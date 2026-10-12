@@ -79,8 +79,16 @@ def redact_text(text: str, *, max_len: int = MAX_FIELD_LEN
     """
     if not isinstance(text, str):
         return ("", True)
-    if max_len < 0:
-        raise ValueError("redact_text: max_len muss >= 0 sein")
+    # Auflage 2091: max_len muss mindestens die Platzhalterlaenge
+    # zulassen. Sonst waere das Ergebnis laenger als max_len,
+    # obwohl max_len HART gelten soll. Fail closed statt
+    # irrefuehrendes Ergebnis.
+    if max_len < len(_REDACTION_PLACEHOLDER):
+        raise ValueError(
+            "redact_text: max_len muss >= "
+            f"{len(_REDACTION_PLACEHOLDER)} sein "
+            f"(Platzhalterlaenge), ist {max_len}"
+        )
 
     redacted = False
     out = text

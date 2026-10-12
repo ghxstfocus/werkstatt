@@ -12,6 +12,8 @@ import sys
 
 sys.path.insert(0, "/opt/werkstatt")
 
+import pytest
+
 import redaction
 
 
@@ -95,6 +97,29 @@ class TestRedactText:
         out, r = redaction.redact_text(langer_text, max_len=100)
         assert len(out) <= 100
         assert r is True
+
+    def test_max_len_zu_klein_wirft_fehler(self) -> None:
+        """Auflage 2091: max_len < Platzhalterlaenge -> ValueError."""
+        with pytest.raises(ValueError):
+            redaction.redact_text("a" * 100, max_len=5)
+
+    def test_max_len_0_wirft_fehler(self) -> None:
+        """Grenzfall: max_len = 0 -> ValueError."""
+        with pytest.raises(ValueError):
+            redaction.redact_text("a" * 100, max_len=0)
+
+    def test_max_len_gleich_platzhalterlaenge(self) -> None:
+        """max_len == Platzhalterlaenge: Ergebnis passt genau."""
+        platzhalter_len = len(redaction._REDACTION_PLACEHOLDER)
+        out, r = redaction.redact_text("a" * 100, max_len=platzhalter_len)
+        assert len(out) <= platzhalter_len
+        assert r is True
+
+    def test_max_len_10_kurzer_text_ok(self) -> None:
+        """kurzer Text unter max_len: unveraendert."""
+        out, r = redaction.redact_text("kurz", max_len=10)
+        assert out == "kurz"
+        assert r is False
 
     def test_clean_text_unchanged(self) -> None:
         out, r = redaction.redact_text("Hallo Welt.")
