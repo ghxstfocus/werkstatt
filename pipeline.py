@@ -39,27 +39,6 @@ COMMIT_PAKET_FORMAT = (
     "BETROFFENE DATEIEN:\n"
     "  - <pfad relativ zum Projekt>\n"
     "ENDE BETROFFENE DATEIEN\n\n"
-    "DOKU-PATCHES (Format):\n"
-    "PATCH-BEGINN\n"
-    "pfad: <pfad zur Zieldatei>\n"
-    "anker: |\n"
-    "  <der ALTE Text, der ersetzt wird. Muss exakt\n"
-    "   so in der Zieldatei stehen, count(anker) == 1.>\n"
-    "ersatz: |\n"
-    "  <der NEUE Text, der an die Stelle des Ankers\n"
-    "   kommt. Muss sich vom Anker UNTERSCHEIDEN.>\n"
-    "PATCH-ENDE\n"
-    "ENDE DOKU-PATCHES\n\n"
-    "Beispiel fuer einen Patch (zur Klarstellung):\n"
-    "PATCH-BEGINN\n"
-    "pfad: docs/STATUS.md\n"
-    "anker: |\n"
-    "  Letzte Aktualisierung: 2026-10-12.\n"
-    "ersatz: |\n"
-    "  Letzte Aktualisierung: 2026-10-13.\n"
-    "PATCH-ENDE\n\n"
-    "Wenn Anker und Ersatz identisch sind, ist der\n"
-    "Patch wirkungslos. Pruefe: ersatz != anker.\n\n"
     "Pflichtabschnitte der Commit-Message (alle fuenf):\n"
     "  - Ausgangslage: warum diese Aenderung?\n"
     "  - Aenderung: was wurde geaendert?\n"
@@ -67,12 +46,8 @@ COMMIT_PAKET_FORMAT = (
     "  - Verifikation: ruff, mypy, pytest.\n"
     "  - Reviewed: Reviewer-Verdict mit Auflagen.\n\n"
     "Platzhalter (wie '<N>') sind verboten. Zahlen MUESSEN konkret sein.\n\n"
-    "HASH-REGEL (verbindlich):\n"
-    "Schreibe KEINEN Commit-Hash in die Doku-Patches.\n"
-    "Das Datum und der Block-Name genuegen.\n"
-    "Der endgueltige Hash wird nach dem Commit in\n"
-    "einem separaten Nachzug-Commit nachgetragen\n"
-    "(Anti-Pattern 'Hash-Zirkel in Doku-Eintraegen')."
+    "HINWEIS: Die Datei-Aenderungen sind bereits angewendet.\n"
+    "Der Commit uebernimmt den echten Zustand (git diff)."
 )
 
 # Redaction (lokal, projektunabhaengig)
@@ -1252,31 +1227,41 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
         cwd=str(state.project_dir), capture_output=True, text=True,
         timeout=30, check=False, env=subprocess_env(),
     ).stdout
+    # UMB-1c: git diff als Basis (die Aenderungen sind angewendet).
+    git_diff = subprocess.run(
+        ("git", "diff", "--stat"),
+        cwd=str(state.project_dir), capture_output=True, text=True,
+        timeout=30, check=False, env=subprocess_env(),
+    ).stdout
+    git_diff_voll = subprocess.run(
+        ("git", "diff"),
+        cwd=str(state.project_dir), capture_output=True, text=True,
+        timeout=30, check=False, env=subprocess_env(),
+    ).stdout
+    git_status = subprocess.run(
+        ("git", "status", "--porcelain"),
+        cwd=str(state.project_dir), capture_output=True, text=True,
+        timeout=30, check=False, env=subprocess_env(),
+    ).stdout
 
     aufgabe = (
         "Der Code-Review ist abgeschlossen. Der Reviewer hat "
-        "in der letzten Runde GO gegeben.\n\n"
+        "in der letzten Runde GO gegeben. Die Code-Patches "
+        "sind bereits angewendet.\n\n"
         "Baue das Commit-Paket:\n"
         "1. Commit-Message im Format des letzten Commits.\n"
-        "2. Liste der betroffenen Dateien.\n"
-        "3. Doku-Patches fuer PHASES.md, SECURITY_REVIEW_LOG.md, "
-        "ggf. DESIGN_DECISIONS.md.\n\n"
-        "Achte auf die Auflagen des Reviewers (unten). Wenn eine "
-        "Auflage den Code betrifft, gehoert sie in den Commit-Text "
-        "oder in einen Doku-Patch.\n\n"
+        "2. Liste der betroffenen Dateien (basierend auf "
+        "git status/git diff).\n\n"
+        "Achte auf die Auflagen des Reviewers (unten).\n\n"
         f"LETZTER COMMIT (Format-Referenz):\n{letzter}\n\n"
-        f"CODE-ENTWURF (gekuerzt):\n{state.code_entwurf[:3000]}\n\n"
+        f"GIT STATUS (die zu committenden Dateien):\n{git_status}\n\n"
+        f"GIT DIFF --STAT:\n{git_diff}\n\n"
+        f"GIT DIFF (gekuerzt):\n{git_diff_voll[:4000]}\n\n"
         f"REVIEWER-VERDICT:\n"
         f"{state.review_runden[-1]['raw'] if state.review_runden else '(keins)'}\n\n"
         + format_messwerte_block(collect_messwerte(state)) + "\n\n"
-        + format_doc_snippets(state.docs) + "\n\n"
         "Antworte in genau diesem Format:\n\n"
-        + COMMIT_PAKET_FORMAT +
-        "\n\nHinweise:\n"
-        "- Reihenfolge von pfad/anker/ersatz ist frei.\n"
-        "- Einrueckung mit 2 Spaces, keine Tabs.\n"
-        "- anker muss gesetzt sein (sonst wird der Patch verworfen).\n"
-        "- ersatz darf leer sein (Loeschung des Ankers)."
+        + COMMIT_PAKET_FORMAT
     )
 
     # Auflage 2124: einmaliger Retry bei reply.ok=False.

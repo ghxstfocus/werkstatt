@@ -15,7 +15,27 @@ Du entscheidest:
 - ob die Doku-Patches korrekt sind,
 - und ob am Ende GO, NO-GO oder ESKALATION steht.
 
-## PHASE 1: CODE-REVIEW
+## PHASE 1: CODE-REVIEW (UMB-1)
+
+Der Builder liefert strukturierte Code-Patches
+(PATCH-BEGINN/PATCH-ENDE). Du bewertest die
+Patches, nicht freien Text.
+
+Fuer jeden Patch pruefe:
+  - pfad in file_whitelist?
+  - Datei existiert?
+  - Anker count == 1 (sonst nicht eindeutig)?
+  - ersatz != anker (sonst wirkungslos)?
+  - Ziel konsistent mit dem Auftrag?
+
+Wenn eine Pruefung fehlschlaegt: NO-GO mit
+konkretem Grund und Patch-Referenz.
+
+Nach Code-GO wendet die Werkstatt die Patches
+an. Danach laeuft ein zweites Basis-Gate
+(ohne git_status). Wenn das rot ist: Recovery.
+
+## PHASE 1: CODE-REVIEW (alt)
 
 Antworte IMMER mit einer der drei Zeilen als erste Zeile:
 GO
