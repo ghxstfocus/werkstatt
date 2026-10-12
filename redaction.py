@@ -169,7 +169,29 @@ __all__ = [
 #   2. redact_text    (Prompt-Injection-Schutz + Laengenlimit)
 
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-_IPV6_RE = re.compile(r"\b(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{1,4}\b")
+# Auflage 2072: IPv6 deckt jetzt auch ::1, fe80::/10 und andere
+# Kurzformen ab. Der Regex ist der klassische Ausdruck fuer IPv6.
+# MAC-Adressen werden NICHT erfasst:
+#   - Vollform braucht 8 Bloecke (MAC hat 6).
+#   - Kurzformen brauchen "::" (MAC hat kein "::").
+# Zusaetzlich laeuft die MAC-Regex VOR der IPv6-Regex.
+#
+# Reihenfolge der Alternation ist wichtig: laengere/spezifischere
+# Formen zuerst, sonst matcht eine kuerzere Form zu frueh und laesst
+# Reste stehen (z.B. "fe80::1" -> "fe80::" + "1").
+_IPV6_RE = re.compile(
+    r"(?:"
+    r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}"                       # Vollform
+    r"|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"                    # :: mittig
+    r"|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}"
+    r"|[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,7}:"                                    # :: am Ende
+    r"|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)"                              # :: Start
+    r")"
+)
 _MAC_RE = re.compile(r"\b(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b")
 _API_KEY_RES = (
     re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"),
