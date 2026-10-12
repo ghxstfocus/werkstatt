@@ -824,3 +824,78 @@ class TestCheckTestsDirUnveraendert:
         ok, probleme = pipeline.check_tests_dir_unveraendert(tmp_path, {})
         assert ok is True
         assert probleme == []
+
+
+# =====================================================================
+# subprocess_env (Auflage 2086)
+# =====================================================================
+
+class TestSubprocessEnv:
+    """Tests fuer subprocess_env().
+
+    Auflage 2086: DEEPSEEK_API_KEY und andere Secrets
+    duerfen nicht an Subprozesse durchgereicht werden.
+    """
+
+    def test_env_does_not_contain_api_key(
+        self, monkeypatch,
+    ) -> None:
+        """DEEPSEEK_API_KEY ist NICHT in subprocess_env()."""
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-key")
+        env = pipeline.subprocess_env()
+        assert "DEEPSEEK_API_KEY" not in env
+
+    def test_env_contains_path(self, monkeypatch) -> None:
+        """PATH ist in subprocess_env() enthalten."""
+        monkeypatch.setenv("PATH", "/usr/bin:/bin")
+        env = pipeline.subprocess_env()
+        assert env.get("PATH") == "/usr/bin:/bin"
+
+    def test_env_does_not_contain_unknown_var(
+        self, monkeypatch,
+    ) -> None:
+        """Beliebige nicht-erlaubte Variable ist NICHT enthalten."""
+        monkeypatch.setenv("NTFY_TOKEN", "geheim")
+        monkeypatch.setenv("FRITZ_PASSWORD", "geheim2")
+        env = pipeline.subprocess_env()
+        assert "NTFY_TOKEN" not in env
+        assert "FRITZ_PASSWORD" not in env
+
+    def test_subprocess_run_uses_clean_env(
+        self, monkeypatch, tmp_path: Path,
+    ) -> None:
+        """Optional: alle Aufrufe uebergeben env= an subprocess.run.
+
+        Wir pruefen stellvertretend run_measurement, weil es
+        den einfachsten Pfad hat (argv fertig, kein State).
+        """
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-key")
+
+        import subprocess as _sp
+        aufrufe: list[dict] = []
+        echtes_run = _sp.run
+
+        class _FakeRes:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def fake_run(argv, *args, **kwargs):
+            aufrufe.append({"argv": argv, "kwargs": kwargs})
+            return _FakeRes()
+
+        monkeypatch.setattr(_sp, "run", fake_run)
+
+        m = pipeline.Measurement("dummy", ("echo",), "Test.", 5)
+        pipeline.run_measurement(m, [], tmp_path)
+
+        # Wiederherstellen nicht noetig (monkeypatch raeumt auf),
+        # aber echtes_run halten, damit ruff nicht meckert.
+        assert echtes_run is not None
+
+        assert len(aufrufe) == 1
+        kwargs = aufrufe[0]["kwargs"]
+        assert "env" in kwargs
+        env = kwargs["env"]
+        assert isinstance(env, dict)
+        assert "DEEPSEEK_API_KEY" not in env

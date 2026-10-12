@@ -189,6 +189,23 @@ def audit(kind: str, payload: dict[str, Any], project_dir: Path,
 
 
 
+def subprocess_env() -> dict[str, str]:
+    """Erlaubt nur die Umgebungsvariablen, die Subprozesse brauchen.
+
+    Auflage 2086: DEEPSEEK_API_KEY und andere Secrets werden
+    NICHT durchgereicht. Allowlist statt Blacklist, damit neue
+    Secrets nicht automatisch im Subprozess-Env landen.
+
+    Erweiterung: Wenn ein Subprozess eine weitere Variable
+    braucht, wird sie hier EXPLIZIT ergaenzt.
+    """
+    erlaubt = (
+        "PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE",
+        "TMPDIR", "USER", "SHELL",
+    )
+    return {k: os.environ[k] for k in erlaubt if k in os.environ}
+
+
 @dataclass(frozen=True)
 class Measurement:
     mid: str
@@ -248,7 +265,8 @@ def run_measurement(m: Measurement, whitelist: list[str], project_dir: Path,
         argv.append(str(cand))
     try:
         res = subprocess.run(argv, cwd=str(project_dir), capture_output=True,
-                             text=True, timeout=m.timeout_s, check=False)
+                             text=True, timeout=m.timeout_s, check=False,
+                             env=subprocess_env())
     except subprocess.TimeoutExpired:
         return f"TIMEOUT {m.timeout_s}s", False
     except OSError as exc:
@@ -278,7 +296,8 @@ def run_measurement_mit_argv(m: Measurement, whitelist: list[str],
         argv.append(str(cand))
     try:
         res = subprocess.run(argv, cwd=str(project_dir), capture_output=True,
-                             text=True, timeout=m.timeout_s, check=False)
+                             text=True, timeout=m.timeout_s, check=False,
+                             env=subprocess_env())
     except subprocess.TimeoutExpired:
         return f"TIMEOUT {m.timeout_s}s", False, argv
     except OSError as exc:
@@ -412,7 +431,7 @@ def load_recent_commits(project_dir: Path, n: int = 10) -> str:
         res = subprocess.run(
             ("git", "log", f"-{n}", "--format=%h %an%n%s%n%b%n---"),
             cwd=str(project_dir), capture_output=True, text=True,
-            timeout=30, check=False,
+            timeout=30, check=False, env=subprocess_env(),
         )
     except (subprocess.TimeoutExpired, OSError):
         return "(git log nicht verfuegbar)"
@@ -474,15 +493,15 @@ def auto_repair_ruff(project_dir: Path, venv_python: str) -> tuple[bool, str]:
     try:
         r1 = subprocess.run((venv_python, "-m", "ruff", "check", ".", "--fix"),
                             cwd=str(project_dir), capture_output=True, text=True,
-                            timeout=300, check=False)
+                            timeout=300, check=False, env=subprocess_env())
         protokoll += f"=== ruff check --fix ===\nRC: {r1.returncode}\n{r1.stdout}\n{r1.stderr}\n"
         r2 = subprocess.run((venv_python, "-m", "ruff", "format", "."),
                             cwd=str(project_dir), capture_output=True, text=True,
-                            timeout=300, check=False)
+                            timeout=300, check=False, env=subprocess_env())
         protokoll += f"=== ruff format ===\nRC: {r2.returncode}\n{r2.stdout}\n{r2.stderr}\n"
         r3 = subprocess.run((venv_python, "-m", "ruff", "check", "."),
                             cwd=str(project_dir), capture_output=True, text=True,
-                            timeout=300, check=False)
+                            timeout=300, check=False, env=subprocess_env())
         return r3.returncode == 0, protokoll
     except (subprocess.TimeoutExpired, OSError) as exc:
         return False, protokoll + f"\nFEHLER: {exc}"
@@ -759,7 +778,7 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
     letzter = subprocess.run(
         ("git", "log", "-1", "--format=%B"),
         cwd=str(state.project_dir), capture_output=True, text=True,
-        timeout=30, check=False,
+        timeout=30, check=False, env=subprocess_env(),
     ).stdout
 
     aufgabe = (
@@ -866,6 +885,7 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
     res_add = subprocess.run(
         argv_add, cwd=str(state.project_dir),
         capture_output=True, text=True, timeout=60, check=False,
+        env=subprocess_env(),
     )
     if res_add.returncode != 0:
         print(f"[!] git add fehlgeschlagen: {res_add.stderr}")
@@ -886,7 +906,7 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
         res_commit = subprocess.run(
             tuple(commit_argv),
             cwd=str(state.project_dir), capture_output=True, text=True,
-            timeout=60, check=False,
+            timeout=60, check=False, env=subprocess_env(),
         )
     finally:
         msg_datei.unlink(missing_ok=True)
@@ -898,6 +918,7 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
             ("git", "reset", "HEAD", "--") + tuple(dateien),
             cwd=str(state.project_dir),
             capture_output=True, text=True, timeout=60, check=False,
+            env=subprocess_env(),
         )
         _rollback_doku()
         return False
@@ -906,7 +927,7 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
     log = subprocess.run(
         ("git", "log", "-1", "--oneline"),
         cwd=str(state.project_dir), capture_output=True, text=True,
-        timeout=30, check=False,
+        timeout=30, check=False, env=subprocess_env(),
     ).stdout
     print(f"[+] Commit erstellt: {log.strip()}")
     return True
