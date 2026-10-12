@@ -7,6 +7,7 @@ Kein DEEPSEEK_API_KEY erforderlich.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 # Werkstatt in den Import-Pfad
 sys.path.insert(0, "/opt/werkstatt")
@@ -14,6 +15,42 @@ sys.path.insert(0, "/opt/werkstatt")
 import pytest
 
 import pipeline
+
+# =====================================================================
+# Test-Helpers
+# =====================================================================
+
+def build_test_state(
+    *,
+    project_dir: Path | None = None,
+    project_name: str = "test-projekt",
+    file_whitelist: list[str] | None = None,
+    always: dict | None = None,
+    optional: dict | None = None,
+) -> pipeline.RunState:
+    """Baut ein minimales RunState fuer Tests.
+
+    Alle Pflichtfelder werden gesetzt, optionale Felder
+    bekommen sinnvolle Defaults.
+
+    Fuer Tests, die nur einen Teil der Felder brauchen.
+    """
+    return pipeline.RunState(
+        block_id="TEST-BLOCK",
+        aufgabe="Test-Aufgabe",
+        start_ts="2026-10-12T00:00:00Z",
+        docs={},
+        agents={},
+        always=always if always is not None else {},
+        optional=optional if optional is not None else {},
+        file_whitelist=file_whitelist if file_whitelist is not None else ["docs/", "core/"],
+        api_key="sk-test",
+        budget={"max_review_rounds": 5, "max_llm_calls": 20},
+        agent_docs={},
+        project_dir=project_dir if project_dir is not None else Path.cwd(),
+        project_name=project_name,
+    )
+
 
 # =====================================================================
 # load_project_config
@@ -239,3 +276,170 @@ class TestParseEmpfehlung:
         assert emp["tests"] == ""
         assert emp["art"] == ""
         assert emp["prioritaet"] == ""
+
+
+# =====================================================================
+# execute_commands (Auflage 2060)
+# =====================================================================
+
+class TestExecuteCommands:
+    """Tests fuer die zentrale Sicherheitsfunktion execute_commands.
+
+    Auflagen 2027, 2039, 2040, 2041, 2042.
+    """
+
+    def test_unknown_id_rejected(self, monkeypatch) -> None:
+        """Auflage 2027: unbekannte ID wird nicht ausgefuehrt."""
+        audited: list[tuple] = []
+        executed: list[tuple] = []
+
+        def fake_audit(kind, payload, project_dir, project_name):
+            audited.append((kind, payload))
+
+        def fake_run(m, wl, pd, arg=None):
+            executed.append((m.mid, arg))
+            return ("output", True, ["cmd"])
+
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        monkeypatch.setattr(pipeline, "run_measurement_mit_argv", fake_run)
+
+        state = build_test_state(always={}, optional={})
+        pipeline.execute_commands(state, [{"id": "unbekannt", "arg": ""}], "reviewer")
+
+        assert executed == [], "unbekannte ID darf nicht ausgefuehrt werden"
+        rejected = [a for a in audited if a[0] == "command_rejected"]
+        assert len(rejected) == 1
+        assert rejected[0][1]["grund"] == "nicht_in_whitelist"
+
+    def test_known_id_executed(self, monkeypatch) -> None:
+        """Auflage 2027: bekannte ID wird ausgefuehrt."""
+        audited: list[tuple] = []
+        executed: list[tuple] = []
+
+        def fake_audit(kind, payload, project_dir, project_name):
+            audited.append((kind, payload))
+
+        def fake_run(m, wl, pd, arg=None):
+            executed.append((m.mid, arg))
+            return ("ausgabe\n", True, ["test_cmd"])
+
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        monkeypatch.setattr(pipeline, "run_measurement_mit_argv", fake_run)
+
+        m = pipeline.Measurement("test_count", ("echo", "test"), "Test")
+        state = build_test_state(always={"test_count": m}, optional={})
+        pipeline.execute_commands(state, [{"id": "test_count", "arg": ""}], "reviewer")
+
+        assert executed == [("test_count", None)]
+        executed_audit = [a for a in audited if a[0] == "command_executed"]
+        assert len(executed_audit) == 1
+        assert executed_audit[0][1]["id"] == "test_count"
+        assert executed_audit[0][1]["argv"] == ["test_cmd"]
+        assert executed_audit[0][1]["quelle"] == "reviewer"
+        assert executed_audit[0][1]["ok"] is True
+
+    def test_arg_not_str_rejected(self, monkeypatch) -> None:
+        """Auflage 2039: arg muss str sein."""
+        audited: list[tuple] = []
+        executed: list[tuple] = []
+
+        def fake_audit(kind, payload, project_dir, project_name):
+            audited.append((kind, payload))
+
+        def fake_run(m, wl, pd, arg=None):
+            executed.append(m.mid)
+            return ("", True, [])
+
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        monkeypatch.setattr(pipeline, "run_measurement_mit_argv", fake_run)
+
+        m = pipeline.Measurement("test_count", ("echo",), "Test")
+        state = build_test_state(always={"test_count": m}, optional={})
+        # arg als dict (kein str) — mypy: bewusst falscher Typ
+        cmd = {"id": "test_count", "arg": {"x": 1}}
+        pipeline.execute_commands(state, [cmd], "reviewer")  # type: ignore[list-item]
+
+        assert executed == [], "arg-dict darf nicht ausgefuehrt werden"
+        rejected = [a for a in audited if a[0] == "command_rejected"]
+        assert len(rejected) == 1
+        assert rejected[0][1]["grund"] == "arg_kein_str"
+
+    def test_quelle_invalid_marked(self, monkeypatch) -> None:
+        """Auflage 2042: ungueltige quelle -> Audit + Downgrade."""
+        audited: list[tuple] = []
+
+        def fake_audit(kind, payload, project_dir, project_name):
+            audited.append((kind, payload))
+
+        def fake_run(m, wl, pd, arg=None):
+            return ("", True, [])
+
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        monkeypatch.setattr(pipeline, "run_measurement_mit_argv", fake_run)
+
+        m = pipeline.Measurement("test_count", ("echo",), "Test")
+        state = build_test_state(always={"test_count": m}, optional={})
+        pipeline.execute_commands(state, [{"id": "test_count", "arg": ""}], "bogus")
+
+        quelle_audits = [a for a in audited if a[0] == "quelle_invalid"]
+        assert len(quelle_audits) == 1
+        # Beim command_executed muss "unknown" stehen
+        executed_audits = [a for a in audited if a[0] == "command_executed"]
+        assert len(executed_audits) == 1
+        assert executed_audits[0][1]["quelle"] == "unknown"
+
+    def test_mess_protokoll_grows(self, monkeypatch) -> None:
+        """mess_protokoll wird an die Ausgabe angehaengt."""
+        def fake_audit(kind, payload, project_dir, project_name):
+            pass
+
+        def fake_run(m, wl, pd, arg=None):
+            return ("AUSGABE-INHALT\n", True, ["cmd"])
+
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        monkeypatch.setattr(pipeline, "run_measurement_mit_argv", fake_run)
+
+        m = pipeline.Measurement("test_count", ("echo",), "Test")
+        state = build_test_state(always={"test_count": m}, optional={})
+        pipeline.execute_commands(state, [{"id": "test_count", "arg": ""}], "reviewer")
+
+        assert "AUSGABE-INHALT" in state.mess_protokoll
+
+    def test_empty_commands_no_effect(self, monkeypatch) -> None:
+        """Leere Befehlsliste aendert nichts."""
+        audited: list[tuple] = []
+
+        def fake_audit(kind, payload, project_dir, project_name):
+            audited.append((kind, payload))
+
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+
+        state = build_test_state(always={}, optional={})
+        pipeline.execute_commands(state, [], "reviewer")
+
+        assert audited == []
+
+    def test_id_not_str_rejected(self, monkeypatch) -> None:
+        """Auflage 2039: id muss str sein."""
+        audited: list[tuple] = []
+        executed: list[tuple] = []
+
+        def fake_audit(kind, payload, project_dir, project_name):
+            audited.append((kind, payload))
+
+        def fake_run(m, wl, pd, arg=None):
+            executed.append(m.mid)
+            return ("", True, [])
+
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        monkeypatch.setattr(pipeline, "run_measurement_mit_argv", fake_run)
+
+        state = build_test_state(always={}, optional={})
+        # id als int (kein str) — mypy: bewusst falscher Typ
+        cmd = {"id": 42, "arg": ""}
+        pipeline.execute_commands(state, [cmd], "reviewer")  # type: ignore[list-item]
+
+        assert executed == []
+        rejected = [a for a in audited if a[0] == "command_rejected"]
+        assert len(rejected) == 1
+        assert rejected[0][1]["grund"] == "id_kein_str"
