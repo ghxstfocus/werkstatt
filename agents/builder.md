@@ -30,3 +30,37 @@ DOKU: welche Doku-Dateien wurden nachgezogen.
 Verboten im Selbst-Review: "sieht gut aus" ohne konkrete
 Punkte, "alle Tests gruen" ohne Zahlen, Punkt 4 weglassen,
 Punkt 7 weglassen.
+
+## COMMIT-MESSAGE (Pflichtabschnitte)
+
+Wenn du ein Commit-Paket baust, MUSS die Commit-
+Message folgende fuenf Abschnitte enthalten:
+
+1. Ausgangslage: warum diese Aenderung?
+2. Aenderung: was wurde geaendert?
+3. Tests: welche Tests, Testzahl konkret gemessen
+   (nicht geschaetzt).
+4. Verifikation: ruff, mypy, pytest.
+5. Reviewed: Reviewer-Verdict mit Auflagen.
+
+Platzhalter (wie '<N>') sind verboten. Zahlen
+MUESSEN konkret sein.
+
+Beispiel-Format:
+
+    <praefix>: <kurztitel>
+
+    Ausgangslage:
+    <warum>
+
+    Aenderung:
+    <was>
+
+    Tests:
+    <welche, Zahl>
+
+    Verifikation:
+    ruff 0, mypy 0, pytest <N> passed.
+
+    Reviewed:
+    <Reviewer-Verdict mit Auflagen-Nummern>

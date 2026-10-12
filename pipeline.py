@@ -28,6 +28,35 @@ from typing import Any
 import requests
 import yaml
 
+# Auflage 2132: Format fuer Commit-Paket (Erstbau + Neubau).
+# Wird an zwei Stellen verwendet (build_commit_paket und
+# COMMIT-NO-GO-Builder-Neubau), damit sie nicht divergieren.
+COMMIT_PAKET_FORMAT = (
+    "Format (verbindlich):\n"
+    "COMMIT-MESSAGE:\n"
+    "<Message mit den fuenf Pflichtabschnitten>\n"
+    "ENDE COMMIT-MESSAGE\n\n"
+    "BETROFFENE DATEIEN:\n"
+    "  - <pfad relativ zum Projekt>\n"
+    "ENDE BETROFFENE DATEIEN\n\n"
+    "DOKU-PATCHES:\n"
+    "PATCH-BEGINN\n"
+    "pfad: docs/PHASES.md\n"
+    "anker: |\n"
+    "  <exakter Text aus der Datei, darf mehrzeilig sein>\n"
+    "ersatz: |\n"
+    "  <neuer Text, darf mehrzeilig oder leer sein>\n"
+    "PATCH-ENDE\n"
+    "ENDE DOKU-PATCHES\n\n"
+    "Pflichtabschnitte der Commit-Message (alle fuenf):\n"
+    "  - Ausgangslage: warum diese Aenderung?\n"
+    "  - Aenderung: was wurde geaendert?\n"
+    "  - Tests: welche Tests, Testzahl konkret gemessen.\n"
+    "  - Verifikation: ruff, mypy, pytest.\n"
+    "  - Reviewed: Reviewer-Verdict mit Auflagen.\n\n"
+    "Platzhalter (wie '<N>') sind verboten. Zahlen MUESSEN konkret sein."
+)
+
 # Redaction (lokal, projektunabhaengig)
 sys.path.insert(0, str(Path(__file__).parent))
 import redaction
@@ -1010,22 +1039,8 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
         f"REVIEWER-VERDICT:\n"
         f"{state.review_runden[-1]['raw'] if state.review_runden else '(keins)'}\n\n"
         "Antworte in genau diesem Format:\n\n"
-        "COMMIT-MESSAGE:\n"
-        "<die vollstaendige Commit-Message>\n"
-        "ENDE COMMIT-MESSAGE\n\n"
-        "BETROFFENE DATEIEN:\n"
-        "  - <pfad relativ zum Projekt>\n"
-        "ENDE BETROFFENE DATEIEN\n\n"
-        "DOKU-PATCHES:\n"
-        "PATCH-BEGINN\n"
-        "pfad: docs/PHASES.md\n"
-        "anker: |\n"
-        "  <exakter Text aus der Datei, darf mehrzeilig sein>\n"
-        "ersatz: |\n"
-        "  <neuer Text, darf mehrzeilig oder leer sein>\n"
-        "PATCH-ENDE\n"
-        "ENDE DOKU-PATCHES\n\n"
-        "Hinweise:\n"
+        + COMMIT_PAKET_FORMAT +
+        "\n\nHinweise:\n"
         "- Reihenfolge von pfad/anker/ersatz ist frei.\n"
         "- Einrueckung mit 2 Spaces, keine Tabs.\n"
         "- anker muss gesetzt sein (sonst wird der Patch verworfen).\n"
@@ -1696,8 +1711,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 api_key, builder_prompt,
                 f"Reviewer hat das Commit-Paket abgelehnt:\n"
                 f"{reply.content}\n\n"
-                "Liefere ein ueberarbeitetes Commit-Paket "
-                "(Message, Dateien, Doku-Patches).",
+                "Liefere ein ueberarbeitetes Commit-Paket.\n\n"
+                + COMMIT_PAKET_FORMAT,
                 state.builder_model, state.builder_temp,
                 state.llm_timeout_s,
                 state=state,
