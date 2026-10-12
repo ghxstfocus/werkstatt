@@ -2142,3 +2142,89 @@ class TestApplyAndRecheck:
         rc = pipeline.apply_and_recheck(state, self._always(),
                                           ["tools/"])
         assert rc == 18
+
+
+# =====================================================================
+# extract_paths + read_target_snippets (Auflage 2146)
+# =====================================================================
+
+class TestExtractPaths:
+    """Tests fuer extract_paths_from_aufgabe."""
+
+    def test_findet_pfade(self, tmp_path: Path) -> None:
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "test_x.py").write_text("x\n",
+                                                       encoding="utf-8")
+        aufgabe = ("Ergaenze in tests/test_x.py den Test A. "
+                   "Ausserdem in tools/foo.py nichts.")
+        pfade = pipeline.extract_paths_from_aufgabe(
+            aufgabe, ["tests/", "tools/"], tmp_path)
+        assert pfade == ["tests/test_x.py"]
+
+    def test_filtert_whitelist(self, tmp_path: Path) -> None:
+        (tmp_path / "extern").mkdir()
+        (tmp_path / "extern" / "y.py").write_text("y\n",
+                                                   encoding="utf-8")
+        aufgabe = "Patch in extern/y.py"
+        pfade = pipeline.extract_paths_from_aufgabe(
+            aufgabe, ["tests/"], tmp_path)
+        assert pfade == []
+
+    def test_filtert_nicht_existierend(self, tmp_path: Path) -> None:
+        aufgabe = "Patch in tests/fehlt.py"
+        pfade = pipeline.extract_paths_from_aufgabe(
+            aufgabe, ["tests/"], tmp_path)
+        assert pfade == []
+
+    def test_dedupliziert(self, tmp_path: Path) -> None:
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "x.py").write_text("x\n",
+                                                  encoding="utf-8")
+        aufgabe = "tests/x.py und nochmal tests/x.py"
+        pfade = pipeline.extract_paths_from_aufgabe(
+            aufgabe, ["tests/"], tmp_path)
+        assert pfade == ["tests/x.py"]
+
+    def test_leere_aufgabe(self, tmp_path: Path) -> None:
+        pfade = pipeline.extract_paths_from_aufgabe(
+            "", ["tests/"], tmp_path)
+        assert pfade == []
+
+
+class TestReadTargetSnippets:
+    """Tests fuer read_target_snippets."""
+
+    def test_liefert_ausschnitt(self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        (tmp_path / "tools" / "x.py").write_text(
+            "Inhalt A.\nInhalt B.\n", encoding="utf-8")
+        s = pipeline.read_target_snippets(
+            ["tools/x.py"], tmp_path, ["tools/"])
+        assert "ZIELDATEIEN" in s
+        assert "--- tools/x.py ---" in s
+        assert "Inhalt A." in s
+
+    def test_nicht_whitelist(self, tmp_path: Path) -> None:
+        (tmp_path / "extern").mkdir()
+        (tmp_path / "extern" / "x.py").write_text(
+            "geheim\n", encoding="utf-8")
+        s = pipeline.read_target_snippets(
+            ["extern/x.py"], tmp_path, ["tools/"])
+        assert "geheim" not in s
+
+    def test_datei_fehlt(self, tmp_path: Path) -> None:
+        s = pipeline.read_target_snippets(
+            ["tools/fehlt.py"], tmp_path, ["tools/"])
+        assert "fehlt" not in s
+
+    def test_redigiert(self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        (tmp_path / "tools" / "x.py").write_text(
+            "Host 192.168.178.117.\n", encoding="utf-8")
+        s = pipeline.read_target_snippets(
+            ["tools/x.py"], tmp_path, ["tools/"])
+        assert "192.168.178.117" not in s
+
+    def test_keine_pfade(self, tmp_path: Path) -> None:
+        s = pipeline.read_target_snippets([], tmp_path, ["tools/"])
+        assert "keine Zieldateien" in s

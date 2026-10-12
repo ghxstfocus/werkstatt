@@ -1222,6 +1222,73 @@ def collect_messwerte(state: RunState) -> dict[str, Any]:
     return werte
 
 
+def extract_paths_from_aufgabe(aufgabe: str,
+                                file_whitelist: list[str],
+                                project_dir: Path) -> list[str]:
+    """Auflage 2146: extrahiert Datei-Pfade aus dem Auftrag.
+
+    Regex findet Pfade mit Endung .py/.md/.yaml/.yml.
+    Filter: Pfad muss in file_whitelist liegen und
+    Datei muss existieren. Dedupliziert.
+    """
+    if not aufgabe:
+        return []
+    kandidaten = re.findall(
+        r"[a-zA-Z0-9_./-]+\.(?:py|md|yaml|yml)",
+        aufgabe,
+    )
+    ergebnis: list[str] = []
+    gesehen: set[str] = set()
+    for p in kandidaten:
+        # Fuehrende Slashes entfernen (z.B. aus "/opt/...").
+        p = p.lstrip("/")
+        if p in gesehen:
+            continue
+        if not any(p.startswith(w) for w in file_whitelist):
+            continue
+        if not (project_dir / p).exists():
+            continue
+        gesehen.add(p)
+        ergebnis.append(p)
+    return ergebnis
+
+
+def read_target_snippets(paths: list[str],
+                        project_dir: Path,
+                        file_whitelist: list[str],
+                        max_len: int = 3000) -> str:
+    """Auflage 2146: Ausschnitte aus den Zieldateien.
+
+    Fail closed bei Pfad ausserhalb file_whitelist.
+    Redaction auf die Ausschnitte.
+    """
+    if not paths:
+        return "(keine Zieldateien im Auftrag erkannt)"
+    teile = ["ZIELDATEIEN (Ausschnitte aus den zu patchenden Dateien):"]
+    for p in paths:
+        if not any(p.startswith(w) for w in file_whitelist):
+            print(f"[WARN] read_target_snippets: "
+                  f"Pfad ausserhalb Whitelist: {p}")
+            continue
+        ziel = project_dir / p
+        if not ziel.exists():
+            print(f"[WARN] read_target_snippets: "
+                  f"Datei fehlt: {p}")
+            continue
+        try:
+            inhalt = ziel.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(f"[WARN] read_target_snippets: "
+                  f"Lesefehler {p}: {exc}")
+            continue
+        ausschnitt = inhalt[:max_len]
+        ausschnitt, _ = redaction.redact_all(
+            ausschnitt, max_len=100000)
+        teile.append(f"--- {p} ---")
+        teile.append(ausschnitt)
+    return "\n".join(teile)
+
+
 def format_doc_snippets(docs: dict[str, str],
                         max_len: int = 3000) -> str:
     """Auflage 2142: Ausschnitte aus den Doku-Dateien fuer den Builder.
@@ -1707,11 +1774,16 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                           max_minutes=max_minutes)
     if rc is not None:
         return rc
+    ziel_pfade = extract_paths_from_aufgabe(
+        aufgabe, file_whitelist, project_dir)
+    ziel_snippets = read_target_snippets(
+        ziel_pfade, project_dir, file_whitelist)
     reply = ask_llm(
         api_key, builder_prompt,
         f"BASIS-GATE:\n{state.basis_protokoll[:1500]}\n\n"
         f"OPTIONALE MESSUNGEN:\n{state.mess_protokoll or '(keine)'}\n\n"
         + format_doc_snippets(state.docs) + "\n\n"
+        + ziel_snippets + "\n\n"
         f"AUFGABE: {aufgabe}\n\n"
         "Liefere strukturierte Code-Patches im Format:\n\n"
         "PATCH-BEGINN\n"
