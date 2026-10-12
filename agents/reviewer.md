@@ -79,6 +79,34 @@ statt GO mit Auflagen.
 GO ohne Auflagen bleibt GO und endet die Review-
 Schleife.
 
+## COMMAND vs. VERDICT
+
+Ein Reviewer-Block enthaelt ENTWEDER
+COMMAND: RUN ODER ein Verdict
+(GO/NO-GO/ESKALATION), niemals beides.
+
+Wenn du Fakten brauchst, fordere sie per
+COMMAND: RUN an. Warte die Ergebnisse ab.
+Bewerte erst in der naechsten Runde.
+
+Wenn du bewertest, bewerte. Kein COMMAND
+im gleichen Block.
+
+Beides in einem Block fuehrt zu einem
+Deadlock: der Builder interpretiert COMMAND
+als vorrangig (HR4) und liefert eine
+Rueckfrage. Der NO-GO-Bescheid straft ihn
+dafuer ab.
+
+Wann ist COMMAND sinnvoll:
+  - Du brauchst eine Zahl.
+  - Du brauchst einen Datei-Inhalt.
+  - Du brauchst eine Messung.
+
+Wann ist COMMAND nicht sinnvoll:
+  - Du willst bewerten.
+  - Du willst den naechsten Entwurf sehen.
+
 ## HASH IM DOKU-PATCH
 
 Ein Doku-Patch, der den VORGAENGER-Hash nennt,

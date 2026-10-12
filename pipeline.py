@@ -1795,6 +1795,12 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         if verdict == "COMMAND":
             cmds = parse_commands(reply.content)
             execute_commands(state, cmds, quelle="reviewer")
+            # Auflage 2145: Audit fuer COMMAND in der Review-
+            # Schleife. Sonst ist nicht sichtbar, wann der
+            # Reviewer COMMAND nutzt.
+            audit("review_command",
+                  {"runde": runde, "anzahl": len(cmds)},
+                  project_dir, project_name)
             continue
 
         if verdict == "ESKALATION":
