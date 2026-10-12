@@ -249,37 +249,17 @@ def build_catalog(config: dict[str, Any], project_dir: Path
     return always, optional
 
 
-def run_measurement(m: Measurement, whitelist: list[str], project_dir: Path,
-                    extra_arg: str | None = None) -> tuple[str, bool]:
-    argv = list(m.argv)
-    if m.mid == "read_file":
-        if not extra_arg:
-            return "read_file ohne Pfad.", False
-        cand = (project_dir / extra_arg).resolve()
-        try:
-            rel = str(cand.relative_to(project_dir.resolve()))
-        except ValueError:
-            return f"Pfad ausserhalb Projekt: {extra_arg}", False
-        if not any(rel.startswith(p) for p in whitelist):
-            return f"Pfad nicht in Whitelist: {rel}", False
-        argv.append(str(cand))
-    try:
-        res = subprocess.run(argv, cwd=str(project_dir), capture_output=True,
-                             text=True, timeout=m.timeout_s, check=False,
-                             env=subprocess_env())
-    except subprocess.TimeoutExpired:
-        return f"TIMEOUT {m.timeout_s}s", False
-    except OSError as exc:
-        return f"OSError: {exc}", False
-    out = (f"=== {m.mid} ===\nARGV: {' '.join(argv)}\nRC: {res.returncode}\n"
-           f"STDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}\n")
-    return out, res.returncode == 0
-
-
 def run_measurement_mit_argv(m: Measurement, whitelist: list[str],
                              project_dir: Path, extra_arg: str | None = None
                              ) -> tuple[str, bool, list[str]]:
-    """Wie run_measurement, gibt aber argv mit zurueck (Auflage 2040)."""
+    """Fuehrt eine Messung aus und gibt (out, ok, argv) zurueck.
+
+    Auflage 2040: argv wird mitgegeben, damit der Aufrufer
+    das tatsaechlich verwendete Kommando protokollieren kann.
+
+    Auflage 2076: Dies ist die einzige Arbeitsfunktion.
+    run_measurement() ist ein Wrapper, der argv wegwirft.
+    """
     argv: list[str] = list(m.argv)
     if m.mid == "read_file":
         if not extra_arg:
@@ -305,6 +285,19 @@ def run_measurement_mit_argv(m: Measurement, whitelist: list[str],
     out = (f"=== {m.mid} ===\nARGV: {' '.join(argv)}\nRC: {res.returncode}\n"
            f"STDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}\n")
     return out, res.returncode == 0, argv
+
+
+def run_measurement(m: Measurement, whitelist: list[str], project_dir: Path,
+                    extra_arg: str | None = None) -> tuple[str, bool]:
+    """Wrapper um run_measurement_mit_argv, wirft argv weg.
+
+    Auflage 2076: Konsolidierung. Die Arbeitslogik liegt
+    in run_measurement_mit_argv.
+    """
+    out, ok, _argv = run_measurement_mit_argv(
+        m, whitelist, project_dir, extra_arg,
+    )
+    return out, ok
 
 
 
