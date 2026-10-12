@@ -1011,6 +1011,85 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
     return {"pfad": pfad, "anker": anker, "ersatz": ersatz}
 
 
+def collect_messwerte(state: RunState) -> dict[str, Any]:
+    """Auflage 2135: extrahiert Messwerte aus dem Basis-Protokoll.
+
+    Liefert ein dict mit den Werten, die der Builder fuer die
+    Commit-Message braucht:
+      - test_anzahl (int | None)
+      - ruff (gruen|rot)
+      - mypy (gruen|rot)
+      - py_compile (gruen|rot)
+      - git_status (clean|geaendert)
+      - git_head (str)
+      - verstrichene_zeit_s (float)
+
+    Basis: state.basis_protokoll (geschrieben vom Basis-Gate).
+    Fallback bei Parse-Fehler: test_anzahl = None, sonst "rot".
+    """
+    import re as _re
+    basis = state.basis_protokoll or ""
+
+    # Pro Messung: (mid, rc, stdout)
+    treffer = _re.findall(
+        r"=== (\w+) ===\nARGV: [^\n]*\nRC: (\d+)\nSTDOUT:\n(.*?)STDERR:",
+        basis, _re.DOTALL,
+    )
+    werte: dict[str, Any] = {
+        "test_anzahl": None,
+        "ruff": "rot",
+        "mypy": "rot",
+        "py_compile": "rot",
+        "git_status": "geaendert",
+        "git_head": "",
+        "verstrichene_zeit_s": 0.0,
+    }
+    for mid, rc_str, stdout in treffer:
+        rc = int(rc_str)
+        if mid == "test_count":
+            m = _re.search(r"(\d+) tests? collected", stdout)
+            if m:
+                werte["test_anzahl"] = int(m.group(1))
+        elif mid == "ruff":
+            werte["ruff"] = "gruen" if rc == 0 else "rot"
+        elif mid == "mypy":
+            werte["mypy"] = "gruen" if rc == 0 else "rot"
+        elif mid == "py_compile":
+            werte["py_compile"] = "gruen" if rc == 0 else "rot"
+        elif mid == "git_status":
+            werte["git_status"] = ("clean"
+                                   if stdout.strip() == ""
+                                   else "geaendert")
+        elif mid == "git_head":
+            werte["git_head"] = stdout.strip()
+
+    # Verstrichene Zeit aus start_monotonic
+    if state.start_monotonic > 0:
+        werte["verstrichene_zeit_s"] = (
+            time.monotonic() - state.start_monotonic)
+
+    return werte
+
+
+def format_messwerte_block(werte: dict[str, Any]) -> str:
+    """Formatiert die Messwerte fuer den Builder-Prompt.
+
+    Auflage 2135: Der Builder verwendet diese Werte woertlich.
+    """
+    test_anzahl = werte.get("test_anzahl")
+    test_str = str(test_anzahl) if test_anzahl is not None else "nicht gemessen"
+    return (
+        "MESSWERTE (von der Werkstatt gemessen, nicht schaetzen):\n"
+        f"  test_anzahl: {test_str}\n"
+        f"  ruff: {werte.get('ruff', 'rot')}\n"
+        f"  mypy: {werte.get('mypy', 'rot')}\n"
+        f"  py_compile: {werte.get('py_compile', 'rot')}\n"
+        f"  git_status: {werte.get('git_status', 'geaendert')}\n"
+        f"  git_head: {werte.get('git_head', '')}\n"
+        f"  verstrichene_zeit_s: {werte.get('verstrichene_zeit_s', 0.0):.0f}"
+    )
+
+
 def build_commit_paket(state: RunState) -> dict[str, Any]:
     """Bittet den Builder um einen Commit-Paket-Vorschlag.
 
@@ -1038,6 +1117,7 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
         f"CODE-ENTWURF (gekuerzt):\n{state.code_entwurf[:3000]}\n\n"
         f"REVIEWER-VERDICT:\n"
         f"{state.review_runden[-1]['raw'] if state.review_runden else '(keins)'}\n\n"
+        + format_messwerte_block(collect_messwerte(state)) + "\n\n"
         "Antworte in genau diesem Format:\n\n"
         + COMMIT_PAKET_FORMAT +
         "\n\nHinweise:\n"
@@ -1717,6 +1797,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 api_key, builder_prompt,
                 f"Reviewer hat das Commit-Paket abgelehnt:\n"
                 f"{reply.content}\n\n"
+                + format_messwerte_block(collect_messwerte(state)) + "\n\n"
                 "Liefere ein ueberarbeitetes Commit-Paket.\n\n"
                 + COMMIT_PAKET_FORMAT,
                 state.builder_model, state.builder_temp,

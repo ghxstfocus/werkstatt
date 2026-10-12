@@ -1709,3 +1709,151 @@ class TestBudgetRecovery:
         # Kontext ist im Audit-Payload enthalten.
         payload = recovery_audits[0][1]
         assert "kontext" in payload
+
+
+# =====================================================================
+# collect_messwerte (Auflage 2135)
+# =====================================================================
+
+class TestCollectMesswerte:
+    """Tests fuer collect_messwerte.
+
+    Auflage 2135: Werkstatt liefert Messwerte an den
+    Builder. Diese Funktion extrahiert sie aus
+    state.basis_protokoll.
+    """
+
+    BASIS_BSP = (
+        "=== py_compile ===\n"
+        "ARGV: /opt/x/.venv/bin/python3 -m compileall -q apps\n"
+        "RC: 0\n"
+        "STDOUT:\n"
+        "\n"
+        "STDERR:\n"
+        "\n"
+        "=== ruff ===\n"
+        "ARGV: /opt/x/.venv/bin/python3 -m ruff check .\n"
+        "RC: 0\n"
+        "STDOUT:\n"
+        "All checks passed!\n"
+        "\n"
+        "STDERR:\n"
+        "\n"
+        "=== mypy ===\n"
+        "ARGV: /opt/x/.venv/bin/python3 -m mypy apps\n"
+        "RC: 0\n"
+        "STDOUT:\n"
+        "Success: no issues found in 147 source files\n"
+        "\n"
+        "STDERR:\n"
+        "\n"
+        "=== test_count ===\n"
+        "ARGV: /opt/x/.venv/bin/python3 -m pytest --collect-only -q\n"
+        "RC: 0\n"
+        "STDOUT:\n"
+        "tests/unit/test_a.py::test_one\n"
+        "tests/unit/test_a.py::test_two\n"
+        "\n"
+        "1312 tests collected in 0.47s\n"
+        "\n"
+        "STDERR:\n"
+        "\n"
+        "=== git_status ===\n"
+        "ARGV: git status --porcelain\n"
+        "RC: 0\n"
+        "STDOUT:\n"
+        "\n"
+        "STDERR:\n"
+        "\n"
+        "=== git_head ===\n"
+        "ARGV: git rev-parse --short HEAD\n"
+        "RC: 0\n"
+        "STDOUT:\n"
+        "f913eac\n"
+        "\n"
+        "STDERR:\n"
+    )
+
+    def test_collect_messwerte_aus_protokoll(self) -> None:
+        state = build_test_state()
+        state.basis_protokoll = self.BASIS_BSP
+        w = pipeline.collect_messwerte(state)
+        assert w["test_anzahl"] == 1312
+        assert w["ruff"] == "gruen"
+        assert w["mypy"] == "gruen"
+        assert w["py_compile"] == "gruen"
+        assert w["git_status"] == "clean"
+        assert w["git_head"] == "f913eac"
+
+    def test_collect_messwerte_fallback(self) -> None:
+        state = build_test_state()
+        state.basis_protokoll = ""
+        w = pipeline.collect_messwerte(state)
+        assert w["test_anzahl"] is None
+        assert w["ruff"] == "rot"
+        assert w["mypy"] == "rot"
+        assert w["py_compile"] == "rot"
+        assert w["git_status"] == "geaendert"
+        assert w["git_head"] == ""
+
+    def test_collect_messwerte_rc_parsing(self) -> None:
+        """Ruff rot, wenn RC != 0."""
+        basis = (
+            "=== ruff ===\n"
+            "ARGV: ruff check .\n"
+            "RC: 1\n"
+            "STDOUT:\n"
+            "Fehler...\n"
+            "\n"
+            "STDERR:\n"
+            "\n"
+        )
+        state = build_test_state()
+        state.basis_protokoll = basis
+        w = pipeline.collect_messwerte(state)
+        assert w["ruff"] == "rot"
+
+    def test_git_status_geaendert(self) -> None:
+        basis = (
+            "=== git_status ===\n"
+            "ARGV: git status --porcelain\n"
+            "RC: 0\n"
+            "STDOUT:\n"
+            " M file.txt\n"
+            "?? new.txt\n"
+            "\n"
+            "STDERR:\n"
+            "\n"
+        )
+        state = build_test_state()
+        state.basis_protokoll = basis
+        w = pipeline.collect_messwerte(state)
+        assert w["git_status"] == "geaendert"
+
+    def test_format_messwerte_block(self) -> None:
+        werte = {
+            "test_anzahl": 1261,
+            "ruff": "gruen",
+            "mypy": "gruen",
+            "py_compile": "gruen",
+            "git_status": "clean",
+            "git_head": "abc1234",
+            "verstrichene_zeit_s": 25.0,
+        }
+        s = pipeline.format_messwerte_block(werte)
+        assert "test_anzahl: 1261" in s
+        assert "ruff: gruen" in s
+        assert "git_head: abc1234" in s
+
+    def test_format_messwerte_block_fallback(self) -> None:
+        werte = {
+            "test_anzahl": None,
+            "ruff": "rot",
+            "mypy": "rot",
+            "py_compile": "rot",
+            "git_status": "geaendert",
+            "git_head": "",
+            "verstrichene_zeit_s": 0.0,
+        }
+        s = pipeline.format_messwerte_block(werte)
+        assert "test_anzahl: nicht gemessen" in s

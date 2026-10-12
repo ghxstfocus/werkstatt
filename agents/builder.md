@@ -31,6 +31,18 @@ Verboten im Selbst-Review: "sieht gut aus" ohne konkrete
 Punkte, "alle Tests gruen" ohne Zahlen, Punkt 4 weglassen,
 Punkt 7 weglassen.
 
+## MESSWERTE IM PROMPT
+
+Wenn der Auftrag einen Block "MESSWERTE" enthaelt,
+sind diese Werte von der Werkstatt gemessen. Du
+verwendest sie woertlich.
+
+Wenn ein Messwert fehlt (z. B. "test_anzahl:
+nicht gemessen"), schreibst du genau das in die
+Commit-Message. Du erfindest KEINE Zahlen.
+
+Kein "ca." Kein "etwa". Kein Schaetzen. HR1.
+
 ## COMMIT-MESSAGE (Pflichtabschnitte)
 
 Wenn du ein Commit-Paket baust, MUSS die Commit-
