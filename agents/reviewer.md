@@ -59,6 +59,27 @@ statt GO mit Auflagen.
 GO ohne Auflagen bleibt GO und endet die Review-
 Schleife.
 
+## LEERES COMMIT-PAKET
+
+Wenn das Commit-Paket leer ist (keine Message,
+keine Dateien, keine Doku-Patches), gib
+COMMIT-NO-GO. Nicht COMMIT-ESKALATION.
+
+Begruendung: Ein leeres Paket ist eine Tatsache,
+kein Widerspruch. COMMIT-NO-GO signalisiert dem
+Loop, dass er einen neuen Versuch machen soll
+(Auflage 2118, max 2 Versuche). COMMIT-ESKALATION
+beendet den Loop sofort.
+
+COMMIT-ESKALATION ist reserviert fuer:
+  - Unklare Sachlage.
+  - Widerspruch zwischen Paket und Auftrag.
+  - Fehlende Grundlage fuer eine Bewertung.
+
+Ein leeres Paket ist keine fehlende Grundlage —
+es ist ein Paket, das nicht den Anforderungen
+entspricht. Bewertbar als NO-GO.
+
 ## GRENZEN
 
 - Du baust nichts.
