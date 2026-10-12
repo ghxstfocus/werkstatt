@@ -1194,24 +1194,9 @@ def apply_and_recheck(state: RunState,
         return 16
     print(f"\n[*] Code-Patches anwenden ({len(state.code_patches)}).")
     ok_apply = apply_code_patches(state, state.code_patches)
-    # Auflage 2157: Rohtext der Patches ins Audit (Diagnose).
-    # Redaction auf anker/ersatz. Groesse begrenzt.
-    patches_audit: list[dict[str, str]] = []
-    for p in state.code_patches:
-        anker = p.get("anker", "")
-        ersatz = p.get("ersatz", "")
-        anker_red, _ = redaction.redact_all(anker[:3000],
-                                             max_len=100000)
-        ersatz_red, _ = redaction.redact_all(ersatz[:3000],
-                                              max_len=100000)
-        patches_audit.append({
-            "pfad": p.get("pfad", ""),
-            "anker": anker_red,
-            "ersatz": ersatz_red,
-        })
+    # Auflage 2158: Roh-Patches aus Audit entfernt.
     audit("code_patches_apply", {"ok": ok_apply,
-                                  "anzahl": len(state.code_patches),
-                                  "patches": patches_audit},
+                                  "anzahl": len(state.code_patches)},
           state.project_dir, state.project_name)
     if not ok_apply:
         print("[!] apply_code_patches fehlgeschlagen. Fail closed.")
@@ -1516,17 +1501,12 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
     paket = parse_commit_paket(reply.content)
     paket["roh"] = reply.content
     # Auflage 2123: Audit, wenn das Paket leer geparst wurde.
+    # Auflage 2134: Roh-Text entfernt (Debug-Ziel erreicht).
     if not paket.get("message") and not paket.get("dateien") \
             and not paket.get("doku_patches"):
-        # Auflage 2133: Roh-Text ins Audit (Debug).
-        # Redaction zuerst (Secrets-Schutz), max_len=100000
-        # damit die 3000 Zeichen nicht weiter gekuerzt werden.
-        roh, _ = redaction.redact_all(
-            reply.content[:3000], max_len=100000)
         audit("commit_paket_leer",
-              {"roh_len": len(reply.content),
-               "roh": roh}, state.project_dir,
-              state.project_name)
+              {"roh_len": len(reply.content)},
+              state.project_dir, state.project_name)
     return paket
 
 
@@ -2143,13 +2123,10 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             commit_verdict = classify_verdict(reply.content)
             state.commit_review = {"verdict": commit_verdict,
                                    "raw": reply.content}
-            # Auflage 2138: Rohtext ins Audit (Debug).
-            roh, _ = redaction.redact_all(
-                reply.content[:3000], max_len=100000)
+            # Auflage 2140: Roh-Text aus Audit entfernt.
             audit("commit_review",
                   {"verdict": commit_verdict,
-                   "runde": commit_versuche,
-                   "roh": roh},
+                   "runde": commit_versuche},
                   project_dir, project_name)
 
             if commit_verdict == "COMMIT-GO":
@@ -2209,13 +2186,10 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             if not state.commit_paket.get("message") \
                     and not state.commit_paket.get("dateien") \
                     and not state.commit_paket.get("doku_patches"):
-                # Auflage 2133: Roh-Text ins Audit (Debug).
-                roh, _ = redaction.redact_all(
-                    bauer_reply.content[:3000], max_len=100000)
+                # Auflage 2134: Roh-Text entfernt.
                 audit("commit_paket_leer",
                       {"runde": commit_versuche,
-                       "roh_len": len(bauer_reply.content),
-                       "roh": roh},
+                       "roh_len": len(bauer_reply.content)},
                       project_dir, project_name)
 
     # ==================================================================
