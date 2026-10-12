@@ -651,25 +651,37 @@ class RecoveryVorschlag:
     rohantwort: str = ""
 
 
+def aufgabe_block(state: RunState) -> str:
+    """Auflage 2154: zentrale Formatierung des Auftrags.
+
+    Liefert "AUFGABE: <auftrag>\n\n". Wird in allen
+    Reviewer- und Builder-Prompts verwendet, damit
+    der Auftrag konsistent ist.
+    """
+    return f"AUFGABE: {state.aufgabe}\n\n"
+
+
 def ask_reviewer_for_recovery(state: RunState, art: str, kontext: str) -> RecoveryVorschlag:
+    # Auflage 2153: Auftrag vor dem Kontext.
+    kopf = aufgabe_block(state)
     if art == "basis_gate":
         aufgabe = ("Das Basis-Gate ist rot und der deterministische "
                    "Auto-Repair-Versuch ist gescheitert.\n\n"
-                   f"{kontext}\n\n"
+                   f"{kopf}{kontext}\n\n"
                    "Liefere:\nDIAGNOSE: <Ursache>\nREPARATURPLAN:\n  1. ...\n"
                    "  2. ...\nBLOCKGROESSE: <ein Block | mehrere Bloecke | eigener Punkt>\n"
                    "EMPFEHLUNG: <was der Mensch tun soll>\n")
     elif art == "no_go":
-        aufgabe = (f"Der Builder hat kein akzeptables Ergebnis geliefert.\n\n{kontext}\n\n"
+        aufgabe = (f"Der Builder hat kein akzeptables Ergebnis geliefert.\n\n{kopf}{kontext}\n\n"
                    "Liefere:\nDIAGNOSE: <warum>\nLOESUNGSVORSCHLAG:\n  1. ...\n  2. ...\n"
                    "BLOCKGROESSE: <...>\nEMPFEHLUNG: <approve | reject | aufteilen | eskalieren>\n")
     elif art == "eskalation":
-        aufgabe = (f"Du hast ESKALATION ausgesprochen.\n\n{kontext}\n\n"
+        aufgabe = (f"Du hast ESKALATION ausgesprochen.\n\n{kopf}{kontext}\n\n"
                    "Liefere:\nDIAGNOSE: <Kern>\nFRAGE AN DEN MENSCHEN: <was>\n"
                    "OPTIONEN:\n  A) ...\n  B) ...\nBLOCKGROESSE: <...>\n"
                    "EMPFEHLUNG: <welche Option>\n")
     elif art == "budget":
-        aufgabe = (f"Das Budget ist erschoepft.\n\n{kontext}\n\n"
+        aufgabe = (f"Das Budget ist erschoepft.\n\n{kopf}{kontext}\n\n"
                    "Liefere:\nDIAGNOSE: <warum>\nLOESUNGSVORSCHLAG:\n  1. ...\n  2. ...\n"
                    "BLOCKGROESSE: <...>\nEMPFEHLUNG: <naechster Schritt>\n")
     else:
@@ -1734,8 +1746,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         + "\n".join(f"  - {m.mid}: {m.beschreibung}" for m in optional.values())
     )
     reviewer_input = (
-        f"AUFGABE: {aufgabe}\n\n"
-        f"LETZTE COMMITS:\n{historie[:3000]}\n\n"
+        aufgabe_block(state)
+        + f"LETZTE COMMITS:\n{historie[:3000]}\n\n"
         f"{overview}\n\n"
         "Waehle optionale Messungen. Antworte mit COMMAND-Zeilen:\n"
         "COMMAND: RUN <id>\n"
@@ -1784,8 +1796,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         f"OPTIONALE MESSUNGEN:\n{state.mess_protokoll or '(keine)'}\n\n"
         + format_doc_snippets(state.docs) + "\n\n"
         + ziel_snippets + "\n\n"
-        f"AUFGABE: {aufgabe}\n\n"
-        "Liefere strukturierte Code-Patches im Format:\n\n"
+        + aufgabe_block(state)
+        + "Liefere strukturierte Code-Patches im Format:\n\n"
         "PATCH-BEGINN\n"
         "pfad: <pfad zur Zieldatei>\n"
         "anker: |\n"
@@ -1835,7 +1847,9 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             runden_block = "\n".join(zeilen) + "\n\n"
 
         szenario = (
-            f"{runden_block}"
+            # Auflage 2152: Auftrag MUSS im Szenario stehen.
+            aufgabe_block(state)
+            + f"{runden_block}"
             f"BASIS-GATE:\n{state.basis_protokoll[:800]}\n\n"
             f"OPTIONALE MESSUNGEN:\n{state.mess_protokoll or '(keine)'}\n\n"
             f"CODE-ENTWURF:\n{state.code_entwurf}\n\n"
