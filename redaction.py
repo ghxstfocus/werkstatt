@@ -216,6 +216,12 @@ def redact_secrets(text: str) -> tuple[str, bool]:
 
     Liefert (sauberer_text, wurde_redigiert).
     Nicht-String -> ("", True) (fail closed).
+
+    Hostnamen (FQDNs, Container-Namen) werden bewusst NICHT
+    maskiert. Sie sind keine Secrets. IP-Adressen sind
+    sensibler und werden maskiert. Eine FQDN-Maskierung
+    wuerde zu viele False-Positives erzeugen (z.B.
+    "security-ai" ist kein Secret).
     """
     if not isinstance(text, str):
         return "", True
