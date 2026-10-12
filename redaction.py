@@ -98,8 +98,12 @@ def redact_text(text: str, *, max_len: int = MAX_FIELD_LEN
         out = substituted
 
     # Laenge
+    # Auflage 2044-Nachtrag: max_len gilt HART. Der Platzhalter
+    # muss in das Limit hineinpassen, sonst waere max_len irrefuehrend.
     if len(out) > max_len:
-        out = out[:max_len] + _REDACTION_PLACEHOLDER
+        platzhalter_len = len(_REDACTION_PLACEHOLDER)
+        schneide = max(0, max_len - platzhalter_len)
+        out = out[:schneide] + _REDACTION_PLACEHOLDER
         redacted = True
 
     return (out, redacted)
