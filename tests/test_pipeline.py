@@ -564,6 +564,117 @@ class TestApplyCommitAndDoku:
         # Keine .commit-msg.tmp uebrig
         assert not (tmp_path / ".commit-msg.tmp").exists()
 
+    def test_doku_patch_nicht_geschrieben_wenn_datei_fehlt(
+        self, tmp_path: Path,
+    ) -> None:
+        """Auflage 2082: dateien fehlt -> Doku bleibt unberuehrt."""
+        self._init_tmp_repo(tmp_path)
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        original = "Alt: MARKER\n"
+        (docs / "x.md").write_text(original)
+        state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+        paket = {
+            "message": "test",
+            "dateien": ["docs/fehlt.md"],
+            "doku_patches": [
+                {"pfad": "docs/x.md", "anker": "MARKER", "ersatz": "NEU"},
+            ],
+        }
+        assert pipeline.apply_commit_and_doku(state, paket) is False
+        # Doku ist unveraendert.
+        assert (docs / "x.md").read_text() == original
+
+    def test_doku_patch_nicht_geschrieben_wenn_anker_fehlt(
+        self, tmp_path: Path,
+    ) -> None:
+        """Auflage 2082: Anker fehlt -> Doku bleibt unberuehrt."""
+        self._init_tmp_repo(tmp_path)
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        original = "Inhalt ohne Anker.\n"
+        (docs / "x.md").write_text(original)
+        state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+        paket = {
+            "message": "test",
+            "dateien": ["docs/x.md"],
+            "doku_patches": [
+                {"pfad": "docs/x.md", "anker": "FEHLT", "ersatz": "NEU"},
+            ],
+        }
+        assert pipeline.apply_commit_and_doku(state, paket) is False
+        assert (docs / "x.md").read_text() == original
+
+    def test_doku_patch_rollback_wenn_git_add_fehlt(
+        self, tmp_path: Path, monkeypatch,
+    ) -> None:
+        """Auflage 2082: git add scheitert -> Doku zurueckgerollt."""
+        self._init_tmp_repo(tmp_path)
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        original = "Alt: MARKER\n"
+        (docs / "x.md").write_text(original)
+        state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+        paket = {
+            "message": "test",
+            "dateien": ["docs/x.md"],
+            "doku_patches": [
+                {"pfad": "docs/x.md", "anker": "MARKER", "ersatz": "NEU"},
+            ],
+        }
+
+        echtes_run = subprocess.run
+
+        def fake_run(argv, *args, **kwargs):
+            if isinstance(argv, (list, tuple)) and len(argv) >= 2 \
+                    and argv[0] == "git" and argv[1] == "add":
+                class _R:
+                    returncode = 1
+                    stdout = ""
+                    stderr = "fake add fehler"
+                return _R()
+            return echtes_run(argv, *args, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert pipeline.apply_commit_and_doku(state, paket) is False
+        # Doku ist zurueckgerollt.
+        assert (docs / "x.md").read_text() == original
+
+    def test_doku_patch_rollback_wenn_git_commit_fehlt(
+        self, tmp_path: Path, monkeypatch,
+    ) -> None:
+        """Auflage 2082: git commit scheitert -> Doku zurueckgerollt."""
+        self._init_tmp_repo(tmp_path)
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        original = "Alt: MARKER\n"
+        (docs / "x.md").write_text(original)
+        state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+        paket = {
+            "message": "test",
+            "dateien": ["docs/x.md"],
+            "doku_patches": [
+                {"pfad": "docs/x.md", "anker": "MARKER", "ersatz": "NEU"},
+            ],
+        }
+
+        echtes_run = subprocess.run
+
+        def fake_run(argv, *args, **kwargs):
+            if isinstance(argv, (list, tuple)) and "commit" in argv \
+                    and "git" in argv:
+                class _R:
+                    returncode = 1
+                    stdout = ""
+                    stderr = "fake commit fehler"
+                return _R()
+            return echtes_run(argv, *args, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert pipeline.apply_commit_and_doku(state, paket) is False
+        # Doku ist zurueckgerollt.
+        assert (docs / "x.md").read_text() == original
+
     def test_erfolg_ohne_doku_patch(self, tmp_path: Path) -> None:
         """Erfolgspfad ohne Doku-Patch."""
         self._init_tmp_repo(tmp_path)

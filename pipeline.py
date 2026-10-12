@@ -808,24 +808,11 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
     """Wendet Doku-Patches an und committet.
 
     NUR nach Human-Gate. Explizite Datei-Liste, kein git add -A.
-    """
-    # 1. Doku-Patches anwenden (assert count == 1)
-    for patch in paket.get("doku_patches", []):
-        ziel = state.project_dir / patch["pfad"]
-        if not ziel.exists():
-            print(f"[!] Doku-Datei fehlt: {patch['pfad']}")
-            return False
-        text = ziel.read_text(encoding="utf-8")
-        count = text.count(patch["anker"])
-        if count != 1:
-            print(f"[!] Anker in {patch['pfad']} kommt {count}x vor. "
-                  f"Erwartet: 1x. Abbruch.")
-            return False
-        text = text.replace(patch["anker"], patch["ersatz"], 1)
-        ziel.write_text(text, encoding="utf-8")
-        print(f"[+] Doku gepatcht: {patch['pfad']}")
 
-    # 2. Datei-Liste pruefen: alle in file_whitelist und existierend
+    Auflage 2082: Validieren vor Schreiben. In-Memory-Rollback
+    fuer Doku-Dateien, falls git add oder git commit fehlschlaegt.
+    """
+    # ---- Phase 1: Validieren (nichts schreiben) ----
     dateien = paket.get("dateien", [])
     if not dateien:
         print("[!] Keine betroffenen Dateien angegeben. Abbruch.")
@@ -835,12 +822,46 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
             print(f"[!] Datei nicht in Whitelist: {pfad}")
             return False
         # Auflage 2048: Datei muss existieren.
-        # Sonst scheitert git add spaeter unspezifisch.
         if not (state.project_dir / pfad).exists():
             print(f"[!] Datei existiert nicht: {pfad}")
             return False
 
-    # 3. git add (explizite Liste)
+    doku_patches = paket.get("doku_patches", [])
+    doku_ziele: dict[Path, str] = {}
+    for patch in doku_patches:
+        ziel = state.project_dir / patch["pfad"]
+        if not ziel.exists():
+            print(f"[!] Doku-Datei fehlt: {patch['pfad']}")
+            return False
+        if ziel in doku_ziele:
+            print(f"[!] Doku-Datei mehrfach im Paket: {patch['pfad']}")
+            return False
+        text = ziel.read_text(encoding="utf-8")
+        count = text.count(patch["anker"])
+        if count != 1:
+            print(f"[!] Anker in {patch['pfad']} kommt {count}x vor. "
+                  f"Erwartet: 1x. Abbruch.")
+            return False
+        doku_ziele[ziel] = text
+
+    # ---- Phase 2: Doku-Patches schreiben + Original merken ----
+    original: dict[Path, str] = {}
+    for patch in doku_patches:
+        ziel = state.project_dir / patch["pfad"]
+        original[ziel] = doku_ziele[ziel]
+        neu = doku_ziele[ziel].replace(patch["anker"], patch["ersatz"], 1)
+        ziel.write_text(neu, encoding="utf-8")
+        print(f"[+] Doku gepatcht: {patch['pfad']}")
+
+    def _rollback_doku() -> None:
+        """Schreibt Doku-Dateien auf Original-Inhalt zurueck."""
+        for ziel, inhalt in original.items():
+            try:
+                ziel.write_text(inhalt, encoding="utf-8")
+            except OSError as exc:
+                print(f"[!] Rollback fehlgeschlagen fuer {ziel}: {exc}")
+
+    # ---- Phase 3: git add ----
     argv_add = ("git", "add", "--") + tuple(dateien)
     res_add = subprocess.run(
         argv_add, cwd=str(state.project_dir),
@@ -848,13 +869,12 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
     )
     if res_add.returncode != 0:
         print(f"[!] git add fehlgeschlagen: {res_add.stderr}")
+        _rollback_doku()
         return False
 
-    # 4. Commit-Message in temp-Datei schreiben (kein Heredoc-Problem)
+    # ---- Phase 4: git commit ----
     msg_datei = state.project_dir / ".commit-msg.tmp"
     msg_datei.write_text(paket["message"], encoding="utf-8")
-    # Autor aus der Konfiguration setzen.
-    # So steht im Git-Log immer der Mensch (ghxstfocus), nicht der Linux-User.
     commit_argv: list[str] = ["git"]
     if state.git_author_name:
         commit_argv += ["-c", f"user.name={state.git_author_name}"]
@@ -862,9 +882,6 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
         commit_argv += ["-c", f"user.email={state.git_author_email}"]
     commit_argv += ["commit", "-F", str(msg_datei)]
 
-    # Auflage 2049: try/finally, damit die Temp-Datei auch bei
-    # einer Exception verschwindet. Sonst bleibt .commit-msg.tmp
-    # im Projektverzeichnis liegen.
     try:
         res_commit = subprocess.run(
             tuple(commit_argv),
@@ -876,9 +893,16 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
 
     if res_commit.returncode != 0:
         print(f"[!] git commit fehlgeschlagen: {res_commit.stderr}")
+        # git add rueckgaengig, dann Doku zurueck.
+        subprocess.run(
+            ("git", "reset", "HEAD", "--") + tuple(dateien),
+            cwd=str(state.project_dir),
+            capture_output=True, text=True, timeout=60, check=False,
+        )
+        _rollback_doku()
         return False
 
-    # 5. Bestaetigung
+    # ---- Phase 5: Bestaetigung ----
     log = subprocess.run(
         ("git", "log", "-1", "--oneline"),
         cwd=str(state.project_dir), capture_output=True, text=True,
