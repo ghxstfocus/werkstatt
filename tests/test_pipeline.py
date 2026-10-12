@@ -287,6 +287,42 @@ class TestParseCommitPaket:
         assert paket["dateien"] == []
         assert paket["doku_patches"] == []
 
+    def test_anker_leer_patch_verworfen(self) -> None:
+        """Auflage 2057: leerer Anker -> Patch wird verworfen.
+
+        Ist-Zustand. Fail closed gegen unbrauchbare Patches.
+        """
+        text = (
+            "DOKU-PATCHES:\n"
+            "  - pfad: docs/PHASES.md\n"
+            "    anker:\n"
+            "    ersatz: NEU\n"
+            "ENDE DOKU-PATCHES"
+        )
+        paket = pipeline.parse_commit_paket(text)
+        assert paket["doku_patches"] == []
+
+    def test_zwei_patches_in_einer_antwort(self) -> None:
+        """Auflage 2057: zwei Patches werden korrekt geparst."""
+        text = (
+            "DOKU-PATCHES:\n"
+            "  - pfad: docs/PHASES.md\n"
+            "    anker: A1\n"
+            "    ersatz: B1\n"
+            "  - pfad: docs/SECURITY_REVIEW_LOG.md\n"
+            "    anker: A2\n"
+            "    ersatz: B2\n"
+            "ENDE DOKU-PATCHES"
+        )
+        paket = pipeline.parse_commit_paket(text)
+        assert len(paket["doku_patches"]) == 2
+        assert paket["doku_patches"][0]["pfad"] == "docs/PHASES.md"
+        assert paket["doku_patches"][0]["anker"] == "A1"
+        assert paket["doku_patches"][0]["ersatz"] == "B1"
+        assert paket["doku_patches"][1]["pfad"] == "docs/SECURITY_REVIEW_LOG.md"
+        assert paket["doku_patches"][1]["anker"] == "A2"
+        assert paket["doku_patches"][1]["ersatz"] == "B2"
+
 
 # =====================================================================
 # parse_empfehlung
