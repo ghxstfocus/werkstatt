@@ -974,7 +974,10 @@ def apply_code_patches(state: RunState,
     if not patches:
         print("[!] apply_code_patches: keine Patches.")
         return False
-    gesehen: set[Path] = set()
+    # Auflage 2173: Doppel-Pruefung auf (Pfad, Anker),
+    # nicht nur Pfad. Mehrere Patches pro Datei sind
+    # legitim, solange Anker unterschiedlich.
+    gesehen: set[tuple[Path, str]] = set()
     original: dict[Path, str] = {}
     plan: list[tuple[Path, str, str]] = []
     for p in patches:
@@ -992,10 +995,11 @@ def apply_code_patches(state: RunState,
         if not ziel.exists():
             print(f"[!] apply_code_patches: Datei fehlt: {pfad}")
             return False
-        if ziel in gesehen:
-            print(f"[!] apply_code_patches: Pfad doppelt: {pfad}")
+        if (ziel, anker) in gesehen:
+            print(f"[!] apply_code_patches: Patch "
+                  f"(pfad, anker) doppelt: {pfad}")
             return False
-        gesehen.add(ziel)
+        gesehen.add((ziel, anker))
         inhalt = ziel.read_text(encoding="utf-8")
         count = inhalt.count(anker)
         # Auflage 2161: Pruefe Zeilen-Anfang.
@@ -1046,13 +1050,19 @@ def apply_code_patches(state: RunState,
         return True
 
     # ---- Phase 2: Anwendung ----
+    # Auflage 2173: bei mehreren Patches pro Datei
+    # muss jede Iteration den AKTUELLEN Stand lesen,
+    # nicht den Urzustand. Sonst ueberschreibt der
+    # zweite Patch den ersten.
     geschrieben: list[Path] = []
     try:
         for ziel, anker, ersatz in plan:
-            neu = original[ziel].replace(anker, ersatz, 1)
+            aktuell = ziel.read_text(encoding="utf-8")
+            neu = aktuell.replace(anker, ersatz, 1)
             ziel.write_text(neu, encoding="utf-8")
             geschrieben.append(ziel)
-            print(f"[+] Code gepatcht: {ziel.relative_to(state.project_dir)}")
+            print(f"[+] Code gepatcht: "
+                  f"{ziel.relative_to(state.project_dir)}")
     except OSError as exc:
         print(f"[!] apply_code_patches: Schreibfehler: {exc}")
         # Rollback

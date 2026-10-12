@@ -2123,6 +2123,86 @@ class TestApplyCodePatches:
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
 
+    def test_apply_zwei_patches_gleiche_datei(
+        self, tmp_path: Path,
+    ) -> None:
+        """Auflage 2173: zwei Patches in derselben Datei.
+
+        Patch 1 (Import) und Patch 2 (Methode) wirken
+        beide. Kein "Pfad doppelt"-Fehler.
+        """
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text(
+            "from tools.a import A\n"
+            "\n"
+            "def f():\n"
+            "    pass\n",
+            encoding="utf-8",
+        )
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        patches = [
+            {"pfad": "tools/x.py",
+             "anker": "from tools.a import A",
+             "ersatz": "from tools.a import A\nfrom tools.b import B"},
+            {"pfad": "tools/x.py",
+             "anker": "def f():\n    pass",
+             "ersatz": "def f():\n    pass\n\ndef g():\n    pass"},
+        ]
+        ok = pipeline.apply_code_patches(state, patches)
+        assert ok is True
+        inhalt = ziel.read_text()
+        assert "from tools.b import B" in inhalt
+        assert "def g():" in inhalt
+
+    def test_apply_zwei_patches_gleicher_anker_fail(
+        self, tmp_path: Path,
+    ) -> None:
+        """Auflage 2173: identische (pfad, anker) -> fail."""
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text("ALT\n", encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        patches = [
+            {"pfad": "tools/x.py", "anker": "ALT",
+             "ersatz": "NEU1"},
+            {"pfad": "tools/x.py", "anker": "ALT",
+             "ersatz": "NEU2"},
+        ]
+        ok = pipeline.apply_code_patches(state, patches)
+        assert ok is False
+        assert ziel.read_text() == "ALT\n"
+
+    def test_apply_anker_muss_im_urstand_sein(
+        self, tmp_path: Path,
+    ) -> None:
+        """Auflage 2173: alle Anker muessen im Urstand sein.
+
+        Patch 2 darf NICHT auf Patch 1 aufbauen. Alle
+        Anker werden gegen den Urzustand validiert.
+        Wenn ein Anker nur durch Patch 1 entsteht:
+        fail closed.
+        """
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text("A\n", encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        patches = [
+            {"pfad": "tools/x.py", "anker": "A",
+             "ersatz": "A\nX"},
+            # X entsteht erst durch Patch 1. Darf nicht
+            # gefunden werden.
+            {"pfad": "tools/x.py", "anker": "X",
+             "ersatz": "Y"},
+        ]
+        ok = pipeline.apply_code_patches(state, patches)
+        assert ok is False
+        # Nichts geaendert (Validierung vor Anwendung).
+        assert ziel.read_text() == "A\n"
+
     def test_apply_commit_msg_in_git(self, tmp_path: Path) -> None:
         """Auflage 2170: msg_datei liegt in .git/.
 
