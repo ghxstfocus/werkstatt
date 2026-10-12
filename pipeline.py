@@ -1478,12 +1478,28 @@ def main() -> int:
     # Die Pipeline laeuft als Projekt-User (z.B. security-ai, xyapp).
     # Als root wuerden Audit-Logs root:root gehoeren und der
     # Service-User koennte sie nicht mehr lesen (SECURITY_REVIEW_LOG Punkt 12).
-    import getpass
-    aktueller_user = getpass.getuser()
-    if aktueller_user == "root":
-        print("[FAIL] Pipeline darf NICHT als root laufen.")
+    #
+    # Auflage 2085: primär os.getuid() == 0 pruefen (deterministisch,
+    # nicht von Env abhaengig). getpass.getuser() nur ergaenzend und
+    # in try/except, weil es bei fehlenden Env-Variablen fehlschlagen
+    # kann (KeyError/OSError). Bei Fehler: nicht abstuerzen, sondern
+    # nur informieren.
+    if os.getuid() == 0:
+        print("[FAIL] Pipeline darf NICHT als root laufen "
+              "(os.getuid() == 0).")
         print("[FAIL] Aufruf: runuser -u <projekt-user> -- ...")
         print("[FAIL] Beispiel: runuser -u security-ai -- ...")
+        return 66
+    import getpass
+    try:
+        aktueller_user = getpass.getuser()
+    except (KeyError, OSError) as exc:
+        print(f"[WARN] getpass.getuser() fehlgeschlagen: {exc}")
+        aktueller_user = ""
+    if aktueller_user == "root":
+        print("[FAIL] Pipeline darf NICHT als root laufen "
+              "(getpass.getuser() == 'root').")
+        print("[FAIL] Aufruf: runuser -u <projekt-user> -- ...")
         return 66
 
     args = sys.argv[1:]

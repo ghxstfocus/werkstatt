@@ -1162,3 +1162,53 @@ class TestRecoveryBlock:
         pipeline.print_recovery(v)
         out = capsys.readouterr().out
         assert "FRAGE AN DEN MENSCHEN:" not in out
+
+
+# =====================================================================
+# root-Guard in main() (Auflage 2085)
+# =====================================================================
+
+class TestRootGuard:
+    """Tests fuer den root-Guard in main().
+
+    Auflage 2085: os.getuid() primaer, getpass.getuser()
+    in try/except.
+    """
+
+    def test_getuid_0_ergibt_exit_66(
+        self, monkeypatch, capsys,
+    ) -> None:
+        monkeypatch.setattr(pipeline.os, "getuid", lambda: 0)
+        rc = pipeline.main()
+        assert rc == 66
+        out = capsys.readouterr().out
+        assert "NICHT als root" in out
+
+    def test_getuser_root_ergibt_exit_66(
+        self, monkeypatch, capsys,
+    ) -> None:
+        monkeypatch.setattr(pipeline.os, "getuid", lambda: 1000)
+        import getpass
+        monkeypatch.setattr(getpass, "getuser", lambda: "root")
+        rc = pipeline.main()
+        assert rc == 66
+        out = capsys.readouterr().out
+        assert "getpass.getuser()" in out
+
+    def test_getuser_fehler_kein_absturz(
+        self, monkeypatch, capsys,
+    ) -> None:
+        """getpass.getuser() wirft -> Warnung, kein Absturz."""
+        monkeypatch.setattr(pipeline.os, "getuid", lambda: 1000)
+        import getpass
+
+        def fake_getuser():
+            raise KeyError("USER")
+
+        monkeypatch.setattr(getpass, "getuser", fake_getuser)
+        # Kein --project -> erwartet Exit 64, aber KEIN Traceback.
+        monkeypatch.setattr(pipeline.sys, "argv", ["pipeline.py"])
+        rc = pipeline.main()
+        assert rc == 64
+        out = capsys.readouterr().out
+        assert "getpass.getuser() fehlgeschlagen" in out
