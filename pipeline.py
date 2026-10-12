@@ -92,6 +92,21 @@ WERKSTATT_HOME = Path("/opt/werkstatt")
 PROJECTS_DIR = WERKSTATT_HOME / "projects"
 
 
+class BudgetExhausted(Exception):
+    """Wird geworfen, wenn das LLM-Budget erschoepft ist."""
+
+
+def require_budget(state: RunState, max_llm: int) -> None:
+    """Auflage 2051: prueft das Budget VOR jedem LLM-Call.
+
+    Wirft BudgetExhausted, wenn state.llm_calls >= max_llm.
+    """
+    if max_llm > 0 and state.llm_calls >= max_llm:
+        raise BudgetExhausted(
+            f"LLM-Budget erschoepft: {state.llm_calls}/{max_llm}"
+        )
+
+
 def load_project_config(project_name: str) -> dict[str, Any]:
     """Laedt die Projekt-Konfiguration aus /opt/werkstatt/projects/.
 
@@ -938,6 +953,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     always, optional = build_catalog(config, project_dir)
     file_whitelist = config.get("file_whitelist", [])
     budget = config.get("budget", {"max_review_rounds": 5, "max_llm_calls": 20})
+    max_llm = budget.get("max_llm_calls", 20)
 
     git_author = config.get("git_author", {}) or {}
     state = RunState(
@@ -1049,6 +1065,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         "COMMAND: RUN <id>\n"
         "COMMAND: RUN read_file <pfad>"
     )
+    try:
+        require_budget(state, max_llm)
+    except BudgetExhausted as exc:
+        print(f"[!] {exc}")
+        return 13
     reply = ask_llm(api_key, reviewer_prompt, reviewer_input,
                     state.reviewer_verdict_model, 0.0, state.llm_timeout_s)
     if not reply.ok:
@@ -1070,6 +1091,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     print("\n[*] Schritt 2: Builder baut Code-Entwurf.")
     builder_prompt = build_system_prompt(state.agents["builder"], state.docs,
                                          state.agent_docs.get("builder", []))
+    try:
+        require_budget(state, max_llm)
+    except BudgetExhausted as exc:
+        print(f"[!] {exc}")
+        return 13
     reply = ask_llm(
         api_key, builder_prompt,
         f"BASIS-GATE:\n{state.basis_protokoll[:1500]}\n\n"
@@ -1089,7 +1115,6 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     # SCHRITT 3: Review-Schleife (Phase 1)
     # ==================================================================
     max_rounds = budget.get("max_review_rounds", 5)
-    max_llm = budget.get("max_llm_calls", 20)
     verdict = "UNKLAR"
     for runde in range(1, max_rounds + 1):
         if state.llm_calls >= max_llm:
@@ -1123,6 +1148,14 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             f"TEST-VORSCHLAEGE:\n{state.test_vorschlaege or '(keine)'}\n\n"
             "Bewerte. Erste Zeile: GO, NO-GO oder ESKALATION."
         )
+        try:
+            require_budget(state, max_llm)
+        except BudgetExhausted as exc:
+            print(f"[!] {exc}")
+            v = ask_reviewer_for_recovery(state, "budget",
+                                          f"Runden: {runde-1}, LLM: {state.llm_calls}")
+            print_recovery(v)
+            return 13
         reply = ask_llm(api_key, reviewer_prompt, szenario,
                         state.reviewer_verdict_model, 0.0, state.llm_timeout_s)
         if not reply.ok:
@@ -1152,6 +1185,14 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
 
         if verdict == "NO-GO":
             print(f"[-] NO-GO:\n{reply.content[:300]}")
+            try:
+                require_budget(state, max_llm)
+            except BudgetExhausted as exc:
+                print(f"[!] {exc}")
+                v = ask_reviewer_for_recovery(state, "budget",
+                                              f"Runden: {runde}, LLM: {state.llm_calls}")
+                print_recovery(v)
+                return 13
             bauer_reply = ask_llm(
                 api_key, builder_prompt,
                 f"Reviewer NO-GO:\n{reply.content}\n\nUeberarbeite.",
@@ -1244,6 +1285,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             + "; ".join(state.auflagen_log[-1] if state.auflagen_log else [])
             + "\n\nAntworte mit COMMIT-GO, COMMIT-NO-GO oder COMMIT-ESKALATION."
         )
+        try:
+            require_budget(state, max_llm)
+        except BudgetExhausted as exc:
+            print(f"[!] {exc}")
+            return 13
         reply = ask_llm(api_key, reviewer_prompt, commit_input,
                         state.reviewer_verdict_model, 0.0, state.llm_timeout_s)
         if not reply.ok:
@@ -1258,6 +1304,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         if commit_verdict == "COMMIT-NO-GO":
             print(f"[-] Commit-NO-GO:\n{reply.content[:400]}")
             # Zurueck an den Builder: neues Commit-Paket
+            try:
+                require_budget(state, max_llm)
+            except BudgetExhausted as exc:
+                print(f"[!] {exc}")
+                return 13
             bauer_reply = ask_llm(
                 api_key, builder_prompt,
                 f"Reviewer hat das Commit-Paket abgelehnt:\n{reply.content}\n\n"
