@@ -172,6 +172,38 @@ class TestClassifyVerdict:
         text = "\n\n\nGO"
         assert pipeline.classify_verdict(text) == "GO"
 
+    def test_go_mit_punkt(self) -> None:
+        assert pipeline.classify_verdict("GO.") == "GO"
+
+    def test_go_mit_doppelpunkt(self) -> None:
+        assert pipeline.classify_verdict("GO:") == "GO"
+
+    def test_no_go_mit_doppelpunkt(self) -> None:
+        assert pipeline.classify_verdict("NO-GO: Grund ...") == "NO-GO"
+
+    def test_no_go_mit_punkt(self) -> None:
+        assert pipeline.classify_verdict("NO-GO. Grund ...") == "NO-GO"
+
+    def test_eskalation_mit_ausrufezeichen(self) -> None:
+        assert pipeline.classify_verdict("ESKALATION!") == "ESKALATION"
+
+    def test_eskalation_mit_fragezeichen(self) -> None:
+        assert pipeline.classify_verdict("ESKALATION?") == "ESKALATION"
+
+    def test_commit_go_mit_punkt(self) -> None:
+        assert pipeline.classify_verdict("COMMIT-GO.") == "COMMIT-GO"
+
+    def test_commit_no_go_mit_doppelpunkt(self) -> None:
+        assert pipeline.classify_verdict(
+            "COMMIT-NO-GO: Message falsch.") == "COMMIT-NO-GO"
+
+    def test_bindestrich_wird_nicht_zerlegt(self) -> None:
+        # "NO-GO." darf NICHT als "NO" gelesen werden.
+        assert pipeline.classify_verdict("NO-GO.") == "NO-GO"
+
+    def test_go_mit_klammer(self) -> None:
+        assert pipeline.classify_verdict("GO)") == "GO"
+
 
 # =====================================================================
 # parse_auflagen (Auflage 2034)

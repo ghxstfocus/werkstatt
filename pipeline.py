@@ -340,6 +340,14 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
 
 
 def classify_verdict(text: str) -> str:
+    """Erkennt GO / NO-GO / ESKALATION / COMMIT-* / COMMAND.
+
+    Auflage 2077: Satzzeichen am Wortende werden gestrippt,
+    damit "GO.", "NO-GO:" und "ESKALATION!" erkannt werden.
+    Der Bindestrich bleibt Teil des Tokens (NO-GO), sonst
+    wuerde "NO-GO." als "NO" gelesen.
+    """
+    satzzeichen = ".,;:!?)"
     gezaehlt = 0
     for line in text.splitlines():
         s = line.strip()
@@ -348,7 +356,7 @@ def classify_verdict(text: str) -> str:
         gezaehlt += 1
         if gezaehlt > 15:
             break
-        w = s.split(maxsplit=1)[0].upper()
+        w = s.split(maxsplit=1)[0].upper().rstrip(satzzeichen)
         if w in {"GO", "NO-GO", "ESKALATION"}:
             return w
         if w in {"COMMIT-GO", "COMMIT-NO-GO", "COMMIT-ESKALATION"}:
