@@ -1382,3 +1382,119 @@ class TestBudgetTime:
         assert "LLM: 3/100" in kt
         assert "Zeit:" in kt
         assert "61s/60s" in kt
+
+
+# =====================================================================
+# BudgetRecovery (Auflage 2095, Nachtrag aus 3b)
+# =====================================================================
+
+class TestBudgetRecovery:
+    """Drei gezielte Tests fuer Recovery-Pfade.
+
+    Auflage 2095: Nachtrag zu 2079 (Recovery bei Commit-Review),
+    2081 (Konsistenz), 2083 (Audit).
+    """
+
+    def test_budget_exhausted_recovery_bei_commit_review(
+        self, monkeypatch, tmp_path: Path,
+    ) -> None:
+        """Auflage 2079: Recovery wenn LLM-Budget bei
+        Commit-Review erschoepft."""
+        state = build_test_state(project_dir=tmp_path)
+        state.llm_calls = 20  # genau am Limit
+
+        recovery_calls: list[dict] = []
+
+        def fake_recovery(st, art, kontext):
+            recovery_calls.append({"art": art, "kontext": kontext})
+            return pipeline.RecoveryVorschlag(art=art)
+
+        monkeypatch.setattr(pipeline, "ask_reviewer_for_recovery",
+                            fake_recovery)
+        monkeypatch.setattr(pipeline, "print_recovery", lambda v: None)
+        monkeypatch.setattr(pipeline, "audit", lambda *a, **kw: None)
+
+        rc = pipeline.budget_or_recover(
+            state, max_llm=20, kontext="Vor Commit-Review.",
+            project_dir=tmp_path, project_name="test",
+            max_minutes=0,
+        )
+        assert rc == 13
+        assert len(recovery_calls) == 1
+        assert recovery_calls[0]["art"] == "budget"
+        assert "Commit-Review" in recovery_calls[0]["kontext"]
+
+    def test_budget_exhausted_recovery_konsistent(
+        self, monkeypatch, tmp_path: Path,
+    ) -> None:
+        """Auflage 2081: Recovery-Pfad ist bei LLM- und
+        Zeit-Erschoepfung identisch."""
+        recovery_calls: list[dict] = []
+
+        def fake_recovery(st, art, kontext):
+            recovery_calls.append({"art": art, "kontext": kontext})
+            return pipeline.RecoveryVorschlag(art=art)
+
+        monkeypatch.setattr(pipeline, "ask_reviewer_for_recovery",
+                            fake_recovery)
+        monkeypatch.setattr(pipeline, "print_recovery", lambda v: None)
+        monkeypatch.setattr(pipeline, "audit", lambda *a, **kw: None)
+
+        # Fall 1: LLM-Budget erschoepft.
+        state1 = build_test_state(project_dir=tmp_path)
+        state1.llm_calls = 20
+        rc1 = pipeline.budget_or_recover(
+            state1, max_llm=20, kontext="Vor X.",
+            project_dir=tmp_path, project_name="test",
+            max_minutes=0,
+        )
+
+        # Fall 2: Zeitbudget erschoepft.
+        state2 = build_test_state(project_dir=tmp_path)
+        state2.llm_calls = 0
+        state2.start_monotonic = 1000.0
+        monkeypatch.setattr(pipeline.time, "monotonic",
+                            lambda: 1000.0 + 61.0)
+        rc2 = pipeline.budget_or_recover(
+            state2, max_llm=20, kontext="Vor Y.",
+            project_dir=tmp_path, project_name="test",
+            max_minutes=1,
+        )
+
+        assert rc1 == 13
+        assert rc2 == 13
+        assert len(recovery_calls) == 2
+        # Beide Aufrufe: art == "budget".
+        assert recovery_calls[0]["art"] == "budget"
+        assert recovery_calls[1]["art"] == "budget"
+
+    def test_budget_recovery_wird_auditiert(
+        self, monkeypatch, tmp_path: Path,
+    ) -> None:
+        """Auflage 2083: recovery_budget erscheint im Audit."""
+        state = build_test_state(project_dir=tmp_path)
+        state.llm_calls = 20
+
+        audit_calls: list[tuple] = []
+
+        def fake_audit(kind, payload, project_dir, project_name):
+            audit_calls.append((kind, payload))
+
+        monkeypatch.setattr(pipeline, "ask_reviewer_for_recovery",
+                            lambda *a, **kw: pipeline.RecoveryVorschlag(
+                                art="budget"))
+        monkeypatch.setattr(pipeline, "print_recovery", lambda v: None)
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+
+        rc = pipeline.budget_or_recover(
+            state, max_llm=20, kontext="Vor X.",
+            project_dir=tmp_path, project_name="test",
+            max_minutes=0,
+        )
+        assert rc == 13
+        recovery_audits = [a for a in audit_calls
+                           if a[0] == "recovery_budget"]
+        assert len(recovery_audits) == 1
+        # Kontext ist im Audit-Payload enthalten.
+        payload = recovery_audits[0][1]
+        assert "kontext" in payload
