@@ -76,18 +76,27 @@ budget:
   max_minutes: 15
   max_llm_calls: 20
 
+# Zukunfts-Konfiguration. Nicht im Code implementiert
+# (Stand HEAD bb6bd60). Aenderungen dieser Werte haben
+# keine Wirkung.
 # Vor-Check-Stufe:
 #   A = py_compile + ruff + mypy
 #   B = A + bandit + pip_audit
 #   C = B + Sandbox-Tests
 pre_check_stage: B
 
+# Zukunfts-Konfiguration. Nicht im Code implementiert
+# (Stand HEAD bb6bd60). Aenderungen dieser Werte haben
+# keine Wirkung.
 # Eskalationsverhalten des Reviewers:
 #   A = Pipeline stoppt, Gate zeigt Stand
 #   B = Pipeline versucht es nochmal mit Eskalationskontext
 #   C = Pipeline ruft zweiten Reviewer (anderes Modell)
 escalation: A
 
+# Zukunfts-Konfiguration. Nicht im Code implementiert
+# (Stand HEAD bb6bd60). Aenderungen dieser Werte haben
+# keine Wirkung.
 # Reject-Pfad:
 #   A = Pipeline endet sofort
 #   B = Pipeline startet neue Runde mit Begruendung

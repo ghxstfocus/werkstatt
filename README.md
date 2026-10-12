@@ -66,8 +66,10 @@ Reviewer bestimmt.
 
 Der Ablauf:
 
-1. Basis-Gate (py_compile, ruff, mypy, test_count, git_status, git_head)
-   laeuft immer. Wenn eines rot ist: Hard Fail, Block startet nicht.
+1. Basis-Gate (immer). Welche Messungen das sind, steht in
+   projects/<name>.yaml unter always_run. Beispiel security-ai:
+   py_compile, ruff, mypy, test_count, git_status, git_head.
+   Wenn eines rot ist: Hard Fail, Block startet nicht.
 2. Auto-Repair (nur deterministisch: ruff --fix, ruff format).
 3. Reviewer waehlt optionale Messungen (COMMAND: RUN <id>).
 4. Builder baut Code-Entwurf.
@@ -92,9 +94,12 @@ Der Ablauf:
 
 ## Was noch nicht fertig ist
 
-- Approval-System (kommt, /opt/werkstatt/approvals/).
-- Runner-Daemon (kommt, fuer Start aus dem Dashboard).
-- Reviewer-Chat im Dashboard (kommt).
+- Approval: aktuell interaktives Gate (input() im Terminal).
+  Geplant: externes Approval-System (Datei, Telegram oder Dashboard).
+- Runner-Daemon (geplant): startet die Pipeline aus dem Dashboard,
+  Warteschlange fuer Bloecke.
+- Reviewer-Chat (geplant): interaktiver Chat mit dem Reviewer-Agenten
+  aus dem Dashboard.
 - Scaffolder (kommt, legt Projekt-Grundstock an).
 - Der Reviewer wird spaeter auch "welcher Block als naechstes"
   entscheiden koennen.
@@ -108,5 +113,10 @@ Eine neue Rolle anlegen:
    Body mit Rolle, Aufgaben, Grenzen.
 2. In `pipeline.py` bei Bedarf eine Aufrufstelle ergaenzen.
 
-Die Hard Rules (HR1-HR10) sind im Rollen-Kern jedes Agenten
-enthalten, nicht in der Projekt-Doku. Sie gelten in jedem Projekt.
+coverage und chaos sind No-LLM-Rollen. Ihre agents/*.md-Dateien
+sind reine Dokumentation, der Code ruft sie direkt (nicht ueber
+einen LLM-Call).
+
+Die Hard Rules (HR1-HR10) sind zentral in pipeline.py als
+HARD_RULES definiert. Sie werden jedem Agenten-System-Prompt
+angehaengt, unabhaengig von der Rolle.
