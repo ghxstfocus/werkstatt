@@ -283,11 +283,11 @@ def build_catalog(config: dict[str, Any], project_dir: Path
     venv = config.get("venv_python", str(project_dir / ".venv/bin/python3"))
     all_m: dict[str, Measurement] = {
         "py_compile": Measurement("py_compile",
-            (venv, "-m", "compileall", "-q", "apps", "core", "harness", "tools", "scripts"),
+            (venv, "-m", "compileall", "-q", "apps", "core", "harness", "tools", "scripts", "tests"),
             "Python-Syntax-Check.", 300),
         "ruff": Measurement("ruff", (venv, "-m", "ruff", "check", "."), "Lint."),
         "mypy": Measurement("mypy",
-            (venv, "-m", "mypy", "apps", "core", "harness", "tools", "scripts"), "Typen.", 300),
+            (venv, "-m", "mypy", "apps", "core", "harness", "tools", "scripts", "tests"), "Typen.", 300),
         "test_count": Measurement("test_count",
             (venv, "-m", "pytest", "--collect-only", "-q"), "Test-Anzahl."),
         "git_status": Measurement("git_status", ("git", "status", "--porcelain"), "Tree."),
@@ -1140,8 +1140,24 @@ def apply_and_recheck(state: RunState,
         return 16
     print(f"\n[*] Code-Patches anwenden ({len(state.code_patches)}).")
     ok_apply = apply_code_patches(state, state.code_patches)
+    # Auflage 2157: Rohtext der Patches ins Audit (Diagnose).
+    # Redaction auf anker/ersatz. Groesse begrenzt.
+    patches_audit: list[dict[str, str]] = []
+    for p in state.code_patches:
+        anker = p.get("anker", "")
+        ersatz = p.get("ersatz", "")
+        anker_red, _ = redaction.redact_all(anker[:3000],
+                                             max_len=100000)
+        ersatz_red, _ = redaction.redact_all(ersatz[:3000],
+                                              max_len=100000)
+        patches_audit.append({
+            "pfad": p.get("pfad", ""),
+            "anker": anker_red,
+            "ersatz": ersatz_red,
+        })
     audit("code_patches_apply", {"ok": ok_apply,
-                                  "anzahl": len(state.code_patches)},
+                                  "anzahl": len(state.code_patches),
+                                  "patches": patches_audit},
           state.project_dir, state.project_name)
     if not ok_apply:
         print("[!] apply_code_patches fehlgeschlagen. Fail closed.")

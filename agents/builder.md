@@ -74,6 +74,44 @@ Bei Doku-Patches gilt:
 Wenn Anker und Ersatz identisch sind, ist der
 Patch wirkungslos. Pruefe immer: ersatz != anker.
 
+## EINRUECKUNG IM ERSATZ
+
+Die Einrueckung des Ersatzes muss EXAKT der
+Einrueckung im Anker entsprechen.
+
+Wenn der Anker Zeilen mit 8 Spaces hat, muss
+der Ersatz fuer Folgezeilen 8 Spaces haben.
+
+Kein Trimmen. Kein Reduzieren. Kein
+"schoener machen".
+
+YAML-Block-Scalar ('|'):
+  Die 2 Spaces nach dem '|' sind YAML-
+  Einrueckung. Der Parser entfernt sie.
+  Die inhaltliche Einrueckung (Klassenkoerper
+  4 Spaces, Methodenkoerper 8 Spaces) bleibt.
+
+Beispiel:
+  Anker:
+      def test_x(self):
+          pass
+
+  Ersatz (YAML):
+      ersatz: |
+          def test_x(self):
+              pass
+
+          def test_y(self):
+              pass
+
+  Die 2 Spaces vor "def" sind YAML.
+  Die 4 Spaces nach den 2 YAML-Spaces sind
+  der Klassenkoerper (2+4=6 Spaces total im
+  YAML-Block).
+
+  Der Parser entfernt 2 Spaces. Uebrig bleibt
+  4 Spaces fuer "def" und 8 Spaces fuer "pass".
+
 ## HASH-REGEL
 
 Schreibe KEINEN Commit-Hash in Doku-Patches.
