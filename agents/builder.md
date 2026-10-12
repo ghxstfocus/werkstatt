@@ -74,43 +74,131 @@ Bei Doku-Patches gilt:
 Wenn Anker und Ersatz identisch sind, ist der
 Patch wirkungslos. Pruefe immer: ersatz != anker.
 
-## EINRUECKUNG IM ERSATZ
+## EINRUECKUNG UND YAML-BLOCK
 
-Die Einrueckung des Ersatzes muss EXAKT der
-Einrueckung im Anker entsprechen.
+### Grundregel
 
-Wenn der Anker Zeilen mit 8 Spaces hat, muss
-der Ersatz fuer Folgezeilen 8 Spaces haben.
+Im YAML-Block-Scalar (|) sind die zwei
+Spaces nach dem '|' die YAML-Einrueckung.
+Der Parser entfernt sie.
 
-Kein Trimmen. Kein Reduzieren. Kein
-"schoener machen".
+Deshalb: Schreibe im YAML-Block immer
+2 Spaces MEHR, als die echte Zeile in
+der Zieldatei hat.
 
-YAML-Block-Scalar ('|'):
-  Die 2 Spaces nach dem '|' sind YAML-
-  Einrueckung. Der Parser entfernt sie.
-  Die inhaltliche Einrueckung (Klassenkoerper
-  4 Spaces, Methodenkoerper 8 Spaces) bleibt.
+Nach dem Entfernen der 2 Spaces bleibt
+die echte Code-Einrueckung uebrig.
 
-Beispiel:
-  Anker:
-      def test_x(self):
-          pass
+### Beispiel 1 — Zeile in Klasse anhaengen
 
-  Ersatz (YAML):
-      ersatz: |
-          def test_x(self):
+Zieldatei (echte Einrueckung):
+
+    class TestX(unittest.TestCase):
+
+        def test_a(self):
+            pass
+
+Die letzte Zeile "pass" hat 8 Spaces.
+
+Patch:
+
+    anker: |
+            def test_a(self):
+                pass
+    ersatz: |
+            def test_a(self):
+                pass
+
+            def test_b(self):
+                pass
+
+Hier hat "def test_a" im YAML-Block
+12 Spaces (8 + 4 fuer die Klasse).
+Nach Abzug der 2 YAML-Spaces bleiben
+10 Spaces. Aber die Datei hat 4 Spaces
+fuer "def".
+
+Warte. Wir muessen genau sein. In der
+YAML-Block-Scalar-Schreibweise sind ALLE
+Zeilen eines Blocks gleich eingerueckt
+(der Block beginnt nach "|" auf einer
+bestimmten Spalte). Der Parser entfernt
+so viele Spaces, wie die erste Zeile
+hat.
+
+Deshalb:
+  - "|" gefolgt von Zeilen mit 6 Spaces
+    (2 Spaces Basis + 4 Spaces Code).
+  - Parser entfernt 6 Spaces.
+  - Uebrig: 0 Spaces.
+  - FALSCH.
+
+Korrekt:
+  - "|" gefolgt von Zeilen mit 8 Spaces
+    (2 Spaces Basis + 6 Spaces Code).
+    Aber die Zieldatei hat 4 Spaces.
+    Also: 2 Basis + 4 Code = 6 Spaces.
+    Der Parser entfernt 2 Spaces.
+    Uebrig: 4 Spaces. Korrekt.
+
+### Beispiel 2 — Praktisch
+
+Zieldatei:
+
+    class TestX(unittest.TestCase):
+
+        def test_a(self):
+            pass
+
+Patch (richtig):
+
+    ersatz: |
+          def test_a(self):
               pass
 
-          def test_y(self):
+          def test_b(self):
               pass
 
-  Die 2 Spaces vor "def" sind YAML.
-  Die 4 Spaces nach den 2 YAML-Spaces sind
-  der Klassenkoerper (2+4=6 Spaces total im
-  YAML-Block).
+Die YAML-Zeilen haben 6 Spaces fuer
+"def" (2 Basis + 4 Code).
+Die YAML-Zeilen haben 10 Spaces fuer
+"pass" (2 Basis + 8 Code).
 
-  Der Parser entfernt 2 Spaces. Uebrig bleibt
-  4 Spaces fuer "def" und 8 Spaces fuer "pass".
+Nach Abzug der 2 Basis-Spaces:
+  4 Spaces fuer "def".
+  8 Spaces fuer "pass".
+Korrekt.
+
+### Beispiel 3 — Einzelne Zeile
+
+Zieldatei:
+
+        self.assertEqual(result["source"], "ping")
+
+8 Spaces vor "self".
+
+Patch (richtig):
+
+    anker: |
+          self.assertEqual(result["source"], "ping")
+
+10 Spaces im YAML-Block.
+Parser entfernt 2 -> 8 Spaces. Korrekt.
+
+### Zusammenfassung
+
+1. Zaehle die Spaces der Zielzeile in
+   der Datei.
+2. Schreibe im YAML-Block 2 Spaces mehr.
+3. Der Parser entfernt 2 -> echte
+   Einrueckung.
+4. Kein Trimmen, kein "schoener machen".
+
+### Anker-Regel
+
+Waehle Anker, die an einem Zeilen-Anfang
+stehen. Kein Substring innerhalb einer
+Zeile.
 
 ## HASH-REGEL
 
