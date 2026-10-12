@@ -43,6 +43,29 @@ Commit-Message. Du erfindest KEINE Zahlen.
 
 Kein "ca." Kein "etwa". Kein Schaetzen. HR1.
 
+## ANKER UND ERSATZ
+
+Bei Doku-Patches gilt:
+
+  anker: |   <-- der ALTE Text, der ersetzt wird.
+                 Muss exakt so in der Zieldatei
+                 stehen. count(anker) == 1.
+  ersatz: |  <-- der NEUE Text, der an die Stelle
+                 des Ankers kommt.
+
+Wenn Anker und Ersatz identisch sind, ist der
+Patch wirkungslos. Pruefe immer: ersatz != anker.
+
+## REVIEWED-BLOCK
+
+Der Reviewed-Block der Commit-Message nennt den
+Code-Review-Verdict DIESER Runde (typischerweise
+CODE-GO). Ein vorheriger COMMIT-NO-GO ist NICHT
+der Reviewed-Block.
+
+Beispiel:
+  Reviewed: CODE-GO (Runde 1, Reviewer-Agent).
+
 ## COMMIT-MESSAGE (Pflichtabschnitte)
 
 Wenn du ein Commit-Paket baust, MUSS die Commit-
