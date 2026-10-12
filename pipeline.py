@@ -351,7 +351,17 @@ class LLMReply:
 
 
 def ask_llm(api_key: str, system_prompt: str, user_content: str,
-            model: str, temperature: float, timeout: int = 120) -> LLMReply:
+            model: str, temperature: float, timeout: int = 120,
+            *, state: RunState | None = None) -> LLMReply:
+    """Fragt das LLM.
+
+    Auflage 2125: Wenn `state` uebergeben wird, zaehlt
+    der Aufruf in state.llm_calls — unabhaengig davon,
+    ob der Call erfolgreich ist. Fehlschlaege zaehlen
+    ebenfalls (konservativ, Budget-Schutz).
+    """
+    if state is not None:
+        state.llm_calls += 1
     # Redaction: vor dem Senden anwenden
     # Auflage 2113: max_len=100_000, damit Block-Auftraege
     # groesser 2000 Zeichen nicht abgeschnitten werden.
@@ -649,13 +659,13 @@ def ask_reviewer_for_recovery(state: RunState, art: str, kontext: str) -> Recove
         state.reviewer_recovery_model,
         0.0,
         state.llm_timeout_s,
+        state=state,
     )
     if not reply.ok:
         return RecoveryVorschlag(art=art,
                                  diagnose="(Reviewer nicht erreichbar)",
                                  empfehlung=f"API-Fehler: {reply.error}",
                                  rohantwort=reply.error)
-    state.llm_calls += 1
     v = RecoveryVorschlag(art=art, rohantwort=reply.content)
     abschnitt = None
     for line in reply.content.splitlines():
@@ -1030,13 +1040,23 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
         state.builder_model,
         state.builder_temp,
         state.llm_timeout_s,
+        state=state,
     )
     if not reply.ok:
+        # Auflage 2123: Audit fuer den Fehlerpfad.
+        audit("builder_commit_paket_failed",
+              {"error": reply.error}, state.project_dir,
+              state.project_name)
         return {"message": "", "dateien": [], "doku_patches": [],
                 "error": reply.error}
-    state.llm_calls += 1
     paket = parse_commit_paket(reply.content)
     paket["roh"] = reply.content
+    # Auflage 2123: Audit, wenn das Paket leer geparst wurde.
+    if not paket.get("message") and not paket.get("dateien") \
+            and not paket.get("doku_patches"):
+        audit("commit_paket_leer",
+              {"roh_len": len(reply.content)}, state.project_dir,
+              state.project_name)
     return paket
 
 
@@ -1340,12 +1360,12 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     if rc is not None:
         return rc
     reply = ask_llm(api_key, reviewer_prompt, reviewer_input,
-                    state.reviewer_verdict_model, 0.0, state.llm_timeout_s)
+                    state.reviewer_verdict_model, 0.0, state.llm_timeout_s,
+                    state=state)
     if not reply.ok:
         print(f"[FAIL] Reviewer: {reply.error}")
         audit("reviewer_call_failed", {"error": reply.error}, project_dir, project_name)
         return 2
-    state.llm_calls += 1
 
     commands = parse_commands(reply.content)
     if commands:
@@ -1373,12 +1393,12 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         f"AUFGABE: {aufgabe}\n\n"
         "Liefere einen Code-Entwurf als Text.",
         state.builder_model, state.builder_temp, state.llm_timeout_s,
+        state=state,
     )
     if not reply.ok:
         print(f"[FAIL] Builder: {reply.error}")
         audit("builder_call_failed", {"error": reply.error}, project_dir, project_name)
         return 4
-    state.llm_calls += 1
     state.code_entwurf = reply.content
 
     # ==================================================================
@@ -1422,13 +1442,13 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         if rc is not None:
             return rc
         reply = ask_llm(api_key, reviewer_prompt, szenario,
-                        state.reviewer_verdict_model, 0.0, state.llm_timeout_s)
+                        state.reviewer_verdict_model, 0.0, state.llm_timeout_s,
+                        state=state)
         if not reply.ok:
             print(f"[FAIL] Reviewer: {reply.error}")
             audit("reviewer_call_failed", {"error": reply.error, "runde": runde},
                   project_dir, project_name)
             return 5
-        state.llm_calls += 1
 
         verdict = classify_verdict(reply.content)
         state.review_runden.append(
@@ -1464,10 +1484,10 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 api_key, builder_prompt,
                 f"Reviewer NO-GO:\n{reply.content}\n\nUeberarbeite.",
                 state.builder_model, state.builder_temp, state.llm_timeout_s,
+                state=state,
             )
             if bauer_reply.ok:
                 state.code_entwurf = bauer_reply.content
-                state.llm_calls += 1
             continue
 
         if verdict == "GO":
@@ -1494,10 +1514,10 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                     "Entwurf.",
                     state.builder_model, state.builder_temp,
                     state.llm_timeout_s,
+                    state=state,
                 )
                 if bauer_reply.ok:
                     state.code_entwurf = bauer_reply.content
-                    state.llm_calls += 1
                 continue
             print("[+] Code-GO erhalten.")
             break
@@ -1547,10 +1567,10 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 f"CODE-BASIS:\n{state.code_entwurf[:3000]}\n\n"
                 "Liefere Test-Vorschlaege als Text. Kein Schreiben.",
                 state.test_gen_model, 0.3, state.llm_timeout_s,
+                state=state,
             )
             if reply.ok:
                 state.test_vorschlaege = reply.content
-                state.llm_calls += 1
 
     if "chaos_probe" in state.optional:
         print("[*] Chaos-Probe.")
@@ -1603,11 +1623,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 return rc
             reply = ask_llm(api_key, reviewer_prompt, commit_input,
                             state.reviewer_verdict_model, 0.0,
-                            state.llm_timeout_s)
+                            state.llm_timeout_s,
+                            state=state)
             if not reply.ok:
                 print(f"[FAIL] Reviewer Commit-Review: {reply.error}")
                 return 6
-            state.llm_calls += 1
 
             commit_verdict = classify_verdict(reply.content)
             state.commit_review = {"verdict": commit_verdict,
@@ -1647,13 +1667,13 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 "(Message, Dateien, Doku-Patches).",
                 state.builder_model, state.builder_temp,
                 state.llm_timeout_s,
+                state=state,
             )
             if not bauer_reply.ok:
                 print(f"[FAIL] Builder Commit-Paket-Neubau: "
                       f"{bauer_reply.error}")
                 return 8
             state.commit_paket = parse_commit_paket(bauer_reply.content)
-            state.llm_calls += 1
 
     # ==================================================================
     # SCHRITT 6: Approval-Dokument + Human-Gate
