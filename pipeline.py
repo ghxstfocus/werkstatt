@@ -567,6 +567,7 @@ class RecoveryVorschlag:
     reparaturplan: list[str] = field(default_factory=list)
     empfehlung: str = ""
     blockgroesse: str = ""
+    frage_an_menschen: str = ""
     rohantwort: str = ""
 
 
@@ -616,6 +617,9 @@ def ask_reviewer_for_recovery(state: RunState, art: str, kontext: str) -> Recove
         if s.upper().startswith("DIAGNOSE:"):
             v.diagnose = s.split(":", 1)[1].strip()
             abschnitt = None
+        elif s.upper().startswith("FRAGE AN DEN MENSCHEN:"):
+            v.frage_an_menschen = s.split(":", 1)[1].strip()
+            abschnitt = None
         elif s.upper().startswith(("REPARATURPLAN:", "LOESUNGSVORSCHLAG:", "OPTIONEN:")):
             abschnitt = "plan"
         elif s.upper().startswith("BLOCKGROESSE:"):
@@ -643,6 +647,8 @@ def print_recovery(v: RecoveryVorschlag) -> None:
             print(f"  {i}. {s}")
     if v.blockgroesse:
         print(f"\nBLOCKGROESSE: {v.blockgroesse}")
+    if v.frage_an_menschen:
+        print(f"\nFRAGE AN DEN MENSCHEN:\n  {v.frage_an_menschen}")
     if v.empfehlung:
         print(f"\nEMPFEHLUNG: {v.empfehlung}")
     print("\n--- ROHE ANTWORT ---")
@@ -1269,6 +1275,10 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             print(f"[!] ESKALATION:\n{reply.content[:500]}")
             v = ask_reviewer_for_recovery(state, "eskalation", reply.content)
             print_recovery(v)
+            audit("recovery_eskalation",
+                  {"frage_an_menschen": v.frage_an_menschen[:500],
+                   "empfehlung": v.empfehlung[:500]},
+                  project_dir, project_name)
             return 14
 
         if verdict == "NO-GO":

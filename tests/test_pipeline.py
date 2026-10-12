@@ -1066,3 +1066,99 @@ class TestAskLlmRetry:
         assert reply.ok is True
         assert len(aufrufe) == 2
         assert warten == [1]
+
+
+# =====================================================================
+# Recovery-Block (Auflagen 2083 + 2084)
+# =====================================================================
+
+class TestRecoveryBlock:
+    """Tests fuer RecoveryVorschlag, Parser und print_recovery.
+
+    Auflage 2084: frage_an_menschen.
+    Auflage 2083: audit recovery_eskalation (in run_pipeline,
+    hier nicht isoliert testbar; das Feld ist Teil der Struktur).
+    """
+
+    def _mock_llm(self, monkeypatch, antwort: str, ok: bool = True) -> None:
+        """Mockt ask_llm. state.agents muss 'reviewer' enthalten,
+        weil ask_reviewer_for_recovery das Argument VOR dem Aufruf
+        von build_system_prompt auswertet.
+        """
+        class _Reply:
+            def __init__(self) -> None:
+                self.ok = ok
+                self.content = antwort
+                self.error = "simulierter Fehler" if not ok else ""
+
+        def fake_ask_llm(*args, **kwargs):
+            return _Reply()
+
+        monkeypatch.setattr(pipeline, "ask_llm", fake_ask_llm)
+        monkeypatch.setattr(
+            pipeline, "build_system_prompt",
+            lambda *a, **kw: "SYSTEM",
+        )
+
+    def _state(self) -> pipeline.RunState:
+        """RunState mit minimalem agents-Eintrag fuer reviewer."""
+        st = build_test_state()
+        st.agents["reviewer"] = {"name": "reviewer"}
+        return st
+
+    def test_frage_an_menschen_default_leer(self) -> None:
+        v = pipeline.RecoveryVorschlag(art="test")
+        assert v.frage_an_menschen == ""
+
+    def test_parser_erkennt_frage_an_menschen(
+        self, monkeypatch,
+    ) -> None:
+        antwort = (
+            "DIAGNOSE: Testfehler.\n"
+            "FRAGE AN DEN MENSCHEN: Welchen Weg?\n"
+            "BLOCKGROESSE: ein Block\n"
+            "EMPFEHLUNG: Variante A\n"
+        )
+        self._mock_llm(monkeypatch, antwort)
+        state = self._state()
+        v = pipeline.ask_reviewer_for_recovery(state, "eskalation", "ctx")
+        assert v.diagnose == "Testfehler."
+        assert v.frage_an_menschen == "Welchen Weg?"
+        assert v.blockgroesse == "ein Block"
+        assert v.empfehlung == "Variante A"
+
+    def test_parser_ohne_frage_an_menschen(
+        self, monkeypatch,
+    ) -> None:
+        antwort = "DIAGNOSE: Ok.\nEMPFEHLUNG: weiter.\n"
+        self._mock_llm(monkeypatch, antwort)
+        state = self._state()
+        v = pipeline.ask_reviewer_for_recovery(state, "no_go", "ctx")
+        assert v.frage_an_menschen == ""
+
+    def test_print_recovery_zeigt_frage(
+        self, capsys,
+    ) -> None:
+        v = pipeline.RecoveryVorschlag(
+            art="eskalation",
+            diagnose="X",
+            frage_an_menschen="Bitte entscheiden.",
+            empfehlung="A",
+            rohantwort="...",
+        )
+        pipeline.print_recovery(v)
+        out = capsys.readouterr().out
+        assert "FRAGE AN DEN MENSCHEN:" in out
+        assert "Bitte entscheiden." in out
+
+    def test_print_recovery_ohne_frage(
+        self, capsys,
+    ) -> None:
+        v = pipeline.RecoveryVorschlag(
+            art="no_go",
+            diagnose="X",
+            rohantwort="...",
+        )
+        pipeline.print_recovery(v)
+        out = capsys.readouterr().out
+        assert "FRAGE AN DEN MENSCHEN:" not in out
