@@ -31,10 +31,17 @@ always_run:
   - git_head
 
 # Diese Messungen waehlt der Reviewer bei Bedarf.
+#
+# Auflage 2114 (temporaer): coverage und test_run sind
+# entfernt. Sie scheitern aktuell an der Test-Isolation
+# (Audit-Writer-DB nicht schreibbar mit User builder,
+# Coverage-Datenverzeichnis nicht konfiguriert).
+# Wieder aktivieren, sobald die Test-Isolation geklaert
+# ist (eigener Block).
+#
+# Auflage 2115: chaos_probe ist entfernt. Die Datei
+# scripts/chaos_probe.py existiert nicht.
 optional_catalog:
-  - test_run
-  - coverage
-  - chaos_probe
   - bandit
   - pip_audit
   - read_file
