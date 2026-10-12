@@ -594,8 +594,10 @@ class RunState:
     project_name: str = ""
     coverage_pct: int = -1  # -1 = nicht gemessen
     basis_protokoll: str = ""
+    basis_protokoll_nach_apply: str = ""  # UMB-1b
     mess_protokoll: str = ""
     code_entwurf: str = ""
+    code_patches: list[dict[str, str]] = field(default_factory=list)  # UMB-1b
     test_vorschlaege: str = ""
     commit_paket: dict[str, Any] = field(default_factory=dict)
     commit_review: dict[str, Any] = field(default_factory=dict)
@@ -1661,11 +1663,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     # ==================================================================
     # SCHRITT 2: Builder baut Code-Entwurf
     # ==================================================================
-    print("\n[*] Schritt 2: Builder baut Code-Entwurf.")
+    print("\n[*] Schritt 2: Builder baut Code-Patches (UMB-1b).")
     builder_prompt = build_system_prompt(state.agents["builder"], state.docs,
                                          state.agent_docs.get("builder", []))
     rc = budget_or_recover(state, max_llm,
-                          "Vor Builder-Aufruf (Code-Entwurf).",
+                          "Vor Builder-Aufruf (Code-Patches).",
                           project_dir, project_name,
                           max_minutes=max_minutes)
     if rc is not None:
@@ -1674,8 +1676,20 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         api_key, builder_prompt,
         f"BASIS-GATE:\n{state.basis_protokoll[:1500]}\n\n"
         f"OPTIONALE MESSUNGEN:\n{state.mess_protokoll or '(keine)'}\n\n"
+        + format_doc_snippets(state.docs) + "\n\n"
         f"AUFGABE: {aufgabe}\n\n"
-        "Liefere einen Code-Entwurf als Text.",
+        "Liefere strukturierte Code-Patches im Format:\n\n"
+        "PATCH-BEGINN\n"
+        "pfad: <pfad zur Zieldatei>\n"
+        "anker: |\n"
+        "  <der ALTE Text, count(anker) == 1>\n"
+        "ersatz: |\n"
+        "  <der NEUE Text, ersatz != anker>\n"
+        "PATCH-ENDE\n\n"
+        "Mehrere Patches hintereinander (jeweils PATCH-BEGINN/PATCH-ENDE).\n"
+        "Kein freier Text. Kein Markdown. Nur Patches.\n"
+        "Wenn du einen Anker nicht im Ausschnitt findest: keinen Patch fuer "
+        "diese Datei. Kein Erfinden.",
         state.builder_model, state.builder_temp, state.llm_timeout_s,
         state=state,
     )
@@ -1684,6 +1698,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         audit("builder_call_failed", {"error": reply.error}, project_dir, project_name)
         return 4
     state.code_entwurf = reply.content
+    state.code_patches = parse_code_patches(reply.content)
+    print(f"[i] {len(state.code_patches)} Code-Patches geparst.")
 
     # ==================================================================
     # SCHRITT 3: Review-Schleife (Phase 1)
@@ -1793,15 +1809,19 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                     api_key, builder_prompt,
                     f"Der Reviewer hat GO gegeben, aber folgende "
                     f"Auflagen formuliert:\n{auflagen_text}\n\n"
-                    "Ueberarbeite den Code-Entwurf, um die Auflagen "
-                    "umzusetzen. Antworte mit dem ueberarbeiteten "
-                    "Entwurf.",
+                    "Ueberarbeite die Code-Patches, um die Auflagen "
+                    "umzusetzen. Antworte mit den ueberarbeiteten "
+                    "PATCH-BEGINN/PATCH-ENDE-Bloecken. Kein freier Text.",
                     state.builder_model, state.builder_temp,
                     state.llm_timeout_s,
                     state=state,
                 )
                 if bauer_reply.ok:
                     state.code_entwurf = bauer_reply.content
+                    state.code_patches = parse_code_patches(
+                        bauer_reply.content)
+                    print(f"[i] {len(state.code_patches)} Code-Patches "
+                          f"nach Auflagen-Umsetzung geparst.")
                 continue
             print("[+] Code-GO erhalten.")
             break
@@ -1815,6 +1835,54 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         print_recovery(v)
         audit("recovery_no_go", {"empfehlung": v.empfehlung}, project_dir, project_name)
         return 15
+
+    # ==================================================================
+    # UMB-1b: Code-Patches anwenden
+    # ==================================================================
+    if not state.code_patches:
+        print("[!] Code-GO, aber keine Code-Patches. Fail closed.")
+        audit("code_patches_leer", {}, project_dir, project_name)
+        return 16
+    print(f"\n[*] Code-Patches anwenden ({len(state.code_patches)}).")
+    ok_apply = apply_code_patches(state, state.code_patches)
+    audit("code_patches_apply", {"ok": ok_apply,
+                                  "anzahl": len(state.code_patches)},
+          project_dir, project_name)
+    if not ok_apply:
+        print("[!] apply_code_patches fehlgeschlagen. Fail closed.")
+        return 17
+
+    # ==================================================================
+    # UMB-1b: Basis-Gate erneut (nach Anwendung).
+    # git_status wird ausgenommen (Working Tree ist absichtlich
+    # nicht clean nach Anwendung).
+    # ==================================================================
+    print("[*] Basis-Gate nach Anwendung (ohne git_status).")
+    state.basis_protokoll_nach_apply = ""
+    nach_fehler: list[str] = []
+    for mid, m in always.items():
+        if mid in ("git_status", "git_head"):
+            # git_status: nach Anwendung nicht clean.
+            # git_head: HEAD aendert sich nicht.
+            continue
+        out, ok_m = run_measurement(m, file_whitelist, project_dir)
+        state.basis_protokoll_nach_apply += out
+        if not ok_m:
+            nach_fehler.append(mid)
+            print(f"[!] Basis-Gate-nach-apply rot: {mid}")
+        else:
+            print(f"[+] Basis-Gate-nach-apply gruen: {mid}")
+    if nach_fehler:
+        print(f"[!] Basis-Gate-nach-apply rot: {nach_fehler}")
+        v = ask_reviewer_for_recovery(
+            state, "basis_gate",
+            f"Nach Anwendung der Code-Patches: {nach_fehler}\n\n"
+            f"Protokoll:\n{state.basis_protokoll_nach_apply[:3000]}")
+        print_recovery(v)
+        audit("recovery_basis_gate_nach_apply",
+              {"fehler": nach_fehler, "empfehlung": v.empfehlung},
+              project_dir, project_name)
+        return 18
 
     # ==================================================================
     # SCHRITT 4: Coverage + ggf. Test-Generator + Chaos
