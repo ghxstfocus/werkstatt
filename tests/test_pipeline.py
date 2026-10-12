@@ -1295,6 +1295,63 @@ class TestRecoveryBlock:
 
 
 # =====================================================================
+# audit() neue Lokation (Auflage 2110)
+# =====================================================================
+
+class TestAudit:
+    """Tests fuer audit() nach Umstellung auf Werkstatt-Pfad.
+
+    Auflage 2110: audit schreibt nach _werkstatt_home()/audit-logs/,
+    nicht mehr ins Ziel-Projekt.
+    """
+
+    def test_schreibt_in_werkstatt_audit_dir(
+        self, monkeypatch, tmp_path: Path,
+    ) -> None:
+        """Audit legt Datei in <werkstatt>/audit-logs/ an."""
+        monkeypatch.setattr(pipeline, "_werkstatt_home",
+                            lambda: tmp_path)
+        pipeline.audit("test_kind", {"k": "v"},
+                       tmp_path / "beliebiges-projekt", "test-projekt")
+        audit_dir = tmp_path / "audit-logs"
+        assert audit_dir.is_dir()
+        dateien = list(audit_dir.glob("agent-pipeline-*.jsonl"))
+        assert len(dateien) == 1
+        inhalt = dateien[0].read_text(encoding="utf-8")
+        assert "test_kind" in inhalt
+        assert "\"project\": \"test-projekt\"" in inhalt
+
+    def test_project_feld_bleibt(
+        self, monkeypatch, tmp_path: Path,
+    ) -> None:
+        """project-Feld im Eintrag bleibt erhalten."""
+        monkeypatch.setattr(pipeline, "_werkstatt_home",
+                            lambda: tmp_path)
+        pipeline.audit("some_event", {}, tmp_path, "mein-projekt")
+        dateien = list((tmp_path / "audit-logs").glob("*.jsonl"))
+        assert len(dateien) == 1
+        zeile = dateien[0].read_text(encoding="utf-8").strip()
+        import json
+        entry = json.loads(zeile)
+        assert entry["project"] == "mein-projekt"
+        assert entry["kind"] == "some_event"
+        assert entry["agent"] == "agent_pipeline"
+
+    def test_mkdir_legt_fehlendes_verzeichnis_an(
+        self, monkeypatch, tmp_path: Path,
+    ) -> None:
+        """mkdir(parents=True, exist_ok=True) legt Verzeichnis an."""
+        # tmp_path/audit-logs existiert noch nicht.
+        nest = tmp_path / "nest" / "home"
+        nest.mkdir(parents=True)
+        monkeypatch.setattr(pipeline, "_werkstatt_home",
+                            lambda: nest)
+        assert not (nest / "audit-logs").exists()
+        pipeline.audit("evt", {}, tmp_path, "p")
+        assert (nest / "audit-logs").is_dir()
+
+
+# =====================================================================
 # root-Guard in main() (Auflage 2085)
 # =====================================================================
 

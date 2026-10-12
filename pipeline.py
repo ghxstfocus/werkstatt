@@ -186,6 +186,18 @@ def load_docs(docs_config: dict[str, str], project_dir: Path) -> dict[str, str]:
     return docs
 
 
+def _werkstatt_home() -> Path:
+    """Liefert das Werkstatt-Heimverzeichnis.
+
+    Auflage 2110: Das ist der Pfad, in dem pipeline.py liegt.
+    Nicht der CWD, nicht das Projekt. Damit landet Audit
+    immer in /opt/werkstatt/audit-logs/, egal von wo der
+    Aufruf kommt. Tests koennen diese Funktion mocken,
+    um in ein tmp_path zu schreiben.
+    """
+    return Path(__file__).resolve().parent
+
+
 def audit(kind: str, payload: dict[str, Any], project_dir: Path,
           project_name: str) -> None:
     """Schreibt einen Audit-Eintrag.
@@ -193,7 +205,13 @@ def audit(kind: str, payload: dict[str, Any], project_dir: Path,
     Auflage 2043: project_name wird explizit uebergeben. Keine
     Modul-Variable mehr, keine unsichtbare Kopplung.
     """
-    audit_dir = project_dir / AUDIT_DIR_NAME
+    # Auflage 2110: Audit schreibt in die Werkstatt, nicht
+    # ins Ziel-Projekt. Grund: Trennung Bau-User (Werkstatt)
+    # von Service-User (Projekt). Werkstatt-Audit ist
+    # projektuebergreifend, mit project-Feld im Eintrag.
+    # project_dir wird nicht mehr fuer die Lokation genutzt,
+    # bleibt aber Parameter (Aufrufer unveraendert).
+    audit_dir = _werkstatt_home() / AUDIT_DIR_NAME
     audit_dir.mkdir(parents=True, exist_ok=True)
     tag = datetime.now(UTC).strftime("%Y-%m-%d")
     datei = audit_dir / f"agent-pipeline-{tag}.jsonl"
