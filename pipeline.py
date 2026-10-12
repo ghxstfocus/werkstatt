@@ -1826,18 +1826,16 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         + format_doc_snippets(state.docs) + "\n\n"
         + ziel_snippets + "\n\n"
         + aufgabe_block(state)
-        + "Liefere strukturierte Code-Patches im Format:\n\n"
-        "PATCH-BEGINN\n"
-        "pfad: <pfad zur Zieldatei>\n"
-        "anker: |\n"
-        "  <der ALTE Text, count(anker) == 1>\n"
-        "ersatz: |\n"
-        "  <der NEUE Text, ersatz != anker>\n"
-        "PATCH-ENDE\n\n"
-        "Mehrere Patches hintereinander (jeweils PATCH-BEGINN/PATCH-ENDE).\n"
+        + "Liefere strukturierte Code-Patches im Format "
+        "PATCH-BEGINN/PATCH-ENDE.\n"
+        "Format und Einrueckungs-Regeln stehen im "
+        "System-Prompt (Abschnitt 'EINRUECKUNG UND "
+        "YAML-BLOCK').\n\n"
+        "Mehrere Patches hintereinander "
+        "(jeweils PATCH-BEGINN/PATCH-ENDE).\n"
         "Kein freier Text. Kein Markdown. Nur Patches.\n"
-        "Wenn du einen Anker nicht im Ausschnitt findest: keinen Patch fuer "
-        "diese Datei. Kein Erfinden.",
+        "Wenn du einen Anker nicht im Ausschnitt findest: "
+        "keinen Patch fuer diese Datei. Kein Erfinden.",
         state.builder_model, state.builder_temp, state.llm_timeout_s,
         state=state,
     )

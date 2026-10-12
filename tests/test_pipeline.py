@@ -2228,3 +2228,20 @@ class TestReadTargetSnippets:
     def test_keine_pfade(self, tmp_path: Path) -> None:
         s = pipeline.read_target_snippets([], tmp_path, ["tools/"])
         assert "keine Zieldateien" in s
+
+    def test_user_prompt_ohne_anker_beispiel(self) -> None:
+        """Auflage 2164: Der Code-Patch-User-Prompt enthaelt
+        kein konkretes 'anker: |'-Beispiel. Die Format-Regel
+        steht im System-Prompt.
+        """
+        # Wir pruefen den Quelltext der Datei, weil der
+        # Prompt-String zur Laufzeit zusammengesetzt wird.
+        from pathlib import Path as _P
+        quelle = _P(pipeline.__file__).read_text(encoding="utf-8")
+        # Der Verweis auf den System-Prompt-Abschnitt
+        # ist im Quelltext (aufgeteilt auf zwei Strings).
+        assert "YAML-BLOCK" in quelle
+        # Der alte Beispielblock (mit konkretem
+        # 'der ALTE Text') darf nicht mehr im
+        # Code-Patch-Prompt stehen.
+        assert "<der ALTE Text, count(anker) == 1>" not in quelle
