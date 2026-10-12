@@ -1,0 +1,119 @@
+# security-ai.yaml - Projekt-Konfiguration fuer die Multi-Agenten-Pipeline
+# Projekt: Homelab Security AI
+# Diese Datei liegt in der Werkstatt (/opt/werkstatt/projects/).
+# Sie beschreibt, wo das Projekt liegt, welche Doku es hat, welche
+# Messungen erlaubt sind. Die Pipeline liest sie beim Aufruf mit
+# --project security-ai.
+
+project: homelab-security-ai
+project_dir: /opt/security-ai
+agents_dir: /opt/werkstatt/agents
+
+# Pflichtdokumente, die in jeden System-Prompt geladen werden.
+# Wenn eines fehlt: Fail closed.
+docs:
+  context: docs/CONTEXT_PROMPT.md
+  handoff: docs/REVIEWER_HANDOFF.md
+  decisions: docs/DESIGN_DECISIONS.md
+  security_log: docs/SECURITY_REVIEW_LOG.md
+  web_security: docs/WEB_SECURITY_CHECKLIST.md
+  workflow: docs/WORKFLOW.md
+
+# Diese Messungen laufen IMMER, ohne Reviewer-Entscheidung.
+# Deterministisch, projektunabhaengig.
+# Wenn eines rot ist: Hard Fail, Block startet nicht.
+always_run:
+  - py_compile
+  - ruff
+  - mypy
+  - test_count
+  - git_status
+  - git_head
+
+# Diese Messungen waehlt der Reviewer bei Bedarf.
+optional_catalog:
+  - test_run
+  - coverage
+  - chaos_probe
+  - bandit
+  - pip_audit
+  - read_file
+
+# Doku-Zuordnung pro Agent.
+# Jeder Agent bekommt nur die Doku, die er braucht.
+# Referenzen beziehen sich auf die Schluessel unter docs:.
+agent_docs:
+  reviewer:
+    - workflow
+    - handoff
+    - decisions
+    - security_log
+    - web_security
+  builder:
+    - context
+    - decisions
+    - web_security
+  test_generator:
+    - context
+
+# Nur diese Praefixe darf read_file lesen.
+file_whitelist:
+  - apps/
+  - core/
+  - harness/
+  - tools/
+  - docs/
+  - tests/
+  - scripts/
+
+# Pfad zum venv-Python. Wird fuer alle Messungen genutzt.
+venv_python: /opt/security-ai/.venv/bin/python3
+
+# Budget pro Block. Bei Ueberschreitung: Stop + Recovery.
+budget:
+  max_review_rounds: 5
+  max_minutes: 15
+  max_llm_calls: 20
+
+# Vor-Check-Stufe:
+#   A = py_compile + ruff + mypy
+#   B = A + bandit + pip_audit
+#   C = B + Sandbox-Tests
+pre_check_stage: B
+
+# Eskalationsverhalten des Reviewers:
+#   A = Pipeline stoppt, Gate zeigt Stand
+#   B = Pipeline versucht es nochmal mit Eskalationskontext
+#   C = Pipeline ruft zweiten Reviewer (anderes Modell)
+escalation: A
+
+# Reject-Pfad:
+#   A = Pipeline endet sofort
+#   B = Pipeline startet neue Runde mit Begruendung
+#   C = Pipeline gibt Entwurf zum manuellen Editieren
+reject_path: B
+
+# Auto-Repair des Basis-Gates.
+auto_repair:
+  enabled: true
+  max_attempts: 3
+  auto_fix_ruff: true
+  auto_fix_ruff_format: true
+  escalate_after_attempts: true
+  escalate_if_errors_over: 20
+
+# Auto-Approval-Gate am Ende. Immer Human-in-the-Loop.
+# Nie automatisch committen.
+require_human_approval: true
+
+# Commit-Paket-Pruefung durch den Reviewer.
+# Zweite Review-Phase nach Code-GO.
+review_commit_package: true
+
+# Git-Autor fuer alle Commits, die diese Pipeline erstellt.
+# Wird beim Commit per git -c user.name=... -c user.email=... gesetzt.
+# Damit steht im Git-Log immer der Mensch, nicht der Linux-User.
+git_author:
+  name: ghxstfocus
+  email: ghxst.focus@gmail.com
+

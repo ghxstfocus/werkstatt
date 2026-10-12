@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.json
+
+# Virtuelle Umgebungen
+.venv/
+venv/
+
+# Laufzeit-Audit der Agenten (nicht ins Repo)
+audit/
+audit-logs/
+
+# Approval-System (Laufzeitdaten)
+approvals/*.db
+approvals/audit/
+
+# Projekt-Konfigurationen mit Secrets
+*.env
+.env
+
+# Editor
+.vscode/
+.idea/
+*.swp
