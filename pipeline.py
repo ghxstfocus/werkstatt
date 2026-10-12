@@ -1032,23 +1032,56 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
         "- ersatz darf leer sein (Loeschung des Ankers)."
     )
 
-    reply = ask_llm(
-        state.api_key,
-        build_system_prompt(state.agents["builder"], state.docs,
-                            state.agent_docs.get("builder", [])),
-        aufgabe,
-        state.builder_model,
-        state.builder_temp,
-        state.llm_timeout_s,
-        state=state,
-    )
-    if not reply.ok:
-        # Auflage 2123: Audit fuer den Fehlerpfad.
-        audit("builder_commit_paket_failed",
-              {"error": reply.error}, state.project_dir,
-              state.project_name)
+    # Auflage 2124: einmaliger Retry bei reply.ok=False.
+    # Kein Retry bei reply.ok=True und leerem Paket
+    # (das ist ein Prompt-Problem, kein Transport-Problem).
+    antworten: list = []
+    for versuch in (1, 2):
+        reply = ask_llm(
+            state.api_key,
+            build_system_prompt(state.agents["builder"], state.docs,
+                                state.agent_docs.get("builder", [])),
+            aufgabe,
+            state.builder_model,
+            state.builder_temp,
+            state.llm_timeout_s,
+            state=state,
+        )
+        antworten.append(reply)
+        if reply.ok:
+            break
+        if versuch == 1:
+            # Nur einmal wiederholen.
+            print(f"[i] build_commit_paket: Versuch 1 "
+                  f"fehlgeschlagen ({reply.error}). "
+                  f"Einmaliger Retry.")
+            audit("builder_commit_paket_failed",
+                  {"error": reply.error, "versuch": 1},
+                  state.project_dir, state.project_name)
+            max_llm = state.budget.get("max_llm_calls", 20)
+            rc = budget_or_recover(
+                state, max_llm, "Vor Commit-Paket-Retry.",
+                state.project_dir, state.project_name)
+            if rc is not None:
+                # Recovery wurde bereits aufgerufen.
+                return {"message": "", "dateien": [],
+                        "doku_patches": [],
+                        "error": f"budget_or_recover rc={rc}"}
+            continue
+        # Versuch 2: endgueltig fehlgeschlagen.
+        print(f"[!] build_commit_paket: Versuch 2 "
+              f"fehlgeschlagen ({reply.error}). Kein weiterer Retry.")
+        audit("builder_commit_paket_failed_retry",
+              {"error": reply.error, "versuch": 2},
+              state.project_dir, state.project_name)
         return {"message": "", "dateien": [], "doku_patches": [],
                 "error": reply.error}
+
+    if not reply.ok:
+        # Fallback (nicht erreichbar nach dem Loop).
+        return {"message": "", "dateien": [], "doku_patches": [],
+                "error": reply.error}
+
     paket = parse_commit_paket(reply.content)
     paket["roh"] = reply.content
     # Auflage 2123: Audit, wenn das Paket leer geparst wurde.
