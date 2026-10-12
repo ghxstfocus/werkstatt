@@ -1766,7 +1766,13 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             commit_verdict = classify_verdict(reply.content)
             state.commit_review = {"verdict": commit_verdict,
                                    "raw": reply.content}
-            audit("commit_review", {"verdict": commit_verdict},
+            # Auflage 2138: Rohtext ins Audit (Debug).
+            roh, _ = redaction.redact_all(
+                reply.content[:3000], max_len=100000)
+            audit("commit_review",
+                  {"verdict": commit_verdict,
+                   "runde": commit_versuche,
+                   "roh": roh},
                   project_dir, project_name)
 
             if commit_verdict == "COMMIT-GO":
