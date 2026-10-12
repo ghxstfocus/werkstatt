@@ -1112,6 +1112,56 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
     return {"pfad": pfad, "anker": anker, "ersatz": ersatz}
 
 
+def apply_and_recheck(state: RunState,
+                      always: dict[str, Measurement],
+                      file_whitelist: list[str]) -> int | None:
+    """UMB-1d: wendet Code-Patches an und prueft das Basis-Gate erneut.
+
+    Liefert None bei Erfolg, sonst einen Exit-Code:
+      16: keine Code-Patches (Code-GO ohne Patches).
+      17: apply_code_patches fehlgeschlagen.
+      18: Basis-Gate nach Anwendung rot (Recovery wurde gerufen).
+    """
+    if not state.code_patches:
+        print("[!] Code-GO, aber keine Code-Patches. Fail closed.")
+        audit("code_patches_leer", {}, state.project_dir, state.project_name)
+        return 16
+    print(f"\n[*] Code-Patches anwenden ({len(state.code_patches)}).")
+    ok_apply = apply_code_patches(state, state.code_patches)
+    audit("code_patches_apply", {"ok": ok_apply,
+                                  "anzahl": len(state.code_patches)},
+          state.project_dir, state.project_name)
+    if not ok_apply:
+        print("[!] apply_code_patches fehlgeschlagen. Fail closed.")
+        return 17
+
+    print("[*] Basis-Gate nach Anwendung (ohne git_status).")
+    state.basis_protokoll_nach_apply = ""
+    nach_fehler: list[str] = []
+    for mid, m in always.items():
+        if mid in ("git_status", "git_head"):
+            continue
+        out, ok_m = run_measurement(m, file_whitelist, state.project_dir)
+        state.basis_protokoll_nach_apply += out
+        if not ok_m:
+            nach_fehler.append(mid)
+            print(f"[!] Basis-Gate-nach-apply rot: {mid}")
+        else:
+            print(f"[+] Basis-Gate-nach-apply gruen: {mid}")
+    if nach_fehler:
+        print(f"[!] Basis-Gate-nach-apply rot: {nach_fehler}")
+        v = ask_reviewer_for_recovery(
+            state, "basis_gate",
+            f"Nach Anwendung der Code-Patches: {nach_fehler}\n\n"
+            f"Protokoll:\n{state.basis_protokoll_nach_apply[:3000]}")
+        print_recovery(v)
+        audit("recovery_basis_gate_nach_apply",
+              {"fehler": nach_fehler, "empfehlung": v.empfehlung},
+              state.project_dir, state.project_name)
+        return 18
+    return None
+
+
 def collect_messwerte(state: RunState) -> dict[str, Any]:
     """Auflage 2135: extrahiert Messwerte aus dem Basis-Protokoll.
 
@@ -1822,52 +1872,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         return 15
 
     # ==================================================================
-    # UMB-1b: Code-Patches anwenden
+    # UMB-1d: Code-Patches anwenden + Basis-Gate erneut
     # ==================================================================
-    if not state.code_patches:
-        print("[!] Code-GO, aber keine Code-Patches. Fail closed.")
-        audit("code_patches_leer", {}, project_dir, project_name)
-        return 16
-    print(f"\n[*] Code-Patches anwenden ({len(state.code_patches)}).")
-    ok_apply = apply_code_patches(state, state.code_patches)
-    audit("code_patches_apply", {"ok": ok_apply,
-                                  "anzahl": len(state.code_patches)},
-          project_dir, project_name)
-    if not ok_apply:
-        print("[!] apply_code_patches fehlgeschlagen. Fail closed.")
-        return 17
-
-    # ==================================================================
-    # UMB-1b: Basis-Gate erneut (nach Anwendung).
-    # git_status wird ausgenommen (Working Tree ist absichtlich
-    # nicht clean nach Anwendung).
-    # ==================================================================
-    print("[*] Basis-Gate nach Anwendung (ohne git_status).")
-    state.basis_protokoll_nach_apply = ""
-    nach_fehler: list[str] = []
-    for mid, m in always.items():
-        if mid in ("git_status", "git_head"):
-            # git_status: nach Anwendung nicht clean.
-            # git_head: HEAD aendert sich nicht.
-            continue
-        out, ok_m = run_measurement(m, file_whitelist, project_dir)
-        state.basis_protokoll_nach_apply += out
-        if not ok_m:
-            nach_fehler.append(mid)
-            print(f"[!] Basis-Gate-nach-apply rot: {mid}")
-        else:
-            print(f"[+] Basis-Gate-nach-apply gruen: {mid}")
-    if nach_fehler:
-        print(f"[!] Basis-Gate-nach-apply rot: {nach_fehler}")
-        v = ask_reviewer_for_recovery(
-            state, "basis_gate",
-            f"Nach Anwendung der Code-Patches: {nach_fehler}\n\n"
-            f"Protokoll:\n{state.basis_protokoll_nach_apply[:3000]}")
-        print_recovery(v)
-        audit("recovery_basis_gate_nach_apply",
-              {"fehler": nach_fehler, "empfehlung": v.empfehlung},
-              project_dir, project_name)
-        return 18
+    rc_apply = apply_and_recheck(state, always, file_whitelist)
+    if rc_apply is not None:
+        return rc_apply
 
     # ==================================================================
     # SCHRITT 4: Coverage + ggf. Test-Generator + Chaos

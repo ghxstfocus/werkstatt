@@ -2045,3 +2045,100 @@ class TestApplyCodePatches:
                                   file_whitelist=["tools/"])
         ok = pipeline.apply_code_patches(state, [])
         assert ok is False
+
+
+# =====================================================================
+# apply_and_recheck (UMB-1d)
+# =====================================================================
+
+class TestApplyAndRecheck:
+    """Tests fuer apply_and_recheck (UMB-1d).
+
+    Deckt ab:
+      - Erfolgspfad: Patches anwenden, Basis-Gate gruen.
+      - Fail: keine Patches -> 16.
+      - Fail: apply schlaegt fehl -> 17.
+      - Fail: Basis-Gate-nach-apply rot -> 18.
+    """
+
+    def _always(self) -> dict:
+        # Wir nutzen Measurement-Objekte mit harmlosen argv.
+        # run_measurement wird gemockt.
+        return {
+            "py_compile": pipeline.Measurement(
+                "py_compile", ("echo",), "Syntax."),
+            "ruff": pipeline.Measurement(
+                "ruff", ("echo",), "Lint."),
+            "mypy": pipeline.Measurement(
+                "mypy", ("echo",), "Typen."),
+            "test_count": pipeline.Measurement(
+                "test_count", ("echo",), "Anzahl."),
+            "git_status": pipeline.Measurement(
+                "git_status", ("echo",), "Tree."),
+            "git_head": pipeline.Measurement(
+                "git_head", ("echo",), "HEAD."),
+        }
+
+    def test_erfolg(self, tmp_path: Path, monkeypatch) -> None:
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text("ALT\n", encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        state.code_patches = [
+            {"pfad": "tools/x.py", "anker": "ALT", "ersatz": "NEU"},
+        ]
+        # run_measurement gemockt: immer gruen.
+        monkeypatch.setattr(pipeline, "run_measurement",
+                            lambda m, wl, pd: ("mock ok\n", True))
+        rc = pipeline.apply_and_recheck(state, self._always(),
+                                          ["tools/"])
+        assert rc is None
+        assert ziel.read_text() == "NEU\n"
+
+    def test_keine_patches_16(self, tmp_path: Path) -> None:
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        state.code_patches = []
+        rc = pipeline.apply_and_recheck(state, self._always(),
+                                          ["tools/"])
+        assert rc == 16
+
+    def test_apply_fail_17(self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text("Inhalt ohne Anker.\n", encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        state.code_patches = [
+            {"pfad": "tools/x.py", "anker": "FEHLT", "ersatz": "NEU"},
+        ]
+        rc = pipeline.apply_and_recheck(state, self._always(),
+                                          ["tools/"])
+        assert rc == 17
+        # Datei unveraendert.
+        assert ziel.read_text() == "Inhalt ohne Anker.\n"
+
+    def test_recheck_rot_18(self, tmp_path: Path, monkeypatch) -> None:
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text("ALT\n", encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        state.code_patches = [
+            {"pfad": "tools/x.py", "anker": "ALT", "ersatz": "NEU"},
+        ]
+        # run_measurement: py_compile gruen, ruff rot.
+        def fake_run(m, wl, pd):
+            if m.mid == "ruff":
+                return ("=== ruff ===\nRC: 1\n", False)
+            return (f"=== {m.mid} ===\nRC: 0\n", True)
+        monkeypatch.setattr(pipeline, "run_measurement", fake_run)
+        # Recovery mocken, sonst echter LLM-Call.
+        monkeypatch.setattr(
+            pipeline, "ask_reviewer_for_recovery",
+            lambda *a, **kw: pipeline.RecoveryVorschlag(art="basis_gate"))
+        monkeypatch.setattr(pipeline, "print_recovery", lambda v: None)
+        rc = pipeline.apply_and_recheck(state, self._always(),
+                                          ["tools/"])
+        assert rc == 18
