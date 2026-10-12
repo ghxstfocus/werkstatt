@@ -1600,7 +1600,12 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
         return False
 
     # ---- Phase 4: git commit ----
-    msg_datei = state.project_dir / ".commit-msg.tmp"
+    # Auflage 2170: msg_datei in .git/ statt in der
+    # Projekt-Wurzel. Die Wurzel gehoert root:security-ai 755,
+    # builder darf dort nicht schreiben. .git gehoert
+    # builder (durch chown) und ist die konventionelle
+    # Stelle fuer Commit-Messages.
+    msg_datei = state.project_dir / ".git" / ".commit-msg.tmp"
     msg_datei.write_text(paket["message"], encoding="utf-8")
     commit_argv: list[str] = ["git"]
     if state.git_author_name:

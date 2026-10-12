@@ -2123,6 +2123,45 @@ class TestApplyCodePatches:
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
 
+    def test_apply_commit_msg_in_git(self, tmp_path: Path) -> None:
+        """Auflage 2170: msg_datei liegt in .git/.
+
+        Wenn apply_commit_and_doku laeuft, schreibt
+        es die Commit-Message nach .git/.commit-msg.tmp,
+        nicht in die Projekt-Wurzel.
+        """
+        import subprocess as _sp
+        _sp.run(("git", "init", "-q"), cwd=str(tmp_path),
+                check=True)
+        _sp.run(
+            ("git", "-c", "user.name=Test",
+             "-c", "user.email=t@t.de", "commit",
+             "--allow-empty", "-m", "init"),
+            cwd=str(tmp_path), check=True, capture_output=True,
+        )
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "x.md").write_text("Alt: MARKER\n",
+                                    encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["docs/"])
+        state.git_author_name = "ghxstfocus"
+        state.git_author_email = "ghxst.focus@gmail.com"
+        paket = {
+            "message": "test: msg\n",
+            "dateien": ["docs/x.md"],
+            "doku_patches": [
+                {"pfad": "docs/x.md", "anker": "MARKER",
+                 "ersatz": "NEU"},
+            ],
+        }
+        ok = pipeline.apply_commit_and_doku(state, paket)
+        assert ok is True
+        # Keine .commit-msg.tmp in der Wurzel.
+        assert not (tmp_path / ".commit-msg.tmp").exists()
+        # Keine .commit-msg.tmp in .git (try/finally).
+        assert not (tmp_path / ".git" / ".commit-msg.tmp").exists()
+
 
 # =====================================================================
 # apply_and_recheck (UMB-1d)
