@@ -312,7 +312,7 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             model: str, temperature: float, timeout: int = 120) -> LLMReply:
     # Redaction: vor dem Senden anwenden
     user_content, _ = redaction.redact_all(user_content)
-    system_prompt, _ = redaction.redact_all(system_prompt, max_len=200000)
+    system_prompt, _ = redaction.redact_all(system_prompt, max_len=100000)
     headers: dict[str, str] = {"Authorization": f"Bearer {api_key}",
                               "Content-Type": "application/json"}
     payload: dict[str, Any] = {"model": model,
