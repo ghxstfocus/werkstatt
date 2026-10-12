@@ -172,6 +172,18 @@ class TestClassifyVerdict:
         text = "\n\n\nGO"
         assert pipeline.classify_verdict(text) == "GO"
 
+    def test_go_at_line_15(self) -> None:
+        """Auflage 2059: GO auf Zeile 15 (Grenze) -> GO."""
+        # 14 Fuellzeilen + GO = Zeile 15.
+        text = "Zeile\n" * 14 + "GO"
+        assert pipeline.classify_verdict(text) == "GO"
+
+    def test_go_at_line_16(self) -> None:
+        """Auflage 2059: GO auf Zeile 16 -> UNKLAR (Grenze)."""
+        # 15 Fuellzeilen + GO = Zeile 16.
+        text = "Zeile\n" * 15 + "GO"
+        assert pipeline.classify_verdict(text) == "UNKLAR"
+
     def test_go_mit_punkt(self) -> None:
         assert pipeline.classify_verdict("GO.") == "GO"
 
