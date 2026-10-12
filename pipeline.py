@@ -988,6 +988,14 @@ def apply_code_patches(state: RunState,
             print(f"[!] apply_code_patches: Anker in {pfad} "
                   f"kommt {count}x vor. Erwartet 1x.")
             return False
+        # Auflage 2161: Anker muss an einem Zeilen-Anfang
+        # stehen. Sonst kann er als Substring einer laengeren
+        # Zeile matchen (z. B. bei falscher Einrueckung).
+        if not inhalt.startswith(anker) and (
+                "\n" + anker) not in inhalt:
+            print(f"[!] apply_code_patches: Anker in {pfad} "
+                  f"steht nicht am Zeilen-Anfang. Fail closed.")
+            return False
         original[ziel] = inhalt
         plan.append((ziel, anker, ersatz))
 
