@@ -6,6 +6,7 @@ Kein DEEPSEEK_API_KEY erforderlich.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -443,3 +444,139 @@ class TestExecuteCommands:
         rejected = [a for a in audited if a[0] == "command_rejected"]
         assert len(rejected) == 1
         assert rejected[0][1]["grund"] == "id_kein_str"
+
+
+# =====================================================================
+# apply_commit_and_doku (Auflage 2061)
+# =====================================================================
+
+class TestApplyCommitAndDoku:
+    """Tests fuer apply_commit_and_doku.
+
+    Fehlerpfade und Erfolgspfad im tmp-Git-Repo.
+    Auflage 2061 (Befund T5).
+    """
+
+    def _init_tmp_repo(self, path: Path) -> None:
+        """Initialisiert ein tmp-Git-Repo."""
+        subprocess.run(("git", "init", "-q"), cwd=str(path), check=True)
+        subprocess.run(
+            ("git", "-c", "user.name=Test", "-c", "user.email=t@t.de",
+             "commit", "--allow-empty", "-m", "init"),
+            cwd=str(path), check=True, capture_output=True,
+        )
+
+    def test_keine_dateien_abbruch(self, tmp_path: Path) -> None:
+        """Keine Dateien angegeben -> False."""
+        self._init_tmp_repo(tmp_path)
+        state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+        paket = {"message": "test", "dateien": [], "doku_patches": []}
+        assert pipeline.apply_commit_and_doku(state, paket) is False
+
+    def test_datei_nicht_in_whitelist(self, tmp_path: Path) -> None:
+        """Datei ausserhalb der Whitelist -> False."""
+        self._init_tmp_repo(tmp_path)
+        (tmp_path / "etwas.txt").write_text("x")
+        state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+        paket = {"message": "test", "dateien": ["etwas.txt"], "doku_patches": []}
+        assert pipeline.apply_commit_and_doku(state, paket) is False
+
+    def test_datei_existiert_nicht(self, tmp_path: Path) -> None:
+        """Auflage 2048: Datei existiert nicht -> False."""
+        self._init_tmp_repo(tmp_path)
+        state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+        paket = {"message": "test", "dateien": ["docs/fehlt.md"], "doku_patches": []}
+        assert pipeline.apply_commit_and_doku(state, paket) is False
+
+    def test_doku_datei_fehlt(self, tmp_path: Path) -> None:
+        """Doku-Zieldatei fehlt -> False."""
+        self._init_tmp_repo(tmp_path)
+        state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+        paket = {
+            "message": "test",
+            "dateien": ["docs/x.md"],
+            "doku_patches": [{"pfad": "docs/fehlt.md", "anker": "X", "ersatz": "Y"}],
+        }
+        assert pipeline.apply_commit_and_doku(state, paket) is False
+
+    def test_anker_kommt_null_mal(self, tmp_path: Path) -> None:
+        """Anker existiert nicht in der Datei -> False."""
+        self._init_tmp_repo(tmp_path)
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "x.md").write_text("Inhalt ohne Anker.")
+        state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+        paket = {
+            "message": "test",
+            "dateien": ["docs/x.md"],
+            "doku_patches": [{"pfad": "docs/x.md", "anker": "FEHLT", "ersatz": "Y"}],
+        }
+        assert pipeline.apply_commit_and_doku(state, paket) is False
+
+    def test_anker_kommt_zweimal_vor(self, tmp_path: Path) -> None:
+        """Anker mehrdeutig (2x) -> False."""
+        self._init_tmp_repo(tmp_path)
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "x.md").write_text("Anker hier. Anker nochmal.")
+        state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+        paket = {
+            "message": "test",
+            "dateien": ["docs/x.md"],
+            "doku_patches": [{"pfad": "docs/x.md", "anker": "Anker", "ersatz": "Y"}],
+        }
+        assert pipeline.apply_commit_and_doku(state, paket) is False
+
+    def test_erfolg_mit_doku_patch(self, tmp_path: Path) -> None:
+        """Erfolgspfad: Doku-Patch + Commit im tmp-Repo."""
+        self._init_tmp_repo(tmp_path)
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "x.md").write_text("Alt: MARKER\n")
+        state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+
+        paket = {
+            "message": "test: doku patchen\n\nDetails.",
+            "dateien": ["docs/x.md"],
+            "doku_patches": [
+                {"pfad": "docs/x.md", "anker": "MARKER", "ersatz": "NEU"},
+            ],
+        }
+        assert pipeline.apply_commit_and_doku(state, paket) is True
+
+        # Doku wurde geaendert
+        assert "NEU" in (docs / "x.md").read_text()
+
+        # Commit existiert
+        log = subprocess.run(
+            ("git", "log", "-1", "--format=%s"),
+            cwd=str(tmp_path), capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        assert log == "test: doku patchen"
+
+        # Autor ist gesetzt
+        author = subprocess.run(
+            ("git", "log", "-1", "--format=%an <%ae>"),
+            cwd=str(tmp_path), capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        assert author == "ghxstfocus <ghxst.focus@gmail.com>"
+
+        # Keine .commit-msg.tmp uebrig
+        assert not (tmp_path / ".commit-msg.tmp").exists()
+
+    def test_erfolg_ohne_doku_patch(self, tmp_path: Path) -> None:
+        """Erfolgspfad ohne Doku-Patch."""
+        self._init_tmp_repo(tmp_path)
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "x.md").write_text("Inhalt.\n")
+        state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+
+        paket = {
+            "message": "test: nur datei\n\nNichts weiter.",
+            "dateien": ["docs/x.md"],
+            "doku_patches": [],
+        }
+        assert pipeline.apply_commit_and_doku(state, paket) is True
+        # .commit-msg.tmp weg
+        assert not (tmp_path / ".commit-msg.tmp").exists()
