@@ -939,6 +939,20 @@ def parse_code_patches(text: str) -> list[dict[str, str]]:
     return _parse_patches(text)
 
 
+def _shift_lines(text: str, prefix: str = "  ") -> str:
+    """Auflage 2165: ergaenzt jede nicht-leere Zeile um prefix.
+
+    Wird fuer die Einrueckungs-Normalisierung verwendet:
+    Der Builder liefert Anker/Ersatz oft um 2 Spaces
+    zu kurz. Wenn der Anker nur in der +2-Variante
+    genau 1x matcht, korrigieren wir.
+    """
+    zeilen = text.split("\n")
+    return "\n".join(
+        (prefix + z) if z else z for z in zeilen
+    )
+
+
 def apply_code_patches(state: RunState,
                        patches: list[dict[str, str]],
                        dry_run: bool = False) -> bool:
@@ -984,15 +998,42 @@ def apply_code_patches(state: RunState,
         gesehen.add(ziel)
         inhalt = ziel.read_text(encoding="utf-8")
         count = inhalt.count(anker)
+        # Auflage 2161: Pruefe Zeilen-Anfang.
+        am_anfang = (
+            inhalt.startswith(anker)
+            or ("\n" + anker) in inhalt
+        )
+        # Auflage 2165: Einrueckungs-Normalisierung.
+        # Der Builder liefert Anker/Ersatz oft um 2 Spaces
+        # zu kurz. Korrektur, wenn:
+        #   - count != 1 (kein exakter Match), ODER
+        #   - nicht am Zeilen-Anfang (Substring-Match).
+        # UND die +2-Variante genau 1x am Zeilen-Anfang
+        # matcht.
+        if count != 1 or not am_anfang:
+            anker_plus = _shift_lines(anker, "  ")
+            plus_count = inhalt.count(anker_plus)
+            plus_am_anfang = (
+                inhalt.startswith(anker_plus)
+                or ("\n" + anker_plus) in inhalt
+            )
+            if plus_count == 1 and plus_am_anfang:
+                print(f"[i] apply_code_patches: Anker in {pfad} "
+                      f"um 2 Spaces verschoben. Korrigiere.")
+                audit("anker_einrueckung_korrigiert",
+                      {"pfad": pfad}, state.project_dir,
+                      state.project_name)
+                anker = anker_plus
+                ersatz = _shift_lines(ersatz, "  ")
+                p["anker"] = anker
+                p["ersatz"] = ersatz
+                count = 1
+                am_anfang = True
         if count != 1:
             print(f"[!] apply_code_patches: Anker in {pfad} "
                   f"kommt {count}x vor. Erwartet 1x.")
             return False
-        # Auflage 2161: Anker muss an einem Zeilen-Anfang
-        # stehen. Sonst kann er als Substring einer laengeren
-        # Zeile matchen (z. B. bei falscher Einrueckung).
-        if not inhalt.startswith(anker) and (
-                "\n" + anker) not in inhalt:
+        if not am_anfang:
             print(f"[!] apply_code_patches: Anker in {pfad} "
                   f"steht nicht am Zeilen-Anfang. Fail closed.")
             return False

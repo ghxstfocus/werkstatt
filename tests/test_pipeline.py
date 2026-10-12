@@ -2046,6 +2046,83 @@ class TestApplyCodePatches:
         ok = pipeline.apply_code_patches(state, [])
         assert ok is False
 
+    def test_shift_lines(self) -> None:
+        """_shift_lines ergaenzt jede nicht-leere Zeile um 2."""
+        s = pipeline._shift_lines("A\nB\n\nC")
+        assert s == "  A\n  B\n\n  C"
+
+    def test_einrueckung_korrektur_greift(self, tmp_path: Path) -> None:
+        """Anker mit 6 Spaces, Datei hat 8. Korrektur.
+
+        Der Anker steht in der +2-Variante exakt 1x.
+        """
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text(
+            "class X:\n    def f(self):\n"
+            "        self.assertEqual(1, 1)\n",
+            encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        # Anker mit 6 Spaces (Datei hat 8).
+        # Anker und Ersatz sind konsistent um 2 Spaces zu
+        # kurz. Nach der Korrektur passen sie.
+        anker = "      self.assertEqual(1, 1)"
+        ersatz = ("      self.assertEqual(1, 1)\n\n"
+                  "  def g(self):\n      pass")
+        patches = [{"pfad": "tools/x.py", "anker": anker,
+                    "ersatz": ersatz}]
+        ok = pipeline.apply_code_patches(state, patches)
+        assert ok is True
+        inhalt = ziel.read_text()
+        # Neue Methode vorhanden.
+        assert "def g(self):" in inhalt
+        # Einrueckung korrekt (4 Spaces vor def).
+        assert "\n    def g(self):" in inhalt
+
+    def test_einrueckung_korrektur_audit(
+        self, tmp_path: Path, monkeypatch,
+    ) -> None:
+        """Korrektur schreibt Audit-Eintrag."""
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text(
+            "        self.assertEqual(1, 1)\n", encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        audit_calls: list[tuple] = []
+
+        def fake_audit(kind, payload, project_dir, project_name):
+            audit_calls.append((kind, payload))
+
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        patches = [{"pfad": "tools/x.py",
+                    "anker": "      self.assertEqual(1, 1)",
+                    "ersatz": "      self.assertEqual(1, 1)\n"}]
+        ok = pipeline.apply_code_patches(state, patches)
+        assert ok is True
+        korrekturen = [a for a in audit_calls
+                       if a[0] == "anker_einrueckung_korrigiert"]
+        assert len(korrekturen) == 1
+
+    def test_einrueckung_korrektur_fail_bei_2x(
+        self, tmp_path: Path,
+    ) -> None:
+        """Wenn +2-Variante mehrfach matcht, fail closed."""
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text(
+            "        self.assertEqual(1, 1)\n"
+            "        self.assertEqual(1, 1)\n",
+            encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        patches = [{"pfad": "tools/x.py",
+                    "anker": "      self.assertEqual(1, 1)",
+                    "ersatz": "      self.assertEqual(1, 1)\n"}]
+        ok = pipeline.apply_code_patches(state, patches)
+        assert ok is False
+
 
 # =====================================================================
 # apply_and_recheck (UMB-1d)
