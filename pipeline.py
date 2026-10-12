@@ -1102,8 +1102,14 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
     # Auflage 2123: Audit, wenn das Paket leer geparst wurde.
     if not paket.get("message") and not paket.get("dateien") \
             and not paket.get("doku_patches"):
+        # Auflage 2133: Roh-Text ins Audit (Debug).
+        # Redaction zuerst (Secrets-Schutz), max_len=100000
+        # damit die 3000 Zeichen nicht weiter gekuerzt werden.
+        roh, _ = redaction.redact_all(
+            reply.content[:3000], max_len=100000)
         audit("commit_paket_leer",
-              {"roh_len": len(reply.content)}, state.project_dir,
+              {"roh_len": len(reply.content),
+               "roh": roh}, state.project_dir,
               state.project_name)
     return paket
 
@@ -1731,9 +1737,13 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             if not state.commit_paket.get("message") \
                     and not state.commit_paket.get("dateien") \
                     and not state.commit_paket.get("doku_patches"):
+                # Auflage 2133: Roh-Text ins Audit (Debug).
+                roh, _ = redaction.redact_all(
+                    bauer_reply.content[:3000], max_len=100000)
                 audit("commit_paket_leer",
                       {"runde": commit_versuche,
-                       "roh_len": len(bauer_reply.content)},
+                       "roh_len": len(bauer_reply.content),
+                       "roh": roh},
                       project_dir, project_name)
 
     # ==================================================================
