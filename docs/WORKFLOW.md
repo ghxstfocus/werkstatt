@@ -145,6 +145,40 @@ Ausnahme: Auftraege der Kategorie 3 (Reviewer-Block
 extern). Dort ist die Review-Pflicht ohnehin
 vorgeschaltet.
 
+### IP-Adressen, MACs, Secrets
+
+Block-Auftraege enthalten KEINE konkreten
+IP-Adressen, MACs oder Secrets.
+
+Grund: Die Werkstatt schickt den Auftrag durch
+die Redaction, bevor er an den Builder geht.
+Die Redaction ersetzt jede IP durch [IPV4] oder
+[IPV6]. Ein Auftrag mit "192.168.178.1" wuerde
+im Builder-Prompt als "[IPV4]" erscheinen —
+der Builder kann damit keinen gueltigen
+Test-Input mehr bauen.
+
+Statt konkreter IPs:
+  - "localhost" (fuer Loopback).
+  - Beispiel-IPs aus RFC 5737:
+      192.0.2.1 (TEST-NET-1)
+      198.51.100.1 (TEST-NET-2)
+      203.0.113.1 (TEST-NET-3)
+  - Platzhalter, wenn der Wert austauschbar ist.
+
+Fuer MACs: keine konkreten MAC-Adressen.
+Wenn ein MAC noetig ist: Platzhalter oder
+generischer String.
+
+Fuer Secrets (API-Keys, Tokens, Passwoerter):
+nie im Auftrag. Der Auftrag beschreibt, was
+gebaut werden soll, nicht den konkreten Wert.
+
+Anlass: Werkstatt-Probebetrieb 22, 2026-10-12.
+Der Auftrag verwendete "192.168.178.1" — der
+Builder bekam "[IPV4]" und der Test schlug
+fehl.
+
 ## Anlass-Historie
 
 - 2026-10-12, Auflage 2086: subprocess_env()
