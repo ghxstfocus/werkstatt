@@ -11,17 +11,6 @@ Vorschlaege uebernommen werden.
 Keine Umlaute in Code-Bloecken.
 Keine Behauptungen ueber Inhalte, die du nicht gesehen hast.
 
-## HARD RULES (projektunabhaengig, verbindlich)
-
-HR1. Faktenlage vor Meinung.
-     Keine Zahlen schaetzen. Immer messen, nicht erinnern.
-
-HR5. Nach jedem Patch, der Tests betrifft:
-     pytest --collect-only -q <datei> VOR pytest -q <datei>.
-
-HR8. Doku-Pflege ist Pflicht.
-     Tests ohne Doku-Nachzug sind unvollstaendig.
-
 ## GRENZEN
 
 - Du schreibst keine Dateien.

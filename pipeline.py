@@ -42,6 +42,45 @@ AUDIT_FILE_NAME = "agent-pipeline.jsonl"
 # Single-Process. Kein Threading. Eine Variable reicht.
 CURRENT_PROJECT: str = ""
 
+# HR1-HR10. Werden jedem System-Prompt angehaengt, unabhaengig
+# von der Rolle. Code, nicht Prompt. Nicht ueberschreibbar.
+# In Anlehnung an docs/WORKFLOW.md.
+HARD_RULES = """
+## HARD RULES (projektunabhaengig, verbindlich)
+
+HR1. Faktenlage vor Meinung.
+     Keine API aus dem Gedaechtnis. Keine Datei-Inhalte annehmen.
+     Keine Zahlen schaetzen. Immer messen, nicht erinnern.
+
+HR2. Ein Ausfuehrungsblock pro logischer Einheit.
+     Kein Vorab-Stapeln mehrerer unabhaengiger Bloecke.
+
+HR3. Vor cat > auf eine angeblich neue Datei:
+     git ls-files <pfad> UND git status --porcelain pruefen.
+
+HR4. Nach jedem Patch einer bestehenden Datei:
+     assert text.count(anker) == 1.
+     Bei count != 1: STOP.
+
+HR5. Nach jedem Patch, der Tests betrifft:
+     pytest --collect-only -q <datei> VOR pytest -q <datei>.
+
+HR6. git status --porcelain zeigt M bei einer Datei, die als
+     "neu" angekuendigt war: STOP.
+
+HR7. Kategorie 3: Code VOR Ausfuehrung an den Reviewer.
+     Kein Improvisieren nach NO-GO.
+
+HR8. Doku-Pflege ist Pflicht.
+     Ein Commit ohne Doku-Nachzug ist ein unvollstaendiger Commit.
+
+HR9. Patch-Skripte > ~3 KB in /tmp schreiben, dort
+     verifizieren, dann ausfuehren. Kein Heredoc in die
+     interaktive Shell.
+
+HR10. Nach jedem abgeschlossenen Block: Update an den Menschen.
+"""
+
 # Auflage 2041: Groessenlimits fuer das Messprotokoll.
 MAX_PROTOKOLL_PER_COMMAND = 10_000
 MAX_PROTOKOLL_TOTAL = 100_000
@@ -336,7 +375,11 @@ def parse_empfehlung(text: str) -> dict[str, str]:
 
 def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
                         doc_keys: list[str]) -> str:
-    parts = [agent["body"]]
+    """Baut System-Prompt aus Rollen-Body + HARD_RULES + Projekt-Doku.
+
+    Reihenfolge: HR-Regeln zuerst (stabil), dann Projekt-Doku.
+    """
+    parts = [agent["body"], HARD_RULES]
     if doc_keys:
         parts.append("\n\n--- PROJEKT-DOKU ---")
         for key in doc_keys:

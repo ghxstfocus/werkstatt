@@ -115,7 +115,9 @@ def redact_field(value: object, *, max_len: int = MAX_FIELD_LEN
     if value is None:
         return ("", False)
     if isinstance(value, str):
-        return redact_text(value, max_len=max_len)
+        # Auflage 2074: redact_all statt redact_text.
+        # Damit greift auch die Secret-Maskierung (IPs, MACs, Keys).
+        return redact_all(value, max_len=max_len)
     if isinstance(value, (int, float, bool)):
         return (str(value), False)
     # dict, list, Objekte: nicht inline rendern (fail closed)
