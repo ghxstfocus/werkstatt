@@ -1567,39 +1567,72 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             print("[!] Commit-Paket leer. Kein Commit moeglich.")
             state.commit_paket["message"] = "(leer, Builder hat nichts geliefert)"
 
-        commit_input = (
-            f"CODE-GO ist erteilt. Pruefe das Commit-Paket.\n\n"
-            f"COMMIT-MESSAGE:\n{state.commit_paket.get('message', '')}\n\n"
-            f"BETROFFENE DATEIEN:\n" +
-            "\n".join(f"  - {d}" for d in state.commit_paket.get("dateien", [])) +
-            "\n\nDOKU-PATCHES:\n" +
-            "\n".join(
-                f"  - {p['pfad']}: {p['anker'][:60]}... -> {p['ersatz'][:60]}..."
-                for p in state.commit_paket.get("doku_patches", [])) +
-            "\n\nAUFLAGEN AUS DIESER RUNDE:\n"
-            + "; ".join(state.auflagen_log[-1] if state.auflagen_log else [])
-            + "\n\nAntworte mit COMMIT-GO, COMMIT-NO-GO oder COMMIT-ESKALATION."
-        )
-        rc = budget_or_recover(state, max_llm,
-                              "Vor Commit-Review.",
-                              project_dir, project_name,
-                              max_minutes=max_minutes)
-        if rc is not None:
-            return rc
-        reply = ask_llm(api_key, reviewer_prompt, commit_input,
-                        state.reviewer_verdict_model, 0.0, state.llm_timeout_s)
-        if not reply.ok:
-            print(f"[FAIL] Reviewer Commit-Review: {reply.error}")
-            return 6
-        state.llm_calls += 1
+        # Auflage 2118: Commit-NO-GO-Loop, max 2 Versuche.
+        max_commit_versuche = 2
+        commit_versuche = 0
+        while True:
+            # Auflage 2120: leere Auflagen explizit 'keine'.
+            auflagen_letzte = (state.auflagen_log[-1]
+                               if state.auflagen_log
+                                  and state.auflagen_log[-1]
+                               else [])
+            auflagen_text = ("; ".join(auflagen_letzte)
+                             if auflagen_letzte else "keine")
 
-        commit_verdict = classify_verdict(reply.content)
-        state.commit_review = {"verdict": commit_verdict, "raw": reply.content}
-        audit("commit_review", {"verdict": commit_verdict}, project_dir, project_name)
+            commit_input = (
+                f"CODE-GO ist erteilt. Pruefe das Commit-Paket.\n\n"
+                f"COMMIT-MESSAGE:\n{state.commit_paket.get('message', '')}\n\n"
+                f"BETROFFENE DATEIEN:\n" +
+                "\n".join(
+                    f"  - {d}"
+                    for d in state.commit_paket.get("dateien", [])) +
+                "\n\nDOKU-PATCHES:\n" +
+                "\n".join(
+                    f"  - {p['pfad']}: {p['anker'][:60]}... -> "
+                    f"{p['ersatz'][:60]}..."
+                    for p in state.commit_paket.get("doku_patches", [])) +
+                f"\n\nAUFLAGEN AUS DIESER RUNDE:\n{auflagen_text}\n\n"
+                "Antworte mit COMMIT-GO, COMMIT-NO-GO oder "
+                "COMMIT-ESKALATION."
+            )
+            rc = budget_or_recover(state, max_llm,
+                                  "Vor Commit-Review.",
+                                  project_dir, project_name,
+                                  max_minutes=max_minutes)
+            if rc is not None:
+                return rc
+            reply = ask_llm(api_key, reviewer_prompt, commit_input,
+                            state.reviewer_verdict_model, 0.0,
+                            state.llm_timeout_s)
+            if not reply.ok:
+                print(f"[FAIL] Reviewer Commit-Review: {reply.error}")
+                return 6
+            state.llm_calls += 1
 
-        if commit_verdict == "COMMIT-NO-GO":
-            print(f"[-] Commit-NO-GO:\n{reply.content[:400]}")
-            # Zurueck an den Builder: neues Commit-Paket
+            commit_verdict = classify_verdict(reply.content)
+            state.commit_review = {"verdict": commit_verdict,
+                                   "raw": reply.content}
+            audit("commit_review", {"verdict": commit_verdict},
+                  project_dir, project_name)
+
+            if commit_verdict == "COMMIT-GO":
+                print("[+] Commit-GO erhalten.")
+                break
+
+            if commit_verdict != "COMMIT-NO-GO":
+                # ESKALATION / UNKLAR: Stop, Mensch entscheidet am Gate.
+                print(f"[i] Commit-Review-Verdict: {commit_verdict}. "
+                      "Kein Loop.")
+                break
+
+            # COMMIT-NO-GO
+            print(f"[-] Commit-NO-GO (Versuch {commit_versuche + 1}/"
+                  f"{max_commit_versuche}):\n{reply.content[:400]}")
+            commit_versuche += 1
+            if commit_versuche >= max_commit_versuche:
+                print("[!] Commit-Review: maximale Versuche erreicht.")
+                return 7
+
             rc = budget_or_recover(state, max_llm,
                                   "Vor Builder-Neubau (Commit-NO-GO).",
                                   project_dir, project_name,
@@ -1608,13 +1641,19 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 return rc
             bauer_reply = ask_llm(
                 api_key, builder_prompt,
-                f"Reviewer hat das Commit-Paket abgelehnt:\n{reply.content}\n\n"
-                "Liefere ein ueberarbeitetes Commit-Paket (Message, Dateien, Doku-Patches).",
-                state.builder_model, state.builder_temp, state.llm_timeout_s,
+                f"Reviewer hat das Commit-Paket abgelehnt:\n"
+                f"{reply.content}\n\n"
+                "Liefere ein ueberarbeitetes Commit-Paket "
+                "(Message, Dateien, Doku-Patches).",
+                state.builder_model, state.builder_temp,
+                state.llm_timeout_s,
             )
-            if bauer_reply.ok:
-                state.commit_paket = parse_commit_paket(bauer_reply.content)
-                state.llm_calls += 1
+            if not bauer_reply.ok:
+                print(f"[FAIL] Builder Commit-Paket-Neubau: "
+                      f"{bauer_reply.error}")
+                return 8
+            state.commit_paket = parse_commit_paket(bauer_reply.content)
+            state.llm_calls += 1
 
     # ==================================================================
     # SCHRITT 6: Approval-Dokument + Human-Gate
