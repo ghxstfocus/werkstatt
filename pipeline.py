@@ -1720,8 +1720,21 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             if not bauer_reply.ok:
                 print(f"[FAIL] Builder Commit-Paket-Neubau: "
                       f"{bauer_reply.error}")
+                # Auflage 2128: Audit fuer den Fehlerpfad.
+                audit("builder_commit_paket_failed_retry",
+                      {"error": bauer_reply.error,
+                       "versuch": commit_versuche},
+                      project_dir, project_name)
                 return 8
             state.commit_paket = parse_commit_paket(bauer_reply.content)
+            # Auflage 2128: Audit, wenn der Neubau leer ist.
+            if not state.commit_paket.get("message") \
+                    and not state.commit_paket.get("dateien") \
+                    and not state.commit_paket.get("doku_patches"):
+                audit("commit_paket_leer",
+                      {"runde": commit_versuche,
+                       "roh_len": len(bauer_reply.content)},
+                      project_dir, project_name)
 
     # ==================================================================
     # SCHRITT 6: Approval-Dokument + Human-Gate
