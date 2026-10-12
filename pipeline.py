@@ -1929,6 +1929,9 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         szenario = (
             # Auflage 2152: Auftrag MUSS im Szenario stehen.
             aufgabe_block(state)
+            # Auflage 2178: MESSWERTE-Block direkt sichtbar.
+            + format_messwerte_block(collect_messwerte(state))
+            + "\n\n"
             + f"{runden_block}"
             f"BASIS-GATE:\n{state.basis_protokoll[:800]}\n\n"
             f"OPTIONALE MESSUNGEN:\n{state.mess_protokoll or '(keine)'}\n\n"
@@ -2119,6 +2122,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             auflagen_text = ("; ".join(auflagen_letzte)
                              if auflagen_letzte else "keine")
 
+            # Auflage 2180 + BO: MESSWERTE-Block statt
+            # veralteter DOKU-PATCHES-Zeilen.
             commit_input = (
                 f"CODE-GO ist erteilt. Pruefe das Commit-Paket.\n\n"
                 f"COMMIT-MESSAGE:\n{state.commit_paket.get('message', '')}\n\n"
@@ -2126,12 +2131,10 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 "\n".join(
                     f"  - {d}"
                     for d in state.commit_paket.get("dateien", [])) +
-                "\n\nDOKU-PATCHES:\n" +
-                "\n".join(
-                    f"  - {p['pfad']}: {p['anker'][:60]}... -> "
-                    f"{p['ersatz'][:60]}..."
-                    for p in state.commit_paket.get("doku_patches", [])) +
-                f"\n\nAUFLAGEN AUS DIESER RUNDE:\n{auflagen_text}\n\n"
+                "\n\n"
+                + format_messwerte_block(collect_messwerte(state))
+                + "\n\n"
+                f"AUFLAGEN AUS DIESER RUNDE:\n{auflagen_text}\n\n"
                 "Antworte mit COMMIT-GO, COMMIT-NO-GO oder "
                 "COMMIT-ESKALATION."
             )

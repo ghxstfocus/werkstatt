@@ -52,11 +52,18 @@ Punkt 7 weglassen.
 ## MESSWERTE IM PROMPT
 
 Der Block "MESSWERTE (von der Werkstatt gemessen,
-nicht schaetzen)" enthaelt echte Messwerte. Die
-Werkstatt hat gemessen, nicht du.
+nicht schaetzen)" ist die EINZIGE Quelle fuer
+Zahlen in der Commit-Message. Verwende keine
+anderen Zahlen.
 
-Verwende die Werte woertlich in der Commit-
-Message:
+Die Regel in drei Punkten:
+  1. Der MESSWERTE-Block ist die einzige Quelle
+     fuer Zahlen.
+  2. Wenn eine Zahl nicht im Block steht:
+     "nicht gemessen".
+  3. Erfinden ist ein HR1-Verstoss.
+
+Verwende die Werte woertlich:
   - test_anzahl: die gemessene Zahl.
   - ruff: gruen/rot.
   - mypy: gruen/rot.
@@ -64,9 +71,9 @@ Message:
   - git_status: clean/geaendert.
   - git_head: der kurze Hash.
 
-Schreibe NICHT "nicht gemessen", wenn der Block
-Werte enthaelt. Nur wenn ein Wert explizit als
-"nicht gemessen" markiert ist, schreibe das.
+Wenn der MESSWERTE-Block z. B. "test_anzahl: 1314"
+zeigt, schreibe "Tests: 1314 gesammelt". NICHT
+"1278 passed" (erfunden). NICHT "17 passed".
 
 Du bist kein Messender. Die Werkstatt ist der
 Messende. Du uebernimmst die Werte aus dem
@@ -74,10 +81,12 @@ MESSWERTE-Block.
 
 Kein "ca." Kein "etwa". Kein Schaetzen. HR1.
 
-Beispiel Commit-Message-Abschnitt:
+Beispiel Commit-Message-Abschnitt (MESSWERTE-Block
+sagt test_anzahl=1314, ruff=gruen, mypy=gruen):
 
   Tests:
-  129 passed (Werkstatt-Messung dieser Runde).
+  1314 Tests gesammelt (Werkstatt-Messung dieser
+  Runde).
 
   Verifikation:
   ruff: gruen, mypy: gruen, py_compile: gruen.
