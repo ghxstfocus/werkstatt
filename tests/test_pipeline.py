@@ -1199,6 +1199,78 @@ class TestAskLlmRetry:
 
 
 # =====================================================================
+# ask_llm: user_content max_len (Auflage 2113)
+# =====================================================================
+
+class TestAskLlmUserContentMaxLen:
+    """Tests fuer user_content max_len=100_000.
+
+    Auflage 2113: analog 2089 (System-Prompt). Der User-Content
+    (Block-Auftrag) wird nicht mehr bei 2000 Zeichen abgeschnitten.
+    """
+
+    def _patch_post(self, monkeypatch) -> list[dict]:
+        gesendet: list[dict] = []
+
+        class _Res200:
+            status_code = 200
+            text = ""
+
+            def json(self):
+                return {"choices": [{"message": {"content": "OK"}}]}
+
+        def fake_post(url, **kwargs):
+            gesendet.append(kwargs)
+            return _Res200()
+
+        monkeypatch.setattr(pipeline.requests, "post", fake_post)
+        return gesendet
+
+    def test_kuerzt_nicht_bei_10k_zeichen(
+        self, monkeypatch,
+    ) -> None:
+        """10k Zeichen kommen vollstaendig durch (nicht bei 2000)."""
+        gesendet = self._patch_post(monkeypatch)
+        # Kein Hex-aehnlicher Text (sonst greift redact_secrets).
+        langer_text = "Der Auftrag umfasst mehrere Zeilen. " * 260
+        assert 5000 < len(langer_text) < 20000
+        pipeline.ask_llm("k", "s", langer_text, "m", 0.0, timeout=1)
+        assert len(gesendet) == 1
+        payload = gesendet[0]["json"]
+        user_msg = payload["messages"][1]["content"]
+        assert user_msg == langer_text
+
+    def test_kuerzt_bei_ueber_100k(
+        self, monkeypatch,
+    ) -> None:
+        """Mehr als 100_000 Zeichen werden auf 100_000 gekuerzt."""
+        gesendet = self._patch_post(monkeypatch)
+        zu_lang = "B" * 120000
+        pipeline.ask_llm("k", "s", zu_lang, "m", 0.0, timeout=1)
+        assert len(gesendet) == 1
+        payload = gesendet[0]["json"]
+        user_msg = payload["messages"][1]["content"]
+        assert len(user_msg) <= 100000
+
+    def test_redaction_greift_weiterhin(
+        self, monkeypatch,
+    ) -> None:
+        """Auch bei max_len=100_000 wird redigiert."""
+        gesendet = self._patch_post(monkeypatch)
+        text = (
+            "Host 192.168.178.117 und "
+            "MAC aa:bb:cc:dd:ee:ff im Text."
+        )
+        pipeline.ask_llm("k", "s", text, "m", 0.0, timeout=1)
+        assert len(gesendet) == 1
+        payload = gesendet[0]["json"]
+        user_msg = payload["messages"][1]["content"]
+        # IP und MAC sind maskiert.
+        assert "192.168.178.117" not in user_msg
+        assert "aa:bb:cc:dd:ee:ff" not in user_msg
+
+
+# =====================================================================
 # Recovery-Block (Auflagen 2083 + 2084)
 # =====================================================================
 

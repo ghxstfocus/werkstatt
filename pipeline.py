@@ -353,7 +353,10 @@ class LLMReply:
 def ask_llm(api_key: str, system_prompt: str, user_content: str,
             model: str, temperature: float, timeout: int = 120) -> LLMReply:
     # Redaction: vor dem Senden anwenden
-    user_content, _ = redaction.redact_all(user_content)
+    # Auflage 2113: max_len=100_000, damit Block-Auftraege
+    # groesser 2000 Zeichen nicht abgeschnitten werden.
+    # Analog 2089 (System-Prompt).
+    user_content, _ = redaction.redact_all(user_content, max_len=100000)
     system_prompt, _ = redaction.redact_all(system_prompt, max_len=100000)
     headers: dict[str, str] = {"Authorization": f"Bearer {api_key}",
                               "Content-Type": "application/json"}
