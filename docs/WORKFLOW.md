@@ -91,6 +91,60 @@ nicht durchlassen. Beispiele:
 - subprocess_env: Secrets werden nicht durchgereicht.
 - redact_text: max_len zu klein -> ValueError.
 
+## Block-Auftraege
+
+Ein Block-Auftrag an die Werkstatt muss vier Angaben
+enthalten:
+
+1. Anker: exakter Text aus der Zieldatei, oder
+   Messung, die den Anker liefert.
+2. Zieltext: der neue Text, wortgetreu.
+3. Bezug: welcher offene Punkt (Nummer), oder
+   welche Fundstelle.
+4. Kategorie: 1/2/3.
+
+Ohne diese vier Angaben ist der Auftrag unterbestimmt.
+Der Reviewer-Agent wird NO-GO oder ESKALATION geben.
+
+### Wer formuliert was
+
+- Der Mensch formuliert den Auftrag.
+- Der Builder kann den Anker messen, aber den
+  Zieltext nicht erfinden (HR1: Faktenlage vor
+  Meinung).
+- Konkret: der Mensch gibt Zieltext, Bezug,
+  Kategorie. Der Builder kann den Anker liefern,
+  wenn der Mensch nur "die Datei X" nennt und
+  den Zieltext vorgibt.
+
+### Beispiele
+
+Beispiel (gut):
+
+    Anker: letzte Zeile in docs/INCONSISTENCIES_FOUND.md
+           lautet '<X>'.
+    Zieltext: "## Neue Inkonsistenz\n<Text>"
+    Bezug: offener Punkt 88.
+    Kategorie: 1.
+
+Beispiel (schlecht):
+
+    "Ergaenze einen Absatz in der Datei."
+
+    Fehlt: Anker, Zieltext, Bezug, Kategorie.
+    Der Reviewer-Agent kann das nicht bewerten.
+
+### Bugfix-Auftraege
+
+Auch Bugfix-Auftraege fallen unter die Konvention:
+
+- Zieltext = neuer Code-Zustand.
+- Anker = problematischer Zustand.
+
+Ausnahme: Auftraege der Kategorie 3 (Reviewer-Block
+extern). Dort ist die Review-Pflicht ohnehin
+vorgeschaltet.
+
 ## Anlass-Historie
 
 - 2026-10-12, Auflage 2086: subprocess_env()
