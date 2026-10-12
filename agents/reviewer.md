@@ -66,9 +66,41 @@ Pruefe beim Commit-Review:
    Verifikation, Reviewed)?
 3. Betroffene Dateien alle in Whitelist?
 4. Konsistenz mit letzten Commits?
-5. Betroffene Dateien passen zum git status?
+5. Betroffene Dateien stimmen mit git diff
+   --name-only ueberein? (Auflage 2169)
    (Nicht mehr: "Doku-Patches platziert?" — UMB-1
     hat DOKU-PATCHES aus dem Paket entfernt.)
+
+## BETROFFENE DATEIEN
+
+Vergleiche die BETROFFENEN DATEIEN im Commit-
+Paket mit dem tatsaechlichen git diff
+--name-only im Projekt:
+
+  git -C <project_dir> diff --name-only HEAD
+
+Regeln:
+  - Jede Datei im Paket muss in git diff
+    --name-only vorkommen.
+  - Jede Datei in git diff --name-only muss
+    im Paket vorkommen.
+  - Wenn die Listen abweichen: COMMIT-NO-GO.
+
+Begruendung:
+  Seit UMB-1 basiert die Datei-Liste auf
+  git diff. Der Check ist Defense in Depth:
+  falls der Builder eine Datei erfindet oder
+  vergisst, faellt es auf.
+
+Beispiel:
+  git diff --name-only HEAD
+    -> tests/unit/test_tools_ping.py
+  BETROFFENE DATEIEN im Paket:
+    -> tests/unit/test_tools_ping.py
+  OK.
+
+  Wenn das Paket zwei Dateien listet, aber
+  nur eine geaendert wurde: COMMIT-NO-GO.
 
 ## DOKU-PFLICHT (UMB-1)
 
