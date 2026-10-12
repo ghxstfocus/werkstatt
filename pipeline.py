@@ -916,13 +916,119 @@ def parse_commit_paket(text: str) -> dict[str, Any]:
     m = re.search(r"DOKU-PATCHES:\s*\n(.*?)\nENDE DOKU-PATCHES",
                   text, re.DOTALL)
     if m:
-        paket["doku_patches"] = _parse_doku_patches(m.group(1))
+        paket["doku_patches"] = _parse_patches(m.group(1))
 
     return paket
 
 
-def _parse_doku_patches(block_text: str) -> list[dict[str, str]]:
-    """Parst DOKU-PATCHES-Bloecke (Auflagen 2088 + 2098).
+def parse_code_patches(text: str) -> list[dict[str, str]]:
+    """UMB-1a: parst die Builder-Antwort fuer Code-Patches.
+
+    Format: direkt PATCH-BEGINN/PATCH-ENDE-Bloecke, ohne
+    Container-Marker.
+
+      PATCH-BEGINN
+      pfad: tools/disk_usage.py
+      anker: |
+        <alter Text>
+      ersatz: |
+        <neuer Text>
+      PATCH-ENDE
+
+      PATCH-BEGINN
+      ...
+      PATCH-ENDE
+
+    Liefert eine Liste von Patches. Leere Liste, wenn
+    keine Patches gefunden wurden.
+    """
+    return _parse_patches(text)
+
+
+def apply_code_patches(state: RunState,
+                       patches: list[dict[str, str]],
+                       dry_run: bool = False) -> bool:
+    """UMB-1a: wendet Code-Patches an (In-Memory-Rollback).
+
+    Pruefungen pro Patch:
+      - pfad in state.file_whitelist
+      - Datei existiert
+      - pfad nicht doppelt in patches
+      - Anker count == 1
+
+    Bei dry_run: nur pruefen, nichts schreiben.
+
+    Bei Fehler: nichts wurde geschrieben, return False.
+    Wenn spaeter etwas fehlschlaegt (theoretisch nicht
+    nach Vollvalidierung): In-Memory-Rollback.
+    """
+    # ---- Phase 1: Validierung ----
+    if not patches:
+        print("[!] apply_code_patches: keine Patches.")
+        return False
+    gesehen: set[Path] = set()
+    original: dict[Path, str] = {}
+    plan: list[tuple[Path, str, str]] = []
+    for p in patches:
+        pfad = p.get("pfad", "")
+        anker = p.get("anker", "")
+        ersatz = p.get("ersatz", "")
+        if not pfad:
+            print("[!] apply_code_patches: Patch ohne pfad.")
+            return False
+        if not any(pfad.startswith(w) for w in state.file_whitelist):
+            print(f"[!] apply_code_patches: Pfad nicht in "
+                  f"Whitelist: {pfad}")
+            return False
+        ziel = state.project_dir / pfad
+        if not ziel.exists():
+            print(f"[!] apply_code_patches: Datei fehlt: {pfad}")
+            return False
+        if ziel in gesehen:
+            print(f"[!] apply_code_patches: Pfad doppelt: {pfad}")
+            return False
+        gesehen.add(ziel)
+        inhalt = ziel.read_text(encoding="utf-8")
+        count = inhalt.count(anker)
+        if count != 1:
+            print(f"[!] apply_code_patches: Anker in {pfad} "
+                  f"kommt {count}x vor. Erwartet 1x.")
+            return False
+        original[ziel] = inhalt
+        plan.append((ziel, anker, ersatz))
+
+    if dry_run:
+        print(f"[i] apply_code_patches (dry_run): "
+              f"{len(plan)} Patches validiert.")
+        return True
+
+    # ---- Phase 2: Anwendung ----
+    geschrieben: list[Path] = []
+    try:
+        for ziel, anker, ersatz in plan:
+            neu = original[ziel].replace(anker, ersatz, 1)
+            ziel.write_text(neu, encoding="utf-8")
+            geschrieben.append(ziel)
+            print(f"[+] Code gepatcht: {ziel.relative_to(state.project_dir)}")
+    except OSError as exc:
+        print(f"[!] apply_code_patches: Schreibfehler: {exc}")
+        # Rollback
+        for ziel in geschrieben:
+            try:
+                ziel.write_text(original[ziel], encoding="utf-8")
+            except OSError as exc2:
+                print(f"[!] Rollback fehlgeschlagen fuer {ziel}: {exc2}")
+        return False
+
+    return True
+
+
+def _parse_patches(block_text: str) -> list[dict[str, str]]:
+    """Parst PATCH-BEGINN/PATCH-ENDE-Bloecke (Auflagen 2088 + 2098).
+
+    Wird sowohl fuer DOKU-PATCHES (parse_commit_paket) als
+    auch fuer CODE-PATCHES (parse_code_patches) verwendet.
+    
 
     Format:
       PATCH-BEGINN

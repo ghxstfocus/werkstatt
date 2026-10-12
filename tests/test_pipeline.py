@@ -1895,3 +1895,153 @@ class TestCollectMesswerte:
         docs = {"x": "Host 192.168.178.117 im Text."}
         s = pipeline.format_doc_snippets(docs)
         assert "192.168.178.117" not in s
+
+
+# =====================================================================
+# parse_code_patches + apply_code_patches (UMB-1a)
+# =====================================================================
+
+class TestParseCodePatches:
+    """Tests fuer parse_code_patches (UMB-1a)."""
+
+    def test_parse_code_patches_ok(self) -> None:
+        text = (
+            "PATCH-BEGINN\n"
+            "pfad: tools/x.py\n"
+            "anker: |\n"
+            "  ALT\n"
+            "ersatz: |\n"
+            "  NEU\n"
+            "PATCH-ENDE"
+        )
+        patches = pipeline.parse_code_patches(text)
+        assert len(patches) == 1
+        assert patches[0]["pfad"] == "tools/x.py"
+        assert patches[0]["anker"] == "ALT"
+        assert patches[0]["ersatz"] == "NEU"
+
+    def test_parse_code_patches_leer(self) -> None:
+        patches = pipeline.parse_code_patches("")
+        assert patches == []
+
+    def test_parse_code_patches_mehrere(self) -> None:
+        text = (
+            "PATCH-BEGINN\n"
+            "pfad: tools/a.py\n"
+            "anker: |\n"
+            "  A1\n"
+            "ersatz: |\n"
+            "  A2\n"
+            "PATCH-ENDE\n"
+            "PATCH-BEGINN\n"
+            "pfad: tools/b.py\n"
+            "anker: |\n"
+            "  B1\n"
+            "ersatz: |\n"
+            "  B2\n"
+            "PATCH-ENDE"
+        )
+        patches = pipeline.parse_code_patches(text)
+        assert len(patches) == 2
+        assert patches[0]["pfad"] == "tools/a.py"
+        assert patches[1]["pfad"] == "tools/b.py"
+
+    def test_parse_code_patches_anker_leer_verworfen(self) -> None:
+        text = (
+            "PATCH-BEGINN\n"
+            "pfad: tools/x.py\n"
+            "anker: |\n"
+            "ersatz: |\n"
+            "  NEU\n"
+            "PATCH-ENDE"
+        )
+        patches = pipeline.parse_code_patches(text)
+        assert patches == []
+
+
+class TestApplyCodePatches:
+    """Tests fuer apply_code_patches (UMB-1a)."""
+
+    def test_apply_ok(self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text("ALT\n", encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        patches = [{"pfad": "tools/x.py", "anker": "ALT",
+                    "ersatz": "NEU"}]
+        ok = pipeline.apply_code_patches(state, patches)
+        assert ok is True
+        assert ziel.read_text() == "NEU\n"
+
+    def test_apply_anker_fehlt(self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text("Inhalt ohne Anker.\n", encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        patches = [{"pfad": "tools/x.py", "anker": "FEHLT",
+                    "ersatz": "NEU"}]
+        ok = pipeline.apply_code_patches(state, patches)
+        assert ok is False
+        assert ziel.read_text() == "Inhalt ohne Anker.\n"
+
+    def test_apply_whitelist_fail(self, tmp_path: Path) -> None:
+        (tmp_path / "extern").mkdir()
+        ziel = tmp_path / "extern" / "x.py"
+        ziel.write_text("ALT\n", encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        patches = [{"pfad": "extern/x.py", "anker": "ALT",
+                    "ersatz": "NEU"}]
+        ok = pipeline.apply_code_patches(state, patches)
+        assert ok is False
+
+    def test_apply_pfad_doppelt(self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text("ALT\n", encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        patches = [
+            {"pfad": "tools/x.py", "anker": "ALT", "ersatz": "NEU"},
+            {"pfad": "tools/x.py", "anker": "NEU", "ersatz": "NOCH"},
+        ]
+        ok = pipeline.apply_code_patches(state, patches)
+        assert ok is False
+        assert ziel.read_text() == "ALT\n"
+
+    def test_apply_mehrere_patches(self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        a = tmp_path / "tools" / "a.py"
+        b = tmp_path / "tools" / "b.py"
+        a.write_text("A1\n", encoding="utf-8")
+        b.write_text("B1\n", encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        patches = [
+            {"pfad": "tools/a.py", "anker": "A1", "ersatz": "A2"},
+            {"pfad": "tools/b.py", "anker": "B1", "ersatz": "B2"},
+        ]
+        ok = pipeline.apply_code_patches(state, patches)
+        assert ok is True
+        assert a.read_text() == "A2\n"
+        assert b.read_text() == "B2\n"
+
+    def test_apply_dry_run_schreibt_nicht(self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        ziel = tmp_path / "tools" / "x.py"
+        ziel.write_text("ALT\n", encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        patches = [{"pfad": "tools/x.py", "anker": "ALT",
+                    "ersatz": "NEU"}]
+        ok = pipeline.apply_code_patches(state, patches, dry_run=True)
+        assert ok is True
+        assert ziel.read_text() == "ALT\n"
+
+    def test_apply_leer_fail(self, tmp_path: Path) -> None:
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["tools/"])
+        ok = pipeline.apply_code_patches(state, [])
+        assert ok is False
