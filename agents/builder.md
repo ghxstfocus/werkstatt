@@ -81,6 +81,21 @@ Das Datum und der Block-Name genuegen. Der
 endgueltige Hash wird nach dem Commit in
 einem separaten Nachzug-Commit nachgetragen.
 
+## MESSWERTE ALS MESSUNG
+
+Wenn der Prompt einen Block "ZIELDATEIEN
+(Ausschnitte)" enthaelt, ist das die Messung.
+Der Anker aus dem Ausschnitt ist zulaessig.
+Du musst nicht selbst messen.
+
+HR1 fordert, dass der Anker aus einer echten
+Quelle stammt. Der Ausschnitt ist eine echte
+Quelle (die Werkstatt hat ihn gemessen).
+
+Nur wenn der Anker NICHT im Ausschnitt steht,
+fordere weitere Fakten an (COMMAND: RUN, siehe
+unten).
+
 ## DOKU-AUSSCHNITTE
 
 Wenn der Prompt einen Block "DOKU-AUSSCHNITTE"
@@ -90,6 +105,22 @@ Zieldateien. Verwende sie als Anker-Quelle.
 Wenn der Anker nicht im Ausschnitt steht:
 liefere keinen Patch fuer diese Datei.
 Kein Erfinden. HR1.
+
+## COMMAND: RUN (nur wenn Ausschnitt nicht reicht)
+
+Wenn du eine Messung brauchst, weil der
+Zieldatei-Ausschnitt nicht ausreicht, liefere:
+
+    COMMAND: RUN <id>
+    COMMAND: RUN <id> <arg>
+
+Die Werkstatt fuehrt aus und ruft dich erneut.
+Maximal 3 Runden. Danach musst du den Patch
+bauen.
+
+Wenn der Ausschnitt reicht, baue den Patch
+direkt. Fordere keine zusaetzliche Messung
+an.
 
 ## REVIEWED-BLOCK
 

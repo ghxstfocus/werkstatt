@@ -79,6 +79,43 @@ statt GO mit Auflagen.
 GO ohne Auflagen bleibt GO und endet die Review-
 Schleife.
 
+## ERSETZUNG UND EINFUEGUNG
+
+Ein Patch kann eine Ersetzung ODER eine
+Einfuegung sein.
+
+Ersetzung:
+  ersatz ersetzt anker komplett.
+  Typisch fuer Doku-Fixes.
+
+Einfuegung:
+  ersatz = anker + neuer Text.
+  Der Anker bleibt, danach kommt neuer Text.
+  Typisch fuer Erweiterungen (neue Tests,
+  neue Funktionen).
+
+Beides ist gueltig. Ersatz != anker ist
+erfuellt, wenn ersatz != anker.
+
+Beispiel Einfuegung:
+  anker:
+      def test_x(self):
+          pass
+  ersatz:
+      def test_x(self):
+          pass
+
+      def test_y(self):
+          pass
+  Ergebnis: test_y ist nach test_x eingefuegt.
+
+Die Werkstatt wendet den Patch durch
+text.replace(anker, ersatz, 1) an. Bei
+Einfuegung: der Anker bleibt, aber die
+Anker-Stelle wird durch (Anker + neuer
+Text) ersetzt. Netto: neuer Text steht
+nach dem Anker.
+
 ## COMMAND vs. VERDICT
 
 Ein Reviewer-Block enthaelt ENTWEDER
