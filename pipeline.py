@@ -38,9 +38,7 @@ COVERAGE_MIN_PCT = 80.0
 AUDIT_DIR_NAME = "audit-logs"
 AUDIT_FILE_NAME = "agent-pipeline.jsonl"
 
-# Aktuelles Projekt (wird in run_pipeline gesetzt, in audit() gelesen).
-# Single-Process. Kein Threading. Eine Variable reicht.
-CURRENT_PROJECT: str = ""
+
 
 # HR1-HR10. Werden jedem System-Prompt angehaengt, unabhaengig
 # von der Rolle. Code, nicht Prompt. Nicht ueberschreibbar.
@@ -149,7 +147,13 @@ def load_docs(docs_config: dict[str, str], project_dir: Path) -> dict[str, str]:
     return docs
 
 
-def audit(kind: str, payload: dict[str, Any], project_dir: Path) -> None:
+def audit(kind: str, payload: dict[str, Any], project_dir: Path,
+          project_name: str) -> None:
+    """Schreibt einen Audit-Eintrag.
+
+    Auflage 2043: project_name wird explizit uebergeben. Keine
+    Modul-Variable mehr, keine unsichtbare Kopplung.
+    """
     audit_dir = project_dir / AUDIT_DIR_NAME
     audit_dir.mkdir(parents=True, exist_ok=True)
     tag = datetime.now(UTC).strftime("%Y-%m-%d")
@@ -158,7 +162,7 @@ def audit(kind: str, payload: dict[str, Any], project_dir: Path) -> None:
         "audit_id": f"PIPE-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{int(time.time()*1000)%100000}",
         "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds"),
         "agent": "agent_pipeline",
-        "project": CURRENT_PROJECT,
+        "project": project_name,
         "kind": kind,
         **payload,
     }
@@ -424,6 +428,7 @@ class RunState:
     llm_timeout_s: int = 180
     git_author_name: str = ""
     git_author_email: str = ""
+    project_name: str = ""
     coverage_pct: int = -1  # -1 = nicht gemessen
     basis_protokoll: str = ""
     mess_protokoll: str = ""
@@ -606,7 +611,7 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
     """
     # Auflage 2042: quelle auf erlaubte Marker beschraenken.
     if quelle not in ERLAUBTE_QUELLEN:
-        audit("quelle_invalid", {"quelle": str(quelle)[:80]}, state.project_dir)
+        audit("quelle_invalid", {"quelle": str(quelle)[:80]}, state.project_dir, state.project_name)
         print(f"[WARN] Ungueltiger quelle-Marker: {str(quelle)[:80]}")
         quelle = "unknown"
 
@@ -624,13 +629,13 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
             audit("command_rejected",
                   {"id": str(cid)[:80], "arg": str(arg)[:80],
                    "quelle": quelle, "grund": "id_kein_str"},
-                  state.project_dir)
+                  state.project_dir, state.project_name)
             continue
         if not isinstance(arg, str):
             audit("command_rejected",
                   {"id": cid, "arg": str(arg)[:80],
                    "quelle": quelle, "grund": "arg_kein_str"},
-                  state.project_dir)
+                  state.project_dir, state.project_name)
             continue
 
         if cid not in erlaubt:
@@ -638,7 +643,7 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
             audit("command_rejected",
                   {"id": cid, "arg": arg[:200], "quelle": quelle,
                    "grund": "nicht_in_whitelist"},
-                  state.project_dir)
+                  state.project_dir, state.project_name)
             continue
 
         m = katalog[cid]
@@ -655,7 +660,7 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
             audit("command_executed",
                   {"id": cid, "arg": arg[:200], "argv": argv,
                    "quelle": quelle, "ok": ok, "ausgabe_verworfen": True},
-                  state.project_dir)
+                  state.project_dir, state.project_name)
             continue
         if len(out) > rest_platz:
             out = out[:rest_platz] + "\n[... Gesamtlimit erreicht ...]\n"
@@ -666,7 +671,7 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
         audit("command_executed",
               {"id": cid, "arg": arg[:200], "argv": argv,
                "quelle": quelle, "ok": ok},
-              state.project_dir)
+              state.project_dir, state.project_name)
 
 
 
@@ -911,9 +916,6 @@ def print_approval_dokument(state: RunState) -> None:
 
 
 def run_pipeline(project_name: str, aufgabe: str) -> int:
-    global CURRENT_PROJECT
-    CURRENT_PROJECT = project_name
-
     api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
     if not api_key:
         print("[FAIL] DEEPSEEK_API_KEY fehlt. Fail closed.")
@@ -938,13 +940,14 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         project_dir=project_dir,
         git_author_name=str(git_author.get("name", "")),
         git_author_email=str(git_author.get("email", "")),
+        project_name=project_name,
     )
 
     audit("pipeline_start",
           {"aufgabe_hash": __import__("hashlib").sha256(aufgabe.encode()).hexdigest(),
            "aufgabe_kurz": aufgabe[:200],
            "llm_calls_start": 0},
-          project_dir)
+          project_dir, project_name)
 
     # ==================================================================
     # SCHRITT 0: BASIS-GATE (HARD FAIL)
@@ -966,7 +969,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         print(f"[!] Basis-Gate rot. Fehler: {basis_fehler}")
         print("[*] Auto-Repair (nur deterministisch).")
         print("=" * 70)
-        audit("basis_gate_rot", {"fehler": basis_fehler}, project_dir)
+        audit("basis_gate_rot", {"fehler": basis_fehler}, project_dir, project_name)
 
         # Nur deterministischer Fix: ruff --fix
         nur_ruff = basis_fehler == ["ruff"]
@@ -976,7 +979,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 project_dir,
                 config.get("venv_python", str(project_dir / ".venv/bin/python3")),
             )
-            audit("auto_repair_ruff", {"ok": ok}, project_dir)
+            audit("auto_repair_ruff", {"ok": ok}, project_dir, project_name)
             tests_ok, probleme = check_tests_dir_unveraendert(project_dir, tests_snap)
             if not tests_ok:
                 print(f"[!] Auto-Repair hat tests/ veraendert: {probleme}")
@@ -1006,7 +1009,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             audit("recovery_basis_gate",
                   {"diagnose": v.diagnose, "plan": v.reparaturplan,
                    "empfehlung": v.empfehlung},
-                  project_dir)
+                  project_dir, project_name)
             return 11
 
     print("[+] Basis-Gate gruen. Block startet.")
@@ -1040,7 +1043,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                     state.reviewer_verdict_model, 0.0, state.llm_timeout_s)
     if not reply.ok:
         print(f"[FAIL] Reviewer: {reply.error}")
-        audit("reviewer_call_failed", {"error": reply.error}, project_dir)
+        audit("reviewer_call_failed", {"error": reply.error}, project_dir, project_name)
         return 2
     state.llm_calls += 1
 
@@ -1067,7 +1070,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     )
     if not reply.ok:
         print(f"[FAIL] Builder: {reply.error}")
-        audit("builder_call_failed", {"error": reply.error}, project_dir)
+        audit("builder_call_failed", {"error": reply.error}, project_dir, project_name)
         return 4
     state.llm_calls += 1
     state.code_entwurf = reply.content
@@ -1099,7 +1102,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         if not reply.ok:
             print(f"[FAIL] Reviewer: {reply.error}")
             audit("reviewer_call_failed", {"error": reply.error, "runde": runde},
-                  project_dir)
+                  project_dir, project_name)
             return 5
         state.llm_calls += 1
 
@@ -1108,7 +1111,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             {"runde": runde, "verdict": verdict, "raw": reply.content})
         state.auflagen_log.append(parse_auflagen(reply.content))
         state.empfehlung_log.append(parse_empfehlung(reply.content))
-        audit("review_round", {"runde": runde, "verdict": verdict}, project_dir)
+        audit("review_round", {"runde": runde, "verdict": verdict}, project_dir, project_name)
 
         if verdict == "COMMAND":
             cmds = parse_commands(reply.content)
@@ -1144,7 +1147,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         )
         v = ask_reviewer_for_recovery(state, "no_go", kontext)
         print_recovery(v)
-        audit("recovery_no_go", {"empfehlung": v.empfehlung}, project_dir)
+        audit("recovery_no_go", {"empfehlung": v.empfehlung}, project_dir, project_name)
         return 15
 
     # ==================================================================
@@ -1224,7 +1227,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
 
         commit_verdict = classify_verdict(reply.content)
         state.commit_review = {"verdict": commit_verdict, "raw": reply.content}
-        audit("commit_review", {"verdict": commit_verdict}, project_dir)
+        audit("commit_review", {"verdict": commit_verdict}, project_dir, project_name)
 
         if commit_verdict == "COMMIT-NO-GO":
             print(f"[-] Commit-NO-GO:\n{reply.content[:400]}")
@@ -1251,20 +1254,20 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         wahl = input("Deine Wahl: ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         print("\n[*] Abbruch.")
-        audit("pipeline_abgebrochen", {}, project_dir)
+        audit("pipeline_abgebrochen", {}, project_dir, project_name)
         return 0
 
     if wahl in {"j", "ja", "y", "yes"}:
         print("[+] Approved.")
         audit("pipeline_approved", {"runden": len(state.review_runden)},
-              project_dir)
+              project_dir, project_name)
 
         if not config.get("require_human_approval", True):
             print("[!] require_human_approval=False. Ueberspringe Commit.")
             return 0
 
         if apply_commit_and_doku(state, state.commit_paket):
-            audit("commit_applied", {}, project_dir)
+            audit("commit_applied", {}, project_dir, project_name)
             return 0
         else:
             print("[!] Commit fehlgeschlagen. Manuell nachholen.")
@@ -1279,12 +1282,12 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             pass
         audit("pipeline_rejected",
               {"runden": len(state.review_runden), "grund_kurz": grund[:200]},
-              project_dir)
+              project_dir, project_name)
         return 0
 
     print("[!] Eskalation.")
     audit("pipeline_escalated", {"runden": len(state.review_runden)},
-          project_dir)
+          project_dir, project_name)
     return 0
 
 
