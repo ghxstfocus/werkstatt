@@ -1857,3 +1857,41 @@ class TestCollectMesswerte:
         }
         s = pipeline.format_messwerte_block(werte)
         assert "test_anzahl: nicht gemessen" in s
+
+    def test_format_doc_snippets_mit_docs(self) -> None:
+        """Auflage 2142: Doku-Ausschnitte werden formatiert."""
+        docs = {
+            "context": "# Context\nInhalt A.\n",
+            "decisions": "# Decisions\nInhalt B.\n",
+        }
+        s = pipeline.format_doc_snippets(docs)
+        assert "DOKU-AUSSCHNITTE" in s
+        assert "--- context ---" in s
+        assert "Inhalt A." in s
+        assert "--- decisions ---" in s
+        assert "Inhalt B." in s
+
+    def test_format_doc_snippets_leer(self) -> None:
+        """Leere docs liefern einen Hinweis."""
+        s = pipeline.format_doc_snippets({})
+        assert "keine Doku" in s
+
+    def test_format_doc_snippets_kuerzt(self) -> None:
+        """Ausschnitt wird auf max_len gekuerzt."""
+        # Klartext (kein Hex), damit redact_secrets
+        # nicht eingreift.
+        docs = {"lang": "Satz. " * 2000}
+        s = pipeline.format_doc_snippets(docs, max_len=100)
+        # Der Ausschnitt ist max_len Zeichen lang.
+        # "Satz. " hat 6 Zeichen, max_len=100
+        # erlaubt rund 16 Wiederholungen im Ausschnitt.
+        assert s.count("Satz.") <= 17
+        # Redaction hat nicht eingegriffen.
+        assert "[HEX]" not in s
+        assert "[REDACTED]" not in s
+
+    def test_format_doc_snippets_redigiert(self) -> None:
+        """IP-Adressen werden redigiert."""
+        docs = {"x": "Host 192.168.178.117 im Text."}
+        s = pipeline.format_doc_snippets(docs)
+        assert "192.168.178.117" not in s

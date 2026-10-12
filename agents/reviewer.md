@@ -59,6 +59,20 @@ statt GO mit Auflagen.
 GO ohne Auflagen bleibt GO und endet die Review-
 Schleife.
 
+## HASH IM DOKU-PATCH
+
+Ein Doku-Patch, der den VORGAENGER-Hash nennt,
+ist OK. Der Vorgaenger-Hash ist der HEAD vor
+dem aktuellen Commit.
+
+Ein Doku-Patch, der den NEUEN Hash nennt, ist
+ein Hash-Zirkel. Der neue Hash ist zum Zeitpunkt
+des Patches noch nicht bekannt. Das ist ein
+STOP-Grund (Anti-Pattern "Hash-Zirkel in
+Doku-Eintraegen").
+
+Verwechsle die beiden nicht.
+
 ## LEERES COMMIT-PAKET
 
 Wenn das Commit-Paket leer ist (keine Message,

@@ -66,7 +66,13 @@ COMMIT_PAKET_FORMAT = (
     "  - Tests: welche Tests, Testzahl konkret gemessen.\n"
     "  - Verifikation: ruff, mypy, pytest.\n"
     "  - Reviewed: Reviewer-Verdict mit Auflagen.\n\n"
-    "Platzhalter (wie '<N>') sind verboten. Zahlen MUESSEN konkret sein."
+    "Platzhalter (wie '<N>') sind verboten. Zahlen MUESSEN konkret sein.\n\n"
+    "HASH-REGEL (verbindlich):\n"
+    "Schreibe KEINEN Commit-Hash in die Doku-Patches.\n"
+    "Das Datum und der Block-Name genuegen.\n"
+    "Der endgueltige Hash wird nach dem Commit in\n"
+    "einem separaten Nachzug-Commit nachgetragen\n"
+    "(Anti-Pattern 'Hash-Zirkel in Doku-Eintraegen')."
 )
 
 # Redaction (lokal, projektunabhaengig)
@@ -1083,6 +1089,31 @@ def collect_messwerte(state: RunState) -> dict[str, Any]:
     return werte
 
 
+def format_doc_snippets(docs: dict[str, str],
+                        max_len: int = 3000) -> str:
+    """Auflage 2142: Ausschnitte aus den Doku-Dateien fuer den Builder.
+
+    Der Builder braucht konkrete Anker-Texte aus den
+    Zieldateien, um gueltige Doku-Patches zu bauen.
+    Ohne diese Ausschnitte liefert er eine Rueckfrage
+    (Befund S aus Probebetrieb 10).
+
+    Pro Datei: max_len Zeichen Anfang. Redaction zuerst
+    (Secrets-Schutz), max_len=100000 damit die Grenze
+    nicht durch Redaction weiter gekuerzt wird.
+    """
+    if not docs:
+        return "(keine Doku geladen)"
+    teile = ["DOKU-AUSSCHNITTE (Auszug aus den Zieldateien):"]
+    for key, inhalt in docs.items():
+        ausschnitt = inhalt[:max_len]
+        ausschnitt, _ = redaction.redact_all(
+            ausschnitt, max_len=100000)
+        teile.append(f"--- {key} ---")
+        teile.append(ausschnitt)
+    return "\n".join(teile)
+
+
 def format_messwerte_block(werte: dict[str, Any]) -> str:
     """Formatiert die Messwerte fuer den Builder-Prompt.
 
@@ -1130,6 +1161,7 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
         f"REVIEWER-VERDICT:\n"
         f"{state.review_runden[-1]['raw'] if state.review_runden else '(keins)'}\n\n"
         + format_messwerte_block(collect_messwerte(state)) + "\n\n"
+        + format_doc_snippets(state.docs) + "\n\n"
         "Antworte in genau diesem Format:\n\n"
         + COMMIT_PAKET_FORMAT +
         "\n\nHinweise:\n"
@@ -1818,6 +1850,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 f"Begruendung (Kontext, NICHT die "
                 f"Reviewed-Zeile):\n{reply.content}\n\n"
                 + format_messwerte_block(collect_messwerte(state)) + "\n\n"
+                + format_doc_snippets(state.docs) + "\n\n"
                 "Liefere ein ueberarbeitetes Commit-Paket.\n\n"
                 "WICHTIG: Der Reviewed-Block der neuen Message "
                 "spiegelt den Code-Review-Verdict DIESER Runde "

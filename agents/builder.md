@@ -56,6 +56,23 @@ Bei Doku-Patches gilt:
 Wenn Anker und Ersatz identisch sind, ist der
 Patch wirkungslos. Pruefe immer: ersatz != anker.
 
+## HASH-REGEL
+
+Schreibe KEINEN Commit-Hash in Doku-Patches.
+Das Datum und der Block-Name genuegen. Der
+endgueltige Hash wird nach dem Commit in
+einem separaten Nachzug-Commit nachgetragen.
+
+## DOKU-AUSSCHNITTE
+
+Wenn der Prompt einen Block "DOKU-AUSSCHNITTE"
+enthaelt, sind das Ausschnitte aus den
+Zieldateien. Verwende sie als Anker-Quelle.
+
+Wenn der Anker nicht im Ausschnitt steht:
+liefere keinen Patch fuer diese Datei.
+Kein Erfinden. HR1.
+
 ## REVIEWED-BLOCK
 
 Der Reviewed-Block der Commit-Message nennt den
