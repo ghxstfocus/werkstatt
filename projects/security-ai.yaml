@@ -45,6 +45,11 @@ optional_catalog:
   - bandit
   - pip_audit
   - read_file
+  # Auflage 2159: mypy ueber tests/ separat. Der Reviewer-
+  # Agent kann es anfordern, um Test-Qualitaet zu pruefen.
+  # In always_run ist es nicht, weil tests/ 1337 mypy-
+  # Fehler hat (fehlende Type Annotations).
+  - mypy_tests
 
 # Doku-Zuordnung pro Agent.
 # Jeder Agent bekommt nur die Doku, die er braucht.

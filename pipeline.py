@@ -287,7 +287,12 @@ def build_catalog(config: dict[str, Any], project_dir: Path
             "Python-Syntax-Check.", 300),
         "ruff": Measurement("ruff", (venv, "-m", "ruff", "check", "."), "Lint."),
         "mypy": Measurement("mypy",
-            (venv, "-m", "mypy", "apps", "core", "harness", "tools", "scripts", "tests"), "Typen.", 300),
+            (venv, "-m", "mypy", "apps", "core", "harness", "tools", "scripts"), "Typen.", 300),
+        # Auflage 2159: mypy ueber tests/ liefert 1337 Fehler
+        # (fehlende Annotations). Deshalb nicht in always_run,
+        # sondern optional. Der Reviewer-Agent kann es anfordern.
+        "mypy_tests": Measurement("mypy_tests",
+            (venv, "-m", "mypy", "tests"), "Typen in tests/.", 300),
         "test_count": Measurement("test_count",
             (venv, "-m", "pytest", "--collect-only", "-q"), "Test-Anzahl."),
         "git_status": Measurement("git_status", ("git", "status", "--porcelain"), "Tree."),
