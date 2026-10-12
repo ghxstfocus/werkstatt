@@ -48,6 +48,17 @@ Pruefe beim Commit-Review:
 5. Betroffene Dateien alle in Whitelist?
 6. Konsistenz mit letzten Commits?
 
+## GO MIT AUFLAGEN
+
+Wenn du GO mit Auflagen gibst, gibt der Loop eine
+weitere Runde. Der Builder setzt die Auflagen um.
+
+Wenn du kein weiteres Mal reviewen willst, gib NO-GO
+statt GO mit Auflagen.
+
+GO ohne Auflagen bleibt GO und endet die Review-
+Schleife.
+
 ## GRENZEN
 
 - Du baust nichts.

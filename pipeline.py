@@ -985,11 +985,16 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
     ).stdout
 
     aufgabe = (
-        "Der Block wurde approved. Erstelle:\n\n"
-        "1. Eine Commit-Message im Format des letzten Commits.\n"
-        "2. Eine Liste der betroffenen Dateien.\n"
+        "Der Code-Review ist abgeschlossen. Der Reviewer hat "
+        "in der letzten Runde GO gegeben.\n\n"
+        "Baue das Commit-Paket:\n"
+        "1. Commit-Message im Format des letzten Commits.\n"
+        "2. Liste der betroffenen Dateien.\n"
         "3. Doku-Patches fuer PHASES.md, SECURITY_REVIEW_LOG.md, "
         "ggf. DESIGN_DECISIONS.md.\n\n"
+        "Achte auf die Auflagen des Reviewers (unten). Wenn eine "
+        "Auflage den Code betrifft, gehoert sie in den Commit-Text "
+        "oder in einen Doku-Patch.\n\n"
         f"LETZTER COMMIT (Format-Referenz):\n{letzter}\n\n"
         f"CODE-ENTWURF (gekuerzt):\n{state.code_entwurf[:3000]}\n\n"
         f"REVIEWER-VERDICT:\n"
@@ -1466,6 +1471,34 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             continue
 
         if verdict == "GO":
+            # Auflage 2117: GO mit Auflagen -> eine weitere Runde.
+            auflagen = (state.auflagen_log[-1]
+                        if state.auflagen_log else [])
+            if auflagen and runde < max_rounds:
+                print(f"[i] Code-GO mit {len(auflagen)} Auflagen. "
+                      "Weitere Runde zur Umsetzung.")
+                rc = budget_or_recover(
+                    state, max_llm,
+                    f"Vor Builder-Aufruf (Auflagen-Umsetzung Runde {runde}).",
+                    project_dir, project_name,
+                    max_minutes=max_minutes)
+                if rc is not None:
+                    return rc
+                auflagen_text = "\n".join(f"- {a}" for a in auflagen)
+                bauer_reply = ask_llm(
+                    api_key, builder_prompt,
+                    f"Der Reviewer hat GO gegeben, aber folgende "
+                    f"Auflagen formuliert:\n{auflagen_text}\n\n"
+                    "Ueberarbeite den Code-Entwurf, um die Auflagen "
+                    "umzusetzen. Antworte mit dem ueberarbeiteten "
+                    "Entwurf.",
+                    state.builder_model, state.builder_temp,
+                    state.llm_timeout_s,
+                )
+                if bauer_reply.ok:
+                    state.code_entwurf = bauer_reply.content
+                    state.llm_calls += 1
+                continue
             print("[+] Code-GO erhalten.")
             break
 
