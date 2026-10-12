@@ -651,6 +651,29 @@ def print_recovery(v: RecoveryVorschlag) -> None:
 
 
 
+def budget_or_recover(state: RunState, max_llm: int, kontext: str,
+                      project_dir: Path, project_name: str) -> int | None:
+    """Auflage 2081: einheitlicher Budget-Check mit Recovery.
+
+    Versucht require_budget. Bei BudgetExhausted:
+    - ruft ask_reviewer_for_recovery("budget", kontext) auf,
+    - gibt den Vorschlag aus,
+    - schreibt recovery_budget ins Audit,
+    - liefert Exit-Code 13.
+    Sonst None (Aufrufer faehrt normal fort).
+    """
+    try:
+        require_budget(state, max_llm)
+    except BudgetExhausted as exc:
+        print(f"[!] {exc}")
+        v = ask_reviewer_for_recovery(state, "budget", kontext)
+        print_recovery(v)
+        audit("recovery_budget", {"kontext": kontext},
+              project_dir, project_name)
+        return 13
+    return None
+
+
 def trim_output(out: str, grenze: int = MAX_PROTOKOLL_PER_COMMAND) -> str:
     """Kuerzt ein Messprotokoll-Stueck auf `grenze` Zeichen (Auflage 2041)."""
     if len(out) <= grenze:
@@ -1136,11 +1159,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         "COMMAND: RUN <id>\n"
         "COMMAND: RUN read_file <pfad>"
     )
-    try:
-        require_budget(state, max_llm)
-    except BudgetExhausted as exc:
-        print(f"[!] {exc}")
-        return 13
+    rc = budget_or_recover(state, max_llm,
+                          "Vor Reviewer-Auswahl optionale Messungen.",
+                          project_dir, project_name)
+    if rc is not None:
+        return rc
     reply = ask_llm(api_key, reviewer_prompt, reviewer_input,
                     state.reviewer_verdict_model, 0.0, state.llm_timeout_s)
     if not reply.ok:
@@ -1162,11 +1185,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     print("\n[*] Schritt 2: Builder baut Code-Entwurf.")
     builder_prompt = build_system_prompt(state.agents["builder"], state.docs,
                                          state.agent_docs.get("builder", []))
-    try:
-        require_budget(state, max_llm)
-    except BudgetExhausted as exc:
-        print(f"[!] {exc}")
-        return 13
+    rc = budget_or_recover(state, max_llm,
+                          "Vor Builder-Aufruf (Code-Entwurf).",
+                          project_dir, project_name)
+    if rc is not None:
+        return rc
     reply = ask_llm(
         api_key, builder_prompt,
         f"BASIS-GATE:\n{state.basis_protokoll[:1500]}\n\n"
@@ -1188,12 +1211,9 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     max_rounds = budget.get("max_review_rounds", 5)
     verdict = "UNKLAR"
     for runde in range(1, max_rounds + 1):
-        if state.llm_calls >= max_llm:
-            print(f"[!] LLM-Budget erschoepft ({state.llm_calls}/{max_llm}).")
-            v = ask_reviewer_for_recovery(state, "budget",
-                                          f"Runden: {runde-1}, LLM: {state.llm_calls}")
-            print_recovery(v)
-            return 13
+        # Auflage 2078: der inline-Budget-Check ist entfernt.
+        # Der Check erfolgt direkt vor dem Reviewer-Call via
+        # budget_or_recover (siehe unten).
 
         print(f"\n[--- Review-Runde {runde} ---]")
 
@@ -1219,14 +1239,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             f"TEST-VORSCHLAEGE:\n{state.test_vorschlaege or '(keine)'}\n\n"
             "Bewerte. Erste Zeile: GO, NO-GO oder ESKALATION."
         )
-        try:
-            require_budget(state, max_llm)
-        except BudgetExhausted as exc:
-            print(f"[!] {exc}")
-            v = ask_reviewer_for_recovery(state, "budget",
-                                          f"Runden: {runde-1}, LLM: {state.llm_calls}")
-            print_recovery(v)
-            return 13
+        rc = budget_or_recover(state, max_llm,
+                              f"Vor Reviewer-Verdict Runde {runde}.",
+                              project_dir, project_name)
+        if rc is not None:
+            return rc
         reply = ask_llm(api_key, reviewer_prompt, szenario,
                         state.reviewer_verdict_model, 0.0, state.llm_timeout_s)
         if not reply.ok:
@@ -1256,14 +1273,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
 
         if verdict == "NO-GO":
             print(f"[-] NO-GO:\n{reply.content[:300]}")
-            try:
-                require_budget(state, max_llm)
-            except BudgetExhausted as exc:
-                print(f"[!] {exc}")
-                v = ask_reviewer_for_recovery(state, "budget",
-                                              f"Runden: {runde}, LLM: {state.llm_calls}")
-                print_recovery(v)
-                return 13
+            rc = budget_or_recover(state, max_llm,
+                                  f"Vor Builder-Neubau (NO-GO Runde {runde}).",
+                                  project_dir, project_name)
+            if rc is not None:
+                return rc
             bauer_reply = ask_llm(
                 api_key, builder_prompt,
                 f"Reviewer NO-GO:\n{reply.content}\n\nUeberarbeite.",
@@ -1356,11 +1370,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             + "; ".join(state.auflagen_log[-1] if state.auflagen_log else [])
             + "\n\nAntworte mit COMMIT-GO, COMMIT-NO-GO oder COMMIT-ESKALATION."
         )
-        try:
-            require_budget(state, max_llm)
-        except BudgetExhausted as exc:
-            print(f"[!] {exc}")
-            return 13
+        rc = budget_or_recover(state, max_llm,
+                              "Vor Commit-Review.",
+                              project_dir, project_name)
+        if rc is not None:
+            return rc
         reply = ask_llm(api_key, reviewer_prompt, commit_input,
                         state.reviewer_verdict_model, 0.0, state.llm_timeout_s)
         if not reply.ok:
@@ -1375,11 +1389,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         if commit_verdict == "COMMIT-NO-GO":
             print(f"[-] Commit-NO-GO:\n{reply.content[:400]}")
             # Zurueck an den Builder: neues Commit-Paket
-            try:
-                require_budget(state, max_llm)
-            except BudgetExhausted as exc:
-                print(f"[!] {exc}")
-                return 13
+            rc = budget_or_recover(state, max_llm,
+                                  "Vor Builder-Neubau (Commit-NO-GO).",
+                                  project_dir, project_name)
+            if rc is not None:
+                return rc
             bauer_reply = ask_llm(
                 api_key, builder_prompt,
                 f"Reviewer hat das Commit-Paket abgelehnt:\n{reply.content}\n\n"
