@@ -580,3 +580,136 @@ class TestApplyCommitAndDoku:
         assert pipeline.apply_commit_and_doku(state, paket) is True
         # .commit-msg.tmp weg
         assert not (tmp_path / ".commit-msg.tmp").exists()
+
+
+# =====================================================================
+# snapshot_tests_dir + check_tests_dir_unveraendert (Auflage 2062)
+# =====================================================================
+
+class TestSnapshotTestsDir:
+    """Tests fuer snapshot_tests_dir."""
+
+    def test_leeres_verzeichnis_kein_snapshot(self, tmp_path: Path) -> None:
+        """Kein tests/-Verzeichnis -> leeres dict."""
+        snap = pipeline.snapshot_tests_dir(tmp_path)
+        assert snap == {}
+
+    def test_leeres_tests_verzeichnis(self, tmp_path: Path) -> None:
+        """tests/ existiert, aber leer -> leeres dict."""
+        (tmp_path / "tests").mkdir()
+        snap = pipeline.snapshot_tests_dir(tmp_path)
+        assert snap == {}
+
+    def test_eine_datei(self, tmp_path: Path) -> None:
+        """Eine Testdatei wird mit relativer Pfad + Groesse erfasst."""
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "test_a.py").write_text("x" * 100)
+        snap = pipeline.snapshot_tests_dir(tmp_path)
+        assert snap == {"tests/test_a.py": 100}
+
+    def test_mehrere_dateien_inkl_unterordner(self, tmp_path: Path) -> None:
+        """rglob erfasst auch Unterordner."""
+        tests = tmp_path / "tests"
+        (tests / "unit").mkdir(parents=True)
+        (tests / "test_a.py").write_text("a" * 50)
+        (tests / "unit" / "test_b.py").write_text("b" * 30)
+        snap = pipeline.snapshot_tests_dir(tmp_path)
+        assert snap == {
+            "tests/test_a.py": 50,
+            "tests/unit/test_b.py": 30,
+        }
+
+    def test_nicht_py_dateien_ignoriert(self, tmp_path: Path) -> None:
+        """Nur *.py wird erfasst."""
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "test_a.py").write_text("x" * 10)
+        (tests / "readme.txt").write_text("y" * 100)
+        snap = pipeline.snapshot_tests_dir(tmp_path)
+        assert snap == {"tests/test_a.py": 10}
+
+
+class TestCheckTestsDirUnveraendert:
+    """Tests fuer check_tests_dir_unveraendert.
+
+    Auflage 2062 (Befund T6): schuetzt vor Auto-Repair-Schaden.
+    """
+
+    def test_keine_aenderung_ok(self, tmp_path: Path) -> None:
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "test_a.py").write_text("x" * 100)
+        vorher = pipeline.snapshot_tests_dir(tmp_path)
+        ok, probleme = pipeline.check_tests_dir_unveraendert(tmp_path, vorher)
+        assert ok is True
+        assert probleme == []
+
+    def test_datei_geloescht_nicht_ok(self, tmp_path: Path) -> None:
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "test_a.py").write_text("x" * 100)
+        vorher = pipeline.snapshot_tests_dir(tmp_path)
+        (tests / "test_a.py").unlink()
+        ok, probleme = pipeline.check_tests_dir_unveraendert(tmp_path, vorher)
+        assert ok is False
+        assert len(probleme) == 1
+        assert probleme[0].startswith("GELOESCHT:")
+        assert "tests/test_a.py" in probleme[0]
+
+    def test_datei_kleiner_nicht_ok(self, tmp_path: Path) -> None:
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "test_a.py").write_text("x" * 100)
+        vorher = pipeline.snapshot_tests_dir(tmp_path)
+        (tests / "test_a.py").write_text("x" * 50)
+        ok, probleme = pipeline.check_tests_dir_unveraendert(tmp_path, vorher)
+        assert ok is False
+        assert len(probleme) == 1
+        assert probleme[0].startswith("KLEINER:")
+        assert "100 -> 50" in probleme[0]
+
+    def test_datei_groesser_ok(self, tmp_path: Path) -> None:
+        """Wachsen ist kein Problem."""
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "test_a.py").write_text("x" * 100)
+        vorher = pipeline.snapshot_tests_dir(tmp_path)
+        (tests / "test_a.py").write_text("x" * 200)
+        ok, probleme = pipeline.check_tests_dir_unveraendert(tmp_path, vorher)
+        assert ok is True
+        assert probleme == []
+
+    def test_neue_datei_ok(self, tmp_path: Path) -> None:
+        """Neue Datei ist kein Problem, wird nicht geprueft."""
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "test_a.py").write_text("x" * 100)
+        vorher = pipeline.snapshot_tests_dir(tmp_path)
+        (tests / "test_b.py").write_text("y" * 200)
+        ok, probleme = pipeline.check_tests_dir_unveraendert(tmp_path, vorher)
+        assert ok is True
+        assert probleme == []
+
+    def test_zwei_probleme(self, tmp_path: Path) -> None:
+        """Geloescht + kleiner in einem Lauf -> zwei Probleme."""
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "test_a.py").write_text("x" * 100)
+        (tests / "test_b.py").write_text("y" * 200)
+        vorher = pipeline.snapshot_tests_dir(tmp_path)
+        (tests / "test_a.py").unlink()
+        (tests / "test_b.py").write_text("y" * 50)
+        ok, probleme = pipeline.check_tests_dir_unveraendert(tmp_path, vorher)
+        assert ok is False
+        assert len(probleme) == 2
+        probleme_text = " | ".join(probleme)
+        assert "GELOESCHT: tests/test_a.py" in probleme_text
+        assert "KLEINER: tests/test_b.py" in probleme_text
+
+    def test_leerer_snapshot_ok(self, tmp_path: Path) -> None:
+        """Vorher-Snapshot leer -> immer ok."""
+        (tmp_path / "tests").mkdir()
+        ok, probleme = pipeline.check_tests_dir_unveraendert(tmp_path, {})
+        assert ok is True
+        assert probleme == []
