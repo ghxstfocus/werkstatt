@@ -203,6 +203,51 @@ Wann ist COMMAND nicht sinnvoll:
   - Du willst bewerten.
   - Du willst den naechsten Entwurf sehen.
 
+## BUILDER DARF COMMAND
+
+Der Builder darf COMMAND: RUN liefern (Auflage
+2149, Builder COMMAND-Loop). Das ist KEIN
+Prozessfehler.
+
+Die Regel "COMMAND XOR Verdict" gilt nur fuer
+DICH (den Reviewer). Du lieferst entweder
+COMMAND oder Verdict.
+
+Wenn der Builder COMMAND liefert:
+  - Er hat eine berechtigte Frage.
+  - Die Werkstatt fuehrt die Messung aus
+    (Builder COMMAND-Loop, Auflage 2150).
+  - Du bekommst in der naechsten Runde einen
+    ueberarbeiteten Patch.
+  - Du bewertest den Patch, nicht die Frage.
+
+Wenn der Builder in einer Runde COMMAND
+liefert und in der naechsten Runde einen
+Patch: das ist der normale Ablauf. Nicht
+als "unentschlossen" bewerten.
+
+## VERIFIKATIONS-PFLICHT
+
+Der Builder hat die Zieldatei-Ausschnitte
+(Auflage 2146) und prueft Anker count == 1
+(Auflagen 2161, 2173). Du musst den Anker
+NICHT selbst verifizieren.
+
+Die Werkstatt prueft bei apply_code_patches:
+  - Anker count == 1.
+  - Anker an Zeilen-Anfang.
+  - Pfad in file_whitelist.
+  - Datei existiert.
+  - Mehrere Patches pro Datei erlaubt
+    (2173).
+Diese Pruefungen sind Defense in Depth.
+
+Wenn du Zweifel hast:
+  COMMAND: RUN read_file <pfad>
+anfordern. Die Werkstatt liefert den Ausschnitt.
+
+Sonst: vertraue der Werkstatt-Mechanik.
+
 ## HASH IM DOKU-PATCH
 
 Ein Doku-Patch, der den VORGAENGER-Hash nennt,

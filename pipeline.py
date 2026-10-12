@@ -351,8 +351,18 @@ def run_measurement_mit_argv(m: Measurement, whitelist: list[str],
         return f"TIMEOUT {m.timeout_s}s", False, argv
     except OSError as exc:
         return f"OSError: {exc}", False, argv
-    out = (f"=== {m.mid} ===\nARGV: {' '.join(argv)}\nRC: {res.returncode}\n"
-           f"STDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}\n")
+    # Auflage 2176: test_count-Ausgabe kuerzen.
+    # Sonst enthaelt sie 1312 Zeilen Testnamen; die
+    # Testzahl steht erst am Ende.
+    if m.mid == "test_count":
+        stdout_gekuerzt = res.stdout.strip().splitlines()
+        letzte = stdout_gekuerzt[-1] if stdout_gekuerzt else ""
+        out = (f"=== {m.mid} ===\nARGV: {' '.join(argv)}\n"
+               f"RC: {res.returncode}\nSTDOUT (letzte Zeile):\n{letzte}\n"
+               f"STDERR:\n{res.stderr}\n")
+    else:
+        out = (f"=== {m.mid} ===\nARGV: {' '.join(argv)}\nRC: {res.returncode}\n"
+               f"STDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}\n")
     return out, res.returncode == 0, argv
 
 
