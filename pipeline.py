@@ -1919,6 +1919,13 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 zeilen.append(raw)
             runden_block = "\n".join(zeilen) + "\n\n"
 
+        # Auflage 2177: Zieldatei-Ausschnitte an den
+        # Reviewer. Der Reviewer sieht damit, was der
+        # Builder sieht.
+        ziel_pfade_rev = extract_paths_from_aufgabe(
+            state.aufgabe, file_whitelist, project_dir)
+        ziel_snippets_rev = read_target_snippets(
+            ziel_pfade_rev, project_dir, file_whitelist)
         szenario = (
             # Auflage 2152: Auftrag MUSS im Szenario stehen.
             aufgabe_block(state)
@@ -1927,6 +1934,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             f"OPTIONALE MESSUNGEN:\n{state.mess_protokoll or '(keine)'}\n\n"
             f"CODE-ENTWURF:\n{state.code_entwurf}\n\n"
             f"TEST-VORSCHLAEGE:\n{state.test_vorschlaege or '(keine)'}\n\n"
+            # Auflage 2177: Zieldatei-Ausschnitte.
+            + ziel_snippets_rev + "\n\n"
             "Bewerte. Erste Zeile: GO, NO-GO oder ESKALATION."
         )
         rc = budget_or_recover(state, max_llm,
