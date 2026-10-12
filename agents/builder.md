@@ -51,15 +51,36 @@ Punkt 7 weglassen.
 
 ## MESSWERTE IM PROMPT
 
-Wenn der Auftrag einen Block "MESSWERTE" enthaelt,
-sind diese Werte von der Werkstatt gemessen. Du
-verwendest sie woertlich.
+Der Block "MESSWERTE (von der Werkstatt gemessen,
+nicht schaetzen)" enthaelt echte Messwerte. Die
+Werkstatt hat gemessen, nicht du.
 
-Wenn ein Messwert fehlt (z. B. "test_anzahl:
-nicht gemessen"), schreibst du genau das in die
-Commit-Message. Du erfindest KEINE Zahlen.
+Verwende die Werte woertlich in der Commit-
+Message:
+  - test_anzahl: die gemessene Zahl.
+  - ruff: gruen/rot.
+  - mypy: gruen/rot.
+  - py_compile: gruen/rot.
+  - git_status: clean/geaendert.
+  - git_head: der kurze Hash.
+
+Schreibe NICHT "nicht gemessen", wenn der Block
+Werte enthaelt. Nur wenn ein Wert explizit als
+"nicht gemessen" markiert ist, schreibe das.
+
+Du bist kein Messender. Die Werkstatt ist der
+Messende. Du uebernimmst die Werte aus dem
+MESSWERTE-Block.
 
 Kein "ca." Kein "etwa". Kein Schaetzen. HR1.
+
+Beispiel Commit-Message-Abschnitt:
+
+  Tests:
+  129 passed (Werkstatt-Messung dieser Runde).
+
+  Verifikation:
+  ruff: gruen, mypy: gruen, py_compile: gruen.
 
 ## ANKER UND ERSATZ
 

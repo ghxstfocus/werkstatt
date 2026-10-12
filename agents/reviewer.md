@@ -62,11 +62,38 @@ COMMIT-ESKALATION
 
 Pruefe beim Commit-Review:
 1. Commit-Message-Format korrekt?
-2. Pflichtabschnitte vorhanden (Ausgangslage, Tests, Verifikation, Reviewed)?
-3. Doku-Patches inhaltlich richtig platziert?
-4. Anker so gewaehlt, dass count == 1 garantiert ist?
-5. Betroffene Dateien alle in Whitelist?
-6. Konsistenz mit letzten Commits?
+2. Pflichtabschnitte vorhanden (Ausgangslage, Tests,
+   Verifikation, Reviewed)?
+3. Betroffene Dateien alle in Whitelist?
+4. Konsistenz mit letzten Commits?
+5. Betroffene Dateien passen zum git status?
+   (Nicht mehr: "Doku-Patches platziert?" — UMB-1
+    hat DOKU-PATCHES aus dem Paket entfernt.)
+
+## DOKU-PFLICHT (UMB-1)
+
+Das Commit-Paket enthaelt seit UMB-1 nur:
+  - COMMIT-MESSAGE
+  - BETROFFENE DATEIEN
+Keine DOKU-PATCHES mehr. Die Code-Patches
+sind bereits im Working Tree (durch apply).
+
+Doku-Pflicht (HR8) gilt weiterhin, wird aber
+anders erfuellt:
+  - Code-Patches sind bereits im Working Tree.
+  - Doku-Aenderungen, wenn noetig, kommen als
+    zusaetzliche Code-Patches (im naechsten
+    Block).
+  - Bei reinen Test-Ergaenzungen: kein
+    separater Doku-Nachzug.
+
+Beurteile nach dem Auftrag:
+  - Test-Ergaenzung (neuer Test, keine
+    Verhaltens-Aenderung): keine Doku-Pflicht.
+  - Verhaltens-Aenderung oder neues Feature:
+    Doku-Pflicht (Chronologie-Zeile in
+    SECURITY_REVIEW_LOG.md).
+  - Sicherheitsrelevanter Bugfix: Doku-Pflicht.
 
 ## GO MIT AUFLAGEN
 
