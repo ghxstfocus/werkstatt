@@ -1090,7 +1090,23 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             return 13
 
         print(f"\n[--- Review-Runde {runde} ---]")
+
+        # Auflage 2045: bisherige Runden mitgeben.
+        # Der Reviewer soll sehen, was er in Runde 1..N-1 gesagt hat,
+        # damit er pruefen kann, ob die Auflagen umgesetzt wurden.
+        runden_block = ""
+        if state.review_runden:
+            zeilen = ["BISHERIGE RUNDEN:"]
+            for r in state.review_runden:
+                raw = r.get("raw", "")
+                if len(raw) > 1500:
+                    raw = raw[:1500] + " [... gekuerzt ...]"
+                zeilen.append(f"[ROUND {r['runde']} - {r['verdict']}]")
+                zeilen.append(raw)
+            runden_block = "\n".join(zeilen) + "\n\n"
+
         szenario = (
+            f"{runden_block}"
             f"BASIS-GATE:\n{state.basis_protokoll[:800]}\n\n"
             f"OPTIONALE MESSUNGEN:\n{state.mess_protokoll or '(keine)'}\n\n"
             f"CODE-ENTWURF:\n{state.code_entwurf}\n\n"
