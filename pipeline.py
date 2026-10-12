@@ -810,7 +810,7 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
         ziel.write_text(text, encoding="utf-8")
         print(f"[+] Doku gepatcht: {patch['pfad']}")
 
-    # 2. Datei-Liste pruefen: alle in file_whitelist
+    # 2. Datei-Liste pruefen: alle in file_whitelist und existierend
     dateien = paket.get("dateien", [])
     if not dateien:
         print("[!] Keine betroffenen Dateien angegeben. Abbruch.")
@@ -818,6 +818,11 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
     for pfad in dateien:
         if not any(pfad.startswith(w) for w in state.file_whitelist):
             print(f"[!] Datei nicht in Whitelist: {pfad}")
+            return False
+        # Auflage 2048: Datei muss existieren.
+        # Sonst scheitert git add spaeter unspezifisch.
+        if not (state.project_dir / pfad).exists():
+            print(f"[!] Datei existiert nicht: {pfad}")
             return False
 
     # 3. git add (explizite Liste)
@@ -842,12 +847,17 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
         commit_argv += ["-c", f"user.email={state.git_author_email}"]
     commit_argv += ["commit", "-F", str(msg_datei)]
 
-    res_commit = subprocess.run(
-        tuple(commit_argv),
-        cwd=str(state.project_dir), capture_output=True, text=True,
-        timeout=60, check=False,
-    )
-    msg_datei.unlink(missing_ok=True)
+    # Auflage 2049: try/finally, damit die Temp-Datei auch bei
+    # einer Exception verschwindet. Sonst bleibt .commit-msg.tmp
+    # im Projektverzeichnis liegen.
+    try:
+        res_commit = subprocess.run(
+            tuple(commit_argv),
+            cwd=str(state.project_dir), capture_output=True, text=True,
+            timeout=60, check=False,
+        )
+    finally:
+        msg_datei.unlink(missing_ok=True)
 
     if res_commit.returncode != 0:
         print(f"[!] git commit fehlgeschlagen: {res_commit.stderr}")
