@@ -1212,3 +1212,125 @@ class TestRootGuard:
         assert rc == 64
         out = capsys.readouterr().out
         assert "getpass.getuser() fehlgeschlagen" in out
+
+
+# =====================================================================
+# Zeitbudget (Auflage 2080 + 2097)
+# =====================================================================
+
+class TestBudgetTime:
+    """Tests fuer require_budget_time und budget_or_recover (Zeit).
+
+    Auflage 2080: max_minutes aus YAML durchgesetzt.
+    Auflage 2097: 6 Tests (Grenze + Recovery-Kontext).
+    """
+
+    def test_zeitbudget_deaktiviert_max_0(
+        self, monkeypatch,
+    ) -> None:
+        """max_minutes=0 -> keine Pruefung."""
+        state = build_test_state()
+        state.start_monotonic = 1.0
+        monkeypatch.setattr(pipeline.time, "monotonic", lambda: 10000.0)
+        # Keine Exception.
+        pipeline.require_budget_time(state, 0)
+
+    def test_zeitbudget_ok_unter_limit(
+        self, monkeypatch,
+    ) -> None:
+        """Verstrichen unter Limit -> ok."""
+        state = build_test_state()
+        state.start_monotonic = 1000.0
+        monkeypatch.setattr(pipeline.time, "monotonic",
+                            lambda: 1000.0 + 60.0)
+        # max_minutes=1 -> Limit 60s. 60s <= 60s -> kein Fehler.
+        pipeline.require_budget_time(state, 1)
+
+    def test_zeitbudget_erschoepft(
+        self, monkeypatch,
+    ) -> None:
+        """Verstrichen ueber Limit -> BudgetExhausted."""
+        state = build_test_state()
+        state.start_monotonic = 1000.0
+        monkeypatch.setattr(pipeline.time, "monotonic",
+                            lambda: 1000.0 + 61.0)
+        with pytest.raises(pipeline.BudgetExhausted):
+            pipeline.require_budget_time(state, 1)
+
+    def test_zeitbudget_grenze_genau(
+        self, monkeypatch,
+    ) -> None:
+        """Auflage 2097 P1: genau == Limit -> kein Fehler."""
+        state = build_test_state()
+        state.start_monotonic = 1000.0
+        monkeypatch.setattr(pipeline.time, "monotonic",
+                            lambda: 1000.0 + 60.0)
+        # max_minutes=1 -> Limit 60s. Genau 60s -> kein Fehler.
+        pipeline.require_budget_time(state, 1)
+
+    def test_budget_or_recover_zeit(
+        self, monkeypatch, tmp_path: Path,
+    ) -> None:
+        """Auflage 2097: Recovery wenn Zeit erschoepft."""
+        state = build_test_state(project_dir=tmp_path)
+        state.start_monotonic = 1000.0
+        monkeypatch.setattr(pipeline.time, "monotonic",
+                            lambda: 1000.0 + 61.0)
+
+        recovery_aufrufe: list[dict] = []
+        audit_aufrufe: list[tuple] = []
+
+        def fake_recovery(st, art, kontext):
+            recovery_aufrufe.append({"art": art, "kontext": kontext})
+            return pipeline.RecoveryVorschlag(art=art)
+
+        def fake_audit(kind, payload, project_dir, project_name):
+            audit_aufrufe.append((kind, payload))
+
+        monkeypatch.setattr(pipeline, "ask_reviewer_for_recovery",
+                            fake_recovery)
+        monkeypatch.setattr(pipeline, "print_recovery", lambda v: None)
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+
+        rc = pipeline.budget_or_recover(
+            state, max_llm=100, kontext="test",
+            project_dir=tmp_path, project_name="test",
+            max_minutes=1,
+        )
+        assert rc == 13
+        assert len(recovery_aufrufe) == 1
+        assert recovery_aufrufe[0]["art"] == "budget"
+        # Recovery wurde auditiert.
+        assert any(a[0] == "recovery_budget" for a in audit_aufrufe)
+
+    def test_budget_or_recover_nennt_dimension(
+        self, monkeypatch, tmp_path: Path,
+    ) -> None:
+        """Auflage 2097 P3: Kontext nennt LLM und Zeit."""
+        state = build_test_state(project_dir=tmp_path)
+        state.start_monotonic = 1000.0
+        state.llm_calls = 3
+        monkeypatch.setattr(pipeline.time, "monotonic",
+                            lambda: 1000.0 + 61.0)
+
+        empfangener_kontext: list[str] = []
+
+        def fake_recovery(st, art, kontext):
+            empfangener_kontext.append(kontext)
+            return pipeline.RecoveryVorschlag(art=art)
+
+        monkeypatch.setattr(pipeline, "ask_reviewer_for_recovery",
+                            fake_recovery)
+        monkeypatch.setattr(pipeline, "print_recovery", lambda v: None)
+        monkeypatch.setattr(pipeline, "audit", lambda *a, **kw: None)
+
+        pipeline.budget_or_recover(
+            state, max_llm=100, kontext="Vor Commit-Review.",
+            project_dir=tmp_path, project_name="test",
+            max_minutes=1,
+        )
+        assert len(empfangener_kontext) == 1
+        kt = empfangener_kontext[0]
+        assert "LLM: 3/100" in kt
+        assert "Zeit:" in kt
+        assert "61s/60s" in kt

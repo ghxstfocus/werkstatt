@@ -107,6 +107,30 @@ def require_budget(state: RunState, max_llm: int) -> None:
         )
 
 
+def require_budget_time(state: RunState, max_minutes: int) -> None:
+    """Auflage 2080: prueft das Zeitbudget vor LLM-Aufrufen.
+
+    Wirft BudgetExhausted, wenn die verstrichene Zeit seit
+    state.start_monotonic groesser ist als max_minutes * 60
+    Sekunden. Bei genau == max*60 wird noch nicht ausgeloest
+    (der erste Check nach Ueberschreitung greift).
+
+    max_minutes <= 0 deaktiviert die Pruefung.
+    start_monotonic <= 0 heisst "nicht gesetzt", ebenfalls
+    keine Pruefung (Tests koennen den Wert so umgehen).
+    """
+    if max_minutes <= 0:
+        return
+    if state.start_monotonic <= 0:
+        return
+    verstrichen = time.monotonic() - state.start_monotonic
+    grenze = max_minutes * 60
+    if verstrichen > grenze:
+        raise BudgetExhausted(
+            f"Zeitbudget erschoepft: {verstrichen:.1f}s / {grenze}s"
+        )
+
+
 def load_project_config(project_name: str) -> dict[str, Any]:
     """Laedt die Projekt-Konfiguration aus /opt/werkstatt/projects/.
 
@@ -480,6 +504,7 @@ class RunState:
     budget: dict[str, int]
     agent_docs: dict[str, list[str]]
     project_dir: Path
+    start_monotonic: float = 0.0  # Auflage 2080: Zeitmessung
     reviewer_verdict_model: str = "deepseek-chat"
     reviewer_recovery_model: str = "deepseek-reasoner"
     builder_model: str = "deepseek-chat"
@@ -658,23 +683,38 @@ def print_recovery(v: RecoveryVorschlag) -> None:
 
 
 def budget_or_recover(state: RunState, max_llm: int, kontext: str,
-                      project_dir: Path, project_name: str) -> int | None:
-    """Auflage 2081: einheitlicher Budget-Check mit Recovery.
+                      project_dir: Path, project_name: str,
+                      max_minutes: int = 0) -> int | None:
+    """Auflage 2081 + 2080: einheitlicher Budget-Check mit Recovery.
 
-    Versucht require_budget. Bei BudgetExhausted:
+    Prueft LLM-Budget (max_llm) und Zeitbudget (max_minutes).
+    Bei BudgetExhausted (aus beiden Dimensionen):
     - ruft ask_reviewer_for_recovery("budget", kontext) auf,
     - gibt den Vorschlag aus,
     - schreibt recovery_budget ins Audit,
     - liefert Exit-Code 13.
     Sonst None (Aufrufer faehrt normal fort).
+
+    Der Recovery-Kontext enthaelt beide Dimensionen,
+    damit der Reviewer weiss, welche erschoepft ist (P3).
     """
     try:
         require_budget(state, max_llm)
+        require_budget_time(state, max_minutes)
     except BudgetExhausted as exc:
         print(f"[!] {exc}")
-        v = ask_reviewer_for_recovery(state, "budget", kontext)
+        # P3: Kontext um beide Dimensionen ergaenzen.
+        verstrichen_s = 0.0
+        if state.start_monotonic > 0:
+            verstrichen_s = time.monotonic() - state.start_monotonic
+        kontext_voll = (
+            f"{kontext}\n"
+            f"LLM: {state.llm_calls}/{max_llm}, "
+            f"Zeit: {verstrichen_s:.0f}s/{max_minutes * 60}s"
+        )
+        v = ask_reviewer_for_recovery(state, "budget", kontext_voll)
         print_recovery(v)
-        audit("recovery_budget", {"kontext": kontext},
+        audit("recovery_budget", {"kontext": kontext_voll},
               project_dir, project_name)
         return 13
     return None
@@ -999,6 +1039,9 @@ def print_approval_dokument(state: RunState) -> None:
     print(f"Start:     {state.start_ts}")
     print(f"Runden:    {len(state.review_runden)}")
     print(f"LLM-Calls: {state.llm_calls}")
+    if state.start_monotonic > 0:
+        verstr = time.monotonic() - state.start_monotonic
+        print(f"Verstrichen: {verstr:.0f}s")
 
     print("\n--- BASIS-GATE (immer, vor Reviewer) ---")
     print(state.basis_protokoll)
@@ -1054,6 +1097,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     file_whitelist = config.get("file_whitelist", [])
     budget = config.get("budget", {"max_review_rounds": 5, "max_llm_calls": 20})
     max_llm = budget.get("max_llm_calls", 20)
+    max_minutes = budget.get("max_minutes", 0)  # Auflage 2080: 0 = aus
 
     git_author = config.get("git_author", {}) or {}
     state = RunState(
@@ -1068,6 +1112,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         git_author_email=str(git_author.get("email", "")),
         project_name=project_name,
     )
+    # Auflage 2080: Startzeitpunkt fuer das Zeitbudget.
+    state.start_monotonic = time.monotonic()
 
     audit("pipeline_start",
           {"aufgabe_hash": __import__("hashlib").sha256(aufgabe.encode()).hexdigest(),
@@ -1167,7 +1213,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     )
     rc = budget_or_recover(state, max_llm,
                           "Vor Reviewer-Auswahl optionale Messungen.",
-                          project_dir, project_name)
+                          project_dir, project_name,
+                          max_minutes=max_minutes)
     if rc is not None:
         return rc
     reply = ask_llm(api_key, reviewer_prompt, reviewer_input,
@@ -1193,7 +1240,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                                          state.agent_docs.get("builder", []))
     rc = budget_or_recover(state, max_llm,
                           "Vor Builder-Aufruf (Code-Entwurf).",
-                          project_dir, project_name)
+                          project_dir, project_name,
+                          max_minutes=max_minutes)
     if rc is not None:
         return rc
     reply = ask_llm(
@@ -1247,7 +1295,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         )
         rc = budget_or_recover(state, max_llm,
                               f"Vor Reviewer-Verdict Runde {runde}.",
-                              project_dir, project_name)
+                              project_dir, project_name,
+                              max_minutes=max_minutes)
         if rc is not None:
             return rc
         reply = ask_llm(api_key, reviewer_prompt, szenario,
@@ -1285,7 +1334,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             print(f"[-] NO-GO:\n{reply.content[:300]}")
             rc = budget_or_recover(state, max_llm,
                                   f"Vor Builder-Neubau (NO-GO Runde {runde}).",
-                                  project_dir, project_name)
+                                  project_dir, project_name,
+                                  max_minutes=max_minutes)
             if rc is not None:
                 return rc
             bauer_reply = ask_llm(
@@ -1382,7 +1432,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         )
         rc = budget_or_recover(state, max_llm,
                               "Vor Commit-Review.",
-                              project_dir, project_name)
+                              project_dir, project_name,
+                              max_minutes=max_minutes)
         if rc is not None:
             return rc
         reply = ask_llm(api_key, reviewer_prompt, commit_input,
@@ -1401,7 +1452,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             # Zurueck an den Builder: neues Commit-Paket
             rc = budget_or_recover(state, max_llm,
                                   "Vor Builder-Neubau (Commit-NO-GO).",
-                                  project_dir, project_name)
+                                  project_dir, project_name,
+                                  max_minutes=max_minutes)
             if rc is not None:
                 return rc
             bauer_reply = ask_llm(
