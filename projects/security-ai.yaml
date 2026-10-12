@@ -44,6 +44,7 @@ optional_catalog:
 # Referenzen beziehen sich auf die Schluessel unter docs:.
 agent_docs:
   reviewer:
+    - context
     - workflow
     - handoff
     - decisions
