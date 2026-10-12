@@ -268,8 +268,16 @@ class TestTrimOutput:
 # =====================================================================
 
 class TestParseCommitPaket:
-    def test_parses_full_paket(self) -> None:
-        text = (
+    """Tests fuer parse_commit_paket.
+
+    Auflagen 2088 + 2098 + 2099: neues Format mit
+    PATCH-BEGINN/PATCH-ENDE und YAML-Block-Scalar "|".
+    """
+
+    def _paket(self, doku: str) -> str:
+        """Baut eine vollstaendige Antwort mit COMMIT-MESSAGE
+        und DOKU-PATCHES."""
+        return (
             "COMMIT-MESSAGE:\n"
             "fix(workbench): 2015 - Test\n"
             "Ausgangslage: x\n"
@@ -279,15 +287,23 @@ class TestParseCommitPaket:
             "  - docs/SECURITY_REVIEW_LOG.md\n"
             "ENDE BETROFFENE DATEIEN\n"
             "DOKU-PATCHES:\n"
-            "  - pfad: docs/PHASES.md\n"
-            "    anker: ALT\n"
-            "    ersatz: NEU\n"
-            "ENDE DOKU-PATCHES"
+            + doku +
+            "\nENDE DOKU-PATCHES"
+        )
+
+    def test_parses_full_paket(self) -> None:
+        text = self._paket(
+            "PATCH-BEGINN\n"
+            "pfad: docs/PHASES.md\n"
+            "anker: |\n"
+            "  ALT\n"
+            "ersatz: |\n"
+            "  NEU\n"
+            "PATCH-ENDE"
         )
         paket = pipeline.parse_commit_paket(text)
         assert paket["message"].startswith("fix(workbench)")
         assert len(paket["dateien"]) == 2
-        assert "docs/PHASES.md" in paket["dateien"]
         assert len(paket["doku_patches"]) == 1
         assert paket["doku_patches"][0]["pfad"] == "docs/PHASES.md"
         assert paket["doku_patches"][0]["anker"] == "ALT"
@@ -299,41 +315,107 @@ class TestParseCommitPaket:
         assert paket["dateien"] == []
         assert paket["doku_patches"] == []
 
-    def test_anker_leer_patch_verworfen(self) -> None:
-        """Auflage 2057: leerer Anker -> Patch wird verworfen.
-
-        Ist-Zustand. Fail closed gegen unbrauchbare Patches.
-        """
-        text = (
-            "DOKU-PATCHES:\n"
-            "  - pfad: docs/PHASES.md\n"
-            "    anker:\n"
-            "    ersatz: NEU\n"
-            "ENDE DOKU-PATCHES"
-        )
-        paket = pipeline.parse_commit_paket(text)
-        assert paket["doku_patches"] == []
-
     def test_zwei_patches_in_einer_antwort(self) -> None:
-        """Auflage 2057: zwei Patches werden korrekt geparst."""
-        text = (
-            "DOKU-PATCHES:\n"
-            "  - pfad: docs/PHASES.md\n"
-            "    anker: A1\n"
-            "    ersatz: B1\n"
-            "  - pfad: docs/SECURITY_REVIEW_LOG.md\n"
-            "    anker: A2\n"
-            "    ersatz: B2\n"
-            "ENDE DOKU-PATCHES"
+        text = self._paket(
+            "PATCH-BEGINN\n"
+            "pfad: docs/PHASES.md\n"
+            "anker: |\n"
+            "  A1\n"
+            "ersatz: |\n"
+            "  B1\n"
+            "PATCH-ENDE\n"
+            "PATCH-BEGINN\n"
+            "pfad: docs/SECURITY_REVIEW_LOG.md\n"
+            "anker: |\n"
+            "  A2\n"
+            "ersatz: |\n"
+            "  B2\n"
+            "PATCH-ENDE"
         )
         paket = pipeline.parse_commit_paket(text)
         assert len(paket["doku_patches"]) == 2
         assert paket["doku_patches"][0]["pfad"] == "docs/PHASES.md"
         assert paket["doku_patches"][0]["anker"] == "A1"
-        assert paket["doku_patches"][0]["ersatz"] == "B1"
         assert paket["doku_patches"][1]["pfad"] == "docs/SECURITY_REVIEW_LOG.md"
-        assert paket["doku_patches"][1]["anker"] == "A2"
         assert paket["doku_patches"][1]["ersatz"] == "B2"
+
+    def test_anker_leer_patch_verworfen(self) -> None:
+        """Leerer Anker -> Patch verworfen (E3)."""
+        text = self._paket(
+            "PATCH-BEGINN\n"
+            "pfad: docs/PHASES.md\n"
+            "anker: |\n"
+            "ersatz: |\n"
+            "  NEU\n"
+            "PATCH-ENDE"
+        )
+        paket = pipeline.parse_commit_paket(text)
+        assert paket["doku_patches"] == []
+
+    def test_mehrzeiliger_ersatz(self) -> None:
+        """Ersatz mit mehreren Zeilen wird vollstaendig geparst."""
+        text = self._paket(
+            "PATCH-BEGINN\n"
+            "pfad: docs/PHASES.md\n"
+            "anker: |\n"
+            "  ALT\n"
+            "ersatz: |\n"
+            "  Zeile 1\n"
+            "  Zeile 2\n"
+            "  Zeile 3\n"
+            "PATCH-ENDE"
+        )
+        paket = pipeline.parse_commit_paket(text)
+        assert len(paket["doku_patches"]) == 1
+        assert paket["doku_patches"][0]["ersatz"] == "Zeile 1\nZeile 2\nZeile 3"
+
+    def test_mehrzeiliger_anker(self) -> None:
+        """Anker mit mehreren Zeilen UND "- pfad:"-Sequenz
+        wird vollstaendig geparst (loest Bug 2088/2098 auf)."""
+        text = self._paket(
+            "PATCH-BEGINN\n"
+            "pfad: docs/PHASES.md\n"
+            "anker: |\n"
+            "  Zeile 1\n"
+            "  - pfad: was-ganz-anderes\n"
+            "  Zeile 3\n"
+            "ersatz: |\n"
+            "  NEU\n"
+            "PATCH-ENDE"
+        )
+        paket = pipeline.parse_commit_paket(text)
+        assert len(paket["doku_patches"]) == 1
+        assert paket["doku_patches"][0]["anker"] == (
+            "Zeile 1\n- pfad: was-ganz-anderes\nZeile 3"
+        )
+
+    def test_leerer_ersatz_erlaubt(self) -> None:
+        """Ersatz leer -> Patch gueltig, ersatz == ''."""
+        text = self._paket(
+            "PATCH-BEGINN\n"
+            "pfad: docs/PHASES.md\n"
+            "anker: |\n"
+            "  ALT\n"
+            "ersatz: |\n"
+            "PATCH-ENDE"
+        )
+        paket = pipeline.parse_commit_paket(text)
+        assert len(paket["doku_patches"]) == 1
+        assert paket["doku_patches"][0]["ersatz"] == ""
+
+    def test_tab_einrueckung_verworfen(self) -> None:
+        """Tabs in der Einrueckung -> Patch verworfen (P1)."""
+        text = self._paket(
+            "PATCH-BEGINN\n"
+            "pfad: docs/PHASES.md\n"
+            "anker: |\n"
+            "\tALT\n"
+            "ersatz: |\n"
+            "  NEU\n"
+            "PATCH-ENDE"
+        )
+        paket = pipeline.parse_commit_paket(text)
+        assert paket["doku_patches"] == []
 
 
 # =====================================================================

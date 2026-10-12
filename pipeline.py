@@ -838,30 +838,117 @@ def parse_commit_paket(text: str) -> dict[str, Any]:
     m = re.search(r"DOKU-PATCHES:\s*\n(.*?)\nENDE DOKU-PATCHES",
                   text, re.DOTALL)
     if m:
-        # Jeder Patch beginnt mit "- pfad: ...".
-        # Wir splitten an den Zeilenanfaengen, die mit "- pfad:" beginnen,
-        # und behalten den Trenner NICHT, sondern parsen den Block selbst.
-        block_text = "\n" + m.group(1).strip()
-        # Trenner: Zeilenanfang, dann "- pfad:"
-        bloecke = re.split(r"\n\s*-\s*pfad:\s*", block_text)
-        # Erster Block ist leer (vor dem ersten Trenner).
-        for block in bloecke[1:]:
-            block = block.strip()
-            if not block:
-                continue
-            lines = block.splitlines()
-            pfad = lines[0].strip()
-            anker, ersatz = "", ""
-            for line in lines[1:]:
-                if "anker:" in line:
-                    anker = line.split("anker:", 1)[1].strip()
-                elif "ersatz:" in line:
-                    ersatz = line.split("ersatz:", 1)[1].strip()
-            if pfad and anker:
-                paket["doku_patches"].append(
-                    {"pfad": pfad, "anker": anker, "ersatz": ersatz})
+        paket["doku_patches"] = _parse_doku_patches(m.group(1))
 
     return paket
+
+
+def _parse_doku_patches(block_text: str) -> list[dict[str, str]]:
+    """Parst DOKU-PATCHES-Bloecke (Auflagen 2088 + 2098).
+
+    Format:
+      PATCH-BEGINN
+      pfad: docs/PHASES.md
+      anker: |
+        <mehrzeilig>
+      ersatz: |
+        <mehrzeilig, darf leer sein>
+      PATCH-ENDE
+
+    Regeln:
+    - Reihenfolge von pfad/anker/ersatz ist frei (P2).
+    - Einrueckung ist 2 Spaces, Tabs werden abgelehnt (P1).
+    - anker fehlt oder leer -> Patch verworfen.
+    - pfad fehlt oder leer -> Patch verworfen.
+    - ersatz darf leer sein (Loeschung).
+    """
+    ergebnis: list[dict[str, str]] = []
+    # Bloecke an PATCH-BEGINN/PATCH-ENDE trennen.
+    for match in re.finditer(
+        r"PATCH-BEGINN\s*\n(.*?)\n\s*PATCH-ENDE",
+        block_text, re.DOTALL,
+    ):
+        block = match.group(1)
+        gepatcht = _parse_einzelpatch(block)
+        if gepatcht is not None:
+            ergebnis.append(gepatcht)
+    return ergebnis
+
+
+def _parse_einzelpatch(block: str) -> dict[str, str] | None:
+    """Parst einen einzelnen PATCH-BEGINN-Block.
+
+    Liefert dict oder None, wenn der Block ungueltig ist.
+    """
+    pfad = ""
+    anker: str | None = None
+    ersatz: str | None = None
+    aktives_feld: str | None = None
+    aktuelle_zeilen: list[str] = []
+
+    def _flush() -> None:
+        nonlocal aktives_feld, aktuelle_zeilen
+        if aktives_feld is None:
+            return
+        wert = "\n".join(aktuelle_zeilen)
+        if aktives_feld == "anker":
+            nonlocal anker
+            anker = wert
+        elif aktives_feld == "ersatz":
+            nonlocal ersatz
+            ersatz = wert
+        elif aktives_feld == "pfad":
+            nonlocal pfad
+            pfad = wert.strip()
+        aktives_feld = None
+        aktuelle_zeilen = []
+
+    for raw_line in block.splitlines():
+        # Tabs ablehnen (P1).
+        if "\t" in raw_line:
+            return None
+        # Feld-Anfang?
+        m_feld = re.match(r"^(pfad|anker|ersatz):\s*(.*)$", raw_line)
+        if m_feld:
+            _flush()
+            name, rest = m_feld.group(1), m_feld.group(2)
+            if name == "pfad":
+                if rest.startswith("|"):
+                    # pfad als Block-Scalar ist erlaubt,
+                    # wird aber praktisch selten genutzt.
+                    aktives_feld = "pfad"
+                    aktuelle_zeilen = []
+                else:
+                    pfad = rest.strip()
+            else:
+                # anker / ersatz muessen "|" haben (YAML-Block).
+                if not rest.startswith("|"):
+                    return None
+                aktives_feld = name
+                aktuelle_zeilen = []
+            continue
+        # Fortsetzungszeile (eingrueckt, 2 Spaces).
+        if aktives_feld is not None:
+            if raw_line.startswith("  "):
+                aktuelle_zeilen.append(raw_line[2:])
+            elif raw_line.strip() == "":
+                # Leerzeile im Block erlaubt.
+                aktuelle_zeilen.append("")
+            else:
+                # Ende des Block-Scalars.
+                _flush()
+        # Sonst: ignorieren (z.B. Leerzeile ausserhalb).
+
+    _flush()
+
+    # Validierung.
+    if not pfad:
+        return None
+    if anker is None or anker == "":
+        return None
+    if ersatz is None:
+        ersatz = ""
+    return {"pfad": pfad, "anker": anker, "ersatz": ersatz}
 
 
 def build_commit_paket(state: RunState) -> dict[str, Any]:
@@ -894,10 +981,19 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
         "  - <pfad relativ zum Projekt>\n"
         "ENDE BETROFFENE DATEIEN\n\n"
         "DOKU-PATCHES:\n"
-        "  - pfad: docs/PHASES.md\n"
-        "    anker: <exakter Text aus der Datei>\n"
-        "    ersatz: <neuer Text>\n"
-        "ENDE DOKU-PATCHES"
+        "PATCH-BEGINN\n"
+        "pfad: docs/PHASES.md\n"
+        "anker: |\n"
+        "  <exakter Text aus der Datei, darf mehrzeilig sein>\n"
+        "ersatz: |\n"
+        "  <neuer Text, darf mehrzeilig oder leer sein>\n"
+        "PATCH-ENDE\n"
+        "ENDE DOKU-PATCHES\n\n"
+        "Hinweise:\n"
+        "- Reihenfolge von pfad/anker/ersatz ist frei.\n"
+        "- Einrueckung mit 2 Spaces, keine Tabs.\n"
+        "- anker muss gesetzt sein (sonst wird der Patch verworfen).\n"
+        "- ersatz darf leer sein (Loeschung des Ankers)."
     )
 
     reply = ask_llm(
