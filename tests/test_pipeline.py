@@ -931,3 +931,138 @@ class TestSubprocessEnv:
         env = kwargs["env"]
         assert isinstance(env, dict)
         assert "DEEPSEEK_API_KEY" not in env
+
+
+# =====================================================================
+# ask_llm Retry (Auflage 2087)
+# =====================================================================
+
+class TestAskLlmRetry:
+    """Tests fuer ask_llm Retry mit Backoff.
+
+    Auflage 2087: Retry nur bei 429 und 5xx, max 2 Versuche,
+    Backoff 1s / 3s. Kein Retry bei 4xx.
+    """
+
+    def _patch_sleep(self, monkeypatch) -> list[float]:
+        """Ersetzt time.sleep, sammelt die Wartezeiten."""
+        warten: list[float] = []
+        monkeypatch.setattr(pipeline.time, "sleep", lambda s: warten.append(s))
+        return warten
+
+    def test_200_kein_retry(self, monkeypatch) -> None:
+        self._patch_sleep(monkeypatch)
+        aufrufe: list[int] = []
+
+        class _Res:
+            status_code = 200
+            text = ""
+
+            def json(self):
+                return {"choices": [{"message": {"content": "GO"}}]}
+
+        def fake_post(url, **kwargs):
+            aufrufe.append(1)
+            return _Res()
+
+        monkeypatch.setattr(pipeline.requests, "post", fake_post)
+        reply = pipeline.ask_llm("k", "s", "u", "m", 0.0, timeout=1)
+        assert reply.ok is True
+        assert reply.content == "GO"
+        assert len(aufrufe) == 1
+
+    def test_401_kein_retry(self, monkeypatch) -> None:
+        warten = self._patch_sleep(monkeypatch)
+        aufrufe: list[int] = []
+
+        class _Res:
+            status_code = 401
+            text = "Unauthorized"
+
+            def json(self):
+                return {}
+
+        def fake_post(url, **kwargs):
+            aufrufe.append(1)
+            return _Res()
+
+        monkeypatch.setattr(pipeline.requests, "post", fake_post)
+        reply = pipeline.ask_llm("k", "s", "u", "m", 0.0, timeout=1)
+        assert reply.ok is False
+        assert "401" in reply.error
+        assert len(aufrufe) == 1
+        assert warten == []
+
+    def test_429_dann_200(self, monkeypatch) -> None:
+        warten = self._patch_sleep(monkeypatch)
+        aufrufe: list[int] = []
+
+        class _Res429:
+            status_code = 429
+            text = "Too Many Requests"
+
+            def json(self):
+                return {}
+
+        class _Res200:
+            status_code = 200
+            text = ""
+
+            def json(self):
+                return {"choices": [{"message": {"content": "OK"}}]}
+
+        def fake_post(url, **kwargs):
+            aufrufe.append(1)
+            return _Res429() if len(aufrufe) == 1 else _Res200()
+
+        monkeypatch.setattr(pipeline.requests, "post", fake_post)
+        reply = pipeline.ask_llm("k", "s", "u", "m", 0.0, timeout=1)
+        assert reply.ok is True
+        assert len(aufrufe) == 2
+        assert warten == [1]
+
+    def test_500_500_kein_dritter_versuch(self, monkeypatch) -> None:
+        warten = self._patch_sleep(monkeypatch)
+        aufrufe: list[int] = []
+
+        class _Res:
+            status_code = 500
+            text = "Server Error"
+
+            def json(self):
+                return {}
+
+        def fake_post(url, **kwargs):
+            aufrufe.append(1)
+            return _Res()
+
+        monkeypatch.setattr(pipeline.requests, "post", fake_post)
+        reply = pipeline.ask_llm("k", "s", "u", "m", 0.0, timeout=1)
+        assert reply.ok is False
+        assert "500" in reply.error
+        assert len(aufrufe) == 2
+        # Nur ein Backoff vor dem zweiten Versuch.
+        assert warten == [1]
+
+    def test_connection_error_retry(self, monkeypatch) -> None:
+        warten = self._patch_sleep(monkeypatch)
+        aufrufe: list[int] = []
+
+        class _Res200:
+            status_code = 200
+            text = ""
+
+            def json(self):
+                return {"choices": [{"message": {"content": "OK"}}]}
+
+        def fake_post(url, **kwargs):
+            aufrufe.append(1)
+            if len(aufrufe) == 1:
+                raise pipeline.requests.RequestException("boom")
+            return _Res200()
+
+        monkeypatch.setattr(pipeline.requests, "post", fake_post)
+        reply = pipeline.ask_llm("k", "s", "u", "m", 0.0, timeout=1)
+        assert reply.ok is True
+        assert len(aufrufe) == 2
+        assert warten == [1]

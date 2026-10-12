@@ -319,12 +319,37 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
                                "messages": [{"role": "system", "content": system_prompt},
                                             {"role": "user", "content": user_content}],
                                "temperature": temperature}
-    try:
-        res = requests.post(DEEPSEEK_API_URL, headers=headers, json=payload, timeout=timeout)
-    except requests.RequestException as exc:
-        return LLMReply(ok=False, error=f"HTTP: {exc}")
+    # Auflage 2087: Retry nur bei 429 (Rate Limit) und 5xx
+    # (Server-Fehler). Kein Retry bei 4xx — ein Auth-Fehler
+    # wuerde sich endlos wiederholen.
+    # Max 2 Versuche. Backoff: 1s, dann 3s.
+    backoffs = (1, 3)
+    letzter_fehler: str = ""
+    res = None
+    for versuch, warte in enumerate(backoffs, start=1):
+        try:
+            res = requests.post(DEEPSEEK_API_URL, headers=headers,
+                                json=payload, timeout=timeout)
+        except requests.RequestException as exc:
+            letzter_fehler = f"HTTP: {exc}"
+            res = None
+        else:
+            if res.status_code == 200:
+                break
+            # Nur 429 und 5xx werden wiederholt.
+            if res.status_code != 429 and res.status_code < 500:
+                return LLMReply(
+                    ok=False,
+                    error=f"HTTP {res.status_code}: {res.text[:200]}",
+                )
+            letzter_fehler = f"HTTP {res.status_code}: {res.text[:200]}"
+        if versuch < len(backoffs):
+            time.sleep(warte)
+
+    if res is None:
+        return LLMReply(ok=False, error=letzter_fehler)
     if res.status_code != 200:
-        return LLMReply(ok=False, error=f"HTTP {res.status_code}: {res.text[:200]}")
+        return LLMReply(ok=False, error=letzter_fehler)
     try:
         data = res.json()
         return LLMReply(ok=True, content=data["choices"][0]["message"]["content"])
