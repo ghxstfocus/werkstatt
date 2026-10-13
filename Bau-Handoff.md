@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 64)
-Werkstatt-HEAD: 147ba2c (Tag probebetrieb-64)
+Stand: 2026-10-13 (nach Probebetrieb 66)
+Werkstatt-HEAD: 8d5598f (Tag probebetrieb-66)
 Letzter Commit in security-ai: 3ccb883
 Branch: main
 Tests: 270 passed
@@ -44,7 +44,7 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 147ba2c (probebetrieb-64)
+  HEAD 8d5598f (probebetrieb-66)
   Tests: 270 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
@@ -55,7 +55,7 @@ Ziel-Projekt security-ai:
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -64
+  probebetrieb-7, -17, -29 bis -66
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
   probebetrieb-1 bis -28 (historisch, vor dieser Session)
@@ -143,6 +143,9 @@ Kurzfassung:
   PB-62: Feature. run_id im Audit (2200a).
   PB-63: Feature. Audit-Aggregator (2200).
   PB-64: Chore. projects/*.memory.yaml ignorieren.
+  PB-65: Doku. Handoff auf PB-64.
+  PB-66: Fix. R7-Phase-2-Toleranz + Aggregator
+         mypy/ruff (2199-R7-P2).
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -235,14 +238,11 @@ WICHTIG (naechste Session):
         Synthetisches Audit-Log, Aggregation
         pruefen. Merkposten.
 
-  2199-R7-P2: R7-Strenge Phase 2 vs.
-        apply_code_patches-Toleranz.
-        Lauf 18:43: Patch angewendet (apply
-        akzeptierte +2-Shift), dann Commit-
-        Reviewer NO-GO (R7 Stufe 3). Der
-        Commit-Reviewer hat kein COMMAND,
-        also kann er +2-Shift nicht tolerieren.
-        Fail-closed-Falschpositiv. Kategorie 3.
+  2199-R7-P2: ERLEDIGT (PB-66).
+        reviewer.md PHASE 2 Punkt 6:
+        vier Stufen. Stufe 2a/2b -> COMMIT-GO
+        mit Bemerkung. Nur Stufe 3 -> NO-GO.
+        Kein COMMAND in Phase 2.
 
   Owner-Regel: Nach jedem manuellen
         git checkout/reset im Zielprojekt:
@@ -250,6 +250,25 @@ WICHTIG (naechste Session):
         Sonst Permission denied beim naechsten
         Werkstatt-Lauf. Als Werkstatt-Regel
         dokumentieren.
+
+  P6-Regel: mypy ab jetzt rekursiv pruefen
+        (mypy /opt/werkstatt/), nicht nur
+        pipeline.py. PB-63 hatte 2 Fehler
+        in werkstatt_aggregate.py, die durch
+        die enge Pruefung nicht auffielen.
+        Als Werkstatt-Regel dokumentieren.
+
+  tests-mypy: tests/test_pipeline.py hat
+        139 mypy-Fehler (fehlende
+        Annotationen in Test-Methoden).
+        Altes Problem, eigener Block.
+        Kategorie 2.
+
+  Phase-2-COMMAND-Schleichpfad:
+        classify_verdict erkennt COMMAND in
+        Phase 2, aber der Loop bricht bei
+        "!= COMMIT-NO-GO" ab. Kein Fail,
+        kein Log. Merkposten.
 
   2183-AQ: Auftragsqualitaet vor Werkstatt-Lauf.
         Neue Auflage (aus 2199-Lauf 3 + Lauf
@@ -506,9 +525,9 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge:
-   a) 2199-R7-P2 (R7-Phase-2 vs. apply-Toleranz).
-      Akutes Fail-closed-Falschpositiv.
-   b) 2183 A1a (Zustandsmaschine, klein).
+   a) 2183 A1a (Zustandsmaschine, klein).
+      Naechster Bau-Block.
+   b) 2183 A1b (code_entwurf_historie).
    c) 2183 A1b (code_entwurf_historie).
    d) 2183 A1c (Rollback-Refaktor + 2184).
    e) 2183 A2 (SolverBefund-Klasse).
