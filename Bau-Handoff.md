@@ -1,11 +1,11 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 40, zweiter Werkstatt-Commit)
-Werkstatt-HEAD: 760f6e6 (Tag probebetrieb-40)
+Stand: 2026-10-13 (nach Probebetrieb 43, Auflage 2191-R)
+Werkstatt-HEAD: 87092f8 (Tag probebetrieb-43)
 Letzter Commit in security-ai: 3ccb883
 Branch: main
 Tests: 270 passed
-ruff: 0
+ruff: 0 (pipeline.py; 2x I001 in tests/, siehe 0a)
 mypy: 0
 
 Dieses Dokument ist der Einstiegspunkt fuer einen neuen
@@ -44,9 +44,10 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 760f6e6 (probebetrieb-40)
+  HEAD 87092f8 (probebetrieb-43)
   Tests: 270 passed
-  ruff: 0, mypy: 0, git status sauber
+  ruff: 0 (pipeline.py), 2x I001 in tests/, mypy: 0,
+  git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
 
 Ziel-Projekt security-ai:
@@ -55,7 +56,7 @@ Ziel-Projekt security-ai:
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -40
+  probebetrieb-7, -17, -29 bis -43
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
   probebetrieb-1 bis -28 (historisch, vor dieser Session)
@@ -63,11 +64,11 @@ Ziel-Projekt-Tags (auf /opt/security-ai):
   (Werkstatt-Konvention: nur Werkstatt-Repo wird getaggt).
 
 Dateien:
-  - pipeline.py (~2900 Zeilen, Stand 2198)
-  - redaction.py (~280 Zeilen, Stand 2195)
+  - pipeline.py (2876 Zeilen, Stand 2191-R)
+  - redaction.py (314 Zeilen, Stand 2195)
   - agents/*.md (5 Rollen)
   - projects/security-ai.yaml
-  - tests/test_pipeline.py (~3250 Zeilen)
+  - tests/test_pipeline.py (3509 Zeilen, Stand 2191-R)
   - tests/test_redaction.py
   - docs/WORKFLOW.md
   - docs/ROADMAP.md
@@ -112,6 +113,9 @@ Kurzfassung:
   PB-38: Fail (Commit-NO-GO). Anker trifft! Testzahl fehlt.
   PB-39: Fail (Commit-NO-GO). Rechte-Problem + Testzahl.
   PB-40: ERFOLG. Commit 3ccb883 in security-ai.
+  PB-41: Doku. Handoff + Protokoll 29-40 neu.
+  PB-42: Chore. .gitignore um *.alt ergaenzt.
+  PB-43: ERFOLG. Auflage 2191-R. HEAD 87092f8.
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -135,16 +139,36 @@ Auflagen dieser Session:
 KRITISCH: keine.
 
 WICHTIG (naechste Session):
-  2191-R: Reviewer prueft nicht gegen GEMESSENER INHALT.
-          In PB-34/35/36/37 hat er Code-GO trotz
-          falschem Anker gegeben.
-          Kategorie 3.
+  2191-R2: Phase 2 (Commit-Review) bekommt keinen
+           GEMESSENER INHALT (commit_input, Zeile
+           2617 ff.). Reviewer kann Anker im Commit
+           nicht gegen Messung pruefen.
+           Kategorie 3.
 
   2194-M: Audit-Debug-Felder reduzieren. Die Felder
           builder_prompt_gebaut und builder_reply_erhalten
           wachsen mit jedem Lauf. Nach der Diagnose
           reduzieren.
           Kategorie 2.
+
+  2191-R3: agents/reviewer.md Body-Regel 2 (Zeile 30-33)
+           fordert "woertlich" ohne Toleranzstufen.
+           Nach PB-43 pruefen, ob Widerspruch zu R7.
+           Kategorie 2.
+
+  2191-R4: Builder-Prompt (Zeile 2344) hat GEMESSENER
+           INHALT nach ZIELDATEIEN. Reviewer-Prompt
+           (Zeile 2424) hat ihn jetzt davor. Inkonsistenz
+           bewusst? Kategorie 2.
+
+  2199: PB-43 messen: greift R7 tatsaechlich?
+        Wenn nein, Ursache nicht Reihenfolge/Regel-
+        quelle, sondern Modellverhalten -> 2193.
+        Kategorie 3.
+
+  0a: ruff I001 in tests/test_pipeline.py:16 und
+      tests/test_redaction.py:15. Import-Sortierung.
+      Kategorie 1.
 
   2182b: agents/reviewer.md:193 (HR4) -> (B8). Nach
          2182 entfallen die HR2-HR6-Nummern. Der
@@ -173,8 +197,9 @@ MITTEL (Merkposten):
 
 NIEDRIG:
   Audit-Log-Ausbau dauerhaft (statt Debug-Felder).
-  Tag-Verwirrung: Ziel-Repo-Tags 1-28 historisch,
-  Werkstatt-Tags 7, 17, 29-40. Vereinheitlichen.
+  Tag-Verwirrung: Ziel-Repo-Tags 2, 20-24 auf
+  f913eac, 25-28 auf dd3048b. Werkstatt-Tags 7,
+  17, 29-43. Vereinheitlichen.
 
 ================================================================
 6. WIE MAN WEITERARBEITET
