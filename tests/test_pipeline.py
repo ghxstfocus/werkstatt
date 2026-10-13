@@ -15,9 +15,8 @@ sys.path.insert(0, "/opt/werkstatt")
 
 import re
 
-import pytest
-
 import pipeline
+import pytest
 
 # =====================================================================
 # Test-Helpers
@@ -2776,3 +2775,30 @@ class TestBuilderCommandLoop:
         yaml_pfad = Path("/opt/werkstatt/projects/security-ai.yaml")
         inhalt = yaml_pfad.read_text(encoding="utf-8")
         assert "read_file" in inhalt
+
+
+# =====================================================================
+# agents/builder.md: KUERZUNGS-MARKER (Auflage 2188)
+# =====================================================================
+
+class TestBuilderMdKuerzung:
+    """Auflage 2188: builder.md respektiert den KUERZUNGS-MARKER."""
+
+    def _md(self) -> str:
+        return Path("/opt/werkstatt/agents/builder.md").read_text(
+            encoding="utf-8")
+
+    def test_builder_md_enthaelt_kuerzungs_marker(self) -> None:
+        s = self._md()
+        assert "KUERZUNGS-MARKER" in s
+        assert "GEKUERZT" in s
+        assert "COMMAND: RUN read_file" in s
+
+    def test_builder_md_kein_widerspruch(self) -> None:
+        s = self._md()
+        assert "Wenn der Ausschnitt reicht" not in s
+        assert "baue den Patch\ndirekt" not in s
+
+    def test_builder_md_kuerzungs_marker_abschnitt(self) -> None:
+        s = self._md()
+        assert "## KUERZUNGS-MARKER" in s

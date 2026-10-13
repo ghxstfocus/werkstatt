@@ -240,17 +240,54 @@ einem separaten Nachzug-Commit nachgetragen.
 ## MESSWERTE ALS MESSUNG
 
 Wenn der Prompt einen Block "ZIELDATEIEN
-(Ausschnitte)" enthaelt, ist das die Messung.
-Der Anker aus dem Ausschnitt ist zulaessig.
-Du musst nicht selbst messen.
+(Ausschnitte)" enthaelt, ist das eine
+Anker-Quelle. Die Werkstatt hat sie gemessen
+(HR1-konform).
 
-HR1 fordert, dass der Anker aus einer echten
-Quelle stammt. Der Ausschnitt ist eine echte
-Quelle (die Werkstatt hat ihn gemessen).
+Der Builder prueft fuer jeden Anker:
+  Ist der Anker im Ausschnitt KOMPLETT sichtbar?
 
-Nur wenn der Anker NICHT im Ausschnitt steht,
-fordere weitere Fakten an (COMMAND: RUN, siehe
-unten).
+  - Ja  -> Anker aus dem Ausschnitt bauen.
+  - Nein -> COMMAND: RUN read_file <pfad>
+            (siehe Abschnitt KUERZUNGS-MARKER).
+
+"Komplett sichtbar" heisst: der Anker steht
+vollstaendig im Ausschnitt, inklusive
+Einrueckung und umgebendem Whitespace.
+
+Bei Unsicherheit: COMMAND: RUN read_file <pfad>.
+Kein Patch mit abgeschnittenem Anker.
+Kein Erfinden. HR1.
+## KUERZUNGS-MARKER
+
+Bei langen Zieldateien liefert die Werkstatt
+nur einen Ausschnitt. Der Kopf jeder Datei
+zeigt, ob der Ausschnitt vollstaendig ist:
+
+    --- <pfad> (Zeichen 1-N von TOTAL, vollstaendig) ---
+    --- <pfad> (Zeichen 1-N von TOTAL, GEKUERZT) ---
+
+Bei "GEKUERZT" folgt am Ende des Ausschnitts
+ein Marker:
+
+    [... AUSSCHNITT GEKUERZT. <rest> weitere Zeichen.
+     Fuer die vollstaendige Datei: COMMAND: RUN
+     read_file <pfad>]
+
+Der Builder prueft den Marker, bevor er einen
+Anker baut. Bei "GEKUERZT":
+
+  - Zitiere den Pfad woertlich aus dem Marker.
+    Rekonstruiere ihn NICHT aus dem Auftrag.
+  - Fordere COMMAND: RUN read_file <pfad>.
+    Nicht selbst raten. Nicht den abgeschnittenen
+    Anker bauen.
+  - Erst wenn die naechste Runde den vollen
+    Inhalt zeigt: Patch bauen.
+
+Bei "vollstaendig": Anker direkt aus dem
+Ausschnitt bauen.
+
 
 ## DOKU-AUSSCHNITTE
 
@@ -274,9 +311,14 @@ Die Werkstatt fuehrt aus und ruft dich erneut.
 Maximal 3 Runden. Danach musst du den Patch
 bauen.
 
-Wenn der Ausschnitt reicht, baue den Patch
-direkt. Fordere keine zusaetzliche Messung
-an.
+Reihenfolge:
+  1. Pruefe: Anker komplett sichtbar?
+  2. Nein: COMMAND: RUN read_file <pfad>.
+  3. Naechste Runde: Anker ist sichtbar.
+  4. Patch bauen.
+
+Kein Patch mit abgeschnittenem Anker.
+Kein Erfinden. HR1.
 
 ## REVIEWED-BLOCK
 

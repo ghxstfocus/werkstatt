@@ -82,6 +82,31 @@ Anlass: Werkstatt-Auflage 2086, 2026-10-12.
   Audit, Kern-Services, Parser. Reviewer-Block
   vor Commit.
 
+## Feature + Prompt
+
+Ein Werkstatt-Feature ist erst wirksam, wenn der
+Agent es kennt. Code allein reicht nicht.
+
+Regel: Jedes neue Feature wird als Paar
+ausgeliefert.
+
+  - Code: die Mechanik (z.B. KUERZUNGS-MARKER
+    in pipeline.py, Auflage 2186).
+  - Prompt: die Anweisung an den Agenten, die
+    Mechanik zu nutzen (z.B. Abschnitt
+    KUERZUNGS-MARKER in agents/builder.md,
+    Auflage 2188).
+
+Beispiele aus der Historie:
+  - 2135 + 2168 (Messwerte).
+  - 2146 + 2175 (Zieldatei-Ausschnitte).
+  - 2178 + 2180 (MESSWERTE im Commit-Review).
+  - 2186 + 2188 (KUERZUNGS-MARKER).
+
+Ohne Code sieht der Agent das Feature nicht.
+Ohne Prompt nutzt der Agent es nicht.
+Beide Tests sind Pflicht.
+
 ## Fail-closed-Prinzip
 
 Wenn eine Pruefung nicht moeglich ist: blockieren,
