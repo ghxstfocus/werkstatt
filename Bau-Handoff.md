@@ -1,10 +1,10 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 73)
-Werkstatt-HEAD: f5c95ea (Tag probebetrieb-73)
-Letzter Commit in security-ai: 3ccb883
+Stand: 2026-10-13 (nach Probebetrieb 75)
+Werkstatt-HEAD: 8b4eb29 (Tag probebetrieb-75)
+Letzter Commit in security-ai: 35e5178
 Branch: main
-Tests: 270 passed
+Tests: 301 passed
 ruff: 0
 mypy: 0
 
@@ -44,8 +44,8 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD f5c95ea (probebetrieb-73)
-  Tests: 270 passed
+  HEAD 8b4eb29 (probebetrieb-75, A3)
+  Tests: 301 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
 
@@ -63,11 +63,11 @@ Ziel-Projekt-Tags (auf /opt/security-ai):
   (Werkstatt-Konvention: nur Werkstatt-Repo wird getaggt).
 
 Dateien:
-  - pipeline.py (2928 Zeilen, Stand 2191-R2b)
+  - pipeline.py (3160 Zeilen, Stand 2183 A3)
   - redaction.py (314 Zeilen, Stand 2195)
   - agents/*.md (5 Rollen)
   - projects/security-ai.yaml
-  - tests/test_pipeline.py (3509 Zeilen, Stand 2191-R)
+  - tests/test_pipeline.py (3804 Zeilen, Stand 2183 A3)
   - tests/test_redaction.py
   - docs/WORKFLOW.md
   - docs/ROADMAP.md
@@ -117,6 +117,11 @@ Kurzfassung:
   PB-43: ERFOLG. Auflage 2191-R. HEAD 87092f8.
   PB-44: Doku. Handoff auf PB-43-Stand.
   PB-45: Style. ruff I001 in tests/ behoben.
+         KORREKTUR (PB-75): War unvollstaendig.
+         Bei PB-75 gemessen: 2 Stellen weiterhin
+         offen (tests/test_pipeline.py:16,
+         tests/test_redaction.py:15). Eigener
+         Block offen.
   PB-46: Doku. Handoff Abschluss-Update PB-45.
   PB-47: Fix. reviewer.md Verweis HR4 -> B5.
   PB-48: Refactor. Audit-Debug-Felder reduziert (2194-M).
@@ -156,6 +161,11 @@ Kurzfassung:
   PB-72: Doku. Handoff auf PB-71.
   PB-73: Feature. SolverBefund-Klasse + run_id
          (2183 A2).
+  PB-74: Doku. Handoff auf PB-73.
+  PB-75: Feature. Trigger-Erkennung (2183 A3).
+         zaehle_no_go_in_folge, recovery-Marker
+         ab 2. NO-GO, recovery_hinweis_block
+         neutral. +8 Tests, 301 passed.
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -237,6 +247,14 @@ WICHTIG (naechste Session):
         ERLEDIGT (PB-71). Neue Funktion
         rollback_vor_recovery (ungenutzt bis A3).
         max_llm_calls-Defaults 20 -> 30.
+  2183 A3 (Trigger-Erkennung): ERLEDIGT (PB-75).
+        zaehle_no_go_in_folge(), recovery-Marker
+        ab 2. NO-GO in Folge, audit("solver_trigger").
+        recovery_hinweis_block() neutral (kein
+        Solver-Befund). ACHTUNG (T1): Ohne P1
+        triggert der Marker auch bei ANDERER_FEHLER;
+        Solver-Pfad (B) muss tolerant sein (P6).
+
   2183 A2 (SolverBefund-Klasse): ERLEDIGT (PB-73).
         Enum SolverDiagnose, @dataclass
         SolverBefund, format_solver_befund.
@@ -287,6 +305,11 @@ WICHTIG (naechste Session):
   tests-mypy: tests/test_pipeline.py hat
         139 mypy-Fehler (fehlende
         Annotationen in Test-Methoden).
+        KORREKTUR (PB-75): Bei PB-75 gemessen:
+        151 Fehler (nicht 139). Differenz 12.
+        Alle vor Zeile 3739 (vor A3-Tests).
+        A3-Tests selbst: mypy-sauber.
+        Merkposten tests-mypy-151 angelegt.
         Altes Problem, eigener Block.
         Kategorie 2.
 
