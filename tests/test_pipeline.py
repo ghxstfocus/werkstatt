@@ -15,9 +15,8 @@ sys.path.insert(0, "/opt/werkstatt")
 
 import re
 
-import pytest
-
 import pipeline
+import pytest
 
 # =====================================================================
 # Test-Helpers
@@ -1868,9 +1867,9 @@ class TestCollectMesswerte:
         }
         s = pipeline.format_doc_snippets(docs)
         assert "DOKU-AUSSCHNITTE" in s
-        assert "--- context ---" in s
+        assert "context" in s
         assert "Inhalt A." in s
-        assert "--- decisions ---" in s
+        assert "decisions" in s
         assert "Inhalt B." in s
 
     def test_format_doc_snippets_leer(self) -> None:
@@ -2399,7 +2398,8 @@ class TestReadTargetSnippets:
         s = pipeline.read_target_snippets(
             ["tools/x.py"], tmp_path, ["tools/"])
         assert "ZIELDATEIEN" in s
-        assert "--- tools/x.py ---" in s
+        assert "tools/x.py" in s
+        assert "vollstaendig" in s
         assert "Inhalt A." in s
 
     def test_nicht_whitelist(self, tmp_path: Path) -> None:
@@ -2505,3 +2505,88 @@ class TestBuildSystemPrompt:
         for r in ("R1.", "R6."):
             muster = rf"(?<![A-Z]){re.escape(r)}"
             assert re.search(muster, s) is None, f"{r} faelschlich im Builder-Prompt"
+
+
+
+# =====================================================================
+# Kuerzungs-Marker fuer Zieldatei- und Doku-Ausschnitte (Auflage 2186)
+# =====================================================================
+
+class TestKuerzungsMarker:
+    """Auflage 2186: Ausschnitte markieren Kuerzung."""
+
+    def test_read_target_snippets_marker_vollstaendig(
+            self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        (tmp_path / "tools" / "x.py").write_text(
+            "kurz\n", encoding="utf-8")
+        s = pipeline.read_target_snippets(
+            ["tools/x.py"], tmp_path, ["tools/"])
+        assert "vollstaendig" in s
+        assert "GEKUERZT" not in s
+        assert "COMMAND: RUN read_file" not in s
+
+    def test_read_target_snippets_marker_gekuerzt(
+            self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        inhalt = "A" * 5000
+        (tmp_path / "tools" / "x.py").write_text(
+            inhalt, encoding="utf-8")
+        s = pipeline.read_target_snippets(
+            ["tools/x.py"], tmp_path, ["tools/"])
+        assert "GEKUERZT" in s
+        assert "von 5000" in s
+        assert "2000 weitere" in s
+
+    def test_read_target_snippets_marker_enthaelt_pfad(
+            self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        (tmp_path / "tools" / "x.py").write_text(
+            "kurz\n", encoding="utf-8")
+        s = pipeline.read_target_snippets(
+            ["tools/x.py"], tmp_path, ["tools/"])
+        assert "tools/x.py" in s
+
+    def test_read_target_snippets_gekuerzt_marker_enthaelt_command(
+            self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        (tmp_path / "tools" / "x.py").write_text(
+            "A" * 5000, encoding="utf-8")
+        s = pipeline.read_target_snippets(
+            ["tools/x.py"], tmp_path, ["tools/"])
+        assert "COMMAND: RUN read_file tools/x.py" in s
+
+    def test_read_target_snippets_grenze_exakt_max_len(
+            self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        inhalt = "A" * 3000
+        (tmp_path / "tools" / "x.py").write_text(
+            inhalt, encoding="utf-8")
+        s = pipeline.read_target_snippets(
+            ["tools/x.py"], tmp_path, ["tools/"])
+        assert "vollstaendig" in s
+        assert "GEKUERZT" not in s
+
+    def test_read_target_snippets_grenze_max_len_plus_eins(
+            self, tmp_path: Path) -> None:
+        (tmp_path / "tools").mkdir()
+        inhalt = "A" * 3001
+        (tmp_path / "tools" / "x.py").write_text(
+            inhalt, encoding="utf-8")
+        s = pipeline.read_target_snippets(
+            ["tools/x.py"], tmp_path, ["tools/"])
+        assert "GEKUERZT" in s
+        assert "1 weitere" in s
+
+    def test_format_doc_snippets_marker_vollstaendig(self) -> None:
+        docs = {"README.md": "kurz\n"}
+        s = pipeline.format_doc_snippets(docs)
+        assert "vollstaendig" in s
+        assert "GEKUERZT" not in s
+
+    def test_format_doc_snippets_marker_gekuerzt(self) -> None:
+        docs = {"README.md": "A" * 5000}
+        s = pipeline.format_doc_snippets(docs)
+        assert "GEKUERZT" in s
+        assert "von 5000" in s
+        assert "COMMAND: RUN read_file README.md" in s

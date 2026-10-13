@@ -1461,11 +1461,30 @@ def read_target_snippets(paths: list[str],
             print(f"[WARN] read_target_snippets: "
                   f"Lesefehler {p}: {exc}")
             continue
+        total = len(inhalt)
+        gekuerzt = total > max_len
         ausschnitt = inhalt[:max_len]
         ausschnitt, _ = redaction.redact_all(
             ausschnitt, max_len=100000)
-        teile.append(f"--- {p} ---")
+        if gekuerzt:
+            kopf = (
+                f"--- {p} (Zeichen 1-{max_len} von {total}, "
+                f"GEKUERZT) ---"
+            )
+        else:
+            kopf = (
+                f"--- {p} (Zeichen 1-{total} von {total}, "
+                f"vollstaendig) ---"
+            )
+        teile.append(kopf)
         teile.append(ausschnitt)
+        if gekuerzt:
+            rest = total - max_len
+            teile.append(
+                f"\n[... AUSSCHNITT GEKUERZT. {rest} weitere "
+                f"Zeichen. Fuer die vollstaendige Datei: "
+                f"COMMAND: RUN read_file {p}]"
+            )
     return "\n".join(teile)
 
 
@@ -1486,11 +1505,30 @@ def format_doc_snippets(docs: dict[str, str],
         return "(keine Doku geladen)"
     teile = ["DOKU-AUSSCHNITTE (Auszug aus den Zieldateien):"]
     for key, inhalt in docs.items():
+        total = len(inhalt)
+        gekuerzt = total > max_len
         ausschnitt = inhalt[:max_len]
         ausschnitt, _ = redaction.redact_all(
             ausschnitt, max_len=100000)
-        teile.append(f"--- {key} ---")
+        if gekuerzt:
+            kopf = (
+                f"--- {key} (Zeichen 1-{max_len} von {total}, "
+                f"GEKUERZT) ---"
+            )
+        else:
+            kopf = (
+                f"--- {key} (Zeichen 1-{total} von {total}, "
+                f"vollstaendig) ---"
+            )
+        teile.append(kopf)
         teile.append(ausschnitt)
+        if gekuerzt:
+            rest = total - max_len
+            teile.append(
+                f"\n[... AUSSCHNITT GEKUERZT. {rest} weitere "
+                f"Zeichen. Fuer die vollstaendige Doku: "
+                f"COMMAND: RUN read_file {key}]"
+            )
     return "\n".join(teile)
 
 
