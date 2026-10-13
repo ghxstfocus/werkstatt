@@ -50,8 +50,8 @@ Werkstatt-Repo:
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
 
 Ziel-Projekt security-ai:
-  HEAD 3ccb883 (Traceroute-Binary-Fehler-Fall)
-  Vorgaenger dd3048b (PingError-Fall, erster Werkstatt-Commit)
+  HEAD c593cb8 (DNS-Fehlerfall, 2199-Zwischenstand)
+  Vorgaenger 3ccb883 (Traceroute), dd3048b (PingError)
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
@@ -124,6 +124,10 @@ Kurzfassung:
          in commit_input (2191-R2).
   PB-50: Feature. Fail-closed bei leerem mess_protokoll
          in Phase 2 (2191-R2b).
+  PB-51: Doku. Handoff auf PB-50.
+  PB-52: Fix. reviewer.md Body an R7 angeglichen
+         (2191-R3).
+  PB-53: Doku. Handoff-Update 2199-Zwischenstand.
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -147,10 +151,24 @@ Auflagen dieser Session:
 KRITISCH: keine.
 
 WICHTIG (naechste Session):
-  2191-R3: agents/reviewer.md Body-Regel 2 (Zeile 30-33)
-           fordert "woertlich" ohne Toleranzstufen.
-           Nach PB-43 pruefen, ob Widerspruch zu R7.
-           Kategorie 2.
+  2199: R7 im Werkstatt-Lauf messen. Bisheriges:
+        Lauf am 2026-10-13 (DNS-Fehlerfall) hat R7
+        nicht getriggert (Anker korrekt, Code-GO
+        Runde 1). Loop scheiterte post-apply an
+        ruff SIM117. Naechster Auftrag muss einen
+        falschen Anker provozieren (Builder setzt
+        Anker aus CODE-ENTWURF gegen bestehende
+        Datei, Whitespace/Zeilenende weichen ab).
+        Kategorie 3.
+
+  2199a: Auto-Repair post-apply-Basis-Gate.
+        Merkposten, nicht Auflage. Neue Fail-Modus-
+        Klasse: post-apply-Basis-Gate rot, Reviewer-
+        Vorschlag liegt vor, Loop wendet nicht an.
+        Verantwortungsfrage (HR-R9, Lehre 4) vor
+        Umsetzung klaeren: wer traegt Verantwortung,
+        wenn Auto-Repair Semantik aendert? Welche
+        Codes fixbar? Whitelist. Kategorie 3.
 
   2191-R2b-T: Test fuer commit_review_ohne_messung.
            main() ist nicht isoliert testbar. Test-
@@ -162,10 +180,6 @@ WICHTIG (naechste Session):
            (Zeile 2424) hat ihn jetzt davor. Inkonsistenz
            bewusst? Kategorie 2.
 
-  2199: PB-43 messen: greift R7 tatsaechlich?
-        Wenn nein, Ursache nicht Reihenfolge/Regel-
-        quelle, sondern Modellverhalten -> 2193.
-        Kategorie 3.
 
 MITTEL (Merkposten):
   2183: Solver-Agent (neue Rolle). Rescue-Agent,
@@ -202,9 +216,9 @@ MITTEL (Merkposten):
 
 NIEDRIG:
   Audit-Log-Ausbau dauerhaft (statt Debug-Felder).
-  Tag-Verwirrung: Ziel-Repo-Tags 2, 20-24 auf
-  f913eac, 25-28 auf dd3048b. Werkstatt-Tags 7,
-  17, 29-50. Vereinheitlichen.
+  Tag-Verwirrung: Ziel-Repo-Tags 1-24 auf f913eac,
+  25-28 auf dd3048b. Werkstatt-Tags 7, 17, 29-53.
+  Vereinheitlichen.
 
 ================================================================
 6. WIE MAN WEITERARBEITET
@@ -368,11 +382,10 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Naechsten Block waehlen:
-   Empfehlung: 2191-R3 (Body-Regel 2 vs. R7).
-   Danach 2199 (PB: greift R7?). Danach 2183
-   (Solver-Agent, P1-P9).
+   Empfehlung: 2199 mit R7-provozierendem Auftrag.
+   Danach 2183 (Solver-Agent, P1-P9).
 
-4. Fuer 2191-R3 und 2183 Kategorie-3-Reviewer-
+4. Fuer 2199 und 2183 Kategorie-3-Reviewer-
    Blocks formulieren. Vor Ausfuehrung.
 
 5. Nach Erfolg: git tag probebetrieb-<n>.
