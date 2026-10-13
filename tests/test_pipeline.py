@@ -3643,3 +3643,94 @@ class TestRollbackVorRecovery:
             encoding="utf-8")
         assert '"max_llm_calls", 20' not in quelle
         assert '"max_llm_calls", 30' in quelle
+
+
+# =====================================================================
+# 2183 A2: SolverBefund-Klasse
+# =====================================================================
+
+class TestSolverBefund:
+    """Auflage 2183 A2: SolverDiagnose und SolverBefund."""
+
+    def test_solver_diagnose_enum_werte(self) -> None:
+        assert pipeline.SolverDiagnose.GLEICHER_FEHLER.value == \
+            "gleicher_fehler"
+        assert pipeline.SolverDiagnose.ANDERER_FEHLER.value == \
+            "anderer_fehler"
+        assert pipeline.SolverDiagnose.WIDERSPRUCH.value == \
+            "widerspruch"
+        assert pipeline.SolverDiagnose.UNKLAR.value == \
+            "unklar"
+
+    def test_solver_befund_leer_defaults(self) -> None:
+        b = pipeline.SolverBefund(
+            art=pipeline.SolverDiagnose.UNKLAR)
+        assert b.kandidaten == []
+        assert b.praezisierter_auftrag == ""
+        assert b.rueckspiel_hinweis == ""
+        assert b.eskalation == ""
+        assert b.run_id == ""
+
+    def test_ist_vollstaendig_gleicher_fehler(self) -> None:
+        b = pipeline.SolverBefund(
+            art=pipeline.SolverDiagnose.GLEICHER_FEHLER,
+            kandidaten=["x"])
+        assert b.ist_vollstaendig()
+        b2 = pipeline.SolverBefund(
+            art=pipeline.SolverDiagnose.GLEICHER_FEHLER)
+        assert not b2.ist_vollstaendig()
+
+    def test_ist_vollstaendig_anderer_fehler(self) -> None:
+        b = pipeline.SolverBefund(
+            art=pipeline.SolverDiagnose.ANDERER_FEHLER,
+            praezisierter_auftrag="x")
+        assert b.ist_vollstaendig()
+
+    def test_ist_vollstaendig_widerspruch(self) -> None:
+        b = pipeline.SolverBefund(
+            art=pipeline.SolverDiagnose.WIDERSPRUCH,
+            rueckspiel_hinweis="x")
+        assert b.ist_vollstaendig()
+
+    def test_ist_vollstaendig_unklar(self) -> None:
+        b = pipeline.SolverBefund(
+            art=pipeline.SolverDiagnose.UNKLAR,
+            eskalation="x")
+        assert b.ist_vollstaendig()
+
+    def test_format_solver_befund_vollstaendig(self) -> None:
+        b = pipeline.SolverBefund(
+            art=pipeline.SolverDiagnose.GLEICHER_FEHLER,
+            kandidaten=["k1", "k2"],
+            run_id="r1")
+        s = pipeline.format_solver_befund(b)
+        assert "## SOLVER-BEFUND (r1)" in s
+        assert "Diagnose: GLEICHER_FEHLER" in s
+        assert "  - k1" in s
+        assert "  - k2" in s
+
+    def test_format_solver_befund_leere_felder(self) -> None:
+        b = pipeline.SolverBefund(
+            art=pipeline.SolverDiagnose.UNKLAR,
+            eskalation="x")
+        s = pipeline.format_solver_befund(b)
+        assert "Kandidaten" not in s
+        assert "Praezisierter Auftrag" not in s
+        assert "Eskalation: x" in s
+
+    def test_format_solver_befund_unvollstaendig(self) -> None:
+        b = pipeline.SolverBefund(
+            art=pipeline.SolverDiagnose.GLEICHER_FEHLER)
+        import pytest
+        with pytest.raises(ValueError):
+            pipeline.format_solver_befund(b)
+
+    def test_runstate_solver_befunde_leer_initial(self) -> None:
+        from pathlib import Path
+        s = pipeline.RunState(
+            block_id="t", aufgabe="a", start_ts="",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=[], api_key="", budget={},
+            agent_docs={}, project_dir=Path("/tmp"))
+        assert s.solver_befunde == []
+        assert s.run_id == ""

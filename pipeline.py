@@ -23,6 +23,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -841,6 +842,11 @@ class RunState:
     # Auflage 2183 A1b: Historisierung fuer Solver-Vergleich.
     code_entwurf_historie: list[dict[str, Any]] = \
         field(default_factory=list)
+    # Auflage 2183 A2: run_id fuer Korrelation.
+    run_id: str = ""
+    # Auflage 2183 A2: Solver-Befunde.
+    solver_befunde: list[SolverBefund] = \
+        field(default_factory=list)
     code_patches: list[dict[str, str]] = field(default_factory=list)  # UMB-1b
     test_vorschlaege: str = ""
     commit_paket: dict[str, Any] = field(default_factory=dict)
@@ -907,6 +913,68 @@ def check_tests_dir_unveraendert(project_dir: Path, vorher: dict[str, int]
             probleme.append(f"KLEINER: {pfad} ({groesse} -> {nachher[pfad]})")
     return (len(probleme) == 0), probleme
 
+
+
+# Auflage 2183 A2: Solver-Diagnose und SolverBefund.
+# Getrennt von RecoveryVorschlag (Freitext-Kanal).
+class SolverDiagnose(Enum):
+    """Auflage 2183 A2: vier Solver-Diagnostypen."""
+    GLEICHER_FEHLER = "gleicher_fehler"
+    ANDERER_FEHLER = "anderer_fehler"
+    WIDERSPRUCH = "widerspruch"
+    UNKLAR = "unklar"
+
+
+@dataclass
+class SolverBefund:
+    """Auflage 2183 A2: strukturierter Solver-Befund.
+
+    Wird vom Solver (B) erzeugt und in state.solver_befunde
+    gespeichert. Getrennt von RecoveryVorschlag.
+    """
+    art: SolverDiagnose
+    kandidaten: list[str] = field(default_factory=list)
+    praezisierter_auftrag: str = ""
+    rueckspiel_hinweis: str = ""
+    eskalation: str = ""
+    run_id: str = ""
+
+    def ist_vollstaendig(self) -> bool:
+        """Auflage 2183 A2: Felder fuer die Diagnose gefuellt?"""
+        if self.art == SolverDiagnose.GLEICHER_FEHLER:
+            return bool(self.kandidaten)
+        if self.art == SolverDiagnose.ANDERER_FEHLER:
+            return bool(self.praezisierter_auftrag)
+        if self.art == SolverDiagnose.WIDERSPRUCH:
+            return bool(self.rueckspiel_hinweis)
+        if self.art == SolverDiagnose.UNKLAR:
+            return bool(self.eskalation)
+        return False
+
+
+def format_solver_befund(befund: SolverBefund) -> str:
+    """Auflage 2183 A2: formatiert SolverBefund fuer Prompt.
+
+    Wirft ValueError, wenn der Befund fuer seine Diagnose
+    nicht vollstaendig ist (Fail-closed, HR-R9).
+    """
+    if not befund.ist_vollstaendig():
+        raise ValueError(
+            f"SolverBefund unvollstaendig fuer {befund.art}")
+    zeilen = [f"## SOLVER-BEFUND ({befund.run_id})"]
+    zeilen.append(f"Diagnose: {befund.art.name}")
+    if befund.kandidaten:
+        zeilen.append("Kandidaten:")
+        for k in befund.kandidaten:
+            zeilen.append(f"  - {k}")
+    if befund.praezisierter_auftrag:
+        zeilen.append(
+            f"Praezisierter Auftrag: {befund.praezisierter_auftrag}")
+    if befund.rueckspiel_hinweis:
+        zeilen.append(f"Rueckspiel: {befund.rueckspiel_hinweis}")
+    if befund.eskalation:
+        zeilen.append(f"Eskalation: {befund.eskalation}")
+    return "\n".join(zeilen) + "\n"
 
 
 @dataclass
@@ -2346,6 +2414,8 @@ def run_pipeline(project_name: str, aufgabe: str,
     _AKTUELLE_RUN_ID = (
         datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         + f"-{os.getpid()}")
+    # Auflage 2183 A2: run_id auch in state.
+    state.run_id = _AKTUELLE_RUN_ID
 
     audit("pipeline_start",
           {"aufgabe_hash": __import__("hashlib").sha256(aufgabe.encode()).hexdigest(),
