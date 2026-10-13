@@ -210,6 +210,20 @@ Merkposten 2192-M2:
   alle drei Schichten pruefen (Zugriff,
   Sichtbarkeit, Automatik).
 
+## Audit-Debug (temporaer)
+
+Waehrend der Diagnose (Auflage 2194)
+protokolliert der Audit-Log:
+  - builder_prompt_gebaut: Sektionen,
+    Laengen, GEMESSENER INHALT-Laenge.
+  - builder_reply_erhalten: Kopf und Fuss
+    des Replies.
+
+Merkposten 2194-M:
+  Nach der Diagnose die Debug-Felder
+  reduzieren oder entfernen. Der Audit
+  waechst sonst unbegrenzt.
+
 ## Fail-closed-Prinzip
 
 Wenn eine Pruefung nicht moeglich ist: blockieren,

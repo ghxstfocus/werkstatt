@@ -644,6 +644,8 @@ def builder_reply_mit_command_loop(
     gescheiterte: set[tuple[str, str]] = set()
     for builder_runde in range(1, max_builder_runden + 1):
         aktueller_prompt = user_prompt_fn(state)
+        _audit_builder_prompt(
+            aktueller_prompt, state, project_dir, project_name)
         reply = ask_llm(
             api_key, builder_prompt, aktueller_prompt,
             state.builder_model, state.builder_temp,
@@ -651,6 +653,8 @@ def builder_reply_mit_command_loop(
         )
         if not reply.ok:
             return reply, None
+        _audit_builder_reply(
+            reply.content, state, project_dir, project_name)
         cmds = parse_commands(reply.content)
         if not cmds:
             return reply, None
@@ -1485,7 +1489,7 @@ def collect_messwerte(state: RunState) -> dict[str, Any]:
     for mid, rc_str, stdout in treffer:
         rc = int(rc_str)
         if mid == "test_count":
-            m = _re.search(r"(\d+) tests? collected", stdout)
+            m = re.search(r"(\d+) tests? collected", stdout)
             if m:
                 werte["test_anzahl"] = int(m.group(1))
         elif mid == "ruff":
@@ -1538,6 +1542,55 @@ def extract_paths_from_aufgabe(aufgabe: str,
         gesehen.add(p)
         ergebnis.append(p)
     return ergebnis
+
+
+def _audit_builder_prompt(prompt: str, state: RunState,
+                          project_dir: Path, project_name: str) -> None:
+    """Auflage 2194: protokolliert die Struktur des Builder-Prompts.
+
+    Nur fuer Diagnose. Speichert Laenge, Sektionsnamen und die
+    Laenge des GEMESSENER INHALT-Blocks (redigiert).
+    """
+    sektionen: list[str] = []
+    for m in re.finditer(r"^([A-ZÄÖÜ][A-ZÄÖÜa-zäöü_ ()/,-]{2,60}):",
+                          prompt, re.MULTILINE):
+        s = m.group(1).strip()
+        if s not in sektionen:
+            sektionen.append(s)
+    # GEMESSENER INHALT-Block-Laenge
+    gem_len = 0
+    marker = "GEMESSENER INHALT (verbindlich"
+    if marker in prompt:
+        i = prompt.find(marker)
+        # bis zur naechsten Sektion oder Ende
+        rest = prompt[i:]
+        # Naechste Sektion suchen: Zeile, die mit Grossbuchstabe
+        # beginnt und mit ":" endet
+        m2 = re.search(r"\n[A-ZÄÖÜ][A-ZÄÖÜa-zäöü_ ()/,-]{2,60}:",
+                        rest[len(marker):])
+        if m2:
+            gem_len = len(rest[:len(marker) + m2.start()])
+        else:
+            gem_len = len(rest)
+    redigiert, _ = redaction.redact_all(prompt, max_len=200000)
+    audit("builder_prompt_gebaut",
+          {"prompt_len": len(redigiert),
+           "sektionen": sektionen,
+           "gemessener_inhalt_len": gem_len},
+          project_dir, project_name)
+
+
+def _audit_builder_reply(reply_content: str, state: RunState,
+                         project_dir: Path, project_name: str) -> None:
+    """Auflage 2194: protokolliert den Builder-Reply (Kopf/Fuss)."""
+    redigiert, _ = redaction.redact_all(reply_content, max_len=200000)
+    kopf = redigiert[:1500]
+    fuss = redigiert[-500:] if len(redigiert) > 1500 else ""
+    audit("builder_reply_erhalten",
+          {"reply_len": len(redigiert),
+           "reply_kopf": kopf,
+           "reply_fuss": fuss},
+          project_dir, project_name)
 
 
 def ensure_ziel_gemessen(

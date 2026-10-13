@@ -3244,3 +3244,61 @@ class TestEnsureZielGemessen:
         # relativ zu "/" als /pfad/a.py aufgeloest wird.
         # Der Test prueft, dass die Funktion robust ist.
         assert isinstance(aufrufe, list)
+
+
+
+# =====================================================================
+# 2194: Audit-Debug
+# =====================================================================
+
+class TestAuditDebug:
+    """Auflage 2194: Audit protokolliert Prompt und Reply."""
+
+    def test_builder_prompt_gebaut(self, monkeypatch) -> None:
+        eintraege: list[tuple[str, dict]] = []
+
+        def fake_audit(kind, payload, *a, **kw):
+            eintraege.append((kind, payload))
+
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        state = build_test_state()
+        prompt = (
+            "BASIS-GATE:\nX\n\n"
+            "GEMESSENER INHALT (verbindlich, gewinnt gegen "
+            "ZIELDATEIEN):\nA" * 50 + "\n\n"
+            "AUFGABE:\nTest\n"
+        )
+        pipeline._audit_builder_prompt(
+            prompt, state, Path("/opt/security-ai"), "test-projekt")
+        kinds = [k for k, _ in eintraege]
+        assert "builder_prompt_gebaut" in kinds
+        for k, p in eintraege:
+            if k == "builder_prompt_gebaut":
+                assert "prompt_len" in p
+                assert "gemessener_inhalt_len" in p
+                assert "sektionen" in p
+
+    def test_builder_reply_erhalten(self, monkeypatch) -> None:
+        eintraege: list[tuple[str, dict]] = []
+
+        def fake_audit(kind, payload, *a, **kw):
+            eintraege.append((kind, payload))
+
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        state = build_test_state()
+        reply = "PATCH-BEGINN\nanker: |\n  x\nersatz: |\n  y\nPATCH-ENDE"
+        pipeline._audit_builder_reply(
+            reply, state, Path("/opt/security-ai"), "test-projekt")
+        kinds = [k for k, _ in eintraege]
+        assert "builder_reply_erhalten" in kinds
+        for k, p in eintraege:
+            if k == "builder_reply_erhalten":
+                assert "reply_len" in p
+                assert "reply_kopf" in p
+                assert "PATCH-BEGINN" in p["reply_kopf"]
+
+    def test_workflow_audit_debug(self) -> None:
+        s = Path("/opt/werkstatt/docs/WORKFLOW.md").read_text(
+            encoding="utf-8")
+        assert "## Audit-Debug" in s
+        assert "2194-M" in s
