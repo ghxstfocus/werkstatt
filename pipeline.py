@@ -1482,6 +1482,23 @@ def _rollback_zieldateien(state: RunState,
           project_dir, project_name)
 
 
+def _pipeline_ende(state: RunState, project_dir: Path,
+                   project_name: str, rc: int,
+                   grund: str = "") -> None:
+    """Auflage 2183-P4-Log: schreibt pipeline_ende-Audit.
+
+    Enthaelt llm_calls am Loop-Ende. Wird an allen
+    Rueckgabepfaden von run_pipeline und in _fail_closed
+    gerufen.
+    """
+    audit("pipeline_ende",
+          {"rc": rc,
+           "llm_calls": state.llm_calls,
+           "runden": len(state.review_runden),
+           "grund": grund[:200]},
+          project_dir, project_name)
+
+
 def _fail_closed(state: RunState, project_dir: Path,
                  project_name: str, code: int,
                  grund: str) -> int:
@@ -1491,6 +1508,8 @@ def _fail_closed(state: RunState, project_dir: Path,
     Commit-Pfad. Setzt den Arbeitsbaum zurueck und liefert
     den Exit-Code.
     """
+    _pipeline_ende(state, project_dir, project_name,
+                   code, grund)
     _rollback_zieldateien(state, project_dir, project_name, grund)
     return code
 
@@ -2810,6 +2829,8 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     except (EOFError, KeyboardInterrupt):
         print("\n[*] Abbruch.")
         audit("pipeline_abgebrochen", {}, project_dir, project_name)
+        _pipeline_ende(state, project_dir, project_name, 0,
+                       "pipeline_abgebrochen")
         return 0
 
     if wahl in {"j", "ja", "y", "yes"}:
@@ -2819,13 +2840,19 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
 
         if not config.get("require_human_approval", True):
             print("[!] require_human_approval=False. Ueberspringe Commit.")
+            _pipeline_ende(state, project_dir, project_name, 0,
+                           "pipeline_approved_no_commit")
             return 0
 
         if apply_commit_and_doku(state, state.commit_paket):
             audit("commit_applied", {}, project_dir, project_name)
+            _pipeline_ende(state, project_dir, project_name, 0,
+                           "commit_applied")
             return 0
         else:
             print("[!] Commit fehlgeschlagen. Manuell nachholen.")
+            _pipeline_ende(state, project_dir, project_name, 20,
+                           "commit_failed")
             return 20
 
     if wahl in {"n", "no", "nein"}:
@@ -2838,11 +2865,15 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         audit("pipeline_rejected",
               {"runden": len(state.review_runden), "grund_kurz": grund[:200]},
               project_dir, project_name)
+        _pipeline_ende(state, project_dir, project_name, 0,
+                       "pipeline_rejected")
         return 0
 
     print("[!] Eskalation.")
     audit("pipeline_escalated", {"runden": len(state.review_runden)},
           project_dir, project_name)
+    _pipeline_ende(state, project_dir, project_name, 0,
+                   "pipeline_escalated")
     return 0
 
 
