@@ -692,6 +692,9 @@ def builder_reply_mit_command_loop(
                       {"grund": "wiederholter_fehler",
                        "key": list(key)},
                       project_dir, project_name)
+                _pipeline_ende(state, project_dir,
+                               project_name, 19,
+                               "builder_command_deadlock")
                 return None, 19
         print(f"[i] Builder-Runde {builder_runde}: "
               f"{len(cmds)} COMMAND(s) angefordert.")
@@ -719,6 +722,8 @@ def builder_reply_mit_command_loop(
     print_recovery(v)
     audit("recovery_builder_command_deadlock",
           {"kontext": kontext}, project_dir, project_name)
+    _pipeline_ende(state, project_dir, project_name, 19,
+                   "builder_command_deadlock")
     return None, 19
 
 
