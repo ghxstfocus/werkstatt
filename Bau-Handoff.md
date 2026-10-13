@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 55)
-Werkstatt-HEAD: 4667e7a (Tag probebetrieb-53)
+Stand: 2026-10-13 (nach Probebetrieb 57)
+Werkstatt-HEAD: a0ffc87 (Tag probebetrieb-57)
 Letzter Commit in security-ai: 3ccb883
 Branch: main
 Tests: 270 passed
@@ -44,7 +44,7 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 4667e7a (probebetrieb-53)
+  HEAD a0ffc87 (probebetrieb-57)
   Tests: 270 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
@@ -55,7 +55,7 @@ Ziel-Projekt security-ai:
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -53
+  probebetrieb-7, -17, -29 bis -57
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
   probebetrieb-1 bis -28 (historisch, vor dieser Session)
@@ -130,6 +130,10 @@ Kurzfassung:
   PB-53: Doku. Handoff-Update 2199-Zwischenstand.
   PB-54: Doku. Handoff-Update 2199a als Auflage.
   PB-55: Doku. Handoff 2199 abgeschlossen, 2183 vor.
+  PB-56: Feature. pipeline_ende mit llm_calls
+         (2183-P4-Log).
+  PB-57: Feature. pipeline_ende im Deadlock-Pfad
+         (Nachtrag).
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -156,6 +160,11 @@ WICHTIG (naechste Session):
   2183: Solver-Agent (vorgezogen, siehe MITTEL).
         Nachster Bau-Block. Siehe MITTEL-Eintrag
         fuer Design P1-P9.
+        Vorbedingung P4 erfuellt (2183-P4-Log,
+        PB-56 + PB-57): pipeline_ende mit llm_calls
+        an 9 Pfaden. Messung 17:31: security-ai-Lauf
+        mit Commit-NO-GO max: rc=7, llm_calls=11,
+        runden=3. Basis fuer 2184.
 
   2199-L: Livelock-Fall (neu aus 2199-Lauf 3).
         Drei 2199-Laeufe, R7 in keinem getriggert.
@@ -167,12 +176,27 @@ WICHTIG (naechste Session):
         laeuft der Loop 5x ins Leere.
         Loesung: 2183. Kategorie 3.
 
-  2199: abgeschlossen (R7 unbetaetigt).
-        R7 wurde in drei Laeufen nicht getriggert.
-        Anker-Fehler, die auftraten, waren strukturell
-        (R5-Bereich), nicht semantisch (R7-Bereich).
-        R7 bleibt unbetaetigt; spaeterer Test nur
-        bei Bedarf.
+  2199: ABGESCHLOSSEN (R7 wirkt).
+        Drei Laeufe ohne R7-Trigger. Vierter Lauf
+        (leerer hostname, 17:31): R7 hat in Phase 2
+        (Commit-Review, Stufe 3) getriggert. Der
+        Commit-Reviewer erkannte, dass das Commit-
+        Paket Aenderungen behauptet, die nicht im
+        GEMESSENER INHALT stehen. COMMIT-NO-GO 2x,
+        Fail-closed mit Rollback. -> 2191-R2 wirkt.
+        Restfall 2199-R7-P1: Phase-1-R7-Wirkung
+        weiter unbetaetigt.
+
+  2183-AQ: Auftragsqualitaet vor Werkstatt-Lauf.
+        Neue Auflage (aus 2199-Lauf 3 + Lauf
+        network_interfaces/Deadlock). Auftraege,
+        die Verhalten annehmen, das im Zielcode
+        nicht existiert, enden in Livelock oder
+        Deadlock. Loesung: vor jedem Lauf pruefen,
+        ob der Auftrag gegen den Zielcode passt.
+        Messung: grep -n 'def .*_run' tools/*.py
+        und grep -rn 'ToolArgumentValueError' tools/.
+        Kategorie 3.
 
   2199a: Recovery-Pfad post-apply-Basis-Gate.
         AUFLAGE (hochgestuft aus Merkposten).
@@ -227,7 +251,15 @@ MITTEL (Merkposten):
         Befund an Reviewer (voll) und Bau-Chat
         (nur praezisierter Auftrag).
         Kategorie 3. Groesserer Umbau.
-  2184: max_llm_calls messen (P4).
+  2184: max_llm_calls 20 -> 30.
+        Begruendung aus P4-Messung:
+        - Einfacher Lauf: ~5 Calls.
+        - Mittlerer Fail-Lauf: 11 Calls (gemessen).
+        - Livelock: ~13 Calls.
+        - Mit Solver: +1-2. Mit 2199a-Recovery:
+          +2-4. Reserve Faktor 2.
+        30 ist aus Messung abgeleitet, nicht geraten.
+        Umsetzung mit 2183.
   2185: README 6 Rollen dokumentieren. Mit 2183.
   2187b: read_file Zeilenbereich (fuer sehr grosse Dateien).
   2188a: agents/*.md konsolidieren (Widersprueche durch
@@ -409,12 +441,14 @@ Der neue Bau-Chat soll:
 
 2. docs/PROTOKOLL-29-40.md lesen.
 
-3. Reihenfolge (nach 2199-Abschluss):
-   a) 2183 Solver (P1-P9). Vorgezogen wegen
-      2199-L (Livelock-Fall).
-   b) 2199a Zustandsmaschine (Kategorie 3).
-   c) 2199a Recovery-Zweig.
-   d) 2199-R7 (bei Bedarf, spaeterer Test).
+3. Reihenfolge:
+   a) 2183 Solver (P1-P9). P4-Basis aus PB-56/57.
+      Schritt A1 (Zustandsmaschine) zuerst.
+   b) 2184 max_llm_calls 30 (mit 2183).
+   c) 2183-AQ Auftragsqualitaet.
+   d) 2199a Zustandsmaschine (Kategorie 3).
+   e) 2199a Recovery-Zweig.
+   f) 2199-R7-P1 (Phase-1-R7-Wirkung).
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
    Blocks formulieren. Vor Ausfuehrung.
