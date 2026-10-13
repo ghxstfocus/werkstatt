@@ -1,6 +1,6 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 54)
+Stand: 2026-10-13 (nach Probebetrieb 55)
 Werkstatt-HEAD: 4667e7a (Tag probebetrieb-53)
 Letzter Commit in security-ai: 3ccb883
 Branch: main
@@ -129,6 +129,7 @@ Kurzfassung:
          (2191-R3).
   PB-53: Doku. Handoff-Update 2199-Zwischenstand.
   PB-54: Doku. Handoff-Update 2199a als Auflage.
+  PB-55: Doku. Handoff 2199 abgeschlossen, 2183 vor.
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -152,17 +153,26 @@ Auflagen dieser Session:
 KRITISCH: keine.
 
 WICHTIG (naechste Session):
-  2199: R7 im Werkstatt-Lauf messen. Bisheriges:
-        Lauf 1 (DNS-Fehlerfall) und Lauf 2
-        (dns_lookup IPv6) haben R7 NICHT getriggert
-        (Anker korrekt, Code-GO Runde 1). Beide
-        Laeufe scheiterten post-apply (ruff SIM117
-        bzw. mypy str|int). R7 ist weder bestaetigt
-        noch widerlegt.
-        Naechster Auftrag muss einen falschen Anker
-        provozieren (mehrzeiliger Anker aus CODE-
-        ENTWURF gegen bestehende Datei).
-        Kategorie 3.
+  2183: Solver-Agent (vorgezogen, siehe MITTEL).
+        Nachster Bau-Block. Siehe MITTEL-Eintrag
+        fuer Design P1-P9.
+
+  2199-L: Livelock-Fall (neu aus 2199-Lauf 3).
+        Drei 2199-Laeufe, R7 in keinem getriggert.
+        Lauf 3 (dns_lookup_reverse): 5x NO-GO,
+        Fail-closed. Reviewer-Diagnose: Struktur-
+        Fehler (Patch 1 ersatz == anker) und
+        Auftrags-Ambiguitaet, in derselben Runde
+        bewertet, kein Fortschritt. Ohne Solver
+        laeuft der Loop 5x ins Leere.
+        Loesung: 2183. Kategorie 3.
+
+  2199: abgeschlossen (R7 unbetaetigt).
+        R7 wurde in drei Laeufen nicht getriggert.
+        Anker-Fehler, die auftraten, waren strukturell
+        (R5-Bereich), nicht semantisch (R7-Bereich).
+        R7 bleibt unbetaetigt; spaeterer Test nur
+        bei Bedarf.
 
   2199a: Recovery-Pfad post-apply-Basis-Gate.
         AUFLAGE (hochgestuft aus Merkposten).
@@ -201,13 +211,8 @@ WICHTIG (naechste Session):
 
 
 MITTEL (Merkposten):
-  2183: Solver-Agent (neue Rolle). Rescue-Agent,
-        Hybrid (deterministisch + LLM). Triggert
-        nach NO-GO 2, wenn NO-GO 1 und NO-GO 2
-        denselben Gegenstand betreffen (Auftraggeber-
-        Entscheidung P5). Befund an Reviewer (voll)
-        und Bau-Chat (nur praezisierter Auftrag).
-        Design mit Reviewer abgestimmt (P1-P9):
+  2183: Solver-Agent. VORGEZOGEN nach WICHTIG
+        (siehe oben). Design P1-P9:
         - P1: Schwellwerte Levenshtein/Token-Overlap.
         - P2: Dosierung Befund.
         - P3: COMMAND: RUN solver erst nach Stabilisierung.
@@ -217,6 +222,10 @@ MITTEL (Merkposten):
         - P7: Fail-closed + Rollback (Lehre 4).
         - P8: Historisierung code_entwurf messen.
         - P9: Format SOLVER-BEFUND definieren.
+        Trigger: NO-GO 2, wenn NO-GO 1 und NO-GO 2
+        denselben Gegenstand betreffen (P5).
+        Befund an Reviewer (voll) und Bau-Chat
+        (nur praezisierter Auftrag).
         Kategorie 3. Groesserer Umbau.
   2184: max_llm_calls messen (P4).
   2185: README 6 Rollen dokumentieren. Mit 2183.
@@ -400,11 +409,12 @@ Der neue Bau-Chat soll:
 
 2. docs/PROTOKOLL-29-40.md lesen.
 
-3. Reihenfolge (Reviewer-verbindlich):
-   a) 2199 mit R7-provozierendem Auftrag.
+3. Reihenfolge (nach 2199-Abschluss):
+   a) 2183 Solver (P1-P9). Vorgezogen wegen
+      2199-L (Livelock-Fall).
    b) 2199a Zustandsmaschine (Kategorie 3).
    c) 2199a Recovery-Zweig.
-   d) 2183 Solver (P1-P9).
+   d) 2199-R7 (bei Bedarf, spaeterer Test).
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
    Blocks formulieren. Vor Ausfuehrung.
