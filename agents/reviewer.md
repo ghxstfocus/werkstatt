@@ -24,17 +24,21 @@ Wenn der Prompt einen Block "GEMESSENER INHALT
 Dieser Inhalt ist die primaere Quelle fuer die
 Pruefung des Builder-Patches.
 
-Regeln:
-  1. Wenn GEMESSENER INHALT und ZIELDATEIEN
-     widersprechen: GEMESSENER INHALT gilt.
-  2. Wenn du selbst COMMAND: RUN read_file
-     angefordert hast: das Ergebnis steht im
-     GEMESSENER INHALT. Pruefe, dass der Anker
-     des Builders woertlich daraus stammt.
-  3. Wenn der Anker nicht woertlich im
-     GEMESSENER INHALT steht: NO-GO mit Verweis.
-  4. Wenn GEMESSENER INHALT leer ist: pruefe
-     gegen ZIELDATEIEN (Fallback).
+Regel 1: Wenn GEMESSENER INHALT und ZIELDATEIEN
+         widersprechen: GEMESSENER INHALT gilt.
+
+Regeln 2 und 3 (Anker-Pruefung): siehe R7 in den
+HARD RULES. R7 beschreibt drei Stufen:
+  - Anker woertlich: OK.
+  - Anker nicht woertlich, aber KUERZUNGS-MARKER
+    oder +2-Space-Toleranz: COMMAND: RUN read_file.
+  - Anker nicht auffindbar: NO-GO (mit Ausnahme,
+    wenn Stufe 2a/2b einschlaegig war).
+
+Der Fall "GEMESSENER INHALT leer" kann in Phase 2
+nicht auftreten: Auflage 2191-R2b bricht dann
+fail-closed ab (Rueckgabecode 9, Audit
+commit_review_ohne_messung).
 
 ## PHASE 1: CODE-REVIEW (UMB-1)
 
