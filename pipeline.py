@@ -733,6 +733,18 @@ def builder_reply_mit_command_loop(
     return None, 19
 
 
+def zaehle_no_go_in_folge(
+        review_runden: list[dict[str, Any]]) -> int:
+    """Auflage 2183 A3: zaehlt aufeinanderfolgende NO-GO."""
+    n = 0
+    for r in reversed(review_runden):
+        if r.get("verdict") == "NO-GO":
+            n += 1
+        else:
+            break
+    return n
+
+
 def formatiere_runden(review_runden: list[dict[str, Any]]) -> str:
     """Auflage 2183 A1a: formatiert review_runden.
 
@@ -765,13 +777,13 @@ def recovery_hinweis_block(
         return ""
     if not review_runden[-1].get("recovery"):
         return ""
+    # Auflage 2183 A3: Text neutral, solange kein
+    # Solver-Befund vorliegt (B existiert noch nicht).
     return (
         "## RECOVERY-RUNDE\n"
-        "Dies ist eine Recovery-Runde. Der Solver-\n"
-        "Befund wurde konsolidiert. Pruefe:\n"
-        "(1) ob der Builder den Befund umsetzt,\n"
-        "(2) ob der Code sonst korrekt ist\n"
-        "(R1-R7 gelten weiter).\n\n"
+        "Dies ist eine Recovery-Runde. Ein Solver-\n"
+        "Befund liegt noch nicht vor. Pruefe den\n"
+        "Code wie sonst (R1-R7 gelten weiter).\n\n"
     )
 
 
@@ -2698,6 +2710,15 @@ def run_pipeline(project_name: str, aufgabe: str,
 
         if verdict == "NO-GO":
             print(f"[-] NO-GO:\n{reply.content[:300]}")
+            # Auflage 2183 A3: Trigger-Erkennung.
+            n_no_go = zaehle_no_go_in_folge(
+                state.review_runden)
+            if n_no_go >= 2:
+                state.review_runden[-1]["recovery"] = True
+                audit("solver_trigger",
+                      {"runde": runde,
+                       "no_go_in_folge": n_no_go},
+                      project_dir, project_name)
             rc = budget_or_recover(state, max_llm,
                                   f"Vor Builder-Neubau (NO-GO Runde {runde}).",
                                   project_dir, project_name,

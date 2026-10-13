@@ -3734,3 +3734,71 @@ class TestSolverBefund:
             agent_docs={}, project_dir=Path("/tmp"))
         assert s.solver_befunde == []
         assert s.run_id == ""
+
+
+def test_zaehle_no_go_in_folge_leer() -> None:
+    """T6: leere Liste -> 0."""
+    assert pipeline.zaehle_no_go_in_folge([]) == 0
+
+
+def test_zaehle_no_go_in_folge_ein_go() -> None:
+    """T6: eine GO-Runde -> 0."""
+    assert pipeline.zaehle_no_go_in_folge([{"verdict": "GO"}]) == 0
+
+
+def test_zaehle_no_go_in_folge_zwei_no_go() -> None:
+    """T6: zwei NO-GO -> 2."""
+    runden = [{"verdict": "NO-GO"}, {"verdict": "NO-GO"}]
+    assert pipeline.zaehle_no_go_in_folge(runden) == 2
+
+
+def test_zaehle_no_go_in_folge_unterbrochen_durch_go() -> None:
+    """T6: NO-GO, GO, NO-GO -> 1 (nur die letzte zaehlt)."""
+    runden = [
+        {"verdict": "NO-GO"},
+        {"verdict": "GO"},
+        {"verdict": "NO-GO"},
+    ]
+    assert pipeline.zaehle_no_go_in_folge(runden) == 1
+
+
+def test_zaehle_no_go_in_folge_drei_no_go() -> None:
+    """T6: NO-GO, NO-GO, NO-GO -> 3."""
+    runden = [
+        {"verdict": "NO-GO"},
+        {"verdict": "NO-GO"},
+        {"verdict": "NO-GO"},
+    ]
+    assert pipeline.zaehle_no_go_in_folge(runden) == 3
+
+
+def test_recovery_marker_nach_zwei_no_go() -> None:
+    """T7: nach zwei NO-GO-Runden Marker an der letzten."""
+    runden = [
+        {"verdict": "NO-GO", "recovery": False},
+        {"verdict": "NO-GO", "recovery": False},
+    ]
+    n = pipeline.zaehle_no_go_in_folge(runden)
+    if n >= 2:
+        runden[-1]["recovery"] = True
+    assert runden[-1]["recovery"] is True
+    assert runden[-2]["recovery"] is False
+
+
+def test_recovery_marker_nach_einer_no_go() -> None:
+    """T7: nach einer NO-GO-Runde kein Marker."""
+    runden = [{"verdict": "NO-GO", "recovery": False}]
+    n = pipeline.zaehle_no_go_in_folge(runden)
+    if n >= 2:
+        runden[-1]["recovery"] = True
+    assert runden[-1]["recovery"] is False
+
+
+def test_recovery_hinweis_block_ohne_befund() -> None:
+    """T5: Text spricht nicht von einem Befund,
+    den es nicht gibt."""
+    runden = [{"verdict": "NO-GO", "recovery": True}]
+    text = pipeline.recovery_hinweis_block(runden)
+    assert "RECOVERY-RUNDE" in text
+    assert "Befund liegt noch nicht vor" in text
+    assert "ob der Builder den Befund umsetzt" not in text
