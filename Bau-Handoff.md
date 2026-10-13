@@ -1,11 +1,11 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 43, Auflage 2191-R)
-Werkstatt-HEAD: 87092f8 (Tag probebetrieb-43)
+Stand: 2026-10-13 (nach Probebetrieb 45)
+Werkstatt-HEAD: 7eaad9f (Tag probebetrieb-45)
 Letzter Commit in security-ai: 3ccb883
 Branch: main
 Tests: 270 passed
-ruff: 0 (pipeline.py; 2x I001 in tests/, siehe 0a)
+ruff: 0
 mypy: 0
 
 Dieses Dokument ist der Einstiegspunkt fuer einen neuen
@@ -44,10 +44,9 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 87092f8 (probebetrieb-43)
+  HEAD 7eaad9f (probebetrieb-45)
   Tests: 270 passed
-  ruff: 0 (pipeline.py), 2x I001 in tests/, mypy: 0,
-  git status sauber
+  ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
 
 Ziel-Projekt security-ai:
@@ -56,7 +55,7 @@ Ziel-Projekt security-ai:
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -43
+  probebetrieb-7, -17, -29 bis -45
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
   probebetrieb-1 bis -28 (historisch, vor dieser Session)
@@ -116,6 +115,8 @@ Kurzfassung:
   PB-41: Doku. Handoff + Protokoll 29-40 neu.
   PB-42: Chore. .gitignore um *.alt ergaenzt.
   PB-43: ERFOLG. Auflage 2191-R. HEAD 87092f8.
+  PB-44: Doku. Handoff auf PB-43-Stand.
+  PB-45: Style. ruff I001 in tests/ behoben.
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -165,10 +166,6 @@ WICHTIG (naechste Session):
         Wenn nein, Ursache nicht Reihenfolge/Regel-
         quelle, sondern Modellverhalten -> 2193.
         Kategorie 3.
-
-  0a: ruff I001 in tests/test_pipeline.py:16 und
-      tests/test_redaction.py:15. Import-Sortierung.
-      Kategorie 1.
 
   2182b: agents/reviewer.md:193 (HR4) -> (B8). Nach
          2182 entfallen die HR2-HR6-Nummern. Der
