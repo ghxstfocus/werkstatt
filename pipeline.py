@@ -20,6 +20,7 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -620,7 +621,7 @@ def builder_reply_mit_command_loop(
     state: RunState,
     api_key: str,
     builder_prompt: str,
-    user_prompt: str,
+    user_prompt_fn: Callable[[RunState], str],
     project_dir: Path,
     project_name: str,
     max_builder_runden: int = 3,
@@ -637,9 +638,9 @@ def builder_reply_mit_command_loop(
       (reply, None):  Reply mit Patch oder Fehler.
       (None, 19):     Builder-Command-Deadlock.
     """
-    aktueller_prompt = user_prompt
     gescheiterte: set[tuple[str, str]] = set()
     for builder_runde in range(1, max_builder_runden + 1):
+        aktueller_prompt = user_prompt_fn(state)
         reply = ask_llm(
             api_key, builder_prompt, aktueller_prompt,
             state.builder_model, state.builder_temp,
@@ -675,12 +676,6 @@ def builder_reply_mit_command_loop(
                "anzahl": len(cmds),
                "ids": [c["id"] for c in cmds]},
               project_dir, project_name)
-        aktueller_prompt = (
-            user_prompt
-            + "\n\nMESSUNGEN AUS DER VORIGEN RUNDE:\n"
-            + (state.mess_protokoll or "(keine)")
-            + "\n\nLiefere jetzt den Code-Patch."
-        )
     audit("builder_command_deadlock",
           {"max_builder_runden": max_builder_runden},
           project_dir, project_name)
@@ -2141,32 +2136,37 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                           max_minutes=max_minutes)
     if rc is not None:
         return rc
-    ziel_pfade = extract_paths_from_aufgabe(
-        aufgabe, file_whitelist, project_dir)
-    ziel_snippets = read_target_snippets(
-        ziel_pfade, project_dir, file_whitelist,
-        bereits_gemessen=_gemessene_pfade(state.mess_protokoll))
-    builder_user_prompt = (
-        f"BASIS-GATE:\n{state.basis_protokoll[:1500]}\n\n"
-        + format_doc_snippets(state.docs) + "\n\n"
-        + ziel_snippets + "\n\n"
-        + f"GEMESSENER INHALT (verbindlich, gewinnt gegen "
-        f"ZIELDATEIEN):\n{state.mess_protokoll or '(keine)'}\n\n"
-        + aufgabe_block(state)
-        + "Liefere strukturierte Code-Patches im Format "
-        "PATCH-BEGINN/PATCH-ENDE.\n"
-        "Format und Einrueckungs-Regeln stehen im "
-        "System-Prompt (Abschnitt 'EINRUECKUNG UND "
-        "YAML-BLOCK').\n\n"
-        "Mehrere Patches hintereinander "
-        "(jeweils PATCH-BEGINN/PATCH-ENDE).\n"
-        "Kein freier Text. Kein Markdown. Nur Patches.\n"
-        "Wenn du einen Anker nicht im Ausschnitt findest: "
-        "keinen Patch fuer diese Datei. Kein Erfinden."
-    )
+    def _builder_user_prompt(s: RunState) -> str:
+        """Auflage 2191b: baut den Builder-Prompt pro Runde
+        frisch, damit GEMESSENER INHALT und ZIELDATEIEN den
+        aktuellen state.mess_protokoll sehen.
+        """
+        zp = extract_paths_from_aufgabe(
+            aufgabe, file_whitelist, project_dir)
+        zs = read_target_snippets(
+            zp, project_dir, file_whitelist,
+            bereits_gemessen=_gemessene_pfade(s.mess_protokoll))
+        return (
+            f"BASIS-GATE:\n{s.basis_protokoll[:1500]}\n\n"
+            + format_doc_snippets(s.docs) + "\n\n"
+            + zs + "\n\n"
+            + f"GEMESSENER INHALT (verbindlich, gewinnt gegen "
+            f"ZIELDATEIEN):\n{s.mess_protokoll or '(keine)'}\n\n"
+            + aufgabe_block(s)
+            + "Liefere strukturierte Code-Patches im Format "
+            "PATCH-BEGINN/PATCH-ENDE.\n"
+            "Format und Einrueckungs-Regeln stehen im "
+            "System-Prompt (Abschnitt 'EINRUECKUNG UND "
+            "YAML-BLOCK').\n\n"
+            "Mehrere Patches hintereinander "
+            "(jeweils PATCH-BEGINN/PATCH-ENDE).\n"
+            "Kein freier Text. Kein Markdown. Nur Patches.\n"
+            "Wenn du einen Anker nicht im Ausschnitt findest: "
+            "keinen Patch fuer diese Datei. Kein Erfinden."
+        )
     max_builder_runden = budget.get("max_builder_runden", 3)
     reply_roh, rc = builder_reply_mit_command_loop(
-        state, api_key, builder_prompt, builder_user_prompt,
+        state, api_key, builder_prompt, _builder_user_prompt,
         project_dir, project_name,
         max_builder_runden=max_builder_runden,
     )
@@ -2289,11 +2289,18 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                                   max_minutes=max_minutes)
             if rc is not None:
                 return rc
-            bauer_user_prompt = (
-                f"Reviewer NO-GO:\n{reply.content}\n\nUeberarbeite."
-            )
+            def _bauer_no_go_prompt(
+                    s: RunState,
+                    _reply: LLMReply = reply) -> str:
+                return (
+                    f"Reviewer NO-GO:\n{_reply.content}\n\n"
+                    + "GEMESSENER INHALT (verbindlich):\n"
+                    + f"{s.mess_protokoll or '(keine)'}\n\n"
+                    + "Ueberarbeite den Code-Entwurf. "
+                    + "Liefere strukturierte Code-Patches."
+                )
             bauer_reply_roh, bauer_rc = builder_reply_mit_command_loop(
-                state, api_key, builder_prompt, bauer_user_prompt,
+                state, api_key, builder_prompt, _bauer_no_go_prompt,
                 project_dir, project_name,
                 max_builder_runden=budget.get("max_builder_runden", 3),
             )
@@ -2321,17 +2328,23 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 if rc is not None:
                     return rc
                 auflagen_text = "\n".join(f"- {a}" for a in auflagen)
-                bauer_user_prompt = (
-                    f"Der Reviewer hat GO gegeben, aber folgende "
-                    f"Auflagen formuliert:\n{auflagen_text}\n\n"
-                    "Ueberarbeite die Code-Patches, um die Auflagen "
-                    "umzusetzen. Antworte mit den ueberarbeiteten "
-                    "PATCH-BEGINN/PATCH-ENDE-Bloecken. Kein freier Text."
-                )
+                def _bauer_auflagen_prompt(
+                        s: RunState,
+                        _at: str = auflagen_text) -> str:
+                    return (
+                        "Der Reviewer hat GO gegeben, aber folgende "
+                        f"Auflagen formuliert:\n{_at}\n\n"
+                        + "GEMESSENER INHALT (verbindlich):\n"
+                        + f"{s.mess_protokoll or '(keine)'}\n\n"
+                        + "Ueberarbeite die Code-Patches, um die "
+                        + "Auflagen umzusetzen. Antworte mit den "
+                        + "ueberarbeiteten PATCH-BEGINN/PATCH-ENDE-"
+                        + "Bloecken. Kein freier Text."
+                    )
                 bauer_reply_roh, bauer_rc = (
                     builder_reply_mit_command_loop(
                         state, api_key, builder_prompt,
-                        bauer_user_prompt,
+                        _bauer_auflagen_prompt,
                         project_dir, project_name,
                         max_builder_runden=budget.get(
                             "max_builder_runden", 3),

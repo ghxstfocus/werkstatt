@@ -2633,7 +2633,7 @@ class TestBuilderCommandLoop:
         monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
 
         reply, rc = pipeline.builder_reply_mit_command_loop(
-            state, "key", "sys", "user", Path.cwd(),
+            state, "key", "sys", lambda s: "user", Path.cwd(),
             "test-projekt", max_builder_runden=3)
         assert rc is None
         assert reply is not None
@@ -2663,7 +2663,7 @@ class TestBuilderCommandLoop:
         monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
 
         reply, rc = pipeline.builder_reply_mit_command_loop(
-            state, "key", "sys", "user", Path.cwd(),
+            state, "key", "sys", lambda s: "user", Path.cwd(),
             "test-projekt", max_builder_runden=3)
         assert rc is None
         assert reply is not None
@@ -2700,7 +2700,7 @@ class TestBuilderCommandLoop:
             pipeline, "ask_reviewer_for_recovery", fake_recovery)
 
         reply, rc = pipeline.builder_reply_mit_command_loop(
-            state, "key", "sys", "user", Path.cwd(),
+            state, "key", "sys", lambda s: "user", Path.cwd(),
             "test-projekt", max_builder_runden=2)
         assert reply is None
         assert rc == 19
@@ -2732,7 +2732,7 @@ class TestBuilderCommandLoop:
             pipeline, "ask_reviewer_for_recovery", fake_recovery)
 
         _reply, rc = pipeline.builder_reply_mit_command_loop(
-            state, "key", "sys", "user", Path.cwd(),
+            state, "key", "sys", lambda s: "user", Path.cwd(),
             "test-projekt", max_builder_runden=3)
         assert rc == 19
         assert zaehler["ask"] == 3
@@ -2876,7 +2876,7 @@ class TestBuilderCommandDeadlockWiederholung:
         monkeypatch.setattr(pipeline, "ask_llm", fake_ask)
         monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
         reply, rc = pipeline.builder_reply_mit_command_loop(
-            state, "key", "sys", "user", Path.cwd(),
+            state, "key", "sys", lambda s: "user", Path.cwd(),
             "test-projekt", max_builder_runden=3)
         assert rc == 19
         assert reply is None
@@ -2909,7 +2909,7 @@ class TestBuilderCommandDeadlockWiederholung:
         monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
         monkeypatch.setattr(pipeline, "audit", fake_audit)
         pipeline.builder_reply_mit_command_loop(
-            state, "key", "sys", "user", Path.cwd(),
+            state, "key", "sys", lambda s: "user", Path.cwd(),
             "test-projekt", max_builder_runden=3)
         kinds = [k for k, _ in audits]
         assert "builder_command_deadlock" in kinds
@@ -2945,7 +2945,7 @@ class TestGemessenerInhalt:
         """Im Builder-Prompt steht GEMESSENER INHALT nach ZIELDATEIEN."""
         quelle = Path("/opt/werkstatt/pipeline.py").read_text(
             encoding="utf-8")
-        i_ziel = quelle.find("+ ziel_snippets + \"\\n\\n\"")
+        i_ziel = quelle.find("+ zs + \"\\n\\n\"")
         i_gem = quelle.find(
             "GEMESSENER INHALT (verbindlich, gewinnt gegen")
         assert i_ziel > 0
@@ -3027,3 +3027,109 @@ class TestGemessenerInhalt:
         )
         pfade = pipeline._gemessene_pfade(text)
         assert "/opt/security-ai/tests/unit/test_x.py" not in pfade
+
+
+
+# =====================================================================
+# 2191: Prompt pro Runde frisch
+# =====================================================================
+
+class TestPromptProRunde:
+    """Auflage 2191: Builder-Prompt wird pro Runde frisch gebaut."""
+
+    def test_builder_command_loop_prompt_fresh(
+            self, monkeypatch) -> None:
+        """In Runde 2 enthaelt der Builder-Prompt den
+        gemessenen Inhalt aus Runde 1."""
+        state = build_test_state()
+        state.optional = {
+            "read_file": pipeline.Measurement(
+                "read_file", ("cat",), "Datei lesen."),
+        }
+        prompts: list[str] = []
+
+        def fake_ask(_api, _sys, user, *a, **kw):
+            prompts.append(user)
+            if len(prompts) == 1:
+                return pipeline.LLMReply(
+                    ok=True,
+                    content="COMMAND: RUN read_file README.md")
+            return pipeline.LLMReply(
+                ok=True,
+                content="PATCH-BEGINN\nanker: x\nersatz: y\nPATCH-ENDE")
+
+        def fake_exec(state, cmds, quelle=""):
+            for c in cmds:
+                state.mess_protokoll += "=== read_file ===\n"
+                state.mess_protokoll += "ARGV: cat README.md\n"
+                state.mess_protokoll += "RC: 0\n"
+                state.mess_protokoll += "STDOUT:\n"
+                state.mess_protokoll += "INHALT-AUS-RUNDE-1\n"
+                state.mess_protokoll += "STDERR:\n\n"
+            return {(c.get("id", ""), c.get("arg", "")): True
+                    for c in cmds}
+
+        monkeypatch.setattr(pipeline, "ask_llm", fake_ask)
+        monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
+
+        def prompt_fn(s: pipeline.RunState) -> str:
+            return (
+                "GEMESSENER INHALT (verbindlich):\n"
+                + (s.mess_protokoll or "(keine)") + "\n"
+            )
+
+        reply, rc = pipeline.builder_reply_mit_command_loop(
+            state, "key", "sys", prompt_fn, Path.cwd(),
+            "test-projekt", max_builder_runden=3)
+        assert rc is None
+        assert reply is not None
+        assert "GEMESSENER INHALT" in prompts[0]
+        assert "INHALT-AUS-RUNDE-1" not in prompts[0]
+        assert "INHALT-AUS-RUNDE-1" in prompts[1]
+
+    def test_builder_prompt_gemessener_inhalt_aktualisiert_sich(
+            self) -> None:
+        """Der Hauptaufruf uebergibt eine Closure, nicht einen String."""
+        quelle = Path("/opt/werkstatt/pipeline.py").read_text(
+            encoding="utf-8")
+        assert "_builder_user_prompt" in quelle
+        assert "user_prompt_fn" in quelle
+        assert "MESSUNGEN AUS DER VORIGEN RUNDE" not in quelle
+
+    def test_gemessene_pfade_leer(self) -> None:
+        assert pipeline._gemessene_pfade("") == set()
+
+    def test_gemessene_pfade_mit_read_file(self) -> None:
+        text = (
+            "=== read_file ===\n"
+            "ARGV: cat /pfad/x.py\n"
+            "RC: 0\n"
+            "STDOUT:\nInhalt\nSTDERR:\n\n"
+        )
+        assert "/pfad/x.py" in pipeline._gemessene_pfade(text)
+
+    def test_gemessene_pfade_ignoriert_andere_commands(self) -> None:
+        text = (
+            "=== pytest ===\n"
+            "ARGV: pytest\n"
+            "RC: 0\n"
+            "STDOUT:\nok\nSTDERR:\n\n"
+        )
+        assert pipeline._gemessene_pfade(text) == set()
+
+    def test_builder_md_prioritaet_einmal(self) -> None:
+        """builder.md hat den Prioritaetsverlauf genau einmal."""
+        s = Path("/opt/werkstatt/agents/builder.md").read_text(
+            encoding="utf-8")
+        assert s.count("Prioritaet der Anker-Quellen") == 1
+
+    def test_builder_md_hinweis_2191(self) -> None:
+        s = Path("/opt/werkstatt/agents/builder.md").read_text(
+            encoding="utf-8")
+        assert "Hinweis (Auflage 2191)" in s
+
+    def test_workflow_dreiklang(self) -> None:
+        s = Path("/opt/werkstatt/docs/WORKFLOW.md").read_text(
+            encoding="utf-8")
+        assert "## Feature + Prompt + Aktualisierung" in s
+        assert "2191-M2" in s

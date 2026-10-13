@@ -151,6 +151,32 @@ Merkposten 2190b-M:
   Konflikt-Potenzial: Label mit Prioritaet
   versehen und im Body erklaeren.
 
+## Feature + Prompt + Aktualisierung
+
+Ein Feature braucht drei Teile, nicht zwei.
+
+  1. Mechanik (Code in pipeline.py).
+  2. Prompt (Anweisung in agents/*.md).
+  3. Aktualisierung pro Runde (Prompt
+     wird in jeder Loop-Runde frisch
+     gebaut, wenn er Zustand enthaelt).
+
+Beispiel 2190 + 2191:
+  2190 = GEMESSENER INHALT als primaere
+         Quelle (Mechanik + Prompt).
+  2191 = GEMESSENER INHALT pro Runde
+         frisch (Aktualisierung).
+
+Ohne Aktualisierung sieht der Agent in
+Runde 2 den Zustand aus Runde 1 nicht.
+Das ist ein verbreiteter Fehler bei
+Loop-Agenten.
+
+Merkposten 2191-M2:
+  Bei jedem Feature pruefen, ob der
+  Prompt in Schleifen frisch gebaut
+  werden muss.
+
 ## Fail-closed-Prinzip
 
 Wenn eine Pruefung nicht moeglich ist: blockieren,
