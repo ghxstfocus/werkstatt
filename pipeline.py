@@ -692,9 +692,6 @@ def builder_reply_mit_command_loop(
                       {"grund": "wiederholter_fehler",
                        "key": list(key)},
                       project_dir, project_name)
-                _pipeline_ende(state, project_dir,
-                               project_name, 19,
-                               "builder_command_deadlock")
                 return None, 19
         print(f"[i] Builder-Runde {builder_runde}: "
               f"{len(cmds)} COMMAND(s) angefordert.")
@@ -722,8 +719,6 @@ def builder_reply_mit_command_loop(
     print_recovery(v)
     audit("recovery_builder_command_deadlock",
           {"kontext": kontext}, project_dir, project_name)
-    _pipeline_ende(state, project_dir, project_name, 19,
-                   "builder_command_deadlock")
     return None, 19
 
 
@@ -1513,8 +1508,6 @@ def _fail_closed(state: RunState, project_dir: Path,
     Commit-Pfad. Setzt den Arbeitsbaum zurueck und liefert
     den Exit-Code.
     """
-    _pipeline_ende(state, project_dir, project_name,
-                   code, grund)
     _rollback_zieldateien(state, project_dir, project_name, grund)
     return code
 
@@ -1566,9 +1559,6 @@ def apply_and_recheck(state: RunState,
         audit("recovery_basis_gate_nach_apply",
               {"fehler": nach_fehler, "empfehlung": v.empfehlung},
               state.project_dir, state.project_name)
-        _pipeline_ende(state, state.project_dir,
-                       state.project_name, 18,
-                       "basis_gate_nach_apply")
         return 18
     return None
 
@@ -2220,7 +2210,8 @@ def print_approval_dokument(state: RunState) -> None:
         print(f"Doku-Patches: {len(state.commit_paket.get('doku_patches', []))}")
 
 
-def run_pipeline(project_name: str, aufgabe: str) -> int:
+def run_pipeline(project_name: str, aufgabe: str,
+                 state_ref: list[RunState]) -> int:
     api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
     if not api_key:
         print("[FAIL] DEEPSEEK_API_KEY fehlt. Fail closed.")
@@ -2251,6 +2242,9 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     )
     # Auflage 2080: Startzeitpunkt fuer das Zeitbudget.
     state.start_monotonic = time.monotonic()
+
+    # Auflage 2183-P4-Log2: state an main zurueckgeben.
+    state_ref.append(state)
 
     audit("pipeline_start",
           {"aufgabe_hash": __import__("hashlib").sha256(aufgabe.encode()).hexdigest(),
@@ -2837,8 +2831,6 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     except (EOFError, KeyboardInterrupt):
         print("\n[*] Abbruch.")
         audit("pipeline_abgebrochen", {}, project_dir, project_name)
-        _pipeline_ende(state, project_dir, project_name, 0,
-                       "pipeline_abgebrochen")
         return 0
 
     if wahl in {"j", "ja", "y", "yes"}:
@@ -2848,19 +2840,13 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
 
         if not config.get("require_human_approval", True):
             print("[!] require_human_approval=False. Ueberspringe Commit.")
-            _pipeline_ende(state, project_dir, project_name, 0,
-                           "pipeline_approved_no_commit")
             return 0
 
         if apply_commit_and_doku(state, state.commit_paket):
             audit("commit_applied", {}, project_dir, project_name)
-            _pipeline_ende(state, project_dir, project_name, 0,
-                           "commit_applied")
             return 0
         else:
             print("[!] Commit fehlgeschlagen. Manuell nachholen.")
-            _pipeline_ende(state, project_dir, project_name, 20,
-                           "commit_failed")
             return 20
 
     if wahl in {"n", "no", "nein"}:
@@ -2873,15 +2859,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         audit("pipeline_rejected",
               {"runden": len(state.review_runden), "grund_kurz": grund[:200]},
               project_dir, project_name)
-        _pipeline_ende(state, project_dir, project_name, 0,
-                       "pipeline_rejected")
         return 0
 
     print("[!] Eskalation.")
     audit("pipeline_escalated", {"runden": len(state.review_runden)},
           project_dir, project_name)
-    _pipeline_ende(state, project_dir, project_name, 0,
-                   "pipeline_escalated")
     return 0
 
 
@@ -2951,16 +2933,36 @@ def main() -> int:
         print("[FAIL] Leere Block-Beschreibung.")
         return 65
 
+    state_ref: list[RunState] = []
+    rc = 1
     try:
-        return run_pipeline(project_name, aufgabe)
+        rc = run_pipeline(project_name, aufgabe, state_ref)
     except KeyboardInterrupt:
         print("\n[*] Abbruch durch Strg+C.")
-        return 0
+        rc = 130
     except Exception as exc:  # noqa: BLE001
         print(f"[FAIL] Unerwarteter Fehler: {exc}")
         import traceback
         traceback.print_exc()
-        return 99
+        rc = 99
+    finally:
+        if state_ref:
+            # Auflage 2183-P4-Log2: zentraler Endlog.
+            try:
+                _grund = (
+                    "user_interrupt" if rc == 130
+                    else "unhandled_exception" if rc == 99
+                    else "run_pipeline_exit")
+                _pipeline_ende(
+                    state_ref[0],
+                    state_ref[0].project_dir,
+                    state_ref[0].project_name,
+                    rc, _grund)
+            except Exception:  # noqa: BLE001
+                # Fehler im Endlog darf den Exit-Code
+                # nicht ueberschreiben (P6).
+                print("[WARN] pipeline_ende fehlgeschlagen.")
+    return rc
 
 
 if __name__ == "__main__":
