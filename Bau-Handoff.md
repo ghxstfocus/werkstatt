@@ -1,9 +1,10 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-12
-Letzter Commit: 6db3c4a
+Stand: 2026-10-13 (nach Probebetrieb 40, zweiter Werkstatt-Commit)
+Werkstatt-HEAD: 760f6e6 (Tag probebetrieb-40)
+Letzter Commit in security-ai: 3ccb883
 Branch: main
-Tests: 94 passed
+Tests: 270 passed
 ruff: 0
 mypy: 0
 
@@ -23,172 +24,198 @@ Verzeichnis: /opt/werkstatt/
 Projekt-Konfigurationen: /opt/werkstatt/projects/
 Rollen: /opt/werkstatt/agents/
 Tests: /opt/werkstatt/tests/
+Doku: /opt/werkstatt/docs/
+  - WORKFLOW.md (Regeln, Anti-Patterns, Merkposten)
+  - ROADMAP.md (offene Architektur-Ideen)
+  - PROTOKOLL-29-40.md (Beobachtungs-Protokoll der
+    Probebetriebe 29 bis 40)
 
-5 Rollen:
-  - reviewer (LLM): hoechster Entscheidungstraeger.
-  - builder (LLM): baut Code-Entwuerfe, Commit-Paket.
+Rollen (5):
+  - reviewer (LLM, deepseek-reasoner): prueft Patches
+    und Commit-Paket, entscheidet GO/NO-GO/ESKALATION.
+  - builder (LLM, deepseek-chat): liefert strukturierte
+    Code-Patches (PATCH-BEGINN/ENDE) und das Commit-Paket.
   - test_generator (LLM): liefert Test-Vorschlaege.
   - coverage (No-LLM): misst Coverage.
   - chaos (No-LLM): fuzzt Extremwerte.
-
-Ablauf pro Block:
-  1. Basis-Gate (py_compile, ruff, mypy, test_count,
-     git_status, git_head) laeuft immer. Hard Fail bei Rot.
-  2. Auto-Repair (deterministisch): ruff --fix, ruff format.
-  3. Reviewer waehlt optionale Messungen (COMMAND-Zeilen).
-  4. Builder baut Code-Entwurf.
-  5. Review-Schleife: GO / NO-GO / ESKALATION.
-  6. Coverage, ggf. Test-Generator, Chaos.
-  7. Commit-Review (zweite Reviewer-Phase).
-  8. Approval-Dokument + Human-Gate.
-  9. Commit (nur bei approve), Autor ghxstfocus.
 
 ================================================================
 2. AKTUELLER ZUSTAND
 ================================================================
 
-Commits (neueste zuerst):
-  6db3c4a auflage: 2072 (IPv6-Regex erweitern)
-  a58e0b7 auflage: 2062 (Tests check_tests_dir)
-  e05c632 auflage: 2061 (Tests apply_commit)
-  63673eb auflage: 2060 (Tests execute_commands)
-  792b4b2 auflage: 2051 (Budget-Check)
-  944be26 auflagen: 2048 + 2049
-  b765abb auflage: 2045 (BISHERIGE RUNDEN)
-  1d579f5 auflage: 2044 (Redaction-Tests)
-  9d1679d auflage: 2043 (CURRENT_PROJECT)
-  bcae013 auflagen: 2074 + 2075
-  25c934e initial: Werkstatt aufgesetzt
+Werkstatt-Repo:
+  HEAD 760f6e6 (probebetrieb-40)
+  Tests: 270 passed
+  ruff: 0, mypy: 0, git status sauber
+  Remote: github.com/ghxstfocus/werkstatt.git (privat)
 
-Reviewer-Runden:
-  Runde 1: NO-GO. 16 Auflagen (2027-2042).
-  Runde 2: NO-GO. 21 Befunde, 17 Auflagen (2076-2092).
-           Alle 12 kritischen Auflagen aus Runde 1
-           bestaetigt. Zwei neue kritisch: 2082, 2086.
+Ziel-Projekt security-ai:
+  HEAD 3ccb883 (Traceroute-Binary-Fehler-Fall)
+  Vorgaenger dd3048b (PingError-Fall, erster Werkstatt-Commit)
+  git status sauber
 
-Verifikation letzter Stand:
-  - ruff check: 0.
-  - mypy: 0.
-  - pytest tests/: 94 passed.
+Werkstatt-Tags (auf /opt/werkstatt):
+  probebetrieb-7, -17, -29 bis -40
+
+Ziel-Projekt-Tags (auf /opt/security-ai):
+  probebetrieb-1 bis -28 (historisch, vor dieser Session)
+  Der zweite Commit (3ccb883) hat keinen Tag bekommen
+  (Werkstatt-Konvention: nur Werkstatt-Repo wird getaggt).
 
 Dateien:
-  - /opt/werkstatt/pipeline.py (~1400 Zeilen)
-  - /opt/werkstatt/redaction.py (~300 Zeilen)
-  - /opt/werkstatt/agents/*.md (5 Rollen)
-  - /opt/werkstatt/projects/security-ai.yaml
-  - /opt/werkstatt/tests/test_pipeline.py (~700 Zeilen)
-  - /opt/werkstatt/tests/test_redaction.py (~220 Zeilen)
-  - /opt/werkstatt/README.md
+  - pipeline.py (~2900 Zeilen, Stand 2198)
+  - redaction.py (~280 Zeilen, Stand 2195)
+  - agents/*.md (5 Rollen)
+  - projects/security-ai.yaml
+  - tests/test_pipeline.py (~3250 Zeilen)
+  - tests/test_redaction.py
+  - docs/WORKFLOW.md
+  - docs/ROADMAP.md
+  - docs/PROTOKOLL-29-40.md
+  - README.md
 
 ================================================================
-3. OFFENE AUFLAGEN
+3. WAS SEIT DEM LETZTEN HANDOFF PASSIERT IST
 ================================================================
 
-KRITISCH (vor naechstem Werkstatt-Lauf):
+Das Handoff vom 2026-10-12 (gesichert als
+Bau-Handoff-2026-10-12.md.alt) ist veraltet. Es
+beschreibt einen Stand vor den Auflagen 2027-2094
+und vor UMB-1.
 
-  2082. apply_commit_and_doku: Rollback-Semantik fuer
-        Doku-Patches. Wenn Doku-Patch erfolgreich, aber
-        Datei-Liste danach fehlschlaegt, bleibt Aenderung
-        im Working Tree. Kategorie 3. Befund N23.
-
-  2086. subprocess.run erbt Env: DEEPSEEK_API_KEY landet
-        in Umgebung von pytest, ruff, mypy.
-        Kategorie 3. Befund N28.
-
-WICHTIG:
-
-  2069. agent_docs.reviewer um "context". Kategorie 1.
-  2076. run_measurement + _mit_argv zusammenfuehren. K2.
-  2077. classify_verdict: Sonderzeichen. Kategorie 2.
-  2078. Budget-Check in Review-Schleife entdoppeln. K2.
-  2079. Budget-Check vor Commit-Review: Recovery. K2.
-  2081. BudgetExhausted-Recovery konsistent. K2.
-  2083. Recovery-Entscheidungen auditieren. K2.
-  2084. RecoveryVorschlag: frage_an_menschen. K2.
-  2085. getpass.getuser() try/except. K2.
-  2087. ask_llm: 1-2 Retries mit Backoff. K2.
-  2089. max_len System-Prompt auf 100_000. K2.
-  2090. README: Satz zu HR-Regeln korrigieren. K1.
-  2092. security-ai.yaml: pre_check_stage / escalation /
-        reject_path implementieren oder markieren. K1.
-
-MITTEL:
-
-  2046 (durch 2084), 2052 (durch 2087), 2053 (durch 2086),
-  2057, 2059, 2064, 2065, 2066, 2067 (durch 2075),
-  2070, 2071, 2073, 2080, 2088, 2091.
+Seitdem:
+  A) Auflagen 2027-2094 (16 kritische + 21 Befunde).
+  B) UMB-1 (Architektur-Umbau, 4 Teile).
+  C) Probebetriebe 1-28 (vor dieser Session).
+  D) Auflagen 2186-2198 (diese Session).
+  E) Zwei erfolgreiche Werkstatt-Commits in security-ai:
+     dd3048b (PingError) und 3ccb883 (Traceroute).
 
 ================================================================
-4. NACHSTE SCHRITTE
+4. DIE 12 PROBEBETRIEBE DIESER SESSION (29-40)
 ================================================================
 
-Empfohlene Reihenfolge:
+Ausfuehrliches Protokoll: siehe docs/PROTOKOLL-29-40.md.
 
-  1. Auflage 2082 (Rollback-Semantik). Kategorie 3.
-  2. Auflage 2086 (Env-Leak). Kategorie 3.
-  3. Auflage 2069 (agent_docs.reviewer). Kategorie 1.
-  4. Auflage 2090 (README). Kategorie 1.
-  5. Auflage 2076 (run_measurement konsolidieren). K2.
-  6. Auflage 2077 (classify_verdict). K2.
-  ... dann die uebrigen wichtigen, dann die mittleren.
+Kurzfassung:
+  PB-29: Fail (Anker 0x). Ausschnitt-Bug entdeckt.
+  PB-30: Fail (Livelock, 5x NO-GO). COMMAND-Loop fehlt.
+  PB-31: Fail (Anker 0x). Prompt einmal gebaut.
+  PB-32: Fail (builder_command_deadlock).
+  PB-33: Fail (Anker 0x). read_file ignoriert.
+  PB-34: Fail (Anker 0x). GEMESSENER INHALT fehlt.
+  PB-35: Fail (Anker 0x). GEMESSENER INHALT ignoriert.
+  PB-36: Fail (Anker 0x). Automatik + GEMESSENER INHALT
+         greifen nicht.
+  PB-37: Fail (Anker 0x). Audit-Debug zeigt: IP-Redaction
+         zerstoert Anker. WURZEL GEFUNDEN.
+  PB-38: Fail (Commit-NO-GO). Anker trifft! Testzahl fehlt.
+  PB-39: Fail (Commit-NO-GO). Rechte-Problem + Testzahl.
+  PB-40: ERFOLG. Commit 3ccb883 in security-ai.
 
-Nach jeder Auflage:
-  - ruff, mypy, pytest pruefen.
-  - Commit mit Beschreibung.
-  - Bei Kategorie 3: Reviewer-Block vor Commit.
-
-Nach allen kritischen und wichtigen Auflagen:
-  - Neuer Reviewer-Block.
-  - Bei GO: Werkstatt produktionsreif.
+Auflagen dieser Session:
+  2186: KUERZUNGS-MARKER
+  2187: Builder-COMMAND-Loop
+  2188: builder.md KUERZUNGS-MARKER respektieren
+  2189: Pfad-Woertlichkeit + Fehler-Marker
+  2190: GEMESSENER INHALT als primaere Quelle
+  2191: Prompt pro Runde frisch
+  2192: Werkstatt messt automatisch
+  2193: zurueckgezogen (Modellwechsel)
+  2194: Audit-Debug (Diagnose)
+  2195: Private IPs nicht mehr redigieren (WURZEL)
+  2196: collect_messwerte bevorzugt nach-apply
+  2197: Fail-closed-Rollback
+  2198: collect_messwerte-Regex an Kuerzung
 
 ================================================================
-5. WIE MAN WEITERARBEITET
+5. OFFENE AUFLAGEN UND MERKPOSTEN
+================================================================
+
+KRITISCH: keine.
+
+WICHTIG (naechste Session):
+  2191-R: Reviewer prueft nicht gegen GEMESSENER INHALT.
+          In PB-34/35/36/37 hat er Code-GO trotz
+          falschem Anker gegeben.
+          Kategorie 3.
+
+  2194-M: Audit-Debug-Felder reduzieren. Die Felder
+          builder_prompt_gebaut und builder_reply_erhalten
+          wachsen mit jedem Lauf. Nach der Diagnose
+          reduzieren.
+          Kategorie 2.
+
+  2182b: agents/reviewer.md:193 (HR4) -> (B8). Nach
+         2182 entfallen die HR2-HR6-Nummern. Der
+         Verweis im Reviewer-Body zeigt auf eine
+         nicht mehr existierende Nummer.
+         Kategorie 1.
+
+MITTEL (Merkposten):
+  2183: Solver-Agent (neue Rolle). Uebersetzt Auftrag
+        in praezisen Builder-Auftrag.
+        Kategorie 3. Groesserer Umbau.
+  2184: max_llm_calls 20 -> 30 (in YAML). Mit 2183.
+  2185: README 6 Rollen dokumentieren. Mit 2183.
+  2187b: read_file Zeilenbereich (fuer sehr grosse Dateien).
+  2188a: agents/*.md konsolidieren (Widersprueche durch
+         anhaengende Auflagen).
+  2188c, 2189c, 2190b-M, 2191-M2, 2192-M2, 2198-M,
+  2198-M2: Merkposten zum "Feature + Prompt +
+         Aktualisierung"-Muster. Konsolidieren in eine
+         Werkstatt-Regel.
+  2190-M: Reviewer-Auswahl-Logik (Schritt 1) pruefen.
+  2192-M1: execute_commands prueft, ob Pfad schon
+         vollstaendig gemessen.
+  2195-M2: MAC-Redaction rechtfertigen oder entfernen.
+  2195-M3: Anker mit gemischten privaten/oeffentlichen IPs.
+
+NIEDRIG:
+  Audit-Log-Ausbau dauerhaft (statt Debug-Felder).
+  Tag-Verwirrung: Ziel-Repo-Tags 1-28 historisch,
+  Werkstatt-Tags 7, 17, 29-40. Vereinheitlichen.
+
+================================================================
+6. WIE MAN WEITERARBEITET
 ================================================================
 
 Regeln fuer jeden Bau-Block:
 
-1. Faktenlage vor Meinung. Keine Datei-Inhalte annehmen.
-   Immer cat/sed/grep zum Messen.
+1. Faktenlage vor Meinung. Keine Datei-Inhalte
+   annehmen. Immer cat/sed/grep zum Messen.
 
 2. Patch per Python-Skript mit assert count == 1.
    Kein sed auf Python-Code. Kein Heredoc >3 KB.
 
-3. Nach jedem Patch: wc -l, py_compile, ruff, mypy, pytest.
+3. Nach jedem Patch: wc -l, py_compile, ruff,
+   mypy, pytest.
 
-4. Vor jedem Commit: git status --porcelain pruefen.
+4. Vor jedem Commit: git status --porcelain
+   pruefen.
 
-5. Commit-Autor immer ghxstfocus <ghxst.focus@gmail.com>.
+5. Commit-Autor immer ghxstfocus
+   <ghxst.focus@gmail.com>.
 
 6. Bei Kategorie 3: Reviewer-Block vor Commit.
 
-7. Nach jedem Meilenstein: dieses Handoff aktualisieren.
+7. Nach jedem Meilenstein: dieses Handoff
+   aktualisieren.
 
-8. Reviewer-Blocks in Codeblock. Bei >30 KB aufteilen.
+8. Reviewer-Blocks in Codeblock.
 
-9. Kein scope creep. Jede Auflage als eigener Block.
+9. Kein Scope-Creep. Jede Auflage als eigener
+   Block.
 
-10. Am Ende jeder Session: git status sauber, dieses
-    Handoff aktuell.
+10. Am Ende jeder Session: git status sauber,
+    dieses Handoff aktuell.
 
-================================================================
-6. WAS DER REVIEWER ZULETZT GESAGT HAT
-================================================================
-
-Runde 2, finale Fassung:
-
-  "12 von 12 kritischen Auflagen erfuellt."
-  "21 neue Befunde, davon 2 Kategorie 3."
-  "Kein Architektur-Blocker."
-  "Die Werkstatt ist auf einem guten Weg, aber noch
-   nicht produktionsreif."
-  "Die zwei kritischen Auflagen (2082, 2086) koennen
-   echten Schaden anrichten."
-  "Nach den kritischen und wichtigen Fixes: erneuter
-   Reviewer-Block."
-
-Fehlalarm zurueckgezogen: Befund N25 (print_approval_
-dokument). Der Code gibt die Commit-Message vollstaendig
-aus. HR-R7: korrigiert, kein Befund.
+Reviewer-Chat:
+  - Der Reviewer-Chat ist ein separater
+    Web-Chat (nicht der Bau-Chat).
+  - Kategorie 3: Code VOR Ausfuehrung an
+    den Reviewer.
+  - Kein Improvisieren nach NO-GO.
 
 ================================================================
 7. WERKZEUGE UND BEFEHLE
@@ -198,6 +225,18 @@ ruff:   /opt/security-ai/.venv/bin/python3 -m ruff check ...
 mypy:   /opt/security-ai/.venv/bin/python3 -m mypy ...
 pytest (aus /opt/werkstatt):
         /opt/security-ai/.venv/bin/python3 -m pytest tests/ -q
+
+Werkstatt-Lauf (aus /opt/security-ai als builder):
+  set -a
+  . /opt/security-ai/.env
+  set +a
+  cd /opt/security-ai && \
+  runuser -u builder -- env DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" \
+    /opt/security-ai/.venv/bin/python3 \
+    /opt/werkstatt/pipeline.py \
+    --project security-ai \
+    "<Block-Auftrag>"
+  unset DEEPSEEK_API_KEY
 
 Git-Commit mit Autor:
   git -c user.name="ghxstfocus" \
@@ -212,93 +251,56 @@ Reviewer-Block nach Kategorie 3:
 8. GIT-STATUS
 ================================================================
 
-Repo: /opt/werkstatt/.git
-Branch: main
-Remote: noch nicht gesetzt. Push nach GitHub offen.
-.gitignore: Cache, .venv, audit, approvals/*.db, *.env.
+Werkstatt-Repo: /opt/werkstatt/.git
+  Branch: main
+  Remote: git@github.com:ghxstfocus/werkstatt.git
+  .gitignore: Cache, .venv, audit-logs/,
+              approvals/*.db, *.env.
 
-Aktueller HEAD: 6db3c4a
+Ziel-Projekt (security-ai):
+  Repo: /opt/security-ai/.git
+  Erster Werkstatt-Commit: dd3048b
+  Zweiter Werkstatt-Commit: 3ccb883
+
+Hinweis: Der Werkstatt-Lauf benoetigt Schreibrechte
+des builder-Users im Ziel-Projekt. Nach manuellen
+git-Eingriffen als root: chown builder:builder pruefen.
 
 ================================================================
 9. HARD RULES (HR1-HR10)
 ================================================================
 
-Diese Regeln sind in pipeline.py als Konstante HARD_RULES
-definiert. Sie werden jedem System-Prompt (Reviewer,
-Builder, Test-Generator) angehaengt. Code, nicht Prompt.
+Seit Auflage 2182 sind die HARD_RULES rollenspezifisch
+getrennt:
+  - HARD_RULES_BASE (universell: HR1, HR7, HR8, HR9, HR10).
+  - HARD_RULES_REVIEWER (R1-R6).
+  - HARD_RULES_BUILDER (B1-B10).
+  - HARD_RULES_TEST_GENERATOR (T1-T4).
+build_system_prompt waehlt anhand des Agent-Namens.
 
-HR1. Faktenlage vor Meinung.
-     Keine API aus dem Gedaechtnis. Keine Datei-Inhalte
-     annehmen. Keine Zahlen schaetzen. Immer messen.
+HR2-HR6 sind entfallen. Ihre Inhalte stehen in B6-B9.
 
-HR2. Ein Ausfuehrungsblock pro logischer Einheit.
-     Kein Vorab-Stapeln mehrerer unabhaengiger Bloecke.
-
-HR3. Vor cat > auf eine angeblich neue Datei:
-     git ls-files <pfad> UND git status --porcelain.
-
-HR4. Nach jedem Patch einer bestehenden Datei:
-     assert text.count(anker) == 1.
-     Bei count != 1: STOP.
-
-HR5. Nach jedem Patch, der Tests betrifft:
-     pytest --collect-only -q <datei> VOR pytest -q.
-
-HR6. git status --porcelain zeigt M bei einer Datei,
-     die als "neu" angekuendigt war: STOP.
-
-HR7. Kategorie 3 (Auth, RBAC, CSP, Secrets, SQL,
-     Input-Validierung, Output-Escaping, DB-Schema,
-     Audit, Kern-Services): Code VOR Ausfuehrung an
-     den Reviewer. Kein Improvisieren nach NO-GO.
-
-HR8. Doku-Pflege ist Pflicht.
-     Ein Commit ohne Doku-Nachzug ist unvollstaendig.
-
-HR9. Patch-Skripte > ~3 KB in /tmp schreiben, dort
-     verifizieren, dann ausfuehren. Kein Heredoc in
-     die interaktive Shell.
-     Anker-Messung Pflicht: Anker IM Patch-Skript
-     ermitteln, nicht im Chat aus grep/wc ableiten.
-
-HR10. Nach jedem Block: Update an den Menschen
-      (HEAD, Testzahl, was erledigt, offene Punkte).
+B4 (wichtig): "Du bist kein Messender. Die Werkstatt
+ist der Messende." Wird seit Auflage 2192 durch
+ensure_ziel_gemessen automatisch durchgesetzt.
 
 ================================================================
 10. HARD RULES FUER DEN REVIEWER-CHAT (HR-R1 bis HR-R10)
 ================================================================
 
-Aus dem Security-AI-Projekt uebernommen. Projektunabhaengig.
+Unveraendert. Siehe vorherige Handoff-Version
+(Bau-Handoff-2026-10-12.md.alt, Abschnitt 10).
 
 HR-R1. Faktenlage vor Meinung.
-       Keine Zahl aus dem Gedaechtnis. Bei ruff/Config/
-       API-Fragen: erst messen lassen, dann Auflage.
-
 HR-R2. Bestandsaufnahme vor Reviewer-Block.
-       Kein Auflagen-Paket ohne gemessene Fakten.
-
 HR-R3. Auflagen-Nummern global fortlaufend.
-       Vor jeder Runde pruefen. Kein doppeltes Vergeben.
-
 HR-R4. Reviewer-Blocks immer in einen Codeblock.
-
 HR-R5. Kategorie 3 nur mit vorherigem Reviewer-Block.
-       Kein Code ohne GO.
-
-HR-R6. Wenn du unsicher bist: ESKALATION. Nicht raten.
-
+HR-R6. Wenn unsicher: ESKALATION.
 HR-R7. Fehler anerkennen, korrigieren, dokumentieren.
-       Nicht relativieren.
-
-HR-R8. Kein Scope-Creep. "Mal eben" etwas mitnehmen:
-       STOP, eigener Block.
-
-HR-R9. Fail-closed. Wenn eine Pruefung nicht moeglich
-       ist: blockieren, nicht durchlassen.
-
+HR-R8. Kein Scope-Creep.
+HR-R9. Fail-closed.
 HR-R10. Kein "das haben wir schon immer so gemacht".
-        Jede Auflage hat einen Grund. Wenn der Grund
-        nicht mehr gilt: Auflage zurueckziehen.
 
 ================================================================
 11. ANTWORTFORMATE DES REVIEWERS
@@ -320,6 +322,33 @@ ESKALATION:
     Frage: <was>
     Warum: <warum unsicher>
     Vorschlag: <was du empfiehlst>
+
+================================================================
+12. NAEECHSTE SCHRITTE (konkret)
+================================================================
+
+Der neue Bau-Chat soll:
+
+1. Diesen Handoff lesen. HEAD pruefen:
+     git -C /opt/werkstatt log -1 --oneline
+     git -C /opt/werkstatt status --porcelain
+     /opt/security-ai/.venv/bin/python3 -m pytest \
+       /opt/werkstatt/tests/ -q
+
+2. docs/PROTOKOLL-29-40.md lesen.
+
+3. Naechsten Block waehlen:
+   Empfehlung: 2191-R (Reviewer prueft gegen
+   GEMESSENER INHALT). Danach 2194-M (Audit-Debug
+   reduzieren). Danach 2182b (Reviewer-Body).
+
+4. Fuer 2191-R einen Kategorie-3-Reviewer-Block
+   formulieren. Vor Ausfuehrung.
+
+5. Nach Erfolg: git tag probebetrieb-41.
+
+6. Bei Problemen: zurueck zu diesem Handoff,
+   Faktenlage pruefen, Reviewer-Chat fragen.
 
 ================================================================
 ENDE DES HANDOFFS
