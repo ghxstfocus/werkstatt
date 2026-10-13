@@ -224,6 +224,31 @@ Merkposten 2194-M:
   reduzieren oder entfernen. Der Audit
   waechst sonst unbegrenzt.
 
+## Messung-Ausgabe-Formate
+
+Die Ausgabe-Formate der Messungen sind
+implizite Schnittstellen zwischen:
+  - run_measurement_mit_argv (Erzeuger).
+  - collect_messwerte (Konsument).
+
+Wenn ein Format geaendert wird, muessen
+alle Konsumenten mitgezogen werden.
+
+Beispiel 2176 -> 2198:
+  - 2176 kuerzte test_count auf die letzte
+    Zeile mit dem Marker STDOUT (letzte
+    Zeile):.
+  - 2135 (collect_messwerte) wurde nicht
+    mitgezogen -> test_anzahl None.
+  - 2198 hat die Regex nachgezogen.
+
+Merkposten 2198-M:
+  Messung-Ausgabe-Formate zentral dokumentieren.
+
+Merkposten 2198-M2:
+  Bei Format-Aenderung Konsumenten pruefen
+  (grep nach dem alten Format-String).
+
 ## Fail-closed-Prinzip
 
 Wenn eine Pruefung nicht moeglich ist: blockieren,

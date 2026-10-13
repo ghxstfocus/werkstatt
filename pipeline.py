@@ -1548,8 +1548,11 @@ def collect_messwerte(state: RunState) -> dict[str, Any]:
     )
 
     # Pro Messung: (mid, rc, stdout)
+    # Auflage 2198: test_count nutzt seit 2176 das Format
+    # STDOUT (letzte Zeile). Der Zusatz ist optional.
     treffer = _re.findall(
-        r"=== (\w+) ===\nARGV: [^\n]*\nRC: (\d+)\nSTDOUT:\n(.*?)STDERR:",
+        r"=== (\w+) ===\nARGV: [^\n]*\nRC: (\d+)\n"
+        r"STDOUT(?: \(letzte Zeile\))?:\n(.*?)STDERR:",
         basis, _re.DOTALL,
     )
     werte: dict[str, Any] = {

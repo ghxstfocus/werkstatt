@@ -3448,3 +3448,61 @@ class TestFailClosedRollback:
             "commit_no_go_max_versuche")
         assert rc == 7
         assert called["rollback"] == 1
+
+
+
+# =====================================================================
+# 2198: collect_messwerte akzeptiert Kuerzungsformat
+# =====================================================================
+
+class TestCollectMesswerteFormate:
+    """Auflage 2198: Regex akzeptiert beide STDOUT-Formate."""
+
+    def _state(self) -> pipeline.RunState:
+        state = build_test_state()
+        state.basis_protokoll = ""
+        state.basis_protokoll_nach_apply = ""
+        return state
+
+    def test_collect_messwerte_kuerzungsformat(self) -> None:
+        state = self._state()
+        state.basis_protokoll = (
+            "=== test_count ===\n"
+            "ARGV: pytest --collect-only -q\n"
+            "RC: 0\n"
+            "STDOUT (letzte Zeile):\n"
+            "1313 tests collected in 0.48s\n"
+            "STDERR:\n\n"
+        )
+        w = pipeline.collect_messwerte(state)
+        assert w["test_anzahl"] == 1313
+
+    def test_collect_messwerte_altes_format(self) -> None:
+        state = self._state()
+        state.basis_protokoll = (
+            "=== test_count ===\n"
+            "ARGV: pytest --collect-only -q\n"
+            "RC: 0\n"
+            "STDOUT:\n"
+            "100 tests collected\n"
+            "STDERR:\n\n"
+        )
+        w = pipeline.collect_messwerte(state)
+        assert w["test_anzahl"] == 100
+
+    def test_collect_messwerte_leer(self) -> None:
+        state = self._state()
+        w = pipeline.collect_messwerte(state)
+        assert w["test_anzahl"] is None
+
+    def test_collect_messwerte_py_compile_alt_format(self) -> None:
+        state = self._state()
+        state.basis_protokoll = (
+            "=== py_compile ===\n"
+            "ARGV: python -m py_compile x.py\n"
+            "RC: 0\n"
+            "STDOUT:\n\n"
+            "STDERR:\n\n"
+        )
+        w = pipeline.collect_messwerte(state)
+        assert w["py_compile"] == "gruen"
