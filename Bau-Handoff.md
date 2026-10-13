@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 50)
-Werkstatt-HEAD: 471d131 (Tag probebetrieb-50)
+Stand: 2026-10-13 (nach Probebetrieb 54)
+Werkstatt-HEAD: 4667e7a (Tag probebetrieb-53)
 Letzter Commit in security-ai: 3ccb883
 Branch: main
 Tests: 270 passed
@@ -44,18 +44,18 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 471d131 (probebetrieb-50)
+  HEAD 4667e7a (probebetrieb-53)
   Tests: 270 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
 
 Ziel-Projekt security-ai:
-  HEAD c593cb8 (DNS-Fehlerfall, 2199-Zwischenstand)
+  HEAD 35e5178 (dns_lookup IPv6-Feld, 2199-Zwischenstand 2)
   Vorgaenger 3ccb883 (Traceroute), dd3048b (PingError)
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -50
+  probebetrieb-7, -17, -29 bis -53
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
   probebetrieb-1 bis -28 (historisch, vor dieser Session)
@@ -128,6 +128,7 @@ Kurzfassung:
   PB-52: Fix. reviewer.md Body an R7 angeglichen
          (2191-R3).
   PB-53: Doku. Handoff-Update 2199-Zwischenstand.
+  PB-54: Doku. Handoff-Update 2199a als Auflage.
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -152,23 +153,41 @@ KRITISCH: keine.
 
 WICHTIG (naechste Session):
   2199: R7 im Werkstatt-Lauf messen. Bisheriges:
-        Lauf am 2026-10-13 (DNS-Fehlerfall) hat R7
-        nicht getriggert (Anker korrekt, Code-GO
-        Runde 1). Loop scheiterte post-apply an
-        ruff SIM117. Naechster Auftrag muss einen
-        falschen Anker provozieren (Builder setzt
-        Anker aus CODE-ENTWURF gegen bestehende
-        Datei, Whitespace/Zeilenende weichen ab).
+        Lauf 1 (DNS-Fehlerfall) und Lauf 2
+        (dns_lookup IPv6) haben R7 NICHT getriggert
+        (Anker korrekt, Code-GO Runde 1). Beide
+        Laeufe scheiterten post-apply (ruff SIM117
+        bzw. mypy str|int). R7 ist weder bestaetigt
+        noch widerlegt.
+        Naechster Auftrag muss einen falschen Anker
+        provozieren (mehrzeiliger Anker aus CODE-
+        ENTWURF gegen bestehende Datei).
         Kategorie 3.
 
-  2199a: Auto-Repair post-apply-Basis-Gate.
-        Merkposten, nicht Auflage. Neue Fail-Modus-
-        Klasse: post-apply-Basis-Gate rot, Reviewer-
-        Vorschlag liegt vor, Loop wendet nicht an.
-        Verantwortungsfrage (HR-R9, Lehre 4) vor
-        Umsetzung klaeren: wer traegt Verantwortung,
-        wenn Auto-Repair Semantik aendert? Welche
-        Codes fixbar? Whitelist. Kategorie 3.
+  2199a: Recovery-Pfad post-apply-Basis-Gate.
+        AUFLAGE (hochgestuft aus Merkposten).
+        Zwei 2199-Laeufe in Folge mit demselben
+        Muster: post-apply-Basis-Gate rot,
+        Reviewer-Vorschlag liegt vor, Loop wendet
+        nicht an, Mensch muss manuell abschliessen.
+        Reviewer-Entscheidung: Option 3, aber erst
+        Zustandsmaschine.
+        Schritt A (Zustandsmaschine): Klaeren
+          - Recovery-Lauf vs. normaler Builder-Lauf.
+          - Zaehlung in state.review_runden?
+          - Reviewer sieht Recovery als neue Runde?
+          - max_llm_calls-Zaehlung.
+          - Strukturierter Ort fuer Reviewer-
+            Vorschlag in state (heute Freitext?).
+        Schritt B (Recovery-Zweig):
+          Trigger: Basis-Gate rot UND Reviewer-
+            Verdict mit strukturiertem Vorschlag.
+          Nicht bei rot ohne Vorschlag (Fail-closed).
+          Max 1 Recovery-Zyklus, dann Fail-closed.
+        Verworfen: Option 1 (Lint-Auto-Repair,
+          Verantwortungsfrage offen), Option 2
+          (mypy hat kein --fix).
+        Kategorie 3.
 
   2191-R2b-T: Test fuer commit_review_ohne_messung.
            main() ist nicht isoliert testbar. Test-
@@ -381,11 +400,13 @@ Der neue Bau-Chat soll:
 
 2. docs/PROTOKOLL-29-40.md lesen.
 
-3. Naechsten Block waehlen:
-   Empfehlung: 2199 mit R7-provozierendem Auftrag.
-   Danach 2183 (Solver-Agent, P1-P9).
+3. Reihenfolge (Reviewer-verbindlich):
+   a) 2199 mit R7-provozierendem Auftrag.
+   b) 2199a Zustandsmaschine (Kategorie 3).
+   c) 2199a Recovery-Zweig.
+   d) 2183 Solver (P1-P9).
 
-4. Fuer 2199 und 2183 Kategorie-3-Reviewer-
+4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
    Blocks formulieren. Vor Ausfuehrung.
 
 5. Nach Erfolg: git tag probebetrieb-<n>.
