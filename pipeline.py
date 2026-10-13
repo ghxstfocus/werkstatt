@@ -62,31 +62,25 @@ AUDIT_FILE_NAME = "agent-pipeline.jsonl"
 
 
 
-# HR1-HR10. Werden jedem System-Prompt angehaengt, unabhaengig
-# von der Rolle. Code, nicht Prompt. Nicht ueberschreibbar.
 # In Anlehnung an docs/WORKFLOW.md.
-HARD_RULES = """
-## HARD RULES (projektunabhaengig, verbindlich)
+# Auflage 2182: HARD_RULES_BASE + rollenspezifisch.
+#
+# HARD_RULES_BASE gilt fuer ALLE Rollen.
+# HARD_RULES_<ROLLE> ergaenzt die Basis mit
+# rollenspezifischen Regeln. build_system_prompt
+# waehlt anhand des Agent-Namens.
+#
+# Nummerierung:
+#   HR1, HR7, HR8, HR9, HR10 bleiben in BASE.
+#   HR2-HR6 sind entfallen; Inhalte stehen in B6-B9.
+#   Rollenspezifisch: R*, B*, T*.
+
+HARD_RULES_BASE = """
+## HARD RULES (universell, verbindlich)
 
 HR1. Faktenlage vor Meinung.
      Keine API aus dem Gedaechtnis. Keine Datei-Inhalte annehmen.
      Keine Zahlen schaetzen. Immer messen, nicht erinnern.
-
-HR2. Ein Ausfuehrungsblock pro logischer Einheit.
-     Kein Vorab-Stapeln mehrerer unabhaengiger Bloecke.
-
-HR3. Vor cat > auf eine angeblich neue Datei:
-     git ls-files <pfad> UND git status --porcelain pruefen.
-
-HR4. Nach jedem Patch einer bestehenden Datei:
-     assert text.count(anker) == 1.
-     Bei count != 1: STOP.
-
-HR5. Nach jedem Patch, der Tests betrifft:
-     pytest --collect-only -q <datei> VOR pytest -q <datei>.
-
-HR6. git status --porcelain zeigt M bei einer Datei, die als
-     "neu" angekuendigt war: STOP.
 
 HR7. Kategorie 3: Code VOR Ausfuehrung an den Reviewer.
      Kein Improvisieren nach NO-GO.
@@ -100,6 +94,99 @@ HR9. Patch-Skripte > ~3 KB in /tmp schreiben, dort
 
 HR10. Nach jedem abgeschlossenen Block: Update an den Menschen.
 """
+
+
+HARD_RULES_REVIEWER = """
+## HARD RULES (Rolle: Reviewer)
+
+R1. Verlange gemessene Zahlen. Der MESSWERTE-Block
+    ist die Quelle.
+
+R2. Vergleiche Commit-Message-Zahlen mit dem
+    MESSWERTE-Block. Abweichung: COMMIT-NO-GO.
+
+R3. Kein Selbst-Messen. Der Builder hat die
+    Zieldatei-Ausschnitte. Wenn du Zweifel hast:
+    COMMAND: RUN read_file <pfad>.
+    Sonst: vertraue der Werkstatt-Mechanik
+    (Anker-Pruefung bei apply_code_patches).
+
+R4. Pruefe Pflichtabschnitte der Commit-Message
+    (Ausgangslage, Aenderung, Tests, Verifikation,
+    Reviewed).
+
+R5. Pruefe Patch-Struktur (PATCH-BEGINN/ENDE,
+    anker/ersatz, ersatz != anker).
+
+R6. Du lieferst entweder COMMAND: RUN ODER ein
+    Verdict (GO/NO-GO/ESKALATION), niemals beides.
+    (Lehre aus Probebetrieb 12.)
+"""
+
+
+HARD_RULES_BUILDER = """
+## HARD RULES (Rolle: Builder)
+
+B1. Der MESSWERTE-Block ist die EINZIGE Quelle fuer
+    Zahlen in der Commit-Message. Verwende keine
+    anderen Zahlen.
+
+B2. Wenn eine Zahl nicht im MESSWERTE-Block steht:
+    schreibe "nicht gemessen".
+
+B3. Erfinden von Zahlen ist ein HR1-Verstoss.
+
+B4. Du bist kein Messender. Die Werkstatt ist der
+    Messende. Uebernimm die Werte aus dem
+    MESSWERTE-Block.
+
+B5. Du darfst COMMAND: RUN liefern, um Messungen
+    anzufordern (Builder COMMAND-Loop).
+
+B6. Ein Ausfuehrungsblock pro logischer Einheit.
+    Kein Vorab-Stapeln mehrerer unabhaengiger
+    Bloecke.
+
+B7. Vor cat > auf eine angeblich neue Datei:
+    git ls-files <pfad> UND git status --porcelain
+    pruefen.
+
+B8. Nach jedem Patch einer bestehenden Datei:
+    assert text.count(anker) == 1.
+    Bei count != 1: STOP.
+
+B9. Nach jedem Patch, der Tests betrifft:
+    pytest --collect-only -q <datei> VOR
+    pytest -q <datei>.
+
+B10. Wenn ein Anker nicht im Zieldatei-Ausschnitt
+     steht: "kein Patch fuer diese Datei".
+     Kein Erfinden.
+"""
+
+
+HARD_RULES_TEST_GENERATOR = """
+## HARD RULES (Rolle: Test-Generator)
+
+T1. Beschreibe Test-Vorschlaege. Fuehre sie NICHT aus.
+
+T2. Keine Zahlen erfinden. Zahlen nur, wenn sie im
+    MESSWERTE-Block stehen.
+
+T3. Keine Datei schreiben. Nur Text.
+
+T4. Keine eigene Meinung zum Code.
+"""
+
+
+# Mapping Agent-Name -> Rollen-Regeln.
+# coverage und chaos sind No-LLM-Rollen und rufen
+# build_system_prompt nicht auf. Deshalb kein Eintrag.
+HARD_RULES_BY_ROLE = {
+    "reviewer": HARD_RULES_REVIEWER,
+    "builder": HARD_RULES_BUILDER,
+    "test_generator": HARD_RULES_TEST_GENERATOR,
+}
 
 # Auflage 2041: Groessenlimits fuer das Messprotokoll.
 MAX_PROTOKOLL_PER_COMMAND = 10_000
@@ -531,11 +618,17 @@ def parse_empfehlung(text: str) -> dict[str, str]:
 
 def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
                         doc_keys: list[str]) -> str:
-    """Baut System-Prompt aus Rollen-Body + HARD_RULES + Projekt-Doku.
+    """Baut System-Prompt aus Rollen-Body + HARD_RULES_BASE + Rolle + Projekt-Doku.
 
-    Reihenfolge: HR-Regeln zuerst (stabil), dann Projekt-Doku.
+    Auflage 2182: HARD_RULES_BASE + rollenspezifische
+    HARD_RULES_<ROLLE> (anhand agent["name"]).
+    Reihenfolge: Rollen-Body, BASE, Rolle, Projekt-Doku.
     """
-    parts = [agent["body"], HARD_RULES]
+    parts = [agent["body"], HARD_RULES_BASE]
+    agent_name = agent.get("name", "")
+    rollen_rules = HARD_RULES_BY_ROLE.get(agent_name, "")
+    if rollen_rules:
+        parts.append(rollen_rules)
     if doc_keys:
         parts.append("\n\n--- PROJEKT-DOKU ---")
         for key in doc_keys:

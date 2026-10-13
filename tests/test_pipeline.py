@@ -13,6 +13,8 @@ from pathlib import Path
 # Werkstatt in den Import-Pfad
 sys.path.insert(0, "/opt/werkstatt")
 
+import re
+
 import pytest
 
 import pipeline
@@ -2441,3 +2443,65 @@ class TestReadTargetSnippets:
         # 'der ALTE Text') darf nicht mehr im
         # Code-Patch-Prompt stehen.
         assert "<der ALTE Text, count(anker) == 1>" not in quelle
+
+
+# =====================================================================
+# build_system_prompt (Auflage 2182)
+# =====================================================================
+
+def _prompt_fuer_rolle(rolle: str) -> str:
+    """Baut einen minimalen System-Prompt fuer eine Rolle."""
+    agent = {"name": rolle, "body": f"Du bist {rolle}."}
+    return pipeline.build_system_prompt(agent, {}, [])
+
+
+class TestBuildSystemPrompt:
+    """Auflage 2182: HARD_RULES pro Rolle trennen."""
+
+    ROLLEN = ("reviewer", "builder", "test_generator")
+
+    def test_base_immer_enthalten(self) -> None:
+        """BASE-Regeln gelten fuer alle Rollen."""
+        for rolle in self.ROLLEN:
+            s = _prompt_fuer_rolle(rolle)
+            for hr in ("HR1.", "HR7.", "HR8.", "HR9.", "HR10."):
+                muster = rf"(?<![A-Z]){re.escape(hr)}"
+                assert re.search(muster, s), f"{hr} fehlt in {rolle}"
+
+    def test_reviewer_enthaelt_r1_bis_r6(self) -> None:
+        s = _prompt_fuer_rolle("reviewer")
+        for r in ("R1.", "R2.", "R3.", "R4.", "R5.", "R6."):
+            muster = rf"(?<![A-Z]){re.escape(r)}"
+            assert re.search(muster, s), f"{r} fehlt im Reviewer-Prompt"
+
+    def test_builder_enthaelt_b1_bis_b10(self) -> None:
+        s = _prompt_fuer_rolle("builder")
+        for b in ("B1.", "B2.", "B3.", "B4.", "B5.",
+                  "B6.", "B7.", "B8.", "B9.", "B10."):
+            muster = rf"(?<![A-Z]){re.escape(b)}"
+            assert re.search(muster, s), f"{b} fehlt im Builder-Prompt"
+
+    def test_test_generator_enthaelt_t1_bis_t4(self) -> None:
+        s = _prompt_fuer_rolle("test_generator")
+        for t in ("T1.", "T2.", "T3.", "T4."):
+            muster = rf"(?<![A-Z]){re.escape(t)}"
+            assert re.search(muster, s), f"{t} fehlt im Test-Generator-Prompt"
+
+    def test_kein_monolith_hard_rules(self) -> None:
+        """Auflage 2182: Der Monolith HARD_RULES existiert nicht mehr."""
+        with pytest.raises(AttributeError):
+            _ = pipeline.HARD_RULES  # type: ignore[attr-defined]
+
+    def test_reviewer_prompt_enthaelt_keine_builder_regeln(self) -> None:
+        """Auflage 2182: Rollen-Regeln sind getrennt."""
+        s = _prompt_fuer_rolle("reviewer")
+        for b in ("B1.", "B5.", "B10."):
+            muster = rf"(?<![A-Z]){re.escape(b)}"
+            assert re.search(muster, s) is None, f"{b} faelschlich im Reviewer-Prompt"
+
+    def test_builder_prompt_enthaelt_keine_reviewer_regeln(self) -> None:
+        """Auflage 2182: Rollen-Regeln sind getrennt."""
+        s = _prompt_fuer_rolle("builder")
+        for r in ("R1.", "R6."):
+            muster = rf"(?<![A-Z]){re.escape(r)}"
+            assert re.search(muster, s) is None, f"{r} faelschlich im Builder-Prompt"

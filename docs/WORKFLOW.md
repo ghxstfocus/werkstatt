@@ -2,7 +2,8 @@
 
 Regeln fuer die Entwicklung der Werkstatt selbst.
 Nicht zu verwechseln mit den HR-Regeln der Agenten
-(die stehen in pipeline.py als HARD_RULES).
+(die stehen in pipeline.py als HARD_RULES_BASE
+und rollenspezifische HARD_RULES_<ROLLE>).
 
 ## Anti-Patterns
 

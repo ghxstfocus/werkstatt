@@ -117,6 +117,8 @@ coverage und chaos sind No-LLM-Rollen. Ihre agents/*.md-Dateien
 sind reine Dokumentation, der Code ruft sie direkt (nicht ueber
 einen LLM-Call).
 
-Die Hard Rules (HR1-HR10) sind zentral in pipeline.py als
-HARD_RULES definiert. Sie werden jedem Agenten-System-Prompt
-angehaengt, unabhaengig von der Rolle.
+Die Hard Rules stehen in pipeline.py: HARD_RULES_BASE
+(universell: HR1, HR7, HR8, HR9, HR10) und die
+rollenspezifischen HARD_RULES_REVIEWER / _BUILDER /
+_TEST_GENERATOR. build_system_prompt waehlt anhand des
+Agent-Namens.
