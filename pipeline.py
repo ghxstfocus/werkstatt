@@ -2659,6 +2659,18 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             print("[!] Commit-Paket leer. Kein Commit moeglich.")
             state.commit_paket["message"] = "(leer, Builder hat nichts geliefert)"
 
+        # Auflage 2191-R2b: Fail-closed, wenn mess_protokoll leer ist.
+        # Phase 2 kann ohne Messung R7 nicht anwenden.
+        if not state.mess_protokoll:
+            print("[!] mess_protokoll leer. Commit-Review kann "
+                  "Anker nicht pruefen (R7). Fail closed.")
+            audit("commit_review_ohne_messung",
+                  {"grund": "mess_protokoll_leer"},
+                  project_dir, project_name)
+            return _fail_closed(
+                state, project_dir, project_name, 9,
+                "commit_review_ohne_messung")
+
         # Auflage 2118: Commit-NO-GO-Loop, max 2 Versuche.
         max_commit_versuche = 2
         commit_versuche = 0
