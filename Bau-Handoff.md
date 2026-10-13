@@ -166,6 +166,7 @@ Kurzfassung:
          zaehle_no_go_in_folge, recovery-Marker
          ab 2. NO-GO, recovery_hinweis_block
          neutral. +8 Tests, 301 passed.
+  PB-76: Doku. Handoff auf PB-75.
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -309,9 +310,15 @@ WICHTIG (naechste Session):
         151 Fehler (nicht 139). Differenz 12.
         Alle vor Zeile 3739 (vor A3-Tests).
         A3-Tests selbst: mypy-sauber.
-        Merkposten tests-mypy-151 angelegt.
         Altes Problem, eigener Block.
-        Kategorie 2.
+        Kategorie 2. Siehe tests-mypy-151.
+
+  tests-mypy-151: 151 Fehler in
+        tests/test_pipeline.py (nicht 139
+        laut Handoff-Kopf). Differenz 12:
+        entweder neu seit PB-45 oder
+        Zaehlfehler. Alle vor Zeile 3739.
+        Eigener Block. Kategorie 2.
 
   Phase-2-COMMAND-Schleichpfad:
         classify_verdict erkennt COMMAND in
@@ -367,6 +374,38 @@ WICHTIG (naechste Session):
 
 
 MITTEL (Merkposten):
+  Werkstatt-Vertrag (2183). Kategorie 3.
+        Fuenf Vertraege zusammenfuehren:
+        1. Anker-Vertrag (woertlich |
+           Kuerzungs-Marker | +2-Shift;
+           drei Konsumenten).
+        2. Auftrags-Vertrag (Auftrag
+           gegen Zielcode geprueft).
+        3. Patch-Vertrag (PATCH-BEGINN/
+           ENDE, whitelist, count == 1,
+           ersatz != anker).
+        4. Fail-Vertrag (rc-Semantik,
+           Audit-Events, Endlog, Rollback).
+        5. Rollen-Vertrag (wer darf was,
+           inkl. solver, scaffolder).
+        Plus docs/KONVENTIONEN.md.
+        Format: docs/WERKSTATT-VERTRAG.md
+        + .yaml (maschinenlesbar).
+        Zeitpunkt: NACH 2183 B und C.
+        Offene Design-Fragen W1-W4:
+          W1 Eigentuemer (Auftraggeber
+             inhaltlich, Bau-Chat Konsistenz,
+             Reviewer prueft).
+          W2 Sanktion bei Verletzung:
+             Fail-closed, im Vertrag.
+          W3 Versionierung: Version im YAML,
+             im Audit-Log jedes Laufs.
+          W4 Bezug zu Auflagen: bei Wider-
+             spruch gewinnt die Auflage, bis
+             sie zurueckgezogen wird.
+        Migration in 6 Schritten (Vertrag-
+        Doc, Patch+Anker, Auftrag, Fail,
+        Rollen, Konventionen), je Kategorie 3.
   2183: Solver-Agent. VORGEZOGEN nach WICHTIG
         (siehe oben). Design P1-P9:
         - P1: Schwellwerte Levenshtein/Token-Overlap.
@@ -574,16 +613,22 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge:
-   a) 2183 A3 (Trigger-Erkennung).
-      Naechster Bau-Block.
-   b) 2183 B (Solver-Code).
-   e) 2183 B (Solver-Code).
-   f) 2183 C (COMMAND: RUN solver).
-   g) 2183-AQ Auftragsqualitaet.
-   h) 2200b/c/T Aggregator-Verfeinerung.
-   i) 2199a Zustandsmaschine (Kategorie 3).
-   j) 2199a Recovery-Zweig.
-   k) 2199-R7-P1 (Phase-1-R7-Wirkung).
+   a) 2183 A4/A5 (P1 Gegenstandsvergleich).
+      Kategorie 3. VOR B (Reviewer-
+      Entscheidung 2026-10-13: A3 setzt
+      Marker zu weit; P1 praezisiert,
+      bevor B LLM-Calls kostet).
+   b) 2183 B (Solver-Code). Kategorie 3.
+      Muss tolerant sein fuer ANDERER_
+      FEHLER (P6, T1-Kopplung).
+   c) 2183 C (COMMAND: RUN solver).
+   d) 2183-AQ Auftragsqualitaet.
+   e) 2200b/c/T Aggregator-Verfeinerung.
+   f) 2199a Zustandsmaschine (Kategorie 3).
+   g) 2199a Recovery-Zweig.
+   h) 2199-R7-P1 (Phase-1-R7-Wirkung).
+   i) Werkstatt-Vertrag (nach 2183 B/C,
+      siehe MITTEL).
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
    Blocks formulieren. Vor Ausfuehrung.
