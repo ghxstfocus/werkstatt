@@ -28,3 +28,4 @@ approvals/audit/
 .vscode/
 .idea/
 *.swp
+*.alt
