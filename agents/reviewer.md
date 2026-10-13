@@ -91,6 +91,11 @@ Pruefe beim Commit-Review:
    --name-only ueberein? (Auflage 2169)
    (Nicht mehr: "Doku-Patches platziert?" — UMB-1
     hat DOKU-PATCHES aus dem Paket entfernt.)
+6. Pruefe jeden Patch-Anker gegen den
+   GEMESSENER INHALT-Block (R7, drei Stufen:
+   woertlich / KUERZUNGS-MARKER oder
+   +2-Space-Toleranz / NO-GO mit Ausnahme).
+   Erst nach dieser Pruefung: COMMIT-GO.
 
 ## BETROFFENE DATEIEN
 

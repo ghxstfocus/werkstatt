@@ -1885,6 +1885,34 @@ def format_messwerte_block(werte: dict[str, Any]) -> str:
     )
 
 
+def format_code_patches_fuer_commit(
+        patches: list[dict[str, str]]) -> str:
+    """Auflage 2191-R2: formatiert CODE-PATCHES fuer commit_input.
+
+    Nur pfad und anker. Kein ersatz (Reviewer-Begruendung P1:
+    ersatz ist nicht Pruefgegenstand in Phase 2, steht in
+    Commit-Message und git diff).
+
+    Format:
+      PATCH <n> (pfad):
+      anker:
+      <anker>
+      ---
+    """
+    if not patches:
+        return "(keine)"
+    bloecke: list[str] = []
+    for i, p in enumerate(patches, start=1):
+        pfad = p.get("pfad", "")
+        anker = p.get("anker", "")
+        bloecke.append(
+            f"PATCH {i} ({pfad}):\n"
+            f"anker:\n{anker}\n"
+            "---"
+        )
+    return "\n".join(bloecke)
+
+
 def build_commit_paket(state: RunState) -> dict[str, Any]:
     """Bittet den Builder um einen Commit-Paket-Vorschlag.
 
@@ -2654,6 +2682,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                     for d in state.commit_paket.get("dateien", [])) +
                 "\n\n"
                 + format_messwerte_block(collect_messwerte(state))
+                + "\n\nGEMESSENER INHALT (verbindlich, "
+                + "gewinnt gegen ZIELDATEIEN):\n"
+                + f"{state.mess_protokoll or '(keine)'}\n\n"
+                + "CODE-PATCHES (angewendet):\n"
+                + format_code_patches_fuer_commit(state.code_patches)
                 + "\n\n"
                 f"AUFLAGEN AUS DIESER RUNDE:\n{auflagen_text}\n\n"
                 "Antworte mit COMMIT-GO, COMMIT-NO-GO oder "
@@ -2665,6 +2698,9 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                                   max_minutes=max_minutes)
             if rc is not None:
                 return rc
+            if len(commit_input) > 50000:
+                print(f"[WARN] commit_input {len(commit_input)} "
+                      f"Zeichen (> 50000). Kontext-Risiko.")
             reply = ask_llm(api_key, reviewer_prompt, commit_input,
                             state.reviewer_verdict_model, 0.0,
                             state.llm_timeout_s,
