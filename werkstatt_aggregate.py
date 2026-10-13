@@ -76,11 +76,7 @@ def aggregiere(project: str, fenster_tage: int) -> dict[str, Any]:
             lc = e.get("llm_calls")
             if isinstance(lc, int):
                 llm_calls.append(lc)
-        elif kind == "review_round":
-            v = e.get("verdict", "")
-            if v:
-                verdicts[v] += 1
-        elif kind == "commit_review":
+        elif kind in ("review_round", "commit_review"):
             v = e.get("verdict", "")
             if v:
                 verdicts[v] += 1
@@ -103,19 +99,20 @@ def aggregiere(project: str, fenster_tage: int) -> dict[str, Any]:
         run_id = s.get("run_id", "")
         start_ts = s.get("timestamp", "")
         # Endlog mit gleicher run_id
+        ende_event: dict[str, Any] | None = None
         if run_id:
-            e = next((x for x in enden
-                      if x.get("run_id") == run_id), None)
-        else:
-            e = None
+            for x in enden:
+                if x.get("run_id") == run_id:
+                    ende_event = x
+                    break
         letzte.append({
             "run_id": run_id,
             "start": start_ts,
-            "ende": (e.get("timestamp", "") if e else ""),
-            "rc": (e.get("rc") if e else None),
-            "grund": (e.get("grund", "") if e else "kein_ende"),
-            "llm_calls": (e.get("llm_calls") if e else None),
-            "runden": (e.get("runden") if e else None),
+            "ende": (ende_event.get("timestamp", "") if ende_event else ""),
+            "rc": (ende_event.get("rc") if ende_event else None),
+            "grund": (ende_event.get("grund", "") if ende_event else "kein_ende"),
+            "llm_calls": (ende_event.get("llm_calls") if ende_event else None),
+            "runden": (ende_event.get("runden") if ende_event else None),
         })
 
     lc_min = min(llm_calls) if llm_calls else None

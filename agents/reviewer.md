@@ -96,10 +96,34 @@ Pruefe beim Commit-Review:
    (Nicht mehr: "Doku-Patches platziert?" — UMB-1
     hat DOKU-PATCHES aus dem Paket entfernt.)
 6. Pruefe jeden Patch-Anker gegen den
-   GEMESSENER INHALT-Block (R7, drei Stufen:
-   woertlich / KUERZUNGS-MARKER oder
-   +2-Space-Toleranz / NO-GO mit Ausnahme).
-   Erst nach dieser Pruefung: COMMIT-GO.
+   GEMESSENER INHALT-Block (R7).
+   In Phase 2 gibt es KEIN COMMAND. Der
+   apply-Erfolg ersetzt das Nachmessen.
+   R7 in Phase 2 hat vier statt drei Stufen,
+   weil Stufe 2a und 2b zu COMMIT-GO mit
+   Bemerkung fuehren (nicht zu COMMAND):
+     Stufe 1: Anker woertlich enthalten
+              -> COMMIT-GO.
+     Stufe 2a: KUERZUNGS-MARKER im
+               GEMESSENER INHALT
+               ("[... Gesamtlimit erreicht ...]"
+               oder "[... gekuerzt, N Zeichen
+               weggelassen ...]")
+               -> COMMIT-GO mit Bemerkung
+                  (Freitext nach COMMIT-GO):
+                  "Anker wegen Kuerzung nicht
+                   verifizierbar; apply hat
+                   akzeptiert (2165)."
+     Stufe 2b: +2-Spaces-verschobene
+               Variante woertlich enthalten
+               -> COMMIT-GO mit Bemerkung
+                  (Freitext nach COMMIT-GO):
+                  "Anker nicht woertlich;
+                   +2-Shift durch apply
+                   akzeptiert (Auflage 2165)."
+     Stufe 3: in keiner Variante auffindbar
+              -> COMMIT-NO-GO.
+   Nur Stufe 3 fuehrt zu COMMIT-NO-GO.
 
 ## BETROFFENE DATEIEN
 
