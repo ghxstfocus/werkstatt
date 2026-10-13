@@ -838,6 +838,9 @@ class RunState:
     basis_protokoll_nach_apply: str = ""  # UMB-1b
     mess_protokoll: str = ""
     code_entwurf: str = ""
+    # Auflage 2183 A1b: Historisierung fuer Solver-Vergleich.
+    code_entwurf_historie: list[dict[str, Any]] = \
+        field(default_factory=list)
     code_patches: list[dict[str, str]] = field(default_factory=list)  # UMB-1b
     test_vorschlaege: str = ""
     commit_paket: dict[str, Any] = field(default_factory=dict)
@@ -1203,6 +1206,26 @@ def parse_commit_paket(text: str) -> dict[str, Any]:
         paket["doku_patches"] = _parse_patches(m.group(1))
 
     return paket
+
+
+def record_code_entwurf(state: RunState, entwurf: str,
+                        phase: str = "normal") -> None:
+    """Auflage 2183 A1b: speichert Builder-Entwurf in der Historie.
+
+    Setzt state.code_entwurf UND haengt einen Eintrag
+    an state.code_entwurf_historie an.
+
+    Eintrag: {runde, entwurf, phase}.
+    runde = len(review_runden) + 1 (naechste Runde).
+    phase = "normal" oder "recovery".
+    Kuerzung: max 10 Eintraege, aeltester faellt weg.
+    """
+    state.code_entwurf = entwurf
+    runde = len(state.review_runden) + 1
+    state.code_entwurf_historie.append(
+        {"runde": runde, "entwurf": entwurf, "phase": phase})
+    if len(state.code_entwurf_historie) > 10:
+        state.code_entwurf_historie.pop(0)
 
 
 def parse_code_patches(text: str) -> list[dict[str, str]]:

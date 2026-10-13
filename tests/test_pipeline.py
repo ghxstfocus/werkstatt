@@ -3561,3 +3561,48 @@ class TestRecoveryZustand:
         assert "## RECOVERY-RUNDE" in s
         # Text enthaelt Umbruch "Solver-\nBefund".
         assert "Solver-" in s and "Befund" in s
+
+
+# =====================================================================
+# 2183 A1b: code_entwurf_historie
+# =====================================================================
+
+class TestCodeEntwurfHistorie:
+    """Auflage 2183 A1b: Historisierung der Entwuerfe."""
+
+    def _state(self) -> object:
+        from pathlib import Path
+        return pipeline.RunState(
+            block_id="t", aufgabe="a", start_ts="",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=[], api_key="", budget={},
+            agent_docs={}, project_dir=Path("/tmp"))
+
+    def test_historie_leer_initial(self) -> None:
+        s = self._state()
+        assert s.code_entwurf_historie == []
+
+    def test_historie_zwei_setzungen(self) -> None:
+        s = self._state()
+        pipeline.record_code_entwurf(s, "entwurf1")
+        s.review_runden.append({"runde": 1, "verdict": "NO-GO",
+                                "raw": "", "recovery": False})
+        pipeline.record_code_entwurf(s, "entwurf2")
+        assert len(s.code_entwurf_historie) == 2
+        assert s.code_entwurf_historie[0]["runde"] == 1
+        assert s.code_entwurf_historie[1]["runde"] == 2
+        assert s.code_entwurf_historie[0]["phase"] == "normal"
+
+    def test_historie_kuerzung(self) -> None:
+        s = self._state()
+        for i in range(12):
+            pipeline.record_code_entwurf(s, f"entwurf{i}")
+        assert len(s.code_entwurf_historie) == 10
+        assert s.code_entwurf_historie[0]["entwurf"] == "entwurf2"
+
+    def test_historie_recovery_phase(self) -> None:
+        s = self._state()
+        s.review_runden.append({"runde": 1, "verdict": "NO-GO",
+                                "raw": "", "recovery": True})
+        pipeline.record_code_entwurf(s, "r", phase="recovery")
+        assert s.code_entwurf_historie[0]["phase"] == "recovery"
