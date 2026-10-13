@@ -3508,3 +3508,56 @@ class TestCollectMesswerteFormate:
         )
         w = pipeline.collect_messwerte(state)
         assert w["py_compile"] == "gruen"
+
+
+# =====================================================================
+# 2183 A1a: Recovery-Zustand
+# =====================================================================
+
+class TestRecoveryZustand:
+    """Auflage 2183 A1a: Recovery-Marker und Prompt-Block."""
+
+    def test_formatiere_runden_ohne_recovery(self) -> None:
+        runden = [
+            {"runde": 1, "verdict": "NO-GO", "raw": "x",
+             "recovery": False},
+            {"runde": 2, "verdict": "GO", "raw": "y",
+             "recovery": False},
+        ]
+        s = pipeline.formatiere_runden(runden)
+        assert "[ROUND 1 - NO-GO]" in s
+        assert "[ROUND 2 - GO]" in s
+        assert "RECOVERY" not in s
+
+    def test_formatiere_runden_mit_recovery(self) -> None:
+        runden = [
+            {"runde": 1, "verdict": "NO-GO", "raw": "x",
+             "recovery": False},
+            {"runde": 2, "verdict": "GO", "raw": "y",
+             "recovery": True},
+        ]
+        s = pipeline.formatiere_runden(runden)
+        assert "[ROUND 1 - NO-GO]" in s
+        assert "[ROUND 2 - RECOVERY - GO]" in s
+
+    def test_formatiere_runden_leer(self) -> None:
+        s = pipeline.formatiere_runden([])
+        assert s == ""
+
+    def test_recovery_hinweis_block_leer(self) -> None:
+        s = pipeline.recovery_hinweis_block([])
+        assert s == ""
+
+    def test_recovery_hinweis_block_normal(self) -> None:
+        s = pipeline.recovery_hinweis_block([
+            {"runde": 1, "verdict": "GO", "raw": "",
+             "recovery": False}])
+        assert s == ""
+
+    def test_recovery_hinweis_block_aktiv(self) -> None:
+        s = pipeline.recovery_hinweis_block([
+            {"runde": 1, "verdict": "GO", "raw": "",
+             "recovery": True}])
+        assert "## RECOVERY-RUNDE" in s
+        # Text enthaelt Umbruch "Solver-\nBefund".
+        assert "Solver-" in s and "Befund" in s

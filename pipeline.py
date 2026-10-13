@@ -732,6 +732,48 @@ def builder_reply_mit_command_loop(
     return None, 19
 
 
+def formatiere_runden(review_runden: list[dict[str, Any]]) -> str:
+    """Auflage 2183 A1a: formatiert review_runden.
+
+    Liefert einen Block fuer den Reviewer-Prompt.
+    Leerer String, wenn keine Runden vorhanden sind.
+    Recovery-Runden erhalten den Marker RECOVERY.
+    """
+    if not review_runden:
+        return ""
+    zeilen = ["BISHERIGE RUNDEN:"]
+    for r in review_runden:
+        raw = r.get("raw", "")
+        if len(raw) > 1500:
+            raw = raw[:1500] + " [... gekuerzt ...]"
+        mark = "RECOVERY - " if r.get("recovery") else ""
+        zeilen.append(
+            f"[ROUND {r['runde']} - {mark}{r['verdict']}]")
+        zeilen.append(raw)
+    return "\n".join(zeilen) + "\n\n"
+
+
+def recovery_hinweis_block(
+        review_runden: list[dict[str, Any]]) -> str:
+    """Auflage 2183 A1a: RECOVERY-RUNDE-Block.
+
+    Liefert den Block, wenn die letzte Runde recovery=True
+    trug. Sonst leerer String.
+    """
+    if not review_runden:
+        return ""
+    if not review_runden[-1].get("recovery"):
+        return ""
+    return (
+        "## RECOVERY-RUNDE\n"
+        "Dies ist eine Recovery-Runde. Der Solver-\n"
+        "Befund wurde konsolidiert. Pruefe:\n"
+        "(1) ob der Builder den Befund umsetzt,\n"
+        "(2) ob der Code sonst korrekt ist\n"
+        "(R1-R7 gelten weiter).\n\n"
+    )
+
+
 def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
                         doc_keys: list[str]) -> str:
     """Baut System-Prompt aus Rollen-Body + HARD_RULES_BASE + Rolle + Projekt-Doku.
@@ -2462,16 +2504,9 @@ def run_pipeline(project_name: str, aufgabe: str,
         # Auflage 2045: bisherige Runden mitgeben.
         # Der Reviewer soll sehen, was er in Runde 1..N-1 gesagt hat,
         # damit er pruefen kann, ob die Auflagen umgesetzt wurden.
-        runden_block = ""
-        if state.review_runden:
-            zeilen = ["BISHERIGE RUNDEN:"]
-            for r in state.review_runden:
-                raw = r.get("raw", "")
-                if len(raw) > 1500:
-                    raw = raw[:1500] + " [... gekuerzt ...]"
-                zeilen.append(f"[ROUND {r['runde']} - {r['verdict']}]")
-                zeilen.append(raw)
-            runden_block = "\n".join(zeilen) + "\n\n"
+        # Auflage 2183 A1a: ausgelagert nach
+        # formatiere_runden().
+        runden_block = formatiere_runden(state.review_runden)
 
         # Auflage 2177: Zieldatei-Ausschnitte an den
         # Reviewer. Der Reviewer sieht damit, was der
@@ -2499,6 +2534,9 @@ def run_pipeline(project_name: str, aufgabe: str,
             f"TEST-VORSCHLAEGE:\n{state.test_vorschlaege or '(keine)'}\n\n"
             "Bewerte. Erste Zeile: GO, NO-GO oder ESKALATION."
         )
+        # Auflage 2183 A1a: Recovery-Hinweis ausgelagert.
+        szenario = (recovery_hinweis_block(state.review_runden)
+                    + szenario)
         rc = budget_or_recover(state, max_llm,
                               f"Vor Reviewer-Verdict Runde {runde}.",
                               project_dir, project_name,
@@ -2515,8 +2553,11 @@ def run_pipeline(project_name: str, aufgabe: str,
             return 5
 
         verdict = classify_verdict(reply.content)
+        # Auflage 2183 A1a: recovery-Marker an der Runde.
+        # Heute immer False; der Setzer kommt in A3.
         state.review_runden.append(
-            {"runde": runde, "verdict": verdict, "raw": reply.content})
+            {"runde": runde, "verdict": verdict,
+             "raw": reply.content, "recovery": False})
         state.auflagen_log.append(parse_auflagen(reply.content))
         state.empfehlung_log.append(parse_empfehlung(reply.content))
         audit("review_round", {"runde": runde, "verdict": verdict}, project_dir, project_name)
