@@ -1566,6 +1566,9 @@ def apply_and_recheck(state: RunState,
         audit("recovery_basis_gate_nach_apply",
               {"fehler": nach_fehler, "empfehlung": v.empfehlung},
               state.project_dir, state.project_name)
+        _pipeline_ende(state, state.project_dir,
+                       state.project_name, 18,
+                       "basis_gate_nach_apply")
         return 18
     return None
 
