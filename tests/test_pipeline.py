@@ -15,8 +15,9 @@ sys.path.insert(0, "/opt/werkstatt")
 
 import re
 
-import pipeline
 import pytest
+
+import pipeline
 
 # =====================================================================
 # Test-Helpers
