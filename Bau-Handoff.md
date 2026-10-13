@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 57)
-Werkstatt-HEAD: a0ffc87 (Tag probebetrieb-57)
+Stand: 2026-10-13 (nach Probebetrieb 59)
+Werkstatt-HEAD: 33d440d (Tag probebetrieb-59)
 Letzter Commit in security-ai: 3ccb883
 Branch: main
 Tests: 270 passed
@@ -44,7 +44,7 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD a0ffc87 (probebetrieb-57)
+  HEAD 33d440d (probebetrieb-59)
   Tests: 270 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
@@ -55,7 +55,7 @@ Ziel-Projekt security-ai:
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -57
+  probebetrieb-7, -17, -29 bis -59
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
   probebetrieb-1 bis -28 (historisch, vor dieser Session)
@@ -134,6 +134,9 @@ Kurzfassung:
          (2183-P4-Log).
   PB-57: Feature. pipeline_ende im Deadlock-Pfad
          (Nachtrag).
+  PB-58: Doku. Handoff 2199 R7 bestaetigt.
+  PB-59: Feature. pipeline_ende im basis_gate_
+         nach_apply-Pfad (2183-P4-Log2).
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -161,10 +164,14 @@ WICHTIG (naechste Session):
         Nachster Bau-Block. Siehe MITTEL-Eintrag
         fuer Design P1-P9.
         Vorbedingung P4 erfuellt (2183-P4-Log,
-        PB-56 + PB-57): pipeline_ende mit llm_calls
-        an 9 Pfaden. Messung 17:31: security-ai-Lauf
-        mit Commit-NO-GO max: rc=7, llm_calls=11,
-        runden=3. Basis fuer 2184.
+        PB-56 + PB-57 + PB-59): pipeline_ende mit
+        llm_calls an 10 Pfaden.
+        Messung 17:31: mittlerer Fail-Lauf
+        (commit_no_go_max): rc=7, llm_calls=11.
+        Lauf 17:48 (basis_gate_nach_apply): ohne
+        Endlog (Pfad fehlte, PB-59 nachgezogen).
+        Lauf 17:57 (eskalation): ohne Endlog
+        (Pfad fehlt noch, siehe 2183-P4-Log2).
 
   2199-L: Livelock-Fall (neu aus 2199-Lauf 3).
         Drei 2199-Laeufe, R7 in keinem getriggert.
@@ -186,6 +193,32 @@ WICHTIG (naechste Session):
         Fail-closed mit Rollback. -> 2191-R2 wirkt.
         Restfall 2199-R7-P1: Phase-1-R7-Wirkung
         weiter unbetaetigt.
+
+  2183-P4-Log2: Zentraler pipeline_ende-Wrapper.
+        Befund: Die verstreute _pipeline_ende-Strategie
+        (PB-56, PB-57, PB-59) hat vier Pfade gefunden,
+        aber weitere fehlen:
+        - basis_gate Schritt 0 (rc=18-Pfad).
+        - eskalation (rc=14, Lauf 17:57).
+        - no_go (rc=15).
+        - commit_review_call_failed (rc=6).
+        Loesung: run_pipeline gibt tuple[int,
+        RunState | None] zurueck, main loggt zentral.
+        Die verstreuten Aufrufe werden entfernt.
+        Kategorie 2, aber groesserer Umbau
+        (Rueckgabesignatur, Tests). Reviewer-Block
+        noetig.
+        Vorbedingung fuer eine stabile P4-Messung.
+
+  2183-P4-Wert: 30 als max_llm_calls.
+        Datenlage heute:
+        - Mittlerer Fail-Lauf: 11 Calls (gemessen).
+        - Livelock (PB-55 Lauf 3): ~13 Calls
+          (rekonstruiert).
+        - Eskalation (17:57): ~6 Calls (rekonstruiert).
+        Worst Case mit Solver + Recovery: 18-20.
+        30 konservativ (Reserve Faktor 1,5).
+        Umsetzung mit 2184.
 
   2183-AQ: Auftragsqualitaet vor Werkstatt-Lauf.
         Neue Auflage (aus 2199-Lauf 3 + Lauf
@@ -442,13 +475,19 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge:
-   a) 2183 Solver (P1-P9). P4-Basis aus PB-56/57.
-      Schritt A1 (Zustandsmaschine) zuerst.
-   b) 2184 max_llm_calls 30 (mit 2183).
-   c) 2183-AQ Auftragsqualitaet.
-   d) 2199a Zustandsmaschine (Kategorie 3).
-   e) 2199a Recovery-Zweig.
-   f) 2199-R7-P1 (Phase-1-R7-Wirkung).
+   a) 2183-P4-Log2 Zentraler Wrapper. Vor A1,
+      weil sonst jede weitere Messung unzuverlaessig.
+   b) 2183 A1a (Zustandsmaschine, klein).
+   c) 2183 A1b (code_entwurf_historie).
+   d) 2183 A1c (Rollback-Refaktor + 2184).
+   e) 2183 A2 (SolverBefund-Klasse).
+   f) 2183 A3 (Trigger-Erkennung).
+   g) 2183 B (Solver-Code).
+   h) 2183 C (COMMAND: RUN solver).
+   i) 2183-AQ Auftragsqualitaet.
+   j) 2199a Zustandsmaschine (Kategorie 3).
+   k) 2199a Recovery-Zweig.
+   l) 2199-R7-P1 (Phase-1-R7-Wirkung).
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
    Blocks formulieren. Vor Ausfuehrung.
