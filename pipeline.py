@@ -616,6 +616,68 @@ def parse_empfehlung(text: str) -> dict[str, str]:
 
 
 
+def builder_reply_mit_command_loop(
+    state: RunState,
+    api_key: str,
+    builder_prompt: str,
+    user_prompt: str,
+    project_dir: Path,
+    project_name: str,
+    max_builder_runden: int = 3,
+) -> tuple[LLMReply | None, int | None]:
+    """Auflage 2187: Builder-COMMAND-Loop.
+
+    Fuehrt ask_llm in einer Schleife aus, bis ein Reply ohne
+    COMMAND-Zeilen kommt (also ein Patch) oder max_builder_runden
+    erreicht ist. Builder-COMMANDs werden ueber execute_commands
+    (quelle="builder") ausgefuehrt, das Ergebnis landet in
+    state.mess_protokoll und geht in die naechste Runde.
+
+    Rueckgabe:
+      (reply, None):  Reply mit Patch oder Fehler.
+      (None, 19):     Builder-Command-Deadlock.
+    """
+    aktueller_prompt = user_prompt
+    for builder_runde in range(1, max_builder_runden + 1):
+        reply = ask_llm(
+            api_key, builder_prompt, aktueller_prompt,
+            state.builder_model, state.builder_temp,
+            state.llm_timeout_s, state=state,
+        )
+        if not reply.ok:
+            return reply, None
+        cmds = parse_commands(reply.content)
+        if not cmds:
+            return reply, None
+        print(f"[i] Builder-Runde {builder_runde}: "
+              f"{len(cmds)} COMMAND(s) angefordert.")
+        execute_commands(state, cmds, quelle="builder")
+        audit("builder_command_executed",
+              {"runde": builder_runde,
+               "anzahl": len(cmds),
+               "ids": [c["id"] for c in cmds]},
+              project_dir, project_name)
+        aktueller_prompt = (
+            user_prompt
+            + "\n\nMESSUNGEN AUS DER VORIGEN RUNDE:\n"
+            + (state.mess_protokoll or "(keine)")
+            + "\n\nLiefere jetzt den Code-Patch."
+        )
+    audit("builder_command_deadlock",
+          {"max_builder_runden": max_builder_runden},
+          project_dir, project_name)
+    kontext = (
+        f"Der Builder hat in {max_builder_runden} aufeinanderfolgenden "
+        f"Runden nur COMMAND-Zeilen geliefert, keinen Patch. "
+        f"Letzter Prompt:\n{aktueller_prompt[:2000]}\n"
+    )
+    v = ask_reviewer_for_recovery(state, "builder_command_deadlock", kontext)
+    print_recovery(v)
+    audit("recovery_builder_command_deadlock",
+          {"kontext": kontext}, project_dir, project_name)
+    return None, 19
+
+
 def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
                         doc_keys: list[str]) -> str:
     """Baut System-Prompt aus Rollen-Body + HARD_RULES_BASE + Rolle + Projekt-Doku.
@@ -792,6 +854,16 @@ def ask_reviewer_for_recovery(state: RunState, art: str, kontext: str) -> Recove
         aufgabe = (f"Das Budget ist erschoepft.\n\n{kopf}{kontext}\n\n"
                    "Liefere:\nDIAGNOSE: <warum>\nLOESUNGSVORSCHLAG:\n  1. ...\n  2. ...\n"
                    "BLOCKGROESSE: <...>\nEMPFEHLUNG: <naechster Schritt>\n")
+    elif art == "builder_command_deadlock":
+        aufgabe = (
+            f"Der Builder hat in aufeinanderfolgenden Runden nur "
+            f"COMMAND-Zeilen geliefert (Builder-COMMAND-Loop, "
+            f"Auflage 2187), keinen Code-Patch.\n\n{kopf}{kontext}\n\n"
+            "Liefere:\nDIAGNOSE: <warum liefert der Builder keinen Patch>\n"
+            "LOESUNGSVORSCHLAG:\n  1. ...\n  2. ...\n"
+            "BLOCKGROESSE: <...>\n"
+            "EMPFEHLUNG: <approve | reject | aufteilen | eskalieren>\n"
+        )
     else:
         return RecoveryVorschlag(art=art, rohantwort="(unbekannt)")
 
@@ -1996,8 +2068,7 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         aufgabe, file_whitelist, project_dir)
     ziel_snippets = read_target_snippets(
         ziel_pfade, project_dir, file_whitelist)
-    reply = ask_llm(
-        api_key, builder_prompt,
+    builder_user_prompt = (
         f"BASIS-GATE:\n{state.basis_protokoll[:1500]}\n\n"
         f"OPTIONALE MESSUNGEN:\n{state.mess_protokoll or '(keine)'}\n\n"
         + format_doc_snippets(state.docs) + "\n\n"
@@ -2012,14 +2083,27 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         "(jeweils PATCH-BEGINN/PATCH-ENDE).\n"
         "Kein freier Text. Kein Markdown. Nur Patches.\n"
         "Wenn du einen Anker nicht im Ausschnitt findest: "
-        "keinen Patch fuer diese Datei. Kein Erfinden.",
-        state.builder_model, state.builder_temp, state.llm_timeout_s,
-        state=state,
+        "keinen Patch fuer diese Datei. Kein Erfinden."
     )
-    if not reply.ok:
-        print(f"[FAIL] Builder: {reply.error}")
-        audit("builder_call_failed", {"error": reply.error}, project_dir, project_name)
+    max_builder_runden = budget.get("max_builder_runden", 3)
+    reply_roh, rc = builder_reply_mit_command_loop(
+        state, api_key, builder_prompt, builder_user_prompt,
+        project_dir, project_name,
+        max_builder_runden=max_builder_runden,
+    )
+    if rc is not None:
+        return rc
+    assert reply_roh is not None
+    if not reply_roh.ok:
+        fehler = reply_roh.error
+        print(f"[FAIL] Builder: {fehler}")
+        audit("builder_call_failed", {"error": fehler},
+              project_dir, project_name)
         return 4
+    reply = reply_roh
+
+    assert reply is not None
+
     state.code_entwurf = reply.content
     state.code_patches = parse_code_patches(reply.content)
     print(f"[i] {len(state.code_patches)} Code-Patches geparst.")
@@ -2123,14 +2207,21 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                                   max_minutes=max_minutes)
             if rc is not None:
                 return rc
-            bauer_reply = ask_llm(
-                api_key, builder_prompt,
-                f"Reviewer NO-GO:\n{reply.content}\n\nUeberarbeite.",
-                state.builder_model, state.builder_temp, state.llm_timeout_s,
-                state=state,
+            bauer_user_prompt = (
+                f"Reviewer NO-GO:\n{reply.content}\n\nUeberarbeite."
             )
-            if bauer_reply.ok:
-                state.code_entwurf = bauer_reply.content
+            bauer_reply_roh, bauer_rc = builder_reply_mit_command_loop(
+                state, api_key, builder_prompt, bauer_user_prompt,
+                project_dir, project_name,
+                max_builder_runden=budget.get("max_builder_runden", 3),
+            )
+            if bauer_rc is not None:
+                return bauer_rc
+            assert bauer_reply_roh is not None
+            if bauer_reply_roh.ok:
+                state.code_entwurf = bauer_reply_roh.content
+                state.code_patches = parse_code_patches(
+                    bauer_reply_roh.content)
             continue
 
         if verdict == "GO":
@@ -2148,21 +2239,29 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                 if rc is not None:
                     return rc
                 auflagen_text = "\n".join(f"- {a}" for a in auflagen)
-                bauer_reply = ask_llm(
-                    api_key, builder_prompt,
+                bauer_user_prompt = (
                     f"Der Reviewer hat GO gegeben, aber folgende "
                     f"Auflagen formuliert:\n{auflagen_text}\n\n"
                     "Ueberarbeite die Code-Patches, um die Auflagen "
                     "umzusetzen. Antworte mit den ueberarbeiteten "
-                    "PATCH-BEGINN/PATCH-ENDE-Bloecken. Kein freier Text.",
-                    state.builder_model, state.builder_temp,
-                    state.llm_timeout_s,
-                    state=state,
+                    "PATCH-BEGINN/PATCH-ENDE-Bloecken. Kein freier Text."
                 )
-                if bauer_reply.ok:
-                    state.code_entwurf = bauer_reply.content
+                bauer_reply_roh, bauer_rc = (
+                    builder_reply_mit_command_loop(
+                        state, api_key, builder_prompt,
+                        bauer_user_prompt,
+                        project_dir, project_name,
+                        max_builder_runden=budget.get(
+                            "max_builder_runden", 3),
+                    )
+                )
+                if bauer_rc is not None:
+                    return bauer_rc
+                assert bauer_reply_roh is not None
+                if bauer_reply_roh.ok:
+                    state.code_entwurf = bauer_reply_roh.content
                     state.code_patches = parse_code_patches(
-                        bauer_reply.content)
+                        bauer_reply_roh.content)
                     print(f"[i] {len(state.code_patches)} Code-Patches "
                           f"nach Auflagen-Umsetzung geparst.")
                 continue

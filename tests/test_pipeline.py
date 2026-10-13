@@ -15,8 +15,9 @@ sys.path.insert(0, "/opt/werkstatt")
 
 import re
 
-import pipeline
 import pytest
+
+import pipeline
 
 # =====================================================================
 # Test-Helpers
@@ -2590,3 +2591,188 @@ class TestKuerzungsMarker:
         assert "GEKUERZT" in s
         assert "von 5000" in s
         assert "COMMAND: RUN read_file README.md" in s
+
+
+# =====================================================================
+# Builder-COMMAND-Loop (Auflage 2187)
+# =====================================================================
+
+class TestBuilderCommandLoop:
+    """Auflage 2187: Builder darf COMMAND: RUN liefern."""
+
+    def _state_mit_read_file(self) -> pipeline.RunState:
+        state = build_test_state()
+        state.optional = {
+            "read_file": pipeline.Measurement(
+                "read_file", ("cat",), "Datei lesen."),
+        }
+        return state
+
+    def test_builder_command_wird_ausgefuehrt(
+            self, monkeypatch) -> None:
+        state = self._state_mit_read_file()
+        replies = [
+            pipeline.LLMReply(
+                ok=True, content="COMMAND: RUN read_file README.md"),
+            pipeline.LLMReply(
+                ok=True,
+                content="PATCH-BEGINN\nanker: x\nersatz: y\nPATCH-ENDE"),
+        ]
+        zaehler = {"ask": 0, "exec": 0}
+
+        def fake_ask(*a, **kw):
+            r = replies[zaehler["ask"]]
+            zaehler["ask"] += 1
+            return r
+
+        def fake_exec(state, cmds, quelle=""):
+            zaehler["exec"] += 1
+
+        monkeypatch.setattr(pipeline, "ask_llm", fake_ask)
+        monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
+
+        reply, rc = pipeline.builder_reply_mit_command_loop(
+            state, "key", "sys", "user", Path.cwd(),
+            "test-projekt", max_builder_runden=3)
+        assert rc is None
+        assert reply is not None
+        assert "PATCH-BEGINN" in reply.content
+        assert zaehler["ask"] == 2
+        assert zaehler["exec"] == 1
+
+    def test_builder_command_leere_liste_wie_bisher(
+            self, monkeypatch) -> None:
+        state = build_test_state()
+        replies = [
+            pipeline.LLMReply(
+                ok=True,
+                content="PATCH-BEGINN\nanker: x\nersatz: y\nPATCH-ENDE"),
+        ]
+        zaehler = {"ask": 0, "exec": 0}
+
+        def fake_ask(*a, **kw):
+            r = replies[zaehler["ask"]]
+            zaehler["ask"] += 1
+            return r
+
+        def fake_exec(state, cmds, quelle=""):
+            zaehler["exec"] += 1
+
+        monkeypatch.setattr(pipeline, "ask_llm", fake_ask)
+        monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
+
+        reply, rc = pipeline.builder_reply_mit_command_loop(
+            state, "key", "sys", "user", Path.cwd(),
+            "test-projekt", max_builder_runden=3)
+        assert rc is None
+        assert reply is not None
+        assert zaehler["ask"] == 1
+        assert zaehler["exec"] == 0
+
+    def test_builder_command_max_runden_erreicht(
+            self, monkeypatch) -> None:
+        state = self._state_mit_read_file()
+        replies = [
+            pipeline.LLMReply(
+                ok=True, content="COMMAND: RUN read_file README.md"),
+        ]
+        zaehler = {"ask": 0, "exec": 0, "recovery": 0}
+
+        def fake_ask(*a, **kw):
+            r = replies[0]
+            zaehler["ask"] += 1
+            return r
+
+        def fake_exec(state, cmds, quelle=""):
+            zaehler["exec"] += 1
+
+        def fake_recovery(state, art, kontext):
+            zaehler["recovery"] += 1
+            return pipeline.RecoveryVorschlag(
+                art=art, rohantwort="(test)")
+
+        monkeypatch.setattr(pipeline, "ask_llm", fake_ask)
+        monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
+        monkeypatch.setattr(
+            pipeline, "ask_reviewer_for_recovery", fake_recovery)
+
+        reply, rc = pipeline.builder_reply_mit_command_loop(
+            state, "key", "sys", "user", Path.cwd(),
+            "test-projekt", max_builder_runden=2)
+        assert reply is None
+        assert rc == 19
+        assert zaehler["ask"] == 2
+        assert zaehler["exec"] == 2
+        assert zaehler["recovery"] == 1
+
+    def test_builder_command_kein_endlosloop(
+            self, monkeypatch) -> None:
+        state = self._state_mit_read_file()
+        zaehler = {"ask": 0}
+
+        def fake_ask(*a, **kw):
+            zaehler["ask"] += 1
+            return pipeline.LLMReply(
+                ok=True, content="COMMAND: RUN read_file README.md")
+
+        def fake_exec(state, cmds, quelle=""):
+            pass
+
+        def fake_recovery(state, art, kontext):
+            return pipeline.RecoveryVorschlag(
+                art=art, rohantwort="(test)")
+
+        monkeypatch.setattr(pipeline, "ask_llm", fake_ask)
+        monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
+        monkeypatch.setattr(
+            pipeline, "ask_reviewer_for_recovery", fake_recovery)
+
+        _reply, rc = pipeline.builder_reply_mit_command_loop(
+            state, "key", "sys", "user", Path.cwd(),
+            "test-projekt", max_builder_runden=3)
+        assert rc == 19
+        assert zaehler["ask"] == 3
+
+    def test_builder_command_quelle_marker_builder(self) -> None:
+        """ERLAUBTE_QUELLEN enthaelt 'builder'."""
+        assert "builder" in pipeline.ERLAUBTE_QUELLEN
+
+    def test_builder_command_recovery_art(self, monkeypatch) -> None:
+        """Recovery-Zweig builder_command_deadlock existiert."""
+        state = build_test_state()
+        state.agents["reviewer"] = {
+            "name": "reviewer", "body": "(body)"}
+        monkeypatch.setattr(
+            pipeline, "ask_llm",
+            lambda *a, **kw: pipeline.LLMReply(
+                ok=True,
+                content="DIAGNOSE: x\nEMPFEHLUNG: reject"))
+        v = pipeline.ask_reviewer_for_recovery(
+            state, "builder_command_deadlock", "kontext")
+        assert v.art == "builder_command_deadlock"
+        assert v.diagnose == "x"
+
+    def test_builder_command_unbekannte_id_abgelehnt(
+            self, monkeypatch) -> None:
+        """Unbekannte id wird nicht ausgefuehrt."""
+        state = build_test_state()
+        zaehler = {"audit": 0}
+
+        def fake_audit(*a, **kw):
+            zaehler["audit"] += 1
+
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        monkeypatch.setattr(
+            pipeline, "run_measurement_mit_argv",
+            lambda *a, **kw: ("", True, []))
+        pipeline.execute_commands(
+            state, [{"id": "nicht_vorhanden", "arg": ""}],
+            "builder")
+        assert zaehler["audit"] >= 1
+
+    def test_builder_command_read_file_im_optional_catalog(
+            self) -> None:
+        """read_file ist ueber optional_catalog erreichbar."""
+        yaml_pfad = Path("/opt/werkstatt/projects/security-ai.yaml")
+        inhalt = yaml_pfad.read_text(encoding="utf-8")
+        assert "read_file" in inhalt
