@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 66)
-Werkstatt-HEAD: 8d5598f (Tag probebetrieb-66)
+Stand: 2026-10-13 (nach Probebetrieb 68)
+Werkstatt-HEAD: 9f22c1c (Tag probebetrieb-68)
 Letzter Commit in security-ai: 3ccb883
 Branch: main
 Tests: 270 passed
@@ -44,7 +44,7 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 8d5598f (probebetrieb-66)
+  HEAD 9f22c1c (probebetrieb-68)
   Tests: 270 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
@@ -55,7 +55,7 @@ Ziel-Projekt security-ai:
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -66
+  probebetrieb-7, -17, -29 bis -68
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
   probebetrieb-1 bis -28 (historisch, vor dieser Session)
@@ -146,6 +146,9 @@ Kurzfassung:
   PB-65: Doku. Handoff auf PB-64.
   PB-66: Fix. R7-Phase-2-Toleranz + Aggregator
          mypy/ruff (2199-R7-P2).
+  PB-67: Doku. Handoff auf PB-66.
+  PB-68: Feature. Recovery-Zustand + Prompt-Block
+         (2183 A1a).
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -216,6 +219,13 @@ WICHTIG (naechste Session):
         (samples=3). Worst Case mit Solver +
         Recovery: 18-20. 30 konservativ.
         Umsetzung mit 2184.
+
+  2183 A1a (Recovery-Zustand): ERLEDIGT (PB-68).
+        Marker recovery an review_runden.
+        formatiere_runden(), recovery_hinweis_block().
+        szenario nutzt Recovery-Block.
+        6 neue Tests.
+        276 passed.
 
   2200 (Audit-Aggregator): ERLEDIGT (PB-63).
         werkstatt_aggregate.py liest JSONL,
@@ -525,20 +535,18 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge:
-   a) 2183 A1a (Zustandsmaschine, klein).
+   a) 2183 A1b (code_entwurf_historie).
       Naechster Bau-Block.
-   b) 2183 A1b (code_entwurf_historie).
-   c) 2183 A1b (code_entwurf_historie).
-   d) 2183 A1c (Rollback-Refaktor + 2184).
-   e) 2183 A2 (SolverBefund-Klasse).
-   f) 2183 A3 (Trigger-Erkennung).
-   g) 2183 B (Solver-Code).
-   h) 2183 C (COMMAND: RUN solver).
-   i) 2183-AQ Auftragsqualitaet.
-   j) 2200b/c/T Aggregator-Verfeinerung.
-   k) 2199a Zustandsmaschine (Kategorie 3).
-   l) 2199a Recovery-Zweig.
-   m) 2199-R7-P1 (Phase-1-R7-Wirkung).
+   b) 2183 A1c (Rollback-Refactor + 2184).
+   c) 2183 A2 (SolverBefund-Klasse).
+   d) 2183 A3 (Trigger-Erkennung).
+   e) 2183 B (Solver-Code).
+   f) 2183 C (COMMAND: RUN solver).
+   g) 2183-AQ Auftragsqualitaet.
+   h) 2200b/c/T Aggregator-Verfeinerung.
+   i) 2199a Zustandsmaschine (Kategorie 3).
+   j) 2199a Recovery-Zweig.
+   k) 2199-R7-P1 (Phase-1-R7-Wirkung).
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
    Blocks formulieren. Vor Ausfuehrung.
