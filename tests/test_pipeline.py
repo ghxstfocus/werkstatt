@@ -3606,3 +3606,40 @@ class TestCodeEntwurfHistorie:
                                 "raw": "", "recovery": True})
         pipeline.record_code_entwurf(s, "r", phase="recovery")
         assert s.code_entwurf_historie[0]["phase"] == "recovery"
+
+
+# =====================================================================
+# 2183 A1c: rollback_vor_recovery + max_llm_calls 30
+# =====================================================================
+
+class TestRollbackVorRecovery:
+    """Auflage 2183 A1c: Rollback ohne Fail."""
+
+    def test_funktion_existiert(self) -> None:
+        assert hasattr(pipeline, "rollback_vor_recovery")
+
+    def test_ruft_rollback(self, monkeypatch) -> None:
+        from pathlib import Path
+        aufgerufen = []
+
+        def fake_rollback(state, project_dir, project_name,
+                          grund):
+            aufgerufen.append(grund)
+
+        monkeypatch.setattr(pipeline, "_rollback_zieldateien",
+                            fake_rollback)
+        s = pipeline.RunState(
+            block_id="t", aufgabe="a", start_ts="",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=[], api_key="", budget={},
+            agent_docs={}, project_dir=Path("/tmp"))
+        pipeline.rollback_vor_recovery(s, Path("/tmp"), "t")
+        assert aufgerufen == ["recovery_start"]
+
+    def test_pipeline_default_max_llm_calls_30(self) -> None:
+        # Source-Inspektion: kein Default mehr auf 20.
+        from pathlib import Path
+        quelle = Path("/opt/werkstatt/pipeline.py").read_text(
+            encoding="utf-8")
+        assert '"max_llm_calls", 20' not in quelle
+        assert '"max_llm_calls", 30' in quelle

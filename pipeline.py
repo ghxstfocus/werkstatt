@@ -1574,6 +1574,21 @@ def _pipeline_ende(state: RunState, project_dir: Path,
           project_dir, project_name)
 
 
+def rollback_vor_recovery(state: RunState, project_dir: Path,
+                          project_name: str) -> None:
+    """Auflage 2183 A1c: Rollback vor einer Recovery-Runde.
+
+    Setzt Zieldateien auf HEAD zurueck, damit der Builder
+    auf sauberem Baum startet. Kein Fail, kein Exit-Code.
+    Der Lauf geht weiter (Recovery-Runde).
+
+    Wird von A3 (Trigger) gerufen, sobald Recovery-Laeufe
+    existieren. Heute ungenutzt.
+    """
+    _rollback_zieldateien(state, project_dir, project_name,
+                         "recovery_start")
+
+
 def _fail_closed(state: RunState, project_dir: Path,
                  project_name: str, code: int,
                  grund: str) -> int:
@@ -2079,7 +2094,8 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
             audit("builder_commit_paket_failed",
                   {"error": reply.error, "versuch": 1},
                   state.project_dir, state.project_name)
-            max_llm = state.budget.get("max_llm_calls", 20)
+            # Auflage 2184: Default 30 (Konsistenz mit YAML).
+            max_llm = state.budget.get("max_llm_calls", 30)
             rc = budget_or_recover(
                 state, max_llm, "Vor Commit-Paket-Retry.",
                 state.project_dir, state.project_name)
@@ -2298,8 +2314,12 @@ def run_pipeline(project_name: str, aufgabe: str,
     docs = load_docs(config.get("docs", {}), project_dir)
     always, optional = build_catalog(config, project_dir)
     file_whitelist = config.get("file_whitelist", [])
-    budget = config.get("budget", {"max_review_rounds": 5, "max_llm_calls": 20})
-    max_llm = budget.get("max_llm_calls", 20)
+    # Auflage 2184: Default 30, damit Projekte ohne YAML
+    # nicht still auf 20 fallen.
+    budget = config.get(
+        "budget",
+        {"max_review_rounds": 5, "max_llm_calls": 30})
+    max_llm = budget.get("max_llm_calls", 30)
     max_minutes = budget.get("max_minutes", 0)  # Auflage 2080: 0 = aus
 
     git_author = config.get("git_author", {}) or {}
