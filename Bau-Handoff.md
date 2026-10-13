@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 68)
-Werkstatt-HEAD: 9f22c1c (Tag probebetrieb-68)
+Stand: 2026-10-13 (nach Probebetrieb 71)
+Werkstatt-HEAD: 6e5b8fc (Tag probebetrieb-71)
 Letzter Commit in security-ai: 3ccb883
 Branch: main
 Tests: 270 passed
@@ -44,7 +44,7 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 9f22c1c (probebetrieb-68)
+  HEAD 6e5b8fc (probebetrieb-71)
   Tests: 270 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
@@ -55,7 +55,7 @@ Ziel-Projekt security-ai:
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -68
+  probebetrieb-7, -17, -29 bis -71
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
   probebetrieb-1 bis -28 (historisch, vor dieser Session)
@@ -149,6 +149,10 @@ Kurzfassung:
   PB-67: Doku. Handoff auf PB-66.
   PB-68: Feature. Recovery-Zustand + Prompt-Block
          (2183 A1a).
+  PB-69: Doku. Handoff auf PB-68.
+  PB-70: Feature. code_entwurf_historie (2183 A1b).
+  PB-71: Feature. rollback_vor_recovery +
+         max_llm_calls 30 (2183 A1c).
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -223,9 +227,13 @@ WICHTIG (naechste Session):
   2183 A1a (Recovery-Zustand): ERLEDIGT (PB-68).
         Marker recovery an review_runden.
         formatiere_runden(), recovery_hinweis_block().
-        szenario nutzt Recovery-Block.
-        6 neue Tests.
-        276 passed.
+  2183 A1b (code_entwurf_historie): ERLEDIGT (PB-70).
+        Feld + record_code_entwurf().
+        Kuerzung auf 10 Eintraege.
+  2183 A1c (rollback_vor_recovery + 2184):
+        ERLEDIGT (PB-71). Neue Funktion
+        rollback_vor_recovery (ungenutzt bis A3).
+        max_llm_calls-Defaults 20 -> 30.
 
   2200 (Audit-Aggregator): ERLEDIGT (PB-63).
         werkstatt_aggregate.py liest JSONL,
@@ -535,11 +543,9 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge:
-   a) 2183 A1b (code_entwurf_historie).
+   a) 2183 A2 (SolverBefund-Klasse).
       Naechster Bau-Block.
-   b) 2183 A1c (Rollback-Refactor + 2184).
-   c) 2183 A2 (SolverBefund-Klasse).
-   d) 2183 A3 (Trigger-Erkennung).
+   b) 2183 A3 (Trigger-Erkennung).
    e) 2183 B (Solver-Code).
    f) 2183 C (COMMAND: RUN solver).
    g) 2183-AQ Auftragsqualitaet.
