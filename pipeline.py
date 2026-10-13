@@ -1684,10 +1684,14 @@ def _audit_builder_prompt(prompt: str, state: RunState,
 
 def _audit_builder_reply(reply_content: str, state: RunState,
                          project_dir: Path, project_name: str) -> None:
-    """Auflage 2194: protokolliert den Builder-Reply (Kopf/Fuss)."""
+    """Auflage 2194-M: protokolliert den Builder-Reply (Kopf/Fuss).
+
+    Felder gekuerzt (2194-M): kopf 300 statt 1500 Zeichen,
+    fuss 200 statt 500 Zeichen. Reduziert Audit-Wachstum.
+    """
     redigiert, _ = redaction.redact_all(reply_content, max_len=200000)
-    kopf = redigiert[:1500]
-    fuss = redigiert[-500:] if len(redigiert) > 1500 else ""
+    kopf = redigiert[:300]
+    fuss = redigiert[-200:] if len(redigiert) > 300 else ""
     audit("builder_reply_erhalten",
           {"reply_len": len(redigiert),
            "reply_kopf": kopf,
