@@ -335,6 +335,14 @@ def _werkstatt_home() -> Path:
     return Path(__file__).resolve().parent
 
 
+# Auflage 2200a: aktueller Run-Identifier.
+# Wird in run_pipeline gesetzt, in audit() in jeden
+# Eintrag geschrieben. Modul-global, weil audit()
+# keinen state-Parameter hat und ein Umbau aller
+# ~200 Aufrufer unverhaeltnismaessig waere.
+_AKTUELLE_RUN_ID: str = ""
+
+
 def audit(kind: str, payload: dict[str, Any], project_dir: Path,
           project_name: str) -> None:
     """Schreibt einen Audit-Eintrag.
@@ -360,6 +368,8 @@ def audit(kind: str, payload: dict[str, Any], project_dir: Path,
         "kind": kind,
         **payload,
     }
+    if _AKTUELLE_RUN_ID:
+        entry["run_id"] = _AKTUELLE_RUN_ID
     try:
         with datei.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry, ensure_ascii=True) + "\n")
@@ -2245,6 +2255,12 @@ def run_pipeline(project_name: str, aufgabe: str,
 
     # Auflage 2183-P4-Log2: state an main zurueckgeben.
     state_ref.append(state)
+
+    # Auflage 2200a: Run-Identifier setzen.
+    global _AKTUELLE_RUN_ID
+    _AKTUELLE_RUN_ID = (
+        datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        + f"-{os.getpid()}")
 
     audit("pipeline_start",
           {"aufgabe_hash": __import__("hashlib").sha256(aufgabe.encode()).hexdigest(),
