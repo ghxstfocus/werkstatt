@@ -3302,3 +3302,149 @@ class TestAuditDebug:
             encoding="utf-8")
         assert "## Audit-Debug" in s
         assert "2194-M" in s
+
+
+
+# =====================================================================
+# 2196: collect_messwerte liest nach-apply
+# =====================================================================
+
+class TestCollectMesswerteNachApply:
+    """Auflage 2196: collect_messwerte bevorzugt nach-apply."""
+
+    def test_collect_messwerte_liest_nach_apply(self) -> None:
+        state = build_test_state()
+        state.basis_protokoll = (
+            "=== test_count ===\nARGV: pytest\nRC: 0\n"
+            "STDOUT:\n100 tests collected\nSTDERR:\n\n"
+        )
+        state.basis_protokoll_nach_apply = (
+            "=== test_count ===\nARGV: pytest\nRC: 0\n"
+            "STDOUT:\n1315 tests collected\nSTDERR:\n\n"
+        )
+        w = pipeline.collect_messwerte(state)
+        assert w["test_anzahl"] == 1315
+
+    def test_collect_messwerte_ohne_nach_apply(self) -> None:
+        state = build_test_state()
+        state.basis_protokoll = (
+            "=== test_count ===\nARGV: pytest\nRC: 0\n"
+            "STDOUT:\n100 tests collected\nSTDERR:\n\n"
+        )
+        state.basis_protokoll_nach_apply = ""
+        w = pipeline.collect_messwerte(state)
+        assert w["test_anzahl"] == 100
+
+    def test_collect_messwerte_leer(self) -> None:
+        state = build_test_state()
+        state.basis_protokoll = ""
+        state.basis_protokoll_nach_apply = ""
+        w = pipeline.collect_messwerte(state)
+        assert w["test_anzahl"] is None
+
+    def test_collect_messwerte_vor_und_nach_gefuellt(self) -> None:
+        state = build_test_state()
+        state.basis_protokoll = (
+            "=== test_count ===\nARGV: pytest\nRC: 0\n"
+            "STDOUT:\n1 tests collected\nSTDERR:\n\n"
+        )
+        state.basis_protokoll_nach_apply = (
+            "=== test_count ===\nARGV: pytest\nRC: 0\n"
+            "STDOUT:\n2 tests collected\nSTDERR:\n\n"
+        )
+        w = pipeline.collect_messwerte(state)
+        assert w["test_anzahl"] == 2
+
+
+# =====================================================================
+# 2197: Fail-closed-Rollback
+# =====================================================================
+
+class TestFailClosedRollback:
+    """Auflage 2197: Rollback bei Fail-closed."""
+
+    def test_rollback_bei_keinem_patch(self, monkeypatch) -> None:
+        state = build_test_state()
+        state.code_patches = []
+        aufrufe = []
+
+        def fake_run(*a, **kw):
+            aufrufe.append(a)
+            class R:
+                stdout = ""
+                returncode = 0
+            return R()
+
+        monkeypatch.setattr(pipeline.subprocess, "run", fake_run)
+        monkeypatch.setattr(pipeline, "audit", lambda *a, **kw: None)
+        pipeline._rollback_zieldateien(
+            state, Path("/tmp"), "test-projekt", "test")
+        assert aufrufe == []
+
+    def test_rollback_bei_recheck_rot(self, monkeypatch) -> None:
+        state = build_test_state()
+        state.code_patches = [{"pfad": "tests/unit/x.py"}]
+        aufrufe: list = []
+
+        def fake_run(*a, **kw):
+            aufrufe.append(a)
+            class R:
+                stdout = " M tests/unit/x.py\n"
+                returncode = 0
+            return R()
+
+        auditiert: list = []
+
+        def fake_audit(kind, payload, *a, **kw):
+            auditiert.append((kind, payload))
+
+        monkeypatch.setattr(pipeline.subprocess, "run", fake_run)
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        pipeline._rollback_zieldateien(
+            state, Path("/tmp"), "test-projekt", "recheck_rot")
+        assert any(k == "rollback_fail_closed" for k, _ in auditiert)
+        for k, p in auditiert:
+            if k == "rollback_fail_closed":
+                assert p.get("grund") == "recheck_rot"
+                assert "tests/unit/x.py" in p.get("zieldateien", [])
+
+    def test_rollback_bei_apply_fail_idempotent(
+            self, monkeypatch) -> None:
+        """Ohne ' M'-Zeile: kein checkout-Aufruf."""
+        state = build_test_state()
+        state.code_patches = [{"pfad": "tests/unit/x.py"}]
+        aufrufe: list = []
+
+        def fake_run(*a, **kw):
+            aufrufe.append(a)
+            class R:
+                stdout = ""
+                returncode = 0
+            return R()
+
+        monkeypatch.setattr(pipeline.subprocess, "run", fake_run)
+        monkeypatch.setattr(pipeline, "audit", lambda *a, **kw: None)
+        pipeline._rollback_zieldateien(
+            state, Path("/tmp"), "test-projekt", "apply_fail")
+        # Nur git status, kein git checkout.
+        checkouts = [
+            a for a in aufrufe
+            if len(a) > 0 and "checkout" in (a[0] if isinstance(a[0], tuple) else ())
+        ]
+        assert checkouts == []
+
+    def test_fail_closed_ruft_rollback(self, monkeypatch) -> None:
+        state = build_test_state()
+        state.code_patches = [{"pfad": "tests/unit/x.py"}]
+        called = {"rollback": 0}
+
+        def fake_rollback(*a, **kw):
+            called["rollback"] += 1
+
+        monkeypatch.setattr(pipeline, "_rollback_zieldateien",
+                            fake_rollback)
+        rc = pipeline._fail_closed(
+            state, Path("/tmp"), "test-projekt", 7,
+            "commit_no_go_max_versuche")
+        assert rc == 7
+        assert called["rollback"] == 1

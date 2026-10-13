@@ -1402,6 +1402,75 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
     return {"pfad": pfad, "anker": anker, "ersatz": ersatz}
 
 
+def _rollback_zieldateien(state: RunState,
+                         project_dir: Path,
+                         project_name: str,
+                         grund: str) -> None:
+    """Auflage 2197: Fail-closed-Rollback.
+
+    Setzt alle Pfade aus state.code_patches zurueck, die im
+    Arbeitsbaum als " M" (modifiziert) auftauchen.
+    Best effort: Fehler brechen nicht ab.
+    """
+    if not state.code_patches:
+        return
+    pfade = []
+    for p in state.code_patches:
+        pfad = p.get("pfad", "")
+        if pfad and pfad not in pfade:
+            pfade.append(pfad)
+    if not pfade:
+        return
+    try:
+        res = subprocess.run(
+            ("git", "status", "--porcelain"),
+            cwd=str(project_dir), capture_output=True, text=True,
+            timeout=30, check=False, env=subprocess_env(),
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        audit("rollback_fail_closed",
+              {"grund": grund, "fehler": f"git status: {exc}"},
+              project_dir, project_name)
+        return
+    geaendert = {
+        line[3:].strip()
+        for line in res.stdout.splitlines()
+        if line.startswith(" M")
+    }
+    zurueckgesetzt = []
+    for pfad in pfade:
+        if pfad in geaendert:
+            try:
+                subprocess.run(
+                    ("git", "checkout", "--", pfad),
+                    cwd=str(project_dir), capture_output=True,
+                    text=True, timeout=30, check=False,
+                    env=subprocess_env(),
+                )
+                zurueckgesetzt.append(pfad)
+            except (subprocess.TimeoutExpired, OSError):
+                pass
+    if zurueckgesetzt:
+        print(f"[i] Fail-closed-Rollback: {zurueckgesetzt}")
+    audit("rollback_fail_closed",
+          {"grund": grund, "zieldateien": zurueckgesetzt,
+           "gepruefte": pfade},
+          project_dir, project_name)
+
+
+def _fail_closed(state: RunState, project_dir: Path,
+                 project_name: str, code: int,
+                 grund: str) -> int:
+    """Auflage 2197: Rollback + Exit-Code.
+
+    Zentrale Stelle fuer alle Fail-closed-Abbrueche im
+    Commit-Pfad. Setzt den Arbeitsbaum zurueck und liefert
+    den Exit-Code.
+    """
+    _rollback_zieldateien(state, project_dir, project_name, grund)
+    return code
+
+
 def apply_and_recheck(state: RunState,
                       always: dict[str, Measurement],
                       file_whitelist: list[str]) -> int | None:
@@ -1470,7 +1539,13 @@ def collect_messwerte(state: RunState) -> dict[str, Any]:
     Fallback bei Parse-Fehler: test_anzahl = None, sonst "rot".
     """
     import re as _re
-    basis = state.basis_protokoll or ""
+    # Auflage 2196: nach apply_and_recheck hat
+    # basis_protokoll_nach_apply die aktuellen Werte.
+    basis = (
+        state.basis_protokoll_nach_apply
+        or state.basis_protokoll
+        or ""
+    )
 
     # Pro Messung: (mid, rc, stdout)
     treffer = _re.findall(
@@ -2564,7 +2639,9 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                             state=state)
             if not reply.ok:
                 print(f"[FAIL] Reviewer Commit-Review: {reply.error}")
-                return 6
+                return _fail_closed(
+                    state, project_dir, project_name, 6,
+                    "commit_review_call_failed")
 
             commit_verdict = classify_verdict(reply.content)
             state.commit_review = {"verdict": commit_verdict,
@@ -2591,7 +2668,9 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             commit_versuche += 1
             if commit_versuche >= max_commit_versuche:
                 print("[!] Commit-Review: maximale Versuche erreicht.")
-                return 7
+                return _fail_closed(
+                    state, project_dir, project_name, 7,
+                    "commit_no_go_max_versuche")
 
             rc = budget_or_recover(state, max_llm,
                                   "Vor Builder-Neubau (Commit-NO-GO).",
