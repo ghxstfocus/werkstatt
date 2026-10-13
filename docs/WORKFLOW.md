@@ -121,6 +121,36 @@ Ohne Code sieht der Agent das Feature nicht.
 Ohne Prompt nutzt der Agent es nicht.
 Beide Tests sind Pflicht.
 
+## Label-Prioritaeten
+
+Prompt-Labels koennen die Prioritaet von
+Kontext-Bloecken setzen.
+
+Beispiele:
+  - "GEMESSENER INHALT (verbindlich, gewinnt
+    gegen ZIELDATEIEN):"
+  - "ZIELDATEIEN (Ausschnitte, Fallback):"
+
+Regeln:
+  1. Der Agent braucht eine Rangfolge der
+     Quellen. Reine Aufzaehlung mehrerer
+     Bloecke ohne Prioritaet fuehrt zu
+     willkuerlicher Auswahl (siehe Auflage
+     2190).
+  2. Der letzte Block vor der Aufgabe wird
+     vom LLM am staerksten gewichtet. Die
+     wichtigste Quelle gehoert deshalb an
+     das Ende.
+  3. "verbindlich" und "gewinnt gegen" sind
+     starke Marker. Sie sind in den Bodies
+     (agents/*.md) zu erklaeren, damit der
+     Agent die Labels richtig interpretiert.
+
+Merkposten 2190b-M:
+  Bei jedem neuen Prompt-Block mit
+  Konflikt-Potenzial: Label mit Prioritaet
+  versehen und im Body erklaeren.
+
 ## Fail-closed-Prinzip
 
 Wenn eine Pruefung nicht moeglich ist: blockieren,

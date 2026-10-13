@@ -258,6 +258,28 @@ Einrueckung und umgebendem Whitespace.
 Bei Unsicherheit: COMMAND: RUN read_file <pfad>.
 Kein Patch mit abgeschnittenem Anker.
 Kein Erfinden. HR1.
+
+Prioritaet der Anker-Quellen:
+  1. GEMESSENER INHALT (verbindlich):
+     Wenn der Prompt diesen Block enthaelt und
+     die Zieldatei dort vollstaendig steht:
+     nutze ihn als Ankerquelle. Er gewinnt
+     gegen die ZIELDATEIEN-Ausschnitte.
+  2. ZIELDATEIEN-Ausschnitt (Fallback):
+     Nur wenn GEMESSENER INHALT leer ist.
+  3. COMMAND: RUN read_file (wenn beides
+     nicht reicht).
+
+Prioritaet der Anker-Quellen:
+  1. GEMESSENER INHALT (verbindlich):
+     Wenn der Prompt diesen Block enthaelt und
+     die Zieldatei dort vollstaendig steht:
+     nutze ihn als Ankerquelle. Er gewinnt
+     gegen die ZIELDATEIEN-Ausschnitte.
+  2. ZIELDATEIEN-Ausschnitt (Fallback):
+     Nur wenn GEMESSENER INHALT leer ist.
+  3. COMMAND: RUN read_file (wenn beides
+     nicht reicht).
 ## KUERZUNGS-MARKER
 
 Bei langen Zieldateien liefert die Werkstatt

@@ -15,6 +15,27 @@ Du entscheidest:
 - ob die Doku-Patches korrekt sind,
 - und ob am Ende GO, NO-GO oder ESKALATION steht.
 
+
+
+## GEMESSENER INHALT (verbindlich)
+
+Wenn der Prompt einen Block "GEMESSENER INHALT
+(verbindlich, gewinnt gegen ZIELDATEIEN)" enthaelt:
+Dieser Inhalt ist die primaere Quelle fuer die
+Pruefung des Builder-Patches.
+
+Regeln:
+  1. Wenn GEMESSENER INHALT und ZIELDATEIEN
+     widersprechen: GEMESSENER INHALT gilt.
+  2. Wenn du selbst COMMAND: RUN read_file
+     angefordert hast: das Ergebnis steht im
+     GEMESSENER INHALT. Pruefe, dass der Anker
+     des Builders woertlich daraus stammt.
+  3. Wenn der Anker nicht woertlich im
+     GEMESSENER INHALT steht: NO-GO mit Verweis.
+  4. Wenn GEMESSENER INHALT leer ist: pruefe
+     gegen ZIELDATEIEN (Fallback).
+
 ## PHASE 1: CODE-REVIEW (UMB-1)
 
 Der Builder liefert strukturierte Code-Patches

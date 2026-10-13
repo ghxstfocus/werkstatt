@@ -2930,3 +2930,100 @@ class TestBuilderMdPfadRegel:
         assert "Pfad-Regel" in s
         assert "Rekonstruiere den Pfad NICHT" in s
         assert "test_tools_traceroute.py" in s
+
+
+
+# =====================================================================
+# 2190: GEMESSENER INHALT als primaere Ankerquelle
+# =====================================================================
+
+class TestGemessenerInhalt:
+    """Auflage 2190: GEMESSENER INHALT als primaere Ankerquelle."""
+
+    def test_builder_prompt_enthaelt_gemessenen_inhalt_nach_zieldateien(
+            self) -> None:
+        """Im Builder-Prompt steht GEMESSENER INHALT nach ZIELDATEIEN."""
+        quelle = Path("/opt/werkstatt/pipeline.py").read_text(
+            encoding="utf-8")
+        i_ziel = quelle.find("+ ziel_snippets + \"\\n\\n\"")
+        i_gem = quelle.find(
+            "GEMESSENER INHALT (verbindlich, gewinnt gegen")
+        assert i_ziel > 0
+        assert i_gem > 0
+        assert i_gem > i_ziel
+
+    def test_reviewer_prompt_enthaelt_gemessenen_inhalt_nach_zieldateien(
+            self) -> None:
+        """Im Reviewer-Prompt steht GEMESSENER INHALT nach ZIELDATEIEN."""
+        quelle = Path("/opt/werkstatt/pipeline.py").read_text(
+            encoding="utf-8")
+        i_ziel = quelle.find('+ ziel_snippets_rev + "\\n\\n"')
+        i_gem = quelle.find(
+            "GEMESSENER INHALT (verbindlich, gewinnt gegen",
+            max(0, i_ziel))
+        assert i_ziel > 0
+        assert i_gem > 0
+        assert i_gem > i_ziel
+
+    def test_ziel_snippets_ersetzt_wenn_gemessen_vollstaendig(
+            self, tmp_path: Path) -> None:
+        """Pfad im GEMESSENEN INHALT -> ZIELDATEIEN nur Kopf."""
+        (tmp_path / "tools").mkdir()
+        (tmp_path / "tools" / "x.py").write_text(
+            "A" * 5000, encoding="utf-8")
+        vollpfad = str((tmp_path / "tools" / "x.py").resolve())
+        s = pipeline.read_target_snippets(
+            ["tools/x.py"], tmp_path, ["tools/"],
+            bereits_gemessen={vollpfad})
+        assert "vollstaendig im GEMESSENEN INHALT" in s
+        assert "Kein Auszug hier" in s
+        assert "A" * 100 not in s
+
+    def test_ziel_snippets_bleibt_wenn_nicht_gemessen(
+            self, tmp_path: Path) -> None:
+        """Pfad nicht im GEMESSENEN INHALT -> normaler Ausschnitt."""
+        (tmp_path / "tools").mkdir()
+        (tmp_path / "tools" / "x.py").write_text(
+            "Inhalt A.\n", encoding="utf-8")
+        s = pipeline.read_target_snippets(
+            ["tools/x.py"], tmp_path, ["tools/"],
+            bereits_gemessen=set())
+        assert "Inhalt A." in s
+
+    def test_builder_md_gemessener_inhalt_verbindlich(self) -> None:
+        """builder.md nennt GEMESSENER INHALT als bevorzugte Quelle."""
+        s = Path("/opt/werkstatt/agents/builder.md").read_text(
+            encoding="utf-8")
+        assert "GEMESSENER INHALT" in s
+        assert "Prioritaet der Anker-Quellen" in s
+
+    def test_reviewer_md_gemessener_inhalt_verbindlich(self) -> None:
+        """reviewer.md hat den GEMESSENER INHALT-Abschnitt."""
+        s = Path("/opt/werkstatt/agents/reviewer.md").read_text(
+            encoding="utf-8")
+        assert "## GEMESSENER INHALT (verbindlich)" in s
+        assert s.count("## GEMESSENER INHALT (verbindlich)") == 1
+
+    def test_gemessene_pfade_hilfsfunktion(self) -> None:
+        """_gemessene_pfade erkennt vollstaendige read_file-Bloecke."""
+        text = (
+            "=== read_file ===\n"
+            "ARGV: cat /opt/security-ai/tests/unit/test_x.py\n"
+            "RC: 0\n"
+            "STDOUT:\nInhalt\nSTDERR:\n\n"
+        )
+        pfade = pipeline._gemessene_pfade(text)
+        assert "/opt/security-ai/tests/unit/test_x.py" in pfade
+
+    def test_gemessene_pfade_gekuerzt_nicht_erkannt(self) -> None:
+        """Gekuerzter read_file-Block wird nicht als vollstaendig erkannt."""
+        text = (
+            "=== read_file ===\n"
+            "ARGV: cat /opt/security-ai/tests/unit/test_x.py\n"
+            "RC: 0\n"
+            "STDOUT:\nAnfang\n"
+            "[... AUSSCHNITT GEKUERZT. 100 weitere Zeichen. ...]\n"
+            "STDERR:\n\n"
+        )
+        pfade = pipeline._gemessene_pfade(text)
+        assert "/opt/security-ai/tests/unit/test_x.py" not in pfade

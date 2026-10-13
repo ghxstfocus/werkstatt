@@ -1542,10 +1542,41 @@ def extract_paths_from_aufgabe(aufgabe: str,
     return ergebnis
 
 
+def _gemessene_pfade(mess_protokoll: str) -> set[str]:
+    """Auflage 2190c: ermittelt Pfade, die im mess_protokoll
+    vollstaendig gelesen wurden (read_file, ok, kein GEKUERZT).
+
+    Liest den mess_protokoll-Text nach read_file-Aufrufen.
+    Ein read_file-Aufruf ist vollstaendig, wenn RC 0 war und
+    kein "AUSSCHNITT GEKUERZT"-Marker folgt.
+    """
+    pfade: set[str] = set()
+    if not mess_protokoll:
+        return pfade
+    bloecke = mess_protokoll.split("=== read_file ===")
+    for block in bloecke[1:]:
+        zeilen = block.splitlines()
+        pfad: str | None = None
+        rc0 = False
+        gekuerzt = False
+        for z in zeilen:
+            if z.startswith("ARGV: cat "):
+                pfad = z[len("ARGV: cat "):].strip()
+            elif z.startswith("RC: "):
+                rc0 = z.strip() == "RC: 0"
+            elif "AUSSCHNITT GEKUERZT" in z:
+                gekuerzt = True
+        if pfad and rc0 and not gekuerzt:
+            pfade.add(pfad)
+    return pfade
+
+
 def read_target_snippets(paths: list[str],
                         project_dir: Path,
                         file_whitelist: list[str],
-                        max_len: int = 3000) -> str:
+                        max_len: int = 3000,
+                        bereits_gemessen: set[str] | None = None
+                        ) -> str:
     """Auflage 2146: Ausschnitte aus den Zieldateien.
 
     Fail closed bei Pfad ausserhalb file_whitelist.
@@ -1572,6 +1603,15 @@ def read_target_snippets(paths: list[str],
             continue
         total = len(inhalt)
         gekuerzt = total > max_len
+        vollpfad = str(ziel.resolve())
+        if bereits_gemessen and vollpfad in bereits_gemessen:
+            teile.append(
+                f"--- {p} (vollstaendig im GEMESSENEN "
+                f"INHALT unten) ---")
+            teile.append(
+                "[... Siehe Sektion GEMESSENER INHALT. "
+                "Kein Auszug hier. ...]")
+            continue
         ausschnitt = inhalt[:max_len]
         ausschnitt, _ = redaction.redact_all(
             ausschnitt, max_len=100000)
@@ -2104,12 +2144,14 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
     ziel_pfade = extract_paths_from_aufgabe(
         aufgabe, file_whitelist, project_dir)
     ziel_snippets = read_target_snippets(
-        ziel_pfade, project_dir, file_whitelist)
+        ziel_pfade, project_dir, file_whitelist,
+        bereits_gemessen=_gemessene_pfade(state.mess_protokoll))
     builder_user_prompt = (
         f"BASIS-GATE:\n{state.basis_protokoll[:1500]}\n\n"
-        f"OPTIONALE MESSUNGEN:\n{state.mess_protokoll or '(keine)'}\n\n"
         + format_doc_snippets(state.docs) + "\n\n"
         + ziel_snippets + "\n\n"
+        + f"GEMESSENER INHALT (verbindlich, gewinnt gegen "
+        f"ZIELDATEIEN):\n{state.mess_protokoll or '(keine)'}\n\n"
         + aufgabe_block(state)
         + "Liefere strukturierte Code-Patches im Format "
         "PATCH-BEGINN/PATCH-ENDE.\n"
@@ -2177,7 +2219,9 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
         ziel_pfade_rev = extract_paths_from_aufgabe(
             state.aufgabe, file_whitelist, project_dir)
         ziel_snippets_rev = read_target_snippets(
-            ziel_pfade_rev, project_dir, file_whitelist)
+            ziel_pfade_rev, project_dir, file_whitelist,
+            bereits_gemessen=_gemessene_pfade(
+                state.mess_protokoll))
         szenario = (
             # Auflage 2152: Auftrag MUSS im Szenario stehen.
             aufgabe_block(state)
@@ -2186,11 +2230,12 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             + "\n\n"
             + f"{runden_block}"
             f"BASIS-GATE:\n{state.basis_protokoll[:800]}\n\n"
-            f"OPTIONALE MESSUNGEN:\n{state.mess_protokoll or '(keine)'}\n\n"
             f"CODE-ENTWURF:\n{state.code_entwurf}\n\n"
             f"TEST-VORSCHLAEGE:\n{state.test_vorschlaege or '(keine)'}\n\n"
             # Auflage 2177: Zieldatei-Ausschnitte.
             + ziel_snippets_rev + "\n\n"
+            + f"GEMESSENER INHALT (verbindlich, gewinnt gegen "
+            f"ZIELDATEIEN):\n{state.mess_protokoll or '(keine)'}\n\n"
             "Bewerte. Erste Zeile: GO, NO-GO oder ESKALATION."
         )
         rc = budget_or_recover(state, max_llm,
