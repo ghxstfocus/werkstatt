@@ -211,7 +211,7 @@ im gleichen Block.
 
 Beides in einem Block fuehrt zu einem
 Deadlock: der Builder interpretiert COMMAND
-als vorrangig (HR4) und liefert eine
+als vorrangig (B5) und liefert eine
 Rueckfrage. Der NO-GO-Bescheid straft ihn
 dafuer ab.
 
