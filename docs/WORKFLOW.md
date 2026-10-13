@@ -177,6 +177,39 @@ Merkposten 2191-M2:
   Prompt in Schleifen frisch gebaut
   werden muss.
 
+## Werkstatt als Messender
+
+HR1 (Faktenlage vor Meinung) wird von der
+Werkstatt ausgefuehrt, nicht vom Agenten.
+Der Agent soll nicht entscheiden muessen,
+ob er messen muss.
+
+Dreischichtiges Modell:
+  1. Zugriff: der Agent KANN messen
+     (COMMAND: RUN read_file).
+  2. Sichtbarkeit: der Agent SIEHT die
+     Messung (GEMESSENER INHALT-Block).
+  3. Automatik: die Werkstatt misst selbst,
+     wenn die Messung fehlt.
+
+Nur alle drei Schichten zusammen sind
+robust. Ohne Schicht 3 entscheidet der
+Agent selbst — und entscheidet falsch
+(Auflagen 2190-2192).
+
+Grenzen der Automatik:
+  - Nur Zieldateien (aus
+    extract_paths_from_aufgabe).
+  - trim_output greift bei sehr grossen
+    Dateien (> 10000 Zeichen).
+  - Pfade ausserhalb file_whitelist werden
+    abgelehnt.
+
+Merkposten 2192-M2:
+  Bei jeder neuen 'Agent soll X'-Regel:
+  alle drei Schichten pruefen (Zugriff,
+  Sichtbarkeit, Automatik).
+
 ## Fail-closed-Prinzip
 
 Wenn eine Pruefung nicht moeglich ist: blockieren,

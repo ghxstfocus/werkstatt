@@ -194,7 +194,10 @@ MAX_PROTOKOLL_PER_COMMAND = 10_000
 MAX_PROTOKOLL_TOTAL = 100_000
 
 # Auflage 2042: erlaubte Quellen-Marker fuer COMMAND-Audits.
-ERLAUBTE_QUELLEN = {"reviewer", "builder", "test_generator"}
+ERLAUBTE_QUELLEN = {
+    "reviewer", "builder", "test_generator",
+    "pipeline_auto",
+}
 
 
 
@@ -1537,6 +1540,34 @@ def extract_paths_from_aufgabe(aufgabe: str,
     return ergebnis
 
 
+def ensure_ziel_gemessen(
+    state: RunState,
+    ziel_pfade: list[str],
+    project_dir: Path,
+    file_whitelist: list[str],
+    project_name: str,
+) -> None:
+    """Auflage 2192: Werkstatt messt automatisch fehlende Zieldateien.
+
+    Fuer jeden Pfad in ziel_pfade: pruefen, ob er im
+    mess_protokoll vollstaendig vorliegt. Wenn nicht:
+    read_file mit quelle="pipeline_auto".
+    """
+    if not ziel_pfade:
+        return
+    bereits = _gemessene_pfade(state.mess_protokoll)
+    fehlend: list[dict[str, str]] = []
+    for p in ziel_pfade:
+        ziel = (project_dir / p).resolve()
+        if str(ziel) in bereits:
+            continue
+        fehlend.append({"id": "read_file", "arg": p})
+    if not fehlend:
+        return
+    print(f"[i] Auto-Messung: {len(fehlend)} Zieldatei(en).")
+    execute_commands(state, fehlend, quelle="pipeline_auto")
+
+
 def _gemessene_pfade(mess_protokoll: str) -> set[str]:
     """Auflage 2190c: ermittelt Pfade, die im mess_protokoll
     vollstaendig gelesen wurden (read_file, ok, kein GEKUERZT).
@@ -2136,6 +2167,11 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
                           max_minutes=max_minutes)
     if rc is not None:
         return rc
+    ziel_pfade = extract_paths_from_aufgabe(
+        aufgabe, file_whitelist, project_dir)
+    ensure_ziel_gemessen(
+        state, ziel_pfade, project_dir, file_whitelist,
+        project_name)
     def _builder_user_prompt(s: RunState) -> str:
         """Auflage 2191b: baut den Builder-Prompt pro Runde
         frisch, damit GEMESSENER INHALT und ZIELDATEIEN den

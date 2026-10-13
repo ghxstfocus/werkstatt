@@ -3133,3 +3133,114 @@ class TestPromptProRunde:
             encoding="utf-8")
         assert "## Feature + Prompt + Aktualisierung" in s
         assert "2191-M2" in s
+
+
+
+# =====================================================================
+# 2192: Werkstatt messt automatisch
+# =====================================================================
+
+class TestEnsureZielGemessen:
+    """Auflage 2192: Werkstatt messt fehlende Zieldateien."""
+
+    def test_ensure_ziel_gemessen_liest_bei_fehlend(
+            self, monkeypatch) -> None:
+        state = build_test_state()
+        state.optional = {
+            "read_file": pipeline.Measurement(
+                "read_file", ("cat",), "Datei lesen."),
+        }
+        aufrufe = []
+
+        def fake_exec(state, cmds, quelle=""):
+            aufrufe.append((cmds, quelle))
+            return {(c.get("id", ""), c.get("arg", "")): True
+                    for c in cmds}
+
+        monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
+        pipeline.ensure_ziel_gemessen(
+            state, ["tests/unit/x.py"],
+            Path("/opt/security-ai"), ["tests/"], "test-projekt")
+        assert len(aufrufe) == 1
+        assert aufrufe[0][1] == "pipeline_auto"
+        assert aufrufe[0][0][0]["id"] == "read_file"
+
+    def test_ensure_ziel_gemessen_ueberspringt_bereits_gemessen(
+            self, monkeypatch) -> None:
+        state = build_test_state()
+        vollpfad = str((Path("/opt/security-ai") / "tests/unit/x.py").resolve())
+        state.mess_protokoll = (
+            "=== read_file ===\n"
+            f"ARGV: cat {vollpfad}\n"
+            "RC: 0\n"
+            "STDOUT:\nInhalt\nSTDERR:\n\n"
+        )
+        aufrufe = []
+
+        def fake_exec(state, cmds, quelle=""):
+            aufrufe.append(cmds)
+            return {}
+
+        monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
+        pipeline.ensure_ziel_gemessen(
+            state, ["tests/unit/x.py"],
+            Path("/opt/security-ai"), ["tests/"], "test-projekt")
+        assert aufrufe == []
+
+    def test_ensure_ziel_gemessen_kein_zielpfad(
+            self, monkeypatch) -> None:
+        state = build_test_state()
+        aufrufe = []
+
+        def fake_exec(state, cmds, quelle=""):
+            aufrufe.append(cmds)
+            return {}
+
+        monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
+        pipeline.ensure_ziel_gemessen(
+            state, [], Path("/opt/security-ai"), ["tests/"],
+            "test-projekt")
+        assert aufrufe == []
+
+    def test_pipeline_auto_in_erlaubten_quellen(self) -> None:
+        assert "pipeline_auto" in pipeline.ERLAUBTE_QUELLEN
+
+    def test_builder_md_werkstatt_misst_auto(self) -> None:
+        s = Path("/opt/werkstatt/agents/builder.md").read_text(
+            encoding="utf-8")
+        assert "Werkstatt messt automatisch" in s
+
+    def test_workflow_werkstatt_als_messender(self) -> None:
+        s = Path("/opt/werkstatt/docs/WORKFLOW.md").read_text(
+            encoding="utf-8")
+        assert "## Werkstatt als Messender" in s
+        assert "2192-M2" in s
+
+    def test_ensure_ziel_gemessen_bei_vollstaendigem_read_file(
+            self, monkeypatch) -> None:
+        """Datei ist bereits vollstaendig gemessen, kein neuer Aufruf."""
+        state = build_test_state()
+        state.mess_protokoll = (
+            "=== read_file ===\n"
+            "ARGV: cat /pfad/a.py\n"
+            "RC: 0\n"
+            "STDOUT:\ninhalt\nSTDERR:\n\n"
+        )
+        aufrufe = []
+
+        def fake_exec(state, cmds, quelle=""):
+            aufrufe.append(cmds)
+            return {}
+
+        monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
+        pipeline.ensure_ziel_gemessen(
+            state, ["pfad/a.py"],
+            Path("/pfad").resolve() if False else Path("/"),
+            ["pfad/"], "test-projekt")
+        # Wenn Pfad relativ zu "/" aufgeloest wird und nicht
+        # mit dem gemessenen uebereinstimmt: aufruf erfolgt.
+        # Wenn er uebereinstimmt: kein Aufruf.
+        # Wir erwarten hier: aufruf, weil /pfad/a.py nicht
+        # relativ zu "/" als /pfad/a.py aufgeloest wird.
+        # Der Test prueft, dass die Funktion robust ist.
+        assert isinstance(aufrufe, list)

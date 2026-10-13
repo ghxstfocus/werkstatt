@@ -259,6 +259,14 @@ Bei Unsicherheit: COMMAND: RUN read_file <pfad>.
 Kein Patch mit abgeschnittenem Anker.
 Kein Erfinden. HR1.
 
+Hinweis (Auflage 2191/2192):
+  Die Werkstatt messt automatisch. Wenn der
+  GEMESSENER INHALT-Block die Zieldatei
+  enthaelt: nutze ihn ohne Rueckfrage.
+  Fordere kein zusaetzliches COMMAND: RUN
+  read_file an, wenn der Inhalt schon da
+  steht.
+
 Hinweis (Auflage 2191):
   Der GEMESSENER INHALT-Block wird in JEDER
   Runde frisch gebaut. Nach einem
