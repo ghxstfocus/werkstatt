@@ -23,6 +23,7 @@ Laengenbegrenzung.
 """
 from __future__ import annotations
 
+import ipaddress
 import re
 from typing import Any
 
@@ -177,6 +178,55 @@ __all__ = [
 #   2. redact_text    (Prompt-Injection-Schutz + Laengenlimit)
 
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+
+# Auflage 2195: private/reservierte IPv4-Bereiche
+_PRIVATE_IPV4_NETS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+]
+
+# Auflage 2195: private/reservierte IPv6-Bereiche
+_PRIVATE_IPV6_NETS = [
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("::/128"),
+]
+
+def _ist_private_ip(text: str) -> bool:
+    """Auflage 2195: prueft, ob die IP privat/reserviert ist."""
+    try:
+        ip = ipaddress.ip_address(text)
+    except ValueError:
+        return False
+    if ip.version == 4:
+        return any(ip in net for net in _PRIVATE_IPV4_NETS)
+    return any(ip in net for net in _PRIVATE_IPV6_NETS)
+
+
+def _ipv4_callback(match: re.Match[str]) -> str:
+    original = match.group(0)
+    if _ist_private_ip(original):
+        return original
+    return "[IPV4]"
+
+
+def _ipv6_callback(match: re.Match[str]) -> str:
+    original = match.group(0)
+    if _ist_private_ip(original):
+        return original
+    return "[IPV6]"
 # Auflage 2072: IPv6 deckt jetzt auch ::1, fe80::/10 und andere
 # Kurzformen ab. Der Regex ist der klassische Ausdruck fuer IPv6.
 # MAC-Adressen werden NICHT erfasst:
@@ -234,14 +284,22 @@ def redact_secrets(text: str) -> tuple[str, bool]:
         (_API_KEY_RES[3], "[BEARER]"),
         (_API_KEY_RES[4], "[TOKEN]"),
         (_MAC_RE, "[MAC]"),
-        (_IPV4_RE, "[IPV4]"),
-        (_IPV6_RE, "[IPV6]"),
         (_LONG_HEX_RE, "[HEX]"),
     ):
         neu, anzahl = regex.subn(ersatz, text)
         if anzahl > 0:
             wurde = True
             text = neu
+
+    # Auflage 2195: IPs mit Callback (private bleiben).
+    neu_ipv4, _ = _IPV4_RE.subn(_ipv4_callback, text)
+    if neu_ipv4 != text:
+        wurde = True
+        text = neu_ipv4
+    neu_ipv6, _ = _IPV6_RE.subn(_ipv6_callback, text)
+    if neu_ipv6 != text:
+        wurde = True
+        text = neu_ipv6
 
     return text, wurde
 

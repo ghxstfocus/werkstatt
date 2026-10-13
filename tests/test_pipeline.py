@@ -1259,15 +1259,15 @@ class TestAskLlmUserContentMaxLen:
         """Auch bei max_len=100_000 wird redigiert."""
         gesendet = self._patch_post(monkeypatch)
         text = (
-            "Host 192.168.178.117 und "
+            "Host 8.8.8.8 und "
             "MAC aa:bb:cc:dd:ee:ff im Text."
         )
         pipeline.ask_llm("k", "s", text, "m", 0.0, timeout=1)
         assert len(gesendet) == 1
         payload = gesendet[0]["json"]
         user_msg = payload["messages"][1]["content"]
-        # IP und MAC sind maskiert.
-        assert "192.168.178.117" not in user_msg
+        # Oeffentliche IP und MAC sind maskiert.
+        assert "8.8.8.8" not in user_msg
         assert "aa:bb:cc:dd:ee:ff" not in user_msg
 
 
@@ -1892,10 +1892,10 @@ class TestCollectMesswerte:
         assert "[REDACTED]" not in s
 
     def test_format_doc_snippets_redigiert(self) -> None:
-        """IP-Adressen werden redigiert."""
-        docs = {"x": "Host 192.168.178.117 im Text."}
+        """Oeffentliche IP-Adressen werden redigiert."""
+        docs = {"x": "Host 8.8.8.8 im Text."}
         s = pipeline.format_doc_snippets(docs)
-        assert "192.168.178.117" not in s
+        assert "8.8.8.8" not in s
 
 
 # =====================================================================
@@ -2418,10 +2418,10 @@ class TestReadTargetSnippets:
     def test_redigiert(self, tmp_path: Path) -> None:
         (tmp_path / "tools").mkdir()
         (tmp_path / "tools" / "x.py").write_text(
-            "Host 192.168.178.117.\n", encoding="utf-8")
+            "Host 8.8.8.8.\n", encoding="utf-8")
         s = pipeline.read_target_snippets(
             ["tools/x.py"], tmp_path, ["tools/"])
-        assert "192.168.178.117" not in s
+        assert "8.8.8.8" not in s
 
     def test_keine_pfade(self, tmp_path: Path) -> None:
         s = pipeline.read_target_snippets([], tmp_path, ["tools/"])
