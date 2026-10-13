@@ -2952,18 +2952,19 @@ class TestGemessenerInhalt:
         assert i_gem > 0
         assert i_gem > i_ziel
 
-    def test_reviewer_prompt_enthaelt_gemessenen_inhalt_nach_zieldateien(
+    def test_reviewer_prompt_enthaelt_gemessenen_inhalt_vor_zieldateien(
             self) -> None:
-        """Im Reviewer-Prompt steht GEMESSENER INHALT nach ZIELDATEIEN."""
+        """Auflage 2191-R: Im Reviewer-Prompt steht GEMESSENER
+        INHALT vor ZIELDATEIEN, damit der Reviewer den Anker
+        vor dem CODE-ENTWURF sieht."""
         quelle = Path("/opt/werkstatt/pipeline.py").read_text(
             encoding="utf-8")
-        i_ziel = quelle.find('+ ziel_snippets_rev + "\\n\\n"')
         i_gem = quelle.find(
-            "GEMESSENER INHALT (verbindlich, gewinnt gegen",
-            max(0, i_ziel))
-        assert i_ziel > 0
+            "GEMESSENER INHALT (verbindlich, gewinnt gegen")
+        i_ziel = quelle.find('+ ziel_snippets_rev + "\\n\\n"')
         assert i_gem > 0
-        assert i_gem > i_ziel
+        assert i_ziel > 0
+        assert i_gem < i_ziel
 
     def test_ziel_snippets_ersetzt_wenn_gemessen_vollstaendig(
             self, tmp_path: Path) -> None:

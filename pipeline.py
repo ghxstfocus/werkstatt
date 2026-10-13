@@ -122,6 +122,30 @@ R5. Pruefe Patch-Struktur (PATCH-BEGINN/ENDE,
 R6. Du lieferst entweder COMMAND: RUN ODER ein
     Verdict (GO/NO-GO/ESKALATION), niemals beides.
     (Lehre aus Probebetrieb 12.)
+
+R7. Pruefe jeden Patch-Anker gegen den
+    GEMESSENER INHALT-Block. Drei Stufen:
+    1. Anker woertlich enthalten: OK.
+    2. Anker nicht woertlich, aber einer
+       dieser Faelle trifft zu:
+         a) der GEMESSENER INHALT-Block
+            enthaelt den KUERZUNGS-MARKER
+            "[... Gesamtlimit erreicht ...]"
+            oder
+            "[... gekuerzt, N Zeichen
+            weggelassen ...]",
+         b) die +2-Spaces-verschobene
+            Variante des Ankers ist
+            woertlich enthalten
+            (Einrueckungs-Toleranz,
+            Auflage 2165).
+       Dann: COMMAND: RUN read_file <pfad>
+       anfordern. Kein NO-GO.
+    3. Anker in keiner Variante auffindbar:
+       NO-GO mit Verweis auf den Patch.
+       AUSNAHME: Wenn Stufe 2a oder 2b
+       einschlaegig war, bleibt es bei
+       COMMAND: RUN read_file.
 """
 
 
@@ -2397,12 +2421,13 @@ def run_pipeline(project_name: str, aufgabe: str) -> int:
             + "\n\n"
             + f"{runden_block}"
             f"BASIS-GATE:\n{state.basis_protokoll[:800]}\n\n"
-            f"CODE-ENTWURF:\n{state.code_entwurf}\n\n"
-            f"TEST-VORSCHLAEGE:\n{state.test_vorschlaege or '(keine)'}\n\n"
-            # Auflage 2177: Zieldatei-Ausschnitte.
-            + ziel_snippets_rev + "\n\n"
+            # Auflage 2191-R: GEMESSENER INHALT vor CODE-ENTWURF.
             + f"GEMESSENER INHALT (verbindlich, gewinnt gegen "
             f"ZIELDATEIEN):\n{state.mess_protokoll or '(keine)'}\n\n"
+            # Auflage 2177: Zieldatei-Ausschnitte.
+            + ziel_snippets_rev + "\n\n"
+            f"CODE-ENTWURF:\n{state.code_entwurf}\n\n"
+            f"TEST-VORSCHLAEGE:\n{state.test_vorschlaege or '(keine)'}\n\n"
             "Bewerte. Erste Zeile: GO, NO-GO oder ESKALATION."
         )
         rc = budget_or_recover(state, max_llm,
