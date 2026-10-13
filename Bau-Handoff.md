@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 71)
-Werkstatt-HEAD: 6e5b8fc (Tag probebetrieb-71)
+Stand: 2026-10-13 (nach Probebetrieb 73)
+Werkstatt-HEAD: f5c95ea (Tag probebetrieb-73)
 Letzter Commit in security-ai: 3ccb883
 Branch: main
 Tests: 270 passed
@@ -44,7 +44,7 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 6e5b8fc (probebetrieb-71)
+  HEAD f5c95ea (probebetrieb-73)
   Tests: 270 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
@@ -55,7 +55,7 @@ Ziel-Projekt security-ai:
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -71
+  probebetrieb-7, -17, -29 bis -73
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
   probebetrieb-1 bis -28 (historisch, vor dieser Session)
@@ -153,6 +153,9 @@ Kurzfassung:
   PB-70: Feature. code_entwurf_historie (2183 A1b).
   PB-71: Feature. rollback_vor_recovery +
          max_llm_calls 30 (2183 A1c).
+  PB-72: Doku. Handoff auf PB-71.
+  PB-73: Feature. SolverBefund-Klasse + run_id
+         (2183 A2).
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -234,6 +237,11 @@ WICHTIG (naechste Session):
         ERLEDIGT (PB-71). Neue Funktion
         rollback_vor_recovery (ungenutzt bis A3).
         max_llm_calls-Defaults 20 -> 30.
+  2183 A2 (SolverBefund-Klasse): ERLEDIGT (PB-73).
+        Enum SolverDiagnose, @dataclass
+        SolverBefund, format_solver_befund.
+        RunState.run_id und RunState.solver_befunde.
+        10 neue Tests, 293 passed.
 
   2200 (Audit-Aggregator): ERLEDIGT (PB-63).
         werkstatt_aggregate.py liest JSONL,
@@ -543,9 +551,9 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge:
-   a) 2183 A2 (SolverBefund-Klasse).
+   a) 2183 A3 (Trigger-Erkennung).
       Naechster Bau-Block.
-   b) 2183 A3 (Trigger-Erkennung).
+   b) 2183 B (Solver-Code).
    e) 2183 B (Solver-Code).
    f) 2183 C (COMMAND: RUN solver).
    g) 2183-AQ Auftragsqualitaet.
