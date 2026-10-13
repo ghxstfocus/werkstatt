@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 59)
-Werkstatt-HEAD: 33d440d (Tag probebetrieb-59)
+Stand: 2026-10-13 (nach Probebetrieb 64)
+Werkstatt-HEAD: 147ba2c (Tag probebetrieb-64)
 Letzter Commit in security-ai: 3ccb883
 Branch: main
 Tests: 270 passed
@@ -44,7 +44,7 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 33d440d (probebetrieb-59)
+  HEAD 147ba2c (probebetrieb-64)
   Tests: 270 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
@@ -55,7 +55,7 @@ Ziel-Projekt security-ai:
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -59
+  probebetrieb-7, -17, -29 bis -64
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
   probebetrieb-1 bis -28 (historisch, vor dieser Session)
@@ -137,6 +137,12 @@ Kurzfassung:
   PB-58: Doku. Handoff 2199 R7 bestaetigt.
   PB-59: Feature. pipeline_ende im basis_gate_
          nach_apply-Pfad (2183-P4-Log2).
+  PB-60: Doku. Handoff P4-Log2 + Worst-Case.
+  PB-61: Refactor. Zentraler pipeline_ende-Wrapper
+         (2183-P4-Log2, endgueltig).
+  PB-62: Feature. run_id im Audit (2200a).
+  PB-63: Feature. Audit-Aggregator (2200).
+  PB-64: Chore. projects/*.memory.yaml ignorieren.
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -195,30 +201,55 @@ WICHTIG (naechste Session):
         weiter unbetaetigt.
 
   2183-P4-Log2: Zentraler pipeline_ende-Wrapper.
-        Befund: Die verstreute _pipeline_ende-Strategie
-        (PB-56, PB-57, PB-59) hat vier Pfade gefunden,
-        aber weitere fehlen:
-        - basis_gate Schritt 0 (rc=18-Pfad).
-        - eskalation (rc=14, Lauf 17:57).
-        - no_go (rc=15).
-        - commit_review_call_failed (rc=6).
-        Loesung: run_pipeline gibt tuple[int,
-        RunState | None] zurueck, main loggt zentral.
-        Die verstreuten Aufrufe werden entfernt.
-        Kategorie 2, aber groesserer Umbau
-        (Rueckgabesignatur, Tests). Reviewer-Block
-        noetig.
-        Vorbedingung fuer eine stabile P4-Messung.
+        ERLEDIGT (PB-61). run_pipeline nimmt
+        state_ref: list[RunState]. main ruft
+        _pipeline_ende im finally. 10 verstreute
+        Aufrufe entfernt. Verifikation:
+        _pipeline_ende genau 2 Fundstellen.
 
   2183-P4-Wert: 30 als max_llm_calls.
-        Datenlage heute:
-        - Mittlerer Fail-Lauf: 11 Calls (gemessen).
-        - Livelock (PB-55 Lauf 3): ~13 Calls
-          (rekonstruiert).
-        - Eskalation (17:57): ~6 Calls (rekonstruiert).
-        Worst Case mit Solver + Recovery: 18-20.
-        30 konservativ (Reserve Faktor 1,5).
+        Datenlage (2200-Aggregator, PB-63):
+        llm_calls min=3 max=11 median=7
+        (samples=3). Worst Case mit Solver +
+        Recovery: 18-20. 30 konservativ.
         Umsetzung mit 2184.
+
+  2200 (Audit-Aggregator): ERLEDIGT (PB-63).
+        werkstatt_aggregate.py liest JSONL,
+        schreibt projects/<name>.memory.yaml.
+
+  2200a (run_id im Audit): ERLEDIGT (PB-62).
+        _AKTUELLE_RUN_ID modul-global.
+        audit() schreibt run_id, wenn gesetzt.
+        Format YYYYMMDD-HHMMSS-<pid>.
+        Alte Events ohne run_id, Aggregator
+        matcht dann per Zeitachse.
+
+  2200b: --heute-Flag fuer Aggregator
+        (Kalendertag statt 24h). Merkposten.
+
+  2200c: Pipeline ruft Aggregator nach
+        pipeline_ende automatisch. Merkposten.
+
+  2200-T: Test fuer Aggregator.
+        Synthetisches Audit-Log, Aggregation
+        pruefen. Merkposten.
+
+  2199-R7-P2: R7-Strenge Phase 2 vs.
+        apply_code_patches-Toleranz.
+        Lauf 18:43: Patch angewendet (apply
+        akzeptierte +2-Shift), dann Commit-
+        Reviewer NO-GO (R7 Stufe 3). Der
+        Commit-Reviewer hat kein COMMAND,
+        also kann er +2-Shift nicht tolerieren.
+        Fail-closed-Falschpositiv. Kategorie 3.
+
+  Owner-Regel: Nach jedem manuellen
+        git checkout/reset im Zielprojekt:
+        chown -R builder:builder /opt/security-ai/.
+        Sonst Permission denied beim naechsten
+        Werkstatt-Lauf. Als Werkstatt-Regel
+        dokumentieren.
 
   2183-AQ: Auftragsqualitaet vor Werkstatt-Lauf.
         Neue Auflage (aus 2199-Lauf 3 + Lauf
@@ -475,8 +506,8 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge:
-   a) 2183-P4-Log2 Zentraler Wrapper. Vor A1,
-      weil sonst jede weitere Messung unzuverlaessig.
+   a) 2199-R7-P2 (R7-Phase-2 vs. apply-Toleranz).
+      Akutes Fail-closed-Falschpositiv.
    b) 2183 A1a (Zustandsmaschine, klein).
    c) 2183 A1b (code_entwurf_historie).
    d) 2183 A1c (Rollback-Refaktor + 2184).
@@ -485,9 +516,10 @@ Der neue Bau-Chat soll:
    g) 2183 B (Solver-Code).
    h) 2183 C (COMMAND: RUN solver).
    i) 2183-AQ Auftragsqualitaet.
-   j) 2199a Zustandsmaschine (Kategorie 3).
-   k) 2199a Recovery-Zweig.
-   l) 2199-R7-P1 (Phase-1-R7-Wirkung).
+   j) 2200b/c/T Aggregator-Verfeinerung.
+   k) 2199a Zustandsmaschine (Kategorie 3).
+   l) 2199a Recovery-Zweig.
+   m) 2199-R7-P1 (Phase-1-R7-Wirkung).
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
    Blocks formulieren. Vor Ausfuehrung.
