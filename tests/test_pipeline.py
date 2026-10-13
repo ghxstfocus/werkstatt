@@ -2626,6 +2626,8 @@ class TestBuilderCommandLoop:
 
         def fake_exec(state, cmds, quelle=""):
             zaehler["exec"] += 1
+            return {(c.get("id", ""), c.get("arg", "")): True
+                    for c in cmds}
 
         monkeypatch.setattr(pipeline, "ask_llm", fake_ask)
         monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
@@ -2684,6 +2686,8 @@ class TestBuilderCommandLoop:
 
         def fake_exec(state, cmds, quelle=""):
             zaehler["exec"] += 1
+            return {(c.get("id", ""), c.get("arg", "")): True
+                    for c in cmds}
 
         def fake_recovery(state, art, kontext):
             zaehler["recovery"] += 1
@@ -2715,7 +2719,8 @@ class TestBuilderCommandLoop:
                 ok=True, content="COMMAND: RUN read_file README.md")
 
         def fake_exec(state, cmds, quelle=""):
-            pass
+            return {(c.get("id", ""), c.get("arg", "")): True
+                    for c in cmds}
 
         def fake_recovery(state, art, kontext):
             return pipeline.RecoveryVorschlag(
@@ -2802,3 +2807,126 @@ class TestBuilderMdKuerzung:
     def test_builder_md_kuerzungs_marker_abschnitt(self) -> None:
         s = self._md()
         assert "## KUERZUNGS-MARKER" in s
+
+
+# =====================================================================
+# 2189: Fehler-Marker + Deadlock + Pfad-Regel
+# =====================================================================
+
+class TestFehlerMarker:
+    """Auflage 2189a: ok=false wird im mess_protokoll markiert."""
+
+    def test_execute_commands_markiert_fehler(
+            self, monkeypatch) -> None:
+        state = build_test_state()
+        state.optional = {
+            "read_file": pipeline.Measurement(
+                "read_file", ("cat",), "Datei lesen."),
+        }
+        monkeypatch.setattr(
+            pipeline, "run_measurement_mit_argv",
+            lambda *a, **kw: ("nix da", False, ["cat"]))
+        ergebnisse = pipeline.execute_commands(
+            state, [{"id": "read_file", "arg": "missing.py"}],
+            "builder")
+        assert "COMMAND FEHLGESCHLAGEN" in state.mess_protokoll
+        assert ergebnisse[("read_file", "missing.py")] is False
+
+    def test_execute_commands_fehler_kategorie(
+            self, monkeypatch) -> None:
+        """Fehler-Marker ist generisch, aber sichtbar."""
+        state = build_test_state()
+        state.optional = {
+            "read_file": pipeline.Measurement(
+                "read_file", ("cat",), "Datei lesen."),
+        }
+        monkeypatch.setattr(
+            pipeline, "run_measurement_mit_argv",
+            lambda *a, **kw: ("Pfad nicht in Whitelist: x", False, []))
+        pipeline.execute_commands(
+            state, [{"id": "read_file", "arg": "x"}], "builder")
+        assert "!!! COMMAND FEHLGESCHLAGEN" in state.mess_protokoll
+        assert "Pfad nicht in Whitelist" in state.mess_protokoll
+
+
+class TestBuilderCommandDeadlockWiederholung:
+    """Auflage 2189a: wiederholter Fehler -> sofort Deadlock."""
+
+    def test_builder_command_wiederholter_fehler_deadlock(
+            self, monkeypatch) -> None:
+        state = build_test_state()
+        state.optional = {
+            "read_file": pipeline.Measurement(
+                "read_file", ("cat",), "Datei lesen."),
+        }
+        reply_cmd = pipeline.LLMReply(
+            ok=True, content="COMMAND: RUN read_file missing.py")
+        zaehler = {"ask": 0}
+
+        def fake_ask(*a, **kw):
+            zaehler["ask"] += 1
+            return reply_cmd
+
+        def fake_exec(state, cmds, quelle=""):
+            for c in cmds:
+                state.mess_protokoll += "dummy"
+            return {(c.get("id", ""), c.get("arg", "")): False
+                    for c in cmds}
+
+        monkeypatch.setattr(pipeline, "ask_llm", fake_ask)
+        monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
+        reply, rc = pipeline.builder_reply_mit_command_loop(
+            state, "key", "sys", "user", Path.cwd(),
+            "test-projekt", max_builder_runden=3)
+        assert rc == 19
+        assert reply is None
+        # Runde 1: COMMAND, ok=false -> gescheitert.
+        # Runde 2: derselbe COMMAND -> Deadlock.
+        assert zaehler["ask"] == 2
+
+    def test_builder_command_deadlock_audit(
+            self, monkeypatch) -> None:
+        state = build_test_state()
+        state.optional = {
+            "read_file": pipeline.Measurement(
+                "read_file", ("cat",), "Datei lesen."),
+        }
+        reply_cmd = pipeline.LLMReply(
+            ok=True, content="COMMAND: RUN read_file missing.py")
+        audits: list[tuple[str, dict]] = []
+
+        def fake_ask(*a, **kw):
+            return reply_cmd
+
+        def fake_exec(state, cmds, quelle=""):
+            return {(c.get("id", ""), c.get("arg", "")): False
+                    for c in cmds}
+
+        def fake_audit(kind, payload, *a, **kw):
+            audits.append((kind, payload))
+
+        monkeypatch.setattr(pipeline, "ask_llm", fake_ask)
+        monkeypatch.setattr(pipeline, "execute_commands", fake_exec)
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        pipeline.builder_reply_mit_command_loop(
+            state, "key", "sys", "user", Path.cwd(),
+            "test-projekt", max_builder_runden=3)
+        kinds = [k for k, _ in audits]
+        assert "builder_command_deadlock" in kinds
+        for k, p in audits:
+            if k == "builder_command_deadlock":
+                assert p.get("grund") == "wiederholter_fehler"
+
+
+class TestBuilderMdPfadRegel:
+    """Auflage 2189b: builder.md verlangt woertliches Pfad-Zitat."""
+
+    def _md(self) -> str:
+        return Path("/opt/werkstatt/agents/builder.md").read_text(
+            encoding="utf-8")
+
+    def test_builder_md_pfad_regel(self) -> None:
+        s = self._md()
+        assert "Pfad-Regel" in s
+        assert "Rekonstruiere den Pfad NICHT" in s
+        assert "test_tools_traceroute.py" in s

@@ -102,6 +102,20 @@ Beispiele aus der Historie:
   - 2146 + 2175 (Zieldatei-Ausschnitte).
   - 2178 + 2180 (MESSWERTE im Commit-Review).
   - 2186 + 2188 (KUERZUNGS-MARKER).
+  - 2189a + 2189b (Pfad-Woertlichkeit:
+    Mechanik markiert Fehler, Prompt
+    verlangt woertliches Pfad-Zitat).
+
+Pruefung vor jedem Feature (Auflage 2189c):
+
+  1. Was sieht der Agent von der Mechanik?
+     (Der Prompt muss den Marker enthalten.)
+  2. Was tut der Agent, wenn die Mechanik
+     warnt? (Der Prompt muss die Reaktion
+     benennen.)
+  3. Was tut der Agent bei Fehlern?
+     (Der Prompt muss Fehler-Kategorien
+     oder Fehler-Reaktion nennen.)
 
 Ohne Code sieht der Agent das Feature nicht.
 Ohne Prompt nutzt der Agent es nicht.

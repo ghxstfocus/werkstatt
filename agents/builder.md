@@ -317,6 +317,29 @@ Reihenfolge:
   3. Naechste Runde: Anker ist sichtbar.
   4. Patch bauen.
 
+Pfad-Regel (verbindlich):
+  Wenn du COMMAND: RUN read_file <pfad>
+  lieferst, MUSS der Pfad woertlich in einer
+  dieser Quellen stehen:
+
+    1. Der Auftrag nennt die Datei.
+    2. Der ZIELDATEIEN-Header
+       ("--- <pfad> (Zeichen ...) ---").
+    3. Der KUERZUNGS-MARKER
+       ("Fuer die vollstaendige Datei: COMMAND:
+        RUN read_file <pfad>").
+
+  Rekonstruiere den Pfad NICHT aus
+  Klassennamen, Methodennamen oder Modulnamen.
+  Beispiel-Fehler: "class TracerouteTests"
+  -> "test_tools_traceroute.py". Der Auftrag
+  nennt die Datei explizit.
+
+  Wenn der Pfad in keiner Quelle woertlich
+  steht: liefere keinen COMMAND fuer diese
+  Datei. Melde stattdessen einen Patch mit
+  "kein Patch fuer diese Datei".
+
 Kein Patch mit abgeschnittenem Anker.
 Kein Erfinden. HR1.
 

@@ -638,6 +638,7 @@ def builder_reply_mit_command_loop(
       (None, 19):     Builder-Command-Deadlock.
     """
     aktueller_prompt = user_prompt
+    gescheiterte: set[tuple[str, str]] = set()
     for builder_runde in range(1, max_builder_runden + 1):
         reply = ask_llm(
             api_key, builder_prompt, aktueller_prompt,
@@ -649,9 +650,26 @@ def builder_reply_mit_command_loop(
         cmds = parse_commands(reply.content)
         if not cmds:
             return reply, None
+        for cmd in cmds:
+            key = (cmd.get("id", ""), cmd.get("arg", ""))
+            if key in gescheiterte:
+                print(
+                    f"[!] COMMAND wiederholt fehlgeschlagen: "
+                    f"{key}. Deadlock.")
+                audit("builder_command_deadlock",
+                      {"grund": "wiederholter_fehler",
+                       "key": list(key)},
+                      project_dir, project_name)
+                return None, 19
         print(f"[i] Builder-Runde {builder_runde}: "
               f"{len(cmds)} COMMAND(s) angefordert.")
-        execute_commands(state, cmds, quelle="builder")
+        ergebnisse = execute_commands(
+            state, cmds, quelle="builder")
+        for key, ok in ergebnisse.items():
+            if ok:
+                gescheiterte.discard(key)
+            else:
+                gescheiterte.add(key)
         audit("builder_command_executed",
               {"runde": builder_runde,
                "anzahl": len(cmds),
@@ -976,7 +994,8 @@ def trim_output(out: str, grenze: int = MAX_PROTOKOLL_PER_COMMAND) -> str:
 
 
 def execute_commands(state: RunState, commands: list[dict[str, str]],
-                     quelle: str) -> None:
+                     quelle: str
+                     ) -> dict[tuple[str, str], bool]:
     """Fuehrt COMMAND-Zeilen aus. NUR wenn id in state.always oder state.optional.
 
     Auflagen 2039, 2040, 2041, 2042:
@@ -996,6 +1015,7 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
     katalog.update(state.always)
     katalog.update(state.optional)
 
+    ergebnisse: dict[tuple[str, str], bool] = {}
     for cmd in commands:
         cid = cmd.get("id", "")
         arg = cmd.get("arg", "")
@@ -1041,13 +1061,30 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
         if len(out) > rest_platz:
             out = out[:rest_platz] + "\n[... Gesamtlimit erreicht ...]\n"
 
-        state.mess_protokoll += out
+        if ok:
+            state.mess_protokoll += out
+        else:
+            state.mess_protokoll += (
+                "\n\n!!! COMMAND FEHLGESCHLAGEN: "
+                f"{cid} {arg} !!!\n"
+                "Der COMMAND hat ok=false geliefert. "
+                "Ursache im Output unten.\n"
+                "Wenn der Pfad falsch war: pruefe den "
+                "Pfad woertlich aus dem Auftrag, aus "
+                "dem ZIELDATEIEN-Header oder aus dem "
+                "KUERZUNGS-MARKER. Rekonstruiere ihn "
+                "nicht.\n\n"
+                + out
+            )
+        ergebnisse[(cid, arg)] = ok
 
         # Auflage 2040: argv ins Audit.
         audit("command_executed",
               {"id": cid, "arg": arg[:200], "argv": argv,
                "quelle": quelle, "ok": ok},
               state.project_dir, state.project_name)
+
+    return ergebnisse
 
 
 
