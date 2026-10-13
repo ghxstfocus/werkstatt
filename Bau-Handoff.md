@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 45)
-Werkstatt-HEAD: 7eaad9f (Tag probebetrieb-45)
+Stand: 2026-10-13 (nach Probebetrieb 50)
+Werkstatt-HEAD: 471d131 (Tag probebetrieb-50)
 Letzter Commit in security-ai: 3ccb883
 Branch: main
 Tests: 270 passed
@@ -44,7 +44,7 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 7eaad9f (probebetrieb-45)
+  HEAD 471d131 (probebetrieb-50)
   Tests: 270 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
@@ -55,7 +55,7 @@ Ziel-Projekt security-ai:
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -45
+  probebetrieb-7, -17, -29 bis -50
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
   probebetrieb-1 bis -28 (historisch, vor dieser Session)
@@ -63,7 +63,7 @@ Ziel-Projekt-Tags (auf /opt/security-ai):
   (Werkstatt-Konvention: nur Werkstatt-Repo wird getaggt).
 
 Dateien:
-  - pipeline.py (2876 Zeilen, Stand 2191-R)
+  - pipeline.py (2928 Zeilen, Stand 2191-R2b)
   - redaction.py (314 Zeilen, Stand 2195)
   - agents/*.md (5 Rollen)
   - projects/security-ai.yaml
@@ -117,6 +117,13 @@ Kurzfassung:
   PB-43: ERFOLG. Auflage 2191-R. HEAD 87092f8.
   PB-44: Doku. Handoff auf PB-43-Stand.
   PB-45: Style. ruff I001 in tests/ behoben.
+  PB-46: Doku. Handoff Abschluss-Update PB-45.
+  PB-47: Fix. reviewer.md Verweis HR4 -> B5.
+  PB-48: Refactor. Audit-Debug-Felder reduziert (2194-M).
+  PB-49: Feature. GEMESSENER INHALT + CODE-PATCHES
+         in commit_input (2191-R2).
+  PB-50: Feature. Fail-closed bei leerem mess_protokoll
+         in Phase 2 (2191-R2b).
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -140,22 +147,15 @@ Auflagen dieser Session:
 KRITISCH: keine.
 
 WICHTIG (naechste Session):
-  2191-R2: Phase 2 (Commit-Review) bekommt keinen
-           GEMESSENER INHALT (commit_input, Zeile
-           2617 ff.). Reviewer kann Anker im Commit
-           nicht gegen Messung pruefen.
-           Kategorie 3.
-
-  2194-M: Audit-Debug-Felder reduzieren. Die Felder
-          builder_prompt_gebaut und builder_reply_erhalten
-          wachsen mit jedem Lauf. Nach der Diagnose
-          reduzieren.
-          Kategorie 2.
-
   2191-R3: agents/reviewer.md Body-Regel 2 (Zeile 30-33)
            fordert "woertlich" ohne Toleranzstufen.
            Nach PB-43 pruefen, ob Widerspruch zu R7.
            Kategorie 2.
+
+  2191-R2b-T: Test fuer commit_review_ohne_messung.
+           main() ist nicht isoliert testbar. Test-
+           Harness muss erst gebaut werden. Eigener
+           Block. Kategorie 2.
 
   2191-R4: Builder-Prompt (Zeile 2344) hat GEMESSENER
            INHALT nach ZIELDATEIEN. Reviewer-Prompt
@@ -167,17 +167,25 @@ WICHTIG (naechste Session):
         quelle, sondern Modellverhalten -> 2193.
         Kategorie 3.
 
-  2182b: agents/reviewer.md:193 (HR4) -> (B8). Nach
-         2182 entfallen die HR2-HR6-Nummern. Der
-         Verweis im Reviewer-Body zeigt auf eine
-         nicht mehr existierende Nummer.
-         Kategorie 1.
-
 MITTEL (Merkposten):
-  2183: Solver-Agent (neue Rolle). Uebersetzt Auftrag
-        in praezisen Builder-Auftrag.
+  2183: Solver-Agent (neue Rolle). Rescue-Agent,
+        Hybrid (deterministisch + LLM). Triggert
+        nach NO-GO 2, wenn NO-GO 1 und NO-GO 2
+        denselben Gegenstand betreffen (Auftraggeber-
+        Entscheidung P5). Befund an Reviewer (voll)
+        und Bau-Chat (nur praezisierter Auftrag).
+        Design mit Reviewer abgestimmt (P1-P9):
+        - P1: Schwellwerte Levenshtein/Token-Overlap.
+        - P2: Dosierung Befund.
+        - P3: COMMAND: RUN solver erst nach Stabilisierung.
+        - P4: max_llm_calls erst messen.
+        - P5: Trigger-Vorbedingung (gleicher Gegenstand).
+        - P6: Solver darf 'kein Handlungsbedarf' melden.
+        - P7: Fail-closed + Rollback (Lehre 4).
+        - P8: Historisierung code_entwurf messen.
+        - P9: Format SOLVER-BEFUND definieren.
         Kategorie 3. Groesserer Umbau.
-  2184: max_llm_calls 20 -> 30 (in YAML). Mit 2183.
+  2184: max_llm_calls messen (P4).
   2185: README 6 Rollen dokumentieren. Mit 2183.
   2187b: read_file Zeilenbereich (fuer sehr grosse Dateien).
   2188a: agents/*.md konsolidieren (Widersprueche durch
@@ -196,7 +204,7 @@ NIEDRIG:
   Audit-Log-Ausbau dauerhaft (statt Debug-Felder).
   Tag-Verwirrung: Ziel-Repo-Tags 2, 20-24 auf
   f913eac, 25-28 auf dd3048b. Werkstatt-Tags 7,
-  17, 29-43. Vereinheitlichen.
+  17, 29-50. Vereinheitlichen.
 
 ================================================================
 6. WIE MAN WEITERARBEITET
@@ -360,14 +368,14 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Naechsten Block waehlen:
-   Empfehlung: 2191-R (Reviewer prueft gegen
-   GEMESSENER INHALT). Danach 2194-M (Audit-Debug
-   reduzieren). Danach 2182b (Reviewer-Body).
+   Empfehlung: 2191-R3 (Body-Regel 2 vs. R7).
+   Danach 2199 (PB: greift R7?). Danach 2183
+   (Solver-Agent, P1-P9).
 
-4. Fuer 2191-R einen Kategorie-3-Reviewer-Block
-   formulieren. Vor Ausfuehrung.
+4. Fuer 2191-R3 und 2183 Kategorie-3-Reviewer-
+   Blocks formulieren. Vor Ausfuehrung.
 
-5. Nach Erfolg: git tag probebetrieb-41.
+5. Nach Erfolg: git tag probebetrieb-<n>.
 
 6. Bei Problemen: zurueck zu diesem Handoff,
    Faktenlage pruefen, Reviewer-Chat fragen.
