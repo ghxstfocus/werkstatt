@@ -1,11 +1,11 @@
 # Bau-Handoff — Werkstatt
 
 Stand: 2026-10-14 (nach Probebetrieb 62)
-Werkstatt-HEAD: dd0e111 (kein Tag)
+Werkstatt-HEAD: 1cb266c (kein Tag, Solver-Kurskorrektur)
 Letzter echter Probebetrieb: PB-62
 Letzter Commit in security-ai: 3bb5917
 Branch: main
-Tests: 338 passed
+Tests: 346 passed
 ruff: 0
 mypy: 0
 
@@ -69,8 +69,8 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD dd0e111 (kein Tag, Werkstatt-Fix)
-  Tests: 338 passed
+  HEAD 1cb266c (kein Tag, Solver-Kurskorrektur Block 2a+4)
+  Tests: 346 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
 
@@ -91,11 +91,11 @@ Ziel-Projekt-Tags (auf /opt/security-ai):
   Pipeline-Durchlaeufe.
 
 Dateien:
-  - pipeline.py (3717 Zeilen, Stand Werkstatt-Fix)
+  - pipeline.py (3772 Zeilen, Stand Block 2a+4)
   - redaction.py (314 Zeilen, Stand 2195)
   - agents/*.md (5 Rollen)
   - projects/security-ai.yaml
-  - tests/test_pipeline.py (4238 Zeilen, Stand Werkstatt-Fix)
+  - tests/test_pipeline.py (4345 Zeilen, Stand Block 2a+4)
   - agents/solver.md (42 Zeilen, Stand 2183 B)
   - tests/test_redaction.py
   - docs/WORKFLOW.md
@@ -174,8 +174,12 @@ Kurzfassung:
   PB-60: Doku. Handoff P4-Log2 + Worst-Case.
   PB-61: Refactor. Zentraler pipeline_ende-Wrapper
          (2183-P4-Log2, endgueltig).
-  PB-62: Feature. run_id im Audit (2200a).
-  PB-63: Feature. Audit-Aggregator (2200).
+  (Hinweis: PB-62 bis PB-73 in der alten
+   Liste waren manual, Tags entfernt. Siehe
+   WICHTIG-Block oben. Der echte PB-62 ist
+   jetzt der whois-Lauf vom 2026-10-14.)
+  M-62: Feature. run_id im Audit (2200a).
+  M-63: Feature. Audit-Aggregator (2200).
   PB-64: Chore. projects/*.memory.yaml ignorieren.
   PB-65: Doku. Handoff auf PB-64.
   PB-66: Fix. R7-Phase-2-Toleranz + Aggregator
@@ -310,6 +314,31 @@ WICHTIG (naechste Session):
         ERLEDIGT (PB-71). Neue Funktion
         rollback_vor_recovery (ungenutzt bis A3).
         max_llm_calls-Defaults 20 -> 30.
+  Solver-Kurskorrektur 2026-10-14:
+        Der Solver-Agent unterstuetzt den
+        Builder-Agenten (nicht den Reviewer,
+        nicht den Menschen).
+        Block 1 (Konzept): ERLEDIGT.
+        Block 2 (solver.md + HARD_RULES_SOLVER):
+        ERLEDIGT (Commit d415e9e).
+        Block 2a+4 (Befund-Kanal):
+        ERLEDIGT (Commit 1cb266c).
+          - recovery_hinweis_block: hat_befund
+            statt befund. Reviewer sieht nur
+            neutralen Hinweis (W6, BB1).
+          - _solver_befund_block: Befund im
+            Builder-Prompt (NO-GO-Pfad),
+            Audit bei verworfenem Befund
+            (DD9, EE1).
+          - _bauer_auflagen_prompt unveraendert
+            (DD5).
+        Block 3 (Wissensbasis): OFFEN.
+        Block 5 (Solver-Loop + Fail-Pfade):
+        OFFEN.
+        Block 6 (Smoke-Test): OFFEN.
+        Zwischenzustand CC10 aufgeloest:
+        echte Laeufe wieder erlaubt.
+
   2183 C (COMMAND: RUN solver): ERLEDIGT (manual,
         Commit 9a5a17f; PB-82 war manual, Tag entfernt).
         ERLAUBTE_QUELLEN um reviewer_command.
@@ -491,6 +520,31 @@ WICHTIG (naechste Session):
 
 
 MITTEL (Merkposten):
+  Solver-Kurskorrektur Merkposten:
+        W10 (Befund-Historie): Builder-Prompt
+             nur letzter Befund. Solver-Prompt
+             (bei Runde > 1) Historie.
+             Reviewer-Prompt nichts. Umgesetzt
+             fuer Builder + Reviewer. Solver-
+             Historie kommt mit Block 5.
+        W12 (Rollen-Vertrag): sechste Rolle
+             "solver" mit Auftraggeber-
+             Beschreibung. Nach Block 5.
+        P4-nach-Solver: max_llm_calls nach 5-10
+             PB-Laeufen mit Solver neu messen.
+             Nicht auf Verdacht erhoehen (F6).
+        max_solver_runden-Kalibrierung:
+             3 ist Setzung (F5). Nach 5-10
+             PB-Laeufen kalibrieren.
+        solver_befunde-Eingrenzung: haengt an
+             RunState-Lebensdauer (BB3). Bei
+             persistentem State auf run_id
+             filtern.
+        Audit-Kanal Solver-UNKLAR: heute nur
+             Audit-Log (Frage 5, CC). Am
+             Approval-Gate anzeigen? Block 5.
+
+  U4-Kalibrierung (P1): Schwellwert 0.5
   B2 — Builder-Kanal fuer Solver-Befund.
         Kategorie 3. Aus 2183 B (X7).
         Der praezisierte_auftrag (Diagnose
@@ -766,7 +820,15 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge:
-   a) 2183-AQ Auftragsqualitaet (Rest).
+   a) Solver-Kurskorrektur Block 3
+      (Solver-Wissensbasis). Kategorie 3.
+      agent_docs["solver"] in security-ai.yaml.
+      Prompt-Bau erweitern.
+   b) Solver-Kurskorrektur Block 5
+      (Solver-Loop + Fail-Pfade). Kategorie 3.
+   c) Solver-Kurskorrektur Block 6
+      (Smoke-Test). Kategorie 2.
+   d) 2183-AQ Auftragsqualitaet (Rest).
       Bei PB-62 praktisch angewendet (Pre-Flight
       whois.py gegen Zielcode). Formaler Nieder-
       schlag (Checkliste in docs/) offen.
