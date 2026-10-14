@@ -4154,3 +4154,85 @@ def _c_state() -> pipeline.RunState:
         {"runde": 1, "verdict": "NO-GO",
          "raw": "x", "recovery": False})
     return st
+
+
+def test_mess_protokoll_veraltet_default_false() -> None:
+    """Z1: neuer State hat _veraltet=False."""
+    from pathlib import Path as _P
+    st = pipeline.RunState(
+        block_id="b", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=_P("/tmp"))
+    assert st.mess_protokoll_veraltet is False
+
+
+def test_mess_protokoll_nicht_mutiert_von_veraltet_flag() -> None:
+    """Z1: das Flag aendert mess_protokoll nicht."""
+    from pathlib import Path as _P
+    st = pipeline.RunState(
+        block_id="b", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=_P("/tmp"))
+    st.mess_protokoll = "urspruenglich"
+    st.mess_protokoll_veraltet = True
+    assert st.mess_protokoll == "urspruenglich"
+
+
+def test_nach_apply_block_leer_bleibt_weg() -> None:
+    """Z4: leerer basis_protokoll_nach_apply -> Block fehlt."""
+    from pathlib import Path as _P
+    st = pipeline.RunState(
+        block_id="b", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=_P("/tmp"))
+    st.mess_protokoll = "inhalt vor apply"
+    st.mess_protokoll_veraltet = True
+    st.basis_protokoll_nach_apply = ""
+    # Wir simulieren den Prompt-Bau wie in Phase 1.
+    header = (
+        ("!!! ACHTUNG: Code-Patches wurden angewendet.\n"
+         "!!! Der folgende GEMESSENER INHALT ist der\n"
+         "!!! Stand VOR dem Apply.\n\n")
+        if st.mess_protokoll_veraltet else "")
+    nach_apply = (
+        (f"GEMESSENER INHALT NACH APPLY:\n"
+         f"{st.basis_protokoll_nach_apply}\n\n")
+        if st.basis_protokoll_nach_apply else "")
+    text = header + st.mess_protokoll + nach_apply
+    assert "Stand VOR dem Apply" in text
+    assert "GEMESSENER INHALT NACH APPLY" not in text
+
+
+def test_nach_apply_block_erscheint_bei_inhalt() -> None:
+    """Z3: bei vorhandenem basis_protokoll_nach_apply -> Block da."""
+    from pathlib import Path as _P
+    st = pipeline.RunState(
+        block_id="b", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=_P("/tmp"))
+    st.mess_protokoll = "inhalt vor apply"
+    st.mess_protokoll_veraltet = True
+    st.basis_protokoll_nach_apply = "nach apply: alles gruen"
+    nach_apply = (
+        (f"GEMESSENER INHALT NACH APPLY:\n"
+         f"{st.basis_protokoll_nach_apply}\n\n")
+        if st.basis_protokoll_nach_apply else "")
+    assert "GEMESSENER INHALT NACH APPLY" in nach_apply
+    assert "nach apply: alles gruen" in nach_apply
+
+
+def test_prompt_phase1_vor_erstem_apply_kein_header() -> None:
+    """Z4: ohne Apply kein Header, kein Nach-Apply-Block."""
+    from pathlib import Path as _P
+    st = pipeline.RunState(
+        block_id="b", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=_P("/tmp"))
+    st.mess_protokoll = "frisch gemessen"
+    assert st.mess_protokoll_veraltet is False
+    assert st.basis_protokoll_nach_apply == ""

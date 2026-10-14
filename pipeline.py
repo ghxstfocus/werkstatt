@@ -1049,6 +1049,12 @@ class RunState:
     basis_protokoll: str = ""
     basis_protokoll_nach_apply: str = ""  # UMB-1b
     mess_protokoll: str = ""
+    # Bug-Fix 2026-10-14: True, sobald mindestens
+    # ein Apply passiert ist. Der GEMESSENER
+    # INHALT-Block ist dann der Stand VOR dem
+    # Apply. Kein Reset (mess_protokoll ist
+    # akkumulativ).
+    mess_protokoll_veraltet: bool = False
     code_entwurf: str = ""
     # Auflage 2183 A1b: Historisierung fuer Solver-Vergleich.
     code_entwurf_historie: list[dict[str, Any]] = \
@@ -2146,6 +2152,9 @@ def apply_and_recheck(state: RunState,
         return 17
 
     print("[*] Basis-Gate nach Anwendung (ohne git_status).")
+    # Bug-Fix 2026-10-14: Apply ist passiert.
+    # mess_protokoll ist ab jetzt der Stand VOR Apply.
+    state.mess_protokoll_veraltet = True
     state.basis_protokoll_nach_apply = ""
     nach_fehler: list[str] = []
     for mid, m in always.items():
@@ -3100,8 +3109,20 @@ def run_pipeline(project_name: str, aufgabe: str,
             + f"{runden_block}"
             f"BASIS-GATE:\n{state.basis_protokoll[:800]}\n\n"
             # Auflage 2191-R: GEMESSENER INHALT vor CODE-ENTWURF.
+            # Bug-Fix 2026-10-14: Header, wenn Apply passierte.
+            + (("!!! ACHTUNG: Code-Patches wurden angewendet.\n"
+                "!!! Der folgende GEMESSENER INHALT ist der\n"
+                "!!! Stand VOR dem Apply. Der aktuelle Stand\n"
+                "!!! steht im MESSWERTE-Block und im\n"
+                "!!! GEMESSENER INHALT NACH APPLY.\n\n")
+               if state.mess_protokoll_veraltet else "")
             + f"GEMESSENER INHALT (verbindlich, gewinnt gegen "
             f"ZIELDATEIEN):\n{state.mess_protokoll or '(keine)'}\n\n"
+            # Bug-Fix 2026-10-14: Nach-Apply-Block (Z4:
+            # nur wenn vorhanden).
+            + (f"GEMESSENER INHALT NACH APPLY:\n"
+               f"{state.basis_protokoll_nach_apply}\n\n"
+               if state.basis_protokoll_nach_apply else "")
             # Auflage 2177: Zieldatei-Ausschnitte.
             + ziel_snippets_rev + "\n\n"
             f"CODE-ENTWURF:\n{state.code_entwurf}\n\n"
@@ -3429,6 +3450,9 @@ def run_pipeline(project_name: str, aufgabe: str,
                 + "\n\nGEMESSENER INHALT (verbindlich, "
                 + "gewinnt gegen ZIELDATEIEN):\n"
                 + f"{state.mess_protokoll or '(keine)'}\n\n"
+                + (f"GEMESSENER INHALT NACH APPLY:\n"
+                   f"{state.basis_protokoll_nach_apply}\n\n"
+                   if state.basis_protokoll_nach_apply else "")
                 + "CODE-PATCHES (angewendet):\n"
                 + format_code_patches_fuer_commit(state.code_patches)
                 + "\n\n"
