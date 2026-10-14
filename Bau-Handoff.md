@@ -1,11 +1,11 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-14
-Werkstatt-HEAD: 6ce7bf8 (kein Tag)
-Letzter echter Probebetrieb: PB-61
-Letzter Commit in security-ai: 35e5178
+Stand: 2026-10-14 (nach Probebetrieb 62)
+Werkstatt-HEAD: dd0e111 (kein Tag)
+Letzter echter Probebetrieb: PB-62
+Letzter Commit in security-ai: 3bb5917
 Branch: main
-Tests: 333 passed
+Tests: 338 passed
 ruff: 0
 mypy: 0
 
@@ -24,10 +24,12 @@ Die Commits selbst bleiben (die Arbeit ist real),
 nur die Tags waren semantisch falsch.
 
 Letzter echter security-ai-Durchlauf:
-  2026-10-13T18:43:09  rc=7  run_pipeline_exit
+  2026-10-14T21:00-21:02  rc=0  PB-62
+  Commit 3bb5917 (whois ToolArgumentValueError).
+  Erster erfolgreicher Lauf nach der
+  Probebetrieb-Neudefinition.
 
-Naechster echter Probebetrieb: probebetrieb-62
-(Nummer ist frei).
+Naechster echter Probebetrieb: probebetrieb-63.
 
 ================================================================
 
@@ -67,14 +69,14 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 6ce7bf8 (kein Tag, manual)
-  Tests: 333 passed
+  HEAD dd0e111 (kein Tag, Werkstatt-Fix)
+  Tests: 338 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
 
 Ziel-Projekt security-ai:
-  HEAD 35e5178 (dns_lookup IPv6-Feld, 2199-Zwischenstand 2)
-  Vorgaenger 3ccb883 (Traceroute), dd3048b (PingError)
+  HEAD 3bb5917 (whois ToolArgumentValueError, PB-62)
+  Vorgaenger 35e5178 (dns_lookup IPv6-Feld)
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
@@ -82,16 +84,18 @@ Werkstatt-Tags (auf /opt/werkstatt):
   (Nur echte Pipeline-Durchlaeufe.)
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
-  probebetrieb-1 bis -28 (historisch, vor dieser Session)
-  Der zweite Commit (3ccb883) hat keinen Tag bekommen
-  (Werkstatt-Konvention: nur Werkstatt-Repo wird getaggt).
+  probebetrieb-1 bis -28 (historisch)
+  probebetrieb-62 (3bb5917, erster echter Lauf
+  nach der Neudefinition)
+  Konvention: Ziel-Repo-Tag fuer echte
+  Pipeline-Durchlaeufe.
 
 Dateien:
-  - pipeline.py (3693 Zeilen, Stand 2183 C)
+  - pipeline.py (3717 Zeilen, Stand Werkstatt-Fix)
   - redaction.py (314 Zeilen, Stand 2195)
   - agents/*.md (5 Rollen)
   - projects/security-ai.yaml
-  - tests/test_pipeline.py (4156 Zeilen, Stand 2183 C)
+  - tests/test_pipeline.py (4238 Zeilen, Stand Werkstatt-Fix)
   - agents/solver.md (42 Zeilen, Stand 2183 B)
   - tests/test_redaction.py
   - docs/WORKFLOW.md
@@ -306,7 +310,8 @@ WICHTIG (naechste Session):
         ERLEDIGT (PB-71). Neue Funktion
         rollback_vor_recovery (ungenutzt bis A3).
         max_llm_calls-Defaults 20 -> 30.
-  2183 C (COMMAND: RUN solver): ERLEDIGT (PB-82).
+  2183 C (COMMAND: RUN solver): ERLEDIGT (manual,
+        Commit 9a5a17f; PB-82 war manual, Tag entfernt).
         ERLAUBTE_QUELLEN um reviewer_command.
         SOLVER_ARG_MAX_LEN=200 (F6, kuerzen
         statt reject). RunState.solver_trigger_
@@ -319,7 +324,8 @@ WICHTIG (naechste Session):
         (Y2). P1-Audit mit quelle=p1_trigger.
         +8 Tests, 333 passed.
 
-  2183 B (Solver-Code): ERLEDIGT (PB-80).
+  2183 B (Solver-Code): ERLEDIGT (manual,
+        Commit 47a9a8b; PB-80 war manual, Tag entfernt).
         agents/solver.md (Rolle, HARD_RULES_
         SOLVER S1-S7). Parser parse_solver_
         diagnose (Fallback UNKLAR). baue_
@@ -359,6 +365,13 @@ WICHTIG (naechste Session):
         Solver-Befund). ACHTUNG (T1): Ohne P1
         triggert der Marker auch bei ANDERER_FEHLER;
         Solver-Pfad (B) muss tolerant sein (P6).
+
+  Bug-Fix 2026-10-14 (GEMESSENER INHALT nach Apply):
+        ERLEDIGT (Werkstatt-HEAD dd0e111).
+        mess_protokoll_veraltet-Flag. Phase 1:
+        Header + Nach-Apply-Block. Commit-Review:
+        nur Nach-Apply-Block. Erster echter Lauf
+        mit dem Fix: PB-62, COMMIT-GO in Runde 1.
 
   2183 A2 (SolverBefund-Klasse): ERLEDIGT (PB-73).
         Enum SolverDiagnose, @dataclass
@@ -753,7 +766,10 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge:
-   a) 2183-AQ Auftragsqualitaet.
+   a) 2183-AQ Auftragsqualitaet (Rest).
+      Bei PB-62 praktisch angewendet (Pre-Flight
+      whois.py gegen Zielcode). Formaler Nieder-
+      schlag (Checkliste in docs/) offen.
       Kategorie 3.
    b) 2200b/c/T Aggregator-Verfeinerung.
    d) 2183-AQ Auftragsqualitaet.
