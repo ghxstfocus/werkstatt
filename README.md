@@ -3,122 +3,165 @@
 Das Agenten-System. Unabhaengig von jedem Projekt. Es baut Projekte,
 aber es gehoert keinem Projekt.
 
-## Was ist das hier
+## Auf einen Blick
 
-Die Werkstatt enthaelt Rollen (Reviewer, Builder, Test-Generator,
-Coverage, Chaos), eine Pipeline, die diese Rollen orchestriert, und
-pro Projekt eine Konfiguration, die sagt, wo das Projekt liegt und
-welche Doku es hat.
+    +----------------------------------------------------------+
+    |                        MENSCH                             |
+    |                  (letzte Instanz, Human-Gate)             |
+    +----------------------------------------------------------+
+                              |  ^
+                              v  |
+    +----------------------------------------------------------+
+    |                        WERKSTATT                          |
+    |                                                           |
+    |   +-------------+    Auftrag    +-------------------+    |
+    |   | Werkstatt-  |-------------->|      BUILDER      |    |
+    |   |   Chat      |               |  (baut Patches)   |    |
+    |   +-------------+               +-------------------+    |
+    |         |                              |   ^             |
+    |         | Reviewer-Block               v   | Befund      |
+    |         v                       +-------------+          |
+    |   +-------------+  NO-GO-Paar   |   SOLVER    |          |
+    |   |  REVIEWER   |-------------->|  (Diagnose, |          |
+    |   | (bewertet)  |               |   Skizze)   |          |
+    |   +-------------+               +-------------+          |
+    |         |                                                 |
+    |         | GO / NO-GO / ESKALATION                         |
+    |         v                                                 |
+    |   +-------------+     +-------------+    +------------+   |
+    |   | TEST-GEN    |     |  COVERAGE   |    |   CHAOS    |   |
+    |   | (LLM)       |     |  (No-LLM)   |    |  (No-LLM)  |   |
+    |   +-------------+     +-------------+    +------------+   |
+    +----------------------------------------------------------+
+                              |
+                              v
+                     Ziel-Projekt (z. B. security-ai)
 
-Der Reviewer ist der oberste Entscheidungstraeger in einem Block.
-Der Mensch ist die letzte Instanz (Approval-Gate). Der Builder baut.
-Die Werkstatt selbst trifft keine Entscheidungen — sie setzt um, was
-der Reviewer entscheidet, und wartet an jedem schreibenden Schritt
-auf den Menschen.
+## Die sechs Rollen
+
+| Rolle           | Typ               | Adressat              | Aufgabe                          |
+|-----------------|-------------------|-----------------------|----------------------------------|
+| reviewer        | LLM (reasoner)    | das Ergebnis          | bewerten: GO/NO-GO/ESKALATION    |
+| builder         | LLM (chat)        | Werkstatt-Chat, Solver| Code-Patches bauen               |
+| solver          | LLM (chat)        | builder               | woran + wie besser (Skizze)      |
+| test_generator  | LLM (chat)        | builder               | Test-Vorschlaege                 |
+| coverage        | No-LLM            | —                     | Coverage messen                  |
+| chaos           | No-LLM            | —                     | Extremwerte fuzzen               |
+
+**reviewer** — prueft Code, Commit-Message, Doku. Waehlt Messungen.
+Loest nicht. Schreibt nichts.
+
+**builder** — baut Code-Patches und Commit-Paket. Baut bei NO-GO neu.
+Baut bei zweimal NO-GO mit gleichem Gegenstand mit Solver-Befund.
+
+**solver** — Unterstuetzung fuer den builder. Wird gerufen, wenn der
+reviewer zweimal NO-GO gibt. Diagnostiziert: GLEICHER_FEHLER,
+ANDERER_FEHLER, WIDERSPRUCH, UNKLAR. Empfiehlt, wie besser. Darf
+Code als Skizze geben, keine fertigen Skripte. Bewertet nicht.
+Adressat ist der builder, nicht der Mensch.
+
+Der Solver-Befund geht in den Builder-Prompt (naechster Neubau).
+Der Reviewer sieht nur einen neutralen Hinweis.
+
+**test_generator** — Test-Vorschlaege bei niedriger Coverage.
+
+**coverage, chaos** — No-LLM. Der Code ruft sie direkt.
 
 ## Struktur
 
     /opt/werkstatt/
-    ├── agents/                  Rollen-Definitionen (Markdown + YAML)
+    ├── agents/                  Rollen (Markdown + YAML)
     │   ├── reviewer.md
     │   ├── builder.md
+    │   ├── solver.md
     │   ├── test_generator.md
     │   ├── coverage.md
     │   └── chaos.md
     ├── projects/                Projekt-Konfigurationen
     │   └── security-ai.yaml
     ├── tests/                   Tests der Werkstatt
-    │   └── test_pipeline.py
+    ├── docs/                    WORKFLOW, ROADMAP, PROTOKOLL
+    ├── audit-logs/              JSONL pro Tag
     ├── pipeline.py              Orchestrierung
-    ├── redaction.py             Redaction vor jedem LLM-Call
-    ├── .gitignore
+    ├── redaction.py             Redaction vor LLM-Calls
+    ├── Bau-Handoff.md           Einstieg fuer neue Bau-Chats
     └── README.md
 
 ## Aufruf
 
-    cd /opt/<projekt>
-    DEEPSEEK_API_KEY=sk-... \
-      runuser -u <projekt-user> -- /opt/security-ai/.venv/bin/python3 \
-      /opt/werkstatt/pipeline.py --project <name> "<Block-Beschreibung>"
+    set -a
+    . /opt/<projekt>/.env
+    set +a
+    cd /opt/<projekt> && \
+    runuser -u <projekt-user> -- env DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" \
+      /opt/<projekt>/.venv/bin/python3 \
+      /opt/werkstatt/pipeline.py \
+      --project <name> \
+      "<Block-Auftrag>"
 
-Beispiel fuer Security AI:
-
-    cd /opt/security-ai
-    DEEPSEEK_API_KEY=sk-... \
-      runuser -u security-ai -- /opt/security-ai/.venv/bin/python3 \
-      /opt/werkstatt/pipeline.py --project security-ai "Punkt 58 Schritt 6"
-
-## Ausfuehrungsregel
-
-Die Pipeline darf NICHT als root laufen. Als root wuerden Audit-Logs
-root:root gehoeren und der Service-User koennte sie nicht mehr lesen
-(vgl. SECURITY_REVIEW_LOG Punkt 12). Als Guard ist im Code verankert:
-aktueller User == "root" -> Exit 66.
-
-Die Pipeline laeuft als Projekt-User (z. B. security-ai, xyapp).
+Laeuft NIE als root (Exit 66). Laeuft als Projekt-User (z. B. builder).
 
 ## Was ein Block ist
 
-Ein Block ist eine logische Einheit: eine Aufgabe, eine Pipeline-
-Ausfuehrung, ein Approval, ein Commit. Nach dem Approval endet der
-Lauf. Der naechste Block wird vom Menschen oder (spaeter) vom
-Reviewer bestimmt.
+Ein Block: eine Aufgabe, eine Pipeline-Ausfuehrung, ein Approval,
+ein Commit. Nach dem Approval endet der Lauf.
 
-Der Ablauf:
+    1. Basis-Gate       py_compile, ruff, mypy, test_count,
+                        git_status, git_head. Rot = Hard Fail.
+    2. Auto-Repair      nur deterministisch (ruff --fix, format).
+    3. Reviewer         waehlt optionale Messungen.
+    4. Builder          baut Code-Patches.
+    5. Review-Schleife  GO / NO-GO / ESKALATION.
+                        - NO-GO: Builder baut neu.
+                        - 2x NO-GO, gleicher Gegenstand:
+                          Solver diagnostiziert -> Builder.
+                          Reviewer sieht neutralen Hinweis.
+    6. Coverage         + ggf. Test-Generator + Chaos.
+    7. Commit-Review    prueft Commit-Paket. Quelle: GEMESSENER
+                        INHALT NACH APPLY.
+    8. Approval         Reviewer-Argumentation.
+    9. Human-Gate       approve / reject / eskalation.
+   10. Commit           nur bei approve, Autor ghxstfocus.
 
-1. Basis-Gate (immer). Welche Messungen das sind, steht in
-   projects/<name>.yaml unter always_run. Beispiel security-ai:
-   py_compile, ruff, mypy, test_count, git_status, git_head.
-   Wenn eines rot ist: Hard Fail, Block startet nicht.
-2. Auto-Repair (nur deterministisch: ruff --fix, ruff format).
-3. Reviewer waehlt optionale Messungen (COMMAND: RUN <id>).
-4. Builder baut Code-Entwurf.
-5. Review-Schleife: GO / NO-GO / ESKALATION.
-6. Coverage + ggf. Test-Generator + Chaos-Agent.
-7. Commit-Review (Phase 2): Prueft Commit-Message, Dateien, Doku-Patches.
-8. Approval-Dokument mit vollstaendiger Reviewer-Argumentation.
-9. Human-Gate: approve / reject / eskalation.
-10. Commit (nur bei approve) mit Autor ghxstfocus.
+## Probebetrieb
+
+Ein Probebetrieb ist NUR ein echter Pipeline-Durchlauf
+(pipeline_start + pipeline_ende im Audit-Log, Projekt security-ai).
+Manual-Sessions werden NICHT getaggt.
+
+Tags probebetrieb-N liegen im Ziel-Repo (security-ai).
 
 ## Sicherheit
 
 - Kein shell=True. Argumentlisten.
-- Whitelist-Katalog: nur was in always_run oder optional_catalog steht,
-  darf ausgefuehrt werden. Unbekannte IDs: Ablehnung + Audit.
-- read_file nur aus FILE_WHITELIST.
-- Path-Traversal-Schutz.
-- Redaction vor jedem LLM-Call (IPs, MACs, Keys, Prompt-Injection-Marker).
-- Audit-JSONL pro Tag, jeder Eintrag mit project-Feld.
-- Fail closed bei fehlender Konfiguration, fehlendem API-Key, unbekanntem
-  Projekt.
+- Whitelist-Katalog (always_run, optional_catalog). Unbekannte
+  IDs: Ablehnung + Audit.
+- read_file nur aus FILE_WHITELIST. Path-Traversal-Schutz.
+- Redaction vor jedem LLM-Call. Private IPs bleiben (Auflage 2195).
+- Audit-JSONL pro Tag mit project und run_id.
+- Fail closed bei fehlender Konfiguration, fehlendem API-Key,
+  unbekanntem Projekt.
 
 ## Was noch nicht fertig ist
 
-- Approval: aktuell interaktives Gate (input() im Terminal).
-  Geplant: externes Approval-System (Datei, Telegram oder Dashboard).
-- Runner-Daemon (geplant): startet die Pipeline aus dem Dashboard,
-  Warteschlange fuer Bloecke.
-- Reviewer-Chat (geplant): interaktiver Chat mit dem Reviewer-Agenten
-  aus dem Dashboard.
-- Scaffolder (kommt, legt Projekt-Grundstock an).
-- Der Reviewer wird spaeter auch "welcher Block als naechstes"
-  entscheiden koennen.
+- Solver-Wissensbasis (Block 3): Solver sieht noch nicht dieselbe
+  Projekt-Doku wie der Reviewer.
+- Solver-Loop (Block 5): heute einmal pro Trigger, geplant 3 Runden.
+- Werkstatt-Vertrag: Anker, Auftrag, Patch, Fail, Rollen.
+- Approval extern (Datei, Telegram, Dashboard).
+- Runner-Daemon.
+- Reviewer-Chat im Dashboard.
+- Scaffolder.
 
 ## Rollen erweitern
 
-Eine neue Rolle anlegen:
+1. `agents/<name>.md`: YAML-Frontmatter (name, description, model,
+   temperature) + Body (Rolle, Aufgaben, Grenzen, Adressat).
+2. In `pipeline.py`: `HARD_RULES_<ROLLE>` + Eintrag in
+   `HARD_RULES_BY_ROLE`.
+3. Bei Bedarf Aufrufstelle ergaenzen.
 
-1. Datei `agents/<name>.md` schreiben. YAML-Frontmatter mit
-   `name`, `description`, `model`, `temperature`. Danach
-   Body mit Rolle, Aufgaben, Grenzen.
-2. In `pipeline.py` bei Bedarf eine Aufrufstelle ergaenzen.
-
-coverage und chaos sind No-LLM-Rollen. Ihre agents/*.md-Dateien
-sind reine Dokumentation, der Code ruft sie direkt (nicht ueber
-einen LLM-Call).
-
-Die Hard Rules stehen in pipeline.py: HARD_RULES_BASE
-(universell: HR1, HR7, HR8, HR9, HR10) und die
-rollenspezifischen HARD_RULES_REVIEWER / _BUILDER /
-_TEST_GENERATOR. build_system_prompt waehlt anhand des
-Agent-Namens.
+Hard Rules in pipeline.py: `HARD_RULES_BASE` (HR1, HR7-HR10),
+`HARD_RULES_REVIEWER`, `HARD_RULES_BUILDER`,
+`HARD_RULES_TEST_GENERATOR`, `HARD_RULES_SOLVER`.
+`build_system_prompt` waehlt anhand des Agent-Namens.
