@@ -1,10 +1,10 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-13 (nach Probebetrieb 75)
-Werkstatt-HEAD: 8b4eb29 (Tag probebetrieb-75)
+Stand: 2026-10-14 (nach Probebetrieb 78)
+Werkstatt-HEAD: da8c7c4 (Tag probebetrieb-78)
 Letzter Commit in security-ai: 35e5178
 Branch: main
-Tests: 301 passed
+Tests: 311 passed
 ruff: 0
 mypy: 0
 
@@ -44,8 +44,8 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 8b4eb29 (probebetrieb-75, A3)
-  Tests: 301 passed
+  HEAD da8c7c4 (probebetrieb-78, A4/A5 P1)
+  Tests: 311 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
 
@@ -63,11 +63,11 @@ Ziel-Projekt-Tags (auf /opt/security-ai):
   (Werkstatt-Konvention: nur Werkstatt-Repo wird getaggt).
 
 Dateien:
-  - pipeline.py (3160 Zeilen, Stand 2183 A3)
+  - pipeline.py (3331 Zeilen, Stand 2183 A4/A5)
   - redaction.py (314 Zeilen, Stand 2195)
   - agents/*.md (5 Rollen)
   - projects/security-ai.yaml
-  - tests/test_pipeline.py (3804 Zeilen, Stand 2183 A3)
+  - tests/test_pipeline.py (3893 Zeilen, Stand 2183 A4/A5)
   - tests/test_redaction.py
   - docs/WORKFLOW.md
   - docs/ROADMAP.md
@@ -167,6 +167,17 @@ Kurzfassung:
          ab 2. NO-GO, recovery_hinweis_block
          neutral. +8 Tests, 301 passed.
   PB-76: Doku. Handoff auf PB-75.
+  PB-77: Doku. Handoff-Korrektur nach PB-75.
+         Doppelung b/e aufgeloest, P1 als
+         Punkt a). Werkstatt-Vertrag-Merkposten.
+  PB-78: Feature. P1 Gegenstandsvergleich
+         (2183 A4/A5). jaccard_aehnlichkeit,
+         gegenstand_gleich, _p1_schon_getriggert,
+         _tokenisiere. zaehle_no_go_in_folge U8-
+         angepasst. Audit solver_trigger mit
+         jaccard/schwellwert/min_tokens/grund.
+         solver_config im YAML. +10 Tests,
+         311 passed.
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -248,6 +259,21 @@ WICHTIG (naechste Session):
         ERLEDIGT (PB-71). Neue Funktion
         rollback_vor_recovery (ungenutzt bis A3).
         max_llm_calls-Defaults 20 -> 30.
+  2183 A4/A5 (P1 Gegenstandsvergleich):
+        ERLEDIGT (PB-78). jaccard_aehnlichkeit,
+        gegenstand_gleich, _p1_schon_getriggert,
+        _tokenisiere. zaehle_no_go_in_folge
+        zaehlt Recovery-Runden nicht (U8).
+        Audit solver_trigger immer, mit
+        jaccard/schwellwert/min_tokens/grund
+        (U6/U7/V3). solver_config im YAML (U3):
+        p1_schwellwert=0.5, p1_min_tokens=10.
+        U1: Annaeherung im Docstring dokumentiert.
+        Fehler 3 (U8 still wirkungslos) durch
+        Test aufgedeckt, behoben. V4: Stopwort-
+        Liste um 3-Zeichen-Woerter ergaenzt.
+        +10 Tests, 311 passed.
+
   2183 A3 (Trigger-Erkennung): ERLEDIGT (PB-75).
         zaehle_no_go_in_folge(), recovery-Marker
         ab 2. NO-GO in Folge, audit("solver_trigger").
@@ -374,6 +400,24 @@ WICHTIG (naechste Session):
 
 
 MITTEL (Merkposten):
+  U4-Kalibrierung (P1): Schwellwert 0.5
+        und min_tokens 10 sind Setzungen,
+        nicht Messungen. Nach ersten PB-
+        Laeufen mit P1: echte NO-GO-Paare
+        labeln (gleicher/anderer Gegenstand),
+        Jaccard-Verteilung messen, Schwell-
+        wert neu setzen. Kategorie 3.
+
+  P4-nach-P1-B (llm_calls): P1 reduziert
+        den Trigger. Wirkung nicht gemessen.
+        Sobald B (Solver) gebaut ist und
+        Calls verbraucht: llm_calls neu
+        messen. Wenn median/max deutlich
+        unter den heutigen 7/11 liegen,
+        kann max_llm_calls in 2184 nach
+        unten korrigiert werden.
+
+  Werkstatt-Vertrag (2183). Kategorie 3.
   Werkstatt-Vertrag (2183). Kategorie 3.
         Fuenf Vertraege zusammenfuehren:
         1. Anker-Vertrag (woertlich |
@@ -613,15 +657,13 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge:
-   a) 2183 A4/A5 (P1 Gegenstandsvergleich).
-      Kategorie 3. VOR B (Reviewer-
-      Entscheidung 2026-10-13: A3 setzt
-      Marker zu weit; P1 praezisiert,
-      bevor B LLM-Calls kostet).
-   b) 2183 B (Solver-Code). Kategorie 3.
+   a) 2183 B (Solver-Code). Kategorie 3.
       Muss tolerant sein fuer ANDERER_
-      FEHLER (P6, T1-Kopplung).
-   c) 2183 C (COMMAND: RUN solver).
+      FEHLER (P6, T1-Kopplung, V6).
+      Vorbedingung erfuellt: P1 (PB-78)
+      reduziert Trigger, damit B nicht
+      bei ANDERER_FEHLER LLM-Calls kostet.
+   b) 2183 C (COMMAND: RUN solver).
    d) 2183-AQ Auftragsqualitaet.
    e) 2200b/c/T Aggregator-Verfeinerung.
    f) 2199a Zustandsmaschine (Kategorie 3).
