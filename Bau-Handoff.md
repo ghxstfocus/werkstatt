@@ -1,10 +1,10 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-14 (nach Probebetrieb 80)
-Werkstatt-HEAD: 47a9a8b (Tag probebetrieb-80)
+Stand: 2026-10-14 (nach Probebetrieb 82)
+Werkstatt-HEAD: 9a5a17f (Tag probebetrieb-82)
 Letzter Commit in security-ai: 35e5178
 Branch: main
-Tests: 325 passed
+Tests: 333 passed
 ruff: 0
 mypy: 0
 
@@ -44,8 +44,8 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 47a9a8b (probebetrieb-80, 2183 B)
-  Tests: 325 passed
+  HEAD 9a5a17f (probebetrieb-82, 2183 C)
+  Tests: 333 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
 
@@ -63,11 +63,11 @@ Ziel-Projekt-Tags (auf /opt/security-ai):
   (Werkstatt-Konvention: nur Werkstatt-Repo wird getaggt).
 
 Dateien:
-  - pipeline.py (3573 Zeilen, Stand 2183 B)
+  - pipeline.py (3693 Zeilen, Stand 2183 C)
   - redaction.py (314 Zeilen, Stand 2195)
   - agents/*.md (5 Rollen)
   - projects/security-ai.yaml
-  - tests/test_pipeline.py (4003 Zeilen, Stand 2183 B)
+  - tests/test_pipeline.py (4156 Zeilen, Stand 2183 C)
   - agents/solver.md (42 Zeilen, Stand 2183 B)
   - tests/test_redaction.py
   - docs/WORKFLOW.md
@@ -191,6 +191,16 @@ Kurzfassung:
          Budget-Gate. X7: kein Builder-Kanal
          (B2 separater Block). +14 Tests,
          325 passed.
+  PB-81: Doku. Handoff auf PB-80 (2183 B).
+  PB-82: Feature. COMMAND: RUN solver (2183 C).
+         ERLAUBTE_QUELLEN um reviewer_command.
+         SOLVER_ARG_MAX_LEN=200. RunState.
+         solver_trigger_quellen. _handle_
+         solver_command (Duplikat, Budget,
+         Fail-closed, Marker). Phase-1-Loop
+         in Reihenfolge. Phase-2-Audit bei
+         solver-Versuch. P1-Audit mit quelle.
+         +8 Tests, 333 passed.
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -272,6 +282,19 @@ WICHTIG (naechste Session):
         ERLEDIGT (PB-71). Neue Funktion
         rollback_vor_recovery (ungenutzt bis A3).
         max_llm_calls-Defaults 20 -> 30.
+  2183 C (COMMAND: RUN solver): ERLEDIGT (PB-82).
+        ERLAUBTE_QUELLEN um reviewer_command.
+        SOLVER_ARG_MAX_LEN=200 (F6, kuerzen
+        statt reject). RunState.solver_trigger_
+        quellen. _solver_prompt_bauen(grund)
+        + rufe_solver(grund_text) (Y6). _handle_
+        solver_command (Duplikat Y4, Budget X5,
+        Fail-closed F3, Marker Y3). Phase-1-
+        Loop in Reihenfolge (Y1). Phase-2-Audit
+        reviewer_run_solver_phase2_ignoriert
+        (Y2). P1-Audit mit quelle=p1_trigger.
+        +8 Tests, 333 passed.
+
   2183 B (Solver-Code): ERLEDIGT (PB-80).
         agents/solver.md (Rolle, HARD_RULES_
         SOLVER S1-S7). Parser parse_solver_
@@ -700,10 +723,9 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge:
-   a) 2183 C (COMMAND: RUN solver).
-      Kategorie 3. Reviewer kann den
-      Solver explizit anfordern.
-   b) 2183-AQ Auftragsqualitaet.
+   a) 2183-AQ Auftragsqualitaet.
+      Kategorie 3.
+   b) 2200b/c/T Aggregator-Verfeinerung.
    d) 2183-AQ Auftragsqualitaet.
    e) 2200b/c/T Aggregator-Verfeinerung.
    f) 2199a Zustandsmaschine (Kategorie 3).
