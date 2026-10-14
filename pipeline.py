@@ -52,6 +52,47 @@ COMMIT_PAKET_FORMAT = (
     "Der Commit uebernimmt den echten Zustand (git diff)."
 )
 
+
+# =====================================================================
+# Auflage 2183 A4/A5 (P1): Gegenstandsvergleich.
+# =====================================================================
+P1_SCHWELLWERT_DEFAULT = 0.5
+P1_MIN_TOKENS_DEFAULT = 10
+
+# Grund-Konstanten fuer den Audit-Eintrag solver_trigger (U6/U7).
+P1_GRUND_GETRIGGERT    = "getriggert"
+P1_GRUND_KEIN_LEER     = "kein_trigger_leer"
+P1_GRUND_KEIN_ZU_KURZ  = "kein_trigger_zu_kurz"
+P1_GRUND_KEIN_JACCARD  = "kein_trigger_jaccard"
+P1_GRUND_KEIN_KEIN_PAAR = "kein_trigger_kein_paar"
+P1_GRUND_KEIN_SCHON    = "kein_trigger_schon_getriggert"
+
+# P1: Tokenisierung. Buchstaben >= 3 Zeichen ODER Zahlen.
+# Zahlen bleiben (identifizieren Gegenstand, z.B. "Zeile 2404").
+P1_TOKEN_RE = re.compile(r"[a-zA-ZaeoeueAEOEUE]{3,}|[0-9]+")
+
+# P1: feste Stopwort-Liste (Deutsch + Englisch).
+# Sprache ist nicht projektspezifisch, deshalb im Code.
+P1_STOPWOERTER = frozenset({
+    # 3-Zeichen-Funktionswoerter (V4):
+    "und", "ist", "war", "ein", "als", "auf", "aus",
+    "bei", "mit", "hat", "soll",
+    "aber", "auch", "beim", "dann", "dass", "denn", "der",
+    "die", "das", "dem", "den", "des", "dies",
+    "doch", "eine", "einer", "eines", "etwa", "fuer", "hier",
+    "immer", "kann", "kein", "keine", "koennen", "muss",
+    "nach", "nicht", "noch", "nur", "oder", "ohne", "schon",
+    "sein", "seine", "sich", "siehe", "sind", "ueber", "unter",
+    "vom", "von", "vor", "wenn", "werden", "wie", "wird",
+    "wurde", "wurden", "zum", "zur", "zwei",
+    "about", "after", "again", "also", "been", "before",
+    "being", "between", "could", "does", "each", "from",
+    "have", "into", "more", "most", "must", "only", "other",
+    "over", "same", "should", "some", "such", "than", "that",
+    "their", "them", "then", "there", "these", "they", "this",
+    "those", "through", "under", "very", "were", "what",
+    "when", "where", "which", "while", "with", "would", "your",
+})
 # Redaction (lokal, projektunabhaengig)
 sys.path.insert(0, str(Path(__file__).parent))
 import redaction
@@ -735,14 +776,114 @@ def builder_reply_mit_command_loop(
 
 def zaehle_no_go_in_folge(
         review_runden: list[dict[str, Any]]) -> int:
-    """Auflage 2183 A3: zaehlt aufeinanderfolgende NO-GO."""
+    """Auflage 2183 A3, angepasst in P1 (U8).
+
+    Zaehlt aufeinanderfolgende NO-GO am Ende.
+    Recovery-Runden zaehlen NICHT (sie sind die
+    Antwort auf einen Solver-Befund, kein neuer
+    Fehler). Sie brechen die Kette aber auch
+    nicht ab.
+    """
     n = 0
     for r in reversed(review_runden):
-        if r.get("verdict") == "NO-GO":
-            n += 1
-        else:
+        if r.get("verdict") != "NO-GO":
             break
+        if r.get("recovery"):
+            continue
+        n += 1
     return n
+
+
+def _tokenisiere(text: str) -> set[str]:
+    """P1 (U2): Tokenisierung fuer Jaccard.
+
+    - lower() (case-insensitiv).
+    - Buchstaben >= 3 Zeichen ODER Zahlen.
+    - Stopwoerter weg.
+    - Kein Bindestrich-Split (IPv6-Feld bleibt).
+    """
+    if not text:
+        return set()
+    roh = P1_TOKEN_RE.findall(text.lower())
+    return {t for t in roh if t not in P1_STOPWOERTER}
+
+
+def jaccard_aehnlichkeit(text_a: str, text_b: str) -> float:
+    """P1 (U2): Jaccard-Aehnlichkeit zweier Texte.
+
+    |A ∩ B| / |A ∪ B| ueber Tokenmengen.
+    Leere Menge -> 0.0.
+    """
+    a = _tokenisiere(text_a)
+    b = _tokenisiere(text_b)
+    if not a or not b:
+        return 0.0
+    schnitt = a & b
+    vereinigung = a | b
+    if not vereinigung:
+        return 0.0
+    return len(schnitt) / len(vereinigung)
+
+
+def _p1_schon_getriggert(
+        review_runden: list[dict[str, Any]]) -> bool:
+    """P1 (U8): Hat eine Runde bereits recovery=True?
+
+    Verhindert erneuten Trigger nach Recovery.
+    """
+    return any(r.get("recovery") for r in review_runden)
+
+
+def gegenstand_gleich(
+        review_runden: list[dict[str, Any]],
+        schwellwert: float,
+        min_tokens: int) -> tuple[float | None, str]:
+    """P1: pruefen, ob die zwei letzten NO-GO-Runden
+    denselben Gegenstand betreffen.
+
+    U1 (Reviewer): P1 ist eine Annaeherung an den
+    Gegenstandsbegriff. Der Vergleich funktioniert
+    nur, wenn der Reviewer denselben Gegenstand
+    sprachlich aehnlich benennt. Bei abweichender
+    Formulierung triggert P1 nicht — das ist ein
+    bekannter Grenzfall, kein Bug. Schwellwert und
+    min_tokens sind im Projekt-YAML justierbar;
+    Kalibrierung mit echten NO-GO-Paaren steht
+    aus (U4).
+
+    Liefert (jaccard_wert, grund).
+    jaccard_wert ist None, wenn nicht gerechnet wurde.
+
+    Fail-closed (U5/U6):
+      - < 2 NO-GO-Runden -> kein_trigger_kein_paar.
+      - Schon getriggert -> kein_trigger_schon_getriggert.
+      - Text leer -> kein_trigger_leer.
+      - Text zu kurz -> kein_trigger_zu_kurz.
+      - Jaccard < Schwellwert -> kein_trigger_jaccard.
+      - Sonst -> getriggert.
+    """
+    # U8: zuerst pruefen, ob schon getriggert.
+    # Sonst greift die Pruefung nicht, wenn die
+    # letzte Runde recovery=True trug.
+    if _p1_schon_getriggert(review_runden):
+        return None, P1_GRUND_KEIN_SCHON
+    no_go = [r for r in review_runden
+             if r.get("verdict") == "NO-GO"
+             and not r.get("recovery")]
+    if len(no_go) < 2:
+        return None, P1_GRUND_KEIN_KEIN_PAAR
+    a = no_go[-2].get("raw", "")
+    b = no_go[-1].get("raw", "")
+    if not a.strip() or not b.strip():
+        return None, P1_GRUND_KEIN_LEER
+    ta = _tokenisiere(a)
+    tb = _tokenisiere(b)
+    if len(ta) < min_tokens or len(tb) < min_tokens:
+        return None, P1_GRUND_KEIN_ZU_KURZ
+    wert = jaccard_aehnlichkeit(a, b)
+    if wert < schwellwert:
+        return wert, P1_GRUND_KEIN_JACCARD
+    return wert, P1_GRUND_GETRIGGERT
 
 
 def formatiere_runden(review_runden: list[dict[str, Any]]) -> str:
@@ -837,6 +978,10 @@ class RunState:
     agent_docs: dict[str, list[str]]
     project_dir: Path
     start_monotonic: float = 0.0  # Auflage 2080: Zeitmessung
+    # Auflage 2183 P1 (U3): Schwellwert + min_tokens
+    # justierbar, nicht im Code hart.
+    solver_config: dict[str, float] = field(
+        default_factory=dict)
     reviewer_verdict_model: str = "deepseek-chat"
     reviewer_recovery_model: str = "deepseek-reasoner"
     builder_model: str = "deepseek-chat"
@@ -2399,6 +2544,16 @@ def run_pipeline(project_name: str, aufgabe: str,
     budget = config.get(
         "budget",
         {"max_review_rounds": 5, "max_llm_calls": 30})
+
+    solver_config: dict[str, float] = {}
+    _solver_yaml = config.get("solver", {}) or {}
+    if isinstance(_solver_yaml, dict):
+        if "p1_schwellwert" in _solver_yaml:
+            solver_config["p1_schwellwert"] = float(
+                _solver_yaml["p1_schwellwert"])
+        if "p1_min_tokens" in _solver_yaml:
+            solver_config["p1_min_tokens"] = float(
+                _solver_yaml["p1_min_tokens"])
     max_llm = budget.get("max_llm_calls", 30)
     max_minutes = budget.get("max_minutes", 0)  # Auflage 2080: 0 = aus
 
@@ -2710,15 +2865,31 @@ def run_pipeline(project_name: str, aufgabe: str,
 
         if verdict == "NO-GO":
             print(f"[-] NO-GO:\n{reply.content[:300]}")
-            # Auflage 2183 A3: Trigger-Erkennung.
+            # Auflage 2183 A3 + A4/A5 (P1): Trigger.
+            # P1 verfeinert A3 um den Gegenstands-
+            # vergleich. Der Audit-Eintrag wird IMMER
+            # geschrieben (U6/U7), auch wenn nicht
+            # getriggert.
             n_no_go = zaehle_no_go_in_folge(
                 state.review_runden)
-            if n_no_go >= 2:
+            schw = state.solver_config.get(
+                "p1_schwellwert", P1_SCHWELLWERT_DEFAULT)
+            mto = int(state.solver_config.get(
+                "p1_min_tokens", P1_MIN_TOKENS_DEFAULT))
+            jw, grund = gegenstand_gleich(
+                state.review_runden, schw, mto)
+            if n_no_go >= 2 and grund == P1_GRUND_GETRIGGERT:
                 state.review_runden[-1]["recovery"] = True
-                audit("solver_trigger",
-                      {"runde": runde,
-                       "no_go_in_folge": n_no_go},
-                      project_dir, project_name)
+            audit("solver_trigger",
+                  {"runde": runde,
+                   "n_no_go": n_no_go,
+                   "jaccard": jw,
+                   "schwellwert": schw,
+                   "min_tokens": mto,
+                   "gegenstand_gleich":
+                       grund == P1_GRUND_GETRIGGERT,
+                   "grund": grund},
+                  project_dir, project_name)
             rc = budget_or_recover(state, max_llm,
                                   f"Vor Builder-Neubau (NO-GO Runde {runde}).",
                                   project_dir, project_name,

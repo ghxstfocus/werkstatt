@@ -3802,3 +3802,92 @@ def test_recovery_hinweis_block_ohne_befund() -> None:
     assert "RECOVERY-RUNDE" in text
     assert "Befund liegt noch nicht vor" in text
     assert "ob der Builder den Befund umsetzt" not in text
+
+
+def test_jaccard_identische_texte() -> None:
+    assert pipeline.jaccard_aehnlichkeit(
+        "dns lookup fehler", "dns lookup fehler") == 1.0
+
+
+def test_jaccard_leere_texte() -> None:
+    assert pipeline.jaccard_aehnlichkeit("", "") == 0.0
+
+
+def test_jaccard_teilueberlappung() -> None:
+    # {dns, lookup, fehler} & {dns, lookup, timeout} =
+    # {dns, lookup} = 2; Union = 4 -> 0.5
+    w = pipeline.jaccard_aehnlichkeit(
+        "dns lookup fehler", "dns lookup timeout")
+    assert abs(w - 0.5) < 1e-9
+
+
+def test_jaccard_stopwoerter_entfernt() -> None:
+    # "der die das" -> keine Token >= 3 ODER Stopwort -> leer.
+    assert pipeline.jaccard_aehnlichkeit(
+        "der die das", "der die das") == 0.0
+
+
+def test_gegenstand_gleich_zu_wenig_runden() -> None:
+    runden = [{"verdict": "NO-GO", "raw": "x" * 100,
+               "recovery": False}]
+    wert, grund = pipeline.gegenstand_gleich(runden, 0.5, 10)
+    assert grund == pipeline.P1_GRUND_KEIN_KEIN_PAAR
+    assert wert is None
+
+
+def test_gegenstand_gleich_leer() -> None:
+    runden = [
+        {"verdict": "NO-GO", "raw": "", "recovery": False},
+        {"verdict": "NO-GO", "raw": "", "recovery": False},
+    ]
+    _wert, grund = pipeline.gegenstand_gleich(runden, 0.5, 10)
+    assert grund == pipeline.P1_GRUND_KEIN_LEER
+
+
+def test_gegenstand_gleich_zu_kurz() -> None:
+    runden = [
+        {"verdict": "NO-GO", "raw": "a b c", "recovery": False},
+        {"verdict": "NO-GO", "raw": "a b c", "recovery": False},
+    ]
+    _wert, grund = pipeline.gegenstand_gleich(runden, 0.5, 10)
+    assert grund == pipeline.P1_GRUND_KEIN_ZU_KURZ
+
+
+def test_gegenstand_gleich_ueber_schwelle() -> None:
+    text = ("dns lookup fehler timeout aufloesung "
+            "server antwortet namensdienst primaer "
+            "sekundaer fallback resolver abfrage")
+    runden = [
+        {"verdict": "NO-GO", "raw": text, "recovery": False},
+        {"verdict": "NO-GO", "raw": text, "recovery": False},
+    ]
+    wert, grund = pipeline.gegenstand_gleich(runden, 0.5, 10)
+    assert grund == pipeline.P1_GRUND_GETRIGGERT
+    assert wert == 1.0
+
+
+def test_gegenstand_gleich_unter_schwelle() -> None:
+    a = ("dns lookup fehler timeout aufloesung "
+         "server antwortet namensdienst primaer "
+         "sekundaer fallback resolver abfrage")
+    b = ("ping routing gateway subnetz maske "
+         "firewall regel blockiert eingehend "
+         "richtung paketfilter zone segment")
+    runden = [
+        {"verdict": "NO-GO", "raw": a, "recovery": False},
+        {"verdict": "NO-GO", "raw": b, "recovery": False},
+    ]
+    _wert, grund = pipeline.gegenstand_gleich(runden, 0.5, 10)
+    assert grund == pipeline.P1_GRUND_KEIN_JACCARD
+
+
+def test_gegenstand_gleich_schon_getriggert() -> None:
+    text = ("dns lookup fehler timeout aufloesung "
+            "server antwortet namensdienst primaer "
+            "sekundaer fallback resolver abfrage")
+    runden = [
+        {"verdict": "NO-GO", "raw": text, "recovery": False},
+        {"verdict": "NO-GO", "raw": text, "recovery": True},
+    ]
+    _wert, grund = pipeline.gegenstand_gleich(runden, 0.5, 10)
+    assert grund == pipeline.P1_GRUND_KEIN_SCHON

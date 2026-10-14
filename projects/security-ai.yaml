@@ -140,3 +140,9 @@ git_author:
   name: ghxstfocus
   email: ghxst.focus@gmail.com
 
+
+# Auflage 2183 P1 (U3): Schwellwerte fuer den
+# Gegenstandsvergleich. Aenderbar ohne Code-Aenderung.
+solver:
+  p1_schwellwert: 0.5
+  p1_min_tokens: 10
