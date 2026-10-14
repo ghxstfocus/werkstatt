@@ -93,6 +93,15 @@ P1_STOPWOERTER = frozenset({
     "those", "through", "under", "very", "were", "what",
     "when", "where", "which", "while", "with", "would", "your",
 })
+
+# =====================================================================
+# Auflage 2183 C: COMMAND: RUN solver.
+# =====================================================================
+SOLVER_ARG_MAX_LEN = 200  # Reviewer-Grund, kurzer Freitext.
+
+ERLAUBTE_SOLVER_QUELLEN = frozenset({
+    "p1_trigger", "reviewer_command",
+})
 # Redaction (lokal, projektunabhaengig)
 sys.path.insert(0, str(Path(__file__).parent))
 import redaction
@@ -290,7 +299,7 @@ MAX_PROTOKOLL_TOTAL = 100_000
 # Auflage 2042: erlaubte Quellen-Marker fuer COMMAND-Audits.
 ERLAUBTE_QUELLEN = {
     "reviewer", "builder", "test_generator",
-    "pipeline_auto",
+    "pipeline_auto", "reviewer_command",
 }
 
 
@@ -1049,6 +1058,9 @@ class RunState:
     # Auflage 2183 A2: Solver-Befunde.
     solver_befunde: list[SolverBefund] = \
         field(default_factory=list)
+    # Auflage 2183 C: Quellen der Solver-Laeufe.
+    solver_trigger_quellen: list[str] = \
+        field(default_factory=list)
     code_patches: list[dict[str, str]] = field(default_factory=list)  # UMB-1b
     test_vorschlaege: str = ""
     commit_paket: dict[str, Any] = field(default_factory=dict)
@@ -1289,9 +1301,13 @@ def _letzte_zwei_entwuerfe(
     return normal[-2:] if len(normal) >= 2 else normal
 
 
-def _solver_prompt_bauen(state: RunState) -> str:
-    """Auflage 2183 B: baut den User-Content
+def _solver_prompt_bauen(state: RunState,
+                         grund: str = "") -> str:
+    """Auflage 2183 B + C: baut den User-Content
     fuer den Solver-Call.
+
+    C: optionaler "Grund des Reviewers" (Freitext,
+    kein Dateipfad).
     """
     no_go = [r for r in state.review_runden
              if r.get("verdict") == "NO-GO"
@@ -1318,6 +1334,12 @@ def _solver_prompt_bauen(state: RunState) -> str:
     zeilen.append("")
     zeilen.append("## GEMESSENER INHALT (verbindlich)")
     zeilen.append(state.mess_protokoll or "(keine)")
+    if grund:
+        zeilen.append("")
+        zeilen.append(
+            "## GRUND DES REVIEWERS "
+            "(Freitext, kein Dateipfad)")
+        zeilen.append(grund)
     zeilen.append("")
     zeilen.append(
         "Antworte mit DIAGNOSE: <WERT> in der ersten "
@@ -1327,15 +1349,18 @@ def _solver_prompt_bauen(state: RunState) -> str:
 
 def rufe_solver(
         state: RunState, api_key: str,
-        solver_prompt: str) -> tuple[SolverBefund | None, str]:
-    """Auflage 2183 B: ruft den Solver.
+        solver_prompt: str,
+        grund_text: str = "") -> tuple[SolverBefund | None, str]:
+    """Auflage 2183 B + C: ruft den Solver.
 
     Liefert (befund, grund).
     befund ist None bei Fehler; grund ist dann
     "llm_fehler" oder "befund_unvollstaendig".
     Bei Erfolg: (befund, "").
+
+    C: grund_text ist optionaler Reviewer-Grund.
     """
-    user_content = _solver_prompt_bauen(state)
+    user_content = _solver_prompt_bauen(state, grund_text)
     reply = ask_llm(api_key, solver_prompt, user_content,
                     state.reviewer_verdict_model, 0.0,
                     state.llm_timeout_s, state=state)
@@ -1346,6 +1371,72 @@ def rufe_solver(
     if not befund.ist_vollstaendig():
         return None, "befund_unvollstaendig"
     return befund, ""
+
+
+def _solver_schon_gelaufen(state: RunState) -> bool:
+    """Auflage 2183 C: hat der Solver in diesem Lauf
+    schon einen Befund geliefert?
+    """
+    return bool(state.solver_befunde)
+
+
+def _handle_solver_command(
+        state: RunState, cmd: dict[str, str],
+        api_key: str, runde: int,
+        max_llm: int, project_dir: Path,
+        project_name: str,
+        max_minutes: int = 0) -> None:
+    """Auflage 2183 C: behandelt COMMAND: RUN solver.
+
+    Im Reviewer-COMMAND-Zweig (Phase 1).
+    """
+    arg = cmd.get("arg", "")
+    if not isinstance(arg, str):
+        arg = ""
+    # F6: Arg kuerzen, nicht reject.
+    if len(arg) > SOLVER_ARG_MAX_LEN:
+        arg = arg[:SOLVER_ARG_MAX_LEN - 3] + "..."
+    audit("reviewer_run_solver",
+          {"runde": runde, "arg": arg},
+          project_dir, project_name)
+    # Y4: Duplikat-Pruefung.
+    if _solver_schon_gelaufen(state):
+        audit("solver_run_duplicate",
+              {"runde": runde, "arg": arg},
+              project_dir, project_name)
+        print("[i] RUN solver ignoriert: "
+              "Solver lief in diesem Lauf schon.")
+        return
+    # X5: eigenes Budget-Gate.
+    rc = budget_or_recover(
+        state, max_llm,
+        f"Vor Solver-Call (Reviewer-Command, Runde {runde}).",
+        project_dir, project_name,
+        max_minutes=max_minutes)
+    if rc is not None:
+        audit("solver_budget_exhausted",
+              {"runde": runde, "quelle": "reviewer_command"},
+              project_dir, project_name)
+        return
+    solver_prompt = build_system_prompt(
+        state.agents["solver"], state.docs,
+        state.agent_docs.get("solver", []))
+    befund, fehler = rufe_solver(
+        state, api_key, solver_prompt, grund_text=arg)
+    if befund is None:
+        audit("solver_failed",
+              {"runde": runde, "grund": fehler,
+               "quelle": "reviewer_command"},
+              project_dir, project_name)
+        return
+    state.solver_befunde.append(befund)
+    state.solver_trigger_quellen.append("reviewer_command")
+    state.review_runden[-1]["recovery"] = True
+    audit("solver_befund",
+          {"runde": runde, "art": befund.art.name,
+           "run_id": befund.run_id,
+           "quelle": "reviewer_command"},
+          project_dir, project_name)
 
 
 def aufgabe_block(state: RunState) -> str:
@@ -3051,7 +3142,20 @@ def run_pipeline(project_name: str, aufgabe: str,
 
         if verdict == "COMMAND":
             cmds = parse_commands(reply.content)
-            execute_commands(state, cmds, quelle="reviewer")
+            # Auflage 2183 C (Y1): Loop in gelieferter
+            # Reihenfolge. solver-Commands werden an
+            # _handle_solver_command delegiert, alle
+            # anderen an execute_commands (einzeln,
+            # damit die Reihenfolge erhalten bleibt).
+            for cmd in cmds:
+                if cmd.get("id") == "solver":
+                    _handle_solver_command(
+                        state, cmd, api_key, runde,
+                        max_llm, project_dir, project_name,
+                        max_minutes=max_minutes)
+                else:
+                    execute_commands(state, [cmd],
+                                     quelle="reviewer")
             # Auflage 2145: Audit fuer COMMAND in der Review-
             # Schleife. Sonst ist nicht sichtbar, wann der
             # Reviewer COMMAND nutzt.
@@ -3127,10 +3231,13 @@ def run_pipeline(project_name: str, aufgabe: str,
                               project_dir, project_name)
                     else:
                         state.solver_befunde.append(befund)
+                        state.solver_trigger_quellen.append(
+                            "p1_trigger")
                         audit("solver_befund",
                               {"runde": runde,
                                "art": befund.art.name,
-                               "run_id": befund.run_id},
+                               "run_id": befund.run_id,
+                               "quelle": "p1_trigger"},
                               project_dir, project_name)
             rc = budget_or_recover(state, max_llm,
                                   f"Vor Builder-Neubau (NO-GO Runde {runde}).",
@@ -3357,6 +3464,19 @@ def run_pipeline(project_name: str, aufgabe: str,
                    "runde": commit_versuche},
                   project_dir, project_name)
 
+            # Auflage 2183 C (Y2): COMMAND in Phase 2
+            # wird nicht ausgefuehrt (2199-R7-P2).
+            # Wenn der Reviewer RUN solver versucht:
+            # Audit, sonst blinder Fleck.
+            if commit_verdict == "COMMAND":
+                cmds_p2 = parse_commands(reply.content)
+                for c in cmds_p2:
+                    if c.get("id") == "solver":
+                        audit(
+                            "reviewer_run_solver_phase2_ignoriert",
+                            {"runde": commit_versuche,
+                             "arg": c.get("arg", "")[:200]},
+                            project_dir, project_name)
             if commit_verdict == "COMMIT-GO":
                 print("[+] Commit-GO erhalten.")
                 break

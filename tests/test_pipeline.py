@@ -4001,3 +4001,156 @@ def test_letzte_zwei_entwuerfe() -> None:
     assert len(e) == 2
     assert e[0]["entwurf"] == "e1"
     assert e[1]["entwurf"] == "e3"
+
+
+def test_handle_solver_command_erfolg() -> None:
+    """C: RUN solver -> Befund + Marker."""
+    state = _c_state()
+    befund = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="frage", run_id="run-c1")
+    orig_rufe = pipeline.rufe_solver
+    pipeline.rufe_solver = (
+        lambda *a, **k: (befund, ""))
+    try:
+        pipeline._handle_solver_command(
+            state, {"id": "solver", "arg": "grund"},
+            api_key="k", runde=2, max_llm=30,
+            project_dir=state.project_dir,
+            project_name="test")
+    finally:
+        pipeline.rufe_solver = orig_rufe
+    assert state.solver_befunde == [befund]
+    assert state.solver_trigger_quellen == ["reviewer_command"]
+    assert state.review_runden[-1]["recovery"] is True
+
+
+def test_handle_solver_command_duplikat() -> None:
+    """C: zweiter Aufruf wird ignoriert."""
+    state = _c_state()
+    befund = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="frage", run_id="run-c2")
+    state.solver_befunde.append(befund)
+    aufrufe = []
+    orig_rufe = pipeline.rufe_solver
+    pipeline.rufe_solver = (
+        lambda *a, **k: aufrufe.append(1) or (None, "x"))
+    try:
+        pipeline._handle_solver_command(
+            state, {"id": "solver", "arg": ""},
+            api_key="k", runde=3, max_llm=30,
+            project_dir=state.project_dir,
+            project_name="test")
+    finally:
+        pipeline.rufe_solver = orig_rufe
+    assert aufrufe == []
+    assert len(state.solver_befunde) == 1
+
+
+def test_handle_solver_command_fail_llm() -> None:
+    """C: Solver-Fehler -> kein Marker, kein Befund."""
+    state = _c_state()
+    orig_rufe = pipeline.rufe_solver
+    pipeline.rufe_solver = (
+        lambda *a, **k: (None, "llm_fehler"))
+    try:
+        pipeline._handle_solver_command(
+            state, {"id": "solver", "arg": ""},
+            api_key="k", runde=2, max_llm=30,
+            project_dir=state.project_dir,
+            project_name="test")
+    finally:
+        pipeline.rufe_solver = orig_rufe
+    assert state.solver_befunde == []
+    assert state.review_runden[-1]["recovery"] is False
+
+
+def test_handle_solver_command_arg_zu_lang_gekuerzt() -> None:
+    """C (F6): Arg > 200 wird gekuerzt, nicht reject."""
+    state = _c_state()
+    befund = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="x", run_id="run-c3")
+    gesehen = []
+    orig_rufe = pipeline.rufe_solver
+    def _fake(*a, **k):
+        gesehen.append(k.get("grund_text", ""))
+        return (befund, "")
+    pipeline.rufe_solver = _fake
+    try:
+        pipeline._handle_solver_command(
+            state, {"id": "solver", "arg": "a" * 500},
+            api_key="k", runde=2, max_llm=30,
+            project_dir=state.project_dir,
+            project_name="test")
+    finally:
+        pipeline.rufe_solver = orig_rufe
+    assert len(gesehen) == 1
+    assert len(gesehen[0]) == pipeline.SOLVER_ARG_MAX_LEN
+    assert gesehen[0].endswith("...")
+
+
+def test_handle_solver_command_arg_leer() -> None:
+    """C (F6): arg leer -> grund_text leer."""
+    state = _c_state()
+    befund = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="x", run_id="run-c4")
+    gesehen = []
+    orig_rufe = pipeline.rufe_solver
+    def _fake(*a, **k):
+        gesehen.append(k.get("grund_text", "x"))
+        return (befund, "")
+    pipeline.rufe_solver = _fake
+    try:
+        pipeline._handle_solver_command(
+            state, {"id": "solver"},
+            api_key="k", runde=2, max_llm=30,
+            project_dir=state.project_dir,
+            project_name="test")
+    finally:
+        pipeline.rufe_solver = orig_rufe
+    assert gesehen == [""]
+
+
+def test_solver_prompt_mit_grund() -> None:
+    """C (Y6): Grund erscheint im Prompt."""
+    state = _c_state()
+    text = pipeline._solver_prompt_bauen(
+        state, grund="Auflage X nicht umgesetzt")
+    assert "GRUND DES REVIEWERS" in text
+    assert "Auflage X nicht umgesetzt" in text
+
+
+def test_solver_prompt_ohne_grund() -> None:
+    """C (Y6): ohne Grund kein leerer Marker."""
+    state = _c_state()
+    text = pipeline._solver_prompt_bauen(state, grund="")
+    assert "GRUND DES REVIEWERS" not in text
+
+
+def test_solver_schon_gelaufen() -> None:
+    state = _c_state()
+    assert not pipeline._solver_schon_gelaufen(state)
+    state.solver_befunde.append(
+        pipeline.SolverBefund(
+            art=pipeline.SolverDiagnose.UNKLAR,
+            eskalation="x", run_id="run-c5"))
+    assert pipeline._solver_schon_gelaufen(state)
+
+
+def _c_state() -> pipeline.RunState:
+    """Hilfsfunktion: minimaler RunState fuer C-Tests."""
+    from pathlib import Path as _P
+    st = pipeline.RunState(
+        block_id="b", aufgabe="a", start_ts="t",
+        docs={}, agents={"solver": {"name": "solver",
+                                    "body": "b"}},
+        always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=_P("/tmp"))
+    st.review_runden.append(
+        {"runde": 1, "verdict": "NO-GO",
+         "raw": "x", "recovery": False})
+    return st
