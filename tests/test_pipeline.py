@@ -3795,13 +3795,13 @@ def test_recovery_marker_nach_einer_no_go() -> None:
 
 
 def test_recovery_hinweis_block_ohne_befund() -> None:
-    """T5: Text spricht nicht von einem Befund,
-    den es nicht gibt."""
+    """Block 2a: hat_befund=False -> Text ohne
+    Solver-Befund."""
     runden = [{"verdict": "NO-GO", "recovery": True}]
     text = pipeline.recovery_hinweis_block(runden)
     assert "RECOVERY-RUNDE" in text
-    assert "Befund liegt noch nicht vor" in text
-    assert "ob der Builder den Befund umsetzt" not in text
+    assert "ohne Solver-" in text
+    assert "Befund ist dem Builder-Agenten" not in text
 
 
 def test_jaccard_identische_texte() -> None:
@@ -3953,32 +3953,139 @@ def test_baue_solver_befund_unvollstaendig() -> None:
 
 
 def test_recovery_hinweis_block_default_parameter() -> None:
-    """B: Default-Parameter befund=None funktioniert."""
+    """Block 2a: Default-Parameter hat_befund=False."""
     runden = [{"verdict": "NO-GO", "recovery": True}]
     text = pipeline.recovery_hinweis_block(runden)
-    assert "Befund liegt noch nicht vor" in text
+    assert "ohne Solver-" in text
 
 
 def test_recovery_hinweis_block_mit_befund() -> None:
-    b = pipeline.SolverBefund(
-        art=pipeline.SolverDiagnose.UNKLAR,
-        eskalation="Frage an Mensch",
-        run_id="run-4")
+    """Block 2a: hat_befund=True -> neutraler Hinweis,
+    KEIN Befund-Text."""
     runden = [{"verdict": "NO-GO", "recovery": True}]
-    text = pipeline.recovery_hinweis_block(runden, b)
-    assert "Ein Solver-Befund liegt vor" in text
+    text = pipeline.recovery_hinweis_block(runden, hat_befund=True)
+    assert "Solver-Befund" in text
+    assert "Builder-Agenten bekannt" in text
+    assert "bewertest das Ergebnis, nicht" in text
+    # KEIN Befund-Text mehr:
+    assert "SOLVER-BEFUND" not in text
+    assert "UNKLAR" not in text
+
+
+def test_recovery_hinweis_block_leer() -> None:
+    """Block 2a: leere Liste -> leer."""
+    assert pipeline.recovery_hinweis_block([]) == ""
+
+
+def test_recovery_hinweis_block_mehrere_runden() -> None:
+    """Block 2a: nur die letzte Runde zaehlt."""
+    runden = [
+        {"runde": 1, "verdict": "NO-GO", "recovery": True},
+        {"runde": 2, "verdict": "GO", "recovery": False},
+        {"runde": 3, "verdict": "NO-GO", "recovery": True},
+    ]
+    text = pipeline.recovery_hinweis_block(
+        runden, hat_befund=True)
+    assert "Solver-Befund" in text
+
+
+def test_recovery_hinweis_block_befund_und_kein_recovery() -> None:
+    """Block 2a: Befund vorhanden, aber letzte Runde
+    recovery=False -> leer."""
+    runden = [{"verdict": "NO-GO", "recovery": False}]
+    assert pipeline.recovery_hinweis_block(
+        runden, hat_befund=True) == ""
+
+
+def test_solver_befund_block_ohne_befund() -> None:
+    """Block 4: kein Befund -> leer."""
+    from pathlib import Path as _P
+    st = pipeline.RunState(
+        block_id="b", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=_P("/tmp"))
+    assert pipeline._solver_befund_block(st) == ""
+
+
+def test_solver_befund_block_mit_befund() -> None:
+    """Block 4: ein vollstaendiger Befund -> Block."""
+    from pathlib import Path as _P
+    st = pipeline.RunState(
+        block_id="b", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=_P("/tmp"))
+    st.solver_befunde.append(pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="Frage", run_id="run-x"))
+    text = pipeline._solver_befund_block(st)
     assert "SOLVER-BEFUND" in text
-    assert "run-4" in text
+    assert "Unterstuetzung" in text
+    assert "Pruefe die Empfehlungen" in text
 
 
-def test_recovery_hinweis_block_mit_unvollstaendigem_befund() -> None:
-    # GLEICHER_FEHLER ohne Kandidaten -> format wirft ValueError.
+def test_solver_befund_block_unvollstaendig() -> None:
+    """Block 4 + EE2: unvollstaendiger letzter Befund
+    -> leer, kein Fallback."""
+    from pathlib import Path as _P
+    st = pipeline.RunState(
+        block_id="b", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=_P("/tmp"))
+    st.solver_befunde.append(pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.GLEICHER_FEHLER,
+        run_id="run-y"))
+    assert pipeline._solver_befund_block(st) == ""
+
+
+def test_solver_befund_block_bei_zwei_befunden() -> None:
+    """Block 4 + EE3: bei zwei Befunden wird nur der
+    letzte gezeigt."""
+    from pathlib import Path as _P
+    st = pipeline.RunState(
+        block_id="b", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=_P("/tmp"))
+    st.solver_befunde.append(pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="erster", run_id="run-1"))
+    st.solver_befunde.append(pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="zweiter", run_id="run-2"))
+    text = pipeline._solver_befund_block(st)
+    assert "run-2" in text
+    assert "zweiter" in text
+    assert "run-1" not in text
+
+
+def test_solver_befund_block_bei_zwei_befunden_letzter_unvollstaendig() -> None:
+    """EE3: letzter unvollstaendig -> leer, kein Fallback."""
+    from pathlib import Path as _P
+    st = pipeline.RunState(
+        block_id="b", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=_P("/tmp"))
+    st.solver_befunde.append(pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="vollstaendig", run_id="run-1"))
+    st.solver_befunde.append(pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.GLEICHER_FEHLER,
+        run_id="run-2"))
+    assert pipeline._solver_befund_block(st) == ""
+
+
+def test_format_solver_befund_unberuehrt() -> None:
+    """format_solver_befund wirft weiterhin ValueError."""
+    import pytest
     b = pipeline.SolverBefund(
         art=pipeline.SolverDiagnose.GLEICHER_FEHLER,
-        run_id="run-5")
-    runden = [{"verdict": "NO-GO", "recovery": True}]
-    text = pipeline.recovery_hinweis_block(runden, b)
-    assert "unvollstaendig" in text
+        run_id="run-z")
+    with pytest.raises(ValueError):
+        pipeline.format_solver_befund(b)
 
 
 def test_recovery_hinweis_block_ohne_recovery() -> None:

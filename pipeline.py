@@ -964,39 +964,36 @@ def formatiere_runden(review_runden: list[dict[str, Any]]) -> str:
 
 def recovery_hinweis_block(
         review_runden: list[dict[str, Any]],
-        befund: SolverBefund | None = None) -> str:
-    """Auflage 2183 A1a + B (Option C, X1).
+        hat_befund: bool = False) -> str:
+    """Auflage 2183 A1a + Block 2a (W6/W7).
 
     Liefert den Block, wenn die letzte Runde recovery=True
     trug. Sonst leerer String.
 
-    Wenn befund uebergeben wird, enthaelt der Block
-    den formatierten Solver-Befund (B, X1).
+    Kein Befund-Text mehr. Nur ein neutraler Hinweis,
+    dass ein Solver-Befund existierte. Der Befund-Text
+    geht an den Builder-Agenten (siehe _solver_befund_block).
     """
     if not review_runden:
         return ""
     if not review_runden[-1].get("recovery"):
         return ""
-    if befund is None:
+    if hat_befund:
         return (
             "## RECOVERY-RUNDE\n"
-            "Dies ist eine Recovery-Runde. Ein Solver-\n"
-            "Befund liegt noch nicht vor. Pruefe den\n"
-            "Code wie sonst (R1-R7 gelten weiter).\n\n"
-        )
-    try:
-        befund_text = format_solver_befund(befund)
-    except ValueError as e:
-        return (
-            "## RECOVERY-RUNDE\n"
-            f"Solver-Befund unvollstaendig ({e}).\n"
-            "Pruefe den Code wie sonst (R1-R7).\n\n"
+            "Diese Runde folgte auf einen Solver-Befund.\n"
+            "Der Befund ist dem Builder-Agenten bekannt,\n"
+            "nicht dir. Du bewertest das Ergebnis, nicht\n"
+            "den Befund. Bewerte den Patch inhaltlich\n"
+            "(R1-R7).\n"
+            "Wenn der Patch den Solver-Befund nicht\n"
+            "umsetzt, aber inhaltlich korrekt ist:\n"
+            "Bewerte ihn trotzdem als korrekt.\n\n"
         )
     return (
         "## RECOVERY-RUNDE\n"
-        f"Ein Solver-Befund liegt vor:\n{befund_text}\n"
-        "Bewerte, ob der Builder den Befund umsetzt,\n"
-        "und ob der Code sonst korrekt ist (R1-R7).\n\n"
+        "Dies ist eine Recovery-Runde ohne Solver-\n"
+        "Befund. Pruefe den Code wie sonst (R1-R7).\n\n"
     )
 
 
@@ -1224,6 +1221,41 @@ class RecoveryVorschlag:
     blockgroesse: str = ""
     frage_an_menschen: str = ""
     rohantwort: str = ""
+
+
+def _solver_befund_block(state: RunState) -> str:
+    """Auflage 2183 Block 2a+4: Befund-Block fuer den
+    Builder-Prompt.
+
+    Liefert "" wenn kein Befund vorliegt.
+    Liefert "" und audit("solver_befund_verworfen"),
+    wenn der letzte Befund unvollstaendig ist.
+
+    KEIN Fallback auf aeltere Befunde. Der letzte
+    Befund ist der relevante. Ein unvollstaendiger
+    letzter Befund ist ein Fail-Fall, der an den
+    Werkstatt-Chat geht.
+    """
+    if not state.solver_befunde:
+        return ""
+    letzter = state.solver_befunde[-1]
+    try:
+        text = format_solver_befund(letzter)
+    except ValueError:
+        audit("solver_befund_verworfen",
+              {"grund": "unvollstaendig",
+               "art": letzter.art.name,
+               "run_id": letzter.run_id},
+              state.project_dir, state.project_name)
+        return ""
+    return (
+        "## SOLVER-BEFUND (Unterstuetzung)\n"
+        f"{text}\n"
+        "Der Solver-Agent hat diesen Befund fuer\n"
+        "dich erstellt. Pruefe die Empfehlungen\n"
+        "gegen den Auftrag und den GEMESSENER\n"
+        "INHALT. Die Umsetzung ist deine Aufgabe.\n\n"
+    )
 
 
 def parse_solver_diagnose(text: str) -> SolverDiagnose:
@@ -3147,12 +3179,16 @@ def run_pipeline(project_name: str, aufgabe: str,
             f"TEST-VORSCHLAEGE:\n{state.test_vorschlaege or '(keine)'}\n\n"
             "Bewerte. Erste Zeile: GO, NO-GO oder ESKALATION."
         )
-        # Auflage 2183 A1a: Recovery-Hinweis ausgelagert.
-        letzter_befund = (
-            state.solver_befunde[-1]
-            if state.solver_befunde else None)
+        # Auflage 2183 A1a + Block 2a: Recovery-Hinweis
+        # ausgelagert. Der Reviewer-Agent sieht nur einen
+        # neutralen Hinweis, keinen Befund-Text.
+        # bool(state.solver_befunde) ist korrekt, weil
+        # RunState pro Lauf neu konstruiert wird. Bei
+        # persistentem State muesste auf run_id gefiltert
+        # werden.
         szenario = (recovery_hinweis_block(
-            state.review_runden, letzter_befund)
+            state.review_runden,
+            hat_befund=bool(state.solver_befunde))
             + szenario)
         rc = budget_or_recover(state, max_llm,
                               f"Vor Reviewer-Verdict Runde {runde}.",
@@ -3289,6 +3325,7 @@ def run_pipeline(project_name: str, aufgabe: str,
                     _reply: LLMReply = reply) -> str:
                 return (
                     f"Reviewer NO-GO:\n{_reply.content}\n\n"
+                    + _solver_befund_block(s)
                     + "GEMESSENER INHALT (verbindlich):\n"
                     + f"{s.mess_protokoll or '(keine)'}\n\n"
                     + "Ueberarbeite den Code-Entwurf. "
