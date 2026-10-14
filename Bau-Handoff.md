@@ -1,12 +1,35 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-14 (nach Probebetrieb 82)
-Werkstatt-HEAD: 9a5a17f (Tag probebetrieb-82)
+Stand: 2026-10-14
+Werkstatt-HEAD: 6ce7bf8 (kein Tag)
+Letzter echter Probebetrieb: PB-61
 Letzter Commit in security-ai: 35e5178
 Branch: main
 Tests: 333 passed
 ruff: 0
 mypy: 0
+
+================================================================
+WICHTIG (2026-10-14)
+================================================================
+
+Ein Probebetrieb ist NUR ein echter Pipeline-
+Durchlauf (pipeline_start + pipeline_ende im
+Audit-Log, Projekt security-ai).
+
+Die Tags probebetrieb-62 bis probebetrieb-83
+wurden fuer manuelle Bau-Sessions vergeben. Das
+war falsch. Sie wurden am 2026-10-14 entfernt.
+Die Commits selbst bleiben (die Arbeit ist real),
+nur die Tags waren semantisch falsch.
+
+Letzter echter security-ai-Durchlauf:
+  2026-10-13T18:43:09  rc=7  run_pipeline_exit
+
+Naechster echter Probebetrieb: probebetrieb-62
+(Nummer ist frei).
+
+================================================================
 
 Dieses Dokument ist der Einstiegspunkt fuer einen neuen
 Bau-Chat. Es enthaelt alles zum Weiterbauen. Es ist ein
@@ -44,7 +67,7 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD 9a5a17f (probebetrieb-82, 2183 C)
+  HEAD 6ce7bf8 (kein Tag, manual)
   Tests: 333 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
@@ -55,7 +78,8 @@ Ziel-Projekt security-ai:
   git status sauber
 
 Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -73
+  probebetrieb-7, -17, -29 bis -61
+  (Nur echte Pipeline-Durchlaeufe.)
 
 Ziel-Projekt-Tags (auf /opt/security-ai):
   probebetrieb-1 bis -28 (historisch, vor dieser Session)
@@ -584,6 +608,12 @@ Regeln fuer jeden Bau-Block:
 
 6. Bei Kategorie 3: Reviewer-Block vor Commit.
 
+6a. Probebetrieb-Tag NUR bei echtem Pipeline-
+    Durchlauf. Beleg: pipeline_start UND
+    pipeline_ende im Audit-Log (Projekt
+    security-ai). Manual-Sessions werden
+    NICHT getaggt. Neue Regel seit 2026-10-14.
+
 7. Nach jedem Meilenstein: dieses Handoff
    aktualisieren.
 
@@ -737,7 +767,9 @@ Der neue Bau-Chat soll:
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
    Blocks formulieren. Vor Ausfuehrung.
 
-5. Nach Erfolg: git tag probebetrieb-<n>.
+5. Nach Erfolg (NUR echter Pipeline-Durchlauf):
+   git tag probebetrieb-<n>. Naechste Nummer:
+   62 (Stand 2026-10-14).
 
 6. Bei Problemen: zurueck zu diesem Handoff,
    Faktenlage pruefen, Reviewer-Chat fragen.
