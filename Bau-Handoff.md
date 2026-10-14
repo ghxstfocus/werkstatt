@@ -1,10 +1,10 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-14 (nach Probebetrieb 78)
-Werkstatt-HEAD: da8c7c4 (Tag probebetrieb-78)
+Stand: 2026-10-14 (nach Probebetrieb 80)
+Werkstatt-HEAD: 47a9a8b (Tag probebetrieb-80)
 Letzter Commit in security-ai: 35e5178
 Branch: main
-Tests: 311 passed
+Tests: 325 passed
 ruff: 0
 mypy: 0
 
@@ -44,8 +44,8 @@ Rollen (5):
 ================================================================
 
 Werkstatt-Repo:
-  HEAD da8c7c4 (probebetrieb-78, A4/A5 P1)
-  Tests: 311 passed
+  HEAD 47a9a8b (probebetrieb-80, 2183 B)
+  Tests: 325 passed
   ruff: 0, mypy: 0, git status sauber
   Remote: github.com/ghxstfocus/werkstatt.git (privat)
 
@@ -63,11 +63,12 @@ Ziel-Projekt-Tags (auf /opt/security-ai):
   (Werkstatt-Konvention: nur Werkstatt-Repo wird getaggt).
 
 Dateien:
-  - pipeline.py (3331 Zeilen, Stand 2183 A4/A5)
+  - pipeline.py (3573 Zeilen, Stand 2183 B)
   - redaction.py (314 Zeilen, Stand 2195)
   - agents/*.md (5 Rollen)
   - projects/security-ai.yaml
-  - tests/test_pipeline.py (3893 Zeilen, Stand 2183 A4/A5)
+  - tests/test_pipeline.py (4003 Zeilen, Stand 2183 B)
+  - agents/solver.md (42 Zeilen, Stand 2183 B)
   - tests/test_redaction.py
   - docs/WORKFLOW.md
   - docs/ROADMAP.md
@@ -178,6 +179,18 @@ Kurzfassung:
          jaccard/schwellwert/min_tokens/grund.
          solver_config im YAML. +10 Tests,
          311 passed.
+  PB-79: Doku. Handoff auf PB-78 (2183 A4/A5).
+  PB-80: Feature. Solver-Code (2183 B).
+         agents/solver.md, HARD_RULES_SOLVER,
+         parse_solver_diagnose, baue_solver_befund,
+         rufe_solver, _letzte_zwei_entwuerfe,
+         _solver_prompt_bauen. recovery_hinweis_
+         block um befund-Parameter erweitert
+         (Option C). Solver-Call im Trigger,
+         nur bei P1_GRUND_GETRIGGERT, eigenes
+         Budget-Gate. X7: kein Builder-Kanal
+         (B2 separater Block). +14 Tests,
+         325 passed.
 
 Auflagen dieser Session:
   2186: KUERZUNGS-MARKER
@@ -259,6 +272,24 @@ WICHTIG (naechste Session):
         ERLEDIGT (PB-71). Neue Funktion
         rollback_vor_recovery (ungenutzt bis A3).
         max_llm_calls-Defaults 20 -> 30.
+  2183 B (Solver-Code): ERLEDIGT (PB-80).
+        agents/solver.md (Rolle, HARD_RULES_
+        SOLVER S1-S7). Parser parse_solver_
+        diagnose (Fallback UNKLAR). baue_
+        solver_befund, rufe_solver, _letzte_
+        zwei_entwuerfe (X8), _solver_prompt_
+        bauen. recovery_hinweis_block um
+        befund-Parameter erweitert (Option C,
+        X1/X2). Solver-Call nur bei GETRIGGERT
+        (X6), eigenes Budget-Gate (X5). Bei
+        Fail: Marker zurueck (X3), audit
+        solver_failed. X4: Parser-Fehler ist
+        UNKLAR, kein Fail. V6: ANDERER_FEHLER
+        ist legitim. X7: B baut keinen Builder-
+        Kanal, praezisierter_auftrag landet in
+        state.solver_befunde. Builder-Kanal B2
+        separater Block. +14 Tests, 325 passed.
+
   2183 A4/A5 (P1 Gegenstandsvergleich):
         ERLEDIGT (PB-78). jaccard_aehnlichkeit,
         gegenstand_gleich, _p1_schon_getriggert,
@@ -400,6 +431,18 @@ WICHTIG (naechste Session):
 
 
 MITTEL (Merkposten):
+  B2 — Builder-Kanal fuer Solver-Befund.
+        Kategorie 3. Aus 2183 B (X7).
+        Der praezisierte_auftrag (Diagnose
+        ANDERER_FEHLER) landet heute nur in
+        state.solver_befunde und im Reviewer-
+        Prompt. Der Builder sieht ihn nicht.
+        Offene Fragen: wo im Builder-Prompt,
+        mit welchem Gewicht (verbindlich vs.
+        Hinweis), was bei Widerspruch zum
+        Auftrag. Nach 2183 C.
+
+  U4-Kalibrierung (P1): Schwellwert 0.5
   U4-Kalibrierung (P1): Schwellwert 0.5
         und min_tokens 10 sind Setzungen,
         nicht Messungen. Nach ersten PB-
@@ -657,13 +700,10 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge:
-   a) 2183 B (Solver-Code). Kategorie 3.
-      Muss tolerant sein fuer ANDERER_
-      FEHLER (P6, T1-Kopplung, V6).
-      Vorbedingung erfuellt: P1 (PB-78)
-      reduziert Trigger, damit B nicht
-      bei ANDERER_FEHLER LLM-Calls kostet.
-   b) 2183 C (COMMAND: RUN solver).
+   a) 2183 C (COMMAND: RUN solver).
+      Kategorie 3. Reviewer kann den
+      Solver explizit anfordern.
+   b) 2183-AQ Auftragsqualitaet.
    d) 2183-AQ Auftragsqualitaet.
    e) 2200b/c/T Aggregator-Verfeinerung.
    f) 2199a Zustandsmaschine (Kategorie 3).
