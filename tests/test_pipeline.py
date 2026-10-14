@@ -3891,3 +3891,113 @@ def test_gegenstand_gleich_schon_getriggert() -> None:
     ]
     _wert, grund = pipeline.gegenstand_gleich(runden, 0.5, 10)
     assert grund == pipeline.P1_GRUND_KEIN_SCHON
+
+
+def test_parse_solver_diagnose_gleicher_fehler() -> None:
+    text = "DIAGNOSE: GLEICHER_FEHLER\nKANDIDATEN:\n- x"
+    assert pipeline.parse_solver_diagnose(text) == \
+        pipeline.SolverDiagnose.GLEICHER_FEHLER
+
+
+def test_parse_solver_diagnose_anderer_fehler() -> None:
+    assert pipeline.parse_solver_diagnose(
+        "DIAGNOSE: ANDERER_FEHLER") == \
+        pipeline.SolverDiagnose.ANDERER_FEHLER
+
+
+def test_parse_solver_diagnose_widerspruch() -> None:
+    assert pipeline.parse_solver_diagnose(
+        "DIAGNOSE: WIDERSPRUCH") == \
+        pipeline.SolverDiagnose.WIDERSPRUCH
+
+
+def test_parse_solver_diagnose_unklar() -> None:
+    assert pipeline.parse_solver_diagnose(
+        "DIAGNOSE: UNKLAR") == \
+        pipeline.SolverDiagnose.UNKLAR
+
+
+def test_parse_solver_diagnose_fallback_unklar() -> None:
+    assert pipeline.parse_solver_diagnose("kein format") == \
+        pipeline.SolverDiagnose.UNKLAR
+
+
+def test_parse_solver_diagnose_bei_leerem_text() -> None:
+    assert pipeline.parse_solver_diagnose("") == \
+        pipeline.SolverDiagnose.UNKLAR
+
+
+def test_baue_solver_befund_gleicher_fehler() -> None:
+    text = "DIAGNOSE: GLEICHER_FEHLER\nKANDIDATEN:\n- a\n- b"
+    b = pipeline.baue_solver_befund(text, "run-1")
+    assert b.art == pipeline.SolverDiagnose.GLEICHER_FEHLER
+    assert b.kandidaten == ["a", "b"]
+    assert b.ist_vollstaendig()
+    assert b.run_id == "run-1"
+
+
+def test_baue_solver_befund_anderer_fehler() -> None:
+    text = ("DIAGNOSE: ANDERER_FEHLER\n"
+            "PRAEZISIERTER_AUFTRAG: mach X")
+    b = pipeline.baue_solver_befund(text, "run-2")
+    assert b.art == pipeline.SolverDiagnose.ANDERER_FEHLER
+    assert b.praezisierter_auftrag == "mach X"
+    assert b.ist_vollstaendig()
+
+
+def test_baue_solver_befund_unvollstaendig() -> None:
+    # GLEICHER_FEHLER ohne Kandidaten -> unvollstaendig
+    text = "DIAGNOSE: GLEICHER_FEHLER"
+    b = pipeline.baue_solver_befund(text, "run-3")
+    assert not b.ist_vollstaendig()
+
+
+def test_recovery_hinweis_block_default_parameter() -> None:
+    """B: Default-Parameter befund=None funktioniert."""
+    runden = [{"verdict": "NO-GO", "recovery": True}]
+    text = pipeline.recovery_hinweis_block(runden)
+    assert "Befund liegt noch nicht vor" in text
+
+
+def test_recovery_hinweis_block_mit_befund() -> None:
+    b = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="Frage an Mensch",
+        run_id="run-4")
+    runden = [{"verdict": "NO-GO", "recovery": True}]
+    text = pipeline.recovery_hinweis_block(runden, b)
+    assert "Ein Solver-Befund liegt vor" in text
+    assert "SOLVER-BEFUND" in text
+    assert "run-4" in text
+
+
+def test_recovery_hinweis_block_mit_unvollstaendigem_befund() -> None:
+    # GLEICHER_FEHLER ohne Kandidaten -> format wirft ValueError.
+    b = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.GLEICHER_FEHLER,
+        run_id="run-5")
+    runden = [{"verdict": "NO-GO", "recovery": True}]
+    text = pipeline.recovery_hinweis_block(runden, b)
+    assert "unvollstaendig" in text
+
+
+def test_recovery_hinweis_block_ohne_recovery() -> None:
+    runden = [{"verdict": "NO-GO", "recovery": False}]
+    assert pipeline.recovery_hinweis_block(runden) == ""
+
+
+def test_letzte_zwei_entwuerfe() -> None:
+    state = pipeline.RunState(
+        block_id="b", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=pipeline.Path("/tmp"))
+    state.code_entwurf_historie = [
+        {"runde": 1, "entwurf": "e1", "phase": "normal"},
+        {"runde": 2, "entwurf": "e2", "phase": "recovery"},
+        {"runde": 3, "entwurf": "e3", "phase": "normal"},
+    ]
+    e = pipeline._letzte_zwei_entwuerfe(state)
+    assert len(e) == 2
+    assert e[0]["entwurf"] == "e1"
+    assert e[1]["entwurf"] == "e3"

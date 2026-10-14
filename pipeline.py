@@ -249,11 +249,39 @@ T4. Keine eigene Meinung zum Code.
 # Mapping Agent-Name -> Rollen-Regeln.
 # coverage und chaos sind No-LLM-Rollen und rufen
 # build_system_prompt nicht auf. Deshalb kein Eintrag.
+# Auflage 2183 B: Solver-Rolle.
+# Aufgabe: Diagnose eines NO-GO-Paares. Kein Code,
+# keine Ausfuehrung. Nur Analyse und Befund.
+HARD_RULES_SOLVER = """
+S1. Du bist der Solver. Deine Aufgabe ist die
+    Diagnose, nicht die Reparatur.
+S2. Du bekommst zwei NO-GO-Runden und die
+    zugehoerigen CODE-ENTWUERFE.
+S3. Du antwortest mit genau einer Diagnose:
+    DIAGNOSE: GLEICHER_FEHLER
+    DIAGNOSE: ANDERER_FEHLER
+    DIAGNOSE: WIDERSPRUCH
+    DIAGNOSE: UNKLAR
+S4. Zur Diagnose lieferst du den passenden Inhalt:
+    GLEICHER_FEHLER -> KANDIDATEN: (Liste)
+    ANDERER_FEHLER  -> PRAEZISIERTER_AUFTRAG: <Text>
+    WIDERSPRUCH     -> RUECKSPIEL: <Text>
+    UNKLAR          -> ESKALATION: <Text>
+S5. Du lieferst KEINEN Code. Du schlaegst KEINE
+    Patches vor.
+S6. Du bist kein Messender. Die Werkstatt messt.
+S7. Wenn du nicht entscheiden kannst: UNKLAR.
+    Das ist kein Fehler, sondern eine gueltige
+    Diagnose.
+"""
+
+
 HARD_RULES_BY_ROLE = {
     "reviewer": HARD_RULES_REVIEWER,
     "builder": HARD_RULES_BUILDER,
     "test_generator": HARD_RULES_TEST_GENERATOR,
 }
+HARD_RULES_BY_ROLE["solver"] = HARD_RULES_SOLVER
 
 # Auflage 2041: Groessenlimits fuer das Messprotokoll.
 MAX_PROTOKOLL_PER_COMMAND = 10_000
@@ -908,23 +936,40 @@ def formatiere_runden(review_runden: list[dict[str, Any]]) -> str:
 
 
 def recovery_hinweis_block(
-        review_runden: list[dict[str, Any]]) -> str:
-    """Auflage 2183 A1a: RECOVERY-RUNDE-Block.
+        review_runden: list[dict[str, Any]],
+        befund: SolverBefund | None = None) -> str:
+    """Auflage 2183 A1a + B (Option C, X1).
 
     Liefert den Block, wenn die letzte Runde recovery=True
     trug. Sonst leerer String.
+
+    Wenn befund uebergeben wird, enthaelt der Block
+    den formatierten Solver-Befund (B, X1).
     """
     if not review_runden:
         return ""
     if not review_runden[-1].get("recovery"):
         return ""
-    # Auflage 2183 A3: Text neutral, solange kein
-    # Solver-Befund vorliegt (B existiert noch nicht).
+    if befund is None:
+        return (
+            "## RECOVERY-RUNDE\n"
+            "Dies ist eine Recovery-Runde. Ein Solver-\n"
+            "Befund liegt noch nicht vor. Pruefe den\n"
+            "Code wie sonst (R1-R7 gelten weiter).\n\n"
+        )
+    try:
+        befund_text = format_solver_befund(befund)
+    except ValueError as e:
+        return (
+            "## RECOVERY-RUNDE\n"
+            f"Solver-Befund unvollstaendig ({e}).\n"
+            "Pruefe den Code wie sonst (R1-R7).\n\n"
+        )
     return (
         "## RECOVERY-RUNDE\n"
-        "Dies ist eine Recovery-Runde. Ein Solver-\n"
-        "Befund liegt noch nicht vor. Pruefe den\n"
-        "Code wie sonst (R1-R7 gelten weiter).\n\n"
+        f"Ein Solver-Befund liegt vor:\n{befund_text}\n"
+        "Bewerte, ob der Builder den Befund umsetzt,\n"
+        "und ob der Code sonst korrekt ist (R1-R7).\n\n"
     )
 
 
@@ -1143,6 +1188,164 @@ class RecoveryVorschlag:
     blockgroesse: str = ""
     frage_an_menschen: str = ""
     rohantwort: str = ""
+
+
+def parse_solver_diagnose(text: str) -> SolverDiagnose:
+    """Auflage 2183 B: parst die Solver-Antwort.
+
+    Sucht "DIAGNOSE: <WERT>" in der ersten Zeile
+    (case-insensitiv). Fallback: UNKLAR.
+    """
+    if not text:
+        return SolverDiagnose.UNKLAR
+    for line in text.splitlines()[:10]:
+        m = re.match(
+            r"\s*DIAGNOSE\s*:\s*([A-Z_]+)",
+            line, re.IGNORECASE)
+        if m:
+            wert = m.group(1).upper().strip()
+            for d in SolverDiagnose:
+                if d.name == wert:
+                    return d
+    return SolverDiagnose.UNKLAR
+
+
+def _parse_solver_feld(text: str, feldname: str) -> str:
+    """Auflage 2183 B: liest ein Feld aus der
+    Solver-Antwort. Format:
+        FELDNAME: wert
+    oder mehrzeilig bis zur naechsten Grossbuchstaben-
+    Zeile.
+    """
+    zeilen = text.splitlines()
+    start = None
+    for k, line in enumerate(zeilen):
+        if re.match(
+                rf"\s*{re.escape(feldname)}\s*:",
+                line, re.IGNORECASE):
+            start = k
+            break
+    if start is None:
+        return ""
+    inhalt = [zeilen[start].split(":", 1)[1].strip()]
+    for line in zeilen[start + 1:]:
+        if re.match(r"\s*[A-Z_]+\s*:", line):
+            break
+        if line.strip():
+            inhalt.append(line.strip())
+    return "\n".join(inhalt).strip()
+
+
+def _parse_solver_kandidaten(text: str) -> list[str]:
+    """Auflage 2183 B: liest KANDIDATEN-Liste."""
+    roh = _parse_solver_feld(text, "KANDIDATEN")
+    if not roh:
+        return []
+    kandidaten = []
+    for line in roh.splitlines():
+        line = line.strip().lstrip("-*").strip()
+        if line:
+            kandidaten.append(line)
+    return kandidaten
+
+
+def baue_solver_befund(
+        text: str, run_id: str) -> SolverBefund:
+    """Auflage 2183 B: baut SolverBefund aus der
+    Solver-Antwort.
+    """
+    art = parse_solver_diagnose(text)
+    if art == SolverDiagnose.GLEICHER_FEHLER:
+        return SolverBefund(
+            art=art,
+            kandidaten=_parse_solver_kandidaten(text),
+            run_id=run_id)
+    if art == SolverDiagnose.ANDERER_FEHLER:
+        return SolverBefund(
+            art=art,
+            praezisierter_auftrag=_parse_solver_feld(
+                text, "PRAEZISIERTER_AUFTRAG"),
+            run_id=run_id)
+    if art == SolverDiagnose.WIDERSPRUCH:
+        return SolverBefund(
+            art=art,
+            rueckspiel_hinweis=_parse_solver_feld(
+                text, "RUECKSPIEL"),
+            run_id=run_id)
+    return SolverBefund(
+        art=SolverDiagnose.UNKLAR,
+        eskalation=_parse_solver_feld(
+            text, "ESKALATION") or text[:500],
+        run_id=run_id)
+
+
+def _letzte_zwei_entwuerfe(
+        state: RunState) -> list[dict[str, Any]]:
+    """Auflage 2183 B (X8): die letzten zwei
+    normalen Entwuerfe aus der Historie.
+    """
+    normal = [e for e in state.code_entwurf_historie
+              if e.get("phase") == "normal"]
+    return normal[-2:] if len(normal) >= 2 else normal
+
+
+def _solver_prompt_bauen(state: RunState) -> str:
+    """Auflage 2183 B: baut den User-Content
+    fuer den Solver-Call.
+    """
+    no_go = [r for r in state.review_runden
+             if r.get("verdict") == "NO-GO"
+             and not r.get("recovery")]
+    letzte = no_go[-2:] if len(no_go) >= 2 else no_go
+    zeilen = ["## NO-GO-RUNDEN"]
+    for r in letzte:
+        zeilen.append(
+            f"--- Runde {r.get('runde', '?')} ---")
+        zeilen.append(r.get("raw", "")[:2000])
+    zeilen.append("")
+    zeilen.append("## CODE-ENTWUERFE")
+    entwuerfe = _letzte_zwei_entwuerfe(state)
+    if not entwuerfe:
+        zeilen.append("(keine Historie)")
+    for e in entwuerfe:
+        zeilen.append(
+            f"--- Runde {e.get('runde', '?')} ---")
+        zeilen.append(e.get("entwurf", "")[:2000])
+    if state.code_entwurf:
+        zeilen.append("")
+        zeilen.append("## AKTUELLER ENTWURF")
+        zeilen.append(state.code_entwurf[:2000])
+    zeilen.append("")
+    zeilen.append("## GEMESSENER INHALT (verbindlich)")
+    zeilen.append(state.mess_protokoll or "(keine)")
+    zeilen.append("")
+    zeilen.append(
+        "Antworte mit DIAGNOSE: <WERT> in der ersten "
+        "Zeile, dann der passende Inhalt.")
+    return "\n".join(zeilen)
+
+
+def rufe_solver(
+        state: RunState, api_key: str,
+        solver_prompt: str) -> tuple[SolverBefund | None, str]:
+    """Auflage 2183 B: ruft den Solver.
+
+    Liefert (befund, grund).
+    befund ist None bei Fehler; grund ist dann
+    "llm_fehler" oder "befund_unvollstaendig".
+    Bei Erfolg: (befund, "").
+    """
+    user_content = _solver_prompt_bauen(state)
+    reply = ask_llm(api_key, solver_prompt, user_content,
+                    state.reviewer_verdict_model, 0.0,
+                    state.llm_timeout_s, state=state)
+    if not reply.ok:
+        return None, "llm_fehler"
+    befund = baue_solver_befund(reply.content,
+                                state.run_id)
+    if not befund.ist_vollstaendig():
+        return None, "befund_unvollstaendig"
+    return befund, ""
 
 
 def aufgabe_block(state: RunState) -> str:
@@ -2815,8 +3018,12 @@ def run_pipeline(project_name: str, aufgabe: str,
             "Bewerte. Erste Zeile: GO, NO-GO oder ESKALATION."
         )
         # Auflage 2183 A1a: Recovery-Hinweis ausgelagert.
-        szenario = (recovery_hinweis_block(state.review_runden)
-                    + szenario)
+        letzter_befund = (
+            state.solver_befunde[-1]
+            if state.solver_befunde else None)
+        szenario = (recovery_hinweis_block(
+            state.review_runden, letzter_befund)
+            + szenario)
         rc = budget_or_recover(state, max_llm,
                               f"Vor Reviewer-Verdict Runde {runde}.",
                               project_dir, project_name,
@@ -2890,6 +3097,41 @@ def run_pipeline(project_name: str, aufgabe: str,
                        grund == P1_GRUND_GETRIGGERT,
                    "grund": grund},
                   project_dir, project_name)
+            # Auflage 2183 B (X6): Solver-Call NUR
+            # bei GETRIGGERT.
+            if grund == P1_GRUND_GETRIGGERT:
+                # X5: eigenes Budget-Gate.
+                rc_solver = budget_or_recover(
+                    state, max_llm,
+                    f"Vor Solver-Call (Runde {runde}).",
+                    project_dir, project_name,
+                    max_minutes=max_minutes)
+                if rc_solver is not None:
+                    state.review_runden[-1]["recovery"] = False
+                    audit("solver_budget_exhausted",
+                          {"runde": runde},
+                          project_dir, project_name)
+                else:
+                    solver_prompt = build_system_prompt(
+                        state.agents["solver"], state.docs,
+                        state.agent_docs.get("solver", []))
+                    befund, fehler = rufe_solver(
+                        state, api_key, solver_prompt)
+                    if befund is None:
+                        # X3: Marker zurueck,
+                        # fail-closed (kein Dauer-Block).
+                        state.review_runden[-1]["recovery"] = False
+                        audit("solver_failed",
+                              {"runde": runde,
+                               "grund": fehler},
+                              project_dir, project_name)
+                    else:
+                        state.solver_befunde.append(befund)
+                        audit("solver_befund",
+                              {"runde": runde,
+                               "art": befund.art.name,
+                               "run_id": befund.run_id},
+                              project_dir, project_name)
             rc = budget_or_recover(state, max_llm,
                                   f"Vor Builder-Neubau (NO-GO Runde {runde}).",
                                   project_dir, project_name,
