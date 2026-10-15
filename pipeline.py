@@ -105,6 +105,7 @@ MAX_SOLVER_RUNDEN_DEFAULT = 3
 ERLAUBTE_SOLVER_QUELLEN = frozenset({
     "p1_trigger", "reviewer_command",
     "anker_nicht_gemessen", "builder_rueckfrage",
+    "wirkungsloser_patch",
 })
 # Redaction (lokal, projektunabhaengig)
 sys.path.insert(0, str(Path(__file__).parent))
@@ -3548,6 +3549,14 @@ def run_pipeline(project_name: str, aufgabe: str,
             _trigger_grund = ""
             if grund == P1_GRUND_GETRIGGERT:
                 _trigger_grund = "p1_trigger"
+            elif state.letzter_patch_wirkungslos:
+                # B4: Builder hat wirkungslosen Patch
+                # geliefert. Solver prueft, ob Auftrag
+                # bereits erfuellt ist.
+                _trigger_grund = "wirkungsloser_patch"
+                audit("solver_trigger_c",
+                      {"runde": runde},
+                      project_dir, project_name)
             elif state.anker_fehler_in_folge >= 2:
                 _trigger_grund = "anker_nicht_gemessen"
                 audit("solver_trigger_a",

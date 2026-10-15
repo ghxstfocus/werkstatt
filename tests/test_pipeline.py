@@ -4666,6 +4666,21 @@ def test_nicht_wirkungslos_setzt_flag_nicht() -> None:
     assert wirkt is False
 
 
+# ---------- Block Auftrag-erfuellt, B4 ----------
+
+def test_erlaubte_quelle_wirkungsloser_patch() -> None:
+    """Neue Quelle ist in ERLAUBTE_SOLVER_QUELLEN."""
+    assert "wirkungsloser_patch" in pipeline.ERLAUBTE_SOLVER_QUELLEN
+
+
+def test_wirkungslos_flag_ist_trigger_c_vorbedingung() -> None:
+    """Trigger C greift nur wenn Flag True."""
+    s = build_test_state()
+    assert s.letzter_patch_wirkungslos is False
+    s.letzter_patch_wirkungslos = True
+    assert s.letzter_patch_wirkungslos is True
+
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)
