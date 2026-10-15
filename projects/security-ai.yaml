@@ -153,3 +153,4 @@ git_author:
 solver:
   p1_schwellwert: 0.5
   p1_min_tokens: 10
+  max_runden: 3

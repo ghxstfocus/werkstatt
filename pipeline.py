@@ -99,6 +99,9 @@ P1_STOPWOERTER = frozenset({
 # =====================================================================
 SOLVER_ARG_MAX_LEN = 200  # Reviewer-Grund, kurzer Freitext.
 
+# Auflage 2183 Block 5: Obergrenze fuer Solver-Aufrufe.
+MAX_SOLVER_RUNDEN_DEFAULT = 3
+
 ERLAUBTE_SOLVER_QUELLEN = frozenset({
     "p1_trigger", "reviewer_command",
 })
@@ -1081,6 +1084,9 @@ class RunState:
     # Auflage 2183 C: Quellen der Solver-Laeufe.
     solver_trigger_quellen: list[str] = \
         field(default_factory=list)
+    # Auflage 2183 Block 5: Zaehlt Solver-Versuche
+    # (auch fehlgeschlagene, GG2).
+    solver_aufrufe: int = 0
     code_patches: list[dict[str, str]] = field(default_factory=list)  # UMB-1b
     test_vorschlaege: str = ""
     commit_paket: dict[str, Any] = field(default_factory=dict)
@@ -1386,6 +1392,14 @@ def _solver_prompt_bauen(state: RunState,
         zeilen.append("")
         zeilen.append("## AKTUELLER ENTWURF")
         zeilen.append(state.code_entwurf[:2000])
+    if state.solver_befunde:
+        zeilen.append("")
+        zeilen.append("## FRUEHERE SOLVER-BEFUNDE")
+        for b in state.solver_befunde:
+            zeilen.append(
+                f"--- Runde {b.run_id} ---")
+            zeilen.append(
+                f"DIAGNOSE: {b.art.name}")
     zeilen.append("")
     zeilen.append("## GEMESSENER INHALT (verbindlich)")
     zeilen.append(state.mess_protokoll or "(keine)")
@@ -2906,6 +2920,9 @@ def run_pipeline(project_name: str, aufgabe: str,
         if "p1_min_tokens" in _solver_yaml:
             solver_config["p1_min_tokens"] = float(
                 _solver_yaml["p1_min_tokens"])
+        if "max_runden" in _solver_yaml:
+            solver_config["max_runden"] = float(
+                _solver_yaml["max_runden"])
     max_llm = budget.get("max_llm_calls", 30)
     max_minutes = budget.get("max_minutes", 0)  # Auflage 2080: 0 = aus
 
@@ -3278,7 +3295,21 @@ def run_pipeline(project_name: str, aufgabe: str,
             # Auflage 2183 B (X6): Solver-Call NUR
             # bei GETRIGGERT.
             if grund == P1_GRUND_GETRIGGERT:
-                # X5: eigenes Budget-Gate.
+                # Auflage 2183 Block 5 (GG1):
+                # Obergrenze fuer Solver-Aufrufe.
+                _msr = int(state.solver_config.get(
+                    "max_runden",
+                    MAX_SOLVER_RUNDEN_DEFAULT))
+                if state.solver_aufrufe >= _msr:
+                    state.review_runden[-1]["recovery"] = False
+                    audit("solver_max_runden_erreicht",
+                          {"runde": runde,
+                           "aufrufe": state.solver_aufrufe,
+                           "max_runden": _msr},
+                          project_dir, project_name)
+                else:
+                    state.solver_aufrufe += 1
+                    # X5: eigenes Budget-Gate.
                 rc_solver = budget_or_recover(
                     state, max_llm,
                     f"Vor Solver-Call (Runde {runde}).",

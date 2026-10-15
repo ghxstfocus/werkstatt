@@ -4284,6 +4284,50 @@ def test_solver_agent_docs_leer_ergibt_kein_projekt_doku_block() -> None:
         {"name": "solver", "body": "BODY"}, {}, [])
     assert "--- PROJEKT-DOKU ---" not in prompt
 
+def test_max_solver_runden_default_3() -> None:
+    """GG5: Default-Konstante ist 3."""
+    assert pipeline.MAX_SOLVER_RUNDEN_DEFAULT == 3
+
+
+def test_max_solver_runden_yaml_override() -> None:
+    """GG5: YAML-Wert ueberschreibt Default."""
+    import yaml
+    with open("/opt/werkstatt/projects/security-ai.yaml",
+              encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    assert cfg["solver"]["max_runden"] == 3
+
+
+def test_max_solver_runden_blockt_nach_3() -> None:
+    """GG5/GG1: Nach 3 Aufrufen blockiert der Trigger."""
+    s = build_test_state()
+    s.solver_aufrufe = 3
+    s.solver_config = {"max_runden": 3.0}
+    msr = int(s.solver_config.get(
+        "max_runden", pipeline.MAX_SOLVER_RUNDEN_DEFAULT))
+    assert s.solver_aufrufe >= msr
+
+
+def test_solver_prompt_ohne_historie_bei_runde_1() -> None:
+    """GG3: Runde 1, leere Befund-Liste, keine Historie."""
+    s = build_test_state()
+    s.solver_befunde = []
+    out = pipeline._solver_prompt_bauen(s)
+    assert "## FRUEHERE SOLVER-BEFUNDE" not in out
+
+
+def test_solver_prompt_enthaelt_historie_bei_runde_2() -> None:
+    """GG3: Runde 2, ein Befund in Liste, Historie sichtbar."""
+    s = build_test_state()
+    b = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="test", run_id="run-1")
+    s.solver_befunde = [b]
+    out = pipeline._solver_prompt_bauen(s)
+    assert "## FRUEHERE SOLVER-BEFUNDE" in out
+    assert "DIAGNOSE: UNKLAR" in out
+
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)
