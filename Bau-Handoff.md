@@ -1,68 +1,60 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach Phase 3a-1 + 3a-2 + 3b)
-Werkstatt-HEAD: 04012f6 (Builder-Injektion Anti-Patterns)
+Stand: 2026-10-15 (nach Doku-Migration + Konsolidierung)
+Werkstatt-HEAD: 254b3fb (Doku-Migration + Schema-Alias-Mechanik)
+security-ai-HEAD: 220c6be (Doku-Migration)
 Letzter echter Probebetrieb: PB-66 (c9142a7, 2026-10-15)
-Letzter Commit in security-ai: c9142a7
-Branch: main
-Tests: 485 passed (Phase 3b: +16 aus Phase 3a-1)
+Branch: main (beide Repos)
+Tests (Werkstatt): 495 passed
 ruff --no-cache: 0
 mypy pipeline.py: 0
-mypy tests/test_pipeline.py: 15 (vorbestehend, tests-mypy-Merkposten)
+mypy tests/test_pipeline.py: 15 (vorbestehend, tests-mypy)
 mypy tests/test_projekt_schema.py: 0
 mypy tests/test_anti_patterns.py: 0
+Tests (security-ai): 1334 collected
+
+ARCHIV: historische Eintraege in Bau-Handoff-Archiv.md.
 
 ================================================================
-WICHTIG (2026-10-14)
+WICHTIG — PROBEBETRIEB-DEFINITION
 ================================================================
 
 Ein Probebetrieb ist NUR ein echter Pipeline-
 Durchlauf (pipeline_start + pipeline_ende im
 Audit-Log, Projekt security-ai).
 
-Die Tags probebetrieb-62 bis probebetrieb-83
-wurden fuer manuelle Bau-Sessions vergeben. Das
-war falsch. Sie wurden am 2026-10-14 entfernt.
-Die Commits selbst bleiben (die Arbeit ist real),
-nur die Tags waren semantisch falsch.
+Manual-Sessions werden NICHT getaggt.
+Die Tags probebetrieb-62 bis -83 (alte Vergabe)
+wurden am 2026-10-14 entfernt.
 
-Letzter echter security-ai-Durchlauf:
+Letzter echter Lauf:
   2026-10-14T21:00-21:02  rc=0  PB-62
-  Commit 3bb5917 (whois ToolArgumentValueError).
-  Erster erfolgreicher Lauf nach der
-  Probebetrieb-Neudefinition.
+  Commit 3bb5917 (whois).
 
-Naechster echter Probebetrieb: probebetrieb-63.
-
-================================================================
-
-Dieses Dokument ist der Einstiegspunkt fuer einen neuen
-Bau-Chat. Es enthaelt alles zum Weiterbauen. Es ist ein
-Arbeitsdokument und wird bei jedem Meilenstein aktualisiert.
+Naechster echter Probebetrieb: probebetrieb-67.
 
 ================================================================
 1. WAS DIE WERKSTATT IST
 ================================================================
 
-Die Werkstatt ist ein Agenten-System. Sie baut Projekte, ist
-aber selbst kein Teil eines Projekts. Aktuell baut sie
-Homelab Security AI, kann aber jedes Projekt bauen.
+Die Werkstatt ist ein Agenten-System. Sie baut
+Projekte, ist aber selbst kein Teil eines Projekts.
 
 Verzeichnis: /opt/werkstatt/
-Projekt-Konfigurationen: /opt/werkstatt/projects/
-Rollen: /opt/werkstatt/agents/
-Tests: /opt/werkstatt/tests/
-Doku: /opt/werkstatt/docs/
-  - WORKFLOW.md (Regeln, Anti-Patterns, Merkposten)
-  - ROADMAP.md (offene Architektur-Ideen)
-  - PROTOKOLL-29-40.md (Beobachtungs-Protokoll der
-    Probebetriebe 29 bis 40)
+Projekt-Konfigurationen: projects/<name>.yaml
+Projekt-Schema: schemas/projekt.yaml
+Rollen: agents/
+Anti-Pattern-Katalog: anti-patterns/katalog.yaml
+Tests: tests/
+Doku: docs/
 
-Rollen (5):
+Rollen (6):
   - reviewer (LLM, deepseek-reasoner): prueft Patches
     und Commit-Paket, entscheidet GO/NO-GO/ESKALATION.
   - builder (LLM, deepseek-chat): liefert strukturierte
     Code-Patches (PATCH-BEGINN/ENDE) und das Commit-Paket.
+  - solver (LLM): unterstuetzt den Builder bei
+    wiederholten NO-GOs.
   - test_generator (LLM): liefert Test-Vorschlaege.
   - coverage (No-LLM): misst Coverage.
   - chaos (No-LLM): fuzzt Extremwerte.
@@ -71,1007 +63,338 @@ Rollen (5):
 2. AKTUELLER ZUSTAND
 ================================================================
 
-Werkstatt-Repo:
-  HEAD 1cb266c (kein Tag, Solver-Kurskorrektur Block 2a+4)
-  Tests: 346 passed
-  ruff: 0, mypy: 0, git status sauber
-  Remote: github.com/ghxstfocus/werkstatt.git (privat)
+Werkstatt-Repo (/opt/werkstatt):
+  HEAD 254b3fb.
+  Tests: 495 passed.
+  ruff --no-cache: 0.
+  mypy pipeline.py: 0.
+  git status: sauber.
+  Remote: github.com/ghxstfocus/werkstatt.git (privat).
 
-Ziel-Projekt security-ai:
-  HEAD 3bb5917 (whois ToolArgumentValueError, PB-62)
-  Vorgaenger 35e5178 (dns_lookup IPv6-Feld)
-  git status sauber
+Ziel-Projekt security-ai (/opt/security-ai):
+  HEAD 220c6be.
+  Tests: 1334 collected.
+  ruff: 0.
+  mypy: 1353 Fehler (Altlast, no-untyped-def).
+  git status: sauber.
+  Remote: github.com/ghxstfocus/security-ai.git.
 
-Werkstatt-Tags (auf /opt/werkstatt):
-  probebetrieb-7, -17, -29 bis -61
-  (Nur echte Pipeline-Durchlaeufe.)
-
-Ziel-Projekt-Tags (auf /opt/security-ai):
-  probebetrieb-1 bis -28 (historisch)
-  probebetrieb-62 (3bb5917, erster echter Lauf
-  nach der Neudefinition)
-  Konvention: Ziel-Repo-Tag fuer echte
-  Pipeline-Durchlaeufe.
-
-Dateien:
-  - pipeline.py (3772 Zeilen, Stand Block 2a+4)
-  - redaction.py (314 Zeilen, Stand 2195)
-  - agents/*.md (5 Rollen)
+Dateien (Werkstatt):
+  - pipeline.py (~4780 Zeilen)
+  - redaction.py
+  - werkstatt_aggregate.py
+  - schemas/projekt.yaml
   - projects/security-ai.yaml
-  - tests/test_pipeline.py (4345 Zeilen, Stand Block 2a+4)
-  - agents/solver.md (42 Zeilen, Stand 2183 B)
+  - agents/*.md (6 Rollen)
+  - anti-patterns/katalog.yaml (26 Eintraege)
+  - tests/test_pipeline.py
+  - tests/test_projekt_schema.py
+  - tests/test_anti_patterns.py
+  - tests/test_aggregate.py
   - tests/test_redaction.py
-  - docs/WORKFLOW.md
+  - docs/WORKFLOW.md (~583 Zeilen)
   - docs/ROADMAP.md
   - docs/PROTOKOLL-29-40.md
-  - README.md
+
+Ziel-Projekt-Doku (nach Doku-Migration):
+  Top-Level: README.md, CHANGELOG.md,
+             PROJECT_VISION.md, LICENSE
+  docs/: STATUS.md, ROADMAP.md, DECISIONS.md,
+         SECURITY_LOG.md, CONVENTIONS.md,
+         WORKFLOW (entfernt), ARCHITECTURE.md,
+         SECURITY.md, PERMISSIONS.md, PROTOCOL.md,
+         DEPLOYMENT.md, WEB_SECURITY_CHECKLIST.md,
+         ADMIN_AI_SCOPE.md, INCONSISTENCIES_FOUND.md,
+         WERKZEUGE.md, ICONS.md, NTFY.md, README.md
+
+Struktur-Konvention (gilt fuer alle Projekte):
+  - README.md (Top-Level) — 30-Sekunden-Ueberblick.
+  - CHANGELOG.md (Top-Level) — chronologisch.
+  - PROJECT_VISION.md (Top-Level) — Vision.
+  - docs/STATUS.md — aktueller Stand.
+  - docs/ROADMAP.md — Phasen und Ausblick.
+  - docs/DECISIONS.md — Design-Entscheidungen.
+  - docs/SECURITY_LOG.md — Sicherheits-Entscheidungen.
+  - docs/CONVENTIONS.md — projektspezifische Konventionen.
+
+Status-Icons:
+  ✅ abgeschlossen, 🔨 in Arbeit, 💡 geplant,
+  ❌ abgebrochen, ⏸ pausiert.
 
 ================================================================
-3. WAS SEIT DEM LETZTEN HANDOFF PASSIERT IST
+3. LETZTE SESSION (2026-10-15)
 ================================================================
 
-Das Handoff vom 2026-10-12 (gesichert als
-Bau-Handoff-2026-10-12.md.alt) ist veraltet. Es
-beschreibt einen Stand vor den Auflagen 2027-2094
-und vor UMB-1.
+Phase 1 Projekt-Schema (Commit 406e3cc):
+  schemas/projekt.yaml (K/O/P/W+O, Defaults,
+  Alias-Mechanik), projects/_template.yaml,
+  tests/test_projekt_schema.py.
+  pipeline.py: pruefe_projekt_yaml (Warn-Modus,
+  Fail-Modus via WERKSTATT_SCHEMA_MODUS),
+  _lade_und_pruefe_projekt.
 
-Seitdem:
-  A) Auflagen 2027-2094 (16 kritische + 21 Befunde).
-  B) UMB-1 (Architektur-Umbau, 4 Teile).
-  C) Probebetriebe 1-28 (vor dieser Session).
-  D) Auflagen 2186-2198 (diese Session).
-  E) Zwei erfolgreiche Werkstatt-Commits in security-ai:
-     dd3048b (PingError) und 3ccb883 (Traceroute).
+Phase 3a-1 Anti-Pattern-Bibliothek (Commit 1ed875a):
+  anti-patterns/katalog.yaml (7 Eintraege),
+  anti-patterns/README.md, pipeline.lade_anti_patterns
+  + anti_patterns_fuer, _AUDIT_KINDS_BEKANNT.
 
-================================================================
-4. DIE 12 PROBEBETRIEBE DIESER SESSION (29-40)
-================================================================
+Phase 3a-2 Anti-Pattern-Katalog (Commit 8ed6cd0):
+  Katalog auf 26 Eintraege erweitert.
 
-Ausfuehrliches Protokoll: siehe docs/PROTOKOLL-29-40.md.
+Phase 3b Builder-Injektion (Commit 04012f6):
+  _anti_pattern_block, _ap_trigger_grund_aus_state,
+  Zwei-Stufen-Sortierung (spezifisch vor Fallback).
 
-Kurzfassung:
-  PB-29: Fail (Anker 0x). Ausschnitt-Bug entdeckt.
-  PB-30: Fail (Livelock, 5x NO-GO). COMMAND-Loop fehlt.
-  PB-31: Fail (Anker 0x). Prompt einmal gebaut.
-  PB-32: Fail (builder_command_deadlock).
-  PB-33: Fail (Anker 0x). read_file ignoriert.
-  PB-34: Fail (Anker 0x). GEMESSENER INHALT fehlt.
-  PB-35: Fail (Anker 0x). GEMESSENER INHALT ignoriert.
-  PB-36: Fail (Anker 0x). Automatik + GEMESSENER INHALT
-         greifen nicht.
-  PB-37: Fail (Anker 0x). Audit-Debug zeigt: IP-Redaction
-         zerstoert Anker. WURZEL GEFUNDEN.
-  PB-38: Fail (Commit-NO-GO). Anker trifft! Testzahl fehlt.
-  PB-39: Fail (Commit-NO-GO). Rechte-Problem + Testzahl.
-  PB-40: ERFOLG. Commit 3ccb883 in security-ai.
-  PB-41: Doku. Handoff + Protokoll 29-40 neu.
-  PB-42: Chore. .gitignore um *.alt ergaenzt.
-  PB-43: ERFOLG. Auflage 2191-R. HEAD 87092f8.
-  PB-44: Doku. Handoff auf PB-43-Stand.
-  PB-45: Style. ruff I001 in tests/ behoben.
-         KORREKTUR (PB-75): War unvollstaendig.
-         Bei PB-75 gemessen: 2 Stellen weiterhin
-         offen (tests/test_pipeline.py:16,
-         tests/test_redaction.py:15). Eigener
-         Block offen.
-  PB-46: Doku. Handoff Abschluss-Update PB-45.
-  PB-47: Fix. reviewer.md Verweis HR4 -> B5.
-  PB-48: Refactor. Audit-Debug-Felder reduziert (2194-M).
-  PB-49: Feature. GEMESSENER INHALT + CODE-PATCHES
-         in commit_input (2191-R2).
-  PB-50: Feature. Fail-closed bei leerem mess_protokoll
-         in Phase 2 (2191-R2b).
-  PB-51: Doku. Handoff auf PB-50.
-  PB-52: Fix. reviewer.md Body an R7 angeglichen
-         (2191-R3).
-  PB-53: Doku. Handoff-Update 2199-Zwischenstand.
-  PB-54: Doku. Handoff-Update 2199a als Auflage.
-  PB-55: Doku. Handoff 2199 abgeschlossen, 2183 vor.
-  PB-56: Feature. pipeline_ende mit llm_calls
-         (2183-P4-Log).
-  PB-57: Feature. pipeline_ende im Deadlock-Pfad
-         (Nachtrag).
-  PB-58: Doku. Handoff 2199 R7 bestaetigt.
-  PB-59: Feature. pipeline_ende im basis_gate_
-         nach_apply-Pfad (2183-P4-Log2).
-  PB-60: Doku. Handoff P4-Log2 + Worst-Case.
-  PB-61: Refactor. Zentraler pipeline_ende-Wrapper
-         (2183-P4-Log2, endgueltig).
-  (Hinweis: PB-62 bis PB-73 in der alten
-   Liste waren manual, Tags entfernt. Siehe
-   WICHTIG-Block oben. Der echte PB-62 ist
-   jetzt der whois-Lauf vom 2026-10-14.)
-  M-62: Feature. run_id im Audit (2200a).
-  M-63: Feature. Audit-Aggregator (2200).
-  PB-64: Chore. projects/*.memory.yaml ignorieren.
-  (Hinweis: die Nummer PB-65 wurde 2026-10-15 neu
-   vergeben: echter notify_ntfy-Test-Lauf. Siehe
-   Session-Liste unten.)
-  PB-66: Fix. R7-Phase-2-Toleranz + Aggregator
-         mypy/ruff (2199-R7-P2).
-  PB-67: Doku. Handoff auf PB-66.
-  PB-68: Feature. Recovery-Zustand + Prompt-Block
-         (2183 A1a).
-  PB-69: Doku. Handoff auf PB-68.
-  PB-70: Feature. code_entwurf_historie (2183 A1b).
-  PB-71: Feature. rollback_vor_recovery +
-         max_llm_calls 30 (2183 A1c).
-  PB-72: Doku. Handoff auf PB-71.
-  PB-73: Feature. SolverBefund-Klasse + run_id
-         (2183 A2).
-  PB-74: Doku. Handoff auf PB-73.
-  PB-75: Feature. Trigger-Erkennung (2183 A3).
-         zaehle_no_go_in_folge, recovery-Marker
-         ab 2. NO-GO, recovery_hinweis_block
-         neutral. +8 Tests, 301 passed.
-  PB-76: Doku. Handoff auf PB-75.
-  PB-77: Doku. Handoff-Korrektur nach PB-75.
-         Doppelung b/e aufgeloest, P1 als
-         Punkt a). Werkstatt-Vertrag-Merkposten.
-  PB-78: Feature. P1 Gegenstandsvergleich
-         (2183 A4/A5). jaccard_aehnlichkeit,
-         gegenstand_gleich, _p1_schon_getriggert,
-         _tokenisiere. zaehle_no_go_in_folge U8-
-         angepasst. Audit solver_trigger mit
-         jaccard/schwellwert/min_tokens/grund.
-         solver_config im YAML. +10 Tests,
-         311 passed.
-  PB-79: Doku. Handoff auf PB-78 (2183 A4/A5).
-  PB-80: Feature. Solver-Code (2183 B).
-         agents/solver.md, HARD_RULES_SOLVER,
-         parse_solver_diagnose, baue_solver_befund,
-         rufe_solver, _letzte_zwei_entwuerfe,
-         _solver_prompt_bauen. recovery_hinweis_
-         block um befund-Parameter erweitert
-         (Option C). Solver-Call im Trigger,
-         nur bei P1_GRUND_GETRIGGERT, eigenes
-         Budget-Gate. X7: kein Builder-Kanal
-         (B2 separater Block). +14 Tests,
-         325 passed.
-  PB-81: Doku. Handoff auf PB-80 (2183 B).
-  PB-82: Feature. COMMAND: RUN solver (2183 C).
-         ERLAUBTE_QUELLEN um reviewer_command.
-         SOLVER_ARG_MAX_LEN=200. RunState.
-         solver_trigger_quellen. _handle_
-         solver_command (Duplikat, Budget,
-         Fail-closed, Marker). Phase-1-Loop
-         in Reihenfolge. Phase-2-Audit bei
-         solver-Versuch. P1-Audit mit quelle.
-         +8 Tests, 333 passed.
+Phase 3c-1/2/3 Reviewer + Solver Injektion
+(Commits 4916b01, 045556e, b84ee8e, d0a9bad):
+  - 3c-1: Solver-Rolle zu 6 Anti-Patterns.
+  - 3c-2: Reviewer-Injektion in build_system_prompt.
+  - 3c-3: Solver-Injektion in rufe_solver
+    (trigger_grund, aufrufer).
 
-Auflagen dieser Session:
-  2186: KUERZUNGS-MARKER
-  2187: Builder-COMMAND-Loop
-  2188: builder.md KUERZUNGS-MARKER respektieren
-  2189: Pfad-Woertlichkeit + Fehler-Marker
-  2190: GEMESSENER INHALT als primaere Quelle
-  2191: Prompt pro Runde frisch
-  2192: Werkstatt messt automatisch
-  2193: zurueckgezogen (Modellwechsel)
-  2194: Audit-Debug (Diagnose)
-  2195: Private IPs nicht mehr redigieren (WURZEL)
-  2196: collect_messwerte bevorzugt nach-apply
-  2197: Fail-closed-Rollback
-  2198: collect_messwerte-Regex an Kuerzung
-  2185: README komplett, 6 Rollen inkl. Solver
-        (nachgezogen 2026-10-15, Commit da50145)
-  2183-B3: Solver-Wissensbasis (Solver sieht
-        Projekt-Doku wie Reviewer). Kategorie 3,
-        Reviewer-Block GO mit FF1-FF8. Commit
-        d706e66. +4 Tests, 350 passed.
-  2183-B5: Solver-Loop + Fail-Pfade. Variante X
-        mit GG1-GG5. max_solver_runden=3, Zaehler
-        solver_aufrufe, Historie im Solver-Prompt.
-        Commit 0b19bcb. +5 Tests, 355 passed.
-  PB-63 (2026-10-15): notify_ntfy auf Konvention
-        umgestellt. Erster echter Lauf nach Neudefinition
-        mit sauberem Werkstatt-Stand. Commit 8db36f7,
-        Tag probebetrieb-63. Runden 2, llm_calls 7, rc 0.
-  Feldtest PB-64 (Feld, 2026-10-15): Auftrag bereits
-        erfuellt. Drei Laeufe:
-        - Lauf 1 (11:04): Deadlock, kein Solver-Trigger
-          im Deadlock-Pfad. rc=19.
-        - Lauf 2 (11:21): Solver gerufen, aber UNKLAR
-          (Solver-Prompt ohne Auftrag). rc=19.
-        - Lauf 3 (11:26): Solver gerufen, ANDERER_FEHLER
-          (Auftrag bereits erfuellt). B2 greift, rc=0,
-          kein Commit. Ziel-Repo unveraendert 8db36f7.
-        Loesung: Block Auftrag-erfuellt (B1-B5) +
-        Solver-Prompt-Auftrag (Commit 3cf7404).
-  Block Auftrag-erfuellt: ERLEDIGT 2026-10-15.
-        B1 (wirkungslos), B3 (Signal), B4 (Trigger C),
-        B2 (Pipeline-Pfad), B5 (Deadlock-Solver),
-        A2 (solver.md-Hinweis), AUFTRAG-Block.
-        Commits a0d436b, 183f560, 0f6442d, 7fdaffa,
-        3cf7404. +24 Tests, 407 passed.
-  PB-65 (2026-10-15): notify_ntfy — acht Tests fuer
-        ToolArgumentValueError. Erster Lauf im normalen
-        Erfolgspfad nach Auftrag-erfuellt. Code-GO Runde 1,
-        Commit-GO, kein Solver-Trigger. Commit 2aa2b0b,
-        Tag probebetrieb-64. 13 passed in test_notify_ntfy.
-  PB-67 (2026-10-15): nmap_scan — Unit-Tests fuer
-        Argument-Validierung. Reviewer-Empfehlung aus
-        PB-66 umgesetzt. Code-GO Runde 1, Commit-GO.
-        Commit c9142a7, Tag probebetrieb-66.
-  PB-66 (2026-10-15): nmap_scan — ToolArgumentValueError.
-        Erster Lauf mit PROJEKT-STAND-Block im Prompt.
-        Code-GO Runde 1, Commit-GO, kein Solver-Trigger.
-        Commit d135fd4, Tag probebetrieb-65.
-        9 raise-Stellen umgestellt, ToolError-Pfade
-        unveraendert (Policy/Laufzeit).
-  Agent-Memory Ebene 1: ERLEDIGT 2026-10-15.
-        Aggregator sammelt projekt_stand aus git log
-        (letzte 5 Commits, Quelle werkstatt/mensch).
-        Prompt-Bau zeigt ## PROJEKT-STAND in Builder,
-        Reviewer, Solver (nach AUFTRAG).
-        main laedt memory.yaml (UU6 fail-closed korrupt).
-        Aggregator-Aufruf nach pipeline_ende (TT2).
-        Commits 4e23aba, 52cd658. +16 Tests, 423 passed.
-  Stufe 0 (Selbstheilung): ERLEDIGT 2026-10-15.
-        A1+1b: pruefe_anker_gegen_messung + pruefe_
-        ersatz_gegen_messung (deterministisch).
-        A2: Builder-Rueckmeldung mit Mess-Chance.
-        A4: Deadlock-Differenzierung (3 Faelle).
-        A3: Solver-Trigger A+B. Commits b5f3073,
-        5bafc02, f4a8378, 737afe9. +28 Tests.
-        383 passed.
-
-  Phase 1 Projekt-Schema: ERLEDIGT 2026-10-15.
-        Commit 406e3cc. Neue Dateien:
-        schemas/projekt.yaml (K/O/P/W+O, Defaults,
-        Alias-Mechanik), projects/_template.yaml,
-        tests/test_projekt_schema.py (18 Tests).
-        pipeline.py: pruefe_projekt_yaml (Warn-Modus,
-        Fail-Modus via WERKSTATT_SCHEMA_MODUS),
-        _lade_und_pruefe_projekt, run_pipeline nutzt
-        project_agents_dir. security-ai.yaml migriert
-        (agents_dir raus, docs.handoff -> docs.reviewer,
-        pre_check_stage/escalation/reject_path raus).
-        WORKFLOW.md: Abschnitte Projekt-Schema +
-        Messtechnik (ruff --no-cache, mypy rekursiv).
-        441 passed. Reviewer-Block 2026-10-15 bestaetigt.
-
-  Phase 3a-1 Anti-Pattern-Bibliothek: ERLEDIGT
-        2026-10-15. Commit 1ed875a.
-        anti-patterns/katalog.yaml (7 Eintraege),
-        anti-patterns/README.md, pipeline.lade_anti_
-        patterns + anti_patterns_fuer, _AUDIT_KINDS_
-        BEKANNT (37 Kinds), tests/test_anti_patterns.py
-        (28 Tests). Fail-closed-Validierung.
-        469 passed.
-
-  Phase 3a-2 Anti-Pattern-Katalog: ERLEDIGT
-        2026-10-15. Commit 8ed6cd0.
-        19 weitere Eintraege aus security-ai/
-        docs/WORKFLOW.md (Katalog auf 26).
-        test_generator-Test an gewachsenen Katalog
-        angepasst. 469 passed.
-
-  Phase 3b Builder-Injektion: ERLEDIGT 2026-10-15.
-        Commit 04012f6.
-        pipeline._anti_pattern_block + _ap_trigger_
-        grund_aus_state + _ap_kuerzen. Injektion in
-        baue_anker_rueckmeldung. Zwei-Stufen-Sortierung
-        (spezifisch vor Fallback). 5 Katalogeintraege
-        mit trigger_gruende. 16 neue Tests. 485 passed.
-        Reviewer-Block + Nachtrag 2026-10-15 bestaetigt.
+Doku-Migration (Werkstatt 254b3fb,
+security-ai 220c6be):
+  - Profi-Konvention: PHASES -> ROADMAP,
+    DESIGN_DECISIONS -> DECISIONS,
+    SECURITY_REVIEW_LOG -> SECURITY_LOG,
+    WORKFLOW -> CONVENTIONS.
+  - Neue Dateien: docs/STATUS.md, CHANGELOG.md.
+  - Entfernt: docs/CONTEXT_PROMPT.md,
+    docs/REVIEWER_HANDOFF.md.
+  - Werkstatt-WORKFLOW um 9 Abschnitte erweitert.
+  - Alias-Mechanik datengetrieben (Schema als
+    einzige Quelle).
 
 ================================================================
-5. OFFENE AUFLAGEN UND MERKPOSTEN
+4. OFFENE MERKPOSTEN
 ================================================================
 
 KRITISCH: keine.
 
-WICHTIG (naechste Session):
-  2183: Solver-Agent (vorgezogen, siehe MITTEL).
-        Nachster Bau-Block. Siehe MITTEL-Eintrag
-        fuer Design P1-P9.
-        Vorbedingung P4 erfuellt (2183-P4-Log,
-        PB-56 + PB-57 + PB-59): pipeline_ende mit
-        llm_calls an 10 Pfaden.
-        Messung 17:31: mittlerer Fail-Lauf
-        (commit_no_go_max): rc=7, llm_calls=11.
-        Lauf 17:48 (basis_gate_nach_apply): ohne
-        Endlog (Pfad fehlte, PB-59 nachgezogen).
-        Lauf 17:57 (eskalation): ohne Endlog
-        (Pfad fehlt noch, siehe 2183-P4-Log2).
+WICHTIG:
 
-  2199-L: Livelock-Fall (neu aus 2199-Lauf 3).
-        Drei 2199-Laeufe, R7 in keinem getriggert.
-        Lauf 3 (dns_lookup_reverse): 5x NO-GO,
-        Fail-closed. Reviewer-Diagnose: Struktur-
-        Fehler (Patch 1 ersatz == anker) und
-        Auftrags-Ambiguitaet, in derselben Runde
-        bewertet, kein Fortschritt. Ohne Solver
-        laeuft der Loop 5x ins Leere.
-        Loesung: 2183. Kategorie 3.
+  Phase 1b (Validator Fail-closed): OFFEN.
+        WERKSTATT_SCHEMA_MODUS Default ist warn
+        (pipeline.py:478). Nach 2-3 echten
+        Pipeline-Laeufen ohne Schema-Warnung
+        auf fail umstellen. Kategorie 2.
 
-  2199: ABGESCHLOSSEN (R7 wirkt).
-        Drei Laeufe ohne R7-Trigger. Vierter Lauf
-        (leerer hostname, 17:31): R7 hat in Phase 2
-        (Commit-Review, Stufe 3) getriggert. Der
-        Commit-Reviewer erkannte, dass das Commit-
-        Paket Aenderungen behauptet, die nicht im
-        GEMESSENER INHALT stehen. COMMIT-NO-GO 2x,
-        Fail-closed mit Rollback. -> 2191-R2 wirkt.
-        Restfall 2199-R7-P1: Phase-1-R7-Wirkung
-        weiter unbetaetigt.
+  Solver-Kurskorrektur Block 6 (Smoke-Test): OFFEN.
+        Echter Solver-Lauf im Deadlock- und
+        Phase-1-Trigger-Pfad. Nach PB-67 oder
+        spaeter. Kategorie 3.
 
-  2183-P4-Log2: Zentraler pipeline_ende-Wrapper.
-        ERLEDIGT (PB-61). run_pipeline nimmt
-        state_ref: list[RunState]. main ruft
-        _pipeline_ende im finally. 10 verstreute
-        Aufrufe entfernt. Verifikation:
-        _pipeline_ende genau 2 Fundstellen.
-
-  2183-P4-Wert: 30 als max_llm_calls.
-        Datenlage (2200-Aggregator, PB-63):
-        llm_calls min=3 max=11 median=7
-        (samples=3). Worst Case mit Solver +
-        Recovery: 18-20. 30 konservativ.
-        Umsetzung mit 2184.
-
-  2183 A1a (Recovery-Zustand): ERLEDIGT (PB-68).
-        Marker recovery an review_runden.
-        formatiere_runden(), recovery_hinweis_block().
-  2183 A1b (code_entwurf_historie): ERLEDIGT (PB-70).
-        Feld + record_code_entwurf().
-        Kuerzung auf 10 Eintraege.
-  2183 A1c (rollback_vor_recovery + 2184):
-        ERLEDIGT (PB-71). Neue Funktion
-        rollback_vor_recovery (ungenutzt bis A3).
-        max_llm_calls-Defaults 20 -> 30.
-  Solver-Kurskorrektur 2026-10-14:
-        Der Solver-Agent unterstuetzt den
-        Builder-Agenten (nicht den Reviewer,
-        nicht den Menschen).
-        Block 1 (Konzept): ERLEDIGT.
-        Block 2 (solver.md + HARD_RULES_SOLVER):
-        ERLEDIGT (Commit d415e9e).
-        Block 2a+4 (Befund-Kanal):
-        ERLEDIGT (Commit 1cb266c).
-          - recovery_hinweis_block: hat_befund
-            statt befund. Reviewer sieht nur
-            neutralen Hinweis (W6, BB1).
-          - _solver_befund_block: Befund im
-            Builder-Prompt (NO-GO-Pfad),
-            Audit bei verworfenem Befund
-            (DD9, EE1).
-          - _bauer_auflagen_prompt unveraendert
-            (DD5).
-        Block 3 (Wissensbasis): ERLEDIGT
-        (Commit d706e66). Solver sieht dieselbe
-        Projekt-Doku wie der Reviewer (S9).
-        agent_docs.solver = reviewer-Set.
-        Block 5 (Solver-Loop + Fail-Pfade):
-        ERLEDIGT (Commit 0b19bcb, Variante X mit
-        GG1). max_solver_runden=3 (YAML),
-        RunState.solver_aufrufe zaehlt Versuche,
-        Audit solver_max_runden_erreicht,
-        Solver-Prompt zeigt FRUEHERE SOLVER-BEFUNDE
-        (nur Diagnose-Zeile, B5-M1).
-        F1-F4 als Merkposten (MITTEL).
-        Block 6 (Smoke-Test): OFFEN.
-        Zwischenzustand CC10 aufgeloest:
-        echte Laeufe wieder erlaubt.
-
-  2183 C (COMMAND: RUN solver): ERLEDIGT (manual,
-        Commit 9a5a17f; PB-82 war manual, Tag entfernt).
-        ERLAUBTE_QUELLEN um reviewer_command.
-        SOLVER_ARG_MAX_LEN=200 (F6, kuerzen
-        statt reject). RunState.solver_trigger_
-        quellen. _solver_prompt_bauen(grund)
-        + rufe_solver(grund_text) (Y6). _handle_
-        solver_command (Duplikat Y4, Budget X5,
-        Fail-closed F3, Marker Y3). Phase-1-
-        Loop in Reihenfolge (Y1). Phase-2-Audit
-        reviewer_run_solver_phase2_ignoriert
-        (Y2). P1-Audit mit quelle=p1_trigger.
-        +8 Tests, 333 passed.
-
-  2183 B (Solver-Code): ERLEDIGT (manual,
-        Commit 47a9a8b; PB-80 war manual, Tag entfernt).
-        agents/solver.md (Rolle, HARD_RULES_
-        SOLVER S1-S7). Parser parse_solver_
-        diagnose (Fallback UNKLAR). baue_
-        solver_befund, rufe_solver, _letzte_
-        zwei_entwuerfe (X8), _solver_prompt_
-        bauen. recovery_hinweis_block um
-        befund-Parameter erweitert (Option C,
-        X1/X2). Solver-Call nur bei GETRIGGERT
-        (X6), eigenes Budget-Gate (X5). Bei
-        Fail: Marker zurueck (X3), audit
-        solver_failed. X4: Parser-Fehler ist
-        UNKLAR, kein Fail. V6: ANDERER_FEHLER
-        ist legitim. X7: B baut keinen Builder-
-        Kanal, praezisierter_auftrag landet in
-        state.solver_befunde. Builder-Kanal B2
-        separater Block. +14 Tests, 325 passed.
-
-  2183 A4/A5 (P1 Gegenstandsvergleich):
-        ERLEDIGT (PB-78). jaccard_aehnlichkeit,
-        gegenstand_gleich, _p1_schon_getriggert,
-        _tokenisiere. zaehle_no_go_in_folge
-        zaehlt Recovery-Runden nicht (U8).
-        Audit solver_trigger immer, mit
-        jaccard/schwellwert/min_tokens/grund
-        (U6/U7/V3). solver_config im YAML (U3):
-        p1_schwellwert=0.5, p1_min_tokens=10.
-        U1: Annaeherung im Docstring dokumentiert.
-        Fehler 3 (U8 still wirkungslos) durch
-        Test aufgedeckt, behoben. V4: Stopwort-
-        Liste um 3-Zeichen-Woerter ergaenzt.
-        +10 Tests, 311 passed.
-
-  2183 A3 (Trigger-Erkennung): ERLEDIGT (PB-75).
-        zaehle_no_go_in_folge(), recovery-Marker
-        ab 2. NO-GO in Folge, audit("solver_trigger").
-        recovery_hinweis_block() neutral (kein
-        Solver-Befund). ACHTUNG (T1): Ohne P1
-        triggert der Marker auch bei ANDERER_FEHLER;
-        Solver-Pfad (B) muss tolerant sein (P6).
-
-  Bug-Fix 2026-10-14 (GEMESSENER INHALT nach Apply):
-        ERLEDIGT (Werkstatt-HEAD dd0e111).
-        mess_protokoll_veraltet-Flag. Phase 1:
-        Header + Nach-Apply-Block. Commit-Review:
-        nur Nach-Apply-Block. Erster echter Lauf
-        mit dem Fix: PB-62, COMMIT-GO in Runde 1.
-
-  2183 A2 (SolverBefund-Klasse): ERLEDIGT (PB-73).
-        Enum SolverDiagnose, @dataclass
-        SolverBefund, format_solver_befund.
-        RunState.run_id und RunState.solver_befunde.
-        10 neue Tests, 293 passed.
-
-  2200 (Audit-Aggregator): ERLEDIGT (PB-63).
-        werkstatt_aggregate.py liest JSONL,
-        schreibt projects/<name>.memory.yaml.
-
-  2200a (run_id im Audit): ERLEDIGT (PB-62).
-        _AKTUELLE_RUN_ID modul-global.
-        audit() schreibt run_id, wenn gesetzt.
-        Format YYYYMMDD-HHMMSS-<pid>.
-        Alte Events ohne run_id, Aggregator
-        matcht dann per Zeitachse.
-
-  2200b: --heute-Flag fuer Aggregator
-        (Kalendertag statt 24h). Merkposten.
-
-  2200c: Pipeline ruft Aggregator nach
-        pipeline_ende automatisch. Merkposten.
-
-  2200-T: Test fuer Aggregator.
-        Synthetisches Audit-Log, Aggregation
-        pruefen. Merkposten.
-
-  2199-R7-P2: ERLEDIGT (PB-66).
-        reviewer.md PHASE 2 Punkt 6:
-        vier Stufen. Stufe 2a/2b -> COMMIT-GO
-        mit Bemerkung. Nur Stufe 3 -> NO-GO.
-        Kein COMMAND in Phase 2.
-
-  Owner-Regel: Nach jedem manuellen
-        git checkout/reset im Zielprojekt:
-        chown -R builder:builder /opt/security-ai/.
-        Sonst Permission denied beim naechsten
-        Werkstatt-Lauf. Als Werkstatt-Regel
-        dokumentieren.
-
-  P6-Regel: mypy ab jetzt rekursiv pruefen
-        (mypy /opt/werkstatt/), nicht nur
-        pipeline.py. PB-63 hatte 2 Fehler
-        in werkstatt_aggregate.py, die durch
-        die enge Pruefung nicht auffielen.
-        Als Werkstatt-Regel dokumentieren.
-
-  tests-mypy: tests/test_pipeline.py hat
-        139 mypy-Fehler (fehlende
-        Annotationen in Test-Methoden).
-        KORREKTUR (PB-75): Bei PB-75 gemessen:
-        151 Fehler (nicht 139). Differenz 12.
-        Alle vor Zeile 3739 (vor A3-Tests).
-        A3-Tests selbst: mypy-sauber.
-        Altes Problem, eigener Block.
-        Kategorie 2. Siehe tests-mypy-151.
-
-  tests-mypy-151: 151 Fehler in
-        tests/test_pipeline.py (nicht 139
-        laut Handoff-Kopf). Differenz 12:
-        entweder neu seit PB-45 oder
-        Zaehlfehler. Alle vor Zeile 3739.
-        Eigener Block. Kategorie 2.
-
-  Phase-2-COMMAND-Schleichpfad:
-        classify_verdict erkennt COMMAND in
-        Phase 2, aber der Loop bricht bei
-        "!= COMMIT-NO-GO" ab. Kein Fail,
-        kein Log. Merkposten.
-
-  2183-AQ: Auftragsqualitaet vor Werkstatt-Lauf.
-        Neue Auflage (aus 2199-Lauf 3 + Lauf
-        network_interfaces/Deadlock). Auftraege,
-        die Verhalten annehmen, das im Zielcode
-        nicht existiert, enden in Livelock oder
-        Deadlock. Loesung: vor jedem Lauf pruefen,
-        ob der Auftrag gegen den Zielcode passt.
-        Messung: grep -n 'def .*_run' tools/*.py
-        und grep -rn 'ToolArgumentValueError' tools/.
+  2183-AQ (Auftragsqualitaet vor Werkstatt-Lauf):
+        Auftraege gegen Zielcode pruefen, bevor
+        ein Lauf startet. Auftraege, die Verhalten
+        annehmen, das im Zielcode nicht existiert,
+        enden in Livelock oder Deadlock.
         Kategorie 3.
 
-  2199a: Recovery-Pfad post-apply-Basis-Gate.
-        AUFLAGE (hochgestuft aus Merkposten).
-        Zwei 2199-Laeufe in Folge mit demselben
-        Muster: post-apply-Basis-Gate rot,
-        Reviewer-Vorschlag liegt vor, Loop wendet
-        nicht an, Mensch muss manuell abschliessen.
-        Reviewer-Entscheidung: Option 3, aber erst
-        Zustandsmaschine.
-        Schritt A (Zustandsmaschine): Klaeren
+  2199a (Recovery-Pfad post-apply-Basis-Gate):
+        Zustandsmaschine klaeren:
           - Recovery-Lauf vs. normaler Builder-Lauf.
           - Zaehlung in state.review_runden?
           - Reviewer sieht Recovery als neue Runde?
           - max_llm_calls-Zaehlung.
-          - Strukturierter Ort fuer Reviewer-
-            Vorschlag in state (heute Freitext?).
-        Schritt B (Recovery-Zweig):
-          Trigger: Basis-Gate rot UND Reviewer-
-            Verdict mit strukturiertem Vorschlag.
-          Nicht bei rot ohne Vorschlag (Fail-closed).
-          Max 1 Recovery-Zyklus, dann Fail-closed.
-        Verworfen: Option 1 (Lint-Auto-Repair,
-          Verantwortungsfrage offen), Option 2
-          (mypy hat kein --fix).
+        Dann Recovery-Zweig bauen. Max 1 Zyklus.
         Kategorie 3.
-
-  2191-R2b-T: Test fuer commit_review_ohne_messung.
-           main() ist nicht isoliert testbar. Test-
-           Harness muss erst gebaut werden. Eigener
-           Block. Kategorie 2.
-
-  2191-R4: Builder-Prompt (Zeile 2344) hat GEMESSENER
-           INHALT nach ZIELDATEIEN. Reviewer-Prompt
-           (Zeile 2424) hat ihn jetzt davor. Inkonsistenz
-           bewusst? Kategorie 2.
-
-
-ZIELE (2026-10-15, laengerfristig)
----------------------------------
-
-Ziel 1 — Autonomie bis Approval.
-        Die Werkstatt soll grosse Arbeitspakete
-        (Phasen mit 10+ Unterkategorien)
-        eigenstaendig abarbeiten. Der Mensch
-        greift nur am Approval-Gate ein.
-
-Ziel 2 — Deterministisch vor LLM.
-        Wo eine Regel entscheiden kann, ent-
-        scheidet Code. LLM nur wo Urteils-
-        vermoegen noetig ist.
-
-Ziel 3 — Ordner-/Doku-Schema + Scaffolder.
-        security-ai ist historisch gewachsen.
-        Fuer Scaffolder (anlegen, migrieren,
-        konsolidieren) braucht es eine Vorlage.
-        Konsolidierung: Dopplungen finden
-        (deterministisch), aehnliche Dokumente
-        zusammenfuehren (LLM), Mensch bestaetigt.
-
-Ziel 5 — Anti-Pattern-Bibliothek (Ziel 5 in Planung).
-        Zentrale Datei anti-patterns/katalog.yaml.
-        Eintraege mit id/titel/beschreibung/loesung/
-        begruendung. Konsumenten: Builder (bei Anker-
-        Rueckmeldung), Reviewer, Solver (nach Trigger-
-        Grund gefiltert). Halb-automatisch: Aggregator
-        schlaegt vor, Mensch bestaetigt.
-
-Ziel 6 — Planner-Agent (spaeter).
-        Liest Roadmap/Phasen des Ziel-Projekts.
-        Findet offene Punkte. Formuliert Auftraege.
-        Uebergibt an Reviewer zur Freigabe.
-        Voraussetzung: Ziel 3 (Ordner-/Doku-Schema)
-        und ein Roadmap-/Phasen-Format (YAML).
-        Schliesst die Kette:
-          Roadmap -> Planner -> Reviewer -> Mensch
-          -> Werkstatt -> Commit -> Projekt-Stand
-          -> Roadmap-Update -> naechster Punkt.
-
-Ziel 4 — Dashboard (spaeter).
-        Web-Ansicht, die den Werkstatt-Prozess
-        live zeigt: Builder, Reviewer, Solver,
-        Test-Generator, Patches, Verdicts.
-        Funktionen:
-        - Live-Ansicht (WebSocket/SSE aus dem
-          Audit-Log).
-        - Konversations-Fenster zwischen allen
-          LLMs in Echtzeit.
-        - Grafische Prozess-Darstellung
-          (State-Diagramm).
-        - Lauf starten (Eingabefeld + Button).
-        - ASK_HUMAN-Kanal: Agent stellt Frage,
-          Lauf pausiert, Mensch antwortet.
-        Voraussetzungen:
-        - Audit-Log um vollstaendige Prompts/
-          Replies erweitern (mit Redaction).
-        - Event-Katalog standardisieren.
-        - Web-Layer (kleiner HTTP-Server).
-        Reihenfolge: nach Agent-Memory (Ebene
-        1+2) und Audit-Erweiterung.
-
-STUFE 0 (Selbstheilung) — ERLEDIGT 2026-10-15.
-        Deterministische Anker-/Ersatz-Pruefung,
-        Builder-Rueckmeldung mit Mess-Chance,
-        Solver-Trigger A+B, Deadlock-
-        Differenzierung. Commits b5f3073 bis
-        737afe9.
-
-GRUNDPRINZIP (2026-10-15)
-------------------------
-Keine Miniblöcke. Bau-Arbeit wird in kompletten
-Phasen geplant und umgesetzt, nicht in Einzel-
-schritten. Eine Phase umfasst alle zusammen-
-haengenden Aenderungen mit Tests. Bloecke wie
-"A1", "A2" waren ein Zwischenzustand — Ziel
-ist, dass eine Phase mit 10 Unterkategorien in
-einem Zug abgearbeitet wird.
-
-MITTEL (Merkposten):
-
-  Phase 3c (Reviewer + Solver Injektion): OFFEN.
-        Naechster Block. Gleiche Mechanik wie Phase 3b,
-        andere Rollen. Injektionspunkte:
-          - Reviewer-Prompt: bei jedem Review-Aufruf,
-            gefiltert nach Rolle reviewer.
-          - Solver-Prompt: nach Trigger-Grund,
-            gefiltert nach Rolle solver.
-        Kategorie 3.
-
-  docs-Migration (Frage 1 b+c): OFFEN.
-        Reviewer-Block 2026-10-15 hat Frage 1
-        zurueckgegeben an den Menschen. Mensch hat
-        entschieden: (b)+(c). Konkret:
-          - Jetzt umbenennen: docs/CONTEXT_PROMPT.md ->
-            docs/CONTEXT.md, docs/REVIEWER_HANDOFF.md ->
-            docs/REVIEWER.md.
-          - Alias-Uebergangszeit (bereits in schemas/
-            projekt.yaml vorbereitet).
-          - Langfristig durch generierte Rollen-Prompts
-            ersetzen. Dateien entfallen dann ganz.
-        Umbenennung in security-ai: eigener Block.
-        Rollen-Prompt-Generator: eigener Block (Phase 3.5).
-
-  _AUDIT_KINDS_BEKANNT: manuell pflegen.
-        Neue Audit-Log-kind-Werte muessen in
-        pipeline.py:_AUDIT_KINDS_BEKANNT ergaenzt
-        werden, sonst schlaegt die Katalog-Validierung
-        fail-closed fehl. Merkposten fuer Phase 3c/4:
-        Pruefen, ob die Liste automatisch aus dem
-        Audit-Log abgeleitet werden kann.
-
-  ap-string-literal-statt-konstante: Bau-Chat-Befund.
-        Eintrag im Katalog ist ehrlich als
-        "Bau-Chat-Befund Phase-3-Recherche" markiert,
-        nicht als Doku-Zitat. Bei der naechsten
-        Katalog-Durchsicht pruefen, ob weitere
-        Bau-Chat-Befunde in Eintraege umgewandelt
-        werden sollen.
-
-  Phase 1b (Validator Fail-closed): OFFEN.
-        Warn-Modus ist Default (WERKSTATT_SCHEMA_MODUS=warn).
-        Nach 2-3 echten Pipeline-Laeufen ohne Schema-Warnung
-        auf fail umstellen. Commit: "Validator im Fail-closed-
-        Modus". Kategorie 2.
-
-  ruff --no-cache: WERKSTATTSREGEL (2026-10-15).
-        ruff-IMMER mit --no-cache messen.
-        Anlass: Phase 1, Block 14. Erster ruff-Aufruf meldete
-        2 Fehler (I001), zweiter Aufruf ohne Aenderung 0
-        Fehler. .ruff_cache war stale. Erst --no-cache lieferte
-        reproduzierbares Ergebnis. In WORKFLOW.md dokumentiert.
-
-  Import-Sortierung: ruff --fix nutzen.
-        Bei I001-Fehlern nicht manuell raten — ruff --fix
-        schreibt deterministisch, was ruff will.
-        Anlass: Phase 1, Block 26c-26h. Zwei Fehlversuche
-        mit Anker-Patches, weil die Sortierlogik (third-party
-        vs. first-party) nicht offensichtlich war.
-
-  docs-Migration (Frage 1 b+c): OFFEN.
-        Reviewer-Block 2026-10-15 hat Frage 1 zurueckgegeben
-        an den Menschen. Mensch hat entschieden: (b)+(c).
-        Konkret:
-          - Jetzt umbenennen: docs/CONTEXT_PROMPT.md ->
-            docs/CONTEXT.md, docs/REVIEWER_HANDOFF.md ->
-            docs/REVIEWER.md. Alias-Uebergangszeit.
-          - Langfristig durch generierte Rollen-Prompts
-            ersetzen. Dateien entfallen dann ganz.
-        Umbenennung in security-ai: eigener Block.
-        Rollen-Prompt-Generator: eigener Block (Phase 3.5).
-
-  pre_check_stage/escalation/reject_path: ENTFERNT.
-        Aus security-ai.yaml entfernt (waren nicht
-        implementiert). Merkposten: falls wieder gebraucht,
-        als Werkstatt-Default zurueckfuehren (nicht pro
-        Projekt). Siehe Reviewer-Block Frage 5.
-
-  tests-mypy: 15 Fehler (nicht mehr 151).
-        Bei Phase 1 (2026-10-15) gemessen: 15 Fehler in
-        tests/test_pipeline.py, Zeilen 3583-3608
-        (code_entwurf_historie, record_code_entwurf) und
-        4147 (append return value). Vorbestehend, nicht
-        durch Phase 1 verursacht. Eigener Block.
-        Kategorie 2.
-
-  Auftrag bereits erfuellt (Feldtest PB-64, 2026-10-15):
-        STATUS: ERLEDIGT in Commits a0d436b bis 3cf7404.
-        Die folgende Beschreibung dokumentiert den
-        urspruenglichen Befund:
-        Die Werkstatt hat keinen Pfad fuer "Auftrag ist
-        bereits erfuellt". Beobachtet:
-        1. Der Builder hat korrekt erkannt: "Die Datei
-           entspricht bereits der Konvention, kein Patch
-           noetig." (reply_fuss, run 20261015-104113).
-        2. Der Builder lieferte einen Patch mit anker ==
-           ersatz (wirkungslos).
-        3. Der Reviewer gab GO, obwohl HR5 (ersatz !=
-           anker) verletzt ist und der Fuss explizit
-           "kein Patch noetig" sagte.
-        4. Stufe-0-Trigger greift nicht: der Anker steht
-           wortwoertlich im mess_protokoll, nur der Ersatz
-           ist identisch.
-        5. Kein Solver-Trigger. Commit-Paket leer ->
-           Commit-NO-GO 2x -> rollback_fail_closed rc=7.
-        Loesung (eigener Block, Kategorie 3):
-          - pruefe_anker_gegen_messung um anker == ersatz
-            erweitern (Grund "wirkungslos").
-          - Reviewer-Prompt: HR5-Pruefung explizit.
-          - Pipeline-Pfad "Auftrag bereits erfuellt":
-            rc=0, Audit auftrag_bereits_erfuellt, kein
-            Commit, kein Tag.
-          - Solver-Trigger erweitern (wirkungslos / kein
-            Patch noetig).
-
-  II2b (Substring-Kollision): Ersatz-Pruefung
-        nutzt Substring-Match (modul in mess_
-        protokoll). Kollisionen bei Modulnamen,
-        die Praefix eines laengeren Modulnamens
-        sind, werden nicht erkannt. Bei erster
-        realer Kollision: Wortgrenzen oder
-        exakter Match.
-
-  II5b (Audit-Fuss-Kuerzung): _audit_builder_
-        reply kuerzt den Fuss auf 200 Zeichen.
-        Rueckfragen im Fuss sind dadurch nur
-        teilweise sichtbar. Vorschlag: auf
-        redigiert[-1000:] erweitern, damit
-        Rueckfragen messbar sind.
-
-  II6b (Inhaltswort-Kalibrierung): Die Liste
-        INHALTSWOERTER_TRIGGER_B ist eine
-        Setzung. Nach 5-10 PB-Laeufen:
-        echte Rueckfragen klassifizieren,
-        Liste anpassen. >20% False Positives
-        -> verschaerfen. >20% echte Rueckfragen
-        nicht getriggert -> lockern.
-
-  F1 (Solver-Frequenz): ERLEDIGT in Block 5
-        als (c) max_solver_runden=3 ohne
-        bool-Blockade. COMMAND-Pfad bleibt
-        _solver_schon_gelaufen (einmal pro Lauf).
-        Asymmetrie bewusst: P1-Trigger automatisch
-        mehrfach (bis max_runden), COMMAND manuell
-        einmal.
-
-  F2 (Fail-closed bei rufe_solver-Fehler):
-        Merkposten. Vorschlag max_rufe_solver_
-        fehler = 2. Nach 5-10 PB-Laeufen mit Solver
-        kalibrieren. Heute X3-Marker zurueck.
-
-  F3 (Fail-closed bei unvollstaendigem Befund):
-        Merkposten. Bleibt (a): leerer Block +
-        Audit solver_befund_verworfen. Fail-closed
-        nur erwaegen, wenn Quote >20%.
-
-  F4 (_bauer_auflagen_prompt): Merkposten.
-        DD5 bleibt. Solver-Befund nur im NO-GO-
-        Prompt. Ueberdenken, wenn Auflagen-Pfad
-        haeufiger failt.
-
-  B5-M1 (Historie-Block Umfang): Der Solver-
-        Prompt zeigt in FRUEHERE SOLVER-BEFUNDE
-        nur DIAGNOSE: <art.name>, nicht den
-        Volltext. Grund: format_solver_befund
-        kann ValueError werfen bei unvollstaen-
-        digem Befund, das wuerde den Prompt-Bau
-        abbrechen. Nach ersten PB-Laeufen pruefen,
-        ob Volltext gebraucht wird.
-
-  B5-M2 (Trigger-Pfad-Test): test_max_solver_
-        runden_blockt_nach_3 prueft nur die
-        Zaehl-Logik, nicht den vollen Trigger-Pfad.
-        Voller Test steht aus, braucht RunState
-        mit Review-Runden bis zum Trigger.
-
-  Solver-Kurskorrektur Merkposten:
-        W10 (Befund-Historie): Builder-Prompt
-             nur letzter Befund. Solver-Prompt
-             (bei Runde > 1) Historie.
-             Reviewer-Prompt nichts. Umgesetzt
-             fuer Builder + Reviewer. Solver-
-             Historie kommt mit Block 5.
-        W12 (Rollen-Vertrag): sechste Rolle
-             "solver" mit Auftraggeber-
-             Beschreibung. Nach Block 5.
-        P4-nach-Solver: max_llm_calls nach 5-10
-             PB-Laeufen mit Solver neu messen.
-             Nicht auf Verdacht erhoehen (F6).
-        max_solver_runden-Kalibrierung:
-             3 ist Setzung (F5). Nach 5-10
-             PB-Laeufen kalibrieren.
-        solver_befunde-Eingrenzung: haengt an
-             RunState-Lebensdauer (BB3). Bei
-             persistentem State auf run_id
-             filtern.
-        Audit-Kanal Solver-UNKLAR: heute nur
-             Audit-Log (Frage 5, CC). Am
-             Approval-Gate anzeigen? Block 5.
-
-  B2 — Builder-Kanal fuer Solver-Befund.
-        Kategorie 3. Aus 2183 B (X7).
-        Der praezisierte_auftrag (Diagnose
-        ANDERER_FEHLER) landet heute nur in
-        state.solver_befunde und im Reviewer-
-        Prompt. Der Builder sieht ihn nicht.
-        Offene Fragen: wo im Builder-Prompt,
-        mit welchem Gewicht (verbindlich vs.
-        Hinweis), was bei Widerspruch zum
-        Auftrag. Nach 2183 C.
-
-  U4-Kalibrierung (P1): Schwellwert 0.5
-        und min_tokens 10 sind Setzungen,
-        nicht Messungen. Nach ersten PB-
-        Laeufen mit P1: echte NO-GO-Paare
-        labeln (gleicher/anderer Gegenstand),
-        Jaccard-Verteilung messen, Schwell-
-        wert neu setzen. Kategorie 3.
-
-  P4-nach-P1-B (llm_calls): P1 reduziert
-        den Trigger. Wirkung nicht gemessen.
-        Sobald B (Solver) gebaut ist und
-        Calls verbraucht: llm_calls neu
-        messen. Wenn median/max deutlich
-        unter den heutigen 7/11 liegen,
-        kann max_llm_calls in 2184 nach
-        unten korrigiert werden.
 
   Werkstatt-Vertrag (2183). Kategorie 3.
         Fuenf Vertraege zusammenfuehren:
-        1. Anker-Vertrag (woertlich |
-           Kuerzungs-Marker | +2-Shift;
-           drei Konsumenten).
-        2. Auftrags-Vertrag (Auftrag
-           gegen Zielcode geprueft).
-        3. Patch-Vertrag (PATCH-BEGINN/
-           ENDE, whitelist, count == 1,
-           ersatz != anker).
-        4. Fail-Vertrag (rc-Semantik,
-           Audit-Events, Endlog, Rollback).
-        5. Rollen-Vertrag (wer darf was,
-           inkl. solver, scaffolder).
-        Plus docs/KONVENTIONEN.md.
-        Format: docs/WERKSTATT-VERTRAG.md
-        + .yaml (maschinenlesbar).
-        Zeitpunkt: NACH 2183 B und C.
-        Offene Design-Fragen W1-W4:
-          W1 Eigentuemer (Auftraggeber
-             inhaltlich, Bau-Chat Konsistenz,
-             Reviewer prueft).
-          W2 Sanktion bei Verletzung:
-             Fail-closed, im Vertrag.
-          W3 Versionierung: Version im YAML,
-             im Audit-Log jedes Laufs.
-          W4 Bezug zu Auflagen: bei Wider-
-             spruch gewinnt die Auflage, bis
-             sie zurueckgezogen wird.
-        Migration in 6 Schritten (Vertrag-
-        Doc, Patch+Anker, Auftrag, Fail,
-        Rollen, Konventionen), je Kategorie 3.
-  2183: Solver-Agent. VORGEZOGEN nach WICHTIG
-        (siehe oben). Design P1-P9:
-        - P1: Schwellwerte Levenshtein/Token-Overlap.
-        - P2: Dosierung Befund.
-        - P3: COMMAND: RUN solver erst nach Stabilisierung.
-        - P4: max_llm_calls erst messen.
-        - P5: Trigger-Vorbedingung (gleicher Gegenstand).
-        - P6: Solver darf 'kein Handlungsbedarf' melden.
-        - P7: Fail-closed + Rollback (Lehre 4).
-        - P8: Historisierung code_entwurf messen.
-        - P9: Format SOLVER-BEFUND definieren.
-        Trigger: NO-GO 2, wenn NO-GO 1 und NO-GO 2
-        denselben Gegenstand betreffen (P5).
-        Befund an Reviewer (voll) und Bau-Chat
-        (nur praezisierter Auftrag).
-        Kategorie 3. Groesserer Umbau.
-  2184: max_llm_calls 20 -> 30.
-        Begruendung aus P4-Messung:
-        - Einfacher Lauf: ~5 Calls.
-        - Mittlerer Fail-Lauf: 11 Calls (gemessen).
-        - Livelock: ~13 Calls.
-        - Mit Solver: +1-2. Mit 2199a-Recovery:
-          +2-4. Reserve Faktor 2.
-        30 ist aus Messung abgeleitet, nicht geraten.
-        Umsetzung mit 2183.
-  2187b: read_file Zeilenbereich (fuer sehr grosse Dateien).
-  2188a: agents/*.md konsolidieren (Widersprueche durch
-         anhaengende Auflagen).
-  2188c, 2189c, 2190b-M, 2191-M2, 2192-M2, 2198-M,
-  2198-M2: Merkposten zum "Feature + Prompt +
-         Aktualisierung"-Muster. Konsolidieren in eine
-         Werkstatt-Regel.
-  2190-M: Reviewer-Auswahl-Logik (Schritt 1) pruefen.
-  2192-M1: execute_commands prueft, ob Pfad schon
-         vollstaendig gemessen.
-  2195-M2: MAC-Redaction rechtfertigen oder entfernen.
-  2195-M3: Anker mit gemischten privaten/oeffentlichen IPs.
+          1. Anker-Vertrag.
+          2. Auftrags-Vertrag.
+          3. Patch-Vertrag.
+          4. Fail-Vertrag.
+          5. Rollen-Vertrag.
+        Format: docs/WERKSTATT-VERTRAG.md + .yaml.
+        Offene Design-Fragen W1-W4 im Archiv.
+
+  B2 — Builder-Kanal fuer Solver-Befund.
+        praezisierter_auftrag landet heute nur in
+        state.solver_befunde und im Reviewer-Prompt.
+        Der Builder sieht ihn nicht. Kategorie 3.
+
+MITTEL:
+
+  _AUDIT_KINDS_BEKANNT: manuell pflegen.
+        Neue kind-Werte im Audit-Log muessen in
+        pipeline.py ergaenzt werden, sonst
+        schlaegt die Katalog-Validierung fehl.
+        Merkposten: automatische Ableitung pruefen.
+
+  ap-string-literal-statt-konstante:
+        Bau-Chat-Befund. Bei der naechsten
+        Katalog-Durchsicht pruefen, ob weitere
+        Bau-Chat-Befunde in Eintraege umgewandelt
+        werden.
+
+  tests-mypy: 15 Fehler (nicht mehr 151).
+        In tests/test_pipeline.py, Zeilen
+        3583-3608 (code_entwurf_historie) und
+        4147 (append return value). Vorbestehend.
+        Eigener Block. Kategorie 2.
+
+  II2b (Substring-Kollision): Ersatz-Pruefung
+        nutzt Substring-Match. Bei erster realer
+        Kollision: Wortgrenzen oder exakter Match.
+
+  II5b (Audit-Fuss-Kuerzung): _audit_builder_
+        reply kuerzt Fuss auf 200 Zeichen.
+        Vorschlag: auf redigiert[-1000:] erweitern.
+
+  II6b (Inhaltswort-Kalibrierung): Liste
+        INHALTSWOERTER_TRIGGER_B nach 5-10
+        PB-Laeufen kalibrieren.
+
+  F2 (Fail-closed bei rufe_solver-Fehler):
+        max_rufe_solver_fehler = 2 nach
+        5-10 PB-Laeufen mit Solver kalibrieren.
+
+  F3 (Fail-closed bei unvollstaendigem Befund):
+        Bleibt (a): leerer Block + Audit.
+        Fail-closed nur bei Quote >20%.
+
+  F4 (_bauer_auflagen_prompt): DD5 bleibt.
+        Ueberdenken, wenn Auflagen-Pfad haeufiger
+        failt.
+
+  B5-M1 (Historie-Block Umfang): Solver-Prompt
+        zeigt nur DIAGNOSE, nicht Volltext.
+        Nach ersten PB-Laeufen pruefen.
+
+  B5-M2 (Trigger-Pfad-Test): voller Test
+        ausstehend.
+
+  Solver-Kurskorrektur Merkposten:
+        W10 (Befund-Historie), W12 (Rollen-Vertrag),
+        P4-nach-Solver (max_llm_calls neu messen),
+        max_solver_runden-Kalibrierung (3 ist
+        Setzung), solver_befunde-Eingrenzung,
+        Audit-Kanal Solver-UNKLAR.
+
+  U4-Kalibrierung (P1): Schwellwert 0.5 und
+        min_tokens 10 sind Setzungen. Nach ersten
+        PB-Laeufen labeln und neu setzen.
+
+  P4-nach-P1-B (llm_calls): P1 reduziert den
+        Trigger. Wirkung nicht gemessen. Nach
+        Solver-Nutzung neu messen.
+
+  docs-Migration Rollen-Prompt-Generator
+        (Phase 3.5): mittelfristig docs/*.md
+        durch generierte Rollen-Prompts ersetzen.
 
 NIEDRIG:
-  Audit-Log-Ausbau dauerhaft (statt Debug-Felder).
-  Tag-Verwirrung: Ziel-Repo-Tags 1-24 auf f913eac,
-  25-28 auf dd3048b. Werkstatt-Tags 7, 17, 29-53.
-  Vereinheitlichen.
+
+  2187b: read_file Zeilenbereich.
+  2188a: agents/*.md konsolidieren.
+  2188c, 2189c, 2190b-M, 2191-M2, 2192-M2,
+  2198-M, 2198-M2: Feature + Prompt + Aktualisierung
+        konsolidieren.
+  2190-M: Reviewer-Auswahl-Logik pruefen.
+  2192-M1: execute_commands prueft, ob Pfad schon
+        vollstaendig gemessen.
+  2195-M2: MAC-Redaction rechtfertigen oder entfernen.
+  2195-M3: Anker mit gemischten privaten/oeffentlichen IPs.
+  2191-R2b-T: Test fuer commit_review_ohne_messung.
+        Test-Harness bauen. Kategorie 2.
+  2191-R4: Builder-Prompt vs. Reviewer-Prompt
+        (GEMESSENER INHALT Position). Kategorie 2.
+  Phase-2-COMMAND-Schleichpfad: classify_verdict
+        erkennt COMMAND in Phase 2, Loop bricht
+        ab. Kein Fail, kein Log. Merkposten.
+  Audit-Log-Ausbau dauerhaft.
+  Tag-Verwirrung vereinheitlichen.
 
 ================================================================
-6. WIE MAN WEITERARBEITET
+5. ERLEDIGTE MERKPOSTEN (KURZREFERENZ)
+================================================================
+
+Detaillierte Beschreibungen in Bau-Handoff-Archiv.md,
+Abschnitt B.
+
+  2183 A1a, A1b, A1c, A2, A3, A4/A5, B, C
+       (Solver-Kurskorrektur, alle erledigt).
+  2183-B3, 2183-B5 (Solver-Wissensbasis, -Loop).
+  2183-P4-Log2 (pipeline_ende-Wrapper).
+  2184 (max_llm_calls 30).
+  2185 (README komplett).
+  2186-2198 (Auflagen 2026-10-12 bis -13).
+  2199, 2199-R7-P2 (ABGESCHLOSSEN).
+  2200, 2200a, 2200c, 2200-T.
+  Agent-Memory Ebene 1 (Commits 4e23aba, 52cd658).
+  Stufe 0 (Commits b5f3073 bis 737afe9).
+  Auftrag bereits erfuellt (Commits a0d436b bis 3cf7404).
+  Phase 1 Projekt-Schema (Commit 406e3cc).
+  Phase 3a-1 (1ed875a), 3a-2 (8ed6cd0), 3b (04012f6).
+  Phase 3c-1 (4916b01), 3c-1b (045556e),
+    3c-2 (b84ee8e), 3c-3 (d0a9bad).
+  Doku-Migration (Werkstatt 254b3fb,
+    security-ai 220c6be).
+
+================================================================
+6. ZIELE
+================================================================
+
+Ziel 1 — Autonomie bis Approval.
+        Die Werkstatt soll grosse Arbeitspakete
+        eigenstaendig abarbeiten. Mensch nur am
+        Approval-Gate.
+
+Ziel 2 — Deterministisch vor LLM.
+        Regel entscheidet, wo moeglich.
+
+Ziel 3 — Ordner-/Doku-Schema + Scaffolder.
+        Vorlage fuer neue Projekte, Migration
+        bestehender. Struktur-Konvention jetzt
+        dokumentiert.
+
+Ziel 4 — Dashboard (spaeter).
+        Web-Ansicht des Prozesses, Live-Log,
+        Konversation zwischen LLMs, ASK_HUMAN-Kanal.
+
+Ziel 5 — Anti-Pattern-Bibliothek.
+        ERLEDIGT fuer 3 Rollen (Builder, Reviewer,
+        Solver). Aggregator-Vorschlaege noch offen.
+
+Ziel 6 — Planner-Agent (spaeter).
+        Liest Roadmap des Ziel-Projekts, formuliert
+        Auftraege, Uebergabe an Reviewer.
+        Voraussetzung: Ziel 3 + Roadmap-Format.
+
+================================================================
+7. WIE MAN WEITERARBEITET
 ================================================================
 
 Regeln fuer jeden Bau-Block:
 
-1. Faktenlage vor Meinung. Keine Datei-Inhalte
-   annehmen. Immer cat/sed/grep zum Messen.
-
+1. Faktenlage vor Meinung. Kein Inhalt annehmen.
 2. Patch per Python-Skript mit assert count == 1.
-   Kein sed auf Python-Code. Kein Heredoc >3 KB.
-
+   Kein sed auf Python-Code.
+   Heredoc nur bis ~40 Zeilen. Laenger: Skript in
+   /tmp anlegen, dann per write_text schreiben.
 3. Nach jedem Patch: wc -l, py_compile, ruff,
    mypy, pytest.
-
-4. Vor jedem Commit: git status --porcelain
-   pruefen.
-
-5. Commit-Autor immer ghxstfocus
-   <ghxst.focus@gmail.com>.
-
+4. Vor jedem Commit: git status --porcelain.
+5. Commit-Autor: ghxstfocus <ghxst.focus@gmail.com>.
 6. Bei Kategorie 3: Reviewer-Block vor Commit.
-
 6a. Probebetrieb-Tag NUR bei echtem Pipeline-
-    Durchlauf. Beleg: pipeline_start UND
-    pipeline_ende im Audit-Log (Projekt
-    security-ai). Manual-Sessions werden
-    NICHT getaggt. Neue Regel seit 2026-10-14.
-
-7. Nach jedem Meilenstein: dieses Handoff
-   aktualisieren.
-
+    Durchlauf (pipeline_start + pipeline_ende).
+7. Nach jedem Meilenstein: Handoff aktualisieren.
 8. Reviewer-Blocks in Codeblock.
+9. Kein Scope-Creep. Jede Auflage eigener Block.
+10. Am Ende: git status sauber, Handoff aktuell.
 
-9. Kein Scope-Creep. Jede Auflage als eigener
-   Block.
-
-10. Am Ende jeder Session: git status sauber,
-    dieses Handoff aktuell.
-
-Reviewer-Chat:
-  - Der Reviewer-Chat ist ein separater
-    Web-Chat (nicht der Bau-Chat).
-  - Kategorie 3: Code VOR Ausfuehrung an
-    den Reviewer.
-  - Kein Improvisieren nach NO-GO.
+Werkstatt-Regel: ruff --no-cache messen.
+Werkstatt-Regel: mypy rekursiv pruefen.
+Werkstatt-Regel: bei Import-Sortierung ruff --fix.
 
 ================================================================
-7. WERKZEUGE UND BEFEHLE
+8. WERKZEUGE UND BEFEHLE
 ================================================================
 
-ruff:   /opt/security-ai/.venv/bin/python3 -m ruff check ...
+ruff:   /opt/security-ai/.venv/bin/python3 -m ruff check ... --no-cache
 mypy:   /opt/security-ai/.venv/bin/python3 -m mypy ...
 pytest (aus /opt/werkstatt):
         /opt/security-ai/.venv/bin/python3 -m pytest tests/ -q
@@ -1093,88 +416,45 @@ Git-Commit mit Autor:
       -c user.email="ghxst.focus@gmail.com" \
       commit -F /tmp/msg.txt
 
-Reviewer-Block nach Kategorie 3:
-  Datei in /tmp/ schreiben, mit cat anzeigen,
-  in Reviewer-Chat kopieren.
-
 ================================================================
-8. GIT-STATUS
+9. GIT-STATUS
 ================================================================
 
 Werkstatt-Repo: /opt/werkstatt/.git
   Branch: main
   Remote: git@github.com:ghxstfocus/werkstatt.git
   .gitignore: Cache, .venv, audit-logs/,
-              approvals/*.db, *.env.
+              approvals/*.db, *.env,
+              projects/*.memory.yaml, *.alt.
 
-Ziel-Projekt (security-ai):
-  Repo: /opt/security-ai/.git
-  Erster Werkstatt-Commit: dd3048b
-  Zweiter Werkstatt-Commit: 3ccb883
+Ziel-Projekt (security-ai): /opt/security-ai/.git
+  Branch: main
+  Remote: git@github.com:ghxstfocus/security-ai.git
 
-Hinweis: Der Werkstatt-Lauf benoetigt Schreibrechte
-des builder-Users im Ziel-Projekt. Nach manuellen
+Hinweis: Werkstatt-Lauf braucht Schreibrechte des
+builder-Users im Ziel-Projekt. Nach manuellen
 git-Eingriffen als root: chown builder:builder pruefen.
 
 ================================================================
-9. HARD RULES (HR1-HR10)
+10. HARD RULES
 ================================================================
 
-Seit Auflage 2182 sind die HARD_RULES rollenspezifisch
-getrennt:
-  - HARD_RULES_BASE (universell: HR1, HR7, HR8, HR9, HR10).
-  - HARD_RULES_REVIEWER (R1-R6).
+Rollenspezifisch getrennt (Auflage 2182):
+  - HARD_RULES_BASE (universell).
+  - HARD_RULES_REVIEWER (R1-R7).
   - HARD_RULES_BUILDER (B1-B10).
   - HARD_RULES_TEST_GENERATOR (T1-T4).
+  - HARD_RULES_SOLVER (S1-S7).
 build_system_prompt waehlt anhand des Agent-Namens.
+Quelle: pipeline.py.
 
-HR2-HR6 sind entfallen. Ihre Inhalte stehen in B6-B9.
-
-B4 (wichtig): "Du bist kein Messender. Die Werkstatt
-ist der Messende." Wird seit Auflage 2192 durch
-ensure_ziel_gemessen automatisch durchgesetzt.
-
-================================================================
-10. HARD RULES FUER DEN REVIEWER-CHAT (HR-R1 bis HR-R10)
-================================================================
-
-Unveraendert. Siehe vorherige Handoff-Version
-(Bau-Handoff-2026-10-12.md.alt, Abschnitt 10).
-
-HR-R1. Faktenlage vor Meinung.
-HR-R2. Bestandsaufnahme vor Reviewer-Block.
-HR-R3. Auflagen-Nummern global fortlaufend.
-HR-R4. Reviewer-Blocks immer in einen Codeblock.
-HR-R5. Kategorie 3 nur mit vorherigem Reviewer-Block.
-HR-R6. Wenn unsicher: ESKALATION.
-HR-R7. Fehler anerkennen, korrigieren, dokumentieren.
-HR-R8. Kein Scope-Creep.
-HR-R9. Fail-closed.
-HR-R10. Kein "das haben wir schon immer so gemacht".
+Die Chat-Regeln (HR-R1..R10) und Antwortformate
+sind Zwei-Webchat-Artefakte. Sie sind im Archiv.
+Die Werkstatt hat sie durch HARD_RULES_REVIEWER
+und classify_verdict abgeloest.
 
 ================================================================
-11. ANTWORTFORMATE DES REVIEWERS
-================================================================
-
-GO:
-    GO
-    Grund: <kurz>
-    Bemerkung: <optional>
-
-NO-GO:
-    NO-GO
-    Grund: <konkreter Punkt>
-    Empfehlung: <wie richtig>
-    Verweis: <Design-Entscheidung / Doc>
-
-ESKALATION:
-    ESKALATION
-    Frage: <was>
-    Warum: <warum unsicher>
-    Vorschlag: <was du empfiehlst>
-
-================================================================
-12. NAEECHSTE SCHRITTE (konkret)
+11. NAECHSTE SCHRITTE (konkret)
 ================================================================
 
 Der neue Bau-Chat soll:
@@ -1185,38 +465,27 @@ Der neue Bau-Chat soll:
      /opt/security-ai/.venv/bin/python3 -m pytest \
        /opt/werkstatt/tests/ -q
 
-2. docs/PROTOKOLL-29-40.md lesen.
-
-3. Reihenfolge (Phase 1 + Phase 3a-1 + 3a-2 + 3b
-   erledigt 2026-10-15):
-   a) Phase 3c: Reviewer + Solver Injektion.
-      Naechster Block. Gleiche Mechanik wie Phase 3b.
-   b) docs-Migration (Frage 1 b+c):
-      security-ai docs/CONTEXT_PROMPT.md -> docs/CONTEXT.md,
-      docs/REVIEWER_HANDOFF.md -> docs/REVIEWER.md.
-   c) Phase 2: Scaffolder (werkstatt_scaffold.py +
-      werkstatt_migrate.py). Abhaengigkeit: Rollen-
-      Prompt-Generator (Phase 3.5) fuer Doku-Migration.
-      Scaffolder kann vorerst die Vorlagen kopieren
-      und spaeter nachziehen.
-   d) Phase 1b: Validator Fail-closed.
+2. Reihenfolge:
+   a) Phase 2: Scaffolder (werkstatt_scaffold.py +
+      werkstatt_migrate.py). Voraussetzung
+      erfuellt: Struktur-Konvention in
+      Werkstatt-WORKFLOW.
+   b) Phase 1b: Validator Fail-closed.
       Nach 2-3 echten Pipeline-Laeufen.
-   e) Rollen-Prompt-Generator (Phase 3.5).
-   f) Block "Agent-Memory Ebene 2" (Run-Memory,
-      Phasen-Fortschritt).
-   g) Ziel 2: Phasen-Modus.
-   h) Ziel 4: Dashboard.
-   i) Solver-Kurskorrektur Block 6, 2183-AQ,
-      2200b/c/T, 2199a, 2199-R7-P1, Werkstatt-Vertrag.
+   c) Solver-Kurskorrektur Block 6 (Smoke-Test).
+   d) Rollen-Prompt-Generator (Phase 3.5).
+   e) Agent-Memory Ebene 2.
+   f) Ziel 2: Phasen-Modus.
+   g) Ziel 4: Dashboard.
+   h) 2183-AQ, 2199a, Werkstatt-Vertrag, B2.
 
-4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
-   Blocks formulieren. Vor Ausfuehrung.
+3. Fuer Kategorie-3-Bloecke: Reviewer-Block
+   formulieren, vor Ausfuehrung.
 
-5. Nach Erfolg (NUR echter Pipeline-Durchlauf):
-   git tag probebetrieb-<n>. Naechste Nummer:
-   63 (Stand 2026-10-15). PB-62 = 3bb5917.
+4. Nach Erfolg (NUR echter Pipeline-Durchlauf):
+   git tag probebetrieb-<n>. Naechste Nummer: 67.
 
-6. Bei Problemen: zurueck zu diesem Handoff,
+5. Bei Problemen: zurueck zu diesem Handoff,
    Faktenlage pruefen, Reviewer-Chat fragen.
 
 ================================================================
