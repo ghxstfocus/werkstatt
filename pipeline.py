@@ -770,12 +770,19 @@ def _anti_pattern_block(
     state: RunState,
     rolle: str,
     trigger_grund: str | None = None,
+    *,
+    aufrufer: str | None = None,
 ) -> str:
     """WW4: formatiert die relevanten Anti-Patterns als
     Prompt-Block. Liefert "" wenn nichts zu zeigen ist.
 
     Schreibt Audit-Event anti_patterns_injiziert, wenn
-    mindestens ein Eintrag gezeigt wird.
+    mindestens ein Eintrag gezeigt wird (YY6: kein
+    Audit bei leerem Block).
+
+    YY4: aufrufer (z.B. "command", "deadlock",
+    "trigger_a_b_c") wird mit ins Audit geschrieben,
+    damit der Pfad nachvollziehbar ist.
     """
     aps = anti_patterns_fuer(rolle, trigger_grund, limit=3)
     if not aps:
@@ -790,12 +797,16 @@ def _anti_pattern_block(
         zeilen.append(f"- [{e['id']}] {e['titel']}")
         zeilen.append(f"  Beschreibung: {beschreibung}")
         zeilen.append(f"  Loesung: {loesung}")
-    # Audit
+    # Audit (YY6: nur bei nicht-leerem Block).
     if state.project_dir is not None:
-        audit("anti_patterns_injiziert",
-              {"rolle": rolle,
-               "trigger_grund": trigger_grund,
-               "ids": [e["id"] for e in aps]},
+        payload: dict[str, Any] = {
+            "rolle": rolle,
+            "trigger_grund": trigger_grund,
+            "ids": [e["id"] for e in aps],
+        }
+        if aufrufer is not None:
+            payload["aufrufer"] = aufrufer
+        audit("anti_patterns_injiziert", payload,
               state.project_dir, state.project_name)
     return "\n".join(zeilen)
 
@@ -2138,7 +2149,10 @@ def _solver_prompt_bauen(state: RunState,
 def rufe_solver(
         state: RunState, api_key: str,
         solver_prompt: str,
-        grund_text: str = "") -> tuple[SolverBefund | None, str]:
+        grund_text: str = "",
+        trigger_grund: str | None = None,
+        aufrufer: str = "unbekannt",
+) -> tuple[SolverBefund | None, str]:
     """Auflage 2183 B + C: ruft den Solver.
 
     Liefert (befund, grund).
@@ -2146,9 +2160,23 @@ def rufe_solver(
     "llm_fehler" oder "befund_unvollstaendig".
     Bei Erfolg: (befund, "").
 
-    C: grund_text ist optionaler Reviewer-Grund.
+    C: grund_text ist optionaler Reviewer-Grund
+    (Freitext).
+
+    Phase 3c-3 (2026-10-15): trigger_grund ist der
+    Trigger-Grund fuer den Anti-Pattern-Filter
+    (p1_trigger, wirkungsloser_patch,
+    anker_nicht_gemessen, builder_rueckfrage,
+    reviewer_command). aufrufer ist "command",
+    "deadlock", "trigger_a_b_c" oder "unbekannt"
+    (YY4).
     """
     user_content = _solver_prompt_bauen(state, grund_text)
+    # Phase 3c-3: Anti-Pattern-Block anhaengen.
+    ap_block = _anti_pattern_block(
+        state, "solver", trigger_grund, aufrufer=aufrufer)
+    if ap_block:
+        user_content = user_content + "\n\n" + ap_block
     reply = ask_llm(api_key, solver_prompt, user_content,
                     state.reviewer_verdict_model, 0.0,
                     state.llm_timeout_s, state=state)
@@ -2210,7 +2238,9 @@ def _handle_solver_command(
         state.agents["solver"], state.docs,
         state.agent_docs.get("solver", []))
     befund, fehler = rufe_solver(
-        state, api_key, solver_prompt, grund_text=arg)
+        state, api_key, solver_prompt, grund_text=arg,
+        trigger_grund="reviewer_command",
+        aufrufer="command")
     if befund is None:
         audit("solver_failed",
               {"runde": runde, "grund": fehler,
@@ -2990,7 +3020,9 @@ def handle_deadlock_mit_solver(
         state.agent_docs.get("solver", []))
     befund, fehler = rufe_solver(
         state, api_key, solver_prompt,
-        grund_text=_trigger_grund)
+        grund_text=_trigger_grund,
+        trigger_grund=_trigger_grund,
+        aufrufer="deadlock")
     if befund is None:
         audit("solver_failed",
               {"pfad": "deadlock", "grund": fehler},
@@ -4241,7 +4273,9 @@ def run_pipeline(project_name: str, aufgabe: str,
                         state.agent_docs.get("solver", []))
                     befund, fehler = rufe_solver(
                         state, api_key, solver_prompt,
-                        grund_text=_trigger_grund)
+                        grund_text=_trigger_grund,
+                        trigger_grund=_trigger_grund,
+                        aufrufer="trigger_a_b_c")
                     if befund is None:
                         # X3: Marker zurueck,
                         # fail-closed (kein Dauer-Block).

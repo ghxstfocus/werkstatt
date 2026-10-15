@@ -500,3 +500,63 @@ class TestReviewerInjektion:
             self._agent("reviewer"), {}, [], state=s)
         anzahl = prompt.count("- [ap-")
         assert anzahl <= 3
+
+
+# =====================================================================
+# Phase 3c-3: Solver-Injektion in rufe_solver
+# =====================================================================
+
+class TestSolverInjektion:
+    def _state(self):
+        from pathlib import Path as _P
+        return pipeline.RunState(
+            block_id="test-block",
+            aufgabe="test",
+            start_ts="2026-10-15T00:00:00+00:00",
+            docs={},
+            agents={},
+            always={},
+            optional={},
+            file_whitelist=["core/"],
+            api_key="test-key",
+            budget={"max_review_rounds": 5, "max_llm_calls": 30},
+            agent_docs={},
+            project_dir=_P("/tmp"),
+            project_name="test-projekt",
+        )
+
+    def test_rufe_solver_signatur_hat_trigger_grund(self) -> None:
+        import inspect
+        sig = inspect.signature(pipeline.rufe_solver)
+        assert "trigger_grund" in sig.parameters
+        assert "aufrufer" in sig.parameters
+        assert sig.parameters["trigger_grund"].default is None
+        assert sig.parameters["aufrufer"].default == "unbekannt"
+
+    def test_anti_pattern_block_mit_aufrufer(self) -> None:
+        # YY4: aufrufer wird ins Audit geschrieben.
+        # Wir koennen das Audit-Log nicht direkt testen,
+        # aber die Funktion akzeptiert den Parameter.
+        s = self._state()
+        s.letzte_anker_fehler = [
+            (0, "core/x.py", "foo", "nicht_gefunden")]
+        block = pipeline._anti_pattern_block(
+            s, "solver", "anker_nicht_gemessen",
+            aufrufer="deadlock")
+        assert "## ANTI-PATTERNS" in block
+
+    def test_solver_rolle_hat_6_kandidaten(self) -> None:
+        # Nach 3c-1: Solver hat 6 Eintraege.
+        aps = pipeline.anti_patterns_fuer(
+            "solver", "anker_nicht_gemessen", limit=100)
+        # Spezifisch fuer anker_nicht_gemessen:
+        # ap-anker-dekorator, ap-anker-semantik,
+        # ap-anker-aus-chat, ap-fehlender-assert-patch.
+        ids = {e["id"] for e in aps}
+        assert "ap-anker-dekorator" in ids
+        assert "ap-anker-semantik" in ids
+
+    def test_solver_trigger_grund_none_fallback(self) -> None:
+        aps = pipeline.anti_patterns_fuer("solver", limit=100)
+        # Fallback: alle 6 Rollen-Eintraege.
+        assert len(aps) == 6
