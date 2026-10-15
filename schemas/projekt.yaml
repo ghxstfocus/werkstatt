@@ -1,0 +1,142 @@
+# schemas/projekt.yaml
+# Werkstatt — Projekt-Schema (maschinenlesbar).
+#
+# Definition der Felder einer Projekt-Konfiguration
+# (projects/<name>.yaml). Quelle fuer Validator + Defaults.
+#
+# Kategorien:
+#   K    = Kern (Pflicht)
+#   O    = Optional (Default greift)
+#   P    = Projektspezifisch
+#   W+O  = Werkstatt-Default, Projekt-YAML darf ueberschreiben
+#
+# docs.* sind Doku-Bausteine (Zweck).
+# agent_docs.* sind Rollensichten (wer sieht was).
+# Die alte Zweiteilung context vs. handoff stammt aus der
+# Zwei-Webchat-Aera und ist keine feste Zweistufigkeit.
+#
+# Alias-Mechanik (Uebergangsphase):
+#   docs.handoff              -> docs.reviewer
+#   docs.context_prompt       -> docs.context
+#   agents_dir                -> project_agents_dir
+#   Datei-Ebene (nur Hinweis):
+#     docs/CONTEXT_PROMPT.md  -> bevorzugt docs/CONTEXT.md
+#     docs/REVIEWER_HANDOFF.md -> bevorzugt docs/REVIEWER.md
+
+version: 1
+
+felder:
+  project:
+    kategorie: K
+    typ: str
+  project_dir:
+    kategorie: K
+    typ: str
+  project_agents_dir:
+    kategorie: O
+    typ: "str | null"
+    default: null
+    alias: agents_dir
+
+  docs:
+    kategorie: K
+    typ: dict
+    schluessel:
+      context:
+        kategorie: O
+        typ: "str | null"
+        default: null
+        alias: context_prompt
+      reviewer:
+        kategorie: O
+        typ: "str | null"
+        default: null
+        alias: handoff
+      decisions:
+        kategorie: K
+        typ: str
+      security_log:
+        kategorie: O
+        typ: "str | null"
+        default: null
+      web_security:
+        kategorie: O
+        typ: "str | null"
+        default: null
+      workflow:
+        kategorie: K
+        typ: str
+
+  always_run:
+    kategorie: K
+    typ: "list[str]"
+    default:
+      - py_compile
+      - ruff
+      - mypy
+      - test_count
+      - git_status
+      - git_head
+
+  optional_catalog:
+    kategorie: K
+    typ: "list[str]"
+    default:
+      - bandit
+      - pip_audit
+      - read_file
+      - mypy_tests
+
+  agent_docs:
+    kategorie: K
+    typ: dict
+
+  file_whitelist:
+    kategorie: K
+    typ: "list[str]"
+
+  venv_python:
+    kategorie: K
+    typ: str
+
+  budget:
+    kategorie: O
+    typ: dict
+    default:
+      max_review_rounds: 5
+      max_minutes: 15
+      max_llm_calls: 30
+      max_builder_runden: 3
+
+  auto_repair:
+    kategorie: O
+    typ: dict
+    default:
+      enabled: false
+      max_attempts: 3
+      auto_fix_ruff: true
+      auto_fix_ruff_format: true
+      escalate_after_attempts: true
+      escalate_if_errors_over: 20
+
+  require_human_approval:
+    kategorie: K
+    typ: bool
+    default: true
+
+  review_commit_package:
+    kategorie: K
+    typ: bool
+    default: true
+
+  git_author:
+    kategorie: P
+    typ: dict
+
+  solver:
+    kategorie: "W+O"
+    typ: dict
+    default:
+      p1_schwellwert: 0.5
+      p1_min_tokens: 10
+      max_runden: 3

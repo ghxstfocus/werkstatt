@@ -369,3 +369,70 @@ fehl.
   versehentlich zwischen @dataclass und
   class Measurement eingefuegt. mypy-Fehler.
   Lehre: Dekorator in den Anker aufnehmen.
+
+## Projekt-Schema
+
+Jede Projekt-Konfiguration (projects/<name>.yaml) wird gegen
+schemas/projekt.yaml geprueft. Der Validator heisst
+pruefe_projekt_yaml in pipeline.py und laeuft beim Laden der
+Projekt-Konfiguration.
+
+### Kategorien
+
+  K    = Kern (Pflicht).
+  O    = Optional (Default greift).
+  P    = Projektspezifisch.
+  W+O  = Werkstatt-Default, Projekt-YAML darf ueberschreiben.
+
+### docs vs. agent_docs
+
+  docs.*       sind Doku-Bausteine (Zweck).
+  agent_docs.* sind Rollensichten (wer sieht was).
+
+Ein Doku-Baustein kann von mehreren Rollen gesehen werden.
+Eine Rolle kann mehrere Bausteine sehen.
+
+Die alte Trennung context vs. handoff stammt aus der
+Zwei-Webchat-Aera und ist keine feste Zweistufigkeit.
+docs/CONTEXT_PROMPT.md und docs/REVIEWER_HANDOFF.md sind
+Uebergangsnamen und werden langfristig durch generierte
+Rollen-Prompts ersetzt.
+
+### Alias-Mechanik (Uebergangsphase)
+
+Schluessel-Ebene:
+  docs.handoff        -> docs.reviewer
+  docs.context_prompt -> docs.context
+  agents_dir          -> project_agents_dir
+
+Datei-Ebene (nur Hinweis, nicht erzwungen):
+  docs/CONTEXT_PROMPT.md   -> bevorzugt docs/CONTEXT.md
+  docs/REVIEWER_HANDOFF.md -> bevorzugt docs/REVIEWER.md
+
+### Modus
+
+Der Validator kennt zwei Modi:
+  warn (Default): Meldungen werden gedruckt, die Pipeline laeuft.
+  fail: Meldungen fuehren zu sys.exit(2).
+
+Steuerung: Umgebungsvariable WERKSTATT_SCHEMA_MODUS.
+
+Phase 1 ist Warn-Modus. Nach der Uebergangsphase wird der
+Default auf fail gestellt.
+
+## Messtechnik
+
+### ruff mit --no-cache messen
+
+Bei der Auswertung von ruff IMMER --no-cache verwenden.
+
+Anlass: 2026-10-15, Phase 1 Projekt-Schema.
+Der erste ruff-Aufruf meldete 2 Fehler (I001), der zweite
+Aufruf ohne Aenderung 0 Fehler. Der .ruff_cache war stale.
+Erst --no-cache lieferte das reproduzierbare Ergebnis.
+
+### mypy rekursiv messen
+
+mypy ab jetzt rekursiv ueber das gesamte Werkstatt-Verzeichnis:
+  mypy /opt/werkstatt/
+Nicht nur pipeline.py. Anlass: PB-63, siehe Handoff-Regel P6.

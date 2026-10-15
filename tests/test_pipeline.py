@@ -64,7 +64,9 @@ class TestLoadProjectConfig:
         config = pipeline.load_project_config("security-ai")
         assert config["project"] == "homelab-security-ai"
         assert config["project_dir"] == "/opt/security-ai"
-        assert config["agents_dir"] == "/opt/werkstatt/agents"
+        # agents_dir ist seit Phase 1 (Projekt-Schema) entfernt.
+        # project_agents_dir ist optional (Kategorie O, Default null).
+        assert "agents_dir" not in config
         assert "always_run" in config
         assert "py_compile" in config["always_run"]
 

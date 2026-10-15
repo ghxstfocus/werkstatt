@@ -4,16 +4,22 @@
 # Sie beschreibt, wo das Projekt liegt, welche Doku es hat, welche
 # Messungen erlaubt sind. Die Pipeline liest sie beim Aufruf mit
 # --project security-ai.
+#
+# Schema: schemas/projekt.yaml. Validator: pipeline.pruefe_projekt_yaml.
 
 project: homelab-security-ai
 project_dir: /opt/security-ai
-agents_dir: /opt/werkstatt/agents
+# project_agents_dir ist optional. Default: Werkstatt-Agenten.
+# Wenn gesetzt: Projekt-eigene Rollen werden zusaetzlich geladen.
 
-# Pflichtdokumente, die in jeden System-Prompt geladen werden.
-# Wenn eines fehlt: Fail closed.
+# Doku-Bausteine. Pflicht: decisions, workflow.
+# Optional: context, reviewer, security_log, web_security.
+# docs.context und docs.reviewer sind Uebergangsnamen:
+#   docs/CONTEXT_PROMPT.md  -> bevorzugt docs/CONTEXT.md
+#   docs/REVIEWER_HANDOFF.md -> bevorzugt docs/REVIEWER.md
 docs:
   context: docs/CONTEXT_PROMPT.md
-  handoff: docs/REVIEWER_HANDOFF.md
+  reviewer: docs/REVIEWER_HANDOFF.md
   decisions: docs/DESIGN_DECISIONS.md
   security_log: docs/SECURITY_REVIEW_LOG.md
   web_security: docs/WEB_SECURITY_CHECKLIST.md
@@ -47,8 +53,8 @@ optional_catalog:
   - read_file
   # Auflage 2159: mypy ueber tests/ separat. Der Reviewer-
   # Agent kann es anfordern, um Test-Qualitaet zu pruefen.
-  # In always_run ist es nicht, weil tests/ 1337 mypy-
-  # Fehler hat (fehlende Type Annotations).
+  # In always_run ist es nicht, weil tests/ mypy-Fehler hat
+  # (fehlende Type Annotations).
   - mypy_tests
 
 # Doku-Zuordnung pro Agent.
@@ -58,7 +64,7 @@ agent_docs:
   reviewer:
     - context
     - workflow
-    - handoff
+    - reviewer
     - decisions
     - security_log
     - web_security
@@ -71,7 +77,7 @@ agent_docs:
   solver:
     - context
     - workflow
-    - handoff
+    - reviewer
     - decisions
     - security_log
     - web_security
@@ -95,33 +101,6 @@ budget:
   max_minutes: 15
   max_llm_calls: 30
   max_builder_runden: 3
-
-# Zukunfts-Konfiguration. Nicht im Code implementiert
-# (Stand HEAD bb6bd60). Aenderungen dieser Werte haben
-# keine Wirkung.
-# Vor-Check-Stufe:
-#   A = py_compile + ruff + mypy
-#   B = A + bandit + pip_audit
-#   C = B + Sandbox-Tests
-pre_check_stage: B
-
-# Zukunfts-Konfiguration. Nicht im Code implementiert
-# (Stand HEAD bb6bd60). Aenderungen dieser Werte haben
-# keine Wirkung.
-# Eskalationsverhalten des Reviewers:
-#   A = Pipeline stoppt, Gate zeigt Stand
-#   B = Pipeline versucht es nochmal mit Eskalationskontext
-#   C = Pipeline ruft zweiten Reviewer (anderes Modell)
-escalation: A
-
-# Zukunfts-Konfiguration. Nicht im Code implementiert
-# (Stand HEAD bb6bd60). Aenderungen dieser Werte haben
-# keine Wirkung.
-# Reject-Pfad:
-#   A = Pipeline endet sofort
-#   B = Pipeline startet neue Runde mit Begruendung
-#   C = Pipeline gibt Entwurf zum manuellen Editieren
-reject_path: B
 
 # Auto-Repair des Basis-Gates.
 auto_repair:
@@ -147,9 +126,9 @@ git_author:
   name: ghxstfocus
   email: ghxst.focus@gmail.com
 
-
 # Auflage 2183 P1 (U3): Schwellwerte fuer den
 # Gegenstandsvergleich. Aenderbar ohne Code-Aenderung.
+# Kategorie W+O: Werkstatt-Default, Projekt-YAML darf ueberschreiben.
 solver:
   p1_schwellwert: 0.5
   p1_min_tokens: 10

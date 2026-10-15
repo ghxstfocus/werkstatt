@@ -389,6 +389,134 @@ def load_project_config(project_name: str) -> dict[str, Any]:
     return data
 
 
+# =====================================================================
+# Projekt-Schema-Validator (Phase 1, Warn-Modus).
+# Schema: schemas/projekt.yaml.
+# Modus: Umgebungsvariable WERKSTATT_SCHEMA_MODUS=warn|fail.
+#        Default: warn. Spaeter: fail (nach Uebergangsphase).
+# =====================================================================
+SCHEMA_PFAD = Path("/opt/werkstatt/schemas/projekt.yaml")
+
+_ALIAS_TOP = {
+    "agents_dir": "project_agents_dir",
+}
+_ALIAS_DOCS = {
+    "handoff": "reviewer",
+    "context_prompt": "context",
+}
+
+
+def _lade_schema() -> dict[str, Any]:
+    if not SCHEMA_PFAD.exists():
+        print(f"[FAIL] Schema fehlt: {SCHEMA_PFAD}. Fail closed.")
+        sys.exit(1)
+    with SCHEMA_PFAD.open(encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
+    if not isinstance(data, dict) or "felder" not in data:
+        print(f"[FAIL] Schema ungueltig: {SCHEMA_PFAD}. Fail closed.")
+        sys.exit(1)
+    return data
+
+
+def _typ_ok(wert: Any, typ: str) -> bool:
+    if typ == "str | null":
+        return wert is None or isinstance(wert, str)
+    if typ == "str":
+        return isinstance(wert, str)
+    if typ == "bool":
+        return isinstance(wert, bool)
+    if typ == "int":
+        return isinstance(wert, int) and not isinstance(wert, bool)
+    if typ == "float":
+        return isinstance(wert, (int, float)) and not isinstance(wert, bool)
+    if typ == "dict":
+        return isinstance(wert, dict)
+    if typ == "list[str]":
+        return isinstance(wert, list) and all(isinstance(x, str) for x in wert)
+    return True
+
+
+def _pruefe_docs(config: dict[str, Any], schema_docs: dict[str, Any],
+                 meldungen: list[str]) -> None:
+    docs = config.get("docs", {})
+    if not isinstance(docs, dict):
+        meldungen.append("docs: muss ein dict sein")
+        return
+    for alt, neu in _ALIAS_DOCS.items():
+        if alt in docs and neu not in docs:
+            docs[neu] = docs.pop(alt)
+            meldungen.append(f"docs.{alt}: Alias aufgeloest zu docs.{neu}")
+    erlaubt = set(schema_docs.get("schluessel", {}).keys())
+    for k in list(docs.keys()):
+        if k not in erlaubt:
+            meldungen.append(
+                f"docs.{k}: unbekannt (erlaubt: {sorted(erlaubt)})")
+    for k, spec in schema_docs.get("schluessel", {}).items():
+        if spec.get("kategorie") == "K" and k not in docs:
+            meldungen.append(f"docs.{k}: Pflichtfeld fehlt")
+
+
+def pruefe_projekt_yaml(config: dict[str, Any], *,
+                        modus: str | None = None) -> list[str]:
+    """Prueft eine Projekt-Konfiguration gegen schemas/projekt.yaml.
+
+    Liefert die Liste der Meldungen (leer = ok).
+    modus: 'warn' | 'fail' | None (= aus Env, Default warn).
+    Im Modus 'fail' wird bei Meldungen sys.exit(2) ausgeloest.
+    """
+    if modus is None:
+        modus = os.getenv("WERKSTATT_SCHEMA_MODUS", "warn")
+    schema = _lade_schema()
+    felder = schema.get("felder", {})
+    meldungen: list[str] = []
+
+    if not isinstance(config, dict):
+        meldungen.append("config: kein dict")
+    else:
+        for alt, neu in _ALIAS_TOP.items():
+            if alt in config and neu not in config:
+                config[neu] = config.pop(alt)
+                meldungen.append(f"{alt}: Alias aufgeloest zu {neu}")
+        for k in list(config.keys()):
+            if k not in felder:
+                meldungen.append(f"{k}: unbekanntes Feld")
+        for k, spec in felder.items():
+            if k == "docs":
+                continue
+            if spec.get("kategorie") == "K" and k not in config:
+                meldungen.append(f"{k}: Pflichtfeld fehlt")
+            if k in config:
+                typ = spec.get("typ", "")
+                if typ and not _typ_ok(config[k], typ):
+                    meldungen.append(
+                        f"{k}: falscher Typ (erwartet {typ}, "
+                        f"ist {type(config[k]).__name__})")
+        if "docs" in config:
+            _pruefe_docs(config, felder.get("docs", {}), meldungen)
+
+    for k, spec in felder.items():
+        if k in config:
+            continue
+        if "default" in spec:
+            config[k] = spec["default"]
+
+    if meldungen:
+        if modus == "fail":
+            for m in meldungen:
+                print(f"[FAIL] Schema: {m}")
+            sys.exit(2)
+        for m in meldungen:
+            print(f"[WARN] Schema: {m}")
+    return meldungen
+
+
+def _lade_und_pruefe_projekt(project_name: str) -> dict[str, Any]:
+    """load_project_config + pruefe_projekt_yaml."""
+    config = load_project_config(project_name)
+    pruefe_projekt_yaml(config)
+    return config
+
+
 def load_agents(agents_dir: str) -> dict[str, dict[str, Any]]:
     base = Path(agents_dir).expanduser()
     if not base.exists():
@@ -3316,7 +3444,7 @@ def run_pipeline(project_name: str, aufgabe: str,
         print("[FAIL] DEEPSEEK_API_KEY fehlt. Fail closed.")
         return 1
 
-    config = load_project_config(project_name)
+    config = _lade_und_pruefe_projekt(project_name)
     project_dir = Path(config.get("project_dir", str(Path.cwd()))).expanduser()
     # Agent-Memory A2: Projekt-Stand aus memory.yaml.
     # UU6: fehlt = ok, korrupt = Fail-closed.
@@ -3334,7 +3462,10 @@ def run_pipeline(project_name: str, aufgabe: str,
                   {"pfad": str(_mem_pfad), "fehler": str(exc)},
                   project_dir, project_name)
             return 3
-    agents = load_agents(config.get("agents_dir", "/opt/werkstatt/agents"))
+    agents_dir = config.get("project_agents_dir")
+    if not agents_dir:
+        agents_dir = "/opt/werkstatt/agents"
+    agents = load_agents(agents_dir)
     docs = load_docs(config.get("docs", {}), project_dir)
     always, optional = build_catalog(config, project_dir)
     file_whitelist = config.get("file_whitelist", [])

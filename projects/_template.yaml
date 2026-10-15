@@ -1,0 +1,99 @@
+# projects/_template.yaml
+# Vorlage fuer eine neue Projekt-Konfiguration.
+# Kopieren nach projects/<name>.yaml und anpassen.
+#
+# Pflichtfelder (K) muessen gesetzt sein. Optionale Felder (O)
+# duerfen fehlen — der Validator setzt die Defaults aus
+# schemas/projekt.yaml.
+#
+# Vollstaendige Feldliste mit Kategorien: schemas/projekt.yaml.
+
+# Pflicht: interner Projektname (Audit-Log).
+project: <name>
+
+# Pflicht: absoluter Pfad zum Projekt-Wurzelverzeichnis.
+project_dir: /opt/<name>
+
+# Optional: Projekt-eigene Rollen (zusaetzlich zu /opt/werkstatt/agents/).
+# project_agents_dir: /opt/<name>/agents
+
+# Doku-Bausteine. Pflicht: decisions, workflow.
+# Optional: context, reviewer, security_log, web_security.
+docs:
+  context: docs/CONTEXT.md
+  # reviewer: docs/REVIEWER.md
+  decisions: docs/DESIGN_DECISIONS.md
+  # security_log: docs/SECURITY_REVIEW_LOG.md
+  # web_security: docs/WEB_SECURITY_CHECKLIST.md
+  workflow: docs/WORKFLOW.md
+
+# Pflicht: immer laufende Messungen.
+always_run:
+  - py_compile
+  - ruff
+  - mypy
+  - test_count
+  - git_status
+  - git_head
+
+# Pflicht: optionale Messungen (Reviewer waehlt).
+optional_catalog:
+  - bandit
+  - pip_audit
+  - read_file
+  - mypy_tests
+
+# Pflicht: welche Rolle sieht welchen Doku-Baustein.
+# Schluessel muessen unter docs: existieren.
+# Darf leer sein — Rollen bekommen dann nur agents/*.md.
+agent_docs:
+  reviewer:
+    - context
+    - workflow
+    - decisions
+  builder:
+    - context
+    - decisions
+  test_generator:
+    - context
+  solver:
+    - context
+    - workflow
+    - decisions
+
+# Pflicht: Pfad-Praefixe, die read_file lesen darf.
+file_whitelist:
+  - core/
+  - tools/
+  - docs/
+  - tests/
+
+# Pflicht: Python-Interpreter fuer Messungen.
+venv_python: /opt/<name>/.venv/bin/python3
+
+# Optional (Defaults aus schemas/projekt.yaml greifen):
+# budget:
+#   max_review_rounds: 5
+#   max_minutes: 15
+#   max_llm_calls: 30
+#   max_builder_runden: 3
+#
+# auto_repair:
+#   enabled: false
+#   max_attempts: 3
+#
+# solver:
+#   p1_schwellwert: 0.5
+#   p1_min_tokens: 10
+#   max_runden: 3
+
+# Pflicht: Human-in-the-Loop-Gate.
+require_human_approval: true
+
+# Pflicht: zweite Review-Phase (Commit-Paket).
+review_commit_package: true
+
+# Projektspezifisch: Git-Autor fuer Pipeline-Commits.
+git_author:
+  name: <name>
+  email: <email>
