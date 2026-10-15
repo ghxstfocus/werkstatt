@@ -596,6 +596,28 @@ Ziel 3 — Ordner-/Doku-Schema + Scaffolder.
         (deterministisch), aehnliche Dokumente
         zusammenfuehren (LLM), Mensch bestaetigt.
 
+Ziel 4 — Dashboard (spaeter).
+        Web-Ansicht, die den Werkstatt-Prozess
+        live zeigt: Builder, Reviewer, Solver,
+        Test-Generator, Patches, Verdicts.
+        Funktionen:
+        - Live-Ansicht (WebSocket/SSE aus dem
+          Audit-Log).
+        - Konversations-Fenster zwischen allen
+          LLMs in Echtzeit.
+        - Grafische Prozess-Darstellung
+          (State-Diagramm).
+        - Lauf starten (Eingabefeld + Button).
+        - ASK_HUMAN-Kanal: Agent stellt Frage,
+          Lauf pausiert, Mensch antwortet.
+        Voraussetzungen:
+        - Audit-Log um vollstaendige Prompts/
+          Replies erweitern (mit Redaction).
+        - Event-Katalog standardisieren.
+        - Web-Layer (kleiner HTTP-Server).
+        Reihenfolge: nach Agent-Memory (Ebene
+        1+2) und Audit-Erweiterung.
+
 STUFE 0 (Selbstheilung) — ERLEDIGT 2026-10-15.
         Deterministische Anker-/Ersatz-Pruefung,
         Builder-Rueckmeldung mit Mess-Chance,
