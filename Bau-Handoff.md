@@ -1,15 +1,16 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach Phase 1 Projekt-Schema)
-Werkstatt-HEAD: 406e3cc (Projekt-Schema + Validator, Warn-Modus)
+Stand: 2026-10-15 (nach Phase 3a-1 + 3a-2 + 3b)
+Werkstatt-HEAD: 04012f6 (Builder-Injektion Anti-Patterns)
 Letzter echter Probebetrieb: PB-66 (c9142a7, 2026-10-15)
 Letzter Commit in security-ai: c9142a7
 Branch: main
-Tests: 441 passed (423 + 18 Phase-1-Tests)
+Tests: 485 passed (Phase 3b: +16 aus Phase 3a-1)
 ruff --no-cache: 0
 mypy pipeline.py: 0
 mypy tests/test_pipeline.py: 15 (vorbestehend, tests-mypy-Merkposten)
 mypy tests/test_projekt_schema.py: 0
+mypy tests/test_anti_patterns.py: 0
 
 ================================================================
 WICHTIG (2026-10-14)
@@ -329,6 +330,31 @@ Auflagen dieser Session:
         WORKFLOW.md: Abschnitte Projekt-Schema +
         Messtechnik (ruff --no-cache, mypy rekursiv).
         441 passed. Reviewer-Block 2026-10-15 bestaetigt.
+
+  Phase 3a-1 Anti-Pattern-Bibliothek: ERLEDIGT
+        2026-10-15. Commit 1ed875a.
+        anti-patterns/katalog.yaml (7 Eintraege),
+        anti-patterns/README.md, pipeline.lade_anti_
+        patterns + anti_patterns_fuer, _AUDIT_KINDS_
+        BEKANNT (37 Kinds), tests/test_anti_patterns.py
+        (28 Tests). Fail-closed-Validierung.
+        469 passed.
+
+  Phase 3a-2 Anti-Pattern-Katalog: ERLEDIGT
+        2026-10-15. Commit 8ed6cd0.
+        19 weitere Eintraege aus security-ai/
+        docs/WORKFLOW.md (Katalog auf 26).
+        test_generator-Test an gewachsenen Katalog
+        angepasst. 469 passed.
+
+  Phase 3b Builder-Injektion: ERLEDIGT 2026-10-15.
+        Commit 04012f6.
+        pipeline._anti_pattern_block + _ap_trigger_
+        grund_aus_state + _ap_kuerzen. Injektion in
+        baue_anker_rueckmeldung. Zwei-Stufen-Sortierung
+        (spezifisch vor Fallback). 5 Katalogeintraege
+        mit trigger_gruende. 16 neue Tests. 485 passed.
+        Reviewer-Block + Nachtrag 2026-10-15 bestaetigt.
 
 ================================================================
 5. OFFENE AUFLAGEN UND MERKPOSTEN
@@ -690,6 +716,45 @@ ist, dass eine Phase mit 10 Unterkategorien in
 einem Zug abgearbeitet wird.
 
 MITTEL (Merkposten):
+
+  Phase 3c (Reviewer + Solver Injektion): OFFEN.
+        Naechster Block. Gleiche Mechanik wie Phase 3b,
+        andere Rollen. Injektionspunkte:
+          - Reviewer-Prompt: bei jedem Review-Aufruf,
+            gefiltert nach Rolle reviewer.
+          - Solver-Prompt: nach Trigger-Grund,
+            gefiltert nach Rolle solver.
+        Kategorie 3.
+
+  docs-Migration (Frage 1 b+c): OFFEN.
+        Reviewer-Block 2026-10-15 hat Frage 1
+        zurueckgegeben an den Menschen. Mensch hat
+        entschieden: (b)+(c). Konkret:
+          - Jetzt umbenennen: docs/CONTEXT_PROMPT.md ->
+            docs/CONTEXT.md, docs/REVIEWER_HANDOFF.md ->
+            docs/REVIEWER.md.
+          - Alias-Uebergangszeit (bereits in schemas/
+            projekt.yaml vorbereitet).
+          - Langfristig durch generierte Rollen-Prompts
+            ersetzen. Dateien entfallen dann ganz.
+        Umbenennung in security-ai: eigener Block.
+        Rollen-Prompt-Generator: eigener Block (Phase 3.5).
+
+  _AUDIT_KINDS_BEKANNT: manuell pflegen.
+        Neue Audit-Log-kind-Werte muessen in
+        pipeline.py:_AUDIT_KINDS_BEKANNT ergaenzt
+        werden, sonst schlaegt die Katalog-Validierung
+        fail-closed fehl. Merkposten fuer Phase 3c/4:
+        Pruefen, ob die Liste automatisch aus dem
+        Audit-Log abgeleitet werden kann.
+
+  ap-string-literal-statt-konstante: Bau-Chat-Befund.
+        Eintrag im Katalog ist ehrlich als
+        "Bau-Chat-Befund Phase-3-Recherche" markiert,
+        nicht als Doku-Zitat. Bei der naechsten
+        Katalog-Durchsicht pruefen, ob weitere
+        Bau-Chat-Befunde in Eintraege umgewandelt
+        werden sollen.
 
   Phase 1b (Validator Fail-closed): OFFEN.
         Warn-Modus ist Default (WERKSTATT_SCHEMA_MODUS=warn).
@@ -1122,24 +1187,20 @@ Der neue Bau-Chat soll:
 
 2. docs/PROTOKOLL-29-40.md lesen.
 
-3. Reihenfolge (Phase 1 Projekt-Schema erledigt 2026-10-15):
-   a) Phase 3: Anti-Pattern-Bibliothek (Ziel 5).
-      Naechster Block. Aufteilung:
-        3a: anti-patterns/katalog.yaml + Loader +
-            Erstbefuellung aus docs/WORKFLOW.md.
-        3b: Builder-Prompt-Injektion bei Anker-
-            Rueckmeldung.
-        3c (optional, spaeter): Aggregator-Vorschlaege.
-      Empfehlung Bau-Chat: 3a + 3b in einem Block.
-   b) Phase 2: Scaffolder (werkstatt_scaffold.py +
-      werkstatt_migrate.py). Abhaengigkeit: Frage 1 (c),
-      Rollen-Prompt-Generator. Scaffolder kann vorerst
-      die Vorlagen kopieren und spaeter nachziehen.
-   c) Phase 1b: Validator Fail-closed.
-      Nach 2-3 echten Pipeline-Laeufen.
-   d) docs-Migration (Frage 1 b+c): security-ai
-      docs/CONTEXT_PROMPT.md -> docs/CONTEXT.md,
+3. Reihenfolge (Phase 1 + Phase 3a-1 + 3a-2 + 3b
+   erledigt 2026-10-15):
+   a) Phase 3c: Reviewer + Solver Injektion.
+      Naechster Block. Gleiche Mechanik wie Phase 3b.
+   b) docs-Migration (Frage 1 b+c):
+      security-ai docs/CONTEXT_PROMPT.md -> docs/CONTEXT.md,
       docs/REVIEWER_HANDOFF.md -> docs/REVIEWER.md.
+   c) Phase 2: Scaffolder (werkstatt_scaffold.py +
+      werkstatt_migrate.py). Abhaengigkeit: Rollen-
+      Prompt-Generator (Phase 3.5) fuer Doku-Migration.
+      Scaffolder kann vorerst die Vorlagen kopieren
+      und spaeter nachziehen.
+   d) Phase 1b: Validator Fail-closed.
+      Nach 2-3 echten Pipeline-Laeufen.
    e) Rollen-Prompt-Generator (Phase 3.5).
    f) Block "Agent-Memory Ebene 2" (Run-Memory,
       Phasen-Fortschritt).
