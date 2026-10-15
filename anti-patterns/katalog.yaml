@@ -55,6 +55,7 @@ eintraege:
     rollen:
       - builder
       - reviewer
+      - solver
 
   - id: ap-anker-semantik
     titel: "Patch-Anker ohne Semantik-Pruefung"
@@ -82,6 +83,7 @@ eintraege:
     rollen:
       - builder
       - reviewer
+      - solver
 
   # -----------------------------------------------------------------
   # Generische Anti-Patterns (aus security-ai/docs/WORKFLOW.md,
@@ -213,6 +215,7 @@ eintraege:
     rollen:
       - builder
       - reviewer
+      - solver
 
   # -----------------------------------------------------------------
   # Generische Anti-Patterns aus security-ai/docs/WORKFLOW.md,
@@ -263,6 +266,7 @@ eintraege:
     kategorie: 2
     rollen:
       - builder
+      - solver
 
   - id: ap-modul-konstante-instanz
     titel: "Modul-Konstante vs. Instanz-Wert"
@@ -413,6 +417,7 @@ eintraege:
       - anker_nicht_gemessen
     rollen:
       - builder
+      - solver
 
   - id: ap-cat-auf-bestehende-datei
     titel: "cat > auf eine bestehende Datei"
@@ -482,6 +487,7 @@ eintraege:
       - anker_nicht_gemessen
     rollen:
       - builder
+      - solver
 
   - id: ap-reviewer-freitext-in-shell
     titel: "Reviewer-Freitext in die Shell gepastet"
