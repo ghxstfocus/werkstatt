@@ -94,10 +94,16 @@ class TestRolle:
         aps = pipeline.anti_patterns_fuer("reviewer")
         assert len(aps) <= 3
 
-    def test_test_generator_nur_seinen_eintrag(self) -> None:
+    def test_test_generator_sieht_4_eintraege(self) -> None:
+        # Phase 3a-2 hat drei weitere Eintraege fuer
+        # test_generator ergaenzt.
         aps = pipeline.anti_patterns_fuer("test_generator", limit=100)
         ids = {e["id"] for e in aps}
-        assert ids == {"ap-test-name-substring"}
+        assert "ap-test-name-substring" in ids
+        assert "ap-modul-konstante-instanz" in ids
+        assert "ap-tests-nicht-gesammelt" in ids
+        assert "ap-rueckgabe-typ-helper" in ids
+        assert len(ids) == 4
 
     def test_solver_keine_eintraege(self) -> None:
         aps = pipeline.anti_patterns_fuer("solver", limit=100)
