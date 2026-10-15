@@ -753,6 +753,27 @@ def parse_empfehlung(text: str) -> dict[str, str]:
 
 
 
+def klassifiziere_deadlock(state: RunState,
+                          letzter_reply: str) -> str:
+    """Stufe 0 Aenderung 4: differenziert den Deadlock.
+
+    Rueckgabe:
+      "anker_nicht_gemessen": Anker- oder Ersatz-Fehler
+                              liegen vor.
+      "rueckfrage":           Reply ohne Patch, ohne COMMAND,
+                              mit Frage im Fuss.
+      "leer":                 weder Patch noch COMMAND noch
+                              Rueckfrage.
+    """
+    if state.letzte_anker_fehler or state.letzte_ersatz_fehler:
+        return "anker_nicht_gemessen"
+    hat_patch = "PATCH-BEGINN" in letzter_reply
+    hat_command = "COMMAND:" in letzter_reply
+    if not hat_patch and not hat_command and "?" in letzter_reply:
+        return "rueckfrage"
+    return "leer"
+
+
 def baue_anker_rueckmeldung(state: RunState) -> str:
     """Stufe 0 Aenderung 2: baut den Rueckmeldungs-Block
     fuer den Builder-Prompt, wenn Anker oder Ersatz nicht
@@ -951,6 +972,12 @@ def builder_reply_mit_command_loop(
                 print(
                     f"[!] COMMAND wiederholt fehlgeschlagen: "
                     f"{key}. Deadlock.")
+                art = klassifiziere_deadlock(
+                    state, reply.content)
+                audit(f"builder_deadlock_{art}",
+                      {"grund": "wiederholter_fehler",
+                       "key": list(key)},
+                      project_dir, project_name)
                 audit("builder_command_deadlock",
                       {"grund": "wiederholter_fehler",
                        "key": list(key)},
@@ -970,8 +997,13 @@ def builder_reply_mit_command_loop(
                "anzahl": len(cmds),
                "ids": [c["id"] for c in cmds]},
               project_dir, project_name)
-    audit("builder_command_deadlock",
+    art = klassifiziere_deadlock(state, reply.content)
+    audit(f"builder_deadlock_{art}",
           {"max_builder_runden": max_builder_runden},
+          project_dir, project_name)
+    audit("builder_command_deadlock",
+          {"max_builder_runden": max_builder_runden,
+           "klassifikation": art},
           project_dir, project_name)
     kontext = (
         f"Der Builder hat in {max_builder_runden} aufeinanderfolgenden "

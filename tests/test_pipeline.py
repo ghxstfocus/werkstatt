@@ -4506,6 +4506,46 @@ def test_letzte_anker_fehler_initial_leer() -> None:
     assert s.letzte_ersatz_fehler == []
 
 
+# ---------- Stufe 0 Aenderung 4 ----------
+
+def test_klassifiziere_deadlock_anker() -> None:
+    """Anker-Fehler -> anker_nicht_gemessen."""
+    s = build_test_state()
+    s.letzte_anker_fehler = [(0, "x.py", "A", "nicht_gefunden")]
+    assert pipeline.klassifiziere_deadlock(s, "") == \
+        "anker_nicht_gemessen"
+
+
+def test_klassifiziere_deadlock_ersatz() -> None:
+    """Ersatz-Fehler -> anker_nicht_gemessen."""
+    s = build_test_state()
+    s.letzte_ersatz_fehler = [(0, "x.py", "tools.workbench_registry")]
+    assert pipeline.klassifiziere_deadlock(s, "") == \
+        "anker_nicht_gemessen"
+
+
+def test_klassifiziere_deadlock_rueckfrage() -> None:
+    """Reply ohne Patch/Command mit Frage -> rueckfrage."""
+    s = build_test_state()
+    reply = "Aus welchem Modul soll das kommen?"
+    assert pipeline.klassifiziere_deadlock(s, reply) == "rueckfrage"
+
+
+def test_klassifiziere_deadlock_leer() -> None:
+    """Reply ohne Patch/Command ohne Frage -> leer."""
+    s = build_test_state()
+    assert pipeline.klassifiziere_deadlock(s, "ok") == "leer"
+
+
+def test_klassifiziere_deadlock_patch_vorhanden() -> None:
+    """Mit PATCH-BEGINN: nie rueckfrage."""
+    s = build_test_state()
+    reply = "PATCH-BEGINN\nfoo?\nPATCH-ENDE"
+    # kein COMMAND, kein ? ohne Patch-Kontext
+    result = pipeline.klassifiziere_deadlock(s, reply)
+    assert result == "leer"
+
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)
