@@ -1,8 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach Probebetrieb 62 + Doku)
-Werkstatt-HEAD: da50145 (Doku README 2185)
-  inhaltlicher Solver-Stand: 1cb266c (Block 2a+4)
+Stand: 2026-10-15 (nach Probebetrieb 62 + 2183 B3)
+Werkstatt-HEAD: d706e66 (2183 Block 3, Solver-Doku)
 Letzter echter Probebetrieb: PB-62
 Letzter Commit in security-ai: 3bb5917
 Branch: main
@@ -251,6 +250,10 @@ Auflagen dieser Session:
   2198: collect_messwerte-Regex an Kuerzung
   2185: README komplett, 6 Rollen inkl. Solver
         (nachgezogen 2026-10-15, Commit da50145)
+  2183-B3: Solver-Wissensbasis (Solver sieht
+        Projekt-Doku wie Reviewer). Kategorie 3,
+        Reviewer-Block GO mit FF1-FF8. Commit
+        d706e66. +4 Tests, 350 passed.
 
 ================================================================
 5. OFFENE AUFLAGEN UND MERKPOSTEN
@@ -335,7 +338,10 @@ WICHTIG (naechste Session):
             (DD9, EE1).
           - _bauer_auflagen_prompt unveraendert
             (DD5).
-        Block 3 (Wissensbasis): OFFEN.
+        Block 3 (Wissensbasis): ERLEDIGT
+        (Commit d706e66). Solver sieht dieselbe
+        Projekt-Doku wie der Reviewer (S9).
+        agent_docs.solver = reviewer-Set.
         Block 5 (Solver-Loop + Fail-Pfade):
         OFFEN.
         Block 6 (Smoke-Test): OFFEN.
@@ -818,25 +824,21 @@ Der neue Bau-Chat soll:
 
 2. docs/PROTOKOLL-29-40.md lesen.
 
-3. Reihenfolge:
-   a) Solver-Kurskorrektur Block 3
-      (Solver-Wissensbasis). Kategorie 3.
-      agent_docs["solver"] in security-ai.yaml.
-      Prompt-Bau erweitern.
-   b) Solver-Kurskorrektur Block 5
+3. Reihenfolge (Block 3 erledigt 2026-10-15):
+   a) Solver-Kurskorrektur Block 5
       (Solver-Loop + Fail-Pfade). Kategorie 3.
-   c) Solver-Kurskorrektur Block 6
+   b) Solver-Kurskorrektur Block 6
       (Smoke-Test). Kategorie 2.
-   d) 2183-AQ Auftragsqualitaet (Rest).
+   c) 2183-AQ Auftragsqualitaet (Rest).
       Bei PB-62 praktisch angewendet (Pre-Flight
       whois.py gegen Zielcode). Formaler Nieder-
       schlag (Checkliste in docs/) offen.
       Kategorie 3.
-   e) 2200b/c/T Aggregator-Verfeinerung.
-   f) 2199a Zustandsmaschine (Kategorie 3).
-   g) 2199a Recovery-Zweig.
-   h) 2199-R7-P1 (Phase-1-R7-Wirkung).
-   i) Werkstatt-Vertrag (nach 2183 B/C,
+   d) 2200b/c/T Aggregator-Verfeinerung.
+   e) 2199a Zustandsmaschine (Kategorie 3).
+   f) 2199a Recovery-Zweig.
+   g) 2199-R7-P1 (Phase-1-R7-Wirkung).
+   h) Werkstatt-Vertrag (nach 2183 B/C,
       siehe MITTEL).
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-

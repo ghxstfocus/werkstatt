@@ -63,6 +63,22 @@ Anlass: Werkstatt-Auflage 2086, 2026-10-12.
 - Nach jedem Patch: py_compile, ruff, mypy,
   pytest.
 
+### Tests gegen pipeline.py
+
+Merkposten 2183-B3-1:
+  Vor dem Schreiben neuer Test-Funktionen den
+  Import-Stil der bestehenden Tests messen:
+    grep -n '^import pipeline\|^from pipeline' \
+      tests/test_pipeline.py
+  tests/test_pipeline.py nutzt 'import pipeline'
+  und qualifizierte Aufrufe (z.B.
+  pipeline.build_system_prompt), keine
+  Direkt-Importe. Unqualifizierte Aufrufe
+  fuehren zu F821 (ruff), bevor pytest sie
+  faengt.
+  Erkannt in 2183 Block 3 (Commit d706e66),
+  durch ruff gefangen, vor Commit korrigiert.
+
 ### Commit-Konventionen
 
 - Ein Commit pro Auflage, ausser thematisch
