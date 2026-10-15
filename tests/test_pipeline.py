@@ -4684,13 +4684,14 @@ def test_wirkungslos_flag_ist_trigger_c_vorbedingung() -> None:
 # ---------- Block Auftrag-erfuellt, B2 ----------
 
 def test_auftrag_bereits_erfuellt_mit_bestaetigung() -> None:
-    """Flag + Befund + nicht WIDERSPRUCH: True."""
+    """Flag + Befund ANDERER_FEHLER mit Auftrag: True (MM2)."""
     s = build_test_state()
     s.letzter_patch_wirkungslos = True
     s.solver_trigger_quellen = ["wirkungsloser_patch"]
     b = pipeline.SolverBefund(
-        art=pipeline.SolverDiagnose.UNKLAR,
-        eskalation="test", run_id="run-1")
+        art=pipeline.SolverDiagnose.ANDERER_FEHLER,
+        praezisierter_auftrag="test-auftrag",
+        run_id="run-1")
     s.solver_befunde = [b]
     assert pipeline.pruefe_auftrag_bereits_erfuellt(s) is True
 
@@ -4730,6 +4731,50 @@ def test_auftrag_bereits_erfuellt_ohne_quelle() -> None:
     """Flag, Quelle fehlt: False."""
     s = build_test_state()
     s.letzter_patch_wirkungslos = True
+    b = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="test", run_id="run-1")
+    s.solver_befunde = [b]
+    assert pipeline.pruefe_auftrag_bereits_erfuellt(s) is False
+
+
+# ---------- Block Auftrag-erfuellt, B5 ----------
+
+def test_erhoehe_solver_aufruf_unter_limit() -> None:
+    """Unter Limit: erhoeht, True."""
+    s = build_test_state()
+    assert s.solver_aufrufe == 0
+    assert pipeline.erhoehe_solver_aufruf(s, 3) is True
+    assert s.solver_aufrufe == 1
+
+
+def test_erhoehe_solver_aufruf_am_limit() -> None:
+    """Am Limit: kein erhoehen, False."""
+    s = build_test_state()
+    s.solver_aufrufe = 3
+    assert pipeline.erhoehe_solver_aufruf(s, 3) is False
+    assert s.solver_aufrufe == 3
+
+
+def test_bestaetigung_erfordert_vollstaendigen_befund() -> None:
+    """MM2: unvollstaendiger Befund ist keine Bestaetigung."""
+    s = build_test_state()
+    s.letzter_patch_wirkungslos = True
+    s.solver_trigger_quellen = ["wirkungsloser_patch"]
+    # ANDERER_FEHLER ohne praezisierten Auftrag: unvollstaendig.
+    b = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.ANDERER_FEHLER,
+        praezisierter_auftrag="",
+        run_id="run-1")
+    s.solver_befunde = [b]
+    assert pipeline.pruefe_auftrag_bereits_erfuellt(s) is False
+
+
+def test_bestaetigung_unklar_ist_keine() -> None:
+    """MM2: UNKLAR ist keine Bestaetigung."""
+    s = build_test_state()
+    s.letzter_patch_wirkungslos = True
+    s.solver_trigger_quellen = ["wirkungsloser_patch"]
     b = pipeline.SolverBefund(
         art=pipeline.SolverDiagnose.UNKLAR,
         eskalation="test", run_id="run-1")

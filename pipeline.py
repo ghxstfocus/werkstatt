@@ -764,6 +764,22 @@ INHALTSWOERTER_TRIGGER_B = (
 )
 
 
+def erhoehe_solver_aufruf(state: RunState,
+                         max_runden: int) -> bool:
+    """B5 (MM1): zentraler Zaehler fuer Solver-Aufrufe.
+
+    Erhoeht state.solver_aufrufe um 1, wenn das Limit
+    nicht erreicht ist. Rueckgabe True, wenn erhoeht.
+
+    Kein append in solver_trigger_quellen (Kontext
+    macht der Aufrufer).
+    """
+    if state.solver_aufrufe >= max_runden:
+        return False
+    state.solver_aufrufe += 1
+    return True
+
+
 def pruefe_trigger_b(reply: str) -> bool:
     """Stufe 0 Aenderung 3: Trigger B (Rueckfrage).
 
@@ -946,6 +962,8 @@ def builder_reply_mit_command_loop(
     project_dir: Path,
     project_name: str,
     max_builder_runden: int = 3,
+    max_llm: int = 0,
+    max_minutes: int = 0,
 ) -> tuple[LLMReply | None, int | None]:
     """Auflage 2187: Builder-COMMAND-Loop.
 
@@ -1034,6 +1052,12 @@ def builder_reply_mit_command_loop(
                        "key": list(key)},
                       project_dir, project_name)
                 return None, 19
+                # B5: Solver + B2 im Deadlock-Pfad.
+                _rc_dl = handle_deadlock_mit_solver(
+                    state, api_key, project_dir, project_name,
+                    max_llm, max_minutes)
+                if _rc_dl is not None:
+                    return None, _rc_dl
         print(f"[i] Builder-Runde {builder_runde}: "
               f"{len(cmds)} COMMAND(s) angefordert.")
         ergebnisse = execute_commands(
@@ -1056,6 +1080,12 @@ def builder_reply_mit_command_loop(
           {"max_builder_runden": max_builder_runden,
            "klassifikation": art},
           project_dir, project_name)
+    # B5: Solver + B2 im Deadlock-Pfad.
+    _rc_dl = handle_deadlock_mit_solver(
+        state, api_key, project_dir, project_name,
+        max_llm, max_minutes)
+    if _rc_dl is not None:
+        return None, _rc_dl
     kontext = (
         f"Der Builder hat in {max_builder_runden} aufeinanderfolgenden "
         f"Runden nur COMMAND-Zeilen geliefert, keinen Patch. "
@@ -2438,6 +2468,89 @@ def _fail_closed(state: RunState, project_dir: Path,
     return code
 
 
+def handle_deadlock_mit_solver(
+    state: RunState,
+    api_key: str,
+    project_dir: Path,
+    project_name: str,
+    max_llm: int,
+    max_minutes: int,
+) -> int | None:
+    """B5 (MM6): Solver + B2 im Deadlock-Pfad.
+
+    Liefert rc (0 bei B2-Erfolg) oder None wenn
+    Fail-closed-Pfad weiter genutzt werden soll.
+    """
+    _trigger_grund = ""
+    if state.letzter_patch_wirkungslos:
+        _trigger_grund = "wirkungsloser_patch"
+        audit("solver_trigger_c",
+              {"pfad": "deadlock"},
+              project_dir, project_name)
+    elif state.anker_fehler_in_folge >= 2:
+        _trigger_grund = "anker_nicht_gemessen"
+        audit("solver_trigger_a",
+              {"pfad": "deadlock",
+               "in_folge": state.anker_fehler_in_folge},
+              project_dir, project_name)
+    if not _trigger_grund:
+        return None
+
+    rc_solver = budget_or_recover(
+        state, max_llm,
+        "Vor Solver-Call (Deadlock).",
+        project_dir, project_name,
+        max_minutes=max_minutes)
+    if rc_solver is not None:
+        audit("solver_budget_exhausted",
+              {"pfad": "deadlock"},
+              project_dir, project_name)
+        return None
+
+    _msr = int(state.solver_config.get(
+        "max_runden", MAX_SOLVER_RUNDEN_DEFAULT))
+    if not erhoehe_solver_aufruf(state, _msr):
+        audit("solver_max_solver_runden_erreicht",
+              {"pfad": "deadlock",
+               "grund": _trigger_grund},
+              project_dir, project_name)
+        return None
+
+    solver_prompt = build_system_prompt(
+        state.agents["solver"], state.docs,
+        state.agent_docs.get("solver", []))
+    befund, fehler = rufe_solver(
+        state, api_key, solver_prompt,
+        grund_text=_trigger_grund)
+    if befund is None:
+        audit("solver_failed",
+              {"pfad": "deadlock", "grund": fehler},
+              project_dir, project_name)
+        return None
+    state.solver_befunde.append(befund)
+    state.solver_trigger_quellen.append(_trigger_grund)
+    audit("solver_befund",
+          {"pfad": "deadlock",
+           "art": befund.art.name,
+           "run_id": befund.run_id,
+           "quelle": _trigger_grund},
+          project_dir, project_name)
+
+    if pruefe_auftrag_bereits_erfuellt(state):
+        print("[+] Auftrag bereits erfuellt (Deadlock).")
+        audit("auftrag_bereits_erfuellt",
+              {"runden": len(state.review_runden),
+               "art": befund.art.name,
+               "trigger_grund": _trigger_grund,
+               "pfad": "deadlock"},
+              project_dir, project_name)
+        audit("pipeline_erfolg_ohne_commit",
+              {"grund": "auftrag_bereits_erfuellt"},
+              project_dir, project_name)
+        return 0
+    return None
+
+
 def pruefe_auftrag_bereits_erfuellt(state: RunState) -> bool:
     """Block Auftrag-erfuellt, B2: Auftrag bereits erfuellt?
 
@@ -2453,7 +2566,12 @@ def pruefe_auftrag_bereits_erfuellt(state: RunState) -> bool:
     if not state.solver_befunde:
         return False
     letzter = state.solver_befunde[-1]
-    return letzter.art != SolverDiagnose.WIDERSPRUCH
+    # MM2: Bestaetigung = nicht WIDERSPRUCH, nicht
+    # UNKLAR, und vollstaendig.
+    if letzter.art in (SolverDiagnose.WIDERSPRUCH,
+                       SolverDiagnose.UNKLAR):
+        return False
+    return letzter.ist_vollstaendig()
 
 
 def apply_and_recheck(state: RunState,
@@ -3389,6 +3507,7 @@ def run_pipeline(project_name: str, aufgabe: str,
         state, api_key, builder_prompt, _builder_user_prompt,
         project_dir, project_name,
         max_builder_runden=max_builder_runden,
+        max_llm=max_llm, max_minutes=max_minutes,
     )
     if rc is not None:
         return rc
@@ -3595,16 +3714,23 @@ def run_pipeline(project_name: str, aufgabe: str,
                 _msr = int(state.solver_config.get(
                     "max_runden",
                     MAX_SOLVER_RUNDEN_DEFAULT))
-                if state.solver_aufrufe >= _msr:
+                if not erhoehe_solver_aufruf(state, _msr):
                     state.review_runden[-1]["recovery"] = False
                     audit("solver_max_runden_erreicht",
                           {"runde": runde,
                            "aufrufe": state.solver_aufrufe,
-                           "max_runden": _msr},
+                           "max_runden": _msr,
+                           "pfad": "no_go"},
                           project_dir, project_name)
-                else:
-                    state.solver_aufrufe += 1
-                    # X5: eigenes Budget-Gate.
+                    rc = budget_or_recover(
+                        state, max_llm,
+                        "Nach Solver-Limit.",
+                        project_dir, project_name,
+                        max_minutes=max_minutes)
+                    if rc is not None:
+                        return rc
+                    continue
+                # X5: eigenes Budget-Gate.
                 rc_solver = budget_or_recover(
                     state, max_llm,
                     f"Vor Solver-Call (Runde {runde}).",
@@ -3661,6 +3787,7 @@ def run_pipeline(project_name: str, aufgabe: str,
                 state, api_key, builder_prompt, _bauer_no_go_prompt,
                 project_dir, project_name,
                 max_builder_runden=budget.get("max_builder_runden", 3),
+                max_llm=max_llm, max_minutes=max_minutes,
             )
             if bauer_rc is not None:
                 return bauer_rc
@@ -3706,6 +3833,7 @@ def run_pipeline(project_name: str, aufgabe: str,
                         project_dir, project_name,
                         max_builder_runden=budget.get(
                             "max_builder_runden", 3),
+                        max_llm=max_llm, max_minutes=max_minutes,
                     )
                 )
                 if bauer_rc is not None:
