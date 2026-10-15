@@ -189,6 +189,51 @@ Planner-Konzept v4 (final):
   Alle 40 Praezisierungen aus 3 Reviewer-
   Durchlaeufen eingearbeitet.
 
+P1-Live-Test (2026-10-15, nach Commit 9544c7e):
+  Erster echter --planner-Lauf.
+  Rohauftrag: "Schau dir den aktuellen
+  Projektstand an und plane den naechsten
+  sinnvollen Bau-Auftrag."
+
+  Ergebnis:
+    - Planner-Runde 1: Auftrag formuliert
+      (Punkt 26 aus SECURITY_LOG: security_ai-
+      Startpfad, __main__.py + systemd-Unit).
+    - Bestaetigung [j]: Lauf startet.
+    - Basis-Gate: gruen.
+    - Builder-Runde 1-3: kein Patch, nur
+      COMMAND-Zeilen (Rueckfragen zur Messung).
+    - Deadlock: builder_command_deadlock.
+    - Recovery: Reviewer diagnostiziert
+      "Zuschnitt-Fehler".
+    - Kein Commit in security-ai.
+    - security-ai unveraendert 0d0fe2c.
+
+  Erkenntnis:
+    - P1 funktioniert im Live-Betrieb.
+    - Der Planner hat den Ist-Zustand korrekt
+      gelesen und einen sinnvollen Auftrag
+      formuliert.
+    - ABER: Der Auftrag war zu gross (6 Schritte,
+      7-9 Dateien, Betriebsakt in einem Block).
+    - Der Builder misst korrekt und endlos,
+      kommt aber nie zum Bauen.
+    - Das ist genau der Zuschnitt-Fehler, den
+      P2 (Phasen-Modus) loesen soll.
+    - Bestaetigt: P2 ist dringender als gedacht.
+
+  Reviewer-Recovery-Vorschlag (im Audit):
+    Vier Bloecke:
+      1. Bestandsaufnahme (Kategorie 1, nur lesen).
+      2. __main__.py + Tests (Kategorie 3).
+      3. systemd-Unit + Doku (Kategorie 1/2).
+      4. Betriebsakt systemctl (Kategorie 3,
+         eigener GO, eigener Rollback).
+    Faustregel: hoechstens EIN neuer Code-Pfad
+    pro Block; systemd-Start nie im selben Block
+    wie der Code; Erkundung nie im selben Block
+    wie Bau.
+
 Doku-Migration (Werkstatt 254b3fb,
 security-ai 220c6be):
   - Profi-Konvention: PHASES -> ROADMAP,
@@ -215,6 +260,22 @@ WICHTIG:
         Naechster Block. Kategorie 3.
         Siehe docs/PLANNER-KONZEPT.md, Abschnitt 5
         und Abschnitt 13.
+        DRINGEND: der P1-Live-Test hat gezeigt,
+        dass der Planner einen zu grossen Auftrag
+        formuliert und der Builder im Deadlock
+        landet. P2 loest das durch Portionierung
+        in Unterbloecke. Vor P2 kann der Planner
+        nur kleine Auftraege abarbeiten.
+
+  Planner-Portionierung (Zwischenloesung):
+        OFFEN. Falls P2 zu gross ist, reicht
+        evtl. eine Zwischenloesung: der Planner
+        liefert bei grossen Auftraegen eine Liste
+        von Unterauftraegen, und der main-Pfad
+        ruft run_pipeline mehrfach auf. Das waere
+        eine vereinfachte Form des Phasen-Modus
+        ohne Persistenz, Gesamt-Review, atomaren
+        Rollback. Diskussion in naechster Session.
 
   Block P3 (ASK_HUMAN + Persistenz):
         OFFEN. Nach P2. Kategorie 3.
