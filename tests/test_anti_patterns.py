@@ -432,3 +432,71 @@ class TestBaueAnkerRueckmeldungMitAP:
         idx_ap = block.find("## ANKER-PRUEFUNG")
         idx_anti = block.find("## ANTI-PATTERNS")
         assert idx_ap < idx_anti
+
+
+# =====================================================================
+# Phase 3c-2: Reviewer-Injektion in build_system_prompt
+# =====================================================================
+
+class TestReviewerInjektion:
+    def _state(self):
+        from pathlib import Path as _P
+        return pipeline.RunState(
+            block_id="test-block",
+            aufgabe="test",
+            start_ts="2026-10-15T00:00:00+00:00",
+            docs={},
+            agents={},
+            always={},
+            optional={},
+            file_whitelist=["core/"],
+            api_key="test-key",
+            budget={"max_review_rounds": 5, "max_llm_calls": 30},
+            agent_docs={},
+            project_dir=_P("/tmp"),
+            project_name="test-projekt",
+        )
+
+    def _agent(self, name):
+        return {"name": name, "body": f"Body-{name}"}
+
+    def test_reviewer_mit_state_enthaelt_ap_block(self) -> None:
+        s = self._state()
+        prompt = pipeline.build_system_prompt(
+            self._agent("reviewer"), {}, [], state=s)
+        assert "## ANTI-PATTERNS" in prompt
+
+    def test_reviewer_ohne_state_kein_ap_block(self) -> None:
+        prompt = pipeline.build_system_prompt(
+            self._agent("reviewer"), {}, [])
+        assert "## ANTI-PATTERNS" not in prompt
+
+    def test_reviewer_mit_mit_anti_patterns_false(self) -> None:
+        s = self._state()
+        prompt = pipeline.build_system_prompt(
+            self._agent("reviewer"), {}, [],
+            state=s, mit_anti_patterns=False)
+        assert "## ANTI-PATTERNS" not in prompt
+
+    def test_builder_mit_state_kein_ap_block(self) -> None:
+        # Builder bekommt den Block via baue_anker_rueckmeldung,
+        # nicht via build_system_prompt.
+        s = self._state()
+        prompt = pipeline.build_system_prompt(
+            self._agent("builder"), {}, [], state=s)
+        assert "## ANTI-PATTERNS" not in prompt
+
+    def test_solver_mit_state_kein_ap_block(self) -> None:
+        # Solver bekommt den Block via rufe_solver (Phase 3c-3),
+        # nicht via build_system_prompt.
+        s = self._state()
+        prompt = pipeline.build_system_prompt(
+            self._agent("solver"), {}, [], state=s)
+        assert "## ANTI-PATTERNS" not in prompt
+
+    def test_reviewer_ap_block_max_3(self) -> None:
+        s = self._state()
+        prompt = pipeline.build_system_prompt(
+            self._agent("reviewer"), {}, [], state=s)
+        anzahl = prompt.count("- [ap-")
+        assert anzahl <= 3
