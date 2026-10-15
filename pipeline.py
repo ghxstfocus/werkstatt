@@ -517,6 +517,208 @@ def _lade_und_pruefe_projekt(project_name: str) -> dict[str, Any]:
     return config
 
 
+# =====================================================================
+# Anti-Pattern-Bibliothek (Phase 3a-1, 2026-10-15).
+# Katalog: anti-patterns/katalog.yaml.
+# Schema: anti-patterns/README.md.
+# =====================================================================
+ANTI_PATTERN_KATALOG = Path("/opt/werkstatt/anti-patterns/katalog.yaml")
+
+_AP_IDS_RE = re.compile(r"^ap-[a-z0-9-]+$")
+_AP_ROLLEN_ERLAUBT = frozenset({
+    "builder", "reviewer", "solver", "test_generator",
+})
+_AP_PFLICHTFELDER = (
+    "id", "titel", "beschreibung", "loesung",
+    "begruendung", "kategorie", "rollen",
+)
+
+# Bekannte Audit-Kinds (aus audit-logs/*.jsonl abgeleitet,
+# 2026-10-15). Neue Kinds MUESSEN hier ergaenzt werden,
+# sonst schlaegt die Katalog-Validierung fehl.
+_AUDIT_KINDS_BEKANNT = frozenset({
+    "anker_einrueckung_korrigiert",
+    "auftrag_bereits_erfuellt",
+    "basis_gate_rot",
+    "builder_anker_fehler",
+    "builder_command_deadlock",
+    "builder_command_executed",
+    "builder_deadlock_anker_nicht_gemessen",
+    "builder_prompt_gebaut",
+    "builder_reply_erhalten",
+    "builder_wirkungsloser_patch",
+    "code_patches_apply",
+    "code_patches_leer",
+    "command_executed",
+    "command_rejected",
+    "commit_applied",
+    "commit_paket_leer",
+    "commit_review",
+    "pipeline_approved",
+    "pipeline_ende",
+    "pipeline_erfolg_ohne_commit",
+    "pipeline_rejected",
+    "pipeline_start",
+    "recovery_basis_gate",
+    "recovery_basis_gate_nach_apply",
+    "recovery_builder_command_deadlock",
+    "recovery_eskalation",
+    "recovery_no_go",
+    "review_round",
+    "reviewer_run_solver",
+    "rollback_fail_closed",
+    "solver_befund",
+    "solver_befund_verworfen",
+    "solver_failed",
+    "solver_run_duplicate",
+    "solver_trigger",
+    "solver_trigger_c",
+})
+
+
+def _validiere_ap_eintrag(e: dict[str, Any], *, index: int) -> None:
+    for feld in _AP_PFLICHTFELDER:
+        if feld not in e:
+            print(f"[FAIL] Anti-Pattern[{index}]: Pflichtfeld "
+                  f"{feld!r} fehlt. Fail closed.")
+            sys.exit(1)
+    eid = e["id"]
+    if not isinstance(eid, str) or not _AP_IDS_RE.match(eid):
+        print(f"[FAIL] Anti-Pattern[{index}]: id {eid!r} passt nicht "
+              f"zu ^ap-[a-z0-9-]+$. Fail closed.")
+        sys.exit(1)
+    if not isinstance(e["rollen"], list) or not e["rollen"]:
+        print(f"[FAIL] Anti-Pattern[{index}] ({eid}): rollen leer "
+              f"oder kein list. Fail closed.")
+        sys.exit(1)
+    for r in e["rollen"]:
+        if r not in _AP_ROLLEN_ERLAUBT:
+            print(f"[FAIL] Anti-Pattern[{index}] ({eid}): Rolle "
+                  f"{r!r} unbekannt. Erlaubt: "
+                  f"{sorted(_AP_ROLLEN_ERLAUBT)}. Fail closed.")
+            sys.exit(1)
+    if e["kategorie"] not in (1, 2, 3):
+        print(f"[FAIL] Anti-Pattern[{index}] ({eid}): kategorie "
+              f"{e['kategorie']!r} nicht in {{1,2,3}}. Fail closed.")
+        sys.exit(1)
+    for ak in e.get("audit_kinds", []) or []:
+        if ak not in _AUDIT_KINDS_BEKANNT:
+            print(f"[FAIL] Anti-Pattern[{index}] ({eid}): "
+                  f"audit_kind {ak!r} unbekannt. Fail closed.")
+            sys.exit(1)
+    for tg in e.get("trigger_gruende", []) or []:
+        if tg not in ERLAUBTE_SOLVER_QUELLEN:
+            print(f"[FAIL] Anti-Pattern[{index}] ({eid}): "
+                  f"trigger_grund {tg!r} nicht in "
+                  f"ERLAUBTE_SOLVER_QUELLEN. Fail closed.")
+            sys.exit(1)
+
+
+def lade_anti_patterns() -> list[dict[str, Any]]:
+    """Laedt und validiert anti-patterns/katalog.yaml.
+
+    Fail closed bei fehlender oder ungueltiger Datei.
+    """
+    if not ANTI_PATTERN_KATALOG.exists():
+        print(f"[FAIL] Anti-Pattern-Katalog fehlt: "
+              f"{ANTI_PATTERN_KATALOG}. Fail closed.")
+        sys.exit(1)
+    with ANTI_PATTERN_KATALOG.open(encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
+    if not isinstance(data, dict):
+        print("[FAIL] Anti-Pattern-Katalog ist kein dict. Fail closed.")
+        sys.exit(1)
+    if data.get("version") != 1:
+        print("[FAIL] Anti-Pattern-Katalog version != 1. Fail closed.")
+        sys.exit(1)
+    eintraege = data.get("eintraege", [])
+    if not isinstance(eintraege, list):
+        print("[FAIL] Anti-Pattern-Katalog eintraege kein list. "
+              "Fail closed.")
+        sys.exit(1)
+    seen: set[str] = set()
+    for i, e in enumerate(eintraege):
+        if not isinstance(e, dict):
+            print(f"[FAIL] Anti-Pattern[{i}] kein dict. Fail closed.")
+            sys.exit(1)
+        _validiere_ap_eintrag(e, index=i)
+        if e["id"] in seen:
+            print(f"[FAIL] Anti-Pattern[{i}]: id {e['id']!r} "
+                  f"doppelt. Fail closed.")
+            sys.exit(1)
+        seen.add(e["id"])
+    return eintraege
+
+
+def _ap_audit_haeufigkeit() -> dict[str, int]:
+    """Zaehlt bekannte audit_kinds in den Werkstatt-Audit-Logs.
+
+    Wird nur fuer Sortierung genutzt (VV1: die drei mit den
+    meisten Treffern). Fehlende Logs = alle Zaehler 0.
+    """
+    haeufig: dict[str, int] = {k: 0 for k in _AUDIT_KINDS_BEKANNT}
+    logdir = Path("/opt/werkstatt/audit-logs")
+    if not logdir.exists():
+        return haeufig
+    for jf in sorted(logdir.glob("agent-pipeline-*.jsonl")):
+        try:
+            for line in jf.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                k = d.get("kind")
+                if k in haeufig:
+                    haeufig[k] += 1
+        except OSError:
+            continue
+    return haeufig
+
+
+def anti_patterns_fuer(
+    rolle: str,
+    trigger_grund: str | None = None,
+    *,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Filtert Anti-Patterns nach Rolle und optional Trigger-Grund.
+
+    - Eintrag wird gezeigt, wenn rolle in e['rollen'].
+    - Wenn trigger_grund gesetzt:
+        - Eintrag ohne trigger_gruende: immer zeigen
+          (VV2 Fallback).
+        - Eintrag mit trigger_gruende: nur zeigen, wenn
+          trigger_grund enthalten.
+    - Sortierung: nach Summe der audit_kinds-Treffer
+      im Audit-Log, absteigend. Eintraege ohne
+      audit_kinds am Ende.
+    - limit: max Anzahl zurueckgegebener Eintraege (VV1).
+    """
+    alle = lade_anti_patterns()
+    treffer = _ap_audit_haeufigkeit()
+
+    def sort_key(e: dict[str, Any]) -> int:
+        s = 0
+        for ak in e.get("audit_kinds", []) or []:
+            s += treffer.get(ak, 0)
+        return -s
+
+    ausgewaehlt: list[dict[str, Any]] = []
+    for e in alle:
+        if rolle not in e.get("rollen", []):
+            continue
+        if trigger_grund is not None:
+            tgs = e.get("trigger_gruende")
+            if tgs and trigger_grund not in tgs:
+                continue
+        ausgewaehlt.append(e)
+    ausgewaehlt.sort(key=sort_key)
+    return ausgewaehlt[:limit]
+
+
 def load_agents(agents_dir: str) -> dict[str, dict[str, Any]]:
     base = Path(agents_dir).expanduser()
     if not base.exists():

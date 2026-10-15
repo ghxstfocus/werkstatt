@@ -1,0 +1,209 @@
+# anti-patterns/katalog.yaml
+# Werkstatt — Anti-Pattern-Bibliothek.
+#
+# Sammelt bekannte Fehler-Muster, ihre Loesung und ihren
+# historischen Anlass. Wird von Rollen-Prompts (Builder,
+# spaeter Reviewer und Solver) gelesen, gefiltert nach
+# Rolle und Trigger-Grund.
+#
+# Schema: siehe anti-patterns/README.md.
+# Pflichtfelder pro Eintrag:
+#   id, titel, beschreibung, loesung, begruendung,
+#   kategorie, rollen.
+# Optional:
+#   anlass, audit_kinds, trigger_gruende.
+#
+# id-Regex: ^ap-[a-z0-9-]+$
+# kategorie: 1 | 2 | 3
+# rollen: nicht leer, Werte aus {builder, reviewer,
+#         solver, test_generator}
+# audit_kinds: muss in _AUDIT_KINDS_BEKANNT (pipeline.py)
+#              enthalten sein.
+# trigger_gruende: muss in ERLAUBTE_SOLVER_QUELLEN
+#                  (pipeline.py) enthalten sein.
+
+version: 1
+
+eintraege:
+
+  # -----------------------------------------------------------------
+  # Werkstatt-Anti-Patterns (aus docs/WORKFLOW.md).
+  # -----------------------------------------------------------------
+
+  - id: ap-anker-dekorator
+    titel: "Anker in Dekorator-Kette"
+    beschreibung: >
+      Patch-Anker auf Klassen mit Dekorator
+      (@dataclass, @functools.*, @app.route) ohne den
+      Dekorator einzubeziehen. Der Patch kann zwischen
+      Dekorator und Klasse eingefuegt werden.
+    loesung: >
+      Bei Patch-Ankern auf Klassen mit Dekorator muss
+      der Dekorator in den Anker aufgenommen werden.
+    begruendung: >
+      Der Anker ist syntaktisch eindeutig, aber
+      semantisch falsch. Der Patch landet in einer
+      unerwarteten Position.
+    anlass:
+      - "Werkstatt-Auflage 2086 (2026-10-12)"
+    audit_kinds:
+      - builder_anker_fehler
+      - anker_einrueckung_korrigiert
+    kategorie: 2
+    rollen:
+      - builder
+      - reviewer
+
+  - id: ap-anker-semantik
+    titel: "Patch-Anker ohne Semantik-Pruefung"
+    beschreibung: >
+      Ein Anker kann syntaktisch eindeutig (count == 1)
+      und semantisch falsch sein. Die Pruefung auf
+      Eindeutigkeit genuegt nicht.
+    loesung: >
+      Bei jedem Anker pruefen, ob er semantisch
+      zusammenhangende Einheiten trifft. Bei Klassen
+      mit Dekorator gehoert der Dekorator dazu. Bei
+      Funktionsbloecken gehoeren Docstring und Signatur
+      zusammen.
+    begruendung: >
+      Ein syntaktisch eindeutiger Anker kann trotzdem
+      an der falschen Stelle greifen. Semantische
+      Pruefung ist zusaetzlich noetig.
+    anlass:
+      - "Werkstatt-Auflage 2086 (2026-10-12)"
+    audit_kinds:
+      - builder_anker_fehler
+    kategorie: 2
+    rollen:
+      - builder
+      - reviewer
+
+  # -----------------------------------------------------------------
+  # Generische Anti-Patterns (aus security-ai/docs/WORKFLOW.md,
+  # Abschnitt "Anti-Patterns aus der Praxis").
+  # -----------------------------------------------------------------
+
+  - id: ap-test-name-substring
+    titel: "Test-Name kollidiert mit Substring-Check"
+    beschreibung: >
+      Ein Test-Name kann in einen Pfad einfliessen (z.B.
+      pytest tmp_path mit Testnamen). Enthaelt der Name
+      einen String, auf den der Test selbst prueft,
+      schlaegt die Pruefung fehl, obwohl kein Fehler
+      vorliegt.
+    loesung: >
+      Testnamen neutral waehlen, wenn der Name in Pfade
+      einfliessen kann. Oder Marker-Checks auf
+      spezifische Strings einschraenken.
+    begruendung: >
+      Substring-Checks auf Pfade oder Responses finden
+      den Test-Namen selbst und liefern
+      falsch-positive Treffer.
+    anlass:
+      - "security-ai/docs/WORKFLOW.md, Abschnitt Anti-Patterns"
+    audit_kinds: []
+    kategorie: 2
+    rollen:
+      - builder
+      - test_generator
+
+  - id: ap-fail-open-4xx
+    titel: "Fail open bei Betriebsfehler als 4xx"
+    beschreibung: >
+      Ein Betriebsfehler (z.B. DB-Ausfall) wird als
+      4xx-Status maskiert. Der Nutzer denkt, er habe
+      sich vertippt, obwohl das System gestoert ist.
+    loesung: >
+      Format-Fehler als 4xx (ServiceError). Betriebs-
+      fehler als 5xx (OperationError). Nicht vermischen.
+      Kein breites except Exception, das 400 liefert.
+    begruendung: >
+      4xx bedeutet "Nutzerfehler", 5xx bedeutet
+      "Systemfehler". Eine Vermischung fuehrt zu
+      falscher Fehlerdiagnose und falscher
+      Nutzerreaktion.
+    anlass:
+      - "security-ai/docs/WORKFLOW.md, Abschnitt Anti-Patterns"
+    audit_kinds: []
+    kategorie: 3
+    rollen:
+      - builder
+      - reviewer
+
+  - id: ap-import-nachtrag-ohne-ruff
+    titel: "Import-Nachtrag ohne ruff-Nachmessung"
+    beschreibung: >
+      Nach einer Aenderung, die Import-Zeilen ergaenzt,
+      wird nur mypy isoliert gemessen, nicht ruff.
+      Import-Reihenfolge-Fehler (I001) bleiben
+      unentdeckt bis zur naechsten Gesamtmessung.
+    loesung: >
+      Nach jedem Commit mit Import- oder Signatur-
+      Aenderung im Verifikationsblock ruff check .
+      mitlaufen lassen.
+    begruendung: >
+      mypy prueft Typen, nicht Import-Reihenfolge.
+      ruff ist die einzige Quelle fuer I001.
+    anlass:
+      - "security-ai, A900-2b-2c, Auflage 1538"
+      - "behoben in 12d9a28 und 81a3607"
+    audit_kinds: []
+    kategorie: 2
+    rollen:
+      - builder
+
+  - id: ap-code-commit-ohne-ruff
+    titel: "Code-Commit ohne ruff-Messung"
+    beschreibung: >
+      Code wird committet, ruff laeuft nicht im selben
+      Block. I001- oder andere Lint-Regressionen fallen
+      erst beim naechsten Commit auf.
+    loesung: >
+      Vor jedem Commit, der .py-Dateien aendert,
+      ruff check . ausfuehren. Bei reinen Doku-Commits
+      entfaellt es. ruff nicht als letztes Glied einer
+      &&-Kette unmittelbar vor git commit verketten.
+    begruendung: >
+      Ein ungemessener Commit ist ein unverifizierter
+      Commit. Lint-Regressionen werden spaeter teuer.
+    anlass:
+      - "security-ai/docs/WORKFLOW.md, Abschnitt Anti-Patterns"
+    audit_kinds: []
+    kategorie: 2
+    rollen:
+      - builder
+
+  # -----------------------------------------------------------------
+  # Bau-Chat-Befund aus der Phase-3-Recherche (2026-10-15).
+  # Kein Doku-Zitat, sondern Messung in pipeline.py.
+  # -----------------------------------------------------------------
+
+  - id: ap-string-literal-statt-konstante
+    titel: "String-Literal statt Konstante fuer denselben Wert"
+    beschreibung: >
+      Derselbe logische Wert wird an einer Stelle als
+      Konstante definiert und an einer anderen als
+      String-Literal verwendet. Bei Umbenennung oder
+      Aenderung divergieren die Stellen unbemerkt.
+    loesung: >
+      Werte, die mehrfach verwendet werden, als Konstante
+      zentralisieren und ausschliesslich die Konstante
+      referenzieren. Kein String-Literal an zweiter
+      Stelle.
+    begruendung: >
+      Literale werden von keinem Werkzeug als abhaengig
+      erkannt. grep findet sie nur, wenn der Text
+      bekannt ist. Konstanten sind ueber den Namen
+      nachvollziehbar.
+    anlass:
+      - "Bau-Chat-Befund Phase-3-Recherche (2026-10-15)"
+      - >
+        Beispiel: 'anker_nicht_gemessen' als Konstante
+        in ERLAUBTE_SOLVER_QUELLEN und als String-Literal
+        in handle_deadlock_mit_solver (pipeline.py).
+    audit_kinds: []
+    kategorie: 2
+    rollen:
+      - builder
+      - reviewer
