@@ -106,9 +106,19 @@ class TestRolle:
         assert "ap-rueckgabe-typ-helper" in ids
         assert len(ids) == 4
 
-    def test_solver_keine_eintraege(self) -> None:
+    def test_solver_hat_6_eintraege(self) -> None:
+        # Phase 3c-1 (Commit 4916b01): Solver-Rolle zu
+        # 6 Katalogeintraegen ergaenzt.
         aps = pipeline.anti_patterns_fuer("solver", limit=100)
-        assert aps == []
+        ids = {e["id"] for e in aps}
+        assert ids == {
+            "ap-anker-dekorator",
+            "ap-anker-semantik",
+            "ap-string-literal-statt-konstante",
+            "ap-api-aus-gedaechtnis",
+            "ap-anker-aus-chat",
+            "ap-fehlender-assert-patch",
+        }
 
     def test_unbekannte_rolle_leer(self) -> None:
         aps = pipeline.anti_patterns_fuer("gibt-es-nicht", limit=100)
