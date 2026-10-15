@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach 2183 + Stufe 0 + PB-63)
-Werkstatt-HEAD: 737afe9 (Stufe 0: Selbstheilung)
+Stand: 2026-10-15 (nach 2183 + Stufe 0 + Auftrag-erfuellt)
+Werkstatt-HEAD: 3cf7404 (Auftrag-erfuellt + Solver-Prompt)
 Letzter echter Probebetrieb: PB-63 (8db36f7, 2026-10-15)
 Letzter Commit in security-ai: 8db36f7
 Branch: main
@@ -262,8 +262,23 @@ Auflagen dieser Session:
         umgestellt. Erster echter Lauf nach Neudefinition
         mit sauberem Werkstatt-Stand. Commit 8db36f7,
         Tag probebetrieb-63. Runden 2, llm_calls 7, rc 0.
-  Feldtest PB-64 (Feld): Auftrag bereits erfuellt.
-        rc=7. Neuer Befund (siehe Merkposten).
+  Feldtest PB-64 (Feld, 2026-10-15): Auftrag bereits
+        erfuellt. Drei Laeufe:
+        - Lauf 1 (11:04): Deadlock, kein Solver-Trigger
+          im Deadlock-Pfad. rc=19.
+        - Lauf 2 (11:21): Solver gerufen, aber UNKLAR
+          (Solver-Prompt ohne Auftrag). rc=19.
+        - Lauf 3 (11:26): Solver gerufen, ANDERER_FEHLER
+          (Auftrag bereits erfuellt). B2 greift, rc=0,
+          kein Commit. Ziel-Repo unveraendert 8db36f7.
+        Loesung: Block Auftrag-erfuellt (B1-B5) +
+        Solver-Prompt-Auftrag (Commit 3cf7404).
+  Block Auftrag-erfuellt: ERLEDIGT 2026-10-15.
+        B1 (wirkungslos), B3 (Signal), B4 (Trigger C),
+        B2 (Pipeline-Pfad), B5 (Deadlock-Solver),
+        A2 (solver.md-Hinweis), AUFTRAG-Block.
+        Commits a0d436b, 183f560, 0f6442d, 7fdaffa,
+        3cf7404. +24 Tests, 407 passed.
   Stufe 0 (Selbstheilung): ERLEDIGT 2026-10-15.
         A1+1b: pruefe_anker_gegen_messung + pruefe_
         ersatz_gegen_messung (deterministisch).
@@ -584,6 +599,9 @@ STUFE 0 (Selbstheilung) — ERLEDIGT 2026-10-15.
 MITTEL (Merkposten):
 
   Auftrag bereits erfuellt (Feldtest PB-64, 2026-10-15):
+        STATUS: ERLEDIGT in Commits a0d436b bis 3cf7404.
+        Die folgende Beschreibung dokumentiert den
+        urspruenglichen Befund:
         Die Werkstatt hat keinen Pfad fuer "Auftrag ist
         bereits erfuellt". Beobachtet:
         1. Der Builder hat korrekt erkannt: "Die Datei
@@ -965,18 +983,16 @@ Der neue Bau-Chat soll:
 
 2. docs/PROTOKOLL-29-40.md lesen.
 
-3. Reihenfolge (2183 + Stufe 0 + PB-63, 2026-10-15):
-   a) Block "Auftrag bereits erfuellt" (Kategorie 3).
-      Deckt die Luecke aus Feldtest PB-64.
-      Inklusive Solver-Trigger-Erweiterung
-      (wirkungsloser Patch, kein Patch noetig).
-   b) PB-64-Wiederholung (Feldtest Solver).
-   c) Block "Agent-Memory" (Kategorie 3).
+3. Reihenfolge (Stufe 0 + Auftrag-erfuellt erledigt
+   2026-10-15):
+   a) PB-65 mit echtem Auftrag. Test der Solver-Blocks
+      im normalen Erfolgspfad (nicht nur Deadlock).
+   b) Block "Agent-Memory" (Kategorie 3).
       Projekt-Memory + Run-Memory + Verdichtung.
       Voraussetzung fuer Phasen-Modus.
-   d) Ziel 3: Ordner-/Doku-Schema + Scaffolder.
-   e) Ziel 2: Phasen-Modus.
-   f) Solver-Kurskorrektur Block 6, 2183-AQ,
+   c) Ziel 3: Ordner-/Doku-Schema + Scaffolder.
+   d) Ziel 2: Phasen-Modus.
+   e) Solver-Kurskorrektur Block 6, 2183-AQ,
       2200b/c/T, 2199a, 2199-R7-P1, Werkstatt-Vertrag.
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
