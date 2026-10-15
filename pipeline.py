@@ -104,6 +104,7 @@ MAX_SOLVER_RUNDEN_DEFAULT = 3
 
 ERLAUBTE_SOLVER_QUELLEN = frozenset({
     "p1_trigger", "reviewer_command",
+    "anker_nicht_gemessen", "builder_rueckfrage",
 })
 # Redaction (lokal, projektunabhaengig)
 sys.path.insert(0, str(Path(__file__).parent))
@@ -751,6 +752,29 @@ def parse_empfehlung(text: str) -> dict[str, str]:
             emp["prioritaet"] = s.split(":", 1)[1].strip()
     return emp
 
+
+
+INHALTSWOERTER_TRIGGER_B = (
+    "welche", "welcher", "welches",
+    "aus welchem", "aus welcher",
+    "wo ", "wohin", "woher",
+    "was ", "wie ", "warum",
+    "soll ich", "sollte ich",
+)
+
+
+def pruefe_trigger_b(reply: str) -> bool:
+    """Stufe 0 Aenderung 3: Trigger B (Rueckfrage).
+
+    II5: Fuss-Fenster 300 Zeichen.
+    II6: "?" UND Inhaltswort. Stopwoerter wie
+         "Fertig?" triggern nicht.
+    HH9-Fall 2: Patch vorhanden, aber Rueckfrage im Fuss.
+    """
+    fenster = reply[-300:].lower()
+    if "?" not in fenster:
+        return False
+    return any(w in fenster for w in INHALTSWOERTER_TRIGGER_B)
 
 
 def klassifiziere_deadlock(state: RunState,
@@ -3489,9 +3513,27 @@ def run_pipeline(project_name: str, aufgabe: str,
                        grund == P1_GRUND_GETRIGGERT,
                    "grund": grund},
                   project_dir, project_name)
-            # Auflage 2183 B (X6): Solver-Call NUR
-            # bei GETRIGGERT.
+            # Stufe 0 Aenderung 3: Trigger A und B.
+            # II7: nur EIN Solver-Ruf pro Runde. P1
+            # hat Vorrang. A/B nur wenn P1 nicht greift.
+            _trigger_grund = ""
             if grund == P1_GRUND_GETRIGGERT:
+                _trigger_grund = "p1_trigger"
+            elif state.anker_fehler_in_folge >= 2:
+                _trigger_grund = "anker_nicht_gemessen"
+                audit("solver_trigger_a",
+                      {"runde": runde,
+                       "in_folge":
+                           state.anker_fehler_in_folge},
+                      project_dir, project_name)
+            elif pruefe_trigger_b(reply.content):
+                _trigger_grund = "builder_rueckfrage"
+                audit("solver_trigger_b",
+                      {"runde": runde},
+                      project_dir, project_name)
+            # Auflage 2183 B (X6): Solver-Call NUR
+            # bei GETRIGGERT (P1) oder A/B.
+            if _trigger_grund:
                 # Auflage 2183 Block 5 (GG1):
                 # Obergrenze fuer Solver-Aufrufe.
                 _msr = int(state.solver_config.get(
@@ -3522,7 +3564,8 @@ def run_pipeline(project_name: str, aufgabe: str,
                         state.agents["solver"], state.docs,
                         state.agent_docs.get("solver", []))
                     befund, fehler = rufe_solver(
-                        state, api_key, solver_prompt)
+                        state, api_key, solver_prompt,
+                        grund_text=_trigger_grund)
                     if befund is None:
                         # X3: Marker zurueck,
                         # fail-closed (kein Dauer-Block).
@@ -3534,12 +3577,12 @@ def run_pipeline(project_name: str, aufgabe: str,
                     else:
                         state.solver_befunde.append(befund)
                         state.solver_trigger_quellen.append(
-                            "p1_trigger")
+                            _trigger_grund)
                         audit("solver_befund",
                               {"runde": runde,
                                "art": befund.art.name,
                                "run_id": befund.run_id,
-                               "quelle": "p1_trigger"},
+                               "quelle": _trigger_grund},
                               project_dir, project_name)
             rc = budget_or_recover(state, max_llm,
                                   f"Vor Builder-Neubau (NO-GO Runde {runde}).",

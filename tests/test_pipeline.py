@@ -4546,6 +4546,52 @@ def test_klassifiziere_deadlock_patch_vorhanden() -> None:
     assert result == "leer"
 
 
+# ---------- Stufe 0 Aenderung 3 ----------
+
+def test_pruefe_trigger_b_bei_patch_mit_frage_im_fuss() -> None:
+    """Patch + Frage im Fuss: Trigger."""
+    reply = (
+        "PATCH-BEGINN\nanker: x\nersatz: y\nPATCH-ENDE\n"
+        "Aus welchem Modul soll das kommen?"
+    )
+    assert pipeline.pruefe_trigger_b(reply) is True
+
+
+def test_pruefe_trigger_b_bei_patch_ohne_frage() -> None:
+    """Patch ohne Frage: kein Trigger."""
+    reply = "PATCH-BEGINN\nanker: x\nersatz: y\nPATCH-ENDE"
+    assert pipeline.pruefe_trigger_b(reply) is False
+
+
+def test_pruefe_trigger_b_bei_langer_antwort_ohne_frage() -> None:
+    """Langer Reply ohne Frage: kein Trigger."""
+    reply = "x" * 5000
+    assert pipeline.pruefe_trigger_b(reply) is False
+
+
+def test_pruefe_trigger_b_bei_frage_ohne_inhaltswort() -> None:
+    """Fertig? im Fuss: kein Trigger (II6)."""
+    reply = "PATCH-BEGINN\nfoo\nPATCH-ENDE\nFertig?"
+    assert pipeline.pruefe_trigger_b(reply) is False
+
+
+def test_pruefe_trigger_b_bei_frage_im_mittelteil() -> None:
+    """Frage im Mittelteil, Fuss ohne: kein Trigger."""
+    reply = "Was soll ich tun?\n" + "y" * 400
+    assert pipeline.pruefe_trigger_b(reply) is False
+
+
+def test_erlaubte_solver_quellen_enthaelt_neue() -> None:
+    """Neue Trigger-Gruende sind in ERLAUBTE_SOLVER_QUELLEN."""
+    assert "anker_nicht_gemessen" in pipeline.ERLAUBTE_SOLVER_QUELLEN
+    assert "builder_rueckfrage" in pipeline.ERLAUBTE_SOLVER_QUELLEN
+
+
+def test_inhaltswoerter_liste_vorhanden() -> None:
+    """Liste der Inhaltswoerter existiert und ist nicht leer."""
+    assert len(pipeline.INHALTSWOERTER_TRIGGER_B) >= 5
+
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)
