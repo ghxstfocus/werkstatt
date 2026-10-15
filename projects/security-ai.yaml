@@ -18,12 +18,14 @@ project_dir: /opt/security-ai
 #   docs/CONTEXT_PROMPT.md  -> bevorzugt docs/CONTEXT.md
 #   docs/REVIEWER_HANDOFF.md -> bevorzugt docs/REVIEWER.md
 docs:
-  context: docs/CONTEXT_PROMPT.md
-  reviewer: docs/REVIEWER_HANDOFF.md
-  decisions: docs/DESIGN_DECISIONS.md
-  security_log: docs/SECURITY_REVIEW_LOG.md
+  # Nach Doku-Migration 2026-10-15:
+  # docs.context  und docs.reviewer entfallen
+  # (Zwei-Webchat-Artefakte, Inhalte verteilt).
+  # docs.workflow umbenannt zu docs.conventions.
+  conventions: docs/CONVENTIONS.md
+  decisions: docs/DECISIONS.md
+  security_log: docs/SECURITY_LOG.md
   web_security: docs/WEB_SECURITY_CHECKLIST.md
-  workflow: docs/WORKFLOW.md
 
 # Diese Messungen laufen IMMER, ohne Reviewer-Entscheidung.
 # Deterministisch, projektunabhaengig.
@@ -62,22 +64,18 @@ optional_catalog:
 # Referenzen beziehen sich auf die Schluessel unter docs:.
 agent_docs:
   reviewer:
-    - context
-    - workflow
-    - reviewer
+    - conventions
     - decisions
     - security_log
     - web_security
   builder:
-    - context
+    - conventions
     - decisions
     - web_security
   test_generator:
-    - context
+    - conventions
   solver:
-    - context
-    - workflow
-    - reviewer
+    - conventions
     - decisions
     - security_log
     - web_security

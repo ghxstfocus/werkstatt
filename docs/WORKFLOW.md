@@ -363,6 +363,151 @@ Der Auftrag verwendete "192.168.178.1" — der
 Builder bekam "[IPV4]" und der Test schlug
 fehl.
 
+## Verbindlichkeits-Hierarchie
+
+Drei Stufen. Bei Zweifel gilt die restriktivere Auslegung.
+
+1. **Verbindlich (Hard-Rules).** Nicht abdingbar.
+   Verstoss = STOP, keine Ausfuehrung. Der Bau-Chat
+   prueft diese Regeln VOR jedem Ausfuehrungsblock.
+2. **Pflicht (Routine).** Nach jedem Schritt.
+   Verstoss = Korrektur im naechsten Block.
+   Selbst-Review, Doku-Pflege, Commit-Konventionen.
+3. **Empfehlung (Praxis).** Nuetzlich, aber
+   situationsabhaengig. Anti-Patterns, Kontext-Hygiene.
+
+## Fakten-Check-Takt
+
+Pro Nachricht genau EIN Ausfuehrungsblock.
+Der naechste Block kommt erst, nachdem der Nutzer
+die Ausgabe des vorherigen gepastet hat.
+
+Kein Vorab-Stapeln mehrerer Bloecke.
+Mehrere Fakten sequenziell klaeren.
+
+Grund: Scroll-Chaos beim Nutzer, doppelte Befehle,
+schwer nachvollziehbare Reihenfolge.
+
+Ausnahme: `&&`-verkettete Einheiten in einem Block
+sind ok, solange sie zusammen ein Ergebnis liefern
+(z. B. Backup + patch + verify).
+
+## Selbst-Review (Pflicht vor jedem Commit)
+
+Vor jedem Commit:
+
+1. `git status --porcelain` pruefen.
+2. `git diff` pruefen (was aendert sich wirklich?).
+3. Alle Tests gruen (`pytest -q`).
+4. ruff sauber (`ruff check . --no-cache`).
+5. mypy sauber (rekursiv, P6-Regel).
+6. Doku nachgezogen (Feature + Prompt + Aktualisierung).
+7. Commit-Message vollstaendig (Ausgangslage,
+   Aenderung, Tests, Verifikation, Reviewed).
+
+Ohne diese Punkte kein Commit.
+
+## Verifikations-Reihenfolge
+
+Nach jedem Patch, jede Messung isoliert und in
+dieser Reihenfolge:
+
+1. `py_compile` — Syntax.
+2. `ruff check --no-cache` — Lint.
+3. `mypy` (rekursiv) — Typen.
+4. `pytest --collect-only -q <datei>` — Sammelzahl.
+5. `pytest -q <datei>` — Tests.
+6. `git status --porcelain` — Sauberkeit.
+7. `git diff --stat` — Umfang.
+
+Erst wenn alle gruen sind: Commit.
+
+## Umgang mit unklaren Zustaenden
+
+### Abgebrochener Paste
+
+Wenn ein Paste mitten im Befehl abbricht: nicht
+weitermachen. Erst `git status --porcelain` messen,
+dann entscheiden, ob der halbe Schritt rueckgaengig
+gemacht werden muss.
+
+### Widerspruch zwischen Ausgabe und Realitaet
+
+Wenn die Ausgabe etwas anderes zeigt als erwartet:
+nicht raten. `cat`, `sed`, `grep` — die Datei
+sprechen lassen.
+
+### Phantom-Dateien
+
+Ein Paste mit Sonderzeichen erzeugt manchmal
+leere Dateien (0 Byte). Nach jedem Paste:
+`git status --porcelain` pruefen. Unbekannte `??`
+sofort entfernen mit `rm -- 'name'`.
+
+## Sprache und Format
+
+- Keine Umlaute in Code-Bloecken (oe, ue, ae, ss).
+  Grund: Shell-, Python- und Tool-Kompatibilitaet.
+- In Kommentaren und Doku: Umlaute erlaubt, aber
+  in Code-Bloecken nicht.
+- Blockueberschriften mit `##`.
+- Status-Icons in ROADMAP/STATUS:
+  ✅ abgeschlossen, 🔨 in Arbeit, 💡 geplant,
+  ❌ abgebrochen, ⏸ pausiert.
+
+## Was nicht verhandelbar ist
+
+- Fail closed statt Fail open.
+- Gemessen statt erinnert.
+- Ein Commit pro Block.
+- Reviewer-Block vor Kategorie-3-Commits.
+- Keine Secrets im Auftrag, in Prompts oder in
+  Commit-Messages.
+- Keine Phantom-Dateien im Repo.
+- Am Ende jeder Session: `git status` sauber,
+  Handoff aktuell.
+
+## Kontext-Hygiene
+
+- Pro Nachricht ein Block.
+- Kein Copy-Paste aus dem Reviewer-Freitext.
+- Nur Codeblock, nicht Begleittext.
+- Keine Umlaute in Code.
+- Keine mehrzeiligen Heredocs > ~3 KB.
+
+Diese Regeln halten den Chat-Zustand sauber und
+reproduzierbar.
+
+## Doku-Pflege (generisch)
+
+Doku-Pflege ist Pflicht. Ein Unterschritt gilt erst
+als abgeschlossen, wenn die zugehoerige Doku
+nachgezogen ist. Ein Commit ohne Doku-Nachzug ist
+unvollstaendig.
+
+Drei Ebenen:
+
+1. **Projekt-Doku** (im Projekt): STATUS, ROADMAP,
+   DECISIONS, SECURITY_LOG, CHANGELOG.
+2. **Werkstatt-Doku**: WORKFLOW, ROADMAP,
+   PROTOKOLL, Bau-Handoff.
+3. **Rollen-Doku**: agents/*.md.
+
+Bei Aenderungen pruefen: wer ist Konsument?
+(Feature + Prompt + Aktualisierung.)
+
+## Anti-Pattern-Katalog
+
+Die Projekt-Anti-Patterns aus der Praxis sind im
+Katalog `anti-patterns/katalog.yaml` (Werkstatt).
+Sie werden rollen- und trigger-grund-spezifisch in
+die Prompts injiziert. Siehe `anti-patterns/README.md`.
+
+Der Abschnitt `## Anti-Patterns` oben (Zeile 8)
+beschreibt nur die zwei Werkstatt-internen
+Anti-Patterns (Anker in Dekorator-Kette,
+Patch-Anker ohne Semantik-Pruefung).
+
 ## Anlass-Historie
 
 - 2026-10-12, Auflage 2086: subprocess_env()

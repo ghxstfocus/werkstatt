@@ -400,10 +400,19 @@ SCHEMA_PFAD = Path("/opt/werkstatt/schemas/projekt.yaml")
 _ALIAS_TOP = {
     "agents_dir": "project_agents_dir",
 }
-_ALIAS_DOCS = {
-    "handoff": "reviewer",
-    "context_prompt": "context",
-}
+def _alias_docs_aus_schema(schema_docs: dict[str, Any]) -> dict[str, str]:
+    """Liest die Alias-Map aus dem Schema.
+
+    Ein Schluessel-Eintrag mit 'alias: <alt>' erzeugt
+    den Eintrag {<alt>: <neu>} in der Map. Damit ist
+    das Schema die einzige Quelle der Alias-Definition.
+    """
+    m: dict[str, str] = {}
+    for neu, spec in schema_docs.get("schluessel", {}).items():
+        alt = spec.get("alias")
+        if isinstance(alt, str) and alt:
+            m[alt] = neu
+    return m
 
 
 def _lade_schema() -> dict[str, Any]:
@@ -442,7 +451,8 @@ def _pruefe_docs(config: dict[str, Any], schema_docs: dict[str, Any],
     if not isinstance(docs, dict):
         meldungen.append("docs: muss ein dict sein")
         return
-    for alt, neu in _ALIAS_DOCS.items():
+    alias_map = _alias_docs_aus_schema(schema_docs)
+    for alt, neu in alias_map.items():
         if alt in docs and neu not in docs:
             docs[neu] = docs.pop(alt)
             meldungen.append(f"docs.{alt}: Alias aufgeloest zu docs.{neu}")

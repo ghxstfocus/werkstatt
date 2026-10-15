@@ -4253,13 +4253,17 @@ def test_agent_docs_solver_enthaelt_reviewer_keys() -> None:
 
 
 def test_agent_docs_solver_enthaelt_projektwissen() -> None:
-    """FF1b: Die vier Projektwissens-Keys sind enthalten."""
+    """FF1b: Die vier Projektwissens-Keys sind enthalten.
+
+    Nach Doku-Migration 2026-10-15: docs.context wurde
+    durch docs.conventions ersetzt.
+    """
     import yaml
     with open("/opt/werkstatt/projects/security-ai.yaml",
               encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     solver = set(cfg["agent_docs"]["solver"])
-    pflicht = {"context", "decisions",
+    pflicht = {"conventions", "decisions",
                "security_log", "web_security"}
     assert pflicht.issubset(solver), \
         f"fehlt: {pflicht - solver}"

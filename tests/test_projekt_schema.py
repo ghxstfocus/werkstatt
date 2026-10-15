@@ -29,8 +29,8 @@ def basis_config() -> dict:
         "project": "test-projekt",
         "project_dir": "/tmp/test-projekt",
         "docs": {
-            "decisions": "docs/DESIGN_DECISIONS.md",
-            "workflow": "docs/WORKFLOW.md",
+            "decisions": "docs/DECISIONS.md",
+            "conventions": "docs/CONVENTIONS.md",
         },
         "always_run": ["py_compile"],
         "optional_catalog": ["read_file"],

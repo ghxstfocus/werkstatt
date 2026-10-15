@@ -63,9 +63,10 @@ felder:
         kategorie: O
         typ: "str | null"
         default: null
-      workflow:
+      conventions:
         kategorie: K
         typ: str
+        alias: workflow
 
   always_run:
     kategorie: K
