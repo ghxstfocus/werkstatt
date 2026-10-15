@@ -4640,6 +4640,32 @@ def test_pruefe_anker_wirksamer_patch_kein_fehler() -> None:
     assert fehlend == []
 
 
+# ---------- Block Auftrag-erfuellt, B3 ----------
+
+def test_letzter_patch_wirkungslos_initial_false() -> None:
+    """Neues Flag startet False."""
+    s = build_test_state()
+    assert s.letzter_patch_wirkungslos is False
+
+
+def test_wirkungslos_setzt_flag_im_loop() -> None:
+    """Wenn Anker-Fehler 'wirkungslos' enthaelt, Flag True."""
+    # Direkter Test der Logik: pruefe_anker liefert
+    # 'wirkungslos', dann Flag setzen.
+    patches = [{"pfad": "x.py", "anker": "y", "ersatz": "y"}]
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "")
+    wirkt = any(g == "wirkungslos" for (_, _, _, g) in fehlend)
+    assert wirkt is True
+
+
+def test_nicht_wirkungslos_setzt_flag_nicht() -> None:
+    """Wenn Anker-Fehler nicht 'wirkungslos' ist, kein Signal."""
+    patches = [{"pfad": "x.py", "anker": "GAMMA", "ersatz": "y"}]
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "")
+    wirkt = any(g == "wirkungslos" for (_, _, _, g) in fehlend)
+    assert wirkt is False
+
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)

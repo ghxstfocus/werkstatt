@@ -985,6 +985,19 @@ def builder_reply_mit_command_loop(
                     state.letzte_anker_fehler = anker_fehler
                     state.letzte_ersatz_fehler = ersatz_fehler
                     state.anker_fehler_in_folge += 1
+                    # B3: wirkungslos-Signal.
+                    _wirkt = any(
+                        g == "wirkungslos"
+                        for (_, _, _, g) in anker_fehler)
+                    state.letzter_patch_wirkungslos = _wirkt
+                    if _wirkt:
+                        audit("builder_wirkungsloser_patch",
+                              {"runde": builder_runde,
+                               "anzahl": sum(
+                                   1 for (_, _, _, g)
+                                   in anker_fehler
+                                   if g == "wirkungslos")},
+                              project_dir, project_name)
                     audit("builder_anker_fehler",
                           {"runde": builder_runde,
                            "anker": len(anker_fehler),
@@ -1318,6 +1331,9 @@ class RunState:
     letzte_ersatz_fehler: list[tuple[int, str, str]] = \
         field(default_factory=list)
     anker_fehler_in_folge: int = 0
+    # Block Auftrag-erfuellt B3: letzter Patch war
+    # wirkungslos (anker == ersatz). Signal fuer B2.
+    letzter_patch_wirkungslos: bool = False
     code_patches: list[dict[str, str]] = field(default_factory=list)  # UMB-1b
     test_vorschlaege: str = ""
     commit_paket: dict[str, Any] = field(default_factory=dict)
