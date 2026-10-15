@@ -4801,6 +4801,37 @@ def test_solver_md_enthaelt_gemessenen_inhalt_erwaehnung() -> None:
     assert "GEMESSENER INHALT" in text
 
 
+# ---------- Solver-Prompt: AUFTRAG ----------
+
+def test_solver_prompt_enthaelt_auftrag() -> None:
+    """AUFTRAG-Block steht im Solver-Prompt."""
+    s = build_test_state()
+    s.aufgabe = "Stelle notify_ntfy um auf ToolArgumentValueError."
+    prompt = pipeline._solver_prompt_bauen(s)
+    assert "AUFGABE:" in prompt
+    assert "Stelle notify_ntfy um" in prompt
+
+
+def test_solver_prompt_auftrag_vor_no_go() -> None:
+    """AUFTRAG steht vor NO-GO-RUNDEN."""
+    s = build_test_state()
+    s.aufgabe = "Testauftrag."
+    prompt = pipeline._solver_prompt_bauen(s)
+    i_auf = prompt.find("AUFGABE:")
+    i_ng = prompt.find("## NO-GO-RUNDEN")
+    assert i_auf > -1
+    assert i_ng > -1
+    assert i_auf < i_ng
+
+
+def test_solver_prompt_auftrag_leer() -> None:
+    """Leerer Auftrag: Block erscheint trotzdem."""
+    s = build_test_state()
+    s.aufgabe = ""
+    prompt = pipeline._solver_prompt_bauen(s)
+    assert "AUFGABE:" in prompt
+
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)

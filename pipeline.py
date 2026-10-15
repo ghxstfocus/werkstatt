@@ -1652,7 +1652,9 @@ def _solver_prompt_bauen(state: RunState,
              if r.get("verdict") == "NO-GO"
              and not r.get("recovery")]
     letzte = no_go[-2:] if len(no_go) >= 2 else no_go
-    zeilen = ["## NO-GO-RUNDEN"]
+    zeilen = [aufgabe_block(state).rstrip()]
+    zeilen.append("")
+    zeilen.append("## NO-GO-RUNDEN")
     for r in letzte:
         zeilen.append(
             f"--- Runde {r.get('runde', '?')} ---")
