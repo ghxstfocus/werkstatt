@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach 2183 + Stufe 0 + Auftrag-erfuellt + PB-65)
-Werkstatt-HEAD: 6a1d5b6 (Doku Auftrag-erfuellt)
+Stand: 2026-10-15 (nach 2183 + Stufe 0 + Auftrag-erfuellt + PB-65 + Agent-Memory-E1)
+Werkstatt-HEAD: 52cd658 (Agent-Memory Ebene 1)
 Letzter echter Probebetrieb: PB-65 (2aa2b0b, 2026-10-15)
 Letzter Commit in security-ai: 2aa2b0b
 Branch: main
@@ -286,6 +286,14 @@ Auflagen dieser Session:
         Erfolgspfad nach Auftrag-erfuellt. Code-GO Runde 1,
         Commit-GO, kein Solver-Trigger. Commit 2aa2b0b,
         Tag probebetrieb-64. 13 passed in test_notify_ntfy.
+  Agent-Memory Ebene 1: ERLEDIGT 2026-10-15.
+        Aggregator sammelt projekt_stand aus git log
+        (letzte 5 Commits, Quelle werkstatt/mensch).
+        Prompt-Bau zeigt ## PROJEKT-STAND in Builder,
+        Reviewer, Solver (nach AUFTRAG).
+        main laedt memory.yaml (UU6 fail-closed korrupt).
+        Aggregator-Aufruf nach pipeline_ende (TT2).
+        Commits 4e23aba, 52cd658. +16 Tests, 423 passed.
   Stufe 0 (Selbstheilung): ERLEDIGT 2026-10-15.
         A1+1b: pruefe_anker_gegen_messung + pruefe_
         ersatz_gegen_messung (deterministisch).
@@ -1013,13 +1021,19 @@ Der neue Bau-Chat soll:
 2. docs/PROTOKOLL-29-40.md lesen.
 
 3. Reihenfolge (Stufe 0 + Auftrag-erfuellt + PB-65
-   erledigt 2026-10-15):
-   a) Block "Agent-Memory" (Kategorie 3).
-      Projekt-Memory + Run-Memory + Verdichtung.
-      Voraussetzung fuer Phasen-Modus.
-   b) Ziel 3: Ordner-/Doku-Schema + Scaffolder.
-   c) Ziel 2: Phasen-Modus.
-   d) Solver-Kurskorrektur Block 6, 2183-AQ,
+   + Memory-E1 erledigt 2026-10-15):
+   a) PB-66 mit echtem Auftrag. Test des PROJEKT-
+      STAND-Blocks im Feld.
+   b) Block "Anti-Pattern-Bibliothek" (Teil B,
+      Kategorie 3, Ziel 5).
+   c) Block "Migration WORKFLOW.md -> katalog.yaml"
+      (Teil C).
+   d) Block "Agent-Memory Ebene 2" (Run-Memory,
+      Phasen-Fortschritt).
+   e) Ziel 3: Ordner-/Doku-Schema + Scaffolder.
+   f) Ziel 2: Phasen-Modus.
+   g) Ziel 4: Dashboard.
+   h) Solver-Kurskorrektur Block 6, 2183-AQ,
       2200b/c/T, 2199a, 2199-R7-P1, Werkstatt-Vertrag.
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
