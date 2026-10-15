@@ -1,11 +1,11 @@
 # Bau-Handoff — Werkstatt
 
 Stand: 2026-10-15 (nach Doku-Migration + Konsolidierung)
-Werkstatt-HEAD: 254b3fb (Doku-Migration + Schema-Alias-Mechanik)
+Werkstatt-HEAD: 9544c7e (Block P1: Planner-Rolle + _planner_lauf)
 security-ai-HEAD: 220c6be (Doku-Migration)
 Letzter echter Probebetrieb: PB-67 (0d0fe2c, 2026-10-15)
 Branch: main (beide Repos)
-Tests (Werkstatt): 495 passed
+Tests (Werkstatt): 514 passed
 ruff --no-cache: 0
 mypy pipeline.py: 0
 mypy tests/test_pipeline.py: 15 (vorbestehend, tests-mypy)
@@ -165,6 +165,30 @@ Erster echter Pipeline-Lauf PB-67:
   Tag probebetrieb-67 gesetzt.
   Damit ist die Bedingung fuer Phase 1b erfuellt.
 
+Block P1 (Planner-Rolle + _planner_lauf):
+  ERLEDIGT 2026-10-15. Commit 9544c7e.
+  agents/planner.md (73 Zeilen).
+  HARD_RULES_PLANNER (P1-P9),
+  PLANNER_BLOCK_PRAEFIXE,
+  HARD_RULES_BY_ROLE["planner"].
+  RunState: planner_model, planner_vorschlag,
+  planner_modus, planner_runden.
+  parse_planner_reply, _planner_lauf,
+  _planner_main_pfad.
+  main() --planner-Pfad.
+  Minimales Basis-Gate (Projekt + git clean).
+  Rueckfrage-Loop, Bestaetigung [j]/[n]/[e].
+  projects/security-ai.yaml: agent_docs.planner
+  + planner-Block.
+  schemas/projekt.yaml: planner-Schema.
+  tests/test_planner.py (19 Tests).
+  514 passed.
+
+Planner-Konzept v4 (final):
+  Commit da80b1f. docs/PLANNER-KONZEPT.md.
+  Alle 40 Praezisierungen aus 3 Reviewer-
+  Durchlaeufen eingearbeitet.
+
 Doku-Migration (Werkstatt 254b3fb,
 security-ai 220c6be):
   - Profi-Konvention: PHASES -> ROADMAP,
@@ -185,6 +209,26 @@ security-ai 220c6be):
 KRITISCH: keine.
 
 WICHTIG:
+
+  Block P2 (--phase + run_phase + Gesamt-Review):
+        OFFEN. Stufe 2 des Planner-Konzepts.
+        Naechster Block. Kategorie 3.
+        Siehe docs/PLANNER-KONZEPT.md, Abschnitt 5
+        und Abschnitt 13.
+
+  Block P3 (ASK_HUMAN + Persistenz):
+        OFFEN. Nach P2. Kategorie 3.
+        Datei-basiert (ask-human/<run_id>).
+        Timeout 60 min.
+
+  Rollen-Modell aus Frontmatter lesen:
+        OFFEN. Bestehende Inkonsistenz:
+        agents/*.md Frontmatter liefert
+        model/temperature, wird aber nicht
+        vom Code gelesen. Alle *_model-Felder
+        in pipeline.py sind hartcodiert.
+        Eigener Block, Kategorie 2.
+        Anlass: P1, SS7-(C).
 
   Phase 1b (Validator Fail-closed): BEREIT.
         WERKSTATT_SCHEMA_MODUS Default ist warn
@@ -483,15 +527,18 @@ Der neue Bau-Chat soll:
        /opt/werkstatt/tests/ -q
 
 2. Reihenfolge:
-   a) Phase 1b: Validator Fail-closed.
-      Naechster Block. Kategorie 3. Bedingung
-      erfuellt durch PB-67.
-   b) Solver-Kurskorrektur Block 6 (Smoke-Test).
-      Echter Solver-Lauf mit P1-Trigger provozieren.
-   c) Phase 2: Scaffolder (werkstatt_scaffold.py +
-      werkstatt_migrate.py). Voraussetzung
-      erfuellt: Struktur-Konvention in
-      Werkstatt-WORKFLOW.
+   a) Block P2: --phase + run_phase + Gesamt-Review.
+      Naechster Block. Stufe 2 des Planner-Konzepts.
+      Kategorie 3.
+   b) Block P3: ASK_HUMAN + Persistenz.
+      Kategorie 3.
+   c) Phase 1b: Validator Fail-closed.
+      Nach P2/P3. Kategorie 3.
+   d) Solver-Kurskorrektur Block 6 (Smoke-Test).
+      Echter Solver-Lauf.
+   e) Phase 2: Scaffolder.
+   f) Rollen-Modell aus Frontmatter lesen.
+      Kategorie 2.
    d) Rollen-Prompt-Generator (Phase 3.5).
    e) Agent-Memory Ebene 2.
    f) Ziel 2: Phasen-Modus.
