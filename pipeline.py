@@ -307,12 +307,44 @@ S9. Du siehst dieselbe Projekt-Doku wie der
 # Projekt-Doku wie der Reviewer.
 
 
+HARD_RULES_PLANNER = """
+P1. Du bist der Planner. Du formulierst Auftraege,
+    du baust nichts.
+P2. Deine Eingabe sind der rohe Auftrag des
+    Menschen, die konfigurierte Projekt-Doku und
+    die letzten 10 Commits im Ziel-Repo.
+P3. Du antwortest mit GENAU EINEM Auftrag ODER
+    GENAU EINER Rueckfrage. Kein anderer Text.
+P4. Der Auftrag muss praezise sein:
+    Datei(en), Aenderung, Erfolgskriterium.
+P5. Du baust nicht, committest nicht, reviewst
+    nicht. Du sprichst keine Verdicts aus.
+P6. Bei Unklarheit: Formuliere eine RUECKFRAGE
+    statt eines Auftrags.
+P7. Auftrag-Format ist bindend:
+      Block: <praefix> - <Kurztitel>
+      Ziel:
+        <Was soll gebaut werden?>
+      Vorgehen:
+        1. <Schritt>
+      Erfolgskriterium:
+        - <Kriterium>
+    Praefix-Werte: feat, fix, docs, refactor, test.
+P8. Rueckfrage-Format ist bindend:
+      RUECKFRAGE:
+        <Frage>
+P9. Das Format ist kein Vorschlag. Bei Verstoss
+    gegen P7 oder P8 wird der Auftrag verworfen
+    und du wirst erneut gerufen (max 3 Runden).
+"""
+
 HARD_RULES_BY_ROLE = {
     "reviewer": HARD_RULES_REVIEWER,
     "builder": HARD_RULES_BUILDER,
     "test_generator": HARD_RULES_TEST_GENERATOR,
 }
 HARD_RULES_BY_ROLE["solver"] = HARD_RULES_SOLVER
+HARD_RULES_BY_ROLE["planner"] = HARD_RULES_PLANNER
 
 # Auflage 2041: Groessenlimits fuer das Messprotokoll.
 MAX_PROTOKOLL_PER_COMMAND = 10_000
@@ -533,6 +565,12 @@ def _lade_und_pruefe_projekt(project_name: str) -> dict[str, Any]:
 # Schema: anti-patterns/README.md.
 # =====================================================================
 ANTI_PATTERN_KATALOG = Path("/opt/werkstatt/anti-patterns/katalog.yaml")
+
+# Planner-Konfiguration (Block P1, 2026-10-15).
+# TT4: Praefix-Liste als Konstante, nicht hart im Regex.
+PLANNER_BLOCK_PRAEFIXE = (
+    "feat", "fix", "docs", "refactor", "test",
+)
 
 _AP_IDS_RE = re.compile(r"^ap-[a-z0-9-]+$")
 _AP_ROLLEN_ERLAUBT = frozenset({
@@ -819,6 +857,104 @@ def _anti_pattern_block(
         audit("anti_patterns_injiziert", payload,
               state.project_dir, state.project_name)
     return "\n".join(zeilen)
+
+
+# =====================================================================
+# Planner (Block P1, 2026-10-15).
+# Stufe 1 des Planner-Konzepts (docs/PLANNER-KONZEPT.md).
+# =====================================================================
+
+def parse_planner_reply(text: str) -> dict[str, Any]:
+    """Parst die Planner-Antwort.
+
+    Liefert:
+      {
+        "art": "auftrag" | "rueckfrage" | "ungueltig",
+        "praefix": str | None,
+        "titel": str,
+        "text": str,
+        "frage": str,
+      }
+
+    Regeln (TT5):
+      - Antwort beginnt mit "Block: <praefix> - <Titel>":
+        praefix muss in PLANNER_BLOCK_PRAEFIXE sein.
+      - Antwort beginnt mit "RUECKFRAGE:":
+        art=rueckfrage.
+      - Sonst: art=ungueltig.
+    """
+    ergebnis: dict[str, Any] = {
+        "art": "ungueltig",
+        "text": text,
+    }
+    stripped = text.strip()
+    if not stripped:
+        return ergebnis
+
+    # Rueckfrage?
+    if stripped.startswith("RUECKFRAGE:"):
+        ergebnis["art"] = "rueckfrage"
+        ergebnis["frage"] = stripped[len("RUECKFRAGE:"):].strip()
+        return ergebnis
+
+    # Auftrag?
+    erste_zeile = stripped.split("\n", 1)[0].strip()
+    if erste_zeile.startswith("Block:"):
+        rest_zeile = erste_zeile[len("Block:"):].strip()
+        if " - " in rest_zeile:
+            praefix_teil, titel = rest_zeile.split(" - ", 1)
+            praefix = praefix_teil.strip().lower()
+            if praefix in PLANNER_BLOCK_PRAEFIXE:
+                ergebnis["art"] = "auftrag"
+                ergebnis["praefix"] = praefix
+                ergebnis["titel"] = titel.strip()
+                return ergebnis
+    return ergebnis
+
+
+def _planner_lauf(
+    state: RunState,
+    api_key: str,
+    roher_auftrag: str,
+    project_dir: Path,
+    project_name: str,
+    historie: str,
+) -> str | None:
+    """Fuehrt den Planner aus und liefert die Antwort.
+
+    Liefert None bei Fehler (Aufrufer behandelt Fail-closed).
+    Liefert den Antwort-Text bei Erfolg.
+    """
+    if "planner" not in state.agents:
+        print("[FAIL] Planner-Rolle nicht geladen. Fail closed.")
+        audit("planner_rolle_fehlt", {}, project_dir, project_name)
+        return None
+
+    planner_prompt = build_system_prompt(
+        state.agents["planner"], state.docs,
+        state.agent_docs.get("planner", []),
+        state=state)
+
+    user_content = (
+        f"ROHER AUFTRAG DES MENSCHEN:\n{roher_auftrag}\n\n"
+        f"LETZTE COMMITS IM ZIEL-REPO:\n{historie[:3000]}\n\n"
+        "Formuliere den naechsten praezisen Auftrag "
+        "oder stelle eine Rueckfrage. "
+        "Halte das Ausgabe-Format aus P7/P8 ein."
+    )
+
+    reply = ask_llm(
+        api_key, planner_prompt, user_content,
+        state.planner_model, 0.0,
+        state.llm_timeout_s, state=state)
+    if not reply.ok:
+        print(f"[FAIL] Planner-Aufruf: {reply.error}")
+        audit("planner_call_failed",
+              {"error": reply.error, "runde": state.planner_runden},
+              project_dir, project_name)
+        return None
+
+    return reply.content
 
 
 def load_agents(agents_dir: str) -> dict[str, dict[str, Any]]:
@@ -1777,6 +1913,13 @@ class RunState:
     # justierbar, nicht im Code hart.
     solver_config: dict[str, float] = field(
         default_factory=dict)
+    # Planner-Konfiguration (Block P1, 2026-10-15).
+    # SS7-(C): Modell als hartcodierter Default, analog
+    # zu builder_model. Frontmatter wird heute nicht gelesen.
+    planner_model: str = "deepseek-chat"
+    planner_vorschlag: str = ""
+    planner_modus: str = "manual"
+    planner_runden: int = 0
     reviewer_verdict_model: str = "deepseek-chat"
     reviewer_recovery_model: str = "deepseek-reasoner"
     builder_model: str = "deepseek-chat"
@@ -4678,7 +4821,245 @@ def run_pipeline(project_name: str, aufgabe: str,
 
 
 
+def _planner_main_pfad(
+    project_name: str,
+    roher_auftrag: str,
+    state_ref: list[RunState],
+) -> int:
+    """Block P1: fuehrt den Planner aus und bestaetigt den Auftrag.
+
+    Ablauf:
+      1. Minimales Basis-Gate: Projekt-YAML + Schema + git clean.
+      2. Planner-Aufruf (max 3 Runden).
+      3. Parser: Auftrag, Rueckfrage oder ungueltig.
+      4. Bestaetigung: [j] uebernehmen, [n] verwerfen, [e] editieren.
+      5. Bei [j]: Auftrag geht an run_pipeline.
+
+    Rueckgabe: rc der Kette oder rc des Planner-Pfads.
+    """
+    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if not api_key:
+        print("[FAIL] DEEPSEEK_API_KEY fehlt. Fail closed.")
+        return 1
+
+    # Minimales Basis-Gate (SS-KERN).
+    try:
+        config = _lade_und_pruefe_projekt(project_name)
+    except SystemExit as exc:
+        return int(exc.code) if isinstance(exc.code, int) else 1
+    project_dir = Path(config.get("project_dir", str(Path.cwd()))).expanduser()
+    if not project_dir.exists():
+        print(f"[FAIL] project_dir fehlt: {project_dir}. Fail closed.")
+        return 18
+
+    # git status clean?
+    try:
+        _st = subprocess.run(
+            ("git", "status", "--porcelain"),
+            cwd=str(project_dir), capture_output=True, text=True,
+            timeout=30, check=False, env=subprocess_env(),
+        )
+        if _st.returncode != 0 or _st.stdout.strip():
+            print("[FAIL] Ziel-Repo nicht sauber (git status). Fail closed.")
+            print(_st.stdout[:500] if _st.stdout else "")
+            audit("planner_basis_gate_failed",
+                  {"grund": "git_status_schmutzig"},
+                  project_dir, project_name)
+            return 18
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        print(f"[FAIL] git status: {exc}. Fail closed.")
+        return 18
+
+    # Rollen + Docs laden.
+    agents_dir = config.get("project_agents_dir")
+    if not agents_dir:
+        agents_dir = "/opt/werkstatt/agents"
+    agents = load_agents(agents_dir)
+    docs = load_docs(config.get("docs", {}), project_dir)
+    file_whitelist = config.get("file_whitelist", [])
+
+    if "planner" not in agents:
+        print("[FAIL] Planner-Rolle nicht gefunden. Fail closed.")
+        audit("planner_rolle_fehlt", {}, project_dir, project_name)
+        return 18
+
+    # Planner-Konfiguration lesen.
+    _pcfg = config.get("planner", {}) or {}
+    if not isinstance(_pcfg, dict):
+        _pcfg = {}
+    planner_modus = str(_pcfg.get("modus", "manual"))
+    planner_max_runden = int(_pcfg.get("max_runden", 3))
+    if planner_modus == "off":
+        print("[i] Planner-Modus ist 'off'. Kein Planner-Lauf.")
+        return 0
+
+    # Historien.
+    historie = load_recent_commits(project_dir, n=10)
+
+    # RunState bauen (minimal, analog run_pipeline).
+    state = RunState(
+        block_id=config.get("project", "unknown"),
+        aufgabe=roher_auftrag,
+        start_ts=datetime.now(UTC).isoformat(timespec="seconds"),
+        docs=docs, agents=agents,
+        always={}, optional={},
+        file_whitelist=file_whitelist,
+        api_key=api_key,
+        budget=config.get("budget", {}),
+        agent_docs=config.get("agent_docs", {}),
+        project_dir=project_dir,
+        project_name=project_name,
+        planner_modus=planner_modus,
+    )
+    state.start_monotonic = time.monotonic()
+    state_ref.append(state)
+
+    # Run-ID setzen (fuer Audit).
+    global _AKTUELLE_RUN_ID
+    _AKTUELLE_RUN_ID = (
+        datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        + f"-{os.getpid()}")
+    state.run_id = _AKTUELLE_RUN_ID
+
+    audit("pipeline_start",
+          {"aufgabe_hash": __import__("hashlib").sha256(
+              roher_auftrag.encode()).hexdigest(),
+           "aufgabe_kurz": roher_auftrag[:200],
+           "modus": "planner"},
+          project_dir, project_name)
+
+    # Planner-Lauf mit max 3 Runden (SS5).
+    vorschlag_text: str | None = None
+    for runde in range(1, planner_max_runden + 1):
+        state.planner_runden = runde
+        print(f"\n[--- Planner-Runde {runde} ---]")
+        audit("planner_start",
+              {"runde": runde, "modus": planner_modus},
+              project_dir, project_name)
+
+        antwort = _planner_lauf(
+            state, api_key, roher_auftrag,
+            project_dir, project_name, historie)
+        if antwort is None:
+            print("[FAIL] Planner-Aufruf fehlgeschlagen. Fail closed.")
+            return 1
+
+        parsed = parse_planner_reply(antwort)
+        if parsed["art"] == "auftrag":
+            vorschlag_text = antwort.strip()
+            state.planner_vorschlag = vorschlag_text
+            audit("planner_vorschlag",
+                  {"runde": runde,
+                   "praefix": parsed.get("praefix", ""),
+                   "titel": parsed.get("titel", "")[:200],
+                   "laenge": len(vorschlag_text)},
+                  project_dir, project_name)
+            print(f"[+] Planner-Vorschlag erhalten (Runde {runde}).")
+            break
+        if parsed["art"] == "rueckfrage":
+            # Rueckfrage-Loop (TT6): dem Menschen zeigen, Antwort
+            # holen, als Kontext weitergeben.
+            print("\n=== RUECKFRAGE DES PLANNERS ===")
+            print(parsed.get("frage", ""))
+            print("=" * 70)
+            try:
+                antwort_mensch = input(
+                    "Deine Antwort (leer = abbrechen): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\n[*] Abbruch.")
+                return 0
+            if not antwort_mensch:
+                print("[i] Leere Antwort. Planner-Runde abgebrochen.")
+                continue
+            roher_auftrag = (
+                roher_auftrag
+                + "\n\n[Antwort des Menschen auf Rueckfrage]\n"
+                + antwort_mensch)
+            continue
+        # art == ungueltig
+        print("[i] Planner-Antwort nicht im Format. "
+              "Neue Runde.")
+        audit("planner_ungueltig",
+              {"runde": runde,
+               "laenge": len(antwort),
+               "kopf": antwort.strip()[:200]},
+              project_dir, project_name)
+
+    if vorschlag_text is None:
+        # Max-Runden erreicht (TT6/SS5).
+        print("\n" + "=" * 70)
+        print("Planner kann nicht formulieren.")
+        print("[j] selbst formulieren (geht direkt an die Pipeline)")
+        print("[n] abbrechen")
+        print("=" * 70)
+        try:
+            wahl = input("Deine Wahl: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\n[*] Abbruch.")
+            return 0
+        if wahl in {"j", "ja", "y", "yes"}:
+            try:
+                eigener = input("Auftrag: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\n[*] Abbruch.")
+                return 0
+            if not eigener:
+                print("[FAIL] Leerer Auftrag. Fail closed.")
+                return 1
+            audit("planner_uebersprungen",
+                  {"grund": "max_runden",
+                   "quelle": "mensch_eigener_auftrag"},
+                  project_dir, project_name)
+            return run_pipeline(project_name, eigener, state_ref)
+        print("[i] Abgebrochen durch Mensch.")
+        audit("planner_abgebrochen",
+              {"runden": state.planner_runden},
+              project_dir, project_name)
+        return 1
+
+    # Bestaetigung.
+    print("\n" + "=" * 70)
+    print("=== PLANNER-VORSCHLAG ===")
+    print(vorschlag_text)
+    print("=" * 70)
+    print("[j] uebernehmen / [n] verwerfen / [e] editieren")
+    try:
+        wahl = input("Deine Wahl: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\n[*] Abbruch.")
+        return 0
+
+    if wahl in {"j", "ja", "y", "yes"}:
+        audit("planner_bestaetigt",
+              {"wahl": "j", "runden": state.planner_runden},
+              project_dir, project_name)
+        return run_pipeline(project_name, vorschlag_text, state_ref)
+
+    if wahl in {"e", "edit", "editieren"}:
+        try:
+            bearbeitet = input(
+                "Editierten Auftrag eingeben: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n[*] Abbruch.")
+            return 0
+        if not bearbeitet:
+            print("[FAIL] Leerer Auftrag. Fail closed.")
+            return 1
+        audit("planner_bestaetigt",
+              {"wahl": "e", "runden": state.planner_runden},
+              project_dir, project_name)
+        return run_pipeline(project_name, bearbeitet, state_ref)
+
+    # [n] verwerfen
+    print("[i] Verworfen.")
+    audit("planner_verworfen",
+          {"runden": state.planner_runden},
+          project_dir, project_name)
+    return 0
+
+
 def main() -> int:
+
     """CLI-Einstieg.
 
     Nutzung:
@@ -4719,6 +5100,43 @@ def main() -> int:
     args = sys.argv[1:]
     project_name: str | None = None
 
+    # Block P1: --planner-Pfad.
+    # Format: pipeline.py --project <name> --planner "<roher Auftrag>"
+    if (len(args) >= 4 and args[0] == "--project"
+            and args[2] == "--planner"):
+        project_name = args[1].strip()
+        roher_auftrag = args[3].strip()
+        if not project_name:
+            print("[FAIL] Leerer Projektname.")
+            return 65
+        if not roher_auftrag:
+            print("[FAIL] Leerer Auftrag.")
+            return 65
+        state_ref: list[RunState] = []
+        rc = 1
+        try:
+            rc = _planner_main_pfad(
+                project_name, roher_auftrag, state_ref)
+        except KeyboardInterrupt:
+            print("\n[*] Abbruch durch Strg+C.")
+            rc = 130
+        except Exception as exc:  # noqa: BLE001
+            print(f"[FAIL] Unerwarteter Fehler: {exc}")
+            import traceback
+            traceback.print_exc()
+            rc = 99
+        finally:
+            if state_ref:
+                try:
+                    _pipeline_ende(
+                        state_ref[0],
+                        state_ref[0].project_dir,
+                        state_ref[0].project_name,
+                        rc, "planner_exit")
+                except Exception:  # noqa: BLE001
+                    print("[WARN] pipeline_ende fehlgeschlagen.")
+        return rc
+
     if args and args[0] == "--project":
         if len(args) < 3:
             print("[FAIL] --project braucht einen Namen und eine Aufgabe.")
@@ -4729,11 +5147,7 @@ def main() -> int:
     else:
         print("[FAIL] --project <name> fehlt.")
         print('Nutzung: pipeline.py --project <name> "<Block-Beschreibung>"')
-        print()
-        print("Beispiel:")
-        print('  DEEPSEEK_API_KEY=sk-... runuser -u security-ai -- \\')
-        print("    /opt/security-ai/.venv/bin/python3 \\")
-        print('    /opt/werkstatt/pipeline.py --project security-ai "Punkt 58 Schritt 6"')
+        print('        pipeline.py --project <name> --planner "<roher Auftrag>"')
         return 64
 
     if not project_name:
@@ -4743,7 +5157,7 @@ def main() -> int:
         print("[FAIL] Leere Block-Beschreibung.")
         return 65
 
-    state_ref: list[RunState] = []
+    state_ref = []
     rc = 1
     try:
         rc = run_pipeline(project_name, aufgabe, state_ref)

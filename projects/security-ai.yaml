@@ -79,6 +79,11 @@ agent_docs:
     - decisions
     - security_log
     - web_security
+  planner:
+    - conventions
+    - decisions
+    - security_log
+    - web_security
 
 # Nur diese Praefixe darf read_file lesen.
 file_whitelist:
@@ -131,3 +136,10 @@ solver:
   p1_schwellwert: 0.5
   p1_min_tokens: 10
   max_runden: 3
+
+# Planner-Konfiguration (W+O).
+# Werkstatt-Default, Projekt-YAML darf ueberschreiben.
+planner:
+  modus: manual
+  max_runden: 3
+  ask_human_timeout_min: 60
