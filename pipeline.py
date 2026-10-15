@@ -1806,7 +1806,8 @@ def format_projekt_stand(state: RunState) -> str:
     zeilen = ["## PROJEKT-STAND (letzte Commits)"]
     for c in commits[:5]:
         h = c.get("hash", "")
-        d = c.get("datum", "")[:10]
+        # datum kann datetime sein (yaml.safe_load).
+        d = str(c.get("datum", ""))[:10]
         q = c.get("quelle", "")
         m = c.get("message", "")
         zeilen.append(f"- {h} ({d}, {q}) {m}")
