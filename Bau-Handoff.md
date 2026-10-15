@@ -1,9 +1,9 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach 2183 + Stufe 0 + Auftrag-erfuellt + PB-65 + Agent-Memory-E1)
-Werkstatt-HEAD: 52cd658 (Agent-Memory Ebene 1)
-Letzter echter Probebetrieb: PB-66 (d135fd4, 2026-10-15)
-Letzter Commit in security-ai: d135fd4
+Stand: 2026-10-15 (nach 2183 + Stufe 0 + Auftrag-erfuellt + PB-65..67 + Agent-Memory-E1)
+Werkstatt-HEAD: 8a73eb1 (Doku PB-66)
+Letzter echter Probebetrieb: PB-67 (c9142a7, 2026-10-15)
+Letzter Commit in security-ai: c9142a7
 Branch: main
 Tests: 346 passed
 ruff: 0
@@ -286,6 +286,10 @@ Auflagen dieser Session:
         Erfolgspfad nach Auftrag-erfuellt. Code-GO Runde 1,
         Commit-GO, kein Solver-Trigger. Commit 2aa2b0b,
         Tag probebetrieb-64. 13 passed in test_notify_ntfy.
+  PB-67 (2026-10-15): nmap_scan — Unit-Tests fuer
+        Argument-Validierung. Reviewer-Empfehlung aus
+        PB-66 umgesetzt. Code-GO Runde 1, Commit-GO.
+        Commit c9142a7, Tag probebetrieb-66.
   PB-66 (2026-10-15): nmap_scan — ToolArgumentValueError.
         Erster Lauf mit PROJEKT-STAND-Block im Prompt.
         Code-GO Runde 1, Commit-GO, kein Solver-Trigger.
@@ -610,6 +614,25 @@ Ziel 3 — Ordner-/Doku-Schema + Scaffolder.
         (deterministisch), aehnliche Dokumente
         zusammenfuehren (LLM), Mensch bestaetigt.
 
+Ziel 5 — Anti-Pattern-Bibliothek (Ziel 5 in Planung).
+        Zentrale Datei anti-patterns/katalog.yaml.
+        Eintraege mit id/titel/beschreibung/loesung/
+        begruendung. Konsumenten: Builder (bei Anker-
+        Rueckmeldung), Reviewer, Solver (nach Trigger-
+        Grund gefiltert). Halb-automatisch: Aggregator
+        schlaegt vor, Mensch bestaetigt.
+
+Ziel 6 — Planner-Agent (spaeter).
+        Liest Roadmap/Phasen des Ziel-Projekts.
+        Findet offene Punkte. Formuliert Auftraege.
+        Uebergibt an Reviewer zur Freigabe.
+        Voraussetzung: Ziel 3 (Ordner-/Doku-Schema)
+        und ein Roadmap-/Phasen-Format (YAML).
+        Schliesst die Kette:
+          Roadmap -> Planner -> Reviewer -> Mensch
+          -> Werkstatt -> Commit -> Projekt-Stand
+          -> Roadmap-Update -> naechster Punkt.
+
 Ziel 4 — Dashboard (spaeter).
         Web-Ansicht, die den Werkstatt-Prozess
         live zeigt: Builder, Reviewer, Solver,
@@ -638,6 +661,16 @@ STUFE 0 (Selbstheilung) — ERLEDIGT 2026-10-15.
         Solver-Trigger A+B, Deadlock-
         Differenzierung. Commits b5f3073 bis
         737afe9.
+
+GRUNDPRINZIP (2026-10-15)
+------------------------
+Keine Miniblöcke. Bau-Arbeit wird in kompletten
+Phasen geplant und umgesetzt, nicht in Einzel-
+schritten. Eine Phase umfasst alle zusammen-
+haengenden Aenderungen mit Tests. Bloecke wie
+"A1", "A2" waren ein Zwischenzustand — Ziel
+ist, dass eine Phase mit 10 Unterkategorien in
+einem Zug abgearbeitet wird.
 
 MITTEL (Merkposten):
 
