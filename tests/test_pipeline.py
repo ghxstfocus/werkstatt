@@ -4832,6 +4832,85 @@ def test_solver_prompt_auftrag_leer() -> None:
     assert "AUFGABE:" in prompt
 
 
+# ---------- Agent-Memory A2: Projekt-Stand ----------
+
+def test_format_projekt_stand_leer() -> None:
+    """Ohne projekt_stand: leerer Block."""
+    s = build_test_state()
+    s.projekt_stand = {}
+    assert pipeline.format_projekt_stand(s) == ""
+
+
+def test_format_projekt_stand_mit_commits() -> None:
+    """Mit Commits: Block mit Hash + Message."""
+    s = build_test_state()
+    s.projekt_stand = {
+        "letzte_commits": [
+            {"hash": "abc123",
+             "datum": "2026-10-15T11:32:00+00:00",
+             "message": "test(workbench): x",
+             "quelle": "werkstatt",
+             "dateien": ["tools/x.py"]},
+        ],
+    }
+    block = pipeline.format_projekt_stand(s)
+    assert "## PROJEKT-STAND" in block
+    assert "abc123" in block
+    assert "2026-10-15" in block
+    assert "werkstatt" in block
+    assert "tools/x.py" in block
+
+
+def test_format_projekt_stand_max_5() -> None:
+    """UU8: nur max 5 Commits."""
+    s = build_test_state()
+    s.projekt_stand = {
+        "letzte_commits": [
+            {"hash": f"h{i}", "datum": "2026-10-15",
+             "message": f"m{i}", "quelle": "werkstatt",
+             "dateien": []}
+            for i in range(10)
+        ],
+    }
+    block = pipeline.format_projekt_stand(s)
+    # Nur 5 Eintraege.
+    assert block.count("- h") == 5
+
+
+def test_projekt_stand_im_builder_prompt() -> None:
+    """A2: PROJEKT-STAND steht im Builder-Prompt."""
+    # Wir bauen einen minimalen RunState und pruefen
+    # nur die Funktion. Der echte Builder-Prompt braucht
+    # zu viel Setup fuer einen Unit-Test.
+    s = build_test_state()
+    s.projekt_stand = {
+        "letzte_commits": [{
+            "hash": "abc", "datum": "2026-10-15",
+            "message": "test", "quelle": "werkstatt",
+            "dateien": ["x.py"]}],
+    }
+    block = pipeline.format_projekt_stand(s)
+    assert "abc" in block
+
+
+def test_projekt_stand_nach_auftrag_im_solver() -> None:
+    """A2: AUFTRAG vor PROJEKT-STAND im Solver-Prompt."""
+    s = build_test_state()
+    s.aufgabe = "Testauftrag."
+    s.projekt_stand = {
+        "letzte_commits": [{
+            "hash": "abc", "datum": "2026-10-15",
+            "message": "test", "quelle": "werkstatt",
+            "dateien": []}],
+    }
+    prompt = pipeline._solver_prompt_bauen(s)
+    i_auf = prompt.find("AUFGABE:")
+    i_ps = prompt.find("## PROJEKT-STAND")
+    assert i_auf > -1
+    assert i_ps > -1
+    assert i_auf < i_ps
+
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)

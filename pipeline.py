@@ -1315,6 +1315,8 @@ class RunState:
     budget: dict[str, int]
     agent_docs: dict[str, list[str]]
     project_dir: Path
+    # Agent-Memory A2: Projekt-Stand (aus memory.yaml).
+    projekt_stand: dict = field(default_factory=dict)
     start_monotonic: float = 0.0  # Auflage 2080: Zeitmessung
     # Auflage 2183 P1 (U3): Schwellwert + min_tokens
     # justierbar, nicht im Code hart.
@@ -1654,6 +1656,9 @@ def _solver_prompt_bauen(state: RunState,
     letzte = no_go[-2:] if len(no_go) >= 2 else no_go
     zeilen = [aufgabe_block(state).rstrip()]
     zeilen.append("")
+    _ps_block = format_projekt_stand(state)
+    if _ps_block:
+        zeilen.append(_ps_block)
     zeilen.append("## NO-GO-RUNDEN")
     for r in letzte:
         zeilen.append(
@@ -1786,6 +1791,31 @@ def _handle_solver_command(
            "run_id": befund.run_id,
            "quelle": "reviewer_command"},
           project_dir, project_name)
+
+
+def format_projekt_stand(state: RunState) -> str:
+    """A2: formatiert den Projekt-Stand als Prompt-Block.
+
+    Liefert "" wenn kein projekt_stand vorliegt (UU6).
+    Max 5 Commits (UU8).
+    """
+    ps = state.projekt_stand or {}
+    commits = ps.get("letzte_commits", [])
+    if not commits:
+        return ""
+    zeilen = ["## PROJEKT-STAND (letzte Commits)"]
+    for c in commits[:5]:
+        h = c.get("hash", "")
+        d = c.get("datum", "")[:10]
+        q = c.get("quelle", "")
+        m = c.get("message", "")
+        zeilen.append(f"- {h} ({d}, {q}) {m}")
+        dateien = c.get("dateien", [])
+        if dateien:
+            zeilen.append(
+                "  Dateien: " + ", ".join(dateien))
+    zeilen.append("")
+    return "\n".join(zeilen)
 
 
 def aufgabe_block(state: RunState) -> str:
@@ -3287,6 +3317,22 @@ def run_pipeline(project_name: str, aufgabe: str,
 
     config = load_project_config(project_name)
     project_dir = Path(config.get("project_dir", str(Path.cwd()))).expanduser()
+    # Agent-Memory A2: Projekt-Stand aus memory.yaml.
+    # UU6: fehlt = ok, korrupt = Fail-closed.
+    projekt_stand: dict = {}
+    _mem_pfad = Path("/opt/werkstatt/projects") / f"{project_name}.memory.yaml"
+    if _mem_pfad.exists():
+        try:
+            _mem = yaml.safe_load(
+                _mem_pfad.read_text(encoding="utf-8"))
+            if isinstance(_mem, dict):
+                projekt_stand = _mem.get("projekt_stand", {}) or {}
+        except yaml.YAMLError as exc:
+            print(f"[FAIL] memory.yaml korrupt: {exc}")
+            audit("memory_yaml_korrupt",
+                  {"pfad": str(_mem_pfad), "fehler": str(exc)},
+                  project_dir, project_name)
+            return 3
     agents = load_agents(config.get("agents_dir", "/opt/werkstatt/agents"))
     docs = load_docs(config.get("docs", {}), project_dir)
     always, optional = build_catalog(config, project_dir)
@@ -3321,6 +3367,7 @@ def run_pipeline(project_name: str, aufgabe: str,
         file_whitelist=file_whitelist, api_key=api_key, budget=budget,
         agent_docs=config.get("agent_docs", {}),
         project_dir=project_dir,
+        projekt_stand=projekt_stand,
         git_author_name=str(git_author.get("name", "")),
         git_author_email=str(git_author.get("email", "")),
         project_name=project_name,
@@ -3484,15 +3531,17 @@ def run_pipeline(project_name: str, aufgabe: str,
             zp, project_dir, file_whitelist,
             bereits_gemessen=_gemessene_pfade(s.mess_protokoll))
         anker_block = baue_anker_rueckmeldung(s)
+        _ps_block = format_projekt_stand(s)
         return (
-            (anker_block if anker_block else "")
+            aufgabe_block(s)
+            + (_ps_block if _ps_block else "")
+            + (anker_block if anker_block else "")
             +
             f"BASIS-GATE:\n{s.basis_protokoll[:1500]}\n\n"
             + format_doc_snippets(s.docs) + "\n\n"
             + zs + "\n\n"
             + f"GEMESSENER INHALT (verbindlich, gewinnt gegen "
             f"ZIELDATEIEN):\n{s.mess_protokoll or '(keine)'}\n\n"
-            + aufgabe_block(s)
             + "Liefere strukturierte Code-Patches im Format "
             "PATCH-BEGINN/PATCH-ENDE.\n"
             "Format und Einrueckungs-Regeln stehen im "
@@ -3559,6 +3608,8 @@ def run_pipeline(project_name: str, aufgabe: str,
         szenario = (
             # Auflage 2152: Auftrag MUSS im Szenario stehen.
             aufgabe_block(state)
+            # Agent-Memory A2: Projekt-Stand.
+            + format_projekt_stand(state)
             # Auflage 2178: MESSWERTE-Block direkt sichtbar.
             + format_messwerte_block(collect_messwerte(state))
             + "\n\n"
@@ -4236,6 +4287,29 @@ def main() -> int:
                 # Fehler im Endlog darf den Exit-Code
                 # nicht ueberschreiben (P6).
                 print("[WARN] pipeline_ende fehlgeschlagen.")
+            # Agent-Memory A3: Projekt-Memory aktualisieren.
+            # TT2: nach pipeline_ende, try/except, kein Fail-closed.
+            try:
+                _projekt = (state_ref[0].project_name
+                            if state_ref else "")
+                if _projekt:
+                    import subprocess as _sp
+                    _sp.run(
+                        (sys.executable,
+                         "/opt/werkstatt/werkstatt_aggregate.py",
+                         _projekt, "--fenster-tage", "1"),
+                        capture_output=True, text=True,
+                        timeout=30, check=False)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[WARN] Aggregator: {exc}")
+                try:
+                    audit("aggregator_failed",
+                          {"fehler": str(exc)},
+                          state_ref[0].project_dir,
+                          state_ref[0].project_name)
+                except Exception:  # noqa: BLE001
+                    print("[WARN] Audit aggregator_failed "
+                          "fehlgeschlagen.")
     return rc
 
 
