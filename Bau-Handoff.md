@@ -1,9 +1,9 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach 2183 + Stufe 0 + Auftrag-erfuellt)
-Werkstatt-HEAD: 3cf7404 (Auftrag-erfuellt + Solver-Prompt)
-Letzter echter Probebetrieb: PB-63 (8db36f7, 2026-10-15)
-Letzter Commit in security-ai: 8db36f7
+Stand: 2026-10-15 (nach 2183 + Stufe 0 + Auftrag-erfuellt + PB-65)
+Werkstatt-HEAD: 6a1d5b6 (Doku Auftrag-erfuellt)
+Letzter echter Probebetrieb: PB-65 (2aa2b0b, 2026-10-15)
+Letzter Commit in security-ai: 2aa2b0b
 Branch: main
 Tests: 346 passed
 ruff: 0
@@ -181,7 +181,9 @@ Kurzfassung:
   M-62: Feature. run_id im Audit (2200a).
   M-63: Feature. Audit-Aggregator (2200).
   PB-64: Chore. projects/*.memory.yaml ignorieren.
-  PB-65: Doku. Handoff auf PB-64.
+  (Hinweis: die Nummer PB-65 wurde 2026-10-15 neu
+   vergeben: echter notify_ntfy-Test-Lauf. Siehe
+   Session-Liste unten.)
   PB-66: Fix. R7-Phase-2-Toleranz + Aggregator
          mypy/ruff (2199-R7-P2).
   PB-67: Doku. Handoff auf PB-66.
@@ -279,6 +281,11 @@ Auflagen dieser Session:
         A2 (solver.md-Hinweis), AUFTRAG-Block.
         Commits a0d436b, 183f560, 0f6442d, 7fdaffa,
         3cf7404. +24 Tests, 407 passed.
+  PB-65 (2026-10-15): notify_ntfy — acht Tests fuer
+        ToolArgumentValueError. Erster Lauf im normalen
+        Erfolgspfad nach Auftrag-erfuellt. Code-GO Runde 1,
+        Commit-GO, kein Solver-Trigger. Commit 2aa2b0b,
+        Tag probebetrieb-64. 13 passed in test_notify_ntfy.
   Stufe 0 (Selbstheilung): ERLEDIGT 2026-10-15.
         A1+1b: pruefe_anker_gegen_messung + pruefe_
         ersatz_gegen_messung (deterministisch).
@@ -983,16 +990,14 @@ Der neue Bau-Chat soll:
 
 2. docs/PROTOKOLL-29-40.md lesen.
 
-3. Reihenfolge (Stufe 0 + Auftrag-erfuellt erledigt
-   2026-10-15):
-   a) PB-65 mit echtem Auftrag. Test der Solver-Blocks
-      im normalen Erfolgspfad (nicht nur Deadlock).
-   b) Block "Agent-Memory" (Kategorie 3).
+3. Reihenfolge (Stufe 0 + Auftrag-erfuellt + PB-65
+   erledigt 2026-10-15):
+   a) Block "Agent-Memory" (Kategorie 3).
       Projekt-Memory + Run-Memory + Verdichtung.
       Voraussetzung fuer Phasen-Modus.
-   c) Ziel 3: Ordner-/Doku-Schema + Scaffolder.
-   d) Ziel 2: Phasen-Modus.
-   e) Solver-Kurskorrektur Block 6, 2183-AQ,
+   b) Ziel 3: Ordner-/Doku-Schema + Scaffolder.
+   c) Ziel 2: Phasen-Modus.
+   d) Solver-Kurskorrektur Block 6, 2183-AQ,
       2200b/c/T, 2199a, 2199-R7-P1, Werkstatt-Vertrag.
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
