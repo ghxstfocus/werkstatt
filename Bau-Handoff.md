@@ -1,13 +1,15 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach 2183 + Stufe 0 + Auftrag-erfuellt + PB-65..67 + Agent-Memory-E1)
-Werkstatt-HEAD: 8a73eb1 (Doku PB-66)
-Letzter echter Probebetrieb: PB-67 (c9142a7, 2026-10-15)
+Stand: 2026-10-15 (nach Phase 1 Projekt-Schema)
+Werkstatt-HEAD: 406e3cc (Projekt-Schema + Validator, Warn-Modus)
+Letzter echter Probebetrieb: PB-66 (c9142a7, 2026-10-15)
 Letzter Commit in security-ai: c9142a7
 Branch: main
-Tests: 346 passed
-ruff: 0
-mypy: 0
+Tests: 441 passed (423 + 18 Phase-1-Tests)
+ruff --no-cache: 0
+mypy pipeline.py: 0
+mypy tests/test_pipeline.py: 15 (vorbestehend, tests-mypy-Merkposten)
+mypy tests/test_projekt_schema.py: 0
 
 ================================================================
 WICHTIG (2026-10-14)
@@ -312,6 +314,21 @@ Auflagen dieser Session:
         A3: Solver-Trigger A+B. Commits b5f3073,
         5bafc02, f4a8378, 737afe9. +28 Tests.
         383 passed.
+
+  Phase 1 Projekt-Schema: ERLEDIGT 2026-10-15.
+        Commit 406e3cc. Neue Dateien:
+        schemas/projekt.yaml (K/O/P/W+O, Defaults,
+        Alias-Mechanik), projects/_template.yaml,
+        tests/test_projekt_schema.py (18 Tests).
+        pipeline.py: pruefe_projekt_yaml (Warn-Modus,
+        Fail-Modus via WERKSTATT_SCHEMA_MODUS),
+        _lade_und_pruefe_projekt, run_pipeline nutzt
+        project_agents_dir. security-ai.yaml migriert
+        (agents_dir raus, docs.handoff -> docs.reviewer,
+        pre_check_stage/escalation/reject_path raus).
+        WORKFLOW.md: Abschnitte Projekt-Schema +
+        Messtechnik (ruff --no-cache, mypy rekursiv).
+        441 passed. Reviewer-Block 2026-10-15 bestaetigt.
 
 ================================================================
 5. OFFENE AUFLAGEN UND MERKPOSTEN
@@ -673,6 +690,52 @@ ist, dass eine Phase mit 10 Unterkategorien in
 einem Zug abgearbeitet wird.
 
 MITTEL (Merkposten):
+
+  Phase 1b (Validator Fail-closed): OFFEN.
+        Warn-Modus ist Default (WERKSTATT_SCHEMA_MODUS=warn).
+        Nach 2-3 echten Pipeline-Laeufen ohne Schema-Warnung
+        auf fail umstellen. Commit: "Validator im Fail-closed-
+        Modus". Kategorie 2.
+
+  ruff --no-cache: WERKSTATTSREGEL (2026-10-15).
+        ruff-IMMER mit --no-cache messen.
+        Anlass: Phase 1, Block 14. Erster ruff-Aufruf meldete
+        2 Fehler (I001), zweiter Aufruf ohne Aenderung 0
+        Fehler. .ruff_cache war stale. Erst --no-cache lieferte
+        reproduzierbares Ergebnis. In WORKFLOW.md dokumentiert.
+
+  Import-Sortierung: ruff --fix nutzen.
+        Bei I001-Fehlern nicht manuell raten — ruff --fix
+        schreibt deterministisch, was ruff will.
+        Anlass: Phase 1, Block 26c-26h. Zwei Fehlversuche
+        mit Anker-Patches, weil die Sortierlogik (third-party
+        vs. first-party) nicht offensichtlich war.
+
+  docs-Migration (Frage 1 b+c): OFFEN.
+        Reviewer-Block 2026-10-15 hat Frage 1 zurueckgegeben
+        an den Menschen. Mensch hat entschieden: (b)+(c).
+        Konkret:
+          - Jetzt umbenennen: docs/CONTEXT_PROMPT.md ->
+            docs/CONTEXT.md, docs/REVIEWER_HANDOFF.md ->
+            docs/REVIEWER.md. Alias-Uebergangszeit.
+          - Langfristig durch generierte Rollen-Prompts
+            ersetzen. Dateien entfallen dann ganz.
+        Umbenennung in security-ai: eigener Block.
+        Rollen-Prompt-Generator: eigener Block (Phase 3.5).
+
+  pre_check_stage/escalation/reject_path: ENTFERNT.
+        Aus security-ai.yaml entfernt (waren nicht
+        implementiert). Merkposten: falls wieder gebraucht,
+        als Werkstatt-Default zurueckfuehren (nicht pro
+        Projekt). Siehe Reviewer-Block Frage 5.
+
+  tests-mypy: 15 Fehler (nicht mehr 151).
+        Bei Phase 1 (2026-10-15) gemessen: 15 Fehler in
+        tests/test_pipeline.py, Zeilen 3583-3608
+        (code_entwurf_historie, record_code_entwurf) und
+        4147 (append return value). Vorbestehend, nicht
+        durch Phase 1 verursacht. Eigener Block.
+        Kategorie 2.
 
   Auftrag bereits erfuellt (Feldtest PB-64, 2026-10-15):
         STATUS: ERLEDIGT in Commits a0d436b bis 3cf7404.
@@ -1059,20 +1122,30 @@ Der neue Bau-Chat soll:
 
 2. docs/PROTOKOLL-29-40.md lesen.
 
-3. Reihenfolge (Stufe 0 + Auftrag-erfuellt + PB-65
-   + Memory-E1 erledigt 2026-10-15):
-   a) PB-67 mit Auftrag "Tests fuer nmap_scan".
-      Reviewer-Empfehlung aus PB-66.
-   b) Block "Anti-Pattern-Bibliothek" (Teil B,
-      Kategorie 3, Ziel 5).
-   c) Block "Migration WORKFLOW.md -> katalog.yaml"
-      (Teil C).
-   d) Block "Agent-Memory Ebene 2" (Run-Memory,
+3. Reihenfolge (Phase 1 Projekt-Schema erledigt 2026-10-15):
+   a) Phase 3: Anti-Pattern-Bibliothek (Ziel 5).
+      Naechster Block. Aufteilung:
+        3a: anti-patterns/katalog.yaml + Loader +
+            Erstbefuellung aus docs/WORKFLOW.md.
+        3b: Builder-Prompt-Injektion bei Anker-
+            Rueckmeldung.
+        3c (optional, spaeter): Aggregator-Vorschlaege.
+      Empfehlung Bau-Chat: 3a + 3b in einem Block.
+   b) Phase 2: Scaffolder (werkstatt_scaffold.py +
+      werkstatt_migrate.py). Abhaengigkeit: Frage 1 (c),
+      Rollen-Prompt-Generator. Scaffolder kann vorerst
+      die Vorlagen kopieren und spaeter nachziehen.
+   c) Phase 1b: Validator Fail-closed.
+      Nach 2-3 echten Pipeline-Laeufen.
+   d) docs-Migration (Frage 1 b+c): security-ai
+      docs/CONTEXT_PROMPT.md -> docs/CONTEXT.md,
+      docs/REVIEWER_HANDOFF.md -> docs/REVIEWER.md.
+   e) Rollen-Prompt-Generator (Phase 3.5).
+   f) Block "Agent-Memory Ebene 2" (Run-Memory,
       Phasen-Fortschritt).
-   e) Ziel 3: Ordner-/Doku-Schema + Scaffolder.
-   f) Ziel 2: Phasen-Modus.
-   g) Ziel 4: Dashboard.
-   h) Solver-Kurskorrektur Block 6, 2183-AQ,
+   g) Ziel 2: Phasen-Modus.
+   h) Ziel 4: Dashboard.
+   i) Solver-Kurskorrektur Block 6, 2183-AQ,
       2200b/c/T, 2199a, 2199-R7-P1, Werkstatt-Vertrag.
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
