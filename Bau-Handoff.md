@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach Probebetrieb 62 + 2183 B3+B5)
-Werkstatt-HEAD: 0b19bcb (2183 Block 5, Solver-Loop)
+Stand: 2026-10-15 (nach 2183 + Stufe 0)
+Werkstatt-HEAD: 737afe9 (Stufe 0: Selbstheilung)
 Letzter echter Probebetrieb: PB-62
 Letzter Commit in security-ai: 3bb5917
 Branch: main
@@ -258,6 +258,14 @@ Auflagen dieser Session:
         mit GG1-GG5. max_solver_runden=3, Zaehler
         solver_aufrufe, Historie im Solver-Prompt.
         Commit 0b19bcb. +5 Tests, 355 passed.
+  Stufe 0 (Selbstheilung): ERLEDIGT 2026-10-15.
+        A1+1b: pruefe_anker_gegen_messung + pruefe_
+        ersatz_gegen_messung (deterministisch).
+        A2: Builder-Rueckmeldung mit Mess-Chance.
+        A4: Deadlock-Differenzierung (3 Faelle).
+        A3: Solver-Trigger A+B. Commits b5f3073,
+        5bafc02, f4a8378, 737afe9. +28 Tests.
+        383 passed.
 
 ================================================================
 5. OFFENE AUFLAGEN UND MERKPOSTEN
@@ -538,7 +546,59 @@ WICHTIG (naechste Session):
            bewusst? Kategorie 2.
 
 
+ZIELE (2026-10-15, laengerfristig)
+---------------------------------
+
+Ziel 1 — Autonomie bis Approval.
+        Die Werkstatt soll grosse Arbeitspakete
+        (Phasen mit 10+ Unterkategorien)
+        eigenstaendig abarbeiten. Der Mensch
+        greift nur am Approval-Gate ein.
+
+Ziel 2 — Deterministisch vor LLM.
+        Wo eine Regel entscheiden kann, ent-
+        scheidet Code. LLM nur wo Urteils-
+        vermoegen noetig ist.
+
+Ziel 3 — Ordner-/Doku-Schema + Scaffolder.
+        security-ai ist historisch gewachsen.
+        Fuer Scaffolder (anlegen, migrieren,
+        konsolidieren) braucht es eine Vorlage.
+        Konsolidierung: Dopplungen finden
+        (deterministisch), aehnliche Dokumente
+        zusammenfuehren (LLM), Mensch bestaetigt.
+
+STUFE 0 (Selbstheilung) — ERLEDIGT 2026-10-15.
+        Deterministische Anker-/Ersatz-Pruefung,
+        Builder-Rueckmeldung mit Mess-Chance,
+        Solver-Trigger A+B, Deadlock-
+        Differenzierung. Commits b5f3073 bis
+        737afe9.
+
 MITTEL (Merkposten):
+
+  II2b (Substring-Kollision): Ersatz-Pruefung
+        nutzt Substring-Match (modul in mess_
+        protokoll). Kollisionen bei Modulnamen,
+        die Praefix eines laengeren Modulnamens
+        sind, werden nicht erkannt. Bei erster
+        realer Kollision: Wortgrenzen oder
+        exakter Match.
+
+  II5b (Audit-Fuss-Kuerzung): _audit_builder_
+        reply kuerzt den Fuss auf 200 Zeichen.
+        Rueckfragen im Fuss sind dadurch nur
+        teilweise sichtbar. Vorschlag: auf
+        redigiert[-1000:] erweitern, damit
+        Rueckfragen messbar sind.
+
+  II6b (Inhaltswort-Kalibrierung): Die Liste
+        INHALTSWOERTER_TRIGGER_B ist eine
+        Setzung. Nach 5-10 PB-Laeufen:
+        echte Rueckfragen klassifizieren,
+        Liste anpassen. >20% False Positives
+        -> verschaerfen. >20% echte Rueckfragen
+        nicht getriggert -> lockern.
 
   F1 (Solver-Frequenz): ERLEDIGT in Block 5
         als (c) max_solver_runden=3 ohne
@@ -873,23 +933,20 @@ Der neue Bau-Chat soll:
 
 2. docs/PROTOKOLL-29-40.md lesen.
 
-3. Reihenfolge (Block 3+5 erledigt 2026-10-15):
-   a) Solver-Kurskorrektur Block 6
-      (Smoke-Test). Kategorie 2.
-   b) 2183-AQ Auftragsqualitaet (Rest).
-      Bei PB-62 praktisch angewendet (Pre-Flight
-      whois.py gegen Zielcode). Formaler Nieder-
-      schlag (Checkliste in docs/) offen.
-      Kategorie 3.
-   c) 2200b/c/T Aggregator-Verfeinerung.
-   d) 2199a Zustandsmaschine (Kategorie 3).
-   e) 2199a Recovery-Zweig.
-   f) 2199-R7-P1 (Phase-1-R7-Wirkung).
-   g) Werkstatt-Vertrag (nach 2183 B/C,
-      siehe MITTEL).
-   (Empfehlung 2026-10-15: vor Block 6 einen
-    echten PB-63 mit dem neuen Solver-Loop.
-    Block 6 auf belastbaren Daten.)
+3. Reihenfolge (2183 + Stufe 0 erledigt 2026-10-15):
+   a) PB-63 Versuch 3 mit korrigiertem Auftrag
+      (notify_ntfy ToolArgumentValueError).
+      Auftrag muss Modul-Herkunft nennen
+      (harness.tool_registry.tool).
+      Nach Erfolg: Tag probebetrieb-63.
+   b) Ziel 3: Ordner-/Doku-Schema + Scaffolder-
+      Grundlage (Konsolidierung). Eigene Runde.
+   c) Ziel 2 (Phasen-Modus). Eigene Runde.
+   d) Solver-Kurskorrektur Block 6 (Smoke-Test).
+   e) 2183-AQ Auftragsqualitaet (Checkliste).
+   f) 2200b/c/T Aggregator-Verfeinerung.
+   g) 2199a Zustandsmaschine / Recovery-Zweig.
+   h) 2199-R7-P1, Werkstatt-Vertrag.
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
    Blocks formulieren. Vor Ausfuehrung.
