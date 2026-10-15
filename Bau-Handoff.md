@@ -1,9 +1,9 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach 2183 + Stufe 0)
+Stand: 2026-10-15 (nach 2183 + Stufe 0 + PB-63)
 Werkstatt-HEAD: 737afe9 (Stufe 0: Selbstheilung)
-Letzter echter Probebetrieb: PB-62
-Letzter Commit in security-ai: 3bb5917
+Letzter echter Probebetrieb: PB-63 (8db36f7, 2026-10-15)
+Letzter Commit in security-ai: 8db36f7
 Branch: main
 Tests: 346 passed
 ruff: 0
@@ -258,6 +258,12 @@ Auflagen dieser Session:
         mit GG1-GG5. max_solver_runden=3, Zaehler
         solver_aufrufe, Historie im Solver-Prompt.
         Commit 0b19bcb. +5 Tests, 355 passed.
+  PB-63 (2026-10-15): notify_ntfy auf Konvention
+        umgestellt. Erster echter Lauf nach Neudefinition
+        mit sauberem Werkstatt-Stand. Commit 8db36f7,
+        Tag probebetrieb-63. Runden 2, llm_calls 7, rc 0.
+  Feldtest PB-64 (Feld): Auftrag bereits erfuellt.
+        rc=7. Neuer Befund (siehe Merkposten).
   Stufe 0 (Selbstheilung): ERLEDIGT 2026-10-15.
         A1+1b: pruefe_anker_gegen_messung + pruefe_
         ersatz_gegen_messung (deterministisch).
@@ -576,6 +582,32 @@ STUFE 0 (Selbstheilung) — ERLEDIGT 2026-10-15.
         737afe9.
 
 MITTEL (Merkposten):
+
+  Auftrag bereits erfuellt (Feldtest PB-64, 2026-10-15):
+        Die Werkstatt hat keinen Pfad fuer "Auftrag ist
+        bereits erfuellt". Beobachtet:
+        1. Der Builder hat korrekt erkannt: "Die Datei
+           entspricht bereits der Konvention, kein Patch
+           noetig." (reply_fuss, run 20261015-104113).
+        2. Der Builder lieferte einen Patch mit anker ==
+           ersatz (wirkungslos).
+        3. Der Reviewer gab GO, obwohl HR5 (ersatz !=
+           anker) verletzt ist und der Fuss explizit
+           "kein Patch noetig" sagte.
+        4. Stufe-0-Trigger greift nicht: der Anker steht
+           wortwoertlich im mess_protokoll, nur der Ersatz
+           ist identisch.
+        5. Kein Solver-Trigger. Commit-Paket leer ->
+           Commit-NO-GO 2x -> rollback_fail_closed rc=7.
+        Loesung (eigener Block, Kategorie 3):
+          - pruefe_anker_gegen_messung um anker == ersatz
+            erweitern (Grund "wirkungslos").
+          - Reviewer-Prompt: HR5-Pruefung explizit.
+          - Pipeline-Pfad "Auftrag bereits erfuellt":
+            rc=0, Audit auftrag_bereits_erfuellt, kein
+            Commit, kein Tag.
+          - Solver-Trigger erweitern (wirkungslos / kein
+            Patch noetig).
 
   II2b (Substring-Kollision): Ersatz-Pruefung
         nutzt Substring-Match (modul in mess_
@@ -933,20 +965,19 @@ Der neue Bau-Chat soll:
 
 2. docs/PROTOKOLL-29-40.md lesen.
 
-3. Reihenfolge (2183 + Stufe 0 erledigt 2026-10-15):
-   a) PB-63 Versuch 3 mit korrigiertem Auftrag
-      (notify_ntfy ToolArgumentValueError).
-      Auftrag muss Modul-Herkunft nennen
-      (harness.tool_registry.tool).
-      Nach Erfolg: Tag probebetrieb-63.
-   b) Ziel 3: Ordner-/Doku-Schema + Scaffolder-
-      Grundlage (Konsolidierung). Eigene Runde.
-   c) Ziel 2 (Phasen-Modus). Eigene Runde.
-   d) Solver-Kurskorrektur Block 6 (Smoke-Test).
-   e) 2183-AQ Auftragsqualitaet (Checkliste).
-   f) 2200b/c/T Aggregator-Verfeinerung.
-   g) 2199a Zustandsmaschine / Recovery-Zweig.
-   h) 2199-R7-P1, Werkstatt-Vertrag.
+3. Reihenfolge (2183 + Stufe 0 + PB-63, 2026-10-15):
+   a) Block "Auftrag bereits erfuellt" (Kategorie 3).
+      Deckt die Luecke aus Feldtest PB-64.
+      Inklusive Solver-Trigger-Erweiterung
+      (wirkungsloser Patch, kein Patch noetig).
+   b) PB-64-Wiederholung (Feldtest Solver).
+   c) Block "Agent-Memory" (Kategorie 3).
+      Projekt-Memory + Run-Memory + Verdichtung.
+      Voraussetzung fuer Phasen-Modus.
+   d) Ziel 3: Ordner-/Doku-Schema + Scaffolder.
+   e) Ziel 2: Phasen-Modus.
+   f) Solver-Kurskorrektur Block 6, 2183-AQ,
+      2200b/c/T, 2199a, 2199-R7-P1, Werkstatt-Vertrag.
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
    Blocks formulieren. Vor Ausfuehrung.
