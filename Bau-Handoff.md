@@ -594,6 +594,10 @@ Regeln fuer jeden Bau-Block:
 Werkstatt-Regel: ruff --no-cache messen.
 Werkstatt-Regel: mypy rekursiv pruefen.
 Werkstatt-Regel: bei Import-Sortierung ruff --fix.
+Werkstatt-Regel: /opt/werkstatt/projects/ gehoert
+                 builder:builder 750 (Pipeline-User
+                 schreibt dort Laufzeit-State). Nach
+                 root-Eingriffen pruefen.
 
 ================================================================
 8. WERKZEUGE UND BEFEHLE
