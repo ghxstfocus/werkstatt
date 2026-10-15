@@ -2438,6 +2438,24 @@ def _fail_closed(state: RunState, project_dir: Path,
     return code
 
 
+def pruefe_auftrag_bereits_erfuellt(state: RunState) -> bool:
+    """Block Auftrag-erfuellt, B2: Auftrag bereits erfuellt?
+
+    Bedingungen (JJ4, JJ5a):
+      - state.letzter_patch_wirkungslos ist True.
+      - Solver-Befund mit Quelle "wirkungsloser_patch".
+      - Letzter Befund ist nicht WIDERSPRUCH (JJ4).
+    """
+    if not state.letzter_patch_wirkungslos:
+        return False
+    if "wirkungsloser_patch" not in state.solver_trigger_quellen:
+        return False
+    if not state.solver_befunde:
+        return False
+    letzter = state.solver_befunde[-1]
+    return letzter.art != SolverDiagnose.WIDERSPRUCH
+
+
 def apply_and_recheck(state: RunState,
                       always: dict[str, Measurement],
                       file_whitelist: list[str]) -> int | None:
@@ -3719,6 +3737,21 @@ def run_pipeline(project_name: str, aufgabe: str,
     rc_apply = apply_and_recheck(state, always, file_whitelist)
     if rc_apply is not None:
         return rc_apply
+
+    # Block Auftrag-erfuellt B2: Auftrag ist bereits
+    # erfuellt. Kein Commit, kein Tag, rc=0.
+    if pruefe_auftrag_bereits_erfuellt(state):
+        print("[+] Auftrag bereits erfuellt. "
+              "Kein Commit noetig.")
+        audit("auftrag_bereits_erfuellt",
+              {"runden": len(state.review_runden),
+               "art": state.solver_befunde[-1].art.name
+                   if state.solver_befunde else ""},
+              project_dir, project_name)
+        audit("pipeline_erfolg_ohne_commit",
+              {"grund": "auftrag_bereits_erfuellt"},
+              project_dir, project_name)
+        return 0
 
     # ==================================================================
     # SCHRITT 4: Coverage + ggf. Test-Generator + Chaos

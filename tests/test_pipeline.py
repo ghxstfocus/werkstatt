@@ -4681,6 +4681,62 @@ def test_wirkungslos_flag_ist_trigger_c_vorbedingung() -> None:
     assert s.letzter_patch_wirkungslos is True
 
 
+# ---------- Block Auftrag-erfuellt, B2 ----------
+
+def test_auftrag_bereits_erfuellt_mit_bestaetigung() -> None:
+    """Flag + Befund + nicht WIDERSPRUCH: True."""
+    s = build_test_state()
+    s.letzter_patch_wirkungslos = True
+    s.solver_trigger_quellen = ["wirkungsloser_patch"]
+    b = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="test", run_id="run-1")
+    s.solver_befunde = [b]
+    assert pipeline.pruefe_auftrag_bereits_erfuellt(s) is True
+
+
+def test_auftrag_bereits_erfuellt_ohne_flag() -> None:
+    """Ohne Flag: False."""
+    s = build_test_state()
+    s.solver_trigger_quellen = ["wirkungsloser_patch"]
+    b = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="test", run_id="run-1")
+    s.solver_befunde = [b]
+    assert pipeline.pruefe_auftrag_bereits_erfuellt(s) is False
+
+
+def test_auftrag_bereits_erfuellt_ohne_solver() -> None:
+    """Flag, kein Solver-Befund: False."""
+    s = build_test_state()
+    s.letzter_patch_wirkungslos = True
+    s.solver_trigger_quellen = ["wirkungsloser_patch"]
+    assert pipeline.pruefe_auftrag_bereits_erfuellt(s) is False
+
+
+def test_auftrag_bereits_erfuellt_mit_widerspruch() -> None:
+    """Flag + WIDERSPRUCH: False (JJ4)."""
+    s = build_test_state()
+    s.letzter_patch_wirkungslos = True
+    s.solver_trigger_quellen = ["wirkungsloser_patch"]
+    b = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.WIDERSPRUCH,
+        rueckspiel_hinweis="test", run_id="run-1")
+    s.solver_befunde = [b]
+    assert pipeline.pruefe_auftrag_bereits_erfuellt(s) is False
+
+
+def test_auftrag_bereits_erfuellt_ohne_quelle() -> None:
+    """Flag, Quelle fehlt: False."""
+    s = build_test_state()
+    s.letzter_patch_wirkungslos = True
+    b = pipeline.SolverBefund(
+        art=pipeline.SolverDiagnose.UNKLAR,
+        eskalation="test", run_id="run-1")
+    s.solver_befunde = [b]
+    assert pipeline.pruefe_auftrag_bereits_erfuellt(s) is False
+
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)
