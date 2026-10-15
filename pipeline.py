@@ -846,6 +846,10 @@ def pruefe_anker_gegen_messung(
     Liefert Liste von (Patch-Index, Pfad, Anker, Grund).
 
     Grund-Werte:
+      "wirkungslos":      Anker und Ersatz sind exakt
+                          gleich. Der Patch aendert
+                          nichts (JJ1: exakter Vergleich,
+                          keine Whitespace-Toleranz).
       "leer":             Anker ist leer.
       "nicht_gefunden":   Anker steht nicht im
                           mess_protokoll (auch nicht
@@ -855,6 +859,10 @@ def pruefe_anker_gegen_messung(
                           Variante (HH2) steht genau
                           einmal am Zeilenanfang.
 
+    JJ3: nur ein Grund pro Patch. Wenn zwei
+    Probleme vorliegen, liefert jede Pruef-
+    Funktion ihren eigenen Eintrag.
+
     HH2: Toleranz fuer +2-Shift, wie in
     apply_code_patches (Auflage 2165).
     HH3: Leerer Anker bekommt eigenen Grund.
@@ -862,7 +870,12 @@ def pruefe_anker_gegen_messung(
     fehlend: list[tuple[int, str, str, str]] = []
     for i, p in enumerate(patches):
         anker = p.get("anker", "")
+        ersatz = p.get("ersatz", "")
         pfad = p.get("pfad", "")
+        # JJ1/JJ2: wirkungslos (exakter Vergleich).
+        if anker and anker == ersatz:
+            fehlend.append((i, pfad, anker, "wirkungslos"))
+            continue
         if not anker:
             fehlend.append((i, pfad, anker, "leer"))
             continue

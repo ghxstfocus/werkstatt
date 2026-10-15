@@ -4592,6 +4592,54 @@ def test_inhaltswoerter_liste_vorhanden() -> None:
     assert len(pipeline.INHALTSWOERTER_TRIGGER_B) >= 5
 
 
+# ---------- Block Auftrag-erfuellt, B1 ----------
+
+def test_pruefe_anker_wirkungslos_erkannt() -> None:
+    """anker == ersatz -> Grund 'wirkungslos'."""
+    patches = [{"pfad": "x.py",
+                "anker": "from foo import bar",
+                "ersatz": "from foo import bar"}]
+    fehlend = pipeline.pruefe_anker_gegen_messung(
+        patches, "from foo import bar")
+    assert len(fehlend) == 1
+    assert fehlend[0][3] == "wirkungslos"
+
+
+def test_pruefe_anker_mit_trailing_whitespace_ist_wirkungslos() -> None:
+    """anker != ersatz (Trailing \n): NICHT wirkungslos (JJ1)."""
+    patches = [{"pfad": "x.py",
+                "anker": "from foo import bar",
+                "ersatz": "from foo import bar\n"}]
+    fehlend = pipeline.pruefe_anker_gegen_messung(
+        patches, "from foo import bar")
+    # anker steht im mess -> kein Fehler.
+    assert fehlend == []
+
+
+def test_pruefe_anker_leer_bleibt_leer() -> None:
+    """Leerer Anker: Grund 'leer', nicht 'wirkungslos'."""
+    patches = [{"pfad": "x.py", "anker": "", "ersatz": ""}]
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "")
+    assert len(fehlend) == 1
+    assert fehlend[0][3] == "leer"
+
+
+def test_pruefe_anker_wirkungslos_hat_einen_grund_pro_patch() -> None:
+    """JJ3: ein Eintrag pro Patch."""
+    patches = [{"pfad": "x.py",
+                "anker": "gleich", "ersatz": "gleich"}]
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "")
+    assert len(fehlend) == 1
+
+
+def test_pruefe_anker_wirksamer_patch_kein_fehler() -> None:
+    """anker != ersatz, anker im mess: kein Fehler."""
+    patches = [{"pfad": "x.py",
+                "anker": "alt", "ersatz": "neu"}]
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "alt")
+    assert fehlend == []
+
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)
