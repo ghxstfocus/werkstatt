@@ -753,6 +753,94 @@ def parse_empfehlung(text: str) -> dict[str, str]:
 
 
 
+def pruefe_anker_gegen_messung(
+    patches: list[dict[str, str]],
+    mess_protokoll: str,
+) -> list[tuple[int, str, str, str]]:
+    """Stufe 0, Aenderung 1: deterministische
+    Anker-Pruefung gegen den GEMESSENER INHALT.
+
+    Liefert Liste von (Patch-Index, Pfad, Anker, Grund).
+
+    Grund-Werte:
+      "leer":             Anker ist leer.
+      "nicht_gefunden":   Anker steht nicht im
+                          mess_protokoll (auch nicht
+                          als +2-Shift-Variante).
+      "shift_akzeptiert": Anker steht nicht wort-
+                          woertlich, aber die +2-Shift-
+                          Variante (HH2) steht genau
+                          einmal am Zeilenanfang.
+
+    HH2: Toleranz fuer +2-Shift, wie in
+    apply_code_patches (Auflage 2165).
+    HH3: Leerer Anker bekommt eigenen Grund.
+    """
+    fehlend: list[tuple[int, str, str, str]] = []
+    for i, p in enumerate(patches):
+        anker = p.get("anker", "")
+        pfad = p.get("pfad", "")
+        if not anker:
+            fehlend.append((i, pfad, anker, "leer"))
+            continue
+        if anker in mess_protokoll:
+            continue
+        # HH2: +2-Shift-Variante
+        verschoben = _shift_lines(anker, "  ")
+        if verschoben in mess_protokoll:
+            fehlend.append(
+                (i, pfad, anker, "shift_akzeptiert"))
+            continue
+        fehlend.append((i, pfad, anker, "nicht_gefunden"))
+    return fehlend
+
+
+def pruefe_ersatz_gegen_messung(
+    patches: list[dict[str, str]],
+    mess_protokoll: str,
+) -> list[tuple[int, str, str]]:
+    """Stufe 0, Aenderung 1b: deterministische
+    Ersatz-Pruefung gegen den GEMESSENER INHALT.
+
+    Liefert Liste von (Patch-Index, Pfad, Modul).
+
+    II1: Regex am Zeilenanfang. Erkennt mehrzeilige
+    Klammer-Imports, weil nur der from-Import-Anfang
+    gematcht wird. Erkennt NICHT: Inline-Imports
+    (x = 1; from foo import bar), relative Imports
+    (from .foo import bar), bedingte Imports
+    (if True:\n    from foo...). Diese kommen in
+    security-ai nicht vor.
+
+    II2b: Treffer ist Substring-Match
+    (modul in mess_protokoll). Kollisionen bei
+    Modulnamen, die Praefix eines laengeren
+    Modulnamens sind, werden nicht erkannt.
+    Bei erster realer Kollision: Wortgrenzen
+    oder exakter Match.
+    """
+    import re as _re
+    fehlend: list[tuple[int, str, str]] = []
+    # II1: Regex muss mit Buchstabe oder _ beginnen,
+    # damit relative Imports (from .foo import) NICHT
+    # erkannt werden.
+    pfad_re = _re.compile(
+        r"^\s*(?:from\s+([a-zA-Z_][\w.]*)\s+import"
+        r"|import\s+([a-zA-Z_][\w.]*))",
+        _re.MULTILINE,
+    )
+    for i, p in enumerate(patches):
+        ersatz = p.get("ersatz", "")
+        pfad = p.get("pfad", "")
+        if not ersatz:
+            continue
+        for m in pfad_re.finditer(ersatz):
+            modul = m.group(1) or m.group(2)
+            if modul and modul not in mess_protokoll:
+                fehlend.append((i, pfad, modul))
+    return fehlend
+
+
 def builder_reply_mit_command_loop(
     state: RunState,
     api_key: str,

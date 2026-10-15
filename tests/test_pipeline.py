@@ -4328,6 +4328,134 @@ def test_solver_prompt_enthaelt_historie_bei_runde_2() -> None:
     assert "DIAGNOSE: UNKLAR" in out
 
 
+# ---------- Stufe 0, Aenderung 1 + 1b ----------
+
+def test_pruefe_anker_gegen_messung_alle_ok() -> None:
+    """Alle Anker stehen im mess_protokoll."""
+    patches = [{"pfad": "x.py", "anker": "alpha", "ersatz": "beta"}]
+    fehlend = pipeline.pruefe_anker_gegen_messung(
+        patches, "alpha und beta drin")
+    assert fehlend == []
+
+
+def test_pruefe_anker_gegen_messung_einer_fehlt() -> None:
+    """Ein Anker fehlt, andere ok."""
+    patches = [
+        {"pfad": "a.py", "anker": "alpha", "ersatz": "x"},
+        {"pfad": "b.py", "anker": "GAMMA", "ersatz": "x"},
+    ]
+    fehlend = pipeline.pruefe_anker_gegen_messung(
+        patches, "alpha und beta drin")
+    assert len(fehlend) == 1
+    i, pfad, anker, grund = fehlend[0]
+    assert i == 1
+    assert pfad == "b.py"
+    assert anker == "GAMMA"
+    assert grund == "nicht_gefunden"
+
+
+def test_pruefe_anker_gegen_messung_leer() -> None:
+    """Leerer Anker bekommt Grund 'leer' (HH3)."""
+    patches = [{"pfad": "x.py", "anker": "", "ersatz": "y"}]
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "irgendwas")
+    assert len(fehlend) == 1
+    _, _, _, grund = fehlend[0]
+    assert grund == "leer"
+
+
+def test_pruefe_anker_gegen_messung_shift_akzeptiert() -> None:
+    """+2-Shift-Variante wird akzeptiert (HH2)."""
+    patches = [{"pfad": "x.py",
+                "anker": "alpha\nbeta", "ersatz": "y"}]
+    fehlend = pipeline.pruefe_anker_gegen_messung(
+        patches, "prefix\n  alpha\n  beta\nsuffix")
+    assert len(fehlend) == 1
+    _, _, _, grund = fehlend[0]
+    assert grund == "shift_akzeptiert"
+
+
+def test_pruefe_anker_gegen_messung_leerer_anmelder_anmelder() -> None:
+    """Mehrere fehlende Anker."""
+    patches = [
+        {"pfad": "a.py", "anker": "AA", "ersatz": "x"},
+        {"pfad": "b.py", "anker": "BB", "ersatz": "x"},
+        {"pfad": "c.py", "anker": "CC", "ersatz": "x"},
+    ]
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "")
+    assert len(fehlend) == 3
+
+
+def test_pruefe_ersatz_gegen_messung_import_ok() -> None:
+    """Import-Pfad im Ersatz steht im mess_protokoll."""
+    patches = [{
+        "pfad": "x.py",
+        "anker": "alt",
+        "ersatz": "from harness.tool_registry.tool import X",
+    }]
+    fehlend = pipeline.pruefe_ersatz_gegen_messung(
+        patches, "import harness.tool_registry.tool ...")
+    assert fehlend == []
+
+
+def test_pruefe_ersatz_gegen_messung_import_im_ersatz() -> None:
+    """Erfundener Import-Pfad wird markiert."""
+    patches = [{
+        "pfad": "x.py",
+        "anker": "alt",
+        "ersatz": "from tools.workbench_registry import X",
+    }]
+    fehlend = pipeline.pruefe_ersatz_gegen_messung(
+        patches, "from harness.tool_registry.tool import Y")
+    assert len(fehlend) == 1
+    _, _, modul = fehlend[0]
+    assert modul == "tools.workbench_registry"
+
+
+def test_pruefe_ersatz_gegen_messung_mehrere_module_ein_patch() -> None:
+    """Ein Patch mit zwei erfundenen Modulen (II3)."""
+    patches = [{
+        "pfad": "x.py",
+        "anker": "alt",
+        "ersatz": (
+            "import foo.bar\n"
+            "from baz.qux import Z\n"
+        ),
+    }]
+    fehlend = pipeline.pruefe_ersatz_gegen_messung(patches, "")
+    assert len(fehlend) == 2
+    module = {f[2] for f in fehlend}
+    assert module == {"foo.bar", "baz.qux"}
+
+
+def test_pruefe_ersatz_gegen_messung_relative_imports_nicht_erkannt() -> None:
+    """Relative Imports werden nicht erkannt (II1-Grenzfall)."""
+    patches = [{
+        "pfad": "x.py",
+        "anker": "alt",
+        "ersatz": "from .foo import bar",
+    }]
+    fehlend = pipeline.pruefe_ersatz_gegen_messung(patches, "")
+    # Regex matcht "from .foo import" nicht, weil ".foo"
+    # nicht auf \w+ passt am Anfang.
+    assert fehlend == []
+
+
+def test_pruefe_ersatz_gegen_messung_mehrzeiliger_import() -> None:
+    """Mehrzeilige Klammer-Imports werden erkannt (II1)."""
+    patches = [{
+        "pfad": "x.py",
+        "anker": "alt",
+        "ersatz": (
+            "from tools.workbench_registry import (\n"
+            "    ToolArgumentError,\n"
+            ")\n"
+        ),
+    }]
+    fehlend = pipeline.pruefe_ersatz_gegen_messung(patches, "")
+    assert len(fehlend) == 1
+    assert fehlend[0][2] == "tools.workbench_registry"
+
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)
