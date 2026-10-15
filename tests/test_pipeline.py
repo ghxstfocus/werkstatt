@@ -4782,6 +4782,25 @@ def test_bestaetigung_unklar_ist_keine() -> None:
     assert pipeline.pruefe_auftrag_bereits_erfuellt(s) is False
 
 
+# ---------- Block A2: Auftrag-erfuellt-Hinweis ----------
+
+def test_solver_prompt_enthaelt_auftrag_erfuellt_hinweis() -> None:
+    """A2: solver.md traegt den Hinweis."""
+    with open("/opt/werkstatt/agents/solver.md",
+              encoding="utf-8") as f:
+        text = f.read()
+    assert "Auftrag bereits" in text
+    assert "PRAEZISIERTER_AUFTRAG" in text
+
+
+def test_solver_md_enthaelt_gemessenen_inhalt_erwaehnung() -> None:
+    """OO7: solver.md verweist auf GEMESSENER INHALT."""
+    with open("/opt/werkstatt/agents/solver.md",
+              encoding="utf-8") as f:
+        text = f.read()
+    assert "GEMESSENER INHALT" in text
+
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)

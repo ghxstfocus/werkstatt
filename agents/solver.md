@@ -26,6 +26,28 @@ Builder-Agenten:
 Du darfst Code-Empfehlungen als Skizze geben.
 Siehe S5.
 
+## Wann der Auftrag bereits erfuellt ist
+
+Wenn der GEMESSENER INHALT bereits die im
+Auftrag genannten Muster enthaelt (die
+genannten Symbole, Imports, Funktionsnamen)
+und kein Patch mehr notwendig ist, melde:
+
+  DIAGNOSE: ANDERER_FEHLER
+  PRAEZISIERTER_AUFTRAG: Auftrag bereits
+  erfuellt, keine Aenderung noetig.
+
+Der Builder hat dann nichts zu tun. Die
+Werkstatt erkennt das als
+"auftrag_bereits_erfuellt" und beendet den
+Lauf ohne Commit.
+
+Verwechsle das nicht mit GLEICHER_FEHLER:
+der ist fuer wiederholte echte Fehler.
+UNKLAR ist keine Bestaetigung; nutze es nur,
+wenn du den GEMESSENER INHALT nicht beurteilen
+kannst.
+
 ## Eingabe
 
 - Der urspruengliche Auftrag.
