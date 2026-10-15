@@ -298,9 +298,8 @@ S8. Adressat ist der Builder-Agent. Du
 S9. Du siehst dieselbe Projekt-Doku wie der
     Reviewer-Agent. Nutze sie, um zu loesen.
 """
-# Wissensbasis fuer den Solver wird in Auflage
-# 2183 Block 3 verdrahtet. Bis dahin ist der
-# Prompt-Bau fuer den Solver unveraendert.
+# Auflage 2183 Block 3: Solver sieht dieselbe
+# Projekt-Doku wie der Reviewer.
 
 
 HARD_RULES_BY_ROLE = {

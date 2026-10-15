@@ -4237,6 +4237,53 @@ def test_solver_prompt_ohne_grund() -> None:
     assert "GRUND DES REVIEWERS" not in text
 
 
+# ---------- Auflage 2183 Block 3: Solver-Doku ----------
+
+def test_agent_docs_solver_enthaelt_reviewer_keys() -> None:
+    """FF1a: Solver-Set enthaelt das Reviewer-Set (S9)."""
+    import yaml
+    with open("/opt/werkstatt/projects/security-ai.yaml",
+              encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    ag = cfg["agent_docs"]
+    assert set(ag["reviewer"]).issubset(set(ag["solver"])), \
+        f"solver fehlt: {set(ag['reviewer']) - set(ag['solver'])}"
+
+
+def test_agent_docs_solver_enthaelt_projektwissen() -> None:
+    """FF1b: Die vier Projektwissens-Keys sind enthalten."""
+    import yaml
+    with open("/opt/werkstatt/projects/security-ai.yaml",
+              encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    solver = set(cfg["agent_docs"]["solver"])
+    pflicht = {"context", "decisions",
+               "security_log", "web_security"}
+    assert pflicht.issubset(solver), \
+        f"fehlt: {pflicht - solver}"
+
+
+def test_solver_system_prompt_enthaelt_alle_doku_keys() -> None:
+    """FF2: build_system_prompt zeigt jeden Solver-Key."""
+    import yaml
+    with open("/opt/werkstatt/projects/security-ai.yaml",
+              encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    keys = cfg["agent_docs"]["solver"]
+    docs = {k: f"INHALT-{k}" for k in keys}
+    agent = {"name": "solver", "body": "BODY"}
+    prompt = pipeline.build_system_prompt(agent, docs, keys)
+    assert "--- PROJEKT-DOKU ---" in prompt
+    for k in keys:
+        assert f"--- {k} ---" in prompt, f"Key {k} fehlt"
+
+
+def test_solver_agent_docs_leer_ergibt_kein_projekt_doku_block() -> None:
+    """FF5-neg: Ohne Keys kein PROJEKT-DOKU-Block."""
+    prompt = pipeline.build_system_prompt(
+        {"name": "solver", "body": "BODY"}, {}, [])
+    assert "--- PROJEKT-DOKU ---" not in prompt
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)

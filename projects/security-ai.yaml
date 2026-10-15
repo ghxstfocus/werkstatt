@@ -68,6 +68,13 @@ agent_docs:
     - web_security
   test_generator:
     - context
+  solver:
+    - context
+    - workflow
+    - handoff
+    - decisions
+    - security_log
+    - web_security
 
 # Nur diese Praefixe darf read_file lesen.
 file_whitelist:
