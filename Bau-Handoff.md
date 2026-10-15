@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach Probebetrieb 62 + 2183 B3)
-Werkstatt-HEAD: d706e66 (2183 Block 3, Solver-Doku)
+Stand: 2026-10-15 (nach Probebetrieb 62 + 2183 B3+B5)
+Werkstatt-HEAD: 0b19bcb (2183 Block 5, Solver-Loop)
 Letzter echter Probebetrieb: PB-62
 Letzter Commit in security-ai: 3bb5917
 Branch: main
@@ -254,6 +254,10 @@ Auflagen dieser Session:
         Projekt-Doku wie Reviewer). Kategorie 3,
         Reviewer-Block GO mit FF1-FF8. Commit
         d706e66. +4 Tests, 350 passed.
+  2183-B5: Solver-Loop + Fail-Pfade. Variante X
+        mit GG1-GG5. max_solver_runden=3, Zaehler
+        solver_aufrufe, Historie im Solver-Prompt.
+        Commit 0b19bcb. +5 Tests, 355 passed.
 
 ================================================================
 5. OFFENE AUFLAGEN UND MERKPOSTEN
@@ -343,7 +347,13 @@ WICHTIG (naechste Session):
         Projekt-Doku wie der Reviewer (S9).
         agent_docs.solver = reviewer-Set.
         Block 5 (Solver-Loop + Fail-Pfade):
-        OFFEN.
+        ERLEDIGT (Commit 0b19bcb, Variante X mit
+        GG1). max_solver_runden=3 (YAML),
+        RunState.solver_aufrufe zaehlt Versuche,
+        Audit solver_max_runden_erreicht,
+        Solver-Prompt zeigt FRUEHERE SOLVER-BEFUNDE
+        (nur Diagnose-Zeile, B5-M1).
+        F1-F4 als Merkposten (MITTEL).
         Block 6 (Smoke-Test): OFFEN.
         Zwischenzustand CC10 aufgeloest:
         echte Laeufe wieder erlaubt.
@@ -529,6 +539,45 @@ WICHTIG (naechste Session):
 
 
 MITTEL (Merkposten):
+
+  F1 (Solver-Frequenz): ERLEDIGT in Block 5
+        als (c) max_solver_runden=3 ohne
+        bool-Blockade. COMMAND-Pfad bleibt
+        _solver_schon_gelaufen (einmal pro Lauf).
+        Asymmetrie bewusst: P1-Trigger automatisch
+        mehrfach (bis max_runden), COMMAND manuell
+        einmal.
+
+  F2 (Fail-closed bei rufe_solver-Fehler):
+        Merkposten. Vorschlag max_rufe_solver_
+        fehler = 2. Nach 5-10 PB-Laeufen mit Solver
+        kalibrieren. Heute X3-Marker zurueck.
+
+  F3 (Fail-closed bei unvollstaendigem Befund):
+        Merkposten. Bleibt (a): leerer Block +
+        Audit solver_befund_verworfen. Fail-closed
+        nur erwaegen, wenn Quote >20%.
+
+  F4 (_bauer_auflagen_prompt): Merkposten.
+        DD5 bleibt. Solver-Befund nur im NO-GO-
+        Prompt. Ueberdenken, wenn Auflagen-Pfad
+        haeufiger failt.
+
+  B5-M1 (Historie-Block Umfang): Der Solver-
+        Prompt zeigt in FRUEHERE SOLVER-BEFUNDE
+        nur DIAGNOSE: <art.name>, nicht den
+        Volltext. Grund: format_solver_befund
+        kann ValueError werfen bei unvollstaen-
+        digem Befund, das wuerde den Prompt-Bau
+        abbrechen. Nach ersten PB-Laeufen pruefen,
+        ob Volltext gebraucht wird.
+
+  B5-M2 (Trigger-Pfad-Test): test_max_solver_
+        runden_blockt_nach_3 prueft nur die
+        Zaehl-Logik, nicht den vollen Trigger-Pfad.
+        Voller Test steht aus, braucht RunState
+        mit Review-Runden bis zum Trigger.
+
   Solver-Kurskorrektur Merkposten:
         W10 (Befund-Historie): Builder-Prompt
              nur letzter Befund. Solver-Prompt
@@ -824,22 +873,23 @@ Der neue Bau-Chat soll:
 
 2. docs/PROTOKOLL-29-40.md lesen.
 
-3. Reihenfolge (Block 3 erledigt 2026-10-15):
-   a) Solver-Kurskorrektur Block 5
-      (Solver-Loop + Fail-Pfade). Kategorie 3.
-   b) Solver-Kurskorrektur Block 6
+3. Reihenfolge (Block 3+5 erledigt 2026-10-15):
+   a) Solver-Kurskorrektur Block 6
       (Smoke-Test). Kategorie 2.
-   c) 2183-AQ Auftragsqualitaet (Rest).
+   b) 2183-AQ Auftragsqualitaet (Rest).
       Bei PB-62 praktisch angewendet (Pre-Flight
       whois.py gegen Zielcode). Formaler Nieder-
       schlag (Checkliste in docs/) offen.
       Kategorie 3.
-   d) 2200b/c/T Aggregator-Verfeinerung.
-   e) 2199a Zustandsmaschine (Kategorie 3).
-   f) 2199a Recovery-Zweig.
-   g) 2199-R7-P1 (Phase-1-R7-Wirkung).
-   h) Werkstatt-Vertrag (nach 2183 B/C,
+   c) 2200b/c/T Aggregator-Verfeinerung.
+   d) 2199a Zustandsmaschine (Kategorie 3).
+   e) 2199a Recovery-Zweig.
+   f) 2199-R7-P1 (Phase-1-R7-Wirkung).
+   g) Werkstatt-Vertrag (nach 2183 B/C,
       siehe MITTEL).
+   (Empfehlung 2026-10-15: vor Block 6 einen
+    echten PB-63 mit dem neuen Solver-Loop.
+    Block 6 auf belastbaren Daten.)
 
 4. Fuer 2199, 2199a, 2183 Kategorie-3-Reviewer-
    Blocks formulieren. Vor Ausfuehrung.
