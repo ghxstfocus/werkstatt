@@ -1,7 +1,8 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-14 (nach Probebetrieb 62)
-Werkstatt-HEAD: 1cb266c (kein Tag, Solver-Kurskorrektur)
+Stand: 2026-10-15 (nach Probebetrieb 62 + Doku)
+Werkstatt-HEAD: da50145 (Doku README 2185)
+  inhaltlicher Solver-Stand: 1cb266c (Block 2a+4)
 Letzter echter Probebetrieb: PB-62
 Letzter Commit in security-ai: 3bb5917
 Branch: main
@@ -248,6 +249,8 @@ Auflagen dieser Session:
   2196: collect_messwerte bevorzugt nach-apply
   2197: Fail-closed-Rollback
   2198: collect_messwerte-Regex an Kuerzung
+  2185: README komplett, 6 Rollen inkl. Solver
+        (nachgezogen 2026-10-15, Commit da50145)
 
 ================================================================
 5. OFFENE AUFLAGEN UND MERKPOSTEN
@@ -544,7 +547,6 @@ MITTEL (Merkposten):
              Audit-Log (Frage 5, CC). Am
              Approval-Gate anzeigen? Block 5.
 
-  U4-Kalibrierung (P1): Schwellwert 0.5
   B2 — Builder-Kanal fuer Solver-Befund.
         Kategorie 3. Aus 2183 B (X7).
         Der praezisierte_auftrag (Diagnose
@@ -556,7 +558,6 @@ MITTEL (Merkposten):
         Hinweis), was bei Widerspruch zum
         Auftrag. Nach 2183 C.
 
-  U4-Kalibrierung (P1): Schwellwert 0.5
   U4-Kalibrierung (P1): Schwellwert 0.5
         und min_tokens 10 sind Setzungen,
         nicht Messungen. Nach ersten PB-
@@ -574,7 +575,6 @@ MITTEL (Merkposten):
         kann max_llm_calls in 2184 nach
         unten korrigiert werden.
 
-  Werkstatt-Vertrag (2183). Kategorie 3.
   Werkstatt-Vertrag (2183). Kategorie 3.
         Fuenf Vertraege zusammenfuehren:
         1. Anker-Vertrag (woertlich |
@@ -632,7 +632,6 @@ MITTEL (Merkposten):
           +2-4. Reserve Faktor 2.
         30 ist aus Messung abgeleitet, nicht geraten.
         Umsetzung mit 2183.
-  2185: README 6 Rollen dokumentieren. Mit 2183.
   2187b: read_file Zeilenbereich (fuer sehr grosse Dateien).
   2188a: agents/*.md konsolidieren (Widersprueche durch
          anhaengende Auflagen).
@@ -833,8 +832,6 @@ Der neue Bau-Chat soll:
       whois.py gegen Zielcode). Formaler Nieder-
       schlag (Checkliste in docs/) offen.
       Kategorie 3.
-   b) 2200b/c/T Aggregator-Verfeinerung.
-   d) 2183-AQ Auftragsqualitaet.
    e) 2200b/c/T Aggregator-Verfeinerung.
    f) 2199a Zustandsmaschine (Kategorie 3).
    g) 2199a Recovery-Zweig.
@@ -847,7 +844,7 @@ Der neue Bau-Chat soll:
 
 5. Nach Erfolg (NUR echter Pipeline-Durchlauf):
    git tag probebetrieb-<n>. Naechste Nummer:
-   62 (Stand 2026-10-14).
+   63 (Stand 2026-10-15). PB-62 = 3bb5917.
 
 6. Bei Problemen: zurueck zu diesem Handoff,
    Faktenlage pruefen, Reviewer-Chat fragen.
