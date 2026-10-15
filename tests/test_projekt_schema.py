@@ -186,3 +186,42 @@ class TestTypen:
         cfg["always_run"] = [1, 2, 3]
         meldungen = pipeline.pruefe_projekt_yaml(cfg, modus="warn")
         assert any("always_run" in m and "Typ" in m for m in meldungen)
+
+# =====================================================================
+# Block P2a: planner.phasen_modus + budget.max_llm_calls_phase
+# =====================================================================
+
+class TestP2aSchemaFelder:
+    def test_schema_planner_phasen_modus(self) -> None:
+        from pathlib import Path
+
+        import yaml
+        schema = yaml.safe_load(
+            Path("/opt/werkstatt/schemas/projekt.yaml").read_text(
+                encoding="utf-8"))
+        planner = schema["felder"]["planner"]
+        assert planner["kategorie"] == "W+O"
+        assert planner["typ"] == "dict"
+        assert planner["default"]["phasen_modus"] is False
+
+    def test_schema_budget_max_llm_calls_phase(self) -> None:
+        from pathlib import Path
+
+        import yaml
+        schema = yaml.safe_load(
+            Path("/opt/werkstatt/schemas/projekt.yaml").read_text(
+                encoding="utf-8"))
+        budget = schema["felder"]["budget"]
+        assert budget["kategorie"] == "O"
+        assert budget["typ"] == "dict"
+        assert budget["default"]["max_llm_calls_phase"] == 200
+
+    def test_security_ai_yaml_hat_phasen_modus(self) -> None:
+        from pathlib import Path
+
+        import yaml
+        cfg = yaml.safe_load(
+            Path("/opt/werkstatt/projects/security-ai.yaml").read_text(
+                encoding="utf-8"))
+        assert cfg["planner"]["phasen_modus"] is False
+        assert cfg["budget"]["max_llm_calls_phase"] == 200

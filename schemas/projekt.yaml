@@ -108,6 +108,7 @@ felder:
       max_minutes: 15
       max_llm_calls: 30
       max_builder_runden: 3
+      max_llm_calls_phase: 200
 
   auto_repair:
     kategorie: O
@@ -153,3 +154,4 @@ felder:
       modus: manual
       max_runden: 3
       ask_human_timeout_min: 60
+      phasen_modus: false

@@ -134,6 +134,8 @@ class TestPlannerLauf:
         assert params == [
             "state", "api_key", "roher_auftrag",
             "project_dir", "project_name", "historie",
+            # P2a-S5a-A8: stufe hinzugefuegt.
+            "stufe",
         ]
 
 
@@ -170,3 +172,67 @@ class TestRunState:
         assert d["planner_vorschlag"] == ""
         assert d["planner_modus"] == "manual"
         assert d["planner_runden"] == 0
+
+# =====================================================================
+# Block P2a: planner.md Stufe-1/Stufe-2-Sektionen
+# + build_system_prompt(stufe=) Prompt-Asserts.
+# =====================================================================
+
+class TestPlannerStufenPrompt:
+    def _planner_agent(self) -> dict:
+        import pipeline
+        return pipeline.load_agents("/opt/werkstatt/agents")["planner"]
+
+    def test_body_enthaelt_stufe_1_sektion(self) -> None:
+        agent = self._planner_agent()
+        assert "## Stufe 1: Auftrag" in agent["body"]
+
+    def test_body_enthaelt_stufe_2_sektion(self) -> None:
+        agent = self._planner_agent()
+        assert "## Stufe 2: Phasenplan" in agent["body"]
+
+    def test_prompt_stufe_1_enthaelt_p3(self) -> None:
+        import pipeline
+        agent = self._planner_agent()
+        prompt = pipeline.build_system_prompt(
+            agent, {}, [], stufe=1)
+        assert "P3. Du antwortest mit GENAU EINEM Auftrag" in prompt
+
+    def test_prompt_stufe_2_enthaelt_p3strich(self) -> None:
+        import pipeline
+        agent = self._planner_agent()
+        prompt = pipeline.build_system_prompt(
+            agent, {}, [], stufe=2)
+        assert "P3'." in prompt
+        assert "P10." in prompt
+        assert "P14." in prompt
+
+    def test_prompt_stufe_2_enthaelt_nicht_original_p3(self) -> None:
+        import pipeline
+        agent = self._planner_agent()
+        prompt = pipeline.build_system_prompt(
+            agent, {}, [], stufe=2)
+        # P3 (Original) darf NICHT enthalten sein.
+        assert "P3. Du antwortest mit GENAU EINEM Auftrag" not in prompt
+
+    def test_prompt_default_ist_stufe_1(self) -> None:
+        import pipeline
+        agent = self._planner_agent()
+        p_default = pipeline.build_system_prompt(agent, {}, [])
+        p_stufe1 = pipeline.build_system_prompt(
+            agent, {}, [], stufe=1)
+        assert p_default == p_stufe1
+
+    def test_user_content_stufe_2(self) -> None:
+        import pipeline
+        uc = pipeline._planner_user_content(
+            "roher Auftrag", "historie", stufe=2)
+        assert "P10-P14" in uc
+        assert "P7/P8" not in uc
+
+    def test_user_content_stufe_1(self) -> None:
+        import pipeline
+        uc = pipeline._planner_user_content(
+            "roher Auftrag", "historie", stufe=1)
+        assert "P7/P8" in uc
+        assert "P10-P14" not in uc

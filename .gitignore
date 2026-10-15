@@ -30,3 +30,5 @@ approvals/audit/
 *.swp
 *.alt
 projects/*.memory.yaml
+projects/*.phase.yaml
+projects/.*.tmp.*

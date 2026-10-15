@@ -307,7 +307,11 @@ S9. Du siehst dieselbe Projekt-Doku wie der
 # Projekt-Doku wie der Reviewer.
 
 
-HARD_RULES_PLANNER = """
+# =====================================================================
+# Planner-Regeln, Stufe 1 (Auftrags-Uebersetzer).
+# Siehe P2a-A11, P2a-S4-A1. Wortgleich zu vorher.
+# =====================================================================
+HARD_RULES_PLANNER_STUFE1 = """
 P1. Du bist der Planner. Du formulierst Auftraege,
     du baust nichts.
 P2. Deine Eingabe sind der rohe Auftrag des
@@ -336,6 +340,74 @@ P8. Rueckfrage-Format ist bindend:
 P9. Das Format ist kein Vorschlag. Bei Verstoss
     gegen P7 oder P8 wird der Auftrag verworfen
     und du wirst erneut gerufen (max 3 Runden).
+"""
+
+# Alias aus Kompatibilitaet: zeigt auf STUFE1
+# (= Default). STUFE2 wird vom Aufrufer explizit
+# gewaehlt (build_system_prompt stufe=2).
+# Siehe P2a-A11, P2a-S4.
+HARD_RULES_PLANNER = HARD_RULES_PLANNER_STUFE1
+
+# =====================================================================
+# Planner-Regeln, Stufe 2 (Phasen-Planer, --phase).
+# Aufrufer waehlt die Stufe (build_system_prompt
+# stufe=1|2, siehe P2a-S4-A5).
+#
+# Diff zu STUFE1:
+#   P1' = P1, aber "Auftraege" -> "Auftraege
+#          oder Phasenplaene" (Stufe 2).
+#   P3' = P3, aber "Auftrag" -> "Phasenplan"
+#          (Format PHASE/UNTERBLOCK).
+#   P4' = P4, aber "Auftrag" -> "Unterblock".
+#   P7  entfaellt (reines Stufe-1-Format,
+#        gemessen: nur Block/Praefix-Regeln).
+#   P9' = P9, aber "gegen P7 oder P8" ->
+#          "gegen P10-P14" (Stufe-2-Format).
+# Unveraendert: P2, P5, P6, P8.
+# Neu: P10-P14.
+# =====================================================================
+HARD_RULES_PLANNER_STUFE2 = """
+P1'. Du bist der Planner. Du formulierst Auftraege
+     oder Phasenplaene, du baust nichts.
+P2. Deine Eingabe sind der rohe Auftrag des
+    Menschen, die konfigurierte Projekt-Doku und
+    die letzten 10 Commits im Ziel-Repo.
+P3'. Du antwortest mit GENAU EINEM Phasenplan
+     (Format PHASE/UNTERBLOCK, siehe P10-P14)
+     ODER GENAU EINER Rueckfrage. Kein anderer
+     Text.
+P4'. Jeder Unterblock muss praezise sein:
+     betroffene Datei(en), Aenderung,
+     Erfolgskriterium.
+P5. Du baust nicht, committest nicht, reviewst
+    nicht. Du sprichst keine Verdicts aus.
+P6. Bei Unklarheit: Formuliere eine RUECKFRAGE
+    statt eines Phasenplans.
+P8. Rueckfrage-Format ist bindend:
+      RUECKFRAGE:
+        <Frage>
+P9'. Das Format ist kein Vorschlag. Bei Verstoss
+     gegen P10-P14 wird der Phasenplan verworfen
+     und du wirst erneut gerufen (max 3 Runden).
+P10. Phase-Kopf-Format ist bindend:
+       PHASE: <id> - <Titel>
+     Der Trenner " - " (Leerzeichen, Minus,
+     Leerzeichen) ist Pflicht.
+P11. Unterblock-Format ist bindend:
+       UNTERBLOCK: U<n> - <Titel>
+       Unterpunkte:
+         - <Punkt>
+         - <Punkt>
+       Geschaetzte Runden: <n>
+     n ist monoton aufsteigend ab 1 (U1, U2, ...).
+     Geschaetzte Runden ist int >= 1.
+P12. Keine erfundenen Unterpunkte. Nur, was aus
+     dem Phasentext oder dem Projektstand
+     ableitbar ist.
+P13. geschaetzte_runden konservativ (lieber hoeher
+     als zu niedrig).
+P14. Keine Prosa ausserhalb des Formats. Keine
+     Meta-Kommentare. Kein "Hier ist der Plan".
 """
 
 HARD_RULES_BY_ROLE = {
@@ -602,6 +674,10 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "commit_applied",
     "commit_paket_leer",
     "commit_review",
+    "phase_plan_editiert",
+    "phase_plan_erstellt",
+    "phase_plan_parse_failed",
+    "phase_plan_verworfen",
     "pipeline_approved",
     "pipeline_ende",
     "pipeline_erfolg_ohne_commit",
@@ -864,6 +940,39 @@ def _anti_pattern_block(
 # Stufe 1 des Planner-Konzepts (docs/PLANNER-KONZEPT.md).
 # =====================================================================
 
+def _parse_phase_kopf(text: str) -> tuple[str, str]:
+    """Parst den PHASE-Kopf (Stufe 2).
+
+    Rueckgabe: (phase_id, phase_titel).
+
+    Fehler immer als ValueError mit klarer Regel.
+
+    Auflage P2a-S5a-A5: z.strip() beim Erkennen
+    toleriert fuehrende Whitespaces vor "PHASE:"
+    (LLM-Replies mit Einrueckung).
+    Auflage P2a-S5a-A6: split(" - ", 1) — maxsplit=1,
+    damit ein Titel, der " - " enthaelt, nicht
+    zerfaellt.
+    """
+    zeilen = text.splitlines()
+    kopf_idx: int | None = None
+    for i, z in enumerate(zeilen):
+        if z.strip().startswith("PHASE:"):
+            kopf_idx = i
+            break
+    if kopf_idx is None:
+        raise ValueError("kein PHASE:-Kopf gefunden")
+    kopf = zeilen[kopf_idx].strip()[len("PHASE:"):].strip()
+    if " - " not in kopf:
+        raise ValueError("Phase: Trenner '-' fehlt")
+    phase_id, phase_titel = kopf.split(" - ", 1)
+    if not phase_id.strip():
+        raise ValueError("Phase: id leer nach strip()")
+    if not phase_titel.strip():
+        raise ValueError("Phase: titel leer nach strip()")
+    return phase_id.strip(), phase_titel.strip()
+
+
 def parse_planner_reply(text: str) -> dict[str, Any]:
     """Parst die Planner-Antwort.
 
@@ -912,6 +1021,472 @@ def parse_planner_reply(text: str) -> dict[str, Any]:
     return ergebnis
 
 
+# =====================================================================
+# Block P2a: Phasen-Modus (Stufe 2) — Parser.
+# Siehe docs/PLANNER-KONZEPT.md, Abschnitt 8.
+# =====================================================================
+
+def _parse_phase_plan(text: str) -> list[dict[str, Any]]:
+    """Parst einen Phasentext in Unterbloecke.
+
+    Eingabeformat (verbindlich):
+      PHASE: <id> - <Titel>
+      UNTERBLOCK: U1 - <Titel>
+      Unterpunkte:
+        - <Punkt>
+        - <Punkt>
+      Geschaetzte Runden: 2
+
+    Rueckgabe: Liste von dicts, je Eintrag:
+      {"id": "U1", "titel": "...",
+       "unterpunkte": ["...", "..."],
+       "geschaetzte_runden": 2}
+
+    Der PHASE-Kopf wird validiert, aber NICHT zurueckgegeben
+    (Auflage P2a-S2-A1). Den PHASE-Kopf liest der Aufrufer
+    separat.
+
+    Fehler immer als ValueError mit Regel + id/Position.
+    """
+    # PHASE-Kopf validieren ueber _parse_phase_kopf
+    # (Auflage P2a-S5a-A9: ohne Zuweisung, damit
+    # keine unbenutzten Variablen entstehen).
+    _parse_phase_kopf(text)
+    zeilen = text.splitlines()
+    # Zweiter splitlines() bewusst: _parse_phase_kopf
+    # gibt die Position nicht zurueck (P2a-S5a-A1).
+    # Text ist kurz (<100 Zeilen).
+    kopf_idx = next(
+        i for i, z in enumerate(zeilen)
+        if z.strip().startswith("PHASE:")
+    )
+
+    # 2. Unterbloecke ab kopf_idx+1 sammeln.
+    unterbloecke: list[dict[str, Any]] = []
+    i = kopf_idx + 1
+    pos = 0
+    while i < len(zeilen):
+        roh = zeilen[i]
+        stripped = roh.strip()
+        if not stripped:
+            i += 1
+            continue
+        if not stripped.startswith("UNTERBLOCK"):
+            i += 1
+            continue
+        pos += 1
+        # Kopf ungueltig, wenn nicht exakt "UNTERBLOCK: U<n> - <Titel>"
+        if not stripped.startswith("UNTERBLOCK:"):
+            raise ValueError(
+                f"Unterblock {pos} (Zeile {i+1}): Kopf ungueltig: "
+                f"{roh!r}")
+        rest = stripped[len("UNTERBLOCK:"):].strip()
+        if " - " not in rest:
+            raise ValueError(
+                f"Unterblock {pos} (Zeile {i+1}): Kopf ungueltig: "
+                f"{roh!r}")
+        id_teil, titel_teil = rest.split(" - ", 1)
+        id_roh = id_teil.strip()
+        titel_roh = titel_teil.strip()
+        erwartete_id = f"U{pos}"
+        if id_roh != erwartete_id:
+            raise ValueError(
+                f"U{pos}: id nicht mit 'U{pos}' ueberein "
+                f"(gefunden: {id_roh!r})")
+        if not titel_roh:
+            raise ValueError(f"U{pos}: titel leer nach strip()")
+
+        # Sektion Unterpunkte.
+        i += 1
+        while i < len(zeilen) and not zeilen[i].strip():
+            i += 1
+        if i >= len(zeilen) or \
+                zeilen[i].strip() != "Unterpunkte:":
+            raise ValueError(
+                f"U{pos}: Reihenfolge Unterpunkte/Runden verletzt")
+        i += 1
+        unterpunkte: list[str] = []
+        while i < len(zeilen):
+            zp = zeilen[i]
+            sp = zp.strip()
+            if not sp:
+                i += 1
+                continue
+            if sp.startswith("- "):
+                punkt = sp[len("- "):].strip()
+                if not punkt:
+                    raise ValueError(
+                        f"U{pos}: unterpunkt leer nach strip()")
+                unterpunkte.append(punkt)
+                i += 1
+                continue
+            if sp.startswith("Geschaetzte Runden:"):
+                break
+            # Fremdzeile zwischen Sektionen.
+            raise ValueError(
+                f"U{pos}: Reihenfolge Unterpunkte/Runden verletzt")
+        if not unterpunkte:
+            raise ValueError(f"U{pos}: unterpunkte fehlen")
+
+        # Sektion Geschaetzte Runden.
+        while i < len(zeilen) and not zeilen[i].strip():
+            i += 1
+        if i >= len(zeilen) or \
+                not zeilen[i].strip().startswith("Geschaetzte Runden:"):
+            raise ValueError(f"U{pos}: geschaetzte_runden fehlt")
+        runden_roh = zeilen[i].strip()[len("Geschaetzte Runden:"):].strip()
+        try:
+            n = int(runden_roh)
+        except ValueError as exc:
+            raise ValueError(
+                f"U{pos}: geschaetzte_runden ungueltig: "
+                f"{runden_roh!r}") from exc
+        if str(n) != runden_roh:
+            raise ValueError(
+                f"U{pos}: geschaetzte_runden ungueltig: "
+                f"{runden_roh!r}")
+        if type(n) is not int or n < 1:
+            raise ValueError(
+                f"U{pos}: geschaetzte_runden ungueltig: "
+                f"{runden_roh!r}")
+        i += 1
+
+        unterbloecke.append({
+            "id": id_roh,
+            "titel": titel_roh,
+            "unterpunkte": unterpunkte,
+            "geschaetzte_runden": n,
+        })
+
+    if not unterbloecke:
+        raise ValueError("Phase: kein Unterblock gefunden")
+    if len(unterbloecke) > 20:
+        raise ValueError(
+            f"{len(unterbloecke)} Unterbloecke: "
+            "Obergrenze 20 ueberschritten")
+    return unterbloecke
+
+
+def _phase_plan_als_text(
+    phase_id: str,
+    phase_titel: str,
+    unterbloecke: list[dict[str, Any]],
+) -> str:
+    """Serialisiert einen Plan ins Phasentext-Format.
+
+    Auflage P2a-S5c-A3/A4/A5: das Ergebnis MUSS
+    _parse_phase_plan ohne ValueError durchlaufen.
+    Eigenschaft (Property):
+      _parse_phase_plan(_phase_plan_als_text(
+          id, titel, unterbloecke)) == unterbloecke
+    fuer gueltige Eingaben (auch bei Titeln mit
+    ' - ').
+
+    Fehler: ValueError, wenn ein Unterblock
+    'unterpunkte' oder 'geschaetzte_runden' fehlen
+    hat (Aufrufer-Bug).
+
+    Rueckgabe ohne trailing newline.
+    """
+    if not phase_id or not phase_titel:
+        raise ValueError(
+            "_phase_plan_als_text: phase_id oder "
+            "phase_titel leer")
+    zeilen: list[str] = [
+        f"PHASE: {phase_id} - {phase_titel}",
+    ]
+    for u in unterbloecke:
+        if "id" not in u or "titel" not in u:
+            raise ValueError(
+                "_phase_plan_als_text: Unterblock ohne "
+                "id oder titel")
+        if "unterpunkte" not in u or not u["unterpunkte"]:
+            raise ValueError(
+                f"_phase_plan_als_text: U{u.get('id')}: "
+                "unterpunkte fehlen")
+        if "geschaetzte_runden" not in u:
+            raise ValueError(
+                f"_phase_plan_als_text: U{u.get('id')}: "
+                "geschaetzte_runden fehlt")
+        n_rd = u["geschaetzte_runden"]
+        if type(n_rd) is not int or n_rd < 1:
+            raise ValueError(
+                f"_phase_plan_als_text: U{u.get('id')}: "
+                "geschaetzte_runden ungueltig")
+        zeilen.append(
+            f"UNTERBLOCK: {u['id']} - {u['titel']}")
+        zeilen.append("Unterpunkte:")
+        for p in u["unterpunkte"]:
+            if not isinstance(p, str) or not p.strip():
+                raise ValueError(
+                    f"_phase_plan_als_text: "
+                    f"U{u.get('id')}: unterpunkt leer")
+            zeilen.append(f"  - {p.strip()}")
+        zeilen.append(f"Geschaetzte Runden: {n_rd}")
+        zeilen.append("")
+    # Letzte Leerzeile entfernen, damit kein trailing \n.
+    while zeilen and not zeilen[-1]:
+        zeilen.pop()
+    return "\n".join(zeilen)
+
+
+def _phase_edit_modus(
+    phase_id: str,
+    phase_titel: str,
+    unterbloecke: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Fuehrt den [e]-Pfad aus (gefuellter Edit).
+
+    Auflage P2a-S5c-A2': nur Titel und
+    geschaetzte_runden pro Unterblock sind editierbar.
+    Unterpunkte und id bleiben unveraendert.
+
+    Rueckgabe: (neue_unterbloecke, anzahl_geaendert).
+    Bei 'q' oder leerer Eingabe ueberall:
+      (alter_plan, 0).
+    Wirft KeyboardInterrupt/EOFError weiter.
+    """
+    neue: list[dict[str, Any]] = []
+    anzahl_geaendert = 0
+    print("\n=== EDIT-MODUS ===")
+    print("(leer = unveraendert, q = Edit beenden)")
+    for u in unterbloecke:
+        if u["id"] == "__q__":
+            # Sicherheitsnetz: kein realer id-Wert.
+            pass
+        titel_neu = u["titel"]
+        runden_neu = u["geschaetzte_runden"]
+        geaendert = False
+        print(f"\n{u['id']}: {u['titel']}")
+        t_ein = input("  Neuer Titel > ").strip()
+        if t_ein.lower() == "q":
+            print("[i] Edit abgebrochen.")
+            return unterbloecke, 0
+        if t_ein:
+            titel_neu = t_ein
+            geaendert = True
+        # Runden.
+        aktuell_runden = u["geschaetzte_runden"]
+        while True:
+            r_ein = input(
+                f"  Geschaetzte Runden "
+                f"(aktuell {aktuell_runden}, "
+                f"leer = unveraendert) > "
+            ).strip()
+            if r_ein.lower() == "q":
+                print("[i] Edit abgebrochen.")
+                return unterbloecke, 0
+            if not r_ein:
+                break
+            try:
+                n = int(r_ein)
+            except ValueError:
+                print("[!] Ungueltig: int >= 1 erwartet. "
+                      "Bitte erneut.")
+                continue
+            if str(n) != r_ein or type(n) is not int or n < 1:
+                print("[!] Ungueltig: int >= 1 erwartet. "
+                      "Bitte erneut.")
+                continue
+            runden_neu = n
+            geaendert = True
+            break
+        neuer_u = dict(u)
+        neuer_u["titel"] = titel_neu
+        neuer_u["geschaetzte_runden"] = runden_neu
+        neue.append(neuer_u)
+        if geaendert:
+            anzahl_geaendert += 1
+    print("\n---")
+    print("Edit beendet.")
+    return neue, anzahl_geaendert
+
+
+# ---------------------------------------------------------------------
+# Block P2a: Persistenz phase.yaml.
+# Siehe docs/PLANNER-KONZEPT.md, Abschnitt 9.1.
+# ---------------------------------------------------------------------
+
+_PHASE_YAML_DIR = Path("/opt/werkstatt/projects")
+
+
+def _phase_yaml_pfad(project_name: str) -> Path:
+    """Pfad zur Phase-Datei eines Projekts.
+
+    Analog zu projects/<name>.memory.yaml.
+    """
+    return _PHASE_YAML_DIR / f"{project_name}.phase.yaml"
+
+
+# Hinweis: ValueError statt TypeError ist hier bewusst —
+# die Aufrufer (CLI, Audit) pruefen einheitlich auf ValueError.
+# Siehe P2a-A7, P2a-S3-A6, P2a-S3-A7. TRY004 wird mit einer
+# begruendeten Ausnahmedirektive auf den raise-Zeilen
+# ausgehebelt.
+def _phase_plan_laden(
+    project_name: str,
+) -> dict[str, Any] | None:
+    """Liest den Phasenplan aus projects/<name>.phase.yaml.
+
+    Rueckgabe:
+      - None, wenn Datei fehlt.
+      - None, wenn phase_aktiv != true.
+      - dict mit allen Feldern sonst.
+
+    Fehler (P2a-A7, P2a-S3-A5, P2a-S3-A6):
+      - yaml.YAMLError: propagiert.
+      - Datei leer -> ValueError("phase.yaml: leer").
+      - Kein dict -> ValueError("phase.yaml: kein dict").
+      - phase_aktiv ist nicht bool -> ValueError.
+      - Pflichtfeld fehlt/falscher Typ -> ValueError
+        mit Feldname.
+
+    Auflage P2a-S1-A4: prueft NICHT phase_erstellt_am
+    (Funktion kennt keine Zeit-Semantik).
+    """
+    pfad = _phase_yaml_pfad(project_name)
+    if not pfad.exists():
+        return None
+    text = pfad.read_text(encoding="utf-8")
+    daten = yaml.safe_load(text)
+    if daten is None:
+        raise ValueError("phase.yaml: leer")
+    if not isinstance(daten, dict):
+        raise ValueError(  # noqa: TRY004 (P2a-A7)
+            "phase.yaml: kein dict")
+
+    aktiv = daten.get("phase_aktiv")
+    if aktiv is None and "phase_aktiv" not in daten:
+        # Feld fehlt komplett: kein aktiver Plan.
+        return None
+    if type(aktiv) is not bool:
+        raise ValueError(
+            "phase.yaml: phase_aktiv kein bool")
+    if aktiv is False:
+        return None
+
+    # Pflichtfelder (P2a-S1-A8, P2a-S3-A7).
+    pid = daten.get("phase_id")
+    if not isinstance(pid, str) or not pid:
+        raise ValueError(
+            "phase.yaml: Pflichtfeld fehlt oder falscher "
+            "Typ: phase_id")
+    ptitel = daten.get("phase_titel")
+    if not isinstance(ptitel, str) or not ptitel:
+        raise ValueError(
+            "phase.yaml: Pflichtfeld fehlt oder falscher "
+            "Typ: phase_titel")
+    pstart = daten.get("phase_start_head")
+    if "phase_start_head" not in daten:
+        raise ValueError(
+            "phase.yaml: Pflichtfeld fehlt oder falscher "
+            "Typ: phase_start_head")
+    if not isinstance(pstart, str):
+        raise ValueError(  # noqa: TRY004 (P2a-A7)
+            "phase.yaml: Pflichtfeld fehlt oder falscher "
+            "Typ: phase_start_head")
+    punter = daten.get("phase_unterbloecke")
+    if not isinstance(punter, list):
+        raise ValueError(  # noqa: TRY004 (P2a-A7)
+            "phase.yaml: Pflichtfeld fehlt oder falscher "
+            "Typ: phase_unterbloecke")
+    for eintrag in punter:
+        if not isinstance(eintrag, dict):
+            raise ValueError(  # noqa: TRY004 (P2a-A7)
+                "phase.yaml: Pflichtfeld fehlt oder falscher "
+                "Typ: phase_unterbloecke")
+
+    return daten
+
+
+def _phase_plan_speichern(
+    project_name: str,
+    plan: dict[str, Any],
+) -> None:
+    """Schreibt den Phasenplan atomar nach phase.yaml.
+
+    Auflage P2a-S1-A4: kennt KEINE Zeit-Semantik.
+    Schreibt das dict wie uebergeben. phase_erstellt_am
+    setzt der Aufrufer.
+
+    Auflage P2a-A6, P2a-S3-A3, P2a-S3-A4: atomar
+    (temp + os.replace), mode 0600, fsync vor close.
+    Kein Verzeichnis-fsync (bewusst, P2a).
+
+    Auflage P2a-S1-A3: yaml.safe_dump mit
+      default_flow_style=False, allow_unicode=True,
+      sort_keys=False, width=4096.
+
+    Auflage P2a-S3-A9: tmp-Lebenszyklus.
+      - O_EXCL legt tmp exklusiv an (Race-Schutz).
+      - try/finally unlink fuer den Fall, dass
+        os.replace scheitert (IOError) und tmp noch
+        existiert.
+      - Nach erfolgreichem os.replace existiert tmp
+        nicht mehr; finally-unlink laeuft ins Leere
+        (exists() == False).
+    """
+    ziel = _phase_yaml_pfad(project_name)
+    ziel.parent.mkdir(parents=True, exist_ok=True)
+    tmp_name = (
+        f".{ziel.name}.tmp.{os.getpid()}.{time.time_ns()}")
+    tmp = ziel.parent / tmp_name
+    try:
+        fd = os.open(
+            str(tmp),
+            os.O_CREAT | os.O_WRONLY | os.O_EXCL,
+            0o600,
+        )
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            yaml.safe_dump(
+                plan, fh,
+                default_flow_style=False,
+                allow_unicode=True,
+                sort_keys=False,
+                width=4096,
+            )
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(str(tmp), str(ziel))
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+
+
+def _planner_user_content(
+    roher_auftrag: str,
+    historie: str,
+    stufe: int = 1,
+) -> str:
+    """Baut den User-Content fuer den Planner.
+
+    Auflage P2a-S5a-A10: stufe=1 wortgleich zum
+    bisherigen Verhalten (test_planner.py bleibt
+    gruen). stufe=2 verweist auf P10-P14.
+    """
+    if stufe == 2:
+        abschluss = (
+            "Formuliere GENAU EINEN Phasenplan "
+            "(PHASE/UNTERBLOCK) oder stelle eine "
+            "Rueckfrage. Halte das Ausgabe-Format "
+            "aus P10-P14 ein."
+        )
+    else:
+        abschluss = (
+            "Formuliere den naechsten praezisen Auftrag "
+            "oder stelle eine Rueckfrage. "
+            "Halte das Ausgabe-Format aus P7/P8 ein."
+        )
+    return (
+        f"ROHER AUFTRAG DES MENSCHEN:\n{roher_auftrag}\n\n"
+        f"LETZTE COMMITS IM ZIEL-REPO:\n{historie[:3000]}\n\n"
+        f"{abschluss}"
+    )
+
+
 def _planner_lauf(
     state: RunState,
     api_key: str,
@@ -919,6 +1494,7 @@ def _planner_lauf(
     project_dir: Path,
     project_name: str,
     historie: str,
+    stufe: int = 1,
 ) -> str | None:
     """Fuehrt den Planner aus und liefert die Antwort.
 
@@ -933,15 +1509,11 @@ def _planner_lauf(
     planner_prompt = build_system_prompt(
         state.agents["planner"], state.docs,
         state.agent_docs.get("planner", []),
-        state=state)
+        state=state,
+        stufe=stufe)
 
-    user_content = (
-        f"ROHER AUFTRAG DES MENSCHEN:\n{roher_auftrag}\n\n"
-        f"LETZTE COMMITS IM ZIEL-REPO:\n{historie[:3000]}\n\n"
-        "Formuliere den naechsten praezisen Auftrag "
-        "oder stelle eine Rueckfrage. "
-        "Halte das Ausgabe-Format aus P7/P8 ein."
-    )
+    user_content = _planner_user_content(
+        roher_auftrag, historie, stufe)
 
     reply = ask_llm(
         api_key, planner_prompt, user_content,
@@ -1844,7 +2416,8 @@ def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
                         doc_keys: list[str],
                         *,
                         state: RunState | None = None,
-                        mit_anti_patterns: bool = True) -> str:
+                        mit_anti_patterns: bool = True,
+                        stufe: int = 1) -> str:
     """Baut System-Prompt aus Rollen-Body + HARD_RULES_BASE + Rolle + Projekt-Doku.
 
     Auflage 2182: HARD_RULES_BASE + rollenspezifische
@@ -1861,7 +2434,13 @@ def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
     """
     parts = [agent["body"], HARD_RULES_BASE]
     agent_name = agent.get("name", "")
-    rollen_rules = HARD_RULES_BY_ROLE.get(agent_name, "")
+    # stufe wirkt nur fuer rolle=planner (P2a-S5a-A2).
+    # stufe=2 waehlt HARD_RULES_PLANNER_STUFE2.
+    # Jeder andere Wert verhaelt sich wie 1 (BY_ROLE).
+    if agent_name == "planner" and stufe == 2:
+        rollen_rules = HARD_RULES_PLANNER_STUFE2
+    else:
+        rollen_rules = HARD_RULES_BY_ROLE.get(agent_name, "")
     if rollen_rules:
         parts.append(rollen_rules)
     if doc_keys:
@@ -1974,6 +2553,16 @@ class RunState:
     auflagen_log: list[list[str]] = field(default_factory=list)
     empfehlung_log: list[dict[str, str]] = field(default_factory=list)
     llm_calls: int = 0
+    # Block P2a: Phasen-Modus (Stufe 2).
+    phase_id: str | None = None
+    phase_titel: str = ""
+    phase_unterbloecke: list[dict[str, Any]] = \
+        field(default_factory=list)
+    phase_aktueller_index: int = 0
+    phase_commit_pakete: list[dict[str, Any]] = \
+        field(default_factory=list)
+    phase_start_head: str = ""
+    phase_aktiv: bool = False
 
 
 
@@ -4821,6 +5410,316 @@ def run_pipeline(project_name: str, aufgabe: str,
 
 
 
+def _phase_main_pfad(
+    project_name: str,
+    phasen_text: str,
+    state_ref: list[RunState],
+) -> int:
+    """Block P2a: fuehrt den Planner Stufe 2 aus und
+    bestaetigt den Phasenplan.
+
+    Ablauf:
+      1. Minimales Basis-Gate (Projekt + git clean).
+      2. Planner Stufe 2 (max planner_max_runden Runden).
+      3. _parse_phase_kopf + _parse_phase_plan.
+      4. Anzeige + Bestaetigung [j]/[n]/[e].
+      5. Bei [j]: _phase_plan_speichern() SOFORT
+         (RR-K13). state.phase_aktiv = True.
+         KEIN run_pipeline (P2a: kein Phasen-Loop,
+         der ist P2b).
+
+    Rueckgabe: rc.
+    """
+    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if not api_key:
+        print("[FAIL] DEEPSEEK_API_KEY fehlt. Fail closed.")
+        return 1
+
+    # Minimales Basis-Gate.
+    try:
+        config = _lade_und_pruefe_projekt(project_name)
+    except SystemExit as exc:
+        return int(exc.code) if isinstance(exc.code, int) else 1
+    project_dir = Path(
+        config.get("project_dir", str(Path.cwd()))
+    ).expanduser()
+    if not project_dir.exists():
+        print(f"[FAIL] project_dir fehlt: {project_dir}. "
+              "Fail closed.")
+        return 18
+
+    # git status clean?
+    try:
+        _st = subprocess.run(
+            ("git", "status", "--porcelain"),
+            cwd=str(project_dir), capture_output=True,
+            text=True, timeout=30, check=False,
+            env=subprocess_env(),
+        )
+        if _st.returncode != 0 or _st.stdout.strip():
+            print("[FAIL] Ziel-Repo nicht sauber (git status). "
+                  "Fail closed.")
+            print(_st.stdout[:500] if _st.stdout else "")
+            audit("phase_basis_gate_failed",
+                  {"grund": "git_status_schmutzig"},
+                  project_dir, project_name)
+            return 18
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        print(f"[FAIL] git status: {exc}. Fail closed.")
+        return 18
+
+    # Rollen + Docs laden.
+    agents_dir = config.get("project_agents_dir")
+    if not agents_dir:
+        agents_dir = "/opt/werkstatt/agents"
+    agents = load_agents(agents_dir)
+    docs = load_docs(config.get("docs", {}), project_dir)
+    file_whitelist = config.get("file_whitelist", [])
+
+    if "planner" not in agents:
+        print("[FAIL] Planner-Rolle nicht gefunden. Fail closed.")
+        audit("planner_rolle_fehlt", {}, project_dir,
+              project_name)
+        return 18
+
+    # Planner-Konfiguration (A9, A10: identisch zu
+    # _planner_main_pfad).
+    _pcfg = config.get("planner", {}) or {}
+    if not isinstance(_pcfg, dict):
+        _pcfg = {}
+    planner_modus = str(_pcfg.get("modus", "manual"))
+    planner_max_runden = int(_pcfg.get("max_runden", 3))
+    if planner_modus == "off":
+        print("[i] Planner-Modus ist 'off'. Kein Planner-Lauf.")
+        return 0
+
+    # Historien.
+    historie = load_recent_commits(project_dir, n=10)
+
+    # RunState bauen (analog _planner_main_pfad).
+    state = RunState(
+        block_id=config.get("project", "unknown"),
+        aufgabe=phasen_text,
+        start_ts=datetime.now(UTC).isoformat(timespec="seconds"),
+        docs=docs, agents=agents,
+        always={}, optional={},
+        file_whitelist=file_whitelist,
+        api_key=api_key,
+        budget=config.get("budget", {}),
+        agent_docs=config.get("agent_docs", {}),
+        project_dir=project_dir,
+        project_name=project_name,
+        planner_modus=planner_modus,
+    )
+    state.start_monotonic = time.monotonic()
+    state_ref.append(state)
+
+    global _AKTUELLE_RUN_ID
+    _AKTUELLE_RUN_ID = (
+        datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        + f"-{os.getpid()}")
+    state.run_id = _AKTUELLE_RUN_ID
+
+    audit("pipeline_start",
+          {"aufgabe_hash": __import__("hashlib").sha256(
+              phasen_text.encode()).hexdigest(),
+           "aufgabe_kurz": phasen_text[:200],
+           "modus": "phase"},
+          project_dir, project_name)
+
+    # Planner Stufe 2, max planner_max_runden Runden.
+    phase_plan_ok = False
+    phase_id = ""
+    phase_titel = ""
+    unterbloecke: list[dict[str, Any]] = []
+    # F-P2a-S5c-1 (alpha): editierter Plan aus
+    # vorheriger Runde. Wenn gesetzt, wird in der
+    # naechsten Runde kein Planner-Aufruf gemacht.
+    letzter_vorschlag: (
+        tuple[str, str, list[dict[str, Any]]] | None
+    ) = None
+    for runde in range(1, planner_max_runden + 1):
+        state.planner_runden = runde
+        print(f"\n[--- Planner-Runde {runde} (Stufe 2) ---]")
+        audit("planner_start",
+              {"runde": runde, "modus": "phase",
+               "stufe": 2},
+              project_dir, project_name)
+
+        if letzter_vorschlag is not None:
+            # F-P2a-S5c-1 (alpha): kein Planner-Aufruf.
+            phase_id, phase_titel, unterbloecke = \
+                letzter_vorschlag
+            letzter_vorschlag = None
+            aus_edit = True
+        else:
+            antwort = _planner_lauf(
+                state, api_key, phasen_text,
+                project_dir, project_name, historie,
+                stufe=2)
+            if antwort is None:
+                print("[FAIL] Planner-Aufruf fehlgeschlagen. "
+                      "Fail closed.")
+                return 1
+
+            # Kopf + Unterbloecke parsen (F1: Audit bei
+            # Parse-Fehler, Runde zaehlt - F2).
+            try:
+                phase_id, phase_titel = \
+                    _parse_phase_kopf(antwort)
+                unterbloecke = _parse_phase_plan(antwort)
+            except ValueError as exc:
+                print(f"[i] Planner-Antwort nicht im "
+                      f"Format: {exc}")
+                audit("phase_plan_parse_failed",
+                      {"runde": runde, "error": str(exc)},
+                      project_dir, project_name)
+                continue
+
+            phase_plan_ok = True
+            audit("planner_vorschlag",
+                  {"runde": runde,
+                   "titel": phase_titel[:200],
+                   "laenge": len(antwort),
+                   "stufe": 2},
+                  project_dir, project_name)
+            print(f"[+] Phasenplan erhalten (Runde {runde}).")
+            aus_edit = False
+
+        # Anzeige (A4, A6, A8).
+        print("\n" + "=" * 70)
+        if aus_edit:
+            print("=== PHASENPLAN (aus Edit) ===")
+            print("[i] Plan aus vorherigem Edit, kein neuer "
+                  "Planner-Aufruf.")
+        else:
+            print("=== PHASENPLAN ===")
+        print(f"Phase: {phase_id} - {phase_titel}")
+        for u in unterbloecke:
+            n_up = len(u["unterpunkte"])
+            n_rd = u["geschaetzte_runden"]
+            print(f"{u['id']}: {u['titel']}  "
+                  f"({n_up} Unterpunkte, ~{n_rd} Runden)")
+        print(f"(Runde {runde}/{planner_max_runden})")
+        print("=" * 70)
+
+        # Bestaetigung (A5, A6, A7: max 5 Versuche).
+        for _versuch in range(5):
+            try:
+                wahl = input(
+                    "[j] uebernehmen / [n] verwerfen / "
+                    "[e] editieren (folgt in Kuerze) > "
+                ).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print("\n[*] Abbruch.")
+                return 0
+            if wahl in {"j", "ja", "y", "yes"}:
+                # Speichern VOR RunState (S5-A4).
+                plan_dict: dict[str, Any] = {
+                    "phase_aktiv": True,
+                    "phase_id": phase_id,
+                    "phase_titel": phase_titel,
+                    "phase_start_head": "",
+                    "phase_erstellt_am": datetime.now(
+                        UTC).isoformat(timespec="seconds"),
+                    "phase_unterbloecke": [
+                        {
+                            "id": u["id"],
+                            "titel": u["titel"],
+                            "status": "pending",
+                            "commit_paket": {},
+                            "unterpunkte": u["unterpunkte"],
+                            "geschaetzte_runden":
+                                u["geschaetzte_runden"],
+                        }
+                        for u in unterbloecke
+                    ],
+                }
+                try:
+                    _phase_plan_speichern(
+                        project_name, plan_dict)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[FAIL] phase.yaml speichern: {exc}")
+                    return 1
+                state.phase_id = phase_id
+                state.phase_titel = phase_titel
+                state.phase_unterbloecke = plan_dict[
+                    "phase_unterbloecke"]
+                state.phase_aktiv = True
+                audit("phase_plan_erstellt",
+                      {"phase_id": phase_id,
+                       "unterbloecke": len(unterbloecke)},
+                      project_dir, project_name)
+                print(f"[+] Phase angelegt: "
+                      f"{_phase_yaml_pfad(project_name)}")
+                print("[i] Phasen-Loop (run_phase) noch nicht "
+                      "implementiert (P2b).")
+                return 0
+            if wahl in {"e", "edit", "editieren"}:
+                # F5: Runde sofort verbraucht.
+                try:
+                    bearbeitet, anzahl_geaendert = \
+                        _phase_edit_modus(
+                            phase_id, phase_titel,
+                            unterbloecke)
+                except (EOFError, KeyboardInterrupt):
+                    print("\n[*] Abbruch.")
+                    return 0
+                # Roundtrip-Validierung (F2, A4).
+                try:
+                    als_text = _phase_plan_als_text(
+                        phase_id, phase_titel, bearbeitet)
+                    neuer_plan = _parse_phase_plan(als_text)
+                except ValueError as exc:
+                    print(f"[!] Edit ungueltig: {exc}")
+                    audit("phase_plan_parse_failed",
+                          {"runde": runde, "error": str(exc),
+                           "nach": "edit"},
+                          project_dir, project_name)
+                    # Edit verworfen, neue Runde.
+                    break
+                # Eigenschafts-Check A4.
+                if neuer_plan != bearbeitet:
+                    print("[FAIL] Roundtrip-Fehler. "
+                          "Fail closed.")
+                    return 1
+                if anzahl_geaendert > 0:
+                    audit("phase_plan_editiert",
+                          {"runde": runde,
+                           "unterbloecke": len(bearbeitet),
+                           "geaenderte": anzahl_geaendert},
+                          project_dir, project_name)
+                # A9: state-Feld aktualisieren, nicht
+                # state_ref manipulieren.
+                state.phase_unterbloecke = bearbeitet
+                # F-P2a-S5c-1 (alpha): fuer die naechste
+                # Runde merken, dann inneren Loop verlassen.
+                letzter_vorschlag = (
+                    phase_id, phase_titel, bearbeitet)
+                # Inneren Loop verlassen; aeusserer Loop
+                # laeuft weiter (Runde verbraucht).
+                break
+            if wahl in {"n", "no", "nein"}:
+                print("[i] Verworfen.")
+                break
+            print("[i] Unbekannte Eingabe. Nochmal.")
+        if wahl in {"n", "no", "nein"}:
+            break
+        if wahl in {"e", "edit", "editieren"}:
+            continue
+        # 5 Versuche erschoepft.
+        print("[i] Zu viele Fehleingaben. Naechste Runde.")
+        continue
+
+    # Max-Runden oder [n] ohne [j]: verworfen (F2).
+    if not phase_plan_ok:
+        print("[i] Kein gueltiger Phasenplan. Verworfen.")
+    audit("phase_plan_verworfen",
+          {"runden": state.planner_runden},
+          project_dir, project_name)
+    return 0
+
+
 def _planner_main_pfad(
     project_name: str,
     roher_auftrag: str,
@@ -5099,6 +5998,53 @@ def main() -> int:
 
     args = sys.argv[1:]
     project_name: str | None = None
+
+    # Block P2a: Konflikt-Check (F1, P2a-S5c-A1).
+    # --phase und --planner sind exklusiv. Kein Audit
+    # (kein pipeline_start, kein RunState, keine
+    # Projekt-Bindung).
+    if "--phase" in args and "--planner" in args:
+        print("[FAIL] --phase und --planner "
+              "nicht kombinierbar.")
+        return 65
+
+    # Block P2a: --phase-Pfad. Reihenfolge: VOR --planner
+    # (P2a-S5b-A1). Beide Bedingungen sind mit args[2]
+    # exklusiv.
+    if (len(args) >= 4 and args[0] == "--project"
+            and args[2] == "--phase"):
+        project_name = args[1].strip()
+        phasen_text = args[3].strip()
+        if not project_name:
+            print("[FAIL] Leerer Projektname.")
+            return 65
+        if not phasen_text:
+            print("[FAIL] Leerer Phasentext.")
+            return 65
+        phase_state_ref: list[RunState] = []
+        rc = 1
+        try:
+            rc = _phase_main_pfad(
+                project_name, phasen_text, phase_state_ref)
+        except KeyboardInterrupt:
+            print("\n[*] Abbruch durch Strg+C.")
+            rc = 130
+        except Exception as exc:  # noqa: BLE001
+            print(f"[FAIL] Unerwarteter Fehler: {exc}")
+            import traceback
+            traceback.print_exc()
+            rc = 99
+        finally:
+            if phase_state_ref:
+                try:
+                    _pipeline_ende(
+                        phase_state_ref[0],
+                        phase_state_ref[0].project_dir,
+                        phase_state_ref[0].project_name,
+                        rc, "phase_exit")
+                except Exception:  # noqa: BLE001
+                    print("[WARN] pipeline_ende fehlgeschlagen.")
+        return rc
 
     # Block P1: --planner-Pfad.
     # Format: pipeline.py --project <name> --planner "<roher Auftrag>"

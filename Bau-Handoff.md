@@ -1,16 +1,17 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach Doku-Migration + Konsolidierung)
-Werkstatt-HEAD: 9544c7e (Block P1: Planner-Rolle + _planner_lauf)
+Stand: 2026-10-15 (nach Block P2a: Phasen-Modus Fundament)
+Werkstatt-HEAD: e8a01a4 (Doku: Handoff — P1-Live-Test)
 security-ai-HEAD: 220c6be (Doku-Migration)
 Letzter echter Probebetrieb: PB-67 (0d0fe2c, 2026-10-15)
 Branch: main (beide Repos)
-Tests (Werkstatt): 514 passed
+Tests (Werkstatt): 542 passed
 ruff --no-cache: 0
 mypy pipeline.py: 0
 mypy tests/test_pipeline.py: 15 (vorbestehend, tests-mypy)
+mypy tests/test_planner.py: 0
 mypy tests/test_projekt_schema.py: 0
-mypy tests/test_anti_patterns.py: 0
+mypy tests/test_phase.py: 0
 Tests (security-ai): 1334 collected
 
 ARCHIV: historische Eintraege in Bau-Handoff-Archiv.md.
@@ -70,11 +71,11 @@ Rollen (6):
 ================================================================
 
 Werkstatt-Repo (/opt/werkstatt):
-  HEAD 254b3fb.
-  Tests: 495 passed.
+  HEAD e8a01a4 (Basis). Nach P2a-Commit: neuer HEAD.
+  Tests: 542 passed.
   ruff --no-cache: 0.
   mypy pipeline.py: 0.
-  git status: sauber.
+  git status: P2a-Aenderungen uncommittet (7 Dateien).
   Remote: github.com/ghxstfocus/werkstatt.git (privat).
 
 Ziel-Projekt security-ai (/opt/security-ai):
@@ -86,21 +87,25 @@ Ziel-Projekt security-ai (/opt/security-ai):
   Remote: github.com/ghxstfocus/security-ai.git.
 
 Dateien (Werkstatt):
-  - pipeline.py (~4780 Zeilen)
+  - pipeline.py (~6162 Zeilen)
   - redaction.py
   - werkstatt_aggregate.py
   - schemas/projekt.yaml
   - projects/security-ai.yaml
-  - agents/*.md (6 Rollen)
+  - agents/*.md (7 Rollen: reviewer, builder, solver,
+    test_generator, coverage, chaos, planner)
   - anti-patterns/katalog.yaml (26 Eintraege)
   - tests/test_pipeline.py
   - tests/test_projekt_schema.py
   - tests/test_anti_patterns.py
   - tests/test_aggregate.py
   - tests/test_redaction.py
+  - tests/test_planner.py (27 Tests)
+  - tests/test_phase.py (17 Tests)
   - docs/WORKFLOW.md (~583 Zeilen)
   - docs/ROADMAP.md
   - docs/PROTOKOLL-29-40.md
+  - docs/PLANNER-KONZEPT.md (v4 final)
 
 Ziel-Projekt-Doku (nach Doku-Migration):
   Top-Level: README.md, CHANGELOG.md,
@@ -247,6 +252,47 @@ security-ai 220c6be):
   - Alias-Mechanik datengetrieben (Schema als
     einzige Quelle).
 
+Block P2a (Phasen-Modus Fundament):
+  ERLEDIGT 2026-10-15. Sieben Teilschritte.
+  Basis: HEAD e8a01a4 (P1-Live-Test-Doku).
+  Naechster Commit: "P2a: Phasen-Modus Fundament".
+
+  Teilschritte:
+    1. RunState + 7 phase_*-Felder.
+    2. _parse_phase_plan (P10-P14-Format).
+    3. _phase_plan_laden/_speichern (atomar, 0600).
+       .gitignore: projects/*.phase.yaml +
+       projects/.*.tmp.*
+    4. HARD_RULES_PLANNER_STUFE1/STUFE2.
+       P1-P9 wortgleich in STUFE1. STUFE2:
+       P1', P2, P3', P4', P5, P6, P8, P9',
+       P10-P14. Alias HARD_RULES_PLANNER auf
+       STUFE1.
+    5a. _parse_phase_kopf + build_system_prompt
+        stufe-Parameter (keyword-only) +
+        _planner_lauf stufe-Parameter +
+        _planner_user_content.
+    5b. _phase_main_pfad + main() --phase +
+        Audit-Kinds phase_plan_erstellt,
+        phase_plan_parse_failed,
+        phase_plan_verworfen.
+    5c. Konflikt-Check --phase/--planner (rc=65)
+        + _phase_plan_als_text (Roundtrip)
+        + _phase_edit_modus (nur Titel/Runden)
+        + Audit-Kind phase_plan_editiert
+        + letzter_vorschlag-Mechanik.
+    6. agents/planner.md: Stufe-1/Stufe-2-Sektionen.
+    7. projects/security-ai.yaml +
+       schemas/projekt.yaml: planner.phasen_modus,
+       budget.max_llm_calls_phase (Deklaration).
+
+  Tests: 514 -> 542 (+28).
+  Reviewer-Auflagen: P2a-A1..A14, P2a-S1..P2a-S6-7
+  (alle eingearbeitet).
+  Kein Probebetrieb-Tag (kein echter Pipeline-
+  Durchlauf; der Phasen-Loop ist erst in P2b
+  funktional).
+
 ================================================================
 4. OFFENE MERKPOSTEN
 ================================================================
@@ -255,17 +301,27 @@ KRITISCH: keine.
 
 WICHTIG:
 
-  Block P2 (--phase + run_phase + Gesamt-Review):
-        OFFEN. Stufe 2 des Planner-Konzepts.
-        Naechster Block. Kategorie 3.
+  Block P2a (Phasen-Modus Fundament):
+        ERLEDIGT 2026-10-15. Siehe Abschnitt 3.
+        Commit: "P2a: Phasen-Modus Fundament".
+
+  Block P2b (run_phase + Unterblock-Loop +
+             Gesamt-Review):
+        OFFEN. Naechster Block. Kategorie 3.
         Siehe docs/PLANNER-KONZEPT.md, Abschnitt 5
         und Abschnitt 13.
-        DRINGEND: der P1-Live-Test hat gezeigt,
-        dass der Planner einen zu grossen Auftrag
-        formuliert und der Builder im Deadlock
-        landet. P2 loest das durch Portionierung
-        in Unterbloecke. Vor P2 kann der Planner
-        nur kleine Auftraege abarbeiten.
+        Inhalt:
+          - run_phase: Loop ueber Unterbloecke.
+          - Pro Unterblock: run_pipeline,
+            Patches anwenden, Commit-Paket sammeln
+            (NICHT committen).
+          - _phase_gesamt_review + Approval.
+          - _phase_rollback (RR-K1/K2/K3).
+          - Budget-Layer-1 (max_llm_calls_phase).
+          - Plan-Korrektur bei Phase-NO-GO.
+        Faustregel P1-Live-Test: ein neuer
+        Code-Pfad pro Block. P2b wird in
+        Teilbloecke zerlegt (P2b-1, P2b-2, ...).
 
   Planner-Portionierung (Zwischenloesung):
         OFFEN. Falls P2 zu gross ist, reicht
@@ -336,6 +392,29 @@ WICHTIG:
         praezisierter_auftrag landet heute nur in
         state.solver_befunde und im Reviewer-Prompt.
         Der Builder sieht ihn nicht. Kategorie 3.
+
+  _WERKSTATT_PROJECTS_DIR (aus P2a-S3-A8):
+        Path("/opt/werkstatt/projects") inline in
+        memory.yaml-Pfad + _PHASE_YAML_DIR in P2a
+        sind zwei Stellen. Zusammenfuehren in eine
+        Konstante. Kategorie 2.
+
+  ruff TRY004 vs. Auflage ValueError (P2a-S3-NA-A5):
+        In _phase_plan_laden bewusst # noqa: TRY004,
+        weil P2a-A7 explizit ValueError fordert.
+        Bei haeufigerem TRY004 in spaeteren Bloecken:
+        Werkstatt-Konvention statt 4x # noqa.
+
+  Resume/Schutz alter phase.yaml (aus P2a-S5b-3):
+        5b/5c pruefen NICHT, ob eine alte phase.yaml
+        existiert, und loeschen nichts. Resume
+        gehoert in einen eigenen Block (Konzept 9.2).
+
+  Gemeinsame Basis _planner_main_pfad +
+  _phase_main_pfad (aus P2a-S5b-F4):
+        Bewusste Duplikation in P2a. Spaeter pruefen,
+        wenn weitere Pfade dazukommen (P3,
+        Scaffolder). Kategorie 2.
 
 MITTEL:
 
@@ -454,6 +533,10 @@ Abschnitt B.
     3c-2 (b84ee8e), 3c-3 (d0a9bad).
   Doku-Migration (Werkstatt 254b3fb,
     security-ai 220c6be).
+  Block P1 (Planner-Rolle + _planner_lauf,
+    Commit 9544c7e).
+  Block P2a (Phasen-Modus Fundament,
+    Commit "P2a: Phasen-Modus Fundament").
 
 ================================================================
 6. ZIELE

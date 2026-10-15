@@ -104,6 +104,9 @@ budget:
   max_minutes: 15
   max_llm_calls: 30
   max_builder_runden: 3
+  # Block P2a: Gesamtbudget pro Phase (Konzept 10).
+  # Wird in P2a noch nicht enforced. Siehe P2b.
+  max_llm_calls_phase: 200
 
 # Auto-Repair des Basis-Gates.
 auto_repair:
@@ -143,3 +146,8 @@ planner:
   modus: manual
   max_runden: 3
   ask_human_timeout_min: 60
+  # Block P2a: Phasen-Modus aktiv? (Default false).
+  # Heute rein manuell ueber --phase. Wenn true,
+  # koennte ein spaeterer Block --phase auch
+  # nicht-manuell ausloesen. In P2a nur deklariert.
+  phasen_modus: false
