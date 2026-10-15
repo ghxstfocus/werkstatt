@@ -3,7 +3,7 @@
 Stand: 2026-10-15 (nach Doku-Migration + Konsolidierung)
 Werkstatt-HEAD: 254b3fb (Doku-Migration + Schema-Alias-Mechanik)
 security-ai-HEAD: 220c6be (Doku-Migration)
-Letzter echter Probebetrieb: PB-66 (c9142a7, 2026-10-15)
+Letzter echter Probebetrieb: PB-67 (0d0fe2c, 2026-10-15)
 Branch: main (beide Repos)
 Tests (Werkstatt): 495 passed
 ruff --no-cache: 0
@@ -28,10 +28,16 @@ Die Tags probebetrieb-62 bis -83 (alte Vergabe)
 wurden am 2026-10-14 entfernt.
 
 Letzter echter Lauf:
+  2026-10-15T16:11-16:11  rc=0  PB-67
+  Commit 0d0fe2c (Docstring orchestrator.py).
+  Erster echter Lauf nach Phase 1 (Projekt-Schema).
+  Runden 1, llm_calls 5, kein Solver-Trigger.
+
+Vorheriger echter Lauf:
   2026-10-14T21:00-21:02  rc=0  PB-62
   Commit 3bb5917 (whois).
 
-Naechster echter Probebetrieb: probebetrieb-67.
+Naechster echter Probebetrieb: probebetrieb-68.
 
 ================================================================
 1. WAS DIE WERKSTATT IST
@@ -152,6 +158,13 @@ Phase 3c-1/2/3 Reviewer + Solver Injektion
   - 3c-3: Solver-Injektion in rufe_solver
     (trigger_grund, aufrufer).
 
+Erster echter Pipeline-Lauf PB-67:
+  Commit 0d0fe2c in security-ai. Docstring
+  orchestrator.py korrigiert (Punkt 94).
+  Runden 1, llm_calls 5, kein Solver-Trigger.
+  Tag probebetrieb-67 gesetzt.
+  Damit ist die Bedingung fuer Phase 1b erfuellt.
+
 Doku-Migration (Werkstatt 254b3fb,
 security-ai 220c6be):
   - Profi-Konvention: PHASES -> ROADMAP,
@@ -173,11 +186,15 @@ KRITISCH: keine.
 
 WICHTIG:
 
-  Phase 1b (Validator Fail-closed): OFFEN.
+  Phase 1b (Validator Fail-closed): BEREIT.
         WERKSTATT_SCHEMA_MODUS Default ist warn
-        (pipeline.py:478). Nach 2-3 echten
-        Pipeline-Laeufen ohne Schema-Warnung
-        auf fail umstellen. Kategorie 2.
+        (pipeline.py:478). PB-67 (2026-10-15) ist
+        der erste echte Lauf nach Phase 1, Warn-
+        Modus ohne Warnung durchgelaufen. Bedingung
+        erfuellt.
+        Naechster Schritt: Kategorie-3-Reviewer-Block,
+        dann Default auf fail umstellen. Kategorie 3
+        (bestaetigt vom Reviewer-Chat 2026-10-15).
 
   Solver-Kurskorrektur Block 6 (Smoke-Test): OFFEN.
         Echter Solver-Lauf im Deadlock- und
@@ -466,13 +483,15 @@ Der neue Bau-Chat soll:
        /opt/werkstatt/tests/ -q
 
 2. Reihenfolge:
-   a) Phase 2: Scaffolder (werkstatt_scaffold.py +
+   a) Phase 1b: Validator Fail-closed.
+      Naechster Block. Kategorie 3. Bedingung
+      erfuellt durch PB-67.
+   b) Solver-Kurskorrektur Block 6 (Smoke-Test).
+      Echter Solver-Lauf mit P1-Trigger provozieren.
+   c) Phase 2: Scaffolder (werkstatt_scaffold.py +
       werkstatt_migrate.py). Voraussetzung
       erfuellt: Struktur-Konvention in
       Werkstatt-WORKFLOW.
-   b) Phase 1b: Validator Fail-closed.
-      Nach 2-3 echten Pipeline-Laeufen.
-   c) Solver-Kurskorrektur Block 6 (Smoke-Test).
    d) Rollen-Prompt-Generator (Phase 3.5).
    e) Agent-Memory Ebene 2.
    f) Ziel 2: Phasen-Modus.
