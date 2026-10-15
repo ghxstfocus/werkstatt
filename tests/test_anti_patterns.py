@@ -15,6 +15,7 @@ Prueft:
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 sys.path.insert(0, "/opt/werkstatt")
 
@@ -137,13 +138,14 @@ class TestLimit:
 # =====================================================================
 
 class TestTrigger:
-    def test_eintrag_ohne_trigger_wird_immer_gezeigt(self) -> None:
-        # ap-anker-dekorator hat kein trigger_gruende-Feld.
+    def test_fallback_eintrag_wird_immer_gezeigt(self) -> None:
+        # ap-import-nachtrag-ohne-ruff hat kein
+        # trigger_gruende-Feld (Fallback).
         # Sollte bei jedem Trigger-Grund erscheinen.
         aps = pipeline.anti_patterns_fuer(
             "builder", "p1_trigger", limit=100)
         ids = {e["id"] for e in aps}
-        assert "ap-anker-dekorator" in ids
+        assert "ap-import-nachtrag-ohne-ruff" in ids
 
     def test_eintrag_mit_trigger_nur_wenn_passend(self) -> None:
         # Hypothetischer Eintrag mit trigger_gruende wird
@@ -241,3 +243,182 @@ class TestValidierung:
             pipeline._validiere_ap_eintrag(
                 {"id": "ap-x", "titel": "x"},
                 index=0)
+
+
+# =====================================================================
+# Phase 3b: _anti_pattern_block + Injektion in baue_anker_rueckmeldung
+# =====================================================================
+
+class TestAntiPatternBlock:
+    def _state(self, *, anker_fehler=None, project_dir=None):
+        from pathlib import Path
+        s = pipeline.RunState(
+            block_id="test-block",
+            aufgabe="test",
+            start_ts="2026-10-15T00:00:00+00:00",
+            docs={},
+            agents={},
+            always={},
+            optional={},
+            file_whitelist=["core/"],
+            api_key="test-key",
+            budget={"max_review_rounds": 5, "max_llm_calls": 30},
+            agent_docs={},
+            project_dir=Path(project_dir) if project_dir else Path("/tmp"),
+            project_name="test-projekt",
+        )
+        if anker_fehler:
+            s.letzte_anker_fehler = anker_fehler
+        return s
+
+    def test_leer_bei_unbekannter_rolle(self) -> None:
+        # _anti_pattern_block prueft NICHT die Anker-Fehler,
+        # nur Rolle und Trigger-Grund. Bei unbekannter Rolle
+        # kommt nichts zurueck.
+        s = self._state()
+        assert pipeline._anti_pattern_block(s, "gibt-es-nicht") == ""
+
+    def test_leer_bei_trigger_ohne_passende_spezifische(self) -> None:
+        # Trigger-Grund ohne spezifischen Eintrag in der
+        # Katalog-Rolle: nur Fallback-Eintraege, aber Block
+        # ist nicht leer.
+        s = self._state()
+        block = pipeline._anti_pattern_block(
+            s, "test_generator", "p1_trigger")
+        assert "## ANTI-PATTERNS" in block
+
+    def test_mit_anker_fehler_enthaelt_block(self) -> None:
+        s = self._state(
+            anker_fehler=[(0, "core/x.py", "foo", "nicht_gefunden")])
+        block = pipeline._anti_pattern_block(s, "builder")
+        assert "## ANTI-PATTERNS" in block
+        assert "ap-anker-dekorator" in block
+        assert "Beschreibung:" in block
+        assert "Loesung:" in block
+
+    def test_ohne_trigger_grund_zeigt_fallback(self) -> None:
+        # ap-anker-dekorator hat trigger_gruende=[anker_nicht_gemessen].
+        # Wenn trigger_grund=None, greift VV2-Fallback: alle
+        # Rollen-Eintraege werden gezeigt.
+        s = self._state(
+            anker_fehler=[(0, "core/x.py", "foo", "nicht_gefunden")])
+        block_none = pipeline._anti_pattern_block(s, "builder", None)
+        block_ng = pipeline._anti_pattern_block(
+            s, "builder", "anker_nicht_gemessen")
+        # Beide enthalten ap-anker-dekorator
+        assert "ap-anker-dekorator" in block_none
+        assert "ap-anker-dekorator" in block_ng
+
+    def test_trigger_grund_filtert(self) -> None:
+        # XX1/XX3: Bei trigger_grund=wirkungsloser_patch
+        # muss der spezifische Eintrag (ap-string-literal-
+        # statt-konstante) in den Top-3 stehen, auch wenn
+        # generische Fallback-Eintraege existieren.
+        s = self._state(
+            anker_fehler=[(0, "core/x.py", "foo", "wirkungslos")])
+        block = pipeline._anti_pattern_block(
+            s, "builder", "wirkungsloser_patch")
+        assert "ap-string-literal-statt-konstante" in block
+        # ap-anker-dekorator hat trigger_gruende=[anker_nicht_gemessen]
+        # und darf hier NICHT erscheinen.
+        assert "ap-anker-dekorator" not in block
+
+    def test_spezifisch_vor_fallback(self) -> None:
+        # XX5: Bei trigger_grund=X und spezifischem Kandidaten
+        # muss der spezifische Eintrag VOR den Fallbacks stehen.
+        aps = pipeline.anti_patterns_fuer(
+            "builder", "wirkungsloser_patch", limit=3)
+        ids = [e["id"] for e in aps]
+        assert ids[0] == "ap-string-literal-statt-konstante"
+
+    def test_ohne_spezifische_fallback_greift(self) -> None:
+        # XX5: Bei trigger_grund=X ohne spezifische Kandidaten
+        # greifen die Fallbacks.
+        aps = pipeline.anti_patterns_fuer(
+            "builder", "reviewer_command", limit=100)
+        # Kein Eintrag hat trigger_gruende=[reviewer_command],
+        # also nur Fallbacks. Mindestens einer da.
+        assert len(aps) >= 1
+
+    def test_ohne_trigger_grund_nach_haeufigkeit(self) -> None:
+        # XX4: Bei trigger_grund=None ist die Sortierung
+        # nach Audit-Haeufigkeit (wie vorher). ap-anker-
+        # dekorator hat die hoechste Haeufigkeit.
+        aps = pipeline.anti_patterns_fuer("builder", limit=100)
+        ids = [e["id"] for e in aps]
+        assert ids[0] == "ap-anker-dekorator"
+
+    def test_max_3_eintraege(self) -> None:
+        s = self._state(
+            anker_fehler=[(0, "core/x.py", "foo", "nicht_gefunden")])
+        block = pipeline._anti_pattern_block(
+            s, "builder", "anker_nicht_gemessen")
+        anzahl = block.count("- [ap-")
+        assert anzahl <= 3
+
+    def test_trigger_grund_aus_state(self) -> None:
+        s = self._state(
+            anker_fehler=[(0, "core/x.py", "foo", "wirkungslos")])
+        assert pipeline._ap_trigger_grund_aus_state(s) == (
+            "wirkungsloser_patch")
+
+    def test_trigger_grund_prioritaet(self) -> None:
+        # Bei mehreren Gruenden gewinnt wirkungslos.
+        s = self._state(anker_fehler=[
+            (0, "core/x.py", "foo", "nicht_gefunden"),
+            (1, "core/y.py", "bar", "wirkungslos"),
+        ])
+        assert pipeline._ap_trigger_grund_aus_state(s) == (
+            "wirkungsloser_patch")
+
+    def test_trigger_grund_leer_ergibt_none(self) -> None:
+        s = self._state(
+            anker_fehler=[(0, "core/x.py", "", "leer")])
+        assert pipeline._ap_trigger_grund_aus_state(s) is None
+
+    def test_kuerzung_bei_500_zeichen(self) -> None:
+        lang = "x" * 1000
+        gekuerzt = pipeline._ap_kuerzen(lang, 500)
+        assert len(gekuerzt) <= 500
+        assert gekuerzt.endswith("\u2026")
+
+    def test_keine_kuerzung_bei_kurz(self) -> None:
+        kurz = "kurz"
+        assert pipeline._ap_kuerzen(kurz, 500) == kurz
+
+
+class TestBaueAnkerRueckmeldungMitAP:
+    def _state(self, *, anker_fehler=None):
+        s = pipeline.RunState(
+            block_id="test-block",
+            aufgabe="test",
+            start_ts="2026-10-15T00:00:00+00:00",
+            docs={},
+            agents={},
+            always={},
+            optional={},
+            file_whitelist=["core/"],
+            api_key="test-key",
+            budget={"max_review_rounds": 5, "max_llm_calls": 30},
+            agent_docs={},
+            project_dir=Path("/tmp"),
+            project_name="test-projekt",
+        )
+        if anker_fehler:
+            s.letzte_anker_fehler = anker_fehler
+        return s
+
+    def test_ohne_fehler_leer(self) -> None:
+        s = self._state()
+        assert pipeline.baue_anker_rueckmeldung(s) == ""
+
+    def test_mit_fehler_enthaelt_ap_block(self) -> None:
+        s = self._state(
+            anker_fehler=[(0, "core/x.py", "foo", "nicht_gefunden")])
+        block = pipeline.baue_anker_rueckmeldung(s)
+        assert "## ANKER-PRUEFUNG" in block
+        assert "## ANTI-PATTERNS" in block
+        # Reihenfolge: ANKER-PRUEFUNG kommt vor ANTI-PATTERNS
+        idx_ap = block.find("## ANKER-PRUEFUNG")
+        idx_anti = block.find("## ANTI-PATTERNS")
+        assert idx_ap < idx_anti

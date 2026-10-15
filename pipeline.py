@@ -700,11 +700,21 @@ def anti_patterns_fuer(
     alle = lade_anti_patterns()
     treffer = _ap_audit_haeufigkeit()
 
-    def sort_key(e: dict[str, Any]) -> int:
+    def audit_key(e: dict[str, Any]) -> int:
         s = 0
         for ak in e.get("audit_kinds", []) or []:
             s += treffer.get(ak, 0)
         return -s
+
+    def stufe(e: dict[str, Any]) -> int:
+        # XX1: Stufe 1 = Eintrag hat trigger_gruende-Feld
+        # UND der aktuelle Grund steht darin.
+        if trigger_grund is None:
+            return 2
+        tgs = e.get("trigger_gruende")
+        if tgs and trigger_grund in tgs:
+            return 1
+        return 2
 
     ausgewaehlt: list[dict[str, Any]] = []
     for e in alle:
@@ -715,8 +725,79 @@ def anti_patterns_fuer(
             if tgs and trigger_grund not in tgs:
                 continue
         ausgewaehlt.append(e)
-    ausgewaehlt.sort(key=sort_key)
+    # XX2: zwei Stufen, innerhalb jeder Stufe nach
+    # Audit-Haeufigkeit (XX3: abschneiden danach).
+    ausgewaehlt.sort(key=lambda e: (stufe(e), audit_key(e)))
     return ausgewaehlt[:limit]
+
+
+# WW3: Mapping Anker-Fehler-Grund -> Trigger-Grund aus
+# ERLAUBTE_SOLVER_QUELLEN. "leer" und "shift_akzeptiert"
+# haben keinen Trigger-Grund und fallen auf None.
+_AP_GRUND_ZU_TRIGGER = {
+    "wirkungslos": "wirkungsloser_patch",
+    "nicht_gefunden": "anker_nicht_gemessen",
+}
+
+# Prioritaet bei mehreren Anker-Fehlern:
+# wirkungslos > nicht_gefunden > leer / shift_akzeptiert.
+_AP_GRUND_PRIO = ("wirkungslos", "nicht_gefunden", "leer",
+                  "shift_akzeptiert")
+
+_AP_BESCHREIBUNG_MAX = 500
+
+
+def _ap_kuerzen(text: str, max_len: int) -> str:
+    if len(text) <= max_len:
+        return text
+    return text[:max_len - 1].rstrip() + "…"
+
+
+def _ap_trigger_grund_aus_state(state: RunState) -> str | None:
+    """WW3: leitet den Trigger-Grund aus den Anker-Fehlern ab.
+
+    Liefert None, wenn kein Fehler vorliegt oder der Grund
+    keinen Trigger-Grund hat.
+    """
+    gruende = [g for (_, _, _, g) in state.letzte_anker_fehler]
+    for g in _AP_GRUND_PRIO:
+        if g in gruende:
+            return _AP_GRUND_ZU_TRIGGER.get(g)
+    return None
+
+
+def _anti_pattern_block(
+    state: RunState,
+    rolle: str,
+    trigger_grund: str | None = None,
+) -> str:
+    """WW4: formatiert die relevanten Anti-Patterns als
+    Prompt-Block. Liefert "" wenn nichts zu zeigen ist.
+
+    Schreibt Audit-Event anti_patterns_injiziert, wenn
+    mindestens ein Eintrag gezeigt wird.
+    """
+    aps = anti_patterns_fuer(rolle, trigger_grund, limit=3)
+    if not aps:
+        return ""
+    zeilen = ["## ANTI-PATTERNS"]
+    for e in aps:
+        beschreibung = _ap_kuerzen(
+            e["beschreibung"].strip(), _AP_BESCHREIBUNG_MAX)
+        loesung = _ap_kuerzen(
+            e["loesung"].strip(), _AP_BESCHREIBUNG_MAX)
+        zeilen.append("")
+        zeilen.append(f"- [{e['id']}] {e['titel']}")
+        zeilen.append(f"  Beschreibung: {beschreibung}")
+        zeilen.append(f"  Loesung: {loesung}")
+    # Audit
+    if state.project_dir is not None:
+        audit("anti_patterns_injiziert",
+              {"rolle": rolle,
+               "trigger_grund": trigger_grund,
+               "ids": [e["id"] for e in aps]},
+              state.project_dir, state.project_name)
+    return "\n".join(zeilen)
 
 
 def load_agents(agents_dir: str) -> dict[str, dict[str, Any]]:
@@ -1180,6 +1261,12 @@ def baue_anker_rueckmeldung(state: RunState) -> str:
     zeilen.append("(b) COMMAND: RUN read_file <pfad>, "
                   "um mehr Kontext zu messen.")
     zeilen.append("")
+    # Phase 3b: Anti-Pattern-Block, wenn relevant.
+    _tg = _ap_trigger_grund_aus_state(state)
+    ap_block = _anti_pattern_block(state, "builder", _tg)
+    if ap_block:
+        zeilen.append("")
+        zeilen.append(ap_block)
     return "\n".join(zeilen) + "\n"
 
 

@@ -50,6 +50,8 @@ eintraege:
       - builder_anker_fehler
       - anker_einrueckung_korrigiert
     kategorie: 2
+    trigger_gruende:
+      - anker_nicht_gemessen
     rollen:
       - builder
       - reviewer
@@ -75,6 +77,8 @@ eintraege:
     audit_kinds:
       - builder_anker_fehler
     kategorie: 2
+    trigger_gruende:
+      - anker_nicht_gemessen
     rollen:
       - builder
       - reviewer
@@ -204,6 +208,8 @@ eintraege:
         in handle_deadlock_mit_solver (pipeline.py).
     audit_kinds: []
     kategorie: 2
+    trigger_gruende:
+      - wirkungsloser_patch
     rollen:
       - builder
       - reviewer
@@ -403,6 +409,8 @@ eintraege:
       - "security-ai, PHASES-Duplikat"
     audit_kinds: []
     kategorie: 2
+    trigger_gruende:
+      - anker_nicht_gemessen
     rollen:
       - builder
 
@@ -470,6 +478,8 @@ eintraege:
       - "security-ai/docs/WORKFLOW.md, Abschnitt Anti-Patterns"
     audit_kinds: []
     kategorie: 2
+    trigger_gruende:
+      - anker_nicht_gemessen
     rollen:
       - builder
 
