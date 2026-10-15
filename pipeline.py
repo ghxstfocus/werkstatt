@@ -753,6 +753,44 @@ def parse_empfehlung(text: str) -> dict[str, str]:
 
 
 
+def baue_anker_rueckmeldung(state: RunState) -> str:
+    """Stufe 0 Aenderung 2: baut den Rueckmeldungs-Block
+    fuer den Builder-Prompt, wenn Anker oder Ersatz nicht
+    im mess_protokoll stehen. HH4: max 5 Eintraege.
+
+    Liefert "" wenn keine Fehler vorliegen.
+    """
+    if not state.letzte_anker_fehler and not state.letzte_ersatz_fehler:
+        return ""
+    zeilen = ["## ANKER-PRUEFUNG (deterministisch)"]
+    zeilen.append(
+        "Diese Anker / Import-Pfade stehen NICHT im "
+        "GEMESSENER INHALT:")
+    anker_eintraege = state.letzte_anker_fehler[:5]
+    for i, pfad, anker, grund in anker_eintraege:
+        kurz = anker[:80].replace("\n", "\\n")
+        zeilen.append(f"- Patch {i} ({pfad}, {grund}): {kurz!r}")
+    if len(state.letzte_anker_fehler) > 5:
+        rest = len(state.letzte_anker_fehler) - 5
+        zeilen.append(f"  ... und {rest} weitere Anker.")
+    ersatz_eintraege = state.letzte_ersatz_fehler[:5]
+    for i, pfad, modul in ersatz_eintraege:
+        zeilen.append(
+            f"- Patch {i} ({pfad}): Modul {modul!r} "
+            f"nicht im GEMESSENER INHALT.")
+    if len(state.letzte_ersatz_fehler) > 5:
+        rest = len(state.letzte_ersatz_fehler) - 5
+        zeilen.append(f"  ... und {rest} weitere Module.")
+    zeilen.append("")
+    zeilen.append("Du hast folgende Moeglichkeiten:")
+    zeilen.append("(a) Neuer Patch mit korrektem Anker "
+                  "(woertlich aus dem GEMESSENER INHALT).")
+    zeilen.append("(b) COMMAND: RUN read_file <pfad>, "
+                  "um mehr Kontext zu messen.")
+    zeilen.append("")
+    return "\n".join(zeilen) + "\n"
+
+
 def pruefe_anker_gegen_messung(
     patches: list[dict[str, str]],
     mess_protokoll: str,
@@ -878,6 +916,34 @@ def builder_reply_mit_command_loop(
             reply.content, state, project_dir, project_name)
         cmds = parse_commands(reply.content)
         if not cmds:
+            # Stufe 0 Aenderung 2: Anker+Ersatz pruefen.
+            patches = parse_code_patches(reply.content)
+            if patches:
+                anker_fehler = pruefe_anker_gegen_messung(
+                    patches, state.mess_protokoll)
+                ersatz_fehler = pruefe_ersatz_gegen_messung(
+                    patches, state.mess_protokoll)
+                if anker_fehler or ersatz_fehler:
+                    state.letzte_anker_fehler = anker_fehler
+                    state.letzte_ersatz_fehler = ersatz_fehler
+                    state.anker_fehler_in_folge += 1
+                    audit("builder_anker_fehler",
+                          {"runde": builder_runde,
+                           "anker": len(anker_fehler),
+                           "ersatz": len(ersatz_fehler),
+                           "in_folge":
+                               state.anker_fehler_in_folge},
+                          project_dir, project_name)
+                    print(f"[!] Builder-Runde {builder_runde}: "
+                          f"{len(anker_fehler)} Anker, "
+                          f"{len(ersatz_fehler)} Ersatz "
+                          f"nicht im GEMESSENER INHALT. "
+                          f"Rueckmeldung in naechster Runde.")
+                    continue
+                # Alle Anker ok: zuruecksetzen und return.
+                state.letzte_anker_fehler = []
+                state.letzte_ersatz_fehler = []
+                state.anker_fehler_in_folge = 0
             return reply, None
         for cmd in cmds:
             key = (cmd.get("id", ""), cmd.get("arg", ""))
@@ -1175,6 +1241,14 @@ class RunState:
     # Auflage 2183 Block 5: Zaehlt Solver-Versuche
     # (auch fehlgeschlagene, GG2).
     solver_aufrufe: int = 0
+    # Stufe 0 Aenderung 2: Anker- und Ersatz-Fehler
+    # im Builder-Loop. Wird in _builder_user_prompt
+    # als Rueckmeldung angezeigt.
+    letzte_anker_fehler: list[tuple[int, str, str, str]] = \
+        field(default_factory=list)
+    letzte_ersatz_fehler: list[tuple[int, str, str]] = \
+        field(default_factory=list)
+    anker_fehler_in_folge: int = 0
     code_patches: list[dict[str, str]] = field(default_factory=list)  # UMB-1b
     test_vorschlaege: str = ""
     commit_paket: dict[str, Any] = field(default_factory=dict)
@@ -3185,7 +3259,10 @@ def run_pipeline(project_name: str, aufgabe: str,
         zs = read_target_snippets(
             zp, project_dir, file_whitelist,
             bereits_gemessen=_gemessene_pfade(s.mess_protokoll))
+        anker_block = baue_anker_rueckmeldung(s)
         return (
+            (anker_block if anker_block else "")
+            +
             f"BASIS-GATE:\n{s.basis_protokoll[:1500]}\n\n"
             + format_doc_snippets(s.docs) + "\n\n"
             + zs + "\n\n"

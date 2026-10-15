@@ -4456,6 +4456,56 @@ def test_pruefe_ersatz_gegen_messung_mehrzeiliger_import() -> None:
     assert fehlend[0][2] == "tools.workbench_registry"
 
 
+# ---------- Stufe 0 Aenderung 2 ----------
+
+def test_baue_anker_rueckmeldung_leer() -> None:
+    """Ohne Fehler: leerer Block."""
+    s = build_test_state()
+    assert pipeline.baue_anker_rueckmeldung(s) == ""
+
+
+def test_baue_anker_rueckmeldung_mit_einem_anker() -> None:
+    """Ein Anker-Fehler erscheint im Block."""
+    s = build_test_state()
+    s.letzte_anker_fehler = [(0, "x.py", "GAMMA", "nicht_gefunden")]
+    block = pipeline.baue_anker_rueckmeldung(s)
+    assert "## ANKER-PRUEFUNG" in block
+    assert "GAMMA" in block
+    assert "nicht_gefunden" in block
+
+
+def test_baue_anker_rueckmeldung_mit_ersatz() -> None:
+    """Ersatz-Fehler erscheint im Block."""
+    s = build_test_state()
+    s.letzte_ersatz_fehler = [(1, "y.py", "tools.workbench_registry")]
+    block = pipeline.baue_anker_rueckmeldung(s)
+    assert "tools.workbench_registry" in block
+
+
+def test_baue_anker_rueckmeldung_max_5() -> None:
+    """HH4: max 5 Eintraege, dann ..."""
+    s = build_test_state()
+    s.letzte_anker_fehler = [
+        (i, f"p{i}.py", f"A{i}", "nicht_gefunden")
+        for i in range(8)
+    ]
+    block = pipeline.baue_anker_rueckmeldung(s)
+    assert "und 3 weitere Anker" in block
+
+
+def test_anker_fehler_in_folge_initial_null() -> None:
+    """Neuer Zaehler startet bei 0."""
+    s = build_test_state()
+    assert s.anker_fehler_in_folge == 0
+
+
+def test_letzte_anker_fehler_initial_leer() -> None:
+    """Neue Felder starten leer."""
+    s = build_test_state()
+    assert s.letzte_anker_fehler == []
+    assert s.letzte_ersatz_fehler == []
+
+
 def test_solver_schon_gelaufen() -> None:
     state = _c_state()
     assert not pipeline._solver_schon_gelaufen(state)
