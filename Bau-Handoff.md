@@ -2,8 +2,8 @@
 
 Stand: 2026-10-15 (nach 2183 + Stufe 0 + Auftrag-erfuellt + PB-65 + Agent-Memory-E1)
 Werkstatt-HEAD: 52cd658 (Agent-Memory Ebene 1)
-Letzter echter Probebetrieb: PB-65 (2aa2b0b, 2026-10-15)
-Letzter Commit in security-ai: 2aa2b0b
+Letzter echter Probebetrieb: PB-66 (d135fd4, 2026-10-15)
+Letzter Commit in security-ai: d135fd4
 Branch: main
 Tests: 346 passed
 ruff: 0
@@ -286,6 +286,12 @@ Auflagen dieser Session:
         Erfolgspfad nach Auftrag-erfuellt. Code-GO Runde 1,
         Commit-GO, kein Solver-Trigger. Commit 2aa2b0b,
         Tag probebetrieb-64. 13 passed in test_notify_ntfy.
+  PB-66 (2026-10-15): nmap_scan — ToolArgumentValueError.
+        Erster Lauf mit PROJEKT-STAND-Block im Prompt.
+        Code-GO Runde 1, Commit-GO, kein Solver-Trigger.
+        Commit d135fd4, Tag probebetrieb-65.
+        9 raise-Stellen umgestellt, ToolError-Pfade
+        unveraendert (Policy/Laufzeit).
   Agent-Memory Ebene 1: ERLEDIGT 2026-10-15.
         Aggregator sammelt projekt_stand aus git log
         (letzte 5 Commits, Quelle werkstatt/mensch).
@@ -1022,8 +1028,8 @@ Der neue Bau-Chat soll:
 
 3. Reihenfolge (Stufe 0 + Auftrag-erfuellt + PB-65
    + Memory-E1 erledigt 2026-10-15):
-   a) PB-66 mit echtem Auftrag. Test des PROJEKT-
-      STAND-Blocks im Feld.
+   a) PB-67 mit Auftrag "Tests fuer nmap_scan".
+      Reviewer-Empfehlung aus PB-66.
    b) Block "Anti-Pattern-Bibliothek" (Teil B,
       Kategorie 3, Ziel 5).
    c) Block "Migration WORKFLOW.md -> katalog.yaml"
