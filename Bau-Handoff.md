@@ -3316,3 +3316,73 @@ Naechster Schritt:
 ================================================================
 ENDE W11
 ================================================================
+
+================================================================
+A1-FINAL DETERMINISTISCHE VOR-CHECKS REVIEWER (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 45. Lauf:
+  U8 Code-GO. Commit-Review 2x NO-GO mit
+  R17-verbotenem Befund. Reviewer ignoriert
+  R17.
+
+A0-qualitative Messung:
+  R15: 63 Zitate, korrekt.
+  R12: 65 Zitate, korrekt.
+  R16: 0 Zitate.
+  R17: 1 Zitat.
+  -> R12 und R15 funktionieren. Determinisierung
+     waere Regression.
+
+A1-final:
+  P1: pruefe_ersatz_gegen_messung
+      schliesst typ=new_file aus
+      (R5-Aequivalent).
+  P3: _check_commit_scope prueft
+      BETROFFENE DATEIEN als Teilmenge von
+      GIT DIFF --NAME-ONLY HEAD. Fail-closed
+      VOR dem Reviewer-Aufruf.
+
+HARD_RULES_REVIEWER: 15 Regeln statt 17.
+  R5 entfernt.
+  R16 entfernt.
+
+Auflagen-Abgleich (A1-final-1 bis 5):
+  A1-final-1 (Handoff): dieser Eintrag.
+  A1-final-2 (7 Tests): erfuellt.
+  A1-final-3 (Reihenfolge): Checks vor
+    Reviewer, dann HARD_RULES-Reduktion.
+  A1-final-4 (_check_commit_scope):
+    Teilmenge-Check, Audit
+    commit_scope_violation.
+  A1-final-5 (P1-Erweiterung):
+    typ=new_file ausgeschlossen.
+
+Merkposten:
+  - R17 bleibt semantisch (W11).
+  - W12-Override (Verdict-Override durch
+    Code) bleibt offen.
+  - Rollen-Split (Option 3) naechster
+    Kandidat.
+  - Builder (A5), Solver (A6), Planner (A7)
+    mit gleicher Methodik.
+
+Stand:
+  U1-U7 done. U8 no_go.
+  U9-U13 pending.
+
+Naechster Schritt:
+  46. PB-68-Lauf mit --resume-force.
+  Beobachten:
+    - R15/R12/R17 wirken weiter.
+    - R16-Aequivalent greift deterministisch
+      (kein Reviewer-Aufruf bei Scope-Verstoss).
+    - U8 Code-GO, Commit-Review Runde 1:
+      COMMIT-GO? (R17 sollte jetzt greifen,
+      weil der Reviewer nur R17-Rest hat.)
+
+================================================================
+ENDE A1-FINAL
+================================================================
