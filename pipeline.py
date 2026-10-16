@@ -303,6 +303,24 @@ R15. SYMBOLISCHE PRUEFUNG BEI NEW_FILE.
      Gilt NUR fuer reine new_file-Pakete (alle
      Patches typ=new_file). Bei gemischten
      Paketen bleibt die bisherige Regel.
+R16. 2169 IM PHASEN-MODUS.
+     Der Prompt enthaelt die Zeile
+     "PHASEN-MODUS: aktiv" oder "inaktiv".
+     Bei PHASEN-MODUS aktiv (Sammel-Kontext):
+     pruefe BETROFFENE DATEIEN als TEILMENGE
+     von GIT DIFF --NAME-ONLY HEAD.
+     Grund: git diff zeigt alle Unterbloecke
+     seit Phase-Start. BETROFFENE DATEIEN
+     (durch die Werkstatt deterministisch
+     gesetzt) zeigt nur den aktuellen
+     Unterblock.
+     Wenn BETROFFENE DATEIEN nicht Teilmenge:
+     NO-GO mit konkretem Pfad.
+     Bei PHASEN-MODUS inaktiv: 2169 bleibt
+     die Gleichheit (BETROFFENE DATEIEN ==
+     GIT DIFF --NAME-ONLY HEAD).
+     R16 ergaenzt R13 (Phasen-Trennung) fuer
+     die 2169-Semantik.
 """
 
 
@@ -957,6 +975,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "git_add_intent",
     "git_add_intent_failed",
     "phase_commit_dateien_deterministisch",
+    "commit_review_diff_fehler",
+    "commit_review_diff_name_only",
     "review_round",
     "reviewer_frage_antwort",
     "reviewer_run_solver",
@@ -7734,6 +7754,39 @@ def run_pipeline(project_name: str, aufgabe: str,
             print("[!] Commit-Paket leer. Kein Commit moeglich.")
             state.commit_paket["message"] = "(leer, Builder hat nichts geliefert)"
 
+        # E (2026-10-16): git diff --name-only HEAD
+        # fuer 2169-Nachweis im Commit-Review-Prompt.
+        # E-A2: Fail-closed bei Fehler (kein "(Fehler)").
+        try:
+            _res_dn = subprocess.run(
+                ("git", "diff", "--name-only", "HEAD"),
+                cwd=str(project_dir),
+                capture_output=True, text=True,
+                timeout=30, check=False,
+                env=subprocess_env(),
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            audit("commit_review_diff_fehler",
+                  {"fehler": str(exc)},
+                  project_dir, project_name)
+            print("[FAIL] git diff --name-only HEAD "
+                  "fehlgeschlagen.")
+            return 9
+        if _res_dn.returncode != 0:
+            audit("commit_review_diff_fehler",
+                  {"fehler": _res_dn.stderr[:200]},
+                  project_dir, project_name)
+            print("[FAIL] git diff --name-only HEAD "
+                  "rc!=0.")
+            return 9
+        _diff_name_only = _res_dn.stdout.strip()
+        if not _diff_name_only:
+            _diff_name_only = "(keine)"
+        audit("commit_review_diff_name_only",
+              {"pfade": _diff_name_only.splitlines(),
+               "phase_aktiv": state.phase_aktiv},
+              project_dir, project_name)
+
         # Auflage 2191-R2b + 2026-10-16: Fail-closed nur,
         # wenn mind. ein Patch mit Anker existiert
         # (typ != new_file). Reine new_file-Patches
@@ -7790,6 +7843,8 @@ def run_pipeline(project_name: str, aufgabe: str,
             commit_input = (
                 # Phasen-Header (2026-10-16).
                 _PHASE_HEADER_COMMIT_REVIEW
+                + f"PHASEN-MODUS: "
+                f"{'aktiv' if state.phase_aktiv else 'inaktiv'}\n\n"
                 + f"CODE-GO ist erteilt. Pruefe das Commit-Paket.\n\n"
                 f"COMMIT-MESSAGE:\n{state.commit_paket.get('message', '')}\n\n"
                 f"BETROFFENE DATEIEN:\n" +
@@ -7797,6 +7852,7 @@ def run_pipeline(project_name: str, aufgabe: str,
                     f"  - {d}"
                     for d in state.commit_paket.get("dateien", [])) +
                 "\n\n"
+                f"GIT DIFF --NAME-ONLY HEAD:\n{_diff_name_only}\n\n"
                 + format_messwerte_block(collect_messwerte(state))
                 + "\n\nGEMESSENER INHALT (verbindlich, "
                 + "gewinnt gegen ZIELDATEIEN):\n"

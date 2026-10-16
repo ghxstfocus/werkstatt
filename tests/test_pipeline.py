@@ -5233,7 +5233,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 72
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 74
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5269,7 +5269,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 72
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 74
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6067,7 +6067,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 72
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 74
 
 
 # =====================================================================
@@ -6172,4 +6172,59 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 72
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 74
+
+
+# =====================================================================
+# E + R16 (2026-10-16): git diff --name-only HEAD + Teilmengen-Check
+# =====================================================================
+
+class TestEDiffNameOnly:
+    def test_commit_input_enthaelt_diff_name_only(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        assert "GIT DIFF --NAME-ONLY HEAD" in src
+
+    def test_commit_input_ruft_git_diff_name_only(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        assert '"diff", "--name-only", "HEAD"' in src
+
+    def test_commit_input_diff_vor_code_patches(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        i_diff = src.find("GIT DIFF --NAME-ONLY HEAD")
+        i_cp = src.find("CODE-PATCHES (angewendet)")
+        assert 0 < i_diff < i_cp
+
+    def test_diff_name_only_leer_zeigt_keine(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        assert '"\""(keine)\""' not in src
+        assert '"(keine)"' in src
+
+    def test_diff_name_only_fehler_fail_closed(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        # Bei Fehler: return 9.
+        i = src.find("commit_review_diff_fehler")
+        assert i > 0
+        i_ret = src.find("return 9", i)
+        assert i_ret > i
+
+    def test_r16_im_reviewer_prompt(self) -> None:
+        assert "R16." in pipeline.HARD_RULES_REVIEWER
+
+    def test_r16_teilmenge_bei_phasen_modus(self) -> None:
+        s = pipeline.HARD_RULES_REVIEWER
+        assert "TEILMENGE" in s
+        assert "PHASEN-MODUS" in s
+
+    def test_audit_kinds_commit_review_diff(self) -> None:
+        assert ("commit_review_diff_name_only"
+                in pipeline._AUDIT_KINDS_BEKANNT)
+        assert ("commit_review_diff_fehler"
+                in pipeline._AUDIT_KINDS_BEKANNT)
+
+    def test_katalog_anzahl_ist_74(self) -> None:
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 74
