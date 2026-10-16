@@ -6891,6 +6891,7 @@ class TestW13a:
         # YAML-Quoting '\n' (Backslash-n) wird zu
         # echtem Zeilenumbruch.
         from pathlib import Path
+
         # Nutze den realen U9-Auftrag aus phase.yaml.
         import yaml
         d = yaml.safe_load(
@@ -6909,10 +6910,10 @@ class TestW13a:
         assert info[1] > info[0]
 
     def test_anker_zeilenbereich_mit_echtem_newline(self) -> None:
-        from pathlib import Path
         # Ein Anker-Text mit echtem Zeilenumbruch muss
         # unveraendert funktionieren.
         import tempfile
+        from pathlib import Path
         with tempfile.TemporaryDirectory() as td:
             td_p = Path(td)
             (td_p / "x").mkdir()
@@ -6949,3 +6950,21 @@ class TestW13b:
         # Wenn er noch im Code steht: Fehler.
         # Anmerkung: Textsuche, nicht Ausfuehrung.
         assert "if anker_fehler or ersatz_fehler" not in src
+
+
+# =====================================================================
+# W11b (2026-10-16): _check_commit_scope beruecksichtigt untracked
+# =====================================================================
+
+class TestW11b:
+    def test_check_commit_scope_liest_git_status(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline._check_commit_scope)
+        assert '"git", "status", "--porcelain", "-uall"' in src
+        assert "diff_pfade.add" in src
+
+    def test_check_commit_scope_untracked_akzeptiert(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline._check_commit_scope)
+        # Untracked Pfade landen in diff_pfade.
+        assert "_status_res.stdout" in src

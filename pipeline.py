@@ -6665,6 +6665,23 @@ def _check_commit_scope(
     diff_pfade = {
         z.strip() for z in diff_name_only.splitlines()
         if z.strip() and z.strip() != "(keine)"}
+    # W11b (2026-10-16): untracked Dateien
+    # zusaetzlich aus git status -uall lesen.
+    # git diff --name-only HEAD sieht sie nicht.
+    try:
+        _status_res = subprocess.run(
+            ("git", "status", "--porcelain", "-uall"),
+            cwd=str(project_dir), capture_output=True,
+            text=True, timeout=30, check=False,
+            env=subprocess_env())
+        for _zeile in _status_res.stdout.splitlines():
+            if len(_zeile) < 4:
+                continue
+            _pfad = _zeile[3:].strip()
+            if _pfad:
+                diff_pfade.add(_pfad)
+    except (subprocess.TimeoutExpired, OSError):
+        pass
     fremd = dateien - diff_pfade
     if not fremd:
         return (True, "")
