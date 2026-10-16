@@ -2621,3 +2621,81 @@ Naechster Schritt:
 ================================================================
 ENDE W1
 ================================================================
+
+================================================================
+W2 + U6-KORREKTUR (2026-10-16)
+================================================================
+
+Commit W2: 0e6c881.
+
+Ausgangslage 31. Lauf:
+  U5 done (W1 wirkt: Auto-Messung 7 Zieldateien).
+  U6 gestartet und gescheitert: Auftrag nannte
+  data/migrations/0014_guardrail_permissions.sql,
+  aber 0014_internal_name.sql existiert.
+  Zwei konkurrierende Migrationen (0014 + 0017).
+
+W2 (HARD_RULES_BUILDER):
+  B4 aufgeteilt:
+    (a) Systemwerte (Tests, Coverage, ruff,
+        mypy, git-Status): Werkstatt.
+    (b) Auftrags-Behauptungen (Datei-Existenz,
+        Import-Pfad): Builder prueft B13b.
+  B13b neu: Behauptungen pruefen.
+    (a) "Datei X existiert" -> read_file ok=True.
+    (b) "neu: X" -> read_file ok=False.
+    (c) "Import aus a/b/c.py" -> read_file ok=True.
+    Bei Widerspruch: COMMAND: frage_reviewer.
+    NICHT fuer Signaturen/Nummernkreise.
+  B13b und B7 komplementaer.
+
+U6-Korrektur (Weg-Y):
+  - 0014 -> 0018 (naechste freie Nummer).
+  - KEINE neuen Permissions (U5-Migration 0017
+    hat sie schon).
+  - U6 ergaenzt nur operator + viewer mit
+    guardrail.view.
+  - Builder soll 0017 lesen.
+
+Tests: 907 -> 912 passed (+5).
+
+Auflagen-Abgleich (W2-A1 bis A7):
+  A1 (list_dir): existiert nicht. B13b
+    beschraenkt sich auf read_file (datei-genau).
+  A2 (B4 praezisieren): erfuellt.
+  A3 (B13b konkret): erfuellt.
+  A4 (Nummernkreis-Merkposten): notiert.
+  A5 (5 Tests): erfuellt.
+  A6 (Test-Anzahl): 907 gemessen.
+  A7 (Reihenfolge): W2 vor U6-Korrektur vor
+    32. Lauf.
+
+Merkposten (W1b):
+  Nummernkreis-Pruefung in extract_paths_from_aufgabe:
+  wenn data/migrations/NNNN_*.sql genannt:
+  Prefix-Scan, ob NNNN belegt ist. Fail-closed
+  bei Konflikt. Eigener Werkstatt-Block.
+
+Merkposten (W3):
+  Planner-Messungs-Kanal (COMMAND: read_file).
+
+Merkposten (W4):
+  Resume-Planung (Planner rufen bei failed/no_go).
+
+Stand:
+  U1-U5 done. U6 no_go (bereit fuer 32. Lauf).
+  U7-U10 pending.
+
+Naechster Schritt:
+  32. PB-68-Lauf mit --resume-force.
+  Beobachtung:
+    - U5 done uebersprungen.
+    - U6 startet.
+    - B13b greift: Builder prueft 0018 frei?
+      liest 0017.
+    - U6 done, U7 startet.
+  Bei Scheitern: neuer Reviewer-Block.
+
+================================================================
+ENDE W2 + U6
+================================================================
