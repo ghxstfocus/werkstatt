@@ -5302,3 +5302,97 @@ class TestCommitReviewNewFileSkip:
         # Redundantes Feld soll NICHT drin sein.
         assert "anzahl_anker_patches" not in quelle
 
+# =====================================================================
+# _post_apply_messung (Auflage A7, 2026-10-16)
+# =====================================================================
+
+class TestPostApplyMessung:
+    """Tests fuer _post_apply_messung.
+
+    Liest new_file-Pfade aus state.code_patches nach dem
+    Apply und schreibt read_file-Ausgaben nach
+    state.mess_protokoll_nach_apply.
+    """
+
+    def _state(self, tmp_path: Path,
+               patches: list[dict]) -> pipeline.RunState:
+        from unittest.mock import patch
+        with patch("pipeline.audit"):
+            state = build_test_state(
+                project_dir=tmp_path,
+                file_whitelist=["core/", "tests/"])
+        state.always = {
+            "read_file": pipeline.Measurement(
+                "read_file", ("cat",), "Datei lesen."),
+        }
+        state.code_patches = patches
+        return state
+
+    def test_leere_code_patches(self, tmp_path: Path) -> None:
+        state = self._state(tmp_path, [])
+        ok = pipeline._post_apply_messung(
+            state, ["core/", "tests/"])
+        assert ok is True
+        assert state.mess_protokoll_nach_apply == ""
+
+    def test_nur_patch_kein_new_file(
+            self, tmp_path: Path) -> None:
+        state = self._state(tmp_path, [
+            {"typ": "patch", "pfad": "core/x.py",
+             "anker": "ALT", "ersatz": "NEU"}])
+        ok = pipeline._post_apply_messung(
+            state, ["core/", "tests/"])
+        assert ok is True
+        assert state.mess_protokoll_nach_apply == ""
+
+    def test_new_file_wird_gelesen(
+            self, tmp_path: Path) -> None:
+        (tmp_path / "core").mkdir()
+        ziel = tmp_path / "core" / "neu.py"
+        ziel.write_text("x = 1\n", encoding="utf-8")
+        state = self._state(tmp_path, [
+            {"typ": "new_file", "pfad": "core/neu.py",
+             "inhalt": "x = 1\n"}])
+        from unittest.mock import patch
+        with patch("pipeline.audit"):
+            ok = pipeline._post_apply_messung(
+                state, ["core/", "tests/"])
+        assert ok is True
+        assert "core/neu.py" in state.mess_protokoll_nach_apply
+        assert "x = 1" in state.mess_protokoll_nach_apply
+
+    def test_read_file_nicht_im_katalog(
+            self, tmp_path: Path) -> None:
+        (tmp_path / "core").mkdir()
+        (tmp_path / "core" / "neu.py").write_text(
+            "x = 1\n", encoding="utf-8")
+        state = self._state(tmp_path, [
+            {"typ": "new_file", "pfad": "core/neu.py",
+             "inhalt": "x = 1\n"}])
+        state.always = {}  # read_file nicht drin
+        state.optional = {}
+        from unittest.mock import patch
+        with patch("pipeline.audit"):
+            ok = pipeline._post_apply_messung(
+                state, ["core/", "tests/"])
+        assert ok is True
+        assert state.mess_protokoll_nach_apply == ""
+
+    def test_commit_review_nutzt_neuen_kanal(self) -> None:
+        """Regression: Commit-Review-Input enthaelt
+        GEMESSENER INHALT NACH APPLY, wenn gesetzt.
+        """
+        import inspect as ins
+        quelle = ins.getsource(pipeline.run_pipeline)
+        assert "GEMESSENER INHALT NACH APPLY " in quelle
+        assert "new_file-Pfade" in quelle
+
+    def test_aufruf_in_apply_and_recheck(self) -> None:
+        """Regression: apply_and_recheck ruft
+        _post_apply_messung nach dem Basis-Gate.
+        """
+        import inspect as ins
+        quelle = ins.getsource(pipeline.apply_and_recheck)
+        assert "_post_apply_messung" in quelle
+        assert "return 17" in quelle
+

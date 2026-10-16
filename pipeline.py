@@ -3750,6 +3750,9 @@ class RunState:
     basis_protokoll: str = ""
     basis_protokoll_nach_apply: str = ""  # UMB-1b
     mess_protokoll: str = ""
+    # Post-Apply-Neumessung 2026-10-16:
+    # read_file-Messungen fuer new_file-Pfade nach Apply.
+    mess_protokoll_nach_apply: str = ""
     # Bug-Fix 2026-10-14: True, sobald mindestens
     # ein Apply passiert ist. Der GEMESSENER
     # INHALT-Block ist dann der Stand VOR dem
@@ -4959,20 +4962,32 @@ def _rollback_zieldateien(state: RunState,
                          project_dir: Path,
                          project_name: str,
                          grund: str) -> None:
-    """Auflage 2197: Fail-closed-Rollback.
+    """Auflage 2197 + 2026-10-16: Fail-closed-Rollback.
 
-    Setzt alle Pfade aus state.code_patches zurueck, die im
-    Arbeitsbaum als " M" (modifiziert) auftauchen.
+    Setzt alle Pfade aus state.code_patches zurueck.
+    - typ="patch": git checkout -- <pfad> (modifiziert).
+    - typ="new_file": rm -rf <pfad> (untracked, wird
+      angelegt).
     Best effort: Fehler brechen nicht ab.
     """
     if not state.code_patches:
         return
-    pfade = []
+    pfade_patch: list[str] = []
+    pfade_new: list[str] = []
     for p in state.code_patches:
+        if not isinstance(p, dict):
+            continue
         pfad = p.get("pfad", "")
-        if pfad and pfad not in pfade:
-            pfade.append(pfad)
-    if not pfade:
+        if not pfad:
+            continue
+        typ = p.get("typ", "patch")
+        if typ == "new_file":
+            if pfad not in pfade_new:
+                pfade_new.append(pfad)
+        else:
+            if pfad not in pfade_patch:
+                pfade_patch.append(pfad)
+    if not pfade_patch and not pfade_new:
         return
     try:
         res = subprocess.run(
@@ -4990,8 +5005,14 @@ def _rollback_zieldateien(state: RunState,
         for line in res.stdout.splitlines()
         if line.startswith(" M")
     }
+    untracked = {
+        line[3:].strip()
+        for line in res.stdout.splitlines()
+        if line.startswith("??")
+    }
     zurueckgesetzt = []
-    for pfad in pfade:
+    entfernt = []
+    for pfad in pfade_patch:
         if pfad in geaendert:
             try:
                 subprocess.run(
@@ -5003,11 +5024,28 @@ def _rollback_zieldateien(state: RunState,
                 zurueckgesetzt.append(pfad)
             except (subprocess.TimeoutExpired, OSError):
                 pass
+    for pfad in pfade_new:
+        if pfad in untracked or pfad in geaendert:
+            try:
+                ziel = project_dir / pfad
+                if ziel.exists():
+                    if ziel.is_dir():
+                        import shutil as _sh
+                        _sh.rmtree(ziel)
+                    else:
+                        ziel.unlink()
+                    entfernt.append(pfad)
+            except OSError:
+                pass
     if zurueckgesetzt:
-        print(f"[i] Fail-closed-Rollback: {zurueckgesetzt}")
+        print(f"[i] Fail-closed-Rollback (patch): {zurueckgesetzt}")
+    if entfernt:
+        print(f"[i] Fail-closed-Rollback (new_file): {entfernt}")
     audit("rollback_fail_closed",
           {"grund": grund, "zieldateien": zurueckgesetzt,
-           "gepruefte": pfade},
+           "entfernt": entfernt,
+           "gepruefte_patch": pfade_patch,
+           "gepruefte_new": pfade_new},
           project_dir, project_name)
 
 
@@ -5164,6 +5202,61 @@ def pruefe_auftrag_bereits_erfuellt(state: RunState) -> bool:
     return letzter.ist_vollstaendig()
 
 
+def _post_apply_messung(state: RunState,
+                        file_whitelist: list[str]) -> bool:
+    """Post-Apply-Neumessung (2026-10-16).
+
+    Liest new_file-Pfade aus state.code_patches nach
+    dem Apply. Ergebnis nach state.mess_protokoll_
+    nach_apply. Der bestehende mess_protokoll-Kanal
+    bleibt unveraendert (Stand VOR Apply).
+
+    Rueckgabe: True bei Erfolg (alle read_file ok
+    oder kein new_file-Pfad), False bei Fehler
+    (Fail-closed, Aufrufer bricht ab).
+    """
+    if not state.code_patches:
+        return True
+    new_files: list[str] = []
+    for p in state.code_patches:
+        if not isinstance(p, dict):
+            continue
+        if p.get("typ") != "new_file":
+            continue
+        pfad = p.get("pfad", "")
+        if pfad and pfad not in new_files:
+            new_files.append(pfad)
+    if not new_files:
+        return True
+    m = state.always.get("read_file")
+    if m is None:
+        m = state.optional.get("read_file")
+    if m is None:
+        print("[i] Post-Apply-Messung: read_file "
+              "nicht im Katalog. Kein Kanal.")
+        return True
+    neue_bloecke: list[str] = []
+    for pfad in new_files:
+        out, ok, argv = run_measurement_mit_argv(
+            m, file_whitelist, state.project_dir, pfad)
+        out = trim_output(out)
+        neue_bloecke.append(out)
+        audit("command_executed",
+              {"id": "read_file", "arg": pfad[:200],
+               "argv": argv, "quelle": "pipeline_auto",
+               "ok": ok, "post_apply": True},
+              state.project_dir, state.project_name)
+        if not ok:
+            print(f"[FAIL] Post-Apply-Messung: "
+                  f"read_file fehlgeschlagen: {pfad}")
+            return False
+    if neue_bloecke:
+        state.mess_protokoll_nach_apply = "\n".join(neue_bloecke)
+        print(f"[i] Post-Apply-Messung: "
+              f"{len(new_files)} read_file-Aufrufe.")
+    return True
+
+
 def apply_and_recheck(state: RunState,
                       always: dict[str, Measurement],
                       file_whitelist: list[str]) -> int | None:
@@ -5193,6 +5286,11 @@ def apply_and_recheck(state: RunState,
     # mess_protokoll ist ab jetzt der Stand VOR Apply.
     state.mess_protokoll_veraltet = True
     state.basis_protokoll_nach_apply = ""
+    # Post-Apply-Neumessung 2026-10-16: read_file
+    # fuer new_file-Pfade, jetzt existieren sie.
+    # Fail-closed bei unerwartetem read_file-Fehler.
+    if not _post_apply_messung(state, file_whitelist):
+        return 17
     nach_fehler: list[str] = []
     for mid, m in always.items():
         if mid in ("git_status", "git_head"):
@@ -6829,6 +6927,10 @@ def run_pipeline(project_name: str, aufgabe: str,
                 + "\n\nGEMESSENER INHALT (verbindlich, "
                 + "gewinnt gegen ZIELDATEIEN):\n"
                 + f"{state.mess_protokoll or '(keine)'}\n\n"
+                + ("GEMESSENER INHALT NACH APPLY "
+                   "(new_file-Pfade):\n"
+                   + f"{state.mess_protokoll_nach_apply}\n\n"
+                   if state.mess_protokoll_nach_apply else "")
                 + (f"GEMESSENER INHALT NACH APPLY:\n"
                    f"{state.basis_protokoll_nach_apply}\n\n"
                    if state.basis_protokoll_nach_apply else "")
