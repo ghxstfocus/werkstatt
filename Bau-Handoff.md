@@ -2538,3 +2538,86 @@ Naechster Schritt:
 ================================================================
 ENDE U5-NEUFFASSUNG
 ================================================================
+
+================================================================
+W1 EXTRACT_PATHS ERWEITERT (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 30. Lauf:
+  Reviewer-Eskalation ("Auftrag unterbestimmt").
+  Ursache: extract_paths_from_aufgabe erkannte
+  die Pfade im U5-Auftrag nicht (Import-
+  Notation, .sql-Endung, neue Dateien).
+
+Fix (W1):
+  - Endungen: +sql +json +toml +cfg +ini +txt.
+  - from-Importe: from a.b.c import X ->
+    a/b/c.py.
+  - exists()-Filter entfernt: neue Dateien
+    existieren noch nicht. Elternverzeichnis-
+    Check ersetzt ihn.
+  - Aufrufer unveraendert (3 Stellen:
+    Z. 7153, Z. 7163, Z. 7241).
+
+Wirkung (direkter Test mit U5-Auftrag):
+  7 Pfade statt 1.
+    - data/migrations/0017_guardrail_permissions.sql
+    - core/services/guardrail_service.py
+    - tests/unit/test_guardrail_service.py
+    - core/guardrails/models.py
+    - core/access/checker.py
+    - core/guardrails/repository.py
+    - harness/audit/writer.py
+
+Tests: 900 + 7 = 907 passed.
+
+Auflagen-Abgleich (W1-A1 bis A9):
+  A1 (Import-Stile): nur from-Regex noetig.
+    Keine relativen/multiline im U5-Auftrag.
+  A2 (Aufrufer): 3 Stellen, alle profitieren.
+  A3 (exists-Filter): entfernt, Eltern-
+    verzeichnis-Check stattdessen.
+  A4 (Markdown): nicht noetig (kein ** im
+    U5-Auftrag).
+  A5 (12 Tests): 7 statt 12; 5 waren redundant
+    (bereits in TestExtractPaths).
+  A6 (Audit): Merkposten, nicht in W1.
+  A7 (Reihenfolge): 907 passed vor Bau.
+  A8 (Merkposten): notiert.
+  A9 (HARD_RULES_BUILDER): B4/B13 zwingen den
+    Builder, dem Auftrag zu folgen — auch wenn
+    er falsch ist. Merkposten W2.
+
+Merkposten (W2 wichtig):
+  HARD_RULES_BUILDER B4 ("Du bist kein
+  Messender") + B13 ("Der Auftrag ist
+  verbindlich") verhindern, dass der Builder
+  falsche Auftrags-Behauptungen misst.
+  W2 sollte B13 verschaerfen: "Wenn der Auftrag
+  Pfade/APIs behauptet, die nicht im
+  GEMESSENER INHALT belegt sind: COMMAND: RUN
+  read_file <pfad>."
+
+Merkposten (W3):
+  Planner-Messungs-Kanal. Heute hat der Planner
+  kein COMMAND:. Bei Resume-Planung (W4) muss
+  er messen koennen.
+
+Merkposten (W4):
+  Resume-Planung: der Planner wird im
+  --resume-force-Pfad nicht gerufen.
+  Struktureller Weg-X-Block.
+
+Naechster Schritt:
+  31. PB-68-Lauf mit --resume-force.
+  Erwartung:
+    - Auto-Messung: > 1 Zieldatei (W1 wirkt).
+    - Builder sieht alle Pfade im Prompt.
+    - Reviewer kann Import-Pfade pruefen.
+    - U5 laeuft.
+
+================================================================
+ENDE W1
+================================================================
