@@ -222,10 +222,14 @@ R9. ROLLENGRENZE (Plan-Korrektur).
     konkretisiert. Wenn du eine Praezisierung
     fuer noetig haeltst, beschreibe sie als
     Befund, nicht als neue Aufgabe.
-    Wenn der Auftrag unvollstaendig ist:
-    NO-GO mit dem Befund "Auftrag
-    unterbestimmt: <was fehlt>". Der Planner
-    bekommt den Befund und zieht nach.
+    Wenn der Auftrag unterbestimmt ist:
+      ESKALATION
+      Grund: Auftrag unterbestimmt
+      Fehlt: <was fehlt>
+    Der Planner konkretisiert in der
+    naechsten Runde. ESKALATION ist ein
+    anderer Ausgang als NO-GO — der Loop
+    endet zugunsten des Planners.
 
 R10. NEUE DATEIEN (P2b-Luecke-C).
      Ein Patch mit typ: new_file legt eine
@@ -252,6 +256,10 @@ R11. SACHFADEN. Der erste Sachbefund, den du
     Sachbefund in 3 aufeinanderfolgenden Runden
     formulierst und der Builder ihn nicht
     behebt: ESKALATION statt weitere NO-GO.
+    ESKALATION ist ein anderer Ausgang als
+    NO-GO: der Loop endet zugunsten des
+    Planners/Menschen. R14 (Verdict-Konsistenz)
+    betrifft nur GO/NO-GO, nicht ESKALATION.
 
 R12. NEW_FILE-MARKER. Wenn der GEMESSENER
     INHALT-Block den Marker "nicht anwendbar"
@@ -259,6 +267,21 @@ R12. NEW_FILE-MARKER. Wenn der GEMESSENER
     (Anker-Pruefung) greift bei reinen new_file-
     Patches nicht. Pruefe stattdessen die
     Patch-Inhalte direkt.
+
+R13. PHASEN-TRENNUNG. Lies die erste Zeile
+    deines Prompts. Dort steht "## PHASE: ..."
+    (CODE-REVIEW Phase 1 oder COMMIT-REVIEW
+    Phase 2). Phase 1: R1-R12, KEINE 2169
+    (git diff). Phase 2: R1-R12 + 2169.
+    Bei Unsicherheit: pruefe den Phasen-Header.
+
+R14. VERDICT-KONSISTENZ. Wenn der Sachstand
+    sich nicht aendert, bleibt dein Verdict
+    gleich (GO bleibt GO, NO-GO bleibt NO-GO).
+    Ein Verdict-Wechsel braucht eine
+    Begruendung: "Sachstand hat sich geaendert,
+    weil X". R14 betrifft NUR GO/NO-GO.
+    ESKALATION (R9, R11) ist kein Verdict.
 """
 
 
@@ -4502,6 +4525,14 @@ def _format_whitelist_block(
         + "\n=== /FILE-WHITELIST ===\n\n")
 
 
+# Phasen-Header (2026-10-16): Konstante Texte,
+# damit der Reviewer seine Phase erkennt.
+_PHASE_HEADER_CODE_REVIEW = (
+    "## PHASE: CODE-REVIEW (Phase 1)\n")
+_PHASE_HEADER_COMMIT_REVIEW = (
+    "## PHASE: COMMIT-REVIEW (Phase 2)\n")
+
+
 def aufgabe_block(state: RunState) -> str:
     """Auflage 2154: zentrale Formatierung des Auftrags.
 
@@ -6679,8 +6710,10 @@ def run_pipeline(project_name: str, aufgabe: str,
             bereits_gemessen=_gemessene_pfade(
                 state.mess_protokoll))
         szenario = (
+            # Phasen-Header (2026-10-16).
+            _PHASE_HEADER_CODE_REVIEW
             # Auflage 2152: Auftrag MUSS im Szenario stehen.
-            aufgabe_block(state)
+            + aufgabe_block(state)
             + _format_whitelist_block(
                 list(getattr(state, "file_whitelist", []) or []))
             # Agent-Memory A2: Projekt-Stand.
@@ -7178,7 +7211,9 @@ def run_pipeline(project_name: str, aufgabe: str,
             # Auflage 2180 + BO: MESSWERTE-Block statt
             # veralteter DOKU-PATCHES-Zeilen.
             commit_input = (
-                f"CODE-GO ist erteilt. Pruefe das Commit-Paket.\n\n"
+                # Phasen-Header (2026-10-16).
+                _PHASE_HEADER_COMMIT_REVIEW
+                + f"CODE-GO ist erteilt. Pruefe das Commit-Paket.\n\n"
                 f"COMMIT-MESSAGE:\n{state.commit_paket.get('message', '')}\n\n"
                 f"BETROFFENE DATEIEN:\n" +
                 "\n".join(

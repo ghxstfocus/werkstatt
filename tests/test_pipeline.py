@@ -5718,3 +5718,82 @@ class TestNewFileMarker:
         assert "Bei reinen new_file-Patches" in md
         assert "KEIN NO-GO" in md
 
+# =====================================================================
+# Phasen-Header + R9/R13/R14 (Fix 1-4, 2026-10-16)
+# =====================================================================
+
+class TestPhasenHeader:
+    """Tests fuer Fix 1-4."""
+
+    def test_konstante_code_review(self) -> None:
+        assert hasattr(pipeline, "_PHASE_HEADER_CODE_REVIEW")
+        assert "CODE-REVIEW" in pipeline._PHASE_HEADER_CODE_REVIEW
+        assert "Phase 1" in pipeline._PHASE_HEADER_CODE_REVIEW
+
+    def test_konstante_commit_review(self) -> None:
+        assert hasattr(pipeline, "_PHASE_HEADER_COMMIT_REVIEW")
+        assert "COMMIT-REVIEW" in pipeline._PHASE_HEADER_COMMIT_REVIEW
+        assert "Phase 2" in pipeline._PHASE_HEADER_COMMIT_REVIEW
+
+    def test_reviewer_md_phasen_header(self) -> None:
+        p = Path("/opt/werkstatt/agents/reviewer.md")
+        md = p.read_text(encoding="utf-8")
+        assert "## Phasen-Header" in md
+        assert "CODE-REVIEW (Phase 1)" in md
+        assert "COMMIT-REVIEW (Phase 2)" in md
+
+    def test_hard_rules_r13(self) -> None:
+        assert "R13. PHASEN-TRENNUNG." in \
+            pipeline.HARD_RULES_REVIEWER
+        assert "2169" in pipeline.HARD_RULES_REVIEWER
+
+    def test_hard_rules_r14(self) -> None:
+        assert "R14. VERDICT-KONSISTENZ." in \
+            pipeline.HARD_RULES_REVIEWER
+
+    def test_r9_eskalation(self) -> None:
+        """R9 nutzt ESKALATION, nicht NO-GO."""
+        assert "R9. ROLLENGRENZE" in pipeline.HARD_RULES_REVIEWER
+        # Suche nach dem R9-Block
+        i = pipeline.HARD_RULES_REVIEWER.find("R9. ROLLENGRENZE")
+        j = pipeline.HARD_RULES_REVIEWER.find("R10.", i)
+        r9_block = pipeline.HARD_RULES_REVIEWER[i:j]
+        assert "ESKALATION" in r9_block
+        # Kein "NO-GO mit dem Befund" mehr
+        assert "NO-GO mit dem Befund" not in r9_block
+
+    def test_r11_eskalation_bezug(self) -> None:
+        assert "ESKALATION ist ein anderer Ausgang" in \
+            pipeline.HARD_RULES_REVIEWER
+
+    def test_reviewer_md_verdict_konsistenz(self) -> None:
+        p = Path("/opt/werkstatt/agents/reviewer.md")
+        md = p.read_text(encoding="utf-8")
+        assert "## VERDICT-KONSISTENZ" in md
+
+    def test_reviewer_md_eskalation_vs_no_go(self) -> None:
+        p = Path("/opt/werkstatt/agents/reviewer.md")
+        md = p.read_text(encoding="utf-8")
+        assert "ESKALATION vs. NO-GO" in md
+
+    def test_build_system_prompt_reviewer_enthaelt_r13_r14(
+            self) -> None:
+        agent = {"name": "reviewer", "body": "Body"}
+        prompt = pipeline.build_system_prompt(
+            agent, {}, [], mit_anti_patterns=False)
+        assert "R13. PHASEN-TRENNUNG." in prompt
+        assert "R14. VERDICT-KONSISTENZ." in prompt
+
+    def test_u4_hinweis_models_py(self) -> None:
+        import yaml
+        d = yaml.safe_load(
+            Path("/opt/werkstatt/projects/security-ai.phase.yaml")
+            .read_text())
+        for u in d["phase_unterbloecke"]:
+            if u["id"] == "U4":
+                hat_hinweis = any(
+                    "models.py" in p
+                    for p in u.get("unterpunkte", []))
+                assert hat_hinweis
+                break
+
