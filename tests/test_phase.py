@@ -1477,3 +1477,45 @@ class TestBuilderFrageReviewerLoop:
         assert "frage_reviewer" in quelle
         assert "builder_frage_reviewer" in quelle
 
+# =====================================================================
+# P2b-Frage-B: Antwort-Modus
+# =====================================================================
+
+class TestAntwortModus:
+    def test_classify_verdict_erkennt_antwort(self) -> None:
+        assert pipeline.classify_verdict(
+            "ANTWORT:\nHier meine Antwort.") == "ANTWORT"
+
+    def test_classify_verdict_antwort_mit_punkt(self) -> None:
+        assert pipeline.classify_verdict(
+            "ANTWORT:") == "ANTWORT"
+
+    def test_classify_verdict_go_unveraendert(self) -> None:
+        assert pipeline.classify_verdict("GO") == "GO"
+        assert pipeline.classify_verdict(
+            "NO-GO\nBegruendung") == "NO-GO"
+
+    def test_extrahiere_antwort(self) -> None:
+        text = "ANTWORT:\nEin Commit-Paket reicht.\nKein Hash."
+        a = pipeline._extrahiere_antwort(text)
+        assert "Ein Commit-Paket reicht" in a
+        assert "Kein Hash" in a
+
+    def test_extrahiere_antwort_leer(self) -> None:
+        assert pipeline._extrahiere_antwort("kein block") == ""
+
+    def test_extrahiere_antwort_inline(self) -> None:
+        text = "ANTWORT: kurze Antwort"
+        a = pipeline._extrahiere_antwort(text)
+        assert "kurze Antwort" in a
+
+
+class TestHardRules:
+    def test_reviewer_r8_vorhanden(self) -> None:
+        assert "R8." in pipeline.HARD_RULES_REVIEWER
+        assert "ANTWORT" in pipeline.HARD_RULES_REVIEWER
+
+    def test_builder_b11_vorhanden(self) -> None:
+        assert "B11." in pipeline.HARD_RULES_BUILDER
+        assert "frage_reviewer" in pipeline.HARD_RULES_BUILDER
+

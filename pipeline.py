@@ -202,6 +202,19 @@ R7. Pruefe jeden Patch-Anker gegen den
        AUSNAHME: Wenn Stufe 2a oder 2b
        einschlaegig war, bleibt es bei
        COMMAND: RUN read_file.
+
+R8. ANTWORT-MODUS (P2b-Frage-B).
+    Wenn im Prompt der Abschnitt
+    '=== BUILDER-FRAGE ===' steht, hat der
+    Builder eine Rueckfrage gestellt. Eine
+    Rueckfrage ist KEIN NO-GO-Grund. Der
+    Builder fragt, weil er unsicher ist —
+    das ist erwuenscht.
+    Antworte mit genau einem Block:
+      ANTWORT:
+      <deine Antwort, klar und knapp>
+    Kein Verdict in dieser Runde. Kein
+    COMMAND. Nur die Antwort.
 """
 
 
@@ -243,6 +256,14 @@ B9. Nach jedem Patch, der Tests betrifft:
 B10. Wenn ein Anker nicht im Zieldatei-Ausschnitt
      steht: "kein Patch fuer diese Datei".
      Kein Erfinden.
+
+B11. RUECKFRAGEN SIND ERLAUBT (P2b-Frage-B).
+     Wenn du unsicher bist, frage den Reviewer:
+       COMMAND: frage_reviewer <deine Frage>
+     Du darfst Patches und Rueckfragen im selben
+     Block liefern. Der Reviewer prueft die
+     Patches und beantwortet die Frage.
+     Fragen sind kein Fehler.
 """
 
 
@@ -2826,6 +2847,34 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
         return LLMReply(ok=False, error=f"Parsing: {exc}")
 
 
+def _extrahiere_antwort(text: str) -> str:
+    """P2b-Frage-B: zieht den ANTWORT-Block aus
+    einer Reviewer-Antwort.
+
+    Format:
+      ANTWORT:
+      <text>
+
+    Liefert den Text oder "" wenn kein Block.
+    """
+    zeilen = text.splitlines()
+    start = None
+    for i, z in enumerate(zeilen):
+        s = z.strip().upper()
+        if s.startswith("ANTWORT:"):
+            start = i
+            break
+    if start is None:
+        return ""
+    kopf = zeilen[start].strip()
+    rest_kopf = kopf[len("ANTWORT:"):].strip()
+    body = zeilen[start + 1:]
+    if rest_kopf:
+        return rest_kopf + "\n" + "\n".join(body)
+    return "\n".join(body).strip()
+
+
+
 def classify_verdict(text: str) -> str:
     """Erkennt GO / NO-GO / ESKALATION / COMMIT-* / COMMAND.
 
@@ -2848,6 +2897,9 @@ def classify_verdict(text: str) -> str:
             return w
         if w in {"COMMIT-GO", "COMMIT-NO-GO", "COMMIT-ESKALATION"}:
             return w
+        # P2b-Frage-B: ANTWORT-Modus.
+        if w == "ANTWORT":
+            return "ANTWORT"
         if s.upper().startswith("COMMAND:"):
             return "COMMAND"
     return "UNKLAR"
@@ -6015,7 +6067,19 @@ def run_pipeline(project_name: str, aufgabe: str,
             + ziel_snippets_rev + "\n\n"
             f"CODE-ENTWURF:\n{state.code_entwurf}\n\n"
             f"TEST-VORSCHLAEGE:\n{state.test_vorschlaege or '(keine)'}\n\n"
-            "Bewerte. Erste Zeile: GO, NO-GO oder ESKALATION."
+            # P2b-Frage-B: Builder-Frage-Abschnitt.
+            + ("=== BUILDER-FRAGE ===\n"
+               + state.letzte_builder_frage
+               + "\n=== /BUILDER-FRAGE ===\n\n"
+               "Antworte mit genau einem Block:\n"
+               "ANTWORT:\n"
+               "<deine Antwort>\n"
+               "Kein Verdict in dieser Runde. Kein COMMAND.\n"
+               if state.letzte_builder_frage else "")
+            + ("Bewerte. Erste Zeile: GO, NO-GO oder "
+               "ESKALATION."
+               if not state.letzte_builder_frage
+               else "")
         )
         # Auflage 2183 A1a + Block 2a: Recovery-Hinweis
         # ausgelagert. Der Reviewer-Agent sieht nur einen
@@ -6049,6 +6113,22 @@ def run_pipeline(project_name: str, aufgabe: str,
         state.review_runden.append(
             {"runde": runde, "verdict": verdict,
              "raw": reply.content, "recovery": False})
+        # P2b-Frage-B: ANTWORT-Modus.
+        # Reviewer antwortet auf eine Builder-Frage.
+        if verdict == "ANTWORT":
+            antwort = _extrahiere_antwort(reply.content)
+            state.letzte_reviewer_antwort = antwort
+            # P2b-Frage-B: Frage ist beantwortet.
+            state.letzte_builder_frage = ""
+            audit("reviewer_frage_antwort",
+                  {"runde": runde,
+                   "antwort": antwort[:500],
+                   "antwort_laenge": len(antwort)},
+                  project_dir, project_name)
+            print(f"[i] Reviewer-Antwort: "
+                  f"{antwort[:200]}")
+            # Naechste Builder-Runde mit der Antwort.
+            continue
         state.auflagen_log.append(parse_auflagen(reply.content))
         state.empfehlung_log.append(parse_empfehlung(reply.content))
         audit("review_round", {"runde": runde, "verdict": verdict}, project_dir, project_name)
@@ -6211,8 +6291,25 @@ def run_pipeline(project_name: str, aufgabe: str,
             def _bauer_no_go_prompt(
                     s: RunState,
                     _reply: LLMReply = reply) -> str:
+                # P2b-Frage-B: Antwort-Modus.
+                # Wenn der Reviewer auf eine Frage
+                # geantwortet hat, heisst der Kopf
+                # "Reviewer-Antwort", nicht NO-GO.
+                kopf = ("Reviewer-Antwort auf deine Frage"
+                        if s.letzte_reviewer_antwort
+                        else "Reviewer NO-GO")
+                antwort_block = ""
+                if s.letzte_reviewer_antwort:
+                    antwort_block = (
+                        "=== REVIEWER-ANTWORT auf deine "
+                        "Frage ===\n"
+                        + s.letzte_reviewer_antwort
+                        + "\n\n")
+                    # Verbrauchen.
+                    s.letzte_reviewer_antwort = ""
                 return (
-                    f"Reviewer NO-GO:\n{_reply.content}\n\n"
+                    f"{kopf}:\n{_reply.content}\n\n"
+                    + antwort_block
                     + _solver_befund_block(s)
                     + "GEMESSENER INHALT (verbindlich):\n"
                     + f"{s.mess_protokoll or '(keine)'}\n\n"
