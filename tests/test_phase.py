@@ -1851,3 +1851,63 @@ class TestBuilderFormatWichtigBlock:
         assert "typ: patch" in prompt
         assert "Platzhalter" in prompt
 
+# =====================================================================
+# V3-Fix: pruefe_anker_gegen_messung ueberspringt new_file
+# =====================================================================
+
+class TestAnkerPruefungNewFile:
+    def test_new_file_wird_uebersprungen(self) -> None:
+        """typ: new_file hat keinen anker, wird nicht geprueft."""
+        patches = [
+            {"typ": "new_file",
+             "pfad": "core/hello.py",
+             "inhalt": "def greet(): ..."},
+        ]
+        fehler = pipeline.pruefe_anker_gegen_messung(
+            patches, "")
+        assert fehler == []
+
+    def test_leerer_anker_patch_bleibt_fehler(self) -> None:
+        """Regression: typ: patch mit leerem Anker
+        bleibt als 'leer' erkannt."""
+        patches = [
+            {"typ": "patch",
+             "pfad": "core/hello.py",
+             "anker": "",
+             "ersatz": "x"},
+        ]
+        fehler = pipeline.pruefe_anker_gegen_messung(
+            patches, "")
+        assert len(fehler) == 1
+        assert fehler[0][3] == "leer"
+
+    def test_falscher_anker_bleibt_fehler(self) -> None:
+        """Regression: typ: patch mit falschem (nicht-leerem)
+        Anker bleibt als 'nicht_gefunden' erkannt."""
+        patches = [
+            {"typ": "patch",
+             "pfad": "core/hello.py",
+             "anker": "XYZ",
+             "ersatz": "ABC"},
+        ]
+        fehler = pipeline.pruefe_anker_gegen_messung(
+            patches, "")
+        assert len(fehler) == 1
+        assert fehler[0][3] == "nicht_gefunden"
+
+    def test_gemischt_new_file_und_patch(self) -> None:
+        """Integration: gemischte Patches. new_file wird
+        uebersprungen, patch wird geprueft."""
+        patches = [
+            {"typ": "new_file",
+             "pfad": "core/a.py", "inhalt": "x"},
+            {"typ": "patch",
+             "pfad": "core/b.py", "anker": "", "ersatz": "y"},
+        ]
+        fehler = pipeline.pruefe_anker_gegen_messung(
+            patches, "")
+        # Nur der Patch (index 1) wird geprueft.
+        assert len(fehler) == 1
+        assert fehler[0][0] == 1
+        assert fehler[0][1] == "core/b.py"
+

@@ -3187,6 +3187,11 @@ def pruefe_anker_gegen_messung(
     """
     fehlend: list[tuple[int, str, str, str]] = []
     for i, p in enumerate(patches):
+        # P-Bugfix 2026-10-16: typ: new_file hat
+        # keinen anker. Die Anker-Pruefung ist fuer
+        # ihn nicht anwendbar.
+        if p.get("typ") == "new_file":
+            continue
         anker = p.get("anker", "")
         ersatz = p.get("ersatz", "")
         pfad = p.get("pfad", "")
