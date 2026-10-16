@@ -3004,3 +3004,94 @@ Naechster Schritt:
 ================================================================
 ENDE W6a+W6b
 ================================================================
+
+================================================================
+12. MANUELLER EINGRIFF: U8-AUFTEILUNG (2026-10-16)
+================================================================
+
+Ausgangslage 36. Lauf:
+  U7 (Template) done. U8 gestartet, 3 Runden,
+  Deadlock.
+  Reviewer-Diagnose (R11):
+    - Anker nicht verifizierbar.
+    - Import-API nicht belegt.
+    - Weitere ungepruefte Fakten.
+
+A0-Messungen (belegt):
+
+  M1: W6a+W6b wirken:
+      gemessener_inhalt_len=2317 (statt 77).
+      anzahl_read_file=7.
+      app.py-Zeilenbereich 252-267 mit Anker.
+
+  M2: Der Builder liefert:
+      - Patch 1: new_file routes_guardrails.py.
+      - Patch 2: patch app.py (Anker ok, aber
+        ersatz-Check schlaegt fehl).
+
+  M3: pruefe_ersatz_gegen_messung (Z. 3964):
+      prueft, ob jede from-Import-Zeile im
+      ersatz im mess_protokoll steht.
+      Der app.py-ersatz enthaelt:
+        from apps.dashboard.routes_guardrails
+        import register_guardrails_routes
+      Dieses Modul existiert noch nicht (wird im
+      gleichen Reply als new_file erzeugt).
+      Also: nicht im mess_protokoll -> Fehler.
+
+Aenderung:
+  U8 aufgeteilt in:
+    U8: Dashboard-Route (new_file).
+    U9: Dashboard-Integration (app.py-Patch).
+  Nummerierung verschoben:
+    ex-U9  -> U10 (Test).
+    ex-U10 -> U11 (Aktion).
+    ex-U11 -> U12 (Sidebar).
+    ex-U12 -> U13 (Doku).
+
+Konsequenz:
+  In U8 (new_file) greift der ersatz-Check
+  nicht — kein Patch mit ersatz.
+  In U9 (Patch) existiert routes_guardrails.py
+  bereits — der ersatz-Check findet das Modul
+  im mess_protokoll (weil U8 die Datei
+  angelegt hat).
+
+Muster:
+  12. manueller phase.yaml-Eingriff in Serie.
+  Nach 12 Eingriffen ist die Werkstatt-
+  Autonomie strukturell gebrochen.
+  W5 (COMMAND+Patch), Weg X (Planner-
+  Konkretisierung) bleiben Merkposten.
+
+Audit-Referenz:
+  Alte Audit-Logs referenzieren "U8" fuer
+  "Route + app.py-Patch". Nach diesem Edit:
+    U8 = Route (new_file).
+    U9 = app.py-Integration (Patch).
+    U10 = Test (ex-U9).
+    U11 = Aktion (ex-U10).
+    U12 = Sidebar (ex-U11).
+    U13 = Doku (ex-U12).
+
+Merkposten:
+  W5: COMMAND + Patch im selben Block
+      (Loop-Logik). Eigener Block.
+  W7: pruefe_ersatz_gegen_messung akzeptiert
+      Module, die im selben Reply als new_file
+      erzeugt werden. Eigener Block.
+  W8: Basis-Gate erkennt A-Eintraege nicht.
+      Wiederholt manuelle git-reset-Aktionen.
+      Eigener Block.
+
+Stand:
+  U1-U7 done. U8 no_go.
+  U9-U13 pending.
+
+Naechster Schritt:
+  37. PB-68-Lauf mit --resume-force.
+  Erwartung: U8 (Route) done.
+
+================================================================
+ENDE 12. MANUELLER EINGRIFF
+================================================================
