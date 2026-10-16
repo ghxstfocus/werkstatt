@@ -2209,3 +2209,156 @@ class TestPhasePersistenz:
         ]
         assert pakete == []
 
+# =====================================================================
+# _phasen_basis_gate_ok (A5, 2026-10-16)
+# =====================================================================
+
+class TestPhasenBasisGate:
+    """Tests fuer das erweiterte Basis-Gate im Phasen-Modus."""
+
+    def _setze_phase_yaml(
+            self, yaml_dir: Path,
+            done_mit_paket: list[tuple[str, list[str]]]
+    ) -> None:
+        """Schreibt eine minimale phase.yaml nach yaml_dir.
+
+        yaml_dir: Verzeichnis fuer phase.yaml (NICHT
+        das git-Repo, sonst wird phase.yaml selbst als
+        untracked erkannt).
+        done_mit_paket: Liste von (unterblock_id, dateien).
+        """
+        import yaml
+        unterbloecke = []
+        for uid, dateien in done_mit_paket:
+            unterbloecke.append({
+                "id": uid,
+                "titel": f"Test-{uid}",
+                "status": "done",
+                "commit_paket": {
+                    "dateien": dateien,
+                    "message": f"{uid} fertig",
+                },
+                "unterpunkte": [],
+                "geschaetzte_runden": 1,
+            })
+        daten = {
+            "phase_aktiv": True,
+            "phase_id": "P1",
+            "phase_titel": "Testphase",
+            "phase_start_head": "",
+            "phase_erstellt_am": "2026-10-15T00:00:00+00:00",
+            "phase_unterbloecke": unterbloecke,
+        }
+        ziel = yaml_dir / "testprojekt.phase.yaml"
+        ziel.write_text(
+            yaml.safe_dump(daten, sort_keys=False),
+            encoding="utf-8")
+
+    def test_clean_git(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """Leerer git status -> clean."""
+        # tmp_path als Projekt-Dir, aber mit git-Repo.
+        import subprocess
+        subprocess.run(["git", "init", "-q"],
+                       cwd=str(tmp_path), check=True)
+        ok, grund, _details = pipeline._phasen_basis_gate_ok(
+            "testprojekt", tmp_path)
+        assert ok is True
+        assert grund == "clean"
+
+    def test_untracked_ohne_phase_yaml_fail(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """Untracked Datei, aber phase.yaml fehlt -> Fail."""
+        monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", tmp_path)
+        import subprocess
+        subprocess.run(["git", "init", "-q"],
+                       cwd=str(tmp_path), check=True)
+        (tmp_path / "fremd.txt").write_text("x")
+        ok, grund, _details = pipeline._phasen_basis_gate_ok(
+            "testprojekt", tmp_path)
+        assert ok is False
+        assert grund == "fremd_untracked"
+
+    def test_untracked_in_done_paket_ok(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """Untracked Datei, die in done-Paket steht -> OK."""
+        # yaml_dir MUSS ausserhalb des git-Repos liegen.
+        # Sonst listet git status das yaml-Verzeichnis
+        # als untracked und _phasen_basis_gate_ok wertet
+        # es als fremd.
+        yaml_dir = tmp_path.parent / (tmp_path.name + "_yaml")
+        yaml_dir.mkdir(exist_ok=True)
+        monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", yaml_dir)
+        import subprocess
+        subprocess.run(["git", "init", "-q"],
+                       cwd=str(tmp_path), check=True)
+        (tmp_path / "a.py").write_text("x")
+        self._setze_phase_yaml(yaml_dir, [("U1", ["a.py"])])
+        ok, grund, details = pipeline._phasen_basis_gate_ok(
+            "testprojekt", tmp_path)
+        assert ok is True
+        assert grund == "phasen_untracked"
+        assert "U1" in details.get("done_ids", [])
+
+    def test_untracked_fremd_fail(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """Untracked Datei, nicht in done-Paket -> Fail."""
+        monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", tmp_path)
+        import subprocess
+        subprocess.run(["git", "init", "-q"],
+                       cwd=str(tmp_path), check=True)
+        (tmp_path / "fremd.txt").write_text("x")
+        self._setze_phase_yaml(tmp_path, [("U1", ["a.py"])])
+        ok, grund, _details = pipeline._phasen_basis_gate_ok(
+            "testprojekt", tmp_path)
+        assert ok is False
+        assert grund == "fremd_untracked"
+        assert "fremd.txt" in _details.get("fremd", [])
+
+    def test_modified_fail(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """Modified Datei -> Fail-closed (auch im Phasen-Modus)."""
+        monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", tmp_path)
+        import subprocess
+        subprocess.run(["git", "init", "-q"],
+                       cwd=str(tmp_path), check=True)
+        subprocess.run(["git", "-c", "user.name=t",
+                        "-c", "user.email=t@t", "commit",
+                        "--allow-empty", "-m", "init", "-q"],
+                       cwd=str(tmp_path), check=True)
+        (tmp_path / "x.py").write_text("v1")
+        subprocess.run(["git", "add", "x.py"],
+                       cwd=str(tmp_path), check=True)
+        subprocess.run(["git", "-c", "user.name=t",
+                        "-c", "user.email=t@t", "commit",
+                        "-m", "add x", "-q"],
+                       cwd=str(tmp_path), check=True)
+        (tmp_path / "x.py").write_text("v2")  # modified
+        ok, grund, _details = pipeline._phasen_basis_gate_ok(
+            "testprojekt", tmp_path)
+        assert ok is False
+        assert grund == "modifiziert"
+
+    def test_mehrere_done_pakete(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """Untracked Dateien aus zwei done-Paketen -> OK."""
+        yaml_dir = tmp_path.parent / (tmp_path.name + "_yaml")
+        yaml_dir.mkdir(exist_ok=True)
+        monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", yaml_dir)
+        import subprocess
+        subprocess.run(["git", "init", "-q"],
+                       cwd=str(tmp_path), check=True)
+        (tmp_path / "a.py").write_text("x")
+        (tmp_path / "b.py").write_text("y")
+        self._setze_phase_yaml(yaml_dir, [
+            ("U1", ["a.py"]),
+            ("U2", ["b.py"]),
+        ])
+        ok, grund, details = pipeline._phasen_basis_gate_ok(
+            "testprojekt", tmp_path)
+        assert ok is True
+        assert grund == "phasen_untracked"
+        done_ids = details.get("done_ids", [])
+        assert "U1" in done_ids
+        assert "U2" in done_ids
+

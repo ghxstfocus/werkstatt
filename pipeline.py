@@ -7235,6 +7235,97 @@ def _resume_force_reset(
     }
 
 
+def _phasen_basis_gate_ok(
+        project_name: str,
+        project_dir: Path,
+) -> tuple[bool, str, dict[str, Any]]:
+    """Phasen-Persistenz (2026-10-16): Basis-Gate
+    im Phasen-Modus erweitert.
+
+    Erlaubt untracked Dateien, die zu done-Unter-
+    bloecken der phase.yaml gehoeren. Alles andere
+    ist Fail-closed.
+
+    Rueckgabe: (ok, grund, details).
+      ok=True  + grund="clean": git status leer.
+      ok=True  + grund="phasen_untracked": alle
+                untracked Pfade gehoeren zu done-
+                Unterbloecken.
+      ok=False + grund="modifiziert": M/D/R-Eintraege.
+      ok=False + grund="fremd_untracked": untracked
+                Pfade ohne done-Zuordnung.
+      ok=False + grund="git_fehler": git status
+                nicht ausfuehrbar.
+    """
+    try:
+        res = subprocess.run(
+            ("git", "status", "--porcelain"),
+            cwd=str(project_dir), capture_output=True,
+            text=True, timeout=30, check=False,
+            env=subprocess_env(),
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return (False, "git_fehler", {})
+    if res.returncode != 0:
+        return (False, "git_fehler", {})
+    if not res.stdout.strip():
+        return (True, "clean", {})
+    modified: list[str] = []
+    untracked: list[str] = []
+    for zeile in res.stdout.splitlines():
+        if len(zeile) < 3:
+            continue
+        code = zeile[:2]
+        pfad = zeile[3:].strip()
+        if code == "??":
+            untracked.append(pfad)
+        else:
+            modified.append(pfad)
+    if modified:
+        return (False, "modifiziert",
+                {"modified": modified})
+    if not untracked:
+        return (True, "clean", {})
+    try:
+        plan = _phase_plan_laden(project_name)
+    except ValueError:
+        plan = None
+    if plan is None:
+        return (False, "fremd_untracked",
+                {"untracked": untracked})
+    done_pfade: set[str] = set()
+    done_ids: list[str] = []
+    for u in plan.get("phase_unterbloecke", []):
+        if not isinstance(u, dict):
+            continue
+        if u.get("status") != "done":
+            continue
+        pk = u.get("commit_paket")
+        if not isinstance(pk, dict):
+            continue
+        for d in pk.get("dateien", []):
+            if isinstance(d, str) and d:
+                done_pfade.add(d)
+        if pk.get("dateien"):
+            done_ids.append(u.get("id", ""))
+
+    def _norm(p: str) -> str:
+        return p.lstrip("./")
+
+    done_norm = {_norm(p) for p in done_pfade}
+    fremd = [
+        p for p in untracked
+        if _norm(p) not in done_norm
+    ]
+    if fremd:
+        return (False, "fremd_untracked",
+                {"untracked": untracked, "fremd": fremd,
+                 "done_pfade": sorted(done_pfade)})
+    return (True, "phasen_untracked",
+            {"untracked": untracked,
+             "done_ids": done_ids})
+
+
 def _phase_main_pfad(
     project_name: str,
     phasen_text: str,
@@ -7275,25 +7366,33 @@ def _phase_main_pfad(
               "Fail closed.")
         return 18
 
-    # git status clean?
-    try:
-        _st = subprocess.run(
-            ("git", "status", "--porcelain"),
-            cwd=str(project_dir), capture_output=True,
-            text=True, timeout=30, check=False,
-            env=subprocess_env(),
-        )
-        if _st.returncode != 0 or _st.stdout.strip():
-            print("[FAIL] Ziel-Repo nicht sauber (git status). "
-                  "Fail closed.")
-            print(_st.stdout[:500] if _st.stdout else "")
-            audit("phase_basis_gate_failed",
-                  {"grund": "git_status_schmutzig"},
-                  project_dir, project_name)
-            return 18
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        print(f"[FAIL] git status: {exc}. Fail closed.")
+    # Phasen-Persistenz-A3 (2026-10-16): Basis-Gate
+    # im Phasen-Modus erweitert. Erlaubt untracked
+    # Dateien aus done-Unterbloecken.
+    _bg_ok, _bg_grund, _bg_details = (
+        _phasen_basis_gate_ok(project_name, project_dir))
+    if not _bg_ok:
+        print("[FAIL] Ziel-Repo nicht sauber (git status). "
+              "Fail closed.")
+        print(f"  Grund: {_bg_grund}")
+        if _bg_details:
+            print(f"  Details: {_bg_details}")
+        audit("phase_basis_gate_failed",
+              {"grund": _bg_grund, "details": _bg_details},
+              project_dir, project_name)
         return 18
+    if _bg_grund == "phasen_untracked":
+        print("[i] Basis-Gate: untracked Dateien aus "
+              "done-Unterbloecken erlaubt "
+              f"({len(_bg_details.get('untracked', []))} "
+              f"Pfade, done-IDs: {_bg_details.get('done_ids', [])}).")
+        audit("phasen_basis_gate_untracked",
+              {"anzahl_untracked":
+                   len(_bg_details.get("untracked", [])),
+               "pfade": _bg_details.get("untracked", []),
+               "done_unterbloecke":
+                   _bg_details.get("done_ids", [])},
+              project_dir, project_name)
 
     # Rollen + Docs laden.
     agents_dir = config.get("project_agents_dir")
