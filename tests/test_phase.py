@@ -2362,3 +2362,187 @@ class TestPhasenBasisGate:
         assert "U1" in done_ids
         assert "U2" in done_ids
 
+# =====================================================================
+# Plan-Korrektur-Schutz (A1+A2, 2026-10-16)
+# =====================================================================
+
+class TestPlanKorrekturSchutz:
+    """Tests fuer done-Schutz in _phase_plan_korrektur."""
+
+    def _setup(self, tmp_path: Path, monkeypatch) -> Path:
+        """Setzt yaml_dir + git-Repo + state vor."""
+        import subprocess
+        yaml_dir = tmp_path.parent / (tmp_path.name + "_yaml")
+        yaml_dir.mkdir(exist_ok=True)
+        monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", yaml_dir)
+        monkeypatch.setattr(pipeline, "audit",
+                            lambda *a, **kw: None)
+        subprocess.run(["git", "init", "-q"],
+                       cwd=str(tmp_path), check=True)
+        return yaml_dir
+
+    def _phase_yaml(self, yaml_dir: Path,
+                    unterbloecke: list) -> None:
+        import yaml
+        daten = {
+            "phase_aktiv": True,
+            "phase_id": "18",
+            "phase_titel": "Testphase",
+            "phase_start_head": "0d0fe2c",
+            "phase_erstellt_am": "2026-10-16T00:00:00+00:00",
+            "phase_unterbloecke": unterbloecke,
+        }
+        (yaml_dir / "testprojekt.phase.yaml").write_text(
+            yaml.safe_dump(daten, sort_keys=False),
+            encoding="utf-8")
+
+    def _state(self, tmp_path: Path,
+               unterbloecke: list) -> pipeline.RunState:
+        state = pipeline.RunState(
+            block_id="t", aufgabe="t",
+            start_ts="2026-10-16T00:00:00+00:00",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=["core/", "tests/"],
+            api_key="x", budget={}, agent_docs={},
+            project_dir=tmp_path, project_name="testprojekt")
+        state.phase_id = "18"
+        state.phase_titel = "Testphase"
+        state.phase_unterbloecke = unterbloecke
+        state.phase_aktiv = True
+        state.phase_commit_pakete = []
+        return state
+
+    def _planner_antwort(self, unterbloecke: list) -> str:
+        """Baut einen Plan-Text im P10-P14-Format."""
+        zeilen = ["PHASE: 18 - Testphase"]
+        for u in unterbloecke:
+            zeilen.append(f"UNTERBLOCK: {u['id']} - {u['titel']}")
+            zeilen.append("Unterpunkte:")
+            for p in u["unterpunkte"]:
+                zeilen.append(f"  - {p}")
+            zeilen.append(
+                f"Geschaetzte Runden: {u['geschaetzte_runden']}")
+        return "\n".join(zeilen) + "\n"
+
+    def test_done_unterblock_bleibt_done(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """U1=done, U2=no_go. Plan-Korrektur darf U1 nicht aendern."""
+        from unittest.mock import patch
+
+        import yaml
+        yaml_dir = self._setup(tmp_path, monkeypatch)
+        ups = [
+            {"id": "U1", "titel": "Modell", "status": "done",
+             "commit_paket": {"dateien": ["core/a.py"],
+                              "message": "U1"},
+             "unterpunkte": ["alt1"],
+             "geschaetzte_runden": 1},
+            {"id": "U2", "titel": "Loader",
+             "status": "no_go", "commit_paket": {},
+             "unterpunkte": ["alt2"],
+             "geschaetzte_runden": 1},
+        ]
+        self._phase_yaml(yaml_dir, ups)
+        state = self._state(tmp_path, ups)
+        neue = [
+            {"id": "U1", "titel": "Modell",
+             "unterpunkte": ["neu1"], "geschaetzte_runden": 1},
+            {"id": "U2", "titel": "Loader",
+             "unterpunkte": ["neu2"], "geschaetzte_runden": 1},
+        ]
+        antwort = self._planner_antwort(neue)
+        with patch("pipeline._planner_lauf",
+                   return_value=antwort), \
+             patch("builtins.input", return_value="j"):
+            ok = pipeline._phase_plan_korrektur(
+                "testprojekt", state, "key")
+        assert ok is True
+        d = yaml.safe_load(
+            (yaml_dir / "testprojekt.phase.yaml").read_text())
+        u1 = d["phase_unterbloecke"][0]
+        u2 = d["phase_unterbloecke"][1]
+        assert u1["status"] == "done"
+        assert u1["commit_paket"]["dateien"] == ["core/a.py"]
+        assert u1["unterpunkte"] == ["alt1"]
+        assert u2["status"] == "pending"
+        assert u2["unterpunkte"] == ["neu2"]
+
+    def test_anzahl_geaendert_fail(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        yaml_dir = self._setup(tmp_path, monkeypatch)
+        ups = [
+            {"id": "U1", "titel": "Modell", "status": "done",
+             "commit_paket": {}, "unterpunkte": [],
+             "geschaetzte_runden": 1},
+            {"id": "U2", "titel": "Loader", "status": "no_go",
+             "commit_paket": {}, "unterpunkte": [],
+             "geschaetzte_runden": 1},
+        ]
+        self._phase_yaml(yaml_dir, ups)
+        state = self._state(tmp_path, ups)
+        neue = [
+            {"id": "U1", "titel": "Modell",
+             "unterpunkte": ["x"], "geschaetzte_runden": 1},
+        ]
+        antwort = self._planner_antwort(neue)
+        with patch("pipeline._planner_lauf",
+                   return_value=antwort), \
+             patch("builtins.input", return_value="j"):
+            ok = pipeline._phase_plan_korrektur(
+                "testprojekt", state, "key")
+        assert ok is False
+
+    def test_id_geaendert_fail(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        yaml_dir = self._setup(tmp_path, monkeypatch)
+        ups = [
+            {"id": "U1", "titel": "Modell", "status": "done",
+             "commit_paket": {}, "unterpunkte": [],
+             "geschaetzte_runden": 1},
+        ]
+        self._phase_yaml(yaml_dir, ups)
+        state = self._state(tmp_path, ups)
+        neue = [
+            {"id": "U9", "titel": "Modell",
+             "unterpunkte": ["x"], "geschaetzte_runden": 1},
+        ]
+        antwort = self._planner_antwort(neue)
+        with patch("pipeline._planner_lauf",
+                   return_value=antwort), \
+             patch("builtins.input", return_value="j"):
+            ok = pipeline._phase_plan_korrektur(
+                "testprojekt", state, "key")
+        assert ok is False
+
+    def test_alter_plan_enthaelt_unterpunkte(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """Der Planner-Kontext enthaelt die Unterpunkte."""
+        from unittest.mock import patch
+        yaml_dir = self._setup(tmp_path, monkeypatch)
+        ups = [
+            {"id": "U1", "titel": "Modell", "status": "done",
+             "commit_paket": {}, "unterpunkte": ["spezifisch1",
+                                                  "spezifisch2"],
+             "geschaetzte_runden": 1},
+        ]
+        self._phase_yaml(yaml_dir, ups)
+        state = self._state(tmp_path, ups)
+
+        gesammelt: list[dict] = []
+        def fake_lauf(state, api, auftrag, *a, **kw):
+            gesammelt.append(kw.get("korrektur_kontext", {}))
+
+        with patch("pipeline._planner_lauf",
+                   side_effect=fake_lauf), \
+             patch("pipeline._phase_rr_k8",
+                   return_value="abbrechen"):
+            pipeline._phase_plan_korrektur(
+                "testprojekt", state, "key")
+
+        assert len(gesammelt) == 1
+        alter_plan = gesammelt[0].get("alter_plan", "")
+        assert "spezifisch1" in alter_plan
+        assert "spezifisch2" in alter_plan
+

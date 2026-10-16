@@ -1981,9 +1981,15 @@ def _phase_plan_korrektur(
     for u in state.phase_unterbloecke:
         if not isinstance(u, dict):
             continue
-        alter_plan_zeilen.append(
+        _zeile = (
             f"{u.get('id', '?')}: {u.get('titel', '')} "
             f"[{u.get('status', '?')}]")
+        # Plan-Korrektur-Schutz-A2 (2026-10-16):
+        # Unterpunkte mit ausgeben, damit der Planner
+        # sie sehen und behalten kann.
+        for _punkt in u.get("unterpunkte", []):
+            _zeile += f"\n    - {_punkt}"
+        alter_plan_zeilen.append(_zeile)
     alter_plan = "\n".join(alter_plan_zeilen)
     pakete_zeilen: list[str] = []
     for i, p in enumerate(state.phase_commit_pakete, 1):
@@ -2074,23 +2080,89 @@ def _phase_plan_korrektur(
         return False
     # Alte Pakete verwerfen.
     state.phase_commit_pakete = []
-    # Neuen Plan schreiben (Status pending).
+    # Plan-Korrektur-Schutz-A1 (2026-10-16):
+    # Struktur-Check + Merge mit dem bestehenden Plan.
+    # done-Unterbloecke bleiben unveraendert.
+    # no_go/failed/pending werden durch neue_ups ersetzt.
     plan = _phase_plan_laden(project_name)
     if plan is None:
         return False
-    plan["phase_id"] = neue_id
-    plan["phase_titel"] = neue_titel
-    plan["phase_unterbloecke"] = [
-        {
-            "id": u["id"],
-            "titel": u["titel"],
+    _alte_ups = plan.get("phase_unterbloecke", [])
+    # 1. Struktur-Check: Anzahl, ids, Reihenfolge.
+    if len(_alte_ups) != len(neue_ups):
+        print("[FAIL] Plan-Korrektur: Anzahl der Unterbloecke "
+              f"geaendert ({len(_alte_ups)} -> {len(neue_ups)}). "
+              "Fail closed.")
+        audit("phase_plan_korrektur_failed",
+              {"phase_id": state.phase_id,
+               "grund": "struktur_verletzt",
+               "detail": "anzahl"}, state.project_dir, project_name)
+        return False
+    for _i, (_alt, _neu) in enumerate(
+            zip(_alte_ups, neue_ups)):
+        if not isinstance(_alt, dict):
+            continue
+        if _alt.get("id") != _neu.get("id"):
+            print("[FAIL] Plan-Korrektur: id an Position "
+                  f"{_i} geaendert "
+                  f"({_alt.get('id')} -> {_neu.get('id')}). "
+                  "Fail closed.")
+            audit("phase_plan_korrektur_failed",
+                  {"phase_id": state.phase_id,
+                   "grund": "struktur_verletzt",
+                   "detail": "id_geaendert",
+                   "position": _i},
+                  state.project_dir, project_name)
+            return False
+        if _alt.get("titel") != _neu.get("titel"):
+            print("[FAIL] Plan-Korrektur: titel an Position "
+                  f"{_i} geaendert. Fail closed.")
+            audit("phase_plan_korrektur_failed",
+                  {"phase_id": state.phase_id,
+                   "grund": "struktur_verletzt",
+                   "detail": "titel_geaendert",
+                   "position": _i},
+                  state.project_dir, project_name)
+            return False
+    # 2. Merge: done-Unterbloecke schuetzen.
+    _gemergt: list[dict[str, Any]] = []
+    for _alt, _neu in zip(_alte_ups, neue_ups):
+        if not isinstance(_alt, dict):
+            _gemergt.append({
+                "id": _neu["id"],
+                "titel": _neu["titel"],
+                "status": "pending",
+                "commit_paket": {},
+                "unterpunkte": _neu["unterpunkte"],
+                "geschaetzte_runden": _neu["geschaetzte_runden"],
+            })
+            continue
+        if _alt.get("status") == "done":
+            # done: der neue Plan darf hier nichts aendern.
+            _gemergt.append({
+                "id": _alt["id"],
+                "titel": _alt["titel"],
+                "status": "done",
+                "commit_paket": dict(
+                    _alt.get("commit_paket", {})),
+                "unterpunkte": list(
+                    _alt.get("unterpunkte", [])),
+                "geschaetzte_runden": _alt.get(
+                    "geschaetzte_runden", 1),
+            })
+            continue
+        # no_go/failed/pending: neuer Plan uebernimmt.
+        _gemergt.append({
+            "id": _neu["id"],
+            "titel": _neu["titel"],
             "status": "pending",
             "commit_paket": {},
-            "unterpunkte": u["unterpunkte"],
-            "geschaetzte_runden": u["geschaetzte_runden"],
-        }
-        for u in neue_ups
-    ]
+            "unterpunkte": _neu["unterpunkte"],
+            "geschaetzte_runden": _neu["geschaetzte_runden"],
+        })
+    plan["phase_id"] = neue_id
+    plan["phase_titel"] = neue_titel
+    plan["phase_unterbloecke"] = _gemergt
     _phase_plan_speichern(project_name, plan)
     # V4-A1: Pakete verwerfen.
     state.phase_commit_pakete = []
