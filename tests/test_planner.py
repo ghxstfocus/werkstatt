@@ -138,6 +138,8 @@ class TestPlannerLauf:
             "stufe",
             # P2b-5: korrektur_kontext hinzugefuegt.
             "korrektur_kontext",
+            # Block 2a / B1: phase_stand hinzugefuegt.
+            "phase_stand",
         ]
 
 
@@ -390,3 +392,110 @@ class TestPlannerPraezision:
             agents["planner"], {}, [], stufe=2)
         assert "P17." in prompt
         assert "P18." in prompt
+
+
+# =====================================================================
+# Block 2a (2026-10-16): Korrektur-Kontext — Reviewer-Befund + Phase-Stand
+# =====================================================================
+
+class TestPlannerKorrekturKontext:
+    def _kk(self) -> dict:
+        return {
+            "begruendung": "Mensch hat abgelehnt.",
+            "alter_plan": "PHASE 18 - Test\nU1: ...",
+            "pakete_kompakt": "(keine)",
+            "reviewer_befund": "NO-GO\n1. Punkt A\n2. Punkt B",
+        }
+
+    def _ps(self) -> dict:
+        return {
+            "phase_id": 18,
+            "unterbloecke": [
+                {"id": "U1", "status": "done",
+                 "paket_groesse": 3, "letzter_befund": ""},
+                {"id": "U2", "status": "no_go",
+                 "paket_groesse": 0,
+                 "letzter_befund": "NO-GO: Sig falsch"},
+                {"id": "U3", "status": "pending",
+                 "paket_groesse": 0, "letzter_befund": ""},
+            ],
+            "naechster": "U2",
+        }
+
+    def test_user_content_reviewer_befund_marker(self) -> None:
+        uc = pipeline._planner_user_content(
+            "roh", "hist", stufe=2,
+            korrektur_kontext=self._kk())
+        assert "=== REVIEWER-BEFUND (vollstaendig) ===" in uc
+        assert "=== /REVIEWER-BEFUND ===" in uc
+        assert "1. Punkt A" in uc
+
+    def test_user_content_reviewer_befund_leer_kein_marker(self) -> None:
+        kk = self._kk()
+        kk["reviewer_befund"] = ""
+        uc = pipeline._planner_user_content(
+            "roh", "hist", stufe=2, korrektur_kontext=kk)
+        assert "REVIEWER-BEFUND" not in uc
+
+    def test_user_content_reviewer_befund_nicht_gekuerzt(self) -> None:
+        kk = self._kk()
+        lang = "X" * 5000
+        kk["reviewer_befund"] = lang
+        uc = pipeline._planner_user_content(
+            "roh", "hist", stufe=2, korrektur_kontext=kk)
+        assert lang in uc
+
+    def test_user_content_p10_p18_im_abschluss(self) -> None:
+        uc = pipeline._planner_user_content(
+            "roh", "hist", stufe=2,
+            korrektur_kontext=self._kk())
+        assert "P10-P16" in uc
+        assert "P17" in uc
+        assert "P18" in uc
+
+    def test_user_content_phase_stand_sektion(self) -> None:
+        uc = pipeline._planner_user_content(
+            "roh", "hist", stufe=2,
+            korrektur_kontext=self._kk(),
+            phase_stand=self._ps())
+        assert "AKTUELLER PHASENSTAND:" in uc
+        assert "U1: done" in uc
+        assert "U2: no_go" in uc
+
+    def test_user_content_phase_stand_naechster_hinweis(self) -> None:
+        uc = pipeline._planner_user_content(
+            "roh", "hist", stufe=2,
+            korrektur_kontext=self._kk(),
+            phase_stand=self._ps())
+        assert "Plane NUR U2" in uc
+        assert "Beruehre" in uc
+
+    def test_user_content_phase_stand_none_keine_sektion(self) -> None:
+        uc = pipeline._planner_user_content(
+            "roh", "hist", stufe=2,
+            korrektur_kontext=self._kk())
+        assert "AKTUELLER PHASENSTAND" not in uc
+
+    def test_user_content_phase_stand_alle_done_fallback(self) -> None:
+        ps = self._ps()
+        for u in ps["unterbloecke"]:
+            u["status"] = "done"
+        ps["naechster"] = None
+        uc = pipeline._planner_user_content(
+            "roh", "hist", stufe=2,
+            korrektur_kontext=self._kk(),
+            phase_stand=ps)
+        assert "Alle Unterbloecke sind abgeschlossen" in uc
+
+    def test_phase_stand_sektion_letzter_befund_gekuerzt(self) -> None:
+        ps = self._ps()
+        ps["unterbloecke"][1]["letzter_befund"] = "Y" * 1000
+        sektion = pipeline._phase_stand_sektion(ps)
+        assert "letzter Befund:" in sektion
+        # Marker aus _truncate_mit_marker
+        assert "Y" * 1000 not in sektion
+
+    def test_planner_lauf_reicht_phase_stand_durch(self) -> None:
+        import inspect
+        sig = inspect.signature(pipeline._planner_lauf)
+        assert "phase_stand" in sig.parameters

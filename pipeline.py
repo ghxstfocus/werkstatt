@@ -2131,6 +2131,32 @@ def _phase_plan_korrektur(
         "pakete_kompakt": pakete_kompakt,
         "reviewer_befund": reviewer_befund,
     }
+    # Block 2a / B1: Phasenstand bauen.
+    _naechster: str | None = None
+    _ups_stand: list[dict[str, Any]] = []
+    for _u in state.phase_unterbloecke:
+        if not isinstance(_u, dict):
+            continue
+        _status = _u.get("status", "")
+        _pkg = _u.get("commit_paket", {}) or {}
+        _pkg_groesse = len(_pkg.get("dateien", []))
+        _letzter = ""
+        if _status in {"no_go", "failed"} and state.review_runden:
+            _letzter = state.review_runden[-1].get("raw", "")
+        _ups_stand.append({
+            "id": _u.get("id", "?"),
+            "status": _status,
+            "paket_groesse": _pkg_groesse,
+            "letzter_befund": _letzter,
+        })
+        if _naechster is None and _status in {
+                "no_go", "failed", "pending"}:
+            _naechster = _u.get("id")
+    phase_stand = {
+        "phase_id": state.phase_id,
+        "unterbloecke": _ups_stand,
+        "naechster": _naechster,
+    }
     audit("phase_plan_korrektur_start",
           {"phase_id": state.phase_id,
            "pakete_verworfen":
@@ -2147,7 +2173,8 @@ def _phase_plan_korrektur(
     antwort = _planner_lauf(
         state, api_key, "Korrektur-Auftrag",
         state.project_dir, project_name, historie,
-        stufe=2, korrektur_kontext=kontext)
+        stufe=2, korrektur_kontext=kontext,
+        phase_stand=phase_stand)
     if antwort is None:
         audit("phase_plan_korrektur_failed",
               {"phase_id": state.phase_id,
@@ -2715,11 +2742,57 @@ def run_phase(
 
 
 
+def _phase_stand_sektion(phase_stand: dict[str, Any]) -> str:
+    """Block 2a / B1: AKTUELLER-PHASENSTAND-Sektion.
+
+    Eingabe: dict mit Schluesseln
+      phase_id: str
+      unterbloecke: list[dict]
+        (id, status, paket_groesse, letzter_befund)
+      naechster: str | None
+
+    Ausgabe: formatierter Text mit expliziter
+    Anweisung "Plane NUR U<n>".
+    """
+    zeilen: list[str] = ["AKTUELLER PHASENSTAND:\n"]
+    for u in phase_stand.get("unterbloecke", []):
+        if not isinstance(u, dict):
+            continue
+        uid = u.get("id", "?")
+        status = u.get("status", "?")
+        paket = u.get("paket_groesse", 0)
+        zeile = f"  {uid}: {status}"
+        if status == "done" and paket:
+            zeile += f" (Paket: {paket} Dateien)"
+        letzter = u.get("letzter_befund", "")
+        if letzter and status in {"no_go", "failed"}:
+            gek = _truncate_mit_marker(letzter, 200)
+            zeile += f"\n      letzter Befund: {gek}"
+        zeilen.append(zeile + "\n")
+    naechster = phase_stand.get("naechster")
+    zeilen.append("\n")
+    if naechster:
+        zeilen.append(
+            f"Der Resume beginnt bei {naechster}. "
+            f"Plane NUR {naechster}. Beruehre "
+            "abgeschlossene Unterbloecke NICHT.\n"
+        )
+    else:
+        zeilen.append(
+            "Alle Unterbloecke sind abgeschlossen. "
+            "Plane einen neuen Phasenplan oder brich "
+            "ab.\n"
+        )
+    zeilen.append("\n")
+    return "".join(zeilen)
+
+
 def _planner_user_content(
     roher_auftrag: str,
     historie: str,
     stufe: int = 1,
     korrektur_kontext: dict[str, Any] | None = None,
+    phase_stand: dict[str, Any] | None = None,
 ) -> str:
     """Baut den User-Content fuer den Planner.
 
@@ -2729,24 +2802,51 @@ def _planner_user_content(
 
     P2b-5 / N10: korrektur_kontext (optional).
     Wenn gesetzt, wird ein Korrektur-Auftrag
-    formuliert (NO-GO-Begruendung + alter Plan
-    + Pakete kompakt).
+    formuliert (NO-GO-Begruendung + Reviewer-
+    Befund + alter Plan + Pakete kompakt).
+
+    Block 2a / D1: reviewer_befund aus dem
+    korrektur_kontext wird vollstaendig in den
+    Prompt eingesetzt (P18 verlangt vollstaendige
+    Verarbeitung). Redaction greift in ask_llm
+    (Z. 3149), nicht hier.
+
+    Block 2a / B1: phase_stand (optional). Wenn
+    gesetzt, wird eine AKTUELLER-PHASENSTAND-
+    Sektion in den Korrektur-Zweig eingefuegt.
     """
     if korrektur_kontext is not None:
         begr = korrektur_kontext.get("begruendung", "")
+        reviewer_befund = korrektur_kontext.get(
+            "reviewer_befund", "")
         alter_plan = korrektur_kontext.get("alter_plan", "")
         pakete_kompakt = korrektur_kontext.get(
             "pakete_kompakt", "")
-        return (
-            "KORREKTUR-AUFTRAG:\n"
-            f"NO-GO-Begruendung: {begr}\n\n"
-            f"ALTER PLAN:\n{alter_plan}\n\n"
-            f"GESAMMELTE PAKETE (kompakt):\n"
+        teile = [
+            "KORREKTUR-AUFTRAG:\n",
+            f"NO-GO-Begruendung: {begr}\n\n",
+        ]
+        if reviewer_befund:
+            teile.append(
+                "=== REVIEWER-BEFUND (vollstaendig) ===\n"
+                f"{reviewer_befund}\n"
+                "=== /REVIEWER-BEFUND ===\n\n"
+            )
+        if phase_stand is not None:
+            teile.append(_phase_stand_sektion(phase_stand))
+        teile.append(f"ALTER PLAN:\n{alter_plan}\n\n")
+        teile.append(
+            "GESAMMELTE PAKETE (kompakt):\n"
             f"{pakete_kompakt}\n\n"
-            "Formuliere GENAU EINEN korrigierten "
-            "Phasenplan (PHASE/UNTERBLOCK) im "
-            "Format aus P10-P14.\n"
         )
+        teile.append(
+            "Formuliere GENAU EINEN korrigierten "
+            "Phasenplan (PHASE/UNTERBLOCK). Halte "
+            "das Ausgabe-Format aus P10-P16 ein. "
+            "Beachte P17 (Builder-Freundlichkeit) "
+            "und P18 (Korrektur-Kompetenz).\n"
+        )
+        return "".join(teile)
     if stufe == 2:
         abschluss = (
             "Formuliere GENAU EINEN Phasenplan "
@@ -2776,6 +2876,7 @@ def _planner_lauf(
     historie: str,
     stufe: int = 1,
     korrektur_kontext: dict[str, Any] | None = None,
+    phase_stand: dict[str, Any] | None = None,
 ) -> str | None:
     """Fuehrt den Planner aus und liefert die Antwort.
 
@@ -2795,7 +2896,8 @@ def _planner_lauf(
 
     user_content = _planner_user_content(
         roher_auftrag, historie, stufe,
-        korrektur_kontext=korrektur_kontext)
+        korrektur_kontext=korrektur_kontext,
+        phase_stand=phase_stand)
 
     reply = ask_llm(
         api_key, planner_prompt, user_content,
