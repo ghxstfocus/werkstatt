@@ -3543,3 +3543,48 @@ Naechster Schritt:
 ================================================================
 ENDE W7
 ================================================================
+
+================================================================
+W11B COMMIT-SCOPE UNTRACKED (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 53. Lauf:
+  U11 baute 4 Patches (Route, Template, JS,
+  Test). _check_commit_scope blockierte:
+    git diff --name-only HEAD sieht
+    untracked Dateien nicht
+    (templates/guardrails.html).
+
+W11b:
+  _check_commit_scope liest zusaetzlich
+  git status --porcelain -uall.
+  Untracked Pfade landen in diff_pfade.
+
+Tests: 983 -> 985 (+2).
+
+Merkposten (neue Klasse):
+  Jede Pruefung, die "git diff --name-only"
+  als Wahrheit nutzt, muss untracked
+  einbeziehen. Gleiche Klasse wie R16/2169.
+  Systematisch pruefen (eigener Block).
+
+Stand:
+  U1-U10 done. U11 no_go (nach 53).
+  U12, U13 pending.
+
+Naechster Schritt:
+  54. Lauf (U11) mit --resume-force.
+  Erwartung:
+    - Basis-Gate gruen (W7).
+    - Code-GO (Vorbedingungen belegt).
+    - apply 4 Dateien.
+    - Commit-Scope-Check gruen (W11b).
+    - Commit-Review COMMIT-GO.
+    - U11 done.
+    - U12 startet.
+
+================================================================
+ENDE W11B
+================================================================
