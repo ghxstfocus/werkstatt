@@ -5865,6 +5865,10 @@ def run_pipeline(project_name: str, aufgabe: str,
                 "phasen_state uebergeben, aber "
                 "state_ref nicht leer")
         state = phasen_state
+        # P-Bugfix 2026-10-16: im Phasen-Modus ist
+        # der Unterblock-Auftrag der aktuelle Auftrag.
+        # Der Phasen-Gesamtauftrag bleibt in phase.yaml.
+        state.aufgabe = aufgabe
     else:
         state = RunState(
             block_id=config.get("project", "unknown"),
@@ -5893,10 +5897,19 @@ def run_pipeline(project_name: str, aufgabe: str,
     # Auflage 2183 A2: run_id auch in state.
     state.run_id = _AKTUELLE_RUN_ID
 
-    audit("pipeline_start",
-          {"aufgabe_hash": __import__("hashlib").sha256(aufgabe.encode()).hexdigest(),
-           "aufgabe_kurz": aufgabe[:200],
-           "llm_calls_start": 0},
+    # P-Bugfix 2026-10-16: Phasen-Kontext im Audit.
+    _start_daten: dict = {
+        "aufgabe_hash": __import__("hashlib").sha256(
+            aufgabe.encode()).hexdigest(),
+        "aufgabe_kurz": aufgabe[:200],
+        "llm_calls_start": 0,
+    }
+    if phasen_state is not None:
+        _start_daten["phase_id"] = state.phase_id
+        _start_daten["phase_titel"] = state.phase_titel
+        _start_daten["unterblock_index"] = \
+            state.phase_aktueller_index
+    audit("pipeline_start", _start_daten,
           project_dir, project_name)
 
     # ==================================================================

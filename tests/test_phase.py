@@ -1771,3 +1771,22 @@ class TestTriggerKonsistenz:
         assert "Wann der Auftrag bereits erfuellt ist" in t
         assert "Auftrag bereits" in t
 
+# =====================================================================
+# state.aufgabe im Phasen-Modus (2026-10-16)
+# =====================================================================
+
+class TestStateAufgabePhasenModus:
+    def test_quelle_setzt_aufgabe(self) -> None:
+        """Der Fix ist im Quelltext: state.aufgabe = aufgabe."""
+        import inspect as ins
+        quelle = ins.getsource(pipeline.run_pipeline)
+        assert "state.aufgabe = aufgabe" in quelle
+
+    def test_quelle_audit_phase_felder(self) -> None:
+        """pipeline_start-Audit ergaenzt um phase_id."""
+        import inspect as ins
+        quelle = ins.getsource(pipeline.run_pipeline)
+        assert "phase_id" in quelle
+        assert "phase_titel" in quelle
+        assert "unterblock_index" in quelle
+
