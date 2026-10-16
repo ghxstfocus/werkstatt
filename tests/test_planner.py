@@ -499,3 +499,86 @@ class TestPlannerKorrekturKontext:
         import inspect
         sig = inspect.signature(pipeline._planner_lauf)
         assert "phase_stand" in sig.parameters
+
+
+# =====================================================================
+# Block 2b (2026-10-16): UNBEANTWORTET-Behandlung
+# =====================================================================
+
+class TestPlannerUnbeantwortet:
+    def _ups(self, punkte_u1=None, punkte_u2=None) -> list:
+        return [
+            {"id": "U1", "titel": "A",
+             "unterpunkte": punkte_u1 or ["normal"],
+             "geschaetzte_runden": 1},
+            {"id": "U2", "titel": "B",
+             "unterpunkte": punkte_u2 or ["normal"],
+             "geschaetzte_runden": 1},
+        ]
+
+    def test_plan_unbeantwortet_punkte_leer(self) -> None:
+        assert pipeline._plan_unbeantwortet_punkte(
+            self._ups()) == []
+
+    def test_plan_unbeantwortet_punkte_einer(self) -> None:
+        r = pipeline._plan_unbeantwortet_punkte(
+            self._ups(punkte_u1=["UNBEANTWORTET: X"]))
+        assert len(r) == 1
+        assert r[0]["unterblock"] == "U1"
+        assert r[0]["punkt"] == "UNBEANTWORTET: X"
+
+    def test_plan_unbeantwortet_punkte_mehrere_gleicher_ub(self) -> None:
+        r = pipeline._plan_unbeantwortet_punkte(
+            self._ups(punkte_u1=[
+                "UNBEANTWORTET: A", "UNBEANTWORTET: B"]))
+        assert len(r) == 2
+        assert all(e["unterblock"] == "U1" for e in r)
+
+    def test_plan_unbeantwortet_punkte_mehrere_unterbloecke(self) -> None:
+        # B4: Punkte in verschiedenen Unterbloecken.
+        r = pipeline._plan_unbeantwortet_punkte(
+            self._ups(
+                punkte_u1=["UNBEANTWORTET: A"],
+                punkte_u2=["UNBEANTWORTET: B"]))
+        assert len(r) == 2
+        ids = sorted(e["unterblock"] for e in r)
+        assert ids == ["U1", "U2"]
+
+    def test_plan_unbeantwortet_punkte_case_sensitive(self) -> None:
+        # B3: Praefix case-sensitive.
+        r = pipeline._plan_unbeantwortet_punkte(
+            self._ups(punkte_u1=["unbeantwortet: X"]))
+        assert r == []
+
+    def test_konstante_unbeantwortet_praefix_existiert(self) -> None:
+        assert pipeline._UNBEANTWORTET_PRAEFIX == "UNBEANTWORTET:"
+
+    def test_audit_kind_phase_plan_unbeantwortet_existiert(self) -> None:
+        assert (
+            "phase_plan_unbeantwortet"
+            in pipeline._AUDIT_KINDS_BEKANNT)
+
+    def test_parse_phase_plan_unveraendert_durch_unbeantwortet(self) -> None:
+        # _parse_phase_plan bleibt unveraendert (B2-A2).
+        text = (
+            "PHASE: 18 - Test\n"
+            "UNTERBLOCK: U1 - A\n"
+            "Unterpunkte:\n"
+            "  - UNBEANTWORTET: X\n"
+            "Geschaetzte Runden: 1\n"
+        )
+        ups = pipeline._parse_phase_plan(text)
+        assert len(ups) == 1
+        assert ups[0]["unterpunkte"] == ["UNBEANTWORTET: X"]
+
+    def test_unbeantwortet_wird_nicht_gespeichert(self) -> None:
+        # Strukturtest: die Pruefung liegt in
+        # _phase_plan_korrektur, nicht im Parser.
+        # Wir testen den Aufruf-Punkt indirekt:
+        # _plan_unbeantwortet_punkte muss VOR dem
+        # Speichern greifen. Hier: Praesenz der
+        # Pruefung im Quelltext.
+        import inspect
+        src = inspect.getsource(pipeline._phase_plan_korrektur)
+        assert "phase_plan_unbeantwortet" in src
+        assert "_plan_unbeantwortet_punkte" in src

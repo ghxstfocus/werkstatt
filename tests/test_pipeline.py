@@ -5216,14 +5216,17 @@ class TestReviewRoundAudit:
         assert len(p["raw"]) == pipeline._AUDIT_RAW_MAX_LEN
 
     def test_kein_neuer_audit_kind(self) -> None:
-        # Baseline: 62 Eintraege. Stand nach
-        # commit_review_new_file_skip (2026-10-16).
+        # Baseline: 63 Eintraege. Stand nach
+        # phase_plan_unbeantwortet (Block 2b,
+        # 2026-10-16).
         # Vorherige Baselines: 60 (Review-Persistenz),
-        #                      61 (--resume-force).
+        #                      61 (--resume-force),
+        #                      62 (commit_review_new_file_skip).
         assert "review_round" in pipeline._AUDIT_KINDS_BEKANNT
         assert "phase_resume_force" in pipeline._AUDIT_KINDS_BEKANNT
         assert "commit_review_new_file_skip" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 62
+        assert "phase_plan_unbeantwortet" in pipeline._AUDIT_KINDS_BEKANNT
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 63
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5257,7 +5260,9 @@ class TestCommitReviewNewFileSkip:
     def test_kein_neuer_audit_kind_ist_62(self) -> None:
         assert "commit_review_new_file_skip" in \
             pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 62
+        # Katalog waechst mit neuen Audit-Kinds.
+        # Stand 2026-10-16 (Block 2b): 63.
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 63
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll

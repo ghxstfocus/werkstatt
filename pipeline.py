@@ -889,6 +889,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "phase_plan_korrektur_failed",
     "phase_plan_korrektur_start",
     "phase_plan_parse_failed",
+    "phase_plan_unbeantwortet",
     "phase_finish",
     "phase_finish_warnung",
     "phase_plan_verworfen",
@@ -1249,6 +1250,12 @@ def parse_planner_reply(text: str) -> dict[str, Any]:
 # Siehe docs/PLANNER-KONZEPT.md, Abschnitt 8.
 # =====================================================================
 
+# Block 2b / B3: Praefix fuer UNBEANTWORTET-Marker.
+# Gekoppelt an P18 Schritt 5. Bei P18-Aenderung
+# hier anpassen.
+_UNBEANTWORTET_PRAEFIX = "UNBEANTWORTET:"
+
+
 def _parse_phase_plan(text: str) -> list[dict[str, Any]]:
     """Parst einen Phasentext in Unterbloecke.
 
@@ -1388,6 +1395,35 @@ def _parse_phase_plan(text: str) -> list[dict[str, Any]]:
             f"{len(unterbloecke)} Unterbloecke: "
             "Obergrenze 20 ueberschritten")
     return unterbloecke
+
+
+def _plan_unbeantwortet_punkte(
+    unterbloecke: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    """Block 2b / B1: erkennt UNBEANTWORTET-Punkte.
+
+    Eingabe: geparste Unterbloecke (aus _parse_phase_plan).
+    Rueckgabe: Liste von dicts mit
+      {"unterblock": "U<n>", "punkt": "<text>"}.
+
+    Erkennung: ein Unterpunkt beginnt mit dem
+    Praefix aus _UNBEANTWORTET_PRAEFIX (case-
+    sensitive, P18 Schritt 5).
+    """
+    treffer: list[dict[str, str]] = []
+    for u in unterbloecke:
+        if not isinstance(u, dict):
+            continue
+        uid = u.get("id", "?")
+        for punkt in u.get("unterpunkte", []):
+            if not isinstance(punkt, str):
+                continue
+            if punkt.startswith(_UNBEANTWORTET_PRAEFIX):
+                treffer.append({
+                    "unterblock": uid,
+                    "punkt": punkt,
+                })
+    return treffer
 
 
 def _phase_plan_als_text(
@@ -2196,6 +2232,28 @@ def _phase_plan_korrektur(
                "grund": "parse_failed",
                "exception": str(exc)},
               state.project_dir, project_name)
+        wahl = _phase_rr_k8(state, alter_plan)
+        if wahl == "neu":
+            return True
+        if wahl == "neu_starten":
+            print("[i] Bitte mit geaendertem Auftrag "
+                  "neuen --phase-Aufruf starten.")
+        return False
+    # Block 2b / B1: UNBEANTWORTET-Punkte pruefen.
+    unbeantwortet = _plan_unbeantwortet_punkte(neue_ups)
+    if unbeantwortet:
+        audit("phase_plan_unbeantwortet",
+              {"phase_id": state.phase_id,
+               "punkte": unbeantwortet,
+               "anzahl": len(unbeantwortet)},
+              state.project_dir, project_name)
+        print("[FAIL] Plan enthaelt UNBEANTWORTET-Punkte. "
+              "Plan wird verworfen.")
+        for _e in unbeantwortet:
+            _txt = _e["punkt"]
+            print(f"  [{_e['unterblock']}] "
+                  + (_truncate_mit_marker(_txt, 200)
+                     if len(_txt) > 200 else _txt))
         wahl = _phase_rr_k8(state, alter_plan)
         if wahl == "neu":
             return True
