@@ -1207,3 +1207,62 @@ Merkposten:
 ENDE REKONSTRUKTION
 ================================================================
 
+================================================================
+U2-REPARATUR 2026-10-16
+================================================================
+
+Kontext: 15. PB-68-Lauf (Versuch 3, 2026-10-16 14:35).
+Der Lauf ist bis Post-Apply-Basis-Gate gruen gekommen.
+Dort `ruff` rot: SIM115 in
+tests/unit/test_guardrails_loader.py:24.
+
+Der Post-Apply-Korrektur-Loop ruft den Reviewer.
+Der Reviewer-Kontext ist durch
+`aktueller_prompt[:2000]` geschnitten (Bug,
+siehe Truncation-Fix 6041033). Der Reviewer sieht
+den abgeschnittenen Prompt und schliesst auf eine
+"unvollstaendige Datei". Das ist falsch — die Datei
+ist 152 Zeilen, py_compile ok, vollstaendig.
+
+Der Builder folgt dem falschen Befund, dreht im
+COMMAND-Loop. Post-Apply-Korrektur max_runden
+erreicht. Fail-closed.
+
+Fix (6041033): Truncation-Marker + GEMESSENER
+INHALT separat im Reviewer-Kontext.
+
+Manuelle U2-Reparatur (2026-10-16):
+- tests/unit/test_guardrails_loader.py: _write
+  auf Context Manager umgestellt (with ... as tmp).
+- ruff check: All checks passed.
+- pytest tests/unit/test_guardrails_loader.py: 22 passed.
+
+phase.yaml: U2 auf status=done mit Paket
+(loader.py + test_guardrails_loader.py).
+U1 bleibt done. U3-U10 pending.
+
+Working Tree:
+  ?? core/guardrails/                 (U1 + U2)
+  ?? tests/unit/test_guardrails_loader.py
+  ?? tests/unit/test_guardrails_models.py
+
+Erwartung 16. Lauf:
+  - Basis-Gate: untracked Dateien aus U1+U2
+    erlaubt.
+  - Phasen-Persistenz: 2 done-Pakete geladen.
+  - U1, U2 uebersprungen.
+  - U3 laeuft (Guardrail-Config-Datei).
+  - Bei Erfolg: Phase laeuft weiter (U4-U10).
+  - Bei Sammel-Commit am Phasen-Ende:
+    Tag probebetrieb-68.
+
+Wenn U3 scheitert und der Reviewer wieder
+"Datei unvollstaendig" behauptet: NICHT
+manuell eingreifen. Der Truncation-Fix (6041033)
+sollte greifen. Wenn nicht: Truncation-Fix
+pruefen.
+
+================================================================
+ENDE U2-REPARATUR
+================================================================
+
