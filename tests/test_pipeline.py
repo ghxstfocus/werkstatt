@@ -2535,9 +2535,16 @@ class TestBuildSystemPrompt:
 
     def test_reviewer_enthaelt_r1_bis_r6(self) -> None:
         s = _prompt_fuer_rolle("reviewer")
-        for r in ("R1.", "R2.", "R3.", "R4.", "R5.", "R6."):
+        # A1-final (2026-10-16): R5 entfernt
+        # (deterministisch in pruefe_ersatz_
+        # gegen_messung). R16 entfernt
+        # (deterministisch in _check_commit_scope).
+        for r in ("R1.", "R2.", "R3.", "R4.", "R6."):
             muster = rf"(?<![A-Z]){re.escape(r)}"
             assert re.search(muster, s), f"{r} fehlt im Reviewer-Prompt"
+        # R5 und R16 duerfen NICHT im Prompt sein.
+        assert not re.search(r"(?<![A-Z])R5\.", s)
+        assert not re.search(r"(?<![A-Z])R16\.", s)
 
     def test_builder_enthaelt_b1_bis_b10(self) -> None:
         s = _prompt_fuer_rolle("builder")
@@ -5289,7 +5296,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 77
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 78
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5325,7 +5332,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 77
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 78
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6123,7 +6130,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 77
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 78
 
 
 # =====================================================================
@@ -6228,7 +6235,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 77
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 78
 
 
 # =====================================================================
@@ -6268,13 +6275,16 @@ class TestEDiffNameOnly:
         i_ret = src.find("return 9", i)
         assert i_ret > i
 
-    def test_r16_im_reviewer_prompt(self) -> None:
-        assert "R16." in pipeline.HARD_RULES_REVIEWER
+    def test_r16_entfernt_im_reviewer_prompt(self) -> None:
+        # A1-final (2026-10-16): R16 entfernt.
+        assert "R16." not in pipeline.HARD_RULES_REVIEWER
 
     def test_r16_teilmenge_bei_phasen_modus(self) -> None:
-        s = pipeline.HARD_RULES_REVIEWER
-        assert "TEILMENGE" in s
-        assert "PHASEN-MODUS" in s
+        # A1-final (2026-10-16): R16 entfernt.
+        # _check_commit_scope uebernimmt.
+        import inspect
+        src = inspect.getsource(pipeline._check_commit_scope)
+        assert "BETROFFENE DATEIEN" in src or "dateien" in src
 
     def test_audit_kinds_commit_review_diff(self) -> None:
         assert ("commit_review_diff_name_only"
@@ -6283,7 +6293,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 77
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 78
 
 
 # =====================================================================
@@ -6568,11 +6578,10 @@ class TestW8:
         assert ("commit_message_diskrepanz"
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
-    def test_r16_unveraendert(self) -> None:
-        # R16 bleibt Teilmengen-Check.
+    def test_r16_entfernt(self) -> None:
+        # A1-final (2026-10-16): R16 entfernt.
         s = pipeline.HARD_RULES_REVIEWER
-        assert "R16." in s
-        assert "TEILMENGE" in s
+        assert "R16." not in s
 
 
 # =====================================================================
@@ -6780,11 +6789,14 @@ class TestW11:
         assert "if state.phase_aktiv:" in src
         assert "_w11_unterblock_kontext = \"\"" in src
 
-    def test_r16_unveraendert(self) -> None:
+    def test_r16_nicht_mehr_im_prompt(self) -> None:
+        # A1-final (2026-10-16): R16 entfernt,
+        # ersetzt durch deterministischen
+        # _check_commit_scope.
         s = pipeline.HARD_RULES_REVIEWER
-        assert "R16." in s
-        assert "2169 IM PHASEN-MODUS" in s
-        assert "TEILMENGE" in s
+        assert "R16." not in s
+        # R17 bleibt.
+        assert "R17." in s
 
 
 # =====================================================================
@@ -6814,3 +6826,57 @@ class TestW10c:
             "apps/dashboard/app.py",
             "apps/dashboard/routes_guardrails.py",
         }
+
+
+# =====================================================================
+# A1-final (2026-10-16): Deterministische Vor-Checks Reviewer
+# =====================================================================
+
+class TestA1Final:
+    def test_check_ersatz_gleich_anker_new_file_ausschluss(
+            self) -> None:
+        # typ=new_file wird ausgeschlossen.
+        patches = [
+            {"typ": "new_file", "pfad": "x.py",
+             "inhalt": "..."},
+        ]
+        fehlend = pipeline.pruefe_ersatz_gegen_messung(
+            patches, "(kein Messprotokoll)")
+        assert fehlend == []
+
+    def test_check_commit_scope_vor_reviewer(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        # Aufruf von _check_commit_scope vor dem
+        # Reviewer-Call.
+        assert "_check_commit_scope" in src
+        assert "if not _scope_ok:" in src
+
+    def test_commit_scope_fail_closed(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline._check_commit_scope)
+        assert "commit_scope_violation" in src
+        assert "return (False" in src
+
+    def test_r5_nicht_mehr_im_prompt(self) -> None:
+        s = pipeline.HARD_RULES_REVIEWER
+        import re
+        assert not re.search(r"(?<![A-Z])R5\.", s)
+
+    def test_r16_nicht_mehr_im_prompt(self) -> None:
+        s = pipeline.HARD_RULES_REVIEWER
+        import re
+        assert not re.search(r"(?<![A-Z])R16\.", s)
+
+    def test_hard_rules_reviewer_anzahl_15(self) -> None:
+        import re
+        s = pipeline.HARD_RULES_REVIEWER
+        regeln = re.findall(r"^(R\d+\w?)\.", s, re.MULTILINE)
+        assert len(regeln) == 15
+
+    def test_r12_r15_schon_im_prompt(self) -> None:
+        # Regression: R12 und R15 bleiben.
+        s = pipeline.HARD_RULES_REVIEWER
+        import re
+        assert re.search(r"(?<![A-Z])R12\.", s)
+        assert re.search(r"(?<![A-Z])R15\.", s)

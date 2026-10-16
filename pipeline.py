@@ -172,9 +172,6 @@ R4. Pruefe Pflichtabschnitte der Commit-Message
     (Ausgangslage, Aenderung, Tests, Verifikation,
     Reviewed).
 
-R5. Pruefe Patch-Struktur (PATCH-BEGINN/ENDE,
-    anker/ersatz, ersatz != anker).
-
 R6. Du lieferst entweder COMMAND: RUN ODER ein
     Verdict (GO/NO-GO/ESKALATION), niemals beides.
     (Lehre aus Probebetrieb 12.)
@@ -303,24 +300,6 @@ R15. SYMBOLISCHE PRUEFUNG BEI NEW_FILE.
      Gilt NUR fuer reine new_file-Pakete (alle
      Patches typ=new_file). Bei gemischten
      Paketen bleibt die bisherige Regel.
-R16. 2169 IM PHASEN-MODUS.
-     Der Prompt enthaelt die Zeile
-     "PHASEN-MODUS: aktiv" oder "inaktiv".
-     Bei PHASEN-MODUS aktiv (Sammel-Kontext):
-     pruefe BETROFFENE DATEIEN als TEILMENGE
-     von GIT DIFF --NAME-ONLY HEAD.
-     Grund: git diff zeigt alle Unterbloecke
-     seit Phase-Start. BETROFFENE DATEIEN
-     (durch die Werkstatt deterministisch
-     gesetzt) zeigt nur den aktuellen
-     Unterblock.
-     Wenn BETROFFENE DATEIEN nicht Teilmenge:
-     NO-GO mit konkretem Pfad.
-     Bei PHASEN-MODUS inaktiv: 2169 bleibt
-     die Gleichheit (BETROFFENE DATEIEN ==
-     GIT DIFF --NAME-ONLY HEAD).
-     R16 ergaenzt R13 (Phasen-Trennung) fuer
-     die 2169-Semantik.
 R17. UNTERBLOCK-ISOLATION IM PHASEN-MODUS.
      Wenn PHASEN-MODUS aktiv:
      Der Commit-Review prueft NUR die
@@ -1080,6 +1059,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "commit_review_diff_fehler",
     "commit_review_diff_name_only",
     "planner_command_max_runden",
+    "commit_scope_violation",
     "commit_message_diskrepanz",
     "commit_paket_gebaut",
     "review_round",
@@ -4053,6 +4033,11 @@ def pruefe_ersatz_gegen_messung(
         _re.MULTILINE,
     )
     for i, p in enumerate(patches):
+        # A1-final-5 (2026-10-16): typ=new_file
+        # ausschliessen (R5-Aequivalent).
+        # new_file hat kein anker/ersatz.
+        if p.get("typ") == "new_file":
+            continue
         ersatz = p.get("ersatz", "")
         pfad = p.get("pfad", "")
         if not ersatz:
@@ -6652,6 +6637,46 @@ def _extrahiere_aenderung_pfade(message: str) -> (
     return (pfade, "")
 
 
+def _check_commit_scope(
+    state: RunState,
+    diff_name_only: str,
+    project_dir: Path,
+    project_name: str,
+) -> tuple[bool, str]:
+    """A1-final-4 (2026-10-16): Prueft, ob
+    BETROFFENE DATEIEN eine Teilmenge von
+    GIT DIFF --NAME-ONLY HEAD sind.
+
+    Fail-closed VOR dem Reviewer-Aufruf.
+    R16-Aequivalent als deterministischer
+    Check.
+
+    Rueckgabe: (ok, grund).
+      ok=True -> grund="".
+      ok=False -> grund="scope_violation".
+    """
+    dateien = set(
+        state.commit_paket.get("dateien", []) or [])
+    diff_pfade = {
+        z.strip() for z in diff_name_only.splitlines()
+        if z.strip() and z.strip() != "(keine)"}
+    fremd = dateien - diff_pfade
+    if not fremd:
+        return (True, "")
+    audit("commit_scope_violation",
+          {"dateien": sorted(dateien),
+           "git_diff": sorted(diff_pfade),
+           "fremd": sorted(fremd)},
+          project_dir, project_name)
+    print("[FAIL] Commit-Scope verletzt: "
+          "BETROFFENE DATEIEN nicht Teilmenge "
+          "von GIT DIFF.")
+    print(f"  BETROFFENE DATEIEN: {sorted(dateien)}")
+    print(f"  GIT DIFF: {sorted(diff_pfade)}")
+    print(f"  fremd: {sorted(fremd)}")
+    return (False, "scope_violation")
+
+
 def _audit_builder_prompt(prompt: str, state: RunState,
                           project_dir: Path, project_name: str) -> None:
     """Auflage 2194: protokolliert die Struktur des Builder-Prompts.
@@ -8276,6 +8301,14 @@ def run_pipeline(project_name: str, aufgabe: str,
               {"pfade": _diff_name_only.splitlines(),
                "phase_aktiv": state.phase_aktiv},
               project_dir, project_name)
+        # A1-2 (2026-10-16): P3 — deterministischer
+        # Commit-Scope-Check VOR dem Reviewer-Aufruf
+        # (R16-Aequivalent).
+        _scope_ok, _scope_grund = _check_commit_scope(
+            state, _diff_name_only,
+            project_dir, project_name)
+        if not _scope_ok:
+            return 9
 
         # Auflage 2191-R2b + 2026-10-16: Fail-closed nur,
         # wenn mind. ein Patch mit Anker existiert
