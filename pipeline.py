@@ -1562,6 +1562,7 @@ def _phase_yaml_status_update(
     project_name: str,
     unterblock_id: str,
     status: str,
+    commit_paket: dict[str, Any] | None = None,
 ) -> None:
     """Setzt den Status eines Unterblocks in phase.yaml.
 
@@ -1573,6 +1574,12 @@ def _phase_yaml_status_update(
       - phase_erstellt_am wird NICHT angetastet:
         das dict wird durchgereicht, nur der
         Status im Ziel-Eintrag wird gepatcht.
+
+    Phasen-Persistenz-A1 (2026-10-16):
+      Optionaler commit_paket-Parameter. Wenn
+      gesetzt, wird das Paket in den Ziel-
+      Unterblock geschrieben. Format:
+        commit_paket: {dateien: [...], message: "..."}
 
     Fail-closed: jede Verletzung -> ValueError.
     """
@@ -1598,6 +1605,16 @@ def _phase_yaml_status_update(
             f"phase.yaml: unterblock_id "
             f"'{unterblock_id}' nicht gefunden")
     ziel["status"] = status
+    # Phasen-Persistenz-A1 (2026-10-16): commit_paket
+    # mitschreiben, damit der naechste Resume es
+    # laden kann (Sammel-Commit und Basis-Gate).
+    if commit_paket is not None:
+        ziel["commit_paket"] = {
+            "dateien": list(
+                commit_paket.get("dateien", [])),
+            "message": str(
+                commit_paket.get("message", ""))[:500],
+        }
     _phase_plan_speichern(project_name, daten)
 
 
@@ -2307,7 +2324,14 @@ def run_phase(
 
         if rc_unterblock == 0 and paket_neu:
             # Klasse 1: Erfolg mit Paket.
-            _phase_yaml_status_update(project_name, uid, "done")
+            # Phasen-Persistenz-A1 (2026-10-16): das
+            # letzte Paket gehoert zu diesem Unterblock.
+            _paket_fuer_yaml = (
+                state.phase_commit_pakete[-1]
+                if state.phase_commit_pakete else None)
+            _phase_yaml_status_update(
+                project_name, uid, "done",
+                commit_paket=_paket_fuer_yaml)
             audit("phase_unterblock_ende",
                   {"id": uid, "index": i,
                    "status": "done",
@@ -7373,6 +7397,21 @@ def _phase_main_pfad(
             "phase_titel", "")
         state.phase_unterbloecke = ups_plan
         state.phase_aktiv = True
+        # Phasen-Persistenz-A1 (2026-10-16): Pakete der
+        # bereits done-Unterbloecke aus phase.yaml laden,
+        # damit der Sammel-Commit sie einschliesst.
+        state.phase_commit_pakete = [
+            dict(u["commit_paket"])
+            for u in ups_plan
+            if isinstance(u, dict)
+            and u.get("status") == "done"
+            and isinstance(u.get("commit_paket"), dict)
+            and u["commit_paket"].get("dateien")
+        ]
+        if state.phase_commit_pakete:
+            print("[i] Phasen-Persistenz: "
+                  f"{len(state.phase_commit_pakete)} "
+                  "done-Paket(e) aus phase.yaml geladen.")
         state.start_monotonic = time.monotonic()
         # Resume-Fix: state_ref NICHT hier anhaengen.
         # run_phase macht das am Ende (Guard verlangt

@@ -2102,3 +2102,110 @@ class TestResumeForceCli:
         assert '_resume_force = "--resume-force" in args' in quelle
         assert "resume_force=_resume_force" in quelle
 
+# =====================================================================
+# Phasen-Persistenz (A1-A6, 2026-10-16)
+# =====================================================================
+
+class TestPhasePersistenz:
+    """Tests fuer commit_paket-Persistenz in phase.yaml.
+
+    A1: done-Unterblock schreibt commit_paket.
+    A6: Persistenz + Restore.
+    """
+
+    def test_yaml_status_update_schreibt_commit_paket(
+            self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        paket = {
+            "dateien": ["core/a.py", "tests/test_a.py"],
+            "message": "U1 fertig",
+        }
+        pipeline._phase_yaml_status_update(
+            "testprojekt", "U1", "done", commit_paket=paket)
+        # phase.yaml neu laden
+        import yaml
+        d = yaml.safe_load(
+            (tmp_path / "testprojekt.phase.yaml").read_text())
+        u1 = d["phase_unterbloecke"][0]
+        assert u1["status"] == "done"
+        assert u1["commit_paket"]["dateien"] == [
+            "core/a.py", "tests/test_a.py"]
+        assert u1["commit_paket"]["message"] == "U1 fertig"
+
+    def test_yaml_status_update_ohne_paket(
+            self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        pipeline._phase_yaml_status_update(
+            "testprojekt", "U1", "pending")
+        import yaml
+        d = yaml.safe_load(
+            (tmp_path / "testprojekt.phase.yaml").read_text())
+        u1 = d["phase_unterbloecke"][0]
+        assert u1["status"] == "pending"
+        # commit_paket bleibt wie vorher (leer).
+        assert u1.get("commit_paket", {}) == {}
+
+    def test_message_wird_gekuerzt(
+            self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        langer_text = "x" * 1000
+        pipeline._phase_yaml_status_update(
+            "testprojekt", "U1", "done",
+            commit_paket={"dateien": ["a.py"],
+                          "message": langer_text})
+        import yaml
+        d = yaml.safe_load(
+            (tmp_path / "testprojekt.phase.yaml").read_text())
+        msg = d["phase_unterbloecke"][0]["commit_paket"]["message"]
+        assert len(msg) == 500
+
+    def test_restore_mehrere_done_unterbloecke(
+            self, tmp_path: Path) -> None:
+        """Resume-Restore: mehrere done-Pakete.
+
+        Prueft die Filterlogik, die in _phase_main_pfad
+        im Resume-Zweig steht. Wir bauen sie nach.
+        """
+        ups_plan = [
+            {"id": "U1", "status": "done",
+             "commit_paket": {"dateien": ["a.py"],
+                              "message": "U1"}},
+            {"id": "U2", "status": "done",
+             "commit_paket": {"dateien": ["b.py"],
+                              "message": "U2"}},
+            {"id": "U3", "status": "pending",
+             "commit_paket": {}},
+        ]
+        pakete = [
+            dict(u["commit_paket"])
+            for u in ups_plan
+            if isinstance(u, dict)
+            and u.get("status") == "done"
+            and isinstance(u.get("commit_paket"), dict)
+            and u["commit_paket"].get("dateien")
+        ]
+        assert len(pakete) == 2
+        assert pakete[0]["dateien"] == ["a.py"]
+        assert pakete[1]["dateien"] == ["b.py"]
+
+    def test_restore_ignoriert_done_ohne_dateien(
+            self, tmp_path: Path) -> None:
+        ups_plan = [
+            {"id": "U1", "status": "done",
+             "commit_paket": {"dateien": []}},
+            {"id": "U2", "status": "done",
+             "commit_paket": {}},
+        ]
+        pakete = [
+            dict(u["commit_paket"])
+            for u in ups_plan
+            if isinstance(u, dict)
+            and u.get("status") == "done"
+            and isinstance(u.get("commit_paket"), dict)
+            and u["commit_paket"].get("dateien")
+        ]
+        assert pakete == []
+
