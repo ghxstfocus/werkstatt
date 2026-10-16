@@ -467,8 +467,11 @@ class TestPlannerKorrekturKontext:
             "roh", "hist", stufe=2,
             korrektur_kontext=self._kk(),
             phase_stand=self._ps())
-        assert "Plane NUR U2" in uc
-        assert "Beruehre" in uc
+        # B1-a (2026-10-16): Wortlaut von
+        # 'Plane NUR U<n>' auf Struktur-Anweisung
+        # umgestellt.
+        assert "Aendere NUR den INHALT von U2" in uc
+        assert "Behalte die Gesamtstruktur" in uc
 
     def test_user_content_phase_stand_none_keine_sektion(self) -> None:
         uc = pipeline._planner_user_content(
