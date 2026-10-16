@@ -3490,3 +3490,56 @@ Naechster Schritt:
 ================================================================
 ENDE W13B
 ================================================================
+
+================================================================
+W7 BASIS-GATE A/M AUS DONE-PFADEN (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 52. Lauf:
+  U1-U10 done. Basis-Gate-Check rot:
+    M apps/dashboard/app.py
+    A apps/dashboard/routes_guardrails.py
+    A tests/unit/test_dashboard_guardrails.py
+  Alle drei in done-Pfaden.
+
+W7:
+  _phasen_basis_gate_ok klassifiziert jetzt:
+    ??          -> untracked
+    A , AM      -> intent (intent-to-add)
+     M, M , MM  -> modified
+    D, R, UD... -> modified (fail-closed)
+  Alle drei Listen gegen done_pfade.
+  Akzeptiert: alle drei aus done-Pfaden.
+  Fail-closed: fremd_untracked / modifiziert
+  ohne done-Zuordnung.
+
+W7b: Fallback bei fehlender phase.yaml
+  gibt 'modifiziert' bei M-Datei.
+
+Tests: 980 -> 983 (+3).
+
+Merkposten:
+  - W8 (Commit-Paket-Prompt bereinigen,
+    Solver-Befund seit Lauf 47).
+  - W12 (Commit-Review-Prompt verkleinern,
+    seit A1-final offen).
+  - W13a (Anker-Zeilenbereich) done.
+  - W13b (Ersatz-Pruefung deaktiviert) done.
+
+Stand:
+  U1-U10 done. U11 pending.
+  U12, U13 pending.
+
+Naechster Schritt:
+  52. Lauf mit --resume-force.
+  Erwartung:
+    - U11 startet (Aktion).
+    - Basis-Gate gruen (W7).
+    - Commit-Review erfolgreich?
+  Bei Scheitern: Diagnose.
+
+================================================================
+ENDE W7
+================================================================
