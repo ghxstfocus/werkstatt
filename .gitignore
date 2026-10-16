@@ -32,3 +32,4 @@ approvals/audit/
 projects/*.memory.yaml
 projects/*.phase.yaml
 projects/.*.tmp.*
+projects/.backups/
