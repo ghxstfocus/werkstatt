@@ -3335,9 +3335,9 @@ def builder_reply_mit_command_loop(
                 if _rc_dl is not None:
                     return None, _rc_dl
         print(f"[i] Builder-Runde {builder_runde}: "
-              f"{len(cmds)} COMMAND(s) angefordert.")
+              f"{len(cmds_run)} COMMAND(s) angefordert.")
         ergebnisse = execute_commands(
-            state, cmds, quelle="builder")
+            state, cmds_run, quelle="builder")
         for key, ok in ergebnisse.items():
             if ok:
                 gescheiterte.discard(key)
@@ -3345,8 +3345,8 @@ def builder_reply_mit_command_loop(
                 gescheiterte.add(key)
         audit("builder_command_executed",
               {"runde": builder_runde,
-               "anzahl": len(cmds),
-               "ids": [c["id"] for c in cmds]},
+               "anzahl": len(cmds_run),
+               "ids": [c.get("id", "?") for c in cmds_run]},
               project_dir, project_name)
     art = klassifiziere_deadlock(state, reply.content)
     audit(f"builder_deadlock_{art}",
