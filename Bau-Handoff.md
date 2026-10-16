@@ -1144,3 +1144,66 @@ Analyse im Handoff, dann entscheiden.
 ENDE WEG-Y-PATCH
 ================================================================
 
+================================================================
+REKONSTRUKTION 2026-10-16 — phase.yaml nach Plan-Korrektur-Bug
+================================================================
+
+Kontext: 15. PB-68-Lauf (Versuch 2, 2026-10-16 14:26).
+_phase_plan_korrektur hat den Plan komplett ersetzt und
+dabei ALLE Unterbloecke auf status=pending gesetzt
+sowie deren commit_paket geloescht. U1 (vorher done)
+verlor damit:
+  - Status done (wurde no_go),
+  - commit_paket mit den drei U1-Dateien,
+  - die urspruenglichen 4 Unterpunkte (der Planner
+    hat neue formuliert).
+
+Konsequenz: der 15. Lauf startete faelschlich mit U1
+statt mit U2 und lief in eine NO-GO-Schleife.
+
+Fix (Commit 6049a0d): _phase_plan_korrektur merged
+jetzt. done-Unterbloecke bleiben unveraendert
+(status, commit_paket, unterpunkte). Struktur-Check:
+Anzahl, ids, titel muessen gleich bleiben. Bei
+Verletzung Fail-closed.
+
+Manuelle Rekonstruktion der phase.yaml (2026-10-16):
+U1 zurueckgesetzt auf:
+  status: done
+  commit_paket:
+    dateien: [core/guardrails/__init__.py,
+              core/guardrails/models.py,
+              tests/unit/test_guardrails_models.py]
+    message: "U1: Guardrail-Modell"
+  unterpunkte: die urspruenglichen 4 aus Weg-Y.
+U2-U10 bleiben pending (korrekt).
+
+Working Tree: 3 U1-Dateien (unveraendert).
+Grund: die U1-Arbeit ist gut und wurde nicht
+verworfen, nur der Plan-Zustand war falsch.
+
+Erwartung 15. Lauf (Versuch 3):
+  - Resume-Force: U2 (pending) -> keine Aenderung
+    (resume-force setzt nur no_go/failed auf pending).
+    U1 bleibt done.
+  - Basis-Gate: untracked U1-Dateien erlaubt.
+  - Phasen-Persistenz: 1 done-Paket geladen.
+  - U1 uebersprungen.
+  - U2 laeuft mit dem neuen Plan-Korrektur-Schutz.
+  - Falls U2 no_go: Plan-Korrektur merged jetzt
+    statt zu ersetzen.
+  - U3-U10.
+  - Sammel-Commit.
+
+Merkposten:
+  - Der 15.-Lauf-Befund bestaetigt: Plan-Korrektur
+    muss mergen, nicht ersetzen. Commit 6049a0d.
+  - Weg X (Marker + Diskriminator) bleibt offen.
+    Anlass praeziser: Reviewer eskaliert
+    "Auftrag unterbestimmt/veraltet" — der Planner
+    soll anreichern, nicht neu formulieren.
+
+================================================================
+ENDE REKONSTRUKTION
+================================================================
+
