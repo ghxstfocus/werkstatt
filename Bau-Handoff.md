@@ -1,6 +1,6 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-16 (nach Block P2b-2: Rollback + phase_start_head)
+Stand: 2026-10-16 (nach Block P2b-3: run_pipeline-Phasen-Modus)
 Werkstatt-HEAD: e8a01a4 (Doku: Handoff — P1-Live-Test)
 security-ai-HEAD: 220c6be (Doku-Migration)
 Letzter echter Probebetrieb: PB-67 (0d0fe2c, 2026-10-15)
@@ -311,6 +311,37 @@ Block P2b-2 (Rollback + phase_start_head):
   Rollback-Aufruf folgt P2b-3 (Exception-Pfad) und
   P2b-4 (Phase-NO-GO).
 
+Block P2b-2-A7 (Fail-closed phase_start_head):
+  ERLEDIGT 2026-10-16. Commit fd34f5d.
+  Reviewer-Nachtrag zu P2b-2 (K2 aus P2b-3).
+  run_phase prueft jetzt vor dem phase_start_head-
+  Setzen: yaml_head == "" UND state != "" ->
+  ValueError. Plus mypy-Fix (_state-Rueckgabetyp
+  in test_phase.py).
+  Tests: 570 -> 571.
+
+Block P2b-3 (run_pipeline-Phasen-Modus):
+  ERLEDIGT 2026-10-16. Commit 85e0572.
+  Reviewer: GO-mit-Auflagen (P2b-3-Zuschnitt).
+
+  Aenderungen:
+    - _AUDIT_KINDS_BEKANNT +1
+      (phase_commit_paket_leer).
+    - run_pipeline-Signatur: *, phasen_state=None
+      (keyword-only).
+    - Docstring fuer phasen_state.
+    - phasen_state-Guard beim RunState-Bau:
+      state_ref muss leer sein, sonst ValueError.
+    - Phasen-Modus vor Schritt 6:
+      state.phase_aktiv True -> Paket sammeln
+      (Audit phase_commit_paket_gesammelt) +
+      return 0.
+      Leeres Paket -> rc=21 (Audit
+      phase_commit_paket_leer).
+    - apply_commit_and_doku unveraendert.
+  Tests: 571 -> 575. test_phase.py 46 -> 50.
+  Loop-Aufruf folgt in P2b-3b.
+
   Teilschritte:
     1. RunState + 7 phase_*-Felder.
     2. _parse_phase_plan (P10-P14-Format).
@@ -395,16 +426,23 @@ WICHTIG:
         ERLEDIGT. Commit 95b2671. Siehe Abschnitt 3.
 
   Block P2b-3 (run_pipeline-Phasen-Modus):
-        OFFEN. Nach P2b-2. Kategorie 3.
+        ERLEDIGT. Commit 85e0572. Siehe Abschnitt 3.
+
+  Block P2b-3b (Loop-Aufruf in run_phase):
+        OFFEN. Naechster Block. Kategorie 3.
         Inhalt:
-          - run_pipeline: Parameter/Flag fuer
-            Phasen-Betrieb (phasen_state, Default None).
-          - Am Approval-Block (Z. ~5377): bei
-            state.phase_aktiv kein input(),
-            stattdessen Paket an
-            state.phase_commit_pakete anhaengen.
-          - apply_commit_and_doku unveraendert.
-        Auflagen: P2b-A1, P2b-A2, P2b-A8.
+          - Stub in run_phase (TODO(P2b-3))
+            ersetzen durch echten run_pipeline-
+            Aufruf mit phasen_state=state.
+          - rc-Pruefung: rc != 0 -> Fail-closed,
+            Phase bricht ab, Rollback.
+          - rc == 0 + Paket -> weiter.
+          - rc == 0 + kein Paket -> B2-Fall,
+            weiter (status=done).
+          - _phase_rollback-Aufruf bei rc != 0
+            oder Exception.
+        Eigener Reviewer-Block vor Bau (Kategorie 3).
+        Auflage: P2b-3-A5.
 
   Block P2b-4 (_phase_gesamt_review + Approval):
         OFFEN. Nach P2b-3. Kategorie 3.
@@ -645,6 +683,10 @@ Abschnitt B.
     Commit 770fbea).
   Block P2b-2 (Rollback + phase_start_head,
     Commit 95b2671).
+  Block P2b-2-A7 (Fail-closed phase_start_head,
+    Commit fd34f5d).
+  Block P2b-3 (run_pipeline-Phasen-Modus,
+    Commit 85e0572).
 
 ================================================================
 6. ZIELE
