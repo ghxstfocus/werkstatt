@@ -956,6 +956,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "llm_timeout_read",
     "git_add_intent",
     "git_add_intent_failed",
+    "phase_commit_dateien_deterministisch",
     "review_round",
     "reviewer_frage_antwort",
     "reviewer_run_solver",
@@ -6606,17 +6607,42 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
         timeout=30, check=False, env=subprocess_env(),
     ).stdout
 
+    # D1 (2026-10-16): ZIELDATEIEN explizit vorgeben.
+    # D3 ist Durchsetzung; D1 ist Beratung.
+    _ziel_pfade = [
+        p.get("pfad", "")
+        for p in state.code_patches
+        if isinstance(p, dict) and p.get("pfad")
+    ]
+    if _ziel_pfade:
+        _ziel_block = (
+            "ZIELDATEIEN DIESES AUFTRAGS "
+            "(verbindlich, uebernimm sie woertlich "
+            "in BETROFFENE DATEIEN):\n"
+            + "\n".join(
+                f"  - {pfad}" for pfad in _ziel_pfade)
+            + "\nAndere untracked Dateien aus "
+            "frueheren Auftraegen gehoeren NICHT "
+            "in die Liste.\n\n"
+        )
+    else:
+        _ziel_block = (
+            "ZIELDATEIEN DIESES AUFTRAGS: "
+            "(keine Patches - Auftrag bereits "
+            "erfuellt).\n\n"
+        )
     aufgabe = (
         "Der Code-Review ist abgeschlossen. Der Reviewer hat "
         "in der letzten Runde GO gegeben. Die Code-Patches "
         "sind bereits angewendet.\n\n"
         "Baue das Commit-Paket:\n"
         "1. Commit-Message im Format des letzten Commits.\n"
-        "2. Liste der betroffenen Dateien (basierend auf "
-        "git status/git diff).\n\n"
-        "Achte auf die Auflagen des Reviewers (unten).\n\n"
+        "2. Liste der betroffenen Dateien.\n\n"
+        + _ziel_block
+        + "Achte auf die Auflagen des Reviewers (unten).\n\n"
         f"LETZTER COMMIT (Format-Referenz):\n{letzter}\n\n"
-        f"GIT STATUS (die zu committenden Dateien):\n{git_status}\n\n"
+        f"GIT STATUS (nicht alles gehoert zu diesem Auftrag):\n"
+        f"{git_status}\n\n"
         f"GIT DIFF --STAT:\n{git_diff}\n\n"
         f"GIT DIFF (gekuerzt):\n{git_diff_voll[:4000]}\n\n"
         f"REVIEWER-VERDICT:\n"
@@ -7685,6 +7711,25 @@ def run_pipeline(project_name: str, aufgabe: str,
         print("\n[*] Schritt 5: Commit-Paket bauen und reviewen.")
 
         state.commit_paket = build_commit_paket(state)
+        # D3 (2026-10-16): Deterministische Liste
+        # im Phasen-Modus. Ueberschreibt die
+        # Builder-Halluzination (10 statt 3 Pfade).
+        # D-A4: MUSS vor phase_commit_pakete.append
+        # (Z. 7900) laufen.
+        # D-A1: auch bei B2 (leere Liste).
+        if state.phase_aktiv:
+            _d3_pfade = [
+                p.get("pfad", "")
+                for p in state.code_patches
+                if isinstance(p, dict) and p.get("pfad")
+            ]
+            state.commit_paket["dateien"] = sorted(
+                set(_d3_pfade))
+            audit("phase_commit_dateien_deterministisch",
+                  {"pfade": state.commit_paket["dateien"],
+                   "anzahl": len(_d3_pfade),
+                   "phase_id": state.phase_id},
+                  project_dir, project_name)
         if not state.commit_paket.get("message"):
             print("[!] Commit-Paket leer. Kein Commit moeglich.")
             state.commit_paket["message"] = "(leer, Builder hat nichts geliefert)"

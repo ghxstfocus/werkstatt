@@ -5233,7 +5233,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 71
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 72
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5269,7 +5269,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 71
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 72
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6067,7 +6067,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 71
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 72
 
 
 # =====================================================================
@@ -6103,3 +6103,73 @@ class TestB0c2MarkdownEnde:
                 "Zeile5.")
         # GO liegt mehr als 5 nicht-leere Zeilen zurueck.
         assert pipeline.classify_verdict(text) == "UNKLAR"
+
+
+# =====================================================================
+# D1 + D3 (2026-10-16): Commit-Paket-Scope deterministisch
+# =====================================================================
+
+class TestCommitPaketScope:
+    def test_build_commit_paket_zieldateien_aus_patches(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.build_commit_paket)
+        assert "ZIELDATEIEN DIESES AUFTRAGS" in src
+        assert "_ziel_pfade" in src
+
+    def test_build_commit_paket_zieldateien_leer(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.build_commit_paket)
+        assert "Auftrag bereits" in src
+
+    def test_build_commit_paket_prompt_scope_hinweis(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.build_commit_paket)
+        assert "Andere untracked Dateien" in src
+
+    def test_d3_ueberschreibt_halluzination(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        # Strukturtest: D3 setzt dateien aus code_patches.
+        assert "phase_commit_dateien_deterministisch" in src
+        assert 'state.commit_paket["dateien"] = sorted' in src
+
+    def test_d3_b2_fall_leere_liste(self) -> None:
+        # Strukturtest: auch bei leeren Patches.
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        i_d3 = src.find("if state.phase_aktiv:")
+        i_audit = src.find("phase_commit_dateien_deterministisch")
+        assert 0 < i_d3 < i_audit
+
+    def test_d3_nicht_im_nicht_phasen_modus(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        # Der Guard steht vor der Zuweisung.
+        i_guard = src.find("if state.phase_aktiv:")
+        i_zuweisung = src.find(
+            'state.commit_paket["dateien"] = sorted', i_guard)
+        assert 0 < i_guard < i_zuweisung
+
+    def test_d3_vor_phase_commit_pakete_append(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        i_d3 = src.find("phase_commit_dateien_deterministisch")
+        i_append = src.find(
+            "state.phase_commit_pakete.append")
+        assert 0 < i_d3 < i_append
+
+    def test_audit_kind_existiert(self) -> None:
+        assert ("phase_commit_dateien_deterministisch"
+                in pipeline._AUDIT_KINDS_BEKANNT)
+
+    def test_d3_ziel_pfade_aus_code_patches(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        # Im D3-Block werden Pfade aus code_patches gezogen.
+        i = src.find("phase_commit_dateien_deterministisch")
+        umfeld = src[i-500:i]
+        assert 'p.get("pfad", "")' in umfeld
+        assert 'state.code_patches' in umfeld
+
+    def test_katalog_anzahl_ist_72(self) -> None:
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 72
