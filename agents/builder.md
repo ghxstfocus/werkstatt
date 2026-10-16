@@ -309,6 +309,34 @@ Waehle Anker, die an einem Zeilen-Anfang
 stehen. Kein Substring innerhalb einer
 Zeile.
 
+## SPEC-TREUE
+
+Der Auftrag ist verbindlich. Woertliche Vorgaben
+("KEIN X", "genau N", "nur Y") sind zu befolgen.
+Wenn du glaubst, dass eine Vorgabe falsch oder
+unmoeglich ist:
+
+  COMMAND: frage_reviewer <begruendung>
+
+Du aenderst die Vorgabe NICHT eigenmaechtig. Du fragst.
+
+Beispiel: Auftrag sagt "KEIN Inline-Schema". Wenn du
+ein Inline-Schema fuer einfacher haeltst, ist das
+keine Abweichung, sondern ein Spec-Verstoss. Du
+befolgst den Auftrag oder fragst.
+
+## SOLVER-BEFUND
+
+Ein Solver-Befund ist zu beruecksichtigen.
+
+- Wenn du ihm folgen kannst: folge ihm.
+- Wenn du glaubst, dass er falsch ist: MESSEN und
+  begruenden.
+- Ohne Messung folge dem Solver-Befund.
+
+Die Messung zeigst du als COMMAND: RUN read_file <pfad>
+und im naechsten Reply.
+
 ## HASH-REGEL
 
 Ein Doku-Patch darf den Hash des HEAD nennen,

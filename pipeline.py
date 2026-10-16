@@ -243,6 +243,15 @@ R10. NEUE DATEIEN (P2b-Luecke-C).
      kein Grund, ein neues Kommando zu erfinden.
      Melde als Befund zurueck: 'Bitte typ:
      new_file verwenden.'
+
+R11. SACHFADEN. Der erste Sachbefund, den du
+    formulierst, ist dein Hauptbefund. Verfolge
+    ihn ueber alle Runden. Wechsle nicht auf
+    Prozess-Befunde, solange der Sachbefund
+    nicht behoben ist. Wenn du denselben
+    Sachbefund in 3 aufeinanderfolgenden Runden
+    formulierst und der Builder ihn nicht
+    behebt: ESKALATION statt weitere NO-GO.
 """
 
 
@@ -306,6 +315,22 @@ B12. NEUE DATEIEN (P2b-Luecke-C).
      gefunden) gelten NICHT fuer typ: new_file.
      Format-Details: builder.md, Abschnitt
      NEUE DATEIEN.
+
+B13. SPEC-TREUE. Der Auftrag ist verbindlich.
+    Woertliche Vorgaben ("KEIN X", "genau N",
+    "nur Y") sind zu befolgen. Wenn du glaubst,
+    dass eine Vorgabe falsch oder unmoeglich ist:
+      COMMAND: frage_reviewer <begruendung>
+    Du aenderst die Vorgabe NICHT eigenmaechtig.
+    Du fragst.
+
+B14. SOLVER-BEFUND. Ein Solver-Befund ist zu
+    beruecksichtigen. Wenn du ihm folgen kannst:
+    folge ihm. Wenn du glaubst, dass er falsch
+    ist: MESSEN und begruenden. Ohne Messung
+    folge dem Solver-Befund. Die Messung zeigst
+    du als COMMAND: RUN read_file <pfad> und
+    im naechsten Reply.
 """
 
 

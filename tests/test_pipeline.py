@@ -5554,3 +5554,68 @@ class TestFormatWhitelistBlock:
             pipeline.ask_reviewer_for_recovery)
         assert "_format_whitelist_block" in quelle_rec
 
+# =====================================================================
+# Rollen-Kalibrierung (A5, 2026-10-16)
+# =====================================================================
+
+class TestRollenKalibrierung:
+    """Tests fuer die drei Rollen-Prompt-Fixes."""
+
+    def _lade_agent(self, name: str) -> str:
+        from pathlib import Path
+        p = Path("/opt/werkstatt/agents") / f"{name}.md"
+        return p.read_text(encoding="utf-8")
+
+    def test_builder_md_spec_treue(self) -> None:
+        md = self._lade_agent("builder")
+        assert "## SPEC-TREUE" in md
+        assert "Vorgabe falsch oder" in md or "falsch oder\nunmoeglich" in md
+        assert "COMMAND: frage_reviewer" in md
+
+    def test_builder_md_solver_befund(self) -> None:
+        md = self._lade_agent("builder")
+        assert "## SOLVER-BEFUND" in md
+        assert "Ohne Messung folge" in md
+
+    def test_reviewer_md_sachfaden(self) -> None:
+        md = self._lade_agent("reviewer")
+        assert "## SACHFADEN" in md
+        assert "Hauptbefund" in md
+        # Markdown hat Zeilenumbruch zwischen den
+        # beiden Woertern, daher nur den Prefix.
+        assert "3 aufeinanderfolgenden" in md
+        assert "ESKALATION" in md
+
+    def test_hard_rules_builder_b13(self) -> None:
+        assert "B13. SPEC-TREUE." in pipeline.HARD_RULES_BUILDER
+        assert "COMMAND: frage_reviewer" in \
+            pipeline.HARD_RULES_BUILDER
+
+    def test_hard_rules_builder_b14(self) -> None:
+        assert "B14. SOLVER-BEFUND." in pipeline.HARD_RULES_BUILDER
+        assert "Ohne Messung" in pipeline.HARD_RULES_BUILDER
+
+    def test_hard_rules_reviewer_r11(self) -> None:
+        assert "R11. SACHFADEN." in pipeline.HARD_RULES_REVIEWER
+        assert "3 aufeinanderfolgenden Runden" in \
+            pipeline.HARD_RULES_REVIEWER
+
+    def test_build_system_prompt_builder(self) -> None:
+        agent = {
+            "name": "builder",
+            "body": "Body",
+        }
+        prompt = pipeline.build_system_prompt(
+            agent, {}, [], mit_anti_patterns=False)
+        assert "B13. SPEC-TREUE." in prompt
+        assert "B14. SOLVER-BEFUND." in prompt
+
+    def test_build_system_prompt_reviewer(self) -> None:
+        agent = {
+            "name": "reviewer",
+            "body": "Body",
+        }
+        prompt = pipeline.build_system_prompt(
+            agent, {}, [], mit_anti_patterns=False)
+        assert "R11. SACHFADEN." in prompt
+
