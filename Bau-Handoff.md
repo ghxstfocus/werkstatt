@@ -2404,3 +2404,70 @@ Naechster Schritt:
 ================================================================
 ENDE E + R16
 ================================================================
+
+================================================================
+DURCHBRUCH: U4 DONE (2026-10-16)
+================================================================
+
+29. PB-68-Lauf (2026-10-16, Uhrzeit?). Erster
+erfolgreicher Commit-Review seit Lauf 12.
+
+U4: status=done. Commit-Paket gesammelt
+(3 Dateien):
+  - data/migrations/0016_guardrails.sql
+  - core/guardrails/repository.py
+  - tests/unit/test_guardrails_repository.py
+
+Die Kette funktioniert:
+  - B0c-2: Verdict-Parser (Markdown + mehrzeilig).
+  - F2: git add -N.
+  - D3: BETROFFENE DATEIEN deterministisch.
+  - E: GIT DIFF --NAME-ONLY HEAD im Prompt.
+  - R16: Teilmenge-Semantik.
+  - Timeout-Fix: kein Haenger.
+
+U5 ist direkt gestartet (2 Patches) und
+gescheitert (Post-Apply-Basis-Gate rot).
+
+U5-Fehler (Reviewer-Diagnose, praezise):
+  Hauptbefund: GuardrailRepository.set_state
+  gibt None zurueck. Der Service behandelt
+  den Rueckgabewert aber als Guardrail-Objekt.
+  AttributeError zur Laufzeit.
+
+  Nebenbefunde:
+  - AuditWriter-Import: from core.audit.writer
+    import AuditWriter. Modul existiert nicht
+    oder anders benannt.
+  - 3x totes "# noqa: BLE001".
+  - Ungenutzter Import AccessChecker.
+  - Test-Fake _FakeRepo.set_state gibt Guardrail
+    zurueck (echte API: None) -> maskiert Bug.
+  - RBAC-Codes guardrail.view/manage evtl.
+    nicht vorhanden.
+
+Auftrags-Unterbestimmtheit U5:
+  Der U5-Auftrag nennt nicht:
+  - Rueckgabeverhalten von set_state.
+  - AuditWriter-Modul-Pfad.
+  - Test-Fake-Vertrag.
+
+Merkposten (kritisch):
+  1. Rollback-Bug: Fail-Pfad nach
+     Post-Apply-Korrektur-max erreicht
+     ruft _rollback_zieldateien NICHT immer.
+     Working Tree hat 5 A-Eintraege (U4+U5).
+     Manuelles Cleanup noetig.
+  2. U5-Auftrag praezisieren (wie U4).
+  3. Bilanz nach diesem Lauf (Pflicht).
+
+Naechster Schritt:
+  - Working-Tree-Cleanup (5 A-Eintraege).
+  - U5-Auftrag praezisieren.
+  - 30. Lauf mit --resume-force.
+  - Ziel: U5 done, dann U6-U10, dann
+    Sammel-Commit, Tag probebetrieb-68.
+
+================================================================
+ENDE U4 DONE
+================================================================
