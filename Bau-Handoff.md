@@ -2471,3 +2471,70 @@ Naechster Schritt:
 ================================================================
 ENDE U4 DONE
 ================================================================
+
+================================================================
+7. MANUELLER EINGRIFF: U5-NEUFFASSUNG (2026-10-16)
+================================================================
+
+Ausgangslage 29. Lauf:
+  U4 durch (Durchbruch). U5 gestartet, 2 Patches,
+  Post-Apply-Basis-Gate rot. Reviewer-Diagnose:
+  4 Auftrags-Unterbestimmtheiten:
+    (1) AuditWriter-Import falsch
+        (core.audit.writer statt
+         harness.audit.writer).
+    (2) set_state gibt None, Service behandelt
+        als Guardrail.
+    (3) RBAC-Codes guardrail.view/manage
+        existieren nicht.
+    (4) Test-Fake maskiert Bug.
+
+A0-Messungen (M-a bis M-d):
+  M-a: hoechste Migration 0016. Neue: 0017.
+  M-b: AccessChecker in core/access/checker.py.
+       Import: from core.access.checker import
+       AccessChecker, AccessDeniedError.
+  M-c: API AccessChecker.require_permission(
+       principal_name, code) -> None.
+       RBAC-Fehler = AccessDeniedError.
+  M-d: AuditWriter.log(*, agent, tool,
+       policy_result, permission_level,
+       execution_status, args=None, ...,
+       details=None) -> AuditEntry.
+       Keyword-only.
+
+Aenderung:
+  U5-Unterpunkte ersetzt (4 Eintraege):
+    1. Migration data/migrations/
+       0017_guardrail_permissions.sql
+       (Muster 0015: INSERT OR IGNORE,
+        role_permissions (role_id, permission_id)).
+    2. Service core/services/
+       guardrail_service.py (exakte Imports,
+       Fehlerklassen, Methoden-Signaturen,
+       try/except-Grenze).
+    3. Test tests/unit/
+       test_guardrail_service.py (drei Fakes,
+       5 Prueffaelle).
+    4. Hinweis (new_file-Skip).
+  P15-Ausnahme dokumentiert: Migration +
+  Service atomar (Service ohne RBAC-Codes =
+  403 fuer alle Rollen).
+
+Muster:
+  7. manueller phase.yaml-Eingriff.
+  Der Planner produziert noch keine P15/P17-
+  konformen Auftraege mit Signaturtiefe.
+  Weg-X-Prioritaet wird durch dieses Muster
+  gestuetzt.
+
+Naechster Schritt:
+  30. PB-68-Lauf mit --resume-force.
+  Beobachtung:
+    - U4 done (uebersprungen).
+    - U5 laeuft.
+    - Ziel: U5 done, U6 startet.
+
+================================================================
+ENDE U5-NEUFFASSUNG
+================================================================
