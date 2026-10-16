@@ -1379,3 +1379,32 @@ class TestPhaseMainPfadResume:
                 "testprojekt", state, 0)
         assert state.phase_aktiv is False
 
+# =====================================================================
+# P2b-Luecke-B: Solver-Befund im Builder-Prompt
+# =====================================================================
+
+class TestSolverBefundBlock:
+    def test_leerer_state_leerer_block(self, tmp_path) -> None:
+        state = _state_fuer_phase(tmp_path)
+        block = pipeline._solver_befund_block(state)
+        assert block == ""
+
+    def test_marker_text_enthaelt_praezisierung(
+            self, tmp_path) -> None:
+        """Der Marker-Text sagt: Praezisierung, kein neuer
+        Auftrag, plus Widerspruch-Anweisung."""
+        # Wir testen die Quelle statisch, weil ein echter
+        # SolverBefund-Erzeuger viel Setup braucht.
+        import inspect as ins
+        quelle = ins.getsource(pipeline._solver_befund_block)
+        assert "PRAEZISIERUNG" in quelle
+        assert "kein neuer Auftrag" in quelle
+        assert "frage_reviewer" in quelle
+
+
+class TestAuditBuilderPromptSolverFeld:
+    def test_audit_enthaelt_solver_feld(self) -> None:
+        import inspect as ins
+        quelle = ins.getsource(pipeline._audit_builder_prompt)
+        assert "solver_befund_eingesetzt" in quelle
+

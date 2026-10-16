@@ -3733,9 +3733,15 @@ def _solver_befund_block(state: RunState) -> str:
         "## SOLVER-BEFUND (Unterstuetzung)\n"
         f"{text}\n"
         "Der Solver-Agent hat diesen Befund fuer\n"
-        "dich erstellt. Pruefe die Empfehlungen\n"
-        "gegen den Auftrag und den GEMESSENER\n"
-        "INHALT. Die Umsetzung ist deine Aufgabe.\n\n"
+        "dich erstellt. Er ist eine PRAEZISIERUNG\n"
+        "des Auftrags, kein neuer Auftrag. Folge\n"
+        "ihm, wenn er mit dem Auftrag konsistent\n"
+        "ist. Pruefe die Empfehlungen gegen den\n"
+        "Auftrag und den GEMESSENER INHALT.\n"
+        "Bei Widerspruch zum Auftrag: melde\n"
+        "COMMAND: frage_reviewer widerspruch \n"
+        "solver-befund\n"
+        "Die Umsetzung ist deine Aufgabe.\n\n"
     )
 
 
@@ -5091,10 +5097,13 @@ def _audit_builder_prompt(prompt: str, state: RunState,
         else:
             gem_len = len(rest)
     redigiert, _ = redaction.redact_all(prompt, max_len=200000)
+    # P2b-Luecke-B / S9: Feld solver_befund_eingesetzt.
+    solver_drin = "SOLVER-BEFUND" in prompt
     audit("builder_prompt_gebaut",
           {"prompt_len": len(redigiert),
            "sektionen": sektionen,
-           "gemessener_inhalt_len": gem_len},
+           "gemessener_inhalt_len": gem_len,
+           "solver_befund_eingesetzt": solver_drin},
           project_dir, project_name)
 
 
