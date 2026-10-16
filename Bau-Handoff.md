@@ -3243,3 +3243,76 @@ Naechster Schritt:
 ================================================================
 ENDE W10
 ================================================================
+
+================================================================
+W11 UNTERBLOCK-ISOLATION (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 43. Lauf:
+  U8 (Route, new_file) Code-GO in Runde 1
+  (Messblock wirkt). apply. Commit-Review
+  2x NO-GO:
+    - R7 Anker-Pruefung bei new_file.
+    - "Route nicht in app.py registriert."
+
+A0-Messung:
+  U8-Auftrag: nur Route. app.py ausgelagert
+  nach U9. R16 deckt Datei-Teilmenge ab,
+  aber nicht funktionale Vollstaendigkeit.
+
+W11a (R17):
+  - HARD_RULES_REVIEWER +R17.
+  - Unterblock-Isolation im Phasen-Modus.
+  - Der Commit-Review prueft NUR den
+    aktuellen Unterblock.
+  - Keine funktionalen Vollstaendigkeits-
+    Befunde (app.py, Tests, etc.) fuer
+    ausgelagerte Folgeunterbloecke.
+  - AUSNAHME: Auftrag nennt den Pfad
+    woertlich (aufgabe_block).
+  - R17 referenziert R11 (Sachfaden) und
+    R16 (Datei-Teilmenge).
+
+W11b:
+  - Unterblock-Kontext im Commit-Review-
+    Prompt (nur Phasen-Modus):
+      UNTERBLOCK: <id> (<pos> von <total>)
+        — <titel>
+      (<done> von <total> bereits done)
+  - Fuer den Reviewer klar: er prueft
+    einen Unterblock, nicht die ganze Phase.
+
+Tests: 958 -> 967 (+9).
+
+Auflagen-Abgleich:
+  W11-A1: AUSNAHME am aufgabe_block
+    woertlich. Im Zweifel HINWEIS.
+  W11-A2: total + done im Kontext.
+  W11-A3: R17 referenziert R11.
+  W11-A4: R17 referenziert R16.
+  W11-A5: Prompt-Struktur gemessen
+    (phase_aktueller_index 0-basiert).
+  W11-A6: Merkposten Phasen-Vollstaendigkeit.
+  W11-A7: 9 Tests.
+  W11-A8: dieser Handoff.
+  W11-A9: keine neuen Audit-Kinds.
+
+Stand:
+  U1-U7 done. U8 no_go (nach U8-Aufteilung:
+  Route). U9-U13 pending.
+
+Naechster Schritt:
+  44. PB-68-Lauf mit --resume-force.
+  Erwartung:
+    - U8 Code-GO, Commit-Review Runde 1:
+      COMMIT-GO (R17 verhindert
+      app.py-Registrierungs-Befund).
+    - Paket gesammelt.
+    - U8 done.
+    - U9 (app.py-Patch) startet.
+
+================================================================
+ENDE W11
+================================================================
