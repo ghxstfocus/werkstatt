@@ -6601,8 +6601,13 @@ def _extrahiere_aenderung_pfade(message: str) -> (
     rest = message[m.end():]
     bullet_re = _re.compile(
         r"^[ \t]*[-*][ \t]+(.+)$", _re.MULTILINE)
+    # W10c (2026-10-16): nur Pfade mit Verzeichnis-
+    # Praefix (mindestens ein '/') zaehlen.
+    # Dateinamen ohne Pfad (z.B. 'app.py') sind
+    # Referenzen, keine Zieldateien.
     pfad_re = _re.compile(
-        r"[a-zA-Z0-9_./-]+\." + f"(?:{_MSG_PFAD_ENDUNGEN})")
+        r"[a-zA-Z0-9_.-]+/[a-zA-Z0-9_./-]+\."
+        + f"(?:{_MSG_PFAD_ENDUNGEN})")
     pfade: set[str] = set()
     gefunden = 0
     for zeile in rest.splitlines():

@@ -6785,3 +6785,32 @@ class TestW11:
         assert "R16." in s
         assert "2169 IM PHASEN-MODUS" in s
         assert "TEILMENGE" in s
+
+
+# =====================================================================
+# W10c (2026-10-16): Regex mit Verzeichnis-Praefix
+# =====================================================================
+
+class TestW10c:
+    def test_app_py_ohne_pfad_ignoriert(self) -> None:
+        msg = (
+            "Aenderung:\n"
+            "  - apps/dashboard/routes_guardrails.py\n"
+            "  Referenz: app.py\n"
+        )
+        pfade, fehler = pipeline._extrahiere_aenderung_pfade(msg)
+        assert fehler == ""
+        assert pfade == {"apps/dashboard/routes_guardrails.py"}
+
+    def test_app_py_mit_pfad_gezaehlt(self) -> None:
+        msg = (
+            "Aenderung:\n"
+            "  - apps/dashboard/app.py\n"
+            "  - apps/dashboard/routes_guardrails.py\n"
+        )
+        pfade, fehler = pipeline._extrahiere_aenderung_pfade(msg)
+        assert fehler == ""
+        assert pfade == {
+            "apps/dashboard/app.py",
+            "apps/dashboard/routes_guardrails.py",
+        }
