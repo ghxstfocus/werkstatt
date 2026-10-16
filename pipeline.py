@@ -6503,6 +6503,93 @@ def extract_paths_from_aufgabe(aufgabe: str,
     return ergebnis
 
 
+# W10 (2026-10-16): Section-Name fuer den
+# Aenderung-Block in der Commit-Message.
+# Synchron mit dem W8b-Prompt-Format
+# ("Aenderung:\n  - <pfad>").
+_MESSAGE_SECTION_CHANGE = "Aenderung:"
+
+# W10: Pfad-Endungen fuer den Section-Parser.
+_MSG_PFAD_ENDUNGEN = (
+    "py|sql|md|yaml|yml|json|toml|html|"
+    "css|js|cfg|ini|txt"
+)
+
+
+def _normalisiere_pfad(p: str) -> str:
+    """W10-A4: Pfad-Normalisierung fuer den Vergleich.
+
+    - fuehrendes "./" entfernen
+    - fuehrendes "/" entfernen
+    - trailing "/" entfernen
+    - Backslash -> Slash
+    """
+    p = p.replace("\\", "/").strip()
+    p = p.removeprefix("./")
+    p = p.removeprefix("/")
+    p = p.removesuffix("/")
+    return p
+
+
+def _extrahiere_aenderung_pfade(message: str) -> (
+        tuple[set[str], str]
+):
+    """W10-A2/A3: extrahiert Zieldatei-Pfade aus dem
+    Aenderung-Block der Commit-Message.
+
+    Rueckgabe: (pfade, fehler).
+      fehler == "" -> OK, pfade gefuellt.
+      fehler == "b" -> Section fehlt.
+      fehler == "a" -> Section leer (keine Bullets).
+      fehler == "c" -> Pfad-Parse-Fehler.
+
+    Regex akzeptiert "Aenderung:" am Zeilenanfang
+    (auch mit fuehrenden Whitespaces). Bullets mit
+    "-" oder "*".
+    """
+    import re as _re
+    # W10-A2: Section-Header suchen.
+    header_re = _re.compile(
+        r"^[ \t]*" + _re.escape(_MESSAGE_SECTION_CHANGE)
+        + r"[ \t]*$",
+        _re.MULTILINE)
+    m = header_re.search(message)
+    if m is None:
+        return (set(), "b")
+    # Bullets nach dem Header sammeln, bis naechste
+    # Section (Zeile ohne fuehrendes "-"/"*" UND
+    # nicht-leer UND nicht Fortsetzung).
+    rest = message[m.end():]
+    bullet_re = _re.compile(
+        r"^[ \t]*[-*][ \t]+(.+)$", _re.MULTILINE)
+    pfad_re = _re.compile(
+        r"[a-zA-Z0-9_./-]+\." + f"(?:{_MSG_PFAD_ENDUNGEN})")
+    pfade: set[str] = set()
+    gefunden = 0
+    for zeile in rest.splitlines():
+        s = zeile.strip()
+        if not s:
+            continue
+        bm = bullet_re.match(zeile)
+        if bm is None:
+            # Naechste Section (nicht-Bullet-Zeile).
+            # Stoppen.
+            if gefunden > 0:
+                break
+            # Sonst: wir sind noch im Header-Bereich,
+            # ignorieren.
+            continue
+        gefunden += 1
+        text = bm.group(1)
+        for pm in pfad_re.finditer(text):
+            pfade.add(_normalisiere_pfad(pm.group(0)))
+    if gefunden == 0:
+        return (set(), "a")
+    if not pfade:
+        return (set(), "c")
+    return (pfade, "")
+
+
 def _audit_builder_prompt(prompt: str, state: RunState,
                           project_dir: Path, project_name: str) -> None:
     """Auflage 2194: protokolliert die Struktur des Builder-Prompts.
@@ -8055,33 +8142,41 @@ def run_pipeline(project_name: str, aufgabe: str,
                    "anzahl": len(_d3_pfade),
                    "phase_id": state.phase_id},
                   project_dir, project_name)
-        # W8-2 (2026-10-16): Message-Sanity-Check.
-        # Fail-closed, wenn die Commit-Message
-        # deutlich mehr Pfade nennt als
-        # state.commit_paket["dateien"] (Builder kopiert
-        # sonst die untracked-Liste).
-        import re as _re_w8
-        _w8_msg = state.commit_paket.get("message", "")
-        _w8_re = _re_w8.compile(
-            r"[a-zA-Z0-9_./-]+\."
-            r"(?:py|sql|md|yaml|yml|json|toml|html|"
-            r"css|js|cfg|ini|txt)")
-        _w8_msg_pfade = set(_w8_re.findall(_w8_msg))
-        _w8_wahrheit = set(
-            state.commit_paket.get("dateien", []))
-        _w8_fremd = _w8_msg_pfade - _w8_wahrheit
-        if _w8_fremd and len(_w8_fremd) > len(_w8_wahrheit):
+        # W10 (2026-10-16): Message-Check praeziser.
+        # Nur der Aenderung-Block wird geprueft,
+        # nicht jede Pfad-Erwaehnung (Referenzen
+        # auf Muster/Template sind zulaessig).
+        _w10_msg = state.commit_paket.get("message", "")
+        _w10_pfade, _w10_fehler = _extrahiere_aenderung_pfade(
+            _w10_msg)
+        _w10_wahrheit = {
+            _normalisiere_pfad(d)
+            for d in state.commit_paket.get("dateien", [])}
+        if _w10_fehler:
             audit("commit_message_diskrepanz",
-                  {"message_pfade": sorted(_w8_msg_pfade),
-                   "dateien": sorted(_w8_wahrheit),
-                   "fremd": sorted(_w8_fremd)},
+                  {"fall": _w10_fehler,
+                   "message_pfade": sorted(_w10_pfade),
+                   "dateien": sorted(_w10_wahrheit)},
                   project_dir, project_name)
-            print("[FAIL] Commit-Message nennt Pfade, "
-                  "die nicht in BETROFFENE DATEIEN "
-                  "stehen.")
-            print(f"  Message: {len(_w8_msg_pfade)} Pfade")
-            print(f"  BETROFFENE DATEIEN: {len(_w8_wahrheit)}")
-            print(f"  fremd: {sorted(_w8_fremd)}")
+            print("[FAIL] Commit-Message-Section "
+                  "'Aenderung' nicht lesbar "
+                  f"(fall={_w10_fehler}).")
+            return 9
+        if _w10_pfade != _w10_wahrheit:
+            _w10_fremd = _w10_pfade - _w10_wahrheit
+            _w10_fehlend = _w10_wahrheit - _w10_pfade
+            audit("commit_message_diskrepanz",
+                  {"fall": "diff",
+                   "message_pfade": sorted(_w10_pfade),
+                   "dateien": sorted(_w10_wahrheit),
+                   "fremd": sorted(_w10_fremd),
+                   "fehlend": sorted(_w10_fehlend)},
+                  project_dir, project_name)
+            print("[FAIL] Commit-Message-Aenderung-Block "
+                  "passt nicht zu BETROFFENE DATEIEN.")
+            print(f"  Aenderung: {sorted(_w10_pfade)}")
+            print(f"  BETROFFENE DATEIEN: "
+                  f"{sorted(_w10_wahrheit)}")
             return 9
         if not state.commit_paket.get("message"):
             print("[!] Commit-Paket leer. Kein Commit moeglich.")

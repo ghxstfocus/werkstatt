@@ -6540,8 +6540,10 @@ class TestW8:
     def test_message_sanity_check_im_code(self) -> None:
         import inspect
         src = inspect.getsource(pipeline.run_pipeline)
+        # W10 (2026-10-16): W8-2 ersetzt durch
+        # Aenderung-Block-Check.
         assert "commit_message_diskrepanz" in src
-        assert "_w8_msg_pfade" in src
+        assert "_w10_pfade" in src
 
     def test_message_regex_endungen(self) -> None:
         import re
@@ -6607,3 +6609,85 @@ class TestW9a:
         src = inspect.getsource(pipeline._planner_user_content)
         # Der Planner nutzt === REVIEWER-BEFUND ===.
         assert "=== REVIEWER-BEFUND" in src
+
+
+# =====================================================================
+# W10 (2026-10-16): Message-Check praeziser
+# =====================================================================
+
+class TestW10:
+    def test_aenderung_block_extraktion(self) -> None:
+        msg = (
+            "Titel\n\n"
+            "Ausgangslage:\nText mit routes_tools.py "
+            "als Referenz.\n\n"
+            "Aenderung:\n"
+            "  - apps/dashboard/routes_guardrails.py\n\n"
+            "Tests:\n1392 gesammelt.\n"
+        )
+        pfade, fehler = pipeline._extrahiere_aenderung_pfade(msg)
+        assert fehler == ""
+        assert pfade == {"apps/dashboard/routes_guardrails.py"}
+
+    def test_referenzen_ignoriert(self) -> None:
+        msg = (
+            "Ausgangslage:\n"
+            "Muster: apps/dashboard/routes_tools.py.\n"
+            "Template: apps/dashboard/templates/guardrails.html.\n\n"
+            "Aenderung:\n"
+            "  - apps/dashboard/routes_guardrails.py\n"
+        )
+        pfade, fehler = pipeline._extrahiere_aenderung_pfade(msg)
+        assert fehler == ""
+        assert "apps/dashboard/routes_tools.py" not in pfade
+        assert ("apps/dashboard/templates/guardrails.html"
+                not in pfade)
+        assert pfade == {"apps/dashboard/routes_guardrails.py"}
+
+    def test_mehrere_aenderung_pfade(self) -> None:
+        msg = (
+            "Aenderung:\n"
+            "  - a/x.py\n"
+            "  - b/y.sql\n"
+            "  - c/z.md\n"
+        )
+        pfade, fehler = pipeline._extrahiere_aenderung_pfade(msg)
+        assert fehler == ""
+        assert pfade == {"a/x.py", "b/y.sql", "c/z.md"}
+
+    def test_kein_aenderung_block_fail_closed(self) -> None:
+        msg = "Titel\n\nAusgangslage:\nText.\n"
+        _pfade, fehler = pipeline._extrahiere_aenderung_pfade(msg)
+        assert fehler == "b"
+
+    def test_aenderung_ohne_bullets_fail_closed(self) -> None:
+        msg = (
+            "Aenderung:\n"
+            "Fliesstext ohne Bullets.\n"
+        )
+        _pfade, fehler = pipeline._extrahiere_aenderung_pfade(msg)
+        assert fehler == "a"
+
+    def test_umlaut_variante_erkannt(self) -> None:
+        # Der Check nutzt "Aenderung:" (ae).
+        # Die Umlaut-Variante "Änderung:" wird
+        # NICHT erkannt (MESSUNG: der Builder
+        # schreibt ae).
+        msg = (
+            "Änderung:\n"
+            "  - x.py\n"
+        )
+        _pfade, fehler = pipeline._extrahiere_aenderung_pfade(msg)
+        # fall b: kein "Aenderung:".
+        assert fehler == "b"
+
+    def test_pfad_normalisierung(self) -> None:
+        assert pipeline._normalisiere_pfad("./x.py") == "x.py"
+        assert pipeline._normalisiere_pfad("/x.py") == "x.py"
+        assert pipeline._normalisiere_pfad("x/") == "x"
+        assert pipeline._normalisiere_pfad(
+            "a\\b.py") == "a/b.py"
+
+    def test_audit_kind_commit_message_diskrepanz_existiert(self) -> None:
+        assert ("commit_message_diskrepanz"
+                in pipeline._AUDIT_KINDS_BEKANNT)
