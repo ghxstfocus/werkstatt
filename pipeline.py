@@ -757,6 +757,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "commit_applied",
     "commit_paket_leer",
     "commit_review",
+    "commit_review_new_file_skip",
     "phase_abgebrochen",
     "phase_budget_ende",
     "phase_commit_paket_gesammelt",
@@ -6763,9 +6764,15 @@ def run_pipeline(project_name: str, aufgabe: str,
             print("[!] Commit-Paket leer. Kein Commit moeglich.")
             state.commit_paket["message"] = "(leer, Builder hat nichts geliefert)"
 
-        # Auflage 2191-R2b: Fail-closed, wenn mess_protokoll leer ist.
-        # Phase 2 kann ohne Messung R7 nicht anwenden.
-        if not state.mess_protokoll:
+        # Auflage 2191-R2b + 2026-10-16: Fail-closed nur,
+        # wenn mind. ein Patch mit Anker existiert
+        # (typ != new_file). Reine new_file-Patches
+        # haben keinen Anker; R7 greift nicht.
+        _hat_anker_patches = any(
+            p.get("typ", "patch") != "new_file"
+            for p in (state.code_patches or [])
+            if isinstance(p, dict))
+        if _hat_anker_patches and not state.mess_protokoll:
             print("[!] mess_protokoll leer. Commit-Review kann "
                   "Anker nicht pruefen (R7). Fail closed.")
             audit("commit_review_ohne_messung",
@@ -6774,6 +6781,27 @@ def run_pipeline(project_name: str, aufgabe: str,
             return _fail_closed(
                 state, project_dir, project_name, 9,
                 "commit_review_ohne_messung")
+        # Skip-Pfad: reine new_file-Patches oder keine
+        # Patches. Kein Anker, kein R7, kein Fail.
+        if not _hat_anker_patches and not state.mess_protokoll:
+            _anzahl_new_file = sum(
+                1 for p in (state.code_patches or [])
+                if isinstance(p, dict)
+                and p.get("typ") == "new_file")
+            if _anzahl_new_file > 0:
+                print("[i] Commit-Review: reine new_file-"
+                      "Patches. Keine Anker-Pruefung noetig "
+                      "(R7 skip).")
+            else:
+                print("[i] Commit-Review: keine Patches. Skip.")
+            _runde_audit = (
+                state.review_runden[-1].get("runde", 0)
+                if state.review_runden else 0)
+            audit("commit_review_new_file_skip",
+                  {"runde": _runde_audit,
+                   "anzahl_new_file": _anzahl_new_file,
+                   "phase_id": getattr(state, "phase_id", "")},
+                  project_dir, project_name)
 
         # Auflage 2118: Commit-NO-GO-Loop, max 2 Versuche.
         max_commit_versuche = 2

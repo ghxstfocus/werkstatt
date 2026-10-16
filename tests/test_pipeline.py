@@ -5216,13 +5216,14 @@ class TestReviewRoundAudit:
         assert len(p["raw"]) == pipeline._AUDIT_RAW_MAX_LEN
 
     def test_kein_neuer_audit_kind(self) -> None:
-        # Baseline: 61 Eintraege. Stand nach
-        # --resume-force (2026-10-16) ergaenzte
-        # phase_resume_force.
-        # Vorherige Baselines: 60 (Review-Persistenz).
+        # Baseline: 62 Eintraege. Stand nach
+        # commit_review_new_file_skip (2026-10-16).
+        # Vorherige Baselines: 60 (Review-Persistenz),
+        #                      61 (--resume-force).
         assert "review_round" in pipeline._AUDIT_KINDS_BEKANNT
         assert "phase_resume_force" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 61
+        assert "commit_review_new_file_skip" in pipeline._AUDIT_KINDS_BEKANNT
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 62
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5240,4 +5241,64 @@ class TestReviewRoundAudit:
             1, "NO-GO", "normaler Text ohne Secrets")
         assert p["raw_len"] <= p["raw_len_redacted"]
         assert p["raw_len_redacted"] <= p["raw_len_original"]
+
+# =====================================================================
+# commit_review_new_file_skip (Auflage A8, 2026-10-16)
+# =====================================================================
+
+class TestCommitReviewNewFileSkip:
+    """Tests fuer den Skip-Pfad im Commit-Review.
+
+    Reine new_file-Patches haben keinen Anker; der
+    Fail-closed-Check bei leerem mess_protokoll wird
+    uebersprungen. Audit-Kind: commit_review_new_file_skip.
+    """
+
+    def test_kein_neuer_audit_kind_ist_62(self) -> None:
+        assert "commit_review_new_file_skip" in \
+            pipeline._AUDIT_KINDS_BEKANNT
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 62
+
+    def test_skip_wenn_nur_new_file(self) -> None:
+        """Reine new_file-Patches + leeres mess_protokoll
+        -> kein Fail-closed. Per String-Match im Quelltext.
+        """
+        import inspect as ins
+        quelle = ins.getsource(pipeline.run_pipeline)
+        assert "_hat_anker_patches" in quelle
+        assert "commit_review_new_file_skip" in quelle
+        assert "anzahl_new_file" in quelle
+
+    def test_fail_closed_pfad_bleibt(self) -> None:
+        """Regression: Fail-closed-Pfad fuer Anker-Patches
+        bleibt erhalten.
+        """
+        import inspect as ins
+        quelle = ins.getsource(pipeline.run_pipeline)
+        assert "_hat_anker_patches and not state.mess_protokoll" \
+            in quelle
+        assert "commit_review_ohne_messung" in quelle
+
+    def test_console_text_differenziert(self) -> None:
+        """A6: Console-Text unterscheidet 0 und n Patches."""
+        import inspect as ins
+        quelle = ins.getsource(pipeline.run_pipeline)
+        assert "reine new_file-" in quelle
+        assert "keine Patches. Skip." in quelle
+
+    def test_anzahl_new_file_berechnet(self) -> None:
+        """A7: anzahl_new_file wird VOR dem Audit berechnet."""
+        import inspect as ins
+        quelle = ins.getsource(pipeline.run_pipeline)
+        assert "_anzahl_new_file = sum(" in quelle
+
+    def test_payload_felder(self) -> None:
+        """Payload hat runde, anzahl_new_file, phase_id."""
+        import inspect as ins
+        quelle = ins.getsource(pipeline.run_pipeline)
+        assert '"runde": _runde_audit' in quelle
+        assert '"anzahl_new_file": _anzahl_new_file' in quelle
+        assert '"phase_id": getattr(state, "phase_id", "")' in quelle
+        # Redundantes Feld soll NICHT drin sein.
+        assert "anzahl_anker_patches" not in quelle
 
