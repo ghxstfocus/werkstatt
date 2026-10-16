@@ -194,3 +194,200 @@ class TestPhaseEditModus:
         sig = inspect.signature(pipeline._phase_edit_modus)
         params = list(sig.parameters.keys())
         assert params == ["phase_id", "phase_titel", "unterbloecke"]
+
+# =====================================================================
+# _phase_yaml_status_update — P2b-1
+# =====================================================================
+
+def _baue_phase_yaml(tmp_path: Path, unterbloecke: list) -> Path:
+    """Schreibt eine minimale phase.yaml nach tmp_path.
+
+    Rueckgabe: der Pfad zum projects-Verzeichnis (tmp_path),
+    damit der Test _PHASE_YAML_DIR darauf setzen kann.
+    """
+    import yaml
+    daten = {
+        "phase_aktiv": True,
+        "phase_id": "P1",
+        "phase_titel": "Testphase",
+        "phase_start_head": "",
+        "phase_erstellt_am": "2026-10-15T00:00:00+00:00",
+        "phase_unterbloecke": unterbloecke,
+    }
+    ziel = tmp_path / "testprojekt.phase.yaml"
+    ziel.write_text(
+        yaml.safe_dump(daten, sort_keys=False,
+                       allow_unicode=True, width=4096),
+        encoding="utf-8")
+    return tmp_path
+
+
+def _standard_unterbloecke() -> list:
+    return [
+        {"id": "U1", "titel": "T1", "status": "pending",
+         "commit_paket": {}, "unterpunkte": ["a"],
+         "geschaetzte_runden": 1},
+        {"id": "U2", "titel": "T2", "status": "pending",
+         "commit_paket": {}, "unterpunkte": ["b"],
+         "geschaetzte_runden": 1},
+    ]
+
+
+class TestPhaseYamlStatusUpdate:
+    def test_funktion_existiert(self) -> None:
+        assert hasattr(pipeline, "_phase_yaml_status_update")
+
+    def test_setzt_status(self, tmp_path: Path,
+                          monkeypatch) -> None:
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        pipeline._phase_yaml_status_update(
+            "testprojekt", "U1", "running")
+        daten = pipeline._phase_plan_laden("testprojekt")
+        assert daten is not None
+        assert daten["phase_unterbloecke"][0]["status"] == "running"
+        assert daten["phase_unterbloecke"][1]["status"] == "pending"
+
+    def test_unbekannter_status_valueerror(
+            self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        try:
+            pipeline._phase_yaml_status_update(
+                "testprojekt", "U1", "quatsch")
+        except ValueError:
+            return
+        raise AssertionError("ValueError erwartet")
+
+    def test_fehlende_datei_valueerror(
+            self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        try:
+            pipeline._phase_yaml_status_update(
+                "unbekannt", "U1", "running")
+        except ValueError:
+            return
+        raise AssertionError("ValueError erwartet")
+
+    def test_unbekannte_unterblock_id_valueerror(
+            self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        try:
+            pipeline._phase_yaml_status_update(
+                "testprojekt", "U99", "running")
+        except ValueError:
+            return
+        raise AssertionError("ValueError erwartet")
+
+
+# =====================================================================
+# run_phase — P2b-1
+# =====================================================================
+
+def _state_fuer_phase(tmp_path: Path) -> pipeline.RunState:
+    """Baut einen minimalen RunState fuer run_phase."""
+    return pipeline.RunState(
+        block_id="test",
+        aufgabe="test",
+        start_ts="2026-10-15T00:00:00+00:00",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="x", budget={},
+        agent_docs={}, project_dir=tmp_path,
+        project_name="testprojekt",
+        phase_id="P1", phase_titel="Testphase",
+        phase_aktiv=True,
+    )
+
+
+class TestRunPhase:
+    def test_funktion_existiert(self) -> None:
+        assert hasattr(pipeline, "run_phase")
+
+    def test_signatur(self) -> None:
+        sig = inspect.signature(pipeline.run_phase)
+        params = list(sig.parameters.keys())
+        assert params == ["project_name", "state"]
+
+    def test_loop_zwei_unterbloecke(
+            self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        state = _state_fuer_phase(tmp_path)
+        from unittest.mock import patch
+        with patch("pipeline.run_pipeline") as mock_rp:
+            rc = pipeline.run_phase("testprojekt", state)
+        assert rc == 0
+        assert not mock_rp.called, (
+            "P2b-1 darf run_pipeline nicht aufrufen")
+        assert state.phase_aktueller_index == 2
+        daten = pipeline._phase_plan_laden("testprojekt")
+        assert daten is not None
+        assert daten["phase_unterbloecke"][0]["status"] == "done"
+        assert daten["phase_unterbloecke"][1]["status"] == "done"
+
+    def test_leerer_plan_fail_closed(
+            self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, [])
+        state = _state_fuer_phase(tmp_path)
+        rc = pipeline.run_phase("testprojekt", state)
+        assert rc != 0
+
+    def test_fehlende_phase_yaml_fail_closed(
+            self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        state = _state_fuer_phase(tmp_path)
+        rc = pipeline.run_phase("unbekannt", state)
+        assert rc != 0
+
+    def test_idempotenz_alle_done(
+            self, tmp_path: Path, monkeypatch) -> None:
+        ups = _standard_unterbloecke()
+        for u in ups:
+            u["status"] = "done"
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, ups)
+        state = _state_fuer_phase(tmp_path)
+        rc = pipeline.run_phase("testprojekt", state)
+        assert rc == 0
+
+    def test_no_go_fail_closed(
+            self, tmp_path: Path, monkeypatch) -> None:
+        ups = _standard_unterbloecke()
+        ups[0]["status"] = "no_go"
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, ups)
+        state = _state_fuer_phase(tmp_path)
+        rc = pipeline.run_phase("testprojekt", state)
+        assert rc != 0
+
+    def test_audit_kinds_im_log(
+            self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        state = _state_fuer_phase(tmp_path)
+        from unittest.mock import patch
+        gesehen: list[str] = []
+
+        def fake_audit(kind, *a, **kw):
+            gesehen.append(kind)
+
+        with patch("pipeline.audit", side_effect=fake_audit):
+            rc = pipeline.run_phase("testprojekt", state)
+        assert rc == 0
+        assert "run_phase_start" in gesehen
+        assert "run_phase_ende" in gesehen
+        assert "phase_unterblock_start" in gesehen
+        assert "phase_unterblock_ende" in gesehen
+

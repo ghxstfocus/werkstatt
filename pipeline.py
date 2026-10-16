@@ -674,10 +674,16 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "commit_applied",
     "commit_paket_leer",
     "commit_review",
+    "phase_abgebrochen",
+    "phase_commit_paket_gesammelt",
+    "phase_gesamt_review",
     "phase_plan_editiert",
     "phase_plan_erstellt",
     "phase_plan_parse_failed",
     "phase_plan_verworfen",
+    "phase_rollback",
+    "phase_unterblock_ende",
+    "phase_unterblock_start",
     "pipeline_approved",
     "pipeline_ende",
     "pipeline_erfolg_ohne_commit",
@@ -691,6 +697,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "review_round",
     "reviewer_run_solver",
     "rollback_fail_closed",
+    "run_phase_ende",
+    "run_phase_start",
     "solver_befund",
     "solver_befund_verworfen",
     "solver_failed",
@@ -1454,6 +1462,164 @@ def _phase_plan_speichern(
                 tmp.unlink()
             except OSError:
                 pass
+
+
+def _phase_yaml_status_update(
+    project_name: str,
+    unterblock_id: str,
+    status: str,
+) -> None:
+    """Setzt den Status eines Unterblocks in phase.yaml.
+
+    Block P2b-1. Auflagen P2b-A5, P2b-1-A6:
+      - Liest ausschliesslich ueber _phase_plan_laden
+        (kein direkter YAML-Zugriff).
+      - status muss in STATUS_WERTE liegen.
+      - unterblock_id muss existieren.
+      - phase_erstellt_am wird NICHT angetastet:
+        das dict wird durchgereicht, nur der
+        Status im Ziel-Eintrag wird gepatcht.
+
+    Fail-closed: jede Verletzung -> ValueError.
+    """
+    STATUS_WERTE = frozenset({
+        "pending", "running", "done", "no_go", "failed",
+    })
+    if status not in STATUS_WERTE:
+        raise ValueError(
+            f"phase.yaml: status '{status}' unbekannt "
+            f"(erlaubt: {sorted(STATUS_WERTE)})")
+    daten = _phase_plan_laden(project_name)
+    if daten is None:
+        raise ValueError(
+            "phase.yaml: kein aktiver Plan")
+    unterbloecke = daten.get("phase_unterbloecke", [])
+    ziel = None
+    for u in unterbloecke:
+        if isinstance(u, dict) and u.get("id") == unterblock_id:
+            ziel = u
+            break
+    if ziel is None:
+        raise ValueError(
+            f"phase.yaml: unterblock_id "
+            f"'{unterblock_id}' nicht gefunden")
+    ziel["status"] = status
+    _phase_plan_speichern(project_name, daten)
+
+
+def run_phase(
+    project_name: str,
+    state: RunState,
+) -> int:
+    """Block P2b-1: Geruest fuer den Phasen-Loop.
+
+    Ablauf:
+      1. phase.yaml via _phase_plan_laden pruefen.
+      2. Idempotenz (P2b-1-A4):
+         - alle done   -> rc=0, bereits_fertig=True.
+         - no_go/failed-> rc=18, Fail-closed.
+      3. audit run_phase_start.
+      4. Loop ueber phase_unterbloecke:
+         - phase_aktueller_index = i (P2b-1-A5).
+         - audit phase_unterblock_start.
+         - _phase_yaml_status_update("running").
+         - STUB: kein run_pipeline-Aufruf (P2b-A9).
+           TODO(P2b-3): hier run_pipeline.
+         - _phase_yaml_status_update("done").
+         - audit phase_unterblock_ende.
+         - phase_aktueller_index = i + 1.
+      5. audit run_phase_ende.
+      6. rc=0.
+
+    KEIN Rollback in P2b-1 (folgt in P2b-2).
+    KEIN run_pipeline-Aufruf (folgt in P2b-3).
+
+    Exception-Verhalten (Q4, P2b-1-A6): Exception wird
+    NICHT abgefangen; der Aufrufer (P2b-2) faengt sie
+    fuer den Rollback.
+    """
+    daten = _phase_plan_laden(project_name)
+    if daten is None:
+        print("[FAIL] phase.yaml: kein aktiver Plan.")
+        audit("run_phase_ende",
+              {"phase_id": state.phase_id,
+               "unterbloecke": 0,
+               "rc": 18,
+               "abgebrochen": True},
+              state.project_dir, project_name)
+        return 18
+    unterbloecke = daten.get("phase_unterbloecke", [])
+    if not unterbloecke:
+        print("[FAIL] phase.yaml: keine Unterbloecke.")
+        audit("run_phase_ende",
+              {"phase_id": state.phase_id,
+               "unterbloecke": 0,
+               "rc": 18,
+               "abgebrochen": True},
+              state.project_dir, project_name)
+        return 18
+
+    # Idempotenz (P2b-1-A4).
+    status_liste = [
+        (u.get("status") if isinstance(u, dict) else None)
+        for u in unterbloecke
+    ]
+    if all(s == "done" for s in status_liste):
+        print("[i] Phase bereits abgeschlossen. Kein Loop.")
+        audit("run_phase_ende",
+              {"phase_id": state.phase_id,
+               "unterbloecke": len(unterbloecke),
+               "rc": 0,
+               "abgebrochen": False,
+               "bereits_fertig": True},
+              state.project_dir, project_name)
+        return 0
+    if any(s in ("no_go", "failed") for s in status_liste):
+        print("[FAIL] Phase enthaelt no_go/failed. Fail closed.")
+        audit("run_phase_ende",
+              {"phase_id": state.phase_id,
+               "unterbloecke": len(unterbloecke),
+               "rc": 18,
+               "abgebrochen": True,
+               "grund": "no_go_oder_failed"},
+              state.project_dir, project_name)
+        return 18
+
+    audit("run_phase_start",
+          {"phase_id": state.phase_id,
+           "unterbloecke": len(unterbloecke),
+           "start_head": state.phase_start_head},
+          state.project_dir, project_name)
+
+    for i, u in enumerate(unterbloecke):
+        uid = u["id"] if isinstance(u, dict) else "?"
+        state.phase_aktueller_index = i
+        t0 = time.monotonic()
+        audit("phase_unterblock_start",
+              {"id": uid, "index": i,
+               "phase_id": state.phase_id},
+              state.project_dir, project_name)
+        _phase_yaml_status_update(project_name, uid, "running")
+        print(f"[i] Unterblock {uid} Stub. "
+              f"run_pipeline folgt in P2b-3.")
+        # TODO(P2b-3): hier run_pipeline
+        _phase_yaml_status_update(project_name, uid, "done")
+        dauer_s = round(time.monotonic() - t0, 3)
+        audit("phase_unterblock_ende",
+              {"id": uid, "index": i,
+               "status": "done",
+               "dauer_s": dauer_s},
+              state.project_dir, project_name)
+        state.phase_aktueller_index = i + 1
+
+    audit("run_phase_ende",
+          {"phase_id": state.phase_id,
+           "unterbloecke": len(unterbloecke),
+           "rc": 0,
+           "abgebrochen": False},
+          state.project_dir, project_name)
+    return 0
+
 
 
 def _planner_user_content(
@@ -5652,9 +5818,7 @@ def _phase_main_pfad(
                       project_dir, project_name)
                 print(f"[+] Phase angelegt: "
                       f"{_phase_yaml_pfad(project_name)}")
-                print("[i] Phasen-Loop (run_phase) noch nicht "
-                      "implementiert (P2b).")
-                return 0
+                return run_phase(project_name, state)
             if wahl in {"e", "edit", "editieren"}:
                 # F5: Runde sofort verbraucht.
                 try:
