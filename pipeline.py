@@ -336,9 +336,14 @@ B2. Wenn eine Zahl nicht im MESSWERTE-Block steht:
 
 B3. Erfinden von Zahlen ist ein HR1-Verstoss.
 
-B4. Du bist kein Messender. Die Werkstatt ist der
-    Messende. Uebernimm die Werte aus dem
-    MESSWERTE-Block.
+B4. MESSWERTE UND AUFTRAGS-BEHAUPTUNGEN.
+    Zwei Klassen von Messungen:
+    (a) SYSTEMWERTE (Tests, Coverage, ruff,
+        mypy, git-Status): du bist kein
+        Messender. Uebernimm die Werte aus
+        dem MESSWERTE-Block.
+    (b) AUFTRAGS-BEHAUPTUNGEN (Datei-Existenz,
+        Import-Pfad): pruefe selbst nach B13b.
 
 B5. Du darfst COMMAND: RUN liefern, um Messungen
     anzufordern (Builder COMMAND-Loop).
@@ -392,6 +397,30 @@ B13. SPEC-TREUE. Der Auftrag ist verbindlich.
       COMMAND: frage_reviewer <begruendung>
     Du aenderst die Vorgabe NICHT eigenmaechtig.
     Du fragst.
+
+B13b. BEHAUPTUNGEN PRUEFEN (nur pruefbare).
+     Wenn der Auftrag eine der folgenden
+     Behauptungen aufstellt, pruefe sie VOR
+     dem Patch mit COMMAND: RUN read_file
+     <pfad>:
+       (a) "Datei X existiert" -> read_file X
+           muss ok=True liefern.
+       (b) "Datei X existiert nicht" (z.B.
+           "neu: X") -> read_file X muss
+           ok=False liefern.
+       (c) "Import aus a/b/c.py" -> read_file
+           a/b/c.py muss ok=True liefern.
+     Wenn die Behauptung falsch ist: KEINE
+     Ausfuehrung. Stattdessen:
+       COMMAND: frage_reviewer <Widerspruch>.
+     B13b gilt NICHT fuer:
+       - Funktions-Signaturen.
+       - Nummernkreise (die Werkstatt prueft,
+         W1b-Merkposten).
+       - Design-Entscheidungen.
+     B13b und B7 sind komplementaer: B7 prueft
+     datei-genau vor cat >; B13b prueft
+     Auftrags-Behauptungen.
 
 B14. SOLVER-BEFUND. Ein Solver-Befund ist zu
     beruecksichtigen. Wenn du ihm folgen kannst:

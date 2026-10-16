@@ -6284,3 +6284,33 @@ class TestEDiffNameOnly:
 
     def test_katalog_anzahl_ist_74(self) -> None:
         assert len(pipeline._AUDIT_KINDS_BEKANNT) == 74
+
+
+# =====================================================================
+# W2 (2026-10-16): HARD_RULES_BUILDER B4/B13b
+# =====================================================================
+
+class TestW2BuilderRules:
+    def test_b4_zwei_klassen(self) -> None:
+        s = pipeline.HARD_RULES_BUILDER
+        assert "SYSTEMWERTE" in s
+        assert "AUFTRAGS-BEHAUPTUNGEN" in s
+
+    def test_b13b_im_prompt(self) -> None:
+        assert "B13b." in pipeline.HARD_RULES_BUILDER
+        assert "BEHAUPTUNGEN PRUEFEN" in pipeline.HARD_RULES_BUILDER
+
+    def test_b13b_datei_existenz_wortlaut(self) -> None:
+        s = pipeline.HARD_RULES_BUILDER
+        assert "Datei X existiert" in s
+        assert "Datei X existiert nicht" in s
+        assert "Import aus a/b/c.py" in s
+
+    def test_b13b_frage_reviewer_format(self) -> None:
+        s = pipeline.HARD_RULES_BUILDER
+        assert "COMMAND: frage_reviewer" in s
+
+    def test_b13b_nicht_fuer_signaturen(self) -> None:
+        s = pipeline.HARD_RULES_BUILDER
+        assert "Funktions-Signaturen" in s
+        assert "Nummernkreise" in s
