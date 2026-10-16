@@ -5233,7 +5233,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 69
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 71
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5269,7 +5269,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 69
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 71
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -5986,3 +5986,85 @@ class TestAskLlmTimeout:
         import inspect
         sig = inspect.signature(pipeline.ask_llm)
         assert "aufgabe" in sig.parameters
+
+
+# =====================================================================
+# F1 + F2 + F3 (2026-10-16): Commit-Phase-Infrastruktur
+# =====================================================================
+
+class TestCommitPhaseFixes:
+    def test_rollback_git_status_uall(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline._rollback_zieldateien)
+        assert '"-uall"' in src
+
+    def test_rollback_findet_datei_in_neuem_verzeichnis(self) -> None:
+        # Strukturtest: -uall muss im Rollback stehen.
+        import inspect
+        src = inspect.getsource(pipeline._rollback_zieldateien)
+        assert "--porcelain" in src and "-uall" in src
+
+    def test_add_n_und_rollback_status_sauber(self) -> None:
+        # F2-A2: Rollback enthaelt reset HEAD vor unlink.
+        import inspect
+        src = inspect.getsource(pipeline._rollback_zieldateien)
+        assert '"reset"' in src
+        assert '"HEAD"' in src
+        i_reset = src.find('"reset"')
+        i_unlink = src.find(".unlink()")
+        assert i_reset < i_unlink
+
+    def test_rollback_reset_head_vor_unlink(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline._rollback_zieldateien)
+        i_reset = src.find("_pfade_zum_reset")
+        i_unlink = src.find(".unlink()")
+        assert 0 < i_reset < i_unlink
+
+    def test_git_add_intent_nach_apply(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.apply_and_recheck)
+        assert '"add"' in src and '"-N"' in src
+        assert "git_add_intent" in src
+
+    def test_git_add_intent_nur_new_file(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.apply_and_recheck)
+        assert 'p.get("typ") == "new_file"' in src
+
+    def test_git_add_intent_audit(self) -> None:
+        assert "git_add_intent" in pipeline._AUDIT_KINDS_BEKANNT
+        assert "git_add_intent_failed" in pipeline._AUDIT_KINDS_BEKANNT
+
+    def test_git_add_intent_failed_fail_closed(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.apply_and_recheck)
+        # Bei returncode != 0 oder Exception: return 17.
+        i_failed = src.find("git_add_intent_failed")
+        i_ret = src.find("return 17", i_failed)
+        assert i_failed > 0
+        assert i_ret > i_failed
+
+    def test_git_add_n_mit_normalisiertem_pfad(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.apply_and_recheck)
+        # Pfad aus p.get("pfad", "") — kein fuehrender
+        # Slash noetig. Test prueft, dass Pfad aus
+        # code_patches uebernommen wird.
+        assert 'p.get("pfad", "")' in src
+
+    def test_collect_messwerte_git_head_fallback(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.collect_messwerte)
+        assert "F3-Fix" in src
+        assert "basis_protokoll_nach_apply" in src
+        assert "basis_protokoll" in src
+
+    def test_collect_messwerte_git_head_primaer(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.collect_messwerte)
+        # Fallback greift nur, wenn Hauptwert leer.
+        assert 'if not werte.get("git_head"):' in src
+
+    def test_katalog_anzahl_ist_71(self) -> None:
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 71

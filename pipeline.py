@@ -954,6 +954,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "llm_timeout_connect",
     "llm_timeout_gesamt",
     "llm_timeout_read",
+    "git_add_intent",
+    "git_add_intent_failed",
     "review_round",
     "reviewer_frage_antwort",
     "reviewer_run_solver",
@@ -5658,7 +5660,7 @@ def _rollback_zieldateien(state: RunState,
         return
     try:
         res = subprocess.run(
-            ("git", "status", "--porcelain"),
+            ("git", "status", "--porcelain", "-uall"),
             cwd=str(project_dir), capture_output=True, text=True,
             timeout=30, check=False, env=subprocess_env(),
         )
@@ -5691,6 +5693,26 @@ def _rollback_zieldateien(state: RunState,
                 zurueckgesetzt.append(pfad)
             except (subprocess.TimeoutExpired, OSError):
                 pass
+    # F2-A1 (2026-10-16): vor unlink git reset HEAD,
+    # damit intent-to-add-Eintraege (git add -N)
+    # sauber aus dem Index entfernt werden. Sonst
+    # bleibt der Working Tree dirty.
+    _pfade_zum_reset = [
+        pfad for pfad in pfade_new
+        if pfad in untracked or pfad in geaendert
+    ]
+    if _pfade_zum_reset:
+        try:
+            subprocess.run(
+                ("git", "reset", "HEAD", "--",
+                 *_pfade_zum_reset),
+                cwd=str(project_dir),
+                capture_output=True, text=True,
+                timeout=30, check=False,
+                env=subprocess_env(),
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            pass  # best-effort cleanup
     for pfad in pfade_new:
         if pfad in untracked or pfad in geaendert:
             try:
@@ -5948,6 +5970,42 @@ def apply_and_recheck(state: RunState,
         print("[!] apply_code_patches fehlgeschlagen. Fail closed.")
         return 17
 
+    # F2 (2169-Fix, 2026-10-16): git add -N fuer
+    # neue Dateien. Damit erscheinen sie in
+    # git diff --name-only HEAD (Phase-2-Pruefung).
+    _neue_pfade = [
+        p.get("pfad", "")
+        for p in state.code_patches
+        if isinstance(p, dict)
+        and p.get("typ") == "new_file"
+        and p.get("pfad")
+    ]
+    if _neue_pfade:
+        try:
+            _res_add = subprocess.run(
+                ("git", "add", "-N", *_neue_pfade),
+                cwd=str(state.project_dir),
+                capture_output=True, text=True,
+                timeout=30, check=False,
+                env=subprocess_env(),
+            )
+            if _res_add.returncode == 0:
+                audit("git_add_intent",
+                      {"pfade": _neue_pfade},
+                      state.project_dir, state.project_name)
+            else:
+                audit("git_add_intent_failed",
+                      {"fehler": _res_add.stderr[:200],
+                       "pfade": _neue_pfade},
+                      state.project_dir, state.project_name)
+                return 17
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            audit("git_add_intent_failed",
+                  {"fehler": str(exc),
+                   "pfade": _neue_pfade},
+                  state.project_dir, state.project_name)
+            return 17
+
     print("[*] Basis-Gate nach Anwendung (ohne git_status).")
     # Bug-Fix 2026-10-14: Apply ist passiert.
     # mess_protokoll ist ab jetzt der Stand VOR Apply.
@@ -6181,6 +6239,28 @@ def collect_messwerte(state: RunState) -> dict[str, Any]:
                                    else "geaendert")
         elif mid == "git_head":
             werte["git_head"] = stdout.strip()
+
+    # F3-Fix (2026-10-16): git_head-Fallback.
+    # apply_and_recheck ueberspringt git_head;
+    # basis_protokoll_nach_apply enthaelt es nicht.
+    # Fallback auf basis_protokoll.
+    if not werte.get("git_head"):
+        _protokolle = [
+            state.basis_protokoll_nach_apply,
+            state.basis_protokoll,
+        ]
+        for _prot in _protokolle:
+            if not _prot:
+                continue
+            for _m in _re.finditer(
+                    r"=== (\w+) ===\nARGV: [^\n]*\nRC: \d+\n"
+                    r"STDOUT(?: \(letzte Zeile\))?:\n(.*?)STDERR:",
+                    _prot, _re.DOTALL):
+                if _m.group(1) == "git_head":
+                    werte["git_head"] = _m.group(2).strip()
+                    break
+            if werte.get("git_head"):
+                break
 
     # Verstrichene Zeit aus start_monotonic
     if state.start_monotonic > 0:
