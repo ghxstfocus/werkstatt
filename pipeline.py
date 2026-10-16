@@ -8729,7 +8729,12 @@ def _phasen_basis_gate_ok(
         return (False, "git_fehler", {})
     if not res.stdout.strip():
         return (True, "clean", {})
+    # W7 (2026-10-16): A  (intent-to-add) und M
+    # (modified) aus done-Pfaden werden akzeptiert
+    # (Sammel-Commit folgt am Phasen-Ende).
+    # D und R bleiben Fail-closed.
     modified: list[str] = []
+    intent: list[str] = []
     untracked: list[str] = []
     for zeile in res.stdout.splitlines():
         if len(zeile) < 3:
@@ -8738,18 +8743,30 @@ def _phasen_basis_gate_ok(
         pfad = zeile[3:].strip()
         if code == "??":
             untracked.append(pfad)
-        else:
+        elif code in ("A ", "AM"):
+            intent.append(pfad)
+        elif code in (" M", "M ", "MM"):
             modified.append(pfad)
-    if modified:
-        return (False, "modifiziert",
-                {"modified": modified})
-    if not untracked:
+        else:
+            # D, R, UD, etc. → fail-closed.
+            modified.append(pfad)
+    if not (modified or intent or untracked):
         return (True, "clean", {})
     try:
         plan = _phase_plan_laden(project_name)
     except ValueError:
         plan = None
     if plan is None:
+        # W7b (2026-10-16): Fallback praeziser.
+        # Wenn modified/intent vorliegt, ist der
+        # Grund 'modifiziert'; nur bei untracked
+        # 'fremd_untracked'.
+        if modified:
+            return (False, "modifiziert",
+                    {"modified": modified})
+        if intent:
+            return (False, "fremd_untracked",
+                    {"intent": intent})
         return (False, "fremd_untracked",
                 {"untracked": untracked})
     done_pfade: set[str] = set()
@@ -8772,16 +8789,29 @@ def _phasen_basis_gate_ok(
         return p.lstrip("./")
 
     done_norm = {_norm(p) for p in done_pfade}
+    # W7: Alle drei Listen gegen done_norm.
+    fremd_mod = [
+        p for p in modified
+        if _norm(p) not in done_norm
+    ]
+    if fremd_mod:
+        return (False, "modifiziert",
+                {"modified": fremd_mod,
+                 "done_pfade": sorted(done_pfade)})
     fremd = [
-        p for p in untracked
+        p for p in (untracked + intent)
         if _norm(p) not in done_norm
     ]
     if fremd:
         return (False, "fremd_untracked",
-                {"untracked": untracked, "fremd": fremd,
+                {"untracked": untracked,
+                 "intent": intent,
+                 "fremd": fremd,
                  "done_pfade": sorted(done_pfade)})
-    return (True, "phasen_untracked",
+    return (True, "phasen_clean",
             {"untracked": untracked,
+             "intent": intent,
+             "modified": modified,
              "done_ids": done_ids})
 
 

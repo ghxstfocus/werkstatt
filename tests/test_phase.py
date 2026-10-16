@@ -2297,7 +2297,7 @@ class TestPhasenBasisGate:
         ok, grund, details = pipeline._phasen_basis_gate_ok(
             "testprojekt", tmp_path)
         assert ok is True
-        assert grund == "phasen_untracked"
+        assert grund == "phasen_clean"  # W7
         assert "U1" in details.get("done_ids", [])
 
     def test_untracked_fremd_fail(
@@ -2317,8 +2317,17 @@ class TestPhasenBasisGate:
 
     def test_modified_fail(
             self, tmp_path: Path, monkeypatch) -> None:
-        """Modified Datei -> Fail-closed (auch im Phasen-Modus)."""
-        monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", tmp_path)
+        """Modified Datei ohne done-Pfad -> Fail-closed.
+
+        W7 (2026-10-16): M aus done-Pfaden wird
+        akzeptiert; M ohne done-Pfad bleibt
+        Fail-closed.
+        """
+        # YAML-Verzeichnis AUSSERHALB des Repos,
+        # damit die x.py nicht als done-Pfad gilt.
+        yaml_dir = tmp_path.parent / (tmp_path.name + "_yaml")
+        yaml_dir.mkdir(exist_ok=True)
+        monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", yaml_dir)
         import subprocess
         subprocess.run(["git", "init", "-q"],
                        cwd=str(tmp_path), check=True)
@@ -2357,7 +2366,8 @@ class TestPhasenBasisGate:
         ok, grund, details = pipeline._phasen_basis_gate_ok(
             "testprojekt", tmp_path)
         assert ok is True
-        assert grund == "phasen_untracked"
+        # W7 (2026-10-16): Grund-Name geaendert.
+        assert grund == "phasen_clean"
         done_ids = details.get("done_ids", [])
         assert "U1" in done_ids
         assert "U2" in done_ids
@@ -2546,3 +2556,28 @@ class TestPlanKorrekturSchutz:
         assert "spezifisch1" in alter_plan
         assert "spezifisch2" in alter_plan
 
+
+
+# =====================================================================
+# W7 (2026-10-16): Basis-Gate akzeptiert A/M aus done-Pfaden
+# =====================================================================
+
+class TestW7:
+    def test_intent_to_add_done_pfad_ok(self) -> None:
+        # Strukturtest: A  (intent-to-add) wird
+        # klassifiziert.
+        import inspect
+        src = inspect.getsource(pipeline._phasen_basis_gate_ok)
+        assert '"A ", "AM"' in src
+        assert "intent" in src
+
+    def test_modified_done_pfad_ok(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline._phasen_basis_gate_ok)
+        assert '" M", "M ", "MM"' in src
+
+    def test_fremd_mod_fail_closed(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline._phasen_basis_gate_ok)
+        assert "fremd_mod" in src
+        assert '"modifiziert"' in src
