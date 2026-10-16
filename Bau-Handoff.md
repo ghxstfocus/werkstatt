@@ -2699,3 +2699,86 @@ Naechster Schritt:
 ================================================================
 ENDE W2 + U6
 ================================================================
+
+================================================================
+W3+W4 PLANNER-MESSUNG + PLAN-KORREKTUR (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 32. Lauf:
+  U6 done (6 von 10). U7 gescheitert.
+  Reviewer-Diagnose: der Planner kann den
+  Reviewer-Befund nicht konkretisieren, weil
+  er keinen Messungs-Kanal hat.
+
+W3 (Planner-Messung):
+  - P19 in HARD_RULES_PLANNER_STUFE2:
+    "MESSEN VOR DEM PLAN".
+    COMMAND: RUN read_file <pfad>.
+  - _planner_lauf: lokale Schleife
+    (max_runden=3). Bei Erschoepfung:
+    fail-closed (return None).
+  - ERLAUBTE_QUELLEN + "planner".
+  - P9' auf P10-P19 erweitert.
+  - _planner_user_content + GEMESSENER INHALT.
+    state als Keyword am Ende
+    (alte Tests bleiben gruen).
+  - _messwerte_fuer_planner: roher
+    Messprotokoll-Inhalt.
+
+W4 (Plan-Korrektur):
+  - P18 + Punkt 6: gemessene Anker Pflicht.
+  - UNBEANTWORTET nur nach Messung.
+
+Tests: 912 -> 924 (+12).
+Katalog: 74 -> 75.
+
+Auflagen-Abgleich:
+  W3-A1 (Rekursion): lokale Schleife mit
+    max_runden-Dekrement per range().
+  W3-A2 (ERLAUBTE_QUELLEN): "planner" ergaenzt.
+  W3-A3 (P9'): P10-P19.
+  W3-A4 (Messwerte): state-Parameter +
+    _messwerte_fuer_planner.
+  W3-A5 (Signatur): Default max_runden=3,
+    3 Aufrufer kompatibel.
+  W3-A6 (rc): bestehender Fail-Pfad.
+  W3-A7 (Redaction): ask_llm redactet.
+  W3-A8 (Stufe1): unveraendert.
+  W3-A9 (read_file): existiert.
+  W4-A1 (P18): +Punkt 6.
+  W4-A2 (DRY): Korrektur-Prompt referenziert
+    P18/P19.
+  W3-W4-A3 (Test-Anzahl): 912 korrekt.
+  W3-W4-A4 (12 Tests): erfuellt.
+  W3-W4-A5 (Groessen-Check): ~250 Zeilen,
+    ein Block.
+  W3-W4-A6 (Katalog): 75.
+
+Merkposten:
+  - Stufe-1-Planner-Messung: offen.
+  - list_dir im Katalog: offen.
+  - Resume-Planung (W4-Langfassung):
+    Planner wird bei --resume-force noch
+    nicht gerufen. W3 wirkt bisher nur
+    im Plan-Korrektur-Pfad.
+    MESSUNG: der 33. Lauf wird zeigen, ob
+    W3 den Plan-Korrektur-Pfad wirksam
+    macht.
+
+Stand:
+  U1-U6 done. U7 no_go.
+  U8-U10 pending.
+
+Naechster Schritt:
+  33. PB-68-Lauf mit --resume-force.
+  Beobachtung:
+    - U7 startet.
+    - Planner-Messung greift (COMMAND
+      im Audit).
+    - U7 done, U8 startet.
+
+================================================================
+ENDE W3+W4
+================================================================
