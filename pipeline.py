@@ -637,7 +637,11 @@ P18. REVIEWER-BEFUND IM DETAIL. Wenn du zur
           Liste.
        3. Beantworte JEDEN Punkt im neuen Plan.
        4. Der neue Plan ist eine PRAEZISIERUNG
-          des alten, kein Ersatz.
+          des alten, kein Ersatz. Er enthaelt
+          ALLE Unterbloecke in derselben
+          Reihenfolge (U1, U2, ..., Un). Nur
+          der betroffene Unterblock-Inhalt
+          aendert sich.
        5. Wenn ein Punkt nicht beantwortet werden
           kann: UNBEANTWORTET: <punkt>.
      Der Plan-Korrektur-Schutz verwirft Plaene,
@@ -2869,9 +2873,24 @@ def _phase_stand_sektion(phase_stand: dict[str, Any]) -> str:
     zeilen.append("\n")
     if naechster:
         zeilen.append(
-            f"Der Resume beginnt bei {naechster}. "
-            f"Plane NUR {naechster}. Beruehre "
-            "abgeschlossene Unterbloecke NICHT.\n"
+            f"Der Resume beginnt bei {naechster}.\n"
+            "\n"
+            "WICHTIG: Behalte die Gesamtstruktur "
+            "bei. Der Plan behaelt ALLE "
+            "Unterbloecke in derselben "
+            "Reihenfolge (U1, U2, ..., Un).\n"
+            "\n"
+            f"Aendere NUR den INHALT von "
+            f"{naechster}.\n"
+            "\n"
+            "Alle anderen Unterbloecke bleiben "
+            "unveraendert (dieselben ids, "
+            "dieselben Titel, dieselben "
+            "Unterpunkte).\n"
+            "\n"
+            "Formuliere den neuen Plan mit "
+            "ALLEN Unterbloecken, nicht nur "
+            f"mit {naechster}.\n"
         )
     else:
         zeilen.append(

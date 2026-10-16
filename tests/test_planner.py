@@ -582,3 +582,65 @@ class TestPlannerUnbeantwortet:
         src = inspect.getsource(pipeline._phase_plan_korrektur)
         assert "phase_plan_unbeantwortet" in src
         assert "_plan_unbeantwortet_punkte" in src
+
+
+# =====================================================================
+# B1 (2026-10-16): Planner-Struktur-Verstaendnis
+# =====================================================================
+
+class TestPlannerStruktur:
+    def _ps(self) -> dict:
+        return {
+            "phase_id": "18",
+            "unterbloecke": [
+                {"id": "U1", "status": "done",
+                 "paket_groesse": 3, "letzter_befund": ""},
+                {"id": "U2", "status": "done",
+                 "paket_groesse": 2, "letzter_befund": ""},
+                {"id": "U3", "status": "done",
+                 "paket_groesse": 4, "letzter_befund": ""},
+                {"id": "U4", "status": "no_go",
+                 "paket_groesse": 0,
+                 "letzter_befund": "NO-GO: Sig falsch"},
+                {"id": "U5", "status": "pending",
+                 "paket_groesse": 0, "letzter_befund": ""},
+            ],
+            "naechster": "U4",
+        }
+
+    def test_phase_stand_sektion_struktur_hinweis(self) -> None:
+        s = pipeline._phase_stand_sektion(self._ps())
+        assert "Behalte die Gesamtstruktur" in s
+
+    def test_phase_stand_sektion_nur_inhalt_aendern(self) -> None:
+        s = pipeline._phase_stand_sektion(self._ps())
+        assert "Aendere NUR den INHALT" in s
+
+    def test_phase_stand_sektion_alle_unterbloecke(self) -> None:
+        s = pipeline._phase_stand_sektion(self._ps())
+        assert "Formuliere den neuen Plan mit" in s
+        assert "ALLEN Unterbloecken" in s
+
+    def test_phase_stand_sektion_generisch(self) -> None:
+        # B1-A1: keine spezifische id-Aufzaehlung.
+        s = pipeline._phase_stand_sektion(self._ps())
+        assert "U1-U3" not in s
+        assert "U5-U10" not in s
+
+    def test_phase_stand_sektion_fallback_unveraendert(self) -> None:
+        # B1-A3: Fallback-Text bei allen done unveraendert.
+        ps = self._ps()
+        for u in ps["unterbloecke"]:
+            u["status"] = "done"
+        ps["naechster"] = None
+        s = pipeline._phase_stand_sektion(ps)
+        assert "Alle Unterbloecke sind abgeschlossen" in s
+
+    def test_p18_struktur_reihenfolge(self) -> None:
+        # B1-b: P18 Schritt 4 nennt "ALLE Unterbloecke
+        # in derselben Reihenfolge".
+        prompt = pipeline.HARD_RULES_PLANNER_STUFE2
+        assert "ALLE Unterbloecke in derselben" in prompt
+        assert "Reihenfolge" in prompt
+        # Schutz-Hinweis aus Block 1 unveraendert (B1-A6).
+        assert "Plan-Korrektur-Schutz" in prompt
