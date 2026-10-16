@@ -431,7 +431,7 @@ class TestPhaseRollback:
         params = list(sig.parameters.keys())
         assert params == ["project_name", "state", "grund"]
 
-    def _state(self, tmp_path: Path, head: str) -> object:
+    def _state(self, tmp_path: Path, head: str) -> pipeline.RunState:
         s = _state_fuer_phase(tmp_path)
         s.phase_start_head = head
         return s
@@ -580,6 +580,28 @@ class TestRunPhaseStartHead:
         assert rc == 0
         # YAML-Wert hat gewonnen, nicht der git-Aufruf.
         assert state.phase_start_head == "d" * 40
+
+    def test_inkonsistenz_fail_closed(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """P2b-2-A7 / K2: yaml_head leer, state != ''."""
+        from unittest.mock import patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        ups = _standard_unterbloecke()
+        _baue_phase_yaml(tmp_path, ups)
+        # YAML hat phase_start_head == "".
+        state = _state_fuer_phase(tmp_path)
+        state.phase_start_head = "e" * 40
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="f" * 40), \
+             patch("pipeline.audit"):
+            try:
+                pipeline.run_phase("testprojekt", state)
+            except ValueError as exc:
+                assert "inkonsistent" in str(exc)
+                return
+        raise AssertionError(
+            "ValueError mit 'inkonsistent' erwartet")
 
 
 # =====================================================================

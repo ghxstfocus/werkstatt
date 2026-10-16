@@ -1727,6 +1727,13 @@ def run_phase(
     # YAML gewinnt, wenn bereits gesetzt (Resume / Plan-
     # Aenderung RR-K3). Sonst neu setzen + speichern.
     yaml_head = str(daten.get("phase_start_head", "") or "")
+    # P2b-2-A7 / K2: Inkonsistenz-Fall fail-closed.
+    # yaml_head leer, aber state != "" -> Programmier-
+    # fehler im Aufrufer oder externer Eingriff.
+    if not yaml_head and state.phase_start_head:
+        raise ValueError(
+            "phase_start_head: state != '', YAML leer "
+            "— inkonsistent")
     if yaml_head:
         state.phase_start_head = yaml_head
         audit("phase_start_head_gesetzt",
