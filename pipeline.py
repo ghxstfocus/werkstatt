@@ -321,6 +321,45 @@ R16. 2169 IM PHASEN-MODUS.
      GIT DIFF --NAME-ONLY HEAD).
      R16 ergaenzt R13 (Phasen-Trennung) fuer
      die 2169-Semantik.
+R17. UNTERBLOCK-ISOLATION IM PHASEN-MODUS.
+     Wenn PHASEN-MODUS aktiv:
+     Der Commit-Review prueft NUR die
+     Aenderungen des aktuellen Unterblocks.
+     Er bewertet NICHT, ob der Unterblock
+     fuer sich funktional vollstaendig ist.
+     Konkret:
+       - Ein neuer Route-File ohne app.py-
+         Registrierung ist KEIN Commit-Review-
+         Befund, wenn die Registrierung in
+         einem spaeteren Unterblock folgt.
+       - Ein Service ohne Test ist KEIN
+         Commit-Review-Befund, wenn der Test
+         in einem spaeteren Unterblock folgt.
+       - Ein Template ohne Route ist KEIN
+         Commit-Review-Befund (analog).
+     AUSNAHME: Wenn der aktuelle Auftrag
+     (aufgabe_block) den Pfad oder die
+     Funktionalitaet WOERTLICH nennt, muss
+     der Unterblock sie liefern. Sonst nicht.
+     Der Reviewer prueft den Auftragstext
+     woertlich (Pfad-Vorkommen), nicht
+     semantisch. Im Zweifel: HINWEIS ohne
+     Verdict, KEIN NO-GO.
+     R17 ergaenzt R16 (Datei-Teilmenge) um
+     die funktionale Isolation. R16 prueft
+     die Datei-Ebene (Mengenlehre). R17
+     prueft die Funktions-Ebene (semantische
+     Vollstaendigkeit). Ein Unterblock, dessen
+     Dateien alle in git diff sind, aber
+     dessen Funktion in einem spaeteren
+     Unterblock folgt, ist kein NO-GO.
+     R17 ergaenzt R11: definiert, was im
+     Phasen-Modus als Sachbefund ZAEHLT.
+     Wenn du einen Sachbefund formulierst,
+     der R17 widerspricht (z.B. 'Route nicht
+     registriert' bei ausgelagerten
+     Folgeunterbloecken), ist das KEIN
+     Sachbefund im Sinne von R11.
 """
 
 
@@ -8284,13 +8323,42 @@ def run_pipeline(project_name: str, aufgabe: str,
             auflagen_text = ("; ".join(auflagen_letzte)
                              if auflagen_letzte else "keine")
 
+            # W11b (2026-10-16): Unterblock-Kontext
+            # fuer den Commit-Review (nur Phasen-Modus).
+            _w11_unterblock_kontext = ""
+            if state.phase_aktiv:
+                _w11_idx = state.phase_aktueller_index
+                _w11_ups = state.phase_unterbloecke
+                if 0 <= _w11_idx < len(_w11_ups):
+                    _w11_u = _w11_ups[_w11_idx]
+                    _w11_uid = (
+                        _w11_u.get("id", "?")
+                        if isinstance(_w11_u, dict) else "?")
+                    _w11_titel = (
+                        _w11_u.get("titel", "")
+                        if isinstance(_w11_u, dict) else "")
+                    _w11_total = len(_w11_ups)
+                    _w11_done = sum(
+                        1 for _u in _w11_ups
+                        if isinstance(_u, dict)
+                        and _u.get("status") == "done")
+                    _w11_unterblock_kontext = (
+                        f"UNTERBLOCK: {_w11_uid} "
+                        f"({_w11_idx + 1} von {_w11_total}) "
+                        f"— {_w11_titel}\n"
+                        f"({_w11_done} von {_w11_total} "
+                        f"bereits done)\n"
+                    )
+
             # Auflage 2180 + BO: MESSWERTE-Block statt
             # veralteter DOKU-PATCHES-Zeilen.
             commit_input = (
                 # Phasen-Header (2026-10-16).
                 _PHASE_HEADER_COMMIT_REVIEW
                 + f"PHASEN-MODUS: "
-                f"{'aktiv' if state.phase_aktiv else 'inaktiv'}\n\n"
+                f"{'aktiv' if state.phase_aktiv else 'inaktiv'}\n"
+                + _w11_unterblock_kontext
+                + "\n"
                 + f"CODE-GO ist erteilt. Pruefe das Commit-Paket.\n\n"
                 # W9a (2026-10-16): Message in
                 # === COMMIT-MESSAGE ===-Marker.

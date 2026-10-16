@@ -6727,3 +6727,61 @@ class TestW10b:
         # (nicht nur Zieldateien).
         assert "apps/dashboard/routes_guardrails.py" in pfade
         assert "apps/dashboard/routes_tools.py" in pfade
+
+
+# =====================================================================
+# W11 (2026-10-16): Unterblock-Isolation im Commit-Review
+# =====================================================================
+
+class TestW11:
+    def test_r17_im_prompt(self) -> None:
+        s = pipeline.HARD_RULES_REVIEWER
+        assert "R17." in s
+        assert "UNTERBLOCK-ISOLATION IM PHASEN-MODUS" in s
+
+    def test_r17_nur_phasen_modus(self) -> None:
+        s = pipeline.HARD_RULES_REVIEWER
+        # R17 gilt nur bei PHASEN-MODUS aktiv.
+        assert "Wenn PHASEN-MODUS aktiv" in s
+
+    def test_r17_new_file_ohne_registrierung_ok(self) -> None:
+        s = pipeline.HARD_RULES_REVIEWER
+        assert "KEIN Commit-Review-" in s
+        assert "spaeteren Unterblock folgt" in s
+
+    def test_r17_verweist_auf_r11_r16(self) -> None:
+        s = pipeline.HARD_RULES_REVIEWER
+        assert "R17 ergaenzt R16" in s
+        assert "R17 ergaenzt R11" in s
+
+    def test_r17_ausnahme_auftrag_nennt_pfad(self) -> None:
+        s = pipeline.HARD_RULES_REVIEWER
+        assert "AUSNAHME" in s
+        assert "aufgabe_block" in s
+        assert "WOERTLICH" in s
+
+    def test_r17_hinweis_statt_no_go(self) -> None:
+        s = pipeline.HARD_RULES_REVIEWER
+        assert "HINWEIS ohne" in s
+        assert "KEIN NO-GO" in s
+
+    def test_commit_review_prompt_unterblock_kontext(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        assert "_w11_unterblock_kontext" in src
+        assert "UNTERBLOCK:" in src
+        assert "von {_w11_total}" in src
+
+    def test_commit_review_prompt_unterblock_nur_phasen_modus(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        # Der Kontext wird nur bei state.phase_aktiv
+        # gefuellt.
+        assert "if state.phase_aktiv:" in src
+        assert "_w11_unterblock_kontext = \"\"" in src
+
+    def test_r16_unveraendert(self) -> None:
+        s = pipeline.HARD_RULES_REVIEWER
+        assert "R16." in s
+        assert "2169 IM PHASEN-MODUS" in s
+        assert "TEILMENGE" in s
