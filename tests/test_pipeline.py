@@ -5289,7 +5289,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 75
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 77
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5325,7 +5325,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 75
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 77
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6123,7 +6123,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 75
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 77
 
 
 # =====================================================================
@@ -6228,7 +6228,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 75
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 77
 
 
 # =====================================================================
@@ -6283,7 +6283,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 75
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 77
 
 
 # =====================================================================
@@ -6517,3 +6517,57 @@ class TestW6b:
             # Wenn info: start = 1.
             if info is not None:
                 assert info[0] == 1
+
+
+# =====================================================================
+# W8 (2026-10-16): Commit-Paket-Prompt + Message-Check
+# =====================================================================
+
+class TestW8:
+    def test_git_status_gefiltert_im_code(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.build_commit_paket)
+        assert "_ziel_pfade" in src
+        assert "_gs_zeilen" in src or "gefiltert" in src
+
+    def test_git_status_filter_logik(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.build_commit_paket)
+        # Filter prueft Zeile[3:] gegen _ziel_pfade.
+        assert "_gs_pfad" in src
+        assert "_gs[3:]" in src
+
+    def test_message_sanity_check_im_code(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        assert "commit_message_diskrepanz" in src
+        assert "_w8_msg_pfade" in src
+
+    def test_message_regex_endungen(self) -> None:
+        import re
+        # Die Regex aus W8-2.
+        regex = re.compile(
+            r"[a-zA-Z0-9_./-]+\."
+            r"(?:py|sql|md|yaml|yml|json|toml|html|"
+            r"css|js|cfg|ini|txt)")
+        # Positiv:
+        assert regex.findall("core/x.py") == ["core/x.py"]
+        assert regex.findall("data/migrations/0017_x.sql") == [
+            "data/migrations/0017_x.sql"]
+        # Negativ:
+        assert regex.findall("v1.2") == []
+        assert regex.findall("3.x") == []
+
+    def test_commit_paket_gebaut_audit_kind(self) -> None:
+        assert ("commit_paket_gebaut"
+                in pipeline._AUDIT_KINDS_BEKANNT)
+
+    def test_commit_message_diskrepanz_audit_kind(self) -> None:
+        assert ("commit_message_diskrepanz"
+                in pipeline._AUDIT_KINDS_BEKANNT)
+
+    def test_r16_unveraendert(self) -> None:
+        # R16 bleibt Teilmengen-Check.
+        s = pipeline.HARD_RULES_REVIEWER
+        assert "R16." in s
+        assert "TEILMENGE" in s

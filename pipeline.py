@@ -1041,6 +1041,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "commit_review_diff_fehler",
     "commit_review_diff_name_only",
     "planner_command_max_runden",
+    "commit_message_diskrepanz",
+    "commit_paket_gebaut",
     "review_round",
     "reviewer_frage_antwort",
     "reviewer_run_solver",
@@ -6902,6 +6904,27 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
             "(keine Patches - Auftrag bereits "
             "erfuellt).\n\n"
         )
+    # W8-1 (2026-10-16): GIT STATUS auf die
+    # Zieldateien filtern. Verhindert, dass der
+    # Builder die volle untracked-Liste in die
+    # Commit-Message kopiert.
+    if _ziel_pfade:
+        _gs_zeilen: list[str] = []
+        for _gs in git_status.splitlines():
+            if len(_gs) <= 3:
+                continue
+            _gs_pfad = _gs[3:].strip()
+            if not _gs_pfad:
+                continue
+            if any(
+                    _zp == _gs_pfad
+                    or _gs_pfad.startswith(_zp)
+                    or _zp.startswith(_gs_pfad)
+                    for _zp in _ziel_pfade):
+                _gs_zeilen.append(_gs)
+        git_status = ("\n".join(_gs_zeilen) + "\n"
+                      if _gs_zeilen
+                      else "(keine Zieldateien)\n")
     aufgabe = (
         "Der Code-Review ist abgeschlossen. Der Reviewer hat "
         "in der letzten Runde GO gegeben. Die Code-Patches "
@@ -6976,6 +6999,18 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
 
     paket = parse_commit_paket(reply.content)
     paket["roh"] = reply.content
+    # W8-3 (2026-10-16): Reply-Kopf/Fuss ins Audit,
+    # damit die Commit-Message nachvollziehbar ist.
+    _w8_redig, _ = redaction.redact_all(
+        reply.content, max_len=200000)
+    audit("commit_paket_gebaut",
+          {"reply_len": len(_w8_redig),
+           "reply_kopf": _w8_redig[:500],
+           "reply_fuss": (_w8_redig[-500:]
+                          if len(_w8_redig) > 500 else ""),
+           "message_len": len(paket.get("message", "")),
+           "anzahl_dateien": len(paket.get("dateien", []))},
+          state.project_dir, state.project_name)
     # Auflage 2123: Audit, wenn das Paket leer geparst wurde.
     # Auflage 2134: Roh-Text entfernt (Debug-Ziel erreicht).
     if not paket.get("message") and not paket.get("dateien") \
@@ -8001,6 +8036,34 @@ def run_pipeline(project_name: str, aufgabe: str,
                    "anzahl": len(_d3_pfade),
                    "phase_id": state.phase_id},
                   project_dir, project_name)
+        # W8-2 (2026-10-16): Message-Sanity-Check.
+        # Fail-closed, wenn die Commit-Message
+        # deutlich mehr Pfade nennt als
+        # state.commit_paket["dateien"] (Builder kopiert
+        # sonst die untracked-Liste).
+        import re as _re_w8
+        _w8_msg = state.commit_paket.get("message", "")
+        _w8_re = _re_w8.compile(
+            r"[a-zA-Z0-9_./-]+\."
+            r"(?:py|sql|md|yaml|yml|json|toml|html|"
+            r"css|js|cfg|ini|txt)")
+        _w8_msg_pfade = set(_w8_re.findall(_w8_msg))
+        _w8_wahrheit = set(
+            state.commit_paket.get("dateien", []))
+        _w8_fremd = _w8_msg_pfade - _w8_wahrheit
+        if _w8_fremd and len(_w8_fremd) > len(_w8_wahrheit):
+            audit("commit_message_diskrepanz",
+                  {"message_pfade": sorted(_w8_msg_pfade),
+                   "dateien": sorted(_w8_wahrheit),
+                   "fremd": sorted(_w8_fremd)},
+                  project_dir, project_name)
+            print("[FAIL] Commit-Message nennt Pfade, "
+                  "die nicht in BETROFFENE DATEIEN "
+                  "stehen.")
+            print(f"  Message: {len(_w8_msg_pfade)} Pfade")
+            print(f"  BETROFFENE DATEIEN: {len(_w8_wahrheit)}")
+            print(f"  fremd: {sorted(_w8_fremd)}")
+            return 9
         if not state.commit_paket.get("message"):
             print("[!] Commit-Paket leer. Kein Commit moeglich.")
             state.commit_paket["message"] = "(leer, Builder hat nichts geliefert)"
