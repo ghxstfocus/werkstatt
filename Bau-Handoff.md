@@ -3386,3 +3386,57 @@ Naechster Schritt:
 ================================================================
 ENDE A1-FINAL
 ================================================================
+
+================================================================
+W13A ANKER-ZEILENBEREICH MIT \n-LITERAL (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 48. Lauf:
+  U9 (app.py-Patch) scheiterte am
+  Anker-Messwert. Anker-Text in phase.yaml
+  als '    from ...\\n    register_...\\n'
+  (YAML-Single-Quote, literal \n).
+
+  _anker_zeilenbereich (W6b) erkannte
+  den Anker nicht -> None -> keine
+  Auto-Messung.
+
+W13a:
+  Wenn anker_text "\\n" enthaelt und keinen
+  echten Zeilenumbruch: literal in echte
+  Zeilenumbrueche wandeln.
+
+Direkter Test (U9-Auftrag):
+  Anker-Info = (252, 267).
+
+Tests: 976 -> 978 (+2).
+
+Merkposten (Solver-Befund aus Lauf 47/48):
+  pruefe_ersatz_gegen_messung prueft ERSATZ-
+  Imports (nicht R5 "ersatz != anker"). Der
+  ERSATZ enthaelt 'from apps.dashboard.
+  routes_guardrails import ...' — das Modul
+  existiert noch nicht -> Fehlalarm.
+  Eigener Werkstatt-Block (W13b).
+  Der Solver hat das in Lauf 47 und 48
+  identisch benannt.
+
+Stand:
+  U1-U8 done. U9 no_go (nach 48).
+  U10-U13 pending.
+
+Naechster Schritt:
+  49. PB-68-Lauf mit --resume-force.
+  Erwartung:
+    - U9 Auto-Messung app.py:252-267.
+    - Builder findet Anker count==1.
+    - Patch app.py.
+    - Commit-Review COMMIT-GO.
+    - U9 done.
+    - U10 (Test) startet.
+
+================================================================
+ENDE W13A
+================================================================
