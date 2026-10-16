@@ -669,6 +669,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "builder_wirkungsloser_patch",
     "code_patches_apply",
     "code_patches_leer",
+    "code_patches_new_file",
     "command_executed",
     "command_rejected",
     "commit_applied",
@@ -4407,11 +4408,14 @@ def apply_code_patches(state: RunState,
     # legitim, solange Anker unterschiedlich.
     gesehen: set[tuple[Path, str]] = set()
     original: dict[Path, str] = {}
-    plan: list[tuple[Path, str, str]] = []
+    plan: list[dict[str, Any]] = []
+    # P2b-Luecke-A / A3: Konflikt-Pruefung VOR Anwenden.
+    # Sammle alle Pfade, pruefe new_file-Konflikte.
+    neue_pfade: set[str] = set()
+    patch_pfade: set[str] = set()
     for p in patches:
+        typ = p.get("typ", "patch")
         pfad = p.get("pfad", "")
-        anker = p.get("anker", "")
-        ersatz = p.get("ersatz", "")
         if not pfad:
             print("[!] apply_code_patches: Patch ohne pfad.")
             return False
@@ -4419,7 +4423,31 @@ def apply_code_patches(state: RunState,
             print(f"[!] apply_code_patches: Pfad nicht in "
                   f"Whitelist: {pfad}")
             return False
+        if typ == "new_file":
+            if pfad in neue_pfade or pfad in patch_pfade:
+                print(f"[!] apply_code_patches: Konflikt "
+                      f"(new_file) auf {pfad}.")
+                return False
+            neue_pfade.add(pfad)
+        else:
+            if pfad in neue_pfade:
+                print(f"[!] apply_code_patches: Konflikt "
+                      f"(patch nach new_file) auf {pfad}.")
+                return False
+            patch_pfade.add(pfad)
         ziel = state.project_dir / pfad
+        # P2b-Luecke-A: Weiche typ.
+        if typ == "new_file":
+            if ziel.exists():
+                print(f"[!] apply_code_patches: new_file "
+                      f"auf existierende Datei: {pfad}")
+                return False
+            plan.append({"typ": "new_file",
+                         "ziel": ziel,
+                         "inhalt": p.get("inhalt", "")})
+            continue
+        anker = p.get("anker", "")
+        ersatz = p.get("ersatz", "")
         if not ziel.exists():
             print(f"[!] apply_code_patches: Datei fehlt: {pfad}")
             return False
@@ -4470,7 +4498,10 @@ def apply_code_patches(state: RunState,
                   f"steht nicht am Zeilen-Anfang. Fail closed.")
             return False
         original[ziel] = inhalt
-        plan.append((ziel, anker, ersatz))
+        plan.append({"typ": "patch",
+                     "ziel": ziel,
+                     "anker": anker,
+                     "ersatz": ersatz})
 
     if dry_run:
         print(f"[i] apply_code_patches (dry_run): "
@@ -4483,8 +4514,29 @@ def apply_code_patches(state: RunState,
     # nicht den Urzustand. Sonst ueberschreibt der
     # zweite Patch den ersten.
     geschrieben: list[Path] = []
+    # P2b-Luecke-A: neue Dateien separat merken, damit
+    # der Rollback sie loeschen kann (nicht zurueckschreiben).
+    neue_dateien: list[Path] = []
     try:
-        for ziel, anker, ersatz in plan:
+        for eintrag in plan:
+            ziel = eintrag["ziel"]
+            if eintrag["typ"] == "new_file":
+                ziel.parent.mkdir(parents=True, exist_ok=True)
+                ziel.write_text(eintrag["inhalt"],
+                                encoding="utf-8")
+                neue_dateien.append(ziel)
+                print(f"[+] Neue Datei: "
+                      f"{ziel.relative_to(state.project_dir)}")
+                audit("code_patches_new_file",
+                      {"pfad": str(ziel.relative_to(
+                          state.project_dir)),
+                       "zeilen":
+                           eintrag["inhalt"].count("\n") + 1},
+                      state.project_dir, state.project_name)
+                continue
+            # patch (alt).
+            anker = eintrag["anker"]
+            ersatz = eintrag["ersatz"]
             aktuell = ziel.read_text(encoding="utf-8")
             neu = aktuell.replace(anker, ersatz, 1)
             ziel.write_text(neu, encoding="utf-8")
@@ -4493,7 +4545,13 @@ def apply_code_patches(state: RunState,
                   f"{ziel.relative_to(state.project_dir)}")
     except OSError as exc:
         print(f"[!] apply_code_patches: Schreibfehler: {exc}")
-        # Rollback
+        # Rollback: neue Dateien loeschen, alte zurueck.
+        for ziel in neue_dateien:
+            try:
+                ziel.unlink()
+            except OSError as exc2:
+                print(f"[!] Rollback (unlink) fehlgeschlagen "
+                      f"fuer {ziel}: {exc2}")
         for ziel in geschrieben:
             try:
                 ziel.write_text(original[ziel], encoding="utf-8")
@@ -4546,6 +4604,8 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
     Liefert dict oder None, wenn der Block ungueltig ist.
     """
     pfad = ""
+    typ = "patch"
+    inhalt: str | None = None
     anker: str | None = None
     ersatz: str | None = None
     aktives_feld: str | None = None
@@ -4562,9 +4622,15 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
         elif aktives_feld == "ersatz":
             nonlocal ersatz
             ersatz = wert
+        elif aktives_feld == "inhalt":
+            nonlocal inhalt
+            inhalt = wert
         elif aktives_feld == "pfad":
             nonlocal pfad
             pfad = wert.strip()
+        elif aktives_feld == "typ":
+            nonlocal typ
+            typ = wert.strip()
         aktives_feld = None
         aktuelle_zeilen = []
 
@@ -4573,20 +4639,24 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
         if "\t" in raw_line:
             return None
         # Feld-Anfang?
-        m_feld = re.match(r"^(pfad|anker|ersatz):\s*(.*)$", raw_line)
+        # P2b-Luecke-A: typ und inhalt ergaenzt.
+        m_feld = re.match(
+            r"^(typ|pfad|anker|ersatz|inhalt):\s*(.*)$",
+            raw_line)
         if m_feld:
             _flush()
             name, rest = m_feld.group(1), m_feld.group(2)
-            if name == "pfad":
+            if name == "pfad" or name == "typ":
                 if rest.startswith("|"):
-                    # pfad als Block-Scalar ist erlaubt,
-                    # wird aber praktisch selten genutzt.
-                    aktives_feld = "pfad"
+                    aktives_feld = name
                     aktuelle_zeilen = []
                 else:
-                    pfad = rest.strip()
+                    if name == "pfad":
+                        pfad = rest.strip()
+                    else:
+                        typ = rest.strip()
             else:
-                # anker / ersatz muessen "|" haben (YAML-Block).
+                # anker / ersatz / inhalt muessen "|" haben.
                 if not rest.startswith("|"):
                     return None
                 aktives_feld = name
@@ -4609,11 +4679,24 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
     # Validierung.
     if not pfad:
         return None
+    # P2b-Luecke-A: typ-Weiche.
+    if typ == "new_file":
+        # anker/ersatz sind verboten.
+        if anker is not None or ersatz is not None:
+            return None
+        if inhalt is None:
+            inhalt = ""
+        return {"typ": "new_file", "pfad": pfad,
+                "inhalt": inhalt}
+    if typ != "patch":
+        return None
+    # Alter Pfad: typ=patch.
     if anker is None or anker == "":
         return None
     if ersatz is None:
         ersatz = ""
-    return {"pfad": pfad, "anker": anker, "ersatz": ersatz}
+    return {"typ": "patch", "pfad": pfad,
+            "anker": anker, "ersatz": ersatz}
 
 
 def _rollback_zieldateien(state: RunState,

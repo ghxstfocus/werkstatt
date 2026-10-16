@@ -15,9 +15,8 @@ sys.path.insert(0, "/opt/werkstatt")
 
 import re
 
-import pytest
-
 import pipeline
+import pytest
 
 # =====================================================================
 # Test-Helpers
@@ -5023,3 +5022,128 @@ def test_prompt_phase1_vor_erstem_apply_kein_header() -> None:
     st.mess_protokoll = "frisch gemessen"
     assert st.mess_protokoll_veraltet is False
     assert st.basis_protokoll_nach_apply == ""
+
+# =====================================================================
+# P2b-Luecke-A: NEW_FILE-Patch-Format
+# =====================================================================
+
+class TestParseNewFilePatch:
+    def _text(self, bloecke: str) -> str:
+        return bloecke
+
+    def test_new_file_erkannt(self) -> None:
+        text = (
+            "PATCH-BEGINN\n"
+            "typ: new_file\n"
+            "pfad: core/hello.py\n"
+            "inhalt: |\n"
+            "  x = 1\n"
+            "PATCH-ENDE\n"
+        )
+        patches = pipeline._parse_patches(text)
+        assert len(patches) == 1
+        p = patches[0]
+        assert p["typ"] == "new_file"
+        assert p["pfad"] == "core/hello.py"
+        assert p["inhalt"] == "x = 1"
+
+    def test_new_file_mit_anker_verworfen(self) -> None:
+        text = (
+            "PATCH-BEGINN\n"
+            "typ: new_file\n"
+            "pfad: core/hello.py\n"
+            "anker: |\n"
+            "  x\n"
+            "inhalt: |\n"
+            "  y\n"
+            "PATCH-ENDE\n"
+        )
+        patches = pipeline._parse_patches(text)
+        assert patches == []
+
+    def test_typ_unbekannt_verworfen(self) -> None:
+        text = (
+            "PATCH-BEGINN\n"
+            "typ: unbekannt\n"
+            "pfad: core/hello.py\n"
+            "inhalt: |\n"
+            "  y\n"
+            "PATCH-ENDE\n"
+        )
+        patches = pipeline._parse_patches(text)
+        assert patches == []
+
+    def test_patch_ohne_typ_bleibt_patch(self) -> None:
+        text = (
+            "PATCH-BEGINN\n"
+            "pfad: a.py\n"
+            "anker: |\n"
+            "  x\n"
+            "ersatz: |\n"
+            "  y\n"
+            "PATCH-ENDE\n"
+        )
+        patches = pipeline._parse_patches(text)
+        assert len(patches) == 1
+        assert patches[0]["typ"] == "patch"
+
+
+class TestApplyNewFile:
+    def _state(self, tmp_path: Path) -> pipeline.RunState:
+        return pipeline.RunState(
+            block_id="t", aufgabe="t",
+            start_ts="2026-01-01T00:00:00+00:00",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=["core/"],
+            api_key="x", budget={}, agent_docs={},
+            project_dir=tmp_path, project_name="t")
+
+    def test_new_file_angelegt(self, tmp_path: Path) -> None:
+        (tmp_path / "core").mkdir()
+        state = self._state(tmp_path)
+        patches = [{"typ": "new_file",
+                    "pfad": "core/hello.py",
+                    "inhalt": "x = 1\n"}]
+        from unittest.mock import patch
+        with patch("pipeline.audit"):
+            ok = pipeline.apply_code_patches(state, patches)
+        assert ok is True
+        assert (tmp_path / "core" / "hello.py").read_text() == "x = 1\n"
+
+    def test_new_file_existiert_fail(
+            self, tmp_path: Path) -> None:
+        (tmp_path / "core").mkdir()
+        (tmp_path / "core" / "hello.py").write_text("alt")
+        state = self._state(tmp_path)
+        patches = [{"typ": "new_file",
+                    "pfad": "core/hello.py",
+                    "inhalt": "neu\n"}]
+        from unittest.mock import patch
+        with patch("pipeline.audit"):
+            ok = pipeline.apply_code_patches(state, patches)
+        assert ok is False
+
+    def test_new_file_whitelist_fail(
+            self, tmp_path: Path) -> None:
+        state = self._state(tmp_path)
+        patches = [{"typ": "new_file",
+                    "pfad": "other/hello.py",
+                    "inhalt": "x\n"}]
+        from unittest.mock import patch
+        with patch("pipeline.audit"):
+            ok = pipeline.apply_code_patches(state, patches)
+        assert ok is False
+
+    def test_zwei_new_file_gleicher_pfad_fail(
+            self, tmp_path: Path) -> None:
+        (tmp_path / "core").mkdir()
+        state = self._state(tmp_path)
+        patches = [
+            {"typ": "new_file", "pfad": "core/a.py", "inhalt": "x\n"},
+            {"typ": "new_file", "pfad": "core/a.py", "inhalt": "y\n"},
+        ]
+        from unittest.mock import patch
+        with patch("pipeline.audit"):
+            ok = pipeline.apply_code_patches(state, patches)
+        assert ok is False
+
