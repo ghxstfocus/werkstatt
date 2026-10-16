@@ -2647,6 +2647,58 @@ def _werkstatt_home() -> Path:
 _AKTUELLE_RUN_ID: str = ""
 
 
+def _review_round_audit_payload(
+        runde: int,
+        verdict: str,
+        reviewer_antwort: str,
+) -> dict[str, object]:
+    """Auflage Review-Persistenz-A7/A9 (2026-10-16).
+
+    Baut den Audit-Payload fuer kind=review_round.
+    Reviewer-Rohtext wird redacted und ggf. gekappt.
+    Reine Funktion, testbar ohne LLM.
+    """
+    _raw_red, _ = redaction.redact_all(
+        reviewer_antwort,
+        max_len=_AUDIT_RAW_REDACTION_LIMIT)
+    _raw_len_original = len(reviewer_antwort)
+    _raw_len_redacted = len(_raw_red)
+    _raw_redaction_gekuerzt = (
+        _raw_len_redacted == _AUDIT_RAW_REDACTION_LIMIT)
+    if _raw_len_redacted > _AUDIT_RAW_MAX_LEN:
+        _raw_audit = _raw_red[:_AUDIT_RAW_MAX_LEN]
+        _raw_gekuerzt = True
+    else:
+        _raw_audit = _raw_red
+        _raw_gekuerzt = False
+    payload: dict[str, object] = {
+        "runde": runde,
+        "verdict": verdict,
+        "raw": _raw_audit,
+        "raw_len": len(_raw_audit),
+        "raw_len_redacted": _raw_len_redacted,
+        "raw_len_original": _raw_len_original,
+    }
+    if _raw_gekuerzt:
+        payload["raw_gekuerzt"] = True
+    if _raw_redaction_gekuerzt:
+        payload["raw_redaction_gekuerzt"] = True
+    return payload
+
+
+# Auflage Review-Persistenz-A7 (2026-10-16):
+# Maximale Laenge des Reviewer-Rohtexts im Audit-Log.
+# Kappung nach Redaction; bei Kappung zusaetzlich
+# raw_gekuerzt=true im payload.
+_AUDIT_RAW_MAX_LEN = 32768
+
+# Auflage Review-Persistenz-A7: Limit fuer redact_all
+# deutlich ueber _AUDIT_RAW_MAX_LEN, damit die
+# Redaction-Kappung nicht versehentlich greift.
+# Bei == _AUDIT_RAW_REDACTION_LIMIT: Redaction hat
+# selbst gekappt (raw_redaction_gekuerzt=true).
+_AUDIT_RAW_REDACTION_LIMIT = 1_000_000
+
 def audit(kind: str, payload: dict[str, Any], project_dir: Path,
           project_name: str) -> None:
     """Schreibt einen Audit-Eintrag.
@@ -6347,7 +6399,10 @@ def run_pipeline(project_name: str, aufgabe: str,
             continue
         state.auflagen_log.append(parse_auflagen(reply.content))
         state.empfehlung_log.append(parse_empfehlung(reply.content))
-        audit("review_round", {"runde": runde, "verdict": verdict}, project_dir, project_name)
+        audit("review_round",
+              _review_round_audit_payload(
+                  runde, verdict, reply.content),
+              project_dir, project_name)
 
         if verdict == "COMMAND":
             cmds = parse_commands(reply.content)

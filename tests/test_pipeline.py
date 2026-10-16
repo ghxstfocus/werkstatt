@@ -5150,3 +5150,91 @@ class TestApplyNewFile:
             ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
 
+# =====================================================================
+# Review-Persistenz (Auflage A4/A6/A9, 2026-10-16)
+# =====================================================================
+
+class TestReviewRoundAudit:
+    """Tests fuer _review_round_audit_payload.
+
+    Die Funktion ist der Audit-Payload-Bauer fuer
+    kind=review_round. Sie redacted + kappt den
+    Reviewer-Rohtext (Auflage A7/A9).
+    """
+
+    def test_no_go_schreibt_raw(self) -> None:
+        p = pipeline._review_round_audit_payload(
+            1, "NO-GO", "irgendein Reviewer-Text")
+        assert p["runde"] == 1
+        assert p["verdict"] == "NO-GO"
+        assert p["raw"] == "irgendein Reviewer-Text"
+        assert isinstance(p["raw_len"], int)
+        assert p["raw_len"] > 0
+
+    def test_go_schreibt_raw(self) -> None:
+        p = pipeline._review_round_audit_payload(
+            2, "GO", "GO-Begruendung")
+        assert p["runde"] == 2
+        assert p["verdict"] == "GO"
+        assert p["raw"] == "GO-Begruendung"
+        assert p["raw_len"] > 0
+
+    def test_redaction_greift(self) -> None:
+        # Oeffentliche IP: 8.8.8.8 -> [IPV4].
+        # (Private IPs werden bewusst nicht maskiert,
+        #  siehe redaction.py Docstring.)
+        p = pipeline._review_round_audit_payload(
+            1, "NO-GO", "Verbindung zu 8.8.8.8 fehlgeschlagen")
+        assert "8.8.8.8" not in p["raw"]
+        assert "[IPV4]" in p["raw"]
+        assert p["raw_len_original"] > 0
+        assert p["raw_len_redacted"] > 0
+
+    def test_kappung_unter_grenze(self) -> None:
+        kurz = "kurzer Text"
+        p = pipeline._review_round_audit_payload(
+            1, "NO-GO", kurz)
+        assert p["raw"] == kurz
+        assert "raw_gekuerzt" not in p
+
+    def test_kappung_ueber_grenze(self) -> None:
+        # Ueber _AUDIT_RAW_MAX_LEN = 32768.
+        lang = "x" * (pipeline._AUDIT_RAW_MAX_LEN + 100)
+        p = pipeline._review_round_audit_payload(
+            1, "NO-GO", lang)
+        assert len(p["raw"]) == pipeline._AUDIT_RAW_MAX_LEN
+        assert p["raw_gekuerzt"] is True
+        assert p["raw_len"] == pipeline._AUDIT_RAW_MAX_LEN
+        assert p["raw_len_original"] == len(lang)
+
+    def test_kappung_genau_grenze(self) -> None:
+        # == Grenze -> NICHT kappen (Auflage Frage 2).
+        genau = "x" * pipeline._AUDIT_RAW_MAX_LEN
+        p = pipeline._review_round_audit_payload(
+            1, "NO-GO", genau)
+        assert "raw_gekuerzt" not in p
+        assert len(p["raw"]) == pipeline._AUDIT_RAW_MAX_LEN
+
+    def test_kein_neuer_audit_kind(self) -> None:
+        # Baseline: 60 Eintraege. Kein neuer im
+        # Review-Persistenz-Block (Auflage A6).
+        assert "review_round" in pipeline._AUDIT_KINDS_BEKANNT
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 60
+
+    def test_state_unredacted(self) -> None:
+        """Regression: state.review_runden[i]['raw']
+        bleibt unredacted (Auflage A8).
+        """
+        import inspect as ins
+        quelle = ins.getsource(pipeline.run_pipeline)
+        assert "state.review_runden.append(" in quelle
+        assert '"raw": reply.content' in quelle
+
+    def test_drei_laengen(self) -> None:
+        # Laengen-Reihenfolge: raw_len <=
+        # raw_len_redacted <= raw_len_original.
+        p = pipeline._review_round_audit_payload(
+            1, "NO-GO", "normaler Text ohne Secrets")
+        assert p["raw_len"] <= p["raw_len_redacted"]
+        assert p["raw_len_redacted"] <= p["raw_len_original"]
+
