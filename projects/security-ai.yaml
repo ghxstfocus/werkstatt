@@ -89,6 +89,7 @@ agent_docs:
 file_whitelist:
   - apps/
   - core/
+  - data/
   - harness/
   - tools/
   - docs/
