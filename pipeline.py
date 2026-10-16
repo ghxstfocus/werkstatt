@@ -746,6 +746,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "builder_deadlock_anker_nicht_gemessen",
     "builder_frage_reviewer",
     "builder_prompt_gebaut",
+    "builder_recovery_nach_apply",
     "builder_reply_erhalten",
     "builder_wirkungsloser_patch",
     "code_patches_apply",
@@ -3729,6 +3730,10 @@ class RunState:
     letzte_reviewer_antwort: str = ""
     # Plan-Korrektur / V-A1: geteilter Zyklus-Zaehler.
     phase_korrektur_zyklus: int = 0
+    # Post-Apply-Fix 2026-10-16: Recovery-Plan aus
+    # apply_and_recheck fuer die Builder-Korrektur-Runde.
+    letzter_recovery_vorschlag: object = None
+    post_apply_korrektur_runden: int = 0
     # Block Auftrag-erfuellt B3: letzter Patch war
     # wirkungslos (anker == ersatz). Signal fuer B2.
     letzter_patch_wirkungslos: bool = False
@@ -5143,8 +5148,124 @@ def apply_and_recheck(state: RunState,
         audit("recovery_basis_gate_nach_apply",
               {"fehler": nach_fehler, "empfehlung": v.empfehlung},
               state.project_dir, state.project_name)
-        return 18
+        # P-Bugfix 2026-10-16: rc=19 ist internes Signal
+        # an run_pipeline, eine Builder-Korrektur-Runde
+        # zu starten. run_pipeline faengt rc=19 ab.
+        # Der Phasen-Loop sieht rc=19 NIE (run_pipeline
+        # wandelt ihn in rc=0 oder rc=18).
+        state.letzter_recovery_vorschlag = v
+        return 19
     return None
+
+
+def _bauer_recovery_prompt(state: RunState) -> str:
+    """Post-Apply-Fix 2026-10-16: Prompt fuer die
+    Builder-Korrektur-Runde nach Post-Apply-Basis-
+    Gate-Fehler.
+
+    Enthaelt:
+      - Reviewer-Diagnose.
+      - Reviewer-Reparaturplan.
+      - Post-Apply-Basis-Gate-Protokoll.
+      - Auftrag: korrigiere mit typ: patch.
+    """
+    v = state.letzter_recovery_vorschlag
+    diagnose = ""
+    reparaturplan = ""
+    if v is not None:
+        diagnose = getattr(v, "diagnose", "") or ""
+        plan_liste = getattr(v, "reparaturplan", []) or []
+        reparaturplan = "\n".join(
+            f"  {i+1}. {p}" for i, p in enumerate(plan_liste))
+    return (
+        "=== POST-APPLY-BASIS-GATE ROT ===\n"
+        "Die bereits angewendeten Patches haben das\n"
+        "Basis-Gate (nach Apply) rot gemacht.\n\n"
+        f"Reviewer-Diagnose:\n{diagnose}\n\n"
+        f"Reviewer-Reparaturplan:\n{reparaturplan}\n\n"
+        "Basis-Gate-Protokoll (nach Apply):\n"
+        f"{state.basis_protokoll_nach_apply[:3000]}\n\n"
+        "=== AUFTRAG ===\n"
+        "Korrigiere die bereits angewendeten Patches.\n"
+        "Die Dateien existieren jetzt - verwende\n"
+        "typ: patch (NICHT typ: new_file).\n"
+        "Liefere strukturierte Code-Patches im Format\n"
+        "PATCH-BEGINN/PATCH-ENDE.\n"
+    )
+
+
+def _post_apply_korrektur_loop(
+        state: RunState,
+        always: dict[str, Any],
+        file_whitelist: list[str],
+        builder_prompt: str,
+        project_dir: Path,
+        project_name: str,
+        api_key: str,
+        max_llm: int,
+        max_minutes: int,
+        max_korrektur_runden: int = 2,
+) -> int:
+    """Post-Apply-Fix 2026-10-16: Builder-Korrektur-
+    Loop nach Post-Apply-Basis-Gate-Fehler.
+
+    Rueckgabe:
+      0   -- Basis-Gate nach Apply gruen.
+      18  -- max_korrektur_runden erschoepft.
+    """
+    for runde in range(1, max_korrektur_runden + 1):
+        state.post_apply_korrektur_runden = runde
+        print(f"[i] Post-Apply-Korrektur-Runde {runde}/"
+              f"{max_korrektur_runden}.")
+        audit("builder_recovery_nach_apply",
+              {"runde": runde,
+               "recovery_grund": "basis_gate_nach_apply",
+               "diagnose_kurz":
+                   (getattr(state.letzter_recovery_vorschlag,
+                            "diagnose", "")[:200]
+                    if state.letzter_recovery_vorschlag
+                    else "")},
+              project_dir, project_name)
+        rc_loop = budget_or_recover(
+            state, max_llm,
+            f"Vor Builder-Korrektur-Runde {runde}.",
+            project_dir, project_name,
+            max_minutes=max_minutes)
+        if rc_loop is not None:
+            return rc_loop
+        reply_roh, rc_b = builder_reply_mit_command_loop(
+            state, api_key, builder_prompt,
+            _bauer_recovery_prompt,
+            project_dir, project_name,
+            max_builder_runden=3,
+            max_llm=max_llm, max_minutes=max_minutes,
+        )
+        if rc_b is not None:
+            print(f"[!] Builder-Korrektur-Runde {runde} "
+                  f"fehlgeschlagen: rc={rc_b}.")
+            continue
+        if reply_roh is None or not reply_roh.ok:
+            print(f"[!] Builder-Korrektur-Runde {runde} "
+                  f"keine Antwort.")
+            continue
+        state.code_entwurf = reply_roh.content
+        state.code_patches = parse_code_patches(reply_roh.content)
+        print(f"[i] {len(state.code_patches)} Code-Patches "
+              f"nach Korrektur-Runde {runde} geparst.")
+        rc_apply = apply_and_recheck(
+            state, always, file_whitelist)
+        if rc_apply is None:
+            print(f"[+] Post-Apply-Korrektur-Runde {runde} "
+                  f"gruen.")
+            return 0
+        if rc_apply == 19:
+            # Naechste Runde.
+            continue
+        # Andere rc: Fail-closed.
+        return rc_apply
+    print(f"[!] Post-Apply-Korrektur max_runden "
+          f"({max_korrektur_runden}) erreicht. Fail closed.")
+    return 18
 
 
 def collect_messwerte(state: RunState) -> dict[str, Any]:
@@ -6491,6 +6612,16 @@ def run_pipeline(project_name: str, aufgabe: str,
     # UMB-1d: Code-Patches anwenden + Basis-Gate erneut
     # ==================================================================
     rc_apply = apply_and_recheck(state, always, file_whitelist)
+    # P-Bugfix 2026-10-16: rc=19 = Post-Apply-Basis-Gate
+    # rot. Eigener Korrektur-Loop (Builder -> apply).
+    if rc_apply == 19:
+        return _post_apply_korrektur_loop(
+            state, always, file_whitelist,
+            builder_prompt=builder_prompt,
+            project_dir=project_dir, project_name=project_name,
+            api_key=api_key, max_llm=max_llm,
+            max_minutes=max_minutes,
+            max_korrektur_runden=2)
     if rc_apply is not None:
         return rc_apply
 

@@ -15,8 +15,9 @@ sys.path.insert(0, "/opt/werkstatt")
 
 import re
 
-import pipeline
 import pytest
+
+import pipeline
 
 # =====================================================================
 # Test-Helpers
@@ -2318,7 +2319,7 @@ class TestApplyAndRecheck:
         # Datei unveraendert.
         assert ziel.read_text() == "Inhalt ohne Anker.\n"
 
-    def test_recheck_rot_18(self, tmp_path: Path, monkeypatch) -> None:
+    def test_recheck_rot_19(self, tmp_path: Path, monkeypatch) -> None:
         (tmp_path / "tools").mkdir()
         ziel = tmp_path / "tools" / "x.py"
         ziel.write_text("ALT\n", encoding="utf-8")
@@ -2340,7 +2341,9 @@ class TestApplyAndRecheck:
         monkeypatch.setattr(pipeline, "print_recovery", lambda v: None)
         rc = pipeline.apply_and_recheck(state, self._always(),
                                           ["tools/"])
-        assert rc == 18
+        # Post-Apply-Fix 2026-10-16: rc=19 ist jetzt
+        # das interne Signal fuer Builder-Korrektur.
+        assert rc == 19
 
 
 # =====================================================================

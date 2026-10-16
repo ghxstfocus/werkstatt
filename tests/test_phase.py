@@ -1911,3 +1911,72 @@ class TestAnkerPruefungNewFile:
         assert fehler[0][0] == 1
         assert fehler[0][1] == "core/b.py"
 
+# =====================================================================
+# Post-Apply-Korrektur-Loop (2026-10-16)
+# =====================================================================
+
+class TestPostApplyKorrektur:
+    def test_aufrufer_hat_rc19_zweig(self) -> None:
+        """run_pipeline prueft rc=19 und ruft die
+        Korrektur-Loop-Funktion."""
+        import inspect as ins
+        quelle = ins.getsource(pipeline.run_pipeline)
+        assert "_post_apply_korrektur_loop" in quelle
+        assert "rc_apply == 19" in quelle
+
+    def test_funktion_existiert(self) -> None:
+        assert hasattr(pipeline, "_post_apply_korrektur_loop")
+        assert hasattr(pipeline, "_bauer_recovery_prompt")
+
+    def test_apply_and_recheck_gibt_19(self) -> None:
+        """apply_and_recheck gibt rc=19 bei Post-Apply-Fehler."""
+        import inspect as ins
+        quelle = ins.getsource(pipeline.apply_and_recheck)
+        assert "return 19" in quelle
+
+    def test_state_feld_vorhanden(self) -> None:
+        sig_fields = [f.name for f in
+                      __import__("dataclasses").fields(
+                          pipeline.RunState)]
+        assert "post_apply_korrektur_runden" in sig_fields
+        assert "letzter_recovery_vorschlag" in sig_fields
+
+    def test_bauer_recovery_prompt_typ_patch(
+            self, tmp_path: Path) -> None:
+        """Der Recovery-Prompt verbietet new_file,
+        verlangt typ: patch."""
+        state = pipeline.RunState(
+            block_id="t", aufgabe="t",
+            start_ts="2026-01-01T00:00:00+00:00",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=[], api_key="x", budget={},
+            agent_docs={}, project_dir=tmp_path,
+            project_name="t")
+        state.basis_protokoll_nach_apply = "=== ruff ===\nRC: 1"
+        state.letzter_recovery_vorschlag = None
+        prompt = pipeline._bauer_recovery_prompt(state)
+        assert "typ: patch" in prompt
+        assert "NICHT typ: new_file" in prompt
+        assert "POST-APPLY-BASIS-GATE ROT" in prompt
+
+    def test_bauer_recovery_prompt_mit_vorschlag(
+            self, tmp_path: Path) -> None:
+        state = pipeline.RunState(
+            block_id="t", aufgabe="t",
+            start_ts="2026-01-01T00:00:00+00:00",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=[], api_key="x", budget={},
+            agent_docs={}, project_dir=tmp_path,
+            project_name="t")
+        state.basis_protokoll_nach_apply = "protokoll"
+        v = pipeline.RecoveryVorschlag(
+            art="basis_gate",
+            diagnose="F401 unused import",
+            reparaturplan=["Zeile 12 entfernen",
+                            "Import anpassen"])
+        state.letzter_recovery_vorschlag = v
+        prompt = pipeline._bauer_recovery_prompt(state)
+        assert "F401 unused import" in prompt
+        assert "Zeile 12 entfernen" in prompt
+        assert "Import anpassen" in prompt
+
