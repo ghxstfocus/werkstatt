@@ -5216,17 +5216,20 @@ class TestReviewRoundAudit:
         assert len(p["raw"]) == pipeline._AUDIT_RAW_MAX_LEN
 
     def test_kein_neuer_audit_kind(self) -> None:
-        # Baseline: 63 Eintraege. Stand nach
-        # phase_plan_unbeantwortet (Block 2b,
-        # 2026-10-16).
+        # Baseline: 66 Eintraege. Stand nach
+        # B0: UNKLAR-Behandlung (2026-10-16).
         # Vorherige Baselines: 60 (Review-Persistenz),
         #                      61 (--resume-force),
-        #                      62 (commit_review_new_file_skip).
+        #                      62 (commit_review_new_file_skip),
+        #                      63 (phase_plan_unbeantwortet).
         assert "review_round" in pipeline._AUDIT_KINDS_BEKANNT
         assert "phase_resume_force" in pipeline._AUDIT_KINDS_BEKANNT
         assert "commit_review_new_file_skip" in pipeline._AUDIT_KINDS_BEKANNT
         assert "phase_plan_unbeantwortet" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 63
+        assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
+        assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
+        assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 66
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5261,8 +5264,8 @@ class TestCommitReviewNewFileSkip:
         assert "commit_review_new_file_skip" in \
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
-        # Stand 2026-10-16 (Block 2b): 63.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 63
+        # Stand 2026-10-16 (B0): 66.
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 66
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -5802,3 +5805,66 @@ class TestPhasenHeader:
                 assert hat_hinweis
                 break
 
+
+# =====================================================================
+# B0 (2026-10-16): UNKLAR-Behandlung Reviewer+Solver+Loop
+# =====================================================================
+
+class TestUnklarBehandlung:
+    def test_reviewer_r15_im_prompt(self) -> None:
+        assert "R15." in pipeline.HARD_RULES_REVIEWER
+        assert "SYMBOLISCHE PRUEFUNG BEI NEW_FILE" in \
+            pipeline.HARD_RULES_REVIEWER
+
+    def test_reviewer_r15_nur_bei_new_file(self) -> None:
+        s = pipeline.HARD_RULES_REVIEWER
+        assert "reine" in s.lower() and "new_file" in s
+
+    def test_reviewer_r15_widerspruchs_format(self) -> None:
+        s = pipeline.HARD_RULES_REVIEWER
+        assert "Widerspruch:" in s
+        assert "Beleg:" in s
+
+    def test_reviewer_r15_querverweis_r12(self) -> None:
+        # B0-A8: R15 ergaenzt R12.
+        s = pipeline.HARD_RULES_REVIEWER
+        assert "ergaenzt R12" in s
+
+    def test_solver_s10_im_prompt(self) -> None:
+        assert "S10." in pipeline.HARD_RULES_SOLVER
+        assert "SYMBOLISCHE PRUEFUNG BEI NEW_FILE" in \
+            pipeline.HARD_RULES_SOLVER
+
+    def test_solver_s10_nur_bei_new_file(self) -> None:
+        s = pipeline.HARD_RULES_SOLVER
+        assert "new_file" in s
+        assert "Widerspruch" in s
+
+    def test_parser_widerspruch_erkannt(self) -> None:
+        raw = "UNKLAR:\nWiderspruch: A vs B\nBeleg: Zeile 3"
+        assert pipeline._review_unklar_widerspruch(raw) is True
+
+    def test_parser_widerspruch_fehlt(self) -> None:
+        raw = "UNKLAR: ich weiss nicht."
+        assert pipeline._review_unklar_widerspruch(raw) is False
+
+    def test_audit_kinds_existieren(self) -> None:
+        for k in ("review_r15_verstoss",
+                  "review_unklar_eskalation",
+                  "review_unklar_widerspruch"):
+            assert k in pipeline._AUDIT_KINDS_BEKANNT
+
+    def test_unklar_zweig_im_loop(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        assert 'verdict == "UNKLAR"' in src
+        assert "_review_unklar_widerspruch" in src
+        assert "_n_unklar >= 2" in src
+        assert "review_unklar_eskalation" in src
+
+    def test_eskalation_rc_14(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        # rc=14 konsistent mit ESKALATION (B0-A2).
+        # mindestens 2x return 14 im Quelltext.
+        assert src.count("return 14") >= 2

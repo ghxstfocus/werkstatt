@@ -282,6 +282,27 @@ R14. VERDICT-KONSISTENZ. Wenn der Sachstand
     Begruendung: "Sachstand hat sich geaendert,
     weil X". R14 betrifft NUR GO/NO-GO.
     ESKALATION (R9, R11) ist kein Verdict.
+R15. SYMBOLISCHE PRUEFUNG BEI NEW_FILE.
+     R15 ergaenzt R12 (new_file-Marker).
+     Bei reinen typ:new_file-Paketen liegen
+     die Dateien nach dem Apply noch nicht
+     auf Platte (Apply laeuft NACH dem Review).
+     Pruefe die Patch-Texte symbolisch:
+       - Pfad in Whitelist.
+       - Datei existiert nicht (git_status).
+       - Inhalt nicht leer.
+       - Format konsistent mit dem Auftrag.
+     Wenn alle Pruefpunkte OK sind: GO.
+     UNKLAR ist bei reinen new_file-Paketen
+     NICHT zulaessig, ausser bei echtem
+     Widerspruch zwischen Patch und Auftrag.
+     Widerspruch-Format:
+       UNKLAR:
+       Widerspruch: <Auftrag fordert X, Patch Y>
+       Beleg: <Patch-Zeile oder Auftrags-Zeile>
+     Gilt NUR fuer reine new_file-Pakete (alle
+     Patches typ=new_file). Bei gemischten
+     Paketen bleibt die bisherige Regel.
 """
 
 
@@ -428,6 +449,20 @@ S8. Adressat ist der Builder-Agent. Du
     Qualitaet des Ergebnisses.
 S9. Du siehst dieselbe Projekt-Doku wie der
     Reviewer-Agent. Nutze sie, um zu loesen.
+S10. SYMBOLISCHE PRUEFUNG BEI NEW_FILE.
+     Bei reinen typ:new_file-Paketen liegen
+     die Dateien noch nicht auf Platte
+     (Apply laeuft nach dem Review).
+     Du bewertest die Patch-Texte gegen den
+     Auftrag. UNKLAR wegen "Datei existiert
+     noch nicht" ist NICHT zulaessig - die
+     Datei entsteht erst nach GO.
+     Echter Widerspruch zwischen Patch und
+     Auftrag bleibt ein UNKLAR-Grund.
+     Widerspruch-Format:
+       DIAGNOSE: UNKLAR
+       ESKALATION: <Auftrag fordert X, Patch Y>
+     Gilt NUR fuer reine new_file-Pakete.
 """
 # Auflage 2183 Block 3: Solver sieht dieselbe
 # Projekt-Doku wie der Reviewer.
@@ -909,6 +944,9 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "recovery_builder_command_deadlock",
     "recovery_eskalation",
     "recovery_no_go",
+    "review_r15_verstoss",
+    "review_unklar_eskalation",
+    "review_unklar_widerspruch",
     "review_round",
     "reviewer_frage_antwort",
     "reviewer_run_solver",
@@ -3378,6 +3416,24 @@ def _extrahiere_antwort(text: str) -> str:
         return rest_kopf + "\n" + "\n".join(body)
     return "\n".join(body).strip()
 
+
+
+def _review_unklar_widerspruch(raw: str) -> bool:
+    """B0-A1/A5: prueft, ob ein UNKLAR-Verdikt
+    einen Widerspruchs-Block enthaelt.
+
+    Format (R15/S10):
+      UNKLAR:
+      Widerspruch: <Text>
+      Beleg: <Text>
+
+    Rueckgabe: True, wenn "Widerspruch:" als
+    eigene Zeile im raw steht.
+    """
+    for zeile in raw.splitlines():
+        if zeile.strip().startswith("Widerspruch:"):
+            return True
+    return False
 
 
 def classify_verdict(text: str) -> str:
@@ -7062,6 +7118,48 @@ def run_pipeline(project_name: str, aufgabe: str,
                    "empfehlung": v.empfehlung[:500]},
                   project_dir, project_name)
             return 14
+
+        if verdict == "UNKLAR":
+            # B0b: UNKLAR ist kein NO-GO.
+            _hat_widerspruch = _review_unklar_widerspruch(
+                reply.content)
+            if _hat_widerspruch:
+                print("[i] UNKLAR mit Widerspruchs-Block "
+                      "(R15/S10-konform).")
+                audit("review_unklar_widerspruch",
+                      {"runde": runde},
+                      project_dir, project_name)
+            else:
+                print("[i] UNKLAR ohne Widerspruchs-Block "
+                      "(R15-Verstoss oder Sachunklarheit).")
+                audit("review_r15_verstoss",
+                      {"runde": runde,
+                       "grund": "unklar_ohne_widerspruch"},
+                      project_dir, project_name)
+            _n_unklar = sum(
+                1 for r in state.review_runden[-2:]
+                if r.get("verdict") == "UNKLAR")
+            print(f"[!] Reviewer-Verdikt UNKLAR "
+                  f"(Runde {runde}, "
+                  f"{_n_unklar}x in Folge).")
+            if _n_unklar >= 2:
+                print("[!] 2x UNKLAR in Folge. "
+                      "Eskalation an den Menschen.")
+                print("[i] Moegliche Aktionen:")
+                print("    - Auftrag in phase.yaml "
+                      "praezisieren")
+                print("    - Phase mit --resume-force "
+                      "neu starten")
+                print("    - Phase abbrechen")
+                audit("review_unklar_eskalation",
+                      {"runde": runde,
+                       "n_unklar": _n_unklar},
+                      project_dir, project_name)
+                v = ask_reviewer_for_recovery(
+                    state, "unklar", reply.content)
+                print_recovery(v)
+                return 14
+            continue
 
         if verdict == "NO-GO":
             print(f"[-] NO-GO:\n{reply.content[:300]}")
