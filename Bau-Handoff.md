@@ -1320,3 +1320,133 @@ Merkposten bleiben offen:
 ENDE 17. LAUF VORBEREITUNG
 ================================================================
 
+================================================================
+BILANZ 17. LAUF 2026-10-16
+================================================================
+
+Kontext: 17. PB-68-Lauf (2026-10-16 15:08-15:12).
+Auflage A6 verlangt Bilanz bei U4-Scheitern.
+Der Lauf ist gescheitert, weil der Auftrag
+unterbestimmt ist.
+
+================================================================
+WAS FUNKTIONIERT
+================================================================
+
+Der Phasen-Modus ist strukturell fertig und im
+Live-Betrieb bewiesen:
+
+1. Multi-Run-Faehigkeit.
+   Der 17. Lauf hat U1, U2, U3 als done erkannt,
+   uebersprungen und mit ihren Paketen (3, 2, 4
+   Dateien) in den Sammel-Commit aufgenommen.
+   Insgesamt 7 untracked Pfade aus drei
+   done-Unterbloecken.
+
+2. Basis-Gate im Phasen-Modus (_phasen_basis_gate_ok).
+   Akzeptiert untracked Dateien aus done-Unterbloecken
+   deterministisch und auditierbar.
+
+3. Phasen-Persistenz (commit_paket in phase.yaml).
+   Die Pakete werden persistiert und beim Resume
+   restauriert. Kein Datenverlust zwischen Laeufen.
+
+4. Plan-Korrektur-Schutz (6049a0d).
+   Nach 5 NO-GO-Runden und Plan-Korrektur-Versuch
+   (mit [n] abgebrochen) sind U1-U3 unveraendert:
+   status=done, Pakete intakt, Unterpunkte unveraendert.
+   Die Plan-Korrektur-Anzeige zeigte 3 Unterpunkte
+   fuer U1 — der Schutz hat die 4 bestehenden
+   gerettet.
+
+5. Whitelist im Prompt (562fde5).
+   Der Reviewer sieht die file_whitelist jetzt
+   direkt im Prompt. Kein "Pfad fehlt"-Fehlbefund
+   mehr.
+
+6. Truncation-Marker (6041033).
+   Reviewer-Kontexte werden mit Marker gekuerzt.
+   Kein "Datei unvollstaendig"-Fehlschluss.
+
+7. Review-Persistenz (a066e0d).
+   Reviewer-Antworten landen im Audit-Log.
+
+8. Post-Apply-Messung (eb8119a) + Recovery-Prompt-
+   Fix (3bbe681).
+
+9. Resume-Force (7e5cc65).
+   no_go/failed -> pending, mit Effekt.
+
+================================================================
+WAS NICHT FUNKTIONIERT
+================================================================
+
+Der systematische Blocker ist Auftragsqualitaet.
+
+Muster in Lauf 13, 14, 16, 17:
+  - Der Planner liefert Auftraege, die das WAS
+    nennen, aber nicht das WIE.
+  - Der Builder kann das WIE nicht erfinden (R9)
+    und dreht im COMMAND-Loop.
+  - Der Reviewer eskaliert korrekt ("Auftrag
+    unterbestimmt").
+  - Die Plan-Korrektur liefert wieder einen
+    unterbestimmten Auftrag (Ersatz statt
+    Konkretisierung).
+
+Konkreter Fall 17: die Test-Anforderung
+"gegen die ECHTE Migration 0016, kein Inline-
+Schema" nennt keinen Weg, wie die Migration
+im Unit-Test ausgefuehrt wird. Der Builder
+pendelt zwischen Inline-Schema (verboten),
+Eigenbau-Runner (nicht spezifiziert) und
+importierbarem Runner (nicht benannt).
+
+Das ist genau das Problem, fuer das Weg X
+(Plan-Konkretisierung) gedacht war.
+
+================================================================
+DREI STRUKTURELLE BLOCKE (offen)
+================================================================
+
+A) Planner-Praezisierung (Weg X).
+   Der Planner soll Auftraege mit dem WIE liefern.
+   Konkret: technische Praezisierungen (Mechanik,
+   APIs, Konventionen) als Pflichtbestandteil.
+   Aufwand: mittel-gross.
+   Anlass: vier Laeufe mit demselben Muster.
+
+B) Reviewer-Input-Vollstaendigkeit.
+   Der Reviewer soll vollstaendigen Kontext sehen.
+   Truncation-Marker sind ein Teil; aber die
+   Reviewer-Inputs sind strukturell unvollstaendig
+   (z.B. filesystem-Zustand, verfuegbare APIs).
+   Aufwand: mittel.
+
+C) Truncation-Konvention.
+   Alle ~50 [:N]-Stellen in pipeline.py markieren.
+   Aufwand: klein, aber systematisch.
+
+================================================================
+EMPFEHLUNG
+================================================================
+
+Die Reihenfolge:
+  1. U4 manuell mit praezisem WIE korrigieren.
+  2. 18. Lauf.
+  3. Bei Erfolg: Phasen-Modus ist bewiesen.
+     Weiter mit U5-U10.
+  4. Danach: Block A (Planner-Praezisierung)
+     als Kern-Fix. Ohne ihn wiederholt sich
+     das Muster in U5-U10.
+
+Wenn der 18. Lauf U4 mit praezisem Auftrag
+schafft: der Beweis ist erbracht, dass die
+Werkstatt mit praezisen Auftraegen funktioniert.
+Die Auftragslieferung durch den Planner bleibt
+der schwierigste Teil.
+
+================================================================
+ENDE BILANZ 17. LAUF
+================================================================
+
