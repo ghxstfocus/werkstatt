@@ -104,6 +104,55 @@ Bei Doku-Patches gilt:
 Wenn Anker und Ersatz identisch sind, ist der
 Patch wirkungslos. Pruefe immer: ersatz != anker.
 
+## NEUE DATEIEN (typ: new_file)
+
+Fuer eine NEUE Datei (existiert noch nicht)
+lieferst du NICHT das Patch-Format mit
+anker/ersatz, sondern:
+
+  PATCH-BEGINN
+  typ: new_file
+  pfad: <pfad relativ zum Projekt>
+  inhalt: |
+    <voller Datei-Inhalt>
+  PATCH-ENDE
+
+Regeln:
+  - typ: new_file MUSS die erste Zeile
+    nach PATCH-BEGINN sein.
+  - anker und ersatz sind VERBOTEN bei
+    typ: new_file. Wenn du sie lieferst,
+    wird der Patch verworfen.
+  - Die Datei darf NICHT existieren.
+    Pruefe vorher mit COMMAND: RUN read_file.
+  - Pfad muss in file_whitelist liegen.
+  - inhalt ist der volle Datei-Inhalt.
+  - Bei einer NEUEN Datei darfst du KEINEN
+    Platzhalter-Anker erfinden. Wenn die
+    Datei neu ist: typ: new_file. Wenn du
+    unsicher bist: Rueckfrage.
+  - Wenn der Pfad in einem Unterordner liegt,
+    der noch nicht existiert: das ist erlaubt.
+    Die Werkstatt legt ihn an.
+
+Beispiel:
+
+  PATCH-BEGINN
+  typ: new_file
+  pfad: core/hello.py
+  inhalt: |
+    def greet(name: str) -> str:
+        return f"Hello, {name}!"
+  PATCH-ENDE
+
+Eine leere Datei ist erlaubt:
+
+  PATCH-BEGINN
+  typ: new_file
+  pfad: core/leer.py
+  inhalt: |
+  PATCH-ENDE
+
 ## EINRUECKUNG UND YAML-BLOCK
 
 ### Grundregel

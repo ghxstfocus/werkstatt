@@ -1569,3 +1569,43 @@ class TestPhaseKorrekturUnterblockNoGo:
         assert "\"grund\": \"unterblock_no_go\"" in quelle \
             or "grund" in quelle
 
+# =====================================================================
+# P2b-Luecke-C: NEW_FILE dem Builder/Reviewer bekannt
+# =====================================================================
+
+class TestNewFilePrompt:
+    def test_builder_md_enthaelt_new_file(self) -> None:
+        from pathlib import Path as _P
+        text = _P("/opt/werkstatt/agents/builder.md").read_text(
+            encoding="utf-8")
+        assert "typ: new_file" in text
+
+    def test_builder_md_platzhalter_verbot(self) -> None:
+        from pathlib import Path as _P
+        text = _P("/opt/werkstatt/agents/builder.md").read_text(
+            encoding="utf-8")
+        assert "Platzhalter" in text
+
+    def test_reviewer_md_enthaelt_new_file(self) -> None:
+        from pathlib import Path as _P
+        text = _P("/opt/werkstatt/agents/reviewer.md").read_text(
+            encoding="utf-8")
+        assert "typ: new_file" in text
+
+    def test_hard_rules_builder_b12(self) -> None:
+        assert "B12." in pipeline.HARD_RULES_BUILDER
+        assert "new_file" in pipeline.HARD_RULES_BUILDER
+
+    def test_hard_rules_reviewer_r10(self) -> None:
+        assert "R10." in pipeline.HARD_RULES_REVIEWER
+        assert "new_file" in pipeline.HARD_RULES_REVIEWER
+
+    def test_r10_verweist_auf_r5_ausnahme(self) -> None:
+        text = pipeline.HARD_RULES_REVIEWER
+        assert "R5" in text
+        assert "gilt NICHT" in text or "NICHT fuer" in text
+
+    def test_r10_verbietet_write_file(self) -> None:
+        text = pipeline.HARD_RULES_REVIEWER
+        assert "write_file" in text
+

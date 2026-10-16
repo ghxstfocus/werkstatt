@@ -226,6 +226,23 @@ R9. ROLLENGRENZE (Plan-Korrektur).
     NO-GO mit dem Befund "Auftrag
     unterbestimmt: <was fehlt>". Der Planner
     bekommt den Befund und zieht nach.
+
+R10. NEUE DATEIEN (P2b-Luecke-C).
+     Ein Patch mit typ: new_file legt eine
+     neue Datei an. Er hat KEIN anker/ersatz.
+     Pruefe: Pfad in file_whitelist,
+     Datei existiert nicht, inhalt nicht leer
+     (leer ist erlaubt bei explizitem Wunsch).
+     R5 (ersatz == anker) gilt NICHT fuer
+     typ: new_file.
+     Du darfst NICHT "COMMAND: RUN write_file"
+     verlangen. Das Kommando gibt es nicht.
+     Wenn der Builder einen Patch mit
+     anker: '# Platzhalter' oder aehnlich
+     liefert: das ist ein Fehler des Builders,
+     kein Grund, ein neues Kommando zu erfinden.
+     Melde als Befund zurueck: 'Bitte typ:
+     new_file verwenden.'
 """
 
 
@@ -275,6 +292,20 @@ B11. RUECKFRAGEN SIND ERLAUBT (P2b-Frage-B).
      Block liefern. Der Reviewer prueft die
      Patches und beantwortet die Frage.
      Fragen sind kein Fehler.
+
+B12. NEUE DATEIEN (P2b-Luecke-C).
+     Fuer eine NEUE Datei lieferst du:
+       PATCH-BEGINN
+       typ: new_file
+       pfad: <pfad>
+       inhalt: |
+         <voller Inhalt>
+       PATCH-ENDE
+     KEIN anker. KEIN ersatz. KEIN Platzhalter.
+     B8 (Anker-Count) und B10 (Anker nicht
+     gefunden) gelten NICHT fuer typ: new_file.
+     Format-Details: builder.md, Abschnitt
+     NEUE DATEIEN.
 """
 
 
@@ -6009,6 +6040,8 @@ def run_pipeline(project_name: str, aufgabe: str,
             "YAML-BLOCK').\n\n"
             "Mehrere Patches hintereinander "
             "(jeweils PATCH-BEGINN/PATCH-ENDE).\n"
+            "Fuer neue Dateien: typ: new_file "
+            "(siehe builder.md, Abschnitt NEUE DATEIEN).\n"
             "Kein freier Text. Kein Markdown. Nur Patches.\n"
             "Wenn du einen Anker nicht im Ausschnitt findest: "
             "keinen Patch fuer diese Datei. Kein Erfinden."

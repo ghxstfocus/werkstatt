@@ -53,6 +53,11 @@ Fuer jeden Patch pruefe:
   - ersatz != anker (sonst wirkungslos)?
   - Ziel konsistent mit dem Auftrag?
 
+Neben typ: patch (Default, mit anker und
+ersatz) gibt es typ: new_file fuer neue
+Dateien (mit pfad und inhalt, ohne anker).
+Siehe R10.
+
 Wenn eine Pruefung fehlschlaegt: NO-GO mit
 konkretem Grund und Patch-Referenz.
 
