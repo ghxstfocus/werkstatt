@@ -2782,3 +2782,70 @@ Naechster Schritt:
 ================================================================
 ENDE W3+W4
 ================================================================
+
+================================================================
+U7-AUFTEILUNG (2026-10-16)
+================================================================
+
+Ausgangslage 33. Lauf:
+  U6 done (6 von 10). U7 gestartet, 5 Runden,
+  NO-GO. Reviewer-Eskalation:
+    "Auftrag unterbestimmt (Zieldatei-
+     Ausschnitte fehlen), Block zu gross,
+     Sachfaden-Drift."
+  Empfehlung: aufteilen in 3 Bloecke.
+
+A0-Messungen (M-a bis M-c):
+  M-a: g.principal gesetzt in app.py:181.
+  M-b: Migration 0017 existiert, gibt
+    guardrail.view/manage an admin.
+    0018 (U6) ergaenzt operator + viewer.
+  M-c: file_whitelist vollstaendig.
+
+Aenderung:
+  U7 aufgeteilt in zwei Unterbloecke:
+    U7 (Dashboard-Route + app.py + Test).
+    U8 (Dashboard-Template + CSP-Test).
+  Nummerierung verschoben:
+    ex-U8 -> U9 (Aktion).
+    ex-U9 -> U10 (Sidebar).
+    ex-U10 -> U11 (Doku).
+  U7-Neufassung mit gemessenem Anker
+  (app.py Z. 257-258):
+    "    from apps.dashboard.routes_tools
+     import register_tools_routes\n
+         register_tools_routes(app)\n"
+  count==1, 4 Spaces, LF.
+
+Wichtige Korrekturen:
+  - Reviewer-Annahme "required_permission"
+    war falsch: heisst "require_permission".
+  - Service wird inline gebaut
+    (GuardrailRepository aus DB_PATH).
+    Kein extensions-Eintrag.
+
+Muster:
+  9. manueller phase.yaml-Eingriff.
+  Nach 9 Eingriffen ist die Werkstatt-
+  Autonomie strukturell blockiert.
+  Weg X (Planner-Konkretisierung) hat
+  Prioritaet.
+
+Stand:
+  U1-U6 done. U7 no_go.
+  U8-U11 pending.
+
+Naechster Schritt:
+  34. PB-68-Lauf mit --resume-force.
+  Beobachtung:
+    - U7 startet.
+    - Route + app.py + Test gebaut.
+    - 200/403-Tests gruen.
+    - Commit-GO.
+    - U7 done.
+    - U8 startet.
+  Bei Scheitern: neuer Reviewer-Block.
+
+================================================================
+ENDE U7-AUFTEILUNG
+================================================================
