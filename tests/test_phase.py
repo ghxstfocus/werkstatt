@@ -1683,3 +1683,91 @@ class TestRollenAuditA:
             agents["builder"], {}, [])
         assert "Warte. Wir muessen genau sein." not in prompt
 
+# =====================================================================
+# Rollen-Audit-B: solver.md
+# =====================================================================
+
+class TestRollenAuditB:
+    def _read(self) -> str:
+        from pathlib import Path as _P
+        return _P("/opt/werkstatt/agents/solver.md").read_text(
+            encoding="utf-8")
+
+    def test_solver_md_dasselbe_wissen(self) -> None:
+        assert "dasselbe Wissen" in self._read()
+
+    def test_solver_md_doch_geht(self) -> None:
+        t = self._read()
+        assert "DOCH GEHT" in t or "wie es besser geht" in t
+
+    def test_solver_md_praeziseren_auftrag(self) -> None:
+        assert "praeziseren Auftrag" in self._read()
+
+    def test_solver_md_trigger_anker(self) -> None:
+        assert "anker_nicht_gemessen" in self._read()
+
+    def test_solver_md_trigger_rueckfrage(self) -> None:
+        assert "builder_rueckfrage" in self._read()
+
+    def test_solver_md_trigger_wirkungslos(self) -> None:
+        assert "wirkungsloser_patch" in self._read()
+
+    def test_solver_md_trigger_p1(self) -> None:
+        assert "p1_trigger" in self._read()
+
+    def test_solver_md_kein_falscher_trigger(self) -> None:
+        # Der falsche Satz war in "Deine Aufgabe".
+        # Wir pruefen, dass der Satz nicht in
+        # Rolle/Aufgabe steht.
+        t = self._read()
+        # Der Satz darf hoechstens im Eingabe-Abschnitt
+        # stehen.
+        assert "zweimal in Folge NO-GO gibt" not in t
+
+    def test_build_system_prompt_solver_hat_trigger(self) -> None:
+        agents = pipeline.load_agents("/opt/werkstatt/agents")
+        prompt = pipeline.build_system_prompt(
+            agents["solver"], {}, [])
+        assert "anker_nicht_gemessen" in prompt
+        assert "builder_rueckfrage" in prompt
+        assert "wirkungsloser_patch" in prompt
+
+
+class TestTriggerKonsistenz:
+    def test_trigger_grund_werte_konsistent(self) -> None:
+        """Die Trigger-Namen in solver.md stimmen mit den
+        _trigger_grund-Werten im Code ueberein."""
+        from pathlib import Path as _P
+        quelle = _P("/opt/werkstatt/pipeline.py").read_text(
+            encoding="utf-8")
+        solver_md = _P(
+            "/opt/werkstatt/agents/solver.md").read_text(
+            encoding="utf-8")
+        # Alle _trigger_grund-Werte aus dem Code.
+        import re
+        treffer = re.findall(
+            r'_trigger_grund\s*=\s*"([a-z0-9_]+)"', quelle)
+        werte = set(treffer)
+        # Jeder Code-Wert ausser "reviewer_command"
+        # und "" muss in solver.md auftauchen.
+        erwartete = {
+            "anker_nicht_gemessen",
+            "builder_rueckfrage",
+            "wirkungsloser_patch",
+            "p1_trigger",
+        }
+        assert erwartete.issubset(werte), (
+            f"Code kennt nicht alle Trigger: "
+            f"{erwartete - werte}")
+        for w in erwartete:
+            assert w in solver_md, (
+                f"Trigger {w} fehlt in solver.md")
+
+    def test_b2_abschnitt_erhalten(self) -> None:
+        t = self._read() if False else None
+        from pathlib import Path as _P
+        t = _P("/opt/werkstatt/agents/solver.md").read_text(
+            encoding="utf-8")
+        assert "Wann der Auftrag bereits erfuellt ist" in t
+        assert "Auftrag bereits" in t
+
