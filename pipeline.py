@@ -4093,9 +4093,14 @@ def builder_reply_mit_command_loop(
             if patches:
                 anker_fehler = pruefe_anker_gegen_messung(
                     patches, state.mess_protokoll)
-                ersatz_fehler = pruefe_ersatz_gegen_messung(
-                    patches, state.mess_protokoll)
-                if anker_fehler or ersatz_fehler:
+                # W13b (2026-10-16): pruefe_ersatz_
+                # gegen_messung deaktiviert. Der
+                # ERSATZ enthaelt neuen Code, der
+                # per Definition nicht im GEMESSENER
+                # INHALT stehen kann. Der Anker-Check
+                # + apply_code_patches reichen.
+                ersatz_fehler: list[tuple[int, str, str]] = []
+                if anker_fehler:
                     state.letzte_anker_fehler = anker_fehler
                     state.letzte_ersatz_fehler = ersatz_fehler
                     state.anker_fehler_in_folge += 1

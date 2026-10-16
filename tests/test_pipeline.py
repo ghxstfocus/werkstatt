@@ -6925,3 +6925,27 @@ class TestW13a:
             # Treffer in Z. 2 -> (1, 12).
             assert info is not None
             assert info[0] == 1
+
+
+# =====================================================================
+# W13b (2026-10-16): pruefe_ersatz_gegen_messung deaktiviert
+# =====================================================================
+
+class TestW13b:
+    def test_pruefe_ersatz_gegen_messung_existiert(self) -> None:
+        # Die Funktion existiert weiter (fuer
+        # spaetere Nutzung), wird aber nicht mehr
+        # aufgerufen.
+        assert hasattr(pipeline, "pruefe_ersatz_gegen_messung")
+
+    def test_ersatz_fehler_nicht_mehr_geprueft(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.builder_reply_mit_command_loop)
+        # Der Aufruf ist deaktiviert.
+        # Stattdessen nur anker_fehler.
+        assert "ersatz_fehler: list" in src
+        # Der Aufruf ist nicht mehr im Code.
+        # (Textsuche nach Aufrufzeile.)
+        # Wenn er noch im Code steht: Fehler.
+        # Anmerkung: Textsuche, nicht Ausfuehrung.
+        assert "if anker_fehler or ersatz_fehler" not in src
