@@ -951,6 +951,9 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "review_r15_verstoss",
     "review_unklar_eskalation",
     "review_unklar_widerspruch",
+    "llm_timeout_connect",
+    "llm_timeout_gesamt",
+    "llm_timeout_read",
     "review_round",
     "reviewer_frage_antwort",
     "reviewer_run_solver",
@@ -3369,7 +3372,8 @@ class LLMReply:
 
 def ask_llm(api_key: str, system_prompt: str, user_content: str,
             model: str, temperature: float, timeout: int = 120,
-            *, state: RunState | None = None) -> LLMReply:
+            *, state: RunState | None = None,
+            aufgabe: str = "unbekannt") -> LLMReply:
     """Fragt das LLM.
 
     Auflage 2125: Wenn `state` uebergeben wird, zaehlt
@@ -3391,6 +3395,20 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
                                "messages": [{"role": "system", "content": system_prompt},
                                             {"role": "user", "content": user_content}],
                                "temperature": temperature}
+    # Timeout-Fix 2026-10-16 (Option B, HR-R7):
+    # B1 (Read-Timeout) bricht haengende Calls ab.
+    # B2 (Deadline) verhindert Folge-Versuche nach
+    # Ueberschreitung. B1 ist primaer, B2 sekundaer.
+    _CONNECT_S = 15  # Timeout-A1: 15s statt 10s.
+    _READ_S = 180
+    _max_total_s = int(
+        getattr(state, "max_total_llm_s", 240)
+        if state is not None else 240)
+    # Zeitout-Verhaeltnis (Timeout-A2): read=180 deckt
+    # einen einzelnen Call ab. max_total=240 erlaubt
+    # 180 s + 60 s Nachlauf fuer einen Retry.
+    _t0 = time.monotonic()
+    _deadline = _t0 + _max_total_s
     # Auflage 2087: Retry nur bei 429 (Rate Limit) und 5xx
     # (Server-Fehler). Kein Retry bei 4xx — ein Auth-Fehler
     # wuerde sich endlos wiederholen.
@@ -3398,10 +3416,48 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
     backoffs = (1, 3)
     letzter_fehler: str = ""
     res = None
+    _versuche_absolut = 0
     for versuch, warte in enumerate(backoffs, start=1):
+        # Timeout-A4: adaptive Restzeit pruefen.
+        _rest = _deadline - time.monotonic()
+        if _rest <= 0:
+            if state is not None:
+                audit("llm_timeout_gesamt",
+                      {"modell": model,
+                       "aufgabe": aufgabe,
+                       "dauer_s": round(
+                           time.monotonic() - _t0, 2),
+                       "versuche": _versuche_absolut,
+                       "deadline_s": _max_total_s,
+                       "letzter_fehler":
+                           letzter_fehler[:200]},
+                      state.project_dir,
+                      state.project_name)
+            return LLMReply(
+                ok=False,
+                error=f"Gesamt-Timeout {_max_total_s}s",
+            )
+        # Read-Timeout adaptiv: min(read, restzeit).
+        _read_adapt = int(min(_READ_S, max(1, _rest)))
+        _req_timeout = (_CONNECT_S, _read_adapt)
+        # SIM113: Retry-Loop mit variabler Laenge
+        # (max len(backoffs)), enumerate ist hier
+        # nicht passend (Abbruch durch break).
+        _versuche_absolut += 1  # noqa: SIM113
         try:
             res = requests.post(DEEPSEEK_API_URL, headers=headers,
-                                json=payload, timeout=timeout)
+                                json=payload, timeout=_req_timeout)
+        except requests.Timeout as exc:
+            letzter_fehler = f"HTTP Timeout: {exc}"
+            res = None
+            if state is not None:
+                audit("llm_timeout_read",
+                      {"modell": model,
+                       "aufgabe": aufgabe,
+                       "read_s": _read_adapt,
+                       "versuch": _versuche_absolut},
+                      state.project_dir,
+                      state.project_name)
         except requests.RequestException as exc:
             letzter_fehler = f"HTTP: {exc}"
             res = None
@@ -4257,6 +4313,9 @@ class RunState:
     builder_temp: float = 0.3
     test_gen_model: str = "deepseek-chat"
     llm_timeout_s: int = 180
+    # Timeout-Fix 2026-10-16: Gesamt-Deadline
+    # pro ask_llm-Aufruf (Retry-Kette).
+    max_total_llm_s: int = 240
     git_author_name: str = ""
     git_author_email: str = ""
     project_name: str = ""

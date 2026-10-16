@@ -5233,7 +5233,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 66
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 69
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5269,7 +5269,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 66
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 69
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -5918,3 +5918,71 @@ class TestB0cUndBugs:
         # Der rc=14-Zweig darf kein _phase_rollback enthalten.
         block_14 = src[i14:i15]
         assert "_phase_rollback" not in block_14
+
+
+# =====================================================================
+# Timeout-Fix 2026-10-16 (Option B)
+# =====================================================================
+
+class TestAskLlmTimeout:
+    def test_ask_llm_timeout_ist_tupel(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.ask_llm)
+        assert "_req_timeout = (_CONNECT_S, _read_adapt)" in src
+        assert "timeout=_req_timeout" in src
+
+    def test_ask_llm_retry_prueft_deadline(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.ask_llm)
+        assert "_deadline" in src
+        assert "if _rest <= 0:" in src
+
+    def test_ask_llm_gesamt_timeout_greift(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.ask_llm)
+        assert "llm_timeout_gesamt" in src
+        assert "Gesamt-Timeout" in src
+
+    def test_runstate_max_total_llm_s_default(self) -> None:
+        import dataclasses
+        feld = None
+        for f in dataclasses.fields(pipeline.RunState):
+            if f.name == "max_total_llm_s":
+                feld = f
+                break
+        assert feld is not None
+        assert feld.default == 240
+
+    def test_audit_kind_llm_timeout_gesamt_existiert(self) -> None:
+        for k in ("llm_timeout_gesamt",
+                  "llm_timeout_connect",
+                  "llm_timeout_read"):
+            assert k in pipeline._AUDIT_KINDS_BEKANNT
+
+    def test_ask_llm_timeout_audit_enthaelt_modell(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.ask_llm)
+        # Audit-Payload enthaelt Modell + Aufgabe.
+        assert "\"modell\": model" in src
+        assert "\"aufgabe\": aufgabe" in src
+
+    def test_ask_llm_read_timeout_adaptiv(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.ask_llm)
+        assert "_read_adapt = int(min(_READ_S, max(1, _rest)))" in src
+
+    def test_ask_llm_deadline_kein_zweiter_versuch(self) -> None:
+        # Strukturtest: Deadline-Check steht VOR
+        # dem requests.post-Aufruf.
+        import inspect
+        src = inspect.getsource(pipeline.ask_llm)
+        i_deadline = src.find("if _rest <= 0:")
+        i_post = src.find("res = requests.post")
+        assert i_deadline > 0
+        assert i_post > 0
+        assert i_deadline < i_post
+
+    def test_ask_llm_aufgabe_parameter(self) -> None:
+        import inspect
+        sig = inspect.signature(pipeline.ask_llm)
+        assert "aufgabe" in sig.parameters
