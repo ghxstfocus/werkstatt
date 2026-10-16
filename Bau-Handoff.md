@@ -1945,3 +1945,69 @@ Naechster Block:
 ================================================================
 ENDE LAUF 22 BILANZ
 ================================================================
+
+================================================================
+B0 UNKLAR-BEHANDLUNG (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Aenderungen:
+  - HARD_RULES_REVIEWER +R15 (symbolische
+    Pruefung bei reinen new_file-Paketen;
+    R15 ergaenzt R12; Widerspruchs-Format
+    Widerspruch:/Beleg:).
+  - HARD_RULES_SOLVER +S10 (analog fuer den
+    Solver; M4: derselbe symbolische
+    Blindfleck).
+  - _review_unklar_widerspruch (Parser fuer
+    Widerspruchs-Block).
+  - run_pipeline: UNKLAR-Zweig im Review-Loop.
+    1x UNKLAR mit/ohne Widerspruch -> naechste
+    Runde (Audit review_unklar_widerspruch
+    bzw. review_r15_verstoss).
+    2x UNKLAR in Folge -> Eskalation (rc=14,
+    konsistent mit ESKALATION-Pfad).
+    Konkrete Options-Ausgabe an den Menschen.
+  - _AUDIT_KINDS_BEKANNT +3.
+  - tests/test_pipeline.py: +11 Tests,
+    Katalog-Anzahl 63 -> 66.
+
+Tests: 842 passed (+11).
+
+Auflagen-Abgleich (B0-A1 bis A8):
+  A1 (Widerspruchs-Format): erfuellt. R15
+    definiert Format, _review_unklar_widerspruch
+    parst es, Loop unterscheidet.
+  A2 (rc=14): bestaetigt durch Messung
+    (ESKALATION-Pfad Z. 7064 return 14).
+    Neuer Zweig nutzt rc=14.
+  A3 (Slice-Order): state.review_runden.append
+    Z. 7006 vor dem UNKLAR-Zweig. [-2:] =
+    diese + vorige Runde. Semantik korrekt.
+  A4 (Eskalations-Output): Optionen-Liste
+    gedruckt.
+  A5 (Widerspruchs-Zaehlung): Audit
+    review_unklar_widerspruch vs.
+    review_r15_verstoss. review_r15_verstoss
+    ist neu.
+  A6 (11 Tests): erfuellt.
+  A7 (Bilanz-Verweis): Handoff Lauf 22
+    zitiert.
+  A8 (R12/R15-Querverweis): in R15-Wortlaut.
+
+Merkposten:
+  B1 (Planner-Struktur-Verstaendnis):
+    der Planner versteht die Phasen-Struktur
+    nicht vollstaendig (liefert "U4" als
+    erste id). P18-Verschaerfung oder
+    phase_stand-Sektion muss explizit
+    "Behalte U1-U10" sagen. Eigener Block.
+  B2 (apply vor Review): nicht notwendig,
+    wenn R15/S10 wirken.
+
+Naechster Block: B1 (Planner-Struktur).
+
+================================================================
+ENDE B0
+================================================================
