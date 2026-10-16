@@ -4206,6 +4206,9 @@ def _solver_prompt_bauen(state: RunState,
              and not r.get("recovery")]
     letzte = no_go[-2:] if len(no_go) >= 2 else no_go
     zeilen = [aufgabe_block(state).rstrip()]
+    _wl = _format_whitelist_block(
+        list(getattr(state, "file_whitelist", []) or []))
+    zeilen.append(_wl.rstrip())
     zeilen.append("")
     _ps_block = format_projekt_stand(state)
     if _ps_block:
@@ -4401,6 +4404,25 @@ def format_projekt_stand(state: RunState) -> str:
     return "\n".join(zeilen)
 
 
+def _format_whitelist_block(
+        file_whitelist: list[str]) -> str:
+    """Whitelist-Prompt-A2 (2026-10-16): zeigt die
+    aktuelle file_whitelist im Prompt an.
+
+    Damit sieht der Reviewer (und der Builder),
+    welche Pfade freigegeben sind.
+    """
+    if not file_whitelist:
+        return (
+            "=== FILE-WHITELIST ===\n"
+            "(keine Pfade freigegeben)\n"
+            "=== /FILE-WHITELIST ===\n\n")
+    return (
+        "=== FILE-WHITELIST (erlaubte Pfade) ===\n"
+        + "\n".join(file_whitelist)
+        + "\n=== /FILE-WHITELIST ===\n\n")
+
+
 def aufgabe_block(state: RunState) -> str:
     """Auflage 2154: zentrale Formatierung des Auftrags.
 
@@ -4413,7 +4435,10 @@ def aufgabe_block(state: RunState) -> str:
 
 def ask_reviewer_for_recovery(state: RunState, art: str, kontext: str) -> RecoveryVorschlag:
     # Auflage 2153: Auftrag vor dem Kontext.
-    kopf = aufgabe_block(state)
+    # Whitelist-Prompt-A2 (2026-10-16).
+    _wl = _format_whitelist_block(
+        list(getattr(state, "file_whitelist", []) or []))
+    kopf = aufgabe_block(state) + _wl
     if art == "basis_gate":
         aufgabe = ("Das Basis-Gate ist rot und der deterministische "
                    "Auto-Repair-Versuch ist gescheitert.\n\n"
@@ -6439,6 +6464,8 @@ def run_pipeline(project_name: str, aufgabe: str,
     )
     reviewer_input = (
         aufgabe_block(state)
+        + _format_whitelist_block(
+            list(getattr(state, "file_whitelist", []) or []))
         + f"LETZTE COMMITS:\n{historie[:3000]}\n\n"
         f"{overview}\n\n"
         "Waehle optionale Messungen. Antworte mit COMMAND-Zeilen:\n"
@@ -6497,6 +6524,8 @@ def run_pipeline(project_name: str, aufgabe: str,
         _ps_block = format_projekt_stand(s)
         return (
             aufgabe_block(s)
+            + _format_whitelist_block(
+                list(getattr(s, "file_whitelist", []) or []))
             + (_ps_block if _ps_block else "")
             + (anker_block if anker_block else "")
             +
@@ -6573,6 +6602,8 @@ def run_pipeline(project_name: str, aufgabe: str,
         szenario = (
             # Auflage 2152: Auftrag MUSS im Szenario stehen.
             aufgabe_block(state)
+            + _format_whitelist_block(
+                list(getattr(state, "file_whitelist", []) or []))
             # Agent-Memory A2: Projekt-Stand.
             + format_projekt_stand(state)
             # Auflage 2178: MESSWERTE-Block direkt sichtbar.

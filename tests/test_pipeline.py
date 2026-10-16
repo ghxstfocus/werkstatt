@@ -5509,3 +5509,48 @@ class TestTruncateMitMarker:
     def test_konstante_vorhanden(self) -> None:
         assert pipeline._REVIEWER_KONTEXT_MAX == 2000
 
+# =====================================================================
+# _format_whitelist_block (A5, 2026-10-16)
+# =====================================================================
+
+class TestFormatWhitelistBlock:
+    """Tests fuer _format_whitelist_block."""
+
+    def test_leere_liste(self) -> None:
+        out = pipeline._format_whitelist_block([])
+        assert "FILE-WHITELIST" in out
+        assert "(keine Pfade freigegeben)" in out
+
+    def test_mit_pfaden(self) -> None:
+        out = pipeline._format_whitelist_block(
+            ["apps/", "core/", "data/", "tests/"])
+        assert "FILE-WHITELIST" in out
+        assert "apps/" in out
+        assert "core/" in out
+        assert "data/" in out
+        assert "tests/" in out
+
+    def test_marker_am_ende(self) -> None:
+        out = pipeline._format_whitelist_block(["core/"])
+        assert "=== /FILE-WHITELIST ===" in out
+
+    def test_block_enden_mit_doppel_newline(self) -> None:
+        out = pipeline._format_whitelist_block(["core/"])
+        assert out.endswith("\n\n")
+
+    def test_aufgabe_block_unveraendert(self) -> None:
+        """Regression: aufgabe_block liefert nur AUFGABE."""
+        import inspect as ins
+        quelle = ins.getsource(pipeline.aufgabe_block)
+        assert "FILE-WHITELIST" not in quelle
+        assert "AUFGABE:" in quelle
+
+    def test_reviewer_prompt_bauer_nutzt_block(self) -> None:
+        """Regression: die Aufrufstellen enthalten den Block."""
+        import inspect as ins
+        quelle_rev = ins.getsource(pipeline.run_pipeline)
+        assert "_format_whitelist_block" in quelle_rev
+        quelle_rec = ins.getsource(
+            pipeline.ask_reviewer_for_recovery)
+        assert "_format_whitelist_block" in quelle_rec
+
