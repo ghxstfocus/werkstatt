@@ -1450,3 +1450,254 @@ der schwierigste Teil.
 ENDE BILANZ 17. LAUF
 ================================================================
 
+================================================================
+UEBERGABE AN NEUEN BAU-CHAT (2026-10-16, 16:00)
+================================================================
+
+Diese Sitzung ist am Kontext-Limit. Ein neuer
+Bau-Chat uebernimmt. Dieser Block ist die
+Startanweisung.
+
+================================================================
+IST-ZUSTAND
+================================================================
+
+Werkstatt-HEAD: 4896edf "feat: Phasen-Header +
+  R9/R13/R14 — Rollen-Kalibrierung Teil 2".
+Werkstatt-Tests: 801 passed.
+ruff/mypy: 0.
+
+security-ai-HEAD: 0d0fe2c (PB-67).
+  Probebetrieb 68 ist NICHT getaggt (21 Laeufe,
+  kein Sammel-Commit).
+Working Tree security-ai: 4 untracked
+  (core/guardrails/, tests/unit/test_guardrails_config.py,
+  test_guardrails_loader.py, test_guardrails_models.py).
+
+phase.yaml:
+  phase_aktiv: true
+  phase_id: 18
+  phase_start_head: 0d0fe2c29b549c968d1ace116a69f57cf65f9998
+  U1: done  (4 Unterpunkte, Paket 3)
+  U2: done  (2 Unterpunkte, Paket 2)
+  U3: done  (2 Unterpunkte, Paket 4)
+  U4: failed (4 Unterpunkte)
+  U5-U10: pending
+
+Commits seit der Uebergabe (Auswahl, chronologisch):
+  651175f (origin/main) doku: Handoff — Lauf 12
+  3e77c1f Fix: Post-Apply-Basis-Gate — rc=19
+  a066e0d feat: review_round-Audit persistiert
+          Reviewer-Antwort
+  e52558b feat: Solver-Sichtbarkeit
+  7e5cc65 feat: --resume-force
+  0651ed6 fix: commit_review_new_file_skip
+  eb8119a fix: Post-Apply-Messung + Rollback
+  7b79425 doku: Handoff — Weg-Y-Patch
+  de93129 feat: Phasen-Persistenz — commit_paket
+  f28511e feat: Basis-Gate im Phasen-Modus
+  2a39626 fix: Basis-Gate git status -uall
+  6049a0d feat: Plan-Korrektur-Schutz
+  5217ab2 doku: Handoff — Rekonstruktion
+  3bbe681 fix: Recovery-Prompt + rohantwort-Fallback
+  6041033 fix: Truncation-Marker
+  e2c5db1 doku: Handoff — U2-Reparatur
+  b8710f5 config: file_whitelist um data/ erweitern
+  562fde5 feat: file_whitelist im Prompt sichtbar
+  e6f7da5 doku: Handoff — Vorbereitung 17
+  d62d044 doku: Handoff — Bilanz 17
+  413921d feat: Rollen-Kalibrierung — Spec-Treue,
+          Solver-Befolgung, Sachfaden
+  1f098c7 feat: new_file-Marker — Prompt, Rollen,
+          HARD_RULES
+  4896edf feat: Phasen-Header + R9/R13/R14
+
+================================================================
+WAS SEIT DER UEBERGABE FUNKTIONIERT
+================================================================
+
+1. Phasen-Modus ist multi-run-faehig.
+   U1, U2, U3 sind done und bleiben done
+   ueber beliebig viele Resume-Versuche.
+   Beweis: Lauf 16-21.
+
+2. Phasen-Persistenz (de93129).
+   commit_paket der done-Unterbloecke wird in
+   phase.yaml persistiert und beim Resume
+   restauriert.
+
+3. Basis-Gate im Phasen-Modus
+   (_phasen_basis_gate_ok, f28511e + 2a39626).
+   Untracked Dateien aus done-Unterbloecken
+   werden deterministisch akzeptiert.
+
+4. Plan-Korrektur-Schutz (6049a0d).
+   done-Unterbloecke bleiben unveraendert bei
+   Plan-Korrektur. Struktur-Check (Anzahl, ids,
+   titel).
+
+5. --resume-force (7e5cc65).
+   no_go/failed -> pending.
+
+6. Post-Apply-Messung (eb8119a).
+   mess_protokoll_nach_apply fuer new_file-Pfade.
+
+7. Review-Persistenz (a066e0d).
+   Reviewer-Antwort im review_round-Audit als raw.
+
+8. Solver-Sichtbarkeit (e52558b).
+   Trigger + Befund auf Konsole.
+
+9. Truncation-Marker (6041033).
+   _truncate_mit_marker + GEMESSENER INHALT separat.
+
+10. Recovery-Prompt-Fix (3bbe681).
+    rohantwort-Fallback + Messblock.
+
+11. Rollen-Kalibrierung (413921d).
+    B13 (Spec-Treue), B14 (Solver-Befolgung),
+    R11 (Sachfaden).
+
+12. new_file-Marker (1f098c7).
+    B15, R12, _NEW_FILE_MARKER,
+    _messwerte_fuer_prompt.
+
+13. Phasen-Header (4896edf).
+    R13 (Phasen-Trennung), R14 (Verdict-Konsistenz),
+    R9 auf ESKALATION, Phasen-Header im Prompt.
+
+================================================================
+WAS NICHT FUNKTIONIERT — DER AKTUELLE BLOCKER
+================================================================
+
+Der 21. PB-68-Lauf (2026-10-16 15:55-15:56)
+ist an U4 gescheitert. Der Auftrag war praezise,
+aber der Builder befolgte ihn nicht.
+
+Befund:
+  - Builder liefert Migration mit 4 statt 6 Spalten
+    (created_at, updated_at fehlen).
+  - Builder nutzt GuardrailRepositoryError statt
+    GuardrailNotFoundError.
+  - Builder nutzt Inline-Schema statt Migration im Test.
+
+Der Reviewer-Verdacht (Truncation) wurde
+WIDERLEGT: prompt_len-Werte aus dem Audit-Log
+sind 17.259 (Code-Review) und 4.988-6.729
+(Recovery). Weit unter redact_all-Limit 100.000.
+
+Der Builder hat den vollstaendigen Auftrag gesehen
+und ignoriert trotzdem Teile.
+
+Neue Diagnose:
+  Der Planner liefert Auftraege, die nicht
+  builder-freundlich genug sind. Konkrete
+  Praezisierungen (Feldnamen, Signaturen,
+  Reihenfolge) fehlen.
+
+================================================================
+VIER OFFENE PLANNER-ANFORDERUNGEN
+================================================================
+
+Der Auftraggeber hat vier zusammenhaengende
+Planner-Anforderungen formuliert, die noch NICHT
+gebaut sind:
+
+1. Planner plant kleiner von vorneherein.
+   Heute P15 (1-2 Zieldateien + 1 Test) ist
+   zu schwach.
+
+2. Planner kann bei Resume dort weitermachen,
+   wo aufgehoert wurde.
+   Heute _planner_user_content bekommt KEINEN
+   phase_unterbloecke-Zustand.
+
+3. Planner versteht: Plan muss builder-freundlich
+   sein. Detailiert.
+   Neue Regel P17 fehlt (Signatur, Feldnamen,
+   Reihenfolge, Schemas, Prueffaelle).
+
+4. Planner bei Korrektur: Reviewer-Begruendung
+   verstehen + Aenderungen im Detail wiedergeben.
+   Neue Regel P18 fehlt. Heute reviewer_befund
+   als Rohtext ohne Struktur-Anforderung.
+
+================================================================
+NAECHSTER SCHRITT — EMPFEHLUNG
+================================================================
+
+Der neue Bau-Chat soll:
+
+1. Diesen Handoff lesen.
+2. HEAD pruefen:
+     git -C /opt/werkstatt log -3 --oneline
+     git -C /opt/werkstatt status --porcelain
+     /opt/security-ai/.venv/bin/python3 -m pytest \
+       /opt/werkstatt/tests/ -q
+   Erwartung: 4896edf, clean, 801 passed.
+3. phase.yaml pruefen:
+     /opt/security-ai/.venv/bin/python3 -c "
+     import yaml
+     d = yaml.safe_load(open(
+         '/opt/werkstatt/projects/security-ai.phase.yaml'))
+     for u in d['phase_unterbloecke'][:4]:
+         print(f\"{u['id']}: {u['status']}\")
+     "
+   Erwartung: U1-U3 done, U4 failed, U5-U10 pending.
+4. Reviewer-Chat kontaktieren mit dem Hinweis:
+     "Neuer Bau-Chat, Uebergabe 2026-10-16 16:00.
+      Stand: HEAD 4896edf, 801 passed.
+      Blocker: Planner-Praezision.
+      Vier Anforderungen: Blockgroesse, Resume,
+      Builder-Freundlichkeit, Reviewer-Befund-
+      Wiedergabe.
+      Siehe Handoff 'UEBERGABE AN NEUEN BAU-CHAT'."
+
+================================================================
+HANDOFF-EINTRAEGE DER SITZUNG (Chronologie)
+================================================================
+
+- WEG-Y-PATCH 2026-10-16
+- REKONSTRUKTION 2026-10-16
+- U2-REPARATUR 2026-10-16
+- 17. LAUF VORBEREITUNG 2026-10-16
+- BILANZ 17. LAUF 2026-10-16
+- UEBERGABE AN NEUEN BAU-CHAT 2026-10-16 (dieser Block)
+
+Alle in diesem Handoff dokumentiert.
+
+================================================================
+WERKZEUG-REGELN (bestaetigt und aktuell)
+================================================================
+
+- ruff --no-cache messen.
+- mypy rekursiv pruefen.
+- /opt/werkstatt/projects/ gehoert builder:builder 750.
+- core.fileMode=false im Werkstatt-Repo.
+- post-checkout-Hook setzt projects/-Owner.
+- Patch-Skripte > 40 Zeilen in /tmp anlegen,
+  nicht als Heredoc.
+- Vor jedem Commit: git status --porcelain pruefen.
+- Bei Kategorie 3: Reviewer-Block vor Bau.
+- Kein Tag ohne echten Pipeline-Durchlauf.
+
+================================================================
+MERKPOSTEN (offen, fuer spaetere Bloecke)
+================================================================
+
+1. Planner-Praezision (vier Anforderungen).
+2. 2169 deterministisch pruefen.
+3. list_dir im Katalog (bei Bedarf).
+4. Vertrauens-Kalibrierung zwischen Rollen.
+5. Truncation-Konvention (systematisch).
+6. Reviewer-Behauptungs-Verifikation.
+7. Persistenz-Konvention.
+8. Weg X (Plan-Konkretisierung).
+9. DRY-Refactor Z. 7077
+   (_hat_anker_patches -> _alle_patches_sind_new_file).
+10. U4 manuelle Neu-Formulierung mit P17-Detailtiefe.
+
+================================================================
+ENDE UEBERGABE
+================================================================
+
