@@ -5341,10 +5341,25 @@ def _bauer_recovery_prompt(state: RunState) -> str:
         plan_liste = getattr(v, "reparaturplan", []) or []
         reparaturplan = "\n".join(
             f"  {i+1}. {p}" for i, p in enumerate(plan_liste))
+        # A1 (2026-10-16): Fallback auf rohantwort.
+        # ask_reviewer_for_recovery fuellt nur rohantwort
+        # (Z. 4359), diagnose/reparaturplan bleiben leer.
+        if not diagnose and not reparaturplan:
+            _roh = getattr(v, "rohantwort", "") or ""
+            _roh_red, _ = redaction.redact_all(
+                _roh, max_len=100000)
+            diagnose = _roh_red
+    # A2 (2026-10-16): GEMESSENER INHALT (nach Apply)
+    # vor den Reviewer-Text.
+    _mess_nach = state.mess_protokoll_nach_apply or ""
+    if not _mess_nach:
+        _mess_nach = "(keine Messung nach Apply)"
     return (
         "=== POST-APPLY-BASIS-GATE ROT ===\n"
         "Die bereits angewendeten Patches haben das\n"
         "Basis-Gate (nach Apply) rot gemacht.\n\n"
+        "GEMESSENER INHALT (nach Apply):\n"
+        f"{_mess_nach}\n\n"
         f"Reviewer-Diagnose:\n{diagnose}\n\n"
         f"Reviewer-Reparaturplan:\n{reparaturplan}\n\n"
         "Basis-Gate-Protokoll (nach Apply):\n"

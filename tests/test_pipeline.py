@@ -5396,3 +5396,88 @@ class TestPostApplyMessung:
         assert "_post_apply_messung" in quelle
         assert "return 17" in quelle
 
+# =====================================================================
+# Recovery-Prompt-Fix (A1+A2, 2026-10-16)
+# =====================================================================
+
+class TestRecoveryPromptFix:
+    """Tests fuer _bauer_recovery_prompt.
+
+    A1: Fallback auf rohantwort, wenn diagnose und
+        reparaturplan leer sind.
+    A2: GEMESSENER INHALT (nach Apply) im Prompt.
+    """
+
+    def _state(self, tmp_path: Path) -> pipeline.RunState:
+        state = build_test_state(project_dir=tmp_path)
+        return state
+
+    def test_fallback_rohantwort_wenn_diagnose_leer(
+            self, tmp_path: Path) -> None:
+        state = self._state(tmp_path)
+        state.letzter_recovery_vorschlag = (
+            pipeline.RecoveryVorschlag(
+                art="basis_gate",
+                diagnose="",
+                reparaturplan=[],
+                rohantwort="DIAGNOSE:\nDer Test oeffnet die "
+                           "Datei ohne with-Block."))
+        text = pipeline._bauer_recovery_prompt(state)
+        assert "Der Test oeffnet die Datei ohne with-Block" in text
+
+    def test_diagnose_vorhanden_kein_fallback(
+            self, tmp_path: Path) -> None:
+        state = self._state(tmp_path)
+        state.letzter_recovery_vorschlag = (
+            pipeline.RecoveryVorschlag(
+                art="basis_gate",
+                diagnose="Strukturierte Diagnose",
+                reparaturplan=["Schritt 1"],
+                rohantwort="Rohantwort-Text"))
+        text = pipeline._bauer_recovery_prompt(state)
+        assert "Strukturierte Diagnose" in text
+        assert "Rohantwort-Text" not in text
+
+    def test_messblock_nach_apply_im_prompt(
+            self, tmp_path: Path) -> None:
+        state = self._state(tmp_path)
+        state.mess_protokoll_nach_apply = (
+            "=== read_file ===\n"
+            "ARGV: cat core/x.py\n"
+            "RC: 0\nSTDOUT: x = 1")
+        state.letzter_recovery_vorschlag = (
+            pipeline.RecoveryVorschlag(
+                art="basis_gate",
+                diagnose="Test",
+                reparaturplan=[],
+                rohantwort=""))
+        text = pipeline._bauer_recovery_prompt(state)
+        assert "GEMESSENER INHALT (nach Apply)" in text
+        assert "x = 1" in text
+
+    def test_messblock_leer_zeigt_platzhalter(
+            self, tmp_path: Path) -> None:
+        state = self._state(tmp_path)
+        state.mess_protokoll_nach_apply = ""
+        state.letzter_recovery_vorschlag = (
+            pipeline.RecoveryVorschlag(
+                art="basis_gate",
+                diagnose="Test",
+                reparaturplan=[],
+                rohantwort=""))
+        text = pipeline._bauer_recovery_prompt(state)
+        assert "(keine Messung nach Apply)" in text
+
+    def test_rohantwort_wird_redacted(
+            self, tmp_path: Path) -> None:
+        state = self._state(tmp_path)
+        state.letzter_recovery_vorschlag = (
+            pipeline.RecoveryVorschlag(
+                art="basis_gate",
+                diagnose="",
+                reparaturplan=[],
+                rohantwort="Server 8.8.8.8 ist nicht erreichbar."))
+        text = pipeline._bauer_recovery_prompt(state)
+        assert "8.8.8.8" not in text
+        assert "[IPV4]" in text
+
