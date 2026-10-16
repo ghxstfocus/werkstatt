@@ -40,6 +40,11 @@ WICHTIG (UMB-1):
     - Bei Unsicherheit: erst
       COMMAND: RUN read_file <pfad>.
       Das Ergebnis der Messung entscheidet.
+    - Bei new_file-Patches: read_file liefert
+      ok=false (Datei existiert nicht). Das ist
+      die Bestaetigung, dass new_file richtig ist.
+      Wenn du das weisst: liefere den new_file-
+      Patch direkt, OHNE vorheriges read_file.
 
   Fuer eine neue Datei: NIEMALS einen Anker
   mit leerem String oder einen Platzhalter-

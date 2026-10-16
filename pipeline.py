@@ -252,6 +252,13 @@ R11. SACHFADEN. Der erste Sachbefund, den du
     Sachbefund in 3 aufeinanderfolgenden Runden
     formulierst und der Builder ihn nicht
     behebt: ESKALATION statt weitere NO-GO.
+
+R12. NEW_FILE-MARKER. Wenn der GEMESSENER
+    INHALT-Block den Marker "nicht anwendbar"
+    enthaelt: das ist KEIN NO-GO-Grund. R7
+    (Anker-Pruefung) greift bei reinen new_file-
+    Patches nicht. Pruefe stattdessen die
+    Patch-Inhalte direkt.
 """
 
 
@@ -331,6 +338,14 @@ B14. SOLVER-BEFUND. Ein Solver-Befund ist zu
     folge dem Solver-Befund. Die Messung zeigst
     du als COMMAND: RUN read_file <pfad> und
     im naechsten Reply.
+
+B15. NEW_FILE OHNE MESSUNG. Bei einem new_file-
+    Patch gibt es keinen Anker und keine Messung.
+    Der GEMESSENER INHALT-Block ist dann erwartbar
+    leer (Marker "nicht anwendbar"). Liefere den
+    Patch direkt. COMMAND: RUN nur, wenn du die
+    Existenz einer Datei pruefen willst
+    (read_file).
 """
 
 
@@ -4266,7 +4281,7 @@ def _solver_prompt_bauen(state: RunState,
                 f"DIAGNOSE: {b.art.name}")
     zeilen.append("")
     zeilen.append("## GEMESSENER INHALT (verbindlich)")
-    zeilen.append(state.mess_protokoll or "(keine)")
+    zeilen.append(_messwerte_fuer_prompt(state))
     if grund:
         zeilen.append("")
         zeilen.append(
@@ -4427,6 +4442,45 @@ def format_projekt_stand(state: RunState) -> str:
                 "  Dateien: " + ", ".join(dateien))
     zeilen.append("")
     return "\n".join(zeilen)
+
+
+# New_file-Marker (2026-10-16): Konstante + Helper.
+# Wenn alle Patches typ=new_file sind, ist der
+# GEMESSENER-INHALT-Block erwartbar leer.
+_NEW_FILE_MARKER = (
+    "(nicht anwendbar -- reine new_file-Patches, "
+    "Dateien werden durch die Patches neu angelegt)")
+
+
+def _alle_patches_sind_new_file(state: RunState) -> bool:
+    """New_file-Marker (2026-10-16): sind alle
+    Patches typ=new_file?
+
+    Liefert True, wenn mindestens ein Patch vorhanden
+    ist UND alle Patches typ=new_file haben.
+    Liefert False, wenn keine Patches da sind oder
+    mindestens einer typ != new_file hat.
+    """
+    patches = state.code_patches or []
+    if not patches:
+        return False
+    return all(
+        isinstance(p, dict) and p.get("typ") == "new_file"
+        for p in patches)
+
+
+def _messwerte_fuer_prompt(state: RunState) -> str:
+    """New_file-Marker (2026-10-16): liefert den
+    GEMESSENER-INHALT-Block-Inhalt.
+
+    - Bei reinen new_file-Patches: _NEW_FILE_MARKER.
+    - Sonst: state.mess_protokoll oder "(keine)".
+    """
+    if not state.mess_protokoll:
+        if _alle_patches_sind_new_file(state):
+            return _NEW_FILE_MARKER
+        return "(keine)"
+    return state.mess_protokoll
 
 
 def _format_whitelist_block(
@@ -6558,7 +6612,7 @@ def run_pipeline(project_name: str, aufgabe: str,
             + format_doc_snippets(s.docs) + "\n\n"
             + zs + "\n\n"
             + f"GEMESSENER INHALT (verbindlich, gewinnt gegen "
-            f"ZIELDATEIEN):\n{s.mess_protokoll or '(keine)'}\n\n"
+            f"ZIELDATEIEN):\n{_messwerte_fuer_prompt(s)}\n\n"
             + "Liefere strukturierte Code-Patches im Format "
             "PATCH-BEGINN/PATCH-ENDE.\n"
             "Format und Einrueckungs-Regeln stehen im "
@@ -6645,7 +6699,7 @@ def run_pipeline(project_name: str, aufgabe: str,
                 "!!! GEMESSENER INHALT NACH APPLY.\n\n")
                if state.mess_protokoll_veraltet else "")
             + f"GEMESSENER INHALT (verbindlich, gewinnt gegen "
-            f"ZIELDATEIEN):\n{state.mess_protokoll or '(keine)'}\n\n"
+            f"ZIELDATEIEN):\n{_messwerte_fuer_prompt(state)}\n\n"
             # Bug-Fix 2026-10-14: Nach-Apply-Block (Z4:
             # nur wenn vorhanden).
             + (f"GEMESSENER INHALT NACH APPLY:\n"
@@ -6903,7 +6957,7 @@ def run_pipeline(project_name: str, aufgabe: str,
                     + antwort_block
                     + _solver_befund_block(s)
                     + "GEMESSENER INHALT (verbindlich):\n"
-                    + f"{s.mess_protokoll or '(keine)'}\n\n"
+                    + f"{_messwerte_fuer_prompt(s)}\n\n"
                     + "Ueberarbeite den Code-Entwurf. "
                     + "Liefere strukturierte Code-Patches."
                 )
@@ -6944,7 +6998,7 @@ def run_pipeline(project_name: str, aufgabe: str,
                         "Der Reviewer hat GO gegeben, aber folgende "
                         f"Auflagen formuliert:\n{_at}\n\n"
                         + "GEMESSENER INHALT (verbindlich):\n"
-                        + f"{s.mess_protokoll or '(keine)'}\n\n"
+                        + f"{_messwerte_fuer_prompt(s)}\n\n"
                         + "Ueberarbeite die Code-Patches, um die "
                         + "Auflagen umzusetzen. Antworte mit den "
                         + "ueberarbeiteten PATCH-BEGINN/PATCH-ENDE-"

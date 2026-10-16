@@ -5619,3 +5619,102 @@ class TestRollenKalibrierung:
             agent, {}, [], mit_anti_patterns=False)
         assert "R11. SACHFADEN." in prompt
 
+# =====================================================================
+# New_file-Marker + B15/R12 (A7, 2026-10-16)
+# =====================================================================
+
+class TestNewFileMarker:
+    """Tests fuer den new_file-Marker + Rollen-Regeln."""
+
+    def _state_new_file(self, tmp_path: Path) -> pipeline.RunState:
+        s = build_test_state(project_dir=tmp_path)
+        s.code_patches = [
+            {"typ": "new_file", "pfad": "core/x.py",
+             "inhalt": "x = 1\n"},
+            {"typ": "new_file", "pfad": "core/y.py",
+             "inhalt": "y = 1\n"},
+        ]
+        s.mess_protokoll = ""
+        return s
+
+    def _state_patch(self, tmp_path: Path) -> pipeline.RunState:
+        s = build_test_state(project_dir=tmp_path)
+        s.code_patches = [
+            {"typ": "patch", "pfad": "core/x.py",
+             "anker": "ALT", "ersatz": "NEU"},
+        ]
+        s.mess_protokoll = ""
+        return s
+
+    def test_marker_konstante(self) -> None:
+        assert "_NEW_FILE_MARKER" in dir(pipeline)
+        assert "nicht anwendbar" in pipeline._NEW_FILE_MARKER
+
+    def test_alle_patches_new_file_true(
+            self, tmp_path: Path) -> None:
+        s = self._state_new_file(tmp_path)
+        assert pipeline._alle_patches_sind_new_file(s) is True
+
+    def test_alle_patches_new_file_false_patch(
+            self, tmp_path: Path) -> None:
+        s = self._state_patch(tmp_path)
+        assert pipeline._alle_patches_sind_new_file(s) is False
+
+    def test_alle_patches_new_file_false_leer(
+            self, tmp_path: Path) -> None:
+        s = build_test_state(project_dir=tmp_path)
+        s.code_patches = []
+        s.mess_protokoll = ""
+        assert pipeline._alle_patches_sind_new_file(s) is False
+
+    def test_messwerte_prompt_marker_bei_new_file(
+            self, tmp_path: Path) -> None:
+        s = self._state_new_file(tmp_path)
+        out = pipeline._messwerte_fuer_prompt(s)
+        assert "nicht anwendbar" in out
+
+    def test_messwerte_prompt_keine_bei_patch(
+            self, tmp_path: Path) -> None:
+        s = self._state_patch(tmp_path)
+        out = pipeline._messwerte_fuer_prompt(s)
+        assert out == "(keine)"
+
+    def test_messwerte_prompt_voller_text(
+            self, tmp_path: Path) -> None:
+        s = self._state_new_file(tmp_path)
+        s.mess_protokoll = "=== read_file ===\nFakten."
+        out = pipeline._messwerte_fuer_prompt(s)
+        assert "Fakten" in out
+
+    def test_hard_rules_builder_b15(self) -> None:
+        assert "B15. NEW_FILE OHNE MESSUNG." in \
+            pipeline.HARD_RULES_BUILDER
+
+    def test_hard_rules_reviewer_r12(self) -> None:
+        assert "R12. NEW_FILE-MARKER." in \
+            pipeline.HARD_RULES_REVIEWER
+
+    def test_build_system_prompt_builder_b15(self) -> None:
+        agent = {"name": "builder", "body": "Body"}
+        prompt = pipeline.build_system_prompt(
+            agent, {}, [], mit_anti_patterns=False)
+        assert "B15. NEW_FILE OHNE MESSUNG." in prompt
+
+    def test_build_system_prompt_reviewer_r12(self) -> None:
+        agent = {"name": "reviewer", "body": "Body"}
+        prompt = pipeline.build_system_prompt(
+            agent, {}, [], mit_anti_patterns=False)
+        assert "R12. NEW_FILE-MARKER." in prompt
+
+    def test_agents_builder_md_new_file(self) -> None:
+        p = Path("/opt/werkstatt/agents/builder.md")
+        md = p.read_text(encoding="utf-8")
+        assert "Bei new_file-Patches: read_file liefert" in md
+        assert "OHNE vorheriges read_file" in md
+
+    def test_agents_reviewer_md_new_file(self) -> None:
+        p = Path("/opt/werkstatt/agents/reviewer.md")
+        md = p.read_text(encoding="utf-8")
+        assert "Bei reinen new_file-Patches" in md
+        assert "KEIN NO-GO" in md
+

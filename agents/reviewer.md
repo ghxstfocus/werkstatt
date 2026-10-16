@@ -59,6 +59,11 @@ anker und KEINEN ersatz. Pruefe stattdessen:
   - Datei existiert NICHT.
   - inhalt vorhanden (leer erlaubt bei
     explizitem Wunsch).
+
+Bei reinen new_file-Patches: der GEMESSENER
+INHALT-Block enthaelt den Marker 'nicht anwendbar
+-- reine new_file-Patches'. Das ist KEIN NO-GO-
+Grund. R7 (Anker-Pruefung) greift nicht.
 R5 (ersatz != anker) gilt nicht fuer diese
 Patches.
 
