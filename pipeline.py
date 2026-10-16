@@ -3568,19 +3568,26 @@ def classify_verdict(text: str) -> str:
         if s.upper().startswith("COMMAND:"):
             return "COMMAND"
     # B0c: Fallback fuer Verdict am Ende.
-    # Nur die LETZTE nicht-leere Zeile, und nur wenn
-    # sie kurz und das Verdict-Wort allein ist.
-    # Grund: reviewer.md verlangt 'am Ende GO/NO-GO/
-    # ESKALATION'. Eingebettete Worte (z.B.
-    # 'R15: GO.' in Fliesstext) werden nicht erkannt.
-    _ende_zeile = ""
+    # B0c-2 (2026-10-16, Lauf 26): Markdown-Marker
+    # strippen und die letzten 5 nicht-leeren Zeilen
+    # pruefen (Verdict kann in -1, -2, ... stehen).
+    # Nur kurze Zeilen (< 40 Zeichen) zaehlen, damit
+    # 'R15: GO.' in Fliesstext nicht faelschlich
+    # greift.
+    _marker = "*`_# \t"
+    _ende_zeilen: list[str] = []
     for line in reversed(text.splitlines()):
-        if line.strip():
-            _ende_zeile = line.strip()
+        _s = line.strip()
+        if _s:
+            _ende_zeilen.append(_s)
+        if len(_ende_zeilen) >= 5:
             break
-    if _ende_zeile and len(_ende_zeile) < 40:
-        w = _ende_zeile.split(maxsplit=1)[0].upper().rstrip(
-            satzzeichen)
+    for _ende_zeile in _ende_zeilen:
+        _rein = _ende_zeile.strip(_marker).strip()
+        if not _rein or len(_rein) > 40:
+            continue
+        w = _rein.split(maxsplit=1)[0].upper().rstrip(
+            satzzeichen + "*`_")
         if w in {"GO", "NO-GO", "ESKALATION"}:
             return w
         if w in {"COMMIT-GO", "COMMIT-NO-GO",
@@ -3588,7 +3595,7 @@ def classify_verdict(text: str) -> str:
             return w
         if w == "ANTWORT":
             return "ANTWORT"
-        if _ende_zeile.upper().startswith("COMMAND:"):
+        if _rein.upper().startswith("COMMAND:"):
             return "COMMAND"
     return "UNKLAR"
 

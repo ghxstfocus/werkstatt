@@ -6068,3 +6068,38 @@ class TestCommitPhaseFixes:
 
     def test_katalog_anzahl_ist_71(self) -> None:
         assert len(pipeline._AUDIT_KINDS_BEKANNT) == 71
+
+
+# =====================================================================
+# B0c-2 (2026-10-16, Lauf 26): Markdown + mehrzeiliger End-Fallback
+# =====================================================================
+
+class TestB0c2MarkdownEnde:
+    def test_go_in_markdown_fett(self) -> None:
+        text = "## Bericht\n\nAlle OK.\n\n**GO**"
+        assert pipeline.classify_verdict(text) == "GO"
+
+    def test_go_nicht_letzte_zeile(self) -> None:
+        # GO in -2, danach noch Text.
+        text = ("## Bericht\n\nBefund.\n\n**GO**\n\n"
+                "Die Werkstatt wendet an.")
+        assert pipeline.classify_verdict(text) == "GO"
+
+    def test_go_mit_backtick(self) -> None:
+        text = "## Bericht\n\nOK.\n\n`GO`"
+        assert pipeline.classify_verdict(text) == "GO"
+
+    def test_no_go_markdown(self) -> None:
+        text = "## Bericht\n\nBefund.\n\n**NO-GO**"
+        assert pipeline.classify_verdict(text) == "NO-GO"
+
+    def test_go_in_satz_zaehlt_nicht(self) -> None:
+        text = "## Bericht\n\nR15: GO ist erfuellt, weil ..."
+        assert pipeline.classify_verdict(text) == "UNKLAR"
+
+    def test_go_nach_sechs_zeilen_nicht(self) -> None:
+        text = ("## Bericht\n\nOK.\n\n**GO**\n\n"
+                "Zeile1.\nZeile2.\nZeile3.\nZeile4.\n"
+                "Zeile5.")
+        # GO liegt mehr als 5 nicht-leere Zeilen zurueck.
+        assert pipeline.classify_verdict(text) == "UNKLAR"
