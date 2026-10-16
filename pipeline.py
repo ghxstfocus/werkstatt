@@ -6584,7 +6584,25 @@ def _extrahiere_aenderung_pfade(message: str) -> (
         for pm in pfad_re.finditer(text):
             pfade.add(_normalisiere_pfad(pm.group(0)))
     if gefunden == 0:
-        return (set(), "a")
+        # W10b (2026-10-16): Fallback. Wenn der
+        # Builder Fliesstext statt Bullets liefert:
+        # alle Pfade bis zum naechsten Abschnitt
+        # (naechste Zeile, die mit Grossbuchstabe
+        # beginnt und mit ':' endet).
+        abschnitt_re = _re.compile(
+            r"^[A-Za-z][A-Za-z0-9 _-]*:",
+            _re.MULTILINE)
+        # Nach dem Header bis zum naechsten
+        # Abschnitt.
+        _rest = rest
+        _m_abs = abschnitt_re.search(_rest)
+        if _m_abs is not None:
+            _rest = _rest[:_m_abs.start()]
+        for _pm in pfad_re.finditer(_rest):
+            pfade.add(_normalisiere_pfad(_pm.group(0)))
+        if not pfade:
+            return (set(), "a")
+        return (pfade, "")
     if not pfade:
         return (set(), "c")
     return (pfade, "")

@@ -6691,3 +6691,39 @@ class TestW10:
     def test_audit_kind_commit_message_diskrepanz_existiert(self) -> None:
         assert ("commit_message_diskrepanz"
                 in pipeline._AUDIT_KINDS_BEKANNT)
+
+
+# =====================================================================
+# W10b (2026-10-16): Aenderung-Block Fallback
+# =====================================================================
+
+class TestW10b:
+    def test_aenderung_block_fliesstext_fallback(self) -> None:
+        msg = (
+            "Aenderung:\n"
+            "apps/dashboard/routes_guardrails.py, neue "
+            "Datei mit register_guardrails_routes(app).\n"
+            "\n"
+            "Tests:\n"
+            "1392 gesammelt.\n"
+        )
+        pfade, fehler = pipeline._extrahiere_aenderung_pfade(msg)
+        assert fehler == ""
+        assert pfade == {"apps/dashboard/routes_guardrails.py"}
+
+    def test_aenderung_block_fliesstext_mit_referenz(self) -> None:
+        # Fliesstext mit Referenz auf Muster.
+        msg = (
+            "Aenderung:\n"
+            "apps/dashboard/routes_guardrails.py, "
+            "Muster apps/dashboard/routes_tools.py.\n"
+            "\n"
+            "Tests:\n"
+            "1392 gesammelt.\n"
+        )
+        pfade, fehler = pipeline._extrahiere_aenderung_pfade(msg)
+        assert fehler == ""
+        # Fallback zaehlt ALLE Pfade im Block
+        # (nicht nur Zieldateien).
+        assert "apps/dashboard/routes_guardrails.py" in pfade
+        assert "apps/dashboard/routes_tools.py" in pfade
