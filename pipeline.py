@@ -735,7 +735,12 @@ HARD_RULES_BY_ROLE["planner"] = HARD_RULES_PLANNER
 
 # Auflage 2041: Groessenlimits fuer das Messprotokoll.
 MAX_PROTOKOLL_PER_COMMAND = 10_000
-MAX_PROTOKOLL_TOTAL = 100_000
+# W6a-4 (2026-10-16): read_file braucht mehr Platz,
+# weil Anker tief in grossen Dateien stehen.
+MAX_PROTOKOLL_PER_COMMAND_READ_FILE = 20_000
+# W6a-4 (2026-10-16): Total auf 150_000 erhoeht,
+# damit 5 read_files a 20_000 + andere passen.
+MAX_PROTOKOLL_TOTAL = 150_000
 
 # Auflage 2042: erlaubte Quellen-Marker fuer COMMAND-Audits.
 ERLAUBTE_QUELLEN = {
@@ -5307,7 +5312,14 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
             m, state.file_whitelist, state.project_dir,
             arg if cid == "read_file" else None,
         )
-        out = trim_output(out)
+        # W6a-4 (2026-10-16): read_file darf groesser
+        # sein (Anker-Zeilen sind oft tief in
+        # grossen Dateien).
+        _grenze = (
+            MAX_PROTOKOLL_PER_COMMAND_READ_FILE
+            if cid == "read_file"
+            else MAX_PROTOKOLL_PER_COMMAND)
+        out = trim_output(out, grenze=_grenze)
 
         # Auflage 2041: Gesamtlaenge begrenzen.
         rest_platz = MAX_PROTOKOLL_TOTAL - len(state.mess_protokoll)
@@ -6489,12 +6501,15 @@ def _audit_builder_prompt(prompt: str, state: RunState,
         rest = prompt[i:]
         # Naechste Sektion suchen: Zeile, die mit Grossbuchstabe
         # beginnt und mit ":" endet
-        m2 = re.search(r"\n[A-ZÄÖÜ][A-ZÄÖÜa-zäöü_ ()/,-]{2,60}:",
-                        rest[len(marker):])
+        m2 = re.search(
+            r"\n(?!ARGV:|RC:|STDOUT:|STDERR:)"
+            r"[A-ZÄÖÜ][A-ZÄÖÜäöü_ ()/,-]{2,60}:",
+            rest[len(marker):])
         if m2:
             gem_len = len(rest[:len(marker) + m2.start()])
         else:
             gem_len = len(rest)
+    anzahl_read_file = prompt.count("=== read_file ===")
     redigiert, _ = redaction.redact_all(prompt, max_len=200000)
     # P2b-Luecke-B / S9: Feld solver_befund_eingesetzt.
     solver_drin = "SOLVER-BEFUND" in prompt
@@ -6502,6 +6517,7 @@ def _audit_builder_prompt(prompt: str, state: RunState,
           {"prompt_len": len(redigiert),
            "sektionen": sektionen,
            "gemessener_inhalt_len": gem_len,
+           "anzahl_read_file": anzahl_read_file,
            "solver_befund_eingesetzt": solver_drin},
           project_dir, project_name)
 

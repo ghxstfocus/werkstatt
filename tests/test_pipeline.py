@@ -6379,3 +6379,52 @@ class TestW3PlannerMessung:
         uc = pipeline._planner_user_content(
             "roh", "hist", stufe=1)
         assert isinstance(uc, str)
+
+
+# =====================================================================
+# W6a (2026-10-16): Diagnose-Regex + read_file-Limit
+# =====================================================================
+
+class TestW6a:
+    def test_diagnose_regex_ignoriert_stdout(self) -> None:
+        import re
+        # Der Test-Text simuliert den GEMESSENER-
+        # INHALT-Block mit einem read_file-Output.
+        text = (
+            "GEMESSENER INHALT (verbindlich, gewinnt):\n"
+            "=== read_file ===\n"
+            "ARGV: cat /x.py\n"
+            "RC: 0\n"
+            "STDOUT:\n"
+            "def f():\n"
+            "    pass\n"
+            "STDERR:\n"
+            "\n"
+            "NAECHSTE SEKTION:\n"
+        )
+        marker = "GEMESSENER INHALT (verbindlich"
+        i = text.find(marker)
+        rest = text[i:]
+        m2 = re.search(
+            r"\n(?!ARGV:|RC:|STDOUT:|STDERR:)"
+            r"([A-ZAEOEUE][A-ZAEOEUEa-zaeoeue_ ()/,-]{2,60}:)",
+            rest[len(marker):])
+        assert m2 is not None
+        assert "NAECHSTE SEKTION" in m2.group(1)
+
+    def test_read_file_konstante_existiert(self) -> None:
+        assert pipeline.MAX_PROTOKOLL_PER_COMMAND_READ_FILE == 20_000
+
+    def test_total_konstante_150k(self) -> None:
+        assert pipeline.MAX_PROTOKOLL_TOTAL == 150_000
+
+    def test_trim_output_mit_grenze(self) -> None:
+        lang = "x" * 30_000
+        gekappt = pipeline.trim_output(lang, grenze=20_000)
+        assert len(gekappt) < 30_000
+
+    def test_read_file_grenze_20k(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.execute_commands)
+        assert "MAX_PROTOKOLL_PER_COMMAND_READ_FILE" in src
+        assert '"read_file"' in src
