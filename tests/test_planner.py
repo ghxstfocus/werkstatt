@@ -140,6 +140,8 @@ class TestPlannerLauf:
             "korrektur_kontext",
             # Block 2a / B1: phase_stand hinzugefuegt.
             "phase_stand",
+            # W3 (2026-10-16): max_runden.
+            "max_runden",
         ]
 
 
@@ -375,9 +377,9 @@ class TestPlannerPraezision:
         assert "P18." not in s
 
     def test_stufe2_p9strich_verweist_auf_p18(self) -> None:
-        # Auflage B1-A1: P9' auf P10-P18 erweitert.
+        # Auflage B1-A1 + W3-A3: P9' auf P10-P19.
         s = pipeline.HARD_RULES_PLANNER_STUFE2
-        assert "P10-P18" in s
+        assert "P10-P19" in s
 
     def test_planner_md_p18_sektion(self) -> None:
         from pathlib import Path as _P

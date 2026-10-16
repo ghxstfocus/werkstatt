@@ -602,7 +602,7 @@ P8. Rueckfrage-Format ist bindend:
       RUECKFRAGE:
         <Frage>
 P9'. Das Format ist bindend. Bei Verstoss gegen
-     P10-P18 wird der Phasenplan verworfen und
+     P10-P19 wird der Phasenplan verworfen und
      du wirst erneut gerufen (max planner.max_runden
      Runden).
 P10. Phase-Kopf-Format ist bindend:
@@ -691,10 +691,38 @@ P18. REVIEWER-BEFUND IM DETAIL. Wenn du zur
           aendert sich.
        5. Wenn ein Punkt nicht beantwortet werden
           kann: UNBEANTWORTET: <punkt>.
+       6. Der Unterpunkt-Text muss die gemessenen
+          Anker/Zitate enthalten (P19). Ein Plan
+          ohne Messung ist unzulaessig.
+          UNBEANTWORTET ist nur zulaessig, wenn
+          eine Messung (COMMAND: RUN read_file)
+          vorliegt und die Messung den Reviewer-
+          Befund nicht aufloesen kann.
      Der Plan-Korrektur-Schutz verwirft Plaene,
      die done-Unterbloecke veraendern. Aendere
      keine done-Unterbloecke - dein Plan wird
      sonst verworfen.
+
+P19. MESSEN VOR DEM PLAN.
+     Bevor du einen Phasenplan formulierst
+     oder korrigierst:
+     (a) Wenn der Auftrag oder der Reviewer-
+         Befund eine Datei nennt: pruefe mit
+           COMMAND: RUN read_file <pfad>
+         ob die Datei existiert und was drin
+         steht.
+     (b) Wenn eine Struktur fehlt (z.B.
+         'register-Aufruf in app.py fehlt'):
+         lies die Datei und zitiere die
+         gemessenen Zeilen woertlich im
+         Auftragstext.
+     (c) Wenn eine Datei neu angelegt wird:
+         pruefe, ob der Pfad frei ist
+         (COMMAND: RUN read_file <pfad>
+          -> wenn ok=False: neu).
+     Der Plan muss die gemessenen Zitate
+     enthalten. Behauptungen ohne Messung
+     sind unzulaessig.
 """
 
 HARD_RULES_BY_ROLE = {
@@ -713,6 +741,7 @@ MAX_PROTOKOLL_TOTAL = 100_000
 ERLAUBTE_QUELLEN = {
     "reviewer", "builder", "test_generator",
     "pipeline_auto", "reviewer_command",
+    "planner",
 }
 
 
@@ -1006,6 +1035,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "phase_commit_dateien_deterministisch",
     "commit_review_diff_fehler",
     "commit_review_diff_name_only",
+    "planner_command_max_runden",
     "review_round",
     "reviewer_frage_antwort",
     "reviewer_run_solver",
@@ -2983,6 +3013,7 @@ def _planner_user_content(
     stufe: int = 1,
     korrektur_kontext: dict[str, Any] | None = None,
     phase_stand: dict[str, Any] | None = None,
+    state: RunState | None = None,
 ) -> str:
     """Baut den User-Content fuer den Planner.
 
@@ -3025,6 +3056,12 @@ def _planner_user_content(
         if phase_stand is not None:
             teile.append(_phase_stand_sektion(phase_stand))
         teile.append(f"ALTER PLAN:\n{alter_plan}\n\n")
+        # W3-A4: GEMESSENER INHALT fuer den Planner.
+        if state is not None:
+            _mw = _messwerte_fuer_planner(state)
+            if _mw:
+                teile.append(
+                    f"GEMESSENER INHALT:\n{_mw}\n\n")
         teile.append(
             "GESAMMELTE PAKETE (kompakt):\n"
             f"{pakete_kompakt}\n\n"
@@ -3067,8 +3104,15 @@ def _planner_lauf(
     stufe: int = 1,
     korrektur_kontext: dict[str, Any] | None = None,
     phase_stand: dict[str, Any] | None = None,
+    max_runden: int = 3,
 ) -> str | None:
     """Fuehrt den Planner aus und liefert die Antwort.
+
+    W3 (2026-10-16): COMMAND-Loop. Der Planner
+    darf COMMAND: RUN read_file senden. Die
+    Werkstatt fuehrt aus, ruft den Planner
+    erneut. Max max_runden Runden (Default 3).
+    Bei Erschoepfung: fail-closed (None).
 
     Liefert None bei Fehler (Aufrufer behandelt Fail-closed).
     Liefert den Antwort-Text bei Erfolg.
@@ -3084,23 +3128,43 @@ def _planner_lauf(
         state=state,
         stufe=stufe)
 
-    user_content = _planner_user_content(
-        roher_auftrag, historie, stufe,
-        korrektur_kontext=korrektur_kontext,
-        phase_stand=phase_stand)
-
-    reply = ask_llm(
-        api_key, planner_prompt, user_content,
-        state.planner_model, 0.0,
-        state.llm_timeout_s, state=state)
-    if not reply.ok:
-        print(f"[FAIL] Planner-Aufruf: {reply.error}")
-        audit("planner_call_failed",
-              {"error": reply.error, "runde": state.planner_runden},
-              project_dir, project_name)
-        return None
-
-    return reply.content
+    for _runde in range(1, max_runden + 1):
+        user_content = _planner_user_content(
+            roher_auftrag, historie, stufe,
+            korrektur_kontext=korrektur_kontext,
+            phase_stand=phase_stand,
+            state=state)
+        state.planner_runden = _runde
+        reply = ask_llm(
+            api_key, planner_prompt, user_content,
+            state.planner_model, 0.0,
+            state.llm_timeout_s, state=state)
+        if not reply.ok:
+            print(f"[FAIL] Planner-Aufruf: {reply.error}")
+            audit("planner_call_failed",
+                  {"error": reply.error,
+                   "runde": state.planner_runden},
+                  project_dir, project_name)
+            return None
+        # W3-A1: COMMAND-Loop (lokale Schleife).
+        if "COMMAND:" not in reply.content:
+            return reply.content
+        _cmds = parse_commands(reply.content)
+        if not _cmds:
+            return reply.content
+        _geaendert = execute_commands(
+            state, _cmds, quelle="planner")
+        print(f"[i] Planner-COMMAND Runde {_runde}/"
+              f"{max_runden}: {len(_cmds)} Kommando(s).")
+        if not _geaendert:
+            return reply.content
+    # Max-Runden erreicht.
+    print(f"[FAIL] Planner-COMMAND max_runden "
+          f"({max_runden}) erreicht. Fail closed.")
+    audit("planner_command_max_runden",
+          {"max_runden": max_runden},
+          project_dir, project_name)
+    return None
 
 
 def load_agents(agents_dir: str) -> dict[str, dict[str, Any]]:
@@ -4951,6 +5015,20 @@ def _alle_patches_sind_new_file(state: RunState) -> bool:
     return all(
         isinstance(p, dict) and p.get("typ") == "new_file"
         for p in patches)
+
+
+def _messwerte_fuer_planner(state: RunState) -> str:
+    """W3-A4 (2026-10-16): Messwerte fuer den Planner.
+
+    Anders als _messwerte_fuer_prompt (der bei reinen
+    new_file-Paketen den new_file-Marker liefert)
+    liefert diese Funktion immer den tatsaechlichen
+    mess_protokoll-Inhalt. Der Planner soll gerade
+    messen.
+    """
+    if not state.mess_protokoll:
+        return "(keine Messungen durchgefuehrt)"
+    return state.mess_protokoll
 
 
 def _messwerte_fuer_prompt(state: RunState) -> str:

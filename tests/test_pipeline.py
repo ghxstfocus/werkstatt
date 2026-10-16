@@ -5289,7 +5289,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 74
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 75
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5325,7 +5325,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 74
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 75
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6123,7 +6123,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 74
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 75
 
 
 # =====================================================================
@@ -6228,7 +6228,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 74
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 75
 
 
 # =====================================================================
@@ -6283,7 +6283,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 74
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 75
 
 
 # =====================================================================
@@ -6314,3 +6314,68 @@ class TestW2BuilderRules:
         s = pipeline.HARD_RULES_BUILDER
         assert "Funktions-Signaturen" in s
         assert "Nummernkreise" in s
+
+
+# =====================================================================
+# W3+W4 (2026-10-16): Planner-Messung + Plan-Korrektur
+# =====================================================================
+
+class TestW3PlannerMessung:
+    def test_p19_im_planner_prompt(self) -> None:
+        assert "P19." in pipeline.HARD_RULES_PLANNER_STUFE2
+
+    def test_p19_nennt_read_file(self) -> None:
+        s = pipeline.HARD_RULES_PLANNER_STUFE2
+        assert "COMMAND: RUN read_file" in s
+        assert "MESSEN VOR DEM PLAN" in s
+
+    def test_p19_nicht_in_stufe1(self) -> None:
+        assert "P19." not in pipeline.HARD_RULES_PLANNER_STUFE1
+
+    def test_planner_command_loop_im_code(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline._planner_lauf)
+        assert "COMMAND:" in src
+        assert "parse_commands" in src
+        assert "quelle=\"planner\"" in src
+
+    def test_planner_command_loop_max_runden(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline._planner_lauf)
+        assert "planner_command_max_runden" in src
+        assert "max_runden" in src
+
+    def test_planner_user_content_hat_messwerte(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline._planner_user_content)
+        assert "_messwerte_fuer_planner" in src
+
+    def test_planner_in_erlaubte_quellen(self) -> None:
+        assert "planner" in pipeline.ERLAUBTE_QUELLEN
+
+    def test_p9strich_verweist_auf_p19(self) -> None:
+        s = pipeline.HARD_RULES_PLANNER_STUFE2
+        assert "P10-P19" in s
+
+    def test_p18_hat_sechste_punkt(self) -> None:
+        s = pipeline.HARD_RULES_PLANNER_STUFE2
+        # P18 Punkt 6: Messungs-Pflicht.
+        i = s.find("P18.")
+        j = s.find("P19.", i)
+        block = s[i:j] if i >= 0 and j > i else s[i:]
+        assert "6. Der Unterpunkt-Text" in block
+
+    def test_planner_lauf_signatur_max_runden(self) -> None:
+        import inspect
+        sig = inspect.signature(pipeline._planner_lauf)
+        assert "max_runden" in sig.parameters
+
+    def test_audit_kind_planner_command_max_runden(self) -> None:
+        assert ("planner_command_max_runden"
+                in pipeline._AUDIT_KINDS_BEKANNT)
+
+    def test_planner_user_content_state_optional(self) -> None:
+        # Alte Tests ohne state bleiben gruen.
+        uc = pipeline._planner_user_content(
+            "roh", "hist", stufe=1)
+        assert isinstance(uc, str)
