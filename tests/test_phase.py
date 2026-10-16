@@ -320,7 +320,9 @@ class TestRunPhase:
         _baue_phase_yaml(tmp_path, _standard_unterbloecke())
         state = _state_fuer_phase(tmp_path)
         from unittest.mock import patch
-        with patch("pipeline.run_pipeline") as mock_rp:
+        with patch("pipeline.run_pipeline") as mock_rp, \
+             patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40):
             rc = pipeline.run_phase("testprojekt", state)
         assert rc == 0
         assert not mock_rp.called, (
@@ -383,11 +385,285 @@ class TestRunPhase:
         def fake_audit(kind, *a, **kw):
             gesehen.append(kind)
 
-        with patch("pipeline.audit", side_effect=fake_audit):
+        with patch("pipeline.audit", side_effect=fake_audit), \
+             patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40):
             rc = pipeline.run_phase("testprojekt", state)
         assert rc == 0
         assert "run_phase_start" in gesehen
         assert "run_phase_ende" in gesehen
         assert "phase_unterblock_start" in gesehen
         assert "phase_unterblock_ende" in gesehen
+
+# =====================================================================
+# _git_rev_parse_head / _git_status_porcelain — P2b-2
+# =====================================================================
+
+class TestGitHelpers:
+    def test_rev_parse_existiert(self) -> None:
+        assert hasattr(pipeline, "_git_rev_parse_head")
+
+    def test_status_porcelain_existiert(self) -> None:
+        assert hasattr(pipeline, "_git_status_porcelain")
+
+    def test_rev_parse_kein_repo_gibt_leer(
+            self, tmp_path: Path) -> None:
+        # tmp_path ist kein git-Repo -> "".
+        assert pipeline._git_rev_parse_head(tmp_path) == ""
+
+    def test_status_porcelain_kein_repo_gibt_sentinel(
+            self, tmp_path: Path) -> None:
+        # tmp_path ist kein git-Repo -> Sentinel (nicht leer).
+        out = pipeline._git_status_porcelain(tmp_path)
+        assert out != ""
+
+
+# =====================================================================
+# _phase_rollback — P2b-2 (Mock)
+# =====================================================================
+
+class TestPhaseRollback:
+    def test_funktion_existiert(self) -> None:
+        assert hasattr(pipeline, "_phase_rollback")
+
+    def test_signatur(self) -> None:
+        sig = inspect.signature(pipeline._phase_rollback)
+        params = list(sig.parameters.keys())
+        assert params == ["project_name", "state", "grund"]
+
+    def _state(self, tmp_path: Path, head: str) -> object:
+        s = _state_fuer_phase(tmp_path)
+        s.phase_start_head = head
+        return s
+
+    def test_leerer_start_head_fail_closed(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        state = self._state(tmp_path, "")
+        with patch("pipeline.audit") as mock_audit:
+            ok = pipeline._phase_rollback(
+                "testprojekt", state, "test")
+        assert ok is False
+        assert any(
+            c.args[1].get("warum") == "kein_phase_start_head"
+            for c in mock_audit.call_args_list
+            if c.args and c.args[0] == "phase_rollback")
+
+    def test_head_abweichend_kein_reset(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        state = self._state(tmp_path, "a" * 40)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="b" * 40), \
+             patch("pipeline.subprocess.run") as mock_run, \
+             patch("pipeline.audit"):
+            ok = pipeline._phase_rollback(
+                "testprojekt", state, "test")
+        assert ok is False
+        assert not mock_run.called
+
+    def test_status_schmutzig_kein_reset(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        state = self._state(tmp_path, "a" * 40)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline._git_status_porcelain",
+                   return_value=" M x.py"), \
+             patch("pipeline.subprocess.run") as mock_run, \
+             patch("pipeline.audit"):
+            ok = pipeline._phase_rollback(
+                "testprojekt", state, "test")
+        assert ok is False
+        assert not mock_run.called
+
+    def test_erfolg_reset_und_clean(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import MagicMock, patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        state = self._state(tmp_path, "a" * 40)
+        state.file_whitelist = ["apps/"]
+        state.phase_commit_pakete = [{"message": "x"}]
+        fake_ok = MagicMock()
+        fake_ok.returncode = 0
+        fake_ok.stdout = ""
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline._git_status_porcelain",
+                   return_value=""), \
+             patch("pipeline.subprocess.run",
+                   return_value=fake_ok) as mock_run, \
+             patch("pipeline.audit") as mock_audit:
+            ok = pipeline._phase_rollback(
+                "testprojekt", state, "test")
+        assert ok is True
+        assert state.phase_commit_pakete == []
+        # argv-Aufbau pruefen: reset + clean-dry + clean.
+        argv_liste = [c.args[0] for c in mock_run.call_args_list]
+        assert ("git", "reset", "--hard", "a" * 40) in argv_liste
+        assert ("git", "clean", "-nd", "--", "apps/") in argv_liste
+        assert ("git", "clean", "-fd", "--", "apps/") in argv_liste
+        assert any(
+            c.args[1].get("ok") is True
+            for c in mock_audit.call_args_list
+            if c.args and c.args[0] == "phase_rollback")
+
+    def test_exception_im_reset_fail_closed(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        state = self._state(tmp_path, "a" * 40)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline._git_status_porcelain",
+                   return_value=""), \
+             patch("pipeline.subprocess.run",
+                   side_effect=OSError("kaputt")), \
+             patch("pipeline.audit"):
+            ok = pipeline._phase_rollback(
+                "testprojekt", state, "test")
+        assert ok is False
+
+
+# =====================================================================
+# run_phase — phase_start_head-Setzung (P2b-2)
+# =====================================================================
+
+class TestRunPhaseStartHead:
+    def test_setzt_head_wenn_leer(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        state = _state_fuer_phase(tmp_path)
+        assert state.phase_start_head == ""
+        fake_head = "c" * 40
+        with patch("pipeline._git_rev_parse_head",
+                   return_value=fake_head), \
+             patch("pipeline.audit"):
+            rc = pipeline.run_phase("testprojekt", state)
+        assert rc == 0
+        assert state.phase_start_head == fake_head
+        # phase.yaml muss den Wert tragen.
+        daten = pipeline._phase_plan_laden("testprojekt")
+        assert daten is not None
+        assert daten["phase_start_head"] == fake_head
+
+    def test_yaml_gewinnt_wenn_gesetzt(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        ups = _standard_unterbloecke()
+        _baue_phase_yaml(tmp_path, ups)
+        # YAML-Wert nachtragen.
+        daten = pipeline._phase_plan_laden("testprojekt")
+        assert daten is not None
+        daten["phase_start_head"] = "d" * 40
+        pipeline._phase_plan_speichern("testprojekt", daten)
+        # state mit abweichendem Wert (soll ueberschrieben werden).
+        state = _state_fuer_phase(tmp_path)
+        state.phase_start_head = "e" * 40
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="f" * 40), \
+             patch("pipeline.audit"):
+            rc = pipeline.run_phase("testprojekt", state)
+        assert rc == 0
+        # YAML-Wert hat gewonnen, nicht der git-Aufruf.
+        assert state.phase_start_head == "d" * 40
+
+
+# =====================================================================
+# _phase_rollback — Integration (echtes git-Repo)
+# =====================================================================
+
+class TestPhaseRollbackIntegration:
+    def _git(self, cwd: Path, *args: str) -> None:
+        import subprocess as sp
+        sp.run(
+            ["git",
+             "-c", "user.name=Test",
+             "-c", "user.email=test@example.invalid",
+             *args],
+            cwd=str(cwd), check=True,
+            capture_output=True, text=True)
+
+    def test_head_abweichend_kein_reset(
+            self, tmp_path: Path, monkeypatch) -> None:
+        import subprocess as sp
+        from unittest.mock import patch
+        # git-Repo in tmp_path initialisieren.
+        self._git(tmp_path, "init", "-q")
+        (tmp_path / "apps").mkdir()
+        (tmp_path / "apps" / "a.py").write_text("x = 1\n",
+                                                encoding="utf-8")
+        self._git(tmp_path, "add", "--", "apps/a.py")
+        self._git(tmp_path, "commit", "-q", "-m", "init")
+        start = sp.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(tmp_path), capture_output=True,
+            text=True, check=True).stdout.strip()
+        # HEAD verschieben.
+        (tmp_path / "apps" / "a.py").write_text("x = 2\n",
+                                                encoding="utf-8")
+        self._git(tmp_path, "add", "--", "apps/a.py")
+        self._git(tmp_path, "commit", "-q", "-m", "second")
+        head_neu = sp.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(tmp_path), capture_output=True,
+            text=True, check=True).stdout.strip()
+        assert head_neu != start
+        # Rollback: HEAD abweichend -> False, kein Reset.
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        state = _state_fuer_phase(tmp_path)
+        state.phase_start_head = start
+        state.file_whitelist = ["apps/"]
+        with patch("pipeline.audit"):
+            ok = pipeline._phase_rollback(
+                "testprojekt", state, "test")
+        assert ok is False
+        head_danach = sp.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(tmp_path), capture_output=True,
+            text=True, check=True).stdout.strip()
+        assert head_danach == head_neu
+
+    def test_status_schmutzig_kein_reset(
+            self, tmp_path: Path, monkeypatch) -> None:
+        import subprocess as sp
+        from unittest.mock import patch
+        self._git(tmp_path, "init", "-q")
+        (tmp_path / "apps").mkdir()
+        (tmp_path / "apps" / "a.py").write_text("x = 1\n",
+                                                encoding="utf-8")
+        self._git(tmp_path, "add", "--", "apps/a.py")
+        self._git(tmp_path, "commit", "-q", "-m", "init")
+        start = sp.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(tmp_path), capture_output=True,
+            text=True, check=True).stdout.strip()
+        # Untracked Datei in whitelist-Ordner = status schmutzig.
+        (tmp_path / "apps" / "neu.py").write_text("y = 1\n",
+                                                  encoding="utf-8")
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        state = _state_fuer_phase(tmp_path)
+        state.phase_start_head = start
+        state.file_whitelist = ["apps/"]
+        with patch("pipeline.audit"):
+            ok = pipeline._phase_rollback(
+                "testprojekt", state, "test")
+        assert ok is False
+        # Datei ist noch da (kein clean passiert).
+        assert (tmp_path / "apps" / "neu.py").exists()
 

@@ -682,6 +682,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "phase_plan_parse_failed",
     "phase_plan_verworfen",
     "phase_rollback",
+    "phase_start_head_gesetzt",
     "phase_unterblock_ende",
     "phase_unterblock_start",
     "pipeline_approved",
@@ -1507,6 +1508,143 @@ def _phase_yaml_status_update(
     _phase_plan_speichern(project_name, daten)
 
 
+def _phase_rollback(
+    project_name: str,
+    state: RunState,
+    grund: str,
+) -> bool:
+    """Block P2b-2: Rollback auf phase_start_head (RR-K1/K2/K3).
+
+    Ablauf (Konzept 5.2):
+      1. phase_start_head pruefen (state, von run_phase
+         aus YAML synchronisiert).
+      2. HEAD == phase_start_head?
+      3. git status clean?
+      4. git reset --hard <phase_start_head>.
+      5. git clean -fd -- <file_whitelist-Pfade>.
+      6. state.phase_commit_pakete leeren.
+      7. audit phase_rollback.
+
+    Best-Effort (F6): faengt Exceptions um die
+    git-Subprozesse, gibt False zurueck, audit
+    dokumentiert.
+    Rueckgabe (F4): bool. True nur bei
+    vollstaendigem Erfolg.
+    """
+    start = state.phase_start_head
+    if not start:
+        audit("phase_rollback",
+              {"grund": grund, "ok": False,
+               "warum": "kein_phase_start_head"},
+              state.project_dir, project_name)
+        return False
+
+    head_jetzt = _git_rev_parse_head(state.project_dir)
+    if head_jetzt != start:
+        audit("phase_rollback",
+              {"grund": grund, "ok": False,
+               "warum": "HEAD_abweichend",
+               "head_jetzt": head_jetzt,
+               "head_ziel": start},
+              state.project_dir, project_name)
+        return False
+
+    status_out = _git_status_porcelain(state.project_dir)
+    if status_out.strip():
+        audit("phase_rollback",
+              {"grund": grund, "ok": False,
+               "warum": "status_schmutzig"},
+              state.project_dir, project_name)
+        return False
+
+    # Reset.
+    try:
+        res_reset = subprocess.run(
+            ("git", "reset", "--hard", start),
+            cwd=str(state.project_dir),
+            capture_output=True, text=True,
+            timeout=60, check=False,
+            env=subprocess_env(),
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        audit("phase_rollback",
+              {"grund": grund, "ok": False,
+               "warum": "exception",
+               "exception": str(exc)},
+              state.project_dir, project_name)
+        return False
+    if res_reset.returncode != 0:
+        audit("phase_rollback",
+              {"grund": grund, "ok": False,
+               "warum": "reset_rc",
+               "rc": res_reset.returncode},
+              state.project_dir, project_name)
+        return False
+
+    # git clean -fd nur in file_whitelist-Pfaden.
+    # dry-run zuerst, um die Anzahl zu zaehlen.
+    clean_pfade = tuple(state.file_whitelist)
+    clean_zahl = 0
+    if clean_pfade:
+        try:
+            res_dry = subprocess.run(
+                ("git", "clean", "-nd", "--") + clean_pfade,
+                cwd=str(state.project_dir),
+                capture_output=True, text=True,
+                timeout=60, check=False,
+                env=subprocess_env(),
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            audit("phase_rollback",
+                  {"grund": grund, "ok": False,
+                   "warum": "exception_clean_dry",
+                   "exception": str(exc)},
+                  state.project_dir, project_name)
+            return False
+        if res_dry.returncode != 0:
+            audit("phase_rollback",
+                  {"grund": grund, "ok": False,
+                   "warum": "clean_dry_rc",
+                   "rc": res_dry.returncode},
+                  state.project_dir, project_name)
+            return False
+        clean_zahl = len(
+            [z for z in res_dry.stdout.splitlines() if z.strip()])
+        try:
+            res_clean = subprocess.run(
+                ("git", "clean", "-fd", "--") + clean_pfade,
+                cwd=str(state.project_dir),
+                capture_output=True, text=True,
+                timeout=60, check=False,
+                env=subprocess_env(),
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            audit("phase_rollback",
+                  {"grund": grund, "ok": False,
+                   "warum": "exception_clean",
+                   "exception": str(exc)},
+                  state.project_dir, project_name)
+            return False
+        if res_clean.returncode != 0:
+            audit("phase_rollback",
+                  {"grund": grund, "ok": False,
+                   "warum": "clean_rc",
+                   "rc": res_clean.returncode},
+                  state.project_dir, project_name)
+            return False
+
+    pakete_verworfen = len(state.phase_commit_pakete)
+    state.phase_commit_pakete = []
+    audit("phase_rollback",
+          {"grund": grund, "ok": True,
+           "head_ziel": start,
+           "clean_zahl": clean_zahl,
+           "pakete_verworfen": pakete_verworfen},
+          state.project_dir, project_name)
+    return True
+
+
+
 def run_phase(
     project_name: str,
     state: RunState,
@@ -1584,6 +1722,39 @@ def run_phase(
                "grund": "no_go_oder_failed"},
               state.project_dir, project_name)
         return 18
+
+    # F1/F2/P2b-2-A1: phase_start_head synchronisieren.
+    # YAML gewinnt, wenn bereits gesetzt (Resume / Plan-
+    # Aenderung RR-K3). Sonst neu setzen + speichern.
+    yaml_head = str(daten.get("phase_start_head", "") or "")
+    if yaml_head:
+        state.phase_start_head = yaml_head
+        audit("phase_start_head_gesetzt",
+              {"phase_id": state.phase_id,
+               "head": yaml_head,
+               "quelle": "yaml"},
+              state.project_dir, project_name)
+    elif not state.phase_start_head:
+        head_neu = _git_rev_parse_head(state.project_dir)
+        if not head_neu:
+            print("[FAIL] git rev-parse HEAD fehlgeschlagen. "
+                  "Fail closed.")
+            audit("run_phase_ende",
+                  {"phase_id": state.phase_id,
+                   "unterbloecke": len(unterbloecke),
+                   "rc": 18,
+                   "abgebrochen": True,
+                   "grund": "rev_parse_fehlgeschlagen"},
+                  state.project_dir, project_name)
+            return 18
+        state.phase_start_head = head_neu
+        daten["phase_start_head"] = head_neu
+        _phase_plan_speichern(project_name, daten)
+        audit("phase_start_head_gesetzt",
+              {"phase_id": state.phase_id,
+               "head": head_neu,
+               "quelle": "neu"},
+              state.project_dir, project_name)
 
     audit("run_phase_start",
           {"phase_id": state.phase_id,
@@ -1800,6 +1971,49 @@ def subprocess_env() -> dict[str, str]:
         "TMPDIR", "USER", "SHELL",
     )
     return {k: os.environ[k] for k in erlaubt if k in os.environ}
+
+
+def _git_rev_parse_head(project_dir: Path) -> str:
+    """Block P2b-2: git rev-parse HEAD im Ziel-Repo.
+
+    Rueckgabe: der volle 40-Zeichen-SHA, oder ""
+    bei Fehler. Kein raise (Aufrufer prueft auf "").
+    """
+    try:
+        res = subprocess.run(
+            ("git", "rev-parse", "HEAD"),
+            cwd=str(project_dir),
+            capture_output=True, text=True,
+            timeout=30, check=False,
+            env=subprocess_env(),
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return ""
+    if res.returncode != 0:
+        return ""
+    return res.stdout.strip()
+
+
+def _git_status_porcelain(project_dir: Path) -> str:
+    """Block P2b-2: git status --porcelain im Ziel-Repo.
+
+    Rueckgabe: der Output. Leer = clean.
+    Bei Fehler: Sentinel-String "!FEHLER!" (nicht leer),
+    damit ein Aufrufer nicht versehentlich clean annimmt.
+    """
+    try:
+        res = subprocess.run(
+            ("git", "status", "--porcelain"),
+            cwd=str(project_dir),
+            capture_output=True, text=True,
+            timeout=30, check=False,
+            env=subprocess_env(),
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return "!FEHLER!"
+    if res.returncode != 0:
+        return "!FEHLER!"
+    return res.stdout
 
 
 @dataclass(frozen=True)
