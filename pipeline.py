@@ -6763,6 +6763,11 @@ def _anker_zeilenbereich(
     anker_text = m.group(1).strip()
     if not anker_text:
         return None
+    # W13a (2026-10-16): YAML-Quoting kann
+    # \\n als Literal enthalten. In echte
+    # Zeilenumbrueche wandeln.
+    if "\\n" in anker_text and "\n" not in anker_text:
+        anker_text = anker_text.replace("\\n", "\n")
     # 2. Datei-Pfad aus dem Auftrag finden.
     # Wir suchen "patch: <pfad>" im Auftrag.
     m2 = _re.search(
