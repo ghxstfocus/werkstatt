@@ -6568,6 +6568,9 @@ def _phase_main_pfad(
     agents = load_agents(agents_dir)
     docs = load_docs(config.get("docs", {}), project_dir)
     file_whitelist = config.get("file_whitelist", [])
+    # Bug-Fix: Katalog laden (fuer Builder-COMMANDs).
+    always_kat, optional_kat = build_catalog(
+        config, project_dir)
 
     if "planner" not in agents:
         print("[FAIL] Planner-Rolle nicht gefunden. Fail closed.")
@@ -6623,8 +6626,8 @@ def _phase_main_pfad(
                      f"{plan_vorhanden.get('phase_titel')}"),
             start_ts=datetime.now(UTC).isoformat(
                 timespec="seconds"),
-            docs=docs, agents=agents, always={},
-            optional={},
+            docs=docs, agents=agents,
+            always=always_kat, optional=optional_kat,
             file_whitelist=file_whitelist,
             api_key=api_key,
             budget=config.get("budget", {}),
@@ -6665,7 +6668,7 @@ def _phase_main_pfad(
         aufgabe=phasen_text,
         start_ts=datetime.now(UTC).isoformat(timespec="seconds"),
         docs=docs, agents=agents,
-        always={}, optional={},
+        always=always_kat, optional=optional_kat,
         file_whitelist=file_whitelist,
         api_key=api_key,
         budget=config.get("budget", {}),
@@ -6962,12 +6965,14 @@ def _planner_main_pfad(
     historie = load_recent_commits(project_dir, n=10)
 
     # RunState bauen (minimal, analog run_pipeline).
+    always_kat, optional_kat = build_catalog(
+        config, project_dir)
     state = RunState(
         block_id=config.get("project", "unknown"),
         aufgabe=roher_auftrag,
         start_ts=datetime.now(UTC).isoformat(timespec="seconds"),
         docs=docs, agents=agents,
-        always={}, optional={},
+        always=always_kat, optional=optional_kat,
         file_whitelist=file_whitelist,
         api_key=api_key,
         budget=config.get("budget", {}),
