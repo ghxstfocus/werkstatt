@@ -2011,3 +2011,52 @@ Naechster Block: B1 (Planner-Struktur).
 ================================================================
 ENDE B0
 ================================================================
+
+================================================================
+B1 PLANNER-STRUKTUR-VERSTAENDNIS (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Aenderungen:
+  - _phase_stand_sektion: Struktur-Anweisung.
+    "Behalte die Gesamtstruktur." "Aendere NUR
+    den INHALT von U<n>." "Formuliere den neuen
+    Plan mit ALLEN Unterbloecken."
+    Generisch (keine spezifische id-Aufzaehlung).
+  - P18 Schritt 4: "Er enthaelt ALLE
+    Unterbloecke in derselben Reihenfolge."
+    Schutz-Hinweis aus Block 1 unveraendert.
+  - tests/test_planner.py: +6 Tests.
+
+Tests: 848 passed (+6).
+
+Auflagen-Abgleich (B1-A1 bis A6):
+  A1 (generische Wortwahl): erfuellt. Test
+    test_phase_stand_sektion_generisch prueft
+    Regressionsschutz.
+  A2 (P18-Wortlaut vorher): eingehalten.
+    Wortlaut aus Block 1 zitiert, ergaenzt.
+  A3 (Fallback "alle done"): gemessen.
+    Fallback-Text unveraendert.
+  A4 (Merkposten Parser-Toleranz): notiert.
+  A5 (Reihenfolge B1-a/B1-b): OK.
+  A6 (Schutz-Hinweis erhalten): erfuellt.
+
+Merkposten (B1-A4):
+  Parser-Toleranz relativ zur Struktur.
+  Wenn Lauf 23 wieder parse_failed liefert,
+  Parser anpassen: Teilmengen-Plaene erlauben,
+  Position aus id ableiten. Eigener Block.
+
+Naechster Schritt:
+  23. PB-68-Lauf mit --resume-force.
+  Beobachten:
+    - Planner liefert Plan mit ALLEN Unterbloecken.
+    - Struktur bleibt, nur U4-Inhalt neu.
+    - U4 laeuft.
+  Bei Scheitern: Bilanz Pflicht.
+
+================================================================
+ENDE B1
+================================================================
