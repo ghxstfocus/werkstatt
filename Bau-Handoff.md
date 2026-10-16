@@ -1,9 +1,9 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-16 (nach Post-Apply-Fix; elf PB-68-Laeufe, viele Rollen-Fixes)
-Werkstatt-HEAD: <nach Handoff-Commit> (Post-Apply-Fix + Sitzung 2026-10-16)
-security-ai-HEAD: 0d0fe2c (PB-67; Working Tree nach elftem Lauf dirty: core/guardrails/, tests/unit/test_guardrails_models.py)
-Letzter echter Probebetrieb: PB-67 (0d0fe2c, 2026-10-15). PB-68 noch offen: elf Laeufe, kein Sammel-Commit erreicht.
+Stand: 2026-10-16 (nach Post-Apply-Fix + Lauf 12; zwoelf PB-68-Laeufe, keine erfolgreicher Sammel-Commit)
+Werkstatt-HEAD: 707f964 (Handoff Sitzung 2026-10-16) + Handoff-final-Commit
+security-ai-HEAD: 0d0fe2c (PB-67; Working Tree clean nach Lauf-12-Reset; kein Sammel-Commit)
+Letzter echter Probebetrieb: PB-67 (0d0fe2c, 2026-10-15). PB-68 noch offen: zwoelf Laeufe, kein Sammel-Commit erreicht.
 Branch: main (beide Repos)
 Tests (Werkstatt): 707 passed
 ruff --no-cache: 0
@@ -65,6 +65,49 @@ Rollen (6):
   - test_generator (LLM): liefert Test-Vorschlaege.
   - coverage (No-LLM): misst Coverage.
   - chaos (No-LLM): fuzzt Extremwerte.
+
+================================================================
+WICHTIG FUER DEN NEUEN CHAT (Uebergabe 2026-10-16):
+================================================================
+
+Dieser Handoff ist am Ende einer sehr langen
+Sitzung (2026-10-16) entstanden. Zwoelf PB-68-
+Laeufe, kein erfolgreicher Sammel-Commit, aber
+viele fundamentale Werkstatt-Fixes.
+
+Bevor der neue Chat arbeitet:
+  1. Werkstatt-HEAD pruefen:
+       git -C /opt/werkstatt log -1 --oneline
+  2. Tests laufen lassen:
+       /opt/security-ai/.venv/bin/python3 -m
+       pytest /opt/werkstatt/tests/ -q
+     Erwartung: 707 passed.
+  3. security-ai pruefen:
+       git -C /opt/security-ai log -1 --oneline
+       git -C /opt/security-ai status --porcelain
+     Erwartung: 0d0fe2c, clean.
+  4. phase.yaml pruefen:
+       head -6 /opt/werkstatt/projects/
+       security-ai.phase.yaml
+     Erwartung: phase_aktiv=true, U1=no_go.
+
+Der naechste Bau-Block:
+  Plan-Konkretisierung. Reviewer-Block wird in
+  dieser Sitzung formuliert, im neuen Chat
+  eingereicht. Kategorie 3, Reviewer-Freigabe
+  einholen.
+
+Der Reviewer-Chat wechselt mit:
+  Der neue Chat muss dem Reviewer mitteilen:
+  'Neuer Bau-Chat, Uebergabe 2026-10-16. Stand:
+   siehe Bau-Handoff, HEAD 707f964+.'
+  Der Reviewer fuehrt seinen eigenen Kontext
+  (alle getroffenen Entscheidungen); er braucht
+  nur den Uebergabe-Hinweis.
+
+Naechster echter Probebetrieb: PB-68 (nicht
+  PB-67 nochmal). Erst nach erfolgreichem
+  Sammel-Commit taggen.
 
 ================================================================
 2. AKTUELLER ZUSTAND
@@ -447,11 +490,40 @@ Sitzung 2026-10-16 (nach P2b):
 
   Aktueller Zustand:
     - Phase 18 (Guardrails) in phase.yaml.
-    - U1 (Guardrail-Modell) failed nach Lauf 11.
-    - Working Tree in security-ai dirty:
-      core/guardrails/{__init__,models}.py,
-      tests/unit/test_guardrails_models.py.
-    - Post-Apply-Fix ist bereit fuer Lauf 12.
+    - U1 (Guardrail-Modell) status=no_go nach
+      Lauf 12 (rc=15, unterblock_no_go).
+    - Working Tree clean (nach git clean -fd
+      vor Lauf 12).
+
+  Lauf 12 (2026-10-16, Post-Apply-Fix):
+    - typ: new_file funktioniert weiter.
+    - Zwei NO-GO-Zyklen in U1 (5 Runden +
+      Plan-Korrektur + 5 Runden).
+    - Reviewer-Diagnose (Zitat):
+        'Der Loop haengt nicht an einem
+         fehlerhaften Builder, sondern an
+         wechselnden Review-Kriterien.'
+        'Der Kern-Befund — Auftrag unterbestimmt
+         — kann nur der Planner aufloesen,
+         nicht der Builder.'
+    - Reviewer verlangt: feste Spezifikation
+      (frozen ja/nein, Defaults, Feldreihen-
+      folge, str-Enum vs. Enum, Bedeutung
+      von 'Roundtrip').
+    - Plan-Korrektur ERSETZT den Plan, sie
+      KONKRETISIERT ihn nicht. Der Builder
+      sieht denselben Auftrag, liefert den
+      denselben Code, der Reviewer gibt
+      dieselbe Bewertung.
+
+  Struktureller Befund (offen):
+    - Es fehlt ein Kanal 'Reviewer-Befund ->
+      Planner-Konkretisierung -> neue
+      Plan-Version'. Plan-Korrektur muss
+      konkretisieren, nicht ersetzen.
+    - Naechster Reviewer-Block: Plan-Konkre-
+      tisierung (in dieser Session formuliert,
+      noch nicht gebaut).
 
   Teilschritte:
     1. RunState + 7 phase_*-Felder.
