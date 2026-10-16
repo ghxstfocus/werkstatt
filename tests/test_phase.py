@@ -689,3 +689,40 @@ class TestPhaseRollbackIntegration:
         # Datei ist noch da (kein clean passiert).
         assert (tmp_path / "apps" / "neu.py").exists()
 
+# =====================================================================
+# run_pipeline — phasen_state + Phasen-Modus (P2b-3)
+# =====================================================================
+
+class TestRunPipelineSignatur:
+    def test_phasen_state_ist_keyword_only(self) -> None:
+        sig = inspect.signature(pipeline.run_pipeline)
+        p = sig.parameters
+        assert "phasen_state" in p
+        assert p["phasen_state"].kind == inspect.Parameter.KEYWORD_ONLY
+        assert p["phasen_state"].default is None
+
+    def test_state_ref_nicht_phasen_state(self) -> None:
+        sig = inspect.signature(pipeline.run_pipeline)
+        params = list(sig.parameters.keys())
+        assert params == ["project_name", "aufgabe", "state_ref",
+                          "phasen_state"]
+
+
+class TestRunPipelinePhasenModus:
+    def test_guard_quelle_vorhanden(self) -> None:
+        """Der phasen_state-Guard steht im Quelltext von
+        run_pipeline (statisch verifiziert)."""
+        import inspect as ins
+        quelle = ins.getsource(pipeline.run_pipeline)
+        assert "phasen_state is not None" in quelle
+        assert "state_ref nicht leer" in quelle
+
+    def test_phasen_modus_quelle_vorhanden(self) -> None:
+        """Der Phasen-Modus-Eingriff steht im Quelltext."""
+        import inspect as ins
+        quelle = ins.getsource(pipeline.run_pipeline)
+        assert "state.phase_aktiv" in quelle
+        assert "phase_commit_paket_gesammelt" in quelle
+        assert "phase_commit_paket_leer" in quelle
+        assert "return 21" in quelle
+

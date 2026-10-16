@@ -676,6 +676,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "commit_review",
     "phase_abgebrochen",
     "phase_commit_paket_gesammelt",
+    "phase_commit_paket_leer",
     "phase_gesamt_review",
     "phase_plan_editiert",
     "phase_plan_erstellt",
@@ -4907,7 +4908,18 @@ def print_approval_dokument(state: RunState) -> None:
 
 
 def run_pipeline(project_name: str, aufgabe: str,
-                 state_ref: list[RunState]) -> int:
+                 state_ref: list[RunState],
+                 *,
+                 phasen_state: RunState | None = None) -> int:
+    """Ein Pipeline-Lauf (ein Block oder ein Phasen-Unterblock).
+
+    phasen_state (P2b-3): optionaler RunState aus einem
+    Phasen-Loop. Wenn None: alter Pfad 1:1 (neuer RunState
+    wird gebaut). Wenn gesetzt: der Aufrufer uebergibt den
+    State (state_ref MUSS leer sein, sonst ValueError),
+    und der Approval-Block wird durch den Phasen-Modus
+    ersetzt (Paket sammeln statt committen).
+    """
     api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
     if not api_key:
         print("[FAIL] DEEPSEEK_API_KEY fehlt. Fail closed.")
@@ -4960,19 +4972,27 @@ def run_pipeline(project_name: str, aufgabe: str,
     max_minutes = budget.get("max_minutes", 0)  # Auflage 2080: 0 = aus
 
     git_author = config.get("git_author", {}) or {}
-    state = RunState(
-        block_id=config.get("project", "unknown"),
-        aufgabe=aufgabe,
-        start_ts=datetime.now(UTC).isoformat(timespec="seconds"),
-        docs=docs, agents=agents, always=always, optional=optional,
-        file_whitelist=file_whitelist, api_key=api_key, budget=budget,
-        agent_docs=config.get("agent_docs", {}),
-        project_dir=project_dir,
-        projekt_stand=projekt_stand,
-        git_author_name=str(git_author.get("name", "")),
-        git_author_email=str(git_author.get("email", "")),
-        project_name=project_name,
-    )
+    # P2b-3 / G6: phasen_state-Guard.
+    if phasen_state is not None:
+        if state_ref:
+            raise ValueError(
+                "phasen_state uebergeben, aber "
+                "state_ref nicht leer")
+        state = phasen_state
+    else:
+        state = RunState(
+            block_id=config.get("project", "unknown"),
+            aufgabe=aufgabe,
+            start_ts=datetime.now(UTC).isoformat(timespec="seconds"),
+            docs=docs, agents=agents, always=always, optional=optional,
+            file_whitelist=file_whitelist, api_key=api_key, budget=budget,
+            agent_docs=config.get("agent_docs", {}),
+            project_dir=project_dir,
+            projekt_stand=projekt_stand,
+            git_author_name=str(git_author.get("name", "")),
+            git_author_email=str(git_author.get("email", "")),
+            project_name=project_name,
+        )
     # Auflage 2080: Startzeitpunkt fuer das Zeitbudget.
     state.start_monotonic = time.monotonic()
 
@@ -5750,6 +5770,39 @@ def run_pipeline(project_name: str, aufgabe: str,
     # ==================================================================
     # SCHRITT 6: Approval-Dokument + Human-Gate
     # ==================================================================
+    # P2b-3 / G2 + G3 + G4: Phasen-Modus.
+    # Kein Pro-Unterblock-Approval. Paket sammeln.
+    # Leeres Paket -> Fail-closed, rc=21.
+    if state.phase_aktiv:
+        if not state.commit_paket.get("dateien"):
+            print("[FAIL] Phasen-Modus: Commit-Paket ohne "
+                  "Dateien. Fail closed.")
+            audit("phase_commit_paket_leer",
+                  {"phase_id": state.phase_id,
+                   "unterblock_index":
+                       state.phase_aktueller_index},
+                  project_dir, project_name)
+            return 21
+        uid = ""
+        if 0 <= state.phase_aktueller_index < len(
+                state.phase_unterbloecke):
+            uid = state.phase_unterbloecke[
+                state.phase_aktueller_index].get("id", "")
+        state.phase_commit_pakete.append(state.commit_paket)
+        audit("phase_commit_paket_gesammelt",
+              {"phase_id": state.phase_id,
+               "unterblock_id": uid,
+               "unterblock_index":
+                   state.phase_aktueller_index,
+               "dateien": state.commit_paket.get("dateien", []),
+               "message_kurz":
+                   state.commit_paket.get("message", "")[:200],
+               "paket_nummer":
+                   len(state.phase_commit_pakete) - 1},
+              project_dir, project_name)
+        print("[+] Phasen-Modus: Commit-Paket gesammelt "
+              "(kein Commit).")
+        return 0
     print_approval_dokument(state)
 
     print("\n" + "=" * 70)
