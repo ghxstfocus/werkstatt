@@ -8179,7 +8179,13 @@ def run_pipeline(project_name: str, aufgabe: str,
                 + f"PHASEN-MODUS: "
                 f"{'aktiv' if state.phase_aktiv else 'inaktiv'}\n\n"
                 + f"CODE-GO ist erteilt. Pruefe das Commit-Paket.\n\n"
-                f"COMMIT-MESSAGE:\n{state.commit_paket.get('message', '')}\n\n"
+                # W9a (2026-10-16): Message in
+                # === COMMIT-MESSAGE ===-Marker.
+                # Konsistent mit === REVIEWER-BEFUND ===
+                # und === SOLVER-BEFUND ===.
+                f"=== COMMIT-MESSAGE (vollstaendig) ===\n"
+                f"{state.commit_paket.get('message', '')}\n"
+                f"=== /COMMIT-MESSAGE ===\n\n"
                 f"BETROFFENE DATEIEN:\n" +
                 "\n".join(
                     f"  - {d}"

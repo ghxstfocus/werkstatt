@@ -6589,3 +6589,21 @@ class TestW8b:
         src = inspect.getsource(pipeline.build_commit_paket)
         assert "Positiv-Format der Commit-Message" in src
         assert "Ein Pfad pro Zeile" in src
+
+
+# =====================================================================
+# W9a (2026-10-16): Message-Marker im Commit-Review-Prompt
+# =====================================================================
+
+class TestW9a:
+    def test_commit_review_prompt_message_marker(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        assert "=== COMMIT-MESSAGE (vollstaendig) ===" in src
+        assert "=== /COMMIT-MESSAGE ===" in src
+
+    def test_konsistenz_mit_bestehenden_markern(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline._planner_user_content)
+        # Der Planner nutzt === REVIEWER-BEFUND ===.
+        assert "=== REVIEWER-BEFUND" in src
