@@ -1,6 +1,6 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-15 (nach Block P2a: Phasen-Modus Fundament)
+Stand: 2026-10-16 (nach Block P2b-1: run_phase-Geruest)
 Werkstatt-HEAD: e8a01a4 (Doku: Handoff — P1-Live-Test)
 security-ai-HEAD: 220c6be (Doku-Migration)
 Letzter echter Probebetrieb: PB-67 (0d0fe2c, 2026-10-15)
@@ -265,6 +265,30 @@ Block P2a (Phasen-Modus Fundament):
   Folge-Commits: 7186363 (Werkstatt-Regel projects/-
   Owner), 26a9911 (Handoff P2a-Smoke-Test).
 
+Block P2b-1 (run_phase-Geruest + Status-Helfer):
+  ERLEDIGT 2026-10-16. Commit 770fbea.
+  Reviewer: GO-mit-Auflagen (P2b-Zuschnitt).
+  Reihenfolge (Reviewer F3): Rollback VOR
+  Phasen-Modus. Daher P2b-2 = Rollback.
+
+  Aenderungen:
+    - _AUDIT_KINDS_BEKANNT +8 (phase_abgebrochen,
+      phase_commit_paket_gesammelt,
+      phase_gesamt_review, phase_rollback,
+      phase_unterblock_ende, phase_unterblock_start,
+      run_phase_ende, run_phase_start).
+    - _phase_yaml_status_update neu (liest via
+      _phase_plan_laden, patcht status, ruft
+      _phase_plan_speichern; Fail-closed ValueError).
+    - run_phase neu (Loop ueber phase_unterbloecke,
+      pending->running->done, phase_aktueller_index,
+      Audit-Kette, Idempotenz-Schutz, Stub statt
+      run_pipeline mit TODO(P2b-3)).
+    - _phase_main_pfad: Andock an run_phase
+      (Z. ~5821).
+  Tests: 542 -> 555. test_phase.py +13.
+  Kein Probebetrieb-Tag (F7: PB-68 erst nach P2b-4).
+
   Teilschritte:
     1. RunState + 7 phase_*-Felder.
     2. _parse_phase_plan (P10-P14-Format).
@@ -342,23 +366,58 @@ WICHTIG:
         ERLEDIGT 2026-10-15. Siehe Abschnitt 3.
         Commit: "P2a: Phasen-Modus Fundament".
 
-  Block P2b (run_phase + Unterblock-Loop +
-             Gesamt-Review):
+  Block P2b-1 (run_phase-Geruest): ERLEDIGT.
+        Commit 770fbea. Siehe Abschnitt 3.
+
+  Block P2b-2 (Rollback + phase_start_head):
         OFFEN. Naechster Block. Kategorie 3.
-        Siehe docs/PLANNER-KONZEPT.md, Abschnitt 5
-        und Abschnitt 13.
+        Reviewer-Reihenfolge (F3): Rollback VOR
+        Phasen-Modus, damit der Abbau-Pfad steht,
+        bevor ein Unterblock echten Code baut.
         Inhalt:
-          - run_phase: Loop ueber Unterbloecke.
-          - Pro Unterblock: run_pipeline,
-            Patches anwenden, Commit-Paket sammeln
-            (NICHT committen).
-          - _phase_gesamt_review + Approval.
           - _phase_rollback (RR-K1/K2/K3).
+          - phase_start_head setzen, wenn leer
+            (RR-K3: nicht neu bei Plan-Aenderung).
+          - RR-K1: git reset --hard nur wenn
+            HEAD == phase_start_head UND status clean.
+          - RR-K2: git clean -fd nur in
+            file_whitelist-Pfaden.
+          - file_whitelist: MESSEN ob vorhanden.
+        Konzept: docs/PLANNER-KONZEPT.md Abschnitt 5.2.
+        Auflagen: P2b-A3, P2b-A6.
+
+  Block P2b-3 (run_pipeline-Phasen-Modus):
+        OFFEN. Nach P2b-2. Kategorie 3.
+        Inhalt:
+          - run_pipeline: Parameter/Flag fuer
+            Phasen-Betrieb (phasen_state, Default None).
+          - Am Approval-Block (Z. ~5377): bei
+            state.phase_aktiv kein input(),
+            stattdessen Paket an
+            state.phase_commit_pakete anhaengen.
+          - apply_commit_and_doku unveraendert.
+        Auflagen: P2b-A1, P2b-A2, P2b-A8.
+
+  Block P2b-4 (_phase_gesamt_review + Approval):
+        OFFEN. Nach P2b-3. Kategorie 3.
+        Inhalt:
+          - Gesamt-Review (Konzept 5.5, drei Orte).
+          - Konsolen-Approval am Ende.
+          - Einmaliger apply_commit_and_doku ueber
+            alle gesammelten Pakete.
+        Nach P2b-4: erster echter Phasen-Lauf
+        moeglich, dann PB-68.
+        Auflage: P2b-A7.
+
+  Block P2b-5 (Budget + Plan-Korrektur):
+        OFFEN. Nach P2b-4. Kategorie 3.
+        Inhalt:
           - Budget-Layer-1 (max_llm_calls_phase).
-          - Plan-Korrektur bei Phase-NO-GO.
-        Faustregel P1-Live-Test: ein neuer
-        Code-Pfad pro Block. P2b wird in
-        Teilbloecke zerlegt (P2b-1, P2b-2, ...).
+          - Plan-Korrektur bei Phase-NO-GO
+            (RR-K6/K7): alte phase_commit_pakete
+            verwerfen.
+          - RR-K8: Konflikt Planner vs. Reviewer
+            ohne Loesung -> Mensch entscheidet.
 
   Planner-Portionierung (Zwischenloesung):
         OFFEN. Falls P2 zu gross ist, reicht
@@ -574,6 +633,8 @@ Abschnitt B.
     Commit 9544c7e).
   Block P2a (Phasen-Modus Fundament,
     Commit "P2a: Phasen-Modus Fundament").
+  Block P2b-1 (run_phase-Geruest + Status-Helfer,
+    Commit 770fbea).
 
 ================================================================
 6. ZIELE
