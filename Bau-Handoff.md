@@ -1266,3 +1266,57 @@ pruefen.
 ENDE U2-REPARATUR
 ================================================================
 
+================================================================
+17. LAUF VORBEREITUNG 2026-10-16
+================================================================
+
+Kontext: 16. PB-68-Lauf (2026-10-16 14:58-15:01) hat
+den Meilenstein erreicht: U1, U2, U3 sind done,
+der Plan-Korrektur-Schutz haelt sie. U4 ist an
+zwei Auftragsfehlern gescheitert.
+
+Fix-Kette seit dem 16. Lauf:
+  b8710f5  config: file_whitelist um data/ erweitern
+  562fde5  feat: file_whitelist im Prompt sichtbar
+           (Reviewer + Builder)
+
+U4-Unterpunkte manuell korrigiert (2026-10-16):
+  1. data/migrations/0016_guardrails.sql
+     (nicht 0013 — Nummernkollision mit
+     0013_whitelist_manage.sql).
+     Whitelist-Hinweis.
+  2. core/guardrails/repository.py mit KEIN upsert,
+     KEIN seed_from_yaml (Auftragstreue).
+  3. test_guardrails_repository.py gegen echte
+     Migration 0016, kein Inline-Schema.
+
+Herkunft der Praezisierungen (Auflage U4-Auftrag-A3):
+  - Punkt 1 Nummernmuster: Bau-Chat-Messung
+    (ls data/migrations/).
+  - Punkt 1 Whitelist-Hinweis: Reviewer-Befund
+    Lauf 16 + Config-Fix b8710f5.
+  - Punkt 2 "kein upsert": Builder-Scope-Drift
+    in Lauf 16 (Runden 1-5), Reviewer-Befund.
+  - Punkt 3 "echte Migration": Reviewer-Befund
+    Lauf 16.
+
+Erwartungshaltung 17. Lauf (Auflage A6):
+  - U1-U3 done (Pakete: 3, 2, 4).
+  - U4 korrigierter Auftrag.
+  - Reviewer-Prompt enthaelt FILE-WHITELIST
+    mit data/.
+  - Erwartung: U4 laeuft.
+  - Wenn U4 scheitert: STOP. Bilanz faellig.
+    Keine weitere Iteration ohne Reflexion.
+
+Merkposten bleiben offen:
+  - Planner-Prompt um Whitelist (eigener Block).
+  - Truncation-Konvention (systematisch).
+  - Reviewer-Behauptungs-Verifikation.
+  - Persistenz-Konvention.
+  - Weg X (Plan-Konkretisierung).
+
+================================================================
+ENDE 17. LAUF VORBEREITUNG
+================================================================
+
