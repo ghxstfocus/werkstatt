@@ -3566,10 +3566,22 @@ def builder_reply_mit_command_loop(
         max_llm, max_minutes)
     if _rc_dl is not None:
         return None, _rc_dl
+    # Truncation-Fix-A1/A2 (2026-10-16):
+    # Kontext-Grenze in Konstante + Marker.
+    # GEMESSENER INHALT (nach Apply) separat, damit
+    # der Reviewer den Datei-Inhalt vollstaendig sieht.
+    _prompt_gek = _truncate_mit_marker(
+        aktueller_prompt, _REVIEWER_KONTEXT_MAX)
+    _mess_nach = state.mess_protokoll_nach_apply or ""
+    _mess_nach_gek = _truncate_mit_marker(
+        _mess_nach, 8000) if _mess_nach else "(keine)"
     kontext = (
-        f"Der Builder hat in {max_builder_runden} aufeinanderfolgenden "
-        f"Runden nur COMMAND-Zeilen geliefert, keinen Patch. "
-        f"Letzter Prompt:\n{aktueller_prompt[:2000]}\n"
+        f"Der Builder hat in {max_builder_runden} "
+        f"aufeinanderfolgenden Runden nur "
+        f"COMMAND-Zeilen geliefert, keinen Patch.\n\n"
+        f"Letzter Prompt (gekuerzt):\n{_prompt_gek}\n\n"
+        f"GEMESSENER INHALT (nach Apply):\n"
+        f"{_mess_nach_gek}\n"
     )
     v = ask_reviewer_for_recovery(state, "builder_command_deadlock", kontext)
     print_recovery(v)
@@ -4545,6 +4557,28 @@ def trim_output(out: str, grenze: int = MAX_PROTOKOLL_PER_COMMAND) -> str:
     return out[:grenze] + f"\n[... gekuerzt, {rest} Zeichen weggelassen ...]\n"
 
 
+# Truncation-Fix (2026-10-16): gemeinsame Kontext-Grenze
+# fuer Reviewer-Recovery-Kontexte.
+_REVIEWER_KONTEXT_MAX = 2000
+
+
+def _truncate_mit_marker(text: str, max_len: int) -> str:
+    """Truncation-Fix (2026-10-16): kuerzt mit
+    sichtbarem Marker.
+
+    Bei len(text) > max_len: schneidet auf max_len
+    und haengt einen Marker an. Der Marker ist klar
+    erkennbar und verhindert, dass ein LLM aus dem
+    abgeschnittenen Text falsche Schluesse zieht.
+    """
+    if len(text) <= max_len:
+        return text
+    rest = len(text) - max_len
+    return (text[:max_len]
+            + f"\n[... Kontext gekuerzt, {rest} "
+            + "Zeichen weggelassen ...]\n")
+
+
 def execute_commands(state: RunState, commands: list[dict[str, str]],
                      quelle: str
                      ) -> dict[tuple[str, str], bool]:
@@ -5400,10 +5434,17 @@ def apply_and_recheck(state: RunState,
             print(f"[+] Basis-Gate-nach-apply gruen: {mid}")
     if nach_fehler:
         print(f"[!] Basis-Gate-nach-apply rot: {nach_fehler}")
+        # Truncation-Fix-A2 (2026-10-16): Marker + Mess separat.
+        _proto_gek = _truncate_mit_marker(
+            state.basis_protokoll_nach_apply, 3000)
+        _mess_nach = state.mess_protokoll_nach_apply or ""
+        _mess_nach_gek = _truncate_mit_marker(
+            _mess_nach, 8000) if _mess_nach else "(keine)"
         v = ask_reviewer_for_recovery(
             state, "basis_gate",
             f"Nach Anwendung der Code-Patches: {nach_fehler}\n\n"
-            f"Protokoll:\n{state.basis_protokoll_nach_apply[:3000]}")
+            f"Protokoll:\n{_proto_gek}\n\n"
+            f"GEMESSENER INHALT (nach Apply):\n{_mess_nach_gek}")
         print_recovery(v)
         audit("recovery_basis_gate_nach_apply",
               {"fehler": nach_fehler, "empfehlung": v.empfehlung},

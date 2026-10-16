@@ -5481,3 +5481,31 @@ class TestRecoveryPromptFix:
         assert "8.8.8.8" not in text
         assert "[IPV4]" in text
 
+# =====================================================================
+# _truncate_mit_marker (Truncation-Fix A1, 2026-10-16)
+# =====================================================================
+
+class TestTruncateMitMarker:
+    """Tests fuer _truncate_mit_marker."""
+
+    def test_kurz_bleibt_unveraendert(self) -> None:
+        text = "kurzer Text"
+        out = pipeline._truncate_mit_marker(text, 100)
+        assert out == text
+
+    def test_genau_grenze_kein_marker(self) -> None:
+        text = "x" * 100
+        out = pipeline._truncate_mit_marker(text, 100)
+        assert out == text
+        assert "gekuerzt" not in out
+
+    def test_ueber_grenze_marker(self) -> None:
+        text = "x" * 250
+        out = pipeline._truncate_mit_marker(text, 100)
+        assert out.startswith("x" * 100)
+        assert "Kontext gekuerzt" in out
+        assert "150 Zeichen weggelassen" in out
+
+    def test_konstante_vorhanden(self) -> None:
+        assert pipeline._REVIEWER_KONTEXT_MAX == 2000
+
