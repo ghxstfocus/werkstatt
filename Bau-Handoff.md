@@ -2239,3 +2239,46 @@ Naechster Schritt:
 ================================================================
 ENDE F1+F2+F3
 ================================================================
+
+================================================================
+B0C-2 VERDICT-PARSER (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 26. Lauf:
+  Reviewer gibt 2x "**GO**" (Markdown), aber
+  classify_verdict liefert UNKLAR.
+  Ursachen:
+    - Markdown-Fett-Marker (*) nicht gestrippt.
+    - Nur letzte nicht-leere Zeile geprueft;
+      Runde 2 hatte Text nach "**GO**".
+
+Fix:
+  - Markdown-Marker (* ` _ #) strippen.
+  - Letzte 5 nicht-leere Zeilen rueckwaerts pruefen.
+  - Nur Zeilen <40 Zeichen zaehlen (Fliesstext-Schutz).
+
+Tests: 875 + 6 = 881 passed.
+
+Auflagen-Abgleich:
+  - B0c aus Lauf 24 erweitert, nicht ersetzt.
+  - Bestehende Tests (test_go_at_line_16,
+    test_go_after_many_inhalt_lines) bleiben gruen.
+
+Merkposten:
+  - Konsolenausgabe "(unbekannt)" bei
+    review_unklar_eskalation: raw steht im Audit,
+    wird aber nicht auf Konsole gedruckt. Kosmetik.
+    Eigener Block.
+
+Naechster Schritt:
+  27. PB-68-Lauf mit --resume-force.
+  Beobachten:
+    - Reviewer Runde 1: GO -> apply + git add -N.
+    - Commit-Review Runde 1: COMMIT-GO.
+    - Sammel-Commit. Tag probebetrieb-68.
+
+================================================================
+ENDE B0C-2
+================================================================
