@@ -344,6 +344,10 @@ class TestRunPhase:
                        rc=0, paket=True)), \
              patch("pipeline._git_rev_parse_head",
                    return_value="a" * 40), \
+             patch("pipeline.apply_commit_and_doku",
+                   return_value=True), \
+             patch("builtins.input",
+                   return_value="j"), \
              patch("pipeline.audit"):
             rc = pipeline.run_phase("testprojekt", state, [])
         assert rc == 0
@@ -409,6 +413,10 @@ class TestRunPhase:
              patch("pipeline.run_pipeline",
                    side_effect=_mock_run_pipeline(
                        rc=0, paket=True)), \
+             patch("pipeline.apply_commit_and_doku",
+                   return_value=True), \
+             patch("builtins.input",
+                   return_value="j"), \
              patch("pipeline._git_rev_parse_head",
                    return_value="a" * 40):
             rc = pipeline.run_phase("testprojekt", state, [])
@@ -575,6 +583,10 @@ class TestRunPhaseStartHead:
              patch("pipeline.run_pipeline",
                    side_effect=_mock_run_pipeline(
                        rc=0, paket=True)), \
+             patch("pipeline.apply_commit_and_doku",
+                   return_value=True), \
+             patch("builtins.input",
+                   return_value="j"), \
              patch("pipeline.audit"):
             rc = pipeline.run_phase("testprojekt", state, [])
         assert rc == 0
@@ -604,6 +616,10 @@ class TestRunPhaseStartHead:
              patch("pipeline.run_pipeline",
                    side_effect=_mock_run_pipeline(
                        rc=0, paket=True)), \
+             patch("pipeline.apply_commit_and_doku",
+                   return_value=True), \
+             patch("builtins.input",
+                   return_value="j"), \
              patch("pipeline.audit"):
             rc = pipeline.run_phase("testprojekt", state, [])
         assert rc == 0
@@ -778,6 +794,10 @@ class TestRunPhaseRcKlassen:
              patch("pipeline.run_pipeline",
                    side_effect=_mock_run_pipeline(
                        rc=0, paket=True)), \
+             patch("pipeline.apply_commit_and_doku",
+                   return_value=True), \
+             patch("builtins.input",
+                   return_value="j"), \
              patch("pipeline.audit"), \
              patch("pipeline._phase_rollback") as mock_rb:
             sr: list = []
@@ -923,4 +943,170 @@ class TestRunPhaseGuards:
                 assert "state nicht in state_ref" in str(exc)
                 return
         raise AssertionError("RuntimeError erwartet")
+
+# =====================================================================
+# _phase_gesamt_review / _phase_sammel_paket / Approval (P2b-4)
+# =====================================================================
+
+class TestPhaseGesamtReview:
+    def test_aggregat_2_pakete(self, tmp_path: Path) -> None:
+        state = _state_fuer_phase(tmp_path)
+        state.phase_unterbloecke = [
+            {"id": "U1", "titel": "T1", "status": "done"},
+            {"id": "U2", "titel": "T2", "status": "done"},
+        ]
+        state.phase_commit_pakete = [
+            {"message": "m1", "dateien": ["a.py"]},
+            {"message": "m2", "dateien": ["b.py", "c.py"]},
+        ]
+        agg = pipeline._phase_gesamt_review(state)
+        assert agg["unterbloecke_total"] == 2
+        assert agg["unterbloecke_done"] == 2
+        assert agg["pakete"] == 2
+        assert agg["dateien_union"] == ["a.py", "b.py", "c.py"]
+        assert agg["duplikate"] == 0
+
+    def test_aggregat_mit_duplikat(self, tmp_path: Path) -> None:
+        state = _state_fuer_phase(tmp_path)
+        state.phase_unterbloecke = [
+            {"id": "U1", "titel": "T1", "status": "done"},
+        ]
+        state.phase_commit_pakete = [
+            {"message": "m", "dateien": ["a.py", "a.py"]},
+        ]
+        agg = pipeline._phase_gesamt_review(state)
+        assert agg["dateien_union"] == ["a.py"]
+        assert agg["duplikate"] == 1
+
+
+class TestPhaseSammelPaket:
+    def test_sammel_union(self, tmp_path: Path) -> None:
+        state = _state_fuer_phase(tmp_path)
+        state.phase_id = "P1"
+        state.phase_titel = "Testphase"
+        state.phase_unterbloecke = [
+            {"id": "U1", "titel": "T1", "status": "done"},
+            {"id": "U2", "titel": "T2", "status": "done"},
+        ]
+        state.phase_commit_pakete = [
+            {"message": "m1", "dateien": ["b.py"]},
+            {"message": "m2", "dateien": ["a.py"]},
+        ]
+        p = pipeline._phase_sammel_paket(state)
+        assert p["dateien"] == ["a.py", "b.py"]
+        assert "PHASE P1: Testphase" in p["message"]
+        assert "m1" in p["message"]
+        assert "m2" in p["message"]
+
+    def test_message_b2_zeile(self, tmp_path: Path) -> None:
+        state = _state_fuer_phase(tmp_path)
+        state.phase_id = "P1"
+        state.phase_titel = "T"
+        state.phase_unterbloecke = [
+            {"id": "U1", "titel": "T1", "status": "done"},
+            {"id": "U2", "titel": "T2", "status": "done"},
+        ]
+        # Nur ein Paket (U1), U2 ist B2.
+        state.phase_commit_pakete = [
+            {"message": "m1", "dateien": ["a.py"]},
+        ]
+        msg = pipeline._phase_sammel_message(state)
+        assert "U1: m1" in msg
+        assert "U2: (Auftrag bereits erfuellt" in msg
+
+
+class TestPhaseApproval:
+    def _setup(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        return _state_fuer_phase(tmp_path)
+
+    def test_approval_j_commit(self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
+             patch("builtins.input", return_value="j"), \
+             patch("pipeline.apply_commit_and_doku",
+                   return_value=True) as mock_apply, \
+             patch("pipeline.audit"):
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 0
+        assert mock_apply.called
+        sammel = mock_apply.call_args.args[1]
+        assert sammel["dateien"] == ["apps/x.py"]
+        assert "PHASE P1" in sammel["message"]
+
+    def test_approval_n_rollback(self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
+             patch("builtins.input", return_value="n"), \
+             patch("pipeline.apply_commit_and_doku") as mock_apply, \
+             patch("pipeline._phase_rollback",
+                   return_value=True) as mock_rb, \
+             patch("pipeline.audit"):
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 23
+        assert not mock_apply.called
+        assert mock_rb.called
+
+    def test_commit_fail_rc_20(self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
+             patch("builtins.input", return_value="j"), \
+             patch("pipeline.apply_commit_and_doku",
+                   return_value=False), \
+             patch("pipeline.audit"):
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 20
+
+    def test_keine_pakete_b2_only(self, tmp_path, monkeypatch) -> None:
+        """B2-only-Phase: 0 Pakete, kein Commit, rc=0."""
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=False)), \
+             patch("pipeline.apply_commit_and_doku") as mock_apply, \
+             patch("builtins.input", return_value="j"), \
+             patch("pipeline.audit"):
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 0
+        assert not mock_apply.called
+        assert sr == [state]
+
+    def test_ungueltige_eingabe_fail_closed(
+            self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
+             patch("builtins.input", return_value="quatsch"), \
+             patch("pipeline.audit"):
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 1
 

@@ -1646,6 +1646,143 @@ def _phase_rollback(
 
 
 
+def _phase_gesamt_review(state: RunState) -> dict[str, Any]:
+    """P2b-4 / M1 + M2: deterministische Aggregation.
+
+    Kein LLM. Rueckgabe: dict mit
+      unterbloecke_total, unterbloecke_done,
+      pakete, dateien_gesamt, dateien_union,
+      duplikate.
+    """
+    ups = state.phase_unterbloecke
+    status_liste = [
+        (u.get("status") if isinstance(u, dict) else None)
+        for u in ups
+    ]
+    done = sum(1 for s in status_liste if s == "done")
+    pakete = state.phase_commit_pakete
+    dateien_alle: list[str] = [
+        d
+        for p in pakete
+        for d in p.get("dateien", [])
+    ]
+    dateien_union = sorted(set(dateien_alle))
+    duplikate = len(dateien_alle) - len(dateien_union)
+    return {
+        "unterbloecke_total": len(ups),
+        "unterbloecke_done": done,
+        "pakete": len(pakete),
+        "dateien_gesamt": len(dateien_alle),
+        "dateien_union": dateien_union,
+        "duplikate": duplikate,
+    }
+
+
+def _phase_sammel_message(
+    state: RunState,
+) -> str:
+    """P2b-4 / A3: Commit-Message-Format.
+
+    PHASE <id>: <titel>
+
+    <U1: message>
+    <U2: message>
+    ...
+
+    Pakete werden in Reihenfolge der done-Unterbloecke
+    zugeordnet. B2-Unterbloecke (done ohne Paket)
+    bekommen eine Hinweiszeile.
+    """
+    zeilen = [
+        f"PHASE {state.phase_id}: {state.phase_titel}",
+        "",
+    ]
+    paket_iter = iter(state.phase_commit_pakete)
+    for u in state.phase_unterbloecke:
+        if not isinstance(u, dict):
+            continue
+        uid = u.get("id", "?")
+        status = u.get("status", "?")
+        if status != "done":
+            zeilen.append(f"{uid}: [{status}]")
+            zeilen.append("")
+            continue
+        try:
+            p = next(paket_iter)
+        except StopIteration:
+            zeilen.append(
+                f"{uid}: (Auftrag bereits erfuellt, "
+                f"kein Commit)")
+            zeilen.append("")
+            continue
+        msg = p.get("message", "") or "(leer)"
+        zeilen.append(f"{uid}: {msg}")
+        zeilen.append("")
+    return "\n".join(zeilen).rstrip() + "\n"
+
+
+def _phase_sammel_paket(state: RunState) -> dict[str, Any]:
+    """P2b-4 / A2 + M5: Sammel-Paket fuer apply_commit_and_doku.
+
+    Liest phase_commit_pakete und baut ein
+    einziges Paket mit Union-aller-dateien und
+    kombinierter Message.
+
+    Vertrag (apply_commit_and_doku liest):
+      message, dateien, doku_patches.
+    """
+    alle_dateien: list[str] = [
+        d
+        for p in state.phase_commit_pakete
+        for d in p.get("dateien", [])
+    ]
+    alle_doku: list[dict[str, Any]] = [
+        dp
+        for p in state.phase_commit_pakete
+        for dp in p.get("doku_patches", [])
+    ]
+    return {
+        "message": _phase_sammel_message(state),
+        "dateien": sorted(set(alle_dateien)),
+        "doku_patches": alle_doku,
+    }
+
+
+def _print_phase_approval_dokument(
+    state: RunState,
+    aggregat: dict[str, Any],
+) -> None:
+    """P2b-4 / M9: Aggregat-Anzeige fuer die Phasen-Approval."""
+    print("\n" + "=" * 70)
+    print("PHASEN-APPROVAL")
+    print("=" * 70)
+    print(f"Phase:        {state.phase_id} - "
+          f"{state.phase_titel}")
+    print(f"Unterbloecke: {aggregat['unterbloecke_total']}")
+    print(f"Pakete:       {aggregat['pakete']}")
+    print(f"Dateien (Union): {len(aggregat['dateien_union'])}")
+    if aggregat["duplikate"]:
+        print(f"  (Duplikate zwischen Paketen: "
+              f"{aggregat['duplikate']})")
+    print()
+    for u in state.phase_unterbloecke:
+        if not isinstance(u, dict):
+            continue
+        titel = u.get("titel", "")
+        status = u.get("status", "?")
+        print(f"  {u.get('id', '?')}: {titel} "
+              f"[{status}]")
+    print()
+    if state.phase_commit_pakete:
+        print("Commit-Message-Vorschau:")
+        print("-" * 70)
+        print(_phase_sammel_message(state).rstrip())
+        print("-" * 70)
+    else:
+        print("[i] Keine Pakete. Kein Commit.")
+
+
+
 def run_phase(
     project_name: str,
     state: RunState,
@@ -1905,9 +2042,112 @@ def run_phase(
            "rc": 0,
            "abgebrochen": False},
           state.project_dir, project_name)
-    # P2b-3b / L1: State fuer main() bereitstellen.
-    state_ref.append(state)
-    return 0
+
+    # =========================================================
+    # P2b-4: Phasen-Gesamt-Review + Approval + Commit.
+    # =========================================================
+    aggregat = _phase_gesamt_review(state)
+    print("[i] Gesamt-Review: "
+          f"{aggregat['pakete']} Pakete, "
+          f"{len(aggregat['dateien_union'])} Dateien.")
+
+    if aggregat["pakete"] == 0:
+        # B2-only-Phase: kein Commit.
+        audit("phase_gesamt_review",
+              {"phase_id": state.phase_id,
+               "phase_titel": state.phase_titel,
+               "unterbloecke_total":
+                   aggregat["unterbloecke_total"],
+               "unterbloecke_done":
+                   aggregat["unterbloecke_done"],
+               "pakete": 0,
+               "dateien_gesamt": 0,
+               "ergebnis": "keine_pakete",
+               "begruendung": ""},
+              state.project_dir, project_name)
+        print("[i] Keine Pakete. Kein Commit.")
+        state_ref.append(state)
+        return 0
+
+    _print_phase_approval_dokument(state, aggregat)
+
+    # Approval [j]/[n], max 5 Versuche.
+    wahl = ""
+    for _versuch in range(5):
+        try:
+            wahl = input(
+                "[j] committen / [n] abbrechen "
+                "(Rollback) > ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\n[*] Abbruch.")
+            audit("phase_abgebrochen",
+                  {"phase_id": state.phase_id,
+                   "grund": "abbruch"},
+                  state.project_dir, project_name)
+            return 1
+        if wahl in {"j", "ja", "y", "yes"}:
+            break
+        if wahl in {"n", "no", "nein"}:
+            break
+        print("[!] Bitte [j] oder [n].")
+    if wahl not in {"j", "ja", "y", "yes",
+                    "n", "no", "nein"}:
+        print("[!] Zu viele Fehleingaben. Fail closed.")
+        audit("phase_abgebrochen",
+              {"phase_id": state.phase_id,
+               "grund": "fehleingaben"},
+              state.project_dir, project_name)
+        return 1
+
+    if wahl in {"n", "no", "nein"}:
+        # Phase-NO-GO: Rollback, Bericht.
+        audit("phase_gesamt_review",
+              {"phase_id": state.phase_id,
+               "phase_titel": state.phase_titel,
+               "unterbloecke_total":
+                   aggregat["unterbloecke_total"],
+               "unterbloecke_done":
+                   aggregat["unterbloecke_done"],
+               "pakete": aggregat["pakete"],
+               "dateien_gesamt":
+                   aggregat["dateien_gesamt"],
+               "ergebnis": "no_go",
+               "begruendung": "Mensch hat abgelehnt"},
+              state.project_dir, project_name)
+        ok = _phase_rollback(
+            project_name, state, "phase_no_go")
+        audit("phase_abgebrochen",
+              {"phase_id": state.phase_id,
+               "grund": "no_go",
+               "rollback_ok": ok},
+              state.project_dir, project_name)
+        return 23
+
+    # [j]: Sammel-Commit.
+    audit("phase_gesamt_review",
+          {"phase_id": state.phase_id,
+           "phase_titel": state.phase_titel,
+           "unterbloecke_total":
+               aggregat["unterbloecke_total"],
+           "unterbloecke_done":
+               aggregat["unterbloecke_done"],
+           "pakete": aggregat["pakete"],
+           "dateien_gesamt": aggregat["dateien_gesamt"],
+           "ergebnis": "go",
+           "begruendung": ""},
+          state.project_dir, project_name)
+    sammel = _phase_sammel_paket(state)
+    if apply_commit_and_doku(state, sammel):
+        audit("commit_applied",
+              {"phase": True,
+               "pakete": aggregat["pakete"]},
+              state.project_dir, project_name)
+        state_ref.append(state)
+        return 0
+    print("[!] Sammel-Commit fehlgeschlagen.")
+    # rc=20 ohne Rollback (apply_commit_and_doku ist
+    # fail-safe).
+    return 20
 
 
 
@@ -6202,8 +6442,24 @@ def _phase_main_pfad(
                       project_dir, project_name)
                 print(f"[+] Phase angelegt: "
                       f"{_phase_yaml_pfad(project_name)}")
-                return run_phase(
+                rc = run_phase(
                     project_name, state, state_ref)
+                # P2b-4 / M8 + A4: Phase abgeschlossen.
+                if rc == 0 and state.phase_aktiv:
+                    plan = _phase_plan_laden(project_name)
+                    if plan is not None:
+                        plan["phase_aktiv"] = False
+                        _phase_plan_speichern(
+                            project_name, plan)
+                        state.phase_aktiv = False
+                    else:
+                        print("[WARN] phase.yaml nach "
+                              "Phasen-Ende nicht lesbar.")
+                        audit("phase_plan_verworfen",
+                              {"grund":
+                               "phase_aktiv_false_fehlgeschlagen"},
+                              project_dir, project_name)
+                return rc
             if wahl in {"e", "edit", "editieren"}:
                 # F5: Runde sofort verbraucht.
                 try:
