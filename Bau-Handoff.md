@@ -1,6 +1,6 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-16 (nach Block P2b-1: run_phase-Geruest)
+Stand: 2026-10-16 (nach Block P2b-2: Rollback + phase_start_head)
 Werkstatt-HEAD: e8a01a4 (Doku: Handoff — P1-Live-Test)
 security-ai-HEAD: 220c6be (Doku-Migration)
 Letzter echter Probebetrieb: PB-67 (0d0fe2c, 2026-10-15)
@@ -289,6 +289,28 @@ Block P2b-1 (run_phase-Geruest + Status-Helfer):
   Tests: 542 -> 555. test_phase.py +13.
   Kein Probebetrieb-Tag (F7: PB-68 erst nach P2b-4).
 
+Block P2b-2 (Rollback + phase_start_head):
+  ERLEDIGT 2026-10-16. Commit 95b2671.
+  Reviewer: GO-mit-Auflagen (P2b-2-Zuschnitt).
+
+  Aenderungen:
+    - _AUDIT_KINDS_BEKANNT +1
+      (phase_start_head_gesetzt).
+    - _git_rev_parse_head (neu): git rev-parse HEAD,
+      "" bei Fehler.
+    - _git_status_porcelain (neu): git status
+      --porcelain, "!FEHLER!" bei Fehler.
+    - _phase_rollback (neu): RR-K1/K2/K3.
+      Best-Effort (F6): faengt Exception, gibt False.
+      Rueckgabe bool (F4), kein rc.
+      state.phase_commit_pakete wird geleert (F5).
+    - run_phase: phase_start_head-Synchronisation
+      vor run_phase_start (YAML gewinnt, wenn != "").
+  Tests: 555 -> 570. test_phase.py 30 -> 45.
+  Kein Probebetrieb-Tag.
+  Rollback-Aufruf folgt P2b-3 (Exception-Pfad) und
+  P2b-4 (Phase-NO-GO).
+
   Teilschritte:
     1. RunState + 7 phase_*-Felder.
     2. _parse_phase_plan (P10-P14-Format).
@@ -370,21 +392,7 @@ WICHTIG:
         Commit 770fbea. Siehe Abschnitt 3.
 
   Block P2b-2 (Rollback + phase_start_head):
-        OFFEN. Naechster Block. Kategorie 3.
-        Reviewer-Reihenfolge (F3): Rollback VOR
-        Phasen-Modus, damit der Abbau-Pfad steht,
-        bevor ein Unterblock echten Code baut.
-        Inhalt:
-          - _phase_rollback (RR-K1/K2/K3).
-          - phase_start_head setzen, wenn leer
-            (RR-K3: nicht neu bei Plan-Aenderung).
-          - RR-K1: git reset --hard nur wenn
-            HEAD == phase_start_head UND status clean.
-          - RR-K2: git clean -fd nur in
-            file_whitelist-Pfaden.
-          - file_whitelist: MESSEN ob vorhanden.
-        Konzept: docs/PLANNER-KONZEPT.md Abschnitt 5.2.
-        Auflagen: P2b-A3, P2b-A6.
+        ERLEDIGT. Commit 95b2671. Siehe Abschnitt 3.
 
   Block P2b-3 (run_pipeline-Phasen-Modus):
         OFFEN. Nach P2b-2. Kategorie 3.
@@ -635,6 +643,8 @@ Abschnitt B.
     Commit "P2a: Phasen-Modus Fundament").
   Block P2b-1 (run_phase-Geruest + Status-Helfer,
     Commit 770fbea).
+  Block P2b-2 (Rollback + phase_start_head,
+    Commit 95b2671).
 
 ================================================================
 6. ZIELE
