@@ -4170,6 +4170,11 @@ def rufe_solver(
         state, "solver", trigger_grund, aufrufer=aufrufer)
     if ap_block:
         user_content = user_content + "\n\n" + ap_block
+    # Solver-Sichtbarkeit 2026-10-16: Trigger + Aufrufer
+    # in der Konsole. Uebergangsloesung bis Dashboard.
+    print(f"[i] Solver-Trigger: "
+          f"{trigger_grund or '(kein Grund)'} "
+          f"(Aufrufer: {aufrufer})")
     reply = ask_llm(api_key, solver_prompt, user_content,
                     state.reviewer_verdict_model, 0.0,
                     state.llm_timeout_s, state=state)
@@ -4178,7 +4183,14 @@ def rufe_solver(
     befund = baue_solver_befund(reply.content,
                                 state.run_id)
     if not befund.ist_vollstaendig():
+        print(f"[!] Solver-Befund unvollstaendig "
+              f"(art={befund.art.name}, "
+              f"aufrufer={aufrufer}).")
         return None, "befund_unvollstaendig"
+    # Solver-Sichtbarkeit 2026-10-16: Befund auf Konsole,
+    # gekuerzt auf 300 Zeichen (Uebergangsloesung).
+    print(f"[i] Solver-Befund: "
+          f"{format_solver_befund(befund)[:300].strip()}")
     return befund, ""
 
 
