@@ -1073,3 +1073,74 @@ Der neue Bau-Chat soll:
 ================================================================
 ENDE DES HANDOFFS
 ================================================================
+
+================================================================
+WEG-Y-PATCH 2026-10-16 (manueller Eingriff)
+================================================================
+
+Kontext: 13. PB-68-Lauf (dritter Versuch) ergab eine
+NO-GO-Schleife. Reviewer-Diagnose: Auftrag unterbestimmt.
+Der Reviewer-Befund "file_whitelist fehlt" ist nach
+Messung sachlich falsch — die Whitelist existiert in
+projects/security-ai.yaml Z. 89-96. Der LLM-Reviewer
+sieht sie nicht im Prompt (Merkposten).
+
+Manueller Eingriff in projects/security-ai.phase.yaml
+(vor dem 14. Lauf):
+
+U1-Unterpunkte vorher (3):
+  1. 'neu: core/guardrails/__init__.py (leer,
+      Package-Marker).'
+  2. 'neu: core/guardrails/models.py: Dataclass
+      Guardrail (id, name, level, state) plus Enum ...'
+  3. 'test: tests/unit/test_guardrails_models.py:
+      Roundtrip (anlegen, lesen), Enum-Werte,
+      Default-State.'
+
+U1-Unterpunkte nachher (4):
+  1. 'neu: core/guardrails/__init__.py. Inhalt: ""
+      (leerer String, kein "inhalt: |"-Block).
+      ... Whitelist: core/ ist freigegeben.'
+  2. 'neu: core/guardrails/models.py. GENAU VIER
+      Felder: id, name, level, state. ...'
+  3. 'test: tests/unit/test_guardrails_models.py.
+      Roundtrip, Enum-Werte, Default-Werte,
+      frozen-Check. ...'
+  4. 'Hinweis (nicht Bau-Auftrag): new_file-Patches
+      -> GEMESSENER INHALT nicht anwendbar. ...'
+
+U2-U10 unveraendert. phase_aktiv=true unveraendert.
+phase_start_head=0d0fe2c unveraendert.
+
+Grund: Reviewer-Antwort "Weg Y als Uebergangsloesung".
+Bewusste Einmal-Aenderung, kein Werkstatt-Bug.
+
+Merkposten (neu):
+  - Weg X (Plan-Konkretisierung) bleibt offen.
+    Anlass praeziser: "Projekt-Whitelist im Prompt
+    unsichtbar", nicht "Auftrag unterbestimmt".
+    Aufteilung in X-1/X-2/X-3 nach 14. Lauf.
+  - LLM-Reviewer sieht file_whitelist aus
+    projects/<name>.yaml nicht im Prompt.
+    Fix-Option: Whitelist in aufgabe_block
+    sichtbar machen. Eigener Block, Kategorie 3.
+  - Fail-closed laesst untracked files in
+    whitelist-Pfaden liegen. Manuelles Cleanup
+    noetig. Eigener Block.
+
+Erwartung Lauf 14 (Weg-Y-A11):
+  - Resume-Force: U1 (no_go) -> pending.
+  - Planner-Skip (Resume-Pfad, verifiziert).
+  - Builder liest U1 mit 4 Unterpunkten.
+  - Patches: inhalt:"" + vier Felder.
+  - Reviewer Code-GO.
+  - Commit-Review mit mess_protokoll_nach_apply.
+  - Sammel-Commit moeglich.
+
+Wenn Lauf 14 scheitert: kein Fix-Loop (Weg-Y-A7).
+Analyse im Handoff, dann entscheiden.
+
+================================================================
+ENDE WEG-Y-PATCH
+================================================================
+
