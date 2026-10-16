@@ -1837,3 +1837,111 @@ Naechster Schritt:
 ================================================================
 ENDE BLOCK 2b
 ================================================================
+
+================================================================
+LAUF 22 BILANZ (2026-10-16)
+================================================================
+
+Kontext: 22. PB-68-Lauf mit neuem U4 (P17-Detailtiefe).
+Abbruch am RR-K8-Menue ([2] Phase abbrechen).
+
+Ergebnis:
+  - Kein Sammel-Commit.
+  - Kein Tag probebetrieb-68.
+  - U4 bleibt no_go.
+  - Working Tree unveraendert (3 U1-U3-Dateien
+    untracked, keine U4-Dateien).
+
+WICHTIGSTE ERKENNTNIS:
+  Die 3 U4-Patches wurden NIE auf Platte geschrieben
+  (apply_code_patches wurde nicht gerufen).
+  Der Reviewer sah die Patch-Texte im Prompt und
+  prueft symbolisch: alle Pruefpunkte OK. Gab
+  trotzdem 5x UNKLAR statt GO.
+
+Audit-Kette 16:29-16:30:
+  - builder_reply_erhalten (3 Patches).
+  - review_round runde 1-5: alle verdict=UNKLAR.
+  - recovery_no_go.
+  - phase_unterblock_ende: U4 / no_go.
+  - phase_plan_korrektur_start.
+  - phase_plan_korrektur_failed:
+      grund=parse_failed,
+      exception="U1: id nicht mit 'U1' ueberein
+                 (gefunden: 'U4')".
+
+Drei getrennte Blocker:
+
+  B0 — Reviewer UNKLAR-Loop.
+    Der Reviewer prueft 5x alle 3 Patches und
+    findet alles OK, gibt aber UNKLAR. Vermutung:
+    weil die Dateien nicht real existieren
+    (apply wurde nicht gerufen), traut er sich
+    kein GO.
+    Fix-Optionen:
+      (a) apply VOR Review (Dateien real da).
+      (b) Reviewer-Prompt: bei reinen new_file
+          ohne Datei-Pruefung GO erlauben.
+      (c) UNKLAR-Behandlung: nach 1x UNKLAR
+          Eskalation statt Loop.
+
+  B1 — Planner-Struktur-Verstaendnis.
+    Der Planner hat phase_stand (Block 2a)
+    bekommen. Er hat fuer U4 einen neuen Plan
+    formuliert. ABER: er hat "U4" als erste
+    UNTERBLOCK-id geschrieben. _parse_phase_plan
+    verlangt monoton ab U1.
+    Konsequenz: phase_plan_korrektur_failed
+    (parse_failed).
+    Fix: phase_stand-Sektion und P18 muessen
+    explizit sagen: "Behalte die Gesamtstruktur
+    U1-U10. Formuliere NUR den Inhalt von U4 neu.
+    Die ids bleiben U1-U10."
+
+  B2 — apply_code_patches im Review-Loop.
+    Heute: Builder -> Review-Runde 1..5 ->
+    apply (erst nach GO).
+    Problem: bei reinen new_file-Patches sieht
+    der Reviewer nie die Datei.
+    Fix: apply VOR Review ODER Datei-Simulation
+    im Reviewer-Prompt.
+
+Was funktioniert hat:
+  - Block 2a (phase_stand im Prompt): wirksam,
+    der Planner bekam den Stand.
+  - Block 2b (UNBEANTWORTET): nicht getriggert
+    (Plan hatte kein UNBEANTWORTET).
+  - Block 1 (P17/P18): nicht bewertbar, weil
+    Planner-Parse fehlschlug.
+
+Auflagen-Abgleich (U4-22-A1 bis A8):
+  A1 (Design-Entscheidung): umgesetzt, aber
+    nicht zum Zug gekommen.
+  A2-A4: umgesetzt, nicht zum Zug gekommen.
+  A5 (L5): Messung ergab: kein Bug.
+  A6 (Hinweise nicht P15): umgesetzt.
+  A7 (5 Test-Prueffaelle): umgesetzt, nicht
+    zum Zug gekommen.
+  A8 (Bilanz): dieser Block.
+
+Merkposten (neu):
+  - B0: Reviewer UNKLAR-Loop.
+  - B1: Planner-Struktur-Verstaendnis (id-
+    Reihenfolge U1-U10 bei Plan-Korrektur).
+  - B2: apply_code_patches im Review-Loop.
+  - Manuelle phase.yaml-Eingriffe: jetzt 6
+    (Weg-Y U1, U2, U4-Lauf 16, U4-Lauf 21,
+    U4-Neufassung Lauf 22). Bilanz-Signal.
+  - Bilanz 21 Laeufe ohne Sammel-Commit
+    (Handoff-Eintrag "BILANZ 17. LAUF" zeigt
+    strukturelle Naehe, aber noch kein
+    Durchbruch).
+
+Naechster Block:
+  Reviewer-Block fuer B0 (UNKLAR-Loop) und
+  B2 (apply vor Review). B1 separat (P18-
+  Verscharfung).
+
+================================================================
+ENDE LAUF 22 BILANZ
+================================================================
