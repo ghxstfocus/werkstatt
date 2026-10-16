@@ -35,7 +35,9 @@ class TestPhaseMainPfad:
     def test_signatur(self) -> None:
         sig = inspect.signature(pipeline._phase_main_pfad)
         params = list(sig.parameters.keys())
-        assert params == ["project_name", "phasen_text", "state_ref"]
+        # --resume-force (2026-10-16): resume_force ergaenzt.
+        assert params == ["project_name", "phasen_text",
+                          "state_ref", "resume_force"]
 
 
 # =====================================================================
@@ -1979,4 +1981,124 @@ class TestPostApplyKorrektur:
         assert "F401 unused import" in prompt
         assert "Zeile 12 entfernen" in prompt
         assert "Import anpassen" in prompt
+
+# =====================================================================
+# Resume-Force (Auflage A8, 2026-10-16)
+# =====================================================================
+
+class TestResumeForce:
+    """Tests fuer _resume_force_reset (Auflage A2-A7)."""
+
+    def _plan(self, unterbloecke: list) -> dict:
+        return {
+            "phase_id": "18",
+            "phase_titel": "Test",
+            "phase_start_head": "abc123",
+            "phase_unterbloecke": unterbloecke,
+        }
+
+    def test_no_go_wird_pending(self) -> None:
+        plan = self._plan([
+            {"id": "U1", "status": "no_go"},
+            {"id": "U2", "status": "pending"},
+        ])
+        r = pipeline._resume_force_reset(plan)
+        assert r["reset"] is True
+        assert plan["phase_unterbloecke"][0]["status"] == "pending"
+        assert plan["phase_unterbloecke"][1]["status"] == "pending"
+
+    def test_failed_wird_pending(self) -> None:
+        plan = self._plan([
+            {"id": "U1", "status": "failed"},
+        ])
+        r = pipeline._resume_force_reset(plan)
+        assert r["reset"] is True
+        assert plan["phase_unterbloecke"][0]["status"] == "pending"
+
+    def test_done_bleibt_done(self) -> None:
+        plan = self._plan([
+            {"id": "U1", "status": "done"},
+            {"id": "U2", "status": "no_go"},
+        ])
+        r = pipeline._resume_force_reset(plan)
+        assert r["reset"] is True
+        assert plan["phase_unterbloecke"][0]["status"] == "done"
+        assert plan["phase_unterbloecke"][1]["status"] == "pending"
+        assert r["kandidaten"] == [
+            {"id": "U2", "alter_status": "no_go"}]
+
+    def test_pending_bleibt_pending(self) -> None:
+        plan = self._plan([
+            {"id": "U1", "status": "pending"},
+        ])
+        r = pipeline._resume_force_reset(plan)
+        assert r["reset"] is False
+        assert plan["phase_unterbloecke"][0]["status"] == "pending"
+
+    def test_ohne_no_go_wirkungslos(self) -> None:
+        plan = self._plan([
+            {"id": "U1", "status": "done"},
+            {"id": "U2", "status": "pending"},
+        ])
+        r = pipeline._resume_force_reset(plan)
+        assert r["reset"] is False
+        assert r["kandidaten"] == []
+
+    def test_phase_start_head_unveraendert(self) -> None:
+        plan = self._plan([
+            {"id": "U1", "status": "no_go"},
+        ])
+        r = pipeline._resume_force_reset(plan)
+        assert r["phase_start_head"] == "abc123"
+        assert plan["phase_start_head"] == "abc123"
+
+    def test_kandidaten_liste(self) -> None:
+        plan = self._plan([
+            {"id": "U1", "status": "no_go"},
+            {"id": "U2", "status": "pending"},
+            {"id": "U3", "status": "failed"},
+        ])
+        r = pipeline._resume_force_reset(plan)
+        assert r["kandidaten"] == [
+            {"id": "U1", "alter_status": "no_go"},
+            {"id": "U3", "alter_status": "failed"},
+        ]
+
+    def test_leerer_plan(self) -> None:
+        plan = self._plan([])
+        r = pipeline._resume_force_reset(plan)
+        assert r["reset"] is False
+        assert r["kandidaten"] == []
+
+    def test_nicht_dict_uebersprungen(self) -> None:
+        plan = self._plan([
+            {"id": "U1", "status": "no_go"},
+            "kein-dict",
+            None,
+        ])
+        r = pipeline._resume_force_reset(plan)
+        assert r["reset"] is True
+        assert r["kandidaten"] == [
+            {"id": "U1", "alter_status": "no_go"}]
+
+
+class TestResumeForceCli:
+    """CLI-Verhalten (Auflage A1)."""
+
+    def test_resume_force_ohne_phase_fail(self) -> None:
+        """--resume-force ohne --phase ist rc=65.
+        Pruefung per Quelltext-Match.
+        """
+        import inspect as ins
+        quelle = ins.getsource(pipeline.main)
+        assert "--resume-force verlangt --phase" in quelle
+
+    def test_resume_force_mit_phase_erlaubt(self) -> None:
+        """--resume-force mit --phase wird durchgereicht.
+        Pruefung per Quelltext-Match.
+        """
+        import inspect as ins
+        quelle = ins.getsource(pipeline.main)
+        assert '_resume_force = "--resume-force" in args' in quelle
+        assert "resume_force=_resume_force" in quelle
 

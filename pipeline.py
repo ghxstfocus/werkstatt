@@ -771,6 +771,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "phase_finish_warnung",
     "phase_plan_verworfen",
     "phase_resume_erkannt",
+    "phase_resume_force",
     "phase_rollback",
     "phase_start_head_gesetzt",
     "phase_unterblock_ende",
@@ -7031,10 +7032,45 @@ def _phase_finish_aktiv(
 
 
 
+def _resume_force_reset(
+        plan: dict[str, Any],
+) -> dict[str, Any]:
+    """Auflage Resume-Force-A2/A7 (2026-10-16).
+
+    Setzt no_go/failed-Unterbloecke im Plan auf
+    pending. Reine Funktion: kein print, kein audit,
+    kein _phase_plan_speichern. Der Aufrufer
+    uebernimmt die Nebenwirkungen.
+
+    Rueckgabe:
+      {"reset": bool,  # wurden Kandidaten gefunden?
+       "kandidaten": [{"id": ..., "alter_status": ...}],
+       "phase_start_head": "<hash>"}
+    """
+    ups = plan.get("phase_unterbloecke", [])
+    kandidaten: list[dict[str, str]] = []
+    for u in ups:
+        if not isinstance(u, dict):
+            continue
+        status = u.get("status")
+        if status in ("no_go", "failed"):
+            kandidaten.append(
+                {"id": u.get("id", ""),
+                 "alter_status": status})
+            u["status"] = "pending"
+    return {
+        "reset": bool(kandidaten),
+        "kandidaten": kandidaten,
+        "phase_start_head": str(
+            plan.get("phase_start_head", "") or ""),
+    }
+
+
 def _phase_main_pfad(
     project_name: str,
     phasen_text: str,
     state_ref: list[RunState],
+    resume_force: bool = False,
 ) -> int:
     global _AKTUELLE_RUN_ID
     """Block P2a: fuehrt den Planner Stufe 2 aus und
@@ -7130,6 +7166,28 @@ def _phase_main_pfad(
               "Ueberspringe Planner.")
         ups_plan = plan_vorhanden.get(
             "phase_unterbloecke", [])
+        # Resume-Force (Auflage A2-A7, 2026-10-16):
+        # Mensch erzwingt Neustart trotz no_go/failed.
+        if resume_force:
+            _rf = _resume_force_reset(plan_vorhanden)
+            if _rf["reset"]:
+                print("[i] --resume-force: folgende "
+                      "Unterbloecke werden auf pending "
+                      "zurueckgesetzt:")
+                for _k in _rf["kandidaten"]:
+                    print(f"    {_k['id']} ({_k['alter_status']})")
+                print("[i] phase_start_head bleibt: "
+                      f"{_rf['phase_start_head']}")
+                _phase_plan_speichern(project_name, plan_vorhanden)
+                audit("phase_resume_force",
+                      {"phase_id": plan_vorhanden.get("phase_id"),
+                       "reset_unterbloecke": _rf["kandidaten"],
+                       "phase_korrektur_zyklus_vorher": 0,
+                       "phase_start_head": _rf["phase_start_head"]},
+                      project_dir, project_name)
+            else:
+                print("[i] --resume-force: keine "
+                      "no_go/failed-Unterbloecke. Wirkungslos.")
         status_verteilung = {
             "done": 0, "pending": 0, "running": 0,
             "no_go": 0, "failed": 0,
@@ -7718,6 +7776,10 @@ def main() -> int:
         print("[FAIL] --phase und --planner "
               "nicht kombinierbar.")
         return 65
+    # --resume-force verlangt --phase (Auflage A1).
+    if "--resume-force" in args and "--phase" not in args:
+        print("[FAIL] --resume-force verlangt --phase.")
+        return 65
 
     # Block P2a: --phase-Pfad. Reihenfolge: VOR --planner
     # (P2a-S5b-A1). Beide Bedingungen sind mit args[2]
@@ -7726,6 +7788,8 @@ def main() -> int:
             and args[2] == "--phase"):
         project_name = args[1].strip()
         phasen_text = args[3].strip()
+        # --resume-force nur mit --phase (Auflage A1).
+        _resume_force = "--resume-force" in args
         if not project_name:
             print("[FAIL] Leerer Projektname.")
             return 65
@@ -7736,7 +7800,8 @@ def main() -> int:
         rc = 1
         try:
             rc = _phase_main_pfad(
-                project_name, phasen_text, phase_state_ref)
+                project_name, phasen_text, phase_state_ref,
+                resume_force=_resume_force)
         except KeyboardInterrupt:
             print("\n[*] Abbruch durch Strg+C.")
             rc = 130

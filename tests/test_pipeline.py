@@ -5216,10 +5216,13 @@ class TestReviewRoundAudit:
         assert len(p["raw"]) == pipeline._AUDIT_RAW_MAX_LEN
 
     def test_kein_neuer_audit_kind(self) -> None:
-        # Baseline: 60 Eintraege. Kein neuer im
-        # Review-Persistenz-Block (Auflage A6).
+        # Baseline: 61 Eintraege. Stand nach
+        # --resume-force (2026-10-16) ergaenzte
+        # phase_resume_force.
+        # Vorherige Baselines: 60 (Review-Persistenz).
         assert "review_round" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 60
+        assert "phase_resume_force" in pipeline._AUDIT_KINDS_BEKANNT
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 61
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
