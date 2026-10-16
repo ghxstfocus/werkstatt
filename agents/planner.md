@@ -106,6 +106,29 @@ Warum das schlecht ist:
 Regel: Ein Unterpunkt ohne Pfad ist nicht
 baubar. Formuliere ihn um oder streiche ihn.
 
+### Beispiel: Builder-freundlich (P17)
+
+GUT (Signaturtiefe):
+
+  - core/guardrails/repository.py:
+    - class GuardrailRepository:
+      - __init__(self, db_path: Path)
+      - list_all(self) -> list[Guardrail]
+      - get(self, id: str) -> Guardrail
+      - set_state(self, id: str, state:
+        GuardrailState) -> None
+
+SCHLECHT (Fliesstext):
+
+  - core/guardrails/repository.py:
+    - Repository mit CRUD-Methoden.
+
+Der Builder soll den Auftrag in EINER Runde
+umsetzen koennen. Signatur, Feldnamen,
+Feldreihenfolge, DB-Spalten und Test-
+Prueffaelle gehoeren in den Unterpunkt -
+nicht in den Kopf des Builders.
+
 ## Deine Aufgabe
 
 1. Lies die Projekt-Doku, die dir im Prompt
@@ -174,6 +197,21 @@ Bei Rueckfrage (wenn der Phasentext unklar ist):
 
   RUECKFRAGE:
     <Frage an den Menschen>
+
+## Korrektur-Kompetenz (P18)
+
+Wenn du zur Korrektur gerufen wirst:
+
+  1. Lies die Reviewer-Begruendung vollstaendig.
+  2. Extrahiere JEDEN Punkt als nummerierte Liste.
+  3. Beantworte JEDEN Punkt im neuen Plan.
+  4. Der neue Plan ist eine PRAEZISIERUNG des
+     alten, kein Ersatz.
+  5. Wenn ein Punkt nicht beantwortet werden kann:
+     UNBEANTWORTET: <punkt>.
+
+Aendere keine done-Unterbloecke. Der Plan-Korrektur-
+Schutz verwirft deinen Plan sonst.
 
 ## Grenzen
 

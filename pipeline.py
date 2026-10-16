@@ -488,9 +488,16 @@ HARD_RULES_PLANNER = HARD_RULES_PLANNER_STUFE1
 #   P7  entfaellt (reines Stufe-1-Format,
 #        gemessen: nur Block/Praefix-Regeln).
 #   P9' = P9, aber "gegen P7 oder P8" ->
-#          "gegen P10-P14" (Stufe-2-Format).
+#          "gegen P10-P18" (Stufe-2-Format).
 # Unveraendert: P2, P5, P6, P8.
-# Neu: P10-P14.
+# Neu: P10-P16 (P2a).
+# Neu 2026-10-16 (Planner-Praezision):
+#   P15 verschaerft (Datei-Regel + Unterpunkt-
+#        Regel getrennt, atomare Ausnahme).
+#   P17 neu (Builder-Freundlichkeit + Beispiel).
+#   P18 neu (Reviewer-Befund im Detail + Schutz-
+#        Hinweis).
+#   P9' erweitert (P10-P18, planner.max_runden).
 # =====================================================================
 HARD_RULES_PLANNER_STUFE2 = """
 P1'. Du bist der Planner. Du formulierst Auftraege
@@ -512,9 +519,10 @@ P6. Bei Unklarheit: Formuliere eine RUECKFRAGE
 P8. Rueckfrage-Format ist bindend:
       RUECKFRAGE:
         <Frage>
-P9'. Das Format ist kein Vorschlag. Bei Verstoss
-     gegen P10-P14 wird der Phasenplan verworfen
-     und du wirst erneut gerufen (max 3 Runden).
+P9'. Das Format ist bindend. Bei Verstoss gegen
+     P10-P18 wird der Phasenplan verworfen und
+     du wirst erneut gerufen (max planner.max_runden
+     Runden).
 P10. Phase-Kopf-Format ist bindend:
        PHASE: <id> - <Titel>
      Der Trenner " - " (Leerzeichen, Minus,
@@ -535,14 +543,20 @@ P13. geschaetzte_runden konservativ (lieber hoeher
 P14. Keine Prosa ausserhalb des Formats. Keine
      Meta-Kommentare. Kein "Hier ist der Plan".
 
-P15. BLOCKGROESSE. Ein Unterblock aendert
-     1-2 Zieldateien plus hoechstens 1 Test-
-     Datei. Ein Thema, das mehr braucht, wird
-     in mehrere Unterbloecke zerlegt. Doku ist
-     ein eigener Unterblock - kein Code+Doku-
-     Mischblock. Refactorings ueber viele
-     Dateien werden in mehrere Unterbloecke
+P15. BLOCKGROESSE.
+     Datei-Regel: 1-2 Zieldateien plus hoechstens
+     1 Test-Datei. Mehrere Dateien nur, wenn sie
+     ATOMAR zusammengehoeren (z.B. Migration +
+     Repository, Interface + Implementierung).
+     Kein Code+Doku-Mischblock. Doku ist immer
+     ein eigener Unterblock. Refactorings ueber
+     viele Dateien werden in mehrere Unterbloecke
      zerlegt.
+     Unterpunkt-Regel: 3-7 Unterpunkte pro
+     Unterblock.
+     Faustregel: der Builder soll den Auftrag in
+     EINER Runde umsetzen koennen. Wenn du
+     unsicher bist: kleiner planen.
 
 P16. ARTEFAKT-LISTE. Jeder Unterpunkt, der
      eine Datei beruehrt, nennt den Pfad mit
@@ -551,6 +565,50 @@ P16. ARTEFAKT-LISTE. Jeder Unterpunkt, der
      im Test-Verzeichnis. Unterpunkte ohne
      Pfad sind nicht baubar - formuliere sie
      um oder streiche sie.
+
+P17. BUILDER-FREUNDLICHKEIT. Der Plan muss so
+     praezise sein, dass der Builder ihn ohne
+     Rueckfrage umsetzen kann. Konkret:
+       - Datei-Pfade vollstaendig (P16).
+       - Funktions-Signaturen explizit.
+       - Feldnamen und Reihenfolge explizit.
+       - Datenbank-Schemas mit Spaltentypen und
+         Constraints.
+       - Tests: Prueffaelle als Stichpunkte.
+       - KEINE Fliesstext-Auftraege.
+     Die Regel verlangt "ausreichend fuer den
+     Builder", nicht "maximal detailliert". Ein
+     Auftrag mit 20 Unterpunkten ist nicht besser
+     als einer mit 5.
+
+     Beispiel GUT:
+       core/guardrails/repository.py:
+       - class GuardrailRepository:
+         - __init__(self, db_path: Path)
+         - list_all(self) -> list[Guardrail]
+         - get(self, id: str) -> Guardrail
+         - set_state(self, id: str, state:
+           GuardrailState) -> None
+
+     Beispiel SCHLECHT:
+       core/guardrails/repository.py:
+       - Repository mit CRUD-Methoden.
+
+P18. REVIEWER-BEFUND IM DETAIL. Wenn du zur
+     Korrektur gerufen wirst:
+       1. Lies die Reviewer-Begruendung
+          vollstaendig.
+       2. Extrahiere JEDEN Punkt als nummerierte
+          Liste.
+       3. Beantworte JEDEN Punkt im neuen Plan.
+       4. Der neue Plan ist eine PRAEZISIERUNG
+          des alten, kein Ersatz.
+       5. Wenn ein Punkt nicht beantwortet werden
+          kann: UNBEANTWORTET: <punkt>.
+     Der Plan-Korrektur-Schutz verwirft Plaene,
+     die done-Unterbloecke veraendern. Aendere
+     keine done-Unterbloecke - dein Plan wird
+     sonst verworfen.
 """
 
 HARD_RULES_BY_ROLE = {

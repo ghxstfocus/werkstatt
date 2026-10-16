@@ -329,3 +329,64 @@ class TestPlannerRolleGroesse:
         assert "P15." not in prompt
         assert "P16." not in prompt
 
+
+
+# =====================================================================
+# Planner-Praezision (2026-10-16): P15-Neu, P17, P18
+# =====================================================================
+
+class TestPlannerPraezision:
+    def test_stufe2_hat_p17(self) -> None:
+        assert "P17." in pipeline.HARD_RULES_PLANNER_STUFE2
+
+    def test_stufe2_hat_p18(self) -> None:
+        assert "P18." in pipeline.HARD_RULES_PLANNER_STUFE2
+
+    def test_stufe2_p15_unterpunkt_regel(self) -> None:
+        # Auflage A1: Unterpunkt-Regel 3-7.
+        assert "3-7 Unterpunkte" in pipeline.HARD_RULES_PLANNER_STUFE2
+
+    def test_stufe2_p15_atomar_ausnahme(self) -> None:
+        # Auflage A1: atomare Ausnahme.
+        assert "ATOMAR" in pipeline.HARD_RULES_PLANNER_STUFE2
+
+    def test_stufe2_p15_datei_regel(self) -> None:
+        # Auflage B1-A2: Datei-Regel wortgleich.
+        assert "1-2 Zieldateien plus hoechstens" in (
+            pipeline.HARD_RULES_PLANNER_STUFE2)
+
+    def test_stufe2_p17_signatur_tiefe(self) -> None:
+        # Auflage B1-A2: Signatur + Schema explizit.
+        s = pipeline.HARD_RULES_PLANNER_STUFE2
+        assert "Funktions-Signaturen explizit" in s
+        assert "Datenbank-Schemas mit Spaltentypen" in s
+
+    def test_stufe2_p17_gut_schlecht_beispiel(self) -> None:
+        # Auflage B1-A2: beide Beispiele.
+        s = pipeline.HARD_RULES_PLANNER_STUFE2
+        assert "class GuardrailRepository:" in s
+        assert "Repository mit CRUD-Methoden" in s
+
+    def test_stufe1_kein_p17_p18(self) -> None:
+        s = pipeline.HARD_RULES_PLANNER_STUFE1
+        assert "P17." not in s
+        assert "P18." not in s
+
+    def test_stufe2_p9strich_verweist_auf_p18(self) -> None:
+        # Auflage B1-A1: P9' auf P10-P18 erweitert.
+        s = pipeline.HARD_RULES_PLANNER_STUFE2
+        assert "P10-P18" in s
+
+    def test_planner_md_p18_sektion(self) -> None:
+        from pathlib import Path as _P
+        text = _P("/opt/werkstatt/agents/planner.md").read_text(
+            encoding="utf-8")
+        assert "Korrektur-Kompetenz (P18)" in text
+        assert "UNBEANTWORTET" in text
+
+    def test_build_system_prompt_stufe2_hat_p17(self) -> None:
+        agents = pipeline.load_agents("/opt/werkstatt/agents")
+        prompt = pipeline.build_system_prompt(
+            agents["planner"], {}, [], stufe=2)
+        assert "P17." in prompt
+        assert "P18." in prompt
