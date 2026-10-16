@@ -2396,6 +2396,62 @@ class TestExtractPaths:
             "", ["tests/"], tmp_path)
         assert pfade == []
 
+    # ---- W1 (2026-10-16) ----
+    def test_w1_import_notation(self, tmp_path: Path) -> None:
+        (tmp_path / "core" / "access").mkdir(parents=True)
+        aufgabe = "from core.access.checker import X"
+        pfade = pipeline.extract_paths_from_aufgabe(
+            aufgabe, ["core/"], tmp_path)
+        assert "core/access/checker.py" in pfade
+
+    def test_w1_sql_endung(self, tmp_path: Path) -> None:
+        (tmp_path / "data" / "migrations").mkdir(parents=True)
+        aufgabe = "data/migrations/0017_x.sql"
+        pfade = pipeline.extract_paths_from_aufgabe(
+            aufgabe, ["data/"], tmp_path)
+        assert "data/migrations/0017_x.sql" in pfade
+
+    def test_w1_neue_datei(self, tmp_path: Path) -> None:
+        # W1-A3: neue Datei (existiert nicht, aber
+        # Elternverzeichnis existiert).
+        (tmp_path / "core" / "services").mkdir(parents=True)
+        aufgabe = "neu: core/services/neu.py"
+        pfade = pipeline.extract_paths_from_aufgabe(
+            aufgabe, ["core/"], tmp_path)
+        assert "core/services/neu.py" in pfade
+
+    def test_w1_elternverzeichnis_fehlt(self, tmp_path: Path) -> None:
+        # W1-A3: kein Match, wenn Elternverzeichnis
+        # fehlt.
+        aufgabe = "neu: nichtda/x.py"
+        pfade = pipeline.extract_paths_from_aufgabe(
+            aufgabe, ["nichtda/"], tmp_path)
+        assert pfade == []
+
+    def test_w1_stdlib_ignoriert(self, tmp_path: Path) -> None:
+        (tmp_path / "core").mkdir()
+        aufgabe = "from os.path import join"
+        pfade = pipeline.extract_paths_from_aufgabe(
+            aufgabe, ["core/", "os/"], tmp_path)
+        assert pfade == []
+
+    def test_w1_pathlib_ignoriert(self, tmp_path: Path) -> None:
+        (tmp_path / "core").mkdir()
+        aufgabe = "from pathlib import Path"
+        pfade = pipeline.extract_paths_from_aufgabe(
+            aufgabe, ["core/", "pathlib/"], tmp_path)
+        assert pfade == []
+
+    def test_w1_mehrere_endungen(self, tmp_path: Path) -> None:
+        (tmp_path / "data").mkdir()
+        (tmp_path / "data" / "a.sql").write_text("x",
+                                                    encoding="utf-8")
+        aufgabe = "data/a.sql data/b.json"
+        pfade = pipeline.extract_paths_from_aufgabe(
+            aufgabe, ["data/"], tmp_path)
+        assert "data/a.sql" in pfade
+        assert "data/b.json" in pfade
+
 
 class TestReadTargetSnippets:
     """Tests fuer read_target_snippets."""

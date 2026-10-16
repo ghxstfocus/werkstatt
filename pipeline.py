@@ -6301,28 +6301,59 @@ def collect_messwerte(state: RunState) -> dict[str, Any]:
 def extract_paths_from_aufgabe(aufgabe: str,
                                 file_whitelist: list[str],
                                 project_dir: Path) -> list[str]:
-    """Auflage 2146: extrahiert Datei-Pfade aus dem Auftrag.
+    """Auflage 2146 + W1 (2026-10-16): extrahiert
+    Datei-Pfade aus dem Auftrag.
 
-    Regex findet Pfade mit Endung .py/.md/.yaml/.yml.
-    Filter: Pfad muss in file_whitelist liegen und
-    Datei muss existieren. Dedupliziert.
+    Drei Quellen (W1-A1):
+      1. Suffix-Pfade: <pfad>.<endung>.
+      2. from-Importe: from a.b.c import X
+         -> a/b/c.py (nur, wenn a/b/c in
+         file_whitelist UND a/b/ existiert).
+      3. (kein 'import X' — im U5-Auftrag
+         nicht verwendet; W1-A1).
+
+    W1-A3: exists()-Filter fuer die Datei
+    entfaellt (neue Dateien existieren noch
+    nicht). Stattdessen: Elternverzeichnis
+    muss existieren. Damit werden Pfade in
+    neuen Dateien erkannt, stdlib-Pfade
+    (os.path -> os/ existiert nicht) aber
+    verworfen.
+
+    Endungen (W1-A1): .py .md .yaml .yml
+    .sql .json .toml .cfg .ini .txt.
+    Dedupliziert.
     """
     if not aufgabe:
         return []
-    kandidaten = re.findall(
-        r"[a-zA-Z0-9_./-]+\.(?:py|md|yaml|yml)",
-        aufgabe,
-    )
+    _endungen = (
+        "py|md|yaml|yml|sql|json|toml|cfg|ini|txt")
+    _suffix_re = re.compile(
+        r"[a-zA-Z0-9_./-]+\.(?:" + _endungen + r")")
+    _from_re = re.compile(
+        r"from\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s+import")
+
+    kandidaten: list[str] = []
+    # 1. Suffix-Pfade.
+    for m in _suffix_re.finditer(aufgabe):
+        kandidaten.append(m.group(0))
+    # 2. from-Importe.
+    for m in _from_re.finditer(aufgabe):
+        modul = m.group(1)
+        pfad = modul.replace(".", "/") + ".py"
+        kandidaten.append(pfad)
+
     ergebnis: list[str] = []
     gesehen: set[str] = set()
     for p in kandidaten:
-        # Fuehrende Slashes entfernen (z.B. aus "/opt/...").
         p = p.lstrip("/")
         if p in gesehen:
             continue
         if not any(p.startswith(w) for w in file_whitelist):
             continue
-        if not (project_dir / p).exists():
+        # W1-A3: Elternverzeichnis-Check.
+        eltern = (project_dir / p).parent
+        if not eltern.exists():
             continue
         gesehen.add(p)
         ergebnis.append(p)
