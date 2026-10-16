@@ -304,6 +304,24 @@ def _state_fuer_phase(tmp_path: Path) -> pipeline.RunState:
     )
 
 
+def _mock_run_pipeline(rc: int = 0, paket: bool = True):
+    """Erzeugt eine run_pipeline-Attrappe fuer Tests.
+
+    Legt den uebergebenen phasen_state in sr_intern und
+    haengt optional ein Paket an phase_commit_pakete.
+    """
+    def _mock(project_name, aufgabe, sr_intern,
+              *, phasen_state=None):
+        if phasen_state is not None:
+            sr_intern.append(phasen_state)
+            if paket and rc == 0:
+                phasen_state.phase_commit_pakete.append(
+                    {"message": "test",
+                     "dateien": ["apps/x.py"]})
+        return rc
+    return _mock
+
+
 class TestRunPhase:
     def test_funktion_existiert(self) -> None:
         assert hasattr(pipeline, "run_phase")
@@ -311,7 +329,8 @@ class TestRunPhase:
     def test_signatur(self) -> None:
         sig = inspect.signature(pipeline.run_phase)
         params = list(sig.parameters.keys())
-        assert params == ["project_name", "state"]
+        assert params == ["project_name", "state",
+                          "state_ref"]
 
     def test_loop_zwei_unterbloecke(
             self, tmp_path: Path, monkeypatch) -> None:
@@ -320,13 +339,14 @@ class TestRunPhase:
         _baue_phase_yaml(tmp_path, _standard_unterbloecke())
         state = _state_fuer_phase(tmp_path)
         from unittest.mock import patch
-        with patch("pipeline.run_pipeline") as mock_rp, \
+        with patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
              patch("pipeline._git_rev_parse_head",
-                   return_value="a" * 40):
-            rc = pipeline.run_phase("testprojekt", state)
+                   return_value="a" * 40), \
+             patch("pipeline.audit"):
+            rc = pipeline.run_phase("testprojekt", state, [])
         assert rc == 0
-        assert not mock_rp.called, (
-            "P2b-1 darf run_pipeline nicht aufrufen")
         assert state.phase_aktueller_index == 2
         daten = pipeline._phase_plan_laden("testprojekt")
         assert daten is not None
@@ -339,7 +359,7 @@ class TestRunPhase:
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, [])
         state = _state_fuer_phase(tmp_path)
-        rc = pipeline.run_phase("testprojekt", state)
+        rc = pipeline.run_phase("testprojekt", state, [])
         assert rc != 0
 
     def test_fehlende_phase_yaml_fail_closed(
@@ -347,7 +367,7 @@ class TestRunPhase:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         state = _state_fuer_phase(tmp_path)
-        rc = pipeline.run_phase("unbekannt", state)
+        rc = pipeline.run_phase("unbekannt", state, [])
         assert rc != 0
 
     def test_idempotenz_alle_done(
@@ -359,7 +379,7 @@ class TestRunPhase:
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, ups)
         state = _state_fuer_phase(tmp_path)
-        rc = pipeline.run_phase("testprojekt", state)
+        rc = pipeline.run_phase("testprojekt", state, [])
         assert rc == 0
 
     def test_no_go_fail_closed(
@@ -370,7 +390,7 @@ class TestRunPhase:
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, ups)
         state = _state_fuer_phase(tmp_path)
-        rc = pipeline.run_phase("testprojekt", state)
+        rc = pipeline.run_phase("testprojekt", state, [])
         assert rc != 0
 
     def test_audit_kinds_im_log(
@@ -386,9 +406,12 @@ class TestRunPhase:
             gesehen.append(kind)
 
         with patch("pipeline.audit", side_effect=fake_audit), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
              patch("pipeline._git_rev_parse_head",
                    return_value="a" * 40):
-            rc = pipeline.run_phase("testprojekt", state)
+            rc = pipeline.run_phase("testprojekt", state, [])
         assert rc == 0
         assert "run_phase_start" in gesehen
         assert "run_phase_ende" in gesehen
@@ -549,8 +572,11 @@ class TestRunPhaseStartHead:
         fake_head = "c" * 40
         with patch("pipeline._git_rev_parse_head",
                    return_value=fake_head), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
              patch("pipeline.audit"):
-            rc = pipeline.run_phase("testprojekt", state)
+            rc = pipeline.run_phase("testprojekt", state, [])
         assert rc == 0
         assert state.phase_start_head == fake_head
         # phase.yaml muss den Wert tragen.
@@ -575,8 +601,11 @@ class TestRunPhaseStartHead:
         state.phase_start_head = "e" * 40
         with patch("pipeline._git_rev_parse_head",
                    return_value="f" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
              patch("pipeline.audit"):
-            rc = pipeline.run_phase("testprojekt", state)
+            rc = pipeline.run_phase("testprojekt", state, [])
         assert rc == 0
         # YAML-Wert hat gewonnen, nicht der git-Aufruf.
         assert state.phase_start_head == "d" * 40
@@ -596,7 +625,7 @@ class TestRunPhaseStartHead:
                    return_value="f" * 40), \
              patch("pipeline.audit"):
             try:
-                pipeline.run_phase("testprojekt", state)
+                pipeline.run_phase("testprojekt", state, [])
             except ValueError as exc:
                 assert "inkonsistent" in str(exc)
                 return
@@ -725,4 +754,173 @@ class TestRunPipelinePhasenModus:
         assert "phase_commit_paket_gesammelt" in quelle
         assert "phase_commit_paket_leer" in quelle
         assert "return 21" in quelle
+
+# =====================================================================
+# run_phase — rc-Klassen (P2b-3b)
+# =====================================================================
+
+class TestRunPhaseRcKlassen:
+    def _setup(self, tmp_path: Path, monkeypatch,
+               ups=None):
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        if ups is None:
+            ups = _standard_unterbloecke()
+        _baue_phase_yaml(tmp_path, ups)
+        return _state_fuer_phase(tmp_path)
+
+    def test_klasse_1_erfolg_mit_paket(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
+             patch("pipeline.audit"), \
+             patch("pipeline._phase_rollback") as mock_rb:
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 0
+        assert not mock_rb.called
+        assert state.phase_aktueller_index == 2
+        assert len(state.phase_commit_pakete) == 2
+        assert sr == [state]
+
+    def test_klasse_2_b2_ohne_paket(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=False)), \
+             patch("pipeline.audit"), \
+             patch("pipeline._phase_rollback") as mock_rb:
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 0
+        assert not mock_rb.called
+        assert len(state.phase_commit_pakete) == 0
+        assert sr == [state]
+
+    def test_klasse_3_rc_15_kein_rollback(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=15, paket=False)), \
+             patch("pipeline.audit"), \
+             patch("pipeline._phase_rollback") as mock_rb:
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 15
+        assert not mock_rb.called, (
+            "Klasse 3: KEIN Rollback (P2b-3b-A7)")
+        # sr bleibt leer, weil Klasse 3 mit return 15
+        # ohne append zurueckkehrt.
+        assert sr == []
+
+    def test_klasse_4_rc_11_mit_rollback(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=11, paket=False)), \
+             patch("pipeline.audit"), \
+             patch("pipeline._phase_rollback",
+                   return_value=True) as mock_rb:
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 11
+        assert mock_rb.called
+        assert sr == []
+
+    def test_klasse_4_rc_21_mit_rollback(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=21, paket=False)), \
+             patch("pipeline.audit"), \
+             patch("pipeline._phase_rollback",
+                   return_value=True) as mock_rb:
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 21
+        assert mock_rb.called
+
+    def test_exception_im_run_pipeline(
+            self, tmp_path: Path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=RuntimeError("kaputt")), \
+             patch("pipeline.audit"), \
+             patch("pipeline._phase_rollback",
+                   return_value=True) as mock_rb:
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 22
+        assert mock_rb.called
+
+
+# =====================================================================
+# run_phase — Guards + Vertragsbruch (P2b-3b)
+# =====================================================================
+
+class TestRunPhaseGuards:
+    def test_state_ref_nicht_leer_wirft(
+            self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        state = _state_fuer_phase(tmp_path)
+        sr = [state]
+        try:
+            pipeline.run_phase("testprojekt", state, sr)
+        except ValueError as exc:
+            assert "state_ref muss leer sein" in str(exc)
+            return
+        raise AssertionError("ValueError erwartet")
+
+    def test_run_pipeline_vertragsbruch(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """Mock legt state nicht in sr_intern -> RuntimeError."""
+        from unittest.mock import patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        state = _state_fuer_phase(tmp_path)
+
+        def schlechter_mock(project_name, aufgabe,
+                            sr_intern, *, phasen_state=None):
+            # sr_intern NICHT befuellen.
+            return 0
+
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=schlechter_mock), \
+             patch("pipeline.audit"), \
+             patch("pipeline._phase_rollback"):
+            try:
+                pipeline.run_phase("testprojekt", state, [])
+            except RuntimeError as exc:
+                assert "state nicht in state_ref" in str(exc)
+                return
+        raise AssertionError("RuntimeError erwartet")
 

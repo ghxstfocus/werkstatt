@@ -1649,6 +1649,7 @@ def _phase_rollback(
 def run_phase(
     project_name: str,
     state: RunState,
+    state_ref: list[RunState],
 ) -> int:
     """Block P2b-1: Geruest fuer den Phasen-Loop.
 
@@ -1677,6 +1678,11 @@ def run_phase(
     NICHT abgefangen; der Aufrufer (P2b-2) faengt sie
     fuer den Rollback.
     """
+    # P2b-3b / L1: state_ref muss leer sein.
+    # Der State wird am Ende angehaengt (fuer main()).
+    if state_ref:
+        raise ValueError(
+            "run_phase: state_ref muss leer sein")
     daten = _phase_plan_laden(project_name)
     if daten is None:
         print("[FAIL] phase.yaml: kein aktiver Plan.")
@@ -1779,17 +1785,119 @@ def run_phase(
                "phase_id": state.phase_id},
               state.project_dir, project_name)
         _phase_yaml_status_update(project_name, uid, "running")
-        print(f"[i] Unterblock {uid} Stub. "
-              f"run_pipeline folgt in P2b-3.")
-        # TODO(P2b-3): hier run_pipeline
-        _phase_yaml_status_update(project_name, uid, "done")
+
+        # P2b-3b / L1: lokaler state_ref pro Aufruf.
+        sr_intern: list[RunState] = []
+        paket_vorher = len(state.phase_commit_pakete)
+        # Aufgaben-Text: Titel + Unterpunkte des
+        # aktuellen Unterblocks.
+        unterpunkte = u.get("unterpunkte", [])
+        aufgabe_text = u.get("titel", "") + "\n" + "\n".join(
+            f"- {p}" for p in unterpunkte)
+
+        # P2b-3b / L5: Exception -> Rollback.
+        try:
+            rc_unterblock = run_pipeline(
+                project_name, aufgabe_text,
+                sr_intern, phasen_state=state)
+        # P2b-3b / L5: bewusster Catch, um Rollback zu
+        # triggern (HR-R9 Fail-closed).
+        except Exception as exc:  # noqa: BLE001
+            audit("phase_unterblock_ende",
+                  {"id": uid, "index": i,
+                   "status": "failed",
+                   "exception": str(exc)},
+                  state.project_dir, project_name)
+            _phase_yaml_status_update(project_name, uid, "failed")
+            ok = _phase_rollback(
+                project_name, state, "exception")
+            audit("run_phase_ende",
+                  {"phase_id": state.phase_id,
+                   "unterbloecke": len(unterbloecke),
+                   "rc": 22, "abgebrochen": True,
+                   "rollback_ok": ok},
+                  state.project_dir, project_name)
+            return 22
+
+        # P2b-3b / L1: Vertragspruefung.
+        if not sr_intern or sr_intern[0] is not state:
+            raise RuntimeError(
+                "run_pipeline hat state nicht in state_ref "
+                "abgelegt")
+
+        # P2b-3b / L4 + A4-NA1:
+        # run_pipeline kann rc=0 liefern ueber:
+        #   (a) B2-Pfad (Z. 5548): kein Paket.
+        #   (b) Paket-Sammel-Pfad (P2b-3): Paket neu.
+        #   (c) require_human_approval=False:
+        #       greift im Phasen-Modus nicht (P2b-3 G4).
+        # Im Phasen-Modus ist (b) an paket_neu
+        # erkennbar, (c) ausgeschlossen, also ist
+        # (a) das Komplement: rc=0 ohne Paket = B2.
+        paket_neu = (
+            len(state.phase_commit_pakete) > paket_vorher)
+
         dauer_s = round(time.monotonic() - t0, 3)
+
+        if rc_unterblock == 0 and paket_neu:
+            # Klasse 1: Erfolg mit Paket.
+            _phase_yaml_status_update(project_name, uid, "done")
+            audit("phase_unterblock_ende",
+                  {"id": uid, "index": i,
+                   "status": "done",
+                   "dauer_s": dauer_s},
+                  state.project_dir, project_name)
+            state.phase_aktueller_index = i + 1
+            continue
+
+        if rc_unterblock == 0 and not paket_neu:
+            # Klasse 2: B2 (Auftrag bereits erfuellt).
+            _phase_yaml_status_update(project_name, uid, "done")
+            audit("phase_unterblock_ende",
+                  {"id": uid, "index": i,
+                   "status": "done",
+                   "b2": True,
+                   "dauer_s": dauer_s},
+                  state.project_dir, project_name)
+            state.phase_aktueller_index = i + 1
+            continue
+
+        if rc_unterblock == 15:
+            # Klasse 3: Unterblock-NO-GO.
+            # KEIN Rollback.
+            _phase_yaml_status_update(project_name, uid, "no_go")
+            audit("phase_unterblock_ende",
+                  {"id": uid, "index": i,
+                   "status": "no_go",
+                   "dauer_s": dauer_s},
+                  state.project_dir, project_name)
+            audit("run_phase_ende",
+                  {"phase_id": state.phase_id,
+                   "unterbloecke": len(unterbloecke),
+                   "rc": 15, "abgebrochen": True,
+                   "grund": "unterblock_no_go"},
+                  state.project_dir, project_name)
+            return 15
+
+        # Klasse 4: Fail-closed.
+        _phase_yaml_status_update(project_name, uid, "failed")
         audit("phase_unterblock_ende",
               {"id": uid, "index": i,
-               "status": "done",
+               "status": "failed",
+               "rc": rc_unterblock,
                "dauer_s": dauer_s},
               state.project_dir, project_name)
-        state.phase_aktueller_index = i + 1
+        ok = _phase_rollback(
+            project_name, state,
+            "unterblock_rc_" + str(rc_unterblock))
+        audit("run_phase_ende",
+              {"phase_id": state.phase_id,
+               "unterbloecke": len(unterbloecke),
+               "rc": rc_unterblock,
+               "abgebrochen": True,
+               "rollback_ok": ok},
+              state.project_dir, project_name)
+        return rc_unterblock
 
     audit("run_phase_ende",
           {"phase_id": state.phase_id,
@@ -1797,6 +1905,8 @@ def run_phase(
            "rc": 0,
            "abgebrochen": False},
           state.project_dir, project_name)
+    # P2b-3b / L1: State fuer main() bereitstellen.
+    state_ref.append(state)
     return 0
 
 
@@ -6092,7 +6202,8 @@ def _phase_main_pfad(
                       project_dir, project_name)
                 print(f"[+] Phase angelegt: "
                       f"{_phase_yaml_pfad(project_name)}")
-                return run_phase(project_name, state)
+                return run_phase(
+                    project_name, state, state_ref)
             if wahl in {"e", "edit", "editieren"}:
                 # F5: Runde sofort verbraucht.
                 try:
