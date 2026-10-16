@@ -2174,3 +2174,68 @@ Naechster Schritt:
 ================================================================
 ENDE TIMEOUT-FIX + U4-PRAEZISIERUNG
 ================================================================
+
+================================================================
+F1+F2+F3 COMMIT-PHASE-FIXES (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 25. Lauf:
+  Erster Code-GO seit Lauf 12 (U4-Patches gebaut).
+  Commit-Phase gescheitert an drei Infrastruktur-Bugs.
+
+Fixes:
+  F1: _rollback_zieldateien git status -uall.
+      Dateien in neuen Verzeichnissen werden
+      einzeln gefunden. Rollback entfernt alle
+      new_file-Pfade (repository.py bleibt nicht
+      mehr liegen).
+
+  F2: apply_and_recheck git add -N.
+      2169-Blocker behoben: neue Dateien erscheinen
+      in git diff --name-only HEAD.
+
+  F2-A1: git reset HEAD -- <pfade> VOR unlink.
+      Index sauber nach intent-to-add-Rollback.
+
+  F3: collect_messwerte git_head-Fallback.
+      Liest aus basis_protokoll, wenn
+      _nach_apply leer (apply_and_recheck-Skip).
+
+Tests: 875 passed (+12).
+
+Auflagen-Abgleich:
+  F1-A1 (Syntax-Konsistenz): -uall wie Z. 7965.
+  F2-A1 (Index-Cleanup): git reset HEAD vor unlink.
+  F2-B1 (Katalog): 69 -> 71.
+  F2-C1 (Pfad-Normalisierung): Pfade aus
+    code_patches sind bereits relativ.
+  F2-D1 (Timeout 30s): konsistent mit bestehenden
+    git-Aufrufen.
+  F3-A1 (Regex): bestehende Regex aus
+    collect_messwerte wiederverwendet.
+  F3-A2 (bestehender Parser): collect_messwerte
+    erweitert, keine dritte Regex.
+  F3-A3 (Fallback-Absicht): Reviewer erwartet
+    git_head (Befund 25. Lauf); Fallback korrekt.
+
+Merkposten (F1-F3-A2):
+  _git_status_porcelain (Z. 3234) nutzt
+  "git status --porcelain" ohne -uall.
+  Bei kuenftigen Aufrufen pruefen, ob -uall
+  noetig ist (Konsistenz mit F1).
+
+Naechster Schritt:
+  26. PB-68-Lauf mit --resume-force.
+  Erwartung:
+    - Code-GO (wie 25).
+    - apply + git add -N.
+    - Commit-Review Runde 1: COMMIT-GO.
+    - Sammel-Commit.
+    - Tag probebetrieb-68.
+  Bei Scheitern: Bilanz Pflicht.
+
+================================================================
+ENDE F1+F2+F3
+================================================================
