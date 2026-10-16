@@ -6639,7 +6639,9 @@ def _phase_main_pfad(
         state.phase_unterbloecke = ups_plan
         state.phase_aktiv = True
         state.start_monotonic = time.monotonic()
-        state_ref.append(state)
+        # Resume-Fix: state_ref NICHT hier anhaengen.
+        # run_phase macht das am Ende (Guard verlangt
+        # leeren state_ref beim Aufruf).
         _AKTUELLE_RUN_ID = (
             datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
             + f"-{os.getpid()}")
