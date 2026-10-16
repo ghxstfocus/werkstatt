@@ -2672,6 +2672,26 @@ def run_phase(
             state.phase_aktueller_index = i + 1
             continue
 
+        if rc_unterblock == 14:
+            # Bug-1 (2026-10-16): Eskalation durch
+            # UNKLAR. Kein Rollback, kein failed.
+            # Der Mensch entscheidet.
+            _phase_yaml_status_update(
+                project_name, uid, "no_go")
+            audit("phase_unterblock_ende",
+                  {"id": uid, "index": i,
+                   "status": "no_go",
+                   "grund": "unklar_eskalation",
+                   "dauer_s": dauer_s},
+                  state.project_dir, project_name)
+            audit("run_phase_ende",
+                  {"phase_id": state.phase_id,
+                   "unterbloecke": len(unterbloecke),
+                   "rc": 14, "abgebrochen": True,
+                   "grund": "unklar_eskalation"},
+                  state.project_dir, project_name)
+            return 14
+
         if rc_unterblock == 15:
             # Klasse 3: Unterblock-NO-GO.
             # KEIN Rollback.
@@ -3462,6 +3482,13 @@ def classify_verdict(text: str) -> str:
     damit "GO.", "NO-GO:" und "ESKALATION!" erkannt werden.
     Der Bindestrich bleibt Teil des Tokens (NO-GO), sonst
     wuerde "NO-GO." als "NO" gelesen.
+
+    B0c (2026-10-16): Verdict kann am Anfang ODER am
+    Ende der Antwort stehen. reviewer.md verlangt
+    "am Ende GO, NO-GO oder ESKALATION". Darum:
+    1. Suche am Anfang (max 15 Zeilen, bestehend).
+    2. Fallback: Suche am Ende (max 5 nicht-leere
+       Zeilen rueckwaerts).
     """
     satzzeichen = ".,;:!?)"
     gezaehlt = 0
@@ -3481,6 +3508,29 @@ def classify_verdict(text: str) -> str:
         if w == "ANTWORT":
             return "ANTWORT"
         if s.upper().startswith("COMMAND:"):
+            return "COMMAND"
+    # B0c: Fallback fuer Verdict am Ende.
+    # Nur die LETZTE nicht-leere Zeile, und nur wenn
+    # sie kurz und das Verdict-Wort allein ist.
+    # Grund: reviewer.md verlangt 'am Ende GO/NO-GO/
+    # ESKALATION'. Eingebettete Worte (z.B.
+    # 'R15: GO.' in Fliesstext) werden nicht erkannt.
+    _ende_zeile = ""
+    for line in reversed(text.splitlines()):
+        if line.strip():
+            _ende_zeile = line.strip()
+            break
+    if _ende_zeile and len(_ende_zeile) < 40:
+        w = _ende_zeile.split(maxsplit=1)[0].upper().rstrip(
+            satzzeichen)
+        if w in {"GO", "NO-GO", "ESKALATION"}:
+            return w
+        if w in {"COMMIT-GO", "COMMIT-NO-GO",
+                 "COMMIT-ESKALATION"}:
+            return w
+        if w == "ANTWORT":
+            return "ANTWORT"
+        if _ende_zeile.upper().startswith("COMMAND:"):
             return "COMMAND"
     return "UNKLAR"
 
@@ -7172,7 +7222,8 @@ def run_pipeline(project_name: str, aufgabe: str,
                 print("    - Phase abbrechen")
                 audit("review_unklar_eskalation",
                       {"runde": runde,
-                       "n_unklar": _n_unklar},
+                       "n_unklar": _n_unklar,
+                       "raw": reply.content[:2000]},
                       project_dir, project_name)
                 v = ask_reviewer_for_recovery(
                     state, "unklar", reply.content)

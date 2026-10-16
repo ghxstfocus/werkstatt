@@ -167,9 +167,9 @@ class TestClassifyVerdict:
         assert pipeline.classify_verdict("Das ist keine Antwort.") == "UNKLAR"
 
     def test_go_after_many_inhalt_lines(self) -> None:
-        # Verdict ist erst nach 20 inhaltlichen Zeilen -> UNKLAR.
+        # B0c: Verdict am Ende wird erkannt.
         text = "Zeile\n" * 20 + "GO"
-        assert pipeline.classify_verdict(text) == "UNKLAR"
+        assert pipeline.classify_verdict(text) == "GO"
 
     def test_go_after_few_empty_lines(self) -> None:
         # Leere Zeilen zaehlen nicht -> GO ist frueh genug
@@ -183,10 +183,14 @@ class TestClassifyVerdict:
         assert pipeline.classify_verdict(text) == "GO"
 
     def test_go_at_line_16(self) -> None:
-        """Auflage 2059: GO auf Zeile 16 -> UNKLAR (Grenze)."""
-        # 15 Fuellzeilen + GO = Zeile 16.
+        """Auflage 2059 + B0c: GO ist letzte Zeile.
+
+        Die 15-Zeilen-Grenze gilt fuer den ANFANG.
+        Der B0c-Fallback erkennt ein Verdict am Ende,
+        wenn es die letzte nicht-leere Zeile ist.
+        """
         text = "Zeile\n" * 15 + "GO"
-        assert pipeline.classify_verdict(text) == "UNKLAR"
+        assert pipeline.classify_verdict(text) == "GO"
 
     def test_go_mit_punkt(self) -> None:
         assert pipeline.classify_verdict("GO.") == "GO"
@@ -5868,3 +5872,49 @@ class TestUnklarBehandlung:
         # rc=14 konsistent mit ESKALATION (B0-A2).
         # mindestens 2x return 14 im Quelltext.
         assert src.count("return 14") >= 2
+
+# =====================================================================
+# B0c (2026-10-16): classify_verdict Fallback am Ende
+# Bug-1: rc=14 im run_phase-Loop
+# Bug-2: review_unklar_eskalation mit raw
+# =====================================================================
+
+class TestB0cUndBugs:
+    def test_classify_go_am_ende(self) -> None:
+        # B0c: GO am Ende einer langen Antwort.
+        text = ("## Pruefung\n\nAlle Punkte OK.\n\nGO")
+        assert pipeline.classify_verdict(text) == "GO"
+
+    def test_classify_no_go_am_ende(self) -> None:
+        text = "## Bericht\n\nBefund.\n\nNO-GO"
+        assert pipeline.classify_verdict(text) == "NO-GO"
+
+    def test_classify_anfang_gewinnt(self) -> None:
+        # Anfang hat Vorrang (konservativ).
+        text = "GO\n\nAusfuehrlicher Bericht.\n\nNO-GO"
+        assert pipeline.classify_verdict(text) == "GO"
+
+    def test_classify_unklar_bleibt_unklar(self) -> None:
+        text = "## Pruefung\n\nIch weiss nicht.\n"
+        assert pipeline.classify_verdict(text) == "UNKLAR"
+
+    def test_unklar_eskalation_mit_raw(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        assert "review_unklar_eskalation" in src
+        # raw in der Payload.
+        i = src.find("review_unklar_eskalation")
+        umfeld = src[i:i+400]
+        assert '"raw"' in umfeld
+
+    def test_rc_14_kein_rollback(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.run_phase)
+        # rc=14 muss vor dem Klasse-4-else-Zweig stehen.
+        i14 = src.find("if rc_unterblock == 14:")
+        i15 = src.find("if rc_unterblock == 15:")
+        assert i14 > 0, "rc=14-Zweig fehlt"
+        assert i14 < i15, "rc=14 muss vor rc=15 stehen"
+        # Der rc=14-Zweig darf kein _phase_rollback enthalten.
+        block_14 = src[i14:i15]
+        assert "_phase_rollback" not in block_14
