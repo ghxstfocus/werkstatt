@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-16 (nach Block P2b-3b: Loop-Aufruf in run_phase)
-Werkstatt-HEAD: e8a01a4 (Doku: Handoff — P1-Live-Test)
+Stand: 2026-10-16 (nach Block P2b-5: Budget-Layer-1 + Plan-Korrektur). P2b fertig.
+Werkstatt-HEAD: 6e8b791 (P2b-5)
 security-ai-HEAD: 220c6be (Doku-Migration)
 Letzter echter Probebetrieb: PB-67 (0d0fe2c, 2026-10-15)
 Branch: main (beide Repos)
@@ -370,6 +370,42 @@ Block P2b-3b (Loop-Aufruf in run_phase):
   Merkposten NA3: run_pipeline B2-Signal im
   state (siehe Abschnitt 4).
 
+Block P2b-4 (Phasen-Gesamt-Review + Sammel-Commit):
+  ERLEDIGT 2026-10-16. Commit 16eec88.
+  Reviewer: GO-mit-Auflagen (P2b-4-Zuschnitt).
+
+  Aenderungen:
+    - _phase_gesamt_review (deterministisch).
+    - _phase_sammel_message (Commit-Message-Format).
+    - _phase_sammel_paket (Union aller Pakete).
+    - _print_phase_approval_dokument.
+    - run_phase: Gesamt-Review + Approval [j]/[n]
+      + Sammel-Commit via apply_commit_and_doku.
+    - _phase_main_pfad: phase_aktiv=False nach
+      erfolgreichem run_phase.
+  Tests: 583 -> 592.
+  Kein Probebetrieb-Tag (F7: PB-68 erst nach
+  P2b-5).
+
+Block P2b-5 (Budget-Layer-1 + Plan-Korrektur):
+  ERLEDIGT 2026-10-16. Commit 6e8b791.
+  Reviewer: GO-mit-Auflagen (P2b-5-Zuschnitt).
+
+  Aenderungen:
+    - _AUDIT_KINDS_BEKANNT +3 (phase_budget_ende,
+      phase_plan_korrektur_failed,
+      phase_plan_korrektur_start).
+    - _planner_user_content + korrektur_kontext.
+    - _planner_lauf + korrektur_kontext.
+    - _phase_rr_k8 (neu): RR-K8-Menue [1]/[2]/[3].
+    - _phase_plan_korrektur (neu): Planner-Korrektur.
+    - run_phase: korrektur_zyklus (keyword-only),
+      Budget-Check vor jedem Unterblock (rc=13),
+      Plan-Korrektur im [n]-Zweig (max 1 Zyklus).
+    - conftest.py: autouse DEEPSEEK_API_KEY-Fixture.
+  Tests: 592 -> 602.
+  P2b ist damit FERTIG.
+
   Teilschritte:
     1. RunState + 7 phase_*-Felder.
     2. _parse_phase_plan (P10-P14-Format).
@@ -470,26 +506,17 @@ WICHTIG:
         state.b2_erreicht: bool) ersetzt werden.
         Eigener Block, nicht in P2b.
 
-  Block P2b-4 (_phase_gesamt_review + Approval):
-        OFFEN. Nach P2b-3. Kategorie 3.
-        Inhalt:
-          - Gesamt-Review (Konzept 5.5, drei Orte).
-          - Konsolen-Approval am Ende.
-          - Einmaliger apply_commit_and_doku ueber
-            alle gesammelten Pakete.
-        Nach P2b-4: erster echter Phasen-Lauf
-        moeglich, dann PB-68.
-        Auflage: P2b-A7.
+  Block P2b-4: ERLEDIGT. Commit 16eec88.
 
-  Block P2b-5 (Budget + Plan-Korrektur):
-        OFFEN. Nach P2b-4. Kategorie 3.
-        Inhalt:
-          - Budget-Layer-1 (max_llm_calls_phase).
-          - Plan-Korrektur bei Phase-NO-GO
-            (RR-K6/K7): alte phase_commit_pakete
-            verwerfen.
-          - RR-K8: Konflikt Planner vs. Reviewer
-            ohne Loesung -> Mensch entscheidet.
+  Block P2b-5: ERLEDIGT. Commit 6e8b791.
+
+  P2b ist FERTIG. Naechster Meilenstein:
+        PB-68 (erster echter Phasen-Lauf).
+        Kategorie 3 (echter Lauf, Commit in
+        security-ai).
+        Bedingung F7 erfuellt.
+        Vorsicht: der Lauf committet in
+        security-ai. Auftrag klein halten.
 
   Planner-Portionierung (Zwischenloesung):
         OFFEN. Falls P2 zu gross ist, reicht
@@ -715,6 +742,10 @@ Abschnitt B.
     Commit 85e0572).
   Block P2b-3b (Loop-Aufruf in run_phase,
     Commit af45157).
+  Block P2b-4 (Phasen-Gesamt-Review + Sammel-
+    Commit, Commit 16eec88).
+  Block P2b-5 (Budget-Layer-1 + Plan-Korrektur,
+    Commit 6e8b791).
 
 ================================================================
 6. ZIELE
