@@ -3439,14 +3439,36 @@ def run_measurement_mit_argv(m: Measurement, whitelist: list[str],
             return "read_file ohne Pfad.", False, []
         if not isinstance(extra_arg, str):
             return "read_file arg ist kein str.", False, []
-        cand = (project_dir / extra_arg).resolve()
+        # W6b-1 (2026-10-16): Zeilenbereich
+        # <pfad>:<start>-<ende>. Auswertung via
+        # sed -n "<start>,<ende>p".
+        _zeilenbereich: tuple[int, int] | None = None
+        _pfad_arg = extra_arg
+        if ":" in extra_arg:
+            _kopf, _rest = extra_arg.rsplit(":", 1)
+            if "-" in _rest:
+                _a, _b = _rest.split("-", 1)
+                try:
+                    _start = int(_a)
+                    _ende = int(_b)
+                    if _start >= 1 and _ende >= _start:
+                        _zeilenbereich = (_start, _ende)
+                        _pfad_arg = _kopf
+                except ValueError:
+                    pass
+        cand = (project_dir / _pfad_arg).resolve()
         try:
             rel = str(cand.relative_to(project_dir.resolve()))
         except ValueError:
-            return f"Pfad ausserhalb Projekt: {extra_arg}", False, []
+            return f"Pfad ausserhalb Projekt: {_pfad_arg}", False, []
         if not any(rel.startswith(p) for p in whitelist):
             return f"Pfad nicht in Whitelist: {rel}", False, []
-        argv.append(str(cand))
+        if _zeilenbereich is not None:
+            argv = ["sed", "-n",
+                    f"{_zeilenbereich[0]},{_zeilenbereich[1]}p",
+                    str(cand)]
+        else:
+            argv.append(str(cand))
     try:
         res = subprocess.run(argv, cwd=str(project_dir), capture_output=True,
                              text=True, timeout=m.timeout_s, check=False,
@@ -6539,12 +6561,71 @@ def _audit_builder_reply(reply_content: str, state: RunState,
           project_dir, project_name)
 
 
+def _anker_zeilenbereich(
+    aufgabe: str,
+    project_dir: Path,
+) -> tuple[int, int] | None:
+    """W6b-2 (2026-10-16): findet den Anker im Auftrag
+    und liefert einen Zeilenbereich (start, ende).
+
+    Format im Auftrag (aus dem Planner):
+      ANKER (...): '<anker-text>' ERSATZ: '...'
+
+    Liefert None, wenn kein Anker erkannt wird oder
+    die Anker-Zeile nicht in der Datei gefunden wird.
+
+    Praezisierung W6-A5: Fail-closed bei Anker nicht
+    gefunden erfolgt im Aufrufer.
+    """
+    import re as _re
+    # 1. Anker-Text extrahieren.
+    m = _re.search(
+        r"ANKER[^:]*:\s*'([^']+)'",
+        aufgabe, _re.DOTALL)
+    if m is None:
+        return None
+    anker_text = m.group(1).strip()
+    if not anker_text:
+        return None
+    # 2. Datei-Pfad aus dem Auftrag finden.
+    # Wir suchen "patch: <pfad>" im Auftrag.
+    m2 = _re.search(
+        r"patch:\s*([a-zA-Z0-9_./-]+\.(?:py|md|yaml|yml|sql))",
+        aufgabe)
+    if m2 is None:
+        return None
+    pfad = m2.group(1).strip()
+    ziel = project_dir / pfad
+    if not ziel.exists():
+        return None
+    # 3. Erste Anker-Zeile in der Datei finden.
+    erste_zeile = anker_text.splitlines()[0].strip()
+    if not erste_zeile:
+        return None
+    try:
+        inhalt = ziel.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    treffer = None
+    for i, zeile in enumerate(inhalt.splitlines(), 1):
+        if zeile.strip() == erste_zeile:
+            treffer = i
+            break
+    if treffer is None:
+        return None
+    # 4. Zeilenbereich: +-5 um die Anker-Zeile.
+    _start = max(1, treffer - 5)
+    _ende = treffer + 10
+    return (_start, _ende)
+
+
 def ensure_ziel_gemessen(
     state: RunState,
     ziel_pfade: list[str],
     project_dir: Path,
     file_whitelist: list[str],
     project_name: str,
+    aufgabe: str = "",
 ) -> None:
     """Auflage 2192: Werkstatt messt automatisch fehlende Zieldateien.
 
@@ -6554,13 +6635,29 @@ def ensure_ziel_gemessen(
     """
     if not ziel_pfade:
         return
+    # W6b-2b (2026-10-16): Anker-Zeilenbereich
+    # berechnen. Nur fuer Patch-Pfade.
+    _anker_info = _anker_zeilenbereich(aufgabe, project_dir)
+    _anker_pfad = ""
+    if _anker_info is not None:
+        import re as _re
+        _m = _re.search(
+            r"patch:\s*([a-zA-Z0-9_./-]+\.(?:py|md|yaml|yml|sql))",
+            aufgabe)
+        if _m is not None:
+            _anker_pfad = _m.group(1).strip()
     bereits = _gemessene_pfade(state.mess_protokoll)
     fehlend: list[dict[str, str]] = []
     for p in ziel_pfade:
         ziel = (project_dir / p).resolve()
         if str(ziel) in bereits:
             continue
-        fehlend.append({"id": "read_file", "arg": p})
+        # W6b-2b: Bei Anker-Pfad Zeilenbereich nutzen.
+        _arg = p
+        if (_anker_info is not None
+                and p == _anker_pfad):
+            _arg = (f"{p}:{_anker_info[0]}-{_anker_info[1]}")
+        fehlend.append({"id": "read_file", "arg": _arg})
     if not fehlend:
         return
     print(f"[i] Auto-Messung: {len(fehlend)} Zieldatei(en).")
@@ -7308,7 +7405,7 @@ def run_pipeline(project_name: str, aufgabe: str,
         aufgabe, file_whitelist, project_dir)
     ensure_ziel_gemessen(
         state, ziel_pfade, project_dir, file_whitelist,
-        project_name)
+        project_name, aufgabe=aufgabe)
     def _builder_user_prompt(s: RunState) -> str:
         """Auflage 2191b: baut den Builder-Prompt pro Runde
         frisch, damit GEMESSENER INHALT und ZIELDATEIEN den

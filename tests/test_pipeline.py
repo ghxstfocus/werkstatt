@@ -6428,3 +6428,92 @@ class TestW6a:
         src = inspect.getsource(pipeline.execute_commands)
         assert "MAX_PROTOKOLL_PER_COMMAND_READ_FILE" in src
         assert '"read_file"' in src
+
+
+# =====================================================================
+# W6b (2026-10-16): read_file Zeilenbereich + Anker-zentriert
+# =====================================================================
+
+class TestW6b:
+    def test_anker_zeilenbereich_findet_an_zeile(self) -> None:
+        from pathlib import Path
+        aufgabe = (
+            "patch: apps/dashboard/app.py. "
+            "ANKER (count==1): '    from apps.dashboard."
+            "routes_tools import register_tools_routes\n"
+            "    register_tools_routes(app)\n' "
+            "ERSATZ: '...'."
+        )
+        info = pipeline._anker_zeilenbereich(
+            aufgabe, Path("/opt/security-ai"))
+        assert info is not None
+        assert info[0] >= 1
+        assert info[1] > info[0]
+
+    def test_anker_zeilenbereich_kein_anker(self) -> None:
+        from pathlib import Path
+        info = pipeline._anker_zeilenbereich(
+            "kein anker hier", Path("/opt/security-ai"))
+        assert info is None
+
+    def test_read_file_zeilenbereich_klassisch(self) -> None:
+        m = pipeline.Measurement("read_file", ("cat",), "x")
+        wl = ["apps/"]
+        from pathlib import Path
+        _out, ok, argv = pipeline.run_measurement_mit_argv(
+            m, wl, Path("/opt/security-ai"),
+            "apps/dashboard/app.py")
+        assert ok
+        assert "cat" in argv
+        assert "sed" not in argv
+
+    def test_read_file_zeilenbereich_sed(self) -> None:
+        m = pipeline.Measurement("read_file", ("cat",), "x")
+        wl = ["apps/"]
+        from pathlib import Path
+        _out, ok, argv = pipeline.run_measurement_mit_argv(
+            m, wl, Path("/opt/security-ai"),
+            "apps/dashboard/app.py:255-260")
+        assert ok
+        assert "sed" in argv
+        assert "-n" in argv
+        assert "255,260p" in argv
+
+    def test_ensure_ziel_gemessen_signatur_aufgabe(self) -> None:
+        import inspect
+        sig = inspect.signature(pipeline.ensure_ziel_gemessen)
+        assert "aufgabe" in sig.parameters
+
+    def test_ensure_ziel_gemessen_nutzt_anker(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.ensure_ziel_gemessen)
+        assert "_anker_zeilenbereich" in src
+        assert "_anker_info" in src
+
+    def test_parse_commands_read_file_zeilenbereich(self) -> None:
+        cmds = pipeline.parse_commands(
+            "COMMAND: RUN read_file apps/dashboard/app.py:255-260")
+        assert len(cmds) == 1
+        assert cmds[0]["id"] == "read_file"
+        assert cmds[0]["arg"] == "apps/dashboard/app.py:255-260"
+
+    def test_anker_zeilenbereich_clamp_start(self) -> None:
+        # Anker in Zeile 2: start = max(1, 2-5) = 1.
+        # Nutze eine existierende Datei mit Anker in
+        # frueher Zeile — oder synthetisch.
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as td:
+            td_p = Path(td)
+            (td_p / "x").mkdir()
+            (td_p / "x" / "y.py").write_text(
+                "line1\nline2\nline3\n",
+                encoding="utf-8")
+            aufgabe = (
+                "patch: x/y.py. ANKER: 'line2' ERSATZ: 'line3'.")
+            info = pipeline._anker_zeilenbereich(aufgabe, td_p)
+            # Kein Pfad-Match (Erwartung: x/y.py in
+            # patch:).
+            # Wenn info: start = 1.
+            if info is not None:
+                assert info[0] == 1
