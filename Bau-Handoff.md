@@ -2060,3 +2060,57 @@ Naechster Schritt:
 ================================================================
 ENDE B1
 ================================================================
+
+================================================================
+B0C VERDICT-PARSER + BUG-1 + BUG-2 (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage:
+  23. PB-68-Lauf (2026-10-16 16:44) ist an B0c gescheitert:
+  Reviewer gab 2x UNKLAR, B0b eskalierte korrekt (rc=14).
+  Aber: der Reviewer hatte "GO" am Ende der Antwort.
+  classify_verdict prueft nur den Anfang (max 15 Zeilen).
+  Verdict am Ende wurde nicht erkannt.
+
+Aenderungen:
+  - classify_verdict: Fallback fuer Verdict am Ende.
+    Nur letzte nicht-leere Zeile, <40 Zeichen,
+    Verdict-Wort allein.
+  - run_phase: rc=14 als eigene Klasse (status=no_go,
+    kein Rollback).
+  - review_unklar_eskalation: + raw ([:2000]).
+  - TestClassifyVerdict: 2 Tests an B0c angepasst.
+  - TestB0cUndBugs: +6 Tests.
+
+Tests: 854 passed (+6).
+
+Auflagen-Abgleich:
+  B0c ist ein neuer Fix (nicht in vorherigen Auflagen).
+  B0a (R15/S10) wirkt: der Reviewer wendet R15 an
+  (Audit zeigt "R15: GO" im Text). Nur der Parser
+  hat versagt.
+  B0b (UNKLAR-Loop) wirkt: 2x UNKLAR -> Eskalation.
+  Bug-1 (rc=14) und Bug-2 (raw) sind neue Befunde
+  aus dem 23. Lauf.
+
+Wichtig:
+  Die 2059-Grenze (Verdict nur in den ersten 15
+  Zeilen) bleibt fuer den ANFANG. Der End-Fallback
+  ist eine Ergaenzung. reviewer.md verlangt das
+  Verdict am Ende; jetzt erkennt der Parser es.
+
+Naechster Schritt:
+  24. PB-68-Lauf mit --resume-force.
+  Beobachten:
+    - Reviewer R15: GO am Ende.
+    - classify_verdict: erkennt GO.
+    - apply_code_patches laeuft.
+    - U4 done.
+    - U5-U10 laufen weiter.
+    - Sammel-Commit, Tag probebetrieb-68.
+
+================================================================
+ENDE B0C
+================================================================
