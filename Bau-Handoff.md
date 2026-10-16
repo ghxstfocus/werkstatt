@@ -3440,3 +3440,53 @@ Naechster Schritt:
 ================================================================
 ENDE W13A
 ================================================================
+
+================================================================
+W13B ERSATZ-PRUEFUNG DEAKTIVIERT (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 47-49. Lauf:
+  U9 (app.py-Patch) scheiterte. Der Builder
+  meldete "1 Ersatz nicht im GEMESSENER
+  INHALT". Der ERSATZ enthaelt einen NEUEN
+  Import. Das Modul existiert noch nicht.
+
+W13b:
+  pruefe_ersatz_gegen_messung wird nicht
+  mehr aufgerufen. Der ERSATZ enthaelt
+  neuen Code; der Anker-Check +
+  apply_code_patches reichen.
+  Die Funktion bleibt fuer spaetere Nutzung.
+
+Tests: 978 -> 980 (+2).
+
+Solver-Befund (Lauf 47, 48, 49):
+  "pruefe_ersatz_gegen_messung prueft ERSATZ-
+   Imports, nicht R5 'ersatz != anker'.
+   Der ERSATZ enthaelt 'from apps.dashboard.
+   routes_guardrails import ...' — das Modul
+   existiert noch nicht -> Fehlalarm."
+
+Drei Laeufe hintereinander identisch
+gemeldet. Bestaetigt und behoben.
+
+Stand:
+  U1-U8 done. U9 no_go.
+  U10-U13 pending.
+
+Naechster Schritt:
+  50. PB-68-Lauf mit --resume-force.
+  Erwartung:
+    - U9 Auto-Messung app.py:252-267 (W13a).
+    - Builder findet Anker count==1.
+    - Kein Ersatz-Fehlalarm (W13b).
+    - Patch app.py.
+    - Commit-Review COMMIT-GO.
+    - U9 done.
+    - U10 (Test) startet.
+
+================================================================
+ENDE W13B
+================================================================
