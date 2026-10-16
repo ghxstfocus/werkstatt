@@ -1,11 +1,11 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-16 (nach Block P2b-5: Budget-Layer-1 + Plan-Korrektur). P2b fertig.
-Werkstatt-HEAD: 6e8b791 (P2b-5)
-security-ai-HEAD: 220c6be (Doku-Migration)
-Letzter echter Probebetrieb: PB-67 (0d0fe2c, 2026-10-15)
+Stand: 2026-10-16 (nach Post-Apply-Fix; elf PB-68-Laeufe, viele Rollen-Fixes)
+Werkstatt-HEAD: <nach Handoff-Commit> (Post-Apply-Fix + Sitzung 2026-10-16)
+security-ai-HEAD: 0d0fe2c (PB-67; Working Tree nach elftem Lauf dirty: core/guardrails/, tests/unit/test_guardrails_models.py)
+Letzter echter Probebetrieb: PB-67 (0d0fe2c, 2026-10-15). PB-68 noch offen: elf Laeufe, kein Sammel-Commit erreicht.
 Branch: main (beide Repos)
-Tests (Werkstatt): 542 passed
+Tests (Werkstatt): 707 passed
 ruff --no-cache: 0
 mypy pipeline.py: 0
 mypy tests/test_pipeline.py: 15 (vorbestehend, tests-mypy)
@@ -406,6 +406,53 @@ Block P2b-5 (Budget-Layer-1 + Plan-Korrektur):
   Tests: 592 -> 602.
   P2b ist damit FERTIG.
 
+Sitzung 2026-10-16 (nach P2b):
+  Ziel: erster echter Phasen-Lauf (PB-68).
+  Ergebnis: elf Laeufe, kein erfolgreicher
+  Sammel-Commit. Aber: viele fundamentale
+  Bugs gefunden und gefixt.
+
+  PB-68-Laeufe und ihre Befunde:
+    1-5: Resume-Pfad, state_ref, build_catalog,
+         NEW_FILE-Format, Solver-Trigger.
+    6:   Builder-Rueckfrage als Fliesstext
+         statt COMMAND: frage_reviewer.
+    7:   Planner lieferte Roadmap-Themen
+         statt baubare Bloecke.
+    8:   state.aufgabe im Phasen-Modus
+         zeigte Phasen-Gesamttext.
+    9:   builder.md nannte nur typ: patch,
+         nicht typ: new_file im Kopf.
+    10:  Anker-Pruefung lehnte korrekte
+         typ: new_file-Patches ab.
+    11:  Erste Code-GO + Apply. Post-Apply-
+         Basis-Gate rot (ruff). Lauf endete
+         terminal, Recovery-Plan erreichte
+         den Builder nicht.
+
+  Wichtige Werkstatt-Fixes in dieser Sitzung:
+    - P2b-Frage-A/B: Rueckfrage-Kanal
+      (COMMAND: frage_reviewer, ANTWORT-Modus).
+    - P2b-Korrektur: Plan-Korrektur bei
+      Unterblock-NO-GO.
+    - Rollen-Audit-A/B: reviewer.md, builder.md,
+      solver.md korrigiert.
+    - Planner-Rolle: P15/P16 (Blockgroessen).
+    - builder-format: typ: new_file im
+      WICHTIG-Block.
+    - V3-Fix: Anker-Pruefung ueberspringt
+      typ: new_file.
+    - Post-Apply-Fix: rc=19-Signal +
+      _post_apply_korrektur_loop.
+
+  Aktueller Zustand:
+    - Phase 18 (Guardrails) in phase.yaml.
+    - U1 (Guardrail-Modell) failed nach Lauf 11.
+    - Working Tree in security-ai dirty:
+      core/guardrails/{__init__,models}.py,
+      tests/unit/test_guardrails_models.py.
+    - Post-Apply-Fix ist bereit fuer Lauf 12.
+
   Teilschritte:
     1. RunState + 7 phase_*-Felder.
     2. _parse_phase_plan (P10-P14-Format).
@@ -476,6 +523,46 @@ Block P2b-5 (Budget-Layer-1 + Plan-Korrektur):
 ================================================================
 
 KRITISCH: keine.
+
+AUS SITZUNG 2026-10-16 (neu):
+
+  P8 — Builder-Rueckfrage als Fliesstext:
+        Der Builder liefert die Rueckfrage als
+        Fliesstext mit '?' am Ende, nicht als
+        'COMMAND: frage_reviewer <text>'.
+        R8 greift deshalb nicht.
+        Fix: Builder-Prompt expliziter.
+        Kategorie 3.
+
+  V1 — baue_anker_rueckmeldung Option (c):
+        Der Anker-Block sollte typ: new_file
+        als Option (c) mit Diagnose-Satz
+        'Existiert die Zieldatei?' nennen.
+        Nur relevant fuer den Fall 'Builder
+        liefert typ: patch mit leerem Anker
+        auf neue Datei'. Eigener Block.
+
+  V4 — statischer new_file-Hinweis in
+        _builder_user_prompt: Position pruefen.
+        Kosmetisch, eigener Block.
+
+  V6 — dynamische vs. statische Prompt-Bloecke:
+        Dynamische Bloecke (baue_anker_rueckmeldung,
+        baue_budget_rueckmeldung) sind maechtiger
+        als statische Doku. Gemeinsamer Katalog
+        'Patch-Format-Optionen' als Quelle.
+        Eigener Block.
+
+  Solver-Entlastung — bereits implementiert:
+        solver_trigger_b (builder_rueckfrage)
+        laeuft parallel zum Reviewer. Rollenbild
+        in Rollen-Audit-B nachgezogen.
+        Kein offener Fix.
+
+  Phase-18-Plan (10 Unterbloecke) — Review:
+        Nach Lauf 12 pruefen, ob 10 Bloecke
+        pro Phase sinnvoll sind. Evtl. P17
+        (Phasen-Obergrenze) einfuehren.
 
 WICHTIG:
 
