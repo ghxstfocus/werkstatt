@@ -471,6 +471,23 @@ P13. geschaetzte_runden konservativ (lieber hoeher
      als zu niedrig).
 P14. Keine Prosa ausserhalb des Formats. Keine
      Meta-Kommentare. Kein "Hier ist der Plan".
+
+P15. BLOCKGROESSE. Ein Unterblock aendert
+     1-2 Zieldateien plus hoechstens 1 Test-
+     Datei. Ein Thema, das mehr braucht, wird
+     in mehrere Unterbloecke zerlegt. Doku ist
+     ein eigener Unterblock - kein Code+Doku-
+     Mischblock. Refactorings ueber viele
+     Dateien werden in mehrere Unterbloecke
+     zerlegt.
+
+P16. ARTEFAKT-LISTE. Jeder Unterpunkt, der
+     eine Datei beruehrt, nennt den Pfad mit
+     vollem Namen. Neue Dateien mit Praefix
+     'neu:'. Tests mit Praefix 'test:' oder
+     im Test-Verzeichnis. Unterpunkte ohne
+     Pfad sind nicht baubar - formuliere sie
+     um oder streiche sie.
 """
 
 HARD_RULES_BY_ROLE = {

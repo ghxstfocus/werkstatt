@@ -238,3 +238,94 @@ class TestPlannerStufenPrompt:
             "roher Auftrag", "historie", stufe=1)
         assert "P7/P8" in uc
         assert "P10-P14" not in uc
+
+# =====================================================================
+# Planner-Rolle + Blockgroessen (2026-10-16)
+# =====================================================================
+
+class TestPlannerRolleGroesse:
+    def test_stufe2_hat_p15(self) -> None:
+        assert "P15." in pipeline.HARD_RULES_PLANNER_STUFE2
+
+    def test_stufe2_hat_p16(self) -> None:
+        assert "P16." in pipeline.HARD_RULES_PLANNER_STUFE2
+
+    def test_stufe2_p15_zieldateien(self) -> None:
+        assert "Zieldateien" in pipeline.HARD_RULES_PLANNER_STUFE2
+
+    def test_stufe2_p16_praefix_neu(self) -> None:
+        assert "neu:" in pipeline.HARD_RULES_PLANNER_STUFE2
+
+    def test_stufe1_kein_p15(self) -> None:
+        assert "P15." not in pipeline.HARD_RULES_PLANNER_STUFE1
+
+    def test_stufe1_kein_p16(self) -> None:
+        assert "P16." not in pipeline.HARD_RULES_PLANNER_STUFE1
+
+    def test_stufe1_unveraendert(self) -> None:
+        # P1-P9 wortgleich geblieben.
+        s = pipeline.HARD_RULES_PLANNER_STUFE1
+        assert "P1." in s and "P2." in s and "P9." in s
+        assert "P10." not in s and "P15." not in s
+
+    def test_stufe2_p10_p14_unveraendert(self) -> None:
+        s = pipeline.HARD_RULES_PLANNER_STUFE2
+        for regel in ("P10.", "P11.", "P12.",
+                      "P13.", "P14."):
+            assert regel in s
+
+    def test_stufe2_hat_refactoring_ausnahme(self) -> None:
+        assert "Refactorings" in pipeline.HARD_RULES_PLANNER_STUFE2
+
+    def test_planner_md_zerlegst(self) -> None:
+        from pathlib import Path as _P
+        text = _P("/opt/werkstatt/agents/planner.md").read_text(
+            encoding="utf-8")
+        assert "zerlegst" in text or "zerlege" in text
+
+    def test_planner_md_baubare(self) -> None:
+        from pathlib import Path as _P
+        text = _P("/opt/werkstatt/agents/planner.md").read_text(
+            encoding="utf-8")
+        assert "baubare" in text or "baubar" in text
+
+    def test_planner_md_rolle_stufe_1(self) -> None:
+        from pathlib import Path as _P
+        text = _P("/opt/werkstatt/agents/planner.md").read_text(
+            encoding="utf-8")
+        assert "Deine Rolle (Stufe 1)" in text
+
+    def test_planner_md_rolle_stufe_2(self) -> None:
+        from pathlib import Path as _P
+        text = _P("/opt/werkstatt/agents/planner.md").read_text(
+            encoding="utf-8")
+        assert "Deine Rolle (Stufe 2)" in text
+
+    def test_planner_md_guter_plan(self) -> None:
+        from pathlib import Path as _P
+        text = _P("/opt/werkstatt/agents/planner.md").read_text(
+            encoding="utf-8")
+        assert "GUTER Plan" in text
+
+    def test_planner_md_schlechter_plan(self) -> None:
+        from pathlib import Path as _P
+        text = _P("/opt/werkstatt/agents/planner.md").read_text(
+            encoding="utf-8")
+        assert "SCHLECHT" in text
+
+    def test_build_system_prompt_stufe2_hat_p15(self) -> None:
+        # System-Prompt fuer Stufe 2 enthaelt P15.
+        # Der Planner-Agent wird geladen.
+        agents = pipeline.load_agents("/opt/werkstatt/agents")
+        prompt = pipeline.build_system_prompt(
+            agents["planner"], {}, [], stufe=2)
+        assert "P15." in prompt
+        assert "P16." in prompt
+
+    def test_build_system_prompt_stufe1_kein_p15(self) -> None:
+        agents = pipeline.load_agents("/opt/werkstatt/agents")
+        prompt = pipeline.build_system_prompt(
+            agents["planner"], {}, [], stufe=1)
+        assert "P15." not in prompt
+        assert "P16." not in prompt
+
