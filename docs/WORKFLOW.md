@@ -562,8 +562,121 @@ Der Validator kennt zwei Modi:
 
 Steuerung: Umgebungsvariable WERKSTATT_SCHEMA_MODUS.
 
-Phase 1 ist Warn-Modus. Nach der Uebergangsphase wird der
-Default auf fail gestellt.
+Phase 1 ist Warn-Modus. Der Default wird auf fail gestellt,
+sobald PB-67 (2026-10-15, Warn-Modus ohne Warnung durchlaufen)
+als stabile Basis bestaetigt ist (Phase 1b).
+
+## Phasen-Modus und Planner
+
+Der Phasen-Modus ist die Antwort auf grosse Auftraege, die
+sonst in Deadlock oder Livelock enden (P1-Live-Test
+2026-10-15). Er zerlegt eine Phase in Unterbloecke, fuehrt
+sie sequenziell aus, sammelt die Commit-Pakete und macht
+am Ende EINEN Sammel-Commit.
+
+Aufruf:
+  pipeline.py --project <name> --phase "<Auftrag>"
+
+Ablauf:
+  1. Planner Stufe 2 liefert einen Plan (P10-P14-Format):
+     phase_id, phase_titel, phase_unterbloecke
+     (mit id, titel, unterpunkte, geschaetzte_runden).
+  2. Bestaetigung [j]/[n]/[e]. Bei [j]: Plan wird
+     atomar nach projects/<name>.phase.yaml geschrieben
+     (mode 0600, owner builder:builder).
+  3. run_phase fuehrt die Unterbloecke sequenziell aus.
+     Pro Unterblock: run_pipeline mit phasen_state.
+     Status: pending -> running -> done | no_go | failed.
+  4. Gesamt-Review (deterministisch) + Approval [j]/[n].
+     Bei [j]: Sammel-Commit via apply_commit_and_doku.
+  5. phase_aktiv wird auf false gesetzt.
+
+Rollback (RR-K1/K2/K3):
+  Bei Exception oder Phase-NO-GO: _phase_rollback setzt
+  den Working Tree auf phase_start_head zurueck. Best-
+  Effort (faengt Exception, gibt bool).
+
+Plan-Korrektur (P2b-5):
+  Bei Phase-NO-GO: Planner liefert einen korrigierten
+  Plan. Max 1 Korrektur-Zyklus pro Phase
+  (state.phase_korrektur_zyklus).
+
+Planner-Rolle (Stufe 1 vs. Stufe 2):
+  Stufe 1 (P1): uebersetzt den Rohauftrag in einen
+    konkreten Bau-Auftrag. --planner-Pfad.
+  Stufe 2 (P2a): liefert den Phasenplan (P10-P14).
+    --phase-Pfad.
+  HARD_RULES_PLANNER_STUFE1/_STUFE2.
+
+Audit-Kinds (Auswahl):
+  planner_start, planner_vorschlag,
+  phase_plan_erstellt, phase_plan_parse_failed,
+  phase_plan_verworfen, phase_plan_editiert,
+  run_phase_start, run_phase_ende,
+  phase_unterblock_start, phase_unterblock_ende,
+  phase_commit_paket_gesammelt,
+  phase_commit_paket_leer,
+  phase_gesamt_review, phase_rollback,
+  phase_start_head_gesetzt,
+  phase_budget_ende,
+  phase_plan_korrektur_start,
+  phase_plan_korrektur_failed,
+  phase_abgebrochen.
+
+## Post-Apply-Recovery
+
+Nach einem Patch-Apply fuehrt die Werkstatt ein
+Basis-Gate aus (ruff + py_compile + Tests). Wenn das
+Basis-Gate nach dem Apply rot ist, wird der Builder
+zurueckgeholt — statt terminal zu enden.
+
+Signal-Kette:
+  apply_and_recheck gibt rc=19 zurueck, wenn das
+  Basis-Gate nach dem Apply rot ist
+  (pipeline.py, ca. Z. 5157).
+  run_pipeline prueft rc_apply == 19 und ruft
+  _post_apply_korrektur_loop (ca. Z. 6617).
+  _post_apply_korrektur_loop laeuft max 2 Runden
+  (max_korrektur_runden=2). Bei erschoepften Runden
+  gibt sie rc=18 zurueck (generischer Fail-closed).
+
+rc-Semantik:
+  18 = generischer Fail-closed (unveraendert).
+  19 = spezifisches Signal: Post-Apply-Basis-Gate rot,
+       Korrektur noetig.
+  Nur 3 Fundstellen fuer 19: apply_and_recheck,
+  Korrektur-Loop, run_pipeline.
+
+Builder-Recovery-Prompt:
+  _bauer_recovery_prompt baut den Prompt fuer die
+  Korrektur-Runde. Enthaelt die Diagnose aus
+  state.letzter_recovery_vorschlag.
+
+Audit-Kind: builder_recovery_nach_apply.
+
+## Git-Konventionen (Werkstatt-Repo)
+
+- core.fileMode = false.
+  Grund: chmod 750 sieht Git als 100755; die
+  Restriktion "others keine Rechte" kann Git nicht
+  abbilden. Mode-Differenzen erscheinen deshalb
+  nicht in git status und werden nicht committet.
+
+- post-checkout-Hook (.git/hooks/post-checkout):
+  chown -R builder:builder /opt/werkstatt/projects/
+  Grund: git checkout als root setzt Owner auf root
+  zurueck. Der Hook laeuft nach jedem checkout/reset
+  und stellt den richtigen Owner wieder her.
+
+- Beide Einstellungen sind lokal, nicht im Repo.
+  Bei einem Clone auf einem neuen Rechner muessen
+  sie reproduziert werden.
+
+- projects/ gehoert builder:builder 750.
+  projects/*.phase.yaml: builder:builder 600.
+  projects/*.memory.yaml: builder:builder 750.
+
+Anlass: 2026-10-16, Reviewer-Auflage Owner-Mode-A1.
 
 ## Messtechnik
 
