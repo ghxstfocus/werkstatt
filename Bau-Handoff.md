@@ -1701,3 +1701,70 @@ MERKPOSTEN (offen, fuer spaetere Bloecke)
 ENDE UEBERGABE
 ================================================================
 
+
+================================================================
+BLOCK 2a PLANNER-KORREKTUR-KONTEXT (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Aenderungen:
+  - _planner_user_content (Z. ~2718):
+      reviewer_befund aus dem korrektur_kontext wird
+      vollstaendig in den Prompt eingesetzt (Marker
+      === REVIEWER-BEFUND (vollstaendig) ===).
+      P18 aus Block 1 wird damit wirksam.
+      Abschluss-Wortlaut: "Format aus P10-P16,
+      beachte P17 (Builder-Freundlichkeit) und
+      P18 (Korrektur-Kompetenz)".
+  - phase_stand-Parameter + _phase_stand_sektion
+    (neu):
+      AKTUELLER-PHASENSTAND-Sektion mit id, status,
+      paket_groesse, letzter_befund (gekuerzt via
+      _truncate_mit_marker auf 200 Zeichen).
+      Explizite Anweisung: "Der Resume beginnt bei
+      U<n>. Plane NUR U<n>. Beruehre abgeschlossene
+      Unterbloecke NICHT."
+      Fallback bei allen done: "Alle Unterbloecke
+      sind abgeschlossen. Plane einen neuen
+      Phasenplan oder brich ab."
+  - _phase_plan_korrektur:
+      Baut phase_stand aus state.phase_unterbloecke
+      + state.review_runden[-1]["raw"] (nur bei
+      no_go/failed). "naechster" = erste
+      no_go/failed/pending id.
+      Uebergibt phase_stand an _planner_lauf.
+  - _planner_lauf: phase_stand durchgereicht.
+  - tests/test_planner.py: +10 Tests, Signatur-Test
+    (TestPlannerLauf.test_planner_lauf_signatur)
+    um phase_stand ergaenzt.
+
+Tests: 822 passed (+10).
+
+Auflagen-Abgleich (aus Reviewer-Block GO-mit-Auflagen):
+  2a-A1 (Redaction): erfuellt, ask_llm redactet
+    user_content (Z. 3149). Keine Aenderung noetig.
+    Im Code-Kommentar (Docstring) dokumentiert.
+  2a-A2 (_truncate_mit_marker): existiert (Z. 4758),
+    genutzt.
+  2a-A3 (naechster Edge-Case): erfuellt, Fallback
+    "Alle Unterbloecke sind abgeschlossen."
+    Plus Test test_user_content_phase_stand_alle_done_fallback.
+  2a-A4 (Redundanz phase_stand vs alter_plan):
+    erfuellt. phase_stand enthaelt KEINEN titel,
+    nur id/status/paket_groesse/letzter_befund.
+    alter_plan behaelt titel.
+  2a-A5 (Abschluss-Wortlaut): erfuellt, P17 und
+    P18 explizit genannt.
+
+Merkposten unveraendert:
+  - B1-A5 (UNBEANTWORTET-Behandlung) -> Block 2b.
+  - B1-A4 (P17-Beispiel Rotation) -> spaeter.
+  - A4 (U5/U6/U9 Unterpunkt-Zahl) -> spaeter.
+
+Naechster Block: 2b (UNBEANTWORTET-Parser +
+Entscheidung).
+
+================================================================
+ENDE BLOCK 2a
+================================================================
