@@ -2937,3 +2937,70 @@ Naechster Schritt:
 ================================================================
 ENDE 11. MANUELLER EINGRIFF
 ================================================================
+
+================================================================
+W6a+W6b READ_FILE-ZEILENBEREICH (2026-10-16)
+================================================================
+
+Ausgangslage 35. Lauf:
+  U7 (Template) done. U8 gestartet, gescheitert.
+  Reviewer-Diagnose (R11):
+    "GEMESSENER INHALT enthaelt nur
+     apps/dashboard/templates/guardrails.html.
+     Die Anker des Auftrags stehen NICHT im
+     GEMESSENER INHALT."
+
+Wurzel:
+  apps/dashboard/app.py ist ~9.000 Zeilen.
+  Der Anker (Z. 257-258) liegt Zeichen ~20.000.
+  trim_output kappte auf 10.000 Zeichen
+  (MAX_PROTOKOLL_PER_COMMAND).
+  Der Anker war abgeschnitten.
+
+W6a (Commit e779c77):
+  - _audit_builder_prompt: Regex ignoriert
+    ARGV/RC/STDOUT/STDERR als Sektion.
+    Behebt Fehldiagnose "gem_len=77".
+  - Audit-Feld anzahl_read_file.
+  - MAX_PROTOKOLL_PER_COMMAND_READ_FILE = 20_000.
+  - MAX_PROTOKOLL_TOTAL = 150_000.
+  - +5 Tests (929 passed).
+
+W6b (dieser Commit):
+  - read_file Zeilenbereich "<pfad>:<start>-<ende>"
+    via sed -n "N,Mp".
+  - _anker_zeilenbereich: extrahiert Anker aus
+    dem Auftrag (Format "ANKER (...): '...'"),
+    findet die Zeile in der Zieldatei.
+    Liefert (anker_zeile-5, anker_zeile+10).
+  - ensure_ziel_gemessen: aufgabe-Parameter.
+    Bei Anker-Pfad wird der Zeilenbereich genutzt.
+  - +8 Tests (937 passed).
+
+Direkter Test:
+  U8-Auftrag -> _anker_zeilenbereich liefert
+  (252, 267). sed -n "252,267p" zeigt den
+  vollstaendigen Anker (register_tools_routes).
+
+Merkposten (W5, bleibt):
+  COMMAND + Patch im selben Block fuehrt zur
+  Verwerfung des Patches. Eigener Block.
+
+Stand:
+  U1-U7 done. U8 no_go.
+  U9-U12 pending.
+
+Naechster Schritt:
+  36. PB-68-Lauf mit --resume-force.
+  Erwartung:
+    - U8 startet.
+    - Auto-Messung: app.py mit Zeilenbereich.
+    - Anker im GEMESSENER INHALT.
+    - Builder baut Route + app.py-Patch.
+    - U8 done.
+    - U9 (Test) startet.
+  Bei Scheitern: neuer Reviewer-Block.
+
+================================================================
+ENDE W6a+W6b
+================================================================
