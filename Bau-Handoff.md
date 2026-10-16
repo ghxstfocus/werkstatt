@@ -293,6 +293,35 @@ Block P2a (Phasen-Modus Fundament):
   Durchlauf; der Phasen-Loop ist erst in P2b
   funktional).
 
+  Smoke-Test (2026-10-15, kein Tag):
+    Aufruf: pipeline.py --project security-ai
+            --phase "Baue eine kleine Testphase ..."
+    Ergebnis: erfolgreich.
+      - Planner Stufe 2 liefert korrektes P10-P14-
+        Format.
+      - Anzeige korrekt (Phase-Titel, U1 mit 5
+        Unterpunkten, U2 mit 4 Unterpunkten,
+        (Runde 1/3)).
+      - [j] schreibt projects/security-ai.phase.yaml
+        atomar, mode 0600, owner builder:builder.
+      - Audit-Kette vollstaendig: pipeline_start
+        -> planner_start (stufe=2) ->
+        planner_vorschlag -> phase_plan_erstellt
+        -> pipeline_ende (rc=0).
+      - .gitignore-Schutz greift (git status leer).
+      - Kein tmp-Zombie.
+    Deployment-Regression entdeckt:
+      projects/ war faelschlich root:root (Phase-1-
+      Commit 406e3cc hatte den Owner versehentlich
+      ueberschrieben). Reparatur: chown
+      builder:builder + chmod 750. Werkstatt-Regel
+      im Handoff ergaenzt.
+    Qualitaets-Beobachtung (wichtig fuer P2b):
+      Der Planner liefert praezise Unterpunkte mit
+      Datei, Testpfad, Verifikationskommandos und
+      Doku-Nachzug. Der Loop in P2b kann sich auf
+      'unterpunkte' als Bau-Auftrag verlassen.
+
 ================================================================
 4. OFFENE MERKPOSTEN
 ================================================================
