@@ -7259,7 +7259,7 @@ def _phasen_basis_gate_ok(
     """
     try:
         res = subprocess.run(
-            ("git", "status", "--porcelain"),
+            ("git", "status", "--porcelain", "-uall"),
             cwd=str(project_dir), capture_output=True,
             text=True, timeout=30, check=False,
             env=subprocess_env(),
