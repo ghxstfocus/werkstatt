@@ -71,15 +71,17 @@ Rollen (6):
 ================================================================
 
 Werkstatt-Repo (/opt/werkstatt):
-  HEAD e8a01a4 (Basis). Nach P2a-Commit: neuer HEAD.
+  HEAD 26a9911 (Doku: Handoff — P2a-Smoke-Test).
+  P2a-Commit: e700e4b.
   Tests: 542 passed.
   ruff --no-cache: 0.
   mypy pipeline.py: 0.
-  git status: P2a-Aenderungen uncommittet (7 Dateien).
+  git status: clean.
   Remote: github.com/ghxstfocus/werkstatt.git (privat).
 
 Ziel-Projekt security-ai (/opt/security-ai):
-  HEAD 220c6be.
+  HEAD 0d0fe2c (PB-67).
+  Doku-Migration: 220c6be (siehe Abschnitt 3).
   Tests: 1334 collected.
   ruff: 0.
   mypy: 1353 Fehler (Altlast, no-untyped-def).
@@ -164,8 +166,11 @@ Phase 3c-1/2/3 Reviewer + Solver Injektion
     (trigger_grund, aufrufer).
 
 Erster echter Pipeline-Lauf PB-67:
-  Commit 0d0fe2c in security-ai. Docstring
-  orchestrator.py korrigiert (Punkt 94).
+  Commit 0d0fe2c in security-ai, Tag probebetrieb-67.
+  Commit-Message: "docs: Docstring in
+  _build_default_registry entkoppelt".
+  Inhalt: Docstring orchestrator.py korrigiert
+  (Punkt 94).
   Runden 1, llm_calls 5, kein Solver-Trigger.
   Tag probebetrieb-67 gesetzt.
   Damit ist die Bedingung fuer Phase 1b erfuellt.
@@ -255,7 +260,10 @@ security-ai 220c6be):
 Block P2a (Phasen-Modus Fundament):
   ERLEDIGT 2026-10-15. Sieben Teilschritte.
   Basis: HEAD e8a01a4 (P1-Live-Test-Doku).
-  Naechster Commit: "P2a: Phasen-Modus Fundament".
+  Commit: e700e4b ("P2a: Phasen-Modus Fundament —
+  Datenmodell, Parser, Persistenz, CLI").
+  Folge-Commits: 7186363 (Werkstatt-Regel projects/-
+  Owner), 26a9911 (Handoff P2a-Smoke-Test).
 
   Teilschritte:
     1. RunState + 7 phase_*-Felder.
@@ -726,7 +734,7 @@ Der neue Bau-Chat soll:
    formulieren, vor Ausfuehrung.
 
 4. Nach Erfolg (NUR echter Pipeline-Durchlauf):
-   git tag probebetrieb-<n>. Naechste Nummer: 67.
+   git tag probebetrieb-<n>. Naechste Nummer: 68.
 
 5. Bei Problemen: zurueck zu diesem Handoff,
    Faktenlage pruefen, Reviewer-Chat fragen.
