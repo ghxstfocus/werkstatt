@@ -3588,3 +3588,193 @@ Naechster Schritt:
 ================================================================
 ENDE W11B
 ================================================================
+
+================================================================
+SITZUNG 2026-10-16 ABENDS — PHASE 18 ABGESCHLOSSEN
+================================================================
+
+Werkstatt-HEAD: e26eb32 (W11b + Handoff).
+security-ai-HEAD: d7b7c26 (Tag probebetrieb-68).
+
+Werkstatt-Commits in dieser Sitzung:
+  (keine — Werkstatt unveraendert seit e26eb32)
+
+security-ai-Commits in dieser Sitzung:
+  1fcc6bf  PHASE 18: Guardrails laden und nutzen (25 Dateien)
+  d7b7c26  test: drei vorbestehende Testfehler korrigiert (W25)
+
+================================================================
+WAS PASSIERT IST
+================================================================
+
+Phasen-Modus, Phase 18 (Guardrails laden und nutzen).
+Start: U1-U10 done, U11 failed, U12+U13 pending.
+
+Laufe 53-60 (teils aus Vorsitzung):
+
+  Lauf 53: U11 gescheitert (Commit-Scope, W11b).
+  Lauf 54: Basis-Gate rot (guardrails.js aus failed-Paket).
+  Lauf 55: U11/U12 durch, U13 Deadlock (Doku).
+  Lauf 56: U13 Deadlock (GEMESSENER INHALT leer).
+  Lauf 57: U13a deadlock, Anker leerer Messblock.
+  Lauf 58: U13a-b deadlock, Anker nicht sichtbar.
+  Lauf 59: U13a-d durch, Approval-Prompt abgebrochen
+           (Fail-closed durch Tippfehler).
+  Lauf 60: Kein Lauf — manueller Sammel-Commit.
+
+Ergebnis Phase 18:
+  U1-U12: Code komplett.
+  U13a-d: Doku-Nachzug STATUS, ROADMAP,
+          DECISIONS, SECURITY_LOG.
+  Sammel-Commit 1fcc6bf (25 Dateien, 1624 Einfuegungen).
+  Nachzieh-Commit d7b7c26 (drei Testfixes).
+  Tag probebetrieb-68.
+
+================================================================
+W25 — BASIS-GATE PRUEFT TESTANZAHL, NICHT ERGEBNIS
+================================================================
+
+Kritischer Befund. `test_count`-Messung im Basis-Gate
+fuehrt `pytest --collect-only` aus (Anzahl), nicht
+`pytest` (Ergebnis).
+
+Beleg: probebetrieb-65 (d135fd4) hat
+ToolArgumentValueError eingefuehrt, ohne den Test
+anzupassen. Zwei rote Tests blieben ab da unbemerkt.
+Heute kamen zwei weitere hinzu (Viewer-Permission
+durch Phase 18, Guard-Test strukturell defekt).
+
+Ergebnis: Sammel-Commit 1fcc6bf lief durch das
+Basis-Gate mit 3 roten Tests.
+
+Fix (Kategorie 3):
+  test_count-Messung durch test_result ersetzen
+  (pytest -q, Exit-Code pruefen). Roter Test
+  blockiert Basis-Gate.
+
+================================================================
+W25a — AST-BASIERTER GUARD-TEST
+================================================================
+
+Der entfernte `test_no_create_table_in_test_file`
+war strukturell defekt: Er prueft die eigene Datei
+auf "CREATE TABLE" — aber der String muss in einem
+solchen Test selbst vorkommen (Selbstreferenz).
+
+Korrektur: AST-basierter Guard (Kategorie 2).
+Prueft, dass die Test-Datei kein
+`sqlite3.executescript("CREATE TABLE ...")`
+enthaelt — ueber `ast.parse` statt String-Match.
+
+================================================================
+MERKPOSTEN — VOLLSTAENDIG
+================================================================
+
+Kategorie 3 (Kernlogik, Reviewer-Block vor Bau):
+
+  W11c  Pfad-Normalisierung in _check_commit_scope.
+        git diff --name-only HEAD (CWD-relativ)
+        vs. git status --porcelain -uall (Repo-Root).
+        Bei Subdir-Aufruf oder Renames inkonsistent.
+
+  W11d  fail-closed statt fail-open bei
+        git-status-Fehler in _check_commit_scope
+        (except ... pass → return False + Audit).
+
+  W14   Loop akzeptiert keinen NO-GO ohne
+        GEMESSENER INHALT (Audit
+        reviewer_no_measurement_no_go).
+
+  W15   --resume-force setzt Status zurueck,
+        raeumt Working Tree nicht auf. Dateien
+        aus failed-Paketen blockieren Neustart.
+
+  W16   intent-Dateien aus laufendem (pending)
+        Paket blockieren Basis-Gate.
+
+  W17   Struktur-Tests pruefen Strings statt
+        Verhalten (TestW7). Kategorie 2.
+
+  W18   git add -N (intent-to-add) ist fluechtig.
+        Basis-Gate kann zwischen Prozessen
+        inkonsistent werden.
+
+  W19   GEMESSENER INHALT fuer Folge-Block ist der
+        des Vorgaenger-Blocks. Kontext-Uebergang
+        verliert Messgrundlage.
+
+  W20   done mit leerem commit_paket (U11/U12).
+        Dateien fehlen in done_pfade und im
+        Sammel-Commit.
+
+  W21   file_whitelist ohne CHANGELOG.md (Root).
+        Doku-Auftrag mit Root-Dateien nicht baubar.
+
+  W22   Doku-Bloecke brauchen woertlichen Anker
+        (W23-D1). Sonst builder_command_deadlock.
+
+  W23   Reviewer-Antwort zur Doku-Block-Frage:
+        Option D (Auftrags-Praezisierung) gewaehlt.
+        Auflagen W23-D1 bis W23-D6 im Handoff-Abschnitt.
+
+  W24   Messblock kuerzt bei ~20.000 Zeichen.
+        Anker am Dateiende grosser Doku-Dateien
+        unsichtbar. read_target_snippets liest
+        von vorne.
+
+  W25   test_count prueft Anzahl, nicht Ergebnis.
+        KRITISCH — siehe oben.
+
+  W25a  AST-basierter Guard statt String-Match.
+        Kategorie 2.
+
+Niedrig:
+
+  P17-Beispiel Rotation (GuardrailRepository)
+    bei Projektwechsel.
+
+  U5/U6/U9 (ex) mit nur 2 Unterpunkten.
+    P15-Neu verlangt 3-7.
+
+  Design-Konflikt U1/U4 (created_at/updated_at).
+    models.py 4 Felder, Migration 6 Spalten.
+    Mismatch dokumentiert.
+
+  Manuelle phase.yaml-Eingriffe: ca. 15 in dieser
+    Sitzung. Autonomie-Anspruch strukturell gebrochen.
+
+================================================================
+STAND PHASE 18
+================================================================
+
+Alle Unterbloecke U1-U13 done.
+Doku aktualisiert: STATUS, ROADMAP, DECISIONS,
+  SECURITY_LOG.
+Tests: 1395 passed, 0 failed.
+ruff: 0.
+mypy: 1353 Fehler in 73 Dateien (Altlast, unveraendert).
+Tag: probebetrieb-68 auf d7b7c26.
+
+================================================================
+NAECHSTER SCHRITT
+================================================================
+
+Phase 19 planen. Kandidaten aus ROADMAP-Ausblick:
+  Host-Scanner (Phase 3.8).
+  Endpoint-Watcher.
+  Sofort-Massnahmen-Kategorie.
+  ChangeApplier-Implementierung.
+  Chat als Aktions-Schnittstelle.
+  Token-Mechanik.
+  Anbindungs-Registry.
+  Cloud-AI-Anbindung.
+  Kunden-KI-Basis.
+  LLM-Rolle klaeren.
+
+Empfehlung: Erst W25 fixen (Basis-Gate test_result),
+sonst wiederholt sich der heutige Fehler bei jedem
+weiteren Sammel-Commit.
+
+================================================================
+ENDE SITZUNG 2026-10-16
+================================================================
