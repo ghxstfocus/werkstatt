@@ -3171,3 +3171,75 @@ Naechster Schritt:
 ================================================================
 ENDE W8
 ================================================================
+
+================================================================
+W10 MESSAGE-CHECK PRAEZISER (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 41. Lauf:
+  U8 (Route) Code-GO in Runde 1 (Messblock
+  wirkt). apply. Der W8-2-Check blockte:
+    Message nennt 3 Pfade
+    (Zieldatei + Muster + Template als
+     Referenz).
+    BETROFFENE DATEIEN: 1. Fail-closed.
+
+W10:
+  - _MESSAGE_SECTION_CHANGE = "Aenderung:".
+  - _extrahiere_aenderung_pfade: Regex
+    extrahiert Pfade NUR aus dem Bullet-Block
+    unter "Aenderung:". Referenzen (Muster,
+    Template) werden ignoriert.
+  - _normalisiere_pfad: fuehrendes "./",
+    "/", trailing "/", Backslash.
+  - W8-2-Block ersetzt.
+  - Fail-Pfade mit fall-Feld:
+    "a" (Section leer), "b" (Section fehlt),
+    "c" (Parse-Fehler), "diff" (Mengen-Ungleich).
+  - Audit-Kind commit_message_diskrepanz
+    bleibt (Katalog unveraendert).
+  - 948 -> 956 passed.
+
+Auflagen-Abgleich (W10-A1 bis A9):
+  A1 (Section-Name): "Aenderung:" (ae),
+    Konstante. Umlaut-Variante wird NICHT
+    erkannt (Test).
+  A2 (Regex-Grenzen): Bullet nur "-" oder
+    "*". Keine trailing Leerzeilen-Toleranz.
+  A3 (Parse-Diskriminierung): ein Kind
+    mit fall-Feld.
+  A4 (D3-Vergleich): Mengenvergleich nach
+    Normalisierung.
+  A5 (echte Message): nicht verfuegbar
+    (Audit-Log leer); Test mit
+    synthetischer, realistischer Message.
+  A6 (W8b-Prompt-Konsistenz): geprueft,
+    Format passt.
+  A7 (Ersetzen): W8-2 ersetzt.
+  A8 (8 Tests): erfuellt.
+  A9 (Handoff): dieser Eintrag.
+
+Merkposten:
+  - Echte Message aus Lauf 41 nicht im Audit.
+    W9a/W10 helfen kuenftig (commit_paket_gebaut
+    speichert Kopf/Fuss).
+  - Deterministische Message-Generierung
+    (W8-A4) bleibt der langfristige Fix.
+
+Stand:
+  U1-U7 done. U8 no_go (nach U8-Aufteilung:
+  Route). U9-U13 pending.
+
+Naechster Schritt:
+  42. PB-68-Lauf mit --resume-force.
+  Erwartung:
+    - U8 Code-GO, Commit-Review Runde 1:
+      COMMIT-GO.
+    - Paket gesammelt.
+    - U9 (app.py-Patch) startet.
+
+================================================================
+ENDE W10
+================================================================
