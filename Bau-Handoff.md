@@ -1768,3 +1768,72 @@ Entscheidung).
 ================================================================
 ENDE BLOCK 2a
 ================================================================
+
+================================================================
+BLOCK 2b PLANNER UNBEANTWORTET-BEHANDLUNG (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Aenderungen:
+  - _UNBEANTWORTET_PRAEFIX = "UNBEANTWORTET:"
+    (neu, B3). Kopplung an P18 Schritt 5.
+  - _plan_unbeantwortet_punkte (neu, B1+B2):
+      Durchsucht geparste Unterpunkte, erkennt
+      Praefix-Treffer. Rueckgabe pro Treffer
+      dict{"unterblock": "U<n>", "punkt": "<text>"}.
+  - _phase_plan_korrektur: Nach _parse_phase_plan,
+    vor Anzeige: Trefferpruefung. Bei Treffern:
+      * Audit phase_plan_unbeantwortet mit
+        unterblock-Zuordnung.
+      * Konsolenausgabe pro Punkt via
+        _truncate_mit_marker(200).
+      * _phase_rr_k8 (konsistent mit parse_failed).
+      * return False (Plan wird nicht gespeichert).
+  - _AUDIT_KINDS_BEKANNT + phase_plan_unbeantwortet.
+  - _parse_phase_plan unveraendert.
+  - tests/test_planner.py: +9 Tests (Klasse
+    TestPlannerUnbeantwortet).
+  - tests/test_pipeline.py: 2 Katalog-Anzahl-Tests
+    auf 63 angepasst.
+
+Tests: 831 passed (+9).
+
+Auflagen-Abgleich:
+  B1 (Anzeige-Truncation): erfuellt.
+    _truncate_mit_marker(200) pro Punkt.
+  B2 (Audit pro Unterblock): erfuellt.
+    _plan_unbeantwortet_punkte gibt dict-Liste
+    zurueck; Audit enthaelt unterblock-Zuordnung.
+  B3 (Konstante _UNBEANTWORTET_PRAEFIX):
+    erfuellt. Kopplung an P18 sichtbar.
+    Merkposten: bei P18-Aenderung Konstante
+    anpassen.
+  B4 (Test mehrere Unterbloecke): erfuellt.
+    test_plan_unbeantwortet_punkte_mehrere_
+    unterbloecke prueft zwei verschiedene
+    Unterbloecke.
+
+Merkposten (B3):
+  _UNBEANTWORTET_PRAEFIX und P18 Schritt 5
+  sind gekoppelt. Bei P18-Wortlaut-Aenderung
+  Konstante anpassen.
+
+Stand jetzt:
+  P18 ist vollstaendig wirksam (Block 1 als
+  Regel, Block 2a als Prompt-Ausgabe, Block 2b
+  als Marker-Erkennung und Entscheidung).
+  Planner-Praezision Block 1 + Block 2a + 2b
+  sind FERTIG.
+
+Naechster Schritt:
+  - U4 in security-ai.phase.yaml manuell mit
+    P17-Detailtiefe formulieren.
+  - 22. PB-68-Lauf mit --resume-force.
+  - Beobachten: folgt der Planner P17/P18?
+    Verarbeitet er den Reviewer-Befund
+    vollstaendig? Plant er kleiner (P15-Neu)?
+
+================================================================
+ENDE BLOCK 2b
+================================================================
