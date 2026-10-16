@@ -2114,3 +2114,63 @@ Naechster Schritt:
 ================================================================
 ENDE B0C
 ================================================================
+
+================================================================
+TIMEOUT-FIX + U4-PRAEZISIERUNG (2026-10-16)
+================================================================
+
+Timeout-Fix (Commit siehe git log). Kategorie 3.
+
+Ausgangslage:
+  24. Lauf (2026-10-16 16:50) hat gezeigt:
+  B0c wirkt (Reviewer gibt NO-GO, classify_verdict
+  korrekt). ABER: der Builder-Call hat nach 460 s
+  nicht terminiert (llm_timeout_s=180, Retry-Backoff
+  1+3 s, Worst-Case 364 s).
+
+  Ursache: requests int-Timeout wird als
+  (connect=180, read=180) interpretiert. Bei
+  tropfendem Server (Chunks alle <180 s) greift
+  der Read-Timeout nie.
+
+Fix (Option B):
+  B1 (primaer, HR-R7): timeout=(15, 180) Tupel.
+    Read-Timeout greift bei Chunk-Stille >180 s.
+  B2 (sekundaer): Deadline max_total_llm_s=240.
+    Verhindert Folgeversuche nach Ueberschreitung.
+    Read-Timeout adaptiv: min(180, restzeit).
+  + RunState.max_total_llm_s: int = 240.
+  + ask_llm aufgabe-Parameter (Audit-Zuordnung).
+  + _AUDIT_KINDS_BEKANNT +3.
+
+Tests: 863 passed (+9).
+
+U4-Praezisierung:
+  Alle vier Reviewer-Befunde aus Lauf 24 eingearbeitet:
+    (a) set_state schreibt updated_at.
+    (b) get/list_all nur vier Spalten selektieren.
+    (c) __init__(db_path: Path) exakt.
+    (d) Fixture Path(__file__).resolve() + exists().
+  Plus U4-Praez-A1 (updated_at testen),
+  A2 (_insert_guardrail-Helper explizit),
+  A3 (Fixture-Reihenfolge),
+  A4 (Fehlerklassen mit Docstrings),
+  A5 (set_state-Validierungs-Semantik).
+
+Merkposten (Timeout-A3):
+  max_total_llm_s aus projects/<name>.yaml
+  als optionales Feld (nicht in diesem Block).
+
+Naechster Schritt:
+  25. PB-68-Lauf mit --resume-force.
+  Beobachten:
+    - B0c: Verdict-Parser erkennt NO-GO/GO am Ende.
+    - Timeout-Fix: kein Haenger >240 s.
+    - U4: vier Befunde eingearbeitet; Reviewer GO?
+    - U4 done -> U5 laeuft.
+    - Sammel-Commit, Tag probebetrieb-68.
+  Bei Scheitern: Bilanz Pflicht.
+
+================================================================
+ENDE TIMEOUT-FIX + U4-PRAEZISIERUNG
+================================================================
