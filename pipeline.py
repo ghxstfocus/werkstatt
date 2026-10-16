@@ -6987,7 +6987,6 @@ def _phase_main_pfad(
         planner_modus=planner_modus,
     )
     state.start_monotonic = time.monotonic()
-    state_ref.append(state)
 
     _AKTUELLE_RUN_ID = (
         datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
