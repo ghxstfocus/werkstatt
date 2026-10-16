@@ -664,6 +664,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "builder_command_deadlock",
     "builder_command_executed",
     "builder_deadlock_anker_nicht_gemessen",
+    "builder_frage_reviewer",
     "builder_prompt_gebaut",
     "builder_reply_erhalten",
     "builder_wirkungsloser_patch",
@@ -704,6 +705,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "recovery_eskalation",
     "recovery_no_go",
     "review_round",
+    "reviewer_frage_antwort",
     "reviewer_run_solver",
     "rollback_fail_closed",
     "run_phase_ende",
@@ -2857,13 +2859,28 @@ def parse_commands(text: str) -> list[dict[str, str]]:
     Auflage 2039: arg muss str sein. Kein dict/list.
     Wenn der LLM einen JSON-Block liefert, wird das
     verworfen und der Eintrag nicht uebernommen.
+
+    P2b-Frage-A: zwei Typen.
+      COMMAND: RUN <id> <arg>
+        -> {"typ": "run", "id": <id>, "arg": <arg>}
+      COMMAND: frage_reviewer <text>
+        -> {"typ": "frage_reviewer", "arg": <text>}
+    Mehrere frage_reviewer-Zeilen werden mit \n
+    zu einem einzigen Eintrag konkateniert.
     """
     cmds: list[dict[str, str]] = []
+    frage_teile: list[str] = []
     for line in text.splitlines():
         s = line.strip()
         if not s.upper().startswith("COMMAND:"):
             continue
         body = s[len("COMMAND:"):].strip()
+        # P2b-Frage-A: frage_reviewer.
+        if body.lower().startswith("frage_reviewer"):
+            rest_f = body[len("frage_reviewer"):].strip()
+            if rest_f:
+                frage_teile.append(rest_f)
+            continue
         if not body.upper().startswith("RUN "):
             continue
         rest = body[4:].strip()
@@ -2877,7 +2894,11 @@ def parse_commands(text: str) -> list[dict[str, str]]:
         # Auflage 2039: arg MUSS str sein. Bei nicht-str: verwerfen.
         if not isinstance(arg_roh, str):
             continue
-        cmds.append({"id": cmd_id, "arg": arg_roh})
+        cmds.append({"typ": "run", "id": cmd_id,
+                     "arg": arg_roh})
+    if frage_teile:
+        cmds.append({"typ": "frage_reviewer",
+                     "arg": "\n".join(frage_teile)})
     return cmds
 
 
@@ -3190,7 +3211,30 @@ def builder_reply_mit_command_loop(
                 state.letzte_ersatz_fehler = []
                 state.anker_fehler_in_folge = 0
             return reply, None
-        for cmd in cmds:
+        # P2b-Frage-A: frage_reviewer aus den cmds
+        # herausziehen. Wenn vorhanden:
+        # state.letzte_builder_frage setzen, Audit.
+        fragen = [c for c in cmds
+                  if c.get("typ") == "frage_reviewer"]
+        if fragen:
+            frage_text = "\n".join(
+                f.get("arg", "") for f in fragen)
+            state.letzte_builder_frage = frage_text
+            audit("builder_frage_reviewer",
+                  {"runde": builder_runde,
+                   "frage": frage_text[:500]},
+                  project_dir, project_name)
+            print(f"[i] Builder-Runde {builder_runde}: "
+                  f"Rueckfrage an Reviewer: "
+                  f"{frage_text[:120]}")
+        # Nur RUN-Zeilen weiterverarbeiten.
+        cmds_run = [c for c in cmds
+                    if c.get("typ", "run") == "run"]
+        if not cmds_run:
+            # Nur frage_reviewer -> kein Deadlock,
+            # Rueckgabe an Aufrufer.
+            return reply, None
+        for cmd in cmds_run:
             key = (cmd.get("id", ""), cmd.get("arg", ""))
             if key in gescheiterte:
                 print(
@@ -3550,6 +3594,9 @@ class RunState:
     letzte_ersatz_fehler: list[tuple[int, str, str]] = \
         field(default_factory=list)
     anker_fehler_in_folge: int = 0
+    # P2b-Frage-A / A4: Rueckfrage und Antwort.
+    letzte_builder_frage: str = ""
+    letzte_reviewer_antwort: str = ""
     # Block Auftrag-erfuellt B3: letzter Patch war
     # wirkungslos (anker == ersatz). Signal fuer B2.
     letzter_patch_wirkungslos: bool = False

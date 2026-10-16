@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pipeline
 
@@ -238,7 +240,7 @@ class TestPhaseYamlStatusUpdate:
         assert hasattr(pipeline, "_phase_yaml_status_update")
 
     def test_setzt_status(self, tmp_path: Path,
-                          monkeypatch) -> None:
+                          monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, _standard_unterbloecke())
@@ -250,7 +252,7 @@ class TestPhaseYamlStatusUpdate:
         assert daten["phase_unterbloecke"][1]["status"] == "pending"
 
     def test_unbekannter_status_valueerror(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, _standard_unterbloecke())
@@ -262,7 +264,7 @@ class TestPhaseYamlStatusUpdate:
         raise AssertionError("ValueError erwartet")
 
     def test_fehlende_datei_valueerror(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         try:
@@ -273,7 +275,7 @@ class TestPhaseYamlStatusUpdate:
         raise AssertionError("ValueError erwartet")
 
     def test_unbekannte_unterblock_id_valueerror(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, _standard_unterbloecke())
@@ -304,14 +306,17 @@ def _state_fuer_phase(tmp_path: Path) -> pipeline.RunState:
     )
 
 
-def _mock_run_pipeline(rc: int = 0, paket: bool = True):
+def _mock_run_pipeline(rc: int = 0,
+                       paket: bool = True) -> object:
     """Erzeugt eine run_pipeline-Attrappe fuer Tests.
 
     Legt den uebergebenen phasen_state in sr_intern und
     haengt optional ein Paket an phase_commit_pakete.
     """
-    def _mock(project_name, aufgabe, sr_intern,
-              *, phasen_state=None):
+    def _mock(project_name: str, aufgabe: str,
+              sr_intern: list, *,
+              phasen_state: pipeline.RunState | None = None
+              ) -> int:
         if phasen_state is not None:
             sr_intern.append(phasen_state)
             if paket and rc == 0:
@@ -334,7 +339,7 @@ class TestRunPhase:
                           "korrektur_zyklus"]
 
     def test_loop_zwei_unterbloecke(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, _standard_unterbloecke())
@@ -359,7 +364,7 @@ class TestRunPhase:
         assert daten["phase_unterbloecke"][1]["status"] == "done"
 
     def test_leerer_plan_fail_closed(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, [])
@@ -368,7 +373,7 @@ class TestRunPhase:
         assert rc != 0
 
     def test_fehlende_phase_yaml_fail_closed(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         state = _state_fuer_phase(tmp_path)
@@ -376,7 +381,7 @@ class TestRunPhase:
         assert rc != 0
 
     def test_idempotenz_alle_done(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         ups = _standard_unterbloecke()
         for u in ups:
             u["status"] = "done"
@@ -388,7 +393,7 @@ class TestRunPhase:
         assert rc == 0
 
     def test_no_go_fail_closed(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         ups = _standard_unterbloecke()
         ups[0]["status"] = "no_go"
         monkeypatch.setattr(
@@ -399,7 +404,7 @@ class TestRunPhase:
         assert rc != 0
 
     def test_audit_kinds_im_log(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, _standard_unterbloecke())
@@ -407,7 +412,8 @@ class TestRunPhase:
         from unittest.mock import patch
         gesehen: list[str] = []
 
-        def fake_audit(kind, *a, **kw):
+        def fake_audit(kind: str, *a: object,
+                       **kw: object) -> None:
             gesehen.append(kind)
 
         with patch("pipeline.audit", side_effect=fake_audit), \
@@ -469,7 +475,7 @@ class TestPhaseRollback:
         return s
 
     def test_leerer_start_head_fail_closed(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
@@ -484,7 +490,7 @@ class TestPhaseRollback:
             if c.args and c.args[0] == "phase_rollback")
 
     def test_head_abweichend_kein_reset(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
@@ -499,7 +505,7 @@ class TestPhaseRollback:
         assert not mock_run.called
 
     def test_status_schmutzig_kein_reset(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
@@ -516,7 +522,7 @@ class TestPhaseRollback:
         assert not mock_run.called
 
     def test_erfolg_reset_und_clean(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import MagicMock, patch
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
@@ -548,7 +554,7 @@ class TestPhaseRollback:
             if c.args and c.args[0] == "phase_rollback")
 
     def test_exception_im_reset_fail_closed(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
@@ -571,7 +577,7 @@ class TestPhaseRollback:
 
 class TestRunPhaseStartHead:
     def test_setzt_head_wenn_leer(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
@@ -598,7 +604,7 @@ class TestRunPhaseStartHead:
         assert daten["phase_start_head"] == fake_head
 
     def test_yaml_gewinnt_wenn_gesetzt(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
@@ -628,7 +634,7 @@ class TestRunPhaseStartHead:
         assert state.phase_start_head == "d" * 40
 
     def test_inkonsistenz_fail_closed(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """P2b-2-A7 / K2: yaml_head leer, state != ''."""
         from unittest.mock import patch
         monkeypatch.setattr(
@@ -666,7 +672,7 @@ class TestPhaseRollbackIntegration:
             capture_output=True, text=True)
 
     def test_head_abweichend_kein_reset(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         import subprocess as sp
         from unittest.mock import patch
         # git-Repo in tmp_path initialisieren.
@@ -707,7 +713,7 @@ class TestPhaseRollbackIntegration:
         assert head_danach == head_neu
 
     def test_status_schmutzig_kein_reset(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         import subprocess as sp
         from unittest.mock import patch
         self._git(tmp_path, "init", "-q")
@@ -777,8 +783,10 @@ class TestRunPipelinePhasenModus:
 # =====================================================================
 
 class TestRunPhaseRcKlassen:
-    def _setup(self, tmp_path: Path, monkeypatch,
-               ups=None):
+    def _setup(self, tmp_path: Path,
+               monkeypatch: pytest.MonkeyPatch,
+               ups: list | None = None
+               ) -> pipeline.RunState:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         if ups is None:
@@ -787,7 +795,7 @@ class TestRunPhaseRcKlassen:
         return _state_fuer_phase(tmp_path)
 
     def test_klasse_1_erfolg_mit_paket(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         with patch("pipeline._git_rev_parse_head",
@@ -810,7 +818,7 @@ class TestRunPhaseRcKlassen:
         assert sr == [state]
 
     def test_klasse_2_b2_ohne_paket(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         with patch("pipeline._git_rev_parse_head",
@@ -828,7 +836,7 @@ class TestRunPhaseRcKlassen:
         assert sr == [state]
 
     def test_klasse_3_rc_15_kein_rollback(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         with patch("pipeline._git_rev_parse_head",
@@ -848,7 +856,7 @@ class TestRunPhaseRcKlassen:
         assert sr == []
 
     def test_klasse_4_rc_11_mit_rollback(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         with patch("pipeline._git_rev_parse_head",
@@ -866,7 +874,7 @@ class TestRunPhaseRcKlassen:
         assert sr == []
 
     def test_klasse_4_rc_21_mit_rollback(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         with patch("pipeline._git_rev_parse_head",
@@ -883,7 +891,7 @@ class TestRunPhaseRcKlassen:
         assert mock_rb.called
 
     def test_exception_im_run_pipeline(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         with patch("pipeline._git_rev_parse_head",
@@ -905,7 +913,7 @@ class TestRunPhaseRcKlassen:
 
 class TestRunPhaseGuards:
     def test_state_ref_nicht_leer_wirft(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, _standard_unterbloecke())
@@ -919,7 +927,7 @@ class TestRunPhaseGuards:
         raise AssertionError("ValueError erwartet")
 
     def test_run_pipeline_vertragsbruch(
-            self, tmp_path: Path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Mock legt state nicht in sr_intern -> RuntimeError."""
         from unittest.mock import patch
         monkeypatch.setattr(
@@ -927,8 +935,10 @@ class TestRunPhaseGuards:
         _baue_phase_yaml(tmp_path, _standard_unterbloecke())
         state = _state_fuer_phase(tmp_path)
 
-        def schlechter_mock(project_name, aufgabe,
-                            sr_intern, *, phasen_state=None):
+        def schlechter_mock(
+                project_name: str, aufgabe: str,
+                sr_intern: list, *,
+                phasen_state: pipeline.RunState | None = None) -> int:
             # sr_intern NICHT befuellen.
             return 0
 
@@ -1017,13 +1027,13 @@ class TestPhaseSammelPaket:
 
 
 class TestPhaseApproval:
-    def _setup(self, tmp_path, monkeypatch):
+    def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> pipeline.RunState:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, _standard_unterbloecke())
         return _state_fuer_phase(tmp_path)
 
-    def test_approval_j_commit(self, tmp_path, monkeypatch) -> None:
+    def test_approval_j_commit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         with patch("pipeline._git_rev_parse_head",
@@ -1043,7 +1053,7 @@ class TestPhaseApproval:
         assert sammel["dateien"] == ["apps/x.py"]
         assert "PHASE P1" in sammel["message"]
 
-    def test_approval_n_rollback(self, tmp_path, monkeypatch) -> None:
+    def test_approval_n_rollback(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "x")
@@ -1065,7 +1075,7 @@ class TestPhaseApproval:
         assert not mock_apply.called
         assert mock_rb.called
 
-    def test_commit_fail_rc_20(self, tmp_path, monkeypatch) -> None:
+    def test_commit_fail_rc_20(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         with patch("pipeline._git_rev_parse_head",
@@ -1081,7 +1091,7 @@ class TestPhaseApproval:
             rc = pipeline.run_phase("testprojekt", state, sr)
         assert rc == 20
 
-    def test_keine_pakete_b2_only(self, tmp_path, monkeypatch) -> None:
+    def test_keine_pakete_b2_only(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """B2-only-Phase: 0 Pakete, kein Commit, rc=0."""
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
@@ -1100,7 +1110,7 @@ class TestPhaseApproval:
         assert sr == [state]
 
     def test_ungueltige_eingabe_fail_closed(
-            self, tmp_path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         with patch("pipeline._git_rev_parse_head",
@@ -1119,14 +1129,14 @@ class TestPhaseApproval:
 # =====================================================================
 
 class TestPhaseBudget:
-    def _setup(self, tmp_path, monkeypatch):
+    def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> pipeline.RunState:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, _standard_unterbloecke())
         return _state_fuer_phase(tmp_path)
 
     def test_budget_ende_rc_13(
-            self, tmp_path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         state.budget = {"max_llm_calls_phase": 5}
@@ -1141,7 +1151,7 @@ class TestPhaseBudget:
         assert not mock_rp.called
 
     def test_budget_genug(
-            self, tmp_path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         state.budget = {"max_llm_calls_phase": 200}
@@ -1160,7 +1170,7 @@ class TestPhaseBudget:
         assert rc == 0
 
     def test_budget_null_kein_deckel(
-            self, tmp_path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
         state.budget = {"max_llm_calls_phase": 0}
@@ -1184,14 +1194,14 @@ class TestPhaseBudget:
 # =====================================================================
 
 class TestPhasePlanKorrektur:
-    def _setup(self, tmp_path, monkeypatch):
+    def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> pipeline.RunState:
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, _standard_unterbloecke())
         return _state_fuer_phase(tmp_path)
 
     def test_korrektur_max_1_zyklus(
-            self, tmp_path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """korrektur_zyklus=1 -> rc=23 ohne Planner."""
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
@@ -1213,7 +1223,7 @@ class TestPhasePlanKorrektur:
         assert not mock_k.called
 
     def test_korrektur_failed_rc_23(
-            self, tmp_path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Erster Zyklus, Korrektur gibt False -> rc=23."""
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
@@ -1241,21 +1251,21 @@ class TestPhasePlanKorrektur:
 # =====================================================================
 
 class TestPhaseRrK8:
-    def test_abbrechen(self, tmp_path, monkeypatch) -> None:
+    def test_abbrechen(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = _state_fuer_phase(tmp_path)
         with patch("builtins.input", return_value="2"):
             wahl = pipeline._phase_rr_k8(state, "alt")
         assert wahl == "abbrechen"
 
-    def test_neu_starten(self, tmp_path, monkeypatch) -> None:
+    def test_neu_starten(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = _state_fuer_phase(tmp_path)
         with patch("builtins.input", return_value="3"):
             wahl = pipeline._phase_rr_k8(state, "alt")
         assert wahl == "neu_starten"
 
-    def test_eof_abbrechen(self, tmp_path, monkeypatch) -> None:
+    def test_eof_abbrechen(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         state = _state_fuer_phase(tmp_path)
         with patch("builtins.input",
@@ -1293,7 +1303,7 @@ class TestPlannerKorrekturKontext:
 
 class TestRunPhaseDoneSkip:
     def test_done_wird_uebersprungen(
-            self, tmp_path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Ein done-Unterblock wird nicht erneut gelaufen."""
         from unittest.mock import patch
         monkeypatch.setattr(
@@ -1324,7 +1334,7 @@ class TestRunPhaseDoneSkip:
 
 class TestPhaseMainPfadResume:
     def test_resume_ohne_plan_planner_gerufen(
-            self, tmp_path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Kein Plan -> Planner-Pfad."""
         # Wir testen die Existenz der Verzweigung im Code
         # (statisch), weil der Planner-Pfad komplex ist.
@@ -1337,7 +1347,7 @@ class TestPhaseMainPfadResume:
         assert hasattr(pipeline, "_phase_finish_aktiv")
 
     def test_finish_setzt_aktiv_false(
-            self, tmp_path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
@@ -1354,7 +1364,7 @@ class TestPhaseMainPfadResume:
         assert daten is None
 
     def test_finish_rc_nicht_null_noop(
-            self, tmp_path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
@@ -1367,7 +1377,7 @@ class TestPhaseMainPfadResume:
         assert state.phase_aktiv is True
 
     def test_finish_phase_aktiv_false_noop(
-            self, tmp_path, monkeypatch) -> None:
+            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import patch
         monkeypatch.setattr(
             pipeline, "_PHASE_YAML_DIR", tmp_path)
@@ -1384,13 +1394,13 @@ class TestPhaseMainPfadResume:
 # =====================================================================
 
 class TestSolverBefundBlock:
-    def test_leerer_state_leerer_block(self, tmp_path) -> None:
+    def test_leerer_state_leerer_block(self, tmp_path: Path) -> None:
         state = _state_fuer_phase(tmp_path)
         block = pipeline._solver_befund_block(state)
         assert block == ""
 
     def test_marker_text_enthaelt_praezisierung(
-            self, tmp_path) -> None:
+            self, tmp_path: Path) -> None:
         """Der Marker-Text sagt: Praezisierung, kein neuer
         Auftrag, plus Widerspruch-Anweisung."""
         # Wir testen die Quelle statisch, weil ein echter
@@ -1407,4 +1417,63 @@ class TestAuditBuilderPromptSolverFeld:
         import inspect as ins
         quelle = ins.getsource(pipeline._audit_builder_prompt)
         assert "solver_befund_eingesetzt" in quelle
+
+# =====================================================================
+# P2b-Frage-A: parse_commands + frage_reviewer
+# =====================================================================
+
+class TestParseCommandsFrage:
+    def test_run_hat_typ_run(self) -> None:
+        text = "COMMAND: RUN read_file foo.txt\n"
+        cmds = pipeline.parse_commands(text)
+        assert len(cmds) == 1
+        assert cmds[0]["typ"] == "run"
+        assert cmds[0]["id"] == "read_file"
+        assert cmds[0]["arg"] == "foo.txt"
+
+    def test_frage_reviewer_erkannt(self) -> None:
+        text = "COMMAND: frage_reviewer Widerspruch solver\n"
+        cmds = pipeline.parse_commands(text)
+        assert len(cmds) == 1
+        assert cmds[0]["typ"] == "frage_reviewer"
+        assert cmds[0]["arg"] == "Widerspruch solver"
+
+    def test_mehrere_fragen_konkateniert(self) -> None:
+        text = (
+            "COMMAND: frage_reviewer Frage 1\n"
+            "COMMAND: frage_reviewer Frage 2\n"
+        )
+        cmds = pipeline.parse_commands(text)
+        assert len(cmds) == 1
+        assert cmds[0]["typ"] == "frage_reviewer"
+        assert "Frage 1" in cmds[0]["arg"]
+        assert "Frage 2" in cmds[0]["arg"]
+
+    def test_gemischt_run_und_frage(self) -> None:
+        text = (
+            "COMMAND: RUN read_file a.py\n"
+            "COMMAND: frage_reviewer Ist das ok?\n"
+        )
+        cmds = pipeline.parse_commands(text)
+        assert len(cmds) == 2
+        typen = {c["typ"] for c in cmds}
+        assert typen == {"run", "frage_reviewer"}
+
+    def test_run_ohne_praefix_verworfen(self) -> None:
+        text = "COMMAND: irgendwas\n"
+        cmds = pipeline.parse_commands(text)
+        assert cmds == []
+
+
+class TestBuilderFrageReviewerLoop:
+    def test_frage_reviewer_kein_deadlock(self) -> None:
+        """Der Loop darf bei frage_reviewer nicht in den
+        Deadlock-Pfad laufen."""
+        # Statische Pruefung: der Loop muss frage_reviewer
+        # explizit behandeln.
+        import inspect as ins
+        quelle = ins.getsource(
+            pipeline.builder_reply_mit_command_loop)
+        assert "frage_reviewer" in quelle
+        assert "builder_frage_reviewer" in quelle
 
