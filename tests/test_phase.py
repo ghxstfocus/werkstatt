@@ -1790,3 +1790,64 @@ class TestStateAufgabePhasenModus:
         assert "phase_titel" in quelle
         assert "unterblock_index" in quelle
 
+# =====================================================================
+# builder.md WICHTIG-Block: beide Patch-Formate (2026-10-16)
+# =====================================================================
+
+class TestBuilderFormatWichtigBlock:
+    def _read(self) -> str:
+        from pathlib import Path as _P
+        return _P("/opt/werkstatt/agents/builder.md").read_text(
+            encoding="utf-8")
+
+    def test_typ_new_file_im_wichtig_block(self) -> None:
+        """typ: new_file steht im WICHTIG-Block
+        (Z. 11-55), nicht nur in NEUE DATEIEN."""
+        t = self._read()
+        # WICHTIG-Block ist vor "## SELBST-REVIEW".
+        idx_wichtig = t.find("WICHTIG (UMB-1)")
+        idx_selbst = t.find("## SELBST-REVIEW")
+        assert idx_wichtig != -1
+        assert idx_selbst != -1
+        assert idx_wichtig < idx_selbst
+        wichtig = t[idx_wichtig:idx_selbst]
+        assert "typ: new_file" in wichtig
+
+    def test_typ_patch_im_wichtig_block(self) -> None:
+        t = self._read()
+        idx_wichtig = t.find("WICHTIG (UMB-1)")
+        idx_selbst = t.find("## SELBST-REVIEW")
+        wichtig = t[idx_wichtig:idx_selbst]
+        assert "typ: patch" in wichtig
+
+    def test_platzhalter_verbot_im_wichtig_block(self) -> None:
+        t = self._read()
+        idx_wichtig = t.find("WICHTIG (UMB-1)")
+        idx_selbst = t.find("## SELBST-REVIEW")
+        wichtig = t[idx_wichtig:idx_selbst]
+        assert "Platzhalter" in wichtig
+        assert "NIEMALS" in wichtig
+
+    def test_read_file_hinweis_im_wichtig_block(self) -> None:
+        t = self._read()
+        idx_wichtig = t.find("WICHTIG (UMB-1)")
+        idx_selbst = t.find("## SELBST-REVIEW")
+        wichtig = t[idx_wichtig:idx_selbst]
+        assert "COMMAND: RUN read_file" in wichtig
+
+    def test_verweise_im_wichtig_block(self) -> None:
+        t = self._read()
+        idx_wichtig = t.find("WICHTIG (UMB-1)")
+        idx_selbst = t.find("## SELBST-REVIEW")
+        wichtig = t[idx_wichtig:idx_selbst]
+        assert "## ANKER UND ERSATZ" in wichtig
+        assert "## NEUE DATEIEN" in wichtig
+
+    def test_build_system_prompt_beide_formate(self) -> None:
+        agents = pipeline.load_agents("/opt/werkstatt/agents")
+        prompt = pipeline.build_system_prompt(
+            agents["builder"], {}, [])
+        assert "typ: new_file" in prompt
+        assert "typ: patch" in prompt
+        assert "Platzhalter" in prompt
+
