@@ -1,6 +1,6 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-16 (nach Block P2b-3: run_pipeline-Phasen-Modus)
+Stand: 2026-10-16 (nach Block P2b-3b: Loop-Aufruf in run_phase)
 Werkstatt-HEAD: e8a01a4 (Doku: Handoff — P1-Live-Test)
 security-ai-HEAD: 220c6be (Doku-Migration)
 Letzter echter Probebetrieb: PB-67 (0d0fe2c, 2026-10-15)
@@ -342,6 +342,34 @@ Block P2b-3 (run_pipeline-Phasen-Modus):
   Tests: 571 -> 575. test_phase.py 46 -> 50.
   Loop-Aufruf folgt in P2b-3b.
 
+Block P2b-3b (Loop-Aufruf in run_phase):
+  ERLEDIGT 2026-10-16. Commit af45157.
+  Reviewer: GO-mit-Auflagen (P2b-3b-Zuschnitt).
+
+  Aenderungen:
+    - run_phase-Signatur:
+      (project_name, state, state_ref) -> int.
+    - state_ref-Guard (ValueError wenn nicht leer).
+    - Loop-Koerper: Stub ersetzt durch
+      run_pipeline(phasen_state=state),
+      lokaler sr_intern pro Aufruf,
+      Vertragspruefung sr_intern[0] is state.
+    - Vier rc-Klassen (L3):
+        Klasse 1: rc=0 + Paket -> done, weiter.
+        Klasse 2: rc=0 ohne Paket -> B2,
+                  done, weiter.
+        Klasse 3: rc=15 -> no_go, Loop-Abbruch,
+                  KEIN Rollback.
+        Klasse 4: sonst -> failed + Rollback,
+                  rc zurueck.
+    - Exception im Loop -> Rollback, rc=22.
+    - state_ref.append(state) am Ende
+      (nur im Erfolgspfad).
+    - _phase_main_pfad-Aufruf angepasst.
+  Tests: 575 -> 583. test_phase.py +8.
+  Merkposten NA3: run_pipeline B2-Signal im
+  state (siehe Abschnitt 4).
+
   Teilschritte:
     1. RunState + 7 phase_*-Felder.
     2. _parse_phase_plan (P10-P14-Format).
@@ -429,20 +457,18 @@ WICHTIG:
         ERLEDIGT. Commit 85e0572. Siehe Abschnitt 3.
 
   Block P2b-3b (Loop-Aufruf in run_phase):
-        OFFEN. Naechster Block. Kategorie 3.
-        Inhalt:
-          - Stub in run_phase (TODO(P2b-3))
-            ersetzen durch echten run_pipeline-
-            Aufruf mit phasen_state=state.
-          - rc-Pruefung: rc != 0 -> Fail-closed,
-            Phase bricht ab, Rollback.
-          - rc == 0 + Paket -> weiter.
-          - rc == 0 + kein Paket -> B2-Fall,
-            weiter (status=done).
-          - _phase_rollback-Aufruf bei rc != 0
-            oder Exception.
-        Eigener Reviewer-Block vor Bau (Kategorie 3).
-        Auflage: P2b-3-A5.
+        ERLEDIGT. Commit af45157. Siehe Abschnitt 3.
+
+  Merkposten (P2b-3b-A4-NA3): run_pipeline B2-Fall
+        B2 ist heute nur per Audit
+        (auftrag_bereits_erfuellt) und rc=0
+        erkennbar. run_phase nutzt die strukturelle
+        Heuristik rc=0 ohne Paket = B2
+        (P2b-3b-A4). Wenn run_pipeline weitere
+        rc=0-Pfade ohne Paket bekommt, MUSS die
+        Heuristik durch ein state-Feld (z.B.
+        state.b2_erreicht: bool) ersetzt werden.
+        Eigener Block, nicht in P2b.
 
   Block P2b-4 (_phase_gesamt_review + Approval):
         OFFEN. Nach P2b-3. Kategorie 3.
@@ -687,6 +713,8 @@ Abschnitt B.
     Commit fd34f5d).
   Block P2b-3 (run_pipeline-Phasen-Modus,
     Commit 85e0572).
+  Block P2b-3b (Loop-Aufruf in run_phase,
+    Commit af45157).
 
 ================================================================
 6. ZIELE
