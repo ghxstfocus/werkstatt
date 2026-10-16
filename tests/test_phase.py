@@ -330,7 +330,8 @@ class TestRunPhase:
         sig = inspect.signature(pipeline.run_phase)
         params = list(sig.parameters.keys())
         assert params == ["project_name", "state",
-                          "state_ref"]
+                          "state_ref",
+                          "korrektur_zyklus"]
 
     def test_loop_zwei_unterbloecke(
             self, tmp_path: Path, monkeypatch) -> None:
@@ -1045,6 +1046,7 @@ class TestPhaseApproval:
     def test_approval_n_rollback(self, tmp_path, monkeypatch) -> None:
         from unittest.mock import patch
         state = self._setup(tmp_path, monkeypatch)
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "x")
         with patch("pipeline._git_rev_parse_head",
                    return_value="a" * 40), \
              patch("pipeline.run_pipeline",
@@ -1052,6 +1054,8 @@ class TestPhaseApproval:
                        rc=0, paket=True)), \
              patch("builtins.input", return_value="n"), \
              patch("pipeline.apply_commit_and_doku") as mock_apply, \
+             patch("pipeline._phase_plan_korrektur",
+                   return_value=False), \
              patch("pipeline._phase_rollback",
                    return_value=True) as mock_rb, \
              patch("pipeline.audit"):
@@ -1109,4 +1113,177 @@ class TestPhaseApproval:
             sr: list = []
             rc = pipeline.run_phase("testprojekt", state, sr)
         assert rc == 1
+
+# =====================================================================
+# P2b-5: Budget-Layer-1
+# =====================================================================
+
+class TestPhaseBudget:
+    def _setup(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        return _state_fuer_phase(tmp_path)
+
+    def test_budget_ende_rc_13(
+            self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        state.budget = {"max_llm_calls_phase": 5}
+        state.llm_calls = 5
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline") as mock_rp, \
+             patch("pipeline.audit"):
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 13
+        assert not mock_rp.called
+
+    def test_budget_genug(
+            self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        state.budget = {"max_llm_calls_phase": 200}
+        state.llm_calls = 5
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
+             patch("builtins.input", return_value="j"), \
+             patch("pipeline.apply_commit_and_doku",
+                   return_value=True), \
+             patch("pipeline.audit"):
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 0
+
+    def test_budget_null_kein_deckel(
+            self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        state.budget = {"max_llm_calls_phase": 0}
+        state.llm_calls = 10000
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
+             patch("builtins.input", return_value="j"), \
+             patch("pipeline.apply_commit_and_doku",
+                   return_value=True), \
+             patch("pipeline.audit"):
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 0
+
+
+# =====================================================================
+# P2b-5: Plan-Korrektur
+# =====================================================================
+
+class TestPhasePlanKorrektur:
+    def _setup(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        return _state_fuer_phase(tmp_path)
+
+    def test_korrektur_max_1_zyklus(
+            self, tmp_path, monkeypatch) -> None:
+        """korrektur_zyklus=1 -> rc=23 ohne Planner."""
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
+             patch("builtins.input", return_value="n"), \
+             patch("pipeline._phase_plan_korrektur") as mock_k, \
+             patch("pipeline._phase_rollback",
+                   return_value=True), \
+             patch("pipeline.audit"):
+            sr: list = []
+            rc = pipeline.run_phase(
+                "testprojekt", state, sr,
+                korrektur_zyklus=1)
+        assert rc == 23
+        assert not mock_k.called
+
+    def test_korrektur_failed_rc_23(
+            self, tmp_path, monkeypatch) -> None:
+        """Erster Zyklus, Korrektur gibt False -> rc=23."""
+        from unittest.mock import patch
+        state = self._setup(tmp_path, monkeypatch)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)), \
+             patch("builtins.input", return_value="n"), \
+             patch("pipeline._phase_plan_korrektur",
+                   return_value=False) as mock_k, \
+             patch("pipeline._phase_rollback",
+                   return_value=True), \
+             patch("pipeline.audit"):
+            sr: list = []
+            rc = pipeline.run_phase(
+                "testprojekt", state, sr,
+                korrektur_zyklus=0)
+        assert rc == 23
+        assert mock_k.called
+
+
+# =====================================================================
+# P2b-5: RR-K8-Menue
+# =====================================================================
+
+class TestPhaseRrK8:
+    def test_abbrechen(self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = _state_fuer_phase(tmp_path)
+        with patch("builtins.input", return_value="2"):
+            wahl = pipeline._phase_rr_k8(state, "alt")
+        assert wahl == "abbrechen"
+
+    def test_neu_starten(self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = _state_fuer_phase(tmp_path)
+        with patch("builtins.input", return_value="3"):
+            wahl = pipeline._phase_rr_k8(state, "alt")
+        assert wahl == "neu_starten"
+
+    def test_eof_abbrechen(self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        state = _state_fuer_phase(tmp_path)
+        with patch("builtins.input",
+                   side_effect=EOFError()):
+            wahl = pipeline._phase_rr_k8(state, "alt")
+        assert wahl == "abbrechen"
+
+
+# =====================================================================
+# P2b-5: Planner-Korrektur-Kontext
+# =====================================================================
+
+class TestPlannerKorrekturKontext:
+    def test_user_content_mit_kontext(self) -> None:
+        kontext = {
+            "begruendung": "Mensch hat abgelehnt",
+            "alter_plan": "PHASE P1: T",
+            "pakete_kompakt": "Paket 1: a.py",
+        }
+        text = pipeline._planner_user_content(
+            "roh", "hist", stufe=2,
+            korrektur_kontext=kontext)
+        assert "KORREKTUR-AUFTRAG" in text
+        assert "Mensch hat abgelehnt" in text
+        assert "PHASE P1: T" in text
+
+    def test_user_content_ohne_kontext(self) -> None:
+        text = pipeline._planner_user_content(
+            "roh", "hist", stufe=2)
+        assert "KORREKTUR-AUFTRAG" not in text
 

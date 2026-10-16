@@ -27,3 +27,16 @@ def _isolate_audit(tmp_path, monkeypatch):
     import pipeline
     monkeypatch.setattr(pipeline, "_werkstatt_home",
                         lambda: tmp_path)
+
+@pytest.fixture(autouse=True)
+def _set_dummy_api_key(monkeypatch):
+    """P2b-5: run_phase prueft DEEPSEEK_API_KEY (Fail-closed).
+
+    Tests, die run_phase (oder Funktionen, die den Key
+    brauchen) aufrufen, sollen nicht an einem fehlenden
+    API-Key scheitern. Der Wert wird nicht an die
+    DeepSeek-API geschickt, weil alle ask_llm-Aufrufe in
+    Tests gemockt sind.
+    """
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-dummy-key")
+

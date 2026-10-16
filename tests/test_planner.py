@@ -136,6 +136,8 @@ class TestPlannerLauf:
             "project_dir", "project_name", "historie",
             # P2a-S5a-A8: stufe hinzugefuegt.
             "stufe",
+            # P2b-5: korrektur_kontext hinzugefuegt.
+            "korrektur_kontext",
         ]
 
 

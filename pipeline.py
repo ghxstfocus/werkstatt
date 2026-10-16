@@ -675,11 +675,14 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "commit_paket_leer",
     "commit_review",
     "phase_abgebrochen",
+    "phase_budget_ende",
     "phase_commit_paket_gesammelt",
     "phase_commit_paket_leer",
     "phase_gesamt_review",
     "phase_plan_editiert",
     "phase_plan_erstellt",
+    "phase_plan_korrektur_failed",
+    "phase_plan_korrektur_start",
     "phase_plan_parse_failed",
     "phase_plan_verworfen",
     "phase_rollback",
@@ -1783,10 +1786,207 @@ def _print_phase_approval_dokument(
 
 
 
+def _phase_rr_k8(
+    state: RunState,
+    projekt_plan: str,
+) -> str:
+    """P2b-5 / N8: RR-K8-Menue. Mensch entscheidet.
+
+    Rueckgabe: "neu" | "abbrechen" | "neu_starten".
+    "neu" = Mensch hat einen neuen Plan eingegeben
+    (in `state` als neue Unterbloecke abgelegt).
+    """
+    print("\n" + "=" * 70)
+    print("RR-K8: KONFLIKT PLANNER VS. REVIEWER")
+    print("=" * 70)
+    print("[1] Plan manuell neu eingeben")
+    print("[2] Phase abbrechen")
+    print("[3] mit geaendertem Auftrag neu starten")
+    for _v in range(5):
+        try:
+            wahl = input("Deine Wahl: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return "abbrechen"
+        if wahl == "1":
+            print("[i] Bitte den korrigierten Plan eingeben "
+                  "(Format P10-P14). Ende mit einer "
+                  "Leerzeile nach 'Geschaetzte Runden: N'.")
+            print("[i] Alter Plan als Referenz:")
+            print(projekt_plan)
+            try:
+                text_eingabe = input("Plan-Text: ")
+            except (EOFError, KeyboardInterrupt):
+                return "abbrechen"
+            # Validierung.
+            try:
+                neue_ups = _parse_phase_plan(text_eingabe)
+                neue_id, neue_titel = _parse_phase_kopf(
+                    text_eingabe)
+            except ValueError as exc:
+                print(f"[!] Plan ungueltig: {exc}")
+                print("[i] Nochmal oder [2]/[3].")
+                continue
+            plan = _phase_plan_laden(state.project_name)
+            if plan is None:
+                print("[!] phase.yaml nicht lesbar.")
+                return "abbrechen"
+            plan["phase_id"] = neue_id
+            plan["phase_titel"] = neue_titel
+            plan["phase_unterbloecke"] = [
+                {
+                    "id": u["id"],
+                    "titel": u["titel"],
+                    "status": "pending",
+                    "commit_paket": {},
+                    "unterpunkte": u["unterpunkte"],
+                    "geschaetzte_runden":
+                        u["geschaetzte_runden"],
+                }
+                for u in neue_ups
+            ]
+            _phase_plan_speichern(state.project_name, plan)
+            return "neu"
+        if wahl == "2":
+            return "abbrechen"
+        if wahl == "3":
+            return "neu_starten"
+        print("[!] Bitte 1, 2 oder 3.")
+    return "abbrechen"
+
+
+def _phase_plan_korrektur(
+    project_name: str,
+    state: RunState,
+    api_key: str,
+) -> bool:
+    """P2b-5 / N4-N8: Plan-Korrektur bei Phase-NO-GO.
+
+    Rueckgabe: True = neuer Plan liegt in phase.yaml,
+    state.phase_unterbloecke neu. False = abbrechen
+    (RR-K8 oder Fehler).
+    """
+    # Historie laden (Korrektur ist self-contained).
+    historie = load_recent_commits(
+        state.project_dir, n=10)
+    # Kompakte Darstellungen.
+    alter_plan_zeilen = [
+        f"PHASE {state.phase_id}: {state.phase_titel}",
+    ]
+    for u in state.phase_unterbloecke:
+        if not isinstance(u, dict):
+            continue
+        alter_plan_zeilen.append(
+            f"{u.get('id', '?')}: {u.get('titel', '')} "
+            f"[{u.get('status', '?')}]")
+    alter_plan = "\n".join(alter_plan_zeilen)
+    pakete_zeilen: list[str] = []
+    for i, p in enumerate(state.phase_commit_pakete, 1):
+        dateien = ", ".join(p.get("dateien", []))
+        msg = p.get("message", "")[:120]
+        pakete_zeilen.append(
+            f"Paket {i}: {dateien}\n  {msg}")
+    pakete_kompakt = "\n".join(pakete_zeilen) or "(keine)"
+
+    kontext = {
+        "begruendung": "Mensch hat Phase abgelehnt.",
+        "alter_plan": alter_plan,
+        "pakete_kompakt": pakete_kompakt,
+    }
+    audit("phase_plan_korrektur_start",
+          {"phase_id": state.phase_id,
+           "pakete_verworfen":
+               len(state.phase_commit_pakete)},
+          state.project_dir, project_name)
+    antwort = _planner_lauf(
+        state, api_key, "Korrektur-Auftrag",
+        state.project_dir, project_name, historie,
+        stufe=2, korrektur_kontext=kontext)
+    if antwort is None:
+        audit("phase_plan_korrektur_failed",
+              {"phase_id": state.phase_id,
+               "grund": "planner_none"},
+              state.project_dir, project_name)
+        wahl = _phase_rr_k8(state, alter_plan)
+        if wahl == "neu":
+            return True
+        if wahl == "neu_starten":
+            print("[i] Bitte mit geaendertem Auftrag "
+                  "neuen --phase-Aufruf starten.")
+        return False
+    try:
+        neue_id, neue_titel = _parse_phase_kopf(antwort)
+        neue_ups = _parse_phase_plan(antwort)
+    except ValueError as exc:
+        audit("phase_plan_korrektur_failed",
+              {"phase_id": state.phase_id,
+               "grund": "parse_failed",
+               "exception": str(exc)},
+              state.project_dir, project_name)
+        wahl = _phase_rr_k8(state, alter_plan)
+        if wahl == "neu":
+            return True
+        if wahl == "neu_starten":
+            print("[i] Bitte mit geaendertem Auftrag "
+                  "neuen --phase-Aufruf starten.")
+        return False
+    # Anzeige + Bestaetigung.
+    print("\n" + "=" * 70)
+    print("PLAN-KORREKTUR")
+    print("=" * 70)
+    print(f"Phase: {neue_id} - {neue_titel}")
+    for u in neue_ups:
+        print(f"{u['id']}: {u['titel']}  "
+              f"({len(u['unterpunkte'])} Unterpunkte)")
+    wahl2 = ""
+    for _v in range(5):
+        try:
+            wahl2 = input(
+                "[j] uebernehmen / [n] abbrechen > "
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            return False
+        if wahl2 in {"j", "ja", "y", "yes"}:
+            break
+        if wahl2 in {"n", "no", "nein"}:
+            return False
+        print("[!] Bitte [j] oder [n].")
+    if wahl2 not in {"j", "ja", "y", "yes"}:
+        return False
+    # Alte Pakete verwerfen.
+    state.phase_commit_pakete = []
+    # Neuen Plan schreiben (Status pending).
+    plan = _phase_plan_laden(project_name)
+    if plan is None:
+        return False
+    plan["phase_id"] = neue_id
+    plan["phase_titel"] = neue_titel
+    plan["phase_unterbloecke"] = [
+        {
+            "id": u["id"],
+            "titel": u["titel"],
+            "status": "pending",
+            "commit_paket": {},
+            "unterpunkte": u["unterpunkte"],
+            "geschaetzte_runden": u["geschaetzte_runden"],
+        }
+        for u in neue_ups
+    ]
+    _phase_plan_speichern(project_name, plan)
+    # state aktualisieren.
+    state.phase_id = neue_id
+    state.phase_titel = neue_titel
+    state.phase_unterbloecke = plan["phase_unterbloecke"]
+    state.phase_aktueller_index = 0
+    return True
+
+
+
 def run_phase(
     project_name: str,
     state: RunState,
     state_ref: list[RunState],
+    *,
+    korrektur_zyklus: int = 0,
 ) -> int:
     """Block P2b-1: Geruest fuer den Phasen-Loop.
 
@@ -1820,6 +2020,11 @@ def run_phase(
     if state_ref:
         raise ValueError(
             "run_phase: state_ref muss leer sein")
+    # P2b-5: api_key fuer Plan-Korrektur (Planner).
+    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if not api_key:
+        print("[FAIL] DEEPSEEK_API_KEY fehlt. Fail closed.")
+        return 1
     daten = _phase_plan_laden(project_name)
     if daten is None:
         print("[FAIL] phase.yaml: kein aktiver Plan.")
@@ -1913,7 +2118,23 @@ def run_phase(
            "start_head": state.phase_start_head},
           state.project_dir, project_name)
 
+    # P2b-5 / N1 + N3: Phasen-Budget vor dem Loop.
+    max_phase = int(state.budget.get(
+        "max_llm_calls_phase", 0) or 0)
+
     for i, u in enumerate(unterbloecke):
+        # Budget-Check VOR jedem Unterblock.
+        if max_phase > 0 and state.llm_calls >= max_phase:
+            print(f"[!] Phasen-Budget erschoepft: "
+                  f"{state.llm_calls}/{max_phase}.")
+            audit("phase_budget_ende",
+                  {"phase_id": state.phase_id,
+                   "unterbloecke_done": i,
+                   "unterbloecke_total": len(unterbloecke),
+                   "llm_calls": state.llm_calls,
+                   "max_phase": max_phase},
+                  state.project_dir, project_name)
+            return 13
         uid = u["id"] if isinstance(u, dict) else "?"
         state.phase_aktueller_index = i
         t0 = time.monotonic()
@@ -2116,12 +2337,30 @@ def run_phase(
               state.project_dir, project_name)
         ok = _phase_rollback(
             project_name, state, "phase_no_go")
-        audit("phase_abgebrochen",
-              {"phase_id": state.phase_id,
-               "grund": "no_go",
-               "rollback_ok": ok},
-              state.project_dir, project_name)
-        return 23
+        # P2b-5 / N5 + N6: Plan-Korrektur, max 1 Zyklus.
+        if korrektur_zyklus >= 1:
+            audit("phase_abgebrochen",
+                  {"phase_id": state.phase_id,
+                   "grund": "korrektur_max_erreicht",
+                   "rollback_ok": ok},
+                  state.project_dir, project_name)
+            return 23
+        print("[i] Phase abgelehnt. Plan-Korrektur wird "
+              "versucht.")
+        if not _phase_plan_korrektur(
+                project_name, state, api_key):
+            audit("phase_abgebrochen",
+                  {"phase_id": state.phase_id,
+                   "grund": "korrektur_failed",
+                   "rollback_ok": ok},
+                  state.project_dir, project_name)
+            return 23
+        # Plan korrigiert. state_ref leeren (Guard
+        # verlangt das). Rekursion.
+        state_ref.clear()
+        return run_phase(
+            project_name, state, state_ref,
+            korrektur_zyklus=korrektur_zyklus + 1)
 
     # [j]: Sammel-Commit.
     audit("phase_gesamt_review",
@@ -2155,13 +2394,34 @@ def _planner_user_content(
     roher_auftrag: str,
     historie: str,
     stufe: int = 1,
+    korrektur_kontext: dict[str, Any] | None = None,
 ) -> str:
     """Baut den User-Content fuer den Planner.
 
     Auflage P2a-S5a-A10: stufe=1 wortgleich zum
     bisherigen Verhalten (test_planner.py bleibt
     gruen). stufe=2 verweist auf P10-P14.
+
+    P2b-5 / N10: korrektur_kontext (optional).
+    Wenn gesetzt, wird ein Korrektur-Auftrag
+    formuliert (NO-GO-Begruendung + alter Plan
+    + Pakete kompakt).
     """
+    if korrektur_kontext is not None:
+        begr = korrektur_kontext.get("begruendung", "")
+        alter_plan = korrektur_kontext.get("alter_plan", "")
+        pakete_kompakt = korrektur_kontext.get(
+            "pakete_kompakt", "")
+        return (
+            "KORREKTUR-AUFTRAG:\n"
+            f"NO-GO-Begruendung: {begr}\n\n"
+            f"ALTER PLAN:\n{alter_plan}\n\n"
+            f"GESAMMELTE PAKETE (kompakt):\n"
+            f"{pakete_kompakt}\n\n"
+            "Formuliere GENAU EINEN korrigierten "
+            "Phasenplan (PHASE/UNTERBLOCK) im "
+            "Format aus P10-P14.\n"
+        )
     if stufe == 2:
         abschluss = (
             "Formuliere GENAU EINEN Phasenplan "
@@ -2190,6 +2450,7 @@ def _planner_lauf(
     project_name: str,
     historie: str,
     stufe: int = 1,
+    korrektur_kontext: dict[str, Any] | None = None,
 ) -> str | None:
     """Fuehrt den Planner aus und liefert die Antwort.
 
@@ -2208,7 +2469,8 @@ def _planner_lauf(
         stufe=stufe)
 
     user_content = _planner_user_content(
-        roher_auftrag, historie, stufe)
+        roher_auftrag, historie, stufe,
+        korrektur_kontext=korrektur_kontext)
 
     reply = ask_llm(
         api_key, planner_prompt, user_content,
