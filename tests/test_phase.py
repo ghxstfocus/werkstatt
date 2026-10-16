@@ -1609,3 +1609,77 @@ class TestNewFilePrompt:
         text = pipeline.HARD_RULES_REVIEWER
         assert "write_file" in text
 
+# =====================================================================
+# Rollen-Audit-A: reviewer.md + builder.md
+# =====================================================================
+
+class TestRollenAuditA:
+    def _read(self, name: str) -> str:
+        from pathlib import Path as _P
+        return _P(f"/opt/werkstatt/agents/{name}").read_text(
+            encoding="utf-8")
+
+    def test_reviewer_kein_alter_abschnitt(self) -> None:
+        assert "CODE-REVIEW (alt)" not in self._read("reviewer.md")
+
+    def test_reviewer_kein_security_review_log(self) -> None:
+        assert "SECURITY_REVIEW_LOG" not in self._read("reviewer.md")
+
+    def test_reviewer_hat_security_log(self) -> None:
+        assert "SECURITY_LOG" in self._read("reviewer.md")
+
+    def test_reviewer_hat_r10_hinweis(self) -> None:
+        t = self._read("reviewer.md")
+        assert "typ: new_file" in t
+
+    def test_reviewer_hat_r5_ausnahme(self) -> None:
+        t = self._read("reviewer.md")
+        assert "R5" in t and "gilt nicht" in t
+
+    def test_reviewer_hat_antwort_modus(self) -> None:
+        t = self._read("reviewer.md")
+        assert "ANTWORT" in t
+        assert "COMMAND vs. VERDICT vs. ANTWORT" in t
+
+    def test_builder_hat_git_ls_files(self) -> None:
+        t = self._read("builder.md")
+        assert "git ls-files" in t
+
+    def test_builder_kein_warte_satz(self) -> None:
+        assert "Warte. Wir muessen genau sein." not in \
+            self._read("builder.md")
+
+    def test_builder_hat_vorgaenger_hash(self) -> None:
+        t = self._read("builder.md")
+        assert "Vorgaenger-Hash" in t
+
+    def test_builder_hat_2_spaces_entfernt(self) -> None:
+        t = self._read("builder.md")
+        assert "2 Spaces entfernt" in t
+
+    def test_hash_regel_gleich(self) -> None:
+        """reviewer.md und builder.md nutzen denselben
+        Wortlaut fuer den Vorgaenger-Hash."""
+        r = self._read("reviewer.md")
+        b = self._read("builder.md")
+        assert "Vorgaenger-Hash" in r
+        assert "Vorgaenger-Hash" in b
+
+    def test_build_system_prompt_reviewer_kein_alt(self) -> None:
+        agents = pipeline.load_agents("/opt/werkstatt/agents")
+        prompt = pipeline.build_system_prompt(
+            agents["reviewer"], {}, [])
+        assert "CODE-REVIEW (alt)" not in prompt
+
+    def test_build_system_prompt_reviewer_hat_antwort(self) -> None:
+        agents = pipeline.load_agents("/opt/werkstatt/agents")
+        prompt = pipeline.build_system_prompt(
+            agents["reviewer"], {}, [])
+        assert "ANTWORT" in prompt
+
+    def test_build_system_prompt_builder_kein_warte(self) -> None:
+        agents = pipeline.load_agents("/opt/werkstatt/agents")
+        prompt = pipeline.build_system_prompt(
+            agents["builder"], {}, [])
+        assert "Warte. Wir muessen genau sein." not in prompt
+

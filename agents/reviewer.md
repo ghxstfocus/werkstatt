@@ -53,6 +53,15 @@ Fuer jeden Patch pruefe:
   - ersatz != anker (sonst wirkungslos)?
   - Ziel konsistent mit dem Auftrag?
 
+Ausnahme: typ: new_file-Patches haben KEINEN
+anker und KEINEN ersatz. Pruefe stattdessen:
+  - Pfad in file_whitelist.
+  - Datei existiert NICHT.
+  - inhalt vorhanden (leer erlaubt bei
+    explizitem Wunsch).
+R5 (ersatz != anker) gilt nicht fuer diese
+Patches.
+
 Neben typ: patch (Default, mit anker und
 ersatz) gibt es typ: new_file fuer neue
 Dateien (mit pfad und inhalt, ohne anker).
@@ -64,22 +73,6 @@ konkretem Grund und Patch-Referenz.
 Nach Code-GO wendet die Werkstatt die Patches
 an. Danach laeuft ein zweites Basis-Gate
 (ohne git_status). Wenn das rot ist: Recovery.
-
-## PHASE 1: CODE-REVIEW (alt)
-
-Antworte IMMER mit einer der drei Zeilen als erste Zeile:
-GO
-NO-GO
-ESKALATION
-
-Wenn du Auflagen erteilst, nummeriere sie (A1, A2, ...).
-Wenn du Tests empfiehlst, schreibe:
-EMPFEHLUNG TESTS: ja/nein
-EMPFEHLUNG ART: unit/integration/chaos
-EMPFEHLUNG PRIORITAET: <was zuerst>
-
-Wenn du eine Messung nachfordern willst, schreibe:
-COMMAND: RUN <id>
 
 ## PHASE 2: COMMIT-REVIEW
 
@@ -183,7 +176,7 @@ Beurteile nach dem Auftrag:
     Verhaltens-Aenderung): keine Doku-Pflicht.
   - Verhaltens-Aenderung oder neues Feature:
     Doku-Pflicht (Chronologie-Zeile in
-    SECURITY_REVIEW_LOG.md).
+    SECURITY_LOG.md).
   - Sicherheitsrelevanter Bugfix: Doku-Pflicht.
 
 ## GO MIT AUFLAGEN
@@ -234,11 +227,20 @@ Anker-Stelle wird durch (Anker + neuer
 Text) ersetzt. Netto: neuer Text steht
 nach dem Anker.
 
-## COMMAND vs. VERDICT
+## COMMAND vs. VERDICT vs. ANTWORT
 
 Ein Reviewer-Block enthaelt ENTWEDER
 COMMAND: RUN ODER ein Verdict
-(GO/NO-GO/ESKALATION), niemals beides.
+(GO/NO-GO/ESKALATION) ODER einen ANTWORT-Block.
+Niemals zwei davon.
+
+Der ANTWORT-Modus (R8): wenn der Builder eine
+Rueckfrage gestellt hat (Feld 'Builder-Frage'
+im Prompt), ist deine Antwort ein ANTWORT-Block:
+  ANTWORT:
+  <text>
+Kein Verdict, kein COMMAND. Der Loop holt die
+Antwort, baut weiter.
 
 Wenn du Fakten brauchst, fordere sie per
 COMMAND: RUN an. Warte die Ergebnisse ab.

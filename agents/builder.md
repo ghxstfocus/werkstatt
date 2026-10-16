@@ -125,6 +125,11 @@ Regeln:
     wird der Patch verworfen.
   - Die Datei darf NICHT existieren.
     Pruefe vorher mit COMMAND: RUN read_file.
+  - Vor dem Patch: pruefe mit git ls-files
+    und git status, dass die Datei fehlt (B7).
+    Auch wenn die Werkstatt das prueft — du
+    lieferst keinen Patch, dessen Ziel
+    unklar ist.
   - Pfad muss in file_whitelist liegen.
   - inhalt ist der volle Datei-Inhalt.
   - Bei einer NEUEN Datei darfst du KEINEN
@@ -170,6 +175,11 @@ die echte Code-Einrueckung uebrig.
 
 ### Beispiel 1 — Zeile in Klasse anhaengen
 
+Die Regel des Parsers: von jeder
+Fortsetzungszeile im YAML-Block werden
+GENAU 2 Spaces entfernt. Kein Trimmen,
+kein dynamisches Basis-Stripping.
+
 Zieldatei (echte Einrueckung):
 
     class TestX(unittest.TestCase):
@@ -177,48 +187,40 @@ Zieldatei (echte Einrueckung):
         def test_a(self):
             pass
 
-Die letzte Zeile "pass" hat 8 Spaces.
+Die echten Einrueckungen in der Zieldatei:
+  class  -> 4 Spaces
+  def    -> 8 Spaces
+  pass   -> 12 Spaces
 
-Patch:
+Patch (richtig):
 
     anker: |
-            def test_a(self):
-                pass
+          def test_a(self):
+              pass
     ersatz: |
-            def test_a(self):
-                pass
+          def test_a(self):
+              pass
 
-            def test_b(self):
-                pass
+          def test_b(self):
+              pass
 
-Hier hat "def test_a" im YAML-Block
-12 Spaces (8 + 4 fuer die Klasse).
-Nach Abzug der 2 YAML-Spaces bleiben
-10 Spaces. Aber die Datei hat 4 Spaces
-fuer "def".
+Im YAML-Block haben die Zeilen 2 Spaces
+mehr als die echte Einrueckung (die 2
+Basis-Spaces, die der Parser entfernt):
+  def  -> echte 8 Spaces + 2 = 10 Spaces
+  pass -> echte 12 Spaces + 2 = 14 Spaces
 
-Warte. Wir muessen genau sein. In der
-YAML-Block-Scalar-Schreibweise sind ALLE
-Zeilen eines Blocks gleich eingerueckt
-(der Block beginnt nach "|" auf einer
-bestimmten Spalte). Der Parser entfernt
-so viele Spaces, wie die erste Zeile
-hat.
+Der Parser entfernt 2 Spaces pro Zeile:
+  def  -> 8 Spaces uebrig
+  pass -> 12 Spaces uebrig
 
-Deshalb:
-  - "|" gefolgt von Zeilen mit 6 Spaces
-    (2 Spaces Basis + 4 Spaces Code).
-  - Parser entfernt 6 Spaces.
-  - Uebrig: 0 Spaces.
-  - FALSCH.
+Ergebnis: die Zieldatei-Zeilen sind
+exakt getroffen.
 
-Korrekt:
-  - "|" gefolgt von Zeilen mit 8 Spaces
-    (2 Spaces Basis + 6 Spaces Code).
-    Aber die Zieldatei hat 4 Spaces.
-    Also: 2 Basis + 4 Code = 6 Spaces.
-    Der Parser entfernt 2 Spaces.
-    Uebrig: 4 Spaces. Korrekt.
+Regel in einem Satz:
+  Zaehle die echten Spaces der Zielzeile.
+  Addiere 2. Das ist die YAML-Block-
+  Einrueckung.
 
 ### Beispiel 2 — Praktisch
 
@@ -281,10 +283,18 @@ Zeile.
 
 ## HASH-REGEL
 
-Schreibe KEINEN Commit-Hash in Doku-Patches.
-Das Datum und der Block-Name genuegen. Der
-endgueltige Hash wird nach dem Commit in
-einem separaten Nachzug-Commit nachgetragen.
+Ein Doku-Patch darf den Hash des HEAD nennen,
+der VOR dem aktuellen Bau-Commit galt
+(Vorgaenger-Hash). Der Hash, der den aktuellen
+Commit beschreiben wuerde, ist verboten
+(Hash-Zirkel). Beispiel:
+
+  OK:      "Stand: 2026-10-16 (HEAD 0d0fe2c)"
+           wobei 0d0fe2c der HEAD VOR diesem
+           Commit ist.
+  VERBOTEN: "... (HEAD <neuer-hash>)" — der
+           neue Hash ist zum Zeitpunkt des
+           Patches unbekannt.
 
 ## MESSWERTE ALS MESSUNG
 
