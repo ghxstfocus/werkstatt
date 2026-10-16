@@ -2282,3 +2282,63 @@ Naechster Schritt:
 ================================================================
 ENDE B0C-2
 ================================================================
+
+================================================================
+D1+D3 COMMIT-PAKET-SCOPE (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 27. Lauf:
+  B0c-2 wirkt, F2 wirkt (Code-GO, apply,
+  git add -N). Commit-Review 2x NO-GO:
+  BETROFFENE DATEIEN (10) != Commit-Message (3).
+
+Fix:
+  D1 (Beratung): build_commit_paket-Prompt
+    nennt ZIELDATEIEN aus state.code_patches.
+    B2-Fall explizit.
+  D3 (Durchsetzung): run_pipeline
+    (Phasen-Modus) ueberschreibt
+    state.commit_paket["dateien"] deterministisch
+    mit state.code_patches-Pfaden. Vor
+    phase_commit_pakete.append.
+  _AUDIT_KINDS_BEKANNT +1.
+
+Tests: 891 passed (+10). Katalog 71 -> 72.
+
+Auflagen-Abgleich:
+  D-A0: D1 Beratung, D3 Durchsetzung —
+    im Docstring dokumentiert.
+  D-A1: B2-Fall: leere Liste; Fail-closed
+    rc=21 greift (Unterblock ohne Dateien
+    ist sinnlos).
+  D-A2: D3 zwischen build (Z. 7687) und
+    Prompt (Z. 7748).
+  D-A3: Katalog 72.
+  D-A4: D3 vor append (Z. 7900).
+  D-A5: Merkposten D-A7 korrigiert —
+    _phase_sammel_paket unioniert alle
+    Pakete. Kein Datenverlust.
+  D-A6: 10 Tests.
+
+HR-R7-Korrektur:
+  Reviewer hat D2 (R16) verworfen, D3
+  uebernommen. LLM-Regel zu einer
+  bestehenden LLM-Regel ist dieselbe
+  Wette. Deterministisch ist besser.
+
+Naechster Schritt:
+  28. PB-68-Lauf mit --resume-force.
+  Erwartung:
+    - Code-GO (wie 27).
+    - apply + git add -N.
+    - D3 greift: phase_commit_dateien_deterministisch.
+    - Commit-Review Runde 1: COMMIT-GO.
+    - Paket gesammelt (kein Commit).
+    - U4 done, U5 laeuft.
+  Bei Scheitern: Bilanz Pflicht.
+
+================================================================
+ENDE D1+D3
+================================================================
