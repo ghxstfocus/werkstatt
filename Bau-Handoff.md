@@ -2342,3 +2342,65 @@ Naechster Schritt:
 ================================================================
 ENDE D1+D3
 ================================================================
+
+================================================================
+E + R16 COMMIT-REVIEW-DIFF (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 28. Lauf:
+  D3 wirkt (BETROFFENE DATEIEN = 3 statt 10).
+  ABER Commit-Review 2x NO-GO: "2169 nicht
+  erfuellt; Pflichtabgleich gegen
+  git diff --name-only HEAD fehlt im Paket."
+
+Fix:
+  E: commit_input enthaelt die Sektion
+    "GIT DIFF --NAME-ONLY HEAD: <pfade>".
+    Vor commit_input ausgelesen.
+    Bei git-Fehler: Fail-closed (return 9).
+    Leere Liste: "(keine)".
+  R16: neue HARD_RULES_REVIEWER-Regel.
+    Der Prompt zeigt "PHASEN-MODUS: aktiv/inaktiv".
+    Bei aktiv: 2169 = TEILMENGE.
+    Bei inaktiv: 2169 = Gleichheit (wie bisher).
+    Grund: git diff zeigt alle Unterbloecke
+    seit Phase-Start; BETROFFENE DATEIEN nur
+    den aktuellen.
+  +2 Audit-Kinds.
+
+Tests: 891 + 9 = 900 passed. Katalog 72 -> 74.
+
+Auflagen-Abgleich (E-A1 bis A8):
+  E-A1 (Teilmengen-Semantik R16): erfuellt.
+  E-A2 (fail-closed statt "(Fehler)"): return 9.
+  E-A3 (leere Liste "(keine)"): erfuellt.
+  E-A4 (Verhaltens-Tests): Muster aus bestehenden
+    Tests (inspect.getsource) uebernommen.
+  E-A5 (Reihenfolge D3 -> E -> commit_input):
+    Z. 7728 -> 7793 -> Prompt.
+  E-A6 (Katalog +2): 72 -> 74.
+  E-A7 (8 Tests): 9 Tests.
+  E-A8 (Merkposten Sub-Ref): notiert.
+
+Merkposten (E-A8):
+  Sub-Ref pro Unterblock fuer praezisere
+  2169-Pruefung. Heute reicht R16 (Teilmenge).
+  Eigener Block, wenn unklar.
+
+Naechster Schritt:
+  29. PB-68-Lauf mit --resume-force.
+  Erwartung:
+    - Code-GO.
+    - apply + git add -N.
+    - D3 (3 Pfade).
+    - E: GIT DIFF --NAME-ONLY HEAD (3 Pfade).
+    - R16: 3 == 3 Teilmenge erfuellt.
+    - Commit-Review Runde 1: COMMIT-GO.
+    - Paket gesammelt (kein Commit).
+    - U4 done, U5 startet.
+
+================================================================
+ENDE E + R16
+================================================================
