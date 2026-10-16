@@ -3095,3 +3095,79 @@ Naechster Schritt:
 ================================================================
 ENDE 12. MANUELLER EINGRIFF
 ================================================================
+
+================================================================
+W8 COMMIT-PAKET-PROMPT + MESSAGE-CHECK (2026-10-16)
+================================================================
+
+Commit: siehe git log. Kategorie 3.
+
+Ausgangslage 37. Lauf:
+  U8 (Route, new_file) gebaut. Code-GO.
+  Commit-Review 2x NO-GO. Reviewer-Befund:
+  "BETROFFENE DATEIEN sechs Dateien vs.
+   GIT DIFF eine Datei."
+
+A0-Messungen (M1-M4):
+  M1: D3 wirkt: state.commit_paket["dateien"]
+      = 1 Pfad.
+  M2: Commit-Review-Prompt zeigt BETROFFENE
+      DATEIEN = 1 Pfad.
+  M3: Builder-Commit-Message nennt 6-7 Pfade.
+  M4: GIT STATUS im build_commit_paket-Prompt
+      zeigt 16 untracked Pfade. Der Builder
+      kopiert sie in die Message.
+
+W8-1 (GIT STATUS filtern):
+  build_commit_paket filtert git_status auf
+  _ziel_pfade. Der Builder sieht nur die
+  Zieldateien — keine Halluzinations-Quelle.
+
+W8-2 (Message-Sanity-Check):
+  Nach D3: Pfade in der Message finden
+  (Regex mit Datei-Endungen). Bei starker
+  Diskrepanz (> Anzahl BETROFFENE DATEIEN):
+  Fail-closed rc=9 + Audit.
+
+W8-3 (commit_paket_gebaut-Audit):
+  Reply-Kopf/Fuss + message_len +
+  anzahl_dateien. Fuer kuenftige Diagnose.
+
+Auflagen-Abgleich (W8-A1 bis A7):
+  A1 (Check-Platzierung nach D3): erfuellt.
+  A2 (GIT STATUS Filter): erfuellt.
+  A3 (Message-Regex Endungen): erfuellt
+    (py|sql|md|yaml|yml|json|toml|html|
+     css|js|cfg|ini|txt).
+  A4 (Fail-closed Pfad): erfuellt.
+  A5 (Merkposten deterministische Message):
+    notiert.
+  A6 (7 Tests): erfuellt (937 -> 944).
+  A7 (Handoff): dieser Eintrag.
+
+R16 unveraendert (Reviewer-Kritik akzeptiert).
+
+Merkposten (W8-A5):
+  Deterministische Message-Generierung:
+  statt Builder die Message schreiben zu
+  lassen, generiert die Werkstatt die
+  Message aus state.commit_paket (D3).
+  Der Builder liefert nur einen Titel-
+  Vorschlag. Eigener Block, HR-R8.
+
+Stand:
+  U1-U7 done. U8 no_go (nach U8-Aufteilung:
+  Route). U9-U13 pending.
+
+Naechster Schritt:
+  38. PB-68-Lauf mit --resume-force.
+  Erwartung:
+    - U8 (Route) Code-GO, Commit-Review
+      Runde 1: COMMIT-GO.
+    - Paket gesammelt.
+    - U9 (app.py-Patch) startet.
+    - U10 (Test) folgt.
+
+================================================================
+ENDE W8
+================================================================
