@@ -684,7 +684,10 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "phase_plan_korrektur_failed",
     "phase_plan_korrektur_start",
     "phase_plan_parse_failed",
+    "phase_finish",
+    "phase_finish_warnung",
     "phase_plan_verworfen",
+    "phase_resume_erkannt",
     "phase_rollback",
     "phase_start_head_gesetzt",
     "phase_unterblock_ende",
@@ -2135,6 +2138,11 @@ def run_phase(
                    "max_phase": max_phase},
                   state.project_dir, project_name)
             return 13
+        # Resume-A2: done-Unterbloecke ueberspringen.
+        if (isinstance(u, dict)
+                and u.get("status") == "done"):
+            state.phase_aktueller_index = i + 1
+            continue
         uid = u["id"] if isinstance(u, dict) else "?"
         state.phase_aktueller_index = i
         t0 = time.monotonic()
@@ -6462,11 +6470,44 @@ def run_pipeline(project_name: str, aufgabe: str,
 
 
 
+def _phase_finish_aktiv(
+    project_name: str,
+    state: RunState,
+    rc: int,
+) -> None:
+    """Resume-R6: setzt phase_aktiv=False nach Erfolg.
+
+    Bedingungen:
+      - rc == 0
+      - state.phase_aktiv ist True
+    Sonst no-op.
+    """
+    if rc != 0:
+        return
+    if not state.phase_aktiv:
+        return
+    plan = _phase_plan_laden(project_name)
+    if plan is None:
+        audit("phase_finish_warnung",
+              {"grund": "plan_nicht_gefunden",
+               "phase_id": state.phase_id},
+              state.project_dir, project_name)
+        return
+    plan["phase_aktiv"] = False
+    _phase_plan_speichern(project_name, plan)
+    state.phase_aktiv = False
+    audit("phase_finish",
+          {"phase_id": state.phase_id},
+          state.project_dir, project_name)
+
+
+
 def _phase_main_pfad(
     project_name: str,
     phasen_text: str,
     state_ref: list[RunState],
 ) -> int:
+    global _AKTUELLE_RUN_ID
     """Block P2a: fuehrt den Planner Stufe 2 aus und
     bestaetigt den Phasenplan.
 
@@ -6544,6 +6585,74 @@ def _phase_main_pfad(
     if planner_modus == "off":
         print("[i] Planner-Modus ist 'off'. Kein Planner-Lauf.")
         return 0
+    # P2b-Resume: aktiver Plan vorhanden?
+    # Wenn ja: Planner ueberspringen, direkt
+    # run_phase.
+    try:
+        plan_vorhanden = _phase_plan_laden(project_name)
+    except ValueError as exc:
+        print(f"[FAIL] phase.yaml korrupt: {exc}")
+        return 1
+    if plan_vorhanden is not None:
+        print("[i] Aktiver Phasenplan gefunden. "
+              "Ueberspringe Planner.")
+        ups_plan = plan_vorhanden.get(
+            "phase_unterbloecke", [])
+        status_verteilung = {
+            "done": 0, "pending": 0, "running": 0,
+            "no_go": 0, "failed": 0,
+        }
+        for u in ups_plan:
+            if isinstance(u, dict):
+                s = u.get("status", "pending")
+                if s in status_verteilung:
+                    status_verteilung[s] += 1
+        bereits_fertig = (
+            len(ups_plan) > 0
+            and status_verteilung["done"] == len(ups_plan))
+        audit("phase_resume_erkannt",
+              {"phase_id": plan_vorhanden.get("phase_id"),
+               "unterbloecke": len(ups_plan),
+               "status_verteilung": status_verteilung,
+               "bereits_fertig": bereits_fertig},
+              project_dir, project_name)
+        state = RunState(
+            block_id=config.get("project", "unknown"),
+            aufgabe=(f"Phase "
+                     f"{plan_vorhanden.get('phase_id')}: "
+                     f"{plan_vorhanden.get('phase_titel')}"),
+            start_ts=datetime.now(UTC).isoformat(
+                timespec="seconds"),
+            docs=docs, agents=agents, always={},
+            optional={},
+            file_whitelist=file_whitelist,
+            api_key=api_key,
+            budget=config.get("budget", {}),
+            agent_docs=config.get("agent_docs", {}),
+            project_dir=project_dir,
+            project_name=project_name,
+            planner_modus=planner_modus,
+        )
+        state.phase_id = plan_vorhanden.get("phase_id")
+        state.phase_titel = plan_vorhanden.get(
+            "phase_titel", "")
+        state.phase_unterbloecke = ups_plan
+        state.phase_aktiv = True
+        state.start_monotonic = time.monotonic()
+        state_ref.append(state)
+        _AKTUELLE_RUN_ID = (
+            datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+            + f"-{os.getpid()}")
+        state.run_id = _AKTUELLE_RUN_ID
+        audit("pipeline_start",
+              {"aufgabe_hash": __import__("hashlib").sha256(
+                  state.aufgabe.encode()).hexdigest(),
+               "aufgabe_kurz": state.aufgabe[:200],
+               "modus": "phase_resume"},
+              project_dir, project_name)
+        rc = run_phase(project_name, state, state_ref)
+        _phase_finish_aktiv(project_name, state, rc)
+        return rc
 
     # Historien.
     historie = load_recent_commits(project_dir, n=10)
@@ -6566,7 +6675,6 @@ def _phase_main_pfad(
     state.start_monotonic = time.monotonic()
     state_ref.append(state)
 
-    global _AKTUELLE_RUN_ID
     _AKTUELLE_RUN_ID = (
         datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         + f"-{os.getpid()}")
@@ -6706,21 +6814,9 @@ def _phase_main_pfad(
                       f"{_phase_yaml_pfad(project_name)}")
                 rc = run_phase(
                     project_name, state, state_ref)
-                # P2b-4 / M8 + A4: Phase abgeschlossen.
-                if rc == 0 and state.phase_aktiv:
-                    plan = _phase_plan_laden(project_name)
-                    if plan is not None:
-                        plan["phase_aktiv"] = False
-                        _phase_plan_speichern(
-                            project_name, plan)
-                        state.phase_aktiv = False
-                    else:
-                        print("[WARN] phase.yaml nach "
-                              "Phasen-Ende nicht lesbar.")
-                        audit("phase_plan_verworfen",
-                              {"grund":
-                               "phase_aktiv_false_fehlgeschlagen"},
-                              project_dir, project_name)
+                # P2b-4 / M8 + Resume-R6: Helper.
+                _phase_finish_aktiv(
+                    project_name, state, rc)
                 return rc
             if wahl in {"e", "edit", "editieren"}:
                 # F5: Runde sofort verbraucht.
@@ -6859,6 +6955,7 @@ def _planner_main_pfad(
         print("[i] Planner-Modus ist 'off'. Kein Planner-Lauf.")
         return 0
 
+
     # Historien.
     historie = load_recent_commits(project_dir, n=10)
 
@@ -6881,7 +6978,6 @@ def _planner_main_pfad(
     state_ref.append(state)
 
     # Run-ID setzen (fuer Audit).
-    global _AKTUELLE_RUN_ID
     _AKTUELLE_RUN_ID = (
         datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         + f"-{os.getpid()}")

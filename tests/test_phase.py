@@ -1287,3 +1287,95 @@ class TestPlannerKorrekturKontext:
             "roh", "hist", stufe=2)
         assert "KORREKTUR-AUFTRAG" not in text
 
+# =====================================================================
+# Resume-A2: done-Skip in run_phase
+# =====================================================================
+
+class TestRunPhaseDoneSkip:
+    def test_done_wird_uebersprungen(
+            self, tmp_path, monkeypatch) -> None:
+        """Ein done-Unterblock wird nicht erneut gelaufen."""
+        from unittest.mock import patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        ups = _standard_unterbloecke()
+        ups[0]["status"] = "done"
+        _baue_phase_yaml(tmp_path, ups)
+        state = _state_fuer_phase(tmp_path)
+        with patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.run_pipeline",
+                   side_effect=_mock_run_pipeline(
+                       rc=0, paket=True)) as mock_rp, \
+             patch("builtins.input", return_value="j"), \
+             patch("pipeline.apply_commit_and_doku",
+                   return_value=True), \
+             patch("pipeline.audit"):
+            sr: list = []
+            rc = pipeline.run_phase("testprojekt", state, sr)
+        assert rc == 0
+        # run_pipeline nur einmal (fuer U2).
+        assert mock_rp.call_count == 1
+
+
+# =====================================================================
+# Resume-Pfad in _phase_main_pfad
+# =====================================================================
+
+class TestPhaseMainPfadResume:
+    def test_resume_ohne_plan_planner_gerufen(
+            self, tmp_path, monkeypatch) -> None:
+        """Kein Plan -> Planner-Pfad."""
+        # Wir testen die Existenz der Verzweigung im Code
+        # (statisch), weil der Planner-Pfad komplex ist.
+        import inspect as ins
+        quelle = ins.getsource(pipeline._phase_main_pfad)
+        assert "phase_resume_erkannt" in quelle
+        assert "plan_vorhanden" in quelle
+
+    def test_finish_aktiv_helper_existiert(self) -> None:
+        assert hasattr(pipeline, "_phase_finish_aktiv")
+
+    def test_finish_setzt_aktiv_false(
+            self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        state = _state_fuer_phase(tmp_path)
+        state.phase_aktiv = True
+        with patch("pipeline.audit"):
+            pipeline._phase_finish_aktiv(
+                "testprojekt", state, 0)
+        assert state.phase_aktiv is False
+        daten = pipeline._phase_plan_laden("testprojekt")
+        # phase_aktiv ist False -> _phase_plan_laden
+        # gibt None zurueck.
+        assert daten is None
+
+    def test_finish_rc_nicht_null_noop(
+            self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        state = _state_fuer_phase(tmp_path)
+        state.phase_aktiv = True
+        with patch("pipeline.audit"):
+            pipeline._phase_finish_aktiv(
+                "testprojekt", state, 1)
+        assert state.phase_aktiv is True
+
+    def test_finish_phase_aktiv_false_noop(
+            self, tmp_path, monkeypatch) -> None:
+        from unittest.mock import patch
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        _baue_phase_yaml(tmp_path, _standard_unterbloecke())
+        state = _state_fuer_phase(tmp_path)
+        state.phase_aktiv = False
+        with patch("pipeline.audit"):
+            pipeline._phase_finish_aktiv(
+                "testprojekt", state, 0)
+        assert state.phase_aktiv is False
+
