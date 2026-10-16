@@ -6571,3 +6571,21 @@ class TestW8:
         s = pipeline.HARD_RULES_REVIEWER
         assert "R16." in s
         assert "TEILMENGE" in s
+
+
+# =====================================================================
+# W8b (2026-10-16): Commit-Paket-Prompt — Verbot fremder Pfade
+# =====================================================================
+
+class TestW8b:
+    def test_prompt_verbietet_fremde_pfade(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.build_commit_paket)
+        assert "VERBOTEN" in src
+        assert "Ausblick auf spaetere Unterbloecke" in src
+
+    def test_prompt_positiv_format(self) -> None:
+        import inspect
+        src = inspect.getsource(pipeline.build_commit_paket)
+        assert "Positiv-Format der Commit-Message" in src
+        assert "Ein Pfad pro Zeile" in src
