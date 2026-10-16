@@ -2849,3 +2849,91 @@ Naechster Schritt:
 ================================================================
 ENDE U7-AUFTEILUNG
 ================================================================
+
+================================================================
+11. MANUELLER EINGRIFF: U7/U8/U9-AUFTEILUNG (2026-10-16)
+================================================================
+
+Ausgangslage 34. Lauf:
+  U6 done. U7 gestartet, 4 Runden, Deadlock.
+  Reviewer-Diagnose (R11):
+    - Template fehlt in der Datei-Liste.
+    - COMMAND + Patch im selben Block
+      (Loop verwarf Patch).
+
+Reviewer-Loesung:
+  Option C: atomare Aufteilung nach P15-Neu.
+
+Aenderung:
+  U7 = Dashboard-Template /guardrails (1 Zieldatei).
+  U8 = Dashboard-Route + app.py-Patch (1 Zieldatei
+       + 1 Patch).
+  U9 = Test /guardrails (1 Test-Datei).
+  U10 = Dashboard-Aktion aktivieren/deaktivieren
+        (ex-U9).
+  U11 = Sidebar-Eintrag Guardrails (ex-U10).
+  U12 = Doku-Nachzug Guardrails (ex-U11).
+
+Wichtige Korrektur:
+  Der U7/U8/U9-Umbau hat zunaechst den Aktion-
+  Block verloren (U9 wurde mit U10 "Test"
+  ueberschrieben). Manuell korrigiert: Aktion-
+  Block als neuer U10 angelegt.
+
+A0-Messungen (M1-M7):
+  M1: Anker app.py Z. 257-258 (2 Zeilen, 4
+      Spaces, LF, count==1).
+  M2: require_permission (decorators.py Z. 28).
+  M3: g.principal (app.py:181, str).
+  M4: build_dashboard_app nutzt create_app.
+  M5: Rollen: admin (view+manage),
+      operator (view, 0018), viewer (view,
+      0018), system (KEIN view).
+  M6: create_role_client(app, "system")
+      funktioniert (Muster test_dashboard_alerts
+      .py:85).
+  M7: Kein U7-Rest aus Lauf 34.
+
+Auflagen-Abgleich:
+  U7-U9-A1 (Anker minimal): erfuellt (2 Zeilen).
+  U7-U9-A2 (system-Rolle): M6 bestaetigt.
+  U7-U9-A3 (11. Eingriff): dieser Eintrag.
+  U7-U9-A4 (Working Tree): M7 bestaetigt.
+  U7-U9-B1 (Unused Imports): erfuellt (nur 5
+    Imports in der Route).
+  U7-U9-B2 (Handoff): dieser Eintrag.
+
+Muster:
+  11. manueller phase.yaml-Eingriff in Serie.
+  Nach 11 Eingriffen ist die Werkstatt-Autonomie
+  strukturell gebrochen. Weg X (Planner-
+  Konkretisierung) hat Prioritaet.
+
+Audit-Referenz:
+  Alte Audit-Logs (Lauf 33, 34) referenzieren
+  "U7" fuer "Dashboard-Route". Nach diesem
+  Edit bedeutet "U7" "Dashboard-Template".
+  Verwechslungsgefahr bei der Nachvoll-
+  ziehbarkeit. Umnummerierung dokumentiert:
+    Lauf 33/34: U7 = Route.
+    Lauf 35+:    U7 = Template,
+                 U8 = Route,
+                 U9 = Test,
+                 U10 = Aktion (ex-U9),
+                 U11 = Sidebar (ex-U10),
+                 U12 = Doku (ex-U11).
+
+Merkposten:
+  W5 (COMMAND+Patch-Bug): eigener Block.
+  Weg X (Planner-Konkretisierung).
+
+Stand:
+  U1-U6 done. U7-U12 pending.
+
+Naechster Schritt:
+  35. PB-68-Lauf mit --resume-force.
+  Erwartung: U7 (Template) done.
+
+================================================================
+ENDE 11. MANUELLER EINGRIFF
+================================================================
