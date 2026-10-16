@@ -335,8 +335,7 @@ class TestRunPhase:
         sig = inspect.signature(pipeline.run_phase)
         params = list(sig.parameters.keys())
         assert params == ["project_name", "state",
-                          "state_ref",
-                          "korrektur_zyklus"]
+                          "state_ref"]
 
     def test_loop_zwei_unterbloecke(
             self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1216,9 +1215,9 @@ class TestPhasePlanKorrektur:
                    return_value=True), \
              patch("pipeline.audit"):
             sr: list = []
+            state.phase_korrektur_zyklus = 1
             rc = pipeline.run_phase(
-                "testprojekt", state, sr,
-                korrektur_zyklus=1)
+                "testprojekt", state, sr)
         assert rc == 23
         assert not mock_k.called
 
@@ -1240,8 +1239,7 @@ class TestPhasePlanKorrektur:
              patch("pipeline.audit"):
             sr: list = []
             rc = pipeline.run_phase(
-                "testprojekt", state, sr,
-                korrektur_zyklus=0)
+                "testprojekt", state, sr)
         assert rc == 23
         assert mock_k.called
 
@@ -1518,4 +1516,56 @@ class TestHardRules:
     def test_builder_b11_vorhanden(self) -> None:
         assert "B11." in pipeline.HARD_RULES_BUILDER
         assert "frage_reviewer" in pipeline.HARD_RULES_BUILDER
+
+# =====================================================================
+# Plan-Korrektur bei Unterblock-NO-GO
+# =====================================================================
+
+class TestPhaseKorrekturUnterblockNoGo:
+    def test_runstate_feld_existiert(self) -> None:
+        sig_fields = [f.name for f in
+                      __import__("dataclasses").fields(
+                          pipeline.RunState)]
+        assert "phase_korrektur_zyklus" in sig_fields
+
+    def test_r9_in_hard_rules(self) -> None:
+        assert "R9." in pipeline.HARD_RULES_REVIEWER
+        assert ("ROLLENGRENZE" in pipeline.HARD_RULES_REVIEWER
+                or "Rollengrenze"
+                in pipeline.HARD_RULES_REVIEWER)
+
+    def test_zyklus_teilt_sich(self) -> None:
+        """Beide Trigger ([n], rc=15) nutzen
+        phase_korrektur_zyklus."""
+        import inspect as ins
+        quelle_run = ins.getsource(pipeline.run_phase)
+        assert "state.phase_korrektur_zyklus" in quelle_run
+        quelle_mp = ins.getsource(pipeline._phase_main_pfad)
+        assert "state.phase_korrektur_zyklus" in quelle_mp
+
+    def test_korrektur_startet_nach_rc15(
+            self, tmp_path: Path,
+            monkeypatch: pytest.MonkeyPatch) -> None:
+        """_phase_plan_korrektur wird gerufen."""
+        # Statische Pruefung: der Aufruf ist da.
+        import inspect as ins
+        quelle = ins.getsource(pipeline._phase_main_pfad)
+        assert "rc == 15" in quelle
+        assert "_phase_plan_korrektur" in quelle
+
+    def test_kontext_enthaelt_reviewer_befund(self) -> None:
+        import inspect as ins
+        quelle = ins.getsource(pipeline._phase_plan_korrektur)
+        assert "reviewer_befund" in quelle
+
+    def test_pakete_reset_nach_korrektur(self) -> None:
+        import inspect as ins
+        quelle = ins.getsource(pipeline._phase_plan_korrektur)
+        assert "state.phase_commit_pakete = []" in quelle
+
+    def test_audit_payload_grund(self) -> None:
+        import inspect as ins
+        quelle = ins.getsource(pipeline._phase_plan_korrektur)
+        assert "\"grund\": \"unterblock_no_go\"" in quelle \
+            or "grund" in quelle
 

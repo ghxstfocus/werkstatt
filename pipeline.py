@@ -215,6 +215,17 @@ R8. ANTWORT-MODUS (P2b-Frage-B).
       <deine Antwort, klar und knapp>
     Kein Verdict in dieser Runde. Kein
     COMMAND. Nur die Antwort.
+
+R9. ROLLENGRENZE (Plan-Korrektur).
+    Du ziehst den Auftrag NICHT selbst nach.
+    Du meldest Befunde. Der Planner
+    konkretisiert. Wenn du eine Praezisierung
+    fuer noetig haeltst, beschreibe sie als
+    Befund, nicht als neue Aufgabe.
+    Wenn der Auftrag unvollstaendig ist:
+    NO-GO mit dem Befund "Auftrag
+    unterbestimmt: <was fehlt>". Der Planner
+    bekommt den Befund und zieht nach.
 """
 
 
@@ -1914,15 +1925,29 @@ def _phase_plan_korrektur(
             f"Paket {i}: {dateien}\n  {msg}")
     pakete_kompakt = "\n".join(pakete_zeilen) or "(keine)"
 
+    # V2-A1: Reviewer-Befund als BEFUND, nicht NO-GO.
+    reviewer_befund = ""
+    if state.review_runden:
+        reviewer_befund = state.review_runden[-1].get(
+            "raw", "")
     kontext = {
         "begruendung": "Mensch hat Phase abgelehnt.",
         "alter_plan": alter_plan,
         "pakete_kompakt": pakete_kompakt,
+        "reviewer_befund": reviewer_befund,
     }
     audit("phase_plan_korrektur_start",
           {"phase_id": state.phase_id,
            "pakete_verworfen":
-               len(state.phase_commit_pakete)},
+               len(state.phase_commit_pakete),
+           "grund": "unterblock_no_go",
+           "unterblock_id": (
+               state.phase_unterbloecke[
+                   state.phase_aktueller_index]
+                   .get("id", "")
+               if (0 <= state.phase_aktueller_index
+                   < len(state.phase_unterbloecke))
+               else "")},
           state.project_dir, project_name)
     antwort = _planner_lauf(
         state, api_key, "Korrektur-Auftrag",
@@ -1999,6 +2024,8 @@ def _phase_plan_korrektur(
         for u in neue_ups
     ]
     _phase_plan_speichern(project_name, plan)
+    # V4-A1: Pakete verwerfen.
+    state.phase_commit_pakete = []
     # state aktualisieren.
     state.phase_id = neue_id
     state.phase_titel = neue_titel
@@ -2012,8 +2039,6 @@ def run_phase(
     project_name: str,
     state: RunState,
     state_ref: list[RunState],
-    *,
-    korrektur_zyklus: int = 0,
 ) -> int:
     """Block P2b-1: Geruest fuer den Phasen-Loop.
 
@@ -2370,7 +2395,7 @@ def run_phase(
         ok = _phase_rollback(
             project_name, state, "phase_no_go")
         # P2b-5 / N5 + N6: Plan-Korrektur, max 1 Zyklus.
-        if korrektur_zyklus >= 1:
+        if state.phase_korrektur_zyklus >= 1:
             audit("phase_abgebrochen",
                   {"phase_id": state.phase_id,
                    "grund": "korrektur_max_erreicht",
@@ -2389,10 +2414,10 @@ def run_phase(
             return 23
         # Plan korrigiert. state_ref leeren (Guard
         # verlangt das). Rekursion.
+        state.phase_korrektur_zyklus += 1
         state_ref.clear()
         return run_phase(
-            project_name, state, state_ref,
-            korrektur_zyklus=korrektur_zyklus + 1)
+            project_name, state, state_ref)
 
     # [j]: Sammel-Commit.
     audit("phase_gesamt_review",
@@ -3649,6 +3674,8 @@ class RunState:
     # P2b-Frage-A / A4: Rueckfrage und Antwort.
     letzte_builder_frage: str = ""
     letzte_reviewer_antwort: str = ""
+    # Plan-Korrektur / V-A1: geteilter Zyklus-Zaehler.
+    phase_korrektur_zyklus: int = 0
     # Block Auftrag-erfuellt B3: letzter Patch war
     # wirkungslos (anker == ersatz). Signal fuer B2.
     letzter_patch_wirkungslos: bool = False
@@ -6892,6 +6919,19 @@ def _phase_main_pfad(
                "modus": "phase_resume"},
               project_dir, project_name)
         rc = run_phase(project_name, state, state_ref)
+        # Plan-Korrektur / V1: Unterblock-NO-GO
+        # (rc=15) -> Planner nachziehen.
+        if (rc == 15
+                and state.phase_korrektur_zyklus < 1):
+            print("[i] Unterblock-NO-GO. Plan-Korrektur "
+                  "wird versucht.")
+            korrigiert = _phase_plan_korrektur(
+                project_name, state, api_key)
+            if korrigiert:
+                state.phase_korrektur_zyklus += 1
+                state_ref.clear()
+                rc = run_phase(project_name, state,
+                               state_ref)
         _phase_finish_aktiv(project_name, state, rc)
         return rc
 
