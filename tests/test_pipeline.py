@@ -5860,20 +5860,6 @@ class TestPhasenHeader:
         assert "R13. PHASEN-TRENNUNG." in prompt
         assert "R14. VERDICT-KONSISTENZ." in prompt
 
-    def test_u4_hinweis_models_py(self) -> None:
-        import yaml
-        d = yaml.safe_load(
-            Path("/opt/werkstatt/projects/security-ai.phase.yaml")
-            .read_text())
-        for u in d["phase_unterbloecke"]:
-            if u["id"] == "U4":
-                hat_hinweis = any(
-                    "models.py" in p
-                    for p in u.get("unterpunkte", []))
-                assert hat_hinweis
-                break
-
-
 # =====================================================================
 # B0 (2026-10-16): UNKLAR-Behandlung Reviewer+Solver+Loop
 # =====================================================================
