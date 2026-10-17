@@ -4737,3 +4737,51 @@ Naechster Block: W28b.
 ================================================================
 ENDE W28a
 ================================================================
+
+
+================================================================
+W28b + W28c ERLEDIGT (2026-10-17)
+================================================================
+
+Commits: siehe git log.
+Kategorie 3 (W28b) + Kategorie 2 (W28c).
+Chef-Anweisung (Umstrukturierung).
+
+W28b — Review-Loop auf Judge umgestellt:
+  - judge_prompt = _build_judge_prompt(state).
+  - judge_input = _build_judge_input(state).
+  - Review-Loop: ask_llm(judge_prompt, judge_input,
+    state.judge_model, ...).
+  - max_review_rounds: 5 -> 2 (Code + YAML).
+  - Commit-Review bleibt beim Reviewer.
+
+W28c — Antwort-Limit (max_tokens):
+  - ask_llm: max_tokens-Parameter (default 4096).
+  - RunState: 5 max_tokens_*-Felder.
+  - security-ai.yaml: budget.max_tokens_*.
+  - HARD_RULES_JUDGE + J11.
+  - HARD_RULES_REVIEWER + R18.
+  - HARD_RULES_BUILDER + B16.
+  - 10 ask_llm-Aufrufe mit max_tokens.
+
+Test-Anzahl: 1043 -> 1051 passed.
+
+Wichtige Konsequenzen:
+  - Judge sieht NICHT mehr: code_entwurf,
+    mess_protokoll, basis_protokoll, commit_message,
+    git_diff.
+  - Judge sieht NUR: contract.md, mess_nach.txt,
+    basis_gate_test_results.
+  - max_review_rounds = 2 (statt 5).
+  - Antworten haben hartes Limit:
+    * Builder: 8192 Token.
+    * Judge: 2048 Token.
+    * Reviewer: 1024 Token.
+    * Planner: 8192 Token.
+    * Solver: 2048 Token.
+
+Naechster Block: W29 (Aggregated Phase-Review).
+
+================================================================
+ENDE W28b + W28c
+================================================================
