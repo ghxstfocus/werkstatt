@@ -4578,6 +4578,12 @@ class RunState:
     # Post-Apply-Neumessung 2026-10-16:
     # read_file-Messungen fuer new_file-Pfade nach Apply.
     mess_protokoll_nach_apply: str = ""
+    # WEG-X-P22a (2026-10-17): strukturierte Gate-Ergebnisse
+    # aus _basis_gate_pytest_ziel / _basis_gate_pytest_suite.
+    # Pro Aufruf ein dict mit scope, exit_code, klassifizierung,
+    # failed_count, passed_count, failed_test_ids, raw_tail.
+    basis_gate_test_results: list[dict[str, Any]] = \
+        field(default_factory=list)
     # Bug-Fix 2026-10-14: True, sobald mindestens
     # ein Apply passiert ist. Der GEMESSENER
     # INHALT-Block ist dann der Stand VOR dem
@@ -6554,6 +6560,28 @@ def apply_and_recheck(state: RunState,
     if _w25_pfade:
         _w25_tr = _basis_gate_pytest_ziel(
             state.project_dir, _w25_pfade, 60)
+        # WEG-X-P22a: Ergebnis in basis_protokoll_nach_apply
+        # einbauen, damit der Recovery-Prompt die Test-Ausgabe
+        # sieht (nicht nur den "rot: ruff"-Hinweis).
+        state.basis_protokoll_nach_apply += (
+            "=== test_run (nach Apply) ===\n"
+            f"ARGV: pytest -q --maxfail=1 "
+            f"{' '.join(_w25_pfade)}\n"
+            f"RC: {_w25_tr['exit_code']}\n"
+            f"STDOUT:\n{_w25_tr['raw_tail']}\n"
+            f"STDERR:\n\n"
+        )
+        state.basis_gate_test_results.append({
+            "scope": "ziel_pfade",
+            "exit_code": _w25_tr["exit_code"],
+            "klassifizierung":
+                _w25_tr["klassifizierung"],
+            "failed_count": _w25_tr["failed_count"],
+            "passed_count": _w25_tr["passed_count"],
+            "failed_test_ids":
+                _w25_tr["failed_test_ids"],
+            "raw_tail": _w25_tr["raw_tail"],
+        })
         audit("basis_gate_test_result",
               {"scope": "ziel_pfade",
                "ist_gate": True,
@@ -6630,6 +6658,23 @@ def _bauer_recovery_prompt(state: RunState) -> str:
     _mess_nach = state.mess_protokoll_nach_apply or ""
     if not _mess_nach:
         _mess_nach = "(keine Messung nach Apply)"
+    # WEG-X-P22a: Strukturierte Test-Ergebnisse.
+    _test_block = ""
+    if state.basis_gate_test_results:
+        _teile: list[str] = []
+        for _tr in state.basis_gate_test_results:
+            _teile.append(
+                f"--- {_tr['scope']} ---\n"
+                f"  exit_code: {_tr['exit_code']}\n"
+                f"  klassifizierung: "
+                f"{_tr['klassifizierung']}\n"
+                f"  failed: {_tr['failed_count']}, "
+                f"passed: {_tr['passed_count']}\n"
+                f"  failed_test_ids: "
+                f"{_tr['failed_test_ids']}\n")
+        _test_block = "\n".join(_teile)
+    else:
+        _test_block = "(keine strukturierten Test-Ergebnisse)\n"
     return (
         "=== POST-APPLY-BASIS-GATE ROT ===\n"
         "Die bereits angewendeten Patches haben das\n"
@@ -6638,8 +6683,10 @@ def _bauer_recovery_prompt(state: RunState) -> str:
         f"{_mess_nach}\n\n"
         f"Reviewer-Diagnose:\n{diagnose}\n\n"
         f"Reviewer-Reparaturplan:\n{reparaturplan}\n\n"
-        "Basis-Gate-Protokoll (nach Apply):\n"
-        f"{state.basis_protokoll_nach_apply[:3000]}\n\n"
+        "Basis-Gate-Protokoll (nach Apply, VOLL):\n"
+        f"{state.basis_protokoll_nach_apply}\n\n"
+        "STRUKTURIERTE TEST-ERGEBNISSE (nach Apply):\n"
+        f"{_test_block}\n"
         "=== AUFTRAG ===\n"
         "Korrigiere die bereits angewendeten Patches.\n"
         "Die Dateien existieren jetzt - verwende\n"
