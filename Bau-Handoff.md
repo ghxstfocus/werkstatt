@@ -3949,3 +3949,63 @@ W25-2 (Recovery bei (e)-Rot, A33):
 ================================================================
 ENDE W25-1
 ================================================================
+
+
+================================================================
+W25-2 ERLEDIGT (2026-10-17) — RECOVERY BEI (E)-ROT
+================================================================
+
+Commit: 7afdea0.
+Kategorie 3 (Recovery-Loop).
+Kein Tag probebetrieb-69 (Werkstatt-Fix).
+
+Was geaendert wurde:
+  pipeline.py:
+    - _FRUEHER_VERURSACHT_MARKER (Tupel,
+      case-insensitive Marker fuer "Fehler aus
+      frueherem Unterblock").
+    - _fehler_nach_apply(v, pos) -> bool:
+      deterministisch. Prueft Diagnose UND
+      Reparaturplan (A36). Marker-Match (A37).
+      Kein LLM-Call.
+    - _sammel_commit_suite_kontext(state, tr)
+      -> str: failed_test_ids, raw_tail,
+      Phase-Zustand, Zieldatei-Tests des
+      aktuellen Unterblocks.
+    - Sammel-Commit-Pfad: bei (e)-Rot
+      ask_reviewer_for_recovery.
+      - Reparierbar: Phase no_go ->
+        _post_apply_korrektur_loop (max 1 Runde)
+        -> erneut (e) -> Status zurueck auf done
+        (A35).
+      - Nicht reparierbar: Phase no_go, rc=18.
+      - Timeout (A38): kein Recovery, fail-closed.
+
+  tests/test_pipeline.py:
+    - TestW25FehlerNachApply (8 Tests).
+    - TestW25SammelCommitRecovery (2 Tests).
+
+Test-Anzahl (gemessen):
+  Vorher: 1000 passed.
+  Nachher: 1010 passed.
+  Neue Tests: 10.
+
+Kosten (A41):
+  Pro (e)-Rot ohne Recovery: +0.5-1 min
+  (Reviewer-Call, dann fail-closed).
+  Pro (e)-Rot mit Recovery: +22-25 min
+  (2x Suite-Lauf ~560 s je + 1 Reviewer
+  + 1 Builder-Korrektur-Runde).
+  Recovery-Loop max_korrektur_runden=1
+  (Reviewer-A33).
+
+W25-2 ist abgeschlossen.
+W25a (AST-Guard in security-ai) ist
+freigegeben als eigener Block (A12).
+Vor W25a: pruefen, wo der alte
+test_no_create_table_in_test_file lag
+und welche Konstruktion er pruefte (A18).
+
+================================================================
+ENDE W25-2
+================================================================
