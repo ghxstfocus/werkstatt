@@ -7121,9 +7121,12 @@ def _anker_zeilenbereich(
     """
     import re as _re
     # 1. Anker-Text extrahieren.
+    # W6b-2 + WEG-X-P19c: ANKER-Format (alt) UND anker:-Feld (P17).
+    # Alt: "ANKER (...): '<text>'"
+    # P17: "anker:'<text>'"
     m = _re.search(
-        r"ANKER[^:]*:\s*'([^']+)'",
-        aufgabe, _re.DOTALL)
+        r"(?:ANKER[^:]*|anker)\s*:\s*'([^']+)'",
+        aufgabe, _re.IGNORECASE | _re.DOTALL)
     if m is None:
         return None
     anker_text = m.group(1).strip()

@@ -6891,26 +6891,55 @@ class TestA1Final:
 
 class TestW13a:
     def test_anker_zeilenbereich_mit_literal_n(self) -> None:
-        # YAML-Quoting '\n' (Backslash-n) wird zu
-        # echtem Zeilenumbruch.
-        from pathlib import Path
+        """W13a: YAML-Quoting '\\n' (Backslash-n) wird zu echtem
+        Zeilenumbruch.
 
-        # Nutze den realen U9-Auftrag aus phase.yaml.
-        import yaml
-        d = yaml.safe_load(
-            Path("/opt/werkstatt/projects/security-ai.phase.yaml")
-            .read_text())
-        aufgabe = ""
-        for u in d["phase_unterbloecke"]:
-            if u["id"] == "U9":
-                aufgabe = (u["titel"] + "\n"
-                           + "\n".join(f"- {p}"
-                                        for p in u["unterpunkte"]))
-        info = pipeline._anker_zeilenbereich(
-            aufgabe, Path("/opt/security-ai"))
-        assert info is not None
-        assert info[0] >= 1
-        assert info[1] > info[0]
+        Anker 'from a\\nregister_aa()\\n' (mit literal \\n)
+        muss den gleichen Treffer liefern wie
+        'from a\nregister_aa()\n' (mit echtem Newline).
+
+        Deterministisch mit tmp_path, nicht aus phase.yaml
+        (phase.yaml wechselt mit jeder Phase, war W13a-Rot-
+        Ursache 2026-10-17).
+        """
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as td:
+            td_p = Path(td)
+            (td_p / "x").mkdir()
+            (td_p / "x" / "y.py").write_text(
+                "class Foo:\n"
+                "    from a import b\n"
+                "    register_aa()\n"
+                "class Bar:\n"
+                "    pass\n",
+                encoding="utf-8")
+            # Anker mit literal \n (Backslash-n), nicht echtem
+            # Newline. Simuliert YAML-Single-Quote-Form.
+            aufgabe = (
+                "patch: x/y.py, aktion:patch, "
+                "anker:'    from a import b\\n"
+                "    register_aa()\\n'")
+            info = pipeline._anker_zeilenbereich(aufgabe, td_p)
+            assert info is not None, (
+                "literal \\n im Anker wurde nicht zu echtem "
+                "Zeilenumbruch konvertiert")
+            # _anker_zeilenbereich liefert ein FENSTER
+            # (anker_zeile - 5, anker_zeile + 10), geclampt
+            # auf [1, len]. Bei Anker in Zeile 2 ist das
+            # Fenster (1, 12).
+            # Pruefen: Anker-Text (mit literal \\n -> echtem
+            # Newline) ist im Fenster enthalten.
+            zeilen = (td_p / "x" / "y.py").read_text(
+                encoding="utf-8").splitlines()
+            fenster = zeilen[info[0]-1:info[1]]
+            assert any("from a import b" in z for z in fenster), (
+                f"Anker 'from a import b' nicht im Fenster "
+                f"{info}: {fenster}")
+            assert any("register_aa()" in z for z in fenster), (
+                f"Anker 'register_aa()' nicht im Fenster "
+                f"{info}: {fenster}")
+            assert info[1] > info[0]
 
     def test_anker_zeilenbereich_mit_echtem_newline(self) -> None:
         # Ein Anker-Text mit echtem Zeilenumbruch muss
