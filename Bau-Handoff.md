@@ -4605,3 +4605,40 @@ Naechster Schritt:
 ================================================================
 ENDE W24a
 ================================================================
+
+
+================================================================
+W25 ERLEDIGT (2026-10-17) — SKILLS-INFRASTRUKTUR
+================================================================
+
+Commit: 317b000.
+Kategorie 3 (Umstrukturierung, Chef-Anweisung).
+Kein Tag probebetrieb-69.
+
+Was gebaut wurde:
+  - 12 SKILL.md in skills/<name>/SKILL.md:
+    * Statisch (5): patch-format, anker-regeln,
+      review-work, plan-crafting,
+      systematic-debugging.
+    * On-Demand (7): web-security, test-patterns,
+      commit-history, simplify, security-review,
+      milestone-planning, skill-creator.
+  - pipeline.py:
+    * RunState.geladene_skills: list[str].
+    * parse_commands: COMMAND: load_skill <name>.
+    * Funktionen: _load_skill, _list_skills,
+      _lade_skill_in_state, _geladene_skills_block,
+      _available_skills_block, _verarbeite_skill_commands.
+    * Planner, Builder, Reviewer: load_skill vor
+      execute_commands.
+    * Prompt-Bau (3 Stellen): AVAILABLE SKILLS
+      + GELADENE SKILLS.
+
+Neue Audit-Kinds: skill_geladen (Katalog 83 -> 84).
+Tests: 1036 -> 1039 passed.
+
+Naechster Block: W26 (PLAN.md als Datei).
+
+================================================================
+ENDE W25
+================================================================
