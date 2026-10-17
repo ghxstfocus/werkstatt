@@ -4053,8 +4053,15 @@ def classify_verdict(text: str) -> str:
         if gezaehlt > 15:
             break
         w = s.split(maxsplit=1)[0].upper().rstrip(satzzeichen)
+        # W41: NO_GO (Unterstrich) tolerieren
+        # (judge.md sagt "NO_GO", reviewer.md
+        # sagt "NO-GO").
+        if w == "NO_GO":
+            w = "NO-GO"
         if w in {"GO", "NO-GO", "ESKALATION"}:
             return w
+        if w == "COMMIT-NO_GO":
+            w = "COMMIT-NO-GO"
         if w in {"COMMIT-GO", "COMMIT-NO-GO", "COMMIT-ESKALATION"}:
             return w
         # P2b-Frage-B: ANTWORT-Modus.
@@ -4083,8 +4090,13 @@ def classify_verdict(text: str) -> str:
             continue
         w = _rein.split(maxsplit=1)[0].upper().rstrip(
             satzzeichen + "*`_")
+        # W41: NO_GO (Unterstrich) tolerieren.
+        if w == "NO_GO":
+            w = "NO-GO"
         if w in {"GO", "NO-GO", "ESKALATION"}:
             return w
+        if w == "COMMIT-NO_GO":
+            w = "COMMIT-NO-GO"
         if w in {"COMMIT-GO", "COMMIT-NO-GO",
                  "COMMIT-ESKALATION"}:
             return w
