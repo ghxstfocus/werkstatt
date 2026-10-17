@@ -3680,7 +3680,7 @@ def _review_round_audit_payload(
         runde: int,
         verdict: str,
         reviewer_antwort: str,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Auflage Review-Persistenz-A7/A9 (2026-10-16).
 
     Baut den Audit-Payload fuer kind=review_round.

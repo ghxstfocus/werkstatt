@@ -3650,7 +3650,7 @@ class TestRecoveryZustand:
 class TestCodeEntwurfHistorie:
     """Auflage 2183 A1b: Historisierung der Entwuerfe."""
 
-    def _state(self) -> object:
+    def _state(self) -> pipeline.RunState:
         from pathlib import Path
         return pipeline.RunState(
             block_id="t", aufgabe="a", start_ts="",
@@ -4221,8 +4221,10 @@ def test_handle_solver_command_duplikat() -> None:
     state.solver_befunde.append(befund)
     aufrufe = []
     orig_rufe = pipeline.rufe_solver
-    pipeline.rufe_solver = (
-        lambda *a, **k: aufrufe.append(1) or (None, "x"))
+    def _mock_rufe_solver(*a, **k):
+        aufrufe.append(1)
+        return (None, "x")
+    pipeline.rufe_solver = _mock_rufe_solver
     try:
         pipeline._handle_solver_command(
             state, {"id": "solver", "arg": ""},
@@ -7103,9 +7105,9 @@ class TestW25ZielPfade:
     def test_ziel_test_pfade_nicht_dict(self, tmp_path: Path) -> None:
         state = build_test_state(project_dir=tmp_path)
         state.code_patches = [
-            "kein dict",
+            "kein dict",  # type: ignore[list-item]
             {"pfad": "tests/test_x.py"},
-            None,
+            None,  # type: ignore[list-item]
             {"kein_pfad": "x"},
         ]
         # Nicht-dict-Eintraege werden ignoriert.
@@ -7197,12 +7199,11 @@ class TestW25FehlerNachApply:
 
     def _v(self, diagnose: str = "",
            plan: list[str] | None = None) -> object:
-        class V:
-            pass
-        v = V()
-        v.diagnose = diagnose
-        v.reparaturplan = plan or []
-        return v
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            diagnose=diagnose,
+            reparaturplan=plan or [],
+        )
 
     def test_none_nicht_reparierbar(self) -> None:
         assert pipeline._fehler_nach_apply(None, 0) is False
