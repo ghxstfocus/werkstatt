@@ -5307,7 +5307,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 85
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 86
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5343,7 +5343,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 85
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 86
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6128,7 +6128,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 85
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 86
 
 
 # =====================================================================
@@ -6233,7 +6233,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 85
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 86
 
 
 # =====================================================================
@@ -6291,7 +6291,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 85
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 86
 
 
 # =====================================================================
@@ -8272,3 +8272,78 @@ class TestW29JudgeVerdict:
         }
         assert pipeline._phase_judge_repair_runde(
             state, aggregat) == "NO_GO"
+
+
+# =====================================================================
+# W30 (2026-10-17): Loop-Cap-Konsistenz
+# =====================================================================
+
+class TestW30LoopCap:
+    """W30: zentraler Cap-Check + YAML-Konsistenz."""
+
+    def _state(self, tmp_path: Path) -> pipeline.RunState:
+        return build_test_state(project_dir=tmp_path)
+
+    def test_review_loop_cap_erreicht(
+            self, tmp_path: Path) -> None:
+        """T1: review-Loop 3. Runde bei max=2 -> True."""
+        state = self._state(tmp_path)
+        assert pipeline._loop_cap_erreicht(
+            state, "review", 3, 2) is True
+
+    def test_korrektur_loop_cap_erreicht(
+            self, tmp_path: Path) -> None:
+        """T2: korrektur-Loop 3. Runde bei max=2 -> True."""
+        state = self._state(tmp_path)
+        assert pipeline._loop_cap_erreicht(
+            state, "korrektur", 3, 2) is True
+
+    def test_solver_loop_cap_erreicht(
+            self, tmp_path: Path) -> None:
+        """T3: solver-Loop 3. Runde bei max=2 -> True."""
+        state = self._state(tmp_path)
+        assert pipeline._loop_cap_erreicht(
+            state, "solver", 3, 2) is True
+
+    def test_cap_nicht_erreicht_bei_gleichheit(
+            self, tmp_path: Path) -> None:
+        """runde == max -> noch nicht erreicht."""
+        state = self._state(tmp_path)
+        assert pipeline._loop_cap_erreicht(
+            state, "review", 2, 2) is False
+
+    def test_config_liest_max_review_aus_yaml(
+            self, tmp_path: Path) -> None:
+        """T4: YAML-Wert wird vom Config-Loader gelesen."""
+        import inspect
+        quelle = inspect.getsource(
+            pipeline.run_pipeline)
+        # Code-Fallback ist 2, nicht 5.
+        assert 'budget.get("max_review_rounds", 2)' in quelle
+
+    def test_yaml_code_defaults_gleich(
+            self, tmp_path: Path) -> None:
+        """T5: YAML-Default == Code-Default (2)."""
+        import inspect
+        quelle = inspect.getsource(
+            pipeline.run_pipeline)
+        # YAML-Fallback-Dict enthaelt 2.
+        assert '"max_review_rounds": 2' in quelle
+        # Code-Fallback ist 2.
+        assert 'budget.get("max_review_rounds", 2)' in quelle
+
+    def test_loop_cap_erreicht_audit_event(
+            self, tmp_path: Path) -> None:
+        """T6: Katalog enthaelt 'loop_cap_erreicht'."""
+        assert "loop_cap_erreicht" in \
+            pipeline._AUDIT_KINDS_BEKANNT
+
+    def test_korrektur_runde_unterschied_dokumentiert(
+            self, tmp_path: Path) -> None:
+        """T7: Beide max_korrektur_runden-Aufrufe
+        haben einen W30-Kommentar."""
+        import inspect
+        quelle = inspect.getsource(pipeline)
+        assert "W30 (A-W30-2): 2 Runden im normalen" \
+            in quelle
+        assert "W30 (A-W30-2): 1 Runde im" in quelle

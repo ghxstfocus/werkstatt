@@ -1129,6 +1129,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "phase_commit_paket_gesammelt",
     "phase_commit_paket_leer",
     "phase_gesamt_review_no_go",
+    "loop_cap_erreicht",
     "phase_gesamt_review",
     "phase_plan_editiert",
     "phase_plan_erstellt",
@@ -2177,6 +2178,32 @@ def _phase_rollback(
           state.project_dir, project_name)
     return True
 
+
+
+def _loop_cap_erreicht(
+    state: RunState,
+    loop_name: str,
+    aktuelle_runde: int,
+    max_runden: int,
+) -> bool:
+    """W30: zentraler Loop-Cap-Check.
+
+    Rueckgabe:
+      True  -> Cap erreicht, Aufrufer fail-closed
+               (rc=18) nach Audit.
+      False -> weiter.
+    """
+    if aktuelle_runde <= max_runden:
+        return False
+    audit("loop_cap_erreicht",
+          {"loop_name": loop_name,
+           "aktuelle_runde": aktuelle_runde,
+           "max_runden": max_runden},
+          state.project_dir, state.project_name)
+    print(f"[FAIL] Loop-Cap erreicht: "
+          f"{loop_name} {aktuelle_runde}/{max_runden}. "
+          f"Fail closed.")
+    return True
 
 
 def _phase_gesamt_review(state: RunState) -> dict[str, Any]:
@@ -8730,7 +8757,9 @@ def run_pipeline(project_name: str, aufgabe: str,
     # nicht still auf 20 fallen.
     budget = config.get(
         "budget",
-        {"max_review_rounds": 5, "max_llm_calls": 30})
+        # W30 (A-W30-1): Default 2 (Chef-Anweisung,
+        # konsistent mit Code-Fallback Z. 9012).
+        {"max_review_rounds": 2, "max_llm_calls": 30})
 
     solver_config: dict[str, float] = {}
     _solver_yaml = config.get("solver", {}) or {}
@@ -9458,6 +9487,9 @@ def run_pipeline(project_name: str, aufgabe: str,
             project_dir=project_dir, project_name=project_name,
             api_key=api_key, max_llm=max_llm,
             max_minutes=max_minutes,
+            # W30 (A-W30-2): 2 Runden im normalen
+            # Post-Apply-Pfad. Recovery-Pfad
+            # (Z. 9626) nutzt 1 Runde.
             max_korrektur_runden=2)
     if rc_apply is not None:
         return rc_apply
@@ -9623,6 +9655,10 @@ def run_pipeline(project_name: str, aufgabe: str,
                     api_key=api_key,
                     max_llm=max_llm,
                     max_minutes=max_minutes,
+                    # W30 (A-W30-2): 1 Runde im
+                    # Recovery-Pfad ((e)-Rot nach
+                    # Phasen-Suite). Bewusst kuerzer
+                    # als der normale Pfad (2, Z. 9461).
                     max_korrektur_runden=1)
                 if _rc_k != 0:
                     print("[!] Korrektur-Runde "
