@@ -6146,6 +6146,143 @@ def _post_apply_messung(state: RunState,
     return True
 
 
+def _venv_fuer_state(state: RunState) -> str:
+    """W25: venv-Pfad aus Projekt-YAML (Fallback project_dir/.venv).
+
+    Konsistent mit _build_default_registry (Z. 3408).
+    """
+    fallback = str(state.project_dir / ".venv/bin/python3")
+    try:
+        config = _lade_und_pruefe_projekt(state.project_name)
+    except SystemExit:
+        return fallback
+    if not isinstance(config, dict):
+        return fallback
+    return config.get("venv_python", fallback)
+
+
+def _ziel_test_pfade(state: RunState) -> list[str]:
+    """W25-A28: Test-Pfade aus code_patches (startswith tests/)."""
+    pfade: list[str] = []
+    for p in state.code_patches:
+        if not isinstance(p, dict):
+            continue
+        pfad = p.get("pfad", "")
+        if isinstance(pfad, str) and pfad.startswith("tests/"):
+            pfade.append(pfad)
+    return pfade
+
+
+def _klassifiziere_pytest(
+        exit_code: int | None,
+        stdout: str,
+        stderr: str,
+        dauer_s: float,
+        is_timeout: bool = False,
+) -> dict[str, Any]:
+    """W25-A25/A38: klassifiziert pytest-Ergebnis."""
+    import re
+    if is_timeout:
+        return {
+            "exit_code": None,
+            "klassifizierung": "timeout",
+            "failed_count": -1,
+            "passed_count": -1,
+            "failed_test_ids": [],
+            "failed_test_ids_mehr": 0,
+            "raw_tail": "(timeout)",
+            "dauer_s": dauer_s,
+        }
+    klass = {
+        0: "gruen",
+        1: "test_failures",
+        2: "collection_error",
+        3: "internal_error",
+        4: "usage_error",
+        5: "no_tests",
+    }.get(exit_code if exit_code is not None else -1,
+          "unknown")
+    raw = (stdout or "") + "\n" + (stderr or "")
+    m_failed = re.search(r"(\d+) failed", stdout)
+    m_passed = re.search(r"(\d+) passed", stdout)
+    failed_count = int(m_failed.group(1)) if m_failed else -1
+    passed_count = int(m_passed.group(1)) if m_passed else -1
+    failed_ids: list[str] = []
+    for m in re.finditer(r"^FAILED (\S+)", stdout, re.MULTILINE):
+        failed_ids.append(m.group(1))
+    mehr = max(0, len(failed_ids) - 20)
+    return {
+        "exit_code": exit_code,
+        "klassifizierung": klass,
+        "failed_count": failed_count,
+        "passed_count": passed_count,
+        "failed_test_ids": failed_ids[:20],
+        "failed_test_ids_mehr": mehr,
+        "raw_tail": raw[-2000:] if len(raw) > 2000 else raw,
+        "dauer_s": dauer_s,
+    }
+
+
+def _basis_gate_pytest_ziel(
+        project_dir: Path,
+        test_pfade: list[str],
+        timeout_s: int = 60,
+) -> dict[str, Any]:
+    """W25: pytest -q --maxfail=1 auf Zieldateien.
+
+    Timeout -> klassifizierung="timeout".
+    Leere test_pfade -> wird vom Aufrufer geprueft.
+    """
+    import subprocess
+    import time
+    venv = str(project_dir / ".venv/bin/python3")
+    # venv-Pfad via state, aber Aufrufer uebergibt
+    # project_dir; deshalb hier Fallback. Der Aufrufer
+    # (apply_and_recheck) nutzt _venv_fuer_state.
+    argv = [venv, "-m", "pytest", "-q", "--maxfail=1", *test_pfade]
+    start = time.monotonic()
+    try:
+        res = subprocess.run(
+            argv, cwd=str(project_dir),
+            capture_output=True, text=True,
+            timeout=timeout_s, check=False,
+            env=subprocess_env(),
+        )
+    except subprocess.TimeoutExpired:
+        return _klassifiziere_pytest(
+            None, "", "", time.monotonic() - start,
+            is_timeout=True)
+    return _klassifiziere_pytest(
+        res.returncode, res.stdout or "",
+        res.stderr or "", time.monotonic() - start)
+
+
+def _basis_gate_pytest_suite(
+        project_dir: Path,
+        timeout_s: int = 900,
+) -> dict[str, Any]:
+    """W25: pytest -q --maxfail=10 auf ganzer Suite."""
+    import subprocess
+    import time
+    venv = str(project_dir / ".venv/bin/python3")
+    argv = [venv, "-m", "pytest", "-q", "--maxfail=10"]
+    start = time.monotonic()
+    try:
+        res = subprocess.run(
+            argv, cwd=str(project_dir),
+            capture_output=True, text=True,
+            timeout=timeout_s, check=False,
+            env=subprocess_env(),
+        )
+    except subprocess.TimeoutExpired:
+        return _klassifiziere_pytest(
+            None, "", "", time.monotonic() - start,
+            is_timeout=True)
+    return _klassifiziere_pytest(
+        res.returncode, res.stdout or "",
+        res.stderr or "", time.monotonic() - start)
+
+
 def apply_and_recheck(state: RunState,
                       always: dict[str, Measurement],
                       file_whitelist: list[str]) -> int | None:
@@ -6251,6 +6388,53 @@ def apply_and_recheck(state: RunState,
         # wandelt ihn in rc=0 oder rc=18).
         state.letzter_recovery_vorschlag = v
         return 19
+
+    # W25-1: Zieldatei-Tests (b) pruefen.
+    _w25_pfade = _ziel_test_pfade(state)
+    if _w25_pfade:
+        _w25_tr = _basis_gate_pytest_ziel(
+            state.project_dir, _w25_pfade, 60)
+        audit("basis_gate_test_result",
+              {"scope": "ziel_pfade",
+               "ist_gate": True,
+               "exit_code": _w25_tr["exit_code"],
+               "klassifizierung":
+                   _w25_tr["klassifizierung"],
+               "failed_count":
+                   _w25_tr["failed_count"],
+               "passed_count":
+                   _w25_tr["passed_count"],
+               "failed_test_ids":
+                   _w25_tr["failed_test_ids"],
+               "failed_test_ids_mehr":
+                   _w25_tr["failed_test_ids_mehr"],
+               "dauer_s": _w25_tr["dauer_s"],
+               "raw_tail":
+                   _w25_tr["raw_tail"]},
+              state.project_dir, state.project_name)
+        if _w25_tr["klassifizierung"] == "timeout":
+            print("[!] W25 Zieldatei-Test-Timeout. "
+                  "Fail-closed.")
+            return 19
+        if _w25_tr["exit_code"] != 0:
+            print(f"[!] W25 Zieldatei-Test rot: "
+                  f"{_w25_tr['failed_count']} failed, "
+                  f"{_w25_tr['passed_count']} passed.")
+            # Gleicher Recovery-Pfad wie always-Rot.
+            _proto_gek = _truncate_mit_marker(
+                state.basis_protokoll_nach_apply, 3000)
+            v = ask_reviewer_for_recovery(
+                state, "basis_gate",
+                f"Zieldatei-Tests rot: "
+                f"{_w25_tr['failed_test_ids']}\n\n"
+                f"Protokoll:\n{_proto_gek}")
+            print_recovery(v)
+            audit("recovery_basis_gate_nach_apply",
+                  {"fehler": ["test_ziel"],
+                   "empfehlung": v.empfehlung},
+                  state.project_dir, state.project_name)
+            state.letzter_recovery_vorschlag = v
+            return 19
     return None
 
 
@@ -8237,6 +8421,45 @@ def run_pipeline(project_name: str, aufgabe: str,
         print("\n[*] Schritt 5: Commit-Paket bauen und reviewen.")
 
         state.commit_paket = build_commit_paket(state)
+        # W25-1 (e): volle Suite vor Sammel-Commit.
+        if state.phase_aktiv:
+            _w25_suite = _basis_gate_pytest_suite(
+                state.project_dir, 900)
+            audit("basis_gate_test_result",
+                  {"scope": "volle_suite",
+                   "ist_gate": True,
+                   "exit_code":
+                       _w25_suite["exit_code"],
+                   "klassifizierung":
+                       _w25_suite["klassifizierung"],
+                   "failed_count":
+                       _w25_suite["failed_count"],
+                   "passed_count":
+                       _w25_suite["passed_count"],
+                   "failed_test_ids":
+                       _w25_suite["failed_test_ids"],
+                   "failed_test_ids_mehr":
+                       _w25_suite["failed_test_ids_mehr"],
+                   "dauer_s":
+                       _w25_suite["dauer_s"],
+                   "raw_tail":
+                       _w25_suite["raw_tail"]},
+                  project_dir, project_name)
+            if _w25_suite["klassifizierung"] == "timeout":
+                print("[!] W25 Suite-Test-Timeout. "
+                      "Fail-closed.")
+                return 18
+            if _w25_suite["exit_code"] != 0:
+                print(f"[FAIL] W25 Suite-Test rot vor "
+                      f"Sammel-Commit: "
+                      f"{_w25_suite['failed_count']} "
+                      f"failed, "
+                      f"{_w25_suite['passed_count']} "
+                      f"passed.")
+                print(f"  Tests: "
+                      f"{_w25_suite['failed_test_ids']}")
+                return 18
+
         # D3 (2026-10-16): Deterministische Liste
         # im Phasen-Modus. Ueberschreibt die
         # Builder-Halluzination (10 statt 3 Pfade).

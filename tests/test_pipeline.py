@@ -6968,3 +6968,195 @@ class TestW11b:
         src = inspect.getsource(pipeline._check_commit_scope)
         # Untracked Pfade landen in diff_pfade.
         assert "_status_res.stdout" in src
+
+
+# =====================================================================
+# W25-1 (2026-10-17): Basis-Gate test_result.
+# Klassifizierer + _ziel_test_pfade + Gate-Funktionen.
+# =====================================================================
+
+
+class TestW25Klassifizierung:
+    """W25-A25/A38: pytest-Ergebnis-Klassifizierung."""
+
+    def test_klassifiziere_gruen(self) -> None:
+        r = pipeline._klassifiziere_pytest(
+            0, "5 passed in 1.23s\n", "", 1.23)
+        assert r["klassifizierung"] == "gruen"
+        assert r["exit_code"] == 0
+        assert r["passed_count"] == 5
+        assert r["failed_count"] == -1
+        assert r["failed_test_ids"] == []
+
+    def test_klassifiziere_test_failures(self) -> None:
+        stdout = (
+            "FAILED tests/test_x.py::test_a - assert\n"
+            "FAILED tests/test_x.py::test_b - assert\n"
+            "2 failed, 1393 passed in 500s\n"
+        )
+        r = pipeline._klassifiziere_pytest(
+            1, stdout, "", 500.0)
+        assert r["klassifizierung"] == "test_failures"
+        assert r["failed_count"] == 2
+        assert r["passed_count"] == 1393
+        assert r["failed_test_ids"] == [
+            "tests/test_x.py::test_a",
+            "tests/test_x.py::test_b",
+        ]
+        assert r["failed_test_ids_mehr"] == 0
+
+    def test_klassifiziere_failed_ids_limit(self) -> None:
+        zeilen = [
+            f"FAILED tests/test_x.py::test_{i}"
+            for i in range(25)
+        ]
+        stdout = "\n".join(zeilen) + "\n25 failed in 10s\n"
+        r = pipeline._klassifiziere_pytest(
+            1, stdout, "", 10.0)
+        assert len(r["failed_test_ids"]) == 20
+        assert r["failed_test_ids_mehr"] == 5
+
+    def test_klassifiziere_collection_error(self) -> None:
+        r = pipeline._klassifiziere_pytest(
+            2, "ERROR collecting tests/test_y.py\n",
+            "", 0.5)
+        assert r["klassifizierung"] == "collection_error"
+        assert r["exit_code"] == 2
+
+    def test_klassifiziere_no_tests(self) -> None:
+        r = pipeline._klassifiziere_pytest(
+            5, "no tests ran in 0.01s\n", "", 0.01)
+        assert r["klassifizierung"] == "no_tests"
+
+    def test_klassifiziere_unknown(self) -> None:
+        r = pipeline._klassifiziere_pytest(
+            99, "irgendwas", "", 1.0)
+        assert r["klassifizierung"] == "unknown"
+
+    def test_klassifiziere_timeout(self) -> None:
+        r = pipeline._klassifiziere_pytest(
+            None, "", "", 60.0, is_timeout=True)
+        assert r["klassifizierung"] == "timeout"
+        assert r["exit_code"] is None
+        assert r["failed_count"] == -1
+        assert r["passed_count"] == -1
+
+
+class TestW25ZielPfade:
+    """W25-A28: Filter auf tests/-Pfade."""
+
+    def test_ziel_test_pfade_filter(self, tmp_path: Path) -> None:
+        state = build_test_state(project_dir=tmp_path)
+        state.code_patches = [
+            {"pfad": "tests/test_a.py", "typ": "new_file"},
+            {"pfad": "core/b.py", "typ": "patch"},
+            {"pfad": "tests/unit/test_c.py", "typ": "new_file"},
+            {"pfad": "tests/integration/test_d.py",
+             "typ": "new_file"},
+            {"pfad": "docs/x.md", "typ": "new_file"},
+        ]
+        r = pipeline._ziel_test_pfade(state)
+        assert r == [
+            "tests/test_a.py",
+            "tests/unit/test_c.py",
+            "tests/integration/test_d.py",
+        ]
+
+    def test_ziel_test_pfade_leer(self, tmp_path: Path) -> None:
+        state = build_test_state(project_dir=tmp_path)
+        state.code_patches = [
+            {"pfad": "core/b.py", "typ": "patch"},
+            {"pfad": "docs/x.md", "typ": "new_file"},
+        ]
+        assert pipeline._ziel_test_pfade(state) == []
+
+    def test_ziel_test_pfade_nicht_dict(self, tmp_path: Path) -> None:
+        state = build_test_state(project_dir=tmp_path)
+        state.code_patches = [
+            "kein dict",
+            {"pfad": "tests/test_x.py"},
+            None,
+            {"kein_pfad": "x"},
+        ]
+        # Nicht-dict-Eintraege werden ignoriert.
+        r = pipeline._ziel_test_pfade(state)
+        assert r == ["tests/test_x.py"]
+
+
+class TestW25BasisGate:
+    """W25: _basis_gate_pytest_ziel / _suite (Mock)."""
+
+    def test_basis_gate_pytest_ziel_rot(
+            self, tmp_path: Path, monkeypatch) -> None:
+        class FakeResult:
+            returncode = 1
+            stdout = "1 failed, 5 passed in 2s\n"
+            stderr = ""
+        monkeypatch.setattr(
+            "subprocess.run",
+            lambda *a, **kw: FakeResult())
+        r = pipeline._basis_gate_pytest_ziel(
+            tmp_path, ["tests/test_x.py"], 60)
+        assert r["exit_code"] == 1
+        assert r["klassifizierung"] == "test_failures"
+        assert r["failed_count"] == 1
+        assert r["passed_count"] == 5
+
+    def test_basis_gate_pytest_ziel_gruen(
+            self, tmp_path: Path, monkeypatch) -> None:
+        class FakeResult:
+            returncode = 0
+            stdout = "13 passed in 0.03s\n"
+            stderr = ""
+        monkeypatch.setattr(
+            "subprocess.run",
+            lambda *a, **kw: FakeResult())
+        r = pipeline._basis_gate_pytest_ziel(
+            tmp_path, ["tests/test_x.py"], 60)
+        assert r["exit_code"] == 0
+        assert r["klassifizierung"] == "gruen"
+        assert r["passed_count"] == 13
+
+    def test_basis_gate_pytest_ziel_timeout(
+            self, tmp_path: Path, monkeypatch) -> None:
+        import subprocess as sp
+        def fake_run(*a, **kw):
+            raise sp.TimeoutExpired(cmd="pytest", timeout=60)
+        monkeypatch.setattr("subprocess.run", fake_run)
+        r = pipeline._basis_gate_pytest_ziel(
+            tmp_path, ["tests/test_x.py"], 60)
+        assert r["klassifizierung"] == "timeout"
+        assert r["exit_code"] is None
+
+    def test_basis_gate_pytest_suite_gruen(
+            self, tmp_path: Path, monkeypatch) -> None:
+        class FakeResult:
+            returncode = 0
+            stdout = "1395 passed in 560s\n"
+            stderr = ""
+        monkeypatch.setattr(
+            "subprocess.run",
+            lambda *a, **kw: FakeResult())
+        r = pipeline._basis_gate_pytest_suite(tmp_path, 900)
+        assert r["exit_code"] == 0
+        assert r["klassifizierung"] == "gruen"
+        assert r["passed_count"] == 1395
+
+    def test_basis_gate_pytest_suite_rot(
+            self, tmp_path: Path, monkeypatch) -> None:
+        class FakeResult:
+            returncode = 1
+            stdout = (
+                "FAILED tests/a.py::test_x - assert\n"
+                "1 failed, 1394 passed in 560s\n"
+            )
+            stderr = ""
+        monkeypatch.setattr(
+            "subprocess.run",
+            lambda *a, **kw: FakeResult())
+        r = pipeline._basis_gate_pytest_suite(tmp_path, 900)
+        assert r["klassifizierung"] == "test_failures"
+        assert r["failed_count"] == 1
+        assert r["failed_test_ids"] == [
+            "tests/a.py::test_x",
+        ]
