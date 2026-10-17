@@ -1098,6 +1098,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "patch_ambig",
     "patch_anker_fehlt",
     "patch_bereits_angewendet",
+    "skill_geladen",
     "phase_plan_korrektur_start",
     "planner_plan_praefix_format_verwendet",
     "planner_plan_unvollstaendig",
@@ -3253,8 +3254,16 @@ def _planner_lauf(
         _cmds = parse_commands(reply.content)
         if not _cmds:
             return reply.content
+        # W25: load_skill vor execute_commands.
+        _run_cmds, _n_skills = _verarbeite_skill_commands(
+            state, _cmds)
+        if _n_skills:
+            print(f"[i] Planner-COMMAND: "
+                  f"{_n_skills} Skill(s) geladen.")
+        if not _run_cmds:
+            return reply.content
         _geaendert = execute_commands(
-            state, _cmds, quelle="planner")
+            state, _run_cmds, quelle="planner")
         print(f"[i] Planner-COMMAND Runde {_runde}/"
               f"{max_runden}: {len(_cmds)} Kommando(s).")
         if not _geaendert:
@@ -3864,6 +3873,14 @@ def parse_commands(text: str) -> list[dict[str, str]]:
             if rest_f:
                 frage_teile.append(rest_f)
             continue
+        # W25 (2026-10-17): load_skill.
+        if body.lower().startswith("load_skill"):
+            rest_ls = body[len("load_skill"):].strip()
+            rest_ls = rest_ls.strip("\"'()")
+            if rest_ls:
+                cmds.append({"typ": "load_skill",
+                             "arg": rest_ls})
+            continue
         if not body.upper().startswith("RUN "):
             continue
         rest = body[4:].strip()
@@ -4226,7 +4243,13 @@ def builder_reply_mit_command_loop(
                   f"Rueckfrage an Reviewer: "
                   f"{frage_text[:120]}")
         # Nur RUN-Zeilen weiterverarbeiten.
-        cmds_run = [c for c in cmds
+        # W25: load_skill vor cmds_run-Filter.
+        _run_cmds_b, _n_skills_b = _verarbeite_skill_commands(
+            state, cmds)
+        if _n_skills_b:
+            print(f"[i] Builder-COMMAND: "
+                  f"{_n_skills_b} Skill(s) geladen.")
+        cmds_run = [c for c in _run_cmds_b
                     if c.get("typ", "run") == "run"]
         if not cmds_run:
             # Nur frage_reviewer -> kein Deadlock,
@@ -4587,6 +4610,8 @@ class RunState:
     # failed_count, passed_count, failed_test_ids, raw_tail.
     basis_gate_test_results: list[dict[str, Any]] = \
         field(default_factory=list)
+    # W25 (2026-10-17): Skills (on-demand).
+    geladene_skills: list[str] = field(default_factory=list)
     # Bug-Fix 2026-10-14: True, sobald mindestens
     # ein Apply passiert ist. Der GEMESSENER
     # INHALT-Block ist dann der Stand VOR dem
@@ -4931,7 +4956,11 @@ def _solver_prompt_bauen(state: RunState,
              if r.get("verdict") == "NO-GO"
              and not r.get("recovery")]
     letzte = no_go[-2:] if len(no_go) >= 2 else no_go
-    zeilen = [aufgabe_block(state).rstrip()]
+    _skills_vor = (
+        _available_skills_block()
+        + _geladene_skills_block(state))
+    zeilen = [
+        _skills_vor + aufgabe_block(state).rstrip()]
     _wl = _format_whitelist_block(
         list(getattr(state, "file_whitelist", []) or []))
     zeilen.append(_wl.rstrip())
@@ -5307,6 +5336,121 @@ def _build_commit_input(
         + "Antworte mit COMMIT-GO, COMMIT-NO-GO oder "
         "COMMIT-ESKALATION."
     )
+
+
+SKILLS_DIR = Path("/opt/werkstatt/skills")
+
+
+def _load_skill(name: str) -> str:
+    """W25: liest eine SKILL.md und liefert ihren Inhalt.
+
+    Liefert "" wenn nicht vorhanden.
+    """
+    pfad = SKILLS_DIR / name / "SKILL.md"
+    if not pfad.exists():
+        return ""
+    try:
+        return pfad.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _list_skills() -> list[dict[str, str]]:
+    """W25: liefert alle verfuegbaren Skills (name + description).
+
+    Liest die SKILL.md-Header (name, description) aus dem
+    YAML-Frontmatter. Kein voller Inhalt.
+    """
+    import re as _re
+    skills: list[dict[str, str]] = []
+    if not SKILLS_DIR.exists():
+        return skills
+    for pfad in sorted(SKILLS_DIR.glob("*/SKILL.md")):
+        try:
+            text = pfad.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        m_name = _re.search(
+            r"^name:\s*(.+)$", text, _re.MULTILINE)
+        # description ist mehrzeilig (|).
+        m_desc = _re.search(
+            r"^description:\s*\|\s*\n"
+            r"((?:\s{2,}.+\n)+)",
+            text, _re.MULTILINE)
+        name = (m_name.group(1).strip()
+                if m_name else pfad.parent.name)
+        if m_desc:
+            desc_roh = m_desc.group(1)
+            # Einrueckung entfernen.
+            desc = "\n".join(
+                z.strip() for z in desc_roh.splitlines()
+                if z.strip())
+        else:
+            desc = ""
+        skills.append({"name": name, "description": desc})
+    return skills
+
+
+def _lade_skill_in_state(state: RunState, name: str) -> None:
+    """W25: laedt eine Skill in state.geladene_skills."""
+    if not name:
+        return
+    if name not in state.geladene_skills:
+        state.geladene_skills.append(name)
+        audit("skill_geladen", {"name": name},
+              state.project_dir, state.project_name)
+
+
+def _available_skills_block() -> str:
+    """W25: baut AVAILABLE-SKILLS-Block fuer Prompt.
+
+    Listet alle Skills mit name + description (erste Zeile).
+    Der Agent kann per COMMAND: load_skill <name> laden.
+    """
+    skills = _list_skills()
+    if not skills:
+        return ""
+    teile = ["=== AVAILABLE SKILLS ==="]
+    for s in skills:
+        desc_kurz = (
+            s["description"].split("\n")[0][:100]
+            if s["description"] else "")
+        teile.append(f"  - {s['name']}: {desc_kurz}")
+    teile.append(
+        "=== /AVAILABLE SKILLS ===\n"
+        "Bei Bedarf: COMMAND: load_skill <name>\n\n")
+    return "\n".join(teile)
+
+
+def _geladene_skills_block(state: RunState) -> str:
+    """W25: baut GELADENE-SKILLS-Block fuer Prompt."""
+    if not state.geladene_skills:
+        return ""
+    teile = ["=== GELADENE SKILLS ==="]
+    for name in state.geladene_skills:
+        inhalt_skill = _load_skill(name)
+        if inhalt_skill:
+            teile.append(f"\n--- {name} ---\n{inhalt_skill}")
+    teile.append("=== /GELADENE SKILLS ===\n\n")
+    return "\n".join(teile)
+
+
+def _verarbeite_skill_commands(
+        state: RunState,
+        cmds: list[dict[str, str]],
+) -> tuple[list[dict[str, str]], int]:
+    """W25: verarbeitet load_skill-Commands.
+
+    Rueckgabe: (rest_cmds, anzahl_geladen).
+    rest_cmds enthaelt nur noch run/frage_reviewer.
+    """
+    skills = [c for c in cmds
+              if c.get("typ") == "load_skill"]
+    rest = [c for c in cmds
+            if c.get("typ", "run") != "load_skill"]
+    for c in skills:
+        _lade_skill_in_state(state, c.get("arg", ""))
+    return rest, len(skills)
 
 
 def _format_whitelist_block(
@@ -8252,9 +8396,15 @@ def run_pipeline(project_name: str, aufgabe: str,
         return 2
 
     commands = parse_commands(reply.content)
-    if commands:
-        print(f"[i] Reviewer fordert {len(commands)} optionale Messungen.")
-        execute_commands(state, commands, quelle="reviewer")
+    # W25: load_skill vor execute_commands.
+    _run_cmds_r, _n_skills_r = _verarbeite_skill_commands(
+        state, commands)
+    if _n_skills_r:
+        print(f"[i] Reviewer-COMMAND: "
+              f"{_n_skills_r} Skill(s) geladen.")
+    if _run_cmds_r:
+        print(f"[i] Reviewer fordert {len(_run_cmds_r)} optionale Messungen.")
+        execute_commands(state, _run_cmds_r, quelle="reviewer")
     else:
         print("[i] Reviewer fordert keine optionalen Messungen.")
 
@@ -8291,6 +8441,9 @@ def run_pipeline(project_name: str, aufgabe: str,
             aufgabe_block(s)
             + _format_whitelist_block(
                 list(getattr(s, "file_whitelist", []) or []))
+            # W25: Skills-Bloecke.
+            + _available_skills_block()
+            + _geladene_skills_block(s)
             + (_ps_block if _ps_block else "")
             + (anker_block if anker_block else "")
             +
@@ -8371,6 +8524,9 @@ def run_pipeline(project_name: str, aufgabe: str,
             + aufgabe_block(state)
             + _format_whitelist_block(
                 list(getattr(state, "file_whitelist", []) or []))
+            # W25: Skills-Bloecke.
+            + _available_skills_block()
+            + _geladene_skills_block(state)
             # Agent-Memory A2: Projekt-Stand.
             + format_projekt_stand(state)
             # Auflage 2178: MESSWERTE-Block direkt sichtbar.

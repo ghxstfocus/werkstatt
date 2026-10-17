@@ -5309,7 +5309,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 83
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 84
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5345,7 +5345,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 83
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 84
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6133,7 +6133,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 83
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 84
 
 
 # =====================================================================
@@ -6238,7 +6238,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 83
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 84
 
 
 # =====================================================================
@@ -6296,7 +6296,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 83
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 84
 
 
 # =====================================================================
@@ -7764,3 +7764,44 @@ class TestW24aIdempotenz:
         # weder anker noch ersatz im Text -> fail-closed.
         ok = pipeline.apply_code_patches(state, state.code_patches)
         assert ok is False
+
+
+class TestW25Skills:
+    """W25 (2026-10-17): Skills-Infrastruktur."""
+
+    def test_available_skills_block_enthaelt_12(self) -> None:
+        """AVAILABLE SKILLS enthaelt 12 Eintraege."""
+        block = pipeline._available_skills_block()
+        assert "=== AVAILABLE SKILLS ===" in block
+        assert "=== /AVAILABLE SKILLS ===" in block
+        assert "COMMAND: load_skill" in block
+        # 12 Skills (5 statisch + 7 on-demand).
+        assert "anker-regeln" in block
+        assert "patch-format" in block
+        assert "review-work" in block
+        assert "skill-creator" in block
+
+    def test_geladene_skills_injiziert(self, tmp_path: Path) -> None:
+        """Geladene Skill erscheint im GELADENE SKILLS-Block."""
+        state = build_test_state(project_dir=tmp_path)
+        pipeline._lade_skill_in_state(state, "test-patterns")
+        assert "test-patterns" in state.geladene_skills
+        block = pipeline._geladene_skills_block(state)
+        assert "=== GELADENE SKILLS ===" in block
+        assert "test-patterns" in block
+        assert "Grundregeln" in block  # Inhalt der Skill.
+
+    def test_multiple_skills_injiziert(
+            self, tmp_path: Path) -> None:
+        """Zwei Skills werden beide geladen und injiziert."""
+        state = build_test_state(project_dir=tmp_path)
+        pipeline._lade_skill_in_state(state, "test-patterns")
+        pipeline._lade_skill_in_state(state, "web-security")
+        assert len(state.geladene_skills) == 2
+        block = pipeline._geladene_skills_block(state)
+        assert "test-patterns" in block
+        assert "web-security" in block
+        # Reihenfolge bleibt erhalten.
+        i1 = block.find("test-patterns")
+        i2 = block.find("web-security")
+        assert 0 < i1 < i2
