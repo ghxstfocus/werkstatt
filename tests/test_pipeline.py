@@ -5423,15 +5423,26 @@ class TestPostApplyMessung:
         assert ok is True
         assert state.mess_protokoll_nach_apply == ""
 
-    def test_nur_patch_kein_new_file(
+    def test_nur_patch_wird_jetzt_gelesen(
             self, tmp_path: Path) -> None:
+        """W33a (A-W33-5): patch-Pfade werden jetzt gelesen.
+
+        Vorher blieb mess_nach bei reinen patch-
+        Aktionen leer; der Judge eskalierte.
+        """
+        (tmp_path / "core").mkdir()
+        (tmp_path / "core" / "x.py").write_text(
+            "x = 1\n", encoding="utf-8")
         state = self._state(tmp_path, [
             {"typ": "patch", "pfad": "core/x.py",
              "anker": "ALT", "ersatz": "NEU"}])
-        ok = pipeline._post_apply_messung(
-            state, ["core/", "tests/"])
+        from unittest.mock import patch as mp
+        with mp("pipeline.audit"):
+            ok = pipeline._post_apply_messung(
+                state, ["core/", "tests/"])
         assert ok is True
-        assert state.mess_protokoll_nach_apply == ""
+        assert "core/x.py" in state.mess_protokoll_nach_apply
+        assert "x = 1" in state.mess_protokoll_nach_apply
 
     def test_new_file_wird_gelesen(
             self, tmp_path: Path) -> None:
@@ -5465,6 +5476,45 @@ class TestPostApplyMessung:
                 state, ["core/", "tests/"])
         assert ok is True
         assert state.mess_protokoll_nach_apply == ""
+
+    def test_mixed_new_file_und_patch(
+            self, tmp_path: Path) -> None:
+        """W33a: new_file + patch -> beide gelesen."""
+        (tmp_path / "core").mkdir()
+        (tmp_path / "core" / "a.py").write_text(
+            "a = 1\n", encoding="utf-8")
+        (tmp_path / "core" / "b.py").write_text(
+            "b = 2\n", encoding="utf-8")
+        state = self._state(tmp_path, [
+            {"typ": "new_file", "pfad": "core/a.py",
+             "inhalt": "a = 1\n"},
+            {"typ": "patch", "pfad": "core/b.py",
+             "anker": "ALT", "ersatz": "NEU"},
+        ])
+        from unittest.mock import patch as mp
+        with mp("pipeline.audit"):
+            ok = pipeline._post_apply_messung(
+                state, ["core/", "tests/"])
+        assert ok is True
+        assert "core/a.py" in state.mess_protokoll_nach_apply
+        assert "core/b.py" in state.mess_protokoll_nach_apply
+
+    def test_nur_patch_regression_new_file(
+            self, tmp_path: Path) -> None:
+        """W33a: new_file-only verhaelt sich wie vorher."""
+        (tmp_path / "core").mkdir()
+        (tmp_path / "core" / "n.py").write_text(
+            "n = 3\n", encoding="utf-8")
+        state = self._state(tmp_path, [
+            {"typ": "new_file", "pfad": "core/n.py",
+             "inhalt": "n = 3\n"}])
+        from unittest.mock import patch as mp
+        with mp("pipeline.audit"):
+            ok = pipeline._post_apply_messung(
+                state, ["core/", "tests/"])
+        assert ok is True
+        assert "core/n.py" in state.mess_protokoll_nach_apply
+        assert "n = 3" in state.mess_protokoll_nach_apply
 
     def test_commit_review_nutzt_neuen_kanal(self) -> None:
         """Regression: Commit-Review-Input enthaelt

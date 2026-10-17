@@ -7053,10 +7053,12 @@ def _post_apply_messung(state: RunState,
                         file_whitelist: list[str]) -> bool:
     """Post-Apply-Neumessung (2026-10-16).
 
-    Liest new_file-Pfade aus state.code_patches nach
-    dem Apply. Ergebnis nach state.mess_protokoll_
-    nach_apply. Der bestehende mess_protokoll-Kanal
-    bleibt unveraendert (Stand VOR Apply).
+    Liest new_file- und patch-Pfade aus
+    state.code_patches nach dem Apply (W33a,
+    A-W33-5). Ergebnis nach
+    state.mess_protokoll_nach_apply. Der bestehende
+    mess_protokoll-Kanal bleibt unveraendert
+    (Stand VOR Apply).
 
     Rueckgabe: True bei Erfolg (alle read_file ok
     oder kein new_file-Pfad), False bei Fehler
@@ -7064,16 +7066,21 @@ def _post_apply_messung(state: RunState,
     """
     if not state.code_patches:
         return True
-    new_files: list[str] = []
+    # W33a (A-W33-5): sowohl new_file- als auch
+    # patch-Pfade lesen. Vorher nur new_file -> bei
+    # reinen patch-Aktionen blieb mess_nach leer,
+    # der Judge eskalierte.
+    pfade: list[str] = []
     for p in state.code_patches:
         if not isinstance(p, dict):
             continue
-        if p.get("typ") != "new_file":
+        typ = p.get("typ", "")
+        if typ not in ("new_file", "patch"):
             continue
         pfad = p.get("pfad", "")
-        if pfad and pfad not in new_files:
-            new_files.append(pfad)
-    if not new_files:
+        if pfad and pfad not in pfade:
+            pfade.append(pfad)
+    if not pfade:
         return True
     m = state.always.get("read_file")
     if m is None:
@@ -7083,7 +7090,7 @@ def _post_apply_messung(state: RunState,
               "nicht im Katalog. Kein Kanal.")
         return True
     neue_bloecke: list[str] = []
-    for pfad in new_files:
+    for pfad in pfade:
         out, ok, argv = run_measurement_mit_argv(
             m, file_whitelist, state.project_dir, pfad)
         out = trim_output(out)
@@ -7100,7 +7107,7 @@ def _post_apply_messung(state: RunState,
     if neue_bloecke:
         state.mess_protokoll_nach_apply = "\n".join(neue_bloecke)
         print(f"[i] Post-Apply-Messung: "
-              f"{len(new_files)} read_file-Aufrufe.")
+              f"{len(pfade)} read_file-Aufrufe.")
     return True
 
 
