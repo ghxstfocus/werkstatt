@@ -237,6 +237,22 @@ def _standard_unterbloecke() -> list:
     ]
 
 
+@pytest.fixture(autouse=True)
+def _mock_phase_judge_go(monkeypatch: pytest.MonkeyPatch) -> None:
+    """W29c: Phase-Judge standardmaessig GO.
+
+    Tests, die das Verhalten des Judges pruefen
+    (W29-Tests, Fail-Pfade), ueberschreiben diesen
+    Mock lokal via monkeypatch.setattr.
+    """
+    monkeypatch.setattr(
+        pipeline, "_phase_judge_review",
+        lambda state, aggregat: "GO")
+    monkeypatch.setattr(
+        pipeline, "_phase_judge_repair_runde",
+        lambda state, aggregat: "GO")
+
+
 class TestPhaseYamlStatusUpdate:
     def test_funktion_existiert(self) -> None:
         assert hasattr(pipeline, "_phase_yaml_status_update")
@@ -322,9 +338,19 @@ def _mock_run_pipeline(rc: int = 0,
         if phasen_state is not None:
             sr_intern.append(phasen_state)
             if paket and rc == 0:
+                # W29c: pro Aufruf andere Datei, sonst
+                # schlaegt D2 (Duplikate) korrekt an.
+                n = len(phasen_state.phase_commit_pakete)
+                datei = f"apps/x{n}.py"
+                # Datei physisch anlegen, damit D5 (tote
+                # Dateien) nicht anschlaegt.
+                p = phasen_state.project_dir / datei
+                p.parent.mkdir(parents=True, exist_ok=True)
+                if not p.exists():
+                    p.write_text("x", encoding="utf-8")
                 phasen_state.phase_commit_pakete.append(
                     {"message": "test",
-                     "dateien": ["apps/x.py"]})
+                     "dateien": [datei]})
         return rc
     return _mock
 
@@ -1051,7 +1077,10 @@ class TestPhaseApproval:
         assert rc == 0
         assert mock_apply.called
         sammel = mock_apply.call_args.args[1]
-        assert sammel["dateien"] == ["apps/x.py"]
+        # W29c: _mock_run_pipeline generiert pro Unterblock
+        # eine andere Datei (D2-Schutz). Union sortiert.
+        assert sammel["dateien"] == [
+            "apps/x0.py", "apps/x1.py"]
         assert "PHASE P1" in sammel["message"]
 
     def test_approval_n_rollback(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

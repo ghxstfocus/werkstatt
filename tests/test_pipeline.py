@@ -5307,7 +5307,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 84
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 85
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5343,7 +5343,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 84
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 85
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6128,7 +6128,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 84
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 85
 
 
 # =====================================================================
@@ -6233,7 +6233,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 84
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 85
 
 
 # =====================================================================
@@ -6291,7 +6291,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 84
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 85
 
 
 # =====================================================================
@@ -7966,3 +7966,309 @@ class TestW28cAntwortLimit:
         assert "ANTWORT-FORMAT" in pipeline.HARD_RULES_JUDGE
         assert "ANTWORT-FORMAT" in pipeline.HARD_RULES_REVIEWER
         assert "ANTWORT-FORMAT" in pipeline.HARD_RULES_BUILDER
+
+
+# =====================================================================
+# W29 (2026-10-17): Aggregated Phase-Review
+# =====================================================================
+
+class TestW29Deterministisch:
+    """W29a: D1-D5 deterministische Vor-Pruefung."""
+
+    def _state_mit_dateien(
+            self, tmp_path: Path,
+            dateien: list[str]) -> pipeline.RunState:
+        for d in dateien:
+            p = tmp_path / d
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("x", encoding="utf-8")
+        return build_test_state(
+            project_dir=tmp_path,
+            file_whitelist=["core/", "tests/"])
+
+    def test_d1_offene_unterbloecke_fail(
+            self, tmp_path: Path) -> None:
+        state = self._state_mit_dateien(
+            tmp_path, ["core/x.py"])
+        state.phase_unterbloecke = [
+            {"id": "U1", "status": "done"},
+            {"id": "U2", "status": "no_go"},
+        ]
+        state.phase_commit_pakete = [
+            {"dateien": ["core/x.py"], "message": "x"},
+        ]
+        aggregat = pipeline._phase_gesamt_review(state)
+        d = pipeline._phase_deterministisch_pruefen(
+            state, aggregat)
+        assert d is not None
+        rc, grund = d
+        assert rc == 17
+        assert grund.startswith("D1_")
+        assert "U2" in grund
+
+    def test_d2_duplikate_fail(
+            self, tmp_path: Path) -> None:
+        state = self._state_mit_dateien(
+            tmp_path, ["core/x.py"])
+        state.phase_unterbloecke = [
+            {"id": "U1", "status": "done"},
+        ]
+        state.phase_commit_pakete = [
+            {"dateien": ["core/x.py"], "message": "a"},
+            {"dateien": ["core/x.py"], "message": "b"},
+        ]
+        aggregat = pipeline._phase_gesamt_review(state)
+        d = pipeline._phase_deterministisch_pruefen(
+            state, aggregat)
+        assert d is not None
+        rc, grund = d
+        assert rc == 17
+        assert grund.startswith("D2_")
+
+    def test_d3_whitelist_fail(
+            self, tmp_path: Path) -> None:
+        state = self._state_mit_dateien(
+            tmp_path, ["fremd/x.py"])
+        state.phase_unterbloecke = [
+            {"id": "U1", "status": "done"},
+        ]
+        state.phase_commit_pakete = [
+            {"dateien": ["fremd/x.py"], "message": "a"},
+        ]
+        aggregat = pipeline._phase_gesamt_review(state)
+        d = pipeline._phase_deterministisch_pruefen(
+            state, aggregat)
+        assert d is not None
+        rc, grund = d
+        assert rc == 17
+        assert grund.startswith("D3_")
+
+    def test_d4_waisen_datei_fail(
+            self, tmp_path: Path) -> None:
+        # Manuell eine Waise konstruieren: Union > Pakete.
+        # D2 (Duplikate) und D4 (Waisen) sind disjunkt.
+        # Wir erzeugen Duplikate, damit D2 zuschlaegt,
+        # ODER setzen union direkt.
+        state = self._state_mit_dateien(
+            tmp_path, ["core/a.py", "core/b.py"])
+        state.phase_unterbloecke = [
+            {"id": "U1", "status": "done"},
+        ]
+        # Nur a.py in Paketen, b.py in Union -> Waise.
+        # Aber aggregat nutzt Pakete. Deshalb aggregat
+        # direkt modifizieren.
+        state.phase_commit_pakete = [
+            {"dateien": ["core/a.py"], "message": "a"},
+        ]
+        aggregat = pipeline._phase_gesamt_review(state)
+        # Aggregat manuell erweitern: b.py als Waise.
+        aggregat["dateien_union"] = ["core/a.py", "core/b.py"]
+        d = pipeline._phase_deterministisch_pruefen(
+            state, aggregat)
+        assert d is not None
+        rc, grund = d
+        assert rc == 17
+        assert grund.startswith("D4_")
+
+    def test_d5_tote_datei_fail(
+            self, tmp_path: Path) -> None:
+        # Datei in Paket, aber existiert nicht.
+        state = build_test_state(
+            project_dir=tmp_path,
+            file_whitelist=["core/"])
+        state.phase_unterbloecke = [
+            {"id": "U1", "status": "done"},
+        ]
+        state.phase_commit_pakete = [
+            {"dateien": ["core/fehlt.py"], "message": "a"},
+        ]
+        aggregat = pipeline._phase_gesamt_review(state)
+        d = pipeline._phase_deterministisch_pruefen(
+            state, aggregat)
+        assert d is not None
+        rc, grund = d
+        assert rc == 17
+        assert grund.startswith("D5_")
+
+    def test_gruen_alle_ok(
+            self, tmp_path: Path) -> None:
+        state = self._state_mit_dateien(
+            tmp_path, ["core/a.py", "tests/test_a.py"])
+        state.phase_unterbloecke = [
+            {"id": "U1", "status": "done"},
+            {"id": "U2", "status": "done"},
+        ]
+        state.phase_commit_pakete = [
+            {"dateien": ["core/a.py"], "message": "a"},
+            {"dateien": ["tests/test_a.py"], "message": "b"},
+        ]
+        aggregat = pipeline._phase_gesamt_review(state)
+        d = pipeline._phase_deterministisch_pruefen(
+            state, aggregat)
+        assert d is None
+
+
+class TestW29JudgePrompt:
+    """W29b: Phase-Judge-Prompt enthaelt Diff-Statistik + plan.md."""
+
+    def test_build_phase_judge_input_enthaelt_plan(
+            self, tmp_path: Path) -> None:
+        state = build_test_state(project_dir=tmp_path)
+        state.phase_id = "99"
+        state.phase_titel = "Test-Phase"
+        state.phase_start_head = "abc123"
+        # plan.md anlegen.
+        _pipeline_plan_pfad = pipeline._plan_pfad(state)
+        _pipeline_plan_pfad.parent.mkdir(
+            parents=True, exist_ok=True)
+        _pipeline_plan_pfad.write_text(
+            "# Plan Phase 99\n- U1: x", encoding="utf-8")
+        aggregat = {
+            "unterbloecke_total": 1,
+            "unterbloecke_done": 1,
+            "pakete": 1,
+            "dateien_gesamt": 1,
+            "dateien_union": ["core/a.py"],
+            "duplikate": 0,
+        }
+        text = pipeline._build_phase_judge_input(
+            state, aggregat)
+        assert "=== PHASE 99: Test-Phase ===" in text
+        assert "=== PLAN (plan.md) ===" in text
+        assert "# Plan Phase 99" in text
+
+    def test_build_phase_judge_input_enthaelt_diff(
+            self, tmp_path: Path) -> None:
+        # Wir pruefen nur, dass der Code die Sektion aufbaut,
+        # nicht die tatsaechliche Diff-Ausgabe (kein Git-Repo).
+        state = build_test_state(project_dir=tmp_path)
+        state.phase_start_head = "deadbeef"
+        aggregat = {
+            "unterbloecke_total": 0,
+            "unterbloecke_done": 0,
+            "pakete": 0,
+            "dateien_gesamt": 0,
+            "dateien_union": [],
+            "duplikate": 0,
+        }
+        text = pipeline._build_phase_judge_input(
+            state, aggregat)
+        # Kein Repo: Statistik-Block bleibt aus, aber
+        # Plan-Sektion darf fehlen (nicht angelegt).
+        # Pruefen wir, dass kein Crash.
+        assert isinstance(text, str)
+
+    def test_build_phase_judge_input_enthaelt_tests(
+            self, tmp_path: Path) -> None:
+        state = build_test_state(project_dir=tmp_path)
+        state.basis_gate_test_results = [
+            {"scope": "ziel_pfade", "exit_code": 0,
+             "klassifizierung": "gruen",
+             "failed_count": 0, "passed_count": 5,
+             "failed_test_ids": [],
+             "failed_test_ids_mehr": 0},
+        ]
+        aggregat = {
+            "unterbloecke_total": 1,
+            "unterbloecke_done": 1,
+            "pakete": 1,
+            "dateien_gesamt": 1,
+            "dateien_union": [],
+            "duplikate": 0,
+        }
+        text = pipeline._build_phase_judge_input(
+            state, aggregat)
+        assert "TEST-ERGEBNISSE" in text
+        assert "ziel_pfade" in text
+
+
+class TestW29JudgeVerdict:
+    """W29b: Verdict-Parsing aus dem Judge."""
+
+    def _mock_ask(self, monkeypatch, antwort: str) -> None:
+        class _Reply:
+            ok = True
+            content = antwort
+        monkeypatch.setattr(
+            pipeline, "ask_llm",
+            lambda *a, **k: _Reply())
+
+    def test_judge_go(
+            self, tmp_path: Path, monkeypatch) -> None:
+        self._mock_ask(monkeypatch, "PHASE-GO\n- alles ok")
+        state = build_test_state(project_dir=tmp_path)
+        aggregat = {
+            "unterbloecke_total": 1,
+            "unterbloecke_done": 1,
+            "pakete": 1,
+            "dateien_gesamt": 1,
+            "dateien_union": [],
+            "duplikate": 0,
+        }
+        assert pipeline._phase_judge_review(
+            state, aggregat) == "GO"
+
+    def test_judge_no_go(
+            self, tmp_path: Path, monkeypatch) -> None:
+        self._mock_ask(monkeypatch, "PHASE-NO-GO\n- problem")
+        state = build_test_state(project_dir=tmp_path)
+        aggregat = {
+            "unterbloecke_total": 1,
+            "unterbloecke_done": 1,
+            "pakete": 1,
+            "dateien_gesamt": 1,
+            "dateien_union": [],
+            "duplikate": 0,
+        }
+        assert pipeline._phase_judge_review(
+            state, aggregat) == "NO_GO"
+
+    def test_judge_llm_fehler(
+            self, tmp_path: Path, monkeypatch) -> None:
+        class _Reply:
+            ok = False
+            content = ""
+        monkeypatch.setattr(
+            pipeline, "ask_llm",
+            lambda *a, **k: _Reply())
+        state = build_test_state(project_dir=tmp_path)
+        aggregat = {
+            "unterbloecke_total": 0,
+            "unterbloecke_done": 0,
+            "pakete": 0,
+            "dateien_gesamt": 0,
+            "dateien_union": [],
+            "duplikate": 0,
+        }
+        assert pipeline._phase_judge_review(
+            state, aggregat) == "FEHLER"
+
+    def test_repair_go(
+            self, tmp_path: Path, monkeypatch) -> None:
+        self._mock_ask(monkeypatch, "PHASE-GO\n- jetzt ok")
+        state = build_test_state(project_dir=tmp_path)
+        aggregat = {
+            "unterbloecke_total": 1,
+            "unterbloecke_done": 1,
+            "pakete": 1,
+            "dateien_gesamt": 1,
+            "dateien_union": [],
+            "duplikate": 0,
+        }
+        assert pipeline._phase_judge_repair_runde(
+            state, aggregat) == "GO"
+
+    def test_repair_no_go(
+            self, tmp_path: Path, monkeypatch) -> None:
+        self._mock_ask(monkeypatch, "PHASE-NO-GO\n- noch nicht")
+        state = build_test_state(project_dir=tmp_path)
+        aggregat = {
+            "unterbloecke_total": 1,
+            "unterbloecke_done": 1,
+            "pakete": 1,
+            "dateien_gesamt": 1,
+            "dateien_union": [],
+            "duplikate": 0,
+        }
+        assert pipeline._phase_judge_repair_runde(
+            state, aggregat) == "NO_GO"

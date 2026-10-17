@@ -1128,6 +1128,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "phase_budget_ende",
     "phase_commit_paket_gesammelt",
     "phase_commit_paket_leer",
+    "phase_gesamt_review_no_go",
     "phase_gesamt_review",
     "phase_plan_editiert",
     "phase_plan_erstellt",
@@ -2253,6 +2254,245 @@ def _phase_sammel_message(
     return "\n".join(zeilen).rstrip() + "\n"
 
 
+def _phase_deterministisch_pruefen(
+    state: RunState,
+    aggregat: dict[str, Any],
+) -> tuple[int, str] | None:
+    """W29a: deterministische Vor-Pruefung der Phase.
+
+    D1: alle Unterbloecke done.
+    D2: keine Duplikate in Datei-Union.
+    D3: jede Datei in file_whitelist.
+    D4: keine Waisen-Datei (Union = Pakete).
+    D5: jede Datei existiert (tote Dateien).
+
+    Rueckgabe:
+      None           -> gruen, weiter zur Judge-Pruefung.
+      (rc, grund)    -> rot, sofort fail-closed.
+
+    Reihenfolge D1..D5: billig zu teuer.
+    """
+    # D1: alle done?
+    if aggregat["unterbloecke_done"] != \
+            aggregat["unterbloecke_total"]:
+        offen = [
+            u.get("id", "?")
+            for u in state.phase_unterbloecke
+            if isinstance(u, dict)
+            and u.get("status") != "done"
+        ]
+        return (17, f"D1_offene_unterbloecke:{','.join(offen)}")
+
+    # D2: Duplikate in Datei-Union.
+    if aggregat["duplikate"] > 0:
+        return (17,
+                f"D2_duplikate:{aggregat['duplikate']}")
+
+    # D3: Whitelist.
+    wl = [str(p) for p in (state.file_whitelist or [])]
+    if wl:
+        fremd = [
+            d for d in aggregat["dateien_union"]
+            if not any(
+                d == w or d.startswith(w.rstrip("/") + "/")
+                for w in wl
+            )
+        ]
+        if fremd:
+            return (17,
+                    "D3_whitelist_verletzt:"
+                    + ",".join(fremd[:5]))
+
+    # D4: Waisen (Union == Pakete).
+    aus_paketen: list[str] = [
+        d
+        for p in state.phase_commit_pakete
+        for d in p.get("dateien", [])
+    ]
+    set_aus_paketen = set(aus_paketen)
+    set_union = set(aggregat["dateien_union"])
+    waisen = sorted(set_union - set_aus_paketen)
+    if waisen:
+        return (17, "D4_waisen:" + ",".join(waisen[:5]))
+
+    # D5: tote Dateien (Pfad existiert nicht).
+    tot: list[str] = []
+    for d in aggregat["dateien_union"]:
+        p = state.project_dir / d
+        if not p.exists():
+            tot.append(d)
+    if tot:
+        return (17, "D5_tote_dateien:" + ",".join(tot[:5]))
+
+    return None
+
+
+def _git_diff_phase(
+    project_dir: Path,
+    start: str,
+    *args: str,
+) -> str:
+    """W29b: git diff <start>..HEAD <args>.
+
+    Duenne Huelle um subprocess.run, damit
+    _build_phase_judge_input nicht mehrfach
+    das Env-/Timeout-Muster kopiert.
+    Rueckgabe: stdout (leer bei Fehler).
+    """
+    try:
+        res = subprocess.run(
+            ("git", "diff", f"{start}..HEAD") + args,
+            cwd=str(project_dir),
+            capture_output=True, text=True,
+            timeout=30, check=False,
+            env=subprocess_env(),
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return ""
+    if res.returncode != 0:
+        return ""
+    return res.stdout
+
+
+def _build_phase_judge_input(
+    state: RunState,
+    aggregat: dict[str, Any],
+) -> str:
+    """W29b: User-Content fuer den Phase-Judge.
+
+    W29-A4: Der Phase-Judge sieht Diff-Statistik
+    + die 3 groessten Dateien als Voll-Diff,
+    NICHT den vollen Diff. Vollstaendige
+    Konsistenz-Pruefung ist bewusst nicht
+    abgedeckt (Merkposten: Chunking bei
+    wachsenden Phasen).
+    """
+    zeilen: list[str] = [
+        f"=== PHASE {state.phase_id}: {state.phase_titel} ===",
+        (f"Unterbloecke: {aggregat['unterbloecke_done']}"
+         f" / {aggregat['unterbloecke_total']} done"),
+        f"Pakete: {aggregat['pakete']}",
+        f"Dateien (Union): {len(aggregat['dateien_union'])}",
+        "",
+    ]
+
+    # Plan aus .werkstatt/plan.md.
+    plan_text = _lese_plan(state)
+    if plan_text:
+        zeilen.append("=== PLAN (plan.md) ===")
+        zeilen.append(plan_text.rstrip())
+        zeilen.append("")
+
+    start = state.phase_start_head or "HEAD"
+    stat = _git_diff_phase(state.project_dir, start, "--stat")
+    if stat.strip():
+        zeilen.append(f"=== DIFF-STATISTIK ({start}..HEAD) ===")
+        zeilen.append(stat.rstrip())
+        zeilen.append("")
+
+    # Top-3-Dateien nach Zeilenzahl als Voll-Diff.
+    if aggregat["dateien_union"]:
+        def _zeilen(pfad: str) -> int:
+            numstat = _git_diff_phase(
+                state.project_dir, start,
+                "--numstat", "--", pfad)
+            teile = numstat.split()
+            try:
+                return int(teile[0]) + int(teile[1])
+            except (ValueError, IndexError):
+                return 0
+
+        top3 = sorted(
+            aggregat["dateien_union"],
+            key=_zeilen, reverse=True)[:3]
+        for pfad in top3:
+            voll = _git_diff_phase(
+                state.project_dir, start, "--", pfad)
+            if voll.strip():
+                zeilen.append(f"=== VOLL-DIFF: {pfad} ===")
+                zeilen.append(voll.rstrip()[:6000])
+                zeilen.append("")
+
+    # basis_gate_test_results (W23-Formatierer).
+    test_block = _format_basis_gate_test_results(
+        state.basis_gate_test_results)
+    if test_block:
+        zeilen.append("=== TEST-ERGEBNISSE (Letzter Suite-Lauf) ===")
+        zeilen.append(test_block.rstrip())
+
+    return "\n".join(zeilen)
+
+
+def _phase_judge_review(
+    state: RunState,
+    aggregat: dict[str, Any],
+) -> str:
+    """W29b: ruft den Judge fuer die Gesamtphase.
+
+    Rueckgabe: "GO" | "NO_GO" | "FEHLER".
+    """
+    system_prompt = _build_judge_prompt(state)
+    system_prompt += (
+        "\n\n=== PHASE-JUDGE ===\n"
+        "Du pruefst eine GESAMTE PHASE.\n"
+        "Antworte mit GENAU EINEM Wort in der "
+        "ersten Zeile:\n"
+        "PHASE-GO oder PHASE-NO-GO.\n"
+        "Bei NO-GO: 1-5 Problem-Punkte danach.\n"
+        "Kein Fliesstext.")
+    user_content = _build_phase_judge_input(
+        state, aggregat)
+    reply = ask_llm(
+        state.api_key, system_prompt, user_content,
+        state.judge_model, 0.0, state.llm_timeout_s,
+        state=state, max_tokens=state.max_tokens_judge,
+    )
+    if not reply.ok:
+        return "FEHLER"
+    text = reply.content.lstrip()
+    erste = text.split("\n", 1)[0].strip().upper()
+    if "PHASE-GO" in erste and "NO-GO" not in erste:
+        return "GO"
+    if "PHASE-NO-GO" in erste or "NO-GO" in erste:
+        return "NO_GO"
+    return "FEHLER"
+
+
+def _phase_judge_repair_runde(
+    state: RunState,
+    aggregat: dict[str, Any],
+) -> str:
+    """W29b: EINE Repair-Runde (Cap 1, A-W29-4).
+
+    Rueckgabe: "GO" | "NO_GO" | "FEHLER".
+    """
+    system_prompt = _build_judge_prompt(state)
+    system_prompt += (
+        "\n\n=== PHASE-JUDGE (REPARATUR-RUNDE) ===\n"
+        "Du hast in der Vorrunde PHASE-NO-GO gesagt.\n"
+        "Der Mensch und der Builder haben den Befund "
+        "nicht abschliessend bearbeitet (kein Loop "
+        "in dieser Runde).\n"
+        "Du pruefst erneut.\n"
+        "Antworte mit PHASE-GO oder PHASE-NO-GO.")
+    user_content = _build_phase_judge_input(
+        state, aggregat)
+    reply = ask_llm(
+        state.api_key, system_prompt, user_content,
+        state.judge_model, 0.0, state.llm_timeout_s,
+        state=state, max_tokens=state.max_tokens_judge,
+    )
+    if not reply.ok:
+        return "FEHLER"
+    text = reply.content.lstrip()
+    erste = text.split("\n", 1)[0].strip().upper()
+    if "PHASE-GO" in erste and "NO-GO" not in erste:
+        return "GO"
+    if "PHASE-NO-GO" in erste or "NO-GO" in erste:
+        return "NO_GO"
+    return "FEHLER"
+
+
 def _phase_sammel_paket(state: RunState) -> dict[str, Any]:
     """P2b-4 / A2 + M5: Sammel-Paket fuer apply_commit_and_doku.
 
@@ -2985,6 +3225,45 @@ def run_phase(
         print("[i] Keine Pakete. Kein Commit.")
         state_ref.append(state)
         return 0
+
+    # W29a: deterministische Vor-Pruefung (D1-D5).
+    d = _phase_deterministisch_pruefen(state, aggregat)
+    if d is not None:
+        rc_d, grund = d
+        print(f"[FAIL] Phase-Pruefung: {grund}")
+        audit("phase_gesamt_review_no_go",
+              {"phase_id": state.phase_id,
+               "quelle": "deterministik",
+               "grund": grund},
+              state.project_dir, project_name)
+        return rc_d
+
+    # W29b: Judge-Pruefung (mit 1 Repair-Runde, A-W29-4).
+    g = _phase_judge_review(state, aggregat)
+    if g == "FEHLER":
+        print("[FAIL] Phase-Judge nicht erreichbar. "
+              "Fail closed.")
+        audit("phase_gesamt_review_no_go",
+              {"phase_id": state.phase_id,
+               "quelle": "judge",
+               "grund": "llm_fehler"},
+              state.project_dir, project_name)
+        return 18
+    if g == "NO_GO":
+        print("[i] Phase-Judge: NO-GO. "
+              "Reparatur-Runde (Cap 1).")
+        g2 = _phase_judge_repair_runde(state, aggregat)
+        if g2 != "GO":
+            print("[FAIL] Phase-Judge: NO-GO nach "
+                  "Reparatur. Fail closed.")
+            audit("phase_gesamt_review_no_go",
+                  {"phase_id": state.phase_id,
+                   "quelle": "judge",
+                   "grund": "no_go_nach_reparatur",
+                   "repair": g2},
+                  state.project_dir, project_name)
+            return 18
+        print("[i] Phase-Judge: GO nach Reparatur.")
 
     _print_phase_approval_dokument(state, aggregat)
 
