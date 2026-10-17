@@ -10683,19 +10683,23 @@ def _phase_planner_resume(
                "neu": len(_neue_ups)},
               state.project_dir, project_name)
         return 18
-    for _i, (_alt, _neu) in enumerate(
-            zip(_alte_ups, _neue_ups)):
-        if not isinstance(_alt, dict):
-            continue
-        if _alt.get("id") != _neu.get("id"):
-            print(f"[FAIL] Planner-Resume: id an Position "
-                  f"{_i} geaendert. Fail closed.")
-            audit("planner_resume_failed",
-                  {"phase_id": state.phase_id,
-                   "grund": "struktur_id",
-                   "position": _i},
-                  state.project_dir, project_name)
-            return 18
+    # Bestehender ID-Check bleibt als Fallback,
+    # aber bei validiertem Split ueberspringen.
+    if _w35a2d_split_anzahl == 0:
+        for _i, (_alt, _neu) in enumerate(
+                zip(_alte_ups, _neue_ups)):
+            if not isinstance(_alt, dict):
+                continue
+            if _alt.get("id") != _neu.get("id"):
+                print(f"[FAIL] Planner-Resume: id an "
+                      f"Position {_i} geaendert. "
+                      f"Fail closed.")
+                audit("planner_resume_failed",
+                      {"phase_id": state.phase_id,
+                       "grund": "struktur_id",
+                       "position": _i},
+                      state.project_dir, project_name)
+                return 18
     # Merge (W35a-2d-3, 2026-10-17): neue Logik
     # mit Suffix-Erkennung + letzter_befund-Kopie.
     _gemergt: list[dict[str, Any]] = []
