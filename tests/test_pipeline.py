@@ -8813,3 +8813,60 @@ class TestW34bWerkstattAusnahme:
         assert all(
             not f.startswith(".werkstatt/")
             for f in details["fremd"])
+
+
+# =====================================================================
+# W35a-1 (2026-10-17): letzter_befund in phase.yaml
+# =====================================================================
+
+class TestW35a1LetzterBefund:
+    """W35a-1: _phase_yaml_status_update schreibt
+    letzter_befund bei no_go, loescht bei done."""
+
+    def _setup(self, tmp_path: Path,
+               monkeypatch) -> None:
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        plan = {
+            "phase_id": "1",
+            "phase_titel": "Test",
+            "phase_aktiv": True,
+            "phase_start_head": "a" * 40,
+            "phase_unterbloecke": [
+                {"id": "U1", "titel": "t", "status": "running",
+                 "unterpunkte": [], "commit_paket": {}},
+            ],
+        }
+        pipeline._phase_plan_speichern("testprojekt", plan)
+
+    def test_no_go_schreibt_letzter_befund(
+            self, tmp_path: Path,
+            monkeypatch) -> None:
+        """T1: no_go + letzter_befund -> in phase.yaml."""
+        self._setup(tmp_path, monkeypatch)
+        pipeline._phase_yaml_status_update(
+            "testprojekt", "U1", "no_go",
+            letzter_befund="Test-Befund: xyz")
+        daten = pipeline._phase_plan_laden("testprojekt")
+        assert daten is not None
+        u = daten["phase_unterbloecke"][0]
+        assert u["status"] == "no_go"
+        assert u["letzter_befund"] == "Test-Befund: xyz"
+
+    def test_done_loescht_letzter_befund(
+            self, tmp_path: Path,
+            monkeypatch) -> None:
+        """T2: done -> letzter_befund = ''."""
+        self._setup(tmp_path, monkeypatch)
+        # Erst no_go mit Befund.
+        pipeline._phase_yaml_status_update(
+            "testprojekt", "U1", "no_go",
+            letzter_befund="alter Befund")
+        # Dann done.
+        pipeline._phase_yaml_status_update(
+            "testprojekt", "U1", "done")
+        daten = pipeline._phase_plan_laden("testprojekt")
+        assert daten is not None
+        u = daten["phase_unterbloecke"][0]
+        assert u["status"] == "done"
+        assert u.get("letzter_befund") == ""

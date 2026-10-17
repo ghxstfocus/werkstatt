@@ -1983,11 +1983,30 @@ def _phase_plan_speichern(
                 pass
 
 
+def _letzter_reviewer_befund(state: RunState) -> str:
+    """W35a-1: liefert den letzten Reviewer-Befund
+    aus state.review_runden[-1]["raw"].
+
+    Leer, wenn keine Review-Runde vorliegt.
+    Wird fuer phase.yaml-Feld letzter_befund genutzt.
+    """
+    if not state.review_runden:
+        return ""
+    letzte = state.review_runden[-1]
+    if not isinstance(letzte, dict):
+        return ""
+    raw = letzte.get("raw", "")
+    if not isinstance(raw, str):
+        return ""
+    return raw[:500]
+
+
 def _phase_yaml_status_update(
     project_name: str,
     unterblock_id: str,
     status: str,
     commit_paket: dict[str, Any] | None = None,
+    letzter_befund: str | None = None,
 ) -> None:
     """Setzt den Status eines Unterblocks in phase.yaml.
 
@@ -2005,6 +2024,13 @@ def _phase_yaml_status_update(
       gesetzt, wird das Paket in den Ziel-
       Unterblock geschrieben. Format:
         commit_paket: {dateien: [...], message: "..."}
+
+    W35a-1 (2026-10-17): optionaler letzter_befund-
+      Parameter. Bei NO-GO (status="no_go") wird
+      der Reviewer-Befund (max 500 Zeichen) im
+      Unterblock-Feld "letzter_befund" persistiert.
+      Bei status="done" wird letzter_befund = ""
+      gesetzt (Loeschen).
 
     Fail-closed: jede Verletzung -> ValueError.
     """
@@ -2030,6 +2056,14 @@ def _phase_yaml_status_update(
             f"phase.yaml: unterblock_id "
             f"'{unterblock_id}' nicht gefunden")
     ziel["status"] = status
+    # W35a-1 (2026-10-17): letzter_befund
+    # pflegen. Bei no_go: setzen. Bei done:
+    # loeschen. Bei anderen: unveraendert.
+    if status == "no_go" and letzter_befund:
+        ziel["letzter_befund"] = (
+            letzter_befund[:500])
+    elif status == "done":
+        ziel["letzter_befund"] = ""
     # Phasen-Persistenz-A1 (2026-10-16): commit_paket
     # mitschreiben, damit der naechste Resume es
     # laden kann (Sammel-Commit und Basis-Gate).
@@ -3177,7 +3211,9 @@ def run_phase(
             # UNKLAR. Kein Rollback, kein failed.
             # Der Mensch entscheidet.
             _phase_yaml_status_update(
-                project_name, uid, "no_go")
+                project_name, uid, "no_go",
+                letzter_befund=_letzter_reviewer_befund(
+                    state))
             audit("phase_unterblock_ende",
                   {"id": uid, "index": i,
                    "status": "no_go",
@@ -3195,7 +3231,10 @@ def run_phase(
         if rc_unterblock == 15:
             # Klasse 3: Unterblock-NO-GO.
             # KEIN Rollback.
-            _phase_yaml_status_update(project_name, uid, "no_go")
+            _phase_yaml_status_update(
+                project_name, uid, "no_go",
+                letzter_befund=_letzter_reviewer_befund(
+                    state))
             audit("phase_unterblock_ende",
                   {"id": uid, "index": i,
                    "status": "no_go",
