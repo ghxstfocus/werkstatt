@@ -10475,6 +10475,202 @@ def _phase_planner_resume(
               state.project_dir, project_name)
         return 18
     _alte_ups = plan.get("phase_unterbloecke", [])
+    # W35a-2d-1 (2026-10-17): Suffix-Erkennung +
+    # Pruefungen. Bei Aufteilung eines no_go/failed-
+    # Unterblocks in mehrere Suffix-Kinder.
+    _w35a2d_alt_by_id: dict[str, dict] = {
+        u.get("id", ""): u
+        for u in _alte_ups if isinstance(u, dict)}
+    _w35a2d_alt_ids_in_order: list[str] = [
+        u.get("id", "") for u in _alte_ups
+        if isinstance(u, dict)]
+
+    def _w35a2d_find_parent(neu_id: str) -> str | None:
+        kandidaten = [
+            a for a in _w35a2d_alt_ids_in_order
+            if a and neu_id.startswith(a)
+            and len(neu_id) > len(a)
+            and neu_id[len(a):].isalnum()
+        ]
+        if not kandidaten:
+            return None
+        return max(kandidaten, key=len)
+
+    _w35a2d_neue_zu_parent: dict[str, str] = {}
+    for _u in _neue_ups:
+        _w35a2d_nid_lokal = _u.get("id", "")
+        _w35a2d_p_lokal = _w35a2d_find_parent(
+            _w35a2d_nid_lokal)
+        if _w35a2d_p_lokal:
+            _w35a2d_neue_zu_parent[
+                _w35a2d_nid_lokal] = _w35a2d_p_lokal
+
+    _w35a2d_neu_ids = {
+        u.get("id", "") for u in _neue_ups}
+    _w35a2d_suffix_kinder: dict[str, list[str]] = {}
+    for _nid, _pid in _w35a2d_neue_zu_parent.items():
+        _w35a2d_suffix_kinder.setdefault(
+            _pid, []).append(_nid)
+
+    # Tiefe 2 verboten.
+    for _nid, _pid in _w35a2d_neue_zu_parent.items():
+        if _pid in _w35a2d_neue_zu_parent:
+            audit("planner_resume_split_depth",
+                  {"phase_id": state.phase_id,
+                   "kind": _nid, "parent": _pid},
+                  state.project_dir, project_name)
+            print(f"[FAIL] Split-Tiefe 2: {_nid} <- {_pid}.")
+            return 18
+
+    # Cap / done / Rename / Misch pro Elternteil.
+    _w35a2d_split_anzahl = 0
+    for _pid, _kinder in _w35a2d_suffix_kinder.items():
+        _alt_u = _w35a2d_alt_by_id.get(_pid, {})
+        if _alt_u.get("status") == "done":
+            audit("planner_resume_split_done_verboten",
+                  {"phase_id": state.phase_id,
+                   "parent": _pid},
+                  state.project_dir, project_name)
+            print(f"[FAIL] Split auf done {_pid} "
+                  f"verboten.")
+            return 18
+        if len(_kinder) > 4:
+            audit("planner_resume_split_cap_erreicht",
+                  {"phase_id": state.phase_id,
+                   "parent": _pid,
+                   "anzahl": len(_kinder)},
+                  state.project_dir, project_name)
+            print(f"[FAIL] Split-Cap: {_pid} -> "
+                  f"{len(_kinder)} Kinder.")
+            return 18
+        if (len(_kinder) == 1
+                and _pid not in _w35a2d_neu_ids):
+            audit("planner_resume_rename_verboten",
+                  {"phase_id": state.phase_id,
+                   "parent": _pid,
+                   "kind": _kinder[0]},
+                  state.project_dir, project_name)
+            print(f"[FAIL] Rename: {_pid} -> "
+                  f"{_kinder[0]}.")
+            return 18
+        if _pid in _w35a2d_neu_ids:
+            audit("planner_resume_misch_zustand",
+                  {"phase_id": state.phase_id,
+                   "parent": _pid,
+                   "kinder": _kinder},
+                  state.project_dir, project_name)
+            print(f"[FAIL] Misch-Zustand: {_pid} "
+                  f"und {_kinder}.")
+            return 18
+        _w35a2d_split_anzahl += 1
+    if _w35a2d_split_anzahl > 1:
+        audit("planner_resume_mehrfach_split_verboten",
+              {"phase_id": state.phase_id,
+               "anzahl": _w35a2d_split_anzahl},
+              state.project_dir, project_name)
+        print(f"[FAIL] Mehrfach-Split: "
+              f"{_w35a2d_split_anzahl}.")
+        return 18
+
+    # Coverage C1/C2/C3 (A-W35a-2d-6).
+    # C1: jeder neue Eintrag 1:1 ODER Suffix.
+    for _u in _neue_ups:
+        _w35a2d_nid_c1 = _u.get("id", "")
+        if (_w35a2d_nid_c1
+                not in _w35a2d_neue_zu_parent
+                and _w35a2d_nid_c1
+                not in _w35a2d_alt_by_id):
+            audit("planner_resume_coverage",
+                  {"phase_id": state.phase_id,
+                   "grund": "c1_unbekannt",
+                   "id": _w35a2d_nid_c1},
+                  state.project_dir, project_name)
+            print(f"[FAIL] Coverage C1: unbekannte id "
+                  f"{_w35a2d_nid_c1}.")
+            return 18
+    # C2: jeder alte done-Eintrag unveraendert.
+    for _u in _alte_ups:
+        if not isinstance(_u, dict):
+            continue
+        if _u.get("status") != "done":
+            continue
+        _w35a2d_aid_c2 = _u.get("id", "")
+        if not any(
+                n.get("id") == _w35a2d_aid_c2
+                for n in _neue_ups):
+            audit("planner_resume_coverage",
+                  {"phase_id": state.phase_id,
+                   "grund": "c2_done_fehlt",
+                   "id": _w35a2d_aid_c2},
+                  state.project_dir, project_name)
+            print(f"[FAIL] Coverage C2: done "
+                  f"{_w35a2d_aid_c2} fehlt.")
+            return 18
+    # C3: jeder alte no_go/failed/pending 1:1
+    #     ODER hat min. 1 Suffix-Kind.
+    for _u in _alte_ups:
+        if not isinstance(_u, dict):
+            continue
+        if _u.get("status") not in (
+                "no_go", "failed", "pending"):
+            continue
+        _w35a2d_aid_c3 = _u.get("id", "")
+        _hat_1zu1 = _w35a2d_aid_c3 in _w35a2d_neu_ids
+        _hat_kinder = (
+            _w35a2d_aid_c3 in _w35a2d_suffix_kinder)
+        if not (_hat_1zu1 or _hat_kinder):
+            audit("planner_resume_coverage",
+                  {"phase_id": state.phase_id,
+                   "grund": "c3_verloren",
+                   "id": _w35a2d_aid_c3},
+                  state.project_dir, project_name)
+            print(f"[FAIL] Coverage C3: "
+                  f"{_w35a2d_aid_c3} verloren.")
+            return 18
+
+    # Order-Preservation (A-W35a-2d-7).
+    if _w35a2d_split_anzahl == 1:
+        _w35a2d_pid_order = next(
+            iter(_w35a2d_suffix_kinder))
+        _w35a2d_kinder_order = (
+            _w35a2d_suffix_kinder[_w35a2d_pid_order])
+        _w35a2d_pos_alt = (
+            _w35a2d_alt_ids_in_order.index(
+                _w35a2d_pid_order))
+        _w35a2d_pos_neu = [
+            i for i, u in enumerate(_neue_ups)
+            if u.get("id") in _w35a2d_kinder_order]
+        if _w35a2d_pos_neu:
+            _w35a2d_pos_min = min(_w35a2d_pos_neu)
+            _w35a2d_pos_max = max(_w35a2d_pos_neu)
+            if (_w35a2d_pos_max - _w35a2d_pos_min + 1
+                    != len(_w35a2d_pos_neu)):
+                audit("planner_resume_order_verletzt",
+                      {"phase_id": state.phase_id,
+                       "parent": _w35a2d_pid_order,
+                       "grund": "nicht_aufeinander"},
+                      state.project_dir, project_name)
+                print(f"[FAIL] Order: "
+                      f"{_w35a2d_pid_order}-Kinder "
+                      f"nicht aufeinander.")
+                return 18
+            if _w35a2d_pos_min != _w35a2d_pos_alt:
+                audit("planner_resume_order_verletzt",
+                      {"phase_id": state.phase_id,
+                       "parent": _w35a2d_pid_order,
+                       "grund": "position",
+                       "erwartet":
+                           _w35a2d_pos_alt,
+                       "gefunden":
+                           _w35a2d_pos_min},
+                      state.project_dir, project_name)
+                print(f"[FAIL] Order: "
+                      f"{_w35a2d_pid_order} an "
+                      f"Position {_w35a2d_pos_min} "
+                      f"statt {_w35a2d_pos_alt}.")
+                return 18
+
+    # Bestehender Anzahl-Check bleibt als Fallback.
     if len(_alte_ups) != len(_neue_ups):
         print("[FAIL] Planner-Resume: Anzahl geaendert. "
               "Fail closed.")
@@ -10498,41 +10694,66 @@ def _phase_planner_resume(
                    "position": _i},
                   state.project_dir, project_name)
             return 18
-    # Merge.
+    # Merge (W35a-2d-3, 2026-10-17): neue Logik
+    # mit Suffix-Erkennung + letzter_befund-Kopie.
     _gemergt: list[dict[str, Any]] = []
-    for _alt, _neu in zip(_alte_ups, _neue_ups):
-        if not isinstance(_alt, dict):
+    for _neu in _neue_ups:
+        _w35a2d_nid_m = _neu.get("id", "")
+        _w35a2d_pid_m = _w35a2d_neue_zu_parent.get(
+            _w35a2d_nid_m)
+        if _w35a2d_pid_m is not None:
+            # Suffix-Kind: letzter_befund vom
+            # Elternteil kopieren.
+            _w35a2d_pu = _w35a2d_alt_by_id.get(
+                _w35a2d_pid_m, {})
+            _w35a2d_pb = ""
+            if _w35a2d_pu.get("status") in (
+                    "no_go", "failed"):
+                _w35a2d_pb = _w35a2d_pu.get(
+                    "letzter_befund", "")
             _gemergt.append({
-                "id": _neu["id"],
-                "titel": _neu["titel"],
+                "id": _w35a2d_nid_m,
+                "titel": _neu.get("titel", ""),
                 "status": "pending",
                 "commit_paket": {},
-                "unterpunkte": _neu["unterpunkte"],
-                "geschaetzte_runden": _neu["geschaetzte_runden"],
+                "unterpunkte": list(
+                    _neu.get("unterpunkte", [])),
+                "geschaetzte_runden": _neu.get(
+                    "geschaetzte_runden", 1),
+                "letzter_befund": _w35a2d_pb,
             })
             continue
-        if _alt.get("status") == "done":
+        _w35a2d_alt_m = _w35a2d_alt_by_id.get(
+            _w35a2d_nid_m)
+        if (_w35a2d_alt_m is not None
+                and _w35a2d_alt_m.get(
+                    "status") == "done"):
             _gemergt.append({
-                "id": _alt["id"],
-                "titel": _alt["titel"],
+                "id": _w35a2d_alt_m["id"],
+                "titel": _w35a2d_alt_m.get(
+                    "titel", ""),
                 "status": "done",
                 "commit_paket": dict(
-                    _alt.get("commit_paket", {})),
+                    _w35a2d_alt_m.get(
+                        "commit_paket", {})),
                 "unterpunkte": list(
-                    _alt.get("unterpunkte", [])),
-                "geschaetzte_runden": _alt.get(
+                    _w35a2d_alt_m.get(
+                        "unterpunkte", [])),
+                "geschaetzte_runden": _w35a2d_alt_m.get(
                     "geschaetzte_runden", 1),
-                "letzter_befund":
-                    _alt.get("letzter_befund", ""),
+                "letzter_befund": _w35a2d_alt_m.get(
+                    "letzter_befund", ""),
             })
             continue
         _gemergt.append({
-            "id": _neu["id"],
-            "titel": _neu["titel"],
+            "id": _w35a2d_nid_m,
+            "titel": _neu.get("titel", ""),
             "status": "pending",
             "commit_paket": {},
-            "unterpunkte": _neu["unterpunkte"],
-            "geschaetzte_runden": _neu["geschaetzte_runden"],
+            "unterpunkte": list(
+                _neu.get("unterpunkte", [])),
+            "geschaetzte_runden": _neu.get(
+                "geschaetzte_runden", 1),
             "letzter_befund": "",
         })
     plan["phase_id"] = _neue_id
@@ -10544,6 +10765,17 @@ def _phase_planner_resume(
     state.phase_titel = _neue_titel
     state.phase_unterbloecke = _gemergt
     state.phase_aktueller_index = 0
+    # Split-Audit (A-W35a-2d-11).
+    if _w35a2d_split_anzahl == 1:
+        _w35a2d_split_pid = next(
+            iter(_w35a2d_suffix_kinder))
+        audit("planner_resume_split_ok",
+              {"phase_id": state.phase_id,
+               "parent": _w35a2d_split_pid,
+               "kinder":
+                   _w35a2d_suffix_kinder[
+                       _w35a2d_split_pid]},
+              state.project_dir, project_name)
     audit("planner_resume_merge",
           {"phase_id": state.phase_id,
            "unterbloecke": len(_gemergt),

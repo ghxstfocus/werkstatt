@@ -9182,13 +9182,19 @@ class TestW35a2PlannerResume:
                     "testprojekt", state, "k", "a", "")
         assert rc == 18
         kinds = [k for k, _ in audit_calls]
-        assert "planner_resume_failed" in kinds
-        # Merge-Schutz hat zugegriffen (struktur_id).
-        hat_struktur_id = any(
-            d.get("grund") == "struktur_id"
-            for k, d in audit_calls
-            if k == "planner_resume_failed")
-        assert hat_struktur_id
+        # W35a-2d-6 (2026-10-17): Coverage-C1 greift
+        # jetzt VOR struktur_id. Beide Audits zeigen
+        # Fail-closed bei erfundener ID.
+        assert (
+            "planner_resume_failed" in kinds
+            or "planner_resume_coverage" in kinds)
+        hat_struktur_verletzt = any(
+            (k == "planner_resume_coverage"
+             and d.get("grund") == "c1_unbekannt")
+            or (k == "planner_resume_failed"
+                and d.get("grund") == "struktur_id")
+            for k, d in audit_calls)
+        assert hat_struktur_verletzt
 
     def test_solver_z3_gueltiger_befund(
             self, tmp_path: Path,
