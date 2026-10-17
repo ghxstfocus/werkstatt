@@ -10434,9 +10434,20 @@ def _phasen_basis_gate_ok(
         return (False, "modifiziert",
                 {"modified": fremd_mod,
                  "done_pfade": sorted(done_pfade)})
+    # W34 (2026-10-17): .werkstatt/ ist Laufzeit-
+    # Verzeichnis (W26/W27: plan.md, contracts/).
+    # Pro Lauf neu erzeugt, nicht versioniert
+    # (.gitignore A.1). Defense-in-Depth: Ausnahme
+    # wirkt auch, wenn .gitignore fehlt oder
+    # umgangen wird. Andere Laufzeit-Verzeichnisse
+    # NICHT in dieser Ausnahme (Merkposten W34b).
+    # _norm entfernt fuehrende Punkte/Slashes, daher
+    # den Praefix NACH _norm pruefen.
+    _W34_PRAEFIX = "werkstatt/"
     fremd = [
         p for p in (untracked + intent)
         if _norm(p) not in done_norm
+        and not _norm(p).startswith(_W34_PRAEFIX)
     ]
     if fremd:
         return (False, "fremd_untracked",

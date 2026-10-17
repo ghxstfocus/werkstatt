@@ -8703,3 +8703,113 @@ class TestW33bApplyVorReview:
         # Audit-Event mess_nach_nahe_budget vorhanden.
         kinds = [k for k, _ in audit_calls]
         assert "mess_nach_nahe_budget" in kinds
+
+
+# =====================================================================
+# W34b (2026-10-17): .werkstatt/ im Basis-Gate
+# =====================================================================
+
+class TestW34bWerkstattAusnahme:
+    """W34b: _phasen_basis_gate_ok ignoriert .werkstatt/."""
+
+    def _init_git(self, tmp_path: Path) -> None:
+        import subprocess
+        subprocess.run(
+            ("git", "init", "-q"), cwd=str(tmp_path),
+            capture_output=True, text=True,
+            timeout=10, check=False,
+        )
+        # Minimal-Config, damit spaetere git-Befehle
+        # nicht haengen.
+        subprocess.run(
+            ("git", "-c", "user.name=t",
+             "-c", "user.email=t@t",
+             "commit", "--allow-empty", "-m", "init", "-q"),
+            cwd=str(tmp_path),
+            capture_output=True, text=True,
+            timeout=10, check=False,
+        )
+
+    def _plan(self, ups: list[dict]) -> dict:
+        return {
+            "phase_id": "1",
+            "phase_titel": "Test",
+            "phase_aktiv": True,
+            "phase_start_head": "a" * 40,
+            "phase_unterbloecke": ups,
+        }
+
+    def test_basis_gate_ignoriert_werkstatt_pfad(
+            self, tmp_path: Path) -> None:
+        """T1: .werkstatt/contracts/U1.md wird ignoriert."""
+        self._init_git(tmp_path)
+        (tmp_path / ".werkstatt" / "contracts").mkdir(
+            parents=True)
+        (tmp_path / ".werkstatt" / "contracts" /
+         "U1.md").write_text("x", encoding="utf-8")
+
+        plan = self._plan([
+            {"id": "U1", "titel": "t",
+             "status": "done",
+             "commit_paket": {"dateien": ["core/x.py"]}},
+        ])
+        # _phase_plan_laden mocken.
+        from unittest.mock import patch as mp
+        with mp("pipeline._phase_plan_laden",
+                return_value=plan):
+            ok, grund, details = pipeline._phasen_basis_gate_ok(
+                "testprojekt", tmp_path)
+        assert ok is True, (
+            f"Erwartet ok=True, got {ok} grund={grund} "
+            f"details={details}")
+
+    def test_basis_gate_fail_closed_bei_fremdem_untracked(
+            self, tmp_path: Path) -> None:
+        """T2: foo.txt bleibt fail-closed."""
+        self._init_git(tmp_path)
+        (tmp_path / "foo.txt").write_text(
+            "x", encoding="utf-8")
+
+        plan = self._plan([
+            {"id": "U1", "titel": "t",
+             "status": "done",
+             "commit_paket": {"dateien": ["core/x.py"]}},
+        ])
+        from unittest.mock import patch as mp
+        with mp("pipeline._phase_plan_laden",
+                return_value=plan):
+            ok, grund, details = pipeline._phasen_basis_gate_ok(
+                "testprojekt", tmp_path)
+        assert ok is False
+        assert grund == "fremd_untracked"
+        assert "foo.txt" in details["fremd"]
+
+    def test_basis_gate_werkstatt_und_fremd_gemischt(
+            self, tmp_path: Path) -> None:
+        """T4: .werkstatt/ ignoriert, foo.txt bleibt
+        fail-closed (gemischt)."""
+        self._init_git(tmp_path)
+        (tmp_path / ".werkstatt" / "contracts").mkdir(
+            parents=True)
+        (tmp_path / ".werkstatt" / "contracts" /
+         "U1.md").write_text("x", encoding="utf-8")
+        (tmp_path / "foo.txt").write_text(
+            "x", encoding="utf-8")
+
+        plan = self._plan([
+            {"id": "U1", "titel": "t",
+             "status": "done",
+             "commit_paket": {"dateien": ["core/x.py"]}},
+        ])
+        from unittest.mock import patch as mp
+        with mp("pipeline._phase_plan_laden",
+                return_value=plan):
+            ok, grund, details = pipeline._phasen_basis_gate_ok(
+                "testprojekt", tmp_path)
+        assert ok is False
+        assert grund == "fremd_untracked"
+        # Nur foo.txt, nicht .werkstatt/.
+        assert "foo.txt" in details["fremd"]
+        assert all(
+            not f.startswith(".werkstatt/")
+            for f in details["fremd"])
