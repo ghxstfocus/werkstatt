@@ -62,28 +62,31 @@ optional_catalog:
 # Doku-Zuordnung pro Agent.
 # Jeder Agent bekommt nur die Doku, die er braucht.
 # Referenzen beziehen sich auf die Schluessel unter docs:.
+# SAN-A (2026-10-17): Prompt-Diaet. DECISIONS.md
+# (1870 Zeilen) und SECURITY_LOG.md (2211 Zeilen)
+# NICHT mehr als statischer Prompt-Anteil — der
+# Agent soll bei Bedarf gezielt lesen
+# (COMMAND: RUN read_file docs/DECISIONS.md:18-221).
+# Grund: 43%/41% Redundanz in agents/*.md,
+# zusaetzlich 4081 Zeilen Doku im Prompt.
+# Plan: SAN-B (agents/*.md-Diaet) folgt separat.
 agent_docs:
   reviewer:
     - conventions
-    - decisions
-    - security_log
     - web_security
   builder:
     - conventions
-    - decisions
-    - web_security
+    - web_security  # A3-Option (a): Builder schreibt
+                    # Sicherheits-relevanten Code.
   test_generator:
     - conventions
   solver:
     - conventions
-    - decisions
-    - security_log
-    - web_security
+    - web_security  # S9: Solver sieht Reviewer-Doku.
   planner:
     - conventions
-    - decisions
-    - security_log
-    - web_security
+  # coverage und chaos: bewusst KEIN agent_docs
+  # (keine LLM-Agenten, No-LLM-Messungen).
 
 # Nur diese Praefixe darf read_file lesen.
 file_whitelist:

@@ -4323,18 +4323,20 @@ def test_agent_docs_solver_enthaelt_reviewer_keys() -> None:
 
 
 def test_agent_docs_solver_enthaelt_projektwissen() -> None:
-    """FF1b: Die vier Projektwissens-Keys sind enthalten.
+    """FF1b: Die kleinen Projektwissens-Keys sind enthalten.
 
     Nach Doku-Migration 2026-10-15: docs.context wurde
     durch docs.conventions ersetzt.
+    SAN-A (2026-10-17): decisions/security_log sind aus
+    agent_docs entfernt (Prompt-Diaet). Solver behaelt
+    Reviewer-Doku (S9): conventions + web_security.
     """
     import yaml
     with open("/opt/werkstatt/projects/security-ai.yaml",
               encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     solver = set(cfg["agent_docs"]["solver"])
-    pflicht = {"conventions", "decisions",
-               "security_log", "web_security"}
+    pflicht = {"conventions", "web_security"}
     assert pflicht.issubset(solver), \
         f"fehlt: {pflicht - solver}"
 
@@ -7533,3 +7535,56 @@ class TestWEGXP19bP17Format:
         assert pipeline._plan_ist_messungsbasiert_praefix_zaehler == 0
 
 
+class TestSANAProjektkonfig:
+    """SAN-A (2026-10-17): Prompt-Diaet der agent_docs."""
+
+    def _load_project(self) -> dict:
+        from pathlib import Path
+
+        import yaml
+        return yaml.safe_load(
+            Path("/opt/werkstatt/projects/security-ai.yaml")
+            .read_text(encoding="utf-8"))
+
+    def test_agent_docs_keine_grossen_dateien(self) -> None:
+        """Kein agent_doc > 500 Zeilen (heute: max 275).
+
+        Wenn jemand DECISIONS.md (1870) oder
+        SECURITY_LOG.md (2211) wieder in
+        agent_docs haengt, schlaegt der Test an.
+        """
+        from pathlib import Path
+        project = self._load_project()
+        security_ai = Path("/opt/security-ai")
+        docs_config = project.get("docs", {})
+        agent_docs = project.get("agent_docs", {})
+        for rolle, doc_keys in agent_docs.items():
+            for key in doc_keys:
+                rel = docs_config.get(key)
+                assert rel, (
+                    f"agent_doc '{key}' (Rolle {rolle}) "
+                    f"nicht in docs: aufgeloest")
+                pfad = security_ai / rel
+                assert pfad.exists(), (
+                    f"Doku fehlt: {pfad}")
+                n_zeilen = len(
+                    pfad.read_text(encoding="utf-8").splitlines())
+                assert n_zeilen <= 500, (
+                    f"agent_doc '{key}' (Rolle {rolle}) "
+                    f"ist {n_zeilen} Zeilen, Limit 500. "
+                    f"Bei Bedarf gezielt lesen "
+                    f"(COMMAND: RUN read_file).")
+
+    def test_kein_decisions_oder_security_log_in_agent_docs(
+            self) -> None:
+        """DECISIONS/SECURITY_LOG explizit NICHT in
+        agent_docs (unabhaengig von Groesse)."""
+        project = self._load_project()
+        agent_docs = project.get("agent_docs", {})
+        verbotene_keys = {"decisions", "security_log"}
+        for rolle, doc_keys in agent_docs.items():
+            treffer = verbotene_keys & set(doc_keys)
+            assert not treffer, (
+                f"Rolle {rolle} hat verbotene agent_docs: "
+                f"{sorted(treffer)}. DECISIONS/SECURITY_LOG "
+                f"bei Bedarf per COMMAND: RUN read_file.")
