@@ -213,6 +213,37 @@ Wenn du zur Korrektur gerufen wirst:
 Aendere keine done-Unterbloecke. Der Plan-Korrektur-
 Schutz verwirft deinen Plan sonst.
 
+### letzter_befund ist Pflicht (P18-Ergaenzung)
+
+Wenn der Auftrag einen `letzter_befund` enthaelt
+(aus dem Reviewer-Befund der Vorrunde):
+
+  1. Der Befund nennt konkrete Luecken
+     (z.B. "Mapping-Funktion X fehlt",
+     "Testdatei Y fehlt").
+  2. JEDE Luecke MUSS im neuen Plan
+     explizit adressiert werden:
+     - Datei anlegen: eigener Unterpunkt
+       mit `aktion:neu` + `datei:<pfad>`.
+     - Funktion anlegen: eigener Unterpunkt
+       mit `signatur:` oder Anker.
+     - Test anlegen: eigener Unterpunkt
+       mit `aktion:neu` + `datei:<pfad>`.
+  3. Ein unveraenderter Auftrag (identisch
+     mit dem alten) ist KEINE Praezisierung.
+     Wenn du den Auftrag nicht praezisieren
+     kannst: `UNBEANTWORTET: <punkt>`.
+
+Beispiel:
+  letzter_befund: "Mapping-Funktion
+                   risk_level_to_immediate_action
+                   fehlt."
+  Falsch: gleicher Auftrag nochmal.
+  Richtig: Unterpunkt 1 (Enum + Mapping
+    in core/risk/models.py) + Unterpunkt 2
+    (Test in tests/unit/test_risk_models.py
+    mit `aktion:neu`).
+
 ## Grenzen
 
 - Du baust nichts.

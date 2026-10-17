@@ -56,6 +56,32 @@ Jede Position nennt:
 Bei `ESKALATION`: Frage an den Menschen
 (was fehlt, was ist unklar).
 
+## Auftragsverstoss vs. UNKLAR
+
+Ein Auftragsverstoss ist NO_GO, nicht UNKLAR.
+
+Regel:
+- Wenn der Contract einen Punkt X fordert
+  (Datei, Test, Funktion, Feld) und X
+  fehlt im gemessenen Inhalt / in den
+  Tests: NO_GO mit Befund "X fehlt".
+- Wenn der Contract einen Test nennt
+  (`test:<pfad>`) und die Testdatei
+  existiert nicht: NO_GO mit Befund
+  "Testdatei <pfad> fehlt, Auftrag fordert
+  sie".
+- UNKLAR nur, wenn der Contract selbst
+  unklar ist (z.B. widerspruechliche
+  Anforderungen, fehlende Akzeptanz).
+
+Begruendung: UNKLAR blockiert den Solver-
+Trigger (nur NO-GO triggert den Solver) und
+fuehrt zu einer Eskalation an den Menschen.
+Ein klarer Auftragsverstoss ist aber
+reparierbar — der Builder kann ihn in einer
+weiteren Runde beheben oder der Solver kann
+eingreifen. NO_GO ist die richtige Bewertung.
+
 ## Grenzen
 
 - Du lieferst KEINEN Code.
