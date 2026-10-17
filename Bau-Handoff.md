@@ -4009,3 +4009,66 @@ und welche Konstruktion er pruefte (A18).
 ================================================================
 ENDE W25-2
 ================================================================
+
+
+================================================================
+W25A ENTFÄLLT + W25-HANDOFF-NACHTRAG (2026-10-17)
+================================================================
+
+W25a (AST-Guard in security-ai) entfällt:
+  Messung 2026-10-17 zeigt:
+    - Der alte defekte Guard-Test
+      test_no_create_table_in_test_file wurde
+      in d7b7c26 entfernt (nur __pycache__-
+      Ueberrest).
+    - Alle heutigen CREATE-TABLE-/
+      executescript-Vorkommen in tests/ sind
+      legitim (Test-Setups fuer Migration und
+      Repository).
+    - Ein generischer AST-Guard wuerde false
+      positives produzieren.
+  security-ai bleibt bei 1395 passed
+  (keine Aenderung durch W25a).
+
+Merkposten W25a-1 (Selbstreferenz-Tests):
+  Der urspruengliche Guard-Test war strukturell
+  defekt (prueft sich selbst) und verschleierte
+  einen roten Test. Wie erkennen wir Selbst-
+  referenz-Tests systematisch? Kandidat:
+  AST-Check, dass test_*-Methoden nicht ihre
+  eigene Datei als String lesen.
+  Eigener Block, wenn das Muster wieder auftritt.
+
+Merkposten W25a-2 (Migration-Vollstaendigkeit):
+  Pruefen, ob jede data/migrations/*.sql von
+  mindestens einem Test referenziert wird.
+  Verhindert tote Migrationen.
+  Eigener Block, wenn Migrationen-Schulden
+  aufgebaut werden.
+
+Merkposten W25a-3 (Testdatei-Layout):
+  90 Testdateien unter tests/ ist viel.
+  Einheitliches Namensschema pruefen
+  (test_*.py konsistent?).
+  Eigener Block, wenn neue Testdatei-Layouts
+  entstehen.
+
+Merkposten A43 (Wert-or-Fallback mit 0):
+  Muster "wert or fallback" mit 0 als gueltigem
+  Wert: pruefen bei kuenftigen Pipelines.
+  Exit-Codes, Counts, Dauern sind oft 0-wertig.
+  Konkret: is-not-None-Check statt or-Fallback.
+  Anlass: W25-1-Klassifizierer nutzte
+  "exit_code or -1", was exit_code=0 als falsy
+  auf -1 mappte. Behoben.
+
+Merkposten A45 (Phase-19-Erwartungshaltung):
+  Erste Phase mit vollstaendigem Basis-Gate
+  (rote Tests blockieren). Erwartung:
+  schaerfer, langsamer, teurer bei Rot.
+  Bei 10 Unterbloecken: +560 s einmalig
+  + jeweils (b)-Kosten (~0.1 s).
+
+================================================================
+ENDE W25-HANDOFF-NACHTRAG
+================================================================
