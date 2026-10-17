@@ -4241,3 +4241,60 @@ Naechster Schritt:
 ================================================================
 ENDE WEG-X-P19b
 ================================================================
+
+
+================================================================
+WEG-X-P19c ERLEDIGT (2026-10-17) — P17-VERSTAENDNIS
+================================================================
+
+Commit: 7b1ffe9.
+Kategorie 3 (HARD_RULES_PLANNER_STUFE2).
+Kein Tag probebetrieb-69.
+
+Was gebaut wurde (nur P17-Wortlaut):
+  A1: "Ein Unterpunkt = genau EIN datei:-Feld.
+       Ein Unterpunkt ohne datei: ist ungueltig.
+       Der test:-Eintrag gehoert in DENSELBEN
+       Unterpunkt."
+  A2: "Bei aktion:patch ist anker: Pflicht.
+       signatur: ist bei patch NICHT erlaubt
+       (nur bei neu)."
+  M4: GUELTIG/UNGUELTIG-Beispiel (A1-Aufloesung
+       ii: "(leer)" durch konkrete Signatur
+       "from .models import ChangeApplier
+       (Re-Export)" ersetzt).
+
+Keine Code-Aenderung an:
+  _plan_ist_messungsbasiert, _plan_ist_portionierbar,
+  _parse_phase_plan, --phase-Pfad.
+
+Test-Anzahl: unveraendert 1028 passed.
+
+Versuch, keine Loesung:
+  WEG-X-P19c verbessert das P17-Verstaendnis
+  des Planners durch ein konkretes Beispiel
+  und zwei harte Regeln. Ob der Planner das
+  umsetzt, zeigt der naechste Lauf.
+
+Merkposten P19d (WEG-X-P19c-A6):
+  "Wenn Planner wiederholt P17 verletzt:
+   deterministischer Check
+   _plan_hat_genau_ein_datei_pro_unterpunkt
+   (analog _plan_ist_messungsbasiert).
+   Eigener Block, Kategorie 3."
+
+Merkposten WEG-X-P19c-Audit:
+  Planner-Lauf Phase 19 (2026-10-17) hat
+  planner_plan_praefix_format_verwendet
+  NICHT ausgeloest (der Plan war unvollstaendig,
+  Fail-closed). Nach dem naechsten erfolgreichen
+  Lauf: Zaehler pruefen.
+
+Naechster Schritt:
+  Plan-Lauf Phase 19 mit P17c-Wortlaut.
+  Wenn P17-konform: Plan-Anzeige, [j]/[n]/[e].
+  Wenn wieder Fail-closed: WEG-X-P19d.
+
+================================================================
+ENDE WEG-X-P19c
+================================================================
