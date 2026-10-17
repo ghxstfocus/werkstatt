@@ -7805,3 +7805,46 @@ class TestW25Skills:
         i1 = block.find("test-patterns")
         i2 = block.find("web-security")
         assert 0 < i1 < i2
+
+
+class TestW26PlanMd:
+    """W26 (2026-10-17): PLAN.md als Datei."""
+
+    def test_schreibe_plan_legt_zwei_dateien_an(
+            self, tmp_path: Path) -> None:
+        """_schreibe_plan legt .werkstatt/plan.md und
+        audit-logs/<run_id>/01-plan.md an."""
+        state = build_test_state(project_dir=tmp_path)
+        state.run_id = "test-run-w26"
+        plan_text = "# Test-Plan\n\nU1: Beispiel"
+        ok = pipeline._schreibe_plan(state, plan_text)
+        assert ok is True
+        # .werkstatt/plan.md.
+        projekt_pfad = pipeline._plan_pfad(state)
+        assert projekt_pfad.exists()
+        assert projekt_pfad.read_text(encoding="utf-8") == plan_text
+        # audit-logs/<run_id>/01-plan.md.
+        audit_pfad = pipeline._plan_audit_pfad(state)
+        assert audit_pfad.exists()
+        assert audit_pfad.read_text(encoding="utf-8") == plan_text
+
+    def test_lese_plan_liefert_inhalt(
+            self, tmp_path: Path) -> None:
+        """_lese_plan liest .werkstatt/plan.md."""
+        state = build_test_state(project_dir=tmp_path)
+        state.run_id = "test-run-w26b"
+        plan_text = "# Mein Plan\n\nInhalt."
+        pipeline._schreibe_plan(state, plan_text)
+        gelesen = pipeline._lese_plan(state)
+        assert gelesen == plan_text
+        # Audit-Fallback.
+        gelesen_audit = pipeline._lese_plan_audit(state)
+        assert gelesen_audit == plan_text
+
+    def test_lese_plan_leer_wenn_nicht_vorhanden(
+            self, tmp_path: Path) -> None:
+        """_lese_plan liefert "" wenn keine Datei."""
+        state = build_test_state(project_dir=tmp_path)
+        state.run_id = "test-run-w26c"
+        assert pipeline._lese_plan(state) == ""
+        assert pipeline._lese_plan_audit(state) == ""

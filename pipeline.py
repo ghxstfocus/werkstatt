@@ -5453,6 +5453,74 @@ def _verarbeite_skill_commands(
     return rest, len(skills)
 
 
+def _plan_pfad(state: RunState) -> Path:
+    """W26: Pfad zu .werkstatt/plan.md im Ziel-Projekt."""
+    return state.project_dir / ".werkstatt" / "plan.md"
+
+
+def _plan_audit_pfad(state: RunState) -> Path:
+    """W26: Pfad zu audit-logs/<run_id>/01-plan.md."""
+    if state.run_id:
+        return (_werkstatt_home() / "audit-logs"
+                / state.run_id / "01-plan.md")
+    return _werkstatt_home() / "audit-logs" / "01-plan.md"
+
+
+def _schreibe_plan(state: RunState, plan_text: str) -> bool:
+    """W26: schreibt PLAN.md an zwei Stellen.
+
+    - .werkstatt/plan.md im Ziel-Projekt (editierbar).
+    - audit-logs/<run_id>/01-plan.md (Audit).
+
+    Liefert True bei Erfolg, False bei Fehler.
+    """
+    if not plan_text:
+        return False
+    # .werkstatt/plan.md im Projekt.
+    plan_pfad = _plan_pfad(state)
+    try:
+        plan_pfad.parent.mkdir(parents=True, exist_ok=True)
+        plan_pfad.write_text(plan_text, encoding="utf-8")
+    except OSError as exc:
+        print(f"[WARN] _schreibe_plan (Projekt): {exc}")
+    # audit-logs/<run_id>/01-plan.md.
+    audit_pfad = _plan_audit_pfad(state)
+    try:
+        audit_pfad.parent.mkdir(parents=True, exist_ok=True)
+        audit_pfad.write_text(plan_text, encoding="utf-8")
+    except OSError as exc:
+        print(f"[WARN] _schreibe_plan (Audit): {exc}")
+    return True
+
+
+def _lese_plan(state: RunState) -> str:
+    """W26: liest .werkstatt/plan.md.
+
+    Liefert "" wenn nicht vorhanden.
+    """
+    plan_pfad = _plan_pfad(state)
+    if not plan_pfad.exists():
+        return ""
+    try:
+        return plan_pfad.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _lese_plan_audit(state: RunState) -> str:
+    """W26: liest audit-logs/<run_id>/01-plan.md.
+
+    Fallback auf .werkstatt/plan.md.
+    """
+    audit_pfad = _plan_audit_pfad(state)
+    if audit_pfad.exists():
+        try:
+            return audit_pfad.read_text(encoding="utf-8")
+        except OSError:
+            pass
+    return _lese_plan(state)
+
+
 def _format_whitelist_block(
         file_whitelist: list[str]) -> str:
     """Whitelist-Prompt-A2 (2026-10-16): zeigt die
@@ -10242,6 +10310,12 @@ def _phase_main_pfad(
                 except Exception as exc:  # noqa: BLE001
                     print(f"[FAIL] phase.yaml speichern: {exc}")
                     return 1
+                # W26: PLAN.md schreiben.
+                _plan_md = _phase_plan_als_text(
+                    phase_id, phase_titel, unterbloecke)
+                _schreibe_plan(state, _plan_md)
+                print(f"[i] Plan geschrieben: "
+                      f"{_plan_pfad(state)}")
                 state.phase_id = phase_id
                 state.phase_titel = phase_titel
                 state.phase_unterbloecke = plan_dict[
