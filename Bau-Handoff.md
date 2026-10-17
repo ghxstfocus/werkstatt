@@ -3778,3 +3778,81 @@ weiteren Sammel-Commit.
 ================================================================
 ENDE SITZUNG 2026-10-16
 ================================================================
+
+
+================================================================
+W17-ERWEITERUNG ERLEDIGT (2026-10-17)
+================================================================
+
+Commit: 784dd98.
+Kategorie 2 (Test-Qualitaet).
+Kein Tag probebetrieb-69 (Werkstatt-Fix).
+
+Was geaendert wurde:
+  tests/test_aggregate.py:
+    - Neuer Helper _git_repo_mit_commits(pfad,
+      commits). Deterministisches Fixture-Repo
+      in tmp_path.
+      Env: GIT_AUTHOR_*, GIT_COMMITTER_*,
+      GIT_CONFIG_NOSYSTEM=1,
+      GIT_CONFIG_GLOBAL=/dev/null.
+      Zusaetzlich -c user.name/-c user.email
+      (W17-A14).
+    - test_quelle_werkstatt umgestellt:
+      Fixture mit 3 workbench + 2 mensch-Commits,
+      sammle_projekt_stand(tmp_path).
+      Zwei Assertions:
+        assert "werkstatt" in quellen
+        assert "mensch" in quellen
+      Meldungen: f"quellen={sorted(quellen)}".
+
+FLAKY-BEFUND (W17-A6):
+  Vorher: Der Test hing von der Live-Historie
+  von /opt/security-ai ab. Er wurde rot, sobald
+  die letzten 5 Commits keinen workbench-Scope
+  trugen; wieder gruen beim naechsten
+  workbench-Commit. Kein Produktiv-Bug, reine
+  Test-Fragilitaet.
+
+Test-Anzahl (gemessen):
+  Vorher:  1 failed, 984 passed
+  Nachher: 0 failed, 985 passed
+  tests/test_aggregate.py: 11 passed, 0 failed.
+
+Merkposten W17b (W17-A3K-2):
+  test_mit_commits nutzt ebenfalls das Live-Repo
+  /opt/security-ai (sammle_projekt_stand,
+  max_commits=3, Z. 42-52 in tests/test_aggregate.py).
+  Prueft Struktur (basis, felder, quelle-Werte),
+  nicht Historie.
+  Heute nicht flaky.
+  Strukturell flaky: Reset auf <3 Commits,
+  Einfuehrung eines dritten quelle-Werts,
+  git-log-Fehler.
+  Bei kuenftiger Flaky-Reparatur von
+  test_aggregate.py ODER bei Erweiterung
+  von _ist_werkstatt_commit mitnehmen.
+
+Merkposten W17c (Werkzeug-Hygiene):
+  Am 2026-10-17 um 06:46 entstanden drei
+  0-Byte-Dateien im Werkstatt-Repo (Commit,
+  Handoff, W25.). Vermutlich Shell-Redirect-
+  Artefakte aus Chat-Codebloecken. Entfernt.
+  Kein Schaden. Klaerung offen: Wer oder was
+  legt diese Dateien an? Bei Wiederholung
+  .gitignore erweitern.
+
+Merkposten W17-A17 (aus Reviewer-Block):
+  W17-Erweiterung deckt gemischte Historie ab.
+  Reine mensch-Historie (kein workbench-Scope)
+  nicht separat getestet. Eigener Block, wenn
+  _ist_werkstatt_commit erweitert wird oder wenn
+  ein Fehlklassifikations-Bug auftritt.
+
+W25 ist damit freigegeben:
+  Basis-Gate test_result (Kategorie 3).
+  Naechster Block.
+
+================================================================
+ENDE W17-ERWEITERUNG ERLEDIGT
+================================================================
