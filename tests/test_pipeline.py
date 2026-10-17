@@ -8348,3 +8348,110 @@ class TestW30LoopCap:
         assert "W30 (A-W30-2): 2 Runden im normalen" \
             in quelle
         assert "W30 (A-W30-2): 1 Runde im" in quelle
+
+
+# =====================================================================
+# W32 (2026-10-17): Contract-Schreiben in run_phase
+# =====================================================================
+
+class TestW32ContractImLoop:
+    """W32: _schreibe_contract muss im run_phase-Loop
+    gerufen werden, nicht nur im Erst-Anlage-Pfad."""
+
+    def test_schreibe_contract_im_loop(self) -> None:
+        """Quelltext-Check: _schreibe_contract innerhalb
+        run_phase, nach 'running'-Setzung."""
+        import inspect
+        quelle = inspect.getsource(pipeline.run_phase)
+        # _schreibe_contract wird im Loop gerufen.
+        assert "_schreibe_contract(state, u)" in quelle
+        # Vor dem Aufruf kommt die running-Setzung.
+        idx_running = quelle.find(
+            '_phase_yaml_status_update(project_name, uid, "running")')
+        idx_contract = quelle.find(
+            "_schreibe_contract(state, u)")
+        assert idx_running != -1
+        assert idx_contract != -1
+        assert idx_running < idx_contract, (
+            "Contract muss NACH running-Setzung geschrieben "
+            "werden.")
+
+    def test_contract_existiert_nach_loop(
+            self, tmp_path: Path,
+            monkeypatch) -> None:
+        """Verhaltens-Test: nach run_phase existiert
+        .werkstatt/contracts/U1.md."""
+        # _phase_yaml_dir umbiegen.
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        # Phase-Plan anlegen.
+        ups = [
+            {"id": "U1", "titel": "Test-U1",
+             "status": "pending",
+             "unterpunkte": [
+                 ("datei:core/x.py, aktion:neu, "
+                  "signatur:X, test:tests/t.py")],
+             "commit_paket": {},
+             "geschaetzte_runden": 1},
+        ]
+        plan = {
+            "phase_id": "1",
+            "phase_titel": "Test-Phase",
+            "phase_aktiv": True,
+            "phase_start_head": "",
+            "phase_unterbloecke": ups,
+        }
+        pipeline._phase_plan_speichern("testprojekt", plan)
+
+        # State bauen.
+        state = pipeline.RunState(
+            block_id="TEST", aufgabe="Test", start_ts="",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=[], api_key="sk-test",
+            budget={"max_review_rounds": 2,
+                    "max_llm_calls": 5},
+            agent_docs={}, project_dir=tmp_path,
+            project_name="testprojekt",
+        )
+
+        # run_pipeline, _schreibe_contract und apply
+        # mocken, damit der Loop durchläuft.
+        from unittest.mock import patch
+
+        def _mock_pipeline(pname, aufg, sr, *,
+                           phasen_state=None):
+            if phasen_state is not None:
+                sr.append(phasen_state)
+                phasen_state.phase_commit_pakete.append(
+                    {"dateien": ["core/x.py"],
+                     "message": "U1"})
+            return 0
+
+        with patch("pipeline.run_pipeline",
+                   side_effect=_mock_pipeline), \
+             patch("pipeline._git_rev_parse_head",
+                   return_value="a" * 40), \
+             patch("pipeline.apply_commit_and_doku",
+                   return_value=True), \
+             patch("builtins.input", return_value="j"), \
+             patch("pipeline.audit"), \
+             patch("pipeline._phase_deterministisch_pruefen",
+                   return_value=None), \
+             patch("pipeline._phase_judge_review",
+                   return_value="GO"):
+            # Datei anlegen, damit D5 (falls aktiv) nicht
+            # anschlaegt.
+            (tmp_path / "core").mkdir(exist_ok=True)
+            (tmp_path / "core" / "x.py").write_text(
+                "x", encoding="utf-8")
+            rc = pipeline.run_phase(
+                "testprojekt", state, [])
+        assert rc == 0
+
+        # Contract-Datei muss existieren.
+        contract_pfad = (
+            tmp_path / ".werkstatt" / "contracts" / "U1.md")
+        assert contract_pfad.exists(), (
+            f"Contract fehlt: {contract_pfad}")
+        text = contract_pfad.read_text(encoding="utf-8")
+        assert "Test-U1" in text or "U1" in text

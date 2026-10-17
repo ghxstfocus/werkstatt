@@ -3079,6 +3079,15 @@ def run_phase(
                "phase_id": state.phase_id},
               state.project_dir, project_name)
         _phase_yaml_status_update(project_name, uid, "running")
+        # W32 (2026-10-17): Contract vor Builder + Judge
+        # schreiben. W27 hat _schreibe_contract gebaut,
+        # aber nur im Erst-Anlage-Pfad (_phase_main_pfad)
+        # verankert. Bei Resume (phase.yaml existiert
+        # bereits) wurde der Contract nie geschrieben,
+        # der Judge sah "(kein Contract vorhanden)"
+        # und eskalierte.
+        if isinstance(u, dict):
+            _schreibe_contract(state, u)
 
         # P2b-3b / L1: lokaler state_ref pro Aufruf.
         sr_intern: list[RunState] = []
