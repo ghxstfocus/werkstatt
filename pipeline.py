@@ -1129,6 +1129,14 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "phase_commit_paket_gesammelt",
     "phase_commit_paket_leer",
     "phase_gesamt_review_no_go",
+    "planner_resume_start",
+    "planner_resume_merge",
+    "planner_resume_failed",
+    "planner_resume_cap_erreicht",
+    "planner_resume_solver_nicht_gerufen",
+    "planner_resume_solver_ohne_befund",
+    "planner_resume_befund_ohne_trigger",
+    "planner_resume_solver_befund_kaputt",
     "loop_cap_erreicht",
     "phase_gesamt_review",
     "phase_plan_editiert",
@@ -4979,6 +4987,10 @@ class RunState:
     planner_model: str = "deepseek-chat"
     planner_vorschlag: str = ""
     planner_modus: str = "manual"
+    # W35a-2 (2026-10-17): Planner-Resume-Cap
+    # pro uid. Max 1x pro Unterblock pro Prozess.
+    planner_resume_anzahl: dict[str, int] = \
+        field(default_factory=dict)
     planner_runden: int = 0
     reviewer_verdict_model: str = "deepseek-chat"
     reviewer_recovery_model: str = "deepseek-reasoner"
@@ -10619,6 +10631,259 @@ def _plan_ist_portionierbar(
     return (len(zu_gross) == 0, zu_gross)
 
 
+def _phase_planner_resume(
+        project_name: str,
+        state: RunState,
+        api_key: str,
+        phasen_text: str,
+        historie: str,
+) -> int:
+    """W35a-2 (2026-10-17): Planner-Resume im Resume-Pfad.
+
+    Zustands-Automat (A-W35a-12/13/15):
+      Z4:  trigger leer, befund gefuellt
+           -> rc=18 (Monotonie-Verletzung).
+      Z1:  trigger leer, befund leer
+           -> Planner-Resume normal.
+      Z2a: trigger gefuellt, solver_aufrufe==0
+           -> rc=18 (Widerspruch).
+      Z2b: trigger gefuellt, aufrufe>0, befund leer
+           -> rc=18 (Solver ohne Befund).
+      Z3:  trigger gefuellt, befund gefuellt
+           -> Planner-Resume MIT solver_befund.
+
+    Cap (A-W35a-5): 1x pro uid pro Prozess.
+    Merge (A-W35a-16): via _phase_plan_korrektur-
+      Mechanik (Struktur-Check + done-Schutz).
+
+    Rueckgabe: rc (0 = Erfolg, sonst fail-closed).
+    """
+    ups = state.phase_unterbloecke
+    _offene = [
+        u for u in ups
+        if isinstance(u, dict)
+        and u.get("status") in ("no_go", "failed")
+    ]
+    if not _offene:
+        return 0
+    # Z4: Monotonie-Verletzung.
+    if state.solver_befunde and not \
+            state.solver_trigger_quellen:
+        print("[FAIL] Planner-Resume: Z4 (Befund ohne "
+              "Trigger). Fail closed.")
+        audit("planner_resume_befund_ohne_trigger",
+              {"phase_id": state.phase_id},
+              state.project_dir, project_name)
+        return 18
+    # Z2a / Z2b / Z3.
+    _solver_kontext = ""
+    if state.solver_trigger_quellen:
+        if state.solver_aufrufe == 0:
+            print("[FAIL] Planner-Resume: Z2a (Trigger "
+                  "ohne Solver-Aufruf). Fail closed.")
+            audit("planner_resume_solver_nicht_gerufen",
+                  {"phase_id": state.phase_id,
+                   "trigger_anzahl":
+                       len(state.solver_trigger_quellen)},
+                  state.project_dir, project_name)
+            return 18
+        if not state.solver_befunde:
+            print("[FAIL] Planner-Resume: Z2b (Solver "
+                  "ohne Befund). Fail closed.")
+            audit("planner_resume_solver_ohne_befund",
+                  {"phase_id": state.phase_id,
+                   "aufrufe": state.solver_aufrufe},
+                  state.project_dir, project_name)
+            return 18
+        # Z3: solver_befund mitgeben.
+        try:
+            _solver_kontext = format_solver_befund(
+                state.solver_befunde[-1])
+        except ValueError as exc:
+            print("[FAIL] Planner-Resume: Solver-Befund "
+                  "kaputt. Fail closed.")
+            audit("planner_resume_solver_befund_kaputt",
+                  {"phase_id": state.phase_id,
+                   "fehler": str(exc)[:200]},
+                  state.project_dir, project_name)
+            return 18
+    # Cap pro uid.
+    for _u in _offene:
+        _uid = _u.get("id", "")
+        if not _uid:
+            continue
+        _n = state.planner_resume_anzahl.get(_uid, 0)
+        if _n >= 1:
+            print(f"[FAIL] Planner-Resume-Cap erreicht "
+                  f"({_uid}, {_n}x). Fail closed.")
+            audit("planner_resume_cap_erreicht",
+                  {"phase_id": state.phase_id,
+                   "uid": _uid, "anzahl": _n},
+                  state.project_dir, project_name)
+            return 18
+    # Planner-Resume starten.
+    for _u in _offene:
+        _uid = _u.get("id", "")
+        if _uid:
+            state.planner_resume_anzahl[_uid] = (
+                state.planner_resume_anzahl.get(_uid, 0) + 1)
+    audit("planner_resume_start",
+          {"phase_id": state.phase_id,
+           "offene": [_u.get("id") for _u in _offene],
+           "solver_kontext_vorhanden": bool(_solver_kontext)},
+          state.project_dir, project_name)
+    print(f"[*] Planner-Resume: "
+          f"{len(_offene)} offene Unterbloecke.")
+    # phase_stand bauen.
+    _ups_stand: list[dict[str, Any]] = []
+    _naechster: str | None = None
+    for _u in ups:
+        if not isinstance(_u, dict):
+            continue
+        _status = _u.get("status", "?")
+        _pkg_groesse = len(
+            _u.get("commit_paket", {}).get("dateien", [])
+            if isinstance(_u.get("commit_paket"), dict)
+            else [])
+        _letzter = _u.get("letzter_befund", "")
+        _ups_stand.append({
+            "id": _u.get("id", "?"),
+            "status": _status,
+            "paket_groesse": _pkg_groesse,
+            "letzter_befund": _letzter,
+        })
+        if (_naechster is None
+                and _status in {"no_go", "failed", "pending"}):
+            _naechster = _u.get("id")
+    _phase_stand = {
+        "phase_id": state.phase_id,
+        "unterbloecke": _ups_stand,
+        "naechster": _naechster,
+    }
+    # korrektur_kontext.
+    _korrektur_kontext: dict[str, Any] = {
+        "begruendung": "Planner-Resume nach no_go/failed.",
+        "reviewer_befund": (
+            state.review_runden[-1].get("raw", "")
+            if state.review_runden else ""),
+    }
+    if _solver_kontext:
+        _korrektur_kontext["solver_befund"] = _solver_kontext
+    # Planner rufen.
+    antwort = _planner_lauf(
+        state, api_key, phasen_text,
+        state.project_dir, project_name, historie,
+        stufe=2, korrektur_kontext=_korrektur_kontext,
+        phase_stand=_phase_stand)
+    if antwort is None:
+        print("[FAIL] Planner-Resume: Planner lieferte "
+              "None. Fail closed.")
+        audit("planner_resume_failed",
+              {"phase_id": state.phase_id,
+               "grund": "planner_none"},
+              state.project_dir, project_name)
+        return 18
+    try:
+        _neue_id, _neue_titel = _parse_phase_kopf(antwort)
+        _neue_ups = _parse_phase_plan(antwort)
+    except ValueError as exc:
+        print(f"[FAIL] Planner-Resume: Parse-Fehler: {exc}")
+        audit("planner_resume_failed",
+              {"phase_id": state.phase_id,
+               "grund": "parse_failed",
+               "exception": str(exc)[:200]},
+              state.project_dir, project_name)
+        return 18
+    # Merge via Struktur-Check (wie _phase_plan_korrektur).
+    plan = _phase_plan_laden(project_name)
+    if plan is None:
+        audit("planner_resume_failed",
+              {"phase_id": state.phase_id,
+               "grund": "phase_yaml_nicht_lesbar"},
+              state.project_dir, project_name)
+        return 18
+    _alte_ups = plan.get("phase_unterbloecke", [])
+    if len(_alte_ups) != len(_neue_ups):
+        print("[FAIL] Planner-Resume: Anzahl geaendert. "
+              "Fail closed.")
+        audit("planner_resume_failed",
+              {"phase_id": state.phase_id,
+               "grund": "struktur_anzahl",
+               "alt": len(_alte_ups),
+               "neu": len(_neue_ups)},
+              state.project_dir, project_name)
+        return 18
+    for _i, (_alt, _neu) in enumerate(
+            zip(_alte_ups, _neue_ups)):
+        if not isinstance(_alt, dict):
+            continue
+        if _alt.get("id") != _neu.get("id"):
+            print(f"[FAIL] Planner-Resume: id an Position "
+                  f"{_i} geaendert. Fail closed.")
+            audit("planner_resume_failed",
+                  {"phase_id": state.phase_id,
+                   "grund": "struktur_id",
+                   "position": _i},
+                  state.project_dir, project_name)
+            return 18
+    # Merge.
+    _gemergt: list[dict[str, Any]] = []
+    for _alt, _neu in zip(_alte_ups, _neue_ups):
+        if not isinstance(_alt, dict):
+            _gemergt.append({
+                "id": _neu["id"],
+                "titel": _neu["titel"],
+                "status": "pending",
+                "commit_paket": {},
+                "unterpunkte": _neu["unterpunkte"],
+                "geschaetzte_runden": _neu["geschaetzte_runden"],
+            })
+            continue
+        if _alt.get("status") == "done":
+            _gemergt.append({
+                "id": _alt["id"],
+                "titel": _alt["titel"],
+                "status": "done",
+                "commit_paket": dict(
+                    _alt.get("commit_paket", {})),
+                "unterpunkte": list(
+                    _alt.get("unterpunkte", [])),
+                "geschaetzte_runden": _alt.get(
+                    "geschaetzte_runden", 1),
+                "letzter_befund":
+                    _alt.get("letzter_befund", ""),
+            })
+            continue
+        _gemergt.append({
+            "id": _neu["id"],
+            "titel": _neu["titel"],
+            "status": "pending",
+            "commit_paket": {},
+            "unterpunkte": _neu["unterpunkte"],
+            "geschaetzte_runden": _neu["geschaetzte_runden"],
+            "letzter_befund": "",
+        })
+    plan["phase_id"] = _neue_id
+    plan["phase_titel"] = _neue_titel
+    plan["phase_unterbloecke"] = _gemergt
+    _phase_plan_speichern(project_name, plan)
+    state.phase_commit_pakete = []
+    state.phase_id = _neue_id
+    state.phase_titel = _neue_titel
+    state.phase_unterbloecke = _gemergt
+    state.phase_aktueller_index = 0
+    audit("planner_resume_merge",
+          {"phase_id": state.phase_id,
+           "unterbloecke": len(_gemergt),
+           "done": sum(
+               1 for _u in _gemergt
+               if _u.get("status") == "done")},
+          state.project_dir, project_name)
+    print(f"[+] Planner-Resume: Plan gemergt "
+          f"({len(_gemergt)} Unterbloecke).")
+    return 0
+
+
 def _phase_main_pfad(
     project_name: str,
     phasen_text: str,
@@ -10723,6 +10988,59 @@ def _phase_main_pfad(
         print(f"[FAIL] phase.yaml korrupt: {exc}")
         return 1
     if plan_vorhanden is not None:
+        # W35a-2 (2026-10-17): Planner-Resume, wenn
+        # offene no_go/failed-Unterbloecke vorliegen
+        # und resume_force nicht gesetzt ist.
+        # resume_force gewinnt (A-W35a-7): es setzt
+        # no_go/failed vorher auf pending.
+        if not resume_force:
+            _ups_check = plan_vorhanden.get(
+                "phase_unterbloecke", [])
+            _hat_offene = any(
+                isinstance(_u, dict)
+                and _u.get("status") in ("no_go", "failed")
+                for _u in _ups_check)
+            if _hat_offene:
+                # state fuer Planner-Resume bauen.
+                _pr_state = RunState(
+                    block_id=config.get("project", "?"),
+                    aufgabe=phasen_text,
+                    start_ts=datetime.now(UTC).isoformat(
+                        timespec="seconds"),
+                    docs=docs, agents=agents,
+                    always=always_kat, optional=optional_kat,
+                    file_whitelist=file_whitelist,
+                    api_key=api_key,
+                    budget=config.get("budget", {}),
+                    agent_docs=config.get("agent_docs", {}),
+                    project_dir=project_dir,
+                    project_name=project_name,
+                    planner_modus=planner_modus,
+                )
+                _pr_state.phase_aktiv = True
+                _pr_state.phase_id = str(
+                    plan_vorhanden.get("phase_id", ""))
+                _pr_state.phase_titel = str(
+                    plan_vorhanden.get("phase_titel", ""))
+                _pr_state.phase_unterbloecke = list(
+                    plan_vorhanden.get(
+                        "phase_unterbloecke", []))
+                _pr_historie = load_recent_commits(
+                    project_dir, n=10)
+                _rc_pr = _phase_planner_resume(
+                    project_name, _pr_state, api_key,
+                    phasen_text, _pr_historie)
+                if _rc_pr != 0:
+                    return _rc_pr
+                # state wurde gemergt. Neue
+                # phase.yaml neu laden.
+                plan_vorhanden = _phase_plan_laden(
+                    project_name)
+                if plan_vorhanden is None:
+                    print("[FAIL] Planner-Resume: "
+                          "phase.yaml nach Merge nicht "
+                          "lesbar. Fail closed.")
+                    return 18
         print("[i] Aktiver Phasenplan gefunden. "
               "Ueberspringe Planner.")
         ups_plan = plan_vorhanden.get(

@@ -5309,7 +5309,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 86
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 94
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5345,7 +5345,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 86
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 94
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6180,7 +6180,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 86
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 94
 
 
 # =====================================================================
@@ -6285,7 +6285,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 86
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 94
 
 
 # =====================================================================
@@ -6343,7 +6343,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 86
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 94
 
 
 # =====================================================================
@@ -8870,3 +8870,409 @@ class TestW35a1LetzterBefund:
         u = daten["phase_unterbloecke"][0]
         assert u["status"] == "done"
         assert u.get("letzter_befund") == ""
+
+
+# =====================================================================
+# W35a-2 (2026-10-17): Planner-Resume
+# =====================================================================
+
+class TestW35a2PlannerResume:
+    """W35a-2: _phase_planner_resume Zustandsautomat."""
+
+    def _state(self, tmp_path: Path,
+               ups: list[dict],
+               solver_trigger: list[str] | None = None,
+               solver_befunde: list | None = None,
+               solver_aufrufe: int = 0,
+               ) -> pipeline.RunState:
+        state = build_test_state(project_dir=tmp_path)
+        state.phase_aktiv = True
+        state.phase_id = "1"
+        state.phase_titel = "Test"
+        state.phase_unterbloecke = ups
+        state.solver_trigger_quellen = (
+            solver_trigger or [])
+        state.solver_befunde = solver_befunde or []
+        state.solver_aufrufe = solver_aufrufe
+        return state
+
+    def test_resume_bei_no_go(
+            self, tmp_path: Path,
+            monkeypatch) -> None:
+        """T1: no_go + letzter_befund -> Planner wird gerufen."""
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        plan: dict = {
+            "phase_id": "1", "phase_titel": "Test",
+            "phase_aktiv": True,
+            "phase_start_head": "a" * 40,
+            "phase_unterbloecke": [
+                {"id": "U1", "titel": "t1", "status": "done",
+                 "commit_paket": {"dateien": ["core/x.py"]},
+                 "unterpunkte": ["x"], "geschaetzte_runden": 1},
+                {"id": "U2", "titel": "t2", "status": "no_go",
+                 "commit_paket": {},
+                 "letzter_befund": "abc",
+                 "unterpunkte": ["y"], "geschaetzte_runden": 1},
+            ],
+        }
+        pipeline._phase_plan_speichern("testprojekt", plan)
+        state = self._state(
+            tmp_path,
+            plan["phase_unterbloecke"])
+        # Planner mocked.
+        from unittest.mock import patch as mp
+        antwort = "Phase 1: Test\n\nU1\ntitel: t1\n- a\n\nU2\ntitel: t2\n- b\n"
+        audit_calls: list[tuple] = []
+        def _fake_audit(kind, daten, pd, pn):
+            audit_calls.append((kind, daten))
+        with mp("pipeline._planner_lauf",
+                return_value=antwort), \
+             mp("pipeline._parse_phase_kopf",
+                return_value=("1", "Test")), \
+             mp("pipeline._parse_phase_plan",
+                return_value=[
+                    {"id": "U1", "titel": "t1",
+                     "unterpunkte": ["a"],
+                     "geschaetzte_runden": 1},
+                    {"id": "U2", "titel": "t2",
+                     "unterpunkte": ["b"],
+                     "geschaetzte_runden": 1}]), \
+             mp("pipeline.audit", side_effect=_fake_audit):
+            rc = pipeline._phase_planner_resume(
+                "testprojekt", state, "k",
+                "Test-Auftrag", "")
+        assert rc == 0
+        kinds = [k for k, _ in audit_calls]
+        assert "planner_resume_start" in kinds
+        assert "planner_resume_merge" in kinds
+
+    def test_kein_resume_bei_alle_done(
+            self, tmp_path: Path,
+            monkeypatch) -> None:
+        """T2: alle done -> kein Resume."""
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        state = self._state(tmp_path, [
+            {"id": "U1", "titel": "t", "status": "done",
+             "commit_paket": {"dateien": ["x"]},
+             "unterpunkte": ["a"], "geschaetzte_runden": 1},
+        ])
+        rc = pipeline._phase_planner_resume(
+            "testprojekt", state, "k", "a", "")
+        assert rc == 0
+
+    def test_cap_erreicht(
+            self, tmp_path: Path) -> None:
+        """T6: 2. Resume-Versuch bei gleichem Unterblock
+        -> rc=18."""
+        state = self._state(tmp_path, [
+            {"id": "U1", "titel": "t", "status": "no_go",
+             "commit_paket": {}, "unterpunkte": ["x"],
+             "geschaetzte_runden": 1},
+        ])
+        state.planner_resume_anzahl["U1"] = 1
+        from unittest.mock import patch as mp
+        audit_calls: list[tuple] = []
+        def _fake_audit(kind, daten, pd, pn):
+            audit_calls.append((kind, daten))
+        with mp("pipeline.audit", side_effect=_fake_audit):
+            rc = pipeline._phase_planner_resume(
+                "testprojekt", state, "k", "a", "")
+        assert rc == 18
+        kinds = [k for k, _ in audit_calls]
+        assert "planner_resume_cap_erreicht" in kinds
+
+    def test_solver_z2a_nicht_gerufen(
+            self, tmp_path: Path) -> None:
+        """T7: Z2a trigger + aufrufe==0 -> rc=18."""
+        state = self._state(
+            tmp_path,
+            [{"id": "U1", "titel": "t", "status": "no_go",
+              "commit_paket": {}, "unterpunkte": ["x"],
+              "geschaetzte_runden": 1}],
+            solver_trigger=["deadlock"],
+            solver_aufrufe=0)
+        from unittest.mock import patch as mp
+        audit_calls: list[tuple] = []
+        def _fake_audit(kind, daten, pd, pn):
+            audit_calls.append((kind, daten))
+        with mp("pipeline.audit", side_effect=_fake_audit):
+            rc = pipeline._phase_planner_resume(
+                "testprojekt", state, "k", "a", "")
+        assert rc == 18
+        kinds = [k for k, _ in audit_calls]
+        assert "planner_resume_solver_nicht_gerufen" in kinds
+
+    def test_solver_z2b_ohne_befund(
+            self, tmp_path: Path) -> None:
+        """T8: Z2b trigger + aufrufe>0 + befund leer
+        -> rc=18."""
+        state = self._state(
+            tmp_path,
+            [{"id": "U1", "titel": "t", "status": "no_go",
+              "commit_paket": {}, "unterpunkte": ["x"],
+              "geschaetzte_runden": 1}],
+            solver_trigger=["deadlock"],
+            solver_befunde=[],
+            solver_aufrufe=1)
+        from unittest.mock import patch as mp
+        audit_calls: list[tuple] = []
+        def _fake_audit(kind, daten, pd, pn):
+            audit_calls.append((kind, daten))
+        with mp("pipeline.audit", side_effect=_fake_audit):
+            rc = pipeline._phase_planner_resume(
+                "testprojekt", state, "k", "a", "")
+        assert rc == 18
+        kinds = [k for k, _ in audit_calls]
+        assert "planner_resume_solver_ohne_befund" in kinds
+
+    def test_z4_befund_ohne_trigger(
+            self, tmp_path: Path) -> None:
+        """T9: Z4 befund + trigger leer -> rc=18."""
+        from pipeline import SolverBefund, SolverDiagnose
+        befund = SolverBefund(
+            art=SolverDiagnose.GLEICHER_FEHLER,
+            kandidaten=["a"], run_id="r1")
+        state = self._state(
+            tmp_path,
+            [{"id": "U1", "titel": "t", "status": "no_go",
+              "commit_paket": {}, "unterpunkte": ["x"],
+              "geschaetzte_runden": 1}],
+            solver_trigger=[],
+            solver_befunde=[befund])
+        from unittest.mock import patch as mp
+        audit_calls: list[tuple] = []
+        def _fake_audit(kind, daten, pd, pn):
+            audit_calls.append((kind, daten))
+        with mp("pipeline.audit", side_effect=_fake_audit):
+            rc = pipeline._phase_planner_resume(
+                "testprojekt", state, "k", "a", "")
+        assert rc == 18
+        kinds = [k for k, _ in audit_calls]
+        assert "planner_resume_befund_ohne_trigger" in kinds
+
+    def test_planner_none_fail_closed(
+            self, tmp_path: Path,
+            monkeypatch) -> None:
+        """T5: Planner None -> rc=18 (fail-closed)."""
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        plan: dict = {
+            "phase_id": "1", "phase_titel": "Test",
+            "phase_aktiv": True,
+            "phase_start_head": "a" * 40,
+            "phase_unterbloecke": [
+                {"id": "U1", "titel": "t", "status": "no_go",
+                 "commit_paket": {}, "unterpunkte": ["x"],
+                 "geschaetzte_runden": 1},
+            ],
+        }
+        pipeline._phase_plan_speichern("testprojekt", plan)
+        state = self._state(
+            tmp_path,
+            plan["phase_unterbloecke"])
+        from unittest.mock import patch as mp
+        audit_calls: list[tuple] = []
+        def _fake_audit(kind, daten, pd, pn):
+            audit_calls.append((kind, daten))
+        with mp("pipeline._planner_lauf",
+                return_value=None), \
+             mp("pipeline.audit", side_effect=_fake_audit):
+            rc = pipeline._phase_planner_resume(
+                "testprojekt", state, "k", "a", "")
+        assert rc == 18
+        kinds = [k for k, _ in audit_calls]
+        assert "planner_resume_failed" in kinds
+
+    def test_merge_done_bleibt_erhalten(
+            self, tmp_path: Path,
+            monkeypatch) -> None:
+        """T4 (a): Merge schuetzt done-Unterbloecke."""
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        plan: dict = {
+            "phase_id": "1", "phase_titel": "Test",
+            "phase_aktiv": True,
+            "phase_start_head": "a" * 40,
+            "phase_unterbloecke": [
+                {"id": "U1", "titel": "alt-t1",
+                 "status": "done",
+                 "commit_paket": {"dateien": ["core/x.py"],
+                                  "message": "x"},
+                 "unterpunkte": ["original"],
+                 "geschaetzte_runden": 1,
+                 "letzter_befund": ""},
+                {"id": "U2", "titel": "alt-t2",
+                 "status": "no_go",
+                 "commit_paket": {},
+                 "unterpunkte": ["y"],
+                 "geschaetzte_runden": 1,
+                 "letzter_befund": "abc"},
+            ],
+        }
+        pipeline._phase_plan_speichern("testprojekt", plan)
+        state = self._state(
+            tmp_path,
+            plan["phase_unterbloecke"])
+        from unittest.mock import patch as mp
+        antwort = "dummy"
+        with mp("pipeline._planner_lauf",
+                return_value=antwort), \
+             mp("pipeline._parse_phase_kopf",
+                return_value=("1", "Test")), \
+             mp("pipeline._parse_phase_plan",
+                return_value=[
+                    {"id": "U1", "titel": "alt-t1",
+                     "unterpunkte": ["neu1"],
+                     "geschaetzte_runden": 1},
+                    {"id": "U2", "titel": "alt-t2",
+                     "unterpunkte": ["neu2"],
+                     "geschaetzte_runden": 1}]), mp("pipeline.audit"):
+            rc = pipeline._phase_planner_resume(
+                "testprojekt", state, "k", "a", "")
+        assert rc == 0
+        daten = pipeline._phase_plan_laden("testprojekt")
+        assert daten is not None
+        u1 = daten["phase_unterbloecke"][0]
+        u2 = daten["phase_unterbloecke"][1]
+        # U1 (done): unveraendert.
+        assert u1["status"] == "done"
+        assert u1["commit_paket"]["dateien"] == ["core/x.py"]
+        assert u1["unterpunkte"] == ["original"]
+        # U2 (no_go): neu, status pending.
+        assert u2["status"] == "pending"
+        assert u2["unterpunkte"] == ["neu2"]
+
+    def test_merge_struktur_verletzt(
+            self, tmp_path: Path,
+            monkeypatch) -> None:
+        """T4 (b): Planner erfindet neue ID -> rc=18."""
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        plan: dict = {
+            "phase_id": "1", "phase_titel": "Test",
+            "phase_aktiv": True,
+            "phase_start_head": "a" * 40,
+            "phase_unterbloecke": [
+                {"id": "U1", "titel": "t", "status": "no_go",
+                 "commit_paket": {}, "unterpunkte": ["x"],
+                 "geschaetzte_runden": 1},
+            ],
+        }
+        pipeline._phase_plan_speichern("testprojekt", plan)
+        state = self._state(
+            tmp_path,
+            plan["phase_unterbloecke"])
+        from unittest.mock import patch as mp
+        with mp("pipeline._planner_lauf",
+                return_value="dummy"), \
+             mp("pipeline._parse_phase_kopf",
+                return_value=("1", "Test")), \
+             mp("pipeline._parse_phase_plan",
+                return_value=[
+                    {"id": "U1-fix", "titel": "t",
+                     "unterpunkte": ["x"],
+                     "geschaetzte_runden": 1}]):
+            audit_calls: list[tuple] = []
+            def _fake_audit(kind, daten, pd, pn):
+                audit_calls.append((kind, daten))
+            with mp("pipeline.audit", side_effect=_fake_audit):
+                rc = pipeline._phase_planner_resume(
+                    "testprojekt", state, "k", "a", "")
+        assert rc == 18
+        kinds = [k for k, _ in audit_calls]
+        assert "planner_resume_failed" in kinds
+        # Merge-Schutz hat zugegriffen (struktur_id).
+        hat_struktur_id = any(
+            d.get("grund") == "struktur_id"
+            for k, d in audit_calls
+            if k == "planner_resume_failed")
+        assert hat_struktur_id
+
+    def test_solver_z3_gueltiger_befund(
+            self, tmp_path: Path,
+            monkeypatch) -> None:
+        """T11: Z3 gueltiger Befund -> solver_kontext
+        wird an Planner gegeben."""
+        monkeypatch.setattr(
+            pipeline, "_PHASE_YAML_DIR", tmp_path)
+        from pipeline import SolverBefund, SolverDiagnose
+        befund = SolverBefund(
+            art=SolverDiagnose.ANDERER_FEHLER,
+            praezisierter_auftrag="Bitte konkreter X",
+            run_id="r1")
+        plan: dict = {
+            "phase_id": "1", "phase_titel": "Test",
+            "phase_aktiv": True,
+            "phase_start_head": "a" * 40,
+            "phase_unterbloecke": [
+                {"id": "U1", "titel": "t", "status": "no_go",
+                 "commit_paket": {}, "unterpunkte": ["x"],
+                 "geschaetzte_runden": 1},
+            ],
+        }
+        pipeline._phase_plan_speichern("testprojekt", plan)
+        state = self._state(
+            tmp_path, plan["phase_unterbloecke"],
+            solver_trigger=["trigger_a"],
+            solver_befunde=[befund],
+            solver_aufrufe=1)
+        from unittest.mock import patch as mp
+        planner_calls: list[dict] = []
+        def _fake_planner(state, api_key, roher_auftrag,
+                          project_dir, project_name,
+                          historie, stufe=1,
+                          korrektur_kontext=None,
+                          phase_stand=None,
+                          max_runden=3):
+            planner_calls.append({
+                "korrektur_kontext": korrektur_kontext,
+                "phase_stand": phase_stand})
+            return "dummy"
+        with mp("pipeline._planner_lauf",
+                side_effect=_fake_planner), \
+             mp("pipeline._parse_phase_kopf",
+                return_value=("1", "Test")), \
+             mp("pipeline._parse_phase_plan",
+                return_value=[
+                    {"id": "U1", "titel": "t",
+                     "unterpunkte": ["x"],
+                     "geschaetzte_runden": 1}]), mp("pipeline.audit"):
+            rc = pipeline._phase_planner_resume(
+                "testprojekt", state, "k", "a", "")
+        assert rc == 0
+        assert len(planner_calls) == 1
+        kk = planner_calls[0]["korrektur_kontext"]
+        assert kk is not None
+        assert "solver_befund" in kk
+        assert "Praezisierter Auftrag" in kk["solver_befund"]
+
+    def test_solver_z3_kaputter_befund(
+            self, tmp_path: Path) -> None:
+        """T10: Z3 kaputter Befund (ValueError) -> rc=18."""
+        from pipeline import SolverBefund, SolverDiagnose
+        # ANDERER_FEHLER ohne praezisierter_auftrag
+        # -> ist_vollstaendig() False -> format_solver_befund
+        # wirft ValueError.
+        befund = SolverBefund(
+            art=SolverDiagnose.ANDERER_FEHLER,
+            run_id="r1")
+        state = self._state(
+            tmp_path,
+            [{"id": "U1", "titel": "t", "status": "no_go",
+              "commit_paket": {}, "unterpunkte": ["x"],
+              "geschaetzte_runden": 1}],
+            solver_trigger=["trigger_a"],
+            solver_befunde=[befund],
+            solver_aufrufe=1)
+        from unittest.mock import patch as mp
+        audit_calls: list[tuple] = []
+        def _fake_audit(kind, daten, pd, pn):
+            audit_calls.append((kind, daten))
+        with mp("pipeline.audit", side_effect=_fake_audit):
+            rc = pipeline._phase_planner_resume(
+                "testprojekt", state, "k", "a", "")
+        assert rc == 18
+        kinds = [k for k, _ in audit_calls]
+        assert "planner_resume_solver_befund_kaputt" in kinds
