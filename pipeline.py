@@ -1095,6 +1095,9 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "phase_plan_editiert",
     "phase_plan_erstellt",
     "phase_plan_korrektur_failed",
+    "patch_ambig",
+    "patch_anker_fehlt",
+    "patch_bereits_angewendet",
     "phase_plan_korrektur_start",
     "planner_plan_praefix_format_verwendet",
     "planner_plan_unvollstaendig",
@@ -5820,6 +5823,22 @@ def apply_code_patches(state: RunState,
                 p["ersatz"] = ersatz
                 count = 1
                 am_anfang = True
+        # W24a (2026-10-17): Idempotenz in Phase 1.
+        # Wenn anker nicht da ist (count == 0), aber ersatz
+        # schon im Datei-Inhalt: Patch bereits angewendet.
+        _aktuell_phase1 = (
+            ziel.read_text(encoding="utf-8")
+            if ziel.exists() else "")
+        if count == 0 and ersatz in _aktuell_phase1:
+            audit("patch_bereits_angewendet",
+                  {"pfad": str(ziel.relative_to(
+                      state.project_dir)),
+                   "anker_len": len(anker)},
+                  state.project_dir, state.project_name)
+            print(f"[i] apply_code_patches: Patch bereits "
+                  f"angewendet in "
+                  f"{ziel.relative_to(state.project_dir)}.")
+            continue
         if count != 1:
             print(f"[!] apply_code_patches: Anker in {pfad} "
                   f"kommt {count}x vor. Erwartet 1x.")
@@ -5869,6 +5888,49 @@ def apply_code_patches(state: RunState,
             anker = eintrag["anker"]
             ersatz = eintrag["ersatz"]
             aktuell = ziel.read_text(encoding="utf-8")
+            # W24a (2026-10-17): Idempotenz-Check.
+            # Verhindert doppelte Anwendung desselben Patches.
+            _hat_ersatz = ersatz in aktuell
+            _hat_anker = anker in aktuell
+            if _hat_ersatz and not _hat_anker:
+                # Patch bereits angewendet.
+                audit("patch_bereits_angewendet",
+                      {"pfad": str(ziel.relative_to(
+                          state.project_dir)),
+                       "anker_len": len(anker)},
+                      state.project_dir, state.project_name)
+                print(f"[i] Patch bereits angewendet: "
+                      f"{ziel.relative_to(state.project_dir)}")
+                geschrieben.append(ziel)
+                continue
+            # Ambig nur, wenn ersatz nicht anker enthaelt.
+            # Sonst: ersatz = anker + etwas (Erweiterung),
+            # das ist kein doppelter Patch, sondern ein
+            # gueltiger Patch mit Erweiterung.
+            if (_hat_ersatz and _hat_anker
+                    and anker not in ersatz):
+                # Echter Ambig-Fall.
+                print(f"[FAIL] Patch ambig: anker und "
+                      f"ersatz beide in "
+                      f"{ziel.relative_to(state.project_dir)}.")
+                audit("patch_ambig",
+                      {"pfad": str(ziel.relative_to(
+                          state.project_dir)),
+                       "anker_len": len(anker),
+                       "ersatz_len": len(ersatz)},
+                      state.project_dir, state.project_name)
+                return False
+            if not _hat_anker:
+                # Weder anker noch ersatz: Datei extern
+                # geaendert. Fail-closed.
+                print(f"[FAIL] Anker fehlt in "
+                      f"{ziel.relative_to(state.project_dir)}.")
+                audit("patch_anker_fehlt",
+                      {"pfad": str(ziel.relative_to(
+                          state.project_dir)),
+                       "anker_len": len(anker)},
+                      state.project_dir, state.project_name)
+                return False
             neu = aktuell.replace(anker, ersatz, 1)
             ziel.write_text(neu, encoding="utf-8")
             geschrieben.append(ziel)
@@ -7806,7 +7868,39 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
     for patch in doku_patches:
         ziel = state.project_dir / patch["pfad"]
         original[ziel] = doku_ziele[ziel]
-        neu = doku_ziele[ziel].replace(patch["anker"], patch["ersatz"], 1)
+        # W24a (2026-10-17): Idempotenz-Check.
+        _aktuell_d = doku_ziele[ziel]
+        _pat_anker = patch["anker"]
+        _pat_ersatz = patch["ersatz"]
+        _hat_ersatz_d = _pat_ersatz in _aktuell_d
+        _hat_anker_d = _pat_anker in _aktuell_d
+        if _hat_ersatz_d and not _hat_anker_d:
+            # Patch bereits angewendet.
+            audit("patch_bereits_angewendet",
+                  {"pfad": str(ziel),
+                   "anker_len": len(_pat_anker)},
+                  state.project_dir, state.project_name)
+            print(f"[i] Doku-Patch bereits angewendet: "
+                  f"{ziel}.")
+            continue
+        if _hat_ersatz_d and _hat_anker_d:
+            print(f"[FAIL] Doku-Patch ambig: anker und "
+                  f"ersatz beide in {ziel}.")
+            audit("patch_ambig",
+                  {"pfad": str(ziel),
+                   "anker_len": len(_pat_anker),
+                   "ersatz_len": len(_pat_ersatz)},
+                  state.project_dir, state.project_name)
+            return False
+        if not _hat_anker_d:
+            print(f"[FAIL] Doku-Anker fehlt in {ziel}.")
+            audit("patch_anker_fehlt",
+                  {"pfad": str(ziel),
+                   "anker_len": len(_pat_anker)},
+                  state.project_dir, state.project_name)
+            return False
+        neu = doku_ziele[ziel].replace(
+            _pat_anker, _pat_ersatz, 1)
         ziel.write_text(neu, encoding="utf-8")
         print(f"[+] Doku gepatcht: {patch['pfad']}")
 

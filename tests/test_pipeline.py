@@ -5309,7 +5309,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 80
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 83
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5345,7 +5345,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 80
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 83
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6133,7 +6133,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 80
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 83
 
 
 # =====================================================================
@@ -6238,7 +6238,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 80
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 83
 
 
 # =====================================================================
@@ -6296,7 +6296,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 80
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 83
 
 
 # =====================================================================
@@ -7685,3 +7685,82 @@ class TestW23CommitReviewPrompt:
         ])
         assert "--- a ---" in s2
         assert "--- b ---" in s2
+
+
+class TestW24aIdempotenz:
+    """W24a (2026-10-17): apply_code_patches idempotent."""
+
+    def test_patch_bereits_angewendet_skip(
+            self, tmp_path: Path) -> None:
+        """ersatz da, anker nicht -> skip (nicht fail)."""
+        (tmp_path / "x.py").write_text(
+            "class Foo:\n    pass\n",
+            encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["x.py"])
+        state.code_patches = [{
+            "pfad": "x.py",
+            "typ": "patch",
+            "anker": "class Bar:",
+            "ersatz": "class Foo:",
+        }]
+        # anker nicht da, ersatz da -> skip.
+        ok = pipeline.apply_code_patches(state, state.code_patches)
+        assert ok is True
+        assert (tmp_path / "x.py").read_text(encoding="utf-8") == (
+            "class Foo:\n    pass\n")
+
+    def test_patch_ambig_fail_closed(
+            self, tmp_path: Path) -> None:
+        """anker und ersatz verschieden, beide im Text -> fail-closed."""
+        (tmp_path / "x.py").write_text(
+            "class Foo:\n    pass\nclass Bar:\n    pass\n",
+            encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["x.py"])
+        state.code_patches = [{
+            "pfad": "x.py",
+            "typ": "patch",
+            "anker": "class Foo:",
+            "ersatz": "class Bar:",  # verschieden
+        }]
+        # anker und ersatz verschieden, beide im Text.
+        # -> Ambig, fail-closed.
+        ok = pipeline.apply_code_patches(state, state.code_patches)
+        assert ok is False
+
+    def test_patch_normal_apply(self, tmp_path: Path) -> None:
+        """anker da, ersatz nicht -> anwenden."""
+        (tmp_path / "x.py").write_text(
+            "class Foo:\n    pass\n",
+            encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["x.py"])
+        state.code_patches = [{
+            "pfad": "x.py",
+            "typ": "patch",
+            "anker": "class Foo:\n    pass",
+            "ersatz": "class Foo:\n    value: int = 1",
+        }]
+        ok = pipeline.apply_code_patches(state, state.code_patches)
+        assert ok is True
+        assert "value: int = 1" in (
+            tmp_path / "x.py").read_text(encoding="utf-8")
+
+    def test_patch_anker_fehlt_fail_closed(
+            self, tmp_path: Path) -> None:
+        """weder anker noch ersatz -> fail-closed (A-F2)."""
+        (tmp_path / "x.py").write_text(
+            "class Baz:\n    pass\n",
+            encoding="utf-8")
+        state = build_test_state(project_dir=tmp_path,
+                                  file_whitelist=["x.py"])
+        state.code_patches = [{
+            "pfad": "x.py",
+            "typ": "patch",
+            "anker": "class Foo:",
+            "ersatz": "class Bar:",
+        }]
+        # weder anker noch ersatz im Text -> fail-closed.
+        ok = pipeline.apply_code_patches(state, state.code_patches)
+        assert ok is False
