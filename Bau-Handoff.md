@@ -4704,3 +4704,36 @@ Naechster Block: W28 (Judge + Repair-Loop).
 ================================================================
 ENDE W27
 ================================================================
+
+
+================================================================
+W28a ERLEDIGT (2026-10-17) — JUDGE-ROLLE + REVIEWER REDUZIERT
+================================================================
+
+Commit: f122c39.
+Kategorie 3 (Umstrukturierung, Chef-Anweisung).
+Kein Tag probebetrieb-69.
+
+Was gebaut wurde:
+  - agents/judge.md (neu, ~120 Zeilen).
+  - agents/reviewer.md (reduziert, 410 -> 56 Zeilen).
+  - HARD_RULES_JUDGE (J1-J10, ~40 Zeilen).
+  - HARD_RULES_BY_ROLE["judge"].
+  - RunState.judge_model = "deepseek-reasoner".
+  - skills/security-review/SKILL.md ueberarbeitet
+    (OWASP Top 10:2025, 4-Fragen-Triage,
+    Severity, Reporting-Format).
+  - 8 Tests angepasst (reviewer.md -> judge.md /
+    HARD_RULES_*), 1 Test geloescht.
+
+Test-Anzahl: 1043 passed.
+
+Wichtig: Der Review-Loop nutzt noch den alten
+reviewer_prompt. Das ist W28b (Review-Loop auf
+Judge-Prompt umstellen + max_review_rounds 5 -> 2).
+
+Naechster Block: W28b.
+
+================================================================
+ENDE W28a
+================================================================
