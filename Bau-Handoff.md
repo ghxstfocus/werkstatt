@@ -4072,3 +4072,34 @@ Merkposten A45 (Phase-19-Erwartungshaltung):
 ================================================================
 ENDE W25-HANDOFF-NACHTRAG
 ================================================================
+
+
+================================================================
+W25D UND W25E ERLEDIGT (2026-10-17)
+================================================================
+
+Commit: 97e637f.
+Kategorie 2 (Code-Hygiene).
+Kein Tag probebetrieb-69.
+
+W25d (test_run dead): entfernt.
+  test_run (Measurement) war nirgends aufgerufen.
+  Die W25-Gate-Funktionen _basis_gate_pytest_ziel/
+  _suite uebernehmen den Zweck.
+
+W25e (_venv_fuer_state dead): entfernt.
+  Funktion war deklariert, aber nie gerufen.
+  Kommentar Z. 6241 korrigiert:
+    apply_and_recheck nutzt project_dir/.venv/bin/python3
+  (nicht _venv_fuer_state).
+
+Konsequenz: bei Projekt-YAML-Abweichung
+(venv_python != project_dir/.venv) muss ein
+neuer Block W25e-2 die venv-Aufloesung
+einheitlich machen.
+
+Test-Anzahl: unveraendert 1010 passed.
+
+================================================================
+ENDE W25D/W25E
+================================================================
