@@ -4862,3 +4862,125 @@ Naechster Block: W30 (Loop-Cap + Solver-Trigger).
 ================================================================
 ENDE W29
 ================================================================
+
+
+================================================================
+W30 + W31-MYPY + W31-MYPY-B ERLEDIGT (2026-10-17)
+================================================================
+
+Commits: e590766, 22464ec, bd3cd70.
+Kategorien: 3 (W30), 2 (W31-Mypy, W31-Mypy-b).
+Kein Tag probebetrieb-69.
+
+W30 — Loop-Cap-Konsistenz:
+  - A-W30-1: YAML-Default max_review_rounds
+    5 -> 2 (Z. 8733). Widerspruch zu Code-Default
+    2 (Z. 9012) behoben.
+  - A-W30-2: Kommentar an beiden
+    max_korrektur_runden-Aufrufen
+    (Z. 9461 normal=2, Z. 9626 Recovery=1).
+    Unterschied bewusst (Recovery kurz halten).
+  - A-W30-3: Solver-Trigger unveraendert. Belegt:
+    solver_trigger_a Z. 6929/9266,
+    solver_trigger_b Z. 9273,
+    solver_trigger_c Z. 6924/9261,
+    rufe_solver Z. 5445/6959/9315,
+    solver_config aus YAML Z. 8735-8745.
+  - A-W30-4: _loop_erkannt NICHT gebaut
+    (existiert nicht, war W24-B).
+    Merkposten W30b, Auftraggeber-Entscheid
+    offen.
+  - Neue Funktion _loop_cap_erreicht (Z. ~2181):
+    zentraler Cap-Check. Audit loop_cap_erreicht
+    mit loop_name + aktuelle_runde + max_runden.
+    rc=18 einheitlich.
+  - Audit-Kind loop_cap_erreicht (Katalog 85 -> 86).
+  - 8 neue Tests (TestW30LoopCap).
+
+  A-W30-6 (Handoff-Satz zu Pakete-behalten):
+    Abnahme 9 (Pakete behalten bei NO-GO):
+    belegt. Drei Fundstellen fuer
+    state.phase_commit_pakete = [] (Z. 2171,
+    2794, 2880) liegen im Rollback-Pfad
+    (_phase_rollback) oder im Phase-NO-GO-Pfad
+    MIT explizitem Rollback. Der W29-NO-GO-Pfad
+    (Deterministik/Judge) ruft KEIN Rollback
+    und leert die Pakete NICHT.
+
+  A-W30-7 (Abweichung Chef-Anweisung):
+    _loop_erkannt(state): Hash der letzten 2
+    Review-Runden. Bei Wiederholung: fail-closed.
+    NICHT in W30 gebaut. Begruendung: existiert
+    nicht im Code, war W24-B, nicht W28.
+    Merkposten W30b.
+
+W31-Mypy (Commit 22464ec):
+  - pipeline.py:
+      _review_round_audit_payload Rueckgabetyp
+      dict[str, object] -> dict[str, Any].
+  - tests/test_pipeline.py:
+      (a) _state() in TestCodeEntwurfHistorie
+          Rueckgabetyp -> pipeline.RunState.
+      (b) lambda append-return -> benannte
+          _mock_rufe_solver-Funktion.
+      (c) state.code_patches: type-ignore[list-item]
+          an den zwei nicht-dict-Elementen.
+      (d) 3 _v()-Helper -> SimpleNamespace.
+  28 mypy-Fehler weg.
+
+W31-Mypy-b (Commit bd3cd70):
+  - tests/test_phase.py: 6 mypy-Fehler weg.
+      pakete: list[dict[str, object]] explizit
+      typisiert, dict-Comprehension durch
+      Schleife ersetzt (isinstance-Verengung
+      greift nicht durch zwei get()-Aufrufe).
+
+Werkstatt-Test-Basis jetzt vollstaendig
+mypy-clean:
+  pipeline.py:             0.
+  tests/test_pipeline.py:  0.
+  tests/test_phase.py:     0.
+
+Handoff-Schuld "tests-mypy: 15 Fehler"
+abgetragen (Stand vor W31-Mypy war 28+6=34,
+jetzt 0+0).
+
+W25-W31-Komplex ABGESCHLOSSEN.
+  W25a entfaellt (defekter Guard-Test).
+  W25b+c (Skill-Infrastruktur + plan.md).
+  W25d+e (toten Code entfernt).
+  W26 (PLAN.md als Datei).
+  W27 (Sprint-Contracts).
+  W28a-c (Judge + Review-Loop + max_tokens).
+  W29 (Aggregated Phase-Review).
+  W30 (Loop-Cap-Konsistenz).
+  W31-Mypy + W31-Mypy-b (Test-Schuld).
+
+Naechster Schritt:
+  1. Phase 19 neu planen mit verschaerftem
+     Planner (Weg-X-P19c).
+  2. Plan pruefen (P17-konform? P19-Messung?).
+  3. Lauf starten.
+  4. Messung: Loop-Cap greift? (Wenn >30%
+     der Laeufe Runde 3 brauchen: A-W30-1-
+     Messung greift, Auftraggeber-Entscheid.)
+  5. Bei Scheitern: Bilanz.
+
+Merkposten nach W30:
+  W30b (_loop_erkannt): Auftraggeber-Entscheid.
+  A-W30-1-Messung: nach 5 Phasen-Laeufen.
+  A-W30-2: Recovery-Runde 1 in Laeufen pruefen.
+
+Merkposten nach W29 (aus Handoff-Abschnitt W29):
+  Chunking (A-W29-3 b): bei wachsenden Phasen.
+  phase_id: str, nicht int.
+
+Merkposten W31-Mypy:
+  mypy --strict ist NICHT eingefuehrt. Nur
+  der bestehende Test-Stand ist clean.
+  Neue Tests muessen typisiert sein (Pflicht).
+  Wenn --strict gewuenscht: eigener Block.
+
+================================================================
+ENDE W30 + W31-MYPY + W31-MYPY-B
+================================================================
