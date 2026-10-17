@@ -2876,15 +2876,24 @@ def run_phase(
         for u in unterbloecke
     ]
     if all(s == "done" for s in status_liste):
-        print("[i] Phase bereits abgeschlossen. Kein Loop.")
-        audit("run_phase_ende",
-              {"phase_id": state.phase_id,
-               "unterbloecke": len(unterbloecke),
-               "rc": 0,
-               "abgebrochen": False,
-               "bereits_fertig": True},
-              state.project_dir, project_name)
-        return 0
+        # W47 (2026-10-17): Unterscheide zwischen
+        # 'Phase bereits offiziell beendet'
+        # (phase_aktiv=False) und 'alle done, aber
+        # Sammel-Commit fehlt' (phase_aktiv=True).
+        # Im zweiten Fall weiter zum Gesamt-Review.
+        if not state.phase_aktiv:
+            print("[i] Phase bereits abgeschlossen. "
+                  "Kein Loop.")
+            audit("run_phase_ende",
+                  {"phase_id": state.phase_id,
+                   "unterbloecke": len(unterbloecke),
+                   "rc": 0,
+                   "abgebrochen": False,
+                   "bereits_fertig": True},
+                  state.project_dir, project_name)
+            return 0
+        print("[i] Alle Unterbloecke done. "
+              "Gesamt-Review folgt.")
     if any(s in ("no_go", "failed") for s in status_liste):
         print("[FAIL] Phase enthaelt no_go/failed. Fail closed.")
         audit("run_phase_ende",

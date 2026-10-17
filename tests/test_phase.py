@@ -416,6 +416,11 @@ class TestRunPhase:
             pipeline, "_PHASE_YAML_DIR", tmp_path)
         _baue_phase_yaml(tmp_path, ups)
         state = _state_fuer_phase(tmp_path)
+        # W47: 'alle done' + phase_aktiv=False
+        # bedeutet 'Phase bereits beendet'.
+        # Mit phase_aktiv=True wuerde der Code
+        # weiter zum Gesamt-Review laufen.
+        state.phase_aktiv = False
         rc = pipeline.run_phase("testprojekt", state, [])
         assert rc == 0
 
