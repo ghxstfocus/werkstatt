@@ -4173,3 +4173,71 @@ Naechster Schritt:
 ================================================================
 ENDE WEG-X-P19
 ================================================================
+
+
+================================================================
+WEG-X-P19b ERLEDIGT (2026-10-17) — P17-FORMAT ERKANNT
+================================================================
+
+Commit: dcda015.
+Kategorie 2 (Bugfix + Tests).
+Kein Tag probebetrieb-69.
+
+Was gebaut wurde:
+  pipeline.py:
+    - _plan_ist_messungsbasiert erweitert:
+      akzeptiert BEIDE Formate:
+        (1) Praefix "neu:"/"anker:" (degraded,
+            backward-compat). Zaehler
+            _plan_ist_messungsbasiert_praefix_zaehler
+            und Audit-Event
+            planner_plan_praefix_format_verwendet.
+        (2) P17-Format: datei: + aktion:neu|patch
+            + signatur: (bei neu) oder anker:
+            (bei patch).
+      Echte Verletzungen bleiben fail-closed:
+        - "test:..." ohne "datei:..."
+        - "aktion: neu" ohne "signatur:"
+        - "aktion: patch" ohne "anker:"
+        - "datei:" ohne "aktion:"
+      Fehlermeldung grund-spezifisch (A4).
+    - Katalog erweitert (78 -> 80):
+        planner_plan_unvollstaendig,
+        planner_plan_praefix_format_verwendet.
+
+  tests/test_pipeline.py:
+    - TestWEGXP19bP17Format (8 Tests).
+    - 5 Katalog-Anzahl-Asserts 78 -> 80
+      (historische Test-Namen bleiben).
+
+Test-Anzahl (gemessen):
+  Vorher: 1020 passed.
+  Nachher: 1028 passed.
+  Neue Tests: 8.
+
+Bugfix waehrend Bau:
+  - mypy-Fehler "Callable has no attribute
+    letzter_praefix_zaehler" (Funktionsattribut
+    nicht typisiert). Fix: modulglobaler
+    Zaehler.
+  - Test-Klasse doppelt eingefuegt (F811).
+    Fix: Doppelten Block entfernt.
+  - ISC004 (implizite String-Konkat in
+    Collections). Fix: Klammern + Zeilenumbrueche.
+
+Merkposten:
+  WEG-X-P19c (Praefix-Format deprecaten):
+    Nach Messung von
+    planner_plan_praefix_format_verwendet
+    in den naechsten Laeufen. Wenn Planner
+    das P17-Format zuverlaessig nutzt:
+    Praefix-Format im Check entfernen
+    (eigener Block, Kategorie 3).
+
+Naechster Schritt:
+  Plan-Lauf Phase 19 mit verschaerftem
+  P19 + P17-Format-Erkennung.
+
+================================================================
+ENDE WEG-X-P19b
+================================================================
