@@ -2200,14 +2200,18 @@ class TestPhasePersistenz:
             {"id": "U3", "status": "pending",
              "commit_paket": {}},
         ]
-        pakete = [
-            dict(u["commit_paket"])
-            for u in ups_plan
-            if isinstance(u, dict)
-            and u.get("status") == "done"
-            and isinstance(u.get("commit_paket"), dict)
-            and u["commit_paket"].get("dateien")
-        ]
+        pakete: list[dict[str, object]] = []
+        for u in ups_plan:
+            if not isinstance(u, dict):
+                continue
+            if u.get("status") != "done":
+                continue
+            cp = u.get("commit_paket")
+            if not isinstance(cp, dict):
+                continue
+            if not cp.get("dateien"):
+                continue
+            pakete.append(dict(cp))
         assert len(pakete) == 2
         assert pakete[0]["dateien"] == ["a.py"]
         assert pakete[1]["dateien"] == ["b.py"]
@@ -2220,14 +2224,18 @@ class TestPhasePersistenz:
             {"id": "U2", "status": "done",
              "commit_paket": {}},
         ]
-        pakete = [
-            dict(u["commit_paket"])
-            for u in ups_plan
-            if isinstance(u, dict)
-            and u.get("status") == "done"
-            and isinstance(u.get("commit_paket"), dict)
-            and u["commit_paket"].get("dateien")
-        ]
+        pakete: list[dict[str, object]] = []
+        for u in ups_plan:
+            if not isinstance(u, dict):
+                continue
+            if u.get("status") != "done":
+                continue
+            cp = u.get("commit_paket")
+            if not isinstance(cp, dict):
+                continue
+            if not cp.get("dateien"):
+                continue
+            pakete.append(dict(cp))
         assert pakete == []
 
 # =====================================================================
