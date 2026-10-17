@@ -4785,3 +4785,80 @@ Naechster Block: W29 (Aggregated Phase-Review).
 ================================================================
 ENDE W28b + W28c
 ================================================================
+
+
+================================================================
+W29 ERLEDIGT (2026-10-17) — AGGREGATED PHASE-REVIEW
+================================================================
+
+Commit: 0faa69f.
+Block W29 von 5 (W25-W30-Komplex).
+Kategorie 3 (Kernlogik).
+Kein Tag probebetrieb-69.
+
+Vorher:
+  _phase_gesamt_review war rein deterministisch
+  (Zaehlung). Kein LLM-Blick auf die Phase.
+
+Nachher:
+  W29a — _phase_deterministisch_pruefen (D1-D5):
+    D1: alle Unterbloecke done.
+    D2: Duplikate = 0 in Datei-Union.
+    D3: Whitelist eingehalten.
+    D4: keine Waisen (Union == Pakete).
+    D5: alle Dateien existieren.
+    Fail-closed rc=17.
+
+  W29b — Phase-Judge (PHASE-GO / PHASE-NO-GO):
+    _build_phase_judge_input (neu):
+      plan.md + Diff-Statistik + Top-3-Voll-Diffs
+      + basis_gate_test_results.
+    _phase_judge_review (neu).
+    _phase_judge_repair_runde (neu, Cap 1,
+      A-W29-4).
+    _git_diff_phase (neu): git diff <start>..HEAD
+      via subprocess.run, analog _git_rev_parse_head.
+    Bei NO-GO nach Repair: Fail-closed rc=18.
+
+  run_phase-Einhaengung zwischen Z. 2966 (aggregat)
+  und Z. 2989 (Approval-Anzeige).
+  Approval-Prompt wird bei NO-GO nicht erreicht.
+  Audit-Kind phase_gesamt_review_no_go (92 -> 93).
+
+Resume-Verhalten:
+  phase_commit_pakete bleiben bei NO-GO erhalten.
+
+A-W29-3-Wahl: (a).
+  Diff-Statistik + Top-3-Dateien als Voll-Diff.
+  Chunking (b) als Merkposten.
+  (c) verworfen.
+
+Test-Anzahl: 1051 -> 1065 passed.
+  TestW29Deterministisch: 6 Tests.
+  TestW29JudgePrompt: 3 Tests.
+  TestW29JudgeVerdict: 5 Tests.
+  Fixture-Fixes:
+    _mock_run_pipeline erzeugt pro Aufruf eine
+      andere Datei (D2-Schutz).
+    Autouse-Fixture _mock_phase_judge_go (GO als
+      Default fuer bestehende Phase-Tests).
+    test_approval_j_commit: Datei-Liste angepasst
+      (["apps/x0.py", "apps/x1.py"]).
+    test_build_phase_judge_input_enthaelt_plan:
+      phase_id als str.
+    Katalog-Anzahl 84 -> 85 in 5 Tests.
+
+Merkposten W29:
+  - Chunking (A-W29-3 b): bei wachsenden Phasen
+    Diff-Chunking oder selektiveres Top-N.
+  - phase_id-Typ: str, nicht int. In RunState
+    dokumentiert (Z. ~4718).
+  - Wenn PHASE-NO_GO haeufig: Judge-Prompt
+    schaerfen oder Phase-Review zurueckbauen
+    (RR1 im Reviewer-Block).
+
+Naechster Block: W30 (Loop-Cap + Solver-Trigger).
+
+================================================================
+ENDE W29
+================================================================
