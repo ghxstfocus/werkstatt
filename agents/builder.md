@@ -137,6 +137,90 @@ Bei Doku-Patches gilt:
 Wenn Anker und Ersatz identisch sind, ist der
 Patch wirkungslos. Pruefe immer: ersatz != anker.
 
+## ANKER-MINIMALITAET
+
+Ein Anker ist IMMER genau der Text, der im
+Auftrag zwischen `anker:'...'` steht. Nichts
+davor, nichts danach.
+
+Wenn der Auftrag sagt:
+  anker:'class RiskLevel(Enum):'
+
+Dann ist der Anker exakt diese eine Zeile —
+NICHT die Zeile davor (`class RiskRuleError`),
+NICHT die Zeilen danach (RiskLevel-Werte),
+NICHT der `__all__`-Block.
+
+Der Patch ersetzt nur den Anker. Der Rest der
+Datei bleibt unveraendert.
+
+Wichtig: Wenn eine Klasse oder Funktion
+umgebender Kontext ist (z. B. `class
+RiskRuleError(Exception):` steht direkt vor
+`class RiskLevel(Enum):`), darf dieser Kontext
+NICHT in den Anker aufgenommen werden. Sonst
+loescht der Patch ungewollt Code, der nicht
+im Auftrag steht.
+
+Pruefung vor dem Absenden:
+  - Enthaelt der Anker nur Text, der im Auftrag
+    woertlich genannt ist?
+  - Wenn nein: Anker kuerzen.
+
+## TEST-FELD IM AUFTRAG
+
+Wenn der Auftrag ein `test:`-Feld nennt
+(z. B. `test:tests/unit/test_risk_models.py`),
+dann ist das eine Pflicht-Testdatei.
+
+Regeln:
+
+1. Existiert die Testdatei bereits?
+   - Ja: Der Builder MUSS den Test anpassen,
+     wenn die Aenderung das Verhalten bricht.
+   - Nein: Der Builder MUSS die Testdatei
+     anlegen (typ: new_file). Die Testdatei
+     gehoert zum Auftrag wie der Code.
+
+2. Wenn `test:` genannt ist, aber der Auftrag
+   KEINE Aenderung an der Testdatei fordert
+   (weil die bestehenden Tests weiter gruen
+   sind): kein Patch noetig. Aber der Builder
+   MUSS pruefen, ob die Tests gruen bleiben.
+   Wenn nein: Test anpassen.
+
+3. `test:` ist NICHT optional. Fehlt die
+   Testdatei und der Auftrag fordert sie,
+   ist der Unterblock nicht erfuellt.
+
+Beispiel:
+  Auftrag: "datei:core/risk/models.py,
+            aktion:patch, test:tests/unit/test_risk_models.py"
+  -> Patch 1: core/risk/models.py (Enum + Mapping).
+  -> Patch 2: tests/unit/test_risk_models.py
+              (typ:new_file, Test fuer Enum + Mapping).
+
+## __ALL__-PFLEGE
+
+Wenn eine neue oeffentliche Klasse, Funktion
+oder Konstante hinzugefuegt wird (z. B.
+`ImmediateActionCategory`), und die Datei hat
+ein `__all__`-Block, dann MUSS der neue Name
+in `__all__` aufgenommen werden.
+
+Regeln:
+
+1. `__all__` erweitern, NICHT loeschen.
+   Bestehende Namen bleiben unveraendert.
+2. Position: alphabetisch (wenn die Datei
+   alphabetisch sortiert ist), sonst am Ende.
+3. Pruefung vor dem Absenden:
+   - Enthaelt `__all__` den neuen Namen?
+   - Wenn nein: ergaenzen.
+
+Ausnahme: Die Datei hat kein `__all__`. Dann
+gilt die Regel nicht.
+
 ## NEUE DATEIEN (typ: new_file)
 
 Fuer eine NEUE Datei (existiert noch nicht)
