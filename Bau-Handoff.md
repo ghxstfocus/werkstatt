@@ -4349,3 +4349,40 @@ Merkposten:
 ================================================================
 ENDE ANKER-REGEX-FIX
 ================================================================
+
+
+================================================================
+U4-HINWEIS-TEST ENTFERNT (2026-10-17)
+================================================================
+
+Commit: 7aa0583.
+Kategorie 2 (Test).
+Kein Tag probebetrieb-69.
+
+Problem:
+  test_u4_hinweis_models_py las phase.yaml und
+  prueft, ob U4 einen "models.py"-Hinweis enthaelt.
+  Das war Phase-18-spezifisch (U4 = Guardrail-
+  Repository (DB)). In Phase 19 ist U4 =
+  SofortMassnahme-Modell — kein models.py.
+
+Fix:
+  Test entfernt. Grund: phase.yaml-abhaengige
+  Tests sind Anti-Pattern (vgl. W17,
+  test_quelle_werkstatt, W13a). Bei jeder
+  Phasen-Aenderung brechen sie.
+
+Test-Anzahl: 1027 passed, 0 failed.
+
+Merkposten W17c:
+  Bei kuenftigen Tests: keine phase.yaml-
+  Abhaengigkeit. Deterministische Fixture
+  verwenden (tmp_path, statische YAML-Strings).
+
+Naechster Schritt:
+  P20+P21 Reviewer-Block formulieren
+  (Planner-Auftrags-Kontext + Selbst-Kritik).
+
+================================================================
+ENDE U4-TEST-ENTFERNUNG
+================================================================
