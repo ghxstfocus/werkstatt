@@ -5138,3 +5138,122 @@ Naechster Schritt: W35a-2 (Planner-Resume),
 ================================================================
 ENDE W35a-1
 ================================================================
+
+
+================================================================
+W34b + W35a-1 + W35a-2 ERLEDIGT (2026-10-17)
+================================================================
+
+Commits: b7d5c02 (W34b), 79027d8 (W35a-1),
+         5a2d7cf (W35a-1-Handoff),
+         ca483cb (W35a-2).
+Kategorien: 3 (W34b), 2 (W35a-1), 3 (W35a-2).
+Kein Tag probebetrieb-69.
+
+W34b (_phasen_basis_gate_ok ignoriert .werkstatt/):
+  Bug: W32 (_schreibe_contract in run_phase)
+    hat .werkstatt/contracts/<uid>.md geschrieben.
+    Das Basis-Gate hat es als fremd_untracked
+    markiert -> Deadlock vor Unterblock-Start.
+  Fix: Filter auf _norm(p).startswith("werkstatt/")
+    (nach _norm, weil _norm fuehrende Punkte
+    entfernt).
+  Tests: 3 (T1 .werkstatt/ ignoriert, T2 fremd
+    fail-closed, T4 gemischt).
+  Test-Anzahl: 1086 -> 1089.
+
+W35a-1 (letzter_befund in phase.yaml):
+  Vorbereitung W35a-2.
+  - _phase_yaml_status_update: neuer Parameter
+    letzter_befund: str | None.
+    Bei no_go: letzter_befund[:500].
+    Bei done: "".
+  - _letzter_reviewer_befund (neu): liefert
+    state.review_runden[-1]["raw"][:500].
+  - run_phase, zwei no_go-Stellen (Z. ~3180
+    unklar_eskalation, Z. ~3198 unterblock_no_go):
+    letzter_befund=_letzter_reviewer_befund(state).
+  Tests: 2 (T1 schreiben, T2 loeschen).
+  Test-Anzahl: 1089 -> 1091.
+  W35a-1-Rollback: git reset --hard b7d5c02
+    (W34b) im Handoff-Commit 5a2d7cf
+    nachgetragen (A-W35a-14).
+  Lehre (A-W35a-18): Rollback-Kriterium gehoert
+    in den CODE-Commit-Body, nicht nur in den
+    Handoff.
+
+W35a-2 (Planner-Resume im Phasen-Pfad):
+  Bug: _phase_main_pfad uebersprang den Planner
+    bei existierendem Plan. Bei offenen no_go/
+    failed musste der Mensch manuell nachbessern
+    (U2a3 yaml.YAMLError -> ValueError,
+     Commit fbba8b0).
+
+  Fix:
+  - _phase_planner_resume (neu):
+    Zustands-Automat Z1/Z2a/Z2b/Z3/Z4.
+    Cap pro uid (state.planner_resume_anzahl).
+    Merge via Struktur-Check (W16-Weg-Y-Schutz):
+    done bleibt, no_go/failed -> pending.
+    phase_stand + korrektur_kontext
+    (reviewer_befund + solver_befund) an
+    _planner_lauf (stufe=2).
+  - RunState.planner_resume_anzahl:
+    dict[str, int].
+  - Aufruf in _phase_main_pfad vor dem
+    Skip-Planner-Zweig, wenn
+    "not resume_force" und offene no_go/failed.
+    resume_force gewinnt (A-W35a-7).
+  - 8 neue Audit-Kinds (Katalog 86 -> 94):
+    planner_resume_start, _merge, _failed,
+    _cap_erreicht, _solver_nicht_gerufen,
+    _solver_ohne_befund, _befund_ohne_trigger,
+    _solver_befund_kaputt.
+
+  Zustands-Automat:
+    Z4:  befund + trigger leer -> rc=18.
+    Z1:  trigger leer + befund leer -> Resume.
+    Z2a: trigger + aufrufe==0 -> rc=18.
+    Z2b: trigger + aufrufe>0 + befund leer -> rc=18.
+    Z3:  trigger + befund -> Resume MIT solver_kontext.
+    ValueError in format_solver_befund -> rc=18.
+
+  Tests: 11 (T1, T2, T4a, T4b, T5, T6, T7,
+    T8, T9, T10, T11).
+  Test-Anzahl: 1091 -> 1102.
+
+W34a (in security-ai, Commit 87a2fbe):
+  .gitignore enthaelt ".werkstatt/".
+
+U2a3 (in security-ai, Commit fbba8b0):
+  Manuell nachgebessert (yaml.YAMLError ->
+  ValueError in apply()). W35a-2 macht das
+  strukturell ueberfluessig: der Planner
+  praezisiert beim Resume, statt Mensch.
+
+Test-Anzahl Werkstatt: 1086 -> 1102 passed.
+Test-Anzahl security-ai: 20 (unveraendert).
+
+Naechster Schritt: Phase-19-Lauf mit W35a-Stack.
+  U2b ist der naechste offene Block.
+  Erwartung: Planer-Resume greift nicht (kein
+  no_go/failed), U2b laeuft normal.
+  Danach W29 (Phase-Review) greift am Ende.
+
+Merkposten nach W35a:
+  W35a-b (W29-Konsistenz bei Planner-Resume):
+    Phase-Judge prueft geaenderten Plan.
+    Erwartung: konsistent (Resume VOR
+    Unterblock-Lauf). Nach 5 Phase-Laeufen
+    messen.
+  RR4 (Planner-Resume-Kosten): nach 5
+    Phase-Laeufen messen, wie oft Planner-
+    Resume triggert. Wenn > 30%:
+    Ursache pruefen.
+  RR2 (Praefix-Format): Planner liefert
+    wieder das Praefix-Format, das der
+    Check akzeptiert. Merkposten.
+
+================================================================
+ENDE W34b + W35a-1 + W35a-2
+================================================================
