@@ -4642,3 +4642,36 @@ Naechster Block: W26 (PLAN.md als Datei).
 ================================================================
 ENDE W25
 ================================================================
+
+
+================================================================
+W26 ERLEDIGT (2026-10-17) — PLAN.MD ALS DATEI
+================================================================
+
+Commit: 05c817e.
+Kategorie 3 (Umstrukturierung, Chef-Anweisung).
+Kein Tag probebetrieb-69.
+
+Was gebaut wurde:
+  - Neue Funktionen:
+    * _plan_pfad(state) -> Path.
+    * _plan_audit_pfad(state) -> Path.
+    * _schreibe_plan(state, plan_text) -> bool.
+    * _lese_plan(state) -> str.
+    * _lese_plan_audit(state) -> str.
+  - _phase_main_pfad: PLAN.md wird nach
+    _phase_plan_speichern geschrieben an zwei
+    Stellen (.werkstatt/plan.md im Projekt +
+    audit-logs/<run_id>/01-plan.md).
+
+Tests: 1039 -> 1042 passed.
+
+Wichtig: Die .werkstatt/plan.md wird noch NICHT
+in den Builder-Prompt eingebaut. Das ist W26b
+(spaeter, wenn der Builder den Plan liest).
+
+Naechster Block: W27 (Sprint-Contracts).
+
+================================================================
+ENDE W26
+================================================================
