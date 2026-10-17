@@ -10584,7 +10584,25 @@ def _phase_planner_resume(
                     f"{_out[:2000]}")
                 audit("planner_resume_messung",
                       {"pfad": _pfad,
-                       "len": len(_out)},
+                       "len": len(_out),
+                       "ok": True},
+                      state.project_dir, project_name)
+            else:
+                # W45 (2026-10-17): Datei fehlt.
+                # Der Planner MUSS sehen, dass die
+                # Zieldatei nicht existiert und
+                # aktion:neu verwenden.
+                _w42_kontext.append(
+                    f"=== ZIELDATEI FEHLT: {_pfad} ===\n"
+                    f"Dieser Pfad existiert NICHT im "
+                    f"Projekt. Wenn der Auftrag diese "
+                    f"Datei anlegen soll: verwende "
+                    f"aktion:neu, nicht aktion:patch.\n"
+                    f"Fehler: {_out[:200]}")
+                audit("planner_resume_messung",
+                      {"pfad": _pfad,
+                       "ok": False,
+                       "grund": "fehlt"},
                       state.project_dir, project_name)
     if _w42_kontext:
         _korrektur_kontext["gemessener_inhalt"] = (
