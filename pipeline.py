@@ -6296,12 +6296,12 @@ def apply_code_patches(state: RunState,
                       f"{ziel.relative_to(state.project_dir)}")
                 geschrieben.append(ziel)
                 continue
-            # Ambig nur, wenn ersatz nicht anker enthaelt.
-            # Sonst: ersatz = anker + etwas (Erweiterung),
-            # das ist kein doppelter Patch, sondern ein
-            # gueltiger Patch mit Erweiterung.
+            # Ambig nur, wenn WEDER anker in ersatz
+            # (Erweiterung) NOCH ersatz in anker (Entfernung).
+            # W35a-2d-6 (2026-10-17): Praefix-Faelle.
             if (_hat_ersatz and _hat_anker
-                    and anker not in ersatz):
+                    and anker not in ersatz
+                    and ersatz not in anker):
                 # Echter Ambig-Fall.
                 print(f"[FAIL] Patch ambig: anker und "
                       f"ersatz beide in "
@@ -8436,7 +8436,11 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
             print(f"[i] Doku-Patch bereits angewendet: "
                   f"{ziel}.")
             continue
-        if _hat_ersatz_d and _hat_anker_d:
+        # W35a-2d-6: Ambig nur, wenn WEDER Ersatz in
+        # Anker NOCH Anker in Ersatz (Praefix-Faelle).
+        if (_hat_ersatz_d and _hat_anker_d
+                and _pat_anker not in _pat_ersatz
+                and _pat_ersatz not in _pat_anker):
             print(f"[FAIL] Doku-Patch ambig: anker und "
                   f"ersatz beide in {ziel}.")
             audit("patch_ambig",
