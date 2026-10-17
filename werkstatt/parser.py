@@ -124,7 +124,12 @@ def _parse_phase_plan(text: str) -> list[dict[str, Any]]:
 
         # Sektion Unterpunkte.
         i += 1
-        while i < len(zeilen) and not zeilen[i].strip():
+        # W39: Leerzeilen + Kommentarzeilen
+        # ignorieren (auch zwischen UNTERBLOCK:
+        # und Unterpunkte:).
+        while i < len(zeilen) and (
+                not zeilen[i].strip()
+                or zeilen[i].strip().startswith("#")):
             i += 1
         if i >= len(zeilen) or \
                 zeilen[i].strip() != "Unterpunkte:":

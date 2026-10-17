@@ -10444,11 +10444,9 @@ def _phase_planner_resume(
         _ustatus = _u.get("status", "?")
         _alter_plan_zeilen.append(
             f"UNTERBLOCK: {_uid} - {_utitel}")
-        # Status als Kommentar, damit der Planner
-        # den aktuellen Stand sieht, aber das
-        # P10-P14-Format nicht bricht.
-        _alter_plan_zeilen.append(
-            f"  # Status: {_ustatus}")
+        # W39: Status NICHT als Kommentar im
+        # P10-P16-Format. Der Planner sieht den
+        # Stand im phase_stand-Block.
         _alter_plan_zeilen.append("Unterpunkte:")
         for _punkt in _u.get("unterpunkte", []):
             # Unterpunkte sind einzeilig; Zeilenumbrueche
