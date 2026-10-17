@@ -4675,3 +4675,32 @@ Naechster Block: W27 (Sprint-Contracts).
 ================================================================
 ENDE W26
 ================================================================
+
+
+================================================================
+W27 ERLEDIGT (2026-10-17) — SPRINT-CONTRACTS
+================================================================
+
+Commit: 309aeef.
+Kategorie 3 (Umstrukturierung, Chef-Anweisung).
+Kein Tag probebetrieb-69.
+
+Was gebaut wurde:
+  - Neue Funktionen:
+    * _contract_pfad(state, uid) -> Path.
+    * _contract_aus_unterblock(unterblock) -> str.
+    * _schreibe_contract(state, unterblock) -> bool.
+    * _lese_contract(state, uid) -> str.
+  - _phase_main_pfad: pro Unterblock wird
+    .werkstatt/contracts/<uid>.md angelegt.
+
+Tests: 1042 -> 1045 passed.
+
+Wichtig: Der Builder liest noch NICHT seinen
+Contract. Das ist W27b (in W28 integriert).
+
+Naechster Block: W28 (Judge + Repair-Loop).
+
+================================================================
+ENDE W27
+================================================================
