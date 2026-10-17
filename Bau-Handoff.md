@@ -4448,3 +4448,57 @@ Naechster Schritt:
 ================================================================
 ENDE SAN-A
 ================================================================
+
+
+================================================================
+WEG-X-P22a ERLEDIGT (2026-10-17) — DIAGNOSE-LUECKE
+================================================================
+
+Commit: 74050ad.
+Kategorie 3.
+Kein Tag probebetrieb-69.
+
+Problem:
+  Post-Apply-Korrektur-Loop zeigte dem Builder nur
+  "rot: ruff" ohne Regeln. Bei Phase-19-U1 fuehrte
+  das zu 5 Runden read_file ohne Patch, Fail-closed.
+
+Fix:
+  - _basis_gate_pytest_ziel-Output in
+    basis_protokoll_nach_apply eingebaut.
+  - RunState-Feld basis_gate_test_results
+    (strukturiert).
+  - _bauer_recovery_prompt: voller Protokoll +
+    strukturierte failed_test_ids.
+
+Test-Anzahl: 1029 passed (unveraendert).
+
+Wirkung:
+  Builder sieht bei Post-Apply-Rot:
+    - Test-ID (tests/unit/test_x.py::test_a).
+    - Traceback (raw_tail).
+    - Volle ruff/mypy-Ausgabe.
+
+  Vermutlich loest das den 5-Runden-Deadlock
+  bei U2-U7.
+
+Naechster Schritt:
+  Phase 19 U2-U7 laufen lassen.
+  Messen: Baut der Builder mit vollstaendiger
+  Diagnose konform?
+  Wenn ja: Diagnose-Luecke war der Hauptgrund.
+  Wenn nein: naechster Block (Rollen-Sanierung
+  SAN-B, oder Crawler WEG-X-P22).
+
+Merkposten Crawler (WEG-X-P22):
+  Konzept skizziert (Crawler + Crawler-Reviewer +
+  Crawler-Solver, eigener Prozess nach Phasen-
+  Ende). NICHT gebaut.
+  Prioritaet: nach Phase 19 (wenn Bauloop stabil).
+  Block ist ~500 Zeilen, 3-5 Sessions.
+  Crawler loest Test-Wartezeit, nicht Auftrags-
+  Verstaendnis.
+
+================================================================
+ENDE WEG-X-P22a
+================================================================
