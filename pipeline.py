@@ -5717,6 +5717,26 @@ def _build_judge_input(state: RunState) -> str:
         state.basis_gate_test_results)
     if not tests:
         tests = "(keine Test-Ergebnisse)"
+    # W44 (2026-10-17): Judge-Prompt-Groesse
+    # begrenzen. Ohne Begrenzung antwortet der
+    # Judge bei >8000 Zeichen leer (raw_len=0,
+    # kein Timeout). Ziel: Gesamt < 8000 Zeichen
+    # (~2000 Token Budget).
+    _W44_CONTRACT_MAX = 2000
+    _W44_MESS_MAX = 4000
+    _W44_TESTS_MAX = 1500
+
+    def _w44_kuerzen(text: str, max_len: int) -> str:
+        if len(text) <= max_len:
+            return text
+        return (
+            text[:max_len]
+            + f"\n[... GEKUERZT. {len(text) - max_len} "
+            f"weitere Zeichen. ...]")
+
+    contract = _w44_kuerzen(contract, _W44_CONTRACT_MAX)
+    mess_nach = _w44_kuerzen(mess_nach, _W44_MESS_MAX)
+    tests = _w44_kuerzen(tests, _W44_TESTS_MAX)
     return (
         f"=== CONTRACT ({uid}) ===\n"
         f"{contract}\n\n"
