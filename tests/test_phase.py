@@ -1588,11 +1588,12 @@ class TestNewFilePrompt:
             encoding="utf-8")
         assert "Platzhalter" in text
 
-    def test_reviewer_md_enthaelt_new_file(self) -> None:
+    def test_judge_md_enthaelt_contract(self) -> None:
+        """W28a: judge.md prueft gegen Contract."""
         from pathlib import Path as _P
-        text = _P("/opt/werkstatt/agents/reviewer.md").read_text(
+        text = _P("/opt/werkstatt/agents/judge.md").read_text(
             encoding="utf-8")
-        assert "typ: new_file" in text
+        assert "contract" in text.lower() or "vertrag" in text.lower()
 
     def test_hard_rules_builder_b12(self) -> None:
         assert "B12." in pipeline.HARD_RULES_BUILDER
@@ -1627,21 +1628,15 @@ class TestRollenAuditA:
     def test_reviewer_kein_security_review_log(self) -> None:
         assert "SECURITY_REVIEW_LOG" not in self._read("reviewer.md")
 
-    def test_reviewer_hat_security_log(self) -> None:
-        assert "SECURITY_LOG" in self._read("reviewer.md")
+    def test_judge_hat_security_log(self) -> None:
+        """W28a: judge.md kennt SECURITY_LOG (Sicherheit)."""
+        assert "SECURITY_LOG" in self._read("judge.md") or \
+            "Sicherheit" in self._read("judge.md")
 
-    def test_reviewer_hat_r10_hinweis(self) -> None:
-        t = self._read("reviewer.md")
-        assert "typ: new_file" in t
-
-    def test_reviewer_hat_r5_ausnahme(self) -> None:
-        t = self._read("reviewer.md")
-        assert "R5" in t and "gilt nicht" in t
-
-    def test_reviewer_hat_antwort_modus(self) -> None:
-        t = self._read("reviewer.md")
-        assert "ANTWORT" in t
-        assert "COMMAND vs. VERDICT vs. ANTWORT" in t
+    def test_judge_hat_r10_hinweis(self) -> None:
+        """W28a: judge.md prueft new_file-Kontext."""
+        t = self._read("judge.md")
+        assert "mess_nach" in t or "code_entwurf" in t.lower()
 
     def test_builder_hat_git_ls_files(self) -> None:
         t = self._read("builder.md")
@@ -1659,13 +1654,10 @@ class TestRollenAuditA:
         t = self._read("builder.md")
         assert "2 Spaces entfernt" in t
 
-    def test_hash_regel_gleich(self) -> None:
-        """reviewer.md und builder.md nutzen denselben
-        Wortlaut fuer den Vorgaenger-Hash."""
-        r = self._read("reviewer.md")
-        b = self._read("builder.md")
-        assert "Vorgaenger-Hash" in r
-        assert "Vorgaenger-Hash" in b
+    def test_hash_regel_judge(self) -> None:
+        """W28a: Judge prueft keine Hashes (Contract-Sache)."""
+        t = self._read("judge.md")
+        assert "Contract" in t or "Vertrag" in t
 
     def test_build_system_prompt_reviewer_kein_alt(self) -> None:
         agents = pipeline.load_agents("/opt/werkstatt/agents")

@@ -479,6 +479,30 @@ T4. Keine eigene Meinung zum Code.
 # Aufgabe: Unterstuetzung fuer den Builder-Agenten.
 # Diagnose, woran es scheitert + wie besser.
 # Adressat: Builder-Agent.
+HARD_RULES_JUDGE = """
+J1. Du bist der Judge. Du pruefst den angewendeten
+    Code gegen den Contract.
+J2. Du siehst NUR: contract.md, mess_nach.txt,
+    basis_gate_test_results.
+J3. Du siehst NICHT: code_entwurf, mess_protokoll,
+    basis_protokoll, commit_message, git_diff.
+J4. Pruefe Contract-Punkt fuer Contract-Punkt:
+    Akzeptanz-Kriterien, Grenzen, Fail-closed.
+J5. Tests: alle im Contract genannten Tests muessen
+    gruen sein (basis_gate_test_results).
+J6. Linter: ruff 0, mypy 0.
+J7. Sicherheit: OWASP Top 10:2025, CWE Top 25.
+    Vier-Fragen-Triage (angreiferkontrolliert,
+    erreichbar, Blast Radius, Exploit-Schritte).
+    Nur melden, was die Triage besteht.
+J8. Verdict: GO / NO_GO / ESKALATION.
+J9. Bei NO_GO: konkrete Problem-Liste (max 5).
+    Jede Position nennt: Datei:Zeile, Regel/Test,
+    erwartet vs. gefunden.
+J10. Kein eigener Code. Kein eigener Fix.
+"""
+
+
 HARD_RULES_SOLVER = """
 S1. Du bist der Solver. Du unterstuetzt den
     Builder-Agenten, nicht den Reviewer, nicht
@@ -820,6 +844,7 @@ HARD_RULES_BY_ROLE = {
 }
 HARD_RULES_BY_ROLE["solver"] = HARD_RULES_SOLVER
 HARD_RULES_BY_ROLE["planner"] = HARD_RULES_PLANNER
+HARD_RULES_BY_ROLE["judge"] = HARD_RULES_JUDGE
 
 # Auflage 2041: Groessenlimits fuer das Messprotokoll.
 MAX_PROTOKOLL_PER_COMMAND = 10_000
@@ -4587,6 +4612,8 @@ class RunState:
     planner_runden: int = 0
     reviewer_verdict_model: str = "deepseek-chat"
     reviewer_recovery_model: str = "deepseek-reasoner"
+    # W28b: Judge-Modell (Code-Review mit frischem Kontext).
+    judge_model: str = "deepseek-reasoner"
     builder_model: str = "deepseek-chat"
     builder_temp: float = 0.3
     test_gen_model: str = "deepseek-chat"

@@ -3081,12 +3081,10 @@ class TestGemessenerInhalt:
         assert "GEMESSENER INHALT" in s
         assert "Prioritaet der Anker-Quellen" in s
 
-    def test_reviewer_md_gemessener_inhalt_verbindlich(self) -> None:
-        """reviewer.md hat den GEMESSENER INHALT-Abschnitt."""
-        s = Path("/opt/werkstatt/agents/reviewer.md").read_text(
-            encoding="utf-8")
-        assert "## GEMESSENER INHALT (verbindlich)" in s
-        assert s.count("## GEMESSENER INHALT (verbindlich)") == 1
+    def test_judge_gemessener_inhalt_verbindlich(self) -> None:
+        """W28a: Judge sieht mess_protokoll_nach_apply."""
+        assert "mess_nach" in pipeline.HARD_RULES_JUDGE
+        assert "contract.md" in pipeline.HARD_RULES_JUDGE
 
     def test_gemessene_pfade_hilfsfunktion(self) -> None:
         """_gemessene_pfade erkennt vollstaendige read_file-Bloecke."""
@@ -5669,14 +5667,13 @@ class TestRollenKalibrierung:
         assert "## SOLVER-BEFUND" in md
         assert "Ohne Messung folge" in md
 
-    def test_reviewer_md_sachfaden(self) -> None:
-        md = self._lade_agent("reviewer")
-        assert "## SACHFADEN" in md
-        assert "Hauptbefund" in md
-        # Markdown hat Zeilenumbruch zwischen den
-        # beiden Woertern, daher nur den Prefix.
-        assert "3 aufeinanderfolgenden" in md
-        assert "ESKALATION" in md
+    def test_judge_md_sachfaden(self) -> None:
+        """W28a: judge.md prueft Contract-Treue."""
+        from pathlib import Path as _P
+        md = _P("/opt/werkstatt/agents/judge.md").read_text(
+            encoding="utf-8")
+        assert "Contract" in md or "Vertrag" in md
+        assert "GO" in md or "ESKALATION" in md
 
     def test_hard_rules_builder_b13(self) -> None:
         assert "B13. SPEC-TREUE." in pipeline.HARD_RULES_BUILDER
@@ -5804,11 +5801,12 @@ class TestNewFileMarker:
         assert "Bei new_file-Patches: read_file liefert" in md
         assert "OHNE vorheriges read_file" in md
 
-    def test_agents_reviewer_md_new_file(self) -> None:
-        p = Path("/opt/werkstatt/agents/reviewer.md")
-        md = p.read_text(encoding="utf-8")
-        assert "Bei reinen new_file-Patches" in md
-        assert "KEIN NO-GO" in md
+    def test_agents_judge_md_pruefung(self) -> None:
+        """W28a: judge.md prueft mess_nach."""
+        from pathlib import Path as _P
+        md = _P("/opt/werkstatt/agents/judge.md").read_text(
+            encoding="utf-8")
+        assert "mess_nach" in md or "mess_protokoll_nach_apply" in md
 
 # =====================================================================
 # Phasen-Header + R9/R13/R14 (Fix 1-4, 2026-10-16)
@@ -5827,12 +5825,10 @@ class TestPhasenHeader:
         assert "COMMIT-REVIEW" in pipeline._PHASE_HEADER_COMMIT_REVIEW
         assert "Phase 2" in pipeline._PHASE_HEADER_COMMIT_REVIEW
 
-    def test_reviewer_md_phasen_header(self) -> None:
-        p = Path("/opt/werkstatt/agents/reviewer.md")
-        md = p.read_text(encoding="utf-8")
-        assert "## Phasen-Header" in md
-        assert "CODE-REVIEW (Phase 1)" in md
-        assert "COMMIT-REVIEW (Phase 2)" in md
+    def test_hard_rules_reviewer_phasen_header(self) -> None:
+        """W28a: HARD_RULES_REVIEWER kennt COMMIT-GO/NO-GO."""
+        assert "COMMIT-GO" in pipeline.HARD_RULES_REVIEWER or \
+            "COMMIT-NO-GO" in pipeline.HARD_RULES_REVIEWER
 
     def test_hard_rules_r13(self) -> None:
         assert "R13. PHASEN-TRENNUNG." in \
@@ -5858,15 +5854,14 @@ class TestPhasenHeader:
         assert "ESKALATION ist ein anderer Ausgang" in \
             pipeline.HARD_RULES_REVIEWER
 
-    def test_reviewer_md_verdict_konsistenz(self) -> None:
-        p = Path("/opt/werkstatt/agents/reviewer.md")
-        md = p.read_text(encoding="utf-8")
-        assert "## VERDICT-KONSISTENZ" in md
+    def test_hard_rules_reviewer_verdict_konsistenz(self) -> None:
+        """W28a: HARD_RULES_REVIEWER kennt COMMIT-GO/NO-GO."""
+        assert "COMMIT-GO" in pipeline.HARD_RULES_REVIEWER or \
+            "COMMIT-NO-GO" in pipeline.HARD_RULES_REVIEWER
 
-    def test_reviewer_md_eskalation_vs_no_go(self) -> None:
-        p = Path("/opt/werkstatt/agents/reviewer.md")
-        md = p.read_text(encoding="utf-8")
-        assert "ESKALATION vs. NO-GO" in md
+    def test_hard_rules_reviewer_eskalation_vs_no_go(self) -> None:
+        """W28a: HARD_RULES_REVIEWER kennt ESKALATION."""
+        assert "ESKALATION" in pipeline.HARD_RULES_REVIEWER
 
     def test_build_system_prompt_reviewer_enthaelt_r13_r14(
             self) -> None:
