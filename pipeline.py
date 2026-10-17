@@ -10670,8 +10670,10 @@ def _phase_planner_resume(
                       f"statt {_w35a2d_pos_alt}.")
                 return 18
 
-    # Bestehender Anzahl-Check bleibt als Fallback.
-    if len(_alte_ups) != len(_neue_ups):
+    # Bestehender Anzahl-Check bleibt als Fallback,
+    # aber bei validiertem Split (W35a-2d) ueberspringen.
+    if (_w35a2d_split_anzahl == 0
+            and len(_alte_ups) != len(_neue_ups)):
         print("[FAIL] Planner-Resume: Anzahl geaendert. "
               "Fail closed.")
         audit("planner_resume_failed",
