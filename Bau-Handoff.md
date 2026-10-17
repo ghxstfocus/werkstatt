@@ -4103,3 +4103,73 @@ Test-Anzahl: unveraendert 1010 passed.
 ================================================================
 ENDE W25D/W25E
 ================================================================
+
+
+================================================================
+WEG-X-P19 ERLEDIGT (2026-10-17) — PLANNER MUSS MESSEN
+================================================================
+
+Commit: 14337bd.
+Kategorie 3 (Planner-Prompt + deterministische Checks).
+Kein Tag probebetrieb-69 (Werkstatt-Fix).
+
+Was gebaut wurde:
+  pipeline.py:
+    - Neue Funktion _plan_ist_messungsbasiert
+      (Syntax-Check, nicht Wahrheit; R1-Grenze
+      im Docstring).
+    - Neue Funktion _plan_ist_portionierbar
+      (max 7 Unterpunkte pro Unterblock).
+    - P15 verschaerft: HARTES Maximum 7
+      Unterpunkte, Erklaerung "Array-Eintrag".
+    - P17 verschaerft: 4 Pflichtfelder
+      (datei, aktion, signatur/anker, test).
+    - P19 verschaerft: "MESSEN IST PFLICHT".
+    - Fail-closed im --phase-Pfad (nach
+      _parse_phase_plan, vor Anzeige).
+    - A6: Anzeige zeigt Anker pro Unterpunkt,
+      Runden-Schaetzung markiert.
+
+  tests/test_pipeline.py:
+    - TestWEGXP19PlanChecks (7 Tests).
+    - TestWEGXP19Anzeige (3 Tests).
+    - test_p19_nennt_read_file angepasst
+      (neuer Header "MESSEN IST PFLICHT").
+
+Test-Anzahl (gemessen):
+  Vorher: 1010 passed.
+  Nachher: 1020 passed.
+  Neue Tests: 10.
+
+Anlass:
+  Planner-Plan Phase 19 (2026-10-17) hat 7
+  Unterbloecke mit 88 Unterpunkten geliefert,
+  ohne Anker, ohne Zieldateien, ohne Signaturen.
+  Mit [n] verworfen.
+
+Entscheidung (Variante a, HR-R8):
+  "1-2 Zieldateien + 1 Test" bleibt reine
+  Prompt-Regel. _plan_ist_portionierbar
+  prueft nur "max 7 Array-Eintraege".
+  Variante (b) (Zaehl-Check der Zieldateien)
+  waere Scope-Creep, eigener Block bei Bedarf.
+
+Determinismus-Grenze (R1, im Docstring):
+  _plan_ist_messungsbasiert prueft Syntax.
+  Dekorative Anker (Planner schreibt "anker:"
+  ohne zu messen) passieren den Check.
+  Wahrheits-Pruefung ist LLM-Sache (P19).
+  Bekannte Grenze, bewusst akzeptiert.
+
+Naechster Schritt:
+  Phase 19 neu planen mit verschaerftem P19.
+  Erwartung: Planner misst (COMMAND: RUN
+  read_file), zitiert Anker, portioniert
+  3-7 Unterpunkte pro Unterblock.
+  Bei Verletzung: Fail-closed, Konsole mit
+  Hinweis "Auftrag praezisieren oder
+  'neu:'-Modus verwenden."
+
+================================================================
+ENDE WEG-X-P19
+================================================================
