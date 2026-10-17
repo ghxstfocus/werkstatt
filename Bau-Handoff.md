@@ -4386,3 +4386,65 @@ Naechster Schritt:
 ================================================================
 ENDE U4-TEST-ENTFERNUNG
 ================================================================
+
+
+================================================================
+SAN-A ERLEDIGT (2026-10-17) — AGENT_DOCS REDUZIERT
+================================================================
+
+Commit: 4469a5e.
+Kategorie 3 (Prompt-Diaet).
+Kein Tag probebetrieb-69.
+
+Was gebaut wurde:
+  projects/security-ai.yaml:
+    agent_docs reduziert:
+      reviewer: [conventions, web_security]
+      builder: [conventions, web_security]
+      test_generator: [conventions]
+      solver: [conventions, web_security]
+      planner: [conventions]
+      coverage, chaos: bewusst kein agent_docs.
+      decisions, security_log: NICHT mehr statisch.
+      Bei Bedarf: COMMAND: RUN read_file
+        docs/DECISIONS.md:18-221.
+
+  tests/test_pipeline.py:
+    +2 Tests (TestSANAProjektkonfig).
+    1 Test angepasst (solver_enthaelt_projektwissen).
+
+Prompt-Groesse (gemessen):
+  Vorher (gesch.):
+    Builder ~2914 Zeilen Basis.
+    Reviewer ~5074.
+    Planner ~4651.
+    Solver ~4709.
+  Nachher (gemessen):
+    Builder 1055 Zeilen.
+    Reviewer 1004.
+    Planner 578.
+    Solver 639.
+
+Test-Anzahl: 1027 -> 1029 passed.
+
+Versuch, nicht Loesung:
+  Prompt-Groesse ist Hypothese, nicht gemessen.
+  Test ist der naechste Phase-19-Lauf mit
+  SAN-A-Konfiguration.
+  Wenn Builder danach weiter Auftraege
+  umdeutet: Ursache woanders (Kanal, Modell,
+  Format).
+
+Rollback-Kriterium:
+  git reset --hard 43051db.
+
+Naechster Schritt:
+  Phase 19 neu planen + laufen lassen.
+  Messen: Builder baut konform?
+  Wenn ja: SAN-A ist Erfolg.
+  Wenn nein: SAN-B (agents/*.md-Diaet)
+  als naechster Hebel.
+
+================================================================
+ENDE SAN-A
+================================================================
