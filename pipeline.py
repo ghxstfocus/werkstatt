@@ -1055,6 +1055,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "phase_plan_erstellt",
     "phase_plan_korrektur_failed",
     "phase_plan_korrektur_start",
+    "planner_plan_praefix_format_verwendet",
+    "planner_plan_unvollstaendig",
     "phase_plan_parse_failed",
     "phase_plan_unbeantwortet",
     "phase_finish",
@@ -9276,19 +9278,42 @@ def _phasen_basis_gate_ok(
              "done_ids": done_ids})
 
 
+# WEG-X-P19b: Zaehler fuer Praefix-Format-Verwendung.
+# Wird von _plan_ist_messungsbasiert gesetzt, vom
+# Aufrufer im --phase-Pfad gelesen (Audit).
+_plan_ist_messungsbasiert_praefix_zaehler: int = 0
+
+
 def _plan_ist_messungsbasiert(
         plan: dict[str, Any],
 ) -> tuple[bool, list[str]]:
-    """WEG-X-P19: Syntax-Check, dass jeder Unterpunkt
-    'anker:' oder 'neu:' enthaelt.
+    """WEG-X-P19b: akzeptiert zwei Formate.
 
-    Syntax-Check: prueft nur, ob unterpunkte 'anker:'
-    oder 'neu:' enthalten. Dekorative Anker passieren
-    den Check. Wahrheits-Pruefung ist LLM-Sache (P19).
-    Siehe WEG-X-P19.
+    Form (1) Praefix (degraded, WEG-X-P19b-A1):
+      "neu: datei" oder "anker: 'text'".
+      Wird per Audit-Event
+      planner_plan_praefix_format_verwendet
+      gezaehlt (Messung fuer Deprecation).
+
+    Form (2) P17 (Ziel-Form):
+      "datei:... aktion: neu|patch ... "
+      mit "signatur:" (bei neu) oder
+      "anker:" (bei patch).
+
+    Syntax-Check: prueft nur, ob unterpunkte
+    Form (1) oder (2) erfuellen. Dekorative
+    Marker passieren den Check. Wahrheits-
+    Pruefung ist LLM-Sache (P19).
+
+    Echte Verletzungen bleiben fail-closed:
+      - "test:..." ohne "datei:..."
+      - "datei:..." ohne "aktion:"
+      - "aktion: neu" ohne "signatur:"
+      - "aktion: patch" ohne "anker:"
     """
     import re as _re
     fehlend: list[str] = []
+    praefix_verwendet = 0
     for u in plan.get("phase_unterbloecke", []):
         if not isinstance(u, dict):
             continue
@@ -9297,13 +9322,52 @@ def _plan_ist_messungsbasiert(
         for punkt in unterpunkte:
             if not isinstance(punkt, str):
                 continue
-            hat_anker = bool(
-                _re.search(r"(?i)\banker\s*:",
-                            punkt))
-            hat_neu = bool(
-                _re.search(r"(?i)\bneu\s*:", punkt))
-            if not (hat_anker or hat_neu):
-                fehlend.append(f"{uid}: {punkt[:80]}")
+            p = punkt
+            # Form (1): Praefix "neu:" oder "anker:".
+            hat_praefix_neu = bool(
+                _re.search(r"(?i)\bneu\s*:", p))
+            hat_praefix_anker = bool(
+                _re.search(r"(?i)\banker\s*:", p))
+            if hat_praefix_neu or hat_praefix_anker:
+                praefix_verwendet += 1
+                continue
+            # Form (2): P17-Felder.
+            hat_datei = bool(
+                _re.search(r"(?i)\bdatei\s*:", p))
+            hat_aktion_neu = bool(
+                _re.search(
+                    r"(?i)\baktion\s*:\s*neu\b", p))
+            hat_aktion_patch = bool(
+                _re.search(
+                    r"(?i)\baktion\s*:\s*patch\b", p))
+            hat_signatur = bool(
+                _re.search(r"(?i)\bsignatur\s*:", p))
+            hat_anker_feld = bool(
+                _re.search(r"(?i)\banker\s*:", p))
+            if (hat_datei and hat_aktion_neu
+                    and hat_signatur):
+                continue
+            if (hat_datei and hat_aktion_patch
+                    and hat_anker_feld):
+                continue
+            # Verletzungs-Grund bestimmen (A4).
+            if not hat_datei and p.lstrip().lower().startswith(
+                    "test:"):
+                grund = ("test: ohne datei: — P17 verlangt "
+                         "datei:aktion:signatur/anker + test")
+            elif hat_datei and not (hat_aktion_neu
+                                     or hat_aktion_patch):
+                grund = "datei: ohne aktion: neu|patch"
+            elif hat_aktion_neu and not hat_signatur:
+                grund = "aktion: neu ohne signatur:"
+            elif hat_aktion_patch and not hat_anker_feld:
+                grund = "aktion: patch ohne anker:"
+            else:
+                grund = "kein anker/signatur oder datei/aktion"
+            fehlend.append(f"{uid}: {grund} | {p[:60]}")
+    global _plan_ist_messungsbasiert_praefix_zaehler
+    _plan_ist_messungsbasiert_praefix_zaehler = (
+        praefix_verwendet)
     return (len(fehlend) == 0, fehlend)
 
 
@@ -9649,6 +9713,12 @@ def _phase_main_pfad(
         }
         _mess_ok, _mess_fehler = _plan_ist_messungsbasiert(
             _plan_fuer_check)
+        _praefix_zaehler = (
+            _plan_ist_messungsbasiert_praefix_zaehler)
+        if _praefix_zaehler > 0:
+            audit("planner_plan_praefix_format_verwendet",
+                  {"anzahl": _praefix_zaehler},
+                  project_dir, project_name)
         if not _mess_ok:
             print("[FAIL] Plan nicht messungsbasiert. "
                   "Unterpunkte ohne anker:/neu:-Marker.")

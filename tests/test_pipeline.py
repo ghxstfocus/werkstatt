@@ -5297,7 +5297,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 78
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 80
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5333,7 +5333,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 78
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 80
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6131,7 +6131,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 78
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 80
 
 
 # =====================================================================
@@ -6236,7 +6236,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 78
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 80
 
 
 # =====================================================================
@@ -6294,7 +6294,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 78
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 80
 
 
 # =====================================================================
@@ -7426,3 +7426,95 @@ class TestWEGXP19Anzeige:
         src = inspect.getsource(pipeline._phase_main_pfad)
         assert "praezisieren" in src
         assert "kleiner planen" in src
+
+
+class TestWEGXP19bP17Format:
+    """WEG-X-P19b: _plan_ist_messungsbasiert erkennt
+    P17-Format (datei + aktion + signatur/anker + test)
+    und Praefix-Format (Backward-Compat)."""
+
+    def _plan(self, punkte: list[str]) -> dict:
+        return {"phase_unterbloecke": [
+            {"id": "U1", "unterpunkte": punkte},
+        ]}
+
+    def test_p17_format_neu_ok(self) -> None:
+        plan = self._plan([
+            ("datei:core/x.py, aktion:neu, "
+             "signatur:'def foo()', "
+             "test:tests/test_x.py"),
+        ])
+        ok, fehlend = pipeline._plan_ist_messungsbasiert(plan)
+        assert ok is True
+        assert fehlend == []
+
+    def test_p17_format_patch_ok(self) -> None:
+        plan = self._plan([
+            ("datei:core/x.py, aktion:patch, "
+             "anker:'def foo', "
+             "test:tests/test_x.py"),
+        ])
+        ok, _ = pipeline._plan_ist_messungsbasiert(plan)
+        assert ok is True
+
+    def test_p17_aktion_ohne_space(self) -> None:
+        # Regex-Toleranz: "aktion:neu" und "aktion: neu"
+        plan = self._plan([
+            ("datei:core/x.py, aktion:neu, "
+             "signatur:'def foo()', "
+             "test:tests/test_x.py"),
+        ])
+        ok, _ = pipeline._plan_ist_messungsbasiert(plan)
+        assert ok is True
+
+    def test_p17_ohne_signatur_fail(self) -> None:
+        # Echte Verletzung: aktion:neu ohne signatur.
+        plan = self._plan([
+            ("datei:core/x.py, aktion:neu, "
+             "test:tests/test_x.py"),
+        ])
+        ok, fehlend = pipeline._plan_ist_messungsbasiert(plan)
+        assert ok is False
+        assert len(fehlend) == 1
+        assert "signatur" in fehlend[0]
+
+    def test_p17_patch_ohne_anker_fail(self) -> None:
+        # Echte Verletzung: aktion:patch ohne anker.
+        plan = self._plan([
+            ("datei:core/x.py, aktion:patch, "
+             "test:tests/test_x.py"),
+        ])
+        ok, fehlend = pipeline._plan_ist_messungsbasiert(plan)
+        assert ok is False
+        assert "anker" in fehlend[0]
+
+    def test_test_ohne_datei_fail(self) -> None:
+        # Echte Verletzung: test: ohne datei:.
+        plan = self._plan([
+            ("test:tests/test_x.py, prueft: (a) xyz"),
+        ])
+        ok, fehlend = pipeline._plan_ist_messungsbasiert(plan)
+        assert ok is False
+        assert "test: ohne datei:" in fehlend[0]
+
+    def test_praefix_backward_ok(self) -> None:
+        # Backward-Compat: Praefix-Format ok, Zaehler > 0.
+        pipeline._plan_ist_messungsbasiert_praefix_zaehler = 0
+        plan = self._plan(["neu: core/x.py"])
+        ok, _ = pipeline._plan_ist_messungsbasiert(plan)
+        assert ok is True
+        assert pipeline._plan_ist_messungsbasiert_praefix_zaehler >= 1
+
+    def test_praefix_zaehler_null_bei_p17(self) -> None:
+        # P17-Format setzt Zaehler auf 0.
+        pipeline._plan_ist_messungsbasiert_praefix_zaehler = 99
+        plan = self._plan([
+            ("datei:core/x.py, aktion:neu, "
+             "signatur:'def foo()', "
+             "test:tests/test_x.py"),
+        ])
+        ok, _ = pipeline._plan_ist_messungsbasiert(plan)
+        assert ok is True
+        assert pipeline._plan_ist_messungsbasiert_praefix_zaehler == 0
+
+
