@@ -5180,6 +5180,132 @@ def _messwerte_fuer_prompt(state: RunState) -> str:
     return state.mess_protokoll
 
 
+def _format_basis_gate_test_results(
+        results: list[dict[str, Any]],
+) -> str:
+    """W23 (2026-10-17): strukturiert basis_gate_test_results
+    fuer den Commit-Review-Prompt.
+
+    Liefert einen Block pro Aufruf: scope, exit_code,
+    klassifizierung, failed_count, passed_count,
+    failed_test_ids.
+    """
+    if not results:
+        return ""
+    teile: list[str] = []
+    for tr in results:
+        teile.append(
+            f"--- {tr.get('scope', '?')} ---\n"
+            f"  exit_code: {tr.get('exit_code', '?')}\n"
+            f"  klassifizierung: "
+            f"{tr.get('klassifizierung', '?')}\n"
+            f"  failed: {tr.get('failed_count', '?')}, "
+            f"passed: {tr.get('passed_count', '?')}\n"
+            f"  failed_test_ids: "
+            f"{tr.get('failed_test_ids', [])}\n"
+        )
+    return "\n".join(teile)
+
+
+def _build_commit_input(
+        state: RunState,
+        diff_name_only: str,
+        w11_unterblock_kontext: str,
+        auflagen_text: str,
+) -> str:
+    """W23 (2026-10-17): baut den Commit-Review-Prompt.
+
+    Ausgelagert aus run_pipeline, damit testbar und
+    wartbar.
+
+    A2-Aenderung: nach Apply ist der GEMESSENER INHALT
+    (NACH Apply, verbindlich) = mess_protokoll_nach_apply.
+    VOR Apply = historisch. Warnung bei veraltet.
+    A4: Grenzfall nach_apply leer -> VOR verbindlich,
+    Warnung + Hinweis.
+    TEST-ERGEBNISSE-Block (basis_gate_test_results).
+    """
+    # A2/A4: Verfuegbarkeit pruefen.
+    _nach_apply_ok = bool(state.mess_protokoll_nach_apply)
+    _veraltet = state.mess_protokoll_veraltet
+    # Warnung.
+    if _veraltet:
+        _warnung = (
+            "!!! ACHTUNG: Code-Patches wurden angewendet.\n"
+            "!!! Der GEMESSENER INHALT (NACH Apply) ist\n"
+            "!!! verbindlich. Der VOR-Stand steht als\n"
+            "!!! historischer Kontext.\n\n")
+    else:
+        _warnung = ""
+    # GEMESSENER INHALT (NACH oder VOR).
+    if _veraltet and _nach_apply_ok:
+        _mess_block = (
+            "GEMESSENER INHALT (NACH Apply, verbindlich, "
+            "gewinnt gegen ZIELDATEIEN):\n"
+            f"{state.mess_protokoll_nach_apply}\n\n"
+            "GEMESSENER INHALT (VOR Apply, historisch):\n"
+            f"{state.mess_protokoll or '(keine)'}\n\n")
+    elif _veraltet and not _nach_apply_ok:
+        # A4 (c): VOR verbindlich, Hinweis.
+        _mess_block = (
+            "GEMESSENER INHALT (VOR Apply, verbindlich, "
+            "gewinnt gegen ZIELDATEIEN):\n"
+            f"{state.mess_protokoll or '(keine)'}\n\n"
+            "!!! WARNUNG: NACH-Apply-Stand leer.\n"
+            "!!! Pruefe mess_protokoll_veraltet-Flag und\n"
+            "!!! basis_protokoll_nach_apply.\n\n")
+    else:
+        _mess_block = (
+            "GEMESSENER INHALT (verbindlich, gewinnt gegen "
+            "ZIELDATEIEN):\n"
+            f"{state.mess_protokoll or '(keine)'}\n\n")
+    # BASIS-GATE (NACH Apply).
+    if state.basis_protokoll_nach_apply:
+        _basis_nach = (
+            "BASIS-GATE (NACH Apply):\n"
+            f"{state.basis_protokoll_nach_apply}\n\n")
+    else:
+        _basis_nach = ""
+    # TEST-ERGEBNISSE-Block.
+    _test_results = _format_basis_gate_test_results(
+        state.basis_gate_test_results)
+    if _test_results:
+        _test_block = (
+            "TEST-ERGEBNISSE (NACH Apply):\n"
+            f"{_test_results}\n\n")
+    else:
+        _test_block = ""
+    return (
+        _PHASE_HEADER_COMMIT_REVIEW
+        + f"PHASEN-MODUS: "
+        f"{'aktiv' if state.phase_aktiv else 'inaktiv'}\n"
+        + w11_unterblock_kontext
+        + "\n"
+        + "CODE-GO ist erteilt. Pruefe das Commit-Paket.\n\n"
+        + "=== COMMIT-MESSAGE (vollstaendig) ===\n"
+        + f"{state.commit_paket.get('message', '')}\n"
+        + "=== /COMMIT-MESSAGE ===\n\n"
+        + "BETROFFENE DATEIEN:\n"
+        + "\n".join(
+            f"  - {d}"
+            for d in state.commit_paket.get("dateien", []))
+        + "\n\n"
+        + f"GIT DIFF --NAME-ONLY HEAD:\n{diff_name_only}\n\n"
+        + format_messwerte_block(collect_messwerte(state))
+        + "\n\n"
+        + _warnung
+        + _mess_block
+        + _basis_nach
+        + _test_block
+        + "CODE-PATCHES (angewendet):\n"
+        + format_code_patches_fuer_commit(state.code_patches)
+        + "\n\n"
+        + f"AUFLAGEN AUS DIESER RUNDE:\n{auflagen_text}\n\n"
+        + "Antworte mit COMMIT-GO, COMMIT-NO-GO oder "
+        "COMMIT-ESKALATION."
+    )
+
+
 def _format_whitelist_block(
         file_whitelist: list[str]) -> str:
     """Whitelist-Prompt-A2 (2026-10-16): zeigt die
@@ -8952,47 +9078,11 @@ def run_pipeline(project_name: str, aufgabe: str,
                         f"bereits done)\n"
                     )
 
-            # Auflage 2180 + BO: MESSWERTE-Block statt
-            # veralteter DOKU-PATCHES-Zeilen.
-            commit_input = (
-                # Phasen-Header (2026-10-16).
-                _PHASE_HEADER_COMMIT_REVIEW
-                + f"PHASEN-MODUS: "
-                f"{'aktiv' if state.phase_aktiv else 'inaktiv'}\n"
-                + _w11_unterblock_kontext
-                + "\n"
-                + f"CODE-GO ist erteilt. Pruefe das Commit-Paket.\n\n"
-                # W9a (2026-10-16): Message in
-                # === COMMIT-MESSAGE ===-Marker.
-                # Konsistent mit === REVIEWER-BEFUND ===
-                # und === SOLVER-BEFUND ===.
-                f"=== COMMIT-MESSAGE (vollstaendig) ===\n"
-                f"{state.commit_paket.get('message', '')}\n"
-                f"=== /COMMIT-MESSAGE ===\n\n"
-                f"BETROFFENE DATEIEN:\n" +
-                "\n".join(
-                    f"  - {d}"
-                    for d in state.commit_paket.get("dateien", [])) +
-                "\n\n"
-                f"GIT DIFF --NAME-ONLY HEAD:\n{_diff_name_only}\n\n"
-                + format_messwerte_block(collect_messwerte(state))
-                + "\n\nGEMESSENER INHALT (verbindlich, "
-                + "gewinnt gegen ZIELDATEIEN):\n"
-                + f"{state.mess_protokoll or '(keine)'}\n\n"
-                + ("GEMESSENER INHALT NACH APPLY "
-                   "(new_file-Pfade):\n"
-                   + f"{state.mess_protokoll_nach_apply}\n\n"
-                   if state.mess_protokoll_nach_apply else "")
-                + (f"GEMESSENER INHALT NACH APPLY:\n"
-                   f"{state.basis_protokoll_nach_apply}\n\n"
-                   if state.basis_protokoll_nach_apply else "")
-                + "CODE-PATCHES (angewendet):\n"
-                + format_code_patches_fuer_commit(state.code_patches)
-                + "\n\n"
-                f"AUFLAGEN AUS DIESER RUNDE:\n{auflagen_text}\n\n"
-                "Antworte mit COMMIT-GO, COMMIT-NO-GO oder "
-                "COMMIT-ESKALATION."
-            )
+            # W23 (2026-10-17): Commit-Review-Prompt ausgelagert
+            # in _build_commit_input (testbar, wartbar).
+            commit_input = _build_commit_input(
+                state, _diff_name_only,
+                _w11_unterblock_kontext, auflagen_text)
             rc = budget_or_recover(state, max_llm,
                                   "Vor Commit-Review.",
                                   project_dir, project_name,

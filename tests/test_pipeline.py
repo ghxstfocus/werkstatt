@@ -3015,11 +3015,21 @@ class TestGemessenerInhalt:
 
     def test_builder_prompt_enthaelt_gemessenen_inhalt_nach_zieldateien(
             self) -> None:
-        """Im Builder-Prompt steht GEMESSENER INHALT nach ZIELDATEIEN."""
-        quelle = Path("/opt/werkstatt/pipeline.py").read_text(
-            encoding="utf-8")
-        i_ziel = quelle.find("+ zs + \"\\n\\n\"")
-        i_gem = quelle.find(
+        """Im Builder-Prompt steht GEMESSENER INHALT nach ZIELDATEIEN.
+
+        W23 (2026-10-17): _builder_user_prompt ist eine
+        Closure in run_pipeline. Pruefe nur innerhalb
+        dieses Closures (ab "def _builder_user_prompt").
+        Sonst findet "find" den Marker in _build_commit_input
+        (W23), der vor der Closure steht.
+        """
+        import inspect
+        src = inspect.getsource(pipeline.run_pipeline)
+        i_start = src.find("def _builder_user_prompt")
+        assert i_start > 0
+        builder_src = src[i_start:]
+        i_ziel = builder_src.find("+ zs + ")
+        i_gem = builder_src.find(
             "GEMESSENER INHALT (verbindlich, gewinnt gegen")
         assert i_ziel > 0
         assert i_gem > 0
@@ -5458,12 +5468,16 @@ class TestPostApplyMessung:
 
     def test_commit_review_nutzt_neuen_kanal(self) -> None:
         """Regression: Commit-Review-Input enthaelt
-        GEMESSENER INHALT NACH APPLY, wenn gesetzt.
+        GEMESSENER INHALT NACH APPLY.
+
+        W23 (2026-10-17): Commit-Review-Prompt ist
+        nach _build_commit_input ausgelagert.
+        Marker: GEMESSENER INHALT (NACH Apply, verbindlich).
         """
         import inspect as ins
-        quelle = ins.getsource(pipeline.run_pipeline)
-        assert "GEMESSENER INHALT NACH APPLY " in quelle
-        assert "new_file-Pfade" in quelle
+        quelle = ins.getsource(pipeline._build_commit_input)
+        assert "GEMESSENER INHALT (NACH Apply, verbindlich" in quelle
+        assert "mess_protokoll_nach_apply" in quelle
 
     def test_aufruf_in_apply_and_recheck(self) -> None:
         """Regression: apply_and_recheck ruft
@@ -6234,7 +6248,7 @@ class TestCommitPaketScope:
 class TestEDiffNameOnly:
     def test_commit_input_enthaelt_diff_name_only(self) -> None:
         import inspect
-        src = inspect.getsource(pipeline.run_pipeline)
+        src = inspect.getsource(pipeline._build_commit_input)
         assert "GIT DIFF --NAME-ONLY HEAD" in src
 
     def test_commit_input_ruft_git_diff_name_only(self) -> None:
@@ -6244,7 +6258,7 @@ class TestEDiffNameOnly:
 
     def test_commit_input_diff_vor_code_patches(self) -> None:
         import inspect
-        src = inspect.getsource(pipeline.run_pipeline)
+        src = inspect.getsource(pipeline._build_commit_input)
         i_diff = src.find("GIT DIFF --NAME-ONLY HEAD")
         i_cp = src.find("CODE-PATCHES (angewendet)")
         assert 0 < i_diff < i_cp
@@ -6600,7 +6614,7 @@ class TestW8b:
 class TestW9a:
     def test_commit_review_prompt_message_marker(self) -> None:
         import inspect
-        src = inspect.getsource(pipeline.run_pipeline)
+        src = inspect.getsource(pipeline._build_commit_input)
         assert "=== COMMIT-MESSAGE (vollstaendig) ===" in src
         assert "=== /COMMIT-MESSAGE ===" in src
 
@@ -7588,3 +7602,86 @@ class TestSANAProjektkonfig:
                 f"Rolle {rolle} hat verbotene agent_docs: "
                 f"{sorted(treffer)}. DECISIONS/SECURITY_LOG "
                 f"bei Bedarf per COMMAND: RUN read_file.")
+
+
+class TestW23CommitReviewPrompt:
+    """W23 (2026-10-17): Commit-Review-Prompt."""
+
+    def test_commit_review_prompt_nach_apply_verbindlich(
+            self, tmp_path: Path) -> None:
+        """A3: Nach Apply ist der NACH-Stand verbindlich."""
+        state = build_test_state(project_dir=tmp_path)
+        state.mess_protokoll = "VOR_APPLY_MARKER\n  - KEIN rollback (U2a2).\n"
+        state.mess_protokoll_nach_apply = "NACH_APPLY_MARKER\n  - KEIN Fail-closed (U2a3).\n"
+        state.mess_protokoll_veraltet = True
+        state.basis_protokoll_nach_apply = "BASIS_NACH_APPLY"
+        state.basis_gate_test_results = [
+            {"scope": "ziel_pfade", "exit_code": 0,
+             "klassifizierung": "gruen",
+             "failed_count": 0, "passed_count": 7,
+             "failed_test_ids": [], "raw_tail": "7 passed"},
+        ]
+        state.commit_paket = {"message": "Test-Message",
+                              "dateien": ["tests/unit/test_x.py"]}
+        state.code_patches = []
+
+        commit_input = pipeline._build_commit_input(
+            state, "", "", "keine")
+
+        assert "GEMESSENER INHALT (NACH Apply, verbindlich" in commit_input
+        assert "NACH_APPLY_MARKER" in commit_input
+        assert "KEIN Fail-closed (U2a3)" in commit_input
+        assert "GEMESSENER INHALT (VOR Apply, historisch" in commit_input
+        assert "VOR_APPLY_MARKER" in commit_input
+        assert "KEIN rollback (U2a2)" in commit_input
+        assert "ACHTUNG: Code-Patches wurden angewendet" in commit_input
+        assert "TEST-ERGEBNISSE (NACH Apply)" in commit_input
+        assert "ziel_pfade" in commit_input
+        assert "passed: 7" in commit_input
+
+    def test_commit_review_prompt_bei_apply_leer(
+            self, tmp_path: Path) -> None:
+        """A4 + A3-1: Grenzfall veraltet=True, nach_apply leer."""
+        state = build_test_state(project_dir=tmp_path)
+        state.mess_protokoll = "VOR_APPLY_MARKER"
+        state.mess_protokoll_nach_apply = ""
+        state.mess_protokoll_veraltet = True
+        state.commit_paket = {"message": "Test", "dateien": []}
+        state.code_patches = []
+
+        commit_input = pipeline._build_commit_input(
+            state, "", "", "keine")
+
+        assert "GEMESSENER INHALT (VOR Apply, verbindlich" in commit_input
+        assert "GEMESSENER INHALT (NACH Apply, verbindlich" not in commit_input
+        assert "VOR_APPLY_MARKER" in commit_input
+        assert "ACHTUNG: Code-Patches wurden angewendet" in commit_input
+        assert "NACH-Apply-Stand leer" in commit_input
+
+    def test_format_basis_gate_test_results(self) -> None:
+        """A4: Format-Funktion."""
+        assert pipeline._format_basis_gate_test_results([]) == ""
+        s1 = pipeline._format_basis_gate_test_results([
+            {"scope": "ziel_pfade", "exit_code": 1,
+             "klassifizierung": "test_failures",
+             "failed_count": 1, "passed_count": 5,
+             "failed_test_ids": ["tests/unit/test_x.py::test_a"],
+             "raw_tail": "1 failed, 5 passed"},
+        ])
+        assert "--- ziel_pfade ---" in s1
+        assert "exit_code: 1" in s1
+        assert "test_failures" in s1
+        assert "tests/unit/test_x.py::test_a" in s1
+        s2 = pipeline._format_basis_gate_test_results([
+            {"scope": "a", "exit_code": 0,
+             "klassifizierung": "gruen",
+             "failed_count": 0, "passed_count": 10,
+             "failed_test_ids": [], "raw_tail": ""},
+            {"scope": "b", "exit_code": 1,
+             "klassifizierung": "test_failures",
+             "failed_count": 2, "passed_count": 3,
+             "failed_test_ids": ["t1", "t2"],
+             "raw_tail": "2 failed"},
+        ])
+        assert "--- a ---" in s2
+        assert "--- b ---" in s2
