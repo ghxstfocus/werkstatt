@@ -339,7 +339,12 @@ R17. UNTERBLOCK-ISOLATION IM PHASEN-MODUS.
      registriert' bei ausgelagerten
      Folgeunterbloecken), ist das KEIN
      Sachbefund im Sinne von R11.
+R18. ANTWORT-FORMAT: max 4000 Zeichen (1000 Token).
+     Erste Zeile: COMMIT-GO / COMMIT-NO-GO / COMMIT-ESKALATION.
+     Max 3 Problem-Punkte.
+     Kein Fliesstext. Keine Wiederholungen.
 """
+
 
 
 HARD_RULES_BUILDER = """
@@ -455,6 +460,9 @@ B15. NEW_FILE OHNE MESSUNG. Bei einem new_file-
     Patch direkt. COMMAND: RUN nur, wenn du die
     Existenz einer Datei pruefen willst
     (read_file).
+B16. ANTWORT-FORMAT: max 30000 Zeichen (7500 Token).
+     Nur PATCH-BEGINN/ENDE. Kein Fliesstext.
+
 """
 
 
@@ -500,6 +508,10 @@ J9. Bei NO_GO: konkrete Problem-Liste (max 5).
     Jede Position nennt: Datei:Zeile, Regel/Test,
     erwartet vs. gefunden.
 J10. Kein eigener Code. Kein eigener Fix.
+J11. ANTWORT-FORMAT: max 8000 Zeichen (2000 Token).
+     Erste Zeile: GO / NO_GO / ESKALATION.
+     Bei NO_GO: max 5 Problem-Punkte.
+     Kein Fliesstext. Keine Wiederholungen.
 """
 
 
@@ -3265,7 +3277,8 @@ def _planner_lauf(
         reply = ask_llm(
             api_key, planner_prompt, user_content,
             state.planner_model, 0.0,
-            state.llm_timeout_s, state=state)
+            state.llm_timeout_s, state=state,
+            max_tokens=state.max_tokens_planner)
         if not reply.ok:
             print(f"[FAIL] Planner-Aufruf: {reply.error}")
             audit("planner_call_failed",
@@ -3645,7 +3658,8 @@ class LLMReply:
 def ask_llm(api_key: str, system_prompt: str, user_content: str,
             model: str, temperature: float, timeout: int = 120,
             *, state: RunState | None = None,
-            aufgabe: str = "unbekannt") -> LLMReply:
+            aufgabe: str = "unbekannt",
+            max_tokens: int = 4096) -> LLMReply:
     """Fragt das LLM.
 
     Auflage 2125: Wenn `state` uebergeben wird, zaehlt
@@ -3664,6 +3678,7 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
     headers: dict[str, str] = {"Authorization": f"Bearer {api_key}",
                               "Content-Type": "application/json"}
     payload: dict[str, Any] = {"model": model,
+        "max_tokens": max_tokens,
                                "messages": [{"role": "system", "content": system_prompt},
                                             {"role": "user", "content": user_content}],
                                "temperature": temperature}
@@ -4197,6 +4212,7 @@ def builder_reply_mit_command_loop(
             api_key, builder_prompt, aktueller_prompt,
             state.builder_model, state.builder_temp,
             state.llm_timeout_s, state=state,
+            max_tokens=state.max_tokens_builder,
         )
         if not reply.ok:
             return reply, None
@@ -4614,6 +4630,12 @@ class RunState:
     reviewer_recovery_model: str = "deepseek-reasoner"
     # W28b: Judge-Modell (Code-Review mit frischem Kontext).
     judge_model: str = "deepseek-reasoner"
+    # W28c: max_tokens pro Rolle.
+    max_tokens_builder: int = 8192
+    max_tokens_judge: int = 2048
+    max_tokens_reviewer: int = 1024
+    max_tokens_planner: int = 8192
+    max_tokens_solver: int = 2048
     builder_model: str = "deepseek-chat"
     builder_temp: float = 0.3
     test_gen_model: str = "deepseek-chat"
@@ -5075,7 +5097,8 @@ def rufe_solver(
           f"(Aufrufer: {aufrufer})")
     reply = ask_llm(api_key, solver_prompt, user_content,
                     state.reviewer_verdict_model, 0.0,
-                    state.llm_timeout_s, state=state)
+                    state.llm_timeout_s, state=state,
+                    max_tokens=state.max_tokens_solver)
     if not reply.ok:
         return None, "llm_fehler"
     befund = baue_solver_befund(reply.content,
@@ -5750,6 +5773,7 @@ def ask_reviewer_for_recovery(state: RunState, art: str, kontext: str) -> Recove
         0.0,
         state.llm_timeout_s,
         state=state,
+        max_tokens=state.max_tokens_reviewer,
     )
     if not reply.ok:
         return RecoveryVorschlag(art=art,
@@ -8116,6 +8140,7 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
             state.builder_temp,
             state.llm_timeout_s,
             state=state,
+            max_tokens=state.max_tokens_builder,
         )
         antworten.append(reply)
         if reply.ok:
@@ -8601,7 +8626,8 @@ def run_pipeline(project_name: str, aufgabe: str,
         return rc
     reply = ask_llm(api_key, reviewer_prompt, reviewer_input,
                     state.reviewer_verdict_model, 0.0, state.llm_timeout_s,
-                    state=state)
+                    state=state,
+                    max_tokens=state.max_tokens_reviewer)
     if not reply.ok:
         print(f"[FAIL] Reviewer: {reply.error}")
         audit("reviewer_call_failed", {"error": reply.error}, project_dir, project_name)
@@ -8801,7 +8827,8 @@ def run_pipeline(project_name: str, aufgabe: str,
         judge_input = _build_judge_input(state)
         reply = ask_llm(api_key, judge_prompt, judge_input,
                         state.judge_model, 0.0, state.llm_timeout_s,
-                        state=state)
+                        state=state,
+                        max_tokens=state.max_tokens_judge)
         if not reply.ok:
             print(f"[FAIL] Reviewer: {reply.error}")
             audit("reviewer_call_failed", {"error": reply.error, "runde": runde},
@@ -9207,6 +9234,7 @@ def run_pipeline(project_name: str, aufgabe: str,
                 "Liefere Test-Vorschlaege als Text. Kein Schreiben.",
                 state.test_gen_model, 0.3, state.llm_timeout_s,
                 state=state,
+                max_tokens=state.max_tokens_builder,
             )
             if reply.ok:
                 state.test_vorschlaege = reply.content
@@ -9560,7 +9588,8 @@ def run_pipeline(project_name: str, aufgabe: str,
             reply = ask_llm(api_key, reviewer_prompt, commit_input,
                             state.reviewer_verdict_model, 0.0,
                             state.llm_timeout_s,
-                            state=state)
+                            state=state,
+                            max_tokens=state.max_tokens_reviewer)
             if not reply.ok:
                 print(f"[FAIL] Reviewer Commit-Review: {reply.error}")
                 return _fail_closed(
@@ -9633,6 +9662,7 @@ def run_pipeline(project_name: str, aufgabe: str,
                 state.builder_model, state.builder_temp,
                 state.llm_timeout_s,
                 state=state,
+                max_tokens=state.max_tokens_builder,
             )
             if not bauer_reply.ok:
                 print(f"[FAIL] Builder Commit-Paket-Neubau: "

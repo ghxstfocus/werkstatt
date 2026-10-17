@@ -1,118 +1,57 @@
-# security-ai.yaml - Projekt-Konfiguration fuer die Multi-Agenten-Pipeline
-# Projekt: Homelab Security AI
-# Diese Datei liegt in der Werkstatt (/opt/werkstatt/projects/).
-# Sie beschreibt, wo das Projekt liegt, welche Doku es hat, welche
-# Messungen erlaubt sind. Die Pipeline liest sie beim Aufruf mit
-# --project security-ai.
-#
-# Schema: schemas/projekt.yaml. Validator: pipeline.pruefe_projekt_yaml.
-
 project: homelab-security-ai
 project_dir: /opt/security-ai
-# project_agents_dir ist optional. Default: Werkstatt-Agenten.
-# Wenn gesetzt: Projekt-eigene Rollen werden zusaetzlich geladen.
-
-# Doku-Bausteine. Pflicht: decisions, workflow.
-# Optional: context, reviewer, security_log, web_security.
-# docs.context und docs.reviewer sind Uebergangsnamen:
-#   docs/CONTEXT_PROMPT.md  -> bevorzugt docs/CONTEXT.md
-#   docs/REVIEWER_HANDOFF.md -> bevorzugt docs/REVIEWER.md
 docs:
-  # Nach Doku-Migration 2026-10-15:
-  # docs.context  und docs.reviewer entfallen
-  # (Zwei-Webchat-Artefakte, Inhalte verteilt).
-  # docs.workflow umbenannt zu docs.conventions.
   conventions: docs/CONVENTIONS.md
   decisions: docs/DECISIONS.md
   security_log: docs/SECURITY_LOG.md
   web_security: docs/WEB_SECURITY_CHECKLIST.md
-
-# Diese Messungen laufen IMMER, ohne Reviewer-Entscheidung.
-# Deterministisch, projektunabhaengig.
-# Wenn eines rot ist: Hard Fail, Block startet nicht.
 always_run:
-  - py_compile
-  - ruff
-  - mypy
-  - test_count
-  - git_status
-  - git_head
-
-# Diese Messungen waehlt der Reviewer bei Bedarf.
-#
-# Auflage 2114 (temporaer): coverage und test_run sind
-# entfernt. Sie scheitern aktuell an der Test-Isolation
-# (Audit-Writer-DB nicht schreibbar mit User builder,
-# Coverage-Datenverzeichnis nicht konfiguriert).
-# Wieder aktivieren, sobald die Test-Isolation geklaert
-# ist (eigener Block).
-#
-# Auflage 2115: chaos_probe ist entfernt. Die Datei
-# scripts/chaos_probe.py existiert nicht.
+- py_compile
+- ruff
+- mypy
+- test_count
+- git_status
+- git_head
 optional_catalog:
-  - bandit
-  - pip_audit
-  - read_file
-  # Auflage 2159: mypy ueber tests/ separat. Der Reviewer-
-  # Agent kann es anfordern, um Test-Qualitaet zu pruefen.
-  # In always_run ist es nicht, weil tests/ mypy-Fehler hat
-  # (fehlende Type Annotations).
-  - mypy_tests
-
-# Doku-Zuordnung pro Agent.
-# Jeder Agent bekommt nur die Doku, die er braucht.
-# Referenzen beziehen sich auf die Schluessel unter docs:.
-# SAN-A (2026-10-17): Prompt-Diaet. DECISIONS.md
-# (1870 Zeilen) und SECURITY_LOG.md (2211 Zeilen)
-# NICHT mehr als statischer Prompt-Anteil — der
-# Agent soll bei Bedarf gezielt lesen
-# (COMMAND: RUN read_file docs/DECISIONS.md:18-221).
-# Grund: 43%/41% Redundanz in agents/*.md,
-# zusaetzlich 4081 Zeilen Doku im Prompt.
-# Plan: SAN-B (agents/*.md-Diaet) folgt separat.
+- bandit
+- pip_audit
+- read_file
+- mypy_tests
 agent_docs:
   reviewer:
-    - conventions
-    - web_security
+  - conventions
+  - web_security
   builder:
-    - conventions
-    - web_security  # A3-Option (a): Builder schreibt
-                    # Sicherheits-relevanten Code.
+  - conventions
+  - web_security
   test_generator:
-    - conventions
+  - conventions
   solver:
-    - conventions
-    - web_security  # S9: Solver sieht Reviewer-Doku.
+  - conventions
+  - web_security
   planner:
-    - conventions
-  # coverage und chaos: bewusst KEIN agent_docs
-  # (keine LLM-Agenten, No-LLM-Messungen).
-
-# Nur diese Praefixe darf read_file lesen.
+  - conventions
 file_whitelist:
-  - apps/
-  - core/
-  - data/
-  - harness/
-  - tools/
-  - docs/
-  - tests/
-  - scripts/
-
-# Pfad zum venv-Python. Wird fuer alle Messungen genutzt.
+- apps/
+- core/
+- data/
+- harness/
+- tools/
+- docs/
+- tests/
+- scripts/
 venv_python: /opt/security-ai/.venv/bin/python3
-
-# Budget pro Block. Bei Ueberschreitung: Stop + Recovery.
 budget:
   max_review_rounds: 2
   max_minutes: 15
   max_llm_calls: 30
   max_builder_runden: 3
-  # Block P2a: Gesamtbudget pro Phase (Konzept 10).
-  # Wird in P2a noch nicht enforced. Siehe P2b.
   max_llm_calls_phase: 200
-
-# Auto-Repair des Basis-Gates.
+  max_tokens_builder: 8192
+  max_tokens_judge: 2048
+  max_tokens_reviewer: 1024
+  max_tokens_planner: 8192
+  max_tokens_solver: 2048
 auto_repair:
   enabled: true
   max_attempts: 3
@@ -120,38 +59,17 @@ auto_repair:
   auto_fix_ruff_format: true
   escalate_after_attempts: true
   escalate_if_errors_over: 20
-
-# Auto-Approval-Gate am Ende. Immer Human-in-the-Loop.
-# Nie automatisch committen.
 require_human_approval: true
-
-# Commit-Paket-Pruefung durch den Reviewer.
-# Zweite Review-Phase nach Code-GO.
 review_commit_package: true
-
-# Git-Autor fuer alle Commits, die diese Pipeline erstellt.
-# Wird beim Commit per git -c user.name=... -c user.email=... gesetzt.
-# Damit steht im Git-Log immer der Mensch, nicht der Linux-User.
 git_author:
   name: ghxstfocus
   email: ghxst.focus@gmail.com
-
-# Auflage 2183 P1 (U3): Schwellwerte fuer den
-# Gegenstandsvergleich. Aenderbar ohne Code-Aenderung.
-# Kategorie W+O: Werkstatt-Default, Projekt-YAML darf ueberschreiben.
 solver:
   p1_schwellwert: 0.5
   p1_min_tokens: 10
   max_runden: 3
-
-# Planner-Konfiguration (W+O).
-# Werkstatt-Default, Projekt-YAML darf ueberschreiben.
 planner:
   modus: manual
   max_runden: 3
   ask_human_timeout_min: 60
-  # Block P2a: Phasen-Modus aktiv? (Default false).
-  # Heute rein manuell ueber --phase. Wenn true,
-  # koennte ein spaeterer Block --phase auch
-  # nicht-manuell ausloesen. In P2a nur deklariert.
   phasen_modus: false

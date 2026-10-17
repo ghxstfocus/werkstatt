@@ -6868,11 +6868,12 @@ class TestA1Final:
         import re
         assert not re.search(r"(?<![A-Z])R16\.", s)
 
-    def test_hard_rules_reviewer_anzahl_15(self) -> None:
+    def test_hard_rules_reviewer_anzahl_16(self) -> None:
+        """R1-R15 + R17 + R18 = 16 Regeln (A1-final + W28c)."""
         import re
         s = pipeline.HARD_RULES_REVIEWER
         regeln = re.findall(r"^(R\d+\w?)\.", s, re.MULTILINE)
-        assert len(regeln) == 15
+        assert len(regeln) == 16
 
     def test_r12_r15_schon_im_prompt(self) -> None:
         # Regression: R12 und R15 bleiben.
@@ -7928,3 +7929,40 @@ class TestW28bReviewLoopJudge:
         """state.judge_model ist deepseek-reasoner."""
         state = build_test_state(project_dir=tmp_path)
         assert state.judge_model == "deepseek-reasoner"
+
+
+class TestW28cAntwortLimit:
+    """W28c (2026-10-17): Antwort-Limit (max_tokens)."""
+
+    def test_ask_llm_hat_max_tokens(self) -> None:
+        """ask_llm hat max_tokens-Parameter."""
+        import inspect
+        sig = inspect.signature(pipeline.ask_llm)
+        assert "max_tokens" in sig.parameters
+        assert sig.parameters["max_tokens"].default == 4096
+
+    def test_runstate_max_tokens_felder(self, tmp_path: Path) -> None:
+        """RunState hat 5 max_tokens_*-Felder."""
+        state = build_test_state(project_dir=tmp_path)
+        assert state.max_tokens_builder == 8192
+        assert state.max_tokens_judge == 2048
+        assert state.max_tokens_reviewer == 1024
+        assert state.max_tokens_planner == 8192
+        assert state.max_tokens_solver == 2048
+
+    def test_security_ai_yaml_max_tokens(self) -> None:
+        """security-ai.yaml hat max_tokens_*-Felder."""
+        import yaml
+        cfg = yaml.safe_load(
+            Path("/opt/werkstatt/projects/security-ai.yaml")
+            .read_text(encoding="utf-8"))
+        budget = cfg["budget"]
+        assert budget["max_tokens_builder"] == 8192
+        assert budget["max_tokens_judge"] == 2048
+        assert budget["max_tokens_reviewer"] == 1024
+
+    def test_hard_rules_antwort_format(self) -> None:
+        """HARD_RULES haben ANTWORT-FORMAT-Sektion."""
+        assert "ANTWORT-FORMAT" in pipeline.HARD_RULES_JUDGE
+        assert "ANTWORT-FORMAT" in pipeline.HARD_RULES_REVIEWER
+        assert "ANTWORT-FORMAT" in pipeline.HARD_RULES_BUILDER
