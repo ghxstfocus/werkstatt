@@ -5351,3 +5351,113 @@ OFFEN (heute nicht mehr):
 ================================================================
 ENDE W36-W41
 ================================================================
+
+================================================================
+UEBERGABE AN NEUEN BAU-CHAT (2026-10-18)
+================================================================
+
+Werkstatt-HEAD:  8aaa861 (W47).
+security-ai-HEAD: c264c7f (U6 Doku-Nachzug).
+Werkstatt-Tests: 1102 passed.
+security-ai-Tests: 1448 passed.
+Tag security-ai: probebetrieb-69 auf c264c7f.
+
+PHASE 19 — inhaltlich abgeschlossen:
+  U1, U2a1, U2a2, U2a3 (ChangeApplier)
+  U2b1, U2b2 (Stub entfernt)
+  U3 (ImmediateActionCategory)
+  U4 (ImmediateActionService)
+  U5 (Detection-Pipeline-Hook)
+  U6 (Doku-Nachzug)
+  Alle als Einzel-Commits im security-ai-main.
+  KEIN formeller Sammel-Commit (W47-Bug:
+  Gesamt-Review wurde uebersprungen, weil
+  run_phase bei "alle done + phase_aktiv=True"
+  zu frueh zurueckkehrte). Tag auf c264c7f.
+
+phase.yaml:
+  phase_id: 19
+  phase_aktiv: False
+  phase_start_head: d7b7c26.
+
+WERKSTATT-FIXES SEIT W25-W30 (Kurzliste):
+  W31-Mypy: tests/test_pipeline.py + test_phase.py
+    mypy-clean.
+  W32: _schreibe_contract im run_phase-Loop.
+  W33a: _post_apply_messung liest patch-Pfade.
+  W33b: _phase_apply_vor_review + Apply vor
+    Review-Loop.
+  W34b: Basis-Gate ignoriert .werkstatt/.
+  W35a-1: letzter_befund in phase.yaml.
+  W35a-2: Planner-Resume Zustands-Automat.
+  W35a-2d: Merge-Block Suffix-Aufteilung
+    (U2b -> U2b1+U2b2).
+  W36-1a/1b: werkstatt/state.py.
+  W36-2a: werkstatt/parser.py (Phasen-Parser).
+  W37: builder.md (Anker-Minimalitaet,
+    test:-Feld, __all__).
+  W38: alter_plan im P10-P16-Format.
+  W39: Parser toleriert Kommentarzeilen.
+  W40: judge.md (Auftragsverstoss=NO_GO),
+    planner.md (letzter_befund=Pflicht).
+  W41: classify_verdict akzeptiert NO_GO.
+  W42: Planner-Resume-Messung (read_file auf
+    Zieldateien).
+  W43: new_file-Idempotenz.
+  W44: Judge-Prompt-Groesse begrenzen.
+  W45: Planner-Resume zeigt fehlende Dateien.
+  W47: Idempotenz-Check vor Gesamt-Review.
+
+OFFENE PUNKTE:
+  W46: Judge-Prompt fuer Doku-Bloecke.
+    Doku-Patches (U6) haben keine Tests.
+    Judge bekommt basis_gate_test_results leer
+    + mess_nach 40652 bytes. Antwortet leer.
+    Loesung: Doku ohne Judge pruefen (nur
+    Commit-Review) oder Prompt drastisch
+    kuerzen. Kategorie 3, Reviewer-Block.
+
+  W48: Planner-Resume bei phase_aktiv=False.
+    Der Lauf 23:38 hat den Planner gerufen,
+    obwohl phase_aktiv=False. Planner hat
+    Phase 20 mit WERKSTATT-Dateien formuliert
+    (harness/pipeline/judge.py), nicht
+    security-ai-Dateien. Vermutlich fehlt
+    der phase_aktiv-Check in _phase_main_pfad
+    vor dem Planner-Resume.
+
+  W49: Sammel-Commit-Erkennung (Phase 19).
+    W47 loest das fuer kuenftige Laeufe.
+
+  W36-2b..6: weitere Modularisierung
+    (parser.py-Rest, audit.py, judge.py,
+    planner.py, apply.py).
+
+  W28a-Repair-Loop (fehlt strukturell).
+
+  W35a-2d-b: W29-Konsistenz nach
+    Planner-Resume.
+
+  A-W30-1-Messung: max_review_rounds=2
+    nach 5 Phasen-Laeufen pruefen.
+
+NAECHSTER SCHRITT:
+  1. W48 (klein): _phase_main_pfad: Planner-
+     Resume nur bei phase_aktiv=True UND
+     no_go/failed.
+  2. Phase 20 mit --phase (echter Auftrag).
+     planner_modus: manual.
+  3. W46 als Vorbereitung fuer Phase 20.
+
+Testbasis (Werkstatt):
+  pytest tests/ -q: 1102 passed.
+  ruff --no-cache: 0.
+  mypy pipeline.py + werkstatt/: 0.
+
+Testbasis (security-ai):
+  pytest tests/ -q: 1448 passed.
+  ruff --no-cache: 0.
+  mypy core/ harness/: 0 (100 Dateien).
+
+ENDE UEBERGABE
+================================================================
