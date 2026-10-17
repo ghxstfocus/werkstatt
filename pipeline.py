@@ -1156,6 +1156,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "planner_resume_mehrfach_split_verboten",
     "planner_resume_rename_verboten",
     "planner_resume_misch_zustand",
+    "planner_resume_messung",
     "loop_cap_erreicht",
     "phase_gesamt_review",
     "phase_plan_editiert",
@@ -3393,10 +3394,23 @@ def _planner_user_content(
         alter_plan = korrektur_kontext.get("alter_plan", "")
         pakete_kompakt = korrektur_kontext.get(
             "pakete_kompakt", "")
+        gemessener_inhalt = korrektur_kontext.get(
+            "gemessener_inhalt", "")
         teile = [
             "KORREKTUR-AUFTRAG:\n",
             f"NO-GO-Begruendung: {begr}\n\n",
         ]
+        # W42 (2026-10-17): gemessener Inhalt der
+        # Zieldateien (vor dem Plan gemessen).
+        # Verhindert, dass der Planner falsche
+        # Anker aus dem alten Plan uebernimmt.
+        if gemessener_inhalt:
+            teile.append(
+                "=== GEMESSENER INHALT (Zieldateien, "
+                "verbindlich) ===\n"
+                f"{gemessener_inhalt}\n"
+                "=== /GEMESSENER INHALT ===\n\n"
+            )
         if reviewer_befund:
             teile.append(
                 "=== REVIEWER-BEFUND (vollstaendig) ===\n"
@@ -10490,6 +10504,46 @@ def _phase_planner_resume(
     }
     if _solver_kontext:
         _korrektur_kontext["solver_befund"] = _solver_kontext
+    # W42 (2026-10-17): Zieldateien der offenen
+    # Unterbloecke messen, BEVOR der Planner
+    # den Plan formuliert. Sonst uebernimmt er
+    # falsche Anker aus dem alten Plan.
+    _w42_pfade: list[str] = []
+    for _off in _offene:
+        for _punkt in _off.get("unterpunkte", []):
+            for _m in re.finditer(
+                    r"datei:\s*([^\s,]+)", str(_punkt)):
+                _pfad = _m.group(1).strip()
+                if (_pfad and _pfad not in _w42_pfade
+                        and (_off.get("id")
+                             in state.planner_resume_anzahl
+                             or True)):
+                    _w42_pfade.append(_pfad)
+    # Nur beim ersten Resume fuer den Block.
+    _w42_kontext: list[str] = []
+    _read_meas = state.always.get("read_file")
+    if _read_meas is None:
+        _read_meas = state.optional.get("read_file")
+    if _read_meas is not None:
+        for _pfad in _w42_pfade[:4]:
+            try:
+                _out, _ok, _argv = run_measurement_mit_argv(
+                    _read_meas,
+                    list(getattr(state, "file_whitelist", [])),
+                    state.project_dir, _pfad)
+            except Exception:  # noqa: BLE001,S112
+                continue
+            if _ok:
+                _w42_kontext.append(
+                    f"=== read_file {_pfad} ===\n"
+                    f"{_out[:2000]}")
+                audit("planner_resume_messung",
+                      {"pfad": _pfad,
+                       "len": len(_out)},
+                      state.project_dir, project_name)
+    if _w42_kontext:
+        _korrektur_kontext["gemessener_inhalt"] = (
+            "\n\n".join(_w42_kontext))
     # Planner rufen.
     antwort = _planner_lauf(
         state, api_key, phasen_text,
