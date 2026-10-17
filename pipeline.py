@@ -10760,9 +10760,32 @@ def _phase_planner_resume(
         "unterbloecke": _ups_stand,
         "naechster": _naechster,
     }
-    # korrektur_kontext.
+    # korrektur_kontext (W35a-2b: vollstaendig wie
+    # _phase_plan_korrektur).
+    _alter_plan_zeilen: list[str] = [
+        f"PHASE {state.phase_id}: {state.phase_titel}",
+    ]
+    for _u in ups:
+        if not isinstance(_u, dict):
+            continue
+        _zeile = (
+            f"{_u.get('id', '?')}: {_u.get('titel', '')} "
+            f"[{_u.get('status', '?')}]")
+        for _punkt in _u.get("unterpunkte", []):
+            _zeile += f"\n    - {_punkt}"
+        _alter_plan_zeilen.append(_zeile)
+    _alter_plan = "\n".join(_alter_plan_zeilen)
+    _pakete_zeilen: list[str] = []
+    for _i, _p in enumerate(state.phase_commit_pakete, 1):
+        _dateien = ", ".join(_p.get("dateien", []))
+        _msg = _p.get("message", "")[:120]
+        _pakete_zeilen.append(
+            f"Paket {_i}: {_dateien}\n  {_msg}")
+    _pakete_kompakt = "\n".join(_pakete_zeilen) or "(keine)"
     _korrektur_kontext: dict[str, Any] = {
         "begruendung": "Planner-Resume nach no_go/failed.",
+        "alter_plan": _alter_plan,
+        "pakete_kompakt": _pakete_kompakt,
         "reviewer_befund": (
             state.review_runden[-1].get("raw", "")
             if state.review_runden else ""),
