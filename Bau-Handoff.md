@@ -5091,3 +5091,50 @@ Bekannte Luecken (Merkposten):
 ================================================================
 ENDE W32 + W33a + W33b
 ================================================================
+
+
+================================================================
+W35a-1 ERLEDIGT (2026-10-17) — LETZTER_BEFUND
+================================================================
+
+Commit: 79027d8.
+Kategorie 2 (Schema, Tests).
+Kein Tag probebetrieb-69.
+
+Aenderungen:
+  - _phase_yaml_status_update: neuer optionaler
+    Parameter letzter_befund: str | None.
+    Bei status="no_go": letzter_befund[:500]
+    im Unterblock-Feld "letzter_befund".
+    Bei status="done": letzter_befund = "".
+  - _letzter_reviewer_befund (neu): liefert
+    state.review_runden[-1]["raw"][:500]
+    oder "".
+  - run_phase, zwei no_go-Stellen (Z. ~3180
+    unklar_eskalation, Z. ~3198 unterblock_no_go):
+    letzter_befund=_letzter_reviewer_befund(state).
+
+Schreibstelle (A-W35a-3a):
+  Z. 2058-2066:
+    ziel["status"] = status
+    if status == "no_go" and letzter_befund:
+        ziel["letzter_befund"] = letzter_befund[:500]
+    elif status == "done":
+        ziel["letzter_befund"] = ""
+
+Tests: 1089 -> 1091 passed (+2).
+  T1: test_no_go_schreibt_letzter_befund.
+  T2: test_done_loescht_letzter_befund.
+
+W35a-1-Rollback:
+  git reset --hard b7d5c02 (W34b), wenn ein
+  Test ausserhalb W35a-1 rot wird oder
+  _phase_yaml_status_update-Aufrufe in
+  bestehenden Tests brechen.
+
+Naechster Schritt: W35a-2 (Planner-Resume),
+  A-W35a-12/13/15/5b/10-Neu.
+
+================================================================
+ENDE W35a-1
+================================================================
