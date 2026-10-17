@@ -4566,3 +4566,42 @@ Naechster Schritt:
 ================================================================
 ENDE W23
 ================================================================
+
+
+================================================================
+W24a ERLEDIGT (2026-10-17) — APPLY IDEMPOTENT
+================================================================
+
+Commit: 4531451.
+Kategorie 2.
+Kein Tag probebetrieb-69.
+
+Problem (heute):
+  U2a2: Patch "rollback hinzufuegen" wurde zweimal
+  angewendet. rollback doppelt in applier.py.
+  Folge: ruff F811 + mypy no-redef. Fail-closed.
+
+Fix:
+  Phase 1 (Vorpruefung): count(anker) == 0 und
+    ersatz in Datei -> skip + Audit.
+  Phase 2 (Anwendung): Ambig nur, wenn anker und
+    ersatz im Text und anker NICHT in ersatz.
+  Gilt fuer apply_code_patches und
+    apply_commit_and_doku.
+
+Neue Audit-Kinds: patch_bereits_angewendet,
+patch_ambig, patch_anker_fehlt.
+Katalog 80 -> 83.
+
+Tests: 1032 -> 1036 passed.
+
+Naechster Schritt:
+  W24b (Loop-Detektor + deterministischer Verdict)
+  nach Auftraggeber-Entscheid E1/E2/E3.
+  W24c (Protokolle als Dateien) danach.
+  U2a3 durch Pipeline (W23 + W24a + SAN-A + P22a
+  Wirkungs-Messung).
+
+================================================================
+ENDE W24a
+================================================================
