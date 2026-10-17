@@ -5507,6 +5507,66 @@ def _lese_plan(state: RunState) -> str:
         return ""
 
 
+def _contract_pfad(state: RunState, uid: str) -> Path:
+    """W27: Pfad zu .werkstatt/contracts/<uid>.md."""
+    return (state.project_dir / ".werkstatt"
+            / "contracts" / f"{uid}.md")
+
+
+def _contract_aus_unterblock(unterblock: dict) -> str:
+    """W27: baut Markdown-Contract aus einem Unterblock.
+
+    Enthaelt: id, titel, Kontext, Fail-closed,
+    Grenzen, Akzeptanz, Abhaengigkeiten, Unterpunkte.
+    """
+    uid = unterblock.get("id", "?")
+    titel = unterblock.get("titel", "")
+    unterpunkte = unterblock.get("unterpunkte", [])
+    teile = [f"# {uid}: {titel}\n"]
+    # Unterpunkte als Markdown-Liste.
+    teile.append("## Unterpunkte\n")
+    for up in unterpunkte:
+        if isinstance(up, str):
+            teile.append(f"- {up}")
+        elif isinstance(up, dict):
+            teile.append(f"- {up.get('text', '')}")
+    return "\n".join(teile) + "\n"
+
+
+def _schreibe_contract(
+        state: RunState, unterblock: dict) -> bool:
+    """W27: schreibt einen Contract fuer einen Unterblock.
+
+    Liefert True bei Erfolg.
+    """
+    uid = unterblock.get("id", "")
+    if not uid:
+        return False
+    text = _contract_aus_unterblock(unterblock)
+    pfad = _contract_pfad(state, uid)
+    try:
+        pfad.parent.mkdir(parents=True, exist_ok=True)
+        pfad.write_text(text, encoding="utf-8")
+        return True
+    except OSError as exc:
+        print(f"[WARN] _schreibe_contract ({uid}): {exc}")
+        return False
+
+
+def _lese_contract(state: RunState, uid: str) -> str:
+    """W27: liest einen Contract.
+
+    Liefert "" wenn nicht vorhanden.
+    """
+    pfad = _contract_pfad(state, uid)
+    if not pfad.exists():
+        return ""
+    try:
+        return pfad.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
 def _lese_plan_audit(state: RunState) -> str:
     """W26: liest audit-logs/<run_id>/01-plan.md.
 
@@ -10316,6 +10376,12 @@ def _phase_main_pfad(
                 _schreibe_plan(state, _plan_md)
                 print(f"[i] Plan geschrieben: "
                       f"{_plan_pfad(state)}")
+                # W27: Contracts schreiben.
+                for _u in plan_dict.get(
+                        "phase_unterbloecke", []):
+                    if _schreibe_contract(state, _u):
+                        print(f"[i] Contract: "
+                              f"{_contract_pfad(state, _u.get('id', '?'))}")
                 state.phase_id = phase_id
                 state.phase_titel = phase_titel
                 state.phase_unterbloecke = plan_dict[

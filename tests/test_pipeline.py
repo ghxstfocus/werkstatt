@@ -7848,3 +7848,42 @@ class TestW26PlanMd:
         state.run_id = "test-run-w26c"
         assert pipeline._lese_plan(state) == ""
         assert pipeline._lese_plan_audit(state) == ""
+
+
+class TestW27Contracts:
+    """W27 (2026-10-17): Sprint-Contracts."""
+
+    def test_contract_pfad(self, tmp_path: Path) -> None:
+        """_contract_pfad liefert .werkstatt/contracts/<uid>.md."""
+        state = build_test_state(project_dir=tmp_path)
+        pfad = pipeline._contract_pfad(state, "U2a3")
+        assert pfad.name == "U2a3.md"
+        assert pfad.parent.name == "contracts"
+        assert pfad.parent.parent.name == ".werkstatt"
+
+    def test_schreibe_contract_und_lese(
+            self, tmp_path: Path) -> None:
+        """_schreibe_contract legt Datei an, _lese_contract liest sie."""
+        state = build_test_state(project_dir=tmp_path)
+        unterblock = {
+            "id": "U1",
+            "titel": "Test-Unterblock",
+            "unterpunkte": [
+                "datei:core/x.py, aktion:neu, signatur:..., test:...",
+                "Kontext: Test-Kontext.",
+            ],
+        }
+        ok = pipeline._schreibe_contract(state, unterblock)
+        assert ok is True
+        pfad = pipeline._contract_pfad(state, "U1")
+        assert pfad.exists()
+        gelesen = pipeline._lese_contract(state, "U1")
+        assert "# U1: Test-Unterblock" in gelesen
+        assert "## Unterpunkte" in gelesen
+        assert "core/x.py" in gelesen
+
+    def test_lese_contract_leer(
+            self, tmp_path: Path) -> None:
+        """_lese_contract liefert "" wenn nicht vorhanden."""
+        state = build_test_state(project_dir=tmp_path)
+        assert pipeline._lese_contract(state, "U99") == ""
