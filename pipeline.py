@@ -1165,6 +1165,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "patch_ambig",
     "patch_anker_fehlt",
     "patch_bereits_angewendet",
+    "patch_konflikt_new_file",
     "skill_geladen",
     "phase_plan_korrektur_start",
     "planner_plan_praefix_format_verwendet",
@@ -6206,8 +6207,32 @@ def apply_code_patches(state: RunState,
         # P2b-Luecke-A: Weiche typ.
         if typ == "new_file":
             if ziel.exists():
+                # W43 (2026-10-17): new_file-Idempotenz.
+                # Datei existiert bereits. Wenn Inhalt
+                # gleich: skip (bereits angewendet).
+                # Wenn Inhalt anders: echter Konflikt.
+                _soll_inhalt = p.get("inhalt", "")
+                try:
+                    _ist_inhalt = ziel.read_text(
+                        encoding="utf-8")
+                except OSError:
+                    _ist_inhalt = None
+                if _ist_inhalt == _soll_inhalt:
+                    audit("patch_bereits_angewendet",
+                          {"pfad": pfad,
+                           "typ": "new_file",
+                           "len": len(_soll_inhalt)},
+                          state.project_dir, state.project_name)
+                    print(f"[i] apply_code_patches: "
+                          f"new_file bereits angewendet: "
+                          f"{pfad}")
+                    continue
                 print(f"[!] apply_code_patches: new_file "
-                      f"auf existierende Datei: {pfad}")
+                      f"auf existierende Datei (Inhalt "
+                      f"abweichend): {pfad}")
+                audit("patch_konflikt_new_file",
+                      {"pfad": pfad},
+                      state.project_dir, state.project_name)
                 return False
             plan.append({"typ": "new_file",
                          "ziel": ziel,
