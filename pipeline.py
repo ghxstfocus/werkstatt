@@ -1532,6 +1532,12 @@ def parse_planner_reply(text: str) -> dict[str, Any]:
 _UNBEANTWORTET_PRAEFIX = "UNBEANTWORTET:"
 
 
+# W35a-2c (2026-10-17): ID-Muster fuer _parse_phase_plan.
+import re as _re_w35a2c
+
+_ID_MUSTER = _re_w35a2c.compile(r"^U[A-Za-z0-9]+$")
+
+
 def _parse_phase_plan(text: str) -> list[dict[str, Any]]:
     """Parst einen Phasentext in Unterbloecke.
 
@@ -1594,11 +1600,18 @@ def _parse_phase_plan(text: str) -> list[dict[str, Any]]:
         id_teil, titel_teil = rest.split(" - ", 1)
         id_roh = id_teil.strip()
         titel_roh = titel_teil.strip()
-        erwartete_id = f"U{pos}"
-        if id_roh != erwartete_id:
+        # W35a-2c (2026-10-17): Suffix-IDs zulassen
+        # (U2a1, U2b, U3, ...). Nur Grundform pruefen:
+        # beginnt mit U, danach alphanumerisch, nicht
+        # leer.
+        if not _ID_MUSTER.match(id_roh):
             raise ValueError(
-                f"U{pos}: id nicht mit 'U{pos}' ueberein "
-                f"(gefunden: {id_roh!r})")
+                f"Unterblock {pos}: id ungueltig: "
+                f"{id_roh!r}")
+        # Eindeutigkeit pruefen.
+        if any(u.get("id") == id_roh for u in unterbloecke):
+            raise ValueError(
+                f"Unterblock {pos}: id doppelt: {id_roh!r}")
         if not titel_roh:
             raise ValueError(f"U{pos}: titel leer nach strip()")
 
