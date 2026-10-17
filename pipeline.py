@@ -7337,6 +7337,158 @@ def _sammel_commit_suite_kontext(
     return "\n".join(teile)
 
 
+def _phase_apply_vor_review(
+        state: RunState,
+        file_whitelist: list[str],
+) -> int | None:
+    """W33b (2026-10-17): Apply + Post-Apply-Messung
+    VOR dem Review-Loop im Phasen-Modus.
+
+    Grund: der Judge (W28b) braucht mess_nach.txt
+    und basis_gate_test_results. Beide entstehen
+    heute erst in apply_and_recheck (nach dem
+    Review-Loop) -> Judge sieht leere Eingaben
+    und eskaliert.
+
+    Ablauf:
+      1. apply_code_patches (W24a-Idempotenz).
+      2. git add -N fuer new_file-Pfade.
+      3. mess_protokoll_veraltet = True (W23-A2).
+      4. _post_apply_messung (W33a, patch+new_file).
+      5. Guard: mess_nach nahe Judge-Budget
+         (A-W33-7) -> Warnung, KEIN fail-closed.
+      6. _basis_gate_pytest_ziel auf Zieldateien
+         (A-W33-8, A-W33-9 (i)).
+         Bei Rot: rc=17 sofort, kein Recovery.
+
+    Rueckgabe:
+      None  -- alles gruen.
+      17    -- apply, Messung oder (b)-Rot.
+    """
+    if not state.code_patches:
+        print("[!] Phasen-Apply: keine Code-Patches. "
+              "Fail closed.")
+        audit("code_patches_leer", {},
+              state.project_dir, state.project_name)
+        return 16
+    print(f"\n[*] Phasen-Apply vor Review "
+          f"({len(state.code_patches)} Patches).")
+    ok_apply = apply_code_patches(state, state.code_patches)
+    audit("code_patches_apply", {"ok": ok_apply,
+                                 "anzahl": len(state.code_patches),
+                                 "phase": True},
+          state.project_dir, state.project_name)
+    if not ok_apply:
+        print("[!] Phasen-Apply fehlgeschlagen. "
+              "Fail closed.")
+        return 17
+    # git add -N fuer new_file-Pfade (F2, 2169).
+    _neue_pfade = [
+        p.get("pfad", "")
+        for p in state.code_patches
+        if isinstance(p, dict)
+        and p.get("typ") == "new_file"
+        and p.get("pfad")
+    ]
+    if _neue_pfade:
+        try:
+            _res_add = subprocess.run(
+                ("git", "add", "-N", *_neue_pfade),
+                cwd=str(state.project_dir),
+                capture_output=True, text=True,
+                timeout=30, check=False,
+                env=subprocess_env(),
+            )
+            if _res_add.returncode == 0:
+                audit("git_add_intent",
+                      {"pfade": _neue_pfade,
+                       "phase": True},
+                      state.project_dir, state.project_name)
+            else:
+                audit("git_add_intent_failed",
+                      {"fehler": _res_add.stderr[:200],
+                       "pfade": _neue_pfade},
+                      state.project_dir, state.project_name)
+                return 17
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            audit("git_add_intent_failed",
+                  {"fehler": str(exc),
+                   "pfade": _neue_pfade},
+                  state.project_dir, state.project_name)
+            return 17
+    # W23-A2: veraltet-Flag setzen, damit der
+    # spaetere Commit-Review den NACH-Stand als
+    # verbindlich nimmt.
+    state.mess_protokoll_veraltet = True
+    state.basis_protokoll_nach_apply = ""
+    # Post-Apply-Messung (W33a: patch + new_file).
+    if not _post_apply_messung(state, file_whitelist):
+        return 17
+    # A-W33-7: Guard gegen Token-Explosion.
+    _len_nach = len(state.mess_protokoll_nach_apply)
+    # Guard ist konservativ-warnend.
+    # 4 Zeichen/Token ist Englisch-Faustregel.
+    # Deutsch/Code liegt bei 3-3.5, Guard feuert
+    # also etwas spaeter als 50%. Kein fail-closed,
+    # nur Sichtbarkeit.
+    _budget_bytes = state.max_tokens_judge * 4
+    # Guard prueft mess_nach gegen Gesamt-Judge-
+    # Budget. mess_nach ist nur ein Teil des
+    # Judge-Prompts (contract.md, plan.md, Aufgabe
+    # kommen dazu). 50% ist ein Konservativ-Signal,
+    # keine Garantie, dass der Prompt passt.
+    if _len_nach > _budget_bytes * 0.5:
+        audit("mess_nach_nahe_budget",
+              {"len_bytes": _len_nach,
+               "budget_bytes": _budget_bytes},
+              state.project_dir, state.project_name)
+        print(f"[WARN] mess_nach nahe Judge-Budget: "
+              f"{_len_nach}/{_budget_bytes} bytes")
+    # A-W33-8 + A-W33-9 (i): (b)-Gate auf Zieldatei-
+    # Tests. Bei Rot: rc=17 sofort, KEIN Recovery
+    # (W25-2-Recovery ist (e)-Rot, nicht (b)-Rot).
+    _w33_pfade = _ziel_test_pfade(state)
+    if _w33_pfade:
+        _w33_tr = _basis_gate_pytest_ziel(
+            state.project_dir, _w33_pfade, 60)
+        state.basis_protokoll_nach_apply += (
+            "=== test_run (Phase-Apply, vor Review) ===\n"
+            f"ARGV: pytest -q --maxfail=1 "
+            f"{' '.join(_w33_pfade)}\n"
+            f"RC: {_w33_tr['exit_code']}\n"
+            f"STDOUT:\n{_w33_tr['raw_tail']}\n"
+            f"STDERR:\n\n"
+        )
+        state.basis_gate_test_results.append({
+            "scope": "ziel_pfade",
+            "exit_code": _w33_tr["exit_code"],
+            "klassifizierung":
+                _w33_tr["klassifizierung"],
+            "failed_count": _w33_tr["failed_count"],
+            "passed_count": _w33_tr["passed_count"],
+            "failed_test_ids":
+                _w33_tr["failed_test_ids"],
+            "raw_tail": _w33_tr["raw_tail"],
+        })
+        audit("basis_gate_test_result",
+              {"scope": "ziel_pfade",
+               "ist_gate": True,
+               "phase_apply": True,
+               "exit_code": _w33_tr["exit_code"],
+               "klassifizierung":
+                   _w33_tr["klassifizierung"]},
+              state.project_dir, state.project_name)
+        if _w33_tr["exit_code"] != 0:
+            print(f"[!] (b)-Gate rot: "
+                  f"{_w33_tr['klassifizierung']}. "
+                  f"Fail closed (rc=17, kein "
+                  f"Recovery fuer (b)-Rot).")
+            return 17
+        print(f"[+] (b)-Gate gruen: "
+              f"{_w33_tr['passed_count']} passed.")
+    return None
+
+
 def apply_and_recheck(state: RunState,
                       always: dict[str, Measurement],
                       file_whitelist: list[str]) -> int | None:
@@ -9050,6 +9202,20 @@ def run_pipeline(project_name: str, aufgabe: str,
     state.code_entwurf = reply.content
     state.code_patches = parse_code_patches(reply.content)
     print(f"[i] {len(state.code_patches)} Code-Patches geparst.")
+
+    # W33b (2026-10-17): Apply + Post-Apply-Messung
+    # VOR dem Review-Loop im Phasen-Modus. Der
+    # Judge (W28b) braucht mess_nach + basis_gate,
+    # beide entstehen sonst erst in
+    # apply_and_recheck NACH dem Review.
+    # Nur Phasen-Modus. Alte Architektur
+    # (Nicht-Phasen) unveraendert, damit
+    # bestehende Nicht-Phasen-Tests gruen bleiben.
+    if state.phase_aktiv:
+        _rc_w33 = _phase_apply_vor_review(
+            state, file_whitelist)
+        if _rc_w33 is not None:
+            return _rc_w33
 
     # ==================================================================
     # SCHRITT 3: Review-Schleife (Phase 1)

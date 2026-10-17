@@ -8505,3 +8505,201 @@ class TestW32ContractImLoop:
             f"Contract fehlt: {contract_pfad}")
         text = contract_pfad.read_text(encoding="utf-8")
         assert "Test-U1" in text or "U1" in text
+
+
+# =====================================================================
+# W33b (2026-10-17): _phase_apply_vor_review
+# =====================================================================
+
+class TestW33bApplyVorReview:
+    """W33b: Apply + Messung vor dem Review-Loop."""
+
+    def _state(self, tmp_path: Path,
+               patches: list[dict]) -> pipeline.RunState:
+        # Git-Repo initialisieren, damit git add -N
+        # (W24a/F2) funktioniert.
+        import subprocess
+        subprocess.run(
+            ("git", "init", "-q"), cwd=str(tmp_path),
+            capture_output=True, text=True,
+            timeout=10, check=False,
+        )
+        from unittest.mock import patch as mp
+        with mp("pipeline.audit"):
+            state = build_test_state(
+                project_dir=tmp_path,
+                file_whitelist=["core/", "tests/"])
+        state.always = {
+            "read_file": pipeline.Measurement(
+                "read_file", ("cat",), "Datei lesen."),
+        }
+        state.code_patches = patches
+        return state
+
+    def test_phase_apply_vor_review_reihenfolge(
+            self, tmp_path: Path) -> None:
+        """T1: code_patches_apply vor review_round."""
+        import inspect
+        quelle = inspect.getsource(pipeline.run_pipeline)
+        # Suche die Reihenfolge im Quelltext.
+        idx_apply = quelle.find("_phase_apply_vor_review(")
+        idx_loop = quelle.find("for runde in range(1, max_rounds + 1):")
+        assert idx_apply != -1
+        assert idx_loop != -1
+        assert idx_apply < idx_loop, (
+            "Apply muss VOR dem Review-Loop stehen.")
+
+    def test_nicht_phasen_modus_unveraendert(
+            self, tmp_path: Path) -> None:
+        """T2: Phasen-Bedingung im Code."""
+        import inspect
+        quelle = inspect.getsource(pipeline.run_pipeline)
+        # Aufruf steht in state.phase_aktiv-Bedingung.
+        assert "if state.phase_aktiv:" in quelle
+        assert "_phase_apply_vor_review" in quelle
+
+    def test_phase_apply_vor_review_fehlschlag(
+            self, tmp_path: Path) -> None:
+        """T4: Anker nicht gefunden -> rc=17."""
+        (tmp_path / "core").mkdir()
+        (tmp_path / "core" / "x.py").write_text(
+            "y = 2\n", encoding="utf-8")
+        state = self._state(tmp_path, [
+            {"typ": "patch", "pfad": "core/x.py",
+             "anker": "NICHT_DA", "ersatz": "NEU"}])
+        from unittest.mock import patch as mp
+        with mp("pipeline.audit"):
+            rc = pipeline._phase_apply_vor_review(
+                state, ["core/", "tests/"])
+        assert rc == 17
+
+    def test_phase_apply_vor_review_mess_nach(
+            self, tmp_path: Path) -> None:
+        """T5: mess_nach befuellt (new_file)."""
+        (tmp_path / "core").mkdir()
+        state = self._state(tmp_path, [
+            {"typ": "new_file", "pfad": "core/n.py",
+             "inhalt": "n = 3\n"}])
+        from unittest.mock import patch as mp
+        with mp("pipeline.audit"):
+            rc = pipeline._phase_apply_vor_review(
+                state, ["core/", "tests/"])
+        assert rc is None
+        assert "core/n.py" in state.mess_protokoll_nach_apply
+
+    def test_phase_apply_vor_review_veraltet_flag(
+            self, tmp_path: Path) -> None:
+        """T6: mess_protokoll_veraltet=True (W23-A2)."""
+        (tmp_path / "core").mkdir()
+        state = self._state(tmp_path, [
+            {"typ": "new_file", "pfad": "core/n.py",
+             "inhalt": "n = 3\n"}])
+        from unittest.mock import patch as mp
+        with mp("pipeline.audit"):
+            pipeline._phase_apply_vor_review(
+                state, ["core/", "tests/"])
+        assert state.mess_protokoll_veraltet is True
+
+    def test_phase_apply_vor_review_mess_nach_patch(
+            self, tmp_path: Path) -> None:
+        """T7: patch-only -> mess_nach befuellt (U2a3)."""
+        (tmp_path / "core").mkdir()
+        (tmp_path / "core" / "x.py").write_text(
+            "class ChangeApplier:\n    pass\n",
+            encoding="utf-8")
+        state = self._state(tmp_path, [
+            {"typ": "patch", "pfad": "core/x.py",
+             "anker": "class ChangeApplier:",
+             "ersatz": "class ChangeApplier:\n    x = 1"}])
+        from unittest.mock import patch as mp
+        with mp("pipeline.audit"):
+            rc = pipeline._phase_apply_vor_review(
+                state, ["core/", "tests/"])
+        assert rc is None
+        assert "core/x.py" in state.mess_protokoll_nach_apply
+
+    def test_phase_apply_vor_review_basis_gate_ziel(
+            self, tmp_path: Path) -> None:
+        """T8: basis_gate_test_results befuellt, Format
+        wie apply_and_recheck."""
+        (tmp_path / "core").mkdir()
+        (tmp_path / "tests").mkdir()
+        state = self._state(tmp_path, [
+            {"typ": "new_file", "pfad": "core/n.py",
+             "inhalt": "n = 1\n"},
+            {"typ": "new_file",
+             "pfad": "tests/test_n.py",
+             "inhalt": "def test_n():\n    assert True\n"}])
+        from unittest.mock import patch as mp
+        # _basis_gate_pytest_ziel mocken, damit wir
+        # kein echtes pytest brauchen.
+        fake_tr = {
+            "exit_code": 0, "klassifizierung": "gruen",
+            "failed_count": 0, "passed_count": 1,
+            "failed_test_ids": [], "raw_tail": "1 passed",
+        }
+        with mp("pipeline.audit"), \
+             mp("pipeline._basis_gate_pytest_ziel",
+                return_value=fake_tr):
+            rc = pipeline._phase_apply_vor_review(
+                state, ["core/", "tests/"])
+        assert rc is None
+        assert len(state.basis_gate_test_results) == 1
+        eintrag = state.basis_gate_test_results[0]
+        assert eintrag["scope"] == "ziel_pfade"
+        assert eintrag["exit_code"] == 0
+        assert eintrag["klassifizierung"] == "gruen"
+        assert set(eintrag.keys()) == {
+            "scope", "exit_code", "klassifizierung",
+            "failed_count", "passed_count",
+            "failed_test_ids", "raw_tail"}
+
+    def test_phase_apply_vor_review_basis_gate_rot(
+            self, tmp_path: Path) -> None:
+        """T4b: (b)-Gate rot -> rc=17 sofort."""
+        (tmp_path / "core").mkdir()
+        (tmp_path / "tests").mkdir()
+        state = self._state(tmp_path, [
+            {"typ": "new_file", "pfad": "core/n.py",
+             "inhalt": "n = 1\n"},
+            {"typ": "new_file",
+             "pfad": "tests/test_n.py",
+             "inhalt": "def test_n():\n    assert False\n"}])
+        from unittest.mock import patch as mp
+        fake_rot = {
+            "exit_code": 1, "klassifizierung": "test_failures",
+            "failed_count": 1, "passed_count": 0,
+            "failed_test_ids": ["tests/test_n.py::test_n"],
+            "raw_tail": "1 failed",
+        }
+        with mp("pipeline.audit"), \
+             mp("pipeline._basis_gate_pytest_ziel",
+                return_value=fake_rot):
+            rc = pipeline._phase_apply_vor_review(
+                state, ["core/", "tests/"])
+        assert rc == 17
+
+    def test_post_apply_messung_guard_warnung(
+            self, tmp_path: Path) -> None:
+        """T9: grosser mess_nach -> Audit-Event + Warnung,
+        aber kein fail-closed."""
+        # Datei gross machen, damit 50% Budget
+        # ueberschritten wird.
+        (tmp_path / "core").mkdir()
+        gross = "x" * 10000 + "\n"
+        state = self._state(tmp_path, [
+            {"typ": "new_file", "pfad": "core/big.py",
+             "inhalt": gross}])
+        state.max_tokens_judge = 100  # 400 bytes Budget
+        from unittest.mock import patch as mp
+        audit_calls: list[tuple] = []
+        def _fake_audit(kind, daten, pd, pn):
+            audit_calls.append((kind, daten))
+        with mp("pipeline.audit", side_effect=_fake_audit):
+            rc = pipeline._phase_apply_vor_review(
+                state, ["core/", "tests/"])
+        # Kein fail-closed (rc=None).
+        assert rc is None
+        # Audit-Event mess_nach_nahe_budget vorhanden.
+        kinds = [k for k, _ in audit_calls]
+        assert "mess_nach_nahe_budget" in kinds
