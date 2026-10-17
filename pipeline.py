@@ -653,7 +653,14 @@ P15. BLOCKGROESSE.
      viele Dateien werden in mehrere Unterbloecke
      zerlegt.
      Unterpunkt-Regel: 3-7 Unterpunkte pro
-     Unterblock.
+     Unterblock. HARTES Maximum 7. Ein Unterpunkt
+     ist ein Array-Eintrag ('neu:', 'patch:',
+     'test:', 'hinweis:'). Bei Verletzung:
+     Fail-closed (_plan_ist_portionierbar).
+     Hinweis: "1-2 Zieldateien + 1 Test" ist
+     reine Prompt-Regel, nicht durch
+     _plan_ist_portionierbar geprueft
+     (Scope-Entscheidung WEG-X-P19, Variante (a)).
      Faustregel: der Builder soll den Auftrag in
      EINER Runde umsetzen koennen. Wenn du
      unsicher bist: kleiner planen.
@@ -668,7 +675,18 @@ P16. ARTEFAKT-LISTE. Jeder Unterpunkt, der
 
 P17. BUILDER-FREUNDLICHKEIT. Der Plan muss so
      praezise sein, dass der Builder ihn ohne
-     Rueckfrage umsetzen kann. Konkret:
+     Rueckfrage umsetzen kann.
+
+     Jeder Unterpunkt nennt vier Pflichtfelder:
+       (a) datei:pfad
+       (b) aktion: neu|patch
+       (c) bei neu: signatur (Funktion/Klasse
+           mit Parametern)
+           bei patch: anker (exakter Text aus
+           dem GEMESSENER INHALT)
+       (d) test:pfad
+
+     Konkret:
        - Datei-Pfade vollstaendig (P16).
        - Funktions-Signaturen explizit.
        - Feldnamen und Reihenfolge explizit.
@@ -721,7 +739,18 @@ P18. REVIEWER-BEFUND IM DETAIL. Wenn du zur
      keine done-Unterbloecke - dein Plan wird
      sonst verworfen.
 
-P19. MESSEN VOR DEM PLAN.
+P19. MESSEN IST PFLICHT. Kein Plan ohne
+     mindestens eine Messung pro Unterblock.
+     Jeder Unterpunkt zitiert einen Anker
+     (datei:pfad:zeile, oder 'neu: X existiert
+     nicht' nach read_file-ok=False).
+     Wenn du keine Anker messen kannst: Plane
+     alles als 'neu:' und begruende. Das ist
+     akzeptierter Fall (ROADMAP-Auftraege).
+     Der deterministische Check
+     _plan_ist_messungsbasiert prueft nur
+     Syntax, nicht Wahrheit.
+
      Bevor du einen Phasenplan formulierst
      oder korrigierst:
      (a) Wenn der Auftrag oder der Reviewer-
@@ -9247,6 +9276,62 @@ def _phasen_basis_gate_ok(
              "done_ids": done_ids})
 
 
+def _plan_ist_messungsbasiert(
+        plan: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    """WEG-X-P19: Syntax-Check, dass jeder Unterpunkt
+    'anker:' oder 'neu:' enthaelt.
+
+    Syntax-Check: prueft nur, ob unterpunkte 'anker:'
+    oder 'neu:' enthalten. Dekorative Anker passieren
+    den Check. Wahrheits-Pruefung ist LLM-Sache (P19).
+    Siehe WEG-X-P19.
+    """
+    import re as _re
+    fehlend: list[str] = []
+    for u in plan.get("phase_unterbloecke", []):
+        if not isinstance(u, dict):
+            continue
+        uid = u.get("id", "?")
+        unterpunkte = u.get("unterpunkte", []) or []
+        for punkt in unterpunkte:
+            if not isinstance(punkt, str):
+                continue
+            hat_anker = bool(
+                _re.search(r"(?i)\banker\s*:",
+                            punkt))
+            hat_neu = bool(
+                _re.search(r"(?i)\bneu\s*:", punkt))
+            if not (hat_anker or hat_neu):
+                fehlend.append(f"{uid}: {punkt[:80]}")
+    return (len(fehlend) == 0, fehlend)
+
+
+def _plan_ist_portionierbar(
+        plan: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    """WEG-X-P19: Portionierungs-Check, max 7 Unterpunkte
+    pro Unterblock.
+
+    Unterpunkt = ein Array-Eintrag in unterpunkte.
+    Kann 'neu: datei', 'patch: datei', 'test: datei',
+    oder 'hinweis: ...' sein.
+
+    1-2 Zieldateien + 1 Test ist reine Prompt-Regel
+    (P15), wird hier nicht geprueft (HR-R8,
+    Variante (a)).
+    """
+    zu_gross: list[str] = []
+    for u in plan.get("phase_unterbloecke", []):
+        if not isinstance(u, dict):
+            continue
+        uid = u.get("id", "?")
+        n = len(u.get("unterpunkte", []) or [])
+        if n > 7:
+            zu_gross.append(f"{uid}: {n} Unterpunkte")
+    return (len(zu_gross) == 0, zu_gross)
+
+
 def _phase_main_pfad(
     project_name: str,
     phasen_text: str,
@@ -9554,6 +9639,43 @@ def _phase_main_pfad(
             print(f"[+] Phasenplan erhalten (Runde {runde}).")
             aus_edit = False
 
+        # WEG-X-P19: Fail-closed bei oberflaechlichem
+        # oder zu grossem Plan.
+        # Plan-Dict fuer die Checks bauen (unterbloecke
+        # ist eine Liste, die Checks erwarten dict-Form
+        # mit phase_unterbloecke).
+        _plan_fuer_check: dict[str, Any] = {
+            "phase_unterbloecke": unterbloecke,
+        }
+        _mess_ok, _mess_fehler = _plan_ist_messungsbasiert(
+            _plan_fuer_check)
+        if not _mess_ok:
+            print("[FAIL] Plan nicht messungsbasiert. "
+                  "Unterpunkte ohne anker:/neu:-Marker.")
+            for _f in _mess_fehler[:10]:
+                print(f"  - {_f}")
+            print("[i] Auftrag praezisieren oder "
+                  "'neu:'-Modus verwenden.")
+            audit("planner_plan_unvollstaendig",
+                  {"grund": "nicht_messungsbasiert",
+                   "fehlend": _mess_fehler[:10]},
+                  project_dir, project_name)
+            return 18
+        _port_ok, _port_fehler = _plan_ist_portionierbar(
+            _plan_fuer_check)
+        if not _port_ok:
+            print("[FAIL] Plan zu gross portioniert "
+                  "(HART max 7 Unterpunkte pro Unterblock).")
+            for _f in _port_fehler[:10]:
+                print(f"  - {_f}")
+            print("[i] Auftrag praezisieren oder "
+                  "kleiner planen.")
+            audit("planner_plan_unvollstaendig",
+                  {"grund": "zu_gross",
+                   "uebergross": _port_fehler[:10]},
+                  project_dir, project_name)
+            return 18
+
         # Anzeige (A4, A6, A8).
         print("\n" + "=" * 70)
         if aus_edit:
@@ -9566,8 +9688,18 @@ def _phase_main_pfad(
         for u in unterbloecke:
             n_up = len(u["unterpunkte"])
             n_rd = u["geschaetzte_runden"]
+            # A6: Runden-Schaetzung markieren.
             print(f"{u['id']}: {u['titel']}  "
-                  f"({n_up} Unterpunkte, ~{n_rd} Runden)")
+                  f"({n_up} Unterpunkte, "
+                  f"~{n_rd} Runden — Schaetzung)")
+            # A6: Anker/Marker pro Unterpunkt zeigen.
+            for _p in (u.get("unterpunkte") or [])[:12]:
+                if not isinstance(_p, str):
+                    continue
+                _kurz = _p if len(_p) <= 100 else _p[:97] + "..."
+                print(f"  - {_kurz}")
+            if n_up > 12:
+                print(f"  ... und {n_up - 12} weitere.")
         print(f"(Runde {runde}/{planner_max_runden})")
         print("=" * 70)
 

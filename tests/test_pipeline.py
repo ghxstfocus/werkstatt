@@ -6336,9 +6336,11 @@ class TestW3PlannerMessung:
         assert "P19." in pipeline.HARD_RULES_PLANNER_STUFE2
 
     def test_p19_nennt_read_file(self) -> None:
+        # WEG-X-P19: Header von "MESSEN VOR DEM PLAN"
+        # zu "MESSEN IST PFLICHT" verschaerft (WX-A1).
         s = pipeline.HARD_RULES_PLANNER_STUFE2
         assert "COMMAND: RUN read_file" in s
-        assert "MESSEN VOR DEM PLAN" in s
+        assert "MESSEN IST PFLICHT" in s
 
     def test_p19_nicht_in_stufe1(self) -> None:
         assert "P19." not in pipeline.HARD_RULES_PLANNER_STUFE1
@@ -7304,3 +7306,123 @@ class TestW25SammelCommitRecovery:
 
         v = V()
         assert pipeline._fehler_nach_apply(v, 1) is False
+
+
+class TestWEGXP19PlanChecks:
+    """WEG-X-P19: _plan_ist_messungsbasiert und
+    _plan_ist_portionierbar."""
+
+    def _plan(self, unterbloecke: list) -> dict:
+        return {"phase_unterbloecke": unterbloecke}
+
+    def test_plan_ist_messungsbasiert_ok_anker(self) -> None:
+        plan = self._plan([
+            {"id": "U1", "unterpunkte": [
+                "patch: core/x.py, anker: 'def foo'",
+                "neu: tests/test_x.py (existiert nicht)",
+            ]},
+        ])
+        ok, fehlend = pipeline._plan_ist_messungsbasiert(plan)
+        assert ok is True
+        assert fehlend == []
+
+    def test_plan_ist_messungsbasiert_ok_neu(self) -> None:
+        plan = self._plan([
+            {"id": "U1", "unterpunkte": [
+                "neu: core/x.py (existiert nicht)",
+                "neu: tests/test_x.py",
+            ]},
+        ])
+        ok, fehlend = pipeline._plan_ist_messungsbasiert(plan)
+        assert ok is True
+        assert fehlend == []
+
+    def test_plan_ist_messungsbasiert_ohne_anker(self) -> None:
+        plan = self._plan([
+            {"id": "U1", "unterpunkte": [
+                "Baue Repository mit CRUD-Methoden.",
+                "Schreibe Tests.",
+            ]},
+        ])
+        ok, fehlend = pipeline._plan_ist_messungsbasiert(plan)
+        assert ok is False
+        assert len(fehlend) == 2
+
+    def test_plan_ist_messungsbasiert_case_insensitive(self) -> None:
+        plan = self._plan([
+            {"id": "U1", "unterpunkte": [
+                "ANKER: 'def foo'",
+                "Neu: core/x.py",
+            ]},
+        ])
+        ok, fehlend = pipeline._plan_ist_messungsbasiert(plan)
+        assert ok is True
+        assert fehlend == []
+
+    def test_plan_ist_portionierbar_ok(self) -> None:
+        plan = self._plan([
+            {"id": "U1",
+             "unterpunkte": ["neu: a", "neu: b", "test: c"]},
+        ])
+        ok, zu_gross = pipeline._plan_ist_portionierbar(plan)
+        assert ok is True
+        assert zu_gross == []
+
+    def test_plan_ist_portionierbar_zu_gross(self) -> None:
+        plan = self._plan([
+            {"id": "U1",
+             "unterpunkte": [f"neu: datei{i}.py"
+                              for i in range(8)]},
+        ])
+        ok, zu_gross = pipeline._plan_ist_portionierbar(plan)
+        assert ok is False
+        assert len(zu_gross) == 1
+        assert "U1: 8 Unterpunkte" in zu_gross[0]
+
+    def test_plan_ist_portionierbar_max_7(self) -> None:
+        """Grenzfall: 7 Unterpunkte sind OK, 8 nicht."""
+        plan7 = self._plan([
+            {"id": "U1",
+             "unterpunkte": [f"neu: d{i}.py" for i in range(7)]},
+        ])
+        plan8 = self._plan([
+            {"id": "U1",
+             "unterpunkte": [f"neu: d{i}.py" for i in range(8)]},
+        ])
+        ok7, _ = pipeline._plan_ist_portionierbar(plan7)
+        ok8, _ = pipeline._plan_ist_portionierbar(plan8)
+        assert ok7 is True
+        assert ok8 is False
+
+
+class TestWEGXP19Anzeige:
+    """WEG-X-P19: Anzeige zeigt Anker + markierte
+    Runden-Schaetzung."""
+
+    def test_anzeige_marker_im_source(self) -> None:
+        """A6: Quelle zeigt "Schaetzung" und
+        Schleifen-Anker-Ausgabe."""
+        import inspect
+        src = inspect.getsource(pipeline._phase_main_pfad)
+        # Runden-Schaetzung markiert.
+        assert "Runden — Schaetzung" in src
+        # Anker-Schleife.
+        assert "unterpunkte" in src
+        # Kuerzung.
+        assert "[:12]" in src or "[:97]" in src
+
+    def test_fail_closed_marker_im_source(self) -> None:
+        """Fail-closed im --phase-Pfad vorhanden."""
+        import inspect
+        src = inspect.getsource(pipeline._phase_main_pfad)
+        assert "_plan_ist_messungsbasiert" in src
+        assert "_plan_ist_portionierbar" in src
+        assert "planner_plan_unvollstaendig" in src
+        assert "return 18" in src
+
+    def test_fail_closed_konsole_hinweis(self) -> None:
+        """Konsolenausgabe enthaelt Hinweis (RR1)."""
+        import inspect
+        src = inspect.getsource(pipeline._phase_main_pfad)
+        assert "praezisieren" in src
+        assert "kleiner planen" in src
