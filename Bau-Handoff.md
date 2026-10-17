@@ -4298,3 +4298,54 @@ Naechster Schritt:
 ================================================================
 ENDE WEG-X-P19c
 ================================================================
+
+
+================================================================
+ANKER-REGEX-FIX + TESTW13A (2026-10-17)
+================================================================
+
+Commit: 7d9be73.
+Kategorie 2 (Regex + Test).
+Kein Tag probebetrieb-69.
+
+Problem:
+  _anker_zeilenbereich erkannte P17-Format nicht.
+  Regex "ANKER[^:]*:" matcht nur Gross-
+  schreibung. Planner liefert "anker:'text'" (P17).
+
+  Folge: Auto-Messung von Anker-Kontexten lief
+  ins Nichts. Builder hat bei Phase 19 ohne
+  Anker-Kontext improvisiert — vermutlich der
+  eigentliche Grund fuer "Builder wirkt dumm".
+
+Fix:
+  Regex erweitert:
+    r"(?:ANKER[^:]*|anker)\s*:\s*'([^']+)'"
+    re.IGNORECASE | re.DOTALL
+  TestW13a deterministisch (tmp_path, nicht
+  phase.yaml).
+
+Test-Anzahl: 1028 passed, 0 failed.
+
+Naechster Schritt:
+  Phase 19 neu planen mit Anker-Regex-Fix.
+  Wenn Builder jetzt mit Anker-Kontext baut:
+  Phase-19-Lauf testen.
+  Wenn wieder NO-GO: Rollen-Sanierung (Prompt-
+  Redundanz) als eigener Block.
+
+Merkposten:
+  Rollen-Sanierung (Audit-Commit 78462f1)
+  bleibt offen. 43% Redundanz in builder.md,
+  41% in reviewer.md. agent_docs enthaelt
+  DECISIONS.md (1870 Zeilen) und SECURITY_LOG.md
+  (2211 Zeilen) in jedem Prompt.
+  Sanierung als SAN-A (agent_docs) + SAN-B
+  (agents-Diaet) geplant, aber zurueckgezogen
+  wegen fehlender Messungen.
+  Nach Phase-19-Neuversuch: Sanierung neu
+  bewerten.
+
+================================================================
+ENDE ANKER-REGEX-FIX
+================================================================
