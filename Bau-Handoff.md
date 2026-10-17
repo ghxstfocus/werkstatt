@@ -4502,3 +4502,67 @@ Merkposten Crawler (WEG-X-P22):
 ================================================================
 ENDE WEG-X-P22a
 ================================================================
+
+
+================================================================
+W23 ERLEDIGT (2026-10-17) — KOMMUNIKATIONSWEGE-AUDIT
+================================================================
+
+Commit: c3bd4db.
+Kategorie 3.
+Kein Tag probebetrieb-69.
+
+Problem:
+  U2a2: Code korrekt (7 Tests gruen, ruff 0),
+  aber Commit-Review NO-GO (2x): "rollback fehlt".
+  Reviewer zitierte Docstring aus U2a1-Stand.
+
+Diagnose:
+  Commit-Review-Prompt (Z. 8977-8985) markierte
+  state.mess_protokoll (Stand VOR Apply) als
+  "GEMESSENER INHALT (verbindlich)". Der NACH-Stand
+  war nur als Zusatz. basis_gate_test_results
+  fehlte komplett.
+
+Fix:
+  - _format_basis_gate_test_results (neu).
+  - _build_commit_input (Refactor).
+  - Commit-Review-Prompt: NACH Apply verbindlich,
+    VOR Apply historisch, Warnung, TEST-ERGEBNISSE.
+  - A4-Grenzfall: nach_apply leer -> VOR verbindlich
+    + Hinweis.
+
+Tests: 1029 -> 1032 passed.
+
+HR-R7-Nachtrag:
+  Der 2x-NO-GO bei U2a2 beruhte auf falscher
+  Datenquelle (VOR statt NACH). Reviewer-Chat
+  hat den Docstring aus U2a1 zitiert und
+  "rollback fehlt" gemeldet. Der Fix in W23
+  behebt die Ursache.
+
+Kommunikationswege-Matrix (Ist nach W23):
+
+| Prompt | mess VOR | mess NACH | basis VOR | basis NACH | test_results |
+|---|---|---|---|---|---|
+| Code-Review | verbindlich | - | [:800] | Zusatz | - |
+| Commit-Review | historisch | verbindlich | - | Zusatz | strukturiert |
+| Recovery | - | verbindlich | - | voll | strukturiert |
+| Builder-User | verbindlich | - | [:1500] | - | - |
+
+Merkposten:
+  W23b: Code-Review zeigt keine test_results.
+    Pruefen, ob noetig (Code-Review ist VOR Apply,
+    test_results sind NACH).
+  MP2: Recovery nutzt eigene format-Logik fuer
+    basis_gate_test_results. Konsistenz zu
+    _format_basis_gate_test_results pruefen.
+
+Naechster Schritt:
+  U2a2-Commit-Review wiederholen (W23-Messung).
+  Wenn GO: W23 behebt den Fehler.
+  Dann U2a3, U2b, U3-U6.
+
+================================================================
+ENDE W23
+================================================================
