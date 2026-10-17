@@ -3422,7 +3422,6 @@ def build_catalog(config: dict[str, Any], project_dir: Path
             (venv, "-m", "pytest", "--collect-only", "-q"), "Test-Anzahl."),
         "git_status": Measurement("git_status", ("git", "status", "--porcelain"), "Tree."),
         "git_head": Measurement("git_head", ("git", "rev-parse", "--short", "HEAD"), "HEAD."),
-        "test_run": Measurement("test_run", (venv, "-m", "pytest", "-q"), "Vollsuite.", 600),
         "coverage": Measurement("coverage",
             (venv, "-m", "pytest", "--cov=core", "--cov-report=json:coverage.json", "-q"),
             "Coverage.", 600),
@@ -6146,21 +6145,6 @@ def _post_apply_messung(state: RunState,
     return True
 
 
-def _venv_fuer_state(state: RunState) -> str:
-    """W25: venv-Pfad aus Projekt-YAML (Fallback project_dir/.venv).
-
-    Konsistent mit _build_default_registry (Z. 3408).
-    """
-    fallback = str(state.project_dir / ".venv/bin/python3")
-    try:
-        config = _lade_und_pruefe_projekt(state.project_name)
-    except SystemExit:
-        return fallback
-    if not isinstance(config, dict):
-        return fallback
-    return config.get("venv_python", fallback)
-
-
 def _ziel_test_pfade(state: RunState) -> list[str]:
     """W25-A28: Test-Pfade aus code_patches (startswith tests/)."""
     pfade: list[str] = []
@@ -6238,7 +6222,7 @@ def _basis_gate_pytest_ziel(
     venv = str(project_dir / ".venv/bin/python3")
     # venv-Pfad via state, aber Aufrufer uebergibt
     # project_dir; deshalb hier Fallback. Der Aufrufer
-    # (apply_and_recheck) nutzt _venv_fuer_state.
+    # (apply_and_recheck) nutzt project_dir/.venv/bin/python3.
     argv = [venv, "-m", "pytest", "-q", "--maxfail=1", *test_pfade]
     start = time.monotonic()
     try:
