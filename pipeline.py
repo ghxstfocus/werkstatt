@@ -30,6 +30,13 @@ from typing import Any
 import requests
 import yaml
 
+# W36-1a: aus werkstatt.state re-exportiert
+from werkstatt.state import (
+    BudgetExhausted,
+    LLMReply,
+    Measurement,
+)
+
 # Auflage 2132: Format fuer Commit-Paket (Erstbau + Neubau).
 # Wird an zwei Stellen verwendet (build_commit_paket und
 # COMMIT-NO-GO-Builder-Neubau), damit sie nicht divergieren.
@@ -112,7 +119,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 import redaction
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
-SUBPROCESS_TIMEOUT = 60
 COVERAGE_MIN_PCT = 80.0
 AUDIT_DIR_NAME = "audit-logs"
 AUDIT_FILE_NAME = "agent-pipeline.jsonl"
@@ -878,10 +884,6 @@ ERLAUBTE_QUELLEN = {
 
 WERKSTATT_HOME = Path("/opt/werkstatt")
 PROJECTS_DIR = WERKSTATT_HOME / "projects"
-
-
-class BudgetExhausted(Exception):
-    """Wird geworfen, wenn das LLM-Budget erschoepft ist."""
 
 
 def require_budget(state: RunState, max_llm: int) -> None:
@@ -3901,14 +3903,6 @@ def _git_status_porcelain(project_dir: Path) -> str:
     return res.stdout
 
 
-@dataclass(frozen=True)
-class Measurement:
-    mid: str
-    argv: tuple[str, ...]
-    beschreibung: str
-    timeout_s: int = SUBPROCESS_TIMEOUT
-
-
 def build_catalog(config: dict[str, Any], project_dir: Path
                   ) -> tuple[dict[str, Measurement], dict[str, Measurement]]:
     venv = config.get("venv_python", str(project_dir / ".venv/bin/python3"))
@@ -4030,13 +4024,6 @@ def run_measurement(m: Measurement, whitelist: list[str], project_dir: Path,
     )
     return out, ok
 
-
-
-@dataclass
-class LLMReply:
-    ok: bool
-    content: str = ""
-    error: str = ""
 
 
 def ask_llm(api_key: str, system_prompt: str, user_content: str,
