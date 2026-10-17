@@ -684,7 +684,17 @@ P17. BUILDER-FREUNDLICHKEIT. Der Plan muss so
            mit Parametern)
            bei patch: anker (exakter Text aus
            dem GEMESSENER INHALT)
+           WICHTIG: bei aktion:patch ist anker:
+           Pflicht. signatur: ist bei patch
+           NICHT erlaubt (nur bei neu). Wenn
+           kein Anker messbar: aktion:neu
+           verwenden und Datei als neu anlegen.
        (d) test:pfad
+
+     Ein Unterpunkt = genau EIN datei:-Feld.
+     Ein Unterpunkt ohne datei: ist ungueltig.
+     Der test:-Eintrag gehoert in DENSELBEN
+     Unterpunkt, nicht in einen eigenen.
 
      Konkret:
        - Datei-Pfade vollstaendig (P16).
@@ -711,6 +721,37 @@ P17. BUILDER-FREUNDLICHKEIT. Der Plan muss so
      Beispiel SCHLECHT:
        core/guardrails/repository.py:
        - Repository mit CRUD-Methoden.
+
+     Beispiel GUELTIGER Unterblock (3 Unterpunkte):
+       U1: ChangeApplier-Grundgeruest
+         - datei:core/changeapplier/__init__.py,
+           aktion:neu,
+           signatur:'from .models import ChangeApplier (Re-Export)',
+           test:tests/unit/test_change_applier_models.py,
+           pruefung: Import
+         - datei:core/changeapplier/models.py,
+           aktion:neu,
+           signatur:'class ChangeApplier: apply(self, change: Change) -> None',
+           test:tests/unit/test_change_applier_models.py,
+           pruefung: Instanziierung + Apply-Signatur
+         - datei:core/services/change_service.py,
+           aktion:patch,
+           anker:'def apply_change(self, change: Change) -> None:',
+           test:tests/unit/test_change_service.py,
+           pruefung: Apply ruft ChangeApplier.apply
+
+     Beispiel UNGUELTIGER Unterblock (2 Unterpunkte,
+     so wie der Planner heute liefert):
+       U1: ChangeApplier
+         - datei:harness/versioning/applier.py,
+           aktion:patch, signatur:'class ChangeApplier'
+           FEHLER: bei patch Pflicht anker,
+           nicht signatur.
+         - test:tests/unit/test_change_applier.py,
+           pruefung: apply mit gueltigem config_change
+           FEHLER: kein datei:, ist ein eigener
+           Unterpunkt (P17 verlangt: test: gehoert
+           in denselben Unterpunkt).
 
 P18. REVIEWER-BEFUND IM DETAIL. Wenn du zur
      Korrektur gerufen wirst:
