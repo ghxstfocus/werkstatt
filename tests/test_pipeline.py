@@ -7882,3 +7882,49 @@ class TestW27Contracts:
         """_lese_contract liefert "" wenn nicht vorhanden."""
         state = build_test_state(project_dir=tmp_path)
         assert pipeline._lese_contract(state, "U99") == ""
+
+
+class TestW28bReviewLoopJudge:
+    """W28b (2026-10-17): Review-Loop nutzt Judge statt Reviewer."""
+
+    def test_judge_prompt_hat_contract(self, tmp_path: Path) -> None:
+        """_build_judge_prompt enthaelt HARD_RULES_JUDGE."""
+        state = build_test_state(project_dir=tmp_path)
+        prompt = pipeline._build_judge_prompt(state)
+        assert "J1." in prompt
+        assert "J2." in prompt
+
+    def test_judge_input_hat_contract(self, tmp_path: Path) -> None:
+        """_build_judge_input enthaelt contract.md."""
+        state = build_test_state(project_dir=tmp_path)
+        state.phase_unterbloecke = [{
+            "id": "U1",
+            "titel": "Test-Unterblock",
+            "status": "pending",
+            "unterpunkte": [
+                "datei:core/x.py, aktion:neu, signatur:..., test:...",
+                "Kontext: Test-Kontext.",
+            ],
+        }]
+        state.phase_aktueller_index = 0
+        pipeline._schreibe_contract(
+            state, state.phase_unterbloecke[0])
+        judge_input = pipeline._build_judge_input(state)
+        assert "=== CONTRACT (U1) ===" in judge_input
+        assert "=== GEMESSENER INHALT (nach Apply) ===" in judge_input
+        assert "=== TEST-ERGEBNISSE ===" in judge_input
+        assert "core/x.py" in judge_input
+
+    def test_max_review_rounds_ist_2(self) -> None:
+        """security-ai.yaml hat max_review_rounds: 2."""
+        import yaml
+        cfg = yaml.safe_load(
+            Path("/opt/werkstatt/projects/security-ai.yaml")
+            .read_text(encoding="utf-8"))
+        assert cfg["budget"]["max_review_rounds"] == 2
+
+    def test_judge_model_ist_konfiguriert(
+            self, tmp_path: Path) -> None:
+        """state.judge_model ist deepseek-reasoner."""
+        state = build_test_state(project_dir=tmp_path)
+        assert state.judge_model == "deepseek-reasoner"

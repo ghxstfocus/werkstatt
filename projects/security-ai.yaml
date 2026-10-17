@@ -104,7 +104,7 @@ venv_python: /opt/security-ai/.venv/bin/python3
 
 # Budget pro Block. Bei Ueberschreitung: Stop + Recovery.
 budget:
-  max_review_rounds: 5
+  max_review_rounds: 2
   max_minutes: 15
   max_llm_calls: 30
   max_builder_runden: 3

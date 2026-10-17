@@ -5594,6 +5594,61 @@ def _lese_contract(state: RunState, uid: str) -> str:
         return ""
 
 
+def _build_judge_prompt(state: RunState) -> str:
+    """W28b2: baut den Judge-System-Prompt.
+
+    Frischer Kontext: judge.md + HARD_RULES_BASE +
+    HARD_RULES_JUDGE. Fallback auf reviewer, wenn
+    judge fehlt.
+    """
+    agent = state.agents.get("judge")
+    if agent is None:
+        agent = state.agents.get("reviewer")
+    if agent is None:
+        return HARD_RULES_BASE + HARD_RULES_JUDGE
+    body = agent.get("body", "")
+    return (
+        body + "\n\n"
+        + HARD_RULES_BASE + "\n\n"
+        + HARD_RULES_JUDGE)
+
+
+def _build_judge_input(state: RunState) -> str:
+    """W28b2: baut den Judge-User-Content.
+
+    Nur: contract.md, mess_nach.txt,
+    basis_gate_test_results.
+    NICHT: code_entwurf, mess_protokoll, basis_protokoll,
+    commit_message, git_diff.
+    """
+    if not (0 <= state.phase_aktueller_index
+            < len(state.phase_unterbloecke)):
+        return (
+            "=== KEIN AKTIVER UNTERBLOCK ===\n"
+            "Der Phasen-Index ist ungueltig. "
+            "ESKALATION an den Menschen.")
+    uid = state.phase_unterbloecke[
+        state.phase_aktueller_index].get("id", "?")
+    contract = _lese_contract(state, uid)
+    if not contract:
+        contract = "(kein Contract vorhanden)"
+    mess_nach = (state.mess_protokoll_nach_apply
+                 or "(keine Messung nach Apply)")
+    tests = _format_basis_gate_test_results(
+        state.basis_gate_test_results)
+    if not tests:
+        tests = "(keine Test-Ergebnisse)"
+    return (
+        f"=== CONTRACT ({uid}) ===\n"
+        f"{contract}\n\n"
+        f"=== GEMESSENER INHALT (nach Apply) ===\n"
+        f"{mess_nach}\n\n"
+        f"=== TEST-ERGEBNISSE ===\n"
+        f"{tests}\n\n"
+        "Bewerte. Erste Zeile: GO, NO_GO oder ESKALATION.\n"
+        "Bei NO_GO: konkrete Problem-Liste (max 5 Punkte).")
+
+
 def _lese_plan_audit(state: RunState) -> str:
     """W26: liest audit-logs/<run_id>/01-plan.md.
 
@@ -8517,6 +8572,8 @@ def run_pipeline(project_name: str, aufgabe: str,
     reviewer_prompt = build_system_prompt(
         state.agents["reviewer"], state.docs,
         doc_keys_reviewer, state=state)
+    # W28b (2026-10-17): Judge-Prompt (Code-Review).
+    judge_prompt = _build_judge_prompt(state)
 
     historie = load_recent_commits(project_dir, n=10)
 
@@ -8647,7 +8704,7 @@ def run_pipeline(project_name: str, aufgabe: str,
     # ==================================================================
     # SCHRITT 3: Review-Schleife (Phase 1)
     # ==================================================================
-    max_rounds = budget.get("max_review_rounds", 5)
+    max_rounds = budget.get("max_review_rounds", 2)
     verdict = "UNKLAR"
     for runde in range(1, max_rounds + 1):
         # Auflage 2078: der inline-Budget-Check ist entfernt.
@@ -8739,8 +8796,11 @@ def run_pipeline(project_name: str, aufgabe: str,
                               max_minutes=max_minutes)
         if rc is not None:
             return rc
-        reply = ask_llm(api_key, reviewer_prompt, szenario,
-                        state.reviewer_verdict_model, 0.0, state.llm_timeout_s,
+        # W28b (2026-10-17): Judge statt Reviewer.
+        # Judge sieht NUR contract + mess_nach + test_results.
+        judge_input = _build_judge_input(state)
+        reply = ask_llm(api_key, judge_prompt, judge_input,
+                        state.judge_model, 0.0, state.llm_timeout_s,
                         state=state)
         if not reply.ok:
             print(f"[FAIL] Reviewer: {reply.error}")
