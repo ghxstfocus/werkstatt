@@ -11604,6 +11604,50 @@ def _planner_main_pfad(
         return 0
 
 
+    # W48 (2026-10-18): Planner-Start bei existierender
+    # phase.yaml sperren. _phase_plan_laden liefert None
+    # bei phase_aktiv=False (Z. 1744-1752) und macht den
+    # inaktiven Fall unsichtbar; deshalb direkter Leser.
+    # A-W48-9b + A-W48-11: Neuanlage ausschliesslich
+    # ueber --phase.
+    _w48_pfad = _phase_yaml_pfad(project_name)
+    if _w48_pfad.exists():
+        try:
+            _w48_roh = _w48_pfad.read_text(encoding="utf-8")
+            _w48_daten = yaml.safe_load(_w48_roh) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            print(f"[FAIL] phase.yaml nicht lesbar: {exc}. Fail closed.")
+            audit("planner_phase_yaml_kaputt",
+                  {"fehler": str(exc)[:200]},
+                  project_dir, project_name)
+            return 18
+        if not isinstance(_w48_daten, dict):
+            print("[FAIL] phase.yaml ist kein dict. Fail closed.")
+            audit("planner_phase_yaml_kaputt",
+                  {"fehler": "kein dict"},
+                  project_dir, project_name)
+            return 18
+        _w48_aktiv = _w48_daten.get("phase_aktiv")
+        _w48_pid = _w48_daten.get("phase_id", "?")
+        if _w48_aktiv is True:
+            print(f"[FAIL] Aktive Phase {_w48_pid} in phase.yaml. "
+                  "--planner gesperrt, bitte --phase nutzen.")
+            audit("planner_blockiert_aktive_phase",
+                  {"phase_id": _w48_pid},
+                  project_dir, project_name)
+            return 65
+        if _w48_aktiv is False:
+            print(f"[FAIL] Phase {_w48_pid} ist abgeschlossen in "
+                  "phase.yaml. --planner gesperrt, bitte --phase "
+                  "(Neuanlage) nutzen.")
+            audit("planner_blockiert_phase_abgeschlossen",
+                  {"phase_id": _w48_pid},
+                  project_dir, project_name)
+            return 65
+        # _w48_aktiv ist None (Feld fehlt): Alt-Datei, durchlassen.
+
+
+
     # Historien.
     historie = load_recent_commits(project_dir, n=10)
 

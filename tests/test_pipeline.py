@@ -9282,3 +9282,101 @@ class TestW35a2PlannerResume:
         assert rc == 18
         kinds = [k for k, _ in audit_calls]
         assert "planner_resume_solver_befund_kaputt" in kinds
+
+    def test_w48_planner_blockiert_aktive_phase(
+            self, tmp_path, monkeypatch) -> None:
+        """W48/T-W48-a: aktive Phase -> rc=65."""
+        _setup_w48_phase_yaml(tmp_path, True, '19')
+        monkeypatch.setattr(
+            pipeline, '_PHASE_YAML_DIR', tmp_path)
+        calls = []
+        monkeypatch.setattr(
+            pipeline, 'audit',
+            lambda k, *a, **kw: calls.append(k))
+        rc = _w48_rufe_planner_main(tmp_path, monkeypatch)
+        assert rc == 65
+        assert 'planner_blockiert_aktive_phase' in calls
+
+    def test_w48_planner_blockiert_abgeschlossene_phase(
+            self, tmp_path, monkeypatch) -> None:
+        """W48/T-W48-b: abgeschlossene Phase -> rc=65."""
+        _setup_w48_phase_yaml(tmp_path, False, '19')
+        monkeypatch.setattr(
+            pipeline, '_PHASE_YAML_DIR', tmp_path)
+        calls = []
+        monkeypatch.setattr(
+            pipeline, 'audit',
+            lambda k, *a, **kw: calls.append(k))
+        rc = _w48_rufe_planner_main(tmp_path, monkeypatch)
+        assert rc == 65
+        assert 'planner_blockiert_phase_abgeschlossen' in calls
+
+    def test_w48_planner_ohne_phase_yaml_frei(
+            self, tmp_path, monkeypatch) -> None:
+        """W48/T-W48-c: keine phase.yaml -> Planner frei."""
+        monkeypatch.setattr(
+            pipeline, '_PHASE_YAML_DIR', tmp_path)
+        calls = []
+        monkeypatch.setattr(
+            pipeline, 'audit',
+            lambda k, *a, **kw: calls.append(k))
+        monkeypatch.setattr(
+            pipeline, '_planner_lauf',
+            lambda *a, **kw: None)
+        monkeypatch.setenv('DEEPSEEK_API_KEY', 'k')
+        _w48_rufe_planner_main(tmp_path, monkeypatch)
+        assert 'planner_blockiert_aktive_phase' not in calls
+        assert 'planner_blockiert_phase_abgeschlossen' not in calls
+
+    def test_w48_direkter_planner_aufruf_blockiert(
+            self, tmp_path, monkeypatch) -> None:
+        """W48/T-W48-d: Defense-in-Depth, direkter Aufruf."""
+        _setup_w48_phase_yaml(tmp_path, False, '19')
+        monkeypatch.setattr(
+            pipeline, '_PHASE_YAML_DIR', tmp_path)
+        calls = []
+        monkeypatch.setattr(
+            pipeline, 'audit',
+            lambda k, *a, **kw: calls.append(k))
+        rc = _w48_rufe_planner_main(tmp_path, monkeypatch)
+        assert rc == 65
+        assert 'planner_blockiert_phase_abgeschlossen' in calls
+
+def _setup_w48_phase_yaml(tmp_path, aktiv, phase_id):
+    """W48-Helper: schreibt eine minimale phase.yaml."""
+    import yaml as _yaml
+    pfad = tmp_path / 'testprojekt.phase.yaml'
+    pfad.write_text(_yaml.safe_dump({
+        'phase_aktiv': aktiv,
+        'phase_id': phase_id,
+        'phase_titel': 'Test',
+        'phase_unterbloecke': [],
+    }), encoding='utf-8')
+
+
+def _w48_rufe_planner_main(tmp_path, monkeypatch):
+    """W48-Helper: ruft _planner_main_pfad minimal auf."""
+    import pipeline as _p
+    monkeypatch.setenv('DEEPSEEK_API_KEY', 'k')
+    monkeypatch.setattr(
+        _p, '_lade_und_pruefe_projekt',
+        lambda name: {'project_dir': str(tmp_path),
+                      'project': name,
+                      'planner': {'modus': 'manual'}})
+    monkeypatch.setattr(
+        _p, 'load_agents', lambda d: {'planner': {}})
+    monkeypatch.setattr(
+        _p, 'load_docs', lambda d, p: {})
+    monkeypatch.setattr(
+        _p, 'load_recent_commits', lambda p, n=10: '')
+    monkeypatch.setattr(
+        _p, 'build_catalog', lambda c, p: ([], []))
+    import subprocess as _sp
+    monkeypatch.setattr(
+        _sp, 'run',
+        lambda *a, **kw: type(
+            'R', (), {'returncode': 0, 'stdout': '',
+                      'stderr': ''})())
+    ref = []
+    return _p._planner_main_pfad('testprojekt', 'Test', ref)
+
