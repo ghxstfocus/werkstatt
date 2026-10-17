@@ -3856,3 +3856,96 @@ W25 ist damit freigegeben:
 ================================================================
 ENDE W17-ERWEITERUNG ERLEDIGT
 ================================================================
+
+
+================================================================
+W25-1 ERLEDIGT (2026-10-17) — BASIS-GATE TEST_RESULT
+================================================================
+
+Commit: 807228a.
+Kategorie 3 (Kernlogik).
+Kein Tag probebetrieb-69 (Werkstatt-Fix).
+
+Was geaendert wurde:
+  pipeline.py:
+    - Neue Funktion _venv_fuer_state (deklariert,
+      ungenutzt; W25-1 nutzt direkt
+      project_dir/.venv/bin/python3).
+    - Neue Funktion _ziel_test_pfade(state)
+      -> list[str]: filtert state.code_patches
+      auf startswith("tests/").
+    - Neue Funktion _klassifiziere_pytest(...)
+      -> dict: gruen|test_failures|collection_error|
+      internal_error|usage_error|no_tests|timeout|
+      unknown. Parst failed_count, passed_count,
+      failed_test_ids (max 20), failed_test_ids_mehr
+      aus pytest-Output.
+    - Neue Funktion _basis_gate_pytest_ziel(
+      project_dir, pfade, timeout_s=60) -> dict:
+      pytest -q --maxfail=1 <pfade>.
+    - Neue Funktion _basis_gate_pytest_suite(
+      project_dir, timeout_s=900) -> dict:
+      pytest -q --maxfail=10 (volle Suite).
+    - apply_and_recheck: nach "always"-Loop
+      zusaetzlich Zieldatei-Tests (b).
+      Bei Rot: bestehender Recovery-Loop (rc=19).
+    - Sammel-Commit-Pfad: vor commit_paket-
+      Finalisierung Suite-Gate (e). Nur bei
+      state.phase_aktiv=True. Bei Rot: rc=18
+      (fail-closed, Recovery folgt in W25-2).
+
+  tests/test_pipeline.py:
+    - TestW25Klassifizierung (7 Tests).
+    - TestW25ZielPfade (3 Tests).
+    - TestW25BasisGate (5 Tests).
+
+Bugfix waehrend Bau:
+  Klassifizierer nutzte "exit_code or -1",
+  was exit_code=0 als falsy auf -1 mappte.
+  Korrigiert zu
+  "exit_code if exit_code is not None else -1".
+
+Test-Anzahl (gemessen):
+  Vorher: 985 passed.
+  Nachher: 1000 passed.
+  Neue Tests: 15.
+
+Kosten:
+  Pro Unterblock: +0.1 s (3 Zieldateien
+  mit je ~13 Tests).
+  Pro Phase: +560 s (1x volle Suite).
+  Bei (e)-Rot: rc=18 sofort (kein Recovery
+  in W25-1). Recovery kommt in W25-2
+  (Kosten dann ~22-25 min bei (e)-Rot
+  mit Recovery-Loop).
+
+Risiko 3 (A27):
+  Code-Aenderungen, die bestehende Tests
+  rot machen, werden von (b) nicht erkannt,
+  weil die betroffene Test-Datei nicht in
+  code_patches ist. (e) erkennt sie am
+  Phasen-Ende vor dem Sammel-Commit.
+  Bei 10 Unterbloecken: Diagnose rueckwaerts
+  noetig.
+
+Merkposten:
+  W25d (test_run dead): test_run (Z. 3425)
+    ist toter Code. Pruefen oder entfernen.
+    Eigener Block.
+  W25e (venv-Pfad): _basis_gate_pytest_ziel
+    und _basis_gate_pytest_suite nutzen
+    project_dir/.venv/bin/python3 direkt,
+    nicht _venv_fuer_state. Fuer security-ai
+    identisch. Bei Projekt-YAML-Abweichung
+    (venv_python != project_dir/.venv)
+    korrigieren. Eigener Block.
+  W25f (Risiko 3 Recovery): Impact-Analyse
+    oder (b) erweitern. Eigener Block.
+
+W25-2 (Recovery bei (e)-Rot, A33):
+  Freigegeben mit GO-mit-Auflagen
+  (A35-A37). Naechster Block.
+
+================================================================
+ENDE W25-1
+================================================================
