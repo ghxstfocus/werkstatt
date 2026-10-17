@@ -3418,8 +3418,22 @@ def _planner_user_content(
         )
         teile.append(
             "Formuliere GENAU EINEN korrigierten "
-            "Phasenplan (PHASE/UNTERBLOCK). Halte "
-            "das Ausgabe-Format aus P10-P16 ein. "
+            "Phasenplan im P10-P16-Format:\n"
+            "  PHASE: <id> - <Titel>\n"
+            "  \n"
+            "  UNTERBLOCK: U<n> - <Titel>\n"
+            "  Unterpunkte:\n"
+            "    - <Punkt>\n"
+            "  Geschaetzte Runden: <N>\n"
+            "  \n"
+            "  UNTERBLOCK: U<n+1> - <Titel>\n"
+            "  ...\n"
+            "\n"
+            "ALLE Unterbloecke muessen im Plan "
+            "erscheinen (auch die done). Nur der "
+            "INHALT des offenen Unterblocks aendert "
+            "sich. Die IDs muessen mit dem ALTER PLAN "
+            "uebereinstimmen.\n"
             "Beachte P17 (Builder-Freundlichkeit) "
             "und P18 (Korrektur-Kompetenz).\n"
         )
@@ -10415,18 +10429,39 @@ def _phase_planner_resume(
     }
     # korrektur_kontext (W35a-2b: vollstaendig wie
     # _phase_plan_korrektur).
+    # W38 (2026-10-17): alter_plan im P10-P14-Format,
+    # damit der Planner das Format erkennt und
+    # repliziert.
     _alter_plan_zeilen: list[str] = [
-        f"PHASE {state.phase_id}: {state.phase_titel}",
+        f"PHASE: {state.phase_id} - {state.phase_titel}",
+        "",
     ]
     for _u in ups:
         if not isinstance(_u, dict):
             continue
-        _zeile = (
-            f"{_u.get('id', '?')}: {_u.get('titel', '')} "
-            f"[{_u.get('status', '?')}]")
+        _uid = _u.get("id", "?")
+        _utitel = _u.get("titel", "")
+        _ustatus = _u.get("status", "?")
+        _alter_plan_zeilen.append(
+            f"UNTERBLOCK: {_uid} - {_utitel}")
+        # Status als Kommentar, damit der Planner
+        # den aktuellen Stand sieht, aber das
+        # P10-P14-Format nicht bricht.
+        _alter_plan_zeilen.append(
+            f"  # Status: {_ustatus}")
+        _alter_plan_zeilen.append("Unterpunkte:")
         for _punkt in _u.get("unterpunkte", []):
-            _zeile += f"\n    - {_punkt}"
-        _alter_plan_zeilen.append(_zeile)
+            # Unterpunkte sind einzeilig; Zeilenumbrueche
+            # in Einzelzeilen aufloesen, damit das
+            # -Format sauber bleibt.
+            _punkt_sauber = " ".join(
+                str(_punkt).splitlines())
+            _alter_plan_zeilen.append(
+                f"  - {_punkt_sauber}")
+        _alter_plan_zeilen.append(
+            f"Geschaetzte Runden: "
+            f"{_u.get('geschaetzte_runden', 1)}")
+        _alter_plan_zeilen.append("")
     _alter_plan = "\n".join(_alter_plan_zeilen)
     _pakete_zeilen: list[str] = []
     for _i, _p in enumerate(state.phase_commit_pakete, 1):
