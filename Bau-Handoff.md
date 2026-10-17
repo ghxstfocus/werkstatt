@@ -5257,3 +5257,97 @@ Merkposten nach W35a:
 ================================================================
 ENDE W34b + W35a-1 + W35a-2
 ================================================================
+
+
+================================================================
+W36-W41 + PHASE 19 STAND (2026-10-17 abends)
+================================================================
+
+Werkstatt-HEAD: 6e4926a (W41).
+security-ai-HEAD: f53a435 (U2b1+U2b2).
+Tests Werkstatt: 1102 passed.
+Tests security-ai: 1413 passed (9:20 min).
+
+Phase 19:
+  done:    U1, U2a1, U2a2, U2a3, U2b1, U2b2
+  no_go:   U3
+  pending: U4, U5, U6
+
+Refactoring (W36):
+  werkstatt/state.py:    BudgetExhausted, Measurement,
+                         LLMReply, RunState, RepairAttempt,
+                         SolverDiagnose, SolverBefund,
+                         RecoveryVorschlag.
+  werkstatt/parser.py:   _parse_phase_kopf, _parse_phase_plan,
+                         _ID_MUSTER.
+  pipeline.py:           11942 -> 11564 Zeilen.
+  Re-Export-Fassade:     pipeline.py importiert aus
+                         werkstatt.state + werkstatt.parser.
+
+Strukturelle Fixes (W35a-2d-Reihe):
+  W35a-2d-4: Anzahl-Check bei validiertem Split ueberspringen.
+  W35a-2d-5: ID-Check bei validiertem Split ueberspringen.
+  W35a-2d-6: Ambig-Check bidirektional (Praefix-Faelle).
+  W38:       alter_plan im P10-P16-Format.
+  W39:       Parser toleriert Kommentarzeilen.
+  W41:       classify_verdict akzeptiert NO_GO.
+
+Rollen-Prompts:
+  W37: builder.md um 3 Abschnitte erweitert
+       (Anker-Minimalitaet, test:-Feld, __all__).
+  W40: judge.md (Auftragsverstoss = NO_GO),
+       planner.md (letzter_befund ist Pflicht).
+
+WAS HEUTE BLOCKIERT (U3):
+  Auftrag verlangt Anker 'class RiskLevel(Enum):'.
+  models.py enthaelt aber 'RiskCategory' (nicht RiskLevel).
+  Der Auftrag stammt aus dem alten Plan (vor U2b1/U2b2)
+  und wurde nie gegen die echte Datei gemessen.
+
+  Der Solver hat das im letzten Lauf korrekt erkannt
+  ('Der Auftrag beruht auf einer falschen Messung').
+  Der Planner hat aber im Resume-Modus die Zieldatei
+  NICHT gemessen (kein read_file), also den Fehler
+  nicht gesehen.
+
+NAECHSTER SCHRITT (W42):
+  Planner-Resume muss vor dem Plan die Zieldateien
+  messen (COMMAND: RUN read_file <pfad>).
+  Heute macht der Planner das im Resume-Modus nicht.
+
+  Konkret:
+    - In _phase_planner_resume: read_file auf alle
+      datei:-Pfade des offenen Unterblocks, BEVOR
+      _planner_lauf gerufen wird.
+    - Ergebnis an planner_lauf als 'gemessener_inhalt'
+      (oder in korrektur_kontext) mitgeben.
+    - Planner sieht dann 'class RiskCategory', nicht
+      'class RiskLevel'.
+
+  Ohne W42 wiederholt sich der Fehler bei jedem
+  U3-Lauf.
+
+  Alternativ pragmatisch:
+    - U3-Auftrag manuell korrigieren (RiskCategory
+      statt RiskLevel, ImmediateActionCategory
+      anlegen, Mapping + Test als aktion:neu).
+    - Dann U3-Lauf.
+  Das ist aber der manuelle Eingriff, den W42
+  strukturell verhindern soll.
+
+OFFEN (heute nicht mehr):
+  - W42 (Planner-Resume-Messung).
+  - W36-2b (weitere Parser-Funktionen).
+  - W36-3 (audit).
+  - W36-4 (judge).
+  - W36-5 (planner).
+  - W36-6 (apply).
+  - W35a-2c-Abnahme (war nachgeholt, aber nicht im
+    Handoff als erledigt markiert).
+  - Phase-19 U3-U6 + Sammel-Commit.
+  - A-W30-1-Messung (max_review_rounds).
+  - W28a-Repair-Loop (fehlt strukturell).
+
+================================================================
+ENDE W36-W41
+================================================================
