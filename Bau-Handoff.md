@@ -4984,3 +4984,110 @@ Merkposten W31-Mypy:
 ================================================================
 ENDE W30 + W31-MYPY + W31-MYPY-B
 ================================================================
+
+
+================================================================
+W32 + W33a + W33b ERLEDIGT (2026-10-17)
+================================================================
+
+Commits: e3e16bb (W32), dc7160d (W33a),
+         c39ebbb (W33b).
+Kategorien: 3 (alle).
+Kein Tag probebetrieb-69.
+
+W32 (_schreibe_contract in run_phase-Loop):
+  Bug: _schreibe_contract war nur im Erst-Anlage-
+    Pfad (_phase_main_pfad) verankert. Bei Resume
+    fehlte der Contract, der Judge eskalierte.
+  Fix: _schreibe_contract(state, u) direkt nach
+    _phase_yaml_status_update(..., "running") im
+    run_phase-Loop (Z. ~3081).
+  Tests: 2 (test_schreibe_contract_im_loop,
+    test_contract_existiert_nach_loop).
+
+W33a (_post_apply_messung liest patch-Pfade):
+  Bug (Wurzel des Deadlocks): _post_apply_messung
+    las nur new_file-Pfade. Bei reinen
+    patch-Aktionen (typ=patch) blieb mess_nach
+    leer. Der Judge (W28b) sieht
+    "(keine Messung nach Apply)" und eskaliert.
+  Fix: typ in {"new_file", "patch"} lesen.
+    Verhalten bei leerer Pfad-Liste bleibt
+    return True ohne Setzen (W25-1-Verhalten).
+  Messung A-W33-5: U2a3 (applier.py, 91 Zeilen,
+    ~696 Token). Judge-Budget 2048. 34%.
+    Option 1 (voller read_file) sicher.
+  Tests: 2 netto + 2 Umbenennung.
+    test_nur_patch_wird_jetzt_gelesen
+      (patch-only: mess_nach befuellt).
+    test_mixed_new_file_und_patch.
+    test_nur_patch_regression_new_file.
+    test_leere_code_patches (Regression).
+
+  A-W33-11 (Rollback-Kriterium W33a):
+    git reset --hard e3e16bb (W32), wenn ein
+    Test ausserhalb W33a rot wird oder
+    mess_nach in einem bestehenden Unterblock-
+    Pfad bricht.
+
+W33b (_phase_apply_vor_review + Aufruf):
+  Bug: apply_and_recheck (Z. 9489) ruft
+    apply_code_patches erst NACH dem Review-
+    Loop. Der Judge sieht mess_nach +
+    basis_gate_test_results im Prompt, beide
+    leer -> ESKALATION.
+  Fix: Neue Funktion _phase_apply_vor_review
+    (6 Schritte: apply, git add -N,
+    veraltet-Flag, _post_apply_messung,
+    Guard, _basis_gate_pytest_ziel).
+    Aufruf in run_pipeline zwischen parse_
+    code_patches und dem Review-Loop, nur
+    bei state.phase_aktiv=True.
+  A-W33-7 (Guard): mess_nach nahe Judge-Budget
+    (>50%) -> Warnung + Audit, KEIN fail-closed.
+  A-W33-8 (basis_gate-Format):
+    state.basis_gate_test_results.append mit
+    demselben Format wie apply_and_recheck
+    (Z. 7462-7472).
+  A-W33-9 (i) ((b)-Rot): rc=17 sofort, kein
+    Recovery. W25-2-Recovery bleibt (e)-Rot
+    vorbehalten.
+  K1 (max_tokens_judge): state.max_tokens_judge
+    (Z. 4950) Default 2048; Config-Loader liest
+    aus YAML budget.max_tokens_judge.
+    Code-Default ist Fallback.
+  K2 (4 Zeichen/Token): Kommentar gesetzt.
+  K3 (Guard-Bezug): Kommentar gesetzt.
+  Tests: 9 (T1, T2, T4, T4b, T5, T6, T7, T8, T9).
+  Test-Helper _state initialisiert tmp_path als
+    Git-Repo (git add -N braucht es).
+
+  A-W33-12 (Umbenennung sauber):
+    test_nur_patch_wird_jetzt_gelesen prueft
+    EXPLIZIT:
+      assert "core/x.py" in
+          state.mess_protokoll_nach_apply
+      assert "x = 1" in
+          state.mess_protokoll_nach_apply
+    (Nicht nur "Test existiert", sondern
+    nachgewiesener Inhalt.)
+
+Test-Anzahl: 1075 -> 1086 passed (+11 gesamt:
+  2 W32 + 2 W33a netto + 9 W33b).
+
+Naechster Schritt: Phase-19-Lauf mit U2a3.
+  Messung: Judge sieht mess_nach + basis_gate.
+  Erwartung: GO oder NO-GO statt ESKALATION.
+
+Bekannte Luecken (Merkposten):
+  W28a-Repair-Loop fehlt (W33b-2, eigener Block).
+  W33b-4 (Doppel-_post_apply_messung W33b +
+    apply_and_recheck nach GO — inhaltlich
+    gleich, ~0.1 s Overhead, Optimierung spaeter).
+  _loop_erkannt (W30b).
+  A-W30-1-Messung (max_review_rounds: 2 nach
+    5 Phasen-Laeufen pruefen).
+
+================================================================
+ENDE W32 + W33a + W33b
+================================================================
