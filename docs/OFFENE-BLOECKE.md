@@ -46,6 +46,55 @@ Uebersicht in `ROADMAP.md`. Erledigt in `ERLEDIGT.md`.
   messung, mtime-Check), pruefen, ob W13b durch W59 ersetzt
   wird oder als legacy bleibt. Eigener Block W59-2.
 
+- W48-A16-b-2 (30 Katalog-Luecken, 2026-10-18):
+  W48-A16-b hat 30 audit()-Aufrufe mit nicht
+  registrierten Kinds aufgedeckt:
+  pipeline_escalated, planner_verworfen,
+  anti_patterns_injiziert, planner_rolle_fehlt (3x),
+  solver_budget_exhausted (2x),
+  solver_max_solver_runden_erreicht, quelle_invalid,
+  mess_nach_nahe_budget, basis_gate_test_result (2x),
+  builder_commit_paket_failed,
+  builder_commit_paket_failed_retry,
+  reviewer_call_failed (2x — im Judge-Pfad,
+  evtl. umbenennen zu judge_call_failed),
+  builder_call_failed, phase_basis_gate_failed,
+  phasen_basis_gate_untracked, planner_start (2x),
+  planner_ungueltig, planner_abgebrochen,
+  planner_bestaetigt (2x), planner_call_failed,
+  recovery_budget, solver_trigger_a,
+  auto_repair_ruff.
+  Eigener Block, Kategorie 3. Registrierung
+  + Rollen-Check + Doku.
+
+- W30-fix-b (UnboundLocalError max_builder_runden=0,
+  2026-10-18): builder_reply_mit_command_loop
+  (Z. 4844) greift auf reply.content zu, aber
+  reply wurde nie gesetzt (Loop lief nicht).
+  Existierte vor W30-fix, wurde durch W30-fix-
+  Integration aufgedeckt. max_builder_runden=0
+  ist eine legitime Konfiguration (Deadlock-Test,
+  Notfall). Kategorie 2. Eigener Block.
+
+- W36-RP (A-B1-13): run_pipeline-Integrationstest-
+  Infrastruktur. run_pipeline hat keinen
+  Integrationstest. T-1 (historie phase=normal
+  nach Builder-Lauf) fehlt. Eigener Block,
+  Kategorie 3.
+
+- B1 erledigt (2026-10-18, 3e1d804): 5 Leichen
+  geloescht, Katalog 119 -> 120 (planner_vorschlag
+  registriert).
+
+- W48-A16-b erledigt (2026-10-18, a074be1):
+  Katalog-Nutzungs-Test, _KATALOG_SOLL = 122.
+  Katalog 120 -> 122 (builder_deadlock_leer,
+  builder_deadlock_rueckfrage).
+
+- W51c-fix erledigt (2026-10-18, 679251c).
+- A1b-fix erledigt (2026-10-18, 800e924).
+- W30-fix erledigt (2026-10-18, 5dbbb79).
+
 - W54-f: builder.md 647 Zeilen.
 - W57: Prompt-Audit.
 - W52a-c: pipeline.py-Modularisierung groesser als 500 Zeilen (ask_llm, audit, execute_commands sind Kern-Infrastruktur).
