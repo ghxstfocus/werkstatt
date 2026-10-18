@@ -7479,10 +7479,15 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
         if aktives_feld is not None:
             if raw_line.strip() == "":
                 aktuelle_zeilen.append("")
-            elif len(raw_line) - len(raw_line.lstrip()) > feld_einrueckung:
+            elif not re.match(
+                    r"^\s*(typ|pfad|anker|ersatz|inhalt):",
+                    raw_line):
+                # W61: Jede Zeile, die kein neues Feld
+                # beginnt, gehoert zum Block — auch ohne
+                # Einrueckung (Code auf Spalte 0).
                 aktuelle_zeilen.append(raw_line)
             else:
-                # Ende des Block-Scalars.
+                # Neues Feld: Block beenden.
                 _flush()
         # Sonst: ignorieren (z.B. Leerzeile ausserhalb).
 
