@@ -5666,32 +5666,84 @@ def _alle_patches_sind_new_file(state: RunState) -> bool:
         for p in patches)
 
 
-def _messwerte_fuer_planner(state: RunState) -> str:
-    """W3-A4 (2026-10-16): Messwerte fuer den Planner.
+def _mess_index_block(state: RunState) -> str:
+    """W52b-D: Index der Messungen statt Volltext.
 
-    Anders als _messwerte_fuer_prompt (der bei reinen
-    new_file-Paketen den new_file-Marker liefert)
-    liefert diese Funktion immer den tatsaechlichen
-    mess_protokoll-Inhalt. Der Planner soll gerade
-    messen.
-    """
-    if not state.mess_protokoll:
-        return "(keine Messungen durchgefuehrt)"
-    return state.mess_protokoll
+    Format:
+      PFAD  SHA1  GROESSE  PREVIEW  DATEI
+
+    PREVIEW: erste 200 Zeichen (whitespace-normalisiert,
+    mit ... wenn gekuerzt). Der Agent liest bei Bedarf
+    per read_file. Kein Volltext im Prompt.
+
+    Branchenstandard (Haystack, Cursor, OpenDev): Pointer
+    = Identitaet + Groesse + Preview + Pfad."""
+    _PREVIEW_LEN = 200
+    if not getattr(state, "messungen", None):
+        return "(keine Messungen)"
+    zeilen = ["PFAD  SHA1  GROESSE  PREVIEW  DATEI"]
+    for m in state.messungen:
+        datei = getattr(m, "datei", None)
+        rel = str(datei) if datei else "(nicht gespeichert)"
+        # Preview lesen (nur wenn Datei existiert).
+        preview = ""
+        if datei is not None:
+            try:
+                roh = datei.read_text(encoding="utf-8",
+                                      errors="replace")
+                # Whitespace normalisieren (einzeilig).
+                prev = " ".join(roh.split())
+                if len(prev) > _PREVIEW_LEN:
+                    preview = prev[:_PREVIEW_LEN] + "..."
+                else:
+                    preview = prev
+            except OSError:
+                preview = ""
+        zeilen.append(
+            f"{m.pfad}  {m.sha1[:8]}  {m.groesse}  "
+            f"{preview or '(leer)'}  {rel}")
+    return "\n".join(zeilen)
+
+
+def _mess_inhalt_block(state: RunState) -> str:
+    """W52b-D: Volltext-Block NUR fuer Rollen, die ihn
+    brauchen (Planner beim Erstplan, Judge nach Apply)."""
+    if not getattr(state, "messungen", None):
+        return "(keine Messungen)"
+    teile = []
+    for m in state.messungen:
+        datei = getattr(m, "datei", None)
+        if datei is None:
+            continue
+        try:
+            inhalt = datei.read_text(encoding="utf-8",
+                                     errors="replace")
+        except OSError:
+            continue
+        teile.append(f"=== {m.pfad} ===")
+        teile.append(inhalt)
+    return "\n".join(teile) if teile else "(keine Messungen)"
+
+
+def _messwerte_fuer_planner(state: RunState) -> str:
+    """W52b-D: Index statt Volltext.
+
+    Der Planner bekommt die Datei-Liste + Pfade, liest
+    bei Bedarf per read_file. Kein 100K-String mehr."""
+    return _mess_index_block(state)
 
 
 def _messwerte_fuer_prompt(state: RunState) -> str:
-    """New_file-Marker (2026-10-16): liefert den
-    GEMESSENER-INHALT-Block-Inhalt.
+    """W52b-D: Index statt Volltext fuer Builder.
 
     - Bei reinen new_file-Patches: _NEW_FILE_MARKER.
-    - Sonst: state.mess_protokoll oder "(keine)".
-    """
-    if not state.mess_protokoll:
+    - Sonst: Index der Messungen. Der Builder liest
+      die Datei bei Bedarf per read_file."""
+    if not getattr(state, "messungen", None):
         if _alle_patches_sind_new_file(state):
             return _NEW_FILE_MARKER
         return "(keine)"
-    return state.mess_protokoll
+    return _mess_index_block(state)
 
 
 def _format_basis_gate_test_results(
@@ -5740,7 +5792,9 @@ def _build_commit_input(
     TEST-ERGEBNISSE-Block (basis_gate_test_results).
     """
     # A2/A4: Verfuegbarkeit pruefen.
-    _nach_apply_ok = bool(state.mess_protokoll_nach_apply)
+    # W52b-D: strukturierte Nach-Apply-Messungen haben Vorrang.
+    _nach_inhalt = _mess_inhalt_nach_apply(state)
+    _nach_apply_ok = bool(_nach_inhalt)
     _veraltet = state.mess_protokoll_veraltet
     # Warnung.
     if _veraltet:
@@ -5756,23 +5810,21 @@ def _build_commit_input(
         _mess_block = (
             "GEMESSENER INHALT (NACH Apply, verbindlich, "
             "gewinnt gegen ZIELDATEIEN):\n"
-            f"{state.mess_protokoll_nach_apply}\n\n"
-            "GEMESSENER INHALT (VOR Apply, historisch):\n"
-            f"{state.mess_protokoll or '(keine)'}\n\n")
+            f"{_nach_inhalt}\n\n"
+            "MESS-INDEX (VOR Apply, historisch):\n"
+            f"{_mess_index_block(state)}\n\n")
     elif _veraltet and not _nach_apply_ok:
         # A4 (c): VOR verbindlich, Hinweis.
         _mess_block = (
-            "GEMESSENER INHALT (VOR Apply, verbindlich, "
-            "gewinnt gegen ZIELDATEIEN):\n"
-            f"{state.mess_protokoll or '(keine)'}\n\n"
+            "MESS-INDEX (VOR Apply, verbindlich):\n"
+            f"{_mess_index_block(state)}\n\n"
             "!!! WARNUNG: NACH-Apply-Stand leer.\n"
             "!!! Pruefe mess_protokoll_veraltet-Flag und\n"
             "!!! basis_protokoll_nach_apply.\n\n")
     else:
         _mess_block = (
-            "GEMESSENER INHALT (verbindlich, gewinnt gegen "
-            "ZIELDATEIEN):\n"
-            f"{state.mess_protokoll or '(keine)'}\n\n")
+            "MESS-INDEX (verbindlich):\n"
+            f"{_mess_index_block(state)}\n\n")
     # BASIS-GATE (NACH Apply).
     if state.basis_protokoll_nach_apply:
         _basis_nach = (
@@ -6068,6 +6120,31 @@ def _build_judge_prompt(state: RunState) -> str:
         + HARD_RULES_JUDGE)
 
 
+def _mess_inhalt_nach_apply(state: RunState) -> str:
+    """W52b-D: Volltext aus state.messungen_nach_apply.
+
+    Fallback auf mess_protokoll_nach_apply (String), solange
+    die strukturierte Liste in alten Laeufen leer ist."""
+    nach = getattr(state, "messungen_nach_apply", None)
+    if nach:
+        teile = []
+        for m in nach:
+            datei = getattr(m, "datei", None)
+            if datei is None:
+                continue
+            try:
+                inhalt = datei.read_text(encoding="utf-8",
+                                         errors="replace")
+            except OSError:
+                continue
+            teile.append(f"=== {m.pfad} ===")
+            teile.append(inhalt)
+        if teile:
+            return "\n".join(teile)
+    # Fallback (Bestandsleser, deprecated).
+    return state.mess_protokoll_nach_apply or ""
+
+
 def _build_judge_input(state: RunState) -> str:
     """W28b2: baut den Judge-User-Content.
 
@@ -6087,8 +6164,10 @@ def _build_judge_input(state: RunState) -> str:
     contract = _lese_contract(state, uid)
     if not contract:
         contract = "(kein Contract vorhanden)"
-    mess_nach = (state.mess_protokoll_nach_apply
-                 or "(keine Messung nach Apply)")
+    # W52b-D: aus strukturierten Nach-Apply-Messungen.
+    mess_nach = _mess_inhalt_nach_apply(state)
+    if not mess_nach:
+        mess_nach = "(keine Messung nach Apply)"
     tests = _format_basis_gate_test_results(
         state.basis_gate_test_results)
     if not tests:

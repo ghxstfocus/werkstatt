@@ -166,7 +166,12 @@ class RunState:
     coverage_pct: int = -1  # -1 = nicht gemessen
     basis_protokoll: str = ""
     basis_protokoll_nach_apply: str = ""  # UMB-1b
-    mess_protokoll: str = ""  # deprecated (W52b)
+    mess_protokoll: str = ""
+    # DEPRECATED (W52b-E): String-Kanal. Wird parallel zu
+    # state.messungen gefuellt, damit Bestandsleser bis zum
+    # vollstaendigen Umbau funktionieren. Neue Leser MUESSEN
+    # state.messungen (Datei-Referenzen) nutzen. Entfaellt,
+    # sobald alle Leser umgestellt sind.
     # W52b (2026-10-18): strukturierte Messungen.
     # Wird parallel zu mess_protokoll gefuellt,
     # bis alle Leser umgestellt sind.
@@ -177,6 +182,9 @@ class RunState:
     # Post-Apply-Neumessung 2026-10-16:
     # read_file-Messungen fuer new_file-Pfade nach Apply.
     mess_protokoll_nach_apply: str = ""
+    # DEPRECATED (W52b-E): String-Kanal. Strukturierte Quelle
+    # ist state.messungen_nach_apply. Fallback fuer Bestands-
+    # leser bis zum vollstaendigen Umbau.
     # WEG-X-P22a (2026-10-17): strukturierte Gate-Ergebnisse
     # aus _basis_gate_pytest_ziel / _basis_gate_pytest_suite.
     # Pro Aufruf ein dict mit scope, exit_code, klassifizierung,

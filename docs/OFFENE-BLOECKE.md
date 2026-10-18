@@ -105,3 +105,27 @@ messungen/<sha1>.txt` + `index.json` rein.
 - `ARCHITEKTUR.md` — Ziel, Rollen, Luecken.
 - `KONVENTION.md` — Ordnerstruktur, Datei-Namen.
 - `ROLLEN-AUDIT.md` — Rollen-Stand (Sektion 8).
+
+## W52b-E — Bestandsleser (nach W52b C+D+E)
+
+`mess_protokoll` und `mess_protokoll_nach_apply` sind als
+DEPRECATED markiert (state.py). Neue Leser MUESSEN
+`state.messungen` / `state.messungen_nach_apply` nutzen.
+
+Bestandsleser (Stand nach W52b D+E), die noch umgestellt
+werden muessen:
+
+| Zeile | Funktion | Zweck | Umbau auf |
+|---|---|---|---|
+| 3656,3659 | `_planner_user_content` | Planner-Korrektur-Zweig | `_mess_index_block(state)` |
+| 3769,3772 | Planner-Loop | Laengen-Tracking | `len(state.messungen)` |
+| 6535,6541 | `execute_commands` | Gesamtlimit | `state.messungen` |
+| 9255,9257 | `run_pipeline` | Print an Konsole | `_mess_index_block(state)` |
+| 10450,10461 | Commit-Review-Gate | `bool(state.mess_protokoll)` | `bool(state.messungen)` |
+
+`mess_protokoll_nach_apply` (String): Fallback in
+`_mess_inhalt_nach_apply` (Z. 6145) bleibt bewusst, bis
+alle Laeufe `messungen_nach_apply` befuellen.
+
+**Aufwand:** klein. **Kategorie:** 2.
+**Nicht in W52b D+E enthalten**, weil Scope.

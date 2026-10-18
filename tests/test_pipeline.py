@@ -5856,12 +5856,22 @@ class TestNewFileMarker:
         out = pipeline._messwerte_fuer_prompt(s)
         assert out == "(keine)"
 
-    def test_messwerte_prompt_voller_text(
+    def test_messwerte_prompt_index_statt_volltext(
             self, tmp_path: Path) -> None:
+        """W52b-D: Prompt enthaelt Index (Pfad/SHA/Preview).
+
+        Preview ist die ersten 200 Zeichen (Haystack/Cursor-
+        Standard), nicht der Volltext."""
         s = self._state_new_file(tmp_path)
-        s.mess_protokoll = "=== read_file ===\nFakten."
+        _inhalt = "Fakten.\n" + ("x" * 500)
+        s.messungen = _messung_aus_string("x.py", _inhalt)
         out = pipeline._messwerte_fuer_prompt(s)
-        assert "Fakten" in out
+        assert "x.py" in out
+        assert "Fakten" in out  # Preview sichtbar
+        # Volltext (500 x) ist NICHT im Prompt, nur Preview.
+        assert out.count("x") < 250
+        # Datei-Pfad ist sichtbar (Agent kann nachlesen).
+        assert ".txt" in out or "messungen" in out
 
     def test_hard_rules_builder_b15(self) -> None:
         assert "B15. NEW_FILE OHNE MESSUNG." in \
@@ -7688,9 +7698,10 @@ class TestW23CommitReviewPrompt:
         assert "GEMESSENER INHALT (NACH Apply, verbindlich" in commit_input
         assert "NACH_APPLY_MARKER" in commit_input
         assert "KEIN Fail-closed (U2a3)" in commit_input
-        assert "GEMESSENER INHALT (VOR Apply, historisch" in commit_input
-        assert "VOR_APPLY_MARKER" in commit_input
-        assert "KEIN rollback (U2a2)" in commit_input
+        # W52b-D: VOR-Abschnitt heisst jetzt MESS-INDEX.
+        assert "MESS-INDEX (VOR Apply, historisch" in commit_input
+        # W52b-D: VOR-Inhalt ist nicht mehr inline (nur Index).
+        assert "VOR_APPLY_MARKER" not in commit_input
         assert "ACHTUNG: Code-Patches wurden angewendet" in commit_input
         assert "TEST-ERGEBNISSE (NACH Apply)" in commit_input
         assert "ziel_pfade" in commit_input
@@ -7709,9 +7720,9 @@ class TestW23CommitReviewPrompt:
         commit_input = pipeline._build_commit_input(
             state, "", "", "keine")
 
-        assert "GEMESSENER INHALT (VOR Apply, verbindlich" in commit_input
+        # W52b-D: VOR-Abschnitt heisst jetzt MESS-INDEX.
+        assert "MESS-INDEX (VOR Apply, verbindlich" in commit_input
         assert "GEMESSENER INHALT (NACH Apply, verbindlich" not in commit_input
-        assert "VOR_APPLY_MARKER" in commit_input
         assert "ACHTUNG: Code-Patches wurden angewendet" in commit_input
         assert "NACH-Apply-Stand leer" in commit_input
 
