@@ -44,6 +44,8 @@ Danach: Phase 20b neu starten.
 - W61: Rollen-Sanierung (aus ROLLEN-AUDIT Sektion 8).
 - W52a-c: pipeline.py-Modularisierung groesser als
   500 Zeilen (Kern-Infrastruktur).
+- W52b: On-Demand-Messung (Dateien statt String im Prompt).
+  Vorbild Claude Code (Read vor Edit), Copilot (Tool Search).
 - W51h-b: W51h greift nur bei parsebarem Plan.
 - W51g-b2: Check-Fehler nicht in letzter_plan_fehler.
 

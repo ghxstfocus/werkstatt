@@ -6,6 +6,13 @@ aber es gehoert keinem Projekt.
 **Ziel:** Das Beste aus Claude Code, Copilot, AutoGen, Swarm und
 OpenAI Agents SDK nehmen und ein eigenes Agentensystem bauen.
 
+Kernprinzip: **On-Demand-Messung.** Der Agent entscheidet
+selbst, welche Datei er liest, basierend auf der aktuellen
+Aufgabe. Kein Pre-Loading des ganzen Repos. Vorbilder:
+Claude Code (Read vor Edit), Copilot (Tool Search),
+Cursor (semantische Suche), AutoGen (RAG bei Bedarf).
+Details: `docs/ARCHITEKTUR.md` Abschnitt 4.7.
+
 **Stand 2026-10-18:**
 
 - Werkstatt: 1166 Tests, ruff 0, mypy 0. HEAD 0df062f.

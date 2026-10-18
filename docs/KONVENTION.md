@@ -102,8 +102,13 @@ Format: siehe `schemas/`.
 
 ### .werkstatt/ — Laufzeit-State
 
-Nicht committen (W34-Ignore). Enthaelt plan.md,
-contracts/, messungen/ (W52b offen), planner/ (W52b offen).
+Nicht committen (W34-Ignore). Enthaelt:
+- `plan.md` — aktueller Phasenplan.
+- `contracts/` — Contract pro Unterblock.
+- `messungen/<sha1>.txt` + `index.json` — On-Demand-
+  Messungen (W52b). Statt String im Prompt: Index + Dateien.
+- `planner/<runde>.reply` + `<runde>.plan` — Planner-
+  Replies als Dateien (W52b).
 
 ## 4. Was wo hingehört
 

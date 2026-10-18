@@ -25,7 +25,7 @@ Uebersicht in `ROADMAP.md`. Erledigt in `ERLEDIGT.md`.
 | Block | Kategorie | Beschreibung | Aufwand |
 |---|---|---|---|
 | W52a-1 | 2 | Planner-Funktionen nach `werkstatt/planner.py` (lazy imports, ~900 Zeilen). | mittel |
-| W52b | 3 | Messungen/Replies als Dateien (statt Strings). `_planner_lauf` schreibt `.werkstatt/<phase>/messungen/` + `planner/`. | gross |
+| W52b | 3 | On-Demand-Messung: Messungen/Replies als Dateien (statt Strings im Prompt). `_planner_lauf` schreibt `.werkstatt/<phase>/messungen/<sha1>.txt` + `index.json` + `planner/<runde>.reply`. Agent liest bei Bedarf. Vorbild: Claude Code (Read vor Edit), Copilot (Tool Search). | gross |
 | W36-2b..6 | 3 | pipeline.py modularisieren: llm.py, audit.py, measurements.py, judge.py, apply.py, parser.py-Rest. | gross (6 Module) |
 | W51b-2 | 3 | Resume-Pfad-Pruefungen (`_phase_planner_resume` ruft `_plan_ist_*` nicht). | klein |
 | W54e-b | 3 | `patch_ambig` pruefen: ueberlappt es mit W54-g? Wenn ja, entfernen. | klein |

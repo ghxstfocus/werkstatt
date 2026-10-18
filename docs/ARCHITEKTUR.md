@@ -131,6 +131,69 @@ Die Rollen-Prompts sind zu gross:
 W61 (Rollen-Sanierung): Redundanz aufloesen
 (builder 43%, planner 20%), Roll-Body < 300.
 
+## 4.7 On-Demand-Messung (fehlt)
+
+Claude Code, Copilot, Cursor und AutoGen arbeiten alle mit
+On-Demand-Messung: der Agent entscheidet selbst, welche
+Datei er liest, basierend auf der aktuellen Aufgabe. Kein
+Pre-Loading des ganzen Repos.
+
+Was die grossen machen:
+
+- **Claude Code:** Glob/Grep zuerst, dann Read nur der
+  relevanten Dateien, dann Edit. Read vor Edit ist
+  Pflicht (error code 6: "File hasn't been read — must
+  read first"). Nach Edit wird die mtime im Read-Cache
+  aktualisiert, damit der naechste Edit auf derselben
+  Datei durchgeht.
+- **Copilot:** Tool Search (Tools nur laden, wenn
+  gebraucht), Prompt Caching fuer stabile Prefixe.
+  Plan Mode: erst Kontext sammeln, dann Plan, dann
+  Mensch-Gate, dann Implementierung.
+- **Cursor:** Semantische Suche + Grep, Agent entscheidet
+  welche Dateien er liest. Nach jeder Aktion: Ergebnis
+  pruefen, dann naechster Schritt.
+- **AutoGen:** RetrieveUserProxyAgent, Retrieval-
+  Augmented Generation nur bei Bedarf.
+
+Werkstatt heute:
+
+- `mess_protokoll` als String, waechst bei jedem
+  `read_file`.
+- `_planner_user_content` baut GEMESSENER INHALT-Block
+  (100K Prompt-String bei 10 Dateien).
+- `_builder_lauf` bekommt den ganzen Mess-Kontext, nicht
+  "hier ist der Index, lies was du brauchst".
+- `apply_code_patches` hat **keinen Read-Cache**. Builder
+  kann patchen, ohne zu messen. Folge: Deadlock in
+  Phase 20b.
+- `_builder_lauf` hat **keinen Loop-Schutz**. Builder
+  wiederholt dieselben Anker 3 Runden.
+
+Soll (W52b + W59):
+
+- `mess_protokoll` als Verzeichnis
+  (`.werkstatt/<phase>/messungen/<sha1>.txt`).
+- `index.json` mit Pfad, SHA, mtime, Groesse, Quelle.
+- Prompt: "Messungen liegen unter X. Index: Y." Statt
+  des vollen Inhalts.
+- Agent liest bei Bedarf per `read_file`, statt alles
+  im Prompt zu haben.
+- `apply_code_patches` prueft `gelesene_dateien` +
+  mtime (`RunState.gelesene_dateien: dict[str, float]`).
+- Loop-Schutz: 2 Runden ohne neuen Read -> Fail-closed,
+  Audit `builder_wiederholt_ohne_messung`.
+
+Blöcke:
+
+- **W52b** (Kategorie 3): Messungen/Replies als Dateien.
+  On-Demand-Messung strukturell.
+- **W59** (Kategorie 3): Read-Cache + mtime-Check +
+  Loop-Schutz. Mechanisch.
+
+Beide sind P1 (akut) bzw. P3 (Refactor). W59 zuerst,
+weil es Phase 20b direkt blockiert.
+
 ## 5. Was funktioniert (verifiziert)
 
 - W31-W47: Modularisierung (state.py, parser.py).
