@@ -5904,6 +5904,33 @@ def _messwerte_fuer_planner(state: RunState) -> str:
     return _mess_index_block(state)
 
 
+def _mess_inhalt_zieldateien(
+        state: RunState, ziel_pfade: set[str]) -> str:
+    """W61: Volltext der Zieldateien aus state.messungen.
+
+    Nur fuer die Zieldateien (die der Builder patchen soll).
+    Andere Messungen (Planner, Basis-Gate) bleiben im Index.
+    """
+    if not ziel_pfade or not getattr(state, "messungen", None):
+        return ""
+    teile = []
+    for m in state.messungen:
+        if not any(z in m.pfad or m.pfad in z
+                   for z in ziel_pfade):
+            continue
+        datei = getattr(m, "datei", None)
+        if datei is None:
+            continue
+        try:
+            inhalt = datei.read_text(encoding="utf-8",
+                                     errors="replace")
+        except OSError:
+            continue
+        teile.append(f"=== ZIELDATEI {m.pfad} ===")
+        teile.append(inhalt)
+    return "\n".join(teile)
+
+
 def _messwerte_fuer_prompt(state: RunState) -> str:
     """W52b-D: Index statt Volltext fuer Builder.
 
@@ -9756,8 +9783,10 @@ def run_pipeline(project_name: str, aufgabe: str,
             f"BASIS-GATE:\n{s.basis_protokoll[:1500]}\n\n"
             + format_doc_snippets(s.docs) + "\n\n"
             + zs + "\n\n"
-            + f"GEMESSENER INHALT (verbindlich, gewinnt gegen "
-            f"ZIELDATEIEN):\n{_messwerte_fuer_prompt(s)}\n\n"
+            + f"GEMESSENER INHALT (Index):\n"
+            f"{_messwerte_fuer_prompt(s)}\n\n"
+            + (_mess_inhalt_zieldateien(s, zp) + "\n\n"
+               if _mess_inhalt_zieldateien(s, zp) else "")
             + "Liefere strukturierte Code-Patches im Format "
             "PATCH-BEGINN/PATCH-ENDE.\n"
             "Format und Einrueckungs-Regeln stehen im "
