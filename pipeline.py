@@ -4292,7 +4292,23 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
         return LLMReply(ok=False, error=letzter_fehler)
     try:
         data = res.json()
-        return LLMReply(ok=True, content=data["choices"][0]["message"]["content"])
+        msg = data["choices"][0]["message"]
+        content = msg.get("content", "") or ""
+        # W58: deepseek-reasoner liefert reasoning_content
+        # (Denk-Tokens) + content (sichtbare Antwort). Wenn
+        # das max_tokens-Budget im Reasoning erschoepft ist,
+        # ist content leer. Fallback auf reasoning_content.
+        if not content:
+            reasoning = msg.get("reasoning_content", "") or ""
+            if reasoning:
+                # Letzte Zeilen des Reasonings als Antwort.
+                content = reasoning
+        if not content:
+            return LLMReply(
+                ok=False,
+                error=("leere Antwort (content und "
+                       "reasoning_content leer)"))
+        return LLMReply(ok=True, content=content)
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         return LLMReply(ok=False, error=f"Parsing: {exc}")
 
