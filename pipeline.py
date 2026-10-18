@@ -8222,6 +8222,16 @@ def _phase_apply_vor_review(
                    _w33_tr["klassifizierung"]},
               state.project_dir, state.project_name)
         if _w33_tr["exit_code"] != 0:
+            # W61: Test-Fehler fuer naechsten Builder-Lauf
+            # speichern (Feedback-Loop).
+            state.letzter_test_fehler = (
+                f"=== TEST-FEHLER (b)-Gate ===\n"
+                f"klassifizierung: "
+                f"{_w33_tr['klassifizierung']}\n"
+                f"failed_test_ids: "
+                f"{_w33_tr.get('failed_test_ids', [])}\n"
+                f"raw_tail:\n{_w33_tr.get('raw_tail', '')[:2000]}\n"
+                f"=== /TEST-FEHLER ===\n")
             print(f"[!] (b)-Gate rot: "
                   f"{_w33_tr['klassifizierung']}. "
                   f"Fail closed (rc=17, kein "
@@ -9905,6 +9915,10 @@ def run_pipeline(project_name: str, aufgabe: str,
                 _zeilen.append(
                     f"  Ergebnis: {_e.get('ergebnis', '')}")
             _explore_block = "\n".join(_zeilen) + "\n\n"
+        # W61: Test-Fehler aus dem letzten (b)-Rot.
+        _test_fehler_block = ""
+        if getattr(s, "letzter_test_fehler", ""):
+            _test_fehler_block = s.letzter_test_fehler + "\n\n"
         # W61: Contract fuer den aktuellen Unterblock.
         # Der Builder MUSS wissen, was der Unterblock
         # verlangt (Anker, Test, Pruefung). Sonst raet er.
@@ -9919,7 +9933,8 @@ def run_pipeline(project_name: str, aufgabe: str,
                     f"{_contract}\n"
                     f"=== /CONTRACT ===\n\n")
         return (
-            _contract_block
+            _test_fehler_block
+            + _contract_block
             + aufgabe_block(s)
             + _format_whitelist_block(
                 list(getattr(s, "file_whitelist", []) or []))

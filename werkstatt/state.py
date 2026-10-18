@@ -183,6 +183,9 @@ class RunState:
     # Wird parallel zu mess_protokoll gefuellt,
     # bis alle Leser umgestellt sind.
     messungen: list = field(default_factory=list)
+    # W61: Test-Fehler aus dem (b)-Gate. Wird in
+    # den naechsten Builder-Prompt gerendert.
+    letzter_test_fehler: str = ""
     # W61: Explore-Subagent-Ergebnisse der letzten Runde.
     # Format: list[dict], je Eintrag {"frage": str, "ergebnis": str}.
     # Wird vom Builder-Prompt gerendert, damit der Builder
