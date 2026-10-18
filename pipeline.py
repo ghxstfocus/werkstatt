@@ -5059,8 +5059,12 @@ def verify_values(patches: list[dict[str, str]],
         # execution_status-Assertion pruefen.
         if _exec_status_werte:
             import re as _re3
+            # W61-Pro: Regex praezise. Nur String-Literale,
+            # die direkt nach dem execution_status-Zugriff
+            # stehen (z.B. assertEqual(..., "OK")).
             for m in _re3.finditer(
-                    r"execution_status[\"']?\s*\)?,?\s*[\"']([^\"']+)[\"']",
+                    r"assertEqual\([^,]*execution_status[^,]*,\s*"
+                    r"[\"']([^\"']+)[\"']",
                     ersatz):
                 val = m.group(1)
                 if val not in _exec_status_werte:
