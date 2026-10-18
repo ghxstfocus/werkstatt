@@ -4853,7 +4853,8 @@ def _projekt_symbol_index(project_dir: Path) -> dict[str, set[str]]:
 
 
 def verify_code(patches: list[dict[str, str]],
-                project_dir: Path) -> list[str]:
+                project_dir: Path,
+                state: "RunState | None" = None) -> list[str]:
     """W61-Pro: Prueft Patch-Anker/Ersatz auf erfundene APIs.
 
     AgentSeed-Ansatz: AST-Walk ueber den Ersatz-Code. Jeder
@@ -4868,6 +4869,29 @@ def verify_code(patches: list[dict[str, str]],
     befunde: list[str] = []
     # W61-Pro: Kwarg-Check gegen echte Signaturen.
     befunde.extend(verify_code_kwargs(patches, project_dir))
+    # W61-Pro: Test-Bezug pruefen. Wenn letzter_test_fehler
+    # failed_test_ids nennt, muss der Patch-Anker zu einem
+    # davon passen.
+    _ltf = getattr(state, "letzter_test_fehler", "") if state else ""
+    if _ltf and "failed_test_ids:" in _ltf:
+        import re as _re
+        # W61-Pro: Nur echte Test-IDs aus failed_test_ids.
+        # Format: tests/...::Klasse::test_name.
+        _ids = _re.findall(
+            r"::(test_[a-zA-Z_0-9]+)", _ltf)
+        if not _ids:
+            _ids = _re.findall(
+                r"\b(test_[a-zA-Z_0-9]{4,})\b", _ltf)
+        for p in patches:
+            anker = p.get("anker", "")
+            if "def test_" in anker or "def test_" in p.get("ersatz", ""):
+                _im_patch = _re.findall(
+                    r"def (test_[a-z_0-9]+)", anker + p.get("ersatz", ""))
+                if _ids and _im_patch:
+                    if not any(t in _ids for t in _im_patch):
+                        befunde.append(
+                            f"Patch am falschen Test: {_im_patch}, "
+                            f"rot ist: {_ids[:3]}")
     for p in patches:
         if p.get("typ") == "new_file":
             continue
@@ -8307,7 +8331,7 @@ def _phase_apply_vor_review(
     # APIs (z.B. log(status=...)) werden gefangen, bevor
     # der Patch angewendet wird.
     _verify_befunde = verify_code(
-        state.code_patches, state.project_dir)
+        state.code_patches, state.project_dir, state)
     if _verify_befunde:
         print(f"[!] verify_code: {len(_verify_befunde)} "
               f"Befund(e). Patch abgelehnt.")
@@ -10145,6 +10169,7 @@ def run_pipeline(project_name: str, aufgabe: str,
         _test_fehler_block = ""
         if getattr(s, "letzter_test_fehler", ""):
             _test_fehler_block = s.letzter_test_fehler + "\n\n"
+            print(f"[DEBUG-TF] len={len(_test_fehler_block)}")
         # W61: Contract fuer den aktuellen Unterblock.
         # Der Builder MUSS wissen, was der Unterblock
         # verlangt (Anker, Test, Pruefung). Sonst raet er.
