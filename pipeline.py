@@ -2096,21 +2096,36 @@ def _phase_rollback(
 
 
 
-def _loop_cap_erreicht(
+def _loop_cap_audit(
     state: RunState,
     loop_name: str,
     aktuelle_runde: int,
     max_runden: int,
-) -> bool:
-    """W30: zentraler Loop-Cap-Check.
+) -> None:
+    """W30: einheitlicher Cap-Audit nach dem Loop.
 
-    Rueckgabe:
-      True  -> Cap erreicht, Aufrufer fail-closed
-               (rc=18) nach Audit.
-      False -> weiter.
+    W30-fix (2026-10-18): Umbenannt von
+    _loop_cap_erreicht (W30, 2026-10-17). Die
+    alte Funktion prueft `aktuelle_runde <=
+    max_runden -> return False` und wurde in
+    for-Loops gerufen, wo `runde` immer
+    <= max_runden ist. Der Check griff nie.
+
+    Kein Check-im-Loop. W30-Ziel "zentraler
+    Check" wurde nicht erreicht; die Loops
+    funktionieren dezentral. W30-fix macht
+    Cap-Ereignisse ueber alle Loops hinweg
+    sichtbar (Aggregation loop_name/runde).
+
+    Aufruf nach dem for-Loop mit
+    aktuelle_runde = max_runden + 1.
+
+    Kein Rueckgabewert. Der Aufrufer hat
+    bereits einen festen Fail-Pfad
+    (return None / return 18 / Solver-Trigger).
     """
     if aktuelle_runde <= max_runden:
-        return False
+        return
     audit("loop_cap_erreicht",
           {"loop_name": loop_name,
            "aktuelle_runde": aktuelle_runde,
@@ -2119,7 +2134,6 @@ def _loop_cap_erreicht(
     print(f"[FAIL] Loop-Cap erreicht: "
           f"{loop_name} {aktuelle_runde}/{max_runden}. "
           f"Fail closed.")
-    return True
 
 
 def _phase_gesamt_review(state: RunState) -> dict[str, Any]:
@@ -3727,6 +3741,9 @@ def _planner_lauf(
                    "phase_id": state.phase_id},
                   project_dir, project_name)
             return None
+    # W30-fix (2026-10-18): einheitlicher Cap-Audit.
+    _loop_cap_audit(state, "planner_command",
+                    max_runden + 1, max_runden)
     # Max-Runden erreicht.
     print(f"[FAIL] Planner-COMMAND max_runden "
           f"({max_runden}) erreicht. Fail closed.")
@@ -4821,6 +4838,9 @@ def builder_reply_mit_command_loop(
                "anzahl": len(cmds_run),
                "ids": [c.get("id", "?") for c in cmds_run]},
               project_dir, project_name)
+    # W30-fix (2026-10-18): einheitlicher Cap-Audit.
+    _loop_cap_audit(state, "builder_command",
+                    max_builder_runden + 1, max_builder_runden)
     art = klassifiziere_deadlock(state, reply.content)
     audit(f"builder_deadlock_{art}",
           {"max_builder_runden": max_builder_runden},
@@ -7913,6 +7933,10 @@ def _post_apply_korrektur_loop(
             continue
         # Andere rc: Fail-closed.
         return rc_apply
+    # W30-fix (2026-10-18): einheitlicher Cap-Audit.
+    _loop_cap_audit(state, "post_apply_korrektur",
+                    max_korrektur_runden + 1,
+                    max_korrektur_runden)
     print(f"[!] Post-Apply-Korrektur max_runden "
           f"({max_korrektur_runden}) erreicht. Fail closed.")
     return 18

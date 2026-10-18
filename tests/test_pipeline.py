@@ -8312,38 +8312,68 @@ class TestW29JudgeVerdict:
 # =====================================================================
 
 class TestW30LoopCap:
-    """W30: zentraler Cap-Check + YAML-Konsistenz."""
+    """W30-fix: Cap-Audit + YAML-Konsistenz."""
 
     def _state(self, tmp_path: Path) -> pipeline.RunState:
         return build_test_state(project_dir=tmp_path)
 
     def test_review_loop_cap_erreicht(
-            self, tmp_path: Path) -> None:
-        """T1: review-Loop 3. Runde bei max=2 -> True."""
+            self, tmp_path: Path, monkeypatch) -> None:
+        """T1 (W30-fix): review-Loop 3. Runde bei max=2
+        -> Audit 'loop_cap_erreicht' gerufen."""
         state = self._state(tmp_path)
-        assert pipeline._loop_cap_erreicht(
-            state, "review", 3, 2) is True
+        gerufen = []
+        monkeypatch.setattr(
+            pipeline, "audit",
+            lambda kind, payload, *a, **kw:
+                gerufen.append((kind, payload)))
+        pipeline._loop_cap_audit(state, "review", 3, 2)
+        assert len(gerufen) == 1
+        assert gerufen[0][0] == "loop_cap_erreicht"
+        assert gerufen[0][1]["loop_name"] == "review"
+        assert gerufen[0][1]["aktuelle_runde"] == 3
+        assert gerufen[0][1]["max_runden"] == 2
 
     def test_korrektur_loop_cap_erreicht(
-            self, tmp_path: Path) -> None:
-        """T2: korrektur-Loop 3. Runde bei max=2 -> True."""
+            self, tmp_path: Path, monkeypatch) -> None:
+        """T2 (W30-fix): korrektur-Loop 3. Runde bei max=2."""
         state = self._state(tmp_path)
-        assert pipeline._loop_cap_erreicht(
-            state, "korrektur", 3, 2) is True
+        gerufen = []
+        monkeypatch.setattr(
+            pipeline, "audit",
+            lambda kind, payload, *a, **kw:
+                gerufen.append((kind, payload)))
+        pipeline._loop_cap_audit(state, "korrektur", 3, 2)
+        assert len(gerufen) == 1
+        assert gerufen[0][0] == "loop_cap_erreicht"
+        assert gerufen[0][1]["loop_name"] == "korrektur"
 
     def test_solver_loop_cap_erreicht(
-            self, tmp_path: Path) -> None:
-        """T3: solver-Loop 3. Runde bei max=2 -> True."""
+            self, tmp_path: Path, monkeypatch) -> None:
+        """T3 (W30-fix): solver-Loop 3. Runde bei max=2."""
         state = self._state(tmp_path)
-        assert pipeline._loop_cap_erreicht(
-            state, "solver", 3, 2) is True
+        gerufen = []
+        monkeypatch.setattr(
+            pipeline, "audit",
+            lambda kind, payload, *a, **kw:
+                gerufen.append((kind, payload)))
+        pipeline._loop_cap_audit(state, "solver", 3, 2)
+        assert len(gerufen) == 1
+        assert gerufen[0][0] == "loop_cap_erreicht"
+        assert gerufen[0][1]["loop_name"] == "solver"
 
     def test_cap_nicht_erreicht_bei_gleichheit(
-            self, tmp_path: Path) -> None:
-        """runde == max -> noch nicht erreicht."""
+            self, tmp_path: Path, monkeypatch) -> None:
+        """W30-fix: runde == max -> kein Audit."""
         state = self._state(tmp_path)
-        assert pipeline._loop_cap_erreicht(
-            state, "review", 2, 2) is False
+        gerufen = []
+        monkeypatch.setattr(
+            pipeline, "audit",
+            lambda kind, payload, *a, **kw:
+                gerufen.append((kind, payload)))
+        pipeline._loop_cap_audit(state, "review", 2, 2)
+        assert gerufen == [], (
+            f"Audit unerwartet gerufen: {gerufen}")
 
     def test_config_liest_max_review_aus_yaml(
             self, tmp_path: Path) -> None:
@@ -8385,6 +8415,110 @@ class TestW30LoopCap:
 # =====================================================================
 # W32 (2026-10-17): Contract-Schreiben in run_phase
 # =====================================================================
+
+
+
+    def test_w30_fix_planner_loop_cap_audit(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """W30-fix Integration: _planner_lauf mit max=0
+        ruft _loop_cap_audit mit loop_name="planner_command".
+        """
+        s = self._state(tmp_path)
+        s.agents["planner"] = {"body": "planner",
+                               "model": "deepseek-chat"}
+        gerufen = []
+        monkeypatch.setattr(
+            pipeline, "audit",
+            lambda kind, payload, *a, **kw:
+                gerufen.append((kind, payload)))
+        pipeline._planner_lauf(
+            s, "key", "auftrag", tmp_path, "test", "",
+            max_runden=0)
+        cap = [r for r in gerufen
+               if r[0] == "loop_cap_erreicht"]
+        assert len(cap) == 1, (
+            f"loop_cap_erreicht {len(cap)}x gerufen")
+        assert cap[0][1]["loop_name"] == "planner_command"
+        assert cap[0][1]["aktuelle_runde"] == 1
+        assert cap[0][1]["max_runden"] == 0
+
+    def test_w30_fix_builder_loop_cap_audit(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """W30-fix Integration: builder_reply_mit_command_loop
+        mit max=1 + Builder liefert nur COMMANDs (kein Patch)
+        -> Loop endet nach Runde 1, Cap-Audit gerufen.
+        """
+        s = self._state(tmp_path)
+        gerufen = []
+        monkeypatch.setattr(
+            pipeline, "audit",
+            lambda kind, payload, *a, **kw:
+                gerufen.append((kind, payload)))
+        reply = type("R", (), {
+            "ok": True,
+            "content": "COMMAND: RUN read_file x.py",
+            "error": ""})()
+        monkeypatch.setattr(
+            pipeline, "ask_llm",
+            lambda *a, **kw: reply)
+        monkeypatch.setattr(
+            pipeline, "execute_commands",
+            lambda *a, **kw: {})
+        monkeypatch.setattr(
+            pipeline, "handle_deadlock_mit_solver",
+            lambda *a, **kw: None)
+        monkeypatch.setattr(
+            pipeline, "_audit_builder_prompt",
+            lambda *a, **kw: None)
+        monkeypatch.setattr(
+            pipeline, "_audit_builder_reply",
+            lambda *a, **kw: None)
+        monkeypatch.setattr(
+            pipeline, "ask_reviewer_for_recovery",
+            lambda *a, **kw: type(
+                "V", (), {"diagnose": "", "reparaturplan": [],
+                          "empfehlung": "", "art": "",
+                          "blockgroesse": "",
+                          "frage_an_menschen": "",
+                          "rohantwort": ""})())
+        monkeypatch.setattr(
+            pipeline, "print_recovery", lambda *a, **kw: None)
+
+        _reply_roh, _rc = pipeline.builder_reply_mit_command_loop(
+            s, "key", "builder-prompt",
+            lambda _s: "user-prompt",
+            tmp_path, "test",
+            max_builder_runden=1)
+        cap = [r for r in gerufen
+               if r[0] == "loop_cap_erreicht"]
+        assert len(cap) == 1, (
+            f"loop_cap_erreicht {len(cap)}x gerufen: {cap}")
+        assert cap[0][1]["loop_name"] == "builder_command"
+        assert cap[0][1]["max_runden"] == 1
+
+    def test_w30_fix_post_apply_loop_cap_audit(
+            self, tmp_path: Path, monkeypatch) -> None:
+        """W30-fix Integration: _post_apply_korrektur_loop
+        mit max=0 ruft _loop_cap_audit mit
+        loop_name="post_apply_korrektur".
+        """
+        s = self._state(tmp_path)
+        gerufen = []
+        monkeypatch.setattr(
+            pipeline, "audit",
+            lambda kind, payload, *a, **kw:
+                gerufen.append((kind, payload)))
+        rc = pipeline._post_apply_korrektur_loop(
+            s, {}, ["core/"], "builder-prompt",
+            tmp_path, "test", "key", 10, 0,
+            max_korrektur_runden=0)
+        assert rc == 18
+        cap = [r for r in gerufen
+               if r[0] == "loop_cap_erreicht"]
+        assert len(cap) == 1, (
+            f"loop_cap_erreicht {len(cap)}x gerufen")
+        assert cap[0][1]["loop_name"] == "post_apply_korrektur"
+        assert cap[0][1]["max_runden"] == 0
 
 class TestW32ContractImLoop:
     """W32: _schreibe_contract muss im run_phase-Loop
