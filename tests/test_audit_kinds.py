@@ -138,8 +138,7 @@ def _baum() -> ast.Module:
 #   review_command, reviewer_call_failed,
 #   reviewer_run_solver_phase2_ignoriert,
 #   solver_budget_exhausted, solver_max_runden_erreicht,
-#   solver_max_solver_runden_erreicht, solver_trigger_a,
-#   solver_trigger_b.
+#   solver_trigger_a, solver_trigger_b.
 def test_audit_kinds_alle_aufrufe_registriert() -> None:
     """Jeder audit('literal', ...) ist im Katalog."""
     calls = _audit_calls(_baum())

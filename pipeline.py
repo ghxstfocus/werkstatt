@@ -1126,7 +1126,7 @@ _AP_PFLICHTFELDER = (
 # (test_audit_kinds_alle_aufrufe_registriert) prueft
 # die Nutzung, test_katalog_anzahl_matcht_soll die
 # Registrierung.
-_KATALOG_SOLL = 159
+_KATALOG_SOLL = 158
 
 _AUDIT_KINDS_BEKANNT = frozenset({
     "aggregator_failed",
@@ -1282,7 +1282,6 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "solver_budget_exhausted",
     "solver_failed",
     "solver_max_runden_erreicht",
-    "solver_max_solver_runden_erreicht",
     "solver_run_duplicate",
     "solver_trigger",
     "solver_trigger_a",
@@ -7167,9 +7166,15 @@ def handle_deadlock_mit_solver(
 
     _msr = int(state.solver_config.get(
         "max_runden", MAX_SOLVER_RUNDEN_DEFAULT))
+    # W48-A16-b-2-a (2026-10-18): Merge zu
+    # solver_max_runden_erreicht. Payload
+    # symmetrisch (aufrufe, max_runden in beiden
+    # Pfaden). pfad-Feld trennt no_go/deadlock.
     if not erhoehe_solver_aufruf(state, _msr):
-        audit("solver_max_solver_runden_erreicht",
+        audit("solver_max_runden_erreicht",
               {"pfad": "deadlock",
+               "aufrufe": state.solver_aufrufe,
+               "max_runden": _msr,
                "grund": _trigger_grund},
               project_dir, project_name)
         return None

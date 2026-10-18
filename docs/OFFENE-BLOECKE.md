@@ -63,7 +63,7 @@ Uebersicht in `ROADMAP.md`. Erledigt in `ERLEDIGT.md`.
   pipeline_escalated, planner_verworfen,
   anti_patterns_injiziert, planner_rolle_fehlt (3x),
   solver_budget_exhausted (2x),
-  solver_max_solver_runden_erreicht, quelle_invalid,
+  quelle_invalid,
   mess_nach_nahe_budget, basis_gate_test_result (2x),
   builder_commit_paket_failed,
   builder_commit_paket_failed_retry,

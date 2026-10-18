@@ -483,3 +483,49 @@ def test_w30_fix_b_max_builder_runden_null(
     for (k, payload) in gerufen:
         if k == "builder_runden_ungueltig":
             assert payload["max_builder_runden"] == 0
+
+
+# =====================================================================
+# W48-A16-b-2-a: solver_max_runden_erreicht Payload.
+# =====================================================================
+
+def test_solver_max_runden_erreicht_payload(
+        tmp_path: Path, monkeypatch) -> None:
+    """W48-A16-b-2-a: Deadlock-Pfad schreibt
+    solver_max_runden_erreicht mit symmetrischem
+    Payload (aufrufe, max_runden, pfad, grund).
+    """
+    state = build_test_state(
+        project_dir=tmp_path)
+    state.solver_config = {"max_runden": 1}
+    state.solver_aufrufe = 1
+    # W48-A16-b-2-a: Trigger "anker_nicht_gemessen"
+    # (nicht "wirkungsloser_patch"). Daher
+    # letzter_patch_wirkungslos=False.
+    state.letzter_patch_wirkungslos = False
+    state.anker_fehler_in_folge = 2
+
+    gerufen = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw:
+            gerufen.append((kind, payload)))
+    monkeypatch.setattr(
+        pipeline, "budget_or_recover",
+        lambda *a, **kw: None)
+
+    rc = pipeline.handle_deadlock_mit_solver(
+        state, "key", tmp_path, "test", 10, 0)
+
+    caps = [p for (k, p) in gerufen
+            if k == "solver_max_runden_erreicht"]
+    assert len(caps) == 1, (
+        f"solver_max_runden_erreicht {len(caps)}x, "
+        f"erwartet 1. Alle: {[k for k,_ in gerufen]}")
+    payload = caps[0]
+    assert payload["pfad"] == "deadlock", payload
+    assert "aufrufe" in payload, payload
+    assert "max_runden" in payload, payload
+    assert payload["max_runden"] == 1, payload
+    assert payload["grund"] == "anker_nicht_gemessen", payload
+    assert rc is None, f"rc={rc}"
