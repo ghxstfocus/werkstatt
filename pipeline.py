@@ -4866,6 +4866,8 @@ def verify_code(patches: list[dict[str, str]],
     import ast as _ast
     index = _projekt_symbol_index(project_dir)
     befunde: list[str] = []
+    # W61-Pro: Kwarg-Check gegen echte Signaturen.
+    befunde.extend(verify_code_kwargs(patches, project_dir))
     for p in patches:
         if p.get("typ") == "new_file":
             continue
@@ -4902,6 +4904,89 @@ def verify_code(patches: list[dict[str, str]],
             befunde.append(
                 f"unbekanntes Symbol: {fname}() "
                 f"(nicht im Projekt definiert)")
+    return befunde
+
+
+def _api_signaturen(project_dir: Path) -> dict[str, str]:
+    """W61-Pro: Liest echte API-Signaturen aus dem Projekt.
+
+    Fuer die wichtigsten Klassen (AuditWriter, Change,
+    ChangeApplier). Wird von verify_code fuer den
+    Kwarg-Check genutzt.
+    """
+    import inspect as _insp
+    import sys as _sys
+    sigs: dict[str, str] = {}
+    # Projekt in den Pfad.
+    if str(project_dir) not in _sys.path:
+        _sys.path.insert(0, str(project_dir))
+    try:
+        from harness.audit.writer import AuditWriter
+        sigs["AuditWriter.log"] = str(
+            _insp.signature(AuditWriter.log))
+    except (ImportError, ValueError):
+        pass
+    try:
+        from core.changeapplier.models import Change
+        sigs["Change.__init__"] = str(
+            _insp.signature(Change))
+    except (ImportError, ValueError):
+        pass
+    try:
+        from core.changeapplier.applier import ChangeApplier
+        sigs["ChangeApplier.__init__"] = str(
+            _insp.signature(ChangeApplier.__init__))
+    except (ImportError, ValueError):
+        pass
+    return sigs
+
+
+def verify_code_kwargs(patches: list[dict[str, str]],
+                       project_dir: Path) -> list[str]:
+    """W61-Pro: Prueft Kwargs in Patches gegen echte Signaturen.
+
+    Findet z.B. log(status=...) wenn AuditWriter.log kein
+    status-Kwarg hat.
+    """
+    import ast as _ast
+    sigs = _api_signaturen(project_dir)
+    if not sigs:
+        return []
+    # Mapping: Methodenname -> (klasse, signatur).
+    methode_zu_sig: dict[str, str] = {}
+    for key, sig in sigs.items():
+        name = key.split(".")[-1]
+        methode_zu_sig[name] = sig
+    befunde: list[str] = []
+    for p in patches:
+        if p.get("typ") == "new_file":
+            continue
+        ersatz = p.get("ersatz", "")
+        if not ersatz.strip():
+            continue
+        try:
+            tree = _ast.parse(ersatz)
+        except SyntaxError:
+            continue
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ast.Call):
+                continue
+            fname = None
+            if isinstance(node.func, _ast.Attribute):
+                fname = node.func.attr
+            elif isinstance(node.func, _ast.Name):
+                fname = node.func.id
+            if not fname or fname not in methode_zu_sig:
+                continue
+            sig_text = methode_zu_sig[fname]
+            # Kwargs des Calls.
+            for kw in node.keywords:
+                if kw.arg is None:
+                    continue
+                if kw.arg not in sig_text:
+                    befunde.append(
+                        f"{fname}() kennt kein Kwarg "
+                        f"{kw.arg!r} (Signatur: {sig_text[:100]})")
     return befunde
 
 
