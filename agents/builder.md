@@ -306,126 +306,31 @@ Eine leere Datei ist erlaubt:
 
 ## EINRUECKUNG UND YAML-BLOCK
 
-### Grundregel
+Schreibe den Anker/Ersatz EXAKT so, wie er in der
+Zieldatei steht — inklusive der echten Einrueckung.
 
-Im YAML-Block-Scalar (|) sind die zwei
-Spaces nach dem '|' die YAML-Einrueckung.
-Der Parser entfernt sie.
+Der Parser uebernimmt die Zeilen roh. Kein "2 Spaces
+mehr", kein "schoener machen". Wenn der Anker in der
+Datei 12 Spaces vor der Zeile hat, schreibe 12 Spaces.
 
-Deshalb: Schreibe im YAML-Block immer
-2 Spaces MEHR, als die echte Zeile in
-der Zieldatei hat.
+Beispiel:
 
-Nach dem Entfernen der 2 Spaces bleibt
-die echte Code-Einrueckung uebrig.
+  anker: |
+              def test_a(self):
+                  pass
+  ersatz: |
+              def test_a(self):
+                  pass
 
-### Beispiel 1 — Zeile in Klasse anhaengen
+              def test_b(self):
+                  pass
 
-Die Regel des Parsers: von jeder
-Fortsetzungszeile im YAML-Block werden
-GENAU 2 Spaces entfernt. Kein Trimmen,
-kein dynamisches Basis-Stripping.
+Die Zeilen haben die echte Code-Einrueckung. Der
+Parser strippt nichts (weil die Einrueckung > 2 ist).
+apply_code_patches prueft count == 1 und Zeilenanfang.
 
-Zieldatei (echte Einrueckung):
-
-    class TestX(unittest.TestCase):
-
-        def test_a(self):
-            pass
-
-Die echten Einrueckungen in der Zieldatei:
-  class  -> 4 Spaces
-  def    -> 8 Spaces
-  pass   -> 12 Spaces
-
-Patch (richtig):
-
-    anker: |
-          def test_a(self):
-              pass
-    ersatz: |
-          def test_a(self):
-              pass
-
-          def test_b(self):
-              pass
-
-Im YAML-Block haben die Zeilen 2 Spaces
-mehr als die echte Einrueckung (die 2
-Basis-Spaces, die der Parser entfernt):
-  def  -> echte 8 Spaces + 2 = 10 Spaces
-  pass -> echte 12 Spaces + 2 = 14 Spaces
-
-Der Parser entfernt 2 Spaces pro Zeile:
-  def  -> 8 Spaces uebrig
-  pass -> 12 Spaces uebrig
-
-Ergebnis: die Zieldatei-Zeilen sind
-exakt getroffen.
-
-Regel in einem Satz:
-  Zaehle die echten Spaces der Zielzeile.
-  Addiere 2. Das ist die YAML-Block-
-  Einrueckung.
-
-### Beispiel 2 — Praktisch
-
-Zieldatei:
-
-    class TestX(unittest.TestCase):
-
-        def test_a(self):
-            pass
-
-Patch (richtig):
-
-    ersatz: |
-          def test_a(self):
-              pass
-
-          def test_b(self):
-              pass
-
-Die YAML-Zeilen haben 6 Spaces fuer
-"def" (2 Basis + 4 Code).
-Die YAML-Zeilen haben 10 Spaces fuer
-"pass" (2 Basis + 8 Code).
-
-Nach Abzug der 2 Basis-Spaces:
-  4 Spaces fuer "def".
-  8 Spaces fuer "pass".
-Korrekt.
-
-### Beispiel 3 — Einzelne Zeile
-
-Zieldatei:
-
-        self.assertEqual(result["source"], "ping")
-
-8 Spaces vor "self".
-
-Patch (richtig):
-
-    anker: |
-          self.assertEqual(result["source"], "ping")
-
-10 Spaces im YAML-Block.
-Parser entfernt 2 -> 8 Spaces. Korrekt.
-
-### Zusammenfassung
-
-1. Zaehle die Spaces der Zielzeile in
-   der Datei.
-2. Schreibe im YAML-Block 2 Spaces mehr.
-3. Der Parser entfernt 2 -> echte
-   Einrueckung.
-4. Kein Trimmen, kein "schoener machen".
-
-### Anker-Regel
-
-Waehle Anker, die an einem Zeilen-Anfang
-stehen. Kein Substring innerhalb einer
-Zeile.
+Anker-Regel: Waehle Anker, die an einem Zeilen-Anfang
+stehen. Kein Substring innerhalb einer Zeile.
 
 ## SPEC-TREUE
 

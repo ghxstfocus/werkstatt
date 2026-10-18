@@ -1684,9 +1684,16 @@ class TestRollenAuditA:
         t = self._read("builder.md")
         assert "Vorgaenger-Hash" in t
 
-    def test_builder_hat_2_spaces_entfernt(self) -> None:
+    def test_builder_einrueckung_roh(self) -> None:
+        """W61: Parser uebernimmt Anker-Zeilen roh (Heuristik).
+
+        Die alte Regel '2 Spaces entfernt' war falsch (Parser
+        strippt bei >2 Einrueckung nichts). Neu: exakte
+        Einrueckung schreiben.
+        """
         t = self._read("builder.md")
-        assert "2 Spaces entfernt" in t
+        assert "Parser uebernimmt die Zeilen roh" in t
+        assert "2 Spaces entfernt" not in t
 
     def test_hash_regel_judge(self) -> None:
         """W28a: Judge prueft keine Hashes (Contract-Sache)."""
