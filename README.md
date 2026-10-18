@@ -3,6 +3,25 @@
 Das Agenten-System. Unabhaengig von jedem Projekt. Es baut Projekte,
 aber es gehoert keinem Projekt.
 
+**Ziel:** Das Beste aus Claude Code, Copilot, AutoGen, Swarm und
+OpenAI Agents SDK nehmen und ein eigenes Agentensystem bauen.
+
+**Stand 2026-10-18:**
+
+- Werkstatt: 1166 Tests, ruff 0, mypy 0. HEAD 0df062f.
+- security-ai: 1452 Tests. Phase 20a committet (manuell, 560659a).
+- Phase 20b (ChangeApplier Audit-Log) offen — Pipeline deadlockt.
+  W59 (Read-vor-Edit, Deadlock-Mechanismus) ist der naechste Block.
+- 18 Commits vor origin/main.
+
+**Doku:**
+
+- `docs/ARCHITEKTUR.md` — Ziel, Rollen, was funktioniert, was fehlt.
+- `docs/OFFENE-BLOECKE.md` — tabellarisch, mit Prioritaet.
+- `docs/ROLLEN-AUDIT.md` — Rollen-Stand 2026-10-18 (Update-Sektion 8).
+- `docs/WORKFLOW.md` — Pipeline-Ablauf im Detail.
+- `Bau-Handoff.md` — aktueller Stand, naechster Schritt.
+
 ## Auf einen Blick
 
     +----------------------------------------------------------+
@@ -14,20 +33,24 @@ aber es gehoert keinem Projekt.
     +----------------------------------------------------------+
     |                        WERKSTATT                          |
     |                                                           |
-    |   +-------------+    Auftrag    +-------------------+    |
-    |   | Werkstatt-  |-------------->|      BUILDER      |    |
-    |   |   Chat      |               |  (baut Patches)   |    |
-    |   +-------------+               +-------------------+    |
-    |         |                              |   ^             |
-    |         | Reviewer-Block               v   | Befund      |
-    |         v                       +-------------+          |
-    |   +-------------+  NO-GO-Paar   |   SOLVER    |          |
-    |   |  REVIEWER   |-------------->|  (Diagnose, |          |
-    |   | (bewertet)  |               |   Skizze)   |          |
+    |   +-------------+  Phasenplan   +-------------+          |
+    |   |   PLANNER   |-------------->|   BUILDER   |          |
+    |   | (Stufe 1/2) |               |(baut Patch) |          |
     |   +-------------+               +-------------+          |
-    |         |                                                 |
-    |         | GO / NO-GO / ESKALATION                         |
-    |         v                                                 |
+    |                                        |   ^             |
+    |                                        v   | Befund      |
+    |                                +-------------+           |
+    |                                |   SOLVER    |           |
+    |                                |  (Diagnose) |           |
+    |                                +-------------+           |
+    |                                        |                 |
+    |                                        v                 |
+    |   +-------------+  Contract     +-------------+          |
+    |   |    JUDGE    |<--------------|  REVIEWER   |          |
+    |   | (pro Patch) |               | (Commit)    |          |
+    |   +-------------+               +-------------+          |
+    |                                        |                 |
+    |                                        v                 |
     |   +-------------+     +-------------+    +------------+   |
     |   | TEST-GEN    |     |  COVERAGE   |    |   CHAOS    |   |
     |   | (LLM)       |     |  (No-LLM)   |    |  (No-LLM)  |   |
@@ -37,31 +60,41 @@ aber es gehoert keinem Projekt.
                               v
                      Ziel-Projekt (z. B. security-ai)
 
-## Die sechs Rollen
+## Die sieben Rollen
 
 | Rolle           | Typ               | Adressat              | Aufgabe                          |
 |-----------------|-------------------|-----------------------|----------------------------------|
-| reviewer        | LLM (reasoner)    | das Ergebnis          | bewerten: GO/NO-GO/ESKALATION    |
+| planner         | LLM (chat)        | builder               | Auftrag (St.1) / Phasenplan (St.2) |
 | builder         | LLM (chat)        | Werkstatt-Chat, Solver| Code-Patches bauen               |
 | solver          | LLM (chat)        | builder               | woran + wie besser (Skizze)      |
+| judge           | LLM (reasoner)    | den Patch             | Contract-Treue, Sicherheit       |
+| reviewer        | LLM (reasoner)    | das Commit-Paket      | COMMIT-GO / COMMIT-NO-GO         |
 | test_generator  | LLM (chat)        | builder               | Test-Vorschlaege                 |
-| coverage        | No-LLM            | —                     | Coverage messen                  |
-| chaos           | No-LLM            | —                     | Extremwerte fuzzen               |
+| coverage, chaos | No-LLM            | —                     | Coverage messen / fuzzen         |
 
-**reviewer** — prueft Code, Commit-Message, Doku. Waehlt Messungen.
-Loest nicht. Schreibt nichts.
+**planner** — formuliert Auftraege (Stufe 1) oder Phasenplaene
+(Stufe 2) aus dem Projektzustand. Vorgeschalteter Agent, laeuft
+vor Basis-Gate und Builder. Messe-Pflicht vor Planformulierung.
 
-**builder** — baut Code-Patches und Commit-Paket. Baut bei NO-GO neu.
-Baut bei zweimal NO-GO mit gleichem Gegenstand mit Solver-Befund.
+**builder** — baut Code-Patches und Commit-Paket. Baut bei NO-GO
+neu. Bei zweimal NO-GO mit gleichem Gegenstand mit Solver-Befund.
 
-**solver** — Unterstuetzung fuer den builder. Wird gerufen, wenn der
-reviewer zweimal NO-GO gibt. Diagnostiziert: GLEICHER_FEHLER,
-ANDERER_FEHLER, WIDERSPRUCH, UNKLAR. Empfiehlt, wie besser. Darf
-Code als Skizze geben, keine fertigen Skripte. Bewertet nicht.
-Adressat ist der builder, nicht der Mensch.
-
+**solver** — Unterstuetzung fuer den builder. Wird gerufen, wenn
+der judge zweimal NO-GO gibt oder der Builder nicht weiterkommt.
+Diagnostiziert: GLEICHER_FEHLER, ANDERER_FEHLER, WIDERSPRUCH,
+UNKLAR. Empfiehlt, wie besser. Darf Code als Skizze geben, keine
+fertigen Skripte. Adressat ist der builder, nicht der Mensch.
 Der Solver-Befund geht in den Builder-Prompt (naechster Neubau).
 Der Reviewer sieht nur einen neutralen Hinweis.
+
+**judge** — prueft den angewendeten Patch gegen den Contract.
+Frischer Kontext: contract.md, mess_nach.txt, test_results.
+Verdict: GO / NO_GO / ESKALATION. Pro Patch im Unterblock.
+
+**reviewer** — prueft das Commit-Paket (Message, betroffene
+Dateien, git diff). Verdict: COMMIT-GO / COMMIT-NO-GO /
+COMMIT-ESKALATION. Am Phasenende. Waehlt Messungen. Loest
+nicht, schreibt nichts.
 
 **test_generator** — Test-Vorschlaege bei niedriger Coverage.
 
@@ -71,16 +104,22 @@ Der Reviewer sieht nur einen neutralen Hinweis.
 
     /opt/werkstatt/
     ├── agents/                  Rollen (Markdown + YAML)
-    │   ├── reviewer.md
-    │   ├── builder.md
-    │   ├── solver.md
-    │   ├── test_generator.md
-    │   ├── coverage.md
-    │   └── chaos.md
+    │   ├── planner.md           Planner (Stufe 1/2)
+    │   ├── builder.md           Builder (Patches)
+    │   ├── solver.md            Solver (Diagnose)
+    │   ├── judge.md             Judge (Contract)
+    │   ├── reviewer.md          Reviewer (Commit)
+    │   ├── test_generator.md    Test-Vorschlaege
+    │   ├── coverage.md          Coverage (No-LLM)
+    │   └── chaos.md             Chaos (No-LLM)
     ├── projects/                Projekt-Konfigurationen
     │   └── security-ai.yaml
+    ├── werkstatt/               Modularisierte Teile (W31-W47)
+    │   ├── state.py             RunState, Measurement
+    │   └── parser.py            Plan-Parser
     ├── tests/                   Tests der Werkstatt
-    ├── docs/                    WORKFLOW, ROADMAP, PROTOKOLL
+    ├── docs/                    ARCHITEKTUR, ROLLEN-AUDIT,
+    │                            OFFENE-BLOECKE, WORKFLOW
     ├── audit-logs/              JSONL pro Tag
     ├── pipeline.py              Orchestrierung
     ├── redaction.py             Redaction vor LLM-Calls
