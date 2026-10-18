@@ -3029,8 +3029,25 @@ def run_phase(
             return 0
         print("[i] Alle Unterbloecke done. "
               "Gesamt-Review folgt.")
-    if any(s in ("no_go", "failed") for s in status_liste):
-        print("[FAIL] Phase enthaelt no_go/failed. Fail closed.")
+    # W61: failed = Builder-Problem (Plan gueltig).
+    # failed -> pending, Builder versucht es nochmal.
+    # no_go = Plan-Problem (Mensch/Planner), fail-closed.
+    _failed = [
+        u for u in unterbloecke
+        if isinstance(u, dict) and u.get("status") == "failed"
+    ]
+    for _u in _failed:
+        _u["status"] = "pending"
+        print(f"[i] Unterblock {_u.get('id', '?')} "
+              f"failed -> pending (Builder nochmal).")
+    if _failed:
+        _phase_plan_speichern(project_name, daten)
+        status_liste = [
+            (u.get("status") if isinstance(u, dict) else None)
+            for u in unterbloecke
+        ]
+    if any(s == "no_go" for s in status_liste):
+        print("[FAIL] Phase enthaelt no_go. Fail closed.")
         audit("run_phase_ende",
               {"phase_id": state.phase_id,
                "unterbloecke": len(unterbloecke),
