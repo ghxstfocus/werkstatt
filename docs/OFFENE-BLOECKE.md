@@ -1,6 +1,6 @@
 # Offene Bloecke — Werkstatt
 
-Stand: 2026-10-18
+Stand: 2026-10-18 (nach Sanierungs-Welle + W52b A/B)
 Todo, priorisiert. Append-only.
 Uebersicht in `ROADMAP.md`. Erledigt in `ERLEDIGT.md`.
 
@@ -8,115 +8,95 @@ Uebersicht in `ROADMAP.md`. Erledigt in `ERLEDIGT.md`.
 
 | Block | Kategorie | Beschreibung | Aufwand |
 |---|---|---|---|
-| W59 | 3 | Patch nur nach Messung (Read-Cache, mtime, Deadlock-Mechanismus). Blockiert Phase 20b. | mittel (25 Tests anpassen) |
-| W61 | 3 | Rollen-Sanierung. builder.md 647 -> < 300, planner.md 297 -> < 150. Redundanz aufloesen. Aus docs/ROLLEN-AUDIT.md Sektion 8. | gross (6+ Bloecke) |
+| W52b C | 3 | Anker-Check gegen Datei-Inhalte statt String. `pruefe_anker_gegen_messung` (Z. 4805), `_gemessene_pfade` (Z. 8624). | mittel |
+| W52b D | 3 | Prompt-Bauer auf Index. `_messwerte_fuer_prompt` (Z. 5660), `_messwerte_fuer_planner` (Z. 5646), `_build_judge_input` (Z. 6067), `_build_commit_input` (Z. 5736), `_planner_user_content` (Z. 3656), Builder-Prompt (Z. 9492, 9599, 9936, 9980). | gross |
+| W61 | 3 | Rollen-Sanierung: 5 Unterbloecke a-e. Reviewer 3 Aufgaben, Judge 2, Solver nutzt Reviewer-Modell. | gross |
 
-## Prioritaet 2 (strukturell, aus Audit)
-
-| Block | Kategorie | Beschreibung | Aufwand |
-|---|---|---|---|
-| W55 | 3 | Solver-Fehldiagnose. Prueft Ist-Zustand statt Aufgabe (Phase-20b: "Auftrag erfuellt" obwohl .log() fehlt). | klein |
-| W58 | 3 | Reviewer-Leer-Antwort bei Deadlock. Reviewer antwortet leer statt Fail-closed. | klein |
-| W54f | 3 | builder.md 647 Zeilen kuerzen. Audit-Ziel < 300. | mittel |
-| W57 | 3 | Prompt-Audit aller Rollen-Dateien. Was liest das LLM tatsaechlich? Was wird ignoriert? | mittel |
-
-## Prioritaet 3 (Refactor, nicht blockierend)
+## Prioritaet 2 (strukturell)
 
 | Block | Kategorie | Beschreibung | Aufwand |
 |---|---|---|---|
-| W52a-1 | 2 | Planner-Funktionen nach `werkstatt/planner.py` (lazy imports, ~900 Zeilen). | mittel |
-| W52b | 3 | On-Demand-Messung: Messungen/Replies als Dateien (statt Strings im Prompt). `_planner_lauf` schreibt `.werkstatt/<phase>/messungen/<sha1>.txt` + `index.json` + `planner/<runde>.reply`. Agent liest bei Bedarf. Vorbild: Claude Code (Read vor Edit), Copilot (Tool Search). | gross |
-| W36-2b..6 | 3 | pipeline.py modularisieren: llm.py, audit.py, measurements.py, judge.py, apply.py, parser.py-Rest. | gross (6 Module) |
-| W51b-2 | 3 | Resume-Pfad-Pruefungen (`_phase_planner_resume` ruft `_plan_ist_*` nicht). | klein |
-| W54e-b | 3 | `patch_ambig` pruefen: ueberlappt es mit W54-g? Wenn ja, entfernen. | klein |
-| W56 | 3 | Phasen-Apply prueft alle Zieldatei-Tests pro Unterblock. Pruefen, ob pro Unterblock nur zugehoerige Tests. | mittel |
-| W62 | 3 | README und KONVENTION: README-Diagramm ist schematisch, KONVENTION-Diagramm ist textuell. KONSISTENZ pruefen. | klein |
+| W52b E | 1 | `mess_protokoll` deprecated markieren, Bestandsleser dokumentieren. | klein |
+| W-Resume-Fail-Kontext | 3 | Planner bekommt Fail-Kontext (Test-Output, rote Tests, letzter Patch, Recovery-Vorschlag), liefert begruendeten Plan. Neuer Skill `fail-recovery`. | gross |
+| W58 | 3 | Reviewer-Leer-Antwort. `max_tokens_reviewer` 1024 zu klein, `reviewer.md` 56 Z. zu duenn. | klein |
+| W59-2 | 3 | W13b-W59-Interaktion. | klein |
+
+## Prioritaet 3 (Refactor)
+
+| Block | Kategorie | Beschreibung | Aufwand |
+|---|---|---|---|
+| W36-RP-a | 2 | Helper-Wartbarkeit (nach 5 Phasen-Laeufen pruefen). | klein |
+| W36-RP-b-os | 3 | os.system/os.popen (0 Treffer heute). | klein |
+| W48-A16-b-2-a-b | 2 | solver_max-Co-occur-Beleg. | klein |
+| W52a-1 | 2 | Planner-Funktionen nach `werkstatt/planner.py`. | mittel |
+| W36-2b..6 | 3 | pipeline.py modularisieren (6 Module). | gross |
+| W56 | 3 | Phasen-Apply prueft alle Zieldatei-Tests pro Unterblock. | mittel |
+| W62 | 3 | README/KONVENTION Diagramm-Konsistenz. | klein |
+
+## W52b — Detail (On-Demand-Messung)
+
+**Ziel:** `mess_protokoll` (String) raus. `state.messungen`
+(Liste von Datei-Referenzen) + `.werkstatt/<run_id>/
+messungen/<sha1>.txt` + `index.json` rein.
+
+**Gebaut:**
+- `state.Messung` (dataclass).
+- `state.messungen`, `state.messungen_nach_apply`,
+  `state.gelesene_dateien`.
+- `_schreibe_messung` (pipeline.py Z. 6320).
+- `execute_commands` schreibt Datei + Liste.
+- `_post_apply_messung` fuellt `messungen_nach_apply`.
+- `apply_code_patches` W59-Check + mtime-Update.
+- Katalog +2: `patch_ohne_messung`,
+  `patch_datei_geaendert_seit_messung`.
+
+**Offen:**
+- C: `pruefe_anker_gegen_messung` gegen Dateien.
+- D: Prompt-Bauer auf Index.
+- E: deprecated markieren.
+- `_gemessene_pfade` (Z. 8624) liest String, soll
+  `state.messungen` lesen.
+- `state.messungen_nach_apply` in `_build_judge_input`
+  nutzen.
+
+## W61 — Detail (Rollen-Sanierung)
+
+**Befund:**
+- `reviewer.md` 56 Z.: Mess-Wahl + Commit + Recovery.
+  Ziel: < 100 Z., nur Commit-Review.
+- `judge.md` 90 Z.: Patch + Repair. Ziel: < 150 Z.,
+  nur Patch. `_phase_judge_repair_runde` (Z. 2519)
+  raus.
+- `rufe_solver` (Z. 5505): `reviewer_verdict_model`.
+  `solver_model` fehlt in state.py.
+- `builder.md` 647 Z.: Ziel < 300.
+- `planner.md` 299 Z.: Ziel < 150.
+
+**Unterbloecke:**
+- W61a: Reviewer-Sanierung (neue Rolle
+  `measure_picker` oder Planner uebernimmt
+  Mess-Wahl).
+- W61b: Judge-Sanierung (Repair raus).
+- W61c: Solver-Sanierung (`solver_model` neu).
+- W61d: Prompt-Groessen (builder.md, planner.md).
+- W61e: Doku (ROLLEN-AUDIT, ARCHITEKTUR,
+  KONVENTION, README).
 
 ## Merkposten
 
-- W51c-fix erledigt (2026-10-18): _planner_lauf nutzt
-  _parse_commands_planner. load_skill im Planner-Parser
-  vorbereitet, aber planner.md bietet es noch nicht an.
-- W25-planner-md: planner.md um AVAILABLE-SKILLS-Block
-  + COMMAND: load_skill <name> erweitern. Eigener Block,
-  Kategorie 3, nicht W51c-fix.
-- W59-W13b-Interaktion: W13b-Deaktivierung (pruefe_ersatz_
-  gegen_messung) ist der aktuelle Ersatz fuer Mess-Zwang.
-  Wenn W59 gebaut wird (gelesene_dateien, patch_ohne_
-  messung, mtime-Check), pruefen, ob W13b durch W59 ersetzt
-  wird oder als legacy bleibt. Eigener Block W59-2.
-
-- W48-A16-b-2 (NAECHSTER Block, 30 Katalog-
-  Luecken, 2026-10-18): W48-A16-b hat 30
-  audit()-Aufrufe mit nicht registrierten Kinds
-  aufgedeckt. Der xfail-Test
-  (test_audit_kinds_alle_aufrufe_registriert)
-  ist wirkungslos, bis W48-A16-b-2 ihn gruen
-  macht. W48-A16-b-2 ist der NAECHSTE Block,
-  nicht "eigener Block danach". 28 registrieren,
-  1 umbenennen (reviewer_call_failed ->
-  judge_call_failed, 2 Stellen), _KATALOG_SOLL
-  122 -> 151, xfail entfernen.
-- W48-A16-b-2 (30 Katalog-Luecken, 2026-10-18):
-  W48-A16-b hat 30 audit()-Aufrufe mit nicht
-  registrierten Kinds aufgedeckt:
-  pipeline_escalated, planner_verworfen,
-  anti_patterns_injiziert, planner_rolle_fehlt (3x),
-  solver_budget_exhausted (2x),
-  quelle_invalid,
-  mess_nach_nahe_budget, basis_gate_test_result (2x),
-  builder_commit_paket_failed,
-  builder_commit_paket_failed_retry,
-  reviewer_call_failed (2x — im Judge-Pfad,
-  evtl. umbenennen zu judge_call_failed),
-  builder_call_failed, phase_basis_gate_failed,
-  phasen_basis_gate_untracked, planner_start (2x),
-  planner_ungueltig, planner_abgebrochen,
-  planner_bestaetigt (2x), planner_call_failed,
-  recovery_budget, solver_trigger_a,
-  auto_repair_ruff.
-  Eigener Block, Kategorie 3. Registrierung
-  + Rollen-Check + Doku.
-
-- W30-fix-b (UnboundLocalError max_builder_runden=0,
-  2026-10-18): builder_reply_mit_command_loop
-  (Z. 4844) greift auf reply.content zu, aber
-  reply wurde nie gesetzt (Loop lief nicht).
-  Existierte vor W30-fix, wurde durch W30-fix-
-  Integration aufgedeckt. max_builder_runden=0
-  ist eine legitime Konfiguration (Deadlock-Test,
-  Notfall). Kategorie 2. Eigener Block.
-
-- W36-RP (A-B1-13): run_pipeline-Integrationstest-
-  Infrastruktur. run_pipeline hat keinen
-  Integrationstest. T-1 (historie phase=normal
-  nach Builder-Lauf) fehlt. Eigener Block,
-  Kategorie 3.
-
-- B1 erledigt (2026-10-18, 3e1d804): 5 Leichen
-  geloescht, Katalog 119 -> 120 (planner_vorschlag
-  registriert).
-
-- W48-A16-b erledigt (2026-10-18, a074be1):
-  Katalog-Nutzungs-Test, _KATALOG_SOLL = 122.
-  Katalog 120 -> 122 (builder_deadlock_leer,
-  builder_deadlock_rueckfrage).
-
-- W51c-fix erledigt (2026-10-18, 679251c).
-- A1b-fix erledigt (2026-10-18, 800e924).
-- W30-fix erledigt (2026-10-18, 5dbbb79).
-
-- W54-f: builder.md 647 Zeilen.
-- W57: Prompt-Audit.
-- W52a-c: pipeline.py-Modularisierung groesser als 500 Zeilen (ask_llm, audit, execute_commands sind Kern-Infrastruktur).
-- W51h-b: W51h greift nur bei parsebarem Plan.
-- W51g-b2: Check-Fehler (nicht Parse-Fehler) in letzter_plan_fehler.
-- W59-Nachlieferung: 25 Tests rufen apply_code_patches direkt.
-- W59-e: `patch_ambig` pruefen (ueberlappt mit W54-g?).
-- W59-f: `_phase_main_pfad` -> W50 bug (planner_resume statt neuanlage bei phase_aktiv=false).
-- W60b: `docs/ROADMAP.md` bei > 200 Zeilen kuerzen (aktuell 125).
-- W60c: `docs/ERLEDIGT.md` bei > 200 Zeilen ins Archiv (aktuell 116).
-- W60d: `Bau-Handoff.md` neu (kompakt, < 500 Zeilen).
+- W52b-C: Anker-Check gegen Datei-Inhalte.
+- W52b-D: Prompt-Bauer auf Index.
+- W52b-E: `mess_protokoll` deprecated.
+- W61: Rollen-Sanierung (5 Unterbloecke).
+- W-Resume-Fail-Kontext: Fail-Log + Skill
+  `fail-recovery`.
+- W58: Reviewer-Leer-Antwort.
+- W36-RP-a: Helper-Wartbarkeit.
+- W36-RP-b-os: os.system/os.popen.
+- W48-A16-b-2-a-b: solver_max-Co-occur.
+- W59-2: W13b-W59-Interaktion.
+- W25-planner-md: ERLEDIGT (041c9a3).
+- W30-fix-b: ERLEDIGT (ab0f389).
 
 ## Verweise
 
@@ -124,4 +104,4 @@ Uebersicht in `ROADMAP.md`. Erledigt in `ERLEDIGT.md`.
 - `ERLEDIGT.md` — Erledigte Bloecke mit Commit/Tests.
 - `ARCHITEKTUR.md` — Ziel, Rollen, Luecken.
 - `KONVENTION.md` — Ordnerstruktur, Datei-Namen.
-- `ROLLEN-AUDIT.md` — Rollen-Stand (Sektion 8, Update 2026-10-18).
+- `ROLLEN-AUDIT.md` — Rollen-Stand (Sektion 8).
