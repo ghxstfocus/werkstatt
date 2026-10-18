@@ -2908,7 +2908,8 @@ class TestBuilderMdKuerzung:
         s = self._md()
         assert "KUERZUNGS-MARKER" in s
         assert "GEKUERZT" in s
-        assert "COMMAND: RUN read_file" in s
+        # W61: Marker verweist auf explore.
+        assert "COMMAND: RUN explore" in s
 
     def test_builder_md_kein_widerspruch(self) -> None:
         s = self._md()
@@ -5896,8 +5897,8 @@ class TestNewFileMarker:
     def test_agents_builder_md_new_file(self) -> None:
         p = Path("/opt/werkstatt/agents/builder.md")
         md = p.read_text(encoding="utf-8")
-        assert "Bei new_file-Patches: read_file liefert" in md
-        assert "OHNE vorheriges read_file" in md
+        assert "Bei new_file-Patches: explore liefert" in md
+        assert "OHNE vorheriges explore" in md
 
     def test_agents_judge_md_pruefung(self) -> None:
         """W28a: judge.md prueft mess_nach."""

@@ -1861,7 +1861,8 @@ class TestBuilderFormatWichtigBlock:
         idx_wichtig = t.find("WICHTIG (UMB-1)")
         idx_selbst = t.find("## SELBST-REVIEW")
         wichtig = t[idx_wichtig:idx_selbst]
-        assert "COMMAND: RUN read_file" in wichtig
+        # W61: WICHTIG-Block verweist auf explore.
+        assert "COMMAND: RUN explore" in wichtig
 
     def test_verweise_im_wichtig_block(self) -> None:
         t = self._read()
