@@ -1237,6 +1237,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "command_block_bereinigt",
     "command_block_in_plan",
     "mess_protokoll_limit_erreicht",
+    "planner_command_ohne_neue_messung",
 })
 
 
@@ -3661,14 +3662,29 @@ def _planner_lauf(
             return _w51c_bereinige_und_audit(
                 reply.content, state, project_dir,
                 project_name, _runde)
+        _mess_vorher = len(state.mess_protokoll)
         _geaendert = execute_commands(
             state, _run_cmds, quelle="planner")
+        _mess_nachher = len(state.mess_protokoll)
         print(f"[i] Planner-COMMAND Runde {_runde}/"
               f"{max_runden}: {len(_cmds)} Kommando(s).")
         if not _geaendert:
             return _w51c_bereinige_und_audit(
                 reply.content, state, project_dir,
                 project_name, _runde)
+        # W51e: Runde ohne neue Messung -> Loop
+        # sinnlos, fail-closed mit None.
+        if _mess_nachher == _mess_vorher:
+            print("[!] Planner-Runde ohne neue "
+                  "Messung. Loop abgebrochen.")
+            audit("planner_command_ohne_neue_messung",
+                  {"runde": _runde,
+                   "anzahl_commands": len(_cmds),
+                   "mess_vorher_len": _mess_vorher,
+                   "mess_nachher_len": _mess_nachher,
+                   "phase_id": state.phase_id},
+                  project_dir, project_name)
+            return None
     # Max-Runden erreicht.
     print(f"[FAIL] Planner-COMMAND max_runden "
           f"({max_runden}) erreicht. Fail closed.")

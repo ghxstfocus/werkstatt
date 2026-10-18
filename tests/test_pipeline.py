@@ -5309,7 +5309,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5345,7 +5345,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6180,7 +6180,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
 
 
 # =====================================================================
@@ -6285,7 +6285,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
 
 
 # =====================================================================
@@ -6343,7 +6343,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
 
 
 # =====================================================================
@@ -9450,7 +9450,7 @@ def test_w46c_2_repair_runde_gleiche_bedingung():
 
 def test_w46_katalog_107():
     """T-Katalog: W46-Katalog-Groesse 107 + neue Kinds."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
     assert "judge_uebersprungen_doku" in pipeline._AUDIT_KINDS_BEKANNT
     assert (
         "phase_judge_uebersprungen_doku"
@@ -9462,7 +9462,7 @@ def test_w48_e_katalog_kinds():
             in pipeline._AUDIT_KINDS_BEKANNT)
     assert ('planner_blockiert_phase_abgeschlossen'
             in pipeline._AUDIT_KINDS_BEKANNT)
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
 
 def test_w50_a_block_ohne_flag(tmp_path, monkeypatch):
     """T-W50-a: phase_aktiv=False, ohne Flag -> rc=65."""
@@ -9819,7 +9819,7 @@ def test_w51c_e_gemessener_inhalt():
 
 def test_w51c_f_katalog_115():
     """T-W51c-f: Katalog 115."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
     assert "command_block_bereinigt" in \
         pipeline._AUDIT_KINDS_BEKANNT
     assert "command_block_in_plan" in \
@@ -9932,4 +9932,123 @@ def test_w51d_d_limit_audit(tmp_path):
             return_value=("y", True, ["cat"])):
         pipeline.execute_commands(st, cmds, quelle="planner")
     assert "mess_protokoll_limit_erreicht" in calls
+
+def _w51e_fake_planner_loop(monkeypatch, replies):
+    """W51e-Helper: baut einen Fake-ask_llm fuer
+    _planner_lauf mit vorgegebenen Replies."""
+    it = iter(replies)
+    calls = []
+    def fake_ask(*a, **kw):
+        r = next(it)
+        class R:
+            ok = True
+            error = ""
+            content = r
+        return R()
+    monkeypatch.setattr("pipeline.ask_llm", fake_ask)
+    return calls
+
+
+def test_w51e_a_runde_ohne_neue_messung(monkeypatch, tmp_path):
+    """T-W51e-a: Runde 2 ohne neue Messung -> None,
+    Audit planner_command_ohne_neue_messung 1x."""
+    from werkstatt.state import RunState
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="t",
+        docs={}, agents={"planner": {"body": "x"}},
+        always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=tmp_path,
+        project_name="p")
+    # Runde 1: COMMAND, das eine neue Messung erzeugt.
+    # Runde 2: derselbe COMMAND, keine neue Messung.
+    replies = [
+        "COMMAND: RUN read_file core/x.py\n",
+        "COMMAND: RUN read_file core/x.py\n",
+    ]
+    _w51e_fake_planner_loop(monkeypatch, replies)
+    # run_measurement_mit_argv liefert Inhalt.
+    ausgefuehrt = []
+    def fake_measure(m, wl, pd, arg=None):
+        ausgefuehrt.append(arg)
+        if arg == "core/x.py" and len(ausgefuehrt) == 1:
+            return ("Inhalt x", True, ["cat"])
+        return ("Inhalt x", True, ["cat"])
+    monkeypatch.setattr("pipeline.run_measurement_mit_argv",
+                        fake_measure)
+    # execute_commands: nur beim ersten Mal
+    # mess_protokoll wachsen lassen.
+    _echte_exec = pipeline.execute_commands
+    runden = [0]
+    def fake_exec(state, cmds, quelle):
+        runden[0] += 1
+        if runden[0] == 1:
+            state.mess_protokoll += "Inhalt x"
+        return {(c["id"], c["arg"]): True for c in cmds}
+    monkeypatch.setattr("pipeline.execute_commands", fake_exec)
+    calls = []
+    monkeypatch.setattr("pipeline.audit",
+                        lambda k, *a, **kw: calls.append(k))
+    result = pipeline._planner_lauf(
+        st, "k", "Auftrag", tmp_path, "p", "",
+        stufe=2, max_runden=3)
+    assert result is None
+    assert runden[0] == 2
+    assert calls.count("planner_command_ohne_neue_messung") == 1
+
+
+def test_w51e_a_variante_runde1_ohne_command(monkeypatch, tmp_path):
+    """T-W51e-a-Variante: Runde 1 Prosa (kein COMMAND)
+    -> W3-A1-Zweig, keine W51e-Pruefung."""
+    from werkstatt.state import RunState
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="t",
+        docs={}, agents={"planner": {"body": "x"}},
+        always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=tmp_path,
+        project_name="p")
+    _w51e_fake_planner_loop(
+        monkeypatch, ["PHASE: 20 - Test\nUNTERBLOCK: U1\n"])
+    calls = []
+    monkeypatch.setattr("pipeline.audit",
+                        lambda k, *a, **kw: calls.append(k))
+    result = pipeline._planner_lauf(
+        st, "k", "Auftrag", tmp_path, "p", "",
+        stufe=2, max_runden=3)
+    assert result is not None
+    assert "planner_command_ohne_neue_messung" not in calls
+
+
+def test_w51e_b_regression_plan_in_runde2(monkeypatch, tmp_path):
+    """T-W51e-b: Runde 1 Messung, Runde 2 Plan -> Return."""
+    from werkstatt.state import RunState
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="t",
+        docs={}, agents={"planner": {"body": "x"}},
+        always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=tmp_path,
+        project_name="p")
+    replies = [
+        "COMMAND: RUN read_file core/x.py\n",
+        "PHASE: 20 - Test\nUNTERBLOCK: U1\n",
+    ]
+    _w51e_fake_planner_loop(monkeypatch, replies)
+    monkeypatch.setattr(
+        "pipeline.run_measurement_mit_argv",
+        lambda m, wl, pd, arg=None: ("Inhalt x", True, ["cat"]))
+    def fake_exec(state, cmds, quelle):
+        state.mess_protokoll += "Inhalt x"
+        return {(c["id"], c["arg"]): True for c in cmds}
+    monkeypatch.setattr("pipeline.execute_commands", fake_exec)
+    calls = []
+    monkeypatch.setattr("pipeline.audit",
+                        lambda k, *a, **kw: calls.append(k))
+    result = pipeline._planner_lauf(
+        st, "k", "Auftrag", tmp_path, "p", "",
+        stufe=2, max_runden=3)
+    assert result is not None
+    assert "PHASE: 20" in result
+    assert "planner_command_ohne_neue_messung" not in calls
 
