@@ -9905,8 +9905,22 @@ def run_pipeline(project_name: str, aufgabe: str,
                 _zeilen.append(
                     f"  Ergebnis: {_e.get('ergebnis', '')}")
             _explore_block = "\n".join(_zeilen) + "\n\n"
+        # W61: Contract fuer den aktuellen Unterblock.
+        # Der Builder MUSS wissen, was der Unterblock
+        # verlangt (Anker, Test, Pruefung). Sonst raet er.
+        _contract_block = ""
+        if s.phase_aktiv and s.phase_unterbloecke:
+            _uid = s.phase_unterbloecke[
+                s.phase_aktueller_index].get("id", "?")
+            _contract = _lese_contract(s, _uid)
+            if _contract:
+                _contract_block = (
+                    f"=== CONTRACT ({_uid}) ===\n"
+                    f"{_contract}\n"
+                    f"=== /CONTRACT ===\n\n")
         return (
-            aufgabe_block(s)
+            _contract_block
+            + aufgabe_block(s)
             + _format_whitelist_block(
                 list(getattr(s, "file_whitelist", []) or []))
             # W25: Skills-Bloecke.
