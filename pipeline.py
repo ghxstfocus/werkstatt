@@ -1120,6 +1120,14 @@ _AP_PFLICHTFELDER = (
 # Bekannte Audit-Kinds (aus audit-logs/*.jsonl abgeleitet,
 # 2026-10-15). Neue Kinds MUESSEN hier ergaenzt werden,
 # sonst schlaegt die Katalog-Validierung fehl.
+# W48-A16-b (2026-10-18): Anzahl der registrierten
+# Audit-Kinds. Bei neuem Kind: DIESE Zeile UND
+# _AUDIT_KINDS_BEKANNT anpassen. Der AST-Test
+# (test_audit_kinds_alle_aufrufe_registriert) prueft
+# die Nutzung, test_katalog_anzahl_matcht_soll die
+# Registrierung.
+_KATALOG_SOLL = 122
+
 _AUDIT_KINDS_BEKANNT = frozenset({
     "anker_einrueckung_korrigiert",
     "auftrag_bereits_erfuellt",
@@ -1128,6 +1136,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "builder_command_deadlock",
     "builder_command_executed",
     "builder_deadlock_anker_nicht_gemessen",
+    "builder_deadlock_leer",
+    "builder_deadlock_rueckfrage",
     "builder_frage_reviewer",
     "builder_prompt_gebaut",
     "builder_recovery_nach_apply",

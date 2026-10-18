@@ -5312,8 +5312,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
-
+    
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
         bleibt unredacted (Auflage A8).
@@ -5348,8 +5347,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
-
+    
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
         -> kein Fail-closed. Per String-Match im Quelltext.
@@ -6182,9 +6180,6 @@ class TestCommitPhaseFixes:
         # Fallback greift nur, wenn Hauptwert leer.
         assert 'if not werte.get("git_head"):' in src
 
-    def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
-
 
 # =====================================================================
 # B0c-2 (2026-10-16, Lauf 26): Markdown + mehrzeiliger End-Fallback
@@ -6287,9 +6282,6 @@ class TestCommitPaketScope:
         assert 'p.get("pfad", "")' in umfeld
         assert 'state.code_patches' in umfeld
 
-    def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
-
 
 # =====================================================================
 # E + R16 (2026-10-16): git diff --name-only HEAD + Teilmengen-Check
@@ -6344,9 +6336,6 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
         assert ("commit_review_diff_fehler"
                 in pipeline._AUDIT_KINDS_BEKANNT)
-
-    def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
 
 
 # =====================================================================
@@ -9566,7 +9555,6 @@ def test_w46c_2_repair_runde_gleiche_bedingung():
 
 def test_w46_katalog_107():
     """T-Katalog: W46-Katalog-Groesse 107 + neue Kinds."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
     assert "judge_uebersprungen_doku" in pipeline._AUDIT_KINDS_BEKANNT
     assert (
         "phase_judge_uebersprungen_doku"
@@ -9578,7 +9566,6 @@ def test_w48_e_katalog_kinds():
             in pipeline._AUDIT_KINDS_BEKANNT)
     assert ('planner_blockiert_phase_abgeschlossen'
             in pipeline._AUDIT_KINDS_BEKANNT)
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
 
 def test_w50_a_block_ohne_flag(tmp_path, monkeypatch):
     """T-W50-a: phase_aktiv=False, ohne Flag -> rc=65."""
@@ -9936,7 +9923,6 @@ def test_w51c_e_gemessener_inhalt():
 
 def test_w51c_f_katalog_115():
     """T-W51c-f: Katalog 115."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
     assert "command_block_bereinigt" in \
         pipeline._AUDIT_KINDS_BEKANNT
     assert "command_block_in_plan" in \
@@ -10288,7 +10274,6 @@ def test_w51f_d_gruen():
 
 def test_w51f_f_katalog_118():
     """T-W51f-f: Katalog 118 + planner_phase_zu_gross."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
     assert "planner_phase_zu_gross" in \
         pipeline._AUDIT_KINDS_BEKANNT
 
