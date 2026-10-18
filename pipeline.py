@@ -1222,6 +1222,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "phase_judge_uebersprungen_doku",
     "planner_blockiert_aktive_phase",
     "planner_blockiert_phase_abgeschlossen",
+    "phase_abgeschlossen_keine_neuanlage",
+    "phase_neuanlage_mit_flag",
 })
 
 
@@ -11046,6 +11048,7 @@ def _phase_main_pfad(
     phasen_text: str,
     state_ref: list[RunState],
     resume_force: bool = False,
+    force_new_phase: bool = False,
 ) -> int:
     global _AKTUELLE_RUN_ID
     """Block P2a: fuehrt den Planner Stufe 2 aus und
@@ -11314,6 +11317,46 @@ def _phase_main_pfad(
     historie = load_recent_commits(project_dir, n=10)
 
     # RunState bauen (analog _planner_main_pfad).
+    # W50 (2026-10-18): Planner-Durchfall bei
+    # abgeschlossener Phase verhindern.
+    _w50_pfad = _phase_yaml_pfad(project_name)
+    _w50_vorher_id = "(keine)"
+    if _w50_pfad.exists():
+        try:
+            _w50_daten = yaml.safe_load(
+                _w50_pfad.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            print(f"[FAIL] phase.yaml nicht lesbar: {exc}. "
+                  "Fail closed.")
+            return 18
+        if not isinstance(_w50_daten, dict):
+            print("[FAIL] phase.yaml ist kein dict. "
+                  "Fail closed.")
+            return 18
+        _w50_vorher_id = _w50_daten.get("phase_id", "?")
+        _w50_aktiv = _w50_daten.get("phase_aktiv")
+        if _w50_aktiv is False and not force_new_phase:
+            _k_offene = sum(
+                1 for _u in _w50_daten.get(
+                    "phase_unterbloecke", []) or []
+                if isinstance(_u, dict)
+                and _u.get("status") in ("no_go", "failed"))
+            print(f"[FAIL] Phase {_w50_vorher_id} ist "
+                  f"abgeschlossen in phase.yaml "
+                  f"({_k_offene} offene Reste). "
+                  "Neuanlage verlangt --new-phase.")
+            audit("phase_abgeschlossen_keine_neuanlage",
+                  {"phase_id": _w50_vorher_id,
+                   "offene_reste": _k_offene,
+                   "aufgabe_kurz": phasen_text[:200]},
+                  project_dir, project_name)
+            return 65
+    if force_new_phase:
+        audit("phase_neuanlage_mit_flag",
+              {"phase_id_vorher": _w50_vorher_id,
+               "aufgabe_kurz": phasen_text[:200]},
+              project_dir, project_name)
+
     state = RunState(
         block_id=config.get("project", "unknown"),
         aufgabe=phasen_text,
@@ -11894,6 +11937,20 @@ def _planner_main_pfad(
     return 0
 
 
+def _validate_new_phase_args(args: list[str]) -> int | None:
+    """W50: prueft --new-phase ohne --phase.
+
+    Rueckgabe: 65 bei Fehler, None sonst.
+    Reine Argument-Pruefung, ohne Sicherheits-
+    Seiteneffekte. Der root-Check in main() bleibt
+    davor, weil er unabhaengig von den Args greift.
+    """
+    if "--new-phase" in args and "--phase" not in args:
+        print("[FAIL] --new-phase verlangt --phase.")
+        return 65
+    return None
+
+
 def main() -> int:
 
     """CLI-Einstieg.
@@ -11949,6 +12006,11 @@ def main() -> int:
         print("[FAIL] --resume-force verlangt --phase.")
         return 65
 
+    # W50: --new-phase verlangt --phase.
+    _rc_np = _validate_new_phase_args(args)
+    if _rc_np is not None:
+        return _rc_np
+
     # Block P2a: --phase-Pfad. Reihenfolge: VOR --planner
     # (P2a-S5b-A1). Beide Bedingungen sind mit args[2]
     # exklusiv.
@@ -11969,7 +12031,8 @@ def main() -> int:
         try:
             rc = _phase_main_pfad(
                 project_name, phasen_text, phase_state_ref,
-                resume_force=_resume_force)
+                resume_force=_resume_force,
+                force_new_phase=("--new-phase" in args))
         except KeyboardInterrupt:
             print("\n[*] Abbruch durch Strg+C.")
             rc = 130

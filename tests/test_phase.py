@@ -37,7 +37,7 @@ class TestPhaseMainPfad:
         params = list(sig.parameters.keys())
         # --resume-force (2026-10-16): resume_force ergaenzt.
         assert params == ["project_name", "phasen_text",
-                          "state_ref", "resume_force"]
+                          "state_ref", "resume_force", "force_new_phase"]
 
 
 # =====================================================================

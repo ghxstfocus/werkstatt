@@ -5309,7 +5309,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5345,7 +5345,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6180,7 +6180,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
 
 
 # =====================================================================
@@ -6285,7 +6285,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
 
 
 # =====================================================================
@@ -6343,7 +6343,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
 
 
 # =====================================================================
@@ -9450,7 +9450,7 @@ def test_w46c_2_repair_runde_gleiche_bedingung():
 
 def test_w46_katalog_107():
     """T-Katalog: W46-Katalog-Groesse 107 + neue Kinds."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
     assert "judge_uebersprungen_doku" in pipeline._AUDIT_KINDS_BEKANNT
     assert (
         "phase_judge_uebersprungen_doku"
@@ -9462,5 +9462,197 @@ def test_w48_e_katalog_kinds():
             in pipeline._AUDIT_KINDS_BEKANNT)
     assert ('planner_blockiert_phase_abgeschlossen'
             in pipeline._AUDIT_KINDS_BEKANNT)
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
+
+def test_w50_a_block_ohne_flag(tmp_path, monkeypatch):
+    """T-W50-a: phase_aktiv=False, ohne Flag -> rc=65."""
+    import yaml as _yaml
+    pfad = tmp_path / "testprojekt.phase.yaml"
+    pfad.write_text(_yaml.safe_dump({
+        "phase_aktiv": False, "phase_id": "19",
+        "phase_titel": "T", "phase_unterbloecke": [],
+    }), encoding="utf-8")
+    monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", tmp_path)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    calls = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda k, *a, **kw: calls.append(k))
+    monkeypatch.setattr(
+        pipeline, "_lade_und_pruefe_projekt",
+        lambda name: {"project_dir": str(tmp_path),
+                      "project": name,
+                      "planner": {"modus": "manual"}})
+    monkeypatch.setattr(
+        pipeline, "load_agents", lambda d: {"planner": {}})
+    monkeypatch.setattr(
+        pipeline, "load_docs", lambda d, p: {})
+    monkeypatch.setattr(
+        pipeline, "build_catalog", lambda c, p: ([], []))
+    import subprocess as _sp
+    monkeypatch.setattr(
+        _sp, "run",
+        lambda *a, **kw: type(
+            "R", (), {"returncode": 0,
+                      "stdout": "",
+                      "stderr": ""})())
+    rc = pipeline._phase_main_pfad(
+        "testprojekt", "Phase 20", [], resume_force=False,
+        force_new_phase=False)
+    assert rc == 65
+    assert "phase_abgeschlossen_keine_neuanlage" in calls
+
+
+def test_w50_b_keine_yaml_planner_laeuft(tmp_path, monkeypatch):
+    """T-W50-b: keine phase.yaml -> Planner laeuft."""
+    monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", tmp_path)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    calls = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda k, *a, **kw: calls.append(k))
+    monkeypatch.setattr(
+        pipeline, "_lade_und_pruefe_projekt",
+        lambda name: {"project_dir": str(tmp_path),
+                      "project": name,
+                      "planner": {"modus": "manual"}})
+    monkeypatch.setattr(
+        pipeline, "load_agents", lambda d: {"planner": {}})
+    monkeypatch.setattr(
+        pipeline, "load_docs", lambda d, p: {})
+    monkeypatch.setattr(
+        pipeline, "build_catalog", lambda c, p: ([], []))
+    monkeypatch.setattr(
+        pipeline, "_planner_lauf", lambda *a, **kw: None)
+    pipeline._phase_main_pfad(
+        "testprojekt", "Phase 20", [], resume_force=False,
+        force_new_phase=False)
+    assert "phase_abgeschlossen_keine_neuanlage" not in calls
+
+
+def test_w50_c_phase_aktiv_resume_pfad(tmp_path, monkeypatch):
+    """T-W50-c: phase_aktiv=True -> Resume-Pfad (Regression)."""
+    import yaml as _yaml
+    pfad = tmp_path / "testprojekt.phase.yaml"
+    pfad.write_text(_yaml.safe_dump({
+        "phase_aktiv": True, "phase_id": "19",
+        "phase_titel": "T",
+        "phase_unterbloecke": [
+            {"id": "U1", "status": "done",
+             "commit_paket": {"dateien": ["x"]}},
+        ],
+    }), encoding="utf-8")
+    monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", tmp_path)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    calls = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda k, *a, **kw: calls.append(k))
+    monkeypatch.setattr(
+        pipeline, "_lade_und_pruefe_projekt",
+        lambda name: {"project_dir": str(tmp_path),
+                      "project": name,
+                      "planner": {"modus": "manual"}})
+    monkeypatch.setattr(
+        pipeline, "load_agents", lambda d: {"planner": {}})
+    monkeypatch.setattr(
+        pipeline, "load_docs", lambda d, p: {})
+    monkeypatch.setattr(
+        pipeline, "build_catalog", lambda c, p: ([], []))
+    monkeypatch.setattr(
+        pipeline, "run_phase", lambda *a, **kw: 0)
+    monkeypatch.setattr(
+        pipeline, "_phase_finish_aktiv",
+        lambda *a, **kw: None)
+    pipeline._phase_main_pfad(
+        "testprojekt", "Phase 19", [], resume_force=False,
+        force_new_phase=False)
+    assert "phase_abgeschlossen_keine_neuanlage" not in calls
+
+
+def test_w50_d_flag_durchlassen(tmp_path, monkeypatch):
+    """T-W50-d: phase_aktiv=False, force_new_phase=True
+       -> durchlassen, Audit phase_neuanlage_mit_flag."""
+    import yaml as _yaml
+    pfad = tmp_path / "testprojekt.phase.yaml"
+    pfad.write_text(_yaml.safe_dump({
+        "phase_aktiv": False, "phase_id": "19",
+        "phase_titel": "T", "phase_unterbloecke": [],
+    }), encoding="utf-8")
+    monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", tmp_path)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    calls = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda k, *a, **kw: calls.append(k))
+    monkeypatch.setattr(
+        pipeline, "_lade_und_pruefe_projekt",
+        lambda name: {"project_dir": str(tmp_path),
+                      "project": name,
+                      "planner": {"modus": "manual"}})
+    monkeypatch.setattr(
+        pipeline, "load_agents", lambda d: {"planner": {}})
+    monkeypatch.setattr(
+        pipeline, "load_docs", lambda d, p: {})
+    monkeypatch.setattr(
+        pipeline, "build_catalog", lambda c, p: ([], []))
+    import subprocess as _sp
+    monkeypatch.setattr(
+        _sp, "run",
+        lambda *a, **kw: type(
+            "R", (), {"returncode": 0,
+                      "stdout": "",
+                      "stderr": ""})())
+    monkeypatch.setattr(
+        pipeline, "_planner_lauf", lambda *a, **kw: None)
+    pipeline._phase_main_pfad(
+        "testprojekt", "Phase 20", [], resume_force=False,
+        force_new_phase=True)
+    assert "phase_neuanlage_mit_flag" in calls
+
+
+def test_w50_e_flag_ohne_yaml(tmp_path, monkeypatch):
+    """T-W50-e: force_new_phase=True ohne phase.yaml."""
+    monkeypatch.setattr(pipeline, "_PHASE_YAML_DIR", tmp_path)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    calls = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda k, *a, **kw: calls.append(k))
+    monkeypatch.setattr(
+        pipeline, "_lade_und_pruefe_projekt",
+        lambda name: {"project_dir": str(tmp_path),
+                      "project": name,
+                      "planner": {"modus": "manual"}})
+    monkeypatch.setattr(
+        pipeline, "load_agents", lambda d: {"planner": {}})
+    monkeypatch.setattr(
+        pipeline, "load_docs", lambda d, p: {})
+    monkeypatch.setattr(
+        pipeline, "build_catalog", lambda c, p: ([], []))
+    import subprocess as _sp
+    monkeypatch.setattr(
+        _sp, "run",
+        lambda *a, **kw: type(
+            "R", (), {"returncode": 0,
+                      "stdout": "",
+                      "stderr": ""})())
+    monkeypatch.setattr(
+        pipeline, "_planner_lauf", lambda *a, **kw: None)
+    pipeline._phase_main_pfad(
+        "testprojekt", "Phase 20", [], resume_force=False,
+        force_new_phase=True)
+    assert "phase_neuanlage_mit_flag" in calls
+
+
+def test_w50_f_new_phase_ohne_phase_failt():
+    """T-W50-f: --new-phase ohne --phase -> rc=65.
+
+    Ruft die reine Argument-Validierung, damit der
+    root-Check von main() nicht greift (Tests laufen
+    als root).
+    """
+    rc = pipeline._validate_new_phase_args(
+        ["--project", "p", "--new-phase"])
+    assert rc == 65
 
