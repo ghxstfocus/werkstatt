@@ -8084,16 +8084,19 @@ class TestW29Deterministisch:
         assert grund.startswith("D1_")
         assert "U2" in grund
 
-    def test_d2_duplikate_fail(
+    def test_d2_duplikate_im_paket_fail(
             self, tmp_path: Path) -> None:
+        """W61: Duplikat = dieselbe Datei 2x im SELBEN Paket.
+
+        Dieselbe Datei in zwei Paketen ist normal (sequentielle
+        Unterbloecke patchen oft dieselbe Datei)."""
         state = self._state_mit_dateien(
             tmp_path, ["core/x.py"])
         state.phase_unterbloecke = [
             {"id": "U1", "status": "done"},
         ]
         state.phase_commit_pakete = [
-            {"dateien": ["core/x.py"], "message": "a"},
-            {"dateien": ["core/x.py"], "message": "b"},
+            {"dateien": ["core/x.py", "core/x.py"], "message": "a"},
         ]
         aggregat = pipeline._phase_gesamt_review(state)
         d = pipeline._phase_deterministisch_pruefen(
@@ -8102,6 +8105,22 @@ class TestW29Deterministisch:
         rc, grund = d
         assert rc == 17
         assert grund.startswith("D2_")
+
+    def test_d2_duplikate_ueber_pakete_ok(
+            self, tmp_path: Path) -> None:
+        """W61: Dieselbe Datei in zwei Paketen ist OK."""
+        state = self._state_mit_dateien(
+            tmp_path, ["core/x.py"])
+        state.phase_unterbloecke = [
+            {"id": "U1", "status": "done"},
+            {"id": "U2", "status": "done"},
+        ]
+        state.phase_commit_pakete = [
+            {"dateien": ["core/x.py"], "message": "a"},
+            {"dateien": ["core/x.py"], "message": "b"},
+        ]
+        aggregat = pipeline._phase_gesamt_review(state)
+        assert aggregat["duplikate"] == 0
 
     def test_d3_whitelist_fail(
             self, tmp_path: Path) -> None:

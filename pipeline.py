@@ -2210,8 +2210,16 @@ def _phase_gesamt_review(state: RunState) -> dict[str, Any]:
         for p in pakete
         for d in p.get("dateien", [])
     ]
+    # W61: Duplikate pro Paket zaehlen, nicht global.
+    # Sequenzielle Unterbloecke patchen oft dieselbe Datei
+    # (z.B. applier.py in U2, U3, U4). Das ist kein Fehler.
+    # Duplikat = dieselbe Datei 2x im SELBEN Paket.
+    duplikate = sum(
+        len(p.get("dateien", [])) - len(set(p.get("dateien", [])))
+        for p in pakete
+        if isinstance(p, dict)
+    )
     dateien_union = sorted(set(dateien_alle))
-    duplikate = len(dateien_alle) - len(dateien_union)
     return {
         "unterbloecke_total": len(ups),
         "unterbloecke_done": done,
