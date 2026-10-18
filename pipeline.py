@@ -5060,6 +5060,12 @@ def builder_reply_mit_command_loop(
                       {"frage": ec.get("arg", "")[:200],
                        "ergebnis": ergebnis[:300]},
                       project_dir, project_name)
+                # W61: Ergebnis in state speichern, damit der
+                # naechste Builder-Prompt es sieht.
+                state.letzte_explore_ergebnisse.append({
+                    "frage": ec.get("arg", ""),
+                    "ergebnis": ergebnis,
+                })
             # Naechste Builder-Runde mit dem Ergebnis.
             continue
         for cmd in cmds_run:
@@ -9727,6 +9733,15 @@ def run_pipeline(project_name: str, aufgabe: str,
             bereits_gemessen=_gemessene_pfade(s))
         anker_block = baue_anker_rueckmeldung(s)
         _ps_block = format_projekt_stand(s)
+        # W61: Explore-Ergebnisse der letzten Runde.
+        _explore_block = ""
+        if getattr(s, "letzte_explore_ergebnisse", None):
+            _zeilen = ["ERGEBNISSE DER SUCHE (verbindlich):"]
+            for _e in s.letzte_explore_ergebnisse:
+                _zeilen.append(f"  Frage: {_e.get('frage', '')}")
+                _zeilen.append(
+                    f"  Ergebnis: {_e.get('ergebnis', '')}")
+            _explore_block = "\n".join(_zeilen) + "\n\n"
         return (
             aufgabe_block(s)
             + _format_whitelist_block(
@@ -9735,6 +9750,7 @@ def run_pipeline(project_name: str, aufgabe: str,
             + _available_skills_block()
             + _geladene_skills_block(s)
             + (_ps_block if _ps_block else "")
+            + _explore_block
             + (anker_block if anker_block else "")
             +
             f"BASIS-GATE:\n{s.basis_protokoll[:1500]}\n\n"

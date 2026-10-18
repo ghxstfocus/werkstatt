@@ -179,6 +179,11 @@ class RunState:
     # Wird parallel zu mess_protokoll gefuellt,
     # bis alle Leser umgestellt sind.
     messungen: list = field(default_factory=list)
+    # W61: Explore-Subagent-Ergebnisse der letzten Runde.
+    # Format: list[dict], je Eintrag {"frage": str, "ergebnis": str}.
+    # Wird vom Builder-Prompt gerendert, damit der Builder
+    # die Suche nicht wiederholt.
+    letzte_explore_ergebnisse: list = field(default_factory=list)
     # W59 (2026-10-18): gelesene Dateien + mtime.
     # Pfad -> mtime. apply_code_patches prueft.
     gelesene_dateien: dict = field(default_factory=dict)
