@@ -5496,3 +5496,33 @@ Merkposten W46b/c-Rollback:
   und W46c (Doku-Phase) teilen den Rollback. Bei
   spaeterem Rollback von W46c muss W46b mitgerollt
   oder separat revertiert werden.
+
+## W50-NACHABNAHME (2026-10-18)
+
+W48 adressiert --planner, nicht --phase. Der 23:38-Bug
+(--phase bei abgeschlossener Phase -> Planner-Durchfall
+mit falschem phasen_text) wird erst mit W50 gefixt.
+A-W48-9b-Empfehlung des Reviewers (W48 in
+_planner_main_pfad) war falsch; Korrektur in W50
+(HR-R7: Reviewer-Fehler).
+
+W50 (Commit 739397f):
+  _phase_main_pfad: force_new_phase-Parameter.
+  Direkter phase.yaml-Leser nach Basis-Gate, vor
+  RunState-Bau. phase_aktiv=False ohne Flag -> rc=65,
+  audit phase_abgeschlossen_keine_neuanlage.
+  Mit Flag: audit phase_neuanlage_mit_flag, durchlassen.
+  CLI: --new-phase nur mit --phase, _validate_new_phase_args
+  als eigene Funktion (vor main()-root-Check testbar).
+  Katalog 109 -> 111.
+  Tests: 1114 -> 1120 passed (T-W50-a..f).
+
+A-W50-8: Katalog-Kette
+  103 (W35a-2d) -> 109 (W48-A16, +6 in W46+W48)
+  -> 111 (W50, +2).
+  Neue Kinds W50: phase_abgeschlossen_keine_neuanlage,
+                  phase_neuanlage_mit_flag.
+
+Merkposten W50-A16-b (A-W48-19, Kategorie 2):
+  Katalog-Nutzungs-Test (alle audit("…")-Aufrufe
+  gegen _AUDIT_KINDS_BEKANNT). Nach Phase 20.
