@@ -114,3 +114,50 @@ Spalten:
 | 18 | Guardrails | ✅ | — | — |
 | 19 | ChangeApplier + Sofort-Massnahmen | ✅ | 163f29b | 1102 |
 | 20a | Change-Modell (Audit-Trail-Felder) | 🔧 | 560659a | 1452 |
+
+## Sitzung 2026-10-18 — Sanierungs-Welle + W52b (A/B)
+
+| Block | Kategorie | Commit | Tests | Katalog |
+|---|---|---|---|---|
+| B1-Schritt-1 (Audit-Fix) | 1 | 15ce62a | 1169 | 119 |
+| W51c-fix (Parser) | 3 | 679251c | 1176 | 119 |
+| A1b-fix (Solver-Blindheit) | 3 | 800e924 | 1179 | 119 |
+| T-2 (Integrationstest) | 1 | aefecc7 | 1180 | 119 |
+| B1 (Leichen) | 3 | 3e1d804 | 1171 | 120 |
+| W30-fix (Loop-Cap) | 3 | 5dbbb79 | 1174 | 120 |
+| W48-A16-b (AST-Test) | 3 | a074be1 | 1177 | 122 |
+| W48-A16-b-2 (Katalog) | 3 | bc69ffc | 1177 | 158 |
+| W36-RP (Integrationstest) | 3 | d0233c8 | 1180 | 158 |
+| W30-fix-b (max=0) | 2 | ab0f389 | 1181 | 159 |
+| W48-A16-b-2-a (solver_max-Merge) | 2 | 70df288 | 1182 | 158 |
+| W36-RP-b (subprocess-Schutz) | 2 | 904c0de | 1186 | 158 |
+| W25-planner-md (Skills) | 3 | 041c9a3 | 1189 | 158 |
+| W52b A/B (On-Demand) | 3 | (offen) | 1189 | 160 |
+
+### Was die Welle geliefert hat
+
+- Drei Integrations-Luecken behoben (W51c, A1b, W30).
+- Katalog-Pflege saniert: AST-Test + _KATALOG_SOLL,
+  36 fehlende Kinds, 1 Merge.
+- 5 Leichen entfernt (B1).
+- Integrationstest-Infrastruktur (W36-RP).
+- UnboundLocalError behoben (W30-fix-b).
+- subprocess-Schutz global (W36-RP-b).
+- Skills im Planner-Prompt (W25-planner-md) +
+  load_skill-only-Bugfix.
+- 47,7M Tokens, 1.468 API-Requests in 3 Tagen
+  (Mensch-Messung). Davon ~20 Bloecke gebaut.
+
+### W52b (On-Demand) — offen
+
+- A (messungen_nach_apply): gebaut.
+- B (_gemessene_pfade liest Liste): offen.
+- C (Anker-Check gegen Datei-Inhalte): offen.
+- D (Prompt-Bauer auf Index): offen.
+- E (deprecated markieren): offen.
+
+### Naechste Bloecke
+
+- W61 (Rollen-Sanierung): 5 Unterbloecke a-e.
+- W-Resume-Fail-Kontext: Fail-Log + Skill.
+- W52b C/D/E.
