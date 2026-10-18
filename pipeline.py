@@ -1126,7 +1126,7 @@ _AP_PFLICHTFELDER = (
 # (test_audit_kinds_alle_aufrufe_registriert) prueft
 # die Nutzung, test_katalog_anzahl_matcht_soll die
 # Registrierung.
-_KATALOG_SOLL = 164  # W61: +explore_subagent
+_KATALOG_SOLL = 165  # W61: +builder_readfile_blockiert
 
 _AUDIT_KINDS_BEKANNT = frozenset({
     "aggregator_failed",
@@ -1268,6 +1268,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "recovery_no_go",
     # W61: Subagent-Audit.
     "explore_subagent",
+    "builder_readfile_blockiert",
     # W61: Judge-Labels (vorher als "reviewer" gefuehrt).
     "judge_frage_antwort",
     "judge_round",
@@ -5046,9 +5047,37 @@ def builder_reply_mit_command_loop(
             # Nur frage_reviewer -> kein Deadlock,
             # Rueckgabe an Aufrufer.
             return reply, None
+        # W61: read_file auf ZIELDATEIEN blockieren.
+        # Der Builder soll fuer die Anker-Suche auf den
+        # Zieldateien explore nutzen (Subagent). Fuer
+        # andere Dateien (README, Doku) bleibt read_file
+        # erlaubt.
+        _ziel_pfade_b = set(extract_paths_from_aufgabe(
+            state.aufgabe,
+            list(getattr(state, "file_whitelist", []) or []),
+            project_dir))
+        _readfile_cmds = [
+            c for c in cmds_run
+            if c.get("id") == "read_file"
+            and any(z in c.get("arg", "") or c.get("arg", "") in z
+                    for z in _ziel_pfade_b)
+        ]
+        if _readfile_cmds:
+            _pfade = ", ".join(
+                c.get("arg", "") for c in _readfile_cmds)
+            print(f"[!] Builder-Runde {builder_runde}: "
+                  f"read_file auf Zieldatei blockiert. "
+                  f"Nutze explore.")
+            state.letzte_anker_fehler = [
+                (0, pfad, "(read_file blockiert)",
+                 "nutze_explore")
+                for pfad in _pfade.split(", ") if pfad]
+            audit("builder_readfile_blockiert",
+                  {"runde": builder_runde,
+                   "pfade": _pfade[:300]},
+                  project_dir, project_name)
+            continue
         # W61: Subagenten (aktiv: explore).
-        # bash/browser sind angelegt, aber nicht im
-        # Builder-Loop aktiv (spaetere Zeitpunkte).
         _explore_cmds = [c for c in cmds_run
                          if c.get("id") == "explore"]
         if _explore_cmds:
