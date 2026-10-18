@@ -9290,7 +9290,9 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
     for versuch in (1, 2):
         reply = ask_llm(
             state.api_key,
-            build_system_prompt(state.agents["builder"], state.docs,
+            build_system_prompt(
+                state.agents.get("builder_commit",
+                                 state.agents["builder"]), state.docs,
                                 state.agent_docs.get("builder", [])),
             aufgabe,
             state.builder_model,
@@ -9813,7 +9815,9 @@ def run_pipeline(project_name: str, aufgabe: str,
     # SCHRITT 2: Builder baut Code-Entwurf
     # ==================================================================
     print("\n[*] Schritt 2: Builder baut Code-Patches (UMB-1b).")
-    builder_prompt = build_system_prompt(state.agents["builder"], state.docs,
+    builder_prompt = build_system_prompt(
+        state.agents.get("builder_patch",
+                         state.agents["builder"]), state.docs,
                                          state.agent_docs.get("builder", []))
     rc = budget_or_recover(state, max_llm,
                           "Vor Builder-Aufruf (Code-Patches).",
