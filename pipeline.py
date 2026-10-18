@@ -9503,7 +9503,11 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
         commit_argv += ["-c", f"user.name={state.git_author_name}"]
     if state.git_author_email:
         commit_argv += ["-c", f"user.email={state.git_author_email}"]
-    commit_argv += ["commit", "-F", str(msg_datei)]
+    # W61: --allow-empty, wenn alle Zieldateien bereits
+    # committed sind (z.B. manuell committed in einer
+    # vorherigen Sitzung). Sonst scheitert git commit mit
+    # "nichts zu committen".
+    commit_argv += ["commit", "--allow-empty", "-F", str(msg_datei)]
 
     try:
         res_commit = subprocess.run(
