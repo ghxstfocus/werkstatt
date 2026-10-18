@@ -3657,10 +3657,18 @@ def _planner_user_content(
             f"{state.mess_protokoll}\n"
             "=== /GEMESSENER INHALT ===\n\n"
         )
+    # W25-planner-md (2026-10-18): Skills im
+    # Planner-Prompt. _geladene_skills_block ist
+    # nicht None-safe (liest state.geladene_skills),
+    # daher state-Pruefung.
+    _w25_skills_block = _available_skills_block()
+    if state is not None:
+        _w25_skills_block += _geladene_skills_block(state)
     return (
         _w51g_block
         + _w51a_block
         + _w51d_mess_block
+        + _w25_skills_block
         + f"ROHER AUFTRAG DES MENSCHEN:\n{roher_auftrag}\n\n"
         f"LETZTE COMMITS IM ZIEL-REPO:\n{historie[:3000]}\n\n"
         f"{abschluss}"
@@ -3746,6 +3754,12 @@ def _planner_lauf(
         if _n_skills:
             print(f"[i] Planner-COMMAND: "
                   f"{_n_skills} Skill(s) geladen.")
+        # W25-planner-md (2026-10-18): load_skill-only
+        # ist KEIN Abbruch. Der geladene Skill muss in
+        # der naechsten Runde im Prompt wirken.
+        if not _run_cmds and _n_skills > 0:
+            # Naechste Runde, geladene Skills sichtbar.
+            continue
         if not _run_cmds:
             return _w51c_bereinige_und_audit(
                 reply.content, state, project_dir,

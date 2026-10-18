@@ -295,3 +295,5 @@ der Pipeline-Prompt dir:
 
 Wenn dir etwas fehlt, um einen Auftrag
 zu formulieren, frag per RUECKFRAGE.
+
+Skills: AVAILABLE SKILLS im Prompt; laden per `COMMAND: load_skill <name>`.

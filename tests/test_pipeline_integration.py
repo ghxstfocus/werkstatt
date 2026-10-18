@@ -557,3 +557,98 @@ def test_solver_max_runden_erreicht_payload(
     assert payload["max_runden"] == 1, payload
     assert payload["grund"] == "anker_nicht_gemessen", payload
     assert rc is None, f"rc={rc}"
+
+
+# =====================================================================
+# W25-planner-md: Skills im Planner-Prompt.
+# =====================================================================
+
+def test_w25_planner_prompt_enthaelt_skills() -> None:
+    """W25-planner-md: _planner_user_content enthaelt
+    AVAILABLE SKILLS.
+    """
+    state = build_test_state()
+    out = pipeline._planner_user_content(
+        "Test-Auftrag", "historie", 1, state=state)
+    assert "AVAILABLE SKILLS" in out, (
+        "AVAILABLE SKILLS fehlt im Planner-Prompt")
+    # Mindestens ein Skill-Name sichtbar.
+    assert "patch-format" in out or "anker-regeln" in out
+
+
+def test_w25_planner_prompt_enthaelt_geladene_skills() -> None:
+    """W25-planner-md: _planner_user_content enthaelt
+    GELADENE SKILLS, wenn state.geladene_skills gesetzt.
+    """
+    state = build_test_state()
+    state.geladene_skills = ["patch-format"]
+    out = pipeline._planner_user_content(
+        "Test-Auftrag", "historie", 1, state=state)
+    assert "GELADENE SKILLS" in out, (
+        "GELADENE SKILLS fehlt im Planner-Prompt")
+    assert "patch-format" in out
+
+
+def test_w25_planner_load_skill_e2e(
+        monkeypatch) -> None:
+    """W25-planner-md E2E: Planner sendet load_skill,
+    _verarbeite_skill_commands laedt, naechster Prompt
+    enthaelt GELADENE SKILLS.
+    """
+    state = build_test_state()
+    state.agents = pipeline.load_agents(
+        "/opt/werkstatt/agents")
+    state.agents.setdefault("planner", {})
+    state.agents["planner"]["body"] = (
+        "Du bist der Planner. Test.")
+    # Runde 1: load_skill. Runde 2: Plan.
+    antworten = [
+        type("R", (), {
+            "ok": True,
+            "content": "COMMAND: load_skill patch-format",
+            "error": ""})(),
+        type("R", (), {
+            "ok": True,
+            "content": (
+                "PHASE: Test\n"
+                "UNTERBLOCK U1: Test\n"
+                "datei:core/x.py, aktion:patch\n"),
+            "error": ""})(),
+    ]
+    aufrufe = {"n": 0}
+    prompts = []
+
+    def _fake_ask(api_key, system_prompt, user_content,
+                  *args, **kwargs):
+        prompts.append(user_content)
+        i = min(aufrufe["n"], len(antworten) - 1)
+        aufrufe["n"] += 1
+        return antworten[i]
+
+    monkeypatch.setattr(pipeline, "ask_llm", _fake_ask)
+    monkeypatch.setattr(
+        pipeline, "extract_paths_from_aufgabe",
+        lambda *a, **kw: [])
+    monkeypatch.setattr(
+        pipeline, "read_target_snippets",
+        lambda *a, **kw: "")
+    monkeypatch.setattr(
+        pipeline, "format_doc_snippets",
+        lambda *a, **kw: "")
+    monkeypatch.setattr(
+        pipeline, "format_projekt_stand",
+        lambda *a, **kw: "")
+
+    pipeline._planner_lauf(
+        state, "key", "auftrag",
+        Path("/tmp"), "test", "historie",
+        max_runden=3)
+
+    # Runde 2 muss GELADENE SKILLS enthalten.
+    assert len(prompts) >= 2, (
+        f"Erwartet 2 Runden, {len(prompts)}.")
+    assert "GELADENE SKILLS" in prompts[1], (
+        "GELADENE SKILLS fehlt in Runde 2.")
+    assert "patch-format" in prompts[1]
+    # state.geladene_skills enthaelt patch-format.
+    assert "patch-format" in state.geladene_skills
