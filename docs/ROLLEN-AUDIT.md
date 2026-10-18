@@ -1,6 +1,6 @@
 # Rollen-Audit — Werkstatt
 
-Stand: 2026-10-17 (Sitzung Phase 19)
+Stand: 2026-10-18 (nach W61-Label-Fix)
 Anlass: Planner liefert P17-konforme Listen, aber keine Aufträge. Builder und Reviewer zeigen Symptome von Prompt-Überflutung. Vor P20+P21 (Planner-Auftrags-Kontext + Selbst-Kritik) muss das Gesamtbild der Rollen geklärt werden.
 
 ## 1. Ist-Zustand (gemessen 2026-10-17)
@@ -240,3 +240,21 @@ Builder wiederholt Anker) sind die Folge.
 W61 (Rollen-Sanierung) ist der strukturelle Fix.
 W59 (Deadlock-Mechanismus) ist der mechanische Fix.
 Beide sind noetig, in dieser Reihenfolge.
+
+## Update 2026-10-18 — W61
+
+- **Judge-Labels**: Der Judge-Loop spricht jetzt Judge
+  (vorher Reviewer). Siehe ARCHITEKTUR.md.
+- **solver_model**: eigene Rolle (deepseek-reasoner),
+  nicht mehr reviewer_verdict_model. W61c.
+- **Subagenten**: explore (aktiv), bash/browser
+  (inaktiv). Siehe ARCHITEKTUR.md.
+- **W61a (Reviewer 3->1)**: offen. Reviewer macht
+  heute noch Mess-Wahl (Schritt 1), Commit-Review,
+  Recovery. Ziel: nur Commit-Review.
+- **W61b (Judge 2->1)**: offen. Judge macht heute
+  Patch-Review + Repair (`_phase_judge_repair_runde`).
+  Ziel: nur Patch-Review.
+- **W61d (Prompt-Groessen)**: offen. builder.md 647,
+  planner.md 299. Ziel: <300 / <150.
+

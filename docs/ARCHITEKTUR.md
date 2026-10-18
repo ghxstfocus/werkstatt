@@ -1,6 +1,6 @@
 # Architektur — Werkstatt
 
-Stand: 2026-10-18
+Stand: 2026-10-18 (nach W61)
 Ziel: Das Beste aus Claude Code, Copilot, AutoGen,
 Swarm und OpenAI Agents SDK nehmen und ein eigenes
 Agentensystem bauen.
@@ -231,3 +231,50 @@ liest die Anker-Regeln nicht mehr (W61).
    klein.
 5. W36-2b..6 (Modularisierung) — pipeline.py,
    gross.
+
+## Subagenten (W61, 2026-10-18)
+
+Drei Subagenten, angelehnt an Cursor/Claude-Code:
+
+- **explore** (aktiv): Sucht Muster per read_file/grep,
+  gibt FUND: <pfad>:<zeile>: <kontext> zurueck.
+  Builder nutzt ihn fuer die Anker-Suche. Isolierter
+  RunState (build_subagent_state), max 3 Runden.
+- **bash** (inaktiv): Shell-Befehle in isoliertem
+  Kontext. Fuer spaetere Zeitpunkte, nicht im
+  Builder-Loop aktiv.
+- **browser** (inaktiv): URL-Abruf. Fuer spaetere
+  Zeitpunkte.
+
+Prinzip: Der Subagent startet mit frischem Kontext,
+gibt nur das Ergebnis zurueck. Der Parent-Kontext
+bleibt sauber (Cursor-Ansatz).
+
+## On-Demand-Messung (W52b)
+
+- `state.messungen`: Liste von Datei-Referenzen
+  (Messung: pfad, sha1, mtime, groesse, quelle, datei).
+- `_mess_index_block`: Pointer (Pfad, SHA, Groesse,
+  Preview 200 Z., Datei-Pfad).
+- `_mess_inhalt_block`: Volltext (Planner/Judge).
+- `_mess_inhalt_zieldateien`: Volltext nur fuer
+  Zieldateien (Builder).
+- `_mess_inhalt_nach_apply`: Volltext der
+  Post-Apply-Messungen (Judge).
+- `mess_protokoll`: deprecated, Bestandsleser in
+  OFFENE-BLOECKE.md.
+
+## Judge-Labels (W61, 2026-10-18)
+
+Der Judge-Loop (Z. 9635ff.) sprach frueher "Review-Runde",
+"Reviewer-Verdict", "Reviewer-Antwort", `audit("review_round")`.
+Das war ein Label-Bug aus W28b: Der Reviewer wurde durch
+den Judge ersetzt, aber die Labels blieben.
+
+Behoben: "Judge-Runde", "Judge-Verdict", "Judge-Antwort",
+`audit("judge_round")`, `audit("judge_frage_antwort")`,
+`audit("judge_command")`, `quelle="judge"`.
+
+Der Reviewer sitzt im Recovery-Pfad (ask_reviewer_for_recovery)
+und im Schritt 1 (optionale Messungen). Das ist korrekt.
+

@@ -161,3 +161,49 @@ Spalten:
 - W61 (Rollen-Sanierung): 5 Unterbloecke a-e.
 - W-Resume-Fail-Kontext: Fail-Log + Skill.
 - W52b C/D/E.
+
+### Sitzung 2026-10-18 (Fortsetzung) — W52b C+D+E, W61, W58
+
+| Block | Titel | Status | Commit | Tests |
+|---|---|---|---|---|
+| W52b C | Anker-Check gegen Datei-Inhalte | ✅ | e768353 | 1188 |
+| W52b D+E | Prompt-Bauer auf Index, mess_protokoll deprecated | ✅ | e2b3ab3 | 1188 |
+| W61a-c | Rollen-Trennung, Judge-Labels, Solver-Modell | ✅ | 9ead335 | 1188 |
+| W61 | Explore-Ergebnis in state + Builder-Prompt | ✅ | 15c7561 | 1188 |
+| W61 | Builder-Prompt erklaert explore vs read_file | ✅ | 2e2c58b | 1188 |
+| W61 | read_file auf Zieldateien blockieren (verworfen) | ⚠️ | c32c59d | 1188 |
+| W61 | builder.md read_file -> explore | ✅ | ca5c461 | 1188 |
+| W61 | Revert read_file-Block (Guard war falsch) | ✅ | 98b9853 | 1188 |
+| W61 | Tests auf explore umgestellt | ✅ | da94939 | 1188 |
+| W61 | Zieldatei-Volltext im Builder-Prompt | ✅ | 3b907a9 | 1188 |
+| W61 | Dedent in _parse_einzelpatch | 🔧 | 9b6d166 | 1188 |
+| W61 | Parser-Heuristik + Anker-Check whitespace-tolerant | ✅ | 81efad8 | 1188 |
+| W61 | pytest-Measurement (Einzeldatei, 300s) | ✅ | 65d4d07 | 1188 |
+| W58 | max_tokens_judge 2048 -> 8192 | ✅ | e2e8b60 | 1188 |
+
+**Was diese Sitzung geliefert hat:**
+
+- W52b C+D+E komplett: `mess_protokoll` deprecated,
+  `_mess_index_block` (Pointer mit Pfad/SHA/Preview/Datei),
+  `_mess_inhalt_zieldateien` (Volltext nur fuer Zieldateien),
+  `_mess_inhalt_nach_apply` (strukturiert).
+- W61: Judge-Labels im Judge-Loop (vorher Reviewer).
+  `solver_model` eigene Rolle. Subagenten (explore aktiv,
+  bash/browser vorhanden). `builder.md` read_file -> explore.
+- Parser: YAML-Block-Scalar-Heuristik (2 vs. >2 Einrueckung).
+  `_anker_in_messung` whitespace-tolerant.
+- pytest-Measurement (Einzeldatei, Whitelist, 300s Timeout).
+- W58: max_tokens_judge 8192 (Reasoning-Modell hatte kein
+  Budget fuer sichtbare Antwort).
+
+**Wichtige Erkenntnis:** Der Deadlock war nicht ein
+einzelner Bug, sondern eine Kette:
+1. Anker-Check gegen String statt Datei (W52b C).
+2. Parser strippt falsche Einrueckung (W61 Parser-Heuristik).
+3. Judge antwortet leer (W58).
+4. Planner erfindet APIs (AuditWriter.log-Signatur).
+5. Builder hat keinen explore-Zugriff (W61 Subagenten).
+
+**Phase 20b (security-ai) ist durch:** U1-U4 done.
+Commits 759b9e1, ada910a, 572d881, cba0ee3.
+

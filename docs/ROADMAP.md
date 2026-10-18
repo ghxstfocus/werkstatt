@@ -1,6 +1,6 @@
 # Roadmap — Werkstatt
 
-Stand: 2026-10-18 (nach Sanierungs-Welle + W52b A/B)
+Stand: 2026-10-18 (nach W52b C+D+E, W61, W58, Phase 20b)
 Uebersicht. Details in `OFFENE-BLOECKE.md` (Todo)
 und `ERLEDIGT.md` (Erledigt).
 
@@ -150,3 +150,34 @@ nicht Plan).
 - `ERLEDIGT.md` — Erledigte Bloecke mit Commit/Tests.
 - `ARCHITEKTUR.md` — Ziel, Rollen, Luecken.
 - `KONVENTION.md` — Ordnerstruktur, Datei-Namen.
+
+## Phase 20b — ChangeApplier-Audit-Trail (security-ai)  ✅
+
+U1-U4 done. Commits in security-ai: 759b9e1, ada910a,
+572d881, cba0ee3.
+
+- U1: audit_writer-Parameter im ChangeApplier.
+- U2: Audit-Log APPLIED nach erfolgreichem Apply.
+- U3: Audit-Log FAILED + Auto-Rollback im Fehlerfall.
+- U4: Audit-Log ROLLED_BACK in rollback().
+
+## W61 — Rollen-Sanierung  🔨
+
+- W61-Label-Fix (Judge-Loop): done (9ead335).
+- W61c (solver_model): done (9ead335).
+- W61a (Reviewer 3->1): offen.
+- W61b (Judge 2->1): offen.
+- W61d (builder.md <300, planner.md <150): offen.
+
+## W52b — On-Demand-Messung  ✅
+
+- A/B: Messungen als Dateien (8ef403a).
+- C: Anker-Check gegen Datei-Inhalte (e768353).
+- D+E: Prompt-Bauer auf Index, mess_protokoll deprecated
+  (e2b3ab3, 3b907a9).
+
+## W58 — Judge-Leer-Antwort  ✅
+
+max_tokens_judge 2048 -> 8192 (e2e8b60). Reasoning-Modell
+hatte kein Budget fuer sichtbare Antwort.
+

@@ -1,6 +1,6 @@
 # Offene Bloecke — Werkstatt
 
-Stand: 2026-10-18 (nach Sanierungs-Welle + W52b A/B)
+Stand: 2026-10-18 (nach W52b C+D+E, W61, W58, Phase 20b)
 Todo, priorisiert. Append-only.
 Uebersicht in `ROADMAP.md`. Erledigt in `ERLEDIGT.md`.
 
@@ -50,14 +50,16 @@ messungen/<sha1>.txt` + `index.json` rein.
 - Katalog +2: `patch_ohne_messung`,
   `patch_datei_geaendert_seit_messung`.
 
-**Offen:**
-- C: `pruefe_anker_gegen_messung` gegen Dateien.
-- D: Prompt-Bauer auf Index.
-- E: deprecated markieren.
-- `_gemessene_pfade` (Z. 8624) liest String, soll
-  `state.messungen` lesen.
+**Erledigt (2026-10-18):**
+- C: Anker-Check gegen Datei-Inhalte (e768353).
+- D: Prompt-Bauer auf Index + Zieldatei-Volltext (e2b3ab3,
+  3b907a9).
+- E: deprecated markiert (e2b3ab3).
+- `_gemessene_pfade` liest `state.messungen` (e768353).
 - `state.messungen_nach_apply` in `_build_judge_input`
-  nutzen.
+  (e2b3ab3).
+
+**W52b-E — Bestandsleser:** siehe eigener Abschnitt unten.
 
 ## W61 — Detail (Rollen-Sanierung)
 
@@ -129,3 +131,42 @@ alle Laeufe `messungen_nach_apply` befuellen.
 
 **Aufwand:** klein. **Kategorie:** 2.
 **Nicht in W52b D+E enthalten**, weil Scope.
+
+## Sitzung 2026-10-18 (Fortsetzung) — erledigt
+
+- W61-Label-Fix: Judge-Loop spricht Judge (9ead335).
+- W61c: `solver_model` eigene Rolle (9ead335).
+- Subagenten: explore aktiv, bash/browser vorhanden (9ead335).
+- Parser-Heuristik: YAML-Block-Einrueckung (81efad8).
+- `_anker_in_messung` whitespace-tolerant (81efad8).
+- pytest-Measurement (65d4d07).
+- W58: max_tokens_judge 8192 (e2e8b60).
+
+## Offen (P1)
+
+- W61a: Reviewer-Aufgaben reduzieren (Mess-Wahl + Recovery
+  raus). Heute: Reviewer macht 3 Aufgaben.
+- W61b: Judge-Repair raus (`_phase_judge_repair_runde`).
+- W61d: `builder.md` 647 -> <300, `planner.md` 299 -> <150.
+- W-Resume-Fail-Kontext: Planner bekommt Fail-Log +
+  Skill `fail-recovery`.
+- Tests fuer U2/U3/U4 (security-ai): Audit-Pfade
+  (APPLIED, FAILED, ROLLED_BACK) sind code-seitig da,
+  aber nicht getestet.
+
+## Offen (P2)
+
+- Planner erfindet APIs (AuditWriter.log-Signatur).
+  Planner muss die API messen, bevor er den Auftrag
+  schreibt.
+- W52b-E Bestandsleser umstellen (siehe Abschnitt oben).
+
+## Offen (P3)
+
+- W36-RP-a: Helper-Wartbarkeit.
+- W36-2b..6: pipeline.py modularisieren.
+- W62: README/KONVENTION Diagramm-Konsistenz.
+- Auftrag fuer die Werkstatt: security-ai-Doku
+  nachziehen (Phase 20b in STATUS.md, ROADMAP.md,
+  SECURITY_LOG.md).
+
