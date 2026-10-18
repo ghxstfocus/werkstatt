@@ -167,6 +167,18 @@ Pruefung vor dem Absenden:
     woertlich genannt ist?
   - Wenn nein: Anker kuerzen.
 
+## KEINE DUPLIKATE (W54, 2026-10-18)
+
+Keine doppelten Imports: jeder Import genau
+einmal in der Datei.
+
+datetime mit tzinfo: datetime(..., tzinfo=UTC)
+statt datetime(...). Ruff DTZ001.
+
+Keine doppelten Klassen/Bloecke: eine Klasse
+genau einmal definieren. Ruff F811.
+
+
 ## TEST-FELD IM AUFTRAG
 
 Wenn der Auftrag ein `test:`-Feld nennt

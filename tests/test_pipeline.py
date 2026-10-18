@@ -10407,3 +10407,80 @@ def test_w51h_e_vor_w51e(monkeypatch, tmp_path):
     assert "PHASE: 20a" in result
     assert "planner_command_ohne_neue_messung" not in calls
 
+def _w54_state(tmp_path):
+    from pipeline import Measurement
+    from werkstatt.state import RunState
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=["core/"], api_key="k", budget={},
+        agent_docs={}, project_dir=tmp_path,
+        project_name="p")
+    m = Measurement("read_file", ("cat",), "Test.")
+    st.always = {"read_file": m}
+    st.optional = {}
+    return st
+
+
+def test_w54_a_builder_md():
+    """T-W54-a: builder.md enthaelt die drei Regeln."""
+    from pathlib import Path as _P
+    md = _P("/opt/werkstatt/agents/builder.md").read_text(
+        encoding="utf-8")
+    assert "## KEINE DUPLIKATE" in md
+    assert "Keine doppelten Imports" in md
+    assert "datetime mit tzinfo" in md
+    assert "Keine doppelten Klassen" in md
+
+
+def test_w54_c_zwei_normale_patches(tmp_path):
+    """T-W54-c: 2 Patches, Ersatz unterschiedlich
+    > 20 Zeichen -> durchlassen."""
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core/x.py").write_text(
+        "def foo():\n    pass\n\n"
+        "def bar():\n    pass\n",
+        encoding="utf-8")
+    st = _w54_state(tmp_path)
+    patches = [
+        {"pfad": "core/x.py", "anker": "def foo():",
+         "ersatz": "def foo_alpha(x, y):\n"
+                   "    return x + y\n"},
+        {"pfad": "core/x.py", "anker": "def bar():",
+         "ersatz": "def bar_beta(x, y):\n"
+                   "    return x - y\n"},
+    ]
+    import unittest.mock as _m
+    with _m.patch("pipeline.audit",
+                  side_effect=lambda k, *a, **kw: None):
+        ok = pipeline.apply_code_patches(st, patches)
+    assert ok
+
+
+def test_w54_d_kurzer_ersatz_kein_fail(tmp_path):
+    """T-W54-d: Ersatz < 20 Zeichen doppelt -> kein Fail,
+    BEIDE Patches angewendet."""
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core/x.py").write_text(
+        "def foo():\n    pass\n\n"
+        "def bar():\n    pass\n",
+        encoding="utf-8")
+    st = _w54_state(tmp_path)
+    patches = [
+        {"pfad": "core/x.py",
+         "anker": "def foo():\n    pass",
+         "ersatz": "def foo():\n    x = 1"},
+        {"pfad": "core/x.py",
+         "anker": "def bar():\n    pass",
+         "ersatz": "def bar():\n    x = 1"},
+    ]
+    calls = []
+    import unittest.mock as _m
+    with _m.patch("pipeline.audit",
+                  side_effect=lambda k, *a, **kw: calls.append(k)):
+        ok = pipeline.apply_code_patches(st, patches)
+    assert ok
+    assert "patch_ersatz_duplikat" not in calls
+    inhalt = (tmp_path / "core/x.py").read_text(encoding="utf-8")
+    assert inhalt.count("    x = 1") == 2
+
