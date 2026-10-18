@@ -7748,13 +7748,14 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
         if _nicht_leer:
             _min = min(len(z) - len(z.lstrip())
                        for z in _nicht_leer)
-            if _min == 2:
+            # W61-Pro: min 2 (YAML-Standard) oder 4
+            # (Builder-Code im Block) strippen. min > 4:
+            # erhalten (echter Code).
+            if _min in (2, 4):
                 aktuelle_zeilen = [
-                    (z[2:] if z.startswith("  ") else z)
+                    (z[_min:] if z.startswith(" " * _min) else z)
                     for z in aktuelle_zeilen
                 ]
-            # _min > 2: Einrueckung erhalten (Builder-Code).
-            # _min < 2: roh.
         wert = "\n".join(aktuelle_zeilen)
         if aktives_feld == "anker":
             nonlocal anker
