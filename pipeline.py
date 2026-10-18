@@ -5038,14 +5038,59 @@ def verify_values(patches: list[dict[str, str]],
     for cs in ChangeState:
         erlaubt.add(cs.name)
         erlaubt.add(str(cs.value))
+    # W61-Pro: execution_status-Werte aus dem Applier-Code
+    # lesen. Der Applier schreibt "OK"/"FAILED", nicht Enum.
+    _exec_status_werte = set()
+    try:
+        _applier_src = (project_dir / "core/changeapplier/applier.py"
+                        ).read_text(encoding="utf-8")
+        import re as _re2
+        for m in _re2.finditer(
+                r"execution_status=[\"']([^\"']+)[\"']",
+                _applier_src):
+            _exec_status_werte.add(m.group(1))
+    except OSError:
+        pass
     befunde: list[str] = []
     for p in patches:
         ersatz = p.get("ersatz", "")
         if not ersatz.strip():
             continue
-        try:
-            tree = _ast.parse(ersatz)
-        except SyntaxError:
+        # execution_status-Assertion pruefen.
+        if _exec_status_werte:
+            import re as _re3
+            for m in _re3.finditer(
+                    r"execution_status[\"']?\s*\)?,?\s*[\"']([^\"']+)[\"']",
+                    ersatz):
+                val = m.group(1)
+                if val not in _exec_status_werte:
+                    befunde.append(
+                        f"execution_status {val!r}: Applier "
+                        f"schreibt {sorted(_exec_status_werte)}")
+        # W61-Pro: Fragment-Handling. Ersatz ist oft
+        # eingerueckter Code, kein vollstaendiges Modul.
+        tree = None
+        for _variant in (ersatz,
+                         "if True:\n" + "\n".join(
+                             "    " + z for z in ersatz.splitlines())):
+            try:
+                tree = _ast.parse(_variant)
+                break
+            except SyntaxError:
+                continue
+        if tree is None:
+            # Letzter Versuch: Zeilenweise nach
+            # assertEqual(..., "wert") suchen.
+            import re as _re
+            for m in _re.finditer(
+                    r"assert(?:Equal|In)\([^,]+,\s*[\"']([^\"']+)[\"']",
+                    ersatz):
+                val = m.group(1)
+                if val not in erlaubt and val.upper() in {
+                        e.upper() for e in erlaubt}:
+                    befunde.append(
+                        f"assertEqual(..., {val!r}): erlaubt "
+                        f"sind {sorted(erlaubt)[:5]}")
             continue
         for node in _ast.walk(tree):
             if not isinstance(node, _ast.Call):
