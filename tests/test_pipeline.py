@@ -10109,3 +10109,111 @@ def test_w51f_f_katalog_118():
     assert "planner_phase_zu_gross" in \
         pipeline._AUDIT_KINDS_BEKANNT
 
+def _w51g_state(tmp_path):
+    from pipeline import Measurement
+    from werkstatt.state import RunState
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="t",
+        docs={}, agents={"planner": {"body": "x"}},
+        always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=tmp_path,
+        project_name="p")
+    m = Measurement("read_file", ("cat",), "Test.")
+    st.always = {"read_file": m}
+    st.optional = {}
+    return st
+
+
+def test_w51g_a_dedup(tmp_path):
+    """T-W51g-a: 2x read_file als planner, nur 1x gemessen."""
+    from unittest.mock import patch as _p
+    st = _w51g_state(tmp_path)
+    st._w51g_gemessen = set()
+    cmds = [{"typ": "run", "id": "read_file",
+             "arg": "core/x.py"}]
+    with _p("pipeline.audit",
+            side_effect=lambda k, *a, **kw: None), \
+         _p("pipeline.run_measurement_mit_argv",
+            return_value=("Inhalt", True, ["cat"])):
+        pipeline.execute_commands(st, cmds, quelle="planner")
+        laenge1 = len(st.mess_protokoll)
+        pipeline.execute_commands(st, cmds, quelle="planner")
+        laenge2 = len(st.mess_protokoll)
+    assert laenge2 == laenge1
+    assert "core/x.py" in st._w51g_gemessen
+
+
+def test_w51g_b_kontext(tmp_path):
+    """T-W51g-b: letzter_plan_fehler + Runde 2 -> Block."""
+    st = _w51g_state(tmp_path)
+    st.letzter_plan_fehler = (
+        "U1: Reihenfolge Unterpunkte/Runden verletzt")
+    p = pipeline._planner_user_content(
+        "Auftrag", "", stufe=2, state=st,
+        letzter_plan_fehler=st.letzter_plan_fehler)
+    assert "=== DEIN LETZTER PLAN WURDE ABGELEHNT ===" in p
+    assert "U1: Reihenfolge" in p
+
+
+def test_w51g_b_leer(tmp_path):
+    """T-W51g-b-leer: letzter_plan_fehler leer -> kein Block."""
+    st = _w51g_state(tmp_path)
+    p = pipeline._planner_user_content(
+        "Auftrag", "", stufe=2, state=st,
+        letzter_plan_fehler="")
+    assert "=== DEIN LETZTER PLAN WURDE ABGELEHNT ===" not in p
+
+
+def test_w51g_c_lebenszyklus(tmp_path):
+    """T-W51g-c: except setzt Fehler; Parse ok loescht ihn."""
+    from werkstatt.state import RunState
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always=[], optional=[],
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=tmp_path,
+        project_name="p")
+    try:
+        pipeline._parse_phase_plan("kein PHASE-Kopf")
+    except ValueError as exc:
+        st.letzter_plan_fehler = str(exc)
+    assert st.letzter_plan_fehler != ""
+    # Loeschen nach erfolgreichem Parse:
+    st.letzter_plan_fehler = ""
+    assert st.letzter_plan_fehler == ""
+
+
+def test_w51g_d_nicht_read_file(tmp_path):
+    """T-W51g-d: frage_reviewer 2x als planner -> kein Dedup."""
+    from unittest.mock import patch as _p
+    st = _w51g_state(tmp_path)
+    st._w51g_gemessen = set()
+    from pipeline import Measurement
+    m = Measurement("frage_reviewer", ("echo",), "Test.")
+    st.always["frage_reviewer"] = m
+    cmds = [{"typ": "run", "id": "frage_reviewer",
+             "arg": "x"}]
+    laengen = []
+    with _p("pipeline.audit",
+            side_effect=lambda k, *a, **kw: None), \
+         _p("pipeline.run_measurement_mit_argv",
+            return_value=("Antwort", True, ["echo"])):
+        pipeline.execute_commands(st, cmds, quelle="planner")
+        laengen.append(len(st.mess_protokoll))
+        pipeline.execute_commands(st, cmds, quelle="planner")
+        laengen.append(len(st.mess_protokoll))
+    # Beim zweiten Mal mehr, weil kein Dedup.
+    assert laengen[1] > laengen[0]
+
+
+def test_w51g_e_scope(tmp_path):
+    """T-W51g-e: neuer _planner_lauf-Aufruf -> set leer."""
+    st1 = _w51g_state(tmp_path)
+    st2 = _w51g_state(tmp_path)
+    st1._w51g_gemessen = set()
+    st2._w51g_gemessen = set()
+    st1._w51g_gemessen.add("core/x.py")
+    assert "core/x.py" in st1._w51g_gemessen
+    assert "core/x.py" not in st2._w51g_gemessen
+

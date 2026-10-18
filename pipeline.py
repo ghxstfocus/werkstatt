@@ -3455,6 +3455,7 @@ def _planner_user_content(
     korrektur_kontext: dict[str, Any] | None = None,
     phase_stand: dict[str, Any] | None = None,
     state: RunState | None = None,
+    letzter_plan_fehler: str = "",
 ) -> str:
     """Baut den User-Content fuer den Planner.
 
@@ -3544,6 +3545,19 @@ def _planner_user_content(
         return "".join(teile)
     # W51a: Erstlauf-Pfad. MESS-PFLICHT-Block
     # fuer alle datei:-Referenzen aus dem Auftrag.
+    _w51g_block = ""
+    if letzter_plan_fehler:
+        _w51g_block = (
+            "=== DEIN LETZTER PLAN WURDE "
+            "ABGELEHNT ===\n"
+            f"Fehler: {letzter_plan_fehler}\n"
+            "Korrigiere das Format (Reihenfolge,\n"
+            "PHASE:-Kopf) oder pruefe, ob neue\n"
+            "Messungen noetig sind. Liefere NUR\n"
+            "den Plan im P10-P14-Format.\n"
+            "=== /DEIN LETZTER PLAN WURDE "
+            "ABGELEHNT ===\n\n"
+        )
     _w51a_pfade = _w51a_extrahiere_datei_pfade(
         roher_auftrag)
     _w51a_block = ""
@@ -3582,7 +3596,8 @@ def _planner_user_content(
             "=== /GEMESSENER INHALT ===\n\n"
         )
     return (
-        _w51a_block
+        _w51g_block
+        + _w51a_block
         + _w51d_mess_block
         + f"ROHER AUFTRAG DES MENSCHEN:\n{roher_auftrag}\n\n"
         f"LETZTE COMMITS IM ZIEL-REPO:\n{historie[:3000]}\n\n"
@@ -3624,12 +3639,18 @@ def _planner_lauf(
         state=state,
         stufe=stufe)
 
+    # W51g: lokales Set (Loop-Lebenszyklus).
+    state._w51g_gemessen = set()
     for _runde in range(1, max_runden + 1):
+        _w51g_fehler = (
+            state.letzter_plan_fehler
+            if _runde > 1 else "")
         user_content = _planner_user_content(
             roher_auftrag, historie, stufe,
             korrektur_kontext=korrektur_kontext,
             phase_stand=phase_stand,
-            state=state)
+            state=state,
+            letzter_plan_fehler=_w51g_fehler)
         state.planner_runden = _runde
         reply = ask_llm(
             api_key, planner_prompt, user_content,
@@ -6306,8 +6327,30 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
         if len(out) > rest_platz:
             out = out[:rest_platz] + "\n[... Gesamtlimit erreicht ...]\n"
 
+        # W51g: Dedup nur fuer Planner + read_file.
+        _dedup_skip = False
+        if (quelle == "planner" and cid == "read_file"
+                and ok):
+            _gem = getattr(
+                state, "_w51g_gemessen", None)
+            if _gem is not None and arg in _gem:
+                _dedup_skip = True
+        if _dedup_skip:
+            ergebnisse[(cid, arg)] = ok
+            audit("command_executed",
+                  {"id": cid, "arg": arg[:200],
+                   "argv": argv, "quelle": quelle,
+                   "ok": ok, "dedup_verworfen": True},
+                  state.project_dir, state.project_name)
+            continue
         if ok:
             state.mess_protokoll += out
+            if (quelle == "planner"
+                    and cid == "read_file"):
+                _gem = getattr(
+                    state, "_w51g_gemessen", None)
+                if _gem is not None:
+                    _gem.add(arg)
         else:
             state.mess_protokoll += (
                 "\n\n!!! COMMAND FEHLGESCHLAGEN: "
@@ -11755,12 +11798,14 @@ def _phase_main_pfad(
             except ValueError as exc:
                 print(f"[i] Planner-Antwort nicht im "
                       f"Format: {exc}")
+                state.letzter_plan_fehler = str(exc)
                 audit("phase_plan_parse_failed",
                       {"runde": runde, "error": str(exc)},
                       project_dir, project_name)
                 continue
 
             phase_plan_ok = True
+            state.letzter_plan_fehler = ""
             audit("planner_vorschlag",
                   {"runde": runde,
                    "titel": phase_titel[:200],
@@ -11956,6 +12001,7 @@ def _phase_main_pfad(
                     neuer_plan = _parse_phase_plan(als_text)
                 except ValueError as exc:
                     print(f"[!] Edit ungueltig: {exc}")
+                    state.letzter_plan_fehler = str(exc)
                     audit("phase_plan_parse_failed",
                           {"runde": runde, "error": str(exc),
                            "nach": "edit"},

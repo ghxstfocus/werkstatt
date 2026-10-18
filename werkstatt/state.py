@@ -121,6 +121,12 @@ class RunState:
     # pro uid. Max 1x pro Unterblock pro Prozess.
     planner_resume_anzahl: dict[str, int] = \
         field(default_factory=dict)
+    # W51g (2026-10-18): Format-Fehler-
+    # Kontext fuer den Planner (Runde > 1).
+    letzter_plan_fehler: str = ""
+    # W51g: lokales Dedup-Set (Loop-Lebenszyklus,
+    # in _planner_lauf gesetzt und verworfen).
+    _w51g_gemessen: set[str] = field(default_factory=set)
     planner_runden: int = 0
     reviewer_verdict_model: str = "deepseek-chat"
     reviewer_recovery_model: str = "deepseek-reasoner"
