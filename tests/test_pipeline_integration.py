@@ -53,6 +53,9 @@ import pytest
 sys.path.insert(0, "/opt/werkstatt")
 import pipeline
 
+sys.path.insert(0, "/opt/werkstatt/tests")
+from test_pipeline import build_test_state
+
 # =====================================================================
 # W36-RP: subprocess fail-closed mit Whitelist.
 # =====================================================================
@@ -409,7 +412,7 @@ def test_t2_apply_befuellt_mess_nach(
 # T-3: Judge -> review_runden akkumuliert Verdicts.
 # =====================================================================
 
-def test_t3_judge_akkumuliert_verdicts(
+def test_t3_review_loop_akkumuliert_verdicts(
         tmp_path: Path, monkeypatch) -> None:
     """W36-RP T-3: review_runden enthaelt Judge-
     Verdicts. Schliesst die W28b-Luecke.
@@ -430,3 +433,53 @@ def test_t3_judge_akkumuliert_verdicts(
     assert "GO" in verdicts, (
         f"review_runden enthaelt kein GO: {verdicts} "
         f"(rc={rc})")
+
+
+# =====================================================================
+# W30-fix-b: max_builder_runden=0 -> fail-closed.
+# =====================================================================
+
+def test_w30_fix_b_max_builder_runden_null(
+        tmp_path: Path, monkeypatch) -> None:
+    """W30-fix-b: max_builder_runden=0 ist ein
+    Konfigurationsfehler. Kein UnboundLocalError,
+    sondern (None, 19) + Audit builder_runden_ungueltig.
+    """
+    state = build_test_state(project_dir=tmp_path)
+    gerufen = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw:
+            gerufen.append((kind, payload)))
+    # ask_llm darf NICHT gerufen werden (Validierung
+    # greift vor dem Loop).
+    monkeypatch.setattr(
+        pipeline, "ask_llm",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            AssertionError("ask_llm unerwartet gerufen")))
+    # subprocess darf nicht gerufen werden.
+    monkeypatch.setattr(
+        subprocess, "run",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            AssertionError("subprocess unerwartet")))
+    monkeypatch.setattr(
+        subprocess, "check_output",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            AssertionError("subprocess unerwartet")))
+
+    result = pipeline.builder_reply_mit_command_loop(
+        state, "key", "builder-prompt",
+        lambda _s: "user-prompt",
+        tmp_path, "test",
+        max_builder_runden=0)
+
+    assert result == (None, 19), (
+        f"Erwartet (None, 19), bekommen {result}")
+    arten = [k for (k, _) in gerufen
+             if k == "builder_runden_ungueltig"]
+    assert len(arten) == 1, (
+        f"builder_runden_ungueltig {len(arten)}x gerufen, "
+        f"erwartet 1. Alle: {[k for k,_ in gerufen]}")
+    for (k, payload) in gerufen:
+        if k == "builder_runden_ungueltig":
+            assert payload["max_builder_runden"] == 0

@@ -1126,7 +1126,7 @@ _AP_PFLICHTFELDER = (
 # (test_audit_kinds_alle_aufrufe_registriert) prueft
 # die Nutzung, test_katalog_anzahl_matcht_soll die
 # Registrierung.
-_KATALOG_SOLL = 158
+_KATALOG_SOLL = 159
 
 _AUDIT_KINDS_BEKANNT = frozenset({
     "aggregator_failed",
@@ -1148,6 +1148,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "builder_frage_reviewer",
     "builder_prompt_gebaut",
     "builder_recovery_nach_apply",
+    "builder_runden_ungueltig",
     "builder_reply_erhalten",
     "builder_wirkungsloser_patch",
     "code_patches_apply",
@@ -4755,6 +4756,17 @@ def builder_reply_mit_command_loop(
       (None, 19):     Builder-Command-Deadlock.
     """
     gescheiterte: set[tuple[str, str]] = set()
+    # W30-fix-b (2026-10-18): max_builder_runden < 1
+    # ist ein Konfigurationsfehler. Fail-closed,
+    # bevor der Loop startet (sonst UnboundLocalError
+    # auf reply.content).
+    if max_builder_runden < 1:
+        print(f"[FAIL] max_builder_runden < 1 "
+              f"({max_builder_runden}). Fail closed.")
+        audit("builder_runden_ungueltig",
+              {"max_builder_runden": max_builder_runden},
+              project_dir, project_name)
+        return None, 19
     for builder_runde in range(1, max_builder_runden + 1):
         aktueller_prompt = user_prompt_fn(state)
         _audit_builder_prompt(
