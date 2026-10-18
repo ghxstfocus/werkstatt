@@ -1224,6 +1224,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "planner_blockiert_phase_abgeschlossen",
     "phase_abgeschlossen_keine_neuanlage",
     "phase_neuanlage_mit_flag",
+    "planner_new_file_auf_existierend",
+    "planner_pfad_ausserhalb_projekt",
 })
 
 
@@ -10495,6 +10497,96 @@ def _plan_ist_portionierbar(
     return (len(zu_gross) == 0, zu_gross)
 
 
+# W51b (2026-10-18): Werkstatt-Prefixe, die im
+# Zielprojekt NICHT vorkommen duerfen. A-W51-10:
+# 'harness/' ist NICHT enthalten, weil es in
+# security-ai existiert und legitimer Zielpfad ist.
+_W51_WERKSTATT_PREFIXE = (
+    "agents/",
+    "skills/",
+    "werkstatt/",
+)
+
+
+def _plan_ist_new_file_valide(
+        plan: dict[str, Any],
+        project_dir: Path,
+) -> tuple[bool, list[str], str]:
+    """W51b: prueft aktion:neu gegen project_dir.
+
+    W51: prueft nur Datei-Existenz gegen project_dir.
+    Die 'Messe JEDE'-Regel im planner.md-Prompt ist
+    NICHT deterministisch durchsetzbar (WEG-X-P19-R1).
+    Der Prompt ist Leitfaden, der Check ist harte
+    Sperre. Beide zusammen garantieren nicht, dass
+    der Planner gemessen hat — nur dass er keinen
+    'aktion:neu auf existierende Datei' baut.
+
+    Rueckgabe: (ok, fehler, grund).
+      ok=True, fehler=[], grund="": alles in Ordnung.
+      ok=False, fehler=[...], grund="pfad" oder
+        "existiert": Fail-closed.
+    """
+    import re as _re
+    fehler: list[str] = []
+    grund = ""
+    projekt = project_dir.resolve()
+    for u in plan.get("phase_unterbloecke", []):
+        if not isinstance(u, dict):
+            continue
+        for punkt in u.get("unterpunkte", []) or []:
+            if not isinstance(punkt, str):
+                continue
+            m = _re.search(
+                r"datei:([^\s,;]+)", punkt)
+            if not m:
+                continue
+            pfad = m.group(1).strip().strip("'\"")
+            if not pfad:
+                continue
+            # Aktion bestimmen.
+            m_akt = _re.search(
+                r"aktion:\s*(neu|patch)", punkt)
+            if not m_akt or m_akt.group(1) != "neu":
+                continue
+            # Pfad-Sicherheit (A-W51-3).
+            p = Path(pfad)
+            if p.is_absolute():
+                try:
+                    p.resolve().relative_to(projekt)
+                except ValueError:
+                    fehler.append(
+                        f"{u.get('id','?')}: "
+                        f"absoluter Pfad ausserhalb "
+                        f"project_dir: {pfad}")
+                    grund = grund or "pfad"
+                    continue
+            if ".." in p.parts:
+                fehler.append(
+                    f"{u.get('id','?')}: '..' im "
+                    f"Pfad: {pfad}")
+                grund = grund or "pfad"
+                continue
+            if any(pfad.startswith(pre)
+                   for pre in _W51_WERKSTATT_PREFIXE):
+                fehler.append(
+                    f"{u.get('id','?')}: "
+                    f"Werkstatt-Pfad: {pfad}")
+                grund = grund or "pfad"
+                continue
+            # Datei-Existenz gegen project_dir.
+            ziel = projekt / pfad
+            if ziel.exists():
+                fehler.append(
+                    f"{u.get('id','?')}: "
+                    f"aktion:neu auf existierende "
+                    f"Datei: {pfad}")
+                grund = grund or "existiert"
+    return (len(fehler) == 0, fehler, grund)
+
+
+
+
 def _phase_planner_resume(
         project_name: str,
         state: RunState,
@@ -11513,6 +11605,25 @@ def _phase_main_pfad(
             audit("planner_plan_unvollstaendig",
                   {"grund": "nicht_messungsbasiert",
                    "fehlend": _mess_fehler[:10]},
+                  project_dir, project_name)
+            return 18
+        # W51b: aktion:neu gegen project_dir pruefen.
+        _nfv_ok, _nfv_fehler, _nfv_grund = (
+            _plan_ist_new_file_valide(
+                _plan_fuer_check, project_dir))
+        if not _nfv_ok:
+            print("[FAIL] Plan nennt aktion:neu fuer "
+                  "existierende Datei oder Pfad "
+                  "ausserhalb project_dir.")
+            for _f in _nfv_fehler[:10]:
+                print(f"  - {_f}")
+            _audit_kind = (
+                "planner_new_file_auf_existierend"
+                if _nfv_grund == "existiert"
+                else "planner_pfad_ausserhalb_projekt")
+            audit(_audit_kind,
+                  {"grund": _nfv_grund,
+                   "fehlend": _nfv_fehler[:10]},
                   project_dir, project_name)
             return 18
         _port_ok, _port_fehler = _plan_ist_portionierbar(

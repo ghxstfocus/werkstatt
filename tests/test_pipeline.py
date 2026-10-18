@@ -5309,7 +5309,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5345,7 +5345,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6180,7 +6180,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
 
 
 # =====================================================================
@@ -6285,7 +6285,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
 
 
 # =====================================================================
@@ -6343,7 +6343,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
 
 
 # =====================================================================
@@ -9450,7 +9450,7 @@ def test_w46c_2_repair_runde_gleiche_bedingung():
 
 def test_w46_katalog_107():
     """T-Katalog: W46-Katalog-Groesse 107 + neue Kinds."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
     assert "judge_uebersprungen_doku" in pipeline._AUDIT_KINDS_BEKANNT
     assert (
         "phase_judge_uebersprungen_doku"
@@ -9462,7 +9462,7 @@ def test_w48_e_katalog_kinds():
             in pipeline._AUDIT_KINDS_BEKANNT)
     assert ('planner_blockiert_phase_abgeschlossen'
             in pipeline._AUDIT_KINDS_BEKANNT)
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 111
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
 
 def test_w50_a_block_ohne_flag(tmp_path, monkeypatch):
     """T-W50-a: phase_aktiv=False, ohne Flag -> rc=65."""
@@ -9673,4 +9673,80 @@ def test_w51a_extrahiere_datei_pfade():
         "datei:core/b.py, aktion:patch. "
         "datei:core/a.py, doppelt.")
     assert pfade == ["core/a.py", "core/b.py"]
+
+def test_w51b_new_file_existiert(tmp_path):
+    """T-W51-b: aktion:neu auf existierende Datei -> fail."""
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core/x.py").write_text("x", encoding="utf-8")
+    plan = {"phase_unterbloecke": [
+        {"id": "U1", "unterpunkte": [
+            "datei:core/x.py, aktion:neu, signatur:'class X'",
+        ]},
+    ]}
+    ok, fehler, grund = pipeline._plan_ist_new_file_valide(
+        plan, tmp_path)
+    assert not ok
+    assert grund == "existiert"
+    assert any("core/x.py" in f for f in fehler)
+
+
+def test_w51b_new_file_nicht_existiert(tmp_path):
+    """T-W51-c: aktion:neu auf nicht existierende Datei -> ok."""
+    plan = {"phase_unterbloecke": [
+        {"id": "U1", "unterpunkte": [
+            "datei:core/y.py, aktion:neu, signatur:'class Y'",
+        ]},
+    ]}
+    ok, fehler, _grund = pipeline._plan_ist_new_file_valide(
+        plan, tmp_path)
+    assert ok
+    assert fehler == []
+    assert _grund == ""
+
+
+def test_w51b_patch_ok(tmp_path):
+    """T-W51-d: aktion:patch -> ok (kein Check)."""
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core/x.py").write_text("x", encoding="utf-8")
+    plan = {"phase_unterbloecke": [
+        {"id": "U1", "unterpunkte": [
+            "datei:core/x.py, aktion:patch, anker:'alt'",
+        ]},
+    ]}
+    ok, fehler, _grund = pipeline._plan_ist_new_file_valide(
+        plan, tmp_path)
+    assert ok
+    assert fehler == []
+
+
+def test_w51b_werkstatt_pfad_fail(tmp_path):
+    """T-W51-e: Werkstatt-Pfad (agents/) -> fail."""
+    plan = {"phase_unterbloecke": [
+        {"id": "U1", "unterpunkte": [
+            ("datei:agents/judge.md, aktion:neu, "
+             "signatur:'body'"),
+        ]},
+    ]}
+    ok, fehler, grund = pipeline._plan_ist_new_file_valide(
+        plan, tmp_path)
+    assert not ok
+    assert grund == "pfad"
+    assert any("agents/judge.md" in f for f in fehler)
+
+
+def test_w51b_pfad_escape_fail(tmp_path):
+    """T-W51-f: '..' und absolute Pfade ausserhalb -> fail."""
+    plan = {"phase_unterbloecke": [
+        {"id": "U1", "unterpunkte": [
+            "datei:../etc/passwd, aktion:neu, signatur:'x'",
+            "datei:/etc/passwd, aktion:neu, signatur:'y'",
+        ]},
+    ]}
+    ok, fehler, grund = pipeline._plan_ist_new_file_valide(
+        plan, tmp_path)
+    assert not ok
+    assert grund == "pfad"
+    assert any(".." in f for f in fehler)
+    assert any("absoluter" in f or "/etc/passwd" in f
+               for f in fehler)
 
