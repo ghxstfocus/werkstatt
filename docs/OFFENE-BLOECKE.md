@@ -46,6 +46,17 @@ Uebersicht in `ROADMAP.md`. Erledigt in `ERLEDIGT.md`.
   messung, mtime-Check), pruefen, ob W13b durch W59 ersetzt
   wird oder als legacy bleibt. Eigener Block W59-2.
 
+- W48-A16-b-2 (NAECHSTER Block, 30 Katalog-
+  Luecken, 2026-10-18): W48-A16-b hat 30
+  audit()-Aufrufe mit nicht registrierten Kinds
+  aufgedeckt. Der xfail-Test
+  (test_audit_kinds_alle_aufrufe_registriert)
+  ist wirkungslos, bis W48-A16-b-2 ihn gruen
+  macht. W48-A16-b-2 ist der NAECHSTE Block,
+  nicht "eigener Block danach". 28 registrieren,
+  1 umbenennen (reviewer_call_failed ->
+  judge_call_failed, 2 Stellen), _KATALOG_SOLL
+  122 -> 151, xfail entfernen.
 - W48-A16-b-2 (30 Katalog-Luecken, 2026-10-18):
   W48-A16-b hat 30 audit()-Aufrufe mit nicht
   registrierten Kinds aufgedeckt:

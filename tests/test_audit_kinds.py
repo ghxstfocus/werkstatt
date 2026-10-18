@@ -115,8 +115,14 @@ def _baum() -> ast.Module:
 #   solver_trigger_a, auto_repair_ruff.
 @pytest.mark.xfail(
     strict=False,
-    reason="W48-A16-b-2: 30 Katalog-Luecken "
-           "(bekannt, dokumentiert im Test-Kommentar)")
+    reason="W48-A16-b-2: 30 Kinds produktiv "
+           "verwendet, aber nicht registriert. "
+           "Wird im NAECHSTEN Block (W48-A16-b-2) "
+           "behoben: 28 registrieren, 1 umbenennen "
+           "(reviewer_call_failed -> judge_call_"
+           "failed), _KATALOG_SOLL 122 -> 151. "
+           "Bei Ueberschreitung: strict=True "
+           "schaltet CI rot.")
 def test_audit_kinds_alle_aufrufe_registriert() -> None:
     """Jeder audit('literal', ...) ist im Katalog."""
     calls = _audit_calls(_baum())
