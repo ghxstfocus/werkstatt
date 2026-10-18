@@ -89,8 +89,11 @@ def _no_real_subprocess(request, monkeypatch):
     # Originale sichern (nur einmal)
     if not hasattr(subprocess, "__orig_run_w36__"):
         subprocess.__orig_run_w36__ = subprocess.run
+        subprocess.__orig_call_w36__ = subprocess.call
+        subprocess.__orig_check_call_w36__ = subprocess.check_call
         subprocess.__orig_check_output_w36__ = \
             subprocess.check_output
+        subprocess.__orig_popen_w36__ = subprocess.Popen
 
     def _run(argv, *args, **kwargs):
         if not _ist_erlaubt(argv):
@@ -101,6 +104,21 @@ def _no_real_subprocess(request, monkeypatch):
                 f"hinzu oder mocke gezielt.")
         return subprocess.__orig_run_w36__(argv, *args, **kwargs)
 
+    def _call(argv, *args, **kwargs):
+        if not _ist_erlaubt(argv):
+            raise AssertionError(
+                f"W36-RP: subprocess.call({argv!r}) "
+                f"im Test nicht erlaubt.")
+        return subprocess.__orig_call_w36__(argv, *args, **kwargs)
+
+    def _check_call(argv, *args, **kwargs):
+        if not _ist_erlaubt(argv):
+            raise AssertionError(
+                f"W36-RP: subprocess.check_call({argv!r}) "
+                f"im Test nicht erlaubt.")
+        return subprocess.__orig_check_call_w36__(
+            argv, *args, **kwargs)
+
     def _check_output(argv, *args, **kwargs):
         if not _ist_erlaubt(argv):
             raise AssertionError(
@@ -109,8 +127,18 @@ def _no_real_subprocess(request, monkeypatch):
         return subprocess.__orig_check_output_w36__(
             argv, *args, **kwargs)
 
+    def _popen(argv, *args, **kwargs):
+        if not _ist_erlaubt(argv):
+            raise AssertionError(
+                f"W36-RP: subprocess.Popen({argv!r}) "
+                f"im Test nicht erlaubt.")
+        return subprocess.__orig_popen_w36__(argv, *args, **kwargs)
+
     monkeypatch.setattr(subprocess, "run", _run)
+    monkeypatch.setattr(subprocess, "call", _call)
+    monkeypatch.setattr(subprocess, "check_call", _check_call)
     monkeypatch.setattr(subprocess, "check_output", _check_output)
+    monkeypatch.setattr(subprocess, "Popen", _popen)
 
 
 # =====================================================================
