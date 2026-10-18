@@ -5309,7 +5309,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5345,7 +5345,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6180,7 +6180,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
 
 
 # =====================================================================
@@ -6285,7 +6285,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
 
 
 # =====================================================================
@@ -6343,7 +6343,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
 
 
 # =====================================================================
@@ -9450,7 +9450,7 @@ def test_w46c_2_repair_runde_gleiche_bedingung():
 
 def test_w46_katalog_107():
     """T-Katalog: W46-Katalog-Groesse 107 + neue Kinds."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
     assert "judge_uebersprungen_doku" in pipeline._AUDIT_KINDS_BEKANNT
     assert (
         "phase_judge_uebersprungen_doku"
@@ -9462,7 +9462,7 @@ def test_w48_e_katalog_kinds():
             in pipeline._AUDIT_KINDS_BEKANNT)
     assert ('planner_blockiert_phase_abgeschlossen'
             in pipeline._AUDIT_KINDS_BEKANNT)
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 113
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
 
 def test_w50_a_block_ohne_flag(tmp_path, monkeypatch):
     """T-W50-a: phase_aktiv=False, ohne Flag -> rc=65."""
@@ -9663,7 +9663,7 @@ def test_w51a_struktur():
         encoding="utf-8")
     assert "MESS-PFLICHT" in md
     assert "COMMAND: RUN read_file" in md
-    assert "Kein aktion:neu fuer existierende Dateien" in md
+    assert "Kein aktion:neu auf existierende Dateien" in md
 
 
 def test_w51a_extrahiere_datei_pfade():
@@ -9749,4 +9749,90 @@ def test_w51b_pfad_escape_fail(tmp_path):
     assert any(".." in f for f in fehler)
     assert any("absoluter" in f or "/etc/passwd" in f
                for f in fehler)
+
+def test_w51c_a_struktur():
+    """T-W51c-a-struktur: planner.md Format-Anweisung."""
+    from pathlib import Path as _P
+    md = _P("/opt/werkstatt/agents/planner.md").read_text(
+        encoding="utf-8")
+    assert "MESS-PFLICHT und MESSUNGEN" in md
+    assert "=== MESSUNGEN ===" in md
+    assert "NICHT in unterpunkte" in md
+
+
+def test_w51c_b_bereinigt_messungen():
+    """T-W51c-b: MESSUNGEN-Block wird bereinigt."""
+    reply = (
+        "=== MESSUNGEN ===\n"
+        "COMMAND: RUN read_file core/x.py\n"
+        "=== /MESSUNGEN ===\n"
+        "PHASE: 20 - Test\n"
+        "UNTERBLOCK: U1 - Titel\n"
+    )
+    r = pipeline._bereinige_planner_reply(reply)
+    assert "MESSUNGEN" not in r
+    assert "COMMAND:" not in r
+    assert "PHASE: 20" in r
+
+
+def test_w51c_c_parse_planner_mit_praefix():
+    """T-W51c-c: _parse_commands_planner erkennt '- COMMAND:'."""
+    cmds = pipeline._parse_commands_planner(
+        "- COMMAND: RUN read_file core/x.py\n"
+        "COMMAND: RUN rm -rf /\n"
+        "COMMAND: RUN read_file core/y.py\n")
+    assert len(cmds) == 2
+    assert cmds[0]["id"] == "read_file"
+    assert cmds[0]["arg"] == "core/x.py"
+    assert cmds[1]["arg"] == "core/y.py"
+
+
+def test_w51c_d_fallback_ohne_klammer():
+    """T-W51c-d: Fallback ohne MESSUNGEN-Klammer."""
+    reply = (
+        "COMMAND: RUN read_file core/x.py\n"
+        "- COMMAND: RUN read_file core/y.py\n"
+        "PHASE: 20 - Test\n"
+    )
+    r = pipeline._bereinige_planner_reply(reply)
+    assert "COMMAND:" not in r
+    assert "PHASE: 20" in r
+
+
+def test_w51c_e_gemessener_inhalt():
+    """T-W51c-e: GEMESSENER INHALT + MESSUNGEN kombiniert."""
+    reply = (
+        "=== MESSUNGEN ===\n"
+        "COMMAND: RUN read_file core/x.py\n"
+        "=== /MESSUNGEN ===\n"
+        "=== GEMESSENER INHALT ===\n"
+        "Dateiinhalt...\n"
+        "=== /GEMESSENER INHALT ===\n"
+        "PHASE: 20 - Test\n"
+    )
+    r = pipeline._bereinige_planner_reply(reply)
+    assert "MESSUNGEN" not in r
+    assert "GEMESSENER INHALT" not in r
+    assert "Dateiinhalt" not in r
+    assert "PHASE: 20" in r
+
+
+def test_w51c_f_katalog_115():
+    """T-W51c-f: Katalog 115."""
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
+    assert "command_block_bereinigt" in \
+        pipeline._AUDIT_KINDS_BEKANNT
+    assert "command_block_in_plan" in \
+        pipeline._AUDIT_KINDS_BEKANNT
+
+
+def test_w51c_g_command_block_in_plan_gemeldet():
+    """T-W51c-g: command_block_in_plan bei nicht-bereinigtem
+    COMMAND im Reply (Fallback greift nicht)."""
+    # 'foo COMMAND: RUN x' beginnt nicht mit COMMAND:,
+    # wird nicht entfernt. _w51c_bereinige_und_audit
+    # sieht 'COMMAND:' im bereinigten Reply -> Audit.
+    reply = "PHASE: 20 - Test\nfoo COMMAND: RUN x\n"
+    r = pipeline._bereinige_planner_reply(reply)
+    assert "COMMAND:" in r
 

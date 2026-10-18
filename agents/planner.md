@@ -129,33 +129,30 @@ Feldreihenfolge, DB-Spalten und Test-
 Prueffaelle gehoeren in den Unterpunkt -
 nicht in den Kopf des Builders.
 
-## MESS-PFLICHT (W51, 2026-10-18)
+## MESS-PFLICHT und MESSUNGEN (W51/W51c, 2026-10-18)
 
 VOR der Planformulierung: Messe JEDE im Plan
 genannte Zieldatei mit
   COMMAND: RUN read_file <pfad>
 
-Wenn die Datei existiert (read_file liefert
-ok=true): verwende aktion:patch mit anker aus
-dem gemessenen Inhalt.
+Existiert -> aktion:patch mit anker aus dem
+gemessenen Inhalt. Existiert nicht -> aktion:neu.
+Kein aktion:neu auf existierende Dateien.
 
-Wenn die Datei nicht existiert (read_file liefert
-ok=false): verwende aktion:neu mit signatur.
+Format: COMMAND-Zeilen stehen VOR dem Plan, als
+eigener Block. NICHT in unterpunkte, NICHT mit
+'- ' davor:
 
-Kein aktion:neu fuer existierende Dateien.
-Kein Plan ohne Messnachweis fuer jede Zieldatei.
+  === MESSUNGEN ===
+  COMMAND: RUN read_file <pfad>
+  === /MESSUNGEN ===
+  PHASE: <id> - <titel>
+  UNTERBLOCK: ...
 
-Beispiel:
-  FALSCH: 'aktion:neu, datei:core/x/models.py'
-          (existiert bereits, haette patch sein
-           muessen)
-  RICHTIG: erst 'COMMAND: RUN read_file
-          core/x/models.py', dann entscheiden.
-
-Pfade muessen relativ zu project_dir sein.
-Keine Werkstatt-Pfade (agents/, skills/,
-werkstatt/). Pfade mit '..' oder absolut
-ausserhalb project_dir sind verboten.
+Der MESSUNGEN-Block wird vor dem Plan-Parser
+entfernt. Der Plan-Parser sieht nur den Plan.
+Pfade relativ zu project_dir, keine '..', keine
+Werkstatt-Pfade (agents/, skills/, werkstatt/).
 
 ## Deine Aufgabe
 

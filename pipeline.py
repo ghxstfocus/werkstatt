@@ -1226,6 +1226,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "phase_neuanlage_mit_flag",
     "planner_new_file_auf_existierend",
     "planner_pfad_ausserhalb_projekt",
+    "command_block_bereinigt",
+    "command_block_in_plan",
 })
 
 
@@ -3624,10 +3626,14 @@ def _planner_lauf(
             return None
         # W3-A1: COMMAND-Loop (lokale Schleife).
         if "COMMAND:" not in reply.content:
-            return reply.content
+            return _w51c_bereinige_und_audit(
+                reply.content, state, project_dir,
+                project_name, _runde)
         _cmds = parse_commands(reply.content)
         if not _cmds:
-            return reply.content
+            return _w51c_bereinige_und_audit(
+                reply.content, state, project_dir,
+                project_name, _runde)
         # W25: load_skill vor execute_commands.
         _run_cmds, _n_skills = _verarbeite_skill_commands(
             state, _cmds)
@@ -3635,13 +3641,17 @@ def _planner_lauf(
             print(f"[i] Planner-COMMAND: "
                   f"{_n_skills} Skill(s) geladen.")
         if not _run_cmds:
-            return reply.content
+            return _w51c_bereinige_und_audit(
+                reply.content, state, project_dir,
+                project_name, _runde)
         _geaendert = execute_commands(
             state, _run_cmds, quelle="planner")
         print(f"[i] Planner-COMMAND Runde {_runde}/"
               f"{max_runden}: {len(_cmds)} Kommando(s).")
         if not _geaendert:
-            return reply.content
+            return _w51c_bereinige_und_audit(
+                reply.content, state, project_dir,
+                project_name, _runde)
     # Max-Runden erreicht.
     print(f"[FAIL] Planner-COMMAND max_runden "
           f"({max_runden}) erreicht. Fail closed.")
@@ -4216,6 +4226,110 @@ def classify_verdict(text: str) -> str:
         if _rein.upper().startswith("COMMAND:"):
             return "COMMAND"
     return "UNKLAR"
+
+
+def _parse_commands_planner(
+        text: str,
+) -> list[dict[str, str]]:
+    """W51c: COMMAND-Parser nur fuer den Planner.
+
+    WHITELIST (A-W51c-8): nur 'COMMAND: RUN
+    read_file <pfad>'. Kein rm, kein solver.
+    Akzeptiert Listungs-Praefixe ('- COMMAND:').
+
+    WARUM TRENNUNG (W23-Lehre): parse_commands
+    wird an 6 Stellen genutzt (Planner, Builder,
+    Reviewer, Commit-Review). Globale Robustheits-
+    Ausweitung wuerde Markdown-Beispiele in
+    Builder/Reviewer-Prompts ausfuehren.
+    """
+    cmds: list[dict[str, str]] = []
+    for line in text.splitlines():
+        s = line.strip()
+        for pre in ("- ", "* ", "• "):
+            if s.startswith(pre):
+                s = s[len(pre):].lstrip()
+                break
+        if not s.upper().startswith("COMMAND:"):
+            continue
+        body = s[len("COMMAND:"):].strip()
+        if not body.upper().startswith("RUN "):
+            continue
+        rest = body[4:].strip()
+        parts = rest.split(maxsplit=1)
+        if len(parts) < 2:
+            continue
+        if parts[0] != "read_file":
+            continue
+        cmds.append({"typ": "run", "id": "read_file",
+                     "arg": parts[1]})
+    return cmds
+
+
+def _bereinige_planner_reply(
+        text: str,
+) -> str:
+    """W51c: entfernt Mess-Artefakte aus Planner-Reply.
+
+    Entfernt: MESSUNGEN-Block, GEMESSENER INHALT-
+    Block, direkte COMMAND-Zeilen (Fallback).
+
+    Fallback greift mit UND ohne MESSUNGEN-Klammer.
+    Determinismus-Grenze (WEG-X-P19-R1): der
+    Planner kann den Fix umgehen (nichts davon in
+    den Reply) — dann greift
+    _plan_ist_messungsbasiert (fail-closed).
+    """
+    import re as _re
+    text = _re.sub(
+        r"=== MESSUNGEN ===.*?=== /MESSUNGEN ===\n?",
+        "", text, flags=_re.DOTALL)
+    text = _re.sub(
+        r"=== GEMESSENER INHALT ===.*?"
+        r"=== /GEMESSENER INHALT ===\n?",
+        "", text, flags=_re.DOTALL)
+    zeilen = []
+    for ln in text.splitlines(keepends=True):
+        s = ln.strip()
+        for pre in ("- ", "* ", "• "):
+            if s.startswith(pre):
+                s = s[len(pre):].lstrip()
+                break
+        if s.upper().startswith("COMMAND:"):
+            continue
+        zeilen.append(ln)
+    return "".join(zeilen).strip() + "\n"
+
+
+def _w51c_bereinige_und_audit(
+        reply: str,
+        state: RunState,
+        project_dir: Path,
+        project_name: str,
+        runde: int,
+) -> str:
+    """W51c: bereinigt Planner-Reply, auditet Ergebnis.
+
+    Prueft nach der Bereinigung, ob noch 'COMMAND:'
+    im Reply steht. Wenn ja: command_block_in_plan
+    (Fallback hat nicht gegriffen). Sonst:
+    command_block_bereinigt, wenn ueberhaupt was
+    entfernt wurde.
+    """
+    bereinigt = _bereinige_planner_reply(reply)
+    if "COMMAND:" in bereinigt.upper():
+        audit("command_block_in_plan",
+              {"anzahl": bereinigt.upper().count(
+                  "COMMAND:"),
+               "runde": runde},
+              project_dir, project_name)
+    elif bereinigt.strip() != reply.strip():
+        audit("command_block_bereinigt",
+              {"runde": runde,
+               "laenge_vorher": len(reply),
+               "laenge_nachher": len(bereinigt)},
+              project_dir, project_name)
+    return bereinigt
 
 
 def parse_commands(text: str) -> list[dict[str, str]]:
