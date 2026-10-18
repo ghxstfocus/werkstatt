@@ -31,8 +31,6 @@ import ast
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, "/opt/werkstatt")
 import pipeline
 
@@ -95,34 +93,53 @@ def _baum() -> ast.Module:
     return ast.parse(PIPELINE.read_text(encoding="utf-8"))
 
 
-# W48-A16-b (2026-10-18): 30 bekannte Luecken im
-# Katalog. Der Test wird in W48-A16-b-2 scharf
-# gestellt, sobald die Luecken registriert sind.
-# Bekannte Luecken (Stand 2026-10-18):
-#   pipeline_escalated, planner_verworfen,
-#   anti_patterns_injiziert, planner_rolle_fehlt,
-#   solver_budget_exhausted,
-#   solver_max_solver_runden_erreicht,
-#   quelle_invalid, mess_nach_nahe_budget,
-#   basis_gate_test_result,
+# W48-A16-b-2 (2026-10-18): 36 Kinds registriert.
+# Der Test ist scharf (kein xfail mehr).
+#
+# Herkunft: W48-A16-b (a074be1) hat 35 audit()-
+# Aufrufe mit nicht registrierten Kinds aufgedeckt
+# (AST-Walk, 35 distinkte Kinds, 48 Calls).
+# W48-A16-b-2 registriert 35 + judge_call_failed
+# (Umbenennung reviewer_call_failed Z. 9503
+# -> judge_call_failed; reviewer_call_failed
+# bleibt fuer Z. 9255).
+#
+# Katalog 122 -> 158. _KATALOG_SOLL = 158.
+#
+# Dynamische Kinds (nicht per AST-Walk pruefbar,
+# daher in test_audit_dynamische_werte_aufgeloest
+# separat geprueft):
+#   builder_deadlock_* (3 Werte)
+#
+# Kinds mit dynamischem Aufruf, aber AST-Walk
+# sieht sie nicht (Variable als erstes Argument):
+#   planner_new_file_auf_existierend (Z. 11954)
+#   planner_pfad_ausserhalb_projekt (Z. 11956)
+#   planner_phase_zu_gross (Z. 11974)
+#   llm_timeout_connect
+# Diese 4 sind im Katalog, aber der AST-Test
+# findet sie nicht. Bekannte Grenze.
+#
+# Die 36 neuen Kinds (alphabetisch):
+#   aggregator_failed, anti_patterns_injiziert,
+#   auto_repair_ruff, basis_gate_test_result,
+#   builder_call_failed, builder_commit_paket_failed,
 #   builder_commit_paket_failed_retry,
-#   reviewer_call_failed, builder_call_failed,
-#   phase_basis_gate_failed,
-#   phasen_basis_gate_untracked,
-#   planner_start, planner_ungueltig,
-#   planner_abgebrochen, planner_bestaetigt,
-#   planner_call_failed, recovery_budget,
-#   solver_trigger_a, auto_repair_ruff.
-@pytest.mark.xfail(
-    strict=False,
-    reason="W48-A16-b-2: 30 Kinds produktiv "
-           "verwendet, aber nicht registriert. "
-           "Wird im NAECHSTEN Block (W48-A16-b-2) "
-           "behoben: 28 registrieren, 1 umbenennen "
-           "(reviewer_call_failed -> judge_call_"
-           "failed), _KATALOG_SOLL 122 -> 151. "
-           "Bei Ueberschreitung: strict=True "
-           "schaltet CI rot.")
+#   commit_review_ohne_messung, judge_call_failed,
+#   memory_yaml_korrupt, mess_nach_nahe_budget,
+#   phase_basis_gate_failed, phase_suite_rot_recovery,
+#   phasen_basis_gate_untracked, pipeline_abgebrochen,
+#   pipeline_escalated, planner_abgebrochen,
+#   planner_basis_gate_failed, planner_bestaetigt,
+#   planner_call_failed, planner_phase_yaml_kaputt,
+#   planner_rolle_fehlt, planner_start,
+#   planner_uebersprungen, planner_ungueltig,
+#   planner_verworfen, quelle_invalid, recovery_budget,
+#   review_command, reviewer_call_failed,
+#   reviewer_run_solver_phase2_ignoriert,
+#   solver_budget_exhausted, solver_max_runden_erreicht,
+#   solver_max_solver_runden_erreicht, solver_trigger_a,
+#   solver_trigger_b.
 def test_audit_kinds_alle_aufrufe_registriert() -> None:
     """Jeder audit('literal', ...) ist im Katalog."""
     calls = _audit_calls(_baum())
