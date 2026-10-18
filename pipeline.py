@@ -3670,7 +3670,11 @@ def _planner_lauf(
             return _w51c_bereinige_und_audit(
                 reply.content, state, project_dir,
                 project_name, _runde)
-        _cmds = parse_commands(reply.content)
+        # W51c-fix (2026-10-18): strikter
+        # Planner-Parser (nur read_file,
+        # load_skill). Blockiert coverage/
+        # bandit/pip_audit im Planner-Pfad.
+        _cmds = _parse_commands_planner(reply.content)
         if not _cmds:
             return _w51c_bereinige_und_audit(
                 reply.content, state, project_dir,
@@ -4304,8 +4308,16 @@ def _parse_commands_planner(
     """W51c: COMMAND-Parser nur fuer den Planner.
 
     WHITELIST (A-W51c-8): nur 'COMMAND: RUN
-    read_file <pfad>'. Kein rm, kein solver.
+    read_file <pfad>' und 'COMMAND: load_skill
+    <name>'. Kein rm, kein solver, kein coverage,
+    kein bandit, kein pip_audit.
     Akzeptiert Listungs-Praefixe ('- COMMAND:').
+
+    W51c-fix (2026-10-18): _planner_lauf nutzt
+    diesen Parser (vorher: globaler parse_commands).
+    load_skill (W25) ist erlaubt. Der Planner-
+    Prompt bietet load_skill noch nicht an
+    (Merkposten W25-planner-md).
 
     WARUM TRENNUNG (W23-Lehre): parse_commands
     wird an 6 Stellen genutzt (Planner, Builder,
@@ -4323,6 +4335,15 @@ def _parse_commands_planner(
         if not s.upper().startswith("COMMAND:"):
             continue
         body = s[len("COMMAND:"):].strip()
+        # W51c-fix (2026-10-18): load_skill (W25)
+        # ist im Planner-Pfad erlaubt.
+        if body.lower().startswith("load_skill"):
+            rest_ls = body[len("load_skill"):].strip()
+            rest_ls = rest_ls.strip("\"'()")
+            if rest_ls:
+                cmds.append({"typ": "load_skill",
+                             "arg": rest_ls})
+            continue
         if not body.upper().startswith("RUN "):
             continue
         rest = body[4:].strip()

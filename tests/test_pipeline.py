@@ -9837,6 +9837,73 @@ def test_w51c_g_command_block_in_plan_gemeldet():
     r = pipeline._bereinige_planner_reply(reply)
     assert "COMMAND:" in r
 
+
+
+# ---------- W51c-fix (2026-10-18): Planner-Parser ----------
+
+def test_w51c_fix_planner_nutzt_planner_parser() -> None:
+    """A-W51c-fix-4: _planner_lauf nutzt
+    _parse_commands_planner, nicht parse_commands.
+    Mock-Beweis ueber call_count.
+    """
+    from unittest.mock import patch
+    s = build_test_state()
+    s.planner_runden = 0
+    # Planner-Rolle muss geladen sein, sonst
+    # fail-closed vor dem Parser-Aufruf.
+    s.agents["planner"] = {"body": "planner",
+                           "model": "deepseek-chat"}
+    reply = type("R", (), {
+        "ok": True, "content": "COMMAND: RUN solver x",
+        "error": ""})()
+
+    with patch.object(pipeline, "_parse_commands_planner",
+                      return_value=[]) as mock_p, \
+         patch.object(pipeline, "parse_commands",
+                      side_effect=AssertionError(
+                          "parse_commands darf nicht "
+                          "gerufen werden")) as mock_global, \
+         patch.object(pipeline, "ask_llm",
+                      return_value=reply):
+        pipeline._planner_lauf(
+            s, "key", "prompt",
+            Path("/tmp"), "test", "",
+            max_runden=1)
+    assert mock_p.call_count == 1, (
+        f"_parse_commands_planner {mock_p.call_count}x")
+    assert mock_global.call_count == 0, (
+        f"parse_commands {mock_global.call_count}x")
+
+
+@pytest.mark.parametrize("cmd", [
+    "COMMAND: RUN solver x",
+    "COMMAND: RUN coverage core/",
+    "COMMAND: RUN bandit core/",
+    "COMMAND: RUN pip_audit",
+])
+def test_w51c_fix_planner_verwirft_unerlaubte_commands(
+        cmd: str) -> None:
+    """A-W51c-fix-3: solver, coverage, bandit,
+    pip_audit werden verworfen."""
+    cmds = pipeline._parse_commands_planner(cmd)
+    assert cmds == [], f"{cmd} ergab {cmds}"
+
+
+def test_w51c_fix_planner_erkennt_load_skill() -> None:
+    """W51c-fix: load_skill im Planner-Pfad."""
+    cmds = pipeline._parse_commands_planner(
+        "COMMAND: load_skill anker-regeln")
+    assert cmds == [{"typ": "load_skill",
+                     "arg": "anker-regeln"}], cmds
+
+
+def test_w51c_fix_planner_read_file_ok() -> None:
+    """W51c-fix: read_file weiter funktional."""
+    cmds = pipeline._parse_commands_planner(
+        "COMMAND: RUN read_file core/applier.py")
+    assert cmds == [{"typ": "run", "id": "read_file",
+                     "arg": "core/applier.py"}], cmds
+
 def test_w51d_a2_beide_zustaende(tmp_path):
     """T-W51d-a2: leeres mess_protokoll -> kein Block;
     gefuelltes -> Block im Erstlauf-Prompt."""

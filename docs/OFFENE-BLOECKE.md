@@ -34,6 +34,18 @@ Uebersicht in `ROADMAP.md`. Erledigt in `ERLEDIGT.md`.
 
 ## Merkposten
 
+- W51c-fix erledigt (2026-10-18): _planner_lauf nutzt
+  _parse_commands_planner. load_skill im Planner-Parser
+  vorbereitet, aber planner.md bietet es noch nicht an.
+- W25-planner-md: planner.md um AVAILABLE-SKILLS-Block
+  + COMMAND: load_skill <name> erweitern. Eigener Block,
+  Kategorie 3, nicht W51c-fix.
+- W59-W13b-Interaktion: W13b-Deaktivierung (pruefe_ersatz_
+  gegen_messung) ist der aktuelle Ersatz fuer Mess-Zwang.
+  Wenn W59 gebaut wird (gelesene_dateien, patch_ohne_
+  messung, mtime-Check), pruefen, ob W13b durch W59 ersetzt
+  wird oder als legacy bleibt. Eigener Block W59-2.
+
 - W54-f: builder.md 647 Zeilen.
 - W57: Prompt-Audit.
 - W52a-c: pipeline.py-Modularisierung groesser als 500 Zeilen (ask_llm, audit, execute_commands sind Kern-Infrastruktur).
