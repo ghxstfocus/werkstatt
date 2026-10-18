@@ -9775,7 +9775,11 @@ def run_pipeline(project_name: str, aufgabe: str,
             "  COMMAND: RUN explore <muster> <pfad>\n"
             "Er durchsucht die Datei und gibt FUND: <pfad>:<zeile>: "
             "<kontext> zurueck. Nutze ihn, BEVOR du einen Patch "
-            "mit einem unbestaetigten Anker sendest."
+            "mit einem unbestaetigten Anker sendest.\n\n"
+            "WICHTIG: Nutze NICHT read_file fuer die Anker-Suche. "
+            "read_file liefert nur den Index (Pfad, SHA, Preview). "
+            "explore liefert die Zeile. Wenn du den Anker nicht "
+            "im Index siehst, ist explore der einzige Weg."
         )
     max_builder_runden = budget.get("max_builder_runden", 3)
     reply_roh, rc = builder_reply_mit_command_loop(
