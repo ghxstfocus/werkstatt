@@ -12189,9 +12189,13 @@ def _phase_main_pfad(
         if not resume_force:
             _ups_check = plan_vorhanden.get(
                 "phase_unterbloecke", [])
+            # W61: Planner-Resume nur bei no_go (Plan-Problem).
+            # Bei failed (Test-Gate rot, Builder-Code falsch)
+            # ist der Plan gueltig — der Builder soll es
+            # nochmal versuchen, kein Planner-Call.
             _hat_offene = any(
                 isinstance(_u, dict)
-                and _u.get("status") in ("no_go", "failed")
+                and _u.get("status") == "no_go"
                 for _u in _ups_check)
             if _hat_offene:
                 # state fuer Planner-Resume bauen.
