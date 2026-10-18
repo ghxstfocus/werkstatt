@@ -1218,6 +1218,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "solver_run_duplicate",
     "solver_trigger",
     "solver_trigger_c",
+    "judge_uebersprungen_doku",
+    "phase_judge_uebersprungen_doku",
 })
 
 
@@ -2351,6 +2353,24 @@ def _phase_judge_review(
 
     Rueckgabe: "GO" | "NO_GO" | "FEHLER".
     """
+    # W46c: Doku-Phase -> Judge ueberspringen.
+    _w46c_alle_doku = bool(state.phase_commit_pakete) and all(
+        isinstance(_p, dict)
+        and all(str(_d).endswith(".md")
+                for _d in _p.get("dateien", []))
+        for _p in state.phase_commit_pakete)
+    _w46c_kein_passed = not any(
+        isinstance(_tr, dict)
+        and _tr.get("passed_count", 0) > 0
+        for _tr in state.basis_gate_test_results)
+    if _w46c_alle_doku and _w46c_kein_passed:
+        print("[i] Phase-Judge uebersprungen "
+              "(Doku-Phase, keine Tests).")
+        audit("phase_judge_uebersprungen_doku",
+              {"phase_id": state.phase_id,
+               "pakete": len(state.phase_commit_pakete)},
+              state.project_dir, state.project_name)
+        return "GO"
     system_prompt = _build_judge_prompt(state)
     system_prompt += (
         "\n\n=== PHASE-JUDGE ===\n"
@@ -2386,6 +2406,24 @@ def _phase_judge_repair_runde(
 
     Rueckgabe: "GO" | "NO_GO" | "FEHLER".
     """
+    # W46c: Doku-Phase -> Judge ueberspringen.
+    _w46c_alle_doku = bool(state.phase_commit_pakete) and all(
+        isinstance(_p, dict)
+        and all(str(_d).endswith(".md")
+                for _d in _p.get("dateien", []))
+        for _p in state.phase_commit_pakete)
+    _w46c_kein_passed = not any(
+        isinstance(_tr, dict)
+        and _tr.get("passed_count", 0) > 0
+        for _tr in state.basis_gate_test_results)
+    if _w46c_alle_doku and _w46c_kein_passed:
+        print("[i] Phase-Judge uebersprungen "
+              "(Doku-Phase, keine Tests).")
+        audit("phase_judge_uebersprungen_doku",
+              {"phase_id": state.phase_id,
+               "pakete": len(state.phase_commit_pakete)},
+              state.project_dir, state.project_name)
+        return "GO"
     system_prompt = _build_judge_prompt(state)
     system_prompt += (
         "\n\n=== PHASE-JUDGE (REPARATUR-RUNDE) ===\n"
@@ -9112,6 +9150,38 @@ def run_pipeline(project_name: str, aufgabe: str,
             return rc
         # W28b (2026-10-17): Judge statt Reviewer.
         # Judge sieht NUR contract + mess_nach + test_results.
+        # W46b: 'kein Eintrag mit passed_count > 0'
+        # umfasst (i) keinen Test-Lauf (Doku-Patch,
+        # _ziel_test_pfade leer) UND (ii) einen
+        # Test-Lauf, in dem alle Tests skipped/0
+        # passed sind. Fall (ii) ist semantisch
+        # 'keine echte Testaussage' — Skip auf
+        # GO ist vertretbar. Wenn spaeter der
+        # Unterschied relevant wird: eigener Block
+        # (Kriterium 'Eintrag mit exit_code != 0
+        # ODER failed_count > 0 ODER passed_count
+        # > 0').
+        _w46b_alle_doku = bool(state.code_patches) and all(
+            isinstance(p, dict)
+            and str(p.get("pfad", "")).endswith(".md")
+            for p in state.code_patches)
+        _w46b_kein_passed = not any(
+            isinstance(_tr, dict)
+            and _tr.get("passed_count", 0) > 0
+            for _tr in state.basis_gate_test_results)
+        if _w46b_alle_doku and _w46b_kein_passed:
+            print("[i] Judge uebersprungen (Doku-Patch, "
+                  "keine Tests).")
+            audit("judge_uebersprungen_doku",
+                  {"runde": runde,
+                   "anzahl_patches": len(state.code_patches),
+                   "phase_id": state.phase_id},
+                  project_dir, project_name)
+            state.review_runden.append(
+                {"runde": runde, "verdict": "GO",
+                 "raw": "(uebersprungen: doku)",
+                 "recovery": False})
+            continue
         judge_input = _build_judge_input(state)
         reply = ask_llm(api_key, judge_prompt, judge_input,
                         state.judge_model, 0.0, state.llm_timeout_s,

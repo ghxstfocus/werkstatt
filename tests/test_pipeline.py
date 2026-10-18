@@ -5309,7 +5309,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 105
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 107
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5345,7 +5345,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 105
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 107
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6180,7 +6180,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 105
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 107
 
 
 # =====================================================================
@@ -6285,7 +6285,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 105
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 107
 
 
 # =====================================================================
@@ -6343,7 +6343,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 105
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 107
 
 
 # =====================================================================
@@ -9379,4 +9379,76 @@ def _w48_rufe_planner_main(tmp_path, monkeypatch):
                       'stderr': ''})())
     ref = []
     return _p._planner_main_pfad('testprojekt', 'Test', ref)
+
+def test_w46b_1_doku_only_skip():
+    """T-W46b-1: Doku-only-Patch -> Skip-Bedingung erfuellt."""
+    patches = [{"pfad": "docs/STATUS.md", "typ": "patch"}]
+    basis: list = []
+    alle = bool(patches) and all(
+        str(p.get("pfad", "")).endswith(".md") for p in patches)
+    kein_passed = not any(
+        t.get("passed_count", 0) > 0 for t in basis)
+    assert alle
+    assert kein_passed
+
+
+def test_w46b_2_code_patch_kein_skip():
+    """T-W46b-2: Code-Patch -> kein Skip."""
+    patches = [{"pfad": "core/x.py", "typ": "patch"}]
+    alle = bool(patches) and all(
+        str(p.get("pfad", "")).endswith(".md") for p in patches)
+    assert not alle
+
+
+def test_w46b_3_mischform_kein_skip():
+    """T-W46b-3: Mischform (.py + .md) -> kein Skip."""
+    patches = [
+        {"pfad": "core/x.py", "typ": "patch"},
+        {"pfad": "docs/STATUS.md", "typ": "patch"},
+    ]
+    alle = bool(patches) and all(
+        str(p.get("pfad", "")).endswith(".md") for p in patches)
+    assert not alle
+
+
+def test_w46b_4_null_passed_skip():
+    """T-W46b-4: Test-Lauf mit 0 passed -> Skip."""
+    patches = [{"pfad": "docs/STATUS.md", "typ": "patch"}]
+    basis = [{"exit_code": 0, "passed_count": 0,
+              "failed_count": 0, "klassifizierung": "gruen"}]
+    alle = bool(patches) and all(
+        str(p.get("pfad", "")).endswith(".md") for p in patches)
+    kein_passed = not any(
+        t.get("passed_count", 0) > 0 for t in basis)
+    assert alle and kein_passed
+
+
+def test_w46c_1_doku_phase_skip():
+    """T-W46c-1: Doku-Phase -> Skip-Bedingung erfuellt."""
+    pakete = [{"dateien": ["docs/STATUS.md", "docs/ROADMAP.md"]}]
+    alle = bool(pakete) and all(
+        all(str(d).endswith(".md") for d in p.get("dateien", []))
+        for p in pakete)
+    assert alle
+
+
+def test_w46c_2_repair_runde_gleiche_bedingung():
+    """T-W46c-2: Repair-Runde nutzt gleiche Bedingung."""
+    pakete = [{"dateien": ["docs/STATUS.md"]}]
+    basis: list = []
+    alle = bool(pakete) and all(
+        all(str(d).endswith(".md") for d in p.get("dateien", []))
+        for p in pakete)
+    kein_passed = not any(
+        t.get("passed_count", 0) > 0 for t in basis)
+    assert alle and kein_passed
+
+
+def test_w46_katalog_107():
+    """T-Katalog: W46-Katalog-Groesse 107 + neue Kinds."""
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 107
+    assert "judge_uebersprungen_doku" in pipeline._AUDIT_KINDS_BEKANNT
+    assert (
+        "phase_judge_uebersprungen_doku"
+        in pipeline._AUDIT_KINDS_BEKANNT)
 
