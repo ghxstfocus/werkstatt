@@ -4869,6 +4869,8 @@ def verify_code(patches: list[dict[str, str]],
     befunde: list[str] = []
     # W61-Pro: Kwarg-Check gegen echte Signaturen.
     befunde.extend(verify_code_kwargs(patches, project_dir))
+    # W61-Pro: Enum-Werte in Assertions pruefen.
+    befunde.extend(verify_values(patches, project_dir))
     # W61-Pro: Test-Bezug pruefen. Wenn letzter_test_fehler
     # failed_test_ids nennt, muss der Patch-Anker zu einem
     # davon passen.
@@ -5011,6 +5013,66 @@ def verify_code_kwargs(patches: list[dict[str, str]],
                     befunde.append(
                         f"{fname}() kennt kein Kwarg "
                         f"{kw.arg!r} (Signatur: {sig_text[:100]})")
+    return befunde
+
+
+def verify_values(patches: list[dict[str, str]],
+                   project_dir: Path) -> list[str]:
+    """W61-Pro: Prueft Assertion-Werte gegen echte Enums.
+
+    Findet z.B. assertEqual(..., "applied") wenn der
+    echte Enum-Wert "APPLIED" (name) oder "applied"
+    (value) ist. Der Builder muss wissen, ob name oder
+    value verglichen wird.
+    """
+    import ast as _ast
+    import sys as _sys
+    if str(project_dir) not in _sys.path:
+        _sys.path.insert(0, str(project_dir))
+    try:
+        from core.changeapplier.models import ChangeState
+    except ImportError:
+        return []
+    # Erlaubte Werte: name (APPLIED) und value (applied).
+    erlaubt = set()
+    for cs in ChangeState:
+        erlaubt.add(cs.name)
+        erlaubt.add(str(cs.value))
+    befunde: list[str] = []
+    for p in patches:
+        ersatz = p.get("ersatz", "")
+        if not ersatz.strip():
+            continue
+        try:
+            tree = _ast.parse(ersatz)
+        except SyntaxError:
+            continue
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ast.Call):
+                continue
+            fname = None
+            if isinstance(node.func, _ast.Attribute):
+                fname = node.func.attr
+            elif isinstance(node.func, _ast.Name):
+                fname = node.func.id
+            if fname not in ("assertEqual", "assertIn"):
+                continue
+            # Zweites Argument pruefen (String-Literal).
+            if len(node.args) < 2:
+                continue
+            arg2 = node.args[1]
+            if not isinstance(arg2, _ast.Constant):
+                continue
+            val = arg2.value
+            if not isinstance(val, str):
+                continue
+            if val in erlaubt:
+                continue
+            # String, der wie ein Enum-Wert aussieht.
+            if val.upper() in {e.upper() for e in erlaubt}:
+                befunde.append(
+                    f"{fname}(..., {val!r}): erlaubt sind "
+                    f"{sorted(erlaubt)[:5]}")
     return befunde
 
 
