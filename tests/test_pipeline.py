@@ -4561,13 +4561,17 @@ def test_pruefe_anker_gegen_messung_leer() -> None:
 
 
 def test_pruefe_anker_gegen_messung_shift_akzeptiert() -> None:
-    """+2-Shift-Variante wird akzeptiert (HH2)."""
+    """W61: Whitespace-toleranter Match.
+
+    Der Anker 'alpha\nbeta' (ohne Einrueckung) wird in
+    der Messung 'prefix\n  alpha\n  beta\nsuffix'
+    gefunden (lstrip auf beiden Seiten)."""
     patches = [{"pfad": "x.py",
                 "anker": "alpha\nbeta", "ersatz": "y"}]
-    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung("prefix\n  alpha\n  beta\nsuffix"))
-    assert len(fehlend) == 1
-    _, _, _, grund = fehlend[0]
-    assert grund == "shift_akzeptiert"
+    fehlend = pipeline.pruefe_anker_gegen_messung(
+        patches,
+        _state_mit_messung("prefix\n  alpha\n  beta\nsuffix"))
+    assert fehlend == []
 
 
 def test_pruefe_anker_gegen_messung_leerer_anmelder_anmelder() -> None:

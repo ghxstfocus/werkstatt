@@ -4699,9 +4699,22 @@ def _anker_in_messung(state: "RunState", anker: str) -> bool:
     Quelle ist ausschliesslich m.datei (Pfad zur
     .werkstatt/<run_id>/messungen/<sha1>.txt-Datei).
     Liest die Datei bei jedem Check neu (klein, gecacht
-    auf OS-Ebene)."""
+    auf OS-Ebene).
+
+    W61: Whitespace-toleranter Vergleich. Der Parser
+    strippt die YAML-Block-Einrueckung; der Anker kann
+    daher gegenueber der Messdatei um die Block-
+    Einrueckung kuerzer sein. Wir vergleichen zeilenweise
+    mit lstrip auf beiden Seiten (Einrueckung egal).
+    """
     if state is None or not anker:
         return False
+    # Normalisierte Anker-Zeilen (ohne fuehrende Spaces).
+    anker_zeilen = [z.lstrip() for z in anker.splitlines()
+                    if z.strip()]
+    if not anker_zeilen:
+        return False
+    anker_norm = "\n".join(anker_zeilen)
     for m in getattr(state, "messungen", []) or []:
         datei = getattr(m, "datei", None)
         if datei is None:
@@ -4711,7 +4724,14 @@ def _anker_in_messung(state: "RunState", anker: str) -> bool:
                                      errors="replace")
         except OSError:
             continue
+        # Exakter Match zuerst.
         if anker in inhalt:
+            return True
+        # Whitespace-toleranter Match: Inhalt zeilenweise
+        # lstrippen und als Block suchen.
+        inhalt_zeilen = [z.lstrip() for z in inhalt.splitlines()]
+        inhalt_norm = "\n".join(inhalt_zeilen)
+        if anker_norm in inhalt_norm:
             return True
     return False
 
@@ -7325,18 +7345,23 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
         nonlocal aktives_feld, aktuelle_zeilen
         if aktives_feld is None:
             return
-        # W61: Dedent (minimale Einrueckung strippen).
-        # Statt pauschal 2 Leerzeichen (die der Builder
-        # nicht immer liefert) ermitteln wir die minimale
-        # Einrueckung aller nicht-leeren Zeilen.
-        nicht_leer = [z for z in aktuelle_zeilen if z.strip()]
-        if nicht_leer:
-            min_indent = min(
-                len(z) - len(z.lstrip()) for z in nicht_leer)
-            aktuelle_zeilen = [
-                z[min_indent:] if z.strip() else z
-                for z in aktuelle_zeilen
-            ]
+        # W61: YAML-Block-Scalar-Heuristik.
+        # Die minimale Einrueckung der nicht-leeren
+        # Zeilen bestimmt den Modus:
+        #   == 2  -> YAML-Standard, strippe 2.
+        #   >  2  -> Builder-Code, Einrueckung erhalten.
+        #   <  2  -> kein Block, roh.
+        _nicht_leer = [z for z in aktuelle_zeilen if z.strip()]
+        if _nicht_leer:
+            _min = min(len(z) - len(z.lstrip())
+                       for z in _nicht_leer)
+            if _min == 2:
+                aktuelle_zeilen = [
+                    (z[2:] if z.startswith("  ") else z)
+                    for z in aktuelle_zeilen
+                ]
+            # _min > 2: Einrueckung erhalten (Builder-Code).
+            # _min < 2: roh.
         wert = "\n".join(aktuelle_zeilen)
         if aktives_feld == "anker":
             nonlocal anker
@@ -7356,15 +7381,24 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
         aktives_feld = None
         aktuelle_zeilen = []
 
+    # W61: Einrueckung der aktuellen Feldzeile.
+    feld_einrueckung = 0
     for raw_line in block.splitlines():
         # Tabs ablehnen (P1).
         if "\t" in raw_line:
             return None
         # Feld-Anfang?
         # P2b-Luecke-A: typ und inhalt ergaenzt.
-        m_feld = re.match(
-            r"^(typ|pfad|anker|ersatz|inhalt):\s*(.*)$",
+        # W61: Anchored at start (Einrueckung wird
+        # explizit gemessen).
+        _feld_match = re.match(
+            r"^\s*(typ|pfad|anker|ersatz|inhalt):\s*(.*)$",
             raw_line)
+        m_feld = _feld_match
+        if m_feld:
+            # Einrueckung der Feldzeile merken.
+            feld_einrueckung = (
+                len(raw_line) - len(raw_line.lstrip()))
         if m_feld:
             _flush()
             name, rest = m_feld.group(1), m_feld.group(2)
@@ -7385,9 +7419,17 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
                 aktuelle_zeilen = []
             continue
         # Fortsetzungszeile (eingrueckt).
-        # W61: Roh sammeln, Dedent nach dem Block.
+        # W61: Roh uebernehmen. Der Builder liefert die
+        # Code-Einrueckung bereits im YAML-Block. Der
+        # Parser strippt nichts (die YAML-Block-Scalar-
+        # Semantik wuerde sonst die Code-Einrueckung
+        # entfernen). _anker_in_messung ist whitespace-
+        # tolerant, apply_code_patches nutzt den
+        # +2-Shift-Fallback.
         if aktives_feld is not None:
-            if raw_line.startswith("  ") or raw_line.strip() == "":
+            if raw_line.strip() == "":
+                aktuelle_zeilen.append("")
+            elif len(raw_line) - len(raw_line.lstrip()) > feld_einrueckung:
                 aktuelle_zeilen.append(raw_line)
             else:
                 # Ende des Block-Scalars.
