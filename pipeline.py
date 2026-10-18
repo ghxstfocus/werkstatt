@@ -4040,6 +4040,12 @@ def build_catalog(config: dict[str, Any], project_dir: Path
             (venv, "-m", "mypy", "tests"), "Typen in tests/.", 300),
         "test_count": Measurement("test_count",
             (venv, "-m", "pytest", "--collect-only", "-q"), "Test-Anzahl."),
+        # W61: pytest fuer eine einzelne Testdatei.
+        # Arg: <pfad> (relativ, in file_whitelist).
+        # Timeout 300s pro Datei, damit die volle Suite
+        # (9+ Min) nicht das Budget sprengt.
+        "pytest": Measurement("pytest",
+            (venv, "-m", "pytest", "-q"), "Test ausfuehren.", 300),
         "git_status": Measurement("git_status", ("git", "status", "--porcelain"), "Tree."),
         "git_head": Measurement("git_head", ("git", "rev-parse", "--short", "HEAD"), "HEAD."),
         "coverage": Measurement("coverage",
@@ -4074,6 +4080,26 @@ def run_measurement_mit_argv(m: Measurement, whitelist: list[str],
     run_measurement() ist ein Wrapper, der argv wegwirft.
     """
     argv: list[str] = list(m.argv)
+    # W61: pytest mit Arg (Testdatei).
+    if m.mid == "pytest":
+        if not extra_arg:
+            return "pytest ohne Pfad.", False, []
+        if not isinstance(extra_arg, str):
+            return "pytest arg ist kein str.", False, []
+        # Whitelist-Pruefung.
+        if not any(extra_arg.startswith(w) for w in whitelist):
+            return (f"pytest arg {extra_arg!r} nicht in "
+                    f"Whitelist.", False, [])
+        argv = list(argv) + [extra_arg]
+        res = subprocess.run(
+            argv, cwd=project_dir, capture_output=True,
+            text=True, timeout=m.timeout)
+        stdout_gekuerzt = res.stdout.strip().splitlines()
+        letzte = stdout_gekuerzt[-1] if stdout_gekuerzt else ""
+        out = (f"=== {m.mid} ===\nARGV: {' '.join(argv)}\n"
+               f"RC: {res.returncode}\nSTDOUT (letzte Zeile):\n"
+               f"{letzte}\nSTDERR:\n{res.stderr}\n")
+        return out, res.returncode == 0, argv
     if m.mid == "read_file":
         if not extra_arg:
             return "read_file ohne Pfad.", False, []

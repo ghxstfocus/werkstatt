@@ -17,6 +17,7 @@ optional_catalog:
 - pip_audit
 - read_file
 - mypy_tests
+- pytest
 agent_docs:
   reviewer:
   - conventions
