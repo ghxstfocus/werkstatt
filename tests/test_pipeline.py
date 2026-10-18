@@ -10217,3 +10217,193 @@ def test_w51g_e_scope(tmp_path):
     assert "core/x.py" in st1._w51g_gemessen
     assert "core/x.py" not in st2._w51g_gemessen
 
+def _w51h_state(tmp_path):
+    from pipeline import Measurement
+    from werkstatt.state import RunState
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="t",
+        docs={}, agents={"planner": {"body": "x"}},
+        always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=tmp_path,
+        project_name="p")
+    m = Measurement("read_file", ("cat",), "Test.")
+    st.always = {"read_file": m}
+    st.optional = {}
+    return st
+
+
+_PHASE_PLAN = (
+    "PHASE: 20a - Test\n"
+    "UNTERBLOCK: U1 - Titel\n"
+    "Unterpunkte:\n"
+    "  - datei:core/x.py, aktion:patch, anker:'a'\n"
+    "Geschaetzte Runden: 1\n"
+)
+
+
+def test_w51h_a_plan_und_command(monkeypatch, tmp_path):
+    """T-W51h-a: COMMANDs + parsebarer Plan -> Plan zurueck."""
+    st = _w51h_state(tmp_path)
+    reply = (
+        "COMMAND: RUN read_file core/x.py\n"
+        + _PHASE_PLAN)
+    it = iter([reply])
+    def fake_ask(*a, **kw):
+        class R:
+            ok = True
+            error = ""
+            content = next(it)
+        return R()
+    monkeypatch.setattr("pipeline.ask_llm", fake_ask)
+    monkeypatch.setattr(
+        "pipeline.run_measurement_mit_argv",
+        lambda m, wl, pd, arg=None: ("Inhalt", True, ["cat"]))
+    def fake_exec(state, cmds, quelle):
+        state.mess_protokoll += "Inhalt"
+        return {(c["id"], c["arg"]): True for c in cmds}
+    monkeypatch.setattr("pipeline.execute_commands", fake_exec)
+    monkeypatch.setattr("pipeline.audit",
+                        lambda k, *a, **kw: None)
+    result = pipeline._planner_lauf(
+        st, "k", "Auftrag", tmp_path, "p", "",
+        stufe=2, max_runden=3)
+    assert result is not None
+    assert "PHASE: 20a" in result
+    assert "COMMAND:" not in result
+
+
+def test_w51h_b_nur_command(monkeypatch, tmp_path):
+    """T-W51h-b: Reply nur COMMANDs -> Loop Runde 2."""
+    st = _w51h_state(tmp_path)
+    replies = [
+        "COMMAND: RUN read_file core/x.py\n",
+        "COMMAND: RUN read_file core/x.py\n",
+    ]
+    it = iter(replies)
+    def fake_ask(*a, **kw):
+        class R:
+            ok = True
+            error = ""
+            content = next(it)
+        return R()
+    monkeypatch.setattr("pipeline.ask_llm", fake_ask)
+    monkeypatch.setattr(
+        "pipeline.run_measurement_mit_argv",
+        lambda m, wl, pd, arg=None: ("Inhalt", True, ["cat"]))
+    runden = [0]
+    def fake_exec(state, cmds, quelle):
+        runden[0] += 1
+        if runden[0] == 1:
+            state.mess_protokoll += "Inhalt"
+        return {(c["id"], c["arg"]): True for c in cmds}
+    monkeypatch.setattr("pipeline.execute_commands", fake_exec)
+    calls = []
+    monkeypatch.setattr("pipeline.audit",
+                        lambda k, *a, **kw: calls.append(k))
+    result = pipeline._planner_lauf(
+        st, "k", "Auftrag", tmp_path, "p", "",
+        stufe=2, max_runden=3)
+    # Loop ging in Runde 2, W51e-Abbruch (kein Plan).
+    assert result is None
+    assert "planner_command_ohne_neue_messung" in calls
+
+
+def test_w51h_c_plan_ohne_command(monkeypatch, tmp_path):
+    """T-W51h-c: Reply Plan ohne COMMANDs -> return."""
+    st = _w51h_state(tmp_path)
+    it = iter([_PHASE_PLAN])
+    def fake_ask(*a, **kw):
+        class R:
+            ok = True
+            error = ""
+            content = next(it)
+        return R()
+    monkeypatch.setattr("pipeline.ask_llm", fake_ask)
+    monkeypatch.setattr("pipeline.audit",
+                        lambda k, *a, **kw: None)
+    result = pipeline._planner_lauf(
+        st, "k", "Auftrag", tmp_path, "p", "",
+        stufe=2, max_runden=3)
+    assert result is not None
+    assert "PHASE: 20a" in result
+
+
+def test_w51h_d_plan_format_fehler(monkeypatch, tmp_path):
+    """T-W51h-d: COMMANDs + Plan mit Format-Fehler ->
+    Loop Runde 2 (kein W51h-return)."""
+    st = _w51h_state(tmp_path)
+    # Plan mit Format-Fehler (Geschaetzte Runden
+    # vor Unterpunkte - unbekanntes Format).
+    plan_fehler = (
+        "COMMAND: RUN read_file core/x.py\n"
+        "PHASE: 20a - Test\n"
+        "UNTERBLOCK: U1 - Titel\n"
+        "Geschaetzte Runden: 1\n"
+        "Unterpunkte:\n"
+        "  - datei:core/x.py, aktion:patch, anker:'a'\n"
+    )
+    replies = [
+        plan_fehler,
+        "COMMAND: RUN read_file core/x.py\n",
+    ]
+    it = iter(replies)
+    def fake_ask(*a, **kw):
+        class R:
+            ok = True
+            error = ""
+            content = next(it)
+        return R()
+    monkeypatch.setattr("pipeline.ask_llm", fake_ask)
+    monkeypatch.setattr(
+        "pipeline.run_measurement_mit_argv",
+        lambda m, wl, pd, arg=None: ("Inhalt", True, ["cat"]))
+    runden = [0]
+    def fake_exec(state, cmds, quelle):
+        runden[0] += 1
+        if runden[0] == 1:
+            state.mess_protokoll += "Inhalt"
+        return {(c["id"], c["arg"]): True for c in cmds}
+    monkeypatch.setattr("pipeline.execute_commands", fake_exec)
+    monkeypatch.setattr("pipeline.audit",
+                        lambda k, *a, **kw: None)
+    result = pipeline._planner_lauf(
+        st, "k", "Auftrag", tmp_path, "p", "",
+        stufe=2, max_runden=3)
+    # W51h greift nicht (Plan nicht parsebar),
+    # Loop in Runde 2, W51e-Abbruch.
+    assert result is None
+
+
+def test_w51h_e_vor_w51e(monkeypatch, tmp_path):
+    """T-W51h-e: COMMANDs + parsebarer Plan, keine neuen
+    Messungen -> W51h VOR W51e."""
+    st = _w51h_state(tmp_path)
+    # Reply: COMMANDs + Plan.
+    reply = (
+        "COMMAND: RUN read_file core/x.py\n"
+        + _PHASE_PLAN)
+    it = iter([reply])
+    def fake_ask(*a, **kw):
+        class R:
+            ok = True
+            error = ""
+            content = next(it)
+        return R()
+    monkeypatch.setattr("pipeline.ask_llm", fake_ask)
+    # Keine neuen Messungen: fake_exec macht nichts.
+    def fake_exec(state, cmds, quelle):
+        return {(c["id"], c["arg"]): True for c in cmds}
+    monkeypatch.setattr("pipeline.execute_commands", fake_exec)
+    calls = []
+    monkeypatch.setattr("pipeline.audit",
+                        lambda k, *a, **kw: calls.append(k))
+    result = pipeline._planner_lauf(
+        st, "k", "Auftrag", tmp_path, "p", "",
+        stufe=2, max_runden=3)
+    # W51h greift VOR W51e: Plan zurueck, kein
+    # planner_command_ohne_neue_messung.
+    assert result is not None
+    assert "PHASE: 20a" in result
+    assert "planner_command_ohne_neue_messung" not in calls
+

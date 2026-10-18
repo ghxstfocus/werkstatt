@@ -3694,6 +3694,20 @@ def _planner_lauf(
             return _w51c_bereinige_und_audit(
                 reply.content, state, project_dir,
                 project_name, _runde)
+        # W51h: Plan + COMMANDs im selben Reply.
+        # Parser-basierte Pruefung (kein String-Match
+        # "PHASE:"), W51h VOR W51e (A-W51h-4).
+        _w51h_bereinigt = _bereinige_planner_reply(
+            reply.content)
+        _w51h_plan_parsebar = False
+        try:
+            _parse_phase_kopf(_w51h_bereinigt)
+            _parse_phase_plan(_w51h_bereinigt)
+            _w51h_plan_parsebar = True
+        except ValueError:
+            pass
+        if _w51h_plan_parsebar:
+            return _w51h_bereinigt
         # W51e: Runde ohne neue Messung -> Loop
         # sinnlos, fail-closed mit None.
         if _mess_nachher == _mess_vorher:
