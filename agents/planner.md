@@ -132,7 +132,11 @@ nicht in den Kopf des Builders.
 ## MESS-PFLICHT und MESSUNGEN (W51/W51c, 2026-10-18)
 
 VOR der Planformulierung: Messe JEDE im Plan
-genannte Zieldatei mit
+genannte Zieldatei GENAU EINMAL. Wenn du eine
+Datei erneut messen willst: pruefe zuerst, ob
+das Ergebnis schon im GEMESSENER INHALT-Block
+steht.
+Messe mit
   COMMAND: RUN read_file <pfad>
 
 Existiert -> aktion:patch mit anker aus dem

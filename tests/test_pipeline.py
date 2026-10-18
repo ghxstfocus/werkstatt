@@ -5309,7 +5309,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5345,7 +5345,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6180,7 +6180,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
 
 
 # =====================================================================
@@ -6285,7 +6285,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
 
 
 # =====================================================================
@@ -6343,7 +6343,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
 
 
 # =====================================================================
@@ -9450,7 +9450,7 @@ def test_w46c_2_repair_runde_gleiche_bedingung():
 
 def test_w46_katalog_107():
     """T-Katalog: W46-Katalog-Groesse 107 + neue Kinds."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
     assert "judge_uebersprungen_doku" in pipeline._AUDIT_KINDS_BEKANNT
     assert (
         "phase_judge_uebersprungen_doku"
@@ -9462,7 +9462,7 @@ def test_w48_e_katalog_kinds():
             in pipeline._AUDIT_KINDS_BEKANNT)
     assert ('planner_blockiert_phase_abgeschlossen'
             in pipeline._AUDIT_KINDS_BEKANNT)
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
 
 def test_w50_a_block_ohne_flag(tmp_path, monkeypatch):
     """T-W50-a: phase_aktiv=False, ohne Flag -> rc=65."""
@@ -9819,7 +9819,7 @@ def test_w51c_e_gemessener_inhalt():
 
 def test_w51c_f_katalog_115():
     """T-W51c-f: Katalog 115."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 115
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 116
     assert "command_block_bereinigt" in \
         pipeline._AUDIT_KINDS_BEKANNT
     assert "command_block_in_plan" in \
@@ -9835,4 +9835,101 @@ def test_w51c_g_command_block_in_plan_gemeldet():
     reply = "PHASE: 20 - Test\nfoo COMMAND: RUN x\n"
     r = pipeline._bereinige_planner_reply(reply)
     assert "COMMAND:" in r
+
+def test_w51d_a2_beide_zustaende(tmp_path):
+    """T-W51d-a2: leeres mess_protokoll -> kein Block;
+    gefuelltes -> Block im Erstlauf-Prompt."""
+    from werkstatt.state import RunState
+    st = RunState(block_id="p", aufgabe="a", start_ts="t",
+                  docs={}, agents={}, always=[], optional=[],
+                  file_whitelist=[], api_key="k", budget={},
+                  agent_docs={}, project_dir=tmp_path,
+                  project_name="p")
+    st.mess_protokoll = ""
+    p1 = pipeline._planner_user_content(
+        "Phase 20 Auftrag", "", stufe=2, state=st)
+    assert "GEMESSENER INHALT" not in p1
+    st.mess_protokoll = "Inhalt von core/x.py"
+    p2 = pipeline._planner_user_content(
+        "Phase 20 Auftrag", "", stufe=2, state=st)
+    assert "GEMESSENER INHALT" in p2
+    assert "Inhalt von core/x.py" in p2
+
+
+def test_w51d_b_struktur():
+    """T-W51d-b-struktur: Planner-Konstanten."""
+    assert pipeline._PLANNER_PROTOKOLL_PER_READ == 10_000
+    assert pipeline._PLANNER_PROTOKOLL_TOTAL == 200_000
+    assert pipeline.MAX_PROTOKOLL_PER_COMMAND_READ_FILE == 20_000
+    assert pipeline.MAX_PROTOKOLL_TOTAL == 150_000
+
+
+def test_w51d_c_planner_md_genau_einmal():
+    """T-W51d-c: planner.md enthaelt GENAU EINMAL."""
+    from pathlib import Path as _P
+    md = _P("/opt/werkstatt/agents/planner.md").read_text(
+        encoding="utf-8")
+    assert "GENAU EINMAL" in md
+
+def _w51d_state(tmp_path):
+    """W51d-Helper: RunState mit read_file-Whitelist."""
+    from werkstatt.state import RunState
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=tmp_path,
+        project_name="p")
+    # Measurement-Objekt fuer read_file bereitstellen.
+    from pipeline import Measurement
+    m = Measurement("read_file", ("cat",), "Test.")
+    st.always = {"read_file": m}
+    st.optional = {}
+    return st
+
+
+def test_w51d_b_verhalten_planner_vs_builder(tmp_path):
+    """T-W51d-b-verhalten: 10x planner < Limit,
+    20x planner > Limit, 10x builder < Limit."""
+    from unittest.mock import patch as _p
+    st = _w51d_state(tmp_path)
+    cmds10 = [{"typ": "run", "id": "read_file",
+               "arg": f"core/f{i}.py"} for i in range(10)]
+
+    # 10x planner: alle drin, kein Limit.
+    calls = []
+    with _p("pipeline.audit",
+            side_effect=lambda k, *a, **kw: calls.append(k)), \
+         _p("pipeline.run_measurement_mit_argv",
+            return_value=("y" * 10_000, True, ["cat"])):
+        pipeline.execute_commands(st, cmds10, quelle="planner")
+    assert "mess_protokoll_limit_erreicht" not in calls
+    assert len(st.mess_protokoll) >= 10 * 10_000 - 1000
+
+    # 10x builder: alle drin, kein Limit.
+    st2 = _w51d_state(tmp_path)
+    calls2 = []
+    with _p("pipeline.audit",
+            side_effect=lambda k, *a, **kw: calls2.append(k)), \
+         _p("pipeline.run_measurement_mit_argv",
+            return_value=("y" * 10_000, True, ["cat"])):
+        pipeline.execute_commands(st2, cmds10, quelle="builder")
+    assert "mess_protokoll_limit_erreicht" not in calls2
+
+
+def test_w51d_d_limit_audit(tmp_path):
+    """T-W51d-d: Limit erreicht -> Audit
+    mess_protokoll_limit_erreicht (planner-Pfad)."""
+    from unittest.mock import patch as _p
+    st = _w51d_state(tmp_path)
+    st.mess_protokoll = "x" * pipeline._PLANNER_PROTOKOLL_TOTAL
+    cmds = [{"typ": "run", "id": "read_file",
+             "arg": "core/x.py"}]
+    calls = []
+    with _p("pipeline.audit",
+            side_effect=lambda k, *a, **kw: calls.append(k)), \
+         _p("pipeline.run_measurement_mit_argv",
+            return_value=("y", True, ["cat"])):
+        pipeline.execute_commands(st, cmds, quelle="planner")
+    assert "mess_protokoll_limit_erreicht" in calls
 

@@ -881,6 +881,14 @@ MAX_PROTOKOLL_PER_COMMAND_READ_FILE = 20_000
 # damit 5 read_files a 20_000 + andere passen.
 MAX_PROTOKOLL_TOTAL = 150_000
 
+# W51d (2026-10-18): Planner-spezifische Grenzen.
+# Der Planner misst bis zu 20 Zieldateien pro
+# Phase. 20 * 10_000 = 200_000. Der Builder behaelt
+# 20_000/read_file (Test-Kontext braucht laengere
+# Auszuege). quelle-Pruefung in execute_commands.
+_PLANNER_PROTOKOLL_PER_READ = 10_000
+_PLANNER_PROTOKOLL_TOTAL = 200_000
+
 # Auflage 2042: erlaubte Quellen-Marker fuer COMMAND-Audits.
 ERLAUBTE_QUELLEN = {
     "reviewer", "builder", "test_generator",
@@ -1228,6 +1236,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "planner_pfad_ausserhalb_projekt",
     "command_block_bereinigt",
     "command_block_in_plan",
+    "mess_protokoll_limit_erreicht",
 })
 
 
@@ -3563,8 +3572,16 @@ def _planner_user_content(
             "oder stelle eine Rueckfrage. "
             "Halte das Ausgabe-Format aus P7/P8 ein."
         )
+    _w51d_mess_block = ""
+    if state is not None and state.mess_protokoll:
+        _w51d_mess_block = (
+            "=== GEMESSENER INHALT ===\n"
+            f"{state.mess_protokoll}\n"
+            "=== /GEMESSENER INHALT ===\n\n"
+        )
     return (
         _w51a_block
+        + _w51d_mess_block
         + f"ROHER AUFTRAG DES MENSCHEN:\n{roher_auftrag}\n\n"
         f"LETZTE COMMITS IM ZIEL-REPO:\n{historie[:3000]}\n\n"
         f"{abschluss}"
@@ -6238,16 +6255,32 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
         # W6a-4 (2026-10-16): read_file darf groesser
         # sein (Anker-Zeilen sind oft tief in
         # grossen Dateien).
-        _grenze = (
-            MAX_PROTOKOLL_PER_COMMAND_READ_FILE
-            if cid == "read_file"
-            else MAX_PROTOKOLL_PER_COMMAND)
+        # W51d: quelle-abhaengige Grenzen.
+        if quelle == "planner":
+            _grenze = (
+                _PLANNER_PROTOKOLL_PER_READ
+                if cid == "read_file"
+                else MAX_PROTOKOLL_PER_COMMAND)
+            _total = _PLANNER_PROTOKOLL_TOTAL
+        else:
+            _grenze = (
+                MAX_PROTOKOLL_PER_COMMAND_READ_FILE
+                if cid == "read_file"
+                else MAX_PROTOKOLL_PER_COMMAND)
+            _total = MAX_PROTOKOLL_TOTAL
         out = trim_output(out, grenze=_grenze)
 
         # Auflage 2041: Gesamtlaenge begrenzen.
-        rest_platz = MAX_PROTOKOLL_TOTAL - len(state.mess_protokoll)
+        rest_platz = _total - len(state.mess_protokoll)
         if rest_platz <= 0:
-            print("[!] mess_protokoll Gesamtlimit erreicht. Weitere Messungen werden nur auditiert.")
+            print("[!] mess_protokoll Gesamtlimit "
+                  "erreicht. Weitere Messungen "
+                  "werden nur auditiert.")
+            audit("mess_protokoll_limit_erreicht",
+                  {"len": len(state.mess_protokoll),
+                   "total": _total,
+                   "quelle": quelle},
+                  state.project_dir, state.project_name)
             audit("command_executed",
                   {"id": cid, "arg": arg[:200], "argv": argv,
                    "quelle": quelle, "ok": ok, "ausgabe_verworfen": True},
