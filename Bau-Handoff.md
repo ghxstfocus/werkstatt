@@ -5526,3 +5526,42 @@ A-W50-8: Katalog-Kette
 Merkposten W50-A16-b (A-W48-19, Kategorie 2):
   Katalog-Nutzungs-Test (alle audit("…")-Aufrufe
   gegen _AUDIT_KINDS_BEKANNT). Nach Phase 20.
+
+## W51h-NACHABNAHME (2026-10-18)
+
+W51h gebaut (Commit 8205456, 5 Tests, 1153 -> 1158).
+Plan + COMMANDs im selben Reply werden jetzt
+verwertet (parser-basierte Plan-Pruefung, VOR
+W51e). W51g-Kollision aufgeloest: Format-Fehler ->
+Loop Runde 2, W51g-b-Kontext greift.
+
+W52 (Planner-Loop als Modul, Messungen/Replies in
+Dateien) wird getrennt:
+  W52a (Modul-Refactor, Kategorie 2): planner.py
+    auslagern, Verhalten identisch. Nach Phase 20a.
+  W52b (Datei-Struktur, Kategorie 3): Messungen
+    und Replies in Dateien. Nach W52a.
+Grund: W51h-Fix zuerst (akut Phase-20a-blockierend),
+W52a als sicherer Refactor auf gruener Basis,
+W52b als Verhaltensaenderung auf W52a.
+
+Merkposten (nach Phase 20a):
+  W51h-b: nach 3 Laeufen pruefen, ob W51h
+    ueberhaupt greift (Plan parsebar in Runde 1).
+    Wenn nein: Parser-Lockerung pruefen.
+  W51g-b2: Check-Fehler (nicht Parse-Fehler) in
+    letzter_plan_fehler aufnehmen (oder durch
+    W52b-fehler.json loesen).
+  W51b-2: Resume-Pfad hat keine _plan_ist_*-
+    Pruefungen. Eigener Block.
+
+Phase-20a-Messung M1-M8:
+  M1: Runde 1: COMMANDs.
+  M2: Runde 1: Plan parsebar? (W51h greift)
+  M3: Runde 1 Format-Fehler? W51g-b-Kontext in
+      Runde 2?
+  M4: Dedup greift (W51g-a)?
+  M5: Plan angenommen (PHASE-Kopf)?
+  M6: max_review_rounds=2 (Lauf 1/5 fuer A-W30-1).
+  M7: W46b/c bei Doku-Patches.
+  M8: Review-Runden bis GO/NO-GO.
