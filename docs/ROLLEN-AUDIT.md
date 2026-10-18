@@ -165,3 +165,78 @@ Anlass: Planner liefert P17-konforme Listen, aber keine Aufträge. Builder und R
 - Anti-Pattern-Katalog (26 Einträge) — werden an welche Rollen angehängt?
 
 Diese Punkte gehören in eine Folge-Session (Rollen-Sanierung).
+
+## 8. Update 2026-10-18 (nach W48-W54h)
+
+Der Audit ist vom 2026-10-17. Seitdem wurde teilweise saniert,
+teilweise gegen die Empfehlung gebaut.
+
+### 8.1 Gemessener Stand 2026-10-18
+
+| Datei | Audit 2026-10-17 | Stand 2026-10-18 | Delta | Ursache |
+|---|---|---|---|---|
+| builder.md | 534 | 647 | +113 | W54-a (+12), W54-h (+17), W37-Nachzug (?) |
+| planner.md | 236 | 297 | +61 | W51a, c, d, f, g |
+| reviewer.md | 410 | 56 | -354 | W40-Sanierung |
+| judge.md | (nicht vorhanden) | 90 | neu | W28b |
+| solver.md | 182 | 182 | 0 | - |
+| chaos.md | 10 | 10 | 0 | - |
+| coverage.md | 10 | 10 | 0 | - |
+| test_generator.md | 18 | 18 | 0 | - |
+
+### 8.2 Was saniert wurde
+
+- **reviewer.md: W40 hat die Redundanz aufgelöst.**
+  410 -> 56 Zeilen. Die Regeln sind jetzt in
+  HARD_RULES_REVIEWER (pipeline.py), der Roll-Body
+  verweist nur noch.
+
+- **judge.md: neue Rolle (W28b).**
+  Der Judge (Phasen-Gesamt-Review) ist im Audit
+  nicht erwähnt, weil er damals noch nicht existierte.
+  90 Zeilen, Aufgabe: Contract-Treue und Sicherheit.
+
+### 8.3 Was gegen die Empfehlung lief
+
+- **builder.md: 534 -> 647 (+113).**
+  Audit-Ziel war < 300 Zeilen (Roll-Body).
+  W54-a (+12, doppelte Imports/Klassen) und
+  W54-h (+17, Ziel-Klasse aus ZIELDATEI) sind
+  Symptom-Behandlung: sie fuegen Regeln hinzu,
+  statt Redundanz aufzuloesen.
+  Der Builder liest die Anker-Regeln nicht mehr
+  (Phase-20b-Laeufe: "Anker nicht im GEMESSENER
+  INHALT", Builder wiederholt 3x).
+
+- **planner.md: 236 -> 297 (+61).**
+  Audit-Ziel war < 150 Zeilen (Roll-Body).
+  W51a-h haben sechs neue Abschnitte hinzugefuegt:
+  MESS-PFLICHT, MESSUNGEN, Phasen-Groesse,
+  DEIN LETZTER PLAN WURDE ABGELEHNT.
+  Der Planner-Loop ist durch die W51-Kette
+  stabilisiert, aber der Roll-Body ist gewachsen.
+
+### 8.4 Was offen bleibt
+
+- **W61 (Rollen-Sanierung, Kategorie 3):**
+  Redundanz aufloesen (builder.md 43% geschaetzt),
+  Roll-Body < 300/250/150.
+  Wurde durch die W51/W54-Serie dringlicher,
+  nicht weniger dringlich.
+
+- **W54-f (builder.md 647 Zeilen):**
+  Aufraeumen bei W36-2b..6 oder W61.
+
+- **W57 (Prompt-Audit):**
+  Nach Phase 20b alle Rollen-Dateien pruefen:
+  was liest das LLM tatsaechlich? Was wird ignoriert?
+
+### 8.5 Fazit
+
+Der Audit war richtig. Die W51/W54-Serie hat ihn
+ignoriert. Die Symptome (Deadlock in Phase 20b,
+Builder wiederholt Anker) sind die Folge.
+
+W61 (Rollen-Sanierung) ist der strukturelle Fix.
+W59 (Deadlock-Mechanismus) ist der mechanische Fix.
+Beide sind noetig, in dieser Reihenfolge.
