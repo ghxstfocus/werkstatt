@@ -4923,6 +4923,17 @@ def verify_code(patches: list[dict[str, str]],
                 continue
             if fname in index:
                 continue
+            # W61-Pro: unittest/mock-Methoden ignorieren.
+            if fname in ("assertEqual", "assertFalse",
+                          "assertTrue", "assertIn", "assertIs",
+                          "assertIsNone", "assertIsNotNone",
+                          "assert_called_once", "assert_called",
+                          "assert_called_with", "assert_not_called",
+                          "exists", "Mock", "MockWriter",
+                          "TemporaryDirectory", "cleanup",
+                          "mkdir", "write_text", "read_text",
+                          "call_args", "called"):
+                continue
             # Modul-Attribut (obj.meth): nur meth pruefen.
             # Wenn meth nirgends im Projekt definiert ist,
             # koennte es eine externe API sein. Wir warnen
