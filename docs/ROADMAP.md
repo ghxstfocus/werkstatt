@@ -1,166 +1,125 @@
-# Werkstatt — Roadmap
+# Roadmap — Werkstatt
 
-Offene Architektur-Ideen fuer die Werkstatt selbst.
-Nicht zu verwechseln mit den TODO-Listen von
-Ziel-Projekten (siehe KONVENTION.md, sobald
-vorhanden).
+Stand: 2026-10-18
+Uebersicht. Details in `OFFENE-BLOECKE.md` (Todo) und
+`ERLEDIGT.md` (Erledigt).
 
-Jeder Punkt hier ist eine Idee, kein Auftrag.
-Ein Auftrag wird er, wenn der Nutzer ihn priorisiert.
+## Symbole
 
-## Regeln fuer diese Datei
+| Symbol | Bedeutung |
+|---|---|
+| ✅ | abgeschlossen, verifiziert (Tests gruen, Commit) |
+| 🔧 | abgeschlossen, nachgebessert (manuell oder A16) |
+| ⚠️ | abgeschlossen, Symptom-Behandlung (nicht strukturell) |
+| 🚫 | blockiert (Deadlock, Review offen) |
+| 📋 | geplant, nicht begonnen |
+| 🔴 | offen, Prioritaet P1 (akut, blockiert Phase) |
+| 🟡 | offen, Prioritaet P2 (strukturell) |
+| 🟢 | offen, Prioritaet P3 (Refactor) |
 
-- Jeder Punkt hat eine Nummer (fortlaufend).
-- Jeder Punkt hat eine Kategorie (1, 2 oder 3).
-- Jeder Punkt nennt "Wann" (jetzt, nach Probebetrieb,
-  spaeter).
-- Erledigte Punkte werden markiert, nicht geloescht.
-- Die Datei bleibt unter ~200 Zeilen. Wenn sie
-  waechst, wird konsolidiert.
+## Phasen
 
-## Offene Punkte
+| Phase | Titel | Status | Commit | Tests |
+|---|---|---|---|---|
+| 1 | Projekt-Schema | ✅ | 406e3cc | — |
+| 1b | Validator Fail-closed | ✅ | — | — |
+| 2 | Scaffolder | 📋 | — | — |
+| 3a-1 | Anti-Pattern-Bibliothek | ✅ | 1ed875a | — |
+| 3a-2 | Anti-Pattern-Katalog | ✅ | 8ed6cd0 | — |
+| 3b | Builder-Injektion | ✅ | 04012f6 | — |
+| 3c-1 | Reviewer + Solver Injektion | ✅ | 4916b01 | — |
+| 3c-1b | Reviewer/Solver-Praezisierung | ✅ | 045556e | — |
+| 3c-2..17 | (weitere Phasen, im Archiv) | ✅ | — | — |
+| 18 | Guardrails | ✅ | — | — |
+| 19 | ChangeApplier + Sofort-Massnahmen | ✅ | 163f29b | 1102 |
+| 20a | Change-Modell (Audit-Trail-Felder) | 🔧 | 560659a | 1452 |
+| 20b | ChangeApplier (Audit-Log, Rollback) | 🚫 | — | — |
 
-### 2101 — Auto-Repair und Kategorie 3
+## W-Block-Serien
 
-- Frage (Architekt, 2026-10-12): soll der
-  deterministische Auto-Repair (`ruff --fix`,
-  `ruff format`) Kategorie-3-Dateien ausschliessen?
-- Der Builder-Agent ist NICHT betroffen (er
-  repariert nichts, er schlaegt vor).
-- Betroffen ist nur `auto_repair_ruff`.
-- Heute: `ruff --fix` laeuft ueber alle Dateien,
-  keine Kategorie-Pruefung.
-- Moegliche Loesung: `file_kategorie_3`-Liste in
-  der Projekt-YAML, ruff --fix pro Pfad,
-  Kategorie-3-Pfade ausgenommen.
-- Erst nach Probebetrieb: messen, ob der
-  Auto-Repair tatsaechlich Kategorie-3-Dateien
-  anfasst.
-- Wann: nach Probebetrieb.
-- Kategorie: 3.
+### W1–W35 (Basis, 2026-10-16/17)
 
-### 2102 — Auto-Repair-Markierung im Audit / Approval
+Serie von 30 Bloecken. Details in `ERLEDIGT.md`.
 
-- Wenn der Auto-Repair laeuft, wird das im Audit
-  sichtbar, welche Dateien geaendert wurden.
-- Vorschlag:
-  - `auto_repair_ruff` liefert
-    `git diff --name-only` (die geaenderten
-    Dateien).
-  - Audit-Feld erweitert:
-    `{"ok": bool,
-     "geaenderte_dateien": [...],
-     "kategorie3_beruehrt": [...]}`.
-  - Approval-Dokument zeigt Warnung bei
-    Kategorie-3-Beruehrung.
-- Klein, eigenstaendig.
-- Wann: naechster Block.
-- Kategorie: 2 (Transparenz).
+| Serie | Inhalt | Status | Commits |
+|---|---|---|---|
+| W1–W11 | Planner-Messung, Unterblock-Isolation, Message-Check, read_file-Zeilenbereich | ✅ | 0e6c881..c3bd4db |
+| W13–W13b | Anker-Zeilenbereich, Ersatz-Pruefung | ✅ | — |
+| W23 | Kommunikationswege-Audit | ✅ | c3bd4db |
+| W24a | Apply idempotent | ✅ | 4531451 |
+| W25 | Skills-Infrastruktur | ✅ | 317b000 |
+| W25a-e | Basis-Gate Testanzahl | ✅ | 784dd98..dcda015 |
+| W26 | plan.md als Datei | ✅ | 05c817e |
+| W27 | Sprint-Contracts | ✅ | 309aeef |
+| W28a | Judge-Rolle + Reviewer reduziert | ✅ | f122c39 |
+| W28b+c | Review-Loop auf Judge, Antwort-Limit | ✅ | — |
+| W29 | Aggregated Phase-Review | ✅ | 0faa69f |
+| W30 | Loop-Cap-Konsistenz | ✅ | — |
+| W31–W34b | mypy-Fixes, phase_apply_vor_review, .werkstatt/Ignore | ✅ | 79027d8, 87a2fbe |
+| W35a-1/2/2d | Planner-Resume + Merge + Suffix-Aufteilung | ✅ | — |
 
-### 2103 — Reviewer-Chat mit Zusammenfassung
+### W36–W47 (Modularisierung, 2026-10-17)
 
-- Die Approval-Seite zeigt nur die Kernpunkte.
-  Details auf Abruf.
-- Der Reviewer-Agent fasst zusammen, was zu
-  approven ist.
-- Der Nutzer kann interaktiv mit dem Reviewer
-  sprechen.
-- "Mach alle fertig" als Freigabe-Option.
-- Wichtige Fragen vor Bau:
-  - Was zeigt die Approval-Seite standardmaessig?
-  - Was ist auf Abruf verfuegbar?
-  - Wie wird "alle fertig" interpretiert?
-  - Was ist die Mindestinformation, die der Nutzer
-    gesehen haben muss?
-  - Wie bleibt der Reviewer zustandslos, wenn er
-    Dialog fuehren soll?
-- Drei Varianten:
-  - A) Approval-Seite mit Kernpunkten (klein, sofort).
-  - B) Reviewer-Zusammenfassung zusaetzlich (mittel).
-  - C) Reviewer-Chat mit Dialog (gross).
-- Wann: nach Probebetrieb, eigener Block.
-- Kategorie: 3.
+Serie von 12 Bloecken. Details in `ERLEDIGT.md`.
 
-### 2104 — Supervisor-Rolle
+| Serie | Inhalt | Status | Commits |
+|---|---|---|---|
+| W36 | pipeline.py → state.py, parser.py | ✅ | 5f6e68f |
+| W37–W41 | builder.md, alter_plan, Parser-Toleranz, judge.md/planner.md, classify_verdict | ✅ | 28b2ecb..6e4926a |
+| W42–W45 | Planner-Resume-Messung, new_file-Idempotenz, Judge-Prompt-Groesse, fehlende Dateien | ✅ | 255191b..e621e24 |
+| W47 | Idempotenz-Check vor Gesamt-Review | ✅ | 8aaa861 (1102) |
 
-- Neue Rolle: `agents/supervisor.md`.
-- Zweck: Ueberblick ueber Projekte und Bloecke.
-  Entlastung des Reviewers.
-- Nicht: Code-Review, Bauen, Tests. Nur
-  Zusammenfassung.
-- Zustandslos. Liest audit-logs/, TODO.md,
-  Block-Status. Schreibt nichts.
-- Nutzung: Block-Ende (kurze Zusammenfassung)
-  + Dashboard (auf Abruf).
-- Modell: deepseek-chat, Temperature 0.0.
-- Rollen-Body muss klarstellen:
-  keine Entscheidungen, kein Code-Review.
-- Heute gibt es nur ein Ziel-Projekt (security-ai).
-  Ein Supervisor hat heute nichts zu koordinieren.
-- Wann: nach Probebetrieb, wenn mehrere Projekte
-  parallel laufen.
-- Kategorie: 3.
+### W46–W50 (Judge/Planner-Bugs, 2026-10-18)
 
-### 2105 — Datei-Namenskonvention fuer Ziel-Projekte
+| Block | Titel | Status | Commit | Tests |
+|---|---|---|---|---|
+| W46 | Judge-Skip bei Doku-Patches/Phasen | ✅ | 38d3960 | 1113 |
+| W48 | Planner-Start bei existierender phase.yaml sperren | 🔧 | 6ba89a6 | 1106 |
+| W48-A16 | Katalog +2, Print-Statement | 🔧 | 7c46c7b | 1114 |
+| W50 | Planner-Durchfall bei abgeschlossener Phase | 🔧 | 739397f | 1120 |
 
-- Fuenf Pflicht-Dateien pro Ziel-Projekt:
-  - `STATUS.md` — Wo stehen wir jetzt?
-  - `TODO.md` — Was ist offen?
-  - `DECISIONS.md` — Warum ist es so?
-  - `REVIEW_LOG.md` — Was wurde geprueft?
-  - `SECURITY_LOG.md` — Was ist sicherheitsrelevant?
-- Optional:
-  `ARCHITECTURE.md`, `DEPLOYMENT.md`,
-  `CONTEXT_PROMPT.md`, `WORKFLOW.md`,
-  modulspezifisch (z. B. `NTFY.md`).
-- Keine Ueberschneidungen:
-  - Offene Punkte NUR in TODO.md.
-  - Sicherheitsrelevantes NUR in SECURITY_LOG.md.
-  - Pruefergebnisse NUR in REVIEW_LOG.md.
-  - STATUS/Phasen NIEMALS mit TODO vermischen.
-- Anwendung:
-  - Neue Ziel-Projekte: Standard.
-  - security-ai: bleibt vorerst bei heutigen
-    Namen. Migration spaeter.
-- Werkstatt-Doku:
-  - `docs/KONVENTION.md` (neu) mit vollstaendiger
-    Konvention.
-  - README kurzer Verweis.
-- Wann: vor dem Scaffolder-Block.
-- Kategorie: 1 (Werkstatt-Doku).
+### W51a–h (Planner-Mess-Mechanik, 2026-10-18) — Symptom
 
-### 2106 — Scaffolder-Rolle mit Organizer-Modus
+Serie von 8 Bloecken. Symptom-Behandlung, nicht
+strukturell. Details in `ERLEDIGT.md`.
 
-- Drei Modi:
-  - Modus 1 (scaffold): neues Projekt anlegen.
-    Deterministisch, kein LLM. Legt die 5 Pflicht-
-    Dateien an. Erster Commit.
-  - Modus 2 (organize): bestehendes Projekt
-    umstrukturieren. LLM erzeugt Plan, Mensch
-    prueft, Skript fuehrt aus.
-  - Modus 3 (cleanup, optional): Ueberschneidungen
-    finden und aufloesen. Wie Modus 2.
-- Sicherheitsgrenzen:
-  - Agent liest, schreibt NICHT. Nur Plan (Text).
-  - Deterministisches Skript fuehrt aus.
-  - Mensch zwischen Plan und Ausfuehrung.
-  - `git tag` vor Migration.
-  - `git diff` zur Nachpruefung.
-  - `git revert` als Rueckrollung.
-  - Keine inhaltlichen Aenderungen (nur
-    verschieben, nicht umformulieren).
-  - Inhalte ohne klare Zuordnung:
-    `MIGRATION_NOTES.md` zur manuellen Pruefung.
-- Kein unbeaufsichtigter Lauf. Kein Cron.
-- Reihenfolge:
-  1. 2105 (Konvention definieren).
-  2. 2106 (Scaffolder + Organizer bauen).
-  3. Migration security-ai (spaeter).
-- Modul: `scaffolder.py` in der Werkstatt.
-- Wann: nach 2105.
-- Kategorie: 3.
+| Block | Titel | Status | Commit | Tests |
+|---|---|---|---|---|
+| W51a–h | Planner-Prompt, Parser-Sperre, COMMAND-Bereinigung, Mess-Mechanik, Loop-Abbruch, Phasen-Groesse, Dedup, Plan+COMMANDs | ⚠️ | 23ce844..8205456 | 1158 |
 
-## Abgeschlossene Punkte (zur Nachvollziehbarkeit)
+### W54a/g/h (Builder-Fixes, 2026-10-18) — Symptom
 
-- 2093 (Werkstatt-WORKFLOW) — erledigt in Commit
-  ec19948.
+Serie von 3 Bloecken. Symptom-Behandlung, nicht
+strukturell.
+
+| Block | Titel | Status | Commit | Tests |
+|---|---|---|---|---|
+| W54a | builder.md-Regeln doppelte Imports | ⚠️ | d291c37 | 1161 |
+| W54g | apply_code_patches Ersatz-Duplikate | ⚠️ | 546bc22 | 1165 |
+| W54h | builder.md-Regel Ziel-Klasse | ⚠️ | 00483a1 | 1166 |
+
+### W60 (Doku-Struktur, 2026-10-18)
+
+| Block | Titel | Status | Commit | Tests |
+|---|---|---|---|---|
+| W60 | Doku-Struktur (KONVENTION, ARCHITEKTUR, ROADMAP, OFFENE, ERLEDIGT) | 🔧 | a70a121.. | 1166 |
+
+## Offene Bloecke
+
+Detail in `OFFENE-BLOECKE.md`. Nur P1 (akut) hier:
+
+| Block | Kategorie | Symbol | Kurz |
+|---|---|---|---|
+| W59 | 3 | 🔴 | Read-vor-Edit (Deadlock-Mechanismus) |
+| W61 | 3 | 🔴 | Rollen-Sanierung (builder.md 647) |
+
+## Ideen
+
+Siehe `docs/IDEEN.md` (2101–2106, Wunschliste, nicht Plan).
+
+## Verweise
+
+- `OFFENE-BLOECKE.md` — Todo, priorisiert.
+- `ERLEDIGT.md` — Erledigte Bloecke mit Commit/Tests.
+- `ARCHITEKTUR.md` — Ziel, Rollen, Luecken.
+- `KONVENTION.md` — Ordnerstruktur, Datei-Namen.

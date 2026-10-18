@@ -69,6 +69,7 @@ Datei-Namen folgen einer festen Konvention.
 | ROADMAP.md | Uebersicht Phasen/W-Bloecke | offen |
 | OFFENE-BLOECKE.md | Todo, priorisiert | 2026-10-18 |
 | ERLEDIGT.md | Abgeschlossene Bloecke | offen |
+| IDEEN.md | Wunschliste (2101-2106) | 2026-10-18 |
 | ROLLEN-AUDIT.md | Rollen-Stand | 2026-10-18 |
 | WORKFLOW.md | Pipeline-Ablauf | 2026-10-16 |
 | PROTOKOLL-*.md | Sitzungen | fortlaufend |
