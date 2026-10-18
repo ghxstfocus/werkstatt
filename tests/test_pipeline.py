@@ -1979,6 +1979,7 @@ class TestApplyCodePatches:
                                   file_whitelist=["tools/"])
         patches = [{"pfad": "tools/x.py", "anker": "ALT",
                     "ersatz": "NEU"}]
+        _setze_gelesen(state, patches)
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is True
         assert ziel.read_text() == "NEU\n"
@@ -1991,6 +1992,7 @@ class TestApplyCodePatches:
                                   file_whitelist=["tools/"])
         patches = [{"pfad": "tools/x.py", "anker": "FEHLT",
                     "ersatz": "NEU"}]
+        _setze_gelesen(state, patches)
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
         assert ziel.read_text() == "Inhalt ohne Anker.\n"
@@ -2003,6 +2005,7 @@ class TestApplyCodePatches:
                                   file_whitelist=["tools/"])
         patches = [{"pfad": "extern/x.py", "anker": "ALT",
                     "ersatz": "NEU"}]
+        _setze_gelesen(state, patches)
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
 
@@ -2016,6 +2019,7 @@ class TestApplyCodePatches:
             {"pfad": "tools/x.py", "anker": "ALT", "ersatz": "NEU"},
             {"pfad": "tools/x.py", "anker": "NEU", "ersatz": "NOCH"},
         ]
+        _setze_gelesen(state, patches)
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
         assert ziel.read_text() == "ALT\n"
@@ -2032,6 +2036,7 @@ class TestApplyCodePatches:
             {"pfad": "tools/a.py", "anker": "A1", "ersatz": "A2"},
             {"pfad": "tools/b.py", "anker": "B1", "ersatz": "B2"},
         ]
+        _setze_gelesen(state, patches)
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is True
         assert a.read_text() == "A2\n"
@@ -2045,6 +2050,7 @@ class TestApplyCodePatches:
                                   file_whitelist=["tools/"])
         patches = [{"pfad": "tools/x.py", "anker": "ALT",
                     "ersatz": "NEU"}]
+        _setze_gelesen(state, patches)
         ok = pipeline.apply_code_patches(state, patches, dry_run=True)
         assert ok is True
         assert ziel.read_text() == "ALT\n"
@@ -2052,6 +2058,7 @@ class TestApplyCodePatches:
     def test_apply_leer_fail(self, tmp_path: Path) -> None:
         state = build_test_state(project_dir=tmp_path,
                                   file_whitelist=["tools/"])
+        _setze_gelesen(state, [])
         ok = pipeline.apply_code_patches(state, [])
         assert ok is False
 
@@ -2081,6 +2088,7 @@ class TestApplyCodePatches:
                   "  def g(self):\n      pass")
         patches = [{"pfad": "tools/x.py", "anker": anker,
                     "ersatz": ersatz}]
+        _setze_gelesen(state, patches)
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is True
         inhalt = ziel.read_text()
@@ -2108,6 +2116,7 @@ class TestApplyCodePatches:
         patches = [{"pfad": "tools/x.py",
                     "anker": "      self.assertEqual(1, 1)",
                     "ersatz": "      self.assertEqual(1, 1)\n"}]
+        _setze_gelesen(state, patches)
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is True
         korrekturen = [a for a in audit_calls
@@ -2129,6 +2138,7 @@ class TestApplyCodePatches:
         patches = [{"pfad": "tools/x.py",
                     "anker": "      self.assertEqual(1, 1)",
                     "ersatz": "      self.assertEqual(1, 1)\n"}]
+        _setze_gelesen(state, patches)
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
 
@@ -2159,6 +2169,7 @@ class TestApplyCodePatches:
              "anker": "def f():\n    pass",
              "ersatz": "def f():\n    pass\n\ndef g():\n    pass"},
         ]
+        _setze_gelesen(state, patches)
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is True
         inhalt = ziel.read_text()
@@ -2180,6 +2191,7 @@ class TestApplyCodePatches:
             {"pfad": "tools/x.py", "anker": "ALT",
              "ersatz": "NEU2"},
         ]
+        _setze_gelesen(state, patches)
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
         assert ziel.read_text() == "ALT\n"
@@ -2207,6 +2219,7 @@ class TestApplyCodePatches:
             {"pfad": "tools/x.py", "anker": "X",
              "ersatz": "Y"},
         ]
+        _setze_gelesen(state, patches)
         ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
         # Nichts geaendert (Validierung vor Anwendung).
@@ -2296,6 +2309,7 @@ class TestApplyAndRecheck:
         # run_measurement gemockt: immer gruen.
         monkeypatch.setattr(pipeline, "run_measurement",
                             lambda m, wl, pd: ("mock ok\n", True))
+        _setze_gelesen(state, state.code_patches)
         rc = pipeline.apply_and_recheck(state, self._always(),
                                           ["tools/"])
         assert rc is None
@@ -2318,6 +2332,7 @@ class TestApplyAndRecheck:
         state.code_patches = [
             {"pfad": "tools/x.py", "anker": "FEHLT", "ersatz": "NEU"},
         ]
+        _setze_gelesen(state, state.code_patches)
         rc = pipeline.apply_and_recheck(state, self._always(),
                                           ["tools/"])
         assert rc == 17
@@ -2344,6 +2359,7 @@ class TestApplyAndRecheck:
             pipeline, "ask_reviewer_for_recovery",
             lambda *a, **kw: pipeline.RecoveryVorschlag(art="basis_gate"))
         monkeypatch.setattr(pipeline, "print_recovery", lambda v: None)
+        _setze_gelesen(state, state.code_patches)
         rc = pipeline.apply_and_recheck(state, self._always(),
                                           ["tools/"])
         # Post-Apply-Fix 2026-10-16: rc=19 ist jetzt
@@ -2514,6 +2530,28 @@ class TestReadTargetSnippets:
 # =====================================================================
 # build_system_prompt (Auflage 2182)
 # =====================================================================
+
+
+def _setze_gelesen(state, patches) -> None:
+    """W59 (2026-10-18): markiert Patch-Pfade als gelesen.
+
+    Setzt state.gelesene_dateien[pfad] = aktuelle mtime
+    fuer jeden Patch-Pfad (typ != new_file). Notwendig
+    fuer apply_code_patches ab W59.
+    """
+    for p in patches:
+        if not isinstance(p, dict):
+            continue
+        if p.get("typ") == "new_file":
+            continue
+        pfad = p.get("pfad", "")
+        if not pfad:
+            continue
+        ziel = state.project_dir / pfad
+        try:
+            state.gelesene_dateien[pfad] = ziel.stat().st_mtime
+        except OSError:
+            state.gelesene_dateien[pfad] = 0.0
 
 def _prompt_fuer_rolle(rolle: str) -> str:
     """Baut einen minimalen System-Prompt fuer eine Rolle."""
@@ -5192,6 +5230,7 @@ class TestApplyNewFile:
                     "inhalt": "x = 1\n"}]
         from unittest.mock import patch
         with patch("pipeline.audit"):
+            _setze_gelesen(state, patches)
             ok = pipeline.apply_code_patches(state, patches)
         assert ok is True
         assert (tmp_path / "core" / "hello.py").read_text() == "x = 1\n"
@@ -5206,6 +5245,7 @@ class TestApplyNewFile:
                     "inhalt": "neu\n"}]
         from unittest.mock import patch
         with patch("pipeline.audit"):
+            _setze_gelesen(state, patches)
             ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
 
@@ -5217,6 +5257,7 @@ class TestApplyNewFile:
                     "inhalt": "x\n"}]
         from unittest.mock import patch
         with patch("pipeline.audit"):
+            _setze_gelesen(state, patches)
             ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
 
@@ -5230,6 +5271,7 @@ class TestApplyNewFile:
         ]
         from unittest.mock import patch
         with patch("pipeline.audit"):
+            _setze_gelesen(state, patches)
             ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
 
@@ -7727,6 +7769,7 @@ class TestW24aIdempotenz:
             "ersatz": "class Foo:",
         }]
         # anker nicht da, ersatz da -> skip.
+        _setze_gelesen(state, state.code_patches)
         ok = pipeline.apply_code_patches(state, state.code_patches)
         assert ok is True
         assert (tmp_path / "x.py").read_text(encoding="utf-8") == (
@@ -7748,6 +7791,7 @@ class TestW24aIdempotenz:
         }]
         # anker und ersatz verschieden, beide im Text.
         # -> Ambig, fail-closed.
+        _setze_gelesen(state, state.code_patches)
         ok = pipeline.apply_code_patches(state, state.code_patches)
         assert ok is False
 
@@ -7764,6 +7808,7 @@ class TestW24aIdempotenz:
             "anker": "class Foo:\n    pass",
             "ersatz": "class Foo:\n    value: int = 1",
         }]
+        _setze_gelesen(state, state.code_patches)
         ok = pipeline.apply_code_patches(state, state.code_patches)
         assert ok is True
         assert "value: int = 1" in (
@@ -7784,6 +7829,7 @@ class TestW24aIdempotenz:
             "ersatz": "class Bar:",
         }]
         # weder anker noch ersatz im Text -> fail-closed.
+        _setze_gelesen(state, state.code_patches)
         ok = pipeline.apply_code_patches(state, state.code_patches)
         assert ok is False
 
@@ -8717,6 +8763,7 @@ class TestW33bApplyVorReview:
              "anker": "class ChangeApplier:",
              "ersatz": "class ChangeApplier:\n    x = 1"}])
         from unittest.mock import patch as mp
+        _setze_gelesen(state, state.code_patches)
         with mp("pipeline.audit"):
             rc = pipeline._phase_apply_vor_review(
                 state, ["core/", "tests/"])
@@ -10621,6 +10668,7 @@ def test_w54_c_zwei_normale_patches(tmp_path):
     import unittest.mock as _m
     with _m.patch("pipeline.audit",
                   side_effect=lambda k, *a, **kw: None):
+        _setze_gelesen(st, patches)
         ok = pipeline.apply_code_patches(st, patches)
     assert ok
 
@@ -10646,6 +10694,7 @@ def test_w54_d_kurzer_ersatz_kein_fail(tmp_path):
     import unittest.mock as _m
     with _m.patch("pipeline.audit",
                   side_effect=lambda k, *a, **kw: calls.append(k)):
+        _setze_gelesen(st, patches)
         ok = pipeline.apply_code_patches(st, patches)
     assert ok
     assert "patch_ersatz_duplikat" not in calls
@@ -10688,6 +10737,7 @@ def test_w54_g_a_anker_doppelt(tmp_path):
     with _m.patch("pipeline.audit",
                   side_effect=lambda k, *a, **kw: calls.append(
                       (k, a, kw))):
+        _setze_gelesen(st, patches)
         ok = pipeline.apply_code_patches(st, patches)
     assert not ok
     kinds = [c[0] for c in calls]
@@ -10712,6 +10762,7 @@ def test_w54_g_b_verschiedene_zeilen(tmp_path):
     import unittest.mock as _m
     with _m.patch("pipeline.audit",
                   side_effect=lambda k, *a, **kw: calls.append(k)):
+        _setze_gelesen(st, patches)
         ok = pipeline.apply_code_patches(st, patches)
     assert ok
     assert "patch_ersatz_doppelte_zeilen" not in calls
@@ -10734,6 +10785,7 @@ def test_w54_g_c_lange_zeile_doppelt(tmp_path):
     with _m.patch("pipeline.audit",
                   side_effect=lambda k, *a, **kw: calls.append(
                       (k, a, kw))):
+        _setze_gelesen(st, patches)
         ok = pipeline.apply_code_patches(st, patches)
     assert not ok
     kinds = [c[0] for c in calls]
@@ -10761,6 +10813,7 @@ def test_w54_g_d_kurze_legit_doppelt(tmp_path):
     import unittest.mock as _m
     with _m.patch("pipeline.audit",
                   side_effect=lambda k, *a, **kw: calls.append(k)):
+        _setze_gelesen(st, patches)
         ok = pipeline.apply_code_patches(st, patches)
     assert ok
     assert "patch_ersatz_doppelte_zeilen" not in calls

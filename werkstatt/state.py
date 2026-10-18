@@ -29,6 +29,22 @@ class Measurement:
 
 
 @dataclass
+class Messung:
+    """W52b (2026-10-18): strukturierte Einzelmessung.
+
+    Ersetzt schrittweise mess_protokoll (String).
+    Jede Messung liegt als Datei unter
+    .werkstatt/<run_id>/messungen/<sha1>.txt.
+    """
+    pfad: str           # Zieldatei-Pfad
+    sha1: str           # Inhalt-Hash
+    mtime: float        # mtime zum Mess-Zeitpunkt
+    groesse: int        # Bytes
+    quelle: str         # "builder", "planner", "reviewer"
+    datei: "Path | None" = None  # Pfad zur Mess-Datei
+
+
+@dataclass
 class LLMReply:
     ok: bool
     content: str = ""
@@ -150,7 +166,14 @@ class RunState:
     coverage_pct: int = -1  # -1 = nicht gemessen
     basis_protokoll: str = ""
     basis_protokoll_nach_apply: str = ""  # UMB-1b
-    mess_protokoll: str = ""
+    mess_protokoll: str = ""  # deprecated (W52b)
+    # W52b (2026-10-18): strukturierte Messungen.
+    # Wird parallel zu mess_protokoll gefuellt,
+    # bis alle Leser umgestellt sind.
+    messungen: list = field(default_factory=list)
+    # W59 (2026-10-18): gelesene Dateien + mtime.
+    # Pfad -> mtime. apply_code_patches prueft.
+    gelesene_dateien: dict = field(default_factory=dict)
     # Post-Apply-Neumessung 2026-10-16:
     # read_file-Messungen fuer new_file-Pfade nach Apply.
     mess_protokoll_nach_apply: str = ""

@@ -1126,7 +1126,7 @@ _AP_PFLICHTFELDER = (
 # (test_audit_kinds_alle_aufrufe_registriert) prueft
 # die Nutzung, test_katalog_anzahl_matcht_soll die
 # Registrierung.
-_KATALOG_SOLL = 158
+_KATALOG_SOLL = 160
 
 _AUDIT_KINDS_BEKANNT = frozenset({
     "aggregator_failed",
@@ -1182,6 +1182,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "patch_ambig",
     "patch_anker_fehlt",
     "patch_bereits_angewendet",
+    "patch_datei_geaendert_seit_messung",
+    "patch_ohne_messung",
     "patch_ersatz_doppelte_zeilen",
     "patch_konflikt_new_file",
     "phase_abgebrochen",
@@ -6308,6 +6310,53 @@ def _truncate_mit_marker(text: str, max_len: int) -> str:
             + "Zeichen weggelassen ...]\n")
 
 
+def _schreibe_messung(
+        state: RunState,
+        pfad: str,
+        inhalt: str,
+        quelle: str,
+        mtime: float,
+) -> None:
+    """W52b (2026-10-18): schreibt eine Messung als Datei.
+
+    Ergaenzt state.messungen, state.gelesene_dateien
+    (W59) und state.mess_protokoll (deprecated, fuer
+    Bestandsleser).
+
+    Pfad: .werkstatt/<run_id>/messungen/<sha1>.txt.
+    """
+    import hashlib
+    from pathlib import Path as _P
+    sha1 = hashlib.sha1(
+        inhalt.encode("utf-8", errors="replace")).hexdigest()
+    # Verzeichnis.
+    run_id = state.run_id or "unbekannt"
+    mess_dir = _P("/opt/werkstatt/.werkstatt") / run_id \
+        / "messungen"
+    try:
+        mess_dir.mkdir(parents=True, exist_ok=True)
+        datei = mess_dir / f"{sha1}.txt"
+        datei.write_text(inhalt, encoding="utf-8")
+    except OSError as exc:
+        print(f"[WARN] Messung-Datei: {exc}")
+        datei = None
+    # state.messungen.
+    from werkstatt.state import Messung
+    state.messungen.append(Messung(
+        pfad=pfad,
+        sha1=sha1,
+        mtime=mtime,
+        groesse=len(inhalt.encode("utf-8",
+                                  errors="replace")),
+        quelle=quelle,
+        datei=datei,
+    ))
+    # W59: gelesene Datei + mtime.
+    state.gelesene_dateien[pfad] = mtime
+    # Deprecated: String-Kanal.
+    state.mess_protokoll += inhalt
+
+
 def execute_commands(state: RunState, commands: list[dict[str, str]],
                      quelle: str
                      ) -> dict[tuple[str, str], bool]:
@@ -6415,8 +6464,18 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
                    "ok": ok, "dedup_verworfen": True},
                   state.project_dir, state.project_name)
             continue
+        # W52b (2026-10-18): Messung als Datei
+        # + state.messungen + state.gelesene_dateien.
+        # mtime nur bei read_file (Datei-Messung).
+        _mtime = 0.0
+        if cid == "read_file" and ok:
+            try:
+                _mtime = (state.project_dir / arg).stat().st_mtime
+            except OSError:
+                _mtime = 0.0
         if ok:
-            state.mess_protokoll += out
+            _schreibe_messung(
+                state, arg, out, quelle, _mtime)
             if (quelle == "planner"
                     and cid == "read_file"):
                 _gem = getattr(
@@ -6424,7 +6483,8 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
                 if _gem is not None:
                     _gem.add(arg)
         else:
-            state.mess_protokoll += (
+            _schreibe_messung(
+                state, arg,
                 "\n\n!!! COMMAND FEHLGESCHLAGEN: "
                 f"{cid} {arg} !!!\n"
                 "Der COMMAND hat ok=false geliefert. "
@@ -6434,8 +6494,8 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
                 "dem ZIELDATEIEN-Header oder aus dem "
                 "KUERZUNGS-MARKER. Rekonstruiere ihn "
                 "nicht.\n\n"
-                + out
-            )
+                + out,
+                quelle, _mtime)
         ergebnisse[(cid, arg)] = ok
 
         # Auflage 2040: argv ins Audit.
@@ -6586,6 +6646,37 @@ def apply_code_patches(state: RunState,
     # Sammle alle Pfade, pruefe new_file-Konflikte.
     neue_pfade: set[str] = set()
     patch_pfade: set[str] = set()
+    # W59 (2026-10-18): Read-vor-Edit. Jeder Pfad
+    # (typ=patch) muss vor dem Patch in
+    # state.gelesene_dateien stehen. mtime muss
+    # uebereinstimmen. Sonst fail-closed.
+    for p in patches:
+        typ = p.get("typ", "patch")
+        pfad = p.get("pfad", "")
+        if typ == "new_file" or not pfad:
+            continue
+        if pfad not in state.gelesene_dateien:
+            print(f"[!] apply_code_patches: {pfad} "
+                  f"nicht gemessen. Fail closed (W59).")
+            audit("patch_ohne_messung",
+                  {"pfad": pfad},
+                  state.project_dir, state.project_name)
+            return False
+        _ziel = state.project_dir / pfad
+        try:
+            _mtime_ist = _ziel.stat().st_mtime
+        except OSError:
+            _mtime_ist = 0.0
+        _mtime_soll = state.gelesene_dateien[pfad]
+        if abs(_mtime_ist - _mtime_soll) > 1e-6:
+            print(f"[!] apply_code_patches: {pfad} "
+                  f"seit Messung geaendert. Fail closed (W59).")
+            audit("patch_datei_geaendert_seit_messung",
+                  {"pfad": pfad,
+                   "mtime_ist": _mtime_ist,
+                   "mtime_soll": _mtime_soll},
+                  state.project_dir, state.project_name)
+            return False
     for p in patches:
         typ = p.get("typ", "patch")
         pfad = p.get("pfad", "")
@@ -6737,6 +6828,17 @@ def apply_code_patches(state: RunState,
                 ziel.parent.mkdir(parents=True, exist_ok=True)
                 ziel.write_text(eintrag["inhalt"],
                                 encoding="utf-8")
+                # W59 (2026-10-18, A-W59-3): mtime
+                # nach dem Schreiben aktualisieren,
+                # damit weitere Patches an derselben
+                # Datei nicht blockieren.
+                try:
+                    _rel = str(ziel.relative_to(
+                        state.project_dir))
+                    state.gelesene_dateien[_rel] = \
+                        ziel.stat().st_mtime
+                except (OSError, ValueError):
+                    pass
                 neue_dateien.append(ziel)
                 print(f"[+] Neue Datei: "
                       f"{ziel.relative_to(state.project_dir)}")
@@ -6839,6 +6941,15 @@ def apply_code_patches(state: RunState,
                       state.project_dir, state.project_name)
                 return False
             ziel.write_text(neu, encoding="utf-8")
+            # W59 (2026-10-18, A-W59-3): mtime
+            # nach dem Schreiben aktualisieren.
+            try:
+                _rel = str(ziel.relative_to(
+                    state.project_dir))
+                state.gelesene_dateien[_rel] = \
+                    ziel.stat().st_mtime
+            except (OSError, ValueError):
+                pass
             geschrieben.append(ziel)
             print(f"[+] Code gepatcht: "
                   f"{ziel.relative_to(state.project_dir)}")
