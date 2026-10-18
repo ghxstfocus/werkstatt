@@ -1943,6 +1943,7 @@ def _phase_yaml_status_update(
     status: str,
     commit_paket: dict[str, Any] | None = None,
     letzter_befund: str | None = None,
+    letzter_test_fehler: str | None = None,
 ) -> None:
     """Setzt den Status eines Unterblocks in phase.yaml.
 
@@ -2000,6 +2001,12 @@ def _phase_yaml_status_update(
             letzter_befund[:500])
     elif status == "done":
         ziel["letzter_befund"] = ""
+    # W61: letzter_test_fehler persistieren (bei failed).
+    if status == "failed" and letzter_test_fehler:
+        ziel["letzter_test_fehler"] = (
+            letzter_test_fehler[:2000])
+    elif status in ("done", "pending"):
+        ziel.pop("letzter_test_fehler", None)
     # Phasen-Persistenz-A1 (2026-10-16): commit_paket
     # mitschreiben, damit der naechste Resume es
     # laden kann (Sammel-Commit und Basis-Gate).
@@ -3038,6 +3045,10 @@ def run_phase(
     ]
     for _u in _failed:
         _u["status"] = "pending"
+        # W61: persistierten Test-Fehler in state laden.
+        if _u.get("letzter_test_fehler"):
+            state.letzter_test_fehler = str(
+                _u["letzter_test_fehler"])
         print(f"[i] Unterblock {_u.get('id', '?')} "
               f"failed -> pending (Builder nochmal).")
     if _failed:
@@ -3269,7 +3280,12 @@ def run_phase(
             return 15
 
         # Klasse 4: Fail-closed.
-        _phase_yaml_status_update(project_name, uid, "failed")
+        # W61: Test-Fehler bei rc=17 persistieren.
+        _ltf = (state.letzter_test_fehler
+                if rc_unterblock == 17 else None)
+        _phase_yaml_status_update(
+            project_name, uid, "failed",
+            letzter_test_fehler=_ltf)
         audit("phase_unterblock_ende",
               {"id": uid, "index": i,
                "status": "failed",
