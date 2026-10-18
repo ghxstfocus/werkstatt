@@ -8151,11 +8151,35 @@ def _post_apply_messung(state: RunState,
               "nicht im Katalog. Kein Kanal.")
         return True
     neue_bloecke: list[str] = []
+    # W61-Pro: strukturierte Messungen sammeln.
+    _neue_messungen: list = []
+    from werkstatt.state import Messung as _M
+    import hashlib as _hl
+    from pathlib import Path as _P
+    _run_id = state.run_id or "unbekannt"
+    _mess_dir = _P("/opt/werkstatt/.werkstatt") / _run_id / "messungen"
+    try:
+        _mess_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"[WARN] Post-Apply-Messungen: {exc}")
+        _mess_dir = None
     for pfad in pfade:
         out, ok, argv = run_measurement_mit_argv(
             m, file_whitelist, state.project_dir, pfad)
         out = trim_output(out)
         neue_bloecke.append(out)
+        if _mess_dir is not None and ok:
+            _sha = _hl.sha1(
+                out.encode("utf-8", errors="replace")).hexdigest()
+            try:
+                _datei = _mess_dir / f"{_sha}.txt"
+                _datei.write_text(out, encoding="utf-8")
+                _neue_messungen.append(_M(
+                    pfad=pfad, sha1=_sha, mtime=0.0,
+                    groesse=len(out.encode("utf-8", errors="replace")),
+                    quelle="post_apply", datei=_datei))
+            except OSError:
+                pass
         audit("command_executed",
               {"id": "read_file", "arg": pfad[:200],
                "argv": argv, "quelle": "pipeline_auto",
@@ -8167,8 +8191,10 @@ def _post_apply_messung(state: RunState,
             return False
     if neue_bloecke:
         state.mess_protokoll_nach_apply = "\n".join(neue_bloecke)
+        state.messungen_nach_apply = _neue_messungen
         print(f"[i] Post-Apply-Messung: "
-              f"{len(pfade)} read_file-Aufrufe.")
+              f"{len(pfade)} read_file-Aufrufe "
+              f"({len(_neue_messungen)} strukturiert).")
     return True
 
 
