@@ -1239,6 +1239,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "mess_protokoll_limit_erreicht",
     "planner_command_ohne_neue_messung",
     "planner_phase_zu_gross",
+    "patch_ersatz_doppelte_zeilen",
 })
 
 
@@ -6727,6 +6728,49 @@ def apply_code_patches(state: RunState,
                       state.project_dir, state.project_name)
                 return False
             neu = aktuell.replace(anker, ersatz, 1)
+            # W54-g (2026-10-18): Ersatz-Duplikat
+            # pruefen. Bug 20261018-014952:
+            # Builder lieferte Patch mit doppeltem
+            # Import im Ersatz. patch_ambig und
+            # W54-b fingen das nicht.
+            # A-W54g-6: Reihenfolge (c) vor (a),
+            # je ein Audit mit grund-Feld.
+            _anker_stripped = anker.strip()
+            # (c) Anker 2x im Ersatz (A-W54g-5:
+            # nur bei Anker >= 10 Zeichen).
+            if (len(_anker_stripped) >= 10
+                    and ersatz.count(_anker_stripped) >= 2):
+                print(f"[FAIL] apply_code_patches: "
+                      f"Anker {pfad} 2x im Ersatz.")
+                audit("patch_ersatz_doppelte_zeilen",
+                      {"pfad": str(ziel.relative_to(
+                          state.project_dir)),
+                       "grund": "anker_doppelt",
+                       "anker_count": ersatz.count(
+                           _anker_stripped),
+                       "anker_len": len(_anker_stripped)},
+                      state.project_dir, state.project_name)
+                return False
+            # (a) Lange Zeile (>= 40 Zeichen) 2x im
+            # Ersatz (sekundaere Heuristik).
+            _ersatz_zeilen = [
+                z.strip() for z in ersatz.splitlines()
+                if len(z.strip()) >= 40]
+            if len(_ersatz_zeilen) != len(
+                    set(_ersatz_zeilen)):
+                print(f"[FAIL] apply_code_patches: "
+                      f"Lange Zeile 2x im Ersatz: "
+                      f"{pfad}")
+                audit("patch_ersatz_doppelte_zeilen",
+                      {"pfad": str(ziel.relative_to(
+                          state.project_dir)),
+                       "grund": "lange_zeile_doppelt",
+                       "anzahl_zeilen": len(
+                           _ersatz_zeilen),
+                       "anzahl_eindeutig": len(set(
+                           _ersatz_zeilen))},
+                      state.project_dir, state.project_name)
+                return False
             ziel.write_text(neu, encoding="utf-8")
             geschrieben.append(ziel)
             print(f"[+] Code gepatcht: "

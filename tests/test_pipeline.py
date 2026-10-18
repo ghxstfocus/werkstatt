@@ -5309,7 +5309,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5345,7 +5345,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6180,7 +6180,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
 
 
 # =====================================================================
@@ -6285,7 +6285,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
 
 
 # =====================================================================
@@ -6343,7 +6343,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
 
 
 # =====================================================================
@@ -9450,7 +9450,7 @@ def test_w46c_2_repair_runde_gleiche_bedingung():
 
 def test_w46_katalog_107():
     """T-Katalog: W46-Katalog-Groesse 107 + neue Kinds."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
     assert "judge_uebersprungen_doku" in pipeline._AUDIT_KINDS_BEKANNT
     assert (
         "phase_judge_uebersprungen_doku"
@@ -9462,7 +9462,7 @@ def test_w48_e_katalog_kinds():
             in pipeline._AUDIT_KINDS_BEKANNT)
     assert ('planner_blockiert_phase_abgeschlossen'
             in pipeline._AUDIT_KINDS_BEKANNT)
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
 
 def test_w50_a_block_ohne_flag(tmp_path, monkeypatch):
     """T-W50-a: phase_aktiv=False, ohne Flag -> rc=65."""
@@ -9820,7 +9820,7 @@ def test_w51c_e_gemessener_inhalt():
 
 def test_w51c_f_katalog_115():
     """T-W51c-f: Katalog 115."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
     assert "command_block_bereinigt" in \
         pipeline._AUDIT_KINDS_BEKANNT
     assert "command_block_in_plan" in \
@@ -10105,7 +10105,7 @@ def test_w51f_d_gruen():
 
 def test_w51f_f_katalog_118():
     """T-W51f-f: Katalog 118 + planner_phase_zu_gross."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
     assert "planner_phase_zu_gross" in \
         pipeline._AUDIT_KINDS_BEKANNT
 
@@ -10483,4 +10483,117 @@ def test_w54_d_kurzer_ersatz_kein_fail(tmp_path):
     assert "patch_ersatz_duplikat" not in calls
     inhalt = (tmp_path / "core/x.py").read_text(encoding="utf-8")
     assert inhalt.count("    x = 1") == 2
+
+def _w54g_state(tmp_path):
+    from pipeline import Measurement
+    from werkstatt.state import RunState
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="t",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=["core/"], api_key="k", budget={},
+        agent_docs={}, project_dir=tmp_path,
+        project_name="p")
+    m = Measurement("read_file", ("cat",), "Test.")
+    st.always = {"read_file": m}
+    st.optional = {}
+    return st
+
+
+def test_w54_g_a_anker_doppelt(tmp_path):
+    """T-W54-g-a: Anker 2x im Ersatz -> fail
+    (grund=anker_doppelt)."""
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core/x.py").write_text(
+        "from harness.audit.writer import AuditWriter\n",
+        encoding="utf-8")
+    st = _w54g_state(tmp_path)
+    anker = "from harness.audit.writer import AuditWriter"
+    ersatz = (
+        "from harness.audit.writer import AuditWriter\n"
+        "\n"
+        "from harness.audit.writer import AuditWriter\n"
+    )
+    patches = [{"pfad": "core/x.py", "anker": anker,
+                "ersatz": ersatz}]
+    calls = []
+    import unittest.mock as _m
+    with _m.patch("pipeline.audit",
+                  side_effect=lambda k, *a, **kw: calls.append(
+                      (k, a, kw))):
+        ok = pipeline.apply_code_patches(st, patches)
+    assert not ok
+    kinds = [c[0] for c in calls]
+    assert "patch_ersatz_doppelte_zeilen" in kinds
+
+
+def test_w54_g_b_verschiedene_zeilen(tmp_path):
+    """T-W54-g-b: verschiedene Zeilen -> durch."""
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core/x.py").write_text(
+        "def foo():\n    return 1\n", encoding="utf-8")
+    st = _w54g_state(tmp_path)
+    patches = [{
+        "pfad": "core/x.py",
+        "anker": "def foo():\n    return 1\n",
+        "ersatz": (
+            "def foo_alpha():\n"
+            "    return 1\n"
+            "def foo_beta():\n"
+            "    return 2\n")}]
+    calls = []
+    import unittest.mock as _m
+    with _m.patch("pipeline.audit",
+                  side_effect=lambda k, *a, **kw: calls.append(k)):
+        ok = pipeline.apply_code_patches(st, patches)
+    assert ok
+    assert "patch_ersatz_doppelte_zeilen" not in calls
+
+
+def test_w54_g_c_lange_zeile_doppelt(tmp_path):
+    """T-W54-g-c: Lange Zeile (>= 40) 2x, Anker
+    nicht im Ersatz -> fail (grund=lange_zeile_doppelt)."""
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core/x.py").write_text(
+        "x = 1\n", encoding="utf-8")
+    st = _w54g_state(tmp_path)
+    lange = ("# Dies ist eine sehr lange Kommentarzeile "
+             "ueber 40 Zeichen")
+    ersatz = f"{lange}\nvar_a = 1\n{lange}\nvar_b = 2\n"
+    patches = [{"pfad": "core/x.py", "anker": "x = 1",
+                "ersatz": ersatz}]
+    calls = []
+    import unittest.mock as _m
+    with _m.patch("pipeline.audit",
+                  side_effect=lambda k, *a, **kw: calls.append(
+                      (k, a, kw))):
+        ok = pipeline.apply_code_patches(st, patches)
+    assert not ok
+    kinds = [c[0] for c in calls]
+    assert "patch_ersatz_doppelte_zeilen" in kinds
+
+
+def test_w54_g_d_kurze_legit_doppelt(tmp_path):
+    """T-W54-g-d: kurze legitime Zeile 2x -> durch
+    (Legit-Duplicate, unter Anker- und Zeilen-Schwelle)."""
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core/x.py").write_text(
+        "def test_a():\n    pass\n", encoding="utf-8")
+    st = _w54g_state(tmp_path)
+    patches = [{
+        "pfad": "core/x.py",
+        "anker": "def test_a():\n    pass\n",
+        "ersatz": (
+            "def test_a():\n"
+            "    result = foo()\n"
+            "    assert result == 1\n"
+            "def test_b():\n"
+            "    result = bar()\n"
+            "    assert result == 1\n")}]
+    calls = []
+    import unittest.mock as _m
+    with _m.patch("pipeline.audit",
+                  side_effect=lambda k, *a, **kw: calls.append(k)):
+        ok = pipeline.apply_code_patches(st, patches)
+    assert ok
+    assert "patch_ersatz_doppelte_zeilen" not in calls
 
