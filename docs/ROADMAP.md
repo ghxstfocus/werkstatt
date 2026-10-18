@@ -35,11 +35,11 @@ und `ERLEDIGT.md` (Erledigt).
 | 20a | Change-Modell (Audit-Trail-Felder) | 🔧 | 560659a | 1452 |
 | 20b | ChangeApplier (Audit-Log, Rollback) | 🚫 | — | — |
 
-Phase 20b blockiert. U1 done (759b9e1),
-U2 failed (Lauf 20261018-023047),
-U3+U4 pending. Deadlock reproduziert
-(Builder sendet falsche Anker). W52b C+D+E
-+ W61 sind die Voraussetzung.
+Phase 20b done. U1-U4 abgeschlossen in Sitzung
+2026-10-18: 759b9e1 (U1), ada910a (U2),
+572d881 (U3), cba0ee3 (U4). Der Deadlock
+(Builder sendet falsche Anker) wurde durch
+W52b C+D+E + W61 + W58 gebrochen.
 
 ## W-Block-Serien
 
