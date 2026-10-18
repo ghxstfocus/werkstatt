@@ -147,6 +147,9 @@ class RunState:
     reviewer_recovery_model: str = "deepseek-reasoner"
     # W28b: Judge-Modell (Code-Review mit frischem Kontext).
     judge_model: str = "deepseek-reasoner"
+    # W61c: Solver-Modell (eigene Rolle, Diagnose).
+    # Reasoner-Klasse, weil Deadlock-Diagnose Reasoning braucht.
+    solver_model: str = "deepseek-reasoner"
     # W28c: max_tokens pro Rolle.
     max_tokens_builder: int = 8192
     max_tokens_judge: int = 2048

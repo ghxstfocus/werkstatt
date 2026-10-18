@@ -1126,7 +1126,7 @@ _AP_PFLICHTFELDER = (
 # (test_audit_kinds_alle_aufrufe_registriert) prueft
 # die Nutzung, test_katalog_anzahl_matcht_soll die
 # Registrierung.
-_KATALOG_SOLL = 160
+_KATALOG_SOLL = 164  # W61: +explore_subagent
 
 _AUDIT_KINDS_BEKANNT = frozenset({
     "aggregator_failed",
@@ -1266,6 +1266,12 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "recovery_builder_command_deadlock",
     "recovery_eskalation",
     "recovery_no_go",
+    # W61: Subagent-Audit.
+    "explore_subagent",
+    # W61: Judge-Labels (vorher als "reviewer" gefuehrt).
+    "judge_frage_antwort",
+    "judge_round",
+    "judge_command",
     "review_command",
     "reviewer_call_failed",
     "review_r15_verstoss",
@@ -4770,6 +4776,149 @@ def pruefe_anker_gegen_messung(
     return fehlend
 
 
+EXPLORE_SUBAGENT_PROMPT = """Du bist ein Suchexperte.
+Deine Aufgabe: Finde ein Muster in einer Datei oder einem
+Repo und gib die genaue Position zurueck.
+
+Antworte NUR mit einer dieser Zeilen:
+  FUND: <pfad>:<zeile>: <kontext (max 120 Zeichen)>
+  NICHT_GEFUNDEN
+
+Du hast maximal 3 Runden. Nutze grep und read_file.
+Kein freier Text."""
+
+
+BASH_SUBAGENT_PROMPT = """Du bist ein Shell-Experte.
+Deine Aufgabe: Fuehre einen Shell-Befehl aus und gib
+das Ergebnis zurueck. Kein Schreiben ausserhalb /tmp.
+
+Antworte NUR mit:
+  OK: <kurzausgabe (max 200 Zeichen)>
+  FEHLER: <grund>
+
+Du hast maximal 2 Runden. Kein freier Text."""
+
+
+BROWSER_SUBAGENT_PROMPT = """Du bist ein Browser-Experte.
+Deine Aufgabe: Rufe eine URL ab und gib den Inhalt
+zurueck (gekuerzt).
+
+Antworte NUR mit:
+  OK: <inhalt (max 300 Zeichen)>
+  FEHLER: <grund>
+
+Du hast maximal 2 Runden. Kein freier Text."""
+
+
+def build_subagent_state(parent: RunState) -> RunState:
+    """Minimaler RunState fuer Subagenten (W61).
+
+    Kopiert nur, was read_file/grep/execute_commands
+    brauchen. Keine Parent-Historie, kein mess_protokoll,
+    keine Skills, keine Code-Patches.
+    """
+    import copy as _copy
+    s = _copy.copy(parent)
+    s.messungen = []
+    s.messungen_nach_apply = []
+    s.mess_protokoll = ""
+    s.mess_protokoll_nach_apply = ""
+    s.gelesene_dateien = {}
+    s.letzte_anker_fehler = []
+    s.letzte_ersatz_fehler = []
+    s.code_entwurf = ""
+    s.code_patches = []
+    s.review_runden = []
+    s.auflagen_log = []
+    s.empfehlung_log = []
+    s.letzte_builder_frage = ""
+    return s
+
+
+def _subagent_lauf(
+        state: RunState,
+        api_key: str,
+        system_prompt: str,
+        frage: str,
+        modell: str,
+        max_runden: int,
+        max_tokens: int,
+        erlaubte_ids: set,
+) -> str:
+    """Generischer Subagenten-Lauf (W61).
+
+    Frischer Kontext, eigene messungen, max N Runden.
+    Gibt die fertige Antwort zurueck.
+    """
+    sub_state = build_subagent_state(state)
+    user = frage
+    for _ in range(max_runden):
+        reply = ask_llm(
+            api_key, system_prompt, user,
+            modell, 0.0, state.llm_timeout_s,
+            state=sub_state,
+            max_tokens=max_tokens,
+        )
+        if not reply.ok:
+            return "FEHLER: llm"
+        inhalt = reply.content.strip()
+        if (inhalt.startswith("FUND:")
+                or inhalt.startswith("OK:")
+                or inhalt.startswith("FEHLER:")
+                or inhalt == "NICHT_GEFUNDEN"):
+            return inhalt
+        cmds = parse_commands(inhalt)
+        if not cmds:
+            return "NICHT_GEFUNDEN"
+        cmds = [c for c in cmds if c.get("id") in erlaubte_ids]
+        if not cmds:
+            return "NICHT_GEFUNDEN"
+        execute_commands(sub_state, cmds, quelle="subagent")
+        user = ("Weiter. Antworte mit dem vorgegebenen "
+                "Format (FUND/OK/FEHLER/NICHT_GEFUNDEN).")
+    return "NICHT_GEFUNDEN"
+
+
+def rufe_explore_subagent(
+        state: RunState, api_key: str, frage: str,
+) -> str:
+    """W61: Explore-Subagent (aktiv)."""
+    return _subagent_lauf(
+        state, api_key,
+        EXPLORE_SUBAGENT_PROMPT,
+        f"Suche: {frage}\n\nAntworte mit FUND: <pfad>:<zeile>: "
+        "<kontext> oder NICHT_GEFUNDEN.",
+        state.builder_model, 3, 1024,
+        {"read_file", "grep"},
+    )
+
+
+def rufe_bash_subagent(
+        state: RunState, api_key: str, frage: str,
+) -> str:
+    """W61: Bash-Subagent (inaktiv, fuer spaeter)."""
+    return _subagent_lauf(
+        state, api_key,
+        BASH_SUBAGENT_PROMPT,
+        f"Befehl: {frage}",
+        state.builder_model, 2, 1024,
+        {"read_file", "grep", "pytest", "ruff", "mypy"},
+    )
+
+
+def rufe_browser_subagent(
+        state: RunState, api_key: str, frage: str,
+) -> str:
+    """W61: Browser-Subagent (inaktiv, fuer spaeter)."""
+    return _subagent_lauf(
+        state, api_key,
+        BROWSER_SUBAGENT_PROMPT,
+        f"URL: {frage}",
+        state.builder_model, 2, 1024,
+        {"read_file"},
+    )
+
+
 def builder_reply_mit_command_loop(
     state: RunState,
     api_key: str,
@@ -4897,6 +5046,22 @@ def builder_reply_mit_command_loop(
             # Nur frage_reviewer -> kein Deadlock,
             # Rueckgabe an Aufrufer.
             return reply, None
+        # W61: Subagenten (aktiv: explore).
+        # bash/browser sind angelegt, aber nicht im
+        # Builder-Loop aktiv (spaetere Zeitpunkte).
+        _explore_cmds = [c for c in cmds_run
+                         if c.get("id") == "explore"]
+        if _explore_cmds:
+            for ec in _explore_cmds:
+                ergebnis = rufe_explore_subagent(
+                    state, api_key, ec.get("arg", ""))
+                print(f"[i] Explore: {ergebnis[:160]}")
+                audit("explore_subagent",
+                      {"frage": ec.get("arg", "")[:200],
+                       "ergebnis": ergebnis[:300]},
+                      project_dir, project_name)
+            # Naechste Builder-Runde mit dem Ergebnis.
+            continue
         for cmd in cmds_run:
             key = (cmd.get("id", ""), cmd.get("arg", ""))
             if key in gescheiterte:
@@ -5528,7 +5693,7 @@ def rufe_solver(
           f"{trigger_grund or '(kein Grund)'} "
           f"(Aufrufer: {aufrufer})")
     reply = ask_llm(api_key, solver_prompt, user_content,
-                    state.reviewer_verdict_model, 0.0,
+                    state.solver_model, 0.0,
                     state.llm_timeout_s, state=state,
                     max_tokens=state.max_tokens_solver)
     if not reply.ok:
@@ -9588,7 +9753,13 @@ def run_pipeline(project_name: str, aufgabe: str,
             "(siehe builder.md, Abschnitt NEUE DATEIEN).\n"
             "Kein freier Text. Kein Markdown. Nur Patches.\n"
             "Wenn du einen Anker nicht im Ausschnitt findest: "
-            "keinen Patch fuer diese Datei. Kein Erfinden."
+            "keinen Patch fuer diese Datei. Kein Erfinden.\n\n"
+            "W61: Wenn du einen Anker suchen musst, rufe den "
+            "Explore-Subagenten auf:\n"
+            "  COMMAND: RUN explore <muster> <pfad>\n"
+            "Er durchsucht die Datei und gibt FUND: <pfad>:<zeile>: "
+            "<kontext> zurueck. Nutze ihn, BEVOR du einen Patch "
+            "mit einem unbestaetigten Anker sendest."
         )
     max_builder_runden = budget.get("max_builder_runden", 3)
     reply_roh, rc = builder_reply_mit_command_loop(
@@ -9636,10 +9807,10 @@ def run_pipeline(project_name: str, aufgabe: str,
     verdict = "UNKLAR"
     for runde in range(1, max_rounds + 1):
         # Auflage 2078: der inline-Budget-Check ist entfernt.
-        # Der Check erfolgt direkt vor dem Reviewer-Call via
+        # Der Check erfolgt direkt vor dem Judge-Call via
         # budget_or_recover (siehe unten).
 
-        print(f"\n[--- Review-Runde {runde} ---]")
+        print(f"\n[--- Judge-Runde {runde} ---]")
 
         # Auflage 2045: bisherige Runden mitgeben.
         # Der Reviewer soll sehen, was er in Runde 1..N-1 gesagt hat,
@@ -9718,7 +9889,7 @@ def run_pipeline(project_name: str, aufgabe: str,
             hat_befund=bool(state.solver_befunde))
             + szenario)
         rc = budget_or_recover(state, max_llm,
-                              f"Vor Reviewer-Verdict Runde {runde}.",
+                              f"Vor Judge-Verdict Runde {runde}.",
                               project_dir, project_name,
                               max_minutes=max_minutes)
         if rc is not None:
@@ -9781,18 +9952,18 @@ def run_pipeline(project_name: str, aufgabe: str,
             state.letzte_reviewer_antwort = antwort
             # P2b-Frage-B: Frage ist beantwortet.
             state.letzte_builder_frage = ""
-            audit("reviewer_frage_antwort",
+            audit("judge_frage_antwort",
                   {"runde": runde,
                    "antwort": antwort[:500],
                    "antwort_laenge": len(antwort)},
                   project_dir, project_name)
-            print(f"[i] Reviewer-Antwort: "
+            print(f"[i] Judge-Antwort: "
                   f"{antwort[:200]}")
             # Naechste Builder-Runde mit der Antwort.
             continue
         state.auflagen_log.append(parse_auflagen(reply.content))
         state.empfehlung_log.append(parse_empfehlung(reply.content))
-        audit("review_round",
+        audit("judge_round",
               _review_round_audit_payload(
                   runde, verdict, reply.content),
               project_dir, project_name)
@@ -9812,11 +9983,11 @@ def run_pipeline(project_name: str, aufgabe: str,
                         max_minutes=max_minutes)
                 else:
                     execute_commands(state, [cmd],
-                                     quelle="reviewer")
+                                     quelle="judge")
             # Auflage 2145: Audit fuer COMMAND in der Review-
             # Schleife. Sonst ist nicht sichtbar, wann der
             # Reviewer COMMAND nutzt.
-            audit("review_command",
+            audit("judge_command",
                   {"runde": runde, "anzahl": len(cmds)},
                   project_dir, project_name)
             continue
