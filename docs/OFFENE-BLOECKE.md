@@ -1,6 +1,6 @@
 # Offene Bloecke — Werkstatt
 
-Stand: 2026-10-18 (nach W52b C+D+E, W61, W58, Phase 20b)
+Stand: 2026-10-19 (nach W61-Pro, Feedback-Loop, Phase 21)
 Todo, priorisiert. Append-only.
 Uebersicht in `ROADMAP.md`. Erledigt in `ERLEDIGT.md`.
 
@@ -195,4 +195,55 @@ Der Aufrufer (`builder_reply_mit_command_loop` vs.
 `build_commit_paket`) waehlt den richtigen.
 
 **Aufwand:** mittel. **Kategorie:** 3.
+
+## W61-Pro — erledigt (2026-10-19)
+
+Pro-System (AgentSeed/Keystone-Ansatz) gebaut:
+
+- **verify_code** (AST-Grounding): Projekt-Symbol-Index,
+  Patch-Ersatz gegen unbekannte Funktionsnamen.
+- **verify_code_kwargs** (inspect.signature): Kwargs
+  gegen echte API-Signaturen.
+- **verify_values**: Enum-Werte + execution_status-Werte
+  in Assertions.
+- **Test-Bezug-Check**: Patch-Anker gegen failed_test_ids.
+- **Feedback-Loop**: letzter_test_fehler persistiert
+  in phase.yaml, im Builder-Prompt gerendert.
+- **_post_apply_messung** befuellt jetzt
+  messungen_nach_apply (Liste), nicht nur String.
+
+## Offen (P1) — Phase 21 (security-ai)
+
+- U1-Tests gruen (13 passed). Commit-Review-Judge
+  eskaliert: „Messlage unvollstaendig, Dateiende
+  nicht im Ausschnitt; ruff/mypy Exit-Codes fehlen."
+- `_build_commit_input` muss den vollen Datei-Inhalt
+  liefern (nicht nur 579 Zeichen). `_mess_inhalt_nach_apply`
+  liest `messungen_nach_apply` — wird jetzt befuellt,
+  aber der Commit-Input-Pfad muss das nutzen.
+- ruff/mypy Exit-Codes im Commit-Review-Prompt.
+
+## Offen (P2) — Phase-21-Fortsetzung
+
+- U2/U3/U4 (Tests FAILED, ROLLED_BACK, Doku).
+- Contract-Regel „ein Patch pro Datei" (Aider-Ansatz)
+  + apply_code_patches atomar pro Datei
+  (Claude-Code-MultiEdit-Ansatz).
+
+## Offen (P3)
+
+- W61a (Reviewer 3->1), W61b (Judge 2->1).
+- W61d: builder_patch.md 486 -> <300, planner.md 299 -> <150.
+- W36-RP-a, W36-2b..6, W62.
+
+## Deadlock-Kette (dokumentiert)
+
+Der Phase-21-Deadlock war eine Kette:
+1. Parser strippt 4 Leerzeichen nicht (min==2 only) -> Anker 0x.
+2. max_tokens_judge 8192 -> reasoning-only, content leer.
+3. D2-Duplikate global statt pro Paket -> Phase 20b scheitert.
+4. Planner-Resume bei failed -> Planner kostet, liefert nichts.
+5. Contract fehlt im Builder-Prompt -> Builder raet API.
+6. Test-Fehler nicht persistiert -> Builder wiederholt.
+7. verify_code fehlt -> erfundene APIs (log(status=...)).
 

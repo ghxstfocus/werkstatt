@@ -1,6 +1,6 @@
 # Roadmap — Werkstatt
 
-Stand: 2026-10-18 (nach W52b C+D+E, W61, W58, Phase 20b)
+Stand: 2026-10-19 (nach W61-Pro, Phase 21)
 Uebersicht. Details in `OFFENE-BLOECKE.md` (Todo)
 und `ERLEDIGT.md` (Erledigt).
 
@@ -180,4 +180,24 @@ U1-U4 done. Commits in security-ai: 759b9e1, ada910a,
 
 max_tokens_judge 2048 -> 8192 (e2e8b60). Reasoning-Modell
 hatte kein Budget fuer sichtbare Antwort.
+
+## W61-Pro — Grounding  ✅
+
+verify_code (AST), verify_code_kwargs (inspect),
+verify_values (Enums), Test-Bezug-Check.
+Feedback-Loop (letzter_test_fehler persistiert).
+
+## Phase 21 — ChangeApplier-Audit-Trail-Tests  🔨
+
+U1 (Tests APPLIED): 13 Tests gruen, im Feedback-Loop
+gebaut. Commit-Review-Judge eskaliert (Messlage
+unvollstaendig, ruff/mypy fehlen).
+U2/U3/U4 offen.
+
+## Offene Deadlock-Kette (dokumentiert)
+
+Siehe OFFENE-BLOECKE.md. Sieben Glieder:
+Parser-Einrueckung, max_tokens_judge, D2-Duplikate,
+Planner-Resume, Contract im Prompt, Feedback-Loop,
+verify_code.
 

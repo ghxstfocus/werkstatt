@@ -1,6 +1,6 @@
 # Architektur — Werkstatt
 
-Stand: 2026-10-18 (nach W61)
+Stand: 2026-10-19 (nach W61-Pro)
 Ziel: Das Beste aus Claude Code, Copilot, AutoGen,
 Swarm und OpenAI Agents SDK nehmen und ein eigenes
 Agentensystem bauen.
@@ -277,4 +277,52 @@ Behoben: "Judge-Runde", "Judge-Verdict", "Judge-Antwort",
 
 Der Reviewer sitzt im Recovery-Pfad (ask_reviewer_for_recovery)
 und im Schritt 1 (optionale Messungen). Das ist korrekt.
+
+## Grounding / verify_code (W61-Pro, 2026-10-19)
+
+AgentSeed/Keystone-Ansatz: Bevor ein Patch angewendet
+wird, prueft verify_code den Ersatz-Code gegen den
+Projekt-Symbol-Index.
+
+- **_projekt_symbol_index**: AST-Walk ueber alle .py,
+  sammelt Funktions-/Klassen-/Methoden-Namen.
+- **verify_code**: Ersatz-Code AST-parsen, jeder
+  Funktionsaufruf gegen Index. Unbekannt -> Befund.
+  unittest/mock-Methoden werden ignoriert.
+- **verify_code_kwargs**: inspect.signature von
+  AuditWriter.log, Change.__init__, ChangeApplier.__init__.
+  Kwargs im Patch gegen Signatur. `log(status=...)` ->
+  „kennt kein Kwarg".
+- **verify_values**: ChangeState-Enum-Werte und
+  execution_status-Werte (aus applier.py) gegen
+  Assertions.
+- **Test-Bezug-Check**: Patch-Anker gegen
+  failed_test_ids. Falscher Test -> Befund.
+
+Bei Befund: rc=17, letzter_test_fehler = Befunde.
+Der naechste Builder-Lauf sieht sie im Prompt.
+
+## Feedback-Loop (W61, 2026-10-19)
+
+- `state.letzter_test_fehler`: Test-Output (kompakt,
+  E-Zeile) oder verify_code-Befunde.
+- Persistiert in phase.yaml (Feld `letzter_test_fehler`).
+- Bei failed -> pending geladen, im Builder-Prompt
+  als TEST-FEHLER-Block gerendert.
+- Bei rc=17 (b-Gate rot) gespeichert.
+
+## Planner-Resume (W61)
+
+- no_go -> Planner-Resume (Plan-Problem).
+- failed -> failed auf pending, Builder nochmal
+  (kein Planner-Call).
+
+## Commit-Review-Judge (Phase 21 offen)
+
+Der Commit-Review-Judge braucht:
+- Vollen Datei-Inhalt (nicht nur 579 Zeichen).
+- ruff/mypy Exit-Codes.
+Aktuell: `_mess_inhalt_nach_apply` liest messungen_nach_apply
+(wird befuellt), aber der Commit-Input-Pfad nutzt es noch
+nicht vollstaendig.
 

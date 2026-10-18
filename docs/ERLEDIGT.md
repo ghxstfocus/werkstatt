@@ -206,4 +206,72 @@ einzelner Bug, sondern eine Kette:
 
 **Phase 20b (security-ai) ist durch:** U1-U4 done.
 Commits 759b9e1, ada910a, 572d881, cba0ee3.
+### Sitzung 2026-10-18/19 — W61-Pro, Feedback-Loop, Phase 21
+
+| Block | Titel | Status | Commit |
+|---|---|---|---|
+| W61 | Planner-Resume nur bei no_go | ✅ | 0beeff2 |
+| W61 | failed -> pending (Builder nochmal) | ✅ | 0898faa |
+| W61 | Contract im Builder-Prompt | ✅ | 69308d7 |
+| W61 | Test-Fehler aus (b)-Gate in Builder-Prompt | ✅ | a3391bc |
+| W61 | letzter_test_fehler persistieren | ✅ | 6f6f457 |
+| W61-Pro | verify_code (AST-Grounding vor Apply) | ✅ | f3ae1d5 |
+| W61-Pro | Katalog +verify_code_befund | ✅ | 6efa322 |
+| W61-Pro | verify_code Kwarg-Check (inspect.signature) | ✅ | c846369 |
+| W61-Pro | verify_code Test-Bezug-Check | ✅ | d61ce99 |
+| W61-Pro | verify_values (Enum-Werte in Assertions) | ✅ | c04848c |
+| W61-Pro | verify_values execution_status-Check | ✅ | 25080d2 |
+| W61-Pro | _post_apply_messung befuellt messungen_nach_apply | ✅ | 4144076 |
+| W61-Pro | execution_status-Regex praezise | ✅ | 9d2b649 |
+| W61-Pro | Parser strippt min 2/4 Einrueckung | ✅ | b4e2ad8 |
+| W61-Pro | verify_code ignoriert unittest/mock | ✅ | 6027295 |
+| W61 | D2-Duplikate pro Paket | ✅ | 0266d3b |
+| W61 | Sammel-Commit mit --allow-empty | ✅ | 57940ef |
+| W58 | max_tokens_judge 32768 | ✅ | f96ddf9 |
+| W61 | Parser Block-Ende per Feld-Token | ✅ | 4648462 |
+| W61 | Ersatz-Duplikat-Schwelle 40 -> 50 | ✅ | 9e3e5f0 |
+| W61d | builder.md in Phasen-Prompts aufteilen | ✅ | a0ce38d |
+
+**Was diese Sitzung geliefert hat (Pro-System):**
+
+Das Pro-System ist der AgentSeed/Keystone-Ansatz:
+Grounding vor dem Schreiben, nicht Prompt-Tuning.
+
+- **verify_code** (AST-Grounding): Vor jedem Apply
+  werden Patch-Anker/Ersatz gegen den Projekt-
+  Symbol-Index geprueft. Erfundene APIs (z.B.
+  `log(status=...)`) werden gefangen, BEVOR der
+  Patch angewendet wird.
+- **verify_code_kwargs**: `inspect.signature` prueft
+  Kwargs gegen echte API-Signaturen. `log(change_id=...)`
+  -> Befund „kennt kein Kwarg".
+- **verify_values**: Enum-Werte in Assertions gegen
+  echte ChangeState-Werte + execution_status-Werte
+  aus dem Applier-Code.
+- **Test-Bezug-Check**: Patch-Anker gegen
+  `failed_test_ids`. Patch am falschen Test -> Befund.
+- **Feedback-Loop**: `letzter_test_fehler` persistiert
+  in phase.yaml, im Builder-Prompt gerendert.
+- **failed -> pending**: Builder-Problem (Test rot),
+  Plan gueltig. Planner-Resume nur bei no_go.
+
+**Wichtige Erkenntnisse:**
+
+1. Der Loop war nicht ein Bug, sondern eine Kette:
+   Parser-Einrueckung, max_tokens_judge, D2-Duplikate,
+   Planner-Resume, Contract im Prompt, Feedback-Loop,
+   verify_code.
+2. Der Builder braucht die **echte** API-Signatur,
+   nicht Contract-Prosa. `verify_code` + `verify_values`
+   liefern das.
+3. Contract und Realitaet widersprechen sich oft
+   (z.B. execution_status="applied" vs "OK").
+   verify_code findet das.
+4. `_post_apply_messung` schrieb nur String, nicht
+   Liste. Der Judge sah 579 statt 6854 Zeichen.
+
+**Phase 21 (security-ai):** U1 (Tests fuer Audit-Log
+APPLIED) ist im Feedback-Loop gebaut, 13 Tests gruen.
+Der Commit-Review-Judge eskaliert noch (Messlage
+unvollstaendig, siehe OFFENE-BLOECKE).
 
