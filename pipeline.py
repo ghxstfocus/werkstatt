@@ -7325,6 +7325,18 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
         nonlocal aktives_feld, aktuelle_zeilen
         if aktives_feld is None:
             return
+        # W61: Dedent (minimale Einrueckung strippen).
+        # Statt pauschal 2 Leerzeichen (die der Builder
+        # nicht immer liefert) ermitteln wir die minimale
+        # Einrueckung aller nicht-leeren Zeilen.
+        nicht_leer = [z for z in aktuelle_zeilen if z.strip()]
+        if nicht_leer:
+            min_indent = min(
+                len(z) - len(z.lstrip()) for z in nicht_leer)
+            aktuelle_zeilen = [
+                z[min_indent:] if z.strip() else z
+                for z in aktuelle_zeilen
+            ]
         wert = "\n".join(aktuelle_zeilen)
         if aktives_feld == "anker":
             nonlocal anker
@@ -7372,13 +7384,11 @@ def _parse_einzelpatch(block: str) -> dict[str, str] | None:
                 aktives_feld = name
                 aktuelle_zeilen = []
             continue
-        # Fortsetzungszeile (eingrueckt, 2 Spaces).
+        # Fortsetzungszeile (eingrueckt).
+        # W61: Roh sammeln, Dedent nach dem Block.
         if aktives_feld is not None:
-            if raw_line.startswith("  "):
-                aktuelle_zeilen.append(raw_line[2:])
-            elif raw_line.strip() == "":
-                # Leerzeile im Block erlaubt.
-                aktuelle_zeilen.append("")
+            if raw_line.startswith("  ") or raw_line.strip() == "":
+                aktuelle_zeilen.append(raw_line)
             else:
                 # Ende des Block-Scalars.
                 _flush()
