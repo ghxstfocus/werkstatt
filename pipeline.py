@@ -1239,6 +1239,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "mess_protokoll_limit_erreicht",
     "planner_command_ohne_neue_messung",
     "planner_phase_zu_gross",
+    "planner_vorschlag",
     "patch_ersatz_doppelte_zeilen",
 })
 
@@ -4667,57 +4668,6 @@ def pruefe_anker_gegen_messung(
     return fehlend
 
 
-def pruefe_ersatz_gegen_messung(
-    patches: list[dict[str, str]],
-    mess_protokoll: str,
-) -> list[tuple[int, str, str]]:
-    """Stufe 0, Aenderung 1b: deterministische
-    Ersatz-Pruefung gegen den GEMESSENER INHALT.
-
-    Liefert Liste von (Patch-Index, Pfad, Modul).
-
-    II1: Regex am Zeilenanfang. Erkennt mehrzeilige
-    Klammer-Imports, weil nur der from-Import-Anfang
-    gematcht wird. Erkennt NICHT: Inline-Imports
-    (x = 1; from foo import bar), relative Imports
-    (from .foo import bar), bedingte Imports
-    (if True:\n    from foo...). Diese kommen in
-    security-ai nicht vor.
-
-    II2b: Treffer ist Substring-Match
-    (modul in mess_protokoll). Kollisionen bei
-    Modulnamen, die Praefix eines laengeren
-    Modulnamens sind, werden nicht erkannt.
-    Bei erster realer Kollision: Wortgrenzen
-    oder exakter Match.
-    """
-    import re as _re
-    fehlend: list[tuple[int, str, str]] = []
-    # II1: Regex muss mit Buchstabe oder _ beginnen,
-    # damit relative Imports (from .foo import) NICHT
-    # erkannt werden.
-    pfad_re = _re.compile(
-        r"^\s*(?:from\s+([a-zA-Z_][\w.]*)\s+import"
-        r"|import\s+([a-zA-Z_][\w.]*))",
-        _re.MULTILINE,
-    )
-    for i, p in enumerate(patches):
-        # A1-final-5 (2026-10-16): typ=new_file
-        # ausschliessen (R5-Aequivalent).
-        # new_file hat kein anker/ersatz.
-        if p.get("typ") == "new_file":
-            continue
-        ersatz = p.get("ersatz", "")
-        pfad = p.get("pfad", "")
-        if not ersatz:
-            continue
-        for m in pfad_re.finditer(ersatz):
-            modul = m.group(1) or m.group(2)
-            if modul and modul not in mess_protokoll:
-                fehlend.append((i, pfad, modul))
-    return fehlend
-
-
 def builder_reply_mit_command_loop(
     state: RunState,
     api_key: str,
@@ -6058,20 +6008,6 @@ def _build_judge_input(state: RunState) -> str:
         "Bei NO_GO: konkrete Problem-Liste (max 5 Punkte).")
 
 
-def _lese_plan_audit(state: RunState) -> str:
-    """W26: liest audit-logs/<run_id>/01-plan.md.
-
-    Fallback auf .werkstatt/plan.md.
-    """
-    audit_pfad = _plan_audit_pfad(state)
-    if audit_pfad.exists():
-        try:
-            return audit_pfad.read_text(encoding="utf-8")
-        except OSError:
-            pass
-    return _lese_plan(state)
-
-
 def _format_whitelist_block(
         file_whitelist: list[str]) -> str:
     """Whitelist-Prompt-A2 (2026-10-16): zeigt die
@@ -7099,21 +7035,6 @@ def _pipeline_ende(state: RunState, project_dir: Path,
           project_dir, project_name)
 
 
-def rollback_vor_recovery(state: RunState, project_dir: Path,
-                          project_name: str) -> None:
-    """Auflage 2183 A1c: Rollback vor einer Recovery-Runde.
-
-    Setzt Zieldateien auf HEAD zurueck, damit der Builder
-    auf sauberem Baum startet. Kein Fail, kein Exit-Code.
-    Der Lauf geht weiter (Recovery-Runde).
-
-    Wird von A3 (Trigger) gerufen, sobald Recovery-Laeufe
-    existieren. Heute ungenutzt.
-    """
-    _rollback_zieldateien(state, project_dir, project_name,
-                         "recovery_start")
-
-
 def _fail_closed(state: RunState, project_dir: Path,
                  project_name: str, code: int,
                  grund: str) -> int:
@@ -7942,7 +7863,6 @@ def _post_apply_korrektur_loop(
       18  -- max_korrektur_runden erschoepft.
     """
     for runde in range(1, max_korrektur_runden + 1):
-        state.post_apply_korrektur_runden = runde
         print(f"[i] Post-Apply-Korrektur-Runde {runde}/"
               f"{max_korrektur_runden}.")
         audit("builder_recovery_nach_apply",
@@ -12337,7 +12257,6 @@ def _planner_main_pfad(
         parsed = parse_planner_reply(antwort)
         if parsed["art"] == "auftrag":
             vorschlag_text = antwort.strip()
-            state.planner_vorschlag = vorschlag_text
             audit("planner_vorschlag",
                   {"runde": runde,
                    "praefix": parsed.get("praefix", ""),

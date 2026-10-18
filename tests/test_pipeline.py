@@ -3689,32 +3689,11 @@ class TestCodeEntwurfHistorie:
 
 
 # =====================================================================
-# 2183 A1c: rollback_vor_recovery + max_llm_calls 30
+# max_llm_calls 30
 # =====================================================================
 
-class TestRollbackVorRecovery:
-    """Auflage 2183 A1c: Rollback ohne Fail."""
-
-    def test_funktion_existiert(self) -> None:
-        assert hasattr(pipeline, "rollback_vor_recovery")
-
-    def test_ruft_rollback(self, monkeypatch) -> None:
-        from pathlib import Path
-        aufgerufen = []
-
-        def fake_rollback(state, project_dir, project_name,
-                          grund):
-            aufgerufen.append(grund)
-
-        monkeypatch.setattr(pipeline, "_rollback_zieldateien",
-                            fake_rollback)
-        s = pipeline.RunState(
-            block_id="t", aufgabe="a", start_ts="",
-            docs={}, agents={}, always={}, optional={},
-            file_whitelist=[], api_key="", budget={},
-            agent_docs={}, project_dir=Path("/tmp"))
-        pipeline.rollback_vor_recovery(s, Path("/tmp"), "t")
-        assert aufgerufen == ["recovery_start"]
+class TestMaxLlmCallsDefault:
+    """Test fuer max_llm_calls-Default (30)."""
 
     def test_pipeline_default_max_llm_calls_30(self) -> None:
         # Source-Inspektion: kein Default mehr auf 20.
@@ -4568,77 +4547,6 @@ def test_pruefe_anker_gegen_messung_leerer_anmelder_anmelder() -> None:
     assert len(fehlend) == 3
 
 
-def test_pruefe_ersatz_gegen_messung_import_ok() -> None:
-    """Import-Pfad im Ersatz steht im mess_protokoll."""
-    patches = [{
-        "pfad": "x.py",
-        "anker": "alt",
-        "ersatz": "from harness.tool_registry.tool import X",
-    }]
-    fehlend = pipeline.pruefe_ersatz_gegen_messung(
-        patches, "import harness.tool_registry.tool ...")
-    assert fehlend == []
-
-
-def test_pruefe_ersatz_gegen_messung_import_im_ersatz() -> None:
-    """Erfundener Import-Pfad wird markiert."""
-    patches = [{
-        "pfad": "x.py",
-        "anker": "alt",
-        "ersatz": "from tools.workbench_registry import X",
-    }]
-    fehlend = pipeline.pruefe_ersatz_gegen_messung(
-        patches, "from harness.tool_registry.tool import Y")
-    assert len(fehlend) == 1
-    _, _, modul = fehlend[0]
-    assert modul == "tools.workbench_registry"
-
-
-def test_pruefe_ersatz_gegen_messung_mehrere_module_ein_patch() -> None:
-    """Ein Patch mit zwei erfundenen Modulen (II3)."""
-    patches = [{
-        "pfad": "x.py",
-        "anker": "alt",
-        "ersatz": (
-            "import foo.bar\n"
-            "from baz.qux import Z\n"
-        ),
-    }]
-    fehlend = pipeline.pruefe_ersatz_gegen_messung(patches, "")
-    assert len(fehlend) == 2
-    module = {f[2] for f in fehlend}
-    assert module == {"foo.bar", "baz.qux"}
-
-
-def test_pruefe_ersatz_gegen_messung_relative_imports_nicht_erkannt() -> None:
-    """Relative Imports werden nicht erkannt (II1-Grenzfall)."""
-    patches = [{
-        "pfad": "x.py",
-        "anker": "alt",
-        "ersatz": "from .foo import bar",
-    }]
-    fehlend = pipeline.pruefe_ersatz_gegen_messung(patches, "")
-    # Regex matcht "from .foo import" nicht, weil ".foo"
-    # nicht auf \w+ passt am Anfang.
-    assert fehlend == []
-
-
-def test_pruefe_ersatz_gegen_messung_mehrzeiliger_import() -> None:
-    """Mehrzeilige Klammer-Imports werden erkannt (II1)."""
-    patches = [{
-        "pfad": "x.py",
-        "anker": "alt",
-        "ersatz": (
-            "from tools.workbench_registry import (\n"
-            "    ToolArgumentError,\n"
-            ")\n"
-        ),
-    }]
-    fehlend = pipeline.pruefe_ersatz_gegen_messung(patches, "")
-    assert len(fehlend) == 1
-    assert fehlend[0][2] == "tools.workbench_registry"
-
-
 # ---------- Stufe 0 Aenderung 2 ----------
 
 def test_baue_anker_rueckmeldung_leer() -> None:
@@ -5404,7 +5312,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5440,7 +5348,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6275,7 +6183,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
 
 
 # =====================================================================
@@ -6380,7 +6288,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
 
 
 # =====================================================================
@@ -6438,7 +6346,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
 
 
 # =====================================================================
@@ -6980,17 +6888,6 @@ class TestW10c:
 # =====================================================================
 
 class TestA1Final:
-    def test_check_ersatz_gleich_anker_new_file_ausschluss(
-            self) -> None:
-        # typ=new_file wird ausgeschlossen.
-        patches = [
-            {"typ": "new_file", "pfad": "x.py",
-             "inhalt": "..."},
-        ]
-        fehlend = pipeline.pruefe_ersatz_gegen_messung(
-            patches, "(kein Messprotokoll)")
-        assert fehlend == []
-
     def test_check_commit_scope_vor_reviewer(self) -> None:
         import inspect
         src = inspect.getsource(pipeline.run_pipeline)
@@ -7106,16 +7003,10 @@ class TestW13a:
 
 
 # =====================================================================
-# W13b (2026-10-16): pruefe_ersatz_gegen_messung deaktiviert
+# W13b (2026-10-16): Ersatz-Pruefung bleibt deaktiviert
 # =====================================================================
 
 class TestW13b:
-    def test_pruefe_ersatz_gegen_messung_existiert(self) -> None:
-        # Die Funktion existiert weiter (fuer
-        # spaetere Nutzung), wird aber nicht mehr
-        # aufgerufen.
-        assert hasattr(pipeline, "pruefe_ersatz_gegen_messung")
-
     def test_ersatz_fehler_nicht_mehr_geprueft(self) -> None:
         import inspect
         src = inspect.getsource(pipeline.builder_reply_mit_command_loop)
@@ -7979,9 +7870,6 @@ class TestW26PlanMd:
         pipeline._schreibe_plan(state, plan_text)
         gelesen = pipeline._lese_plan(state)
         assert gelesen == plan_text
-        # Audit-Fallback.
-        gelesen_audit = pipeline._lese_plan_audit(state)
-        assert gelesen_audit == plan_text
 
     def test_lese_plan_leer_wenn_nicht_vorhanden(
             self, tmp_path: Path) -> None:
@@ -7989,7 +7877,6 @@ class TestW26PlanMd:
         state = build_test_state(project_dir=tmp_path)
         state.run_id = "test-run-w26c"
         assert pipeline._lese_plan(state) == ""
-        assert pipeline._lese_plan_audit(state) == ""
 
 
 class TestW27Contracts:
@@ -9545,7 +9432,7 @@ def test_w46c_2_repair_runde_gleiche_bedingung():
 
 def test_w46_katalog_107():
     """T-Katalog: W46-Katalog-Groesse 107 + neue Kinds."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
     assert "judge_uebersprungen_doku" in pipeline._AUDIT_KINDS_BEKANNT
     assert (
         "phase_judge_uebersprungen_doku"
@@ -9557,7 +9444,7 @@ def test_w48_e_katalog_kinds():
             in pipeline._AUDIT_KINDS_BEKANNT)
     assert ('planner_blockiert_phase_abgeschlossen'
             in pipeline._AUDIT_KINDS_BEKANNT)
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
 
 def test_w50_a_block_ohne_flag(tmp_path, monkeypatch):
     """T-W50-a: phase_aktiv=False, ohne Flag -> rc=65."""
@@ -9915,7 +9802,7 @@ def test_w51c_e_gemessener_inhalt():
 
 def test_w51c_f_katalog_115():
     """T-W51c-f: Katalog 115."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
     assert "command_block_bereinigt" in \
         pipeline._AUDIT_KINDS_BEKANNT
     assert "command_block_in_plan" in \
@@ -10267,7 +10154,7 @@ def test_w51f_d_gruen():
 
 def test_w51f_f_katalog_118():
     """T-W51f-f: Katalog 118 + planner_phase_zu_gross."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 119
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 120
     assert "planner_phase_zu_gross" in \
         pipeline._AUDIT_KINDS_BEKANNT
 

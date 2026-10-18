@@ -167,7 +167,6 @@ class TestRunState:
         import dataclasses
         felder = {f.name for f in dataclasses.fields(pipeline.RunState)}
         assert "planner_model" in felder
-        assert "planner_vorschlag" in felder
         assert "planner_modus" in felder
         assert "planner_runden" in felder
 
@@ -175,7 +174,6 @@ class TestRunState:
         import dataclasses
         d = {f.name: f.default for f in dataclasses.fields(pipeline.RunState)}
         assert d["planner_model"] == "deepseek-chat"
-        assert d["planner_vorschlag"] == ""
         assert d["planner_modus"] == "manual"
         assert d["planner_runden"] == 0
 

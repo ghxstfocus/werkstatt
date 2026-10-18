@@ -1966,7 +1966,6 @@ class TestPostApplyKorrektur:
         sig_fields = [f.name for f in
                       __import__("dataclasses").fields(
                           pipeline.RunState)]
-        assert "post_apply_korrektur_runden" in sig_fields
         assert "letzter_recovery_vorschlag" in sig_fields
 
     def test_bauer_recovery_prompt_typ_patch(

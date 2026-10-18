@@ -115,7 +115,6 @@ class RunState:
     # SS7-(C): Modell als hartcodierter Default, analog
     # zu builder_model. Frontmatter wird heute nicht gelesen.
     planner_model: str = "deepseek-chat"
-    planner_vorschlag: str = ""
     planner_modus: str = "manual"
     # W35a-2 (2026-10-17): Planner-Resume-Cap
     # pro uid. Max 1x pro Unterblock pro Prozess.
@@ -200,7 +199,6 @@ class RunState:
     # Post-Apply-Fix 2026-10-16: Recovery-Plan aus
     # apply_and_recheck fuer die Builder-Korrektur-Runde.
     letzter_recovery_vorschlag: object = None
-    post_apply_korrektur_runden: int = 0
     # Block Auftrag-erfuellt B3: letzter Patch war
     # wirkungslos (anker == ersatz). Signal fuer B2.
     letzter_patch_wirkungslos: bool = False

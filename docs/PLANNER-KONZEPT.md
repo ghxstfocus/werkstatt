@@ -249,7 +249,6 @@ Regel: Planner kann Reviewer nicht uebergehen.
 ================================================================
 
 Stufe 1:
-  planner_vorschlag: str = ""
   planner_modus: str = "manual"
   planner_runden: int = 0
 
