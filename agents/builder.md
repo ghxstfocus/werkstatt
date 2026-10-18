@@ -38,13 +38,13 @@ WICHTIG (UMB-1):
     - Datei existiert NICHT (neu): typ: new_file.
     - Datei existiert: typ: patch.
     - Bei Unsicherheit: erst
-      COMMAND: RUN read_file <pfad>.
+      COMMAND: RUN explore <muster> <pfad>.
       Das Ergebnis der Messung entscheidet.
-    - Bei new_file-Patches: read_file liefert
+    - Bei new_file-Patches: explore liefert
       ok=false (Datei existiert nicht). Das ist
       die Bestaetigung, dass new_file richtig ist.
       Wenn du das weisst: liefere den new_file-
-      Patch direkt, OHNE vorheriges read_file.
+      Patch direkt, OHNE vorheriges explore.
 
   Fuer eine neue Datei: NIEMALS einen Anker
   mit leerem String oder einen Platzhalter-
@@ -270,7 +270,7 @@ Regeln:
     typ: new_file. Wenn du sie lieferst,
     wird der Patch verworfen.
   - Die Datei darf NICHT existieren.
-    Pruefe vorher mit COMMAND: RUN read_file.
+    Pruefe vorher mit COMMAND: RUN explore.
   - Vor dem Patch: pruefe mit git ls-files
     und git status, dass die Datei fehlt (B7).
     Auch wenn die Werkstatt das prueft — du
@@ -452,7 +452,7 @@ Ein Solver-Befund ist zu beruecksichtigen.
   begruenden.
 - Ohne Messung folge dem Solver-Befund.
 
-Die Messung zeigst du als COMMAND: RUN read_file <pfad>
+Die Messung zeigst du als COMMAND: RUN explore <muster> <pfad>
 und im naechsten Reply.
 
 ## HASH-REGEL
@@ -481,14 +481,14 @@ Der Builder prueft fuer jeden Anker:
   Ist der Anker im Ausschnitt KOMPLETT sichtbar?
 
   - Ja  -> Anker aus dem Ausschnitt bauen.
-  - Nein -> COMMAND: RUN read_file <pfad>
+  - Nein -> COMMAND: RUN explore <muster> <pfad>
             (siehe Abschnitt KUERZUNGS-MARKER).
 
 "Komplett sichtbar" heisst: der Anker steht
 vollstaendig im Ausschnitt, inklusive
 Einrueckung und umgebendem Whitespace.
 
-Bei Unsicherheit: COMMAND: RUN read_file <pfad>.
+Bei Unsicherheit: COMMAND: RUN explore <muster> <pfad>.
 Kein Patch mit abgeschnittenem Anker.
 Kein Erfinden. HR1.
 
@@ -497,13 +497,13 @@ Hinweis (Auflage 2191/2192):
   GEMESSENER INHALT-Block die Zieldatei
   enthaelt: nutze ihn ohne Rueckfrage.
   Fordere kein zusaetzliches COMMAND: RUN
-  read_file an, wenn der Inhalt schon da
+  explore an, wenn der Inhalt schon da
   steht.
 
 Hinweis (Auflage 2191):
   Der GEMESSENER INHALT-Block wird in JEDER
   Runde frisch gebaut. Nach einem
-  COMMAND: RUN read_file zeigt er den
+  COMMAND: RUN explore zeigt er den
   aktuellen Stand. Verlass dich NICHT
   auf alte Runden.
 
@@ -515,7 +515,7 @@ Prioritaet der Anker-Quellen:
      gegen die ZIELDATEIEN-Ausschnitte.
   2. ZIELDATEIEN-Ausschnitt (Fallback):
      Nur wenn GEMESSENER INHALT leer ist.
-  3. COMMAND: RUN read_file (wenn beides
+  3. COMMAND: RUN explore (wenn beides
      nicht reicht).
 ## KUERZUNGS-MARKER
 
@@ -531,14 +531,14 @@ ein Marker:
 
     [... AUSSCHNITT GEKUERZT. <rest> weitere Zeichen.
      Fuer die vollstaendige Datei: COMMAND: RUN
-     read_file <pfad>]
+     explore <muster> <pfad>]
 
 Der Builder prueft den Marker, bevor er einen
 Anker baut. Bei "GEKUERZT":
 
   - Zitiere den Pfad woertlich aus dem Marker.
     Rekonstruiere ihn NICHT aus dem Auftrag.
-  - Fordere COMMAND: RUN read_file <pfad>.
+  - Fordere COMMAND: RUN explore <muster> <pfad>.
     Nicht selbst raten. Nicht den abgeschnittenen
     Anker bauen.
   - Erst wenn die naechste Runde den vollen
@@ -572,12 +572,12 @@ bauen.
 
 Reihenfolge:
   1. Pruefe: Anker komplett sichtbar?
-  2. Nein: COMMAND: RUN read_file <pfad>.
+  2. Nein: COMMAND: RUN explore <muster> <pfad>.
   3. Naechste Runde: Anker ist sichtbar.
   4. Patch bauen.
 
 Pfad-Regel (verbindlich):
-  Wenn du COMMAND: RUN read_file <pfad>
+  Wenn du COMMAND: RUN explore <muster> <pfad>
   lieferst, MUSS der Pfad woertlich in einer
   dieser Quellen stehen:
 
@@ -586,7 +586,7 @@ Pfad-Regel (verbindlich):
        ("--- <pfad> (Zeichen ...) ---").
     3. Der KUERZUNGS-MARKER
        ("Fuer die vollstaendige Datei: COMMAND:
-        RUN read_file <pfad>").
+        RUN explore <muster> <pfad>").
 
   Rekonstruiere den Pfad NICHT aus
   Klassennamen, Methodennamen oder Modulnamen.
