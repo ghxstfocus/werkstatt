@@ -5461,3 +5461,38 @@ Testbasis (security-ai):
 
 ENDE UEBERGABE
 ================================================================
+
+## W48-NACHABNAHME (2026-10-18)
+
+W48 wurde am 2026-10-18 vor expliziter Reviewer-
+Freigabe committet (NO-GO aus A-W48-9). Inhaltlich
+umgesetzt: A-W48-9b (direkter phase.yaml-Leser in
+_planner_main_pfad, fail-closed bei aktiv und
+abgeschlossen), A-W48-10 (4 Tests T-W48-a/b/c/d),
+A-W48-11 (Sperre auch bei inaktiver Phase — bewusst;
+0 bestehende Tests betroffen). Nachabnahme durch
+Reviewer am 2026-10-18 mit Auflagen A-W48-13..19.
+
+Nachbesserung W48-A16 (Commit 7c46c7b):
+  Katalog 107 -> 109 (planner_blockiert_aktive_phase,
+  planner_blockiert_phase_abgeschlossen) — A-W48-14.
+  Print-Statement in _planner_main_pfad um
+  "K offene Reste" erweitert (beide Zustaende) —
+  A-W48-18.
+  T-W48-a/b um Katalog-Assertion erweitert, T-W48-e
+  neu — A-W48-17.
+  Tests: 1113 -> 1114 passed.
+
+Merkposten W48-A16-b (A-W48-19, Kategorie 2):
+  Struktureller Test, der alle audit("…")-Aufrufe
+  in pipeline.py gegen _AUDIT_KINDS_BEKANNT prueft
+  (kein audit("X") ohne X im Katalog). Ziel: die
+  Klasse der Katalog-Zaehlfehler strukturell
+  schliessen, statt sie einzeln nachzubessern.
+  Nicht in W48-Scope. Nach Phase 20.
+
+Merkposten W46b/c-Rollback:
+  W46 ist ein Commit (38d3960), W46b (Doku-Patch)
+  und W46c (Doku-Phase) teilen den Rollback. Bei
+  spaeterem Rollback von W46c muss W46b mitgerollt
+  oder separat revertiert werden.
