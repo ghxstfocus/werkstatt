@@ -4244,6 +4244,47 @@ def test_a1b_fix_recovery_only_zeigt_keine_historie() -> None:
     prompt = pipeline._solver_prompt_bauen(s)
     assert "(keine Historie)" in prompt
 
+
+
+def test_a1b_fix_post_apply_korrektur_loop_recovery(
+        tmp_path: Path, monkeypatch) -> None:
+    """A-B1-12: T-2 Integrationstest. _post_apply_korrektur_loop
+    ruft record_code_entwurf(state, ..., phase="recovery").
+
+    Mockt builder_reply_mit_command_loop (liefert einen
+    Reply), apply_and_recheck (return None = gruen) und
+    budget_or_recover (return None). Der produktive Pfad
+    laeuft, der Test prueft die Historie.
+    """
+    from unittest.mock import patch
+    s = build_test_state(project_dir=tmp_path)
+    s.review_runden = []
+    reply = type("R", (), {
+        "ok": True, "content": "recovery-entwurf",
+        "error": ""})()
+
+    def _fake_builder_loop(*args, **kwargs):
+        return (reply, None)
+
+    with patch.object(pipeline, "budget_or_recover",
+                      return_value=None), \
+         patch.object(pipeline, "builder_reply_mit_command_loop",
+                      side_effect=_fake_builder_loop), \
+         patch.object(pipeline, "apply_and_recheck",
+                      return_value=None), \
+         patch.object(pipeline, "audit"):
+        rc = pipeline._post_apply_korrektur_loop(
+            s, {}, ["core/"], "builder-prompt",
+            tmp_path, "test", "key", 10, 0,
+            max_korrektur_runden=1)
+    assert rc == 0, f"rc={rc}, erwartet 0"
+    assert len(s.code_entwurf_historie) == 1, (
+        f"Historie hat {len(s.code_entwurf_historie)} "
+        f"Eintraege, erwartet 1.")
+    eintrag = s.code_entwurf_historie[0]
+    assert eintrag["phase"] == "recovery", eintrag
+    assert eintrag["entwurf"] == "recovery-entwurf", eintrag
+
 def test_handle_solver_command_erfolg() -> None:
     """C: RUN solver -> Befund + Marker."""
     state = _c_state()
