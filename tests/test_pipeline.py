@@ -3125,37 +3125,12 @@ class TestGemessenerInhalt:
         assert "contract.md" in pipeline.HARD_RULES_JUDGE
 
     def test_gemessene_pfade_hilfsfunktion(self) -> None:
-        """_gemessene_pfade erkennt vollstaendige read_file-Bloecke."""
-        text = (
-            "=== read_file ===\n"
-            "ARGV: cat /opt/security-ai/tests/unit/test_x.py\n"
-            "RC: 0\n"
-            "STDOUT:\nInhalt\nSTDERR:\n\n"
-        )
-        pfade = pipeline._gemessene_pfade(text)
+        """W52b-C: _gemessene_pfade liest state.messungen."""
+        s = build_test_state()
+        s.messungen = _messung_aus_string(
+            "/opt/security-ai/tests/unit/test_x.py", "Inhalt")
+        pfade = pipeline._gemessene_pfade(s)
         assert "/opt/security-ai/tests/unit/test_x.py" in pfade
-
-    def test_gemessene_pfade_gekuerzt_nicht_erkannt(self) -> None:
-        """Gekuerzter read_file-Block wird nicht als vollstaendig erkannt."""
-        text = (
-            "=== read_file ===\n"
-            "ARGV: cat /opt/security-ai/tests/unit/test_x.py\n"
-            "RC: 0\n"
-            "STDOUT:\nAnfang\n"
-            "[... AUSSCHNITT GEKUERZT. 100 weitere Zeichen. ...]\n"
-            "STDERR:\n\n"
-        )
-        pfade = pipeline._gemessene_pfade(text)
-        assert "/opt/security-ai/tests/unit/test_x.py" not in pfade
-
-
-
-# =====================================================================
-# 2191: Prompt pro Runde frisch
-# =====================================================================
-
-class TestPromptProRunde:
-    """Auflage 2191: Builder-Prompt wird pro Runde frisch gebaut."""
 
     def test_builder_command_loop_prompt_fresh(
             self, monkeypatch) -> None:
@@ -3217,25 +3192,17 @@ class TestPromptProRunde:
         assert "MESSUNGEN AUS DER VORIGEN RUNDE" not in quelle
 
     def test_gemessene_pfade_leer(self) -> None:
-        assert pipeline._gemessene_pfade("") == set()
+        s = build_test_state()
+        assert pipeline._gemessene_pfade(s) == set()
 
     def test_gemessene_pfade_mit_read_file(self) -> None:
-        text = (
-            "=== read_file ===\n"
-            "ARGV: cat /pfad/x.py\n"
-            "RC: 0\n"
-            "STDOUT:\nInhalt\nSTDERR:\n\n"
-        )
-        assert "/pfad/x.py" in pipeline._gemessene_pfade(text)
+        s = build_test_state()
+        s.messungen = _messung_aus_string("/pfad/x.py", "Inhalt")
+        assert "/pfad/x.py" in pipeline._gemessene_pfade(s)
 
     def test_gemessene_pfade_ignoriert_andere_commands(self) -> None:
-        text = (
-            "=== pytest ===\n"
-            "ARGV: pytest\n"
-            "RC: 0\n"
-            "STDOUT:\nok\nSTDERR:\n\n"
-        )
-        assert pipeline._gemessene_pfade(text) == set()
+        s = build_test_state()
+        assert pipeline._gemessene_pfade(s) == set()
 
     def test_builder_md_prioritaet_einmal(self) -> None:
         """builder.md hat den Prioritaetsverlauf genau einmal."""
@@ -3289,12 +3256,7 @@ class TestEnsureZielGemessen:
             self, monkeypatch) -> None:
         state = build_test_state()
         vollpfad = str((Path("/opt/security-ai") / "tests/unit/x.py").resolve())
-        state.mess_protokoll = (
-            "=== read_file ===\n"
-            f"ARGV: cat {vollpfad}\n"
-            "RC: 0\n"
-            "STDOUT:\nInhalt\nSTDERR:\n\n"
-        )
+        state.messungen = _messung_aus_string(vollpfad, "Inhalt")
         aufrufe = []
 
         def fake_exec(state, cmds, quelle=""):
@@ -4530,11 +4492,46 @@ def test_solver_prompt_enthaelt_historie_bei_runde_2() -> None:
 
 # ---------- Stufe 0, Aenderung 1 + 1b ----------
 
+def _messung_aus_string(pfad: str, inhalt: str):
+    """Baut eine Messung mit echter Datei aus einem String."""
+    import hashlib, tempfile, os
+    from werkstatt.state import Messung
+    fd, tmp = tempfile.mkstemp(suffix=".txt")
+    os.close(fd)
+    datei = Path(tmp)
+    datei.write_text(inhalt, encoding="utf-8")
+    return [Messung(pfad=pfad, sha1=hashlib.sha1(inhalt.encode()).hexdigest(),
+                    mtime=0.0, groesse=len(inhalt), quelle="test",
+                    datei=datei)]
+
+
+def _state_mit_messung(inhalt: str):
+    """W52b-C: RunState mit einer Messung (fuer pruefe_anker-Tests).
+
+    Quelle ist eine echte Datei (Messung.datei), keine
+    inhalt-Property (die gibt es nicht)."""
+    import hashlib, tempfile
+    from werkstatt.state import Messung
+    s = build_test_state()
+    if not inhalt:
+        s.messungen = []
+        return s
+    fd, pfad = tempfile.mkstemp(suffix=".txt")
+    import os
+    os.close(fd)
+    datei = Path(pfad)
+    datei.write_text(inhalt, encoding="utf-8")
+    sha1 = hashlib.sha1(inhalt.encode("utf-8")).hexdigest()
+    s.messungen = [Messung(
+        pfad="x.py", sha1=sha1, mtime=0.0,
+        groesse=len(inhalt), quelle="test", datei=datei)]
+    return s
+
+
 def test_pruefe_anker_gegen_messung_alle_ok() -> None:
     """Alle Anker stehen im mess_protokoll."""
     patches = [{"pfad": "x.py", "anker": "alpha", "ersatz": "beta"}]
-    fehlend = pipeline.pruefe_anker_gegen_messung(
-        patches, "alpha und beta drin")
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung("alpha und beta drin"))
     assert fehlend == []
 
 
@@ -4544,8 +4541,7 @@ def test_pruefe_anker_gegen_messung_einer_fehlt() -> None:
         {"pfad": "a.py", "anker": "alpha", "ersatz": "x"},
         {"pfad": "b.py", "anker": "GAMMA", "ersatz": "x"},
     ]
-    fehlend = pipeline.pruefe_anker_gegen_messung(
-        patches, "alpha und beta drin")
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung("alpha und beta drin"))
     assert len(fehlend) == 1
     i, pfad, anker, grund = fehlend[0]
     assert i == 1
@@ -4557,7 +4553,7 @@ def test_pruefe_anker_gegen_messung_einer_fehlt() -> None:
 def test_pruefe_anker_gegen_messung_leer() -> None:
     """Leerer Anker bekommt Grund 'leer' (HH3)."""
     patches = [{"pfad": "x.py", "anker": "", "ersatz": "y"}]
-    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "irgendwas")
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung("irgendwas"))
     assert len(fehlend) == 1
     _, _, _, grund = fehlend[0]
     assert grund == "leer"
@@ -4567,8 +4563,7 @@ def test_pruefe_anker_gegen_messung_shift_akzeptiert() -> None:
     """+2-Shift-Variante wird akzeptiert (HH2)."""
     patches = [{"pfad": "x.py",
                 "anker": "alpha\nbeta", "ersatz": "y"}]
-    fehlend = pipeline.pruefe_anker_gegen_messung(
-        patches, "prefix\n  alpha\n  beta\nsuffix")
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung("prefix\n  alpha\n  beta\nsuffix"))
     assert len(fehlend) == 1
     _, _, _, grund = fehlend[0]
     assert grund == "shift_akzeptiert"
@@ -4581,7 +4576,7 @@ def test_pruefe_anker_gegen_messung_leerer_anmelder_anmelder() -> None:
         {"pfad": "b.py", "anker": "BB", "ersatz": "x"},
         {"pfad": "c.py", "anker": "CC", "ersatz": "x"},
     ]
-    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "")
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung(''))
     assert len(fehlend) == 3
 
 
@@ -4728,8 +4723,7 @@ def test_pruefe_anker_wirkungslos_erkannt() -> None:
     patches = [{"pfad": "x.py",
                 "anker": "from foo import bar",
                 "ersatz": "from foo import bar"}]
-    fehlend = pipeline.pruefe_anker_gegen_messung(
-        patches, "from foo import bar")
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung("from foo import bar"))
     assert len(fehlend) == 1
     assert fehlend[0][3] == "wirkungslos"
 
@@ -4739,8 +4733,7 @@ def test_pruefe_anker_mit_trailing_whitespace_ist_wirkungslos() -> None:
     patches = [{"pfad": "x.py",
                 "anker": "from foo import bar",
                 "ersatz": "from foo import bar\n"}]
-    fehlend = pipeline.pruefe_anker_gegen_messung(
-        patches, "from foo import bar")
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung("from foo import bar"))
     # anker steht im mess -> kein Fehler.
     assert fehlend == []
 
@@ -4748,7 +4741,7 @@ def test_pruefe_anker_mit_trailing_whitespace_ist_wirkungslos() -> None:
 def test_pruefe_anker_leer_bleibt_leer() -> None:
     """Leerer Anker: Grund 'leer', nicht 'wirkungslos'."""
     patches = [{"pfad": "x.py", "anker": "", "ersatz": ""}]
-    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "")
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung(''))
     assert len(fehlend) == 1
     assert fehlend[0][3] == "leer"
 
@@ -4757,7 +4750,7 @@ def test_pruefe_anker_wirkungslos_hat_einen_grund_pro_patch() -> None:
     """JJ3: ein Eintrag pro Patch."""
     patches = [{"pfad": "x.py",
                 "anker": "gleich", "ersatz": "gleich"}]
-    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "")
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung(''))
     assert len(fehlend) == 1
 
 
@@ -4765,7 +4758,7 @@ def test_pruefe_anker_wirksamer_patch_kein_fehler() -> None:
     """anker != ersatz, anker im mess: kein Fehler."""
     patches = [{"pfad": "x.py",
                 "anker": "alt", "ersatz": "neu"}]
-    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "alt")
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung("alt"))
     assert fehlend == []
 
 
@@ -4782,7 +4775,7 @@ def test_wirkungslos_setzt_flag_im_loop() -> None:
     # Direkter Test der Logik: pruefe_anker liefert
     # 'wirkungslos', dann Flag setzen.
     patches = [{"pfad": "x.py", "anker": "y", "ersatz": "y"}]
-    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "")
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung(''))
     wirkt = any(g == "wirkungslos" for (_, _, _, g) in fehlend)
     assert wirkt is True
 
@@ -4790,7 +4783,7 @@ def test_wirkungslos_setzt_flag_im_loop() -> None:
 def test_nicht_wirkungslos_setzt_flag_nicht() -> None:
     """Wenn Anker-Fehler nicht 'wirkungslos' ist, kein Signal."""
     patches = [{"pfad": "x.py", "anker": "GAMMA", "ersatz": "y"}]
-    fehlend = pipeline.pruefe_anker_gegen_messung(patches, "")
+    fehlend = pipeline.pruefe_anker_gegen_messung(patches, _state_mit_messung(''))
     wirkt = any(g == "wirkungslos" for (_, _, _, g) in fehlend)
     assert wirkt is False
 

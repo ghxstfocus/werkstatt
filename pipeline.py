@@ -4687,9 +4687,32 @@ def baue_anker_rueckmeldung(state: RunState) -> str:
     return "\n".join(zeilen) + "\n"
 
 
+def _anker_in_messung(state: "RunState", anker: str) -> bool:
+    """W52b-C: prueft Anker gegen Datei-Inhalte aus state.messungen.
+
+    Quelle ist ausschliesslich m.datei (Pfad zur
+    .werkstatt/<run_id>/messungen/<sha1>.txt-Datei).
+    Liest die Datei bei jedem Check neu (klein, gecacht
+    auf OS-Ebene)."""
+    if state is None or not anker:
+        return False
+    for m in getattr(state, "messungen", []) or []:
+        datei = getattr(m, "datei", None)
+        if datei is None:
+            continue
+        try:
+            inhalt = datei.read_text(encoding="utf-8",
+                                     errors="replace")
+        except OSError:
+            continue
+        if anker in inhalt:
+            return True
+    return False
+
+
 def pruefe_anker_gegen_messung(
     patches: list[dict[str, str]],
-    mess_protokoll: str,
+    state: "RunState",
 ) -> list[tuple[int, str, str, str]]:
     """Stufe 0, Aenderung 1: deterministische
     Anker-Pruefung gegen den GEMESSENER INHALT.
@@ -4735,11 +4758,11 @@ def pruefe_anker_gegen_messung(
         if not anker:
             fehlend.append((i, pfad, anker, "leer"))
             continue
-        if anker in mess_protokoll:
+        if _anker_in_messung(state, anker):
             continue
         # HH2: +2-Shift-Variante
         verschoben = _shift_lines(anker, "  ")
-        if verschoben in mess_protokoll:
+        if _anker_in_messung(state, verschoben):
             fehlend.append(
                 (i, pfad, anker, "shift_akzeptiert"))
             continue
@@ -4802,7 +4825,7 @@ def builder_reply_mit_command_loop(
             patches = parse_code_patches(reply.content)
             if patches:
                 anker_fehler = pruefe_anker_gegen_messung(
-                    patches, state.mess_protokoll)
+                    patches, state)
                 # W13b (2026-10-16): pruefe_ersatz_
                 # gegen_messung deaktiviert. Der
                 # ERSATZ enthaelt neuen Code, der
@@ -8603,7 +8626,7 @@ def ensure_ziel_gemessen(
             aufgabe)
         if _m is not None:
             _anker_pfad = _m.group(1).strip()
-    bereits = _gemessene_pfade(state.mess_protokoll)
+    bereits = _gemessene_pfade(state)
     fehlend: list[dict[str, str]] = []
     for p in ziel_pfade:
         ziel = (project_dir / p).resolve()
@@ -8621,32 +8644,17 @@ def ensure_ziel_gemessen(
     execute_commands(state, fehlend, quelle="pipeline_auto")
 
 
-def _gemessene_pfade(mess_protokoll: str) -> set[str]:
-    """Auflage 2190c: ermittelt Pfade, die im mess_protokoll
-    vollstaendig gelesen wurden (read_file, ok, kein GEKUERZT).
+def _gemessene_pfade(state: "RunState") -> set[str]:
+    """W52b-C: Pfade aus state.messungen (Datei-Referenzen).
 
-    Liest den mess_protokoll-Text nach read_file-Aufrufen.
-    Ein read_file-Aufruf ist vollstaendig, wenn RC 0 war und
-    kein "AUSSCHNITT GEKUERZT"-Marker folgt.
-    """
+    Liest NICHT mehr den mess_protokoll-String. Quelle ist
+    ausschliesslich state.messungen (W52b A/B)."""
     pfade: set[str] = set()
-    if not mess_protokoll:
+    if state is None:
         return pfade
-    bloecke = mess_protokoll.split("=== read_file ===")
-    for block in bloecke[1:]:
-        zeilen = block.splitlines()
-        pfad: str | None = None
-        rc0 = False
-        gekuerzt = False
-        for z in zeilen:
-            if z.startswith("ARGV: cat "):
-                pfad = z[len("ARGV: cat "):].strip()
-            elif z.startswith("RC: "):
-                rc0 = z.strip() == "RC: 0"
-            elif "AUSSCHNITT GEKUERZT" in z:
-                gekuerzt = True
-        if pfad and rc0 and not gekuerzt:
-            pfade.add(pfad)
+    for m in getattr(state, "messungen", []) or []:
+        if getattr(m, "pfad", None):
+            pfade.add(m.pfad)
     return pfade
 
 
@@ -9472,7 +9480,7 @@ def run_pipeline(project_name: str, aufgabe: str,
             aufgabe, file_whitelist, project_dir)
         zs = read_target_snippets(
             zp, project_dir, file_whitelist,
-            bereits_gemessen=_gemessene_pfade(s.mess_protokoll))
+            bereits_gemessen=_gemessene_pfade(s))
         anker_block = baue_anker_rueckmeldung(s)
         _ps_block = format_projekt_stand(s)
         return (
@@ -9568,8 +9576,7 @@ def run_pipeline(project_name: str, aufgabe: str,
             state.aufgabe, file_whitelist, project_dir)
         ziel_snippets_rev = read_target_snippets(
             ziel_pfade_rev, project_dir, file_whitelist,
-            bereits_gemessen=_gemessene_pfade(
-                state.mess_protokoll))
+            bereits_gemessen=_gemessene_pfade(state))
         szenario = (
             # Phasen-Header (2026-10-16).
             _PHASE_HEADER_CODE_REVIEW
