@@ -1126,7 +1126,7 @@ _AP_PFLICHTFELDER = (
 # (test_audit_kinds_alle_aufrufe_registriert) prueft
 # die Nutzung, test_katalog_anzahl_matcht_soll die
 # Registrierung.
-_KATALOG_SOLL = 164  # W61: +explore_subagent
+_KATALOG_SOLL = 166  # W61: +builder_readfile_blockiert, verify_code_befund
 
 _AUDIT_KINDS_BEKANNT = frozenset({
     "aggregator_failed",
@@ -1268,6 +1268,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "recovery_no_go",
     # W61: Subagent-Audit.
     "explore_subagent",
+    "builder_readfile_blockiert",
+    "verify_code_befund",
     # W61: Judge-Labels (vorher als "reviewer" gefuehrt).
     "judge_frage_antwort",
     "judge_round",
