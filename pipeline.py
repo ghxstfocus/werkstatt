@@ -1220,6 +1220,8 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "solver_trigger_c",
     "judge_uebersprungen_doku",
     "phase_judge_uebersprungen_doku",
+    "planner_blockiert_aktive_phase",
+    "planner_blockiert_phase_abgeschlossen",
 })
 
 
@@ -11699,17 +11701,25 @@ def _planner_main_pfad(
             return 18
         _w48_aktiv = _w48_daten.get("phase_aktiv")
         _w48_pid = _w48_daten.get("phase_id", "?")
+        _k_offene_w48 = sum(
+            1 for _u in _w48_daten.get(
+                "phase_unterbloecke", []) or []
+            if isinstance(_u, dict)
+            and _u.get("status") in ("no_go", "failed"))
         if _w48_aktiv is True:
-            print(f"[FAIL] Aktive Phase {_w48_pid} in phase.yaml. "
-                  "--planner gesperrt, bitte --phase nutzen.")
+            print(f"[FAIL] Aktive Phase {_w48_pid} in phase.yaml "
+                  f"({_k_offene_w48} offene Reste). "
+                  "--planner gesperrt, bitte "
+                  "--phase nutzen.")
             audit("planner_blockiert_aktive_phase",
                   {"phase_id": _w48_pid},
                   project_dir, project_name)
             return 65
         if _w48_aktiv is False:
-            print(f"[FAIL] Phase {_w48_pid} ist abgeschlossen in "
-                  "phase.yaml. --planner gesperrt, bitte --phase "
-                  "(Neuanlage) nutzen.")
+            print(f"[FAIL] Phase {_w48_pid} ist abgeschlossen "
+                  f"in phase.yaml ({_k_offene_w48} offene "
+                  "Reste). --planner gesperrt, bitte "
+                  "--phase (Neuanlage) nutzen.")
             audit("planner_blockiert_phase_abgeschlossen",
                   {"phase_id": _w48_pid},
                   project_dir, project_name)

@@ -5309,7 +5309,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 107
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5345,7 +5345,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 107
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6180,7 +6180,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 107
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
 
 
 # =====================================================================
@@ -6285,7 +6285,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 107
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
 
 
 # =====================================================================
@@ -6343,7 +6343,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 107
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
 
 
 # =====================================================================
@@ -9296,6 +9296,8 @@ class TestW35a2PlannerResume:
         rc = _w48_rufe_planner_main(tmp_path, monkeypatch)
         assert rc == 65
         assert 'planner_blockiert_aktive_phase' in calls
+        assert ('planner_blockiert_aktive_phase'
+                in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_w48_planner_blockiert_abgeschlossene_phase(
             self, tmp_path, monkeypatch) -> None:
@@ -9310,6 +9312,8 @@ class TestW35a2PlannerResume:
         rc = _w48_rufe_planner_main(tmp_path, monkeypatch)
         assert rc == 65
         assert 'planner_blockiert_phase_abgeschlossen' in calls
+        assert ('planner_blockiert_phase_abgeschlossen'
+                in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_w48_planner_ohne_phase_yaml_frei(
             self, tmp_path, monkeypatch) -> None:
@@ -9446,9 +9450,17 @@ def test_w46c_2_repair_runde_gleiche_bedingung():
 
 def test_w46_katalog_107():
     """T-Katalog: W46-Katalog-Groesse 107 + neue Kinds."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 107
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
     assert "judge_uebersprungen_doku" in pipeline._AUDIT_KINDS_BEKANNT
     assert (
         "phase_judge_uebersprungen_doku"
         in pipeline._AUDIT_KINDS_BEKANNT)
+
+def test_w48_e_katalog_kinds():
+    """T-W48-e: beide W48-Kinds im Audit-Katalog."""
+    assert ('planner_blockiert_aktive_phase'
+            in pipeline._AUDIT_KINDS_BEKANNT)
+    assert ('planner_blockiert_phase_abgeschlossen'
+            in pipeline._AUDIT_KINDS_BEKANNT)
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 109
 
