@@ -1,8 +1,8 @@
 # Roadmap — Werkstatt
 
-Stand: 2026-10-18
-Uebersicht. Details in `OFFENE-BLOECKE.md` (Todo) und
-`ERLEDIGT.md` (Erledigt).
+Stand: 2026-10-18 (nach Sanierungs-Welle + W52b A/B)
+Uebersicht. Details in `OFFENE-BLOECKE.md` (Todo)
+und `ERLEDIGT.md` (Erledigt).
 
 ## Symbole
 
@@ -35,15 +35,21 @@ Uebersicht. Details in `OFFENE-BLOECKE.md` (Todo) und
 | 20a | Change-Modell (Audit-Trail-Felder) | 🔧 | 560659a | 1452 |
 | 20b | ChangeApplier (Audit-Log, Rollback) | 🚫 | — | — |
 
+Phase 20b blockiert. U1 done (759b9e1),
+U2 failed (Lauf 20261018-023047),
+U3+U4 pending. Deadlock reproduziert
+(Builder sendet falsche Anker). W52b C+D+E
++ W61 sind die Voraussetzung.
+
 ## W-Block-Serien
 
 ### W1–W35 (Basis, 2026-10-16/17)
 
-Serie von 30 Bloecken. Details in `ERLEDIGT.md`.
+Details in `ERLEDIGT.md`.
 
 | Serie | Inhalt | Status | Commits |
 |---|---|---|---|
-| W1–W11 | Planner-Messung, Unterblock-Isolation, Message-Check, read_file-Zeilenbereich | ✅ | 0e6c881..c3bd4db |
+| W1–W11 | Planner-Messung, Unterblock-Isolation, read_file-Zeilenbereich | ✅ | 0e6c881..c3bd4db |
 | W13–W13b | Anker-Zeilenbereich, Ersatz-Pruefung | ✅ | — |
 | W23 | Kommunikationswege-Audit | ✅ | c3bd4db |
 | W24a | Apply idempotent | ✅ | 4531451 |
@@ -59,8 +65,6 @@ Serie von 30 Bloecken. Details in `ERLEDIGT.md`.
 | W35a-1/2/2d | Planner-Resume + Merge + Suffix-Aufteilung | ✅ | — |
 
 ### W36–W47 (Modularisierung, 2026-10-17)
-
-Serie von 12 Bloecken. Details in `ERLEDIGT.md`.
 
 | Serie | Inhalt | Status | Commits |
 |---|---|---|---|
@@ -80,42 +84,65 @@ Serie von 12 Bloecken. Details in `ERLEDIGT.md`.
 
 ### W51a–h (Planner-Mess-Mechanik, 2026-10-18) — Symptom
 
-Serie von 8 Bloecken. Symptom-Behandlung, nicht
-strukturell. Details in `ERLEDIGT.md`.
+Symptom-Behandlung, nicht strukturell.
 
-| Block | Titel | Status | Commit | Tests |
-|---|---|---|---|---|
-| W51a–h | Planner-Prompt, Parser-Sperre, COMMAND-Bereinigung, Mess-Mechanik, Loop-Abbruch, Phasen-Groesse, Dedup, Plan+COMMANDs | ⚠️ | 23ce844..8205456 | 1158 |
+| Block | Status | Commits | Tests |
+|---|---|---|---|
+| W51a–h | ⚠️ | 23ce844..8205456 | 1158 |
 
 ### W54a/g/h (Builder-Fixes, 2026-10-18) — Symptom
 
-Serie von 3 Bloecken. Symptom-Behandlung, nicht
-strukturell.
+| Block | Status | Commit | Tests |
+|---|---|---|---|
+| W54a | ⚠️ | d291c37 | 1161 |
+| W54g | ⚠️ | 546bc22 | 1165 |
+| W54h | ⚠️ | 00483a1 | 1166 |
+
+### Sanierungs-Welle (2026-10-18)
 
 | Block | Titel | Status | Commit | Tests |
 |---|---|---|---|---|
-| W54a | builder.md-Regeln doppelte Imports | ⚠️ | d291c37 | 1161 |
-| W54g | apply_code_patches Ersatz-Duplikate | ⚠️ | 546bc22 | 1165 |
-| W54h | builder.md-Regel Ziel-Klasse | ⚠️ | 00483a1 | 1166 |
+| B1-Schritt-1 | Audit-Werkzeug (statische Analyse) | ✅ | 15ce62a | 1169 |
+| W51c-fix | Planner nutzt _parse_commands_planner | ✅ | 679251c | 1176 |
+| A1b-fix | record_code_entwurf im Builder verdrahtet | ✅ | 800e924 | 1179 |
+| T-2 | Integrationstest _post_apply | ✅ | aefecc7 | 1180 |
+| B1 | 5 Leichen entfernt | ✅ | 3e1d804 | 1171 |
+| W30-fix | Loop-Cap-Audit zentralisiert | ✅ | 5dbbb79 | 1174 |
+| W48-A16-b | Katalog-Nutzungs-Test (AST) | ✅ | a074be1 | 1177 |
+| W48-A16-b-2 | 36 Katalog-Luecken registriert | ✅ | bc69ffc | 1177 |
+| W36-RP | run_pipeline-Integrationstests | ✅ | d0233c8 | 1180 |
+| W30-fix-b | max_builder_runden < 1 fail-closed | ✅ | ab0f389 | 1181 |
+| W48-A16-b-2-a | solver_max-Kinds zusammengelegt | ✅ | 70df288 | 1182 |
+| W36-RP-b | subprocess-Schutz global | ✅ | 904c0de | 1186 |
+| W25-planner-md | Skills im Planner-Prompt | ✅ | 041c9a3 | 1189 |
 
-### W60 (Doku-Struktur, 2026-10-18)
+### W52b (On-Demand-Messung, 2026-10-18, in Arbeit)
 
-| Block | Titel | Status | Commit | Tests |
+| Schritt | Titel | Status | Commit | Tests |
 |---|---|---|---|---|
-| W60 | Doku-Struktur (KONVENTION, ARCHITEKTUR, ROADMAP, OFFENE, ERLEDIGT) | 🔧 | a70a121.. | 1166 |
+| A+B | Messungen als Dateien (state.messungen, gelesene_dateien) | ✅ | 8ef403a | 1189 |
+| C | Anker-Check gegen Datei-Inhalte | 🔴 | — | — |
+| D | Prompt-Bauer auf Index | 🔴 | — | — |
+| E | mess_protokoll deprecated | 🟡 | — | — |
 
 ## Offene Bloecke
 
-Detail in `OFFENE-BLOECKE.md`. Nur P1 (akut) hier:
+Detail in `OFFENE-BLOECKE.md`. P1 (akut) hier:
 
 | Block | Kategorie | Symbol | Kurz |
 |---|---|---|---|
-| W59 | 3 | 🔴 | Read-vor-Edit (Deadlock-Mechanismus) |
-| W61 | 3 | 🔴 | Rollen-Sanierung (builder.md 647) |
+| W52b C | 3 | 🔴 | Anker-Check gegen Datei-Inhalte |
+| W52b D | 3 | 🔴 | Prompt-Bauer auf Index |
+| W61 | 3 | 🔴 | Rollen-Sanierung (5 Unterbloecke) |
+
+P2/P3: W52b E, W-Resume-Fail-Kontext, W58,
+W59-2, W36-RP-a, W36-RP-b-os, W48-A16-b-2-a-b,
+W52a-1, W36-2b..6, W56, W62.
 
 ## Ideen
 
-Siehe `docs/IDEEN.md` (2101–2106, Wunschliste, nicht Plan).
+Siehe `docs/IDEEN.md` (2101–2106, Wunschliste,
+nicht Plan).
 
 ## Verweise
 
