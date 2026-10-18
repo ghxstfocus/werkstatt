@@ -10597,3 +10597,12 @@ def test_w54_g_d_kurze_legit_doppelt(tmp_path):
     assert ok
     assert "patch_ersatz_doppelte_zeilen" not in calls
 
+def test_w54_h_a_builder_md():
+    """T-W54-h-a: builder.md enthaelt ZIEL-KLASSE-Regel."""
+    from pathlib import Path as _P
+    md = _P("/opt/werkstatt/agents/builder.md").read_text(
+        encoding="utf-8")
+    assert "## ZIEL-KLASSE" in md
+    assert "ZIELDATEI" in md
+    assert "nicht die alte" in md
+

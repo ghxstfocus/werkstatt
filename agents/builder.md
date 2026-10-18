@@ -179,6 +179,23 @@ Keine doppelten Klassen/Bloecke: eine Klasse
 genau einmal definieren. Ruff F811.
 
 
+## ZIEL-KLASSE (W54-h, 2026-10-18)
+
+Verwende die Klasse aus der ZIELDATEI.
+
+Wenn mehrere Klassen mit gleichem Namen
+existieren (alte + neue): pruefe die Imports
+der Test-Datei. Teste die Klasse, die zur
+ZIELDATEI gehoert, nicht die alte.
+
+Beispiel (Phase 20b-U1): Zieldatei
+core/changeapplier/applier.py. Die Test-Datei
+importiert 'from harness.versioning.applier
+import ChangeApplier' (alt). Die neue
+ChangeApplier-Klasse ist in
+core.changeapplier.applier. Der Test muss
+den Import umstellen.
+
 ## TEST-FELD IM AUFTRAG
 
 Wenn der Auftrag ein `test:`-Feld nennt
