@@ -170,3 +170,29 @@ alle Laeufe `messungen_nach_apply` befuellen.
   nachziehen (Phase 20b in STATUS.md, ROADMAP.md,
   SECURITY_LOG.md).
 
+
+## W61d — Befund 2026-10-18 (Phase-Prompts trennen)
+
+`builder.md` wird fuer BEIDE Phasen genutzt:
+- **Phase 1 (Patch-Bau):** Builder-COMMAND-Loop,
+  Reply = PATCH-BEGINN/ENDE. Braucht: Anker-Regeln,
+  COMMAND: RUN, MESSWERTE, KUERZUNGS-MARKER.
+- **Phase 2 (Commit-Paket):** `build_commit_paket`,
+  Reply = COMMIT-MESSAGE. Braucht: SELBST-REVIEW,
+  COMMIT-MESSAGE, __ALL__-Pflege, REVIEWED-BLOCK.
+
+Redundanz:
+- SELBST-REVIEW (17 Z.): Phase 2, nicht Phase 1.
+- COMMIT-MESSAGE (32 Z.): Phase 2, nicht Phase 1.
+- COMMAND: RUN (44 Z.): Phase 1, nicht Phase 2.
+
+**Ziel:** `builder.md` aufteilen in
+- `builder_patch.md` (< 300): Phase 1.
+- `builder_commit.md` (< 300): Phase 2.
+
+`load_agents` laedt `builder.md` als System-Prompt.
+Der Aufrufer (`builder_reply_mit_command_loop` vs.
+`build_commit_paket`) waehlt den richtigen.
+
+**Aufwand:** mittel. **Kategorie:** 3.
+
