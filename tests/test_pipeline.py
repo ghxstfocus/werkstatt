@@ -4190,6 +4190,60 @@ def test_letzte_zwei_entwuerfe() -> None:
     assert e[1]["entwurf"] == "e3"
 
 
+
+
+# ---------- A1b-fix (2026-10-18): record_code_entwurf verdrahtet ----------
+
+def test_a1b_fix_solver_sieht_historie() -> None:
+    """A-A1b-fix-1: E2E. Nach Befuellung der Historie
+    enthaelt der Solver-Prompt die Entwuerfe, NICHT
+    "(keine Historie)".
+    """
+    s = build_test_state()
+    # 2 normale Entwuerfe in die Historie.
+    pipeline.record_code_entwurf(s, "entwurf_A", phase="normal")
+    pipeline.record_code_entwurf(s, "entwurf_B", phase="normal")
+    assert len(s.code_entwurf_historie) == 2
+    prompt = pipeline._solver_prompt_bauen(s)
+    assert "(keine Historie)" not in prompt, (
+        "Solver-Prompt zeigt '(keine Historie)', "
+        "obwohl 2 Entwuerfe in der Historie sind.")
+    assert "entwurf_A" in prompt
+    assert "entwurf_B" in prompt
+
+
+def test_a1b_fix_recovery_wird_ausgeblendet() -> None:
+    """A-A1b-fix-3: Recovery-Entwuerfe werden in
+    _letzte_zwei_entwuerfe ausgeblendet.
+    """
+    s = build_test_state()
+    pipeline.record_code_entwurf(s, "normal_1", phase="normal")
+    pipeline.record_code_entwurf(s, "recovery_1", phase="recovery")
+    pipeline.record_code_entwurf(s, "normal_2", phase="normal")
+    entwuerfe = pipeline._letzte_zwei_entwuerfe(s)
+    assert len(entwuerfe) == 2
+    inhalte = [e["entwurf"] for e in entwuerfe]
+    assert "normal_1" in inhalte
+    assert "normal_2" in inhalte
+    assert "recovery_1" not in inhalte, (
+        "Recovery-Entwurf darf nicht in _letzte_zwei_"
+        "entwuerfe erscheinen.")
+
+
+def test_a1b_fix_recovery_only_zeigt_keine_historie() -> None:
+    """A-A1b-fix-3: Wenn NUR Recovery-Entwuerfe
+    existieren, zeigt der Solver-Prompt
+    '(keine Historie)'. Bewusstes Verhalten.
+    """
+    s = build_test_state()
+    pipeline.record_code_entwurf(s, "recovery_1", phase="recovery")
+    assert len(s.code_entwurf_historie) == 1
+    assert s.code_entwurf_historie[0]["phase"] == "recovery"
+    entwuerfe = pipeline._letzte_zwei_entwuerfe(s)
+    assert entwuerfe == []
+    prompt = pipeline._solver_prompt_bauen(s)
+    assert "(keine Historie)" in prompt
+
 def test_handle_solver_command_erfolg() -> None:
     """C: RUN solver -> Befund + Marker."""
     state = _c_state()

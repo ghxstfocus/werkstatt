@@ -5344,6 +5344,15 @@ def _letzte_zwei_entwuerfe(
         state: RunState) -> list[dict[str, Any]]:
     """Auflage 2183 B (X8): die letzten zwei
     normalen Entwuerfe aus der Historie.
+
+    A1b-fix (2026-10-18): Recovery-Entwuerfe
+    (phase="recovery") werden bewusst ausgeblendet.
+    Wenn in einem Lauf NUR Recovery-Entwuerfe
+    existieren (Builder scheitert in normal-Runde,
+    Recovery greift), sieht der Solver
+    "(keine Historie)". Das ist korrekt: der Solver
+    soll die normalen Runden vergleichen, nicht
+    die Korrekturversuche.
     """
     normal = [e for e in state.code_entwurf_historie
               if e.get("phase") == "normal"]
@@ -6462,6 +6471,16 @@ def record_code_entwurf(state: RunState, entwurf: str,
     runde = len(review_runden) + 1 (naechste Runde).
     phase = "normal" oder "recovery".
     Kuerzung: max 10 Eintraege, aeltester faellt weg.
+
+    A1b-fix (2026-10-18): Wird produktiv aus dem
+    Builder-Pfad gerufen (Z. 7960 recovery, Z. 9373
+    normal, Z. 9796 normal, Z. 9843 normal).
+    Vorher wurde state.code_entwurf direkt gesetzt
+    und die Historie blieb leer — Folge: der Solver
+    sah "(keine Historie)".
+
+    Leerer entwurf wird protokolliert. Das ist ein
+    Builder-Bug, nicht ein Bug in dieser Funktion.
     """
     state.code_entwurf = entwurf
     runde = len(state.review_runden) + 1
@@ -7957,7 +7976,9 @@ def _post_apply_korrektur_loop(
             print(f"[!] Builder-Korrektur-Runde {runde} "
                   f"keine Antwort.")
             continue
-        state.code_entwurf = reply_roh.content
+        # A1b-fix: Recovery-Kontext.
+        record_code_entwurf(state, reply_roh.content,
+                            phase="recovery")
         state.code_patches = parse_code_patches(reply_roh.content)
         print(f"[i] {len(state.code_patches)} Code-Patches "
               f"nach Korrektur-Runde {runde} geparst.")
@@ -9370,7 +9391,8 @@ def run_pipeline(project_name: str, aufgabe: str,
 
     assert reply is not None
 
-    state.code_entwurf = reply.content
+    # A1b-fix: normaler Builder-Lauf.
+    record_code_entwurf(state, reply.content, phase="normal")
     state.code_patches = parse_code_patches(reply.content)
     print(f"[i] {len(state.code_patches)} Code-Patches geparst.")
 
@@ -9793,7 +9815,10 @@ def run_pipeline(project_name: str, aufgabe: str,
                 return bauer_rc
             assert bauer_reply_roh is not None
             if bauer_reply_roh.ok:
-                state.code_entwurf = bauer_reply_roh.content
+                # A1b-fix: NO-GO-Builder, normal.
+                record_code_entwurf(
+                    state, bauer_reply_roh.content,
+                    phase="normal")
                 state.code_patches = parse_code_patches(
                     bauer_reply_roh.content)
             continue
@@ -9840,7 +9865,10 @@ def run_pipeline(project_name: str, aufgabe: str,
                     return bauer_rc
                 assert bauer_reply_roh is not None
                 if bauer_reply_roh.ok:
-                    state.code_entwurf = bauer_reply_roh.content
+                    # A1b-fix: Auflagen-Builder, normal.
+                    record_code_entwurf(
+                        state, bauer_reply_roh.content,
+                        phase="normal")
                     state.code_patches = parse_code_patches(
                         bauer_reply_roh.content)
                     print(f"[i] {len(state.code_patches)} Code-Patches "
