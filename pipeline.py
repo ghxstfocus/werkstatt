@@ -3283,6 +3283,10 @@ def run_phase(
         # W61: Test-Fehler bei rc=17 persistieren.
         _ltf = (state.letzter_test_fehler
                 if rc_unterblock == 17 else None)
+        print(f"[DEBUG] rc={rc_unterblock} "
+              f"letzter_test_fehler_len="
+              f"{len(state.letzter_test_fehler or '')} "
+              f"ltf={bool(_ltf)}")
         _phase_yaml_status_update(
             project_name, uid, "failed",
             letzter_test_fehler=_ltf)
@@ -4817,6 +4821,86 @@ def _anker_in_messung(state: "RunState", anker: str) -> bool:
         if anker_norm in inhalt_norm:
             return True
     return False
+
+
+def _projekt_symbol_index(project_dir: Path) -> dict[str, set[str]]:
+    """W61-Pro: Baut einen Symbol-Index ueber das ganze Projekt.
+
+    Sammelt alle definierten Funktions-, Klassen- und Methoden-
+    Namen aus .py-Dateien. Wird von verify_code genutzt, um
+    erfundene APIs zu erkennen.
+    """
+    import ast as _ast
+    index: dict[str, set[str]] = {}
+    for py in project_dir.rglob("*.py"):
+        # Ignoriere .venv, __pycache__, .git.
+        if any(t in py.parts for t in (".venv", "__pycache__",
+                                       ".git", "node_modules")):
+            continue
+        try:
+            tree = _ast.parse(py.read_text(encoding="utf-8",
+                                          errors="replace"))
+        except (SyntaxError, OSError):
+            continue
+        for node in _ast.walk(tree):
+            if isinstance(node, (_ast.FunctionDef,
+                                  _ast.AsyncFunctionDef,
+                                  _ast.ClassDef)):
+                index.setdefault(node.name, set()).add(str(py))
+    return index
+
+
+def verify_code(patches: list[dict[str, str]],
+                project_dir: Path) -> list[str]:
+    """W61-Pro: Prueft Patch-Anker/Ersatz auf erfundene APIs.
+
+    AgentSeed-Ansatz: AST-Walk ueber den Ersatz-Code. Jeder
+    Funktionsaufruf `foo(...)` oder `obj.meth(...)` wird
+    gegen den Projekt-Symbol-Index geprueft. Wenn `foo`
+    nirgends definiert ist -> Halluzination (suspect).
+
+    Rueckgabe: Liste von Befunden (leer = ok).
+    """
+    import ast as _ast
+    index = _projekt_symbol_index(project_dir)
+    befunde: list[str] = []
+    for p in patches:
+        if p.get("typ") == "new_file":
+            continue
+        ersatz = p.get("ersatz", "")
+        if not ersatz.strip():
+            continue
+        # Ersatz ist Code-Fragment, kein vollstaendiges Modul.
+        # Wir parsen ihn als Modul (Einrueckung normalisieren).
+        try:
+            tree = _ast.parse(ersatz)
+        except SyntaxError:
+            # Fragment (z.B. nur ein Block). Kein AST-Check.
+            continue
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ast.Call):
+                continue
+            # Funktionsname extrahieren.
+            fname = None
+            if isinstance(node.func, _ast.Name):
+                fname = node.func.id
+            elif isinstance(node.func, _ast.Attribute):
+                fname = node.func.attr
+            if not fname:
+                continue
+            # Eingebaute und bekannte Namen ignorieren.
+            if fname in dir(__builtins__):
+                continue
+            if fname in index:
+                continue
+            # Modul-Attribut (obj.meth): nur meth pruefen.
+            # Wenn meth nirgends im Projekt definiert ist,
+            # koennte es eine externe API sein. Wir warnen
+            # nur, blocken nicht.
+            befunde.append(
+                f"unbekanntes Symbol: {fname}() "
+                f"(nicht im Projekt definiert)")
+    return befunde
 
 
 def pruefe_anker_gegen_messung(
@@ -8132,6 +8216,25 @@ def _phase_apply_vor_review(
         return 16
     print(f"\n[*] Phasen-Apply vor Review "
           f"({len(state.code_patches)} Patches).")
+    # W61-Pro: AST-Grounding vor dem Apply. Erfundene
+    # APIs (z.B. log(status=...)) werden gefangen, bevor
+    # der Patch angewendet wird.
+    _verify_befunde = verify_code(
+        state.code_patches, state.project_dir)
+    if _verify_befunde:
+        print(f"[!] verify_code: {len(_verify_befunde)} "
+              f"Befund(e). Patch abgelehnt.")
+        for b in _verify_befunde[:10]:
+            print(f"    {b}")
+        audit("verify_code_befund",
+              {"befunde": _verify_befunde[:10],
+               "anzahl": len(_verify_befunde)},
+              state.project_dir, state.project_name)
+        state.letzter_test_fehler = (
+            "=== VERIFY-CODE-BEFUNDE ===\n"
+            + "\n".join(_verify_befunde[:10])
+            + "\n=== /VERIFY-CODE-BEFUNDE ===\n")
+        return 17
     ok_apply = apply_code_patches(state, state.code_patches)
     audit("code_patches_apply", {"ok": ok_apply,
                                  "anzahl": len(state.code_patches),
@@ -8240,13 +8343,30 @@ def _phase_apply_vor_review(
         if _w33_tr["exit_code"] != 0:
             # W61: Test-Fehler fuer naechsten Builder-Lauf
             # speichern (Feedback-Loop).
+            # W61: Kompakter Test-Fehler. Der raw_tail ist
+            # oft zu lang und schneidet den entscheidenden
+            # Hinweis ab. Stattdessen: fehlgeschlagene
+            # Test-IDs + die letzten 300 Zeichen (Fehler-
+            # Zeile).
+            _raw = _w33_tr.get('raw_tail', '') or ''
+            # W61: Die relevante Fehlerzeile extrahieren
+            # (E ...), nicht die pytest-Zusammenfassung.
+            _fehler_zeilen = [
+                z.strip() for z in _raw.splitlines()
+                if z.lstrip().startswith("E ")
+                or "Error:" in z or "assert" in z.lower()
+            ]
+            if _fehler_zeilen:
+                _letzte = "\n".join(_fehler_zeilen[-5:])
+            else:
+                _letzte = _raw[-300:].strip() if _raw else ''
             state.letzter_test_fehler = (
                 f"=== TEST-FEHLER (b)-Gate ===\n"
                 f"klassifizierung: "
                 f"{_w33_tr['klassifizierung']}\n"
                 f"failed_test_ids: "
                 f"{_w33_tr.get('failed_test_ids', [])}\n"
-                f"raw_tail:\n{_w33_tr.get('raw_tail', '')[:2000]}\n"
+                f"letzte_zeilen:\n{_letzte}\n"
                 f"=== /TEST-FEHLER ===\n")
             print(f"[!] (b)-Gate rot: "
                   f"{_w33_tr['klassifizierung']}. "
@@ -9932,6 +10052,9 @@ def run_pipeline(project_name: str, aufgabe: str,
                     f"  Ergebnis: {_e.get('ergebnis', '')}")
             _explore_block = "\n".join(_zeilen) + "\n\n"
         # W61: Test-Fehler aus dem letzten (b)-Rot.
+        print(f"[DEBUG-PROMPT] phase_aktiv={s.phase_aktiv} "
+              f"test_fehler_len={len(s.letzter_test_fehler or '')} "
+              f"uid={s.phase_unterbloecke[s.phase_aktueller_index].get('id') if s.phase_unterbloecke else '?'}")
         _test_fehler_block = ""
         if getattr(s, "letzter_test_fehler", ""):
             _test_fehler_block = s.letzter_test_fehler + "\n\n"
