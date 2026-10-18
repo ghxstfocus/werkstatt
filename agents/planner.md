@@ -136,25 +136,19 @@ genannte Zieldatei GENAU EINMAL. Wenn du eine
 Datei erneut messen willst: pruefe zuerst, ob
 das Ergebnis schon im GEMESSENER INHALT-Block
 steht.
-Messe mit
   COMMAND: RUN read_file <pfad>
 
 Existiert -> aktion:patch mit anker aus dem
 gemessenen Inhalt. Existiert nicht -> aktion:neu.
 Kein aktion:neu auf existierende Dateien.
 
-Format: COMMAND-Zeilen stehen VOR dem Plan, als
-eigener Block. NICHT in unterpunkte, NICHT mit
-'- ' davor:
-
+Format: COMMAND-Zeilen VOR dem Plan, NICHT in
+unterpunkte. Block:
   === MESSUNGEN ===
   COMMAND: RUN read_file <pfad>
   === /MESSUNGEN ===
   PHASE: <id> - <titel>
-  UNTERBLOCK: ...
 
-Der MESSUNGEN-Block wird vor dem Plan-Parser
-entfernt. Der Plan-Parser sieht nur den Plan.
 Pfade relativ zu project_dir, keine '..', keine
 Werkstatt-Pfade (agents/, skills/, werkstatt/).
 
@@ -210,6 +204,13 @@ Bei einem Phasenplan:
   Unterpunkte:
     - <Punkt>
   Geschaetzte Runden: 1
+
+Phasen-Groesse (W51f): >5 Unterbloecke ODER
+>6 Zieldateien: Teile die Phase. Liefere
+NUR Teil 1 (max 5 Unterbloecke, max 6
+Zieldateien). Nach dem letzten Unterblock:
+  PHASE-TEILUNG: Teil 1 von N.
+  Nach Abschluss Teil 2 mit --new-phase starten.
 
 Hinweise:
 - id der Unterbloecke ist monoton aufsteigend

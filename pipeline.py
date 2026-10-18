@@ -1238,6 +1238,7 @@ _AUDIT_KINDS_BEKANNT = frozenset({
     "command_block_in_plan",
     "mess_protokoll_limit_erreicht",
     "planner_command_ohne_neue_messung",
+    "planner_phase_zu_gross",
 })
 
 
@@ -10657,6 +10658,33 @@ def _plan_ist_portionierbar(
         n = len(u.get("unterpunkte", []) or [])
         if n > 7:
             zu_gross.append(f"{uid}: {n} Unterpunkte")
+    # W51f: Phasen-Groesse pruefen.
+    # Grenze 5 Unterbloecke / 6 Zieldateien
+    # (W51f-a). Nur Erstlauf-Pfad aufgerufen
+    # (Z. 11792); Resume-Pfad (Z. 10753)
+    # ruft diese Funktion nicht.
+    _ups = plan.get("phase_unterbloecke", []) or []
+    _n_ups = len(_ups)
+    if _n_ups > 5:
+        zu_gross.append(
+            f"Phase: {_n_ups} Unterbloecke, "
+            f"max 5. Teile in mehrere Phasen.")
+    import re as _re
+    _datei_pfade: set[str] = set()
+    for _u in _ups:
+        if not isinstance(_u, dict):
+            continue
+        for _p in _u.get("unterpunkte", []) or []:
+            if not isinstance(_p, str):
+                continue
+            _m = _re.search(r"datei:([^\s,;]+)", _p)
+            if _m:
+                _datei_pfade.add(
+                    _m.group(1).strip().strip("'\""))
+    if len(_datei_pfade) > 6:
+        zu_gross.append(
+            f"Phase: {len(_datei_pfade)} Zieldateien, "
+            f"max 6. Teile in mehrere Phasen.")
     return (len(zu_gross) == 0, zu_gross)
 
 
@@ -11798,13 +11826,26 @@ def _phase_main_pfad(
                 print(f"  - {_f}")
             print("[i] Auftrag praezisieren oder "
                   "kleiner planen.")
-            audit("planner_plan_unvollstaendig",
-                  {"grund": "zu_gross",
+            _hat_phase = any(
+                _f.startswith("Phase: ")
+                for _f in _port_fehler)
+            _kind = ("planner_phase_zu_gross"
+                     if _hat_phase
+                     else "planner_plan_unvollstaendig")
+            _grund = ("zu_gross_phase"
+                      if _hat_phase else "zu_gross")
+            audit(_kind,
+                  {"grund": _grund,
                    "uebergross": _port_fehler[:10]},
                   project_dir, project_name)
             return 18
 
         # Anzeige (A4, A6, A8).
+        if (antwort is not None
+                and "PHASE-TEILUNG:" in antwort):
+            print("[i] Planner hat die Phase "
+                  "geteilt. Nach Abschluss Teil 2 "
+                  "mit --new-phase starten.")
         print("\n" + "=" * 70)
         if aus_edit:
             print("=== PHASENPLAN (aus Edit) ===")

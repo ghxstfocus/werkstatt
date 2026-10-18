@@ -5309,7 +5309,7 @@ class TestReviewRoundAudit:
         assert "review_unklar_eskalation" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_r15_verstoss" in pipeline._AUDIT_KINDS_BEKANNT
         assert "review_unklar_widerspruch" in pipeline._AUDIT_KINDS_BEKANNT
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
 
     def test_state_unredacted(self) -> None:
         """Regression: state.review_runden[i]['raw']
@@ -5345,7 +5345,7 @@ class TestCommitReviewNewFileSkip:
             pipeline._AUDIT_KINDS_BEKANNT
         # Katalog waechst mit neuen Audit-Kinds.
         # Stand 2026-10-16 (B0): 66.
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
 
     def test_skip_wenn_nur_new_file(self) -> None:
         """Reine new_file-Patches + leeres mess_protokoll
@@ -6180,7 +6180,7 @@ class TestCommitPhaseFixes:
         assert 'if not werte.get("git_head"):' in src
 
     def test_katalog_anzahl_ist_71(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
 
 
 # =====================================================================
@@ -6285,7 +6285,7 @@ class TestCommitPaketScope:
         assert 'state.code_patches' in umfeld
 
     def test_katalog_anzahl_ist_72(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
 
 
 # =====================================================================
@@ -6343,7 +6343,7 @@ class TestEDiffNameOnly:
                 in pipeline._AUDIT_KINDS_BEKANNT)
 
     def test_katalog_anzahl_ist_74(self) -> None:
-        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
+        assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
 
 
 # =====================================================================
@@ -9450,7 +9450,7 @@ def test_w46c_2_repair_runde_gleiche_bedingung():
 
 def test_w46_katalog_107():
     """T-Katalog: W46-Katalog-Groesse 107 + neue Kinds."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
     assert "judge_uebersprungen_doku" in pipeline._AUDIT_KINDS_BEKANNT
     assert (
         "phase_judge_uebersprungen_doku"
@@ -9462,7 +9462,7 @@ def test_w48_e_katalog_kinds():
             in pipeline._AUDIT_KINDS_BEKANNT)
     assert ('planner_blockiert_phase_abgeschlossen'
             in pipeline._AUDIT_KINDS_BEKANNT)
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
 
 def test_w50_a_block_ohne_flag(tmp_path, monkeypatch):
     """T-W50-a: phase_aktiv=False, ohne Flag -> rc=65."""
@@ -9757,7 +9757,8 @@ def test_w51c_a_struktur():
         encoding="utf-8")
     assert "MESS-PFLICHT und MESSUNGEN" in md
     assert "=== MESSUNGEN ===" in md
-    assert "NICHT in unterpunkte" in md
+    assert "NICHT in unterpunkte" in md.replace(
+        "\n", " ")
 
 
 def test_w51c_b_bereinigt_messungen():
@@ -9819,7 +9820,7 @@ def test_w51c_e_gemessener_inhalt():
 
 def test_w51c_f_katalog_115():
     """T-W51c-f: Katalog 115."""
-    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 117
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
     assert "command_block_bereinigt" in \
         pipeline._AUDIT_KINDS_BEKANNT
     assert "command_block_in_plan" in \
@@ -10051,4 +10052,60 @@ def test_w51e_b_regression_plan_in_runde2(monkeypatch, tmp_path):
     assert result is not None
     assert "PHASE: 20" in result
     assert "planner_command_ohne_neue_messung" not in calls
+
+def test_w51f_a_struktur():
+    """T-W51f-a: planner.md Phasen-Teilungs-Regel."""
+    from pathlib import Path as _P
+    md = _P("/opt/werkstatt/agents/planner.md").read_text(
+        encoding="utf-8")
+    assert "PHASE-TEILUNG" in md
+    assert ">5 Unterbloecke" in md
+    assert ">6 Zieldateien" in md
+
+
+def _w51f_plan(n_ups, n_dateien):
+    """W51f-Helper: baut einen Plan mit n_ups Unterbloecken
+    und n_dateien distinkten Zieldateien."""
+    ups = []
+    for i in range(n_ups):
+        dateien = []
+        for j in range(n_dateien):
+            dateien.append(
+                f"datei:core/f{j}.py, aktion:patch, "
+                f"anker:'x{i}_{j}'")
+        ups.append({"id": f"U{i+1}", "unterpunkte": dateien})
+    return {"phase_unterbloecke": ups}
+
+
+def test_w51f_b_zu_viele_unterbloecke():
+    """T-W51f-b: 6 Unterbloecke -> (False, Grund 'max 5')."""
+    plan = _w51f_plan(6, 1)
+    ok, fehler = pipeline._plan_ist_portionierbar(plan)
+    assert not ok
+    assert any("Phase: 6 Unterbloecke, max 5" in f
+               for f in fehler)
+
+
+def test_w51f_c_zu_viele_dateien():
+    """T-W51f-c: 7 Dateien -> (False, Grund 'max 6')."""
+    plan = _w51f_plan(1, 7)
+    ok, fehler = pipeline._plan_ist_portionierbar(plan)
+    assert not ok
+    assert any("Phase: 7 Zieldateien, max 6" in f
+               for f in fehler)
+
+
+def test_w51f_d_gruen():
+    """T-W51f-d: 4 Unterbloecke + 5 Dateien -> (True, [])."""
+    plan = _w51f_plan(4, 5)
+    ok, fehler = pipeline._plan_ist_portionierbar(plan)
+    assert ok
+    assert fehler == []
+
+
+def test_w51f_f_katalog_118():
+    """T-W51f-f: Katalog 118 + planner_phase_zu_gross."""
+    assert len(pipeline._AUDIT_KINDS_BEKANNT) == 118
+    assert "planner_phase_zu_gross" in \
+        pipeline._AUDIT_KINDS_BEKANNT
 
