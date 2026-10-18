@@ -8022,7 +8022,8 @@ class TestW28cAntwortLimit:
         """RunState hat 5 max_tokens_*-Felder."""
         state = build_test_state(project_dir=tmp_path)
         assert state.max_tokens_builder == 8192
-        assert state.max_tokens_judge == 2048
+        # W58: Reasoning-Modell braucht mehr Budget.
+        assert state.max_tokens_judge == 8192
         assert state.max_tokens_reviewer == 1024
         assert state.max_tokens_planner == 8192
         assert state.max_tokens_solver == 2048
@@ -8035,7 +8036,7 @@ class TestW28cAntwortLimit:
             .read_text(encoding="utf-8"))
         budget = cfg["budget"]
         assert budget["max_tokens_builder"] == 8192
-        assert budget["max_tokens_judge"] == 2048
+        assert budget["max_tokens_judge"] == 8192
         assert budget["max_tokens_reviewer"] == 1024
 
     def test_hard_rules_antwort_format(self) -> None:

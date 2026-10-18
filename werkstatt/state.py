@@ -152,7 +152,10 @@ class RunState:
     solver_model: str = "deepseek-reasoner"
     # W28c: max_tokens pro Rolle.
     max_tokens_builder: int = 8192
-    max_tokens_judge: int = 2048
+    # W58: Reasoning-Modell (deepseek-reasoner) braucht
+    # Budget fuer Reasoning-Tokens + sichtbare Antwort.
+    # 2048 war zu knapp, Judge antwortete leer.
+    max_tokens_judge: int = 8192
     max_tokens_reviewer: int = 1024
     max_tokens_planner: int = 8192
     max_tokens_solver: int = 2048
