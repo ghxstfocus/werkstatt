@@ -7292,9 +7292,13 @@ def apply_code_patches(state: RunState,
                 return False
             # (a) Lange Zeile (>= 40 Zeichen) 2x im
             # Ersatz (sekundaere Heuristik).
+            # W61: Schwelle 50 statt 40. Kurze legitime
+            # Assertions (z.B. 42 Zeichen) in verschiedenen
+            # Test-Methoden sind kein Duplikat. Echte
+            # Duplikate (Imports, lange Code-Zeilen) bleiben.
             _ersatz_zeilen = [
                 z.strip() for z in ersatz.splitlines()
-                if len(z.strip()) >= 40]
+                if len(z.strip()) >= 50]
             if len(_ersatz_zeilen) != len(
                     set(_ersatz_zeilen)):
                 print(f"[FAIL] apply_code_patches: "
