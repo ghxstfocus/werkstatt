@@ -3410,6 +3410,29 @@ def _phase_stand_sektion(phase_stand: dict[str, Any]) -> str:
     return "".join(zeilen)
 
 
+def _w51a_extrahiere_datei_pfade(
+        auftrag: str,
+) -> list[str]:
+    """W51a: extrahiert datei:-Pfade aus dem
+    Auftragstext.
+
+    Sucht 'datei:<pfad>' in jeder Zeile.
+    Liefert die Pfade in Auftretensreihenfolge,
+    ohne Duplikate.
+    """
+    import re as _re
+    gesehen: set[str] = set()
+    ergebnis: list[str] = []
+    for m in _re.finditer(
+            r"datei:([^\s,;]+)", auftrag):
+        p = m.group(1).strip().strip("'\"")
+        if not p or p in gesehen:
+            continue
+        gesehen.add(p)
+        ergebnis.append(p)
+    return ergebnis
+
+
 def _planner_user_content(
     roher_auftrag: str,
     historie: str,
@@ -3504,6 +3527,25 @@ def _planner_user_content(
             "und P18 (Korrektur-Kompetenz).\n"
         )
         return "".join(teile)
+    # W51a: Erstlauf-Pfad. MESS-PFLICHT-Block
+    # fuer alle datei:-Referenzen aus dem Auftrag.
+    _w51a_pfade = _w51a_extrahiere_datei_pfade(
+        roher_auftrag)
+    _w51a_block = ""
+    if _w51a_pfade:
+        _w51a_block = (
+            "=== MESS-PFLICHT (W51) ===\n"
+            "Messe JEDE der folgenden Zieldateien "
+            "mit 'COMMAND: RUN read_file <pfad>', "
+            "bevor du den Plan formulierst. "
+            "Wenn die Datei existiert: aktion:patch "
+            "mit anker aus dem gemessenen Inhalt. "
+            "Wenn nicht: aktion:neu. "
+            "Kein aktion:neu fuer existierende "
+            "Dateien.\n"
+            + "\n".join(f"  - {p}" for p in _w51a_pfade)
+            + "\n=== /MESS-PFLICHT ===\n\n"
+        )
     if stufe == 2:
         abschluss = (
             "Formuliere GENAU EINEN Phasenplan "
@@ -3518,7 +3560,8 @@ def _planner_user_content(
             "Halte das Ausgabe-Format aus P7/P8 ein."
         )
     return (
-        f"ROHER AUFTRAG DES MENSCHEN:\n{roher_auftrag}\n\n"
+        _w51a_block
+        + f"ROHER AUFTRAG DES MENSCHEN:\n{roher_auftrag}\n\n"
         f"LETZTE COMMITS IM ZIEL-REPO:\n{historie[:3000]}\n\n"
         f"{abschluss}"
     )

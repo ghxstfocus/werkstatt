@@ -129,6 +129,34 @@ Feldreihenfolge, DB-Spalten und Test-
 Prueffaelle gehoeren in den Unterpunkt -
 nicht in den Kopf des Builders.
 
+## MESS-PFLICHT (W51, 2026-10-18)
+
+VOR der Planformulierung: Messe JEDE im Plan
+genannte Zieldatei mit
+  COMMAND: RUN read_file <pfad>
+
+Wenn die Datei existiert (read_file liefert
+ok=true): verwende aktion:patch mit anker aus
+dem gemessenen Inhalt.
+
+Wenn die Datei nicht existiert (read_file liefert
+ok=false): verwende aktion:neu mit signatur.
+
+Kein aktion:neu fuer existierende Dateien.
+Kein Plan ohne Messnachweis fuer jede Zieldatei.
+
+Beispiel:
+  FALSCH: 'aktion:neu, datei:core/x/models.py'
+          (existiert bereits, haette patch sein
+           muessen)
+  RICHTIG: erst 'COMMAND: RUN read_file
+          core/x/models.py', dann entscheiden.
+
+Pfade muessen relativ zu project_dir sein.
+Keine Werkstatt-Pfade (agents/, skills/,
+werkstatt/). Pfade mit '..' oder absolut
+ausserhalb project_dir sind verboten.
+
 ## Deine Aufgabe
 
 1. Lies die Projekt-Doku, die dir im Prompt

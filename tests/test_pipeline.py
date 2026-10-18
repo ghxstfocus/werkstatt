@@ -9656,3 +9656,21 @@ def test_w50_f_new_phase_ohne_phase_failt():
         ["--project", "p", "--new-phase"])
     assert rc == 65
 
+def test_w51a_struktur():
+    """T-W51-a-struktur: planner.md enthaelt MESS-PFLICHT."""
+    from pathlib import Path as _P
+    md = _P("/opt/werkstatt/agents/planner.md").read_text(
+        encoding="utf-8")
+    assert "MESS-PFLICHT" in md
+    assert "COMMAND: RUN read_file" in md
+    assert "Kein aktion:neu fuer existierende Dateien" in md
+
+
+def test_w51a_extrahiere_datei_pfade():
+    """T-W51-a-verhalten: datei:-Pfade werden extrahiert."""
+    pfade = pipeline._w51a_extrahiere_datei_pfade(
+        "datei:core/a.py, aktion:neu. "
+        "datei:core/b.py, aktion:patch. "
+        "datei:core/a.py, doppelt.")
+    assert pfade == ["core/a.py", "core/b.py"]
+
