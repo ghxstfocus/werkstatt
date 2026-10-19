@@ -159,3 +159,54 @@ Reviewer-Chat 2026-10-19:
 - Gate 4: ALTERNATIVE (4a jetzt, 4b nach Phase 3).
 
 Charge 1 (Audit-Kind-Frequenzmessung, read-only) freigegeben.
+
+## Anhang 2026-10-19 — Gates 8-14
+
+Abgenommen durch Reviewer-Chat:
+- Gate 8: Phase-1-Metrik ohne _KATALOG_SOLL (bestaetigt).
+- Gate 9: Katalog-Schnitt 166 -> 20 ist Phase-3-Ziel
+  (bestaetigt).
+- Gate 10: Charge 2a Option A (chaos.md + coverage.md
+  loeschen, test_generator/reviewer/solver bleiben)
+  (bestaetigt).
+- Gate 11: 6 Rollen nach 2a -- siehe Anhang 2.
+  Nach Befund J sind es 8, nicht 6 (chaos/coverage
+  weg, Builder-Trio-Merge in Phase 3).
+- Gate 12: Builder-Trio-Merge ist Phase 3, nicht
+  Charge 2a (bestätigt: Option 3).
+- Gate 13: Body = Prosa, HARD_RULES = pruefbar oder
+  Doku (bestaetigt: C).
+- Gate 14: Phase 3.0 Rollen-Definitionen entdoppeln
+  (bestaetigt, 5 Auflagen). Siehe
+  docs/PHASE3-0-ROLLEN-ENTDOPPELN.md.
+
+## Anhang 2 — Rollen-Zaehlung nach Charge 2a
+
+Nach Charge 2a (chaos.md + coverage.md weg):
+- builder.md
+- builder_commit.md
+- builder_patch.md
+- judge.md
+- planner.md
+- reviewer.md
+- solver.md
+- test_generator.md
+
+= 8 Rollen (nicht 6, wie Gate 11 zuerst sagte;
+kein Builder-Merge in Phase 1).
+
+Nach Phase 3.0 + Phase 3 (Builder-Merge + solver/
+reviewer/test_generator sterben): 3 Rollen.
+
+## Anhang 3 — Befunde K, M, N, O, P, Q
+
+- Befund K: Subagenten inline in pipeline.py
+  (EXPLORE_SUBAGENT_PROMPT, BASH_SUBAGENT_PROMPT,
+  BROWSER_SUBAGENT_PROMPT). Extraktion in Phase 3.
+- Befund M: skills/*/SKILL.md ist vierte Kategorie,
+  10 Dateien. Phase 6 (Prompt-Kuerzung) pruefen.
+- Befund N/O: builder_commit/builder_patch als
+  eigene Rollen mit Fallback, nicht in HARD_RULES_
+  BY_ROLE.
+- Befund P/Q: Body + HARD_RULES + Code doppelt.
+  Phase 3.0 adressiert.
