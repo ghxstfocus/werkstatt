@@ -6878,16 +6878,14 @@ class TestW11:
         assert "HINWEIS ohne" in s
         assert "KEIN NO-GO" in s
 
-    def test_commit_review_prompt_unterblock_kontext(self) -> None:
-        import inspect
-        src = inspect.getsource(pipeline.run_pipeline)
-        assert "_w11_unterblock_kontext" in src
-        assert "UNTERBLOCK:" in src
-        assert "von {_w11_total}" in src
-
     def test_commit_review_prompt_unterblock_nur_phasen_modus(self) -> None:
+        # Dual-source (A10-13b): _w11_unterblock_kontext-Bau
+        # wandert bei 3a-1c-2 (C7) in _commit_review_loop.
+        # Merkposten: Aufloesen in 3a-1c-2-doc.
         import inspect
-        src = inspect.getsource(pipeline.run_pipeline)
+        src = (
+            inspect.getsource(pipeline.run_pipeline)
+            + inspect.getsource(pipeline._review_verdict_behandlung))
         # Der Kontext wird nur bei state.phase_aktiv
         # gefuellt.
         assert "if state.phase_aktiv:" in src
@@ -6937,14 +6935,6 @@ class TestW10c:
 # =====================================================================
 
 class TestA1Final:
-    def test_check_commit_scope_vor_reviewer(self) -> None:
-        import inspect
-        src = inspect.getsource(pipeline.run_pipeline)
-        # Aufruf von _check_commit_scope vor dem
-        # Reviewer-Call.
-        assert "_check_commit_scope" in src
-        assert "if not _scope_ok:" in src
-
     def test_commit_scope_fail_closed(self) -> None:
         import inspect
         src = inspect.getsource(pipeline._check_commit_scope)

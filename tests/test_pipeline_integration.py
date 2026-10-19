@@ -1385,3 +1385,40 @@ def test_run_pipeline_unklar_ohne_widerspruch_r15_verstoss(
         "unerwartet review_unklar_eskalation (1x UNKLAR "
         "darf nicht eskalieren)")
     assert kinds.count("review_unklar_widerspruch") == 0
+
+
+
+# =====================================================================
+# 3a-1c-2-vorbereitung (2026-10-19): Verhaltens-Tests fuer
+# _build_commit_input (A10-13a). Ersetzen Struktur-Tests.
+# =====================================================================
+
+
+def test_build_commit_input_enthaelt_unterblock_kontext() -> None:
+    """A10-13a: _build_commit_input uebernimmt unterblock_kontext.
+
+    _build_commit_input bekommt w11_unterblock_kontext als
+    Parameter (Signatur: state, diff_name_only,
+    w11_unterblock_kontext, auflagen_text). Der Test prueft
+    das Verhalten, NICHT die Code-Position (run_pipeline
+    vs _commit_review_loop). Nach 3a-1c-2 bleibt der Test
+    gruen: _build_commit_input verhaelt sich gleich.
+    """
+    from test_pipeline import build_test_state
+    state = build_test_state()
+    result = pipeline._build_commit_input(
+        state, "core/x.py",
+        "UNTERBLOCK: U1 (1 von 2) \u2014 Testtitel",
+        "keine")
+    assert "UNTERBLOCK:" in result
+    assert "U1" in result
+    assert "1 von 2" in result
+
+
+def test_build_commit_input_ohne_unterblock_kontext() -> None:
+    """A10-13a: leerer unterblock_kontext -> kein UNTERBLOCK-Marker."""
+    from test_pipeline import build_test_state
+    state = build_test_state()
+    result = pipeline._build_commit_input(
+        state, "core/x.py", "", "keine")
+    assert "UNTERBLOCK:" not in result
