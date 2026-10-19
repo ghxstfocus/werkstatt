@@ -10856,3 +10856,110 @@ def test_w54_h_a_builder_md():
     assert "ZIELDATEI" in md
     assert "nicht die alte" in md
 
+
+
+class TestVerifyCharakterisierung:
+    """W61-Pro-Charakterisierung (Neubau 21b, 2026-10-19).
+
+    Schreibt das aktuelle Verhalten von verify_values,
+    verify_code_kwargs und verify_code fest. Kein
+    Wunsch-Verhalten, nur Ist-Zustand.
+
+    Grund: verify_* ist der einzige Sensor gegen
+    erfundene APIs (log(status=...) faengt mypy
+    nicht). Die W61-Pro-Funktionen wurden gebaut,
+    aber nie getestet (Befund AQ). Diese vier Tests
+    sind der Baseline-Anker fuer den Neubau.
+    """
+
+    SECURITY_AI = Path("/opt/security-ai")
+
+    @pytest.fixture(autouse=True)
+    def _isolate_core_modules(self) -> None:
+        """Test-Isolation fuer verify_*-Charakterisierung.
+
+        Grund (Befund AW): verify_code_kwargs und
+        verify_values fuegen /opt/security-ai zu
+        sys.path hinzu (pipeline.py:4959, 5042) und
+        importieren core.changeapplier.models. Ein
+        frueherer Test kann core.* in sys.modules
+        gecacht haben — dann scheitert der zweite
+        Import stumm (verify_values: except ImportError
+        -> return []), und der Test ist im Gesamtlauf
+        rot, isoliert aber gruen.
+
+        Diese Fixture setzt sys.path und sys.modules
+        vor und nach dem Test in den sauberen Zustand
+        zurueck. Kein Code-Fix, reine Test-Hygiene.
+        """
+        import sys as _sys
+        saved_path = list(_sys.path)
+        saved_core = {
+            k: _sys.modules[k] for k in list(_sys.modules)
+            if k == "core" or k.startswith("core.")
+        }
+        for k in list(_sys.modules):
+            if k == "core" or k.startswith("core."):
+                del _sys.modules[k]
+        yield
+        _sys.path[:] = saved_path
+        for k in list(_sys.modules):
+            if k == "core" or k.startswith("core."):
+                del _sys.modules[k]
+        _sys.modules.update(saved_core)
+
+    @pytest.mark.skipif(
+        not Path("/opt/security-ai").exists(),
+        reason="security-ai Projekt fehlt (verify_* braucht es)",
+    )
+    def test_verify_values_execution_status_falsch(self) -> None:
+        """Falscher execution_status-Wert -> Befund."""
+        ersatz = (
+            "    def test_x(self):\n"
+            "        self.assertEqual(x.execution_status, "
+            "'applied')\n"
+        )
+        patches = [{"typ": "patch", "ersatz": ersatz}]
+        befunde = pipeline.verify_values(patches, self.SECURITY_AI)
+        assert any("execution_status" in b for b in befunde), (
+            f"erwartet: Befund zu execution_status, "
+            f"gefunden: {befunde}")
+
+    @pytest.mark.skipif(
+        not Path("/opt/security-ai").exists(),
+        reason="security-ai Projekt fehlt (verify_* braucht es)",
+    )
+    def test_verify_values_execution_status_korrekt(self) -> None:
+        """Korrekter execution_status-Wert -> kein Befund."""
+        ersatz = (
+            "    def test_x(self):\n"
+            "        self.assertEqual(x.execution_status, "
+            "'OK')\n"
+        )
+        patches = [{"typ": "patch", "ersatz": ersatz}]
+        befunde = pipeline.verify_values(patches, self.SECURITY_AI)
+        assert befunde == [], (
+            f"erwartet: kein Befund, gefunden: {befunde}")
+
+    @pytest.mark.skipif(
+        not Path("/opt/security-ai/harness/audit/writer.py").exists(),
+        reason="security-ai AuditWriter fehlt (Kwarg-Check braucht ihn)",
+    )
+    def test_verify_code_kwargs_falsches_kwarg(self) -> None:
+        """Falsches Kwarg an log() -> Befund."""
+        ersatz = "writer.log(status='APPLIED', change_id='x')\n"
+        patches = [{"typ": "patch", "ersatz": ersatz}]
+        befunde = pipeline.verify_code_kwargs(
+            patches, self.SECURITY_AI)
+        assert any("kennt kein Kwarg" in b for b in befunde), (
+            f"erwartet: Befund 'kennt kein Kwarg', "
+            f"gefunden: {befunde}")
+
+    def test_verify_code_unbekanntes_symbol(self) -> None:
+        """Erfundenes Symbol im Ersatz -> Befund."""
+        ersatz = "voeaellig_erfundene_api_xyz_12345('arg')\n"
+        patches = [{"typ": "patch", "ersatz": ersatz}]
+        befunde = pipeline.verify_code(patches, self.SECURITY_AI)
+        assert any("unbekanntes Symbol" in b for b in befunde), (
+            f"erwartet: Befund 'unbekanntes Symbol', "
+            f"gefunden: {befunde}")
