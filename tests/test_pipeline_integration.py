@@ -1033,3 +1033,174 @@ def test_run_pipeline_command_judge_command_audit(
         f"erwartet judge_command genau 1x (Runde 1 "
         f"COMMAND, Runde 2 GO), gefunden {n}x. "
         f"Alle audits: {gerufen[:20]}")
+    # A8-4-nach-1: verdict-Assert trennt "break"
+    # (verdict=GO, rc=0 aus Apply) von "return 0"
+    # (verdict=NO-GO, rc=0 aus fruehem return).
+    assert ref[0].review_runden[-1]["verdict"] == "GO", (
+        f"erwartet letzter verdict GO, gefunden "
+        f"{ref[0].review_runden[-1].get('verdict')!r}")
+
+
+
+# =====================================================================
+# 3a-1c-1b (2026-10-19): AQ-Tests V2-Dispatch + Fallback.
+# =====================================================================
+
+
+def test_run_pipeline_fallback_go(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-1b AQ: Fallback-Anker run_pipeline-Loop.
+
+    Sequenz ["COMMAND: RUN solver"], judge_verdict="GO".
+    Runde 1 = COMMAND (Sequenz-Ende), Runde 2 = Fallback
+    "GO" -> break -> Apply-Pfad -> rc=0.
+
+    Fallback-Anker fuer run_pipeline-Loop, NICHT fuer
+    V1/V2 (A8-5-Nach-1).
+
+    Apply-Pfad: wie test_t2 (984f784). apply_and_recheck
+    ist im Helper gemockt und setzt
+    state.mess_protokoll_nach_apply.
+
+    Overrides:
+      1. audit.
+      2. _handle_solver_command.
+    Helper-Parameter: judge_verdict_sequenz, judge_verdict.
+    """
+    mock_run_pipeline_deps(
+        monkeypatch,
+        judge_verdict_sequenz=["COMMAND: RUN solver"],
+        judge_verdict="GO")
+    monkeypatch.setattr(
+        pipeline, "_handle_solver_command",
+        lambda *a, **kw: None)
+    gerufen: list = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw: gerufen.append(kind))
+    ref: list = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc == 0, (
+        f"erwartet rc=0 bei Fallback GO, gefunden rc={rc}")
+    n = gerufen.count("judge_command")
+    assert n == 1, (
+        f"erwartet judge_command 1x, gefunden {n}x. "
+        f"Alle: {gerufen[:20]}")
+    assert ref[0].review_runden[-1]["verdict"] == "GO", (
+        f"erwartet verdict GO nach Fallback, "
+        f"gefunden {ref[0].review_runden[-1].get('verdict')!r}")
+
+
+def test_run_pipeline_no_go_dispatch(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-1b AQ: NO-GO ohne Trigger -> solver_trigger.
+
+    Sequenz ["NO-GO", "GO"]. Runde 1 NO-GO ohne Trigger
+    (_trigger_grund=""), Runde 2 GO -> break.
+
+    Erwartete Kinds: solver_trigger (8256).
+    NICHT erwartet: solver_trigger_a/b/c, solver_max_
+    runden_erreicht, solver_budget_exhausted,
+    solver_failed, solver_befund, recovery_no_go.
+
+    Layer VOR/NACH (A8-3-Nach-3a):
+      solver_trigger in audit_kinds  | C4-Rumpf | V2
+      review_runden enthaelt NO-GO   | C4-Rumpf | C4-Rumpf
+      rc == 0                        | C4-Rumpf | C4-Rumpf
+
+    Overrides:
+      1. gegenstand_gleich -> (0.0, "").
+      2. pruefe_trigger_b -> False.
+      3. budget_or_recover -> None.
+    """
+    mock_run_pipeline_deps(
+        monkeypatch,
+        judge_verdict_sequenz=["NO-GO", "GO"])
+    monkeypatch.setattr(
+        pipeline, "gegenstand_gleich",
+        lambda *a, **kw: (0.0, ""))
+    monkeypatch.setattr(
+        pipeline, "pruefe_trigger_b",
+        lambda *a, **kw: False)
+    monkeypatch.setattr(
+        pipeline, "budget_or_recover",
+        lambda *a, **kw: None)
+    gerufen: list = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw: gerufen.append(kind))
+    ref: list = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc == 0, (
+        f"erwartet rc=0 (NO-GO Runde 1, GO Runde 2), "
+        f"gefunden rc={rc}")
+    assert gerufen.count("solver_trigger") == 1, (
+        f"erwartet solver_trigger 1x, gefunden "
+        f"{gerufen.count('solver_trigger')}x. "
+        f"Alle: {gerufen[:20]}")
+    for kind in ("solver_trigger_a", "solver_trigger_b",
+                 "solver_trigger_c",
+                 "solver_max_runden_erreicht",
+                 "solver_budget_exhausted",
+                 "solver_failed", "solver_befund",
+                 "recovery_no_go"):
+        assert kind not in gerufen, (
+            f"unerwarteter audit-Kind {kind!r}: "
+            f"{gerufen[:20]}")
+    verdicts = [r.get("verdict") for r in ref[0].review_runden]
+    assert "NO-GO" in verdicts, (
+        f"review_runden enthaelt kein NO-GO: {verdicts}")
+
+
+def test_run_pipeline_no_go_recovery(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-1b AQ: 2x NO-GO -> Recovery post-loop.
+
+    Sequenz starr NO-GO. 2 Runden NO-GO -> Loop endet.
+    post-loop if verdict != "GO": Recovery -> rc=15.
+
+    Layer VOR/NACH (A8-3-Nach-3a):
+      rc == 15                        | C4-Rumpf | C4-Rumpf
+      recovery_no_go in audit_kinds   | C4-Rumpf | C4-Rumpf
+    V2 wird durchlaufen (2x None/continue), nicht
+    direkt asserted (A8-3-Nach-2b).
+
+    Overrides:
+      1. gegenstand_gleich -> (0.0, "").
+      2. pruefe_trigger_b -> False.
+      3. ask_reviewer_for_recovery -> RecoveryVorschlag.
+      4. print_recovery -> None.
+      5. audit -> Sammeln.
+    Helper-Parameter: judge_verdict="NO-GO".
+    budget_or_recover NICHT im Recovery-Pfad (8460-8468).
+    """
+    mock_run_pipeline_deps(monkeypatch, judge_verdict="NO-GO")
+    monkeypatch.setattr(
+        pipeline, "gegenstand_gleich",
+        lambda *a, **kw: (0.0, ""))
+    monkeypatch.setattr(
+        pipeline, "pruefe_trigger_b",
+        lambda *a, **kw: False)
+    monkeypatch.setattr(
+        pipeline, "ask_reviewer_for_recovery",
+        lambda *a, **kw: type("V", (), {
+            "frage_an_menschen": "test-frage",
+            "empfehlung": "test-empfehlung"})())
+    monkeypatch.setattr(
+        pipeline, "print_recovery",
+        lambda *a, **kw: None)
+    gerufen: list = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw: gerufen.append(kind))
+    ref: list = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc == 15, (
+        f"erwartet rc=15 bei 2x NO-GO, gefunden rc={rc}")
+    assert gerufen.count("recovery_no_go") == 1, (
+        f"erwartet recovery_no_go 1x, gefunden "
+        f"{gerufen.count('recovery_no_go')}x. "
+        f"Alle: {gerufen[:20]}")
