@@ -647,3 +647,39 @@ R-B: Path = None (pipeline.py:6007):
   `_mess_dir: Path | None` deklarieren. Phase 5.
 
 Beide Phase 5 (Annotation-Fixes, kein Runtime-Bug).
+
+### R-3-Nachtrag (2026-10-19, nach P1-Fix 77aed9f)
+
+R-B (Path = None, pipeline.py:6007 alt) ist durch den
+P1-Fix behoben: `_mess_dir = None` entfernt, except
+OSError gibt `return False` + Audit. mypy 8 -> 7.
+
+R-A (RunState.messungen_nach_apply fehlt, 2x) bleibt
+Phase 5. Beide Stellen sind Zuweisungen
+(pipeline.py:3962, 6039 neu), Leser in measurement.py
+nutzt getattr. Fix: Feld in werkstatt/state.py
+deklarieren.
+
+Verbleibende mypy 7:
+- 3 import-not-found (verify.py, MYPYPATH).
+- 2 RunState.messungen_nach_apply (R-A).
+- 2 _mess_inhalt_zieldateien list[str]/set[str].
+Alle Phase 5.
+
+### R-3-Nachtrag (2026-10-19, nach P1-Fix 77aed9f)
+
+R-B (Path = None, pipeline.py:6007 alt) ist durch den
+P1-Fix behoben: `_mess_dir = None` entfernt, except
+OSError gibt `return False` + Audit. mypy 8 -> 7.
+
+R-A (RunState.messungen_nach_apply fehlt, 2x) bleibt
+Phase 5. Beide Stellen sind Zuweisungen
+(pipeline.py:3962, 6039 neu), Leser in measurement.py
+nutzt getattr. Fix: Feld in werkstatt/state.py
+deklarieren.
+
+Verbleibende mypy 7:
+- 3 import-not-found (verify.py, MYPYPATH).
+- 2 RunState.messungen_nach_apply (R-A).
+- 2 _mess_inhalt_zieldateien list[str]/set[str].
+Alle Phase 5.
