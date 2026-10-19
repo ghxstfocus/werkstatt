@@ -652,3 +652,211 @@ def test_w25_planner_load_skill_e2e(
     assert "patch-format" in prompts[1]
     # state.geladene_skills enthaelt patch-format.
     assert "patch-format" in state.geladene_skills
+
+
+# =====================================================================
+# 3a-1a: run_pipeline-Charakterisierung (2026-10-19)
+# Reviewer-Gate 3a-1a, 8 Tests.
+# =====================================================================
+
+def _state_ref():
+    """Leerer state_ref fuer run_pipeline."""
+    return []
+
+
+def test_run_pipeline_state_guard_valueerror(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1a Setup: phasen_state + nicht-leerer state_ref
+    -> ValueError.
+
+    Zitat run_pipeline Z. 7674-7679:
+        if phasen_state is not None:
+            if state_ref:
+                raise ValueError(...)
+    """
+    mock_run_pipeline_deps(monkeypatch)
+    # Phasen-State mit projekt_dir bauen
+    ph = build_test_state(project_dir=tmp_path)
+    ph.phase_aktiv = True
+    ref = [ph]  # nicht leer
+    with pytest.raises(ValueError, match="state_ref nicht leer"):
+        pipeline.run_pipeline(
+            "test-projekt", "Test-Auftrag", ref,
+            phasen_state=ph)
+
+
+def test_run_pipeline_phasen_state_uebernommen(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1a Setup: phasen_state wird uebernommen
+    (state_ref[0] is phasen_state).
+
+    Zitat run_pipeline Z. 7680:
+        state = phasen_state
+    """
+    mock_run_pipeline_deps(monkeypatch)
+    # Rollen + Doku bereitstellen, damit run_pipeline
+    # nicht an KeyError "reviewer" scheitert.
+    _agents = {
+        r: {"body": f"Du bist der {r.capitalize()}.",
+            "name": r}
+        for r in ("builder", "reviewer", "solver",
+                  "test_generator")
+    }
+    monkeypatch.setattr(
+        pipeline, "load_agents", lambda d: _agents)
+    monkeypatch.setattr(
+        pipeline, "load_docs", lambda d, p: {})
+    monkeypatch.setattr(
+        pipeline, "load_recent_commits", lambda *a, **kw: "")
+    ph = build_test_state(project_dir=tmp_path)
+    ph.agents = _agents
+    ph.phase_aktiv = True
+    ref = []
+    pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref,
+        phasen_state=ph)
+    assert len(ref) == 1
+    assert ref[0] is ph
+    # P-Bugfix Z. 7684: state.aufgabe = aufgabe
+    assert ph.aufgabe == "Test-Auftrag"
+
+
+def test_run_pipeline_klassisch_neuer_state(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1a Setup: phasen_state=None -> neuer RunState
+    in state_ref.
+
+    Zitat run_pipeline Z. 7685-7698 (else: state = RunState).
+    """
+    mock_run_pipeline_deps(monkeypatch)
+    ref = []
+    pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert len(ref) == 1
+    # Neuer State, nicht phasen_state
+    assert ref[0].aufgabe == "Test-Auftrag"
+
+
+def test_run_pipeline_builder_fehler_rc4(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1a S2: Builder-Fehler -> rc=4.
+
+    Zitat run_pipeline Z. 7965-7970:
+        if not reply_roh.ok:
+            ...
+            return 4
+    """
+    mock_run_pipeline_deps(monkeypatch)
+    # Builder-Antwort: reply.ok=False
+    from werkstatt.state import LLMReply
+    monkeypatch.setattr(
+        pipeline, "builder_reply_mit_command_loop",
+        lambda *a, **kw: (LLMReply(ok=False, error="kaputt"), None))
+    ref = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc == 4, f"erwartet rc=4, gefunden rc={rc}"
+
+
+def test_run_pipeline_judge_go_commit(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1a S4: Judge-GO -> Commit-Pfad.
+
+    Zitat run_pipeline Z. 8929 (commit_verdict == "COMMIT-GO").
+    """
+    mock_run_pipeline_deps(monkeypatch, judge_verdict="GO",
+                           commit_verdict="COMMIT-GO")
+    ref = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    state = ref[0]
+    # Commit-Paket gebaut
+    assert state.commit_paket, (
+        f"commit_paket leer (rc={rc})")
+    # Commit-Paket enthaelt message
+    assert "message" in state.commit_paket
+
+
+def test_run_pipeline_basis_gate_rot(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1a Luecke: Basis-Gate rot -> Fail-Pfad.
+
+    Zitat run_pipeline Z. 7735-7748:
+        for mid, m in always.items():
+            out, ok = run_measurement(m, file_whitelist, project_dir)
+            if not ok:
+                basis_fehler.append(mid)
+        ...
+        audit("basis_gate_rot", ...)
+    """
+    mock_run_pipeline_deps(monkeypatch)
+    # Rollen bereitstellen (run_pipeline greift auf
+    # agents["reviewer"] zu, nach dem Basis-Gate).
+    _agents = {
+        r: {"body": f"Du bist der {r.capitalize()}.",
+            "name": r}
+        for r in ("builder", "reviewer", "solver",
+                  "test_generator")
+    }
+    monkeypatch.setattr(
+        pipeline, "load_agents", lambda d: _agents)
+    monkeypatch.setattr(
+        pipeline, "load_docs", lambda d, p: {})
+    # Basis-Gate rot: run_measurement liefert ok=False
+    monkeypatch.setattr(
+        pipeline, "run_measurement",
+        lambda *a, **kw: ("", False))
+    gerufen = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw:
+            gerufen.append(kind))
+    ref = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc != 0, f"erwartet rc != 0, gefunden rc={rc}"
+    assert "basis_gate_rot" in gerufen, (
+        f"erwartet audit basis_gate_rot, "
+        f"gefunden: {gerufen[:10]}")
+
+
+def test_run_pipeline_commit_fehler_rollback(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1a Luecke: apply_commit_and_doku False -> Fail-Pfad.
+
+    Zitat run_pipeline Z. 9052-9053:
+        if apply_commit_and_doku(state, state.commit_paket):
+            audit("commit_applied", ...)
+    """
+    mock_run_pipeline_deps(monkeypatch, judge_verdict="GO",
+                           commit_verdict="COMMIT-GO")
+    # apply_commit_and_doku False
+    monkeypatch.setattr(
+        pipeline, "apply_commit_and_doku",
+        lambda state, paket: False)
+    ref = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc != 0, f"erwartet rc != 0 bei commit-fehler, gefunden rc={rc}"
+
+
+def test_run_pipeline_solver_trigger_im_block(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1a Recovery: solver_trigger im Block (Deadlock).
+
+    Zitat run_pipeline Z. 5840/5856 (handle_deadlock_mit_solver,
+    audit solver_trigger_c).
+    """
+    mock_run_pipeline_deps(monkeypatch)
+    # Builder-Deadlock erzwingen: builder_reply liefert 3x COMMAND
+    # ohne Patch.
+    from werkstatt.state import LLMReply
+    monkeypatch.setattr(
+        pipeline, "builder_reply_mit_command_loop",
+        lambda *a, **kw: (
+            LLMReply(ok=False, error="deadlock"),
+            19))
+    ref = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc == 19, f"erwartet rc=19 (deadlock), gefunden rc={rc}"
