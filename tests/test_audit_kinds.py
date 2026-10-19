@@ -35,6 +35,10 @@ sys.path.insert(0, "/opt/werkstatt")
 import pipeline
 
 PIPELINE = Path("/opt/werkstatt/pipeline.py")
+# 18e (2026-10-19): audit() liegt seit Phase 2 in
+# werkstatt/audit.py. AST-Test muss beide Dateien
+# walken.
+AUDIT_MODUL = Path("/opt/werkstatt/werkstatt/audit.py")
 
 # Erlaubte dynamische Praefixe. Neue MUESSEN
 # hier eingetragen werden.
@@ -93,6 +97,21 @@ def _baum() -> ast.Module:
     return ast.parse(PIPELINE.read_text(encoding="utf-8"))
 
 
+def _baeume() -> list[tuple[str, ast.Module]]:
+    """18e: parst alle Dateien mit audit()-Aufrufen.
+
+    pipeline.py (Hauptcode) + werkstatt/audit.py (Modul
+    seit Phase 2). Liefert Liste (dateiname, ast.Module).
+    """
+    dateien = [("pipeline.py", PIPELINE)]
+    if AUDIT_MODUL.exists():
+        dateien.append(("werkstatt/audit.py", AUDIT_MODUL))
+    return [
+        (name, ast.parse(pfad.read_text(encoding="utf-8")))
+        for name, pfad in dateien
+    ]
+
+
 # W48-A16-b-2 (2026-10-18): 36 Kinds registriert.
 # Der Test ist scharf (kein xfail mehr).
 #
@@ -140,9 +159,17 @@ def _baum() -> ast.Module:
 #   solver_budget_exhausted, solver_max_runden_erreicht,
 #   solver_trigger_a, solver_trigger_b.
 def test_audit_kinds_alle_aufrufe_registriert() -> None:
-    """Jeder audit('literal', ...) ist im Katalog."""
-    calls = _audit_calls(_baum())
-    literale = [c for c in calls if c["art"] == "literal"]
+    """Jeder audit('literal', ...) ist im Katalog.
+
+    18e: walkt pipeline.py UND werkstatt/audit.py.
+    """
+    literale = []
+    for dateiname, baum in _baeume():
+        calls = _audit_calls(baum)
+        for c in calls:
+            if c["art"] == "literal":
+                c["datei"] = dateiname
+                literale.append(c)
     assert literale, "keine audit()-Aufrufe gefunden"
     fehlend = [
         c for c in literale
@@ -151,7 +178,7 @@ def test_audit_kinds_alle_aufrufe_registriert() -> None:
     assert not fehlend, (
         "audit()-Aufrufe mit nicht registriertem Kind:\n"
         + "\n".join(
-            f"  Z. {c['zeile']}: {c['kind']!r}"
+            f"  {c['datei']} Z. {c['zeile']}: {c['kind']!r}"
             for c in fehlend
         )
     )
@@ -213,18 +240,19 @@ def test_audit_dynamische_werte_aufgeloest() -> None:
 
 def test_audit_kinds_kein_attribute_aufruf() -> None:
     """Heute kein pipeline.audit(...)-Aufruf.
-    Wenn einer dazukommt, faengt dieser Test ihn,
-    bevor der AST-Test ihn uebersieht."""
-    tree = _baum()
+
+    18e: walkt pipeline.py UND werkstatt/audit.py.
+    """
     treffer = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        if (isinstance(node.func, ast.Attribute)
-                and node.func.attr == "audit"):
-            treffer.append(node.lineno)
+    for dateiname, baum in _baeume():
+        for node in ast.walk(baum):
+            if not isinstance(node, ast.Call):
+                continue
+            if (isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "audit"):
+                treffer.append((dateiname, node.lineno))
     assert treffer == [], (
-        f"pipeline.audit()-Aufrufe gefunden: {treffer}. "
+        f"audit()-Aufrufe als Attribut gefunden: {treffer}. "
         f"Der AST-Test erkennt sie NICHT. Bitte "
         f"_audit_calls() erweitern oder Aufruf "
         f"entfernen.")

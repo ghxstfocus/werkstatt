@@ -1390,7 +1390,8 @@ class TestAudit:
         self, monkeypatch, tmp_path: Path,
     ) -> None:
         """Audit legt Datei in <werkstatt>/audit-logs/ an."""
-        monkeypatch.setattr(pipeline, "_werkstatt_home",
+        import werkstatt.audit as _wa
+        monkeypatch.setattr(_wa, "_werkstatt_home",
                             lambda: tmp_path)
         pipeline.audit("test_kind", {"k": "v"},
                        tmp_path / "beliebiges-projekt", "test-projekt")
@@ -1406,7 +1407,8 @@ class TestAudit:
         self, monkeypatch, tmp_path: Path,
     ) -> None:
         """project-Feld im Eintrag bleibt erhalten."""
-        monkeypatch.setattr(pipeline, "_werkstatt_home",
+        import werkstatt.audit as _wa
+        monkeypatch.setattr(_wa, "_werkstatt_home",
                             lambda: tmp_path)
         pipeline.audit("some_event", {}, tmp_path, "mein-projekt")
         dateien = list((tmp_path / "audit-logs").glob("*.jsonl"))
@@ -1425,7 +1427,8 @@ class TestAudit:
         # tmp_path/audit-logs existiert noch nicht.
         nest = tmp_path / "nest" / "home"
         nest.mkdir(parents=True)
-        monkeypatch.setattr(pipeline, "_werkstatt_home",
+        import werkstatt.audit as _wa
+        monkeypatch.setattr(_wa, "_werkstatt_home",
                             lambda: nest)
         assert not (nest / "audit-logs").exists()
         pipeline.audit("evt", {}, tmp_path, "p")
@@ -4495,7 +4498,10 @@ def test_solver_prompt_enthaelt_historie_bei_runde_2() -> None:
 
 def _messung_aus_string(pfad: str, inhalt: str):
     """Baut eine Messung mit echter Datei aus einem String."""
-    import hashlib, tempfile, os
+    import hashlib
+    import os
+    import tempfile
+
     from werkstatt.state import Messung
     fd, tmp = tempfile.mkstemp(suffix=".txt")
     os.close(fd)
@@ -4511,7 +4517,9 @@ def _state_mit_messung(inhalt: str):
 
     Quelle ist eine echte Datei (Messung.datei), keine
     inhalt-Property (die gibt es nicht)."""
-    import hashlib, tempfile
+    import hashlib
+    import tempfile
+
     from werkstatt.state import Messung
     s = build_test_state()
     if not inhalt:

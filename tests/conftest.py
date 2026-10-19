@@ -24,8 +24,8 @@ def _isolate_audit(tmp_path, monkeypatch):
 
     Diese Fixture lenkt _werkstatt_home auf tmp_path um.
     """
-    import pipeline
-    monkeypatch.setattr(pipeline, "_werkstatt_home",
+    import werkstatt.audit as _wa
+    monkeypatch.setattr(_wa, "_werkstatt_home",
                         lambda: tmp_path)
 
 @pytest.fixture(autouse=True)

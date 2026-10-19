@@ -523,3 +523,30 @@ _schreibe_messung in Phase C-Modul verify.py
 charakterisiert (P1-Kette). Grund: Fehler waere
 stumm (Messung nicht geschrieben, P1 zeigt weniger
 Zeichen).
+
+## Befund BC — mypy-Baseline 9 Fehler (2026-10-19)
+
+Stand nach Phase 2 / audit.py-Extraktion (Commit 42f2cb4
++ audit.py). 9 mypy-Fehler in pipeline.py, 24 ruff-Fehler.
+
+Kategorien:
+
+**Kategorie 1 — echte Typ-Bugs (5):**
+- pipeline.py:3912 Measurement.timeout (heisst timeout_s).
+- pipeline.py:5012 RunState.messungen_nach_apply fehlt.
+- pipeline.py:7979 RunState.messungen_nach_apply fehlt.
+- pipeline.py:10114 _mess_inhalt_zieldateien: list[str] vs set[str].
+- pipeline.py:10115 dito.
+
+**Kategorie 2 — mypy-Pfad-Problem (3):**
+- harness.audit.writer (aus /opt/security-ai).
+- core.changeapplier.models.
+- core.changeapplier.applier.
+Loesung: MYPYPATH=/opt/security-ai oder
+# type: ignore[import-not-found].
+
+**Kategorie 3 — Path=None (1):**
+- pipeline.py:7950 Path = None.
+
+Ziel Phase 5 (Grounding): mypy als Gate, 0 Fehler.
+Nicht Phase-2-Scope. Baseline unveraendert (18g).
