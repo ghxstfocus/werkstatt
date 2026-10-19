@@ -220,3 +220,24 @@ Drei Kategorien mit klarer Semantik:
 | TRAGEND-REFACTOR | 13167 | 288 | _planner_main_pfad |
 | TRAGEND | 13457 | 12 | _validate_new_phase_args |
 | TRAGEND-REFACTOR | 13471 | 212 | main |
+
+## Auflage 21b-2 — Risiko-Akzeptanz pro TRAGEND-Funktion ohne direkte Test-Referenz
+
+Reviewer-Auflage: Kein stilles "indirekt abgedeckt".
+Pro Funktion: Aufrufer + Test-Status + Entscheidung.
+
+Format: `Risiko akzeptiert: <Grund>` ODER
+`Charakterisierung folgt in Phase C-Modul <Name>`.
+
+| Funktion | Aufrufer (pipeline.py) | Aufrufer getestet in | Entscheidung |
+|---|---|---|---|
+| _anker_in_messung | pruefe_anker_gegen_messung | tests/test_pipeline.py | Risiko akzeptiert: Aufrufer-Test deckt Verhalten ab |
+| _api_signaturen | verify_code_kwargs | tests/test_pipeline.py (TestVerifyCharakterisierung) | Risiko akzeptiert: durch 21b-Test verify_code_kwargs abgedeckt |
+| _projekt_symbol_index | verify_code | tests/test_pipeline.py (TestVerifyCharakterisierung) | Risiko akzeptiert: durch 21b-Test verify_code abgedeckt |
+| _tokenisiere | gegenstand_gleich | tests/test_pipeline.py (TestAntiPattern) | Risiko akzeptiert: Aufrufer-Test deckt Verhalten ab |
+| _mess_index_block | _build_commit_input, _build_judge_input | tests/test_pipeline.py | Risiko akzeptiert: durch 21b-1-Test _build_commit_input abgedeckt |
+| _parse_einzelpatch | parse_code_patches | tests/test_pipeline.py | Risiko akzeptiert: Aufrufer-Test deckt Verhalten ab |
+| format_code_patches_fuer_commit | _build_commit_input | tests/test_pipeline.py (21b-1) | Risiko akzeptiert: durch 21b-1-Test abgedeckt |
+| _schreibe_messung | execute_commands | tests/test_pipeline.py | Charakterisierung folgt in Phase C-Modul verify.py: Messung-Schreiben ist Teil der P1-Kette (Befund AX), Fehler waere stumm |
+| _print_phase_approval_dokument | run_phase | tests/test_phase.py | Risiko akzeptiert: Aufrufer-Test deckt Verhalten ab (Anzeige-Funktion, Fehler waere sichtbar) |
+| print_approval_dokument | run_pipeline | tests/test_pipeline.py | Risiko akzeptiert: Aufrufer-Test deckt Verhalten ab (Human-Gate, Fehler waere sichtbar) |
