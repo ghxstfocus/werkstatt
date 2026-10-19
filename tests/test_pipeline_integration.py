@@ -223,14 +223,10 @@ def mock_run_pipeline_deps(
             if n == 1:
                 # Reviewer Mess-Wahl: keine Commands.
                 return _reply_ok("")
-            if n == 2:
-                # Reviewer Commit-Review.
+            if n >= 2:
+                # Reviewer Commit-Review (auch bei Wiederholung
+                # im commit_versuche-Loop, 3a-1c-0 B1b).
                 return _reply_ok(commit_verdict)
-            raise AssertionError(
-                f"W36-RP: reviewer_prompt zum {n}. Mal gerufen. "
-                f"Erwartet: max 2 (Mess-Wahl, Commit). "
-                f"Neue reviewer_prompt-Aufrufe erfordern "
-                f"Anpassung des Helpers.")
         raise AssertionError(
             f"W36-RP: ask_llm mit unbekanntem Body-Anfang "
             f"({sp[:80]!r}). Rollen-Match fehlgeschlagen.")
@@ -860,3 +856,64 @@ def test_run_pipeline_solver_trigger_im_block(
     rc = pipeline.run_pipeline(
         "test-projekt", "Test-Auftrag", ref)
     assert rc == 19, f"erwartet rc=19 (deadlock), gefunden rc={rc}"
+
+
+# =====================================================================
+# 3a-1c-0 (C-CN-3, 2026-10-19): 2 B1b-Tests fuer Fail-Closed-Pfade
+# in run_pipeline. Reviewer-Freigabe (a) mit 5 Auflagen.
+# =====================================================================
+
+def test_run_pipeline_scope_violation_rc9(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-0 B1b: _check_commit_scope False -> rc=9.
+
+    Zitat run_pipeline Z. 8797-8801:
+        _scope_ok, _scope_grund = _check_commit_scope(
+            state, _diff_name_only, project_dir, project_name)
+        if not _scope_ok:
+            return 9
+
+    Deckt ab: deterministisches Commit-Scope-Gate vor
+    LLM-Review (R16-Aequivalent). Fail-Closed, rc=9.
+    """
+    mock_run_pipeline_deps(monkeypatch,
+                           judge_verdict="GO",
+                           commit_verdict="COMMIT-GO")
+    monkeypatch.setattr(
+        pipeline, "_check_commit_scope",
+        lambda *a, **kw: (False, "scope_violation"))
+    ref: list = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc == 9, (
+        f"erwartet rc=9 bei scope_violation, gefunden rc={rc}")
+
+
+def test_run_pipeline_commit_no_go_max_rc7(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-0 B1b: commit_versuche >= max_commit_versuche -> rc=7.
+
+    Zitat run_pipeline Z. 8942-8946:
+        commit_versuche += 1
+        if commit_versuche >= max_commit_versuche:
+            return _fail_closed(
+                state, project_dir, project_name, 7,
+                "commit_no_go_max_versuche")
+
+    Deckt ab: Fail-Closed nach max_commit_versuche x
+    COMMIT-NO-GO (Endlos-Loop-Schutz). rc=7.
+    Helper-Parameter commit_verdict (tests:170) reicht;
+    _rollback_zieldateien wird gemockt, weil _fail_closed
+    es aufruft.
+    """
+    mock_run_pipeline_deps(monkeypatch,
+                           judge_verdict="GO",
+                           commit_verdict="COMMIT-NO-GO")
+    monkeypatch.setattr(
+        pipeline, "_rollback_zieldateien",
+        lambda *a, **kw: None)
+    ref: list = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc == 7, (
+        f"erwartet rc=7 bei commit_no_go_max, gefunden rc={rc}")
