@@ -3164,7 +3164,7 @@ def run_measurement_mit_argv(m: Measurement, whitelist: list[str],
         argv = list(argv) + [extra_arg]
         res = subprocess.run(
             argv, cwd=project_dir, capture_output=True,
-            text=True, timeout=m.timeout)
+            text=True, timeout=m.timeout_s)
         stdout_gekuerzt = res.stdout.strip().splitlines()
         letzte = stdout_gekuerzt[-1] if stdout_gekuerzt else ""
         out = (f"=== {m.mid} ===\nARGV: {' '.join(argv)}\n"

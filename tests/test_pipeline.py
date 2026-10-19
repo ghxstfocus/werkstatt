@@ -11299,3 +11299,53 @@ class TestMessSchreibenCharakterisierung:
         finally:
             if ziel_dir.exists():
                 shutil.rmtree(ziel_dir)
+
+
+class TestMeasurementTimeoutCharakterisierung:
+    """Charakterisierung Measurement.timeout (Befund BY, 2026-10-19).
+
+    Reviewer-Auflage R-2 (Gate 18 / ruff-mypy-TEILS):
+    Test VOR Fix. run_measurement_mit_argv ruft
+    m.timeout, aber Measurement (werkstatt/state.py:22)
+    hat nur timeout_s. Der Pfad ist erreichbar
+    (m.mid == "pytest", 3 Aufrufer).
+
+    Test mockt subprocess.run, damit kein echter
+    pytest-Prozess laeuft. Prueft: kein AttributeError,
+    timeout_s wird an subprocess.run uebergeben.
+    """
+
+    def test_pytest_measurement_nutzt_timeout_s(self) -> None:
+        """run_measurement_mit_argv(mid='pytest') nutzt
+        m.timeout_s, nicht m.timeout.
+
+        Ohne Fix: AttributeError 'Measurement' object
+        has no attribute 'timeout'.
+        """
+        from unittest.mock import MagicMock, patch
+
+        from werkstatt.state import Measurement
+
+        m = Measurement(
+            mid="pytest",
+            argv=("pytest", "-q"),
+            beschreibung="Test",
+            timeout_s=300,
+        )
+        # subprocess.run mocken
+        fake_result = MagicMock()
+        fake_result.stdout = "1 passed\n"
+        fake_result.stderr = ""
+        fake_result.returncode = 0
+
+        with patch("pipeline.subprocess.run",
+                   return_value=fake_result) as mock_run:
+            out, ok, _argv = pipeline.run_measurement_mit_argv(
+                m, ["tests/"], Path("/tmp"), extra_arg="tests/")
+        assert ok is True, f"ok={ok}, out={out}"
+        # timeout_s wurde uebergeben
+        assert mock_run.called
+        kwargs = mock_run.call_args.kwargs
+        assert kwargs.get("timeout") == 300, (
+            f"erwartet timeout=300 (aus timeout_s), "
+            f"gefunden: {kwargs.get('timeout')}")
