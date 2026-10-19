@@ -1328,3 +1328,60 @@ def test_run_pipeline_unklar_eskalation_payload_raw(
     assert "Widerspruch: Test" in payload["raw"], (
         f"raw enthaelt nicht den Widerspruch-Text: "
         f"{payload['raw'][:100]}")
+
+
+
+def test_run_pipeline_unklar_ohne_widerspruch_r15_verstoss(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-1-b AQ: 1x UNKLAR ohne Widerspruch -> Verstoss-Audit.
+
+    Zitat _review_verdict_behandlung (V2) Z. 8840-8854:
+        if verdict == "UNKLAR":
+            _hat_widerspruch = _review_unklar_widerspruch(
+                reply.content)
+            if _hat_widerspruch:
+                audit("review_unklar_widerspruch", ...)
+            else:
+                audit("review_r15_verstoss",
+                      {"rund": runde,
+                       "grund": "unklar_ohne_widerspruch"}, ...)
+            _n_unklar = sum(...)
+            if _n_unklar >= 2:
+                ...
+                return 14
+            continue
+
+    Sequenz: Runde 1 "Ich weiss nicht." -> UNKLAR ohne
+    Widerspruch (Verstoss), 1x UNKLAR reicht NICHT fuer
+    Eskalation -> continue. Runde 2 GO -> break -> rc=0.
+
+    Overrides (1): audit (Spy).
+    _review_unklar_widerspruch laeuft real (pure Logik).
+    Kein ask_reviewer_for_recovery / print_recovery
+    (nicht erreicht).
+    """
+    mock_run_pipeline_deps(
+        monkeypatch,
+        judge_verdict_sequenz=[
+            "Ich weiss nicht.",
+            "GO",
+        ])
+    gerufen: list = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw: gerufen.append(
+            (kind, payload)))
+    ref: list = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc == 0, (
+        f"erwartet rc=0 (UNKLAR dann GO), gefunden rc={rc}")
+    kinds = [k for k, _ in gerufen]
+    assert kinds.count("review_r15_verstoss") == 1, (
+        f"erwartet 1x review_r15_verstoss, "
+        f"gefunden {kinds.count('review_r15_verstoss')}x. "
+        f"Alle: {kinds[:20]}")
+    assert kinds.count("review_unklar_eskalation") == 0, (
+        "unerwartet review_unklar_eskalation (1x UNKLAR "
+        "darf nicht eskalieren)")
+    assert kinds.count("review_unklar_widerspruch") == 0
