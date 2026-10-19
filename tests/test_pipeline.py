@@ -11102,3 +11102,132 @@ class TestTragendCharakterisierung:
         for s in skills:
             assert "name" in s
             assert "description" in s
+
+
+class TestP1KetteCharakterisierung:
+    """Charakterisierung der P1-Kette (Neubau 21b-1, 2026-10-19).
+
+    Reviewer-Auflage 21b-1: Der P1-Blocker (Commit-Review-
+    Messlage: _build_commit_input liefert 579 statt 6854
+    Zeichen) sitzt in der Kette
+    _build_commit_input -> _mess_inhalt_nach_apply ->
+    _mess_inhalt_block.
+
+    Ohne Charakterisierung waere der P1-Fix Symptom-
+    Reparatur auf unbekannter Baseline.
+
+    Diese Tests schreiben den IST-Zustand fest:
+    - Was liefert _mess_inhalt_nach_apply bei leerer
+      und befuellter state.messungen_nach_apply?
+    - Was liefert _mess_inhalt_block bei leerer und
+      befuellter state.messungen?
+    - Was baut _build_commit_input bei leerem
+      _mess_inhalt_nach_apply?
+    """
+
+    def _state(self):
+        """Baut einen minimalen RunState."""
+        return pipeline.RunState(
+            block_id="t", aufgabe="a", start_ts="",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=[], api_key="", budget={},
+            agent_docs={}, project_dir=Path("/tmp"))
+
+    def _messung(self, pfad: str, datei: Path):
+        """Baut ein Mess-Objekt mit .pfad + .datei."""
+        from types import SimpleNamespace
+        return SimpleNamespace(pfad=pfad, datei=datei)
+
+    def test_mess_inhalt_nach_apply_leer(self) -> None:
+        """Ohne messungen_nach_apply -> leerer String.
+
+        Characterisiert den P1-Zustand: der Fallback
+        (mess_protokoll_nach_apply) ist leer, also
+        liefert die Funktion "".
+        """
+        st = self._state()
+        st.messungen_nach_apply = []
+        st.mess_protokoll_nach_apply = ""
+        assert pipeline._mess_inhalt_nach_apply(st) == ""
+
+    def test_mess_inhalt_nach_apply_befuellt(self, tmp_path) -> None:
+        """Mit befuellter messungen_nach_apply -> voller Inhalt.
+
+        Characterisiert: die strukturierte Liste wird
+        bevorzugt, jede Datei wird gelesen, Format ist
+        '=== pfad ===\\n<inhalt>'.
+        """
+        f = tmp_path / "applier.py"
+        f.write_text("class ChangeApplier:\n    pass\n",
+                     encoding="utf-8")
+        st = self._state()
+        st.messungen_nach_apply = [
+            self._messung("core/changeapplier/applier.py", f),
+        ]
+        st.mess_protokoll_nach_apply = ""
+        inhalt = pipeline._mess_inhalt_nach_apply(st)
+        assert "=== core/changeapplier/applier.py ===" in inhalt
+        assert "class ChangeApplier:" in inhalt
+
+    def test_mess_inhalt_nach_apply_fallback(self) -> None:
+        """Ohne messungen_nach_apply -> Fallback auf String.
+
+        Characterisiert den P1-Risiko-Pfad: wenn die
+        strukturierte Liste leer ist, faellt die Funktion
+        auf mess_protokoll_nach_apply zurueck. Das ist
+        die Quelle des 579-Zeichen-Problems.
+        """
+        st = self._state()
+        st.messungen_nach_apply = []
+        st.mess_protokoll_nach_apply = "FALLBACK-INHALT-579"
+        assert (pipeline._mess_inhalt_nach_apply(st)
+                == "FALLBACK-INHALT-579")
+
+    def test_mess_inhalt_block_leer(self) -> None:
+        """Ohne messungen -> '(keine Messungen)'."""
+        st = self._state()
+        st.messungen = []
+        assert pipeline._mess_inhalt_block(st) == "(keine Messungen)"
+
+    def test_mess_inhalt_block_befuellt(self, tmp_path) -> None:
+        """Mit befuellten messungen -> '=== pfad ===\\n<inhalt>'."""
+        f = tmp_path / "x.py"
+        f.write_text("def foo():\n    pass\n",
+                     encoding="utf-8")
+        st = self._state()
+        st.messungen = [self._messung("x.py", f)]
+        inhalt = pipeline._mess_inhalt_block(st)
+        assert "=== x.py ===" in inhalt
+        assert "def foo():" in inhalt
+
+    def test_build_commit_input_enthaelt_mess_inhalt(self,
+                                                       tmp_path) -> None:
+        """_build_commit_input enthaelt den vollen Nach-Apply-
+        Inhalt, wenn messungen_nach_apply befuellt ist.
+
+        Characterisiert: der P1-Fix muss den Pfad
+        _mess_inhalt_nach_apply -> _build_commit_input
+        intakt lassen. Wenn diese Kette reisst (leerer
+        Fallback), faellt der Commit-Input auf 579
+        Zeichen zurueck.
+        """
+        f = tmp_path / "applier.py"
+        f.write_text("# VOLLER-NACH-APPLY-INHALT\n"
+                     "class ChangeApplier:\n    pass\n",
+                     encoding="utf-8")
+        st = self._state()
+        st.messungen_nach_apply = [
+            self._messung("core/applier.py", f),
+        ]
+        st.mess_protokoll_nach_apply = ""
+        st.mess_protokoll_veraltet = True
+        st.messungen = []
+        st.basis_protokoll_nach_apply = ""
+        st.basis_gate_test_results = {}
+        st.commit_paket = {"message": "test", "dateien": ["core/applier.py"]}
+        st.code_patches = []
+        st.phase_aktiv = False
+        input_text = pipeline._build_commit_input(
+            st, "", "", "")
+        assert "VOLLER-NACH-APPLY-INHALT" in input_text
+        assert "GEMESSENER INHALT (NACH Apply, verbindlich" in input_text
