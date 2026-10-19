@@ -1204,3 +1204,127 @@ def test_run_pipeline_no_go_recovery(
         f"erwartet recovery_no_go 1x, gefunden "
         f"{gerufen.count('recovery_no_go')}x. "
         f"Alle: {gerufen[:20]}")
+
+
+
+# =====================================================================
+# 3a-1c-1-b (2026-10-19): UNKLAR-Verhaltens-Tests (A9-8-3a).
+# Profi-Ansatz: _review_unklar_widerspruch NICHT gemockt (pure Logik).
+# =====================================================================
+
+
+def _fake_recovery_obj():
+    return type("V", (), {
+        "frage_an_menschen": "test-frage",
+        "empfehlung": "test-empfehlung"})()
+
+
+def test_run_pipeline_unklar_kette_rc14(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-1-b AQ: 2x UNKLAR in Folge -> rc=14.
+
+    Zitat _review_verdict_behandlung (V2) Z. 8839-8922:
+        if verdict == "UNKLAR":
+            _hat_widerspruch = _review_unklar_widerspruch(
+                reply.content)
+            if _hat_widerspruch:
+                audit("review_unklar_widerspruch", ...)
+            else:
+                audit("review_r15_verstoss", ...)
+            _n_unklar = sum(...)
+            if _n_unklar >= 2:
+                audit("review_unklar_eskalation", {...})
+                ...
+                return 14
+
+    _review_unklar_widerspruch laeuft real (pure Logik,
+    startswith "Widerspruch:"). ask_llm liefert 2x
+    "Widerspruch: Test\nUNKLAR" -> classify_verdict
+    Fallback -> UNKLAR.
+
+    Overrides (3, Profi-Ansatz):
+      1. ask_reviewer_for_recovery (LLM-nah).
+      2. print_recovery (Seiteneffekt).
+      3. audit (Spy).
+    Helper-Parameter: judge_verdict_sequenz.
+    """
+    mock_run_pipeline_deps(
+        monkeypatch,
+        judge_verdict_sequenz=[
+            "Widerspruch: Test\nUNKLAR",
+            "Widerspruch: Test\nUNKLAR",
+        ])
+    monkeypatch.setattr(
+        pipeline, "ask_reviewer_for_recovery",
+        lambda *a, **kw: _fake_recovery_obj())
+    monkeypatch.setattr(
+        pipeline, "print_recovery", lambda *a: None)
+    gerufen: list = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw: gerufen.append(
+            (kind, payload)))
+    ref: list = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc == 14, (
+        f"erwartet rc=14 bei 2x UNKLAR, gefunden rc={rc}")
+    kinds = [k for k, _ in gerufen]
+    assert kinds.count("review_unklar_widerspruch") == 2, (
+        f"erwartet 2x review_unklar_widerspruch, "
+        f"gefunden {kinds.count('review_unklar_widerspruch')}x. "
+        f"Alle: {kinds[:20]}")
+    assert kinds.count("review_unklar_eskalation") == 1, (
+        f"erwartet 1x review_unklar_eskalation, "
+        f"gefunden {kinds.count('review_unklar_eskalation')}x")
+    assert "review_r15_verstoss" not in kinds, (
+        f"unerwartet review_r15_verstoss: {kinds[:20]}")
+
+
+def test_run_pipeline_unklar_eskalation_payload_raw(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-1-b AQ: review_unklar_eskalation Payload enthaelt
+    raw + n_unklar.
+
+    Zitat _review_verdict_behandlung (V2) Z. 8896-8901:
+        audit("review_unklar_eskalation",
+              {"runde": runde,
+               "n_unklar": _n_unklar,
+               "raw": reply.content[:2000]},
+              project_dir, project_name)
+
+    Overrides (3, Profi-Ansatz): wie Test 1.
+    """
+    mock_run_pipeline_deps(
+        monkeypatch,
+        judge_verdict_sequenz=[
+            "Widerspruch: Test\nUNKLAR",
+            "Widerspruch: Test\nUNKLAR",
+        ])
+    monkeypatch.setattr(
+        pipeline, "ask_reviewer_for_recovery",
+        lambda *a, **kw: _fake_recovery_obj())
+    monkeypatch.setattr(
+        pipeline, "print_recovery", lambda *a: None)
+    gerufen: list = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw: gerufen.append(
+            (kind, payload)))
+    ref: list = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc == 14
+    eskalationen = [
+        p for k, p in gerufen if k == "review_unklar_eskalation"]
+    assert len(eskalationen) == 1, (
+        f"erwartet 1x review_unklar_eskalation, "
+        f"gefunden {len(eskalationen)}x")
+    payload = eskalationen[0]
+    assert "raw" in payload, (
+        f"raw fehlt in Payload: {payload}")
+    assert payload["n_unklar"] == 2, (
+        f"n_unklar != 2: {payload.get('n_unklar')}")
+    assert "Widerspruch: Test" in payload["raw"], (
+        f"raw enthaelt nicht den Widerspruch-Text: "
+        f"{payload['raw'][:100]}")
