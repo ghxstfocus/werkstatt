@@ -167,6 +167,7 @@ def mock_run_pipeline_deps(
             "ersatz: y = 2\n"
             "PATCH-ENDE\n"),
         judge_verdict: str = "GO",
+        judge_verdict_sequenz: list[str] | None = None,
         commit_verdict: str = "COMMIT-GO",
         builder_max_runden: int = 3,
         mock_audit: bool = True,
@@ -214,6 +215,18 @@ def mock_run_pipeline_deps(
         if sp.startswith("Du bist der Judge"):
             handle.setdefault("judge_calls", []).append(
                 user_content)
+            # 3a-1c-1a (A4-1): Sequenz-Modus fuer
+            # mehrrundige Verdict-Tests. Nach Erschoepfung
+            # der Sequenz Fallback auf judge_verdict
+            # (fail-open; neue Sequenz-Tests muessen alle
+            # Runden abdecken).
+            if judge_verdict_sequenz is not None:
+                idx = len(handle.setdefault(
+                    "judge_calls_consumed", []))
+                handle["judge_calls_consumed"].append(idx)
+                if idx < len(judge_verdict_sequenz):
+                    return _reply_ok(
+                        judge_verdict_sequenz[idx])
             return _reply_ok(judge_verdict)
         if sp.startswith("Du bist der Test-Generator"):
             return _reply_ok("")
@@ -917,3 +930,106 @@ def test_run_pipeline_commit_no_go_max_rc7(
         "test-projekt", "Test-Auftrag", ref)
     assert rc == 7, (
         f"erwartet rc=7 bei commit_no_go_max, gefunden rc={rc}")
+
+
+# =====================================================================
+# 3a-1c-1a (2026-10-19): AQ-Vorspann C4. 2 Tests.
+# Reviewer-Freigabe A4-1 + L-1/COMMAND (5 Auflagen).
+# =====================================================================
+
+def test_run_pipeline_eskalation_rc14(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-1a AQ-1: ESKALATION -> rc=14.
+
+    Zitat run_pipeline Z. 8186-8194:
+        if verdict == "ESKALATION":
+            ...
+            audit("recovery_eskalation", ...)
+            return 14
+
+    A3: Unterscheidung zu UNKLAR. UNKLAR schreibt
+    audit("review_unklar_widerspruch") oder
+    audit("review_unklar_eskalation"). ESKALATION schreibt
+    audit("recovery_eskalation"). Der Test asserted
+    rc=14, "recovery_eskalation" da, KEIN
+    "review_unklar_*".
+    """
+    mock_run_pipeline_deps(monkeypatch,
+                           judge_verdict="ESKALATION")
+    monkeypatch.setattr(
+        pipeline, "ask_reviewer_for_recovery",
+        lambda *a, **kw: type("V", (), {
+            "frage_an_menschen": "test-frage",
+            "empfehlung": "test-empfehlung"})())
+    monkeypatch.setattr(
+        pipeline, "print_recovery", lambda *a, **kw: None)
+    gerufen: list[str] = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw: gerufen.append(kind))
+    ref: list = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc == 14, (
+        f"erwartet rc=14 bei ESKALATION, gefunden rc={rc}")
+    assert "recovery_eskalation" in gerufen, (
+        f"erwartet audit recovery_eskalation, "
+        f"gefunden: {gerufen[:15]}")
+    assert "review_unklar_eskalation" not in gerufen, (
+        f"UNKLAR-Pfad unerwartet beruehrt "
+        f"(review_unklar_eskalation): {gerufen[:15]}")
+    assert "review_unklar_widerspruch" not in gerufen, (
+        f"UNKLAR-Pfad unerwartet beruehrt "
+        f"(review_unklar_widerspruch): {gerufen[:15]}")
+
+
+def test_run_pipeline_command_judge_command_audit(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-1a AQ-2: COMMAND dispatcht audit(judge_command).
+
+    Zitat run_pipeline Z. 8162-8185:
+        if verdict == "COMMAND":
+            cmds = parse_commands(reply.content)
+            for cmd in cmds:
+                if cmd.get("id") == "solver":
+                    _handle_solver_command(...)
+                else:
+                    execute_commands(...)
+            audit("judge_command", {...}, ...)
+            continue
+
+    C4-Dispatch: COMMAND loest audit("judge_command") aus
+    und continue't. _handle_solver_command ist gemockt —
+    Solver-Ausfuehrung wird NICHT durch diesen Test
+    charakterisiert (A7-2).
+
+    A7-1: Zaehlung statt "present". Sequenz
+    ["COMMAND: RUN solver", "GO"] mit max_rounds=2:
+    Runde 1 = COMMAND (1x judge_command), Runde 2 = GO
+    (0x judge_command). count("judge_command") == 1
+    beweist Dispatch in Runde 1 UND Terminierung in
+    Runde 2.
+
+    A7-3: 2 Overrides (audit, _handle_solver_command).
+    """
+    mock_run_pipeline_deps(
+        monkeypatch,
+        judge_verdict_sequenz=["COMMAND: RUN solver", "GO"])
+    monkeypatch.setattr(
+        pipeline, "_handle_solver_command",
+        lambda *a, **kw: None)
+    gerufen: list[str] = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw: gerufen.append(kind))
+    ref: list = []
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref)
+    assert rc == 0, (
+        f"erwartet rc=0 bei Sequenz COMMAND->GO, "
+        f"gefunden rc={rc}")
+    n = gerufen.count("judge_command")
+    assert n == 1, (
+        f"erwartet judge_command genau 1x (Runde 1 "
+        f"COMMAND, Runde 2 GO), gefunden {n}x. "
+        f"Alle audits: {gerufen[:20]}")
