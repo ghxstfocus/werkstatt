@@ -15,7 +15,7 @@ Chronologisch nach Umbau-Phasen. Append-only pro Phase.
 | 3a-1c-1b-Fallback | 3 | `judge_verdict_sequenz`-Fallback (Sequenz erschoepft -> starr `judge_verdict`) in 3a-1c-1a implementiert, aber nicht getestet. Test folgt in 3a-1c-1b. Fail-open-Hinweis: Fallback uebernimmt `judge_verdict`; fail-closed nur, wenn `judge_verdict` fail-closed ist. | klein | offen |
 | 3a-3-b | 3 | NO-GO-Recovery + Recovery nach Loop (`pipeline.py` Z. 8460-8467). Gehoert in 3a-3 (`_phase_main_pfad`, Befund CI/CG, Deadlock-Kette). | mittel | offen |
 | 3a-1c-1a-COMMAND-Solver | 3 | 3a-1c-1a-COMMAND-Test deckt Solver-Ausfuehrung NICHT ab. Solver-Ausfuehrung ist in `_handle_solver_command` zu testen — existierenden Test pruefen, sonst Merkposten fuer 3a-1c-2. Folge aus Fix C (Reviewer A7-4, Aufruf-Tiefe #17). | klein | offen |
-| 3a-1c-1-b (Vorbedingung) | 3 | UNKLAR-Verhaltens-Test MUSS vor 3a-1c-2 abgeschlossen sein. Nach extract-1 sind 3 UNKLAR-Pfade (Kette, Payload-raw, Widerspruch) nur durch V2-Struktur-Tests abgesichert, die bei 3a-1c-2 brechen. 3a-1c-2 darf ohne 3a-1c-1-b-Abnahme nicht beginnen (A9-8-3a, HR-R9). | mittel | offen |
+| 3a-1c-1-b (Vorbedingung) | 3 | ERLEDIGT (Commits 7cb8866 + 6cd545f). 3 UNKLAR-Verhaltens-Tests: Kette rc=14, Payload-raw, Verstoss (1x UNKLAR). Vorbedingung fuer 3a-1c-2 erfuellt (A9-8-3a, HR-R9). | mittel | done |
 | Struktur-Tests umstellen | 2 | 15 gruene `inspect.getsource(run_pipeline)`-Tests brechen bei 3a-1c-2/3/4 (C7/C0C1C2C6/C8C9). Vor 3a-1c-2 Block einplanen. Duale Quellen-Pruefung oder Verhaltens-Test (A9-13). | gross | offen |
 | 3a-1c-2-V2-Groesse | 3 | V2 = 303 Z., 13 Steuerungsstellen, 12 Parameter. Zu gross fuer 1-Rutsch. Zerlegung V2a/V2b vor 3a-1c-2 pruefen (A8-2-nach-3b). | mittel | offen |
 
