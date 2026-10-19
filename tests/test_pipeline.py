@@ -11351,3 +11351,82 @@ class TestMeasurementTimeoutCharakterisierung:
         assert kwargs.get("timeout") == 300, (
             f"erwartet timeout=300 (aus timeout_s), "
             f"gefunden: {kwargs.get('timeout')}")
+
+
+class TestPostApplyMessDirFailClosed:
+    """Charakterisierung _post_apply_messung mkdir-Fehler
+    (P1, 2026-10-19).
+
+    Reviewer-Auflage P1-a: Test VOR Fix.
+    P1-b (ii): fail-closed.
+
+    Der Test patcht Path.mkdir so, dass es OSError
+    wirft. Der except-Zweig in _post_apply_messung
+    greift.
+
+    Vor Fix (Ist): return True, state.messungen_nach_apply
+    bleibt leer, kein Audit "mess_dir_fehler".
+    Nach Fix: return False, Audit "mess_dir_fehler".
+    """
+
+    def _state(self, tmp_path):
+        """Baut minimalen RunState mit code_patches und
+        read_file-Messung."""
+        from werkstatt.state import Measurement
+        st = pipeline.RunState(
+            block_id="t", aufgabe="a", start_ts="",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=[], api_key="", budget={},
+            agent_docs={}, project_dir=tmp_path)
+        # read_file-Messung in always
+        st.always = {
+            "read_file": Measurement(
+                mid="read_file", argv=("cat",),
+                beschreibung="Datei lesen."),
+        }
+        # Zieldatei
+        (tmp_path / "core").mkdir()
+        (tmp_path / "core" / "x.py").write_text(
+            "x = 1\n", encoding="utf-8")
+        st.code_patches = [
+            {"typ": "patch", "pfad": "core/x.py"},
+        ]
+        return st
+
+    def test_mkdir_fehler_fail_closed(self, tmp_path, monkeypatch) -> None:
+        """mkdir-Fehler -> return False + Audit mess_dir_fehler.
+
+        Vor Fix: Test schlaegt fehl (return True statt False).
+        Nach Fix: Test gruen.
+        """
+        st = self._state(tmp_path)
+        audit_calls: list = []
+
+        def fake_audit(kind, payload, project_dir, project_name):
+            audit_calls.append(kind)
+
+        # Path.mkdir patchen -> OSError
+        original_mkdir = Path.mkdir
+
+        def failing_mkdir(self, *args, **kwargs):
+            raise OSError("mkdir kaputt (Test)")
+
+        monkeypatch.setattr(Path, "mkdir", failing_mkdir)
+        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        try:
+            ok = pipeline._post_apply_messung(
+                st, ["core/"])
+        finally:
+            monkeypatch.setattr(Path, "mkdir", original_mkdir)
+
+        # Nach Fix: fail-closed.
+        assert ok is False, (
+            f"erwartet: return False (fail-closed), "
+            f"gefunden: {ok}")
+        assert "mess_dir_fehler" in audit_calls, (
+            f"erwartet: Audit 'mess_dir_fehler', "
+            f"gefunden: {audit_calls}")
+        # Liste bleibt leer (kein mkdir)
+        nach = getattr(st, "messungen_nach_apply", [])
+        assert nach == [], (
+            f"erwartet: leer, gefunden: {nach}")

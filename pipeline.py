@@ -512,7 +512,7 @@ _AP_PFLICHTFELDER = (
 # (test_audit_kinds_alle_aufrufe_registriert) prueft
 # die Nutzung, test_katalog_anzahl_matcht_soll die
 # Registrierung.
-_KATALOG_SOLL = 166  # W61: +builder_readfile_blockiert, verify_code_befund
+_KATALOG_SOLL = 167  # W61: +builder_readfile_blockiert, verify_code_befund
 
 
 
@@ -6003,8 +6003,11 @@ def _post_apply_messung(state: RunState,
     try:
         _mess_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        print(f"[WARN] Post-Apply-Messungen: {exc}")
-        _mess_dir = None
+        print(f"[FAIL] Post-Apply-Messungen: {exc}")
+        audit("mess_dir_fehler",
+              {"run_id": _run_id, "exc": str(exc)[:200]},
+              state.project_dir, state.project_name)
+        return False
     for pfad in pfade:
         out, ok, argv = run_measurement_mit_argv(
             m, file_whitelist, state.project_dir, pfad)
