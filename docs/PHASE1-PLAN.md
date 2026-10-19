@@ -210,3 +210,61 @@ reviewer/test_generator sterben): 3 Rollen.
   BY_ROLE.
 - Befund P/Q: Body + HARD_RULES + Code doppelt.
   Phase 3.0 adressiert.
+
+## Abschluss Phase 1 — 2026-10-19
+
+Reviewer-Gate 17: B bestaetigt.
+Charge 4a (mypy) verschoben nach Phase 5 (Grounding).
+Befund AE: Werkstatt hat kein eigenes venv; mypy auf
+pipeline.py braucht Laufzeitumgebung -> Phase 5.
+
+### Abgeschlossene Chargen
+
+| Charge | Status | Commit |
+|---|---|---|
+| 1 (Audit-Kinds) | Messung + Doku, Kinds bleiben bis Phase 3 (Befund E) | 17b7f6f |
+| 2a (Rollen chaos/coverage) | erledigt, 10 -> 8 | 3533055 |
+| 3 (Tests) | Triage 1186 def / 1189 cases, keine Loeschung | f789dab |
+| 4a (mypy) | verschoben Phase 5 (Gate 17 B) | - |
+| 5 (Symptome) | verschoben Phase 2/3 | - |
+
+### Phase-1-Metrik (Gate 8 + Gate 17 B)
+
+- Rollen: 10 -> 8.
+- Audit-Kinds: 166 unveraendert.
+- Tests: 1189 unveraendert, Triage-Buckets dokumentiert
+  (956 Kern / 230 Phase-3).
+- verify_code: unangetastet.
+- mypy: Aufgabe an Phase 5 uebergeben.
+- Kein Symptom-Fix.
+
+### Was Phase 1 NICHT geliefert hat (bewusst)
+
+- Kein Audit-Kinds-Schnitt (Befund E: Kinds sind
+  Guard-Anker, sterben mit Phase 3).
+- Kein Builder-Trio-Merge (Befund N/O: Merge erzeugt
+  Doppelung, Phase 3.0 entdoppelt zuerst).
+- Kein mypy-Einbau (Befund AE: Werkstatt-venv fehlt,
+  Phase 5).
+- Keine Test-Loeschung (Befund S: 80% testen Phase-3-
+  Code, Baseline intakt halten).
+
+### Offene Merkposten fuer Phase 3 / 5
+
+- Phase 3.0: Rollen-Definitionen entdoppeln (Befund P/Q).
+- Phase 3.0: Builder-Trio-Merge (Befund N/O).
+- Phase 3: Audit-Kinds 166 -> ~20 mit Zusammenfassung
+  (Befund D).
+- Phase 3: solver.md + reviewer.md + test_generator.md
+  sterben (Befund J: load_agents-Pflicht bis Phase 3).
+- Phase 3: Kategorie-Zusammenfassung 7 planner_resume_*
+  -> 1 planner_resume_fehler.
+- Phase 5: Werkstatt-venv anlegen (Befund AE).
+- Phase 5: mypy auf tests/ + pipeline.py (Gate 4-neu C).
+- Phase 5: Subagenten aus pipeline.py nach
+  subagents/*.md extrahieren (Befund K).
+
+### Naechste Phase
+
+Phase 2 — Modularisieren (pipeline.py -> 6 Module).
+Kritischer Pfad: Phase 1 abgeschlossen, Phase 2 beginnt.
