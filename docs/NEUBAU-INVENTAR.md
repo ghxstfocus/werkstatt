@@ -550,3 +550,100 @@ Loesung: MYPYPATH=/opt/security-ai oder
 
 Ziel Phase 5 (Grounding): mypy als Gate, 0 Fehler.
 Nicht Phase-2-Scope. Baseline unveraendert (18g).
+
+## Phase-2-Abnahme — Nachlieferungen N1-N4 + R-3 (2026-10-19)
+
+Reviewer-Gate 18 / Phase-2-Abnahme: BESTAETIGT mit
+N1-N4. R-3 (10-Minuten-Pruefung R-A/R-B) erledigt.
+
+### N1 — Baseline pro Modul
+
+| Modul | pytest VOR/NACH | ruff VOR/NACH | mypy VOR/NACH |
+|---|---|---|---|
+| audit.py (ae32005) | 1217/1217 | 24/23 | 9/9 |
+| hard_rules.py (f62834f) | 1217/1217 | 23/18 | 9/9 |
+| prompts.py (7f51a63) | 1217/1217 | 18/17 | 9/9 |
+| measurement.py (13df6bd) | 1217/1217 | 17/17 | 9/9 |
+| commit_input.py + subprocess_env.py (05c4ce9) | 1217/1217 | 17/17 | 9/9 |
+| Measurement.timeout-Fix (033378c) | 1217/1218 | 17/17 | 9/8 |
+| apply.py (af53336) | 1218/1218 | 17/17 | 8/8 |
+| verify.py (ab8631f) | 1218/1218 | 17/17 | 8/8 |
+
+Alle Module Baseline-neutral ausser hard_rules.py
+(ruff -5), Measurement.timeout-Fix (mypy -1) und
+pytest +1 (Charakterisierung).
+
+### N2 — Befund BV: Scope-Erweiterung commit_input.py
+
+5 Funktionen + 1 Konstante wurden in commit_input.py
+mitgenommen, ohne explizite Freigabe:
+
+- _lese_plan (14 Z., Z. 5365-alt)
+- _lese_contract (22 Z., Z. 5425-alt)
+- _plan_pfad (16 Z., Z. 5333-alt)
+- _contract_pfad (8 Z., Z. 5379-alt)
+- _git_diff_phase (27 Z., Z. 1534-alt)
+- _PHASE_HEADER_COMMIT_REVIEW (4 Z., Z. 5443-alt)
+
+Aufruf-Matrix belegt: nur von commit_input-
+Funktionen gerufen (_build_commit_input,
+_build_judge_input, _build_phase_judge_input).
+Kein Ruf aus prompts.py, keine HARD_RULES_*.
+Konsequenz: commit_input.py 410 Z. statt ~284.
+
+### N3 — Befund CB: audit-Mock-Ziel
+
+Grep-Beweis, dass keine Test-Stelle mehr
+`patch('pipeline.audit')` fuer apply.py-Aufrufe
+nutzt:
+
+Test-Anpassungen (10 Tests + 1 monkeypatch):
+- test_w54_c_zwei_normale_patches (Z. 10706)
+- test_w54_d_kurzer_ersatz_kein_fail (Z. 10732)
+- test_w54_g_a_anker_doppelt (Z. 10774)
+- test_w54_g_b_verschiedene_zeilen (Z. 10800)
+- test_w54_g_c_lange_zeile_doppelt (Z. 10822)
+- test_w54_g_d_kurze_legit_doppelt (Z. 10851)
+- test_new_file_angelegt (Z. 5238)
+- test_new_file_existiert_fail (Z. 5253)
+- test_new_file_whitelist_fail (Z. 5265)
+- test_zwei_new_file_gleicher_pfad_fail (Z. 5279)
+- test_einrueckung_korrektur_audit (Z. 2118,
+  monkeypatch.setattr zusaetzlich werkstatt.apply.audit)
+
+Alle 11 patchen jetzt `werkstatt.apply.audit` oder
+`werkstatt.apply.audit`-Attribut. 0 Treffer in
+tests/ fuer patch('pipeline.audit') in
+apply-Code-Kontext (apply_code_patches).
+
+### N4 — Befund CD: verify.py Funktion-zu-Test
+
+| Funktion | Test |
+|---|---|
+| verify_code | TestVerifyCharakterisierung::test_verify_code_unbekanntes_symbol |
+| verify_code_kwargs | TestVerifyCharakterisierung::test_verify_code_kwargs_falsches_kwarg |
+| verify_values | TestVerifyCharakterisierung::test_verify_values_execution_status_falsch + _korrekt |
+| _api_signaturen | indirekt via test_verify_code_kwargs_falsches_kwarg |
+| _projekt_symbol_index | indirekt via test_verify_code_unbekanntes_symbol |
+
+Ausnahme (342 Z.) gerechtfertigt: alle 5 Funktionen
+haben Charakterisierungs-Test oder indirekten Beweis.
+
+### R-3 — 10-Minuten-Pruefung R-A/R-B
+
+R-A: RunState.messungen_nach_apply fehlt (2x):
+- pipeline.py:3962 (s.messungen_nach_apply = []).
+- pipeline.py:6036 (state.messungen_nach_apply = _neue_messungen).
+- Leser in measurement.py:173 nutzt getattr (defensiv).
+- Bewertung: Annotation-only. RunState-Feld fehlt
+  in werkstatt/state.py. Kein Runtime-Bug (Python
+  erlaubt dynamische Attribute). Phase 5.
+
+R-B: Path = None (pipeline.py:6007):
+- _mess_dir = Path, in except OSError: _mess_dir = None.
+- Guard danach: `if _mess_dir is not None and ok:`
+  (Z. 6013).
+- Bewertung: Annotation-only. Guard ist da. Fix:
+  `_mess_dir: Path | None` deklarieren. Phase 5.
+
+Beide Phase 5 (Annotation-Fixes, kein Runtime-Bug).
