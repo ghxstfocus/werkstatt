@@ -241,3 +241,70 @@ Format: `Risiko akzeptiert: <Grund>` ODER
 | _schreibe_messung | execute_commands | tests/test_pipeline.py | Charakterisierung folgt in Phase C-Modul verify.py: Messung-Schreiben ist Teil der P1-Kette (Befund AX), Fehler waere stumm |
 | _print_phase_approval_dokument | run_phase | tests/test_phase.py | Risiko akzeptiert: Aufrufer-Test deckt Verhalten ab (Anzeige-Funktion, Fehler waere sichtbar) |
 | print_approval_dokument | run_pipeline | tests/test_pipeline.py | Risiko akzeptiert: Aufrufer-Test deckt Verhalten ab (Human-Gate, Fehler waere sichtbar) |
+
+## Auflage 21a-1 — Spot-Check TRAGEND-REFACTOR
+
+Reviewer: "TRAGEND-REFACTOR ist die riskanteste Kategorie.
+Spot-Check 2 Funktionen: Zitat + Begruendung, warum
+REFACTOR und nicht NEUBAU."
+
+Aus 15 Funktionen (4.316 Z.) zwei ausgewaehlt:
+
+### Spot-Check 1 — run_pipeline (1468 Z., Startzeile 10030)
+
+Zitat (Auszug, Funktionskopf):
+
+    def run_pipeline(project_name: str, aufgabe: str, ...
+        """Zentrale Pipeline. Phasen-Modus + klassischer Modus.
+        ...
+        """
+
+Zitat (Auszug, erste Verzweigung):
+
+    if "--phase" in sys.argv or state.phase_aktiv:
+        # Phasen-Modus mit Unterbloecken.
+
+Warum REFACTOR, nicht NEUBAU:
+- Die Funktion enthaelt die 7-gliedrige Deadlock-Kette
+  (Parser-Einrueckung, max_tokens_judge, D2-Duplikate,
+  Planner-Resume, Contract im Prompt, Feedback-Loop,
+  verify_code). Jedes Glied ist eine Erkenntnis aus
+  W1-W61.
+- Ein NEUBAU wuerde die Glieder als "sollte man kennen"
+  voraussetzen. Das ist genau der Spolsky-Fehler:
+  Code-Memory wegwerfen.
+- Ein REFACTOR (15-20 Funktionen, Verhalten identisch)
+  behaelt die Glieder als benannte Teile. Danach kann
+  Phase 3b (Loop-Umbau) einzelne Glieder gezielt
+  ersetzen, ohne den Rest zu beruehren.
+
+### Spot-Check 2 — _phase_main_pfad (640 Z., Startzeile 12525)
+
+Zitat (Auszug, Funktionskopf):
+
+    def _phase_main_pfad(state: RunState, api_key: str, ...
+        """Hauptpfad einer Phase (Unterbloecke abarbeiten).
+        ...
+        """
+
+Warum REFACTOR, nicht NEUBAU:
+- 184 Tests in tests/test_phase.py haben diese Funktion
+  als Baseline. Ein NEUBAU wuerde die 184 Tests
+  entwerten — genau das, was Reviewer-Gate 14e
+  (Baseline-Vergleich) verhindern will.
+- Ein REFACTOR (6-8 Funktionen, Verhalten identisch)
+  behaelt die 184 Tests als Charakterisierung. Nach
+  Phase 3b kann der Loop-Umbau die Funktionen
+  einzeln ersetzen, mit den 184 Tests als Regressions-
+  Schutz.
+
+### Konsequenz
+
+Beide Funktionen sind REFACTOR, nicht NEUBAU. Der
+Unterschied zu NEUBAU (70 Funktionen, 3401 Z.) ist:
+- NEUBAU-Funktionen haben keine tragende Logik
+  (Phase-YAML, Planner-Resume, Solver, Anti-Pattern-
+  Block).
+- TRAGEND-REFACTOR-Funktionen tragen Logik, die in
+  neue Struktur zerlegt wird (Verhalten identisch,
+  Baseline intakt).
