@@ -6034,7 +6034,7 @@ class TestUnklarBehandlung:
 
     def test_unklar_zweig_im_loop(self) -> None:
         import inspect
-        src = inspect.getsource(pipeline.run_pipeline)
+        src = inspect.getsource(pipeline._review_verdict_behandlung)
         assert 'verdict == "UNKLAR"' in src
         assert "_review_unklar_widerspruch" in src
         assert "_n_unklar >= 2" in src
@@ -6042,7 +6042,7 @@ class TestUnklarBehandlung:
 
     def test_eskalation_rc_14(self) -> None:
         import inspect
-        src = inspect.getsource(pipeline.run_pipeline)
+        src = inspect.getsource(pipeline._review_verdict_behandlung)
         # rc=14 konsistent mit ESKALATION (B0-A2).
         # mindestens 2x return 14 im Quelltext.
         assert src.count("return 14") >= 2
@@ -6074,7 +6074,7 @@ class TestB0cUndBugs:
 
     def test_unklar_eskalation_mit_raw(self) -> None:
         import inspect
-        src = inspect.getsource(pipeline.run_pipeline)
+        src = inspect.getsource(pipeline._review_verdict_behandlung)
         assert "review_unklar_eskalation" in src
         # raw in der Payload.
         i = src.find("review_unklar_eskalation")

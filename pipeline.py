@@ -23,7 +23,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import requests
 import yaml
@@ -8153,309 +8153,19 @@ def run_pipeline(project_name: str, aufgabe: str,
             # Naechste Builder-Runde mit der Antwort.
             continue
         state.auflagen_log.append(parse_auflagen(reply.content))
-        state.empfehlung_log.append(parse_empfehlung(reply.content))
-        audit("judge_round",
-              _review_round_audit_payload(
-                  runde, verdict, reply.content),
-              project_dir, project_name)
-
-        if verdict == "COMMAND":
-            cmds = parse_commands(reply.content)
-            # Auflage 2183 C (Y1): Loop in gelieferter
-            # Reihenfolge. solver-Commands werden an
-            # _handle_solver_command delegiert, alle
-            # anderen an execute_commands (einzeln,
-            # damit die Reihenfolge erhalten bleibt).
-            for cmd in cmds:
-                if cmd.get("id") == "solver":
-                    _handle_solver_command(
-                        state, cmd, api_key, runde,
-                        max_llm, project_dir, project_name,
-                        max_minutes=max_minutes)
-                else:
-                    execute_commands(state, [cmd],
-                                     quelle="judge")
-            # Auflage 2145: Audit fuer COMMAND in der Review-
-            # Schleife. Sonst ist nicht sichtbar, wann der
-            # Reviewer COMMAND nutzt.
-            audit("judge_command",
-                  {"runde": runde, "anzahl": len(cmds)},
-                  project_dir, project_name)
-            continue
-
-        if verdict == "ESKALATION":
-            print(f"[!] ESKALATION:\n{reply.content[:500]}")
-            v = ask_reviewer_for_recovery(state, "eskalation", reply.content)
-            print_recovery(v)
-            audit("recovery_eskalation",
-                  {"frage_an_menschen": v.frage_an_menschen[:500],
-                   "empfehlung": v.empfehlung[:500]},
-                  project_dir, project_name)
-            return 14
-
-        if verdict == "UNKLAR":
-            # B0b: UNKLAR ist kein NO-GO.
-            _hat_widerspruch = _review_unklar_widerspruch(
-                reply.content)
-            if _hat_widerspruch:
-                print("[i] UNKLAR mit Widerspruchs-Block "
-                      "(R15/S10-konform).")
-                audit("review_unklar_widerspruch",
-                      {"runde": runde},
-                      project_dir, project_name)
-            else:
-                print("[i] UNKLAR ohne Widerspruchs-Block "
-                      "(R15-Verstoss oder Sachunklarheit).")
-                audit("review_r15_verstoss",
-                      {"runde": runde,
-                       "grund": "unklar_ohne_widerspruch"},
-                      project_dir, project_name)
-            _n_unklar = sum(
-                1 for r in state.review_runden[-2:]
-                if r.get("verdict") == "UNKLAR")
-            print(f"[!] Reviewer-Verdikt UNKLAR "
-                  f"(Runde {runde}, "
-                  f"{_n_unklar}x in Folge).")
-            if _n_unklar >= 2:
-                print("[!] 2x UNKLAR in Folge. "
-                      "Eskalation an den Menschen.")
-                print("[i] Moegliche Aktionen:")
-                print("    - Auftrag in phase.yaml "
-                      "praezisieren")
-                print("    - Phase mit --resume-force "
-                      "neu starten")
-                print("    - Phase abbrechen")
-                audit("review_unklar_eskalation",
-                      {"runde": runde,
-                       "n_unklar": _n_unklar,
-                       "raw": reply.content[:2000]},
-                      project_dir, project_name)
-                v = ask_reviewer_for_recovery(
-                    state, "unklar", reply.content)
-                print_recovery(v)
-                return 14
-            continue
-
-        if verdict == "NO-GO":
-            print(f"[-] NO-GO:\n{reply.content[:300]}")
-            # Auflage 2183 A3 + A4/A5 (P1): Trigger.
-            # P1 verfeinert A3 um den Gegenstands-
-            # vergleich. Der Audit-Eintrag wird IMMER
-            # geschrieben (U6/U7), auch wenn nicht
-            # getriggert.
-            n_no_go = zaehle_no_go_in_folge(
-                state.review_runden)
-            schw = state.solver_config.get(
-                "p1_schwellwert", P1_SCHWELLWERT_DEFAULT)
-            mto = int(state.solver_config.get(
-                "p1_min_tokens", P1_MIN_TOKENS_DEFAULT))
-            jw, grund = gegenstand_gleich(
-                state.review_runden, schw, mto)
-            if n_no_go >= 2 and grund == P1_GRUND_GETRIGGERT:
-                state.review_runden[-1]["recovery"] = True
-            audit("solver_trigger",
-                  {"runde": runde,
-                   "n_no_go": n_no_go,
-                   "jaccard": jw,
-                   "schwellwert": schw,
-                   "min_tokens": mto,
-                   "gegenstand_gleich":
-                       grund == P1_GRUND_GETRIGGERT,
-                   "grund": grund},
-                  project_dir, project_name)
-            # Stufe 0 Aenderung 3: Trigger A und B.
-            # II7: nur EIN Solver-Ruf pro Runde. P1
-            # hat Vorrang. A/B nur wenn P1 nicht greift.
-            _trigger_grund = ""
-            if grund == P1_GRUND_GETRIGGERT:
-                _trigger_grund = "p1_trigger"
-            elif state.letzter_patch_wirkungslos:
-                # B4: Builder hat wirkungslosen Patch
-                # geliefert. Solver prueft, ob Auftrag
-                # bereits erfuellt ist.
-                _trigger_grund = "wirkungsloser_patch"
-                audit("solver_trigger_c",
-                      {"runde": runde},
-                      project_dir, project_name)
-            elif state.anker_fehler_in_folge >= 2:
-                _trigger_grund = "anker_nicht_gemessen"
-                audit("solver_trigger_a",
-                      {"runde": runde,
-                       "in_folge":
-                           state.anker_fehler_in_folge},
-                      project_dir, project_name)
-            elif pruefe_trigger_b(reply.content):
-                _trigger_grund = "builder_rueckfrage"
-                audit("solver_trigger_b",
-                      {"runde": runde},
-                      project_dir, project_name)
-            # Auflage 2183 B (X6): Solver-Call NUR
-            # bei GETRIGGERT (P1) oder A/B.
-            if _trigger_grund:
-                # Auflage 2183 Block 5 (GG1):
-                # Obergrenze fuer Solver-Aufrufe.
-                _msr = int(state.solver_config.get(
-                    "max_runden",
-                    MAX_SOLVER_RUNDEN_DEFAULT))
-                if not erhoehe_solver_aufruf(state, _msr):
-                    state.review_runden[-1]["recovery"] = False
-                    audit("solver_max_runden_erreicht",
-                          {"runde": runde,
-                           "aufrufe": state.solver_aufrufe,
-                           "max_runden": _msr,
-                           "pfad": "no_go"},
-                          project_dir, project_name)
-                    rc = budget_or_recover(
-                        state, max_llm,
-                        "Nach Solver-Limit.",
-                        project_dir, project_name,
-                        max_minutes=max_minutes)
-                    if rc is not None:
-                        return rc
-                    continue
-                # X5: eigenes Budget-Gate.
-                rc_solver = budget_or_recover(
-                    state, max_llm,
-                    f"Vor Solver-Call (Runde {runde}).",
-                    project_dir, project_name,
-                    max_minutes=max_minutes)
-                if rc_solver is not None:
-                    state.review_runden[-1]["recovery"] = False
-                    audit("solver_budget_exhausted",
-                          {"runde": runde},
-                          project_dir, project_name)
-                else:
-                    solver_prompt = build_system_prompt(
-                        state.agents["solver"], state.docs,
-                        state.agent_docs.get("solver", []))
-                    befund, fehler = rufe_solver(
-                        state, api_key, solver_prompt,
-                        grund_text=_trigger_grund,
-                        trigger_grund=_trigger_grund,
-                        aufrufer="trigger_a_b_c")
-                    if befund is None:
-                        # X3: Marker zurueck,
-                        # fail-closed (kein Dauer-Block).
-                        state.review_runden[-1]["recovery"] = False
-                        audit("solver_failed",
-                              {"runde": runde,
-                               "grund": fehler},
-                              project_dir, project_name)
-                    else:
-                        state.solver_befunde.append(befund)
-                        state.solver_trigger_quellen.append(
-                            _trigger_grund)
-                        audit("solver_befund",
-                              {"runde": runde,
-                               "art": befund.art.name,
-                               "run_id": befund.run_id,
-                               "quelle": _trigger_grund},
-                              project_dir, project_name)
-            rc = budget_or_recover(state, max_llm,
-                                  f"Vor Builder-Neubau (NO-GO Runde {runde}).",
-                                  project_dir, project_name,
-                                  max_minutes=max_minutes)
-            if rc is not None:
-                return rc
-            def _bauer_no_go_prompt(
-                    s: RunState,
-                    _reply: LLMReply = reply) -> str:
-                # P2b-Frage-B: Antwort-Modus.
-                # Wenn der Reviewer auf eine Frage
-                # geantwortet hat, heisst der Kopf
-                # "Reviewer-Antwort", nicht NO-GO.
-                kopf = ("Reviewer-Antwort auf deine Frage"
-                        if s.letzte_reviewer_antwort
-                        else "Reviewer NO-GO")
-                antwort_block = ""
-                if s.letzte_reviewer_antwort:
-                    antwort_block = (
-                        "=== REVIEWER-ANTWORT auf deine "
-                        "Frage ===\n"
-                        + s.letzte_reviewer_antwort
-                        + "\n\n")
-                    # Verbrauchen.
-                    s.letzte_reviewer_antwort = ""
-                return (
-                    f"{kopf}:\n{_reply.content}\n\n"
-                    + antwort_block
-                    + _solver_befund_block(s)
-                    + "GEMESSENER INHALT (verbindlich):\n"
-                    + f"{_messwerte_fuer_prompt(s)}\n\n"
-                    + "Ueberarbeite den Code-Entwurf. "
-                    + "Liefere strukturierte Code-Patches."
-                )
-            bauer_reply_roh, bauer_rc = builder_reply_mit_command_loop(
-                state, api_key, builder_prompt, _bauer_no_go_prompt,
-                project_dir, project_name,
-                max_builder_runden=budget.get("max_builder_runden", 3),
-                max_llm=max_llm, max_minutes=max_minutes,
-            )
-            if bauer_rc is not None:
-                return bauer_rc
-            assert bauer_reply_roh is not None
-            if bauer_reply_roh.ok:
-                # A1b-fix: NO-GO-Builder, normal.
-                record_code_entwurf(
-                    state, bauer_reply_roh.content,
-                    phase="normal")
-                state.code_patches = parse_code_patches(
-                    bauer_reply_roh.content)
-            continue
-
-        if verdict == "GO":
-            # Auflage 2117: GO mit Auflagen -> eine weitere Runde.
-            auflagen = (state.auflagen_log[-1]
-                        if state.auflagen_log else [])
-            if auflagen and runde < max_rounds:
-                print(f"[i] Code-GO mit {len(auflagen)} Auflagen. "
-                      "Weitere Runde zur Umsetzung.")
-                rc = budget_or_recover(
-                    state, max_llm,
-                    f"Vor Builder-Aufruf (Auflagen-Umsetzung Runde {runde}).",
-                    project_dir, project_name,
-                    max_minutes=max_minutes)
-                if rc is not None:
-                    return rc
-                auflagen_text = "\n".join(f"- {a}" for a in auflagen)
-                def _bauer_auflagen_prompt(
-                        s: RunState,
-                        _at: str = auflagen_text) -> str:
-                    return (
-                        "Der Reviewer hat GO gegeben, aber folgende "
-                        f"Auflagen formuliert:\n{_at}\n\n"
-                        + "GEMESSENER INHALT (verbindlich):\n"
-                        + f"{_messwerte_fuer_prompt(s)}\n\n"
-                        + "Ueberarbeite die Code-Patches, um die "
-                        + "Auflagen umzusetzen. Antworte mit den "
-                        + "ueberarbeiteten PATCH-BEGINN/PATCH-ENDE-"
-                        + "Bloecken. Kein freier Text."
-                    )
-                bauer_reply_roh, bauer_rc = (
-                    builder_reply_mit_command_loop(
-                        state, api_key, builder_prompt,
-                        _bauer_auflagen_prompt,
-                        project_dir, project_name,
-                        max_builder_runden=budget.get(
-                            "max_builder_runden", 3),
-                        max_llm=max_llm, max_minutes=max_minutes,
-                    )
-                )
-                if bauer_rc is not None:
-                    return bauer_rc
-                assert bauer_reply_roh is not None
-                if bauer_reply_roh.ok:
-                    # A1b-fix: Auflagen-Builder, normal.
-                    record_code_entwurf(
-                        state, bauer_reply_roh.content,
-                        phase="normal")
-                    state.code_patches = parse_code_patches(
-                        bauer_reply_roh.content)
-                    print(f"[i] {len(state.code_patches)} Code-Patches "
-                          f"nach Auflagen-Umsetzung geparst.")
-                continue
-            print("[+] Code-GO erhalten.")
+        _v2_rc = _review_verdict_behandlung(
+            state=state, reply=reply, verdict=verdict,
+            runde=runde, max_rounds=max_rounds,
+            api_key=api_key, project_dir=project_dir,
+            project_name=project_name,
+            max_llm=max_llm, max_minutes=max_minutes,
+            budget=budget, builder_prompt=builder_prompt,
+        )
+        if isinstance(_v2_rc, int):
+            return _v2_rc
+        if _v2_rc == 'break':
             break
+        continue
 
     if verdict != "GO":
         kontext = (
@@ -9072,6 +8782,325 @@ def run_pipeline(project_name: str, aufgabe: str,
     audit("pipeline_escalated", {"runden": len(state.review_runden)},
           project_dir, project_name)
     return 0
+
+def _review_verdict_behandlung(
+        state: RunState, reply: LLMReply, verdict: str,
+        runde: int, max_rounds: int,
+        api_key: str, project_dir: Path,
+        project_name: str,
+        max_llm: int, max_minutes: int,
+        budget: dict, builder_prompt: str,
+) -> int | None | Literal['break']:
+    """Review-Verdict-Dispatch (extrahiert aus run_pipeline).
+
+    Rueckgabe: None -> continue, 'break' -> break, int -> return rc.
+    """
+
+    state.empfehlung_log.append(parse_empfehlung(reply.content))
+    audit("judge_round",
+          _review_round_audit_payload(
+              runde, verdict, reply.content),
+          project_dir, project_name)
+
+    if verdict == "COMMAND":
+        cmds = parse_commands(reply.content)
+        # Auflage 2183 C (Y1): Loop in gelieferter
+        # Reihenfolge. solver-Commands werden an
+        # _handle_solver_command delegiert, alle
+        # anderen an execute_commands (einzeln,
+        # damit die Reihenfolge erhalten bleibt).
+        for cmd in cmds:
+            if cmd.get("id") == "solver":
+                _handle_solver_command(
+                    state, cmd, api_key, runde,
+                    max_llm, project_dir, project_name,
+                    max_minutes=max_minutes)
+            else:
+                execute_commands(state, [cmd],
+                                 quelle="judge")
+        # Auflage 2145: Audit fuer COMMAND in der Review-
+        # Schleife. Sonst ist nicht sichtbar, wann der
+        # Reviewer COMMAND nutzt.
+        audit("judge_command",
+              {"runde": runde, "anzahl": len(cmds)},
+              project_dir, project_name)
+        return None
+
+    if verdict == "ESKALATION":
+        print(f"[!] ESKALATION:\n{reply.content[:500]}")
+        v = ask_reviewer_for_recovery(state, "eskalation", reply.content)
+        print_recovery(v)
+        audit("recovery_eskalation",
+              {"frage_an_menschen": v.frage_an_menschen[:500],
+               "empfehlung": v.empfehlung[:500]},
+              project_dir, project_name)
+        return 14
+
+    if verdict == "UNKLAR":
+        # B0b: UNKLAR ist kein NO-GO.
+        _hat_widerspruch = _review_unklar_widerspruch(
+            reply.content)
+        if _hat_widerspruch:
+            print("[i] UNKLAR mit Widerspruchs-Block "
+                  "(R15/S10-konform).")
+            audit("review_unklar_widerspruch",
+                  {"runde": runde},
+                  project_dir, project_name)
+        else:
+            print("[i] UNKLAR ohne Widerspruchs-Block "
+                  "(R15-Verstoss oder Sachunklarheit).")
+            audit("review_r15_verstoss",
+                  {"runde": runde,
+                   "grund": "unklar_ohne_widerspruch"},
+                  project_dir, project_name)
+        _n_unklar = sum(
+            1 for r in state.review_runden[-2:]
+            if r.get("verdict") == "UNKLAR")
+        print(f"[!] Reviewer-Verdikt UNKLAR "
+              f"(Runde {runde}, "
+              f"{_n_unklar}x in Folge).")
+        if _n_unklar >= 2:
+            print("[!] 2x UNKLAR in Folge. "
+                  "Eskalation an den Menschen.")
+            print("[i] Moegliche Aktionen:")
+            print("    - Auftrag in phase.yaml "
+                  "praezisieren")
+            print("    - Phase mit --resume-force "
+                  "neu starten")
+            print("    - Phase abbrechen")
+            audit("review_unklar_eskalation",
+                  {"runde": runde,
+                   "n_unklar": _n_unklar,
+                   "raw": reply.content[:2000]},
+                  project_dir, project_name)
+            v = ask_reviewer_for_recovery(
+                state, "unklar", reply.content)
+            print_recovery(v)
+            return 14
+        return None
+
+    if verdict == "NO-GO":
+        print(f"[-] NO-GO:\n{reply.content[:300]}")
+        # Auflage 2183 A3 + A4/A5 (P1): Trigger.
+        # P1 verfeinert A3 um den Gegenstands-
+        # vergleich. Der Audit-Eintrag wird IMMER
+        # geschrieben (U6/U7), auch wenn nicht
+        # getriggert.
+        n_no_go = zaehle_no_go_in_folge(
+            state.review_runden)
+        schw = state.solver_config.get(
+            "p1_schwellwert", P1_SCHWELLWERT_DEFAULT)
+        mto = int(state.solver_config.get(
+            "p1_min_tokens", P1_MIN_TOKENS_DEFAULT))
+        jw, grund = gegenstand_gleich(
+            state.review_runden, schw, mto)
+        if n_no_go >= 2 and grund == P1_GRUND_GETRIGGERT:
+            state.review_runden[-1]["recovery"] = True
+        audit("solver_trigger",
+              {"runde": runde,
+               "n_no_go": n_no_go,
+               "jaccard": jw,
+               "schwellwert": schw,
+               "min_tokens": mto,
+               "gegenstand_gleich":
+                   grund == P1_GRUND_GETRIGGERT,
+               "grund": grund},
+              project_dir, project_name)
+        # Stufe 0 Aenderung 3: Trigger A und B.
+        # II7: nur EIN Solver-Ruf pro Runde. P1
+        # hat Vorrang. A/B nur wenn P1 nicht greift.
+        _trigger_grund = ""
+        if grund == P1_GRUND_GETRIGGERT:
+            _trigger_grund = "p1_trigger"
+        elif state.letzter_patch_wirkungslos:
+            # B4: Builder hat wirkungslosen Patch
+            # geliefert. Solver prueft, ob Auftrag
+            # bereits erfuellt ist.
+            _trigger_grund = "wirkungsloser_patch"
+            audit("solver_trigger_c",
+                  {"runde": runde},
+                  project_dir, project_name)
+        elif state.anker_fehler_in_folge >= 2:
+            _trigger_grund = "anker_nicht_gemessen"
+            audit("solver_trigger_a",
+                  {"runde": runde,
+                   "in_folge":
+                       state.anker_fehler_in_folge},
+                  project_dir, project_name)
+        elif pruefe_trigger_b(reply.content):
+            _trigger_grund = "builder_rueckfrage"
+            audit("solver_trigger_b",
+                  {"runde": runde},
+                  project_dir, project_name)
+        # Auflage 2183 B (X6): Solver-Call NUR
+        # bei GETRIGGERT (P1) oder A/B.
+        if _trigger_grund:
+            # Auflage 2183 Block 5 (GG1):
+            # Obergrenze fuer Solver-Aufrufe.
+            _msr = int(state.solver_config.get(
+                "max_runden",
+                MAX_SOLVER_RUNDEN_DEFAULT))
+            if not erhoehe_solver_aufruf(state, _msr):
+                state.review_runden[-1]["recovery"] = False
+                audit("solver_max_runden_erreicht",
+                      {"runde": runde,
+                       "aufrufe": state.solver_aufrufe,
+                       "max_runden": _msr,
+                       "pfad": "no_go"},
+                      project_dir, project_name)
+                rc = budget_or_recover(
+                    state, max_llm,
+                    "Nach Solver-Limit.",
+                    project_dir, project_name,
+                    max_minutes=max_minutes)
+                if rc is not None:
+                    return rc
+                return None
+            # X5: eigenes Budget-Gate.
+            rc_solver = budget_or_recover(
+                state, max_llm,
+                f"Vor Solver-Call (Runde {runde}).",
+                project_dir, project_name,
+                max_minutes=max_minutes)
+            if rc_solver is not None:
+                state.review_runden[-1]["recovery"] = False
+                audit("solver_budget_exhausted",
+                      {"runde": runde},
+                      project_dir, project_name)
+            else:
+                solver_prompt = build_system_prompt(
+                    state.agents["solver"], state.docs,
+                    state.agent_docs.get("solver", []))
+                befund, fehler = rufe_solver(
+                    state, api_key, solver_prompt,
+                    grund_text=_trigger_grund,
+                    trigger_grund=_trigger_grund,
+                    aufrufer="trigger_a_b_c")
+                if befund is None:
+                    # X3: Marker zurueck,
+                    # fail-closed (kein Dauer-Block).
+                    state.review_runden[-1]["recovery"] = False
+                    audit("solver_failed",
+                          {"runde": runde,
+                           "grund": fehler},
+                          project_dir, project_name)
+                else:
+                    state.solver_befunde.append(befund)
+                    state.solver_trigger_quellen.append(
+                        _trigger_grund)
+                    audit("solver_befund",
+                          {"runde": runde,
+                           "art": befund.art.name,
+                           "run_id": befund.run_id,
+                           "quelle": _trigger_grund},
+                          project_dir, project_name)
+        rc = budget_or_recover(state, max_llm,
+                              f"Vor Builder-Neubau (NO-GO Runde {runde}).",
+                              project_dir, project_name,
+                              max_minutes=max_minutes)
+        if rc is not None:
+            return rc
+        def _bauer_no_go_prompt(
+                s: RunState,
+                _reply: LLMReply = reply) -> str:
+            # P2b-Frage-B: Antwort-Modus.
+            # Wenn der Reviewer auf eine Frage
+            # geantwortet hat, heisst der Kopf
+            # "Reviewer-Antwort", nicht NO-GO.
+            kopf = ("Reviewer-Antwort auf deine Frage"
+                    if s.letzte_reviewer_antwort
+                    else "Reviewer NO-GO")
+            antwort_block = ""
+            if s.letzte_reviewer_antwort:
+                antwort_block = (
+                    "=== REVIEWER-ANTWORT auf deine "
+                    "Frage ===\n"
+                    + s.letzte_reviewer_antwort
+                    + "\n\n")
+                # Verbrauchen.
+                s.letzte_reviewer_antwort = ""
+            return (
+                f"{kopf}:\n{_reply.content}\n\n"
+                + antwort_block
+                + _solver_befund_block(s)
+                + "GEMESSENER INHALT (verbindlich):\n"
+                + f"{_messwerte_fuer_prompt(s)}\n\n"
+                + "Ueberarbeite den Code-Entwurf. "
+                + "Liefere strukturierte Code-Patches."
+            )
+        bauer_reply_roh, bauer_rc = builder_reply_mit_command_loop(
+            state, api_key, builder_prompt, _bauer_no_go_prompt,
+            project_dir, project_name,
+            max_builder_runden=budget.get("max_builder_runden", 3),
+            max_llm=max_llm, max_minutes=max_minutes,
+        )
+        if bauer_rc is not None:
+            return bauer_rc
+        assert bauer_reply_roh is not None
+        if bauer_reply_roh.ok:
+            # A1b-fix: NO-GO-Builder, normal.
+            record_code_entwurf(
+                state, bauer_reply_roh.content,
+                phase="normal")
+            state.code_patches = parse_code_patches(
+                bauer_reply_roh.content)
+        return None
+
+    if verdict == "GO":
+        # Auflage 2117: GO mit Auflagen -> eine weitere Runde.
+        auflagen = (state.auflagen_log[-1]
+                    if state.auflagen_log else [])
+        if auflagen and runde < max_rounds:
+            print(f"[i] Code-GO mit {len(auflagen)} Auflagen. "
+                  "Weitere Runde zur Umsetzung.")
+            rc = budget_or_recover(
+                state, max_llm,
+                f"Vor Builder-Aufruf (Auflagen-Umsetzung Runde {runde}).",
+                project_dir, project_name,
+                max_minutes=max_minutes)
+            if rc is not None:
+                return rc
+            auflagen_text = "\n".join(f"- {a}" for a in auflagen)
+            def _bauer_auflagen_prompt(
+                    s: RunState,
+                    _at: str = auflagen_text) -> str:
+                return (
+                    "Der Reviewer hat GO gegeben, aber folgende "
+                    f"Auflagen formuliert:\n{_at}\n\n"
+                    + "GEMESSENER INHALT (verbindlich):\n"
+                    + f"{_messwerte_fuer_prompt(s)}\n\n"
+                    + "Ueberarbeite die Code-Patches, um die "
+                    + "Auflagen umzusetzen. Antworte mit den "
+                    + "ueberarbeiteten PATCH-BEGINN/PATCH-ENDE-"
+                    + "Bloecken. Kein freier Text."
+                )
+            bauer_reply_roh, bauer_rc = (
+                builder_reply_mit_command_loop(
+                    state, api_key, builder_prompt,
+                    _bauer_auflagen_prompt,
+                    project_dir, project_name,
+                    max_builder_runden=budget.get(
+                        "max_builder_runden", 3),
+                    max_llm=max_llm, max_minutes=max_minutes,
+                )
+            )
+            if bauer_rc is not None:
+                return bauer_rc
+            assert bauer_reply_roh is not None
+            if bauer_reply_roh.ok:
+                # A1b-fix: Auflagen-Builder, normal.
+                record_code_entwurf(
+                    state, bauer_reply_roh.content,
+                    phase="normal")
+                state.code_patches = parse_code_patches(
+                    bauer_reply_roh.content)
+                print(f"[i] {len(state.code_patches)} Code-Patches "
+                      f"nach Auflagen-Umsetzung geparst.")
+            return None
+        print("[+] Code-GO erhalten.")
+        return 'break'
+    return None
+
 
 
 
