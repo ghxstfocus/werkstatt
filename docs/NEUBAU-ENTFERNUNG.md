@@ -56,3 +56,18 @@ Nach Phase 3b (Hooks eingebaut):
 Nach Phase 3c:
 - lade_anti_patterns -> incidents.py oder entfaellt.
 
+
+### Nachtrag 2026-10-19 — Befund BO/BP (prompts.py)
+
+| Was | Wo jetzt | Warum entfernen | Wann | Ersatz |
+|---|---|---|---|---|
+| build_system_prompt (45 Z.) | pipeline.py | Ruft _anti_pattern_block (Anker). Nach Anti-Pattern-Abloesung nach prompts.py. | Phase 3b/6 | prompts.py (ohne Anti-Pattern-Block) |
+| _anti_pattern_block (43 Z.) | pipeline.py:638 | Prompt-Blockade durch Hooks ersetzt | Phase 3b | hooks.py (PreToolUse: mypy/ruff-Gate blockiert) |
+
+**Zaehl-Klaerung A-4:**
+prompts.py-Auftrag in Gate 18B: 21 Funktionen.
+Aufteilung nach Messung:
+- 8 in prompts.py (extrahiert, 7f51a63).
+- 12 in commit_input.py (naechster Schritt).
+- 1 build_system_prompt (pipeline.py, Befund BO).
+Summe: 21.
