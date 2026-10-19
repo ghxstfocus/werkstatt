@@ -2116,6 +2116,8 @@ class TestApplyCodePatches:
             audit_calls.append((kind, payload))
 
         monkeypatch.setattr(pipeline, "audit", fake_audit)
+        import werkstatt.apply
+        monkeypatch.setattr(werkstatt.apply, "audit", fake_audit)
         patches = [{"pfad": "tools/x.py",
                     "anker": "      self.assertEqual(1, 1)",
                     "ersatz": "      self.assertEqual(1, 1)\n"}]
@@ -5235,7 +5237,7 @@ class TestApplyNewFile:
                     "pfad": "core/hello.py",
                     "inhalt": "x = 1\n"}]
         from unittest.mock import patch
-        with patch("pipeline.audit"):
+        with patch("werkstatt.apply.audit"):
             _setze_gelesen(state, patches)
             ok = pipeline.apply_code_patches(state, patches)
         assert ok is True
@@ -5250,7 +5252,7 @@ class TestApplyNewFile:
                     "pfad": "core/hello.py",
                     "inhalt": "neu\n"}]
         from unittest.mock import patch
-        with patch("pipeline.audit"):
+        with patch("werkstatt.apply.audit"):
             _setze_gelesen(state, patches)
             ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
@@ -5262,7 +5264,7 @@ class TestApplyNewFile:
                     "pfad": "other/hello.py",
                     "inhalt": "x\n"}]
         from unittest.mock import patch
-        with patch("pipeline.audit"):
+        with patch("werkstatt.apply.audit"):
             _setze_gelesen(state, patches)
             ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
@@ -5276,7 +5278,7 @@ class TestApplyNewFile:
             {"typ": "new_file", "pfad": "core/a.py", "inhalt": "y\n"},
         ]
         from unittest.mock import patch
-        with patch("pipeline.audit"):
+        with patch("werkstatt.apply.audit"):
             _setze_gelesen(state, patches)
             ok = pipeline.apply_code_patches(state, patches)
         assert ok is False
@@ -10703,7 +10705,7 @@ def test_w54_c_zwei_normale_patches(tmp_path):
                    "    return x - y\n"},
     ]
     import unittest.mock as _m
-    with _m.patch("pipeline.audit",
+    with _m.patch("werkstatt.apply.audit",
                   side_effect=lambda k, *a, **kw: None):
         _setze_gelesen(st, patches)
         ok = pipeline.apply_code_patches(st, patches)
@@ -10729,7 +10731,7 @@ def test_w54_d_kurzer_ersatz_kein_fail(tmp_path):
     ]
     calls = []
     import unittest.mock as _m
-    with _m.patch("pipeline.audit",
+    with _m.patch("werkstatt.apply.audit",
                   side_effect=lambda k, *a, **kw: calls.append(k)):
         _setze_gelesen(st, patches)
         ok = pipeline.apply_code_patches(st, patches)
@@ -10771,7 +10773,7 @@ def test_w54_g_a_anker_doppelt(tmp_path):
                 "ersatz": ersatz}]
     calls = []
     import unittest.mock as _m
-    with _m.patch("pipeline.audit",
+    with _m.patch("werkstatt.apply.audit",
                   side_effect=lambda k, *a, **kw: calls.append(
                       (k, a, kw))):
         _setze_gelesen(st, patches)
@@ -10797,7 +10799,7 @@ def test_w54_g_b_verschiedene_zeilen(tmp_path):
             "    return 2\n")}]
     calls = []
     import unittest.mock as _m
-    with _m.patch("pipeline.audit",
+    with _m.patch("werkstatt.apply.audit",
                   side_effect=lambda k, *a, **kw: calls.append(k)):
         _setze_gelesen(st, patches)
         ok = pipeline.apply_code_patches(st, patches)
@@ -10819,7 +10821,7 @@ def test_w54_g_c_lange_zeile_doppelt(tmp_path):
                 "ersatz": ersatz}]
     calls = []
     import unittest.mock as _m
-    with _m.patch("pipeline.audit",
+    with _m.patch("werkstatt.apply.audit",
                   side_effect=lambda k, *a, **kw: calls.append(
                       (k, a, kw))):
         _setze_gelesen(st, patches)
@@ -10848,7 +10850,7 @@ def test_w54_g_d_kurze_legit_doppelt(tmp_path):
             "    assert result == 1\n")}]
     calls = []
     import unittest.mock as _m
-    with _m.patch("pipeline.audit",
+    with _m.patch("werkstatt.apply.audit",
                   side_effect=lambda k, *a, **kw: calls.append(k)):
         _setze_gelesen(st, patches)
         ok = pipeline.apply_code_patches(st, patches)
