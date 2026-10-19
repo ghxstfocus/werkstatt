@@ -10963,3 +10963,142 @@ class TestVerifyCharakterisierung:
         assert any("unbekanntes Symbol" in b for b in befunde), (
             f"erwartet: Befund 'unbekanntes Symbol', "
             f"gefunden: {befunde}")
+
+
+class TestTragendCharakterisierung:
+    """Charakterisierungs-Tests fuer die restlichen 8 TRAGEND-
+    Funktionen ohne Test-Referenz (Neubau 21b-2, 2026-10-19).
+
+    Befund AQ zeigte: 24 TRAGEND-Funktionen ohne Test-Referenz.
+    Vier sind in TestVerifyCharakterisierung abgedeckt. Die
+    restlichen sind kleine Utilities — diese Klasse schreibt
+    ihr aktuelles Verhalten fest, bevor sie in den Neubau
+    wandern.
+
+    Kein Wunsch-Verhalten, Ist-Zustand.
+
+    _pipeline_ende fehlt bewusst: Ein-Zeilen-Delegation an
+    audit(), das in test_audit.py bereits geprueft wird
+    (indirekt abgesichert).
+    """
+
+    def test_alias_docs_aus_schema(self) -> None:
+        """Schema-Schluessel mit 'alias: alt' -> {alt: neu}."""
+        schema = {
+            "schluessel": {
+                "reviewer": {"alias": "handoff"},
+                "context": {},
+            }
+        }
+        m = pipeline._alias_docs_aus_schema(schema)
+        assert m == {"handoff": "reviewer"}
+
+    def test_alias_docs_aus_schema_leer(self) -> None:
+        """Leeres Schema -> leere Map."""
+        assert pipeline._alias_docs_aus_schema({}) == {}
+
+    def test_lade_schema_echte_datei(self) -> None:
+        """Echtes Schema laden -> dict mit 'felder'."""
+        schema = pipeline._lade_schema()
+        assert isinstance(schema, dict)
+        assert "felder" in schema
+
+    def test_typ_ok_str_null(self) -> None:
+        assert pipeline._typ_ok(None, "str | null") is True
+        assert pipeline._typ_ok("x", "str | null") is True
+        assert pipeline._typ_ok(42, "str | null") is False
+
+    def test_typ_ok_str(self) -> None:
+        assert pipeline._typ_ok("x", "str") is True
+        assert pipeline._typ_ok(42, "str") is False
+
+    def test_typ_ok_bool(self) -> None:
+        assert pipeline._typ_ok(True, "bool") is True
+        assert pipeline._typ_ok(1, "bool") is False
+
+    def test_typ_ok_int_nicht_bool(self) -> None:
+        """Wichtig: bool ist int-Subklasse, _typ_ok
+        schliesst bool aus."""
+        assert pipeline._typ_ok(42, "int") is True
+        assert pipeline._typ_ok(True, "int") is False
+        assert pipeline._typ_ok("42", "int") is False
+
+    def test_typ_ok_float_nicht_bool(self) -> None:
+        assert pipeline._typ_ok(3.14, "float") is True
+        assert pipeline._typ_ok(42, "float") is True
+        assert pipeline._typ_ok(True, "float") is False
+
+    def test_typ_ok_list_str(self) -> None:
+        assert pipeline._typ_ok(["a", "b"], "list[str]") is True
+        assert pipeline._typ_ok(["a", 1], "list[str]") is False
+        assert pipeline._typ_ok("a", "list[str]") is False
+
+    def test_typ_ok_unbekannter_typ_permissiv(self) -> None:
+        """Unbekannter Typ -> True (permissiv)."""
+        assert pipeline._typ_ok("irgendwas", "unbekannt") is True
+
+    def test_pruefe_docs_alias_aufgeloest(self) -> None:
+        """Alias-Schluessel wird umbenannt, Meldung angehaengt."""
+        config = {"docs": {"handoff": "x.md"}}
+        schema_docs = {
+            "schluessel": {
+                "reviewer": {"alias": "handoff", "kategorie": "K"},
+            }
+        }
+        meldungen: list[str] = []
+        pipeline._pruefe_docs(config, schema_docs, meldungen)
+        assert "reviewer" in config["docs"]
+        assert "handoff" not in config["docs"]
+        assert any("Alias" in m for m in meldungen)
+
+    def test_pruefe_docs_unbekannt(self) -> None:
+        """Unbekannter Schluessel -> Meldung."""
+        config = {"docs": {"foo": "x.md"}}
+        schema_docs = {"schluessel": {"reviewer": {}}}
+        meldungen: list[str] = []
+        pipeline._pruefe_docs(config, schema_docs, meldungen)
+        assert any("foo" in m and "unbekannt" in m for m in meldungen)
+
+    def test_pruefe_docs_pflichtfeld_fehlt(self) -> None:
+        """Pflichtfeld (kategorie K) fehlt -> Meldung."""
+        config = {"docs": {}}
+        schema_docs = {
+            "schluessel": {"reviewer": {"kategorie": "K"}}
+        }
+        meldungen: list[str] = []
+        pipeline._pruefe_docs(config, schema_docs, meldungen)
+        assert any("Pflichtfeld" in m for m in meldungen)
+
+    def test_letzter_reviewer_befund_leer(self) -> None:
+        """Ohne Review-Runden -> leerer String."""
+        st = pipeline.RunState(
+            block_id="t", aufgabe="a", start_ts="",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=[], api_key="", budget={},
+            agent_docs={}, project_dir=Path("/tmp"))
+        assert pipeline._letzter_reviewer_befund(st) == ""
+
+    def test_letzter_reviewer_befund_max_500(self) -> None:
+        """raw wird auf 500 Zeichen gekuerzt."""
+        st = pipeline.RunState(
+            block_id="t", aufgabe="a", start_ts="",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=[], api_key="", budget={},
+            agent_docs={}, project_dir=Path("/tmp"))
+        st.review_runden = [{"raw": "x" * 1000}]
+        bef = pipeline._letzter_reviewer_befund(st)
+        assert len(bef) == 500
+
+    def test_git_diff_phase_fehler_leer(self, tmp_path) -> None:
+        """Leeres Repo -> leerer String (kein Crash)."""
+        result = pipeline._git_diff_phase(tmp_path, "HEAD")
+        assert result == ""
+
+    def test_list_skills_echte_dir(self) -> None:
+        """Echte skills/-Dir -> Liste mit name+description."""
+        skills = pipeline._list_skills()
+        assert isinstance(skills, list)
+        assert len(skills) > 0
+        for s in skills:
+            assert "name" in s
+            assert "description" in s
