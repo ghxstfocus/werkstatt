@@ -125,8 +125,6 @@ Drei Kategorien mit klarer Semantik:
 | NEUBAU | 5845 | 23 | format_solver_befund |
 | NEUBAU | 5870 | 39 | _solver_befund_block |
 | NEUBAU | 5911 | 18 | parse_solver_diagnose |
-| UNKLAR | 5931 | 24 | _parse_solver_feld |
-| UNKLAR | 5957 | 11 | _parse_solver_kandidaten |
 | NEUBAU | 5970 | 28 | baue_solver_befund |
 | NEUBAU | 6000 | 17 | _letzte_zwei_entwuerfe |
 | NEUBAU | 6019 | 64 | _solver_prompt_bauen |
@@ -221,6 +219,8 @@ Drei Kategorien mit klarer Semantik:
 | TRAGEND | 13457 | 12 | _validate_new_phase_args |
 | TRAGEND-REFACTOR | 13471 | 212 | main |
 
+| NEUBAU | 5931 | 24 | _parse_solver_feld |
+| NEUBAU | 5957 | 11 | _parse_solver_kandidaten |
 ## Auflage 21b-2 — Risiko-Akzeptanz pro TRAGEND-Funktion ohne direkte Test-Referenz
 
 Reviewer-Auflage: Kein stilles "indirekt abgedeckt".
@@ -308,3 +308,218 @@ Unterschied zu NEUBAU (70 Funktionen, 3401 Z.) ist:
 - TRAGEND-REFACTOR-Funktionen tragen Logik, die in
   neue Struktur zerlegt wird (Verhalten identisch,
   Baseline intakt).
+
+## Auflage 21a-1-a — Deklaration Option-3-Reduktion
+
+Reviewer-Auflage: Die Kategorie-Verschiebung muss
+deklariert werden, nicht stillschweigend passieren.
+
+### Neue Kategorie-Verteilung (nach Spot-Check)
+
+| Kategorie | Funktionen | Zeilen | Anteil |
+|---|---|---|---|
+| TRAGEND | 104 | 4.231 | 35,3 % |
+| TRAGEND-REFACTOR | 15 | 4.316 | 36,0 % |
+| NEUBAU | 72 | 3.436 | 28,7 % |
+| **Gesamt** | **191** | **11.983** | 100 % |
+
+### Korrektur der Reviewer-Schaetzung
+
+Der Reviewer schrieb in Gate 21a-1:
+
+> "Wenn run_pipeline (1468) + _phase_main_pfad (640)
+> + vermutlich _phase_planner_resume (589) + run_phase
+> (528) -> REFACTOR wandern, dann: NEUBAU: ~66
+> Funktionen, ~176 Zeilen (ca. 4%)."
+
+Die Annahme "_phase_planner_resume -> REFACTOR" ist
+nicht korrekt. Der Bau-Chat hat _phase_planner_resume
+(589 Z.) als NEUBAU klassifiziert, weil:
+
+- Planner-Resume faellt in Phase 3 (Befund E,
+  Reviewer-Gate 15 B: "Planer-Resume nur bei no_go,
+  nicht bei failed").
+- Im neuen Loop gibt es keinen Planner-Resume-Pfad
+  mehr. Der Contract wird einmal gebaut, nicht
+  resumed.
+- Damit ist _phase_planner_resume kein REFACTOR-
+  Material (Verhalten bleibt), sondern NEUBAU
+  (Verhalten aendert sich).
+
+Konsequenz: Die echte Option-3-Reduktion ist nicht
+~4% NEUBAU, sondern 28,7% NEUBAU. Die Verteilung
+ist:
+
+- 35% TRAGEND (bleibt 1:1)
+- 36% REFACTOR (Verhalten bleibt, Struktur neu)
+- 29% NEUBAU (Verhalten aendert sich)
+
+Das ist naeher an Gate 20 (Option 3 = Hybrid) als
+die Reviewer-Schaetzung. Hybrid heisst: substanzieller
+Teil wird neu gebaut (29%), nicht nur "Aufraeumen"
+(4%).
+
+### Verbleibende NEUBAU-Funktionen namentlich
+
+Die 72 NEUBAU-Funktionen (3.436 Z.) in Gruppen:
+
+**Gruppe 1 — Phase-YAML (wird state.json):**
+_phase_yaml_pfad (6), _phase_yaml_status_update (81),
+_phase_rollback (134), _phase_plan_laden (74),
+_phase_plan_speichern (55), _phase_plan_als_text (61),
+_phase_edit_modus (70), _phase_rr_k8 (66),
+_phase_sammel_message (41), _phase_sammel_paket (25),
+_phase_stand_sektion (58), _phase_finish_aktiv (29).
+Summe: ~700 Z. Grund: YAML + Regex wird JSON + Schema.
+
+**Gruppe 2 — Planner-Resume / Plan-Validierung:**
+_phase_planner_resume (589), _resume_force_reset (32),
+_plan_ist_messungsbasiert (85),
+_plan_ist_portionierbar (50),
+_plan_ist_new_file_valide (75),
+_plan_ist_messungsbasiert_praefix_zaehler (11),
+_plan_unbeantwortet_punkte (27).
+Summe: ~869 Z. Grund: Planner-Resume faellt in
+Phase 3.
+
+**Gruppe 3 — Contract-Format (neu):**
+_contract_aus_unterblock (18), _contract_pfad (4),
+_lese_contract (12), _schreibe_contract (18),
+_lese_plan (12), _schreibe_plan (25), _plan_pfad (3),
+_plan_audit_pfad (6).
+Summe: ~98 Z. Grund: Contract-Modell neu (JSON statt
+YAML-Regex).
+
+**Gruppe 4 — Loop-Cap / Post-Apply / Commit-Scope:**
+_loop_cap_audit (38), _post_apply_korrektur_loop (77),
+_post_apply_messung (86), _check_commit_scope (55).
+Summe: ~256 Z. Grund: Loop max 3 Iterationen,
+Post-Apply inline, Commit-Scope im Judge.
+
+**Gruppe 5 — Fehler-Klassifikation / Basis-Gate:**
+_fehler_nach_apply (32), _klassifiziere_pytest (48),
+_basis_gate_pytest_suite (24),
+_basis_gate_pytest_ziel (32).
+Summe: ~136 Z. Grund: Recovery neu, Test-Klassifikation
+im Builder-Loop.
+
+**Gruppe 6 — Planner-Reply / Anti-Pattern / Skills:**
+parse_planner_reply (46), _bereinige_planner_reply (33),
+_w51c_bereinige_und_audit (29),
+_w51a_extrahiere_datei_pfade (21),
+_planner_user_content (163),
+_anti_pattern_block (43), anti_patterns_fuer (51),
+_ap_audit_haeufigkeit (26), _ap_kuerzen (4),
+_ap_trigger_grund_aus_state (11),
+_validiere_ap_eintrag (36), _p1_schon_getriggert (7),
+_available_skills_block (19),
+_geladene_skills_block (11), _verarbeite_skill_commands (16).
+Summe: ~516 Z. Grund: Planner-Prompt neu, Anti-Pattern
+166 -> 20 (Zusammenfassung), Skills-Struktur neu.
+
+**Gruppe 7 — Solver (stirbt mit solver.md):**
+rufe_solver (54), _solver_prompt_bauen (64),
+_solver_schon_gelaufen (5), erhoehe_solver_aufruf (14),
+baue_solver_befund (28), parse_solver_diagnose (18),
+parse_solver_feld (24), parse_solver_kandidaten (11),
+format_solver_befund (23), _solver_befund_block (39),
+_handle_solver_command (59), _letzte_zwei_entwuerfe (17).
+Summe: ~356 Z. Grund: solver.md faellt in Phase 3.
+
+**Gruppe 8 — Subagenten inline (werden subagents/*.md):**
+rufe_explore_subagent (12), rufe_bash_subagent (11),
+rufe_browser_subagent (11), _subagent_lauf (42),
+build_subagent_state (23).
+Summe: ~99 Z. Grund: Extraktion in eigene Dateien
+(Befund K).
+
+**Gruppe 9 — Review/Judge/State:**
+_review_round_audit_payload (37),
+_review_unklar_widerspruch (16),
+_rollback_zieldateien (109),
+_sammel_commit_suite_kontext (54),
+_phase_deterministisch_pruefen (71).
+Summe: ~287 Z. Grund: Judge neu, Recovery neu,
+deterministische Pruefung im Verifier.
+
+### Befunde AG/AF/Q — adressiert durch 3a + 3.0
+
+- AG (run_pipeline 1468 Z.) -> 3a: Zerlegung in
+  15-20 Funktionen, Verhalten identisch.
+- AF (0 Klassen) -> nicht strukturell noetig;
+  funktionale Programme sind kein Defekt.
+- Q (dreifache Rollen-Definition) -> 3.0:
+  Rollen-Entdopplung.
+
+Fuer run_pipeline entfaellt 3c (NEUBAU-Ersatz).
+Die uebrigen 71 NEUBAU-Funktionen sind in Gruppen
+oben begruendet. 3c bleibt fuer die Gruppen 1-9.
+
+### Was das fuer den Neubau bedeutet
+
+Option 3 ist substanzieller als "4% NEUBAU".
+Die 29% NEUBAU sind:
+- 23% Phase-3-Code (Gruppen 1-9, stirbt mit Loop-
+  Umbau).
+- 6% Subagenten-Extraktion (Gruppe 8, wird in
+  subagents/*.md verschoben, nicht geloescht).
+
+Der Neubau ist kein "Aufraeumen", sondern ein
+echter Hybrid: 29% neue Struktur, 36% Refactor,
+35% bleibt.
+
+## Auflage 21b-2 — Korrekturen (Nachtrag)
+
+### 21b-2-a — Zahl 13 vs 10: Rekonstruktion
+
+Die Zahl war falsch. Es waren nie 13, sondern
+**24 TRAGEND-Funktionen ohne direkte Test-Referenz**
+(nach Erstrecherche, Stand vor 21b).
+
+Davon:
+
+- 14 in 21b/21b-1 getestet (siehe Tabelle unten).
+- 8 Risiko akzeptiert mit konkretem Test-Beleg.
+- 1 _schreibe_messung: Test folgt (21b-2-c).
+- 1 _pipeline_ende: bewusst ausgelassen
+  (Delegation an audit(), test_audit.py deckt).
+- 1 _mess_inhalt_zieldateien: **Nachtrag, war
+  Fehler in 21b-2** — weder Risiko akzeptiert
+  noch Test. Charakterisierung folgt in Phase C-
+  Modul verify.py (wie _schreibe_messung, P1-
+  Kette).
+
+Die 10 in 21b-2 waren die nach 21b/21b-1 noch
+offenen. Davon 9 akzeptiert, 1 Deferral. Plus
+_mess_inhalt_zieldateien = 10.
+
+### 21b-2-b — Konkrete Test-Belege pro akzeptierter Funktion
+
+| Funktion | Aufrufer | Konkreter Test (Datei:Zeile) |
+|---|---|---|
+| _anker_in_messung | pruefe_anker_gegen_messung | test_pipeline.py:4535, 4545, 4557 |
+| _api_signaturen | verify_code_kwargs | test_pipeline.py (TestVerifyCharakterisierung::test_verify_code_kwargs_falsches_kwarg) |
+| _projekt_symbol_index | verify_code | test_pipeline.py (TestVerifyCharakterisierung::test_verify_code_unbekanntes_symbol) |
+| _tokenisiere | gegenstand_gleich | test_pipeline.py:3893, 3903, 3912 |
+| _mess_index_block | _build_commit_input | test_pipeline.py (TestP1KetteCharakterisierung::test_build_commit_input_enthaelt_mess_inhalt) |
+| _parse_einzelpatch | parse_code_patches | test_pipeline.py:1926, 1933, 1953 |
+| format_code_patches_fuer_commit | _build_commit_input | test_pipeline.py (TestP1KetteCharakterisierung::test_build_commit_input_enthaelt_mess_inhalt) |
+| _print_phase_approval_dokument | run_phase | test_pipeline.py:8677 |
+| print_approval_dokument | run_pipeline | test_pipeline.py (run_pipeline-Tests, 50 Treffer) |
+
+Kein "generischer Aufrufer-Test" mehr. Jede Zeile
+hat eine konkrete Fundstelle.
+
+### 21b-2-c — _schreibe_messung: Test statt Deferral
+
+Siehe TestMessSchreibenCharakterisierung in
+tests/test_pipeline.py (nachgezogen in 21b-2-c-
+Commit). Kein Deferral mehr.
+
+### Nachtrag _mess_inhalt_zieldateien
+
+War in 21b-2 falsch dokumentiert. Wird wie
+_schreibe_messung in Phase C-Modul verify.py
+charakterisiert (P1-Kette). Grund: Fehler waere
+stumm (Messung nicht geschrieben, P1 zeigt weniger
+Zeichen).

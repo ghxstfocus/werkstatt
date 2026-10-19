@@ -11231,3 +11231,63 @@ class TestP1KetteCharakterisierung:
             st, "", "", "")
         assert "VOLLER-NACH-APPLY-INHALT" in input_text
         assert "GEMESSENER INHALT (NACH Apply, verbindlich" in input_text
+
+
+class TestMessSchreibenCharakterisierung:
+    """Charakterisierung _schreibe_messung (Neubau 21b-2-c, 2026-10-19).
+
+    Reviewer-Auflage 21b-2-c: Statt Deferral ein Test.
+
+    Grund: _schreibe_messung hat ein stummes Fehlerbild.
+    Wenn die Datei nicht geschrieben wird (OSError), laeuft
+    die Pipeline weiter, aber die P1-Kette sieht weniger
+    Zeichen. Der Test schreibt den Ist-Zustand fest.
+
+    Der Test nutzt eine temporaere run_id und raeumt
+    danach auf. Kein Eingriff in echte .werkstatt/-Daten.
+    """
+
+    def _state(self, run_id: str):
+        st = pipeline.RunState(
+            block_id="t", aufgabe="a", start_ts="",
+            docs={}, agents={}, always={}, optional={},
+            file_whitelist=[], api_key="", budget={},
+            agent_docs={}, project_dir=Path("/tmp"))
+        st.run_id = run_id
+        return st
+
+    def test_schreibe_messung_datei_und_state(self) -> None:
+        """_schreibe_messung schreibt Datei + state.messungen.
+
+        Characterisiert:
+        - Datei .werkstatt/<run_id>/messungen/<sha1>.txt existiert.
+        - Inhalt entspricht dem uebergebenen Text.
+        - state.messungen hat einen Eintrag mit sha1, pfad, quelle.
+        """
+        import hashlib
+        import shutil
+
+        run_id = "test-21b2c-schreibe-messung"
+        ziel_dir = Path("/opt/werkstatt/.werkstatt") / run_id
+        try:
+            st = self._state(run_id)
+            inhalt = "INHALT-FUER-CHARAKTERISIERUNG\n"
+            pipeline._schreibe_messung(
+                st, "core/applier.py", inhalt, "test", 12345.0)
+
+            # state.messungen gefuellt.
+            assert len(st.messungen) == 1
+            m = st.messungen[0]
+            assert m.pfad == "core/applier.py"
+            assert m.quelle == "test"
+            assert m.mtime == 12345.0
+
+            # Datei existiert und hat den Inhalt.
+            sha1 = hashlib.sha1(
+                inhalt.encode("utf-8", errors="replace")).hexdigest()
+            datei = ziel_dir / "messungen" / f"{sha1}.txt"
+            assert datei.exists(), f"Datei fehlt: {datei}"
+            assert datei.read_text(encoding="utf-8") == inhalt
+        finally:
+            if ziel_dir.exists():
+                shutil.rmtree(ziel_dir)
