@@ -19,6 +19,8 @@ Chronologisch nach Umbau-Phasen. Append-only pro Phase.
 | Struktur-Tests umstellen | 2 | 15 gruene `inspect.getsource(run_pipeline)`-Tests brechen bei 3a-1c-2/3/4 (C7/C0C1C2C6/C8C9). Vor 3a-1c-2 Block einplanen. Duale Quellen-Pruefung oder Verhaltens-Test (A9-13). | gross | offen |
 | 3a-1c-2-V2-Groesse | 3 | V2 = 303 Z., 13 Steuerungsstellen, 12 Parameter. Zu gross fuer 1-Rutsch. Zerlegung V2a/V2b vor 3a-1c-2 pruefen (A8-2-nach-3b). | mittel | offen |
 | 3a-1c-2b (W2-Extraktion) | 3 | W2 = 8585-8735 (151 Z.), 11 Parameter + commit_versuche local, Literal['break']. Erster Versuch (ae25e08-Nachfolger) mit 14 Regressionen gescheitert. Bekannte Fallen: (a) _diff_name_only ist C7-Local, muss Parameter sein. (b) reply/commit_verdict sind W2-intern (aus ask_llm), nicht Input. (c) break -> return 'break' + Fall-Through zu C8 (kein pass). (d) AQ-Vorspann B7/B8/6887 gruen in ae25e08. Naechste Session: schrittweise (def-Geruest, dann Body-Move, dann Parameter-Fix). | gross | offen |
+| 3a-1c-2a (W0a-1/2/3) | 3 | ERLEDIGT (ecf35a4). W0a-1/2/3 extrahiert (`_commit_review_w25_suite`, `_commit_review_w25_recovery`, `_commit_review_w25_suite_nachlauf`). 7390 (test_sammel_commit_recovery_reparierbar) geloescht, B1a ersetzt. | gross | done |
+| 3a-1c-2a-AQ | 2 | ERLEDIGT (88e3e5c + ae25e08). 6 AQ-Tests B1a/B1b/B2/B3/B4/B6 + B7/B8/6887 = 9 neue Verhaltens-Tests. Baseline 1237 -> 1245. | mittel | done |
 
 ## Phase 3b — Loop-Umbau (nach 3a)
 

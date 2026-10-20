@@ -201,3 +201,24 @@ Parser-Einrueckung, max_tokens_judge, D2-Duplikate,
 Planner-Resume, Contract im Prompt, Feedback-Loop,
 verify_code.
 
+## Phase 3a — run_pipeline zerlegen (laufend, 2026-10-20)
+
+Baseline: pytest 1245 / ruff 17 / mypy 7 / AST 6 / Katalog 167.
+
+| Block | Status | Inhalt |
+|---|---|---|
+| 3a-1a | done (1ea4d15) | 8 run_pipeline-Tests. |
+| 3a-1c-0 | done (be0cd3f) | 169 Verzweigungen klassifiziert, 2 B1b-Tests. |
+| 3a-1c-1a | done (d89d0fa/984f784/0b790e2) | 2 AQ-Tests C4. |
+| 3a-1c-1b | done (8110509/72e3459/9665140) | V2 extrahiert, 4 AQ-Tests. |
+| 3a-1c-1-b | done (7cb8866/6cd545f/c57d1b1) | 3 UNKLAR-Tests. |
+| 3a-1c-2-vorb | done (4769dd9) | Struktur-Tests reduziert. |
+| 3a-1c-2a | done (88e3e5c/ecf35a4/ae25e08) | W0a-1/2/3 extrahiert, 7390 geloescht, 9 AQ-Tests. |
+| 3a-1c-2b | offen (Merkposten ca56520) | W2-Extraktion. 1. Versuch 14 Regressionen. |
+| 3a-1c-3 | offen | C0+C1+C2+C6. |
+| 3a-1c-4 | offen | C8+C9. |
+| 3a-2 | offen | run_phase (528 Z.). |
+| 3a-3 | offen | _phase_main_pfad (641 Z., Deadlock). |
+| 3b | offen | Loop-Umbau. |
+| 3c | offen | NEUBAU-Abloesung. |
+

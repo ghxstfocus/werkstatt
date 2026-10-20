@@ -12,16 +12,36 @@
 ## Stand
 
 Branch: umbau/phase-2, gepusht (origin/umbau/phase-2).
-HEAD: 1ea4d15 (3a-1a: run_pipeline-Charakterisierung).
+HEAD: ca56520 (3a-1c-2b-doc: Merkposten W2-Extraktion).
 main: 3d71aad (43 Commits hinter umbau/phase-2, nicht
 gepusht).
 
-Baseline:
-- pytest: 1227 passed.
+Baseline (2026-10-20, Ende Session):
+- pytest: 1245 passed.
 - ruff: 17 errors.
 - mypy: 7 errors.
 - AST-Test: 6 passed.
 - Katalog: 167 (_KATALOG_SOLL).
+
+Abgeschlossene Phase-3a-Bloecke:
+- 3a-1a (8 Tests, 1ea4d15).
+- 3a-1c-0 (be0cd3f).
+- 3a-1c-1a (d89d0fa + 984f784 + 0b790e2).
+- 3a-1c-1b (8110509 + 72e3459 + 9665140).
+- 3a-1c-1-b (7cb8866 + 6cd545f + c57d1b1).
+- 3a-1c-2-vorbereitung (4769dd9).
+- 3a-1c-2a (88e3e5c + ecf35a4 + ae25e08).
+- 3a-1c-2b-doc (ca56520, Merkposten).
+
+Offen:
+- 3a-1c-2b (W2-Extraktion, 14 Regressionen im 1. Versuch,
+  Merkposten mit Fallstricken).
+- 3a-1c-3 (C0+C1+C2+C6).
+- 3a-1c-4 (C8+C9).
+- 3a-2 (run_phase).
+- 3a-3 (_phase_main_pfad, Deadlock).
+- 3b (Loop-Umbau).
+- 3c (NEUBAU-Abloesung).
 
 ## Was seit Phase 0 passiert ist
 

@@ -275,3 +275,19 @@ APPLIED) ist im Feedback-Loop gebaut, 13 Tests gruen.
 Der Commit-Review-Judge eskaliert noch (Messlage
 unvollstaendig, siehe OFFENE-BLOECKE).
 
+
+
+## 3a-1c-2a — W0a-1/2/3 extrahiert (2026-10-20)
+
+Commits: 88e3e5c (AQ-Vorspann 6 Tests), ecf35a4 (W0a-1/2/3 extrahiert),
+ae25e08 (B7/B8 + 6887-Verhaltens-Test).
+
+W0a-1 _commit_review_w25_suite: erster W25-Suite-Lauf.
+W0a-2 _commit_review_w25_recovery: Recovery bei rotem Suite.
+W0a-3 _commit_review_w25_suite_nachlauf: zweiter Suite-Lauf.
+
+7390 (test_sammel_commit_recovery_reparierbar) geloescht (A12-2),
+B1a ersetzt Recovery-Absicherung als Verhaltens-Test.
+
+Baseline: 1237 -> 1245 (+8 Tests: B1a/B1b/B2/B3/B4/B6/B7/B8 + 6887).
+ruff 17, mypy 7, AST 6, Katalog 167.
