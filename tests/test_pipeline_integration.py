@@ -709,7 +709,7 @@ def test_run_pipeline_phasen_state_uebernommen(
         r: {"body": f"Du bist der {r.capitalize()}.",
             "name": r}
         for r in ("builder", "reviewer", "solver",
-                  "test_generator")
+                  "test_generator", "judge")
     }
     monkeypatch.setattr(
         pipeline, "load_agents", lambda d: _agents)
@@ -719,6 +719,8 @@ def test_run_pipeline_phasen_state_uebernommen(
         pipeline, "load_recent_commits", lambda *a, **kw: "")
     ph = build_test_state(project_dir=tmp_path)
     ph.agents = _agents
+    ph.code_patches = [{"pfad": "core/x.py", "typ": "patch",
+                        "anker": "y = 1", "ersatz": "y = 2"}]
     ph.phase_aktiv = True
     ref = []
     pipeline.run_pipeline(
@@ -805,7 +807,7 @@ def test_run_pipeline_basis_gate_rot(
         r: {"body": f"Du bist der {r.capitalize()}.",
             "name": r}
         for r in ("builder", "reviewer", "solver",
-                  "test_generator")
+                  "test_generator", "judge")
     }
     monkeypatch.setattr(
         pipeline, "load_agents", lambda d: _agents)
@@ -1215,8 +1217,13 @@ def test_run_pipeline_no_go_recovery(
 
 def _fake_recovery_obj():
     return type("V", (), {
+        "art": "test",
+        "diagnose": "Test-Diagnose.",
+        "reparaturplan": ["Test korrigieren."],
+        "blockgroesse": "",
         "frage_an_menschen": "test-frage",
-        "empfehlung": "test-empfehlung"})()
+        "empfehlung": "test-empfehlung",
+        "rohantwort": "roh"})()
 
 
 def test_run_pipeline_unklar_kette_rc14(
@@ -1422,3 +1429,434 @@ def test_build_commit_input_ohne_unterblock_kontext() -> None:
     result = pipeline._build_commit_input(
         state, "core/x.py", "", "keine")
     assert "UNTERBLOCK:" not in result
+
+
+
+# =====================================================================
+# 3a-1c-2a (2026-10-20): AQ-Vorspann C7 W0a (6 Tests).
+# Profi-Ansatz: nur an Systemgrenzen mocken.
+# =====================================================================
+
+
+def _fake_w25_suite(klassifizierung: str, exit_code: int,
+                    failed: int = 0, passed: int = 10):
+    return {
+        "exit_code": exit_code,
+        "klassifizierung": klassifizierung,
+        "failed_count": failed,
+        "passed_count": passed,
+        "failed_test_ids": [],
+        "failed_test_ids_mehr": [],
+        "dauer_s": 0.1,
+        "raw_tail": "",
+    }
+
+
+def test_run_pipeline_commit_recovery_reparierbar(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-2a B1a: W25-Recovery reparierbar -> Suite2 gruen.
+
+    Zitat C7 (Z. 8295-8412): exit_code != 0 ->
+    ask_reviewer_for_recovery -> _fehler_nach_apply
+    -> _post_apply_korrektur_loop -> _w25_suite2.
+
+    Mocks (Profi: Systemgrenzen):
+      _basis_gate_pytest_suite: 1. rot, 2. gruen.
+      _post_apply_korrektur_loop: 0.
+      _phase_yaml_status_update: no-op.
+      ask_reviewer_for_recovery: RecoveryVorschlag.
+      audit: Spy.
+    """
+    mock_run_pipeline_deps(
+        monkeypatch,
+        builder_reply=(
+            "PATCH-BEGINN\n"
+            "pfad: core/x.py\n"
+            "anker: |\n"
+            "  y = 1\n"
+            "ersatz: |\n"
+            "  y = 2\n"
+            "PATCH-ENDE\n"))
+    # Phasen-State.
+    _br = (
+        "PATCH-BEGINN\n"
+        "pfad: core/x.py\n"
+        "anker: |\n"
+        "  y = 1\n"
+        "ersatz: |\n"
+        "  y = 2\n"
+        "PATCH-ENDE\n")
+    _br = (
+        "PATCH-BEGINN\n"
+        "pfad: core/x.py\n"
+        "anker: |\n"
+        "  y = 1\n"
+        "ersatz: |\n"
+        "  y = 2\n"
+        "PATCH-ENDE\n")
+    rufe = {"n": 0}
+    def fake_suite(project_dir, timeout_s=900):
+        rufe["n"] += 1
+        if rufe["n"] == 1:
+            return _fake_w25_suite("test_failures", 1, failed=1)
+        return _fake_w25_suite("gruen", 0)
+    monkeypatch.setattr(
+        pipeline, "_basis_gate_pytest_suite", fake_suite)
+    monkeypatch.setattr(
+        pipeline, "_post_apply_korrektur_loop",
+        lambda *a, **kw: 0)
+    monkeypatch.setattr(
+        pipeline, "_phase_yaml_status_update",
+        lambda *a, **kw: None)
+    monkeypatch.setattr(
+        pipeline, "ask_reviewer_for_recovery",
+        lambda *a, **kw: _fake_recovery_obj())
+    monkeypatch.setattr(
+        pipeline, "_fehler_nach_apply",
+        lambda *a, **kw: True)
+    # Phasen-Apply: Dummy-Patch + apply_code_patches + _post_apply.
+    monkeypatch.setattr(
+        pipeline, "apply_code_patches", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        pipeline, "_post_apply_messung", lambda *a, **kw: True)
+    # Builder-Loop ueberspringen (Anker-Kohärenz nicht Ziel).
+    from werkstatt.state import LLMReply
+    monkeypatch.setattr(
+        pipeline, "builder_reply_mit_command_loop",
+        lambda state, api_key, builder_prompt, *a, **kw: (
+            LLMReply(ok=True, content=_br, error=""),
+            None))
+    gerufen: list = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw: gerufen.append(
+            (kind, payload)))
+    # Agents bereitstellen (KeyError 'reviewer' sonst).
+    _agents = {
+        r: {"body": f"Du bist der {r.capitalize()}.",
+            "name": r}
+        for r in ("builder", "reviewer", "solver",
+                  "test_generator", "judge")
+    }
+    monkeypatch.setattr(
+        pipeline, "load_agents", lambda d: _agents)
+    monkeypatch.setattr(
+        pipeline, "load_docs", lambda d, pr: {})
+    monkeypatch.setattr(
+        pipeline, "load_recent_commits", lambda *a, **kw: "")
+    ref: list = []
+    ph = __import__("test_pipeline").build_test_state(
+        project_dir=tmp_path)
+    ph.agents = _agents
+    ph.code_patches = [{"pfad": "core/x.py", "typ": "patch",
+                        "anker": "y = 1", "ersatz": "y = 2"}]
+    ph.phase_aktiv = True
+    ph.phase_unterbloecke = [
+        {"id": "U1", "status": "done", "titel": "A"},
+        {"id": "U2", "status": "pending", "titel": "B"},
+    ]
+    ph.phase_aktueller_index = 1
+    pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref,
+        phasen_state=ph)
+    kinds = [k for k, _ in gerufen]
+    print("DEBUG review_runden:", ph.review_runden)
+    print("DEBUG commit_paket:", ph.commit_paket)
+    print("DEBUG kinds:", kinds)
+    assert "phase_suite_rot_recovery" in kinds
+    assert "basis_gate_test_result" in kinds
+    nachlauf = [p for k, p in gerufen
+                if k == "basis_gate_test_result"
+                and p.get("nachtlauf")]
+    assert len(nachlauf) == 1
+
+
+def test_run_pipeline_commit_w25_nachtlauf_rot(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-2a B1b: W25-Recovery reparierbar, Suite2 rot -> rc=18.
+
+    Zitat C7 Z. 8371-8402: _w25_suite2 exit_code != 0
+    -> return 18.
+    """
+    mock_run_pipeline_deps(
+        monkeypatch,
+        builder_reply=(
+            "PATCH-BEGINN\n"
+            "pfad: core/x.py\n"
+            "anker: |\n"
+            "  y = 1\n"
+            "ersatz: |\n"
+            "  y = 2\n"
+            "PATCH-ENDE\n"))
+    rufe = {"n": 0}
+    def fake_suite(project_dir, timeout_s=900):
+        rufe["n"] += 1
+        return _fake_w25_suite("test_failures", 1, failed=1)
+    monkeypatch.setattr(
+        pipeline, "_basis_gate_pytest_suite", fake_suite)
+    monkeypatch.setattr(
+        pipeline, "_post_apply_korrektur_loop",
+        lambda *a, **kw: 0)
+    monkeypatch.setattr(
+        pipeline, "_phase_yaml_status_update",
+        lambda *a, **kw: None)
+    monkeypatch.setattr(
+        pipeline, "ask_reviewer_for_recovery",
+        lambda *a, **kw: _fake_recovery_obj())
+    monkeypatch.setattr(
+        pipeline, "_fehler_nach_apply",
+        lambda *a, **kw: True)
+    monkeypatch.setattr(
+        pipeline, "apply_code_patches", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        pipeline, "_post_apply_messung", lambda *a, **kw: True)
+    _br = (
+        "PATCH-BEGINN\n"
+        "pfad: core/x.py\n"
+        "anker: |\n"
+        "  y = 1\n"
+        "ersatz: |\n"
+        "  y = 2\n"
+        "PATCH-ENDE\n")
+    from werkstatt.state import LLMReply
+    monkeypatch.setattr(
+        pipeline, "builder_reply_mit_command_loop",
+        lambda state, api_key, builder_prompt, *a, **kw: (
+            LLMReply(ok=True, content=_br, error=""),
+            None))
+    monkeypatch.setattr(
+        pipeline, "audit", lambda *a, **kw: None)
+    _agents = {
+        r: {"body": f"Du bist der {r.capitalize()}.",
+            "name": r}
+        for r in ("builder", "reviewer", "solver",
+                  "test_generator", "judge")
+    }
+    monkeypatch.setattr(
+        pipeline, "load_agents", lambda d: _agents)
+    monkeypatch.setattr(
+        pipeline, "load_docs", lambda d, pr: {})
+    monkeypatch.setattr(
+        pipeline, "load_recent_commits", lambda *a, **kw: "")
+    ref: list = []
+    ph = __import__("test_pipeline").build_test_state(
+        project_dir=tmp_path)
+    ph.agents = _agents
+    ph.code_patches = [{"pfad": "core/x.py", "typ": "patch",
+                        "anker": "y = 1", "ersatz": "y = 2"}]
+    ph.phase_aktiv = True
+    ph.phase_unterbloecke = [
+        {"id": "U1", "status": "done", "titel": "A"},
+        {"id": "U2", "status": "pending", "titel": "B"},
+    ]
+    ph.phase_aktueller_index = 1
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref,
+        phasen_state=ph)
+    assert rc == 18, (
+        f"erwartet rc=18 bei Suite2 rot, gefunden rc={rc}")
+
+
+
+# =====================================================================
+# 3a-1c-2a AQ-Vorspann (B2/B3/B4/B6).
+# Helper: Phasen-State bis C7 (Commit-Review).
+# =====================================================================
+
+
+_DEFAULT_PATCH_REPLY = (
+    "PATCH-BEGINN\n"
+    "pfad: core/x.py\n"
+    "anker: |\n"
+    "  y = 1\n"
+    "ersatz: |\n"
+    "  y = 2\n"
+    "PATCH-ENDE\n")
+
+
+def _setup_c7(monkeypatch, tmp_path, builder_reply=None):
+    """Baut Phasen-State + erreicht C7 (Commit-Review).
+
+    builder_reply: optionaler Builder-Reply-Text (fuer
+    mehrere Patches).
+    Rueckgabe: (ph, gerufen, ref).
+    """
+    from werkstatt.state import LLMReply
+    _br = builder_reply or _DEFAULT_PATCH_REPLY
+    mock_run_pipeline_deps(
+        monkeypatch, builder_reply=_br)
+    # Builder-Loop ueberspringen.
+    monkeypatch.setattr(
+        pipeline, "builder_reply_mit_command_loop",
+        lambda state, api_key, builder_prompt, *a, **kw: (
+            LLMReply(ok=True, content=_br, error=""),
+            None))
+    monkeypatch.setattr(
+        pipeline, "apply_code_patches", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        pipeline, "_post_apply_messung", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        pipeline, "_rollback_zieldateien",
+        lambda *a, **kw: None)
+    _agents = {
+        r: {"body": f"Du bist der {r.capitalize()}.",
+            "name": r}
+        for r in ("builder", "reviewer", "solver",
+                  "test_generator", "judge")
+    }
+    monkeypatch.setattr(
+        pipeline, "load_agents", lambda d: _agents)
+    monkeypatch.setattr(
+        pipeline, "load_docs", lambda d, pr: {})
+    monkeypatch.setattr(
+        pipeline, "load_recent_commits", lambda *a, **kw: "")
+    gerufen: list = []
+    monkeypatch.setattr(
+        pipeline, "audit",
+        lambda kind, payload, *a, **kw: gerufen.append(
+            (kind, payload)))
+    ph = __import__("test_pipeline").build_test_state(
+        project_dir=tmp_path)
+    ph.agents = _agents
+    ph.code_patches = [{"pfad": "core/x.py", "typ": "patch",
+                        "anker": "y = 1", "ersatz": "y = 2"}]
+    ph.phase_aktiv = True
+    ph.phase_unterbloecke = [
+        {"id": "U1", "status": "done", "titel": "A"},
+        {"id": "U2", "status": "pending", "titel": "B"},
+    ]
+    ph.phase_aktueller_index = 1
+    ref: list = []
+    return ph, gerufen, ref
+
+
+def test_run_pipeline_d3_dateien_deterministisch(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-2a B2: D3-Liste deterministisch aus code_patches.
+
+    Zitat C7 Z. 8420-8432: state.commit_paket["dateien"] =
+    sorted(set(_d3_pfade)) + audit("phase_commit_dateien_
+    deterministisch").
+
+    Layer VOR/NACH: C7-Rumpf (inline W0b).
+    """
+    br = (
+        "PATCH-BEGINN\n"
+        "pfad: core/x.py\n"
+        "anker: |\n"
+        "  y = 1\n"
+        "ersatz: |\n"
+        "  y = 2\n"
+        "PATCH-ENDE\n"
+        "PATCH-BEGINN\n"
+        "pfad: core/z.py\n"
+        "anker: |\n"
+        "  z = 1\n"
+        "ersatz: |\n"
+        "  z = 2\n"
+        "PATCH-ENDE\n")
+    ph, gerufen, ref = _setup_c7(
+        monkeypatch, tmp_path, builder_reply=br)
+    pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref,
+        phasen_state=ph)
+    kinds = [k for k, _ in gerufen]
+    print("DEBUG code_patches:", ph.code_patches)
+    print("DEBUG commit_paket:", ph.commit_paket)
+    assert "phase_commit_dateien_deterministisch" in kinds
+    assert ph.commit_paket.get("dateien") == [
+        "core/x.py", "core/z.py"]
+
+
+def test_run_pipeline_commit_message_sanity_rc9(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-2a B3: Message ohne Aenderung-Block -> rc=9.
+
+    Zitat C7 Z. 8443-8468: _w10_fehler -> audit(
+    "commit_message_diskrepanz") + return 9.
+    _w10_pfade != _w10_wahrheit -> dito.
+
+    Layer VOR/NACH: C7-Rumpf (inline W0c).
+    """
+    ph, gerufen, ref = _setup_c7(monkeypatch, tmp_path)
+    # build_commit_paket liefert Message ohne Aenderung.
+    monkeypatch.setattr(
+        pipeline, "build_commit_paket",
+        lambda state: {
+            "message": "Test-Commit\n\nkein Block hier\n",
+            "dateien": ["core/x.py"],
+        })
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref,
+        phasen_state=ph)
+    kinds = [k for k, _ in gerufen]
+    assert rc == 9, f"erwartet rc=9, gefunden rc={rc}"
+    assert "commit_message_diskrepanz" in kinds
+
+
+def test_run_pipeline_commit_diff_fehler_rc9(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-2a B4: git diff rc!=0 -> rc=9.
+
+    Zitat C7 Z. 8491-8497: subprocess.run rc != 0 ->
+    audit("commit_review_diff_fehler") + return 9.
+
+    Layer VOR/NACH: C7-Rumpf (inline W0d).
+    """
+    ph, gerufen, ref = _setup_c7(monkeypatch, tmp_path)
+    # Commit-Paket mit Aenderung-Block (B3-Sanity passieren).
+    monkeypatch.setattr(
+        pipeline, "build_commit_paket",
+        lambda state: {
+            "message": (
+                "Test-Commit\n\nAenderung:\n"
+                "  - core/x.py\n"),
+            "dateien": ["core/x.py"],
+        })
+    # subprocess.run -> rc=1 fuer git diff --name-only.
+    import subprocess as sp
+    def fake_run(argv, *a, **kw):
+        if isinstance(argv, tuple) and argv[:3] == (
+                "git", "diff", "--name-only"):
+            return type("R", (), {
+                "returncode": 1, "stdout": "",
+                "stderr": "fatal: not a repo"})()
+        # andere git-Aufrufe (status, log, rev-parse).
+        return type("R", (), {
+            "returncode": 0, "stdout": "", "stderr": ""})()
+    monkeypatch.setattr(sp, "run", fake_run)
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref,
+        phasen_state=ph)
+    kinds = [k for k, _ in gerufen]
+    assert rc == 9, f"erwartet rc=9, gefunden rc={rc}"
+    assert "commit_review_diff_fehler" in kinds
+
+
+def test_run_pipeline_commit_ohne_messung_rc9(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-2a B6: Anker-Patch ohne mess_protokoll -> rc=9.
+
+    Zitat C7 Z. 8522-8530: _hat_anker_patches and not
+    state.mess_protokoll -> _fail_closed(9).
+
+    Layer VOR/NACH: C7-Rumpf (inline W0e).
+    """
+    ph, gerufen, ref = _setup_c7(monkeypatch, tmp_path)
+    # Commit-Paket mit Aenderung-Block.
+    monkeypatch.setattr(
+        pipeline, "build_commit_paket",
+        lambda state: {
+            "message": (
+                "Test-Commit\n\nAenderung:\n"
+                "  - core/x.py\n"),
+            "dateien": ["core/x.py"],
+        })
+    # mess_protokoll leer, aber Patch hat Anker.
+    ph.mess_protokoll = ""
+    rc = pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref,
+        phasen_state=ph)
+    kinds = [k for k, _ in gerufen]
+    assert rc == 9, f"erwartet rc=9, gefunden rc={rc}"
+    assert "commit_review_ohne_messung" in kinds
