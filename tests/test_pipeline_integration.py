@@ -1674,17 +1674,22 @@ _DEFAULT_PATCH_REPLY = (
     "PATCH-ENDE\n")
 
 
-def _setup_c7(monkeypatch, tmp_path, builder_reply=None):
+def _setup_c7(monkeypatch, tmp_path, builder_reply=None,
+              commit_verdict="COMMIT-GO"):
     """Baut Phasen-State + erreicht C7 (Commit-Review).
 
     builder_reply: optionaler Builder-Reply-Text (fuer
     mehrere Patches).
+    commit_verdict: Commit-Review-Verdict (Default
+    COMMIT-GO). Wird an mock_run_pipeline_deps
+    durchgereicht.
     Rueckgabe: (ph, gerufen, ref).
     """
     from werkstatt.state import LLMReply
     _br = builder_reply or _DEFAULT_PATCH_REPLY
     mock_run_pipeline_deps(
-        monkeypatch, builder_reply=_br)
+        monkeypatch, builder_reply=_br,
+        commit_verdict=commit_verdict)
     # Builder-Loop ueberspringen.
     monkeypatch.setattr(
         pipeline, "builder_reply_mit_command_loop",
@@ -1860,3 +1865,94 @@ def test_run_pipeline_commit_ohne_messung_rc9(
     kinds = [k for k, _ in gerufen]
     assert rc == 9, f"erwartet rc=9, gefunden rc={rc}"
     assert "commit_review_ohne_messung" in kinds
+
+
+
+# =====================================================================
+# 3a-1c-2b AQ-Vorspann (B7/B8) + 6887-Verhaltens-Test (M-19).
+# =====================================================================
+
+
+def test_run_pipeline_commit_review_go_break(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-2b B7: COMMIT-GO -> break 8673.
+
+    Zitat C7 Z. 8671-8673:
+        if commit_verdict == "COMMIT-GO":
+            print("[+] Commit-GO erhalten.")
+            break
+
+    Layer VOR: C7-Rumpf. NACH: W2.
+    """
+    ph, gerufen, ref = _setup_c7(monkeypatch, tmp_path)
+    ph.mess_protokoll = "x"
+    # commit_verdict = COMMIT-GO (Default).
+    # build_commit_paket mit Aenderung.
+    monkeypatch.setattr(
+        pipeline, "build_commit_paket",
+        lambda state: {
+            "message": (
+                "Test-Commit\n\nAenderung:\n"
+                "  - core/x.py\n"),
+            "dateien": ["core/x.py"],
+        })
+    pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref,
+        phasen_state=ph)
+    payloads = [p for k, p in gerufen if k == "commit_review"]
+    assert len(payloads) >= 1
+    assert payloads[0].get("verdict") == "COMMIT-GO"
+
+
+def test_run_pipeline_commit_review_eskalation_break(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-2b B8: != COMMIT-NO-GO -> break 8679.
+
+    Zitat C7 Z. 8675-8679:
+        if commit_verdict != "COMMIT-NO-GO":
+            print(f"[i] Commit-Review-Verdict: ...")
+            break
+
+    Layer VOR: C7-Rumpf. NACH: W2.
+    """
+    ph, gerufen, ref = _setup_c7(
+        monkeypatch, tmp_path,
+        commit_verdict="COMMIT-ESKALATION")
+    ph.mess_protokoll = "x"
+    monkeypatch.setattr(
+        pipeline, "build_commit_paket",
+        lambda state: {
+            "message": (
+                "Test-Commit\n\nAenderung:\n"
+                "  - core/x.py\n"),
+            "dateien": ["core/x.py"],
+        })
+    pipeline.run_pipeline(
+        "test-projekt", "Test-Auftrag", ref,
+        phasen_state=ph)
+    payloads = [p for k, p in gerufen if k == "commit_review"]
+    assert len(payloads) >= 1
+    assert payloads[0].get("verdict") == "COMMIT-ESKALATION"
+
+
+def test_build_commit_input_phasen_unterblock(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-2b A15: Phasen-Modus -> commit_input mit
+    UNTERBLOCK-Kontext.
+
+    Prueft Verhalten von _build_commit_input mit
+    w11_unterblock_kontext (real, nicht gemockt).
+    Ersetzt 6887 (Struktur-Test) als Verhaltens-Test.
+    """
+    ph, _, _ = _setup_c7(monkeypatch, tmp_path)
+    ph.mess_protokoll = "x"
+    # _build_commit_input NICHT mocken (Default).
+    # Der Helper hat build_commit_paket gemockt.
+    # Wir rufen _build_commit_input direkt.
+    result = pipeline._build_commit_input(
+        ph, "core/x.py",
+        "UNTERBLOCK: U1 (1 von 2) — A",
+        "keine")
+    assert "UNTERBLOCK:" in result
+    assert "U1" in result
+    assert "1 von 2" in result
