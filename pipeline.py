@@ -7604,6 +7604,159 @@ def print_approval_dokument(state: RunState) -> None:
         print(f"Doku-Patches: {len(state.commit_paket.get('doku_patches', []))}")
 
 
+def _commit_review_w25_suite_nachlauf(
+        state: RunState, project_dir: Path,
+        project_name: str, uid: str,
+) -> int | None:
+    """Zweiter W25-Suite-Lauf nach Recovery.
+
+    Rueckgabe:
+      None = gruen (weiter zu C7).
+      int  = rc 18 bei Suite2 rot.
+
+    Layer: W0a-3 (3a-1c-2a, extrahiert aus C7).
+    """
+    # Erneut (e) pruefen.
+    _w25_suite2 = _basis_gate_pytest_suite(
+        project_dir, 900)
+    audit("basis_gate_test_result",
+          {"scope": "volle_suite",
+           "ist_gate": True,
+           "nachtlauf": True,
+           "exit_code": _w25_suite2["exit_code"],
+           "klassifizierung": _w25_suite2["klassifizierung"],
+           "failed_count": _w25_suite2["failed_count"],
+           "passed_count": _w25_suite2["passed_count"],
+           "failed_test_ids": _w25_suite2["failed_test_ids"],
+           "failed_test_ids_mehr":
+               _w25_suite2["failed_test_ids_mehr"],
+           "dauer_s": _w25_suite2["dauer_s"],
+           "raw_tail": _w25_suite2["raw_tail"]},
+          project_dir, project_name)
+    if _w25_suite2["exit_code"] != 0:
+        print("[!] (e)-Rot nach Korrektur "
+              "weiterhin rot. Fail-closed.")
+        return 18
+    # A35: Status zurueck auf done.
+    if uid:
+        try:
+            _phase_yaml_status_update(
+                project_name, uid, "done")
+        except ValueError:
+            pass
+    print("[+] (e)-Rot nach Recovery "
+          "gruen. Sammel-Commit weiter.")
+    return None
+
+def _commit_review_w25_suite(
+        state: RunState, project_dir: Path,
+        project_name: str,
+) -> dict | int:
+    """Erster W25-Suite-Lauf vor Sammel-Commit.
+
+    Rueckgabe:
+      dict = Suite-Ergebnis (exit_code, klassifizierung,
+             failed_count, passed_count, failed_test_ids,
+             failed_test_ids_mehr, dauer_s, raw_tail).
+      int  = rc 18 bei timeout.
+
+    Layer: W0a-1 (3a-1c-2a, extrahiert aus C7).
+    """
+    _w25_suite = _basis_gate_pytest_suite(
+        project_dir, 900)
+    audit("basis_gate_test_result",
+          {"scope": "volle_suite",
+           "ist_gate": True,
+           "exit_code": _w25_suite["exit_code"],
+           "klassifizierung": _w25_suite["klassifizierung"],
+           "failed_count": _w25_suite["failed_count"],
+           "passed_count": _w25_suite["passed_count"],
+           "failed_test_ids": _w25_suite["failed_test_ids"],
+           "failed_test_ids_mehr":
+               _w25_suite["failed_test_ids_mehr"],
+           "dauer_s": _w25_suite["dauer_s"],
+           "raw_tail": _w25_suite["raw_tail"]},
+          project_dir, project_name)
+    if _w25_suite["klassifizierung"] == "timeout":
+        print("[!] W25 Suite-Test-Timeout. Fail-closed.")
+        return 18
+    return _w25_suite
+
+def _commit_review_w25_recovery(
+        state: RunState, w25_suite: dict, pos: int,
+        always, file_whitelist,
+        builder_prompt: str, project_dir: Path,
+        project_name: str, api_key: str,
+        max_llm: int, max_minutes: int,
+) -> int | None:
+    """W25-Recovery bei rotem Suite-Test.
+
+    Rueckgabe:
+      None = reparierbar (weiter zu W0a-3).
+      int  = rc 18 (nicht-reparierbar oder Korrektur rot).
+
+    Layer: W0a-2 (3a-1c-2a, extrahiert aus C7).
+    """
+    print(f"[FAIL] W25 Suite-Test rot vor "
+          f"Sammel-Commit: "
+          f"{w25_suite['failed_count']} "
+          f"failed, "
+          f"{w25_suite['passed_count']} "
+          f"passed.")
+    print(f"  Tests: {w25_suite['failed_test_ids']}")
+    _ctx = _sammel_commit_suite_kontext(state, w25_suite)
+    _v2 = ask_reviewer_for_recovery(
+        state, "basis_gate_suite", _ctx)
+    print_recovery(_v2)
+    audit("phase_suite_rot_recovery",
+          {"diagnose":
+               (getattr(_v2, "diagnose", "") or "")[:2000],
+           "failed_test_ids":
+               w25_suite["failed_test_ids"],
+           "klassifizierung":
+               w25_suite["klassifizierung"]},
+          project_dir, project_name)
+    _reparierbar = _fehler_nach_apply(_v2, pos)
+    if not _reparierbar:
+        _uid = ""
+        if 0 <= pos < len(state.phase_unterbloecke):
+            _uid = state.phase_unterbloecke[pos].get("id", "")
+        if _uid:
+            try:
+                _phase_yaml_status_update(
+                    project_name, _uid, "no_go")
+            except ValueError:
+                pass
+        print("[!] (e)-Rot nicht im aktuellen Unterblock "
+              "reparierbar. Phase no_go.")
+        return 18
+    # Reparierbar -> no_go + 1 Korrektur-Runde.
+    _uid = ""
+    if 0 <= pos < len(state.phase_unterbloecke):
+        _uid = state.phase_unterbloecke[pos].get("id", "")
+    if _uid:
+        try:
+            _phase_yaml_status_update(
+                project_name, _uid, "no_go")
+        except ValueError:
+            pass
+    _rc_k = _post_apply_korrektur_loop(
+        state, always, file_whitelist,
+        builder_prompt=builder_prompt,
+        project_dir=project_dir,
+        project_name=project_name,
+        api_key=api_key,
+        max_llm=max_llm,
+        max_minutes=max_minutes,
+        # W30 (A-W30-2): 1 Runde im Recovery-Pfad
+        # ((e)-Rot nach Phasen-Suite). Bewusst kuerzer
+        # als der normale Pfad (2, Z. 9461).
+        max_korrektur_runden=1)
+    if _rc_k != 0:
+        print("[!] Korrektur-Runde fuer (e)-Rot fehlgeschlagen.")
+        return 18
+    return None
+
 def run_pipeline(project_name: str, aufgabe: str,
                  state_ref: list[RunState],
                  *,
@@ -8266,150 +8419,29 @@ def run_pipeline(project_name: str, aufgabe: str,
         state.commit_paket = build_commit_paket(state)
         # W25-1 (e): volle Suite vor Sammel-Commit.
         if state.phase_aktiv:
-            _w25_suite = _basis_gate_pytest_suite(
-                state.project_dir, 900)
-            audit("basis_gate_test_result",
-                  {"scope": "volle_suite",
-                   "ist_gate": True,
-                   "exit_code":
-                       _w25_suite["exit_code"],
-                   "klassifizierung":
-                       _w25_suite["klassifizierung"],
-                   "failed_count":
-                       _w25_suite["failed_count"],
-                   "passed_count":
-                       _w25_suite["passed_count"],
-                   "failed_test_ids":
-                       _w25_suite["failed_test_ids"],
-                   "failed_test_ids_mehr":
-                       _w25_suite["failed_test_ids_mehr"],
-                   "dauer_s":
-                       _w25_suite["dauer_s"],
-                   "raw_tail":
-                       _w25_suite["raw_tail"]},
-                  project_dir, project_name)
-            if _w25_suite["klassifizierung"] == "timeout":
-                print("[!] W25 Suite-Test-Timeout. "
-                      "Fail-closed.")
-                return 18
+            _w25_ergebnis = _commit_review_w25_suite(
+                state, project_dir, project_name)
+            if isinstance(_w25_ergebnis, int):
+                return _w25_ergebnis
+            _w25_suite = _w25_ergebnis
             if _w25_suite["exit_code"] != 0:
-                print(f"[FAIL] W25 Suite-Test rot vor "
-                      f"Sammel-Commit: "
-                      f"{_w25_suite['failed_count']} "
-                      f"failed, "
-                      f"{_w25_suite['passed_count']} "
-                      f"passed.")
-                print(f"  Tests: "
-                      f"{_w25_suite['failed_test_ids']}")
-                # W25-2-A33: Recovery statt
-                # fail-closed.
-                _ctx = _sammel_commit_suite_kontext(
-                    state, _w25_suite)
-                _v2 = ask_reviewer_for_recovery(
-                    state, "basis_gate_suite", _ctx)
-                print_recovery(_v2)
-                audit("phase_suite_rot_recovery",
-                      {"diagnose":
-                           (getattr(_v2, "diagnose", "")
-                            or "")[:2000],
-                       "failed_test_ids":
-                           _w25_suite[
-                               "failed_test_ids"],
-                       "klassifizierung":
-                           _w25_suite[
-                               "klassifizierung"]},
-                      project_dir, project_name)
                 _pos = state.phase_aktueller_index
-                _reparierbar = _fehler_nach_apply(
-                    _v2, _pos)
-                if not _reparierbar:
-                    # Fehler aus frueherem
-                    # Unterblock oder nicht
-                    # reparierbar -> no_go.
-                    _uid = state.phase_unterbloecke[
-                        _pos].get("id", "")
-                    if _uid:
-                        try:
-                            _phase_yaml_status_update(
-                                project_name, _uid,
-                                "no_go")
-                        except ValueError:
-                            pass
-                    print("[!] (e)-Rot nicht im "
-                          "aktuellen Unterblock "
-                          "reparierbar. Phase no_go.")
-                    return 18
-                # Reparierbar -> Status no_go,
-                # 1 Korrektur-Runde, dann (e) neu.
-                _uid = state.phase_unterbloecke[
-                    _pos].get("id", "")
-                if _uid:
-                    try:
-                        _phase_yaml_status_update(
-                            project_name, _uid,
-                            "no_go")
-                    except ValueError:
-                        pass
-                _rc_k = _post_apply_korrektur_loop(
-                    state, always, file_whitelist,
-                    builder_prompt=builder_prompt,
-                    project_dir=project_dir,
-                    project_name=project_name,
-                    api_key=api_key,
-                    max_llm=max_llm,
-                    max_minutes=max_minutes,
-                    # W30 (A-W30-2): 1 Runde im
-                    # Recovery-Pfad ((e)-Rot nach
-                    # Phasen-Suite). Bewusst kuerzer
-                    # als der normale Pfad (2, Z. 9461).
-                    max_korrektur_runden=1)
-                if _rc_k != 0:
-                    print("[!] Korrektur-Runde "
-                          "fuer (e)-Rot fehlgeschlagen.")
-                    return 18
-                # Erneut (e) pruefen.
-                _w25_suite2 = _basis_gate_pytest_suite(
-                    state.project_dir, 900)
-                audit("basis_gate_test_result",
-                      {"scope": "volle_suite",
-                       "ist_gate": True,
-                       "nachtlauf": True,
-                       "exit_code":
-                           _w25_suite2["exit_code"],
-                       "klassifizierung":
-                           _w25_suite2[
-                               "klassifizierung"],
-                       "failed_count":
-                           _w25_suite2[
-                               "failed_count"],
-                       "passed_count":
-                           _w25_suite2[
-                               "passed_count"],
-                       "failed_test_ids":
-                           _w25_suite2[
-                               "failed_test_ids"],
-                       "failed_test_ids_mehr":
-                           _w25_suite2[
-                               "failed_test_ids_mehr"],
-                       "dauer_s":
-                           _w25_suite2["dauer_s"],
-                       "raw_tail":
-                           _w25_suite2["raw_tail"]},
-                      project_dir, project_name)
-                if _w25_suite2["exit_code"] != 0:
-                    print("[!] (e)-Rot nach Korrektur "
-                          "weiterhin rot. Fail-closed.")
-                    return 18
-                # A35: Status zurueck auf done.
-                if _uid:
-                    try:
-                        _phase_yaml_status_update(
-                            project_name, _uid,
-                            "done")
-                    except ValueError:
-                        pass
-                print("[+] (e)-Rot nach Recovery "
-                      "gruen. Sammel-Commit weiter.")
+                _rc_r = _commit_review_w25_recovery(
+                    state, _w25_suite, _pos,
+                    always, file_whitelist,
+                    builder_prompt, project_dir,
+                    project_name, api_key,
+                    max_llm, max_minutes)
+                if _rc_r is not None:
+                    return _rc_r
+                _uid = ""
+                if 0 <= _pos < len(state.phase_unterbloecke):
+                    _uid = state.phase_unterbloecke[_pos].get(
+                        "id", "")
+                _rc_n = _commit_review_w25_suite_nachlauf(
+                    state, project_dir, project_name, _uid)
+                if _rc_n is not None:
+                    return _rc_n
 
         # D3 (2026-10-16): Deterministische Liste
         # im Phasen-Modus. Ueberschreibt die

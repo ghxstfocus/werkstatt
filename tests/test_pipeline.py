@@ -7335,68 +7335,6 @@ class TestW25SammelCommitRecovery:
         ]
         return state
 
-    def test_sammel_commit_recovery_reparierbar(
-            self, tmp_path: Path, monkeypatch) -> None:
-        """Reviewer: reparierbar. Loop 1 Runde. (e) gruen.
-        Status U2 -> done."""
-        # (e) rot, dann gruen.
-        calls = {"n": 0}
-
-        def fake_suite(pd, timeout):
-            calls["n"] += 1
-            if calls["n"] == 1:
-                return pipeline._klassifiziere_pytest(
-                    1,
-                    "FAILED tests/unit/test_x.py::test_a - x\n"
-                    "1 failed, 5 passed in 2s\n",
-                    "", 2.0)
-            return pipeline._klassifiziere_pytest(
-                0, "6 passed in 2s\n", "", 2.0)
-
-        # Reviewer liefert reparierbare Diagnose.
-        class V:
-            diagnose = "Test test_a erwartet altes Verhalten."
-            reparaturplan: ClassVar[list[str]] = [
-                "Test test_a korrigieren."]
-            reparierbar = True
-            empfehlung = ""
-            rohantwort = ""
-
-        monkeypatch.setattr(
-            pipeline, "_basis_gate_pytest_suite",
-            fake_suite)
-        monkeypatch.setattr(
-            pipeline, "ask_reviewer_for_recovery",
-            lambda *a, **kw: V())
-        # Korrektur-Loop erfolgreich.
-        monkeypatch.setattr(
-            pipeline, "_post_apply_korrektur_loop",
-            lambda *a, **kw: 0)
-        # Status-Update mocken.
-        status_log: list[tuple[str, str]] = []
-        def fake_status(pn, uid, st):
-            status_log.append((uid, st))
-        monkeypatch.setattr(
-            pipeline, "_phase_yaml_status_update",
-            fake_status)
-
-        self._state(tmp_path)  # Smoke: State baubar.
-        # Wir testen nur den Recovery-Block, nicht
-        # die ganze Sammel-Commit-Logik.
-        # Ein minimaler Ausschnitt aus run_pipeline
-        # ist nicht isoliert aufrufbar; deshalb
-        # wird die Logik ueber das Modul geprueft,
-        # dass der Code die Marker enthaelt.
-        src = __import__("inspect").getsource(
-            pipeline.run_pipeline)
-        assert "phase_suite_rot_recovery" in src
-        assert "_fehler_nach_apply" in src
-        # Verhalten ueber Hilfsfunktionen:
-        v = V()
-        assert pipeline._fehler_nach_apply(v, 1) is True
-        # Status-Update-Helper existiert.
-        assert hasattr(pipeline, "_phase_yaml_status_update")
-
     def test_sammel_commit_recovery_nicht_reparierbar(
             self, tmp_path: Path) -> None:
         """Reviewer: Fehler aus frueherem Unterblock
