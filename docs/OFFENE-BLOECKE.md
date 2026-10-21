@@ -1044,3 +1044,35 @@ HEAD bb919d1. Vier vollstaendige Return-Listen.
 Prognose A22-2 war 45. Messung 46 (Erfolgs-Return
 in _vorlauf_und_state vergessen). Korrektur dokumentiert.
 
+
+## M-56 — C2/C0+C1-Grenzen-Widerspruch aufgeloest (2026-10-21)
+
+Reviewer-Auflage (Durchlauf 55, M-56).
+
+Die Session-Bilanz (Reviewer-Block 21) sagte:
+- C2 = 8041-8147 (107 Z.).
+- C0+C1 = 8041-8147 (107 Z.).
+Beide gleich -> Widerspruch.
+
+### Die Wahrheit (HEAD 5d512b0, ast-gemessen)
+
+| Block | Body VOR Extraktion | Aufruf NACH Extraktion |
+|---|---|---|
+| C0+C1 | 8041-8147 (107 Z.) | 8168-8181 (14 Z.) |
+| C2 | 8070-8131 (62 Z.) | 8183-8186 (4 Z.) |
+| C7 | 8585-8755 (171 Z.) | 8811-8815 (5 Z.) |
+
+### Mein Fehler (ehrlich)
+
+Ich habe in der Session-Bilanz die C2-Body-Grenze
+(8070-8131, 62 Z.) mit der C0+C1-Body-Grenze
+(8041-8147, 107 Z.) verwechselt. C2 hatte nie 107 Z.
+C2 = 62 Z. (8070-8131) VOR Extraktion, 4 Z. (8183-8186)
+NACH Extraktion.
+
+### Konsequenz
+
+Ab jetzt in Session-Bilanzen: Body-Bereich VOR und
+Aufrufstelle NACH getrennt ausweisen (zwei Spalten,
+nicht eine Zahl).
+
