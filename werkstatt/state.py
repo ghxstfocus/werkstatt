@@ -270,3 +270,23 @@ class RunState:
 
 
 
+
+
+@dataclass
+class VorlaufErgebnis:
+    """C0+C1: Rueckgabe von _vorlauf_und_state.
+
+    Alle 10 Werte, die run_pipeline nach C0+C1 braucht.
+    docs/agents fallen weg (in state.docs/state.agents).
+    """
+    state: RunState
+    config: dict
+    budget: dict
+    max_llm: int
+    max_minutes: int
+    project_dir: Path
+    file_whitelist: list
+    api_key: str
+    always: dict
+    optional: dict
+

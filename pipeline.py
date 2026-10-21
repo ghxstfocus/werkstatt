@@ -106,6 +106,7 @@ from werkstatt.state import (
     RunState,
     SolverBefund,
     SolverDiagnose,
+    VorlaufErgebnis,
 )
 from werkstatt.subprocess_env import subprocess_env
 from werkstatt.verify import (  # noqa: F401 (Re-Export fuer Tests)
