@@ -31,6 +31,12 @@ Chronologisch nach Umbau-Phasen. Append-only pro Phase.
 | 3a-1c-2a (W0a-1/2/3) | 3 | ERLEDIGT (ecf35a4). W0a-1/2/3 extrahiert (`_commit_review_w25_suite`, `_commit_review_w25_recovery`, `_commit_review_w25_suite_nachlauf`). 7390 (test_sammel_commit_recovery_reparierbar) geloescht, B1a ersetzt. | gross | done |
 | 3a-1c-2a-AQ | 2 | ERLEDIGT (88e3e5c + ae25e08). 6 AQ-Tests B1a/B1b/B2/B3/B4/B6 + B7/B8/6887 = 9 neue Verhaltens-Tests. Baseline 1237 -> 1245. | mittel | done |
 
+### 3a-2a-Vorlauf — done (20f0e7d)
+
+_phase_vorlauf extrahiert. 7 Returns. Baseline 1245/17/9.
+M-61 (Return-Zaehlung 3a-2c vs 3a-2d) offen, blockierend
+nur fuer 3a-2c/d.
+
 ## Phase 3b — Loop-Umbau (nach 3a)
 
 Noch keine Merkposten. Entstehen hier, sobald 3a abgeschlossen.

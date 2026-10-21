@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-21 (Phase 3a, nach 3a-1c-4).
-Werkstatt-HEAD: 5762d8e. Branch: umbau/phase-2 (origin gepusht).
+Stand: 2026-10-21 (Phase 3a, nach 3a-2a).
+Werkstatt-HEAD: 20f0e7d. Branch: umbau/phase-2 (origin gepusht).
 Baseline: pytest 1245 passed / ruff 17 / mypy 9 (isoliert) / AST 6 / Katalog 167.
 
 Baseline-Definition (verbindlich, sonst reproduziert sich der 7-vs-9-Fehler):
@@ -13,11 +13,11 @@ Baseline-Definition (verbindlich, sonst reproduziert sich der 7-vs-9-Fehler):
 
 ## Aktueller Block
 
-3a-2 (run_phase, 528 Z.): noch nicht begonnen. Naechster konkreter
-Schritt: read-only Inspektion von run_phase, Signatur-Freeze,
-Return-Bilanz, bestehende Tests, Position (A/B).
+3a-2b (Loop, run_phase Z. 2216-2404, 5 Returns): naechster
+Block. M-61 (Return-Zaehlung 3a-2c vs 3a-2d) parallel
+klaeren — blockierend nur fuer 3a-2c/d, nicht fuer 3a-2b.
 
-Rollback-Anker: 5762d8e. Delta != 0 -> Rollback, nicht Test anpassen.
+Rollback-Anker: 20f0e7d. Delta != 0 -> Rollback, nicht Test anpassen.
 
 ## Abgeschlossen seit letztem Handoff
 
@@ -31,6 +31,14 @@ Rollback-Anker: 5762d8e. Delta != 0 -> Rollback, nicht Test anpassen.
   Return-Bilanz: 27/3/2/7/8 = 47.
   3 Test-Anpassungen (#1 test_phase.py:804, #5 test_pipeline.py:6324,
   #12 test_pipeline.py:8671) via duale Quelle/Split.
+- 3a-2a (Vorlauf): done (20f0e7d).
+  _phase_vorlauf(state, project_name) -> PhaseVorlaufErgebnis | int.
+  Dataclass PhaseVorlaufErgebnis in werkstatt/state.py
+  (state, unterbloecke, api_key, max_phase).
+  if-state_ref-Guard bleibt in run_phase.
+  Return-Bilanz: run_phase 17, _phase_vorlauf 7, Summe 24
+  (+2 Extraktions-Artefakte gegen 22).
+  Baseline 1245/17/9 unveraendert.
 - C6 (Coverage/Chaos): gestrichen (Durchlauf 48, gehoert zu 3b).
 
 ## C8/C9-Grenzen-Korrektur (Reviewer-Auflage A1)
@@ -62,10 +70,12 @@ Korrektur ist in docs/OFFENE-BLOECKE.md eingepflegt (Z. 20).
 
 ## Naechste Bloecke (Reihenfolge laut ROADMAP.md Z. 217-223)
 
-1. 3a-2 (run_phase, 528 Z.) — naechster Block.
-2. 3a-3 (_phase_main_pfad, 641 Z., Deadlock).
-3. 3b (Loop-Umbau; enthaelt C6 + Reviewer-Modus + Quality-Gate).
-4. 3c (NEUBAU-Abloesung).
+1. 3a-2b (Loop, Z. 2216-2404, 5 Returns) — naechster Block.
+2. 3a-2c (Nachlauf, Z. 2406-2524, 6 Returns; M-61-Klaerung noetig).
+3. 3a-2d (Wiederaufnahme+Commit, Z. 2525-2574, 3 Returns).
+4. 3a-3 (_phase_main_pfad, 641 Z., Deadlock).
+5. 3b (Loop-Umbau; enthaelt C6 + Reviewer-Modus + Quality-Gate).
+6. 3c (NEUBAU-Abloesung).
 
 ## Offene Merkposten
 

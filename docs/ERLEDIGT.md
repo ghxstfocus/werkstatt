@@ -402,3 +402,43 @@ Test-Anpassungen (Kategorie 2, A9-12-deklariert):
   #12 tests/test_pipeline.py:8671  (duale Quelle)
 
 Rollback-Anker: 5762d8e (origin).
+
+## 3a-2a/Vorlauf — _phase_vorlauf extrahiert (2026-10-21)
+
+Commit: 20f0e7d (refactor, auf origin).
+Vorlauf: 5708bcf (M-57 SESSION-BILANZ).
+
+Extraktion: run_phase Z. 2084-2214 (HEAD 5708bcf) ->
+`_phase_vorlauf(state, project_name) -> PhaseVorlaufErgebnis | int`
+(pipeline.py Z. 2048-2195, 148 Zeilen).
+if-state_ref-Guard (Z. 2081-2083) bleibt in run_phase.
+
+Dataclass: PhaseVorlaufErgebnis (werkstatt/state.py)
+  state: RunState
+  unterbloecke: list
+  api_key: str
+  max_phase: int
+Bewusst NICHT VorlaufErgebnis wiederverwendet (8/10 Felder ungenutzt).
+
+Return-Bilanz NACH (gemessen via ast):
+  run_phase       17 (22 - 6 Vorlauf + 1 Verteiler _vl)
+  _phase_vorlauf   7 (6 Fail-fast + 1 PhaseVorlaufErgebnis)
+  Summe           24 (+2 Extraktions-Artefakte gegen Original 22).
+
+Baseline (HEAD 20f0e7d):
+  pytest -q                            1245 passed
+  ruff check .                         17 errors
+  mypy pipeline.py werkstatt/          9 errors
+  pytest tests/test_audit_kinds.py -q  6 passed
+  _KATALOG_SOLL                        167.
+
+Zwischenstaende (ehrlich):
+  1. Versuch 1: handgeschriebene Kopie, 25 Tests kaputt. Kein Commit.
+  2. Versuch 2: wortwoertliche Extraktion, PhaseVorlaufErgebnis-Import
+     fehlte -> 23 Tests kaputt. Kein Commit.
+  3. Import-Fix: ruff +1 (I001 Import-Sortierung). Kein Commit.
+  4. I001-Fix: 1245/17/9 gruen. Commit.
+
+Test-Anpassungen (Kategorie 2): keine.
+
+Rollback-Anker: 20f0e7d (origin).
