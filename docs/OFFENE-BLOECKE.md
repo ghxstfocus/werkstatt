@@ -743,3 +743,69 @@ if _rc_c2 is not None:                    # 5
 ```
 = 6 Zeilen Code (ohne Leerzeile).
 
+
+## M-48..M-52 — C0+C1-Belege (2026-10-21, HEAD fafc5b5)
+
+Reviewer-Auflage (Durchlauf 49, M-48..M-52).
+
+### M-48 — C0+C1 = 8040-8146 (107 Z.), keine C2-Ueberlappung
+
+HEAD fafc5b5, run_pipeline Z. 8027-8863 (837 Z.).
+Top-Level-Statements:
+```
+body[1]-body[20]:  Z. 8040-8093  = C0 (Vorlauf)
+body[21]-body[29]: Z. 8095-8146  = C1 (State + run_id + Audit)
+body[30]-body[31]: Z. 8148-8153  = C2-Aufruf (extrahiert)
+body[32]:          Z. 8155       = print Basis-Gate gruen
+```
+C0+C1 = 8040-8146 (107 Z.). C2 beginnt bei body[30] (Z. 8148)
+— keine Ueberlappung. Die fruehere Messung gegen d512264
+hatte C2 noch als body[30]-body[34] (8070-8131) in run_pipeline;
+nach C2-Extraktion (d06cf23) ist C2 durch den 5-Zeilen-Aufruf
+ersetzt (8148-8153). C0+C1 bleibt unveraendert 8040-8146.
+
+### M-49 — api_key-Herkunft: C0-Local
+
+Zitat Z. 8040:
+```
+8040:     api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+8041:     if not api_key:
+8042:         print("[FAIL] DEEPSEEK_API_KEY fehlt. Fail closed.")
+8043:         return 1
+```
+api_key ist ein C0-Local (os.getenv), kein Parameter.
+Er wandert in RunState (Z. 8110: api_key=api_key).
+Nach C0+C1 wird state.api_key gelesen (z.B. Z. 1584, 1637).
+
+### M-50 — Rueckgabe-Typ: belegt
+
+```
+8045:     config = _lade_und_pruefe_projekt(project_name)  # dict
+8090:     max_llm = budget.get("max_llm_calls", 30)        # int
+8091:     max_minutes = budget.get("max_minutes", 0)       # int
+```
+Signatur: tuple[RunState, dict, int, int] | int.
+state_ref: list[RunState] ist korrekt (run_pipeline Z. 8029).
+
+### M-51 — M-38-Widerspruch aufgeloest
+
+Marker:
+```
+8095:     if phasen_state is not None:
+8099:                 "state_ref nicht leer")
+8140:     if phasen_state is not None:
+```
+M-38 sagte 8017-8040 (gegen d512264). Nach C2-Extraktion
+sind die Marker bei Z. 8095-8099. M-38 war nicht falsch,
+sondern veraltet (HEAD-Verschiebung durch C2-Extraktion).
+
+### M-52 — Baseline-Kette: konsistent
+
+```
+d512264:  1245 / 17 / 9 / 14
+8ac1092:  1245 / 17 / 9 / 14 (Doku)
+d06cf23:  1245 / 17 / 9 / 14 (C2, pytest 1245 passed)
+fafc5b5:  1245 / 17 / 9 / 14 (Docstring, pytest 1245 passed)
+```
+Kein Test dazugekommen. Kein Delta.
+
