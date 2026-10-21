@@ -553,3 +553,51 @@ Grenze (171 Z., basierend auf 8a921d4).
 Extraktion. Nur die Reviewer-Freigabe M-22 war auf einer
 veralteten Zahl (Stand vor 8a921d4).
 
+
+## M-43 + M-44 — W2-Grenze praezisiert + Geruest-tot belegt (2026-10-21)
+
+Reviewer-Auflage (Durchlauf 42, M-43 + M-44).
+
+### M-43 — Drei Zahlen, drei Objekte
+
+Die drei Zahlen sind **rechnerisch alle korrekt**, messen
+aber **verschiedene Objekte**:
+
+| Zahl | Was | Zeilen | Status |
+|---|---|---|---|
+| 151 | M-22 (alt) | 8585-8735 | **FALSCH** (veraltet) |
+| 171 | W2-Block (extrahiert) | 8585-8755 | **KORREKT** |
+| 156 | if-Block in run_pipeline | 8605-8760 | **KORREKT** (Rest) |
+
+**Praezisierung:**
+- W2 = 8585-8755 (171 Z.). Das ist der Block, der in
+  `277029f` extrahiert wurde: Skip-Pfad (8585-8603),
+  Init max_commit_versuche/commit_versuche (8606-8607),
+  while-True-Loop (8608-8755).
+- Der `if config.review_commit_package:`-Block in
+  `run_pipeline` (nach Extraktion): 8605-8760 (156 Z.).
+  Das ist der **Rest** — C7-Vorlauf plus W2-Aufruf.
+- Die 20 Zeilen 8585-8604 (M-43e) sind **C6**
+  (Coverage/Test-Generator/Chaos), nicht W2.
+
+**M-22 (151) zurueckgezogen.**
+
+### M-44 — Geruest-tot in 5a9939c belegt
+
+grep -n `_commit_review_w25_loop` pipeline.py (aktuell):
+```
+7761:def _commit_review_w25_loop(
+8754:        _rc_w2 = _commit_review_w25_loop(
+```
+= 2 Treffer (def + Aufruf).
+
+grep -n in 5a9939c (git show 5a9939c:pipeline.py):
+```
+7761:def _commit_review_w25_loop(
+```
+= 1 Treffer (nur def).
+
+**In 5a9939c war das Geruest tot** (1 Treffer, nur
+Definition, kein Aufruf). Baseline 1245/17/9 ist korrekt
+dokumentiert.
+
