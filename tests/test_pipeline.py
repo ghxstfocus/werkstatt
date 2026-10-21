@@ -5403,7 +5403,7 @@ class TestCommitReviewNewFileSkip:
         -> kein Fail-closed. Per String-Match im Quelltext.
         """
         import inspect as ins
-        quelle = ins.getsource(pipeline.run_pipeline)
+        quelle = ins.getsource(pipeline._commit_review_w25_loop)
         assert "_hat_anker_patches" in quelle
         assert "commit_review_new_file_skip" in quelle
         assert "anzahl_new_file" in quelle
@@ -5421,20 +5421,20 @@ class TestCommitReviewNewFileSkip:
     def test_console_text_differenziert(self) -> None:
         """A6: Console-Text unterscheidet 0 und n Patches."""
         import inspect as ins
-        quelle = ins.getsource(pipeline.run_pipeline)
+        quelle = ins.getsource(pipeline._commit_review_w25_loop)
         assert "reine new_file-" in quelle
         assert "keine Patches. Skip." in quelle
 
     def test_anzahl_new_file_berechnet(self) -> None:
         """A7: anzahl_new_file wird VOR dem Audit berechnet."""
         import inspect as ins
-        quelle = ins.getsource(pipeline.run_pipeline)
+        quelle = ins.getsource(pipeline._commit_review_w25_loop)
         assert "_anzahl_new_file = sum(" in quelle
 
     def test_payload_felder(self) -> None:
         """Payload hat runde, anzahl_new_file, phase_id."""
         import inspect as ins
-        quelle = ins.getsource(pipeline.run_pipeline)
+        quelle = ins.getsource(pipeline._commit_review_w25_loop)
         assert '"runde": _runde_audit' in quelle
         assert '"anzahl_new_file": _anzahl_new_file' in quelle
         assert '"phase_id": getattr(state, "phase_id", "")' in quelle
@@ -6880,12 +6880,12 @@ class TestW11:
 
     def test_commit_review_prompt_unterblock_nur_phasen_modus(self) -> None:
         # Dual-source (A10-13b): _w11_unterblock_kontext-Bau
-        # wandert bei 3a-1c-2 (C7) in _commit_review_loop.
+        # wandert bei 3a-1c-2b in _commit_review_w25_loop (erledigt).
         # Merkposten: Aufloesen in 3a-1c-2-doc.
         import inspect
         src = (
             inspect.getsource(pipeline.run_pipeline)
-            + inspect.getsource(pipeline._review_verdict_behandlung))
+            + inspect.getsource(pipeline._commit_review_w25_loop))
         # Der Kontext wird nur bei state.phase_aktiv
         # gefuellt.
         assert "if state.phase_aktiv:" in src
