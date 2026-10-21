@@ -1076,3 +1076,27 @@ Ab jetzt in Session-Bilanzen: Body-Bereich VOR und
 Aufrufstelle NACH getrennt ausweisen (zwei Spalten,
 nicht eine Zahl).
 
+
+## M-57 — Body-VOR-Commit-Bezuege (2026-10-21)
+
+Reviewer-Auflage (Durchlauf 56, M-57).
+
+Die M-56-Tabelle sagte "HEAD 5d512b0, ast-gemessen".
+Das ist fuer Body VOR falsch: die Bloecke sind in
+5d512b0 laengst extrahiert. Body VOR ist gegen den
+jeweiligen Vor-Commit gemessen.
+
+### Korrekte Commit-Bezuege
+
+| Block | Body VOR | Vor-Commit | Aufruf NACH | HEAD |
+|---|---|---|---|---|
+| C0+C1 | 8041-8147 (107 Z.) | da67198 (bb919d1~1) | 8168-8181 (14 Z.) | 5d512b0 |
+| C2 | 8070-8131 (62 Z.) | 8ac1092 (d06cf23~1) | 8183-8186 (4 Z.) | 5d512b0 |
+| W2 | 8585-8755 (171 Z.) | 6e11718 (277029f~1) | 8811-8815 (5 Z.) | 5d512b0 |
+
+### Konsequenz
+
+Ab jetzt: Body-VOR-Werte immer mit Vor-Commit-Bezug,
+Aufruf-NACH-Werte mit HEAD-Bezug. Nie "HEAD" fuer
+Body-VOR, wenn der Block extrahiert ist.
+
