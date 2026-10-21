@@ -503,3 +503,53 @@ vorsorglich gebaut, nicht nachgezogen.
 
 Kein 18c-Bruch. Kein Merkposten noetig.
 
+
+## A18-1d + M-42 — Baseline-Rest + W2-Grenze (2026-10-21)
+
+Reviewer-Auflage (Durchlauf 41, A18-1d + M-42).
+
+### A18-1d — Baseline 5a9939c / 6e11718 / 8a921d4
+
+Gemessen via git worktree + pytest --collect-only +
+ruff check . + mypy pipeline.py:
+
+| Commit | pytest | ruff | mypy |
+|---|---|---|---|
+| 5a9939c (Geruest tot) | 1245 | 17 | 9 |
+| 6e11718 (Parameterbedarf 8->9) | 1245 | 17 | 9 |
+| 8a921d4 (W2-Grenze) | 1245 | 17 | 9 |
+
+**Alle drei unveraendert.** 5a9939c (Geruest, tot) aendert
+nichts — die Funktion _commit_review_w25_loop wird nirgends
+gerufen. 6e11718/8a921d4 sind Doku.
+
+**Deklaration der 9 uebrigen Doku-Commits** (ca56520,
+1091b3e, 9141591, bf2e487, da7d6bc, f608658, 4e450d7,
+05c8b81, de62a2b): Baseline unveraendert, nicht einzeln
+gemessen, weil reine Doku (kein Code, kein Test).
+
+### M-42 — W2-Grenze 171 vs 151: 171 ist korrekt
+
+**M-22 (Reviewer-Freigabe, Durchlauf 28):** W2 = 8585-8735
+(151 Z.). **Das war falsch.**
+
+**8a921d4 (Korrektur):** W2 = 8585-8755 (171 Z.).
+**Das ist korrekt.**
+
+**Begruendung (M-42b, ast-gemessen):** Der `while True:`-Loop
+endet bei Z. 8755 (nicht 8735). Der `if config.review_commit_
+package:`-Block endet bei Z. 8760 (156 Z. nach Extraktion).
+Zwischen 8735 und 8755 liegen:
+- `if not bauer_reply.ok:` (Fehler-Pfad, return 8)
+- `state.commit_paket = parse_commit_paket(bauer_reply.content)`
+- `if not state.commit_paket.get("message") ...: audit(...)`
+
+Diese 20 Zeilen (8736-8755) sind **W2-intern**, nicht C8.
+Die Extraktion in `277029f` verwendete die **korrekte**
+Grenze (171 Z., basierend auf 8a921d4).
+
+**Konsequenz:** M-22 (151) war falsch. Die Signatur
+(10 Parameter nach M-39) bleibt gueltig. Kein Bug in der
+Extraktion. Nur die Reviewer-Freigabe M-22 war auf einer
+veralteten Zahl (Stand vor 8a921d4).
+
