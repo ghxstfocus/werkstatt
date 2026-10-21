@@ -797,7 +797,7 @@ class TestRunPipelinePhasenModus:
         """Der phasen_state-Guard steht im Quelltext von
         run_pipeline (statisch verifiziert)."""
         import inspect as ins
-        quelle = ins.getsource(pipeline.run_pipeline)
+        quelle = ins.getsource(pipeline._vorlauf_und_state)
         assert "phasen_state is not None" in quelle
         assert "state_ref nicht leer" in quelle
 
@@ -1814,13 +1814,13 @@ class TestStateAufgabePhasenModus:
     def test_quelle_setzt_aufgabe(self) -> None:
         """Der Fix ist im Quelltext: state.aufgabe = aufgabe."""
         import inspect as ins
-        quelle = ins.getsource(pipeline.run_pipeline)
+        quelle = ins.getsource(pipeline._vorlauf_und_state)
         assert "state.aufgabe = aufgabe" in quelle
 
     def test_quelle_audit_phase_felder(self) -> None:
         """pipeline_start-Audit ergaenzt um phase_id."""
         import inspect as ins
-        quelle = ins.getsource(pipeline.run_pipeline)
+        quelle = ins.getsource(pipeline._vorlauf_und_state)
         assert "phase_id" in quelle
         assert "phase_titel" in quelle
         assert "unterblock_index" in quelle

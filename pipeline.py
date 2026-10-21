@@ -7759,6 +7759,133 @@ def _commit_review_w25_recovery(
     return None
 
 
+def _vorlauf_und_state(
+    project_name: str,
+    aufgabe: str,
+    state_ref: list[RunState],
+    phasen_state: RunState | None = None,
+) -> VorlaufErgebnis | int:
+    """C0+C1: Vorlauf + State-Aufbau.
+
+    Extrahiert aus run_pipeline, Z. 8041-8147 (Stand da67198).
+    Return: int bei api_key-leer (1) oder memory-korrupt (3).
+            VorlaufErgebnis bei Erfolg.
+    Raise: ValueError bei phasen_state + nicht-leerem state_ref.
+    """
+    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if not api_key:
+        print("[FAIL] DEEPSEEK_API_KEY fehlt. Fail closed.")
+        return 1
+
+    config = _lade_und_pruefe_projekt(project_name)
+    project_dir = Path(config.get("project_dir", str(Path.cwd()))).expanduser()
+    # Agent-Memory A2: Projekt-Stand aus memory.yaml.
+    # UU6: fehlt = ok, korrupt = Fail-closed.
+    projekt_stand: dict = {}
+    _mem_pfad = Path("/opt/werkstatt/projects") / f"{project_name}.memory.yaml"
+    if _mem_pfad.exists():
+        try:
+            _mem = yaml.safe_load(
+                _mem_pfad.read_text(encoding="utf-8"))
+            if isinstance(_mem, dict):
+                projekt_stand = _mem.get("projekt_stand", {}) or {}
+        except yaml.YAMLError as exc:
+            print(f"[FAIL] memory.yaml korrupt: {exc}")
+            audit("memory_yaml_korrupt",
+                  {"pfad": str(_mem_pfad), "fehler": str(exc)},
+                  project_dir, project_name)
+            return 3
+    agents_dir = config.get("project_agents_dir")
+    if not agents_dir:
+        agents_dir = "/opt/werkstatt/agents"
+    agents = load_agents(agents_dir)
+    docs = load_docs(config.get("docs", {}), project_dir)
+    always, optional = build_catalog(config, project_dir)
+    file_whitelist = config.get("file_whitelist", [])
+    # Auflage 2184: Default 30, damit Projekte ohne YAML
+    # nicht still auf 20 fallen.
+    budget = config.get(
+        "budget",
+        # W30 (A-W30-1): Default 2 (Chef-Anweisung,
+        # konsistent mit Code-Fallback Z. 9012).
+        {"max_review_rounds": 2, "max_llm_calls": 30})
+
+    solver_config: dict[str, float] = {}
+    _solver_yaml = config.get("solver", {}) or {}
+    if isinstance(_solver_yaml, dict):
+        if "p1_schwellwert" in _solver_yaml:
+            solver_config["p1_schwellwert"] = float(
+                _solver_yaml["p1_schwellwert"])
+        if "p1_min_tokens" in _solver_yaml:
+            solver_config["p1_min_tokens"] = float(
+                _solver_yaml["p1_min_tokens"])
+        if "max_runden" in _solver_yaml:
+            solver_config["max_runden"] = float(
+                _solver_yaml["max_runden"])
+    max_llm = budget.get("max_llm_calls", 30)
+    max_minutes = budget.get("max_minutes", 0)  # Auflage 2080: 0 = aus
+
+    git_author = config.get("git_author", {}) or {}
+    # P2b-3 / G6: phasen_state-Guard.
+    if phasen_state is not None:
+        if state_ref:
+            raise ValueError(
+                "phasen_state uebergeben, aber "
+                "state_ref nicht leer")
+        state = phasen_state
+        # P-Bugfix 2026-10-16: im Phasen-Modus ist
+        # der Unterblock-Auftrag der aktuelle Auftrag.
+        # Der Phasen-Gesamtauftrag bleibt in phase.yaml.
+        state.aufgabe = aufgabe
+    else:
+        state = RunState(
+            block_id=config.get("project", "unknown"),
+            aufgabe=aufgabe,
+            start_ts=datetime.now(UTC).isoformat(timespec="seconds"),
+            docs=docs, agents=agents, always=always, optional=optional,
+            file_whitelist=file_whitelist, api_key=api_key, budget=budget,
+            agent_docs=config.get("agent_docs", {}),
+            project_dir=project_dir,
+            projekt_stand=projekt_stand,
+            git_author_name=str(git_author.get("name", "")),
+            git_author_email=str(git_author.get("email", "")),
+            project_name=project_name,
+        )
+    # Auflage 2080: Startzeitpunkt fuer das Zeitbudget.
+    state.start_monotonic = time.monotonic()
+
+    # Auflage 2183-P4-Log2: state an main zurueckgeben.
+    state_ref.append(state)
+
+    # Auflage 2200a: Run-Identifier setzen.
+    _neue_run_id = (
+        datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        + f"-{os.getpid()}")
+    # Auflage 2183 A2: run_id auch in state.
+    set_run_id(_neue_run_id)
+    state.run_id = _neue_run_id
+
+    # P-Bugfix 2026-10-16: Phasen-Kontext im Audit.
+    _start_daten: dict = {
+        "aufgabe_hash": __import__("hashlib").sha256(
+            aufgabe.encode()).hexdigest(),
+        "aufgabe_kurz": aufgabe[:200],
+        "llm_calls_start": 0,
+    }
+    if phasen_state is not None:
+        _start_daten["phase_id"] = state.phase_id
+        _start_daten["phase_titel"] = state.phase_titel
+        _start_daten["unterblock_index"] = \
+            state.phase_aktueller_index
+    audit("pipeline_start", _start_daten,
+          project_dir, project_name)
+    return VorlaufErgebnis(
+        state=state, config=config, budget=budget,
+        max_llm=max_llm, max_minutes=max_minutes,
+        project_dir=project_dir, file_whitelist=file_whitelist,
+        api_key=api_key, always=always, optional=optional)
+
+
 def _basis_gate(
     state: RunState,
     always: dict,
@@ -8038,113 +8165,20 @@ def run_pipeline(project_name: str, aufgabe: str,
     und der Approval-Block wird durch den Phasen-Modus
     ersetzt (Paket sammeln statt committen).
     """
-    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
-    if not api_key:
-        print("[FAIL] DEEPSEEK_API_KEY fehlt. Fail closed.")
-        return 1
-
-    config = _lade_und_pruefe_projekt(project_name)
-    project_dir = Path(config.get("project_dir", str(Path.cwd()))).expanduser()
-    # Agent-Memory A2: Projekt-Stand aus memory.yaml.
-    # UU6: fehlt = ok, korrupt = Fail-closed.
-    projekt_stand: dict = {}
-    _mem_pfad = Path("/opt/werkstatt/projects") / f"{project_name}.memory.yaml"
-    if _mem_pfad.exists():
-        try:
-            _mem = yaml.safe_load(
-                _mem_pfad.read_text(encoding="utf-8"))
-            if isinstance(_mem, dict):
-                projekt_stand = _mem.get("projekt_stand", {}) or {}
-        except yaml.YAMLError as exc:
-            print(f"[FAIL] memory.yaml korrupt: {exc}")
-            audit("memory_yaml_korrupt",
-                  {"pfad": str(_mem_pfad), "fehler": str(exc)},
-                  project_dir, project_name)
-            return 3
-    agents_dir = config.get("project_agents_dir")
-    if not agents_dir:
-        agents_dir = "/opt/werkstatt/agents"
-    agents = load_agents(agents_dir)
-    docs = load_docs(config.get("docs", {}), project_dir)
-    always, optional = build_catalog(config, project_dir)
-    file_whitelist = config.get("file_whitelist", [])
-    # Auflage 2184: Default 30, damit Projekte ohne YAML
-    # nicht still auf 20 fallen.
-    budget = config.get(
-        "budget",
-        # W30 (A-W30-1): Default 2 (Chef-Anweisung,
-        # konsistent mit Code-Fallback Z. 9012).
-        {"max_review_rounds": 2, "max_llm_calls": 30})
-
-    solver_config: dict[str, float] = {}
-    _solver_yaml = config.get("solver", {}) or {}
-    if isinstance(_solver_yaml, dict):
-        if "p1_schwellwert" in _solver_yaml:
-            solver_config["p1_schwellwert"] = float(
-                _solver_yaml["p1_schwellwert"])
-        if "p1_min_tokens" in _solver_yaml:
-            solver_config["p1_min_tokens"] = float(
-                _solver_yaml["p1_min_tokens"])
-        if "max_runden" in _solver_yaml:
-            solver_config["max_runden"] = float(
-                _solver_yaml["max_runden"])
-    max_llm = budget.get("max_llm_calls", 30)
-    max_minutes = budget.get("max_minutes", 0)  # Auflage 2080: 0 = aus
-
-    git_author = config.get("git_author", {}) or {}
-    # P2b-3 / G6: phasen_state-Guard.
-    if phasen_state is not None:
-        if state_ref:
-            raise ValueError(
-                "phasen_state uebergeben, aber "
-                "state_ref nicht leer")
-        state = phasen_state
-        # P-Bugfix 2026-10-16: im Phasen-Modus ist
-        # der Unterblock-Auftrag der aktuelle Auftrag.
-        # Der Phasen-Gesamtauftrag bleibt in phase.yaml.
-        state.aufgabe = aufgabe
-    else:
-        state = RunState(
-            block_id=config.get("project", "unknown"),
-            aufgabe=aufgabe,
-            start_ts=datetime.now(UTC).isoformat(timespec="seconds"),
-            docs=docs, agents=agents, always=always, optional=optional,
-            file_whitelist=file_whitelist, api_key=api_key, budget=budget,
-            agent_docs=config.get("agent_docs", {}),
-            project_dir=project_dir,
-            projekt_stand=projekt_stand,
-            git_author_name=str(git_author.get("name", "")),
-            git_author_email=str(git_author.get("email", "")),
-            project_name=project_name,
-        )
-    # Auflage 2080: Startzeitpunkt fuer das Zeitbudget.
-    state.start_monotonic = time.monotonic()
-
-    # Auflage 2183-P4-Log2: state an main zurueckgeben.
-    state_ref.append(state)
-
-    # Auflage 2200a: Run-Identifier setzen.
-    _neue_run_id = (
-        datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-        + f"-{os.getpid()}")
-    # Auflage 2183 A2: run_id auch in state.
-    set_run_id(_neue_run_id)
-    state.run_id = _neue_run_id
-
-    # P-Bugfix 2026-10-16: Phasen-Kontext im Audit.
-    _start_daten: dict = {
-        "aufgabe_hash": __import__("hashlib").sha256(
-            aufgabe.encode()).hexdigest(),
-        "aufgabe_kurz": aufgabe[:200],
-        "llm_calls_start": 0,
-    }
-    if phasen_state is not None:
-        _start_daten["phase_id"] = state.phase_id
-        _start_daten["phase_titel"] = state.phase_titel
-        _start_daten["unterblock_index"] = \
-            state.phase_aktueller_index
-    audit("pipeline_start", _start_daten,
-          project_dir, project_name)
+    _v = _vorlauf_und_state(
+        project_name, aufgabe, state_ref, phasen_state)
+    if isinstance(_v, int):
+        return _v
+    state = _v.state
+    config = _v.config
+    budget = _v.budget
+    max_llm = _v.max_llm
+    max_minutes = _v.max_minutes
+    project_dir = _v.project_dir
+    file_whitelist = _v.file_whitelist
+    api_key = _v.api_key
+    always = _v.always
+    optional = _v.optional
 
     _rc_c2 = _basis_gate(
         state, always, config, file_whitelist,

@@ -8390,13 +8390,14 @@ class TestW30LoopCap:
             self, tmp_path: Path) -> None:
         """T5: YAML-Default == Code-Default (2)."""
         import inspect
-        quelle = inspect.getsource(
+        quelle_vorlauf = inspect.getsource(
+            pipeline._vorlauf_und_state)
+        quelle_rp = inspect.getsource(
             pipeline.run_pipeline)
-        # YAML-Fallback-Dict enthaelt 2.
-        assert '"max_review_rounds": 2' in quelle
-        # Code-Fallback ist 2.
-        assert 'budget.get("max_review_rounds", 2)' in quelle
-
+        # YAML-Fallback-Dict enthaelt 2 (in _vorlauf_und_state).
+        assert '"max_review_rounds": 2' in quelle_vorlauf
+        # Code-Fallback ist 2 (in run_pipeline).
+        assert 'budget.get("max_review_rounds", 2)' in quelle_rp
     def test_loop_cap_erreicht_audit_event(
             self, tmp_path: Path) -> None:
         """T6: Katalog enthaelt 'loop_cap_erreicht'."""
