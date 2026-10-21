@@ -7761,7 +7761,7 @@ def _commit_review_w25_recovery(
 def _commit_review_w25_loop(
     state: RunState,
     api_key: str,
-    project_dir: str,
+    project_dir: Path,
     project_name: str,
     max_llm: int,
     max_minutes: int,
