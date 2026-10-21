@@ -49,6 +49,8 @@ Korrektur ist in docs/OFFENE-BLOECKE.md eingepflegt (Z. 20).
 
 ## Verweise
 
+- docs/SESSION-BILANZ.md — M-57-Nachweise Body-VOR-Werte pro Commit.
+
 - docs/OFFENE-BLOECKE.md — Todo, chronologisch nach Phasen.
 - docs/OFFENE-BLOECKE-ARCHIV.md — Todos vor Umbau.
 - docs/ERLEDIGT.md — abgeschlossene Bloecke.

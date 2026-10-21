@@ -49,6 +49,8 @@ Noch keine Merkposten. Entstehen hier, sobald 3b abgeschlossen.
 
 ## Session-Nachbereitung
 
+**M-57-Nachweis (done 2026-10-21):** Vor-Comm-SHAs fuer `ae25e08` (`ecf35a4`) und `277029f` (`6e11718`) in `docs/SESSION-BILANZ.md`. `5762d8e` und `b352d54` bereits konform.
+
 | Block | Kategorie | Beschreibung | Aufwand | Status |
 |---|---|---|---|---|
 | Bau-Handoff-Refresh | 2 | `Bau-Handoff.md` nach Session-Ende auf Ist-Stand bringen (HEAD be0cd3f, Branch umbau/phase-2, 1229 Tests, ruff 17, mypy 7, AST 6, Katalog 167). | klein | offen |
