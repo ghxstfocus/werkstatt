@@ -6322,12 +6322,16 @@ class TestCommitPaketScope:
         assert 0 < i_guard < i_zuweisung
 
     def test_d3_vor_phase_commit_pakete_append(self) -> None:
+        # 3a-1c-4 (Variante A): Split in 2 Assertions.
+        # D3 (phase_commit_dateien_deterministisch) bleibt in
+        # run_pipeline (C7-Rest). pakete.append ist nach
+        # _approval_und_human_gate gewandert.
         import inspect
-        src = inspect.getsource(pipeline.run_pipeline)
-        i_d3 = src.find("phase_commit_dateien_deterministisch")
-        i_append = src.find(
-            "state.phase_commit_pakete.append")
-        assert 0 < i_d3 < i_append
+        src_rp = inspect.getsource(pipeline.run_pipeline)
+        src_gate = inspect.getsource(pipeline._approval_und_human_gate)
+        i_d3 = src_rp.find("phase_commit_dateien_deterministisch")
+        assert i_d3 > 0, "D3-Marker fehlt in run_pipeline."
+        assert "state.phase_commit_pakete.append" in src_gate
 
     def test_audit_kind_existiert(self) -> None:
         assert ("phase_commit_dateien_deterministisch"
@@ -8670,12 +8674,17 @@ class TestW33bApplyVorReview:
 
     def test_nicht_phasen_modus_unveraendert(
             self, tmp_path: Path) -> None:
-        """T2: Phasen-Bedingung im Code."""
+        """T2: Phasen-Bedingung im Code.
+
+        3a-1c-4 (Variante A): phase_aktiv-Bedingung ist nach
+        _approval_und_human_gate gewandert. _phase_apply_vor_review
+        bleibt in run_pipeline. Duale Quelle.
+        """
         import inspect
-        quelle = inspect.getsource(pipeline.run_pipeline)
-        # Aufruf steht in state.phase_aktiv-Bedingung.
-        assert "if state.phase_aktiv:" in quelle
-        assert "_phase_apply_vor_review" in quelle
+        quelle_rp = inspect.getsource(pipeline.run_pipeline)
+        quelle_gate = inspect.getsource(pipeline._approval_und_human_gate)
+        assert "if state.phase_aktiv:" in quelle_gate
+        assert "_phase_apply_vor_review" in quelle_rp
 
     def test_phase_apply_vor_review_fehlschlag(
             self, tmp_path: Path) -> None:

@@ -802,13 +802,20 @@ class TestRunPipelinePhasenModus:
         assert "state_ref nicht leer" in quelle
 
     def test_phasen_modus_quelle_vorhanden(self) -> None:
-        """Der Phasen-Modus-Eingriff steht im Quelltext."""
+        """Der Phasen-Modus-Eingriff steht im Quelltext.
+
+        3a-1c-4 (Variante A): Der Phasen-Block ist aus run_pipeline
+        in _approval_und_human_gate gewandert. Duale Quelle:
+        run_pipeline (Aufruf) + _approval_und_human_gate (Body).
+        """
         import inspect as ins
-        quelle = ins.getsource(pipeline.run_pipeline)
-        assert "state.phase_aktiv" in quelle
-        assert "phase_commit_paket_gesammelt" in quelle
-        assert "phase_commit_paket_leer" in quelle
-        assert "return 21" in quelle
+        quelle_rp = ins.getsource(pipeline.run_pipeline)
+        quelle_gate = ins.getsource(pipeline._approval_und_human_gate)
+        assert "_approval_und_human_gate(" in quelle_rp
+        assert "state.phase_aktiv" in quelle_gate
+        assert "phase_commit_paket_gesammelt" in quelle_gate
+        assert "phase_commit_paket_leer" in quelle_gate
+        assert "return 21" in quelle_gate
 
 # =====================================================================
 # run_phase — rc-Klassen (P2b-3b)

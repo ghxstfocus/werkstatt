@@ -8152,6 +8152,101 @@ def _commit_review_w25_loop(
                   {"runde": commit_versuche,
                    "roh_len": len(bauer_reply.content)},
                   project_dir, project_name)
+def _approval_und_human_gate(
+        state: RunState,
+        project_dir: Path,
+        project_name: str,
+        config: dict,
+) -> int:
+    """C8+C9 (3a-1c-4, Variante A): Approval-Dokument + Human-Gate.
+
+    Extrahiert aus run_pipeline Z. 8819-8898 (HEAD 75f844b).
+
+    Returns:
+        0   approved / rejected / eskaliert / abgebrochen
+        20  Commit fehlgeschlagen (apply_commit_and_doku False)
+        21  Phasen-Modus: commit_paket ohne Dateien (fail-closed)
+    """
+    # SCHRITT 6: Approval-Dokument + Human-Gate
+    # P2b-3 / G2 + G3 + G4: Phasen-Modus.
+    # Kein Pro-Unterblock-Approval. Paket sammeln.
+    # Leeres Paket -> Fail-closed, rc=21.
+    if state.phase_aktiv:
+        if not state.commit_paket.get("dateien"):
+            print("[FAIL] Phasen-Modus: Commit-Paket ohne "
+                  "Dateien. Fail closed.")
+            audit("phase_commit_paket_leer",
+                  {"phase_id": state.phase_id,
+                   "unterblock_index":
+                       state.phase_aktueller_index},
+                  project_dir, project_name)
+            return 21
+        uid = ""
+        if 0 <= state.phase_aktueller_index < len(
+                state.phase_unterbloecke):
+            uid = state.phase_unterbloecke[
+                state.phase_aktueller_index].get("id", "")
+        state.phase_commit_pakete.append(state.commit_paket)
+        audit("phase_commit_paket_gesammelt",
+              {"phase_id": state.phase_id,
+               "unterblock_id": uid,
+               "unterblock_index":
+                   state.phase_aktueller_index,
+               "dateien": state.commit_paket.get("dateien", []),
+               "message_kurz":
+                   state.commit_paket.get("message", "")[:200],
+               "paket_nummer":
+                   len(state.phase_commit_pakete) - 1},
+              project_dir, project_name)
+        print("[+] Phasen-Modus: Commit-Paket gesammelt "
+              "(kein Commit).")
+        return 0
+    print_approval_dokument(state)
+
+    print("\n" + "=" * 70)
+    print("ENTSCHEIDUNG: [j] approve / [n] reject / [e] eskalation")
+    print("=" * 70)
+    try:
+        wahl = input("Deine Wahl: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\n[*] Abbruch.")
+        audit("pipeline_abgebrochen", {}, project_dir, project_name)
+        return 0
+
+    if wahl in {"j", "ja", "y", "yes"}:
+        print("[+] Approved.")
+        audit("pipeline_approved", {"runden": len(state.review_runden)},
+              project_dir, project_name)
+
+        if not config.get("require_human_approval", True):
+            print("[!] require_human_approval=False. Ueberspringe Commit.")
+            return 0
+
+        if apply_commit_and_doku(state, state.commit_paket):
+            audit("commit_applied", {}, project_dir, project_name)
+            return 0
+        else:
+            print("[!] Commit fehlgeschlagen. Manuell nachholen.")
+            return 20
+
+    if wahl in {"n", "no", "nein"}:
+        print("[-] Rejected.")
+        grund = ""
+        try:
+            grund = input("Begruendung (leer = keine): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            pass
+        audit("pipeline_rejected",
+              {"runden": len(state.review_runden), "grund_kurz": grund[:200]},
+              project_dir, project_name)
+        return 0
+
+    print("[!] Eskalation.")
+    audit("pipeline_escalated", {"runden": len(state.review_runden)},
+          project_dir, project_name)
+    return 0
+
+
 def run_pipeline(project_name: str, aufgabe: str,
                  state_ref: list[RunState],
                  *,
@@ -8816,86 +8911,11 @@ def run_pipeline(project_name: str, aufgabe: str,
         if _rc_w2 is not None:
             return _rc_w2
 
-    # ==================================================================
-    # SCHRITT 6: Approval-Dokument + Human-Gate
-    # ==================================================================
-    # P2b-3 / G2 + G3 + G4: Phasen-Modus.
-    # Kein Pro-Unterblock-Approval. Paket sammeln.
-    # Leeres Paket -> Fail-closed, rc=21.
-    if state.phase_aktiv:
-        if not state.commit_paket.get("dateien"):
-            print("[FAIL] Phasen-Modus: Commit-Paket ohne "
-                  "Dateien. Fail closed.")
-            audit("phase_commit_paket_leer",
-                  {"phase_id": state.phase_id,
-                   "unterblock_index":
-                       state.phase_aktueller_index},
-                  project_dir, project_name)
-            return 21
-        uid = ""
-        if 0 <= state.phase_aktueller_index < len(
-                state.phase_unterbloecke):
-            uid = state.phase_unterbloecke[
-                state.phase_aktueller_index].get("id", "")
-        state.phase_commit_pakete.append(state.commit_paket)
-        audit("phase_commit_paket_gesammelt",
-              {"phase_id": state.phase_id,
-               "unterblock_id": uid,
-               "unterblock_index":
-                   state.phase_aktueller_index,
-               "dateien": state.commit_paket.get("dateien", []),
-               "message_kurz":
-                   state.commit_paket.get("message", "")[:200],
-               "paket_nummer":
-                   len(state.phase_commit_pakete) - 1},
-              project_dir, project_name)
-        print("[+] Phasen-Modus: Commit-Paket gesammelt "
-              "(kein Commit).")
-        return 0
-    print_approval_dokument(state)
+    # C8+C9 (3a-1c-4, Variante A): Approval-Dokument + Human-Gate
+    return _approval_und_human_gate(
+        state, project_dir, project_name, config,
+    )
 
-    print("\n" + "=" * 70)
-    print("ENTSCHEIDUNG: [j] approve / [n] reject / [e] eskalation")
-    print("=" * 70)
-    try:
-        wahl = input("Deine Wahl: ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        print("\n[*] Abbruch.")
-        audit("pipeline_abgebrochen", {}, project_dir, project_name)
-        return 0
-
-    if wahl in {"j", "ja", "y", "yes"}:
-        print("[+] Approved.")
-        audit("pipeline_approved", {"runden": len(state.review_runden)},
-              project_dir, project_name)
-
-        if not config.get("require_human_approval", True):
-            print("[!] require_human_approval=False. Ueberspringe Commit.")
-            return 0
-
-        if apply_commit_and_doku(state, state.commit_paket):
-            audit("commit_applied", {}, project_dir, project_name)
-            return 0
-        else:
-            print("[!] Commit fehlgeschlagen. Manuell nachholen.")
-            return 20
-
-    if wahl in {"n", "no", "nein"}:
-        print("[-] Rejected.")
-        grund = ""
-        try:
-            grund = input("Begruendung (leer = keine): ").strip()
-        except (EOFError, KeyboardInterrupt):
-            pass
-        audit("pipeline_rejected",
-              {"runden": len(state.review_runden), "grund_kurz": grund[:200]},
-              project_dir, project_name)
-        return 0
-
-    print("[!] Eskalation.")
-    audit("pipeline_escalated", {"runden": len(state.review_runden)},
-          project_dir, project_name)
-    return 0
 
 def _review_verdict_behandlung(
         state: RunState, reply: LLMReply, verdict: str,
