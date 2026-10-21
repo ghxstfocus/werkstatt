@@ -291,3 +291,80 @@ B1a ersetzt Recovery-Absicherung als Verhaltens-Test.
 
 Baseline: 1237 -> 1245 (+8 Tests: B1a/B1b/B2/B3/B4/B6/B7/B8 + 6887).
 ruff 17, mypy 7, AST 6, Katalog 167.
+
+## 3a-1c-2b — W2-Extraktion (2026-10-21)
+
+Commits: ca66927 (Entscheidung b), d512264 (Zeile-26-Korrektur),
+277029f (W2-Extraktion), 74ff77d (Struktur-Tests), ac4956f
+(project_dir-Fix), b502e20 (Block-done), + 13 Doku-Commits
+(M-32..M-55, A13..A22).
+
+W2 = 8585-8755 (171 Z.) nach _commit_review_w25_loop extrahiert.
+10 Parameter (M-39): state, api_key, project_dir, project_name,
+max_llm, max_minutes, reviewer_prompt, builder_prompt,
+_hat_anker_patches, _diff_name_only.
+Zwei break (COMMIT-GO, ESKALATION) -> return None.
+5 Struktur-Tests umgestellt (74ff77d).
+mypy-Fix (ac4956f): project_dir str->Path (19->9).
+
+Baseline 1245 / ruff 17 / mypy 9 / AST+Katalog 14.
+AQ-Regressionslatte 9/9 gruen.
+
+Entscheidung (b) Durchlauf 44: 3a-1c-2b als gebaut
+akzeptiert. W2-Grenze VOR/NACH in OFFENE-BLOECKE.md
+Zeile 23 dokumentiert. Doku-Klaerung in 3b.
+
+
+## 3a-1c-3/C2 — Basis-Gate extrahiert (2026-10-21)
+
+Commits: d06cf23 (C2-Extraktion), fafc5b5 (A17-1
+Docstring-Update).
+
+C2 = 8041-8147 (107 Z. nach C0+C1-Verschiebung) ->
+_basis_gate (6 Parameter: state, always, config,
+file_whitelist, project_dir, project_name).
+Position A: _basis_gate vor _commit_review_w25_loop.
+Rueckgabe: return 11 bei rot, return None bei gruen.
+
+Baseline 1245 / ruff 17 / mypy 9 / AST+Katalog 14.
+Verhaltens-Test test_run_pipeline_basis_gate_rot gruen.
+
+
+## 3a-1c-3/C0+C1 — Vorlauf+State extrahiert (2026-10-21)
+
+Commits: da67198 (VorlaufErgebnis-Dataclass), bb919d1
+(C0+C1-Extraktion), 44eaedc (A22-2-Nach-Liste).
+
+C0+C1 = 8041-8147 (107 Z.) -> _vorlauf_und_state.
+VorlaufErgebnis-Dataclass (10 Felder): state, config,
+budget, max_llm, max_minutes, project_dir, file_whitelist,
+api_key, always, optional.
+docs/agents fallen weg (in state.docs/state.agents).
+
+Signatur: -> VorlaufErgebnis | int.
+Return: int bei api_key-leer (1) oder memory-korrupt (3).
+5 Test-Anpassungen (A9-12): test_guard_quelle_vorhanden,
+test_quelle_setzt_aufgabe, test_quelle_audit_phase_felder,
+test_config_liest_max_review_aus_yaml,
+test_yaml_code_defaults_gleich.
+
+Baseline 1245 / ruff 17 / mypy 9 / AST+Katalog 14.
+Return-Bilanz: run_pipeline 34, _vorlauf_und_state 3,
+_basis_gate 2, W2 7 = 46 (A22-2-Nach-Liste).
+
+
+## C6 (Coverage/Chaos) — GESTRICHEN (2026-10-21)
+
+Auftraggeber-Entscheid Durchlauf 48: C6 ist keine
+einheitliche Extraktion. Enthaelt:
+- Coverage-Messung (execute_commands)
+- Test-Generator-Aufruf (state.agents["test_generator"],
+  echte Rolle)
+- Chaos-Messung (execute_commands)
+
+Kein einheitliches Extraktions-Ziel. Gehoert zu 3b
+(Rollen-Reduktion).
+
+Konsequenz: 3a-1c-3 = C0+C1 + C2 (beide done).
+C6 bleibt in run_pipeline.
+
