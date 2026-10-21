@@ -890,3 +890,67 @@ if isinstance(_rc_vorlauf, int):
 state, config, budget, max_llm, max_minutes = _rc_vorlauf
 ```
 
+
+## M-55 + A22-1/2/3 — Struktur-Test-Rest + budget + Return-Bilanz (2026-10-21)
+
+Reviewer-Auflage (Durchlauf 51, M-55 + A22-1/2/3).
+
+### M-55 — 5 test_phase.py-Tests gegen fafc5b5: 3 brechen
+
+| Test | Marker | Marker-Zeile | C-Bereich | Bricht? |
+|---|---|---|---|---|
+| test_guard_quelle_vorhanden | phasen_state is not None, state_ref nicht leer | 8095, 8099 | C0+C1 | JA |
+| test_quelle_setzt_aufgabe | state.aufgabe = aufgabe | 8104 | C0+C1 | JA |
+| test_quelle_audit_phase_felder | phase_id, phase_titel, unterblock_index | 8134-8143 | C0+C1 | JA |
+| test_phasen_modus_quelle_vorhanden | state.phase_aktiv, return 21 | 8794-8806 | C8 | nein |
+| test_aufrufer_hat_rc19_zweig | rc_apply == 19 | 8550 | C5 | nein |
+
+**3 Tests brechen** (nicht 1): test_guard_quelle_vorhanden,
+test_quelle_setzt_aufgabe, test_quelle_audit_phase_felder.
+
+Aktion (A9-12, Kategorie-2): getsource-Ziel von
+pipeline.run_pipeline auf pipeline._vorlauf_und_state
+in allen 3 Tests umstellen. Marker bleiben unveraendert.
+
+### A22-1 — budget-Doppelquelle (Befund Q)
+
+M-54-5-Tupel schafft ZWEI budget-Quellen:
+- state.budget (RunState-Konstruktor @ 8110)
+- local budget (Rueckgabe aus _vorlauf_und_state)
+
+Nach C0+C1: state.budget 0x gelesen,
+local budget 3x gelesen (8319, 8361, 8526).
+Beide haben denselben Wert, keine Gewinner-Regel.
+Genau Befund Q.
+
+**Merkposten:** budget-Doppelquelle in 3b/Phase 6 aufloesen
+(entweder state.budget entfernen oder alle Leser auf
+state.budget umstellen; eine Quelle, eine Gewinner-Regel).
+
+### A22-2 — Return-Bilanz C0+C1 (Prognose)
+
+VOR C0+C1: run_pipeline 35, _basis_gate 2, W2 7 = 44.
+NACH C0+C1:
+- run_pipeline: 35 - 2 (return 1 @ 8043, return 3 @ 8062)
+  + 1 (return _rc_vorlauf) = 34.
+- _vorlauf_und_state: 2 (return 1, return 3).
+- _basis_gate: 2.
+- W2: 7.
+- Summe: 34 + 2 + 2 + 7 = 45.
+
+### A22-3 — A20-1-Nach als Listen (nicht Summen)
+
+A20-1 verlangte vollstaendige Listen. Nachgeliefert:
+
+run_pipeline (35 Returns): 8043, 8062, 8153, 8192, 8200,
+8228, 8276, 8327, 8334, 8356, 8451, 8495, 8529, 8542,
+8551, 8562, 8577, 8636, 8647, 8655, 8695, 8711, 8733,
+8740, 8755, 8771, 8782, 8799, 8819, 8830, 8839, 8843,
+8846, 8858, 8863.
+
+_basis_gate (2 Returns): 7835 (return 11), 7836 (return None).
+
+_commit_review_w25_loop (7 Returns): 7925 (return rc),
+7936 (_fail_closed 6), 7964 (return None), 7970 (return None),
+7978 (_fail_closed 7), 7987 (return rc), 8016 (return 8).
+
