@@ -7758,6 +7758,84 @@ def _commit_review_w25_recovery(
     return None
 
 
+def _basis_gate(
+    state: RunState,
+    always: dict,
+    config: dict,
+    file_whitelist: list,
+    project_dir: Path,
+    project_name: str,
+) -> int | None:
+    """C2: Basis-Gate (Schritt 0). Fail-Fast bei rotem Gate.
+
+    Extrahiert aus run_pipeline, Z. 8070-8131 (Stand d512264).
+    Return: 11 bei rot, None bei gruen.
+    """
+    # ==================================================================
+    # SCHRITT 0: BASIS-GATE (HARD FAIL)
+    # ==================================================================
+    print("[*] Schritt 0: Basis-Gate (immer).")
+    print(f"[i] Messungen: {list(always.keys())}")
+    basis_fehler: list[str] = []
+    for mid, m in always.items():
+        out, ok = run_measurement(m, file_whitelist, project_dir)
+        state.basis_protokoll += out
+        if not ok:
+            basis_fehler.append(mid)
+            print(f"[!] Basis-Gate rot: {mid}")
+        else:
+            print(f"[+] Basis-Gate gruen: {mid}")
+
+    if basis_fehler:
+        print("\n" + "=" * 70)
+        print(f"[!] Basis-Gate rot. Fehler: {basis_fehler}")
+        print("[*] Auto-Repair (nur deterministisch).")
+        print("=" * 70)
+        audit("basis_gate_rot", {"fehler": basis_fehler}, project_dir, project_name)
+
+        # Nur deterministischer Fix: ruff --fix
+        nur_ruff = basis_fehler == ["ruff"]
+        if nur_ruff:
+            tests_snap = snapshot_tests_dir(project_dir)
+            ok, _ = auto_repair_ruff(
+                project_dir,
+                config.get("venv_python", str(project_dir / ".venv/bin/python3")),
+            )
+            audit("auto_repair_ruff", {"ok": ok}, project_dir, project_name)
+            tests_ok, probleme = check_tests_dir_unveraendert(project_dir, tests_snap)
+            if not tests_ok:
+                print(f"[!] Auto-Repair hat tests/ veraendert: {probleme}")
+                ok = False
+            if ok:
+                # Nachmessen
+                state.basis_protokoll = ""
+                neue_fehler: list[str] = []
+                for mid, m in always.items():
+                    out, ok_m = run_measurement(m, file_whitelist, project_dir)
+                    state.basis_protokoll += out
+                    if not ok_m:
+                        neue_fehler.append(mid)
+                if not neue_fehler:
+                    print("[+] Basis-Gate gruen nach Auto-Repair.")
+                    basis_fehler = []
+                else:
+                    basis_fehler = neue_fehler
+
+        if basis_fehler:
+            kontext = (
+                f"Basis-Gate-Fehler: {basis_fehler}\n\n"
+                f"Basis-Protokoll:\n{state.basis_protokoll[:3000]}"
+            )
+            v = ask_reviewer_for_recovery(state, "basis_gate", kontext)
+            print_recovery(v)
+            audit("recovery_basis_gate",
+                  {"diagnose": v.diagnose, "plan": v.reparaturplan,
+                   "empfehlung": v.empfehlung},
+                  project_dir, project_name)
+            return 11
+    return None
+
+
 def _commit_review_w25_loop(
     state: RunState,
     api_key: str,
@@ -8067,68 +8145,12 @@ def run_pipeline(project_name: str, aufgabe: str,
     audit("pipeline_start", _start_daten,
           project_dir, project_name)
 
-    # ==================================================================
-    # SCHRITT 0: BASIS-GATE (HARD FAIL)
-    # ==================================================================
-    print("[*] Schritt 0: Basis-Gate (immer).")
-    print(f"[i] Messungen: {list(always.keys())}")
-    basis_fehler: list[str] = []
-    for mid, m in always.items():
-        out, ok = run_measurement(m, file_whitelist, project_dir)
-        state.basis_protokoll += out
-        if not ok:
-            basis_fehler.append(mid)
-            print(f"[!] Basis-Gate rot: {mid}")
-        else:
-            print(f"[+] Basis-Gate gruen: {mid}")
-
-    if basis_fehler:
-        print("\n" + "=" * 70)
-        print(f"[!] Basis-Gate rot. Fehler: {basis_fehler}")
-        print("[*] Auto-Repair (nur deterministisch).")
-        print("=" * 70)
-        audit("basis_gate_rot", {"fehler": basis_fehler}, project_dir, project_name)
-
-        # Nur deterministischer Fix: ruff --fix
-        nur_ruff = basis_fehler == ["ruff"]
-        if nur_ruff:
-            tests_snap = snapshot_tests_dir(project_dir)
-            ok, _ = auto_repair_ruff(
-                project_dir,
-                config.get("venv_python", str(project_dir / ".venv/bin/python3")),
-            )
-            audit("auto_repair_ruff", {"ok": ok}, project_dir, project_name)
-            tests_ok, probleme = check_tests_dir_unveraendert(project_dir, tests_snap)
-            if not tests_ok:
-                print(f"[!] Auto-Repair hat tests/ veraendert: {probleme}")
-                ok = False
-            if ok:
-                # Nachmessen
-                state.basis_protokoll = ""
-                neue_fehler: list[str] = []
-                for mid, m in always.items():
-                    out, ok_m = run_measurement(m, file_whitelist, project_dir)
-                    state.basis_protokoll += out
-                    if not ok_m:
-                        neue_fehler.append(mid)
-                if not neue_fehler:
-                    print("[+] Basis-Gate gruen nach Auto-Repair.")
-                    basis_fehler = []
-                else:
-                    basis_fehler = neue_fehler
-
-        if basis_fehler:
-            kontext = (
-                f"Basis-Gate-Fehler: {basis_fehler}\n\n"
-                f"Basis-Protokoll:\n{state.basis_protokoll[:3000]}"
-            )
-            v = ask_reviewer_for_recovery(state, "basis_gate", kontext)
-            print_recovery(v)
-            audit("recovery_basis_gate",
-                  {"diagnose": v.diagnose, "plan": v.reparaturplan,
-                   "empfehlung": v.empfehlung},
-                  project_dir, project_name)
-            return 11
+    _rc_c2 = _basis_gate(
+        state, always, config, file_whitelist,
+        project_dir, project_name,
+    )
+    if _rc_c2 is not None:
+        return _rc_c2
 
     print("[+] Basis-Gate gruen. Block startet.")
 
