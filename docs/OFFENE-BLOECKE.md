@@ -439,3 +439,67 @@ NACH 1245") ist **KORREKT**. VOR `ae25e08` war 1242 (weil
 Korrekt. Die +3 sind B7 + B8 + test_build_commit_input_phasen_
 unterblock.
 
+
+## A18-1a/1b/1c — Vollstaendige Chronologie + Baseline + B3-4 (2026-10-21)
+
+Reviewer-Auflage (Durchlauf 40, NO-GO wegen A18-1-Luecke).
+
+### A18-1a — Vollstaendige Chronologie (git log --reverse)
+
+```
+2026-10-20 06:00:59  88e3e5c  3a-1c-2a: AQ-Vorspann 6 Tests (B1a/B1b/B2/B3/B4/B6)
+2026-10-20 06:08:52  ecf35a4  3a-1c-2a: W0a-1/2/3 extrahiert + 7390 geloescht
+2026-10-20 06:40:12  ae25e08  3a-1c-2b: AQ-Vorspann B7/B8 + 6887-Verhaltens-Test
+2026-10-20 06:42:09  ca56520  3a-1c-2b-doc: Merkposten W2-Extraktion (Fallstricke)
+2026-10-20 06:47:58  1091b3e  Doku: Phase-3a-Stand nachziehen (2026-10-20)
+2026-10-20 07:01:04  9141591  docs(3a-1c-2b): Merkposten gegen 1091b3e korrigiert
+2026-10-21 14:41:48  bf2e487  docs(3a-1c-2b): Merkposten Werkstatt-Entkopplung
+2026-10-21 14:45:24  5a9939c  refactor: Geruest _commit_review_w25_loop (tot)
+2026-10-21 14:50:29  da7d6bc  docs: Baseline-Delta ruff 0.17.1 / mypy 2.4.0
+2026-10-21 14:53:07  8a921d4  docs: W2-Grenze korrigiert 8585-8755 (171 Z.)
+2026-10-21 15:05:30  6e11718  docs: Parameterbedarf 8 -> 9
+2026-10-21 15:10:24  277029f  refactor: W2-Extraktion _commit_review_w25_loop
+2026-10-21 15:12:15  74ff77d  test: Struktur-Tests auf _commit_review_w25_loop
+2026-10-21 15:15:48  ac4956f  fix: project_dir: Path
+2026-10-21 15:23:21  b502e20  docs: Block done, Struktur-Tests 5/~15
+2026-10-21 15:30:47  293589e  docs: C-Nummerierung run_pipeline
+2026-10-21 15:43:26  f608658  docs: Abnahme-Bericht A13/A14/A15
+2026-10-21 15:52:33  4e450d7  docs: M-39/M-40 geklaert
+2026-10-21 16:08:35  05c8b81  docs: M-33-Korrektur + M-41 + A16-1/2
+2026-10-21 16:13:31  f16c302  docs: A18-1/2/3/4
+```
+
+Kernbefund: AQ-Commits (88e3e5c/ecf35a4/ae25e08) am 20.10.
+morgens. W2-Extraktion (277029f etc.) am 21.10. nachmittags.
+Dazwischen: ca56520/1091b3e/9141591 (Doku).
+
+`git log --oneline 88e3e5c..ae25e08` zeigt nur ae25e08 und
+ecf35a4 — korrekt, weil 88e3e5c der direkte Vorgaenger von
+ecf35a4 ist und die W2-Commits NACH ae25e08 liegen.
+
+### A18-1b — Baseline pro Commit (alle 9 gemessen)
+
+```
+88e3e5c:  1243  (+6 von 1237)
+ecf35a4:  1242  (-1 durch 7390)
+ae25e08:  1245  (+3: B7, B8, test_build_commit_input_phasen_unterblock)
+277029f:  1245  (0, W2-Extraktion)
+74ff77d:  1245  (0, Test-Umstellung)
+ac4956f:  1245  (0, Fix)
+b502e20:  1245  (0, Doku)
+293589e:  1245  (0, Doku)
+f16c302:  1245  (0, Doku)
+```
+
+Kette: 1237 -> 1243 -> 1242 -> 1245 -> 1245 -> 1245 -> 1245
+-> 1245 -> 1245 -> 1245. Lueckenlos.
+
+### A18-1c — B3-4-Status
+
+**B3-4 erfuellt.** Die AQ-Commits (88e3e5c/ecf35a4/ae25e08)
+sind vom 20.10. morgens (06:00-06:40). Die W2-Extraktion
+(277029f) ist vom 21.10. nachmittags (15:10). Tests wurden
+vorsorglich gebaut, nicht nachgezogen.
+
+Kein 18c-Bruch. Kein Merkposten noetig.
+
