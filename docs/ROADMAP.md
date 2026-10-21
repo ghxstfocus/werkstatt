@@ -216,7 +216,7 @@ Baseline: pytest 1245 / ruff 17 / mypy 7 / AST 6 / Katalog 167.
 | 3a-1c-2a | done (88e3e5c/ecf35a4/ae25e08) | W0a-1/2/3 extrahiert, 7390 geloescht, 9 AQ-Tests. |
 | 3a-1c-2b | done (277029f/74ff77d/ac4956f) | W2-Extraktion, _commit_review_w25_loop, 10 Parameter. |
 | 3a-1c-3 | done (da67198/bb919d1/d06cf23/fafc5b5) | C0+C1+C2 extrahiert; C6 gestrichen (-> 3b). |
-| 3a-1c-4 | offen (FREIGABE JA-MIT-AUFLAGEN 2026-10-21) | C8+C9, Grenzen korrigiert: C8=8819-8854, C9=8855-8898. |
+| 3a-1c-4 | done (5762d8e) | _approval_und_human_gate (Variante A, 8 Returns). C8=8819-8854, C9=8855-8898. Return-Bilanz 27/3/2/7/8=47. |
 | 3a-2 | offen | run_phase (528 Z.). |
 | 3a-3 | offen | _phase_main_pfad (641 Z., Deadlock). |
 | 3b | offen | Loop-Umbau. |

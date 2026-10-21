@@ -34,3 +34,10 @@ Vor jedem Code-Touch in 3a-1c-4 und Nachfolgern:
 
 - 2026-10-20: Baseline 1245/17/7/6/167 (mypy 7, weil vor W2-Fix).
 - 2026-10-21: Baseline 1245/17/9/6/167 (mypy 9, nach 3a-1c-2b-W2).
+
+## Klarstellung AST+Katalog
+
+- "AST+Katalog 14" ist eine Summen-Konvention (6 AST + 8 andere
+  Test-Kategorien), KEIN Messwert. Baseline: AST-Test
+  `pytest tests/test_audit_kinds.py -q` = 6 passed, Katalog
+  `_KATALOG_SOLL` = 167. Reviewer-Bestaetigung #138 (2026-10-21).

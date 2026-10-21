@@ -368,3 +368,37 @@ Kein einheitliches Extraktions-Ziel. Gehoert zu 3b
 Konsequenz: 3a-1c-3 = C0+C1 + C2 (beide done).
 C6 bleibt in run_pipeline.
 
+
+## 3a-1c-4/C8+C9 — Approval+Human-Gate extrahiert (2026-10-21)
+
+Commit: 5762d8e (refactor, auf origin).
+Vorlauf: 75f844b (Handoff-Refresh + C8/C9-Grenzen-Korrektur, Doku).
+
+Extraktion: run_pipeline Z. 8819-8898 (Endstand HEAD 75f844b)
+-> `_approval_und_human_gate(state, project_dir, project_name, config)
+-> int` (pipeline.py Z. 8155-8247, 93 Zeilen).
+C8 = 8819-8854 (Approval + Phasen-Paket-Sammlung).
+C9 = 8855-8898 (Human-Gate input(), commit-Entscheidung).
+Variante A: alle 8 Returns wandern (5x 0, 1x 20, 1x 21, 1x 0).
+
+Return-Bilanz NACH (gemessen via ast):
+  run_pipeline               27
+  _vorlauf_und_state          3
+  _basis_gate                 2
+  _commit_review_w25_loop     7
+  _approval_und_human_gate    8
+  Summe                      47.
+
+Baseline (HEAD 5762d8e):
+  pytest -q                            1245 passed
+  ruff check .                         17 errors
+  mypy pipeline.py werkstatt/          9 errors
+  pytest tests/test_audit_kinds.py -q  6 passed
+  _KATALOG_SOLL                        167.
+
+Test-Anpassungen (Kategorie 2, A9-12-deklariert):
+  #1 tests/test_phase.py:804-811   (duale Quelle)
+  #5 tests/test_pipeline.py:6324   (Split)
+  #12 tests/test_pipeline.py:8671  (duale Quelle)
+
+Rollback-Anker: 5762d8e (origin).

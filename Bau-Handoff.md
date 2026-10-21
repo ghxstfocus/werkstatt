@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-21 (Phase 3a, nach 3a-1c-3).
-Werkstatt-HEAD: 5e50ea6. Branch: umbau/phase-2 (origin gepusht).
+Stand: 2026-10-21 (Phase 3a, nach 3a-1c-4).
+Werkstatt-HEAD: 5762d8e. Branch: umbau/phase-2 (origin gepusht).
 Baseline: pytest 1245 passed / ruff 17 / mypy 9 (isoliert) / AST 6 / Katalog 167.
 
 Baseline-Definition (verbindlich, sonst reproduziert sich der 7-vs-9-Fehler):
@@ -13,14 +13,11 @@ Baseline-Definition (verbindlich, sonst reproduziert sich der 7-vs-9-Fehler):
 
 ## Aktueller Block
 
-3a-1c-4 (C8+C9): Freigabe JA-MIT-AUFLAGEN (Reviewer, 2026-10-21).
-Auflagen vor Code-Touch:
-  1. Dieser Handoff-Refresh-Commit (mit C8/C9-Korrektur, mypy-Definition,
-     Testbefehl, Baseline, done-Bloecken).
-  2. B3-Klassifikation aller 12 getsource-Tests (Datei:Zeile + Marker +
-     C-Zuordnung + Aktion (a)/(b)/(c)/(d)).
-  3. Return-Bilanz VOR — vollstaendige Listen (nicht Summen).
-Rollback-Anker: 5e50ea6. Delta != 0 -> Rollback, nicht Test anpassen.
+3a-2 (run_phase, 528 Z.): noch nicht begonnen. Naechster konkreter
+Schritt: read-only Inspektion von run_phase, Signatur-Freeze,
+Return-Bilanz, bestehende Tests, Position (A/B).
+
+Rollback-Anker: 5762d8e. Delta != 0 -> Rollback, nicht Test anpassen.
 
 ## Abgeschlossen seit letztem Handoff
 
@@ -28,6 +25,12 @@ Rollback-Anker: 5e50ea6. Delta != 0 -> Rollback, nicht Test anpassen.
   _commit_review_w25_loop, 10 Parameter, Aufruf Z. 8811-8817.
 - 3a-1c-3 (C0+C1+C2): done (da67198 + bb919d1 + d06cf23 + fafc5b5).
   _vorlauf_und_state + VorlaufErgebnis, _basis_gate.
+- 3a-1c-4 (C8+C9): done (75f844b Handoff-Refresh, 5762d8e Code).
+  _approval_und_human_gate (4 Parameter, 8 Returns).
+  C8 = 8819-8854, C9 = 8855-8898. run_pipeline endet 8917.
+  Return-Bilanz: 27/3/2/7/8 = 47.
+  3 Test-Anpassungen (#1 test_phase.py:804, #5 test_pipeline.py:6324,
+  #12 test_pipeline.py:8671) via duale Quelle/Split.
 - C6 (Coverage/Chaos): gestrichen (Durchlauf 48, gehoert zu 3b).
 
 ## C8/C9-Grenzen-Korrektur (Reviewer-Auflage A1)
@@ -57,11 +60,10 @@ Korrektur ist in docs/OFFENE-BLOECKE.md eingepflegt (Z. 20).
 
 ## Naechste Bloecke (Reihenfolge laut ROADMAP.md Z. 217-223)
 
-1. 3a-1c-4 (C8+C9) — laufend, Auflagen siehe oben.
-2. 3a-2 (run_phase, 528 Z.).
-3. 3a-3 (_phase_main_pfad, 641 Z., Deadlock).
-4. 3b (Loop-Umbau; enthaelt C6 + Reviewer-Modus + Quality-Gate).
-5. 3c (NEUBAU-Abloesung).
+1. 3a-2 (run_phase, 528 Z.) — naechster Block.
+2. 3a-3 (_phase_main_pfad, 641 Z., Deadlock).
+3. 3b (Loop-Umbau; enthaelt C6 + Reviewer-Modus + Quality-Gate).
+4. 3c (NEUBAU-Abloesung).
 
 ## Offene Merkposten
 
