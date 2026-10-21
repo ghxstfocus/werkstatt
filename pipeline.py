@@ -7767,16 +7767,185 @@ def _commit_review_w25_loop(
     max_minutes: int,
     reviewer_prompt: str,
     builder_prompt: str,
+    _hat_anker_patches,
     _diff_name_only,
 ) -> int | None:
     """W2: Commit-NO-GO-Loop (max 2 Versuche).
 
-    Extrahiert aus run_pipeline, Z. 8585-8735 (Stand 1091b3e).
-    Signatur-Freeze 18c: 8 Parameter, siehe OFFENE-BLOECKE.md 3a-1c-2b.
+    Extrahiert aus run_pipeline, Z. 8585-8755 (Stand 1091b3e).
+    Signatur-Freeze 18c: 9 Parameter, siehe OFFENE-BLOECKE.md 3a-1c-2b.
     """
-    raise NotImplementedError(
-        "W2-Extraktion folgt in Schritt 2 (3a-1c-2b)."
-    )
+    if not _hat_anker_patches and not state.mess_protokoll:
+        _anzahl_new_file = sum(
+            1 for p in (state.code_patches or [])
+            if isinstance(p, dict)
+            and p.get("typ") == "new_file")
+        if _anzahl_new_file > 0:
+            print("[i] Commit-Review: reine new_file-"
+                  "Patches. Keine Anker-Pruefung noetig "
+                  "(R7 skip).")
+        else:
+            print("[i] Commit-Review: keine Patches. Skip.")
+        _runde_audit = (
+            state.review_runden[-1].get("runde", 0)
+            if state.review_runden else 0)
+        audit("commit_review_new_file_skip",
+              {"runde": _runde_audit,
+               "anzahl_new_file": _anzahl_new_file,
+               "phase_id": getattr(state, "phase_id", "")},
+              project_dir, project_name)
+
+    # Auflage 2118: Commit-NO-GO-Loop, max 2 Versuche.
+    max_commit_versuche = 2
+    commit_versuche = 0
+    while True:
+        # Auflage 2120: leere Auflagen explizit 'keine'.
+        auflagen_letzte = (state.auflagen_log[-1]
+                           if state.auflagen_log
+                              and state.auflagen_log[-1]
+                           else [])
+        auflagen_text = ("; ".join(auflagen_letzte)
+                         if auflagen_letzte else "keine")
+
+        # W11b (2026-10-16): Unterblock-Kontext
+        # fuer den Commit-Review (nur Phasen-Modus).
+        _w11_unterblock_kontext = ""
+        if state.phase_aktiv:
+            _w11_idx = state.phase_aktueller_index
+            _w11_ups = state.phase_unterbloecke
+            if 0 <= _w11_idx < len(_w11_ups):
+                _w11_u = _w11_ups[_w11_idx]
+                _w11_uid = (
+                    _w11_u.get("id", "?")
+                    if isinstance(_w11_u, dict) else "?")
+                _w11_titel = (
+                    _w11_u.get("titel", "")
+                    if isinstance(_w11_u, dict) else "")
+                _w11_total = len(_w11_ups)
+                _w11_done = sum(
+                    1 for _u in _w11_ups
+                    if isinstance(_u, dict)
+                    and _u.get("status") == "done")
+                _w11_unterblock_kontext = (
+                    f"UNTERBLOCK: {_w11_uid} "
+                    f"({_w11_idx + 1} von {_w11_total}) "
+                    f"— {_w11_titel}\n"
+                    f"({_w11_done} von {_w11_total} "
+                    f"bereits done)\n"
+                )
+
+        # W23 (2026-10-17): Commit-Review-Prompt ausgelagert
+        # in _build_commit_input (testbar, wartbar).
+        commit_input = _build_commit_input(
+            state, _diff_name_only,
+            _w11_unterblock_kontext, auflagen_text)
+        rc = budget_or_recover(state, max_llm,
+                              "Vor Commit-Review.",
+                              project_dir, project_name,
+                              max_minutes=max_minutes)
+        if rc is not None:
+            return rc
+        if len(commit_input) > 50000:
+            print(f"[WARN] commit_input {len(commit_input)} "
+                  f"Zeichen (> 50000). Kontext-Risiko.")
+        reply = ask_llm(api_key, reviewer_prompt, commit_input,
+                        state.reviewer_verdict_model, 0.0,
+                        state.llm_timeout_s,
+                        state=state,
+                        max_tokens=state.max_tokens_reviewer)
+        if not reply.ok:
+            print(f"[FAIL] Reviewer Commit-Review: {reply.error}")
+            return _fail_closed(
+                state, project_dir, project_name, 6,
+                "commit_review_call_failed")
+
+        commit_verdict = classify_verdict(reply.content)
+        state.commit_review = {"verdict": commit_verdict,
+                               "raw": reply.content}
+        # Auflage 2140: Roh-Text aus Audit entfernt.
+        audit("commit_review",
+              {"verdict": commit_verdict,
+               "runde": commit_versuche},
+              project_dir, project_name)
+
+        # Auflage 2183 C (Y2): COMMAND in Phase 2
+        # wird nicht ausgefuehrt (2199-R7-P2).
+        # Wenn der Reviewer RUN solver versucht:
+        # Audit, sonst blinder Fleck.
+        if commit_verdict == "COMMAND":
+            cmds_p2 = parse_commands(reply.content)
+            for c in cmds_p2:
+                if c.get("id") == "solver":
+                    audit(
+                        "reviewer_run_solver_phase2_ignoriert",
+                        {"runde": commit_versuche,
+                         "arg": c.get("arg", "")[:200]},
+                        project_dir, project_name)
+        if commit_verdict == "COMMIT-GO":
+            print("[+] Commit-GO erhalten.")
+            return None
+
+        if commit_verdict != "COMMIT-NO-GO":
+            # ESKALATION / UNKLAR: Stop, Mensch entscheidet am Gate.
+            print(f"[i] Commit-Review-Verdict: {commit_verdict}. "
+                  "Kein Loop.")
+            return None
+
+        # COMMIT-NO-GO
+        print(f"[-] Commit-NO-GO (Versuch {commit_versuche + 1}/"
+              f"{max_commit_versuche}):\n{reply.content[:400]}")
+        commit_versuche += 1
+        if commit_versuche >= max_commit_versuche:
+            print("[!] Commit-Review: maximale Versuche erreicht.")
+            return _fail_closed(
+                state, project_dir, project_name, 7,
+                "commit_no_go_max_versuche")
+
+        rc = budget_or_recover(state, max_llm,
+                              "Vor Builder-Neubau (Commit-NO-GO).",
+                              project_dir, project_name,
+                              max_minutes=max_minutes)
+        if rc is not None:
+            return rc
+        bauer_reply = ask_llm(
+            api_key, builder_prompt,
+            f"Der Reviewer hat das vorherige Commit-Paket "
+            f"mit COMMIT-NO-GO abgelehnt.\n"
+            f"Begruendung (Kontext, NICHT die "
+            f"Reviewed-Zeile):\n{reply.content}\n\n"
+            + format_messwerte_block(collect_messwerte(state)) + "\n\n"
+            + format_doc_snippets(state.docs) + "\n\n"
+            "Liefere ein ueberarbeitetes Commit-Paket.\n\n"
+            "WICHTIG: Der Reviewed-Block der neuen Message "
+            "spiegelt den Code-Review-Verdict DIESER Runde "
+            "(CODE-GO), nicht den vorherigen COMMIT-NO-GO. "
+            "Der vorherige NO-GO ist Kontext, keine "
+            "Verdict-Quelle.\n\n"
+            + COMMIT_PAKET_FORMAT,
+            state.builder_model, state.builder_temp,
+            state.llm_timeout_s,
+            state=state,
+            max_tokens=state.max_tokens_builder,
+        )
+        if not bauer_reply.ok:
+            print(f"[FAIL] Builder Commit-Paket-Neubau: "
+                  f"{bauer_reply.error}")
+            # Auflage 2128: Audit fuer den Fehlerpfad.
+            audit("builder_commit_paket_failed_retry",
+                  {"error": bauer_reply.error,
+                   "versuch": commit_versuche},
+                  project_dir, project_name)
+            return 8
+        state.commit_paket = parse_commit_paket(bauer_reply.content)
+        # Auflage 2128: Audit, wenn der Neubau leer ist.
+        if not state.commit_paket.get("message") \
+                and not state.commit_paket.get("dateien") \
+                and not state.commit_paket.get("doku_patches"):
+            # Auflage 2134: Roh-Text entfernt.
+            audit("commit_paket_leer",
+                  {"runde": commit_versuche,
+                   "roh_len": len(bauer_reply.content)},
+                  project_dir, project_name)
 def run_pipeline(project_name: str, aufgabe: str,
                  state_ref: list[RunState],
                  *,
@@ -8582,177 +8751,13 @@ def run_pipeline(project_name: str, aufgabe: str,
                 "commit_review_ohne_messung")
         # Skip-Pfad: reine new_file-Patches oder keine
         # Patches. Kein Anker, kein R7, kein Fail.
-        if not _hat_anker_patches and not state.mess_protokoll:
-            _anzahl_new_file = sum(
-                1 for p in (state.code_patches or [])
-                if isinstance(p, dict)
-                and p.get("typ") == "new_file")
-            if _anzahl_new_file > 0:
-                print("[i] Commit-Review: reine new_file-"
-                      "Patches. Keine Anker-Pruefung noetig "
-                      "(R7 skip).")
-            else:
-                print("[i] Commit-Review: keine Patches. Skip.")
-            _runde_audit = (
-                state.review_runden[-1].get("runde", 0)
-                if state.review_runden else 0)
-            audit("commit_review_new_file_skip",
-                  {"runde": _runde_audit,
-                   "anzahl_new_file": _anzahl_new_file,
-                   "phase_id": getattr(state, "phase_id", "")},
-                  project_dir, project_name)
-
-        # Auflage 2118: Commit-NO-GO-Loop, max 2 Versuche.
-        max_commit_versuche = 2
-        commit_versuche = 0
-        while True:
-            # Auflage 2120: leere Auflagen explizit 'keine'.
-            auflagen_letzte = (state.auflagen_log[-1]
-                               if state.auflagen_log
-                                  and state.auflagen_log[-1]
-                               else [])
-            auflagen_text = ("; ".join(auflagen_letzte)
-                             if auflagen_letzte else "keine")
-
-            # W11b (2026-10-16): Unterblock-Kontext
-            # fuer den Commit-Review (nur Phasen-Modus).
-            _w11_unterblock_kontext = ""
-            if state.phase_aktiv:
-                _w11_idx = state.phase_aktueller_index
-                _w11_ups = state.phase_unterbloecke
-                if 0 <= _w11_idx < len(_w11_ups):
-                    _w11_u = _w11_ups[_w11_idx]
-                    _w11_uid = (
-                        _w11_u.get("id", "?")
-                        if isinstance(_w11_u, dict) else "?")
-                    _w11_titel = (
-                        _w11_u.get("titel", "")
-                        if isinstance(_w11_u, dict) else "")
-                    _w11_total = len(_w11_ups)
-                    _w11_done = sum(
-                        1 for _u in _w11_ups
-                        if isinstance(_u, dict)
-                        and _u.get("status") == "done")
-                    _w11_unterblock_kontext = (
-                        f"UNTERBLOCK: {_w11_uid} "
-                        f"({_w11_idx + 1} von {_w11_total}) "
-                        f"— {_w11_titel}\n"
-                        f"({_w11_done} von {_w11_total} "
-                        f"bereits done)\n"
-                    )
-
-            # W23 (2026-10-17): Commit-Review-Prompt ausgelagert
-            # in _build_commit_input (testbar, wartbar).
-            commit_input = _build_commit_input(
-                state, _diff_name_only,
-                _w11_unterblock_kontext, auflagen_text)
-            rc = budget_or_recover(state, max_llm,
-                                  "Vor Commit-Review.",
-                                  project_dir, project_name,
-                                  max_minutes=max_minutes)
-            if rc is not None:
-                return rc
-            if len(commit_input) > 50000:
-                print(f"[WARN] commit_input {len(commit_input)} "
-                      f"Zeichen (> 50000). Kontext-Risiko.")
-            reply = ask_llm(api_key, reviewer_prompt, commit_input,
-                            state.reviewer_verdict_model, 0.0,
-                            state.llm_timeout_s,
-                            state=state,
-                            max_tokens=state.max_tokens_reviewer)
-            if not reply.ok:
-                print(f"[FAIL] Reviewer Commit-Review: {reply.error}")
-                return _fail_closed(
-                    state, project_dir, project_name, 6,
-                    "commit_review_call_failed")
-
-            commit_verdict = classify_verdict(reply.content)
-            state.commit_review = {"verdict": commit_verdict,
-                                   "raw": reply.content}
-            # Auflage 2140: Roh-Text aus Audit entfernt.
-            audit("commit_review",
-                  {"verdict": commit_verdict,
-                   "runde": commit_versuche},
-                  project_dir, project_name)
-
-            # Auflage 2183 C (Y2): COMMAND in Phase 2
-            # wird nicht ausgefuehrt (2199-R7-P2).
-            # Wenn der Reviewer RUN solver versucht:
-            # Audit, sonst blinder Fleck.
-            if commit_verdict == "COMMAND":
-                cmds_p2 = parse_commands(reply.content)
-                for c in cmds_p2:
-                    if c.get("id") == "solver":
-                        audit(
-                            "reviewer_run_solver_phase2_ignoriert",
-                            {"runde": commit_versuche,
-                             "arg": c.get("arg", "")[:200]},
-                            project_dir, project_name)
-            if commit_verdict == "COMMIT-GO":
-                print("[+] Commit-GO erhalten.")
-                break
-
-            if commit_verdict != "COMMIT-NO-GO":
-                # ESKALATION / UNKLAR: Stop, Mensch entscheidet am Gate.
-                print(f"[i] Commit-Review-Verdict: {commit_verdict}. "
-                      "Kein Loop.")
-                break
-
-            # COMMIT-NO-GO
-            print(f"[-] Commit-NO-GO (Versuch {commit_versuche + 1}/"
-                  f"{max_commit_versuche}):\n{reply.content[:400]}")
-            commit_versuche += 1
-            if commit_versuche >= max_commit_versuche:
-                print("[!] Commit-Review: maximale Versuche erreicht.")
-                return _fail_closed(
-                    state, project_dir, project_name, 7,
-                    "commit_no_go_max_versuche")
-
-            rc = budget_or_recover(state, max_llm,
-                                  "Vor Builder-Neubau (Commit-NO-GO).",
-                                  project_dir, project_name,
-                                  max_minutes=max_minutes)
-            if rc is not None:
-                return rc
-            bauer_reply = ask_llm(
-                api_key, builder_prompt,
-                f"Der Reviewer hat das vorherige Commit-Paket "
-                f"mit COMMIT-NO-GO abgelehnt.\n"
-                f"Begruendung (Kontext, NICHT die "
-                f"Reviewed-Zeile):\n{reply.content}\n\n"
-                + format_messwerte_block(collect_messwerte(state)) + "\n\n"
-                + format_doc_snippets(state.docs) + "\n\n"
-                "Liefere ein ueberarbeitetes Commit-Paket.\n\n"
-                "WICHTIG: Der Reviewed-Block der neuen Message "
-                "spiegelt den Code-Review-Verdict DIESER Runde "
-                "(CODE-GO), nicht den vorherigen COMMIT-NO-GO. "
-                "Der vorherige NO-GO ist Kontext, keine "
-                "Verdict-Quelle.\n\n"
-                + COMMIT_PAKET_FORMAT,
-                state.builder_model, state.builder_temp,
-                state.llm_timeout_s,
-                state=state,
-                max_tokens=state.max_tokens_builder,
-            )
-            if not bauer_reply.ok:
-                print(f"[FAIL] Builder Commit-Paket-Neubau: "
-                      f"{bauer_reply.error}")
-                # Auflage 2128: Audit fuer den Fehlerpfad.
-                audit("builder_commit_paket_failed_retry",
-                      {"error": bauer_reply.error,
-                       "versuch": commit_versuche},
-                      project_dir, project_name)
-                return 8
-            state.commit_paket = parse_commit_paket(bauer_reply.content)
-            # Auflage 2128: Audit, wenn der Neubau leer ist.
-            if not state.commit_paket.get("message") \
-                    and not state.commit_paket.get("dateien") \
-                    and not state.commit_paket.get("doku_patches"):
-                # Auflage 2134: Roh-Text entfernt.
-                audit("commit_paket_leer",
-                      {"runde": commit_versuche,
-                       "roh_len": len(bauer_reply.content)},
-                      project_dir, project_name)
+        _rc_w2 = _commit_review_w25_loop(
+            state, api_key, project_dir, project_name,
+            max_llm, max_minutes, reviewer_prompt, builder_prompt,
+            _hat_anker_patches, _diff_name_only,
+        )
+        if _rc_w2 is not None:
+            return _rc_w2
 
     # ==================================================================
     # SCHRITT 6: Approval-Dokument + Human-Gate
