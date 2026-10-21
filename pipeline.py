@@ -7757,6 +7757,26 @@ def _commit_review_w25_recovery(
         return 18
     return None
 
+
+def _commit_review_w25_loop(
+    state: RunState,
+    api_key: str,
+    project_dir: str,
+    project_name: str,
+    max_llm: int,
+    max_minutes: int,
+    reviewer_prompt: str,
+    builder_prompt: str,
+    _diff_name_only,
+) -> int | None:
+    """W2: Commit-NO-GO-Loop (max 2 Versuche).
+
+    Extrahiert aus run_pipeline, Z. 8585-8735 (Stand 1091b3e).
+    Signatur-Freeze 18c: 8 Parameter, siehe OFFENE-BLOECKE.md 3a-1c-2b.
+    """
+    raise NotImplementedError(
+        "W2-Extraktion folgt in Schritt 2 (3a-1c-2b)."
+    )
 def run_pipeline(project_name: str, aufgabe: str,
                  state_ref: list[RunState],
                  *,
