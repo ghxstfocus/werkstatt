@@ -691,3 +691,55 @@ verwechselt.
 keine 7 Wahrheiten. Die Verwirrung entstand, weil VOR und
 NACH nicht getrennt deklariert wurden. Klaerung in 3b.
 
+
+## M-46 + M-47 — Return-Bilanz korrigiert (2026-10-21, ehrlich)
+
+Reviewer-Auflage (Durchlauf 46, M-46 + M-47).
+
+### M-46 — W2 hat 7 Returns, nicht 6
+
+ast-Messung gegen d512264 (eine Messung, alle Zahlen
+aus einem Lauf):
+
+_commit_review_w25_loop (Z. 7761-7948, 188 Z.): 7 Returns
+```
+  Z. 7847: return rc
+  Z. 7858: return _fail_closed(...)  # rc 6
+  Z. 7886: return None
+  Z. 7892: return None
+  Z. 7900: return _fail_closed(...)  # rc 7
+  Z. 7909: return rc
+  Z. 7938: return 8
+```
+
+run_pipeline:
+- VOR (277029f~1): 39 Returns.
+- NACH (d512264): 35 Returns.
+- Delta: -4.
+
+**Die Rechnung:**
+- 5 Returns sind verschoben (rc 2x, _fail_closed 2x,
+  return 8 1x): 39 - 5 = 34.
+- 1 Return ist neu in run_pipeline (Z. 8760,
+  return _rc_w2): 34 + 1 = 35. Passt.
+- W2 hat 5 verschobene + 2 neue (return None Z. 7886,
+  7892 — aus den zwei break-Stellen) = 7.
+- Codebase-Summe: 35 (run_pipeline) + 7 (W2) = 42.
+
+**Meine fruehere Behauptung '5 + 1 = 6 Returns in W2'
+war falsch.** W2 hat 7 Returns, weil es zwei
+break-Stellen gab (COMMIT-GO @ 8673, ESKALATION @ 8679),
+nicht eine.
+
+### M-47 — Aufrufstelle ist 6 Zeilen Code, nicht 5
+
+```
+_rc_c2 = _basis_gate(                    # 1
+    state, always, config, file_whitelist,  # 2
+    project_dir, project_name,            # 3
+)                                          # 4
+if _rc_c2 is not None:                    # 5
+    return _rc_c2                         # 6
+```
+= 6 Zeilen Code (ohne Leerzeile).
+
