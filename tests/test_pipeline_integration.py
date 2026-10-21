@@ -792,7 +792,7 @@ def test_run_pipeline_basis_gate_rot(
         tmp_path: Path, monkeypatch) -> None:
     """3a-1a Luecke: Basis-Gate rot -> Fail-Pfad.
 
-    Zitat run_pipeline Z. 7735-7748:
+    Zitat run_pipeline Z. 8070-8131 (Stand d512264), jetzt _basis_gate:
         for mid, m in always.items():
             out, ok = run_measurement(m, file_whitelist, project_dir)
             if not ok:
