@@ -954,3 +954,89 @@ _commit_review_w25_loop (7 Returns): 7925 (return rc),
 7936 (_fail_closed 6), 7964 (return None), 7970 (return None),
 7978 (_fail_closed 7), 7987 (return rc), 8016 (return 8).
 
+
+## A22-2-Nach-Liste — Return-Bilanz C0+C1 (2026-10-21, Messung)
+
+Reviewer-Auflage (Durchlauf 54, A22-2-Nach-Liste).
+
+HEAD bb919d1. Vier vollstaendige Return-Listen.
+
+### run_pipeline: 34 Returns
+
+```
+  Z. 8171: return _v
+  Z. 8188: return _rc_c2
+  Z. 8227: return rc
+  Z. 8235: return 2
+  Z. 8263: return rc
+  Z. 8311: return _test_fehler_block + _contract_block + aufgabe_block(s) + _format_whitelist_block(list(getattr(s, 'f
+  Z. 8362: return rc
+  Z. 8369: return 4
+  Z. 8391: return _rc_w33
+  Z. 8486: return rc
+  Z. 8530: return 5
+  Z. 8564: return _v2_rc
+  Z. 8577: return 15
+  Z. 8586: return _post_apply_korrektur_loop(state, always, file_whitelist, builder_prompt=builder_prompt, project_dir
+  Z. 8597: return rc_apply
+  Z. 8612: return 0
+  Z. 8671: return _w25_ergebnis
+  Z. 8682: return _rc_r
+  Z. 8690: return _rc_n
+  Z. 8730: return 9
+  Z. 8746: return 9
+  Z. 8768: return 9
+  Z. 8775: return 9
+  Z. 8790: return 9
+  Z. 8806: return _fail_closed(state, project_dir, project_name, 9, 'commit_review_ohne_messung')
+  Z. 8817: return _rc_w2
+  Z. 8834: return 21
+  Z. 8854: return 0
+  Z. 8865: return 0
+  Z. 8874: return 0
+  Z. 8878: return 0
+  Z. 8881: return 20
+  Z. 8893: return 0
+  Z. 8898: return 0
+```
+
+### _vorlauf_und_state: 3 Returns
+
+```
+  Z. 7778: return 1
+  Z. 7797: return 3
+  Z. 7882: return VorlaufErgebnis(state=state, config=config, budget=budget, max_llm=max_llm, max_minutes=max_minutes,
+```
+
+### _basis_gate: 2 Returns
+
+```
+  Z. 7963: return 11
+  Z. 7964: return None
+```
+
+### _commit_review_w25_loop: 7 Returns
+
+```
+  Z. 8053: return rc
+  Z. 8064: return _fail_closed(state, project_dir, project_name, 6, 'commit_review_call_failed')
+  Z. 8092: return None
+  Z. 8098: return None
+  Z. 8106: return _fail_closed(state, project_dir, project_name, 7, 'commit_no_go_max_versuche')
+  Z. 8115: return rc
+  Z. 8144: return 8
+```
+
+### Summenprobe
+
+```
+  run_pipeline:            34
+  _vorlauf_und_state:      3
+  _basis_gate:             2
+  _commit_review_w25_loop: 7
+  Summe:                   46
+```
+
+Prognose A22-2 war 45. Messung 46 (Erfolgs-Return
+in _vorlauf_und_state vergessen). Korrektur dokumentiert.
+
