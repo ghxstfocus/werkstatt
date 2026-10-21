@@ -110,7 +110,7 @@ A13-3 n==2-Sicherstellung:
   commit_verdict.
 ```
 
-**A14-1 — Baseline VOR/NACH (mit Korrektur):**
+**A14-1 — Baseline VOR/NACH (korrekt: VOR 1242, NACH 1245):**
 ```
 A14-1 Baseline-VOR/NACH:
   VOR:  1242 / ruff 17 / mypy 7 / AST 6 / 167
@@ -202,7 +202,7 @@ Beleg: `_setup_c7` (test_pipeline_integration.py:1677) mockt
 (Commit-Review, auch bei Wiederholung im commit_versuche-Loop).
 Nach W2-Extraktion gruen.
 
-### A14-1 — Baseline VOR/NACH
+### A14-1 — Baseline VOR/NACH (korrekt: VOR 1242, NACH 1245)
 
 Zitat `ae25e08`:
 > A14-1 Baseline-VOR/NACH:
@@ -261,7 +261,7 @@ gemessen in Block 3, korrigiert in `6e11718`). Die 9 Parameter:
 ### Ergebnis
 
 3a-1c-2b ist **abgenommen** mit zwei Korrekturen an Commit-Body-Zahlen
-(A14-1: 1242 -> 1243; 11 -> 9 Parameter). Beide Korrekturen sind
+(A14-1: VOR 1242, NACH 1245 — korrekt aus ae25e08; 11 -> 9 Parameter war falsch, korrekt 10). Beide Korrekturen sind
 in `OFFENE-BLOECKE.md` als Merkposten dokumentiert.
 
 
@@ -338,4 +338,104 @@ Semantisch ist `_commit_review_w25_loop` korrekt
 (Commit-Review-Loop, nicht Verdict-Verarbeitung).
 
 **M-27 zurueckgezogen.** 18c-Freeze wurde gebrochen.
+
+
+## A18-1/A18-2/A18-3/A18-4 — Zitate + Klarstellung (2026-10-21)
+
+Reviewer-Auflage (Durchlauf 39, GO-mit-Auflagen).
+
+### A18-1 — Baseline-Kette (Zitate)
+
+`git log --oneline 88e3e5c..ae25e08`:
+```
+ae25e08 3a-1c-2b: AQ-Vorspann B7/B8 + 6887-Verhaltens-Test
+ecf35a4 3a-1c-2a: W0a-1/2/3 extrahiert + 7390 geloescht
+```
+
+`pytest --collect-only` pro Commit (git worktree):
+```
+88e3e5c:  1243 tests collected
+ecf35a4:  1242 tests collected
+ae25e08:  1245 tests collected
+```
+
+Kette: 1237 (vor 88e3e5c) + 6 (B1a/B1b/B2/B3/B4/B6) = 1243, dann -1 (7390) = 1242, dann +3 (B7, B8, test_build_commit_input_phasen_unterblock) = 1245. **Alle drei Commit-Bodies richtig.**
+
+### A18-2 — M-41 (Zitate)
+
+`git show 74ff77d --stat` (Auszug):
+```
+test(3a-1c-2b): Struktur-Tests auf _commit_review_w25_loop umgestellt
+5 getsource-Struktur-Tests, die Code pruefen, der mit
+W2 (Commit 277029f) in _commit_review_w25_loop gewandert
+```
+
+Diff Z. 6880-6892 (Auszug):
+```
+-        # wandert bei 3a-1c-2 (C7) in _commit_review_loop.
++        # wandert bei 3a-1c-2b in _commit_review_w25_loop (erledigt).
+-            + inspect.getsource(pipeline._review_verdict_behandlung))
++            + inspect.getsource(pipeline._commit_review_w25_loop))
+```
+
+Aktueller Zustand Z. 6881-6892:
+```
+def test_commit_review_prompt_unterblock_nur_phasen_modus(self) -> None:
+    # Dual-source (A10-13b): _w11_unterblock_kontext-Bau
+    # wandert bei 3a-1c-2b in _commit_review_w25_loop (erledigt).
+    import inspect
+    src = (
+        inspect.getsource(pipeline.run_pipeline)
+        + inspect.getsource(pipeline._commit_review_w25_loop))
+    assert "if state.phase_aktiv:" in src
+    assert "_w11_unterblock_kontext = \"\"" in src
+```
+
+`test_build_commit_input_phasen_unterblock` (integration:1938):
+```
+def test_build_commit_input_phasen_unterblock(
+        tmp_path: Path, monkeypatch) -> None:
+    """3a-1c-2b A15: Phasen-Modus -> commit_input mit
+    UNTERBLOCK-Kontext. Ersetzt 6887 (Struktur-Test) als
+    Verhaltens-Test."""
+    ph, _, _ = _setup_c7(monkeypatch, tmp_path)
+    result = pipeline._build_commit_input(
+        ph, "core/x.py",
+        "UNTERBLOCK: U1 (1 von 2) — A",
+        "keine")
+    assert "UNTERBLOCK:" in result
+    assert "U1" in result
+    assert "1 von 2" in result
+```
+
+### A18-3 — 18c-Bruch-Deklaration (Verantwortungs-Klarstellung)
+
+M-27 (11 Parameter) vs 277029f (10 Parameter).
+Falsch in M-27: reply, commit_verdict, max_commit_versuche
+(W2-intern). Uebersehen in M-27: _hat_anker_patches,
+_diff_name_only (W2-Input).
+
+**Verantwortung beider Seiten:**
+- Reviewer hat M-27 mit 11 abgenommen, ohne reply/commit_verdict/
+  max_commit_versuche (W2-intern) und _hat_anker_patches/
+  _diff_name_only (W2-Input) zu pruefen.
+- Bau-Chat hat mit 10 gebaut, ohne die Abweichung zu M-27 vor
+  dem Bau zu deklarieren.
+- **Kein Prozess-Schutz zwischen Freigabe und Bau.**
+
+M-27 zurueckgezogen.
+
+### A18-4 — A14-1-Widerspruch geklaert
+
+**Klarstellung:** Die A14-1-Angabe in `ae25e08` ("VOR 1242 /
+NACH 1245") ist **KORREKT**. VOR `ae25e08` war 1242 (weil
+`ecf35a4` -1 gemacht hat: 1243 -> 1242).
+
+**Meine Korrektur in `4e450d7`** ("A14-1 VOR war 1243, nicht
+1242") war **FALSCH**. Ursache: Verwechslung von `ecf35a4~1`
+(1243) mit `ecf35a4` (1242).
+
+**Korrigierte Aussage:** A14-1 (ae25e08): VOR 1242, NACH 1245.
+Korrekt. Die +3 sind B7 + B8 + test_build_commit_input_phasen_
+unterblock.
 
