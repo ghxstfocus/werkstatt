@@ -601,3 +601,47 @@ grep -n in 5a9939c (git show 5a9939c:pipeline.py):
 Definition, kein Aufruf). Baseline 1245/17/9 ist korrekt
 dokumentiert.
 
+
+## M-45 — W2-Grenze endgueltig (2026-10-21, widerspruchsfrei)
+
+Reviewer-Auflage (Durchlauf 43). Eine Messung, alle Zahlen
+aus einem Lauf. Keine Widersprueche.
+
+### Die Tabelle
+
+| Objekt | Zeilen | Groesse | Was |
+|---|---|---|---|
+| C6 (Coverage/Chaos) | 8560-8600 | 41 | nicht W2 |
+| **W2 (extrahiert)** | **8585-8755** | **171** | Skip-Pfad 8585-8603 + Init 8606-8607 + while 8608-8755 |
+| C7-Rest (in run_pipeline) | 8605-8760 | 156 | if config...Block nach Extraktion |
+| W2-Funktion | 7761-7948 | 188 | _commit_review_w25_loop |
+| W2-Aufruf (in run_pipeline) | 8754-8758 | 5 | _rc_w2 = _commit_review_w25_loop(...) |
+
+### Die entscheidende Messung (ast, 277029f~1)
+
+```
+if config.review_commit_package (vor Extraktion): Z. 8436-8755 (320 Z.)
+  body: If      Z. 8585-8603  if not _hat_anker_patches...
+  body: Assign  Z. 8606-8606  max_commit_versuche = 2
+  body: Assign  Z. 8607-8607  commit_versuche = 0
+  body: While   Z. 8608-8755  while True:
+```
+
+**W2 = 8585-8755 (171 Z.).** Das ist der Bereich, den
+277029f extrahiert hat. Kein Zweifel.
+
+### Meine (c) in M-43 war falsch
+
+Ich hatte geschrieben: "Die 20 Z. 8585-8604 sind C6
+(Coverage/Chaos)". **Das war falsch.** C6 endet bei 8600.
+Der W2-Skip-Pfad beginnt bei 8585. Ich hatte C6 und W2
+verwechselt.
+
+### Die fuenf Zahlen sind erklaert
+
+- 151 (M-22): falsch, veraltet.
+- 156: C7-Rest in run_pipeline (8605-8760).
+- 171: W2 (8585-8755). **Die richtige Zahl.**
+- 8585-8755: W2-Zeilen.
+- 8605-8755: C7-Rest ohne Aufruf-Ende (8754-8760).
+
