@@ -102,6 +102,7 @@ from werkstatt.state import (
     BudgetExhausted,
     LLMReply,
     Measurement,
+    PhaseVorlaufErgebnis,
     RecoveryVorschlag,
     RunState,
     SolverBefund,
@@ -2044,43 +2045,16 @@ def _phase_plan_korrektur(
 
 
 
-def run_phase(
-    project_name: str,
-    state: RunState,
-    state_ref: list[RunState],
-) -> int:
-    """Block P2b-1: Geruest fuer den Phasen-Loop.
+def _phase_vorlauf(
+        state: RunState,
+        project_name: str,
+) -> PhaseVorlaufErgebnis | int:
+    """3a-2a: Vorlauf aus run_phase extrahiert (Z. 2084-2214, HEAD 5708bcf).
 
-    Ablauf:
-      1. phase.yaml via _phase_plan_laden pruefen.
-      2. Idempotenz (P2b-1-A4):
-         - alle done   -> rc=0, bereits_fertig=True.
-         - no_go/failed-> rc=18, Fail-closed.
-      3. audit run_phase_start.
-      4. Loop ueber phase_unterbloecke:
-         - phase_aktueller_index = i (P2b-1-A5).
-         - audit phase_unterblock_start.
-         - _phase_yaml_status_update("running").
-         - STUB: kein run_pipeline-Aufruf (P2b-A9).
-           TODO(P2b-3): hier run_pipeline.
-         - _phase_yaml_status_update("done").
-         - audit phase_unterblock_ende.
-         - phase_aktueller_index = i + 1.
-      5. audit run_phase_ende.
-      6. rc=0.
-
-    KEIN Rollback in P2b-1 (folgt in P2b-2).
-    KEIN run_pipeline-Aufruf (folgt in P2b-3).
-
-    Exception-Verhalten (Q4, P2b-1-A6): Exception wird
-    NICHT abgefangen; der Aufrufer (P2b-2) faengt sie
-    fuer den Rollback.
+    Wortwoertliche Extraktion. Der if-state_ref-Guard bleibt in run_phase.
+    Returns: PhaseVorlaufErgebnis bei Erfolg, int (1|18|0) bei Vorlauf-
+    Fehler oder "alle done".
     """
-    # P2b-3b / L1: state_ref muss leer sein.
-    # Der State wird am Ende angehaengt (fuer main()).
-    if state_ref:
-        raise ValueError(
-            "run_phase: state_ref muss leer sein")
     # P2b-5: api_key fuer Plan-Korrektur (Planner).
     api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
     if not api_key:
@@ -2212,6 +2186,58 @@ def run_phase(
     # P2b-5 / N1 + N3: Phasen-Budget vor dem Loop.
     max_phase = int(state.budget.get(
         "max_llm_calls_phase", 0) or 0)
+
+    return PhaseVorlaufErgebnis(
+        state=state,
+        unterbloecke=unterbloecke,
+        api_key=api_key,
+        max_phase=max_phase,
+    )
+
+
+def run_phase(
+    project_name: str,
+    state: RunState,
+    state_ref: list[RunState],
+) -> int:
+    """Block P2b-1: Geruest fuer den Phasen-Loop.
+
+    Ablauf:
+      1. phase.yaml via _phase_plan_laden pruefen.
+      2. Idempotenz (P2b-1-A4):
+         - alle done   -> rc=0, bereits_fertig=True.
+         - no_go/failed-> rc=18, Fail-closed.
+      3. audit run_phase_start.
+      4. Loop ueber phase_unterbloecke:
+         - phase_aktueller_index = i (P2b-1-A5).
+         - audit phase_unterblock_start.
+         - _phase_yaml_status_update("running").
+         - STUB: kein run_pipeline-Aufruf (P2b-A9).
+           TODO(P2b-3): hier run_pipeline.
+         - _phase_yaml_status_update("done").
+         - audit phase_unterblock_ende.
+         - phase_aktueller_index = i + 1.
+      5. audit run_phase_ende.
+      6. rc=0.
+
+    KEIN Rollback in P2b-1 (folgt in P2b-2).
+    KEIN run_pipeline-Aufruf (folgt in P2b-3).
+
+    Exception-Verhalten (Q4, P2b-1-A6): Exception wird
+    NICHT abgefangen; der Aufrufer (P2b-2) faengt sie
+    fuer den Rollback.
+    """
+    # P2b-3b / L1: state_ref muss leer sein.
+    # Der State wird am Ende angehaengt (fuer main()).
+    if state_ref:
+        raise ValueError(
+            "run_phase: state_ref muss leer sein")
+    _vl = _phase_vorlauf(state, project_name)
+    if isinstance(_vl, int):
+        return _vl
+    unterbloecke = _vl.unterbloecke
+    api_key = _vl.api_key
+    max_phase = _vl.max_phase
 
     for i, u in enumerate(unterbloecke):
         # Budget-Check VOR jedem Unterblock.

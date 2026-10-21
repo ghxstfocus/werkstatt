@@ -290,3 +290,22 @@ class VorlaufErgebnis:
     always: dict
     optional: dict
 
+
+
+@dataclass
+class PhaseVorlaufErgebnis:
+    """Ergebnis des Vorlaufs von run_phase (3a-2a).
+
+    4 Felder. Bewusst NICHT VorlaufErgebnis (werkstatt/state.py) wieder-
+    verwendet: VorlaufErgebnis hat 10 Felder (config, budget, max_llm,
+    max_minutes, project_dir, file_whitelist, always, optional + state +
+    api_key), davon 8 in 3a-2a ungenutzt. Konsistenz: state ist wie in
+    VorlaufErgebnis enthalten (Durchreichen an untergeordnete Funktionen),
+    damit kuenftige Felder (max_llm, budget) ohne Signatur-Bruch ergaenzt
+    werden koennen.
+    """
+    state: RunState
+    unterbloecke: list
+    api_key: str
+    max_phase: int
+
