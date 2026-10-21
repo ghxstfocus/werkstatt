@@ -20,6 +20,7 @@ Chronologisch nach Umbau-Phasen. Append-only pro Phase.
 | C-Nummerierung run_pipeline | 3 | **Definiert 2026-10-21 (Block 6d-6g), weil C0-C9 nirgends dokumentiert war** (nur Erwaehnungen in ROADMAP/UEBERGABE). run_pipeline Z. 7949-8841 (893 Z.) wird in 10 logische Bloecke zerlegt. Grundlage: 7 SCHRITT-Kommentare (Z. 8070-8764) + Vorlauf/Nachlauf. Die C-Nummern sind Zerlegungs-Ziele, NICHT die aktuellen Top-Level-if (davon 25). Tabelle: C0 Vorlauf (config/project_dir/memory/agents/docs/catalog/budget/solver/git_author/phasen_state, Z. 7962-8040) offen | C1 Audit-Start+run_id (Z. 8042-8066) offen | C2 Basis-Gate Schritt 0 (Z. 8070-8131) offen | C3 Reviewer-Wahl Schritt 1 (Z. 8135-8191) inline, nicht geplant | C4 Builder Schritt 2 (Z. 8193-8334) DONE vor 3a (e8763ad, builder_reply_mit_command_loop) | C5 Review-Schleife Schritt 3 (Z. 8336-8555) DONE 3a-1c-1b (72e3459, _review_verdict_behandlung) | C6 Coverage+Chaos Schritt 4 (Z. 8557-8600) offen | C7 Commit-Review Schritt 5 (Z. 8602-8760) DONE 3a-1c-2b (W2, _commit_review_w25_loop) | C8 Approval Schritt 6 (Z. 8762-8797) offen | C9 Human-Gate (Z. 8798-8841) offen. Konsequenz: 3a-1c-3 = C0+C1+C2+C6 (4 offene), 3a-1c-4 = C8+C9 (2 offene). | mittel | done |
 | Commit-Body-Fehler 3a-1c-2a/2b | 2 | **KORREKTUR (2026-10-21, ehrlich):** Die fruehere Behauptung in Commit 4e450d7 ("drei Commit-Bodies falsch, echte Kette 1243 -> 1243 -> 1245") war **ein Messfehler des Bau-Chats**. Ursache: In Block 12a (M-33-Nachmass) wurde `ecf35a4~1` gemessen (1243, korrekt), aber `ecf35a4` selbst (nach -1) wurde NICHT gemessen. Stattdessen wurde 1243 fuer `88e3e5c` und 1243 fuer `ecf35a4~1` als "dieselbe Zahl" gewertet, ohne `ecf35a4` (1242) zu messen. **Die tatsaechliche Chronologie (git log --oneline, absteigend):** ae25e08 (neuester), ecf35a4 (mittlerer), 88e3e5c (aeltester). **Die korrekte Kette (hart gemessen via git worktree + pytest --collect-only):** vor 88e3e5c: 1237. 88e3e5c: +6 -> 1243 (6 neue B1a/B1b/B2/B3/B4/B6). ecf35a4: -1 -> 1242 (7390 geloescht). ae25e08: +3 -> 1245 (B7, B8, test_build_commit_input_phasen_unterblock). **Alle drei Commit-Bodies (ecf35a4/88e3e5c/ae25e08) sind richtig.** Meine fruehere Behauptung "drei falsch" war falsch. **M-39/M-40 bleiben gueltig:** `ae25e08` sagt "11 Parameter" — echt: **10** im Code (Z. 7761-7771). `277029f`/`74ff77d`/`ac4956f`/`b502e20`/`f608658` nennen `_commit_review_w25_loop` — M-27-Freigabe nannte `_commit_verdict_behandlung` (falsch, Funktion existierte damals nicht). **M-27 war Freigabe auf falscher Grundlage.** Konsequenz: Bei Commit-Body-Pruefungen **zwei** Messungen: (a) `git log`-Reihenfolge explizit pruefen (Chronologie aus `git log --reverse` oder Datum), (b) `pytest --collect-only` auf **jedem** Zwischenstand, nicht nur auf `~1`. | klein | offen |
 | Position A vs B (Code-Reihenfolge) | 2 | **Entschieden 2026-10-21 (Reviewer-Frage 3, Durchlauf 36):** Position **A** = `_basis_gate` (C2) vor `run_pipeline`, `_commit_review_w25_loop` (C7) bleibt wo er ist (vor `_basis_gate`). **Begruendung:** Extraktions-Bloecke in umgekehrter Abhaengigkeits-Reihenfolge erzeugen am wenigsten Ueberraschung. Die Doku-Konvention C0-C9 (293589e) ist **orthogonal** zur Code-Reihenfolge. 293589e etabliert Doku, nicht Code-Reihenfolge. **Code-Reihenfolge folgt NICHT C-Nummerierung.** Keine stille Konvention (Reviewer-Auflage). | klein | done |
+| W2-Grenze VOR/NACH (Doku-Klaerung 3b) | 2 | **Vier Objekte, ein Etikett "W2" — die Doku-Verwirrung.** Hart gemessen 2026-10-21 (ast, ein Lauf): (1) **W2-Quell-Bereich VOR Extraktion:** 8585-8755 (171 Z.) in run_pipeline — Skip-Pfad 8585-8603, Init 8606-8607, while-True 8608-8755. (2) **W2-Funktion NACH Extraktion:** _commit_review_w25_loop, 7761-7948 (188 Z.). (3) **W2-Aufruf NACH Extraktion:** in run_pipeline, 8754-8758 (5 Z.). (4) **C7-Rest NACH Extraktion:** if config.review_commit_package-Block, 8605-8760 (156 Z.). C6 (Coverage/Chaos) endet bei 8600 — nicht W2. **Die 7 Varianten in M-22..M-45 sind Etiketten fuer diese 4 Objekte, keine 7 Wahrheiten.** **Entscheidung (b) 2026-10-21 (Auftraggeber):** 3a-1c-2b als gebaut akzeptiert. Code verhaltensgleich (1245/17/9/14 durchgehend). Die Doku-Klaerung (VOR/NACH-Trennung in OFFENE-BLOECKE.md, C-Nummerierung) erfolgt in 3b. Kein Aufteilen in 3a-1c-2b-1/2/3 (waere nur Doku-Restruktur, kein Code). | klein | offen |
 | Struktur-Tests umstellen | 2 | **5 von ~15 erledigt (74ff77d).** Umgestellt: TestCommitReviewNewFileSkip 4x + TestW11 (getsource run_pipeline -> _commit_review_w25_loop). **Rest ~10** folgen mit 3a-1c-3 (C0/C1/C2/C6) und 3a-1c-4 (C8/C9), weil dort die naechsten getsource-Ziele wandern. test_fail_closed_pfad_bleibt (Z. 5416) bleibt absichtlich auf run_pipeline. Duale Quellen-Pruefung oder Verhaltens-Test (A9-13, A10-13b). | gross | offen |
 | 3a-1c-2-V2-Groesse | 3 | V2 = 303 Z., 13 Steuerungsstellen, 12 Parameter. Zu gross fuer 1-Rutsch. Zerlegung V2a/V2b vor 3a-1c-2 pruefen (A8-2-nach-3b). | mittel | offen |
 | 3a-1c-2b (W2-Extraktion) | 3 | ERLEDIGT (277029f + 74ff77d + ac4956f). W2 = 8585-8755 (171 Z.) nach `_commit_review_w25_loop` extrahiert. 9 Parameter (Signatur-Freeze 18c): _diff_name_only, _hat_anker_patches, api_key, builder_prompt, max_llm, max_minutes, project_dir (Path!), reviewer_prompt, state. Zwei break (COMMIT-GO, ESKALATION) -> return None. Aufrufstelle run_pipeline Z. 8754-8760. 5 Struktur-Tests umgestellt (74ff77d): TestCommitReviewNewFileSkip 4x + TestW11. test_fail_closed_pfad_bleibt unberuehrt (Fail-Closed-Pfad blieb in run_pipeline). mypy-Fix (ac4956f): project_dir str->Path (19->9). Baseline 1245 / ruff 17 / mypy 9 / AST+Katalog 14. AQ-Regressionslatte 9/9 gruen. | gross | done |
@@ -644,4 +645,49 @@ verwechselt.
 - 171: W2 (8585-8755). **Die richtige Zahl.**
 - 8585-8755: W2-Zeilen.
 - 8605-8755: C7-Rest ohne Aufruf-Ende (8754-8760).
+
+
+## W2-Grenze VOR/NACH — Doku-Klaerung (2026-10-21, Entscheidung b)
+
+**Auftraggeber-Entscheidung (Durchlauf 44, Option b):**
+3a-1c-2b wird als gebaut akzeptiert. Kein Aufteilen in
+3a-1c-2b-1/2/3. Die Doku-Klaerung erfolgt in 3b.
+
+**Begruendung:**
+- Code ist verhaltensgleich (Baseline 1245/17/9/14 durchgehend).
+- B7/B8 gruen, AQ 9/9 gruen.
+- Die Aufteilung (a) waere reine Doku-Restruktur — kein Code,
+  kein Test, keine Baseline-Aenderung.
+- Der Merkposten ist ehrlicher als eine nachtraegliche
+  Aufteilung.
+
+### Die vier Objekte (VOR/NACH sauber getrennt)
+
+**VOR der Extraktion (277029f~1):**
+- W2-Quell-Bereich: 8585-8755 (171 Z.).
+  Skip-Pfad 8585-8603, Init max_commit_versuche/
+  commit_versuche 8606-8607, while-True-Loop 8608-8755.
+- C6 (Coverage/Chaos): 8560-8600 (41 Z.), endet bei 8600.
+
+**NACH der Extraktion (HEAD):**
+- W2-Funktion _commit_review_w25_loop: 7761-7948 (188 Z.).
+- W2-Aufruf in run_pipeline: 8754-8758 (5 Z.).
+- C7-Rest (if config.review_commit_package):
+  8605-8760 (156 Z.).
+
+### Die 7 Varianten aus M-22..M-45
+
+| Variante | Objekt |
+|---|---|
+| 8585-8735 (M-22) | FALSCH, veraltet |
+| 8585-8755 (M-42, M-45) | W2-Quell-Bereich VOR |
+| 8605-8760 (M-42) | C7-Rest NACH |
+| 8585-8603 (M-45) | W2-Skip-Pfad (Teil des Quell-Bereichs) |
+| 8606-8607 (M-45) | W2-Init (Teil des Quell-Bereichs) |
+| 8608-8755 (M-45) | W2-while-Loop (Teil des Quell-Bereichs) |
+| 7761-7948 (M-45) | W2-Funktion NACH |
+
+**Fazit:** Die 7 Varianten sind Etiketten fuer 4 Objekte,
+keine 7 Wahrheiten. Die Verwirrung entstand, weil VOR und
+NACH nicht getrennt deklariert wurden. Klaerung in 3b.
 
