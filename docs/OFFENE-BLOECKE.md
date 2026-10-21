@@ -18,7 +18,7 @@ Chronologisch nach Umbau-Phasen. Append-only pro Phase.
 | 3a-1c-1-b (Vorbedingung) | 3 | ERLEDIGT (Commits 7cb8866 + 6cd545f). 3 UNKLAR-Verhaltens-Tests: Kette rc=14, Payload-raw, Verstoss (1x UNKLAR). Vorbedingung fuer 3a-1c-2 erfuellt (A9-8-3a, HR-R9). | mittel | done |
 | Werkstatt-Entkopplung von security-ai | 3 | `werkstatt/verify.py` importiert `harness.audit.writer.AuditWriter`, `core.changeapplier.models.Change`, `core.changeapplier.applier.ChangeApplier`, `core.changeapplier.models.ChangeState` — **nur Introspektion** (`inspect.signature`, Enum-Iteration), keine Ausfuehrung. Betroffen: `_api_signaturen` (Z. 151-182, 3 Importe), `verify_values` (Z. 234-253, 1 Import), plus Datei-Lesen `(project_dir / "core/changeapplier/applier.py")` Z. 260 (kein Import, nur Datei). Ziel: null `harness`/`core`-Imports in `werkstatt/`. Empfohlen: AST-basierte Signatur-Extraktion aus `project_dir` (Quelltext liegt lokal). Fallback: Signaturen als Konstanten einfrieren. Aufwand ~4-6 h. **Kein Blocker fuer 3a-1c-2b** (W2 nutzt verify nicht). Nach 3a-1c-2b, vor 3a-1c-3. | mittel | offen |
 | C-Nummerierung run_pipeline | 3 | **Definiert 2026-10-21 (Block 6d-6g), weil C0-C9 nirgends dokumentiert war** (nur Erwaehnungen in ROADMAP/UEBERGABE). run_pipeline Z. 7949-8841 (893 Z.) wird in 10 logische Bloecke zerlegt. Grundlage: 7 SCHRITT-Kommentare (Z. 8070-8764) + Vorlauf/Nachlauf. Die C-Nummern sind Zerlegungs-Ziele, NICHT die aktuellen Top-Level-if (davon 25). Tabelle: C0 Vorlauf (config/project_dir/memory/agents/docs/catalog/budget/solver/git_author/phasen_state, Z. 7962-8040) offen | C1 Audit-Start+run_id (Z. 8042-8066) offen | C2 Basis-Gate Schritt 0 (Z. 8070-8131) offen | C3 Reviewer-Wahl Schritt 1 (Z. 8135-8191) inline, nicht geplant | C4 Builder Schritt 2 (Z. 8193-8334) DONE vor 3a (e8763ad, builder_reply_mit_command_loop) | C5 Review-Schleife Schritt 3 (Z. 8336-8555) DONE 3a-1c-1b (72e3459, _review_verdict_behandlung) | C6 Coverage+Chaos Schritt 4 (Z. 8557-8600) offen | C7 Commit-Review Schritt 5 (Z. 8602-8760) DONE 3a-1c-2b (W2, _commit_review_w25_loop) | C8 Approval Schritt 6 (Z. 8762-8797) offen | C9 Human-Gate (Z. 8798-8841) offen. Konsequenz: 3a-1c-3 = C0+C1+C2+C6 (4 offene), 3a-1c-4 = C8+C9 (2 offene). | mittel | done |
-| Commit-Body-Fehler 3a-1c-2a/2b | 2 | **Drei Commit-Bodies mit falschen Baseline-Zahlen** (hart gemessen 2026-10-21 via `git worktree` + `pytest --collect-only`): `ecf35a4` sagt "1243 -> 1242", echt: **1243 -> 1243** (netto 0, die 7390-Loeschung wurde durch +1 in anderer Datei kompensiert). `88e3e5c` sagt "1237 -> 1243 (+6)", echt: **1243 -> 1243** (die 6 B1a/B1b/B2/B3/B4/B6 ersetzen 6 alte Struktur-Tests, keine Addition). `ae25e08` sagt "1242 -> 1245 (+3)", echt: **1243 -> 1245 (+2)** (B7, B8; 6887-Ersatz ist netto 0). **Echte Kette: 1243 -> 1243 -> 1245.** Zusaetzlich: `ae25e08` sagt "W2-Signatur frozen (18c): 11 Parameter", echt: **9 Parameter** (korrigiert in 6e11718, Block 3). Konsequenz: Commit-Body-Baseline-Zahlen kuenftig **vor** dem Commit mit `pytest --collect-only` messen, nicht schaetzen (Reviewer-Muster "Zahl aus Chat-Gedaechtnis", UEBERGABE-3A-2026-10-19.md). Kein Blocker fuer C2-Start, aber Pflicht-Reparatur im C2-doc-Commit. | klein | offen |
+| Commit-Body-Fehler 3a-1c-2a/2b | 2 | **Drei Commit-Bodies mit falschen Baseline-Zahlen** (hart gemessen 2026-10-21 via `git worktree` + `pytest --collect-only`): `ecf35a4` sagt "1243 -> 1242", echt: **1243 -> 1243** (netto 0). `88e3e5c` sagt "1237 -> 1243 (+6)", echt: **1243 -> 1243** (die 6 B1a/B1b/B2/B3/B4/B6 ersetzen 6 alte Struktur-Tests, keine Addition). `ae25e08` sagt "1242 -> 1245 (+3)", echt: **1243 -> 1245 (+2)** (B7, B8; 6887-Ersatz netto 0). **Echte Kette: 1243 -> 1243 -> 1245.** **Weitere Commit-Body-Fehler (M-39, M-40):** `ae25e08` sagt "W2-Signatur frozen (18c): 11 Parameter" — echt: **10 Parameter** im Code (Z. 7761-7771), **9** in 6e11718 (dort fehlt `project_name`), **11** in M-27 (dort faelschlich `reply`/`commit_verdict` als Input). Korrekte Zahl: **10**. `277029f`/`74ff77d`/`ac4956f`/`b502e20`/`f608658` nennen `_commit_review_w25_loop` — M-27-Freigabe nannte `_commit_verdict_behandlung` (falsch, Funktion existierte damals noch nicht). **M-40: M-27 war Freigabe auf falscher Grundlage.** Konsequenz: Commit-Body-Baseline-Zahlen und Signaturen kuenftig **vor** dem Commit mit `pytest --collect-only` / `ast` messen, nicht schaetzen. | klein | offen |
 | Position A vs B (Code-Reihenfolge) | 2 | **Entschieden 2026-10-21 (Reviewer-Frage 3, Durchlauf 36):** Position **A** = `_basis_gate` (C2) vor `run_pipeline`, `_commit_review_w25_loop` (C7) bleibt wo er ist (vor `_basis_gate`). **Begruendung:** Extraktions-Bloecke in umgekehrter Abhaengigkeits-Reihenfolge erzeugen am wenigsten Ueberraschung. Die Doku-Konvention C0-C9 (293589e) ist **orthogonal** zur Code-Reihenfolge. 293589e etabliert Doku, nicht Code-Reihenfolge. **Code-Reihenfolge folgt NICHT C-Nummerierung.** Keine stille Konvention (Reviewer-Auflage). | klein | done |
 | Struktur-Tests umstellen | 2 | **5 von ~15 erledigt (74ff77d).** Umgestellt: TestCommitReviewNewFileSkip 4x + TestW11 (getsource run_pipeline -> _commit_review_w25_loop). **Rest ~10** folgen mit 3a-1c-3 (C0/C1/C2/C6) und 3a-1c-4 (C8/C9), weil dort die naechsten getsource-Ziele wandern. test_fail_closed_pfad_bleibt (Z. 5416) bleibt absichtlich auf run_pipeline. Duale Quellen-Pruefung oder Verhaltens-Test (A9-13, A10-13b). | gross | offen |
 | 3a-1c-2-V2-Groesse | 3 | V2 = 303 Z., 13 Steuerungsstellen, 12 Parameter. Zu gross fuer 1-Rutsch. Zerlegung V2a/V2b vor 3a-1c-2 pruefen (A8-2-nach-3b). | mittel | offen |
@@ -76,6 +76,93 @@ Der Phase-21-Deadlock war eine Kette:
 Reviewer-Auflage (Durchlauf 36, Frage 2): Formeller Abnahme-Bericht
 fuer 3a-1c-2b. Quellen: Commit-Body `ae25e08` (AQ-Vorspann) +
 `277029f`/`74ff77d`/`ac4956f` (Extraktion) + `b502e20` (Block-done).
+
+
+### Vollstaendige Zitate aus `ae25e08` (nachgeliefert 2026-10-21, M-39/M-40)
+
+Der urspruengliche Abnahme-Bericht (f608658) hat A13/A14/A15 nur
+referenziert, nicht zitiert. Hier die vollstaendigen Zitate:
+
+**A13-1 — Layer-Tabelle (B7/B8):**
+```
+A13-1 Layer-Tabelle (B7/B8):
+  B7: VOR C7-Rumpf @ 8671-8673.
+      NACH W2.
+  B8: VOR C7-Rumpf @ 8675-8679.
+      NACH W2.
+```
+
+**A13-2 — commit_verdict-Wert:**
+```
+A13-2 commit_verdict-Wert:
+  commit_verdict != "COMMIT-NO-GO" @ 8675.
+  Jeder Wert ausser COMMIT-GO und COMMIT-NO-GO
+  -> break. COMMIT-ESKALATION gewaehlt
+  (classify_verdict kennt es).
+```
+
+**A13-3 — n==2-Sicherstellung:**
+```
+A13-3 n==2-Sicherstellung:
+  Helper: n==1 Mess-Wahl (""), n>=2
+  commit_verdict. Reviewer-Aufruf 1 (C1)
+  Mess-Wahl, Reviewer-Aufruf 2 (W2)
+  commit_verdict.
+```
+
+**A14-1 — Baseline VOR/NACH (mit Korrektur):**
+```
+A14-1 Baseline-VOR/NACH:
+  VOR:  1242 / ruff 17 / mypy 7 / AST 6 / 167
+  NACH: 1245 / ruff 17 / mypy 7 / AST 6 / 167
+  (+3: B7, B8, 6887-Verhaltens-Test).
+```
+Korrektur: VOR war **1243**, nicht 1242 (M-33, git worktree
++ pytest --collect-only). NACH 1245 ist korrekt. Die +3 sind
+effektiv **+2** (B7, B8; 6887-Ersatz netto 0).
+
+**A14-2 — 6887 delete vs dual-source:**
+```
+A14-2 6887:
+  Verhaltens-Test test_build_commit_input_
+  phasen_unterblock neu. 6887 (Struktur-Test)
+  wird in 3a-1c-2b-Extraktion geloescht.
+```
+Beleg: In `74ff77d` wurde 6887 auf `_commit_review_w25_loop`
+umgestellt (nicht geloescht — die Dual-Source-Assertion
+`if state.phase_aktiv:` steht weiterhin in `run_pipeline`).
+
+**A15-1 — 6887-Verhaltens-Test-Setup:**
+```
+A15-1 Setup:
+  _setup_c7 erweitert um commit_verdict-
+  Parameter (Default COMMIT-GO).
+  Phasen-State mit _agents (5 Rollen inkl.
+  judge), Builder-Reply, apply_code_patches,
+  _post_apply_messung, _rollback_zieldateien.
+```
+
+**W2-Signatur (M-39-Korrektur):**
+```
+Aktueller Code (pipeline.py:7761-7771):
+  def _commit_review_w25_loop(
+      state: RunState,
+      api_key: str,
+      project_dir: Path,
+      project_name: str,
+      max_llm: int,
+      max_minutes: int,
+      reviewer_prompt: str,
+      builder_prompt: str,
+      _hat_anker_patches,
+      _diff_name_only,
+  ) -> int | None:
+
+= 10 Parameter.
+
+6e11718 sagt 9 (project_name fehlt). M-27 sagt 11 (reply und
+commit_verdict faelschlich als Input). Korrekt: **10**.
+```
 
 ### A13-1 — Layer-Tabelle (B7/B8)
 
