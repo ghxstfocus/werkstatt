@@ -809,3 +809,84 @@ fafc5b5:  1245 / 17 / 9 / 14 (Docstring, pytest 1245 passed)
 ```
 Kein Test dazugekommen. Kein Delta.
 
+
+## M-53 + M-54 — Marker-Zeilen + budget-Herkunft (2026-10-21, HEAD 5e7a37e)
+
+Reviewer-Auflage (Durchlauf 50, M-53 + M-54).
+
+### M-53 — M-38-Widerspruch aufgeloest: Marker bei 8095/8099/8140
+
+Jedes Vorkommen in fafc5b5:
+```
+8095:    if phasen_state is not None:
+8099:                "state_ref nicht leer")
+8140:    if phasen_state is not None:
+```
+
+test_guard_quelle_vorhanden (test_phase.py:796-802) prueft:
+```
+quelle = ins.getsource(pipeline.run_pipeline)
+assert "phasen_state is not None" in quelle
+assert "state_ref nicht leer" in quelle
+```
+Beide Marker liegen in C0+C1 (8095-8099). Der Test bricht
+bei C0+C1-Extraktion. getsource-Ziel auf _vorlauf_und_state
+umstellen (A9-12-Analogie).
+
+**M-38 (8017-8040) war nicht falsch, sondern veraltet.**
+M-38 wurde gegen HEAD 293589e gemessen (run_pipeline
+7607-9074, 1468 Z.). Seitdem: 3a-1c-1a/1b, 3a-1c-2a/2b,
+C2-Extraktion. Jetzt: run_pipeline 8027-8863 (837 Z.).
+Die Zeilen haben sich um >600 verschoben.
+
+**Merkposten:** A10-1 (Struktur-Test-Klassifikation aus
+3a-1c-1b) verwendet Zeilennummern, die seit den Extraktionen
+veraltet sind. Pruefen bei 3b (Loop-Umbau).
+
+### M-54 — budget-Herkunft: 5-Tupel statt 4-Tupel
+
+budget entsteht bei Z. 8072-8076:
+```
+8072:    budget = config.get(
+8073:        "budget",
+8074:        # W30 (A-W30-1): Default 2 ...
+8076:        {"max_review_rounds": 2, "max_llm_calls": 30})
+```
+
+**budget wird NACH C0+C1 3x als Local gelesen:**
+```
+8319, 8361, 8526
+```
+**state.budget wird 0x gelesen.**
+
+**Konsequenz:** Die Signatur tuple[RunState, dict, int, int]
+gibt budget NICHT zurueck. Nach Extraktion fehlt budget
+an Z. 8319/8361/8526 -> NameError.
+
+**Korrigierte Signatur (5-Tupel):**
+```
+def _vorlauf_und_state(
+    project_name: str,
+    aufgabe: str,
+    state_ref: list[RunState],
+    phasen_state: RunState | None = None,
+) -> tuple[RunState, dict, dict, int, int] | int:
+    """C0+C1: Vorlauf + State-Aufbau.
+
+    Extrahiert aus run_pipeline, Z. 8040-8146 (Stand 5e7a37e).
+    Return: int bei api_key-leer (1) oder memory-korrupt (3).
+            (state, config, budget, max_llm, max_minutes)
+            bei Erfolg.
+    Raise: ValueError bei phasen_state + nicht-leerem state_ref.
+    """
+```
+
+Aufrufstelle:
+```
+_rc_vorlauf = _vorlauf_und_state(
+    project_name, aufgabe, state_ref, phasen_state)
+if isinstance(_rc_vorlauf, int):
+    return _rc_vorlauf
+state, config, budget, max_llm, max_minutes = _rc_vorlauf
+```
+
