@@ -51,6 +51,7 @@ from werkstatt.commit_input import (
     _plan_pfad,
     format_code_patches_fuer_commit,  # noqa: F401 (Re-Export fuer Tests)
 )
+from werkstatt.config import Config
 from werkstatt.exec import run_git, run_ruff
 
 # Re-Export der HARD_RULES-Konstanten. Tests und
@@ -480,11 +481,11 @@ def pruefe_projekt_yaml(config: dict[str, Any], *,
     return meldungen
 
 
-def _lade_und_pruefe_projekt(project_name: str) -> dict[str, Any]:
+def _lade_und_pruefe_projekt(project_name: str) -> Config:
     """load_project_config + pruefe_projekt_yaml."""
     config = load_project_config(project_name)
     pruefe_projekt_yaml(config)
-    return config
+    return Config(config)
 
 
 # =====================================================================
@@ -3187,7 +3188,7 @@ def _git_status_porcelain(project_dir: Path) -> str:
     return res.stdout
 
 
-def build_catalog(config: dict[str, Any], project_dir: Path
+def build_catalog(config: Config, project_dir: Path
                   ) -> tuple[dict[str, Measurement], dict[str, Measurement]]:
     venv = config.get("venv_python", str(project_dir / ".venv/bin/python3"))
     all_m: dict[str, Measurement] = {
@@ -7949,7 +7950,7 @@ def _vorlauf_und_state(
 def _basis_gate(
     state: RunState,
     always: dict,
-    config: dict,
+    config: Config,
     file_whitelist: list,
     project_dir: Path,
     project_name: str,
@@ -8216,7 +8217,7 @@ def _approval_und_human_gate(
         state: RunState,
         project_dir: Path,
         project_name: str,
-        config: dict,
+        config: Config,
 ) -> int:
     """C8+C9 (3a-1c-4, Variante A): Approval-Dokument + Human-Gate.
 

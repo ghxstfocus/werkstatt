@@ -9,6 +9,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from werkstatt.config import Config
+
 SUBPROCESS_TIMEOUT = 60
 
 
@@ -41,7 +43,7 @@ class Messung:
     mtime: float        # mtime zum Mess-Zeitpunkt
     groesse: int        # Bytes
     quelle: str         # "builder", "planner", "reviewer"
-    datei: "Path | None" = None  # Pfad zur Mess-Datei
+    datei: Path | None = None  # Pfad zur Mess-Datei
 
 
 @dataclass
@@ -280,7 +282,7 @@ class VorlaufErgebnis:
     docs/agents fallen weg (in state.docs/state.agents).
     """
     state: RunState
-    config: dict
+    config: Config
     budget: dict
     max_llm: int
     max_minutes: int
@@ -341,7 +343,7 @@ class PhaseMainVorlaufErgebnis:
       plan_vorhanden     _phase_plan_laden()              -> dict[str, Any] | None
     """
     api_key: str
-    config: dict[str, Any]
+    config: Config
     project_dir: Path
     agents: dict[str, dict[str, Any]]
     docs: dict[str, str]
