@@ -63,3 +63,11 @@ Setup: `docs/KEY-ARCHITEKTUR.md`.
   Aenderung neu messen (M-202).
 - **Kandidaten vollstaendig pruefen.** `grep` nach allen
   String-Vorkommen, nicht nur `audit("literal")` (M-202).
+
+## Naechster groesser Umbau
+
+Pipeline-Trichotomie (A8, Block E in docs/AUFRAEUM-UND-LOOP-PLAN.md):
+- Orchestrator: werkstatt/orchestrator.py (Loop, extern).
+- Agent: werkstatt/agent.py (LLM + Dispatch).
+- Hooks: hooks/ (deterministisch, subprocess).
+Ziel: pipeline.py von 11.639 Z. auf ~1.200 Z. reduzieren.

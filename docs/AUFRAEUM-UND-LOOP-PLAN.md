@@ -134,6 +134,40 @@ C3. Reviewer (verdict) in Judge konsolidieren.
 D1. Judge von anderem Vendor als Builder.
 D2. UI-Tests (Playwright) als Verifier-Erweiterung.
 
+### Block E — Pipeline-Trichotomie (A8)
+
+Ist (2026-10-22): pipeline.py 11.639 Z. / 170 Funktionen.
+werkstatt/ 3.378 Z. / 12 Module. Gesamt 15.017 Z.
+
+Ziel: Drei Teile, klar getrennt. Profi-Ansatz
+(Claude Code, Codex, mission, relevo):
+  Orchestrator: deterministischer Loop, extern.
+  Agent: LLM-Call + Tool-Dispatch, im Modul.
+  Hooks: externe Prozesse, deterministisch.
+
+A8-1. Agent isolieren (~370 Z. raus)
+  ask_llm, build_system_prompt, execute_commands
+  -> werkstatt/agent.py.
+  Baseline-Gate: 1259/16/9/6/162.
+
+A8-2. Orchestrator isolieren (~1.850 Z. raus)
+  run_pipeline, run_phase, _phase_main_pfad,
+  _phase_unterblock_loop, _phase_main_planner_loop,
+  _review_verdict_behandlung
+  -> werkstatt/orchestrator.py.
+  Grosser Schnitt. Erfordert A8-1.
+
+A8-3. Hooks externalisieren (~100 Z. neu)
+  hooks/ als separates Verzeichnis.
+  orchestrator.py ruft via subprocess.run.
+  Bounded retry mit Reflexion (M-208).
+  Erfordert A8-2.
+
+A8-4. pipeline.py wird CLI-Wrapper (~200 Z.)
+  main() + load_project_config + load_agents + load_docs.
+  Ruft orchestrator.run_pipeline.
+  Erfordert A8-3.
+
 ## Abgrenzung — was NICHT in Block A
 
 - Kein Loop-Umbau (das ist Block B).
@@ -152,6 +186,13 @@ D2. UI-Tests (Playwright) als Verifier-Erweiterung.
 - A6 (HARD_RULES) beruehrt das Gate-14-Design. Braucht
   eigene Mess-Infrastruktur (Test pro Rolle: keine doppelten
   Aussagen).
+- A8 (Trichotomie) ist der groesste Umbau. 11.639 Z. in
+  pipeline.py. Jeder Schnitt braucht Messung, Tests,
+  Baseline-Gate. Realistisch 3-4 Wochen. Rollback pro
+  Sub-Block.
+- A8-2 (Orchestrator) beruehrt die Loop-Logik. Fehler
+  hier = Endlos-Loop oder Abbruch. Retry-Grenzen muessen
+  bounded sein (M-208).
 
 ## Aufwand-Schaetzung
 
@@ -159,6 +200,8 @@ Block A: ~1 Woche (A2 1d, A1 1h, A3 1d, A4 1d, A5 2d, A6 2-3d)
 Block B: ~3-4 Tage (B1 0.5d, B2 0.5d, B3 1-2d, B4 0.5d, B5 0.5d)
 Block C: ~2 Tage
 Block D: spaeter
+Block E (A8-1..A8-4): ~3-4 Wochen
+  A8-1: 2-3d, A8-2: 1-2w, A8-3: 3-5d, A8-4: 1d
 
 ## Mess-Referenzen (T1-T7)
 
