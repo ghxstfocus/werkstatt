@@ -10758,43 +10758,11 @@ def _phase_main_pfad(
     # RunState bauen (analog _planner_main_pfad).
     # W50 (2026-10-18): Planner-Durchfall bei
     # abgeschlossener Phase verhindern.
-    _w50_pfad = _phase_yaml_pfad(project_name)
-    _w50_vorher_id = "(keine)"
-    if _w50_pfad.exists():
-        try:
-            _w50_daten = yaml.safe_load(
-                _w50_pfad.read_text(encoding="utf-8")) or {}
-        except (OSError, yaml.YAMLError) as exc:
-            print(f"[FAIL] phase.yaml nicht lesbar: {exc}. "
-                  "Fail closed.")
-            return 18
-        if not isinstance(_w50_daten, dict):
-            print("[FAIL] phase.yaml ist kein dict. "
-                  "Fail closed.")
-            return 18
-        _w50_vorher_id = _w50_daten.get("phase_id", "?")
-        _w50_aktiv = _w50_daten.get("phase_aktiv")
-        if _w50_aktiv is False and not force_new_phase:
-            _k_offene = sum(
-                1 for _u in _w50_daten.get(
-                    "phase_unterbloecke", []) or []
-                if isinstance(_u, dict)
-                and _u.get("status") in ("no_go", "failed"))
-            print(f"[FAIL] Phase {_w50_vorher_id} ist "
-                  f"abgeschlossen in phase.yaml "
-                  f"({_k_offene} offene Reste). "
-                  "Neuanlage verlangt --new-phase.")
-            audit("phase_abgeschlossen_keine_neuanlage",
-                  {"phase_id": _w50_vorher_id,
-                   "offene_reste": _k_offene,
-                   "aufgabe_kurz": phasen_text[:200]},
-                  project_dir, project_name)
-            return 65
-    if force_new_phase:
-        audit("phase_neuanlage_mit_flag",
-              {"phase_id_vorher": _w50_vorher_id,
-               "aufgabe_kurz": phasen_text[:200]},
-              project_dir, project_name)
+    _w50_rc = _phase_main_w50_gate(
+        project_name, phasen_text,
+        force_new_phase, _vor)
+    if _w50_rc is not None:
+        return _w50_rc
 
     state = RunState(
         block_id=config.get("project", "unknown"),
