@@ -10802,14 +10802,7 @@ def _phase_main_pfad(
     if isinstance(_vor, int):
         return _vor
     api_key = _vor.api_key
-    config = _vor.config
     project_dir = _vor.project_dir
-    agents = _vor.agents
-    docs = _vor.docs
-    file_whitelist = _vor.file_whitelist
-    always_kat = _vor.always_kat
-    optional_kat = _vor.optional_kat
-    planner_modus = _vor.planner_modus
     planner_max_runden = _vor.planner_max_runden
     plan_vorhanden = _vor.plan_vorhanden
     if plan_vorhanden is not None:
@@ -10834,46 +10827,14 @@ def _phase_main_pfad(
     if _w50_rc is not None:
         return _w50_rc
 
-    state = RunState(
-        block_id=config.get("project", "unknown"),
-        aufgabe=phasen_text,
-        start_ts=datetime.now(UTC).isoformat(timespec="seconds"),
-        docs=docs, agents=agents,
-        always=always_kat, optional=optional_kat,
-        file_whitelist=file_whitelist,
-        api_key=api_key,
-        budget=config.get("budget", {}),
-        agent_docs=config.get("agent_docs", {}),
-        project_dir=project_dir,
-        project_name=project_name,
-        planner_modus=planner_modus,
-    )
-    state.start_monotonic = time.monotonic()
-
-    _neue_run_id = (
-        datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-        + f"-{os.getpid()}")
-    set_run_id(_neue_run_id)
-    state.run_id = _neue_run_id
-
-    audit("pipeline_start",
-          {"aufgabe_hash": __import__("hashlib").sha256(
-              phasen_text.encode()).hexdigest(),
-           "aufgabe_kurz": phasen_text[:200],
-           "modus": "phase"},
-          project_dir, project_name)
-
-    # Planner Stufe 2, max planner_max_runden Runden.
-    phase_plan_ok = False
-    phase_id = ""
-    phase_titel = ""
-    unterbloecke: list[dict[str, Any]] = []
-    # F-P2a-S5c-1 (alpha): editierter Plan aus
-    # vorheriger Runde. Wenn gesetzt, wird in der
-    # naechsten Runde kein Planner-Aufruf gemacht.
-    letzter_vorschlag: (
-        tuple[str, str, list[dict[str, Any]]] | None
-    ) = None
+    _kontext = _phase_main_planner_vorb(
+        project_name, phasen_text, _vor)
+    state = _kontext.state
+    phase_plan_ok = _kontext.phase_plan_ok
+    phase_id = _kontext.phase_id
+    phase_titel = _kontext.phase_titel
+    unterbloecke = _kontext.unterbloecke
+    letzter_vorschlag = _kontext.letzter_vorschlag
     for runde in range(1, planner_max_runden + 1):
         state.planner_runden = runde
         print(f"\n[--- Planner-Runde {runde} (Stufe 2) ---]")
