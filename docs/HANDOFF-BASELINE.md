@@ -1,16 +1,16 @@
 # Werkstatt-Baseline — verbindliche Definition
 
-Stand: 2026-10-21, HEAD 5e50ea6, Branch umbau/phase-2.
+Stand: 2026-10-22, HEAD 76f4bf1, Branch umbau/phase-2.
 
 ## Messbefehle (kanonisch)
 
 | Metrik  | Befehl                          | Soll         |
 |---------|---------------------------------|--------------|
-| pytest  | `pytest -q`                     | 1245 passed  |
+| pytest  | `pytest -q`                     | 1259 passed  |
 | ruff    | `ruff check .`                  | 17 errors    |
 | mypy    | `mypy pipeline.py werkstatt/`   | 9 errors     |
 | AST     | AST-Test (siehe tests/)         | 6 passed     |
-| Katalog | `_KATALOG_SOLL`                 | 167          |
+| Katalog | `_KATALOG_SOLL`                 | 162          |
 
 ## Fallstricke
 

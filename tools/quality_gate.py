@@ -25,11 +25,11 @@ from pathlib import Path
 
 # Baseline fixiert (Quelle: docs/HANDOFF-BASELINE.md @ ae40f26).
 BASELINE = {
-    "pytest": 1245,   # pytest -q
+    "pytest": 1259,   # pytest -q (A3: +14 Skill-Tests)
     "ruff": 17,       # ruff check .
     "mypy": 9,        # mypy pipeline.py werkstatt/
     "ast": 6,         # pytest tests/test_audit_kinds.py -q
-    "katalog": 167,   # _KATALOG_SOLL
+    "katalog": 162,   # _KATALOG_SOLL
 }
 
 HEAD = "ae40f26"
