@@ -32,7 +32,7 @@ BASELINE = {
     "katalog": 162,   # _KATALOG_SOLL
 }
 
-HEAD = "ae40f26"
+HEAD = "ae40f26"  # Baseline-Anker (nicht HEAD). Aktueller HEAD wechselt pro Commit.
 
 
 def _run(cmd: list[str], cwd: Path) -> tuple[int, str]:
