@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-22 (Phase 3a, nach 3a-2b).
-Werkstatt-HEAD: 8e46062. Branch: umbau/phase-2 (origin gepusht).
+Stand: 2026-10-22 (Phase 3a, nach 3a-2d, 3a-2 komplett).
+Werkstatt-HEAD: 00ffb5e. Branch: umbau/phase-2 (origin gepusht).
 Baseline: pytest 1245 passed / ruff 17 / mypy 9 (isoliert) / AST 6 / Katalog 167.
 
 Baseline-Definition (verbindlich, sonst reproduziert sich der 7-vs-9-Fehler):
@@ -13,13 +13,14 @@ Baseline-Definition (verbindlich, sonst reproduziert sich der 7-vs-9-Fehler):
 
 ## Aktueller Block
 
-3a-2c (Nachlauf, run_phase Z. ~2432-2524, 6 Returns):
-naechster Block. Start-Posting mit Standardpflichten:
-HEAD, Baseline VOR 5 Werte, Grenzen ast, Signatur +
-Lese-Zeilen, Return-Bilanz VOR als Listen, Position,
-A9-12, Commit-Body-Pflichten.
+3a-3 (_phase_main_pfad, 641 Z., Deadlock-Test): naechster
+Block. Einziger verbleibender grosser Block in run_pipeline.
+Start-Posting mit Standardpflichten + Deadlock-Analyse
+strukturell (dreistufige Kette: run_phase ->
+_phase_wiederaufnahme -> run_phase + _phase_main_pfad-
+Sicherung).
 
-Rollback-Anker: 8e46062. Delta != 0 -> Rollback, nicht Test anpassen.
+Rollback-Anker: 00ffb5e. Delta != 0 -> Rollback.
 
 ## Abgeschlossen seit letztem Handoff
 
@@ -49,6 +50,18 @@ Rollback-Anker: 8e46062. Delta != 0 -> Rollback, nicht Test anpassen.
   Return-Bilanz: 89 Returns (run_phase 13, loop 6).
   2 Test-Anpassungen (getsource -> _phase_unterblock_loop).
   Baseline 1245/17/9 unveraendert.
+- 3a-2d (Wiederaufnahme): done (00ffb5e).
+  _phase_wiederaufnahme(state, project_name, state_ref,
+  aggregat, wahl, api_key) -> int. 6 Parameter.
+  5 Returns. Rekursion max 1 Tiefe.
+  Test-Anpassung test_zyklus_teilt_sich (erster Assert).
+- 3a-2 GESAMT (20f0e7d + 8e46062 + 3f98364 + 00ffb5e):
+  run_phase von 528 Z. / 22 Returns auf 4 Verteiler-Returns.
+  4 neue Funktionen: _phase_vorlauf, _phase_unterblock_loop,
+  _phase_nachlauf, _phase_wiederaufnahme.
+  2 neue Dataclasses: PhaseVorlaufErgebnis, NachlaufErgebnis.
+  Return-Bilanz: 87 -> 92 (Delta +5, Extraktions-Artefakte).
+  Baseline 1245/17/9 durchgehend.
 - C6 (Coverage/Chaos): gestrichen (Durchlauf 48, gehoert zu 3b).
 
 ## C8/C9-Grenzen-Korrektur (Reviewer-Auflage A1)
@@ -167,11 +180,9 @@ Block.**
 
 ## Naechste Bloecke (Reihenfolge laut ROADMAP.md Z. 217-223)
 
-1. 3a-2c (Nachlauf, 6 Returns) — naechster Block.
-2. 3a-2d (Wiederaufnahme+Commit, 5 Returns).
-3. 3a-3 (_phase_main_pfad, 641 Z., Deadlock).
-4. 3b (Loop-Umbau; enthaelt C6 + Reviewer-Modus + Quality-Gate).
-5. 3c (NEUBAU-Abloesung).
+1. 3a-3 (_phase_main_pfad, 641 Z., Deadlock) — naechster Block.
+2. 3b (Loop-Umbau; enthaelt C6 + Reviewer-Modus + Quality-Gate).
+3. 3c (NEUBAU-Abloesung).
 
 ## Offene Merkposten
 

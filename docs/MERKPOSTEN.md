@@ -100,3 +100,60 @@ statt davor.
 - docs/SESSION-BILANZ.md — Vor-Comm-SHAs pro Commit.
 - docs/OFFENE-BLOECKE.md — offene Todos.
 - docs/MESS-INFRASTRUKTUR.md — Block M (Mess-Werkzeuge).
+
+
+## Aus 3a-2c/3a-2d (2026-10-22)
+
+### M-94 — Variablen-Transfer bei Extraktion
+Vor dem Code-Touch pruefen: welche Variablen definiert
+der zu extrahierende Block, welche werden in nachfolgenden
+Statements gelesen? Zitat pro Variable (Zeile + Definition).
+Beispiel 3a-2d: aggregat @ 2575, wahl @ 2576, state_ref
+@ 2616/2618/2639, api_key @ 2551. Ohne Transfer-Check
+NameError wie bei 3a-2c (M-83).
+
+### M-95 — HEAD-Bezug der body-Indizes
+body[i]-Zaehlungen sind HEAD-abhaengig. Nach jeder
+Extraktion verschieben sich die Indizes. Im Commit-Body
+explizit: "body[14]..[19] gegen HEAD 3f98364" statt
+nur "body[14]..[19]".
+
+### M-96 — Off-by-N in Zeilen-Zitaten
+Zitat "return 23 @ 2596" war Off-by-6 (Pruefzeile 2596,
+Return 2602). Bei jedem Return-Zitat: Zeile der
+Pruefbedingung UND Zeile des Returns getrennt zitieren.
+
+### M-97 — Return-Listen VOR als Listen
+M-70/M-73 gilt auch fuer den VOR-Stand. "run_phase 8
+Returns, _phase_nachlauf 7 Returns" ist keine Liste.
+Erst "Z. 2549: _vl, Z. 2558: _rc_loop, ...".
+
+### M-98 — api_key-Herkunft pruefen
+"api_key @ 2606 (nur _phase_plan_korrektur)" ist
+Behauptung. Signatur der aufgerufenen Funktion pruefen:
+_phase_plan_korrektur(project_name, state, api_key) ->
+3. Positionsargument -> api_key bleibt Parameter.
+
+### M-99 — state_ref-Vorkommen zaehlen
+4 Treffer, aber 1 ist Kommentar (# state_ref leeren).
+Echte Vorkommen: 2616 (clear), 2618 (Argument),
+2639 (append). Bei jedem "Nx gelesen" einzelne Zeilen
+mit Zweck zitieren.
+
+### M-100 — Uebergangs-Grenze zweier Bloecke
+body[13] (wahl = _res_nachlauf.wahl) bleibt in run_phase,
+body[14] (if wahl in n) beginnt 3a-2d. Die Werte aus
+body[12]/[13] fliessen in body[14]. Grenze explizit
+zitieren, nicht nur "ab 2578".
+
+### M-101 — "neue Funktionen" zaehlen
+3a-2 legte 4 neue Funktionen an (2a/b/c/d) + 2
+Dataclasses. Meine Aussage "9 neue Funktionen" war
+falsch (zaehlte bestehende mit). Bei Extraktions-Bloecken:
+nur die im Block tatsaechlich neu angelegten Funktionen
+zaehlen.
+
+### M-102 — Body-Zeilen-Widerspruch
+179 (Schaetzwert) vs 178 (gemessen). Body-Laenge immer
+aus `git log -1 --format='%B' | wc -l` zitieren, nie
+schaetzen.

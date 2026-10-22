@@ -52,6 +52,21 @@ M-70 (Return-Listen), M-71 (Prognose-Korrektur), M-72
 (Herkunft neuer Returns), M-75 (Commit-Body vor Push):
 abgenommen. Details und Lehren in `docs/MERKPOSTEN.md`.
 
+### 3a-2d-Wiederaufnahme — done (00ffb5e)
+
+_phase_wiederaufnahme extrahiert. 6 Parameter, 5 Returns.
+Rekursion max 1 Tiefe. Baseline 1245/17/9.
+
+### 3a-2 GESAMT — komplett (2026-10-22)
+
+run_phase 528 Z. -> 4 Verteiler. 4 neue Funktionen,
+2 neue Dataclasses. Return-Bilanz 92.
+
+**Offene Merkposten fuer 3b/Phase 6:**
+- budget-Doppelquelle (6 Felder, aus 3a-1c-3 Z. 27).
+- test_zyklus_teilt_sich: nach 3a-2d Kandidat (b)/(d)
+  fuer zweiten Assert (getsource(_phase_main_pfad)).
+
 ## Phase 3b — Loop-Umbau (nach 3a)
 
 Noch keine Merkposten. Entstehen hier, sobald 3a abgeschlossen.

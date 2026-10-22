@@ -78,3 +78,22 @@ Aus M-70..M-75 und den Bau-Bloecken 3a-2a/3a-2b:
 - mypy-Fallback `return 0` / `return rc_unterblock`,
   nicht `raise RuntimeError`.
 - Doku-Nachzug nach jedem fertigen Block + Push.
+
+
+## Vor-Comm-SHAs 3a-2 (2026-10-22)
+
+| Commit | Vor-Comm | Body-VOR-Wert |
+|---|---|---|
+| 20f0e7d (3a-2a) | 5708bcf | 5f50ea6 (M-57-Kontext) |
+| 8e46062 (3a-2b) | ab6f4cd | ab6f4cd (nach Amend-Kette) |
+| 3f98364 (3a-2c) | 3c757ec | 3c757ec (Z. 2463-2553 body[10]..[21]) |
+| 00ffb5e (3a-2d) | 3f98364 | 3f98364 (Z. 2578-2644 body[14]..[19]) |
+
+Body 00ffb5e: 178 Zeilen (179 war Schaetzwert, M-102),
+92 Return-Listen.
+
+Amend-Kette 3a-2b: 4e25fde -> 2a36ff0 -> d889f5b -> 8e46062.
+d889f5b nie auf origin (kein Force-Push, M-81).
+
+Amend-Kette 3a-2c: ab7e8ec -> c7611df -> 3f98364.
+Amend-Kette 3a-2d: ea51f7f -> 00ffb5e.

@@ -218,8 +218,10 @@ Baseline: pytest 1245 / ruff 17 / mypy 7 / AST 6 / Katalog 167.
 | 3a-1c-3 | done (da67198/bb919d1/d06cf23/fafc5b5) | C0+C1+C2 extrahiert; C6 gestrichen (-> 3b). |
 | 3a-1c-4 | done (5762d8e) | _approval_und_human_gate (Variante A, 8 Returns). C8=8819-8854, C9=8855-8898. Return-Bilanz 27/3/2/7/8=47. |
 | 3a-2a | done (20f0e7d) | Vorlauf _phase_vorlauf, PhaseVorlaufErgebnis. run_phase 17, _phase_vorlauf 7, Summe 24. |
-| 3a-2b | done (8e46062) | _phase_unterblock_loop (4 Parameter). Return-Bilanz 89. 2 Test-Anpassungen. |
-| 3a-3 | offen | _phase_main_pfad (641 Z., Deadlock). |
+| 3a-2b | done (8e46062) | _phase_unterblock_loop. |
+| 3a-2c | done (3f98364) | _phase_nachlauf. |
+| 3a-2d | done (00ffb5e) | _phase_wiederaufnahme. |
+| 3a-3 | offen | _phase_main_pfad (641 Z., Deadlock) — naechster Block. |
 | 3b | offen | Loop-Umbau. |
 | 3c | offen | NEUBAU-Abloesung. |
 

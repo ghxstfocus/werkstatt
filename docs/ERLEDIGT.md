@@ -481,3 +481,50 @@ Test-Anpassungen (Kategorie 2, A9-12):
   Beide getsource-Ziel: run_phase -> _phase_unterblock_loop.
 
 Rollback-Anker: 8e46062 (origin).
+
+## 3a-2d/Wiederaufnahme — _phase_wiederaufnahme extrahiert (2026-10-22)
+
+Commit: 00ffb5e (refactor, auf origin).
+Vorlauf: 3f98364 (3a-2c).
+
+Extraktion: run_phase body[14]..[19] (HEAD 3f98364,
+Z. 2578-2644) -> `_phase_wiederaufnahme(state, project_name,
+state_ref, aggregat, wahl, api_key) -> int`.
+6 Parameter (M-94/M-98/M-99). 5 Returns.
+Rekursion: return run_phase(...). Max 1 Rekursionstiefe
+(phase_korrektur_zyklus >= 1 -> return 23).
+Doppelte Sicherung: _phase_main_pfad @ 10596/10602.
+
+Test-Anpassung (Kategorie 2, A9-12):
+  tests/test_phase.py:1580 test_zyklus_teilt_sich
+    Erster Assert: getsource(run_phase) ->
+    getsource(_phase_wiederaufnahme). Zweiter bleibt.
+
+Baseline (HEAD 00ffb5e):
+  pytest 1245 / ruff 17 / mypy 9 / AST 6 / Katalog 167.
+  Delta 0.
+
+Commit-Body 178 Zeilen, 92 Return-Listen.
+M-102: 179 war Schaetzwert, tatsaechlich 178.
+
+## 3a-2 GESAMT — komplett (2026-10-22)
+
+Commits: 20f0e7d (2a), 8e46062 (2b), 3f98364 (2c), 00ffb5e (2d).
+
+run_phase: von 528 Z. / 22 Returns auf 4 Verteiler-Returns
+  (_vl, _rc_loop, _res_nachlauf, _rc_wdh).
+
+4 neue Funktionen (nicht 9, M-101-Korrektur):
+  _phase_vorlauf        (3a-2a, 7 Returns)
+  _phase_unterblock_loop (3a-2b, 6 Returns)
+  _phase_nachlauf       (3a-2c, 7 Returns)
+  _phase_wiederaufnahme (3a-2d, 5 Returns)
+
+2 neue Dataclasses:
+  PhaseVorlaufErgebnis  (state, unterbloecke, api_key, max_phase)
+  NachlaufErgebnis      (rc, aggregat, wahl)
+
+Return-Bilanz: 87 -> 92 (Delta +5, Extraktions-Artefakte:
+  Verteiler + Erfolgs-Fallbacks + Option-D-Returns).
+
+Baseline 1245/17/9/6/167 durchgehend (alle 4 Sub-Bloecke).
