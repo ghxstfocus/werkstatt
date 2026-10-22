@@ -6082,8 +6082,9 @@ class TestB0cUndBugs:
         assert '"raw"' in umfeld
 
     def test_rc_14_kein_rollback(self) -> None:
+        # 3a-2b: Loop aus run_phase in _phase_unterblock_loop gewandert.
         import inspect
-        src = inspect.getsource(pipeline.run_phase)
+        src = inspect.getsource(pipeline._phase_unterblock_loop)
         # rc=14 muss vor dem Klasse-4-else-Zweig stehen.
         i14 = src.find("if rc_unterblock == 14:")
         i15 = src.find("if rc_unterblock == 15:")
@@ -8533,9 +8534,12 @@ class TestW32ContractImLoop:
 
     def test_schreibe_contract_im_loop(self) -> None:
         """Quelltext-Check: _schreibe_contract innerhalb
-        run_phase, nach 'running'-Setzung."""
+        _phase_unterblock_loop, nach 'running'-Setzung.
+
+        3a-2b: Loop aus run_phase in _phase_unterblock_loop gewandert.
+        """
         import inspect
-        quelle = inspect.getsource(pipeline.run_phase)
+        quelle = inspect.getsource(pipeline._phase_unterblock_loop)
         # _schreibe_contract wird im Loop gerufen.
         assert "_schreibe_contract(state, u)" in quelle
         # Vor dem Aufruf kommt die running-Setzung.
