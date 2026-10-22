@@ -320,3 +320,34 @@ class PhaseVorlaufErgebnis:
     api_key: str
     max_phase: int
 
+
+
+@dataclass
+class PhaseMainVorlaufErgebnis:
+    """Rueckgabe _phase_main_vorlauf (3a-3a).
+
+    Aus _phase_main_pfad Block A (29da314 Z.10367..10462).
+    11 Felder (M-120 A.1/A.2/A.3 Typen gemessen):
+      api_key            os.getenv(...).strip()           -> str
+      config             _lade_und_pruefe_projekt()       -> dict[str, Any]
+      project_dir        Path(...).expanduser()           -> Path
+      agents             load_agents()                    -> dict[str, dict[str, Any]]
+      docs               load_docs()                      -> dict[str, str]
+      file_whitelist     config.get("file_whitelist", []) -> list[str]
+      always_kat         build_catalog()[0]               -> dict[str, Measurement]
+      optional_kat       build_catalog()[1]               -> dict[str, Measurement]
+      planner_modus      str(_pcfg.get("modus", "manual"))-> str
+      planner_max_runden int(_pcfg.get("max_runden", 3))  -> int
+      plan_vorhanden     _phase_plan_laden()              -> dict[str, Any] | None
+    """
+    api_key: str
+    config: dict[str, Any]
+    project_dir: Path
+    agents: dict[str, dict[str, Any]]
+    docs: dict[str, str]
+    file_whitelist: list[str]
+    always_kat: dict[str, Measurement]
+    optional_kat: dict[str, Measurement]
+    planner_modus: str
+    planner_max_runden: int
+    plan_vorhanden: dict[str, Any] | None
