@@ -1154,3 +1154,20 @@ M-204 -> M-206. Nummer uebersprungen.
 Kein Code, keine Doku-Referenz. Tippfehler in
 einer frueheren Session-Notiz.
 Status: erledigt (dokumentiert 2026-10-22).
+
+## B17 — Body-vs-Diff-Drift in 54f8802
+
+Body von 54f8802 dokumentiert B11-Edit
+("tools/quality_gate.py:37 HEAD-Kommentar
+klargestellt"), Diff enthaelt ihn NICHT
+(EDIT 5 fehlgeschlagen: Zeilennummer 37
+statt 35). Nachgeholt in 0229aa8.
+
+History nicht rueckwirkend korrigierbar
+(Force-Push verboten).
+
+Muster: Body-Zeilen gegen `git show --stat`
+abgleichen. Wenn Body eine Datei nennt, die
+nicht in --stat steht: Widerspruch pruefen.
+
+Status: dokumentiert (2026-10-22).
