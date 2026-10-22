@@ -10482,7 +10482,7 @@ def _phase_main_plan_verarbeiten(
     state_ref: list[RunState],
     resume_force: bool,
     vor: PhaseMainVorlaufErgebnis,
-) -> RunState | int:
+) -> tuple[RunState, int] | int:
     """Block B aus _phase_main_pfad (3a-3b).
 
     Liest vor.* (10 Felder) + 4 Parameter.
@@ -10665,8 +10665,7 @@ def _phase_main_plan_verarbeiten(
             state_ref.clear()
             rc = run_phase(project_name, state,
                            state_ref)
-    _phase_finish_aktiv(project_name, state, rc)
-    return state
+    return (state, rc)
 
 def _phase_main_pfad(
     project_name: str,
@@ -10690,173 +10689,12 @@ def _phase_main_pfad(
     planner_max_runden = _vor.planner_max_runden
     plan_vorhanden = _vor.plan_vorhanden
     if plan_vorhanden is not None:
-        # W35a-2 (2026-10-17): Planner-Resume, wenn
-        # offene no_go/failed-Unterbloecke vorliegen
-        # und resume_force nicht gesetzt ist.
-        # resume_force gewinnt (A-W35a-7): es setzt
-        # no_go/failed vorher auf pending.
-        if not resume_force:
-            _ups_check = plan_vorhanden.get(
-                "phase_unterbloecke", [])
-            # W61: Planner-Resume nur bei no_go (Plan-Problem).
-            # Bei failed (Test-Gate rot, Builder-Code falsch)
-            # ist der Plan gueltig — der Builder soll es
-            # nochmal versuchen, kein Planner-Call.
-            _hat_offene = any(
-                isinstance(_u, dict)
-                and _u.get("status") == "no_go"
-                for _u in _ups_check)
-            if _hat_offene:
-                # state fuer Planner-Resume bauen.
-                _pr_state = RunState(
-                    block_id=config.get("project", "?"),
-                    aufgabe=phasen_text,
-                    start_ts=datetime.now(UTC).isoformat(
-                        timespec="seconds"),
-                    docs=docs, agents=agents,
-                    always=always_kat, optional=optional_kat,
-                    file_whitelist=file_whitelist,
-                    api_key=api_key,
-                    budget=config.get("budget", {}),
-                    agent_docs=config.get("agent_docs", {}),
-                    project_dir=project_dir,
-                    project_name=project_name,
-                    planner_modus=planner_modus,
-                )
-                _pr_state.phase_aktiv = True
-                _pr_state.phase_id = str(
-                    plan_vorhanden.get("phase_id", ""))
-                _pr_state.phase_titel = str(
-                    plan_vorhanden.get("phase_titel", ""))
-                _pr_state.phase_unterbloecke = list(
-                    plan_vorhanden.get(
-                        "phase_unterbloecke", []))
-                _pr_historie = load_recent_commits(
-                    project_dir, n=10)
-                _rc_pr = _phase_planner_resume(
-                    project_name, _pr_state, api_key,
-                    phasen_text, _pr_historie)
-                if _rc_pr != 0:
-                    return _rc_pr
-                # state wurde gemergt. Neue
-                # phase.yaml neu laden.
-                plan_vorhanden = _phase_plan_laden(
-                    project_name)
-                if plan_vorhanden is None:
-                    print("[FAIL] Planner-Resume: "
-                          "phase.yaml nach Merge nicht "
-                          "lesbar. Fail closed.")
-                    return 18
-        print("[i] Aktiver Phasenplan gefunden. "
-              "Ueberspringe Planner.")
-        ups_plan = plan_vorhanden.get(
-            "phase_unterbloecke", [])
-        # Resume-Force (Auflage A2-A7, 2026-10-16):
-        # Mensch erzwingt Neustart trotz no_go/failed.
-        if resume_force:
-            _rf = _resume_force_reset(plan_vorhanden)
-            if _rf["reset"]:
-                print("[i] --resume-force: folgende "
-                      "Unterbloecke werden auf pending "
-                      "zurueckgesetzt:")
-                for _k in _rf["kandidaten"]:
-                    print(f"    {_k['id']} ({_k['alter_status']})")
-                print("[i] phase_start_head bleibt: "
-                      f"{_rf['phase_start_head']}")
-                _phase_plan_speichern(project_name, plan_vorhanden)
-                audit("phase_resume_force",
-                      {"phase_id": plan_vorhanden.get("phase_id"),
-                       "reset_unterbloecke": _rf["kandidaten"],
-                       "phase_korrektur_zyklus_vorher": 0,
-                       "phase_start_head": _rf["phase_start_head"]},
-                      project_dir, project_name)
-            else:
-                print("[i] --resume-force: keine "
-                      "no_go/failed-Unterbloecke. Wirkungslos.")
-        status_verteilung = {
-            "done": 0, "pending": 0, "running": 0,
-            "no_go": 0, "failed": 0,
-        }
-        for u in ups_plan:
-            if isinstance(u, dict):
-                s = u.get("status", "pending")
-                if s in status_verteilung:
-                    status_verteilung[s] += 1
-        bereits_fertig = (
-            len(ups_plan) > 0
-            and status_verteilung["done"] == len(ups_plan))
-        audit("phase_resume_erkannt",
-              {"phase_id": plan_vorhanden.get("phase_id"),
-               "unterbloecke": len(ups_plan),
-               "status_verteilung": status_verteilung,
-               "bereits_fertig": bereits_fertig},
-              project_dir, project_name)
-        state = RunState(
-            block_id=config.get("project", "unknown"),
-            aufgabe=(f"Phase "
-                     f"{plan_vorhanden.get('phase_id')}: "
-                     f"{plan_vorhanden.get('phase_titel')}"),
-            start_ts=datetime.now(UTC).isoformat(
-                timespec="seconds"),
-            docs=docs, agents=agents,
-            always=always_kat, optional=optional_kat,
-            file_whitelist=file_whitelist,
-            api_key=api_key,
-            budget=config.get("budget", {}),
-            agent_docs=config.get("agent_docs", {}),
-            project_dir=project_dir,
-            project_name=project_name,
-            planner_modus=planner_modus,
-        )
-        state.phase_id = plan_vorhanden.get("phase_id")
-        state.phase_titel = plan_vorhanden.get(
-            "phase_titel", "")
-        state.phase_unterbloecke = ups_plan
-        state.phase_aktiv = True
-        # Phasen-Persistenz-A1 (2026-10-16): Pakete der
-        # bereits done-Unterbloecke aus phase.yaml laden,
-        # damit der Sammel-Commit sie einschliesst.
-        state.phase_commit_pakete = [
-            dict(u["commit_paket"])
-            for u in ups_plan
-            if isinstance(u, dict)
-            and u.get("status") == "done"
-            and isinstance(u.get("commit_paket"), dict)
-            and u["commit_paket"].get("dateien")
-        ]
-        if state.phase_commit_pakete:
-            print("[i] Phasen-Persistenz: "
-                  f"{len(state.phase_commit_pakete)} "
-                  "done-Paket(e) aus phase.yaml geladen.")
-        state.start_monotonic = time.monotonic()
-        # Resume-Fix: state_ref NICHT hier anhaengen.
-        # run_phase macht das am Ende (Guard verlangt
-        # leeren state_ref beim Aufruf).
-        _neue_run_id = (
-            datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-            + f"-{os.getpid()}")
-        set_run_id(_neue_run_id)
-        state.run_id = _neue_run_id
-        audit("pipeline_start",
-              {"aufgabe_hash": __import__("hashlib").sha256(
-                  state.aufgabe.encode()).hexdigest(),
-               "aufgabe_kurz": state.aufgabe[:200],
-               "modus": "phase_resume"},
-              project_dir, project_name)
-        rc = run_phase(project_name, state, state_ref)
-        # Plan-Korrektur / V1: Unterblock-NO-GO
-        # (rc=15) -> Planner nachziehen.
-        if (rc == 15
-                and state.phase_korrektur_zyklus < 1):
-            print("[i] Unterblock-NO-GO. Plan-Korrektur "
-                  "wird versucht.")
-            korrigiert = _phase_plan_korrektur(
-                project_name, state, api_key)
-            if korrigiert:
-                state.phase_korrektur_zyklus += 1
-                state_ref.clear()
-                rc = run_phase(project_name, state,
-                               state_ref)
+        _st = _phase_main_plan_verarbeiten(
+            project_name, phasen_text, state_ref,
+            resume_force, _vor)
+        if isinstance(_st, int):
+            return _st
+        state, rc = _st
         _phase_finish_aktiv(project_name, state, rc)
         return rc
 

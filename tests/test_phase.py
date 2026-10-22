@@ -1380,7 +1380,7 @@ class TestPhaseMainPfadResume:
         # Wir testen die Existenz der Verzweigung im Code
         # (statisch), weil der Planner-Pfad komplex ist.
         import inspect as ins
-        quelle = ins.getsource(pipeline._phase_main_pfad)
+        quelle = ins.getsource(pipeline._phase_main_plan_verarbeiten)
         assert "phase_resume_erkannt" in quelle
         assert "plan_vorhanden" in quelle
 
@@ -1588,8 +1588,9 @@ class TestPhaseKorrekturUnterblockNoGo:
         import inspect as ins
         quelle_wdh = ins.getsource(pipeline._phase_wiederaufnahme)
         assert "state.phase_korrektur_zyklus" in quelle_wdh
-        quelle_mp = ins.getsource(pipeline._phase_main_pfad)
-        assert "state.phase_korrektur_zyklus" in quelle_mp
+        quelle_pv = ins.getsource(
+            pipeline._phase_main_plan_verarbeiten)
+        assert "state.phase_korrektur_zyklus" in quelle_pv
 
     def test_korrektur_startet_nach_rc15(
             self, tmp_path: Path,
@@ -1597,7 +1598,7 @@ class TestPhaseKorrekturUnterblockNoGo:
         """_phase_plan_korrektur wird gerufen."""
         # Statische Pruefung: der Aufruf ist da.
         import inspect as ins
-        quelle = ins.getsource(pipeline._phase_main_pfad)
+        quelle = ins.getsource(pipeline._phase_main_plan_verarbeiten)
         assert "rc == 15" in quelle
         assert "_phase_plan_korrektur" in quelle
 
