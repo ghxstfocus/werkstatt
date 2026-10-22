@@ -1267,12 +1267,10 @@ def _phase_rollback(
 
     # Reset.
     try:
-        res_reset = subprocess.run(
-            ("git", "reset", "--hard", start),
-            cwd=str(state.project_dir),
-            capture_output=True, text=True,
-            timeout=60, check=False,
-            env=subprocess_env(),
+        res_reset = run_git(
+            ["git", "reset", "--hard", start],
+            state.project_dir,
+            timeout=60,
         )
     except (subprocess.TimeoutExpired, OSError) as exc:
         audit("phase_rollback",
@@ -1295,12 +1293,10 @@ def _phase_rollback(
     clean_zahl = 0
     if clean_pfade:
         try:
-            res_dry = subprocess.run(
-                ("git", "clean", "-nd", "--") + clean_pfade,
-                cwd=str(state.project_dir),
-                capture_output=True, text=True,
-                timeout=60, check=False,
-                env=subprocess_env(),
+            res_dry = run_git(
+                ["git", "clean", "-nd", "--", *clean_pfade],
+                state.project_dir,
+                timeout=60,
             )
         except (subprocess.TimeoutExpired, OSError) as exc:
             audit("phase_rollback",
@@ -1319,12 +1315,10 @@ def _phase_rollback(
         clean_zahl = len(
             [z for z in res_dry.stdout.splitlines() if z.strip()])
         try:
-            res_clean = subprocess.run(
-                ("git", "clean", "-fd", "--") + clean_pfade,
-                cwd=str(state.project_dir),
-                capture_output=True, text=True,
-                timeout=60, check=False,
-                env=subprocess_env(),
+            res_clean = run_git(
+                ["git", "clean", "-fd", "--", *clean_pfade],
+                state.project_dir,
+                timeout=60,
             )
         except (subprocess.TimeoutExpired, OSError) as exc:
             audit("phase_rollback",
@@ -5820,10 +5814,9 @@ def _rollback_zieldateien(state: RunState,
     if not pfade_patch and not pfade_new:
         return
     try:
-        res = subprocess.run(
-            ("git", "status", "--porcelain", "-uall"),
-            cwd=str(project_dir), capture_output=True, text=True,
-            timeout=30, check=False, env=subprocess_env(),
+        res = run_git(
+            ["git", "status", "--porcelain", "-uall"],
+            project_dir,
         )
     except (subprocess.TimeoutExpired, OSError) as exc:
         audit("rollback_fail_closed",
@@ -5845,11 +5838,9 @@ def _rollback_zieldateien(state: RunState,
     for pfad in pfade_patch:
         if pfad in geaendert:
             try:
-                subprocess.run(
-                    ("git", "checkout", "--", pfad),
-                    cwd=str(project_dir), capture_output=True,
-                    text=True, timeout=30, check=False,
-                    env=subprocess_env(),
+                run_git(
+                    ["git", "checkout", "--", pfad],
+                    project_dir,
                 )
                 zurueckgesetzt.append(pfad)
             except (subprocess.TimeoutExpired, OSError):
@@ -5864,13 +5855,9 @@ def _rollback_zieldateien(state: RunState,
     ]
     if _pfade_zum_reset:
         try:
-            subprocess.run(
-                ("git", "reset", "HEAD", "--",
-                 *_pfade_zum_reset),
-                cwd=str(project_dir),
-                capture_output=True, text=True,
-                timeout=30, check=False,
-                env=subprocess_env(),
+            run_git(
+                ["git", "reset", "HEAD", "--", *_pfade_zum_reset],
+                project_dir,
             )
         except (subprocess.TimeoutExpired, OSError):
             pass  # best-effort cleanup
