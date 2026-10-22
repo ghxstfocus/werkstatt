@@ -13,14 +13,20 @@ Baseline-Definition (verbindlich, sonst reproduziert sich der 7-vs-9-Fehler):
 
 ## Aktueller Block
 
-3a-3 (_phase_main_pfad, 641 Z., Deadlock-Test): naechster
-Block. Einziger verbleibender grosser Block in run_pipeline.
-Start-Posting mit Standardpflichten + Deadlock-Analyse
-strukturell (dreistufige Kette: run_phase ->
-_phase_wiederaufnahme -> run_phase + _phase_main_pfad-
-Sicherung).
+3a-3 (_phase_main_pfad, 641 Z., Z. 10360-11000):
+641 Z. / 43 Statements / 23 Returns / 5 Parameter.
+Aufteilungs-Vorschlag in 3 Sub-Bloecke:
+  3a-3a Vorlauf    (body[0]..[21], Z. 10360-10462, ~103 Z.)
+  3a-3b Plan-Verarb.(body[22], Z. 10463-10632, ~170 Z.)
+  3a-3c Planner-Loop (body[23]..[42], Z. 10635-11000, ~366 Z.)
+Deadlock-Kette: 3x run_phase-Aufruf + phase_korrektur_zyklus-
+Sicherung in 3a-3c (Vorab-Messung unten).
+6 getsource-Tests (Kandidaten Kategorie 2).
 
-Rollback-Anker: 00ffb5e. Delta != 0 -> Rollback.
+Naechster konkreter Schritt: Reviewer-Start-Posting 3a-3
+mit Aufteilungs-Vorschlag. Dann 3a-3a.
+
+Rollback-Anker: 416550a. Delta != 0 -> Rollback.
 
 ## Abgeschlossen seit letztem Handoff
 
@@ -205,3 +211,119 @@ Block.**
 Vorheriger Handoff (2026-10-18, W52b) in Bau-Handoff-Archiv.md.
 Vorgaenger-Handoff (2026-10-20, 3a-1c-2b "NO-GO") war ueberholt:
 3a-1c-2b ist done, 3a-1c-3 ist done, C6 gestrichen.
+
+
+## 3a-3 — Vorab-Messung (HEAD 416550a)
+
+Gemessen am 2026-10-22. Dient als Startpunkt fuer den naechsten Block.
+Naechster Kontext kann direkt hier ansetzen.
+
+### _phase_main_pfad — Signatur + Zeilen
+
+  def Z. 10360..11000 (641 Zeilen).
+  positional: ['project_name', 'phasen_text', 'state_ref',
+               'resume_force', 'force_new_phase']
+  kw-only:    []
+  Returns: 23.
+
+### Aufrufer
+
+  Intern:
+    Z. 11386: rc = _phase_main_pfad(
+    (einziger interner Aufrufer, in main()).
+  Tests: 6 getsource-Ziele (siehe unten).
+
+### Top-Level-Statements (43)
+
+  Block A (Vorlauf, body[0]..[21], Z. 10360-10462, ~103 Z.):
+    Docstring, api_key, project_dir, Baseline-Gate,
+    agents_dir, load_agents, load_docs, file_whitelist,
+    build_catalog, planner-config (modus, max_runden),
+    plan_vorhanden-Try.
+
+  Block B (Plan-Verarbeitung, body[22], Z. 10463-10632, ~170 Z.):
+    if plan_vorhanden is not None:
+    Enthaelt Plan-Parsing, Resume-Logik, Unterblock-Init,
+    phase_start_head-Setzung, audit-Calls.
+
+  Block C (Planner-Loop, body[23]..[42], Z. 10635-11000, ~366 Z.):
+    historie, phase_yaml-Pfad, force_new_phase-Check,
+    RunState-Anlage, run_id-Setzung, audit pipeline_start,
+    for runde in range(1, planner_max_runden+1):
+      -> Planner-Aufruf, run_phase-Aufruf (3x),
+         phase_korrektur_zyklus-Sicherung.
+    phase_plan_ok-Check, return 0.
+
+### Rekursion + Deadlock-Stellen
+
+  run_phase-Aufrufe in _phase_main_pfad:
+    Z. 10617: rc = run_phase(project_name, state, state_ref)
+    Z. 10629: rc = run_phase(project_name, state, state_ref)
+    Z. 10931: rc = run_phase(
+  phase_korrektur_zyklus-Sicherung:
+    Z. 10621: if ... and state.phase_korrektur_zyklus < 1:
+    Z. 10627: state.phase_korrektur_zyklus += 1
+    Z. 10541: audit phase_korrektur_zyklus_vorher: 0
+
+  Deadlock-Kette dreistufig (strukturell):
+    run_phase -> _phase_wiederaufnahme -> run_phase
+      (Rekursion in 3a-2d, max 1 Tiefe).
+    _phase_main_pfad -> run_phase (3x)
+      (Sicherung durch phase_korrektur_zyklus < 1
+       in _phase_main_pfad Z. 10621).
+    Doppelte Sicherung: run_phase-Rekursion UND
+      _phase_main_pfad-Sicherung.
+
+### getsource-Tests auf _phase_main_pfad
+
+  tests/test_pipeline.py:7452  inspect.getsource(pipeline._phase_main_pfad)
+  tests/test_pipeline.py:7463  inspect.getsource(pipeline._phase_main_pfad)
+  tests/test_pipeline.py:7472  inspect.getsource(pipeline._phase_main_pfad)
+  tests/test_phase.py:1383     ins.getsource(pipeline._phase_main_pfad)
+  tests/test_phase.py:1591     ins.getsource(pipeline._phase_main_pfad)
+  tests/test_phase.py:1600     ins.getsource(pipeline._phase_main_pfad)
+
+  6 Kandidaten fuer Test-Anpassungen (Kategorie 2) bei
+  Extraktion von Teilen aus _phase_main_pfad.
+
+### Baseline
+
+  pytest 1245 passed / ruff 17 / mypy 9 / AST 6 / Katalog 167.
+  Delta 0.
+
+### Aufteilungs-Vorschlag (3 Sub-Bloecke, analog 3a-2)
+
+  Der Block ist mit 641 Z. / 43 Statements / 23 Returns
+  zu gross fuer einen Schnitt. Drei natuerliche Sub-Bloecke:
+
+  3a-3a: Vorlauf (body[0]..[21], Z. 10360-10462, ~103 Z.)
+    api_key, project_dir, Baseline-Gate, agents, docs,
+    file_whitelist, build_catalog, planner-config.
+    Neue Funktion: _phase_main_vorlauf(...) -> PhaseMainVorlaufErgebnis | int.
+
+  3a-3b: Plan-Verarbeitung (body[22], Z. 10463-10632, ~170 Z.)
+    if plan_vorhanden is not None.
+    Neue Funktion: _phase_main_plan_verarbeiten(...) -> ... | int.
+    ODER als Teil von 3a-3a belassen (haengt von
+    Variablen-Transfer ab, M-94).
+
+  3a-3c: Planner-Loop (body[23]..[42], Z. 10635-11000, ~366 Z.)
+    RunState, historie, for runde-Loop mit 3 run_phase-Aufrufen,
+    phase_korrektur_zyklus-Sicherung, phase_plan_ok-Check.
+    Neue Funktion: _phase_main_planner_loop(...) -> int.
+    ODER weiter zerlegt (Loop-Body vs. Loop-Vorbereitung).
+
+  Reihenfolge-Empfehlung: 3a-3a -> 3a-3b -> 3a-3c (wie 3a-2a/b/c/d).
+  Deadlock-Analyse (M-65-Muster): vor 3a-3c, weil dort die 3
+  run_phase-Aufrufe + phase_korrektur_zyklus-Sicherung liegen.
+
+  Test-Anpassungen: 6 getsource-Tests. Kategorisierung pro Block
+  im jeweiligen Start-Posting (a/b/c/d), wie bei 3a-2.
+
+### Naechster Schritt (frische Session)
+
+  1. Reviewer-Start-Posting 3a-3 mit Aufteilungs-Vorschlag.
+  2. Nach Freigabe: 3a-3a (Vorlauf), dann 3a-3b, 3a-3c.
+  3. 3a-3c: Deadlock-Analyse strukturell + phase_korrektur_zyklus
+     zitieren (wie 3a-2d).
+
