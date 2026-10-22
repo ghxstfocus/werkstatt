@@ -40,6 +40,10 @@ dann `../Bau-Handoff.md`, dann `NEUBAU-ZIELBILD.md`.
 - `MESS-INFRASTRUKTUR.md` — Block-M-Recherche (Mess-Infrastruktur).
 - `HANDOFF-BASELINE.md` — Baseline-Definition (siehe How-to).
 
+## ADRs (Architecture Decision Records)
+
+- `adr/0001-sops-age.md` — Key-Architektur mit SOPS + age (M-203).
+
 ## Explanation (Verstehen)
 
 - `ARCHITEKTUR.md` — Ziel-Architektur.
