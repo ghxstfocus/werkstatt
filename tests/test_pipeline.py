@@ -7449,7 +7449,7 @@ class TestWEGXP19Anzeige:
         """A6: Quelle zeigt "Schaetzung" und
         Schleifen-Anker-Ausgabe."""
         import inspect
-        src = inspect.getsource(pipeline._phase_main_pfad)
+        src = inspect.getsource(pipeline._phase_main_planner_loop)
         # Runden-Schaetzung markiert.
         assert "Runden — Schaetzung" in src
         # Anker-Schleife.
@@ -7460,7 +7460,7 @@ class TestWEGXP19Anzeige:
     def test_fail_closed_marker_im_source(self) -> None:
         """Fail-closed im --phase-Pfad vorhanden."""
         import inspect
-        src = inspect.getsource(pipeline._phase_main_pfad)
+        src = inspect.getsource(pipeline._phase_main_planner_loop)
         assert "_plan_ist_messungsbasiert" in src
         assert "_plan_ist_portionierbar" in src
         assert "planner_plan_unvollstaendig" in src
@@ -7469,7 +7469,7 @@ class TestWEGXP19Anzeige:
     def test_fail_closed_konsole_hinweis(self) -> None:
         """Konsolenausgabe enthaelt Hinweis (RR1)."""
         import inspect
-        src = inspect.getsource(pipeline._phase_main_pfad)
+        src = inspect.getsource(pipeline._phase_main_planner_loop)
         assert "praezisieren" in src
         assert "kleiner planen" in src
 
