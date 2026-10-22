@@ -45,10 +45,20 @@ def run_ruff(
     args: list[str],
     cwd: Path,
     timeout: int = 60,
+    venv_python: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """ruff-Aufruf (check/format). env=subprocess_env()."""
+    """ruff-Aufruf (check/format). env=subprocess_env().
+
+    venv_python: Wenn gesetzt, wird [venv_python, "-m", "ruff",
+    *args] aufgerufen (A2-3: auto_repair_ruff). Sonst ["ruff",
+    *args] aus PATH.
+    """
+    if venv_python is not None:
+        full_args = [venv_python, "-m", "ruff", *args]
+    else:
+        full_args = ["ruff", *args]
     return subprocess.run(
-        tuple(args),
+        tuple(full_args),
         cwd=str(cwd),
         capture_output=True,
         text=True,

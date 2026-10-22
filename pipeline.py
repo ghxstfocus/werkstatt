@@ -51,7 +51,7 @@ from werkstatt.commit_input import (
     _plan_pfad,
     format_code_patches_fuer_commit,  # noqa: F401 (Re-Export fuer Tests)
 )
-from werkstatt.exec import run_git
+from werkstatt.exec import run_git, run_ruff
 
 # Re-Export der HARD_RULES-Konstanten. Tests und
 # pipeline-interne Nutzung (build_system_prompt,
@@ -4546,17 +4546,14 @@ def auto_repair_ruff(project_dir: Path, venv_python: str) -> tuple[bool, str]:
     """Nur deterministische Fixes. Kein LLM."""
     protokoll = ""
     try:
-        r1 = subprocess.run((venv_python, "-m", "ruff", "check", ".", "--fix"),
-                            cwd=str(project_dir), capture_output=True, text=True,
-                            timeout=300, check=False, env=subprocess_env())
+        r1 = run_ruff(["check", ".", "--fix"], project_dir,
+                      timeout=300, venv_python=venv_python)
         protokoll += f"=== ruff check --fix ===\nRC: {r1.returncode}\n{r1.stdout}\n{r1.stderr}\n"
-        r2 = subprocess.run((venv_python, "-m", "ruff", "format", "."),
-                            cwd=str(project_dir), capture_output=True, text=True,
-                            timeout=300, check=False, env=subprocess_env())
+        r2 = run_ruff(["format", "."], project_dir,
+                      timeout=300, venv_python=venv_python)
         protokoll += f"=== ruff format ===\nRC: {r2.returncode}\n{r2.stdout}\n{r2.stderr}\n"
-        r3 = subprocess.run((venv_python, "-m", "ruff", "check", "."),
-                            cwd=str(project_dir), capture_output=True, text=True,
-                            timeout=300, check=False, env=subprocess_env())
+        r3 = run_ruff(["check", "."], project_dir,
+                      timeout=300, venv_python=venv_python)
         return r3.returncode == 0, protokoll
     except (subprocess.TimeoutExpired, OSError) as exc:
         return False, protokoll + f"\nFEHLER: {exc}"
