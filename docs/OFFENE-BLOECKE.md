@@ -37,6 +37,8 @@ _phase_vorlauf extrahiert. 7 Returns. Baseline 1245/17/9.
 M-61 (Return-Zaehlung 3a-2c vs 3a-2d) offen, blockierend
 nur fuer 3a-2c/d.
 
+| Block M (Mess-Infrastruktur) | 2 | **Ziel:** Deterministischer Block-Report fuer Planner/Builder (Returns, state.X, Audit-Kinds, Tests, Aufrufer pro Zeilenzone). **Position:** Nach 3a-2d, vor 3a-3 (Deadlock). **Recherche 2026-10-21:** Aider, codebase-index, CodeWalker, CodeCortex, readmenator. Erkenntnis: Bausteine existieren, aber keiner liefert unsere Block-Semantik. Hybrid: codebase-index/CodeWalker als Backend, eigenes tools/mess/block.py fuer Block-Report. **3 Skripte:** anker.py, block.py, baseline.py. **Explorer-Subagent (W61)** ist Konsument. **Doku:** docs/MESS-INFRASTRUKTUR.md. | mittel | offen |
+
 ## Phase 3b — Loop-Umbau (nach 3a)
 
 Noch keine Merkposten. Entstehen hier, sobald 3a abgeschlossen.

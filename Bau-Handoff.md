@@ -58,6 +58,7 @@ Korrektur ist in docs/OFFENE-BLOECKE.md eingepflegt (Z. 20).
 ## Verweise
 
 - docs/SESSION-BILANZ.md — M-57-Nachweise Body-VOR-Werte pro Commit.
+- docs/MESS-INFRASTRUKTUR.md — Recherche und Einordnung Block M (Mess-Infrastruktur, nach 3a-2d vor 3a-3). Explorer-Subagent (W61) als Konsument.
 
 - docs/OFFENE-BLOECKE.md — Todo, chronologisch nach Phasen.
 - docs/OFFENE-BLOECKE-ARCHIV.md — Todos vor Umbau.
