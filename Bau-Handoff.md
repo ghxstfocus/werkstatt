@@ -65,6 +65,92 @@ Real gemessen (HEAD 5e50ea6, SCHRITT-Kommentare + AST):
   Bereich 8762-8817 = C7-Rest, nicht C8.
 Korrektur ist in docs/OFFENE-BLOECKE.md eingepflegt (Z. 20).
 
+## Mess-Skripte — verbindliche Form
+
+**Regel:** Messen vor jedem Block. Kein Code-Touch ohne vorherigen
+read-only Messblock. Kein "wird schon passen" — jede Zahl und jede
+Aussage muss aus einem Zitat stammen (ast, git show, grep, pytest).
+
+**Form:** Ein Block, ein Skript. Nicht mehrere kleine Schnipsel,
+sondern ein zusammenhaengender Bash-Block mit klaren Sektionen.
+Diese Form hat sich in der Session 2026-10-21/22 bewaehrt (M-58 bis
+M-75 aufgedeckt, Fehler verhindert).
+
+### Sektionen-Struktur
+
+  0) Zustand        HEAD, origin, Branch, Tree-Sauberkeit
+  1..N) Messung /   je nach Block: Anker, Returns, state.X, Tests,
+       Aenderung     Baseline, Diff, Commit, Push
+  Baseline          pytest -q / ruff / mypy / AST / Katalog
+  Commit-Entscheidung   bei Baseline-Gruen: Commit, sonst Warnung
+  Read-Back         git show --stat + git log -1 + status
+  FERTIG            "Bitte Ausgabe zuruecksenden"
+
+### Haertung (Pflicht)
+
+- `set -u` am Anfang (oder `set -eu`, wenn kein Fehlerpfad
+  erwartet wird).
+- `cd /opt/werkstatt || exit 1`.
+- `python3` statt `python` (Binary `python` fehlt).
+- `pytest -q` statt `python -m pytest`.
+- ruff-Match: `grep -oE "Found [0-9]+ errors"`, NICHT
+  `grep -q "Found 17 errors"` (die letzte Zeile ist die
+  `[*] fixable`-Zeile).
+- mypy: `mypy pipeline.py werkstatt/` (Baseline 9), NICHT `mypy .`
+  (tests/ zaehlt 40 Fehler).
+- AST- und Katalog-Test: `pytest tests/test_audit_kinds.py -q`
+  (6 passed) + `_KATALOG_SOLL` = 167.
+
+### Extraktion (Code-Touch)
+
+- Wortwoertlich per `git show <ref>:pipeline.py` + Zeilenbereich.
+  KEINE handgeschriebene Kopie (3a-2a-Versuch 1: 25 Tests kaputt).
+- Loop-Selektor per Zeilenbereich oder Groesse, NICHT "erster
+  for-Loop in node.body" (3a-2b-Versuch 1: falscher Loop).
+- Neue Imports per `ast`-Sortierung einfuegen, nicht "nach letztem
+  bekannten Feld" (I001).
+- mypy-Fallback: `return 0` oder `return rc_unterblock` (semantisch
+  korrekt), NICHT `raise RuntimeError` (killt Tests).
+- Nach Extraktion: Return-Bilanz als Listen (M-70/M-73), Semantik-
+  Beweis (M-72), Herkunft neuer Returns (M-74).
+
+### Rollback
+
+- NIE implizit `git reset --hard` im Skript, ausser als explizite
+  Rollback-Funktion mit Grund.
+- Vor jedem Reset: Arbeitsstaende nach `.werkstatt/tmp-<block>-<ts>/`
+  sichern, wenn nicht-trivial.
+- Baseline-Anker immer im Handoff nennen.
+
+### Entscheidung
+
+- Jeder Block endet mit **einer klaren Entscheidung**: Commit +
+  Push, oder Warnung + Diff sichtbar lassen, oder Rollback mit
+  Grund.
+- Kein "vielleicht spaeter" — Zwischenstaende ohne Commit werden
+  entweder korrigiert oder verworfen.
+
+### Warum diese Form funktioniert
+
+Die Werkstatt hat in 3a-1c-4 und 3a-2a/b mehrere Fehler gehabt, die
+durch die Messbloecke aufgedeckt wurden, nicht durch Tests:
+
+- M-58 (Return-Verteilung 3a-2d: 3 statt 2)
+- M-59 (state.phase_korrektur_zyklus angeblich geteilt)
+- M-60 (VorlaufErgebnis-Namenskonflikt)
+- M-61/M-63 (Return-Zaehlung 3a-2c: 6 vs 7)
+- M-62 (_phase_vorlauf 6 vs 7 Returns)
+- M-64 (2 unkategorisierte Returns)
+- M-65 (rc_unterblock-Herkunft)
+- M-66 (Summe 22 vs 24)
+- M-68 (run_phase vs run_pipeline verwechselt)
+- M-72 (return 0 vs return rc_unterblock — Fail-open)
+- M-74 (Herkunft 2399)
+
+Baseline-Gruen (1245 Tests) hat KEINEN dieser Fehler aufgedeckt.
+Der Messblock hat sie alle aufgedeckt. Deshalb: **Messen vor jedem
+Block.**
+
 ## Verweise
 
 - docs/SESSION-BILANZ.md — M-57-Nachweise Body-VOR-Werte pro Commit.

@@ -45,6 +45,13 @@ _phase_unterblock_loop extrahiert. 6 Returns.
 M-72-Fix (rc_unterblock statt return 0).
 Baseline 1245/17/9. Naechster Block: 3a-2c.
 
+## Abgenommene Merkposten (Session 2026-10-21/22)
+
+M-70 (Return-Listen), M-71 (Prognose-Korrektur), M-72
+(Semantik-Beweis), M-73 (Listen im Commit-Body), M-74
+(Herkunft neuer Returns), M-75 (Commit-Body vor Push):
+abgenommen. Details und Lehren in `docs/MERKPOSTEN.md`.
+
 ## Phase 3b — Loop-Umbau (nach 3a)
 
 Noch keine Merkposten. Entstehen hier, sobald 3a abgeschlossen.

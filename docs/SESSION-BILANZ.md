@@ -58,3 +58,23 @@ Nachweis belegt die Vor-Comm-SHA pro Commit eindeutig.
 
 Jeder neue Commit mit Body-VOR-Wert MUSS die Vor-Comm-SHA im Body
 nennen (z.B. "VOR 8671-8679 gegen <sha>"). Sonst M-57-Verstoss.
+
+## Prozess-Regeln (Session 2026-10-21/22)
+
+Aus M-70..M-75 und den Bau-Bloecken 3a-2a/3a-2b:
+
+- Messen vor jedem Block (read-only Skript, Sektionen-Struktur).
+- Ein Block, ein Bash-Skript (siehe Bau-Handoff,
+  'Mess-Skripte — verbindliche Form').
+- Return-Bilanz als Listen, nicht Summen (M-70/M-73).
+- Semantik-Aequivalenz belegen, nicht behaupten (M-72).
+- Herkunft neuer Returns pruefen (M-74).
+- Commit-Body-Pflichten VOR Push (M-75).
+- ruff-Match: `grep -oE 'Found [0-9]+ errors'`.
+- `python3` statt `python`, `pytest` als Entry-Point.
+- Wortwoertliche Extraktion per `git show`.
+- Loop-Selektor per Zeilenbereich oder Groesse.
+- Import-Sortierung per `ast`.
+- mypy-Fallback `return 0` / `return rc_unterblock`,
+  nicht `raise RuntimeError`.
+- Doku-Nachzug nach jedem fertigen Block + Push.
