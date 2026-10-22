@@ -31,7 +31,7 @@ def run_git(
 ) -> subprocess.CompletedProcess[str]:
     """git-Aufruf. env=subprocess_env(), check=False."""
     return subprocess.run(
-        args,
+        tuple(args),
         cwd=str(cwd),
         capture_output=True,
         text=True,
@@ -48,7 +48,7 @@ def run_ruff(
 ) -> subprocess.CompletedProcess[str]:
     """ruff-Aufruf (check/format). env=subprocess_env()."""
     return subprocess.run(
-        args,
+        tuple(args),
         cwd=str(cwd),
         capture_output=True,
         text=True,
@@ -78,6 +78,6 @@ def run_test(
             env=env,
         )
     return subprocess.run(
-        argv, cwd=str(cwd), capture_output=True,
+        tuple(argv), cwd=str(cwd), capture_output=True,
         text=True, timeout=timeout, check=False,
     )

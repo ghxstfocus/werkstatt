@@ -51,6 +51,7 @@ from werkstatt.commit_input import (
     _plan_pfad,
     format_code_patches_fuer_commit,  # noqa: F401 (Re-Export fuer Tests)
 )
+from werkstatt.exec import run_git
 
 # Re-Export der HARD_RULES-Konstanten. Tests und
 # pipeline-interne Nutzung (build_system_prompt,
@@ -3162,12 +3163,9 @@ def _git_rev_parse_head(project_dir: Path) -> str:
     bei Fehler. Kein raise (Aufrufer prueft auf "").
     """
     try:
-        res = subprocess.run(
-            ("git", "rev-parse", "HEAD"),
-            cwd=str(project_dir),
-            capture_output=True, text=True,
-            timeout=30, check=False,
-            env=subprocess_env(),
+        res = run_git(
+            ["git", "rev-parse", "HEAD"],
+            project_dir,
         )
     except (subprocess.TimeoutExpired, OSError):
         return ""
@@ -3184,12 +3182,9 @@ def _git_status_porcelain(project_dir: Path) -> str:
     damit ein Aufrufer nicht versehentlich clean annimmt.
     """
     try:
-        res = subprocess.run(
-            ("git", "status", "--porcelain"),
-            cwd=str(project_dir),
-            capture_output=True, text=True,
-            timeout=30, check=False,
-            env=subprocess_env(),
+        res = run_git(
+            ["git", "status", "--porcelain"],
+            project_dir,
         )
     except (subprocess.TimeoutExpired, OSError):
         return "!FEHLER!"
@@ -4542,10 +4537,9 @@ def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
 
 def load_recent_commits(project_dir: Path, n: int = 10) -> str:
     try:
-        res = subprocess.run(
-            ("git", "log", f"-{n}", "--format=%h %an%n%s%n%b%n---"),
-            cwd=str(project_dir), capture_output=True, text=True,
-            timeout=30, check=False, env=subprocess_env(),
+        res = run_git(
+            ["git", "log", f"-{n}", "--format=%h %an%n%s%n%b%n---"],
+            project_dir,
         )
     except (subprocess.TimeoutExpired, OSError):
         return "(git log nicht verfuegbar)"
@@ -7020,11 +7014,9 @@ def _check_commit_scope(
     # zusaetzlich aus git status -uall lesen.
     # git diff --name-only HEAD sieht sie nicht.
     try:
-        _status_res = subprocess.run(
-            ("git", "status", "--porcelain", "-uall"),
-            cwd=str(project_dir), capture_output=True,
-            text=True, timeout=30, check=False,
-            env=subprocess_env())
+        _status_res = run_git(
+            ["git", "status", "--porcelain", "-uall"],
+            project_dir)
         for _zeile in _status_res.stdout.splitlines():
             if len(_zeile) < 4:
                 continue
@@ -7323,10 +7315,9 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
         cwd=str(state.project_dir), capture_output=True, text=True,
         timeout=30, check=False, env=subprocess_env(),
     ).stdout
-    git_status = subprocess.run(
-        ("git", "status", "--porcelain"),
-        cwd=str(state.project_dir), capture_output=True, text=True,
-        timeout=30, check=False, env=subprocess_env(),
+    git_status = run_git(
+        ["git", "status", "--porcelain"],
+        state.project_dir,
     ).stdout
 
     # D1 (2026-10-16): ZIELDATEIEN explizit vorgeben.
@@ -9443,11 +9434,9 @@ def _phasen_basis_gate_ok(
                 nicht ausfuehrbar.
     """
     try:
-        res = subprocess.run(
-            ("git", "status", "--porcelain", "-uall"),
-            cwd=str(project_dir), capture_output=True,
-            text=True, timeout=30, check=False,
-            env=subprocess_env(),
+        res = run_git(
+            ["git", "status", "--porcelain", "-uall"],
+            project_dir,
         )
     except (subprocess.TimeoutExpired, OSError):
         return (False, "git_fehler", {})
@@ -11191,10 +11180,9 @@ def _planner_main_pfad(
 
     # git status clean?
     try:
-        _st = subprocess.run(
-            ("git", "status", "--porcelain"),
-            cwd=str(project_dir), capture_output=True, text=True,
-            timeout=30, check=False, env=subprocess_env(),
+        _st = run_git(
+            ["git", "status", "--porcelain"],
+            project_dir,
         )
         if _st.returncode != 0 or _st.stdout.strip():
             print("[FAIL] Ziel-Repo nicht sauber (git status). Fail closed.")
