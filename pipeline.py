@@ -103,6 +103,7 @@ from werkstatt.state import (
     LLMReply,
     Measurement,
     NachlaufErgebnis,
+    PhaseMainPlannerKontext,
     PhaseMainVorlaufErgebnis,
     PhaseVorlaufErgebnis,
     RecoveryVorschlag,
@@ -10720,6 +10721,75 @@ def _phase_main_w50_gate(
                "aufgabe_kurz": phasen_text[:200]},
               project_dir, project_name)
     return None
+
+def _phase_main_planner_vorb(
+    project_name: str,
+    phasen_text: str,
+    vor: PhaseMainVorlaufErgebnis,
+) -> PhaseMainPlannerKontext:
+    """C2-Vorbereitung aus _phase_main_pfad (3a-3c-2a).
+
+    Liest project_name, phasen_text, 9 vor-Felder (M-131).
+    0 fruehe Returns (M-148).
+    """
+    api_key = vor.api_key
+    config = vor.config
+    project_dir = vor.project_dir
+    agents = vor.agents
+    docs = vor.docs
+    file_whitelist = vor.file_whitelist
+    always_kat = vor.always_kat
+    optional_kat = vor.optional_kat
+    planner_modus = vor.planner_modus
+
+    state = RunState(
+        block_id=config.get("project", "unknown"),
+        aufgabe=phasen_text,
+        start_ts=datetime.now(UTC).isoformat(timespec="seconds"),
+        docs=docs, agents=agents,
+        always=always_kat, optional=optional_kat,
+        file_whitelist=file_whitelist,
+        api_key=api_key,
+        budget=config.get("budget", {}),
+        agent_docs=config.get("agent_docs", {}),
+        project_dir=project_dir,
+        project_name=project_name,
+        planner_modus=planner_modus,
+    )
+    state.start_monotonic = time.monotonic()
+
+    _neue_run_id = (
+        datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        + f"-{os.getpid()}")
+    set_run_id(_neue_run_id)
+    state.run_id = _neue_run_id
+
+    audit("pipeline_start",
+          {"aufgabe_hash": __import__("hashlib").sha256(
+              phasen_text.encode()).hexdigest(),
+           "aufgabe_kurz": phasen_text[:200],
+           "modus": "phase"},
+          project_dir, project_name)
+
+    # Planner Stufe 2, max planner_max_runden Runden.
+    phase_plan_ok = False
+    phase_id = ""
+    phase_titel = ""
+    unterbloecke: list[dict[str, Any]] = []
+    # F-P2a-S5c-1 (alpha): editierter Plan aus
+    # vorheriger Runde. Wenn gesetzt, wird in der
+    # naechsten Runde kein Planner-Aufruf gemacht.
+    letzter_vorschlag: (
+        tuple[str, str, list[dict[str, Any]]] | None
+    ) = None
+    return PhaseMainPlannerKontext(
+        state=state,
+        phase_plan_ok=phase_plan_ok,
+        phase_id=phase_id,
+        phase_titel=phase_titel,
+        unterbloecke=unterbloecke,
+        letzter_vorschlag=letzter_vorschlag,
+    )
 
 def _phase_main_pfad(
     project_name: str,

@@ -351,3 +351,17 @@ class PhaseMainVorlaufErgebnis:
     planner_modus: str
     planner_max_runden: int
     plan_vorhanden: dict[str, Any] | None
+
+
+@dataclass
+class PhaseMainPlannerKontext:
+    """Rueckgabe _phase_main_planner_vorb (3a-3c-2a).
+
+    6 Felder aus _phase_main_pfad body[17..27] (M-149).
+    """
+    state: RunState
+    phase_plan_ok: bool
+    phase_id: str
+    phase_titel: str
+    unterbloecke: list
+    letzter_vorschlag: tuple | None
