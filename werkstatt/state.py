@@ -291,6 +291,17 @@ class VorlaufErgebnis:
     optional: dict
 
 
+@dataclass
+class NachlaufErgebnis:
+    """Ergebnis des Nachlaufs von run_phase (3a-2c, M-83/M-85).
+
+    3 Felder: rc, aggregat, wahl.
+    """
+    rc: int
+    aggregat: dict
+    wahl: str
+
+
 
 @dataclass
 class PhaseVorlaufErgebnis:

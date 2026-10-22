@@ -102,6 +102,7 @@ from werkstatt.state import (
     BudgetExhausted,
     LLMReply,
     Measurement,
+    NachlaufErgebnis,
     PhaseVorlaufErgebnis,
     RecoveryVorschlag,
     RunState,
@@ -2400,66 +2401,16 @@ def _phase_unterblock_loop(
     return rc_unterblock
 
 
-def run_phase(
-    project_name: str,
-    state: RunState,
-    state_ref: list[RunState],
-) -> int:
-    """Block P2b-1: Geruest fuer den Phasen-Loop.
+def _phase_nachlauf(
+        state: RunState,
+        project_name: str,
+        state_ref: list[RunState],
+) -> NachlaufErgebnis | int:
+    """3a-2c: Nachlauf aus run_phase extrahiert (Z. 2463-2553, HEAD 3c757ec).
 
-    Ablauf:
-      1. phase.yaml via _phase_plan_laden pruefen.
-      2. Idempotenz (P2b-1-A4):
-         - alle done   -> rc=0, bereits_fertig=True.
-         - no_go/failed-> rc=18, Fail-closed.
-      3. audit run_phase_start.
-      4. Loop ueber phase_unterbloecke:
-         - phase_aktueller_index = i (P2b-1-A5).
-         - audit phase_unterblock_start.
-         - _phase_yaml_status_update("running").
-         - STUB: kein run_pipeline-Aufruf (P2b-A9).
-           TODO(P2b-3): hier run_pipeline.
-         - _phase_yaml_status_update("done").
-         - audit phase_unterblock_ende.
-         - phase_aktueller_index = i + 1.
-      5. audit run_phase_ende.
-      6. rc=0.
-
-    KEIN Rollback in P2b-1 (folgt in P2b-2).
-    KEIN run_pipeline-Aufruf (folgt in P2b-3).
-
-    Exception-Verhalten (Q4, P2b-1-A6): Exception wird
-    NICHT abgefangen; der Aufrufer (P2b-2) faengt sie
-    fuer den Rollback.
+    Wortwoertliche Extraktion (body[10]..body[21]).
+    3 Parameter (M-78 + M-89: state_ref fuer b2-Pfad). Return NachlaufErgebnis oder int.
     """
-    # P2b-3b / L1: state_ref muss leer sein.
-    # Der State wird am Ende angehaengt (fuer main()).
-    if state_ref:
-        raise ValueError(
-            "run_phase: state_ref muss leer sein")
-    _vl = _phase_vorlauf(state, project_name)
-    if isinstance(_vl, int):
-        return _vl
-    unterbloecke = _vl.unterbloecke
-    api_key = _vl.api_key
-    max_phase = _vl.max_phase
-
-    _rc_loop = _phase_unterblock_loop(
-        state, project_name, unterbloecke, max_phase,
-    )
-    if _rc_loop != 0:
-        return _rc_loop
-
-    audit("run_phase_ende",
-          {"phase_id": state.phase_id,
-           "unterbloecke": len(unterbloecke),
-           "rc": 0,
-           "abgebrochen": False},
-          state.project_dir, project_name)
-
-    # =========================================================
-    # P2b-4: Phasen-Gesamt-Review + Approval + Commit.
-    # =========================================================
     aggregat = _phase_gesamt_review(state)
     print("[i] Gesamt-Review: "
           f"{aggregat['pakete']} Pakete, "
@@ -2551,6 +2502,78 @@ def run_phase(
                "grund": "fehleingaben"},
               state.project_dir, project_name)
         return 1
+    return NachlaufErgebnis(
+        rc=0, aggregat=aggregat, wahl=wahl,
+    )
+
+
+def run_phase(
+    project_name: str,
+    state: RunState,
+    state_ref: list[RunState],
+) -> int:
+    """Block P2b-1: Geruest fuer den Phasen-Loop.
+
+    Ablauf:
+      1. phase.yaml via _phase_plan_laden pruefen.
+      2. Idempotenz (P2b-1-A4):
+         - alle done   -> rc=0, bereits_fertig=True.
+         - no_go/failed-> rc=18, Fail-closed.
+      3. audit run_phase_start.
+      4. Loop ueber phase_unterbloecke:
+         - phase_aktueller_index = i (P2b-1-A5).
+         - audit phase_unterblock_start.
+         - _phase_yaml_status_update("running").
+         - STUB: kein run_pipeline-Aufruf (P2b-A9).
+           TODO(P2b-3): hier run_pipeline.
+         - _phase_yaml_status_update("done").
+         - audit phase_unterblock_ende.
+         - phase_aktueller_index = i + 1.
+      5. audit run_phase_ende.
+      6. rc=0.
+
+    KEIN Rollback in P2b-1 (folgt in P2b-2).
+    KEIN run_pipeline-Aufruf (folgt in P2b-3).
+
+    Exception-Verhalten (Q4, P2b-1-A6): Exception wird
+    NICHT abgefangen; der Aufrufer (P2b-2) faengt sie
+    fuer den Rollback.
+    """
+    # P2b-3b / L1: state_ref muss leer sein.
+    # Der State wird am Ende angehaengt (fuer main()).
+    if state_ref:
+        raise ValueError(
+            "run_phase: state_ref muss leer sein")
+    _vl = _phase_vorlauf(state, project_name)
+    if isinstance(_vl, int):
+        return _vl
+    unterbloecke = _vl.unterbloecke
+    api_key = _vl.api_key
+    max_phase = _vl.max_phase
+
+    _rc_loop = _phase_unterblock_loop(
+        state, project_name, unterbloecke, max_phase,
+    )
+    if _rc_loop != 0:
+        return _rc_loop
+
+    audit("run_phase_ende",
+          {"phase_id": state.phase_id,
+           "unterbloecke": len(unterbloecke),
+           "rc": 0,
+           "abgebrochen": False},
+          state.project_dir, project_name)
+
+    # =========================================================
+    # P2b-4: Phasen-Gesamt-Review + Approval + Commit.
+    # =========================================================
+    _res_nachlauf = _phase_nachlauf(
+        state, project_name, state_ref,
+    )
+    if isinstance(_res_nachlauf, int):
+        return _res_nachlauf
+    aggregat = _res_nachlauf.aggregat
+    wahl = _res_nachlauf.wahl
 
     if wahl in {"n", "no", "nein"}:
         # Phase-NO-GO: Rollback, Bericht.
