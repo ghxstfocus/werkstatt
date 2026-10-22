@@ -27,6 +27,17 @@ auf MUELL.
 5. Dead-Code-Detection ist Standard (slopauditor,
    superclaude-plusplus, GitHub Dead Code Removal Agent).
 
+## Abnahme
+
+Plan abgenommen 2026-10-22 durch Auftraggeber.
+Zitat A: "ok vorher halten wir den plan fest und
+dann geht es los mit aufraeumen" (Auftraggeber,
+Session 2026-10-22).
+Zitat B: "ja" auf "Plan so anpassen und committen?"
+(Auftraggeber, Session 2026-10-22).
+
+
+
 ## Reihenfolge
 
 ### Block A — Aufraeumen (VOR 3b-2)
