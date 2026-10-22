@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-22 (Phase 3a, nach 3a-2d, 3a-2 komplett).
-Werkstatt-HEAD: 00ffb5e. Branch: umbau/phase-2 (origin gepusht).
+Stand: 2026-10-22 (Phase 3a komplett, Uebergabe an 3b).
+Werkstatt-HEAD: 6e440e6. Branch: umbau/phase-2 (origin gepusht).
 Baseline: pytest 1245 passed / ruff 17 / mypy 9 (isoliert) / AST 6 / Katalog 167.
 
 Baseline-Definition (verbindlich, sonst reproduziert sich der 7-vs-9-Fehler):

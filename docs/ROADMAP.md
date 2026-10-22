@@ -203,7 +203,9 @@ verify_code.
 
 ## Phase 3a — run_pipeline zerlegen (laufend, 2026-10-20)
 
-Baseline: pytest 1245 / ruff 17 / mypy 7 / AST 6 / Katalog 167.
+Baseline: pytest 1245 / ruff 17 / mypy 9 / AST 6 / Katalog 167.
+(mypy 7->9: M-34, mypy 1.x->2.4.0 strenger bei attr-defined,
+keine Verhaltensaenderung, Baseline-NeuMessung 2026-10-21.)
 
 | Block | Status | Inhalt |
 |---|---|---|
@@ -221,7 +223,7 @@ Baseline: pytest 1245 / ruff 17 / mypy 7 / AST 6 / Katalog 167.
 | 3a-2b | done (8e46062) | _phase_unterblock_loop. |
 | 3a-2c | done (3f98364) | _phase_nachlauf. |
 | 3a-2d | done (00ffb5e) | _phase_wiederaufnahme. |
-| 3a-3 | offen | _phase_main_pfad (641 Z., Deadlock) — naechster Block. |
-| 3b | offen | Loop-Umbau. |
+| 3a-3 | done (6e440e6) | _phase_main_pfad (641 Z.) in 5 Funktionen zerlegt. Return-Bilanz global 123. |
+| 3b | offen | Loop-Umbau (C6, Quality-Gate, Reviewer-Modus). NACH 3.0 + Werkstatt-Entkopplung. |
 | 3c | offen | NEUBAU-Abloesung. |
 
