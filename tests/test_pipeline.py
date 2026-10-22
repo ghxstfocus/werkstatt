@@ -705,6 +705,10 @@ class TestApplyCommitAndDoku:
         docs.mkdir()
         (docs / "x.md").write_text("Alt: MARKER\n")
         state = build_test_state(project_dir=tmp_path, file_whitelist=["docs/"])
+        # M-204: git_author_* explizit setzen, damit der Test nicht
+        # vom globalen git-config abhaengt (flaky seit Reboot).
+        state.git_author_name = "ghxstfocus"
+        state.git_author_email = "ghxst.focus@gmail.com"
 
         paket = {
             "message": "test: doku patchen\n\nDetails.",
