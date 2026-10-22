@@ -7555,11 +7555,10 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
                 print(f"[!] Rollback fehlgeschlagen fuer {ziel}: {exc}")
 
     # ---- Phase 3: git add ----
-    argv_add = ("git", "add", "--") + tuple(dateien)
-    res_add = subprocess.run(
-        argv_add, cwd=str(state.project_dir),
-        capture_output=True, text=True, timeout=60, check=False,
-        env=subprocess_env(),
+    res_add = run_git(
+        ["git", "add", "--", *dateien],
+        state.project_dir,
+        timeout=60,
     )
     if res_add.returncode != 0:
         print(f"[!] git add fehlgeschlagen: {res_add.stderr}")
@@ -7586,10 +7585,10 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
     commit_argv += ["commit", "--allow-empty", "-F", str(msg_datei)]
 
     try:
-        res_commit = subprocess.run(
-            tuple(commit_argv),
-            cwd=str(state.project_dir), capture_output=True, text=True,
-            timeout=60, check=False, env=subprocess_env(),
+        res_commit = run_git(
+            list(commit_argv),
+            state.project_dir,
+            timeout=60,
         )
     finally:
         msg_datei.unlink(missing_ok=True)
@@ -8930,12 +8929,9 @@ def run_pipeline(project_name: str, aufgabe: str,
         # fuer 2169-Nachweis im Commit-Review-Prompt.
         # E-A2: Fail-closed bei Fehler (kein "(Fehler)").
         try:
-            _res_dn = subprocess.run(
-                ("git", "diff", "--name-only", "HEAD"),
-                cwd=str(project_dir),
-                capture_output=True, text=True,
-                timeout=30, check=False,
-                env=subprocess_env(),
+            _res_dn = run_git(
+                ["git", "diff", "--name-only", "HEAD"],
+                project_dir,
             )
         except (subprocess.TimeoutExpired, OSError) as exc:
             audit("commit_review_diff_fehler",
