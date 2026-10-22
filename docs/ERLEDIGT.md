@@ -442,3 +442,42 @@ Zwischenstaende (ehrlich):
 Test-Anpassungen (Kategorie 2): keine.
 
 Rollback-Anker: 20f0e7d (origin).
+
+## 3a-2b/Loop — _phase_unterblock_loop extrahiert (2026-10-22)
+
+Commit: 8e46062 (refactor, auf origin).
+Vorlauf: 20f0e7d (3a-2a), ab6f4cd (M-57 SESSION-BILANZ).
+
+Extraktion: run_phase Loop Z. 2242-2430 (HEAD ab6f4cd) ->
+`_phase_unterblock_loop(state, project_name, unterbloecke,
+max_phase) -> int` (pipeline.py Z. 2198-2400).
+4 Parameter (Signatur-Freeze 18c). api_key NICHT in Signatur (A-5).
+
+M-72-Fix:
+  rc_unterblock = 0 Vor-Init (Z. 2210).
+  return rc_unterblock Z. 2399 (Klasse-4-Fail-closed).
+  return rc_unterblock Z. 2400 (Erfolgs-Fallback, ex-return-0).
+  Semantik 1:1 zu Original 5708bcf Z. 2404.
+
+Return-Bilanz NACH (9 Funktionen, Liste im Commit-Body):
+  _approval_und_human_gate       8
+  _basis_gate                    2
+  _commit_review_w25_loop        7
+  _phase_vorlauf                 7
+  _phase_unterblock_loop         6
+  _review_verdict_behandlung    16
+  _vorlauf_und_state             3
+  run_pipeline                  27
+  run_phase                     13
+  ------------------------------------------------
+  Summe                         89.
+
+Baseline (HEAD 8e46062):
+  pytest 1245 / ruff 17 / mypy 9 / AST 6 / Katalog 167. Delta 0.
+
+Test-Anpassungen (Kategorie 2, A9-12):
+  TestB0cUndBugs::test_rc_14_kein_rollback
+  TestW32ContractImLoop::test_schreibe_contract_im_loop
+  Beide getsource-Ziel: run_phase -> _phase_unterblock_loop.
+
+Rollback-Anker: 8e46062 (origin).

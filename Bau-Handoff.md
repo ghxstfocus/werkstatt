@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-21 (Phase 3a, nach 3a-2a).
-Werkstatt-HEAD: 20f0e7d. Branch: umbau/phase-2 (origin gepusht).
+Stand: 2026-10-22 (Phase 3a, nach 3a-2b).
+Werkstatt-HEAD: 8e46062. Branch: umbau/phase-2 (origin gepusht).
 Baseline: pytest 1245 passed / ruff 17 / mypy 9 (isoliert) / AST 6 / Katalog 167.
 
 Baseline-Definition (verbindlich, sonst reproduziert sich der 7-vs-9-Fehler):
@@ -13,11 +13,13 @@ Baseline-Definition (verbindlich, sonst reproduziert sich der 7-vs-9-Fehler):
 
 ## Aktueller Block
 
-3a-2b (Loop, run_phase Z. 2216-2404, 5 Returns): naechster
-Block. M-61 (Return-Zaehlung 3a-2c vs 3a-2d) parallel
-klaeren — blockierend nur fuer 3a-2c/d, nicht fuer 3a-2b.
+3a-2c (Nachlauf, run_phase Z. ~2432-2524, 6 Returns):
+naechster Block. Start-Posting mit Standardpflichten:
+HEAD, Baseline VOR 5 Werte, Grenzen ast, Signatur +
+Lese-Zeilen, Return-Bilanz VOR als Listen, Position,
+A9-12, Commit-Body-Pflichten.
 
-Rollback-Anker: 20f0e7d. Delta != 0 -> Rollback, nicht Test anpassen.
+Rollback-Anker: 8e46062. Delta != 0 -> Rollback, nicht Test anpassen.
 
 ## Abgeschlossen seit letztem Handoff
 
@@ -38,6 +40,14 @@ Rollback-Anker: 20f0e7d. Delta != 0 -> Rollback, nicht Test anpassen.
   if-state_ref-Guard bleibt in run_phase.
   Return-Bilanz: run_phase 17, _phase_vorlauf 7, Summe 24
   (+2 Extraktions-Artefakte gegen 22).
+  Baseline 1245/17/9 unveraendert.
+- 3a-2b (Loop): done (8e46062).
+  _phase_unterblock_loop(state, project_name, unterbloecke,
+  max_phase) -> int. 4 Parameter (Signatur-Freeze 18c).
+  M-72-Fix: rc_unterblock = 0 Vor-Init + return rc_unterblock
+  (Z. 2399 Klasse-4 + Z. 2400 Fallback).
+  Return-Bilanz: 89 Returns (run_phase 13, loop 6).
+  2 Test-Anpassungen (getsource -> _phase_unterblock_loop).
   Baseline 1245/17/9 unveraendert.
 - C6 (Coverage/Chaos): gestrichen (Durchlauf 48, gehoert zu 3b).
 
@@ -71,12 +81,11 @@ Korrektur ist in docs/OFFENE-BLOECKE.md eingepflegt (Z. 20).
 
 ## Naechste Bloecke (Reihenfolge laut ROADMAP.md Z. 217-223)
 
-1. 3a-2b (Loop, Z. 2216-2404, 5 Returns) — naechster Block.
-2. 3a-2c (Nachlauf, Z. 2406-2524, 6 Returns; M-61-Klaerung noetig).
-3. 3a-2d (Wiederaufnahme+Commit, Z. 2525-2574, 3 Returns).
-4. 3a-3 (_phase_main_pfad, 641 Z., Deadlock).
-5. 3b (Loop-Umbau; enthaelt C6 + Reviewer-Modus + Quality-Gate).
-6. 3c (NEUBAU-Abloesung).
+1. 3a-2c (Nachlauf, 6 Returns) — naechster Block.
+2. 3a-2d (Wiederaufnahme+Commit, 5 Returns).
+3. 3a-3 (_phase_main_pfad, 641 Z., Deadlock).
+4. 3b (Loop-Umbau; enthaelt C6 + Reviewer-Modus + Quality-Gate).
+5. 3c (NEUBAU-Abloesung).
 
 ## Offene Merkposten
 
