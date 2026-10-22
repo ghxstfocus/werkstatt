@@ -103,6 +103,7 @@ from werkstatt.state import (
     LLMReply,
     Measurement,
     NachlaufErgebnis,
+    PhaseMainVorlaufErgebnis,
     PhaseVorlaufErgebnis,
     RecoveryVorschlag,
     RunState,
@@ -10356,6 +10357,124 @@ def _phase_planner_resume(
           f"({len(_gemergt)} Unterbloecke).")
     return 0
 
+
+def _phase_main_vorlauf(
+    project_name: str,
+) -> PhaseMainVorlaufErgebnis | int:
+    """Block A aus _phase_main_pfad (3a-3a).
+
+    M-117a: A liest nur project_name.
+    7 fruehe Returns, sonst PhaseMainVorlaufErgebnis.
+    """
+    """Block P2a: fuehrt den Planner Stufe 2 aus und
+    bestaetigt den Phasenplan.
+
+    Ablauf:
+      1. Minimales Basis-Gate (Projekt + git clean).
+      2. Planner Stufe 2 (max planner_max_runden Runden).
+      3. _parse_phase_kopf + _parse_phase_plan.
+      4. Anzeige + Bestaetigung [j]/[n]/[e].
+      5. Bei [j]: _phase_plan_speichern() SOFORT
+         (RR-K13). state.phase_aktiv = True.
+         KEIN run_pipeline (P2a: kein Phasen-Loop,
+         der ist P2b).
+
+    Rueckgabe: rc.
+    """
+    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if not api_key:
+        print("[FAIL] DEEPSEEK_API_KEY fehlt. Fail closed.")
+        return 1
+
+    # Minimales Basis-Gate.
+    try:
+        config = _lade_und_pruefe_projekt(project_name)
+    except SystemExit as exc:
+        return int(exc.code) if isinstance(exc.code, int) else 1
+    project_dir = Path(
+        config.get("project_dir", str(Path.cwd()))
+    ).expanduser()
+    if not project_dir.exists():
+        print(f"[FAIL] project_dir fehlt: {project_dir}. "
+              "Fail closed.")
+        return 18
+
+    # Phasen-Persistenz-A3 (2026-10-16): Basis-Gate
+    # im Phasen-Modus erweitert. Erlaubt untracked
+    # Dateien aus done-Unterbloecken.
+    _bg_ok, _bg_grund, _bg_details = (
+        _phasen_basis_gate_ok(project_name, project_dir))
+    if not _bg_ok:
+        print("[FAIL] Ziel-Repo nicht sauber (git status). "
+              "Fail closed.")
+        print(f"  Grund: {_bg_grund}")
+        if _bg_details:
+            print(f"  Details: {_bg_details}")
+        audit("phase_basis_gate_failed",
+              {"grund": _bg_grund, "details": _bg_details},
+              project_dir, project_name)
+        return 18
+    if _bg_grund == "phasen_untracked":
+        print("[i] Basis-Gate: untracked Dateien aus "
+              "done-Unterbloecken erlaubt "
+              f"({len(_bg_details.get('untracked', []))} "
+              f"Pfade, done-IDs: {_bg_details.get('done_ids', [])}).")
+        audit("phasen_basis_gate_untracked",
+              {"anzahl_untracked":
+                   len(_bg_details.get("untracked", [])),
+               "pfade": _bg_details.get("untracked", []),
+               "done_unterbloecke":
+                   _bg_details.get("done_ids", [])},
+              project_dir, project_name)
+
+    # Rollen + Docs laden.
+    agents_dir = config.get("project_agents_dir")
+    if not agents_dir:
+        agents_dir = "/opt/werkstatt/agents"
+    agents = load_agents(agents_dir)
+    docs = load_docs(config.get("docs", {}), project_dir)
+    file_whitelist = config.get("file_whitelist", [])
+    # Bug-Fix: Katalog laden (fuer Builder-COMMANDs).
+    always_kat, optional_kat = build_catalog(
+        config, project_dir)
+
+    if "planner" not in agents:
+        print("[FAIL] Planner-Rolle nicht gefunden. Fail closed.")
+        audit("planner_rolle_fehlt", {}, project_dir,
+              project_name)
+        return 18
+
+    # Planner-Konfiguration (A9, A10: identisch zu
+    # _planner_main_pfad).
+    _pcfg = config.get("planner", {}) or {}
+    if not isinstance(_pcfg, dict):
+        _pcfg = {}
+    planner_modus = str(_pcfg.get("modus", "manual"))
+    planner_max_runden = int(_pcfg.get("max_runden", 3))
+    if planner_modus == "off":
+        print("[i] Planner-Modus ist 'off'. Kein Planner-Lauf.")
+        return 0
+    # P2b-Resume: aktiver Plan vorhanden?
+    # Wenn ja: Planner ueberspringen, direkt
+    # run_phase.
+    try:
+        plan_vorhanden = _phase_plan_laden(project_name)
+    except ValueError as exc:
+        print(f"[FAIL] phase.yaml korrupt: {exc}")
+        return 1
+    return PhaseMainVorlaufErgebnis(
+        api_key=api_key,
+        config=config,
+        project_dir=project_dir,
+        agents=agents,
+        docs=docs,
+        file_whitelist=file_whitelist,
+        always_kat=always_kat,
+        optional_kat=optional_kat,
+        planner_modus=planner_modus,
+        planner_max_runden=planner_max_runden,
+        plan_vorhanden=plan_vorhanden,
+    )
 
 def _phase_main_pfad(
     project_name: str,
