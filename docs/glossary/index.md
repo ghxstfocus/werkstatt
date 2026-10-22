@@ -11,8 +11,8 @@ eingefuegt wird. `count(anker) == 1` Pflicht.
 **Audit-Kind** — String, mit dem ein Ereignis in `.werkstatt/audit.log`
 protokolliert wird. Katalog in `pipeline.py:521` (`_KATALOG_SOLL`).
 
-**Baseline** — Verbindliche Soll-Werte: pytest 1259, ruff 17,
-mypy 9, AST 6, Katalog 162. Siehe `../HANDOFF-BASELINE.md`.
+**Baseline** — Verbindliche Soll-Werte: pytest 1259, ruff 16,
+mypy 8, AST 6, Katalog 162. Siehe `../HANDOFF-BASELINE.md`.
 
 **Builder** — Rolle, die Code-Patches baut. `agents/builder*.md`.
 

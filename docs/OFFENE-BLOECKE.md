@@ -1140,3 +1140,17 @@ Ab jetzt: Body-VOR-Werte immer mit Vor-Commit-Bezug,
 Aufruf-NACH-Werte mit HEAD-Bezug. Nie "HEAD" fuer
 Body-VOR, wenn der Block extrahiert ist.
 
+
+## M-208 — Bounded retry mit Reflexion
+
+Referenziert in docs/AUFRAEUM-UND-LOOP-PLAN.md
+Z.163 und Z.195. Nicht in MERKPOSTEN.md definiert.
+Aktion: bei A8-3 (Hooks) oder Loop-Umbau aufgreifen.
+Status: offen (Merkposten angelegt 2026-10-22).
+
+## M-205 — nicht vergeben
+
+M-204 -> M-206. Nummer uebersprungen.
+Kein Code, keine Doku-Referenz. Tippfehler in
+einer frueheren Session-Notiz.
+Status: erledigt (dokumentiert 2026-10-22).

@@ -123,7 +123,7 @@ def _baeume() -> list[tuple[str, ast.Module]]:
 # -> judge_call_failed; reviewer_call_failed
 # bleibt fuer Z. 9255).
 #
-# Katalog 122 -> 158. _KATALOG_SOLL = 158.
+# Katalog 122 -> 162. _KATALOG_SOLL = 162.
 #
 # Dynamische Kinds (nicht per AST-Walk pruefbar,
 # daher in test_audit_dynamische_werte_aufgeloest

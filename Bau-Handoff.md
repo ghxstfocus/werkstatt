@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
 Stand: 2026-10-22 (Aufraeum-Block A, HEAD nach A8-1a-1).
-Werkstatt-HEAD: 7494ac4. Branch: umbau/phase-2 (origin gepusht).
+Werkstatt-HEAD: eb17291. Branch: umbau/phase-2 (origin gepusht).
 Baseline: pytest 1259 / ruff 16 / mypy 8 / AST 6 / Katalog 162.
 
 ## Aufraeum-Block A — Status
@@ -11,7 +11,7 @@ Phase 3a ist komplett (letzter Commit 6e440e6).
 
 - **A1 (Audit-Kinds):** done (929a7e3). Katalog 167 -> 162.
 - **A2 (subprocess):** 26/30 gekapselt (git + ruff).
-  A2-4 (5 mess) wartet auf M-187 (Key-Env-Entscheid).
+  A2-4 (4 mess) wartet auf M-187 (Key-Env-Entscheid).
 - **A3 (Skills):** done (76f4bf1). 14 neue Tests.
 - **A4 (Config):** A4-a-1 (b84c3a1), A4-a-2 (c544308) done.
   A4-a-3 (42 config.get -> Properties) offen.
