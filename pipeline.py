@@ -2507,6 +2507,94 @@ def _phase_nachlauf(
     )
 
 
+def _phase_wiederaufnahme(
+        state: RunState,
+        project_name: str,
+        state_ref: list[RunState],
+        aggregat: dict,
+        wahl: str,
+        api_key: str,
+) -> int:
+    """3a-2d: Wiederaufnahme + Sammel-Commit (Z. 2578-2644, HEAD 3f98364).
+
+    Wortwoertliche Extraktion aus run_phase body[14]..body[19].
+    6 Parameter (M-94/M-98/M-99): aggregat (2575), wahl (2576)
+    aus _res_nachlauf; state_ref (2616/2618/2639); api_key
+    (2606 an _phase_plan_korrektur).
+
+    Rekursion: return run_phase(...) @ 2617.
+    Max 1 Rekursionstiefe (phase_korrektur_zyklus >= 1 -> return 23).
+    Doppelte Sicherung: _phase_main_pfad @ 10596/10602.
+    """
+    if wahl in {"n", "no", "nein"}:
+        # Phase-NO-GO: Rollback, Bericht.
+        audit("phase_gesamt_review",
+              {"phase_id": state.phase_id,
+               "phase_titel": state.phase_titel,
+               "unterbloecke_total":
+                   aggregat["unterbloecke_total"],
+               "unterbloecke_done":
+                   aggregat["unterbloecke_done"],
+               "pakete": aggregat["pakete"],
+               "dateien_gesamt":
+                   aggregat["dateien_gesamt"],
+               "ergebnis": "no_go",
+               "begruendung": "Mensch hat abgelehnt"},
+              state.project_dir, project_name)
+        ok = _phase_rollback(
+            project_name, state, "phase_no_go")
+        # P2b-5 / N5 + N6: Plan-Korrektur, max 1 Zyklus.
+        if state.phase_korrektur_zyklus >= 1:
+            audit("phase_abgebrochen",
+                  {"phase_id": state.phase_id,
+                   "grund": "korrektur_max_erreicht",
+                   "rollback_ok": ok},
+                  state.project_dir, project_name)
+            return 23
+        print("[i] Phase abgelehnt. Plan-Korrektur wird "
+              "versucht.")
+        if not _phase_plan_korrektur(
+                project_name, state, api_key):
+            audit("phase_abgebrochen",
+                  {"phase_id": state.phase_id,
+                   "grund": "korrektur_failed",
+                   "rollback_ok": ok},
+                  state.project_dir, project_name)
+            return 23
+        # Plan korrigiert. state_ref leeren (Guard
+        # verlangt das). Rekursion.
+        state.phase_korrektur_zyklus += 1
+        state_ref.clear()
+        return run_phase(
+            project_name, state, state_ref)
+
+    # [j]: Sammel-Commit.
+    audit("phase_gesamt_review",
+          {"phase_id": state.phase_id,
+           "phase_titel": state.phase_titel,
+           "unterbloecke_total":
+               aggregat["unterbloecke_total"],
+           "unterbloecke_done":
+               aggregat["unterbloecke_done"],
+           "pakete": aggregat["pakete"],
+           "dateien_gesamt": aggregat["dateien_gesamt"],
+           "ergebnis": "go",
+           "begruendung": ""},
+          state.project_dir, project_name)
+    sammel = _phase_sammel_paket(state)
+    if apply_commit_and_doku(state, sammel):
+        audit("commit_applied",
+              {"phase": True,
+               "pakete": aggregat["pakete"]},
+              state.project_dir, project_name)
+        state_ref.append(state)
+        return 0
+    print("[!] Sammel-Commit fehlgeschlagen.")
+    # rc=20 ohne Rollback (apply_commit_and_doku ist
+    # fail-safe).
+    return 20
+
+
 def run_phase(
     project_name: str,
     state: RunState,
@@ -2575,73 +2663,10 @@ def run_phase(
     aggregat = _res_nachlauf.aggregat
     wahl = _res_nachlauf.wahl
 
-    if wahl in {"n", "no", "nein"}:
-        # Phase-NO-GO: Rollback, Bericht.
-        audit("phase_gesamt_review",
-              {"phase_id": state.phase_id,
-               "phase_titel": state.phase_titel,
-               "unterbloecke_total":
-                   aggregat["unterbloecke_total"],
-               "unterbloecke_done":
-                   aggregat["unterbloecke_done"],
-               "pakete": aggregat["pakete"],
-               "dateien_gesamt":
-                   aggregat["dateien_gesamt"],
-               "ergebnis": "no_go",
-               "begruendung": "Mensch hat abgelehnt"},
-              state.project_dir, project_name)
-        ok = _phase_rollback(
-            project_name, state, "phase_no_go")
-        # P2b-5 / N5 + N6: Plan-Korrektur, max 1 Zyklus.
-        if state.phase_korrektur_zyklus >= 1:
-            audit("phase_abgebrochen",
-                  {"phase_id": state.phase_id,
-                   "grund": "korrektur_max_erreicht",
-                   "rollback_ok": ok},
-                  state.project_dir, project_name)
-            return 23
-        print("[i] Phase abgelehnt. Plan-Korrektur wird "
-              "versucht.")
-        if not _phase_plan_korrektur(
-                project_name, state, api_key):
-            audit("phase_abgebrochen",
-                  {"phase_id": state.phase_id,
-                   "grund": "korrektur_failed",
-                   "rollback_ok": ok},
-                  state.project_dir, project_name)
-            return 23
-        # Plan korrigiert. state_ref leeren (Guard
-        # verlangt das). Rekursion.
-        state.phase_korrektur_zyklus += 1
-        state_ref.clear()
-        return run_phase(
-            project_name, state, state_ref)
-
-    # [j]: Sammel-Commit.
-    audit("phase_gesamt_review",
-          {"phase_id": state.phase_id,
-           "phase_titel": state.phase_titel,
-           "unterbloecke_total":
-               aggregat["unterbloecke_total"],
-           "unterbloecke_done":
-               aggregat["unterbloecke_done"],
-           "pakete": aggregat["pakete"],
-           "dateien_gesamt": aggregat["dateien_gesamt"],
-           "ergebnis": "go",
-           "begruendung": ""},
-          state.project_dir, project_name)
-    sammel = _phase_sammel_paket(state)
-    if apply_commit_and_doku(state, sammel):
-        audit("commit_applied",
-              {"phase": True,
-               "pakete": aggregat["pakete"]},
-              state.project_dir, project_name)
-        state_ref.append(state)
-        return 0
-    print("[!] Sammel-Commit fehlgeschlagen.")
-    # rc=20 ohne Rollback (apply_commit_and_doku ist
-    # fail-safe).
-    return 20
+    _rc_wdh = _phase_wiederaufnahme(
+        state, project_name, state_ref, aggregat, wahl, api_key,
+    )
+    return _rc_wdh
 
 
 

@@ -1579,10 +1579,15 @@ class TestPhaseKorrekturUnterblockNoGo:
 
     def test_zyklus_teilt_sich(self) -> None:
         """Beide Trigger ([n], rc=15) nutzen
-        phase_korrektur_zyklus."""
+        phase_korrektur_zyklus.
+
+        3a-2d: state.phase_korrektur_zyklus wandert aus
+        run_phase in _phase_wiederaufnahme (M-96/M-100).
+        Nur der erste Assert wird umgestellt.
+        """
         import inspect as ins
-        quelle_run = ins.getsource(pipeline.run_phase)
-        assert "state.phase_korrektur_zyklus" in quelle_run
+        quelle_wdh = ins.getsource(pipeline._phase_wiederaufnahme)
+        assert "state.phase_korrektur_zyklus" in quelle_wdh
         quelle_mp = ins.getsource(pipeline._phase_main_pfad)
         assert "state.phase_korrektur_zyklus" in quelle_mp
 
