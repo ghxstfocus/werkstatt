@@ -15,7 +15,7 @@ sind die Skills.
 
     pytest -q                              # 1259 passed
     ruff check .                           # 16 errors
-    mypy pipeline.py werkstatt/            # 9 errors
+    mypy pipeline.py werkstatt/            # 8 errors
     pytest tests/test_audit_kinds.py -q    # 6 passed
     grep -n "_KATALOG_SOLL" pipeline.py    # 162
 

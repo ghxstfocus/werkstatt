@@ -2,7 +2,7 @@
 
 Stand: 2026-10-22 (Aufraeum-Block A, HEAD nach A4-a-2).
 Werkstatt-HEAD: ede85cd. Branch: umbau/phase-2 (origin gepusht).
-Baseline: pytest 1259 / ruff 16 / mypy 9 / AST 6 / Katalog 162.
+Baseline: pytest 1259 / ruff 16 / mypy 8 / AST 6 / Katalog 162.
 
 Baseline-Definition (verbindlich, sonst reproduziert sich der 7-vs-9-Fehler):
 - pytest:      `pytest -q`  (KEIN `python -m pytest` — Binary `python` fehlt)

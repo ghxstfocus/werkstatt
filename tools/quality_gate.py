@@ -27,7 +27,7 @@ from pathlib import Path
 BASELINE = {
     "pytest": 1259,   # pytest -q (A3: +14 Skill-Tests)
     "ruff": 16,       # ruff check .
-    "mypy": 9,        # mypy pipeline.py werkstatt/
+    "mypy": 8,        # mypy pipeline.py werkstatt/
     "ast": 6,         # pytest tests/test_audit_kinds.py -q
     "katalog": 162,   # _KATALOG_SOLL
 }

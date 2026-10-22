@@ -19,6 +19,7 @@ import re
 import pytest
 
 import pipeline
+import werkstatt.agent
 
 # =====================================================================
 # Test-Helpers
@@ -1108,7 +1109,7 @@ class TestAskLlmRetry:
             aufrufe.append(1)
             return _Res()
 
-        monkeypatch.setattr(pipeline.requests, "post", fake_post)
+        monkeypatch.setattr(werkstatt.agent.requests, "post", fake_post)
         reply = pipeline.ask_llm("k", "s", "u", "m", 0.0, timeout=1)
         assert reply.ok is True
         assert reply.content == "GO"
@@ -1129,7 +1130,7 @@ class TestAskLlmRetry:
             aufrufe.append(1)
             return _Res()
 
-        monkeypatch.setattr(pipeline.requests, "post", fake_post)
+        monkeypatch.setattr(werkstatt.agent.requests, "post", fake_post)
         reply = pipeline.ask_llm("k", "s", "u", "m", 0.0, timeout=1)
         assert reply.ok is False
         assert "401" in reply.error
@@ -1158,7 +1159,7 @@ class TestAskLlmRetry:
             aufrufe.append(1)
             return _Res429() if len(aufrufe) == 1 else _Res200()
 
-        monkeypatch.setattr(pipeline.requests, "post", fake_post)
+        monkeypatch.setattr(werkstatt.agent.requests, "post", fake_post)
         reply = pipeline.ask_llm("k", "s", "u", "m", 0.0, timeout=1)
         assert reply.ok is True
         assert len(aufrufe) == 2
@@ -1179,7 +1180,7 @@ class TestAskLlmRetry:
             aufrufe.append(1)
             return _Res()
 
-        monkeypatch.setattr(pipeline.requests, "post", fake_post)
+        monkeypatch.setattr(werkstatt.agent.requests, "post", fake_post)
         reply = pipeline.ask_llm("k", "s", "u", "m", 0.0, timeout=1)
         assert reply.ok is False
         assert "500" in reply.error
@@ -1201,10 +1202,10 @@ class TestAskLlmRetry:
         def fake_post(url, **kwargs):
             aufrufe.append(1)
             if len(aufrufe) == 1:
-                raise pipeline.requests.RequestException("boom")
+                raise werkstatt.agent.requests.RequestException("boom")
             return _Res200()
 
-        monkeypatch.setattr(pipeline.requests, "post", fake_post)
+        monkeypatch.setattr(werkstatt.agent.requests, "post", fake_post)
         reply = pipeline.ask_llm("k", "s", "u", "m", 0.0, timeout=1)
         assert reply.ok is True
         assert len(aufrufe) == 2
@@ -1236,7 +1237,7 @@ class TestAskLlmUserContentMaxLen:
             gesendet.append(kwargs)
             return _Res200()
 
-        monkeypatch.setattr(pipeline.requests, "post", fake_post)
+        monkeypatch.setattr(werkstatt.agent.requests, "post", fake_post)
         return gesendet
 
     def test_kuerzt_nicht_bei_10k_zeichen(
@@ -6105,19 +6106,19 @@ class TestB0cUndBugs:
 class TestAskLlmTimeout:
     def test_ask_llm_timeout_ist_tupel(self) -> None:
         import inspect
-        src = inspect.getsource(pipeline.ask_llm)
+        src = inspect.getsource(werkstatt.agent.ask_llm)
         assert "_req_timeout = (_CONNECT_S, _read_adapt)" in src
         assert "timeout=_req_timeout" in src
 
     def test_ask_llm_retry_prueft_deadline(self) -> None:
         import inspect
-        src = inspect.getsource(pipeline.ask_llm)
+        src = inspect.getsource(werkstatt.agent.ask_llm)
         assert "_deadline" in src
         assert "if _rest <= 0:" in src
 
     def test_ask_llm_gesamt_timeout_greift(self) -> None:
         import inspect
-        src = inspect.getsource(pipeline.ask_llm)
+        src = inspect.getsource(werkstatt.agent.ask_llm)
         assert "llm_timeout_gesamt" in src
         assert "Gesamt-Timeout" in src
 
@@ -6138,21 +6139,21 @@ class TestAskLlmTimeout:
 
     def test_ask_llm_timeout_audit_enthaelt_modell(self) -> None:
         import inspect
-        src = inspect.getsource(pipeline.ask_llm)
+        src = inspect.getsource(werkstatt.agent.ask_llm)
         # Audit-Payload enthaelt Modell + Aufgabe.
         assert "\"modell\": model" in src
         assert "\"aufgabe\": aufgabe" in src
 
     def test_ask_llm_read_timeout_adaptiv(self) -> None:
         import inspect
-        src = inspect.getsource(pipeline.ask_llm)
+        src = inspect.getsource(werkstatt.agent.ask_llm)
         assert "_read_adapt = int(min(_READ_S, max(1, _rest)))" in src
 
     def test_ask_llm_deadline_kein_zweiter_versuch(self) -> None:
         # Strukturtest: Deadline-Check steht VOR
         # dem requests.post-Aufruf.
         import inspect
-        src = inspect.getsource(pipeline.ask_llm)
+        src = inspect.getsource(werkstatt.agent.ask_llm)
         i_deadline = src.find("if _rest <= 0:")
         i_post = src.find("res = requests.post")
         assert i_deadline > 0
