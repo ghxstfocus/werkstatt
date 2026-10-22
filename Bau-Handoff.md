@@ -1,88 +1,68 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-22 (Aufraeum-Block A, HEAD nach A4-a-2).
-Werkstatt-HEAD: ede85cd. Branch: umbau/phase-2 (origin gepusht).
+Stand: 2026-10-22 (Aufraeum-Block A, HEAD nach A8-1a-1).
+Werkstatt-HEAD: 7494ac4. Branch: umbau/phase-2 (origin gepusht).
 Baseline: pytest 1259 / ruff 16 / mypy 8 / AST 6 / Katalog 162.
 
-Baseline-Definition (verbindlich, sonst reproduziert sich der 7-vs-9-Fehler):
-- pytest:      `pytest -q`  (KEIN `python -m pytest` — Binary `python` fehlt)
-- ruff:        `ruff check .`
-- mypy:        `mypy pipeline.py werkstatt/`   (NICHT `mypy .` — tests/ zaehlt 40 Fehler)
-- AST:         AST-Test, 6 passed
-- Katalog:     `_KATALOG_SOLL` = 167
+## Aufraeum-Block A — Status
 
-## Aktueller Block
+Siehe docs/AUFRAEUM-UND-LOOP-PLAN.md (Block A-E).
+Phase 3a ist komplett (letzter Commit 6e440e6).
 
-3a-3 (_phase_main_pfad, 641 Z., Z. 10360-11000):
-641 Z. / 43 Statements / 23 Returns / 5 Parameter.
-Aufteilungs-Vorschlag in 3 Sub-Bloecke:
-  3a-3a Vorlauf    (body[0]..[21], Z. 10360-10462, ~103 Z.)
-  3a-3b Plan-Verarb.(body[22], Z. 10463-10632, ~170 Z.)
-  3a-3c Planner-Loop (body[23]..[42], Z. 10635-11000, ~366 Z.)
-Deadlock-Kette: 3x run_phase-Aufruf + phase_korrektur_zyklus-
-Sicherung in 3a-3c (Vorab-Messung unten).
-6 getsource-Tests (Kandidaten Kategorie 2).
+- **A1 (Audit-Kinds):** done (929a7e3). Katalog 167 -> 162.
+- **A2 (subprocess):** 26/30 gekapselt (git + ruff).
+  A2-4 (5 mess) wartet auf M-187 (Key-Env-Entscheid).
+- **A3 (Skills):** done (76f4bf1). 14 neue Tests.
+- **A4 (Config):** A4-a-1 (b84c3a1), A4-a-2 (c544308) done.
+  A4-a-3 (42 config.get -> Properties) offen.
+- **A5 (Builder kuerzen):** offen, wird durch A8 ersetzt.
+- **A6 (HARD_RULES entdoppeln):** offen.
+- **A7 (Doku):** A7-1 (103aac9), A7-2 (bab3150) done.
+- **A8 (Trichotomie):** A8-1a-1 (7494ac4) done.
+  A8-1a-2 blockiert bis A8-3 (Hooks, _anti_pattern_block).
+  A8-1b (execute_commands) offen.
+  A8-2 (Orchestrator) offen.
+  A8-3 (Hooks) offen.
+  A8-4 (CLI) offen.
 
-Naechster konkreter Schritt: Reviewer-Start-Posting 3a-3
-mit Aufteilungs-Vorschlag. Dann 3a-3a.
+## Naechster Block
 
-Rollback-Anker: 416550a. Delta != 0 -> Rollback.
+**A8-1b (execute_commands aufteilen)** ODER
+**A8-2 (Orchestrator, ~2.000 Z.)**.
+Details: docs/AUFRAEUM-UND-LOOP-PLAN.md Block E.
 
-## Abgeschlossen seit letztem Handoff
+Phase-Modus-Messung 2026-10-22:
+  run_phase (75 Z.) + _phase_unterblock_loop (400 Z.)
+  + _phase_main_pfad (50 Z.) + _phase_main_planner_loop (310 Z.)
+  + Vorlauf (~400 Z.) + run_pipeline (660 Z.) = ~2.000 Z.
+  Der Phase-Modus ruft run_pipeline pro Unterblock.
+  Alle drei Loop-Ebenen (Block, Phase, Meta) gehoeren in
+  werkstatt/orchestrator.py.
 
-- 3a-1c-2b (W2-Extraktion): done (277029f + 74ff77d + ac4956f).
-  _commit_review_w25_loop, 10 Parameter, Aufruf Z. 8811-8817.
-- 3a-1c-3 (C0+C1+C2): done (da67198 + bb919d1 + d06cf23 + fafc5b5).
-  _vorlauf_und_state + VorlaufErgebnis, _basis_gate.
-- 3a-1c-4 (C8+C9): done (75f844b Handoff-Refresh, 5762d8e Code).
-  _approval_und_human_gate (4 Parameter, 8 Returns).
-  C8 = 8819-8854, C9 = 8855-8898. run_pipeline endet 8917.
-  Return-Bilanz: 27/3/2/7/8 = 47.
-  3 Test-Anpassungen (#1 test_phase.py:804, #5 test_pipeline.py:6324,
-  #12 test_pipeline.py:8671) via duale Quelle/Split.
-- 3a-2a (Vorlauf): done (20f0e7d).
-  _phase_vorlauf(state, project_name) -> PhaseVorlaufErgebnis | int.
-  Dataclass PhaseVorlaufErgebnis in werkstatt/state.py
-  (state, unterbloecke, api_key, max_phase).
-  if-state_ref-Guard bleibt in run_phase.
-  Return-Bilanz: run_phase 17, _phase_vorlauf 7, Summe 24
-  (+2 Extraktions-Artefakte gegen 22).
-  Baseline 1245/17/9 unveraendert.
-- 3a-2b (Loop): done (8e46062).
-  _phase_unterblock_loop(state, project_name, unterbloecke,
-  max_phase) -> int. 4 Parameter (Signatur-Freeze 18c).
-  M-72-Fix: rc_unterblock = 0 Vor-Init + return rc_unterblock
-  (Z. 2399 Klasse-4 + Z. 2400 Fallback).
-  Return-Bilanz: 89 Returns (run_phase 13, loop 6).
-  2 Test-Anpassungen (getsource -> _phase_unterblock_loop).
-  Baseline 1245/17/9 unveraendert.
-- 3a-2d (Wiederaufnahme): done (00ffb5e).
-  _phase_wiederaufnahme(state, project_name, state_ref,
-  aggregat, wahl, api_key) -> int. 6 Parameter.
-  5 Returns. Rekursion max 1 Tiefe.
-  Test-Anpassung test_zyklus_teilt_sich (erster Assert).
-- 3a-2 GESAMT (20f0e7d + 8e46062 + 3f98364 + 00ffb5e):
-  run_phase von 528 Z. / 22 Returns auf 4 Verteiler-Returns.
-  4 neue Funktionen: _phase_vorlauf, _phase_unterblock_loop,
-  _phase_nachlauf, _phase_wiederaufnahme.
-  2 neue Dataclasses: PhaseVorlaufErgebnis, NachlaufErgebnis.
-  Return-Bilanz: 87 -> 92 (Delta +5, Extraktions-Artefakte).
-  Baseline 1245/17/9 durchgehend.
-- C6 (Coverage/Chaos): gestrichen (Durchlauf 48, gehoert zu 3b).
+## Offene Merkposten
 
-## C8/C9-Grenzen-Korrektur (Reviewer-Auflage A1)
+- **M-187 (Key-Env A2-4):** Auftraggeber-Entscheid offen.
+- **M-194 (W36-Mock list|tuple):** offen, nicht blockierend.
+- **M-203 Stufe 2 (Placeholder-Proxy):** spaeter.
 
-OFFENE-BLOECKE.md Z. 20 war FALSCH. Altes Zitat:
-  "C8 Approval Schritt 6 (Z. 8762-8797) offen | C9 Human-Gate
-   (Z. 8798-8841) offen"
-Real gemessen (HEAD 5e50ea6, SCHRITT-Kommentare + AST):
-  SCHRITT 5 (Commit-Review) = Z. 8660  -> C7 (done)
-  SCHRITT 6 (Approval+Human-Gate) = Z. 8820 -> C8+C9
-  C8 = Z. 8819-8854 (Approval-Dokument + Phasen-Paket-Sammlung)
-  C9 = Z. 8855-8898 (Human-Gate, input(), Commit-Entscheidung)
-  run_pipeline endet bei Z. 8898 (nicht 8841).
-  Bereich 8762-8817 = C7-Rest, nicht C8.
-Korrektur ist in docs/OFFENE-BLOECKE.md eingepflegt (Z. 20).
+## Top-5-Lehren (Kurzfassung)
+
+Ausfuehrlich: docs/MERKPOSTEN.md, docs/SESSION-BILANZ.md.
+
+1. **Messen vor jedem Block** (M-58 bis M-209). Kein Code-Touch
+   ohne read-only Messblock. Zahlen aus Zitat.
+2. **Return-Bilanz als Listen**, nicht Summen (M-70/M-73). Jeder
+   Return mit Zeile + Wert.
+3. **Semantik-Beweis bei Extraktion** (M-72). Jeder Return behaelt
+   Wert und Bedingung.
+4. **Marker-Zuordnung nur mit Repro** (M-142). Nicht Sichtpruefung.
+   Erst "Test rot bei Entfernung", dann Klassifikation.
+5. **Kandidaten-Erkennung vollstaendig** (M-202). `grep` nach allen
+   String-Vorkommen, nicht nur `audit("literal")`. Kinds koennen
+   dynamisch via Variable uebergeben werden.
+
+Baseline-Gruen deckt diese Fehler NICHT auf. Der Messblock deckt
+sie alle auf.
 
 ## Mess-Skripte — verbindliche Form
 
@@ -170,160 +150,28 @@ Baseline-Gruen (1245 Tests) hat KEINEN dieser Fehler aufgedeckt.
 Der Messblock hat sie alle aufgedeckt. Deshalb: **Messen vor jedem
 Block.**
 
+
 ## Verweise
 
+- docs/INDEX.md — Doku-Einstieg (Diaetaxis: Tutorial, How-to,
+  Reference, Explanation, ADR, Glossar).
+- docs/AUFRAEUM-UND-LOOP-PLAN.md — Aufraeum- und Loop-Umbau-Plan
+  (Block A-E; E = Pipeline-Trichotomie A8).
+- docs/MERKPOSTEN.md — M-Nummern, chronologisch mit Lehre.
 - docs/SESSION-BILANZ.md — M-57-Nachweise Body-VOR-Werte pro Commit.
-- docs/MESS-INFRASTRUKTUR.md — Recherche und Einordnung Block M (Mess-Infrastruktur, nach 3a-2d vor 3a-3). Explorer-Subagent (W61) als Konsument.
-
+- docs/HANDOFF-BASELINE.md — Baseline-Definition.
 - docs/OFFENE-BLOECKE.md — Todo, chronologisch nach Phasen.
-- docs/OFFENE-BLOECKE-ARCHIV.md — Todos vor Umbau.
 - docs/ERLEDIGT.md — abgeschlossene Bloecke.
-- docs/ROADMAP.md — Phasen-Uebersicht (Stand 3a).
-- docs/UEBERGABE-3A-2026-10-19.md — Phase-3a-Uebergabe (Stand
-  2026-10-19, ueberholt; neuer Stand ist dieser Handoff).
+- docs/ROADMAP.md — Phasen-Uebersicht.
+- docs/KEY-ARCHITEKTUR.md — SOPS + age Setup.
+- docs/adr/ — Architecture Decision Records.
 - docs/NEUBAU-ZIELBILD.md, NEUBAU-INVENTAR.md, NEUBAU-ENTFERNUNG.md.
-- docs/ARCHITEKTUR.md, KONVENTION.md, ROLLEN-AUDIT.md, IDEEN.md.
-
-## Naechste Bloecke (Reihenfolge laut ROADMAP.md Z. 217-223)
-
-1. 3a-3 (_phase_main_pfad, 641 Z., Deadlock) — naechster Block.
-2. 3b (Loop-Umbau; enthaelt C6 + Reviewer-Modus + Quality-Gate).
-3. 3c (NEUBAU-Abloesung).
-
-## Offene Merkposten
-
-- Werkstatt-Entkopplung von security-ai: UEBERFAELLIG laut
-  OFFENE-BLOECKE.md Z. 19 (sollte nach 3a-1c-2b, vor 3a-1c-3
-  erledigt sein). Kein Blocker fuer 3a-1c-4, aber zeitnah
-  einsortieren. Nach 3a-1c-4 als eigenen Block einplanen.
-- 3a-1c-2-V2-Groesse (OFFENE-BLOECKE.md Z. 29): V2 = 303 Z.,
-  13 Steuerstellen, 12 Parameter. Zerlegung V2a/V2b vor 3b pruefen.
-- Struktur-Tests umstellen: Rest-Klassifikation folgt in 3a-1c-4
-  (Auflage 2).
-- M-57 (Commit-Bezuege pro Body-VOR-Wert): offen aus der Runde
-  vor diesem Handoff. Nachziehen vor Session-Abschluss.
-- Commit-Body-Lehre (Z. 21): bei Commit-Body-Pruefung ZWEI
-  Messungen — git-log-Chronologie + pytest --collect-only auf
-  JEDEM Zwischenstand.
+- docs/ARCHITEKTUR.md, KONVENTION.md, ROLLEN-AUDIT.md.
+- AGENTS.md — Einstiegspunkt (Befehle, Struktur, Regeln).
 
 ## Archiv
 
-Vorheriger Handoff (2026-10-18, W52b) in Bau-Handoff-Archiv.md.
-Vorgaenger-Handoff (2026-10-20, 3a-1c-2b "NO-GO") war ueberholt:
-3a-1c-2b ist done, 3a-1c-3 ist done, C6 gestrichen.
-
-
-## 3a-3 — Vorab-Messung (HEAD 416550a)
-
-Gemessen am 2026-10-22. Dient als Startpunkt fuer den naechsten Block.
-Naechster Kontext kann direkt hier ansetzen.
-
-### _phase_main_pfad — Signatur + Zeilen
-
-  def Z. 10360..11000 (641 Zeilen).
-  positional: ['project_name', 'phasen_text', 'state_ref',
-               'resume_force', 'force_new_phase']
-  kw-only:    []
-  Returns: 23.
-
-### Aufrufer
-
-  Intern:
-    Z. 11386: rc = _phase_main_pfad(
-    (einziger interner Aufrufer, in main()).
-  Tests: 6 getsource-Ziele (siehe unten).
-
-### Top-Level-Statements (43)
-
-  Block A (Vorlauf, body[0]..[21], Z. 10360-10462, ~103 Z.):
-    Docstring, api_key, project_dir, Baseline-Gate,
-    agents_dir, load_agents, load_docs, file_whitelist,
-    build_catalog, planner-config (modus, max_runden),
-    plan_vorhanden-Try.
-
-  Block B (Plan-Verarbeitung, body[22], Z. 10463-10632, ~170 Z.):
-    if plan_vorhanden is not None:
-    Enthaelt Plan-Parsing, Resume-Logik, Unterblock-Init,
-    phase_start_head-Setzung, audit-Calls.
-
-  Block C (Planner-Loop, body[23]..[42], Z. 10635-11000, ~366 Z.):
-    historie, phase_yaml-Pfad, force_new_phase-Check,
-    RunState-Anlage, run_id-Setzung, audit pipeline_start,
-    for runde in range(1, planner_max_runden+1):
-      -> Planner-Aufruf, run_phase-Aufruf (3x),
-         phase_korrektur_zyklus-Sicherung.
-    phase_plan_ok-Check, return 0.
-
-### Rekursion + Deadlock-Stellen
-
-  run_phase-Aufrufe in _phase_main_pfad:
-    Z. 10617: rc = run_phase(project_name, state, state_ref)
-    Z. 10629: rc = run_phase(project_name, state, state_ref)
-    Z. 10931: rc = run_phase(
-  phase_korrektur_zyklus-Sicherung:
-    Z. 10621: if ... and state.phase_korrektur_zyklus < 1:
-    Z. 10627: state.phase_korrektur_zyklus += 1
-    Z. 10541: audit phase_korrektur_zyklus_vorher: 0
-
-  Deadlock-Kette dreistufig (strukturell):
-    run_phase -> _phase_wiederaufnahme -> run_phase
-      (Rekursion in 3a-2d, max 1 Tiefe).
-    _phase_main_pfad -> run_phase (3x)
-      (Sicherung durch phase_korrektur_zyklus < 1
-       in _phase_main_pfad Z. 10621).
-    Doppelte Sicherung: run_phase-Rekursion UND
-      _phase_main_pfad-Sicherung.
-
-### getsource-Tests auf _phase_main_pfad
-
-  tests/test_pipeline.py:7452  inspect.getsource(pipeline._phase_main_pfad)
-  tests/test_pipeline.py:7463  inspect.getsource(pipeline._phase_main_pfad)
-  tests/test_pipeline.py:7472  inspect.getsource(pipeline._phase_main_pfad)
-  tests/test_phase.py:1383     ins.getsource(pipeline._phase_main_pfad)
-  tests/test_phase.py:1591     ins.getsource(pipeline._phase_main_pfad)
-  tests/test_phase.py:1600     ins.getsource(pipeline._phase_main_pfad)
-
-  6 Kandidaten fuer Test-Anpassungen (Kategorie 2) bei
-  Extraktion von Teilen aus _phase_main_pfad.
-
-### Baseline
-
-  pytest 1245 passed / ruff 17 / mypy 9 / AST 6 / Katalog 167.
-  Delta 0.
-
-### Aufteilungs-Vorschlag (3 Sub-Bloecke, analog 3a-2)
-
-  Der Block ist mit 641 Z. / 43 Statements / 23 Returns
-  zu gross fuer einen Schnitt. Drei natuerliche Sub-Bloecke:
-
-  3a-3a: Vorlauf (body[0]..[21], Z. 10360-10462, ~103 Z.)
-    api_key, project_dir, Baseline-Gate, agents, docs,
-    file_whitelist, build_catalog, planner-config.
-    Neue Funktion: _phase_main_vorlauf(...) -> PhaseMainVorlaufErgebnis | int.
-
-  3a-3b: Plan-Verarbeitung (body[22], Z. 10463-10632, ~170 Z.)
-    if plan_vorhanden is not None.
-    Neue Funktion: _phase_main_plan_verarbeiten(...) -> ... | int.
-    ODER als Teil von 3a-3a belassen (haengt von
-    Variablen-Transfer ab, M-94).
-
-  3a-3c: Planner-Loop (body[23]..[42], Z. 10635-11000, ~366 Z.)
-    RunState, historie, for runde-Loop mit 3 run_phase-Aufrufen,
-    phase_korrektur_zyklus-Sicherung, phase_plan_ok-Check.
-    Neue Funktion: _phase_main_planner_loop(...) -> int.
-    ODER weiter zerlegt (Loop-Body vs. Loop-Vorbereitung).
-
-  Reihenfolge-Empfehlung: 3a-3a -> 3a-3b -> 3a-3c (wie 3a-2a/b/c/d).
-  Deadlock-Analyse (M-65-Muster): vor 3a-3c, weil dort die 3
-  run_phase-Aufrufe + phase_korrektur_zyklus-Sicherung liegen.
-
-  Test-Anpassungen: 6 getsource-Tests. Kategorisierung pro Block
-  im jeweiligen Start-Posting (a/b/c/d), wie bei 3a-2.
-
-### Naechster Schritt (frische Session)
-
-  1. Reviewer-Start-Posting 3a-3 mit Aufteilungs-Vorschlag.
-  2. Nach Freigabe: 3a-3a (Vorlauf), dann 3a-3b, 3a-3c.
-  3. 3a-3c: Deadlock-Analyse strukturell + phase_korrektur_zyklus
-     zitieren (wie 3a-2d).
-
+Vorheriger Handoff (2026-10-22, 3a-3 komplett) im
+Bau-Handoff-Archiv.md (Anhang).
+Vorherige Uebergaenge (2026-10-18 W52b, 2026-10-20 3a-1c-2b
+"NO-GO") sind ueberholt.
