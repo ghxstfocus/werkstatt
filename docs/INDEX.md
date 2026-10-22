@@ -17,8 +17,8 @@ dann `../Bau-Handoff.md`, dann `NEUBAU-ZIELBILD.md`.
 ## How-to (Arbeiten)
 
 - `KEY-ARCHITEKTUR.md` — API-Key mit SOPS + age einrichten.
-- `AUFRAEUM-UND-LOOP-PLAN.md` — aktueller Aufraeum- und
-  Loop-Umbau-Plan (Block A-D).
+- `AUFRAEUM-UND-LOOP-PLAN.md` — Aufraeum- und Loop-Umbau-Plan
+  (Block A-E; E = Pipeline-Trichotomie A8).
 - `WORKFLOW.md` — Werkstatt-Workflow (Phasen-Modus, Post-Apply-Recovery,
   Git-Konventionen).
 - `HANDOFF-BASELINE.md` — Baseline-Messbefehle + Fallstricke.
