@@ -6435,12 +6435,9 @@ def _phase_apply_vor_review(
     ]
     if _neue_pfade:
         try:
-            _res_add = subprocess.run(
-                ("git", "add", "-N", *_neue_pfade),
-                cwd=str(state.project_dir),
-                capture_output=True, text=True,
-                timeout=30, check=False,
-                env=subprocess_env(),
+            _res_add = run_git(
+                ["git", "add", "-N", *_neue_pfade],
+                state.project_dir,
             )
             if _res_add.returncode == 0:
                 audit("git_add_intent",
@@ -6595,12 +6592,9 @@ def apply_and_recheck(state: RunState,
     ]
     if _neue_pfade:
         try:
-            _res_add = subprocess.run(
-                ("git", "add", "-N", *_neue_pfade),
-                cwd=str(state.project_dir),
-                capture_output=True, text=True,
-                timeout=30, check=False,
-                env=subprocess_env(),
+            _res_add = run_git(
+                ["git", "add", "-N", *_neue_pfade],
+                state.project_dir,
             )
             if _res_add.returncode == 0:
                 audit("git_add_intent",
@@ -7299,21 +7293,18 @@ def build_commit_paket(state: RunState) -> dict[str, Any]:
     Der Builder sieht: letzten Commit, Code-Entwurf, Reviewer-Verdict,
     sowie die betroffenen Dateien.
     """
-    letzter = subprocess.run(
-        ("git", "log", "-1", "--format=%B"),
-        cwd=str(state.project_dir), capture_output=True, text=True,
-        timeout=30, check=False, env=subprocess_env(),
+    letzter = run_git(
+        ["git", "log", "-1", "--format=%B"],
+        state.project_dir,
     ).stdout
     # UMB-1c: git diff als Basis (die Aenderungen sind angewendet).
-    git_diff = subprocess.run(
-        ("git", "diff", "--stat"),
-        cwd=str(state.project_dir), capture_output=True, text=True,
-        timeout=30, check=False, env=subprocess_env(),
+    git_diff = run_git(
+        ["git", "diff", "--stat"],
+        state.project_dir,
     ).stdout
-    git_diff_voll = subprocess.run(
-        ("git", "diff"),
-        cwd=str(state.project_dir), capture_output=True, text=True,
-        timeout=30, check=False, env=subprocess_env(),
+    git_diff_voll = run_git(
+        ["git", "diff"],
+        state.project_dir,
     ).stdout
     git_status = run_git(
         ["git", "status", "--porcelain"],
@@ -7619,20 +7610,18 @@ def apply_commit_and_doku(state: RunState, paket: dict[str, Any]) -> bool:
     if res_commit.returncode != 0:
         print(f"[!] git commit fehlgeschlagen: {res_commit.stderr}")
         # git add rueckgaengig, dann Doku zurueck.
-        subprocess.run(
-            ("git", "reset", "HEAD", "--") + tuple(dateien),
-            cwd=str(state.project_dir),
-            capture_output=True, text=True, timeout=60, check=False,
-            env=subprocess_env(),
+        run_git(
+            ["git", "reset", "HEAD", "--", *dateien],
+            state.project_dir,
+            timeout=60,
         )
         _rollback_doku()
         return False
 
     # ---- Phase 5: Bestaetigung ----
-    log = subprocess.run(
-        ("git", "log", "-1", "--oneline"),
-        cwd=str(state.project_dir), capture_output=True, text=True,
-        timeout=30, check=False, env=subprocess_env(),
+    log = run_git(
+        ["git", "log", "-1", "--oneline"],
+        state.project_dir,
     ).stdout
     print(f"[+] Commit erstellt: {log.strip()}")
     return True
