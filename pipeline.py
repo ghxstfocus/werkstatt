@@ -8865,44 +8865,7 @@ def run_pipeline(project_name: str, aufgabe: str,
     print("\n[*] Schritt 4: Coverage und optionale Test-Generierung.")
 
     # Coverage laeuft nur, wenn im Katalog vorhanden
-    if "coverage" in state.optional:
-        print("[*] Coverage-Lauf.")
-        execute_commands(state, [{"id": "coverage", "arg": ""}], quelle="reviewer")
-        cov_file = project_dir / "coverage.json"
-        if cov_file.exists():
-            try:
-                cov = json.loads(cov_file.read_text(encoding="utf-8"))
-                state.coverage_pct = int(
-                    cov.get("totals", {}).get("percent_covered", -1))
-                print(f"[i] Coverage: {state.coverage_pct}%")
-            except (OSError, ValueError):
-                print("[WARN] coverage.json nicht lesbar.")
-                state.coverage_pct = -1
-        else:
-            print("[WARN] coverage.json fehlt nach Coverage-Lauf.")
-            state.coverage_pct = -1
-
-        # Fail closed: unbekannte Coverage wird wie "< 80%" behandelt.
-        if state.coverage_pct < 0 or state.coverage_pct < int(COVERAGE_MIN_PCT):
-            print(f"[i] Coverage < {COVERAGE_MIN_PCT}%. Test-Generator wird gerufen.")
-            tg_prompt = build_system_prompt(
-                state.agents["test_generator"], state.docs,
-                state.agent_docs.get("test_generator", []))
-            reply = ask_llm(
-                api_key, tg_prompt,
-                f"Ungetestete Bereiche (Coverage {state.coverage_pct}%):\n"
-                f"CODE-BASIS:\n{state.code_entwurf[:3000]}\n\n"
-                "Liefere Test-Vorschlaege als Text. Kein Schreiben.",
-                state.test_gen_model, 0.3, state.llm_timeout_s,
-                state=state,
-                max_tokens=state.max_tokens_builder,
-            )
-            if reply.ok:
-                state.test_vorschlaege = reply.content
-
-    if "chaos_probe" in state.optional:
-        print("[*] Chaos-Probe.")
-        execute_commands(state, [{"id": "chaos_probe", "arg": ""}], quelle="reviewer")
+    _phase_coverage_chaos(state, project_dir, api_key)
 
     # ==================================================================
     # SCHRITT 5: Reviewer-Phase 2 (Commit-Review)
