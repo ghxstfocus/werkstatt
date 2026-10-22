@@ -518,7 +518,7 @@ _AP_PFLICHTFELDER = (
 # (test_audit_kinds_alle_aufrufe_registriert) prueft
 # die Nutzung, test_katalog_anzahl_matcht_soll die
 # Registrierung.
-_KATALOG_SOLL = 167  # W61: +builder_readfile_blockiert, verify_code_befund
+_KATALOG_SOLL = 162  # nach A1: 5 tote Kinds entfernt (M-201/M-202)
 
 
 

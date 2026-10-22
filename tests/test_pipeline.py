@@ -5355,7 +5355,6 @@ class TestReviewRoundAudit:
         #                      61 (--resume-force),
         #                      62 (commit_review_new_file_skip),
         #                      63 (phase_plan_unbeantwortet).
-        assert "review_round" in pipeline._AUDIT_KINDS_BEKANNT
         assert "phase_resume_force" in pipeline._AUDIT_KINDS_BEKANNT
         assert "commit_review_new_file_skip" in pipeline._AUDIT_KINDS_BEKANNT
         assert "phase_plan_unbeantwortet" in pipeline._AUDIT_KINDS_BEKANNT
@@ -6130,7 +6129,6 @@ class TestAskLlmTimeout:
 
     def test_audit_kind_llm_timeout_gesamt_existiert(self) -> None:
         for k in ("llm_timeout_gesamt",
-                  "llm_timeout_connect",
                   "llm_timeout_read"):
             assert k in pipeline._AUDIT_KINDS_BEKANNT
 
