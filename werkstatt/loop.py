@@ -560,7 +560,8 @@ def main(argv: list[str] | None = None) -> int:
     # Konstruktionsfunktion folgt in M-299+ (Altlasten).
     import os as _os
     import time as _time
-    from datetime import UTC as _UTC, datetime as _dt
+    from datetime import UTC as _UTC
+    from datetime import datetime as _dt
     from pathlib import Path as _Path
 
     _cfg = load_project_config(args.project)
@@ -585,7 +586,12 @@ def main(argv: list[str] | None = None) -> int:
         import pipeline as _pl
         _full_cfg = _pl.load_project_config(args.project)
         _docs = _pl.load_docs(_full_cfg.get("docs", {}), _pd)
-    except (SystemExit, Exception):
+    except SystemExit:
+        # load_project_config killt bei Fehlern via sys.exit(1).
+        # Das ist hier gewollt (fail-closed).
+        raise
+    except Exception:  # noqa: BLE001, S110
+        # Doku-Ladefehler sind nicht fatal; Planner laeuft ohne Kontext.
         pass
 
     _state = RunState(
