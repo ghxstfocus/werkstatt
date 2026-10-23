@@ -1,7 +1,7 @@
 # Bau-Handoff — Werkstatt
 
 Stand: 2026-10-22 (Aufraeum-Block A, HEAD nach A8-1a-1).
-Werkstatt-HEAD: eb17291. Branch: umbau/phase-2 (origin gepusht).
+Werkstatt-HEAD: c99c543. Branch: umbau/phase-2 (origin gepusht).
 Baseline: pytest 1290 / ruff 13 / mypy 8 / AST 6 / Katalog 162.
 
 ## Loop-Neubau (Phase 1-17) — Status
