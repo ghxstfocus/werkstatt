@@ -124,3 +124,46 @@ def test_loop_cli_dry_run_uses_renderer():
     assert rc == 0
     assert m_h.called, "renderer.header muss aufgerufen werden"
     assert m_f.called, "renderer.footer muss aufgerufen werden"
+
+
+def test_loop_uses_phase_state(tmp_path):
+    """Loop persistiert Task-Fortschritt in PhaseState."""
+    from werkstatt.phase_state import PhaseState
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "Task 1"}]
+    ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    ps.init_new("a", st.tasks, tests=st.tests, akzeptanzkriterien=st.akzeptanzkriterien)
+    with patch("werkstatt.loop._verify_patches", return_value=True), \
+         patch("werkstatt.loop.run_planner", return_value=True), \
+         patch("werkstatt.loop.run_builder", return_value=True), \
+         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
+         patch("werkstatt.loop.run_reviewer", return_value=True), \
+         patch("pipeline._approval_und_human_gate", return_value=0), \
+         patch("pipeline.load_project_config", return_value={}), \
+         patch("werkstatt.loop.audit"):
+        rc = run_pipeline_loop("p", "a", [st], phase_state=ps)
+    assert rc == 0
+    assert ps.is_complete() is True
+
+
+def test_loop_resume_nach_unterbrechung(tmp_path):
+    """Resume: bereits erledigte Tasks werden uebersprungen."""
+    from werkstatt.phase_state import PhaseState
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "Task 1"}, {"id": "t2", "name": "Task 2"}]
+    ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    ps.init_new("a", st.tasks, tests=st.tests, akzeptanzkriterien=st.akzeptanzkriterien)
+    ps.mark_done("t1")
+    nxt = ps.get_next_task()
+    assert nxt is not None and nxt["id"] == "t2"
+    with patch("werkstatt.loop._verify_patches", return_value=True), \
+         patch("werkstatt.loop.run_planner", return_value=True), \
+         patch("werkstatt.loop.run_builder", return_value=True), \
+         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
+         patch("werkstatt.loop.run_reviewer", return_value=True), \
+         patch("pipeline._approval_und_human_gate", return_value=0), \
+         patch("pipeline.load_project_config", return_value={}), \
+         patch("werkstatt.loop.audit"):
+        rc = run_pipeline_loop("p", "a", [st], phase_state=ps)
+    assert rc == 0
+    assert ps.is_complete() is True

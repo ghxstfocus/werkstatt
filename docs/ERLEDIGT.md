@@ -612,3 +612,13 @@ Abnahme: Reviewer-Session 2026-10-24, M-283.
 
 **A8-2 (Orchestrator):** SKIP (durch Loop-Neubau ersetzt).
 **A8-4 (CLI-Wrapper):** SKIP (loop.py ist der neue Einstiegspunkt).
+
+## M-296 — PhaseState-Integration in loop.py (2026-10-24)
+
+run_pipeline_loop nutzt PhaseState als persistente Task-Quelle
+mit vollstaendigem Plan-Checkpoint (tasks + tests + akz).
+Resume-faehig: Planner wird bei vorhandenem PhaseState
+uebersprungen. main() erzeugt PhaseState (load). 2 neue Tests
+(test_loop_uses_phase_state, test_loop_resume_nach_unterbrechung).
+
+Baseline: 1293 -> 1295.

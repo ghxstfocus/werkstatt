@@ -19,6 +19,7 @@ from werkstatt.audit import audit
 from werkstatt.builder import run_builder
 from werkstatt.explorer import run_explorer
 from werkstatt.loop_renderer import header, step, task, task_ok
+from werkstatt.phase_state import PhaseState
 from werkstatt.planner import run_planner
 from werkstatt.reviewer import run_reviewer
 from werkstatt.state import RunState
@@ -281,8 +282,24 @@ def run_pipeline_loop(
     state_ref: list[RunState],
     *,
     phasen_state: RunState | None = None,
+    phase_state: PhaseState | None = None,
 ) -> int:
-    """Echter Loop: Plan -> Planner -> Builder -> Verify -> Reflection -> Human."""
+    """Echter Loop: Plan -> Planner -> Builder -> Verify -> Reflection -> Human.
+
+    phase_state: wenn uebergeben, persistiert PhaseState den
+    vollstaendigen Plan (tasks + tests + akz) und den
+    Task-Fortschritt. Resume-faehig.
+    """
+    def _normalize_tasks(raw_tasks):
+        """Normalisiert heterogene Task-Liste (dicts + strings) fuer PhaseState."""
+        out = []
+        for i, t in enumerate(raw_tasks, 1):
+            if isinstance(t, dict):
+                out.append(t)
+            else:
+                out.append({"id": f"t{i}", "name": str(t)})
+        return out
+
     state = phasen_state or (state_ref[-1] if state_ref else None)
 
     header(f"{project_name} — {aufgabe[:50]}")
@@ -314,18 +331,44 @@ def run_pipeline_loop(
         step(1, "Explorer", "0 files", ok=False)
         audit("loop_explorer_leer", {}, pd, pn)
 
+    # PhaseState automatisch anlegen (fuer Resume-Pfad).
+    if phase_state is None:
+        phase_state = PhaseState(project_name, base_dir=Path(pd) / ".werkstatt")
+
     # 1. Plan-Gate (leer -> Planner muss erst laufen)
-    if not _plan_gate(state):
+    #    Resume: wenn PhaseState vollstaendigen Plan-Checkpoint hat
+    #    (tasks + tests + akz), Planner ueberspringen und
+    #    state.* aus PhaseState befuellen.
+    plan_ok = _plan_gate(state)
+    if not plan_ok and phase_state.exists():
+        data = phase_state.data
+        if data.get("tasks"):
+            state.tasks = data["tasks"]  # type: ignore[attr-defined]
+        if data.get("tests"):
+            state.tests = data["tests"]  # type: ignore[attr-defined]
+        if data.get("akzeptanzkriterien"):
+            state.akzeptanzkriterien = data["akzeptanzkriterien"]  # type: ignore[attr-defined]
+        plan_ok = _plan_gate(state)
+        if plan_ok:
+            audit("loop_resume", {"tasks": len(getattr(state, "tasks", []))}, pd, pn)
+
+    if not plan_ok:
         audit("loop_plan_missing", {"aufgabe": aufgabe[:100]}, pd, pn)
-        # 1a. Planner aufrufen
         if not run_planner(state):
             audit("loop_planner_failed", {}, pd, pn)
             return 1
-        # 1b. Plan-Gate erneut pruefen
         if not _plan_gate(state):
             step(2, "Planner", "kein Plan", ok=False)
             audit("loop_gate_failed", {"gate": "plan"}, pd, pn)
             return 1
+        # PhaseState mit vollstaendigem Plan-Checkpoint initialisieren.
+        if not phase_state.exists():
+            phase_state.init_new(
+                aufgabe,
+                _normalize_tasks(getattr(state, "tasks", [])),
+                tests=list(getattr(state, "tests", []) or []),
+                akzeptanzkriterien=list(getattr(state, "akzeptanzkriterien", []) or []),
+            )
 
     step(2, "Planner", f"{len(getattr(state, 'tasks', []))} tasks")
     audit("loop_phase", {"phase": "plan", "status": "ok"}, pd, pn)
@@ -340,7 +383,14 @@ def run_pipeline_loop(
     #    Human-Gate kommt nur am Ende der Phase.
     tasks = getattr(state, "tasks", [])
     tasks_ok = 0
-    for i, task_obj in enumerate(tasks, 1):
+    i = 0
+    for task_obj in tasks:
+        next_task = phase_state.get_next_task()
+        if next_task is None:
+            break
+        i += 1
+        task_id = next_task.get("id", f"t{i}")
+        phase_state.mark_running(task_id)
         task_name = task_obj.get("name", f"Task {i}") if isinstance(task_obj, dict) else str(task_obj)
         task(i, len(tasks), task_name)
         audit("loop_task_start", {"task_id": i, "name": task_name}, pd, pn)
@@ -349,6 +399,7 @@ def run_pipeline_loop(
         state.aktuelle_task = task_obj  # type: ignore[attr-defined]
         if not run_builder(state):
             audit("loop_builder_failed", {"task_id": i}, pd, pn)
+            phase_state.mark_failed(task_id, failure="builder_failed")
             return 1
 
         # PreToolUse-Hook (Phase 15): Patch pruefen, BEVOR er angewendet wird.
@@ -426,6 +477,7 @@ def run_pipeline_loop(
             audit("loop_gate_failed", {"gate": "post_build", "task_id": i}, pd, pn)
             if not _reflection_loop(state):
                 audit("loop_reflection_gescheitert", {"task_id": i}, pd, pn)
+                phase_state.mark_failed(task_id, failure="post_build_verify_failed")
                 return 1
 
         # Reviewer (Phase 9)
@@ -433,10 +485,12 @@ def run_pipeline_loop(
             audit("loop_reviewer_rejected", {"task_id": i}, pd, pn)
             if not _reflection_loop(state):
                 audit("loop_reviewer_reflection_gescheitert", {"task_id": i}, pd, pn)
+                phase_state.mark_failed(task_id, failure="reviewer_rejected")
                 return 1
 
         task_ok(i, len(tasks))
         tasks_ok += 1
+        phase_state.mark_done(task_id)
         audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
 
     # 4. Post-Build Verify + Reflection (nach allen Tasks)
@@ -484,7 +538,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     state_ref: list[RunState] = []
-    rc = run_pipeline_loop(args.project, args.aufgabe, state_ref)
+    from pathlib import Path as _Path
+    _cfg = load_project_config(args.project)
+    _pd = _cfg.get("project_dir")
+    _ps = None
+    if _pd:
+        _ps = PhaseState(args.project, base_dir=_Path(_pd) / ".werkstatt")
+        if _ps.exists():
+            _ps.load()
+    rc = run_pipeline_loop(args.project, args.aufgabe, state_ref, phase_state=_ps)
     _r.footer(success=(rc == 0), tasks_total=0, tasks_ok=0)
     return rc
 

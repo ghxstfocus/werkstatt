@@ -1256,3 +1256,19 @@ Der neue Loop ist funktional (Phase 1-9). Was noch fehlt:
 - **Echter LLM-Test:** Bisher nur gemockt.
 
 Status: dokumentiert 2026-10-23.
+
+## M-300 — Rote Commits in History (2026-10-24)
+
+M-295 (4e1a72f) wurde rot gepusht (ruff 13->16, pytest-Soll
+veraltet). Fix durch 51ba780. History rot, Force-Push verboten.
+
+Status: dokumentiert 2026-10-24.
+
+## M-301 — agent.py:164 "Invalid # noqa" stille Warnung
+
+Sichtbar nur mit `ruff check . --no-cache`. quality_gate.py
+prueft nur :CODE-Suffixe, Warnungen zaehlen nicht.
+Kein Baseline-Impact, aber stille Drift.
+Fix: noqa entfernen ODER CODE ergaenzen. Aufraeum-Block > 20.
+
+Status: dokumentiert 2026-10-24.

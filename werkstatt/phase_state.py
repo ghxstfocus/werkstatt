@@ -53,8 +53,20 @@ class PhaseState:
             yaml.safe_dump(self.data, fh, allow_unicode=True, sort_keys=False)
         tmp.replace(self.path)
 
-    def init_new(self, aufgabe: str, tasks: list[dict]) -> None:
-        """Initialisiert einen neuen Phase-State mit Tasks."""
+    def init_new(
+        self,
+        aufgabe: str,
+        tasks: list[dict],
+        *,
+        tests: list | None = None,
+        akzeptanzkriterien: list | None = None,
+    ) -> None:
+        """Initialisiert einen neuen Phase-State.
+
+        Vollstaendiger Plan-Checkpoint: tasks + tests + akzeptanz-
+        kriterien. Ohne tests+akz wuerde _plan_gate beim Resume
+        scheitern und der Planner doch laufen.
+        """
         now = datetime.datetime.now(datetime.UTC).isoformat()
         self.data = {
             "project": self.project_name,
@@ -74,6 +86,8 @@ class PhaseState:
                 }
                 for i, t in enumerate(tasks, 1)
             ],
+            "tests": list(tests or []),
+            "akzeptanzkriterien": list(akzeptanzkriterien or []),
         }
         self.save()
 
