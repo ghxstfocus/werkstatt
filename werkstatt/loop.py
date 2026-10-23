@@ -460,7 +460,6 @@ def run_pipeline_loop(
 def main(argv: list[str] | None = None) -> int:
     """CLI-Einstieg: python3 -m werkstatt.loop --project <name> --aufgabe <text> [--dry-run]."""
     import argparse
-    import sys
 
     from werkstatt import loop_renderer as _r
 

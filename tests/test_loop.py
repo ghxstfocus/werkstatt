@@ -97,7 +97,7 @@ def test_loop_cli_help_zeigt_usage():
     """CLI --help: argparse-usage + Exit 0."""
     result = subprocess.run(
         [sys.executable, "-m", "werkstatt.loop", "--help"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0
     assert "usage:" in result.stdout.lower()
@@ -108,7 +108,7 @@ def test_loop_cli_requires_project():
     """CLI ohne --project: argparse-Fehler rc=2."""
     result = subprocess.run(
         [sys.executable, "-m", "werkstatt.loop"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, check=False,
     )
     assert result.returncode != 0
     assert "project" in (result.stderr + result.stdout).lower()
