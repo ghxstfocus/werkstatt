@@ -28,12 +28,18 @@ from typing import Any, Literal
 import yaml
 
 from werkstatt.agent import (
-    MAX_PROTOKOLL_PER_COMMAND,
-    _schreibe_messung,
+    _PLANNER_PROTOKOLL_PER_READ,  # noqa: F401
+    _PLANNER_PROTOKOLL_TOTAL,  # noqa: F401
+    ERLAUBTE_QUELLEN,  # noqa: F401
+    MAX_PROTOKOLL_PER_COMMAND,  # noqa: F401
+    MAX_PROTOKOLL_PER_COMMAND_READ_FILE,  # noqa: F401
+    MAX_PROTOKOLL_TOTAL,  # noqa: F401
+    _schreibe_messung,  # noqa: F401
     ask_llm,  # A8-1a-1 Re-Export
+    execute_commands,  # A8-1b-1b
     run_measurement_mit_argv,
     trim_output,
-)  # A8-1b-0 Re-Export
+)  # A8-1b-0 + A8-1b-1b Re-Export
 from werkstatt.apply import _shift_lines, apply_code_patches
 from werkstatt.audit import (
     _AUDIT_KINDS_BEKANNT,
@@ -274,25 +280,16 @@ COVERAGE_MIN_PCT = 80.0
 # Auflage 2041: Groessenlimits fuer das Messprotokoll.
 # W6a-4 (2026-10-16): read_file braucht mehr Platz,
 # weil Anker tief in grossen Dateien stehen.
-MAX_PROTOKOLL_PER_COMMAND_READ_FILE = 20_000
 # W6a-4 (2026-10-16): Total auf 150_000 erhoeht,
 # damit 5 read_files a 20_000 + andere passen.
-MAX_PROTOKOLL_TOTAL = 150_000
 
 # W51d (2026-10-18): Planner-spezifische Grenzen.
 # Der Planner misst bis zu 20 Zieldateien pro
 # Phase. 20 * 10_000 = 200_000. Der Builder behaelt
 # 20_000/read_file (Test-Kontext braucht laengere
 # Auszuege). quelle-Pruefung in execute_commands.
-_PLANNER_PROTOKOLL_PER_READ = 10_000
-_PLANNER_PROTOKOLL_TOTAL = 200_000
 
 # Auflage 2042: erlaubte Quellen-Marker fuer COMMAND-Audits.
-ERLAUBTE_QUELLEN = {
-    "reviewer", "builder", "test_generator",
-    "pipeline_auto", "reviewer_command",
-    "planner",
-}
 
 
 
@@ -5086,157 +5083,6 @@ def _truncate_mit_marker(text: str, max_len: int) -> str:
     return (text[:max_len]
             + f"\n[... Kontext gekuerzt, {rest} "
             + "Zeichen weggelassen ...]\n")
-
-
-def execute_commands(state: RunState, commands: list[dict[str, str]],
-                     quelle: str
-                     ) -> dict[tuple[str, str], bool]:
-    """Fuehrt COMMAND-Zeilen aus. NUR wenn id in state.always oder state.optional.
-
-    Auflagen 2039, 2040, 2041, 2042:
-      - arg muss str sein.
-      - argv geht ins Audit.
-      - mess_protokoll wird begrenzt.
-      - quelle ist ein Marker, kein Prompt-Text.
-    """
-    # Auflage 2042: quelle auf erlaubte Marker beschraenken.
-    if quelle not in ERLAUBTE_QUELLEN:
-        audit("quelle_invalid", {"quelle": str(quelle)[:80]}, state.project_dir, state.project_name)
-        print(f"[WARN] Ungueltiger quelle-Marker: {str(quelle)[:80]}")
-        quelle = "unknown"
-
-    erlaubt = set(state.always.keys()) | set(state.optional.keys())
-    katalog: dict[str, Measurement] = {}
-    katalog.update(state.always)
-    katalog.update(state.optional)
-
-    ergebnisse: dict[tuple[str, str], bool] = {}
-    for cmd in commands:
-        cid = cmd.get("id", "")
-        arg = cmd.get("arg", "")
-
-        # Auflage 2039: id und arg muessen str sein.
-        if not isinstance(cid, str) or not cid:
-            audit("command_rejected",
-                  {"id": str(cid)[:80], "arg": str(arg)[:80],
-                   "quelle": quelle, "grund": "id_kein_str"},
-                  state.project_dir, state.project_name)
-            continue
-        if not isinstance(arg, str):
-            audit("command_rejected",
-                  {"id": cid, "arg": str(arg)[:80],
-                   "quelle": quelle, "grund": "arg_kein_str"},
-                  state.project_dir, state.project_name)
-            continue
-
-        if cid not in erlaubt:
-            print(f"[!] COMMAND abgelehnt (nicht in Whitelist): {cid}")
-            audit("command_rejected",
-                  {"id": cid, "arg": arg[:200], "quelle": quelle,
-                   "grund": "nicht_in_whitelist"},
-                  state.project_dir, state.project_name)
-            continue
-
-        m = katalog[cid]
-        out, ok, argv = run_measurement_mit_argv(
-            m, state.file_whitelist, state.project_dir,
-            arg if cid == "read_file" else None,
-        )
-        # W6a-4 (2026-10-16): read_file darf groesser
-        # sein (Anker-Zeilen sind oft tief in
-        # grossen Dateien).
-        # W51d: quelle-abhaengige Grenzen.
-        if quelle == "planner":
-            _grenze = (
-                _PLANNER_PROTOKOLL_PER_READ
-                if cid == "read_file"
-                else MAX_PROTOKOLL_PER_COMMAND)
-            _total = _PLANNER_PROTOKOLL_TOTAL
-        else:
-            _grenze = (
-                MAX_PROTOKOLL_PER_COMMAND_READ_FILE
-                if cid == "read_file"
-                else MAX_PROTOKOLL_PER_COMMAND)
-            _total = MAX_PROTOKOLL_TOTAL
-        out = trim_output(out, grenze=_grenze)
-
-        # Auflage 2041: Gesamtlaenge begrenzen.
-        rest_platz = _total - len(state.mess_protokoll)
-        if rest_platz <= 0:
-            print("[!] mess_protokoll Gesamtlimit "
-                  "erreicht. Weitere Messungen "
-                  "werden nur auditiert.")
-            audit("mess_protokoll_limit_erreicht",
-                  {"len": len(state.mess_protokoll),
-                   "total": _total,
-                   "quelle": quelle},
-                  state.project_dir, state.project_name)
-            audit("command_executed",
-                  {"id": cid, "arg": arg[:200], "argv": argv,
-                   "quelle": quelle, "ok": ok, "ausgabe_verworfen": True},
-                  state.project_dir, state.project_name)
-            continue
-        if len(out) > rest_platz:
-            out = out[:rest_platz] + "\n[... Gesamtlimit erreicht ...]\n"
-
-        # W51g: Dedup nur fuer Planner + read_file.
-        _dedup_skip = False
-        if (quelle == "planner" and cid == "read_file"
-                and ok):
-            _gem = getattr(
-                state, "_w51g_gemessen", None)
-            if _gem is not None and arg in _gem:
-                _dedup_skip = True
-        if _dedup_skip:
-            ergebnisse[(cid, arg)] = ok
-            audit("command_executed",
-                  {"id": cid, "arg": arg[:200],
-                   "argv": argv, "quelle": quelle,
-                   "ok": ok, "dedup_verworfen": True},
-                  state.project_dir, state.project_name)
-            continue
-        # W52b (2026-10-18): Messung als Datei
-        # + state.messungen + state.gelesene_dateien.
-        # mtime nur bei read_file (Datei-Messung).
-        _mtime = 0.0
-        if cid == "read_file" and ok:
-            try:
-                _mtime = (state.project_dir / arg).stat().st_mtime
-            except OSError:
-                _mtime = 0.0
-        if ok:
-            _schreibe_messung(
-                state, arg, out, quelle, _mtime)
-            if (quelle == "planner"
-                    and cid == "read_file"):
-                _gem = getattr(
-                    state, "_w51g_gemessen", None)
-                if _gem is not None:
-                    _gem.add(arg)
-        else:
-            _schreibe_messung(
-                state, arg,
-                "\n\n!!! COMMAND FEHLGESCHLAGEN: "
-                f"{cid} {arg} !!!\n"
-                "Der COMMAND hat ok=false geliefert. "
-                "Ursache im Output unten.\n"
-                "Wenn der Pfad falsch war: pruefe den "
-                "Pfad woertlich aus dem Auftrag, aus "
-                "dem ZIELDATEIEN-Header oder aus dem "
-                "KUERZUNGS-MARKER. Rekonstruiere ihn "
-                "nicht.\n\n"
-                + out,
-                quelle, _mtime)
-        ergebnisse[(cid, arg)] = ok
-
-        # Auflage 2040: argv ins Audit.
-        audit("command_executed",
-              {"id": cid, "arg": arg[:200], "argv": argv,
-               "quelle": quelle, "ok": ok},
-              state.project_dir, state.project_name)
-
-    return ergebnisse
-
 
 
 def parse_commit_paket(text: str) -> dict[str, Any]:

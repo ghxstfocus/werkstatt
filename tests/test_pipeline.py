@@ -473,8 +473,8 @@ class TestExecuteCommands:
             executed.append((m.mid, arg))
             return ("output", True, ["cmd"])
 
-        monkeypatch.setattr(pipeline, "audit", fake_audit)
-        monkeypatch.setattr(pipeline, "run_measurement_mit_argv", fake_run)
+        monkeypatch.setattr(werkstatt.agent, "audit", fake_audit)
+        monkeypatch.setattr(werkstatt.agent, "run_measurement_mit_argv", fake_run)
 
         state = build_test_state(always={}, optional={})
         pipeline.execute_commands(state, [{"id": "unbekannt", "arg": ""}], "reviewer")
@@ -496,8 +496,8 @@ class TestExecuteCommands:
             executed.append((m.mid, arg))
             return ("ausgabe\n", True, ["test_cmd"])
 
-        monkeypatch.setattr(pipeline, "audit", fake_audit)
-        monkeypatch.setattr(pipeline, "run_measurement_mit_argv", fake_run)
+        monkeypatch.setattr(werkstatt.agent, "audit", fake_audit)
+        monkeypatch.setattr(werkstatt.agent, "run_measurement_mit_argv", fake_run)
 
         m = pipeline.Measurement("test_count", ("echo", "test"), "Test")
         state = build_test_state(always={"test_count": m}, optional={})
@@ -523,8 +523,8 @@ class TestExecuteCommands:
             executed.append(m.mid)
             return ("", True, [])
 
-        monkeypatch.setattr(pipeline, "audit", fake_audit)
-        monkeypatch.setattr(pipeline, "run_measurement_mit_argv", fake_run)
+        monkeypatch.setattr(werkstatt.agent, "audit", fake_audit)
+        monkeypatch.setattr(werkstatt.agent, "run_measurement_mit_argv", fake_run)
 
         m = pipeline.Measurement("test_count", ("echo",), "Test")
         state = build_test_state(always={"test_count": m}, optional={})
@@ -547,8 +547,8 @@ class TestExecuteCommands:
         def fake_run(m, wl, pd, arg=None):
             return ("", True, [])
 
-        monkeypatch.setattr(pipeline, "audit", fake_audit)
-        monkeypatch.setattr(pipeline, "run_measurement_mit_argv", fake_run)
+        monkeypatch.setattr(werkstatt.agent, "audit", fake_audit)
+        monkeypatch.setattr(werkstatt.agent, "run_measurement_mit_argv", fake_run)
 
         m = pipeline.Measurement("test_count", ("echo",), "Test")
         state = build_test_state(always={"test_count": m}, optional={})
@@ -569,8 +569,8 @@ class TestExecuteCommands:
         def fake_run(m, wl, pd, arg=None):
             return ("AUSGABE-INHALT\n", True, ["cmd"])
 
-        monkeypatch.setattr(pipeline, "audit", fake_audit)
-        monkeypatch.setattr(pipeline, "run_measurement_mit_argv", fake_run)
+        monkeypatch.setattr(werkstatt.agent, "audit", fake_audit)
+        monkeypatch.setattr(werkstatt.agent, "run_measurement_mit_argv", fake_run)
 
         m = pipeline.Measurement("test_count", ("echo",), "Test")
         state = build_test_state(always={"test_count": m}, optional={})
@@ -604,8 +604,8 @@ class TestExecuteCommands:
             executed.append(m.mid)
             return ("", True, [])
 
-        monkeypatch.setattr(pipeline, "audit", fake_audit)
-        monkeypatch.setattr(pipeline, "run_measurement_mit_argv", fake_run)
+        monkeypatch.setattr(werkstatt.agent, "audit", fake_audit)
+        monkeypatch.setattr(werkstatt.agent, "run_measurement_mit_argv", fake_run)
 
         state = build_test_state(always={}, optional={})
         # id als int (kein str) — mypy: bewusst falscher Typ
@@ -2886,7 +2886,7 @@ class TestBuilderCommandLoop:
         def fake_audit(*a, **kw):
             zaehler["audit"] += 1
 
-        monkeypatch.setattr(pipeline, "audit", fake_audit)
+        monkeypatch.setattr(werkstatt.agent, "audit", fake_audit)
         monkeypatch.setattr(
             pipeline, "run_measurement_mit_argv",
             lambda *a, **kw: ("", True, []))
@@ -10099,9 +10099,9 @@ def test_w51d_b_verhalten_planner_vs_builder(tmp_path):
 
     # 10x planner: alle drin, kein Limit.
     calls = []
-    with _p("pipeline.audit",
+    with _p("werkstatt.agent.audit",
             side_effect=lambda k, *a, **kw: calls.append(k)), \
-         _p("pipeline.run_measurement_mit_argv",
+         _p("werkstatt.agent.run_measurement_mit_argv",
             return_value=("y" * 10_000, True, ["cat"])):
         pipeline.execute_commands(st, cmds10, quelle="planner")
     assert "mess_protokoll_limit_erreicht" not in calls
@@ -10110,9 +10110,9 @@ def test_w51d_b_verhalten_planner_vs_builder(tmp_path):
     # 10x builder: alle drin, kein Limit.
     st2 = _w51d_state(tmp_path)
     calls2 = []
-    with _p("pipeline.audit",
+    with _p("werkstatt.agent.audit",
             side_effect=lambda k, *a, **kw: calls2.append(k)), \
-         _p("pipeline.run_measurement_mit_argv",
+         _p("werkstatt.agent.run_measurement_mit_argv",
             return_value=("y" * 10_000, True, ["cat"])):
         pipeline.execute_commands(st2, cmds10, quelle="builder")
     assert "mess_protokoll_limit_erreicht" not in calls2
@@ -10127,9 +10127,9 @@ def test_w51d_d_limit_audit(tmp_path):
     cmds = [{"typ": "run", "id": "read_file",
              "arg": "core/x.py"}]
     calls = []
-    with _p("pipeline.audit",
+    with _p("werkstatt.agent.audit",
             side_effect=lambda k, *a, **kw: calls.append(k)), \
-         _p("pipeline.run_measurement_mit_argv",
+         _p("werkstatt.agent.run_measurement_mit_argv",
             return_value=("y", True, ["cat"])):
         pipeline.execute_commands(st, cmds, quelle="planner")
     assert "mess_protokoll_limit_erreicht" in calls
@@ -10331,9 +10331,9 @@ def test_w51g_a_dedup(tmp_path):
     st._w51g_gemessen = set()
     cmds = [{"typ": "run", "id": "read_file",
              "arg": "core/x.py"}]
-    with _p("pipeline.audit",
+    with _p("werkstatt.agent.audit",
             side_effect=lambda k, *a, **kw: None), \
-         _p("pipeline.run_measurement_mit_argv",
+         _p("werkstatt.agent.run_measurement_mit_argv",
             return_value=("Inhalt", True, ["cat"])):
         pipeline.execute_commands(st, cmds, quelle="planner")
         laenge1 = len(st.mess_protokoll)

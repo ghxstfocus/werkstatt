@@ -1171,3 +1171,13 @@ abgleichen. Wenn Body eine Datei nennt, die
 nicht in --stat steht: Widerspruch pruefen.
 
 Status: dokumentiert (2026-10-22).
+
+## A8-1b-1a-Zwischenzustand (M-231/M-237)
+
+1a (e43b877) hatte doppelten Code: execute_commands
++ 5 Konstanten in agent.py UND pipeline.py. 1b
+loest den Zwischenzustand auf.
+
+Bei Verwerfen von 1b: 1a rueckgaengig machen
+(git revert e43b877), nicht dauerhaft doppelt
+fuehren.
