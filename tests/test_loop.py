@@ -1,6 +1,8 @@
 """Tests fuer werkstatt/loop.py (Phase 7a: Happy Path)."""
 from __future__ import annotations
 
+import subprocess
+import sys
 from unittest.mock import patch
 
 from werkstatt.loop import _plan_gate, _verify_patches, run_pipeline_loop
@@ -89,3 +91,36 @@ def test_loop_happy_path(tmp_path):
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st])
         assert rc == 0
+
+
+def test_loop_cli_help_zeigt_usage():
+    """CLI --help: argparse-usage + Exit 0."""
+    result = subprocess.run(
+        [sys.executable, "-m", "werkstatt.loop", "--help"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0
+    assert "usage:" in result.stdout.lower()
+    assert "--project" in result.stdout
+
+
+def test_loop_cli_requires_project():
+    """CLI ohne --project: argparse-Fehler rc=2."""
+    result = subprocess.run(
+        [sys.executable, "-m", "werkstatt.loop"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "project" in (result.stderr + result.stdout).lower()
+
+
+def test_loop_cli_dry_run_uses_renderer():
+    """CLI --dry-run ruft Renderer header + footer auf, kein LLM."""
+    from werkstatt import loop_renderer
+    with patch.object(loop_renderer, "header") as m_h, \
+         patch.object(loop_renderer, "footer") as m_f:
+        from werkstatt.loop import main
+        rc = main(["--project", "test-x", "--dry-run"])
+    assert rc == 0
+    assert m_h.called, "renderer.header muss aufgerufen werden"
+    assert m_f.called, "renderer.footer muss aufgerufen werden"

@@ -2,8 +2,11 @@
 
 Phase 7a: Happy Path.
 Planner -> Builder -> Verify -> Reflection -> Human.
-Kein Aufruf des alten Monolithen (pipeline.run_pipeline)
-im Hauptpfad mehr.
+
+Hauptpfad: eigener Loop (run_pipeline_loop) ohne den Monolithen.
+Fallback (Z.~305): pipeline.run_pipeline, wenn project_dir fehlt.
+Das ist die Strangler-Fig-Zwischenphase (Phase 1-18) — kein
+Endzustand; der Fallback wird nach Phase >20 entfernt (M-299+).
 """
 from __future__ import annotations
 
@@ -191,7 +194,14 @@ PROJECTS_DIR = Path("/opt/werkstatt/projects")
 
 
 def load_project_config(project_name: str) -> dict:
-    """Laedt die Projekt-Konfiguration aus /opt/werkstatt/projects/<name>.yaml.
+    """Laedt die Projekt-Konfiguration (Loop-eigene Variante).
+
+    BEWUSST eigenstaendig, NICHT Alias auf pipeline.load_project_config.
+    Grund: pipeline.load_project_config macht sys.exit(1) bei fehlender
+    YAML (Fail-closed). Der Loop braucht Fallback-Verhalten
+    (/opt/<name>), damit run_pipeline_loop auch ohne project-yaml
+    startet. Die beiden Funktionen sind semantisch unterschiedlich.
+    Aufloesung der Doppel-Definition nach Phase >20 (M-299+).
 
     Liefert ein dict mit 'project_dir' (Pfad zum Zielprojekt).
     Fallback: /opt/<project_name>, wenn keine YAML existiert.
@@ -445,3 +455,41 @@ def run_pipeline_loop(
     if rc == 0:
         audit("loop_erfolg", {"project_name": project_name}, pd, pn)
     return rc
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI-Einstieg: python3 -m werkstatt.loop --project <name> --aufgabe <text> [--dry-run]."""
+    import argparse
+    import sys
+
+    from werkstatt import loop_renderer as _r
+
+    parser = argparse.ArgumentParser(
+        prog="werkstatt.loop",
+        description="Werkstatt Strangler-Fig Loop (CLI-Einstieg).",
+    )
+    parser.add_argument("--project", required=True,
+                        help="Projektname (z.B. security-ai)")
+    parser.add_argument("--aufgabe", default="",
+                        help="Aufgabentext (leer = dry-run-aehnlich)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Nur Plan-Gate + Renderer, kein LLM, kein Patch")
+
+    args = parser.parse_args(argv)
+
+    _r.header(f"Loop: {args.project}")
+
+    if args.dry_run:
+        _r.step(0, "dry-run", "kein LLM, kein Patch")
+        _r.footer(success=True, tasks_total=0, tasks_ok=0)
+        return 0
+
+    state_ref: list[RunState] = []
+    rc = run_pipeline_loop(args.project, args.aufgabe, state_ref)
+    _r.footer(success=(rc == 0), tasks_total=0, tasks_ok=0)
+    return rc
+
+
+if __name__ == "__main__":
+    import sys as _sys
+    _sys.exit(main())
