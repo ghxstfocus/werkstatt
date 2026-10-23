@@ -572,6 +572,32 @@ Baseline 1245/17/9/6/167 durchgehend (alle 4 Sub-Bloecke).
 - `hooks/simplify.py` (64 Z.): Aufraeumer (Komplexitaet).
 - `hooks/anti_patterns.py` (86 Z.): Anti-Patterns.
 
+
+### M-Nummern-Nachtrag (2026-10-24) — M-283 nachgezogen
+
+Die folgenden 30 M-Nummern sind im Loop-Neubau (Phase 1-18) sowie
+in der Aufraeum-Session vergeben und in Commit-Bodies dokumentiert:
+
+M-212, M-213, M-214, M-215, M-217, M-224, M-225, M-227,
+M-230, M-231, M-236, M-237, M-240, M-241, M-242, M-243,
+M-244, M-246, M-247, M-248, M-255, M-257, M-258, M-259,
+M-260, M-261, M-262, M-263, M-264, M-265
+
+M-266 und M-281..M-289 sind im Reviewer-Chat vergeben, aber NICHT
+im Loop-Neubau (Phase 1-18) angewandt. M-266 = A8-2-Plan-Korrektur-
+Status. M-281..M-289 = Session-Abschluss 2026-10-23/24 (M-281
+Baseline-Kette, M-282 Commit-Bodies, M-283 Doku-Nachtrag, M-284
+Modul-Signaturen, M-285 PhaseState-Start, M-286..M-289 Abnahme).
+
+M-212..M-280: 39 Nummern nicht vergeben (Skip: M-216, M-218..M-223,
+M-226, M-228..M-229, M-232..M-235, M-238..M-239, M-245,
+M-249..M-254, M-256, M-266..M-280).
+
+Nachweis: `git log 238e629..c55c849 --format=%B` +
+`git log 7494ac4..238e629 --format=%B`.
+
+Abnahme: Reviewer-Session 2026-10-24, M-283.
+
 ## A8-Trichotomie (A8-1 + A8-3) — 2026-10-23
 
 | Block | Titel | Status | Commit |
