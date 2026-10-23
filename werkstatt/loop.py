@@ -311,6 +311,23 @@ def run_pipeline_loop(
             state.project_dir = Path(cfg["project_dir"])  # type: ignore[attr-defined]
 
     if state is None or getattr(state, "project_dir", None) is None:
+        # M-298a: Fallback-Audit. HR-R9 (fail-closed Sichtbarkeit).
+        # Ohne diesen Audit ist "Loop funktioniert" nicht von
+        # "Loop faellt still auf Monolith zurueck" unterscheidbar.
+        _fb_pd = getattr(state, "project_dir", None) if state else None
+        if not isinstance(_fb_pd, Path):
+            _fb_pd = Path(".")
+        _fb_pn = getattr(state, "project_name", project_name) if state else project_name
+        audit(
+            "loop_fallback",
+            {
+                "project_name": project_name,
+                "aufgabe": aufgabe[:100],
+                "reason": "state_none_or_no_project_dir",
+            },
+            _fb_pd,
+            _fb_pn,
+        )
         return pipeline.run_pipeline(
             project_name, aufgabe, state_ref, phasen_state=phasen_state
         )
