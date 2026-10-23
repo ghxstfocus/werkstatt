@@ -1211,3 +1211,24 @@ AP-Block scheitern. Audit macht den Fehler sichtbar.
 
 Wenn in N Laeufen > M Fehler: auf fail-closed
 umstellen (Phase 3b/6).
+
+## M-259/M-260 — A8-1a-2-Commit-Body-Nachtrag
+
+Commit 14bf723 (A8-1a-2) hat M-259/M-260 nicht
+explizit im Body. Nachlieferung:
+
+M-259 (6 Hook-Test-Namen, aus A8-3):
+  test_hook_liefert_json_liste (JSON-Format)
+  test_hook_limit_3_bei_builder (Limit 3)
+  test_hook_unbekannte_rolle_leer (unbek. Rolle -> [])
+  test_hook_trigger_grund_filtert (Trigger-Filter)
+  test_hook_ohne_trigger_zeigt_fallback (Fallback)
+  test_hook_fehlender_katalog_nicht_testbar (Fehler-Pfad)
+
+M-260 (timestamps):
+  A8-1a-2: 2026-10-23T13:30:33Z (VOR Gate)
+           2026-10-23T13:30:56Z (VOR Commit)
+           2026-10-23T13:31:21Z (NACH Commit)
+  Gate ok=true, regression=false.
+
+Status: dokumentiert 2026-10-23.
