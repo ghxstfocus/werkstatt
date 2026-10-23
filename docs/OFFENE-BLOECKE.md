@@ -69,7 +69,7 @@ run_phase 528 Z. -> 4 Verteiler. 4 neue Funktionen,
 - test_zyklus_teilt_sich: nach 3a-2d Kandidat (b)/(d)
   fuer zweiten Assert (getsource(_phase_main_pfad)).
 
-## Phase 3b — Loop-Umbau (nach 3a)
+## Phase 3b — Loop-Umbau (ERSETZT DURCH LOOP-NEUBAU, done in 92eb7c7)
 
 Noch keine Merkposten. Entstehen hier, sobald 3a abgeschlossen.
 
@@ -1148,7 +1148,7 @@ Z.163 und Z.195. Nicht in MERKPOSTEN.md definiert.
 Aktion: bei A8-3 (Hooks) oder Loop-Umbau aufgreifen.
 Status: offen (Merkposten angelegt 2026-10-22).
 
-## M-205 — nicht vergeben
+## M-205 — nicht vergeben (erledigt: dokumentiert 2026-10-23)
 
 M-204 -> M-206. Nummer uebersprungen.
 Kein Code, keine Doku-Referenz. Tippfehler in
@@ -1246,7 +1246,7 @@ Ziel: Kein LLM-Token wird verschwendet, wenn die Voraussetzungen fehlen.
 Status: Phase 2 (B1 + B2) implementiert.
 
 
-## Loop-Neubau (Phase 10+)
+## Loop-Neubau (Phase 1-18 done; PhaseState + alte Abhaengigkeiten offen)
 
 Der neue Loop ist funktional (Phase 1-9). Was noch fehlt:
 

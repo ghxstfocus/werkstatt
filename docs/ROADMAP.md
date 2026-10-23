@@ -33,18 +33,10 @@ und `ERLEDIGT.md` (Erledigt).
 | 18 | Guardrails | ✅ | — | — |
 | 19 | ChangeApplier + Sofort-Massnahmen | ✅ | 163f29b | 1102 |
 | 20a | Change-Modell (Audit-Trail-Felder) | 🔧 | 560659a | 1452 |
-| 20b | ChangeApplier (Audit-Log, Rollback) | 🚫 | — | — |
+| 20b | ChangeApplier (Audit-Log, Rollback) | ✅ | 759b9e1..cba0ee3 | — |
 | **Loop-Neubau** | **Phase 1-18 (Strangler-Fig + Agenten + Hooks)** | **✅** | **92eb7c7** | **1290** |
 | **A8-Trichotomie** | **A8-1 + A8-3 (Agenten + Hooks extrahiert)** | **✅** | **92eb7c7** | **1290** |
 
-**HINWEIS (2026-10-23):** Die Roadmap ist inkonsistent:
-  - Phase 20b ist oben 🚫, unten ✅.
-  - W52b ist oben 🔴/🟡, unten ✅.
-  - W61 ist 🔨, aber durch Loop-Neubau teilweise ersetzt.
-  - Block B (Loop-Umbau) ist "ERSETZT DURCH LOOP-NEUBAU",
-    aber B1-B5 sind noch als offen gelistet.
-  → Diese Widersprüche werden in einem separaten Doku-Commit
-    bereinigt (nicht hier, um die Historie zu erhalten).
 
 Phase 20b done. U1-U4 abgeschlossen in Sitzung
 2026-10-18: 759b9e1 (U1), ada910a (U2),
@@ -127,7 +119,7 @@ Symptom-Behandlung, nicht strukturell.
 | W36-RP-b | subprocess-Schutz global | ✅ | 904c0de | 1186 |
 | W25-planner-md | Skills im Planner-Prompt | ✅ | 041c9a3 | 1189 |
 
-### W52b (On-Demand-Messung, 2026-10-18, in Arbeit)
+### W52b (On-Demand-Messung, 2026-10-18) — ✅ done
 
 | Schritt | Titel | Status | Commit | Tests |
 |---|---|---|---|---|
@@ -142,11 +134,11 @@ Detail in `OFFENE-BLOECKE.md`. P1 (akut) hier:
 
 | Block | Kategorie | Symbol | Kurz |
 |---|---|---|---|
-| W52b C | 3 | 🔴 | Anker-Check gegen Datei-Inhalte |
-| W52b D | 3 | 🔴 | Prompt-Bauer auf Index |
+| W52b C | 3 | ✅ | Anker-Check gegen Datei-Inhalte |
+| W52b D | 3 | ✅ | Prompt-Bauer auf Index |
 | W61 | 3 | 🔴 | Rollen-Sanierung (5 Unterbloecke) |
 
-P2/P3: W52b E, W-Resume-Fail-Kontext, W58,
+P2/P3: W-Resume-Fail-Kontext, W58,
 W59-2, W36-RP-a, W36-RP-b-os, W48-A16-b-2-a-b,
 W52a-1, W36-2b..6, W56, W62.
 
