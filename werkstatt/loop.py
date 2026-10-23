@@ -15,6 +15,7 @@ from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.builder import run_builder
 from werkstatt.explorer import run_explorer
+from werkstatt.loop_renderer import header, step, task, task_ok
 from werkstatt.planner import run_planner
 from werkstatt.reviewer import run_reviewer
 from werkstatt.state import RunState
@@ -274,6 +275,8 @@ def run_pipeline_loop(
     """Echter Loop: Plan -> Planner -> Builder -> Verify -> Reflection -> Human."""
     state = phasen_state or (state_ref[-1] if state_ref else None)
 
+    header(f"{project_name} — {aufgabe[:50]}")
+
     # Projekt-Pfad aus Config aufloesen, falls nicht gesetzt
     if state is not None and getattr(state, "project_dir", None) is None:
         cfg = load_project_config(project_name)
@@ -294,9 +297,11 @@ def run_pipeline_loop(
     # 0b. Explorer (Phase 14, read-only). Einmal pro Loop-Lauf.
     explorer_result = run_explorer(state, aufgabe)
     if explorer_result.get("key_files"):
+        step(1, "Explorer", f"{len(explorer_result['key_files'])} files")
         audit("loop_explorer_ok", {"files": len(explorer_result["key_files"])}, pd, pn)
         state.explorer_context = explorer_result  # type: ignore[attr-defined]
     else:
+        step(1, "Explorer", "0 files", ok=False)
         audit("loop_explorer_leer", {}, pd, pn)
 
     # 1. Plan-Gate (leer -> Planner muss erst laufen)
@@ -308,9 +313,11 @@ def run_pipeline_loop(
             return 1
         # 1b. Plan-Gate erneut pruefen
         if not _plan_gate(state):
+            step(2, "Planner", "kein Plan", ok=False)
             audit("loop_gate_failed", {"gate": "plan"}, pd, pn)
             return 1
 
+    step(2, "Planner", f"{len(getattr(state, 'tasks', []))} tasks")
     audit("loop_phase", {"phase": "plan", "status": "ok"}, pd, pn)
 
     # 2. Pre-Build Verify
@@ -322,12 +329,14 @@ def run_pipeline_loop(
     #    Alle Tasks werden abgearbeitet ohne Unterbrechung.
     #    Human-Gate kommt nur am Ende der Phase.
     tasks = getattr(state, "tasks", [])
-    for i, task in enumerate(tasks, 1):
-        task_name = task.get("name", f"Task {i}") if isinstance(task, dict) else str(task)
+    tasks_ok = 0
+    for i, task_obj in enumerate(tasks, 1):
+        task_name = task_obj.get("name", f"Task {i}") if isinstance(task_obj, dict) else str(task_obj)
+        task(i, len(tasks), task_name)
         audit("loop_task_start", {"task_id": i, "name": task_name}, pd, pn)
 
         # Builder fuer diesen Task
-        state.aktuelle_task = task  # type: ignore[attr-defined]
+        state.aktuelle_task = task_obj  # type: ignore[attr-defined]
         if not run_builder(state):
             audit("loop_builder_failed", {"task_id": i}, pd, pn)
             return 1
@@ -412,11 +421,12 @@ def run_pipeline_loop(
         # Reviewer (Phase 9)
         if not run_reviewer(state):
             audit("loop_reviewer_rejected", {"task_id": i}, pd, pn)
-            # Reflection-Loop versuchen (Builder korrigiert)
             if not _reflection_loop(state):
                 audit("loop_reviewer_reflection_gescheitert", {"task_id": i}, pd, pn)
                 return 1
 
+        task_ok(i, len(tasks))
+        tasks_ok += 1
         audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
 
     # 4. Post-Build Verify + Reflection (nach allen Tasks)
