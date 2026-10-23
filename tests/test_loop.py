@@ -69,7 +69,7 @@ def test_loop_stoppt_bei_verify_fail(tmp_path):
         rc = run_pipeline_loop("p", "a", [st])
         assert rc == 1
         mock_rp.assert_not_called()
-        mock_audit.assert_called_with("loop_gate_failed", {"gate": "verify"}, st.project_dir, st.project_name)
+        mock_audit.assert_called_with("loop_gate_failed", {"gate": "pre_build"}, st.project_dir, st.project_name)
 
 
 def test_loop_delegiert_wenn_gates_gruen(tmp_path):
