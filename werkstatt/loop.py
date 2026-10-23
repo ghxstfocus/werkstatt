@@ -30,22 +30,59 @@ def _plan_gate(state: RunState) -> bool:
 
 
 def _verify_patches(state: RunState) -> bool:
-    """B2: Verifier (deterministisch). Ruft quality_gate.py auf."""
-    qg_path = Path("/opt/werkstatt/tools/quality_gate.py")
-    if not qg_path.exists():
-        return False
-    try:
-        res = subprocess.run(
-            ["python3", str(qg_path), "--json"],
-            cwd="/opt/werkstatt",
-            capture_output=True, text=True, timeout=300, check=False
-        )
-        return res.returncode == 0 and (
-            '"ok": true' in res.stdout or '"ok":true' in res.stdout
-        )
-    except Exception:  # noqa: BLE001
+    """B2: Verifier (multi-projekt-faehig via Projekt-Contract).
+
+    Liest .werkstatt/verify.json aus dem Zielprojekt.
+    Fallback: pytest + ruff im Zielprojekt, wenn keine Config.
+    """
+    import json
+    project_dir = getattr(state, "project_dir", None)
+    if project_dir is None or not Path(project_dir).exists():
         return False
 
+    project_dir = Path(project_dir)
+    errors = []
+
+    # 1. Projekt-Contract lesen
+    contract_file = project_dir / ".werkstatt" / "verify.json"
+    stages = []
+
+    if contract_file.exists():
+        try:
+            with contract_file.open(encoding="utf-8") as fh:
+                contract = json.load(fh)
+            stages = contract.get("stages", [])
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # 2. Fallback: Standard-Checks, wenn kein Contract
+    if not stages:
+        stages = [
+            {"id": "pytest", "command": ["python3", "-m", "pytest", "-q"]},
+            {"id": "ruff", "command": ["ruff", "check", "."]},
+        ]
+
+    # 3. Stages ausfuehren
+    for stage in stages:
+        cmd = stage.get("command")
+        if not cmd:
+            continue
+        try:
+            res = subprocess.run(
+                cmd, cwd=str(project_dir),
+                capture_output=True, text=True, timeout=300, check=False
+            )
+            if res.returncode != 0:
+                errors.append(f"{stage.get('id', '?')}: {res.stdout[-500:]}")
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{stage.get('id', '?')}-Fehler: {exc}")
+
+    if errors:
+        from werkstatt.audit import audit
+        audit("loop_verify_failed", {"errors": errors}, project_dir, getattr(state, "project_name", "?"))
+        return False
+
+    return True
 
 def _get_baseline_error_details() -> str:
     """Holt den echten Fehlertext fuer die Reflexion."""
@@ -241,6 +278,28 @@ def run_pipeline_loop(
         if not run_builder(state):
             audit("loop_builder_failed", {"task_id": i}, pd, pn)
             return 1
+
+        # Patches anwenden (git apply)
+        patches = getattr(state, "patches", [])
+        for patch in patches:
+            if not isinstance(patch, dict):
+                continue
+            file = patch.get("file", "")
+            old_str = patch.get("old_string", "")
+            new_str = patch.get("new_string", "")
+            if not file or not old_str or not new_str:
+                continue
+            target = Path(pd) / file
+            if not target.exists():
+                audit("loop_patch_file_missing", {"file": file}, pd, pn)
+                continue
+            content = target.read_text()
+            if old_str not in content:
+                audit("loop_patch_old_string_not_found", {"file": file, "old": old_str[:50]}, pd, pn)
+                continue
+            content = content.replace(old_str, new_str, 1)
+            target.write_text(content)
+            audit("loop_patch_applied", {"file": file}, pd, pn)
 
         # PreToolUse-Hook (Phase 15, NEU): Patch pruefen, BEVOR er angewendet wird.
         patches = getattr(state, "patches", [])
