@@ -73,7 +73,7 @@ Pipeline-Trichotomie (A8, Block E in docs/AUFRAEUM-UND-LOOP-PLAN.md):
 Ziel: pipeline.py von 11.639 Z. auf ~1.200 Z. reduzieren.
 
 
-## Loop-Neubau (Phase 1-16)
+## Loop-Neubau (Phase 1-17)
 
 Der neue Orchestrator ist `werkstatt/loop.py`.
 Ablauf: Explorer -> Planner -> Builder -> Hooks -> Reviewer -> Human.
@@ -81,17 +81,19 @@ Ablauf: Explorer -> Planner -> Builder -> Hooks -> Reviewer -> Human.
 Agenten:
 - `werkstatt/explorer.py` (read-only Kontext)
 - `werkstatt/planner.py` (JSON-Plan)
-- `werkstatt/builder.py` (str_replace-Patches)
-- `werkstatt/reviewer.py` (Bug-Check)
+- `werkstatt/builder.py` (str_replace-Patches, create + update)
+- `werkstatt/reviewer.py` (Bug-Check, Diff im Zielprojekt)
 - `werkstatt/phase_state.py` (Resume, Decisions)
 
 Hooks:
-- `hooks/pre_tool_use.py` (Waechter)
-- `hooks/post_tool_use.py` (Verifier)
-- `hooks/simplify.py` (Aufraeumer)
+- `hooks/pre_tool_use.py` (Waechter: .env, destruktive Kommandos, Datei-Existenz)
+- `hooks/post_tool_use.py` (Verifier: Baseline)
+- `hooks/simplify.py` (Aufraeumer: Komplexitaet)
 
 Multi-Projekt:
-- Werkstatt-YAML: WO liegt das Projekt.
-- `.werkstatt/verify.json`: WIE verifizieren.
+- Werkstatt-YAML: WO liegt das Projekt (project_dir).
+- `.werkstatt/verify.json`: WIE verifizieren (stages).
+
+Human-Gate: fail-closed (EOFError -> reject), respektiert require_human_approval.
 
 Baseline: 1290 passed / 13 ruff / 8 mypy.

@@ -4,9 +4,9 @@ Stand: 2026-10-22 (Aufraeum-Block A, HEAD nach A8-1a-1).
 Werkstatt-HEAD: eb17291. Branch: umbau/phase-2 (origin gepusht).
 Baseline: pytest 1290 / ruff 13 / mypy 8 / AST 6 / Katalog 162.
 
-## Loop-Neubau (Phase 1-16) — Status
+## Loop-Neubau (Phase 1-17) — Status
 
-**HEAD:** ad98bd8 (Phase 16)
+**HEAD:** 134917d (Phase 17)
 
 **Fertig:**
 - Phase 1-2: Strangler-Fig + Gates (Copilot/Codex)
@@ -22,6 +22,7 @@ Baseline: pytest 1290 / ruff 13 / mypy 8 / AST 6 / Katalog 162.
 - Phase 14: Explorer-Subagent (read-only, JSON)
 - Phase 15: Multi-Projekt Verify-Contract (.werkstatt/verify.json)
 - Phase 16: Projekt-Pfad-Aufloesung (load_project_config)
+- Phase 17: Reviewer im Zielprojekt (Diff) + fail-closed Human-Gate
 
 **Architektur:**
 - Werkstatt = zentraler Runner.
@@ -31,7 +32,7 @@ Baseline: pytest 1290 / ruff 13 / mypy 8 / AST 6 / Katalog 162.
 
 **Baseline:** 1290 passed / 13 ruff / 8 mypy / 6 AST / 162 Katalog.
 
-**Naechster Schritt:** Echter LLM-Test mit security-ai.
+**Naechster Schritt:** Echter LLM-Test mit security-ai (Phase 14-17 testen).
 
 
 ## Aufraeum-Block A — Status
