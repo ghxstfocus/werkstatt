@@ -279,9 +279,25 @@ def run_pipeline_loop(
             audit("loop_builder_failed", {"task_id": i}, pd, pn)
             return 1
 
-        # Patches anwenden (create + update)
+        # PreToolUse-Hook (Phase 15): Patch pruefen, BEVOR er angewendet wird.
         patches = getattr(state, "patches", [])
-        # Backup-Verzeichnis anlegen
+        for patch in patches:
+            if not isinstance(patch, dict):
+                continue
+            action = patch.get("action", "update")
+            patch_text = patch.get("new_string", "") or patch.get("content", "")
+            hook_res = _call_hook("pre_tool_use.py", {
+                "patch": patch_text,
+                "action": action,
+                "project_dir": str(pd),
+            })
+            if not hook_res.get("allow", False):
+                audit("loop_hook_blocked", {"hook": "pre_tool_use", "reason": hook_res.get("reason", "")}, pd, pn)
+                if not _reflection_loop(state):
+                    return 1
+                break
+
+        # Patches anwenden (create + update) — NACH dem Hook.
         backup_dir = Path(pd) / ".werkstatt" / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
         for patch in patches:
@@ -297,7 +313,6 @@ def run_pipeline_loop(
                 content = patch.get("content", "")
                 if not content:
                     continue
-                # Sicherheits-Check: Datei darf nicht existieren
                 if target.exists():
                     audit("loop_patch_file_exists", {"file": file}, pd, pn)
                     continue
@@ -319,19 +334,6 @@ def run_pipeline_loop(
                 file_content = file_content.replace(old_str, new_str, 1)
                 target.write_text(file_content)
                 audit("loop_patch_updated", {"file": file}, pd, pn)
-
-        # PreToolUse-Hook (Phase 15, NEU): Patch pruefen, BEVOR er angewendet wird.
-        patches = getattr(state, "patches", [])
-        for patch in patches:
-            patch_text = patch.get("new_string", "") if isinstance(patch, dict) else str(patch)
-            hook_res = _call_hook("pre_tool_use.py", {"patch": patch_text})
-            if not hook_res.get("allow", False):
-                audit("loop_hook_blocked", {"hook": "pre_tool_use", "reason": hook_res.get("reason", "")}, pd, pn)
-                # Reflection-Loop: Builder korrigiert den Patch
-                if not _reflection_loop(state):
-                    return 1
-                # Nach Reflection: Patch neu pruefen (rekursiv? Nein, einfach weiter)
-                break
 
         # PostToolUse-Hook (Phase 10)
         hook_res = _call_hook("post_tool_use.py", {})
