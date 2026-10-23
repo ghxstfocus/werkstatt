@@ -14,6 +14,7 @@ import pipeline  # nur fuer Fallback / Human-Gate
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.builder import run_builder
+from werkstatt.explorer import run_explorer
 from werkstatt.planner import run_planner
 from werkstatt.reviewer import run_reviewer
 from werkstatt.state import RunState
@@ -168,6 +169,14 @@ def run_pipeline_loop(
     # 0. Aufgabe in State setzen (fuer Planner)
     state.aufgabe = aufgabe  # type: ignore[attr-defined]
 
+    # 0b. Explorer (Phase 14, read-only). Einmal pro Loop-Lauf.
+    explorer_result = run_explorer(state, aufgabe)
+    if explorer_result.get("key_files"):
+        audit("loop_explorer_ok", {"files": len(explorer_result["key_files"])}, pd, pn)
+        state.explorer_context = explorer_result  # type: ignore[attr-defined]
+    else:
+        audit("loop_explorer_leer", {}, pd, pn)
+
     # 1. Plan-Gate (leer -> Planner muss erst laufen)
     if not _plan_gate(state):
         audit("loop_plan_missing", {"aufgabe": aufgabe[:100]}, pd, pn)
@@ -200,6 +209,19 @@ def run_pipeline_loop(
         if not run_builder(state):
             audit("loop_builder_failed", {"task_id": i}, pd, pn)
             return 1
+
+        # PreToolUse-Hook (Phase 15, NEU): Patch pruefen, BEVOR er angewendet wird.
+        patches = getattr(state, "patches", [])
+        for patch in patches:
+            patch_text = patch.get("new_string", "") if isinstance(patch, dict) else str(patch)
+            hook_res = _call_hook("pre_tool_use.py", {"patch": patch_text})
+            if not hook_res.get("allow", False):
+                audit("loop_hook_blocked", {"hook": "pre_tool_use", "reason": hook_res.get("reason", "")}, pd, pn)
+                # Reflection-Loop: Builder korrigiert den Patch
+                if not _reflection_loop(state):
+                    return 1
+                # Nach Reflection: Patch neu pruefen (rekursiv? Nein, einfach weiter)
+                break
 
         # PostToolUse-Hook (Phase 10)
         hook_res = _call_hook("post_tool_use.py", {})

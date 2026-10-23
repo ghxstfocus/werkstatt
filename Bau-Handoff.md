@@ -2,7 +2,7 @@
 
 Stand: 2026-10-22 (Aufraeum-Block A, HEAD nach A8-1a-1).
 Werkstatt-HEAD: eb17291. Branch: umbau/phase-2 (origin gepusht).
-Baseline: pytest 1282 / ruff 13 / mypy 8 / AST 6 / Katalog 162.
+Baseline: pytest 1290 / ruff 13 / mypy 8 / AST 6 / Katalog 162.
 
 ## Loop-Neubau (Phase 1-9) — Status
 
@@ -37,7 +37,7 @@ schrittweise ersetzt.
 - Bestehende Hooks in Loop integrieren
 - Echter LLM-Test
 
-**Baseline:** 1282 passed / 13 ruff / 8 mypy.
+**Baseline:** 1290 passed / 13 ruff / 8 mypy.
 
 ## Aufraeum-Block A — Status
 

@@ -72,10 +72,12 @@ def test_loop_stoppt_bei_verify_fail(tmp_path):
 
 def test_loop_happy_path(tmp_path):
     st = _state(tmp_path)
-    # Alle Gates gruen, Planner/Builder erfolgreich, Human-Gate rc=0
+    # _verify_patches mocken (verhindert subprocess.run(pytest))
     with patch("werkstatt.loop._verify_patches", return_value=True), \
          patch("werkstatt.loop.run_planner", return_value=True), \
          patch("werkstatt.loop.run_builder", return_value=True), \
+         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
+         patch("werkstatt.loop.run_reviewer", return_value=True), \
          patch("pipeline._approval_und_human_gate", return_value=0), \
          patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
