@@ -279,27 +279,39 @@ def run_pipeline_loop(
             audit("loop_builder_failed", {"task_id": i}, pd, pn)
             return 1
 
-        # Patches anwenden (git apply)
+        # Patches anwenden (create + update)
         patches = getattr(state, "patches", [])
         for patch in patches:
             if not isinstance(patch, dict):
                 continue
+            action = patch.get("action", "update")
             file = patch.get("file", "")
-            old_str = patch.get("old_string", "")
-            new_str = patch.get("new_string", "")
-            if not file or not old_str or not new_str:
+            if not file:
                 continue
             target = Path(pd) / file
-            if not target.exists():
-                audit("loop_patch_file_missing", {"file": file}, pd, pn)
-                continue
-            content = target.read_text()
-            if old_str not in content:
-                audit("loop_patch_old_string_not_found", {"file": file, "old": old_str[:50]}, pd, pn)
-                continue
-            content = content.replace(old_str, new_str, 1)
-            target.write_text(content)
-            audit("loop_patch_applied", {"file": file}, pd, pn)
+
+            if action == "create":
+                content = patch.get("content", "")
+                if not content:
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content)
+                audit("loop_patch_created", {"file": file}, pd, pn)
+            elif action == "update":
+                old_str = patch.get("old_string", "")
+                new_str = patch.get("new_string", "")
+                if not old_str or not new_str:
+                    continue
+                if not target.exists():
+                    audit("loop_patch_file_missing", {"file": file}, pd, pn)
+                    continue
+                file_content = target.read_text()
+                if old_str not in file_content:
+                    audit("loop_patch_old_string_not_found", {"file": file, "old": old_str[:50]}, pd, pn)
+                    continue
+                file_content = file_content.replace(old_str, new_str, 1)
+                target.write_text(file_content)
+                audit("loop_patch_updated", {"file": file}, pd, pn)
 
         # PreToolUse-Hook (Phase 15, NEU): Patch pruefen, BEVOR er angewendet wird.
         patches = getattr(state, "patches", [])
