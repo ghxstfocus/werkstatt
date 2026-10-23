@@ -11285,7 +11285,7 @@ class TestMeasurementTimeoutCharakterisierung:
         fake_result.stderr = ""
         fake_result.returncode = 0
 
-        with patch("pipeline.subprocess.run",
+        with patch("werkstatt.agent.subprocess.run",
                    return_value=fake_result) as mock_run:
             out, ok, _argv = pipeline.run_measurement_mit_argv(
                 m, ["tests/"], Path("/tmp"), extra_arg="tests/")
