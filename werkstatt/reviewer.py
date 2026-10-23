@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
@@ -27,12 +28,12 @@ Antworte NUR mit validem JSON:
 """
 
 
-def _get_git_diff() -> str:
-    """Holt den aktuellen Git-Diff (nur unstaged/staged Aenderungen)."""
+def _get_git_diff(project_dir: str | Path = "/opt/werkstatt") -> str:
+    """Holt den aktuellen Git-Diff im Zielprojekt."""
     try:
         res = subprocess.run(
             ["git", "diff", "HEAD"],
-            cwd="/opt/werkstatt", capture_output=True, text=True, timeout=30, check=False
+            cwd=str(project_dir), capture_output=True, text=True, timeout=30, check=False
         )
         return res.stdout[:10000]
     except Exception:  # noqa: BLE001
@@ -49,7 +50,8 @@ def run_reviewer(state: RunState) -> bool:
         audit("reviewer_kein_key", {}, pd, pn)
         return False
 
-    diff = _get_git_diff()
+    pd = getattr(state, "project_dir", None) or Path("/opt/werkstatt")
+    diff = _get_git_diff(pd)
     if not diff:
         audit("reviewer_kein_diff", {}, pd, pn)
         return True  # Nichts zu reviewen -> OK
