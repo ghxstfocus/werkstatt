@@ -6,7 +6,7 @@ Stand: 2026-10-22, HEAD 76f4bf1, Branch umbau/phase-2.
 
 | Metrik  | Befehl                          | Soll         |
 |---------|---------------------------------|--------------|
-| pytest  | `pytest -q`                     | 1265 passed  |
+| pytest  | `pytest -q`                     | 1267 passed  |
 | ruff    | `ruff check .`                  | 14 errors    |
 | mypy    | `mypy pipeline.py werkstatt/`   | 8 errors     |
 | AST     | AST-Test (siehe tests/)         | 6 passed     |
