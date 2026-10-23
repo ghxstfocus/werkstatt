@@ -13,7 +13,7 @@ from pathlib import Path
 
 TOOLS = Path("/opt/werkstatt/tools")
 sys.path.insert(0, str(TOOLS))
-import audit as audit_mod  # noqa: E402
+import audit as audit_mod
 
 
 def test_audit_erkennt_callback_als_argument() -> None:
