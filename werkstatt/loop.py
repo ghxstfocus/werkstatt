@@ -554,15 +554,62 @@ def main(argv: list[str] | None = None) -> int:
         _r.footer(success=True, tasks_total=0, tasks_ok=0)
         return 0
 
-    state_ref: list[RunState] = []
+    # M-298c: main() erzeugt echten RunState. Ohne das faellt der
+    # Loop auf pipeline.run_pipeline zurueck (loop_fallback-Audit).
+    # Merkposten: RunState-Bau ist hier inline; gemeinsame
+    # Konstruktionsfunktion folgt in M-299+ (Altlasten).
+    import os as _os
+    import time as _time
+    from datetime import UTC as _UTC, datetime as _dt
     from pathlib import Path as _Path
+
     _cfg = load_project_config(args.project)
-    _pd = _cfg.get("project_dir")
-    _ps = None
-    if _pd:
-        _ps = PhaseState(args.project, base_dir=_Path(_pd) / ".werkstatt")
-        if _ps.exists():
-            _ps.load()
+    _pd_str = _cfg.get("project_dir")
+    if not _pd_str:
+        _r.step(0, "config",
+                f"project_dir fehlt in projects/{args.project}.yaml",
+                ok=False)
+        _r.footer(success=False, tasks_total=0, tasks_ok=0)
+        return 1
+    _pd = _Path(_pd_str)
+
+    _api_key = _os.environ.get("DEEPSEEK_API_KEY", "")
+    if not _api_key:
+        _r.step(0, "config", "DEEPSEEK_API_KEY fehlt", ok=False)
+        _r.footer(success=False, tasks_total=0, tasks_ok=0)
+        return 1
+
+    # docs-Inhalte laden (Planner-Kontext). Fehler tolerieren.
+    _docs: dict = {}
+    try:
+        import pipeline as _pl
+        _full_cfg = _pl.load_project_config(args.project)
+        _docs = _pl.load_docs(_full_cfg.get("docs", {}), _pd)
+    except (SystemExit, Exception):
+        pass
+
+    _state = RunState(
+        block_id=args.project,
+        aufgabe=args.aufgabe,
+        start_ts=_dt.now(_UTC).isoformat(timespec="seconds"),
+        docs=_docs,
+        agents={},
+        always={},
+        optional={},
+        file_whitelist=[],
+        api_key=_api_key,
+        budget={},
+        agent_docs={},
+        project_dir=_pd,
+        project_name=args.project,
+    )
+    _state.start_monotonic = _time.monotonic()
+    state_ref: list[RunState] = [_state]
+
+    _ps = PhaseState(args.project, base_dir=_pd / ".werkstatt")
+    if _ps.exists():
+        _ps.load()
+
     rc = run_pipeline_loop(args.project, args.aufgabe, state_ref, phase_state=_ps)
     _r.footer(success=(rc == 0), tasks_total=0, tasks_ok=0)
     return rc
