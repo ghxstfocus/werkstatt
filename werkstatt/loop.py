@@ -1,18 +1,20 @@
 """Strangler-Fig Loop (M-262 Option C, 2026-10-23).
 
-Phase 4: Reflection-Loop.
-Wenn die Baseline nach dem Build rot ist, wird der
-echte Fehlertext als Reflexion an den Builder zurueckgegeben.
-Max 3 Runden, dann Circuit Breaker.
+Phase 7a: Happy Path.
+Planner -> Builder -> Verify -> Reflection -> Human.
+Kein Aufruf des alten Monolithen (pipeline.run_pipeline)
+im Hauptpfad mehr.
 """
 from __future__ import annotations
 
 import subprocess
 from pathlib import Path
 
-import pipeline
+import pipeline  # nur fuer Fallback / Human-Gate
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
+from werkstatt.builder import run_builder
+from werkstatt.planner import run_planner
 from werkstatt.state import RunState
 
 
@@ -44,7 +46,7 @@ def _verify_patches(state: RunState) -> bool:
 
 
 def _get_baseline_error_details() -> str:
-    """Holt den echten Fehlertext (pytest/ruff/mypy) fuer die Reflexion."""
+    """Holt den echten Fehlertext fuer die Reflexion."""
     try:
         res = subprocess.run(
             ["python3", "/opt/werkstatt/tools/quality_gate.py", "--json"],
@@ -57,17 +59,13 @@ def _get_baseline_error_details() -> str:
 
 
 def _reflection_loop(state: RunState, max_runden: int = 3) -> bool:
-    """Echter Reflection-Loop (Aider-Prinzip).
-    
-    Nimmt den Fehlertext, schickt ihn an den Builder,
-    wendet den Korrektur-Patch an. Max 3 Runden.
-    """
+    """Echter Reflection-Loop (Aider-Prinzip)."""
     pd = state.project_dir
     pn = state.project_name
     api_key = getattr(state, "api_key", "")
     
     if not api_key:
-        audit("loop_repair_kein_key", {}, pd, pn)
+        audit("loop_reflection_kein_key", {}, pd, pn)
         return False
 
     for runde in range(1, max_runden + 1):
@@ -77,7 +75,6 @@ def _reflection_loop(state: RunState, max_runden: int = 3) -> bool:
         error_ctx = _get_baseline_error_details()
         audit("loop_reflection_runde", {"runde": runde}, pd, pn)
 
-        # Aider-Prinzip: Echter Fehlertext als User-Nachricht
         reflection_prompt = (
             f"Dein letzter Patch hat die Baseline zerstoert.\n"
             f"Hier ist der echte Fehler-Output:\n\n{error_ctx}\n\n"
@@ -85,7 +82,6 @@ def _reflection_loop(state: RunState, max_runden: int = 3) -> bool:
             "der nur diesen Fehler behebt. Gib NUR den Patch aus."
         )
 
-        # Builder (ask_llm) mit Reflexions-Prompt aufrufen
         reply = ask_llm(
             api_key,
             "Du bist ein Repair-Agent. Behebe die Baseline-Fehler.",
@@ -121,7 +117,7 @@ def run_pipeline_loop(
     *,
     phasen_state: RunState | None = None,
 ) -> int:
-    """Echter Loop: Plan -> Build -> Verify -> Reflection -> Human."""
+    """Echter Loop: Plan -> Planner -> Builder -> Verify -> Reflection -> Human."""
     state = phasen_state or (state_ref[-1] if state_ref else None)
 
     if state is None or getattr(state, "project_dir", None) is None:
@@ -132,30 +128,60 @@ def run_pipeline_loop(
     pd = state.project_dir
     pn = state.project_name
 
-    # 1. Plan-Gate
+    # 0. Aufgabe in State setzen (fuer Planner)
+    state.aufgabe = aufgabe  # type: ignore[attr-defined]
+
+    # 1. Plan-Gate (leer -> Planner muss erst laufen)
     if not _plan_gate(state):
-        audit("loop_gate_failed", {"gate": "plan"}, pd, pn)
-        return 1
+        audit("loop_plan_missing", {"aufgabe": aufgabe[:100]}, pd, pn)
+        # 1a. Planner aufrufen
+        if not run_planner(state):
+            audit("loop_planner_failed", {}, pd, pn)
+            return 1
+        # 1b. Plan-Gate erneut pruefen
+        if not _plan_gate(state):
+            audit("loop_gate_failed", {"gate": "plan"}, pd, pn)
+            return 1
+
+    audit("loop_phase", {"phase": "plan", "status": "ok"}, pd, pn)
 
     # 2. Pre-Build Verify
     if not _verify_patches(state):
         audit("loop_gate_failed", {"gate": "pre_build"}, pd, pn)
         return 1
 
-    # 3. Delegation an alten Motor
-    audit("loop_aktiv", {"project_name": project_name, "aufgabe": aufgabe[:100]}, pd, pn)
-    rc = pipeline.run_pipeline(
-        project_name, aufgabe, state_ref, phasen_state=phasen_state
-    )
+    # 3. Builder (neuer Agent)
+    audit("loop_phase", {"phase": "build", "status": "start"}, pd, pn)
+    if not run_builder(state):
+        audit("loop_builder_failed", {}, pd, pn)
+        return 1
+    audit("loop_phase", {"phase": "build", "status": "ok"}, pd, pn)
 
-    # 4. Post-Build Verify + Reflection-Loop (Aider-Prinzip)
+    # 4. Post-Build Verify + Reflection
     if not _verify_patches(state):
         audit("loop_gate_failed", {"gate": "post_build"}, pd, pn)
         if _reflection_loop(state):
             audit("loop_reflection_erfolg", {"project_name": project_name}, pd, pn)
         else:
             audit("loop_reflection_gescheitert", {"project_name": project_name}, pd, pn)
-            return rc or 1
+            return 1
 
-    audit("loop_erfolg", {"project_name": project_name}, pd, pn)
+    # 5. Human-Gate (isoliert aus dem alten Code)
+    #    (approval_und_human_gate ist noch in pipeline.py, wir rufen es direkt)
+    audit("loop_phase", {"phase": "human_gate", "status": "start"}, pd, pn)
+    try:
+        from werkstatt.config import Config
+        config = Config(pipeline.load_project_config(project_name))
+        rc = pipeline._approval_und_human_gate(
+            state, pd, pn, config
+        )
+    except Exception:  # noqa: BLE001
+        # Fallback: Delegation an Monolithen, falls Human-Gate nicht aufrufbar
+        audit("loop_human_gate_fallback", {}, pd, pn)
+        rc = pipeline.run_pipeline(
+            project_name, aufgabe, state_ref, phasen_state=phasen_state
+        )
+
+    if rc == 0:
+        audit("loop_erfolg", {"project_name": project_name}, pd, pn)
     return rc
