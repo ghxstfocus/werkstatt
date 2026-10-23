@@ -15,6 +15,7 @@ from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.builder import run_builder
 from werkstatt.planner import run_planner
+from werkstatt.reviewer import run_reviewer
 from werkstatt.state import RunState
 
 
@@ -169,6 +170,14 @@ def run_pipeline_loop(
             audit("loop_gate_failed", {"gate": "post_build", "task_id": i}, pd, pn)
             if not _reflection_loop(state):
                 audit("loop_reflection_gescheitert", {"task_id": i}, pd, pn)
+                return 1
+
+        # Reviewer (Phase 9)
+        if not run_reviewer(state):
+            audit("loop_reviewer_rejected", {"task_id": i}, pd, pn)
+            # Reflection-Loop versuchen (Builder korrigiert)
+            if not _reflection_loop(state):
+                audit("loop_reviewer_reflection_gescheitert", {"task_id": i}, pd, pn)
                 return 1
 
         audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
