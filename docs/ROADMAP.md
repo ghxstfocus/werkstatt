@@ -23,7 +23,7 @@ und `ERLEDIGT.md` (Erledigt).
 |---|---|---|---|---|
 | 1 | Projekt-Schema | ✅ | 406e3cc | — |
 | 1b | Validator Fail-closed | ✅ | — | — |
-| 2 | Scaffolder | 📋 | — | — |
+| 2 | Scaffolder (Agent: legt Projekt-Ordnerstruktur an) | 📋 | — | — |
 | 3a-1 | Anti-Pattern-Bibliothek | ✅ | 1ed875a | — |
 | 3a-2 | Anti-Pattern-Katalog | ✅ | 8ed6cd0 | — |
 | 3b | Builder-Injektion | ✅ | 04012f6 | — |
@@ -34,6 +34,17 @@ und `ERLEDIGT.md` (Erledigt).
 | 19 | ChangeApplier + Sofort-Massnahmen | ✅ | 163f29b | 1102 |
 | 20a | Change-Modell (Audit-Trail-Felder) | 🔧 | 560659a | 1452 |
 | 20b | ChangeApplier (Audit-Log, Rollback) | 🚫 | — | — |
+| **Loop-Neubau** | **Phase 1-18 (Strangler-Fig + Agenten + Hooks)** | **✅** | **92eb7c7** | **1290** |
+| **A8-Trichotomie** | **A8-1 + A8-3 (Agenten + Hooks extrahiert)** | **✅** | **92eb7c7** | **1290** |
+
+**HINWEIS (2026-10-23):** Die Roadmap ist inkonsistent:
+  - Phase 20b ist oben 🚫, unten ✅.
+  - W52b ist oben 🔴/🟡, unten ✅.
+  - W61 ist 🔨, aber durch Loop-Neubau teilweise ersetzt.
+  - Block B (Loop-Umbau) ist "ERSETZT DURCH LOOP-NEUBAU",
+    aber B1-B5 sind noch als offen gelistet.
+  → Diese Widersprüche werden in einem separaten Doku-Commit
+    bereinigt (nicht hier, um die Historie zu erhalten).
 
 Phase 20b done. U1-U4 abgeschlossen in Sitzung
 2026-10-18: 759b9e1 (U1), ada910a (U2),

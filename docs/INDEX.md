@@ -39,6 +39,9 @@ dann `../Bau-Handoff.md`, dann `NEUBAU-ZIELBILD.md`.
 - `PHASE3-0-ROLLEN-ENTDOPPELN.md` — Phase 3.0 (Gate 14, 5 Auflagen).
 - `MESS-INFRASTRUKTUR.md` — Block-M-Recherche (Mess-Infrastruktur).
 - `HANDOFF-BASELINE.md` — Baseline-Definition (siehe How-to).
+- `werkstatt/loop.py` — neuer Orchestrator (Phase 1-18).
+- `werkstatt/planner.py`, `builder.py`, `reviewer.py`, `explorer.py` — Agenten.
+- `hooks/pre_tool_use.py`, `post_tool_use.py`, `simplify.py` — Hooks.
 
 ## ADRs (Architecture Decision Records)
 
@@ -63,4 +66,4 @@ dann `../Bau-Handoff.md`, dann `NEUBAU-ZIELBILD.md`.
 - `UEBERGABE-3A-2026-10-19.md` — alte Uebergabe.
 - `UEBERGABE-BAU-CHAT-2026-10-19.md` — alte Uebergabe.
 
-Diese drei werden in A7-2 geloescht (Git-Historie bleibt).
+Diese drei sind in A7-2 geloescht (Git-Historie bleibt).

@@ -528,3 +528,61 @@ Return-Bilanz: 87 -> 92 (Delta +5, Extraktions-Artefakte:
   Verteiler + Erfolgs-Fallbacks + Option-D-Returns).
 
 Baseline 1245/17/9/6/167 durchgehend (alle 4 Sub-Bloecke).
+
+## Loop-Neubau (Phase 1-18) — 2026-10-23
+
+| Phase | Titel | Status | Commit |
+|---|---|---|---|
+| 1 | Strangler-Fig Wrapper | ✅ | 3c82470 |
+| 2 | Harte Gates B1+B2 | ✅ | db39459 |
+| 3 | Post-Build Gates | ✅ | 3eb5b34 |
+| 4 | Reflection-Loop (Aider) | ✅ | 42ac992 |
+| 5 | Planner-Agent | ✅ | 264db19 |
+| 6 | Builder-Agent (create + update) | ✅ | 67c0def |
+| 7a | Happy Path | ✅ | dcc29bd |
+| 7c | Autonomer Task-Loop (Claude) | ✅ | 6206d85 |
+| 8 | Reviewer-Agent | ✅ | 87546c0 |
+| 9 | Reviewer im Loop | ✅ | 4d63d14 |
+| 10 | PreToolUse + PostToolUse Hooks | ✅ | 97b2886 |
+| 10+11 | Simplify-Hook | ✅ | 01b5647 |
+| 14 | Explorer-Subagent | ✅ | ad98bd8 |
+| 15 | Multi-Projekt Verify-Contract | ✅ | (in Phase 14-16) |
+| 16 | Projekt-Pfad-Aufloesung | ✅ | 324c367 |
+| 18 | CI-Optik (loop_renderer) | ✅ | 92eb7c7 |
+
+**Architektur (gemessen 2026-10-23):**
+- `pipeline.py`: 11.118 Z. (Fallback).
+- `werkstatt/`: 5.027 Z. (Agenten, Loop, State).
+- `hooks/`: 281 Z. (Pre/PostToolUse, Simplify, Anti-Patterns).
+- Gesamt: 16.426 Z.
+- Baseline: 1290 passed / 13 ruff / 8 mypy / 6 AST / 162 Katalog.
+
+**Neue Agenten:**
+- `werkstatt/explorer.py` (89 Z.): read-only Kontext.
+- `werkstatt/planner.py` (81 Z.): JSON-Plan.
+- `werkstatt/builder.py` (89 Z.): str_replace, create + update.
+- `werkstatt/reviewer.py` (103 Z.): Bug-Check.
+- `werkstatt/phase_state.py` (137 Z.): Resume, Decisions.
+- `werkstatt/loop.py` (447 Z.): Orchestrator.
+- `werkstatt/loop_renderer.py` (94 Z.): CI-Optik.
+
+**Neue Hooks:**
+- `hooks/pre_tool_use.py` (89 Z.): Waechter (.env, destruktive Kommandos, Datei-Existenz).
+- `hooks/post_tool_use.py` (42 Z.): Verifier (Baseline).
+- `hooks/simplify.py` (64 Z.): Aufraeumer (Komplexitaet).
+- `hooks/anti_patterns.py` (86 Z.): Anti-Patterns.
+
+## A8-Trichotomie (A8-1 + A8-3) — 2026-10-23
+
+| Block | Titel | Status | Commit |
+|---|---|---|---|
+| A8-1a-1 | ask_llm nach agent.py | ✅ | 7494ac4 |
+| A8-1b-0 | 3 Helper + Konstante | ✅ | 9e5346c |
+| A8-1b-1a | execute_commands Definition | ✅ | e43b877 |
+| A8-1b-0b | Test-Patch-Nachtrag | ✅ | fed2438 |
+| A8-1b-1b | execute_commands Umstellung | ✅ | 8fe0e04 |
+| A8-1a-2 | build_system_prompt | ✅ | 14bf723 |
+| A8-3 | Anti-Pattern-Hook | ✅ | daaba7f |
+
+**A8-2 (Orchestrator):** SKIP (durch Loop-Neubau ersetzt).
+**A8-4 (CLI-Wrapper):** SKIP (loop.py ist der neue Einstiegspunkt).

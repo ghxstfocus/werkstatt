@@ -50,6 +50,34 @@ mit Frontmatter `name` + `description`.
 **W36-Mock** — Schutz-Mechanismus in Tests, der `subprocess.run`
 auf Tupel-Argumente prueft. Siehe M-194.
 
+**Loop** — Neuer Orchestrator (`werkstatt/loop.py`).
+Explorer -> Planner -> Builder -> Hooks -> Reviewer -> Human.
+
+**Explorer** — Read-only Subagent (`werkstatt/explorer.py`).
+Sammelt Kontext, bevor der Planner laeuft.
+
+**Planner** — Agent (`werkstatt/planner.py`). Erstellt JSON-Plan
+(tasks, tests, akzeptanzkriterien). Kein Code.
+
+**Builder** — Agent (`werkstatt/builder.py`). Generiert
+str_replace-Patches (create + update).
+
+**Reviewer** — Agent (`werkstatt/reviewer.py`). Prueft Diff
+auf Bugs (JSON-Output).
+
+**PreToolUse-Hook** — Waechter (`hooks/pre_tool_use.py`).
+Blockiert .env, destruktive Kommandos, Datei-Existenz.
+
+**PostToolUse-Hook** — Verifier (`hooks/post_tool_use.py`).
+Prueft Baseline nach dem Builder.
+
+**Simplify-Hook** — Aufraeumer (`hooks/simplify.py`).
+Prueft Diff auf Komplexitaet.
+
+**Multi-Projekt** — Werkstatt-YAML (`projects/<name>.yaml`)
+sagt WO, Zielprojekt-Contract (`.werkstatt/verify.json`)
+sagt WIE.
+
 ## M-Nummern (Auswahl)
 
 **M-57** — Body-VOR-Werte pro Commit in `SESSION-BILANZ.md`.
