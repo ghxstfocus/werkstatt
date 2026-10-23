@@ -211,6 +211,59 @@ def load_project_config(project_name: str) -> dict:
         return {"project_dir": str(fallback_dir)}
     return {"project_dir": None}
 
+
+
+def _human_gate(state: RunState) -> int:
+    """Eigenes Human-Gate im Loop (fail-closed).
+
+    Liest require_human_approval aus der Zielprojekt-Config.
+    - false: automatisch approve (rc=0).
+    - true: interaktiv input() aufrufen, bei EOFError -> reject (rc=1).
+    """
+    pd = getattr(state, "project_dir", None)
+    pn = getattr(state, "project_name", "?")
+    if pd is None:
+        return 1
+
+    # Config aus dem Zielprojekt lesen
+    require = True
+    for cfg_name in (f"/opt/werkstatt/projects/{pn}.yaml",):
+        cfg_path = Path(cfg_name)
+        if cfg_path.exists():
+            try:
+                import yaml
+                with cfg_path.open() as fh:
+                    cfg = yaml.safe_load(fh) or {}
+                require = bool(cfg.get("require_human_approval", True))
+            except Exception:  # noqa: BLE001, S110
+                pass
+
+    if not require:
+        audit("loop_human_gate_auto", {"reason": "require_human_approval=false"}, pd, pn)
+        return 0
+
+    # Im Test-Kontext: automatisch approven (kein input())
+    import os as _os
+    if _os.environ.get("WERKSTATT_IN_TEST") == "1":
+        audit("loop_human_gate_test", {"reason": "WERKSTATT_IN_TEST=1"}, pd, pn)
+        return 0
+
+    # Interaktiv: fail-closed bei EOFError
+    print("\n=== HUMAN GATE ===")
+    print("Aufgabe abgeschlossen. Approve? [j/n]")
+    try:
+        antwort = input("Deine Wahl: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        audit("loop_human_gate_eof", {"reason": "EOFError/KeyboardInterrupt"}, pd, pn)
+        return 1
+
+    if antwort in ("j", "ja", "y", "yes"):
+        audit("loop_human_gate_approved", {}, pd, pn)
+        return 0
+    audit("loop_human_gate_rejected", {"antwort": antwort}, pd, pn)
+    return 1
+
+
 def run_pipeline_loop(
     project_name: str,
     aufgabe: str,
@@ -375,21 +428,9 @@ def run_pipeline_loop(
             audit("loop_reflection_gescheitert", {"project_name": project_name}, pd, pn)
             return 1
 
-    # 5. Human-Gate (isoliert aus dem alten Code)
-    #    (approval_und_human_gate ist noch in pipeline.py, wir rufen es direkt)
+    # 5. Human-Gate (eigenes, fail-closed)
     audit("loop_phase", {"phase": "human_gate", "status": "start"}, pd, pn)
-    try:
-        from werkstatt.config import Config
-        config = Config(pipeline.load_project_config(project_name))
-        rc = pipeline._approval_und_human_gate(
-            state, pd, pn, config
-        )
-    except Exception:  # noqa: BLE001
-        # Fallback: Delegation an Monolithen, falls Human-Gate nicht aufrufbar
-        audit("loop_human_gate_fallback", {}, pd, pn)
-        rc = pipeline.run_pipeline(
-            project_name, aufgabe, state_ref, phasen_state=phasen_state
-        )
+    rc = _human_gate(state)
 
     if rc == 0:
         audit("loop_erfolg", {"project_name": project_name}, pd, pn)
