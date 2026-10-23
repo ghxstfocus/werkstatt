@@ -1232,3 +1232,15 @@ M-260 (timestamps):
   Gate ok=true, regression=false.
 
 Status: dokumentiert 2026-10-23.
+
+
+## Best-of-Loop-Architektur (Phase 2)
+
+Der neue Loop (werkstatt/loop.py) vereint die Staerken der Konkurrenz:
+- Copilot Workspace: Plan-Gate (B1) erzwingt vollstaendigen Plan vor Ausfuehrung.
+- OpenAI Codex: Deterministischer Verifier (B2) prueft Baseline vor dem LLM-Call.
+- Claude Code: Kontext-Disziplin (Abbruch bei fehlendem Plan/Baseline).
+- Grok Build: Hooks + Diff-Transparenz (in Phase 3).
+
+Ziel: Kein LLM-Token wird verschwendet, wenn die Voraussetzungen fehlen.
+Status: Phase 2 (B1 + B2) implementiert.

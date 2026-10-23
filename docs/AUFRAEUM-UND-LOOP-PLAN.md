@@ -100,12 +100,12 @@ A6. HARD_RULES entdoppeln (Phase 3.0) — Prompt vs. Skill trennen
 
 ### Block B — Loop-Umbau (3b-2)
 
-B1. Plan-Gate (deterministisch)
+B1. Plan-Gate (deterministisch) - DONE in Loop Phase 2
     Neue Funktion _plan_gate(state) -> bool.
     Prueft: tasks + tests + akzeptanzkriterien.
     Kein LLM.
 
-B2. Verifier (deterministisch)
+B2. Verifier (deterministisch) - DONE in Loop Phase 2
     Neue Funktion _verify_patches(state) -> int.
     Ruft tools/quality_gate.py + Tests.
     Kein LLM.
