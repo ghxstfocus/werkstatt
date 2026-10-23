@@ -133,6 +133,20 @@ def _call_hook(hook_name: str, payload: dict) -> dict:
         return {"allow": False, "reason": f"Hook-Fehler: {exc}"}
 
 
+
+
+def _get_git_diff_for_hook() -> str:
+    """Holt den aktuellen Git-Diff fuer Hooks."""
+    try:
+        res = subprocess.run(
+            ["git", "diff", "HEAD"],
+            cwd="/opt/werkstatt", capture_output=True, text=True, timeout=30, check=False
+        )
+        return res.stdout[:10000]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def run_pipeline_loop(
     project_name: str,
     aufgabe: str,
@@ -186,6 +200,20 @@ def run_pipeline_loop(
         if not run_builder(state):
             audit("loop_builder_failed", {"task_id": i}, pd, pn)
             return 1
+
+        # PostToolUse-Hook (Phase 10)
+        hook_res = _call_hook("post_tool_use.py", {})
+        if not hook_res.get("allow", False):
+            audit("loop_hook_blocked", {"hook": "post_tool_use", "reason": hook_res.get("reason", "")}, pd, pn)
+            if not _reflection_loop(state):
+                return 1
+
+        # Simplify-Hook (Phase 11)
+        hook_res = _call_hook("simplify.py", {"diff": _get_git_diff_for_hook()})
+        if not hook_res.get("allow", False):
+            audit("loop_hook_blocked", {"hook": "simplify", "reason": hook_res.get("reason", "")}, pd, pn)
+            if not _reflection_loop(state):
+                return 1
 
         # Post-Build Verify + Reflection (automatisch)
         if not _verify_patches(state):
