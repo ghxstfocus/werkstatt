@@ -148,6 +148,32 @@ def _get_git_diff_for_hook() -> str:
         return ""
 
 
+
+PROJECTS_DIR = Path("/opt/werkstatt/projects")
+
+
+def load_project_config(project_name: str) -> dict:
+    """Laedt die Projekt-Konfiguration aus /opt/werkstatt/projects/<name>.yaml.
+
+    Liefert ein dict mit 'project_dir' (Pfad zum Zielprojekt).
+    Fallback: /opt/<project_name>, wenn keine YAML existiert.
+    """
+    import yaml  # type: ignore[import-untyped]
+    cfg_path = PROJECTS_DIR / f"{project_name}.yaml"
+    if cfg_path.exists():
+        try:
+            with cfg_path.open(encoding="utf-8") as fh:
+                cfg = yaml.safe_load(fh) or {}
+            if "project_dir" in cfg:
+                return cfg
+        except (yaml.YAMLError, OSError):
+            pass
+    # Fallback: /opt/<project_name>
+    fallback_dir = Path(f"/opt/{project_name}")
+    if fallback_dir.exists():
+        return {"project_dir": str(fallback_dir)}
+    return {"project_dir": None}
+
 def run_pipeline_loop(
     project_name: str,
     aufgabe: str,
@@ -157,6 +183,12 @@ def run_pipeline_loop(
 ) -> int:
     """Echter Loop: Plan -> Planner -> Builder -> Verify -> Reflection -> Human."""
     state = phasen_state or (state_ref[-1] if state_ref else None)
+
+    # Projekt-Pfad aus Config aufloesen, falls nicht gesetzt
+    if state is not None and getattr(state, "project_dir", None) is None:
+        cfg = load_project_config(project_name)
+        if cfg.get("project_dir"):
+            state.project_dir = Path(cfg["project_dir"])  # type: ignore[attr-defined]
 
     if state is None or getattr(state, "project_dir", None) is None:
         return pipeline.run_pipeline(
