@@ -150,14 +150,30 @@ def run_pipeline_loop(
         audit("loop_gate_failed", {"gate": "pre_build"}, pd, pn)
         return 1
 
-    # 3. Builder (neuer Agent)
-    audit("loop_phase", {"phase": "build", "status": "start"}, pd, pn)
-    if not run_builder(state):
-        audit("loop_builder_failed", {}, pd, pn)
-        return 1
-    audit("loop_phase", {"phase": "build", "status": "ok"}, pd, pn)
+    # 3. Autonomer Task-Loop (Claude-Code-Prinzip)
+    #    Alle Tasks werden abgearbeitet ohne Unterbrechung.
+    #    Human-Gate kommt nur am Ende der Phase.
+    tasks = getattr(state, "tasks", [])
+    for i, task in enumerate(tasks, 1):
+        task_name = task.get("name", f"Task {i}") if isinstance(task, dict) else str(task)
+        audit("loop_task_start", {"task_id": i, "name": task_name}, pd, pn)
 
-    # 4. Post-Build Verify + Reflection
+        # Builder fuer diesen Task
+        state.aktuelle_task = task  # type: ignore[attr-defined]
+        if not run_builder(state):
+            audit("loop_builder_failed", {"task_id": i}, pd, pn)
+            return 1
+
+        # Post-Build Verify + Reflection (automatisch)
+        if not _verify_patches(state):
+            audit("loop_gate_failed", {"gate": "post_build", "task_id": i}, pd, pn)
+            if not _reflection_loop(state):
+                audit("loop_reflection_gescheitert", {"task_id": i}, pd, pn)
+                return 1
+
+        audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
+
+    # 4. Post-Build Verify + Reflection (nach allen Tasks)
     if not _verify_patches(state):
         audit("loop_gate_failed", {"gate": "post_build"}, pd, pn)
         if _reflection_loop(state):
