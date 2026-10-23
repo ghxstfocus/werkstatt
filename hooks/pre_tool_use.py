@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from pathlib import Path
 
 # Verbotene Muster im Patch
 DESTRUCTIVE_PATTERNS = [
@@ -27,8 +28,12 @@ FORBIDDEN_FILES = [
 ]
 
 
-def check_patch(patch_text: str) -> dict:
-    """Prueft einen Patch auf Sicherheitsverletzungen."""
+def check_patch(patch_text: str, *, project_dir: str | None = None, action: str = "update") -> dict:
+    """Prueft einen Patch auf Sicherheitsverletzungen.
+    
+    NEU: Bei action="create" wird geprueft, ob die Datei
+    bereits existiert. Wenn ja -> blockieren.
+    """
     if not patch_text.strip():
         return {"allow": False, "reason": "Patch ist leer."}
 
@@ -49,6 +54,19 @@ def check_patch(patch_text: str) -> dict:
                 "reason": f"Patch enthaelt destruktives Kommando ({pattern}). "
                           f"Verwende eine sichere Alternative.",
             }
+
+    # NEU: Bei create pruefen, ob Datei existiert
+    if action == "create" and project_dir:
+        # Datei aus dem Patch extrahieren (erste Zeile, die mit "+++ b/" beginnt)
+        match = re.search(r'^\+\+\+ b/(.+)$', patch_text, re.MULTILINE)
+        if match:
+            file_path = Path(project_dir) / match.group(1)
+            if file_path.exists():
+                return {
+                    "allow": False,
+                    "reason": f"Datei existiert bereits: {match.group(1)}. "
+                              f"Verwende action='update' statt 'create'.",
+                }
 
     return {"allow": True, "reason": "OK"}
 

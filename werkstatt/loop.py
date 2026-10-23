@@ -281,6 +281,9 @@ def run_pipeline_loop(
 
         # Patches anwenden (create + update)
         patches = getattr(state, "patches", [])
+        # Backup-Verzeichnis anlegen
+        backup_dir = Path(pd) / ".werkstatt" / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
         for patch in patches:
             if not isinstance(patch, dict):
                 continue
@@ -293,6 +296,10 @@ def run_pipeline_loop(
             if action == "create":
                 content = patch.get("content", "")
                 if not content:
+                    continue
+                # Sicherheits-Check: Datei darf nicht existieren
+                if target.exists():
+                    audit("loop_patch_file_exists", {"file": file}, pd, pn)
                     continue
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(content)
