@@ -13,7 +13,7 @@ sind die Skills.
 
 ## Pflicht-Befehle
 
-    pytest -q                              # 1259 passed
+    pytest -q                              # 1265 passed
     ruff check .                           # 14 errors
     mypy pipeline.py werkstatt/            # 8 errors
     pytest tests/test_audit_kinds.py -q    # 6 passed

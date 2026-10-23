@@ -479,3 +479,74 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
 
 
 
+
+# =====================================================================
+# A8-3 (2026-10-23): Anti-Pattern-Hook via subprocess.run.
+# Fail-open: Hook-Fehler -> leerer Block + Audit.
+# =====================================================================
+
+import json
+
+_AP_HOOK_TIMEOUT_S = 5
+_AP_HOOK_PATH = "/opt/werkstatt/hooks/anti_patterns.py"
+
+
+def _anti_pattern_block(
+    state: RunState,
+    rolle: str,
+    trigger_grund: str | None = None,
+    *,
+    aufrufer: str | None = None,
+) -> str:
+    """A8-3: Anti-Pattern-Block via hooks/anti_patterns.py.
+
+    Fail-open: bei Hook-Fehler (Timeout, Crash,
+    ungueltiges JSON) -> leerer Block + Audit
+    "anti_patterns_hook_fehler".
+    """
+    import subprocess
+    args = [
+        "python3", _AP_HOOK_PATH,
+        "--rolle", rolle,
+    ]
+    if trigger_grund is not None:
+        args.extend(["--trigger-grund", trigger_grund])
+    try:
+        res = subprocess.run(
+            args, capture_output=True, text=True,
+            timeout=_AP_HOOK_TIMEOUT_S, check=False,
+        )
+        if res.returncode != 0:
+            raise RuntimeError(
+                f"hook rc={res.returncode} stderr={res.stderr[:200]}")
+        aps = json.loads(res.stdout)
+    except (subprocess.TimeoutExpired, json.JSONDecodeError,
+            RuntimeError, OSError) as exc:
+        if state.project_dir is not None:
+            audit("anti_patterns_hook_fehler",
+                  {"rolle": rolle, "fehler": str(exc)[:200]},
+                  state.project_dir, state.project_name)
+        return ""
+    if not aps:
+        return ""
+    zeilen = ["## ANTI-PATTERNS"]
+    for e in aps:
+        zeilen.append("")
+        zeilen.append(
+            f"- [{e['id']}] {e['titel']}")
+        zeilen.append(
+            f"  Beschreibung: {e['beschreibung']}")
+        zeilen.append(
+            f"  Loesung: {e['loesung']}")
+    if state.project_dir is not None:
+        payload: dict[str, Any] = {
+            "rolle": rolle,
+            "trigger_grund": trigger_grund,
+            "ids": [e["id"] for e in aps],
+        }
+        if aufrufer is not None:
+            payload["aufrufer"] = aufrufer
+        audit("anti_patterns_injiziert", payload,
+              state.project_dir, state.project_name)
+    return "\\n".join(zeilen)
+

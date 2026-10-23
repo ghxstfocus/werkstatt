@@ -159,9 +159,11 @@ A8-2. Orchestrator isolieren (~1.850 Z. raus)
 
 A8-3. Hooks externalisieren (~100 Z. neu)
   hooks/ als separates Verzeichnis.
-  orchestrator.py ruft via subprocess.run.
+  agent.py ruft via subprocess.run.
   Bounded retry mit Reflexion (M-208).
-  Erfordert A8-2.
+  Erfordert A8-1b (ask_llm + execute_commands).
+  Schaltet A8-1a-2 frei (build_system_prompt).
+  Unabhaengig von A8-2.
 
 A8-4. pipeline.py wird CLI-Wrapper (~200 Z.)
   main() + load_project_config + load_agents + load_docs.

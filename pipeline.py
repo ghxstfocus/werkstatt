@@ -34,6 +34,7 @@ from werkstatt.agent import (
     MAX_PROTOKOLL_PER_COMMAND,  # noqa: F401
     MAX_PROTOKOLL_PER_COMMAND_READ_FILE,  # noqa: F401
     MAX_PROTOKOLL_TOTAL,  # noqa: F401
+    _anti_pattern_block,  # A8-3
     _schreibe_messung,  # noqa: F401
     ask_llm,  # A8-1a-1 Re-Export
     execute_commands,  # A8-1b-1b
@@ -686,56 +687,6 @@ def _ap_trigger_grund_aus_state(state: RunState) -> str | None:
             return _AP_GRUND_ZU_TRIGGER.get(g)
     return None
 
-
-def _anti_pattern_block(
-    state: RunState,
-    rolle: str,
-    trigger_grund: str | None = None,
-    *,
-    aufrufer: str | None = None,
-) -> str:
-    """WW4: formatiert die relevanten Anti-Patterns als
-    Prompt-Block. Liefert "" wenn nichts zu zeigen ist.
-
-    Schreibt Audit-Event anti_patterns_injiziert, wenn
-    mindestens ein Eintrag gezeigt wird (YY6: kein
-    Audit bei leerem Block).
-
-    YY4: aufrufer (z.B. "command", "deadlock",
-    "trigger_a_b_c") wird mit ins Audit geschrieben,
-    damit der Pfad nachvollziehbar ist.
-    """
-    aps = anti_patterns_fuer(rolle, trigger_grund, limit=3)
-    if not aps:
-        return ""
-    zeilen = ["## ANTI-PATTERNS"]
-    for e in aps:
-        beschreibung = _ap_kuerzen(
-            e["beschreibung"].strip(), _AP_BESCHREIBUNG_MAX)
-        loesung = _ap_kuerzen(
-            e["loesung"].strip(), _AP_BESCHREIBUNG_MAX)
-        zeilen.append("")
-        zeilen.append(f"- [{e['id']}] {e['titel']}")
-        zeilen.append(f"  Beschreibung: {beschreibung}")
-        zeilen.append(f"  Loesung: {loesung}")
-    # Audit (YY6: nur bei nicht-leerem Block).
-    if state.project_dir is not None:
-        payload: dict[str, Any] = {
-            "rolle": rolle,
-            "trigger_grund": trigger_grund,
-            "ids": [e["id"] for e in aps],
-        }
-        if aufrufer is not None:
-            payload["aufrufer"] = aufrufer
-        audit("anti_patterns_injiziert", payload,
-              state.project_dir, state.project_name)
-    return "\n".join(zeilen)
-
-
-# =====================================================================
-# Planner (Block P1, 2026-10-15).
-# Stufe 1 des Planner-Konzepts (docs/PLANNER-KONZEPT.md).
-# =====================================================================
 
 def parse_planner_reply(text: str) -> dict[str, Any]:
     """Parst die Planner-Antwort.

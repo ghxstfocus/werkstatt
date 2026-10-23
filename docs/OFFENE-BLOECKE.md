@@ -1198,3 +1198,16 @@ Beispiel A8-1b-1b:
   M-244 (8) und M-246 (44) waren Prognosen.
 
 Status: dokumentiert 2026-10-23 (M-251).
+
+## Anti-Pattern-Hook fail-open (A8-3)
+
+Bei Hook-Fehler (Timeout, Crash, ungueltiges JSON)
+liefert agent._anti_pattern_block einen leeren
+Block und auditet "anti_patterns_hook_fehler".
+
+Begruendung: AP-Block ist Prompt-Anreicherung,
+kein Gate. Pipeline darf nicht an fehlendem
+AP-Block scheitern. Audit macht den Fehler sichtbar.
+
+Wenn in N Laeufen > M Fehler: auf fail-closed
+umstellen (Phase 3b/6).
