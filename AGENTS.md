@@ -73,15 +73,25 @@ Pipeline-Trichotomie (A8, Block E in docs/AUFRAEUM-UND-LOOP-PLAN.md):
 Ziel: pipeline.py von 11.639 Z. auf ~1.200 Z. reduzieren.
 
 
-## Loop-Neubau (Phase 1-9)
+## Loop-Neubau (Phase 1-16)
 
 Der neue Orchestrator ist `werkstatt/loop.py`.
-Er ruft die neuen Agenten auf:
-- `werkstatt/planner.py` (Plan erstellen)
-- `werkstatt/builder.py` (Patches generieren)
-- `werkstatt/reviewer.py` (Bugs pruefen)
+Ablauf: Explorer -> Planner -> Builder -> Hooks -> Reviewer -> Human.
 
-Der alte Monolith (`pipeline.run_pipeline`) ist Fallback.
+Agenten:
+- `werkstatt/explorer.py` (read-only Kontext)
+- `werkstatt/planner.py` (JSON-Plan)
+- `werkstatt/builder.py` (str_replace-Patches)
+- `werkstatt/reviewer.py` (Bug-Check)
+- `werkstatt/phase_state.py` (Resume, Decisions)
 
-Ablauf pro Task:
-  Builder -> Verify -> Reflection -> Reviewer -> Verify.
+Hooks:
+- `hooks/pre_tool_use.py` (Waechter)
+- `hooks/post_tool_use.py` (Verifier)
+- `hooks/simplify.py` (Aufraeumer)
+
+Multi-Projekt:
+- Werkstatt-YAML: WO liegt das Projekt.
+- `.werkstatt/verify.json`: WIE verifizieren.
+
+Baseline: 1290 passed / 13 ruff / 8 mypy.

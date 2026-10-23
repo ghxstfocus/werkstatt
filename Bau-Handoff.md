@@ -4,40 +4,35 @@ Stand: 2026-10-22 (Aufraeum-Block A, HEAD nach A8-1a-1).
 Werkstatt-HEAD: eb17291. Branch: umbau/phase-2 (origin gepusht).
 Baseline: pytest 1290 / ruff 13 / mypy 8 / AST 6 / Katalog 162.
 
-## Loop-Neubau (Phase 1-9) — Status
+## Loop-Neubau (Phase 1-16) — Status
 
-Der neue Loop (`werkstatt/loop.py`) ist der neue Orchestrator.
-Alte Agenten (pipeline.py) bleiben als Fallback, werden aber
-schrittweise ersetzt.
+**HEAD:** ad98bd8 (Phase 16)
 
-**Fertig (committed):**
-- Phase 1: Strangler-Fig Wrapper (3c82470)
-- Phase 2: Harte Gates B1+B2 (db39459)
-- Phase 3: Post-Build Gates (3eb5b34)
-- Phase 4: Reflection-Loop (42ac992)
-- Phase 5: Planner-Agent (264db19)
-- Phase 6: Builder-Agent (67c0def)
-- Phase 7a: Happy Path (dcc29bd)
-- Phase 7c: Autonomer Task-Loop (6206d85)
-- Phase 8: Reviewer-Agent (87546c0)
-- Phase 9: Reviewer im Loop (4d63d14)
+**Fertig:**
+- Phase 1-2: Strangler-Fig + Gates (Copilot/Codex)
+- Phase 3-4: Reflection-Loop (Aider)
+- Phase 5: Planner-Agent (Codex Plan Mode)
+- Phase 6: Builder-Agent (str_replace, Claude)
+- Phase 7: Autonomer Task-Loop (Claude Code)
+- Phase 8: Reviewer-Agent (Bug-Check)
+- Phase 9: Reviewer im Loop
+- Phase 10: PreToolUse + PostToolUse Hooks (Claude/Cursor/Grok)
+- Phase 11: Simplify-Hook (Claude /simplify)
+- Phase 13: PhaseState (Resume, Decisions, Failures)
+- Phase 14: Explorer-Subagent (read-only, JSON)
+- Phase 15: Multi-Projekt Verify-Contract (.werkstatt/verify.json)
+- Phase 16: Projekt-Pfad-Aufloesung (load_project_config)
 
-**Neue Agenten:**
-- `werkstatt/planner.py`: JSON-Plan, kein Code.
-- `werkstatt/builder.py`: str_replace-Patches.
-- `werkstatt/reviewer.py`: Bug-Check (JSON).
+**Architektur:**
+- Werkstatt = zentraler Runner.
+- Zielprojekt = .werkstatt/verify.json (WIE verifizieren).
+- Werkstatt/projects/<name>.yaml = project_dir (WO).
+- Loop ruft: Explorer -> Planner -> Builder -> Hooks -> Reviewer -> Human.
 
-**Neuer Loop (`werkstatt/loop.py`):**
-1. Plan-Gate -> Planner -> Pre-Build Verify
-2. Pro Task: Builder -> Verify -> Reflection -> Reviewer
-3. Finales Human-Gate
+**Baseline:** 1290 passed / 13 ruff / 8 mypy / 6 AST / 162 Katalog.
 
-**Naechste Schritte:**
-- Simplify-Hook (Phase 10)
-- Bestehende Hooks in Loop integrieren
-- Echter LLM-Test
+**Naechster Schritt:** Echter LLM-Test mit security-ai.
 
-**Baseline:** 1290 passed / 13 ruff / 8 mypy.
 
 ## Aufraeum-Block A — Status
 
