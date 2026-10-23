@@ -71,3 +71,17 @@ Pipeline-Trichotomie (A8, Block E in docs/AUFRAEUM-UND-LOOP-PLAN.md):
 - Agent: werkstatt/agent.py (LLM + Dispatch).
 - Hooks: hooks/ (deterministisch, subprocess).
 Ziel: pipeline.py von 11.639 Z. auf ~1.200 Z. reduzieren.
+
+
+## Loop-Neubau (Phase 1-9)
+
+Der neue Orchestrator ist `werkstatt/loop.py`.
+Er ruft die neuen Agenten auf:
+- `werkstatt/planner.py` (Plan erstellen)
+- `werkstatt/builder.py` (Patches generieren)
+- `werkstatt/reviewer.py` (Bugs pruefen)
+
+Der alte Monolith (`pipeline.run_pipeline`) ist Fallback.
+
+Ablauf pro Task:
+  Builder -> Verify -> Reflection -> Reviewer -> Verify.

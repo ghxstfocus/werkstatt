@@ -98,7 +98,11 @@ A6. HARD_RULES entdoppeln (Phase 3.0) — Prompt vs. Skill trennen
     Scope: Voller Gate-14-Scope (planner, builder, judge).
     Aufwand: 2-3 Tage.
 
-### Block B — Loop-Umbau (3b-2)
+### Block B — Loop-Umbau (3b-2) [ERSETZT DURCH LOOP-NEUBAU]
+
+HINWEIS: Block B wurde durch den Loop-Neubau (Phase 1-9)
+ersetzt. Die hier definierten B1-B5 sind im neuen Loop
+implementiert (siehe werkstatt/loop.py).
 
 B1. Plan-Gate (deterministisch) - DONE in Loop Phase 2
     Neue Funktion _plan_gate(state) -> bool.

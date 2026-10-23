@@ -1244,3 +1244,15 @@ Der neue Loop (werkstatt/loop.py) vereint die Staerken der Konkurrenz:
 
 Ziel: Kein LLM-Token wird verschwendet, wenn die Voraussetzungen fehlen.
 Status: Phase 2 (B1 + B2) implementiert.
+
+
+## Loop-Neubau (Phase 10+)
+
+Der neue Loop ist funktional (Phase 1-9). Was noch fehlt:
+
+- **Simplify-Hook:** Code aufraeumen (Claude-Prinzip).
+- **Hooks in Loop:** `hooks/anti_patterns.py` wird vom
+  neuen Loop noch nicht direkt aufgerufen.
+- **Echter LLM-Test:** Bisher nur gemockt.
+
+Status: dokumentiert 2026-10-23.
