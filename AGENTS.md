@@ -13,7 +13,7 @@ sind die Skills.
 
 ## Pflicht-Befehle
 
-    pytest -q                              # 1276 passed
+    pytest -q                              # 1279 passed
     ruff check .                           # 14 errors
     mypy pipeline.py werkstatt/            # 8 errors
     pytest tests/test_audit_kinds.py -q    # 6 passed
@@ -44,7 +44,7 @@ Setup: `docs/KEY-ARCHITEKTUR.md`.
     agents/               8 Rollen-Prompts (builder, judge, ...)
     skills/               12 Skills (anker-regeln, plan-crafting, ...)
     tools/                quality_gate.py, audit.py
-    tests/                1276 Tests
+    tests/                1279 Tests
     docs/                 30 Doku-Dateien (INDEX.md als Einstieg)
 
 ## Doku

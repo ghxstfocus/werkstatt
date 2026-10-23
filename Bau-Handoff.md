@@ -2,7 +2,7 @@
 
 Stand: 2026-10-22 (Aufraeum-Block A, HEAD nach A8-1a-1).
 Werkstatt-HEAD: eb17291. Branch: umbau/phase-2 (origin gepusht).
-Baseline: pytest 1276 / ruff 14 / mypy 8 / AST 6 / Katalog 162.
+Baseline: pytest 1279 / ruff 14 / mypy 8 / AST 6 / Katalog 162.
 
 ## Aufraeum-Block A — Status
 
