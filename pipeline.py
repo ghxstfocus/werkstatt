@@ -37,6 +37,7 @@ from werkstatt.agent import (
     _anti_pattern_block,  # A8-3
     _schreibe_messung,  # noqa: F401
     ask_llm,  # A8-1a-1 Re-Export
+    build_system_prompt,  # A8-1a-2
     execute_commands,  # A8-1b-1b
     run_measurement_mit_argv,
     trim_output,
@@ -4215,51 +4216,6 @@ def gegenstand_gleich(
     if wert < schwellwert:
         return wert, P1_GRUND_KEIN_JACCARD
     return wert, P1_GRUND_GETRIGGERT
-
-
-def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
-                        doc_keys: list[str],
-                        *,
-                        state: RunState | None = None,
-                        mit_anti_patterns: bool = True,
-                        stufe: int = 1) -> str:
-    """Baut System-Prompt aus Rollen-Body + HARD_RULES_BASE + Rolle + Projekt-Doku.
-
-    Auflage 2182: HARD_RULES_BASE + rollenspezifische
-    HARD_RULES_<ROLLE> (anhand agent["name"]).
-    Reihenfolge: Rollen-Body, BASE, Rolle, Projekt-Doku.
-
-    Phase 3c-2 (2026-10-15): Wenn state gesetzt,
-    mit_anti_patterns True und Rolle reviewer, wird
-    der Anti-Pattern-Block angehaengt (Trigger-Grund
-    None, Fallback VV2). Builder bekommt den Block
-    via baue_anker_rueckmeldung (Phase 3b), Solver
-    via rufe_solver (Phase 3c-3). Recovery-Reviewer
-    ruft mit mit_anti_patterns=False (YY3).
-    """
-    parts = [agent["body"], HARD_RULES_BASE]
-    agent_name = agent.get("name", "")
-    # stufe wirkt nur fuer rolle=planner (P2a-S5a-A2).
-    # stufe=2 waehlt HARD_RULES_PLANNER_STUFE2.
-    # Jeder andere Wert verhaelt sich wie 1 (BY_ROLE).
-    if agent_name == "planner" and stufe == 2:
-        rollen_rules = HARD_RULES_PLANNER_STUFE2
-    else:
-        rollen_rules = HARD_RULES_BY_ROLE.get(agent_name, "")
-    if rollen_rules:
-        parts.append(rollen_rules)
-    if doc_keys:
-        parts.append("\n\n--- PROJEKT-DOKU ---")
-        for key in doc_keys:
-            if key in docs:
-                parts.append(f"\n--- {key} ---\n{docs[key]}")
-    # Phase 3c-2: Reviewer-Anti-Pattern-Block.
-    if (state is not None and mit_anti_patterns
-            and agent_name == "reviewer"):
-        ap_block = _anti_pattern_block(state, "reviewer", None)
-        if ap_block:
-            parts.append("\n\n" + ap_block)
-    return "\n".join(parts)
 
 
 def load_recent_commits(project_dir: Path, n: int = 10) -> str:

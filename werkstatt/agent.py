@@ -17,6 +17,11 @@ import requests  # type: ignore[import-untyped]
 
 import redaction
 from werkstatt.audit import audit
+from werkstatt.hard_rules import (
+    HARD_RULES_BASE,
+    HARD_RULES_BY_ROLE,
+    HARD_RULES_PLANNER_STUFE2,
+)
 from werkstatt.state import LLMReply, Measurement, Messung, RunState
 from werkstatt.subprocess_env import subprocess_env
 
@@ -549,4 +554,56 @@ def _anti_pattern_block(
         audit("anti_patterns_injiziert", payload,
               state.project_dir, state.project_name)
     return "\\n".join(zeilen)
+
+
+# =====================================================================
+# A8-1a-2 (2026-10-23): build_system_prompt aus pipeline.py.
+# Re-Export in pipeline.py.
+# =====================================================================
+
+def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
+                        doc_keys: list[str],
+                        *,
+                        state: RunState | None = None,
+                        mit_anti_patterns: bool = True,
+                        stufe: int = 1) -> str:
+    """Baut System-Prompt aus Rollen-Body + HARD_RULES_BASE + Rolle + Projekt-Doku.
+
+    Auflage 2182: HARD_RULES_BASE + rollenspezifische
+    HARD_RULES_<ROLLE> (anhand agent["name"]).
+    Reihenfolge: Rollen-Body, BASE, Rolle, Projekt-Doku.
+
+    Phase 3c-2 (2026-10-15): Wenn state gesetzt,
+    mit_anti_patterns True und Rolle reviewer, wird
+    der Anti-Pattern-Block angehaengt (Trigger-Grund
+    None, Fallback VV2). Builder bekommt den Block
+    via baue_anker_rueckmeldung (Phase 3b), Solver
+    via rufe_solver (Phase 3c-3). Recovery-Reviewer
+    ruft mit mit_anti_patterns=False (YY3).
+    """
+    parts = [agent["body"], HARD_RULES_BASE]
+    agent_name = agent.get("name", "")
+    # stufe wirkt nur fuer rolle=planner (P2a-S5a-A2).
+    # stufe=2 waehlt HARD_RULES_PLANNER_STUFE2.
+    # Jeder andere Wert verhaelt sich wie 1 (BY_ROLE).
+    if agent_name == "planner" and stufe == 2:
+        rollen_rules = HARD_RULES_PLANNER_STUFE2
+    else:
+        rollen_rules = HARD_RULES_BY_ROLE.get(agent_name, "")
+    if rollen_rules:
+        parts.append(rollen_rules)
+    if doc_keys:
+        parts.append("\n\n--- PROJEKT-DOKU ---")
+        for key in doc_keys:
+            if key in docs:
+                parts.append(f"\n--- {key} ---\n{docs[key]}")
+    # Phase 3c-2: Reviewer-Anti-Pattern-Block.
+    if (state is not None and mit_anti_patterns
+            and agent_name == "reviewer"):
+        ap_block = _anti_pattern_block(state, "reviewer", None)
+        if ap_block:
+            parts.append("\n\n" + ap_block)
+    return "\n".join(parts)
+
+
 
