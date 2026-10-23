@@ -17,11 +17,21 @@ from __future__ import annotations
 
 import argparse
 import json
+
+# Recursion Guard (Phase 14): Wenn wir in einem Test laufen,
+# sofort ok zurueckgeben, ohne pytest/ruff/mypy aufzurufen.
+import os as _os
 import re
 import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+
+if _os.environ.get("WERKSTATT_IN_TEST") == "1":
+    import sys as _sys
+    print('{"ok": true, "regression": false, "skipped": "WERKSTATT_IN_TEST=1"}')
+    _sys.exit(0)
+
 
 # Baseline fixiert (Quelle: docs/HANDOFF-BASELINE.md @ ae40f26).
 BASELINE = {

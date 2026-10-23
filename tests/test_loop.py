@@ -36,19 +36,25 @@ def test_plan_gate_fails_ohne_tests(tmp_path):
 
 
 def test_verify_patches_ok(tmp_path):
+    """Neue Version: Contract mit erfolgreichem Check -> True."""
     st = _state(tmp_path)
-    with patch("werkstatt.loop.subprocess.run") as mock_run:
-        mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = '{"ok": true}'
-        assert _verify_patches(st) is True
+    contract_dir = tmp_path / ".werkstatt"
+    contract_dir.mkdir()
+    (contract_dir / "verify.json").write_text(
+        '{"stages": [{"id": "ok", "command": ["python3", "-c", "import sys; sys.exit(0)"]}]}'
+    )
+    assert _verify_patches(st) is True
 
 
 def test_verify_patches_fails(tmp_path):
+    """Neue Version: Contract mit fehlschlagendem Check -> False."""
     st = _state(tmp_path)
-    with patch("werkstatt.loop.subprocess.run") as mock_run:
-        mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = '{"ok": false}'
-        assert _verify_patches(st) is False
+    contract_dir = tmp_path / ".werkstatt"
+    contract_dir.mkdir()
+    (contract_dir / "verify.json").write_text(
+        '{"stages": [{"id": "fail", "command": ["python3", "-c", "import sys; sys.exit(1)"]}]}'
+    )
+    assert _verify_patches(st) is False
 
 
 def test_loop_planner_fail(tmp_path):

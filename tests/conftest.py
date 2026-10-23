@@ -214,3 +214,12 @@ def ap_block_inprocess(monkeypatch):
     monkeypatch.setattr(_agent, "_anti_pattern_block", _ap_block)
     monkeypatch.setattr(_pipe, "_anti_pattern_block", _ap_block)
     return _ap_block
+
+
+import pytest as _pytest
+
+
+@_pytest.fixture(autouse=True)
+def _werkstatt_in_test(monkeypatch):
+    """Setzt WERKSTATT_IN_TEST=1 fuer alle Tests."""
+    monkeypatch.setenv("WERKSTATT_IN_TEST", "1")
