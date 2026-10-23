@@ -1181,3 +1181,20 @@ loest den Zwischenzustand auf.
 Bei Verwerfen von 1b: 1a rueckgaengig machen
 (git revert e43b877), nicht dauerhaft doppelt
 fuehren.
+
+## Patch-Zahlen im A8-Kontext
+
+Patch-Zahlen im Start-Posting sind Prognosen,
+nicht Anker. Anker = Baseline-Gate (pytest 1259,
+ruff 14, mypy 8, AST 6, Katalog 162).
+
+Commit-Body enthaelt die gemessene Zahl (git
+diff --stat + grep-c), nicht die Prognose.
+
+Beispiel A8-1b-1b:
+  Prognosen: 37, 39, 45, 47, 49, 8, 44.
+  Messung: 16 Tests, 31 Patch-Stellen
+  (audit 16, run_meas 15).
+  M-244 (8) und M-246 (44) waren Prognosen.
+
+Status: dokumentiert 2026-10-23 (M-251).
