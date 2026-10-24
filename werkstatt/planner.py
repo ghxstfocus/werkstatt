@@ -34,8 +34,12 @@ Jeder Task hat zwei Pflichtfelder:
               "create" = NEUE Datei anlegen (existiert noch nicht).
               "update" = BESTEHENDE Datei aendern (existiert schon).
               Wenn unsicher: "update" (fail-safe, Patch wird erzeugt).
-  - "task_files": list[str] = EXPLIZITE Datei-Pfade, die dieser Task
-              anfasst.
+  - "task_files": list[str] = EXPLIZITE Datei-Pfade (MIT Suffix,
+              z.B. "core/checks/__init__.py").
+              KEINE Ordner ("core/checks/" ist FALSCH).
+              KEINE Wildcards.
+              Wenn du einen Ordner meinst: nenne die konkrete Datei
+              ("core/checks/__init__.py", nicht "core/checks/").
 
 Phasen-Struktur (Haupt-/Unterpunkte, M-323c):
   PFLICHT, wenn die Aufgabe eines der Kriterien erfuellt:

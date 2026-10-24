@@ -165,22 +165,27 @@ def run_builder(state: RunState) -> bool:
         if _task_files:
             _task_files_str = [f for f in _task_files if isinstance(f, str)]
             if _task_files_str:
-                # task_files zuerst, dann der Rest
-                _relevant_files = list(_task_files_str) + [
-                    f for f in _relevant_files if f not in _task_files_str
-                ]
+                # M-337-b: NUR task_files. Kein Regex, kein Explorer.
+                # Der Builder soll nur die vom Planner genannten
+                # Dateien sehen — nicht 6 andere.
+                _relevant_files = list(_task_files_str)
 
-    # Explorer-Report (key_files) als Wegweiser ergaenzen — NUR
-    # wenn task_files leer war (M-335: Fallback).
-    _expl = getattr(state, "explorer_context", {}) or {}
-    for _f in _expl.get("key_files", []) or []:
-        _f_str = None
-        if isinstance(_f, str):
-            _f_str = _f
-        elif isinstance(_f, dict):
-            _f_str = _f.get("file") or _f.get("path") or _f.get("name")
-        if _f_str and _f_str not in _relevant_files:
-            _relevant_files.append(_f_str)
+    # M-337-b: Explorer-key_files NUR als Fallback, wenn
+    # task_files leer war.
+    _hat_task_files = (
+        isinstance(_aktuelle_task, dict)
+        and bool(_aktuelle_task.get("task_files"))
+    )
+    if not _hat_task_files:
+        _expl = getattr(state, "explorer_context", {}) or {}
+        for _f in _expl.get("key_files", []) or []:
+            _f_str = None
+            if isinstance(_f, str):
+                _f_str = _f
+            elif isinstance(_f, dict):
+                _f_str = _f.get("file") or _f.get("path") or _f.get("name")
+            if _f_str and _f_str not in _relevant_files:
+                _relevant_files.append(_f_str)
 
     _file_context: dict[str, str] = {}
     # M-336: Ordner in _relevant_files aufloesen. Der Planner

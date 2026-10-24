@@ -10,7 +10,15 @@ from werkstatt.audit import audit
 from werkstatt.state import RunState
 
 EXPLORER_SYSTEM = """Du bist ein read-only Codebase-Explorer.
-Finde die relevanten Dateien und Symbole fuer die gegebene Frage.
+Finde die Dateien, die in der Aufgabe EXPLIZIT genannt sind.
+
+WICHTIG (M-338):
+  - Markiere NUR Dateien, die in der Aufgabe direkt vorkommen
+    (z.B. "core/checks/" -> core/checks/__init__.py).
+  - Markiere KEINE aehnlichen Dateien. Wenn die Aufgabe
+    "core/checks/" nennt, markiere NICHT "tools/port_check.py".
+  - Wenn keine Datei explizit genannt ist: key_files = [].
+
 Du darfst NUR lesen und suchen.
 Antworte NUR mit validem JSON:
 {

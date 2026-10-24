@@ -478,3 +478,55 @@ def test_builder_patch_richtige_datei(tmp_path):
 
     assert result is True
     assert st.patches[0]["file"] == "core/checks.py"
+
+
+def test_builder_task_files_nur_diese(tmp_path):
+    """M-337-b: task_files gesetzt -> NUR task_files in _file_context."""
+    from unittest.mock import patch
+
+    from werkstatt.builder import run_builder
+
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "checks.py").write_text("def broken(:\n")
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "port.py").write_text("def port(): pass\n")
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
+                 "task_files": ["core/checks.py"]}]
+    st.aktuelle_task = st.tasks[0]
+    # Explorer-Key-Files: tools/port.py (sollte ignoriert werden)
+    st.explorer_context = {"key_files": ["tools/port.py"]}
+
+    _file_ctx = []
+    def _mock_audit(kind, payload, *a, **kw):
+        if kind == "builder_file_context":
+            _file_ctx.extend(payload.get("files", []))
+
+    with patch("werkstatt.builder.ask_llm") as mock_llm, \
+         patch("werkstatt.builder.audit", side_effect=_mock_audit):
+        mock_llm.return_value = type("R", (), {
+            "ok": True,
+            "content": '{"patches": [{"action": "update", "file": "core/checks.py", "old_string": "x", "new_string": "y"}]}',
+            "error": ""
+        })()
+        run_builder(st)
+
+    # core/checks.py muss da sein, tools/port.py NICHT
+    assert "core/checks.py" in _file_ctx, f"erwartet core/checks.py, war {_file_ctx}"
+    assert "tools/port.py" not in _file_ctx, f"tools/port.py sollte nicht da sein: {_file_ctx}"
+
+
+def test_explorer_prompt_m338():
+    """M-338: Explorer-Prompt nennt M-338-Regeln."""
+    from werkstatt.explorer import EXPLORER_SYSTEM
+    assert "M-338" in EXPLORER_SYSTEM
+    assert "EXPLIZIT" in EXPLORER_SYSTEM
+    assert "KEINE aehnlichen" in EXPLORER_SYSTEM
+
+
+def test_planner_prompt_m339():
+    """M-339: Planner-Prompt nennt Datei-Pflicht."""
+    from werkstatt.planner import PLANNER_SYSTEM
+    assert "MIT Suffix" in PLANNER_SYSTEM
+    assert "KEINE Ordner" in PLANNER_SYSTEM
