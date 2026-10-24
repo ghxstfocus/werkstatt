@@ -34,7 +34,7 @@ def test_skills_dir_existiert() -> None:
 
 def test_12_skills() -> None:
     dirs = _skill_dirs()
-    assert len(dirs) == 12, f"erwartet 12, gefunden {len(dirs)}: {[d.name for d in dirs]}"
+    assert len(dirs) == 13, f"erwartet 13, gefunden {len(dirs)}: {[d.name for d in dirs]}"
 
 
 @pytest.mark.parametrize("skill_dir", _skill_dirs(), ids=lambda p: p.name)

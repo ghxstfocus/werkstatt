@@ -1,26 +1,34 @@
-"""Explorer-Subagent (Phase 14). Strikt read-only, JSON-Output."""
+"""Explorer-Subagent. Read-only. Deterministische Messung VOR dem LLM.
+
+M-338-Fix: Der Explorer MESS'T zuerst (ruff, pytest), extrahiert
+die Dateien, und liefert sie als key_files. Das LLM formuliert
+nur noch findings. Kein Raten.
+"""
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
+from werkstatt.tools import run_readonly
 
 EXPLORER_SYSTEM = """Du bist ein read-only Codebase-Explorer.
-Finde die Dateien, die in der Aufgabe EXPLIZIT genannt sind.
 
-WICHTIG (M-338):
-  - Markiere NUR Dateien, die in der Aufgabe direkt vorkommen
-    (z.B. "core/checks/" -> core/checks/__init__.py).
-  - Markiere KEINE aehnlichen Dateien. Wenn die Aufgabe
-    "core/checks/" nennt, markiere NICHT "tools/port_check.py".
-  - Wenn keine Datei explizit genannt ist: key_files = [].
+WICHTIG (M-338-Fix):
+  - Wenn die Aufgabe eine Messung verlangt (ruff-Fehler,
+    Test-Fehler, Bug), hast du die Messung BEREITS erhalten
+    (siehe "Messungen" im Kontext). Nutze sie.
+  - Rate NICHT. Die Dateien aus der Messung sind deine
+    key_files.
+  - Wenn keine Messung moeglich war und keine Datei explizit
+    in der Aufgabe genannt ist: key_files = [].
 
-Du darfst NUR lesen und suchen.
 Antworte NUR mit validem JSON:
 {
   "findings": "Kurze Zusammenfassung",
@@ -33,7 +41,8 @@ Keine Erklaerung, nur JSON."""
 def _list_py_files(project_dir: Path, max_files: int = 200) -> list[str]:
     try:
         res = subprocess.run(
-            ["find", str(project_dir), "-name", "*.py", "-type", "f"],
+            ["find", str(project_dir), "-name", "*.py", "-type", "f",
+             "-not", "-path", "*/.venv/*", "-not", "-path", "*/__pycache__/*"],
             capture_output=True, text=True, timeout=30, check=False,
         )
         return [f for f in res.stdout.split("\n") if f.strip()][:max_files]
@@ -41,45 +50,127 @@ def _list_py_files(project_dir: Path, max_files: int = 200) -> list[str]:
         return []
 
 
-def _grep_files(project_dir: Path, pattern: str, max_hits: int = 20) -> list[str]:
-    try:
-        res = subprocess.run(
-            ["grep", "-r", "-n", "--include=*.py", pattern, str(project_dir)],
-            capture_output=True, text=True, timeout=30, check=False,
-        )
-        return [h for h in res.stdout.split("\n") if h.strip()][:max_hits]
-    except Exception:  # noqa: BLE001
-        return []
+def _extract_dateien(stdout: str) -> list[str]:
+    """Extrahiert Dateipfade aus ruff-concise-Output.
+
+    Format: 'pfad/datei.py:zeile:spalte: CODE message'
+    """
+    dateien: list[str] = []
+    for line in stdout.splitlines():
+        m = re.match(r"^([^:\s]+\.py):", line)
+        if m:
+            d = m.group(1)
+            if d not in dateien:
+                dateien.append(d)
+    return dateien
+
+
+def _messen(frage: str, project_dir: Path) -> dict[str, Any]:
+    """M-373: Deterministische Messung VOR dem LLM.
+
+    Fuehrt basierend auf der Aufgabe die passenden Befehle aus.
+    """
+    results: dict[str, Any] = {}
+    frage_lower = frage.lower()
+
+    if "ruff" in frage_lower:
+        r = run_readonly("ruff check . --output-format=concise", project_dir)
+        results["ruff"] = {
+            "ok": r.get("ok", False),
+            "stdout": r.get("stdout", "")[:5000],
+            "stderr": r.get("stderr", "")[:1000],
+            "dateien": _extract_dateien(r.get("stdout", "")),
+        }
+
+    if "pytest" in frage_lower or "test" in frage_lower:
+        r = run_readonly("pytest -q", project_dir)
+        results["pytest"] = {
+            "ok": r.get("ok", False),
+            "stdout": r.get("stdout", "")[:3000],
+            "stderr": r.get("stderr", "")[:1000],
+        }
+
+    return results
+
+
+def _format_findings(messungen: dict[str, Any]) -> str:
+    """Formatiert die Messungen als Klartext fuer den Planner."""
+    lines = []
+    for name, m in messungen.items():
+        n = len(m.get("dateien", []))
+        lines.append(f"{name}: {n} Datei(en) betroffen")
+        if m.get("dateien"):
+            lines.append(f"  Dateien: {', '.join(m['dateien'])}")
+        if m.get("stdout"):
+            lines.append(f"  Ausgabe (Auszug): {m['stdout'][:500]}")
+    return "\n".join(lines)
 
 
 def _explorer_system(frage: str) -> str:
-    """M-374: Haengt systematic-debugging an, wenn die Aufgabe matcht."""
+    """Haengt systematic-debugging + using-werkstatt an."""
     skills = load_all_skills()
-    skill = load_skill_by_name("systematic-debugging", skills)
-    if skill is None:
-        return EXPLORER_SYSTEM
+    parts = [EXPLORER_SYSTEM]
+    # Meta-Skill IMMER
+    uw = load_skill_by_name("using-werkstatt", skills)
+    if uw and uw["body"]:
+        parts.append("## Skill: Using-Werkstatt\n" + uw["body"])
+    # systematic-debugging bei Trigger
     trigger = ("ruff", "test", "bug", "fehler", "debug", "pytest")
     if any(w in frage.lower() for w in trigger):
-        return EXPLORER_SYSTEM + "\n\n## Skill: Systematic-Debugging\n" + (skill["body"] or "")
-    return EXPLORER_SYSTEM
+        sd = load_skill_by_name("systematic-debugging", skills)
+        if sd and sd["body"]:
+            parts.append("## Skill: Systematic-Debugging\n" + sd["body"])
+    return "\n\n".join(parts)
 
 
 def run_explorer(state: RunState, frage: str) -> dict:
     pd = state.project_dir
     pn = state.project_name
     api_key = getattr(state, "api_key", "")
+
+    # === M-373: Deterministische Messung ZUERST ===
+    messungen = _messen(frage, Path(pd))
+    if messungen:
+        audit("explorer_messung", {
+            "befehle": list(messungen.keys()),
+            "dateien_gesamt": sum(len(m.get("dateien", [])) for m in messungen.values()),
+        }, pd, pn)
+
+    # Dateien aus Messung extrahieren -> deterministische key_files
+    key_files: list[dict] = []
+    for name, m in messungen.items():
+        for datei in m.get("dateien", []):
+            key_files.append({
+                "file": datei,
+                "why": f"{name}-Fehler",
+                "symbols": "",
+                "confidence": "high",
+            })
+
+    if key_files:
+        audit("explorer_key_files_deterministisch", {
+            "n": len(key_files),
+            "files": [k["file"] for k in key_files][:20],
+        }, pd, pn)
+        findings = _format_findings(messungen)
+        return {
+            "findings": findings,
+            "key_files": key_files,
+            "next_reads": [k["file"] for k in key_files],
+        }
+
+    # === Fallback: LLM-Explorer (bestehender Pfad) ===
     if not api_key:
         audit("explorer_kein_key", {}, pd, pn)
         return {"findings": "", "key_files": [], "next_reads": []}
 
     py_files = _list_py_files(Path(pd))
-    grep_hits = _grep_files(Path(pd), frage[:100]) if frage else []
     context = (
         f"Frage: {frage}\n\n"
-        f"Python-Dateien ({len(py_files)}):\n"
+        f"Messungen (bereits ausgefuehrt):\n"
+        + (_format_findings(messungen) if messungen else "(keine)")
+        + f"\n\nPython-Dateien ({len(py_files)}):\n"
         + "\n".join(py_files[:50])
-        + f"\n\nGrep-Treffer fuer '{frage[:50]}':\n"
-        + "\n".join(grep_hits[:20])
     )
 
     reply = ask_llm(

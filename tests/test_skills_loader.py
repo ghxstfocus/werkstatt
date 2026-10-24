@@ -9,9 +9,9 @@ from werkstatt.skills import (
 from werkstatt.tools import run_readonly, run_write
 
 
-def test_load_all_skills_liefert_12() -> None:
+def test_load_all_skills_liefert_13() -> None:
     skills = load_all_skills()
-    assert len(skills) == 12, f"erwartet 12, gefunden {len(skills)}"
+    assert len(skills) == 13, f"erwartet 13, gefunden {len(skills)}"
 
 
 def test_jeder_skill_hat_name_und_description() -> None:
@@ -38,7 +38,7 @@ def test_allowed_tools_im_frontmatter() -> None:
 def test_skills_summary_ist_kompakt() -> None:
     skills = load_all_skills()
     summary = skills_summary(skills)
-    assert len(summary.splitlines()) == 12
+    assert len(summary.splitlines()) == 13
     assert "systematic-debugging" in summary
 
 

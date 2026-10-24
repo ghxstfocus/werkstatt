@@ -37,7 +37,7 @@ if _os.environ.get("WERKSTATT_IN_TEST") == "1":
 
 # Baseline fixiert (Quelle: docs/HANDOFF-BASELINE.md @ ae40f26).
 BASELINE = {
-    "pytest": 1425,   # pytest -q (M-359b: +1 fail-closed-Test)
+    "pytest": 1432,   # pytest -q (M-359b: +1 fail-closed-Test)
     "ruff": 13,       # ruff check .
     "mypy": 8,        # mypy pipeline.py werkstatt/
     "ast": 6,         # pytest tests/test_audit_kinds.py -q

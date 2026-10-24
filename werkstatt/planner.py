@@ -146,9 +146,13 @@ def _preflight_scan(state: RunState) -> list[dict]:
 
 
 def _planner_system(aufgabe: str) -> str:
-    """M-374: plan-crafting IMMER, systematic-debugging bei Bug-Match."""
+    """M-374: using-werkstatt IMMER, plan-crafting IMMER,
+    systematic-debugging bei Bug-Match."""
     skills = load_all_skills()
     parts = [PLANNER_SYSTEM]
+    uw = load_skill_by_name("using-werkstatt", skills)
+    if uw and uw["body"]:
+        parts.append("## Skill: Using-Werkstatt\n" + uw["body"])
     pc = load_skill_by_name("plan-crafting", skills)
     if pc and pc["body"]:
         parts.append("## Skill: Plan-Crafting\n" + pc["body"])

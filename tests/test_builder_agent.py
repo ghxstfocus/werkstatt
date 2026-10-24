@@ -530,12 +530,11 @@ def test_builder_task_files_nur_diese(tmp_path):
 
 
 def test_explorer_prompt_m338():
-    """M-338: Explorer-Prompt nennt M-338-Regeln."""
+    """M-338-Fix: Explorer-Prompt fordert Messung statt nur expliziter Dateien."""
     from werkstatt.explorer import EXPLORER_SYSTEM
-    assert "M-338" in EXPLORER_SYSTEM
-    assert "EXPLIZIT" in EXPLORER_SYSTEM
-    assert "KEINE aehnlichen" in EXPLORER_SYSTEM
-
+    # Der neue Prompt verbietet das Raten und verlangt Messung.
+    assert "Rate NICHT" in EXPLORER_SYSTEM or "rate nicht" in EXPLORER_SYSTEM.lower()
+    assert "Messung" in EXPLORER_SYSTEM or "messen" in EXPLORER_SYSTEM.lower()
 
 def test_planner_prompt_m339():
     """M-339: Planner-Prompt nennt Datei-Pflicht."""
