@@ -1,328 +1,226 @@
 # Architektur — Werkstatt
 
-Stand: 2026-10-19 (nach W61-Pro)
-Ziel: Das Beste aus Claude Code, Copilot, AutoGen,
-Swarm und OpenAI Agents SDK nehmen und ein eigenes
-Agentensystem bauen.
+Stand: 2026-10-24 (nach M-360, RERUN-38).
+Technische Architektur des aktuellen Loops.
+Zielbild: `NEUBAU-ZIELBILD.md`. Roadmap: `ROADMAP.md`.
+Historische Architektur (6 Rollen, W-Bloecke): siehe
+Abschnitt "Archiv" am Ende.
 
 ## 1. Ziel-Architektur
 
 Die Werkstatt ist ein Multi-Agent-System mit
-sechs Rollen. Jede Rolle hat einen eigenen
-Prompt, ein eigenes Modell, eine eigene Aufgabe.
+**fuenf Rollen** und **zwei deterministischen Hooks**.
 Der Mensch ist das letzte Gate.
 
     +--------------------------------------------------+
-    |                     MENSCH                        |
-    |            (Reviewer-Chat, Human-Gate)            |
+    |                     MENSCH                       |
+    |              (Plan-Gate, Human-Gate)             |
     +--------------------------------------------------+
                           |  ^
                           v  |
     +--------------------------------------------------+
-    |                     WERKSTATT                     |
-    |                                                   |
-    |   Planner ---- Auftrag ----> Builder             |
-    |      |                          |                 |
-    |      |                          v                 |
-    |      |                     Code-Patches           |
-    |      |                          |                 |
-    |      |                          v                 |
-    |      |                     Solver (Diagnose)      |
-    |      |                          |                 |
-    |      |                          v                 |
-    |      |                     Judge (Contract)       |
-    |      |                          |                 |
-    |      |                          v                 |
-    |      |                     Reviewer (Commit)      |
-    |      |                          |                 |
-    |      v                          v                 |
-    |   Phasenplan              Commit-Paket            |
+    |                     WERKSTATT                    |
+    |                                                  |
+    |   Explorer ----> Planner ----> Builder           |
+    |    (read)         (JSON)        (search/replace) |
+    |                                     |            |
+    |                                     v            |
+    |                            Verify (verify.json)  |
+    |                                     |            |
+    |                                     v            |
+    |                              Reviewer            |
+    |                              (Bug-Check)         |
+    |                                     |            |
+    |                                     v            |
+    |                              Human-Gate          |
+    |                              (fail-closed)       |
     +--------------------------------------------------+
                           |
                           v
                    Ziel-Projekt (security-ai)
 
-## 2. Die Rollen
+**Deterministische Gates:**
+- `pre_tool_use`-Hook (AST-Import-Validierung)
+- `simplify`-Hook (Komplexitaets-Check)
 
-| Rolle | Modell | Aufgabe | Groesse |
+## 2. Rollen (5)
+
+| Rolle | Modell | Aufgabe | Datei |
 |---|---|---|---|
-| planner | deepseek-chat | Auftrag (Stufe 1) oder Phasenplan (Stufe 2) | 297 Z. |
-| builder | deepseek-chat | Code-Patches, Commit-Paket | 647 Z. |
-| solver | deepseek-chat | Diagnose bei Deadlock | 182 Z. |
-| judge | deepseek-reasoner | Contract-Treue, Sicherheit | 90 Z. |
-| reviewer | deepseek-reasoner | Commit-Paket | 56 Z. |
-| test_generator | deepseek-chat | Test-Vorschlaege | 18 Z. |
-| coverage/chaos | no-LLM | Messungen | 10 Z. |
+| Explorer | deepseek-chat | Read-only Kontext, `key_files` | `werkstatt/explorer.py` |
+| Planner | deepseek-chat | JSON-Plan (tasks, tests, akzeptanzkriterien, phasen) | `werkstatt/planner.py` |
+| Builder | deepseek-chat | search/replace-Patches (`old_string` -> `new_string`) | `werkstatt/builder.py` |
+| Reviewer | deepseek-reasoner | Bug-Check, pytest ist letztes Wort (M-343c) | `werkstatt/reviewer.py` |
+| Human-Gate | no-LLM | fail-closed, Diff-Anzeige, Plan-Gate + Human-Gate | `_human_gate` in `loop.py` |
 
-## 3. Was die Werkstatt gut macht
+## 3. Hooks (2)
 
-- Multi-Agent mit klaren Rollen: Planner, Builder,
-  Judge, Reviewer sind getrennt. Jeder hat einen
-  eigenen Prompt, ein eigenes Modell.
-- Human-Gate: Der Mensch entscheidet bei NO-GO
-  und am Phasenende.
-- Audit-Log: Jede Entscheidung ist im JSONL.
-- Rollback: apply_code_patches hat In-Memory-
-  Rollback. phase_rollback bei Deadlock.
-- Basis-Gate: py_compile, ruff, mypy, pytest,
-  git_status, git_head vor jedem Bau.
+Deterministische Gates, die unabhaengig vom LLM pruefen:
 
-## 4. Was die Werkstatt NICHT hat (Luecken)
+1. **`pre_tool_use`** (`hooks/pre_tool_use.py`, M-334a)
+   AST-basierte Import-Validierung. Prueft `import X` /
+   `from X import Y` gegen die tatsaechlichen Projekt-Module.
+   Blockiert halluzinierte Imports, bevor der Patch angewendet
+   wird. Deterministisch, kein LLM-Call.
 
-### 4.1 Read-vor-Edit (Claude Code)
+2. **`simplify`** (`hooks/simplify.py`)
+   Komplexitaets-Check auf dem Diff. Blockiert uebergrosse
+   Patches, bevor sie das Zielprojekt erreichen.
 
-Claude Code erzwingt: "File hasn't been read —
-must read first" (error code 6). Die Werkstatt
-hat das NICHT. Der Builder kann patchen, ohne
-zu messen. Folge: Phase-20b-Laeufe, Builder
-wiederholt Anker 3x, Solver-Deadlock, Reviewer
-antwortet leer.
+## 4. Loop-Ablauf
 
-W59 (Deadlock-Mechanismus): Patch nur nach
-Messung (RunState.gelesene_dateien, mtime-Check).
+Pro Task:
 
-### 4.2 mtime-Check (Claude Code)
+1. **Explorer** — `key_files` aus der Aufgabe.
+2. **Planner** — JSON-Plan mit Phasen (M-323c: Pflicht bei
+   >5 Tasks, >2 Dateien oder Keywords).
+3. **Plan-Human-Gate** — Plan anzeigen, j/n/a (M-348).
+4. Pro Task:
+   - **Builder** — search/replace. Zieldatei deterministisch
+     aus `task_files` (M-337, M-360).
+   - **PreToolUse-Hook** — Import-Validierung.
+   - **Simplify-Hook** — Komplexitaet.
+   - **Verify** — `verify.json`-Stages (`py_compile_changed`,
+     `pytest_changed`, `py_compile_core`, `pytest_full_checks`).
+   - **Reviewer** — Bug-Check. pytest ist das letzte Wort
+     (M-343c, M-359).
+5. **Phase-End Verify** — Vollsuite.
+6. **Human-Gate** — Diff anzeigen, j/n/e. Fail-closed.
+7. **Rollback** — bei `LOOP_RC != 0` auf `start-HEAD`
+   (M-356).
 
-Claude Code prueft: "File has been modified
-since read". Die Werkstatt hat das NICHT.
+## 5. Verify (verify.json)
 
-W59: mtime-Check in apply_code_patches.
+Vier Stages, in `.werkstatt/verify.json` des Zielprojekts:
 
-### 4.3 Verify-vor-PR (Copilot)
+| Stage | Befehl | Phase |
+|---|---|---|
+| `py_compile_changed` | `py_compile {changed_py_files}` | post_build |
+| `pytest_changed` | `pytest {changed_test_files} -q` | post_build |
+| `py_compile_core` | `py_compile core/...` | phase_end |
+| `pytest_full_checks` | `pytest tests/unit/test_checks.py -q` | phase_end |
 
-Copilot Coding Agent verifiziert vor PR: Tests,
-Linter, Self-Review. Die Werkstatt hat das
-teilweise: Basis-Gate prueft Tests, aber der
-Builder sieht das Ergebnis NICHT und korrigiert
-nicht.
+**Wichtig:** `py_compile` nur fuer `.py` (M-340). Platzhalter
+werden aus dem Diff gefuellt (M-322).
 
-W59: Builder-Loop mit Fail-closed bei
-Wiederholung ohne Messung.
+## 6. Was die Werkstatt gut macht
 
-### 4.4 Handoff-Mechanik (AutoGen)
+- **Klare Rollen-Trennung:** Explorer liest, Planner plant,
+  Builder schreibt, Reviewer prueft, Mensch entscheidet.
+- **Deterministische Hooks:** Import-Validierung und
+  Komplexitaets-Check sind LLM-unabhaengig.
+- **Fail-closed:** Human-Gate, Rollback (M-356), Reviewer
+  entscheidet per pytest (M-343c).
+- **Audit-Log:** Jede Entscheidung ist im JSONL (`audit()`).
+- **Rollback:** immer auf `start-HEAD` bei Fehler (M-356).
+- **Idempotenz:** nur bei `action="create"` und existierender
+  Zieldatei (M-352).
 
-AutoGen hat "Handoff": Agent A gibt an Agent B
-ab, wenn er nicht weiterkommt. Die Werkstatt hat
-das teilweise: Solver-Trigger bei Deadlock. Aber
-der Solver antwortet oft mit falscher Diagnose
-(Phase-20b: "Auftrag erfuellt", obwohl .log()
-fehlt).
+## 7. Methodische Luecken (bewusst dokumentiert)
 
-W55 (Solver-Fehldiagnose): Solver-Prompt muss
-die tatsaechliche Aufgabe pruefen, nicht den
-Ist-Zustand.
+Die folgenden Methode sind in der Werkstatt **teilweise** oder
+**nicht** umgesetzt. Sie sind Kandidaten fuer kuenftige Bloecke,
+nicht fuer den aktuellen.
 
-### 4.5 Dynamic Routing (Swarm)
+### 7.1 Read-Before-Write-Protokoll (Tool-Use-Contract)
 
-Swarm routet dynamisch zwischen Agenten. Die
-Werkstatt hat statische Rollen. Kein dynamisches
-Routing.
+Ein Read-Before-Write-Protokoll erzwingt, dass ein Agent eine
+Datei liest, bevor er sie aendert. Die Werkstatt hat das nicht.
+Der Builder kann patchen, ohne den aktuellen Inhalt zu messen.
+**Folge:** In fruehen Phasen wiederholte Anker-Fehler,
+Deadlock mit dem Solver, leere Reviewer-Antworten.
 
-W58 (Deadlock-Mechanismus): Wenn zwei Runden
-hintereinander derselbe Fehler auftritt,
-fail-closed statt Loop.
+**Kandidat:** M-365 (Read-Before-Write im Builder).
 
-### 4.6 Prompt-Groessen-Limit (Anthropic)
+### 7.2 Optimistic-Concurrency (Stale-Read-Detection)
 
-Die Rollen-Prompts sind zu gross:
-- builder.md: 647 Zeilen (Audit-Ziel < 300).
-- planner.md: 297 Zeilen (Audit-Ziel < 150).
+Optimistic-Concurrency prueft per `mtime`, ob eine Datei seit
+dem letzten Lesen veraendert wurde. Die Werkstatt hat das nicht.
 
-W61 (Rollen-Sanierung): Redundanz aufloesen
-(builder 43%, planner 20%), Roll-Body < 300.
+**Kandidat:** M-366 (mtime-Check in `apply_code_patches`).
 
-## 4.7 On-Demand-Messung (fehlt)
+### 7.3 Verify-Before-Commit (Pre-Merge-Gate)
 
-Claude Code, Copilot, Cursor und AutoGen arbeiten alle mit
-On-Demand-Messung: der Agent entscheidet selbst, welche
-Datei er liest, basierend auf der aktuellen Aufgabe. Kein
-Pre-Loading des ganzen Repos.
+Verify-Before-Commit verifiziert Aenderungen (Tests, Linter,
+Self-Review) **vor** dem Commit. Die Werkstatt hat das
+teilweise: `_verify_patches` prueft Tests, aber der Builder
+sieht das Ergebnis nicht und korrigiert nicht.
 
-Was die grossen machen:
+**Kandidat:** M-367 (Builder-Feedback-Loop).
 
-- **Claude Code:** Glob/Grep zuerst, dann Read nur der
-  relevanten Dateien, dann Edit. Read vor Edit ist
-  Pflicht (error code 6: "File hasn't been read — must
-  read first"). Nach Edit wird die mtime im Read-Cache
-  aktualisiert, damit der naechste Edit auf derselben
-  Datei durchgeht.
-- **Copilot:** Tool Search (Tools nur laden, wenn
-  gebraucht), Prompt Caching fuer stabile Prefixe.
-  Plan Mode: erst Kontext sammeln, dann Plan, dann
-  Mensch-Gate, dann Implementierung.
-- **Cursor:** Semantische Suche + Grep, Agent entscheidet
-  welche Dateien er liest. Nach jeder Aktion: Ergebnis
-  pruefen, dann naechster Schritt.
-- **AutoGen:** RetrieveUserProxyAgent, Retrieval-
-  Augmented Generation nur bei Bedarf.
+### 7.4 Agent-Handoff (Escalation-Pattern)
 
-Werkstatt heute:
+Agent-Handoff gibt bei Deadlock an eine hoehere Rolle ab.
+Die Werkstatt hat das teilweise: Reflection-Loop bei
+`old_string_not_found` und Reviewer-Reject. Aber die
+Reflection nutzt denselben Builder-Prompt — sie kann
+strukturelle Fehler nicht beheben.
 
-- `mess_protokoll` als String, waechst bei jedem
-  `read_file`.
-- `_planner_user_content` baut GEMESSENER INHALT-Block
-  (100K Prompt-String bei 10 Dateien).
-- `_builder_lauf` bekommt den ganzen Mess-Kontext, nicht
-  "hier ist der Index, lies was du brauchst".
-- `apply_code_patches` hat **keinen Read-Cache**. Builder
-  kann patchen, ohne zu messen. Folge: Deadlock in
-  Phase 20b.
-- `_builder_lauf` hat **keinen Loop-Schutz**. Builder
-  wiederholt dieselben Anker 3 Runden.
+**Kandidat:** M-368 (Reviewer-als-Reflection).
 
-Soll (W52b + W59):
+### 7.5 Dynamic Dispatch (Router-Pattern)
 
-- `mess_protokoll` als Verzeichnis
-  (`.werkstatt/<phase>/messungen/<sha1>.txt`).
-- `index.json` mit Pfad, SHA, mtime, Groesse, Quelle.
-- Prompt: "Messungen liegen unter X. Index: Y." Statt
-  des vollen Inhalts.
-- Agent liest bei Bedarf per `read_file`, statt alles
-  im Prompt zu haben.
-- `apply_code_patches` prueft `gelesene_dateien` +
-  mtime (`RunState.gelesene_dateien: dict[str, float]`).
-- Loop-Schutz: 2 Runden ohne neuen Read -> Fail-closed,
-  Audit `builder_wiederholt_ohne_messung`.
+Dynamic Dispatch routet Aufgaben dynamisch zwischen Agenten.
+Die Werkstatt hat statische Rollen. Kein dynamisches Routing.
 
-Blöcke:
+**Kandidat:** M-369 (Router-Pattern fuer Task-Typen).
 
-- **W52b** (Kategorie 3): Messungen/Replies als Dateien.
-  On-Demand-Messung strukturell.
-- **W59** (Kategorie 3): Read-Cache + mtime-Check +
-  Loop-Schutz. Mechanisch.
+### 7.6 Context-Window-Management (Prompt-Budgeting)
 
-Beide sind P1 (akut) bzw. P3 (Refactor). W59 zuerst,
-weil es Phase 20b direkt blockiert.
+Context-Window-Management budgetiert den Prompt anhand der
+Modell-Grenzen. Die Werkstatt hat das nicht — der Builder-Prompt
+kann zu gross werden.
 
-## 5. Was funktioniert (verifiziert)
+**Kandidat:** M-370 (Prompt-Budget im Builder).
 
-- W31-W47: Modularisierung (state.py, parser.py).
-- W28b: Judge als eigene Rolle.
-- W40: Reviewer-Sanierung (410 -> 56).
-- W48-A16: Katalog-Bug gefixt (105 -> 109).
-- W50: Planner-Durchfall verhindert.
-- W51a-h: Planner-Mess-Mechanik (8 Bloecke,
-  Symptom-Behandlung).
-- W54-a, W54-g, W54-h: Builder-Fixes
-  (Symptom-Behandlung).
+## 8. Was funktioniert (verifiziert RERUN-38)
 
-## 6. Was nicht funktioniert (Deadlock in Phase 20b)
+- **Loop laeuft Ende-zu-Ende:** 8/8 Tasks, `LOOP_RC=0`.
+- **Echte Aenderung im Zielprojekt:** `harness/audit/writer.py`
+  (+23, Owner-Check im AuditWriter), committed `2a0a284`.
+- **Rollen + Hooks greifen:** Explorer (0 files, kosmetisch),
+  Planner (8 Tasks, 5 Phasen), Builder (search/replace),
+  Verify (53 Tests gruen), Reviewer (pytest entscheidet),
+  Human-Gate (approved).
+- **Rollback funktioniert:** RERUN-36/37 — `rc=1` -> Tree clean.
 
-Der Phase-20b-Lauf ist 3x gescheitert:
-- Builder sendet 2 Anker, deren Ersatz nicht im
-  GEMESSENER INHALT steht.
-- 3 Runden Wiederholung.
-- Solver diagnostiziert "Auftrag erfuellt".
-- Reviewer antwortet leer.
+## 9. Was noch fehlt (operativ)
 
-Die Wurzel: Read-vor-Edit fehlt (W59). Und der
-Builder-Prompt ist zu gross (647 Zeilen), das LLM
-liest die Anker-Regeln nicht mehr (W61).
+- **M-361:** Test fuer M-355b.
+- **M-362:** Test fuer M-360.
+- **M-363:** Doku-Pflege Baseline/HISTORISCH.
+- **M-323b:** Phasen-Checkpoints (`phase_end` pro Phase).
+- **M-341:** Explorer ueberspringen bei `task_files`.
+- **M-344:** `PROGRESS.md` mit Phasen-Header.
+- **M-345..M-347:** Pipeline-Abbau + CLI.
 
-## 7. Reihenfolge der Fixes
+## 10. Archiv (historisch, nicht mehr aktuell)
 
-1. W59 (Deadlock-Mechanismus) — mechanisch,
-   wirksam, mittel.
-2. W61 (Rollen-Sanierung) — strukturell, aus
-   dem Audit, gross.
-3. W55 (Solver-Fehldiagnose) — Solver-Prompt,
-   klein.
-4. W58 (Reviewer-Leer-Antwort) — Reviewer-Loop,
-   klein.
-5. W36-2b..6 (Modularisierung) — pipeline.py,
-   gross.
+**Vor dem Loop-Neubau** (bis Commit `a4c487d`, 2026-10-24)
+hatte die Werkstatt **sechs Rollen** mit einem anderen
+Ablauf:
 
-## Subagenten (W61, 2026-10-18)
+| Rolle | Modell | Aufgabe |
+|---|---|---|
+| planner | deepseek-chat | Auftrag oder Phasenplan |
+| builder | deepseek-chat | Code-Patches |
+| solver | deepseek-chat | Diagnose bei Deadlock |
+| judge | deepseek-reasoner | Contract-Treue, Sicherheit |
+| reviewer | deepseek-reasoner | Commit-Paket |
+| test_generator | deepseek-chat | Test-Vorschlaege |
 
-Drei Subagenten, angelehnt an Cursor/Claude-Code:
+Der **Solver** und der **Judge** existieren im Loop-Neubau
+**nicht mehr**. Ihre Aufgaben sind teilweise in den Reviewer
+und die Reflection verschoben.
 
-- **explore** (aktiv): Sucht Muster per read_file/grep,
-  gibt FUND: <pfad>:<zeile>: <kontext> zurueck.
-  Builder nutzt ihn fuer die Anker-Suche. Isolierter
-  RunState (build_subagent_state), max 3 Runden.
-- **bash** (inaktiv): Shell-Befehle in isoliertem
-  Kontext. Fuer spaetere Zeitpunkte, nicht im
-  Builder-Loop aktiv.
-- **browser** (inaktiv): URL-Abruf. Fuer spaetere
-  Zeitpunkte.
+Die **W-Block-Serien** (W1..W62) beschreiben die
+Vor-Umbau-Phasen und sind in `ERLEDIGT.md` archiviert.
+Sie sind **nicht** Teil der aktuellen Roadmap.
 
-Prinzip: Der Subagent startet mit frischem Kontext,
-gibt nur das Ergebnis zurueck. Der Parent-Kontext
-bleibt sauber (Cursor-Ansatz).
+### Warum der Umbau?
 
-## On-Demand-Messung (W52b)
-
-- `state.messungen`: Liste von Datei-Referenzen
-  (Messung: pfad, sha1, mtime, groesse, quelle, datei).
-- `_mess_index_block`: Pointer (Pfad, SHA, Groesse,
-  Preview 200 Z., Datei-Pfad).
-- `_mess_inhalt_block`: Volltext (Planner/Judge).
-- `_mess_inhalt_zieldateien`: Volltext nur fuer
-  Zieldateien (Builder).
-- `_mess_inhalt_nach_apply`: Volltext der
-  Post-Apply-Messungen (Judge).
-- `mess_protokoll`: deprecated, Bestandsleser in
-  OFFENE-BLOECKE.md.
-
-## Judge-Labels (W61, 2026-10-18)
-
-Der Judge-Loop (Z. 9635ff.) sprach frueher "Review-Runde",
-"Reviewer-Verdict", "Reviewer-Antwort", `audit("review_round")`.
-Das war ein Label-Bug aus W28b: Der Reviewer wurde durch
-den Judge ersetzt, aber die Labels blieben.
-
-Behoben: "Judge-Runde", "Judge-Verdict", "Judge-Antwort",
-`audit("judge_round")`, `audit("judge_frage_antwort")`,
-`audit("judge_command")`, `quelle="judge"`.
-
-Der Reviewer sitzt im Recovery-Pfad (ask_reviewer_for_recovery)
-und im Schritt 1 (optionale Messungen). Das ist korrekt.
-
-## Grounding / verify_code (W61-Pro, 2026-10-19)
-
-AgentSeed/Keystone-Ansatz: Bevor ein Patch angewendet
-wird, prueft verify_code den Ersatz-Code gegen den
-Projekt-Symbol-Index.
-
-- **_projekt_symbol_index**: AST-Walk ueber alle .py,
-  sammelt Funktions-/Klassen-/Methoden-Namen.
-- **verify_code**: Ersatz-Code AST-parsen, jeder
-  Funktionsaufruf gegen Index. Unbekannt -> Befund.
-  unittest/mock-Methoden werden ignoriert.
-- **verify_code_kwargs**: inspect.signature von
-  AuditWriter.log, Change.__init__, ChangeApplier.__init__.
-  Kwargs im Patch gegen Signatur. `log(status=...)` ->
-  „kennt kein Kwarg".
-- **verify_values**: ChangeState-Enum-Werte und
-  execution_status-Werte (aus applier.py) gegen
-  Assertions.
-- **Test-Bezug-Check**: Patch-Anker gegen
-  failed_test_ids. Falscher Test -> Befund.
-
-Bei Befund: rc=17, letzter_test_fehler = Befunde.
-Der naechste Builder-Lauf sieht sie im Prompt.
-
-## Feedback-Loop (W61, 2026-10-19)
-
-- `state.letzter_test_fehler`: Test-Output (kompakt,
-  E-Zeile) oder verify_code-Befunde.
-- Persistiert in phase.yaml (Feld `letzter_test_fehler`).
-- Bei failed -> pending geladen, im Builder-Prompt
-  als TEST-FEHLER-Block gerendert.
-- Bei rc=17 (b-Gate rot) gespeichert.
-
-## Planner-Resume (W61)
-
-- no_go -> Planner-Resume (Plan-Problem).
-- failed -> failed auf pending, Builder nochmal
-  (kein Planner-Call).
-
-## Commit-Review-Judge (Phase 21 offen)
-
-Der Commit-Review-Judge braucht:
-- Vollen Datei-Inhalt (nicht nur 579 Zeichen).
-- ruff/mypy Exit-Codes.
-Aktuell: `_mess_inhalt_nach_apply` liest messungen_nach_apply
-(wird befuellt), aber der Commit-Input-Pfad nutzt es noch
-nicht vollstaendig.
-
+Die alte Architektur hatte strukturelle Deadlocks (Phase 20b):
+Solver-Fehldiagnose, leere Reviewer-Antworten, Builder ohne
+Read-vor-Edit. Der Umbau (Strangler-Fig, M-322..M-360) hat
+die Rollen auf 5 reduziert, Hooks deterministisch gemacht,
+und die Idempotenz/Rollback-Semantik gehaertet.

@@ -116,3 +116,18 @@ Zielprojekt committed 2a0a284).
 | **M-361** | offen | Test fuer M-355b (run_builder=False -> sofort return 1). |
 | **M-362** | offen | Test fuer M-360 (create + Datei fehlt -> anlegen). |
 | **M-363** | offen | Doku-Pflege Baseline/HISTORISCH. |
+
+
+## M-365..M-370 (Methodische Luecken, 2026-10-24)
+
+Kandidaten aus `ARCHITEKTUR.md` Abschnitt 7. Nicht Teil
+des aktuellen Loops, aber strukturell sinnvoll.
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| **M-365** | mittel | Read-Before-Write im Builder (Tool-Use-Contract). |
+| **M-366** | klein | mtime-Check in apply_code_patches (Stale-Read-Detection). |
+| **M-367** | mittel | Builder-Feedback-Loop (Verify-Before-Commit). |
+| **M-368** | mittel | Reviewer-als-Reflection (Agent-Handoff/Escalation). |
+| **M-369** | gross | Router-Pattern fuer Task-Typen (Dynamic Dispatch). |
+| **M-370** | klein | Prompt-Budget im Builder (Context-Window-Management). |
