@@ -1403,3 +1403,86 @@ def test_reviewer_reject_bleibt_rot_wenn_pytest_rot(tmp_path, monkeypatch):
 
     rc = loop_mod.run_pipeline_loop("p", "a", [st])
     assert rc == 1, f"erwartet rc=1, war {rc}; audits={_audits}"
+
+
+def test_plan_renderer_zeigt_phasen(tmp_path, capsys):
+    """M-348a: plan_renderer.plan zeigt Phasen + Tasks."""
+    from werkstatt import loop_renderer as r
+    r.plan(
+        phasen=[
+            {"id": "p1", "titel": "Analyse"},
+            {"id": "p2", "titel": "Tests"},
+        ],
+        tasks=[
+            {"id": "t1", "name": "lesen", "action": "read",
+             "task_files": ["core/checks/__init__.py"], "phase_id": "p1"},
+            {"id": "t2", "name": "testen", "action": "create",
+             "task_files": ["tests/x.py"], "phase_id": "p2"},
+        ],
+        tests=["pytest tests/x.py"],
+        akzeptanzkriterien=["y"],
+    )
+    out = capsys.readouterr().out
+    assert "PLAN" in out
+    assert "p1" in out
+    assert "p2" in out
+    assert "[read]" in out
+    assert "[create]" in out
+
+
+def test_human_gate_plan_auto_approve(tmp_path, monkeypatch):
+    """M-348b: auto_approve=True -> rc=0."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+    (tmp_path / ".werkstatt").mkdir()
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda k, p, *a, **kw: _audits.append(k))
+    rc = loop_mod._human_gate_plan(st, auto_approve=True)
+    assert rc == 0
+    assert "loop_plan_gate_auto" in _audits
+
+
+def test_human_gate_plan_test_kontext(tmp_path, monkeypatch):
+    """M-348b: WERKSTATT_IN_TEST=1 -> rc=0."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+    (tmp_path / ".werkstatt").mkdir()
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    monkeypatch.setenv("WERKSTATT_IN_TEST", "1")
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda k, p, *a, **kw: _audits.append(k))
+    rc = loop_mod._human_gate_plan(st, auto_approve=False)
+    assert rc == 0
+    assert "loop_plan_gate_test" in _audits
+
+
+def test_human_gate_plan_eof_reject(tmp_path, monkeypatch):
+    """M-348b: EOFError -> rc=1."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+    (tmp_path / ".werkstatt").mkdir()
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda k, p, *a, **kw: _audits.append(k))
+    monkeypatch.setattr("builtins.input",
+                        lambda *a, **kw: (_ for _ in ()).throw(EOFError()))
+    rc = loop_mod._human_gate_plan(st, auto_approve=False)
+    assert rc == 1
+    assert "loop_plan_gate_eof" in _audits

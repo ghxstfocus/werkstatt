@@ -160,3 +160,28 @@ def footer(success: bool, tasks_total: int, tasks_ok: int) -> None:
     _emit(f"  Tasks: {tasks_ok}/{tasks_total}")
     _emit(_bold("═" * 60))
     _emit("")
+
+
+def plan(phasen, tasks, tests, akzeptanzkriterien):
+    """M-348a: Plan-Ausgabe."""
+    _emit("")
+    _emit("=" * 62)
+    _emit(f"  PLAN — {len(phasen)} Phasen, {len(tasks)} Tasks")
+    _emit("=" * 62)
+    for _p in phasen:
+        _emit(f"Phase {_p.get('id', '?')}: {_p.get('titel', '')}")
+        for _t in tasks:
+            if isinstance(_t, dict) and _t.get("phase_id") == _p.get("id"):
+                _files = ", ".join(_t.get("task_files", [])) or "(keine)"
+                _emit(f"  {_t.get('id')} [{_t.get('action', '?')}] {_t.get('name', '')[:60]}")
+                _emit(f"       Zieldatei: {_files}")
+        _emit("")
+    if tests:
+        _emit(f"Tests ({len(tests)}):")
+        for _t in tests:
+            _emit(f"  - {_t}")
+    if akzeptanzkriterien:
+        _emit(f"Akzeptanzkriterien ({len(akzeptanzkriterien)}):")
+        for _a in akzeptanzkriterien:
+            _emit(f"  - {_a}")
+    _emit("")

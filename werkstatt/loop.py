@@ -294,6 +294,95 @@ def _get_baseline_error_details(
         return "Baseline-Check fehlgeschlagen (Timeout/OSError)"
 
 
+def _human_gate_plan(state, auto_approve=False):
+    """M-348b: Plan-Human-Gate (nach Plan-Erstellung, vor Builder)."""
+    pd = getattr(state, "project_dir", None)
+    pn = getattr(state, "project_name", "?")
+    if pd is None:
+        return 1
+
+    if auto_approve:
+        audit("loop_plan_gate_auto", {"reason": "auto_approve"}, pd, pn)
+        return 0
+
+    import os as _os
+    if _os.environ.get("WERKSTATT_IN_TEST") == "1":
+        audit("loop_plan_gate_test", {"reason": "WERKSTATT_IN_TEST=1"}, pd, pn)
+        return 0
+
+    require = True
+    for cfg_name in (f"/opt/werkstatt/projects/{pn}.yaml",):
+        cfg_path = Path(cfg_name)
+        if cfg_path.exists():
+            try:
+                import yaml  # type: ignore[import-untyped]
+                with cfg_path.open() as fh:
+                    cfg = yaml.safe_load(fh) or {}
+                require = bool(cfg.get("require_plan_approval", True))
+            except Exception:  # noqa: BLE001, S110
+                pass
+    if not require:
+        audit("loop_plan_gate_auto", {"reason": "require_plan_approval=false"}, pd, pn)
+        return 0
+
+    from werkstatt import loop_renderer as _r
+    _r.plan(
+        getattr(state, "phasen", []) or [],
+        getattr(state, "tasks", []) or [],
+        getattr(state, "tests", []) or [],
+        getattr(state, "akzeptanzkriterien", []) or [],
+    )
+
+    while True:
+        try:
+            _antwort = input(
+                "\nPlan ausfuehren? [j/n/a]\n"
+                "  j = bauen\n"
+                "  n = ablehnen (Loop bricht ab)\n"
+                "  a = Plan anpassen\n"
+                "Deine Wahl: "
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            audit("loop_plan_gate_eof", {}, pd, pn)
+            return 1
+
+        if _antwort == "j":
+            audit("loop_plan_gate_approved", {}, pd, pn)
+            return 0
+        if _antwort == "n":
+            audit("loop_plan_gate_rejected", {}, pd, pn)
+            return 1
+        if _antwort == "a":
+            _plan_file = Path(pd) / ".werkstatt" / f"{pn}.phase.yaml"
+            print(f"\nPlan-Datei: {_plan_file}")
+            input("Enter zum Fortfahren...")
+            if _plan_file.exists():
+                try:
+                    import yaml  # type: ignore[import-untyped]
+                    with _plan_file.open() as fh:
+                        _d = yaml.safe_load(fh) or {}
+                    if _d.get("tasks"):
+                        state.tasks = _d["tasks"]
+                    if _d.get("phasen"):
+                        state.phasen = _d["phasen"]
+                    if _d.get("tests"):
+                        state.tests = _d["tests"]
+                    if _d.get("akzeptanzkriterien"):
+                        state.akzeptanzkriterien = _d["akzeptanzkriterien"]
+                except Exception:  # noqa: BLE001, S110
+                    pass
+            _r.plan(
+                getattr(state, "phasen", []) or [],
+                getattr(state, "tasks", []) or [],
+                getattr(state, "tests", []) or [],
+                getattr(state, "akzeptanzkriterien", []) or [],
+            )
+            continue
+        print("Antworte mit j, n oder a.")
+
+    return 1
+
+
 def _task_ende(
     state: RunState,
     phase_state,
@@ -837,6 +926,18 @@ def run_pipeline_loop(
             step(2, "Planner", "kein Plan", ok=False)
             audit("loop_gate_failed", {"gate": "plan"}, pd, pn)
             return 1
+
+    # M-348c: Plan-Human-Gate (nach Plan-Erstellung, vor Builder).
+    if plan_ok:
+        audit("loop_phase", {"phase": "plan_gate", "status": "start"}, pd, pn)
+        _rc_plan = _human_gate_plan(
+            state,
+            auto_approve=getattr(state, "auto_approve", False),
+        )
+        if _rc_plan != 0:
+            audit("loop_phase", {"phase": "plan_gate", "status": "rejected"}, pd, pn)
+            return 1
+        audit("loop_phase", {"phase": "plan_gate", "status": "approved"}, pd, pn)
         # PhaseState mit vollstaendigem Plan-Checkpoint initialisieren.
         if not phase_state.exists():
             phase_state.init_new(
@@ -1170,6 +1271,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Aufgabentext (leer = dry-run-aehnlich)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Nur Plan-Gate + Renderer, kein LLM, kein Patch")
+    parser.add_argument("--auto-approve", action="store_true",
+                        help="Plan-Gate + Human-Gate automatisch approven (Skript-Runs)")
 
     args = parser.parse_args(argv)
 
@@ -1237,6 +1340,7 @@ def main(argv: list[str] | None = None) -> int:
         project_name=args.project,
     )
     _state.start_monotonic = _time.monotonic()
+    _state.auto_approve = bool(args.auto_approve)  # type: ignore[attr-defined]
     state_ref: list[RunState] = [_state]
 
     _ps = PhaseState(args.project, base_dir=_pd / ".werkstatt")
