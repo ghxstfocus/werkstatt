@@ -41,3 +41,16 @@ def test_builder_ohne_tasks(tmp_path):
     st = _state(tmp_path)
     st.tasks = []
     assert run_builder(st) is False
+
+
+def test_builder_read_only_task_kein_patch(tmp_path):
+    """M-306a: action='read' -> kein LLM-Call, kein Patch."""
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "Bestandsaufnahme", "action": "read"}]
+
+    with patch("werkstatt.builder.ask_llm") as mock_llm, \
+         patch("werkstatt.builder.audit"):
+        result = run_builder(st)
+    assert result is True
+    assert mock_llm.call_count == 0  # kein LLM-Call
+    assert st.patches == []  # keine Patches

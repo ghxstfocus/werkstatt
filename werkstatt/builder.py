@@ -47,6 +47,20 @@ def run_builder(state: RunState) -> bool:
         audit("builder_keine_tasks", {}, pd, pn)
         return False
 
+    # M-306a: Read-only-Tasks. Wenn ALLE Tasks action="read" haben,
+    # ist der Task eine Bestandsaufnahme. Builder ruft keinen LLM,
+    # erzeugt keinen Patch. Gibt True (Task erfolgreich = Info
+    # gesammelt).
+    def _is_read_only(task_obj) -> bool:
+        if not isinstance(task_obj, dict):
+            return False
+        return task_obj.get("action") == "read"
+
+    if all(_is_read_only(t) for t in tasks):
+        audit("builder_read_only", {"tasks": len(tasks)}, pd, pn)
+        state.patches = []  # type: ignore[attr-defined]
+        return True
+
     # M-298d: On-demand Zieldatei lesen.
     # Profi-Ansatz (Aider Repo-Map, Cline read_file): Der Builder
     # liest nur die Dateien, die der Task betrifft — nicht die

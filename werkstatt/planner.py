@@ -28,9 +28,14 @@ Phase). Entscheide pro Fehler:
     (z.B. mypy-Fehler in unrelated Modulen).
   - IGNORE: irrelevant (z.B. Timeout in ungenutztem Modul).
 
+Jeder Task hat ein "action"-Feld:
+  - "read" = Bestandsaufnahme / Pruefung. KEIN Code-Patch.
+    (z.B. "Analysiere Fehler in X", "Pruefe Zustand Y").
+  - "write" = Code/Doku-Aenderung. Patch wird erzeugt.
+
 Antworte NUR mit validem JSON:
 {
-  "tasks": [{"id": "t1", "name": "...", "description": "...", "akzeptanzkriterien": ["..."]}],
+  "tasks": [{"id": "t1", "name": "...", "description": "...", "action": "read"|"write", "akzeptanzkriterien": ["..."]}],
   "tests": ["..."],
   "akzeptanzkriterien": ["..."],
   "blocker": [{"klasse": "...", "text": "..."}],
