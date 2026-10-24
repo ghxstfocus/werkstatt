@@ -28,6 +28,6 @@ Wenn der Anker um 2 Spaces verschoben ist, korrigiert die Werkstatt automatisch.
 ## Wirkungsloser Patch
 Wenn ersatz == anker: Kein Patch. Liefere keinen.
 
-## Tools (nach Patch)
-- `run_write("python3 -m py_compile <datei>")` — Syntax pruefen.
-- `run_write("ruff check <datei>")` — Lint pruefen.
+## Tools (nach Patch — der LOOP macht das)
+- Der Loop prueft `py_compile` nach dem Patch (Builder muss nichts tun).
+- Der Loop prueft `ruff check` nach dem Patch (via verify.json ruff_changed).
