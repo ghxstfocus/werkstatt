@@ -202,6 +202,28 @@ def run_planner(state: RunState) -> bool:
             + json.dumps(follow_up_prev[:10], ensure_ascii=False)
         )
 
+    # M-349d: Planner-Info aus vorherigem _plan_gate-Fail.
+    # Der Hook hat den Plan abgelehnt. Der Planner MUSS die Info
+    # sehen, sonst plant er blind neu.
+    _planner_info = getattr(state, "last_planner_info", None)
+    if _planner_info:
+        user_content += (
+            "\n\n=== DEIN VORHERIGER PLAN WURDE ABGELEHNT ===\n"
+            f"Grund: {_planner_info.get('hinweis', 'unbekannt')}\n"
+            f"Task: {_planner_info.get('task_id', '?')}\n"
+            f"Verbotene Datei: {_planner_info.get('verbotene_datei', '?')}\n"
+            "\n"
+            "Du MUSST jetzt einen GUELTIGEN Plan liefern:\n"
+            "  1. KEINE Doku-Tasks (docs/, CHANGELOG, README,\n"
+            "     STATUS, PROGRESS sind verboten).\n"
+            "  2. Wenn mehr als 5 Tasks: PFLICHT Phasen mit\n"
+            "     phase_id pro Task.\n"
+            "  3. task_files: konkrete Datei mit Suffix\n"
+            "     (.py, .yaml, .toml), KEINE Ordner.\n"
+            "\n"
+            "Antworte mit gueltigem JSON."
+        )
+
     reply = ask_llm(
         api_key, PLANNER_SYSTEM, user_content,
         model="deepseek-chat", temperature=0.2, max_tokens=4000,

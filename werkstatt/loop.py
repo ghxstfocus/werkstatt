@@ -934,14 +934,18 @@ def run_pipeline_loop(
             audit("loop_planner_failed", {}, pd, pn)
             return 1
         plan_ok = _plan_gate(state)
-        # M-349c: Plan-Reflection. Wenn der Hook den Plan abgelehnt
-        # hat (last_planner_info gesetzt), Planner erneut rufen.
-        if not plan_ok and getattr(state, "last_planner_info", None):
+        # M-349c/d: Plan-Reflection. Max 3 Runden.
+        for _runde in range(3):
+            if plan_ok:
+                break
+            _info = getattr(state, "last_planner_info", None)
+            if not _info:
+                break
             audit("loop_plan_reflection",
-                  {"info": state.last_planner_info},  # type: ignore[attr-defined]
-                  pd, pn)
-            if run_planner(state):
-                plan_ok = _plan_gate(state)
+                  {"runde": _runde + 1, "info": _info}, pd, pn)
+            if not run_planner(state):
+                break
+            plan_ok = _plan_gate(state)
         if not plan_ok:
             step(2, "Planner", "kein Plan", ok=False)
             audit("loop_gate_failed", {"gate": "plan"}, pd, pn)
