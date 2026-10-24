@@ -1368,3 +1368,120 @@ sind, und nimmt sie in den Plan auf.
 **Baseline-Erwartung:** +1 Test.
 
 Status: dokumentiert 2026-10-24.
+
+## M-312 — Architektur-Modus + ADR-getriebener Scaffolder (geplant)
+
+### Chef-Anforderung 2026-10-24
+
+"LLM als Software-Architekt, der mit mir zusammen
+Architektur- und Design-Entscheidungen trifft. Nach
+Reflektion und meiner Freigabe übergibt er an den
+Scaffolder, der die grundlegenden Strukturen anlegt
+(Ordnerstrukturen State-of-the-Art: core/, apps/ usw.)."
+
+### Profi-Ansatz (recherchiert)
+
+- **Claude Code Plan-Mode:** Agent analysiert Codebase,
+  schlägt Plan vor, wartet auf Freigabe.
+- **arch-decision:** 3 parallele Explorer (Prior Art,
+  Impact, Constraints), 3 Ansätze, Trade-off-Tabelle,
+  Human Approval Gate, ADR.
+- **cortex-x:** 7 Discovery-Fragen, Architektur-Vorschlag,
+  dann Scaffolder.
+- **DECIDER/architect:** ADRs als enforceable Constraints
+  (Hooks blockieren bei Verstoß).
+
+### Zielbild
+
+1. **Architektur-Modus (M-312a):**
+   - `werkstatt/architect.py`.
+   - 3 parallele Explorer (read-only).
+   - LLM-Synthese: 3 Ansätze + Trade-off-Tabelle.
+   - Human-Gate: Nutzer wählt + bestätigt.
+   - Output: `docs/decisions/ADR-0001-<slug>.md`.
+
+2. **Scaffolder (M-299c + M-312b):**
+   - `werkstatt/scaffolder.py`.
+   - Nimmt ADR als Input.
+   - Legt Ordnerstruktur an (State-of-the-Art:
+     core/, apps/, tests/, docs/).
+   - Legt .werkstatt/verify.json an.
+   - Legt projects/<name>.yaml an.
+   - KEINE agents/, skills/ (Chef-Mandat).
+
+### Voraussetzung (Chef-Bedingung)
+
+Der Loop muss vorher **Komplexität bewältigen**:
+- Multi-Task mit Dependencies.
+- Echte Code-Änderungen (nicht nur Doku).
+- Resume nach Abbruch (M-310c in Praxis).
+- Phasen-Hierarchie (M-310a in Praxis).
+
+### Aufwand
+
+~2-3 Tage (Architektur-Modus + Scaffolder + Tests).
+
+Status: dokumentiert 2026-10-24, blockiert bis Komplexitätstests grün.
+
+
+## M-313 — Projektstruktur-Schema + Scaffolder-Migration (geplant)
+
+### Chef-Anforderung 2026-10-24
+
+"Wir müssen uns über die Ordnerstruktur in jedem Projekt
+Gedanken machen. Ich will es wie Werkstatt (ADR, Index,
+Glossar usw.) — ein System, das für alle Projekte geht.
+Scaffolder soll auch migrieren können, z.B. security-ai,
+wenn sich was ändern sollte an der Struktur, komplett
+umstrukturieren können."
+
+### Problem
+
+Bestehende Projekte (security-ai) haben schon eine
+Struktur (core/, apps/, tests/, docs/), aber keine
+einheitliche Werkstatt-konforme Struktur (kein ADR-
+Verzeichnis, kein Index, kein Glossar, kein PROGRESS.md).
+
+### Profi-Ansatz (recherchiert)
+
+- **AssemblyZero:** JSON-Schema als Single Source of
+  Truth für Projektstruktur. Scaffolder, Doku und
+  Migration lesen aus derselben Quelle.
+- **SpecWeave:** "Just-in-time, not big-bang". Phase 1:
+  nur Doku-Struktur migrieren. Phase 2: Feature-
+  Migration on-demand.
+- **PyScaffold:** "Deploy new scaffold in the same
+  repository and move files with git mv".
+- **rescaffold:** `.rescaffold.toml` trackt, welche
+  Dateien der Scaffolder angelegt hat (Checksums).
+  Bei `-upgrade` werden nur diese Dateien aktualisiert,
+  Nutzer-Code wird nie angefasst.
+
+### Zielbild
+
+1. **`schemas/projektstruktur.yaml`** — Single Source of
+   Truth für alle Zielprojekt-Ordner und -Dateien.
+
+2. **`werkstatt/scaffolder.py`** — CREATE + MIGRATE:
+   - Ohne Lock-File: neue Struktur anlegen.
+   - Mit Lock-File: nur Scaffolder-eigene Dateien
+     aktualisieren, Nutzer-Dateien nicht anfassen.
+
+3. **`.werkstatt/scaffold-lock.toml`** — Trackt
+   Checksums der vom Scaffolder angelegten Dateien.
+
+4. **Kein** `agents/`, `skills/` (Chef-Mandat).
+
+### Voraussetzung
+
+M-306-RERUN-5..8 (Komplexitätstests) müssen grün sein.
+Der Loop muss Multi-Task, echte Code-Änderung, Resume
+und Phasen-Hierarchie in Praxis bewältigen.
+
+### Aufwand
+
+~3-4 Tage (Schema + Scaffolder + Migration + Tests).
+
+Status: dokumentiert 2026-10-24, blockiert bis
+Komplexitätstests grün.
+
