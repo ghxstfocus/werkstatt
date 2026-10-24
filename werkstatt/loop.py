@@ -575,7 +575,14 @@ def _run_with_progress(
     _t_hb.join()
 
     if _exc[0] is not None:
-        raise _exc[0]
+        # M-357: Exception nicht re-raisen, sondern als False
+        # zurueckgeben, damit der Aufrufer (Task-Loop) den
+        # Fehlerpfad mit Audit + _task_ende durchlaeuft.
+        import logging as _logging
+        _logging.getLogger(__name__).exception(
+            "run_with_progress exception: %s", _exc[0]
+        )
+        return False
     return _result[0]
 
 
@@ -1135,6 +1142,7 @@ def run_pipeline_loop(
             task_ok(i, len(tasks), elapsed_s=_el_task)
             group_end()
             tasks_ok += 1
+            state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
             _task_ende(state, phase_state, task_id, ok=True, name=task_name)
             audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
             continue
@@ -1281,9 +1289,18 @@ def run_pipeline_loop(
                 audit("loop_reviewer_rejected_after_reflection", {"task_id": i}, pd, pn)
                 # M-343c: pytest ist das letzte Wort.
                 _last_errors = getattr(state, "last_verify_errors", None) or []
-                if not _last_errors:
+                # M-359: pytest gruen reicht NICHT, wenn der Patch
+                # gar nicht angewendet wurde (old_string_not_found).
+                # Dann ist der Task fail-closed.
+                _hat_patch = bool(getattr(state, "patches", []))
+                if not _last_errors and _hat_patch:
                     audit("loop_reviewer_reject_ignoriert",
                           {"task_id": i, "grund": "pytest gruen nach Reflection"}, pd, pn)
+                elif not _last_errors and not _hat_patch:
+                    audit("loop_reviewer_reject_fail_closed",
+                          {"task_id": i, "grund": "kein_patch_angewendet"}, pd, pn)
+                    _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected_no_patch")
+                    return 1
                 else:
                     _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected_after_reflection")
                     return 1
@@ -1293,6 +1310,7 @@ def run_pipeline_loop(
         task_ok(i, len(tasks), elapsed_s=_el_task)
         group_end()
         tasks_ok += 1
+        state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
         _task_ende(state, phase_state, task_id, ok=True, name=task_name)
         audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
 
@@ -1443,7 +1461,10 @@ def main(argv: list[str] | None = None) -> int:
         if _had_stash:
             audit("loop_stash_pop", {}, _pd, args.project)
             _git_stash_pop(_pd)
-    _r.footer(success=(rc == 0), tasks_total=0, tasks_ok=0)
+    # M-358: Footer mit echten Task-Zahlen (aus state).
+    _tasks_total = len(getattr(_state, "tasks", []) or [])
+    _tasks_ok = int(getattr(_state, "tasks_ok_counter", 0) or 0)
+    _r.footer(success=(rc == 0), tasks_total=_tasks_total, tasks_ok=_tasks_ok)
     return rc
 
 

@@ -2,7 +2,14 @@
 
 Stand: 2026-10-22, HEAD 76f4bf1, Branch umbau/phase-2.
 
-## Messbefehle (kanonisch)
+> **HISTORISCH.** Diese Datei wird seit 2026-10-24 nicht mehr gepflegt.
+> Die einzige lebende Baseline ist das `BASELINE`-Dict in
+> `tools/quality_gate.py`. Aktueller Stand: siehe `Bau-Handoff.md`.
+>
+> Der folgende Inhalt beschreibt einen **vergangenen** Stand
+> (2026-10-22, HEAD 76f4bf1). Nicht als aktuell verwenden.
+
+## Messbefehle (kanonisch, historisch)
 
 | Metrik  | Befehl                          | Soll         |
 |---------|---------------------------------|--------------|

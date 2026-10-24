@@ -1020,18 +1020,19 @@ def test_run_with_progress_ruft_fn(monkeypatch):
 
 
 def test_run_with_progress_exception():
-    """M-327: _run_with_progress propagiert Exceptions."""
+    """M-357: _run_with_progress wandelt Exceptions in False um.
+
+    Frueher (M-327): Exception re-raised -> Loop starb ohne Audit.
+    Jetzt (M-357): Exception -> False -> Aufrufer (Task-Loop) geht
+    in den Fehlerpfad mit Audit + _task_ende.
+    """
     from werkstatt import loop as loop_mod
 
     def _boom():
         raise ValueError("kaputt")
 
-    try:
-        loop_mod._run_with_progress(_boom, 1, 1, "x")
-    except ValueError as e:
-        assert "kaputt" in str(e)
-    else:
-        raise AssertionError("Exception nicht propagiert")
+    result = loop_mod._run_with_progress(_boom, 1, 1, "x")
+    assert result is False
 
 
 def test_run_with_progress_heartbeat(monkeypatch):
@@ -1343,7 +1344,13 @@ def test_reviewer_reject_ignoriert_wenn_pytest_gruen(tmp_path, monkeypatch):
     monkeypatch.setattr(loop_mod, "_plan_gate", lambda s: True)
     monkeypatch.setattr(loop_mod, "run_explorer",
                         lambda s, a: {"key_files": [], "findings": "", "next_reads": []})
-    monkeypatch.setattr(loop_mod, "run_builder", lambda s: True)
+    def _fake_builder(_s):
+        # M-359b: run_builder muss state.patches fuellen, damit
+        # M-359 (kein_patch -> fail_closed) nicht greift.
+        _s.patches = [{"action": "update", "file": "core/checks.py",
+                       "old_string": "x = 1", "new_string": "x = 2"}]
+        return True
+    monkeypatch.setattr(loop_mod, "run_builder", _fake_builder)
     monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: True)
     monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
     monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
@@ -1356,6 +1363,58 @@ def test_reviewer_reject_ignoriert_wenn_pytest_gruen(tmp_path, monkeypatch):
     rc = loop_mod.run_pipeline_loop("p", "a", [st])
     assert rc == 0, f"erwartet rc=0, war {rc}; audits={_audits}"
     assert "loop_reviewer_reject_ignoriert" in _audits
+
+
+def test_reviewer_reject_fail_closed_bei_leerem_patch(tmp_path, monkeypatch):
+    """M-359: Reviewer-Reject + kein Patch angewendet -> fail-closed.
+
+    Frueher (M-343c): pytest gruen reicht -> task_ok, auch wenn
+    der Patch gar nicht angewendet wurde (old_string_not_found).
+    Jetzt (M-359): state.patches == [] -> fail_closed.
+    """
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
+    )
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "checks.py").write_text("x = 1\n")
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.tasks = [{"id": "t1", "name": "T1", "action": "update",
+                 "task_files": ["core/checks.py"]}]
+    st.phasen = []
+
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda k, p, *a, **kw: _audits.append(k))
+    monkeypatch.setattr(loop_mod, "_plan_gate", lambda s: True)
+    monkeypatch.setattr(loop_mod, "run_explorer",
+                        lambda s, a: {"key_files": [], "findings": "", "next_reads": []})
+
+    def _fake_builder_empty(_s):
+        # Kein Patch -> state.patches bleibt []
+        _s.patches = []
+        return True
+    monkeypatch.setattr(loop_mod, "run_builder", _fake_builder_empty)
+    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: True)
+    monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
+    monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
+    monkeypatch.setattr(loop_mod, "_reflection_loop", lambda s, **kw: False)
+    for _fn in ("header", "step", "task", "task_ok", "task_failed",
+                "group_start", "group_end", "footer"):
+        if hasattr(loop_mod, _fn):
+            monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
+
+    rc = loop_mod.run_pipeline_loop("p", "a", [st])
+    assert rc == 1, f"erwartet rc=1 (fail_closed), war {rc}; audits={_audits}"
+    assert "loop_reviewer_reject_fail_closed" in _audits
 
 
 def test_reviewer_reject_bleibt_rot_wenn_pytest_rot(tmp_path, monkeypatch):
