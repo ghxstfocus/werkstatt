@@ -276,3 +276,67 @@ def test_loop_preflight_vor_planner(tmp_path):
     assert "preflight" in call_order
     assert "planner" in call_order
     assert call_order.index("preflight") < call_order.index("planner")
+
+
+def test_pre_build_uebersprungen_bei_follow_up(tmp_path):
+    """M-299g: Pre-Build rot, aber Planner FOLLOW_UP -> Loop laeuft weiter."""
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "Task 1"}]
+    st.tests = ["Test 1"]
+    st.akzeptanzkriterien = ["Kriterium 1"]
+    st.blocker_fehler = []
+    st.follow_up_fehler = [{"klasse": "type", "stage_id": "mypy", "text": "unused"}]
+    st.ignore_fehler = []
+
+    verify_calls = {"count": 0}
+    def _verify(state, phase=None):
+        verify_calls["count"] += 1
+        is_first_pre_build = verify_calls["count"] == 1 and phase == "pre_build"
+        return not is_first_pre_build
+
+    with patch("werkstatt.loop._verify_patches", side_effect=_verify), \
+         patch("werkstatt.loop.run_builder", return_value=True), \
+         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
+         patch("werkstatt.loop.run_reviewer", return_value=True), \
+         patch("werkstatt.loop.run_planner", return_value=True), \
+         patch("pipeline._approval_und_human_gate", return_value=0), \
+         patch("pipeline.load_project_config", return_value={}), \
+         patch("werkstatt.loop.audit"):
+        rc = run_pipeline_loop("p", "a", [st])
+    assert rc == 0
+
+
+def test_pre_build_blockiert_bei_blocker(tmp_path):
+    """M-299g: Pre-Build rot, Planner meldet BLOCKER -> Loop stoppt."""
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "Task 1"}]
+    st.tests = ["Test 1"]
+    st.akzeptanzkriterien = ["Kriterium 1"]
+    st.blocker_fehler = [{"klasse": "syntax", "stage_id": "py_compile", "text": "SyntaxError"}]
+    st.follow_up_fehler = []
+    st.ignore_fehler = []
+
+    with patch("werkstatt.loop._verify_patches", return_value=False), \
+         patch("werkstatt.loop.run_planner", return_value=True), \
+         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
+         patch("werkstatt.loop.audit"):
+        rc = run_pipeline_loop("p", "a", [st])
+    assert rc == 1
+
+
+def test_pre_build_blockiert_ohne_klassifikation(tmp_path):
+    """M-299g: Pre-Build rot, keine Klassifikation -> Loop stoppt (alt)."""
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "Task 1"}]
+    st.tests = ["Test 1"]
+    st.akzeptanzkriterien = ["Kriterium 1"]
+    st.blocker_fehler = []
+    st.follow_up_fehler = []
+    st.ignore_fehler = []
+
+    with patch("werkstatt.loop._verify_patches", return_value=False), \
+         patch("werkstatt.loop.run_planner", return_value=True), \
+         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
+         patch("werkstatt.loop.audit"):
+        rc = run_pipeline_loop("p", "a", [st])
+    assert rc == 1

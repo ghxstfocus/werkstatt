@@ -434,9 +434,29 @@ def run_pipeline_loop(
     audit("loop_phase", {"phase": "plan", "status": "ok"}, pd, pn)
 
     # 2. Pre-Build Verify
+    # M-299g: Planner-Klassifikation beruecksichtigen.
+    # Wenn der Planner die Fehler als FOLLOW_UP/IGNORE klassifiziert
+    # hat (und keine BLOCKER), laeuft der Loop weiter. Sonst harter
+    # Abbruch (Rueckfall auf altes Verhalten).
     if not _verify_patches(state, phase="pre_build"):
-        audit("loop_gate_failed", {"gate": "pre_build"}, pd, pn)
-        return 1
+        follow_up = getattr(state, "follow_up_fehler", []) or []
+        ignore = getattr(state, "ignore_fehler", []) or []
+        blocker = getattr(state, "blocker_fehler", []) or []
+
+        if len(blocker) == 0 and (len(follow_up) + len(ignore)) > 0:
+            audit(
+                "loop_pre_build_uebersprungen",
+                {
+                    "follow_up": len(follow_up),
+                    "ignore": len(ignore),
+                    "blocker": len(blocker),
+                },
+                pd, pn,
+            )
+            # Kein return 1 - Loop laeuft weiter.
+        else:
+            audit("loop_gate_failed", {"gate": "pre_build"}, pd, pn)
+            return 1
 
     # 3. Autonomer Task-Loop (Claude-Code-Prinzip)
     #    Alle Tasks werden abgearbeitet ohne Unterbrechung.
