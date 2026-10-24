@@ -1177,9 +1177,12 @@ def test_plan_gate_flat_bleibt_gueltig(tmp_path):
 def test_planner_prompt_phasen_pflicht():
     """M-323c: PLANNER_SYSTEM enthaelt Phasen-Pflicht-Hinweis."""
     from werkstatt.planner import PLANNER_SYSTEM
-    assert "PFLICHT" in PLANNER_SYSTEM
+    # M-350: Prompt gekuerzt. Phasen-Pflicht steht jetzt als
+    # "Pflicht" (nicht "PFLICHT"), Details im Hook (planner_gate.py).
+    _lower = PLANNER_SYSTEM.lower()
+    assert "pflicht" in _lower
     assert "phase_id" in PLANNER_SYSTEM
-    assert "Mehr als 5 Tasks" in PLANNER_SYSTEM or "Mehr als 5" in PLANNER_SYSTEM
+    assert "phasen" in PLANNER_SYSTEM
 
 
 def test_init_new_speichert_phasen(tmp_path):

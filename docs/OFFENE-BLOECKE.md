@@ -62,3 +62,22 @@ Nur noch **offene** Bloecke. Erledigte stehen in
 - `OFFENE-BLOECKE-ARCHIV-2.md` — archivierte Bloecke (vor 2026-10-24).
 - `NEUBAU-ZIELBILD.md` — aktueller Loop als Ziel.
 - `Bau-Handoff.md` — aktueller Stand.
+
+## Hooks statt Prompts (M-349..M-352)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| **M-348-Fix** | klein | `plan_ok` nach `run_planner` neu berechnen. Sonst wird das Plan-Human-Gate uebersprungen. |
+| **M-349** | klein | `hooks/planner_gate.py` neu: Doku-Tasks ablehnen. `_plan_gate` ruft Hook. Planner-Reflection mit `last_planner_info`. |
+| **M-350** | mittel | `planner_gate.py` erweitern: action, task_files, phasen-Pflicht, phase_id. `PLANNER_SYSTEM` halbieren. |
+| **M-351** | klein | `loop.py:1167`: toter `post_tool_use`-Aufruf entfernen. |
+| **M-352** | klein | `anti_patterns.py`: tot oder aktivieren? Entscheidung offen. |
+
+## Offene Merkposten (unveraendert)
+
+- **M-323b:** Phasen-Checkpoints (`phase_end` pro Phase).
+- **M-341:** Explorer ueberspringen bei `task_files`.
+- **M-344:** PROGRESS.md mit Phasen-Header.
+- **M-345:** pipeline.py loeschen (nach agent.py-Aufloesung).
+- **M-346:** pipeline._approval_und_human_gate verschieben.
+- **M-347:** CLI-Einstiegspunkt.

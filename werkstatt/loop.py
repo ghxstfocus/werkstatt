@@ -62,6 +62,17 @@ def _plan_gate(state: RunState) -> bool:
         if _tid is not None and _tid not in _phasen_ids:
             return False
 
+    # M-349b: Doku-Tasks via Hook ablehnen (deterministisch).
+    _hook_res = _call_hook("planner_gate.py", {
+        "tasks": _tasks,
+        "phasen": _phasen,
+        "project_dir": str(getattr(state, "project_dir", "")),
+    })
+    if not _hook_res.get("allow", True):
+        # Info fuer Planner-Reflection
+        state.last_planner_info = _hook_res.get("info", {})  # type: ignore[attr-defined]
+        return False
+
     return True
 
 
@@ -922,7 +933,8 @@ def run_pipeline_loop(
         if not run_planner(state):
             audit("loop_planner_failed", {}, pd, pn)
             return 1
-        if not _plan_gate(state):
+        plan_ok = _plan_gate(state)
+        if not plan_ok:
             step(2, "Planner", "kein Plan", ok=False)
             audit("loop_gate_failed", {"gate": "plan"}, pd, pn)
             return 1
@@ -1155,12 +1167,8 @@ def run_pipeline_loop(
                     break
                 audit("loop_patch_updated", {"file": file}, pd, pn)
 
-        # PostToolUse-Hook (Phase 10)
-        hook_res = _call_hook("post_tool_use.py", {})
-        if not hook_res.get("allow", False):
-            audit("loop_hook_blocked", {"hook": "post_tool_use", "reason": hook_res.get("reason", "")}, pd, pn)
-            if not _reflection_loop(state):
-                return 1
+        # M-334b/M-351: post_tool_use entfernt (prueft Werkstatt statt
+        # Zielprojekt). _verify_patches prueft das Zielprojekt.
 
         # Simplify-Hook (Phase 11)
         hook_res = _call_hook("simplify.py", {"diff": _get_git_diff_for_hook()})

@@ -19,52 +19,19 @@ from werkstatt.state import RunState
 PLANNER_SYSTEM = """Du bist ein elite Software-Architekt und Planner.
 Zerlege die Aufgabe in ausfuehrbare Tasks.
 
-Du bekommst optional eine Preflight-Fehlerliste (Verify-Fehler
-aus dem Zielprojekt) und eine Follow_up-Liste (aus fruehrerer
-Phase). Entscheide pro Fehler:
-  - BLOCKER: verhindert DIESE Aufgabe (z.B. SyntaxError im
-    betroffenen File, fehlende Abhaengigkeit fuer den Test).
-  - FOLLOW_UP: Baseline-Schuld, nicht aufgabenrelevant
-    (z.B. mypy-Fehler in unrelated Modulen).
-  - IGNORE: irrelevant (z.B. Timeout in ungenutztem Modul).
+Jeder Task:
+  - id, name, description
+  - action: "read" | "create" | "update"
+  - task_files: konkrete Datei-Pfade MIT Suffix (keine Ordner)
+  - phase_id: optional, muss in phasen existieren
 
-Jeder Task hat zwei Pflichtfelder:
-  - "action": Drei Werte (M-317):
-              "read"   = Bestandsaufnahme / Pruefung, KEIN Patch.
-              "create" = NEUE Datei anlegen (existiert noch nicht).
-              "update" = BESTEHENDE Datei aendern (existiert schon).
-              Wenn unsicher: "update" (fail-safe, Patch wird erzeugt).
-  - "task_files": list[str] = EXPLIZITE Datei-Pfade (MIT Suffix,
-              z.B. "core/checks/__init__.py").
-              KEINE Ordner ("core/checks/" ist FALSCH).
-              KEINE Wildcards.
-              Wenn du einen Ordner meinst: nenne die konkrete Datei
-              ("core/checks/__init__.py", nicht "core/checks/").
+Phasen (Pflicht bei >5 Tasks oder Refactoring-Aufgaben):
+  phasen: [{"id": "p1", "titel": "Analyse", "tasks": ["t1"]}]
+  Jeder Task braucht dann eine phase_id.
 
-Phasen-Struktur (Haupt-/Unterpunkte, M-323c):
-  PFLICHT, wenn die Aufgabe eines der Kriterien erfuellt:
-    - Mehr als 5 Tasks, ODER
-    - Mehr als 2 Dateien/Module betroffen, ODER
-    - Aufgabe enthaelt Woerter wie "refaktoriere", "analysiere",
-      "teile auf", "phase", "strukturiere".
-  Sonst: OPTIONAL (kleine Aufgaben duerfen flach bleiben).
-
-  Format:
-    "phasen": [{"id": "p1", "titel": "Vorbereitung",
-                "parent_id": null, "tasks": ["t1", "t2"]}]
-    Unterpunkte: parent_id = "p1" (statt null).
-    Tasks MUESSEN "phase_id": "p1" haben, wenn phasen existiert.
-
-  Beispiel "Refaktoriere core/checks/":
-    phasen: [
-      {"id": "p1", "titel": "Analyse", "tasks": ["t1"]},
-      {"id": "p2", "titel": "Implementierung", "tasks": ["t2", "t3"]},
-      {"id": "p3", "titel": "Tests", "tasks": ["t4"]},
-    ]
-    tasks: [{"id": "t1", ..., "phase_id": "p1"}, ...]
-
-  WICHTIG: Wenn phasen vorhanden sind, MUSS jeder Task eine
-  gueltige phase_id haben. Die phase_id MUSS in phasen existieren.
+Doku-Tasks sind VERBOTEN (docs/, CHANGELOG.md, README.md,
+STATUS.md, PROGRESS.md). Doku schreibt der Loop.
+Verstoesse werden vom Hook deterministisch geblockt.
 
 Antworte NUR mit validem JSON:
 {
@@ -81,7 +48,13 @@ Antworte NUR mit validem JSON:
   "follow_up": [{"klasse": "...", "text": "..."}],
   "ignore": [{"klasse": "...", "text": "..."}]
 }
-Keine Erklaerung, nur JSON."""
+
+WICHTIG (wird vom Hook erzwungen):
+  - action muss read/create/update sein.
+  - task_files: Datei mit Suffix, KEINE Ordner, KEINE Wildcards.
+  - Doku-Tasks verboten.
+  - phase_id muss in phasen existieren.
+"""
 
 
 def _klassifiziere_fehler(stage_id: str, fehlertext: str) -> str:

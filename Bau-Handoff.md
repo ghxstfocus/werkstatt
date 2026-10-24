@@ -101,3 +101,53 @@ Zielprojekt: f1bd193 (RERUN-24).
 - `docs/MERKPOSTEN.md` — M-Nummern.
 - `docs/NEUBAU-ZIELBILD.md` — aktueller Loop als Ziel.
 - `docs/ARCHITEKTUR.md` — technische Architektur.
+
+---
+
+## Zwischenstand 2026-10-24 18:00 — M-348..M-351
+
+**HEAD:** c9eb707 (M-348). Arbeitsbaum: M-350 in Arbeit.
+
+### M-348 (committet, c9eb707): Plan-Human-Gate
+
+`_human_gate_plan` zwischen Planner und Builder. Zeigt Plan,
+fragt j/n/a. 4 Tests. **Bug:** `plan_ok` wird nach `run_planner`
+nicht neu berechnet → Gate wird uebersprungen. **M-348-Fix**
+liegt im Arbeitsbaum.
+
+### M-349 (Arbeitsbaum): Doku-Tasks via Hook ablehnen
+
+- `hooks/planner_gate.py` neu: prueft `state.tasks` nach
+  Doku-Mustern (docs/, CHANGELOG.md, ...).
+- `_plan_gate` ruft Hook, speichert `state.last_planner_info`.
+- `planner.py` haengt `last_planner_info` an den Prompt.
+- **Status:** gebaut, nicht committet.
+
+### M-350 (Arbeitsbaum): Hooks erweitern, Prompts reduzieren
+
+- `planner_gate.py`: 5 Checks (Doku, action, task_files,
+  phasen-Pflicht, phase_id).
+- `PLANNER_SYSTEM`: von ~80 auf ~40 Zeilen gekuerzt.
+- Regeln stehen am **Ende** des Prompts (Recency).
+- **Status:** gebaut, nicht committet.
+
+### M-351 (Arbeitsbaum): post_tool_use-Aufruf entfernt
+
+- `loop.py:1167`: toter `_call_hook("post_tool_use.py", {})`
+  entfernt (Datei seit M-334b geloescht, Aufruf war fail-open).
+- **Status:** gebaut, nicht committet.
+
+### Offene Bugs
+
+1. **M-348-Fix:** `plan_ok` nach `run_planner` neu berechnen.
+   (Im Arbeitsbaum, Zeile ~925.)
+2. **RERUN-25/26:** Rollback auf f1bd193, `backups/`/`deploy/*`
+   waren untracked (kein Verlust). Doku-Aenderungen weg.
+3. **`anti_patterns.py`:** wird nie gerufen (tot). Nicht
+   angefasst (Entscheidung offen).
+
+### Naechster Schritt
+
+1. M-350-Block ausfuehren (Hooks erweitern).
+2. Baseline setzen, Commit M-349+M-350+M-351.
+3. RERUN-27 (vage Aufgabe).
