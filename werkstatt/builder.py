@@ -63,14 +63,24 @@ def run_builder(state: RunState) -> bool:
         for _m in _file_pattern.findall(_text):
             if _m not in _relevant_files:
                 _relevant_files.append(_m)
-    # Explorer-Report (key_files) als Wegweiser ergaenzen
+    # Explorer-Report (key_files) als Wegweiser ergaenzen.
+    # key_files kann dicts enthalten (z.B. {"file": "...", ...})
+    # oder strings. Wir normalisieren auf strings.
     _expl = getattr(state, "explorer_context", {}) or {}
     for _f in _expl.get("key_files", []) or []:
-        if _f and _f not in _relevant_files:
-            _relevant_files.append(_f)
+        _f_str = None
+        if isinstance(_f, str):
+            _f_str = _f
+        elif isinstance(_f, dict):
+            _f_str = _f.get("file") or _f.get("path") or _f.get("name")
+        if _f_str and _f_str not in _relevant_files:
+            _relevant_files.append(_f_str)
 
     _file_context: dict[str, str] = {}
     for _rel in _relevant_files[:5]:  # max 5, kein Kontext-Ballern
+        # Sicherheits-Check: _rel muss str sein (M-298d-Bugfix).
+        if not isinstance(_rel, str):
+            continue
         _target = pd / _rel
         if _target.exists() and _target.is_file():
             try:
