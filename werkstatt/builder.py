@@ -94,7 +94,38 @@ def run_builder(state: RunState) -> bool:
     # erfuellt wurde, wurde als Fehler gewertet.
     # Profi-Muster (Aider, Claude Code, SWE-agent): Erfuellung ist
     # Repo-Zustand nach Task, nicht "Patch nicht leer".
-    _allow_idempotent = _current_action in ("create", "update")
+    # M-352: Idempotenz NUR bei create, wenn Zieldatei existiert.
+    # Sonst: fail-closed (Builder muss Datei anlegen).
+    if _current_action == "create":
+        _task_obj = getattr(state, "aktuelle_task", None)
+        if not isinstance(_task_obj, dict) or not _task_obj:
+            _task_obj = next(
+                (t for t in tasks if isinstance(t, dict)), {}
+            )
+        _files = (
+            _task_obj.get("task_files", [])
+            if isinstance(_task_obj, dict) else []
+        )
+        _any_exists = any(
+            (pd / f).exists() for f in _files if isinstance(f, str)
+        )
+        # M-352-Fallback: task_files leer -> Dateiname aus name (M-317).
+        if not _any_exists and not _files:
+            import re as _re_fb
+            _name_fb = (
+                _task_obj.get("name", "") if isinstance(_task_obj, dict) else ""
+            )
+            for _m_fb in _re_fb.findall(
+                r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.'
+                r'(?:md|py|yaml|yml|json|txt|toml|cfg|ini))\b',
+                _name_fb,
+            ):
+                if (pd / _m_fb).exists():
+                    _any_exists = True
+                    break
+        _allow_idempotent = _any_exists
+    else:
+        _allow_idempotent = False
 
     # M-316 (A1/A2): Idempotenz-Check (Variante iii: verify.py).
     # Wird nur bei create-Tasks verwendet (M-317).

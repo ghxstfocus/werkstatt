@@ -81,3 +81,13 @@ Nur noch **offene** Bloecke. Erledigte stehen in
 - **M-345:** pipeline.py loeschen (nach agent.py-Aufloesung).
 - **M-346:** pipeline._approval_und_human_gate verschieben.
 - **M-347:** CLI-Einstiegspunkt.
+
+## M-350..M-353 (Hooks + Rollback)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| **M-350** | erledigt | planner_gate.py erweitert (5 Checks), PLANNER_SYSTEM gekuerzt. |
+| **M-351** | erledigt | no_effect-Patches filtern (builder + loop). |
+| **M-352** | offen | Idempotenz NUR bei create + Datei existiert. Tests anpassen. |
+| **M-353** | offen | Rollback auf sauberen Tree (git reset --hard + clean). |
+| **M-354** | offen | Checkpoint nach jedem Task (Aider-Muster, statt reset --hard). |

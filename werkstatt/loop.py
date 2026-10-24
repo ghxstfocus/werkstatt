@@ -800,6 +800,84 @@ def _human_gate(state: RunState) -> int:
     return 1
 
 
+def _git_dirty(pd: Path) -> bool:
+    """M-353a: Prueft, ob das Zielprojekt uncommittete Aenderungen hat."""
+    import subprocess as _sp
+    try:
+        res = _sp.run(
+            ["git", "-C", str(pd), "status", "--porcelain"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        return bool(res.stdout.strip())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _git_head(pd: Path) -> str:
+    """M-353a: Liefert den aktuellen HEAD-Commit."""
+    import subprocess as _sp
+    try:
+        res = _sp.run(
+            ["git", "-C", str(pd), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        return res.stdout.strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _git_stash(pd: Path) -> bool:
+    """M-353b: Sichert dirty tree via git stash."""
+    import subprocess as _sp
+    try:
+        res = _sp.run(
+            ["git", "-C", str(pd), "stash", "push", "-u", "-m", "werkstatt-loop"],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        return res.returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _git_stash_pop(pd: Path) -> bool:
+    """M-353b: Holt dirty tree zurueck (bei Erfolg)."""
+    import subprocess as _sp
+    try:
+        res = _sp.run(
+            ["git", "-C", str(pd), "stash", "pop"],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        return res.returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _git_stash_drop(pd: Path) -> bool:
+    """M-353b: Verwirft dirty tree (bei Fehler)."""
+    import subprocess as _sp
+    try:
+        res = _sp.run(
+            ["git", "-C", str(pd), "stash", "drop"],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        return res.returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _git_reset(pd: Path, ref: str) -> bool:
+    """M-353c: Setzt Arbeitsbaum auf ref zurueck."""
+    import subprocess as _sp
+    try:
+        res = _sp.run(
+            ["git", "-C", str(pd), "reset", "--hard", ref],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        return res.returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def run_pipeline_loop(
     project_name: str,
     aufgabe: str,
@@ -1070,7 +1148,7 @@ def run_pipeline_loop(
             _loop_action = None
             if isinstance(task_obj, dict):
                 _loop_action = task_obj.get("action")
-            if _loop_action not in ("create", "update"):
+            if _loop_action not in ("create", "update", "read"):
                 # read-Task mit leerem Patch: echter Fehler (Builder
                 # sollte hier nie laufen). Bei create/update: Idempotenz-
                 # Pfad unten pruefen (M-318).
@@ -1371,7 +1449,23 @@ def main(argv: list[str] | None = None) -> int:
     if _ps.exists():
         _ps.load()
 
+    # M-353: Rollback bei Fehler. Dirty tree sichern, bei Erfolg
+    # zurueckholen, bei Fehler verwerfen.
+    _had_stash = False
+    if _git_dirty(_pd):
+        audit("loop_dirty_tree", {"aktion": "stash"}, _pd, args.project)
+        _had_stash = _git_stash(_pd)
+
     rc = run_pipeline_loop(args.project, args.aufgabe, state_ref, phase_state=_ps)
+
+    if rc != 0 and _had_stash:
+        # M-353c: Loop-Änderungen weg, dirty tree zurueck.
+        audit("loop_rollback", {"rc": rc}, _pd, args.project)
+        _git_stash_drop(_pd)
+    elif rc == 0 and _had_stash:
+        # M-353b: Loop-Änderungen + dirty tree zusammen.
+        audit("loop_stash_pop", {}, _pd, args.project)
+        _git_stash_pop(_pd)
     _r.footer(success=(rc == 0), tasks_total=0, tasks_ok=0)
     return rc
 

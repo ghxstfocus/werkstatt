@@ -151,3 +151,74 @@ liegt im Arbeitsbaum.
 1. M-350-Block ausfuehren (Hooks erweitern).
 2. Baseline setzen, Commit M-349+M-350+M-351.
 3. RERUN-27 (vage Aufgabe).
+
+---
+
+## Zwischenstand 2026-10-24 19:30 — M-348..M-353
+
+**Werkstatt-HEAD:** 99eae5d (M-351). Arbeitsbaum: M-352 + M-353.
+**Zielprojekt-HEAD:** f1bd193 (sauber, RERUN-33 zurueckgerollt).
+**Baseline:** 1410 / 13 / 8 / 6 / 162.
+
+### Was seit M-348 passiert ist
+
+- **M-348:** Plan-Human-Gate (`_human_gate_plan`). 4 Tests.
+  RERUN-32 zeigte: funktioniert (Plan wird angezeigt).
+- **M-349:** Planner-Gate-Hook (`hooks/planner_gate.py`).
+  Doku-Tasks werden deterministisch abgelehnt.
+- **M-350:** Hook erweitert (5 Checks: Doku, action,
+  task_files, phasen, phase_id). PLANNER_SYSTEM gekuerzt.
+- **M-351:** no_effect-Patches filtern (Builder + Loop).
+  RERUN-33 zeigte: Builder liefert old==new, Loop zaehlt
+  als updated. M-351 filtert.
+- **M-352:** (Arbeitsbaum) Idempotenz NUR bei create +
+  Datei existiert. M-318 war zu locker (update wurde
+  als "nichts zu tun" gewertet).
+- **M-353:** (Arbeitsbaum) Rollback auf sauberen Tree
+  bei Loop-Fehler (git reset --hard + git clean).
+
+### RERUN-Ergebnisse (chronologisch)
+
+- **RERUN-27/28:** Vage Aufgabe, Planner plant Doku-Tasks.
+  Hook blockt, Loop stoppt. Plan-Human-Gate nicht erreicht.
+- **RERUN-29:** Exakte Fakten (kein "Plane neu", sondern
+  "ABGELEHNT: regel/fakt/erklaerung/details"). Planner
+  ignoriert weiter. Strukturelle LLM-Neigung.
+- **RERUN-30:** Praezisierter Befehl ("Sieh dir das Projekt
+  an und plane die naechsten logischen Schritte"). Planner
+  plant 12 Tasks ohne Phasen. Hook blockt. Loop stoppt.
+- **RERUN-31:** Praezisierter Befehl ("Plane fuer den
+  Builder"). Planner plant Code statt Doku. Aber .sql
+  wird geblockt (M-349f erlaubt .sql).
+- **RERUN-32:** Plan-Human-Gate erscheint (11 Tasks,
+  5 Phasen). 10/11 Tasks task_ok. Aber Diff nur
+  PROGRESS.md — no_effect-Patches.
+- **RERUN-33:** Praezisierter Befehl. 11 Tasks, 5 Phasen.
+  ECHTE Aenderungen: applier.py +163, change_service.py
+  +88, errors.py +10, test_change_applier.py +35.
+  Task 11 (update) failed (Reviewer rejected nach
+  Reflection). Loop-RC=1.
+  **create-Tasks (t3, t5, t10): idempotent, aber Datei
+  fehlt** -> fail-open (M-318).
+  **Rollback auf f1bd193** durchgefuehrt.
+
+### Aktuelle Blocker (M-352 + M-353)
+
+1. **M-352:** Idempotenz NUR bei create + Datei existiert.
+   M-318 war zu locker. Tests (3) muessen angepasst werden:
+   - test_builder_idempotent_bei_korrekter_datei
+   - test_builder_idempotent_bei_create_und_update
+   - test_builder_idempotent_bei_update_mit_korrekter_datei
+
+2. **M-353:** Rollback auf sauberen Tree. `git-Helper` in
+   loop.py eingefuegt. ruff-Fehler gefixt (6x noqa BLE001).
+   Noch nicht committet.
+
+### Naechster Schritt
+
+1. Drei Idempotenz-Tests anpassen (create statt update).
+2. Gate gruen (ruff 13, mypy 8, pytest 1410).
+3. Commit M-352 + M-353.
+4. RERUN-34 (praezisierter Befehl, create fail-closed).
+5. Pruefen: create-Tasks schreiben Dateien ODER
+   loop_builder_failed (fail-closed).

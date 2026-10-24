@@ -168,24 +168,36 @@ def test_builder_update_inkorrekte_datei_nutzt_patch_pfad(tmp_path):
     )
 
 
-def test_builder_idempotent_bei_update_mit_korrekter_datei(tmp_path):
-    """M-318: action=update + Datei existiert + korrekt -> idempotent."""
+def test_builder_update_kein_idempotenz(tmp_path):
+    """M-352: update + Datei existiert + korrekt -> KEIN Idempotenz.
+
+    M-352 stellt M-317 wieder her: update-Tasks gehen immer durch
+    den Patch-Pfad, auch wenn die Datei korrekt ist. Sonst wuerde
+    ein update-Task ('Unused Imports entfernen') als 'nichts zu tun'
+    gewertet, obwohl die Datei unused imports hat.
+    """
     from werkstatt.builder import run_builder
 
     st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "test_checks.py erweitern", "action": "update"}]
+    st.tasks = [{"id": "t1", "name": "test_checks.py erweitern",
+                 "action": "update", "task_files": ["test_checks.py"]}]
+    st.aktuelle_task = st.tasks[0]
 
-    # Datei existiert und ist syntaktisch korrekt
     (tmp_path / "test_checks.py").write_text(
         "def test_foo():\n    assert True\n", encoding="utf-8"
     )
 
-    with patch("werkstatt.builder.audit") as mock_audit:
+    with patch("werkstatt.builder.audit") as mock_audit, \
+         patch("werkstatt.builder.ask_llm") as mock_llm:
+        mock_llm.return_value = type("R", (), {
+            "ok": True, "content": '{"patches": []}', "error": ""
+        })()
         result = run_builder(st)
 
-    assert result is True
-    assert st.patches == []
-    assert any(
+    # update -> Patch-Pfad. LLM liefert leere Patches -> False.
+    assert result is False
+    # KEIN builder_nichts_zu_tun (Idempotenz-Pfad).
+    assert not any(
         c[0][0] == "builder_nichts_zu_tun" for c in mock_audit.call_args_list
     )
 
