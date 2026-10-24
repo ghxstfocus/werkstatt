@@ -156,6 +156,15 @@ def run_planner(state: RunState) -> bool:
 
     user_content = f"Aufgabe: {aufgabe}\n\nKontext:\n{docs_ctx}"
 
+    # M-307b: letzte 10 PROGRESS.md-Eintraege als Kontext.
+    try:
+        from werkstatt import progress as _progress
+        progress_text = _progress.read_recent(pd, n=10)
+        if progress_text:
+            user_content += f"\n\nProjekt-Fortschritt (letzte 10):\n{progress_text}"
+    except Exception:  # noqa: BLE001, S110
+        pass  # PROGRESS.md nicht kritisch
+
     # M-299e: Preflight-Fehler + Follow_up aus vorheriger Phase.
     preflight = getattr(state, "preflight_fehler", []) or []
     follow_up_prev = getattr(state, "follow_up_fehler", []) or []

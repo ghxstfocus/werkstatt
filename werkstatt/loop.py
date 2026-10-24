@@ -160,6 +160,46 @@ def _get_baseline_error_details() -> str:
         return "Baseline-Check fehlgeschlagen (Timeout/OSError)"
 
 
+def _task_ende(
+    state: RunState,
+    phase_state,
+    task_id: str,
+    *,
+    ok: bool,
+    name: str = "",
+    failure: str | None = None,
+    dateien: list[str] | None = None,
+) -> None:
+    """M-307b (A1): zentrale Task-Ende-Behandlung.
+
+    Kapselt mark_done/mark_failed + progress.append in EINEM
+    Aufruf, damit nicht 9 Stellen einzeln gepflegt werden muessen.
+    Fail-open bei progress.append (A2, Ereignis-Log, kein Gate).
+    """
+    from werkstatt import progress as _progress
+
+    pd = getattr(state, "project_dir", None)
+    if ok:
+        phase_state.mark_done(task_id)
+        if pd is not None:
+            _progress.append(
+                pd,
+                name=name or task_id,
+                status="done",
+                dateien=dateien,
+            )
+    else:
+        phase_state.mark_failed(task_id, failure=failure or "unknown")
+        if pd is not None:
+            _progress.append(
+                pd,
+                name=name or task_id,
+                status="failed",
+                dateien=dateien,
+                info=failure,
+            )
+
+
 def _reflection_loop(state: RunState, max_runden: int = 3) -> bool:
     """Echter Reflection-Loop (Aider-Prinzip)."""
     pd = state.project_dir
@@ -590,13 +630,13 @@ def run_pipeline_loop(
             task_ok(i, len(tasks), elapsed_s=_el_task)
             group_end()
             tasks_ok += 1
-            phase_state.mark_done(task_id)
+            _task_ende(state, phase_state, task_id, ok=True, name=task_name)
             audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
             continue
 
         if not run_builder(state):
             audit("loop_builder_failed", {"task_id": i}, pd, pn)
-            phase_state.mark_failed(task_id, failure="builder_failed")
+            _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="builder_failed")
             return 1
 
         # PreToolUse-Hook (Phase 15): Patch pruefen, BEVOR er angewendet wird.
@@ -652,7 +692,7 @@ def run_pipeline_loop(
                     audit("loop_patch_old_string_not_found", {"file": file, "old": old_str[:50]}, pd, pn)
                     # M-298d: Reflection statt stumm weiterlaufen.
                     if not _reflection_loop(state):
-                        phase_state.mark_failed(task_id, failure="old_string_not_found")
+                        _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="old_string_not_found")
                         return 1
                     break  # Retry mit korrigiertem Patch
                 file_content = file_content.replace(old_str, new_str, 1)
@@ -663,7 +703,7 @@ def run_pipeline_loop(
                 if new_str not in _after:
                     audit("loop_patch_not_applied", {"file": file}, pd, pn)
                     if not _reflection_loop(state):
-                        phase_state.mark_failed(task_id, failure="patch_not_applied")
+                        _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="patch_not_applied")
                         return 1
                     break
                 audit("loop_patch_updated", {"file": file}, pd, pn)
@@ -687,7 +727,7 @@ def run_pipeline_loop(
             audit("loop_gate_failed", {"gate": "post_build", "task_id": i}, pd, pn)
             if not _reflection_loop(state):
                 audit("loop_reflection_gescheitert", {"task_id": i}, pd, pn)
-                phase_state.mark_failed(task_id, failure="post_build_verify_failed")
+                _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="post_build_verify_failed")
                 return 1
 
         # Reviewer (Phase 9)
@@ -695,13 +735,13 @@ def run_pipeline_loop(
             audit("loop_reviewer_rejected", {"task_id": i}, pd, pn)
             if not _reflection_loop(state):
                 audit("loop_reviewer_reflection_gescheitert", {"task_id": i}, pd, pn)
-                phase_state.mark_failed(task_id, failure="reviewer_rejected")
+                _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected")
                 return 1
             # M-306d Fix 2: Nach erfolgreicher Reflection MUSS der
             # Reviewer erneut pruefen. Sonst fail-open (HR-R9).
             if not run_reviewer(state):
                 audit("loop_reviewer_rejected_after_reflection", {"task_id": i}, pd, pn)
-                phase_state.mark_failed(task_id, failure="reviewer_rejected_after_reflection")
+                _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected_after_reflection")
                 return 1
             audit("loop_reviewer_approved_after_reflection", {"task_id": i}, pd, pn)
 
@@ -709,7 +749,7 @@ def run_pipeline_loop(
         task_ok(i, len(tasks), elapsed_s=_el_task)
         group_end()
         tasks_ok += 1
-        phase_state.mark_done(task_id)
+        _task_ende(state, phase_state, task_id, ok=True, name=task_name)
         audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
 
     # 4. Post-Build Verify + Reflection (nach allen Tasks)
@@ -729,6 +769,16 @@ def run_pipeline_loop(
 
     if rc == 0:
         audit("loop_erfolg", {"project_name": project_name}, pd, pn)
+
+    # M-307b: Phasen-Ende in PROGRESS.md
+    from werkstatt import progress as _progress
+    _progress.append(
+        pd,
+        name=f"Phase abgeschlossen: {project_name}",
+        status="phase_ende",
+        info=f"rc={rc} tasks_ok={tasks_ok}/{len(tasks)}",
+    )
+
     return rc
 
 
