@@ -179,3 +179,64 @@ def test_builder_idempotent_bei_update_mit_korrekter_datei(tmp_path):
     assert any(
         c[0][0] == "builder_nichts_zu_tun" for c in mock_audit.call_args_list
     )
+
+
+def test_builder_prompt_import_regeln():
+    """M-333a: BUILDER_SYSTEM enthaelt Import-Regeln."""
+    from werkstatt.builder import BUILDER_SYSTEM
+    assert "Verwende AUSSCHLIESSLICH Imports" in BUILDER_SYSTEM
+    assert "Erfinde KEINE Modulnamen" in BUILDER_SYSTEM
+
+
+def test_builder_create_task_mit_import_kontext(tmp_path):
+    """M-333b: Bei create-Task werden Projekt-Imports gesammelt."""
+    from unittest.mock import patch
+
+    from werkstatt.builder import run_builder
+
+    # Bestehende .py-Datei mit Import
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "__init__.py").write_text(
+        "from core.checks import check_port\n"
+    )
+    # Neue Datei (existiert nicht)
+    st = _state(tmp_path)
+    st.tasks = [
+        {"id": "t1", "name": "neue_datei.py anlegen",
+         "action": "create"},
+    ]
+    # Task-Text enthaelt Pfad
+    st.tasks[0]["description"] = "Erstelle tests/unit/test_neu.py"
+
+    _audits = []
+    def _mock_audit(kind, payload, *a, **kw):
+        _audits.append(kind)
+
+    with patch("werkstatt.builder.audit", side_effect=_mock_audit), \
+         patch("werkstatt.builder.ask_llm") as mock_llm:
+        mock_llm.return_value = type("R", (), {
+            "ok": True, "content": '{"patches": []}', "error": ""
+        })()
+        run_builder(st)
+
+    # builder_import_context sollte gefeuert haben
+    assert "builder_import_context" in _audits, \
+        f"erwartet builder_import_context, war {_audits}"
+
+
+def test_builder_create_ohne_imports(tmp_path):
+    """M-333b: Bei create ohne benachbarte .py-Dateien -> kein Crash."""
+    from unittest.mock import patch
+
+    from werkstatt.builder import run_builder
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "leer.py anlegen", "action": "create"}]
+
+    with patch("werkstatt.builder.ask_llm") as mock_llm:
+        mock_llm.return_value = type("R", (), {
+            "ok": True, "content": '{"patches": []}', "error": ""
+        })()
+        result = run_builder(st)
+    # Kein Crash
+    assert result in (True, False)

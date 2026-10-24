@@ -31,6 +31,18 @@ Fuer NEUE DATEIEN (Datei existiert nicht):
   ]
 }
 
+WICHTIG — Imports (M-333):
+  - Verwende AUSSCHLIESSLICH Imports, die im Abschnitt
+    "Aktueller Datei-Kontext" sichtbar sind.
+  - Erfinde KEINE Modulnamen. Wenn du einen Import brauchst,
+    der nicht im Kontext steht: lass ihn weg.
+  - Bei action="create" (neue Datei): importiere nur aus
+    Modulen, die im Kontext als existierend sichtbar sind.
+    Wenn der Kontext keine passenden Imports zeigt: keine
+    Imports. Der Code wird spaeter ergaenzt.
+  - Bei Unsicherheit: KEIN Import. Ein fehlender Import ist
+    besser als ein erfundener (fuehrt zu ModuleNotFoundError).
+
 Keine Erklaerung, nur JSON."""
 
 
@@ -158,6 +170,41 @@ def run_builder(state: RunState) -> bool:
                 _file_context[_rel] = _tail
             except OSError:
                 continue
+
+    # M-333b: Bei create-Tasks (neue Dateien) gibt es keinen
+    # _file_context (Datei existiert nicht). Wir sammeln die
+    # Imports benachbarter .py-Dateien, damit der Builder weiss,
+    # welche Module im Projekt existieren.
+    _create_tasks = [
+        t for t in tasks
+        if isinstance(t, dict) and t.get("action") == "create"
+    ]
+    if _create_tasks:
+        _imports_ctx: dict[str, str] = {}
+        # Alle .py-Dateien im Projekt (max 30, um Token zu sparen)
+        _py_files = sorted(pd.rglob("*.py"))[:30]
+        for _f in _py_files:
+            if _f.is_file():
+                try:
+                    _lines = _f.read_text(encoding="utf-8").splitlines()
+                except (OSError, UnicodeDecodeError):
+                    continue
+                _imports = [
+                    ln for ln in _lines[:30]
+                    if ln.startswith(("import ", "from "))
+                ]
+                if _imports:
+                    _rel = str(_f.relative_to(pd))
+                    _imports_ctx[_rel] = "\n".join(_imports)
+        if _imports_ctx:
+            _file_context["__projekt_imports__"] = (
+                "\n\n".join(
+                    f"--- {f} ---\n{imp}"
+                    for f, imp in list(_imports_ctx.items())[:15]
+                )
+            )
+            audit("builder_import_context",
+                  {"files": list(_imports_ctx.keys())[:15]}, pd, pn)
 
     if _file_context:
         audit("builder_file_context", {"files": list(_file_context.keys())}, pd, pn)
