@@ -138,3 +138,61 @@ des aktuellen Loops, aber strukturell sinnvoll.
 |---|---|---|
 | **M-386** | mittel | Rollen-Audit (alle Rollen gegen goldenen Standard + Widerspruchs-Check). |
 | **M-387** | mittel | RERUN-49 mit schwierigerer Aufgabe (mehrere Fehler, verschiedene Typen). |
+
+## M-389 — Doku-Pflege im Loop (geplant 2026-10-25)
+
+**Problem:** Der Loop schreibt nur `PROGRESS.md` (Selbst-Tracking).
+Echte Projektdokumentation (`docs/*.md`, `README.md`) wird
+nicht gepflegt. Bei Code-Aenderungen veraltet die Doku.
+
+**Goldstandard:** Living Documentation (Doctyze, Codebase-Cortex)
+— der Agent prueft Doku-Freshness und flaggt veraltete Seiten.
+
+**Architektur:**
+- `skills/doku-pflege/SKILL.md` — neuer Skill.
+  Trigger: "doku", "readme", "docs", "dokumentation".
+  allowed-tools: run_readonly
+- `explorer.py` — `_messen()` erkennt Doku-Trigger,
+  `grep -r "TODO\|FIXME\|XXX" docs/`.
+- `reviewer.py` — Prompt: "Pruefe Doku-Freshness. Wenn stale:
+  flagge als Doku-Task."
+- `planner.py` — Wenn Reviewer Doku-Task flaggt: separater
+  Task mit action=update, task_files=["docs/*.md"].
+
+**Wichtig:** Doku ist KEIN Code-Patch. Der Reviewer flaggt,
+der Planner baut einen separaten Task. Der Builder schreibt
+die Doku.
+
+**Aufwand:** mittel (~150 Zeilen + neuer Skill + Reviewer-Prompt
++ Planner-Erweiterung).
+
+**Voraussetzung:** M-345 (Pipeline-Abbau) sollte vorher
+abgeschlossen sein.
+
+**Nicht in dieser Session** — Loop ist gerade stabil
+(RERUN-48/49/50 alle LOOP_RC=0).
+
+## M-388 — UI-Testing via Chrome DevTools (geplant 2026-10-25)
+
+**Problem:** Der Loop kann aktuell nur ruff/pytest messen.
+Projekte mit UI (Browser, Frontend) koennen nicht getestet werden.
+
+**Goldstandard:** Chrome DevTools MCP (offizieller MCP-Server von
+Google) — verbindet den Agenten mit einer live Chrome-Instanz.
+Accessibility-Snapshots statt CSS-Selektoren, Netzwerk-Inspektion,
+Console-Messages, Performance-Traces.
+
+**Architektur:**
+- `skills/ui-testing/SKILL.md` — neuer Skill.
+  Trigger: "ui", "browser", "chrome", "frontend", "oberflaeche".
+  allowed-tools: run_chrome_devtools
+- `werkstatt/tools.py` — `run_chrome_devtools()` via MCP-Client.
+- `explorer.py` — `_messen()` erkennt UI-Trigger.
+- Python-MCP-Library (`mcp`), `npx chrome-devtools-mcp@latest`.
+
+**Aufwand:** mittel-gross (~200 Zeilen + MCP-Setup).
+
+**Voraussetzung:** M-345 (Pipeline-Abbau) sollte vorher
+abgeschlossen sein.
+
+**Nicht in dieser Session** — Loop ist gerade stabil.
