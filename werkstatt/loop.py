@@ -186,6 +186,8 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
               {"errors": errors, "phase": phase,
                "stages": _executed_stages},
               project_dir, getattr(state, "project_name", "?"))
+        # M-326a: Errors fuer Reflection verfuegbar machen.
+        state.last_verify_errors = list(errors)  # type: ignore[attr-defined]
         return False
 
     # M-322: Erfolg sichtbar machen.
@@ -228,8 +230,20 @@ def _extract_files_from_tasks(tasks: list) -> list[str]:
     return files
 
 
-def _get_baseline_error_details() -> str:
-    """Holt den echten Fehlertext fuer die Reflexion."""
+def _get_baseline_error_details(
+    state: RunState | None = None,
+) -> str:
+    """Holt den echten Fehlertext fuer die Reflexion.
+
+    M-326b: Wenn state uebergeben ist UND last_verify_errors
+    vorhanden sind, nutze diese (Zielprojekt-Fehler). Sonst
+    Fallback auf Werkstatt-Baseline (Backward-Compat fuer
+    Reflection-Aufrufe ohne state).
+    """
+    if state is not None:
+        _errors = getattr(state, "last_verify_errors", None)
+        if _errors:
+            return "\n".join(str(e) for e in _errors)[:4000]
     try:
         res = subprocess.run(
             ["python3", "/opt/werkstatt/tools/quality_gate.py", "--json"],
@@ -303,7 +317,7 @@ def _reflection_loop(
         if _verify_patches(state):
             return True
 
-        error_ctx = _get_baseline_error_details()
+        error_ctx = _get_baseline_error_details(state)
         audit("loop_reflection_runde", {"runde": runde}, pd, pn)
 
         _extra = ""
@@ -314,11 +328,15 @@ def _reflection_loop(
             )
 
         reflection_prompt = (
-            f"Dein letzter Patch hat die Baseline zerstoert.\n"
-            f"Hier ist der echte Fehler-Output:\n\n{error_ctx}"
+            f"Der letzte Patch hat die Zielprojekt-Tests zerstoert.\n"
+            f"Fehler-Output:\n\n{error_ctx}"
             f"{_extra}\n\n"
-            "Bitte schreibe einen korrigierten Patch (git diff), "
-            "der nur diesen Fehler behebt. Gib NUR den Patch aus."
+            "Analysiere den Fehler. Haeufige Ursachen:\n"
+            "  - NameError/ImportError: fehlender Import in der Datei\n"
+            "  - AttributeError: falscher Attributname\n"
+            "  - TypeError: falsche Signatur\n"
+            "Schreibe einen korrigierten Patch (git diff), "
+            "der NUR diesen Fehler behebt. Gib NUR den Patch aus."
         )
 
         reply = ask_llm(
@@ -339,7 +357,8 @@ def _reflection_loop(
             patch_datei.write_text(patch_text)
             apply_res = subprocess.run(
                 ["git", "apply", str(patch_datei)],
-                cwd="/opt/werkstatt", capture_output=True, text=True, check=False
+                cwd=str(state.project_dir),
+                capture_output=True, text=True, check=False,
             )
             if apply_res.returncode != 0:
                 audit("loop_reflection_patch_fehler", {"runde": runde, "fehler": apply_res.stderr[:200]}, pd, pn)

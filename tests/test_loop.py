@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 from unittest.mock import patch
 
 from werkstatt.loop import _plan_gate, _verify_patches, run_pipeline_loop
@@ -751,3 +752,97 @@ def test_verify_patches_fallback_breit(tmp_path, monkeypatch):
 
     assert loop_mod._verify_patches(st) is False
     assert "loop_verify_failed" in _audits
+
+
+def test_verify_patches_speichert_errors_in_state(tmp_path, monkeypatch):
+    """M-326a: _verify_patches setzt state.last_verify_errors bei Fehler."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "__init__.py").write_text("def broken(:\n")
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": '
+        '["python3", "-m", "py_compile", "core/__init__.py"]}]}'
+    )
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+
+    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    assert loop_mod._verify_patches(st) is False
+    assert hasattr(st, "last_verify_errors")
+    assert len(st.last_verify_errors) > 0
+
+
+def test_get_baseline_error_details_aus_state():
+    """M-326b: _get_baseline_error_details nutzt state.last_verify_errors."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=Path("/tmp"), project_name="p",
+    )
+    st.last_verify_errors = ["pytest_changed: NameError: name 'foo' is not defined"]
+
+    result = loop_mod._get_baseline_error_details(st)
+    assert "NameError" in result
+    assert "foo" in result
+
+
+def test_get_baseline_error_details_fallback_ohne_state():
+    """M-326b: Ohne state -> Fallback auf Werkstatt-Baseline (kein Crash)."""
+    from werkstatt import loop as loop_mod
+    result = loop_mod._get_baseline_error_details(None)
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+def test_reflection_patch_zielprojekt_cwd(tmp_path, monkeypatch):
+    """M-326c: _reflection_loop patcht im state.project_dir, nicht in /opt/werkstatt."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    # Zielprojekt mit git init
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "__init__.py").write_text("x = 1\n")
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": '
+        '["python3", "-m", "py_compile", "core/__init__.py"]}]}'
+    )
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=False)
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=False)
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.last_verify_errors = ["dummy"]
+
+    _apply_cwds = []
+    def _fake_run(cmd, **kw):
+        if cmd[:2] == ["git", "apply"]:
+            _apply_cwds.append(kw.get("cwd"))
+        class R:
+            returncode = 1
+            stdout = ""
+            stderr = "fail"
+        return R()
+    monkeypatch.setattr(loop_mod.subprocess, "run", _fake_run)
+    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
+    monkeypatch.setattr(loop_mod, "ask_llm", lambda *a, **k: type(
+        "R", (), {"ok": True, "content": "diff --git a/x b/x\n+foo\n", "error": ""}
+    )())
+
+    loop_mod._reflection_loop(st, max_runden=1)
+    assert any(c == str(tmp_path) for c in _apply_cwds), \
+        f"erwartet cwd={tmp_path}, war {_apply_cwds}"
