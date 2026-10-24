@@ -20,6 +20,7 @@ _KNOWN_ROOTS = {
     "time", "threading", "logging", "collections", "itertools",
     "functools", "dataclasses", "enum", "io", "base64", "hashlib",
     "tempfile", "traceback", "warnings", "weakref", "contextlib",
+    "__future__",
     "pytest", "yaml", "requests", "pydantic", "click", "rich",
     "numpy", "pandas", "flask", "django", "fastapi", "httpx",
     "aiohttp", "sqlalchemy", "jinja2", "werkzeug", "boto3",
