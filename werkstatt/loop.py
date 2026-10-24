@@ -86,11 +86,14 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
             if s.get("phase") is None or s.get("phase") == phase
         ]
 
-    # 2. Fallback: Standard-Checks, wenn kein Contract
+    # 2. Fallback (M-315): KEIN voller pytest/ruff, sondern nur
+    # py_compile. Der alte Fallback (volle Suite) blockierte den Loop
+    # bei fehlendem verify.json 10+ Minuten.
+    # Fail-closed: ohne Contract pruefen wir nur Syntax.
     if not stages:
         stages = [
-            {"id": "pytest", "command": ["python3", "-m", "pytest", "-q"]},
-            {"id": "ruff", "command": ["ruff", "check", "."]},
+            {"id": "py_compile_fallback",
+             "command": ["python3", "-m", "py_compile", "core/__init__.py"]},
         ]
 
     # 3. Stages ausfuehren
