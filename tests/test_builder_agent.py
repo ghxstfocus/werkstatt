@@ -126,7 +126,7 @@ def test_builder_idempotent_nur_bei_create(tmp_path):
 
 
 def test_builder_update_nutzt_patch_pfad(tmp_path):
-    """M-317: Bei action=update kein Idempotenz-Check (fail-open)."""
+    """M-317: Bei action=update kein Idempotenz-Check (fail-closed)."""
     from werkstatt.builder import run_builder
 
     st = _state(tmp_path)
@@ -144,6 +144,10 @@ def test_builder_update_nutzt_patch_pfad(tmp_path):
             "ok": True, "content": '{"patches": []}', "error": ""
         })()
         result = run_builder(st)
+
+    # M-317: action=update + leerer Patch -> fail-closed (False),
+    # aber NICHT der Idempotenz-Pfad (kein builder_nichts_zu_tun).
+    assert result is False
 
     # KEIN idempotent (auch wenn Datei korrekt ist)
     assert not any(

@@ -284,9 +284,10 @@ def test_planner_speichert_phasen(tmp_path):
 
 def test_planner_action_create_update(tmp_path):
     """M-317: Planner akzeptiert action=create und action=update."""
-    from werkstatt.planner import run_planner
-    from unittest.mock import MagicMock, patch
     import json
+    from unittest.mock import MagicMock, patch
+
+    from werkstatt.planner import run_planner
 
     st = _state(tmp_path)
     st.aufgabe = "Test"
