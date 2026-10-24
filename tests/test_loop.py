@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import werkstatt.builder as builder_mod
+from werkstatt import loop as loop_mod
 from werkstatt.loop import _plan_gate, _verify_patches, run_pipeline_loop
 from werkstatt.state import RunState
 
@@ -543,32 +545,24 @@ def test_loop_reviewer_after_reflection(tmp_path):
     assert reviewer_calls["n"] == 2  # zwei Aufrufe: 1 original + 1 nach Reflection
 
 
-def test_reflection_erhaelt_reviewer_bug_kontext(tmp_path):
-    """M-314: _reflection_loop bekommt Reviewer-Bugs als error_context."""
-    from werkstatt.loop import _reflection_loop
+def test_reflection_ruft_builder(tmp_path, monkeypatch):
+    """M-329: Reflection ruft run_builder, nicht ask_llm mit git-diff."""
 
     st = _state(tmp_path)
-    st.reviewer_bugs = [
-        {"file": "x.py", "line": 0, "description": "fehlt", "severity": "high"},
-    ]
+    st.api_key = "dummy"
+    st.last_verify_errors = ["NameError: foo"]
 
-    captured = {}
+    _builder_calls = []
+    def _fake_builder(s):
+        _builder_calls.append(1)
+        return False
 
-    def _mock_ask_llm(api_key, system, user_content, **kwargs):
-        captured["user_content"] = user_content
-        reply = type("R", (), {"ok": False, "content": "", "error": "test"})()
-        return reply
+    monkeypatch.setattr(builder_mod, "run_builder", _fake_builder)
+    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
 
-    with patch("werkstatt.loop._verify_patches", return_value=False), \
-         patch("werkstatt.loop._get_baseline_error_details", return_value="test-error"), \
-         patch("werkstatt.loop.ask_llm", side_effect=_mock_ask_llm), \
-         patch("werkstatt.loop.audit"):
-        _reflection_loop(st, max_runden=1, error_context='[{"file":"x.py","description":"fehlt"}]')
-
-    prompt = captured.get("user_content", "")
-    assert "x.py" in prompt
-    assert "fehlt" in prompt
-
+    loop_mod._reflection_loop(st, max_runden=2)
+    assert len(_builder_calls) >= 1, f"Builder nicht gerufen: {_builder_calls}"
 
 def test_verify_patches_fallback_py_compile(tmp_path):
     """M-315: Ohne verify.json Fallback auf py_compile (nicht pytest)."""
@@ -804,103 +798,18 @@ def test_get_baseline_error_details_fallback_ohne_state():
     assert len(result) > 0
 
 
-def test_reflection_patch_zielprojekt_cwd(tmp_path, monkeypatch):
-    """M-326c: _reflection_loop patcht im state.project_dir, nicht in /opt/werkstatt."""
+def test_reflection_patch_anwendung_search_replace(tmp_path, monkeypatch):
+    """M-329: Reflection wendet search/replace-Patches an (old_string/new_string)."""
+    import werkstatt.builder as builder_mod
     from werkstatt import loop as loop_mod
     from werkstatt.state import RunState
 
-    # Zielprojekt mit git init
-    (tmp_path / "core").mkdir()
-    (tmp_path / "core" / "__init__.py").write_text("x = 1\n")
-    (tmp_path / ".werkstatt").mkdir()
-    (tmp_path / ".werkstatt" / "verify.json").write_text(
-        '{"stages": [{"id": "pc", "command": '
-        '["python3", "-m", "py_compile", "core/__init__.py"]}]}'
-    )
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=False)
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=False)
-
-    st = RunState(
-        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
-        always={}, optional={}, file_whitelist=[], api_key="dummy",
-        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
-    )
-    st.last_verify_errors = ["dummy"]
-
-    _apply_cwds = []
-    def _fake_run(cmd, **kw):
-        if cmd[:2] == ["git", "apply"]:
-            _apply_cwds.append(kw.get("cwd"))
-        class R:
-            returncode = 1
-            stdout = ""
-            stderr = "fail"
-        return R()
-    monkeypatch.setattr(loop_mod.subprocess, "run", _fake_run)
-    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
-    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
-    monkeypatch.setattr(loop_mod, "ask_llm", lambda *a, **k: type(
-        "R", (), {"ok": True, "content": "diff --git a/x b/x\n+foo\n", "error": ""}
-    )())
-
-    loop_mod._reflection_loop(st, max_runden=1)
-    assert any(c == str(tmp_path) for c in _apply_cwds), \
-        f"erwartet cwd={tmp_path}, war {_apply_cwds}"
-
-
-def test_reflection_patch_pfad_zielprojekt(tmp_path, monkeypatch):
-    """M-328a: Patch-Pfad im state.project_dir, nicht /tmp."""
-    from werkstatt import loop as loop_mod
-    from werkstatt.state import RunState
+    target = tmp_path / "test_x.py"
+    target.write_text("a = 1\n")
 
     (tmp_path / ".werkstatt").mkdir()
     (tmp_path / ".werkstatt" / "verify.json").write_text(
-        '{"stages": [{"id": "pc", "command": '
-        '["python3", "-m", "py_compile", "core/__init__.py"]}]}'
-    )
-    (tmp_path / "core").mkdir()
-    (tmp_path / "core" / "__init__.py").write_text("x = 1\n")
-
-    st = RunState(
-        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
-        always={}, optional={}, file_whitelist=[], api_key="dummy",
-        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
-    )
-    st.last_verify_errors = ["dummy"]
-
-    _patch_paths = []
-    _real_write_text = Path.write_text
-    def _spy_write(self, *a, **k):
-        if "reflection.patch" in str(self):
-            _patch_paths.append(str(self))
-        return _real_write_text(self, *a, **k)
-
-    monkeypatch.setattr(Path, "write_text", _spy_write)
-    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
-    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
-    monkeypatch.setattr(loop_mod, "ask_llm", lambda *a, **k: type(
-        "R", (), {"ok": True, "content": "diff --git a/x b/x\n+foo\n", "error": ""}
-    )())
-    monkeypatch.setattr(loop_mod.subprocess, "run", lambda cmd, **kw: type(
-        "R", (), {"returncode": 1, "stdout": "", "stderr": "fail"}
-    )())
-
-    loop_mod._reflection_loop(st, max_runden=1)
-    assert any(".werkstatt/reflection.patch" in p for p in _patch_paths), \
-        f"erwartet .werkstatt/reflection.patch, war {_patch_paths}"
-
-
-def test_reflection_prompt_enthaelt_datei_kontext(tmp_path, monkeypatch):
-    """M-328b: Prompt enthaelt Zieldatei-Zeilen."""
-    from werkstatt import loop as loop_mod
-    from werkstatt.state import RunState
-
-    (tmp_path / "core").mkdir()
-    (tmp_path / "core" / "test_x.py").write_text("from core.checks import check_port\n")
-    (tmp_path / ".werkstatt").mkdir()
-    (tmp_path / ".werkstatt" / "verify.json").write_text(
-        '{"stages": [{"id": "pc", "command": '
-        '["python3", "-m", "py_compile", "core/test_x.py"]}]}'
+        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
     )
 
     st = RunState(
@@ -908,26 +817,66 @@ def test_reflection_prompt_enthaelt_datei_kontext(tmp_path, monkeypatch):
         always={}, optional={}, file_whitelist=[], api_key="dummy",
         budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
     )
-    st.patches = [{"file": "core/test_x.py", "new_string": "x"}]
-    st.last_verify_errors = ["NameError: name 'check_port' is not defined"]
+    st.last_verify_errors = ["x"]
 
-    _prompts = []
-    def _spy_ask(*a, **k):
-        _prompts.append(a[2] if len(a) > 2 else "")
-        return type("R", (), {"ok": False, "content": "", "error": "skip"})()
-    monkeypatch.setattr(loop_mod, "ask_llm", _spy_ask)
+    def _fake_builder(s):
+        s.patches = [{"file": "test_x.py", "action": "update",
+                      "old_string": "a = 1\n", "new_string": "a = 2\n"}]
+        return True
+
+    monkeypatch.setattr(builder_mod, "run_builder", _fake_builder)
     monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    # Erste Runde: verify rot, zweite: gruen (nach Patch)
+    _calls = [0]
+    def _fake_verify(s, phase=None):
+        _calls[0] += 1
+        return _calls[0] > 1
+    monkeypatch.setattr(loop_mod, "_verify_patches", _fake_verify)
+
+    result = loop_mod._reflection_loop(st, max_runden=2)
+    assert result is True
+    assert "a = 2" in target.read_text(), f"Patch nicht angewendet: {target.read_text()}"
+
+
+def test_reflection_old_string_not_found(tmp_path, monkeypatch):
+    """M-329: Wenn old_string fehlt, kein Fehler-Crash, Audit."""
+    import werkstatt.builder as builder_mod
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    target = tmp_path / "test_x.py"
+    target.write_text("a = 1\n")
+
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
+    )
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.last_verify_errors = ["x"]
+
+    def _fake_builder(s):
+        s.patches = [{"file": "test_x.py", "action": "update",
+                      "old_string": "NICHT_DA", "new_string": "a = 2\n"}]
+        return True
+
+    _audits = []
+    monkeypatch.setattr(builder_mod, "run_builder", _fake_builder)
+    monkeypatch.setattr(loop_mod, "audit", lambda kind, payload, *a, **k: _audits.append(kind))
     monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
 
-    loop_mod._reflection_loop(st, max_runden=1)
-    assert _prompts, "ask_llm wurde nicht gerufen"
-    prompt = _prompts[0]
-    assert "core/test_x.py" in prompt, "Datei-Pfad fehlt im Prompt"
-    assert "check_port" in prompt, "Datei-Inhalt fehlt im Prompt"
+    result = loop_mod._reflection_loop(st, max_runden=1)
+    assert result is False
+    assert "loop_reflection_patch_old_string_not_found" in _audits
 
 
-def test_reflection_prompt_strengere_anweisung(tmp_path, monkeypatch):
-    """M-328c: Prompt verlangt AUSSCHLIESSLICH git-diff."""
+def test_reflection_kein_patch_vom_builder(tmp_path, monkeypatch):
+    """M-329: Wenn Builder keine Patches liefert -> loop_reflection_kein_patch."""
+    import werkstatt.builder as builder_mod
     from werkstatt import loop as loop_mod
     from werkstatt.state import RunState
 
@@ -941,50 +890,17 @@ def test_reflection_prompt_strengere_anweisung(tmp_path, monkeypatch):
         always={}, optional={}, file_whitelist=[], api_key="dummy",
         budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
     )
-    st.last_verify_errors = ["dummy"]
+    st.last_verify_errors = ["x"]
 
-    _prompts = []
-    monkeypatch.setattr(loop_mod, "ask_llm",
-                        lambda *a, **k: (_prompts.append(a[2] if len(a) > 2 else "")
-                                         or type("R", (), {"ok": False, "content": "", "error": "skip"})()))
-    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    def _fake_builder(s):
+        s.patches = []
+        return True
+
+    _audits = []
+    monkeypatch.setattr(builder_mod, "run_builder", _fake_builder)
+    monkeypatch.setattr(loop_mod, "audit", lambda kind, payload, *a, **k: _audits.append(kind))
     monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
 
-    loop_mod._reflection_loop(st, max_runden=1)
-    assert _prompts
-    assert "AUSSCHLIESSLICH" in _prompts[0]
-    assert "git-diff" in _prompts[0]
-
-
-def test_reflection_apply_mit_3way(tmp_path, monkeypatch):
-    """M-328d: git apply laeuft mit --3way."""
-    from werkstatt import loop as loop_mod
-    from werkstatt.state import RunState
-
-    (tmp_path / ".werkstatt").mkdir()
-    (tmp_path / ".werkstatt" / "verify.json").write_text(
-        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
-    )
-
-    st = RunState(
-        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
-        always={}, optional={}, file_whitelist=[], api_key="dummy",
-        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
-    )
-    st.last_verify_errors = ["dummy"]
-
-    _cmds = []
-    def _spy_run(cmd, **kw):
-        _cmds.append(list(cmd))
-        return type("R", (), {"returncode": 1, "stdout": "", "stderr": "fail"})()
-    monkeypatch.setattr(loop_mod.subprocess, "run", _spy_run)
-    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
-    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
-    monkeypatch.setattr(loop_mod, "ask_llm", lambda *a, **k: type(
-        "R", (), {"ok": True, "content": "diff --git a/x b/x\n+foo\n", "error": ""}
-    )())
-
-    loop_mod._reflection_loop(st, max_runden=1)
-    apply_cmds = [c for c in _cmds if c[:2] == ["git", "apply"]]
-    assert apply_cmds, "git apply wurde nicht gerufen"
-    assert "--3way" in apply_cmds[0], f"--3way fehlt: {apply_cmds[0]}"
+    result = loop_mod._reflection_loop(st, max_runden=1)
+    assert result is False
+    assert "loop_reflection_kein_patch" in _audits

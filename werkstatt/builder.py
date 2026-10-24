@@ -170,6 +170,17 @@ def run_builder(state: RunState) -> bool:
 
     user_content = f"Aufgabe: {aufgabe}\n\nTasks:\n{tasks_ctx}"
 
+    # M-329a: Fehler-Kontext aus Reflection (_verify_patches).
+    _verify_errors = getattr(state, "last_verify_errors", None)
+    if _verify_errors:
+        _err_text = "\n".join(str(e) for e in _verify_errors)[:3000]
+        user_content += (
+            f"\n\nDer letzte Patch hat die Tests zerstoert. "
+            f"Hier ist der Fehler-Output:\n\n{_err_text}\n\n"
+            "Behebe NUR diesen Fehler. Nutze old_string/new_string. "
+            "Wenn ein Import fehlt, ergaenze ihn in der Import-Zeile."
+        )
+
     # M-298d: Datei-Kontext als zusaetzlicher Abschnitt (on-demand).
     # Nur Dateien, die der Task betrifft — verhindert Token-Ballern.
     if "_file_context" in dir() and _file_context:
