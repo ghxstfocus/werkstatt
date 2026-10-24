@@ -381,6 +381,58 @@ def _apply_patches_with_hooks(
     return _applied
 
 
+def _run_with_progress(
+    fn,
+    nr: int,
+    total: int,
+    name: str,
+) -> object:
+    """M-327: Ruft fn() auf, zeigt alle 2s eine Status-Zeile.
+
+    Verhindert den Eindruck, der Loop haenge (Builder-LLM-Call
+    dauert 20-40s, ask_llm timeout 120s).
+
+    Nutzt loop_renderer.heartbeat (M-301), das im CI-Modus
+    mit Zeitstempel schreibt. TTY-Modus: Carriage-Return.
+    """
+    import threading as _threading
+    import time as _time
+
+    from werkstatt import loop_renderer as _r
+
+    _result: list = [None]
+    _exc: list = [None]
+    _done = _threading.Event()
+
+    def _worker():
+        try:
+            _result[0] = fn()
+        except Exception as e:  # noqa: BLE001
+            _exc[0] = e
+        finally:
+            _done.set()
+
+    _t = _threading.Thread(target=_worker, daemon=True)
+    _t.start()
+    _start = _time.monotonic()
+    _last_elapsed = -1
+    while not _done.is_set():
+        _elapsed = int(_time.monotonic() - _start)
+        if _elapsed // 2 > _last_elapsed // 2:
+            try:
+                _r.heartbeat(f"[{nr}/{total}] {name}", _elapsed)
+            except Exception:  # noqa: BLE001, S110
+                pass
+            _last_elapsed = _elapsed
+        if _done.wait(timeout=0.5):
+            break
+    _t.join()
+
+    if _exc[0] is not None:
+        raise _exc[0]
+    return _result[0]
+
+
 def _reflection_loop(
     state: RunState,
     max_runden: int = 3,
@@ -837,7 +889,10 @@ def run_pipeline_loop(
             audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
             continue
 
-        if not run_builder(state):
+        if not _run_with_progress(
+            lambda: run_builder(state),
+            i, len(tasks), task_name,
+        ):
             # M-316 + M-317: Idempotenz-Erkennung NUR bei
             # action="create". Bei update: fail-closed (return 1).
             _loop_action = None

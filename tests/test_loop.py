@@ -999,3 +999,54 @@ def test_reflection_nutzt_hooks(tmp_path, monkeypatch):
     assert result is True
     assert "pre_tool_use.py" in _hook_calls
     assert "post_tool_use.py" in _hook_calls
+
+
+def test_run_with_progress_ruft_fn(monkeypatch):
+    """M-327: _run_with_progress ruft fn und gibt Ergebnis zurueck."""
+    import time as _time
+
+    from werkstatt import loop as loop_mod
+
+    def _fake_fn():
+        _time.sleep(0.1)
+        return "result-42"
+
+    result = loop_mod._run_with_progress(_fake_fn, 2, 3, "test")
+    assert result == "result-42"
+
+
+def test_run_with_progress_exception():
+    """M-327: _run_with_progress propagiert Exceptions."""
+    from werkstatt import loop as loop_mod
+
+    def _boom():
+        raise ValueError("kaputt")
+
+    try:
+        loop_mod._run_with_progress(_boom, 1, 1, "x")
+    except ValueError as e:
+        assert "kaputt" in str(e)
+    else:
+        raise AssertionError("Exception nicht propagiert")
+
+
+def test_run_with_progress_heartbeat(monkeypatch):
+    """M-327: _run_with_progress ruft heartbeat waehrend fn laeuft."""
+    import time as _time
+
+    from werkstatt import loop as loop_mod
+    from werkstatt import loop_renderer as r
+
+    _beats = []
+    monkeypatch.setattr(r, "heartbeat",
+                        lambda label, elapsed: _beats.append((label, elapsed)))
+
+    def _slow_fn():
+        _time.sleep(2.5)  # > 2s, damit mindestens 1 heartbeat kommt
+        return "ok"
+
+    result = loop_mod._run_with_progress(_slow_fn, 2, 3, "check_port_ping")
+    assert result == "ok"
+    assert len(_beats) >= 1, f"keine heartbeats: {_beats}"
+    # Label enthaelt Task-Namen
+    assert any("check_port_ping" in lbl for lbl, _ in _beats)
