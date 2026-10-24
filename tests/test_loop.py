@@ -9,6 +9,7 @@ from unittest.mock import patch
 import werkstatt.builder as builder_mod
 from werkstatt import loop as loop_mod
 from werkstatt.loop import _plan_gate, _verify_patches, run_pipeline_loop
+from werkstatt.phase_state import PhaseState
 from werkstatt.state import RunState
 
 
@@ -141,7 +142,6 @@ def test_loop_cli_dry_run_uses_renderer():
 
 def test_loop_uses_phase_state(tmp_path):
     """Loop persistiert Task-Fortschritt in PhaseState."""
-    from werkstatt.phase_state import PhaseState
     st = _state(tmp_path)
     st.tasks = [{"id": "t1", "name": "Task 1"}]
     ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
@@ -161,7 +161,6 @@ def test_loop_uses_phase_state(tmp_path):
 
 def test_loop_resume_nach_unterbrechung(tmp_path):
     """Resume: bereits erledigte Tasks werden uebersprungen."""
-    from werkstatt.phase_state import PhaseState
     st = _state(tmp_path)
     st.tasks = [{"id": "t1", "name": "Task 1"}, {"id": "t2", "name": "Task 2"}]
     ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
@@ -1050,3 +1049,41 @@ def test_run_with_progress_heartbeat(monkeypatch):
     assert len(_beats) >= 1, f"keine heartbeats: {_beats}"
     # Label enthaelt Task-Namen
     assert any("check_port_ping" in lbl for lbl, _ in _beats)
+
+
+def test_phase_state_init_new_reicht_action_durch():
+    """M-323a: init_new reicht action/phase_id/parent_id durch."""
+    import tempfile
+    from pathlib import Path as P
+
+
+    tmp = P(tempfile.mkdtemp())
+    ps = PhaseState("test", base_dir=tmp / ".werkstatt")
+    ps.init_new(
+        "aufgabe",
+        [
+            {"id": "t1", "name": "Task 1", "description": "",
+             "action": "create", "phase_id": "p1"},
+            {"id": "t2", "name": "Task 2", "description": "",
+             "action": "update", "phase_id": "p1"},
+        ],
+    )
+    tasks = ps.data["tasks"]
+    assert tasks[0]["action"] == "create"
+    assert tasks[1]["action"] == "update"
+    assert tasks[0]["phase_id"] == "p1"
+
+
+def test_phase_state_init_new_ohne_action():
+    """M-323a: action=None bleibt None (kein Fehler)."""
+    import tempfile
+    from pathlib import Path as P
+
+    from werkstatt.phase_state import PhaseState
+
+    tmp = P(tempfile.mkdtemp())
+    ps = PhaseState("test", base_dir=tmp / ".werkstatt")
+    ps.init_new("aufgabe", [{"id": "t1", "name": "Task 1"}])
+    assert ps.data["tasks"][0]["action"] is None
+
+

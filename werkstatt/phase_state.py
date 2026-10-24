@@ -80,6 +80,10 @@ class PhaseState:
                     "id": t.get("id", f"t{i}"),
                     "name": t.get("name", ""),
                     "description": t.get("description", ""),
+                    "action": t.get("action"),  # M-323a
+                    "phase_id": t.get("phase_id"),  # M-323a
+                    "parent_id": t.get("parent_id"),  # M-323a
+                    "task_files": t.get("task_files", []),  # M-323a
                     "status": "pending",
                     "decision": None,
                     "failure": None,
