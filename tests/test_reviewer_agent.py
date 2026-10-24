@@ -67,3 +67,8 @@ def test_reviewer_sieht_untracked_dateien(tmp_path):
     assert "new_file.py" in diff
     assert "NEUE DATEI" in diff
     assert "def foo" in diff
+
+
+def test_reviewer_ignoriert_progress_md():
+    from werkstatt.reviewer import REVIEWER_SYSTEM
+    assert "PROGRESS.md" in REVIEWER_SYSTEM

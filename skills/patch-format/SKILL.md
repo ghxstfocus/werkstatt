@@ -32,3 +32,9 @@ typ:new_file (fuer neue Datei):
 - Ein Reply enthaelt AUSSCHLIESSLICH Patch-Bloecke.
 - Kein Fliesstext, kein Markdown, kein CODE-ENTWURF-Block.
 - Bei Unsicherheit: COMMAND: RUN read_file <pfad>.
+
+## # noqa-Regel (M-381)
+
+Bevor du # noqa entfernst:
+1. Ist der Code absichtlich so (Negativtest)? -> BEHALTEN.
+2. Sonst: entfernen ok.

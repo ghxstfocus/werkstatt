@@ -20,6 +20,8 @@ Du bekommst einen Git-Diff und die Anforderung.
 Pruefe NUR auf Korrektheit (Bugs, Logikfehler, fehlende Edge-Cases).
 Ignoriere Stil und Formatierung.
 
+M-380: Ignoriere Loop-Doku (PROGRESS.md etc.). Pruefe NUR den Builder-Patch.
+
 Antworte NUR mit validem JSON:
 {
   "approved": true|false,
