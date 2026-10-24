@@ -380,6 +380,7 @@ def run_builder(state: RunState) -> bool:
             f"\n\nDer letzte Patch hat die Tests zerstoert. "
             f"Hier ist der Fehler-Output:\n\n{_err_text}\n\n"
             "Behebe NUR diesen Fehler. Nutze old_string/new_string. "
+            "M-383: Wenn der Fehler RUF100 (unused noqa) ist: Entferne den # noqa NICHT, wenn der Code absichtlich so ist (Negativtest, naive datetime). Behalte den # noqa. " 
             "Wenn ein Import fehlt, ergaenze ihn in der Import-Zeile."
         )
 

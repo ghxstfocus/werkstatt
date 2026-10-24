@@ -684,7 +684,7 @@ def _get_git_diff_for_hook() -> str:
     """Holt den aktuellen Git-Diff fuer Hooks."""
     try:
         res = subprocess.run(
-            ["git", "diff", "HEAD"],
+            ["git", "diff", "HEAD", "--", ".", ":!PROGRESS.md"],
             cwd="/opt/werkstatt", capture_output=True, text=True, timeout=30, check=False
         )
         return res.stdout[:10000]
