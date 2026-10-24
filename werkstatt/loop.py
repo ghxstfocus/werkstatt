@@ -13,7 +13,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import pipeline  # nur fuer Fallback / Human-Gate
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.builder import run_builder
@@ -323,15 +322,20 @@ def run_pipeline_loop(
             state.project_dir = Path(cfg["project_dir"])  # type: ignore[attr-defined]
 
     if state is None or getattr(state, "project_dir", None) is None:
-        # M-298a: Fallback-Audit. HR-R9 (fail-closed Sichtbarkeit).
-        # Ohne diesen Audit ist "Loop funktioniert" nicht von
-        # "Loop faellt still auf Monolith zurueck" unterscheidbar.
+        # M-299b: Harter Abbruch statt Fallback auf pipeline.run_pipeline.
+        # Ohne diese Pruefung faellt der Loop still auf den Monolithen
+        # zurueck und "Loop funktioniert" ist nicht von "Loop delegiert
+        # an pipeline" unterscheidbar (HR-R9).
+        #
+        # Wer den Loop aufruft, muss einen state mit project_dir
+        # liefern. main() prueft das vorher (project_dir aus
+        # projects/<name>.yaml), Tests setzen es im _state-Helper.
         _fb_pd = getattr(state, "project_dir", None) if state else None
         if not isinstance(_fb_pd, Path):
             _fb_pd = Path(".")
         _fb_pn = getattr(state, "project_name", project_name) if state else project_name
         audit(
-            "loop_fallback",
+            "loop_fallback_failed",
             {
                 "project_name": project_name,
                 "aufgabe": aufgabe[:100],
@@ -340,9 +344,7 @@ def run_pipeline_loop(
             _fb_pd,
             _fb_pn,
         )
-        return pipeline.run_pipeline(
-            project_name, aufgabe, state_ref, phasen_state=phasen_state
-        )
+        return 1
 
     pd = state.project_dir
     pn = state.project_name
