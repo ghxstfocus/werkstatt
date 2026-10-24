@@ -387,6 +387,19 @@ def run_pipeline_loop(
                 akzeptanzkriterien=list(getattr(state, "akzeptanzkriterien", []) or []),
             )
 
+    # M-298d: init_new-Fallback. Wenn der Plan von Anfang an gruen
+    # war (state.tasks vorbelegt, z.B. via Resume), wurde
+    # init_new oben NICHT aufgerufen (nur im !plan_ok-Zweig).
+    # Dann ist phase_state.data = {} und get_next_task() liefert
+    # None -> Task-Loop bricht sofort ab (M-298b-Loop-Bug).
+    if not phase_state.exists() and getattr(state, "tasks", []):
+        phase_state.init_new(
+            aufgabe,
+            _normalize_tasks(getattr(state, "tasks", [])),
+            tests=list(getattr(state, "tests", []) or []),
+            akzeptanzkriterien=list(getattr(state, "akzeptanzkriterien", []) or []),
+        )
+
     step(2, "Planner", f"{len(getattr(state, 'tasks', []))} tasks")
     audit("loop_phase", {"phase": "plan", "status": "ok"}, pd, pn)
 
@@ -470,9 +483,22 @@ def run_pipeline_loop(
                 file_content = target.read_text()
                 if old_str not in file_content:
                     audit("loop_patch_old_string_not_found", {"file": file, "old": old_str[:50]}, pd, pn)
-                    continue
+                    # M-298d: Reflection statt stumm weiterlaufen.
+                    if not _reflection_loop(state):
+                        phase_state.mark_failed(task_id, failure="old_string_not_found")
+                        return 1
+                    break  # Retry mit korrigiertem Patch
                 file_content = file_content.replace(old_str, new_str, 1)
                 target.write_text(file_content)
+                # M-298d: Post-Apply-Verifikation (Profi-Ansatz
+                # Overwatcher/Claude-Code edit-verifier).
+                _after = target.read_text()
+                if new_str not in _after:
+                    audit("loop_patch_not_applied", {"file": file}, pd, pn)
+                    if not _reflection_loop(state):
+                        phase_state.mark_failed(task_id, failure="patch_not_applied")
+                        return 1
+                    break
                 audit("loop_patch_updated", {"file": file}, pd, pn)
 
         # PostToolUse-Hook (Phase 10)

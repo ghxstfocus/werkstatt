@@ -47,6 +47,43 @@ def run_builder(state: RunState) -> bool:
         audit("builder_keine_tasks", {}, pd, pn)
         return False
 
+    # M-298d: On-demand Zieldatei lesen.
+    # Profi-Ansatz (Aider Repo-Map, Cline read_file): Der Builder
+    # liest nur die Dateien, die der Task betrifft — nicht die
+    # ganze Codebase. Explorer-Report (key_files) zeigt WELCHE
+    # Datei relevant ist; der Builder liest sie DANN selbst.
+    #
+    # Wir scannen den Task-Text nach Datei-Pfaden (typisch:
+    # "README.md", "core/x.py"). Der erste Treffer wird gelesen.
+    import re as _re
+    _file_pattern = _re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.(?:md|py|yaml|yml|json|txt|toml|cfg|ini))\b')
+    _relevant_files: list[str] = []
+    for _task in tasks:
+        _text = _task if isinstance(_task, str) else str(_task)
+        for _m in _file_pattern.findall(_text):
+            if _m not in _relevant_files:
+                _relevant_files.append(_m)
+    # Explorer-Report (key_files) als Wegweiser ergaenzen
+    _expl = getattr(state, "explorer_context", {}) or {}
+    for _f in _expl.get("key_files", []) or []:
+        if _f and _f not in _relevant_files:
+            _relevant_files.append(_f)
+
+    _file_context: dict[str, str] = {}
+    for _rel in _relevant_files[:5]:  # max 5, kein Kontext-Ballern
+        _target = pd / _rel
+        if _target.exists() and _target.is_file():
+            try:
+                _content = _target.read_text()
+                # Nur letzte 50 Zeilen (On-Demand, nicht volle Datei)
+                _tail = "\n".join(_content.splitlines()[-50:])
+                _file_context[_rel] = _tail
+            except OSError:
+                continue
+
+    if _file_context:
+        audit("builder_file_context", {"files": list(_file_context.keys())}, pd, pn)
+
     aufgabe = getattr(state, "aufgabe", "")
     tasks_ctx = json.dumps(tasks, ensure_ascii=False)
 
@@ -54,6 +91,14 @@ def run_builder(state: RunState) -> bool:
     # Fuer Phase 6 nehmen wir einen Platzhalter, spaeter wird das aus dem Repo gelesen.
 
     user_content = f"Aufgabe: {aufgabe}\n\nTasks:\n{tasks_ctx}"
+
+    # M-298d: Datei-Kontext als zusaetzlicher Abschnitt (on-demand).
+    # Nur Dateien, die der Task betrifft — verhindert Token-Ballern.
+    if "_file_context" in dir() and _file_context:
+        _ctx_parts = []
+        for _f, _c in _file_context.items():
+            _ctx_parts.append(f"--- {_f} (letzte 50 Zeilen) ---\n{_c}")
+        user_content += "\n\nAktueller Datei-Kontext:\n" + "\n\n".join(_ctx_parts)
 
     reply = ask_llm(
         api_key, BUILDER_SYSTEM, user_content,
