@@ -100,6 +100,21 @@ class PhaseState:
                 return task
         return None
 
+    def resume_failed(self) -> int:
+        """M-310c: Setzt failed-Tasks auf pending (Resume nach Abbruch).
+
+        Returns: Anzahl reaktivierter Tasks.
+        """
+        n = 0
+        for task in self.data.get("tasks", []):
+            if task.get("status") == "failed":
+                task["status"] = "pending"
+                task["failure"] = None
+                n += 1
+        if n > 0:
+            self.save()
+        return n
+
     def get_task(self, task_id: str) -> dict | None:
         for task in self.data.get("tasks", []):
             if task.get("id") == task_id:

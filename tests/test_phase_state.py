@@ -64,3 +64,25 @@ def test_progress(tmp_path):
     assert p["done"] == 1
     assert p["failed"] == 1
     assert p["pending"] == 1
+
+
+def test_resume_failed_setzt_pending(tmp_path):
+    """M-310c: resume_failed macht failed -> pending."""
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new("X", [{"id": "t1"}, {"id": "t2"}])
+    ps.mark_failed("t1", failure="builder_failed")
+    ps.mark_done("t2")
+    n = ps.resume_failed()
+    assert n == 1
+    assert ps.get_task("t1")["status"] == "pending"
+    assert ps.get_task("t1")["failure"] is None
+    assert ps.get_task("t2")["status"] == "done"
+
+
+def test_resume_failed_keine_failed_tasks(tmp_path):
+    """M-310c: resume_failed ohne failed-Tasks -> 0."""
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new("X", [{"id": "t1"}])
+    ps.mark_done("t1")
+    n = ps.resume_failed()
+    assert n == 0

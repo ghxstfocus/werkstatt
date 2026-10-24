@@ -247,3 +247,36 @@ def test_planner_liest_progress(tmp_path):
     assert "Vorheriger Task 1" in prompt
     assert "Vorheriger Task 2" in prompt
     assert "builder_failed" in prompt
+
+
+def test_planner_speichert_phasen(tmp_path):
+    """M-310: Planner speichert phasen in state."""
+    import json
+    from unittest.mock import MagicMock, patch
+
+    from werkstatt.planner import run_planner
+
+    st = _state(tmp_path)
+    st.aufgabe = "Test"
+    st.docs = {}
+
+    mock_reply = MagicMock()
+    mock_reply.ok = True
+    mock_reply.content = json.dumps({
+        "phasen": [
+            {"id": "p1", "titel": "Vorbereitung", "parent_id": None,
+             "tasks": ["t1"]},
+        ],
+        "tasks": [{"id": "t1", "name": "Task 1", "action": "write"}],
+        "tests": ["test"],
+        "akzeptanzkriterien": ["akz"],
+        "blocker": [], "follow_up": [], "ignore": [],
+    })
+
+    with patch("werkstatt.planner.ask_llm", return_value=mock_reply):
+        rc = run_planner(st)
+
+    assert rc is True
+    assert len(st.phasen) == 1
+    assert st.phasen[0]["id"] == "p1"
+    assert st.phasen[0]["titel"] == "Vorbereitung"

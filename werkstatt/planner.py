@@ -32,16 +32,23 @@ Jeder Task hat zwei Pflichtfelder:
   - "action": "read" = Bestandsaufnahme / Pruefung, KEIN Code-Patch.
               "write" = Code/Doku-Aenderung, Patch wird erzeugt.
   - "task_files": list[str] = EXPLIZITE Datei-Pfade, die dieser Task
-              anfasst. Bei Baseline-Reparatur: die Dateien aus der
-              Preflight-Fehlerliste (Feld "datei" im Fehler-Dict).
-              Bei Aufgabe "repariere Codebasis": ALLE Preflight-
-              Fehlerdateien hier eintragen.
+              anfasst.
+
+Optional: Phasen-Struktur (Haupt-/Unterpunkte):
+  "phasen": [{"id": "p1", "titel": "Vorbereitung",
+              "parent_id": null, "tasks": ["t1", "t2"]}]
+  Unterpunkte: parent_id = "p1" (statt null).
+  Tasks koennen optional "phase_id": "p1" haben, um sie einer Phase
+  zuzuordnen.
 
 Antworte NUR mit validem JSON:
 {
+  "phasen": [{"id": "p1", "titel": "...", "parent_id": null,
+              "tasks": ["t1"]}],
   "tasks": [{"id": "t1", "name": "...", "description": "...",
              "action": "read"|"write",
              "task_files": ["pfad/zur/datei.py"],
+             "phase_id": "p1",
              "akzeptanzkriterien": ["..."]}],
   "tests": ["..."],
   "akzeptanzkriterien": ["..."],
@@ -165,6 +172,24 @@ def run_planner(state: RunState) -> bool:
     except Exception:  # noqa: BLE001, S110
         pass  # PROGRESS.md nicht kritisch
 
+    # M-310b: strukturierter Phase-State (wo bin ich jetzt).
+    try:
+        from werkstatt.phase_state import PhaseState
+        _ps = PhaseState(pn, base_dir=pd / ".werkstatt")
+        if _ps.exists() and _ps.load():
+            _tasks_status = [
+                {"id": t.get("id"), "name": t.get("name", ""),
+                 "status": t.get("status"), "failure": t.get("failure")}
+                for t in _ps.data.get("tasks", [])
+            ]
+            if _tasks_status:
+                user_content += (
+                    "\n\nPhase-State (aktueller Stand):\n"
+                    + json.dumps(_tasks_status, ensure_ascii=False)
+                )
+    except Exception:  # noqa: BLE001, S110
+        pass  # PhaseState nicht kritisch fuer Prompt
+
     # M-299e: Preflight-Fehler + Follow_up aus vorheriger Phase.
     preflight = getattr(state, "preflight_fehler", []) or []
     follow_up_prev = getattr(state, "follow_up_fehler", []) or []
@@ -215,6 +240,8 @@ def run_planner(state: RunState) -> bool:
 
     # Plan in State schreiben
     state.tasks = _tasks_raw  # type: ignore[attr-defined]
+    # M-310: phasen optional.
+    state.phasen = plan.get("phasen", [])  # type: ignore[attr-defined]
     state.tests = plan.get("tests", [])  # type: ignore[attr-defined]
     state.akzeptanzkriterien = plan.get("akzeptanzkriterien", [])  # type: ignore[attr-defined]
 

@@ -491,6 +491,16 @@ def run_pipeline_loop(
     # PhaseState automatisch anlegen (fuer Resume-Pfad).
     if phase_state is None:
         phase_state = PhaseState(project_name, base_dir=Path(pd) / ".werkstatt")
+        if phase_state.exists():
+            phase_state.load()
+        # M-310c: failed-Tasks reaktivieren (Resume nach Abbruch).
+        _n_resume = phase_state.resume_failed()
+        if _n_resume > 0:
+            audit(
+                "loop_resume_failed_tasks",
+                {"anzahl": _n_resume},
+                pd, pn,
+            )
 
     # 1. Plan-Gate (leer -> Planner muss erst laufen)
     #    Resume: wenn PhaseState vollstaendigen Plan-Checkpoint hat
