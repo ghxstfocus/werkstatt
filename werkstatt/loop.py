@@ -327,16 +327,50 @@ def _reflection_loop(
                 f"{error_context}"
             )
 
+        # M-328b: Zieldatei-Kontexte (Import-Bereiche) in den Prompt.
+        _datei_kontext = ""
+        _patches = getattr(state, "patches", []) or []
+        _seen: set[str] = set()
+        for _pat in _patches:
+            if not isinstance(_pat, dict):
+                continue
+            _f = _pat.get("file", "")
+            if not _f or _f in _seen:
+                continue
+            _seen.add(_f)
+            _fp = Path(state.project_dir) / _f
+            if not _fp.exists():
+                continue
+            try:
+                _lines = _fp.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            _head = _lines[:40]
+            _datei_kontext += (
+                f"\n\n--- {_f} (Zeilen 1-{len(_head)}) ---\n"
+                + "\n".join(f"{i+1}: {ln}" for i, ln in enumerate(_head))
+            )
+
         reflection_prompt = (
             f"Der letzte Patch hat die Zielprojekt-Tests zerstoert.\n"
             f"Fehler-Output:\n\n{error_ctx}"
-            f"{_extra}\n\n"
+            f"{_extra}"
+            f"{_datei_kontext}\n\n"
             "Analysiere den Fehler. Haeufige Ursachen:\n"
             "  - NameError/ImportError: fehlender Import in der Datei\n"
             "  - AttributeError: falscher Attributname\n"
             "  - TypeError: falsche Signatur\n"
-            "Schreibe einen korrigierten Patch (git diff), "
-            "der NUR diesen Fehler behebt. Gib NUR den Patch aus."
+            "Antworte AUSSCHLIESSLICH mit einem git-diff-Block.\n"
+            "Kein Text davor, kein Text danach.\n"
+            "Format:\n"
+            "diff --git a/<pfad> b/<pfad>\n"
+            "--- a/<pfad>\n"
+            "+++ b/<pfad>\n"
+            "@@ -<start>,<anzahl> +<start>,<anzahl> @@\n"
+            " <kontextzeile>\n"
+            "-<alte zeile>\n"
+            "+<neue zeile>\n"
+            "Die Kontextzeilen MUESSEN exakt der oben gezeigten Datei entsprechen."
         )
 
         reply = ask_llm(
@@ -353,10 +387,13 @@ def _reflection_loop(
 
         patch_text = reply.content.strip()
         if patch_text and "diff --git" in patch_text:
-            patch_datei = Path("/tmp/loop_reflection.patch")
+            # M-328a: Patch-Pfad prozess-sicher (im Zielprojekt).
+            patch_datei = Path(state.project_dir) / ".werkstatt" / "reflection.patch"
+            patch_datei.parent.mkdir(parents=True, exist_ok=True)
             patch_datei.write_text(patch_text)
+            # M-328d: --3way fuer robusteres Anwenden.
             apply_res = subprocess.run(
-                ["git", "apply", str(patch_datei)],
+                ["git", "apply", "--3way", str(patch_datei)],
                 cwd=str(state.project_dir),
                 capture_output=True, text=True, check=False,
             )

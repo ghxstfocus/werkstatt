@@ -846,3 +846,145 @@ def test_reflection_patch_zielprojekt_cwd(tmp_path, monkeypatch):
     loop_mod._reflection_loop(st, max_runden=1)
     assert any(c == str(tmp_path) for c in _apply_cwds), \
         f"erwartet cwd={tmp_path}, war {_apply_cwds}"
+
+
+def test_reflection_patch_pfad_zielprojekt(tmp_path, monkeypatch):
+    """M-328a: Patch-Pfad im state.project_dir, nicht /tmp."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": '
+        '["python3", "-m", "py_compile", "core/__init__.py"]}]}'
+    )
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "__init__.py").write_text("x = 1\n")
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.last_verify_errors = ["dummy"]
+
+    _patch_paths = []
+    _real_write_text = Path.write_text
+    def _spy_write(self, *a, **k):
+        if "reflection.patch" in str(self):
+            _patch_paths.append(str(self))
+        return _real_write_text(self, *a, **k)
+
+    monkeypatch.setattr(Path, "write_text", _spy_write)
+    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
+    monkeypatch.setattr(loop_mod, "ask_llm", lambda *a, **k: type(
+        "R", (), {"ok": True, "content": "diff --git a/x b/x\n+foo\n", "error": ""}
+    )())
+    monkeypatch.setattr(loop_mod.subprocess, "run", lambda cmd, **kw: type(
+        "R", (), {"returncode": 1, "stdout": "", "stderr": "fail"}
+    )())
+
+    loop_mod._reflection_loop(st, max_runden=1)
+    assert any(".werkstatt/reflection.patch" in p for p in _patch_paths), \
+        f"erwartet .werkstatt/reflection.patch, war {_patch_paths}"
+
+
+def test_reflection_prompt_enthaelt_datei_kontext(tmp_path, monkeypatch):
+    """M-328b: Prompt enthaelt Zieldatei-Zeilen."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "test_x.py").write_text("from core.checks import check_port\n")
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": '
+        '["python3", "-m", "py_compile", "core/test_x.py"]}]}'
+    )
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.patches = [{"file": "core/test_x.py", "new_string": "x"}]
+    st.last_verify_errors = ["NameError: name 'check_port' is not defined"]
+
+    _prompts = []
+    def _spy_ask(*a, **k):
+        _prompts.append(a[2] if len(a) > 2 else "")
+        return type("R", (), {"ok": False, "content": "", "error": "skip"})()
+    monkeypatch.setattr(loop_mod, "ask_llm", _spy_ask)
+    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
+
+    loop_mod._reflection_loop(st, max_runden=1)
+    assert _prompts, "ask_llm wurde nicht gerufen"
+    prompt = _prompts[0]
+    assert "core/test_x.py" in prompt, "Datei-Pfad fehlt im Prompt"
+    assert "check_port" in prompt, "Datei-Inhalt fehlt im Prompt"
+
+
+def test_reflection_prompt_strengere_anweisung(tmp_path, monkeypatch):
+    """M-328c: Prompt verlangt AUSSCHLIESSLICH git-diff."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
+    )
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.last_verify_errors = ["dummy"]
+
+    _prompts = []
+    monkeypatch.setattr(loop_mod, "ask_llm",
+                        lambda *a, **k: (_prompts.append(a[2] if len(a) > 2 else "")
+                                         or type("R", (), {"ok": False, "content": "", "error": "skip"})()))
+    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
+
+    loop_mod._reflection_loop(st, max_runden=1)
+    assert _prompts
+    assert "AUSSCHLIESSLICH" in _prompts[0]
+    assert "git-diff" in _prompts[0]
+
+
+def test_reflection_apply_mit_3way(tmp_path, monkeypatch):
+    """M-328d: git apply laeuft mit --3way."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
+    )
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.last_verify_errors = ["dummy"]
+
+    _cmds = []
+    def _spy_run(cmd, **kw):
+        _cmds.append(list(cmd))
+        return type("R", (), {"returncode": 1, "stdout": "", "stderr": "fail"})()
+    monkeypatch.setattr(loop_mod.subprocess, "run", _spy_run)
+    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
+    monkeypatch.setattr(loop_mod, "ask_llm", lambda *a, **k: type(
+        "R", (), {"ok": True, "content": "diff --git a/x b/x\n+foo\n", "error": ""}
+    )())
+
+    loop_mod._reflection_loop(st, max_runden=1)
+    apply_cmds = [c for c in _cmds if c[:2] == ["git", "apply"]]
+    assert apply_cmds, "git apply wurde nicht gerufen"
+    assert "--3way" in apply_cmds[0], f"--3way fehlt: {apply_cmds[0]}"
