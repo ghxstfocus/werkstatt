@@ -480,3 +480,63 @@ def test_verify_patches_nutzt_venv_python(tmp_path):
     # python3 wurde durch venv_python ersetzt
     assert captured_cmds[0][0] == "/opt/fake-venv/bin/python3"
     assert "python3" not in captured_cmds[0]
+
+
+def test_loop_task_read_only(tmp_path):
+    """M-306d: read-only Task erzeugt keinen Patch."""
+    st = _state(tmp_path)
+    st.tasks = [
+        {"id": "t1", "name": "Lesen", "action": "read"},
+        {"id": "t2", "name": "Schreiben", "action": "write"},
+    ]
+    st.tests = ["Test 1"]
+    st.akzeptanzkriterien = ["Kriterium 1"]
+
+    builder_calls = []
+    def _mock_builder(state):
+        builder_calls.append(state.aktuelle_task.get("id"))
+        state.patches = []
+        return True
+
+    with patch("werkstatt.loop.run_builder", side_effect=_mock_builder), \
+         patch("werkstatt.loop._verify_patches", return_value=True), \
+         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
+         patch("werkstatt.loop.run_reviewer", return_value=True), \
+         patch("pipeline._approval_und_human_gate", return_value=0), \
+         patch("pipeline.load_project_config", return_value={}), \
+         patch("werkstatt.loop.audit"):
+        rc = run_pipeline_loop("p", "a", [st])
+
+    assert rc == 0
+    # t1 (read) sollte NICHT im builder_calls sein
+    assert "t1" not in builder_calls
+    # t2 (write) sollte drin sein
+    assert "t2" in builder_calls
+
+
+def test_loop_reviewer_after_reflection(tmp_path):
+    """M-306d: Nach Reflection muss Reviewer erneut pruefen."""
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "Task 1", "action": "write"}]
+    st.tests = ["Test 1"]
+    st.akzeptanzkriterien = ["Kriterium 1"]
+
+    reviewer_calls = {"n": 0}
+    def _mock_reviewer(state):
+        reviewer_calls["n"] += 1
+        # Erster Aufruf: rejected. Zweiter Aufruf (nach Reflection): auch rejected.
+        return False
+
+    with patch("werkstatt.loop.run_builder", return_value=True), \
+         patch("werkstatt.loop._verify_patches", return_value=True), \
+         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
+         patch("werkstatt.loop.run_reviewer", side_effect=_mock_reviewer), \
+         patch("werkstatt.loop._reflection_loop", return_value=True), \
+         patch("pipeline._approval_und_human_gate", return_value=0), \
+         patch("pipeline.load_project_config", return_value={}), \
+         patch("werkstatt.loop.audit"):
+        rc = run_pipeline_loop("p", "a", [st])
+
+    # Reviewer rejected nach Reflection -> return 1
+    assert rc == 1
+    assert reviewer_calls["n"] == 2  # zwei Aufrufe: 1 original + 1 nach Reflection

@@ -580,6 +580,20 @@ def run_pipeline_loop(
 
         # Builder fuer diesen Task
         state.aktuelle_task = task_obj  # type: ignore[attr-defined]
+
+        # M-306d Fix 1: Pro-Task action-Check. read-only Tasks
+        # erzeugen keinen Patch, markieren sich direkt als ok.
+        _is_read = isinstance(task_obj, dict) and task_obj.get("action") == "read"
+        if _is_read:
+            audit("loop_task_read_only", {"task_id": i, "name": task_name}, pd, pn)
+            _el_task = time.monotonic() - _t_task
+            task_ok(i, len(tasks), elapsed_s=_el_task)
+            group_end()
+            tasks_ok += 1
+            phase_state.mark_done(task_id)
+            audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
+            continue
+
         if not run_builder(state):
             audit("loop_builder_failed", {"task_id": i}, pd, pn)
             phase_state.mark_failed(task_id, failure="builder_failed")
@@ -683,6 +697,13 @@ def run_pipeline_loop(
                 audit("loop_reviewer_reflection_gescheitert", {"task_id": i}, pd, pn)
                 phase_state.mark_failed(task_id, failure="reviewer_rejected")
                 return 1
+            # M-306d Fix 2: Nach erfolgreicher Reflection MUSS der
+            # Reviewer erneut pruefen. Sonst fail-open (HR-R9).
+            if not run_reviewer(state):
+                audit("loop_reviewer_rejected_after_reflection", {"task_id": i}, pd, pn)
+                phase_state.mark_failed(task_id, failure="reviewer_rejected_after_reflection")
+                return 1
+            audit("loop_reviewer_approved_after_reflection", {"task_id": i}, pd, pn)
 
         _el_task = time.monotonic() - _t_task
         task_ok(i, len(tasks), elapsed_s=_el_task)

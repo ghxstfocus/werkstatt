@@ -166,3 +166,37 @@ def test_planner_deklariert_task_files(tmp_path):
     assert rc is True
     assert len(st.tasks) == 1
     assert st.tasks[0]["task_files"] == ["core/a.py"]
+
+
+def test_planner_action_missing(tmp_path):
+    """M-306d: Planner-Task ohne action-Feld -> Default write + Audit."""
+    import json
+    from unittest.mock import MagicMock, patch
+
+    from werkstatt.planner import run_planner
+
+    st = _state(tmp_path)
+    st.aufgabe = "Test"
+    st.docs = {}
+
+    mock_reply = MagicMock()
+    mock_reply.ok = True
+    mock_reply.content = json.dumps({
+        "tasks": [{"id": "t1", "name": "Task ohne action"}],
+        "tests": ["test"],
+        "akzeptanzkriterien": ["akz"],
+        "blocker": [], "follow_up": [], "ignore": [],
+    })
+
+    with patch("werkstatt.planner.ask_llm", return_value=mock_reply), \
+         patch("werkstatt.planner.audit") as mock_audit:
+        rc = run_planner(st)
+
+    assert rc is True
+    # action wurde auf write gesetzt
+    assert st.tasks[0]["action"] == "write"
+    # Audit wurde aufgerufen
+    assert any(
+        c[0][0] == "planner_action_missing"
+        for c in mock_audit.call_args_list
+    )

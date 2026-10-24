@@ -193,8 +193,19 @@ def run_planner(state: RunState) -> bool:
         audit("planner_json_fehler", {"raw": raw[:200]}, pd, pn)
         return False
 
+    # M-306d Fix 3: action-Default. Wenn Planner "action" nicht
+    # setzt, Default auf "write" (fail-safe) + Audit-Spur.
+    _tasks_raw = plan.get("tasks", [])
+    _action_missing = 0
+    for _t in _tasks_raw:
+        if isinstance(_t, dict) and "action" not in _t:
+            _t["action"] = "write"
+            _action_missing += 1
+    if _action_missing > 0:
+        audit("planner_action_missing", {"anzahl": _action_missing}, pd, pn)
+
     # Plan in State schreiben
-    state.tasks = plan.get("tasks", [])  # type: ignore[attr-defined]
+    state.tasks = _tasks_raw  # type: ignore[attr-defined]
     state.tests = plan.get("tests", [])  # type: ignore[attr-defined]
     state.akzeptanzkriterien = plan.get("akzeptanzkriterien", [])  # type: ignore[attr-defined]
 
