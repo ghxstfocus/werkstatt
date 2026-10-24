@@ -131,3 +131,10 @@ des aktuellen Loops, aber strukturell sinnvoll.
 | **M-368** | mittel | Reviewer-als-Reflection (Agent-Handoff/Escalation). |
 | **M-369** | gross | Router-Pattern fuer Task-Typen (Dynamic Dispatch). |
 | **M-370** | klein | Prompt-Budget im Builder (Context-Window-Management). |
+
+## M-386/M-387 (nach RERUN-48)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| **M-386** | mittel | Rollen-Audit (alle Rollen gegen goldenen Standard + Widerspruchs-Check). |
+| **M-387** | mittel | RERUN-49 mit schwierigerer Aufgabe (mehrere Fehler, verschiedene Typen). |

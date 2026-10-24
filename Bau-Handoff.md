@@ -311,3 +311,111 @@ liegt im Arbeitsbaum.
 1. Doku committen.
 2. RERUN-39 mit create-lastiger Aufgabe (M-360 gezielt).
 3. M-361/M-362 (Tests fuer ungetestete Fixes).
+
+---
+
+## Zwischenstand 2026-10-25 — M-338-Fix..M-385, RERUN-40..48
+
+**Werkstatt-HEAD:** 5127154 (M-384).
+**Zielprojekt-HEAD:** c0216d2 (RERUN-48, auf main).
+**Baseline:** 1435 / 13 / 8 / 6 / 162.
+
+### Der Durchbruch
+
+RERUN-48 ist der **erste vollstaendig erfolgreiche Loop-Lauf**
+seit RERUN-23 mit dem **kompletten Skillsystem**:
+
+- Explorer messt deterministisch (`ruff check .` -> 1 Datei).
+- Planner folgt (`<measured_files>` + `<pflicht>`).
+- Builder fixt (I001).
+- Verify `ruff_changed` gruen.
+- Reviewer approved.
+- **ruff: 1 -> 0.** LOOP_RC=0.
+
+### Was seit RERUN-39 passiert ist
+
+**Explorer (M-338-Fix, M-373):**
+- Prompt umgeschrieben: "Messe. Rate nicht."
+- `_messen()` ruft deterministisch `run_readonly('ruff check .')`
+  bzw. `pytest -q`.
+- `_extract_dateien()` parst ruff-concise-Output.
+- key_files kommen jetzt aus der Messung, nicht aus dem LLM.
+
+**Skills (M-374):**
+- `werkstatt/skills.py`: SkillLoader mit Progressive Disclosure
+  (Level 1: name+description, Level 2: SKILL.md-Body).
+- `werkstatt/tools.py`: run_readonly / run_write mit Whitelist
+  (ruff, pytest, grep, find, git status/diff/log, py_compile)
+  und Deny (rm, git commit/push, pip install, sudo, curl, wget).
+- Skills erweitert um `allowed-tools`.
+
+**Planner (M-375, M-376):**
+- Liest `state.explorer_context` (M-375).
+- Explorer-Dateien als `<measured_files>` + `<pflicht>` +
+  `<erinnerung>` VOR und NACH PLANNER_SYSTEM (M-376,
+  Lost-in-the-Middle + Recency-Bias).
+
+**Meta-Skill (M-374):**
+- `skills/using-werkstatt/SKILL.md`: "Wenn ein Skill passt,
+  MUSST du ihn nutzen. Messe statt raten."
+- Explorer + Planner laden es IMMER.
+
+**Live-Renderer (M-377):**
+- `_run_with_progress` ruft KEIN spinner_start/stop mehr.
+- spinner_start ist idempotent.
+- spinner_stop setzt `_live = None` garantiert.
+
+**Verify (M-378):**
+- Neue `ruff_changed`-Stage in `.werkstatt/verify.json`.
+- `_reflection_loop` sieht ruff-Fehler und ruft Builder erneut.
+
+**Reviewer + noqa (M-380..M-384):**
+- M-380: Reviewer-Prompt ignoriert Loop-Doku.
+- M-381: patch-format-Skill: `# noqa` nur entfernen, wenn
+  Code NICHT absichtlich ist.
+- M-382: `_get_git_diff` (reviewer.py + loop.py) schliesst
+  `PROGRESS.md` per Pathspec aus.
+- M-383: Builder-Reflection: bei RUF100 `# noqa` BEHALTEN.
+- M-384: Reviewer-Prompt STRIKT: "PROGRESS.md ist NICHT
+  Teil deines Reviews."
+
+**Ruff-Konfiguration (M-385):**
+- `RUF100` in `per-file-ignores` fuer `tests/*`.
+- Grund: Ruff 0.17 hat DTZ aus dem Default-Set entfernt,
+  dadurch wurden die absichtlichen `# noqa: DTZ001`-Tags
+  in Negativtests zu RUF100.
+- Loesung analog dismech-PR: scoped ignore, `# noqa` bleibt.
+- ruff: 5 -> 1 Fehler (nur I001 in test_checks.py).
+
+### RERUN-Ergebnisse (chronologisch)
+
+- **RERUN-40:** Explorer 0 files (M-338-Prompt). Planner 15
+  halluzinierte Tasks. Loop-RC=1.
+- **RERUN-41:** Explorer 4 files (M-373), Planner 15 falsche
+  Tasks (M-376 fehlte). Loop-RC=1.
+- **RERUN-42:** Explorer 4 files, Planner 4 Tasks (echte
+  Dateien, M-376). Loop-RC=1 (LiveError bei Task 2).
+- **RERUN-43:** 4/4 tasks ok, aber RUF100-Fehler von Builder
+  eingefuehrt (Verify prueft ruff nicht). Loop-RC=0.
+- **RERUN-44:** 1/4 tasks ok. Reviewer rejected wegen
+  PROGRESS.md + noqa-Entfernung. Loop-RC=1.
+- **RERUN-45:** 1/4. Reviewer rejected 2x. Loop-RC=1.
+- **RERUN-46:** 1/4. 3 Reflection-Runden, dann rejected.
+  Loop-RC=1.
+- **RERUN-47:** 1/4. `builder_patch_no_effect` (M-383: noqa
+  nicht entfernt, aber nichts anderes gemacht).
+- **RERUN-48:** **1/1, LOOP_RC=0, ruff 1->0.** ERFOLG.
+
+### Aktuelle Bloecke
+
+- **M-361/M-362:** Tests fuer M-355b/M-360 (aus frueheren Bloecken).
+- **M-386:** Rollen-Audit (alle Rollen gegen goldenen Standard
+  + Widerspruchs-Check).
+- **M-387:** RERUN-49 mit schwierigerer Aufgabe (mehrere Fehler,
+  verschiedene Typen).
+
+### Naechster Schritt
+
+1. Rollen-Audit (M-386).
+2. RERUN-49 (Belastbarkeitstest).
+3. Doku nachziehen.

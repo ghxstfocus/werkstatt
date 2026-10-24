@@ -824,3 +824,31 @@ NACH: 1401/13/8/6/162.
 **Beweis:** RERUN-38, 8/8 Tasks, LOOP_RC=0, echte Aenderung
 (harness/audit/writer.py, Owner-Check). Zielprojekt committed
 2a0a284.
+
+## M-338-Fix..M-385 (Skillsystem, 2026-10-25)
+
+Der Loop hat jetzt ein vollstaendiges Skillsystem mit
+deterministischer Messung. RERUN-48 ist der erste
+vollstaendig erfolgreiche Lauf.
+
+- **M-338-Fix:** Explorer-Prompt: "Messe. Rate nicht."
+- **M-373:** Explorer-Messung deterministisch (`_messen()`,
+  `_extract_dateien()`).
+- **M-374:** SkillLoader (`werkstatt/skills.py`) + Tool-Klassen
+  (`werkstatt/tools.py`) + Meta-Skill `using-werkstatt`.
+- **M-375:** Planner liest `state.explorer_context`.
+- **M-376:** Explorer-Dateien Pflicht im Planner
+  (`<measured_files>` + `<pflicht>` + `<erinnerung>`).
+- **M-377:** Live-Spinner idempotent (kein LiveError).
+- **M-378:** `ruff_changed`-Stage in `verify.json`.
+- **M-380:** Reviewer ignoriert Loop-Doku.
+- **M-381:** patch-format-Skill: `# noqa` nur entfernen, wenn
+  Code nicht absichtlich ist.
+- **M-382:** `_get_git_diff` schliesst `PROGRESS.md` aus.
+- **M-383:** Builder-Reflection: bei RUF100 `# noqa` BEHALTEN.
+- **M-384:** Reviewer STRIKT: PROGRESS.md nicht bewerten.
+- **M-385:** `RUF100` in `per-file-ignores` fuer Tests
+  (DTZ-Entfernung in Ruff 0.17).
+
+**Beweis:** RERUN-48, 1/1 Tasks, LOOP_RC=0, ruff 1->0.
+Zielprojekt committed `c0216d2`.

@@ -119,3 +119,25 @@ existieren im Loop-Neubau nicht mehr. Details in
 - `ERLEDIGT.md` — erledigte Bloecke mit Commit/Tests.
 - `KONVENTION.md` — Ordnerstruktur, Datei-Namen.
 - `Bau-Handoff.md` — Zwischenstaende, RERUN-Ergebnisse.
+
+---
+
+## Nachtrag 2026-10-25 — Skillsystem
+
+**Loop-Neubau** ist jetzt **wirklich fertig**: RERUN-48,
+1/1 Tasks, LOOP_RC=0, ruff 1->0.
+
+**Was seit RERUN-38 dazukam:**
+- Deterministische Explorer-Messung (M-373).
+- SkillLoader + Tool-Klassen (M-374).
+- Planner liest Explorer-Kontext (M-375/M-376).
+- Live-Renderer idempotent (M-377).
+- ruff_changed-Stage in verify.json (M-378).
+- Reviewer + noqa-Regeln (M-380..M-385).
+
+**Beweis:** RERUN-48, Zielprojekt committed `c0216d2`.
+
+**Naechste Schritte:**
+1. M-386: Rollen-Audit.
+2. M-387: RERUN-49 (Belastbarkeit).
+3. Doku nachziehen.
