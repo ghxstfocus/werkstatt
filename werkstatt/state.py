@@ -272,9 +272,13 @@ class RunState:
     # M-299a: Preflight-Scan + Fehler-Klassifikation.
     # Liste von dicts: [{klasse, stage_id, datei, text}, ...]
     preflight_fehler: list[dict] = field(default_factory=list)
-    # Fehler, die als FOLLOW_UP (nicht aufgabenrelevant) markiert
-    # wurden. Bleiben ueber Phasen erhalten.
+    # M-299e: Planner-Entscheidung pro Preflight-Fehler.
+    # BLOCKER: verhindert die Aufgabe -> in Plan.
+    blocker_fehler: list[dict] = field(default_factory=list)
+    # FOLLOW_UP: Baseline-Schuld, ueber Phasen erhalten.
     follow_up_fehler: list[dict] = field(default_factory=list)
+    # IGNORE: irrelevant, verworfen.
+    ignore_fehler: list[dict] = field(default_factory=list)
 
 
 

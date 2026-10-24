@@ -385,6 +385,22 @@ def run_pipeline_loop(
 
     if not plan_ok:
         audit("loop_plan_missing", {"aufgabe": aufgabe[:100]}, pd, pn)
+        # M-299e: Preflight-Scan vor Planner. Klassifiziert
+        # Baseline-Fehler, damit der Planner BLOCKER/FOLLOW_UP/
+        # IGNORE entscheiden kann.
+        if not getattr(state, "preflight_fehler", None):
+            from werkstatt.planner import _preflight_scan
+            _pf = _preflight_scan(state)
+            state.preflight_fehler = _pf  # type: ignore[attr-defined]
+            if _pf:
+                audit(
+                    "loop_preflight_fehler",
+                    {
+                        "anzahl": len(_pf),
+                        "klassen": sorted({f["klasse"] for f in _pf}),
+                    },
+                    pd, pn,
+                )
         if not run_planner(state):
             audit("loop_planner_failed", {}, pd, pn)
             return 1

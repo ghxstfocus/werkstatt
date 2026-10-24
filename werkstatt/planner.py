@@ -17,12 +17,24 @@ from werkstatt.state import RunState
 
 PLANNER_SYSTEM = """Du bist ein elite Software-Architekt und Planner.
 Zerlege die Aufgabe in ausfuehrbare Tasks.
-Jeder Task hat: id, name, description, akzeptanzkriterien.
+
+Du bekommst optional eine Preflight-Fehlerliste (Verify-Fehler
+aus dem Zielprojekt) und eine Follow_up-Liste (aus fruehrerer
+Phase). Entscheide pro Fehler:
+  - BLOCKER: verhindert DIESE Aufgabe (z.B. SyntaxError im
+    betroffenen File, fehlende Abhaengigkeit fuer den Test).
+  - FOLLOW_UP: Baseline-Schuld, nicht aufgabenrelevant
+    (z.B. mypy-Fehler in unrelated Modulen).
+  - IGNORE: irrelevant (z.B. Timeout in ungenutztem Modul).
+
 Antworte NUR mit validem JSON:
 {
   "tasks": [{"id": "t1", "name": "...", "description": "...", "akzeptanzkriterien": ["..."]}],
   "tests": ["..."],
-  "akzeptanzkriterien": ["..."]
+  "akzeptanzkriterien": ["..."],
+  "blocker": [{"klasse": "...", "text": "..."}],
+  "follow_up": [{"klasse": "...", "text": "..."}],
+  "ignore": [{"klasse": "...", "text": "..."}]
 }
 Keine Erklaerung, nur JSON."""
 
@@ -125,6 +137,20 @@ def run_planner(state: RunState) -> bool:
 
     user_content = f"Aufgabe: {aufgabe}\n\nKontext:\n{docs_ctx}"
 
+    # M-299e: Preflight-Fehler + Follow_up aus vorheriger Phase.
+    preflight = getattr(state, "preflight_fehler", []) or []
+    follow_up_prev = getattr(state, "follow_up_fehler", []) or []
+    if preflight:
+        user_content += (
+            "\n\nPreflight-Fehler (aktuell):\n"
+            + json.dumps(preflight[:10], ensure_ascii=False)
+        )
+    if follow_up_prev:
+        user_content += (
+            "\n\nFollow_up (vorherige Phase, neu bewerten):\n"
+            + json.dumps(follow_up_prev[:10], ensure_ascii=False)
+        )
+
     reply = ask_llm(
         api_key, PLANNER_SYSTEM, user_content,
         model="deepseek-chat", temperature=0.2, max_tokens=4000,
@@ -152,6 +178,11 @@ def run_planner(state: RunState) -> bool:
     state.tasks = plan.get("tasks", [])  # type: ignore[attr-defined]
     state.tests = plan.get("tests", [])  # type: ignore[attr-defined]
     state.akzeptanzkriterien = plan.get("akzeptanzkriterien", [])  # type: ignore[attr-defined]
+
+    # M-299e: Planner-Entscheidung pro Fehler speichern.
+    state.blocker_fehler = plan.get("blocker", [])  # type: ignore[attr-defined]
+    state.follow_up_fehler = plan.get("follow_up", [])  # type: ignore[attr-defined]
+    state.ignore_fehler = plan.get("ignore", [])  # type: ignore[attr-defined]
 
     audit("planner_plan_erstellt", {
         "tasks": len(state.tasks),  # type: ignore[attr-defined]

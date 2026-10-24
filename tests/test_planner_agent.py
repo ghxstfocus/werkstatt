@@ -1,9 +1,10 @@
 """Tests fuer werkstatt/planner.py (Phase 5)."""
 from __future__ import annotations
 
-from unittest.mock import patch
+import json
+from unittest.mock import MagicMock, patch
 
-from werkstatt.planner import run_planner
+from werkstatt.planner import _preflight_scan, run_planner
 from werkstatt.state import RunState
 
 
@@ -65,3 +66,65 @@ def test_klassifiziert_syntax():
     """M-299a: py_compile wird als 'syntax' klassifiziert."""
     from werkstatt.planner import _klassifiziere_fehler
     assert _klassifiziere_fehler("py_compile", "SyntaxError: invalid syntax") == "syntax"
+
+
+def test_planner_blocker_follow_up_ignore(tmp_path):
+    """M-299e: Planner klassifiziert Preflight-Fehler."""
+    st = _state(tmp_path)
+    st.aufgabe = "Test-Aufgabe"
+    st.docs = {}
+    st.preflight_fehler = [
+        {"klasse": "syntax", "stage_id": "py_compile", "datei": None, "text": "SyntaxError"},
+    ]
+    st.follow_up_fehler = [
+        {"klasse": "type", "stage_id": "mypy", "datei": None, "text": "unused-ignore"},
+    ]
+
+    mock_reply = MagicMock()
+    mock_reply.ok = True
+    mock_reply.content = json.dumps({
+        "tasks": [{"id": "t1", "name": "Fix", "description": "Fix syntax", "akzeptanzkriterien": ["ok"]}],
+        "tests": ["test_fix"],
+        "akzeptanzkriterien": ["fix laeuft"],
+        "blocker": [{"klasse": "syntax", "text": "SyntaxError"}],
+        "follow_up": [{"klasse": "type", "text": "unused-ignore"}],
+        "ignore": [],
+    })
+
+    with patch("werkstatt.planner.ask_llm", return_value=mock_reply):
+        rc = run_planner(st)
+
+    assert rc is True
+    assert len(st.blocker_fehler) == 1
+    assert st.blocker_fehler[0]["klasse"] == "syntax"
+    assert len(st.follow_up_fehler) == 1
+    assert st.follow_up_fehler[0]["klasse"] == "type"
+    assert st.ignore_fehler == []
+
+
+def test_preflight_scan_klassifiziert(tmp_path):
+    """M-299e: _preflight_scan klassifiziert Stage-Fehler."""
+    from subprocess import CompletedProcess
+
+    st = _state(tmp_path)
+    contract_dir = tmp_path / ".werkstatt"
+    contract_dir.mkdir()
+    (contract_dir / "verify.json").write_text(json.dumps({
+        "stages": [
+            {"id": "py_compile", "command": ["false"]},
+            {"id": "ruff", "command": ["false"]},
+        ]
+    }))
+
+    def _mock_run(cmd, **kwargs):
+        if "py_compile" in str(cmd):
+            return CompletedProcess(cmd, 1, "", "SyntaxError: invalid syntax")
+        return CompletedProcess(cmd, 1, "", "ruff: unused import")
+
+    with patch("subprocess.run", side_effect=_mock_run):
+        fehler = _preflight_scan(st)
+
+    assert len(fehler) == 2
+    klassen = {f["klasse"] for f in fehler}
+    assert "syntax" in klassen
+    assert "lint" in klassen

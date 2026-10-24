@@ -235,3 +235,44 @@ def test_verify_patches_phase_filter(tmp_path):
     assert _verify_patches(st, phase="pre_build") is True
     # post_build: nur post1 (fail) -> False
     assert _verify_patches(st, phase="post_build") is False
+
+
+def test_loop_preflight_vor_planner(tmp_path):
+    """M-299e: Loop ruft Preflight-Scan vor Planner auf."""
+    import json
+    st = _state(tmp_path, tasks=False)
+    st.tests = ["Test 1"]
+    st.akzeptanzkriterien = ["Kriterium 1"]
+    contract_dir = tmp_path / ".werkstatt"
+    contract_dir.mkdir()
+    (contract_dir / "verify.json").write_text(json.dumps({
+        "stages": [{"id": "py_compile", "command": ["false"]}]
+    }))
+
+    call_order = []
+
+    def _mock_preflight(state):
+        call_order.append("preflight")
+        return [{"klasse": "syntax", "stage_id": "py_compile", "datei": None, "text": "SyntaxError"}]
+
+    def _mock_planner(state):
+        call_order.append("planner")
+        state.tasks = [{"id": "t1", "name": "Task 1"}]
+        state.tests = ["Test 1"]
+        state.akzeptanzkriterien = ["Kriterium 1"]
+        return True
+
+    with patch("werkstatt.planner._preflight_scan", side_effect=_mock_preflight), \
+         patch("werkstatt.loop.run_planner", side_effect=_mock_planner), \
+         patch("werkstatt.loop._verify_patches", return_value=True), \
+         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
+         patch("werkstatt.loop.run_builder", return_value=True), \
+         patch("werkstatt.loop.run_reviewer", return_value=True), \
+         patch("pipeline._approval_und_human_gate", return_value=0), \
+         patch("pipeline.load_project_config", return_value={}), \
+         patch("werkstatt.loop.audit"):
+        _rc = run_pipeline_loop("p", "a", [st])
+
+    assert "preflight" in call_order
+    assert "planner" in call_order
+    assert call_order.index("preflight") < call_order.index("planner")
