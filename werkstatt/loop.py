@@ -52,6 +52,20 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     project_dir = Path(project_dir)
     errors = []
 
+    # M-306c: venv_python aus projects/<name>.yaml (verhindert,
+    # dass Verify im Zielprojekt mit System-Python laeuft und
+    # Dependencies nicht findet).
+    _venv_python = "python3"  # Fallback
+    _project_name = getattr(state, "project_name", "")
+    if _project_name:
+        try:
+            from werkstatt.orchestrator import load_project_config
+            _cfg = load_project_config(_project_name)
+            if _cfg.get("venv_python"):
+                _venv_python = _cfg["venv_python"]
+        except (SystemExit, Exception):  # noqa: BLE001, S110
+            pass  # Fallback auf python3
+
     # 1. Projekt-Contract lesen
     contract_file = project_dir / ".werkstatt" / "verify.json"
     stages = []
@@ -84,6 +98,10 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
         cmd = stage.get("command")
         if not cmd:
             continue
+        # M-306c: "python3" im Stage-Command durch venv_python ersetzen.
+        # Nur wenn venv_python != "python3" (also aus Config geladen).
+        if _venv_python != "python3":
+            cmd = [_venv_python if c == "python3" else c for c in cmd]
         try:
             res = subprocess.run(
                 cmd, cwd=str(project_dir),

@@ -442,3 +442,41 @@ def test_extract_files_regex_fallback():
     ]
     files = _extract_files_from_tasks(tasks)
     assert "README.md" in files
+
+
+def test_verify_patches_nutzt_venv_python(tmp_path):
+    """M-306c: _verify_patches ersetzt python3 im Stage-Command
+    durch venv_python aus projects/<name>.yaml."""
+    import json
+    from subprocess import CompletedProcess
+    from unittest.mock import patch
+
+    st = _state(tmp_path)
+    st.project_name = "test-venv-project"
+
+    contract_dir = tmp_path / ".werkstatt"
+    contract_dir.mkdir()
+    (contract_dir / "verify.json").write_text(json.dumps({
+        "stages": [
+            {"id": "py_compile", "command": ["python3", "-m", "py_compile", "x.py"]},
+        ]
+    }))
+
+    # Config mit venv_python mocken
+    fake_cfg = {"venv_python": "/opt/fake-venv/bin/python3", "project_dir": str(tmp_path)}
+
+    captured_cmds = []
+
+    def _mock_run(cmd, **kwargs):
+        captured_cmds.append(list(cmd))
+        return CompletedProcess(cmd, 0, "", "")
+
+    with patch("werkstatt.orchestrator.load_project_config", return_value=fake_cfg), \
+         patch("subprocess.run", side_effect=_mock_run):
+        result = _verify_patches(st, phase="pre_build")
+
+    assert result is True
+    assert len(captured_cmds) == 1
+    # python3 wurde durch venv_python ersetzt
+    assert captured_cmds[0][0] == "/opt/fake-venv/bin/python3"
+    assert "python3" not in captured_cmds[0]
