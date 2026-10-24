@@ -1168,7 +1168,13 @@ def run_pipeline_loop(
             # M-355: Loop-Idempotenz-Check entfernt. Der Builder
             # (M-352) entscheidet ueber Idempotenz. Der Loop prueft
             # nur noch, ob der Builder erfolgreich war.
+            # M-355b: run_builder=False -> Task gescheitert, KEIN
+            # Durchfallen in den Patch-Pfad mit leerem state.patches.
             audit("loop_builder_aufgerufen", {"task_id": i}, pd, pn)
+            _task_ende(state, phase_state, task_id, ok=False,
+                       name=task_name, failure="builder_failed")
+            audit("loop_task_failed", {"task_id": i, "grund": "builder_failed"}, pd, pn)
+            return 1
 
         # PreToolUse-Hook (Phase 15): Patch pruefen, BEVOR er angewendet wird.
         patches = getattr(state, "patches", [])
