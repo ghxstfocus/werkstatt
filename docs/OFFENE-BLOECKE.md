@@ -71,7 +71,6 @@ Nur noch **offene** Bloecke. Erledigte stehen in
 | **M-349** | klein | `hooks/planner_gate.py` neu: Doku-Tasks ablehnen. `_plan_gate` ruft Hook. Planner-Reflection mit `last_planner_info`. |
 | **M-350** | mittel | `planner_gate.py` erweitern: action, task_files, phasen-Pflicht, phase_id. `PLANNER_SYSTEM` halbieren. |
 | **M-351** | klein | `loop.py:1167`: toter `post_tool_use`-Aufruf entfernen. |
-| **M-352** | klein | `anti_patterns.py`: tot oder aktivieren? Entscheidung offen. |
 
 ## Offene Merkposten (unveraendert)
 
@@ -88,6 +87,32 @@ Nur noch **offene** Bloecke. Erledigte stehen in
 |---|---|---|
 | **M-350** | erledigt | planner_gate.py erweitert (5 Checks), PLANNER_SYSTEM gekuerzt. |
 | **M-351** | erledigt | no_effect-Patches filtern (builder + loop). |
-| **M-352** | offen | Idempotenz NUR bei create + Datei existiert. Tests anpassen. |
-| **M-353** | offen | Rollback auf sauberen Tree (git reset --hard + clean). |
 | **M-354** | offen | Checkpoint nach jedem Task (Aider-Muster, statt reset --hard). |
+
+
+## M-355b..M-363 (Loop-Durchbruch, 2026-10-24)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| **M-355b** | erledigt (403823d) | run_builder=False -> sofort return 1. |
+| **M-356** | erledigt (b844ab8) | Rollback auf start-HEAD. |
+| **M-357** | erledigt (9b31ec8) | _run_with_progress re-raised Exceptions -> False. |
+| **M-358** | erledigt (9b31ec8) | Footer mit echten Task-Zahlen. |
+| **M-359** | erledigt (9b31ec8) | fail-closed bei kein Patch (old_string_not_found). |
+| **M-360** | erledigt (f4e45ed) | create + Datei fehlt -> anlegen statt fail. |
+| **M-361** | offen | Test fuer M-355b (run_builder=False -> return 1). |
+| **M-362** | offen | Test fuer M-360 (create + Datei fehlt -> anlegen). |
+| **M-363** | offen | Doku-Pflege Baseline/HISTORISCH. |
+
+**Stand RERUN-38:** Loop erstmals seit RERUN-23 vollstaendig
+erfolgreich (8/8, RC=0, echte Aenderung im Zielprojekt,
+Zielprojekt committed 2a0a284).
+
+
+## M-361..M-363 (Nachpflege nach RERUN-38)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| **M-361** | offen | Test fuer M-355b (run_builder=False -> sofort return 1). |
+| **M-362** | offen | Test fuer M-360 (create + Datei fehlt -> anlegen). |
+| **M-363** | offen | Doku-Pflege Baseline/HISTORISCH. |

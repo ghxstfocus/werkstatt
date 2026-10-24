@@ -222,3 +222,92 @@ liegt im Arbeitsbaum.
 4. RERUN-34 (praezisierter Befehl, create fail-closed).
 5. Pruefen: create-Tasks schreiben Dateien ODER
    loop_builder_failed (fail-closed).
+
+
+---
+
+## Zwischenstand 2026-10-24 20:30 — M-355b..M-360, RERUN-36/37/38
+
+**Werkstatt-HEAD:** f4e45ed (M-360).
+**Zielprojekt-HEAD:** 2a0a284 (RERUN-38, auf f1bd193).
+**Baseline:** 1411 / 13 / 8 / 6 / 162.
+
+### Was seit RERUN-35 passiert ist
+
+- **M-355b** (403823d): run_builder=False -> sofort return 1.
+  M-355 hatte den Loop-Idempotenz-Check entfernt, aber im
+  Fehlerpfad fehlte continue/return. RERUN-36 zeigte: Task 3
+  (create) scheiterte, Loop fiel 45s durch Verify/Reviewer/
+  Reflection, wurde erst von M-359 gefangen.
+- **M-356** (b844ab8): Rollback immer auf start-HEAD. M-353
+  griff nur bei dirty Ausgang und war invertiert.
+- **M-357** (9b31ec8): _run_with_progress re-raised Exceptions
+  -> Loop starb ohne Audit. RERUN-35 zeigte: Task 9 lief
+  sichtbar, dann LOOP_RC=1 ohne Traceback.
+- **M-358/M-358b** (9b31ec8): Footer hartcodiert Tasks: 0/0.
+  Jetzt echte Zahlen aus state.tasks_ok_counter.
+- **M-359** (9b31ec8): Reviewer-Reject + pytest gruen reichte
+  fuer task_ok, auch wenn kein Patch angewendet wurde
+  (old_string_not_found). Jetzt: zusaetzlich state.patches
+  != [] noetig. Sonst fail-closed.
+- **M-360** (f4e45ed): Builder warf builder_zieldatei_nicht_
+  gefunden auch bei action=create und fehlender Zieldatei.
+  Damit wurde M-352 nie erreicht. Jetzt: create + Datei fehlt
+  -> Zieldatei aus task_files, LLM legt sie an.
+
+### RERUN-Ergebnisse
+
+- **RERUN-36:** 4/6, LOOP_RC=1. M-355b entdeckt (45s-Durchfall).
+  M-357/358/359 wirken (keine Traceback, Tasks: 4/6,
+  fail_closed).
+- **RERUN-37:** 4/6, LOOP_RC=1. M-355b wirkt
+  (loop_task_failed, grund builder_failed, kein 45s-Durchfall).
+  M-360 entdeckt (builder_zieldatei_nicht_gefunden bei create).
+- **RERUN-38:** 8/8, LOOP_RC=0, ERFOLGREICH. Erster
+  vollstaendiger Durchlauf seit RERUN-23. Echte Aenderung:
+  harness/audit/writer.py (+23, Owner-Check im AuditWriter).
+  Zielprojekt committed 2a0a284.
+
+### Aktuelle Bloecke
+
+- **M-361:** Test fuer M-355b.
+- **M-362:** Test fuer M-360.
+- **M-363:** Doku-Pflege Baseline/HISTORISCH.
+
+### Naechster Schritt
+
+1. Doku committen (M-355b..M-360 in Bau-Handoff + OFFENE-BLOECKE).
+2. RERUN-39 mit create-lastiger Aufgabe (M-360 gezielt testen).
+3. Danach M-361/M-362 (Tests fuer ungetestete Fixes).
+
+
+---
+
+## Zwischenstand 2026-10-24 20:30 — M-355b..M-360, RERUN-36/37/38
+
+**Werkstatt-HEAD:** f4e45ed (M-360).
+**Zielprojekt-HEAD:** 2a0a284 (RERUN-38, auf f1bd193).
+**Baseline:** 1411 / 13 / 8 / 6 / 162.
+
+### Was seit RERUN-35 passiert ist
+
+- **M-355b** (403823d): run_builder=False -> sofort return 1.
+- **M-356** (b844ab8): Rollback immer auf start-HEAD.
+- **M-357** (9b31ec8): Exception -> False statt re-raise.
+- **M-358/M-358b** (9b31ec8): Footer mit echten Task-Zahlen.
+- **M-359** (9b31ec8): fail-closed bei kein Patch.
+- **M-360** (f4e45ed): create + Datei fehlt -> anlegen.
+
+### RERUN-Ergebnisse
+
+- **RERUN-36:** 4/6, LOOP_RC=1. M-355b entdeckt.
+- **RERUN-37:** 4/6, LOOP_RC=1. M-355b wirkt, M-360 entdeckt.
+- **RERUN-38:** 8/8, LOOP_RC=0, ERFOLGREICH. Erster
+  vollstaendiger Durchlauf seit RERUN-23. Zielprojekt committed
+  2a0a284.
+
+### Naechster Schritt
+
+1. Doku committen.
+2. RERUN-39 mit create-lastiger Aufgabe (M-360 gezielt).
+3. M-361/M-362 (Tests fuer ungetestete Fixes).

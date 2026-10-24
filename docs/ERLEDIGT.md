@@ -799,3 +799,28 @@ NACH: 1401/13/8/6/162.
 - M-323b: Phasen-Checkpoints (`phase_end` pro Phase).
 - M-341: Explorer überspringen bei `task_files`.
 - M-344: `PROGRESS.md` mit Phasen-Header.
+
+
+## M-352..M-360 (Loop-Durchbruch, 2026-10-24)
+
+- **M-352** (a5b986a): Idempotenz NUR bei create + Datei existiert.
+  M-318 war zu locker. Tests angepasst.
+- **M-353** (a5b986a): Rollback auf sauberen Tree (M-356 korrigiert
+  die Semantik).
+- **M-355** (b844ab8): Loop-Idempotenz-Check entfernt. Builder
+  entscheidet.
+- **M-355b** (403823d): run_builder=False -> sofort return 1.
+  Kein 45s-Durchfall mehr.
+- **M-356** (b844ab8): Rollback immer auf start-HEAD.
+- **M-357** (9b31ec8): _run_with_progress re-raised Exceptions ->
+  jetzt False, damit der Fehlerpfad greift.
+- **M-358/M-358b** (9b31ec8): Footer mit echten Task-Zahlen aus
+  state.tasks_ok_counter.
+- **M-359** (9b31ec8): Reviewer-Reject + pytest gruen reicht nicht
+  mehr, wenn kein Patch angewendet wurde. Fail-closed.
+- **M-360** (f4e45ed): create + Datei fehlt -> Zieldatei aus
+  task_files, LLM legt sie an.
+
+**Beweis:** RERUN-38, 8/8 Tasks, LOOP_RC=0, echte Aenderung
+(harness/audit/writer.py, Owner-Check). Zielprojekt committed
+2a0a284.
