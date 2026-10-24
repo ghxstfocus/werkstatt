@@ -77,7 +77,9 @@ def _expand_cmd_placeholders(
     Rueckgabe None: Stage ueberspringen (z.B. keine changed_test_files).
     """
     cmd_str = " ".join(str(c) for c in cmd)
-    if "{changed_files}" not in cmd_str and "{changed_test_files}" not in cmd_str:
+    if ("{changed_files}" not in cmd_str
+            and "{changed_test_files}" not in cmd_str
+            and "{changed_py_files}" not in cmd_str):
         return [str(c) for c in cmd]
 
     patches = getattr(state, "patches", []) or []
@@ -91,9 +93,15 @@ def _expand_cmd_placeholders(
         if "test" in f.lower() and f.endswith(".py")
     ]
 
+    changed_py = [f for f in changed if f.endswith(".py")]
+
     out: list[str] = []
     for c in cmd:
         s = str(c)
+        if "{changed_py_files}" in s:
+            if not changed_py:
+                return None
+            s = s.replace("{changed_py_files}", " ".join(changed_py))
         if "{changed_test_files}" in s:
             if not changed_tests:
                 return None

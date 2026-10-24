@@ -1255,3 +1255,55 @@ def test_post_tool_use_hook_datei_entfernt():
     """M-334b: hooks/post_tool_use.py existiert nicht mehr."""
     from pathlib import Path as P
     assert not P("/opt/werkstatt/hooks/post_tool_use.py").exists()
+
+
+def test_expand_cmd_changed_py_files(tmp_path):
+    """M-340: {changed_py_files} filtert auf .py-Dateien."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "x.py").write_text("x = 1\n")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "y.md").write_text("# y\n")
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.patches = [
+        {"file": "core/x.py", "new_string": "x = 1"},
+        {"file": "docs/y.md", "new_string": "# y"},
+    ]
+
+    result = loop_mod._expand_cmd_placeholders(
+        ["python3", "-m", "py_compile", "{changed_py_files}"],
+        st, tmp_path,
+    )
+    assert result is not None
+    # Nur core/x.py, nicht docs/y.md
+    assert any("core/x.py" in c for c in result)
+    assert not any("docs/y.md" in c for c in result)
+
+
+def test_expand_cmd_changed_py_files_leer(tmp_path):
+    """M-340: {changed_py_files} ohne .py-Dateien -> None (skip)."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "y.md").write_text("# y\n")
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.patches = [{"file": "docs/y.md", "new_string": "# y"}]
+
+    result = loop_mod._expand_cmd_placeholders(
+        ["python3", "-m", "py_compile", "{changed_py_files}"],
+        st, tmp_path,
+    )
+    assert result is None
