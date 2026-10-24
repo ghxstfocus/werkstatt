@@ -66,3 +66,29 @@ def test_heartbeat_ci():
     out = buf.getvalue()
     assert "Planner" in out
     assert "42s" in out
+
+
+def test_step_mit_elapsed():
+    """M-302: step() zeigt elapsed_s."""
+    import werkstatt.loop_renderer as r
+    buf = io.StringIO()
+    with patch.object(sys, "stdout", buf), \
+         patch.object(r, "IS_CI", False):
+        r.step(1, "Explorer", "3 files", elapsed_s=1.234)
+    out = buf.getvalue()
+    assert "1.2s" in out
+
+
+def test_group_nicht_verschachtelt():
+    """M-302: group_start/group_end paarweise."""
+    import werkstatt.loop_renderer as r
+    buf = io.StringIO()
+    with patch.object(sys, "stdout", buf), \
+         patch.object(r, "IS_CI", True):
+        r.group_start("Phase 1")
+        r.group_end()
+        r.group_start("Phase 2")
+        r.group_end()
+    out = buf.getvalue()
+    assert out.count("::group::") == 2
+    assert out.count("::endgroup::") == 2

@@ -11,13 +11,14 @@ Endzustand; der Fallback wird nach Phase >20 entfernt (M-299+).
 from __future__ import annotations
 
 import subprocess
+import time
 from pathlib import Path
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.builder import run_builder
 from werkstatt.explorer import run_explorer
-from werkstatt.loop_renderer import header, step, task, task_ok
+from werkstatt.loop_renderer import group_end, group_start, header, step, task, task_ok
 from werkstatt.phase_state import PhaseState
 from werkstatt.planner import run_planner
 from werkstatt.reviewer import run_reviewer
@@ -368,14 +369,18 @@ def run_pipeline_loop(
     state.aufgabe = aufgabe  # type: ignore[attr-defined]
 
     # 0b. Explorer (Phase 14, read-only). Einmal pro Loop-Lauf.
+    group_start("Phase 1: Explorer")
+    _t_exp = time.monotonic()
     explorer_result = run_explorer(state, aufgabe)
+    _el_exp = time.monotonic() - _t_exp
     if explorer_result.get("key_files"):
-        step(1, "Explorer", f"{len(explorer_result['key_files'])} files")
+        step(1, "Explorer", f"{len(explorer_result['key_files'])} files", elapsed_s=_el_exp)
         audit("loop_explorer_ok", {"files": len(explorer_result["key_files"])}, pd, pn)
         state.explorer_context = explorer_result  # type: ignore[attr-defined]
     else:
-        step(1, "Explorer", "0 files", ok=False)
+        step(1, "Explorer", "0 files", ok=False, elapsed_s=_el_exp)
         audit("loop_explorer_leer", {}, pd, pn)
+    group_end()
 
     # PhaseState automatisch anlegen (fuer Resume-Pfad).
     if phase_state is None:
@@ -385,6 +390,8 @@ def run_pipeline_loop(
     #    Resume: wenn PhaseState vollstaendigen Plan-Checkpoint hat
     #    (tasks + tests + akz), Planner ueberspringen und
     #    state.* aus PhaseState befuellen.
+    group_start("Phase 2: Planner")
+    _t_plan = time.monotonic()
     plan_ok = _plan_gate(state)
     if not plan_ok and phase_state.exists():
         data = phase_state.data
@@ -445,8 +452,10 @@ def run_pipeline_loop(
             akzeptanzkriterien=list(getattr(state, "akzeptanzkriterien", []) or []),
         )
 
-    step(2, "Planner", f"{len(getattr(state, 'tasks', []))} tasks")
+    _el_plan = time.monotonic() - _t_plan
+    step(2, "Planner", f"{len(getattr(state, 'tasks', []))} tasks", elapsed_s=_el_plan)
     audit("loop_phase", {"phase": "plan", "status": "ok"}, pd, pn)
+    group_end()
 
     # 2. Pre-Build Verify (M-299i: deterministische Baseline-Klassifikation).
     # Profi-Ansatz (dxkit, GitAuto): Baseline-Schuld blockiert nicht.
@@ -498,6 +507,8 @@ def run_pipeline_loop(
         task_id = next_task.get("id", f"t{i}")
         phase_state.mark_running(task_id)
         task_name = task_obj.get("name", f"Task {i}") if isinstance(task_obj, dict) else str(task_obj)
+        group_start(f"Task {i}/{len(tasks)}: {task_name}")
+        _t_task = time.monotonic()
         task(i, len(tasks), task_name)
         audit("loop_task_start", {"task_id": i, "name": task_name}, pd, pn)
 
@@ -607,7 +618,9 @@ def run_pipeline_loop(
                 phase_state.mark_failed(task_id, failure="reviewer_rejected")
                 return 1
 
-        task_ok(i, len(tasks))
+        _el_task = time.monotonic() - _t_task
+        task_ok(i, len(tasks), elapsed_s=_el_task)
+        group_end()
         tasks_ok += 1
         phase_state.mark_done(task_id)
         audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
@@ -622,8 +635,10 @@ def run_pipeline_loop(
             return 1
 
     # 5. Human-Gate (eigenes, fail-closed)
+    group_start("Phase 5: Human-Gate")
     audit("loop_phase", {"phase": "human_gate", "status": "start"}, pd, pn)
     rc = _human_gate(state)
+    group_end()
 
     if rc == 0:
         audit("loop_erfolg", {"project_name": project_name}, pd, pn)

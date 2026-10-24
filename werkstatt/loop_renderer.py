@@ -14,6 +14,15 @@ from __future__ import annotations
 import sys
 from datetime import datetime
 
+# M-302: Rich (optional). Fallback auf Plain, wenn nicht installiert.
+try:
+    from rich.console import Console as _RichConsole  # type: ignore[import-not-found]
+    _HAS_RICH = True
+    _console = _RichConsole()
+except ImportError:
+    _HAS_RICH = False
+    _console = None
+
 # ANSI-Farben (nur wenn Terminal, sonst Plain)
 USE_COLOR = sys.stdout.isatty()
 
@@ -31,13 +40,17 @@ def _emit(text: str) -> None:
 
 
 def group_start(name: str) -> None:
-    """CI: GitHub-Actions ::group:: (aufklappbarer Block)."""
+    """Phasen-Header: CI ::group::, TTY+Rich Panel, sonst Plain."""
     if IS_CI:
         print(f"::group::{name}")
+    elif _HAS_RICH and _console is not None:
+        _console.rule(f"[bold cyan]{name}[/]")
+    else:
+        _emit(f"--- {name} ---")
 
 
 def group_end() -> None:
-    """CI: GitHub-Actions ::endgroup::."""
+    """Phasen-Ende: CI ::endgroup::, sonst nichts."""
     if IS_CI:
         print("::endgroup::")
 
@@ -71,15 +84,22 @@ def header(title: str) -> None:
     _emit("")
 
 
-def step(phase_nr: int, name: str, detail: str = "", ok: bool = True) -> None:
-    """Zeigt einen Loop-Schritt (z.B. [1/5] Explorer ... 3 files)."""
+def step(
+    phase_nr: int,
+    name: str,
+    detail: str = "",
+    ok: bool = True,
+    elapsed_s: float | None = None,
+) -> None:
+    """Zeigt einen Loop-Schritt (z.B. [1/5] Explorer ... 3 files (1.2s))."""
     marker = _green("✓") if ok else _red("✗")
     label = f"[{phase_nr}/{TOTAL_PHASES}]"
     name_padded = name.ljust(14)
+    timing = f" ({elapsed_s:.1f}s)" if elapsed_s is not None else ""
     if detail:
-        _emit(f"  {_dim(label)} {marker} {_bold(name_padded)} {_dim('...')} {detail}")
+        _emit(f"  {_dim(label)} {marker} {_bold(name_padded)} {_dim('...')} {detail}{timing}")
     else:
-        _emit(f"  {_dim(label)} {marker} {_bold(name_padded)}")
+        _emit(f"  {_dim(label)} {marker} {_bold(name_padded)}{timing}")
 
 
 def task(nr: int, total: int, name: str) -> None:
@@ -88,9 +108,10 @@ def task(nr: int, total: int, name: str) -> None:
     _emit(f"  {_dim(label)} {_cyan('→')} {name}")
 
 
-def task_ok(nr: int, total: int) -> None:
+def task_ok(nr: int, total: int, elapsed_s: float | None = None) -> None:
     label = f"[{nr}/{total}]"
-    _emit(f"  {_dim(label)} {_green('✓')} task ok")
+    timing = f" ({elapsed_s:.1f}s)" if elapsed_s is not None else ""
+    _emit(f"  {_dim(label)} {_green('✓')} task ok{timing}")
 
 
 def task_failed(nr: int, total: int, reason: str = "") -> None:
