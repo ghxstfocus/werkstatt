@@ -14,34 +14,37 @@ from werkstatt.audit import audit
 from werkstatt.state import RunState
 
 BUILDER_SYSTEM = """Du bist ein elite Software-Engineer.
-Du bekommst eine Aufgabe und den aktuellen Code.
-Entscheide, ob du eine Datei AENDERN oder ERSTELLEN musst.
+Du bekommst EINE ZIELDATEI und EINE AKTION.
 
-Fuer AENDERUNGEN (Datei existiert):
+Bei AKTION=update (Datei aendern):
+  - Aendere NUR die ZIELDATEI.
+  - Verwende old_string/new_string.
+  - old_string MUSS exakt im "Aktueller Datei-Inhalt" vorkommen.
+  - KEINE neuen Dateien. KEINE anderen Dateien.
+
+Bei AKTION=create (Datei anlegen):
+  - Lege NUR die ZIELDATEI an.
+  - Verwende content (kompletter Datei-Inhalt).
+  - KEINE anderen Dateien.
+
+Antworte NUR mit JSON. patches[].file MUSS die ZIELDATEI sein.
+patches[].action MUSS der AKTION entsprechen.
+
+Format:
 {
   "patches": [
-    {"action": "update", "file": "pfad/datei.py", "old_string": "exakter code", "new_string": "neuer code"}
-  ]
-}
-
-Fuer NEUE DATEIEN (Datei existiert nicht):
-{
-  "patches": [
-    {"action": "create", "file": "pfad/datei.py", "content": "kompletter dateiinhalt"}
+    {"action": "update", "file": "<ZIELDATEI>",
+     "old_string": "exakter code", "new_string": "neuer code"}
+    // ODER bei create:
+    // {"action": "create", "file": "<ZIELDATEI>", "content": "..."}
   ]
 }
 
 WICHTIG — Imports (M-333):
   - Verwende AUSSCHLIESSLICH Imports, die im Abschnitt
     "Aktueller Datei-Kontext" sichtbar sind.
-  - Erfinde KEINE Modulnamen. Wenn du einen Import brauchst,
-    der nicht im Kontext steht: lass ihn weg.
-  - Bei action="create" (neue Datei): importiere nur aus
-    Modulen, die im Kontext als existierend sichtbar sind.
-    Wenn der Kontext keine passenden Imports zeigt: keine
-    Imports. Der Code wird spaeter ergaenzt.
-  - Bei Unsicherheit: KEIN Import. Ein fehlender Import ist
-    besser als ein erfundener (fuehrt zu ModuleNotFoundError).
+  - Erfinde KEINE Modulnamen.
+  - Bei Unsicherheit: KEIN Import.
 
 Keine Erklaerung, nur JSON."""
 
@@ -105,7 +108,16 @@ def run_builder(state: RunState) -> bool:
             if _tf.exists() and _tf.is_file() and _tf not in _target_files:
                 _target_files.append(_tf)
 
-    if _target_files and _allow_idempotent:
+    # M-337-c: Idempotenz-Check NUR wenn task_files leer ist.
+    # Wenn task_files gesetzt: Der Planner will die Datei explizit
+    # aendern. Idempotenz (M-318) wuerde den Patch ueberspringen.
+    _aktuelle_task_early = getattr(state, "aktuelle_task", None)
+    _hat_task_files = (
+        isinstance(_aktuelle_task_early, dict)
+        and bool(_aktuelle_task_early.get("task_files"))
+    )
+
+    if _target_files and _allow_idempotent and not _hat_task_files:
         _all_ok = True
         for _tf in _target_files:
             if _tf.suffix == ".py":
@@ -234,13 +246,61 @@ def run_builder(state: RunState) -> bool:
     if _file_context:
         audit("builder_file_context", {"files": list(_file_context.keys())}, pd, pn)
 
+    # M-337: Zieldatei deterministisch bestimmen aus task_files.
+    # Der Builder bekommt KEINE freie Wahl. Er MUSS diese Datei
+    # aendern (update) oder anlegen (create).
+    _aktuelle_task = getattr(state, "aktuelle_task", None)
+    if not isinstance(_aktuelle_task, dict):
+        audit("builder_keine_aktuelle_task", {}, pd, pn)
+        return False
+    _task_files = _aktuelle_task.get("task_files", []) or []
+    _current_action2 = _aktuelle_task.get("action", "update")
+
+    _zieldatei = None
+    for _tf in _task_files:
+        if not isinstance(_tf, str):
+            continue
+        _target = pd / _tf
+        if _target.is_dir():
+            _init = _target / "__init__.py"
+            if _init.exists():
+                _zieldatei = str(_init.relative_to(pd))
+                break
+            _py = sorted(_target.glob("*.py"))
+            if _py:
+                _zieldatei = str(_py[0].relative_to(pd))
+                break
+        elif _target.is_file():
+            _zieldatei = _tf
+            break
+
+    if _zieldatei is None:
+        audit("builder_zieldatei_nicht_gefunden",
+              {"task_files": _task_files}, pd, pn)
+        return False
+
+    # Volle Zieldatei in den Prompt (nicht letzte 50 Zeilen),
+    # damit old_string exakt passt.
+    _zieldatei_path = pd / _zieldatei
+    if _zieldatei_path.exists() and _zieldatei_path.is_file():
+        try:
+            _file_context[_zieldatei] = _zieldatei_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            pass
+
     aufgabe = getattr(state, "aufgabe", "")
-    tasks_ctx = json.dumps(tasks, ensure_ascii=False)
 
     # Aktuellen Code lesen (vereinfacht: aus state.docs oder direkt)
     # Fuer Phase 6 nehmen wir einen Platzhalter, spaeter wird das aus dem Repo gelesen.
 
-    user_content = f"Aufgabe: {aufgabe}\n\nTasks:\n{tasks_ctx}"
+    # M-337: user_content mit Zieldatei + Aktion. KEINE Task-Liste
+    # (der LLM soll nicht frei entscheiden).
+    user_content = (
+        f"ZIELDATEI: {_zieldatei}\n"
+        f"AKTION: {_current_action2}\n\n"
+        f"AUFGABE: {aufgabe}\n\n"
+        f"AKTUELLER TASK: {json.dumps(_aktuelle_task, ensure_ascii=False)}"
+    )
 
     # M-329a: Fehler-Kontext aus Reflection (_verify_patches).
     _verify_errors = getattr(state, "last_verify_errors", None)
@@ -288,6 +348,27 @@ def run_builder(state: RunState) -> bool:
     if not patches:
         audit("builder_keine_patches", {}, pd, pn)
         return False
+
+    # M-337: Jeder Patch MUSS die Zieldatei sein + die Aktion
+    # respektieren. Der LLM darf NICHT frei entscheiden.
+    for _p in patches:
+        if not isinstance(_p, dict):
+            continue
+        _pfile = _p.get("file", "")
+        if _pfile != _zieldatei:
+            audit("builder_patch_invalid",
+                  {"file": _pfile, "zieldatei": _zieldatei,
+                   "grund": "falsche Datei"}, pd, pn)
+            return False
+        _paction = _p.get("action")
+        if _current_action2 == "update" and _paction != "update":
+            audit("builder_patch_invalid",
+                  {"action": _paction, "expected": "update"}, pd, pn)
+            return False
+        if _current_action2 == "create" and _paction != "create":
+            audit("builder_patch_invalid",
+                  {"action": _paction, "expected": "create"}, pd, pn)
+            return False
 
     # Patches in State schreiben (spaeter anwenden)
     state.patches = patches  # type: ignore[attr-defined]

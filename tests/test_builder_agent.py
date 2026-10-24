@@ -17,9 +17,17 @@ def _state(tmp_path, tasks=None, api_key="fake"):
 
 
 def test_builder_erstellt_patches(tmp_path):
+    """M-337: Builder liefert Patch fuer Zieldatei mit passender action."""
+    # Zieldatei muss existieren (action=update).
+    (tmp_path / "a.py").write_text("x = 1\n")
+
     st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "A", "description": "B"}]
-    fake_json = '{"patches": [{"file": "a.py", "old_string": "x", "new_string": "y"}]}'
+    st.tasks = [{
+        "id": "t1", "name": "A", "description": "B",
+        "action": "update", "task_files": ["a.py"],
+    }]
+    st.aktuelle_task = st.tasks[0]
+    fake_json = '{"patches": [{"action": "update", "file": "a.py", "old_string": "x = 1", "new_string": "x = 2"}]}'
 
     class FakeReply:
         ok = True
@@ -29,6 +37,7 @@ def test_builder_erstellt_patches(tmp_path):
         result = run_builder(st)
         assert result is True
         assert len(st.patches) == 1
+        assert st.patches[0]["file"] == "a.py"
 
 
 def test_builder_ohne_key(tmp_path):
@@ -380,3 +389,92 @@ def test_builder_ordner_leer(tmp_path):
         })()
         result = run_builder(st)
     assert result in (True, False)
+
+
+def test_builder_zieldatei_aus_task_files(tmp_path):
+    """M-337: Zieldatei wird aus task_files bestimmt."""
+    from unittest.mock import patch
+
+    from werkstatt.builder import run_builder
+
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "checks.py").write_text("def check(: pass\n")  # inkorrekt
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
+                 "task_files": ["core/checks.py"]}]
+    st.aktuelle_task = st.tasks[0]
+
+    _user_content = []
+    def _mock_ask(api_key, system, user_content, **kw):
+        _user_content.append(user_content)
+        return type("R", (), {"ok": False, "content": "", "error": "skip"})()
+
+    with patch("werkstatt.builder.ask_llm", side_effect=_mock_ask), \
+         patch("werkstatt.builder.audit"):
+        run_builder(st)
+
+    assert _user_content, "ask_llm wurde nicht gerufen"
+    prompt = _user_content[0]
+    assert "ZIELDATEI: core/checks.py" in prompt
+    assert "AKTION: update" in prompt
+
+
+def test_builder_patch_falsche_datei_abgelehnt(tmp_path):
+    """M-337: Patch mit falscher Datei -> builder_patch_invalid, False."""
+    from unittest.mock import patch
+
+    from werkstatt.builder import run_builder
+
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "checks.py").write_text("x = 1\n")
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
+                 "task_files": ["core/checks.py"]}]
+    st.aktuelle_task = st.tasks[0]
+
+    _audits = []
+    def _mock_ask(*a, **kw):
+        return type("R", (), {
+            "ok": True,
+            "content": '{"patches": [{"action": "create", "file": "FALSCH.py", "content": "x"}]}',
+            "error": ""
+        })()
+
+    with patch("werkstatt.builder.ask_llm", side_effect=_mock_ask), \
+         patch("werkstatt.builder.audit",
+               side_effect=lambda k, p, *a, **kw: _audits.append(k)):
+        result = run_builder(st)
+
+    assert result is False
+    assert "builder_patch_invalid" in _audits
+
+
+def test_builder_patch_richtige_datei(tmp_path):
+    """M-337: Patch mit richtiger Datei + Aktion -> True."""
+    from unittest.mock import patch
+
+    from werkstatt.builder import run_builder
+
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "checks.py").write_text("x = 1\n")
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
+                 "task_files": ["core/checks.py"]}]
+    st.aktuelle_task = st.tasks[0]
+
+    def _mock_ask(*a, **kw):
+        return type("R", (), {
+            "ok": True,
+            "content": '{"patches": [{"action": "update", "file": "core/checks.py", "old_string": "x = 1", "new_string": "x = 2"}]}',
+            "error": ""
+        })()
+
+    with patch("werkstatt.builder.ask_llm", side_effect=_mock_ask), \
+         patch("werkstatt.builder.audit"):
+        result = run_builder(st)
+
+    assert result is True
+    assert st.patches[0]["file"] == "core/checks.py"
