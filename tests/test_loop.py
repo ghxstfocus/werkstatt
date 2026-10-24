@@ -1087,3 +1087,91 @@ def test_phase_state_init_new_ohne_action():
     assert ps.data["tasks"][0]["action"] is None
 
 
+def test_plan_gate_phasen_valid(tmp_path):
+    """M-323c: 2 Phasen, alle Tasks mit gueltiger phase_id -> True."""
+    from werkstatt.loop import _plan_gate
+    from werkstatt.state import RunState
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.tasks = [
+        {"id": "t1", "phase_id": "p1"},
+        {"id": "t2", "phase_id": "p2"},
+    ]
+    st.tests = ["pytest -q"]
+    st.akzeptanzkriterien = ["a"]
+    st.phasen = [
+        {"id": "p1", "titel": "Phase 1", "tasks": ["t1"]},
+        {"id": "p2", "titel": "Phase 2", "tasks": ["t2"]},
+    ]
+    assert _plan_gate(st) is True
+
+
+def test_plan_gate_phasen_ungueltige_phase_id(tmp_path):
+    """M-323c: Task mit phase_id, die nicht in phasen existiert -> False."""
+    from werkstatt.loop import _plan_gate
+    from werkstatt.state import RunState
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.tasks = [
+        {"id": "t1", "phase_id": "p1"},
+        {"id": "t2", "phase_id": "P_NICHT_DA"},
+    ]
+    st.tests = ["pytest -q"]
+    st.akzeptanzkriterien = ["a"]
+    st.phasen = [
+        {"id": "p1", "titel": "Phase 1", "tasks": ["t1"]},
+    ]
+    assert _plan_gate(st) is False
+
+
+def test_plan_gate_phase_ohne_tasks(tmp_path):
+    """M-323c: Phase ohne Tasks -> False."""
+    from werkstatt.loop import _plan_gate
+    from werkstatt.state import RunState
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.tasks = [{"id": "t1", "phase_id": "p1"}]
+    st.tests = ["pytest -q"]
+    st.akzeptanzkriterien = ["a"]
+    st.phasen = [
+        {"id": "p1", "titel": "Phase 1", "tasks": ["t1"]},
+        {"id": "p2", "titel": "Phase 2", "tasks": []},  # ← leer
+    ]
+    assert _plan_gate(st) is False
+
+
+def test_plan_gate_flat_bleibt_gueltig(tmp_path):
+    """M-323c: flacher Plan (phasen leer) bleibt gueltig."""
+    from werkstatt.loop import _plan_gate
+    from werkstatt.state import RunState
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.tasks = [{"id": "t1"}, {"id": "t2"}]
+    st.tests = ["pytest -q"]
+    st.akzeptanzkriterien = ["a"]
+    st.phasen = []
+    assert _plan_gate(st) is True
+
+
+def test_planner_prompt_phasen_pflicht():
+    """M-323c: PLANNER_SYSTEM enthaelt Phasen-Pflicht-Hinweis."""
+    from werkstatt.planner import PLANNER_SYSTEM
+    assert "PFLICHT" in PLANNER_SYSTEM
+    assert "phase_id" in PLANNER_SYSTEM
+    assert "Mehr als 5 Tasks" in PLANNER_SYSTEM or "Mehr als 5" in PLANNER_SYSTEM

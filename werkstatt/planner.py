@@ -37,12 +37,30 @@ Jeder Task hat zwei Pflichtfelder:
   - "task_files": list[str] = EXPLIZITE Datei-Pfade, die dieser Task
               anfasst.
 
-Optional: Phasen-Struktur (Haupt-/Unterpunkte):
-  "phasen": [{"id": "p1", "titel": "Vorbereitung",
-              "parent_id": null, "tasks": ["t1", "t2"]}]
-  Unterpunkte: parent_id = "p1" (statt null).
-  Tasks koennen optional "phase_id": "p1" haben, um sie einer Phase
-  zuzuordnen.
+Phasen-Struktur (Haupt-/Unterpunkte, M-323c):
+  PFLICHT, wenn die Aufgabe eines der Kriterien erfuellt:
+    - Mehr als 5 Tasks, ODER
+    - Mehr als 2 Dateien/Module betroffen, ODER
+    - Aufgabe enthaelt Woerter wie "refaktoriere", "analysiere",
+      "teile auf", "phase", "strukturiere".
+  Sonst: OPTIONAL (kleine Aufgaben duerfen flach bleiben).
+
+  Format:
+    "phasen": [{"id": "p1", "titel": "Vorbereitung",
+                "parent_id": null, "tasks": ["t1", "t2"]}]
+    Unterpunkte: parent_id = "p1" (statt null).
+    Tasks MUESSEN "phase_id": "p1" haben, wenn phasen existiert.
+
+  Beispiel "Refaktoriere core/checks/":
+    phasen: [
+      {"id": "p1", "titel": "Analyse", "tasks": ["t1"]},
+      {"id": "p2", "titel": "Implementierung", "tasks": ["t2", "t3"]},
+      {"id": "p3", "titel": "Tests", "tasks": ["t4"]},
+    ]
+    tasks: [{"id": "t1", ..., "phase_id": "p1"}, ...]
+
+  WICHTIG: Wenn phasen vorhanden sind, MUSS jeder Task eine
+  gueltige phase_id haben. Die phase_id MUSS in phasen existieren.
 
 Antworte NUR mit validem JSON:
 {

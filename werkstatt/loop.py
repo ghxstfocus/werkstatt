@@ -25,12 +25,44 @@ from werkstatt.state import RunState
 
 
 def _plan_gate(state: RunState) -> bool:
-    """B1: Plan-Gate (deterministisch)."""
-    return all((
+    """B1: Plan-Gate (deterministisch).
+
+    M-323c: Validiert Phasen-Struktur, wenn phasen existiert:
+      - jeder Task mit phase_id hat eine gueltige phase_id
+      - jede phase_id existiert in phasen
+      - jede Phase hat mindestens 1 Task
+    Flacher Plan (phasen leer) bleibt gueltig.
+    """
+    if not all((
         getattr(state, 'tasks', []),
         getattr(state, 'tests', []),
         getattr(state, 'akzeptanzkriterien', [])
-    ))
+    )):
+        return False
+
+    _phasen = getattr(state, "phasen", []) or []
+    if not _phasen:
+        return True  # flacher Plan
+
+    _phasen_ids = {p.get("id") for p in _phasen if isinstance(p, dict)}
+    _tasks = getattr(state, "tasks", []) or []
+
+    # Jede Phase hat mindestens 1 Task
+    for _phase in _phasen:
+        _pid = _phase.get("id")
+        _ptasks = [t for t in _tasks if isinstance(t, dict) and t.get("phase_id") == _pid]
+        if not _ptasks:
+            return False
+
+    # Jeder Task mit phase_id hat eine gueltige phase_id
+    for _t in _tasks:
+        if not isinstance(_t, dict):
+            continue
+        _tid = _t.get("phase_id")
+        if _tid is not None and _tid not in _phasen_ids:
+            return False
+
+    return True
 
 
 def _expand_cmd_placeholders(
