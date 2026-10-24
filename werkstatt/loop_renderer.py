@@ -11,23 +11,35 @@ Statt roher `AUDIT: ...`-Zeilen.
 """
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime
 
-# M-302: Rich (optional). Fallback auf Plain, wenn nicht installiert.
+# M-302 + M-321: Rich (optional). Fallback auf Plain.
+# M-321: force_terminal=False, damit Rich auch in Pipes (tee/Log)
+# strukturiert rendert, aber ohne ANSI-Codes.
+
+_force_pretty = os.environ.get("WERKSTATT_RENDER") == "pretty"
+_is_tty = sys.stdout.isatty()
+
 try:
     from rich.console import Console as _RichConsole  # type: ignore[import-not-found]
     _HAS_RICH = True
-    _console = _RichConsole()
+    _console = _RichConsole(
+        force_terminal=False,
+        no_color=(not _is_tty) or not bool(os.environ.get("FORCE_COLOR")),
+        width=100,
+    )
 except ImportError:
     _HAS_RICH = False
     _console = None
 
-# ANSI-Farben (nur wenn Terminal, sonst Plain)
-USE_COLOR = sys.stdout.isatty()
+# ANSI-Farben (nur wenn echtes Terminal, sonst Plain)
+USE_COLOR = _is_tty
 
-# M-301: CI-Modus (kein TTY) -> plain line-by-line mit Zeitstempel
-IS_CI = not sys.stdout.isatty()
+# M-301 + M-321: CI-Modus (kein TTY, kein WERKSTATT_RENDER=pretty)
+# -> plain line-by-line mit Zeitstempel.
+IS_CI = (not _is_tty) and (not _force_pretty)
 
 
 def _emit(text: str) -> None:
