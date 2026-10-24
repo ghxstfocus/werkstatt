@@ -412,21 +412,31 @@ def _run_with_progress(
         finally:
             _done.set()
 
+    def _heartbeat_loop():
+        """M-327c: Heartbeat in eigenem Thread.
+
+        Der Worker-Thread (ask_llm, HTTP+JSON) blockiert den
+        Main-Thread durch die GIL. Der Heartbeat-Thread laeuft
+        trotzdem weiter, weil _done.wait() die GIL freigibt.
+        """
+        _start_hb = _time.monotonic()
+        _last_hb = -1
+        while not _done.is_set():
+            _elapsed_hb = int(_time.monotonic() - _start_hb)
+            if _elapsed_hb // 2 > _last_hb // 2:
+                try:
+                    _r.heartbeat(f"[{nr}/{total}] {name}", _elapsed_hb)
+                except Exception:  # noqa: BLE001, S110
+                    pass
+                _last_hb = _elapsed_hb
+            _done.wait(timeout=0.5)
+
     _t = _threading.Thread(target=_worker, daemon=True)
+    _t_hb = _threading.Thread(target=_heartbeat_loop, daemon=True)
     _t.start()
-    _start = _time.monotonic()
-    _last_elapsed = -1
-    while not _done.is_set():
-        _elapsed = int(_time.monotonic() - _start)
-        if _elapsed // 2 > _last_elapsed // 2:
-            try:
-                _r.heartbeat(f"[{nr}/{total}] {name}", _elapsed)
-            except Exception:  # noqa: BLE001, S110
-                pass
-            _last_elapsed = _elapsed
-        if _done.wait(timeout=0.5):
-            break
+    _t_hb.start()
     _t.join()
+    _t_hb.join()
 
     if _exc[0] is not None:
         raise _exc[0]

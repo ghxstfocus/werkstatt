@@ -43,12 +43,16 @@ IS_CI = (not _is_tty) and (not _force_pretty)
 
 
 def _emit(text: str) -> None:
-    """Zentraler Output. TTY: plain. CI: mit Zeitstempel."""
+    """Zentraler Output. TTY: plain. CI: mit Zeitstempel.
+
+    M-327c: flush=True. Sonst puffert Python (besonders mit tee)
+    und Heartbeats kommen erst am Ende auf einmal.
+    """
     if IS_CI:
         ts = datetime.now().strftime("%H:%M:%S")
-        print(f"[{ts}] {text}")
+        print(f"[{ts}] {text}", flush=True)
     else:
-        print(text)
+        print(text, flush=True)
 
 
 def group_start(name: str) -> None:
