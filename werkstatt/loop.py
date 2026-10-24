@@ -1166,6 +1166,10 @@ def run_pipeline_loop(
                         _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="old_string_not_found")
                         return 1
                     break  # Retry mit korrigiertem Patch
+                # M-351a: Patch mit identischem Inhalt = no_effect.
+                if old_str == new_str:
+                    audit("loop_patch_no_effect", {"file": file}, pd, pn)
+                    continue
                 file_content = file_content.replace(old_str, new_str, 1)
                 target.write_text(file_content)
                 # M-298d: Post-Apply-Verifikation (Profi-Ansatz

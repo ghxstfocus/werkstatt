@@ -376,6 +376,19 @@ def run_builder(state: RunState) -> bool:
             return False
 
     # Patches in State schreiben (spaeter anwenden)
-    state.patches = patches  # type: ignore[attr-defined]
-    audit("builder_patches_erstellt", {"anzahl": len(patches)}, pd, pn)
+    # M-351: Patches mit identischem Inhalt (old == new) sind no_effect.
+    _effective_patches = []
+    for _p in patches:
+        if not isinstance(_p, dict):
+            continue
+        if _p.get("action") == "update" and _p.get("old_string") == _p.get("new_string"):
+            audit("builder_patch_no_effect",
+                  {"file": _p.get("file", "?")}, pd, pn)
+            continue
+        _effective_patches.append(_p)
+    if not _effective_patches:
+        audit("builder_keine_wirksamen_patches", {}, pd, pn)
+        return False
+    state.patches = _effective_patches  # type: ignore[attr-defined]
+    audit("builder_patches_erstellt", {"anzahl": len(_effective_patches)}, pd, pn)
     return True
