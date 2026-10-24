@@ -700,9 +700,10 @@ def main(argv: list[str] | None = None) -> int:
     # docs-Inhalte laden (Planner-Kontext). Fehler tolerieren.
     _docs: dict = {}
     try:
-        import pipeline as _pl
-        _full_cfg = _pl.load_project_config(args.project)
-        _docs = _pl.load_docs(_full_cfg.get("docs", {}), _pd)
+        from werkstatt.orchestrator import load_docs as _load_docs
+        from werkstatt.orchestrator import load_project_config as _load_cfg
+        _full_cfg = _load_cfg(args.project)
+        _docs = _load_docs(_full_cfg.get("docs", {}), _pd)
     except SystemExit:
         # load_project_config killt bei Fehlern via sys.exit(1).
         # Das ist hier gewollt (fail-closed).
