@@ -70,12 +70,22 @@ def test_loop_planner_fail(tmp_path):
 
 
 def test_loop_stoppt_bei_verify_fail(tmp_path):
+    """M-299i: Pre-Build rot UND relevanter Fehler in Task-Datei -> Loop stoppt."""
     st = _state(tmp_path)
+    # Task-Datei explizit setzen, damit die Klassifikation sie findet.
+    st.tasks = [{"id": "t1", "name": "Update README.md", "description": "Add line"}]
+    # Preflight-Fehler in derselben Datei (Task-Datei) -> BLOCKER
+    st.preflight_fehler = [
+        {"klasse": "syntax", "stage_id": "py_compile", "datei": "README.md", "text": "SyntaxError"},
+    ]
     with patch("werkstatt.loop._verify_patches", return_value=False), \
          patch("werkstatt.loop.audit") as mock_audit:
         rc = run_pipeline_loop("p", "a", [st])
         assert rc == 1
-        mock_audit.assert_called_with("loop_gate_failed", {"gate": "pre_build"}, st.project_dir, st.project_name)
+        # Audit enthaelt loop_gate_failed mit blocker-Anzahl
+        assert any(
+            c[0][0] == "loop_gate_failed" for c in mock_audit.call_args_list
+        ), f"loop_gate_failed fehlt: {mock_audit.call_args_list}"
 
 
 def test_loop_happy_path(tmp_path):
@@ -340,3 +350,48 @@ def test_pre_build_blockiert_ohne_klassifikation(tmp_path):
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st])
     assert rc == 1
+
+
+def test_extract_files_from_tasks():
+    """M-299i: Datei-Pfade aus Task-Text extrahieren."""
+    from werkstatt.loop import _extract_files_from_tasks
+    tasks = [
+        {"name": "Update README.md", "description": "Add line to README.md"},
+        {"name": "Fix core/x.py", "description": "See core/changeapplier/applier.py"},
+        "No file here",
+    ]
+    files = _extract_files_from_tasks(tasks)
+    assert "README.md" in files
+    assert "core/x.py" in files
+    assert "core/changeapplier/applier.py" in files
+    assert len(files) == 3
+
+
+def test_pre_build_deterministische_klassifikation(tmp_path):
+    """M-299i: Baseline-Fehler ausserhalb Task-Dateien -> Loop laeuft weiter."""
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "Update README.md", "description": "Add line"}]
+    st.tests = ["Test 1"]
+    st.akzeptanzkriterien = ["Kriterium 1"]
+    # Preflight-Fehler in NICHT-Task-Datei
+    st.preflight_fehler = [
+        {"klasse": "type", "stage_id": "mypy", "datei": "core/unrelated.py", "text": "err"},
+    ]
+
+    # verify_patches: erster Call (pre_build) rot, dann True
+    verify_calls = {"n": 0}
+    def _verify(state, phase=None):
+        verify_calls["n"] += 1
+        is_first_pre_build = verify_calls["n"] == 1 and phase == "pre_build"
+        return not is_first_pre_build
+
+    with patch("werkstatt.loop._verify_patches", side_effect=_verify), \
+         patch("werkstatt.loop.run_builder", return_value=True), \
+         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
+         patch("werkstatt.loop.run_reviewer", return_value=True), \
+         patch("werkstatt.loop.run_planner", return_value=True), \
+         patch("pipeline._approval_und_human_gate", return_value=0), \
+         patch("pipeline.load_project_config", return_value={}), \
+         patch("werkstatt.loop.audit"):
+        rc = run_pipeline_loop("p", "a", [st])
+    assert rc == 0  # Loop lief durch

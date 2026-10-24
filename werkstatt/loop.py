@@ -100,6 +100,21 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
 
     return True
 
+def _extract_files_from_tasks(tasks: list) -> list[str]:
+    """M-299i: Datei-Pfade aus Task-Beschreibungen extrahieren (deterministisch)."""
+    import re as _re
+    pattern = _re.compile(
+        r'([a-zA-Z_][a-zA-Z0-9_/.-]*\.(?:md|py|yaml|yml|json|txt|toml|cfg|ini))'
+    )
+    files: list[str] = []
+    for task_obj in tasks or []:
+        text = task_obj if isinstance(task_obj, str) else str(task_obj)
+        for f in pattern.findall(text):
+            if f not in files:
+                files.append(f)
+    return files
+
+
 def _get_baseline_error_details() -> str:
     """Holt den echten Fehlertext fuer die Reflexion."""
     try:
@@ -433,30 +448,41 @@ def run_pipeline_loop(
     step(2, "Planner", f"{len(getattr(state, 'tasks', []))} tasks")
     audit("loop_phase", {"phase": "plan", "status": "ok"}, pd, pn)
 
-    # 2. Pre-Build Verify
-    # M-299g: Planner-Klassifikation beruecksichtigen.
-    # Wenn der Planner die Fehler als FOLLOW_UP/IGNORE klassifiziert
-    # hat (und keine BLOCKER), laeuft der Loop weiter. Sonst harter
-    # Abbruch (Rueckfall auf altes Verhalten).
+    # 2. Pre-Build Verify (M-299i: deterministische Baseline-Klassifikation).
+    # Profi-Ansatz (dxkit, GitAuto): Baseline-Schuld blockiert nicht.
+    # Nur Fehler, deren Datei in den Task-Dateien ist, sind BLOCKER.
     if not _verify_patches(state, phase="pre_build"):
-        follow_up = getattr(state, "follow_up_fehler", []) or []
-        ignore = getattr(state, "ignore_fehler", []) or []
-        blocker = getattr(state, "blocker_fehler", []) or []
+        task_files = _extract_files_from_tasks(getattr(state, "tasks", []))
+        preflight = getattr(state, "preflight_fehler", []) or []
 
-        if len(blocker) == 0 and (len(follow_up) + len(ignore)) > 0:
+        relevant: list[dict] = []
+        follow_up: list[dict] = []
+        for fehler in preflight:
+            _f = fehler.get("datei")
+            if _f and any(_f in tf or tf in _f for tf in task_files):
+                relevant.append(fehler)
+            else:
+                follow_up.append(fehler)
+
+        if relevant:
+            audit(
+                "loop_gate_failed",
+                {"gate": "pre_build", "blocker": len(relevant),
+                 "dateien": [f.get("datei") for f in relevant]},
+                pd, pn,
+            )
+            return 1
+        else:
             audit(
                 "loop_pre_build_uebersprungen",
                 {
                     "follow_up": len(follow_up),
-                    "ignore": len(ignore),
-                    "blocker": len(blocker),
+                    "task_files": task_files,
+                    "reason": "baseline_schuld",
                 },
                 pd, pn,
             )
             # Kein return 1 - Loop laeuft weiter.
-        else:
-            audit("loop_gate_failed", {"gate": "pre_build"}, pd, pn)
-            return 1
 
     # 3. Autonomer Task-Loop (Claude-Code-Prinzip)
     #    Alle Tasks werden abgearbeitet ohne Unterbrechung.

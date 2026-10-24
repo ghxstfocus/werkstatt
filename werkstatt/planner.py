@@ -10,6 +10,7 @@ Reiner Denker (Codex Plan Mode).
 from __future__ import annotations
 
 import json
+import re
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
@@ -104,10 +105,16 @@ def _preflight_scan(state: RunState) -> list[dict]:
                 continue
             stderr = (res.stderr or "") + (res.stdout or "")
             klasse = _klassifiziere_fehler(stage_id, stderr)
+            # M-299i: Datei-Pfad aus Fehlertext extrahieren (deterministisch).
+            # mypy/ruff: "path/to/file.py:ZEILE: ..." oder
+            #            "path/to/file.py:ZEILE:SPALTE: CODE ..."
+            _file_pattern = re.compile(r'([a-zA-Z0-9_./-]+\.(?:py|md|yaml|yml|json|txt|toml))')
+            _dateien = _file_pattern.findall(stderr)
+            _datei = _dateien[0] if _dateien else None
             fehler.append({
                 "klasse": klasse,
                 "stage_id": stage_id,
-                "datei": None,  # TODO: aus stderr extrahieren
+                "datei": _datei,
                 "text": stderr[:500],
             })
         except Exception as exc:  # noqa: BLE001
