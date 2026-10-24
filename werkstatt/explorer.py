@@ -7,6 +7,7 @@ from pathlib import Path
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
+from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
 
 EXPLORER_SYSTEM = """Du bist ein read-only Codebase-Explorer.
@@ -51,6 +52,18 @@ def _grep_files(project_dir: Path, pattern: str, max_hits: int = 20) -> list[str
         return []
 
 
+def _explorer_system(frage: str) -> str:
+    """M-374: Haengt systematic-debugging an, wenn die Aufgabe matcht."""
+    skills = load_all_skills()
+    skill = load_skill_by_name("systematic-debugging", skills)
+    if skill is None:
+        return EXPLORER_SYSTEM
+    trigger = ("ruff", "test", "bug", "fehler", "debug", "pytest")
+    if any(w in frage.lower() for w in trigger):
+        return EXPLORER_SYSTEM + "\n\n## Skill: Systematic-Debugging\n" + (skill["body"] or "")
+    return EXPLORER_SYSTEM
+
+
 def run_explorer(state: RunState, frage: str) -> dict:
     pd = state.project_dir
     pn = state.project_name
@@ -70,7 +83,7 @@ def run_explorer(state: RunState, frage: str) -> dict:
     )
 
     reply = ask_llm(
-        api_key, EXPLORER_SYSTEM, context,
+        api_key, _explorer_system(frage), context,
         model="deepseek-chat", temperature=0.0, max_tokens=3000,
     )
     if not reply.ok:

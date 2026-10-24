@@ -14,6 +14,7 @@ import re
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
+from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
 
 PLANNER_SYSTEM = """Du bist ein elite Software-Architekt und Planner.
@@ -144,6 +145,21 @@ def _preflight_scan(state: RunState) -> list[dict]:
     return fehler
 
 
+def _planner_system(aufgabe: str) -> str:
+    """M-374: plan-crafting IMMER, systematic-debugging bei Bug-Match."""
+    skills = load_all_skills()
+    parts = [PLANNER_SYSTEM]
+    pc = load_skill_by_name("plan-crafting", skills)
+    if pc and pc["body"]:
+        parts.append("## Skill: Plan-Crafting\n" + pc["body"])
+    trigger = ("ruff", "test", "bug", "fehler", "debug", "pytest")
+    if any(w in aufgabe.lower() for w in trigger):
+        sd = load_skill_by_name("systematic-debugging", skills)
+        if sd and sd["body"]:
+            parts.append("## Skill: Systematic-Debugging\n" + sd["body"])
+    return "\n\n".join(parts)
+
+
 def run_planner(state: RunState) -> bool:
     """Erstellt den Plan. Schreibt in state.tasks/tests/akzeptanzkriterien."""
     pd = state.project_dir
@@ -160,6 +176,26 @@ def run_planner(state: RunState) -> bool:
         docs_ctx = "\n".join(f"--- {k} ---\n{v}" for k, v in list(state.docs.items())[:3])
 
     user_content = f"Aufgabe: {aufgabe}\n\nKontext:\n{docs_ctx}"
+
+    # M-375: Explorer-Kontext lesen (key_files + findings).
+    _explorer_ctx = getattr(state, "explorer_context", None)
+    if isinstance(_explorer_ctx, dict):
+        _key = _explorer_ctx.get("key_files") or []
+        _findings = _explorer_ctx.get("findings") or ""
+        if _key or _findings:
+            _key_names = [
+                k.get("file") for k in _key
+                if isinstance(k, dict) and k.get("file")
+            ]
+            user_content += "\n\nExplorer-Kontext:"
+            if _findings:
+                user_content += f"\nBefund: {_findings[:2000]}"
+            if _key_names:
+                user_content += f"\nRelevante Dateien: {_key_names}"
+                user_content += (
+                    "\nNutze diese Dateien als task_files. "
+                    "Erfinde KEINE anderen Dateien."
+                )
 
     # M-307b: letzte 10 PROGRESS.md-Eintraege als Kontext.
     try:
@@ -219,7 +255,7 @@ def run_planner(state: RunState) -> bool:
         )
 
     reply = ask_llm(
-        api_key, PLANNER_SYSTEM, user_content,
+        api_key, _planner_system(aufgabe), user_content,
         model="deepseek-chat", temperature=0.2, max_tokens=4000,
     )
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
+from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
 
 BUILDER_SYSTEM = """Du bist ein elite Software-Engineer.
@@ -47,6 +48,17 @@ WICHTIG — Imports (M-333):
   - Bei Unsicherheit: KEIN Import.
 
 Keine Erklaerung, nur JSON."""
+
+
+def _builder_system() -> str:
+    """M-374: anker-regeln + patch-format IMMER laden."""
+    skills = load_all_skills()
+    parts = [BUILDER_SYSTEM]
+    for name in ("anker-regeln", "patch-format"):
+        s = load_skill_by_name(name, skills)
+        if s and s["body"]:
+            parts.append(f"## Skill: {name}\n" + s["body"])
+    return "\n\n".join(parts)
 
 
 def run_builder(state: RunState) -> bool:
@@ -380,7 +392,7 @@ def run_builder(state: RunState) -> bool:
         user_content += "\n\nAktueller Datei-Kontext:\n" + "\n\n".join(_ctx_parts)
 
     reply = ask_llm(
-        api_key, BUILDER_SYSTEM, user_content,
+        api_key, _builder_system(), user_content,
         model="deepseek-chat", temperature=0.2, max_tokens=8000,
     )
 

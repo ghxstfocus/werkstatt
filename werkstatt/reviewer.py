@@ -12,6 +12,7 @@ from pathlib import Path
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
+from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
 
 REVIEWER_SYSTEM = """Du bist ein elite Code-Reviewer.
@@ -69,6 +70,16 @@ def _get_git_diff(project_dir: str | Path = "/opt/werkstatt") -> str:
         return ""
 
 
+def _reviewer_system() -> str:
+    """M-374: review-work IMMER laden."""
+    skills = load_all_skills()
+    parts = [REVIEWER_SYSTEM]
+    rw = load_skill_by_name("review-work", skills)
+    if rw and rw["body"]:
+        parts.append("## Skill: Review-Work\n" + rw["body"])
+    return "\n\n".join(parts)
+
+
 def run_reviewer(state: RunState) -> bool:
     """Prueft den Code. Gibt True zurueck, wenn approved."""
     pd = state.project_dir
@@ -95,7 +106,7 @@ def run_reviewer(state: RunState) -> bool:
     )
 
     reply = ask_llm(
-        api_key, REVIEWER_SYSTEM, user_content,
+        api_key, _reviewer_system(), user_content,
         model="deepseek-chat", temperature=0.0, max_tokens=4000,
     )
 
