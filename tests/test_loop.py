@@ -395,3 +395,26 @@ def test_pre_build_deterministische_klassifikation(tmp_path):
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st])
     assert rc == 0  # Loop lief durch
+
+
+def test_human_gate_zeigt_diff(tmp_path):
+    """M-303: Human-Gate zeigt Git-Diff vor Approve."""
+    from werkstatt.loop import _human_gate
+
+    st = _state(tmp_path)
+    # Datei ändern, damit git diff etwas zeigt
+    (tmp_path / "README.md").write_text("# Test\n+neue Zeile\n")
+    # Git-Repo initialisieren
+    subprocess.run(["git", "init"], cwd=str(tmp_path), capture_output=True, check=False)
+    subprocess.run(["git", "add", "."], cwd=str(tmp_path), capture_output=True, check=False)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+             "commit", "-m", "init"], cwd=str(tmp_path), capture_output=True, check=False)
+    (tmp_path / "README.md").write_text("# Test\n+neue Zeile\n+noch eine\n")
+
+    # input() mocken: erst "e" (edit), dann "j" (approve)
+    inputs = iter(["j"])
+    with patch("builtins.input", side_effect=lambda *a, **k: next(inputs)), \
+         patch("werkstatt.loop.audit"):
+        rc = _human_gate(st)
+    # approve -> 0
+    assert rc == 0

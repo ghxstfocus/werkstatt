@@ -288,8 +288,37 @@ def _human_gate(state: RunState) -> int:
         return 0
 
     # Interaktiv: fail-closed bei EOFError
+    # M-303: Impact-Preview vor dem Gate (Agent-Polis/pi-show-diffs-Muster).
     print("\n=== HUMAN GATE ===")
-    print("Aufgabe abgeschlossen. Approve? [j/n]")
+    print("Aenderungen im Zielprojekt:")
+    try:
+        _stat = subprocess.run(
+            ["git", "-C", str(pd), "diff", "--stat"],
+            capture_output=True, text=True, check=False, timeout=10,
+        ).stdout
+        if _stat.strip():
+            print(_stat)
+        else:
+            print("  (keine Aenderungen)")
+
+        # Voller Diff nur bei kleiner Aenderung (max 2000 Zeichen)
+        _full = subprocess.run(
+            ["git", "-C", str(pd), "diff"],
+            capture_output=True, text=True, check=False, timeout=10,
+        ).stdout
+        if _full.strip() and len(_full) <= 2000:
+            print("--- Diff ---")
+            print(_full)
+        elif _full.strip():
+            print(f"  (Diff zu gross: {len(_full)} Zeichen, siehe git diff)")
+    except Exception:  # noqa: BLE001
+        print("  (Diff nicht verfuegbar)")
+
+    print()
+    print("Approve? [j/n/e]")
+    print("  j = approve")
+    print("  n = reject (Loop bricht ab)")
+    print("  e = Datei manuell bearbeiten (dann erneut fragen)")
     try:
         antwort = input("Deine Wahl: ").strip().lower()
     except (EOFError, KeyboardInterrupt):
@@ -299,6 +328,12 @@ def _human_gate(state: RunState) -> int:
     if antwort in ("j", "ja", "y", "yes"):
         audit("loop_human_gate_approved", {}, pd, pn)
         return 0
+    if antwort == "e":
+        # Manueller Edit-Modus: Nutzer oeffnet Editor, dann erneut fragen
+        print("  Bitte Datei(en) manuell bearbeiten. Enter druecken zum Fortfahren.")
+        input()
+        # Rekursiv erneut fragen (Diff neu anzeigen)
+        return _human_gate(state)
     audit("loop_human_gate_rejected", {"antwort": antwort}, pd, pn)
     return 1
 
