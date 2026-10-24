@@ -529,6 +529,10 @@ def test_loop_reviewer_after_reflection(tmp_path):
         # Erster Aufruf: rejected. Zweiter Aufruf (nach Reflection): auch rejected.
         return False
 
+    # M-343c: pytest ist das letzte Wort. Damit der Reviewer-Reject
+    # durchgreift (rc=1), muss last_verify_errors gesetzt sein.
+    st.last_verify_errors = ["pytest: mock failed"]
+
     with patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop._verify_patches", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
@@ -539,7 +543,7 @@ def test_loop_reviewer_after_reflection(tmp_path):
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st])
 
-    # Reviewer rejected nach Reflection -> return 1
+    # Reviewer rejected nach Reflection + last_verify_errors -> return 1
     assert rc == 1
     assert reviewer_calls["n"] == 2  # zwei Aufrufe: 1 original + 1 nach Reflection
 
@@ -1307,3 +1311,95 @@ def test_expand_cmd_changed_py_files_leer(tmp_path):
         st, tmp_path,
     )
     assert result is None
+
+
+def test_reviewer_reject_ignoriert_wenn_pytest_gruen(tmp_path, monkeypatch):
+    """M-343c: Reviewer-Reject + last_verify_errors leer -> task_ok."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
+    )
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "checks.py").write_text("x = 1\n")
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.tasks = [{"id": "t1", "name": "T1", "action": "update",
+                 "task_files": ["core/checks.py"]}]
+    st.phasen = []
+
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda k, p, *a, **kw: _audits.append(k))
+    monkeypatch.setattr(loop_mod, "_plan_gate", lambda s: True)
+    monkeypatch.setattr(loop_mod, "run_explorer",
+                        lambda s, a: {"key_files": [], "findings": "", "next_reads": []})
+    monkeypatch.setattr(loop_mod, "run_builder", lambda s: True)
+    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: True)
+    monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
+    monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
+    monkeypatch.setattr(loop_mod, "_reflection_loop", lambda s, **kw: False)
+    for _fn in ("header", "step", "task", "task_ok", "task_failed",
+                "group_start", "group_end", "footer"):
+        if hasattr(loop_mod, _fn):
+            monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
+
+    rc = loop_mod.run_pipeline_loop("p", "a", [st])
+    assert rc == 0, f"erwartet rc=0, war {rc}; audits={_audits}"
+    assert "loop_reviewer_reject_ignoriert" in _audits
+
+
+def test_reviewer_reject_bleibt_rot_wenn_pytest_rot(tmp_path, monkeypatch):
+    """M-343c: Reviewer-Reject + last_verify_errors nicht leer -> return 1."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
+    )
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "checks.py").write_text("x = 1\n")
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.tasks = [{"id": "t1", "name": "T1", "action": "update",
+                 "task_files": ["core/checks.py"]}]
+    st.phasen = []
+
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda k, p, *a, **kw: _audits.append(k))
+    monkeypatch.setattr(loop_mod, "_plan_gate", lambda s: True)
+    monkeypatch.setattr(loop_mod, "run_explorer",
+                        lambda s, a: {"key_files": [], "findings": "", "next_reads": []})
+    monkeypatch.setattr(loop_mod, "run_builder", lambda s: True)
+
+    # _verify_patches: pre_build True, danach False (und setzt last_verify_errors)
+    _calls = [0]
+    def _vp(s, phase=None):
+        _calls[0] += 1
+        if _calls[0] == 1:
+            return True
+        s.last_verify_errors = ["pytest: 3 failed"]
+        return False
+    monkeypatch.setattr(loop_mod, "_verify_patches", _vp)
+    monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
+    monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
+    monkeypatch.setattr(loop_mod, "_reflection_loop", lambda s, **kw: False)
+    for _fn in ("header", "step", "task", "task_ok", "task_failed",
+                "group_start", "group_end", "footer"):
+        if hasattr(loop_mod, _fn):
+            monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
+
+    rc = loop_mod.run_pipeline_loop("p", "a", [st])
+    assert rc == 1, f"erwartet rc=1, war {rc}; audits={_audits}"

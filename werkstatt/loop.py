@@ -1087,14 +1087,29 @@ def run_pipeline_loop(
                 _bug_ctx = _json.dumps(_reviewer_bugs, ensure_ascii=False)
             if not _reflection_loop(state, error_context=_bug_ctx):
                 audit("loop_reviewer_reflection_gescheitert", {"task_id": i}, pd, pn)
-                _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected")
-                return 1
+                # M-343c: pytest ist das letzte Wort. Wenn der letzte
+                # _verify_patches-Lauf gruen war (last_verify_errors leer),
+                # ist der Reviewer-Reject eine Halluzination.
+                _last_errors = getattr(state, "last_verify_errors", None) or []
+                if not _last_errors:
+                    audit("loop_reviewer_reject_ignoriert",
+                          {"task_id": i, "grund": "pytest gruen"}, pd, pn)
+                    # Fall durch zum task_ok
+                else:
+                    _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected")
+                    return 1
             # M-306d Fix 2: Nach erfolgreicher Reflection MUSS der
             # Reviewer erneut pruefen. Sonst fail-open (HR-R9).
             if not run_reviewer(state):
                 audit("loop_reviewer_rejected_after_reflection", {"task_id": i}, pd, pn)
-                _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected_after_reflection")
-                return 1
+                # M-343c: pytest ist das letzte Wort.
+                _last_errors = getattr(state, "last_verify_errors", None) or []
+                if not _last_errors:
+                    audit("loop_reviewer_reject_ignoriert",
+                          {"task_id": i, "grund": "pytest gruen nach Reflection"}, pd, pn)
+                else:
+                    _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected_after_reflection")
+                    return 1
             audit("loop_reviewer_approved_after_reflection", {"task_id": i}, pd, pn)
 
         _el_task = time.monotonic() - _t_task
