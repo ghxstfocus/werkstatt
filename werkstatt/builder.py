@@ -171,19 +171,30 @@ def run_builder(state: RunState) -> bool:
             _relevant_files.append(_f_str)
 
     _file_context: dict[str, str] = {}
-    for _rel in _relevant_files[:5]:  # max 5, kein Kontext-Ballern
-        # Sicherheits-Check: _rel muss str sein (M-298d-Bugfix).
+    # M-336: Ordner in _relevant_files aufloesen. Der Planner
+    # setzt task_files manchmal als Ordner (z.B. "core/checks/")
+    # statt als Datei ("core/checks/__init__.py"). is_file()
+    # schlaegt dann fehl — der Builder sieht die Datei nicht.
+    _aufgeloest: list[Path] = []
+    for _rel in _relevant_files:
         if not isinstance(_rel, str):
             continue
         _target = pd / _rel
-        if _target.exists() and _target.is_file():
-            try:
-                _content = _target.read_text()
-                # Nur letzte 50 Zeilen (On-Demand, nicht volle Datei)
-                _tail = "\n".join(_content.splitlines()[-50:])
-                _file_context[_rel] = _tail
-            except OSError:
-                continue
+        if _target.is_dir():
+            # Ordner: alle .py-Dateien darin (max 5)
+            _aufgeloest.extend(sorted(_target.glob("*.py"))[:5])
+        elif _target.is_file():
+            _aufgeloest.append(_target)
+
+    for _target in _aufgeloest[:5]:  # max 5, kein Kontext-Ballern
+        try:
+            _content = _target.read_text()
+            # Nur letzte 50 Zeilen (On-Demand, nicht volle Datei)
+            _tail = "\n".join(_content.splitlines()[-50:])
+            _rel_str = str(_target.relative_to(pd))
+            _file_context[_rel_str] = _tail
+        except OSError:
+            continue
 
     # M-333b: Bei create-Tasks (neue Dateien) gibt es keinen
     # _file_context (Datei existiert nicht). Wir sammeln die

@@ -325,3 +325,58 @@ def test_builder_task_files_nicht_str(tmp_path):
         })()
         result = run_builder(st)
     assert result in (True, False)
+
+
+def test_builder_ordner_in_task_files(tmp_path):
+    """M-336: task_files mit Ordner -> .py-Dateien im Ordner gelesen."""
+    from unittest.mock import patch
+
+    from werkstatt.builder import run_builder
+
+    # Ordner mit __init__.py
+    (tmp_path / "core" / "checks").mkdir(parents=True)
+    (tmp_path / "core" / "checks" / "__init__.py").write_text(
+        "def broken(:\n"  # Syntax-Fehler -> Idempotenz greift nicht
+    )
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
+                 "task_files": ["core/checks/"]}]
+    st.aktuelle_task = st.tasks[0]
+
+    _file_ctx = []
+    def _mock_audit(kind, payload, *a, **kw):
+        if kind == "builder_file_context":
+            _file_ctx.extend(payload.get("files", []))
+
+    with patch("werkstatt.builder.audit", side_effect=_mock_audit), \
+         patch("werkstatt.builder.ask_llm") as mock_llm:
+        mock_llm.return_value = type("R", (), {
+            "ok": True, "content": '{"patches": []}', "error": ""
+        })()
+        run_builder(st)
+
+    # core/checks/__init__.py muss in _file_context sein
+    assert any("core/checks/__init__.py" in f for f in _file_ctx), \
+        f"erwartet core/checks/__init__.py, war {_file_ctx}"
+
+
+def test_builder_ordner_leer(tmp_path):
+    """M-336: task_files mit leerem Ordner -> kein Crash."""
+    from unittest.mock import patch
+
+    from werkstatt.builder import run_builder
+
+    (tmp_path / "core" / "leer").mkdir(parents=True)
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
+                 "task_files": ["core/leer/"]}]
+    st.aktuelle_task = st.tasks[0]
+
+    with patch("werkstatt.builder.ask_llm") as mock_llm:
+        mock_llm.return_value = type("R", (), {
+            "ok": True, "content": '{"patches": []}', "error": ""
+        })()
+        result = run_builder(st)
+    assert result in (True, False)
