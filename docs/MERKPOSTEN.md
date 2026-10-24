@@ -157,3 +157,26 @@ zaehlen.
 179 (Schaetzwert) vs 178 (gemessen). Body-Laenge immer
 aus `git log -1 --format='%B' | wc -l` zitieren, nie
 schaetzen.
+
+### M-323b — Phasen-Checkpoints
+`_verify_patches(state, phase="phase_end")` nach jeder logischen
+Phase. Aktuell: Phasen sind nur Gruppierung, kein Checkpoint.
+Nach der letzten Phase: Vollsuite + Reflection.
+
+### M-341 — Explorer überspringen
+Explorer ruft `0 files` (M-338 zu strikt). Wenn der Planner
+`task_files` gesetzt hat, ist der Explorer redundant. Loop
+sollte `loop_explorer_skipped` auditieren statt `0 files`.
+
+### M-344 — PROGRESS.md mit Phasen-Header
+`_progress.append` schreibt pro Task. Sollte pro Phase einen
+Header setzen (`## Phase p1: Bestandsaufnahme`).
+
+### M-319 — Patch-Typ aus Datei-Existenz
+Größtenteils durch M-337 gelöst (Builder nutzt nur `_zieldatei`
++ `action`). Verbleibend: `_get_git_diff` im Reviewer könnte
+create/update aus Datei-Existenz ableiten.
+
+### M-320 — phase_state.save() bei Loop-Abbruch
+Bei `return 1` fehlt `phase_state.save()`. Resume nach
+Abbruch unmöglich.

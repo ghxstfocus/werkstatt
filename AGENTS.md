@@ -13,7 +13,7 @@ sind die Skills.
 
 ## Pflicht-Befehle
 
-    pytest -q                              # 1290 passed
+    pytest -q                              # 1401 passed
     ruff check .                           # 14 errors
     mypy pipeline.py werkstatt/            # 8 errors
     pytest tests/test_audit_kinds.py -q    # 6 passed
@@ -96,4 +96,4 @@ Multi-Projekt:
 
 Human-Gate: fail-closed (EOFError -> reject), respektiert require_human_approval.
 
-Baseline: 1290 passed / 13 ruff / 8 mypy.
+Baseline: 1401 passed / 13 ruff / 8 mypy.

@@ -20,7 +20,7 @@ Stand: 2026-10-22, HEAD 76f4bf1, Branch umbau/phase-2.
 - `mypy .` zaehlt `tests/` mit und liefert 40 Fehler. Die Baseline
   von 9 gilt NUR fuer `mypy pipeline.py werkstatt/`. Jede Messung,
   die nicht explizit diesen Befehl nutzt, ist NICHT die Baseline.
-- AST- und Katalog-Zahlen (6 / 167) werden ueber den jeweiligen
+- AST- und Katalog-Zahlen (6 / 162) werden ueber den jeweiligen
   Testlauf gemessen; beide sind in der pytest-Suite enthalten.
   Die separate Ausweisung dient der schnellen Sichtpruefung.
 
@@ -32,12 +32,12 @@ Vor jedem Code-Touch in 3a-1c-4 und Nachfolgern:
 
 ## Historie
 
-- 2026-10-20: Baseline 1245/17/7/6/167 (mypy 7, weil vor W2-Fix).
-- 2026-10-21: Baseline 1245/17/9/6/167 (mypy 9, nach 3a-1c-2b-W2).
+- 2026-10-20: Baseline 1245/17/7/6/162 (mypy 7, weil vor W2-Fix).
+- 2026-10-21: Baseline 1245/17/9/6/162 (mypy 9, nach 3a-1c-2b-W2).
 
 ## Klarstellung AST+Katalog
 
 - "AST+Katalog 14" ist eine Summen-Konvention (6 AST + 8 andere
   Test-Kategorien), KEIN Messwert. Baseline: AST-Test
   `pytest tests/test_audit_kinds.py -q` = 6 passed, Katalog
-  `_KATALOG_SOLL` = 167. Reviewer-Bestaetigung #138 (2026-10-21).
+  `_KATALOG_SOLL` = 162. Reviewer-Bestaetigung #138 (2026-10-21).

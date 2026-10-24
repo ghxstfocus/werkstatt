@@ -752,3 +752,50 @@ mit M-317-Fix).
 
 Baseline 1337 -> 1345 (M-310..M-317).
 
+
+---
+
+## M-322 bis M-343c — Loop-Haertung (2026-10-24)
+
+22 strukturelle Fixes fuer den Loop-Neubau. Ziel: Der Loop
+soll echte Phasen-Aufgaben Ende-zu-Ende loesen, ohne
+fail-open und ohne halluzinierte Builder-Patches.
+
+### Commits (chronologisch)
+
+| SHA | Titel | Zweck |
+|---|---|---|
+| `3f615af` | feat(verify): Platzhalter, Erfolgs-Audit, phase_end (M-322) | {changed_files}-Platzhalter |
+| `8f31fdf` | chore(verify): verify.json mit changed-scope | Zielprojekt-Contract |
+| `3abe09b` | fix(loop): Reflection im Zielprojekt-Kontext (M-326) | git apply im Zielprojekt |
+| `3abb3fb` | fix(loop): Reflection-Patch anwendbar (M-328) | Patch-Pfad prozess-sicher |
+| `f8becb8` | fix(loop): Reflection nutzt Builder (M-329) | search/replace statt git apply |
+| `d504c77` | feat(loop): Hooks in Reflection (M-330) | pre_tool_use/post_tool_use/simplify |
+| `b9aea97` | fix(gate): quality_gate prueft failed (M-331) | Fail-closed Gate |
+| `a8db21c` | test(gate): Fail-closed-Tests (M-331b) | 3 Tests |
+| `4dc6a86` | feat(builder): keine halluzinierten Imports (M-333) | Import-Regeln + Projekt-Imports |
+| `42671d2` | feat(hooks): pre_tool_use prueft Imports (M-334a) | Deterministisch |
+| `fee2bb6` | refactor(hooks): post_tool_use entfernt (M-334b) | Prueft falsches Projekt |
+| `87c7ed8` | feat(builder): task_files aus Planner priorisieren (M-335) | M-317-Feature verdrahtet |
+| `74cc816` | fix(builder): Ordner in task_files aufloesen (M-336) | core/checks/ -> __init__.py |
+| `e005513` | feat(builder): strukturelle Begrenzung (M-337) | Zieldatei + action erzwungen |
+| `5f4e500` | fix(explorer+planner+builder): Kontext-Begrenzung (M-337-b/c/d) | Strukturelle Filter |
+| `badb75d` | fix(verify): py_compile nur auf .py-Dateien (M-340) | {changed_py_files} |
+| `8a71eb0` | fix(loop): pytest ist das letzte Wort (M-343c) | Reviewer-Reject ignorieren bei pytest-gruen |
+
+### Beweis: RERUN-23 und RERUN-24
+
+Beide Läufe: **Loop-RC=0**, 7/7 Tasks, 4 Phasen.
+- RERUN-23: `core/checks/__init__.py` +115, 53 Tests grün.
+- RERUN-24: `core/checks/__init__.py` +85/-25, 53 Tests grün.
+
+### Baseline
+
+VOR: 1367/13/8/6/162.
+NACH: 1401/13/8/6/162.
+
+### Offen
+
+- M-323b: Phasen-Checkpoints (`phase_end` pro Phase).
+- M-341: Explorer überspringen bei `task_files`.
+- M-344: `PROGRESS.md` mit Phasen-Header.

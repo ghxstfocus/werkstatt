@@ -227,6 +227,6 @@ keine Verhaltensaenderung, Baseline-NeuMessung 2026-10-21.)
 | 3a-2c | done (3f98364) | _phase_nachlauf. |
 | 3a-2d | done (00ffb5e) | _phase_wiederaufnahme. |
 | 3a-3 | done (6e440e6) | _phase_main_pfad (641 Z.) in 5 Funktionen zerlegt. Return-Bilanz global 123. |
-| 3b | offen | Loop-Umbau (C6, Quality-Gate, Reviewer-Modus). NACH 3.0 + Werkstatt-Entkopplung. |
+| 3b | done (8a71eb0) | Loop-Umbau. RERUN-23/24 grün, 7/7 Tasks, Baseline 1401. |
 | 3c | offen | NEUBAU-Abloesung. |
 

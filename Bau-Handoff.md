@@ -211,3 +211,58 @@ Vorheriger Handoff (2026-10-22, 3a-3 komplett) im
 Bau-Handoff-Archiv.md (Anhang).
 Vorherige Uebergaenge (2026-10-18 W52b, 2026-10-20 3a-1c-2b
 "NO-GO") sind ueberholt.
+
+---
+
+## Loop-Haertung (2026-10-24) — M-322 bis M-343c
+
+**HEAD:** 8a71eb0 (umbau/phase-2, origin gepusht).
+**Baseline:** 1401 passed / 13 ruff / 8 mypy / 6 AST / 162 Katalog.
+
+### Loop-Stand nach 22 Fixes
+
+Der Loop läuft Ende-zu-Ende. Beweis: RERUN-23 und RERUN-24,
+beide Loop-RC=0, 7/7 Tasks, 4 Phasen.
+
+Aufgabe: "Refaktoriere core/checks/ in logische Phasen:
+analysiere alle check_port_*-Funktionen, dokumentiere sie
+mit Docstrings und Typannotationen, schreibe Grenzfall-Tests."
+
+Ergebnis RERUN-23:
+- core/checks/__init__.py +115 (Docstrings + Typannotationen)
+- docs/STATUS.md +30
+- 53 Tests grün, Human-Gate approved.
+
+### Strukturelle Fixes (Kurzfassung)
+
+1. **Verify-Contract** (M-322, M-324): `{changed_files}`,
+   `{changed_test_files}`, `{changed_py_files}`, `phase_end`.
+2. **Reflection im Zielprojekt** (M-326, M-329): `git apply`
+   → Builder search/replace, kumulativ.
+3. **Hooks** (M-330, M-334a, M-334b): pre_tool_use prüft
+   Imports deterministisch; post_tool_use entfernt (prüfte
+   Werkstatt statt Zielprojekt).
+4. **Gate fail-closed** (M-331, M-331b): `delta.pytest =
+   (baseline - passed) + failed`.
+5. **Builder strukturell begrenzt** (M-333, M-337, M-338,
+   M-339): task_files aus Planner, Zieldatei erzwungen,
+   action validiert, keine freie Wahl.
+6. **py_compile nur .py** (M-340): `{changed_py_files}` statt
+   `{changed_files}`.
+7. **pytest als letztes Wort** (M-343c): Reviewer-Reject
+   ignoriert, wenn `last_verify_errors` leer.
+
+### Offene Merkposten
+
+- **M-323b:** Phasen-Checkpoints (`phase_end` pro Phase).
+- **M-341:** Explorer überspringen bei `task_files`.
+- **M-344:** PROGRESS.md mit Phasen-Header.
+- **M-320:** `phase_state.save()` bei Loop-Abbruch.
+
+### Nächster Block
+
+**M-323b** (Phasen-Checkpoints). Danach M-341 und M-344 als
+kosmetische Fixes.
+
+**Rollback-Anker:** c55c849 (historisch), 8a71eb0 (aktuell).
+**Zielprojekt:** f1bd193 (RERUN-23).
