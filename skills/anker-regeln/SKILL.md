@@ -1,11 +1,17 @@
 ---
 name: anker-regeln
-description: |
-  Regeln fuer Anker und Ersatz in typ:patch.
+description: 'Regeln fuer Anker und Ersatz in typ:patch.
+
   count(anker) == 1, ersatz != anker, Einrueckung
+
   beachten. Nutze diese Skill immer, wenn du
+
   typ:patch lieferst. Sie ist statisch im
+
   Builder-Prompt.
+
+  '
+allowed-tools: run_write
 ---
 
 # Anker-Regeln
@@ -21,3 +27,7 @@ Wenn der Anker um 2 Spaces verschoben ist, korrigiert die Werkstatt automatisch.
 
 ## Wirkungsloser Patch
 Wenn ersatz == anker: Kein Patch. Liefere keinen.
+
+## Tools (nach Patch)
+- `run_write("python3 -m py_compile <datei>")` — Syntax pruefen.
+- `run_write("ruff check <datei>")` — Lint pruefen.

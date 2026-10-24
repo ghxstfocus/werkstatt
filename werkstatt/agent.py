@@ -161,7 +161,7 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
 
 # =====================================================================
 # A8-1b-0 (2026-10-23): aus pipeline.py extrahiert, wortwoertlich.
-# Weg A: check=False ergaenzt, ISC004-# noqa. Lazy Imports entfernt.
+# Weg A: check=False ergaenzt, ISC004-noqa. Lazy Imports entfernt.
 # =====================================================================
 
 MAX_PROTOKOLL_PER_COMMAND = 10_000
