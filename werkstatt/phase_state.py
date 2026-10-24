@@ -60,12 +60,17 @@ class PhaseState:
         *,
         tests: list | None = None,
         akzeptanzkriterien: list | None = None,
+        phasen: list[dict] | None = None,
     ) -> None:
         """Initialisiert einen neuen Phase-State.
 
         Vollstaendiger Plan-Checkpoint: tasks + tests + akzeptanz-
         kriterien. Ohne tests+akz wuerde _plan_gate beim Resume
         scheitern und der Planner doch laufen.
+
+        M-323d: phasen optional. Wenn uebergeben, wird die
+        Phasen-Struktur (M-323c) persistiert. Resume laedt sie
+        ueber .data["phasen"].
         """
         now = datetime.datetime.now(datetime.UTC).isoformat()
         self.data = {
@@ -92,6 +97,7 @@ class PhaseState:
             ],
             "tests": list(tests or []),
             "akzeptanzkriterien": list(akzeptanzkriterien or []),
+            "phasen": list(phasen or []),  # M-323d
         }
         self.save()
 

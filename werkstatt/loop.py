@@ -840,6 +840,7 @@ def run_pipeline_loop(
                 _normalize_tasks(getattr(state, "tasks", [])),
                 tests=list(getattr(state, "tests", []) or []),
                 akzeptanzkriterien=list(getattr(state, "akzeptanzkriterien", []) or []),
+                phasen=list(getattr(state, "phasen", []) or []),  # M-323d
             )
 
     # M-298d: init_new-Fallback. Wenn der Plan von Anfang an gruen

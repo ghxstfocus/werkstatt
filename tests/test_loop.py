@@ -1175,3 +1175,49 @@ def test_planner_prompt_phasen_pflicht():
     assert "PFLICHT" in PLANNER_SYSTEM
     assert "phase_id" in PLANNER_SYSTEM
     assert "Mehr als 5 Tasks" in PLANNER_SYSTEM or "Mehr als 5" in PLANNER_SYSTEM
+
+
+def test_init_new_speichert_phasen(tmp_path):
+    """M-323d: init_new speichert phasen in self.data."""
+    from werkstatt.phase_state import PhaseState
+
+    ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    ps.init_new(
+        "aufgabe",
+        [{"id": "t1", "phase_id": "p1"}, {"id": "t2", "phase_id": "p2"}],
+        phasen=[
+            {"id": "p1", "titel": "Phase 1", "tasks": ["t1"]},
+            {"id": "p2", "titel": "Phase 2", "tasks": ["t2"]},
+        ],
+    )
+    assert ps.data["phasen"] == [
+        {"id": "p1", "titel": "Phase 1", "tasks": ["t1"]},
+        {"id": "p2", "titel": "Phase 2", "tasks": ["t2"]},
+    ]
+
+
+def test_init_new_ohne_phasen(tmp_path):
+    """M-323d: init_new ohne phasen -> leere Liste."""
+    from werkstatt.phase_state import PhaseState
+
+    ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    ps.init_new("aufgabe", [{"id": "t1"}])
+    assert ps.data["phasen"] == []
+
+
+def test_resume_laedt_phasen(tmp_path):
+    """M-323d: load() laedt phasen aus der YAML."""
+    from werkstatt.phase_state import PhaseState
+
+    base = tmp_path / ".werkstatt"
+    ps1 = PhaseState("p", base_dir=base)
+    ps1.init_new(
+        "aufgabe",
+        [{"id": "t1"}],
+        phasen=[{"id": "p1", "titel": "Phase 1", "tasks": ["t1"]}],
+    )
+
+    ps2 = PhaseState("p", base_dir=base)
+    assert ps2.load() is True
+    assert len(ps2.data["phasen"]) == 1
+    assert ps2.data["phasen"][0]["id"] == "p1"
