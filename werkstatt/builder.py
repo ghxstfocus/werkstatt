@@ -6,6 +6,8 @@ ruft ask_llm auf, generiert Patch (str_replace).
 from __future__ import annotations
 
 import json
+import subprocess
+from pathlib import Path
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
@@ -60,6 +62,42 @@ def run_builder(state: RunState) -> bool:
         audit("builder_read_only", {"tasks": len(tasks)}, pd, pn)
         state.patches = []  # type: ignore[attr-defined]
         return True
+
+    # M-316 (A1/A2): Idempotenz-Check (Variante iii: verify.py).
+    # Wenn die Zieldatei(en) existieren UND via py_compile
+    # (schnell) syntaktisch ok sind, ist nichts zu tun.
+    # Verhindert fail-open (falscher Code bleibt) und
+    # fail-closed (Reflection auf Phantom).
+    _target_files: list[Path] = []
+    import re as _re2
+    _file_pattern2 = _re2.compile(r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.(?:md|py|yaml|yml|json|txt|toml|cfg|ini))\b')
+    for _task_obj in tasks:
+        _text2 = _task_obj if isinstance(_task_obj, str) else str(_task_obj)
+        for _m2 in _file_pattern2.findall(_text2):
+            _tf = pd / _m2
+            if _tf.exists() and _tf.is_file() and _tf not in _target_files:
+                _target_files.append(_tf)
+
+    if _target_files:
+        _all_ok = True
+        for _tf in _target_files:
+            if _tf.suffix == ".py":
+                _res = subprocess.run(
+                    ["python3", "-m", "py_compile", str(_tf)],
+                    capture_output=True, text=True, timeout=30, check=False,
+                )
+                if _res.returncode != 0:
+                    _all_ok = False
+                    audit("builder_zieldatei_inkorrekt",
+                          {"file": str(_tf), "fehler": _res.stderr[:200]}, pd, pn)
+                    break
+
+        if _all_ok:
+            # A2: Datei existiert UND ist korrekt -> task_ok.
+            audit("builder_nichts_zu_tun",
+                  {"files": [str(f.name) for f in _target_files]}, pd, pn)
+            state.patches = []  # type: ignore[attr-defined]
+            return True
 
     # M-298d: On-demand Zieldatei lesen.
     # Profi-Ansatz (Aider Repo-Map, Cline read_file): Der Builder

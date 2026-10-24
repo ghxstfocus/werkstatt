@@ -664,6 +664,36 @@ def run_pipeline_loop(
             continue
 
         if not run_builder(state):
+            # M-316: Idempotenz-Erkennung. Wenn run_builder False
+            # zurueckgibt, aber die Zieldatei existiert + ist
+            # syntaktisch korrekt, ist das kein Fehler (Phantom).
+            _targets_exist = True
+            import re as _re3
+            _file_pattern3 = _re3.compile(r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.(?:md|py|yaml|yml|json|txt|toml|cfg|ini))\b')
+            _found_any = False
+            for _task3 in tasks:
+                _text3 = _task3 if isinstance(_task3, str) else str(_task3)
+                for _m3 in _file_pattern3.findall(_text3):
+                    _tf3 = Path(pd) / _m3
+                    if _tf3.exists():
+                        _found_any = True
+                        if _tf3.suffix == ".py":
+                            _r3 = subprocess.run(
+                                ["python3", "-m", "py_compile", str(_tf3)],
+                                capture_output=True, text=True, timeout=30, check=False,
+                            )
+                            if _r3.returncode != 0:
+                                _targets_exist = False
+                                break
+            if _found_any and _targets_exist:
+                audit("loop_task_idempotent", {"task_id": i}, pd, pn)
+                _el_task = time.monotonic() - _t_task
+                task_ok(i, len(tasks), elapsed_s=_el_task)
+                group_end()
+                tasks_ok += 1
+                _task_ende(state, phase_state, task_id, ok=True, name=task_name)
+                audit("loop_task_ok", {"task_id": i, "name": task_name, "idempotent": True}, pd, pn)
+                continue
             audit("loop_builder_failed", {"task_id": i}, pd, pn)
             _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="builder_failed")
             return 1

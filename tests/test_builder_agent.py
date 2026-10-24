@@ -54,3 +54,49 @@ def test_builder_read_only_task_kein_patch(tmp_path):
     assert result is True
     assert mock_llm.call_count == 0  # kein LLM-Call
     assert st.patches == []  # keine Patches
+
+
+def test_builder_idempotent_bei_korrekter_datei(tmp_path):
+    """M-316: existierende korrekte Zieldatei -> keine Patches."""
+    from werkstatt.builder import run_builder
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "test_checks.py schreiben", "action": "write"}]
+
+    # Datei existiert und ist syntaktisch korrekt
+    (tmp_path / "test_checks.py").write_text(
+        "def test_foo():\n    assert True\n", encoding="utf-8"
+    )
+
+    with patch("werkstatt.builder.audit") as mock_audit:
+        result = run_builder(st)
+
+    assert result is True
+    assert st.patches == []
+    # Audit-Ruf "builder_nichts_zu_tun"
+    assert any(
+        c[0][0] == "builder_nichts_zu_tun" for c in mock_audit.call_args_list
+    )
+
+
+def test_builder_reflection_bei_inkorrekter_datei(tmp_path):
+    """M-316: existierende inkorrekte Zieldatei -> kein task_ok, Reflection."""
+    from werkstatt.builder import run_builder
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "test_checks.py schreiben", "action": "write"}]
+
+    # Datei existiert, ist syntaktisch FALSCH
+    (tmp_path / "test_checks.py").write_text(
+        "def test_foo(:\n    assert True\n", encoding="utf-8"
+    )
+
+    with patch("werkstatt.builder.ask_llm") as mock_llm, \
+         patch("werkstatt.builder.audit") as mock_audit:
+        mock_llm.return_value = type("R", (), {"ok": True, "content": '{"patches": []}', "error": ""})()
+        _result = run_builder(st)
+
+    # Soll NICHT idempotent-True sein
+    assert not any(
+        c[0][0] == "builder_nichts_zu_tun" for c in mock_audit.call_args_list
+    )
