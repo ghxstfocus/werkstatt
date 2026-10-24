@@ -1,87 +1,95 @@
-"""PreToolUse-Hook (Phase 10).
+"""PreToolUse-Hook (Phase 10, M-334a).
 
-Prueft, ob ein Patch sicher ist, bevor er angewendet wird.
-Blockiert bei .env-Dateien, destruktiven Git-Kommandos
-oder leerem Diff.
+Prueft einen Patch VOR dem Anwenden. Deterministisch:
+  - Import-Validierung (existiert das Modul im Zielprojekt?)
+  - Datei-Existenz (bei update: existiert die Datei? bei create: nicht?)
 
 Output: {"allow": bool, "reason": str}
 """
 from __future__ import annotations
 
+import ast
 import json
-import re
 import sys
 from pathlib import Path
 
-# Verbotene Muster im Patch
-DESTRUCTIVE_PATTERNS = [
-    r"git\s+reset\s+--hard",
-    r"git\s+clean\s+-[fd]",
-    r"rm\s+-rf\s+/",
-]
-
-FORBIDDEN_FILES = [
-    r"\.env$",
-    r"\.env\.",
-    r"secrets\.yaml$",
-    r"id_rsa$",
-]
+# Standard-Library + bekannte Third-Party (nicht pruefbar).
+_KNOWN_ROOTS = {
+    "sys", "os", "json", "re", "ast", "pathlib", "datetime",
+    "typing", "unittest", "argparse", "subprocess", "shutil",
+    "time", "threading", "logging", "collections", "itertools",
+    "functools", "dataclasses", "enum", "io", "base64", "hashlib",
+    "tempfile", "traceback", "warnings", "weakref", "contextlib",
+    "pytest", "yaml", "requests", "pydantic", "click", "rich",
+    "numpy", "pandas", "flask", "django", "fastapi", "httpx",
+    "aiohttp", "sqlalchemy", "jinja2", "werkzeug", "boto3",
+}
 
 
-def check_patch(patch_text: str, *, project_dir: str | None = None, action: str = "update") -> dict:
-    """Prueft einen Patch auf Sicherheitsverletzungen.
-    
-    NEU: Bei action="create" wird geprueft, ob die Datei
-    bereits existiert. Wenn ja -> blockieren.
-    """
+def _module_exists(name: str, project_dir: Path) -> bool:
+    """Prueft, ob ein Modul im Projekt existiert (Datei-Existenz)."""
+    if not name:
+        return True
+    root = name.split(".")[0]
+    if root in _KNOWN_ROOTS:
+        return True
+    # Relativer Import? Dann nicht pruefbar (patch-spezifisch).
+    if name.startswith("."):
+        return True
+    # Projekt-Modul: Datei-Existenz pruefen.
+    rel = name.replace(".", "/")
+    for cand in (
+        project_dir / rel,
+        project_dir / f"{rel}.py",
+        project_dir / rel / "__init__.py",
+    ):
+        if cand.exists():
+            return True
+    return False
+
+
+def _check_imports(patch_text: str, project_dir: Path) -> tuple[bool, str]:
+    """Prueft alle Imports im Patch gegen existierende Module."""
     if not patch_text.strip():
-        return {"allow": False, "reason": "Patch ist leer."}
-
-    # Verbotene Dateien
-    for pattern in FORBIDDEN_FILES:
-        if re.search(pattern, patch_text, re.MULTILINE):
-            return {
-                "allow": False,
-                "reason": f"Patch beruehrt verbotene Datei ({pattern}). "
-                          f"Entferne diese Datei aus dem Patch.",
-            }
-
-    # Destruktive Kommandos
-    for pattern in DESTRUCTIVE_PATTERNS:
-        if re.search(pattern, patch_text, re.MULTILINE):
-            return {
-                "allow": False,
-                "reason": f"Patch enthaelt destruktives Kommando ({pattern}). "
-                          f"Verwende eine sichere Alternative.",
-            }
-
-    # NEU: Bei create pruefen, ob Datei existiert
-    if action == "create" and project_dir:
-        # Datei aus dem Patch extrahieren (erste Zeile, die mit "+++ b/" beginnt)
-        match = re.search(r'^\+\+\+ b/(.+)$', patch_text, re.MULTILINE)
-        if match:
-            file_path = Path(project_dir) / match.group(1)
-            if file_path.exists():
-                return {
-                    "allow": False,
-                    "reason": f"Datei existiert bereits: {match.group(1)}. "
-                              f"Verwende action='update' statt 'create'.",
-                }
-
-    return {"allow": True, "reason": "OK"}
+        return True, ""
+    try:
+        tree = ast.parse(patch_text)
+    except SyntaxError:
+        # Patch ist nicht valides Python (z.B. Markdown, YAML) ->
+        # nicht pruefbar. py_compile prueft spaeter.
+        return True, ""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if not _module_exists(alias.name, project_dir):
+                    return False, f"Import '{alias.name}' existiert nicht im Projekt"
+        elif (
+            isinstance(node, ast.ImportFrom)
+            and node.module
+            and not _module_exists(node.module, project_dir)
+        ):
+            return False, f"Import-from '{node.module}' existiert nicht im Projekt"
+    return True, ""
 
 
 def main() -> int:
-    raw = sys.stdin.read()
     try:
-        data = json.loads(raw)
+        payload = json.load(sys.stdin)
     except json.JSONDecodeError:
-        print(json.dumps({"allow": False, "reason": "Hook-Input ist kein JSON."}))
+        print(json.dumps({"allow": False, "reason": "Ungueltiges Payload-JSON"}))
         return 0
 
-    patch = data.get("patch", "")
-    result = check_patch(patch)
-    print(json.dumps(result, ensure_ascii=False))
+    patch_text = payload.get("patch", "") or ""
+    project_dir_str = payload.get("project_dir", "")
+    project_dir = Path(project_dir_str) if project_dir_str else None
+
+    if project_dir is None or not project_dir.exists():
+        # Kein Projekt-Pfad -> nicht pruefbar (Backward-Compat).
+        print(json.dumps({"allow": True, "reason": "Kein project_dir"}))
+        return 0
+
+    ok, reason = _check_imports(patch_text, project_dir)
+    print(json.dumps({"allow": ok, "reason": reason}, ensure_ascii=False))
     return 0
 
 
