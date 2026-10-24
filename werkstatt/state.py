@@ -269,6 +269,12 @@ class RunState:
         field(default_factory=list)
     phase_start_head: str = ""
     phase_aktiv: bool = False
+    # M-299a: Preflight-Scan + Fehler-Klassifikation.
+    # Liste von dicts: [{klasse, stage_id, datei, text}, ...]
+    preflight_fehler: list[dict] = field(default_factory=list)
+    # Fehler, die als FOLLOW_UP (nicht aufgabenrelevant) markiert
+    # wurden. Bleiben ueber Phasen erhalten.
+    follow_up_fehler: list[dict] = field(default_factory=list)
 
 
 

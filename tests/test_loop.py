@@ -218,3 +218,20 @@ def test_loop_patch_post_apply_verify(tmp_path):
     # Ohne Patch kein Diff -> Reviewer oder Verify schlaegt zu
     # (Test prueft nur, dass Loop nicht crasht)
     assert rc in (0, 1)
+
+
+def test_verify_patches_phase_filter(tmp_path):
+    """M-299a: _verify_patches filtert nach phase."""
+    st = _state(tmp_path)
+    contract_dir = tmp_path / ".werkstatt"
+    contract_dir.mkdir()
+    (contract_dir / "verify.json").write_text(
+        '{"stages": ['
+        '{"id": "pre1", "phase": "pre_build", "command": ["python3", "-c", "import sys; sys.exit(0)"]},'
+        '{"id": "post1", "phase": "post_build", "command": ["python3", "-c", "import sys; sys.exit(1)"]}'
+        ']}'
+    )
+    # pre_build: nur pre1 (ok) -> True
+    assert _verify_patches(st, phase="pre_build") is True
+    # post_build: nur post1 (fail) -> False
+    assert _verify_patches(st, phase="post_build") is False

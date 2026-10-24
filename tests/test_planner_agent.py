@@ -47,3 +47,21 @@ def test_planner_llm_fehler(tmp_path):
     
     with patch("werkstatt.planner.ask_llm", return_value=FakeReply()):
         assert run_planner(st) is False
+
+
+def test_klassifiziert_env():
+    """M-299a: ModuleNotFoundError wird als 'env' klassifiziert."""
+    from werkstatt.planner import _klassifiziere_fehler
+    assert _klassifiziere_fehler("pytest", "ModuleNotFoundError: No module named 'defusedxml'") == "env"
+
+
+def test_klassifiziert_lint():
+    """M-299a: ruff-Stage wird als 'lint' klassifiziert."""
+    from werkstatt.planner import _klassifiziere_fehler
+    assert _klassifiziere_fehler("ruff", "error: unused import") == "lint"
+
+
+def test_klassifiziert_syntax():
+    """M-299a: py_compile wird als 'syntax' klassifiziert."""
+    from werkstatt.planner import _klassifiziere_fehler
+    assert _klassifiziere_fehler("py_compile", "SyntaxError: invalid syntax") == "syntax"

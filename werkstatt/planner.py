@@ -27,6 +27,87 @@ Antworte NUR mit validem JSON:
 Keine Erklaerung, nur JSON."""
 
 
+def _klassifiziere_fehler(stage_id: str, fehlertext: str) -> str:
+    """M-299a: Klassifiziert einen Verify-Fehler nach Klasse.
+
+    Klassen:
+      env     — Umgebungsproblem (ModuleNotFoundError, ImportError)
+      lint    — mechanisch (ruff --fix)
+      type    — Typfehler (mypy)
+      test    — Testfehler (pytest)
+      syntax  — Syntaxfehler (py_compile)
+      unknown — Sonstiges
+    """
+    if stage_id == "py_compile" or "SyntaxError" in fehlertext:
+        return "syntax"
+    if "ModuleNotFoundError" in fehlertext or "ImportError" in fehlertext:
+        return "env"
+    if stage_id == "ruff":
+        return "lint"
+    if stage_id == "mypy":
+        return "type"
+    if stage_id == "pytest":
+        return "test"
+    return "unknown"
+
+
+def _preflight_scan(state: RunState) -> list[dict]:
+    """M-299a: Liest verify.json, fuehrt Stages aus, klassifiziert Fehler.
+
+    Liefert strukturierte Fehlerliste:
+      [{klasse, stage_id, datei, text}, ...]
+
+    Wird in state.preflight_fehler persistiert (vom Aufrufer).
+    """
+    import json
+    import subprocess
+    from pathlib import Path as _P
+
+    pd = getattr(state, "project_dir", None)
+    if pd is None:
+        return []
+    project_dir = _P(pd)
+
+    contract = project_dir / ".werkstatt" / "verify.json"
+    if not contract.exists():
+        return []
+
+    try:
+        stages = json.loads(contract.read_text(encoding="utf-8")).get("stages", [])
+    except (json.JSONDecodeError, OSError):
+        return []
+
+    fehler: list[dict] = []
+    for stage in stages:
+        cmd = stage.get("command")
+        if not cmd:
+            continue
+        stage_id = stage.get("id", "?")
+        try:
+            res = subprocess.run(
+                cmd, cwd=str(project_dir),
+                capture_output=True, text=True, timeout=300, check=False,
+            )
+            if res.returncode == 0:
+                continue
+            stderr = (res.stderr or "") + (res.stdout or "")
+            klasse = _klassifiziere_fehler(stage_id, stderr)
+            fehler.append({
+                "klasse": klasse,
+                "stage_id": stage_id,
+                "datei": None,  # TODO: aus stderr extrahieren
+                "text": stderr[:500],
+            })
+        except Exception as exc:  # noqa: BLE001
+            fehler.append({
+                "klasse": "unknown",
+                "stage_id": stage_id,
+                "datei": None,
+                "text": f"Exception: {exc}",
+            })
+    return fehler
+
+
 def run_planner(state: RunState) -> bool:
     """Erstellt den Plan. Schreibt in state.tasks/tests/akzeptanzkriterien."""
     pd = state.project_dir

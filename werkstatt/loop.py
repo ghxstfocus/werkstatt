@@ -34,11 +34,15 @@ def _plan_gate(state: RunState) -> bool:
     ))
 
 
-def _verify_patches(state: RunState) -> bool:
+def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     """B2: Verifier (multi-projekt-faehig via Projekt-Contract).
 
     Liest .werkstatt/verify.json aus dem Zielprojekt.
     Fallback: pytest + ruff im Zielprojekt, wenn keine Config.
+
+    phase: wenn gesetzt ("pre_build" oder "post_build"),
+    werden nur Stages mit passendem phase-Feld ausgefuehrt.
+    Stages ohne phase-Feld laufen immer (Backward-Compat).
     """
     import json
     project_dir = getattr(state, "project_dir", None)
@@ -59,6 +63,14 @@ def _verify_patches(state: RunState) -> bool:
             stages = contract.get("stages", [])
         except (json.JSONDecodeError, OSError):
             pass
+
+    # 1b. Phase-Filter (M-299a). Wenn phase gesetzt, nur passende
+    # Stages behalten. Stages ohne phase-Feld laufen immer.
+    if phase is not None:
+        stages = [
+            s for s in stages
+            if s.get("phase") is None or s.get("phase") == phase
+        ]
 
     # 2. Fallback: Standard-Checks, wenn kein Contract
     if not stages:
@@ -404,7 +416,7 @@ def run_pipeline_loop(
     audit("loop_phase", {"phase": "plan", "status": "ok"}, pd, pn)
 
     # 2. Pre-Build Verify
-    if not _verify_patches(state):
+    if not _verify_patches(state, phase="pre_build"):
         audit("loop_gate_failed", {"gate": "pre_build"}, pd, pn)
         return 1
 
@@ -516,7 +528,7 @@ def run_pipeline_loop(
                 return 1
 
         # Post-Build Verify + Reflection (automatisch)
-        if not _verify_patches(state):
+        if not _verify_patches(state, phase="post_build"):
             audit("loop_gate_failed", {"gate": "post_build", "task_id": i}, pd, pn)
             if not _reflection_loop(state):
                 audit("loop_reflection_gescheitert", {"task_id": i}, pd, pn)
@@ -537,7 +549,7 @@ def run_pipeline_loop(
         audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
 
     # 4. Post-Build Verify + Reflection (nach allen Tasks)
-    if not _verify_patches(state):
+    if not _verify_patches(state, phase="post_build"):
         audit("loop_gate_failed", {"gate": "post_build"}, pd, pn)
         if _reflection_loop(state):
             audit("loop_reflection_erfolg", {"project_name": project_name}, pd, pn)
