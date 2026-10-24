@@ -554,9 +554,17 @@ def _run_with_progress(
         Der Worker-Thread (ask_llm, HTTP+JSON) blockiert den
         Main-Thread durch die GIL. Der Heartbeat-Thread laeuft
         trotzdem weiter, weil _done.wait() die GIL freigibt.
+
+        M-371: Nutzt spinner_start/spinner_update, wenn der
+        Renderer im live-Modus ist. In ci/pretty: heartbeat.
         """
         _start_hb = _time.monotonic()
         _last_hb = -1
+        # Spinner einmal starten (No-Op in ci/pretty)
+        try:
+            _r.spinner_start(f"[{nr}/{total}] {name}")
+        except Exception:  # noqa: BLE001, S110
+            pass
         while not _done.is_set():
             _elapsed_hb = int(_time.monotonic() - _start_hb)
             if _elapsed_hb // 2 > _last_hb // 2:
@@ -566,6 +574,10 @@ def _run_with_progress(
                     pass
                 _last_hb = _elapsed_hb
             _done.wait(timeout=0.5)
+        try:
+            _r.spinner_stop()
+        except Exception:  # noqa: BLE001, S110
+            pass
 
     _t = _threading.Thread(target=_worker, daemon=True)
     _t_hb = _threading.Thread(target=_heartbeat_loop, daemon=True)
@@ -758,17 +770,16 @@ def _human_gate(state: RunState) -> int:
 
     # Interaktiv: fail-closed bei EOFError
     # M-303: Impact-Preview vor dem Gate (Agent-Polis/pi-show-diffs-Muster).
-    print("\n=== HUMAN GATE ===")
-    print("Aenderungen im Zielprojekt:")
+    # M-372: panel_diff statt Plain-Text (rich im pretty/live-Modus).
+    from werkstatt import loop_renderer as _rh
+    _stat_txt = ""
+    _diff_txt = ""
     try:
         _stat = subprocess.run(
             ["git", "-C", str(pd), "diff", "--stat"],
             capture_output=True, text=True, check=False, timeout=10,
         ).stdout
-        if _stat.strip():
-            print(_stat)
-        else:
-            print("  (keine Aenderungen)")
+        _stat_txt = _stat.strip() if _stat.strip() else "  (keine Aenderungen)"
 
         # Voller Diff nur bei kleiner Aenderung (max 2000 Zeichen)
         _full = subprocess.run(
@@ -776,12 +787,21 @@ def _human_gate(state: RunState) -> int:
             capture_output=True, text=True, check=False, timeout=10,
         ).stdout
         if _full.strip() and len(_full) <= 2000:
-            print("--- Diff ---")
-            print(_full)
+            _diff_txt = _full
         elif _full.strip():
-            print(f"  (Diff zu gross: {len(_full)} Zeichen, siehe git diff)")
+            _diff_txt = f"  (Diff zu gross: {len(_full)} Zeichen, siehe git diff)"
     except Exception:  # noqa: BLE001
-        print("  (Diff nicht verfuegbar)")
+        _stat_txt = "  (Diff nicht verfuegbar)"
+
+    _gate_body = f"Aenderungen im Zielprojekt:\n{_stat_txt}"
+    if _diff_txt:
+        _gate_body += f"\n\n{_diff_txt}"
+    try:
+        _rh.panel_diff(_gate_body, title="HUMAN GATE")
+    except Exception:  # noqa: BLE001
+        # Fallback: Plain
+        print("\n=== HUMAN GATE ===")
+        print(_gate_body)
 
     print()
     print("Approve? [j/n/e]")
