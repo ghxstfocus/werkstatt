@@ -1,1 +1,0 @@
-bash: a8_3_v2.sh: Datei oder Verzeichnis nicht gefunden
