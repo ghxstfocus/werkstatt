@@ -35,7 +35,7 @@ if _os.environ.get("WERKSTATT_IN_TEST") == "1":
 
 # Baseline fixiert (Quelle: docs/HANDOFF-BASELINE.md @ ae40f26).
 BASELINE = {
-    "pytest": 1358,   # pytest -q (M-318: +2 Idempotenz-Tests)
+    "pytest": 1361,   # pytest -q (M-318: +2 Idempotenz-Tests)
     "ruff": 13,       # ruff check .
     "mypy": 8,        # mypy pipeline.py werkstatt/
     "ast": 6,         # pytest tests/test_audit_kinds.py -q
@@ -95,7 +95,9 @@ def check_all(cwd: Path) -> dict:
     _rc, out = _run(["pytest", "-q"], cwd)
     passed, failed = _parse_pytest(out)
     result["current"]["pytest"] = {"passed": passed, "failed": failed}
-    result["delta"]["pytest"] = BASELINE["pytest"] - passed
+    # M-331: failed zaehlt als Fehler. Sonst ist der Gate fail-open:
+    # 1360 passed + 1 failed -> delta=0 -> "ok", obwohl ein Test rot ist.
+    result["delta"]["pytest"] = (BASELINE["pytest"] - passed) + failed
 
     # ruff
     _rc, out = _run(["ruff", "check", "--no-cache", "."], cwd)
