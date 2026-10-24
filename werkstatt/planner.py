@@ -145,11 +145,47 @@ def _preflight_scan(state: RunState) -> list[dict]:
     return fehler
 
 
-def _planner_system(aufgabe: str) -> str:
-    """M-374: using-werkstatt IMMER, plan-crafting IMMER,
-    systematic-debugging bei Bug-Match."""
+def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
+    """M-376: Explorer-Dateien ZUERST (Lost-in-the-Middle).
+
+    Goldstandard: Relevante Information an den Anfang des
+    Kontexts. Die gemessenen Dateien sind die wichtigste
+    Information — sie stehen VOR PLANNER_SYSTEM.
+    """
     skills = load_all_skills()
-    parts = [PLANNER_SYSTEM]
+    parts: list[str] = []
+
+    # === M-376: GEMESSENE DATEIEN ZUERST (hoechste Prioritaet) ===
+    if isinstance(explorer_ctx, dict):
+        _key = explorer_ctx.get("key_files") or []
+        _files = [
+            k.get("file") for k in _key
+            if isinstance(k, dict) and k.get("file")
+        ]
+        if _files:
+            _files_str = "\n".join(f"  - {f}" for f in _files)
+            parts.append(
+                "<measured_files>\n"
+                f"Der Explorer hat {len(_files)} Datei(en) mit Fehlern "
+                f"gemessen (deterministisch, nicht geraten):\n"
+                f"{_files_str}\n"
+                "</measured_files>"
+            )
+            parts.append(
+                "<pflicht>\n"
+                f"DEINE TASKS MUESSEN GENAU DIESE {len(_files)} DATEIEN "
+                f"VERWENDEN.\n"
+                "Erfinde KEINE anderen Dateien. KEINE generischen Tasks "
+                "wie 'Datei 1', 'Datei 2'.\n"
+                "Jeder Task nennt eine dieser Dateien mit action=update.\n"
+                f"Die {len(_files)} Dateien sind: {', '.join(str(f) for f in _files)}\n"
+                "</pflicht>"
+            )
+
+    # === Dann PLANNER_SYSTEM ===
+    parts.append(PLANNER_SYSTEM)
+
+    # === Skills ===
     uw = load_skill_by_name("using-werkstatt", skills)
     if uw and uw["body"]:
         parts.append("## Skill: Using-Werkstatt\n" + uw["body"])
@@ -161,6 +197,20 @@ def _planner_system(aufgabe: str) -> str:
         sd = load_skill_by_name("systematic-debugging", skills)
         if sd and sd["body"]:
             parts.append("## Skill: Systematic-Debugging\n" + sd["body"])
+
+    # === M-376: Pflicht-Wiederholung am ENDE (recency bias) ===
+    if isinstance(explorer_ctx, dict):
+        _key2 = explorer_ctx.get("key_files") or []
+        _files2 = [
+            k.get("file") for k in _key2
+            if isinstance(k, dict) and k.get("file")
+        ]
+        if _files2:
+            parts.append(
+                f"<erinnerung>Nur diese {len(_files2)} Dateien: "
+                f"{', '.join(str(f) for f in _files2)}</erinnerung>"
+            )
+
     return "\n\n".join(parts)
 
 
@@ -181,7 +231,7 @@ def run_planner(state: RunState) -> bool:
 
     user_content = f"Aufgabe: {aufgabe}\n\nKontext:\n{docs_ctx}"
 
-    # M-375: Explorer-Kontext lesen (key_files + findings).
+    # M-375/M-376: Explorer-Kontext lesen (key_files + findings).
     _explorer_ctx = getattr(state, "explorer_context", None)
     if isinstance(_explorer_ctx, dict):
         _key = _explorer_ctx.get("key_files") or []
@@ -259,7 +309,7 @@ def run_planner(state: RunState) -> bool:
         )
 
     reply = ask_llm(
-        api_key, _planner_system(aufgabe), user_content,
+        api_key, _planner_system(aufgabe, _explorer_ctx), user_content,
         model="deepseek-chat", temperature=0.2, max_tokens=4000,
     )
 
