@@ -418,3 +418,27 @@ def test_human_gate_zeigt_diff(tmp_path):
         rc = _human_gate(st)
     # approve -> 0
     assert rc == 0
+
+
+def test_extract_files_aus_task_files_feld():
+    """M-306b: _extract_files_from_tasks bevorzugt task_files-Feld."""
+    from werkstatt.loop import _extract_files_from_tasks
+    tasks = [
+        {"id": "t1", "name": "Fix", "task_files": ["core/a.py", "core/b.py"]},
+        {"id": "t2", "name": "Doku", "task_files": ["docs/README.md"]},
+    ]
+    files = _extract_files_from_tasks(tasks)
+    assert "core/a.py" in files
+    assert "core/b.py" in files
+    assert "docs/README.md" in files
+    assert len(files) == 3
+
+
+def test_extract_files_regex_fallback():
+    """M-306b: Fallback auf Regex, wenn task_files fehlt."""
+    from werkstatt.loop import _extract_files_from_tasks
+    tasks = [
+        {"id": "t1", "name": "Update README.md", "description": "Add line to README.md"},
+    ]
+    files = _extract_files_from_tasks(tasks)
+    assert "README.md" in files

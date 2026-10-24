@@ -102,13 +102,26 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     return True
 
 def _extract_files_from_tasks(tasks: list) -> list[str]:
-    """M-299i: Datei-Pfade aus Task-Beschreibungen extrahieren (deterministisch)."""
+    """M-299i + M-306b: Datei-Pfade aus Task-Beschreibungen extrahieren.
+
+    Bevorzugt das task_files-Feld (deterministisch). Fallback:
+    Regex auf Task-Text (Backward-Compat fuer alte Plaene).
+    """
     import re as _re
     pattern = _re.compile(
         r'([a-zA-Z_][a-zA-Z0-9_/.-]*\.(?:md|py|yaml|yml|json|txt|toml|cfg|ini))'
     )
     files: list[str] = []
     for task_obj in tasks or []:
+        # M-306b: task_files-Feld bevorzugen (deterministisch).
+        if isinstance(task_obj, dict):
+            tf = task_obj.get("task_files")
+            if isinstance(tf, list):
+                for f in tf:
+                    if isinstance(f, str) and f not in files:
+                        files.append(f)
+                continue  # task_files da -> kein Regex-Fallback
+        # Fallback: Regex auf Task-Text (Backward-Compat).
         text = task_obj if isinstance(task_obj, str) else str(task_obj)
         for f in pattern.findall(text):
             if f not in files:

@@ -128,3 +128,41 @@ def test_preflight_scan_klassifiziert(tmp_path):
     klassen = {f["klasse"] for f in fehler}
     assert "syntax" in klassen
     assert "lint" in klassen
+
+
+def test_planner_deklariert_task_files(tmp_path):
+    """M-306b: Planner speichert task_files aus Plan."""
+    import json
+    from unittest.mock import MagicMock, patch
+
+    from werkstatt.planner import run_planner
+
+    st = _state(tmp_path)
+    st.aufgabe = "Repariere"
+    st.docs = {}
+    st.preflight_fehler = [
+        {"klasse": "type", "stage_id": "mypy", "datei": "core/a.py", "text": "err"},
+    ]
+
+    mock_reply = MagicMock()
+    mock_reply.ok = True
+    mock_reply.content = json.dumps({
+        "tasks": [{
+            "id": "t1", "name": "Fix a.py", "description": "...",
+            "action": "write",
+            "task_files": ["core/a.py"],
+            "akzeptanzkriterien": ["ok"],
+        }],
+        "tests": ["t1"],
+        "akzeptanzkriterien": ["akz"],
+        "blocker": [{"klasse": "type", "text": "err"}],
+        "follow_up": [],
+        "ignore": [],
+    })
+
+    with patch("werkstatt.planner.ask_llm", return_value=mock_reply):
+        rc = run_planner(st)
+
+    assert rc is True
+    assert len(st.tasks) == 1
+    assert st.tasks[0]["task_files"] == ["core/a.py"]

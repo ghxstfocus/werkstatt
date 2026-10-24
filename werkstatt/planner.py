@@ -28,14 +28,21 @@ Phase). Entscheide pro Fehler:
     (z.B. mypy-Fehler in unrelated Modulen).
   - IGNORE: irrelevant (z.B. Timeout in ungenutztem Modul).
 
-Jeder Task hat ein "action"-Feld:
-  - "read" = Bestandsaufnahme / Pruefung. KEIN Code-Patch.
-    (z.B. "Analysiere Fehler in X", "Pruefe Zustand Y").
-  - "write" = Code/Doku-Aenderung. Patch wird erzeugt.
+Jeder Task hat zwei Pflichtfelder:
+  - "action": "read" = Bestandsaufnahme / Pruefung, KEIN Code-Patch.
+              "write" = Code/Doku-Aenderung, Patch wird erzeugt.
+  - "task_files": list[str] = EXPLIZITE Datei-Pfade, die dieser Task
+              anfasst. Bei Baseline-Reparatur: die Dateien aus der
+              Preflight-Fehlerliste (Feld "datei" im Fehler-Dict).
+              Bei Aufgabe "repariere Codebasis": ALLE Preflight-
+              Fehlerdateien hier eintragen.
 
 Antworte NUR mit validem JSON:
 {
-  "tasks": [{"id": "t1", "name": "...", "description": "...", "action": "read"|"write", "akzeptanzkriterien": ["..."]}],
+  "tasks": [{"id": "t1", "name": "...", "description": "...",
+             "action": "read"|"write",
+             "task_files": ["pfad/zur/datei.py"],
+             "akzeptanzkriterien": ["..."]}],
   "tests": ["..."],
   "akzeptanzkriterien": ["..."],
   "blocker": [{"klasse": "...", "text": "..."}],
