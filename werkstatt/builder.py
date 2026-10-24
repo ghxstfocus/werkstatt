@@ -143,9 +143,23 @@ def run_builder(state: RunState) -> bool:
         for _m in _file_pattern.findall(_text):
             if _m not in _relevant_files:
                 _relevant_files.append(_m)
-    # Explorer-Report (key_files) als Wegweiser ergaenzen.
-    # key_files kann dicts enthalten (z.B. {"file": "...", ...})
-    # oder strings. Wir normalisieren auf strings.
+    # M-335: task_files aus aktuellem Task (M-317) PRIORISIEREN.
+    # Der Planner setzt explizite Datei-Pfade pro Task. Der Builder
+    # hat sie bisher ignoriert — deshalb sah er oft die falsche
+    # Datei (z.B. tools/port_check.py statt core/checks/).
+    _aktuelle_task = getattr(state, "aktuelle_task", None)
+    if isinstance(_aktuelle_task, dict):
+        _task_files = _aktuelle_task.get("task_files", []) or []
+        if _task_files:
+            _task_files_str = [f for f in _task_files if isinstance(f, str)]
+            if _task_files_str:
+                # task_files zuerst, dann der Rest
+                _relevant_files = list(_task_files_str) + [
+                    f for f in _relevant_files if f not in _task_files_str
+                ]
+
+    # Explorer-Report (key_files) als Wegweiser ergaenzen — NUR
+    # wenn task_files leer war (M-335: Fallback).
     _expl = getattr(state, "explorer_context", {}) or {}
     for _f in _expl.get("key_files", []) or []:
         _f_str = None

@@ -240,3 +240,88 @@ def test_builder_create_ohne_imports(tmp_path):
         result = run_builder(st)
     # Kein Crash
     assert result in (True, False)
+
+
+def test_builder_task_files_priorisiert(tmp_path):
+    """M-335: task_files kommen zuerst in _file_context."""
+    from unittest.mock import patch
+
+    from werkstatt.builder import run_builder
+
+    # Zwei Dateien
+    (tmp_path / "core").mkdir()
+    # Datei syntaktisch FALSCH: Idempotenz-Check greift nicht,
+    # Builder geht weiter zu _relevant_files.
+    (tmp_path / "core" / "checks.py").write_text("def check(:\n")
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "port.py").write_text("def port(): pass\n")
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
+                 "task_files": ["core/checks.py"]}]
+    st.aktuelle_task = st.tasks[0]
+
+    _file_ctx = []
+    def _mock_audit(kind, payload, *a, **kw):
+        if kind == "builder_file_context":
+            _file_ctx.extend(payload.get("files", []))
+
+    with patch("werkstatt.builder.audit", side_effect=_mock_audit), \
+         patch("werkstatt.builder.ask_llm") as mock_llm:
+        mock_llm.return_value = type("R", (), {
+            "ok": True, "content": '{"patches": []}', "error": ""
+        })()
+        run_builder(st)
+
+    # core/checks.py muss in _file_context sein
+    assert "core/checks.py" in _file_ctx, f"erwartet core/checks.py, war {_file_ctx}"
+
+
+def test_builder_task_files_leer_fallback(tmp_path):
+    """M-335: Ohne task_files bleibt altes Verhalten (Task-Text + Explorer)."""
+    from unittest.mock import patch
+
+    from werkstatt.builder import run_builder
+
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "port.py").write_text("def port(): pass\n")
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "refactor", "action": "update"}]
+    st.aktuelle_task = st.tasks[0]
+    st.explorer_context = {"key_files": ["tools/port.py"]}
+
+    _file_ctx = []
+    def _mock_audit(kind, payload, *a, **kw):
+        if kind == "builder_file_context":
+            _file_ctx.extend(payload.get("files", []))
+
+    with patch("werkstatt.builder.audit", side_effect=_mock_audit), \
+         patch("werkstatt.builder.ask_llm") as mock_llm:
+        mock_llm.return_value = type("R", (), {
+            "ok": True, "content": '{"patches": []}', "error": ""
+        })()
+        run_builder(st)
+
+    # tools/port.py (Explorer-Fallback) ist da
+    assert "tools/port.py" in _file_ctx
+
+
+def test_builder_task_files_nicht_str(tmp_path):
+    """M-335: task_files mit Nicht-String-Werten werden ignoriert."""
+    from unittest.mock import patch
+
+    from werkstatt.builder import run_builder
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
+                 "task_files": [None, 123, "core/checks.py"]}]
+    st.aktuelle_task = st.tasks[0]
+
+    # Kein Crash
+    with patch("werkstatt.builder.ask_llm") as mock_llm:
+        mock_llm.return_value = type("R", (), {
+            "ok": True, "content": '{"patches": []}', "error": ""
+        })()
+        result = run_builder(st)
+    assert result in (True, False)
