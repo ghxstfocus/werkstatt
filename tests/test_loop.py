@@ -1548,3 +1548,58 @@ def test_human_gate_plan_eof_reject(tmp_path, monkeypatch):
     rc = loop_mod._human_gate_plan(st, auto_approve=False)
     assert rc == 1
     assert "loop_plan_gate_eof" in _audits
+
+
+def test_loop_builder_false_sofort_return(tmp_path, monkeypatch):
+    """M-355b: run_builder=False -> sofort loop_task_failed + rc=1.
+
+    Vor M-355b fiel der Loop in den Patch-Pfad mit leerem
+    state.patches und lief durch Verify/Reviewer/Reflection.
+    M-359 fing das erst nach 45s als
+    loop_reviewer_reject_fail_closed ab. M-355b bricht sofort ab.
+    """
+    from werkstatt import loop as loop_mod
+
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
+    )
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "checks.py").write_text("x = 1\n")
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.tasks = [{"id": "t1", "name": "T1", "action": "create",
+                 "task_files": ["core/neu.py"]}]
+    st.phasen = []
+
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda k, p, *a, **kw: _audits.append(k))
+    monkeypatch.setattr(loop_mod, "_plan_gate", lambda s: True)
+    monkeypatch.setattr(loop_mod, "run_explorer",
+                        lambda s, a: {"key_files": [], "findings": "", "next_reads": []})
+    # run_builder liefert False (create-Task scheitert).
+    monkeypatch.setattr(loop_mod, "run_builder", lambda s: False)
+    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: True)
+    monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
+    monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
+    monkeypatch.setattr(loop_mod, "_reflection_loop", lambda s, **kw: False)
+    for _fn in ("header", "step", "task", "task_ok", "task_failed",
+                "group_start", "group_end", "footer"):
+        if hasattr(loop_mod, _fn):
+            monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
+
+    rc = loop_mod.run_pipeline_loop("p", "a", [st])
+    # M-355b: rc=1, Grund builder_failed.
+    assert rc == 1, f"erwartet rc=1, war {rc}; audits={_audits}"
+    assert "loop_builder_aufgerufen" in _audits
+    assert "loop_task_failed" in _audits
+    # M-355b: KEIN Durchfall zu M-359.
+    assert "loop_reviewer_reject_fail_closed" not in _audits, (
+        f"M-355b: Durchfall zu fail_closed; audits={_audits}"
+    )
+

@@ -542,3 +542,79 @@ def test_planner_prompt_m339():
     from werkstatt.planner import PLANNER_SYSTEM
     assert "MIT Suffix" in PLANNER_SYSTEM
     assert "KEINE Ordner" in PLANNER_SYSTEM
+
+
+def test_builder_create_zieldatei_fehlt_wird_angelegt(tmp_path):
+    """M-360: create + Datei fehlt -> Zieldatei aus task_files, LLM legt sie an.
+
+    Vor M-360 warf der Builder builder_zieldatei_nicht_gefunden,
+    sobald keine task_file existierte — auch bei action=create.
+    Damit wurde M-352 (Idempotenz bei create) nie erreicht, und
+    create-Tasks scheiterten strukturell.
+
+    Nach M-360: bei action=create und fehlender Datei nimmt der
+    Builder die erste task_file als Zieldatei, Audit
+    builder_zieldatei_create_neu.
+    """
+    from werkstatt.builder import run_builder
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "neues Modul anlegen",
+                 "action": "create", "task_files": ["core/neu.py"]}]
+    st.aktuelle_task = st.tasks[0]
+
+    # Zieldatei existiert NICHT.
+    assert not (tmp_path / "core" / "neu.py").exists()
+
+    fake_json = (
+        '{"patches": [{"action": "create", "file": "core/neu.py", '
+        '"content": "x = 1\\n"}]}'
+    )
+
+    class FakeReply:
+        ok = True
+        content = fake_json
+
+    _audits = []
+    with patch("werkstatt.builder.ask_llm", return_value=FakeReply()), \
+         patch("werkstatt.builder.audit",
+               lambda k, p, *a, **kw: _audits.append(k)):
+        result = run_builder(st)
+
+    # M-360: create-Zieldatei-Audit statt zieldatei_nicht_gefunden.
+    assert "builder_zieldatei_create_neu" in _audits, f"audits={_audits}"
+    assert "builder_zieldatei_nicht_gefunden" not in _audits, (
+        f"M-360: zieldatei_nicht_gefunden bei create; audits={_audits}"
+    )
+    assert result is True, "Builder muss erfolgreich sein"
+    assert len(st.patches) == 1
+    assert st.patches[0]["action"] == "create"
+    assert st.patches[0]["file"] == "core/neu.py"
+
+
+def test_builder_update_zieldatei_fehlt_bleibt_fail_closed(tmp_path):
+    """M-360-Gegenprobe: update + Datei fehlt -> fail-closed.
+
+    M-360 aendert NUR create-Tasks. update-Tasks mit fehlender
+    Zieldatei bleiben fail-closed (builder_zieldatei_nicht_gefunden).
+    """
+    from werkstatt.builder import run_builder
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "bestehendes Modul aendern",
+                 "action": "update", "task_files": ["core/fehlt.py"]}]
+    st.aktuelle_task = st.tasks[0]
+
+    assert not (tmp_path / "core" / "fehlt.py").exists()
+
+    _audits = []
+    with patch("werkstatt.builder.audit",
+               lambda k, p, *a, **kw: _audits.append(k)):
+        result = run_builder(st)
+
+    assert result is False
+    assert "builder_zieldatei_nicht_gefunden" in _audits, f"audits={_audits}"
+    assert "builder_zieldatei_create_neu" not in _audits, (
+        f"M-360: create-Audit bei update; audits={_audits}"
+    )
+
