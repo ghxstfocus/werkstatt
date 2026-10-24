@@ -311,9 +311,31 @@ def run_builder(state: RunState) -> bool:
             break
 
     if _zieldatei is None:
-        audit("builder_zieldatei_nicht_gefunden",
-              {"task_files": _task_files}, pd, pn)
-        return False
+        # M-360: Bei create-Tasks ist das Fehlen der Zieldatei
+        # ERWARTET (die Datei soll angelegt werden). Statt
+        # fail-closed nehmen wir die erste task_file als Ziel
+        # und lassen das LLM sie anlegen.
+        # Bei update/read: Datei MUSS existieren -> fail-closed.
+        if _current_action2 == "create":
+            _erste = next(
+                (f for f in _task_files if isinstance(f, str) and f),
+                None,
+            )
+            if _erste:
+                _zieldatei = _erste
+                audit("builder_zieldatei_create_neu",
+                      {"task_files": _task_files, "zieldatei": _zieldatei},
+                      pd, pn)
+            else:
+                audit("builder_zieldatei_nicht_gefunden",
+                      {"task_files": _task_files, "action": _current_action2},
+                      pd, pn)
+                return False
+        else:
+            audit("builder_zieldatei_nicht_gefunden",
+                  {"task_files": _task_files, "action": _current_action2},
+                  pd, pn)
+            return False
 
     # Volle Zieldatei in den Prompt (nicht letzte 50 Zeilen),
     # damit old_string exakt passt.
