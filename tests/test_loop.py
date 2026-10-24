@@ -615,3 +615,139 @@ def test_loop_update_leerer_patch_idempotent(tmp_path, monkeypatch):
     # Wir testen nur, dass der Loop bei idempotent NICHT return 1 gibt.
     # Dazu muessen wir den Loop bis zum Ende laufen lassen —
     # das ist in test_loop.py bereits teilweise gemockt.
+
+
+def test_verify_patches_platzhalter_changed_files(tmp_path, monkeypatch):
+    """M-322: {changed_files} wird durch state.patches ersetzt."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "__init__.py").write_text("x = 1\n")
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": '
+        '["python3", "-m", "py_compile", "{changed_files}"]}]}'
+    )
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.patches = [{"file": "core/__init__.py", "new_string": "x = 1\n"}]
+
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda kind, payload, pd, pn: _audits.append(kind))
+
+    assert loop_mod._verify_patches(st) is True
+    assert "loop_verify_ok" in _audits
+
+
+def test_verify_patches_stage_skip_ohne_changed_tests(tmp_path, monkeypatch):
+    """M-322: Stage mit {changed_test_files} wird uebersprungen, wenn keine Test-Dateien geaendert."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pt", "command": '
+        '["python3", "-m", "pytest", "{changed_test_files}", "-q"]}]}'
+    )
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.patches = [{"file": "core/x.py", "new_string": "x = 1\n"}]
+
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda kind, payload, pd, pn: _audits.append(kind))
+
+    assert loop_mod._verify_patches(st) is True
+    assert "loop_verify_stage_skipped" in _audits
+
+
+def test_verify_patches_no_tests_stage_warnung(tmp_path, monkeypatch):
+    """M-322: Warnung, wenn keine pytest-Stage im Contract."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "__init__.py").write_text("x = 1\n")
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "py_compile", "command": '
+        '["python3", "-m", "py_compile", "core/__init__.py"]}]}'
+    )
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda kind, payload, pd, pn: _audits.append(kind))
+
+    assert loop_mod._verify_patches(st) is True
+    assert "loop_verify_no_tests_stage" in _audits
+
+
+def test_verify_patches_phase_end_filter(tmp_path, monkeypatch):
+    """M-322: phase='phase_end' filtert Stages korrekt."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "__init__.py").write_text("x = 1\n")
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": ['
+        '{"id": "pc", "command": ["python3", "-m", "py_compile", "core/__init__.py"], "phase": "post_build"},'
+        '{"id": "pytest_full", "command": ["true"], "phase": "phase_end"}'
+        ']}'
+    )
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda kind, payload, pd, pn: _audits.append((kind, payload)))
+
+    assert loop_mod._verify_patches(st, phase="phase_end") is True
+    ok_payloads = [p for k, p in _audits if k == "loop_verify_ok"]
+    assert any("pytest_full" in p.get("stages", []) for p in ok_payloads)
+
+
+def test_verify_patches_fallback_breit(tmp_path, monkeypatch):
+    """M-322: Fallback prueft alle *.py in core/ und tests/."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "ok.py").write_text("x = 1\n")
+    (tmp_path / "core" / "broken.py").write_text("def bad(:\n")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_x.py").write_text("def test_x(): assert True\n")
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda kind, payload, pd, pn: _audits.append(kind))
+
+    assert loop_mod._verify_patches(st) is False
+    assert "loop_verify_failed" in _audits

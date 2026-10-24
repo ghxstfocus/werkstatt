@@ -34,6 +34,47 @@ def _plan_gate(state: RunState) -> bool:
     ))
 
 
+def _expand_cmd_placeholders(
+    cmd: list, state: RunState, project_dir: Path,
+) -> list[str] | None:
+    """M-322: Ersetzt Platzhalter in Stage-Commands.
+
+    Platzhalter:
+      {changed_files}      — alle Dateien aus state.patches
+      {changed_test_files} — nur test_*-Dateien aus state.patches
+
+    Rueckgabe None: Stage ueberspringen (z.B. keine changed_test_files).
+    """
+    cmd_str = " ".join(str(c) for c in cmd)
+    if "{changed_files}" not in cmd_str and "{changed_test_files}" not in cmd_str:
+        return [str(c) for c in cmd]
+
+    patches = getattr(state, "patches", []) or []
+    changed = [
+        p["file"] for p in patches
+        if isinstance(p, dict) and p.get("file")
+        and (Path(project_dir) / p["file"]).exists()
+    ]
+    changed_tests = [
+        f for f in changed
+        if "test" in f.lower() and f.endswith(".py")
+    ]
+
+    out: list[str] = []
+    for c in cmd:
+        s = str(c)
+        if "{changed_test_files}" in s:
+            if not changed_tests:
+                return None
+            s = s.replace("{changed_test_files}", " ".join(changed_tests))
+        if "{changed_files}" in s:
+            if not changed:
+                return None
+            s = s.replace("{changed_files}", " ".join(changed))
+        out.extend(s.split())
+    return out
+
+
 def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     """B2: Verifier (multi-projekt-faehig via Projekt-Contract).
 
@@ -91,20 +132,45 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     # bei fehlendem verify.json 10+ Minuten.
     # Fail-closed: ohne Contract pruefen wir nur Syntax.
     if not stages:
-        stages = [
-            {"id": "py_compile_fallback",
-             "command": ["python3", "-m", "py_compile", "core/__init__.py"]},
-        ]
+        # M-322: Fallback breiter — alle *.py in core/ und tests/.
+        _fallback_targets: list[str] = []
+        for _sub in ("core", "tests"):
+            _d = project_dir / _sub
+            if _d.exists():
+                _fallback_targets.extend(
+                    str(pp.relative_to(project_dir))
+                    for pp in sorted(_d.rglob("*.py"))
+                )
+        if _fallback_targets:
+            stages = [{
+                "id": "py_compile_fallback",
+                "command": ["python3", "-m", "py_compile", *_fallback_targets],
+            }]
+        else:
+            stages = [{
+                "id": "py_compile_fallback",
+                "command": ["python3", "-m", "py_compile", "core/__init__.py"],
+            }]
 
     # 3. Stages ausfuehren
+    _executed_stages = []
     for stage in stages:
         cmd = stage.get("command")
         if not cmd:
             continue
+        # M-322: Platzhalter ersetzen ({changed_files}, {changed_test_files}).
+        _expanded = _expand_cmd_placeholders(list(cmd), state, project_dir)
+        if _expanded is None:
+            audit("loop_verify_stage_skipped",
+                        {"stage": stage.get("id", "?"),
+                         "reason": "no changed files"},
+                        project_dir, getattr(state, "project_name", "?"))
+            continue
+        cmd = _expanded
         # M-306c: "python3" im Stage-Command durch venv_python ersetzen.
-        # Nur wenn venv_python != "python3" (also aus Config geladen).
         if _venv_python != "python3":
             cmd = [_venv_python if c == "python3" else c for c in cmd]
+        _executed_stages.append(stage.get("id", "?"))
         try:
             res = subprocess.run(
                 cmd, cwd=str(project_dir),
@@ -116,10 +182,22 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
             errors.append(f"{stage.get('id', '?')}-Fehler: {exc}")
 
     if errors:
-        from werkstatt.audit import audit
-        audit("loop_verify_failed", {"errors": errors}, project_dir, getattr(state, "project_name", "?"))
+        audit("loop_verify_failed",
+              {"errors": errors, "phase": phase,
+               "stages": _executed_stages},
+              project_dir, getattr(state, "project_name", "?"))
         return False
 
+    # M-322: Erfolg sichtbar machen.
+    audit("loop_verify_ok",
+          {"stages": _executed_stages, "phase": phase},
+          project_dir, getattr(state, "project_name", "?"))
+    if not any("pytest" in (s.get("id", "") or "").lower()
+               or any("pytest" in str(c) for c in (s.get("command") or []))
+               for s in stages):
+        audit("loop_verify_no_tests_stage",
+              {"stages": [s.get("id", "?") for s in stages]},
+              project_dir, getattr(state, "project_name", "?"))
     return True
 
 def _extract_files_from_tasks(tasks: list) -> list[str]:
@@ -828,8 +906,13 @@ def run_pipeline_loop(
         _task_ende(state, phase_state, task_id, ok=True, name=task_name)
         audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
 
-    # 4. Post-Build Verify + Reflection (nach allen Tasks)
-    if not _verify_patches(state, phase="post_build"):
+    # 4. Phase-End Verify + Reflection (nach allen Tasks).
+    # M-322: Bei vorhandener Phasen-Hierarchie laeuft hier die
+    # Vollsuite (verify.json: phase="phase_end"). Bei flachem Plan
+    # (nur Einzelauftraege) ist phase="phase_end" ein No-Op, weil
+    # keine Stage diese Phase deklariert — der Aufruf ist dann
+    # billig (nur py_compile-Fallback oder leer).
+    if not _verify_patches(state, phase="phase_end"):
         audit("loop_gate_failed", {"gate": "post_build"}, pd, pn)
         if _reflection_loop(state):
             audit("loop_reflection_erfolg", {"project_name": project_name}, pd, pn)
