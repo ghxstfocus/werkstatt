@@ -871,7 +871,9 @@ def test_reflection_old_string_not_found(tmp_path, monkeypatch):
 
     result = loop_mod._reflection_loop(st, max_runden=1)
     assert result is False
-    assert "loop_reflection_patch_old_string_not_found" in _audits
+    # M-330: Apply-Pfad ist _apply_patches_with_hooks, das auditiert
+    # loop_patch_old_string_not_found (einheitlich mit Haupt-Pfad).
+    assert "loop_patch_old_string_not_found" in _audits
 
 
 def test_reflection_kein_patch_vom_builder(tmp_path, monkeypatch):
@@ -904,3 +906,96 @@ def test_reflection_kein_patch_vom_builder(tmp_path, monkeypatch):
     result = loop_mod._reflection_loop(st, max_runden=1)
     assert result is False
     assert "loop_reflection_kein_patch" in _audits
+
+
+def test_apply_patches_with_hooks_blocked(tmp_path, monkeypatch):
+    """M-330: PreToolUse blockt -> 0 Patches angewendet."""
+    from werkstatt import loop as loop_mod
+
+    target = tmp_path / "test_x.py"
+    target.write_text("a = 1\n")
+
+    from werkstatt.state import RunState
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+
+    _audits = []
+    monkeypatch.setattr(loop_mod, "audit", lambda kind, payload, *a, **k: _audits.append(kind))
+    monkeypatch.setattr(loop_mod, "_call_hook",
+                        lambda name, payload: {"allow": False, "reason": "blocked"})
+
+    patches = [{"file": "test_x.py", "action": "update",
+                "old_string": "a = 1\n", "new_string": "a = 2\n"}]
+    result = loop_mod._apply_patches_with_hooks(st, patches, phase_label="test")
+    assert result == 0
+    assert "a = 1" in target.read_text()
+    assert "loop_hook_blocked" in _audits
+
+
+def test_apply_patches_with_hooks_allowed(tmp_path, monkeypatch):
+    """M-330: Hooks erlauben -> Patch angewendet."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    target = tmp_path / "test_x.py"
+    target.write_text("a = 1\n")
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+
+    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    monkeypatch.setattr(loop_mod, "_call_hook", lambda name, payload: {"allow": True})
+
+    patches = [{"file": "test_x.py", "action": "update",
+                "old_string": "a = 1\n", "new_string": "a = 2\n"}]
+    result = loop_mod._apply_patches_with_hooks(st, patches, phase_label="test")
+    assert result == 1
+    assert "a = 2" in target.read_text()
+
+
+def test_reflection_nutzt_hooks(tmp_path, monkeypatch):
+    """M-330: Reflection ruft _apply_patches_with_hooks."""
+    import werkstatt.builder as builder_mod
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
+    )
+    target = tmp_path / "test_x.py"
+    target.write_text("a = 1\n")
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.last_verify_errors = ["dummy"]
+
+    def _fake_builder(s):
+        s.patches = [{"file": "test_x.py", "action": "update",
+                      "old_string": "a = 1\n", "new_string": "a = 2\n"}]
+        return True
+
+    _hook_calls = []
+    monkeypatch.setattr(builder_mod, "run_builder", _fake_builder)
+    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    monkeypatch.setattr(loop_mod, "_call_hook",
+                        lambda name, payload: (_hook_calls.append(name) or {"allow": True}))
+    _calls = [0]
+    def _fake_verify(s, phase=None):
+        _calls[0] += 1
+        return _calls[0] > 1
+    monkeypatch.setattr(loop_mod, "_verify_patches", _fake_verify)
+
+    result = loop_mod._reflection_loop(st, max_runden=2)
+    assert result is True
+    assert "pre_tool_use.py" in _hook_calls
+    assert "post_tool_use.py" in _hook_calls

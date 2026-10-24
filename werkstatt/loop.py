@@ -294,6 +294,93 @@ def _task_ende(
             )
 
 
+def _apply_patches_with_hooks(
+    state: RunState,
+    patches: list,
+    *,
+    phase_label: str = "",
+) -> int:
+    """Wendet search/replace-Patches an, MIT Hooks (M-330).
+
+    Wird vom Haupt-Pfad UND von der Reflection genutzt.
+    Hooks:
+      - pre_tool_use pro Patch (allow-Check)
+      - post_tool_use nach Apply
+      - simplify nach Apply
+
+    Rueckgabe: Anzahl angewendeter Patches (0 = keiner).
+    """
+    pd = state.project_dir
+    pn = state.project_name
+
+    # 1. PreToolUse pro Patch
+    for _pat in patches:
+        if not isinstance(_pat, dict):
+            continue
+        _hook_res = _call_hook("pre_tool_use.py", {
+            "patch": _pat.get("new_string", "") or _pat.get("content", ""),
+            "action": _pat.get("action", "update"),
+            "project_dir": str(pd),
+        })
+        if not _hook_res.get("allow", False):
+            audit("loop_hook_blocked",
+                  {"hook": "pre_tool_use", "phase": phase_label,
+                   "reason": _hook_res.get("reason", "")},
+                  pd, pn)
+            return 0
+
+    # 2. Apply (search/replace)
+    _applied = 0
+    for _pat in patches:
+        if not isinstance(_pat, dict):
+            continue
+        _f = _pat.get("file", "")
+        _old = _pat.get("old_string", "")
+        _new = _pat.get("new_string", "")
+        if not _f or not _old or not _new:
+            continue
+        _target = Path(pd) / _f
+        if not _target.exists():
+            audit("loop_patch_file_missing",
+                  {"file": _f, "phase": phase_label}, pd, pn)
+            continue
+        _content = _target.read_text(encoding="utf-8")
+        if _old not in _content:
+            audit("loop_patch_old_string_not_found",
+                  {"file": _f, "phase": phase_label}, pd, pn)
+            continue
+        _target.write_text(
+            _content.replace(_old, _new, 1), encoding="utf-8",
+        )
+        audit("loop_patch_applied",
+              {"file": _f, "phase": phase_label}, pd, pn)
+        _applied += 1
+
+    if _applied == 0:
+        return 0
+
+    # 3. PostToolUse
+    _hook_res = _call_hook("post_tool_use.py", {})
+    if not _hook_res.get("allow", False):
+        audit("loop_hook_blocked",
+              {"hook": "post_tool_use", "phase": phase_label,
+               "reason": _hook_res.get("reason", "")},
+              pd, pn)
+        return _applied  # Patches sind angewendet, aber Hook warnt
+
+    # 4. Simplify
+    _hook_res = _call_hook("simplify.py", {
+        "diff": _get_git_diff_for_hook() if "_get_git_diff_for_hook" in globals() else "",
+    })
+    if not _hook_res.get("allow", False):
+        audit("loop_hook_blocked",
+              {"hook": "simplify", "phase": phase_label,
+               "reason": _hook_res.get("reason", "")},
+              pd, pn)
+
+    return _applied
+
+
 def _reflection_loop(
     state: RunState,
     max_runden: int = 3,
@@ -343,30 +430,11 @@ def _reflection_loop(
             audit("loop_reflection_kein_patch", {"runde": runde}, pd, pn)
             continue
 
-        # Patches anwenden (gleiche Logik wie im Haupt-Pfad).
-        _applied = 0
-        for _pat in _patches:
-            if not isinstance(_pat, dict):
-                continue
-            _f = _pat.get("file", "")
-            _old = _pat.get("old_string", "")
-            _new = _pat.get("new_string", "")
-            if not _f or not _old or not _new:
-                continue
-            _target = Path(state.project_dir) / _f
-            if not _target.exists():
-                audit("loop_reflection_patch_file_missing",
-                      {"runde": runde, "file": _f}, pd, pn)
-                continue
-            _content = _target.read_text(encoding="utf-8")
-            if _old not in _content:
-                audit("loop_reflection_patch_old_string_not_found",
-                      {"runde": runde, "file": _f}, pd, pn)
-                continue
-            _target.write_text(
-                _content.replace(_old, _new, 1), encoding="utf-8",
-            )
-            _applied += 1
+        # M-330: gemeinsame Apply-Funktion MIT Hooks.
+        _applied = _apply_patches_with_hooks(
+            state, _patches,
+            phase_label=f"reflection-runde-{runde}",
+        )
 
         if _applied == 0:
             audit("loop_reflection_patch_nicht_angewendet",
