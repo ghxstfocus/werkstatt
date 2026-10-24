@@ -29,13 +29,42 @@ Antworte NUR mit validem JSON:
 
 
 def _get_git_diff(project_dir: str | Path = "/opt/werkstatt") -> str:
-    """Holt den aktuellen Git-Diff im Zielprojekt."""
+    """Holt den aktuellen Git-Diff im Zielprojekt.
+
+    M-314: umfasst jetzt auch UNTRACKED-Dateien (git ls-files
+    --others). Vorher war der Reviewer blind fuer neue Dateien,
+    die der Builder mit `create` angelegt hat.
+    """
     try:
+        pd = Path(project_dir)
         res = subprocess.run(
             ["git", "diff", "HEAD"],
-            cwd=str(project_dir), capture_output=True, text=True, timeout=30, check=False
+            cwd=str(pd), capture_output=True, text=True, timeout=30, check=False
         )
-        return res.stdout[:10000]
+        parts = [res.stdout[:10000]] if res.stdout else []
+
+        # M-314: untracked-Dateien als "Neue Datei"-Block anhaengen.
+        untracked = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            cwd=str(pd), capture_output=True, text=True, timeout=30, check=False
+        )
+        if untracked.stdout:
+            for rel in untracked.stdout.splitlines():
+                if not rel or rel.startswith("."):
+                    continue
+                f = pd / rel
+                if not f.is_file():
+                    continue
+                try:
+                    content = f.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                block = ["--- /dev/null", f"+++ b/{rel}", "@@ NEUE DATEI @@"]
+                for line in content.splitlines():
+                    block.append(f"+{line}")
+                parts.append("\n".join(block) + "\n")
+
+        return "\n".join(parts)[:20000]
     except Exception:  # noqa: BLE001
         return ""
 
@@ -99,5 +128,9 @@ def run_reviewer(state: RunState) -> bool:
     if not approved:
         for bug in bugs:
             audit("reviewer_bug", bug, pd, pn)
+        # M-314: bugs in State persistieren (fuer Reflection).
+        state.reviewer_bugs = list(bugs)  # type: ignore[attr-defined]
+    else:
+        state.reviewer_bugs = []  # type: ignore[attr-defined]
 
     return approved

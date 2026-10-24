@@ -273,9 +273,11 @@ class RunState:
     # Liste von dicts: [{klasse, stage_id, datei, text}, ...]
     preflight_fehler: list[dict] = field(default_factory=list)
     # M-310: Phasen-Hierarchie (Haupt- und Unterpunkte).
-    # Struktur: [{"id": "p1", "titel": "...", "parent_id": None,
-    #             "tasks": ["t1", "t2"]}]
     phasen: list[dict] = field(default_factory=list)
+    # M-314: Reviewer-Bugs (file/line/description/severity).
+    # Wird von run_reviewer befuellt, von _reflection_loop
+    # als Kontext an den Builder uebergeben.
+    reviewer_bugs: list[dict] = field(default_factory=list)
     # M-299e: Planner-Entscheidung pro Preflight-Fehler.
     # BLOCKER: verhindert die Aufgabe -> in Plan.
     blocker_fehler: list[dict] = field(default_factory=list)

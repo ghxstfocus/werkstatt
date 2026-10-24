@@ -540,3 +540,30 @@ def test_loop_reviewer_after_reflection(tmp_path):
     # Reviewer rejected nach Reflection -> return 1
     assert rc == 1
     assert reviewer_calls["n"] == 2  # zwei Aufrufe: 1 original + 1 nach Reflection
+
+
+def test_reflection_erhaelt_reviewer_bug_kontext(tmp_path):
+    """M-314: _reflection_loop bekommt Reviewer-Bugs als error_context."""
+    from werkstatt.loop import _reflection_loop
+
+    st = _state(tmp_path)
+    st.reviewer_bugs = [
+        {"file": "x.py", "line": 0, "description": "fehlt", "severity": "high"},
+    ]
+
+    captured = {}
+
+    def _mock_ask_llm(api_key, system, user_content, **kwargs):
+        captured["user_content"] = user_content
+        reply = type("R", (), {"ok": False, "content": "", "error": "test"})()
+        return reply
+
+    with patch("werkstatt.loop._verify_patches", return_value=False), \
+         patch("werkstatt.loop._get_baseline_error_details", return_value="test-error"), \
+         patch("werkstatt.loop.ask_llm", side_effect=_mock_ask_llm), \
+         patch("werkstatt.loop.audit"):
+        _reflection_loop(st, max_runden=1, error_context='[{"file":"x.py","description":"fehlt"}]')
+
+    prompt = captured.get("user_content", "")
+    assert "x.py" in prompt
+    assert "fehlt" in prompt

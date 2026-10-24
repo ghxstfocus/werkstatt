@@ -200,8 +200,16 @@ def _task_ende(
             )
 
 
-def _reflection_loop(state: RunState, max_runden: int = 3) -> bool:
-    """Echter Reflection-Loop (Aider-Prinzip)."""
+def _reflection_loop(
+    state: RunState,
+    max_runden: int = 3,
+    error_context: str | None = None,
+) -> bool:
+    """Echter Reflection-Loop (Aider-Prinzip).
+
+    error_context: zusaetzlicher Kontext (z.B. Reviewer-Bug-Text),
+    der dem Builder mitgegeben wird (M-314).
+    """
     pd = state.project_dir
     pn = state.project_name
     api_key = getattr(state, "api_key", "")
@@ -217,9 +225,17 @@ def _reflection_loop(state: RunState, max_runden: int = 3) -> bool:
         error_ctx = _get_baseline_error_details()
         audit("loop_reflection_runde", {"runde": runde}, pd, pn)
 
+        _extra = ""
+        if error_context:
+            _extra = (
+                f"\n\nZusaetzlicher Kontext (z.B. Reviewer-Befund):\n"
+                f"{error_context}"
+            )
+
         reflection_prompt = (
             f"Dein letzter Patch hat die Baseline zerstoert.\n"
-            f"Hier ist der echte Fehler-Output:\n\n{error_ctx}\n\n"
+            f"Hier ist der echte Fehler-Output:\n\n{error_ctx}"
+            f"{_extra}\n\n"
             "Bitte schreibe einen korrigierten Patch (git diff), "
             "der nur diesen Fehler behebt. Gib NUR den Patch aus."
         )
@@ -743,7 +759,13 @@ def run_pipeline_loop(
         # Reviewer (Phase 9)
         if not run_reviewer(state):
             audit("loop_reviewer_rejected", {"task_id": i}, pd, pn)
-            if not _reflection_loop(state):
+            # M-314: Reviewer-Bug-Text als Kontext an Reflection.
+            _reviewer_bugs = getattr(state, "reviewer_bugs", []) or []
+            _bug_ctx = ""
+            if _reviewer_bugs:
+                import json as _json
+                _bug_ctx = _json.dumps(_reviewer_bugs, ensure_ascii=False)
+            if not _reflection_loop(state, error_context=_bug_ctx):
                 audit("loop_reviewer_reflection_gescheitert", {"task_id": i}, pd, pn)
                 _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected")
                 return 1

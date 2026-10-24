@@ -46,3 +46,24 @@ def test_reviewer_ohne_diff(tmp_path):
     st = _state(tmp_path)
     with patch("werkstatt.reviewer._get_git_diff", return_value=""):
         assert run_reviewer(st) is True
+
+
+def test_reviewer_sieht_untracked_dateien(tmp_path):
+    """M-314: _get_git_diff umfasst untracked-Dateien."""
+    import subprocess as _sp
+
+    from werkstatt.reviewer import _get_git_diff
+
+    # Repo initialisieren
+    _sp.run(["git", "init"], cwd=str(tmp_path), capture_output=True, check=False)
+    _sp.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+             "commit", "--allow-empty", "-m", "init"],
+            cwd=str(tmp_path), capture_output=True, check=False)
+
+    # Neue (untracked) Datei
+    (tmp_path / "new_file.py").write_text("def foo():\n    return 1\n")
+
+    diff = _get_git_diff(tmp_path)
+    assert "new_file.py" in diff
+    assert "NEUE DATEI" in diff
+    assert "def foo" in diff
