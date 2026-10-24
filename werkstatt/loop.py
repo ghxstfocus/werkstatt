@@ -669,8 +669,10 @@ def run_pipeline_loop(
             _loop_action = None
             if isinstance(task_obj, dict):
                 _loop_action = task_obj.get("action")
-            if _loop_action != "create":
-                # update-Task mit leerem Patch: echter Fehler.
+            if _loop_action not in ("create", "update"):
+                # read-Task mit leerem Patch: echter Fehler (Builder
+                # sollte hier nie laufen). Bei create/update: Idempotenz-
+                # Pfad unten pruefen (M-318).
                 audit("loop_builder_failed", {"task_id": i, "action": _loop_action}, pd, pn)
                 _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="builder_failed")
                 return 1

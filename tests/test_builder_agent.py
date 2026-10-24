@@ -102,8 +102,8 @@ def test_builder_reflection_bei_inkorrekter_datei(tmp_path):
     )
 
 
-def test_builder_idempotent_nur_bei_create(tmp_path):
-    """M-317: Idempotenz-Check nur bei action=create."""
+def test_builder_idempotent_bei_create_und_update(tmp_path):
+    """M-318: Idempotenz-Check bei create+update (M-317 war zu strikt)."""
     from werkstatt.builder import run_builder
 
     st = _state(tmp_path)
@@ -125,18 +125,22 @@ def test_builder_idempotent_nur_bei_create(tmp_path):
     )
 
 
-def test_builder_update_nutzt_patch_pfad(tmp_path):
-    """M-317: Bei action=update kein Idempotenz-Check (fail-closed)."""
+def test_builder_update_inkorrekte_datei_nutzt_patch_pfad(tmp_path):
+    """M-318: Bei action=update + INKORREKTER Datei -> Patch-Pfad.
+
+    Der Idempotenz-Check greift nur, wenn die Datei syntaktisch
+    korrekt ist. Bei inkorrekter Datei muss der Builder durch den
+    Patch-Pfad (kein builder_nichts_zu_tun, sondern echte Arbeit).
+    """
     from werkstatt.builder import run_builder
 
     st = _state(tmp_path)
-    # Datei existiert + korrekt
+    # Datei existiert, aber ist syntaktisch FALSCH
     (tmp_path / "test_checks.py").write_text(
-        "def test_foo():\n    assert True\n", encoding="utf-8"
+        "def test_foo(:\n    assert True\n", encoding="utf-8"
     )
 
-    # Task: action=update -> normaler Patch-Pfad (kein idempotent)
-    st.tasks = [{"id": "t1", "name": "test_checks.py erweitern", "action": "update"}]
+    st.tasks = [{"id": "t1", "name": "test_checks.py reparieren", "action": "update"}]
 
     with patch("werkstatt.builder.ask_llm") as mock_llm, \
          patch("werkstatt.builder.audit") as mock_audit:
@@ -145,11 +149,33 @@ def test_builder_update_nutzt_patch_pfad(tmp_path):
         })()
         result = run_builder(st)
 
-    # M-317: action=update + leerer Patch -> fail-closed (False),
-    # aber NICHT der Idempotenz-Pfad (kein builder_nichts_zu_tun).
+    # Datei ist inkorrekt -> py_compile schlaegt fehl -> _all_ok=False
+    # -> normaler Patch-Pfad -> LLM liefert leere Patches -> False
     assert result is False
 
-    # KEIN idempotent (auch wenn Datei korrekt ist)
+    # KEIN "nichts zu tun" (weil Datei inkorrekt)
     assert not any(
+        c[0][0] == "builder_nichts_zu_tun" for c in mock_audit.call_args_list
+    )
+
+
+def test_builder_idempotent_bei_update_mit_korrekter_datei(tmp_path):
+    """M-318: action=update + Datei existiert + korrekt -> idempotent."""
+    from werkstatt.builder import run_builder
+
+    st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "test_checks.py erweitern", "action": "update"}]
+
+    # Datei existiert und ist syntaktisch korrekt
+    (tmp_path / "test_checks.py").write_text(
+        "def test_foo():\n    assert True\n", encoding="utf-8"
+    )
+
+    with patch("werkstatt.builder.audit") as mock_audit:
+        result = run_builder(st)
+
+    assert result is True
+    assert st.patches == []
+    assert any(
         c[0][0] == "builder_nichts_zu_tun" for c in mock_audit.call_args_list
     )

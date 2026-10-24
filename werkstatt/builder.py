@@ -72,7 +72,14 @@ def run_builder(state: RunState) -> bool:
         if isinstance(_t_check, dict):
             _current_action = _t_check.get("action")
             break
-    _allow_idempotent = (_current_action == "create")
+    # M-318: Idempotenz auch bei "update" pruefen. Wenn die Zieldatei
+    # existiert und syntaktisch korrekt ist, ist "nichts zu tun" ein
+    # legitimer Erfolg. M-317 hatte "nur create" — das war zu strikt:
+    # ein update-Task, dessen Ziel durch einen vorherigen Task bereits
+    # erfuellt wurde, wurde als Fehler gewertet.
+    # Profi-Muster (Aider, Claude Code, SWE-agent): Erfuellung ist
+    # Repo-Zustand nach Task, nicht "Patch nicht leer".
+    _allow_idempotent = _current_action in ("create", "update")
 
     # M-316 (A1/A2): Idempotenz-Check (Variante iii: verify.py).
     # Wird nur bei create-Tasks verwendet (M-317).

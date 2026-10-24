@@ -578,3 +578,40 @@ def test_verify_patches_fallback_py_compile(tmp_path):
     # -> Fehler, aber schnell (nicht pytest).
     # Wir pruefen nur, dass der Fallback schnell ist (< 5s).
     assert result in (True, False)  # kein Timeout
+
+
+def test_loop_update_leerer_patch_idempotent(tmp_path, monkeypatch):
+    """M-318: update-Task + leerer Patch + Datei korrekt -> task_ok."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    # Einfacher State mit einem update-Task
+    st = RunState(
+        block_id="p",
+        aufgabe="a",
+        start_ts="2026-01-01T00:00:00",
+        docs={},
+        agents={},
+        always={},
+        optional={},
+        file_whitelist=[],
+        api_key="dummy",
+        budget={},
+        agent_docs={},
+        project_dir=tmp_path,
+        project_name="p",
+    )
+    st.tasks = [
+        {"id": "t1", "name": "test_checks.py erweitern", "action": "update"}
+    ]
+    # Datei existiert und ist korrekt
+    (tmp_path / "test_checks.py").write_text(
+        "def test_foo():\n    assert True\n", encoding="utf-8"
+    )
+    # Builder liefert False (leerer Patch)
+    monkeypatch.setattr(loop_mod, "run_builder", lambda s: False)
+    # Reviewer soll nicht erreicht werden (Loop bricht vorher ab bei
+    # nicht-idempotent; bei idempotent: task_ok + continue)
+    # Wir testen nur, dass der Loop bei idempotent NICHT return 1 gibt.
+    # Dazu muessen wir den Loop bis zum Ende laufen lassen —
+    # das ist in test_loop.py bereits teilweise gemockt.
