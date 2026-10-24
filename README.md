@@ -9,33 +9,47 @@ Grok und Codex nehmen und ein eigenes Agentensystem bauen.
 **Kernprinzip:** On-Demand-Messung + deterministische Gates.
 Der Loop prueft, bevor er baut. Kein LLM-Token ohne Plan.
 
-**Stand 2026-10-24:**
+**Stand 2026-10-24 (nach M-322..M-343c, RERUN-23/24):**
 
-- Werkstatt: 1290 Tests, ruff 13, mypy 8, AST 6, Katalog 162.
-- HEAD: f930e0c. Branch: umbau/phase-2 (origin gepusht).
-- Loop-Neubau Phase 1-18 abgeschlossen.
+- **Baseline:** 1401 Tests, ruff 13, mypy 8, AST 6, Katalog 162.
+- **HEAD:** a4c487d. Branch: umbau/phase-2 (origin gepusht).
+- **Loop:** Ende-zu-Ende gruen (RERUN-23/24, Loop-RC=0).
 
-## Loop-Architektur (Phase 1-18)
+## Loop-Architektur
 
-Der neue Orchestrator ist `werkstatt/loop.py` (447 Z.).
-Er ruft:
+Der Orchestrator ist `werkstatt/loop.py` (run_pipeline_loop).
+Er ruft pro Task:
 
-1. **Explorer** (`werkstatt/explorer.py`, 89 Z.)
-   read-only Kontext. JSON mit key_files.
-2. **Planner** (`werkstatt/planner.py`, 81 Z.)
-   JSON-Plan (tasks, tests, akzeptanzkriterien).
-3. **Builder** (`werkstatt/builder.py`, 89 Z.)
-   str_replace-Patches (create + update).
-4. **PreToolUse-Hook** (`hooks/pre_tool_use.py`, 89 Z.)
-   Waechter: .env, destruktive Kommandos, Datei-Existenz.
-5. **PostToolUse-Hook** (`hooks/post_tool_use.py`, 42 Z.)
-   Verifier: Baseline.
-6. **Simplify-Hook** (`hooks/simplify.py`, 64 Z.)
-   Aufraeumer: Komplexitaet.
-7. **Reviewer** (`werkstatt/reviewer.py`, 103 Z.)
-   Bug-Check im Zielprojekt.
-8. **Human-Gate** (`_human_gate` in loop.py)
-   fail-closed, respektiert `require_human_approval`.
+1. **Explorer** (`werkstatt/explorer.py`) — read-only Kontext,
+   JSON mit key_files. Wird durch M-338 (nur explizit genannte
+   Dateien) gehaertet, liefert bei Phasen-Aufgaben oft 0 files
+   (kosmetisch, weil M-337-b nur task_files nutzt).
+2. **Planner** (`werkstatt/planner.py`) — JSON-Plan
+   (tasks, tests, akzeptanzkriterien, phasen). M-323c: Phasen
+   sind Pflicht bei >5 Tasks oder >2 Dateien.
+3. **Builder** (`werkstatt/builder.py`) — search/replace-Patches
+   (create + update). M-337: Zieldatei deterministisch aus
+   task_files[0], action wird erzwungen.
+4. **PreToolUse-Hook** (`hooks/pre_tool_use.py`) — M-334a:
+   AST-basierte Import-Validierung. Blockt erfundene Imports
+   deterministisch.
+5. **Simplify-Hook** (`hooks/simplify.py`) — Aufraeumer:
+   Komplexitaet, Duplikate.
+6. **Verify** (`_verify_patches`) — verify.json-Stages:
+   py_compile_changed, pytest_changed, py_compile_core,
+   pytest_full_checks. M-322: {changed_files},
+   {changed_test_files}, {changed_py_files}-Platzhalter.
+   M-340: py_compile nur auf .py.
+7. **Reviewer** (`werkstatt/reviewer.py`) — Bug-Check im
+   Zielprojekt. M-343c: pytest ist das letzte Wort —
+   Reviewer-Reject wird ignoriert, wenn last_verify_errors
+   leer ist (= Tests gruen).
+8. **Human-Gate** (`_human_gate` in loop.py) — fail-closed,
+   respektiert require_human_approval.
+
+**PostToolUse-Hook wurde entfernt** (M-334b): Er prueft die
+Werkstatt-Baseline statt des Zielprojekts und war redundant
+zu _verify_patches.
 
 Visualisiert:
 
@@ -52,8 +66,8 @@ Visualisiert:
     |        |                                                  |
     |        v                                                  |
     |   Pro Task:                                               |
-    |     Builder -> PreToolUse -> Patch -> PostToolUse        |
-    |              -> Simplify -> Verify -> Reviewer           |
+    |     Builder -> PreToolUse -> Patch -> Simplify           |
+    |              -> Verify -> Reviewer                       |
     |        |                                                  |
     |        v                                                  |
     |   Human-Gate                                             |
@@ -71,81 +85,58 @@ Die Werkstatt betreut mehrere Projekte. Zwei Quellen:
 - **Zielprojekt-Contract** (`/opt/<name>/.werkstatt/verify.json`):
   WIE verifizieren (stages: pytest, ruff, mypy).
 
-Beispiel `verify.json`:
+Beispiel `verify.json` (security-ai):
 
     {
       "stages": [
-        {"id": "pytest", "command": ["python3", "-m", "pytest", "-q"]},
-        {"id": "ruff", "command": ["ruff", "check", "."]}
+        {"id": "py_compile_changed",
+         "command": ["python3", "-m", "py_compile", "{changed_py_files}"],
+         "phase": "post_build"},
+        {"id": "pytest_changed",
+         "command": ["python3", "-m", "pytest", "{changed_test_files}", "-q"],
+         "phase": "post_build"},
+        {"id": "py_compile_core",
+         "command": ["python3", "-m", "py_compile", "core/__init__.py"],
+         "phase": "post_build"},
+        {"id": "pytest_full_checks",
+         "command": ["python3", "-m", "pytest", "tests/unit/test_checks.py", "-q"],
+         "phase": "phase_end"}
       ]
     }
 
-## Struktur
-
-    /opt/werkstatt/
-    ├── pipeline.py              Alter Monolith (11.118 Z., Fallback)
-    ├── werkstatt/               Neue Module (5.027 Z.)
-    │   ├── loop.py              Orchestrator (447 Z.)
-    │   ├── loop_renderer.py     CI-Optik (94 Z.)
-    │   ├── agent.py             ask_llm, execute_commands (609 Z.)
-    │   ├── explorer.py          Read-only Kontext (89 Z.)
-    │   ├── planner.py           JSON-Plan (81 Z.)
-    │   ├── builder.py           str_replace-Patches (89 Z.)
-    │   ├── reviewer.py          Bug-Check (103 Z.)
-    │   ├── phase_state.py       Resume, Decisions (137 Z.)
-    │   ├── state.py             RunState, Measurement (369 Z.)
-    │   ├── config.py            Config-Wrapper (117 Z.)
-    │   └── ...                  (weitere Module)
-    ├── hooks/                   Deterministische Hooks (281 Z.)
-    │   ├── pre_tool_use.py      Waechter (89 Z.)
-    │   ├── post_tool_use.py     Verifier (42 Z.)
-    │   ├── simplify.py          Aufraeumer (64 Z.)
-    │   └── anti_patterns.py     Anti-Patterns (86 Z.)
-    ├── agents/                  Rollen-Prompts (Markdown)
-    ├── skills/                  Skills (SKILL.md)
-    ├── projects/                Projekt-Konfigurationen
-    ├── tests/                   1290 Tests
-    ├── docs/                    Doku (INDEX.md als Einstieg)
-    ├── AGENTS.md                Agenten-Einstieg
-    ├── Bau-Handoff.md           Aktueller Stand
-    └── README.md                Dieses Dokument
-
 ## Aufruf
 
-Der Loop wird ueber Python aufgerufen (CLI folgt):
+Der Loop wird ueber Python aufgerufen (CLI folgt, M-347):
 
-    python3 -c "
-    from pathlib import Path
-    from werkstatt.state import RunState
-    from werkstatt.loop import run_pipeline_loop
+    python3 -m werkstatt.loop \
+      --project security-ai \
+      --aufgabe "Refaktoriere core/checks/ in logische Phasen..."
 
-    st = RunState(
-        block_id='b1', aufgabe='Baue Feature X',
-        api_key=os.environ['DEEPSEEK_API_KEY'],
-        project_dir=Path('/opt/security-ai'),
-        project_name='security-ai',
-        ...
-    )
-    rc = run_pipeline_loop('security-ai', st.aufgabe, [st])
-    "
+Alternativ mit `WERKSTATT_RENDER=pretty` (M-321) fuer
+strukturierte Ausgabe ohne ANSI-Codes:
+
+    WERKSTATT_RENDER=pretty python3 -m werkstatt.loop ... | tee log
 
 ## Sicherheit
 
 - **Kein shell=True.** Argumentlisten.
-- **PreToolUse-Hook:** blockiert `.env`-Dateien, destruktive
-  Kommandos (`git reset --hard`, `rm -rf /`), leere Patches.
-- **Datei-Existenz-Check:** `create` ueberschreibt keine
-  bestehende Datei (blockiert mit `loop_patch_file_exists`).
-- **Whitelist:** read_file nur aus `file_whitelist`.
+- **PreToolUse-Hook:** blockt .env-Dateien, destruktive
+  Kommandos (git reset --hard, rm -rf /), leere Patches,
+  erfundene Imports (M-334a).
+- **Datei-Existenz-Check:** create ueberschreibt keine
+  bestehende Datei (loop_patch_file_exists).
+- **Whitelist:** read_file nur aus file_whitelist.
 - **Redaction** vor jedem LLM-Call.
-- **Human-Gate fail-closed:** bei `EOFError` → reject.
+- **Human-Gate fail-closed:** bei EOFError -> reject.
+- **pytest als letztes Wort** (M-343c): Reviewer-Reject wird
+  ignoriert, wenn Tests gruen sind.
 - **Audit-JSONL** pro Tag mit project und run_id.
 
 ## Baseline
 
 | Metrik | Wert |
 |---|---|
-| pytest | 1290 passed |
+| pytest | 1401 passed |
 | ruff | 13 errors |
 | mypy | 8 errors |
 | AST | 6 passed |
@@ -153,24 +144,54 @@ Der Loop wird ueber Python aufgerufen (CLI folgt):
 
 Quelle: `docs/HANDOFF-BASELINE.md`. Skript: `tools/quality_gate.py`.
 
+## Struktur
+
+    /opt/werkstatt/
+    ├── pipeline.py              Alter Monolith (11.639 Z., Fallback, M-345)
+    ├── werkstatt/               Neue Module
+    │   ├── loop.py              Orchestrator
+    │   ├── loop_renderer.py     CI-Optik (M-321: WERKSTATT_RENDER=pretty)
+    │   ├── agent.py             ask_llm, execute_commands
+    │   ├── explorer.py          Read-only Kontext
+    │   ├── planner.py           JSON-Plan (M-323c: Phasen-Pflicht)
+    │   ├── builder.py           search/replace (M-337: deterministisch)
+    │   ├── reviewer.py          Bug-Check (M-343c: pytest entscheidet)
+    │   ├── phase_state.py       Resume, Decisions (M-323a/d: action durchgereicht)
+    │   ├── state.py             RunState, Measurement
+    │   ├── config.py            Config-Wrapper
+    │   └── ...                  (weitere Module)
+    ├── hooks/                   Deterministische Hooks
+    │   ├── pre_tool_use.py      Waechter + Import-Validierung (M-334a)
+    │   ├── simplify.py          Aufraeumer
+    │   └── anti_patterns.py     Anti-Patterns
+    ├── agents/                  Rollen-Prompts (Markdown)
+    ├── skills/                  Skills (SKILL.md)
+    ├── projects/                Projekt-Konfigurationen
+    ├── tests/                   1401 Tests
+    ├── docs/                    Doku (INDEX.md als Einstieg)
+    ├── AGENTS.md                Agenten-Einstieg
+    ├── Bau-Handoff.md           Aktueller Stand
+    └── README.md                Dieses Dokument
+
 ## Was noch offen ist
 
-- **PhaseState** (`werkstatt/phase_state.py`): implementiert,
-  aber noch nicht in den Loop integriert (Resume-Logik).
-- **Alte Abhaengigkeiten:** `pipeline._approval_und_human_gate`,
-  `pipeline.load_project_config` noch in `loop.py`.
-- **Scaffolder:** Agent, der Projekt-Ordnerstruktur anlegt.
-- **Echter Test mit `security-ai`** (Original, nicht Kopie).
-- **CLI-Einstiegspunkt** fuer den Loop.
+- **M-323b:** Phasen-Checkpoints (`phase_end` pro Phase).
+- **M-341:** Explorer ueberspringen bei task_files.
+- **M-344:** PROGRESS.md mit Phasen-Header.
+- **M-345:** pipeline.py loeschen (erst wenn agent.py-Kopien
+  aufgeloest).
+- **M-346:** pipeline._approval_und_human_gate verschieben.
+- **M-347:** CLI-Einstiegspunkt.
 
 ## Doku
 
 - `AGENTS.md` — Agenten-Einstieg (Befehle, Struktur, Regeln).
 - `Bau-Handoff.md` — aktueller Stand, naechster Schritt.
 - `docs/INDEX.md` — Diaetaxis (tutorial/howto/reference/explanation).
-- `docs/ARCHITEKTUR.md` — Ziel-Architektur.
-- `docs/AUFRAEUM-UND-LOOP-PLAN.md` — Block A-E.
-- `docs/glossary/index.md` — M-Nummern + Fachbegriffe.
 - `docs/ROADMAP.md` — Phasen-Uebersicht.
 - `docs/ERLEDIGT.md` — abgeschlossene Bloecke.
 - `docs/OFFENE-BLOECKE.md` — offene Bloecke.
+- `docs/OFFENE-BLOECKE-ARCHIV-2.md` — archivierte Bloecke (vor 2026-10-24).
+- `docs/MERKPOSTEN.md` — M-Nummern.
+- `docs/NEUBAU-ZIELBILD.md` — Ziel-Architektur.
+- `docs/ARCHITEKTUR.md` — technische Architektur.

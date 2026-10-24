@@ -1,6 +1,6 @@
 # Roadmap — Werkstatt
 
-Stand: 2026-10-19 (nach W61-Pro, Phase 21)
+Stand: 2026-10-24 (nach M-322..M-343c, Loop-Neubau komplett)
 Uebersicht. Details in `OFFENE-BLOECKE.md` (Todo)
 und `ERLEDIGT.md` (Erledigt).
 
@@ -26,7 +26,7 @@ und `ERLEDIGT.md` (Erledigt).
 | 2 | Scaffolder (Agent: legt Projekt-Ordnerstruktur an) | 📋 | — | — |
 | 3a-1 | Anti-Pattern-Bibliothek | ✅ | 1ed875a | — |
 | 3a-2 | Anti-Pattern-Katalog | ✅ | 8ed6cd0 | — |
-| 3b | Builder-Injektion | ✅ | 04012f6 | — |
+| 3b (alt) | Builder-Injektion — historisch, ersetzt durch Loop-Neubau | ✅ | 04012f6 | — |
 | 3c-1 | Reviewer + Solver Injektion | ✅ | 4916b01 | — |
 | 3c-1b | Reviewer/Solver-Praezisierung | ✅ | 045556e | — |
 | 3c-2..17 | (weitere Phasen, im Archiv) | ✅ | — | — |
@@ -124,9 +124,9 @@ Symptom-Behandlung, nicht strukturell.
 | Schritt | Titel | Status | Commit | Tests |
 |---|---|---|---|---|
 | A+B | Messungen als Dateien (state.messungen, gelesene_dateien) | ✅ | 8ef403a | 1189 |
-| C | Anker-Check gegen Datei-Inhalte | 🔴 | — | — |
-| D | Prompt-Bauer auf Index | 🔴 | — | — |
-| E | mess_protokoll deprecated | 🟡 | — | — |
+| C | Anker-Check gegen Datei-Inhalte | ✅ | e768353 | — |
+| D | Prompt-Bauer auf Index | ✅ | e2b3ab3 | — |
+| E | mess_protokoll deprecated | ✅ | 3b907a9 | — |
 
 ## Offene Bloecke
 
@@ -168,9 +168,7 @@ U1-U4 done. Commits in security-ai: 759b9e1, ada910a,
 
 - W61-Label-Fix (Judge-Loop): done (9ead335).
 - W61c (solver_model): done (9ead335).
-- W61a (Reviewer 3->1): offen.
-- W61b (Judge 2->1): offen.
-- W61d (builder.md <300, planner.md <150): offen.
+- W61a/b/d: obsolet (Reviewer/Judge gibt es im Loop-Neubau nicht mehr).
 
 ## W52b — On-Demand-Messung  ✅
 
@@ -190,7 +188,7 @@ verify_code (AST), verify_code_kwargs (inspect),
 verify_values (Enums), Test-Bezug-Check.
 Feedback-Loop (letzter_test_fehler persistiert).
 
-## Phase 21 — ChangeApplier-Audit-Trail-Tests  🔨
+## Phase 21 — ChangeApplier-Audit-Trail-Tests  (ersetzt durch Loop-Neubau)
 
 U1 (Tests APPLIED): 13 Tests gruen, im Feedback-Loop
 gebaut. Commit-Review-Judge eskaliert (Messlage

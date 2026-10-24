@@ -6,10 +6,10 @@ Werkstatt arbeiten. Kurz, konkret, Befehle statt Prosa.
 ## Was ist die Werkstatt
 
 Ein Agenten-System fuer autonome Code-Aenderungen:
-Planner -> Builder -> Judge -> Human-Gate.
-`pipeline.py` orchestriert, `werkstatt/` sind die Module,
-`agents/*.md` sind die Rollen-Prompts, `skills/*/SKILL.md`
-sind die Skills.
+Explorer -> Planner -> Builder -> Hooks -> Reviewer -> Human-Gate.
+`werkstatt/loop.py` orchestriert, `werkstatt/` sind die Module,
+`hooks/` sind die deterministischen Gates, `agents/*.md` sind
+die Rollen-Prompts, `skills/*/SKILL.md` sind die Skills.
 
 ## Pflicht-Befehle
 
@@ -41,10 +41,10 @@ Setup: `docs/KEY-ARCHITEKTUR.md`.
 
     pipeline.py           Orchestrierung (~13000 Z.)
     werkstatt/            11 Module (state, exec, verify, ...)
-    agents/               8 Rollen-Prompts (builder, judge, ...)
+    agents/               Rollen-Prompts (builder, planner, ...)
     skills/               12 Skills (anker-regeln, plan-crafting, ...)
     tools/                quality_gate.py, audit.py
-    tests/                1290 Tests
+    tests/                1401 Tests
     docs/                 30 Doku-Dateien (INDEX.md als Einstieg)
 
 ## Doku
@@ -66,11 +66,11 @@ Setup: `docs/KEY-ARCHITEKTUR.md`.
 
 ## Naechster groesser Umbau
 
-Pipeline-Trichotomie (A8, Block E in docs/AUFRAEUM-UND-LOOP-PLAN.md):
-- Orchestrator: werkstatt/orchestrator.py (Loop, extern).
-- Agent: werkstatt/agent.py (LLM + Dispatch).
-- Hooks: hooks/ (deterministisch, subprocess).
-Ziel: pipeline.py von 11.639 Z. auf ~1.200 Z. reduzieren.
+**Pipeline-Tot (M-345):** pipeline.py (11.639 Z.) loeschen,
+sobald `werkstatt/agent.py` keine Kopien mehr braucht
+(M-231 Zwischenzustand). Danach: Werkstatt-Entkopplung
+von security-ai (werkstatt/verify.py importiert noch
+harness.*-Module, nur Introspektion).
 
 
 ## Loop-Neubau (Phase 1-17)
@@ -87,7 +87,6 @@ Agenten:
 
 Hooks:
 - `hooks/pre_tool_use.py` (Waechter: .env, destruktive Kommandos, Datei-Existenz)
-- `hooks/post_tool_use.py` (Verifier: Baseline)
 - `hooks/simplify.py` (Aufraeumer: Komplexitaet)
 
 Multi-Projekt:

@@ -1,222 +1,122 @@
-# Neubau-Zielbild — Hybrid mit Funktions-Inventar
+# Zielbild — Aktueller Loop (Stand 2026-10-24)
 
-Stand: 2026-10-19
-Branch: umbau/phase-2
-Status: ABGENOMMEN durch Reviewer-Chat (Gate 20 + Rueckfrage 1).
-Basis: docs/UMBAU-FAHRPLAN.md, docs/PHASE1-PLAN.md,
-       docs/PHASE2-PLAN.md, Reviewer-Gates 19-21h.
+Branch: umbau/phase-2, HEAD a4c487d.
 
-## Entscheidung
+Das Zielbild ist der **aktuelle Loop** nach M-322..M-343c,
+verifiziert durch RERUN-23/24 (Loop-RC=0, 7/7 Tasks, 4 Phasen).
 
-Option 3 — Hybrid: Neubau mit Funktions-Inventar
-und Baseline-Schutz. Nicht Greenfield, nicht
-inkrementeller Umbau.
+## Rollen (5)
 
-Drei Argumente tragen (unabhaengig von 40-%-Zahl
-und unbelegten Kostenschaetzungen):
+Der Loop hat fuenf Rollen. Jede Rolle hat einen eigenen
+Prompt (in `werkstatt/*.py` oder `agents/*.md`) und klare
+Verantwortung.
 
-1. Befunde AG/AF/Q: Option 1 strukturell nicht
-   tragfaehig (run_pipeline 1468 Z., 0 Klassen,
-   dreifache Rollen-Definition).
-2. Spolsky-Prinzip: Option 2 zerstoert Code-Memory
-   (1189 Tests, 200+ W-Bloecke, 7-gliedrige
-   Deadlock-Kette).
-3. Option 3 erhaelt Code-Memory via
-   Charakterisierungs-Tests (21b) und
-   Baseline-Vergleich (21c).
+1. **Explorer** (`werkstatt/explorer.py`)
+   Read-only Kontext. Liefert `key_files` (explizit genannte
+   Dateien). Wird durch M-338 gehaertet: markiert nur Dateien,
+   die in der Aufgabe direkt vorkommen. Bei Phasen-Aufgaben
+   liefert er oft 0 files (kosmetisch, weil M-337-b nur
+   `task_files` nutzt).
 
-Kosten-Relation Hybrid vs. inkrementell:
-empirisch offen. Kein Entscheidungsgrund,
-nur Risiko-Verteilung.
+2. **Planner** (`werkstatt/planner.py`)
+   JSON-Plan: tasks, tests, akzeptanzkriterien, phasen.
+   M-323c: Phasen sind Pflicht bei >5 Tasks, >2 Dateien
+   oder Keywords (refaktoriere, analysiere, phase, ...).
+   Jeder Task hat `action` (read/create/update) und
+   `task_files` (explizite Datei-Pfade, M-339: mit Suffix).
 
-## Nutzer-Anforderungen (verbindlich)
+3. **Builder** (`werkstatt/builder.py`)
+   search/replace-Patches (`old_string` -> `new_string`).
+   M-337: Zieldatei deterministisch aus `task_files[0]`,
+   `action` wird erzwungen. Der Builder hat KEINE freie Wahl,
+   welche Datei er aendert. M-335/336: `task_files` hat
+   Vorrang, Ordner werden zu `__init__.py` aufgeloest.
 
-1. Sammelcommit pro Phase (alle Unterbloecke in
-   einem Commit/Push, inkl. Doku).
-2. Pro Commit (Phasenende): Tests/ruff/mypy
-   pruefen und korrigieren, bevor committet wird.
-3. Unterbloecke werden vom Planner geplant, aber
-   nicht einzeln committet. Waehrend der
-   Unterbloecke weich pruefen, am Phasenende
-   hart abnehmen.
-4. Builder bearbeitet bei Rot automatisch alle
-   Probleme (max 3 Versuche), dann Eskalation.
-5. Abnahmen "wie die Profis": harte Gates, nicht
-   nur Reviewer-Chat.
+4. **Reviewer** (`werkstatt/reviewer.py`)
+   Bug-Check im Zielprojekt. Liest `git diff HEAD` plus
+   untracked-Dateien (M-314). M-343c: pytest ist das letzte
+   Wort — Reviewer-Reject wird ignoriert, wenn
+   `last_verify_errors` leer ist (= Tests gruen).
 
-## Architektur
+5. **Human-Gate** (`_human_gate` in `loop.py`)
+   fail-closed. Bei EOFError -> reject. Zeigt Diff,
+   respektiert `require_human_approval`.
 
-### 3 Rollen (Stationen im Loop, eigener State)
+## Hooks (2)
 
-- Planner: Auftrag + Repo-Map -> Contract mit
-  Ankern, Pfaden, Tests. Schreibt
-  state.unterbloecke.
-- Builder: Contract + Repo-Map + Zieldatei-
-  Snippets -> Patch. Wendet Patches an (einziger
-  Akteur mit Dateisystem-Schreibrecht).
-  Schreibt state.pending_patches.
-- Judge: Patch + voller Datei-Inhalt + ruff/mypy
-  Exit-Codes -> GO / NO-GO / ESKALATION.
-  Threshold 90/100, max 3 Iterationen.
+Deterministische Gates, die unabhaengig vom LLM pruefen:
 
-### 4 Subagenten (Werkzeuge, isolierter Kontext)
+1. **pre_tool_use** (`hooks/pre_tool_use.py`, M-334a)
+   AST-basierte Import-Validierung. Prueft `import X` /
+   `from X import Y` gegen existierende Module im Zielprojekt.
+   Blockt erfundene Imports deterministisch. Standard-Library
+   und bekannte Third-Party werden durchgelassen.
 
-- Explore: Codebase-Suche. Readonly.
-- Debugger: Root-Cause bei rotem Test. Darf
-  Patches VORSCHLAGEN (in
-  .werkstatt/<run_id>/vorschlaege/), nicht
-  anwenden.
-- Test-Runner: fuehrt Tests aus. Readonly.
-- Verifier: prueft Phasen-Abnahme. Readonly.
+2. **simplify** (`hooks/simplify.py`)
+   Prueft den Diff auf Komplexitaet (max. 200 Zeilen,
+   Duplikate, Over-Engineering).
 
-### Single-threaded writes (Cognition-Regel)
+**post_tool_use wurde entfernt** (M-334b): Er prueft die
+Werkstatt-Baseline statt des Zielprojekts und war redundant
+zu `_verify_patches`.
 
-- Nur der Builder ruft apply_code_patches auf.
-- Nur der Builder mutiert state.pending_patches.
-- Subagenten schreiben nur in
-  .werkstatt/<run_id>/vorschlaege/ (21h).
-- Kein paralleles Schreiben in Projektdateien
-  (CooperBench).
+## Verify (verify.json)
 
-## Loop
+Der Projekt-Contract definiert, WIE verifiziert wird.
+Beispiel security-ai:
 
-### Unterblock-Ebene (weich, iterativ)
+- `py_compile_changed` (M-340: nur `.py`, `{changed_py_files}`)
+- `pytest_changed` (`{changed_test_files}`)
+- `py_compile_core` (feste Dateien)
+- `pytest_full_checks` (phase_end, Vollsuite)
 
-1. Builder liefert Patch.
-2. apply_code_patches.
-3. pytest auf betroffene Datei + ruff + mypy.
-4. Bei Rot: Builder korrigiert (max 3 Versuche,
-   VERSCHIEDENE Ansaetze, nicht derselbe Patch 3x).
-5. Nach 3x rot: Eskalation an Menschen mit
-   konkretem Befund (Test-Output, Patch-Diff,
-   Fehlerkette).
-6. Bei gruen: naechster Unterblock.
+M-322: Platzhalter `{changed_files}`, `{changed_test_files}`,
+`{changed_py_files}`, `phase_end`.
 
-Kein Commit auf dieser Ebene.
+## Loop-Ablauf
 
-### Phasen-Ebene (hart, einmalig)
+1. Explorer -> key_files (Wegweiser).
+2. Planner -> tasks + phasen.
+3. `_plan_gate` validiert (M-323c: Phasen-Struktur).
+4. Pro Task:
+   - Builder -> Patches (M-337: deterministisch).
+   - PreToolUse -> Import-Validierung.
+   - Apply -> search/replace.
+   - Simplify -> Komplexitaet.
+   - Verify -> py_compile + pytest.
+   - Bei Rot: Reflection (M-329: Builder erneut, nicht git apply).
+   - Reviewer -> Bug-Check.
+   - Bei Reject + pytest gruen: M-343c ignoriert.
+5. Human-Gate -> approve/reject.
+6. Loop-RC: 0 = erfolgreich, 1 = fail-closed.
 
-1. Alle Unterbloecke done.
-2. Voller pytest-Lauf.
-3. ruff/mypy auf Zieldateien.
-4. Deterministisches Gate: alle Unterbloecke
-   done? Alle Patches in state.pending_patches?
-   Tests gruen? ruff/mypy Exit 0?
-5. Wenn rot: zurueck zum Builder (max 3 auf
-   Phasen-Ebene), dann Eskalation.
-6. Commit-Review-Judge: Commit-Message gegen
-   tatsaechliche Aenderungen.
-7. Sammelcommit + Push + Doku.
+## Was das Zielbild NICHT hat
 
-Reihenfolge: erst Code-Gates (deterministisch),
-dann LLM-Review (Judge). Nicht umgekehrt.
+- **Kein Judge** (alte Rolle, ersetzt durch Reviewer).
+- **Kein Debugger, Test-Runner, Verifier** als eigene
+  Subagenten (alte Phase-1-Idee, nicht implementiert).
+- **Kein separater Scaffolder** (M-312, M-313 sind Merkposten,
+  nicht Teil des aktuellen Loops).
+- **Kein Pipeline-Trichotomie** (M-298 ist erledigt,
+  pipeline.py ist Altlast, M-345).
 
-## Grounding
+## Was noch fehlt
 
-- Repo-Map: tree-sitter + PageRank, 1024 Tokens
-  Default. Im Planner- und Builder-Prompt.
-  Neues Modul werkstatt/repo_map.py.
-- grep-Pflicht im Builder-Prompt: "Bevor du eine
-  Funktion aufrufst, grep sie."
-- mypy auf tests/ und pipeline.py als Gate
-  (nicht als Measurement).
-- verify_values behalten (Enum-Checks, die mypy
-  nicht kann).
-- verify_code_kwargs behalten (API-Signaturen,
-  die mypy wegen **kwargs nicht faengt).
-- verify_code (Symbol-Existenz): pruefen, ob
-  mypy + AST-Fallback das abdecken. Wenn ja:
-  faellt.
+- M-323b: `phase_end`-Checkpoint pro Phase.
+- M-341: Explorer ueberspringen bei `task_files`.
+- M-344: PROGRESS.md mit Phasen-Header.
+- M-345: pipeline.py loeschen.
+- M-346: pipeline._approval_und_human_gate verschieben.
+- M-347: CLI-Einstiegspunkt.
 
-## State
+## Beweis
 
-state.json mit JSON-Schema, ein Format, ein Parser:
+RERUN-23 (Loop-RC=0, 7/7 Tasks, 4 Phasen):
+  core/checks/__init__.py +115 (Docstrings + Typannotationen)
+  docs/STATUS.md +30
+  53 Tests gruen.
 
-{
-  "run_id": "...",
-  "phase": {"id": "21", "status": "in_progress"},
-  "unterbloecke": [...],       // Planner schreibt
-  "pending_patches": [...],    // Builder schreibt
-  "pruefung": {...},           // Verifier/Judge schreibt
-  "phasen_abnahme": null       // Judge schreibt
-}
-
-Single-writer pro Feld, multi-reader. Das ist die
-strukturelle Konsequenz aus Befund Q (drei Quellen,
-keine Gewinner-Regel).
-
-## Datei-Struktur
-
-werkstatt/
-  orchestrator.py      # run_phase, run_pipeline (< 400 Z.)
-  apply.py             # apply_code_patches (< 300 Z.)
-  verify.py            # verify_values, mypy-Runner (< 200 Z.)
-  prompts.py           # _build_commit_input, _build_judge_input (< 300 Z.)
-  audit.py             # audit(), JSONL-Writer, 20 Kinds (< 200 Z.)
-  phase.py             # state.json, JSON-Schema (< 300 Z.)
-  repo_map.py          # tree-sitter + PageRank (NEU, < 200 Z.)
-  hooks.py             # PreToolUse-Gates (NEU, < 150 Z.)
-  pipeline.py          # Facade, main() (< 100 Z.)
-
-agents/
-  planner.md           # < 150 Z.
-  builder.md           # < 300 Z.
-  judge.md             # < 150 Z.
-  subagents/
-    explore.md         # < 80 Z.
-    debugger.md        # < 80 Z.
-    test_runner.md     # < 60 Z.
-    verifier.md        # < 80 Z.
-
-skills/ (10 bestehende SKILL.md bleiben)
-
-## Tests
-
-50 Integration + 50 Produkt, von Anfang an.
-Die 1189 alten Tests bleiben bis zum Ende des
-Neubaus gruen (Baseline). Dann: alte Tests fallen
-mit dem alten Code.
-
-Jeder alte Test, der einen Bug dokumentiert, wird
-zu einem neuen Integration-Test oder einer Regel
-im Neubau (Charakterisierung, 21b).
-
-## Gates (Reviewer, 21a-21h)
-
-21a Funktions-Inventar VOR Neubau.
-21b Charakterisierungs-Tests VOR Neubau.
-21c Sammel-Commit + Baseline-Vergleich.
-21d Builder-Korrektur max 3 (verschiedene Ansaetze).
-21e Subagenten-Isolation (Vorschlag ja, Anwendung nein).
-21f Rollen-Trennung (Planner, Builder, Judge).
-21g State-Schema vor Neubau festgelegt.
-21h Subagenten-Vorschlags-Kanal
-    (.werkstatt/<run_id>/vorschlaege/).
-
-## Reihenfolge
-
-Phase A — Inventar (21a + 21b, 2-3 Tage, read-only).
-Phase B — Ziel-Struktur fein (1 Tag, Abnahme).
-Phase C — Neubau (2-3 Wochen).
-Phase D — Baseline-Abloesung (alte Tests + alter
-          Code fallen).
-
-## Nicht Teil des Neubaus
-
-- Commit-Review-Messlage (P1): strukturell durch
-  neuen Judge geloest.
-- Phase 21 U2-U4, U1-Smoke: nach Neubau erneut
-  messen.
-- Alte 1189 Tests: fallen mit dem alten Code,
-  Erkenntnisse wandern ins Inventar.
-
-## Was Phase 1+2 geliefert haben (bleibt gueltig)
-
-- Phase 1: Rollen 10 -> 8, Triage 1186/1189,
-  Audit-Kinds 166 unveraendert (Phase-3-Material).
-- Phase 2 (Plan): Reihenfolge audit -> prompts ->
-  apply -> verify (wird im Neubau anders geloest,
-  aber die Modul-Grenzen bleiben).
-
-Die Phase-1/2-Artefakte sind Grundlage fuer 21a
-(Inventar).
+RERUN-24 (Loop-RC=0, 7/7 Tasks, 4 Phasen):
+  core/checks/__init__.py +85/-25
+  docs/STATUS.md +4
+  53 Tests gruen.
