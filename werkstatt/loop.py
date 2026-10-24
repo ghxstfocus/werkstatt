@@ -664,9 +664,18 @@ def run_pipeline_loop(
             continue
 
         if not run_builder(state):
-            # M-316: Idempotenz-Erkennung. Wenn run_builder False
-            # zurueckgibt, aber die Zieldatei existiert + ist
-            # syntaktisch korrekt, ist das kein Fehler (Phantom).
+            # M-316 + M-317: Idempotenz-Erkennung NUR bei
+            # action="create". Bei update: fail-closed (return 1).
+            _loop_action = None
+            if isinstance(task_obj, dict):
+                _loop_action = task_obj.get("action")
+            if _loop_action != "create":
+                # update-Task mit leerem Patch: echter Fehler.
+                audit("loop_builder_failed", {"task_id": i, "action": _loop_action}, pd, pn)
+                _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="builder_failed")
+                return 1
+
+            # Idempotenz-Erkennung (nur create).
             _targets_exist = True
             import re as _re3
             _file_pattern3 = _re3.compile(r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.(?:md|py|yaml|yml|json|txt|toml|cfg|ini))\b')

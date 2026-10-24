@@ -193,8 +193,8 @@ def test_planner_action_missing(tmp_path):
         rc = run_planner(st)
 
     assert rc is True
-    # action wurde auf write gesetzt
-    assert st.tasks[0]["action"] == "write"
+    # M-317: action-Default ist "update" (nicht "write")
+    assert st.tasks[0]["action"] == "update"
     # Audit wurde aufgerufen
     assert any(
         c[0][0] == "planner_action_missing"
@@ -280,3 +280,33 @@ def test_planner_speichert_phasen(tmp_path):
     assert len(st.phasen) == 1
     assert st.phasen[0]["id"] == "p1"
     assert st.phasen[0]["titel"] == "Vorbereitung"
+
+
+def test_planner_action_create_update(tmp_path):
+    """M-317: Planner akzeptiert action=create und action=update."""
+    from werkstatt.planner import run_planner
+    from unittest.mock import MagicMock, patch
+    import json
+
+    st = _state(tmp_path)
+    st.aufgabe = "Test"
+    st.docs = {}
+
+    mock_reply = MagicMock()
+    mock_reply.ok = True
+    mock_reply.content = json.dumps({
+        "tasks": [
+            {"id": "t1", "name": "Neu", "action": "create"},
+            {"id": "t2", "name": "Update", "action": "update"},
+        ],
+        "tests": ["t"],
+        "akzeptanzkriterien": ["a"],
+        "blocker": [], "follow_up": [], "ignore": [],
+    })
+
+    with patch("werkstatt.planner.ask_llm", return_value=mock_reply):
+        rc = run_planner(st)
+
+    assert rc is True
+    assert st.tasks[0]["action"] == "create"
+    assert st.tasks[1]["action"] == "update"

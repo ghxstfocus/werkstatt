@@ -63,11 +63,19 @@ def run_builder(state: RunState) -> bool:
         state.patches = []  # type: ignore[attr-defined]
         return True
 
+    # M-317: Idempotenz-Check NUR bei action="create".
+    # Bei "update" (Datei existiert + soll erweitert werden)
+    # ist py_compile immer ok -> fail-open (M-317-Befund).
+    # Also: bei update IMMER durch den LLM-Patch-Pfad.
+    _current_action = None
+    for _t_check in tasks:
+        if isinstance(_t_check, dict):
+            _current_action = _t_check.get("action")
+            break
+    _allow_idempotent = (_current_action == "create")
+
     # M-316 (A1/A2): Idempotenz-Check (Variante iii: verify.py).
-    # Wenn die Zieldatei(en) existieren UND via py_compile
-    # (schnell) syntaktisch ok sind, ist nichts zu tun.
-    # Verhindert fail-open (falscher Code bleibt) und
-    # fail-closed (Reflection auf Phantom).
+    # Wird nur bei create-Tasks verwendet (M-317).
     _target_files: list[Path] = []
     import re as _re2
     _file_pattern2 = _re2.compile(r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.(?:md|py|yaml|yml|json|txt|toml|cfg|ini))\b')
@@ -78,7 +86,7 @@ def run_builder(state: RunState) -> bool:
             if _tf.exists() and _tf.is_file() and _tf not in _target_files:
                 _target_files.append(_tf)
 
-    if _target_files:
+    if _target_files and _allow_idempotent:
         _all_ok = True
         for _tf in _target_files:
             if _tf.suffix == ".py":
@@ -94,6 +102,7 @@ def run_builder(state: RunState) -> bool:
 
         if _all_ok:
             # A2: Datei existiert UND ist korrekt -> task_ok.
+            # Nur bei create-Tasks (M-317).
             audit("builder_nichts_zu_tun",
                   {"files": [str(f.name) for f in _target_files]}, pd, pn)
             state.patches = []  # type: ignore[attr-defined]

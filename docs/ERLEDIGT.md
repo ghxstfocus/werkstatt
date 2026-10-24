@@ -660,3 +660,95 @@ greifen zusammen. Der Builder schreibt tatsaechlich.
 - init_new-Fallback bei plan_ok=True (M-298b-Realbug).
 
 **Baseline:** 1297.
+
+## M-306-RERUN-5 bis M-317 — Loop-Komplexitaet (2026-10-24)
+
+Reihe von Echt-Tests und Fixes fuer Loop-Komplexitaet,
+Reviewer-Blindheit, Fallback-Haenger und Idempotenz.
+
+### Commits (chronologisch, 6aa1e78..HEAD)
+
+| SHA | Titel | Zweck |
+|---|---|---|
+| 595b8e7 | feat(loop): Phasen-Hierarchie + phase_state im Prompt + Resume (M-310) | planner liest phase_state, resume_failed |
+| 7fbd883 | docs: M-312 + M-313 als Merkposten | Architektur + Projektstruktur geplant |
+| b7b5e34 | fix(reviewer+loop): untracked-Diff + Reflection-Kontext (M-314) | Reviewer sah neue Dateien nicht |
+| 4102c8e | fix(loop): Fallback fail-closed statt pytest/ruff (M-315) | Fallback rief volle Suite -> 10-Min-Haenger |
+| 549f20f | feat(builder+loop): Idempotenz-Check (M-316) | Fail-open bei update-Tasks |
+| (neu) | fix(builder): action=read/create/update (M-317) | Idempotenz nur bei create |
+
+### M-306-RERUN-5 (2026-10-24): Erster echter Code-Lauf
+
+**Aufgabe:** `core/checks/__init__.py` mit `check_port(port: int) -> bool` + Tests.
+
+**Ergebnis:**
+- Planner: 5 Tasks (2 read-only + 1 write + 2 weitere).
+- Builder: 2 neue Dateien (`core/checks/__init__.py`,
+  `tests/unit/test_checks.py`).
+- Tests: 3 passed.
+- Reviewer: rejected, bugs=2 — "Datei fehlt im Diff".
+- Loop-RC: 1 (fail-closed nach Reflection).
+
+**Befund:** Reviewer sah untracked-Dateien nicht
+(`git diff HEAD`).
+
+### M-306-RERUN-6/7 (2026-10-24): Fallback-Haenger
+
+**Befund 1 (RERUN-6):** Loop blockierte 10+ Min in
+`_verify_patches`. Ursache: `verify.json` fehlte
+(durch M-310-Aufraeumen `rm -rf .werkstatt/`
+geloescht). Fallback rief `pytest -q` (volle Suite).
+
+**Fix (M-315):** `verify.json` neu angelegt +
+Fallback fail-closed auf `py_compile`.
+
+**Befund 2 (RERUN-7):** 3/5 Tasks gruen, Code + Tests
+funktionieren (Reviewer approved, 21 Tests gruen),
+aber t4 "tests schreiben" findet nichts zu tun
+(`builder_keine_patches`). Ursache: t3 hat in EINEM
+LLM-Call BEIDE Dateien erstellt.
+
+**Fix (M-316):** Idempotenz-Check (py_compile) bei
+existierender Zieldatei.
+
+### M-306-RERUN-8 (2026-10-24): M-317 Fail-open
+
+**Aufgabe:** `check_port_range` hinzufuegen (update-Task).
+
+**Ergebnis:**
+- t3 "check_port_range implementieren":
+  `builder_nichts_zu_tun` (Datei syntaktisch ok,
+  aber Funktion fehlt).
+- Reviewer: rejected, bugs=2 — "check_port_range fehlt".
+- Loop-RC: 1 (fail-closed nach Reflection).
+
+**Befund:** py_compile prueft Syntax, nicht Content.
+Bei update-Tasks ist py_compile immer ok ->
+fail-open.
+
+**Fix (M-317):** action unterscheidet read/create/
+update. Idempotenz-Check NUR bei create.
+
+### Wirkende Fixes (M-310..M-317)
+
+- **M-310:** Phasen-Hierarchie (parent_id) + Planner
+  liest phase_state + resume_failed.
+- **M-314:** Reviewer sieht untracked-Dateien
+  (`git ls-files --others`).
+- **M-315:** Fallback fail-closed (py_compile) statt
+  pytest/ruff.
+- **M-316:** Idempotenz-Check via py_compile.
+- **M-317:** action read/create/update, Idempotenz
+  nur bei create.
+
+### Chef-Mandat D (Echt-Test security-ai, Original)
+
+**Status:** TEILWEISE. Loop baut funktionierenden
+Code, Tests gruen, Reviewer bestaetigt Code
+(RERUN-7). Vollstaendig nach RERUN-9 (update-Task
+mit M-317-Fix).
+
+### Test-Bilanz
+
+Baseline 1337 -> 1345 (M-310..M-317).
+

@@ -57,11 +57,11 @@ def test_builder_read_only_task_kein_patch(tmp_path):
 
 
 def test_builder_idempotent_bei_korrekter_datei(tmp_path):
-    """M-316: existierende korrekte Zieldatei -> keine Patches."""
+    """M-317: existierende korrekte Zieldatei + action=create -> idempotent."""
     from werkstatt.builder import run_builder
 
     st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "test_checks.py schreiben", "action": "write"}]
+    st.tasks = [{"id": "t1", "name": "test_checks.py schreiben", "action": "create"}]
 
     # Datei existiert und ist syntaktisch korrekt
     (tmp_path / "test_checks.py").write_text(
@@ -97,6 +97,55 @@ def test_builder_reflection_bei_inkorrekter_datei(tmp_path):
         _result = run_builder(st)
 
     # Soll NICHT idempotent-True sein
+    assert not any(
+        c[0][0] == "builder_nichts_zu_tun" for c in mock_audit.call_args_list
+    )
+
+
+def test_builder_idempotent_nur_bei_create(tmp_path):
+    """M-317: Idempotenz-Check nur bei action=create."""
+    from werkstatt.builder import run_builder
+
+    st = _state(tmp_path)
+    # Datei existiert + ist korrekt
+    (tmp_path / "test_checks.py").write_text(
+        "def test_foo():\n    assert True\n", encoding="utf-8"
+    )
+
+    # Task: action=create, Datei existiert -> idempotent (nichts zu tun)
+    st.tasks = [{"id": "t1", "name": "test_checks.py schreiben", "action": "create"}]
+
+    with patch("werkstatt.builder.audit") as mock_audit:
+        result = run_builder(st)
+
+    assert result is True
+    assert st.patches == []
+    assert any(
+        c[0][0] == "builder_nichts_zu_tun" for c in mock_audit.call_args_list
+    )
+
+
+def test_builder_update_nutzt_patch_pfad(tmp_path):
+    """M-317: Bei action=update kein Idempotenz-Check (fail-open)."""
+    from werkstatt.builder import run_builder
+
+    st = _state(tmp_path)
+    # Datei existiert + korrekt
+    (tmp_path / "test_checks.py").write_text(
+        "def test_foo():\n    assert True\n", encoding="utf-8"
+    )
+
+    # Task: action=update -> normaler Patch-Pfad (kein idempotent)
+    st.tasks = [{"id": "t1", "name": "test_checks.py erweitern", "action": "update"}]
+
+    with patch("werkstatt.builder.ask_llm") as mock_llm, \
+         patch("werkstatt.builder.audit") as mock_audit:
+        mock_llm.return_value = type("R", (), {
+            "ok": True, "content": '{"patches": []}', "error": ""
+        })()
+        result = run_builder(st)
+
+    # KEIN idempotent (auch wenn Datei korrekt ist)
     assert not any(
         c[0][0] == "builder_nichts_zu_tun" for c in mock_audit.call_args_list
     )

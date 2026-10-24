@@ -29,8 +29,11 @@ Phase). Entscheide pro Fehler:
   - IGNORE: irrelevant (z.B. Timeout in ungenutztem Modul).
 
 Jeder Task hat zwei Pflichtfelder:
-  - "action": "read" = Bestandsaufnahme / Pruefung, KEIN Code-Patch.
-              "write" = Code/Doku-Aenderung, Patch wird erzeugt.
+  - "action": Drei Werte (M-317):
+              "read"   = Bestandsaufnahme / Pruefung, KEIN Patch.
+              "create" = NEUE Datei anlegen (existiert noch nicht).
+              "update" = BESTEHENDE Datei aendern (existiert schon).
+              Wenn unsicher: "update" (fail-safe, Patch wird erzeugt).
   - "task_files": list[str] = EXPLIZITE Datei-Pfade, die dieser Task
               anfasst.
 
@@ -46,7 +49,7 @@ Antworte NUR mit validem JSON:
   "phasen": [{"id": "p1", "titel": "...", "parent_id": null,
               "tasks": ["t1"]}],
   "tasks": [{"id": "t1", "name": "...", "description": "...",
-             "action": "read"|"write",
+             "action": "read"|"create"|"update",
              "task_files": ["pfad/zur/datei.py"],
              "phase_id": "p1",
              "akzeptanzkriterien": ["..."]}],
@@ -231,10 +234,18 @@ def run_planner(state: RunState) -> bool:
     # setzt, Default auf "write" (fail-safe) + Audit-Spur.
     _tasks_raw = plan.get("tasks", [])
     _action_missing = 0
+    # M-317: Default "update" (nicht "write"). Fail-safe:
+    # update = normaler Patch-Pfad, kein Idempotenz-Risiko.
+    # "write" wird nicht mehr verwendet (M-306a -> M-317).
     for _t in _tasks_raw:
-        if isinstance(_t, dict) and "action" not in _t:
-            _t["action"] = "write"
-            _action_missing += 1
+        if isinstance(_t, dict):
+            _a = _t.get("action")
+            if _a is None:
+                _t["action"] = "update"
+                _action_missing += 1
+            elif _a == "write":
+                # M-317: Legacy-Wert "write" -> "update"
+                _t["action"] = "update"
     if _action_missing > 0:
         audit("planner_action_missing", {"anzahl": _action_missing}, pd, pn)
 
