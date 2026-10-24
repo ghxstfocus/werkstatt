@@ -50,3 +50,39 @@ def test_progress_read_recent_limit(tmp_path):
     assert "Task 14" in recent
     assert "Task 10" in recent
     assert "Task 9" not in recent
+
+def test_loop_schreibt_progress(tmp_path):
+    """M-307b-3 (N1): Loop schreibt PROGRESS.md bei mark_done."""
+    from unittest.mock import patch
+
+    from werkstatt.loop import run_pipeline_loop
+    from werkstatt.state import RunState
+
+    st = RunState(
+        block_id="t", aufgabe="a", start_ts="",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="fake", budget={},
+        agent_docs={}, project_dir=tmp_path, project_name="p"
+    )
+    st.tasks = [{"id": "t1", "name": "Test-Task", "action": "write"}]
+    st.tests = ["Test 1"]
+    st.akzeptanzkriterien = ["Kriterium 1"]
+
+    with patch("werkstatt.loop._verify_patches", return_value=True), \
+         patch("werkstatt.loop.run_planner", return_value=True), \
+         patch("werkstatt.loop.run_builder", return_value=True), \
+         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
+         patch("werkstatt.loop.run_reviewer", return_value=True), \
+         patch("pipeline._approval_und_human_gate", return_value=0), \
+         patch("pipeline.load_project_config", return_value={}), \
+         patch("werkstatt.loop.audit"):
+        rc = run_pipeline_loop("p", "a", [st])
+
+    assert rc == 0
+    progress_path = tmp_path / "PROGRESS.md"
+    assert progress_path.exists(), "PROGRESS.md muss angelegt werden"
+    content = progress_path.read_text()
+    assert "Test-Task" in content
+    assert "Status:** done" in content
+    # Phase-Ende-Block
+    assert "Phase abgeschlossen" in content

@@ -200,3 +200,50 @@ def test_planner_action_missing(tmp_path):
         c[0][0] == "planner_action_missing"
         for c in mock_audit.call_args_list
     )
+
+def test_planner_liest_progress(tmp_path):
+    """M-307b-3 (N2): Planner-Prompt enthaelt PROGRESS.md-Inhalt."""
+    import json
+    from unittest.mock import MagicMock, patch
+
+    from werkstatt.planner import run_planner
+
+    # PROGRESS.md mit 2 Bloecken anlegen
+    (tmp_path / "PROGRESS.md").write_text(
+        "# Fortschritt: test\n\n"
+        "## 2026-10-24T10:00:00 -- Vorheriger Task 1\n"
+        "- **Status:** done\n"
+        "- **Dateien:** a.py\n\n"
+        "## 2026-10-24T10:05:00 -- Vorheriger Task 2\n"
+        "- **Status:** failed\n"
+        "- **Info:** builder_failed\n",
+        encoding="utf-8",
+    )
+
+    st = _state(tmp_path)
+    st.aufgabe = "Test-Aufgabe"
+    st.docs = {}
+
+    captured = {}
+
+    def _mock_ask_llm(api_key, system, user_content, **kwargs):
+        captured["user_content"] = user_content
+        reply = MagicMock()
+        reply.ok = True
+        reply.content = json.dumps({
+            "tasks": [{"id": "t1", "name": "Task 1"}],
+            "tests": ["test"],
+            "akzeptanzkriterien": ["akz"],
+            "blocker": [], "follow_up": [], "ignore": [],
+        })
+        return reply
+
+    with patch("werkstatt.planner.ask_llm", side_effect=_mock_ask_llm):
+        rc = run_planner(st)
+
+    assert rc is True
+    prompt = captured["user_content"]
+    assert "Projekt-Fortschritt" in prompt
+    assert "Vorheriger Task 1" in prompt
+    assert "Vorheriger Task 2" in prompt
+    assert "builder_failed" in prompt
