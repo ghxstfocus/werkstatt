@@ -1157,36 +1157,10 @@ def run_pipeline_loop(
                 return 1
 
             # Idempotenz-Erkennung (nur create).
-            _targets_exist = True
-            import re as _re3
-            _file_pattern3 = _re3.compile(r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.(?:md|py|yaml|yml|json|txt|toml|cfg|ini))\b')
-            _found_any = False
-            for _task3 in tasks:
-                _text3 = _task3 if isinstance(_task3, str) else str(_task3)
-                for _m3 in _file_pattern3.findall(_text3):
-                    _tf3 = Path(pd) / _m3
-                    if _tf3.exists():
-                        _found_any = True
-                        if _tf3.suffix == ".py":
-                            _r3 = subprocess.run(
-                                ["python3", "-m", "py_compile", str(_tf3)],
-                                capture_output=True, text=True, timeout=30, check=False,
-                            )
-                            if _r3.returncode != 0:
-                                _targets_exist = False
-                                break
-            if _found_any and _targets_exist:
-                audit("loop_task_idempotent", {"task_id": i}, pd, pn)
-                _el_task = time.monotonic() - _t_task
-                task_ok(i, len(tasks), elapsed_s=_el_task)
-                group_end()
-                tasks_ok += 1
-                _task_ende(state, phase_state, task_id, ok=True, name=task_name)
-                audit("loop_task_ok", {"task_id": i, "name": task_name, "idempotent": True}, pd, pn)
-                continue
-            audit("loop_builder_failed", {"task_id": i}, pd, pn)
-            _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="builder_failed")
-            return 1
+            # M-355: Loop-Idempotenz-Check entfernt. Der Builder
+            # (M-352) entscheidet ueber Idempotenz. Der Loop prueft
+            # nur noch, ob der Builder erfolgreich war.
+            audit("loop_builder_aufgerufen", {"task_id": i}, pd, pn)
 
         # PreToolUse-Hook (Phase 15): Patch pruefen, BEVOR er angewendet wird.
         patches = getattr(state, "patches", [])
@@ -1449,8 +1423,8 @@ def main(argv: list[str] | None = None) -> int:
     if _ps.exists():
         _ps.load()
 
-    # M-353: Rollback bei Fehler. Dirty tree sichern, bei Erfolg
-    # zurueckholen, bei Fehler verwerfen.
+    # M-356: Rollback immer auf start-HEAD. Merken, wo wir starten.
+    _start_head = _git_head(_pd)
     _had_stash = False
     if _git_dirty(_pd):
         audit("loop_dirty_tree", {"aktion": "stash"}, _pd, args.project)
@@ -1458,14 +1432,17 @@ def main(argv: list[str] | None = None) -> int:
 
     rc = run_pipeline_loop(args.project, args.aufgabe, state_ref, phase_state=_ps)
 
-    if rc != 0 and _had_stash:
-        # M-353c: Loop-Änderungen weg, dirty tree zurueck.
-        audit("loop_rollback", {"rc": rc}, _pd, args.project)
-        _git_stash_drop(_pd)
-    elif rc == 0 and _had_stash:
-        # M-353b: Loop-Änderungen + dirty tree zusammen.
-        audit("loop_stash_pop", {}, _pd, args.project)
-        _git_stash_pop(_pd)
+    if rc != 0:
+        # M-356: Fehler -> Tree auf start-HEAD zuruecksetzen.
+        audit("loop_rollback", {"rc": rc, "start_head": _start_head}, _pd, args.project)
+        _git_reset(_pd, _start_head)
+        if _had_stash:
+            _git_stash_pop(_pd)  # Nutzer-Aenderungen zurueckholen
+    else:
+        # Erfolg: Loop-Aenderungen behalten.
+        if _had_stash:
+            audit("loop_stash_pop", {}, _pd, args.project)
+            _git_stash_pop(_pd)
     _r.footer(success=(rc == 0), tasks_total=0, tasks_ok=0)
     return rc
 
