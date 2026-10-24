@@ -32,6 +32,19 @@ DENY = [
 ]
 
 
+def _find_tool(name: str, cwd: Path) -> str:
+    """M-387: Findet ein Tool im venv des Zielprojekts, sonst PATH.
+
+    Das Zielprojekt hat seine eigene Tool-Version in .venv/bin/.
+    Der Loop muss gegen DIESE Version pruefen, nicht gegen die
+    System-Version (Reproduzierbarkeit, CI-Konsistenz).
+    """
+    venv_bin = Path(cwd) / ".venv" / "bin" / name
+    if venv_bin.exists():
+        return str(venv_bin)
+    return name
+
+
 def _run(cmd: str, cwd: Path, allowed: list[str]) -> dict[str, Any]:
     """Fuehrt cmd aus, wenn er in allowed ist und nicht in DENY."""
     cmd = cmd.strip()
@@ -44,9 +57,12 @@ def _run(cmd: str, cwd: Path, allowed: list[str]) -> dict[str, Any]:
     # Allow
     if not any(cmd == a or cmd.startswith(a + " ") for a in allowed):
         return {"ok": False, "error": f"nicht erlaubt: {cmd}"}
+    # M-387: Tool aus venv nehmen, wenn vorhanden
+    _parts = cmd.split()
+    _parts[0] = _find_tool(_parts[0], Path(cwd))
     try:
         res = subprocess.run(
-            cmd.split(), cwd=str(cwd), capture_output=True,
+            _parts, cwd=str(cwd), capture_output=True,
             text=True, timeout=120, check=False,
         )
         return {
