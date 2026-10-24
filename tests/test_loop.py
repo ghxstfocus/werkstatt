@@ -997,7 +997,8 @@ def test_reflection_nutzt_hooks(tmp_path, monkeypatch):
     result = loop_mod._reflection_loop(st, max_runden=2)
     assert result is True
     assert "pre_tool_use.py" in _hook_calls
-    assert "post_tool_use.py" in _hook_calls
+    # M-334b: post_tool_use entfernt (prüfte Werkstatt statt Zielprojekt)
+    assert "post_tool_use.py" not in _hook_calls
 
 
 def test_run_with_progress_ruft_fn(monkeypatch):
@@ -1221,3 +1222,36 @@ def test_resume_laedt_phasen(tmp_path):
     assert ps2.load() is True
     assert len(ps2.data["phasen"]) == 1
     assert ps2.data["phasen"][0]["id"] == "p1"
+
+
+def test_apply_patches_ohne_post_tool_use(tmp_path, monkeypatch):
+    """M-334b: post_tool_use wird nicht mehr gerufen."""
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    target = tmp_path / "test_x.py"
+    target.write_text("a = 1\n")
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+
+    _hook_calls = []
+    monkeypatch.setattr(loop_mod, "_call_hook",
+                        lambda name, payload: (_hook_calls.append(name) or {"allow": True}))
+    monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+
+    patches = [{"file": "test_x.py", "action": "update",
+                "old_string": "a = 1\n", "new_string": "a = 2\n"}]
+    loop_mod._apply_patches_with_hooks(st, patches, phase_label="test")
+
+    assert "post_tool_use.py" not in _hook_calls
+    assert "pre_tool_use.py" in _hook_calls  # pre bleibt
+
+
+def test_post_tool_use_hook_datei_entfernt():
+    """M-334b: hooks/post_tool_use.py existiert nicht mehr."""
+    from pathlib import Path as P
+    assert not P("/opt/werkstatt/hooks/post_tool_use.py").exists()

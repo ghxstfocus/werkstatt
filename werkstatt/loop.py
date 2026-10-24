@@ -391,14 +391,10 @@ def _apply_patches_with_hooks(
     if _applied == 0:
         return 0
 
-    # 3. PostToolUse
-    _hook_res = _call_hook("post_tool_use.py", {})
-    if not _hook_res.get("allow", False):
-        audit("loop_hook_blocked",
-              {"hook": "post_tool_use", "phase": phase_label,
-               "reason": _hook_res.get("reason", "")},
-              pd, pn)
-        return _applied  # Patches sind angewendet, aber Hook warnt
+    # M-334b: post_tool_use entfernt. Der Hook prueft die
+    # Werkstatt-Baseline (cwd=/opt/werkstatt), nicht das
+    # Zielprojekt. _verify_patches prueft das Zielprojekt
+    # (via verify.json). post_tool_use war redundant und blind.
 
     # 4. Simplify
     _hook_res = _call_hook("simplify.py", {
