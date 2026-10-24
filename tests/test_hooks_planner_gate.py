@@ -26,7 +26,8 @@ def test_doku_task_verboten():
                    "task_files": ["docs/STATUS.md"]}],
     })
     assert result["allow"] is False
-    assert "Doku-Task" in result["reason"]
+    assert result["info"]["regel"] == "DOKU_TASK"
+    assert "docs/STATUS.md" in result["info"]["fakt"]
 
 
 def test_action_ungueltig():
@@ -36,7 +37,8 @@ def test_action_ungueltig():
                    "task_files": ["core/x.py"]}],
     })
     assert result["allow"] is False
-    assert "action='write'" in result["reason"]
+    assert result["info"]["regel"] == "ACTION"
+    assert "write" in result["info"]["details"]
 
 
 def test_task_files_ordner_verboten():
@@ -46,7 +48,7 @@ def test_task_files_ordner_verboten():
                    "task_files": ["core/checks/"]}],
     })
     assert result["allow"] is False
-    assert "kein" in result["reason"].lower() or "Suffix" in result["reason"]
+    assert result["info"]["regel"] in ("TASK_FILE", "DOKU_TASK")
 
 
 def test_phasen_pflicht_bei_6_tasks():
@@ -57,7 +59,8 @@ def test_phasen_pflicht_bei_6_tasks():
     ]
     result = _run({"tasks": tasks})
     assert result["allow"] is False
-    assert "Phasen" in result["reason"]
+    assert result["info"]["regel"] == "PHASEN_PFLICHT"
+    assert "Phasen" in result["info"]["details"]
 
 
 def test_gueltiger_plan_erlaubt():

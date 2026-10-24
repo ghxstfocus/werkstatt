@@ -208,19 +208,13 @@ def run_planner(state: RunState) -> bool:
     _planner_info = getattr(state, "last_planner_info", None)
     if _planner_info:
         user_content += (
-            "\n\n=== DEIN VORHERIGER PLAN WURDE ABGELEHNT ===\n"
-            f"Grund: {_planner_info.get('hinweis', 'unbekannt')}\n"
-            f"Task: {_planner_info.get('task_id', '?')}\n"
-            f"Verbotene Datei: {_planner_info.get('verbotene_datei', '?')}\n"
+            "\n\n=== ABGELEHNT ===\n"
+            f"Regel: {_planner_info.get('regel', '?')}\n"
+            f"Fakt: {_planner_info.get('fakt', '?')}\n"
+            f"Erklaerung: {_planner_info.get('erklaerung', '?')}\n"
+            f"Details: {_planner_info.get('details', '?')}\n"
             "\n"
-            "Du MUSST jetzt einen GUELTIGEN Plan liefern:\n"
-            "  1. KEINE Doku-Tasks (docs/, CHANGELOG, README,\n"
-            "     STATUS, PROGRESS sind verboten).\n"
-            "  2. Wenn mehr als 5 Tasks: PFLICHT Phasen mit\n"
-            "     phase_id pro Task.\n"
-            "  3. task_files: konkrete Datei mit Suffix\n"
-            "     (.py, .yaml, .toml), KEINE Ordner.\n"
-            "\n"
+            "Der vorherige Plan wurde nicht gebaut.\n"
             "Antworte mit gueltigem JSON."
         )
 
