@@ -27,7 +27,12 @@ _DOKU_PATTERNS = [
 ]
 _VALID_ACTIONS = {"read", "create", "update"}
 _VALID_SUFFIXES = (
-    ".py", ".yaml", ".yml", ".toml", ".cfg", ".ini", ".json",
+    # Code
+    ".py", ".sql", ".sh", ".bash",
+    # Config
+    ".yaml", ".yml", ".toml", ".cfg", ".ini", ".json",
+    # Frontend
+    ".html", ".css", ".js", ".ts",
 )
 
 
