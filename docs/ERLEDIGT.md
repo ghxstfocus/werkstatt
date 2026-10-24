@@ -622,3 +622,41 @@ uebersprungen. main() erzeugt PhaseState (load). 2 neue Tests
 (test_loop_uses_phase_state, test_loop_resume_nach_unterbrechung).
 
 Baseline: 1293 -> 1295.
+
+## M-298 — Echt-Test + Loop-Fixes (2026-10-24)
+
+Loop laeuft Ende-zu-Ende im echten Zielprojekt (security-ai).
+10 Commits, Baseline 1290 -> 1297.
+
+| Commit | Titel | Zweck |
+|---|---|---|
+| 28c1e1c | feat(loop): loop_fallback-Audit | HR-R9: Fallback sichtbar |
+| 4e1a72f | feat(loop): CLI-Einstieg | main() mit argparse |
+| bd74558 | feat(loop): main() erzeugt RunState | Kein Fallback mehr |
+| e008aed | fix(loop): 3 ruff-Regression | I001 + S110/BLE001 |
+| d0ca166 | feat(builder+loop): on-demand Zieldatei | Profi-Ansatz, Post-Apply |
+| eecd15a | fix(builder): key_files dict vs str | TypeError-Fix |
+
+Vorangegangene Commits (M-295/M-296):
+  061667a, 4e1a72f, 51ba780, 4d6a5b7, df71204
+
+**Echt-Test-Ergebnis (security-ai, 2026-10-24, HEAD eecd15a):**
+- loop_fallback: 0 (Delta 0)
+- loop_task_start: +1, loop_task_ok: +1
+- loop_patch_updated: +1 (erster erfolgreicher Patch)
+- loop_erfolg: +1, loop_human_gate_approved: +1
+- README.md: +2 Zeilen ("Loop-Test 2026-10-24")
+- Werkstatt-Baseline: 1297/13/8/6/162 unveraendert.
+
+**Damit bewiesen:** Der Loop laeuft Ende-zu-Ende im echten
+Zielprojekt. Explorer, Planner, Builder, Reviewer, Human-Gate
+greifen zusammen. Der Builder schreibt tatsaechlich.
+
+**Profi-Muster (recherchiert, bestaetigt):**
+- Explorer = Wegweiser (key_files), nicht Inhalt.
+- Builder liest Zieldatei on-demand (max 5 Dateien).
+- Post-Apply-Verifikation (new_str in target.read_text()).
+- old_string_not_found -> Reflection (nicht stumm weiter).
+- init_new-Fallback bei plan_ok=True (M-298b-Realbug).
+
+**Baseline:** 1297.

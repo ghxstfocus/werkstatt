@@ -1272,3 +1272,99 @@ Kein Baseline-Impact, aber stille Drift.
 Fix: noqa entfernen ODER CODE ergaenzen. Aufraeum-Block > 20.
 
 Status: dokumentiert 2026-10-24.
+
+## M-299a — Preflight + Fehler-Klassifikation (Profi-Ansatz)
+
+Der aktuelle Pre-Build-Verify blockiert bei jeder roten Baseline
+(fail-closed). Der Profi-Ansatz (Aider auto_lint, SWE-agent
+Linting-Guardrail, Claude Code PostToolUse-Hook, OpenHands
+PlanningAgent, PAUSE Planner):
+
+**Kern:** Fehler werden KLASSIFIZIERT, nicht hart blockiert.
+
+| Klasse | Beispiel | Aktion |
+|---|---|---|
+| env | ModuleNotFoundError | pip install oder Abbruch |
+| lint | ruff --fixable | ruff --fix |
+| type | mypy unused-ignore | Code-Patch |
+| test | pytest fail | Reflection an Builder |
+| syntax | py_compile fail | Guardrail (Edit ablehnen) |
+
+**Planner-Prompt** bekommt die Fehlerliste und entscheidet:
+- BLOCKER (aufgabenrelevant) -> in Plan aufnehmen.
+- FOLLOW_UP (Baseline-Schuld) -> in state.follow_up_fehler.
+- IGNORE (irrelevant) -> verwerfen.
+
+**Phasen-Uebergang:** Bei neuer Phase Preflight erneut, mit
+vorheriger FOLLOW_UP-Liste vergleichen. Neue Relevanz ->
+BLOCKER.
+
+**verify.json-Schema** wird um `phase`-Feld erweitert:
+- pre_build: nur py_compile (Sekunden).
+- post_build: ruff, mypy, pytest (nach Builder).
+
+**Struktur:** `_preflight_scan(state) -> list[dict]` liefert
+pro Fehler: {klasse, datei, text}. Wird in
+`state.preflight_fehler` persistiert.
+
+**Hook-Reflect:** `hooks/post_tool_use.py` gibt Fehlertext
+als `reason` zurueck (nicht nur `{"allow": False}`).
+`_reflection_loop` baut Prompt mit `error_context`.
+
+**Tests (geplant, 4):**
+- test_preflight_klassifiziert_env
+- test_preflight_klassifiziert_lint
+- test_preflight_klassifiziert_type
+- test_verify_patches_phase_filter
+
+**Baseline-Erwartung:** 1297 -> 1301.
+
+## M-299b — pipeline.run_pipeline-Fallback entfernen
+
+`werkstatt/loop.py:297` ruft `pipeline.run_pipeline` als
+Fallback, wenn project_dir fehlt. Nach M-298b ist bewiesen:
+Der Fallback wird nie getriggert (loop_fallback=0).
+
+**Aktion:** Fallback-Code entfernen. Wenn project_dir fehlt
+-> harter Abbruch mit klarer Fehlermeldung, kein stiller
+Fallback.
+
+**Baseline-Erwartung:** 1297 (unveraendert).
+
+## M-299c — Scaffolder
+
+`werkstatt/scaffolder.py` fehlt. ROADMAP Block 2.
+Chef-Mandat: agents/ und skills/ NICHT im Zielprojekt anlegen.
+
+**Aktion:** Modul + Test test_scaffolder_legt_keine_agents_
+skills_an.
+
+**Baseline-Erwartung:** 1297 -> 1299.
+
+## M-299d — orchestrator.py + pipeline.py-Entkopplung
+
+`main()` nutzt noch `pipeline.load_project_config` und
+`pipeline.load_docs`. Nach M-299b soll die Werkstatt
+vollstaendig pipeline-unabhaengig sein.
+
+**Aktion:** Eigene Loader in werkstatt/. `orchestrator.py`
+als neue Datei (NEUBAU-ZIELBILD Z.151).
+
+**Baseline-Erwartung:** +2 Tests.
+
+## M-299e — Planner-Preflight im Phasen-Uebergang
+
+Uebergang zwischen Phasen:
+- Preflight erneut laufen.
+- FOLLOW_UP-Liste aus voriger Phase mit neuer Preflight-
+  Liste vergleichen.
+- Bei neuen Fehlern: Planner entscheidet neu (BLOCKER /
+  FOLLOW_UP / IGNORE).
+
+**Das ist der autonome Uebergang:** Der Planner stellt in
+Phase N+1 fest, dass ruff-Fixes jetzt aufgabenrelevant
+sind, und nimmt sie in den Plan auf.
+
+**Baseline-Erwartung:** +1 Test.
+
+Status: dokumentiert 2026-10-24.

@@ -1,10 +1,10 @@
 # Bau-Handoff — Werkstatt
 
-Stand: 2026-10-24 (Loop-Neubau Phase 1-18, HEAD c55c849).
-Werkstatt-HEAD: c55c849. Branch: umbau/phase-2 (origin gepusht).
-Baseline: pytest 1290 / ruff 13 / mypy 8 / AST 6 / Katalog 162.
+Stand: 2026-10-24 (M-298 abgeschlossen, HEAD eecd15a).
+Werkstatt-HEAD: eecd15a. Branch: umbau/phase-2 (origin gepusht).
+Baseline: pytest 1297 / ruff 13 / mypy 8 / AST 6 / Katalog 162.
 
-## Loop-Neubau (Phase 1-17) — Status
+## Loop-Neubau (Phase 1-18 + M-298) — Status
 
 **HEAD:** 134917d (Phase 17)
 
@@ -31,6 +31,11 @@ Baseline: pytest 1290 / ruff 13 / mypy 8 / AST 6 / Katalog 162.
 - Loop ruft: Explorer -> Planner -> Builder -> Hooks -> Reviewer -> Human.
 
 **Baseline:** 1290 passed / 13 ruff / 8 mypy / 6 AST / 162 Katalog.
+
+**M-298 abgeschlossen:** Loop laeuft Ende-zu-Ende im echten
+Zielprojekt (security-ai). Echt-Test erfolgreich:
+loop_fallback=0, loop_task_ok=+1, loop_patch_updated=+1,
+loop_erfolg=+1, README.md +2 Zeilen.
 
 **Naechster Schritt:** Echter LLM-Test mit security-ai (Phase 14-17 testen).
 
