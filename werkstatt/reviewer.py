@@ -20,7 +20,7 @@ Du bekommst einen Git-Diff und die Anforderung.
 Pruefe NUR auf Korrektheit (Bugs, Logikfehler, fehlende Edge-Cases).
 Ignoriere Stil und Formatierung.
 
-M-380: Ignoriere Loop-Doku (PROGRESS.md etc.). Pruefe NUR den Builder-Patch.
+M-380: PROGRESS.md ist NICHT Teil deines Reviews. Du siehst es nicht (wird vor dem Review gefiltert). Bewerte NUR den Builder-Patch. Wenn du PROGRESS.md siehst, ist das ein Bug im Filter — ignoriere es STRIKT.
 
 Antworte NUR mit validem JSON:
 {
@@ -41,7 +41,7 @@ def _get_git_diff(project_dir: str | Path = "/opt/werkstatt") -> str:
     try:
         pd = Path(project_dir)
         res = subprocess.run(
-            ["git", "diff", "HEAD"],
+            ["git", "diff", "HEAD", "--", ".", ":!PROGRESS.md"],
             cwd=str(pd), capture_output=True, text=True, timeout=30, check=False
         )
         parts = [res.stdout[:10000]] if res.stdout else []
