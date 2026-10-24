@@ -560,11 +560,9 @@ def _run_with_progress(
         """
         _start_hb = _time.monotonic()
         _last_hb = -1
-        # Spinner einmal starten (No-Op in ci/pretty)
-        try:
-            _r.spinner_start(f"[{nr}/{total}] {name}")
-        except Exception:  # noqa: BLE001, S110
-            pass
+        # M-377: KEIN spinner_start hier — task()/task_ok() steuert
+        # den Live-Bereich. Nur heartbeat (No-Op in live, wenn
+        # Heartbeat spinner_update ruft).
         while not _done.is_set():
             _elapsed_hb = int(_time.monotonic() - _start_hb)
             if _elapsed_hb // 2 > _last_hb // 2:
@@ -574,10 +572,6 @@ def _run_with_progress(
                     pass
                 _last_hb = _elapsed_hb
             _done.wait(timeout=0.5)
-        try:
-            _r.spinner_stop()
-        except Exception:  # noqa: BLE001, S110
-            pass
 
     _t = _threading.Thread(target=_worker, daemon=True)
     _t_hb = _threading.Thread(target=_heartbeat_loop, daemon=True)

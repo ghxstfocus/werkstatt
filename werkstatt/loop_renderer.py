@@ -120,10 +120,19 @@ def spinner_start(label: str, detail: str = "") -> None:
         return
 
     with _live_lock:
+        # M-377: idempotent — wenn schon aktiv, nur updaten.
+        if _live is not None:
+            _spinner_text = f"{label}" + (f" · {detail}" if detail else "")
+            _live.update(_RichSpinner("dots", text=_spinner_text, style="cyan"))
+            return
         _spinner_text = f"{label}" + (f" · {detail}" if detail else "")
         _spinner = _RichSpinner("dots", text=_spinner_text, style="cyan")
         _live = _RichLive(_spinner, console=_console, refresh_per_second=10, transient=True)
-        _live.start()
+        try:
+            _live.start()
+        except Exception:  # noqa: BLE001
+            # Falls rich trotzdem crasht: Live deaktivieren, kein Loop-Abbruch.
+            _live = None
 
 
 def spinner_update(label: str, detail: str = "") -> None:
@@ -142,11 +151,12 @@ def spinner_stop(final_label: str = "") -> None:
     if not IS_LIVE or not _HAS_RICH or _live is None:
         return
     with _live_lock:
-        try:
-            _live.stop()
-        except Exception:  # noqa: BLE001, S110
-            # Live-Objekt ist bereits gestoppt oder ungueltig.
-            pass
+        if _live is not None:
+            try:
+                _live.stop()
+            except Exception:  # noqa: BLE001, S110
+                # Live-Objekt ist bereits gestoppt oder ungueltig.
+                pass
         _live = None
 
 
