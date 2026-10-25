@@ -18,6 +18,11 @@ from werkstatt.agent import ask_llm
 
 # M-442: Architect-Modell konfigurierbar (Default: deepseek-chat).
 # Fuer Messungen: WERKSTATT_ARCHITECT_MODEL=deepseek-reasoner
+def _is_reasoning_model(model: str) -> bool:
+    """M-445: Reasoning-Modelle unterstuetzen temperature/top_p nicht."""
+    return "reasoner" in model.lower() or "r1" in model.lower()
+
+
 _ARCHITECT_MODEL = os.environ.get("WERKSTATT_ARCHITECT_MODEL", "deepseek-chat")
 
 from werkstatt.audit import audit
@@ -470,6 +475,8 @@ def run_planner(state: RunState) -> bool:
         if _tool_kontext:
             _sys += "\n\n<tool_ergebnisse>\n" + _tool_kontext + "\n</tool_ergebnisse>"
         _user = user_content + (_tool_kontext if _tool_kontext else "")
+        # M-445: temperature bleibt positional (ask_llm-Signatur).
+        # Reasoning-Modelle ignorieren temperature serverseitig.
         reply = ask_llm(
             api_key, _sys, _user,
             model=_ARCHITECT_MODEL, temperature=0.2, max_tokens=4000,

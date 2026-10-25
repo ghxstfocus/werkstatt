@@ -44,6 +44,56 @@ def _builder_system() -> str:
     return BUILDER_SYSTEM
 
 
+def _validate_imports_in_patch(
+    new_string: str, project_dir: Path,
+) -> list[str]:
+    """M-444: Findet unaufloesbare Imports in einem Patch-String.
+
+    Prueft `import X` und `from X import Y` gegen:
+    - stdlib (sys.stdlib_module_names)
+    - Projekt-Module (project_dir / X.py oder project_dir / X / __init__.py)
+    - installierte Pakete im venv (project_dir / .venv / lib / * / site-packages)
+    """
+    import re as _re
+    import sys as _sys
+
+    fehlend: list[str] = []
+    patterns = [
+        _re.compile(r"^\s*from\s+([\w.]+)\s+import\b", _re.MULTILINE),
+        _re.compile(r"^\s*import\s+([\w.]+)\b", _re.MULTILINE),
+    ]
+    kandidaten: set[str] = set()
+    for p in patterns:
+        for m in p.finditer(new_string):
+            kandidaten.add(m.group(1).split(".")[0])
+
+    stdlib = getattr(_sys, "stdlib_module_names", set())
+    venv_site_dirs: list[Path] = []
+    venv_lib = project_dir / ".venv" / "lib"
+    if venv_lib.is_dir():
+        for site in venv_lib.iterdir():
+            sp = site / "site-packages"
+            if sp.is_dir():
+                venv_site_dirs.append(sp)
+
+    for mod in kandidaten:
+        if mod in stdlib:
+            continue
+        if (project_dir / f"{mod}.py").is_file():
+            continue
+        if (project_dir / mod / "__init__.py").is_file():
+            continue
+        found = False
+        for sp in venv_site_dirs:
+            if (sp / mod).is_dir() or (sp / f"{mod}.py").is_file():
+                found = True
+                break
+        if not found:
+            fehlend.append(mod)
+
+    return fehlend
+
+
 def _architect_abschnitt(beschreibung: str, zieldatei: str) -> str:
     """M-408c: Extrahiert den Abschnitt fuer eine Datei aus der Architect-Prosa.
 
@@ -115,7 +165,22 @@ def _build_patches_fuer_datei(
     for p in patches:
         if isinstance(p, dict):
             p["file"] = zieldatei
-    return [p for p in patches if isinstance(p, dict)]
+    # M-444: Import-Validierung. Patches mit unaufloesbaren Imports
+    # werden verworfen — sonst bricht der Verify-Loop mit
+    # ModuleNotFoundError (RERUN-54: core.changeapplier.errors).
+    _gueltig: list[dict] = []
+    for p in patches:
+        if not isinstance(p, dict):
+            continue
+        _fehlend = _validate_imports_in_patch(
+            p.get("new_string", "") or "", pd,
+        )
+        if _fehlend:
+            audit("builder_patch_import_fehler",
+                  {"datei": zieldatei, "fehlend": _fehlend}, pd, pn)
+            continue
+        _gueltig.append(p)
+    return _gueltig
 
 
 def run_builder(state: RunState) -> bool:
