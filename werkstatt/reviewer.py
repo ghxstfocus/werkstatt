@@ -101,15 +101,28 @@ def run_reviewer(state: RunState) -> bool:
     aufgabe = getattr(state, "aufgabe", "")
     tests_ok = getattr(state, "baseline_gruen", True)
 
-    # M-412: Architect-Text bei action=architect
-    _arch_desc = ""
+    # M-459: Reviewer prueft Task-Description, nicht Gesamtaufgabe.
     _akt_task = getattr(state, "aktuelle_task", None)
-    if isinstance(_akt_task, dict) and _akt_task.get("action") == "architect":
-        _arch_desc = _akt_task.get("description", "")
+    _task_name = ""
+    _task_desc = ""
+    _arch_desc = ""
+    if isinstance(_akt_task, dict):
+        _task_name = _akt_task.get("name", "")
+        _task_desc = _akt_task.get("description", "")
+        if _akt_task.get("action") == "architect":
+            _arch_desc = _task_desc
     user_content = (
-        f"Aufgabe: {aufgabe}\n\n"
+        f"## AKTUELLE TASK: {_task_name}\n"
+        f"## TASK-BESCHREIBUNG: {_task_desc}\n"
+        f"## GESAMTAUFGABE: {aufgabe}\n\n"
         f"Baseline gruen: {tests_ok}\n\n"
         f"Diff:\n{diff}"
+    )
+    # Hinweis an den Reviewer: pruefe die Task, nicht die Gesamtaufgabe.
+    user_content += (
+        "\n\nPruefe: Hat DIESE Task das getan, was ihre "
+        "TASK-BESCHREIBUNG verlangt? Die GESAMTAUFGABE ist nur "
+        "Kontext — nicht der Pruefungsgegenstand."
     )
     if _arch_desc:
         user_content += f"\n\nArchitect-Vorgabe:\n{_arch_desc}"
