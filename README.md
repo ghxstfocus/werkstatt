@@ -1,197 +1,66 @@
 # Werkstatt
 
-Das Agenten-System. Unabhaengig von jedem Projekt.
-Es baut Projekte, aber es gehoert keinem Projekt.
+Das Agenten-System. Unabhängig von jedem Projekt.
+Es baut Projekte, aber es gehört keinem Projekt.
 
 **Ziel:** Das Beste aus Claude Code, Copilot, Aider, Cursor,
 Grok und Codex nehmen und ein eigenes Agentensystem bauen.
 
 **Kernprinzip:** On-Demand-Messung + deterministische Gates.
-Der Loop prueft, bevor er baut. Kein LLM-Token ohne Plan.
+Der Loop prüft, bevor er baut. Kein LLM-Token ohne Plan.
 
-**Stand 2026-10-24 (nach M-322..M-343c, RERUN-23/24):**
+**Stand 2026-10-25 (nach M-472, ADaPT):**
 
-- **Baseline:** 1401 Tests, ruff 13, mypy 8, AST 6, Katalog 162.
-- **HEAD:** a4c487d. Branch: umbau/phase-2 (origin gepusht).
-- **Loop:** Ende-zu-Ende gruen (RERUN-23/24, Loop-RC=0).
+- **Baseline:** 1448 Tests, ruff 13, mypy 11, AST 6, Katalog 162.
+- **HEAD:** efe4ffc. Branch: umbau/phase-2 (origin gepusht).
+- **Loop:** Ende-zu-Ende gruen (RERUN-80, Loop-RC=0).
 
-## Loop-Architektur
+## Loop-Architektur (5+1 Rollen + ADaPT)
 
 Der Orchestrator ist `werkstatt/loop.py` (run_pipeline_loop).
 Er ruft pro Task:
 
-1. **Explorer** (`werkstatt/explorer.py`) — read-only Kontext,
-   JSON mit key_files. Wird durch M-338 (nur explizit genannte
-   Dateien) gehaertet, liefert bei Phasen-Aufgaben oft 0 files
-   (kosmetisch, weil M-337-b nur task_files nutzt).
-2. **Planner** (`werkstatt/planner.py`) — JSON-Plan
-   (tasks, tests, akzeptanzkriterien, phasen). M-323c: Phasen
-   sind Pflicht bei >5 Tasks oder >2 Dateien.
-3. **Builder** (`werkstatt/builder.py`) — search/replace-Patches
-   (create + update). M-337: Zieldatei deterministisch aus
-   task_files[0], action wird erzwungen.
-4. **PreToolUse-Hook** (`hooks/pre_tool_use.py`) — M-334a:
-   AST-basierte Import-Validierung. Blockt erfundene Imports
-   deterministisch.
-5. **Simplify-Hook** (`hooks/simplify.py`) — Aufraeumer:
-   Komplexitaet, Duplikate.
+1. **Explorer** (`werkstatt/explorer.py`) — read-only, messt
+   deterministisch (`ruff check .`, `pytest -q`). Liefert
+   `key_files` aus der Messung, nicht aus dem LLM.
+2. **Architect** (deepseek-reasoner) — Prosa mit numerierten
+   Schritten. Keine Skills, keine Tools (M-446).
+3. **Planner-Split** (deepseek-chat) — zerlegt die Prosa in
+   Tasks mit `architect_start`/`architect_ende` (wörtliche
+   Marker). Rekursiv, max 2 Ebenen (M-469/M-470/M-471).
+4. **Builder** (deepseek-chat) — search/replace pro Task.
+   Bekommt den wörtlichen Architect-Abschnitt (M-461).
+5. **PreToolUse-Hook** (`hooks/pre_tool_use.py`) — AST-basierte
+   Import-Validierung (M-334a).
 6. **Verify** (`_verify_patches`) — verify.json-Stages:
-   py_compile_changed, pytest_changed, py_compile_core,
-   pytest_full_checks. M-322: {changed_files},
-   {changed_test_files}, {changed_py_files}-Platzhalter.
-   M-340: py_compile nur auf .py.
-7. **Reviewer** (`werkstatt/reviewer.py`) — Bug-Check im
-   Zielprojekt. M-343c: pytest ist das letzte Wort —
-   Reviewer-Reject wird ignoriert, wenn last_verify_errors
-   leer ist (= Tests gruen).
-8. **Human-Gate** (`_human_gate` in loop.py) — fail-closed,
-   respektiert require_human_approval.
+   py_compile_changed, ruff_changed, pytest_changed,
+   py_compile_core, pytest_full_checks (phase_end).
+7. **Reviewer** (`werkstatt/reviewer.py`) — prüft die
+   Task-Description, nicht die Gesamtaufgabe (M-459).
+8. **Human-Gate** (`_human_gate`) — Plan-Gate + Ergebnis-Gate,
+   fail-closed.
 
-**PostToolUse-Hook wurde entfernt** (M-334b): Er prueft die
-Werkstatt-Baseline statt des Zielprojekts und war redundant
-zu _verify_patches.
+## ADaPT (On-Demand-Zerlegung)
 
-Visualisiert:
+Wenn ein Task scheitert (`builder_failed`,
+`post_build_verify_failed`, `reviewer_high_bug_fail_closed`),
+wird er in 2–3 Sub-Tasks zerlegt (M-472/M-473/M-474/M-475).
+Max 2 Ebenen tief. Abgeschlossene Tasks bleiben. `get_next_task`
+liefert nur `pending`.
 
-    +----------------------------------------------------------+
-    |                        MENSCH                             |
-    |                  (Human-Gate, fail-closed)                |
-    +----------------------------------------------------------+
-                              |  ^
-                              v  |
-    +----------------------------------------------------------+
-    |                  WERKSTATT LOOP                           |
-    |                                                           |
-    |   Explorer -> Planner -> Pre-Build Verify                |
-    |        |                                                  |
-    |        v                                                  |
-    |   Pro Task:                                               |
-    |     Builder -> PreToolUse -> Patch -> Simplify           |
-    |              -> Verify -> Reviewer                       |
-    |        |                                                  |
-    |        v                                                  |
-    |   Human-Gate                                             |
-    +----------------------------------------------------------+
-                              |
-                              v
-                     Ziel-Projekt (z. B. security-ai)
+## Verifikation
 
-## Multi-Projekt
-
-Die Werkstatt betreut mehrere Projekte. Zwei Quellen:
-
-- **Werkstatt-YAML** (`/opt/werkstatt/projects/<name>.yaml`):
-  WO liegt das Projekt (`project_dir`).
-- **Zielprojekt-Contract** (`/opt/<name>/.werkstatt/verify.json`):
-  WIE verifizieren (stages: pytest, ruff, mypy).
-
-Beispiel `verify.json` (security-ai):
-
-    {
-      "stages": [
-        {"id": "py_compile_changed",
-         "command": ["python3", "-m", "py_compile", "{changed_py_files}"],
-         "phase": "post_build"},
-        {"id": "pytest_changed",
-         "command": ["python3", "-m", "pytest", "{changed_test_files}", "-q"],
-         "phase": "post_build"},
-        {"id": "py_compile_core",
-         "command": ["python3", "-m", "py_compile", "core/__init__.py"],
-         "phase": "post_build"},
-        {"id": "pytest_full_checks",
-         "command": ["python3", "-m", "pytest", "tests/unit/test_checks.py", "-q"],
-         "phase": "phase_end"}
-      ]
-    }
-
-## Aufruf
-
-Der Loop wird ueber Python aufgerufen (CLI folgt, M-347):
-
-    python3 -m werkstatt.loop \
-      --project security-ai \
-      --aufgabe "Refaktoriere core/checks/ in logische Phasen..."
-
-Alternativ mit `WERKSTATT_RENDER=pretty` (M-321) fuer
-strukturierte Ausgabe ohne ANSI-Codes:
-
-    WERKSTATT_RENDER=pretty python3 -m werkstatt.loop ... | tee log
-
-## Sicherheit
-
-- **Kein shell=True.** Argumentlisten.
-- **PreToolUse-Hook:** blockt .env-Dateien, destruktive
-  Kommandos (git reset --hard, rm -rf /), leere Patches,
-  erfundene Imports (M-334a).
-- **Datei-Existenz-Check:** create ueberschreibt keine
-  bestehende Datei (loop_patch_file_exists).
-- **Whitelist:** read_file nur aus file_whitelist.
-- **Redaction** vor jedem LLM-Call.
-- **Human-Gate fail-closed:** bei EOFError -> reject.
-- **pytest als letztes Wort** (M-343c): Reviewer-Reject wird
-  ignoriert, wenn Tests gruen sind.
-- **Audit-JSONL** pro Tag mit project und run_id.
-
-## Baseline
-
-| Metrik | Wert |
-|---|---|
-| pytest | 1401 passed |
-| ruff | 13 errors |
-| mypy | 8 errors |
-| AST | 6 passed |
-| Katalog | 162 |
-
-Quelle: `docs/HANDOFF-BASELINE.md`. Skript: `tools/quality_gate.py`.
-
-## Struktur
-
-    /opt/werkstatt/
-    ├── pipeline.py              Alter Monolith (11.639 Z., Fallback, M-345)
-    ├── werkstatt/               Neue Module
-    │   ├── loop.py              Orchestrator
-    │   ├── loop_renderer.py     CI-Optik (M-321: WERKSTATT_RENDER=pretty)
-    │   ├── agent.py             ask_llm, execute_commands
-    │   ├── explorer.py          Read-only Kontext
-    │   ├── planner.py           JSON-Plan (M-323c: Phasen-Pflicht)
-    │   ├── builder.py           search/replace (M-337: deterministisch)
-    │   ├── reviewer.py          Bug-Check (M-343c: pytest entscheidet)
-    │   ├── phase_state.py       Resume, Decisions (M-323a/d: action durchgereicht)
-    │   ├── state.py             RunState, Measurement
-    │   ├── config.py            Config-Wrapper
-    │   └── ...                  (weitere Module)
-    ├── hooks/                   Deterministische Hooks
-    │   ├── pre_tool_use.py      Waechter + Import-Validierung (M-334a)
-    │   ├── simplify.py          Aufraeumer
-    │   └── anti_patterns.py     Anti-Patterns
-    ├── agents/                  Rollen-Prompts (Markdown)
-    ├── skills/                  Skills (SKILL.md)
-    ├── projects/                Projekt-Konfigurationen
-    ├── tests/                   1401 Tests
-    ├── docs/                    Doku (INDEX.md als Einstieg)
-    ├── AGENTS.md                Agenten-Einstieg
-    ├── Bau-Handoff.md           Aktueller Stand
-    └── README.md                Dieses Dokument
-
-## Was noch offen ist
-
-- **M-323b:** Phasen-Checkpoints (`phase_end` pro Phase).
-- **M-341:** Explorer ueberspringen bei task_files.
-- **M-344:** PROGRESS.md mit Phasen-Header.
-- **M-345:** pipeline.py loeschen (erst wenn agent.py-Kopien
-  aufgeloest).
-- **M-346:** pipeline._approval_und_human_gate verschieben.
-- **M-347:** CLI-Einstiegspunkt.
+- `ruff --fix` vor `_verify_patches` (deterministisch, M-467).
+- Circuit Breaker: Reflection stoppt, wenn Ruff-Fehler nicht
+  sinken (`loop_reflection_stagnation`).
+- Kein `except Exception` ohne `# noqa: BLE001`.
+- Fail closed: jeder Fehler → `ApplierError`-Subklasse.
 
 ## Doku
 
-- `AGENTS.md` — Agenten-Einstieg (Befehle, Struktur, Regeln).
-- `Bau-Handoff.md` — aktueller Stand, naechster Schritt.
-- `docs/INDEX.md` — Diaetaxis (tutorial/howto/reference/explanation).
-- `docs/ROADMAP.md` — Phasen-Uebersicht.
-- `docs/ERLEDIGT.md` — abgeschlossene Bloecke.
-- `docs/OFFENE-BLOECKE.md` — offene Bloecke.
-- `docs/OFFENE-BLOECKE-ARCHIV-2.md` — archivierte Bloecke (vor 2026-10-24).
-- `docs/MERKPOSTEN.md` — M-Nummern.
-- `docs/NEUBAU-ZIELBILD.md` — Ziel-Architektur.
-- `docs/ARCHITEKTUR.md` — technische Architektur.
+- `docs/README.md` — Diátaxis-Map
+- `docs/ARCHITEKTUR.md` — System-Map
+- `docs/NEUBAU-ZIELBILD.md` — Aktueller Loop
+- `docs/ERLEDIGT.md` — Erledigte Blöcke
+- `docs/OFFENE-BLOECKE.md` — Offene Blöcke
+- `AGENTS.md` — Agenten-Routing

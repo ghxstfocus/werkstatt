@@ -852,3 +852,76 @@ vollstaendig erfolgreiche Lauf.
 
 **Beweis:** RERUN-48, 1/1 Tasks, LOOP_RC=0, ruff 1->0.
 Zielprojekt committed `c0216d2`.
+
+
+## M-441..M-476 (ADaPT, Doku, 2026-10-25)
+
+Der Loop ist nach 30+ Fixes Ende-zu-Ende gruen.
+RERUN-80: ChangeApplier.apply/rollback implementiert (237 Zeilen),
+6/6 Tasks approved, LOOP_RC=0.
+
+### Loop-Architektur
+
+- **M-441:** Divergenz-Check (`loop_reviewer_divergenz`).
+- **M-442:** Architect-Modell Env-Var (`WERKSTATT_ARCHITECT_MODEL`).
+- **M-443:** venv-Python (`_venv_env`, `_resolve_venv_cmd`).
+- **M-444:** Import-Validierung Modul (`_validate_imports_in_patch`).
+- **M-444b:** Symbol-Validierung + Feedback-Loop.
+- **M-444c:** Ganzer Patch (old_string + new_string).
+- **M-445:** Reasoning-Architect (`deepseek-reasoner`).
+- **M-446:** Architect-Prompt ohne Skills (kein DSML).
+- **M-447:** Architect `max_tokens=16000`.
+- **M-448:** Reviewer Diff-Limit 500k.
+- **M-449:** Tests out-of-scope (Architect beschreibt keine Tests).
+- **M-450:** Leerer Architect-Abschnitt -> kein Patch.
+- **M-451:** stdlib Top-Level + Cross-File-Importe.
+- **M-453:** Architect immer + Planner-Split (architect_start/ende).
+- **M-454:** "so viele Sub-Tasks wie noetig" (statt 3-5).
+- **M-455:** `_with_spinner` (Architect, Planner-Split, Builder, Reviewer).
+- **M-456:** Render-API (`log_line`, `task_started`, `task_done`, `summary`).
+- **M-458:** Architect-Prosa im Panel (`state.architect_prosa`).
+- **M-459:** Reviewer prueft Task-Description, nicht Gesamtaufgabe.
+- **M-460:** Architect-Zitat programmatisch (Marker).
+- **M-461:** `_extrahiere_prosa_abschnitt` (woertliche Marker).
+- **M-462:** Architect liefert numerierte Schritte.
+- **M-463:** Robuste Marker-Suche (Backticks, 800-Zeichen-Limit).
+- **M-464:** Marker max 3 Schritte / 800 Zeichen.
+- **M-465:** Planner-Split `max_tokens=8000`.
+- **M-466:** Builder-Feedback (Reviewer-Bugs im Prompt).
+- **M-467:** ruff --fix + Circuit Breaker (`loop_reflection_stagnation`).
+- **M-468:** Fallback auf 800 Zeichen.
+- **M-469:** Rekursive Zerlegung (ADaPT).
+- **M-470:** Schritt-Anzahl-Pruefung.
+- **M-471:** Bullets zaehlen zur Komplexitaet.
+- **M-472:** ADaPT On-Demand-Zerlegung (`_split_task_on_demand`).
+- **M-473:** `while`-Loop statt `for` (Sub-Tasks werden gebaut).
+- **M-474:** ADaPT bei `reviewer_high_bug_fail_closed`.
+- **M-475:** `get_next_task` liefert nur `pending`.
+- **M-476:** `phase_end` nach `human_gate` + `verify.json` fester Command.
+
+### RERUN-Ergebnisse
+
+- **RERUN-65:** 3/7 Tasks, Reviewer prueft Gesamtaufgabe.
+- **RERUN-66:** 3/7 Tasks, `handler(change)` statt `handler.backup(change)`.
+- **RERUN-67:** 1 Task, Planner-Split JSON abgeschnitten.
+- **RERUN-68:** 2/12 Tasks, Reviewer prueft Tasks 5-20.
+- **RERUN-69:** 5/10 Tasks, desc_len=3680 fuer t6.
+- **RERUN-70:** 1 Task, `planner_split_json_fehler`.
+- **RERUN-71:** 2/9 Tasks, `register_handler` prueft nur 2 Methoden.
+- **RERUN-72:** 4/9 Tasks, `rollback` High-Bug.
+- **RERUN-73:** 1/10 Tasks, `S110`/`BLE001` Ruff-Fehler.
+- **RERUN-74:** 8 Tasks, `t2` desc_len=10373.
+- **RERUN-75:** 8 Tasks, `t5` 9 Unterpunkte.
+- **RERUN-76:** 9 Tasks, `t5` 5 Schritte.
+- **RERUN-77:** 6 Tasks, ADaPT (`Split-t3`) aber Loop springt zu `t4`.
+- **RERUN-78:** 4/9 Tasks, ADaPT (`Split-t5`) aber Loop haengt.
+- **RERUN-79:** Endlosschleife (26+ Tasks, `Split-t1` immer wieder).
+- **RERUN-80:** 6/6 Tasks approved, LOOP_RC=0. ChangeApplier gebaut.
+
+### Baseline
+
+- **Tests:** 1448 passed (Baseline 1448).
+- **Ruff:** 13 errors (Baseline 13).
+- **Mypy:** 11 errors (Baseline 11).
+- **AST:** 6 passed.
+- **Katalog:** 162.

@@ -1644,25 +1644,19 @@ def run_pipeline_loop(
         _task_ende(state, phase_state, task_id, ok=True, name=task_name)
         audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
 
-    # 4. Phase-End Verify + Reflection (nach allen Tasks).
-    # M-322: Bei vorhandener Phasen-Hierarchie laeuft hier die
-    # Vollsuite (verify.json: phase="phase_end"). Bei flachem Plan
-    # (nur Einzelauftraege) ist phase="phase_end" ein No-Op, weil
-    # keine Stage diese Phase deklariert — der Aufruf ist dann
-    # billig (nur py_compile-Fallback oder leer).
-    if not _verify_patches(state, phase="phase_end"):
-        audit("loop_gate_failed", {"gate": "post_build"}, pd, pn)
-        if _reflection_loop(state):
-            audit("loop_reflection_erfolg", {"project_name": project_name}, pd, pn)
-        else:
-            audit("loop_reflection_gescheitert", {"project_name": project_name}, pd, pn)
-            return 1
+    # 4. (M-476) Phase-End Verify NACH human_gate.
 
     # 5. Human-Gate (eigenes, fail-closed)
     group_start("Phase 5: Human-Gate")
     audit("loop_phase", {"phase": "human_gate", "status": "start"}, pd, pn)
     rc = _human_gate(state)
     group_end()
+
+    # M-476: Phase-End Verify (Vollsuite) nach human_gate.
+    if rc == 0:
+        if not _verify_patches(state, phase="phase_end"):
+            audit("loop_gate_failed", {"gate": "phase_end"}, pd, pn)
+            rc = 1
 
     if rc == 0:
         audit("loop_erfolg", {"project_name": project_name}, pd, pn)
