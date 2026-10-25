@@ -278,9 +278,32 @@ def _build_patches_fuer_datei(
             f"Der letzte Patch wurde verworfen. Grund:\n{_feedback}\n"
             f"Behebe das in dieser Antwort.\n"
         )
+    # M-466: Reviewer-Bugs aus letzter Runde in den Prompt.
+    _reviewer_bugs = getattr(state, "reviewer_bugs", None) or []
+    if _reviewer_bugs:
+        _bug_lines = []
+        for _b in _reviewer_bugs:
+            if not isinstance(_b, dict):
+                continue
+            _sev = _b.get("severity", "?")
+            _desc = _b.get("description", "")
+            if _desc:
+                _bug_lines.append(f"- [{_sev}] {_desc}")
+        if _bug_lines:
+            _feedback_block += (
+                "\n\n## REVIEWER-FEEDBACK (aus letzter Runde):\n"
+                + "\n".join(_bug_lines)
+                + "\nBehebe diese Bugs in dieser Antwort.\n"
+            )
+    # M-466: Task-Name + Beschreibung fuer Kontext.
+    _task = getattr(state, "aktuelle_task", None) or {}
+    _task_name = _task.get("name", "") if isinstance(_task, dict) else ""
+    _task_desc = _task.get("description", "") if isinstance(_task, dict) else ""
     _user = (
         f"## ZIELDATEI: {zieldatei}\n\n"
-        f"## ARCHITECT-BESCHREIBUNG (nur diese Datei):\n{_abschnitt}\n\n"
+        f"## TASK: {_task_name}\n"
+        f"## TASK-BESCHREIBUNG: {_task_desc}\n\n"
+        f"## ARCHITECT-BESCHREIBUNG (fuer Kontext):\n{_abschnitt}\n\n"
         f"## AKTUELLER DATEI-INHALT:\n```python\n{_inhalt}\n```\n"
         f"{_feedback_block}"
     )

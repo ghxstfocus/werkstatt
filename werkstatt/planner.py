@@ -230,6 +230,8 @@ Jeder Sub-Task:
   (max 1 Datei pro Task, wenn moeglich)
 - architect_start: ERSTE Zeile des Architect-Abschnitts,
   der zu diesem Task gehoert (woertliches Zitat, z.B. "5. Backup").
+  FUER __init__.py-Tasks: verwende den exakten Schritt, z.B.
+  "15. In __init__.py: __all__ alphabetisch sortieren".
 - architect_ende: LETZTE Zeile des Architect-Abschnitts
   (woertliches Zitat, z.B. "6. Anwenden").
   WICHTIG: architect_start und architect_ende muessen BENACHBARTE
@@ -464,7 +466,7 @@ def _extrahiere_prosa_abschnitt(
         if i_ende < 0:
             return prosa[i_start:]
     _result = prosa[i_start:i_ende + len(ende)]
-    # M-464: Laengen-Begrenzung auf 800 Zeichen.
+    # M-466: Laengen-Begrenzung IMMER anwenden (auch bei Fallback).
     if len(_result) > 800:
         # Schneide am letzten Satzende vor 800 Zeichen.
         _cut = _result.rfind(".", 0, 800)
