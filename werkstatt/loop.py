@@ -125,6 +125,58 @@ def _expand_cmd_placeholders(
     return out
 
 
+def _verify_stage_with_heartbeat(
+    cmd: list[str], cwd: str, stage_id: str, timeout: int = 300
+) -> subprocess.CompletedProcess:
+    """M-390: Fuehrt subprocess.run aus, mit Heartbeat alle 2s.
+
+    Bei langen pytest-Laeufen (11 Min) sieht der Nutzer sonst
+    11 Minuten Stille — kein Lebenszeichen.
+    """
+    import threading as _threading
+    import time as _time
+
+    from werkstatt import loop_renderer as _r
+
+    _done = _threading.Event()
+    _result: list = [None]
+    _exc: list = [None]
+
+    def _worker():
+        try:
+            _result[0] = subprocess.run(
+                cmd, cwd=cwd, capture_output=True, text=True,
+                timeout=timeout, check=False,
+            )
+        except Exception as e:  # noqa: BLE001
+            _exc[0] = e
+        finally:
+            _done.set()
+
+    def _heartbeat():
+        _start = _time.monotonic()
+        _last = -1
+        while not _done.is_set():
+            _el = int(_time.monotonic() - _start)
+            if _el // 2 > _last // 2:
+                try:
+                    _r.heartbeat(f"[verify] {stage_id}", _el)
+                except Exception:  # noqa: BLE001, S110
+                    pass
+                _last = _el
+            _done.wait(timeout=0.5)
+
+    _t = _threading.Thread(target=_worker, daemon=True)
+    _th = _threading.Thread(target=_heartbeat, daemon=True)
+    _t.start()
+    _th.start()
+    _t.join()
+    _th.join()
+    if _exc[0] is not None:
+        raise _exc[0]
+    return _result[0]
+
+
 def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     """B2: Verifier (multi-projekt-faehig via Projekt-Contract).
 
@@ -222,9 +274,9 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
             cmd = [_venv_python if c == "python3" else c for c in cmd]
         _executed_stages.append(stage.get("id", "?"))
         try:
-            res = subprocess.run(
-                cmd, cwd=str(project_dir),
-                capture_output=True, text=True, timeout=300, check=False
+            # M-390: Heartbeat alle 2s waehrend der Stage
+            res = _verify_stage_with_heartbeat(
+                cmd, str(project_dir), stage.get("id", "?"),
             )
             if res.returncode != 0:
                 errors.append(f"{stage.get('id', '?')}: {res.stdout[-500:]}")
