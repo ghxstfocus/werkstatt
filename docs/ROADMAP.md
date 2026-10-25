@@ -78,6 +78,39 @@ Rollen: Explorer, Planner, Builder, Verify, Reviewer, Human-Gate.
 - M-485: Event-Sourcing / Memory.
 - M-486: Cache-aware Cost Model (7.1x Genauigkeit).
 
+### Phase 22: Grundsystem schliessen (M-487..M-489) 🔴
+
+- M-487: Human-Gate committet selbst.
+- M-488: `phase_end` laeuft Vollsuite.
+- M-489: Test-Repair-Loop (TDFlow-Stil, 94.3% SWE-bench Verified).
+
+### Phase 22b: Doku-Sync (M-490..M-492) 🔴
+
+- M-490: Doku-Staleness-Check (deterministisch, Documentledger).
+- M-491: Doku-Update-Agent (DocWriter, AUTO-Sections).
+- M-492: Doku-Critic (DocSync).
+
+### Phase 23: Effizienz (M-479..M-482) 🔧
+
+- M-479: Modell-Routing pro Rolle.
+- M-480: Kosten-Circuit-Breaker.
+- M-481: Cache-aware Prompts.
+- M-482: LiteLLM Adaptive Router (optional).
+
+### Phase 24: Robustheit (M-483..M-486) 🔴
+
+- M-483: Sandboxing (OS-Level, 84% weniger Permission-Prompts).
+- M-484: SWE-bench-Harness (die einzige vergleichbare Zahl).
+- M-485: Event-Sourcing / Memory.
+- M-486: Cache-aware Cost Model (7.1x Genauigkeit).
+
+### Phase 25: Web-Interface (M-494..M-497) 📋
+
+- M-494: Web-Backend (FastAPI, Web-Sockets, State pro Projekt).
+- M-495: Terminal-Proxy (Live-Logs im Browser).
+- M-496: Interactive Chat (Intent-Parsing, Bestaetigung per Chat).
+- M-497: UI-Layout (Chrome-Tabs, CLI links, Chat rechts, Reviewer unten).
+
 ## Offene Bloecke (P1/P2)
 
 | Block | Prio | Kurz |

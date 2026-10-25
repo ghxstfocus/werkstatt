@@ -72,6 +72,51 @@ Merkposten (M-Nummern) in `MERKPOSTEN.md`.
 | M-485 | mittel | Event-Sourcing / Memory. Unveraenderliche Event-Logs statt YAML-Checkpoint. Loop-Spezifikation (Trigger, Goal, Verification, Stopping Rule, Memory). |
 | M-486 | klein | Cache-aware Cost Model. 98.6% Input-Tokens aus Prefix-Cache. Flat-Pricing ueberschaetzt Kosten um 7.1x. |
 
+## Grundsystem schliessen (M-487..M-489)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| M-487 | klein | Human-Gate committet selbst. `_human_gate` ruft `git commit` auf. Ohne das ist der Loop ein Vorschlagsgenerator. |
+| M-488 | klein | `phase_end` laeuft Vollsuite. `verify.json` + `loop.py` (M-476). Ohne das ist der Loop ein Builder. |
+| M-489 | gross | Test-Repair-Loop (TDFlow-Stil). 4 Sub-Agenten: Patch-Propose, Debug, Patch-Revise, Test-Generate. Tests FEST. Max 3 Runden. |
+
+## Doku-Sync (M-490..M-492)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| M-490 | klein | Doku-Staleness-Check (deterministisch, Documentledger). Nach jedem Task: Hash-Vergleich Code -> Doku. Kein LLM. |
+| M-491 | mittel | Doku-Update-Agent (DocWriter). Bekommt Git-Diff + betroffene Sektionen + Quellcode. Schreibt nur `<!-- AUTO:... -->`-Bloecke neu (docwright). |
+| M-492 | klein | Doku-Critic (DocSync). Prueft DocWriter-Output gegen Code. Max 2 Runden. |
+
+## Effizienz (M-479..M-482)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| M-479 | klein | Modell-Routing pro Rolle. `ask_llm(role=...)` mit Env-Vars. Architect = `deepseek-reasoner`, Builder/Reviewer = `deepseek-chat`. |
+| M-480 | klein | Kosten-Circuit-Breaker. `RunState.max_budget_usd`. `ask_llm` zaehlt Tokens, bei Ueberschreitung `BudgetExceededError`. |
+| M-481 | mittel | Cache-aware Prompts. Stabiler Prefix (System, Architektur) vor variablem Suffix (Aufgabe). 98.6% Cache-Hit-Rate moeglich. |
+| M-482 | mittel | LiteLLM Adaptive Router (optional). Lernt, welches Modell fuer welchen Request-Typ am besten ist. |
+
+## Robustheit (M-483..M-486)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| M-483 | mittel | Sandboxing (OS-Level). Filesystem-Isolation + Netzwerk-Isolation. Linux bubblewrap / macOS seatbelt. Reduziert Permission-Prompts um 84%. |
+| M-484 | mittel | SWE-bench-Harness. 50-100 Tasks aus `princeton-nlp/SWE-bench_Verified`. Die einzige Zahl, die mit Aider/OpenHands/Devin vergleichbar ist. |
+| M-485 | mittel | Event-Sourcing / Memory. Unveraenderliche Event-Logs statt YAML-Checkpoint. Loop-Spezifikation (Trigger, Goal, Verification, Stopping Rule, Memory). |
+| M-486 | klein | Cache-aware Cost Model. 98.6% Input-Tokens aus Prefix-Cache. Flat-Pricing ueberschaetzt Kosten um 7.1x. |
+
+## Web-Interface (M-494..M-497)
+
+Das UI ist eine "IDE fuer Agenten": Chrome-Tabs oben (Projekte), CLI links (Live-Loop), Chat rechts (LLM-Interaktion), Reviewer unten (Diff/Audit).
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| M-494 | mittel | Web-Backend (FastAPI). Startet den Loop als Subprozess, bietet Web-Sockets fuer Live-Logs und Chat. Zentraler State pro Projekt. |
+| M-495 | klein | Terminal-Proxy. `loop_renderer`-Ausgaben (Spinner, `log_line`, `task_started`) live in den Browser streamen. xterm.js oder `<pre>` mit HTMX. |
+| M-496 | mittel | Interactive Chat. Chat-Fenster rechts, Intent-Parsing (`plan`, `build`, `approve`, `chat_only`). Bestaetigung (j/n) per Chat oder CLI. |
+| M-497 | mittel | UI-Layout. Chrome-Tabs oben (Projekte oeffnen/schliessen), CLI links, Chat rechts, Reviewer unten. Synchronisation: Tab-Wechsel wechselt beide Fenster. |
+
 ## Verweise
 
 - `ROADMAP.md` — Phasen-Uebersicht.
