@@ -16,6 +16,7 @@ from pathlib import Path
 
 from werkstatt.audit import audit
 from werkstatt.builder import run_builder
+from werkstatt.env_loader import load_env
 from werkstatt.explorer import run_explorer
 from werkstatt.loop_renderer import group_end, group_start, header, step, task, task_ok
 from werkstatt.phase_state import PhaseState
@@ -1422,6 +1423,8 @@ def run_pipeline_loop(
 
 
 def main(argv: list[str] | None = None) -> int:
+    # M-391: .env laden (DEEPSEEK_API_KEY automatisch setzen)
+    load_env()
     """CLI-Einstieg: python3 -m werkstatt.loop --project <name> --aufgabe <text> [--dry-run]."""
     import argparse
 
