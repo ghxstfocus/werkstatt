@@ -523,6 +523,13 @@ def _zerlege_in_sub_tasks(
             _name = t.get("name") or ""
             _desc = t.get("description") or ""
             _abschnitt = f"## TASK: {_name}\n{_desc}" if _desc else _name
+        # M-468: Fallback auch auf 800 Zeichen begrenzen.
+        if len(_abschnitt) > 800:
+            _cut = _abschnitt.rfind(".", 0, 800)
+            if _cut > 0:
+                _abschnitt = _abschnitt[:_cut + 1]
+            else:
+                _abschnitt = _abschnitt[:800]
         tasks.append({
             "id": t.get("id") or f"t{i}",
             "name": t.get("name") or f"Sub-Task {i}",
@@ -531,11 +538,33 @@ def _zerlege_in_sub_tasks(
             "dependencies": t.get("dependencies") or [],
             "description": _abschnitt,
         })
-    audit("planner_split", {"anzahl": len(tasks), "tasks": [
+    # M-469: Rekursive Zerlegung (ADaPT). Tasks > 800 Zeichen
+    # werden neu zerlegt (max 2 Ebenen tief).
+    _final: list[dict] = []
+    for t in tasks:
+        if len(t.get("description", "")) <= 800 or tiefe >= 2:
+            _final.append(t)
+        else:
+            audit("planner_task_zu_gross",
+                  {"id": t.get("id"),
+                   "desc_len": len(t.get("description", "")),
+                   "tiefe": tiefe}, pd, pn)
+            _sub = _llm_split_einzel_task(prosa, t, api_key, pd, pn)
+            if _sub:
+                for _st in _sub:
+                    if len(_st.get("description", "")) <= 800 or tiefe + 1 >= 2:
+                        _final.append(_st)
+                    else:
+                        _sub2 = _llm_split_einzel_task(prosa, _st, api_key, pd, pn)
+                        _final.extend(_sub2 or [_st])
+            else:
+                _final.append(t)
+
+    audit("planner_split", {"anzahl": len(_final), "tasks": [
         {"id": t["id"], "files": t["task_files"],
-         "desc_len": len(t.get("description", ""))} for t in tasks
+         "desc_len": len(t.get("description", ""))} for t in _final
     ]}, pd, pn)
-    return tasks
+    return _final
 
 
 def run_planner(state: RunState) -> bool:
