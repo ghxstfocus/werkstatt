@@ -540,3 +540,68 @@ analysieren. **Dann** entscheiden.
 - **M-389:** Doku-Pflege im Loop.
 - **M-417:** Architect mit Code-Beispielen.
 - **M-418:** Loop-Audit (Logik-Luecken, Widersprueche).
+
+---
+
+## Nachtrag: Recherche-Auftrag fuer den naechsten Chat
+
+**Zusaetzlich zu "messen und Logik-Luecken finden":**
+
+Der naechste Chat **soll recherchieren**, wie der **Goldstandard**
+aussieht und wie man das **Beste aus allen Welten** vereint.
+
+### Was zu recherchieren ist
+
+**1) Aider Architect/Editor (belegt):**
+- Architect (Reasoning-Modell) beschreibt Loesung in Prosa.
+- Editor (Chat-Modell) setzt sie in search/replace um.
+- Aider-Zahlen: DeepSeek solo 48,4 %; R1+Sonnet 64,0 %;
+  o1-preview+DeepSeek 85 % [citation:1][citation:13].
+- **Frage:** Ist dein Loop-Design (Planner=Architect, Builder=Editor)
+  korrekt umgesetzt? Wo weicht es ab?
+
+**2) Loop Engineering (2026):**
+- arXiv-Paper: "Stop Hand-Holding Your Coding Agent" .
+- Loop-Spezifikation: Trigger, Goal, Verification, Stopping Rule,
+  Memory.
+- **Frage:** Hat dein Loop eine klare Stopping-Rule? Eine Memory?
+  Einen Verifier-Ladder?
+
+**3) Devin Subagents:**
+- `subagent_explore` (read-only) vs. `subagent_general` (full tools) [citation:10].
+- **Frage:** Entspricht dein Explorer/Builder dieser Trennung?
+
+**4) Multi-Agent-Patterns:**
+- Planner → Builder → Validator → Critic → Lead [citation:12].
+- **Frage:** Fehlt deinem Loop ein "Validator" (deterministisch)
+  oder ein "Critic" (Reviewer)?
+
+### Ziel der Recherche
+
+**Nicht:** Kopieren. **Sondern:** Pruefen, ob dein Loop die
+**Prinzipien** umsetzt, die bei den Profis funktionieren.
+**Dann:** Bewerten, was fehlt, was ueberfluessig ist, was
+widerspruechlich ist.
+
+### Konkrete Fragen an den naechsten Chat
+
+1. **Architect/Editor:** Ist die Trennung sauber? (Prompt, Modell,
+   Edit-Format)
+2. **Verifier-Ladder:** Prueft dein Loop deterministisch (ruff,
+   pytest) **vor** dem Reviewer? Oder nur der Reviewer?
+3. **Stopping-Rule:** Wann bricht der Loop ab? (Max Runden?
+   Max Reflection? Fail-closed?)
+4. **Memory:** Was weiss der Loop ueber vergangene Runs?
+   (`PROGRESS.md`, `phase_state`, `audit-logs`)
+5. **Human-Gate:** Ist der Mensch **richtig** platziert?
+   (Nach Planner? Nach Reviewer? Nach beidem?)
+6. **Kontext-Explosion:** Bekommt der Builder **zu viel** Kontext?
+   (Architect-Text + `_file_context` + `user_content`)
+7. **Edit-Format:** search/replace vs. whole-file — was ist
+   **wirklich** besser fuer deine Dateien?
+
+### Wichtig
+
+**Erst messen, dann recherchieren, dann bewerten.**
+**Keine neuen Features bauen.** Der naechste Chat **soll nicht
+fixen** — er **soll verstehen**.
