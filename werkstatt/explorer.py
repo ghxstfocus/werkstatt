@@ -65,6 +65,7 @@ def _extract_dateien(stdout: str) -> list[str]:
     return dateien
 
 
+
 def _messen(frage: str, project_dir: Path) -> dict[str, Any]:
     """M-373: Deterministische Messung VOR dem LLM.
 
@@ -119,6 +120,8 @@ def _messen(frage: str, project_dir: Path) -> dict[str, Any]:
             "stdout": r2.get("stdout", "")[:3000],
             "stderr": r2.get("stderr", "")[:500],
         }
+
+
 
     return results
 

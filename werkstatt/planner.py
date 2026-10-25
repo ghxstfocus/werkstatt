@@ -186,6 +186,22 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
     # === Dann PLANNER_SYSTEM ===
     parts.append(PLANNER_SYSTEM)
 
+    # === M-397: Doku-Verbot (harte Regel, vor den Skills) ===
+    parts.append(
+        "<doku_verbot>\n"
+        "Doku-Tasks (docs/*.md, README.md, ROADMAP.md, CHANGELOG.md) "
+        "sind STRENG VERBOTEN.\n"
+        "Der Loop schreibt PROGRESS.md automatisch.\n"
+        "Wenn die findings offene Punkte in docs/ enthalten:\n"
+        "  - Extrahiere das CODE-Stichwort "
+        "(z.B. 'Migrations-Tracking' -> 'migration', "
+        "'Sanity-Check' -> 'sanity', 'Logout-Button' -> 'logout')\n"
+        "  - Plane einen Code-Task auf der zugehoerigen .py-Datei "
+        "mit action=update.\n"
+        "  - NIEMALS docs/*.md als task_files.\n"
+        "</doku_verbot>"
+    )
+
     # === Skills ===
     uw = load_skill_by_name("using-werkstatt", skills)
     if uw and uw["body"]:
