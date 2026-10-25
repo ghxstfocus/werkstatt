@@ -90,6 +90,30 @@ def _messen(frage: str, project_dir: Path) -> dict[str, Any]:
             "stderr": r.get("stderr", "")[:1000],
         }
 
+    # M-392: Doku-Exploration — offene Punkte, Roadmap, Status
+    _doku_trigger = (
+        "offene", "todo", "naechste", "roadmap", "status",
+        "was fehlt", "was ist offen", "unvollstaendig",
+        "finde", "durchsuche",
+    )
+    if any(w in frage_lower for w in _doku_trigger):
+        r = run_readonly(
+            "grep -rn Offen docs/ --include=*.md",
+            project_dir,
+        )
+        results["docs_offen"] = {
+            "ok": r.get("ok", False),
+            "stdout": r.get("stdout", "")[:5000],
+            "stderr": r.get("stderr", "")[:500],
+            "dateien": _extract_dateien(r.get("stdout", "")),
+        }
+        r2 = run_readonly("cat docs/STATUS.md", project_dir)
+        results["status"] = {
+            "ok": r2.get("ok", False),
+            "stdout": r2.get("stdout", "")[:3000],
+            "stderr": r2.get("stderr", "")[:500],
+        }
+
     return results
 
 
@@ -98,11 +122,13 @@ def _format_findings(messungen: dict[str, Any]) -> str:
     lines = []
     for name, m in messungen.items():
         n = len(m.get("dateien", []))
-        lines.append(f"{name}: {n} Datei(en) betroffen")
-        if m.get("dateien"):
+        if n > 0:
+            lines.append(f"{name}: {n} Datei(en) betroffen")
             lines.append(f"  Dateien: {', '.join(m['dateien'])}")
-        if m.get("stdout"):
-            lines.append(f"  Ausgabe (Auszug): {m['stdout'][:500]}")
+        else:
+            lines.append(f"{name}: {m.get('stdout', '')[:200] or '(keine)'}")
+        if m.get("stdout") and n == 0:
+            lines.append(f"  Ausgabe: {m['stdout'][:800]}")
     return "\n".join(lines)
 
 
