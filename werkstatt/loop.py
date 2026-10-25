@@ -649,6 +649,7 @@ def _reflection_loop(
     state: RunState,
     max_runden: int = 3,
     error_context: str | None = None,
+    phase: str | None = "post_build",
 ) -> bool:
     """Echter Reflection-Loop (Aider-Prinzip, M-329).
 
@@ -672,7 +673,9 @@ def _reflection_loop(
     from werkstatt.builder import run_builder
 
     for runde in range(1, max_runden + 1):
-        if _verify_patches(state, phase=None):
+        # M-402: phase statt None (sonst laeuft pytest_full_checks
+        # bei jeder Reflection-Runde mit).
+        if _verify_patches(state, phase=phase):
             return True
 
         audit("loop_reflection_runde", {"runde": runde}, pd, pn)
@@ -708,7 +711,7 @@ def _reflection_loop(
         audit("loop_reflection_patch_applied",
               {"runde": runde, "anzahl": _applied}, pd, pn)
 
-    return _verify_patches(state, phase=None)
+    return _verify_patches(state, phase=phase)
 
 
 def _call_hook(hook_name: str, payload: dict) -> dict:
