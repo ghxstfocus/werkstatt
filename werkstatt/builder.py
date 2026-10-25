@@ -44,6 +44,23 @@ def _builder_system() -> str:
     return BUILDER_SYSTEM
 
 
+def _architect_abschnitt(beschreibung: str, zieldatei: str) -> str:
+    """M-408c: Extrahiert den Abschnitt fuer eine Datei aus der Architect-Prosa.
+
+    Format: '## <pfad>' als Ueberschrift. Fallback: ganze Prosa.
+    """
+    import re
+    pattern = rf"^##\s*{re.escape(zieldatei)}\s*$"
+    m = re.search(pattern, beschreibung, re.MULTILINE)
+    if not m:
+        return beschreibung
+    start = m.end()
+    n = re.search(r"^##\s+\S", beschreibung[start:], re.MULTILINE)
+    if n:
+        return beschreibung[start:start + n.start()].strip()
+    return beschreibung[start:].strip()
+
+
 def _build_patches_fuer_datei(
     state: RunState,
     zieldatei: str,
@@ -67,9 +84,10 @@ def _build_patches_fuer_datei(
     except OSError:
         return []
 
+    _abschnitt = _architect_abschnitt(architect_beschreibung, zieldatei)
     _user = (
         f"## ZIELDATEI: {zieldatei}\n\n"
-        f"## ARCHITECT-BESCHREIBUNG:\n{architect_beschreibung}\n\n"
+        f"## ARCHITECT-BESCHREIBUNG (nur diese Datei):\n{_abschnitt}\n\n"
         f"## AKTUELLER DATEI-INHALT:\n```python\n{_inhalt}\n```\n"
     )
     reply = ask_llm(
