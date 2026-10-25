@@ -47,7 +47,13 @@ def _plan_gate(state: RunState) -> bool:
         # Architect-Modus: 1 Task mit action=architect -> Plan ok
         return bool(_tasks_check)
 
-    if not all((
+    # M-457: Planner-Split (Architect+Split) braucht keine
+    # tests/akzeptanzkriterien. Tests sind out-of-scope (M-449).
+    _is_split = bool(getattr(state, "architect_prosa", None))
+    if _is_split:
+        if not getattr(state, "tasks", []):
+            return False
+    elif not all((
         getattr(state, 'tasks', []),
         getattr(state, 'tests', []),
         getattr(state, 'akzeptanzkriterien', [])
