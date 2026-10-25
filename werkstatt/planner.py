@@ -416,24 +416,50 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
     return "\n\n".join(parts)
 
 
+def _normalisiere(text: str) -> str:
+    """M-463: Entfernt Backticks, mehrfache Leerzeichen.
+
+    Damit Marker wie "1. In `applier.py`" und "1. In applier.py"
+    matchen.
+    """
+    import re as _re
+    text = text.replace("`", "")
+    text = _re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
 def _extrahiere_prosa_abschnitt(
     prosa: str, start: str, ende: str,
 ) -> str:
-    """M-461: Extrahiert woertlichen Prosa-Abschnitt zwischen Markern.
+    """M-461/M-463: Extrahiert woertlichen Prosa-Abschnitt zwischen Markern.
 
-    Wenn start nicht gefunden: ganze Prosa (Fallback).
-    Wenn ende nicht gefunden: bis Ende (Fallback).
+    Sucht erst woertlich, dann normalisiert (ohne Backticks).
+    Fallback: leerer String (NICHT ganze Prosa).
     """
     if not start:
-        return prosa
+        return ""
+    # 1. Woertliche Suche.
     i_start = prosa.find(start)
     if i_start < 0:
-        return prosa  # Fallback: ganze Prosa
+        # 2. Normalisierte Suche.
+        _p_norm = _normalisiere(prosa)
+        _s_norm = _normalisiere(start)
+        i_start_norm = _p_norm.find(_s_norm)
+        if i_start_norm < 0:
+            return ""
+        # Position im Original: erstes Wort des Markers.
+        _erstes_wort = start.split()[0] if start.split() else start
+        i_start = prosa.find(_erstes_wort)
+        if i_start < 0:
+            return ""
     if not ende or ende == start:
         return prosa[i_start:]
     i_ende = prosa.find(ende, i_start + len(start))
     if i_ende < 0:
-        return prosa[i_start:]
+        _ende_wort = ende.split()[0] if ende.split() else ende
+        i_ende = prosa.find(_ende_wort, i_start + len(start))
+        if i_ende < 0:
+            return prosa[i_start:]
     return prosa[i_start:i_ende + len(ende)]
 
 
@@ -478,9 +504,11 @@ def _zerlege_in_sub_tasks(
         _ende = t.get("architect_ende") or ""
         # M-461: Woertlichen Prosa-Abschnitt extrahieren.
         _abschnitt = _extrahiere_prosa_abschnitt(prosa, _start, _ende)
-        if not _abschnitt or _abschnitt == prosa:
-            # Fallback: description aus LLM nutzen, wenn vorhanden.
-            _abschnitt = t.get("description") or ""
+        if not _abschnitt:
+            # M-463: Fallback: Task-Name + Description, NICHT ganze Prosa.
+            _name = t.get("name") or ""
+            _desc = t.get("description") or ""
+            _abschnitt = f"## TASK: {_name}\n{_desc}" if _desc else _name
         tasks.append({
             "id": t.get("id") or f"t{i}",
             "name": t.get("name") or f"Sub-Task {i}",
@@ -490,7 +518,8 @@ def _zerlege_in_sub_tasks(
             "description": _abschnitt,
         })
     audit("planner_split", {"anzahl": len(tasks), "tasks": [
-        {"id": t["id"], "files": t["task_files"]} for t in tasks
+        {"id": t["id"], "files": t["task_files"],
+         "desc_len": len(t.get("description", ""))} for t in tasks
     ]}, pd, pn)
     return tasks
 
