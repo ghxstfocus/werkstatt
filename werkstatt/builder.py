@@ -197,15 +197,25 @@ def _validate_imports_in_patch(
 
 
 def _architect_abschnitt(beschreibung: str, zieldatei: str) -> str:
-    """M-408c: Extrahiert den Abschnitt fuer eine Datei aus der Architect-Prosa.
+    """M-408c/M-450: Extrahiert den Abschnitt fuer eine Datei.
 
-    Format: '## <pfad>' als Ueberschrift. Fallback: ganze Prosa.
+    - Wenn die Prosa '## <pfad>'-Ueberschriften hat:
+      * Datei gefunden -> Abschnitt.
+      * Datei NICHT gefunden -> "" (Datei ist nicht Teil der Aufgabe).
+    - Wenn die Prosa KEINE Ueberschriften hat (Fallback):
+      * Ganze Prosa zurueckgeben.
     """
     import re
+    # M-450: Pruefen, ob die Prosa ueberhaupt '## '-Ueberschriften hat.
+    _hat_ueberschriften = bool(
+        re.search(r"^##\s+\S", beschreibung, re.MULTILINE)
+    )
+    if not _hat_ueberschriften:
+        return beschreibung  # Fallback: keine Struktur
     pattern = rf"^##\s*{re.escape(zieldatei)}\s*$"
     m = re.search(pattern, beschreibung, re.MULTILINE)
     if not m:
-        return beschreibung
+        return ""  # Datei nicht in der Prosa -> leerer Abschnitt
     start = m.end()
     n = re.search(r"^##\s+\S", beschreibung[start:], re.MULTILINE)
     if n:
@@ -237,6 +247,12 @@ def _build_patches_fuer_datei(
         return []
 
     _abschnitt = _architect_abschnitt(architect_beschreibung, zieldatei)
+    # M-450: Leerer Abschnitt -> Datei ist nicht Teil der Aufgabe.
+    # Kein LLM-Aufruf, kein Patch.
+    if not _abschnitt:
+        audit("builder_architect_datei_nicht_beschrieben",
+              {"datei": zieldatei}, pd, pn)
+        return []
     # M-444b: Feedback aus vorherigem Versuch einbauen.
     _feedback = (getattr(state, "builder_feedback", None) or {}).get(zieldatei, "")
     _feedback_block = ""
