@@ -346,6 +346,24 @@ def _render_plan_rich(phasen, tasks, tests, akzeptanzkriterien) -> None:
                 )
                 body.append(f"       [dim]→ {_files}[/]")
         body.append("")
+    # M-410c: Tasks ohne phase_id (flacher Plan, z.B. Architect)
+    _ohne_phase = [
+        _t for _t in tasks
+        if isinstance(_t, dict) and not _t.get("phase_id")
+    ]
+    if _ohne_phase:
+        body.append("")
+        for _t in _ohne_phase:
+            _files = ", ".join(_t.get("task_files", [])) or "(keine)"
+            _action = _t.get("action", "?")
+            _color = {"create": "green", "update": "yellow",
+                      "read": "dim", "architect": "magenta"}.get(_action, "white")
+            body.append(
+                f"  [{_color}]{_t.get('id')} [{_action}][/] "
+                f"{_t.get('name', '')[:55]}"
+            )
+            body.append(f"       [dim]→ {_files}[/]")
+
     if tests:
         body.append(f"[bold]Tests ({len(tests)}):[/]")
         for _t in tests:
