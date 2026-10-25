@@ -48,5 +48,5 @@ def test_messen_ohne_trigger_leer(tmp_path: Path) -> None:
 
 
 def test_messen_pytest_trigger(tmp_path: Path) -> None:
-    m = _messen("Repariere den Test", tmp_path)
+    m = _messen("Repariere den pytest-Fehler", tmp_path)
     assert "pytest" in m

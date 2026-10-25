@@ -82,7 +82,13 @@ def _messen(frage: str, project_dir: Path) -> dict[str, Any]:
             "dateien": _extract_dateien(r.get("stdout", "")),
         }
 
-    if "pytest" in frage_lower or "test" in frage_lower:
+    # M-393: pytest nur bei explizitem Test-Fehler-Trigger.
+    # 'offene Tests' oder 'Test-Suite' soll NICHT die Vollsuite starten.
+    _pytest_trigger = (
+        "pytest", "testfehler", "roter test",
+        "test schlaegt fehl", "test fail", "failing test",
+    )
+    if any(w in frage_lower for w in _pytest_trigger):
         r = run_readonly("pytest -q", project_dir)
         results["pytest"] = {
             "ok": r.get("ok", False),
