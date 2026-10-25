@@ -196,3 +196,28 @@ Console-Messages, Performance-Traces.
 abgeschlossen sein.
 
 **Nicht in dieser Session** — Loop ist gerade stabil.
+
+## M-390 — Spinner/Heartbeat fuer Verify-Stages (geplant 2026-10-25)
+
+**Problem:** `_verify_patches` ruft `subprocess.run([...])`
+blockierend auf. Bei langen pytest-Laeufen (11 Min) sieht
+der Nutzer **11 Minuten Stille** — kein Spinner, kein
+Heartbeat. Es sieht aus, als haenge der Loop.
+
+**Beispiel RERUN-50:** `pytest tests/unit/ -q` — 1476 Tests,
+670 Sekunden. Kein Lebenszeichen.
+
+**Goldstandard:** Der Loop zeigt **jede** Zeile von pytest
+live — oder zumindest einen **Heartbeat** alle 2 Sekunden.
+
+**Architektur:**
+- `_verify_patches` nutzt `subprocess.Popen` mit
+  `stdout=PIPE` + **live**-Streaming.
+- Oder: `_run_with_progress`-Pattern (Heartbeat-Thread)
+  auch fuer Verify-Stages.
+- Renderer: `spinner_start`/`spinner_update` in
+  `_verify_patches` fuer jede Stage.
+
+**Aufwand:** klein-mittel (~50 Zeilen + Renderer-Anpassung).
+
+**Voraussetzung:** keine — kann sofort gebaut werden.
