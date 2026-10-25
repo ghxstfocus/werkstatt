@@ -1611,6 +1611,11 @@ def run_pipeline_loop(
                 if _high_bugs:
                     audit("loop_reviewer_high_bug_fail_closed",
                           {"task_id": i, "high_bugs": len(_high_bugs)}, pd, pn)
+                    # M-474: ADaPT bei High-Bugs.
+                    if _split_task_on_demand(state, task_id):
+                        audit("loop_task_retry_nach_split",
+                              {"task_id": task_id}, pd, pn)
+                        continue
                     _task_ende(state, phase_state, task_id, ok=False,
                                name=task_name, failure="reviewer_high_bug")
                     return 1
