@@ -475,7 +475,7 @@ def run_builder(state: RunState) -> bool:
         _user = user_content + (_tool_kontext if _tool_kontext else "")
         reply = ask_llm(
             api_key, _sys, _user,
-            model="deepseek-chat", temperature=0.2, max_tokens=8000,
+            model="deepseek-chat", temperature=0.2, max_tokens=16000,
         )
         if not reply.ok:
             audit("builder_llm_fehler", {"fehler": reply.error}, pd, pn)
