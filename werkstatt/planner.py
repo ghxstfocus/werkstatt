@@ -443,6 +443,30 @@ def run_planner(state: RunState) -> bool:
             audit("planner_llm_fehler", {"fehler": reply.error}, pd, pn)
             return False
 
+        # M-408b: Architect-Modus -> Prosa als eine Task
+        if "architect" in aufgabe.lower() or "prosa" in aufgabe.lower():
+            _prosa = reply.content.strip()
+            _key_files = []
+            if isinstance(_explorer_ctx, dict):
+                _key_files = [
+                    k.get("file") for k in (_explorer_ctx.get("key_files") or [])
+                    if isinstance(k, dict) and k.get("file")
+                ]
+            state.tasks = [{
+                "id": "t1",
+                "name": "Architect-Loesung umsetzen",
+                "action": "architect",
+                "description": _prosa,
+                "task_files": _key_files,
+            }]
+            state.phasen = []  # type: ignore[attr-defined]
+            state.tests = []  # type: ignore[attr-defined]
+            state.akzeptanzkriterien = []  # type: ignore[attr-defined]
+            audit("planner_architect_erstellt",
+                  {"prosa_len": len(_prosa),
+                   "task_files": _key_files}, pd, pn)
+            return True
+
         raw = reply.content.strip()
         start = raw.find("{")
         end = raw.rfind("}") + 1
