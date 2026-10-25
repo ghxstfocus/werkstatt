@@ -488,7 +488,7 @@ def _zerlege_in_sub_tasks(
         "Planner-Split",
         lambda: ask_llm(
             api_key, PLANNER_SPLIT_SYSTEM, _user,
-            model="deepseek-chat", temperature=0.2, max_tokens=4000,
+            model="deepseek-chat", temperature=0.2, max_tokens=8000,
         ),
     )
     if not reply.ok:
