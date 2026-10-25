@@ -104,9 +104,13 @@ class PhaseState:
     # --- Resume ---
 
     def get_next_task(self) -> dict | None:
-        """Findet den naechsten Task, der nicht 'done' ist (Resume-Logik)."""
+        """M-475: Liefert den naechsten 'pending'-Task.
+
+        'done', 'split', 'running' und 'failed' werden uebersprungen.
+        'failed' wird durch resume_failed reaktiviert.
+        """
         for task in self.data.get("tasks", []):
-            if task.get("status") != "done":
+            if task.get("status") == "pending":
                 return task
         return None
 
