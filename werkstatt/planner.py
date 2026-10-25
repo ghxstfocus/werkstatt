@@ -249,7 +249,27 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
 
     # === M-408: Architect-Modus (Prosa statt JSON) ===
     if "architect" in aufgabe.lower() or "prosa" in aufgabe.lower():
-        parts.append(ARCHITECT_SYSTEM)
+        # M-446: Architect-Modus -> NUR ARCHITECT_SYSTEM + measured_files.
+        # Keine Skills (Tool-Definitionen triggern deepseek-reasoner
+        # zu DSML-Tool-Calls statt Prosa), kein <doku_verbot>,
+        # kein <task_groesse>.
+        _arch_parts: list[str] = []
+        if isinstance(explorer_ctx, dict):
+            _arch_key = explorer_ctx.get("key_files") or []
+            _arch_files = [
+                k.get("file") for k in _arch_key
+                if isinstance(k, dict) and k.get("file")
+            ]
+            if _arch_files:
+                _arch_str = "\n".join(f"  - {f}" for f in _arch_files)
+                _arch_parts.append(
+                    "<measured_files>\n"
+                    f"Der Explorer hat {len(_arch_files)} Datei(en) "
+                    f"gemessen:\n{_arch_str}\n"
+                    "</measured_files>"
+                )
+        _arch_parts.append(ARCHITECT_SYSTEM)
+        return "\n\n".join(_arch_parts)
     else:
         parts.append(PLANNER_SYSTEM)
 
