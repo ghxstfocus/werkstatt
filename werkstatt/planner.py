@@ -545,8 +545,11 @@ def _zerlege_in_sub_tasks(
     for t in tasks:
         _desc = t.get("description", "")
         _schritte = len(_re_470.findall(r"^\s*\d+\.", _desc, _re_470.MULTILINE))
-        # M-470: Zerlegen, wenn desc_len > 800 ODER > 4 Schritte.
-        _zu_gross = len(_desc) > 800 or _schritte > 4
+        # M-471: Bullets (Spiegelstriche) zaehlen mit.
+        _bullets = len(_re_470.findall(r"^\s+-\s", _desc, _re_470.MULTILINE))
+        _komplexitaet = _schritte + _bullets
+        # Zerlegen, wenn desc_len > 800 ODER > 4 Schritte+Bullets.
+        _zu_gross = len(_desc) > 800 or _komplexitaet > 4
         if not _zu_gross or tiefe >= 2:
             _final.append(t)
         else:
@@ -554,6 +557,8 @@ def _zerlege_in_sub_tasks(
                   {"id": t.get("id"),
                    "desc_len": len(_desc),
                    "schritte": _schritte,
+                   "bullets": _bullets,
+                   "komplexitaet": _komplexitaet,
                    "tiefe": tiefe}, pd, pn)
             _sub = _llm_split_einzel_task(prosa, t, api_key, pd, pn)
             if _sub:
@@ -562,7 +567,11 @@ def _zerlege_in_sub_tasks(
                     _st_schritte = len(_re_470.findall(
                         r"^\s*\d+\.", _st_desc, _re_470.MULTILINE
                     ))
-                    _st_gross = len(_st_desc) > 800 or _st_schritte > 4
+                    _st_bullets = len(_re_470.findall(
+                        r"^\s+-\s", _st_desc, _re_470.MULTILINE
+                    ))
+                    _st_komplex = _st_schritte + _st_bullets
+                    _st_gross = len(_st_desc) > 800 or _st_komplex > 4
                     if not _st_gross or tiefe + 1 >= 2:
                         _final.append(_st)
                     else:
