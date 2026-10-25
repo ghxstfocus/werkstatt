@@ -168,10 +168,15 @@ def run_explorer(state: RunState, frage: str) -> dict:
             "dateien_gesamt": sum(len(m.get("dateien", [])) for m in messungen.values()),
         }, pd, pn)
 
-    # Dateien aus Messung extrahieren -> deterministische key_files
+    # M-394: Dateien aus Messung extrahieren -> deterministische key_files.
+    # ABER: Doku-Dateien (docs/*.md, README.md) NICHT als key_files —
+    # sie sind Kontext (findings), nicht Task-Ziel. Der Planner waehlt
+    # die Code-Dateien selbst.
     key_files: list[dict] = []
     for name, m in messungen.items():
         for datei in m.get("dateien", []):
+            if datei.endswith(".md") or datei.startswith("docs/"):
+                continue  # M-394: Doku ist findings, kein task_file
             key_files.append({
                 "file": datei,
                 "why": f"{name}-Fehler",
@@ -179,12 +184,13 @@ def run_explorer(state: RunState, frage: str) -> dict:
                 "confidence": "high",
             })
 
-    if key_files:
-        audit("explorer_key_files_deterministisch", {
-            "n": len(key_files),
-            "files": [k["file"] for k in key_files][:20],
-        }, pd, pn)
+    # M-394: Auch ohne key_files: findings aus Messung liefern.
+    if messungen:
         findings = _format_findings(messungen)
+        audit("explorer_messung_findings", {
+            "n_key_files": len(key_files),
+            "findings_len": len(findings),
+        }, pd, pn)
         return {
             "findings": findings,
             "key_files": key_files,
