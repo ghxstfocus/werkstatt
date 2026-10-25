@@ -203,6 +203,34 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
         "</doku_verbot>"
     )
 
+    # === M-399a: Datei-Pruefung (kein Erfinden) ===
+    parts.append(
+        "<datei_pruefung>\n"
+        "Bevor du eine Datei in task_files setzt:\n"
+        "  - Pruefe mit grep oder read_file, ob die Datei existiert.\n"
+        "  - Wenn die Datei NICHT existiert und action=update: "
+        "Erfinde sie NICHT.\n"
+        "    Nutze action=create (dann legt der Builder sie an) "
+        "oder eine existierende Datei.\n"
+        "  - Wenn du unsicher bist: Nutze grep, um die Datei zu finden.\n"
+        "</datei_pruefung>"
+    )
+
+    # === M-401: Task-Groesse (2-5 Minuten) ===
+    parts.append(
+        "<task_groesse>\n"
+        "Jeder Task MUSS in 2-5 Minuten erledigt sein.\n"
+        "  - Ein Task = EIN kleiner Fix (z.B. 'I001 in app.py beheben').\n"
+        "  - KEINE 'ChangeApplier.apply implementieren' — das ist "
+        "Stunden-Arbeit.\n"
+        "  - Grosse Features aufteilen in mehrere kleine Tasks.\n"
+        "  - Maximal 5 Tasks pro Phase.\n"
+        "  - Wenn ein offener Punkt zu gross ist: Zerlege ihn in "
+        "Teil-Tasks (z.B. 'apply-Signatur', 'apply-Happy-Path', "
+        "'apply-Fehlerbehandlung').\n"
+        "</task_groesse>"
+    )
+
     # === Skills ===
     uw = load_skill_by_name("using-werkstatt", skills)
     if uw and uw["body"]:
