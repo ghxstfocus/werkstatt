@@ -208,6 +208,36 @@ Antworte NUR mit diesem Prosa-Text. Kein Code, nur Beschreibung.
 """
 
 
+PLANNER_SPLIT_SYSTEM = """Du bist ein Task-Zerleger.
+Du bekommst eine Architect-Prosa und eine Liste von Dateien.
+Zerlege die Prosa in 3-5 Sub-Tasks (nicht mehr, nicht weniger).
+
+Jeder Sub-Task:
+- id: "t1", "t2", ... (aufsteigend)
+- name: kurzer Titel (< 50 Zeichen)
+- action: "update" (Datei existiert) oder "create" (neue Datei)
+- task_files: Liste der Dateien, die dieser Sub-Task aendert
+  (max 1 Datei pro Task, wenn moeglich)
+- dependencies: Liste von Task-IDs, die vorher fertig sein muessen
+- description: kurze Beschreibung (< 200 Zeichen)
+
+Regeln:
+  - Jeder Sub-Task < 50 Zeilen Code.
+  - Keine Test-Dateien (tests/*).
+  - Wenn die Loesung nur 1 Datei betrifft: 1-2 Sub-Tasks.
+  - Wenn 2-3 Dateien: 3-5 Sub-Tasks.
+
+Antworte NUR mit JSON:
+{
+  "tasks": [
+    {"id": "t1", "name": "...", "action": "update",
+     "task_files": ["..."], "dependencies": [], "description": "..."},
+    ...
+  ]
+}
+Keine Erklaerung, nur JSON."""
+
+
 def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
     """M-376: Explorer-Dateien ZUERST (Lost-in-the-Middle).
 
@@ -371,6 +401,54 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
     return "\n\n".join(parts)
 
 
+def _zerlege_in_sub_tasks(
+    prosa: str, key_files: list[str], api_key: str, pd, pn,
+) -> list[dict]:
+    """M-453: Zerlegt Architect-Prosa in 3-5 Sub-Tasks."""
+    import json as _json
+    _user = (
+        f"## ARCHITECT-PROSA:\n{prosa}\n\n"
+        f"## DATEIEN:\n" + "\n".join(f"- {f}" for f in key_files)
+    )
+    reply = ask_llm(
+        api_key, PLANNER_SPLIT_SYSTEM, _user,
+        model="deepseek-chat", temperature=0.2, max_tokens=4000,
+    )
+    if not reply.ok:
+        audit("planner_split_llm_fehler", {"fehler": reply.error}, pd, pn)
+        return []
+    raw = reply.content.strip()
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start < 0 or end <= start:
+        audit("planner_split_json_fehler", {"raw": raw[:200]}, pd, pn)
+        return []
+    try:
+        parsed = _json.loads(raw[start:end])
+    except _json.JSONDecodeError:
+        audit("planner_split_json_fehler", {"raw": raw[:200]}, pd, pn)
+        return []
+    tasks_raw = parsed.get("tasks", [])
+    if not isinstance(tasks_raw, list):
+        return []
+    tasks: list[dict] = []
+    for i, t in enumerate(tasks_raw, 1):
+        if not isinstance(t, dict):
+            continue
+        tasks.append({
+            "id": t.get("id") or f"t{i}",
+            "name": t.get("name") or f"Sub-Task {i}",
+            "action": t.get("action", "update"),
+            "task_files": t.get("task_files") or [],
+            "dependencies": t.get("dependencies") or [],
+            "description": t.get("description") or "",
+        })
+    audit("planner_split", {"anzahl": len(tasks), "tasks": [
+        {"id": t["id"], "files": t["task_files"]} for t in tasks
+    ]}, pd, pn)
+    return tasks
+
+
 def run_planner(state: RunState) -> bool:
     """Erstellt den Plan. Schreibt in state.tasks/tests/akzeptanzkriterien."""
     pd = state.project_dir
@@ -512,9 +590,15 @@ def run_planner(state: RunState) -> bool:
             audit("planner_llm_fehler", {"fehler": reply.error}, pd, pn)
             return False
 
-        # M-408b: Architect-Modus -> Prosa fuer ALLE key_files.
-        if "architect" in aufgabe.lower() or "prosa" in aufgabe.lower():
-            _prosa = reply.content.strip()
+        # M-453b: JSON erkennen. Wenn die Antwort JSON ist:
+        # in den bestehenden JSON-Pfad fallen (kein Architect+Split).
+        # Wenn Prosa: Architect+Split.
+        _raw = reply.content.strip()
+        _is_json = _raw.startswith("{") or '"tasks"' in _raw[:200]
+
+        if not _is_json:
+            # Prosa -> Architect+Split.
+            _prosa = _raw
             _key_files: list[str] = []
             if isinstance(_explorer_ctx, dict):
                 for k in (_explorer_ctx.get("key_files") or []):
@@ -522,7 +606,6 @@ def run_planner(state: RunState) -> bool:
                         _f = k["file"]
                         if _f not in _key_files:
                             _key_files.append(_f)
-                # Fallback: next_reads, wenn key_files leer.
                 if not _key_files:
                     for _f in (_explorer_ctx.get("next_reads") or []):
                         if isinstance(_f, str) and _f not in _key_files:
@@ -531,20 +614,26 @@ def run_planner(state: RunState) -> bool:
                   {"prosa_len": len(_prosa),
                    "anzahl_dateien": len(_key_files),
                    "dateien": _key_files[:10]}, pd, pn)
-            state.tasks = [{
-                "id": "t1",
-                "name": "Architect-Loesung umsetzen",
-                "action": "architect",
-                "description": _prosa,
-                "task_files": _key_files,
-            }]
+            state.architect_prosa = _prosa  # type: ignore[attr-defined]
+            _sub_tasks = _zerlege_in_sub_tasks(
+                _prosa, _key_files, api_key, pd, pn,
+            )
+            if _sub_tasks:
+                state.tasks = _sub_tasks  # type: ignore[attr-defined]
+            else:
+                state.tasks = [{  # type: ignore[attr-defined]
+                    "id": "t1", "name": "Architect-Loesung umsetzen",
+                    "action": "update", "description": _prosa,
+                    "task_files": _key_files,
+                }]
             state.phasen = []  # type: ignore[attr-defined]
             state.tests = []  # type: ignore[attr-defined]
             state.akzeptanzkriterien = []  # type: ignore[attr-defined]
             audit("planner_architect_erstellt",
                   {"prosa_len": len(_prosa),
-                   "task_files": _key_files}, pd, pn)
+                   "anzahl_tasks": len(state.tasks)}, pd, pn)
             return True
+
 
         raw = reply.content.strip()
         start = raw.find("{")
