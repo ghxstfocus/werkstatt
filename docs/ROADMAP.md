@@ -63,6 +63,21 @@ Rollen: Explorer, Planner, Builder, Verify, Reviewer, Human-Gate.
 - `pipeline.py` (11.639 Zeilen) loeschen.
 - Voraussetzung: `werkstatt/agent.py` braucht keine Kopien mehr.
 
+### Phase 23: Effizienz (M-479..M-482) 🔧
+
+- M-479: Modell-Routing pro Rolle.
+- M-480: Kosten-Circuit-Breaker.
+- M-481: Cache-aware Prompts.
+- M-482: LiteLLM Adaptive Router (optional).
+
+### Phase 24: Robustheit (M-478, M-483..M-486) 🔴
+
+- M-478: Test-Repair-Loop (TDFlow-Stil, 94.3% SWE-bench Verified).
+- M-483: Sandboxing (OS-Level, 84% weniger Permission-Prompts).
+- M-484: SWE-bench-Harness (die einzige vergleichbare Zahl).
+- M-485: Event-Sourcing / Memory.
+- M-486: Cache-aware Cost Model (7.1x Genauigkeit).
+
 ## Offene Bloecke (P1/P2)
 
 | Block | Prio | Kurz |

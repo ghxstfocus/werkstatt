@@ -53,6 +53,25 @@ Merkposten (M-Nummern) in `MERKPOSTEN.md`.
 | M-388 | klein | UI-Testing via Chrome DevTools. |
 | M-389 | klein | Doku-Pflege im Loop. |
 
+## Effizienz (M-479..M-482)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| M-479 | klein | Modell-Routing pro Rolle. `ask_llm(role=...)` mit Env-Vars. Architect = `deepseek-reasoner`, Builder/Reviewer = `deepseek-chat`. |
+| M-480 | klein | Kosten-Circuit-Breaker. `RunState.max_budget_usd`. `ask_llm` zaehlt Tokens, bei Ueberschreitung `BudgetExceededError`. |
+| M-481 | mittel | Cache-aware Prompts. Stabiler Prefix (System, Architektur) vor variablem Suffix (Aufgabe). 98.6% Cache-Hit-Rate moeglich. |
+| M-482 | mittel | LiteLLM Adaptive Router (optional). Lernt, welches Modell fuer welchen Request-Typ am besten ist. |
+
+## Robustheit (M-478, M-483..M-486)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| M-478 | gross | Test-Repair-Loop (TDFlow-Stil). 4 Sub-Agenten: Patch-Propose, Debug, Patch-Revise, Test-Generate. Tests FEST (kein Test-Hacking). Max 3 Runden, dann Eskalation. |
+| M-483 | mittel | Sandboxing (OS-Level). Filesystem-Isolation + Netzwerk-Isolation. Linux bubblewrap / macOS seatbelt. Reduziert Permission-Prompts um 84%. |
+| M-484 | mittel | SWE-bench-Harness. 50-100 Tasks aus `princeton-nlp/SWE-bench_Verified`. Die einzige Zahl, die mit Aider/OpenHands/Devin vergleichbar ist. |
+| M-485 | mittel | Event-Sourcing / Memory. Unveraenderliche Event-Logs statt YAML-Checkpoint. Loop-Spezifikation (Trigger, Goal, Verification, Stopping Rule, Memory). |
+| M-486 | klein | Cache-aware Cost Model. 98.6% Input-Tokens aus Prefix-Cache. Flat-Pricing ueberschaetzt Kosten um 7.1x. |
+
 ## Verweise
 
 - `ROADMAP.md` — Phasen-Uebersicht.
