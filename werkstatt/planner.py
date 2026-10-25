@@ -17,6 +17,7 @@ from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
+from werkstatt.tools import run_readonly
 
 PLANNER_SYSTEM = """Du bist ein elite Software-Architekt und Planner.
 Zerlege die Aufgabe in ausfuehrbare Tasks.
@@ -228,6 +229,24 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
                 f"{', '.join(str(f) for f in _files2)}</erinnerung>"
             )
 
+    # === M-398: Tool-Definition ===
+    parts.append(
+        "<tools>\n"
+        "Du hast Zugriff auf zwei Tools, um den Code zu erkunden:\n"
+        "\n"
+        "  read_file: Lies eine Datei.\n"
+        '    Antwort: {"tool": "read_file", "args": {"file": "pfad/datei.py"}}\n'
+        "\n"
+        "  grep: Suche in Dateien.\n"
+        '    Antwort: {"tool": "grep", "args": {"pattern": "migration", '
+        '"path": "core/"}}\n'
+        "\n"
+        "Wenn du mehr Kontext brauchst, antworte NUR mit einem Tool-Call-JSON.\n"
+        "Wenn du genug weisst, antworte NUR mit dem Plan-JSON "
+        '({"tasks": [...], "tests": [...], "akzeptanzkriterien": [...]}).\n'
+        "</tools>"
+    )
+
     return "\n\n".join(parts)
 
 
@@ -352,27 +371,71 @@ def run_planner(state: RunState) -> bool:
             "Antworte mit gueltigem JSON."
         )
 
-    reply = ask_llm(
-        api_key, _planner_system(aufgabe, _explorer_ctx), user_content,
-        model="deepseek-chat", temperature=0.2, max_tokens=4000,
-    )
+    # M-398: Tool-Use-Loop (max 3 Runden).
+    _max_tool_runden = 3
+    _tool_kontext = ""
+    reply = None
+    plan = None
+    for _runde in range(_max_tool_runden + 1):
+        _sys = _planner_system(aufgabe, _explorer_ctx)
+        if _tool_kontext:
+            _sys += "\n\n<tool_ergebnisse>\n" + _tool_kontext + "\n</tool_ergebnisse>"
+        _user = user_content + (_tool_kontext if _tool_kontext else "")
+        reply = ask_llm(
+            api_key, _sys, _user,
+            model="deepseek-chat", temperature=0.2, max_tokens=4000,
+        )
+        if not reply.ok:
+            audit("planner_llm_fehler", {"fehler": reply.error}, pd, pn)
+            return False
 
-    if not reply.ok:
-        audit("planner_llm_fehler", {"fehler": reply.error}, pd, pn)
-        return False
+        raw = reply.content.strip()
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start < 0 or end <= start:
+            audit("planner_json_fehler", {"raw": raw[:200]}, pd, pn)
+            return False
 
-    # JSON aus dem Reply extrahieren
-    raw = reply.content.strip()
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    if start < 0 or end <= start:
-        audit("planner_json_fehler", {"raw": raw[:200]}, pd, pn)
-        return False
+        try:
+            _parsed = json.loads(raw[start:end])
+        except json.JSONDecodeError:
+            audit("planner_json_fehler", {"raw": raw[:200]}, pd, pn)
+            return False
 
-    try:
-        plan = json.loads(raw[start:end])
-    except json.JSONDecodeError:
-        audit("planner_json_fehler", {"raw": raw[:200]}, pd, pn)
+        # Tool-Call?
+        if isinstance(_parsed, dict) and "tool" in _parsed and "tasks" not in _parsed:
+            _tool = _parsed.get("tool")
+            _args = _parsed.get("args", {})
+            _cmd = None
+            if _tool == "read_file":
+                _fp = _args.get("file", "")
+                if _fp and not _fp.startswith("/"):
+                    _cmd = f"cat {_fp}"
+            elif _tool == "grep":
+                _pat = _args.get("pattern", "")
+                _path = _args.get("path", ".")
+                if _pat:
+                    _safe_pat = _pat.replace('"', '')
+                    _cmd = f'grep -rn "{_safe_pat}" --include=*.py --exclude-dir=.venv --exclude-dir=__pycache__ {_path}'
+            if _cmd:
+                _res = run_readonly(_cmd, Path(pd))
+                _out = _res.get("stdout", "")[:3000]
+                _tool_kontext += f"\n--- {_tool} {_args} ---\n{_out}\n"
+                audit("planner_tool_call",
+                      {"runde": _runde + 1, "tool": _tool, "args": _args,
+                       "stdout_len": len(_out)}, pd, pn)
+                continue
+            else:
+                audit("planner_tool_ungueltig",
+                      {"runde": _runde + 1, "parsed": str(_parsed)[:200]}, pd, pn)
+                return False
+
+        # Plan-JSON
+        plan = _parsed
+        break
+
+    if plan is None:
+        audit("planner_kein_plan_nach_tools", {}, pd, pn)
         return False
 
     # M-306d Fix 3: action-Default. Wenn Planner "action" nicht
