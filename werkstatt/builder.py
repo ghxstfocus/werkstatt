@@ -84,7 +84,9 @@ def _builder_system() -> str:
         "Der Architect hat die Loesung beschrieben. Du bist der Editor.\n"
         "  - Lies die Zieldatei mit read_file.\n"
         "  - Schreibe die ganze Datei mit write_file (content = kompletter Inhalt).\n"
-        "  - Teste mit run_command (py_compile, ruff).\n"
+        "  - Teste mit run_command (py_compile, ruff check <datei>).\n"
+        "  - Bei ruff-Fehler: korrigiere (write_file erneut).\n"
+        "  - Code MUSS ruff-konform sein: __all__ sortiert, kein except Exception.\n"
         "  - Der Architect-Text steht in der Aufgabe unter 'description'.\n"
         "</architect_editor>"
     )
@@ -463,7 +465,7 @@ def run_builder(state: RunState) -> bool:
         user_content += "\n\nAktueller Datei-Kontext:\n" + "\n\n".join(_ctx_parts)
 
     # M-403: Tool-Use-Loop (max 3 Runden).
-    _max_tool_runden = 3
+    _max_tool_runden = 10
     _tool_kontext = ""
     _patch_data = None
     for _runde in range(_max_tool_runden + 1):

@@ -157,6 +157,13 @@ Format:
   3. Wie sieht die Loesung aus? (Signaturen, Schluessel-Logik)
   4. Welche Tests brauchen wir?
 
+REGELN:
+  - Code muss ruff-konform sein (E, F, I, SIM, RUF, BLE).
+  - __all__ sortiert.
+  - Kein `except Exception` ohne `# noqa: BLE001`.
+  - Max line-length 100.
+  - Keine unbenutzten Variablen (F841).
+
 Antworte NUR mit diesem Prosa-Text. Kein Code, nur Beschreibung.
 """
 
