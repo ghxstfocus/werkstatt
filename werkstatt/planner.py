@@ -210,7 +210,8 @@ Antworte NUR mit diesem Prosa-Text. Kein Code, nur Beschreibung.
 
 PLANNER_SPLIT_SYSTEM = """Du bist ein Task-Zerleger.
 Du bekommst eine Architect-Prosa und eine Liste von Dateien.
-Zerlege die Prosa in 3-5 Sub-Tasks (nicht mehr, nicht weniger).
+Zerlege die Prosa in so viele Sub-Tasks wie noetig (typisch 3-10).
+Nicht mehr, nicht weniger als die Aufgabe braucht.
 
 Jeder Sub-Task:
 - id: "t1", "t2", ... (aufsteigend)
@@ -224,8 +225,11 @@ Jeder Sub-Task:
 Regeln:
   - Jeder Sub-Task < 50 Zeilen Code.
   - Keine Test-Dateien (tests/*).
-  - Wenn die Loesung nur 1 Datei betrifft: 1-2 Sub-Tasks.
-  - Wenn 2-3 Dateien: 3-5 Sub-Tasks.
+  - Wenn eine Funktion > 30 Zeilen hat: teile sie in mehrere
+    Sub-Tasks (Signatur, Happy Path, Fehlerbehandlung).
+  - 1 Datei mit 1 Funktion: 1-2 Sub-Tasks.
+  - 1 Datei mit mehreren Funktionen: 3-5 Sub-Tasks.
+  - 2-3 Dateien: 5-10 Sub-Tasks.
 
 Antworte NUR mit JSON:
 {
