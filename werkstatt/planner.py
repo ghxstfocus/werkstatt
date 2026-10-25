@@ -499,7 +499,7 @@ def run_planner(state: RunState) -> bool:
         # Reasoning-Modelle ignorieren temperature serverseitig.
         reply = ask_llm(
             api_key, _sys, _user,
-            model=_ARCHITECT_MODEL, temperature=0.2, max_tokens=4000,
+            model=_ARCHITECT_MODEL, temperature=0.2, max_tokens=16000,
         )
         if not reply.ok:
             audit("planner_llm_fehler", {"fehler": reply.error}, pd, pn)
