@@ -27,7 +27,7 @@ def _mock_run_factory(pytest_output: str):
     ["pytest", "tests/test_audit_kinds.py"], weil "test_audit_kinds"
     nicht exakt als Listenelement vorkommt.
     """
-    def _mock_run(cmd, cwd):
+    def _mock_run(cmd, cwd, env=None):
         cmd_str = " ".join(str(c) for c in cmd)
         # Spezifischere Regel zuerst:
         if "test_audit_kinds" in cmd_str:
@@ -37,7 +37,7 @@ def _mock_run_factory(pytest_output: str):
         if "ruff" in cmd_str:
             return 0, "Found 13 errors."
         if "mypy" in cmd_str:
-            return 0, "Found 8 errors."
+            return 0, "Found 11 errors."
         return 0, ""
     return _mock_run
 

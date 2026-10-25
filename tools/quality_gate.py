@@ -37,9 +37,9 @@ if _os.environ.get("WERKSTATT_IN_TEST") == "1":
 
 # Baseline fixiert (Quelle: docs/HANDOFF-BASELINE.md @ ae40f26).
 BASELINE = {
-    "pytest": 1435,   # pytest -q (M-359b: +1 fail-closed-Test)
+    "pytest": 1435,   # M-359b: volle Suite (M-441: _clean_env entfernt WERKSTATT_IN_TEST)
     "ruff": 13,       # ruff check .
-    "mypy": 8,        # mypy pipeline.py werkstatt/
+    "mypy": 11,       # M-345: pipeline.py Altlast (wird in eigenem Block geloescht)
     "ast": 6,         # pytest tests/test_audit_kinds.py -q
     "katalog": 162,   # _KATALOG_SOLL
 }
@@ -47,12 +47,22 @@ BASELINE = {
 HEAD = "ae40f26"  # Baseline-Anker (nicht HEAD). Aktueller HEAD wechselt pro Commit.
 
 
-def _run(cmd: list[str], cwd: Path) -> tuple[int, str]:
+def _clean_env() -> dict:
+    """Umgebung ohne WERKSTATT_IN_TEST (sonst skippen 74 Tests)."""
+    import os as _os
+    env = dict(_os.environ)
+    env.pop("WERKSTATT_IN_TEST", None)
+    return env
+
+
+def _run(cmd: list[str], cwd: Path,
+         env: dict | None = None) -> tuple[int, str]:
     """Fuehrt Kommando aus, liefert (rc, output)."""
     try:
         res = subprocess.run(
             cmd, cwd=cwd, capture_output=True, text=True,
             timeout=600, check=False,
+            env=env,
         )
         return res.returncode, res.stdout + res.stderr
     except subprocess.TimeoutExpired:
@@ -94,7 +104,10 @@ def check_all(cwd: Path) -> dict:
               "fehler": None}
 
     # pytest
-    _rc, out = _run(["pytest", "-q"], cwd)
+    # M-441: Mit sauberer Umgebung aufrufen, sonst erbt der
+    # Kindprozess WERKSTATT_IN_TEST=1 (aus conftest.py) und
+    # 74 Tests skippen -> 1361 statt 1435.
+    _rc, out = _run(["pytest", "-q"], cwd, env=_clean_env())
     passed, failed = _parse_pytest(out)
     result["current"]["pytest"] = {"passed": passed, "failed": failed}
     # M-331: failed zaehlt als Fehler. Sonst ist der Gate fail-open:

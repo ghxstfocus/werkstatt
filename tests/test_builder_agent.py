@@ -203,10 +203,16 @@ def test_builder_update_kein_idempotenz(tmp_path):
 
 
 def test_builder_prompt_import_regeln():
-    """M-333a: BUILDER_SYSTEM enthaelt Import-Regeln."""
+    """M-333a/M-416: BUILDER_SYSTEM enthaelt Import-Regeln.
+
+    M-416 hat den Prompt radikal gekuerzt. Die alten M-333a-Strings
+    ("Verwende AUSSCHLIESSLICH Imports", "Erfinde KEINE Modulnamen")
+    sind nicht mehr woertlich drin. Stattdessen pruefen wir die
+    aktuellen Regeln: ruff-Konformitaet und API-Stabilitaet.
+    """
     from werkstatt.builder import BUILDER_SYSTEM
-    assert "Verwende AUSSCHLIESSLICH Imports" in BUILDER_SYSTEM
-    assert "Erfinde KEINE Modulnamen" in BUILDER_SYSTEM
+    assert "ruff-konform" in BUILDER_SYSTEM
+    assert "API-Aenderungen" in BUILDER_SYSTEM or "Umbenennungen" in BUILDER_SYSTEM
 
 
 def test_builder_create_task_mit_import_kontext(tmp_path):

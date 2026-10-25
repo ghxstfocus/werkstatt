@@ -10,10 +10,16 @@ Reiner Denker (Codex Plan Mode).
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
 from werkstatt.agent import ask_llm
+
+# M-442: Architect-Modell konfigurierbar (Default: deepseek-chat).
+# Fuer Messungen: WERKSTATT_ARCHITECT_MODEL=deepseek-reasoner
+_ARCHITECT_MODEL = os.environ.get("WERKSTATT_ARCHITECT_MODEL", "deepseek-chat")
+
 from werkstatt.audit import audit
 from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
@@ -173,6 +179,18 @@ API-STABILITAET (WICHTIG):
 FROZEN DATACLASSES:
   - Wenn ein Parameter `frozen=True` ist: NICHT setattr() aufrufen.
   - Nutze dict/separate Struktur fuer Zusatz-Daten.
+
+WENN MEHRERE DATEIEN BETROFFEN SIND:
+  Beschreibe JEDE Datei einzeln, mit ihrem Pfad als Ueberschrift.
+  Beispiel:
+    ## harness/versioning/applier.py
+    <Beschreibung>
+
+    ## core/changeapplier/applier.py
+    <Beschreibung>
+
+WENN NUR EINE DATEI BETROFFEN IST:
+  Beschreibe sie direkt, ohne Ueberschrift.
 
 Antworte NUR mit diesem Prosa-Text. Kein Code, nur Beschreibung.
 """
@@ -454,21 +472,31 @@ def run_planner(state: RunState) -> bool:
         _user = user_content + (_tool_kontext if _tool_kontext else "")
         reply = ask_llm(
             api_key, _sys, _user,
-            model="deepseek-chat", temperature=0.2, max_tokens=4000,
+            model=_ARCHITECT_MODEL, temperature=0.2, max_tokens=4000,
         )
         if not reply.ok:
             audit("planner_llm_fehler", {"fehler": reply.error}, pd, pn)
             return False
 
-        # M-408b: Architect-Modus -> Prosa als eine Task
+        # M-408b: Architect-Modus -> Prosa fuer ALLE key_files.
         if "architect" in aufgabe.lower() or "prosa" in aufgabe.lower():
             _prosa = reply.content.strip()
-            _key_files = []
+            _key_files: list[str] = []
             if isinstance(_explorer_ctx, dict):
-                _key_files = [
-                    k.get("file") for k in (_explorer_ctx.get("key_files") or [])
-                    if isinstance(k, dict) and k.get("file")
-                ]
+                for k in (_explorer_ctx.get("key_files") or []):
+                    if isinstance(k, dict) and k.get("file"):
+                        _f = k["file"]
+                        if _f not in _key_files:
+                            _key_files.append(_f)
+                # Fallback: next_reads, wenn key_files leer.
+                if not _key_files:
+                    for _f in (_explorer_ctx.get("next_reads") or []):
+                        if isinstance(_f, str) and _f not in _key_files:
+                            _key_files.append(_f)
+            audit("planner_architect_scope",
+                  {"prosa_len": len(_prosa),
+                   "anzahl_dateien": len(_key_files),
+                   "dateien": _key_files[:10]}, pd, pn)
             state.tasks = [{
                 "id": "t1",
                 "name": "Architect-Loesung umsetzen",

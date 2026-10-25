@@ -66,6 +66,36 @@ def _extract_dateien(stdout: str) -> list[str]:
 
 
 
+def _verwandte_dateien(project_dir: Path, dateien: list[str]) -> list[str]:
+    """M-396-Fix: Findet verwandte Dateien zu explizit genannten.
+
+    Nachbarn = gleicher Ordner (*.py), __init__.py, models.py,
+    sowie Test-Dateien, die den Modul-Stamm enthalten.
+    """
+    verwandt: list[str] = []
+    gesehen: set[str] = set(dateien)
+    for rel in dateien:
+        p = project_dir / rel
+        if not p.exists():
+            continue
+        # 1. Gleicher Ordner: alle *.py.
+        for nachbar in sorted(p.parent.glob("*.py")):
+            nrel = str(nachbar.relative_to(project_dir))
+            if nrel not in gesehen:
+                gesehen.add(nrel)
+                verwandt.append(nrel)
+        # 2. Tests, die den Modul-Stamm nennen.
+        stamm = p.stem
+        tests_dir = project_dir / "tests"
+        if tests_dir.exists():
+            for t in tests_dir.rglob(f"*{stamm}*.py"):
+                trel = str(t.relative_to(project_dir))
+                if trel not in gesehen:
+                    gesehen.add(trel)
+                    verwandt.append(trel)
+    return verwandt[:10]
+
+
 def _messen(frage: str, project_dir: Path) -> dict[str, Any]:
     """M-373: Deterministische Messung VOR dem LLM.
 

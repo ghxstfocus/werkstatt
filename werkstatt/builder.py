@@ -44,6 +44,62 @@ def _builder_system() -> str:
     return BUILDER_SYSTEM
 
 
+def _build_patches_fuer_datei(
+    state: RunState,
+    zieldatei: str,
+    architect_beschreibung: str,
+    api_key: str,
+) -> list[dict]:
+    """M-416b: Baut Patches fuer EINE Datei im Architect-Modus.
+
+    Macht einen LLM-Aufruf, parst die Antwort, gibt Patches zurueck.
+    Bei Fehler: leere Liste (Aufrufer entscheidet fail-closed).
+    """
+    import json as _json
+
+    pd = state.project_dir
+    pn = state.project_name
+    _target = pd / zieldatei
+    if not _target.is_file():
+        return []
+    try:
+        _inhalt = _target.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+
+    _user = (
+        f"## ZIELDATEI: {zieldatei}\n\n"
+        f"## ARCHITECT-BESCHREIBUNG:\n{architect_beschreibung}\n\n"
+        f"## AKTUELLER DATEI-INHALT:\n```python\n{_inhalt}\n```\n"
+    )
+    reply = ask_llm(
+        api_key, BUILDER_SYSTEM, _user,
+        model="deepseek-chat", temperature=0.2, max_tokens=8000,
+    )
+    if not reply.ok:
+        audit("builder_architect_llm_fehler",
+              {"datei": zieldatei, "fehler": reply.error}, pd, pn)
+        return []
+    raw = reply.content.strip()
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start < 0 or end <= start:
+        audit("builder_architect_json_fehler",
+              {"datei": zieldatei, "raw": raw[:200]}, pd, pn)
+        return []
+    try:
+        parsed = _json.loads(raw[start:end])
+    except _json.JSONDecodeError:
+        return []
+    patches = parsed.get("patches") or []
+    if not isinstance(patches, list):
+        return []
+    for p in patches:
+        if isinstance(p, dict):
+            p["file"] = zieldatei
+    return [p for p in patches if isinstance(p, dict)]
+
+
 def run_builder(state: RunState) -> bool:
     """Erstellt Patches. Schreibt sie in state.patches (oder wendet sie an)."""
     pd = state.project_dir
@@ -287,9 +343,38 @@ def run_builder(state: RunState) -> bool:
     _task_files = _aktuelle_task.get("task_files", []) or []
     _current_action2 = _aktuelle_task.get("action", "update")
     _is_architect = _current_action2 == "architect"
-    # M-408: Architect-Modus -> Editor (write_file, keine _zieldatei)
-    _is_architect = _current_action2 == "architect"
     _architect_beschreibung = _aktuelle_task.get("description", "") if _is_architect else ""
+
+    # M-416b: Architect-Modus -> Editor pro Datei.
+    # Wird VOR der normalen Zieldatei-Wahl ausgefuehrt.
+    if _is_architect:
+        _alle_dateien = [f for f in _task_files if isinstance(f, str) and f]
+        if not _alle_dateien:
+            audit("builder_architect_keine_dateien", {}, pd, pn)
+            return False
+        _alle_patches: list[dict] = []
+        _dateien_ok: list[str] = []
+        for _zd in _alle_dateien:
+            _target = pd / _zd
+            if not _target.is_file():
+                audit("builder_architect_datei_fehlt",
+                      {"datei": _zd}, pd, pn)
+                continue
+            _patches = _build_patches_fuer_datei(
+                state, _zd, _architect_beschreibung, api_key,
+            )
+            if _patches:
+                _alle_patches.extend(_patches)
+                _dateien_ok.append(_zd)
+        if not _alle_patches:
+            audit("builder_architect_keine_patches",
+                  {"dateien": _alle_dateien}, pd, pn)
+            return False
+        state.patches = _alle_patches
+        audit("builder_architect_patches",
+              {"anzahl_patches": len(_alle_patches),
+               "dateien": _dateien_ok}, pd, pn)
+        return True
 
     _zieldatei = None
     for _tf in _task_files:
