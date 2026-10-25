@@ -197,6 +197,13 @@ WENN MEHRERE DATEIEN BETROFFEN SIND:
 WENN NUR EINE DATEI BETROFFEN IST:
   Beschreibe sie direkt, ohne Ueberschrift.
 
+TESTS SIND OUT-OF-SCOPE:
+  Beschreibe KEINE Test-Dateien (tests/*, test_*.py, *_test.py).
+  Beschreibe KEINE Aenderungen an Test-Dateien. Tests werden
+  vom Menschen geschrieben, nicht vom Loop. Wenn deine Loesung
+  Tests braucht: beschreibe nur, welche Faelle getestet werden
+  sollten, nicht den Test-Code selbst.
+
 Antworte NUR mit diesem Prosa-Text. Kein Code, nur Beschreibung.
 """
 

@@ -285,9 +285,16 @@ def _build_patches_fuer_datei(
     for p in patches:
         if not isinstance(p, dict):
             continue
-        _fehlend = _validate_imports_in_patch(
-            p.get("new_string", "") or "", pd,
+        # M-444c: Pruefe new_string UND old_string zusammen.
+        # Sonst uebersehen wir Importe, die nur in old_string stehen
+        # (und entfernt werden sollen). Verwirft den GANZEN Patch,
+        # wenn ein Import ungueltig ist.
+        _patch_text = (
+            (p.get("old_string", "") or "")
+            + "\n"
+            + (p.get("new_string", "") or "")
         )
+        _fehlend = _validate_imports_in_patch(_patch_text, pd)
         if _fehlend:
             audit("builder_patch_import_fehler",
                   {"datei": zieldatei, "fehlend": _fehlend}, pd, pn)
