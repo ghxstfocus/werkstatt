@@ -419,3 +419,124 @@ seit RERUN-23 mit dem **kompletten Skillsystem**:
 1. Rollen-Audit (M-386).
 2. RERUN-49 (Belastbarkeitstest).
 3. Doku nachziehen.
+
+---
+
+## Zwischenstand 2026-10-25 — Architect/Editor + M-416
+
+**Werkstatt-HEAD:** f6a94df (M-415) + M-416 uncommitted.
+**Zielprojekt-HEAD:** f436e42 (clean, Rollback nach RERUN-51).
+**Baseline:** 1435 / 13 / 8 / 6 / 162.
+
+### Was seit M-390 passiert ist
+
+**M-390:** Heartbeat fuer Verify-Stages (`_verify_stage_with_heartbeat`).
+**M-391:** `.env`-Loader (`env_loader.py`, `DEEPSEEK_API_KEY`).
+**M-392:** Doku-Exploration (`grep Offen docs/`, `cat STATUS.md`).
+**M-393:** pytest-Trigger eingeschraenkt.
+**M-394:** Doku-Dateien NICHT als key_files.
+**M-395:** Planner liest key_files-Inhalt.
+**M-396:** Explorer ueberspringt bei expliziten Dateien.
+**M-397:** `<doku_verbot>` im Planner.
+**M-398:** Planner Tool-Use (read_file, grep).
+**M-399a:** `<datei_pruefung>` im Planner.
+**M-399b:** High-Bug fail-closed im Reviewer.
+**M-400:** Heartbeat fuer Explorer + Planner.
+**M-401:** Task-Groesse 2-5 Min.
+**M-402:** `_reflection_loop` mit phase-Parameter.
+**M-403:** Builder Tool-Use (explore, read_file, write_file, run_command).
+**M-405:** `<hinweis>` statt `<pflicht>` bei leeren key_files.
+**M-406:** BUILDER_SYSTEM Tools zuerst.
+**M-407:** `_planner_system` entschlackt (4998 -> 2488 Zeichen).
+**M-408:** Architect/Editor-Pattern (Planner = Prosa, Builder = Editor).
+**M-409:** Architect-Beschreibung anzeigen.
+**M-410:** Architect-Anzeige entdoppelt + Plan-Tasks.
+**M-411:** Architect + Builder ruff-konform, 10 Runden.
+**M-412:** Diff-Limit 50000 + Architect-Text im Reviewer.
+**M-413:** max_tokens 16000.
+**M-414:** Volle Zieldatei im Reviewer.
+**M-415:** Architect API-Stabilitaet + frozen dataclass.
+**M-416:** Builder radikal gekuerzt — nur search/replace, keine Tools.
+
+### Das Ziel (Architect/Editor)
+
+**Aider-Muster:** Der Architect (deepseek-reasoner) beschreibt die
+Loesung in Prosa. Der Editor (deepseek-chat) setzt sie in
+search/replace-Patches um. **Zwei Modelle, zwei Rollen, ein Format.**
+
+**Aider-Zahlen (belegt):**
+- DeepSeek solo (diff-Format): 48,4 %
+- o1-preview + DeepSeek (Architect/Editor): 80,5 %
+- Der Unterschied: Architect/Editor-Trennung.
+
+**Dein Loop:** Planner (Architect) = deepseek-chat, Builder (Editor)
+= deepseek-chat. Beide Rollen nutzen dasselbe Modell — aber der
+Prompt trennt sie jetzt (M-408, M-416).
+
+### Was funktioniert
+
+- Explorer messt (0-6 files).
+- Planner (Architect) baut exzellente Prosa-Loesungen (4395 Zeichen).
+- Builder (Editor) schreibt search/replace-Patches.
+- Verify (`ruff_changed`) gruen.
+- Reviewer findet echte Bugs (M-399b fail-closed).
+- Rollback (M-356) greift.
+
+### Was nicht funktioniert
+
+- **ChangeApplier.apply/rollback** (600 Zeilen, 12 Tests):
+  Der Builder setzt die Architect-Vorgabe **nicht 1:1** um.
+  Reviewer findet reproduzierbar 5-10 Bugs (Fail-closed-Semantik,
+  Idempotenz, frozen dataclass).
+  RERUN-51 scheitert **immer** an Task 1.
+
+**Das ist ein LLM-Limit:** DeepSeek-Chat (Editor) versteht
+"fail closed" nicht semantisch. Der Architect gibt Prosa — der
+Editor braucht konkrete Code-Beispiele.
+
+### Naechster Schritt (M-417)
+
+**Architect mit Code-Beispielen:** Der Architect gibt konkrete
+Python-Snippets (nicht Prosa). Der Editor kopiert sie.
+**Das ist Aider's naechster Schritt** — Code-Beispiele statt
+Prosa.
+
+**Aber:** ChangeApplier ist **zu gross** fuer einen Run.
+**Manuell** implementieren, M-417 fuer **zukuenftige** komplexe
+Aufgaben.
+
+### Aufgabe fuer den naechsten Chat
+
+**Ziel:** Pruefe den Loop im **Jetzt-Zustand**. Finde Logik-Luecken,
+Fehler, Widersprueche. Bewerte, ob der Loop **sinnvoll** ist.
+
+**Konkret:**
+1. **Lies** `Bau-Handoff.md` (dieser Block), `docs/OFFENE-BLOECKE.md`,
+   `docs/ERLEDIGT.md`, `docs/ROADMAP.md`, `docs/ARCHITEKTUR.md`.
+2. **Messe** den Loop:
+   - `python3 -m tools.quality_gate --json`
+   - `pytest -q tests/test_loop.py tests/test_planner_agent.py tests/test_builder_agent.py`
+3. **Pruefe** die Rollen-Kette:
+   - Explorer → Planner → Builder → Reviewer → Human-Gate.
+   - Uebergaben (explorer_context, task_files, patches, reviewer_bugs).
+   - Widersprueche (Prompt vs. Code).
+4. **Finde** Logik-Luecken:
+   - Fehlt ein `continue`/`return`?
+   - Wird ein Fehler verschluckt?
+   - Ist die Fail-closed-Kette vollstaendig?
+5. **Bewerte**:
+   - Ist der Loop **sinnvoll** fuer 80% der Aufgaben?
+   - Wo sind die **echten** Limits (LLM, Prompt, Architektur)?
+   - Was ist der **naechste** richtige Fix?
+
+**Wichtig:** Keine **neuen** Features bauen. **Erst** messen und
+analysieren. **Dann** entscheiden.
+
+### Offene Merkposten
+
+- **M-345:** `pipeline.py` (408 KB) + `hard_rules.py` + `agents/*.md`
+  + alte Tests loeschen.
+- **M-388:** UI-Testing via Chrome DevTools.
+- **M-389:** Doku-Pflege im Loop.
+- **M-417:** Architect mit Code-Beispielen.
+- **M-418:** Loop-Audit (Logik-Luecken, Widersprueche).

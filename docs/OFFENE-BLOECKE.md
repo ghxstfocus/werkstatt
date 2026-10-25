@@ -221,3 +221,11 @@ live — oder zumindest einen **Heartbeat** alle 2 Sekunden.
 **Aufwand:** klein-mittel (~50 Zeilen + Renderer-Anpassung).
 
 **Voraussetzung:** keine — kann sofort gebaut werden.
+
+## M-416..M-418 (nach Architect/Editor)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| **M-416** | erledigt | Builder radikal gekuerzt (nur search/replace). |
+| **M-417** | offen | Architect mit Code-Beispielen (statt Prosa). |
+| **M-418** | offen | Loop-Audit (Logik-Luecken, Widersprueche). |
