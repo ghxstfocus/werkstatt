@@ -44,28 +44,104 @@ def _builder_system() -> str:
     return BUILDER_SYSTEM
 
 
+def _finde_modul_pfad(modul: str, project_dir: Path) -> Path | None:
+    """M-444b: Findet den Pfad zu einem Modul (Datei oder Package).
+
+    Versteht dotted paths: 'core.models' -> core/models.py
+    oder core/models/__init__.py.
+    """
+    teile = modul.split(".")
+    base = project_dir
+    for teil in teile[:-1]:
+        base = base / teil
+        if not base.is_dir():
+            return None
+    letzter = teile[-1]
+    datei = base / f"{letzter}.py"
+    if datei.is_file():
+        return datei
+    pkg = base / letzter / "__init__.py"
+    if pkg.is_file():
+        return pkg
+    return None
+
+
+def _hat_symbol(modul_pfad: Path, symbol: str) -> bool:
+    """M-444b: Prueft, ob ein Modul ein Symbol (class/def/var) definiert."""
+    import ast as _ast
+    try:
+        tree = _ast.parse(modul_pfad.read_text(encoding="utf-8", errors="replace"))
+    except (SyntaxError, OSError):
+        return False
+    for node in tree.body:
+        if isinstance(node, _ast.ClassDef) and node.name == symbol:
+            return True
+        if isinstance(node, _ast.FunctionDef) and node.name == symbol:
+            return True
+        if isinstance(node, _ast.AsyncFunctionDef) and node.name == symbol:
+            return True
+        if isinstance(node, _ast.Assign):
+            for t in node.targets:
+                if isinstance(t, _ast.Name) and t.id == symbol:
+                    return True
+        if isinstance(node, _ast.AnnAssign):
+            if isinstance(node.target, _ast.Name) and node.target.id == symbol:
+                return True
+    return False
+
+
 def _validate_imports_in_patch(
     new_string: str, project_dir: Path,
 ) -> list[str]:
-    """M-444: Findet unaufloesbare Imports in einem Patch-String.
+    """M-444b: Findet unaufloesbare Imports (Modul UND Symbol).
 
-    Prueft `import X` und `from X import Y` gegen:
-    - stdlib (sys.stdlib_module_names)
-    - Projekt-Module (project_dir / X.py oder project_dir / X / __init__.py)
-    - installierte Pakete im venv (project_dir / .venv / lib / * / site-packages)
+    Prueft `import X`, `from X import Y` und `from X.Y import Z` gegen:
+    - stdlib
+    - Projekt-Module
+    - venv-Pakete
+    - Symbol-Existenz (via AST), wenn Modul im Projekt liegt und
+      Symbol NICHT im selben Patch definiert wird.
     """
     import re as _re
     import sys as _sys
 
     fehlend: list[str] = []
-    patterns = [
-        _re.compile(r"^\s*from\s+([\w.]+)\s+import\b", _re.MULTILINE),
-        _re.compile(r"^\s*import\s+([\w.]+)\b", _re.MULTILINE),
-    ]
-    kandidaten: set[str] = set()
-    for p in patterns:
-        for m in p.finditer(new_string):
-            kandidaten.add(m.group(1).split(".")[0])
+
+    # Sammle Symbole, die im Patch selbst definiert werden (class X, def X).
+    _im_patch_definiert: set[str] = set()
+    for m in _re.finditer(r"^(?:class|def)\s+(\w+)", new_string, _re.MULTILINE):
+        _im_patch_definiert.add(m.group(1))
+    for m in _re.finditer(r"^async\s+def\s+(\w+)", new_string, _re.MULTILINE):
+        _im_patch_definiert.add(m.group(1))
+    for m in _re.finditer(r"^([A-Z][A-Z0-9_]*)\s*=", new_string, _re.MULTILINE):
+        _im_patch_definiert.add(m.group(1))
+
+    # Pattern 1: from X import Y, Z
+    from_re = _re.compile(
+        r"^\s*from\s+([\w.]+)\s+import\s+([^\n]+)", _re.MULTILINE,
+    )
+    from_imports: list[tuple[str, list[str]]] = []
+    for m in from_re.finditer(new_string):
+        modul = m.group(1)
+        # Symbole: "Y, Z" oder "Y as Z, ..."
+        roh = m.group(2).strip().rstrip("()")
+        syms = []
+        for teil in roh.split(","):
+            teil = teil.strip()
+            if not teil:
+                continue
+            # "X as Y" -> X
+            if " as " in teil:
+                teil = teil.split(" as ")[0].strip()
+            if teil and teil != "*":
+                syms.append(teil)
+        from_imports.append((modul, syms))
+
+    # Pattern 2: import X.Y
+    imp_re = _re.compile(r"^\s*import\s+([\w.]+)", _re.MULTILINE)
+    imp_mods: set[str] = set()
+    for m in imp_re.finditer(new_string):
+        imp_mods.add(m.group(1))
 
     stdlib = getattr(_sys, "stdlib_module_names", set())
     venv_site_dirs: list[Path] = []
@@ -76,20 +152,46 @@ def _validate_imports_in_patch(
             if sp.is_dir():
                 venv_site_dirs.append(sp)
 
-    for mod in kandidaten:
-        if mod in stdlib:
-            continue
-        if (project_dir / f"{mod}.py").is_file():
-            continue
-        if (project_dir / mod / "__init__.py").is_file():
-            continue
-        found = False
+    def _modul_existiert(modul: str) -> bool:
+        if modul in stdlib:
+            return True
+        # Erster Teil (bei submodule: "core.changeapplier" -> "core").
+        top = modul.split(".")[0]
+        if _finde_modul_pfad(top, project_dir):
+            # Fuer submodule auch den vollen Pfad pruefen.
+            if modul != top:
+                sub_path = project_dir / modul.replace(".", "/")
+                if sub_path.with_suffix(".py").is_file() or (sub_path / "__init__.py").is_file():
+                    return True
+                return False
+            return True
         for sp in venv_site_dirs:
-            if (sp / mod).is_dir() or (sp / f"{mod}.py").is_file():
-                found = True
-                break
-        if not found:
+            if (sp / top).is_dir() or (sp / f"{top}.py").is_file():
+                return True
+        return False
+
+    # Modulpruefung
+    for mod in imp_mods:
+        if not _modul_existiert(mod):
             fehlend.append(mod)
+    for modul, _syms in from_imports:
+        if not _modul_existiert(modul):
+            fehlend.append(modul)
+
+    # Symbolpruefung (nur fuer Projekt-Module; stdlib/venv ignorieren).
+    for modul, syms in from_imports:
+        if not _modul_existiert(modul):
+            continue  # Modul-Fehler schon gemeldet
+        if modul in stdlib:
+            continue
+        mod_pfad = _finde_modul_pfad(modul, project_dir)
+        if mod_pfad is None:
+            continue  # venv-Paket; Symbol nicht pruefbar
+        for sym in syms:
+            if sym in _im_patch_definiert:
+                continue  # wird im selben Patch definiert
+            if not _hat_symbol(mod_pfad, sym):
+                fehlend.append(f"{modul}.{sym}")
 
     return fehlend
 
@@ -135,10 +237,20 @@ def _build_patches_fuer_datei(
         return []
 
     _abschnitt = _architect_abschnitt(architect_beschreibung, zieldatei)
+    # M-444b: Feedback aus vorherigem Versuch einbauen.
+    _feedback = (getattr(state, "builder_feedback", None) or {}).get(zieldatei, "")
+    _feedback_block = ""
+    if _feedback:
+        _feedback_block = (
+            f"\n\n## FEEDBACK AUS VORHERIGEM VERSUCH:\n"
+            f"Der letzte Patch wurde verworfen. Grund:\n{_feedback}\n"
+            f"Behebe das in dieser Antwort.\n"
+        )
     _user = (
         f"## ZIELDATEI: {zieldatei}\n\n"
         f"## ARCHITECT-BESCHREIBUNG (nur diese Datei):\n{_abschnitt}\n\n"
         f"## AKTUELLER DATEI-INHALT:\n```python\n{_inhalt}\n```\n"
+        f"{_feedback_block}"
     )
     reply = ask_llm(
         api_key, BUILDER_SYSTEM, _user,
@@ -169,6 +281,7 @@ def _build_patches_fuer_datei(
     # werden verworfen — sonst bricht der Verify-Loop mit
     # ModuleNotFoundError (RERUN-54: core.changeapplier.errors).
     _gueltig: list[dict] = []
+    _feedback_neu: list[str] = []
     for p in patches:
         if not isinstance(p, dict):
             continue
@@ -178,8 +291,23 @@ def _build_patches_fuer_datei(
         if _fehlend:
             audit("builder_patch_import_fehler",
                   {"datei": zieldatei, "fehlend": _fehlend}, pd, pn)
+            _feedback_neu.append(
+                "Import nicht aufloesbar: " + ", ".join(_fehlend)
+                + ". Verwende existierende Symbole oder definiere "
+                "sie im selben Patch (class/def/var)."
+            )
             continue
         _gueltig.append(p)
+
+    # M-444b: Feedback speichern, damit der naechste Aufruf es sieht.
+    if _feedback_neu:
+        if not getattr(state, "builder_feedback", None):
+            state.builder_feedback = {}  # type: ignore[attr-defined]
+        state.builder_feedback[zieldatei] = "\n".join(_feedback_neu)  # type: ignore[attr-defined]
+    else:
+        if getattr(state, "builder_feedback", None):
+            state.builder_feedback.pop(zieldatei, None)  # type: ignore[attr-defined]
+
     return _gueltig
 
 

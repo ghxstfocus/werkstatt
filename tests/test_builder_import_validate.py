@@ -3,10 +3,15 @@ from __future__ import annotations
 
 
 def test_validate_imports_findet_fehlendes_modul(tmp_path):
+    """M-444b: Modul 'core' existiert nicht -> Fehler.
+
+    Nach M-444b enthaelt 'fehlend' den vollen Modulpfad
+    ('core' oder 'core.changeapplier').
+    """
     from werkstatt.builder import _validate_imports_in_patch
     patch = "from core.changeapplier.errors import ApplierError\n"
     fehlend = _validate_imports_in_patch(patch, tmp_path)
-    assert "core" in fehlend
+    assert any(f.startswith("core") for f in fehlend), f"fehlend={fehlend}"
 
 
 def test_validate_imports_ok_fuer_stdlib(tmp_path):
@@ -17,12 +22,13 @@ def test_validate_imports_ok_fuer_stdlib(tmp_path):
 
 
 def test_validate_imports_ok_fuer_projektmodul(tmp_path):
+    """M-444b: Symbol existiert im Package -> OK."""
     from werkstatt.builder import _validate_imports_in_patch
     (tmp_path / "core").mkdir()
-    (tmp_path / "core" / "__init__.py").write_text("")
+    (tmp_path / "core" / "__init__.py").write_text("something = None\n")
     patch = "from core import something\n"
     fehlend = _validate_imports_in_patch(patch, tmp_path)
-    assert fehlend == []
+    assert fehlend == [], f"fehlend={fehlend}"
 
 
 def test_validate_imports_findet_mehrere(tmp_path):
