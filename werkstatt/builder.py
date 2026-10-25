@@ -13,6 +13,7 @@ from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
+from werkstatt.tools import run_readonly, run_write
 
 BUILDER_SYSTEM = """Du bist ein elite Software-Engineer.
 Du bekommst EINE ZIELDATEI und EINE AKTION.
@@ -58,6 +59,32 @@ def _builder_system() -> str:
         s = load_skill_by_name(name, skills)
         if s and s["body"]:
             parts.append(f"## Skill: {name}\n" + s["body"])
+
+    # M-403: Tool-Definition
+    parts.append(
+        "<tools>\n"
+        "Du hast Zugriff auf vier Tools:\n"
+        "\n"
+        "  explore: Delegiere die Suche an den Explorer.\n"
+        '    {"tool": "explore", "args": {"description": "Finde X"}}\n'
+        "\n"
+        "  read_file: Lies eine ganze Datei.\n"
+        '    {"tool": "read_file", "args": {"file": "pfad/datei.py"}}\n'
+        "\n"
+        "  write_file: Schreibe eine ganze Datei.\n"
+        '    {"tool": "write_file", "args": {"file": "pfad/datei.py", '
+        '"content": "<vollstaendiger Inhalt>"}}\n'
+        "\n"
+        "  run_command: Fuehre einen Befehl aus.\n"
+        '    {"tool": "run_command", "args": {"command": "py_compile pfad/datei.py"}}\n'
+        "\n"
+        "Wenn du mehr Kontext brauchst: explore oder read_file.\n"
+        "Wenn du den Patch bauen willst: write_file.\n"
+        "Wenn du testen willst: run_command.\n"
+        "Wenn du fertig bist: antworte mit dem Patch-JSON.\n"
+        "</tools>"
+    )
+
     return "\n\n".join(parts)
 
 
@@ -392,29 +419,92 @@ def run_builder(state: RunState) -> bool:
             _ctx_parts.append(f"--- {_f} (letzte 50 Zeilen) ---\n{_c}")
         user_content += "\n\nAktueller Datei-Kontext:\n" + "\n\n".join(_ctx_parts)
 
-    reply = ask_llm(
-        api_key, _builder_system(), user_content,
-        model="deepseek-chat", temperature=0.2, max_tokens=8000,
-    )
+    # M-403: Tool-Use-Loop (max 3 Runden).
+    _max_tool_runden = 3
+    _tool_kontext = ""
+    _patch_data = None
+    for _runde in range(_max_tool_runden + 1):
+        _sys = _builder_system()
+        if _tool_kontext:
+            _sys += "\n\n<tool_ergebnisse>\n" + _tool_kontext + "\n</tool_ergebnisse>"
+        _user = user_content + (_tool_kontext if _tool_kontext else "")
+        reply = ask_llm(
+            api_key, _sys, _user,
+            model="deepseek-chat", temperature=0.2, max_tokens=8000,
+        )
+        if not reply.ok:
+            audit("builder_llm_fehler", {"fehler": reply.error}, pd, pn)
+            return False
 
-    if not reply.ok:
-        audit("builder_llm_fehler", {"fehler": reply.error}, pd, pn)
+        raw = reply.content.strip()
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start < 0 or end <= start:
+            audit("builder_json_fehler", {"raw": raw[:200]}, pd, pn)
+            return False
+        try:
+            _parsed = json.loads(raw[start:end])
+        except json.JSONDecodeError:
+            audit("builder_json_fehler", {"raw": raw[:200]}, pd, pn)
+            return False
+
+        # Tool-Call?
+        if isinstance(_parsed, dict) and "tool" in _parsed and "patches" not in _parsed:
+            _tool = _parsed.get("tool")
+            _args = _parsed.get("args", {})
+            _result_text = ""
+            if _tool == "explore":
+                from werkstatt.explorer import run_explorer
+                _desc = _args.get("description", "")
+                _r = run_explorer(state, _desc)
+                _result_text = "findings: " + str(_r.get("findings", ""))[:2000]
+                _result_text += "\nkey_files: " + str(
+                    [k.get("file") for k in (_r.get("key_files") or [])
+                     if isinstance(k, dict)]
+                )
+            elif _tool == "read_file":
+                _fp = _args.get("file", "")
+                if _fp and not _fp.startswith("/"):
+                    _r = run_readonly(f"cat {_fp}", Path(pd))
+                    _result_text = _r.get("stdout", "")[:5000] or _r.get("error", "")
+            elif _tool == "write_file":
+                _fp = _args.get("file", "")
+                _content = _args.get("content", "")
+                if _fp and not _fp.startswith("/"):
+                    _target = Path(pd) / _fp
+                    try:
+                        _target.parent.mkdir(parents=True, exist_ok=True)
+                        _target.write_text(_content, encoding="utf-8")
+                        _result_text = f"OK: {_fp} geschrieben ({len(_content)} Zeichen)"
+                    except (OSError, UnicodeDecodeError) as e:
+                        _result_text = f"FEHLER: {e}"
+            elif _tool == "run_command":
+                _cmd = _args.get("command", "")
+                if _cmd:
+                    _r = run_write(_cmd, Path(pd))
+                    _result_text = _r.get("stdout", "")[:3000] or _r.get("error", "")
+            if _result_text:
+                _tool_kontext += (
+                    f"\n--- {_tool} {list(_args.keys())} ---\n{_result_text}\n"
+                )
+                audit("builder_tool_call",
+                      {"runde": _runde + 1, "tool": _tool,
+                       "args_keys": list(_args.keys()),
+                       "result_len": len(_result_text)}, pd, pn)
+                continue
+            else:
+                audit("builder_tool_ungueltig",
+                      {"runde": _runde + 1, "parsed": str(_parsed)[:200]}, pd, pn)
+                return False
+
+        _patch_data = _parsed
+        break
+
+    if _patch_data is None:
+        audit("builder_kein_patch_nach_tools", {}, pd, pn)
         return False
 
-    # JSON aus dem Reply extrahieren
-    raw = reply.content.strip()
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    if start < 0 or end <= start:
-        audit("builder_json_fehler", {"raw": raw[:200]}, pd, pn)
-        return False
-
-    try:
-        patch_data = json.loads(raw[start:end])
-    except json.JSONDecodeError:
-        audit("builder_json_fehler", {"raw": raw[:200]}, pd, pn)
-        return False
-
+    patch_data = _patch_data
     patches = patch_data.get("patches", [])
     if not patches:
         audit("builder_keine_patches", {}, pd, pn)

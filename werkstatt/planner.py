@@ -184,6 +184,15 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
                 "</pflicht>"
             )
 
+        else:
+            # M-405: Keine key_files -> KEIN <pflicht>
+            parts.append(
+                "<hinweis>\n"
+                "Keine Dateien gemessen. Nutze <tools> (grep, read_file).\n"
+                "Die findings enthalten Hinweise.\n"
+                "</hinweis>"
+            )
+
     # === Dann PLANNER_SYSTEM ===
     parts.append(PLANNER_SYSTEM)
 
