@@ -611,6 +611,76 @@ def _apply_patches_with_hooks(
     return _applied
 
 
+def _split_task_on_demand(
+    state: RunState, task_id: str,
+) -> bool:
+    """M-472: Zerlegt eine fehlgeschlagene Task in Sub-Tasks (ADaPT).
+
+    Nur wenn die Task noch nicht zu tief zerlegt ist (max 2 Ebenen).
+    Abgeschlossene Tasks bleiben unveraendert.
+    """
+    from werkstatt.planner import _llm_split_einzel_task
+    from werkstatt.phase_state import PhaseState
+
+    pd = state.project_dir
+    pn = state.project_name
+    api_key = getattr(state, "api_key", "")
+
+    # Task finden.
+    _task = None
+    for t in (getattr(state, "tasks", None) or []):
+        if isinstance(t, dict) and t.get("id") == task_id:
+            _task = t
+            break
+    if _task is None:
+        return False
+
+    # Tiefe pruefen (max 2).
+    _tiefe = _task.get("split_tiefe", 0)
+    if _tiefe >= 2:
+        audit("loop_split_max_tiefe", {"task_id": task_id}, pd, pn)
+        return False
+
+    # Fehler-Kontext.
+    _errors = getattr(state, "last_verify_errors", None) or []
+    _bugs = getattr(state, "reviewer_bugs", None) or []
+    _prosa = getattr(state, "architect_prosa", "") or ""
+
+    # Sub-Tasks vom LLM.
+    _sub = _llm_split_einzel_task(
+        _prosa, _task, api_key, pd, pn,
+    )
+    if not _sub:
+        audit("loop_split_fehler", {"task_id": task_id}, pd, pn)
+        return False
+
+    # PhaseState: split_task.
+    _ps = PhaseState(pn, base_dir=Path(pd) / ".werkstatt")
+    if _ps.exists():
+        _ps.load()
+        _ps.split_task(task_id, _sub)
+
+    # state.tasks: Sub-Tasks an Position von _task einfuegen.
+    _tasks = list(getattr(state, "tasks", []) or [])
+    _idx = -1
+    for i, t in enumerate(_tasks):
+        if isinstance(t, dict) and t.get("id") == task_id:
+            _idx = i
+            break
+    if _idx >= 0:
+        for j, st in enumerate(_sub):
+            st["split_tiefe"] = _tiefe + 1
+            _tasks.insert(_idx + 1 + j, st)
+        state.tasks = _tasks  # type: ignore[attr-defined]
+
+    audit("loop_task_split",
+          {"task_id": task_id,
+           "anzahl_sub": len(_sub),
+           "sub_ids": [st.get("id") for st in _sub],
+           "tiefe": _tiefe + 1}, pd, pn)
+    return True
+
+
 def _run_with_progress(
     fn,
     nr: int,
@@ -1368,6 +1438,11 @@ def run_pipeline_loop(
             audit("loop_builder_aufgerufen", {"task_id": i}, pd, pn)
             _task_ende(state, phase_state, task_id, ok=False,
                        name=task_name, failure="builder_failed")
+            # M-472: On-Demand-Zerlegung (ADaPT).
+            if _split_task_on_demand(state, task_id):
+                audit("loop_task_retry_nach_split",
+                      {"task_id": task_id}, pd, pn)
+                continue  # naechster Task (Sub-Task)
             audit("loop_task_failed", {"task_id": i, "grund": "builder_failed"}, pd, pn)
             return 1
 

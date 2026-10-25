@@ -164,6 +164,36 @@ class PhaseState:
 
     # --- Fortschritt ---
 
+    def split_task(
+        self, task_id: str, sub_tasks: list[dict],
+    ) -> None:
+        """M-472: Ersetzt eine Task durch Sub-Tasks (ADaPT).
+
+        Die Original-Task wird 'split'. Die Sub-Tasks werden an
+        ihrer Position eingefuegt und sind 'pending'.
+        """
+        tasks = self.data.get("tasks", [])
+        # Position der Original-Task finden.
+        idx = -1
+        for i, t in enumerate(tasks):
+            if t.get("id") == task_id:
+                idx = i
+                break
+        if idx < 0:
+            return
+        # Original-Task: status=split.
+        tasks[idx]["status"] = "split"
+        # Sub-Tasks: status=pending, eingefuegt nach idx.
+        for j, st in enumerate(sub_tasks):
+            st["status"] = "pending"
+            st["split_tiefe"] = tasks[idx].get("split_tiefe", 0) + 1
+            tasks.insert(idx + 1 + j, st)
+        self.data["tasks"] = tasks
+        self.data["updated"] = __import__("datetime").datetime.now(
+            __import__("datetime").UTC
+        ).isoformat()
+        self.save()
+
     def progress(self) -> dict[str, int]:
         """Gibt den Fortschritt zurueck (done/total)."""
         tasks = self.data.get("tasks", [])

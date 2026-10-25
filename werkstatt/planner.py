@@ -257,6 +257,39 @@ Antworte NUR mit JSON:
 }
 Keine Erklaerung, nur JSON."""
 
+PLANNER_SPLIT_SINGLE_SYSTEM = """Du bist ein Task-Zerleger.
+Du bekommst EINEN zu grossen Sub-Task (Description > 2000 Zeichen
+oder vom Builder als zu gross gemeldet).
+Zerlege ihn in 2-3 kleinere Sub-Tasks.
+
+Jeder Sub-Task:
+- id: "tN_a", "tN_b", ... (abgeleitet von der Original-ID)
+- name: kurzer Titel (< 50 Zeichen)
+- action: "update" oder "create"
+- task_files: Liste der Dateien (max 1)
+- architect_start: ERSTE Zeile des Architect-Abschnitts (woertlich)
+- architect_ende: LETZTE Zeile (woertlich, benachbart zu start)
+- dependencies: Liste von Task-IDs
+
+Regeln:
+  - Jeder Sub-Task < 800 Zeichen Description.
+  - Max 3 Sub-Tasks.
+  - architect_start und architect_ende MUESSEN woertlich
+    in der Architect-Prosa vorkommen.
+
+Antworte NUR mit JSON:
+{
+  "tasks": [
+    {"id": "...", "name": "...", "action": "update",
+     "task_files": ["..."], "architect_start": "...",
+     "architect_ende": "...", "dependencies": []},
+    ...
+  ]
+}
+Keine Erklaerung, nur JSON."""
+
+
+
 
 def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
     """M-376: Explorer-Dateien ZUERST (Lost-in-the-Middle).
@@ -477,6 +510,65 @@ def _extrahiere_prosa_abschnitt(
     return _result
 
 
+def _llm_split_einzel_task(
+    prosa: str, task: dict, api_key: str, pd, pn,
+) -> list[dict]:
+    """M-469: Zerlegt EINEN zu grossen Task in 2-3 Sub-Tasks (LLM)."""
+    import json as _json
+    _user = (
+        f"## ZU GROSSER TASK:\n"
+        f"id: {task.get('id')}\n"
+        f"name: {task.get('name')}\n"
+        f"description (Laenge {len(task.get('description', ''))}):\n"
+        f"{task.get('description', '')[:3000]}\n\n"
+        f"## ARCHITECT-PROSA (Kontext):\n{prosa[:4000]}"
+    )
+    reply = _with_spinner(
+        f"Split-{task.get('id', '?')}",
+        lambda: ask_llm(
+            api_key, PLANNER_SPLIT_SINGLE_SYSTEM, _user,
+            model="deepseek-chat", temperature=0.2, max_tokens=4000,
+        ),
+    )
+    if not reply.ok:
+        return []
+    raw = reply.content.strip()
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start < 0 or end <= start:
+        return []
+    try:
+        parsed = _json.loads(raw[start:end])
+    except _json.JSONDecodeError:
+        return []
+    tasks_raw = parsed.get("tasks", [])
+    if not isinstance(tasks_raw, list):
+        return []
+    out: list[dict] = []
+    for i, t in enumerate(tasks_raw, 1):
+        if not isinstance(t, dict):
+            continue
+        _start = t.get("architect_start") or ""
+        _ende = t.get("architect_ende") or ""
+        _abschnitt = _extrahiere_prosa_abschnitt(prosa, _start, _ende)
+        if not _abschnitt:
+            _name = t.get("name") or ""
+            _desc = t.get("description") or ""
+            _abschnitt = f"## TASK: {_name}\n{_desc}" if _desc else _name
+        if len(_abschnitt) > 800:
+            _cut = _abschnitt.rfind(".", 0, 800)
+            _abschnitt = _abschnitt[:_cut + 1] if _cut > 0 else _abschnitt[:800]
+        out.append({
+            "id": t.get("id") or f"{task.get('id', 't')}_{i}",
+            "name": t.get("name") or f"Sub {i}",
+            "action": t.get("action", "update"),
+            "task_files": t.get("task_files") or task.get("task_files") or [],
+            "dependencies": t.get("dependencies") or [],
+            "description": _abschnitt,
+        })
+    return out
+
+
 def _zerlege_in_sub_tasks(
     prosa: str, key_files: list[str], api_key: str, pd, pn,
 ) -> list[dict]:
@@ -544,12 +636,9 @@ def _zerlege_in_sub_tasks(
     import re as _re_470
     for t in tasks:
         _desc = t.get("description", "")
-        _schritte = len(_re_470.findall(r"^\s*\d+\.", _desc, _re_470.MULTILINE))
-        # M-471: Bullets (Spiegelstriche) zaehlen mit.
-        _bullets = len(_re_470.findall(r"^\s+-\s", _desc, _re_470.MULTILINE))
-        _komplexitaet = _schritte + _bullets
-        # Zerlegen, wenn desc_len > 800 ODER > 4 Schritte+Bullets.
-        _zu_gross = len(_desc) > 800 or _komplexitaet > 4
+        # M-472: On-Demand-Zerlegung (ADaPT). Keine praeventive
+        # Komplexitaetspruefung mehr. Nur Sicherheitsnetz: > 2000 Zeichen.
+        _zu_gross = len(_desc) > 2000
         if not _zu_gross or tiefe >= 2:
             _final.append(t)
         else:
