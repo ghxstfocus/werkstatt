@@ -163,10 +163,18 @@ def _preflight_scan(state: RunState) -> list[dict]:
 ARCHITECT_SYSTEM = """Du bist ein elite Software-Architekt.
 Beschreibe die Loesung in Prosa. KEIN JSON, KEIN Patch-Format.
 
-Format:
+Format (STRIKT einhalten):
   1. Was ist das Problem?
   2. Welche Datei(en) muessen geaendert werden?
-  3. Wie sieht die Loesung aus? (Signaturen, Schluessel-Logik)
+  3. Wie sieht die Loesung aus?
+     NUMERIERTE SCHRITTE. Jeder Schritt ist eine konkrete
+     Anweisung mit klarem Anfang. Beispiel:
+       "5. In apply(): rufe handler.backup(change) auf;
+        Fehler -> ApplyError."
+       "6. In apply(): rufe handler.apply(change, backup) auf."
+     Der Planner-Split schneidet die Prosa an diesen
+     nummerierten Schritten. Ohne Nummerierung kann er
+     nicht fein schneiden.
   4. Welche Tests brauchen wir?
 
 REGELN:
