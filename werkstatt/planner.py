@@ -147,6 +147,20 @@ def _preflight_scan(state: RunState) -> list[dict]:
     return fehler
 
 
+
+ARCHITECT_SYSTEM = """Du bist ein elite Software-Architekt.
+Beschreibe die Loesung in Prosa. KEIN JSON, KEIN Patch-Format.
+
+Format:
+  1. Was ist das Problem?
+  2. Welche Datei(en) muessen geaendert werden?
+  3. Wie sieht die Loesung aus? (Signaturen, Schluessel-Logik)
+  4. Welche Tests brauchen wir?
+
+Antworte NUR mit diesem Prosa-Text. Kein Code, nur Beschreibung.
+"""
+
+
 def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
     """M-376: Explorer-Dateien ZUERST (Lost-in-the-Middle).
 
@@ -193,8 +207,11 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
                 "</hinweis>"
             )
 
-    # === Dann PLANNER_SYSTEM ===
-    parts.append(PLANNER_SYSTEM)
+    # === M-408: Architect-Modus (Prosa statt JSON) ===
+    if "architect" in aufgabe.lower() or "prosa" in aufgabe.lower():
+        parts.append(ARCHITECT_SYSTEM)
+    else:
+        parts.append(PLANNER_SYSTEM)
 
     # === M-397: Doku-Verbot (harte Regel, vor den Skills) ===
     parts.append(

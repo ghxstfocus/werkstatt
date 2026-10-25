@@ -78,6 +78,27 @@ def _builder_system() -> str:
         if s and s["body"]:
             parts.append(f"## Skill: {name}\n" + s["body"])
 
+    # M-408: Architect-Modus -> Editor-Anweisung
+    parts.append(
+        "<architect_editor>\n"
+        "Der Architect hat die Loesung beschrieben. Du bist der Editor.\n"
+        "  - Lies die Zieldatei mit read_file.\n"
+        "  - Schreibe die ganze Datei mit write_file (content = kompletter Inhalt).\n"
+        "  - Teste mit run_command (py_compile, ruff).\n"
+        "  - Der Architect-Text steht in der Aufgabe unter 'description'.\n"
+        "</architect_editor>"
+    )
+
+    # M-408: Architect/Editor
+    parts.append(
+        "<architect_editor>\n"
+        "Du bist der Editor. Der Architect hat die Loesung in Prosa beschrieben.\n"
+        "  - Lies die Zieldatei mit read_file.\n"
+        "  - Schreibe die ganze Datei mit write_file (content = kompletter Inhalt).\n"
+        "  - Teste mit run_command (py_compile, ruff).\n"
+        "</architect_editor>"
+    )
+
     # M-403: Tool-Definition
     parts.append(
         "<tools>\n"
@@ -348,6 +369,10 @@ def run_builder(state: RunState) -> bool:
         return False
     _task_files = _aktuelle_task.get("task_files", []) or []
     _current_action2 = _aktuelle_task.get("action", "update")
+    _is_architect = _current_action2 == "architect"
+    # M-408: Architect-Modus -> Editor (write_file, keine _zieldatei)
+    _is_architect = _current_action2 == "architect"
+    _architect_beschreibung = _aktuelle_task.get("description", "") if _is_architect else ""
 
     _zieldatei = None
     for _tf in _task_files:
