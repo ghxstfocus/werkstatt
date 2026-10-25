@@ -1018,9 +1018,30 @@ def run_pipeline_loop(
     state.aufgabe = aufgabe  # type: ignore[attr-defined]
 
     # 0b. Explorer (Phase 14, read-only). Einmal pro Loop-Lauf.
+    # M-396: Ueberspringen, wenn die Aufgabe explizite Dateien nennt.
+    import re as _re_explorer
+    _explizite_dateien = _re_explorer.findall(
+        r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.(?:py|md|yaml|yml|json|toml))\b',
+        aufgabe,
+    )
+    _skip_explorer = bool(_explizite_dateien)
+
     group_start("Phase 1: Explorer")
     _t_exp = time.monotonic()
-    explorer_result = run_explorer(state, aufgabe)
+    if _skip_explorer:
+        audit("loop_explorer_uebersprungen",
+              {"reason": "explizite Dateien", "dateien": _explizite_dateien[:5]},
+              pd, pn)
+        explorer_result = {
+            "findings": f"Explorer uebersprungen (explizite Dateien: {_explizite_dateien[:5]})",
+            "key_files": [
+                {"file": f, "why": "explizit in Aufgabe", "confidence": "high"}
+                for f in _explizite_dateien[:5]
+            ],
+            "next_reads": _explizite_dateien[:5],
+        }
+    else:
+        explorer_result = run_explorer(state, aufgabe)
     _el_exp = time.monotonic() - _t_exp
     if explorer_result.get("key_files"):
         step(1, "Explorer", f"{len(explorer_result['key_files'])} files", elapsed_s=_el_exp)

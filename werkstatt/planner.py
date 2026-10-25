@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
@@ -250,6 +251,33 @@ def run_planner(state: RunState) -> bool:
                     "\nNutze diese Dateien als task_files. "
                     "Erfinde KEINE anderen Dateien."
                 )
+
+    # M-395: key_files-Inhalt lesen (max 3 Dateien, je max 2000 Zeichen).
+    _key_files_content = ""
+    if isinstance(_explorer_ctx, dict):
+        _key = _explorer_ctx.get("key_files") or []
+        _file_paths = [
+            k.get("file") for k in _key[:3]
+            if isinstance(k, dict) and k.get("file")
+        ]
+        for _fp in _file_paths:
+            if not isinstance(_fp, str):
+                continue
+            _target = Path(pd) / _fp
+            if not _target.is_file():
+                continue
+            try:
+                _content = _target.read_text(encoding="utf-8")[:2000]
+                _key_files_content += (
+                    f"\n--- {_fp} ---\n{_content}\n"
+                )
+            except (OSError, UnicodeDecodeError):
+                continue
+        if _key_files_content:
+            user_content += (
+                "\n\nDatei-Inhalt (relevant, gekuerzt):"
+                + _key_files_content
+            )
 
     # M-307b: letzte 10 PROGRESS.md-Eintraege als Kontext.
     try:
