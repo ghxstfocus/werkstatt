@@ -44,7 +44,7 @@ def _get_git_diff(project_dir: str | Path = "/opt/werkstatt") -> str:
             ["git", "diff", "HEAD", "--", ".", ":!PROGRESS.md"],
             cwd=str(pd), capture_output=True, text=True, timeout=30, check=False
         )
-        parts = [res.stdout[:10000]] if res.stdout else []
+        parts = [res.stdout[:50000]] if res.stdout else []
 
         # M-314: untracked-Dateien als "Neue Datei"-Block anhaengen.
         untracked = subprocess.run(
@@ -101,11 +101,18 @@ def run_reviewer(state: RunState) -> bool:
     aufgabe = getattr(state, "aufgabe", "")
     tests_ok = getattr(state, "baseline_gruen", True)
 
+    # M-412: Architect-Text bei action=architect
+    _arch_desc = ""
+    _akt_task = getattr(state, "aktuelle_task", None)
+    if isinstance(_akt_task, dict) and _akt_task.get("action") == "architect":
+        _arch_desc = _akt_task.get("description", "")
     user_content = (
         f"Aufgabe: {aufgabe}\n\n"
         f"Baseline gruen: {tests_ok}\n\n"
         f"Diff:\n{diff}"
     )
+    if _arch_desc:
+        user_content += f"\n\nArchitect-Vorgabe:\n{_arch_desc}"
 
     reply = ask_llm(
         api_key, _reviewer_system(), user_content,
