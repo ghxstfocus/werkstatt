@@ -188,6 +188,26 @@ def _verify_stage_with_heartbeat(
     return _result[0]
 
 
+def _resolve_venv_cmd(
+    cmd: list[str] | None, project_dir: Path,
+) -> list[str] | None:
+    """M-443: Wenn .venv/bin/<cmd[0]> existiert, nutze es statt System-Binary.
+
+    Zielprojekte haben ein eigenes venv. Ohne diesen Fix ruft der
+    Verify-Loop System-pytest auf, das z.B. defusedxml nicht kennt.
+    """
+    import os as _os
+    if not cmd:
+        return cmd
+    venv_bin = project_dir / ".venv" / "bin"
+    if not venv_bin.is_dir():
+        return cmd
+    exe = venv_bin / cmd[0]
+    if exe.is_file() and _os.access(exe, _os.X_OK):
+        return [str(exe)] + cmd[1:]
+    return cmd
+
+
 def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     """B2: Verifier (multi-projekt-faehig via Projekt-Contract).
 
@@ -273,6 +293,8 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
             continue
         # M-322: Platzhalter ersetzen ({changed_files}, {changed_test_files}).
         _expanded = _expand_cmd_placeholders(list(cmd), state, project_dir)
+        # M-443: venv-Binary nutzen, falls vorhanden.
+        _expanded = _resolve_venv_cmd(_expanded, project_dir)
         if _expanded is None:
             audit("loop_verify_stage_skipped",
                         {"stage": stage.get("id", "?"),
