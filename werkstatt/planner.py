@@ -541,18 +541,29 @@ def _zerlege_in_sub_tasks(
     # M-469: Rekursive Zerlegung (ADaPT). Tasks > 800 Zeichen
     # werden neu zerlegt (max 2 Ebenen tief).
     _final: list[dict] = []
+    import re as _re_470
     for t in tasks:
-        if len(t.get("description", "")) <= 800 or tiefe >= 2:
+        _desc = t.get("description", "")
+        _schritte = len(_re_470.findall(r"^\s*\d+\.", _desc, _re_470.MULTILINE))
+        # M-470: Zerlegen, wenn desc_len > 800 ODER > 4 Schritte.
+        _zu_gross = len(_desc) > 800 or _schritte > 4
+        if not _zu_gross or tiefe >= 2:
             _final.append(t)
         else:
             audit("planner_task_zu_gross",
                   {"id": t.get("id"),
-                   "desc_len": len(t.get("description", "")),
+                   "desc_len": len(_desc),
+                   "schritte": _schritte,
                    "tiefe": tiefe}, pd, pn)
             _sub = _llm_split_einzel_task(prosa, t, api_key, pd, pn)
             if _sub:
                 for _st in _sub:
-                    if len(_st.get("description", "")) <= 800 or tiefe + 1 >= 2:
+                    _st_desc = _st.get("description", "")
+                    _st_schritte = len(_re_470.findall(
+                        r"^\s*\d+\.", _st_desc, _re_470.MULTILINE
+                    ))
+                    _st_gross = len(_st_desc) > 800 or _st_schritte > 4
+                    if not _st_gross or tiefe + 1 >= 2:
                         _final.append(_st)
                     else:
                         _sub2 = _llm_split_einzel_task(prosa, _st, api_key, pd, pn)
