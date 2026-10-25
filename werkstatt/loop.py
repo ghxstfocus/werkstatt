@@ -713,11 +713,21 @@ def _reflection_loop(
     # M-329: Builder importieren (vermeidet Zirkularitaet).
     from werkstatt.builder import run_builder
 
+    _ruff_vorher: int | None = None
     for runde in range(1, max_runden + 1):
         # M-402: phase statt None (sonst laeuft pytest_full_checks
         # bei jeder Reflection-Runde mit).
         if _verify_patches(state, phase=phase):
             return True
+        # M-467: Circuit Breaker. Wenn Ruff-Fehler nicht sinken -> stoppen.
+        _errs = getattr(state, "last_verify_errors", None) or []
+        _ruff_jetzt = sum(1 for e in _errs if isinstance(e, str) and "ruff" in e.lower())
+        if _ruff_vorher is not None and _ruff_jetzt >= _ruff_vorher and _ruff_jetzt > 0:
+            audit("loop_reflection_stagnation",
+                  {"runde": runde, "ruff_vorher": _ruff_vorher,
+                   "ruff_jetzt": _ruff_jetzt}, pd, pn)
+            return False
+        _ruff_vorher = _ruff_jetzt
 
         audit("loop_reflection_runde", {"runde": runde}, pd, pn)
 
@@ -1443,6 +1453,22 @@ def run_pipeline_loop(
             audit("loop_hook_blocked", {"hook": "simplify", "reason": hook_res.get("reason", "")}, pd, pn)
             if not _reflection_loop(state):
                 return 1
+
+        # M-467: ruff --fix auf geaenderte Dateien (deterministisch).
+        try:
+            import subprocess as _sp
+            _changed = [
+                p.get("file") for p in (getattr(state, "patches", None) or [])
+                if isinstance(p, dict) and p.get("file")
+            ]
+            _py_files = [f for f in _changed if f.endswith(".py")]
+            if _py_files:
+                _sp.run(
+                    ["ruff", "check", "--fix", "--no-cache", *_py_files],
+                    cwd=pd, capture_output=True, text=True, timeout=30,
+                )
+        except Exception:  # noqa: BLE001, S110
+            pass
 
         # Post-Build Verify + Reflection (automatisch)
         if not _verify_patches(state, phase="post_build"):
