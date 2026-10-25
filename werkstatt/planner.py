@@ -164,6 +164,16 @@ REGELN:
   - Max line-length 100.
   - Keine unbenutzten Variablen (F841).
 
+API-STABILITAET (WICHTIG):
+  - Bestehende API NIE umbenennen (z.B. ApplierError bleibt ApplierError).
+  - Bestehende Signaturen NIE aendern ohne Not.
+  - Bestehende Rueckgabetypen NIE aendern.
+  - Neue Features: ADDITIV (neue Methoden, neue Klassen), nicht ersetzend.
+
+FROZEN DATACLASSES:
+  - Wenn ein Parameter `frozen=True` ist: NICHT setattr() aufrufen.
+  - Nutze dict/separate Struktur fuer Zusatz-Daten.
+
 Antworte NUR mit diesem Prosa-Text. Kein Code, nur Beschreibung.
 """
 

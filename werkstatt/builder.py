@@ -88,6 +88,10 @@ def _builder_system() -> str:
         "  - Bei ruff-Fehler: korrigiere (write_file erneut).\n"
         "  - Code MUSS ruff-konform sein: __all__ sortiert, kein except Exception.\n"
         "  - Der Architect-Text steht in der Aufgabe unter 'description'.\n"
+        "  - Halte dich EXAKT an den Architect-Text.\n"
+        "  - Keine API-Aenderungen (keine Umbenennungen).\n"
+        "  - Kein except Exception ohne noqa: BLE001.\n"
+        "  - Wenn frozen dataclass: kein setattr().\n"
         "</architect_editor>"
     )
 
