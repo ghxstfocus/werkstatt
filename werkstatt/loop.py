@@ -407,18 +407,6 @@ def _human_gate_plan(state, auto_approve=False):
         getattr(state, "akzeptanzkriterien", []) or [],
     )
 
-    # M-409: Architect-Beschreibung vor dem Gate anzeigen
-    _arch_tasks = [
-        t for t in (getattr(state, "tasks", []) or [])
-        if isinstance(t, dict) and t.get("action") == "architect"
-    ]
-    if _arch_tasks:
-        _arch_desc = _arch_tasks[0].get("description", "")
-        if _arch_desc:
-            print("\n=== ARCHITECT-BESCHREIBUNG ===")
-            print(_arch_desc)
-            print()
-
     while True:
         try:
             _antwort = input(

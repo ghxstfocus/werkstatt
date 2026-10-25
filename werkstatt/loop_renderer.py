@@ -309,6 +309,18 @@ def _render_plan_plain(phasen, tasks, tests, akzeptanzkriterien) -> None:
                 _emit(f"  {_t.get('id')} [{_t.get('action', '?')}] {_t.get('name', '')[:60]}")
                 _emit(f"       Zieldatei: {_files}")
         _emit("")
+    # M-410b: Tasks ohne phase_id (flacher Plan, z.B. Architect)
+    _ohne_phase = [
+        _t for _t in tasks
+        if isinstance(_t, dict) and not _t.get("phase_id")
+    ]
+    if _ohne_phase:
+        _emit("")
+        for _t in _ohne_phase:
+            _files = ", ".join(_t.get("task_files", [])) or "(keine)"
+            _emit(f"  {_t.get('id')} [{_t.get('action', '?')}] {_t.get('name', '')[:60]}")
+            _emit(f"       Zieldatei: {_files}")
+
     if tests:
         _emit(f"Tests ({len(tests)}):")
         for _t in tests:
