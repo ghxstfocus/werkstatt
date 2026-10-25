@@ -1174,21 +1174,31 @@ def run_pipeline_loop(
             audit("loop_planner_failed", {}, pd, pn)
             return 1
 
-        # M-409: Architect-Ausgabe anzeigen
-        _arch_tasks = [
-            t for t in (getattr(state, "tasks", []) or [])
-            if isinstance(t, dict) and t.get("action") == "architect"
-        ]
-        if _arch_tasks:
-            _arch_desc = _arch_tasks[0].get("description", "")
-            if _arch_desc:
-                from werkstatt import loop_renderer as _r_arch
-                try:
-                    _r_arch.panel_diff(
-                        _arch_desc, title="ARCHITECT-BESCHREIBUNG"
-                    )
-                except Exception:  # noqa: BLE001, S110
-                    pass
+        # M-458: Architect-Prosa anzeigen (Planner-Split).
+        _arch_prosa = getattr(state, "architect_prosa", None)
+        if _arch_prosa:
+            from werkstatt import loop_renderer as _r_arch
+            try:
+                _r_arch.panel_diff(
+                    _arch_prosa, title="ARCHITECT-BESCHREIBUNG"
+                )
+            except Exception:  # noqa: BLE001, S110
+                pass
+        else:
+            _arch_tasks = [
+                t for t in (getattr(state, "tasks", []) or [])
+                if isinstance(t, dict) and t.get("action") == "architect"
+            ]
+            if _arch_tasks:
+                _arch_desc = _arch_tasks[0].get("description", "")
+                if _arch_desc:
+                    from werkstatt import loop_renderer as _r_arch
+                    try:
+                        _r_arch.panel_diff(
+                            _arch_desc, title="ARCHITECT-BESCHREIBUNG"
+                        )
+                    except Exception:  # noqa: BLE001, S110
+                        pass
         plan_ok = _plan_gate(state)
         # M-349c/d: Plan-Reflection. Max 3 Runden.
         for _runde in range(3):
