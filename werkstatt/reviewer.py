@@ -44,7 +44,7 @@ def _get_git_diff(project_dir: str | Path = "/opt/werkstatt") -> str:
             ["git", "diff", "HEAD", "--", ".", ":!PROGRESS.md"],
             cwd=str(pd), capture_output=True, text=True, timeout=30, check=False
         )
-        parts = [res.stdout[:50000]] if res.stdout else []
+        parts = [res.stdout[:500000]] if res.stdout else []
 
         # M-314: untracked-Dateien als "Neue Datei"-Block anhaengen.
         untracked = subprocess.run(
