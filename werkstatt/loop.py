@@ -15,6 +15,9 @@ import time
 from pathlib import Path
 
 from werkstatt.audit import audit
+from werkstatt.loop_renderer import (
+    _with_spinner, log_line, task_started, task_done, summary,
+)
 from werkstatt.builder import run_builder
 from werkstatt.env_loader import load_env
 from werkstatt.explorer import run_explorer
@@ -147,7 +150,7 @@ def _verify_stage_with_heartbeat(
     import threading as _threading
     import time as _time
 
-    from werkstatt import loop_renderer as _r
+    from werkstatt import loop_renderer
 
     _done = _threading.Event()
     _result: list = [None]
@@ -1288,6 +1291,10 @@ def run_pipeline_loop(
         phase_state.mark_running(task_id)
         task_name = task_obj.get("name", f"Task {i}") if isinstance(task_obj, dict) else str(task_obj)
         group_start(f"Task {i}/{len(tasks)}: {task_name}")
+        try:
+            task_started(i, len(tasks), task_name)
+        except Exception:  # noqa: BLE001, S110
+            pass
         _t_task = time.monotonic()
         task(i, len(tasks), task_name)
         audit("loop_task_start", {"task_id": i, "name": task_name}, pd, pn)
@@ -1310,7 +1317,7 @@ def run_pipeline_loop(
             continue
 
         if not _run_with_progress(
-            lambda: run_builder(state),
+            lambda: _with_spinner(f"Builder t{i}", lambda: run_builder(state)),
             i, len(tasks), task_name,
         ):
             # M-316 + M-317: Idempotenz-Erkennung NUR bei
@@ -1430,7 +1437,7 @@ def run_pipeline_loop(
                 return 1
 
         # Reviewer (Phase 9)
-        if not run_reviewer(state):
+        if not _with_spinner(f"Reviewer t{i}", lambda: run_reviewer(state)):
             audit("loop_reviewer_rejected", {"task_id": i}, pd, pn)
             # M-314: Reviewer-Bug-Text als Kontext an Reflection.
             _reviewer_bugs = getattr(state, "reviewer_bugs", []) or []
@@ -1502,6 +1509,10 @@ def run_pipeline_loop(
 
         _el_task = time.monotonic() - _t_task
         task_ok(i, len(tasks), elapsed_s=_el_task)
+        try:
+            task_done(i, len(tasks), task_name, elapsed_s=_el_task, ok=True)
+        except Exception:  # noqa: BLE001, S110
+            pass
         group_end()
         tasks_ok += 1
         state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
@@ -1539,6 +1550,14 @@ def run_pipeline_loop(
         status="phase_ende",
         info=f"rc={rc} tasks_ok={tasks_ok}/{len(tasks)}",
     )
+
+    # M-456: Zusammenfassung.
+    try:
+        _total = len(tasks)
+        _failed = _total - tasks_ok
+        summary(tasks_ok, _failed, 0)
+    except Exception:  # noqa: BLE001, S110
+        pass
 
     return rc
 

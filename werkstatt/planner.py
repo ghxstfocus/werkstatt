@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 
 from werkstatt.agent import ask_llm
+from werkstatt.loop_renderer import _with_spinner
 
 # M-442: Architect-Modell konfigurierbar (Default: deepseek-chat).
 # Fuer Messungen: WERKSTATT_ARCHITECT_MODEL=deepseek-reasoner
@@ -414,9 +415,12 @@ def _zerlege_in_sub_tasks(
         f"## ARCHITECT-PROSA:\n{prosa}\n\n"
         f"## DATEIEN:\n" + "\n".join(f"- {f}" for f in key_files)
     )
-    reply = ask_llm(
-        api_key, PLANNER_SPLIT_SYSTEM, _user,
-        model="deepseek-chat", temperature=0.2, max_tokens=4000,
+    reply = _with_spinner(
+        "Planner-Split",
+        lambda: ask_llm(
+            api_key, PLANNER_SPLIT_SYSTEM, _user,
+            model="deepseek-chat", temperature=0.2, max_tokens=4000,
+        ),
     )
     if not reply.ok:
         audit("planner_split_llm_fehler", {"fehler": reply.error}, pd, pn)
@@ -586,9 +590,12 @@ def run_planner(state: RunState) -> bool:
         _user = user_content + (_tool_kontext if _tool_kontext else "")
         # M-445: temperature bleibt positional (ask_llm-Signatur).
         # Reasoning-Modelle ignorieren temperature serverseitig.
-        reply = ask_llm(
-            api_key, _sys, _user,
-            model=_ARCHITECT_MODEL, temperature=0.2, max_tokens=16000,
+        reply = _with_spinner(
+            "Architect",
+            lambda: ask_llm(
+                api_key, _sys, _user,
+                model=_ARCHITECT_MODEL, temperature=0.2, max_tokens=16000,
+            ),
         )
         if not reply.ok:
             audit("planner_llm_fehler", {"fehler": reply.error}, pd, pn)

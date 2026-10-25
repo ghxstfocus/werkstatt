@@ -425,3 +425,176 @@ class _null_progress:
     def add_task(self, *a, **kw): return 0
     def update(self, *a, **kw): pass
     def advance(self, *a, **kw): pass
+
+def _with_spinner(label: str, fn):
+    """M-455: Fuehrt fn aus, mit Spinner + Heartbeat alle 2s.
+
+    Zeigt dem Nutzer, dass der Loop laeuft (nicht haengt).
+    """
+    import threading as _th
+    import time as _time
+
+    try:
+        spinner_start(label)
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+    _start = _time.monotonic()
+    _done = _th.Event()
+    _result: list = [None]
+    _exc: list = [None]
+
+    def _worker():
+        try:
+            _result[0] = fn()
+        except Exception as e:  # noqa: BLE001
+            _exc[0] = e
+        finally:
+            _done.set()
+
+    def _heartbeat_loop():
+        _last = -1
+        while not _done.is_set():
+            _el = int(_time.monotonic() - _start)
+            if _el // 2 > _last // 2:
+                try:
+                    heartbeat(label, _el)
+                except Exception:  # noqa: BLE001, S110
+                    pass
+                _last = _el
+            _done.wait(timeout=0.5)
+
+    _t = _th.Thread(target=_worker, daemon=True)
+    _hb = _th.Thread(target=_heartbeat_loop, daemon=True)
+    _t.start()
+    _hb.start()
+    _t.join()
+    _hb.join(timeout=1)
+
+    try:
+        spinner_stop()
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+    # M-456: permanente Log-Zeile.
+    try:
+        _elapsed = _time.monotonic() - _start
+        log_line(label, elapsed_s=_elapsed, ok=(_exc[0] is None))
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+    if _exc[0] is not None:
+        raise _exc[0]
+    return _result[0]
+
+# _with_spinner_log_line
+
+# ============================================================
+# M-456: Erweiterte Render-API (log_line, task_started, summary)
+# ============================================================
+
+def _timestamp() -> str:
+    """HH:MM:SS fuer permanente Log-Zeilen."""
+    import datetime as _dt
+    return _dt.datetime.now().strftime("%H:%M:%S")
+
+
+def log_line(
+    label: str, detail: str = "",
+    elapsed_s: float | None = None,
+    ok: bool = True,
+) -> None:
+    """Permanente Zeile mit Zeitstempel. Ersetzt nicht, appends.
+
+    Beispiel: [12:47:16] OK Explorer  . 3.1s . 8 files
+    """
+    ts = _timestamp()
+    if IS_CI:
+        status = "ok" if ok else "fail"
+        print(f"::log::{ts} {status} {label} {detail}")
+        return
+    _el = f" · {elapsed_s:.1f}s" if elapsed_s is not None else ""
+    if _use_rich:
+        mark = "[green]OK[/]" if ok else "[red]X[/]"
+        _console.print(
+            f"[dim]{ts}[/] {mark} [bold]{label}[/]{_el}"
+            + (f" · [dim]{detail}[/]" if detail else "")
+        )
+    else:
+        mark = "OK" if ok else "X"
+        print(f"[{ts}] {mark} {label}{_el}" + (f" · {detail}" if detail else ""))
+
+
+def task_started(nr: int, total: int, name: str) -> None:
+    """Permanente Zeile: Task startet."""
+    ts = _timestamp()
+    if IS_CI:
+        print(f"::log::{ts} start Task {nr}/{total}: {name}")
+        return
+    if _use_rich:
+        _console.print(
+            f"[dim]{ts}[/] [cyan]>[/] [bold]Task {nr}/{total}[/]: {name} [dim](running)[/]"
+        )
+    else:
+        print(f"[{ts}] > Task {nr}/{total}: {name} (running)")
+
+
+def task_done(
+    nr: int, total: int, name: str,
+    elapsed_s: float | None = None,
+    ok: bool = True, reason: str = "",
+) -> None:
+    """Permanente Zeile: Task fertig (ok oder failed)."""
+    ts = _timestamp()
+    _el = f" · {elapsed_s:.1f}s" if elapsed_s is not None else ""
+    if IS_CI:
+        status = "ok" if ok else "fail"
+        print(f"::log::{ts} {status} Task {nr}/{total}: {name}{_el}")
+        return
+    mark_ok = "[green]OK[/]" if ok else "[red]X[/]"
+    mark_plain = "OK" if ok else "X"
+    suffix = f" [dim]({reason})[/]" if reason else ""
+    if _use_rich:
+        _console.print(
+            f"[dim]{ts}[/] {mark_ok} [bold]Task {nr}/{total}[/]: {name}{_el}{suffix}"
+        )
+    else:
+        print(f"[{ts}] {mark_plain} Task {nr}/{total}: {name}{_el}" + (f" ({reason})" if reason else ""))
+
+
+def status_header(label: str, detail: str = "") -> None:
+    """Ueberschreibbare Status-Zeile oben (nur live)."""
+    if not IS_LIVE:
+        return
+    try:
+        spinner_update(label, detail)
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+
+def summary(
+    tasks_ok: int, tasks_failed: int,
+    elapsed_s: float, task_details: list[dict] | None = None,
+) -> None:
+    """Zusammenfassung am Ende (permanent)."""
+    ts = _timestamp()
+    total = tasks_ok + tasks_failed
+    _el = f"{elapsed_s:.1f}s"
+    if IS_CI:
+        print(f"::log::{ts} done {tasks_ok}/{total} tasks in {_el}")
+        return
+    if _use_rich:
+        _console.print("")
+        _console.print(
+            f"[dim]{ts}[/] [bold green]Done[/] · {_el} · "
+            f"[green]{tasks_ok}[/]/{total} Tasks"
+            + (f" · [red]{tasks_failed} failed[/]" if tasks_failed else "")
+        )
+        for t in (task_details or []):
+            mark = "[green]OK[/]" if t.get("ok") else "[red]X[/]"
+            name = t.get("name", "?")
+            el = f" · {t.get('elapsed_s', 0):.1f}s" if t.get("elapsed_s") else ""
+            _console.print(f"  {mark} {name}{el}")
+    else:
+        print(f"[{ts}] Done · {_el} · {tasks_ok}/{total} Tasks" + (f" · {tasks_failed} failed" if tasks_failed else ""))
+
