@@ -220,23 +220,25 @@ Jeder Sub-Task:
 - action: "update" (Datei existiert) oder "create" (neue Datei)
 - task_files: Liste der Dateien, die dieser Sub-Task aendert
   (max 1 Datei pro Task, wenn moeglich)
-- dependencies: Liste von Task-IDs, die vorher fertig sein muessen
-- description: kurze Beschreibung (< 200 Zeichen)
+- architect_start: ERSTE Zeile des Architect-Abschnitts,
+  der zu diesem Task gehoert (woertliches Zitat, z.B. "5. Backup").
+- architect_ende: LETZTE Zeile des Architect-Abschnitts
+  (woertliches Zitat, z.B. "6. Anwenden").
+- dependencies: Liste von Task-IDs, die vorher fertig sein muessen.
 
 Regeln:
   - Jeder Sub-Task < 50 Zeilen Code.
   - Keine Test-Dateien (tests/*).
-  - Wenn eine Funktion > 30 Zeilen hat: teile sie in mehrere
-    Sub-Tasks (Signatur, Happy Path, Fehlerbehandlung).
-  - 1 Datei mit 1 Funktion: 1-2 Sub-Tasks.
-  - 1 Datei mit mehreren Funktionen: 3-5 Sub-Tasks.
-  - 2-3 Dateien: 5-10 Sub-Tasks.
+  - architect_start und architect_ende MUESSEN woertlich in
+    der Architect-Prosa vorkommen. Der Loop extrahiert dann
+    den Text dazwischen.
 
 Antworte NUR mit JSON:
 {
   "tasks": [
     {"id": "t1", "name": "...", "action": "update",
-     "task_files": ["..."], "dependencies": [], "description": "..."},
+     "task_files": ["..."], "architect_start": "...",
+     "architect_ende": "...", "dependencies": []},
     ...
   ]
 }
@@ -406,6 +408,27 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
     return "\n\n".join(parts)
 
 
+def _extrahiere_prosa_abschnitt(
+    prosa: str, start: str, ende: str,
+) -> str:
+    """M-461: Extrahiert woertlichen Prosa-Abschnitt zwischen Markern.
+
+    Wenn start nicht gefunden: ganze Prosa (Fallback).
+    Wenn ende nicht gefunden: bis Ende (Fallback).
+    """
+    if not start:
+        return prosa
+    i_start = prosa.find(start)
+    if i_start < 0:
+        return prosa  # Fallback: ganze Prosa
+    if not ende or ende == start:
+        return prosa[i_start:]
+    i_ende = prosa.find(ende, i_start + len(start))
+    if i_ende < 0:
+        return prosa[i_start:]
+    return prosa[i_start:i_ende + len(ende)]
+
+
 def _zerlege_in_sub_tasks(
     prosa: str, key_files: list[str], api_key: str, pd, pn,
 ) -> list[dict]:
@@ -443,13 +466,20 @@ def _zerlege_in_sub_tasks(
     for i, t in enumerate(tasks_raw, 1):
         if not isinstance(t, dict):
             continue
+        _start = t.get("architect_start") or ""
+        _ende = t.get("architect_ende") or ""
+        # M-461: Woertlichen Prosa-Abschnitt extrahieren.
+        _abschnitt = _extrahiere_prosa_abschnitt(prosa, _start, _ende)
+        if not _abschnitt or _abschnitt == prosa:
+            # Fallback: description aus LLM nutzen, wenn vorhanden.
+            _abschnitt = t.get("description") or ""
         tasks.append({
             "id": t.get("id") or f"t{i}",
             "name": t.get("name") or f"Sub-Task {i}",
             "action": t.get("action", "update"),
             "task_files": t.get("task_files") or [],
             "dependencies": t.get("dependencies") or [],
-            "description": t.get("description") or "",
+            "description": _abschnitt,
         })
     audit("planner_split", {"anzahl": len(tasks), "tasks": [
         {"id": t["id"], "files": t["task_files"]} for t in tasks
