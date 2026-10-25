@@ -1378,15 +1378,18 @@ def run_pipeline_loop(
     tasks = getattr(state, "tasks", [])
     tasks_ok = 0
     i = 0
-    for task_obj in tasks:
+    # M-473: while-Loop statt for. Nach ADaPT-Split wird die
+    # Schleife neu gestartet, damit Sub-Tasks gebaut werden.
+    while True:
         next_task = phase_state.get_next_task()
         if next_task is None:
             break
+        task_obj = next_task  # Sub-Tasks werden direkt aus PhaseState geholt.
         i += 1
         task_id = next_task.get("id", f"t{i}")
         phase_state.mark_running(task_id)
         task_name = task_obj.get("name", f"Task {i}") if isinstance(task_obj, dict) else str(task_obj)
-        group_start(f"Task {i}/{len(tasks)}: {task_name}")
+        group_start(f"Task {i}/?: {task_name}")
         try:
             task_started(i, len(tasks), task_name)
         except Exception:  # noqa: BLE001, S110
