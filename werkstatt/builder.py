@@ -92,6 +92,7 @@ def _hat_symbol(modul_pfad: Path, symbol: str) -> bool:
 
 def _validate_imports_in_patch(
     new_string: str, project_dir: Path,
+    task_files: list[str] | None = None,
 ) -> list[str]:
     """M-444b: Findet unaufloesbare Imports (Modul UND Symbol).
 
@@ -143,6 +144,9 @@ def _validate_imports_in_patch(
     for m in imp_re.finditer(new_string):
         imp_mods.add(m.group(1))
 
+    # M-451: stdlib-Check auf Top-Level. sys.stdlib_module_names
+    # enthaelt nur Top-Level (collections), nicht submodule
+    # (collections.abc). Submodule sind aber Teil der stdlib.
     stdlib = getattr(_sys, "stdlib_module_names", set())
     venv_site_dirs: list[Path] = []
     venv_lib = project_dir / ".venv" / "lib"
@@ -153,10 +157,10 @@ def _validate_imports_in_patch(
                 venv_site_dirs.append(sp)
 
     def _modul_existiert(modul: str) -> bool:
-        if modul in stdlib:
-            return True
-        # Erster Teil (bei submodule: "core.changeapplier" -> "core").
+        # M-451: Top-Level-Check. collections.abc -> collections.
         top = modul.split(".")[0]
+        if top in stdlib:
+            return True
         if _finde_modul_pfad(top, project_dir):
             # Fuer submodule auch den vollen Pfad pruefen.
             if modul != top:
@@ -187,9 +191,21 @@ def _validate_imports_in_patch(
         mod_pfad = _finde_modul_pfad(modul, project_dir)
         if mod_pfad is None:
             continue  # venv-Paket; Symbol nicht pruefbar
+        # M-451: Symbole, die in anderen task_files definiert werden,
+        # sind gueltig (Cross-File-Importe).
+        _andere_defs: set[str] = set()
+        if task_files:
+            for _tf in task_files:
+                _tf_path = project_dir / _tf
+                if _tf_path.is_file() and _tf_path != mod_pfad:
+                    for _sym in syms:
+                        if _hat_symbol(_tf_path, _sym):
+                            _andere_defs.add(_sym)
         for sym in syms:
             if sym in _im_patch_definiert:
                 continue  # wird im selben Patch definiert
+            if sym in _andere_defs:
+                continue  # wird in anderer Datei definiert
             if not _hat_symbol(mod_pfad, sym):
                 fehlend.append(f"{modul}.{sym}")
 
@@ -310,7 +326,10 @@ def _build_patches_fuer_datei(
             + "\n"
             + (p.get("new_string", "") or "")
         )
-        _fehlend = _validate_imports_in_patch(_patch_text, pd)
+        _fehlend = _validate_imports_in_patch(
+            _patch_text, pd,
+            task_files=getattr(state, "tasks", [{}])[0].get("task_files", []) if getattr(state, "tasks", None) else None,
+        )
         if _fehlend:
             audit("builder_patch_import_fehler",
                   {"datei": zieldatei, "fehlend": _fehlend}, pd, pn)
