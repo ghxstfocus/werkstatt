@@ -1387,7 +1387,18 @@ def run_pipeline_loop(
                 # gar nicht angewendet wurde (old_string_not_found).
                 # Dann ist der Task fail-closed.
                 _hat_patch = bool(getattr(state, "patches", []))
-                if not _last_errors and _hat_patch:
+                # M-399b: High-severity Bugs NIE ignorieren.
+                _high_bugs = [
+                    b for b in (getattr(state, "reviewer_bugs", []) or [])
+                    if isinstance(b, dict) and b.get("severity") == "high"
+                ]
+                if _high_bugs:
+                    audit("loop_reviewer_high_bug_fail_closed",
+                          {"task_id": i, "high_bugs": len(_high_bugs)}, pd, pn)
+                    _task_ende(state, phase_state, task_id, ok=False,
+                               name=task_name, failure="reviewer_high_bug")
+                    return 1
+                elif not _last_errors and _hat_patch:
                     audit("loop_reviewer_reject_ignoriert",
                           {"task_id": i, "grund": "pytest gruen nach Reflection"}, pd, pn)
                 elif not _last_errors and not _hat_patch:
