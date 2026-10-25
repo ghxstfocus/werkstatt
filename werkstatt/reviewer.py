@@ -113,6 +113,20 @@ def run_reviewer(state: RunState) -> bool:
     )
     if _arch_desc:
         user_content += f"\n\nArchitect-Vorgabe:\n{_arch_desc}"
+        # M-414: Volle Zieldatei lesen
+        _zieldatei = _akt_task.get("task_files", [])
+        if _zieldatei:
+            _fp = Path(pd) / _zieldatei[0]
+            if _fp.is_file():
+                try:
+                    _content = _fp.read_text(encoding="utf-8")[:30000]
+                    user_content += (
+                        f"\n\n--- VOLLE ZIELDATEI: {_zieldatei[0]} ---\n"
+                        f"{_content}\n"
+                        f"--- ENDE ---"
+                    )
+                except (OSError, UnicodeDecodeError):
+                    pass
 
     reply = ask_llm(
         api_key, _reviewer_system(), user_content,
