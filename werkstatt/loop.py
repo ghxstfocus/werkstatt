@@ -34,6 +34,16 @@ def _plan_gate(state: RunState) -> bool:
       - jede Phase hat mindestens 1 Task
     Flacher Plan (phasen leer) bleibt gueltig.
     """
+    # M-408c: Architect-Modus braucht keine tests/akzeptanzkriterien
+    _tasks_check = getattr(state, "tasks", []) or []
+    _is_architect = any(
+        isinstance(_t, dict) and _t.get("action") == "architect"
+        for _t in _tasks_check
+    )
+    if _is_architect:
+        # Architect-Modus: 1 Task mit action=architect -> Plan ok
+        return bool(_tasks_check)
+
     if not all((
         getattr(state, 'tasks', []),
         getattr(state, 'tests', []),
