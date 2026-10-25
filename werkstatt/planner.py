@@ -232,6 +232,9 @@ Jeder Sub-Task:
   der zu diesem Task gehoert (woertliches Zitat, z.B. "5. Backup").
 - architect_ende: LETZTE Zeile des Architect-Abschnitts
   (woertliches Zitat, z.B. "6. Anwenden").
+  WICHTIG: architect_start und architect_ende muessen BENACHBARTE
+  nummerierte Schritte sein (max 3 Schritte dazwischen).
+  Wenn ein Task nur 1 Schritt umfasst, setze start = ende.
 - dependencies: Liste von Task-IDs, die vorher fertig sein muessen.
 
 Regeln:
@@ -460,7 +463,16 @@ def _extrahiere_prosa_abschnitt(
         i_ende = prosa.find(_ende_wort, i_start + len(start))
         if i_ende < 0:
             return prosa[i_start:]
-    return prosa[i_start:i_ende + len(ende)]
+    _result = prosa[i_start:i_ende + len(ende)]
+    # M-464: Laengen-Begrenzung auf 800 Zeichen.
+    if len(_result) > 800:
+        # Schneide am letzten Satzende vor 800 Zeichen.
+        _cut = _result.rfind(".", 0, 800)
+        if _cut > 0:
+            _result = _result[:_cut + 1]
+        else:
+            _result = _result[:800]
+    return _result
 
 
 def _zerlege_in_sub_tasks(
