@@ -407,6 +407,18 @@ def _human_gate_plan(state, auto_approve=False):
         getattr(state, "akzeptanzkriterien", []) or [],
     )
 
+    # M-409: Architect-Beschreibung vor dem Gate anzeigen
+    _arch_tasks = [
+        t for t in (getattr(state, "tasks", []) or [])
+        if isinstance(t, dict) and t.get("action") == "architect"
+    ]
+    if _arch_tasks:
+        _arch_desc = _arch_tasks[0].get("description", "")
+        if _arch_desc:
+            print("\n=== ARCHITECT-BESCHREIBUNG ===")
+            print(_arch_desc)
+            print()
+
     while True:
         try:
             _antwort = input(
@@ -1119,6 +1131,22 @@ def run_pipeline_loop(
         if not run_planner(state):
             audit("loop_planner_failed", {}, pd, pn)
             return 1
+
+        # M-409: Architect-Ausgabe anzeigen
+        _arch_tasks = [
+            t for t in (getattr(state, "tasks", []) or [])
+            if isinstance(t, dict) and t.get("action") == "architect"
+        ]
+        if _arch_tasks:
+            _arch_desc = _arch_tasks[0].get("description", "")
+            if _arch_desc:
+                from werkstatt import loop_renderer as _r_arch
+                try:
+                    _r_arch.panel_diff(
+                        _arch_desc, title="ARCHITECT-BESCHREIBUNG"
+                    )
+                except Exception:  # noqa: BLE001, S110
+                    pass
         plan_ok = _plan_gate(state)
         # M-349c/d: Plan-Reflection. Max 3 Runden.
         for _runde in range(3):
