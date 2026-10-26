@@ -162,6 +162,32 @@ def _preflight_scan(state: RunState) -> list[dict]:
 
 
 
+def _strip_xml_tags(text: str) -> str:
+    """K7: Entfernt DSML/XML-Tool-Call-Tags aus Architect-Prosa.
+
+    Der Architect liefert gelegentlich <shell_command>, <read_file>,
+    <tool>, <function>-Tags. Diese gehoeren nicht in die Prosa,
+    die an den Planner-Split und Builder geht.
+    """
+    import re as _re
+    # Tags + Inhalt entfernen (nicht nur Tags).
+    text = _re.sub(
+        r"<(shell_command|read_file|tool|function|function_calls|invoke)"
+        r"[^>]*>.*?</\1>",
+        "",
+        text,
+        flags=_re.DOTALL,
+    )
+    # Selbstschliessende Tags.
+    text = _re.sub(
+        r"<(shell_command|read_file|tool|function|function_calls|invoke)"
+        r"[^>]*/>",
+        "",
+        text,
+    )
+    return text.strip()
+
+
 ARCHITECT_SYSTEM = """Du bist ein elite Software-Architekt.
 Beschreibe die Loesung in Prosa. KEIN JSON, KEIN Patch-Format.
 
@@ -180,6 +206,11 @@ Format (STRIKT einhalten):
   4. Welche Tests brauchen wir?
 
 REGELN:
+  - KEINE XML-Tags, KEINE DSML-Tool-Calls.
+    Verboten: <shell_command>, <read_file>, <tool>, <function>,
+    <function_calls>, <invoke>.
+    Du bist Architekt, nicht Tool-Caller. Beschreibe die
+    Loesung als Prosa.
   - Code muss ruff-konform sein (E, F, I, SIM, RUF, BLE).
   - __all__ sortiert.
   - Kein `except Exception` ohne `# noqa: BLE001`.
@@ -830,7 +861,8 @@ def run_planner(state: RunState) -> bool:
 
         if not _is_json:
             # Prosa -> Architect+Split.
-            _prosa = _raw
+            # K7: XML/DSML-Tool-Call-Tags entfernen.
+            _prosa = _strip_xml_tags(_raw)
             _key_files: list[str] = []
             if isinstance(_explorer_ctx, dict):
                 for k in (_explorer_ctx.get("key_files") or []):
