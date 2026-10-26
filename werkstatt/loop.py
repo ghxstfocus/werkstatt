@@ -790,10 +790,15 @@ def _reflection_loop(
 
     _ruff_vorher: int | None = None
     for runde in range(1, max_runden + 1):
-        # M-402: phase statt None (sonst laeuft pytest_full_checks
-        # bei jeder Reflection-Runde mit).
-        if _verify_patches(state, phase=phase):
-            return True
+        # K3: Wenn error_context gesetzt ist (Reviewer hat abgelehnt),
+        # ist ein "Verify gruen" kein Grund zum Abbrechen — der Patch
+        # ist semantisch falsch, auch wenn er kompiliert. Dann direkt
+        # in den Builder.
+        if not error_context:
+            # M-402: phase statt None (sonst laeuft pytest_full_checks
+            # bei jeder Reflection-Runde mit).
+            if _verify_patches(state, phase=phase):
+                return True
         # M-467: Circuit Breaker. Wenn Ruff-Fehler nicht sinken -> stoppen.
         _errs = getattr(state, "last_verify_errors", None) or []
         _ruff_jetzt = sum(1 for e in _errs if isinstance(e, str) and "ruff" in e.lower())
