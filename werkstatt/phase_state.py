@@ -104,13 +104,15 @@ class PhaseState:
     # --- Resume ---
 
     def get_next_task(self) -> dict | None:
-        """M-475: Liefert den naechsten 'pending'-Task.
+        """Findet den naechsten ausfuehrbaren Task (K1).
 
-        'done', 'split', 'running' und 'failed' werden uebersprungen.
-        'failed' wird durch resume_failed reaktiviert.
+        Nur 'pending' und 'running' sind ausfuehrbar. 'done', 'failed'
+        und 'split' werden uebersprungen — sonst liefert der Loop
+        fehlgeschlagene oder zerlegte Tasks erneut (Cursor-Mismatch
+        und Re-Split, siehe OFFENE-BLOECKE.md K1).
         """
         for task in self.data.get("tasks", []):
-            if task.get("status") == "pending":
+            if task.get("status") in ("pending", "running"):
                 return task
         return None
 
@@ -121,7 +123,9 @@ class PhaseState:
         """
         n = 0
         for task in self.data.get("tasks", []):
-            if task.get("status") == "failed":
+            # K1: failed UND running zuruecksetzen. running-Tasks
+            # sind Reste eines abgebrochenen Laufs.
+            if task.get("status") in ("failed", "running"):
                 task["status"] = "pending"
                 task["failure"] = None
                 n += 1

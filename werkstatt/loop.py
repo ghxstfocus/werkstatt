@@ -658,7 +658,12 @@ def _split_task_on_demand(
     _ps = PhaseState(pn, base_dir=Path(pd) / ".werkstatt")
     if _ps.exists():
         _ps.load()
-        _ps.split_task(task_id, _sub)
+        _existing = _ps.get_task(task_id)
+        if _existing and _existing.get("status") == "split":
+            # K1: Idempotenz — bereits zerlegt, kein Re-Split.
+            audit("loop_split_bereits_erledigt", {"task_id": task_id}, pd, pn)
+        else:
+            _ps.split_task(task_id, _sub)
 
     # state.tasks: Sub-Tasks an Position von _task einfuegen.
     _tasks = list(getattr(state, "tasks", []) or [])
