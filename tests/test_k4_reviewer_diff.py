@@ -68,3 +68,53 @@ def test_k4_run_reviewer_reicht_task_files_durch() -> None:
         _rv.run_reviewer(_State())
 
     assert captured["task_files"] == ["only_this.py"], captured
+
+
+def test_k4b_untracked_nur_task_files(tmp_path) -> None:
+    """K4b: untracked-Dateien werden nach task_files gefiltert."""
+    (tmp_path / "a.py").write_text("x")
+    (tmp_path / "b.py").write_text("x")
+
+    calls = []
+
+    def _fake_run(cmd, *args, **kwargs):
+        calls.append(cmd)
+        class _R:
+            if "ls-files" in cmd:
+                stdout = "a.py\nb.py\n"
+            else:
+                stdout = "diff --git a/a.py b/a.py\n"
+            returncode = 0
+        return _R()
+
+    from unittest.mock import patch
+    with patch("werkstatt.reviewer.subprocess.run", side_effect=_fake_run):
+        diff = _rv._get_git_diff(str(tmp_path), task_files=["a.py"])
+
+    assert "a.py" in diff
+    assert "b.py" not in diff, f"b.py darf nicht im Diff sein: {diff}"
+
+
+def test_k4b_ohne_task_files_alle_untracked(tmp_path) -> None:
+    """Ohne task_files: altes Verhalten (alle untracked)."""
+    (tmp_path / "a.py").write_text("x")
+    (tmp_path / "b.py").write_text("x")
+
+    calls = []
+
+    def _fake_run(cmd, *args, **kwargs):
+        calls.append(cmd)
+        class _R:
+            if "ls-files" in cmd:
+                stdout = "a.py\nb.py\n"
+            else:
+                stdout = ""
+            returncode = 0
+        return _R()
+
+    from unittest.mock import patch
+    with patch("werkstatt.reviewer.subprocess.run", side_effect=_fake_run):
+        diff = _rv._get_git_diff(str(tmp_path), task_files=None)
+
+    assert "a.py" in diff
+    assert "b.py" in diff

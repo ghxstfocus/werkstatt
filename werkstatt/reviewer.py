@@ -62,6 +62,12 @@ def _get_git_diff(
             for rel in untracked.stdout.splitlines():
                 if not rel or rel.startswith("."):
                     continue
+                # K4b: nur untracked-Dateien der aktuellen Task.
+                if task_files and not any(
+                    rel == tf or rel.startswith(tf.rstrip("/") + "/")
+                    for tf in task_files
+                ):
+                    continue
                 f = pd / rel
                 if not f.is_file():
                     continue
