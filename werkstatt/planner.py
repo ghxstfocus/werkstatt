@@ -321,7 +321,19 @@ Jeder Sub-Task:
 - dependencies: Liste von Task-IDs, die vorher fertig sein muessen.
 
 Regeln:
-  - Jeder Sub-Task < 50 Zeilen Code.
+  - INTERFACE-GRENZE: Jede Task liefert EIN vollstaendiges,
+    reviewbares Interface — nicht einen Schritt einer Funktion.
+    Beispiel GUT: eine Funktion/Methode komplett (Eingabepruefung,
+    Kernlogik, Fehlerbehandlung, Rueckgabe) als EINE Task.
+    Beispiel SCHLECHT: Eingabepruefung / Kernlogik / Fehler-
+    behandlung als getrennte Tasks fuer dieselbe Funktion.
+  - Groesse: 50-150 Zeilen Code pro Task. Zu klein (< 30 Zeilen):
+    Reviewer sieht kein Feature. Zu gross (> 200 Zeilen):
+    Semantik geht verloren.
+  - Eine Datei mit N unabhaengigen Funktionen/Klassen:
+    EINE Task pro Einheit, nicht pro Schritt.
+  - Eine Datei mit EINER Funktion/Klasse: EINE Task fuer die
+    ganze Einheit — nicht in Schritte aufteilen.
   - Keine Test-Dateien (tests/*).
   - architect_start und architect_ende MUESSEN woertlich in
     der Architect-Prosa vorkommen. Der Loop extrahiert dann
@@ -353,8 +365,9 @@ Jeder Sub-Task:
 - dependencies: Liste von Task-IDs
 
 Regeln:
-  - Jeder Sub-Task < 800 Zeichen Description.
-  - Max 3 Sub-Tasks.
+  - Jede Sub-Task liefert ein vollstaendiges, reviewbares
+    Interface (nicht einen Schritt). Max 3 Sub-Tasks.
+  - Groesse: 50-150 Zeilen Code pro Sub-Task.
   - architect_start und architect_ende MUESSEN woertlich
     in der Architect-Prosa vorkommen.
 
