@@ -188,6 +188,43 @@ def _strip_xml_tags(text: str) -> str:
     return text.strip()
 
 
+def _erledigte_punkte(pd) -> str:
+    """K6: Sammelt erledigte Punkte aus git log + ROADMAP.md.
+
+    Verhindert, dass der Architect bereits abgeschlossene
+    Punkte erneut plant.
+    """
+    import re as _re
+    import subprocess as _sp
+    from pathlib import Path as _Path
+
+    _teile: list[str] = []
+    _pd = _Path(pd) if pd else _Path(".")
+    try:
+        res = _sp.run(
+            ["git", "-C", str(_pd), "log", "--grep=✅", "--oneline", "-20"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        if res.stdout.strip():
+            _teile.append("Commits mit ✅:\n" + res.stdout.strip())
+    except Exception:  # noqa: BLE001
+        pass
+
+    _roadmap = _pd / "docs" / "ROADMAP.md"
+    if not _roadmap.is_file():
+        _roadmap = _pd / "ROADMAP.md"
+    if _roadmap.is_file():
+        try:
+            _txt = _roadmap.read_text(encoding="utf-8")
+            _matches = _re.findall(r"^.*✅.*$", _txt, flags=_re.MULTILINE)
+            if _matches:
+                _teile.append("ROADMAP ✅-Zeilen:\n" + "\n".join(_matches[:30]))
+        except OSError:
+            pass
+
+    return "\n\n".join(_teile)
+
+
 ARCHITECT_SYSTEM = """Du bist ein elite Software-Architekt.
 Beschreibe die Loesung in Prosa. KEIN JSON, KEIN Patch-Format.
 
@@ -725,6 +762,14 @@ def run_planner(state: RunState) -> bool:
         docs_ctx = "\n".join(f"--- {k} ---\n{v}" for k, v in list(state.docs.items())[:3])
 
     user_content = f"Aufgabe: {aufgabe}\n\nKontext:\n{docs_ctx}"
+
+    # K6: Abgeschlossene Punkte als Signal — verhindert Neu-Planen.
+    _erledigt = _erledigte_punkte(getattr(state, "project_dir", None))
+    if _erledigt:
+        user_content += (
+            "\n\n## BEREITS ERLEDIGT (NICHT neu planen):\n"
+            + _erledigt[:3000]
+        )
 
     # M-375/M-376: Explorer-Kontext lesen (key_files + findings).
     _explorer_ctx = getattr(state, "explorer_context", None)
