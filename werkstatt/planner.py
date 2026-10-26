@@ -210,17 +210,28 @@ def _erledigte_punkte(pd) -> str:
     except Exception:  # noqa: BLE001
         pass
 
-    _roadmap = _pd / "docs" / "ROADMAP.md"
-    if not _roadmap.is_file():
-        _roadmap = _pd / "ROADMAP.md"
-    if _roadmap.is_file():
+    # K6.1: ROADMAP.md UND STATUS.md als Signal.
+    for _name, _rel in (
+        ("ROADMAP", ("docs/ROADMAP.md", "ROADMAP.md")),
+        ("STATUS", ("docs/STATUS.md", "STATUS.md")),
+    ):
+        _file = None
+        for _cand in _rel:
+            _cand_p = _pd / _cand
+            if _cand_p.is_file():
+                _file = _cand_p
+                break
+        if _file is None:
+            continue
         try:
-            _txt = _roadmap.read_text(encoding="utf-8")
-            _matches = _re.findall(r"^.*✅.*$", _txt, flags=_re.MULTILINE)
-            if _matches:
-                _teile.append("ROADMAP ✅-Zeilen:\n" + "\n".join(_matches[:30]))
+            _txt = _file.read_text(encoding="utf-8")
         except OSError:
-            pass
+            continue
+        _matches = _re.findall(r"^.*✅.*$", _txt, flags=_re.MULTILINE)
+        if _matches:
+            _teile.append(
+                f"{_name} ✅-Zeilen:\n" + "\n".join(_matches[:30])
+            )
 
     return "\n\n".join(_teile)
 

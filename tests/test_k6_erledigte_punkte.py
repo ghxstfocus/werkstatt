@@ -76,3 +76,25 @@ def test_roadmap_im_root_fallback(tmp_path: Path) -> None:
         out = _erledigte_punkte(tmp_path)
 
     assert "X" in out
+
+
+def test_status_md_mit_haken(tmp_path: Path) -> None:
+    """K6.1: STATUS.md ✅-Zeilen werden gesammelt."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "## ChangeApplier ✅\nStatus: implementiert\n",
+        encoding="utf-8",
+    )
+
+    def _fake_run(*a, **kw):
+        class _R:
+            stdout = ""
+            returncode = 0
+        return _R()
+
+    with patch("subprocess.run", side_effect=_fake_run):
+        out = _erledigte_punkte(tmp_path)
+
+    assert "STATUS" in out
+    assert "ChangeApplier" in out
