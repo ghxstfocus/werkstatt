@@ -706,10 +706,21 @@ def _zerlege_in_sub_tasks(
     import re as _re_470
     for t in tasks:
         _desc = t.get("description", "")
+        # K11: Tiefe und Komplexitaetsmetriken fuer den Haupt-Task.
+        # Vorher waren die Tiefe, Schritte und Bullets
+        # '_komplexitaet' undefiniert -> NameError >2000 Zeichen.
+        _tiefe = int(t.get("split_tiefe", 0) or 0)
+        _schritte = len(_re_470.findall(
+            r"^\s*\d+\.", _desc, _re_470.MULTILINE
+        ))
+        _bullets = len(_re_470.findall(
+            r"^\s+-\s", _desc, _re_470.MULTILINE
+        ))
+        _komplexitaet = _schritte + _bullets
         # M-472: On-Demand-Zerlegung (ADaPT). Keine praeventive
         # Komplexitaetspruefung mehr. Nur Sicherheitsnetz: > 2000 Zeichen.
         _zu_gross = len(_desc) > 2000
-        if not _zu_gross or tiefe >= 2:
+        if not _zu_gross or _tiefe >= 2:
             _final.append(t)
         else:
             audit("planner_task_zu_gross",
@@ -718,7 +729,7 @@ def _zerlege_in_sub_tasks(
                    "schritte": _schritte,
                    "bullets": _bullets,
                    "komplexitaet": _komplexitaet,
-                   "tiefe": tiefe}, pd, pn)
+                   "tiefe": _tiefe}, pd, pn)
             _sub = _llm_split_einzel_task(prosa, t, api_key, pd, pn)
             if _sub:
                 for _st in _sub:
@@ -731,7 +742,7 @@ def _zerlege_in_sub_tasks(
                     ))
                     _st_komplex = _st_schritte + _st_bullets
                     _st_gross = len(_st_desc) > 800 or _st_komplex > 4
-                    if not _st_gross or tiefe + 1 >= 2:
+                    if not _st_gross or _tiefe + 1 >= 2:
                         _final.append(_st)
                     else:
                         _sub2 = _llm_split_einzel_task(prosa, _st, api_key, pd, pn)
