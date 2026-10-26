@@ -188,6 +188,36 @@ def _explorer_system(frage: str) -> str:
     return "\n\n".join(parts)
 
 
+_PY_PATH_RE = __import__("re").compile(
+    r"\b([a-zA-Z_][\w/]*\.py)\b"
+)
+
+
+def _extrahiere_py_pfade(project_dir: Path, md_datei: str) -> list[str]:
+    """K12: Extrahiert .py-Pfade aus dem Body einer .md-Datei.
+
+    Bei .md-Aufgaben liefert die Messung nur Doku-Dateien, die als
+    key_files rausgefiltert werden. Die in der Doku genannten
+    .py-Pfade sind aber der eigentliche Task-Ziel-Kontext.
+    """
+    try:
+        text = (Path(project_dir) / md_datei).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    pfade: list[str] = []
+    seen: set[str] = set()
+    for m in _PY_PATH_RE.finditer(text):
+        pfad = m.group(1)
+        if pfad in seen:
+            continue
+        if (Path(project_dir) / pfad).is_file():
+            pfade.append(pfad)
+            seen.add(pfad)
+        if len(pfade) >= 15:
+            break
+    return pfade
+
+
 def run_explorer(state: RunState, frage: str) -> dict:
     pd = state.project_dir
     pn = state.project_name
@@ -206,16 +236,31 @@ def run_explorer(state: RunState, frage: str) -> dict:
     # sie sind Kontext (findings), nicht Task-Ziel. Der Planner waehlt
     # die Code-Dateien selbst.
     key_files: list[dict] = []
+    _seen_files: set[str] = set()
     for name, m in messungen.items():
         for datei in m.get("dateien", []):
             if datei.endswith(".md") or datei.startswith("docs/"):
-                continue  # M-394: Doku ist findings, kein task_file
+                # K12: Aus .md-Body die .py-Pfade extrahieren.
+                for _py in _extrahiere_py_pfade(Path(pd), datei):
+                    if _py in _seen_files:
+                        continue
+                    key_files.append({
+                        "file": _py,
+                        "why": f"aus {datei}",
+                        "symbols": "",
+                        "confidence": "medium",
+                    })
+                    _seen_files.add(_py)
+                continue  # M-394: Doku selbst ist findings
+            if datei in _seen_files:
+                continue
             key_files.append({
                 "file": datei,
                 "why": f"{name}-Fehler",
                 "symbols": "",
                 "confidence": "high",
             })
+            _seen_files.add(datei)
 
     # M-394: Auch ohne key_files: findings aus Messung liefern.
     if messungen:
