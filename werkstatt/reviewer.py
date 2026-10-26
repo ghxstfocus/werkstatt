@@ -31,17 +31,24 @@ Antworte NUR mit validem JSON:
 """
 
 
-def _get_git_diff(project_dir: str | Path = "/opt/werkstatt") -> str:
+def _get_git_diff(
+    project_dir: str | Path = "/opt/werkstatt",
+    task_files: list[str] | None = None,
+) -> str:
     """Holt den aktuellen Git-Diff im Zielprojekt.
 
     M-314: umfasst jetzt auch UNTRACKED-Dateien (git ls-files
     --others). Vorher war der Reviewer blind fuer neue Dateien,
     die der Builder mit `create` angelegt hat.
+
+    K4: Wenn task_files uebergeben, nur diese Pfade diffen — sonst
+    sieht der Reviewer kumulative Aenderungen frueherer Tasks.
     """
     try:
         pd = Path(project_dir)
+        pathspec = list(task_files) if task_files else ["."]
         res = subprocess.run(
-            ["git", "diff", "HEAD", "--", ".", ":!PROGRESS.md"],
+            ["git", "diff", "HEAD", "--", *pathspec, ":!PROGRESS.md"],
             cwd=str(pd), capture_output=True, text=True, timeout=30, check=False
         )
         parts = [res.stdout[:500000]] if res.stdout else []
@@ -93,7 +100,13 @@ def run_reviewer(state: RunState) -> bool:
         return False
 
     pd = getattr(state, "project_dir", None) or Path("/opt/werkstatt")
-    diff = _get_git_diff(pd)
+    # K4: task_files aus aktuelle_task — Reviewer sieht nur
+    # den Diff der aktuellen Task, nicht kumulativ.
+    _akt_task_early = getattr(state, "aktuelle_task", None)
+    _tf_early = None
+    if isinstance(_akt_task_early, dict) and _akt_task_early.get("task_files"):
+        _tf_early = list(_akt_task_early["task_files"])
+    diff = _get_git_diff(pd, task_files=_tf_early)
     if not diff:
         audit("reviewer_kein_diff", {}, pd, pn)
         return True  # Nichts zu reviewen -> OK
