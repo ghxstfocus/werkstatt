@@ -66,11 +66,32 @@ def test_ordner_abgelehnt():
     assert result["info"]["regel"] in ("TASK_FILE", "DOKU_TASK")
 
 
-def test_phasen_pflicht_bei_vielen_tasks():
+def test_phasen_optional_bei_vielen_tasks():
+    """K5.2: Phasen sind optional. 7 Code-Tasks ohne Phasen -> erlaubt."""
     tasks = [
         {"id": f"t{i}", "task_files": ["app/foo.py"], "action": "update"}
         for i in range(1, 8)
     ]
     result = _run({"tasks": tasks, "phasen": []})
+    assert result["allow"] is True, result
+
+
+def test_phasen_mit_gueltiger_id_erlaubt():
+    """Phasen sind erlaubt, wenn sie gueltig sind."""
+    tasks = [
+        {"id": "t1", "task_files": ["app/foo.py"], "action": "update",
+         "phase_id": "p1"},
+    ]
+    result = _run({"tasks": tasks, "phasen": [{"id": "p1"}]})
+    assert result["allow"] is True, result
+
+
+def test_phasen_mit_ungueltiger_id_abgelehnt():
+    """PHASE_ID-Check bleibt: ungueltige phase_id -> deny."""
+    tasks = [
+        {"id": "t1", "task_files": ["app/foo.py"], "action": "update",
+         "phase_id": "p_falsch"},
+    ]
+    result = _run({"tasks": tasks, "phasen": [{"id": "p1"}]})
     assert result["allow"] is False
-    assert result["info"]["regel"] == "PHASEN_PFLICHT"
+    assert result["info"]["regel"] == "PHASE_ID"

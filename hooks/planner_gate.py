@@ -7,7 +7,7 @@ Checks:
   1. DOKU_TASK: task_files matcht Doku-Regex.
   2. ACTION: action muss read/create/update sein.
   3. TASK_FILE: task_files muss Datei mit Suffix sein.
-  4. PHASEN_PFLICHT: >5 Tasks -> phasen Pflicht.
+  4. (entfernt K5.2) PHASEN_PFLICHT — Phasen sind optional.
   5. PHASE_ID: phase_id muss in phasen existieren.
 
 Output: {"allow": bool, "reason": str, "info": {...}}
@@ -155,16 +155,9 @@ def check_plan(payload: dict) -> dict:
                     f"Erlaubt: {sorted(_VALID_SUFFIXES)}.",
                 )
 
-    # 4) PHASEN_PFLICHT
-    if len(tasks) > 5 and not phasen:
-        return _deny(
-            "PHASEN_PFLICHT",
-            "",
-            "",
-            f"{len(tasks)} Tasks, aber keine Phasen.",
-            "Der Plan wird nicht gebaut. Phasen sind Pflicht "
-            "bei >5 Tasks (M-323c).",
-        )
+    # 4) PHASEN_PFLICHT (K5.2): entfernt. Phasen sind OPTIONAL.
+    # Der Architect liefert phasenlose Plaene; der Loop baut sie.
+    # Phasen werden nur validiert, wenn sie vorhanden sind (Check 5).
 
     # 5) PHASE_ID
     if phasen:
