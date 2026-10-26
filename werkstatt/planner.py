@@ -663,6 +663,63 @@ def _llm_split_einzel_task(
     return out
 
 
+def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 2500) -> list[dict]:
+    """K15a: Merged benachbarte Tasks mit gleicher Zieldatei.
+
+    Der LLM-Split zerlegt eine Funktion oft in 3-4 Mini-Tasks
+    (Validierung / Kernlogik / Fehler / Rueckgabe). Keine ist
+    allein reviewbar. Diese deterministische Nachbearbeitung merged
+    aufeinanderfolgende Tasks mit gleicher task_files[0], solange
+    die kombinierte desc_len <= max_merged_len bleibt.
+
+    Andere Dateien und action-Wechsel (create <-> update) blocken
+    den Merge.
+    """
+    if not tasks:
+        return tasks
+
+    merged: list[dict] = []
+    for t in tasks:
+        if not merged:
+            merged.append(dict(t))
+            continue
+
+        prev = merged[-1]
+        prev_file = (prev.get("task_files") or [None])[0]
+        cur_file = (t.get("task_files") or [None])[0]
+        prev_act = prev.get("action", "update")
+        cur_act = t.get("action", "update")
+
+        same_file = prev_file is not None and prev_file == cur_file
+        same_act = prev_act == cur_act
+        combined_len = (
+            len(prev.get("description", "")) + len(t.get("description", ""))
+        )
+
+        if same_file and same_act and combined_len <= max_merged_len:
+            # Merge: Description anhaengen, architect_start behalten,
+            # architect_ende auf den spaeteren Task setzen.
+            prev["description"] = (
+                prev.get("description", "").rstrip()
+                + "\n\n"
+                + t.get("description", "").lstrip()
+            )
+            if t.get("architect_ende"):
+                prev["architect_ende"] = t["architect_ende"]
+            _deps = set(prev.get("dependencies") or [])
+            _deps.update(t.get("dependencies") or [])
+            _deps.discard(prev.get("id"))
+            prev["dependencies"] = sorted(_deps)
+        else:
+            merged.append(dict(t))
+
+    # IDs neu vergeben (t1..tN).
+    for i, t in enumerate(merged, 1):
+        t["id"] = f"t{i}"
+
+    return merged
+
+
 def _zerlege_in_sub_tasks(
     prosa: str, key_files: list[str], api_key: str, pd, pn,
 ) -> list[dict]:
@@ -773,6 +830,14 @@ def _zerlege_in_sub_tasks(
                         _final.extend(_sub2 or [_st])
             else:
                 _final.append(t)
+
+    # K15a: deterministischer Merge benachbarter Mini-Tasks.
+    _vor_merge = len(_final)
+    _final = _merge_mini_tasks(_final)
+    if len(_final) != _vor_merge:
+        audit("planner_split_merged",
+              {"vorher": _vor_merge, "nachher": len(_final)},
+              pd, pn)
 
     audit("planner_split", {"anzahl": len(_final), "tasks": [
         {"id": t["id"], "files": t["task_files"],
