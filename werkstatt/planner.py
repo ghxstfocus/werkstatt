@@ -605,14 +605,16 @@ def _extrahiere_prosa_abschnitt(
         if i_ende < 0:
             return prosa[i_start:]
     _result = prosa[i_start:i_ende + len(ende)]
-    # M-466: Laengen-Begrenzung IMMER anwenden (auch bei Fallback).
-    if len(_result) > 800:
-        # Schneide am letzten Satzende vor 800 Zeichen.
-        _cut = _result.rfind(".", 0, 800)
+    # K15c: Laengen-Begrenzung an Block-Format angepasst.
+    # M-466 hatte 800 Zeichen (Mini-Task-Zeitalter). K15/K15b
+    # produzieren ganze Funktions-Bloecke; 800 schnitt den
+    # Konstruktor ab. 2500 = ~150-200 Zeilen Code.
+    if len(_result) > 2500:
+        _cut = _result.rfind(".", 0, 2500)
         if _cut > 0:
             _result = _result[:_cut + 1]
         else:
-            _result = _result[:800]
+            _result = _result[:2500]
     return _result
 
 
@@ -812,7 +814,7 @@ def _zerlege_in_sub_tasks(
         _komplexitaet = _schritte + _bullets
         # M-472: On-Demand-Zerlegung (ADaPT). Keine praeventive
         # Komplexitaetspruefung mehr. Nur Sicherheitsnetz: > 2000 Zeichen.
-        _zu_gross = len(_desc) > 2000
+        _zu_gross = len(_desc) > 2500
         if not _zu_gross or _tiefe >= 2:
             _final.append(t)
         else:
