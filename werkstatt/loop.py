@@ -1686,6 +1686,13 @@ def run_pipeline_loop(
     return rc
 
 
+def _k13_rc(rc: int, tasks_ok: int) -> int:
+    """K13: rc=0 nur wenn tasks_ok>0. Sonst ist der Lauf ein Fehlschlag."""
+    if rc == 0 and tasks_ok <= 0:
+        return 1
+    return rc
+
+
 def main(argv: list[str] | None = None) -> int:
     # M-391: .env laden (DEEPSEEK_API_KEY automatisch setzen)
     load_env()
@@ -1810,8 +1817,10 @@ def main(argv: list[str] | None = None) -> int:
     # M-358: Footer mit echten Task-Zahlen (aus state).
     _tasks_total = len(getattr(_state, "tasks", []) or [])
     _tasks_ok = int(getattr(_state, "tasks_ok_counter", 0) or 0)
-    _r.footer(success=(rc == 0), tasks_total=_tasks_total, tasks_ok=_tasks_ok)
-    return rc
+    # K13: rc=0 nur, wenn tatsaechlich Tasks erledigt wurden.
+    _erfolg = (rc == 0) and (_tasks_ok > 0)
+    _r.footer(success=_erfolg, tasks_total=_tasks_total, tasks_ok=_tasks_ok)
+    return _k13_rc(rc, _tasks_ok)
 
 
 if __name__ == "__main__":
