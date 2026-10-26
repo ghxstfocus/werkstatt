@@ -1784,6 +1784,13 @@ def main(argv: list[str] | None = None) -> int:
 
     rc = run_pipeline_loop(args.project, args.aufgabe, state_ref, phase_state=_ps)
 
+    # K1b/Schritt1: PhaseState am Loop-Ende persistieren (K14-neutral).
+    # Auch bei rc=1 schreiben -> Resume-Basis nach Abbruch.
+    try:
+        _ps.save()
+    except OSError:
+        pass
+
     if rc != 0:
         # M-356: Fehler -> Tree auf start-HEAD zuruecksetzen.
         audit("loop_rollback", {"rc": rc, "start_head": _start_head}, _pd, args.project)
