@@ -489,7 +489,8 @@ def test_loop_task_read_only(tmp_path):
     st = _state(tmp_path)
     st.tasks = [
         {"id": "t1", "name": "Lesen", "action": "read"},
-        {"id": "t2", "name": "Schreiben", "action": "write"},
+        {"id": "t2", "name": "Schreiben", "action": "update",
+         "task_files": ["app/foo.py"]},
     ]
     st.tests = ["Test 1"]
     st.akzeptanzkriterien = ["Kriterium 1"]
@@ -519,7 +520,8 @@ def test_loop_task_read_only(tmp_path):
 def test_loop_reviewer_after_reflection(tmp_path):
     """M-306d: Nach Reflection muss Reviewer erneut pruefen."""
     st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Task 1", "action": "write"}]
+    st.tasks = [{"id": "t1", "name": "Task 1", "action": "update",
+                 "task_files": ["app/foo.py"]}]
     st.tests = ["Test 1"]
     st.akzeptanzkriterien = ["Kriterium 1"]
 

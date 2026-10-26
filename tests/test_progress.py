@@ -64,7 +64,8 @@ def test_loop_schreibt_progress(tmp_path):
         file_whitelist=[], api_key="fake", budget={},
         agent_docs={}, project_dir=tmp_path, project_name="p"
     )
-    st.tasks = [{"id": "t1", "name": "Test-Task", "action": "write"}]
+    st.tasks = [{"id": "t1", "name": "Test-Task", "action": "update",
+                 "task_files": ["app/foo.py"]}]
     st.tests = ["Test 1"]
     st.akzeptanzkriterien = ["Kriterium 1"]
 

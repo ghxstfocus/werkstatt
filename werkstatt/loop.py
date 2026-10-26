@@ -61,26 +61,27 @@ def _plan_gate(state: RunState) -> bool:
         return False
 
     _phasen = getattr(state, "phasen", []) or []
-    if not _phasen:
-        return True  # flacher Plan
-
-    _phasen_ids = {p.get("id") for p in _phasen if isinstance(p, dict)}
     _tasks = getattr(state, "tasks", []) or []
 
-    # Jede Phase hat mindestens 1 Task
-    for _phase in _phasen:
-        _pid = _phase.get("id")
-        _ptasks = [t for t in _tasks if isinstance(t, dict) and t.get("phase_id") == _pid]
-        if not _ptasks:
-            return False
+    # K5: Phasen-Validierung nur wenn phasen existieren. Der
+    # Doku-Filter-Hook unten laeuft IMMER — auch bei flachem Plan.
+    if _phasen:
+        _phasen_ids = {p.get("id") for p in _phasen if isinstance(p, dict)}
 
-    # Jeder Task mit phase_id hat eine gueltige phase_id
-    for _t in _tasks:
-        if not isinstance(_t, dict):
-            continue
-        _tid = _t.get("phase_id")
-        if _tid is not None and _tid not in _phasen_ids:
-            return False
+        # Jede Phase hat mindestens 1 Task
+        for _phase in _phasen:
+            _pid = _phase.get("id")
+            _ptasks = [t for t in _tasks if isinstance(t, dict) and t.get("phase_id") == _pid]
+            if not _ptasks:
+                return False
+
+        # Jeder Task mit phase_id hat eine gueltige phase_id
+        for _t in _tasks:
+            if not isinstance(_t, dict):
+                continue
+            _tid = _t.get("phase_id")
+            if _tid is not None and _tid not in _phasen_ids:
+                return False
 
     # M-349b: Doku-Tasks via Hook ablehnen (deterministisch).
     _hook_res = _call_hook("planner_gate.py", {
