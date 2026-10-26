@@ -25,13 +25,18 @@ Antworte mit JSON:
   "patches": [
     {"action": "update", "file": "zieldatei.py",
      "old_string": "<exakter Text aus der Datei>",
-     "new_string": "<neuer Text>"}
+     "new_string": "<neuer Text>"},
+    {"action": "create", "file": "neue_datei.py",
+     "content": "<kompletter Datei-Inhalt>"}
   ]
 }
 
 Regeln:
   - old_string MUSS exakt in der Datei vorkommen.
   - old_string != new_string.
+  - Fuer NEUE Dateien: action="create" mit "content"
+    (kompletter Datei-Inhalt, kein old_string).
+    Nutze "create", wenn der Task eine neue Datei anlegen soll.
   - KEIN write_file. KEINE Tools.
   - Aendere NUR die ZIELDATEI.
   - Code MUSS ruff-konform sein (__all__ sortiert, kein except Exception).
