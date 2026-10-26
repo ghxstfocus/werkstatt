@@ -6,6 +6,16 @@ Vorherige Liste: `OFFENE-BLOECKE-ARCHIV-2.md`.
 Nur **offene** Bloecke. Erledigte stehen in `ERLEDIGT.md`.
 Merkposten (M-Nummern) in `MERKPOSTEN.md`.
 
+## Offene K-Fixes (Session 2026-10-26)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| K14 | gross | `run_pipeline_loop` = 601 Zeilen. Refactoring in 7 `_phase_*`-Funktionen. |
+| K17 | mittel | Architect prueft existierende Migrationsnummern nicht (Kollision 0017/0018 in security-ai). Fix: vor Migrations-Task `ls data/migrations/`. |
+| K19 | mittel | Builder setzt Task-Anforderungen nur teilweise um (Builder sinngemaess, Reviewer woertlich). Fix-Kandidaten: Builder-Prompt-Praezision / Checkliste. |
+
+**K18 ist abgedeckt durch M-345/M-346** (Pipeline-Abbau, siehe unten).
+
 ## Loop-Haertung
 
 | Block | Aufwand | Kurz |
