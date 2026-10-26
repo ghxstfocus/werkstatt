@@ -243,14 +243,21 @@ Format (STRIKT einhalten):
   1. Was ist das Problem?
   2. Welche Datei(en) muessen geaendert werden?
   3. Wie sieht die Loesung aus?
-     NUMERIERTE SCHRITTE. Jeder Schritt ist eine konkrete
-     Anweisung mit klarem Anfang. Beispiel:
-       "5. In apply(): rufe handler.backup(change) auf;
-        Fehler -> ApplyError."
-       "6. In apply(): rufe handler.apply(change, backup) auf."
-     Der Planner-Split schneidet die Prosa an diesen
-     nummerierten Schritten. Ohne Nummerierung kann er
-     nicht fein schneiden.
+     PRO DATEI EIN BLOCK. Innerhalb eines Blocks: EINE
+     Funktion/Methode komplett (Signatur, Logik, Fehler,
+     Rueckgabe) als zusammenhaengender Absatz. NICHT als
+     nummerierte Schritte.
+     Der Planner-Split schneidet die Prosa an Datei- und
+     Funktionsgrenzen. Eine Task = ein reviewbares Interface.
+     Beispiel GUT:
+       "In app/foo.py: neue Funktion bar(x, y). Validiert
+        x > 0, ruft helper(y), gibt Result zurueck. Bei
+        Fehler: BarError."
+     Beispiel SCHLECHT:
+       "1. In bar(): validiere x. 2. In bar(): rufe
+        helper(y). 3. In bar(): gib Result zurueck."
+     Jede Funktion/Klasse ist EIN Block. Wenn eine Datei
+     mehrere Funktionen hat: EIN Block pro Funktion.
   4. Welche Tests brauchen wir?
 
 REGELN:
@@ -286,6 +293,11 @@ WENN MEHRERE DATEIEN BETROFFEN SIND:
 
 WENN NUR EINE DATEI BETROFFEN IST:
   Beschreibe sie direkt, ohne Ueberschrift.
+
+GROESSEN-ZIEL:
+  Eine Funktion/Methode = 50-150 Zeilen Code. Zu klein
+  (< 30 Zeilen) -> kein reviewbares Interface. Zu gross
+  (> 200 Zeilen) -> Semantik-Verlust im Builder.
 
 TESTS SIND OUT-OF-SCOPE:
   Beschreibe KEINE Test-Dateien (tests/*, test_*.py, *_test.py).
