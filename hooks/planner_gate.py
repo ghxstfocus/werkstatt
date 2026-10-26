@@ -64,24 +64,43 @@ def check_plan(payload: dict) -> dict:
     tasks = payload.get("tasks", [])
     phasen = payload.get("phasen", [])
 
-    # 1) DOKU_TASK (Regex, nicht startswith)
+    # 1) DOKU_TASK (Regex, nicht startswith).
+    # K5.1: Nur ablehnen, wenn der Plan AUSSCHLIESSLICH Doku-Tasks
+    # enthaelt (kein Code-Task). Doku-Nachzug als expliziter Task
+    # neben Code-Aenderungen ist erlaubt — der Architect plant
+    # STATUS/CHANGELOG/DECISIONS korrekt als Nachtrag.
+    _has_code_task = False
     for t in tasks:
         if not isinstance(t, dict):
             continue
         for f in t.get("task_files", []) or []:
             if not isinstance(f, str):
                 continue
-            for pat in _DOKU_PATTERNS:
-                if pat.match(f):
-                    return _deny(
-                        "DOKU_TASK",
-                        t.get("id", "?"),
-                        f,
-                        "Doku-Tasks sind nicht erlaubt.",
-                        "Der Loop schreibt Doku automatisch "
-                        "(PROGRESS.md pro Task, CHANGELOG.md pro "
-                        "Phase). Der Plan wird nicht gebaut.",
-                    )
+            if not any(pat.match(f) for pat in _DOKU_PATTERNS):
+                _has_code_task = True
+                break
+        if _has_code_task:
+            break
+
+    if not _has_code_task:
+        for t in tasks:
+            if not isinstance(t, dict):
+                continue
+            for f in t.get("task_files", []) or []:
+                if not isinstance(f, str):
+                    continue
+                for pat in _DOKU_PATTERNS:
+                    if pat.match(f):
+                        return _deny(
+                            "DOKU_TASK",
+                            t.get("id", "?"),
+                            f,
+                            "Doku-Only-Plan: kein Code-Task.",
+                            "Der Loop schreibt Doku automatisch "
+                            "(PROGRESS.md pro Task, CHANGELOG.md pro "
+                            "Phase). Der Plan wird nicht gebaut, weil "
+                            "er ausschliesslich Doku aendert.",
+                        )
 
     # 2) ACTION
     for t in tasks:
@@ -122,6 +141,12 @@ def check_plan(payload: dict) -> dict:
                     f"{sorted(_VALID_SUFFIXES)}.",
                 )
             if not f.endswith(_VALID_SUFFIXES):
+                # K5.1: Doku-Datei mit Code-Task daneben ist erlaubt
+                # (Doku-Nachtrag vom Architect geplant).
+                if _has_code_task and any(
+                    pat.match(f) for pat in _DOKU_PATTERNS
+                ):
+                    continue
                 return _deny(
                     "TASK_FILE",
                     t.get("id", "?"),
