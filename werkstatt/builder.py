@@ -44,6 +44,34 @@ Regeln:
   - Keine API-Aenderungen (keine Umbenennungen)."""
 
 
+_PY_IGNORE_PARTS = frozenset({
+    ".venv", "venv", "__pycache__", "site-packages",
+    "node_modules", ".git", ".tox", ".mypy_cache",
+    ".pytest_cache", ".ruff_cache", ".eggs", "build", "dist",
+})
+
+
+def _sammle_projekt_py_files(project_dir: Path, limit: int = 30) -> list[Path]:
+    """K10: Sammelt max `limit` .py-Dateien im Projekt, ohne Ignorier-Pfade.
+
+    Filtert .venv, site-packages, __pycache__, node_modules etc.
+    Sonst landen bei einem Projekt mit .venv die ersten N Treffer
+    ausschliesslich in den venv-Paketen.
+    """
+    out: list[Path] = []
+    for f in sorted(Path(project_dir).rglob("*.py")):
+        try:
+            rel_parts = set(f.relative_to(project_dir).parts)
+        except ValueError:
+            continue
+        if rel_parts & _PY_IGNORE_PARTS:
+            continue
+        out.append(f)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _builder_system() -> str:
     """M-416: Editor-Modus. Nur Architect-Text + Edit-Format."""
     return BUILDER_SYSTEM
@@ -586,8 +614,10 @@ def run_builder(state: RunState) -> bool:
     ]
     if _create_tasks:
         _imports_ctx: dict[str, str] = {}
-        # Alle .py-Dateien im Projekt (max 30, um Token zu sparen)
-        _py_files = sorted(pd.rglob("*.py"))[:30]
+        # Alle .py-Dateien im Projekt (max 30). K10: Ignorier-Pfade
+        # (.venv, __pycache__, site-packages, node_modules) werden
+        # in _sammle_projekt_py_files gefiltert.
+        _py_files = _sammle_projekt_py_files(pd, limit=30)
         for _f in _py_files:
             if _f.is_file():
                 try:
