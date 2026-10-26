@@ -83,15 +83,17 @@ def _klassifiziere_fehler(stage_id: str, fehlertext: str) -> str:
       syntax  — Syntaxfehler (py_compile)
       unknown — Sonstiges
     """
-    if stage_id == "py_compile" or "SyntaxError" in fehlertext:
+    # K9: Prefix-Match statt Gleichheit — verify.json liefert
+    # py_compile_changed/py_compile_core, ruff_changed, pytest_changed.
+    if stage_id.startswith("py_compile") or "SyntaxError" in fehlertext:
         return "syntax"
     if "ModuleNotFoundError" in fehlertext or "ImportError" in fehlertext:
         return "env"
-    if stage_id == "ruff":
+    if stage_id.startswith("ruff"):
         return "lint"
-    if stage_id == "mypy":
+    if stage_id.startswith("mypy"):
         return "type"
-    if stage_id == "pytest":
+    if stage_id.startswith("pytest"):
         return "test"
     return "unknown"
 
