@@ -16,12 +16,62 @@ from werkstatt.loop_renderer import _with_spinner
 from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
 
+
+def _reviewer_history_block(state: RunState) -> str:
+    """K40: Formatiert die Historie der vorherigen Reviewer-Runden.
+
+    Verhindert, dass der Reviewer behobene Bugs erneut meldet.
+    Max 3 Runden -- aeltere sind meist schon repariert.
+    """
+    _history = getattr(state, "reviewer_bugs_history", None) or []
+    if not _history:
+        return ""
+    _lines = ["\n## REVIEWER-HISTORIE (vorherige Runden):\n"]
+    for i, bugs in enumerate(_history[-3:], 1):
+        _lines.append(f"\n### Runde {i} ({len(bugs)} Bugs):\n")
+        for b in bugs:
+            if not isinstance(b, dict):
+                continue
+            _sev = b.get("severity", "?")
+            _file = b.get("file", "?")
+            _desc = (b.get("description") or b.get("beschreibung") or "")[:200]
+            _lines.append(f"- [{_sev}] {_file} - {_desc}\n")
+    _lines.append(
+        "\nPruefe, ob diese Bugs behoben sind. Melde NUR noch "
+        "offene oder NEUE Bugs. Wenn ein Bug behoben ist: NICHT "
+        "erneut melden.\n"
+    )
+    return "".join(_lines)
+
 REVIEWER_SYSTEM = """Du bist ein elite Code-Reviewer.
 Du bekommst einen Git-Diff und die Anforderung.
-Pruefe NUR auf Korrektheit (Bugs, Logikfehler, fehlende Edge-Cases).
-Ignoriere Stil und Formatierung.
 
-M-380: PROGRESS.md ist NICHT Teil deines Reviews. Du siehst es nicht (wird vor dem Review gefiltert). Bewerte NUR den Builder-Patch. Wenn du PROGRESS.md siehst, ist das ein Bug im Filter — ignoriere es STRIKT.
+## Was du PRUEFST
+
+Pruefe NUR auf Korrektheit:
+- Bricht der Code (Syntax, TypeError, falsche Signatur, fehlende Imports)?
+- Verletzt der Code die TASK-BESCHREIBUNG (explizite Anforderung nicht erfuellt)?
+
+Ignoriere Stil, Formatierung, Kleinigkeiten, "nice to have".
+
+## Severity-Level (WICHTIG)
+
+- "high": Code BRICHT zur Laufzeit, ODER explizite Task-Anforderung
+  verletzt (z.B. "nur sqlite3.Error fangen" -> Code faengt auch
+  Exception -> HIGH). HIGH blockiert den Task.
+- "medium": Fehlender Randfall, unvollstaendige Doku. Blockiert NICHT.
+- "low": Stil, Tippfehler, Vorschlag. Blockiert NICHT.
+
+## approved-Regel (STRIKT)
+
+- approved=true, wenn KEIN Bug mit severity="high".
+- approved=false, NUR wenn mindestens ein "high"-Bug.
+- Medium/low-Bugs werden in "bugs" gemeldet, aber approved bleibt true.
+- Wenn du unsicher bist, ob etwas "high" ist: setze "medium".
+  Ein falscher high-Bug kostet 5 Reflection-Runden.
+
+M-380: PROGRESS.md ist NICHT Teil deines Reviews. Bewerte NUR den
+Builder-Patch.
 
 Antworte NUR mit validem JSON:
 {
@@ -174,7 +224,9 @@ def run_phase_end_review(state: RunState) -> bool:
         f"{_json.dumps(list(akz), ensure_ascii=False, indent=2)}\n\n"
         f"## GESAMT-DIFF (alle Task-Aenderungen zusammen):\n"
         f"```diff\n{diff}\n```\n\n"
-        "Pruefe den Code zusammenhängend. Achte auf:\n"
+        # K40: Historie vorheriger Reviews.
+        + _reviewer_history_block(state)
+        + "Pruefe den Code zusammenhängend. Achte auf:\n"
         "- API-Kompatibilitaet (Signaturen unveraendert?)\n"
         "- Cross-File-Referenzen (Importe, Symbole)\n"
         "- Sicherheit (Permissions, CSRF, Input-Validierung)\n"
@@ -303,6 +355,9 @@ def run_reviewer(state: RunState) -> bool:
         f"## GESAMTAUFGABE: {aufgabe}\n\n"
         f"Baseline gruen: {tests_ok}\n\n"
         f"Diff:\n{diff}"
+        # K40: Historie der vorherigen Reviewer-Runden.
+        # Reviewer soll behobene Bugs NICHT erneut melden.
+        + _reviewer_history_block(state)
     )
     # Hinweis an den Reviewer: pruefe die Task, nicht die Gesamtaufgabe.
     user_content += (
