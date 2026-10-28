@@ -1335,7 +1335,9 @@ def run_pipeline_loop(
             return 1
         audit("loop_phase", {"phase": "plan_gate", "status": "approved"}, pd, pn)
         # PhaseState mit vollstaendigem Plan-Checkpoint initialisieren.
-        if not phase_state.exists():
+        # K21: auch bei existierender aber leerer .phase.yaml ({})-Datei.
+        if (not phase_state.exists()
+                or not phase_state.data.get("tasks")):
             phase_state.init_new(
                 aufgabe,
                 _normalize_tasks(getattr(state, "tasks", [])),
@@ -1349,7 +1351,10 @@ def run_pipeline_loop(
     # init_new oben NICHT aufgerufen (nur im !plan_ok-Zweig).
     # Dann ist phase_state.data = {} und get_next_task() liefert
     # None -> Task-Loop bricht sofort ab (M-298b-Loop-Bug).
-    if not phase_state.exists() and getattr(state, "tasks", []):
+    # K21: auch bei leerer existierender Datei.
+    if ((not phase_state.exists()
+         or not phase_state.data.get("tasks"))
+            and getattr(state, "tasks", [])):
         phase_state.init_new(
             aufgabe,
             _normalize_tasks(getattr(state, "tasks", [])),
@@ -1819,10 +1824,12 @@ def main(argv: list[str] | None = None) -> int:
 
     # K1b/Schritt1: PhaseState am Loop-Ende persistieren (K14-neutral).
     # Auch bei rc=1 schreiben -> Resume-Basis nach Abbruch.
-    try:
-        _ps.save()
-    except OSError:
-        pass
+    # K21: leeren State nicht persistieren (sonst ueberschreibt {} die Tasks).
+    if _ps.data:
+        try:
+            _ps.save()
+        except OSError:
+            pass
 
     if rc != 0:
         # M-356: Fehler -> Tree auf start-HEAD zuruecksetzen.
