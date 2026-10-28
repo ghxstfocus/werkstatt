@@ -631,6 +631,7 @@ def _apply_patches_with_hooks(
 
 def _split_task_on_demand(
     state: RunState, task_id: str,
+    phase_state=None,
 ) -> bool:
     """M-472: Zerlegt eine fehlgeschlagene Task in Sub-Tasks (ADaPT).
 
@@ -672,16 +673,17 @@ def _split_task_on_demand(
         audit("loop_split_fehler", {"task_id": task_id}, pd, pn)
         return False
 
-    # PhaseState: split_task.
-    _ps = PhaseState(pn, base_dir=Path(pd) / ".werkstatt")
-    if _ps.exists():
-        _ps.load()
-        _existing = _ps.get_task(task_id)
-        if _existing and _existing.get("status") == "split":
-            # K1: Idempotenz — bereits zerlegt, kein Re-Split.
-            audit("loop_split_bereits_erledigt", {"task_id": task_id}, pd, pn)
-        else:
-            _ps.split_task(task_id, _sub)
+    # K26: NUTZE die uebergebene phase_state (statt eigene Instanz).
+    _ps = phase_state
+    if _ps is None:
+        _ps = PhaseState(pn, base_dir=Path(pd) / ".werkstatt")
+        if _ps.exists():
+            _ps.load()
+    _existing = _ps.get_task(task_id)
+    if _existing and _existing.get("status") == "split":
+        audit("loop_split_bereits_erledigt", {"task_id": task_id}, pd, pn)
+    else:
+        _ps.split_task(task_id, _sub)
 
     # state.tasks: Sub-Tasks an Position von _task einfuegen.
     _tasks = list(getattr(state, "tasks", []) or [])
@@ -807,6 +809,7 @@ def _reflection_loop(
     from werkstatt.builder import run_builder
 
     _ruff_vorher: int | None = None
+    _stagnation = 0
     for runde in range(1, max_runden + 1):
         # K3: Wenn error_context gesetzt ist (Reviewer hat abgelehnt),
         # ist ein "Verify gruen" kein Grund zum Abbrechen — der Patch
@@ -817,14 +820,24 @@ def _reflection_loop(
             # bei jeder Reflection-Runde mit).
             if _verify_patches(state, phase=phase):
                 return True
-        # M-467: Circuit Breaker. Wenn Ruff-Fehler nicht sinken -> stoppen.
+        # K28: Circuit Breaker praezisiert. Zaehlt nur echte Stagnation
+        # (gleiche Fehler-Anzahl UND keine Verbesserung in 2 Runden).
+        # Vorher: abort bei 1 Runde ohne Rueckgang -> verhinderte
+        # Reparatur, wenn Fehler sich aendern (F841 statt RUF-Serie).
         _errs = getattr(state, "last_verify_errors", None) or []
         _ruff_jetzt = sum(1 for e in _errs if isinstance(e, str) and "ruff" in e.lower())
         if _ruff_vorher is not None and _ruff_jetzt >= _ruff_vorher and _ruff_jetzt > 0:
-            audit("loop_reflection_stagnation",
-                  {"runde": runde, "ruff_vorher": _ruff_vorher,
+            _stagnation += 1
+            audit("loop_reflection_stagnation_runde",
+                  {"runde": runde, "stagnation": _stagnation,
+                   "ruff_vorher": _ruff_vorher,
                    "ruff_jetzt": _ruff_jetzt}, pd, pn)
-            return False
+            if _stagnation >= 2:
+                audit("loop_reflection_stagnation_abort",
+                      {"runde": runde, "stagnation": _stagnation}, pd, pn)
+                return False
+        else:
+            _stagnation = 0
         _ruff_vorher = _ruff_jetzt
 
         audit("loop_reflection_runde", {"runde": runde}, pd, pn)
