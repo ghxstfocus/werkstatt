@@ -26,6 +26,10 @@ Antworte mit JSON:
     {"action": "update", "file": "zieldatei.py",
      "old_string": "<exakter Text aus der Datei>",
      "new_string": "<neuer Text>"},
+    {"action": "update", "file": "zieldatei.py",
+     "context": "<3-5 Zeilen VOR old_string, exakt aus Datei>",
+     "old": "<exakter Text, ersetzt wird>",
+     "new": "<neuer Text>"},
     {"action": "create", "file": "neue_datei.py",
      "content": "<kompletter Datei-Inhalt>"}
   ]
@@ -39,6 +43,11 @@ Regeln:
     kuerzeren, eindeutigen old_string (5-10 Zeilen) aus dem aktuellen
     Inhalt.
   - old_string != new_string.
+  - BEVORZUGT fuer "update": Format mit "context"+"old"+"new"
+    (Aider-Style). "context" = 3-5 Zeilen VOR dem Block,
+    zeichengenau aus "AKTUELLER DATEI-INHALT". Der Parser sucht
+    context+old zusammen -- robuster bei Einrueckung/Umbruechen.
+    "old_string"/"new_string" bleibt als Fallback erlaubt.
   - Fuer NEUE Dateien: action="create" mit "content"
     (kompletter Datei-Inhalt, kein old_string).
     Nutze "create", wenn der Task eine neue Datei anlegen soll.
@@ -250,6 +259,39 @@ def _validate_imports_in_patch(
     return fehlend
 
 
+def _normalisiere_aider_patches(
+    patches: list, *, pd: Path, pn: str,
+) -> list:
+    """K48: Aider-Format (context+old+new) auf old_string/new_string
+    normalisieren. Idempotent: Legacy-Patches laufen unveraendert durch.
+
+    Wird von BEIDEN Builder-Pfaden aufgerufen:
+      - Architect-Pfad (_build_patches_fuer_datei)
+      - Klassischer Pfad (run_builder, direkter ask_llm-Call)
+    """
+    _out: list = []
+    for _p in patches:
+        if not isinstance(_p, dict):
+            _out.append(_p)
+            continue
+        if _p.get("context") and _p.get("old") and _p.get("new") is not None:
+            _ctx = _p["context"]
+            if not _ctx.endswith("\n"):
+                _ctx = _ctx + "\n"
+            _p = {
+                **_p,
+                "old_string": _ctx + _p["old"],
+                "new_string": _ctx + _p["new"],
+            }
+            _p.pop("context", None)
+            _p.pop("old", None)
+            _p.pop("new", None)
+            audit("builder_aider_patch_normalisiert",
+                  {"file": _p.get("file", "")}, pd, pn)
+        _out.append(_p)
+    return _out
+
+
 def _architect_abschnitt(beschreibung: str, zieldatei: str) -> str:
     """M-408c/M-450: Extrahiert den Abschnitt fuer eine Datei.
 
@@ -421,6 +463,12 @@ def _build_patches_fuer_datei(
             (p.get("old_string", "") or "")
             + "\n"
             + (p.get("new_string", "") or "")
+            + "\n"
+            + (p.get("context", "") or "")
+            + "\n"
+            + (p.get("old", "") or "")
+            + "\n"
+            + (p.get("new", "") or "")
         )
         _fehlend = _validate_imports_in_patch(
             _patch_text, pd,
@@ -446,6 +494,8 @@ def _build_patches_fuer_datei(
         if getattr(state, "builder_feedback", None):
             state.builder_feedback.pop(zieldatei, None)  # type: ignore[attr-defined]
 
+    # K48: Aider-Format auf Legacy normalisieren (zentraler Helper).
+    _gueltig = _normalisiere_aider_patches(_gueltig, pd=pd, pn=pn)
     return _gueltig
 
 
@@ -875,6 +925,9 @@ def run_builder(state: RunState) -> bool:
         audit("builder_json_fehler", {"raw": raw[:200]}, pd, pn)
         return False
     patches = patch_data.get("patches", [])
+    # K48: Aider-Format auf Legacy normalisieren (zentraler Helper).
+    # Greift auch im klassischen Pfad (direkter ask_llm-Call).
+    patches = _normalisiere_aider_patches(patches, pd=pd, pn=pn)
     if not patches:
         audit("builder_keine_patches", {}, pd, pn)
         return False
