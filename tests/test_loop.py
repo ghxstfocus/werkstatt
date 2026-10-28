@@ -100,6 +100,7 @@ def test_loop_happy_path(tmp_path):
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
+             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("pipeline._approval_und_human_gate", return_value=0), \
          patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
@@ -151,6 +152,7 @@ def test_loop_uses_phase_state(tmp_path):
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
+             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("pipeline._approval_und_human_gate", return_value=0), \
          patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
@@ -173,6 +175,7 @@ def test_loop_resume_nach_unterbrechung(tmp_path):
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
+             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("pipeline._approval_und_human_gate", return_value=0), \
          patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
@@ -199,6 +202,7 @@ def test_loop_patch_reflection_bei_old_string_not_found(tmp_path):
          patch("werkstatt.loop.run_builder", side_effect=_mock_builder), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
+             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop._reflection_loop", return_value=False), \
          patch("pipeline._approval_und_human_gate", return_value=0), \
          patch("pipeline.load_project_config", return_value={}), \
@@ -218,6 +222,7 @@ def test_loop_patch_post_apply_verify(tmp_path):
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
+             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop._reflection_loop", return_value=False), \
          patch("pipeline._approval_und_human_gate", return_value=0), \
          patch("pipeline.load_project_config", return_value={}), \
@@ -280,6 +285,7 @@ def test_loop_preflight_vor_planner(tmp_path):
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
+             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("pipeline._approval_und_human_gate", return_value=0), \
          patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
@@ -310,6 +316,7 @@ def test_pre_build_uebersprungen_bei_follow_up(tmp_path):
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
+             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop.run_planner", return_value=True), \
          patch("pipeline._approval_und_human_gate", return_value=0), \
          patch("pipeline.load_project_config", return_value={}), \
@@ -391,6 +398,7 @@ def test_pre_build_deterministische_klassifikation(tmp_path):
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
+             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop.run_planner", return_value=True), \
          patch("pipeline._approval_und_human_gate", return_value=0), \
          patch("pipeline.load_project_config", return_value={}), \
@@ -505,6 +513,7 @@ def test_loop_task_read_only(tmp_path):
          patch("werkstatt.loop._verify_patches", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
+             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("pipeline._approval_und_human_gate", return_value=0), \
          patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
@@ -1357,6 +1366,9 @@ def test_reviewer_reject_ignoriert_wenn_pytest_gruen(tmp_path, monkeypatch):
     monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
     monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
     monkeypatch.setattr(loop_mod, "_reflection_loop", lambda s, **kw: False)
+    # K23c: Phase-End-Review muss im Test OK sein, sonst rc=1.
+    from werkstatt import reviewer as _rv_mod
+    monkeypatch.setattr(_rv_mod, "run_phase_end_review", lambda s: True)
     for _fn in ("header", "step", "task", "task_ok", "task_failed",
                 "group_start", "group_end", "footer"):
         if hasattr(loop_mod, _fn):

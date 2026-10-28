@@ -12,6 +12,7 @@ from pathlib import Path
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
+from werkstatt.loop_renderer import _with_spinner
 from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
 
@@ -51,6 +52,15 @@ def _get_git_diff(
             ["git", "diff", "HEAD", "--", *pathspec, ":!PROGRESS.md"],
             cwd=str(pd), capture_output=True, text=True, timeout=30, check=False
         )
+        # K23a: fail-closed. Git-Fehler darf NICHT als "kein Diff" enden.
+        # getattr defensiv -- aeltere Mocks setzen stderr nicht.
+        _rc = getattr(res, "returncode", 0) or 0
+        _stderr = getattr(res, "stderr", "") or ""
+        _stderr_l = _stderr.lower()
+        if _rc != 0 or ("dubious" in _stderr_l or "dubiose" in _stderr_l):
+            raise RuntimeError(
+                f"git diff fehlgeschlagen (rc={_rc}): {_stderr[:300]}"
+            )
         parts = [res.stdout[:500000]] if res.stdout else []
 
         # M-314: untracked-Dateien als "Neue Datei"-Block anhaengen.
@@ -58,7 +68,7 @@ def _get_git_diff(
             ["git", "ls-files", "--others", "--exclude-standard"],
             cwd=str(pd), capture_output=True, text=True, timeout=30, check=False
         )
-        if untracked.stdout:
+        if getattr(untracked, "stdout", ""):
             for rel in untracked.stdout.splitlines():
                 if not rel or rel.startswith("."):
                     continue
@@ -81,8 +91,14 @@ def _get_git_diff(
                 parts.append("\n".join(block) + "\n")
 
         return "\n".join(parts)[:20000]
-    except Exception:  # noqa: BLE001
-        return ""
+    except (RuntimeError, subprocess.SubprocessError,
+            OSError, TimeoutError) as _exc:
+        # K23a: fail-closed -- Git-Fehler propagieren, nicht still leer.
+        # K23a: RuntimeError aus dem returncode-Check wird NICHT
+        # hier gefangen, sondern nach oben gereicht.
+        if isinstance(_exc, RuntimeError):
+            raise
+        raise RuntimeError(f"git diff fehlgeschlagen: {_exc}") from _exc
 
 
 def _reviewer_system() -> str:
@@ -93,6 +109,123 @@ def _reviewer_system() -> str:
     if rw and rw["body"]:
         parts.append("## Skill: Review-Work\n" + rw["body"])
     return "\n\n".join(parts)
+
+
+def run_phase_end_review(state: RunState) -> bool:
+    """K23c: Phase-End-Review vor Human-Gate.
+
+    Prueft ALLE uncommitted Aenderungen der Phase zusammen gegen:
+    - aufgabe
+    - state.tasks (Namen, Actions)
+    - state.akzeptanzkriterien
+    - ruff-Ergebnis + Diff
+
+    Fail-closed bei high/medium-bugs. Bei LLM-Fehler: fail-closed.
+    """
+    pd = state.project_dir
+    pn = state.project_name
+    api_key = getattr(state, "api_key", "")
+    if not api_key:
+        audit("reviewer_phase_kein_key", {}, pd, pn)
+        return False
+
+    # Gesamt-Diff der Phase (nicht pro Task), inkl. untracked.
+    try:
+        diff = _get_git_diff(pd, task_files=None)
+    except RuntimeError as _exc:
+        audit("reviewer_phase_diff_fehler",
+              {"fehler": str(_exc)[:300]}, pd, pn)
+        return False
+
+    if not diff:
+        audit("reviewer_phase_kein_diff", {}, pd, pn)
+        return False  # fail-closed: Phase ohne Diff = Bug
+
+    tasks_summary = []
+    for _t in (getattr(state, "tasks", []) or []):
+        if isinstance(_t, dict):
+            tasks_summary.append({
+                "id": _t.get("id"), "name": _t.get("name"),
+                "files": _t.get("task_files"),
+                "status": _t.get("status"),
+            })
+    aufgabe = getattr(state, "aufgabe", "")
+    akz = getattr(state, "akzeptanzkriterien", []) or []
+
+    import json as _json
+    user = (
+        f"## AUFGABE DER PHASE:\n{aufgabe}\n\n"
+        f"## TASKS ({len(tasks_summary)}):\n"
+        f"{_json.dumps(tasks_summary, ensure_ascii=False, indent=2)}\n\n"
+        f"## AKZEPTANZKRITERIEN ({len(akz)}):\n"
+        f"{_json.dumps(list(akz), ensure_ascii=False, indent=2)}\n\n"
+        f"## GESAMT-DIFF (alle Task-Aenderungen zusammen):\n"
+        f"```diff\n{diff}\n```\n\n"
+        "Pruefe den Code zusammenhängend. Achte auf:\n"
+        "- API-Kompatibilitaet (Signaturen unveraendert?)\n"
+        "- Cross-File-Referenzen (Importe, Symbole)\n"
+        "- Sicherheit (Permissions, CSRF, Input-Validierung)\n"
+        "- Erfuellung der Akzeptanzkriterien\n"
+        "- Semantische Kohärenz zwischen den Tasks\n\n"
+        "Antworte NUR mit JSON: "
+        '{"approved": true|false, "bugs": [{"severity": "high|medium|low", "beschreibung": "..."}]}'
+    )
+
+    try:
+        reply = _with_spinner(
+            "Phase-Review",
+            lambda: ask_llm(
+                api_key, _reviewer_system(), user,
+                model="deepseek-chat", temperature=0.2, max_tokens=4000,
+            ),
+        )
+    except Exception as _exc:  # noqa: BLE001
+        audit("reviewer_phase_call_failed",
+              {"fehler": str(_exc)[:300]}, pd, pn)
+        return False
+
+    if not reply.ok:
+        audit("reviewer_phase_call_failed",
+              {"fehler": reply.error[:200]}, pd, pn)
+        return False
+
+    _raw = (reply.content or "").strip()
+    _start = _raw.find("{")
+    _end = _raw.rfind("}") + 1
+    if _start < 0 or _end <= _start:
+        audit("reviewer_phase_json_fehler",
+              {"raw": _raw[:200]}, pd, pn)
+        return False
+    try:
+        _parsed = _json.loads(_raw[_start:_end])
+    except _json.JSONDecodeError:
+        audit("reviewer_phase_json_fehler",
+              {"raw": _raw[:200]}, pd, pn)
+        return False
+
+    _approved = bool(_parsed.get("approved"))
+    _bugs = _parsed.get("bugs") or []
+    if not isinstance(_bugs, list):
+        _bugs = []
+    _high = [b for b in _bugs
+             if isinstance(b, dict) and b.get("severity") == "high"]
+    _medium = [b for b in _bugs
+               if isinstance(b, dict) and b.get("severity") == "medium"]
+
+    if not _approved or _high:
+        audit("reviewer_phase_rejected",
+              {"approved": _approved,
+               "bugs_high": len(_high),
+               "bugs_medium": len(_medium),
+               "bugs": _bugs[:5]}, pd, pn)
+        state.reviewer_bugs = _bugs  # type: ignore[attr-defined]
+        return False
+
+    audit("reviewer_phase_approved",
+          {"bugs_medium": len(_medium),
+           "bugs_low": len(_bugs) - len(_high) - len(_medium)},
+          pd, pn)
+    return True
 
 
 def run_reviewer(state: RunState) -> bool:
@@ -112,10 +245,25 @@ def run_reviewer(state: RunState) -> bool:
     _tf_early = None
     if isinstance(_akt_task_early, dict) and _akt_task_early.get("task_files"):
         _tf_early = list(_akt_task_early["task_files"])
-    diff = _get_git_diff(pd, task_files=_tf_early)
+    # K23a: _get_git_diff kann RuntimeError werfen (Git-Fehler).
+    try:
+        diff = _get_git_diff(pd, task_files=_tf_early)
+    except RuntimeError as _exc:
+        audit("reviewer_diff_fehler",
+              {"fehler": str(_exc)[:300]}, pd, pn)
+        return False  # fail-closed
+
+    # K23b: fail-closed. Leerer Diff MIT vorhandenen Patches = Bug.
+    # Leerer Diff OHNE Patches = legitimer Leerfall (read-only, keine Aenderung).
+    _patches = getattr(state, "patches", None) or []
     if not diff:
-        audit("reviewer_kein_diff", {}, pd, pn)
-        return True  # Nichts zu reviewen -> OK
+        if _patches:
+            audit("reviewer_kein_diff_aber_patches",
+                  {"patches": len(_patches),
+                   "task_files": _tf_early or []}, pd, pn)
+            return False  # fail-closed: Patch da, aber Diff leer = Bug
+        audit("reviewer_kein_diff_kein_patch", {}, pd, pn)
+        return True  # Nichts zu reviewen -- legitim
 
     aufgabe = getattr(state, "aufgabe", "")
     tests_ok = getattr(state, "baseline_gruen", True)

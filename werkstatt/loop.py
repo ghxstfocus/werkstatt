@@ -1679,6 +1679,29 @@ def run_pipeline_loop(
 
     # 4. (M-476) Phase-End Verify NACH human_gate.
 
+    # K23c: Phase-End-Review VOR Human-Gate.
+    group_start("Phase 4: Phase-End-Review")
+    audit("loop_phase", {"phase": "phase_end_review", "status": "start"}, pd, pn)
+    from werkstatt.reviewer import run_phase_end_review as _phase_review
+    if not _with_spinner("Phase-Review", lambda: _phase_review(state)):
+        audit("loop_phase", {"phase": "phase_end_review", "status": "rejected"}, pd, pn)
+        group_end()
+        # Reflection-Loop mit Phase-Bugs versuchen.
+        _phase_bugs = getattr(state, "reviewer_bugs", []) or []
+        import json as _json
+        _phase_ctx = _json.dumps(_phase_bugs, ensure_ascii=False) if _phase_bugs else ""
+        if not _reflection_loop(state, error_context=_phase_ctx):
+            audit("loop_gate_failed",
+                  {"gate": "phase_end_review"}, pd, pn)
+            return 1
+        # Nach erfolgreicher Reflection: Phase-Review nochmal.
+        if not _phase_review(state):
+            audit("loop_gate_failed",
+                  {"gate": "phase_end_review_after_reflection"}, pd, pn)
+            return 1
+    audit("loop_phase", {"phase": "phase_end_review", "status": "approved"}, pd, pn)
+    group_end()
+
     # 5. Human-Gate (eigenes, fail-closed)
     group_start("Phase 5: Human-Gate")
     audit("loop_phase", {"phase": "human_gate", "status": "start"}, pd, pn)

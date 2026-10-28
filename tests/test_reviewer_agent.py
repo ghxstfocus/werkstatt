@@ -43,9 +43,20 @@ def test_reviewer_rejects_buggy_diff(tmp_path):
 
 
 def test_reviewer_ohne_diff(tmp_path):
+    """K23b: kein Diff + kein Patch -> True (nichts zu reviewen)."""
     st = _state(tmp_path)
+    st.patches = []
     with patch("werkstatt.reviewer._get_git_diff", return_value=""):
         assert run_reviewer(st) is True
+
+
+def test_reviewer_patch_ohne_diff_fail_closed(tmp_path):
+    """K23b: Patch da, aber Diff leer -> False (fail-closed)."""
+    st = _state(tmp_path)
+    st.patches = [{"file": "x.py", "action": "create"}]
+    with patch("werkstatt.reviewer._get_git_diff", return_value=""):
+        with patch("werkstatt.reviewer.audit"):
+            assert run_reviewer(st) is False
 
 
 def test_reviewer_sieht_untracked_dateien(tmp_path):
