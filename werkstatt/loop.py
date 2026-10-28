@@ -324,7 +324,9 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
                 cmd, str(project_dir), stage.get("id", "?"),
             )
             if res.returncode != 0:
-                errors.append(f"{stage.get('id', '?')}: {res.stdout[-500:]}")
+                # K22a: stderr einbeziehen -- ruff schreibt auf stderr.
+                _out = (res.stdout or "") + (res.stderr or "")
+                errors.append(f"{stage.get('id', '?')}: {_out[-500:]}")
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{stage.get('id', '?')}-Fehler: {exc}")
 

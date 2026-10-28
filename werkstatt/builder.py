@@ -409,6 +409,40 @@ def _build_patches_fuer_datei(
     return _gueltig
 
 
+def _korrigiere_builder_action(
+    task: dict, pd: Path, pn: str,
+) -> str:
+    """K22b/c: Korrigiert Task-Action live gegen Dateisystem.
+
+    - 'create' + Datei existiert -> 'update'
+    - 'update' + Datei fehlt    -> 'create'
+
+    Aendert task['action'] und gibt die (ggf. korrigierte)
+    Action zurueck. Bei fehlendem task_files oder non-str:
+    unveraendert.
+    """
+    act = task.get("action", "update")
+    if act not in ("create", "update"):
+        return act
+    tf_list = task.get("task_files") or []
+    if not tf_list or not isinstance(tf_list[0], str):
+        return act
+    ziel = pd / tf_list[0]
+    exists = ziel.is_file()
+    # K22b: NUR create->update bei existierender Datei
+    # (Reflection-Runde 2: Datei ist aus Runde 1 da).
+    # update->create wird NICHT korrigiert -- fail-closed bleibt.
+    # Siehe test_builder_update_zieldatei_fehlt_bleibt_fail_closed.
+    if act == "create" and exists:
+        audit("builder_action_korrigiert",
+              {"datei": tf_list[0], "von": "create", "nach": "update",
+               "grund": "datei_existiert"},
+              pd, pn)
+        task["action"] = "update"
+        return "update"
+    return act
+
+
 def run_builder(state: RunState) -> bool:
     """Erstellt Patches. Schreibt sie in state.patches (oder wendet sie an)."""
     pd = state.project_dir
@@ -654,6 +688,11 @@ def run_builder(state: RunState) -> bool:
     _task_files = _aktuelle_task.get("task_files", []) or []
     _current_action2 = _aktuelle_task.get("action", "update")
     _is_architect = _current_action2 == "architect"
+    # K22b/c: Action live gegen Dateisystem korrigieren.
+    if not _is_architect:
+        _current_action2 = _korrigiere_builder_action(
+            _aktuelle_task, pd, pn,
+        )
     _architect_beschreibung = _aktuelle_task.get("description", "") if _is_architect else ""
 
     # M-416b: Architect-Modus -> Editor pro Datei.
