@@ -183,7 +183,7 @@ def _verify_stage_with_heartbeat(
             _el = int(_time.monotonic() - _start)
             if _el // 2 > _last // 2:
                 try:
-                    _r.heartbeat(f"[verify] {stage_id}", _el)
+                    loop_renderer.heartbeat(f"[verify] {stage_id}", _el)
                 except Exception:  # noqa: BLE001, S110
                     pass
                 _last = _el
@@ -849,7 +849,13 @@ def _reflection_loop(
         state.last_verify_errors = _errors  # type: ignore[attr-defined]
 
         # M-329: Builder erneut rufen. Er nutzt search/replace.
-        if not run_builder(state):
+        # K34: reflection_phase -> _korrigiere_builder_action skip.
+        state.reflection_phase = True  # type: ignore[attr-defined]
+        try:
+            _builder_ok = run_builder(state)
+        finally:
+            state.reflection_phase = False  # type: ignore[attr-defined]
+        if not _builder_ok:
             audit("loop_reflection_builder_failed", {"runde": runde}, pd, pn)
             continue
 

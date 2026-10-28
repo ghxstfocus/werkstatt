@@ -328,6 +328,15 @@ def _build_patches_fuer_datei(
                 + "\n".join(_bug_lines)
                 + "\nBehebe diese Bugs in dieser Antwort.\n"
             )
+    # K33: Verify-Fehler (Ruff/Compile) aus letzter Runde als Feedback.
+    _verify_errs = getattr(state, "last_verify_errors", None) or []
+    if _verify_errs:
+        _err_lines = [str(e)[:500] for e in _verify_errs[:5]]
+        _feedback_block += (
+            "\n\n## VERIFY-FEHLER (aus letzter Runde):\n"
+            + "\n".join(f"- {e}" for e in _err_lines)
+            + "\nBehebe diese Fehler in dieser Antwort.\n"
+        )
     # M-466: Task-Name + Beschreibung fuer Kontext.
     _task = getattr(state, "aktuelle_task", None) or {}
     _task_name = _task.get("name", "") if isinstance(_task, dict) else ""
@@ -689,7 +698,8 @@ def run_builder(state: RunState) -> bool:
     _current_action2 = _aktuelle_task.get("action", "update")
     _is_architect = _current_action2 == "architect"
     # K22b/c: Action live gegen Dateisystem korrigieren.
-    if not _is_architect:
+    # K34: NICHT in Reflection-Runde (Task-Action bleibt wie im Plan).
+    if not _is_architect and not getattr(state, "reflection_phase", False):
         _current_action2 = _korrigiere_builder_action(
             _aktuelle_task, pd, pn,
         )
