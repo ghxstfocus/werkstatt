@@ -785,7 +785,7 @@ def _run_with_progress(
 
 def _reflection_loop(
     state: RunState,
-    max_runden: int = 3,
+    max_runden: int = 5,
     error_context: str | None = None,
     phase: str | None = "post_build",
 ) -> bool:
@@ -812,6 +812,8 @@ def _reflection_loop(
 
     _ruff_vorher: int | None = None
     _stagnation = 0
+    # K39a: merken, ob wir wegen Reviewer-Reject gestartet sind.
+    _had_error_context = bool(error_context)
     for runde in range(1, max_runden + 1):
         # K3: Wenn error_context gesetzt ist (Reviewer hat abgelehnt),
         # ist ein "Verify gruen" kein Grund zum Abbrechen — der Patch
@@ -889,6 +891,27 @@ def _reflection_loop(
 
         audit("loop_reflection_patch_applied",
               {"runde": runde, "anzahl": _applied}, pd, pn)
+
+        # K39a: Verify NACH jeder Runde pruefen (nicht nur am Ende).
+        # Sonst reparieren die Runden 1-3 nur Reviewer-Bugs und bauen
+        # dabei neue Verify-Fehler ein, ohne dass die nächste Runde
+        # davon erfährt.
+        if not _verify_patches(state, phase=phase):
+            # Verify-Fehler -> naechste Runde triggert Verify erneut.
+            error_context = ""  # type: ignore[assignment]
+            continue
+        # Verify gruen -- wenn wir Reflection wegen Reviewer-Reject
+        # gestartet haben, jetzt pruefen ob Reviewer jetzt approved.
+        if _had_error_context and not error_context:
+            from werkstatt.reviewer import run_reviewer as _run_rev
+            if _run_rev(state):
+                return True
+            # sonst: neue Reviewer-Bugs -> naechste Runde
+            _new_bugs = getattr(state, "reviewer_bugs", None) or []
+            if _new_bugs:
+                import json as _j
+                error_context = _j.dumps(_new_bugs, ensure_ascii=False)
+            continue
 
     return _verify_patches(state, phase=phase)
 
