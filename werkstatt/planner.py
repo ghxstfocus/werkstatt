@@ -803,6 +803,46 @@ def _korrigiere_aktion(task: dict, pd, pn: str) -> None:
         return
 
 
+def _korrigiere_aktion_sequenziell(tasks: list[dict], pd, pn: str) -> None:
+    """K20b: Beruecksichtigt Task-Reihenfolge.
+
+    Problem: Architect plant t1=create + t2=create auf selber Datei.
+    Sequentiell korrekt, aber K20 isoliert sieht beide als create
+    (Datei fehlt beim Plan-Zeitpunkt).
+
+    Fix: nach _korrigiere_aktion, iteriere in Reihenfolge.
+    Merke 'wird angelegt bis Position'. Wenn Task an Position i
+    auf Datei X create und X bereits (durch frueheren Task)
+    angelegt wird -> update.
+    """
+    try:
+        # Set: Datei wird bis jetzt angelegt.
+        angelegt_bis: set[str] = set()
+        for t in tasks:
+            if not isinstance(t, dict):
+                continue
+            act = t.get("action", "update")
+            files = t.get("task_files") or []
+            if not isinstance(files, list):
+                continue
+            _alle_existieren = all(
+                isinstance(f, str) and f in angelegt_bis
+                for f in files
+            )
+            if act == "create" and _alle_existieren and files:
+                t["action"] = "update"
+                audit("planner_action_korrigiert", {
+                    "dateien": files, "von": "create", "nach": "update",
+                    "grund": "frueherer_task_legt_an",
+                }, pd, pn)
+            elif act == "create":
+                for f in files:
+                    if isinstance(f, str):
+                        angelegt_bis.add(f)
+    except Exception:  # noqa: BLE001
+        return
+
+
 def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 2500) -> list[dict]:
     """K15a: Merged benachbarte Tasks mit gleicher Zieldatei.
 
@@ -976,6 +1016,9 @@ def _zerlege_in_sub_tasks(
     for _t_korr in _final:
         if isinstance(_t_korr, dict):
             _korrigiere_aktion(_t_korr, pd, pn)
+    # K20b: Sequentiell -- create auf Datei, die ein frueherer
+    # Task bereits anlegt -> update.
+    _korrigiere_aktion_sequenziell(_final, pd, pn)
 
     # K15a: deterministischer Merge benachbarter Mini-Tasks.
     _vor_merge = len(_final)
