@@ -162,50 +162,68 @@ def _preflight_scan(state: RunState) -> list[dict]:
 
 
 
-def _strip_xml_tags(text: str) -> str:
-    """K7/K51: Entfernt DSML/XML-Tool-Call-Tags aus Architect-Prosa.
+_TOOL_CALL_TAGS = (
+    "shell_command", "read_file", "write_file", "tool_call", "tool_result",
+    "tool", "function", "function_calls", "invoke", "parameter",
+    "antml:invoke", "antml:parameter",
+)
 
-    K51: zusaetzlich DSML-Special-Token-Format
-    (<|DSML| ... |DSML|>-Variante, hier als Unicode-Fullwidth-Pipes
-    <\uff5c\uff5cDSML\uff5c\uff5c>-Token). Diese Tokens werden von
-    manchen LLMs als Tool-Call-Marker verwendet; sie gehoeren nicht
-    in die Prosa.
+_DSML_TOKEN = "\uff5c\uff5cDSML\uff5c\uff5c"
+
+
+def _strip_xml_tags(text: str) -> str:
+    """K7/K51/K52: Entfernt XML- und DSML-Tool-Call-Marker aus Prosa.
+
+    K52: generischer Ansatz. Statt eine feste Tag-Liste zu pflegen
+    (jedes LLM nutzt neue Marker: <tool_call>, <invoke>, <function_calls>,
+    <read_file>, DSML-Special-Tokens), entfernen wir:
+    - Bekannte Tag-Namen (Block + Einzel).
+    - DSML-Special-Tokens (Unicode-Fullwidth-Pipes).
+    - Verbleibende Bloecke <X>...</X> mit identischem Namen (rekursiv).
     """
     import re as _re
-    # 1) K7: bekannte XML-Tool-Tags + Inhalt entfernen.
+    # 1) K52: bekannte Tag-Namen als Block.
+    _names = "|".join(_TOOL_CALL_TAGS)
     text = _re.sub(
-        r"<(shell_command|read_file|tool|function|function_calls|invoke)"
-        r"[^>]*>.*?</\1>",
+        rf"<({_names})(?:[^>]*>|\s[^>]*>).*?</\1>",
+        "",
+        text,
+        flags=_re.DOTALL,
+    )
+    # 2) K52: bekannte Tag-Namen als Einzel-Tag.
+    text = _re.sub(
+        rf"<({_names})[^>]*/?>",
+        "",
+        text,
+        flags=_re.DOTALL,
+    )
+    # 3) K51: DSML-Special-Tokens.
+    text = _re.sub(
+        "<" + _DSML_TOKEN + r"[^>]*>.*?</" + _DSML_TOKEN + r"[^>]*>",
         "",
         text,
         flags=_re.DOTALL,
     )
     text = _re.sub(
-        r"<(shell_command|read_file|tool|function|function_calls|invoke)"
-        r"[^>]*/>",
-        "",
-        text,
-    )
-    # 2) K51: DSML-Special-Token-Format.
-    # Token-Form (Unicode FULLWIDTH VERTICAL LINE U+FF5C):
-    #   <｜｜DSML｜｜ calls> ... </｜｜DSML｜｜ calls>
-    # Wir entfernen sowohl den umschliessenden Block als auch
-    # einzelne Tags. Pattern als Unicode-Escapes, damit Quoting
-    # nicht von Heredoc/Terminal abhaengt.
-    _dsml = "\uff5c\uff5cDSML\uff5c\uff5c"
-    # Block-Form (Inhalt mehrzeilig).
-    text = _re.sub(
-        "<" + _dsml + r"[^>]*>.*?</" + _dsml + r"[^>]*>",
+        "<" + _DSML_TOKEN + r"[^>]*/?>",
         "",
         text,
         flags=_re.DOTALL,
     )
-    # Einzelne Tags (falls Block-Regex nicht greift).
+    # 4) K52: verbleibende <X>...</X>-Bloecke mit gleichem Namen
+    #    (generisch, unabhaengig vom Tag-Namen).
     text = _re.sub(
-        "<" + _dsml + r"[^>]*/?>",
+        r"<([a-zA-Z_:][\w:.-]*)(?:\s[^>]*)?>.*?</\1>",
         "",
         text,
         flags=_re.DOTALL,
+    )
+    # 5) K52: verbleibende Einzel-Tags mit Attributen (kein
+    #    Vergleichstext, z.B. <br>, <img>).
+    text = _re.sub(
+        r"<[a-zA-Z_:][\w:.-]*(?:\s[^>]*)?/?>",
+        "",
+        text,
     )
     return text.strip()
 
@@ -1285,20 +1303,32 @@ def run_planner(state: RunState) -> bool:
             # K51: Fail-Closed, wenn nach Strip zu wenig Prosa uebrig.
             # Verhindert, dass der Planner-Split aus DSML-Argumenten
             # 11 leere Tasks baut (Live 22:24, prosa_len=199).
-            if len(_prosa.strip()) < 100:
+            # K51/K52: Fail-Closed, wenn nach Strip zu wenig Prosa
+            # uebrig ODER noch XML-artige Marker vorhanden sind
+            # (z.B. <tool_call> mit JSON-Payload, das nicht gefiltert
+            # wurde).
+            _marker_rest = (
+                "<" in _prosa and ">" in _prosa
+            )
+            if len(_prosa.strip()) < 100 or _marker_rest:
                 audit("planner_prosa_zu_kurz",
                       {"len": len(_prosa),
+                       "marker_rest": _marker_rest,
                        "raw_prefix": _raw[:200]}, pd, pn)
+                _fakt = (
+                    f"Architect-Antwort hat nur {len(_prosa)} Zeichen "
+                    f"nach XML/DSML-Strip."
+                    if len(_prosa.strip()) < 100
+                    else f"Architect-Antwort enthaelt noch XML-Marker "
+                    f"nach Strip: {_prosa[:150]!r}"
+                )
                 state.last_planner_info = {
                     "regel": "PROSA_PFLICHT",
-                    "fakt": (
-                        f"Architect-Antwort hat nur {len(_prosa)} "
-                        f"Zeichen nach XML/DSML-Strip."
-                    ),
+                    "fakt": _fakt,
                     "erklaerung": (
                         "Beschreibe die Loesung in Prosa. KEINE "
-                        "Tool-Calls. KEINE DSML-Tokens. Kein "
-                        "<read_file>, <function_calls>, <invoke>."
+                        "Tool-Calls. KEINE DSML-Tokens. KEIN "
+                        "<tool_call>, <read_file>, <function_calls>."
                     ),
                     "details": f"Original-Anfang: {_raw[:200]}",
                 }
