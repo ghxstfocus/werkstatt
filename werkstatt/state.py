@@ -278,6 +278,8 @@ class RunState:
     # Wird von run_reviewer befuellt, von _reflection_loop
     # als Kontext an den Builder uebergeben.
     reviewer_bugs: list[dict] = field(default_factory=list)
+    # K40: Historie aller Reviewer-Runden (pro Runde eine Bug-Liste).
+    reviewer_bugs_history: list[list[dict]] = field(default_factory=list)
     # M-299e: Planner-Entscheidung pro Preflight-Fehler.
     # BLOCKER: verhindert die Aufgabe -> in Plan.
     blocker_fehler: list[dict] = field(default_factory=list)

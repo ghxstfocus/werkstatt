@@ -1759,7 +1759,19 @@ def run_pipeline_loop(
                 return 1
 
         # Reviewer (Phase 9)
-        if not _with_spinner(f"Reviewer t{i}", lambda: run_reviewer(state)):
+        _rev_ok = _with_spinner(f"Reviewer t{i}", lambda: run_reviewer(state))
+        # K40: Historie pushen (unabhaengig vom Ergebnis).
+        _cur_bugs = getattr(state, "reviewer_bugs", None) or []
+        if _cur_bugs:
+            _hist = getattr(state, "reviewer_bugs_history", None)
+            if _hist is None:
+                state.reviewer_bugs_history = []  # type: ignore[attr-defined]
+                _hist = state.reviewer_bugs_history  # type: ignore[attr-defined]
+            _hist.append(list(_cur_bugs))
+            # Limit auf 5 Runden (RAM-Schutz).
+            if len(_hist) > 5:
+                state.reviewer_bugs_history = _hist[-5:]  # type: ignore[attr-defined]
+        if not _rev_ok:
             audit("loop_reviewer_rejected", {"task_id": i}, pd, pn)
             # M-314: Reviewer-Bug-Text als Kontext an Reflection.
             _reviewer_bugs = getattr(state, "reviewer_bugs", []) or []
@@ -1855,7 +1867,18 @@ def run_pipeline_loop(
     group_start("Phase 4: Phase-End-Review")
     audit("loop_phase", {"phase": "phase_end_review", "status": "start"}, pd, pn)
     from werkstatt.reviewer import run_phase_end_review as _phase_review
-    if not _with_spinner("Phase-Review", lambda: _phase_review(state)):
+    _pe_ok = _with_spinner("Phase-Review", lambda: _phase_review(state))
+    # K40: Historie pushen.
+    _pe_bugs = getattr(state, "reviewer_bugs", None) or []
+    if _pe_bugs:
+        _hist = getattr(state, "reviewer_bugs_history", None)
+        if _hist is None:
+            state.reviewer_bugs_history = []  # type: ignore[attr-defined]
+            _hist = state.reviewer_bugs_history  # type: ignore[attr-defined]
+        _hist.append(list(_pe_bugs))
+        if len(_hist) > 5:
+            state.reviewer_bugs_history = _hist[-5:]  # type: ignore[attr-defined]
+    if not _pe_ok:
         audit("loop_phase", {"phase": "phase_end_review", "status": "rejected"}, pd, pn)
         group_end()
         # K23d: Phase-End-Reflection pro Datei.

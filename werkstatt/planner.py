@@ -859,7 +859,7 @@ def _korrigiere_aktion_sequenziell(tasks: list[dict], pd, pn: str) -> None:
         return
 
 
-def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 2500) -> list[dict]:
+def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 1800) -> list[dict]:
     """K15a: Merged benachbarte Tasks mit gleicher Zieldatei.
 
     Der LLM-Split zerlegt eine Funktion oft in 3-4 Mini-Tasks
@@ -874,6 +874,10 @@ def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 2500) -> list[dic
     if not tasks:
         return tasks
 
+    # K41: zaehlt Merges pro Datei -- max 2 kombinierte Mini-Tasks
+    # pro Zieldatei. Sonst entsteht ein Mega-Task (>200 Zeilen Code),
+    # den der Builder nicht sauber baut.
+    _merge_count: dict[str, int] = {}
     merged: list[dict] = []
     for t in tasks:
         if not merged:
@@ -892,7 +896,12 @@ def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 2500) -> list[dic
             len(prev.get("description", "")) + len(t.get("description", ""))
         )
 
-        if same_file and same_act and combined_len <= max_merged_len:
+        # K41: pro Datei max 2 Merges (d.h. max 2 Mini-Tasks zusammengefasst).
+        _file_key = prev_file if isinstance(prev_file, str) else "_none_"
+        _at_limit = _merge_count.get(_file_key, 0) >= 2
+
+        if same_file and same_act and combined_len <= max_merged_len and not _at_limit:
+            _merge_count[_file_key] = _merge_count.get(_file_key, 0) + 1
             # K36: Merge-Audit -- sichtbar machen, welche Tasks gemergt werden.
             _merge_audit = {
                 "prev_id": prev.get("id"),
