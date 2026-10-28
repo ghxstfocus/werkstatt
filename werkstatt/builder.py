@@ -32,7 +32,12 @@ Antworte mit JSON:
 }
 
 Regeln:
-  - old_string MUSS exakt in der Datei vorkommen.
+  - old_string MUSS zeichengenau aus dem AKTUELLEN DATEI-INHALT
+    stammen (siehe "AKTUELLER DATEI-INHALT" unten). NICHT aus dem
+    Gedaechtnis erfinden, NICHT aus vorherigen Runden.
+  - Wenn du unsicher bist, ob old_string noch stimmt: waehle einen
+    kuerzeren, eindeutigen old_string (5-10 Zeilen) aus dem aktuellen
+    Inhalt.
   - old_string != new_string.
   - Fuer NEUE Dateien: action="create" mit "content"
     (kompletter Datei-Inhalt, kein old_string).
@@ -337,6 +342,32 @@ def _build_patches_fuer_datei(
             + "\n".join(f"- {e}" for e in _err_lines)
             + "\nBehebe diese Fehler in dieser Antwort.\n"
         )
+    # K47: Reflection-Historie -- was in vorherigen Runden passiert ist.
+    _refl_hist = getattr(state, "reflection_history", None) or []
+    if _refl_hist:
+        _refl_lines = ["\n\n## VORHERIGE REFLECTION-RUNDEN (was du bereits versucht hast):\n"]
+        for _r in _refl_hist[-3:]:  # max 3 Runden
+            _rn = _r.get("runde", "?")
+            _pa = _r.get("patches_applied", 0)
+            _ve = _r.get("verify_errors", [])[:2]
+            _rb = _r.get("reviewer_bugs", [])[:2]
+            _refl_lines.append(f"\n### Runde {_rn}:\n")
+            _refl_lines.append(f"- Patches: {_pa} angewendet\n")
+            if _ve:
+                _refl_lines.append("- Verify-Fehler:\n")
+                for _e in _ve:
+                    _refl_lines.append(f"  * {str(_e)[:200]}\n")
+            if _rb:
+                _refl_lines.append("- Reviewer-Bugs:\n")
+                for _b in _rb:
+                    _sv = _b.get("severity", "?")
+                    _ds = (_b.get("description") or _b.get("beschreibung") or "")[:150]
+                    _refl_lines.append(f"  * [{_sv}] {_ds}\n")
+        _refl_lines.append(
+            "\nWiederhole NICHT die gleichen Versuche. Pruefe den aktuellen "
+            "Dateiinhalt und waehle old_string zeichengenau.\n"
+        )
+        _feedback_block += "".join(_refl_lines)
     # M-466: Task-Name + Beschreibung fuer Kontext.
     _task = getattr(state, "aktuelle_task", None) or {}
     _task_name = _task.get("name", "") if isinstance(_task, dict) else ""

@@ -893,16 +893,51 @@ def _reflection_loop(
             _patch_err = (
                 "reflection: patch_nicht_angewendet "
                 "(old_string not found oder apply_skip). "
-                "Pruefe den aktuellen Dateiinhalt exakt."
+                "Pruefe den aktuellen Dateiinhalt exakt -- old_string "
+                "MUSS zeichengenau aus dem aktuellen Inhalt kopiert sein."
             )
             _cur = getattr(state, "last_verify_errors", None) or []
             state.last_verify_errors = list(_cur) + [_patch_err]  # type: ignore[attr-defined]
             audit("loop_reflection_patch_nicht_angewendet",
                   {"runde": runde}, pd, pn)
+            # K47: auch hier History-Eintrag (Patches=0).
+            _refl_hist = getattr(state, "reflection_history", None)
+            if _refl_hist is None:
+                state.reflection_history = []  # type: ignore[attr-defined]
+                _refl_hist = state.reflection_history  # type: ignore[attr-defined]
+            _refl_hist.append({
+                "runde": runde,
+                "patches_applied": 0,
+                "verify_errors": list(getattr(state, "last_verify_errors", None) or [])[:3],
+                "reviewer_bugs": list(getattr(state, "reviewer_bugs", None) or [])[:3],
+            })
+            if len(_refl_hist) > 5:
+                state.reflection_history = _refl_hist[-5:]  # type: ignore[attr-defined]
+            # K45: patch_nicht_angewendet ist KEINE Stagnation --
+            # der Builder hat etwas versucht. Stagnation-Zaehler
+            # zurücksetzen, damit der naechste echte Stagnations-Fall
+            # erkannt wird (2x in Folge ohne Versuch).
+            _stagnation = 0
+            _ruff_vorher = None  # naechste Runde frisch zaehlen
+            error_context = ""  # Verify in naechster Runde triggern
             continue
 
         audit("loop_reflection_patch_applied",
               {"runde": runde, "anzahl": _applied}, pd, pn)
+
+        # K47: Reflection-History Eintrag.
+        _refl_hist = getattr(state, "reflection_history", None)
+        if _refl_hist is None:
+            state.reflection_history = []  # type: ignore[attr-defined]
+            _refl_hist = state.reflection_history  # type: ignore[attr-defined]
+        _refl_hist.append({
+            "runde": runde,
+            "patches_applied": _applied,
+            "verify_errors": list(getattr(state, "last_verify_errors", None) or [])[:3],
+            "reviewer_bugs": list(getattr(state, "reviewer_bugs", None) or [])[:3],
+        })
+        if len(_refl_hist) > 5:
+            state.reflection_history = _refl_hist[-5:]  # type: ignore[attr-defined]
 
         # K39a: Verify NACH jeder Runde pruefen (nicht nur am Ende).
         # Sonst reparieren die Runden 1-3 nur Reviewer-Bugs und bauen

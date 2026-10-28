@@ -280,6 +280,9 @@ class RunState:
     reviewer_bugs: list[dict] = field(default_factory=list)
     # K40: Historie aller Reviewer-Runden (pro Runde eine Bug-Liste).
     reviewer_bugs_history: list[list[dict]] = field(default_factory=list)
+    # K47: Historie der Reflection-Runden pro Task.
+    # Pro Eintrag: {runde, verify_errors, reviewer_bugs, patches_applied}.
+    reflection_history: list[dict] = field(default_factory=list)
     # M-299e: Planner-Entscheidung pro Preflight-Fehler.
     # BLOCKER: verhindert die Aufgabe -> in Plan.
     blocker_fehler: list[dict] = field(default_factory=list)
