@@ -181,7 +181,13 @@ def run_phase_end_review(state: RunState) -> bool:
         "- Erfuellung der Akzeptanzkriterien\n"
         "- Semantische Kohärenz zwischen den Tasks\n\n"
         "Antworte NUR mit JSON: "
-        '{"approved": true|false, "bugs": [{"severity": "high|medium|low", "beschreibung": "..."}]}'
+        '{"approved": true|false, "bugs": ['
+        '{"severity": "high|medium|low", '
+        '"file": "path/to/file.py", '
+        '"description": "..."}]}\n\n'
+        "Jeder Bug MUSS ein 'file'-Feld haben (relativer Pfad, "
+        "exakt wie im Diff). Wenn du die Datei nicht kennst, "
+        "verwende 'unknown'."
     )
 
     try:

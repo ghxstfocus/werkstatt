@@ -921,6 +921,18 @@ def _phase_end_reflection(state: RunState) -> bool:
             _f = _b.get("file")
             if _f and _f not in _bug_files:
                 _bug_files.append(_f)
+        # K37b: Wenn keine file-Felder in bugs (LLM hat Schema verletzt),
+        # Fallback auf alle Task-Dateien.
+        if not _bug_files:
+            for _t in (getattr(state, "tasks", []) or []):
+                if not isinstance(_t, dict):
+                    continue
+                for _f in (_t.get("task_files") or []):
+                    if isinstance(_f, str) and _f not in _bug_files:
+                        _bug_files.append(_f)
+            if _bug_files:
+                audit("loop_phase_reflection_fallback_alle_task_files",
+                      {"runde": _runde + 1, "dateien": _bug_files}, pd, pn)
         if not _bug_files:
             audit("loop_phase_reflection_keine_dateien",
                   {"runde": _runde + 1}, pd, pn)
