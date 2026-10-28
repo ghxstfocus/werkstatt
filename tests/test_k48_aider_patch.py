@@ -45,8 +45,14 @@ def test_aider_patch_wird_normalisiert(tmp_path):
     assert ok is True
     p = st.patches[0]
     assert "context" not in p and "old" not in p and "new" not in p
-    assert p["old_string"] == "def helper():\n    return 1\ndef ziel():\n    return 2\n"
-    assert p["new_string"] == "def helper():\n    return 1\ndef ziel():\n    return 42\n"
+    # K53b: context+old wird mit garantiertem \n\n (Leerzeile)
+    # verbunden. Datei zeigt: context (mit \n) + \n + old.
+    _sep = "\n\n"
+    _ctx = "def helper():\n    return 1"
+    _old = "def ziel():\n    return 2\n"
+    _new = "def ziel():\n    return 42\n"
+    assert p["old_string"] == _ctx + _sep + _old
+    assert p["new_string"] == _ctx + _sep + _new
 
 
 def test_legacy_patch_bleibt_unveraendert(tmp_path):

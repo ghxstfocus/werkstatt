@@ -26,10 +26,6 @@ Antworte mit JSON:
     {"action": "update", "file": "zieldatei.py",
      "old_string": "<exakter Text aus der Datei>",
      "new_string": "<neuer Text>"},
-    {"action": "update", "file": "zieldatei.py",
-     "context": "<3-5 Zeilen VOR old_string, exakt aus Datei>",
-     "old": "<exakter Text, ersetzt wird>",
-     "new": "<neuer Text>"},
     {"action": "create", "file": "neue_datei.py",
      "content": "<kompletter Datei-Inhalt>"}
   ]
@@ -43,11 +39,9 @@ Regeln:
     kuerzeren, eindeutigen old_string (5-10 Zeilen) aus dem aktuellen
     Inhalt.
   - old_string != new_string.
-  - BEVORZUGT fuer "update": Format mit "context"+"old"+"new"
-    (Aider-Style). "context" = 3-5 Zeilen VOR dem Block,
-    zeichengenau aus "AKTUELLER DATEI-INHALT". Der Parser sucht
-    context+old zusammen -- robuster bei Einrueckung/Umbruechen.
-    "old_string"/"new_string" bleibt als Fallback erlaubt.
+  - KEIN Aider-Format. KEIN "context" + "old" + "new".
+    Nur "old_string" + "new_string".
+
   - Fuer NEUE Dateien: action="create" mit "content"
     (kompletter Datei-Inhalt, kein old_string).
     Nutze "create", wenn der Task eine neue Datei anlegen soll.
@@ -275,19 +269,48 @@ def _normalisiere_aider_patches(
             _out.append(_p)
             continue
         if _p.get("context") and _p.get("old") and _p.get("new") is not None:
-            _ctx = _p["context"]
-            if not _ctx.endswith("\n"):
-                _ctx = _ctx + "\n"
-            _p = {
-                **_p,
-                "old_string": _ctx + _p["old"],
-                "new_string": _ctx + _p["new"],
-            }
+            # K53b: Aider-Fallback. Wenn context+old nicht in Datei
+            # passt, aber old allein: context verwerfen.
+            _ctx_raw = _p["context"]
+            _old = _p["old"]
+            _new_val = _p["new"]
+            _target = Path(pd) / _p.get("file", "")
+            _use_context = True
+            if _target.is_file():
+                try:
+                    _content = _target.read_text(encoding="utf-8")
+                except OSError:
+                    _content = ""
+                if _content:
+                    _candidates = (
+                        _ctx_raw.rstrip() + "\n\n" + _old,
+                        _ctx_raw + _old,
+                    )
+                    _with_ctx_ok = any(c in _content for c in _candidates)
+                    _old_only_ok = _old in _content
+                    if _old_only_ok and not _with_ctx_ok:
+                        _use_context = False
+            if _use_context:
+                _ctx = _ctx_raw.rstrip() + "\n\n"
+                _p = {
+                    **_p,
+                    "old_string": _ctx + _old,
+                    "new_string": _ctx + _new_val,
+                }
+            else:
+                _p = {
+                    **_p,
+                    "old_string": _old,
+                    "new_string": _new_val,
+                }
+                audit("builder_aider_context_verworfen",
+                      {"file": _p.get("file", "")}, pd, pn)
             _p.pop("context", None)
             _p.pop("old", None)
             _p.pop("new", None)
             audit("builder_aider_patch_normalisiert",
-                  {"file": _p.get("file", "")}, pd, pn)
+                  {"file": _p.get("file", ""),
+                   "with_context": _use_context}, pd, pn)
         _out.append(_p)
     return _out
 
