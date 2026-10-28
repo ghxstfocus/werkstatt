@@ -863,6 +863,104 @@ def _reflection_loop(
     return _verify_patches(state, phase=phase)
 
 
+def _phase_end_reflection(state: RunState) -> bool:
+    """K23d: Phase-End-Reflection. Repariert Phase-Review-Bugs pro Datei.
+
+    Anders als _reflection_loop: kein aktueller Task im State.
+    Stattdessen synthetischer Task pro Bug-Datei.
+
+    Max 2 Runden. Rueckgabe: True wenn Phase-Review danach approved.
+    """
+    from werkstatt.reviewer import run_phase_end_review
+
+    pd = state.project_dir
+    pn = state.project_name
+    bugs = getattr(state, "reviewer_bugs", []) or []
+
+    for _runde in range(2):
+        if not bugs:
+            # Nichts zu reparieren, aber Phase-Review war reject.
+            # Fail-closed.
+            audit("loop_phase_reflection_keine_bugs",
+                  {"runde": _runde + 1}, pd, pn)
+            return False
+
+        # Eindeutige Dateien aus bugs.
+        _bug_files: list[str] = []
+        for _b in bugs:
+            if not isinstance(_b, dict):
+                continue
+            _f = _b.get("file")
+            if _f and _f not in _bug_files:
+                _bug_files.append(_f)
+        if not _bug_files:
+            audit("loop_phase_reflection_keine_dateien",
+                  {"runde": _runde + 1}, pd, pn)
+            return False
+
+        audit("loop_phase_reflection_runde",
+              {"runde": _runde + 1, "dateien": _bug_files}, pd, pn)
+
+        _repaired = 0
+        for _datei in _bug_files:
+            # Bugs dieser Datei als Fehler-Kontext.
+            _datei_bugs = [
+                b for b in bugs
+                if isinstance(b, dict) and b.get("file") == _datei
+            ]
+            _bug_text = "; ".join(
+                f"[{b.get('severity')}] {b.get('description', '')}"
+                for b in _datei_bugs
+            )
+            # Synthetischer Task.
+            state.aktuelle_task = {  # type: ignore[attr-defined]
+                "id": f"phase-fix-{_datei}",
+                "name": f"Phase-Fix: {_datei}",
+                "action": "update",
+                "task_files": [_datei],
+                "description": (
+                    f"Behebe die vom Phase-Review gemeldeten Bugs in "
+                    f"{_datei}: {_bug_text[:1000]}"
+                ),
+            }
+            # Builder rufen.
+            state.patches = []  # type: ignore[attr-defined]
+            if not run_builder(state):
+                audit("loop_phase_reflection_builder_failed",
+                      {"datei": _datei, "runde": _runde + 1}, pd, pn)
+                continue
+            _patches = getattr(state, "patches", None) or []
+            if not _patches:
+                audit("loop_phase_reflection_kein_patch",
+                      {"datei": _datei, "runde": _runde + 1}, pd, pn)
+                continue
+            _applied = _apply_patches_with_hooks(
+                state, _patches,
+                phase_label=f"phase-fix-{_datei}-r{_runde + 1}",
+            )
+            if _applied > 0:
+                _repaired += 1
+                audit("loop_phase_reflection_patch_applied",
+                      {"datei": _datei, "anzahl": _applied,
+                       "runde": _runde + 1}, pd, pn)
+
+        # Verify nach Repair.
+        if not _verify_patches(state, phase="post_build"):
+            audit("loop_phase_reflection_verify_failed",
+                  {"runde": _runde + 1}, pd, pn)
+            return False
+
+        # Phase-Review erneut.
+        if run_phase_end_review(state):
+            audit("loop_phase_reflection_approved",
+                  {"runde": _runde + 1, "repaired": _repaired}, pd, pn)
+            return True
+        bugs = getattr(state, "reviewer_bugs", []) or []
+
+    audit("loop_phase_reflection_erschoepft", {"runden": 2}, pd, pn)
+    return False
+
+
 def _call_hook(hook_name: str, payload: dict) -> dict:
     """Ruft einen Hook auf und gibt das JSON-Ergebnis zurueck."""
     import json as _json
@@ -1686,18 +1784,10 @@ def run_pipeline_loop(
     if not _with_spinner("Phase-Review", lambda: _phase_review(state)):
         audit("loop_phase", {"phase": "phase_end_review", "status": "rejected"}, pd, pn)
         group_end()
-        # Reflection-Loop mit Phase-Bugs versuchen.
-        _phase_bugs = getattr(state, "reviewer_bugs", []) or []
-        import json as _json
-        _phase_ctx = _json.dumps(_phase_bugs, ensure_ascii=False) if _phase_bugs else ""
-        if not _reflection_loop(state, error_context=_phase_ctx):
+        # K23d: Phase-End-Reflection pro Datei.
+        if not _phase_end_reflection(state):
             audit("loop_gate_failed",
                   {"gate": "phase_end_review"}, pd, pn)
-            return 1
-        # Nach erfolgreicher Reflection: Phase-Review nochmal.
-        if not _phase_review(state):
-            audit("loop_gate_failed",
-                  {"gate": "phase_end_review_after_reflection"}, pd, pn)
             return 1
     audit("loop_phase", {"phase": "phase_end_review", "status": "approved"}, pd, pn)
     group_end()
