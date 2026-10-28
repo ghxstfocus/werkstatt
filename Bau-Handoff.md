@@ -129,3 +129,62 @@ script -q -e -c "su -s /bin/bash security-ai -c 'cd /opt/werkstatt && PYTHONUNBU
 ---
 
 *Ende Bau-Handoff 2026-10-28 (Session-Ende).*
+
+---
+
+## ERGAENZUNG — K48 ist jetzt der naechste Fix (Session 2026-10-28 spaet)
+
+Live-Beleg aus RERUN 2026-10-28 19:12 (Timeline-Aufgabe):
+
+t1 (list_recent_assessments) wurde reviewer_rejected nach 1 Reflection-Runde.
+Ablauf:
+- Runde 1 (Reviewer-Reject): Builder baut Patch (`patch_applied`).
+- Verify failt: F822 (`list_recent_assessments` undefined) + unused import.
+- Runde 2 startet (`stagnation_runde 2`, `reflection_runde 2`, `builder_file_context`).
+- Danach: NICHTS. Kein `builder_patches_erstellt`, kein `patch_applied`, kein `_verify_patches`.
+- Loop returned `False` -> `_task_ende(reviewer_rejected)` -> t1 failed.
+
+Der Build-Mechanismus mit `old_string`/`new_string` ist LLM-fragil. Bei
+Verschieben einer Methode (Modul-Funktion -> Klassen-Methode) bricht er.
+
+## NAECHSTE AKTION (verbindlich)
+
+1. `_reflection_loop`-Bug diagnostizieren:
+   - Warum returned die Loop nach Runde 2 False, ohne dass `run_builder`
+     einen Patch erzeugte oder `_verify_patches` lief?
+   - Verdacht: in `_reflection_loop` (werkstatt/loop.py, ~815-1000) gibt es
+     einen `continue`-Zweig, der `error_context` falsch setzt, oder der
+     `if not error_context`-Block returned `_verify_patches` zu frueh.
+   - Messung: `grep -n "return False\|continue\|error_context" werkstatt/loop.py`
+     im Bereich der `_reflection_loop`-Funktion.
+
+2. K48 angehen — Patching-Ansatz wechseln:
+   - Optionen (Reihenfolge = Praeferenz):
+     A) Aider-Style search/replace mit 3-5 Kontextzeilen vor/nach.
+        Builder liefert `<context>`, `<old>`, `<new>`. Parser sucht context+old,
+        ersetzt. Robuster gegen Zeilenumbrueche/Einrueckungsaenderungen.
+     B) Ganze Datei neu schreiben: `write_file`-Patch (content=komplett).
+        Goldstandard fuer `create`. Fuer `update` riskant (Kontextverlust),
+        aber immer anwendbar.
+     C) Fuzzy-Match: Levenshtein-Distanz zwischen `old_string` und Dateizeilen.
+        Riskant (falsche Treffer). Nur als Fallback.
+   - Empfehlung: Hybrid — `create` -> write_file (B), `update` -> Aider (A).
+   - Messung vor Umbau: `grep -c "old_string" werkstatt/apply.py werkstatt/builder.py`
+     `grep -c "new_string" werkstatt/apply.py werkstatt/builder.py`
+   - Alle bestehenden Tests (`tests/test_k8_builder_create.py`,
+     `tests/test_builder_*.py`, `tests/test_apply_*.py`) muessen gruen bleiben.
+
+3. Nach K48: RERUN mit Timeline-Aufgabe (aus dieser Session) wiederholen.
+   Datei: /tmp/rerun_timeline_20261028-191117.log (Log der gescheiterten Runde).
+   Aufgabe war: Timeline im Dashboard befuellen (Backend routes_state.py +
+   Frontend dashboard.js + partials/timeline.html).
+   Hinweis: Der Plan von 19:12 hat NUR Backend geplant (5 Tasks auf
+   audit_reader.py und routes_state.py). Frontend fehlt. Beim naechsten
+   RERUN Aufgabe explizit splitten in 2 Phasen (Backend, Frontend) oder
+   zwei separate RERUNs.
+
+## Live-Log
+
+- `/tmp/rerun_timeline_20261028-191117.log` — gescheiterte Runde
+- `/opt/security-ai/.werkstatt/security-ai.phase.yaml` — 5 Tasks, alle
+  pending/failed (nach Rollback)
