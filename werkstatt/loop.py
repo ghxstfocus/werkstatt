@@ -658,6 +658,8 @@ def _split_task_on_demand(
     _tiefe = _task.get("split_tiefe", 0)
     if _tiefe >= 2:
         audit("loop_split_max_tiefe", {"task_id": task_id}, pd, pn)
+        # K38b: Grund merken, damit Aufrufer korrektes failure setzt.
+        state.split_failure_grund = "split_max_tiefe"  # type: ignore[attr-defined]
         return False
 
     # Fehler-Kontext.
@@ -1617,7 +1619,13 @@ def run_pipeline_loop(
                 audit("loop_task_retry_nach_split",
                       {"task_id": task_id}, pd, pn)
                 continue  # naechster Task (Sub-Task)
-            audit("loop_task_failed", {"task_id": i, "grund": "builder_failed"}, pd, pn)
+            # K38b: Grund aus split_max_tiefe uebernehmen.
+            _split_failure = getattr(state, "split_failure_grund", None) or "builder_failed"
+            state.split_failure_grund = None  # type: ignore[attr-defined]
+            audit("loop_task_failed", {"task_id": i, "grund": _split_failure}, pd, pn)
+            _task_ende(state, phase_state, task_id, ok=False,
+                       name=task_name, failure=_split_failure)
+            return 1
             return 1
 
         # PreToolUse-Hook (Phase 15): Patch pruefen, BEVOR er angewendet wird.
@@ -1787,8 +1795,11 @@ def run_pipeline_loop(
                         audit("loop_task_retry_nach_split",
                               {"task_id": task_id}, pd, pn)
                         continue
+                    # K38b: Grund aus split_max_tiefe uebernehmen.
+                    _split_failure = getattr(state, "split_failure_grund", None) or "reviewer_high_bug"
+                    state.split_failure_grund = None  # type: ignore[attr-defined]
                     _task_ende(state, phase_state, task_id, ok=False,
-                               name=task_name, failure="reviewer_high_bug")
+                               name=task_name, failure=_split_failure)
                     return 1
                 elif not _last_errors and _hat_patch:
                     audit("loop_reviewer_reject_ignoriert",

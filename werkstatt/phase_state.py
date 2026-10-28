@@ -173,8 +173,67 @@ class PhaseState:
     def mark_done(self, task_id: str, *, decision: str | None = None) -> None:
         self.update_task(task_id, "done", decision=decision)
 
+    def _propagate_failed_to_parents(self, task_id: str) -> None:
+        """K38: Wenn alle Kinder eines Parents failed sind, Parent failed.
+
+        Rekursiv bis root. Verhindert inkonsistenten Zustand:
+        Parent bleibt 'split', obwohl alle Kinder failed sind.
+        """
+        # Finde Task und Parent.
+        task = None
+        for t in self.data.get("tasks", []):
+            if t.get("id") == task_id:
+                task = t
+                break
+        if not task:
+            return
+        parent_id = task.get("parent_id")
+        # Wenn kein parent_id, versuche Prefix-Ableitung (t2_a -> t2).
+        # Aber: _llm_split_einzel_task setzt parent_id nicht immer.
+        # Praktisch: wir muessen den Parent aus ID-Prefix oder aus
+        # anderen Tasks finden. Wir suchen Tasks, deren ID Prefix
+        # von task_id ist (z.B. t2 fuer t2_a).
+        if not parent_id:
+            # Prefix-Suche: task_id "t2_a_c" -> Kandidaten t2_a, t2
+            # Wir pruefen alle Tasks: ist task_id ein Kind von X?
+            for t in self.data.get("tasks", []):
+                tid = t.get("id", "")
+                # SIM102: Bedingung zusammengezogen.
+                if (
+                    tid
+                    and task_id.startswith(tid + "_")
+                    and tid != task_id
+                    and (not parent_id or len(tid) > len(parent_id))
+                ):
+                    parent_id = tid
+        if not parent_id:
+            return
+        # Sammle Kinder dieses Parents.
+        children = [
+            t for t in self.data.get("tasks", [])
+            if t.get("id", "").startswith(parent_id + "_")
+            and t.get("id") != parent_id
+            and len(t.get("id", "").split("_")) == len(parent_id.split("_")) + 1
+        ]
+        if not children:
+            return
+        # Wenn alle direkten Kinder failed -> Parent failed.
+        if all(c.get("status") == "failed" for c in children):
+            for t in self.data.get("tasks", []):
+                if t.get("id") == parent_id:
+                    if t.get("status") != "failed":
+                        t["status"] = "failed"
+                        t["failure"] = "kinder_failed"
+                        # Rekursiv weiter.
+                        self._propagate_failed_to_parents(parent_id)
+                    break
+
     def mark_failed(self, task_id: str, *, failure: str) -> None:
+        """K38: mark_failed + propagation an Parents."""
         self.update_task(task_id, "failed", failure=failure)
+        # K38: Wenn alle Kinder failed sind, Parent failed.
+        self._propagate_failed_to_parents(task_id)
+        self.save()
 
     def mark_running(self, task_id: str) -> None:
         self.update_task(task_id, "running")
