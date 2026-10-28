@@ -149,6 +149,24 @@ def _messen(frage: str, project_dir: Path) -> dict[str, Any]:
             "ok": r2.get("ok", False),
             "stdout": r2.get("stdout", "")[:3000],
             "stderr": r2.get("stderr", "")[:500],
+            # K31c: status muss auch als .md-Datei markiert werden,
+            # damit _extrahiere_pfade laeuft.
+            "dateien": ["docs/STATUS.md"] if r2.get("ok") else [],
+        }
+
+    # K31b: Migrations-Stand IMMER messen (kostet 2ms, nuetzt immer).
+    _mig = _migrations_stand(project_dir)
+    if _mig:
+        results["migrations"] = {
+            "ok": True,
+            "hoechste": _mig["hoechste"],
+            "naechste": _mig["naechste"],
+            "alle": _mig["alle"],
+            "dateien": _mig["dateien"],
+            "stdout": (
+                f"Migrationsstand: hoechste {_mig['hoechste']}, "
+                f"naechste frei {_mig['naechste']}"
+            ),
         }
 
 
@@ -160,6 +178,15 @@ def _format_findings(messungen: dict[str, Any]) -> str:
     """Formatiert die Messungen als Klartext fuer den Planner."""
     lines = []
     for name, m in messungen.items():
+        # K31d: Migrations-Stand prominent rendern.
+        if name == "migrations" and m.get("hoechste"):
+            lines.append(
+                f"migrations: hoechste belegt {m['hoechste']}, "
+                f"naechste frei {m['naechste']}"
+            )
+            if m.get("dateien"):
+                lines.append(f"  Dateien: {', '.join(m['dateien'])}")
+            continue
         n = len(m.get("dateien", []))
         if n > 0:
             lines.append(f"{name}: {n} Datei(en) betroffen")
@@ -188,17 +215,18 @@ def _explorer_system(frage: str) -> str:
     return "\n\n".join(parts)
 
 
-_PY_PATH_RE = __import__("re").compile(
-    r"\b([a-zA-Z_][\w/]*\.py)\b"
+# K31a: Pfad-Regex fuer Code-Dateien aus Doku (.py, .sql, .html, .css, .js).
+# Nicht .md (Doku) und nicht .yaml/.json (Config).
+_CODE_PATH_RE = __import__("re").compile(
+    r"\b([a-zA-Z_][\w/.-]*\.(?:py|sql|html|css|js))\b"
 )
 
 
-def _extrahiere_py_pfade(project_dir: Path, md_datei: str) -> list[str]:
-    """K12: Extrahiert .py-Pfade aus dem Body einer .md-Datei.
+def _extrahiere_pfade(project_dir: Path, md_datei: str) -> list[str]:
+    """K31: Extrahiert Pfade aus .md-Datei.
 
-    Bei .md-Aufgaben liefert die Messung nur Doku-Dateien, die als
-    key_files rausgefiltert werden. Die in der Doku genannten
-    .py-Pfade sind aber der eigentliche Task-Ziel-Kontext.
+    K31a: auch .sql/.html/.css/.js (vorher nur .py).
+    K31:  max 30 Pfade (vorher 15).
     """
     try:
         text = (Path(project_dir) / md_datei).read_text(encoding="utf-8")
@@ -206,16 +234,75 @@ def _extrahiere_py_pfade(project_dir: Path, md_datei: str) -> list[str]:
         return []
     pfade: list[str] = []
     seen: set[str] = set()
-    for m in _PY_PATH_RE.finditer(text):
+    for m in _CODE_PATH_RE.finditer(text):
         pfad = m.group(1)
         if pfad in seen:
             continue
         if (Path(project_dir) / pfad).is_file():
             pfade.append(pfad)
             seen.add(pfad)
-        if len(pfade) >= 15:
+        if len(pfade) >= 30:
             break
     return pfade
+
+
+def _datei_inhalt(project_dir: Path, rel: str) -> str:
+    """K31: Dateiinhalt fuer Explorer-Kontext.
+
+    - <= 200 Zeilen: komplett.
+    - > 200 Zeilen: erste 100 + letzte 50, mit Truncation-Marker.
+    - Binaer/Fehler: "".
+    """
+    try:
+        f = Path(project_dir) / rel
+        if not f.is_file():
+            return ""
+        text = f.read_text(encoding="utf-8", errors="replace")
+        lines = text.splitlines()
+        if len(lines) <= 200:
+            return text
+        _skip = len(lines) - 150
+        return (
+            "\n".join(lines[:100])
+            + f"\n[... {_skip} Zeilen gekuerzt ...]\n"
+            + "\n".join(lines[-50:])
+        )
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+def _migrations_stand(project_dir: Path) -> dict:
+    """K31: Migrations-Inhalt immer listen.
+
+    Rueckgabe: {hoechste: "0018", naechste: "0019",
+                alle: ["0004", ..., "0018"],
+                dateien: ["0018_x.sql", ...]}
+    Leer wenn data/migrations/ fehlt.
+    """
+    mdir = Path(project_dir) / "data" / "migrations"
+    if not mdir.is_dir():
+        return {}
+    try:
+        files = sorted(f.name for f in mdir.glob("*.sql") if f.is_file())
+    except OSError:
+        return {}
+    if not files:
+        return {}
+    nums = []
+    for name in files:
+        head = name.split("_", 1)[0]
+        if head.isdigit():
+            nums.append(head)
+    if not nums:
+        return {}
+    hoechste = max(nums)
+    naechste = f"{int(hoechste) + 1:04d}"
+    return {
+        "hoechste": hoechste,
+        "naechste": naechste,
+        "alle": sorted(set(nums)),
+        "dateien": files[-20:],  # letzte 20 reichen
+    }
 
 
 def run_explorer(state: RunState, frage: str) -> dict:
@@ -240,17 +327,19 @@ def run_explorer(state: RunState, frage: str) -> dict:
     for name, m in messungen.items():
         for datei in m.get("dateien", []):
             if datei.endswith(".md") or datei.startswith("docs/"):
-                # K12: Aus .md-Body die .py-Pfade extrahieren.
-                for _py in _extrahiere_py_pfade(Path(pd), datei):
-                    if _py in _seen_files:
+                # K31: Aus .md-Body alle Code-Pfade extrahieren (.py/.sql/.html/.css/.js).
+                for _pfad in _extrahiere_pfade(Path(pd), datei):
+                    if _pfad in _seen_files:
                         continue
+                    _inhalt = _datei_inhalt(Path(pd), _pfad)
                     key_files.append({
-                        "file": _py,
+                        "file": _pfad,
                         "why": f"aus {datei}",
                         "symbols": "",
+                        "preview": _inhalt,
                         "confidence": "medium",
                     })
-                    _seen_files.add(_py)
+                    _seen_files.add(_pfad)
                 continue  # M-394: Doku selbst ist findings
             if datei in _seen_files:
                 continue

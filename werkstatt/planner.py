@@ -487,6 +487,22 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
     skills = load_all_skills()
     parts: list[str] = []
 
+    # === K32: MIGRATIONSSTAND ZUERST (hoechste Prioritaet) ===
+    # Der Architect darf Migrationsnummern NICHT raten.
+    _mig_ctx = None
+    if isinstance(explorer_ctx, dict):
+        _mig_ctx = explorer_ctx.get("migrations")
+    if isinstance(_mig_ctx, dict) and _mig_ctx.get("hoechste"):
+        parts.append(
+            "<migrationsstand pflicht=\"true\">\n"
+            f"Hoechste belegte Migrationsnummer: {_mig_ctx['hoechste']}\n"
+            f"Naechste freie Nummer: {_mig_ctx['naechste']}\n"
+            f"VERBOTEN (belegt): {', '.join(n + '_*' for n in _mig_ctx.get('alle', [])[-5:])}\n"
+            "Verwende fuer neue Migrationen NUR die naechste freie Nummer.\n"
+            "Kollisionen fuehren zu Review-Fail und Loop-Abbruch.\n"
+            "</migrationsstand>"
+        )
+
     # === M-376: GEMESSENE DATEIEN ZUERST (hoechste Prioritaet) ===
     if isinstance(explorer_ctx, dict):
         _key = explorer_ctx.get("key_files") or []
