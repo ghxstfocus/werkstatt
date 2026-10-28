@@ -163,14 +163,16 @@ def _preflight_scan(state: RunState) -> list[dict]:
 
 
 def _strip_xml_tags(text: str) -> str:
-    """K7: Entfernt DSML/XML-Tool-Call-Tags aus Architect-Prosa.
+    """K7/K51: Entfernt DSML/XML-Tool-Call-Tags aus Architect-Prosa.
 
-    Der Architect liefert gelegentlich <shell_command>, <read_file>,
-    <tool>, <function>-Tags. Diese gehoeren nicht in die Prosa,
-    die an den Planner-Split und Builder geht.
+    K51: zusaetzlich DSML-Special-Token-Format
+    (<|DSML| ... |DSML|>-Variante, hier als Unicode-Fullwidth-Pipes
+    <\uff5c\uff5cDSML\uff5c\uff5c>-Token). Diese Tokens werden von
+    manchen LLMs als Tool-Call-Marker verwendet; sie gehoeren nicht
+    in die Prosa.
     """
     import re as _re
-    # Tags + Inhalt entfernen (nicht nur Tags).
+    # 1) K7: bekannte XML-Tool-Tags + Inhalt entfernen.
     text = _re.sub(
         r"<(shell_command|read_file|tool|function|function_calls|invoke)"
         r"[^>]*>.*?</\1>",
@@ -178,12 +180,32 @@ def _strip_xml_tags(text: str) -> str:
         text,
         flags=_re.DOTALL,
     )
-    # Selbstschliessende Tags.
     text = _re.sub(
         r"<(shell_command|read_file|tool|function|function_calls|invoke)"
         r"[^>]*/>",
         "",
         text,
+    )
+    # 2) K51: DSML-Special-Token-Format.
+    # Token-Form (Unicode FULLWIDTH VERTICAL LINE U+FF5C):
+    #   <｜｜DSML｜｜ calls> ... </｜｜DSML｜｜ calls>
+    # Wir entfernen sowohl den umschliessenden Block als auch
+    # einzelne Tags. Pattern als Unicode-Escapes, damit Quoting
+    # nicht von Heredoc/Terminal abhaengt.
+    _dsml = "\uff5c\uff5cDSML\uff5c\uff5c"
+    # Block-Form (Inhalt mehrzeilig).
+    text = _re.sub(
+        "<" + _dsml + r"[^>]*>.*?</" + _dsml + r"[^>]*>",
+        "",
+        text,
+        flags=_re.DOTALL,
+    )
+    # Einzelne Tags (falls Block-Regex nicht greift).
+    text = _re.sub(
+        "<" + _dsml + r"[^>]*/?>",
+        "",
+        text,
+        flags=_re.DOTALL,
     )
     return text.strip()
 
@@ -1258,8 +1280,29 @@ def run_planner(state: RunState) -> bool:
 
         if not _is_json:
             # Prosa -> Architect+Split.
-            # K7: XML/DSML-Tool-Call-Tags entfernen.
+            # K7/K51: XML/DSML-Tool-Call-Tags entfernen.
             _prosa = _strip_xml_tags(_raw)
+            # K51: Fail-Closed, wenn nach Strip zu wenig Prosa uebrig.
+            # Verhindert, dass der Planner-Split aus DSML-Argumenten
+            # 11 leere Tasks baut (Live 22:24, prosa_len=199).
+            if len(_prosa.strip()) < 100:
+                audit("planner_prosa_zu_kurz",
+                      {"len": len(_prosa),
+                       "raw_prefix": _raw[:200]}, pd, pn)
+                state.last_planner_info = {
+                    "regel": "PROSA_PFLICHT",
+                    "fakt": (
+                        f"Architect-Antwort hat nur {len(_prosa)} "
+                        f"Zeichen nach XML/DSML-Strip."
+                    ),
+                    "erklaerung": (
+                        "Beschreibe die Loesung in Prosa. KEINE "
+                        "Tool-Calls. KEINE DSML-Tokens. Kein "
+                        "<read_file>, <function_calls>, <invoke>."
+                    ),
+                    "details": f"Original-Anfang: {_raw[:200]}",
+                }
+                return False
             _key_files: list[str] = []
             if isinstance(_explorer_ctx, dict):
                 for k in (_explorer_ctx.get("key_files") or []):
