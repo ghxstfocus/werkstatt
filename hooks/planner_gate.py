@@ -175,7 +175,64 @@ def check_plan(payload: dict) -> dict:
                     f"Gueltig: {sorted(_ids)}.",
                 )
 
+    # 6) MIGRATIONS_KOLLISION (K17c): geplante Migrationsnummer
+    #    kollidiert mit existierender Datei in data/migrations/.
+    _prosa = payload.get("architect_prosa") or ""
+    _projdir = payload.get("project_dir") or ""
+    if isinstance(_prosa, str) and _prosa and _projdir:
+        _koll = _check_migrations_kollision(_prosa, _projdir)
+        if _koll:
+            _nums = ", ".join(k["nummer"] for k in _koll)
+            _hoechste = _koll[0].get("hoechste", "?")
+            _naechste = _koll[0].get("naechste", "?")
+            return _deny(
+                "MIGRATIONS_KOLLISION",
+                "",
+                f"data/migrations/{_koll[0]['nummer']}_*.sql",
+                f"Migrationsnummer(n) {_nums} existieren bereits. "
+                f"Naechste freie Nummer: {_naechste}.",
+                f"Hoechste vorhandene Nummer: {_hoechste}. "
+                f"Verwende NUR die naechste freie Nummer {_naechste}.",
+            )
+
     return {"allow": True, "reason": "", "info": {}}
+
+
+def _check_migrations_kollision(prosa: str, project_dir: str) -> list[dict]:
+    """K17c: Prueft geplante Migrationsnummern gegen data/migrations/.
+
+    Sucht 'data/migrations/NNNN_*.sql' in der Prosa. Kollidiert
+    NNNN mit existierender Datei -> Eintrag. Max 20 Treffer
+    als Schutz gegen Endlos-Parsing.
+    """
+    try:
+        from pathlib import Path as _P
+        mdir = _P(project_dir) / "data" / "migrations"
+        if not mdir.is_dir():
+            return []
+        existierend: set[str] = set()
+        for f in mdir.glob("*.sql"):
+            head = f.name.split("_", 1)[0]
+            if head.isdigit():
+                existierend.add(head)
+        if not existierend:
+            return []
+        hoechste = max(existierend)
+        naechste = f"{int(hoechste) + 1:04d}"
+        geplant = re.findall(r"data/migrations/(\d+)_", prosa)
+        koll: list[dict] = []
+        for n in sorted(set(geplant)):
+            if n in existierend:
+                koll.append({
+                    "nummer": n,
+                    "hoechste": hoechste,
+                    "naechste": naechste,
+                })
+            if len(koll) >= 20:
+                break
+        return koll
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def main() -> int:

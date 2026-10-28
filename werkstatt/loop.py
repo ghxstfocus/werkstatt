@@ -88,6 +88,8 @@ def _plan_gate(state: RunState) -> bool:
         "tasks": _tasks,
         "phasen": _phasen,
         "project_dir": str(getattr(state, "project_dir", "")),
+        # K17c: Architect-Prosa fuer Migrations-Kollisions-Check.
+        "architect_prosa": getattr(state, "architect_prosa", "") or "",
     })
     if not _hook_res.get("allow", True):
         # Info fuer Planner-Reflection

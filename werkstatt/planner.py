@@ -1125,26 +1125,7 @@ def run_planner(state: RunState) -> bool:
                    "anzahl_dateien": len(_key_files),
                    "dateien": _key_files[:10]}, pd, pn)
 
-            # K17b: Deterministische Migrations-Kollision pruefen.
-            _kollisionen = _pruefe_migrations_kollision(_prosa, pd)
-            if _kollisionen:
-                _mig_stand_feedback = _migrations_stand(pd)
-                audit("planner_migration_kollision",
-                      {"kollisionen": _kollisionen}, pd, pn)
-                state.last_planner_info = {
-                    "regel": "MIGRATIONS-NUMMER",
-                    "fakt": (
-                        "Nummer(n) "
-                        + ", ".join(k["nummer"] for k in _kollisionen)
-                        + " existieren bereits als Datei in data/migrations/."
-                    ),
-                    "erklaerung": (
-                        "Waehle die naechste freie Migrationsnummer "
-                        "und wiederhole den Plan. Keine belegte Nummer wiederverwenden."
-                    ),
-                    "details": _mig_stand_feedback,
-                }
-                return False
+            # K17c: Migrations-Kollision wandert in planner_gate.py (Hook).
             state.architect_prosa = _prosa  # type: ignore[attr-defined]
             _sub_tasks = _zerlege_in_sub_tasks(
                 _prosa, _key_files, api_key, pd, pn,
