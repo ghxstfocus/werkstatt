@@ -893,6 +893,19 @@ def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 2500) -> list[dic
         )
 
         if same_file and same_act and combined_len <= max_merged_len:
+            # K36: Merge-Audit -- sichtbar machen, welche Tasks gemergt werden.
+            _merge_audit = {
+                "prev_id": prev.get("id"),
+                "prev_file": prev_file,
+                "prev_action": prev_act,
+                "cur_id": t.get("id"),
+                "cur_file": cur_file,
+                "cur_action": cur_act,
+                "combined_len": combined_len,
+                "max_len": max_merged_len,
+            }
+            import sys
+            print(f"[K36-MERGE] {_merge_audit}", file=sys.stderr)
             # Merge: Description anhaengen, architect_start behalten,
             # architect_ende auf den spaeteren Task setzen.
             prev["description"] = (
@@ -907,6 +920,15 @@ def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 2500) -> list[dic
             _deps.discard(prev.get("id"))
             prev["dependencies"] = sorted(_deps)
         else:
+            # K36: Nicht-gemergt -- auch loggen.
+            import sys
+            print(
+                f"[K36-KEEP] prev={prev.get('id')}({prev_file}) "
+                f"cur={t.get('id')}({cur_file}) "
+                f"same_file={same_file} same_act={same_act} "
+                f"combined={combined_len}/{max_merged_len}",
+                file=sys.stderr,
+            )
             merged.append(dict(t))
 
     # IDs neu vergeben (t1..tN).
@@ -1035,6 +1057,17 @@ def _zerlege_in_sub_tasks(
     # K20b: Sequentiell -- create auf Datei, die ein frueherer
     # Task bereits anlegt -> update.
     _korrigiere_aktion_sequenziell(_final, pd, pn)
+
+    # K36: Vor-Merge-State loggen.
+    audit("planner_split_vor_merge", {
+        "anzahl": len(_final),
+        "tasks": [
+            {"id": t.get("id"), "name": t.get("name"),
+             "files": t.get("task_files"), "action": t.get("action"),
+             "desc_len": len(t.get("description", ""))}
+            for t in _final if isinstance(t, dict)
+        ],
+    }, pd, pn)
 
     # K15a: deterministischer Merge benachbarter Mini-Tasks.
     _vor_merge = len(_final)
