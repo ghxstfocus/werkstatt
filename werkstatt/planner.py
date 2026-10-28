@@ -709,9 +709,10 @@ def _llm_split_einzel_task(
             _name = t.get("name") or ""
             _desc = t.get("description") or ""
             _abschnitt = f"## TASK: {_name}\n{_desc}" if _desc else _name
-        if len(_abschnitt) > 800:
-            _cut = _abschnitt.rfind(".", 0, 800)
-            _abschnitt = _abschnitt[:_cut + 1] if _cut > 0 else _abschnitt[:800]
+        # K19b: 2500 statt 800 -- konsistent mit K15c-Extraktor.
+        if len(_abschnitt) > 2500:
+            _cut = _abschnitt.rfind(".", 0, 2500)
+            _abschnitt = _abschnitt[:_cut + 1] if _cut > 0 else _abschnitt[:2500]
         out.append({
             "id": t.get("id") or f"{task.get('id', 't')}_{i}",
             "name": t.get("name") or f"Sub {i}",
@@ -826,13 +827,13 @@ def _zerlege_in_sub_tasks(
             _name = t.get("name") or ""
             _desc = t.get("description") or ""
             _abschnitt = f"## TASK: {_name}\n{_desc}" if _desc else _name
-        # M-468: Fallback auch auf 800 Zeichen begrenzen.
-        if len(_abschnitt) > 800:
-            _cut = _abschnitt.rfind(".", 0, 800)
+        # K19b: Fallback 2500 statt 800 -- K15c-Konsistenz.
+        if len(_abschnitt) > 2500:
+            _cut = _abschnitt.rfind(".", 0, 2500)
             if _cut > 0:
                 _abschnitt = _abschnitt[:_cut + 1]
             else:
-                _abschnitt = _abschnitt[:800]
+                _abschnitt = _abschnitt[:2500]
         tasks.append({
             "id": t.get("id") or f"t{i}",
             "name": t.get("name") or f"Sub-Task {i}",
@@ -841,7 +842,7 @@ def _zerlege_in_sub_tasks(
             "dependencies": t.get("dependencies") or [],
             "description": _abschnitt,
         })
-    # M-469: Rekursive Zerlegung (ADaPT). Tasks > 800 Zeichen
+    # M-469: Rekursive Zerlegung (ADaPT). Tasks > 2500 Zeichen (K19b).
     # werden neu zerlegt (max 2 Ebenen tief).
     _final: list[dict] = []
     import re as _re_470
@@ -882,7 +883,8 @@ def _zerlege_in_sub_tasks(
                         r"^\s+-\s", _st_desc, _re_470.MULTILINE
                     ))
                     _st_komplex = _st_schritte + _st_bullets
-                    _st_gross = len(_st_desc) > 800 or _st_komplex > 4
+                    # K19b: 2500 statt 800 -- konsistent mit K15c.
+                    _st_gross = len(_st_desc) > 2500 or _st_komplex > 4
                     if not _st_gross or _tiefe + 1 >= 2:
                         _final.append(_st)
                     else:
