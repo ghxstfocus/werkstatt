@@ -60,6 +60,81 @@ def _deny(regel: str, task_id: str, datei: str,
     }
 
 
+def _levenshtein(a: str, b: str) -> int:
+    """K27: Einfacher Levenshtein-Abstand (iterativ)."""
+    if len(a) < len(b):
+        a, b = b, a
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        curr = [i]
+        for j, cb in enumerate(b, 1):
+            cost = 0 if ca == cb else 1
+            curr.append(min(
+                curr[j - 1] + 1,
+                prev[j] + 1,
+                prev[j - 1] + cost,
+            ))
+        prev = curr
+    return prev[-1]
+
+
+def _check_dateiname_aehnlich(project_dir: str, tasks: list) -> list[dict]:
+    """K27: Findet create-Tasks deren Dateiname einem existierenden
+    File sehr aehnlich ist (Levenshtein <= 2, gleiche Extension).
+
+    Verhindert Architect-Fehler wie 'changes_detail.html' (create)
+    bei existierender 'change_detail.html'.
+    """
+    if not project_dir:
+        return []
+    from pathlib import Path as _P
+    pd = _P(project_dir)
+    if not pd.is_dir():
+        return []
+    _target_dirs: set = set()
+    for t in tasks:
+        if not isinstance(t, dict):
+            continue
+        if t.get("action") != "create":
+            continue
+        for f in (t.get("task_files") or []):
+            if isinstance(f, str):
+                _target_dirs.add((pd / f).parent)
+    koll: list[dict] = []
+    for d in _target_dirs:
+        if not d.is_dir():
+            continue
+        try:
+            existing = list(d.iterdir())
+        except OSError:
+            continue
+        for t in tasks:
+            if not isinstance(t, dict) or t.get("action") != "create":
+                continue
+            for f in (t.get("task_files") or []):
+                if not isinstance(f, str):
+                    continue
+                target = pd / f
+                if target.parent != d:
+                    continue
+                name = target.name
+                ext = target.suffix
+                for e in existing:
+                    if e.is_dir() or e.suffix != ext:
+                        continue
+                    if e.name == name:
+                        continue
+                    if _levenshtein(name, e.name) <= 2:
+                        koll.append({
+                            "task_id": t.get("id", "?"),
+                            "geplant": f,
+                            "aehnlich": str(e.relative_to(pd)),
+                        })
+    return koll
+
+
 def check_plan(payload: dict) -> dict:
     tasks = payload.get("tasks", [])
     phasen = payload.get("phasen", [])
@@ -193,6 +268,32 @@ def check_plan(payload: dict) -> dict:
                 f"Naechste freie Nummer: {_naechste}.",
                 f"Hoechste vorhandene Nummer: {_hoechste}. "
                 f"Verwende NUR die naechste freie Nummer {_naechste}.",
+            )
+
+    # 7) DATEINAME_AEHNLICH (K27): create auf sehr aehnlichen Namen
+    #    wie existierendes File -> deny mit Hinweis auf existierende Datei.
+    _projdir = payload.get("project_dir") or ""
+    _tasks = payload.get("tasks") or []
+    if _projdir and _tasks:
+        _aehnlich = _check_dateiname_aehnlich(_projdir, _tasks)
+        if _aehnlich:
+            _first = _aehnlich[0]
+            return _deny(
+                "DATEINAME_AEHNLICH",
+                _first.get("task_id", "?"),
+                _first.get("geplant", ""),
+                (
+                    f"Datei '{_first.get('geplant')}' ist sehr aehnlich zu "
+                    f"existierender '{_first.get('aehnlich')}' "
+                    f"(Levenshtein <= 2). "
+                    f"Verwende die existierende Datei (action=update)."
+                ),
+                (
+                    f"Existiert: {_first.get('aehnlich')}. "
+                    f"Pruefe, ob du diese statt '{_first.get('geplant')}' "
+                    f"aendern willst. Wenn die neue Datei wirklich gewollt "
+                    f"ist, benenne sie eindeutig."
+                ),
             )
 
     return {"allow": True, "reason": "", "info": {}}

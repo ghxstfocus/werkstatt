@@ -1573,7 +1573,7 @@ def run_pipeline_loop(
             _task_ende(state, phase_state, task_id, ok=False,
                        name=task_name, failure="builder_failed")
             # M-472: On-Demand-Zerlegung (ADaPT).
-            if _split_task_on_demand(state, task_id):
+            if _split_task_on_demand(state, task_id, phase_state):
                 audit("loop_task_retry_nach_split",
                       {"task_id": task_id}, pd, pn)
                 continue  # naechster Task (Sub-Task)
@@ -1743,7 +1743,7 @@ def run_pipeline_loop(
                     audit("loop_reviewer_high_bug_fail_closed",
                           {"task_id": i, "high_bugs": len(_high_bugs)}, pd, pn)
                     # M-474: ADaPT bei High-Bugs.
-                    if _split_task_on_demand(state, task_id):
+                    if _split_task_on_demand(state, task_id, phase_state):
                         audit("loop_task_retry_nach_split",
                               {"task_id": task_id}, pd, pn)
                         continue
