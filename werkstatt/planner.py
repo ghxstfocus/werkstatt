@@ -428,19 +428,53 @@ def _migrations_stand(pd) -> str:
             return ""
         hoechste = max(nums)
         naechste = f"{int(hoechste) + 1:04d}"
-        shown = files[-20:]
+        # K17b: Kompakter pflicht-Block (Lost-in-the-Middle-Schutz).
+        # Nur Fakten: hoechste Nr., naechste freie Nr., Sperrliste.
+        gesperrt = ", ".join(f"{n}_*" for n in sorted(set(nums))[-5:])
         lines = [
-            "<migrationsstand>",
-            "Vorhandene Migrationen in data/migrations/ (hoechste zuerst gelistet):",
+            "<migrationsstand pflicht=\"true\">",
+            f"Hoechste vorhandene Nummer: {hoechste}",
+            f"Naechste freie Nummer: {naechste}",
+            f"VERBOTEN (bereits belegt): {gesperrt}",
+            "Waehle fuer neue Migrationen NUR die naechste freie Nummer.",
+            "Eine andere Nummer fuehrt zu einem Review-Fail und Loop-Abbruch.",
+            "</migrationsstand>",
         ]
-        for n in shown:
-            lines.append(f"  - {n}")
-        lines.append(f"Hoechste vorhandene Nummer: {hoechste}")
-        lines.append(f"Fuer neue Migration: {naechste} (NICHT {hoechste} wiederverwenden).")
-        lines.append("</migrationsstand>")
         return "\n".join(lines)
     except Exception:  # noqa: BLE001
         return ""
+
+
+def _pruefe_migrations_kollision(
+    prosa: str, pd,
+) -> list[dict]:
+    """K17b: Deterministische Migrations-Kollision pruefen.
+
+    Sucht in der Architect-Prosa nach 'data/migrations/NNNN_*.sql'
+    und prueft, ob NNNN als Datei bereits existiert. Gibt Liste
+    von Kollisionen zurueck (leer = OK).
+
+    Fail-soft: bei IO-Fehler (Ordner fehlt) -> leere Liste.
+    """
+    try:
+        import re
+        from pathlib import Path as _P
+        mdir = _P(str(pd)) / "data" / "migrations"
+        if not mdir.is_dir():
+            return []
+        existierend = set()
+        for f in mdir.glob("*.sql"):
+            head = f.name.split("_", 1)[0]
+            if head.isdigit():
+                existierend.add(head)
+        geplant = re.findall(r"data/migrations/(\d+)_", prosa)
+        kollisionen: list[dict] = []
+        for n in sorted(set(geplant)):
+            if n in existierend:
+                kollisionen.append({"nummer": n, "existiert": True})
+        return kollisionen
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
@@ -1090,6 +1124,27 @@ def run_planner(state: RunState) -> bool:
                   {"prosa_len": len(_prosa),
                    "anzahl_dateien": len(_key_files),
                    "dateien": _key_files[:10]}, pd, pn)
+
+            # K17b: Deterministische Migrations-Kollision pruefen.
+            _kollisionen = _pruefe_migrations_kollision(_prosa, pd)
+            if _kollisionen:
+                _mig_stand_feedback = _migrations_stand(pd)
+                audit("planner_migration_kollision",
+                      {"kollisionen": _kollisionen}, pd, pn)
+                state.last_planner_info = {
+                    "regel": "MIGRATIONS-NUMMER",
+                    "fakt": (
+                        "Nummer(n) "
+                        + ", ".join(k["nummer"] for k in _kollisionen)
+                        + " existieren bereits als Datei in data/migrations/."
+                    ),
+                    "erklaerung": (
+                        "Waehle die naechste freie Migrationsnummer "
+                        "und wiederhole den Plan. Keine belegte Nummer wiederverwenden."
+                    ),
+                    "details": _mig_stand_feedback,
+                }
+                return False
             state.architect_prosa = _prosa  # type: ignore[attr-defined]
             _sub_tasks = _zerlege_in_sub_tasks(
                 _prosa, _key_files, api_key, pd, pn,

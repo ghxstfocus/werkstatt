@@ -32,10 +32,11 @@ def test_migrations_stand_listet_und_empfiehlt(tmp_path: Path):
               "0017_guardrail_permissions.sql", "0018_guardrail_permissions.sql"):
         (mdir / n).write_text("-- noop\n")
     out = _migrations_stand(tmp_path)
-    assert "<migrationsstand>" in out
+    # K17b: Format umgestellt auf pflicht-Block.
+    assert '<migrationsstand pflicht="true">' in out
     assert "Hoechste vorhandene Nummer: 0018" in out
-    assert "Fuer neue Migration: 0019" in out
-    assert "NICHT 0018 wiederverwenden" in out
+    assert "Naechste freie Nummer: 0019" in out
+    assert "VERBOTEN (bereits belegt):" in out
 
 
 def test_migrations_stand_ignoriert_nicht_numerische(tmp_path: Path):
