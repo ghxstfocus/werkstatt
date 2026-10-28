@@ -662,6 +662,18 @@ def _split_task_on_demand(
         state.split_failure_grund = "split_max_tiefe"  # type: ignore[attr-defined]
         return False
 
+    # K43a/K44a: ADaPT nur bei WIRKLICH grossen Tasks (> 2500 Zeichen).
+    # K43a-Schwelle 1500 war zu niedrig: t2 (Service-Methode + Validierung,
+    # ~2000 Zeichen) wurde in 3 Subtasks gesplittet, t2_b nochmal in 3 --
+    # mit Doppelung ("Route+Template" als Subtask, obwohl eigener Task).
+    # K15c sagt: 50-150 Zeilen Code = ~1000-1800 Zeichen. Bei 2500 ist
+    # der Task ~200+ Zeilen -- dann ist ADaPT sinnvoll.
+    _desc_len = len(_task.get("description", ""))
+    if _desc_len < 2500:
+        audit("loop_split_skip_klein",
+              {"task_id": task_id, "desc_len": _desc_len}, pd, pn)
+        return False
+
     # Fehler-Kontext.
     _errors = getattr(state, "last_verify_errors", None) or []
     _bugs = getattr(state, "reviewer_bugs", None) or []
@@ -1648,6 +1660,12 @@ def run_pipeline_loop(
             audit("loop_task_failed", {"task_id": i, "grund": _split_failure}, pd, pn)
             _task_ende(state, phase_state, task_id, ok=False,
                        name=task_name, failure=_split_failure)
+            # K43b: bei split_max_tiefe NICHT den ganzen Loop abbrechen.
+            # Der Task ist failed, aber spaetere Tasks koennen weiterlaufen
+            # (die Phase ist dann inkonsistent, aber Loop-Erfolg zeigt es
+            # im footer korrekt als X/N).
+            if _split_failure == "split_max_tiefe":
+                continue
             return 1
             return 1
 
@@ -1756,7 +1774,11 @@ def run_pipeline_loop(
             if not _reflection_loop(state):
                 audit("loop_reflection_gescheitert", {"task_id": i}, pd, pn)
                 _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="post_build_verify_failed")
-                return 1
+                # K44b: Loop laeuft weiter, andere Tasks koennen noch
+                # gebaut werden. Phase ist inkonsistent (footer zeigt X/N),
+                # aber ein einzelner gescheiterter Task soll nicht den
+                # ganzen Lauf stoppen (vgl. K43b fuer split_max_tiefe).
+                continue
 
         # Reviewer (Phase 9)
         _rev_ok = _with_spinner(f"Reviewer t{i}", lambda: run_reviewer(state))
@@ -1835,6 +1857,9 @@ def run_pipeline_loop(
                     state.split_failure_grund = None  # type: ignore[attr-defined]
                     _task_ende(state, phase_state, task_id, ok=False,
                                name=task_name, failure=_split_failure)
+                    # K43b: bei split_max_tiefe NICHT abbrechen.
+                    if _split_failure == "split_max_tiefe":
+                        continue
                     return 1
                 elif not _last_errors and _hat_patch:
                     audit("loop_reviewer_reject_ignoriert",
