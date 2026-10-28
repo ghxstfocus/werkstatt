@@ -758,6 +758,51 @@ def _llm_split_einzel_task(
     return out
 
 
+def _korrigiere_aktion(task: dict, pd, pn: str) -> None:
+    """K20: Korrigiert action anhand Datei-Existenz (deterministisch).
+
+    - action='update' + Datei fehlt -> action='create'
+    - action='create' + Datei existiert -> action='update'
+
+    Mehrere task_files: pruefe JEDE. Bei gemischtem Zustand
+    (manche existieren, manche nicht) -> keine Aenderung
+    (unsicher, Architect oder Gate soll entscheiden).
+    Audit-Eintrag pro Korrektur.
+    """
+    try:
+        act = task.get("action", "update")
+        if act not in ("update", "create"):
+            return
+        files = task.get("task_files") or []
+        if not files or not isinstance(files, list):
+            return
+        from pathlib import Path as _P
+        pd_path = _P(str(pd))
+        zustaende = []
+        for f in files:
+            if not isinstance(f, str) or not f:
+                return  # ungueltig, nicht anfassen
+            zustaende.append((pd_path / f).is_file())
+        if len(set(zustaende)) != 1:
+            # Gemischt -- unsicher, nicht anfassen.
+            return
+        exists = zustaende[0]
+        if act == "update" and not exists:
+            task["action"] = "create"
+            audit("planner_action_korrigiert", {
+                "dateien": files, "von": "update", "nach": "create",
+                "grund": "datei_fehlt",
+            }, pd_path, pn)
+        elif act == "create" and exists:
+            task["action"] = "update"
+            audit("planner_action_korrigiert", {
+                "dateien": files, "von": "create", "nach": "update",
+                "grund": "datei_existiert",
+            }, pd_path, pn)
+    except Exception:  # noqa: BLE001
+        return
+
+
 def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 2500) -> list[dict]:
     """K15a: Merged benachbarte Tasks mit gleicher Zieldatei.
 
@@ -926,6 +971,11 @@ def _zerlege_in_sub_tasks(
                         _final.extend(_sub2 or [_st])
             else:
                 _final.append(t)
+
+    # K20: Action anhand Datei-Existenz korrigieren (vor Merge).
+    for _t_korr in _final:
+        if isinstance(_t_korr, dict):
+            _korrigiere_aktion(_t_korr, pd, pn)
 
     # K15a: deterministischer Merge benachbarter Mini-Tasks.
     _vor_merge = len(_final)
