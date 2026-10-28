@@ -546,6 +546,37 @@ def _task_ende(
             )
 
 
+def _apply_one_patch(
+    content: str, old: str, new: str,
+) -> tuple[str, str]:
+    """K49: Mehrstufiger old_string-Fallback fuer Aider/Search-Replace."""
+    if old in content:
+        return content.replace(old, new, 1), "exact"
+    _old_s = old.lstrip()
+    if _old_s and _old_s in content:
+        return content.replace(_old_s, new.lstrip(), 1), "strip"
+    _SEP = chr(10) + chr(10)  # "\n\n"
+    if _SEP in old:
+        _parts = old.rsplit(_SEP, 1)
+        _just_old = _parts[-1]
+        if _just_old and _just_old in content:
+            _new_tail = new.rsplit(_SEP, 1)[-1]
+            return (
+                content.replace(_just_old, _new_tail, 1),
+                "context_only",
+            )
+    if _SEP in _old_s:
+        _parts = _old_s.rsplit(_SEP, 1)
+        _just_old = _parts[-1]
+        if _just_old and _just_old in content:
+            _new_tail = new.rsplit(_SEP, 1)[-1]
+            return (
+                content.replace(_just_old, _new_tail, 1),
+                "context_only",
+            )
+    return content, "fail"
+
+
 def _apply_patches_with_hooks(
     state: RunState,
     patches: list,
@@ -597,15 +628,14 @@ def _apply_patches_with_hooks(
                   {"file": _f, "phase": phase_label}, pd, pn)
             continue
         _content = _target.read_text(encoding="utf-8")
-        if _old not in _content:
+        _neu_content, _match = _apply_one_patch(_content, _old, _new)
+        if _match == "fail":
             audit("loop_patch_old_string_not_found",
                   {"file": _f, "phase": phase_label}, pd, pn)
             continue
-        _target.write_text(
-            _content.replace(_old, _new, 1), encoding="utf-8",
-        )
+        _target.write_text(_neu_content, encoding="utf-8")
         audit("loop_patch_applied",
-              {"file": _f, "phase": phase_label}, pd, pn)
+              {"file": _f, "phase": phase_label, "match": _match}, pd, pn)
         _applied += 1
 
     if _applied == 0:
@@ -1753,19 +1783,25 @@ def run_pipeline_loop(
                     audit("loop_patch_file_missing", {"file": file}, pd, pn)
                     continue
                 file_content = target.read_text()
-                if old_str not in file_content:
-                    audit("loop_patch_old_string_not_found", {"file": file, "old": old_str[:50]}, pd, pn)
+                _neu_content2, _match2 = _apply_one_patch(
+                    file_content, old_str, new_str,
+                )
+                if _match2 == "fail":
+                    audit("loop_patch_old_string_not_found",
+                          {"file": file, "old": old_str[:50]}, pd, pn)
                     # M-298d: Reflection statt stumm weiterlaufen.
                     if not _reflection_loop(state):
                         _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="old_string_not_found")
                         return 1
                     break  # Retry mit korrigiertem Patch
                 # M-351a: Patch mit identischem Inhalt = no_effect.
-                if old_str == new_str:
+                if old_str == new_str and _match2 == "exact":
                     audit("loop_patch_no_effect", {"file": file}, pd, pn)
                     continue
-                file_content = file_content.replace(old_str, new_str, 1)
-                target.write_text(file_content)
+                if _match2 != "exact":
+                    audit("loop_patch_fallback_used",
+                          {"file": file, "match": _match2}, pd, pn)
+                target.write_text(_neu_content2)
                 # M-298d: Post-Apply-Verifikation (Profi-Ansatz
                 # Overwatcher/Claude-Code edit-verifier).
                 _after = target.read_text()
