@@ -19,4 +19,5 @@ def test_update_format_weiterhin_da() -> None:
 
 
 def test_old_string_regel_bleibt() -> None:
-    assert "old_string MUSS exakt" in BUILDER_SYSTEM
+    assert "old_string MUSS zeichengenau" in BUILDER_SYSTEM
+    assert "AKTUELLEN DATEI-INHALT" in BUILDER_SYSTEM
