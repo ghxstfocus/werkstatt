@@ -1310,7 +1310,7 @@ def run_planner(state: RunState) -> bool:
             _marker_rest = (
                 "<" in _prosa and ">" in _prosa
             )
-            if len(_prosa.strip()) < 100 or _marker_rest:
+            if len(_prosa.strip()) < 300 or _marker_rest:
                 audit("planner_prosa_zu_kurz",
                       {"len": len(_prosa),
                        "marker_rest": _marker_rest,

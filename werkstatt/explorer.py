@@ -169,6 +169,31 @@ def _messen(frage: str, project_dir: Path) -> dict[str, Any]:
             ),
         }
 
+    # K54: Pfade aus der Aufgabe selbst extrahieren. Die Aufgabe
+    # nennt oft explizit Zieldateien (z.B. "Timeline in dashboard.js
+    # und routes_state.py"). Diese Dateien MUSS der Architect sehen,
+    # auch wenn STATUS.md sie nicht referenziert.
+    _aufgabe_pfade: list[str] = []
+    _seen_ap: set[str] = set()
+    for m in _CODE_PATH_RE.finditer(frage):
+        _pf = m.group(1)
+        if _pf in _seen_ap:
+            continue
+        if (Path(project_dir) / _pf).is_file():
+            _aufgabe_pfade.append(_pf)
+            _seen_ap.add(_pf)
+        if len(_aufgabe_pfade) >= 20:
+            break
+    if _aufgabe_pfade:
+        results["aufgabe_pfade"] = {
+            "ok": True,
+            "dateien": _aufgabe_pfade,
+            "stdout": (
+                "Aus der Aufgabe genannte existierende Dateien:\n"
+                + "\n".join(f"  - {f}" for f in _aufgabe_pfade)
+            ),
+        }
+
 
 
     return results
@@ -186,6 +211,16 @@ def _format_findings(messungen: dict[str, Any]) -> str:
             )
             if m.get("dateien"):
                 lines.append(f"  Dateien: {', '.join(m['dateien'])}")
+            continue
+        # K54: Aufgabe-Pfade als eigener Block.
+        if name == "aufgabe_pfade":
+            _files = m.get("dateien") or []
+            lines.append(
+                f"aufgabe_pfade: {len(_files)} in der Aufgabe genannte "
+                f"Datei(en) existieren:"
+            )
+            for _f in _files:
+                lines.append(f"  - {_f}")
             continue
         n = len(m.get("dateien", []))
         if n > 0:
@@ -350,6 +385,22 @@ def run_explorer(state: RunState, frage: str) -> dict:
                 "confidence": "high",
             })
             _seen_files.add(datei)
+
+    # K54: Aufgabe-Pfade als eigene key_files ergaenzen (hoechste
+    # Prioritaet, weil Architect sie explizit bauen soll).
+    _aufgabe_pfade_m = messungen.get("aufgabe_pfade") or {}
+    for _pfad in (_aufgabe_pfade_m.get("dateien") or []):
+        if _pfad in _seen_files:
+            continue
+        _inhalt = _datei_inhalt(Path(pd), _pfad)
+        key_files.insert(0, {
+            "file": _pfad,
+            "why": "in der Aufgabe genannt",
+            "symbols": "",
+            "preview": _inhalt,
+            "confidence": "high",
+        })
+        _seen_files.add(_pfad)
 
     # M-394: Auch ohne key_files: findings aus Messung liefern.
     if messungen:
