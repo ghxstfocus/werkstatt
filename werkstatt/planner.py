@@ -306,6 +306,12 @@ TESTS SIND OUT-OF-SCOPE:
   Tests braucht: beschreibe nur, welche Faelle getestet werden
   sollten, nicht den Test-Code selbst.
 
+MIGRATIONS-NUMMERN:
+  - Wenn eine Migration noetig ist: pruefe data/migrations/.
+  - Nimm die hoechste vorhandene Nummer +1.
+  - Nummern-Kollision ist ein Review-Fail.
+  - Nutze NIEMALS eine Nummer, die bereits als Datei existiert.
+
 Antworte NUR mit diesem Prosa-Text. Kein Code, nur Beschreibung.
 """
 
@@ -395,6 +401,46 @@ Antworte NUR mit JSON:
 Keine Erklaerung, nur JSON."""
 
 
+
+
+def _migrations_stand(pd) -> str:
+    """K17: Deterministischer Migrationsstand fuer Architect-Kontext.
+
+    Liest data/migrations/ und liefert eine kurze, sortierte Liste
+    der vorhandenen Nummern + die hoechste Nummer explizit. Wird
+    NUR eingefuegt, wenn Dateien vorhanden sind. Kein Fehlerfall
+    propagiert (fail-soft, Kontext ist Zusatzinfo).
+    """
+    try:
+        from pathlib import Path as _P
+        mdir = _P(str(pd)) / "data" / "migrations"
+        if not mdir.is_dir():
+            return ""
+        files = sorted(f.name for f in mdir.glob("*.sql") if f.is_file())
+        if not files:
+            return ""
+        nums = []
+        for name in files:
+            head = name.split("_", 1)[0]
+            if head.isdigit():
+                nums.append(head)
+        if not nums:
+            return ""
+        hoechste = max(nums)
+        naechste = f"{int(hoechste) + 1:04d}"
+        shown = files[-20:]
+        lines = [
+            "<migrationsstand>",
+            "Vorhandene Migrationen in data/migrations/ (hoechste zuerst gelistet):",
+        ]
+        for n in shown:
+            lines.append(f"  - {n}")
+        lines.append(f"Hoechste vorhandene Nummer: {hoechste}")
+        lines.append(f"Fuer neue Migration: {naechste} (NICHT {hoechste} wiederverwenden).")
+        lines.append("</migrationsstand>")
+        return "\n".join(lines)
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
@@ -976,6 +1022,11 @@ def run_planner(state: RunState) -> bool:
     # M-349d: Planner-Info aus vorherigem _plan_gate-Fail.
     # Der Hook hat den Plan abgelehnt. Der Planner MUSS die Info
     # sehen, sonst plant er blind neu.
+    # K17: Migrationsstand deterministisch in den Kontext.
+    _mig_stand = _migrations_stand(pd)
+    if _mig_stand:
+        user_content += "\n\n" + _mig_stand
+
     _planner_info = getattr(state, "last_planner_info", None)
     if _planner_info:
         user_content += (
