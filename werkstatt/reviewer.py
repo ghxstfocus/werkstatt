@@ -129,9 +129,22 @@ def run_phase_end_review(state: RunState) -> bool:
         audit("reviewer_phase_kein_key", {}, pd, pn)
         return False
 
-    # Gesamt-Diff der Phase (nicht pro Task), inkl. untracked.
+    # K25: Phase-Review-Scope = Task-Dateien, nicht alle uncommitted Files.
+    # Sonst sieht Reviewer alte RERUN-Reste (core/alerts/) und meldet
+    # Bugs, die nicht zur Phase gehoeren.
+    _phase_files: list[str] = []
+    for _t in (getattr(state, "tasks", []) or []):
+        if not isinstance(_t, dict):
+            continue
+        for _f in (_t.get("task_files") or []):
+            if isinstance(_f, str) and _f not in _phase_files:
+                _phase_files.append(_f)
+    if not _phase_files:
+        audit("reviewer_phase_keine_task_files", {}, pd, pn)
+        return False
+
     try:
-        diff = _get_git_diff(pd, task_files=None)
+        diff = _get_git_diff(pd, task_files=_phase_files)
     except RuntimeError as _exc:
         audit("reviewer_phase_diff_fehler",
               {"fehler": str(_exc)[:300]}, pd, pn)

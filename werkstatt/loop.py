@@ -1848,6 +1848,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--project", required=True,
                         help="Projektname (z.B. security-ai)")
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="K24: .phase.yaml ignorieren, Phase neu starten.",
+    )
     parser.add_argument("--aufgabe", default="",
                         help="Aufgabentext (leer = dry-run-aehnlich)")
     parser.add_argument("--dry-run", action="store_true",
@@ -1925,7 +1930,16 @@ def main(argv: list[str] | None = None) -> int:
     state_ref: list[RunState] = [_state]
 
     _ps = PhaseState(args.project, base_dir=_pd / ".werkstatt")
-    if _ps.exists():
+    # K24: --fresh -> alte .phase.yaml verwerfen, Phase neu.
+    if getattr(args, "fresh", False) and _ps.exists():
+        _bak = _ps.path.with_suffix(".yaml.fresh-bak")
+        try:
+            _ps.path.replace(_bak)
+        except OSError:
+            pass
+        audit("loop_fresh_reset", {"bak": str(_bak)},
+              _pd, args.project)
+    elif _ps.exists():
         _ps.load()
 
     # M-356: Rollback immer auf start-HEAD. Merken, wo wir starten.
