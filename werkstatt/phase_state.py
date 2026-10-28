@@ -47,6 +47,15 @@ class PhaseState:
 
     def save(self) -> None:
         """Speichert den State atomar (temp + rename)."""
+        # K21-DEBUG: Trace was gerade gespeichert wird.
+        import sys
+        print(
+            f"[K21-SAVE] path={self.path} "
+            f"data_keys={list(self.data.keys())} "
+            f"tasks_len={len(self.data.get('tasks', []))} "
+            f"pid={id(self)}",
+            file=sys.stderr,
+        )
         self.base_dir.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         with tmp.open("w", encoding="utf-8") as fh:
