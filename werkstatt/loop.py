@@ -441,6 +441,8 @@ def _human_gate_plan(state, auto_approve=False):
         getattr(state, "akzeptanzkriterien", []) or [],
     )
 
+    # K20c: Leere-Antworten-Zaehler (EOF-aehnlicher Zustand via script-Wrapper).
+    _leer_count = 0
     while True:
         try:
             _antwort = input(
@@ -453,6 +455,17 @@ def _human_gate_plan(state, auto_approve=False):
         except (EOFError, KeyboardInterrupt):
             audit("loop_plan_gate_eof", {}, pd, pn)
             return 1
+
+        # K20c: Leere Antwort -- script/su-Wrapper liefert '' statt EOFError.
+        # Nach 3 leeren Versuchen abbrechen, sonst endlos-Schleife.
+        if not _antwort:
+            _leer_count += 1
+            if _leer_count >= 3:
+                audit("loop_plan_gate_leer",
+                      {"anzahl": _leer_count}, pd, pn)
+                return 1
+            continue
+        _leer_count = 0
 
         if _antwort == "j":
             audit("loop_plan_gate_approved", {}, pd, pn)
