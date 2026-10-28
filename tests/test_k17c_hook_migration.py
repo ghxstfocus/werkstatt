@@ -85,10 +85,11 @@ def test_hook_ohne_migrations_ordner(tmp_path: Path):
 
 
 def test_hook_mehrfach_kollision(tmp_path: Path):
+    """K29: Header-Format, mehrere Kollisionen."""
     _mk_migrations(tmp_path)
     prosa = (
-        "data/migrations/0017_a.sql und "
-        "data/migrations/0018_b.sql"
+        "## data/migrations/0017_a.sql\n"
+        "## data/migrations/0018_b.sql"
     )
     payload = _basis_payload(prosa, str(tmp_path))
     payload["tasks"][0]["task_files"] = ["data/migrations/0019_c.sql"]

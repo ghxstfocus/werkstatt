@@ -866,6 +866,15 @@ def _reflection_loop(
         )
 
         if _applied == 0:
+            # K30: Konkreten Patch-Fehler in verify_errors anhaengen,
+            # damit naechste Runde weiss warum.
+            _patch_err = (
+                "reflection: patch_nicht_angewendet "
+                "(old_string not found oder apply_skip). "
+                "Pruefe den aktuellen Dateiinhalt exakt."
+            )
+            _cur = getattr(state, "last_verify_errors", None) or []
+            state.last_verify_errors = list(_cur) + [_patch_err]  # type: ignore[attr-defined]
             audit("loop_reflection_patch_nicht_angewendet",
                   {"runde": runde}, pd, pn)
             continue

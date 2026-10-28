@@ -320,7 +320,13 @@ def _check_migrations_kollision(prosa: str, project_dir: str) -> list[dict]:
             return []
         hoechste = max(existierend)
         naechste = f"{int(hoechste) + 1:04d}"
-        geplant = re.findall(r"data/migrations/(\d+)_", prosa)
+        # K29: Nur Header-Zeilen "## data/migrations/NNNN_..." pruefen.
+        # Vorher: alle "data/migrations/NNNN_" in der Prosa -- fuehrte
+        # zu False-Positives, wenn Architect eine existierende Datei
+        # als Muster referenziert ("folgt Muster von 0008_x.sql").
+        geplant = re.findall(
+            r"^##\s+data/migrations/(\d+)_", prosa, re.MULTILINE,
+        )
         koll: list[dict] = []
         for n in sorted(set(geplant)):
             if n in existierend:
