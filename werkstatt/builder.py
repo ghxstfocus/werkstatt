@@ -49,7 +49,43 @@ Regeln:
   - Aendere NUR die ZIELDATEI.
   - Code MUSS ruff-konform sein (__all__ sortiert, kein except Exception).
   - Halte dich EXAKT an den Architect-Text.
-  - Keine API-Aenderungen (keine Umbenennungen)."""
+  - Keine API-Aenderungen (keine Umbenennungen).
+
+## GOLD: Erweitern statt Ueberschreiben (STRIKT)
+
+Wenn du eine BESTEHENDE Funktion/Methode/Klasse erweiterst:
+  - ERHALTE ALLE bestehenden Zeilen.
+  - FUEGE NUR die neuen Zeilen hinzu.
+  - old_string MUSS nur den ERWEITERUNGSPUNKT enthalten, NICHT
+    die ganze Funktion.
+  - new_string MUSS den alten Inhalt PLUS die Erweiterung enthalten.
+
+Beispiel GUT (erweitern):
+  old_string:
+    def dashboard_state():
+        body = {"timestamp": ...}
+        body["devices"] = _section_devices()
+  new_string:
+    def dashboard_state():
+        body = {"timestamp": ...}
+        body["devices"] = _section_devices()
+        body["timeline"] = _section_timeline()
+
+Beispiel SCHLECHT (ueberschreiben — VERBOTEN):
+  old_string:
+    def dashboard_state():
+        body = {"timestamp": ...}
+        body["devices"] = _section_devices()
+  new_string:
+    def dashboard_state():
+        body = {"timeline": _section_timeline()}
+
+Regel: body["x"] = ... ist OK (dict erweitern).
+       body = {...} ist VERBOTEN (dict ersetzen).
+
+Wenn du eine Funktion erweiterst: das alte body-Dict MUSS im
+new_string vollstaendig enthalten sein. Sonst sind bestehende
+Sektionen weg."""
 
 
 _PY_IGNORE_PARTS = frozenset({
@@ -316,30 +352,45 @@ def _normalisiere_aider_patches(
 
 
 def _architect_abschnitt(beschreibung: str, zieldatei: str) -> str:
-    """M-408c/M-450: Extrahiert den Abschnitt fuer eine Datei.
+    """M-408c/M-450 + GOLD: Extrahiert den Abschnitt fuer eine Datei.
 
-    - Wenn die Prosa '## <pfad>'-Ueberschriften hat:
-      * Datei gefunden -> Abschnitt.
-      * Datei NICHT gefunden -> "" (Datei ist nicht Teil der Aufgabe).
-    - Wenn die Prosa KEINE Ueberschriften hat (Fallback):
-      * Ganze Prosa zurueckgeben.
+    Unterstuetzt ZWEI Formate:
+    A) '## <pfad>'-Ueberschriften (alter Architect-Prompt):
+       -> exakter Abschnitt.
+    B) '## 3. Wie sieht die Loesung aus?' + darin '## <pfad>'
+       (Gold-Architect-Prompt):
+       -> Abschnitt ab '## <pfad>' bis zum naechsten '## '.
+
+    Fallback: ganze Prosa.
     """
     import re
-    # M-450: Pruefen, ob die Prosa ueberhaupt '## '-Ueberschriften hat.
+    if not beschreibung:
+        return ""
     _hat_ueberschriften = bool(
         re.search(r"^##\s+\S", beschreibung, re.MULTILINE)
     )
     if not _hat_ueberschriften:
-        return beschreibung  # Fallback: keine Struktur
-    pattern = rf"^##\s*{re.escape(zieldatei)}\s*$"
-    m = re.search(pattern, beschreibung, re.MULTILINE)
-    if not m:
-        return ""  # Datei nicht in der Prosa -> leerer Abschnitt
-    start = m.end()
-    n = re.search(r"^##\s+\S", beschreibung[start:], re.MULTILINE)
-    if n:
-        return beschreibung[start:start + n.start()].strip()
-    return beschreibung[start:].strip()
+        return beschreibung
+    # Format A: '## <pfad>' direkt.
+    pattern_direct = rf"^##\s*{re.escape(zieldatei)}\s*$"
+    m = re.search(pattern_direct, beschreibung, re.MULTILINE)
+    if m:
+        start = m.end()
+        _next = re.search(r"^##\s+\S", beschreibung[start:], re.MULTILINE)
+        if _next:
+            return beschreibung[start:start + _next.start()].strip()
+        return beschreibung[start:].strip()
+    # Format B: '## <pfad>' innerhalb einer Sektion. Suche im
+    # gesamten Text nach '## <pfad>' — auch wenn davor '## 3.' steht.
+    for _m in re.finditer(
+        rf"^##\s*{re.escape(zieldatei)}\s*$", beschreibung, re.MULTILINE
+    ):
+        start = _m.end()
+        _next = re.search(r"^##\s+\S", beschreibung[start:], re.MULTILINE)
+        if _next:
+            return beschreibung[start:start + _next.start()].strip()
+        return beschreibung[start:].strip()
+    return ""  # Datei nicht in der Prosa
 
 
 def _build_patches_fuer_datei(
@@ -928,80 +979,20 @@ def run_builder(state: RunState) -> bool:
             _ctx_parts.append(f"--- {_f} (letzte 50 Zeilen) ---\n{_c}")
         user_content += "\n\nAktueller Datei-Kontext:\n" + "\n\n".join(_ctx_parts)
 
-    # M-416: Direkter ask_llm-Call (kein Tool-Use mehr).
-    reply = ask_llm(
-        api_key, _builder_system(), user_content,
-        model="deepseek-chat", temperature=0.2, max_tokens=8000,
+    # GOLD: Klassischer Pfad nutzt _build_patches_fuer_datei.
+    # Vorteile: voller Datei-Inhalt, relevanter Architect-Abschnitt,
+    # Feedback, Reviewer-Bugs, Verify-Fehler, Reflection-History,
+    # Import-Validierung.
+    _arch_beschreibung = (
+        _aktuelle_task.get("description", "")
+        if isinstance(_aktuelle_task, dict) else ""
     )
-    if not reply.ok:
-        audit("builder_llm_fehler", {"fehler": reply.error}, pd, pn)
-        return False
-    raw = reply.content.strip()
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    if start < 0 or end <= start:
-        audit("builder_json_fehler", {"raw": raw[:200]}, pd, pn)
-        return False
-    try:
-        patch_data = json.loads(raw[start:end])
-    except json.JSONDecodeError:
-        audit("builder_json_fehler", {"raw": raw[:200]}, pd, pn)
-        return False
-    patches = patch_data.get("patches", [])
-    _k60_vor = len(patches) if isinstance(patches, list) else -1
-    # K48: Aider-Format auf Legacy normalisieren (zentraler Helper).
-    # Greift auch im klassischen Pfad (direkter ask_llm-Call).
-    patches = _normalisiere_aider_patches(patches, pd=pd, pn=pn)
-
-    # GOLD: Import-Validierung auch im klassischen Pfad.
-    # Vorher nur im Architect-Pfad (_build_patches_fuer_datei).
-    # Live 15:13: Builder importierte AuditReadError (existiert
-    # nicht in core/audit_reader.py), Reviewer approved, Service
-    # failte erst beim Start.
-    _gueltig_import: list = []
-    for _p_imp in patches:
-        if not isinstance(_p_imp, dict):
-            continue
-        _patch_text_imp = (
-            (_p_imp.get("old_string", "") or "")
-            + "\n"
-            + (_p_imp.get("new_string", "") or "")
-            + "\n"
-            + (_p_imp.get("content", "") or "")
-        )
-        _tf_imp = (
-            _p_imp.get("task_files")
-            or (getattr(state, "aktuelle_task", {}) or {}).get("task_files", [])
-        )
-        _fehlend_imp = _validate_imports_in_patch(
-            _patch_text_imp, pd, task_files=_tf_imp,
-        )
-        if _fehlend_imp:
-            audit("builder_patch_import_fehler",
-                  {"file": _p_imp.get("file", "?"),
-                   "fehlend": _fehlend_imp}, pd, pn)
-            continue
-        _gueltig_import.append(_p_imp)
-    if not _gueltig_import:
-        audit("builder_alle_patches_import_fehler", {}, pd, pn)
-        return False
-    patches = _gueltig_import
-
+    patches = _build_patches_fuer_datei(
+        state, _zieldatei, _arch_beschreibung, api_key,
+    )
     if not patches:
-        # K60: Diagnose-Details, damit der naechste RERUN zeigt,
-        # was der LLM geliefert hat (Aider vs klassisch vs leer).
-        _k60_data = {
-            "raw_len": len(raw),
-            "raw_prefix": raw[:200],
-            "raw_has_patches_key": '"patches"' in raw,
-            "raw_has_context": '"context"' in raw,
-            "raw_has_old_string": '"old_string"' in raw,
-            "raw_has_old": '"old"' in raw,
-            "patch_data_keys": sorted(patch_data.keys()) if isinstance(patch_data, dict) else None,
-            "patches_vor_normalisierung": _k60_vor,
-            "patches_nach_normalisierung": 0,
-        }
-        audit("builder_keine_patches", _k60_data, pd, pn)
+        audit("builder_keine_patches_gold",
+              {"zieldatei": _zieldatei}, pd, pn)
         return False
 
     # M-337: Jeder Patch MUSS die Zieldatei sein + die Aktion

@@ -322,17 +322,31 @@ FROZEN DATACLASSES:
   - Wenn ein Parameter `frozen=True` ist: NICHT setattr() aufrufen.
   - Nutze dict/separate Struktur fuer Zusatz-Daten.
 
-WENN MEHRERE DATEIEN BETROFFEN SIND:
-  Beschreibe JEDE Datei einzeln, mit ihrem Pfad als Ueberschrift.
-  Beispiel:
-    ## harness/versioning/applier.py
-    <Beschreibung>
+DATEI-UEBERSCHRIFTEN (PFLICHT fuer jede Datei):
 
-    ## core/changeapplier/applier.py
-    <Beschreibung>
+Fuer JEDE Datei, die du aenderst, schreibe eine eigene
+Ueberschrift im Format "## <voller-pfad>". Diese Ueberschrift
+wird vom Builder genutzt, um den richtigen Abschnitt zu finden.
+
+Beispiel:
+  ## 3. Wie sieht die Loesung aus?
+
+  ## apps/dashboard/routes_state.py
+  Neue Funktion _section_timeline()...
+
+  ## apps/dashboard/static/js/dashboard.js
+  Neue Funktion renderTimeline()...
+
+Regeln:
+  - Ueberschrift EXAKT der Dateipfad, KEIN Backtick, KEIN "Datei:".
+  - Format: "## <pfad>" (zwei Rauten, dann Pfad).
+  - Fuer jede Datei ein eigener Block.
+  - Der Builder sucht "## <pfad>", um den Abschnitt zu finden.
+  - Wenn du eine Datei ohne "## <pfad>"-Ueberschrift beschreibst,
+    findet der Builder sie NICHT.
 
 WENN NUR EINE DATEI BETROFFEN IST:
-  Beschreibe sie direkt, ohne Ueberschrift.
+  Beschreibe sie direkt, mit "## <pfad>"-Ueberschrift.
 
 GROESSEN-ZIEL:
   Eine Funktion/Methode = 50-150 Zeilen Code. Zu klein
