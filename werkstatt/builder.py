@@ -952,6 +952,41 @@ def run_builder(state: RunState) -> bool:
     # K48: Aider-Format auf Legacy normalisieren (zentraler Helper).
     # Greift auch im klassischen Pfad (direkter ask_llm-Call).
     patches = _normalisiere_aider_patches(patches, pd=pd, pn=pn)
+
+    # GOLD: Import-Validierung auch im klassischen Pfad.
+    # Vorher nur im Architect-Pfad (_build_patches_fuer_datei).
+    # Live 15:13: Builder importierte AuditReadError (existiert
+    # nicht in core/audit_reader.py), Reviewer approved, Service
+    # failte erst beim Start.
+    _gueltig_import: list = []
+    for _p_imp in patches:
+        if not isinstance(_p_imp, dict):
+            continue
+        _patch_text_imp = (
+            (_p_imp.get("old_string", "") or "")
+            + "\n"
+            + (_p_imp.get("new_string", "") or "")
+            + "\n"
+            + (_p_imp.get("content", "") or "")
+        )
+        _tf_imp = (
+            _p_imp.get("task_files")
+            or (getattr(state, "aktuelle_task", {}) or {}).get("task_files", [])
+        )
+        _fehlend_imp = _validate_imports_in_patch(
+            _patch_text_imp, pd, task_files=_tf_imp,
+        )
+        if _fehlend_imp:
+            audit("builder_patch_import_fehler",
+                  {"file": _p_imp.get("file", "?"),
+                   "fehlend": _fehlend_imp}, pd, pn)
+            continue
+        _gueltig_import.append(_p_imp)
+    if not _gueltig_import:
+        audit("builder_alle_patches_import_fehler", {}, pd, pn)
+        return False
+    patches = _gueltig_import
+
     if not patches:
         # K60: Diagnose-Details, damit der naechste RERUN zeigt,
         # was der LLM geliefert hat (Aider vs klassisch vs leer).
