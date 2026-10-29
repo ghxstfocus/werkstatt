@@ -948,11 +948,25 @@ def run_builder(state: RunState) -> bool:
         audit("builder_json_fehler", {"raw": raw[:200]}, pd, pn)
         return False
     patches = patch_data.get("patches", [])
+    _k60_vor = len(patches) if isinstance(patches, list) else -1
     # K48: Aider-Format auf Legacy normalisieren (zentraler Helper).
     # Greift auch im klassischen Pfad (direkter ask_llm-Call).
     patches = _normalisiere_aider_patches(patches, pd=pd, pn=pn)
     if not patches:
-        audit("builder_keine_patches", {}, pd, pn)
+        # K60: Diagnose-Details, damit der naechste RERUN zeigt,
+        # was der LLM geliefert hat (Aider vs klassisch vs leer).
+        _k60_data = {
+            "raw_len": len(raw),
+            "raw_prefix": raw[:200],
+            "raw_has_patches_key": '"patches"' in raw,
+            "raw_has_context": '"context"' in raw,
+            "raw_has_old_string": '"old_string"' in raw,
+            "raw_has_old": '"old"' in raw,
+            "patch_data_keys": sorted(patch_data.keys()) if isinstance(patch_data, dict) else None,
+            "patches_vor_normalisierung": _k60_vor,
+            "patches_nach_normalisierung": 0,
+        }
+        audit("builder_keine_patches", _k60_data, pd, pn)
         return False
 
     # M-337: Jeder Patch MUSS die Zieldatei sein + die Aktion
