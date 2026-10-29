@@ -417,6 +417,13 @@ def _build_patches_fuer_datei(
         return []
 
     _abschnitt = _architect_abschnitt(architect_beschreibung, zieldatei)
+    # GOLD-Fallback: Task-Description enthaelt oft nicht die
+    # "## <pfad>"-Ueberschrift. Dann auf die volle Architect-Prosa
+    # zurueckfallen (state.architect_prosa).
+    if not _abschnitt:
+        _volle = getattr(state, "architect_prosa", "") or ""
+        if _volle:
+            _abschnitt = _architect_abschnitt(_volle, zieldatei)
     # M-450: Leerer Abschnitt -> Datei ist nicht Teil der Aufgabe.
     # Kein LLM-Aufruf, kein Patch.
     if not _abschnitt:
