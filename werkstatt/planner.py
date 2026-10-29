@@ -583,10 +583,27 @@ Du formulierst einen Auftrag fuer den Architect.
   "auftrag_prosa": "Ausformulierter Auftrag fuer den Architect (3-10 Saetze)"
 }
 
-## WICHTIG
-- Nutze NUR die API-Symbole aus dem Code-Index. Erfinde KEINE.
+## WICHTIG: WIDERSPRUCH-CHECK (STRIKT)
+
+Der Auftrag nennt oft APIs, die es NICHT gibt (z.B. read_events()).
+Pruefe JEDE im Auftrag genannte API gegen den Code-Index:
+
+1. Ist die API im Code-Index? (Klasse, Methode, Signatur)
+2. Wenn NICHT: als Risiko nennen.
+3. Echte API suchen (aehnlicher Name, andere Klasse).
+4. Im auftrag_prosa NUR echte APIs aus dem Code-Index nennen.
+
+## BEISPIEL
+- Auftrag sagt: "Nutze read_events(limit=15) aus core.audit_reader."
+- Code-Index zeigt: "AuditReaderService.list_recent_assessments(actor, limit=100)"
+- Risiko: "read_events existiert nicht in core.audit_reader. Echte API: AuditReaderService.list_recent_assessments"
+- auftrag_prosa: "Nutze AuditReaderService.list_recent_assessments(principal, limit=15)"
+
+## REGEL
+- Nenne NUR APIs, die im Code-Index stehen.
+- Erfinde KEINE APIs.
+- Uebernimm KEINE APIs aus dem Auftrag, wenn sie nicht im Code-Index sind.
 - Nenne konkrete Zeilen und Datei-Pfade.
-- Wenn eine API unklar ist: als Risiko nennen, NICHT raten.
 
 ## DEIN NACHFOLGER
 """ + _ARCHITECT_SCHNITTSTELLE + """
