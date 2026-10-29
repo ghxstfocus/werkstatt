@@ -367,7 +367,41 @@ def _normalisiere_aider_patches(
     return _out
 
 
-def _architect_abschnitt(beschreibung: str, zieldatei: str) -> str:
+def _filtere_auf_funktionen(abschnitt: str, task_text: str) -> str:
+    """GOLD: Filtert Datei-Abschnitt auf in Task genannte Funktionen.
+
+    No-op, wenn task_text leer oder keine Kandidaten gefunden.
+    """
+    import re
+    if not abschnitt or not task_text:
+        return abschnitt
+    _kandidaten = set()
+    for _m in re.finditer(r"`([_a-zA-Z][_a-zA-Z0-9]{2,})`", task_text):
+        _kandidaten.add(_m.group(1))
+    for _m in re.finditer(r"\bdef\s+([_a-zA-Z][_a-zA-Z0-9]{2,})", task_text):
+        _kandidaten.add(_m.group(1))
+    for _m in re.finditer(r"\bclass\s+([_a-zA-Z][_a-zA-Z0-9]{2,})", task_text):
+        _kandidaten.add(_m.group(1))
+    if not _kandidaten:
+        return abschnitt
+    _bloecke = re.findall(r"```(?:python)?\n(.*?)```", abschnitt, re.DOTALL)
+    if not _bloecke:
+        return abschnitt
+    _gefiltert = []
+    for _block in _bloecke:
+        for _name in _kandidaten:
+            if re.search(rf"\bdef\s+{re.escape(_name)}\b", _block) or \
+               re.search(rf"\bclass\s+{re.escape(_name)}\b", _block):
+                _gefiltert.append(_block)
+                break
+    if not _gefiltert:
+        return abschnitt
+    return "\n\n".join(_gefiltert)
+
+
+def _architect_abschnitt(
+    beschreibung: str, zieldatei: str, task_text: str = "",
+) -> str:
     """M-408c/M-450 + GOLD: Extrahiert den Abschnitt fuer eine Datei.
 
     Unterstuetzt ZWEI Formate:
@@ -394,8 +428,8 @@ def _architect_abschnitt(beschreibung: str, zieldatei: str) -> str:
         start = m.end()
         _next = re.search(r"^##\s+\S", beschreibung[start:], re.MULTILINE)
         if _next:
-            return beschreibung[start:start + _next.start()].strip()
-        return beschreibung[start:].strip()
+            return _filtere_auf_funktionen(beschreibung[start:start + _next.start()].strip(), task_text)
+        return _filtere_auf_funktionen(beschreibung[start:].strip(), task_text)
     # Format B: '## <pfad>' innerhalb einer Sektion. Suche im
     # gesamten Text nach '## <pfad>' — auch wenn davor '## 3.' steht.
     for _m in re.finditer(
@@ -404,8 +438,8 @@ def _architect_abschnitt(beschreibung: str, zieldatei: str) -> str:
         start = _m.end()
         _next = re.search(r"^##\s+\S", beschreibung[start:], re.MULTILINE)
         if _next:
-            return beschreibung[start:start + _next.start()].strip()
-        return beschreibung[start:].strip()
+            return _filtere_auf_funktionen(beschreibung[start:start + _next.start()].strip(), task_text)
+        return _filtere_auf_funktionen(beschreibung[start:].strip(), task_text)
     return ""  # Datei nicht in der Prosa
 
 
@@ -432,14 +466,26 @@ def _build_patches_fuer_datei(
     except OSError:
         return []
 
-    _abschnitt = _architect_abschnitt(architect_beschreibung, zieldatei)
+    _task_fuer_filter = getattr(state, "aktuelle_task", None) or {}
+    if isinstance(_task_fuer_filter, dict):
+        _filter_text = (
+            (_task_fuer_filter.get("name") or "") + "\n"
+            + (_task_fuer_filter.get("description") or "")
+        )
+    else:
+        _filter_text = ""
+    _abschnitt = _architect_abschnitt(
+        architect_beschreibung, zieldatei, task_text=_filter_text,
+    )
     # GOLD-Fallback: Task-Description enthaelt oft nicht die
     # "## <pfad>"-Ueberschrift. Dann auf die volle Architect-Prosa
     # zurueckfallen (state.architect_prosa).
     if not _abschnitt:
         _volle = getattr(state, "architect_prosa", "") or ""
         if _volle:
-            _abschnitt = _architect_abschnitt(_volle, zieldatei)
+            _abschnitt = _architect_abschnitt(
+            _volle, zieldatei, task_text=_filter_text,
+        )
     # M-450: Leerer Abschnitt -> Datei ist nicht Teil der Aufgabe.
     # Kein LLM-Aufruf, kein Patch.
     if not _abschnitt:
