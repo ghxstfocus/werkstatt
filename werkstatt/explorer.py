@@ -179,7 +179,24 @@ def _messen(frage: str, project_dir: Path) -> dict[str, Any]:
         _pf = m.group(1)
         if _pf in _seen_ap:
             continue
-        if (Path(project_dir) / _pf).is_file():
+        # K61c: kurzen Aufgabe-Pfad gegen Projekt auflösen.
+        # Auftrag sagt oft nur "routes_state.py", echte Datei
+        # liegt unter apps/dashboard/. rglob findet sie.
+        _target = Path(project_dir) / _pf
+        if not _target.is_file():
+            _candidates = [
+                p for p in Path(project_dir).rglob(_pf)
+                if p.is_file()
+                and ".venv" not in p.parts
+                and ".git" not in p.parts
+            ]
+            if len(_candidates) == 1:
+                _target = _candidates[0]
+                try:
+                    _pf = str(_target.relative_to(project_dir))
+                except ValueError:
+                    pass
+        if _target.is_file():
             _aufgabe_pfade.append(_pf)
             _seen_ap.add(_pf)
         if len(_aufgabe_pfade) >= 20:
