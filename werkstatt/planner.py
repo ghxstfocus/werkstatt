@@ -1307,8 +1307,15 @@ def run_planner(state: RunState) -> bool:
             # uebrig ODER noch XML-artige Marker vorhanden sind
             # (z.B. <tool_call> mit JSON-Payload, das nicht gefiltert
             # wurde).
+            # K55b: nur KONKRETE Tool-Call-Marker pruefen.
+            # Vorher: "<" in _prosa and ">" in _prosa -- das fing
+            # jede Prosa mit Vergleichsoperatoren, HTML-Erwaehnung
+            # oder dem <migrationsstand pflicht>-Marker selbst.
+            # Live 13:47-13:50: 4x Prosa-Fail, weil der Architect
+            # den Pflicht-Marker lieferte (K17-Konflikt mit K52).
             _marker_rest = (
-                "<" in _prosa and ">" in _prosa
+                any(tag in _prosa for tag in _TOOL_CALL_TAGS)
+                or _DSML_TOKEN in _prosa
             )
             if len(_prosa.strip()) < 300 or _marker_rest:
                 audit("planner_prosa_zu_kurz",
