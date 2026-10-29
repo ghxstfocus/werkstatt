@@ -925,3 +925,72 @@ RERUN-80: ChangeApplier.apply/rollback implementiert (237 Zeilen),
 - **Mypy:** 11 errors (Baseline 11).
 - **AST:** 6 passed.
 - **Katalog:** 162.
+
+## 2026-10-29 — Gold-Umbau + P0/P1 (K19 erledigt)
+
+### Gold-Umbau (Commit `2c4703d`)
+
+- **Architect-Prosa:** freie Prosa mit `## <pfad>`-Ueberschriften statt
+  Tool-Use-Loop.
+- **Planner-Split:** `_zerlege_in_sub_tasks` (JSON) zerlegt in Tasks.
+- **Scout-Agent:** `_baue_api_index` (AST-basiert, deterministisch),
+  `_format_api_index_for_prompt`, `_finde_api`, `_run_scout`,
+  Widerspruchs-Check (API-Index vs. Auftrag).
+- **Prompt-Audit (P0-P3):** `_BUILDER_SCHNITTSTELLE`,
+  `_REVIEWER_SCHNITTSTELLE`, `_SCOUT_NACHFOLGER_BLOCK`,
+  `## GOLD: SCOUT-KONTEXT`, `PLANNER_SYSTEM`-else-Zweig entfernt.
+- **Reviewer Diff-Check (P0):** prueft jede `-`-Zeile gegen Zieldatei;
+  HIGH-Bug bei entferntem Aufruf, ueberschriebener Funktion, erfundener API.
+- **Import-Validierung (`996d616`):** `_validate_imports_in_patch` im
+  klassischen Builder-Pfad.
+
+### P0/P1 (K19) — Commit `aa7881f` + `c13bb8a`
+
+**K19** aus `OFFENE-BLOECKE.md`:
+*"Builder setzt Task-Anforderungen nur teilweise um (Builder sinngemaess,
+Reviewer woertlich). Fix-Kandidaten: Builder-Prompt-Praezision / Checkliste."*
+
+**Fix-Ansatz (deterministisch, nicht Prompt-Bastelei):**
+
+- **`_segmentiere_nach_pfad(prosa)`** (`aa7881f`, planner.py):
+  zerlegt Architect-Prosa an `## <pfad>`-Ueberschriften. Fallback in
+  `_zerlege_in_sub_tasks` und `_llm_split_einzel_task`, wenn
+  `architect_start` fehlt. Ersetzt P0 "`PLANNER_SPLIT_SYSTEM` an
+  Gold-Format anpassen" — die Prompt-Aenderung ist nicht mehr noetig.
+- **`## FUNKTION-WAHL`** in `BUILDER_SYSTEM` (`aa7881f`): waehlt die
+  in der Task genannte Funktion, nicht die "aehnlichste". Explizit
+  fuer `_section_timeline` vs. `_section_timeline_entries`.
+- **`## SEMANTIK-CHECK`** in `REVIEWER_SYSTEM` (`aa7881f`): HIGH-Bug,
+  wenn der Diff eine andere Funktion nutzt, als die Task nennt, oder
+  eine Funktion ohne Task-Auftrag aendert.
+- **`_filtere_auf_funktionen(abschnitt, task_text)`** (`c13bb8a`,
+  builder.py): schneidet den Architect-Abschnitt auf die in der Task
+  genannten Funktionen zu, bevor er in den Builder-Prompt geht.
+  Ohne diese Funktion sah der Builder alle Funktionen aus dem
+  Datei-Abschnitt und baute sie um — auch die, die die Task nicht
+  nannte. Mit Filter sieht er nur die Zielfunktion.
+- **Aufrufer** (`c13bb8a`): `_architect_abschnitt(..., task_text=...)`
+  in `_build_patches_fuer_datei` (Hauptaufruf und Gold-Fallback).
+
+### RERUN-Ergebnis (2026-10-29 20:16)
+
+- **Aufgabe:** `_section_timeline_entries` absteigend nach Score
+  sortieren (nur diese Funktion, nur `routes_state.py`).
+- **Plan:** 1 Task / 1 Datei.
+- **Builder:** 1.2s, 1 Patch.
+- **Reviewer:** 1.7s, **approved** (1. Durchlauf, keine Reflection).
+- **Task-Status:** **1/1 approved**, LOOP_RC=0.
+- **Patch:** 5 Zeilen (`entries = sorted(..., reverse=True)`),
+  **kein** Umbau von `_format_timeline_ts`, **kein** `ts_display`/
+  `ts_iso`. `_filtere_auf_funktionen` hat gegriffen.
+- **Zielprojekt-Commits:** `81f74e7` (CSS+JS, Altlast vom Handoff),
+  `7a46d5e` (Sortierung).
+
+### Baseline (2026-10-29 nach P0/P1)
+
+- **Tests:** 1622 passed, 5 skipped.
+- **Ruff:** planner.py 3, builder.py 2, reviewer.py 0 (Baseline 5).
+- **RERUN-Erfolgsquote:** 1/1 (der Test-Task).
+
+---
+

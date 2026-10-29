@@ -1,6 +1,6 @@
 # Offene Bloecke — Werkstatt
 
-Stand: 2026-10-25 (nach M-476, RERUN-80).
+Stand: 2026-10-29 (nach P0/P1 Erledigung, RERUN 2026-10-29 20:16).
 Vorherige Liste: `OFFENE-BLOECKE-ARCHIV-2.md`.
 
 Nur **offene** Bloecke. Erledigte stehen in `ERLEDIGT.md`.
@@ -12,7 +12,6 @@ Merkposten (M-Nummern) in `MERKPOSTEN.md`.
 |---|---|---|
 | K14 | gross | `run_pipeline_loop` = 601 Zeilen. Refactoring in 7 `_phase_*`-Funktionen. |
 | K17 | mittel | Architect prueft existierende Migrationsnummern nicht (Kollision 0017/0018 in security-ai). Fix: vor Migrations-Task `ls data/migrations/`. |
-| K19 | mittel | Builder setzt Task-Anforderungen nur teilweise um (Builder sinngemaess, Reviewer woertlich). Fix-Kandidaten: Builder-Prompt-Praezision / Checkliste. |
 
 **K18 ist abgedeckt durch M-345/M-346** (Pipeline-Abbau, siehe unten).
 

@@ -129,35 +129,33 @@ Commit `2c4703d` (Gold-Umbau: `_baue_api_index` + Reviewer).
 
 ## OFFEN (Prioritaet)
 
-### P0 — P4: `PLANNER_SPLIT_SYSTEM` an Gold-Format (30 min)
-**Problem:** `PLANNER_SPLIT_SYSTEM` erwartet `architect_start`/
-`architect_ende` (nummerierte Schritte wie "5. Backup").
-**Gold-Architect** liefert `## <pfad>`-Ueberschriften.
-**Folge:** `_extrahiere_prosa_abschnitt` findet `architect_start` nicht
--> Fallback (`name + description`).
-**Fix (Entscheidung noetig):**
-- (a) `PLANNER_SPLIT_SYSTEM` anpassen: `architect_start`/`architect_ende`
-  optional, Zerlegung entlang `## <pfad>`-Ueberschriften.
-- (b) `_zerlege_in_sub_tasks` in Python, deterministische Segmentierung
-  nach `## <pfad>`.
+Kanonische offene Liste: `docs/OFFENE-BLOECKE.md`.
+Dieser Abschnitt fuehrt nur die session-relevanten P0-P4.
 
-### P0 — Builder-Prompt: Funktion-Wahl (15 min)
-**Problem:** Live 19:10: Builder waehlte `_section_timeline` statt
-`_section_timeline_entries` in `dashboard_state`.
-**Fix:** `BUILDER_SYSTEM` erweitern:
-- Wenn die Task eine Funktion X nennt: waehle X, nicht die aehnlichste.
-- Wenn mehrere Funktionen mit aehnlichem Namen existieren
-  (`_section_timeline`, `_section_timeline_entries`):
-  waehle die, die die Task nennt.
+### ✅ P0 — `PLANNER_SPLIT_SYSTEM` an Gold-Format (erledigt `aa7881f`)
+**Entscheidung:** Option (b) — deterministische Python-Segmentierung.
+`_segmentiere_nach_pfad(prosa)` in planner.py zerlegt an
+`## <pfad>`-Ueberschriften, Fallback in `_zerlege_in_sub_tasks` und
+`_llm_split_einzel_task`, wenn `architect_start` fehlt.
+Der `PLANNER_SPLIT_SYSTEM`-Prompt bleibt unveraendert — die
+LLM-Marker sind nicht mehr Pflicht.
 
-### P1 — Reviewer Semantik (20 min)
-**Problem:** Reviewer approved semantisch falschen Code (falsche
-Funktion in `dashboard_state`).
-**Fix:** `REVIEWER_SYSTEM` erweitern:
-- Pruefe, ob der Aufruf die Task-Funktion nutzt.
-- Bei `_section_timeline` vs. `_section_timeline_entries`:
-  Wenn die Task `_section_timeline_entries` nennt, aber der Code
-  `_section_timeline` nutzt: HIGH-Bug.
+### ✅ P0 — Builder-Prompt: Funktion-Wahl (erledigt `aa7881f` + `c13bb8a`)
+**Loesung:** zwei Ebenen.
+1. `## FUNKTION-WAHL` in `BUILDER_SYSTEM` (`aa7881f`): waehle die
+   genannte Funktion, nicht die aehnlichste.
+2. `_filtere_auf_funktionen(abschnitt, task_text)` (`c13bb8a`):
+   schneidet den Architect-Abschnitt auf die Task-Funktionen zu,
+   bevor er in den Builder-Prompt geht. Verhindert, dass der Builder
+   fremde Funktionen aus demselben Datei-Block umbaut.
+
+### ✅ P1 — Reviewer Semantik (erledigt `aa7881f`)
+**Loesung:** `## SEMANTIK-CHECK` in `REVIEWER_SYSTEM`:
+- Task nennt Funktion X, Diff nutzt Funktion Y → HIGH-Bug.
+- Bestehender Aufruf ohne Task-Auftrag entfernt → HIGH-Bug.
+- API erfunden (nicht im Import-/Code-Index) → HIGH-Bug.
+Live-Beleg 20:16: RERUN approved im 1. Durchlauf, weil Builder
+nur `_section_timeline_entries` angefasst hat.
 
 ### P2 — Frontend-Tests (1-2h)
 **Problem:** `dashboard.js` ist ungetestet.
