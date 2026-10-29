@@ -1,69 +1,178 @@
-# Bau-Handoff — Session 2026-10-28 (Ende)
+# Bau-Handoff — Session 2026-10-29 (Durchbruch)
 
-**Session-Ergebnis:** 25 K-Fixes gepusht (K17-K47). Suite 1550 -> 1616.
-Loop baut+prueft mit 70-80% Erfolgsquote.
+**Session-Ergebnis:** Gold-Umbau + Scout-Agent + Prompt-Audit.
+Suite 1619 -> 1622. Erster RERUN mit 3/3 Tasks approved.
+Commit `2c4703d` (Gold-Umbau: `_baue_api_index` + Reviewer).
 
 ---
 
 ## STAND
 
 **Werkstatt** (`/opt/werkstatt`):
-- Branch `umbau/phase-2` (== origin)
-- HEAD: `83f371f` (K45+K46+K47)
-- Suite: **1616 passed**
-- Ruff Baseline: loop.py 7, planner.py 4, builder.py 2, reviewer.py 0
+- Branch `umbau/phase-2`
+- Suite: **1622 passed, 5 skipped**
+- Ruff Baseline: loop.py 7, planner.py 3, builder.py 2,
+  reviewer.py 0, explorer.py 0
 
 **Zielprojekt** (`/opt/security-ai`):
 - Services active, `.env` vollstaendig
-- `core/alerts/` untracked, security-ai-owner (M-XXX-Altlast)
-- `.phase.yaml` oft leer nach Rollback
+- Timeline funktioniert (15 Eintraege, klickbar, mit Score)
+- Letzter RERUN 19:10 — 3/3 Tasks approved
 
 ---
 
-## WAS FUNKTIONIERT (verifiziert)
+## WAS FUNKTIONIERT (verifiziert 2026-10-29)
 
-- **Explorer:** 20-22 Files, Migrationsstand prominent (K31/K32)
-- **Planner:** `<migrationsstand pflicht>`, keine erfundenen Nummern (K17/K17c)
-- **Planner-Split:** Merge-Limit 1800, max 2/Datei (K41)
-- **planner_gate:** 7 Checks (K17c MIGRATIONS_KOLLISION, K27 DATEINAME_AEHNLICH)
-- **Builder:** baut Tasks, Reflection mit old_string-Praezision (K46), History (K47)
-- **Reviewer:** fail-closed (K23a), Historie (K40), Severity-Def (K42)
-- **Phase-End-Review:** vor Human-Gate (K23c)
-- **Reflection:** iteriert Verify+Reviewer (K39), History (K47)
-- **ADaPT:** Schwelle 2500 (K44a)
+### Gold-Umbau (`2c4703d`)
+- **Architect** (`ARCHITECT_SYSTEM`, deepseek-reasoner): freie Prosa
+  mit `## <pfad>`-Ueberschriften, Interface + Logik + Integration.
+- **Planner** (`_zerlege_in_sub_tasks`, deepseek-chat): zerlegt Prosa
+  in Tasks (JSON).
+- **Zwei Agents, zwei Calls.** Tool-Use-Loop entfernt.
 
-**Live-Beleg (18:33):** 3/10 Tasks done mit Reviewer-Approved.
+### Scout-Agent (`_run_scout` + `_baue_api_index`)
+- **`_baue_api_index`:** AST-basiert, deterministisch. Liefert pro Datei:
+  `__all__`, Klassen (Methoden + Signaturen + Rueckgabetypen),
+  Top-Level-Funktionen, Imports.
+- **`_format_api_index_for_prompt`:** deterministisch, kompakt.
+- **`_finde_api`:** deterministisch, sucht API im Index.
+- **`_run_scout`** (deepseek-chat): formuliert Auftrag aus API-Index.
+- **Widerspruchs-Check:** prueft APIs aus Auftrag gegen Code-Index
+  (`read_events` existiert nicht -> `list_recent_assessments`).
+
+### Prompt-Audit (P0-P3)
+- **`_BUILDER_SCHNITTSTELLE`** an `ARCHITECT_SYSTEM`:
+  Architect kennt Builder-Grenzen (max 8000 Tokens, keine Tools,
+  `## <pfad>`-Pflicht).
+- **`_REVIEWER_SCHNITTSTELLE`** an `BUILDER_SYSTEM`:
+  Builder kennt Reviewer (bestehende Aufrufe pruefen, HIGH-Bug bei
+  Entfernung).
+- **`ARCHITECT_SYSTEM`:** `GOLD: SCOUT-KONTEXT` — nutzt APIs aus
+  dem Code-Index, NICHT aus der Aufgabe.
+- **`_SCOUT_NACHFOLGER_BLOCK`:** Scout liefert JSON, Architect Prosa.
+- **Toter else-Zweig (`PLANNER_SYSTEM`)** entfernt.
+
+### Reviewer Diff-Check (P0)
+- `REVIEWER_SYSTEM` prueft **jede `-`-Zeile** gegen die volle Zieldatei.
+- **HIGH-Bug** wenn bestehender Aufruf entfernt, Funktion ueberschrieben,
+  API erfunden.
+- **Live-Beleg 18:58:** t3 rejected (Builder wollte `_section_timeline`
+  statt `_section_timeline_entries` aendern).
+
+### Import-Validierung (`996d616`)
+- Klassischer Builder-Pfad prueft jetzt Imports
+  (`_validate_imports_in_patch`).
+- Bei Fehler: Patch verworfen, `builder_patch_import_fehler`.
+- **Live-Beleg 18:51:** `AuditReadError` (erfunden) -> Task failte sauber,
+  kein Service-Crash.
+
+### Timeline (Zielprojekt, `5101e84`)
+- **Backend** (`routes_state.py`):
+  * `_section_timeline_entries` liefert `ts_display`, `href`, `score`,
+    `audit_id`.
+  * `_format_timeline_ts` (ISO -> YYYY-MM-DD HH:MM:SS).
+  * `dashboard_state` ruft `_section_timeline_entries` (nicht
+    `_section_timeline`).
+- **Frontend** (`dashboard.js`):
+  * `fetchState` unterstuetzt Array + `{entries}`.
+  * `renderTimeline` nutzt `ts_display`, `href`, `score`, `agent`.
+- **CSS** (`components.css`): 7 Timeline-Klassen.
+- **Ergebnis:** 15 Eintraege, formatiert, klickbar (Link auf
+  `/audit/<audit_id>`), mit Score.
+
+---
+
+## ERLEDIGT (2026-10-29)
+
+### K48 — old_string-Patch-Ansatz
+- Builder nutzt `_build_patches_fuer_datei` mit vollem Datei-Inhalt +
+  relevantem Architect-Abschnitt + Feedback + Reviewer-Bugs +
+  Verify-Fehlern + Reflection-History.
+- `BUILDER_SYSTEM`: "Erweitern statt Ueberschreiben"-Regel.
+- `_architect_abschnitt`: versteht beide Formate
+  (`## <pfad>` + innerhalb von `## 3.`).
+
+### K50 — Fake-Done bei Reviewer-Reject
+- `_patches_wirklich_angewendet` (fail-closed).
+- `last_verify_errors` kumulativ.
+- `applied_count` an allen Apply-Pfaden.
+
+### K55b — `_marker_rest` praezisieren
+- Nur konkrete Tool-Call-Marker pruefen.
+- `<migrationsstand pflicht>` wird durchgelassen.
+
+### K56a — Planner-Reflection
+- Cherry-Pick, aber **nicht** aktiv (Kaskade, im Gold-Umbau entfernt).
+
+### K60 — Builder-Diagnose
+- `builder_keine_patches` mit Details (raw_len, raw_prefix,
+  raw_has_context, patches_vor_normalisierung, ...).
+
+### K61a — `task_files` normalisieren
+- `_normalisiere_task_files` an 3 Stellen.
+- Kurze Pfade -> volle Pfade (aus Explorer).
+
+### K61b — `last_planner_info` bei JSON-Fehler
+- Wird gesetzt bei `planner_json_fehler`.
+
+### K61c — Explorer-Pfade aufloesen
+- `rglob` findet volle Pfade.
+- `_aufgabe_pfade` enthaelt volle Pfade.
+
+### K62 — Import-Validierung klassischer Pfad
+- In `run_builder` nach `_normalisiere_aider_patches`.
+
+### Prompt-Audit P0-P3 + Gold-Umbau + Scout + API-Index
+- Siehe "Was funktioniert".
 
 ---
 
 ## OFFEN (Prioritaet)
 
-### K48 — old_string-Patch-Ansatz fragil (P1, GROSS)
-- Symptom: `loop_patch_old_string_not_found` trotz K46-Prompt
-- Fix-Optionen: A) Aider-Style Kontext-Zeilen, B) ganze Datei neu schreiben, C) Fuzzy-Match
-- Goldstandard: B (ganze Datei) + Diff-Check nach Apply
+### P0 — P4: `PLANNER_SPLIT_SYSTEM` an Gold-Format (30 min)
+**Problem:** `PLANNER_SPLIT_SYSTEM` erwartet `architect_start`/
+`architect_ende` (nummerierte Schritte wie "5. Backup").
+**Gold-Architect** liefert `## <pfad>`-Ueberschriften.
+**Folge:** `_extrahiere_prosa_abschnitt` findet `architect_start` nicht
+-> Fallback (`name + description`).
+**Fix (Entscheidung noetig):**
+- (a) `PLANNER_SPLIT_SYSTEM` anpassen: `architect_start`/`architect_ende`
+  optional, Zerlegung entlang `## <pfad>`-Ueberschriften.
+- (b) `_zerlege_in_sub_tasks` in Python, deterministische Segmentierung
+  nach `## <pfad>`.
 
-### `_reflection_loop` returned zu frueh False (P1)
-- Symptom: Nach Runde 1 (patch_nicht_angewendet) returned False statt 5 Runden
-- Diagnose: `_had_error_context`-Logik in `_reflection_loop`
+### P0 — Builder-Prompt: Funktion-Wahl (15 min)
+**Problem:** Live 19:10: Builder waehlte `_section_timeline` statt
+`_section_timeline_entries` in `dashboard_state`.
+**Fix:** `BUILDER_SYSTEM` erweitern:
+- Wenn die Task eine Funktion X nennt: waehle X, nicht die aehnlichste.
+- Wenn mehrere Funktionen mit aehnlichem Namen existieren
+  (`_section_timeline`, `_section_timeline_entries`):
+  waehle die, die die Task nennt.
 
-### M-XXX Owner-Permissions (P2)
-- Setup-Skript `setup_project.sh` (`.werkstatt` 2775, `.ruff_cache` chown, git safe.directory)
+### P1 — Reviewer Semantik (20 min)
+**Problem:** Reviewer approved semantisch falschen Code (falsche
+Funktion in `dashboard_state`).
+**Fix:** `REVIEWER_SYSTEM` erweitern:
+- Pruefe, ob der Aufruf die Task-Funktion nutzt.
+- Bei `_section_timeline` vs. `_section_timeline_entries`:
+  Wenn die Task `_section_timeline_entries` nennt, aber der Code
+  `_section_timeline` nutzt: HIGH-Bug.
 
-### `core/alerts/` (P3)
-- `git rm -r core/alerts/` manuell im Zielprojekt
+### P2 — Frontend-Tests (1-2h)
+**Problem:** `dashboard.js` ist ungetestet.
+**Optionen:** Jest/Vitest mit jsdom; `node --check` (nur Syntax);
+manuelle Browser-Tests.
 
-### `_k13_rc` praezisieren (P3)
-- `tasks_ok == tasks_total` pruefen, nicht `> 0`
+### P3 — Doku-Ueberarbeitung
+- `AGENTS.md`: Agent-Kette (Scout, Architect, Planner, Builder,
+  Reviewer).
+- `docs/ARCHITEKTUR.md`: Layer, API-Index, Prompt-Kette.
+- `docs/RUNBOOK.md`: RERUN, Debug, safe.directory.
 
-### Doku-Ueberarbeitung (P4)
-- AGENTS.md (Loop-Phasen, fail-closed, Gates)
-- docs/ARCHITEKTUR.md (Layer, PhaseState, Reflection)
-- docs/RUNBOOK.md (RERUN, Debug, safe.directory, --fresh)
-
-### K14 / K18 (P5, gross)
-- `run_pipeline_loop` 601 Zeilen -> 7 Phasen-Funktionen
-- `pipeline.py` 11k Zeilen zerlegen
+### P4 — K14 / K18 (gross)
+- `run_pipeline_loop` 700 Zeilen -> 7 Phasen-Funktionen.
+- `pipeline.py` 11k Zeilen zerlegen.
 
 ---
 
@@ -71,15 +180,43 @@ Loop baut+prueft mit 70-80% Erfolgsquote.
 
 **Vorbereitung:**
 1. `git status --short --branch` sauber?
-2. `git log --oneline -1` == `83f371f`?
-3. `pytest -q` — 1616 erwartet.
+2. `git log --oneline -1` == letzter Commit?
+3. `pytest -q` — 1622 erwartet.
 4. `systemctl is-active` — alle active?
 
-**Erste Aktion: K48** — old_string-Patch-Ansatz ueberdenken.
-- Messung: `grep -c "old_string" werkstatt/apply.py werkstatt/builder.py`
-- Entscheidung Aider-Style vs. ganze Datei.
+**Erste Aktion: P4 (PLANNER_SPLIT_SYSTEM)**
+- Messung: `grep -n "architect_start\|PLANNER_SPLIT_SYSTEM" werkstatt/planner.py`
+- Fix: `PLANNER_SPLIT_SYSTEM` anpassen.
 
-**Danach:** `_reflection_loop`-Bug diagnostizieren. Danach Doku.
+**Danach:** Builder-Prompt (Funktion-Wahl) + Reviewer (Semantik).
+
+**Dann:** RERUN mit neuer Aufgabe (z. B. Timeline-Sortierung).
+
+---
+
+## HARD-RULES
+
+1. **Messen, nicht raten.** Keine Fixes ohne Grep-/Test-Beleg.
+2. **Ein Block, warten auf Paste.** Kein Vorpreschen.
+3. **Backup vor `cat >`.** `/root/backups/werkstatt/` oder
+   `/root/backups/security-ai/`.
+4. **`python3`, nicht `python`.**
+5. **Kein `systemctl stop <timer>`.**
+6. **Kein `grep`/`tee` um interaktive Prozesse** (TTY-Problem).
+7. **`git status --short` vor Commit.**
+8. **Heredoc in Bash: nur <30 Zeilen.** Sonst Python-Heredoc oder
+   stueckweise.
+9. **Kein Aider-Mix.** `old_string`/`new_string` — nicht
+   `context+old+new`.
+10. **`_format_code_index_for_prompt` ist tot** — nur
+    `_format_api_index_for_prompt` nutzen.
+11. **`PLANNER_SYSTEM` ist tot** (Z. 34) — nicht reaktivieren.
+12. **`_section_timeline` (Z. 226) ist alte Funktion** — nicht fuer
+    `dashboard_state` nutzen. `_section_timeline_entries` (Z. 295) ist
+    die richtige.
+13. **Kein String-Patching an System-Prompts.** Wrapper-Funktionen
+    nutzen (`_architect_system_with_builder`,
+    `_scout_system_with_nachfolger`).
 
 ---
 
@@ -98,93 +235,10 @@ Loop baut+prueft mit 70-80% Erfolgsquote.
 
 ## BEWAEHRTE RERUN-INVOCATION
 
-Am Prompt `j` waehlen (Plan-Gate + Human-Gate). Kein grep/tee in der Pipe.
-`--fresh` loescht `.phase.yaml` vor Start (K24).
-
 ```bash
-set -uo pipefail
-cd /opt/security-ai || exit 1
-for f in core/services/sofortmassnahme_service.py; do
-  [ -f "$f" ] && mv -v "$f" "/root/backups/security-ai/$(basename $f).alt-$(date +%s)"
-done
+cd /opt/werkstatt
 
-cd /opt/werkstatt || exit 1
 LOG="/tmp/rerun_$(date +%Y%m%d-%H%M%S).log"
-script -q -e -c "su -s /bin/bash security-ai -c 'cd /opt/werkstatt && PYTHONUNBUFFERED=1 WERKSTATT_RENDER=live WERKSTATT_ARCHITECT_MODEL=deepseek-reasoner exec timeout 2400 python3 -m werkstatt.loop --fresh --project security-ai --aufgabe \"Architect: Lies docs/STATUS.md. Plane den naechsten offenen Code-Punkt.\"'" "$LOG"
+
+script -q -e -c "su -s /bin/bash security-ai -c 'cd /opt/werkstatt && PYTHONUNBUFFERED=1 WERKSTATT_RENDER=live WERKSTATT_ARCHITECT_MODEL=deepseek-reasoner exec timeout 2400 python3 -m werkstatt.loop --fresh --project security-ai --aufgabe \"<AUFGABE>\"'" "$LOG"
 ```
-
----
-
-## REGELN
-
-- Messen, nicht raten.
-- Ein Block, warten auf Paste.
-- Backup vor `cat >`.
-- `python3`, nicht `python`.
-- Kein `systemctl stop <timer>`.
-- Kein `grep`/`tee` um interaktive Prozesse (TTY-Problem).
-- `git status --short` vor Commit.
-- Heredoc in Bash: nur fuer <30 Zeilen. Sonst Python-Heredoc oder stuetzweise.
-
----
-
-*Ende Bau-Handoff 2026-10-28 (Session-Ende).*
-
----
-
-## ERGAENZUNG — K48 ist jetzt der naechste Fix (Session 2026-10-28 spaet)
-
-Live-Beleg aus RERUN 2026-10-28 19:12 (Timeline-Aufgabe):
-
-t1 (list_recent_assessments) wurde reviewer_rejected nach 1 Reflection-Runde.
-Ablauf:
-- Runde 1 (Reviewer-Reject): Builder baut Patch (`patch_applied`).
-- Verify failt: F822 (`list_recent_assessments` undefined) + unused import.
-- Runde 2 startet (`stagnation_runde 2`, `reflection_runde 2`, `builder_file_context`).
-- Danach: NICHTS. Kein `builder_patches_erstellt`, kein `patch_applied`, kein `_verify_patches`.
-- Loop returned `False` -> `_task_ende(reviewer_rejected)` -> t1 failed.
-
-Der Build-Mechanismus mit `old_string`/`new_string` ist LLM-fragil. Bei
-Verschieben einer Methode (Modul-Funktion -> Klassen-Methode) bricht er.
-
-## NAECHSTE AKTION (verbindlich)
-
-1. `_reflection_loop`-Bug diagnostizieren:
-   - Warum returned die Loop nach Runde 2 False, ohne dass `run_builder`
-     einen Patch erzeugte oder `_verify_patches` lief?
-   - Verdacht: in `_reflection_loop` (werkstatt/loop.py, ~815-1000) gibt es
-     einen `continue`-Zweig, der `error_context` falsch setzt, oder der
-     `if not error_context`-Block returned `_verify_patches` zu frueh.
-   - Messung: `grep -n "return False\|continue\|error_context" werkstatt/loop.py`
-     im Bereich der `_reflection_loop`-Funktion.
-
-2. K48 angehen — Patching-Ansatz wechseln:
-   - Optionen (Reihenfolge = Praeferenz):
-     A) Aider-Style search/replace mit 3-5 Kontextzeilen vor/nach.
-        Builder liefert `<context>`, `<old>`, `<new>`. Parser sucht context+old,
-        ersetzt. Robuster gegen Zeilenumbrueche/Einrueckungsaenderungen.
-     B) Ganze Datei neu schreiben: `write_file`-Patch (content=komplett).
-        Goldstandard fuer `create`. Fuer `update` riskant (Kontextverlust),
-        aber immer anwendbar.
-     C) Fuzzy-Match: Levenshtein-Distanz zwischen `old_string` und Dateizeilen.
-        Riskant (falsche Treffer). Nur als Fallback.
-   - Empfehlung: Hybrid — `create` -> write_file (B), `update` -> Aider (A).
-   - Messung vor Umbau: `grep -c "old_string" werkstatt/apply.py werkstatt/builder.py`
-     `grep -c "new_string" werkstatt/apply.py werkstatt/builder.py`
-   - Alle bestehenden Tests (`tests/test_k8_builder_create.py`,
-     `tests/test_builder_*.py`, `tests/test_apply_*.py`) muessen gruen bleiben.
-
-3. Nach K48: RERUN mit Timeline-Aufgabe (aus dieser Session) wiederholen.
-   Datei: /tmp/rerun_timeline_20261028-191117.log (Log der gescheiterten Runde).
-   Aufgabe war: Timeline im Dashboard befuellen (Backend routes_state.py +
-   Frontend dashboard.js + partials/timeline.html).
-   Hinweis: Der Plan von 19:12 hat NUR Backend geplant (5 Tasks auf
-   audit_reader.py und routes_state.py). Frontend fehlt. Beim naechsten
-   RERUN Aufgabe explizit splitten in 2 Phasen (Backend, Frontend) oder
-   zwei separate RERUNs.
-
-## Live-Log
-
-- `/tmp/rerun_timeline_20261028-191117.log` — gescheiterte Runde
-- `/opt/security-ai/.werkstatt/security-ai.phase.yaml` — 5 Tasks, alle
-  pending/failed (nach Rollback)
