@@ -82,6 +82,21 @@ Commit `2c4703d` (Gold-Umbau: `_baue_api_index` + Reviewer).
 
 ---
 
+### M-487 — Human-Gate committet selbst (`31c6ff3`)
+- **`_committe_zielprojekt(state)`** in `werkstatt/loop.py`:
+  `git status` -> `git add -A` -> `git commit` -> `git rev-parse HEAD`.
+- Aufruf im `_human_gate`-`j`-Zweig. Fail-closed: Bei Git-Fehler
+  bricht der Loop ab (`✗ LOOP FEHLGESCHLAGEN`), statt `✓` zu luegen.
+- **Nur bei explizitem `j`.** Auto-Approve committet nicht.
+- **4 Audit-Events:** `loop_human_gate_committed`,
+  `loop_human_gate_commit_skip`, `loop_human_gate_commit_fehler`,
+  `loop_human_gate_commit_abort`.
+- **Betriebs-Voraussetzung:** `.git/` im Zielprojekt muss vom
+  Loop-User (`security-ai`, Gruppe `builder`) beschreibbar sein.
+  Setgid auf `.git`-Verzeichnisse. Keine `root:root`-Dateien.
+- **Live-Beleg 20:36:** RERUN `4e860c3` — Builder+Reviewer+Phase-Review
+  in 4s, Human-Gate `j` -> automatischer Commit, `✓ LOOP ERFOLGREICH`.
+
 ## ERLEDIGT (2026-10-29)
 
 ### K48 — old_string-Patch-Ansatz

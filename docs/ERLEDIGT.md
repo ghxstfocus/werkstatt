@@ -994,3 +994,64 @@ Reviewer woertlich). Fix-Kandidaten: Builder-Prompt-Praezision / Checkliste."*
 
 ---
 
+---
+
+## 2026-10-29 — M-487 (Human-Gate committet)
+
+### Was
+
+Der Loop committet nach explizitem `j` am Human-Gate **selbst**.
+Vorher: `✓ LOOP ERFOLGREICH` gemeldet, aber Aenderungen blieben
+uncommittet im Zielprojekt liegen (Vorschlagsgenerator).
+
+### Fix (Commit `31c6ff3`)
+
+- Neue Funktion `_committe_zielprojekt(state)` in `werkstatt/loop.py`:
+  1. `git status --porcelain` im Zielprojekt.
+  2. Bei Aenderungen: `git add -A`.
+  3. `git commit` mit Autorschaft `state.git_author_name` /
+     `state.git_author_email` (Default `builder <builder@security-ai.local>`).
+  4. `git rev-parse HEAD` fuer den SHA.
+  Fail-closed: Bei Git-Fehler `(False, fehlertext)`.
+- `_human_gate`-`j`-Zweig ruft `_committe_zielprojekt` auf.
+  Bei Fehler -> `return 1` (Loop bricht ab, kein falsches `✓`).
+- **Nur bei explizitem `j`.** Auto-Approve (`require_human_approval=false`,
+  `WERKSTATT_IN_TEST=1`) committet **nicht**.
+- 4 Audit-Events: `loop_human_gate_committed` (Erfolg),
+  `loop_human_gate_commit_skip` (nichts zu tun),
+  `loop_human_gate_commit_fehler` (Git-Fehler),
+  `loop_human_gate_commit_abort` (Aufrufer entscheidet Abbruch).
+
+### Betriebs-Voraussetzung (Zielprojekt)
+
+`.git/` muss vom Loop-User (`security-ai`) beschreibbar sein.
+Konkret:
+
+- `.git/` auf `builder:builder`, setgid `drwxrwsr-x` (neue Dateien
+  erben Gruppe `builder`).
+- `security-ai` ist in Gruppe `builder`.
+- Keine `root:root`-Dateien mehr in `.git/` — vorher per
+  `find .git -user root -exec chown builder:builder {} +` bereinigt.
+
+Ohne diese Rechte failt der Commit mit `git add rc=128: index.lock
+Keine Berechtigung`. Der Loop meldet dann `✗ LOOP FEHLGESCHLAGEN`
+(fail-closed, kein falsches `✓`).
+
+### RERUN-Beleg (2026-10-29 20:36)
+
+- Aufgabe: Docstring-Marker in `_timeline_get` (`routes_state.py`).
+- 1 Task / 1 Datei.
+- Builder 1.4s, Reviewer 1.4s, Phase-Review 1.3s.
+- Human-Gate `j` -> `Commit: 4e860c3`, `✓ LOOP ERFOLGREICH`.
+- Zielprojekt-Commit `4e860c3` **automatisch**, ohne manuellen
+  Eingriff, mit Message `chore(werkstatt): … RERUN (M-487,
+  human_gate committet selbst).`
+
+### Offen
+
+- `status: completed` in `phase_state.py` wird weiterhin **nicht**
+  gesetzt (gehoert zu M-488).
+- `git push` nach origin bleibt manuell (kein Teil von M-487).
+
+---
+

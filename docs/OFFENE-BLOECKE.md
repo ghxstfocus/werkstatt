@@ -81,11 +81,10 @@ Merkposten (M-Nummern) in `MERKPOSTEN.md`.
 | M-485 | mittel | Event-Sourcing / Memory. Unveraenderliche Event-Logs statt YAML-Checkpoint. Loop-Spezifikation (Trigger, Goal, Verification, Stopping Rule, Memory). |
 | M-486 | klein | Cache-aware Cost Model. 98.6% Input-Tokens aus Prefix-Cache. Flat-Pricing ueberschaetzt Kosten um 7.1x. |
 
-## Grundsystem schliessen (M-487..M-489)
+## Grundsystem schliessen (M-488..M-489)
 
 | Block | Aufwand | Kurz |
 |---|---|---|
-| M-487 | klein | Human-Gate committet selbst. `_human_gate` ruft `git commit` auf. Ohne das ist der Loop ein Vorschlagsgenerator. |
 | M-488 | klein | `phase_end` laeuft Vollsuite. `verify.json` + `loop.py` (M-476). Ohne das ist der Loop ein Builder. |
 | M-489 | gross | Test-Repair-Loop (TDFlow-Stil). 4 Sub-Agenten: Patch-Propose, Debug, Patch-Revise, Test-Generate. Tests FEST. Max 3 Runden. |
 
