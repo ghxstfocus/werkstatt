@@ -987,6 +987,56 @@ def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 1800) -> list[dic
     return merged
 
 
+def _normalisiere_task_files(tasks, explorer_ctx, pd, pn) -> list:
+    """K61a: Korrigiert task_files ohne Pfad-Praefix anhand key_files.
+
+    Problem (Live 2026-10-29 14:16): Architect plante t5 mit
+    task_files=["routes_state.py"], Builder fand die Datei nicht
+    (sie liegt unter apps/dashboard/routes_state.py).
+
+    Fail-closed bei Mehrdeutigkeit: mehrere Dateien mit gleichem
+    Basisnamen -> unveraendert + audit, damit Builder meldet.
+    """
+    if not tasks:
+        return tasks or []
+    _basen: dict = {}
+    for kf in (explorer_ctx or {}).get("key_files") or []:
+        if isinstance(kf, dict):
+            f = kf.get("file")
+        elif isinstance(kf, str):
+            f = kf
+        else:
+            continue
+        if not f or "/" not in f:
+            continue
+        _basen.setdefault(f.rsplit("/", 1)[-1], []).append(f)
+    for t in tasks:
+        if not isinstance(t, dict):
+            continue
+        files = t.get("task_files") or []
+        neu = []
+        for f in files:
+            if not isinstance(f, str) or not f:
+                neu.append(f)
+                continue
+            if "/" in f:
+                neu.append(f)
+                continue
+            treffer = _basen.get(f, [])
+            if len(treffer) == 1:
+                neu.append(treffer[0])
+                audit("planner_task_files_korrigiert",
+                      {"alt": f, "neu": treffer[0]}, pd, pn)
+            elif len(treffer) > 1:
+                neu.append(f)
+                audit("planner_task_files_mehrdeutig",
+                      {"name": f, "kandidaten": treffer}, pd, pn)
+            else:
+                neu.append(f)
+        t["task_files"] = neu
+    return tasks
+
+
 def _zerlege_in_sub_tasks(
     prosa: str, key_files: list[str], api_key: str, pd, pn,
 ) -> list[dict]:
@@ -1099,6 +1149,11 @@ def _zerlege_in_sub_tasks(
             else:
                 _final.append(t)
 
+    # K61a: task_files normalisieren (Dateiname -> voller Pfad).
+    # Vor K20, damit _korrigiere_aktion auf korrekten Pfaden arbeitet.
+    _final = _normalisiere_task_files(
+        _final, {"key_files": key_files}, pd, pn,
+    )
     # K20: Action anhand Datei-Existenz korrigieren (vor Merge).
     for _t_korr in _final:
         if isinstance(_t_korr, dict):
@@ -1362,6 +1417,11 @@ def run_planner(state: RunState) -> bool:
                 _prosa, _key_files, api_key, pd, pn,
             )
             if _sub_tasks:
+                # K61a-2: Task-Files normalisieren (Defensiv, falls
+                # _zerlege_in_sub_tasks die Korrektur verpasst hat).
+                _sub_tasks = _normalisiere_task_files(
+                    _sub_tasks, _explorer_ctx, pd, pn,
+                )
                 state.tasks = _sub_tasks  # type: ignore[attr-defined]
             else:
                 state.tasks = [{  # type: ignore[attr-defined]
@@ -1446,6 +1506,10 @@ def run_planner(state: RunState) -> bool:
     if _action_missing > 0:
         audit("planner_action_missing", {"anzahl": _action_missing}, pd, pn)
 
+    # K61a-3: task_files normalisieren (Dateiname -> voller Pfad).
+    _tasks_raw = _normalisiere_task_files(
+        _tasks_raw, _explorer_ctx, pd, pn,
+    )
     # Plan in State schreiben
     state.tasks = _tasks_raw  # type: ignore[attr-defined]
     # M-310: phasen optional.
