@@ -1319,11 +1319,17 @@ def run_planner(state: RunState) -> bool:
             f"Details: {_planner_info.get('details', '?')}\n"
             "\n"
             "Der vorherige Plan wurde nicht gebaut.\n"
-            "Antworte mit gueltigem JSON."
+            "Antworte mit gueltigem JSON. "
+        "GOLD: KEINE TOOL-CALLS. KEIN {\"tool\": ...}. "
+        "Beginne deine Antwort mit '{' und ende mit '}'. "
+        "Erst Dateien lesen, DANN planen -- in einer Antwort."
         )
 
     # M-398: Tool-Use-Loop (max 3 Runden).
-    _max_tool_runden = 3
+    # GOLD: Tool-Use nur 1 Runde. Architect soll PLANEN, nicht
+    # staendig Dateien lesen. Bei 3 Runden liefert er oft nur
+    # Tool-Calls (DSML) statt Plan-JSON (Live 14:52).
+    _max_tool_runden = 1
     _tool_kontext = ""
     reply = None
     plan = None
