@@ -57,11 +57,36 @@ Ignoriere Stil, Formatierung, Kleinigkeiten, "nice to have".
 ## GOLD: Datei-Kontext
 
 Du bekommst im User-Content den vollstaendigen aktuellen
-Datei-Inhalt (Abschnitt "AKTUELLER DATEI-INHALT"). Pruefe
+Datei-Inhalt (Abschnitt "VOLLE ZIELDATEI"). Pruefe
 JEDEN Patch gegen diesen Inhalt:
 - Existieren alle importierten Symbole im Modul?
 - Bleiben bestehende Sektionen/Funktionen erhalten?
 - Wird eine Funktion erweitert (nicht ueberschrieben)?
+
+## GOLD: Diff-Pruefung (STRIKT)
+
+Pruefe JEDE `-`-Zeile im Diff. Was wurde ENTFERNT?
+
+Wenn eine `-`-Zeile eine BESTEHENDE Funktionsaufruf-Zeile ist
+(z.B. `updateFast(data)`, `updateSlow(data)`, `renderDevices(...)`,
+`body["devices"] = ...`, `renderAlerts(...)`) und die Task-Beschreibung
+verlangt NICHT explizit deren Entfernung:
+  -> reviewer_bug mit severity="high":
+     "Bestehender Aufruf X entfernt, nicht in Task gefordert."
+
+Wenn eine `-`-Zeile eine bestehende Zuweisung/Funktion entfernt:
+  -> reviewer_bug mit severity="high":
+     "Bestehende Zuweisung/Funktion X entfernt."
+
+NUR wenn die Task explizit sagt "entferne X", ist eine `-`-Zeile ok.
+
+Vergleiche den Diff mit der "VOLLEN ZIELDATEI". Wenn die Datei eine
+Funktion X enthaelt, die der Diff entfernt haben muesste (aber die
+Datei hat sie noch) -> Patch inkonsistent -> HIGH.
+
+Wenn der Diff eine bestehende Zeile entfernt (z.B. `updateFast(data);`),
+aber die Datei diese Zeile NICHT mehr enthaelt (weil der Patch sie
+entfernt hat) -> HIGH, weil bestehende Funktionalitaet verloren.
 
 ## Severity-Level (WICHTIG)
 

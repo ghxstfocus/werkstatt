@@ -634,24 +634,25 @@ Der Builder baut pro Datei einen Patch.
 """
 
 
-def _baue_code_index(project_dir) -> dict:
-    """GOLD: AST-basierter Code-Index (deterministisch).
+def _baue_api_index(project_dir) -> dict:
+    """GOLD: Deterministischer API-Index (AST).
 
-    Parst alle .py-Dateien im Projekt, extrahiert:
-    - Module
-    - Klassen (mit Methoden)
-    - Top-Level-Funktionen (mit Signaturen)
-    - Imports
-
-    Kein LLM. Deterministisch.
+    Liefert fuer jede .py-Datei:
+    - __all__ (falls vorhanden)
+    - Klassen (mit Methoden + Signaturen)
+    - Top-Level-Funktionen (mit Signaturen + Rueckgabetypen)
+    - Imports (from X import Y)
     """
     import ast as _ast
     from pathlib import Path as _Path
+
     _pd = _Path(project_dir)
+    _ignore = {
+        ".venv", "venv", "__pycache__", "site-packages",
+        "node_modules", ".git", ".tox", ".mypy_cache",
+        ".pytest_cache", ".ruff_cache", ".eggs", "build", "dist",
+    }
     index: dict = {}
-    _ignore = {".venv", "venv", "__pycache__", "site-packages",
-               "node_modules", ".git", ".tox", ".mypy_cache",
-               ".pytest_cache", ".ruff_cache", ".eggs", "build", "dist"}
     for _f in _pd.rglob("*.py"):
         if any(p in _ignore for p in _f.parts):
             continue
@@ -661,52 +662,123 @@ def _baue_code_index(project_dir) -> dict:
         except (OSError, SyntaxError):
             continue
         _rel = str(_f.relative_to(_pd))
-        _classes: list[dict] = []
-        _functions: list[dict] = []
-        _imports: list[str] = []
+        _entry = {
+            "all": [],
+            "classes": [],
+            "functions": [],
+            "imports": [],
+        }
         for _node in _tree.body:
-            if isinstance(_node, _ast.ClassDef):
+            if isinstance(_node, _ast.Assign):
+                for _t in _node.targets:
+                    if isinstance(_t, _ast.Name) and _t.id == "__all__":
+                        try:
+                            _val = _ast.literal_eval(_node.value)
+                            _entry["all"] = list(_val) if isinstance(_val, (list, tuple)) else []
+                        except (ValueError, SyntaxError):
+                            pass
+            elif isinstance(_node, _ast.ClassDef):
                 _methods = []
                 for _m in _node.body:
                     if isinstance(_m, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
                         _args = [a.arg for a in _m.args.args]
-                        _methods.append({"name": _m.name, "args": _args})
-                _classes.append({"name": _node.name, "methods": _methods})
+                        _ret = ""
+                        if _m.returns:
+                            try:
+                                _ret = _ast.unparse(_m.returns)
+                            except (AttributeError, ValueError):
+                                pass
+                        _methods.append({
+                            "name": _m.name,
+                            "args": _args,
+                            "return": _ret,
+                        })
+                _entry["classes"].append({
+                    "name": _node.name,
+                    "methods": _methods,
+                })
             elif isinstance(_node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
                 _args = [a.arg for a in _node.args.args]
-                _functions.append({"name": _node.name, "args": _args})
+                _ret = ""
+                if _node.returns:
+                    try:
+                        _ret = _ast.unparse(_node.returns)
+                    except (AttributeError, ValueError):
+                        pass
+                _entry["functions"].append({
+                    "name": _node.name,
+                    "args": _args,
+                    "return": _ret,
+                })
             elif isinstance(_node, _ast.ImportFrom):
                 _mod = _node.module or ""
                 _names = [a.name for a in _node.names]
-                _imports.append(f"from {_mod} import {', '.join(_names)}")
+                _entry["imports"].append({
+                    "from": _mod,
+                    "names": _names,
+                })
             elif isinstance(_node, _ast.Import):
-                _names = [a.name for a in _node.names]
-                _imports.append(f"import {', '.join(_names)}")
-        index[_rel] = {
-            "classes": _classes,
-            "functions": _functions,
-            "imports": _imports,
-        }
+                for _a in _node.names:
+                    _entry["imports"].append({"import": _a.name})
+        index[_rel] = _entry
     return index
 
 
-def _format_code_index_for_prompt(index: dict, max_files: int = 30) -> str:
-    """Formatiert den Code-Index fuer den Scout-Prompt (kompakt)."""
+def _format_api_index_for_prompt(index: dict, max_files: int = 40) -> str:
+    """Deterministisch: API-Index -> Prompt-Text."""
     lines = []
     for i, (f, info) in enumerate(index.items()):
         if i >= max_files:
             lines.append(f"... und {len(index) - max_files} weitere Dateien")
             break
-        _sig_parts = []
-        if info["classes"]:
-            _cls = ", ".join(c["name"] for c in info["classes"][:5])
-            _sig_parts.append(f"Klassen: {_cls}")
-        if info["functions"]:
-            _fn = ", ".join(f["name"] for f in info["functions"][:5])
-            _sig_parts.append(f"Funktionen: {_fn}")
-        _sig = " | ".join(_sig_parts) if _sig_parts else "(leer)"
+        _parts = []
+        if info.get("all"):
+            _parts.append(f"__all__: {', '.join(info['all'][:8])}")
+        for _c in info.get("classes", [])[:5]:
+            _methods = ", ".join(m["name"] for m in _c["methods"][:8])
+            _parts.append(f"class {_c['name']}({_methods})")
+        for _fn in info.get("functions", [])[:5]:
+            _args = ", ".join(_fn["args"])
+            _ret = f" -> {_fn['return']}" if _fn["return"] else ""
+            _parts.append(f"def {_fn['name']}({_args}){_ret}")
+        _sig = " | ".join(_parts) if _parts else "(kein oeffentliches API)"
         lines.append(f"- {f}: {_sig}")
     return "\n".join(lines)
+
+
+def _finde_api(index: dict, name: str) -> list:
+    """Deterministisch: sucht eine API (Funktion/Klasse/Methode) im Index."""
+    _matches = []
+    for _pfad, _info in index.items():
+        for _fn in _info.get("functions", []):
+            if _fn["name"] == name:
+                _matches.append({
+                    "pfad": _pfad,
+                    "kind": "function",
+                    "name": _fn["name"],
+                    "args": _fn["args"],
+                    "return": _fn["return"],
+                })
+        for _c in _info.get("classes", []):
+            if _c["name"] == name:
+                _matches.append({
+                    "pfad": _pfad,
+                    "kind": "class",
+                    "name": _c["name"],
+                    "methods": [m["name"] for m in _c["methods"]],
+                })
+            for _m in _c["methods"]:
+                if _m["name"] == name:
+                    _matches.append({
+                        "pfad": _pfad,
+                        "kind": "method",
+                        "class": _c["name"],
+                        "name": _m["name"],
+                        "args": _m["args"],
+                        "return": _m["return"],
+                    })
+    return _matches
+
 
 
 def _architect_system_with_builder() -> str:
@@ -1404,7 +1476,7 @@ def _run_scout(
     pd = state.project_dir
     pn = state.project_name
 
-    _index_str = _format_code_index_for_prompt(code_index, max_files=40)
+    _index_str = _format_api_index_for_prompt(code_index, max_files=40)
     _files_str = "\n".join(f"- {f}" for f in (key_files or [])[:20])
     user_content = (
         f"## AUFGABE\n{aufgabe}\n\n"
@@ -1587,7 +1659,7 @@ def run_planner(state: RunState) -> bool:
     # zwei Agents -- kein Tool-Use, kein JSON/Prosa-Raetsel.
 
     # === GOLD: CALL 0 -- Scout (Code-Index + Auftrag) ===
-    _code_index = _baue_code_index(pd)
+    _code_index = _baue_api_index(pd)
     _key_files_scan: list[str] = []
     if isinstance(_explorer_ctx, dict):
         for _k in (_explorer_ctx.get("key_files") or []):
