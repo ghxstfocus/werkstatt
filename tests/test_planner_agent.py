@@ -20,9 +20,17 @@ def _state(tmp_path):
 
 
 def test_planner_erstellt_plan(tmp_path):
-    """GOLD: Architect (Prosa) + Planner (JSON). Zwei Calls."""
+    """GOLD: Scout + Architect (Prosa) + Planner (JSON). Drei Calls."""
     st = _state(tmp_path)
 
+    _scout_json = json.dumps({
+        "ziel": "Test",
+        "relevante_dateien": [{"pfad": "a.py", "zeilen": [1], "warum": "test"}],
+        "api_auszug": {},
+        "vorgeschlagene_aenderungen": ["neue Funktion fix()"],
+        "risiken": [],
+        "auftrag_prosa": "Baue fix() in a.py",
+    })
     _arch_prosa = (
         "## Interface\n"
         "Neue Funktion fix() in a.py.\n\n"
@@ -45,7 +53,11 @@ def test_planner_erstellt_plan(tmp_path):
             self.ok = True
             self.content = content
 
-    _responses = iter([FakeReply(_arch_prosa), FakeReply(_planner_json)])
+    _responses = iter([
+        FakeReply(_scout_json),
+        FakeReply(_arch_prosa),
+        FakeReply(_planner_json),
+    ])
 
     def _fake_ask_llm(*args, **kwargs):
         return next(_responses)
@@ -249,14 +261,10 @@ def test_planner_liest_progress(tmp_path):
     st.aufgabe = "Test-Aufgabe"
     st.docs = {}
 
-    captured = {}
+    captured = {"calls": []}
 
     def _mock_ask_llm(api_key, system, user_content, **kwargs):
-        # GOLD: Nur den Architect-Call capturen (erster Call).
-        # Der zweite Call ist der Planner-Split, der braucht
-        # anderen Content.
-        if "user_content" not in captured:
-            captured["user_content"] = user_content
+        captured["calls"].append(user_content)
         reply = MagicMock()
         reply.ok = True
         reply.content = json.dumps({
@@ -271,11 +279,13 @@ def test_planner_liest_progress(tmp_path):
         rc = run_planner(st)
 
     assert rc is True
-    prompt = captured["user_content"]
-    assert "Projekt-Fortschritt" in prompt
-    assert "Vorheriger Task 1" in prompt
-    assert "Vorheriger Task 2" in prompt
-    assert "builder_failed" in prompt
+    # GOLD: captured["calls"][0]=Scout, [1]=Architect, [2]=Planner-Split.
+    # PROGRESS.md-Inhalt geht in den Architect-Call (user_content).
+    _alle = "\n".join(captured["calls"])
+    assert "Projekt-Fortschritt" in _alle
+    assert "Vorheriger Task 1" in _alle
+    assert "Vorheriger Task 2" in _alle
+    assert "builder_failed" in _alle
 
 
 @pytest.mark.skip(reason="GOLD: alter JSON-Plan-Pfad entfernt (phasen kommen vom Planner-Split, nicht direkt aus JSON)")

@@ -531,6 +531,146 @@ def _pruefe_migrations_kollision(
         return []
 
 
+# =====================================================
+# GOLD: Agent-Schnittstellen (kompakt, deterministisch)
+# =====================================================
+
+_BUILDER_SCHNITTSTELLE = """## DER BUILDER (Schnittstelle)
+- Modell: deepseek-chat, max 8000 Tokens.
+- Input: eine Zieldatei + dein Abschnitt fuer diese Datei.
+- Output: JSON-Patch mit old_string (aus Datei) + new_string (deine Beschreibung).
+- Grenzen: keine Tools, keine API-Raterei, keine Imports ohne explizite Nennung.
+- Du musst liefern: "## <pfad>", Interface (Signatur), Logik, Integration, Imports.
+"""
+
+_ARCHITECT_SCHNITTSTELLE = """## DER ARCHITECT (Schnittstelle)
+- Liefert: Prosa mit "## <pfad>", Interface, Logik, Integration.
+- Plant modular: welche Datei, welche Klasse, welcher Datenfluss.
+- Modell: deepseek-reasoner.
+"""
+
+_REVIEWER_SCHNITTSTELLE = """## DER REVIEWER (Schnittstelle)
+- Prueft: bricht der Code? Task erfuellt? Bestehende Aufrufe erhalten?
+- HIGH-Bug wenn: bestehender Aufruf entfernt, Funktion ueberschrieben, API erfunden.
+"""
+
+
+SCOUT_SYSTEM = """Du bist ein Scout.
+Du formulierst einen Auftrag fuer den Architect.
+
+## DEIN INPUT
+- Die Aufgabe des Users (vage Idee).
+- Der Code-Index (deterministisch aus AST): alle Module, Klassen,
+  Funktionen, Signaturen, Imports.
+- Die vom Explorer gemessenen Dateien.
+
+## DEIN OUTPUT (JSON + Prosa)
+{
+  "ziel": "Was soll gebaut werden? (1-2 Saetze)",
+  "relevante_dateien": [
+    {"pfad": "...", "zeilen": [..], "warum": "..."}
+  ],
+  "api_auszug": {
+    "pfad/der/datei.py": ["Klasse.method(args) -> return", "..."]
+  },
+  "vorgeschlagene_aenderungen": [
+    "Neue Funktion _section_timeline in routes_state.py",
+    "In dashboard_state additiv einbinden"
+  ],
+  "risiken": [
+    "API X hat RBAC alert.view, nicht audit.read"
+  ],
+  "auftrag_prosa": "Ausformulierter Auftrag fuer den Architect (3-10 Saetze)"
+}
+
+## WICHTIG
+- Nutze NUR die API-Symbole aus dem Code-Index. Erfinde KEINE.
+- Nenne konkrete Zeilen und Datei-Pfade.
+- Wenn eine API unklar ist: als Risiko nennen, NICHT raten.
+
+## DEIN NACHFOLGER
+""" + _ARCHITECT_SCHNITTSTELLE + """
+Der Architect bekommt deinen Auftrag + die Datei-Inhalte und liefert Prosa.
+Der Planner zerlegt in Tasks.
+Der Builder baut pro Datei einen Patch.
+"""
+
+
+def _baue_code_index(project_dir) -> dict:
+    """GOLD: AST-basierter Code-Index (deterministisch).
+
+    Parst alle .py-Dateien im Projekt, extrahiert:
+    - Module
+    - Klassen (mit Methoden)
+    - Top-Level-Funktionen (mit Signaturen)
+    - Imports
+
+    Kein LLM. Deterministisch.
+    """
+    import ast as _ast
+    from pathlib import Path as _Path
+    _pd = _Path(project_dir)
+    index: dict = {}
+    _ignore = {".venv", "venv", "__pycache__", "site-packages",
+               "node_modules", ".git", ".tox", ".mypy_cache",
+               ".pytest_cache", ".ruff_cache", ".eggs", "build", "dist"}
+    for _f in _pd.rglob("*.py"):
+        if any(p in _ignore for p in _f.parts):
+            continue
+        try:
+            _src = _f.read_text(encoding="utf-8", errors="replace")
+            _tree = _ast.parse(_src)
+        except (OSError, SyntaxError):
+            continue
+        _rel = str(_f.relative_to(_pd))
+        _classes: list[dict] = []
+        _functions: list[dict] = []
+        _imports: list[str] = []
+        for _node in _tree.body:
+            if isinstance(_node, _ast.ClassDef):
+                _methods = []
+                for _m in _node.body:
+                    if isinstance(_m, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                        _args = [a.arg for a in _m.args.args]
+                        _methods.append({"name": _m.name, "args": _args})
+                _classes.append({"name": _node.name, "methods": _methods})
+            elif isinstance(_node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                _args = [a.arg for a in _node.args.args]
+                _functions.append({"name": _node.name, "args": _args})
+            elif isinstance(_node, _ast.ImportFrom):
+                _mod = _node.module or ""
+                _names = [a.name for a in _node.names]
+                _imports.append(f"from {_mod} import {', '.join(_names)}")
+            elif isinstance(_node, _ast.Import):
+                _names = [a.name for a in _node.names]
+                _imports.append(f"import {', '.join(_names)}")
+        index[_rel] = {
+            "classes": _classes,
+            "functions": _functions,
+            "imports": _imports,
+        }
+    return index
+
+
+def _format_code_index_for_prompt(index: dict, max_files: int = 30) -> str:
+    """Formatiert den Code-Index fuer den Scout-Prompt (kompakt)."""
+    lines = []
+    for i, (f, info) in enumerate(index.items()):
+        if i >= max_files:
+            lines.append(f"... und {len(index) - max_files} weitere Dateien")
+            break
+        _sig_parts = []
+        if info["classes"]:
+            _cls = ", ".join(c["name"] for c in info["classes"][:5])
+            _sig_parts.append(f"Klassen: {_cls}")
+        if info["functions"]:
+            _fn = ", ".join(f["name"] for f in info["functions"][:5])
+            _sig_parts.append(f"Funktionen: {_fn}")
+        _sig = " | ".join(_sig_parts) if _sig_parts else "(leer)"
+        lines.append(f"- {f}: {_sig}")
+    return "\n".join(lines)
+
+
 def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
     """M-376: Explorer-Dateien ZUERST (Lost-in-the-Middle).
 
@@ -1204,6 +1344,55 @@ def _zerlege_in_sub_tasks(
     return _final
 
 
+def _run_scout(
+    state, aufgabe: str, code_index: dict,
+    key_files: list, api_key: str,
+) -> dict | None:
+    """GOLD: Scout-Call (deepseek-chat). Liefert strukturierten Auftrag.
+
+    Deterministisch: Code-Index aus AST.
+    LLM: formuliert Auftrag (Ziel, relevante Dateien, API, Risiken).
+    """
+    import json as _json
+    pd = state.project_dir
+    pn = state.project_name
+
+    _index_str = _format_code_index_for_prompt(code_index, max_files=40)
+    _files_str = "\n".join(f"- {f}" for f in (key_files or [])[:20])
+    user_content = (
+        f"## AUFGABE\n{aufgabe}\n\n"
+        f"## CODE-INDEX (Module/Klassen/Funktionen)\n{_index_str}\n\n"
+        f"## EXPLORER-DATEIEN\n{_files_str}\n"
+    )
+    reply = _with_spinner(
+        "Scout",
+        lambda: ask_llm(
+            api_key, SCOUT_SYSTEM, user_content,
+            model="deepseek-chat", temperature=0.2, max_tokens=4000,
+        ),
+    )
+    if not reply.ok:
+        audit("planner_scout_llm_fehler", {"fehler": reply.error}, pd, pn)
+        return None
+    raw = reply.content.strip()
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start < 0 or end <= start:
+        audit("planner_scout_json_fehler", {"raw": raw[:200]}, pd, pn)
+        return None
+    try:
+        parsed = _json.loads(raw[start:end])
+    except _json.JSONDecodeError:
+        audit("planner_scout_json_fehler", {"raw": raw[:200]}, pd, pn)
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    audit("planner_scout_ok",
+          {"dateien": len(parsed.get("relevante_dateien") or []),
+           "risiken": len(parsed.get("risiken") or [])}, pd, pn)
+    return parsed
+
+
 def run_planner(state: RunState) -> bool:
     """Erstellt den Plan. Schreibt in state.tasks/tests/akzeptanzkriterien."""
     pd = state.project_dir
@@ -1349,6 +1538,43 @@ def run_planner(state: RunState) -> bool:
     # Der Architect liefert strukturierte Prosa. Der Planner
     # (_zerlege_in_sub_tasks) macht daraus Tasks. Zwei Calls,
     # zwei Agents -- kein Tool-Use, kein JSON/Prosa-Raetsel.
+
+    # === GOLD: CALL 0 -- Scout (Code-Index + Auftrag) ===
+    _code_index = _baue_code_index(pd)
+    _key_files_scan: list[str] = []
+    if isinstance(_explorer_ctx, dict):
+        for _k in (_explorer_ctx.get("key_files") or []):
+            if isinstance(_k, dict) and _k.get("file"):
+                _kf = _k["file"]
+                if _kf not in _key_files_scan:
+                    _key_files_scan.append(_kf)
+    _scout_report = _run_scout(
+        state, aufgabe, _code_index, _key_files_scan, api_key,
+    )
+    if _scout_report:
+        _scout_auftrag = _scout_report.get("auftrag_prosa") or ""
+        _scout_apis = _scout_report.get("api_auszug") or {}
+        _scout_risiken = _scout_report.get("risiken") or []
+        if _scout_auftrag:
+            user_content += (
+                "\n\n## SCOUT-AUFTRAG (vorformuliert):\n"
+                + _scout_auftrag[:3000]
+            )
+        if _scout_apis:
+            _api_lines = []
+            for _af, _asyms in list(_scout_apis.items())[:10]:
+                _api_lines.append(f"-- {_af}")
+                for _asym in (_asyms or [])[:20]:
+                    _api_lines.append(f"   {_asym}")
+            user_content += (
+                "\n\n## VERFUEGBARE APIS (aus Code-Index):\n"
+                + "\n".join(_api_lines)[:4000]
+            )
+        if _scout_risiken:
+            user_content += (
+                "\n\n## SCOUT-RISIKEN:\n"
+                + "\n".join(f"- {r}" for r in _scout_risiken[:10])
+            )
 
     # CALL 1: Architect
     _arch_sys = _planner_system(aufgabe, _explorer_ctx)
