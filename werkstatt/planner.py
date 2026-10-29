@@ -579,8 +579,10 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
                 "</hinweis>"
             )
 
-    # === M-408: Architect-Modus (Prosa statt JSON) ===
-    if "architect" in aufgabe.lower() or "prosa" in aufgabe.lower():
+    # === GOLD: Architect-Modus IMMER (nicht nur bei "architect") ===
+    # Der Architect liefert Prosa, _zerlege_in_sub_tasks macht
+    # daraus Tasks. Zwei Agents, zwei Calls.
+    if True:
         # M-446: Architect-Modus -> NUR ARCHITECT_SYSTEM + measured_files.
         # Keine Skills (Tool-Definitionen triggern deepseek-reasoner
         # zu DSML-Tool-Calls statt Prosa), kein <doku_verbot>,
@@ -1329,209 +1331,67 @@ def run_planner(state: RunState) -> bool:
     # GOLD: Tool-Use nur 1 Runde. Architect soll PLANEN, nicht
     # staendig Dateien lesen. Bei 3 Runden liefert er oft nur
     # Tool-Calls (DSML) statt Plan-JSON (Live 14:52).
-    _max_tool_runden = 1
-    _tool_kontext = ""
-    reply = None
-    plan = None
-    for _runde in range(_max_tool_runden + 1):
-        _sys = _planner_system(aufgabe, _explorer_ctx)
-        if _tool_kontext:
-            _sys += "\n\n<tool_ergebnisse>\n" + _tool_kontext + "\n</tool_ergebnisse>"
-        _user = user_content + (_tool_kontext if _tool_kontext else "")
-        # M-445: temperature bleibt positional (ask_llm-Signatur).
-        # Reasoning-Modelle ignorieren temperature serverseitig.
-        reply = _with_spinner(
-            "Architect",
-            lambda: ask_llm(
-                api_key, _sys, _user,
-                model=_ARCHITECT_MODEL, temperature=0.2, max_tokens=16000,
-            ),
-        )
-        if not reply.ok:
-            audit("planner_llm_fehler", {"fehler": reply.error}, pd, pn)
-            return False
+    # === GOLD: Architect (Prosa) + Planner (JSON) ===
+    # Der Architect liefert strukturierte Prosa. Der Planner
+    # (_zerlege_in_sub_tasks) macht daraus Tasks. Zwei Calls,
+    # zwei Agents -- kein Tool-Use, kein JSON/Prosa-Raetsel.
 
-        # M-453b: JSON erkennen. Wenn die Antwort JSON ist:
-        # in den bestehenden JSON-Pfad fallen (kein Architect+Split).
-        # Wenn Prosa: Architect+Split.
-        _raw = reply.content.strip()
-        _is_json = _raw.startswith("{") or '"tasks"' in _raw[:200]
-
-        if not _is_json:
-            # Prosa -> Architect+Split.
-            # K7/K51: XML/DSML-Tool-Call-Tags entfernen.
-            _prosa = _strip_xml_tags(_raw)
-            # K51: Fail-Closed, wenn nach Strip zu wenig Prosa uebrig.
-            # Verhindert, dass der Planner-Split aus DSML-Argumenten
-            # 11 leere Tasks baut (Live 22:24, prosa_len=199).
-            # K51/K52: Fail-Closed, wenn nach Strip zu wenig Prosa
-            # uebrig ODER noch XML-artige Marker vorhanden sind
-            # (z.B. <tool_call> mit JSON-Payload, das nicht gefiltert
-            # wurde).
-            # K55b: nur KONKRETE Tool-Call-Marker pruefen.
-            # Vorher: "<" in _prosa and ">" in _prosa -- das fing
-            # jede Prosa mit Vergleichsoperatoren, HTML-Erwaehnung
-            # oder dem <migrationsstand pflicht>-Marker selbst.
-            # Live 13:47-13:50: 4x Prosa-Fail, weil der Architect
-            # den Pflicht-Marker lieferte (K17-Konflikt mit K52).
-            _marker_rest = (
-                any(tag in _prosa for tag in _TOOL_CALL_TAGS)
-                or _DSML_TOKEN in _prosa
-            )
-            if len(_prosa.strip()) < 300 or _marker_rest:
-                audit("planner_prosa_zu_kurz",
-                      {"len": len(_prosa),
-                       "marker_rest": _marker_rest,
-                       "raw_prefix": _raw[:200]}, pd, pn)
-                _fakt = (
-                    f"Architect-Antwort hat nur {len(_prosa)} Zeichen "
-                    f"nach XML/DSML-Strip."
-                    if len(_prosa.strip()) < 100
-                    else f"Architect-Antwort enthaelt noch XML-Marker "
-                    f"nach Strip: {_prosa[:150]!r}"
-                )
-                state.last_planner_info = {
-                    "regel": "PROSA_PFLICHT",
-                    "fakt": _fakt,
-                    "erklaerung": (
-                        "Beschreibe die Loesung in Prosa. KEINE "
-                        "Tool-Calls. KEINE DSML-Tokens. KEIN "
-                        "<tool_call>, <read_file>, <function_calls>."
-                    ),
-                    "details": f"Original-Anfang: {_raw[:200]}",
-                }
-                return False
-            _key_files: list[str] = []
-            if isinstance(_explorer_ctx, dict):
-                for k in (_explorer_ctx.get("key_files") or []):
-                    if isinstance(k, dict) and k.get("file"):
-                        _f = k["file"]
-                        if _f not in _key_files:
-                            _key_files.append(_f)
-                if not _key_files:
-                    for _f in (_explorer_ctx.get("next_reads") or []):
-                        if isinstance(_f, str) and _f not in _key_files:
-                            _key_files.append(_f)
-            audit("planner_architect_scope",
-                  {"prosa_len": len(_prosa),
-                   "anzahl_dateien": len(_key_files),
-                   "dateien": _key_files[:10]}, pd, pn)
-
-            # K17c: Migrations-Kollision wandert in planner_gate.py (Hook).
-            state.architect_prosa = _prosa  # type: ignore[attr-defined]
-            _sub_tasks = _zerlege_in_sub_tasks(
-                _prosa, _key_files, api_key, pd, pn,
-            )
-            if _sub_tasks:
-                # K61a-2: Task-Files normalisieren (Defensiv, falls
-                # _zerlege_in_sub_tasks die Korrektur verpasst hat).
-                _sub_tasks = _normalisiere_task_files(
-                    _sub_tasks, _explorer_ctx, pd, pn,
-                )
-                state.tasks = _sub_tasks  # type: ignore[attr-defined]
-            else:
-                state.tasks = [{  # type: ignore[attr-defined]
-                    "id": "t1", "name": "Architect-Loesung umsetzen",
-                    "action": "update", "description": _prosa,
-                    "task_files": _key_files,
-                }]
-            state.phasen = []  # type: ignore[attr-defined]
-            state.tests = []  # type: ignore[attr-defined]
-            state.akzeptanzkriterien = []  # type: ignore[attr-defined]
-            audit("planner_architect_erstellt",
-                  {"prosa_len": len(_prosa),
-                   "anzahl_tasks": len(state.tasks)}, pd, pn)
-            return True
-
-
-        raw = reply.content.strip()
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
-        if start < 0 or end <= start:
-            audit("planner_json_fehler", {"raw": raw[:200]}, pd, pn)
-            return False
-
-        try:
-            _parsed = json.loads(raw[start:end])
-        except json.JSONDecodeError:
-            audit("planner_json_fehler", {"raw": raw[:200]}, pd, pn)
-            return False
-
-        # Tool-Call?
-        if isinstance(_parsed, dict) and "tool" in _parsed and "tasks" not in _parsed:
-            _tool = _parsed.get("tool")
-            _args = _parsed.get("args", {})
-            _cmd = None
-            if _tool == "read_file":
-                _fp = _args.get("file", "")
-                if _fp and not _fp.startswith("/"):
-                    _cmd = f"cat {_fp}"
-            elif _tool == "grep":
-                _pat = _args.get("pattern", "")
-                _path = _args.get("path", ".")
-                if _pat:
-                    _safe_pat = _pat.replace('"', '')
-                    _cmd = f'grep -rn "{_safe_pat}" --include=*.py --exclude-dir=.venv --exclude-dir=__pycache__ {_path}'
-            if _cmd:
-                _res = run_readonly(_cmd, Path(pd))
-                _out = _res.get("stdout", "")[:3000]
-                _tool_kontext += f"\n--- {_tool} {_args} ---\n{_out}\n"
-                audit("planner_tool_call",
-                      {"runde": _runde + 1, "tool": _tool, "args": _args,
-                       "stdout_len": len(_out)}, pd, pn)
-                continue
-            else:
-                audit("planner_tool_ungueltig",
-                      {"runde": _runde + 1, "parsed": str(_parsed)[:200]}, pd, pn)
-                return False
-
-        # Plan-JSON
-        plan = _parsed
-        break
-
-    if plan is None:
-        audit("planner_kein_plan_nach_tools", {}, pd, pn)
+    # CALL 1: Architect
+    _arch_sys = _planner_system(aufgabe, _explorer_ctx)
+    _arch_reply = _with_spinner(
+        "Architect",
+        lambda: ask_llm(
+            api_key, _arch_sys, user_content,
+            model=_ARCHITECT_MODEL, temperature=0.2, max_tokens=16000,
+        ),
+    )
+    if not _arch_reply.ok:
+        audit("planner_architect_llm_fehler",
+              {"fehler": _arch_reply.error}, pd, pn)
         return False
 
-    # M-306d Fix 3: action-Default. Wenn Planner "action" nicht
-    # setzt, Default auf "write" (fail-safe) + Audit-Spur.
-    _tasks_raw = plan.get("tasks", [])
-    _action_missing = 0
-    # M-317: Default "update" (nicht "write"). Fail-safe:
-    # update = normaler Patch-Pfad, kein Idempotenz-Risiko.
-    # "write" wird nicht mehr verwendet (M-306a -> M-317).
-    for _t in _tasks_raw:
-        if isinstance(_t, dict):
-            _a = _t.get("action")
-            if _a is None:
-                _t["action"] = "update"
-                _action_missing += 1
-            elif _a == "write":
-                # M-317: Legacy-Wert "write" -> "update"
-                _t["action"] = "update"
-    if _action_missing > 0:
-        audit("planner_action_missing", {"anzahl": _action_missing}, pd, pn)
+    _arch_prosa = _strip_xml_tags(_arch_reply.content.strip())
+    if len(_arch_prosa.strip()) < 50:
+        audit("planner_architect_prosa_zu_kurz",
+              {"len": len(_arch_prosa),
+               "raw_prefix": _arch_reply.content[:200]}, pd, pn)
+        return False
 
-    # K61a-3: task_files normalisieren (Dateiname -> voller Pfad).
-    _tasks_raw = _normalisiere_task_files(
-        _tasks_raw, _explorer_ctx, pd, pn,
+    audit("planner_architect_ok",
+          {"prosa_len": len(_arch_prosa)}, pd, pn)
+    state.architect_prosa = _arch_prosa  # type: ignore[attr-defined]
+
+    # CALL 2: Planner (JSON aus Prosa)
+    _key_files: list[str] = []
+    if isinstance(_explorer_ctx, dict):
+        for k in (_explorer_ctx.get("key_files") or []):
+            if isinstance(k, dict) and k.get("file"):
+                _f = k["file"]
+                if _f not in _key_files:
+                    _key_files.append(_f)
+
+    _sub_tasks = _zerlege_in_sub_tasks(
+        _arch_prosa, _key_files, api_key, pd, pn,
     )
-    # Plan in State schreiben
-    state.tasks = _tasks_raw  # type: ignore[attr-defined]
-    # M-310: phasen optional.
-    state.phasen = plan.get("phasen", [])  # type: ignore[attr-defined]
-    state.tests = plan.get("tests", [])  # type: ignore[attr-defined]
-    state.akzeptanzkriterien = plan.get("akzeptanzkriterien", [])  # type: ignore[attr-defined]
 
-    # M-299e: Planner-Entscheidung pro Fehler speichern.
-    state.blocker_fehler = plan.get("blocker", [])  # type: ignore[attr-defined]
-    state.follow_up_fehler = plan.get("follow_up", [])  # type: ignore[attr-defined]
-    state.ignore_fehler = plan.get("ignore", [])  # type: ignore[attr-defined]
+    if _sub_tasks:
+        _sub_tasks = _normalisiere_task_files(
+            _sub_tasks, _explorer_ctx, pd, pn,
+        )
+        state.tasks = _sub_tasks  # type: ignore[attr-defined]
+    else:
+        state.tasks = [{  # type: ignore[attr-defined]
+            "id": "t1", "name": "Architect-Loesung umsetzen",
+            "action": "update", "description": _arch_prosa,
+            "task_files": _key_files,
+        }]
 
-    audit("planner_plan_erstellt", {
-        "tasks": len(state.tasks),  # type: ignore[attr-defined]
-        "tests": len(state.tests),  # type: ignore[attr-defined]
-        "kriterien": len(state.akzeptanzkriterien),  # type: ignore[attr-defined]
-    }, pd, pn)
+    state.phasen = []  # type: ignore[attr-defined]
+    state.tests = []  # type: ignore[attr-defined]
+    state.akzeptanzkriterien = []  # type: ignore[attr-defined]
 
-    return bool(state.tasks and state.tests and state.akzeptanzkriterien)  # type: ignore[attr-defined]
+    audit("planner_plan_erstellt",
+          {"tasks": len(state.tasks),
+           "prosa_len": len(_arch_prosa)}, pd, pn)
+
+    return bool(state.tasks)  # type: ignore[attr-defined]
