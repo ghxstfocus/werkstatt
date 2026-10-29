@@ -983,6 +983,26 @@ def _normalisiere(text: str) -> str:
     return text.strip()
 
 
+def _segmentiere_nach_pfad(prosa: str) -> list[dict]:
+    """Deterministisch: zerlegt Prosa an "## <pfad>"-Ueberschriften.
+
+    Liefert Liste von {"datei": str, "prosa": str}.
+    Reine Textverarbeitung, kein LLM.
+    """
+    import re as _re
+    segs: list[dict] = []
+    pat = _re.compile(r"^##\s+(\S+\.py)\s*$", _re.MULTILINE)
+    ms = list(pat.finditer(prosa))
+    for i, m in enumerate(ms):
+        start = m.start()
+        ende = ms[i + 1].start() if i + 1 < len(ms) else len(prosa)
+        segs.append({
+            "datei": m.group(1),
+            "prosa": prosa[start:ende].strip(),
+        })
+    return segs
+
+
 def _extrahiere_prosa_abschnitt(
     prosa: str, start: str, ende: str,
 ) -> str:
@@ -1070,6 +1090,14 @@ def _llm_split_einzel_task(
         _start = t.get("architect_start") or ""
         _ende = t.get("architect_ende") or ""
         _abschnitt = _extrahiere_prosa_abschnitt(prosa, _start, _ende)
+        if not _abschnitt and not _start:
+            _tf = t.get("task_files") or task.get("task_files") or []
+            _ziel = _tf[0] if _tf else ""
+            if _ziel:
+                for _seg in _segmentiere_nach_pfad(prosa):
+                    if _seg["datei"] == _ziel or _seg["datei"].endswith("/" + _ziel) or _ziel.endswith(_seg["datei"]):
+                        _abschnitt = _seg["prosa"]
+                        break
         if not _abschnitt:
             _name = t.get("name") or ""
             _desc = t.get("description") or ""
@@ -1353,6 +1381,16 @@ def _zerlege_in_sub_tasks(
         _ende = t.get("architect_ende") or ""
         # M-461: Woertlichen Prosa-Abschnitt extrahieren.
         _abschnitt = _extrahiere_prosa_abschnitt(prosa, _start, _ende)
+        # GOLD: Wenn architect_start fehlt (Gold-Architect liefert
+        # "## <pfad>"-Ueberschriften), deterministisch segmentieren.
+        if not _abschnitt and not _start:
+            _tf = t.get("task_files") or []
+            _ziel = _tf[0] if _tf else ""
+            if _ziel:
+                for _seg in _segmentiere_nach_pfad(prosa):
+                    if _seg["datei"] == _ziel or _seg["datei"].endswith("/" + _ziel) or _ziel.endswith(_seg["datei"]):
+                        _abschnitt = _seg["prosa"]
+                        break
         if not _abschnitt:
             # M-463: Fallback: Task-Name + Description, NICHT ganze Prosa.
             _name = t.get("name") or ""

@@ -91,7 +91,16 @@ Regel: body["x"] = ... ist OK (dict erweitern).
 
 Wenn du eine Funktion erweiterst: das alte body-Dict MUSS im
 new_string vollstaendig enthalten sein. Sonst sind bestehende
-Sektionen weg."""
+Sektionen weg.
+
+## FUNKTION-WAHL (verbindlich)
+- Wenn die Task eine Funktion/Klasse X namentlich nennt: waehle X.
+  Nicht die "aehnlichste", nicht die kuerzere.
+- Bei Namens-Aehnlichkeit (z.B. `_section_timeline` vs.
+  `_section_timeline_entries`): pruefe, welche die Task nennt,
+  und nutze genau diese.
+- Wenn du unsicher bist: Task failen lassen, nicht raten.
+"""
 
 
 _PY_IGNORE_PARTS = frozenset({
