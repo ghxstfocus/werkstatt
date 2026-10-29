@@ -191,6 +191,17 @@ manuelle Browser-Tests.
 
 ## NAECHSTE SESSION — START
 
+**Aus Session 2026-10-29 spaet (nach Handoff-Update):**
+
+- **M-487 erledigt** (`31c6ff3`), live bewiesen (`4e860c3`).
+- **Neuer offener Punkt `R-CHECK-1`** (siehe `docs/OFFENE-BLOECKE.md`):
+  Reviewer prueft Task-Zahlen nicht. Live-Beleg 20:42: Task verlangt
+  `limit=10`, Builder schreibt `limit=5`, Phase-Review approved.
+  Fix: `## KONSTANTEN-CHECK` in `REVIEWER_SYSTEM`.
+- **Naechster Block:** `R-CHECK-1` (klein, ~15 min).
+
+## NAECHSTE SESSION — START (alt)
+
 **Vorbereitung:**
 1. `git status --short --branch` sauber?
 2. `git log --oneline -1` == letzter Commit?

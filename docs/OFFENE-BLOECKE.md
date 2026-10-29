@@ -88,6 +88,12 @@ Merkposten (M-Nummern) in `MERKPOSTEN.md`.
 | M-488 | klein | `phase_end` laeuft Vollsuite. `verify.json` + `loop.py` (M-476). Ohne das ist der Loop ein Builder. |
 | M-489 | gross | Test-Repair-Loop (TDFlow-Stil). 4 Sub-Agenten: Patch-Propose, Debug, Patch-Revise, Test-Generate. Tests FEST. Max 3 Runden. |
 
+## Reviewer-Regression (2026-10-29)
+
+| Block | Aufwand | Kurz |
+|---|---|---|
+| R-CHECK-1 | klein | Reviewer prueft Task-Zahlen nicht. Live-Beleg 20:42: Task verlangt `limit=10`, Code nutzt `limit=5`, Phase-Review approved. In Runde 1 des vorigen RERUN (20:38) hatte der Reviewer denselben Bug als HIGH markiert — Regression. Fix: `## KONSTANTEN-CHECK` in `REVIEWER_SYSTEM` (Zahlen aus Task muessen im Diff als Literal auftauchen, sonst HIGH-Bug). |
+
 ## Doku-Sync (M-490..M-492)
 
 | Block | Aufwand | Kurz |
