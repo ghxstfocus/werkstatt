@@ -13,6 +13,12 @@ from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.state import RunState
 
+_REVIEWER_SCHNITTSTELLE = """## DER REVIEWER (Schnittstelle)
+- Prueft: bricht der Code? Task erfuellt? Bestehende Aufrufe erhalten?
+- HIGH-Bug wenn: bestehender Aufruf entfernt, Funktion ueberschrieben, API erfunden.
+"""
+
+
 BUILDER_SYSTEM = """Du bist ein Editor.
 Du bekommst eine ZIELDATEI und eine ARCHITECT-BESCHREIBUNG.
 
@@ -118,7 +124,8 @@ def _sammle_projekt_py_files(project_dir: Path, limit: int = 30) -> list[Path]:
 
 def _builder_system() -> str:
     """M-416: Editor-Modus. Nur Architect-Text + Edit-Format."""
-    return BUILDER_SYSTEM
+    # GOLD: Reviewer-Schnittstelle anhaengen.
+    return BUILDER_SYSTEM + "\n\n" + _REVIEWER_SCHNITTSTELLE
 
 
 def _finde_modul_pfad(modul: str, project_dir: Path) -> Path | None:

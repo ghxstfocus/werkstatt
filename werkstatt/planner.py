@@ -367,6 +367,17 @@ MIGRATIONS-NUMMERN:
   - Nutze NIEMALS eine Nummer, die bereits als Datei existiert.
 
 Antworte NUR mit diesem Prosa-Text. Kein Code, nur Beschreibung.
+
+## GOLD: SCOUT-KONTEXT
+Du bekommst im User-Content:
+- "SCOUT-AUFTRAG" (vorformuliert).
+- "VERFUEGBARE APIS (aus Code-Index)".
+
+Nutze die APIs aus "VERFUEGBARE APIS" -- NICHT die aus der Aufgabe.
+Wenn die Aufgabe eine API nennt, die nicht im API-Auszug steht:
+  Nenne sie NICHT. Nutze die aehnlichste echte API.
+Beispiel: Aufgabe sagt "read_events". API-Auszug hat
+"list_recent_assessments". Nutze list_recent_assessments.
 """
 
 
@@ -554,6 +565,16 @@ _REVIEWER_SCHNITTSTELLE = """## DER REVIEWER (Schnittstelle)
 - HIGH-Bug wenn: bestehender Aufruf entfernt, Funktion ueberschrieben, API erfunden.
 """
 
+_SCOUT_NACHFOLGER_BLOCK = """## DEIN NACHFOLGER
+Der Architect bekommt deinen `auftrag_prosa` + `api_auszug`.
+Der Planner zerlegt seine Prosa in Tasks.
+Der Builder baut pro Datei einen Patch.
+
+WICHTIG: Du lieferst JSON (mit "auftrag_prosa" als Prosa-Text).
+Der Architect liefert Prosa mit "## <pfad>"-Ueberschriften.
+Du musst NICHT "## <pfad>" liefern -- nur den Auftrag formulieren.
+"""
+
 
 SCOUT_SYSTEM = """Du bist ein Scout.
 Du formulierst einen Auftrag fuer den Architect.
@@ -606,7 +627,7 @@ Pruefe JEDE im Auftrag genannte API gegen den Code-Index:
 - Nenne konkrete Zeilen und Datei-Pfade.
 
 ## DEIN NACHFOLGER
-""" + _ARCHITECT_SCHNITTSTELLE + """
+
 Der Architect bekommt deinen Auftrag + die Datei-Inhalte und liefert Prosa.
 Der Planner zerlegt in Tasks.
 Der Builder baut pro Datei einen Patch.
@@ -686,6 +707,16 @@ def _format_code_index_for_prompt(index: dict, max_files: int = 30) -> str:
         _sig = " | ".join(_sig_parts) if _sig_parts else "(leer)"
         lines.append(f"- {f}: {_sig}")
     return "\n".join(lines)
+
+
+def _architect_system_with_builder() -> str:
+    """GOLD: ARCHITECT_SYSTEM + _BUILDER_SCHNITTSTELLE."""
+    return ARCHITECT_SYSTEM + "\n\n" + _BUILDER_SCHNITTSTELLE
+
+
+def _scout_system_with_nachfolger() -> str:
+    """GOLD: SCOUT_SYSTEM + _SCOUT_NACHFOLGER_BLOCK."""
+    return SCOUT_SYSTEM + "\n\n" + _SCOUT_NACHFOLGER_BLOCK
 
 
 def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
@@ -775,8 +806,7 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
                 )
         _arch_parts.append(ARCHITECT_SYSTEM)
         return "\n\n".join(_arch_parts)
-    else:
-        parts.append(PLANNER_SYSTEM)
+    # GOLD: kein else -- PLANNER_SYSTEM ist toter Code.
 
     # === M-397: Doku-Verbot (harte Regel, vor den Skills) ===
     parts.append(
@@ -1384,7 +1414,7 @@ def _run_scout(
     reply = _with_spinner(
         "Scout",
         lambda: ask_llm(
-            api_key, SCOUT_SYSTEM, user_content,
+            api_key, _scout_system_with_nachfolger(), user_content,
             model="deepseek-chat", temperature=0.2, max_tokens=4000,
         ),
     )
@@ -1594,7 +1624,10 @@ def run_planner(state: RunState) -> bool:
             )
 
     # CALL 1: Architect
-    _arch_sys = _planner_system(aufgabe, _explorer_ctx)
+    # GOLD: _planner_system baut ARCHITECT_SYSTEM + measured_files.
+    # Dann _architect_system_with_builder() haengt _BUILDER_SCHNITTSTELLE an.
+    _arch_sys_base = _planner_system(aufgabe, _explorer_ctx)
+    _arch_sys = _arch_sys_base + "\n\n" + _BUILDER_SCHNITTSTELLE
     _arch_reply = _with_spinner(
         "Architect",
         lambda: ask_llm(
