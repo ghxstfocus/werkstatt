@@ -577,6 +577,18 @@ def _apply_one_patch(
     return content, "fail"
 
 
+def _patches_wirklich_angewendet(state) -> bool:
+    """K50: True nur, wenn Patches geliefert UND angewandt wurden.
+
+    Wird von beiden Reviewer-Reject-Pfaden genutzt (BUG-A + BUG-B),
+    damit die Logik an einer Stelle lebt und testbar ist.
+    fail-closed: state.patches truthy, aber applied_count 0/None
+    -> False -> Reviewer-Reject wird NICHT ignoriert.
+    """
+    _applied = int(getattr(state, "applied_count", 0) or 0)
+    return bool(getattr(state, "patches", [])) and _applied > 0
+
+
 def _apply_patches_with_hooks(
     state: RunState,
     patches: list,
@@ -888,10 +900,15 @@ def _reflection_loop(
 
         audit("loop_reflection_runde", {"runde": runde}, pd, pn)
 
-        # Fehler-Kontext anreichern (aus _verify_patches).
-        _errors = getattr(state, "last_verify_errors", None) or []
-        if error_context:
-            _errors = list(_errors) + [error_context]
+        # K50-Bug-C: last_verify_errors KUMULATIV halten.
+        # Vorher wurde die Liste bei jedem Reflection-Eintritt mit
+        # error_context ueberschrieben, was dazu fuehrte, dass ein
+        # spaeterer reject-Pfad (Z. ~1933) ein leeres _last_errors
+        # sah und den Task trotz gescheitertem Patch als task_ok
+        # markierte.
+        _errors = list(getattr(state, "last_verify_errors", None) or [])
+        if error_context and error_context not in _errors:
+            _errors = _errors + [error_context]
         state.last_verify_errors = _errors  # type: ignore[attr-defined]
 
         # M-329: Builder erneut rufen. Er nutzt search/replace.
@@ -916,6 +933,7 @@ def _reflection_loop(
             state, _patches,
             phase_label=f"reflection-runde-{runde}",
         )
+        state.applied_count = getattr(state, "applied_count", 0) + _applied  # type: ignore[attr-defined]
 
         if _applied == 0:
             # K30: Konkreten Patch-Fehler in verify_errors anhaengen,
@@ -1080,6 +1098,7 @@ def _phase_end_reflection(state: RunState) -> bool:
                 state, _patches,
                 phase_label=f"phase-fix-{_datei}-r{_runde + 1}",
             )
+            state.applied_count = getattr(state, "applied_count", 0) + _applied  # type: ignore[attr-defined]
             if _applied > 0:
                 _repaired += 1
                 audit("loop_phase_reflection_patch_applied",
@@ -1753,6 +1772,8 @@ def run_pipeline_loop(
                 break
 
         # Patches anwenden (create + update) — NACH dem Hook.
+        # K50b: applied_count zaehlen.
+        state.applied_count = 0  # type: ignore[attr-defined]
         backup_dir = Path(pd) / ".werkstatt" / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
         for patch in patches:
@@ -1773,6 +1794,7 @@ def run_pipeline_loop(
                     continue
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(content)
+                state.applied_count += 1  # type: ignore[attr-defined]
                 audit("loop_patch_created", {"file": file}, pd, pn)
             elif action == "update":
                 old_str = patch.get("old_string", "")
@@ -1786,6 +1808,9 @@ def run_pipeline_loop(
                 _neu_content2, _match2 = _apply_one_patch(
                     file_content, old_str, new_str,
                 )
+                if _match2 != "fail":
+                    target.write_text(_neu_content2)
+                    state.applied_count += 1  # type: ignore[attr-defined]
                 if _match2 == "fail":
                     audit("loop_patch_old_string_not_found",
                           {"file": file, "old": old_str[:50]}, pd, pn)
@@ -1880,10 +1905,23 @@ def run_pipeline_loop(
                 # _verify_patches-Lauf gruen war (last_verify_errors leer),
                 # ist der Reviewer-Reject eine Halluzination.
                 _last_errors = getattr(state, "last_verify_errors", None) or []
-                if not _last_errors:
+                # K50-Bug-A: wie BUG-B, gleicher semantischer
+                # _hat_patch-Check. Ohne diesen Zweig war der
+                # erste Reject-Pfad fail-open, der zweite fail-
+                # closed -- asymmetrisch und reproduzierbar falsch.
+                _hat_patch_a = _patches_wirklich_angewendet(state)
+                if not _last_errors and _hat_patch_a:
                     audit("loop_reviewer_reject_ignoriert",
                           {"task_id": i, "grund": "pytest gruen"}, pd, pn)
                     # Fall durch zum task_ok
+                elif not _last_errors and not _hat_patch_a:
+                    audit("loop_reviewer_reject_fail_closed",
+                          {"task_id": i, "grund": "kein_patch_angewendet_runde1"},
+                          pd, pn)
+                    _task_ende(state, phase_state, task_id, ok=False,
+                               name=task_name,
+                               failure="reviewer_rejected_no_patch")
+                    return 1
                 else:
                     _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected")
                     return 1
@@ -1896,7 +1934,12 @@ def run_pipeline_loop(
                 # M-359: pytest gruen reicht NICHT, wenn der Patch
                 # gar nicht angewendet wurde (old_string_not_found).
                 # Dann ist der Task fail-closed.
-                _hat_patch = bool(getattr(state, "patches", []))
+                # K50-Bug-B: state.patches ist nur Builder-Output.
+                # Es sagt NICHTS darueber, ob der Patch angewandt
+                # wurde (loop_patch_old_string_not_found setzt
+                # state.patches NICHT zurueck). Fail-closed nur,
+                # wenn nachweislich kein Patch angewandt wurde:
+                _hat_patch = _patches_wirklich_angewendet(state)
                 # M-441: Divergenz-Check. Wenn der Reviewer in Runde 2
                 # MEHR Bugs findet als in Runde 1, hat die Reflection
                 # nichts geholfen — fail-closed, keine dritte Runde.
