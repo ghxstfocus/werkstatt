@@ -1191,6 +1191,78 @@ def load_project_config(project_name: str) -> dict:
 
 
 
+def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
+    """M-487: Committet uncommittete Aenderungen im Zielprojekt.
+
+    Wird vom Human-Gate nach 'j' aufgerufen. Fail-closed bei Git-Fehler.
+    Rueckgabe: (True, sha) bei Erfolg, (True, "") wenn nichts zu tun,
+    (False, fehlertext) bei Fehler.
+    """
+    pd = getattr(state, "project_dir", None)
+    pn = getattr(state, "project_name", "?")
+    if pd is None:
+        return False, "kein project_dir"
+
+    try:
+        status = subprocess.run(
+            ["git", "-C", str(pd), "status", "--porcelain"],
+            capture_output=True, text=True, check=False, timeout=10,
+        )
+    except Exception as _e:  # noqa: BLE001
+        return False, f"git status fehlgeschlagen: {_e}"
+    if not status.stdout.strip():
+        audit("loop_human_gate_commit_skip",
+              {"reason": "working_tree_clean"}, pd, pn)
+        return True, ""
+
+    try:
+        add = subprocess.run(
+            ["git", "-C", str(pd), "add", "-A"],
+            capture_output=True, text=True, check=False, timeout=30,
+        )
+    except Exception as _e:  # noqa: BLE001
+        return False, f"git add fehlgeschlagen: {_e}"
+    if add.returncode != 0:
+        return False, f"git add rc={add.returncode}: {add.stderr.strip()[:200]}"
+
+    _name = getattr(state, "git_author_name", "") or "builder"
+    _email = getattr(state, "git_author_email", "") or "builder@security-ai.local"
+    _aufgabe = (getattr(state, "aufgabe", "") or "").strip()
+    _msg_kurz = _aufgabe.split("\n")[0][:80] if _aufgabe else "Werkstatt-RERUN"
+    _msg = f"chore(werkstatt): {_msg_kurz}\n\nRERUN (M-487, human_gate committet selbst)."
+
+    _commit_argv = [
+        "git", "-C", str(pd),
+        "-c", f"user.name={_name}",
+        "-c", f"user.email={_email}",
+        "commit", "-m", _msg,
+    ]
+    try:
+        commit = subprocess.run(
+            _commit_argv,
+            capture_output=True, text=True, check=False, timeout=30,
+        )
+    except Exception as _e:  # noqa: BLE001
+        return False, f"git commit fehlgeschlagen: {_e}"
+    if commit.returncode != 0:
+        audit("loop_human_gate_commit_fehler",
+              {"rc": commit.returncode, "stderr": commit.stderr[:300]}, pd, pn)
+        return False, f"git commit rc={commit.returncode}: {commit.stderr.strip()[:200]}"
+
+    try:
+        _rev = subprocess.run(
+            ["git", "-C", str(pd), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=False, timeout=10,
+        )
+        _sha = _rev.stdout.strip()[:12]
+    except Exception:  # noqa: BLE001
+        _sha = ""
+
+    audit("loop_human_gate_committed",
+          {"sha": _sha, "msg": _msg_kurz}, pd, pn)
+    return True, _sha
+
+
 def _human_gate(state: RunState) -> int:
     """Eigenes Human-Gate im Loop (fail-closed).
 
@@ -1274,6 +1346,14 @@ def _human_gate(state: RunState) -> int:
 
     if antwort in ("j", "ja", "y", "yes"):
         audit("loop_human_gate_approved", {}, pd, pn)
+        # M-487: Human-Gate committet selbst (nur bei explizitem j).
+        _ok, _info = _committe_zielprojekt(state)
+        if not _ok:
+            audit("loop_human_gate_commit_abort", {"info": _info}, pd, pn)
+            print(f"  FEHLER beim Commit: {_info}")
+            return 1
+        if _info:
+            print(f"  Commit: {_info}")
         return 0
     if antwort == "e":
         # Manueller Edit-Modus: Nutzer oeffnet Editor, dann erneut fragen
