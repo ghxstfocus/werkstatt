@@ -897,14 +897,14 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
                 "</measured_files>"
             )
             parts.append(
-                "<pflicht>\n"
-                f"DEINE TASKS MUESSEN GENAU DIESE {len(_files)} DATEIEN "
-                f"VERWENDEN.\n"
-                "Erfinde KEINE anderen Dateien. KEINE generischen Tasks "
-                "wie 'Datei 1', 'Datei 2'.\n"
-                "Jeder Task nennt eine dieser Dateien mit action=update.\n"
-                f"Die {len(_files)} Dateien sind: {', '.join(str(f) for f in _files)}\n"
-                "</pflicht>"
+                "<measured_files_hinweis>\n"
+                f"Der Explorer hat {len(_files)} Datei(en) gemessen. "
+                "Diese sind KONTEXT, keine Aufgabenliste.\n"
+                "Wenn die Aufgabe explizit Funktionen oder Dateien nennt: "
+                "halte dich an die Aufgabe.\n"
+                "Nur wenn die Aufgabe keine Dateien nennt: waehle aus "
+                "diesen Dateien.\n"
+                "</measured_files_hinweis>"
             )
 
         else:

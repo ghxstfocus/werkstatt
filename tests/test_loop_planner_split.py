@@ -240,3 +240,22 @@ def test_audit_kind_scout_bekannt(kind):
     from werkstatt.audit import _AUDIT_KINDS_BEKANNT
     assert kind in _AUDIT_KINDS_BEKANNT, \
         f"{kind} fehlt in _AUDIT_KINDS_BEKANNT"
+
+
+# =====================================================================
+# GOLD 2026-10-30: <measured_files_hinweis> statt <pflicht>
+# =====================================================================
+
+def test_planner_system_measured_files_als_kontext():
+    """Der Block sagt explizit: KONTEXT, keine Aufgabenliste.
+
+    Regression: Live 2026-10-30 20:26 baute der Architect 29 Tasks
+    fuer 28 gemessene Dateien, weil <pflicht> "DEINE TASKS MUESSEN
+    GENAU DIESE N DATEIEN VERWENDEN" sagte.
+    """
+    ctx = {"key_files": [{"file": "a.py"}, {"file": "b.py"}]}
+    s = planner._planner_system("Testaufgabe", ctx)
+    assert "<measured_files_hinweis>" in s
+    assert "KONTEXT, keine Aufgabenliste" in s
+    assert "<pflicht>" not in s
+    assert "MUESSEN GENAU DIESE" not in s
