@@ -2212,15 +2212,47 @@ def run_pipeline_loop(
                 if _match2 != "exact":
                     audit("loop_patch_fallback_used",
                           {"file": file, "match": _match2}, pd, pn)
+                # GOLD 2026-10-30: Erst pruefen, ob new_str im neuen
+                # Inhalt steht, DANN schreiben. Vorher wurde
+                # geschrieben, applied_count++, dann geprueft. Bei
+                # loop_patch_not_applied war applied_count trotzdem
+                # >0 -> _patches_wirklich_angewendet True ->
+                # reviewer_reject_ignoriert -> task_ok obwohl Patch
+                # nicht angewendet. Live-Beleg 2026-10-30 22:35.
+                if new_str not in _neu_content2:
+                    audit("loop_patch_not_applied_vor_schreiben",
+                          {"file": file}, pd, pn)
+                    if not _reflection_loop(state):
+                        _task_ende(state, phase_state, task_id,
+                                   ok=False, name=task_name,
+                                   failure="patch_not_applied")
+                        return 1
+                    _task_ende(state, phase_state, task_id,
+                               ok=False, name=task_name,
+                               failure="patch_not_applied_nach_reflection")
+                    break
                 target.write_text(_neu_content2)
                 # M-298d: Post-Apply-Verifikation (Profi-Ansatz
                 # Overwatcher/Claude-Code edit-verifier).
                 _after = target.read_text()
                 if new_str not in _after:
                     audit("loop_patch_not_applied", {"file": file}, pd, pn)
+                    # GOLD 2026-10-30: Auch nach erfolgreicher Reflection
+                    # ist der Patch NICHT angewendet. Der Task ist nicht
+                    # erledigt. Live-Beleg 2026-10-30 22:35:
+                    # loop_patch_not_applied, _reflection_loop True,
+                    # break, reviewer_kein_diff_aber_patches,
+                    # loop_task_ok trotzdem -> Phase-Review fail.
                     if not _reflection_loop(state):
-                        _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="patch_not_applied")
+                        _task_ende(state, phase_state, task_id,
+                                   ok=False, name=task_name,
+                                   failure="patch_not_applied")
                         return 1
+                    # Reflection war "erfolgreich", aber der Patch
+                    # wurde trotzdem nicht angewendet. Task fail.
+                    _task_ende(state, phase_state, task_id,
+                               ok=False, name=task_name,
+                               failure="patch_not_applied_nach_reflection")
                     break
                 audit("loop_patch_updated", {"file": file}, pd, pn)
 
