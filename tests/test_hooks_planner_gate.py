@@ -95,3 +95,59 @@ def test_phasen_mit_ungueltiger_id_abgelehnt():
     result = _run({"tasks": tasks, "phasen": [{"id": "p1"}]})
     assert result["allow"] is False
     assert result["info"]["regel"] == "PHASE_ID"
+
+
+# =====================================================================
+# GOLD 2026-10-30: Doku-Aufgaben erlauben
+# =====================================================================
+
+def test_doku_only_plan_bei_doku_aufgabe_erlaubt():
+    """Wenn die Prosa nur Doku nennt, ist ein Doku-Only-Plan ok.
+
+    Regression: Live 2026-10-30 22:17: Aufgabe 'entferne Punkt 1
+    aus docs/STATUS.md', Planner-Split baute 1 Doku-Task, Hook
+    lehnte ab -> 3x Plan-Reflection -> Loop-Abbruch.
+    """
+    import sys
+    sys.path.insert(0, "/opt/werkstatt/hooks")
+    import planner_gate as pg
+
+    payload = {
+        "tasks": [
+            {"id": "t1", "name": "STATUS Punkt 1 entfernen",
+             "action": "update",
+             "task_files": ["docs/STATUS.md"]},
+        ],
+        "phasen": [],
+        "architect_prosa": (
+            "## docs/STATUS.md\n"
+            "In docs/STATUS.md den Punkt 1 entfernen. Keine "
+            "Python-Datei.\n"
+        ),
+        "project_dir": "",
+    }
+    result = pg.check_plan(payload)
+    assert result["allow"] is True, result
+
+
+def test_doku_only_plan_ohne_doku_aufgabe_abgelehnt():
+    """Wenn die Prosa Code nennt, ist ein Doku-Only-Plan ungueltig."""
+    import sys
+    sys.path.insert(0, "/opt/werkstatt/hooks")
+    import planner_gate as pg
+
+    payload = {
+        "tasks": [
+            {"id": "t1", "action": "update",
+             "task_files": ["docs/STATUS.md"]},
+        ],
+        "phasen": [],
+        "architect_prosa": (
+            "## core/foo.py\n"
+            "In core/foo.py die Funktion bar() anpassen.\n"
+        ),
+        "project_dir": "",
+    }
+    result = pg.check_plan(payload)
+    assert result["allow"] is False
+    assert result["info"]["regel"] == "DOKU_TASK"

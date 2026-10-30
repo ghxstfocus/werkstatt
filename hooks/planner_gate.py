@@ -33,6 +33,8 @@ _VALID_SUFFIXES = (
     ".yaml", ".yml", ".toml", ".cfg", ".ini", ".json",
     # Frontend
     ".html", ".css", ".js", ".ts",
+    # Doku (GOLD 2026-10-30: Doku-Aufgaben sind legitim)
+    ".md", ".rst", ".txt",
 )
 
 
@@ -157,7 +159,27 @@ def check_plan(payload: dict) -> dict:
         if _has_code_task:
             break
 
-    if not _has_code_task:
+    # GOLD 2026-10-30: Doku-Aufgaben erlauben.
+    # Wenn die Architect-Prosa nur Doku-Dateien nennt und keinen
+    # Code, ist ein Doku-Only-Plan KORREKT. Live-Beleg
+    # 2026-10-30 22:17: Aufgabe 'entferne Punkt 1 aus
+    # docs/STATUS.md', Planner-Split baute 1 Doku-Task, Hook
+    # lehnte ab (M-349b) -> 3x Plan-Reflection -> Loop-Abbruch.
+    _prosa = payload.get("architect_prosa") or ""
+    _prosa_nur_doku = False
+    if isinstance(_prosa, str) and _prosa:
+        # Pfade in der Prosa finden
+        _prosa_pfade = re.findall(
+            r'(?:^|\s)([a-zA-Z_][a-zA-Z0-9_/.-]+\.(?:py|md|sql|html|css|js|yaml|yml|json|toml))',
+            _prosa,
+        )
+        if _prosa_pfade:
+            _prosa_nur_doku = all(
+                any(pat.match(p) for pat in _DOKU_PATTERNS)
+                for p in _prosa_pfade
+            )
+
+    if not _has_code_task and not _prosa_nur_doku:
         for t in tasks:
             if not isinstance(t, dict):
                 continue
