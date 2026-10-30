@@ -285,3 +285,25 @@ def test_planner_system_ohne_preview_kein_ist_zustand():
     ]}
     s = planner._planner_system("Aufgabe", ctx)
     assert "<ist_zustand>" not in s
+
+
+# =====================================================================
+# GOLD 2026-10-30: Scout-Abbruch -> skip_plan_gate
+# =====================================================================
+
+def test_loop_skip_plan_gate_bei_auftrag_bereits_erfuellt():
+    """Wenn run_planner auftrag_bereits_erfuellt setzt, springt der
+    Loop direkt zum Human-Gate (Plan-Gate ueberspringen).
+
+    Regression: Live 2026-10-30 21:58 — Scout meldete
+    bereits_erfuellt, run_planner gab True zurueck, aber der
+    Plan-Gate failte (Tasks leer), Loop brach ab mit
+    'LOOP FEHLGESCHLAGEN'.
+    """
+    import inspect
+    from werkstatt import loop as loop_mod
+    src = inspect.getsource(loop_mod.run_pipeline_loop)
+    assert "auftrag_bereits_erfuellt" in src
+    assert "skip_plan_gate" in src or "via" in src
+    assert "_task_ende(state, phase_state, \"scout_skip\"" in src or \
+           "scout_skip" in src

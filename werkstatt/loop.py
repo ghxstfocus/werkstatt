@@ -1765,6 +1765,32 @@ def run_pipeline_loop(
             audit("loop_planner_failed", {}, pd, pn)
             return 1
 
+        # GOLD 2026-10-30: Scout kann bereits_erfuellt melden.
+        # Dann ist der Plan leer (Tasks = []), und der Plan-Gate
+        # wuerde fail-closed abbrechen. Wir springen direkt zum
+        # Human-Gate.
+        if getattr(state, "auftrag_bereits_erfuellt", False):
+            audit("auftrag_bereits_erfuellt",
+                  {"quelle": "scout", "aktion": "skip_plan_gate"},
+                  pd, pn)
+            state.auftrag_bereits_erfuellt = False  # type: ignore[attr-defined]
+            _task_ende(state, phase_state, "scout_skip", ok=True,
+                       name="Auftrag bereits erfuellt")
+            # Direkt zum Human-Gate (Phase 5), Plan-Gate ueberspringen.
+            group_end()  # Phase 2: Planner
+            group_start("Phase 5: Human-Gate")
+            audit("loop_phase", {"phase": "human_gate",
+                                 "status": "start",
+                                 "reason": "auftrag_bereits_erfuellt"},
+                  pd, pn)
+            rc = _human_gate(state)
+            group_end()
+            if rc == 0:
+                audit("loop_erfolg",
+                      {"project_name": project_name,
+                       "via": "auftrag_bereits_erfuellt"}, pd, pn)
+            return rc
+
         # M-458: Architect-Prosa anzeigen (Planner-Split).
         _arch_prosa = getattr(state, "architect_prosa", None)
         if _arch_prosa:
