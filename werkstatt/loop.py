@@ -2197,28 +2197,50 @@ def run_pipeline_loop(
     # K23c: Phase-End-Review VOR Human-Gate.
     group_start("Phase 4: Phase-End-Review")
     audit("loop_phase", {"phase": "phase_end_review", "status": "start"}, pd, pn)
-    from werkstatt.reviewer import run_phase_end_review as _phase_review
-    _pe_ok = _with_spinner("Phase-Review", lambda: _phase_review(state))
-    # K40: Historie pushen.
-    _pe_bugs = getattr(state, "reviewer_bugs", None) or []
-    if _pe_bugs:
-        _hist = getattr(state, "reviewer_bugs_history", None)
-        if _hist is None:
-            state.reviewer_bugs_history = []  # type: ignore[attr-defined]
-            _hist = state.reviewer_bugs_history  # type: ignore[attr-defined]
-        _hist.append(list(_pe_bugs))
-        if len(_hist) > 5:
-            state.reviewer_bugs_history = _hist[-5:]  # type: ignore[attr-defined]
-    if not _pe_ok:
-        audit("loop_phase", {"phase": "phase_end_review", "status": "rejected"}, pd, pn)
+    # GOLD 2026-10-30: Wenn state.patches leer ist (alle Tasks waren
+    # auftrag_bereits_erfuellt) und kein Task fehlgeschlagen ist,
+    # ueberspringen wir den Phase-Review. Der Reviewer braucht einen
+    # Diff — bei leerem patches gibt es keinen, und der Reviewer
+    # wuerde mit 'reviewer_phase_kein_diff' fail-closed abbrechen.
+    # Live-Beleg 2026-10-30 21:28:25: alle 5 Tasks done, aber
+    # reviewer_phase_kein_diff -> Loop-Rollback.
+    _tasks = getattr(state, "tasks", None) or []
+    _alle_done = (
+        bool(_tasks)
+        and all(
+            isinstance(t, dict) and t.get("status") == "done"
+            for t in _tasks
+        )
+    )
+    _patches_leer = not getattr(state, "patches", None)
+    if _alle_done and _patches_leer:
+        audit("loop_phase",
+              {"phase": "phase_end_review",
+               "status": "skipped",
+               "reason": "keine_patches_alle_done"}, pd, pn)
+    else:
+        from werkstatt.reviewer import run_phase_end_review as _phase_review
+        _pe_ok = _with_spinner("Phase-Review", lambda: _phase_review(state))
+        # K40: Historie pushen.
+        _pe_bugs = getattr(state, "reviewer_bugs", None) or []
+        if _pe_bugs:
+            _hist = getattr(state, "reviewer_bugs_history", None)
+            if _hist is None:
+                state.reviewer_bugs_history = []  # type: ignore[attr-defined]
+                _hist = state.reviewer_bugs_history  # type: ignore[attr-defined]
+            _hist.append(list(_pe_bugs))
+            if len(_hist) > 5:
+                state.reviewer_bugs_history = _hist[-5:]  # type: ignore[attr-defined]
+        if not _pe_ok:
+            audit("loop_phase", {"phase": "phase_end_review", "status": "rejected"}, pd, pn)
+            group_end()
+            # K23d: Phase-End-Reflection pro Datei.
+            if not _phase_end_reflection(state):
+                audit("loop_gate_failed",
+                      {"gate": "phase_end_review"}, pd, pn)
+                return 1
+        audit("loop_phase", {"phase": "phase_end_review", "status": "approved"}, pd, pn)
         group_end()
-        # K23d: Phase-End-Reflection pro Datei.
-        if not _phase_end_reflection(state):
-            audit("loop_gate_failed",
-                  {"gate": "phase_end_review"}, pd, pn)
-            return 1
-    audit("loop_phase", {"phase": "phase_end_review", "status": "approved"}, pd, pn)
-    group_end()
 
     # 5. Human-Gate (eigenes, fail-closed)
     group_start("Phase 5: Human-Gate")
