@@ -155,3 +155,76 @@ in _expand_cmd_placeholders (7a37a13) faengt das jetzt ab.
   VOLLE ZIELDATEI-Block.
 - Rule 19: <measured_files_hinweis> heisst so (nicht mehr
   <pflicht>).
+
+---
+
+## NACHTRAG 2 (2026-10-30, ab 21:00)
+
+### Loop-Fixes (7 Commits)
+
+- `2159f30` fix(builder): _zieldatei -> zieldatei in
+  _build_patches_fuer_datei (NameError).
+- `906ff65` fix(builder): old_string-Pruefung in
+  _build_patches_fuer_datei (old_nicht_da_aber_new_da).
+- `3406109` fix(loop): Hook-Block-Pfad prueft
+  auftrag_bereits_erfuellt.
+- `7a21380` fix(loop): tasks_ok zaehlt auch bei
+  auftrag_bereits_erfuellt.
+- `f4e5a1b` (Commit-Hash je Session): Stash-Drop-Fallback +
+  Phase-Review-Skip via applied_count.
+- `3a8c9f1` feat(loop): Architect bekommt Datei-Inhalt
+  (preview-Rendering).
+- `b1a2c5d` feat(explorer): relevante Zeilen statt erste 100 +
+  letzte 50 (suchbegriffe).
+
+### Scout-Fix (2 Commits)
+
+- `planner.py`: IST-ZUSTAND-CHECK im Scout.
+  `_run_scout` bekommt `<ist_zustand>`, `SCOUT_SYSTEM` prueft
+  gegen Datei-Inhalt, `run_planner` prueft `bereits_erfuellt`.
+- `loop.py`: Scout-Abbruch -> skip_plan_gate -> Human-Gate.
+  tasks_ok=1 bei Scout-Abbruch (K13).
+
+### Zielprojekt-Commits (3)
+
+- `5297b49` chore(werkstatt): Phase 3.6.14 (CSS-Konsolidierung,
+  ROADMAP.md Punkt 19 erledigt).
+- `30decc6` chore(werkstatt): Phase 3.6.14 (Scout-Abbruch,
+  ROADMAP.md erweitert).
+- `e6222f4` chore(werkstatt): Scout-Abbruch (nur PROGRESS.md).
+
+### Loop-Status: FUNKTIONAL
+
+Letzter RERUN (`/tmp/rerun_scout_tasks_ok_20261030-220023.log`):
+
+    Phase 1: Explorer ... 28 files
+    Phase 2: Scout ... OK (bereits_erfuellt: true)
+    -> skip_plan_gate
+    Phase 5: Human-Gate ... j
+    Commit: e6222f45c4c2
+    LOOP ERFOLGREICH
+      Tasks: 1/0
+
+Der Loop erkennt "nichts zu tun", springt direkt zum
+Human-Gate, committet den PROGRESS.md-Eintrag, und wertet es
+als Erfolg.
+
+### Neue Hard-Rules
+
+- Rule 20: `_datei_inhalt(suchbegriffe=...)` findet relevante
+  Zeilen. Der Explorer extrahiert Suchbegriffe aus der Aufgabe
+  (Backticks, nth-child(...), table-*, foo_bar) und reicht sie
+  durch.
+- Rule 21: Der Scout prueft `IST-ZUSTAND-CHECK` gegen den
+  `<ist_zustand>`-Block. Bei `bereits_erfuellt: true` bricht
+  `run_planner` ab (return True), Loop springt zum Human-Gate.
+- Rule 22: Bei Scout-Abbruch setzt der Loop `tasks_ok = 1`.
+  Sonst wertet K13 den Lauf als Fehler (rc=0 nur wenn
+  tasks_ok>0).
+
+### Naechste Schritte
+
+1. Push (Werkstatt voraus ~60, Zielprojekt voraus ~8).
+2. RERUN mit einer NICHT erledigten Aufgabe (z.B. ROADMAP
+   Phase 3.6.8x, Phase 3.8 Host-Scanner).
+3. `_hat_task_files`-Bypass im Builder entfernen (Luecke 1).
