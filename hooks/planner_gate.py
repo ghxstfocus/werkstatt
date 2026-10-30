@@ -24,6 +24,11 @@ _DOKU_PATTERNS = [
     re.compile(r"^PROGRESS\.md$"),
     re.compile(r"^README\.md$"),
     re.compile(r"^docs/STATUS\.md$"),
+    # GOLD 2026-10-30: Alle .md/.rst/.txt-Dateien im docs/-Ordner
+    # oder als Top-Level. Live-Beleg: SECURITY_LOG.md wurde als
+    # Pfad erkannt, aber nicht als Doku-Pattern -> _prosa_nur_doku
+    # = False -> DOKU_TASK abgelehnt.
+    re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\.(?:md|rst|txt)$"),
 ]
 _VALID_ACTIONS = {"read", "create", "update"}
 _VALID_SUFFIXES = (
@@ -178,6 +183,14 @@ def check_plan(payload: dict) -> dict:
                 any(pat.match(p) for pat in _DOKU_PATTERNS)
                 for p in _prosa_pfade
             )
+            # Debug-Audit
+            if not _prosa_nur_doku:
+                _nicht_doku = [
+                    p for p in _prosa_pfade
+                    if not any(pat.match(p) for pat in _DOKU_PATTERNS)
+                ]
+                print(f"[DEBUG] _prosa_nur_doku=False, nicht-Doku-Pfade: {_nicht_doku}",
+                      file=__import__("sys").stderr)
 
     if not _has_code_task and not _prosa_nur_doku:
         for t in tasks:
