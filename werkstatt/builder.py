@@ -614,6 +614,25 @@ def _build_patches_fuer_datei(
     patches = parsed.get("patches") or []
     if not isinstance(patches, list):
         return []
+    if not patches:
+        # GOLD 2026-10-30: LLM hat geantwortet, aber keine Patches
+        # geliefert. Das ist der "Auftrag bereits erfuellt"-Fall —
+        # die Zieldatei enthaelt den Zielzustand schon (z.B.
+        # _RECENT_CHANGES_LIMIT aus f69f1b2).
+        # Vorher: return [] -> run_builder False -> task_failed.
+        # Jetzt: Flag setzen, run_builder entscheidet.
+        if isinstance(state, object) and hasattr(state, "__dict__"):
+            try:
+                state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
+            except (AttributeError, TypeError):
+                pass
+        audit("auftrag_bereits_erfuellt",
+              {"zieldatei": _zieldatei,
+               "grund": "llm_keine_patches"}, pd, pn)
+        audit("builder_keine_patches_gold",
+              {"zieldatei": _zieldatei,
+               "grund": "llm_keine_patches"}, pd, pn)
+        return []
     for p in patches:
         if isinstance(p, dict):
             p["file"] = zieldatei
@@ -1087,6 +1106,10 @@ def run_builder(state: RunState) -> bool:
         state, _zieldatei, _arch_beschreibung, api_key,
     )
     if not patches:
+        # GOLD 2026-10-30: pruefen, ob der LLM-Pfad bereits das
+        # auftrag_bereits_erfuellt-Flag gesetzt hat.
+        if getattr(state, "auftrag_bereits_erfuellt", False):
+            return True
         audit("builder_keine_patches_gold",
               {"zieldatei": _zieldatei}, pd, pn)
         return False

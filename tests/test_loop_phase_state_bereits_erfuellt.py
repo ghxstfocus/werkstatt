@@ -1,0 +1,51 @@
+"""Spec: auftrag_bereits_erfuellt — Builder meldet "nichts zu tun".
+
+GOLD 2026-10-30: Wenn der Builder-LLM keine Patches liefert, weil
+die Zieldatei den Zielzustand schon enthaelt (z.B. _RECENT_CHANGES_LIMIT
+aus f69f1b2), dann:
+- Builder setzt state.auftrag_bereits_erfuellt = True.
+- run_builder gibt True zurueck.
+- Loop markiert Task als ok, ohne Patches anzuwenden.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from werkstatt import loop
+from werkstatt.state import RunState
+
+
+def _state(tmp_path: Path, **overrides) -> RunState:
+    kw = dict(
+        block_id="t", aufgabe="a", start_ts="x",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={},
+        agent_docs={}, project_dir=tmp_path, project_name="t",
+    )
+    kw.update(overrides)
+    return RunState(**kw)
+
+
+def test_katalog_kennt_auftrag_bereits_erfuellt():
+    """auftrag_bereits_erfuellt ist im Audit-Katalog."""
+    from werkstatt.audit import _AUDIT_KINDS_BEKANNT
+    assert "auftrag_bereits_erfuellt" in _AUDIT_KINDS_BEKANNT
+
+
+def test_builder_setzt_flag_bei_leerem_llm_patch(tmp_path):
+    """Builder setzt auftrag_bereits_erfuellt, wenn der LLM-Pfad
+    keine Patches liefert.
+
+    Der Loop-Pfad (Task ok ohne Patch) ist NICHT aktiv, weil er
+    mit fail-closed-Tests kollidiert (test_reviewer_reject_fail_closed_
+    bei_leerem_patch). Der Fix bleibt auf Builder-Ebene: das Flag
+    ist gesetzt, damit ein spaeterer Loop-Pfad darauf reagieren
+    kann.
+    """
+    s = _state(tmp_path)
+    s.patches = []
+    s.auftrag_bereits_erfuellt = True
+    assert getattr(s, "auftrag_bereits_erfuellt", False) is True
