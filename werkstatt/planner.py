@@ -17,6 +17,7 @@ from pathlib import Path
 from werkstatt.agent import ask_llm
 from werkstatt.loop_renderer import _with_spinner
 
+
 # M-442: Architect-Modell konfigurierbar (Default: deepseek-chat).
 # Fuer Messungen: WERKSTATT_ARCHITECT_MODEL=deepseek-reasoner
 def _is_reasoning_model(model: str) -> bool:
@@ -27,9 +28,7 @@ def _is_reasoning_model(model: str) -> bool:
 _ARCHITECT_MODEL = os.environ.get("WERKSTATT_ARCHITECT_MODEL", "deepseek-chat")
 
 from werkstatt.audit import audit
-from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
-from werkstatt.tools import run_readonly
 
 # DEPRECATED (2026-10-29): PLANNER_SYSTEM wird im Gold-Pfad nicht
 # mehr an das LLM gesendet. Der Architect-System-Prompt ist
@@ -805,7 +804,6 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
     Kontexts. Die gemessenen Dateien sind die wichtigste
     Information — sie stehen VOR PLANNER_SYSTEM.
     """
-    skills = load_all_skills()
     parts: list[str] = []
 
     # === K32: MIGRATIONSSTAND ZUERST (hoechste Prioritaet) ===
