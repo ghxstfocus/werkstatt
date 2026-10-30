@@ -314,7 +314,10 @@ def format_code_patches_fuer_commit(
     bloecke: list[str] = []
     for i, p in enumerate(patches, start=1):
         pfad = p.get("pfad", "")
-        anker = p.get("anker", "")
+        # GOLD 2026-10-30: akzeptiere beide Patch-Formate.
+        # Aktiv ist old_string/new_string (loop._apply_patches_with_hooks).
+        # anker/ersatz kommt aus Legacy-Aufrufern.
+        anker = p.get("old_string") or p.get("anker", "")
         bloecke.append(
             f"PATCH {i} ({pfad}):\n"
             f"anker:\n{anker}\n"

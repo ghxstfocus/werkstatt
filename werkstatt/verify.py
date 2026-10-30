@@ -89,8 +89,10 @@ def verify_code(patches: list[dict[str, str]],
             _ids = _re.findall(
                 r"\b(test_[a-zA-Z_0-9]{4,})\b", _ltf)
         for p in patches:
-            anker = p.get("anker", "")
-            if "def test_" in anker or "def test_" in p.get("ersatz", ""):
+            # GOLD 2026-10-30: akzeptiere beide Patch-Formate.
+            anker = p.get("old_string") or p.get("anker", "")
+            ersatz = p.get("new_string") or p.get("ersatz", "")
+            if "def test_" in anker or "def test_" in ersatz:
                 _im_patch = _re.findall(
                     r"def (test_[a-z_0-9]+)", anker + p.get("ersatz", ""))
                 if _ids and _im_patch:

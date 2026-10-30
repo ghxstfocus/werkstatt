@@ -787,6 +787,64 @@ def _finde_api(index: dict, name: str) -> list:
 
 
 
+def _pruefe_api_widerspruch(
+    scout_report: dict | None, code_index: dict,
+) -> list[dict]:
+    """GOLD-Neu 2026-10-30: prueft Scout-Auftrag gegen Code-Index.
+
+    Deterministisch. Kein LLM, keine Seiteneffekte.
+
+    Prueft jede (datei, symbol) aus scout_report["api_auszug"]
+    gegen _finde_api(code_index, symbol).
+
+    Befund-Arten:
+    - "fehlt":     symbol nicht im Code-Index.
+    - "verschoben": symbol existiert, aber NICHT in datei.
+
+    Rueckgabe: list[dict] mit {"datei", "symbol", "art",
+    "gefunden_in"}. Leer, wenn kein Widerspruch.
+
+    Der Aufrufer (run_planner) entscheidet, was mit den
+    Befunden passiert (Audit + Prompt-Block, kein Verwerfen).
+    """
+    if not isinstance(scout_report, dict):
+        return []
+    _api_auszug = scout_report.get("api_auszug") or {}
+    if not isinstance(_api_auszug, dict):
+        return []
+    if not isinstance(code_index, dict):
+        return []
+
+    befunde: list[dict] = []
+    for _datei, _symbole in _api_auszug.items():
+        if not isinstance(_datei, str):
+            continue
+        if not isinstance(_symbole, (list, tuple)):
+            continue
+        for _sym in _symbole:
+            if not isinstance(_sym, str) or not _sym:
+                continue
+            _treffer = _finde_api(code_index, _sym)
+            if not _treffer:
+                befunde.append({
+                    "datei": _datei,
+                    "symbol": _sym,
+                    "art": "fehlt",
+                    "gefunden_in": [],
+                })
+                continue
+            _pfade = sorted({_t["pfad"] for _t in _treffer})
+            if _datei in _pfade:
+                continue  # Erwartet: Treffer in der genannten Datei.
+            befunde.append({
+                "datei": _datei,
+                "symbol": _sym,
+                "art": "verschoben",
+                "gefunden_in": _pfade,
+            })
+    return befunde
+
+
 def _architect_system_with_builder() -> str:
     """GOLD: ARCHITECT_SYSTEM + _BUILDER_SCHNITTSTELLE."""
     return ARCHITECT_SYSTEM + "\n\n" + _BUILDER_SCHNITTSTELLE
@@ -859,30 +917,13 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
             )
 
     # === GOLD: Architect-Modus IMMER (nicht nur bei "architect") ===
-    # Der Architect liefert Prosa, _zerlege_in_sub_tasks macht
-    # daraus Tasks. Zwei Agents, zwei Calls.
-    if True:
-        # M-446: Architect-Modus -> NUR ARCHITECT_SYSTEM + measured_files.
-        # Keine Skills (Tool-Definitionen triggern deepseek-reasoner
-        # zu DSML-Tool-Calls statt Prosa), kein <doku_verbot>,
-        # kein <task_groesse>.
-        _arch_parts: list[str] = []
-        if isinstance(explorer_ctx, dict):
-            _arch_key = explorer_ctx.get("key_files") or []
-            _arch_files = [
-                k.get("file") for k in _arch_key
-                if isinstance(k, dict) and k.get("file")
-            ]
-            if _arch_files:
-                _arch_str = "\n".join(f"  - {f}" for f in _arch_files)
-                _arch_parts.append(
-                    "<measured_files>\n"
-                    f"Der Explorer hat {len(_arch_files)} Datei(en) "
-                    f"gemessen:\n{_arch_str}\n"
-                    "</measured_files>"
-                )
-        _arch_parts.append(ARCHITECT_SYSTEM)
-        return "\n\n".join(_arch_parts)
+    # FIX 2026-10-30: bis hier wurde `parts` gebaut, aber am Ende
+    # verworfen (Bug: alter if-True-Zweig gab nur _arch_parts zurueck).
+    # Jetzt: `parts` (Migrationsstand + measured_files + pflicht/hinweis)
+    # werden VOR ARCHITECT_SYSTEM gefuehrt. Sonst bleibt K32/M-376/M-405
+    # toter Code.
+    parts.append(ARCHITECT_SYSTEM)
+    return "\n\n".join(parts)
 def _normalisiere(text: str) -> str:
     """M-463: Entfernt Backticks, mehrfache Leerzeichen.
 
@@ -1643,6 +1684,27 @@ def run_planner(state: RunState) -> bool:
             user_content += (
                 "\n\n## SCOUT-RISIKEN:\n"
                 + "\n".join(f"- {r}" for r in _scout_risiken[:10])
+            )
+
+        # GOLD-Neu 2026-10-30: Widerspruchs-Check Auftrag vs Code-Index.
+        _widersprueche = _pruefe_api_widerspruch(_scout_report, _code_index)
+        if _widersprueche:
+            audit("planner_scout_api_widerspruch",
+                  {"anzahl": len(_widersprueche),
+                   "widersprueche": _widersprueche[:10]}, pd, pn)
+            _w_block = "\n".join(
+                f"- {w['symbol']} ({w['art']}) -> "
+                + (", ".join(w["gefunden_in"]) if w["gefunden_in"]
+                   else "nicht im Code-Index")
+                for w in _widersprueche[:10]
+            )
+            user_content += (
+                "\n\n## API-WIDERSPRUCH (Auftrag nennt APIs,"
+                " die so nicht existieren)\n"
+                "Der Scout-Auftrag nennt folgende APIs. Der Code-Index"
+                " kennt sie nicht oder nur in anderer Datei. Richte"
+                " dich nach dem CODE-INDEX, nicht nach dem Auftrag:\n"
+                + _w_block
             )
 
     # CALL 1: Architect
