@@ -626,11 +626,42 @@ Pruefe JEDE im Auftrag genannte API gegen den Code-Index:
 - Risiko: "read_events existiert nicht in core.audit_reader. Echte API: AuditReaderService.list_recent_assessments"
 - auftrag_prosa: "Nutze AuditReaderService.list_recent_assessments(principal, limit=15)"
 
+## IST-ZUSTAND-CHECK (STRIKT, HOECHSTE PRIORITAET)
+
+Der Code-Index zeigt nur Signaturen. Der "IST-ZUSTAND"-Block
+enthaelt den tatsaechlichen Datei-Inhalt.
+
+Pruefe JEDE Anforderung aus der Aufgabe gegen den IST-ZUSTAND:
+
+1. Enthaelt die Zieldatei schon, was die Aufgabe verlangt?
+2. Wenn JA (alle Anforderungen erfuellt): liefere
+   "bereits_erfuellt": true, "begruendung_erfuellt": "...".
+   Das ist der wichtigste Fall. Der Loop bricht dann ab.
+3. Wenn NEIN: normales Vorgehen (Auftrag formulieren).
+
+Beispiel:
+- Aufgabe: "Fuehre table-alerts in alerts.html ein."
+- IST-ZUSTAND zeigt: `<table class="table table-alerts">`.
+- -> bereits_erfuellt: true, begruendung: "alerts.html hat
+  class='table table-alerts' schon (Zeile 70)."
+- -> Loop bricht ab. Kein Architect, kein Planner, kein Builder.
+
+## DEIN OUTPUT-FELD (NEU)
+
+Zusaetzlich zu den bisherigen Feldern:
+{
+  "bereits_erfuellt": true|false,
+  "begruendung_erfuellt": "Kurze Begruendung (1-3 Saetze)"
+}
+
+Wenn "bereits_erfuellt" fehlt: false (Default).
+
 ## REGEL
 - Nenne NUR APIs, die im Code-Index stehen.
 - Erfinde KEINE APIs.
 - Uebernimm KEINE APIs aus dem Auftrag, wenn sie nicht im Code-Index sind.
 - Nenne konkrete Zeilen und Datei-Pfade.
+- IST-ZUSTAND-Check ist PFLICHT, wenn "IST-ZUSTAND" im Input steht.
 
 ## DEIN NACHFOLGER
 
@@ -1491,11 +1522,34 @@ def _run_scout(
 
     _index_str = _format_api_index_for_prompt(code_index, max_files=40)
     _files_str = "\n".join(f"- {f}" for f in (key_files or [])[:20])
+
+    # GOLD 2026-10-30: Datei-Inhalte aus explorer_context holen.
+    # Ohne Inhalt kann der Scout nicht pruefen, ob die Aufgabe
+    # schon erfuellt ist.
+    _previews_parts = []
+    _explorer_ctx = getattr(state, "explorer_context", None)
+    if isinstance(_explorer_ctx, dict):
+        for _k in (_explorer_ctx.get("key_files") or [])[:8]:
+            if not isinstance(_k, dict):
+                continue
+            _pf = _k.get("file", "")
+            _pv = _k.get("preview", "")
+            if _pf and _pv:
+                _previews_parts.append(
+                    f'<datei_inhalt datei="{_pf}">\n{_pv[:8000]}\n</datei_inhalt>'
+                )
+    _previews_str = "\n\n".join(_previews_parts)
+
     user_content = (
         f"## AUFGABE\n{aufgabe}\n\n"
         f"## CODE-INDEX (Module/Klassen/Funktionen)\n{_index_str}\n\n"
         f"## EXPLORER-DATEIEN\n{_files_str}\n"
     )
+    if _previews_str:
+        user_content += (
+            f"\n\n## IST-ZUSTAND (Inhalt der genannten Dateien)\n"
+            f"{_previews_str}\n"
+        )
     reply = _with_spinner(
         "Scout",
         lambda: ask_llm(
@@ -1684,6 +1738,18 @@ def run_planner(state: RunState) -> bool:
     _scout_report = _run_scout(
         state, aufgabe, _code_index, _key_files_scan, api_key,
     )
+
+    # GOLD 2026-10-30: Scout kann "bereits_erfuellt" melden.
+    # Dann brechen wir ab: kein Architect, kein Planner, kein Builder.
+    if _scout_report and _scout_report.get("bereits_erfuellt") is True:
+        _begr = _scout_report.get("begruendung_erfuellt", "")
+        audit("auftrag_bereits_erfuellt",
+              {"quelle": "scout",
+               "begruendung": _begr[:300]}, pd, pn)
+        # Flag fuer den Loop setzen
+        state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
+        return True
+
     if _scout_report:
         _scout_auftrag = _scout_report.get("auftrag_prosa") or ""
         _scout_apis = _scout_report.get("api_auszug") or {}
