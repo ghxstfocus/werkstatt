@@ -1774,6 +1774,12 @@ def run_pipeline_loop(
                   {"quelle": "scout", "aktion": "skip_plan_gate"},
                   pd, pn)
             state.auftrag_bereits_erfuellt = False  # type: ignore[attr-defined]
+            # GOLD 2026-10-30: tasks_ok auf 1 setzen, damit K13
+            # (rc=0 nur wenn tasks_ok>0) den Lauf als Erfolg wertet.
+            # Live-Beleg 2026-10-30 21:59: Commit 30decc63 durch,
+            # aber Footer zeigte LOOP FEHLGESCHLAGEN (tasks_ok=0).
+            tasks_ok = 1
+            state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
             _task_ende(state, phase_state, "scout_skip", ok=True,
                        name="Auftrag bereits erfuellt")
             # Direkt zum Human-Gate (Phase 5), Plan-Gate ueberspringen.

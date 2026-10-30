@@ -307,3 +307,17 @@ def test_loop_skip_plan_gate_bei_auftrag_bereits_erfuellt():
     assert "skip_plan_gate" in src or "via" in src
     assert "_task_ende(state, phase_state, \"scout_skip\"" in src or \
            "scout_skip" in src
+
+
+def test_scout_abbruch_setzt_tasks_ok():
+    """Bei Scout-Abbruch (auftrag_bereits_erfuellt) wird tasks_ok=1
+    gesetzt, damit K13 den Lauf als Erfolg wertet.
+
+    Regression: Live 2026-10-30 21:59: Commit 30decc63 durch, aber
+    Footer zeigte LOOP FEHLGESCHLAGEN (tasks_ok=0).
+    """
+    import inspect
+    from werkstatt import loop as loop_mod
+    src = inspect.getsource(loop_mod.run_pipeline_loop)
+    # tasks_ok = 1 muss im Scout-Abbruch-Block stehen
+    assert "tasks_ok = 1" in src
