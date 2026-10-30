@@ -10,15 +10,66 @@ Commit `2c4703d` (Gold-Umbau: `_baue_api_index` + Reviewer).
 
 **Werkstatt** (`/opt/werkstatt`):
 - Branch `umbau/phase-2`
-- Suite: **1622 passed, 5 skipped**
-- Ruff Baseline: loop.py 7, planner.py 1, builder.py 2,
-  reviewer.py 0, explorer.py 0, pipeline.py 2
-  (planner.py 3 -> 1 durch Cleanup 2026-10-30)
+- Suite: **432 passed, 5 skipped**
+- Ruff Baseline (gesamt): 13 Errors ueber alle `werkstatt/*.py`.
+  Hauptverteilung: loop.py 7, planner.py 1, builder.py 2,
+  agent.py, apply.py, audit.py, commit_input.py, measurement.py,
+  prompts.py, verify.py (Rest). `pipeline.py` ist weg.
 
 **Zielprojekt** (`/opt/security-ai`):
 - Services active, `.env` vollstaendig
 - Timeline funktioniert (15 Eintraege, klickbar, mit Score)
 - Letzter RERUN 19:10 — 3/3 Tasks approved
+
+---
+
+## LOOP-NEUBAU (2026-10-30)
+
+Der grosse Schnitt: `pipeline.py` (11.119 Z.) und die alte
+`pipeline`-Test-Suite (~28.000 Z.) sind entfernt. Der Loop
+laeuft ausschliesslich ueber `werkstatt/*.py`.
+
+**Was weg ist:**
+
+- `pipeline.py` (11.119 Zeilen) — Monolith, produktiv tot.
+- `tests/test_pipeline.py` (11.377 Z.).
+- `tests/test_pipeline_integration.py` (1.958 Z.).
+- `tests/test_phase.py` (2.637 Z.).
+- `tests/test_planner.py` (649 Z., testete 70% `pipeline`-Planner).
+- `tests/test_anti_patterns.py` (549 Z.).
+- `tests/test_hooks_anti_patterns.py` (58 Z.).
+- `tests/test_audit_kinds.py` (268 Z.).
+- `tests/test_projekt_schema.py` (227 Z.).
+- `hooks/anti_patterns.py` + `anti-patterns/` (Katalog + README).
+- `tests/conftest.py`: `import pipeline as _pipe` + `ap_block_inprocess`-Fixture.
+- `werkstatt/agent.py`: `_anti_pattern_block`, `_AP_HOOK_PATH`, `_AP_HOOK_TIMEOUT_S`, `mit_anti_patterns`-Parameter.
+- `werkstatt/audit.py`: `_ap_audit_haeufigkeit`, `anti_patterns_injiziert` aus Katalog.
+
+**Commits 2026-10-30:**
+
+- `513ab55` — `build_system_prompt` ohne `mit_anti_patterns`-Parameter.
+- `a9abe5b` — 2 `mit_anti_patterns`-Tests entfernt.
+- `0bcc732` — 5 Test-Dateien + Anti-Pattern-Hook + Katalog entfernt (17.473 Z.).
+- `f163f33` — `patch(pipeline.*)`-Aufrufe entfernt (wirkungslos).
+- `07a4de6` — `pipeline.py` + 3 Tests + Anti-Pattern-Code (12.401 Z.).
+
+**Neue Suite:** 432 passed, 5 skipped. **32 Test-Dateien** weniger als vorher.
+**Ruff gesamt:** 13 Errors (Baseline ohne `pipeline.py`).
+**`voraus 31`** ungepusht.
+
+**Was jetzt kommt (Roadmap):**
+
+1. **Loop-Weg-Tests** — jeder Pfad im Gold-Loop braucht einen Test:
+   Explorer, Scout, Architect, Planner-Split, Builder (mit
+   `_filtere_auf_funktionen`), Reviewer (mit `## SEMANTIK-CHECK`),
+   Human-Gate (M-487: committet selbst), Phasen-Uebergaenge,
+   Fail-Closed, Redaction. **Die alten Tests sind Historie, die
+   neuen sind Spec.**
+2. **Security-Audit** — wenn der Loop produktiv ist:
+   - Keine IPs / Secrets / Nutzdaten ans LLM.
+   - UI-Login (fehlt komplett).
+   - `redact_all` in `ask_llm` ist da, aber niemand testet ihn.
+3. **Push** — 31 Commits.
 
 ---
 

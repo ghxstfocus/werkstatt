@@ -1118,3 +1118,57 @@ gemessen, weil als "zu loeschen" gefuehrt. Siehe `M-345`.
 
 ---
 
+---
+
+## 2026-10-30 — Loop-Neubau (pipeline.py entfernt)
+
+### Was
+
+Der Monolith `pipeline.py` (11.119 Zeilen) und die alte
+`pipeline`-Test-Suite (~28.000 Zeilen) sind entfernt. Der Loop
+laeuft ausschliesslich ueber `werkstatt/*.py`.
+
+### Commits
+
+- `513ab55` — `build_system_prompt` ohne `mit_anti_patterns`-Parameter.
+- `a9abe5b` — 2 `mit_anti_patterns`-Tests entfernt.
+- `0bcc732` — 5 Test-Dateien + Anti-Pattern-Hook + Katalog entfernt (17.473 Z.).
+- `f163f33` — `patch(pipeline.*)`-Aufrufe entfernt (wirkungslos).
+- `07a4de6` — `pipeline.py` + 3 Tests + Anti-Pattern-Code (12.401 Z.).
+
+### Entfernt
+
+| Datei | Zeilen | Grund |
+|---|---|---|
+| `pipeline.py` | 11.119 | Monolith, produktiv tot |
+| `tests/test_pipeline.py` | 11.377 | testet `pipeline`-Interna |
+| `tests/test_pipeline_integration.py` | 1.958 | dito |
+| `tests/test_phase.py` | 2.637 | testet `pipeline`-Phasen |
+| `tests/test_planner.py` | 649 | 70% `pipeline`-Planner-Logik |
+| `tests/test_anti_patterns.py` | 549 | Anti-Pattern tot |
+| `tests/test_hooks_anti_patterns.py` | 58 | Anti-Pattern tot |
+| `tests/test_audit_kinds.py` | 268 | testet `pipeline.py` |
+| `tests/test_projekt_schema.py` | 227 | testet `pipeline.pruefe_projekt_yaml` |
+| `hooks/anti_patterns.py` | ~90 | kein Aufrufer |
+| `anti-patterns/katalog.yaml` | 22 KB | kein Konsument |
+| `anti-patterns/README.md` | 4 KB | dito |
+| `werkstatt/agent.py:_anti_pattern_block` | 69 | kein Aufrufer |
+| `werkstatt/audit.py:_ap_audit_haeufigkeit` | 26 | kein Aufrufer |
+| `tests/conftest.py:ap_block_inprocess` | 39 | testet toten Code |
+
+### Neue Baseline
+
+- **Tests:** 432 passed, 5 skipped (vorher: 1620).
+- **Ruff gesamt:** 13 Errors ueber alle `werkstatt/*.py`.
+- **Test-Dateien:** 60 (vorher: 68).
+
+### Was jetzt kommt
+
+1. **Loop-Weg-Tests** — neue Test-Suite als Spec, nicht als Historie:
+   Explorer, Scout, Architect, Planner-Split, Builder, Reviewer,
+   Human-Gate, Phasen, Fail-Closed, Redaction.
+2. **Security-Audit** — wenn der Loop produktiv ist.
+3. **Push** — 31 Commits.
+
+---
+
