@@ -322,3 +322,55 @@ def test_heartbeat_timeout_propagiert(tmp_path):
         with pytest.raises(subprocess.TimeoutExpired):
             loop._verify_stage_with_heartbeat(
                 ["x"], str(tmp_path), "stage-1", timeout=5)
+
+
+# =====================================================================
+# GOLD 2026-10-30: _ruff_fix_changed vor jedem Verify
+# =====================================================================
+
+def test_ruff_fix_changed_ruft_ruff_auf(tmp_path):
+    """_ruff_fix_changed ruft ruff --fix auf geaenderte Dateien."""
+    from unittest.mock import patch
+    from werkstatt.state import RunState
+
+    s = RunState(
+        block_id="t", aufgabe="a", start_ts="x",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={}, agent_docs={},
+        project_dir=tmp_path, project_name="t",
+    )
+    (tmp_path / "a.py").write_text("")
+    s.patches = [{"file": "a.py"}]
+
+    aufrufe: list = []
+    def _fake_run(argv, **kw):
+        aufrufe.append((argv, kw.get("cwd")))
+        return type("R", (), {"returncode": 0})()
+    with patch("werkstatt.loop.subprocess.run", _fake_run):
+        loop._ruff_fix_changed(s)
+
+    assert len(aufrufe) == 1
+    argv, cwd = aufrufe[0]
+    assert argv[0] == "ruff"
+    assert "--fix" in argv
+    assert "a.py" in argv
+
+
+def test_ruff_fix_changed_leer(tmp_path):
+    """Ohne .py-Patches: kein ruff-Aufruf."""
+    from unittest.mock import patch
+    from werkstatt.state import RunState
+
+    s = RunState(
+        block_id="t", aufgabe="a", start_ts="x",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={}, agent_docs={},
+        project_dir=tmp_path, project_name="t",
+    )
+    s.patches = [{"file": "a.txt"}]
+    aufrufe: list = []
+    with patch("werkstatt.loop.subprocess.run",
+               lambda *a, **kw: aufrufe.append(a) or
+                                 type("R", (), {"returncode": 0})()):
+        loop._ruff_fix_changed(s)
+    assert aufrufe == []

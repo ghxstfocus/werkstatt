@@ -220,6 +220,34 @@ def _resolve_venv_cmd(
     return cmd
 
 
+def _ruff_fix_changed(state: RunState) -> None:
+    """GOLD 2026-10-30: ruff --fix auf geaenderte Dateien.
+
+    Vor jedem _verify_patches aufrufen, damit der Fehler-Report
+    den aktuellen (nach --fix) Zustand sieht. Bisher lief --fix
+    nur im Haupt-Pfad, nicht in der Reflection-Schleife — der
+    Builder sah dadurch veraltete Ruff-Fehler.
+    """
+    try:
+        import subprocess as _sp
+        pd = getattr(state, "project_dir", None)
+        if pd is None:
+            return
+        _changed = [
+            p.get("file") for p in (getattr(state, "patches", None) or [])
+            if isinstance(p, dict) and p.get("file")
+        ]
+        _py_files = [f for f in _changed if f.endswith(".py")]
+        if not _py_files:
+            return
+        _sp.run(
+            ["ruff", "check", "--fix", "--no-cache", *_py_files],
+            cwd=pd, capture_output=True, text=True, timeout=30,
+        )
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+
 def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     """B2: Verifier (multi-projekt-faehig via Projekt-Contract).
 
@@ -876,6 +904,9 @@ def _reflection_loop(
         if not error_context:
             # M-402: phase statt None (sonst laeuft pytest_full_checks
             # bei jeder Reflection-Runde mit).
+            # GOLD 2026-10-30: ruff --fix vor jedem Verify, damit der
+            # Fehler-Report den aktuellen (nach --fix) Zustand sieht.
+            _ruff_fix_changed(state)
             if _verify_patches(state, phase=phase):
                 return True
         # K28: Circuit Breaker praezisiert. Zaehlt nur echte Stagnation
@@ -991,6 +1022,8 @@ def _reflection_loop(
         # Sonst reparieren die Runden 1-3 nur Reviewer-Bugs und bauen
         # dabei neue Verify-Fehler ein, ohne dass die nächste Runde
         # davon erfährt.
+        # GOLD 2026-10-30: ruff --fix vor jedem Verify.
+        _ruff_fix_changed(state)
         if not _verify_patches(state, phase=phase):
             # Verify-Fehler -> naechste Runde triggert Verify erneut.
             error_context = ""  # type: ignore[assignment]
@@ -1929,20 +1962,9 @@ def run_pipeline_loop(
                 return 1
 
         # M-467: ruff --fix auf geaenderte Dateien (deterministisch).
-        try:
-            import subprocess as _sp
-            _changed = [
-                p.get("file") for p in (getattr(state, "patches", None) or [])
-                if isinstance(p, dict) and p.get("file")
-            ]
-            _py_files = [f for f in _changed if f.endswith(".py")]
-            if _py_files:
-                _sp.run(
-                    ["ruff", "check", "--fix", "--no-cache", *_py_files],
-                    cwd=pd, capture_output=True, text=True, timeout=30,
-                )
-        except Exception:  # noqa: BLE001, S110
-            pass
+        # GOLD 2026-10-30: ausgelagert nach _ruff_fix_changed, damit
+        # dieselbe Logik auch in der Reflection-Schleife laeuft.
+        _ruff_fix_changed(state)
 
         # Post-Build Verify + Reflection (automatisch)
         if not _verify_patches(state, phase="post_build"):
