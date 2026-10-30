@@ -177,45 +177,6 @@ def _no_gefaehrliche_subprocess(monkeypatch):
 
 
 # =====================================================================
-# A8-3 (2026-10-23): Anti-Pattern-Hook in-process fuer Tests.
-# =====================================================================
-import pipeline as _pipe
-import werkstatt.agent as _agent
-
-
-@pytest.fixture(autouse=True)
-def ap_block_inprocess(monkeypatch):
-    def _ap_block(state, rolle, trigger_grund=None, *, aufrufer=None):
-        aps = _pipe.anti_patterns_fuer(rolle, trigger_grund, limit=3)
-        if not aps:
-            return ""
-        zeilen = ["## ANTI-PATTERNS"]
-        for e in aps:
-            beschreibung = _pipe._ap_kuerzen(
-                e["beschreibung"].strip(), _pipe._AP_BESCHREIBUNG_MAX)
-            loesung = _pipe._ap_kuerzen(
-                e["loesung"].strip(), _pipe._AP_BESCHREIBUNG_MAX)
-            zeilen.append("")
-            zeilen.append(f"- [{e['id']}] {e['titel']}")
-            zeilen.append(f"  Beschreibung: {beschreibung}")
-            zeilen.append(f"  Loesung: {loesung}")
-        if state.project_dir is not None:
-            payload = {
-                "rolle": rolle,
-                "trigger_grund": trigger_grund,
-                "ids": [e["id"] for e in aps],
-            }
-            if aufrufer is not None:
-                payload["aufrufer"] = aufrufer
-            from werkstatt.audit import audit
-            audit("anti_patterns_injiziert", payload,
-                  state.project_dir, state.project_name)
-        return "\n".join(zeilen)
-    monkeypatch.setattr(_agent, "_anti_pattern_block", _ap_block)
-    monkeypatch.setattr(_pipe, "_anti_pattern_block", _ap_block)
-    return _ap_block
-
-
 import pytest as _pytest
 
 
