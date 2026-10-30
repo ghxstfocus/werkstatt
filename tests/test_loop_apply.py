@@ -255,3 +255,59 @@ def test_apply_hooks_erlaubt_kein_patch(tmp_path):
             s, [{"file": "a.py", "old_string": "xyz", "new_string": "y"}],
             phase_label="test")
     assert n == 0
+
+
+# =====================================================================
+# GOLD 2026-10-30: git-diff-Fallback in _expand_cmd_placeholders
+# =====================================================================
+
+def test_expand_placeholders_git_diff_fallback(tmp_path):
+    """state.patches leer, aber git diff zeigt Aenderung -> stages bekommen Datei.
+
+    Regression: Live 2026-10-30 20:52:28 — state.patches leer,
+    alle Stages 'no changed files', _verify_patches gab True
+    obwohl nichts geprueft wurde.
+    """
+    import subprocess
+    from werkstatt.state import RunState
+
+    # Git-Repo anlegen
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "t"],
+                   cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "t@t"],
+                   cwd=tmp_path, check=True)
+    (tmp_path / "a.py").write_text("init\n")
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "init"],
+                   cwd=tmp_path, check=True)
+    # Aenderung
+    (tmp_path / "a.py").write_text("geaendert\n")
+
+    s = RunState(
+        block_id="t", aufgabe="a", start_ts="x",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={}, agent_docs={},
+        project_dir=tmp_path, project_name="t",
+    )
+    s.patches = []  # leer
+    out = loop._expand_cmd_placeholders(
+        ["pytest", "{changed_py_files}"], s, tmp_path)
+    assert out is not None
+    assert "a.py" in out
+
+
+def test_expand_placeholders_fallback_kein_git(tmp_path):
+    """Nicht-Git-Verzeichnis: Fallback greift nicht, kein Crash."""
+    from werkstatt.state import RunState
+    (tmp_path / "a.py").write_text("")
+    s = RunState(
+        block_id="t", aufgabe="a", start_ts="x",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={}, agent_docs={},
+        project_dir=tmp_path, project_name="t",
+    )
+    s.patches = []
+    out = loop._expand_cmd_placeholders(
+        ["pytest", "{changed_py_files}"], s, tmp_path)
+    assert out is None  # kein git, keine Aenderung

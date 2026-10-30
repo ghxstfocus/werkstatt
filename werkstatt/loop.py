@@ -122,6 +122,29 @@ def _expand_cmd_placeholders(
         if isinstance(p, dict) and p.get("file")
         and (Path(project_dir) / p["file"]).exists()
     ]
+
+    # GOLD 2026-10-30: Fallback via git diff --name-only, wenn
+    # state.patches leer ist. Der Loop leert state.patches nach
+    # dem Apply (z.B. _phase_end_reflection), dann finden die
+    # Verify-Stages keine changed files und werden uebersprungen
+    # (Live-Beleg 2026-10-30 20:52:28: alle Stages skipped, dann
+    # loop_verify_ok — echte Verifikation fand nie statt).
+    if not changed:
+        try:
+            import subprocess as _sp
+            _res = _sp.run(
+                ["git", "-C", str(project_dir), "diff", "--name-only",
+                 "HEAD"],
+                capture_output=True, text=True, timeout=10, check=False,
+            )
+            if _res.returncode == 0 and _res.stdout.strip():
+                changed = [
+                    f for f in _res.stdout.strip().splitlines()
+                    if f and (Path(project_dir) / f).exists()
+                ]
+        except Exception:  # noqa: BLE001, S110
+            pass
+
     changed_tests = [
         f for f in changed
         if "test" in f.lower() and f.endswith(".py")
