@@ -27,6 +27,43 @@ from werkstatt.subprocess_env import subprocess_env
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 
+_PROMPT_DUMP_DIR = Path("/tmp/werkstatt-prompts")
+
+
+def _dump_prompt(aufgabe: str, model: str,
+                 system_prompt: str, user_content: str) -> None:
+    """Schreibt die wortwoertlichen Prompts nach /tmp/werkstatt-prompts/.
+
+    Aktiv nur wenn WERKSTATT_PROMPT_DUMP=1 gesetzt ist.
+    Pro Call zwei Dateien: <agent>_<ts>_system.txt und _user.txt.
+    Zusaetzlich eine .meta.txt mit Modell + Laengen.
+    """
+    import os as _os
+    if _os.environ.get("WERKSTATT_PROMPT_DUMP") != "1":
+        return
+    try:
+        _PROMPT_DUMP_DIR.mkdir(parents=True, exist_ok=True)
+        _ts = time.strftime("%Y%m%d-%H%M%S")
+        # Nanosekunden-Suffix, damit schnelle Calls nicht kollidieren.
+        _suffix = f"{time.monotonic_ns() % 1_000_000:06d}"
+        _base = _PROMPT_DUMP_DIR / f"{aufgabe}_{_ts}_{_suffix}"
+        (_base.with_name(_base.name + "_system.txt")
+         ).write_text(system_prompt, encoding="utf-8")
+        (_base.with_name(_base.name + "_user.txt")
+         ).write_text(user_content, encoding="utf-8")
+        (_base.with_name(_base.name + "_meta.txt")).write_text(
+            f"agent={aufgabe}\n"
+            f"model={model}\n"
+            f"system_len={len(system_prompt)}\n"
+            f"user_len={len(user_content)}\n"
+            f"system_tokens_approx={len(system_prompt) // 4}\n"
+            f"user_tokens_approx={len(user_content) // 4}\n",
+            encoding="utf-8",
+        )
+    except (OSError, UnicodeError):
+        pass
+
+
 def ask_llm(api_key: str, system_prompt: str, user_content: str,
             model: str, temperature: float, timeout: int = 120,
             *, state: RunState | None = None,
@@ -54,6 +91,23 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
                                "messages": [{"role": "system", "content": system_prompt},
                                             {"role": "user", "content": user_content}],
                                "temperature": temperature}
+
+    # MESS-1: Laengen nach Redaktion, vor HTTP. Werden in jeden
+    # LLMReply-Return gesetzt und einmal pro Call auditiert.
+    _system_len = len(system_prompt)
+    _user_len = len(user_content)
+    if state is not None:
+        audit("llm_call",
+              {"agent": aufgabe,
+               "model": model,
+               "system_len": _system_len,
+               "user_len": _user_len,
+               "max_tokens": max_tokens},
+              state.project_dir,
+              state.project_name)
+
+    # Prompt-Dump (nur bei WERKSTATT_PROMPT_DUMP=1).
+    _dump_prompt(aufgabe, model, system_prompt, user_content)
     # Timeout-Fix 2026-10-16 (Option B, HR-R7):
     # B1 (Read-Timeout) bricht haengende Calls ab.
     # B2 (Deadline) verhindert Folge-Versuche nach
@@ -95,6 +149,8 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             return LLMReply(
                 ok=False,
                 error=f"Gesamt-Timeout {_max_total_s}s",
+                system_len=_system_len,
+                user_len=_user_len,
             )
         # Read-Timeout adaptiv: min(read, restzeit).
         _read_adapt = int(min(_READ_S, max(1, _rest)))
@@ -128,15 +184,21 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
                 return LLMReply(
                     ok=False,
                     error=f"HTTP {res.status_code}: {res.text[:200]}",
+                    system_len=_system_len,
+                    user_len=_user_len,
                 )
             letzter_fehler = f"HTTP {res.status_code}: {res.text[:200]}"
         if versuch < len(backoffs):
             time.sleep(warte)
 
     if res is None:
-        return LLMReply(ok=False, error=letzter_fehler)
+        return LLMReply(ok=False, error=letzter_fehler,
+                        system_len=_system_len,
+                        user_len=_user_len)
     if res.status_code != 200:
-        return LLMReply(ok=False, error=letzter_fehler)
+        return LLMReply(ok=False, error=letzter_fehler,
+                        system_len=_system_len,
+                        user_len=_user_len)
     try:
         data = res.json()
         msg = data["choices"][0]["message"]
@@ -154,10 +216,17 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             return LLMReply(
                 ok=False,
                 error=("leere Antwort (content und "
-                       "reasoning_content leer)"))
-        return LLMReply(ok=True, content=content)
+                       "reasoning_content leer)"),
+                system_len=_system_len,
+                user_len=_user_len,
+            )
+        return LLMReply(ok=True, content=content,
+                        system_len=_system_len,
+                        user_len=_user_len)
     except (KeyError, IndexError, TypeError, ValueError) as exc:
-        return LLMReply(ok=False, error=f"Parsing: {exc}")
+        return LLMReply(ok=False, error=f"Parsing: {exc}",
+                        system_len=_system_len,
+                        user_len=_user_len)
 
 # =====================================================================
 # A8-1b-0 (2026-10-23): aus pipeline.py extrahiert, wortwoertlich.

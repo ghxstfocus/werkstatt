@@ -31,6 +31,13 @@ from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
 from werkstatt.tools import run_readonly
 
+# DEPRECATED (2026-10-29): PLANNER_SYSTEM wird im Gold-Pfad nicht
+# mehr an das LLM gesendet. Der Architect-System-Prompt ist
+# ARCHITECT_SYSTEM. Tests pruefen noch den Inhalt von
+# PLANNER_SYSTEM (test_builder_agent.py::test_planner_prompt_m339,
+# test_loop.py::test_planner_prompt_phasen_pflicht) — bleiben als
+# Regressionsschutz, bis der Planner-Split umgestellt ist.
+# Siehe Bau-Handoff, P0 (erledigt aa7881f) + docs/OFFENE-BLOECKE.md.
 PLANNER_SYSTEM = """Du bist ein elite Software-Architekt und Planner.
 Zerlege die Aufgabe in ausfuehrbare Tasks.
 
@@ -878,99 +885,6 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
                 )
         _arch_parts.append(ARCHITECT_SYSTEM)
         return "\n\n".join(_arch_parts)
-    # GOLD: kein else -- PLANNER_SYSTEM ist toter Code.
-
-    # === M-397: Doku-Verbot (harte Regel, vor den Skills) ===
-    parts.append(
-        "<doku_verbot>\n"
-        "Doku-Tasks (docs/*.md, README.md, ROADMAP.md, CHANGELOG.md) "
-        "sind STRENG VERBOTEN.\n"
-        "Der Loop schreibt PROGRESS.md automatisch.\n"
-        "Wenn die findings offene Punkte in docs/ enthalten:\n"
-        "  - Extrahiere das CODE-Stichwort "
-        "(z.B. 'Migrations-Tracking' -> 'migration', "
-        "'Sanity-Check' -> 'sanity', 'Logout-Button' -> 'logout')\n"
-        "  - Plane einen Code-Task auf der zugehoerigen .py-Datei "
-        "mit action=update.\n"
-        "  - NIEMALS docs/*.md als task_files.\n"
-        "</doku_verbot>"
-    )
-
-    # === M-399a: Datei-Pruefung (kein Erfinden) ===
-    parts.append(
-        "<datei_pruefung>\n"
-        "Bevor du eine Datei in task_files setzt:\n"
-        "  - Pruefe mit grep oder read_file, ob die Datei existiert.\n"
-        "  - Wenn die Datei NICHT existiert und action=update: "
-        "Erfinde sie NICHT.\n"
-        "    Nutze action=create (dann legt der Builder sie an) "
-        "oder eine existierende Datei.\n"
-        "  - Wenn du unsicher bist: Nutze grep, um die Datei zu finden.\n"
-        "</datei_pruefung>"
-    )
-
-    # === M-401: Task-Groesse (2-5 Minuten) ===
-    parts.append(
-        "<task_groesse>\n"
-        "Jeder Task MUSS in 2-5 Minuten erledigt sein.\n"
-        "  - Ein Task = EIN kleiner Fix (z.B. 'I001 in app.py beheben').\n"
-        "  - KEINE 'ChangeApplier.apply implementieren' — das ist "
-        "Stunden-Arbeit.\n"
-        "  - Grosse Features aufteilen in mehrere kleine Tasks.\n"
-        "  - Maximal 5 Tasks pro Phase.\n"
-        "  - Wenn ein offener Punkt zu gross ist: Zerlege ihn in "
-        "Teil-Tasks (z.B. 'apply-Signatur', 'apply-Happy-Path', "
-        "'apply-Fehlerbehandlung').\n"
-        "</task_groesse>"
-    )
-
-    # === Skills ===
-    uw = load_skill_by_name("using-werkstatt", skills)
-    if uw and uw["body"]:
-        parts.append("## Skill: Using-Werkstatt\n" + uw["body"])
-    pc = load_skill_by_name("plan-crafting", skills)
-    if pc and pc["body"]:
-        parts.append("## Skill: Plan-Crafting\n" + pc["body"])
-    trigger = ("ruff", "test", "bug", "fehler", "debug", "pytest")
-    if any(w in aufgabe.lower() for w in trigger):
-        sd = load_skill_by_name("systematic-debugging", skills)
-        if sd and sd["body"]:
-            parts.append("## Skill: Systematic-Debugging\n" + sd["body"])
-
-    # === M-376: Pflicht-Wiederholung am ENDE (recency bias) ===
-    if isinstance(explorer_ctx, dict):
-        _key2 = explorer_ctx.get("key_files") or []
-        _files2 = [
-            k.get("file") for k in _key2
-            if isinstance(k, dict) and k.get("file")
-        ]
-        if _files2:
-            parts.append(
-                f"<erinnerung>Nur diese {len(_files2)} Dateien: "
-                f"{', '.join(str(f) for f in _files2)}</erinnerung>"
-            )
-
-    # === M-398: Tool-Definition ===
-    parts.append(
-        "<tools>\n"
-        "Du hast Zugriff auf zwei Tools, um den Code zu erkunden:\n"
-        "\n"
-        "  read_file: Lies eine Datei.\n"
-        '    Antwort: {"tool": "read_file", "args": {"file": "pfad/datei.py"}}\n'
-        "\n"
-        "  grep: Suche in Dateien.\n"
-        '    Antwort: {"tool": "grep", "args": {"pattern": "migration", '
-        '"path": "core/"}}\n'
-        "\n"
-        "Wenn du mehr Kontext brauchst, antworte NUR mit einem Tool-Call-JSON.\n"
-        "Wenn du genug weisst, antworte NUR mit dem Plan-JSON "
-        '({"tasks": [...], "tests": [...], "akzeptanzkriterien": [...]}).\n'
-        "</tools>"
-    )
-
-    return "\n\n".join(parts)
-
-
 def _normalisiere(text: str) -> str:
     """M-463: Entfernt Backticks, mehrfache Leerzeichen.
 

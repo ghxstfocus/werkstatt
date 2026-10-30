@@ -51,6 +51,9 @@ class LLMReply:
     ok: bool
     content: str = ""
     error: str = ""
+    # MESS-1: Prompt-Laengen (Zeichen nach Redaktion, vor HTTP).
+    system_len: int = 0
+    user_len: int = 0
 
 
 class SolverDiagnose(Enum):
