@@ -417,9 +417,17 @@ def run_explorer(state: RunState, frage: str) -> dict:
     # die Code-Dateien selbst.
     key_files: list[dict] = []
     _seen_files: set[str] = set()
+    # FIX 2026-10-31 (Fix F): Aufgabe-genannte .md ist Ziel, nicht
+    # Kontext — dann NICHT die Code-Pfade aus ihrem Body extrahieren.
+    # Sonst landen 19 Code-Dateien als key_files fuer 1 .md-Aufgabe.
+    _aufgabe_pfade_set = set(
+        (messungen.get("aufgabe_pfade") or {}).get("dateien") or []
+    )
     for name, m in messungen.items():
         for datei in m.get("dateien", []):
             if datei.endswith(".md") or datei.startswith("docs/"):
+                if datei in _aufgabe_pfade_set:
+                    continue  # Fix F: Ziel-.md, kein Kontext-Explorer
                 # K31: Aus .md-Body alle Code-Pfade extrahieren (.py/.sql/.html/.css/.js).
                 for _pfad in _extrahiere_pfade(Path(pd), datei):
                     if _pfad in _seen_files:

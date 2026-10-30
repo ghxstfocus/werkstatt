@@ -476,6 +476,96 @@ def _architect_abschnitt(
     return ""  # Datei nicht in der Prosa
 
 
+
+
+
+def _extrahiere_verbote(abschnitt: str) -> str:
+    """FIX 2026-10-31: Zieht negative Anweisungen aus der Prosa.
+
+    LLMs ignorieren Negativ-Anweisungen in langer Prosa. Wir stellen
+    sie isoliert VOR die Prosa als eigenen Block.
+    """
+    import re as _re_v
+    if not abschnitt:
+        return ""
+    _marker = _re_v.compile(
+        r"\b(nicht|kein|keine|keiner|behalte|behalten|erhalte|erhalten|"
+        r"nur|ausschliesslich|vermeide|verboten)\b",
+        _re_v.IGNORECASE,
+    )
+    _saetze = _re_v.split(r"(?<=[.!?])\s+", abschnitt)
+    _verbote: list[str] = []
+    for _s in _saetze:
+        _s_clean = _s.strip()
+        if len(_s_clean) < 15 or len(_s_clean) > 400:
+            continue
+        if _marker.search(_s_clean):
+            _verbote.append(_s_clean)
+        if len(_verbote) >= 5:
+            break
+    if not _verbote:
+        return ""
+    return (
+        "<verbote verbindlich=\"true\">\n"
+        "Diese Anweisungen sind HART. Verletze sie NICHT:\n"
+        + "\n".join(f"- {v}" for v in _verbote)
+        + "\n</verbote>"
+    )
+
+
+
+
+
+def _pruefe_doku_patch_breite(
+    patches: list, aufgabe: str, zieldatei: str, pd, pn,
+) -> list:
+    """FIX 2026-10-31: Reiner Loesch-Patch fuer Doku darf nicht
+    mehrere nummerierte Punkte loeschen, wenn der Auftrag
+    "nicht umnummerieren"/"behalte"/"unveraendert" sagt.
+
+    Live-Beleg 2026-10-30 23:32: Builder loeschte Punkt 1+2,
+    Nummerierung 2-7 rutschte auf 1-6.
+    """
+    import re as _re_breite
+    if not patches:
+        return patches
+    _aufgabe_l = (aufgabe or "").lower()
+    _negativ = (
+        "nicht umnummerier" in _aufgabe_l
+        or "keine umnummerier" in _aufgabe_l
+        or "behalte" in _aufgabe_l
+        or "unveraendert" in _aufgabe_l
+        or "unverandert" in _aufgabe_l
+        or "unverändert" in _aufgabe_l
+    )
+    if not _negativ:
+        return patches
+    _punkt_re = _re_breite.compile(r"^\s*\d+\.", _re_breite.MULTILINE)
+    _ok: list = []
+    for _p in patches:
+        if not isinstance(_p, dict):
+            _ok.append(_p)
+            continue
+        if _p.get("action", "update") != "update":
+            _ok.append(_p)
+            continue
+        _new = _p.get("new_string", "") or ""
+        _old = _p.get("old_string", "") or ""
+        if _new.strip() != "":
+            _ok.append(_p)
+            continue
+        _n_punkte = len(_punkt_re.findall(_old))
+        if _n_punkte > 1:
+            audit("builder_patch_zu_breit", {
+                "zieldatei": zieldatei,
+                "nummerierte_punkte_im_old": _n_punkte,
+                "old_prefix": _old[:200],
+            }, pd, pn)
+            continue
+        _ok.append(_p)
+    return _ok
+
+
 def _build_patches_fuer_datei(
     state: RunState,
     zieldatei: str,
@@ -590,8 +680,11 @@ def _build_patches_fuer_datei(
     _task = getattr(state, "aktuelle_task", None) or {}
     _task_name = _task.get("name", "") if isinstance(_task, dict) else ""
     _task_desc = _task.get("description", "") if isinstance(_task, dict) else ""
+    _verbote = _extrahiere_verbote(_abschnitt)
+    _verbote_prefix = (_verbote + "\n\n") if _verbote else ""
     _user = (
         f"## ZIELDATEI: {zieldatei}\n\n"
+        f"{_verbote_prefix}"
         f"## TASK: {_task_name}\n"
         f"## TASK-BESCHREIBUNG: {_task_desc}\n\n"
         f"## ARCHITECT-BESCHREIBUNG (fuer Kontext):\n{_abschnitt}\n\n"
@@ -731,6 +824,9 @@ def _build_patches_fuer_datei(
                 pass
         return []
 
+    _erfuellt = _pruefe_doku_patch_breite(
+        _erfuellt, getattr(state, 'aufgabe', ''), zieldatei, pd, pn,
+    )
     return _erfuellt
 
 

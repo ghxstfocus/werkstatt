@@ -238,6 +238,13 @@ def _ipv6_callback(match: re.Match[str]) -> str:
 # Formen zuerst, sonst matcht eine kuerzere Form zu frueh und laesst
 # Reste stehen (z.B. "fe80::1" -> "fe80::" + "1").
 _IPV6_RE = re.compile(
+    # FIX 2026-10-31: Negativ-Raender verhindern False-Positives
+    # in Code-Kontext (python::os, .py::Audit), erlauben aber echte
+    # IPv6-Short-Formen (fe80::1, ::1, 2001:db8::1).
+    # Regel: vor `::` kein Buchstabe/Pfadzeichen (Ziffern sind
+    # IPv6-typisch), nach `::` kein Buchstabe/Unterstrich
+    # (Ziffern sind IPv6-typisch).
+    r"(?<![./A-Za-z])"
     r"(?:"
     r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}"                       # Vollform
     r"|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"                    # :: mittig
@@ -249,6 +256,7 @@ _IPV6_RE = re.compile(
     r"|(?:[0-9a-fA-F]{1,4}:){1,7}:"                                    # :: am Ende
     r"|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)"                              # :: Start
     r")"
+    r"(?![A-Za-z_])"
 )
 _MAC_RE = re.compile(r"\b(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b")
 _API_KEY_RES = (

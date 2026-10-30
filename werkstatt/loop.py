@@ -1307,6 +1307,43 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
               {"reason": "working_tree_clean"}, pd, pn)
         return True, ""
 
+    # FIX 2026-10-31: Task-File-Pruefung VOR git add.
+    # Wenn ein Task als done markiert ist und task_files nennt,
+    # muessen diese im aktuellen Working Tree stehen. Sonst
+    # Fake-Done. Nutzt status --porcelain (erfasst auch
+    # untracked, die diff --name-only verschweigt).
+    try:
+        _status_lines = subprocess.run(
+            ["git", "-C", str(pd), "status", "--porcelain", "-uall"],
+            capture_output=True, text=True, check=False, timeout=10,
+        ).stdout.splitlines()
+    except Exception:  # noqa: BLE001
+        _status_lines = []
+    _diff_set = set()
+    for _ln in _status_lines:
+        # Format: "XY path" — X=Index, Y=Worktree, path ab Spalte 3
+        _p = _ln[3:].strip() if len(_ln) > 3 else ""
+        if _p and " -> " in _p:
+            _p = _p.split(" -> ", 1)[1]
+        if _p:
+            _diff_set.add(_p)
+    _tasks_state = getattr(state, "tasks", None) or []
+    for _t in _tasks_state:
+        if not isinstance(_t, dict):
+            continue
+        if _t.get("status") != "done":
+            continue
+        for _tf in (_t.get("task_files") or []):
+            if not isinstance(_tf, str) or not _tf:
+                continue
+            if _tf not in _diff_set:
+                audit("loop_human_gate_task_files_missing",
+                      {"task_id": _t.get("id", ""), "file": _tf}, pd, pn)
+                return False, (
+                    f"Task {_t.get('id','?')} meldet done, aber "
+                    f"{_tf} steht nicht im git-Diff. Fake-Done verhindert."
+                )
+
     try:
         add = subprocess.run(
             ["git", "-C", str(pd), "add", "-A"],

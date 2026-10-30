@@ -30,53 +30,6 @@ _ARCHITECT_MODEL = os.environ.get("WERKSTATT_ARCHITECT_MODEL", "deepseek-chat")
 from werkstatt.audit import audit
 from werkstatt.state import RunState
 
-# DEPRECATED (2026-10-29): PLANNER_SYSTEM wird im Gold-Pfad nicht
-# mehr an das LLM gesendet. Der Architect-System-Prompt ist
-# ARCHITECT_SYSTEM. Tests pruefen noch den Inhalt von
-# PLANNER_SYSTEM (test_builder_agent.py::test_planner_prompt_m339,
-# test_loop.py::test_planner_prompt_phasen_pflicht) — bleiben als
-# Regressionsschutz, bis der Planner-Split umgestellt ist.
-# Siehe Bau-Handoff, P0 (erledigt aa7881f) + docs/OFFENE-BLOECKE.md.
-PLANNER_SYSTEM = """Du bist ein elite Software-Architekt und Planner.
-Zerlege die Aufgabe in ausfuehrbare Tasks.
-
-Jeder Task:
-  - id, name, description
-  - action: "read" | "create" | "update"
-  - task_files: konkrete Datei-Pfade MIT Suffix (keine Ordner)
-  - phase_id: optional, muss in phasen existieren
-
-Phasen (Pflicht bei >5 Tasks oder Refactoring-Aufgaben):
-  phasen: [{"id": "p1", "titel": "Analyse", "tasks": ["t1"]}]
-  Jeder Task braucht dann eine phase_id.
-
-Doku-Tasks sind VERBOTEN (docs/, CHANGELOG.md, README.md,
-STATUS.md, PROGRESS.md). Doku schreibt der Loop.
-Verstoesse werden vom Hook deterministisch geblockt.
-
-Antworte NUR mit validem JSON:
-{
-  "phasen": [{"id": "p1", "titel": "...", "parent_id": null,
-              "tasks": ["t1"]}],
-  "tasks": [{"id": "t1", "name": "...", "description": "...",
-             "action": "read"|"create"|"update",
-             "task_files": ["pfad/zur/datei.py"],
-             "phase_id": "p1",
-             "akzeptanzkriterien": ["..."]}],
-  "tests": ["..."],
-  "akzeptanzkriterien": ["..."],
-  "blocker": [{"klasse": "...", "text": "..."}],
-  "follow_up": [{"klasse": "...", "text": "..."}],
-  "ignore": [{"klasse": "...", "text": "..."}]
-}
-
-WICHTIG (wird vom Hook erzwungen):
-  - action muss read/create/update sein.
-  - task_files: Datei mit Suffix, KEINE Ordner, KEINE Wildcards.
-  - Doku-Tasks verboten.
-  - phase_id muss in phasen existieren.
-"""
-
 
 def _klassifiziere_fehler(stage_id: str, fehlertext: str) -> str:
     """M-299a: Klassifiziert einen Verify-Fehler nach Klasse.
@@ -1357,6 +1310,7 @@ def _normalisiere_task_files(tasks, explorer_ctx, pd, pn) -> list:
 
 def _zerlege_in_sub_tasks(
     prosa: str, key_files: list[str], api_key: str, pd, pn,
+    aufgabe: str = "",
 ) -> list[dict]:
     """M-453: Zerlegt Architect-Prosa in 3-5 Sub-Tasks."""
     import json as _json
@@ -1513,8 +1467,59 @@ def _zerlege_in_sub_tasks(
         {"id": t["id"], "files": t["task_files"],
          "desc_len": len(t.get("description", ""))} for t in _final
     ]}, pd, pn)
-    return _final
+    return _doku_post_check(_final, prosa, pd, pn, aufgabe)
 
+
+
+
+def _doku_post_check(
+    tasks: list[dict], prosa: str, pd, pn,
+    aufgabe: str = "",
+) -> list[dict]:
+    """FIX 2026-10-31 v2: Doku-Aufgaben deterministisch auf 1 Task reduzieren.
+
+    Trigger: User-Auftrag enthaelt "nur"/"ausschliesslich"/"keine python"/
+    "kein code" UND nennt .md oder docs/. Dann darf der Loop NICHT
+    alle Explorer-Dateien als Tasks bauen.
+
+    Live-Beleg 2026-10-30 23:03: 19 task_files fuer 1 Datei-Aufgabe
+    (docs/STATUS.md), weil der Explorer Code-Pfade aus .md-Bodies
+    extrahiert und der Split-LLM daraus Tasks macht.
+    """
+    if not tasks:
+        return tasks
+    _MD_SUFFIX = (".md", ".rst", ".txt")
+    _aufgabe_lower = (aufgabe or "").lower()
+    _prosa_lower = (prosa or "").lower()
+    _both = _aufgabe_lower + " " + _prosa_lower
+    _trigger_marker = ("nur", "ausschliesslich", "keine python",
+                       "kein code", "nur doku", "keine code")
+    _has_trigger = any(m in _both for m in _trigger_marker)
+    _has_doku_ziel = (".md" in _aufgabe_lower or "docs/" in _aufgabe_lower
+                      or "doku" in _aufgabe_lower)
+    if not (_has_trigger and _has_doku_ziel):
+        return tasks
+    _md_tasks = [
+        t for t in tasks
+        if isinstance(t, dict)
+        and any(
+            isinstance(f, str) and f.endswith(_MD_SUFFIX)
+            for f in (t.get("task_files") or [])
+        )
+    ]
+    if not _md_tasks:
+        audit("planner_doku_post_check_leer", {
+            "original_task_count": len(tasks),
+            "aufgabe_len": len(aufgabe or ""),
+        }, pd, pn)
+        return []
+    if len(tasks) > 1:
+        audit("planner_doku_post_check_reduziert", {
+            "original_task_count": len(tasks),
+            "md_task_count": len(_md_tasks),
+            "behalten": _md_tasks[0].get("task_files"),
+        }, pd, pn)
+    return _md_tasks[:1]
 
 def _run_scout(
     state, aufgabe: str, code_index: dict,
@@ -1602,7 +1607,32 @@ def run_planner(state: RunState) -> bool:
     aufgabe = getattr(state, "aufgabe", "")
     docs_ctx = ""
     if getattr(state, "docs", None):
-        docs_ctx = "\n".join(f"--- {k} ---\n{v}" for k, v in list(state.docs.items())[:3])
+        # FIX 2026-10-31 (Fix E): Bei Doku-Aufgaben ("nur X.md") nur
+        # die betroffene .md + max 5 KB. Sonst: 3 Dateien, je 20 KB.
+        _aufgabe_lower = (aufgabe or "").lower()
+        _ist_doku_task = (
+            ("nur" in _aufgabe_lower or "ausschliesslich" in _aufgabe_lower
+             or "keine python" in _aufgabe_lower
+             or "kein code" in _aufgabe_lower)
+            and (".md" in _aufgabe_lower or "docs/" in _aufgabe_lower)
+        )
+        if _ist_doku_task:
+            import re as _re_e
+            _md_paths = _re_e.findall(
+                r"[a-zA-Z_][\w/.-]*\.md", aufgabe or "",
+            )
+            _md_ziel = _md_paths[0] if _md_paths else ""
+            _found = ""
+            for _k, _v in state.docs.items():
+                if _md_ziel and (_md_ziel in _v[:2000] or _md_ziel in _k):
+                    _found = f"--- {_k} ---\n{_v[:5000]}"
+                    break
+            docs_ctx = _found
+        else:
+            docs_ctx = "\n".join(
+                f"--- {k} ---\n{v[:20000]}"
+                for k, v in list(state.docs.items())[:3]
+            )
 
     user_content = f"Aufgabe: {aufgabe}\n\nKontext:\n{docs_ctx}"
 
@@ -1845,6 +1875,7 @@ def run_planner(state: RunState) -> bool:
 
     _sub_tasks = _zerlege_in_sub_tasks(
         _arch_prosa, _key_files, api_key, pd, pn,
+        aufgabe=aufgabe,
     )
 
     if _sub_tasks:

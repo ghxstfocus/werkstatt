@@ -548,12 +548,6 @@ def test_explorer_prompt_m338():
     assert "Rate NICHT" in EXPLORER_SYSTEM or "rate nicht" in EXPLORER_SYSTEM.lower()
     assert "Messung" in EXPLORER_SYSTEM or "messen" in EXPLORER_SYSTEM.lower()
 
-def test_planner_prompt_m339():
-    """M-339: Planner-Prompt nennt Datei-Pflicht."""
-    from werkstatt.planner import PLANNER_SYSTEM
-    assert "MIT Suffix" in PLANNER_SYSTEM
-    assert "KEINE Ordner" in PLANNER_SYSTEM
-
 
 @pytest.mark.skip(reason="GOLD: _build_patches_fuer_datei kann keine neuen Dateien anlegen (braucht existierende Datei); create-Pfad fehlt, K62")
 def test_builder_create_zieldatei_fehlt_wird_angelegt(tmp_path):

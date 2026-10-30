@@ -161,6 +161,24 @@ Antworte NUR mit validem JSON:
   erfuellt ist: HIGH-Bug.
 - Belege im `description`-Feld: "Anforderung X fehlt im Diff und
   im Datei-Inhalt (Zeilen 1-N geprueft)".
+
+
+## AUFTRAG-TREUE-CHECK (HIGH-Bug, FIX 2026-10-31)
+Der User-Auftrag enthaelt oft NEGATIVE Anweisungen ("nicht X",
+"kein Y", "behalte Z", "erhalte W"). Pruefe JEDE solche Anweisung:
+- Suche im GESAMTAUFGABE-Text nach "nicht", "kein", "keine",
+  "behalte", "erhalte", "nur", "ausschliesslich", "vermeide".
+- Pruefe fuer JEDE gefundene Anweisung, ob der Diff sie verletzt.
+- Beispiel: Aufgabe sagt "nicht umnummerieren", Diff nummeriert
+  Punkte um (2->1, 3->2): HIGH-Bug "Auftrag-Treue verletzt:
+  Umnummerierung, obwohl Auftrag 'nicht umnummerieren' fordert".
+- Beispiel: Aufgabe sagt "nur docs/STATUS.md", Diff aendert auch
+  eine .py-Datei: HIGH-Bug "Auftrag-Treue: zusaetzliche Datei".
+- Beispiel: Aufgabe sagt "behalte Abschnitt X", Diff entfernt
+  Zeilen aus X: HIGH-Bug "Auftrag-Treue: Abschnitt X entfernt".
+- Wenn keine negativen Anweisungen im Auftrag: kein Bug.
+- Belege im `description`-Feld: "Auftrag sagt 'nicht umnummerieren',
+  Diff nummeriert 2->1, 3->2, 4->3".
 """
 
 
@@ -429,7 +447,9 @@ def run_reviewer(state: RunState) -> bool:
         return False  # fail-closed
 
     # K23b: fail-closed. Leerer Diff MIT vorhandenen Patches = Bug.
-    # Leerer Diff OHNE Patches = legitimer Leerfall (read-only, keine Aenderung).
+    # Leerer Diff OHNE Patches = legitim NUR bei action="read".
+    # FIX 2026-10-31: update-Task + task_files + leerer Diff
+    # ist Fake-Done. Fail-closed.
     _patches = getattr(state, "patches", None) or []
     if not diff:
         if _patches:
@@ -437,8 +457,15 @@ def run_reviewer(state: RunState) -> bool:
                   {"patches": len(_patches),
                    "task_files": _tf_early or []}, pd, pn)
             return False  # fail-closed: Patch da, aber Diff leer = Bug
+        _akt_action = ""
+        if isinstance(_akt_task_early, dict):
+            _akt_action = _akt_task_early.get("action", "")
+        if _akt_action == "update" and _tf_early:
+            audit("reviewer_kein_diff_update_task",
+                  {"task_files": _tf_early}, pd, pn)
+            return False  # fail-closed: update-Task ohne Diff = Fake-Done
         audit("reviewer_kein_diff_kein_patch", {}, pd, pn)
-        return True  # Nichts zu reviewen -- legitim
+        return True  # Nichts zu reviewen (read-only / kein task_files)
 
     aufgabe = getattr(state, "aufgabe", "")
     tests_ok = getattr(state, "baseline_gruen", True)
@@ -463,11 +490,15 @@ def run_reviewer(state: RunState) -> bool:
         # Reviewer soll behobene Bugs NICHT erneut melden.
         + _reviewer_history_block(state)
     )
-    # Hinweis an den Reviewer: pruefe die Task, nicht die Gesamtaufgabe.
+    # Hinweis an den Reviewer: Task-Beschreibung UND Auftrag-Treue.
+    # FIX 2026-10-31: Der Auftrag enthaelt Verbote ("nicht X"), die
+    # auch geprueft werden muessen.
     user_content += (
-        "\n\nPruefe: Hat DIESE Task das getan, was ihre "
-        "TASK-BESCHREIBUNG verlangt? Die GESAMTAUFGABE ist nur "
-        "Kontext — nicht der Pruefungsgegenstand."
+        "\n\nPruefe: "
+        "(a) Hat DIESE Task das getan, was ihre TASK-BESCHREIBUNG "
+        "verlangt? "
+        "(b) Verletzt der Diff eine NEGATIVE Anweisung aus der "
+        "GESAMTAUFGABE (nicht, kein, behalte, erhalte, nur)?"
     )
     if _arch_desc:
         user_content += f"\n\nArchitect-Vorgabe:\n{_arch_desc}"
