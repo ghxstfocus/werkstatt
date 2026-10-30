@@ -1479,6 +1479,7 @@ def _run_scout(
         lambda: ask_llm(
             api_key, _scout_system_with_nachfolger(), user_content,
             model="deepseek-chat", temperature=0.2, max_tokens=4000,
+            aufgabe="scout",
         ),
     )
     if not reply.ok:
@@ -1717,6 +1718,7 @@ def run_planner(state: RunState) -> bool:
         lambda: ask_llm(
             api_key, _arch_sys, user_content,
             model=_ARCHITECT_MODEL, temperature=0.2, max_tokens=16000,
+            aufgabe="architect",
         ),
     )
     if not _arch_reply.ok:

@@ -466,3 +466,28 @@ def test_scout_uebergabe_an_llm(tmp_path):
     assert a["model"] == "deepseek-chat"
     assert a["temperature"] == 0.2
     assert a["max_tokens"] == 4000
+
+
+# =====================================================================
+# GOLD 2026-10-30: aufgabe= an Scout- und Architect-ask_llm-Calls
+# =====================================================================
+
+def test_scout_uebergabe_an_llm_hat_aufgabe(tmp_path):
+    """Scout-Call setzt aufgabe='scout' (fuer Prompt-Dump)."""
+    s = _state(tmp_path)
+    aufrufe: list = []
+
+    def _fake(api_key, system, user, **kw):
+        aufrufe.append(kw)
+        return _reply(True, json.dumps({"relevante_dateien": [],
+                                        "risiken": []}))
+
+    with patch.multiple(
+        "werkstatt.planner",
+        ask_llm=_fake,
+        _with_spinner=lambda _l, fn: fn(),
+    ):
+        planner._run_scout(s, "A", {}, [], "sk-test")
+
+    assert len(aufrufe) == 1
+    assert aufrufe[0].get("aufgabe") == "scout"

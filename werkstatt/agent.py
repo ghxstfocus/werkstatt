@@ -60,8 +60,21 @@ def _dump_prompt(aufgabe: str, model: str,
             f"user_tokens_approx={len(user_content) // 4}\n",
             encoding="utf-8",
         )
-    except (OSError, UnicodeError):
-        pass
+    except (OSError, UnicodeError) as _exc:
+        # GOLD 2026-10-30: Dump-Fehler ins Audit (Diagnose).
+        # Vorher wurde der Fehler still verschluckt; das machte
+        # fehlende Architect-Dumps unerklaerbar.
+        try:
+            from werkstatt.audit import audit as _audit
+            _audit(
+                "prompt_dump_fehler",
+                {"agent": aufgabe, "model": model,
+                 "exc_type": type(_exc).__name__,
+                 "exc_str": str(_exc)[:300]},
+                Path("/tmp"), "werkstatt",
+            )
+        except Exception:  # noqa: BLE001, S110
+            pass
 
 
 def ask_llm(api_key: str, system_prompt: str, user_content: str,
