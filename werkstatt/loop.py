@@ -1915,6 +1915,11 @@ def run_pipeline_loop(
                    "reason": "loop_flag_vor_hook"},
                   pd, pn)
             state.auftrag_bereits_erfuellt = False  # type: ignore[attr-defined]
+            # GOLD 2026-10-30: tasks_ok auch bei auftrag_bereits_erfuellt
+            # hochzaehlen. Sonst zeigt der Footer "1/5", obwohl alle 5
+            # Tasks done sind (Live-Beleg 2026-10-30 21:41:45).
+            tasks_ok += 1
+            state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
             _task_ende(state, phase_state, task_id, ok=True,
                        name=task_name)
             audit("loop_task_ok", {"task_id": i, "name": task_name,
@@ -1964,6 +1969,8 @@ def run_pipeline_loop(
                        "blocked_reason": _blocked_reason},
                       pd, pn)
                 state.auftrag_bereits_erfuellt = False  # type: ignore[attr-defined]
+                tasks_ok += 1
+                state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
                 _task_ende(state, phase_state, task_id, ok=True,
                            name=task_name)
                 audit("loop_task_ok", {"task_id": i, "name": task_name,

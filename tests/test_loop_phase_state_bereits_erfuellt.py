@@ -82,3 +82,18 @@ def test_loop_flag_vor_hook_generalisiert():
     # Hier testen wir nur, dass das Feld existiert und der Loop
     # es zuruecksetzen kann.
     assert getattr(s, "auftrag_bereits_erfuellt", False) is True
+
+
+def test_tasks_ok_zaehler_bei_auftrag_bereits_erfuellt():
+    """Bei auftrag_bereits_erfuellt wird tasks_ok hochgezaehlt.
+
+    Regression: Live 2026-10-30 21:41:45 — Footer zeigte
+    '1/5 Tasks · 4 failed', obwohl alle 5 done waren.
+    """
+    import inspect
+    from werkstatt import loop as loop_mod
+    src = inspect.getsource(loop_mod.run_pipeline_loop)
+    # tasks_ok += 1 muss im Flag-Pfad stehen
+    assert src.count("tasks_ok += 1") >= 2, (
+        "tasks_ok wird nicht in allen Pfaden hochgezaehlt"
+    )
