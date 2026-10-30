@@ -601,6 +601,19 @@ Pruefe JEDE Anforderung aus der Aufgabe gegen den IST-ZUSTAND:
    Das ist der wichtigste Fall. Der Loop bricht dann ab.
 3. Wenn NEIN: normales Vorgehen (Auftrag formulieren).
 
+## ENTFERNEN-AUFGABEN (FIX 2026-10-31, Bug L)
+
+Wenn die Aufgabe sagt "entferne X", "loesche X", "X rausnehmen":
+- Pruefe im IST-ZUSTAND, ob X noch existiert.
+- Wenn X NICHT mehr im IST-ZUSTAND steht: bereits_erfuellt: true.
+- Wenn X noch da ist: bereits_erfuellt: false, normaler Auftrag.
+- Beispiel: Aufgabe "entferne Punkt 1 (AuditReaderError) aus
+  docs/STATUS.md". IST-ZUSTAND enthaelt Abschnitt "Offene Punkte"
+  mit Punkten 2-7, aber KEINEN Punkt 1 zur AuditReaderError:
+  -> bereits_erfuellt: true.
+- Wenn der IST-ZUSTAND die Zieldatei NICHT enthaelt: kein Check
+  moeglich, bereits_erfuellt: false.
+
 Beispiel:
 - Aufgabe: "Fuehre table-alerts in alerts.html ein."
 - IST-ZUSTAND zeigt: `<table class="table table-alerts">`.

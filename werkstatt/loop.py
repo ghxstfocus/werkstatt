@@ -1307,6 +1307,23 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
               {"reason": "working_tree_clean"}, pd, pn)
         return True, ""
 
+    # FIX 2026-10-31 (Fix K): PROGRESS.md-Eintrag VOR git add -A,
+    # damit er im selben Commit landet wie der Task-Diff. Vorher
+    # wurde er vom Hauptloop NACH dem Commit geschrieben und blieb
+    # uncommitted (Live-Beleg 2026-10-30: 53db3b0).
+    try:
+        from werkstatt import progress as _progress_k
+        _tasks_len_k = len(getattr(state, "tasks", None) or [])
+        _tasks_ok_k = int(getattr(state, "tasks_ok_counter", 0) or 0)
+        _progress_k.append(
+            pd,
+            name=f"Phase abgeschlossen: {pn}",
+            status="phase_ende",
+            info=f"tasks_ok={_tasks_ok_k}/{_tasks_len_k}",
+        )
+    except Exception:  # noqa: BLE001, S110
+        pass
+
     # FIX 2026-10-31: Task-File-Pruefung VOR git add.
     # Wenn ein Task als done markiert ist und task_files nennt,
     # muessen diese im aktuellen Working Tree stehen. Sonst
@@ -2527,13 +2544,18 @@ def run_pipeline_loop(
         audit("loop_erfolg", {"project_name": project_name}, pd, pn)
 
     # M-307b: Phasen-Ende in PROGRESS.md
-    from werkstatt import progress as _progress
-    _progress.append(
-        pd,
-        name=f"Phase abgeschlossen: {project_name}",
-        status="phase_ende",
-        info=f"rc={rc} tasks_ok={tasks_ok}/{len(tasks)}",
-    )
+    # FIX 2026-10-31 (Fix K): Bei erfolgreichem Human-Gate-Commit
+    # hat _committe_zielprojekt den Eintrag schon VOR git add -A
+    # geschrieben. Nur bei Nicht-Commit (reject, auto-approve)
+    # hier nachschreiben, sonst doppelter Eintrag.
+    if rc != 0:
+        from werkstatt import progress as _progress
+        _progress.append(
+            pd,
+            name=f"Phase abgeschlossen: {project_name}",
+            status="phase_ende",
+            info=f"rc={rc} tasks_ok={tasks_ok}/{len(tasks)}",
+        )
 
     # M-456: Zusammenfassung.
     try:
