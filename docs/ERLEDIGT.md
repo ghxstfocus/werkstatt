@@ -1055,3 +1055,66 @@ Keine Berechtigung`. Der Loop meldet dann `✗ LOOP FEHLGESCHLAGEN`
 
 ---
 
+---
+
+## 2026-10-30 — MESS-1 + planner-Cleanup + pipeline._KATALOG_SOLL
+
+### MESS-1 — Prompt-Laengen messbar (`b3b9511`)
+
+- `LLMReply` (state.py) um `system_len: int`, `user_len: int` erweitert.
+- `ask_llm` (agent.py): alle 7 `return LLMReply(...)`-Pfade fuellen
+  die Laengen; zusaetzlich `audit("llm_call", {agent, model,
+  system_len, user_len, max_tokens})`, wenn `state` gesetzt.
+- `llm_call` in `_AUDIT_KINDS_BEKANNT` (audit.py) + `_KATALOG_SOLL`
+  162 -> 163 (pipeline.py).
+- **Prompt-Dump (optional):** `WERKSTATT_PROMPT_DUMP=1` schreibt pro
+  LLM-Call die wortwoertlichen System- und User-Prompts nach
+  `/tmp/werkstatt-prompts/<agent>_<ts>_<suffix>_{system,user,meta}.txt`.
+  Kein Effekt, wenn die Env-Var nicht gesetzt ist.
+
+### planner.py-Cleanup (`c9821bb`)
+
+- Toten Block in `_planner_system` entfernt (Zeilen 881-973,
+  93 Zeilen): `<doku_verbot>`, `<datei_pruefung>`, `<task_groesse>`,
+  `<tools>`, Skill-Laden (`load_all_skills`, `load_skill_by_name`),
+  `<erinnerung>`. Wurde nie erreicht (`return` davor).
+- `PLANNER_SYSTEM` deprecatet (6-Zeilen-Kommentar, Inhalt
+  unveraendert). Grund: `_planner_system` gibt nur `ARCHITECT_SYSTEM`
+  zurueck; `PLANNER_SYSTEM` wird nicht mehr ans LLM gesendet. Bleibt
+  aber im Modul, weil `test_builder_agent.py::test_planner_prompt_m339`
+  und `test_loop.py::test_planner_prompt_phasen_pflicht` den Inhalt
+  pruefen (Regressionsschutz bis Planner-Split umgestellt).
+- Unbenutzte Imports entfernt: `load_skill_by_name`, `run_readonly`,
+  `load_all_skills`. Ruff planner.py 3 -> 1.
+
+### Ruff-Baseline (Stand 2026-10-30)
+
+| Datei | Errors | Delta |
+|---|---|---|
+| loop.py | 7 | 0 |
+| planner.py | 1 | **-2** |
+| builder.py | 2 | 0 (SIM102, SIM103 alt) |
+| reviewer.py | 0 | 0 |
+| explorer.py | 0 | 0 |
+| pipeline.py | 2 | +2 (neu erfasst, PIE810 + F841) |
+| **Gesamt** | **12** | 0 |
+
+`pipeline.py` ist in der Baseline **neu erfasst** — vorher nicht
+gemessen, weil als "zu loeschen" gefuehrt. Siehe `M-345`.
+
+### Tests
+
+- 1622 passed, 5 skipped (unveraendert).
+
+### Was aufgefallen ist
+
+- **Commit `b3b9511` (MESS-1) enthaelt auch `pipeline._KATALOG_SOLL`
+  und `planner.py`-Cleanup** — der `git reset --soft` hatte alle
+  Aenderungen im Index, `git add` pro Datei hat die anderen nicht
+  entfernt. Funktional korrekt, Commit-Message unvollstaendig.
+  Beim naechsten Mal: `git reset HEAD` + `git add` pro Commit-Gruppe.
+- **`pipeline.py`-Migration (M-345) ist Tages- bis Wochenaufgabe,
+  nicht "Block".** 146 Symbole, 182 Tests.
+
+---
+
