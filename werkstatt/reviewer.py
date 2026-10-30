@@ -306,8 +306,30 @@ def run_phase_end_review(state: RunState) -> bool:
         f"{_json.dumps(list(akz), ensure_ascii=False, indent=2)}\n\n"
         f"## GESAMT-DIFF (alle Task-Aenderungen zusammen):\n"
         f"```diff\n{diff}\n```\n\n"
+    )
+    # GOLD 2026-10-30: Datei-Inhalt fuer jede Task-Datei anhaengen.
+    # Vorher hatte der Phase-Review NUR den Diff — der Reviewer
+    # konnte nicht pruefen, ob eine Anforderung schon im Datei-Inhalt
+    # erfuellt ist (DATEI-CHECK/SYMBOL-CHECK griffen ins Leere).
+    # Live-Beleg 2026-10-30 20:52:24: Reviewer meldete "Anforderung
+    # weder im Diff noch im Datei-Inhalt", obwohl die Sortierung
+    # in _section_timeline_entries schon da war.
+    for _tf in _phase_files[:3]:
+        _fp = Path(pd) / _tf
+        if not _fp.is_file():
+            continue
+        try:
+            _content = _fp.read_text(encoding="utf-8")[:30000]
+        except (OSError, UnicodeDecodeError):
+            continue
+        user += (
+            f"\n\n--- VOLLE ZIELDATEI: {_tf} ---\n"
+            f"{_content}\n"
+            f"--- ENDE ---"
+        )
+    user += (
         # K40: Historie vorheriger Reviews.
-        + _reviewer_history_block(state)
+        _reviewer_history_block(state)
         + "Pruefe den Code zusammenhängend. Achte auf:\n"
         "- API-Kompatibilitaet (Signaturen unveraendert?)\n"
         "- Cross-File-Referenzen (Importe, Symbole)\n"
