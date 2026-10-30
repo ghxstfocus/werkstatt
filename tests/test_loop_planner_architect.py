@@ -491,3 +491,22 @@ def test_scout_uebergabe_an_llm_hat_aufgabe(tmp_path):
 
     assert len(aufrufe) == 1
     assert aufrufe[0].get("aufgabe") == "scout"
+
+
+# =====================================================================
+# GOLD 2026-10-30: PLANNER_SPLIT_SYSTEM kennt DOKU-AUFGABEN
+# =====================================================================
+
+def test_planner_split_system_hat_doku_regel():
+    """PLANNER_SPLIT_SYSTEM hat eine DOKU-AUFGABEN-Regel.
+
+    Regression: Live 2026-10-30 22:10 — Architect sagte
+    'ausschliesslich docs/DECISIONS.md, kein Python-Code',
+    Planner-Split baute trotzdem einen Code-Task fuer
+    core/reporting/audit_reader.py.
+    """
+    from werkstatt import planner
+    s = planner.PLANNER_SPLIT_SYSTEM
+    assert "DOKU-AUFGABEN" in s
+    assert "Markdown-Dateien" in s
+    assert "GENAU EINEN Task" in s or "GENAU EINEN" in s

@@ -424,6 +424,15 @@ Regeln:
   - Eine Datei mit EINER Funktion/Klasse: EINE Task fuer die
     ganze Einheit — nicht in Schritte aufteilen.
   - Keine Test-Dateien (tests/*).
+  - DOKU-AUFGABEN: Wenn die Prosa AUSSCHLIESSLICH
+    Markdown-Dateien (docs/*.md, README.md) aendert und
+    KEINEN Python-Code nennt: Erzeuge GENAU EINEN Task fuer
+    die genannte Markdown-Datei. Keine Code-Tasks aus
+    Symbolen, die in der Prosa nur als "schon erledigt" oder
+    "bereits vorhanden" erwaehnt werden. Beispiel: Prosa sagt
+    "in docs/DECISIONS.md Abschnitt 2 praezisieren, kein
+    Python-Code" -> Task t1 mit task_files=["docs/DECISIONS.md"],
+    action="update", architect_start/ende aus der Prosa.
   - architect_start und architect_ende MUESSEN woertlich in
     der Architect-Prosa vorkommen. Der Loop extrahiert dann
     den Text dazwischen.
