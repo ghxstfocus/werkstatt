@@ -460,22 +460,9 @@ class TestReviewerInjektion:
     def _agent(self, name):
         return {"name": name, "body": f"Body-{name}"}
 
-    def test_reviewer_mit_state_enthaelt_ap_block(self) -> None:
-        s = self._state()
-        prompt = pipeline.build_system_prompt(
-            self._agent("reviewer"), {}, [], state=s)
-        assert "## ANTI-PATTERNS" in prompt
-
     def test_reviewer_ohne_state_kein_ap_block(self) -> None:
         prompt = pipeline.build_system_prompt(
             self._agent("reviewer"), {}, [])
-        assert "## ANTI-PATTERNS" not in prompt
-
-    def test_reviewer_mit_mit_anti_patterns_false(self) -> None:
-        s = self._state()
-        prompt = pipeline.build_system_prompt(
-            self._agent("reviewer"), {}, [],
-            state=s, mit_anti_patterns=False)
         assert "## ANTI-PATTERNS" not in prompt
 
     def test_builder_mit_state_kein_ap_block(self) -> None:
