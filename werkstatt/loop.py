@@ -1867,7 +1867,13 @@ def run_pipeline_loop(
             return 1
 
         # PreToolUse-Hook (Phase 15): Patch pruefen, BEVOR er angewendet wird.
+        # GOLD 2026-10-30: Wenn ein Patch blockiert wird, ueberspringen
+        # wir den Apply-Loop komplett. Vorher rief "break" nur aus der
+        # Hook-Schleife aus — der Apply-Loop darunter wendete dieselben
+        # blockierten Patches trotzdem an (Audit loop_patch_updated).
         patches = getattr(state, "patches", [])
+        _hook_blocked = False
+        _blocked_reason = ""
         for patch in patches:
             if not isinstance(patch, dict):
                 continue
@@ -1879,10 +1885,23 @@ def run_pipeline_loop(
                 "project_dir": str(pd),
             })
             if not hook_res.get("allow", False):
-                audit("loop_hook_blocked", {"hook": "pre_tool_use", "reason": hook_res.get("reason", "")}, pd, pn)
-                if not _reflection_loop(state):
-                    return 1
+                audit("loop_hook_blocked",
+                      {"hook": "pre_tool_use",
+                       "reason": hook_res.get("reason", "")}, pd, pn)
+                _hook_blocked = True
+                _blocked_reason = hook_res.get("reason", "")
                 break
+        if _hook_blocked:
+            # Reflection versuchen. Sie ruft run_builder + _apply_patches_with_hooks
+            # intern; bei True ist der neue Patch schon angewendet.
+            if _reflection_loop(state):
+                _task_ende(state, phase_state, task_id, ok=True,
+                           name=task_name)
+            else:
+                _task_ende(state, phase_state, task_id, ok=False,
+                           name=task_name,
+                           failure=f"hook_blocked: {_blocked_reason}")
+            continue
 
         # Patches anwenden (create + update) — NACH dem Hook.
         # K50b: applied_count zaehlen.

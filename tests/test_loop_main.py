@@ -231,3 +231,42 @@ def test_main_stash_pop_bei_erfolg(tmp_path, monkeypatch):
     assert rc == 0
     assert len(pop_calls) == 1
     assert len(_kind(tmp_path, "loop_stash_pop")) == 1
+
+
+# =====================================================================
+# GOLD 2026-10-30: Hook-Block ueberspringt Apply-Loop
+# =====================================================================
+
+def test_hook_blocked_ueberspringt_apply_loop(tmp_path, monkeypatch):
+    """Bei pre_tool_use deny: keine Patches angewendet, Task failed.
+
+    Regression: Vorher rief 'break' nur aus der Hook-Schleife aus,
+    der Apply-Loop wendete dieselben blockierten Patches trotzdem an
+    (loop_patch_updated im Audit).
+    """
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / "a.py").write_text("alte zeile\n")
+    s = RunState(
+        block_id="t", aufgabe="a", start_ts="x",
+        docs={}, agents={}, always={}, optional={},
+        file_whitelist=[], api_key="k", budget={}, agent_docs={},
+        project_dir=tmp_path, project_name="t",
+    )
+
+    # Wir koennen den Haupt-Pfad nicht isoliert aufrufen (run_pipeline_loop
+    # ist zu gross). Wir testen den Hook-Block ueber die Hilfsfunktion
+    # _apply_patches_with_hooks, die denselben Effekt hat: bei deny kein
+    # Patch. Das ist die einzige isoliert testbare Stelle.
+    with patch("werkstatt.loop._call_hook",
+               return_value={"allow": False, "reason": "hook-deny"}):
+        n = loop_mod._apply_patches_with_hooks(
+            s,
+            [{"file": "a.py", "old_string": "alte zeile",
+              "new_string": "neue zeile"}],
+            phase_label="test",
+        )
+    assert n == 0
+    # Datei unveraendert.
+    assert (tmp_path / "a.py").read_text() == "alte zeile\n"
