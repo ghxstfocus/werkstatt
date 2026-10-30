@@ -259,3 +259,29 @@ def test_planner_system_measured_files_als_kontext():
     assert "KONTEXT, keine Aufgabenliste" in s
     assert "<pflicht>" not in s
     assert "MUESSEN GENAU DIESE" not in s
+
+
+# =====================================================================
+# GOLD 2026-10-30: preview-Rendering in _planner_system
+# =====================================================================
+
+def test_planner_system_rendert_datei_inhalt():
+    """Wenn key_files preview haben, landet der Inhalt im Prompt."""
+    ctx = {"key_files": [
+        {"file": "a.py", "why": "explizit", "confidence": "high",
+         "preview": "def foo():\n    return 1\n"},
+    ]}
+    s = planner._planner_system("Aufgabe", ctx)
+    assert "<ist_zustand>" in s
+    assert "<datei_inhalt" in s
+    assert 'datei="a.py"' in s
+    assert "def foo():\n    return 1" in s
+
+
+def test_planner_system_ohne_preview_kein_ist_zustand():
+    """Ohne preview kein <ist_zustand>-Block."""
+    ctx = {"key_files": [
+        {"file": "a.py", "why": "explizit", "confidence": "high"},
+    ]}
+    s = planner._planner_system("Aufgabe", ctx)
+    assert "<ist_zustand>" not in s

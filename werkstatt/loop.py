@@ -1607,14 +1607,27 @@ def run_pipeline_loop(
     for f in _explizite_dateien[:5]:
         if f not in _seen:
             _seen.add(f)
+            # GOLD 2026-10-30: Datei-Inhalt fuer den Architect.
+            # Vorher hatte der Architect nur die API-Signaturen
+            # (aus _baue_api_index), nicht den Ist-Zustand. Deshalb
+            # plante er Aenderungen, die schon erledigt waren.
+            # Live-Beleg 2026-10-30 21:44: alerts.html hatte schon
+            # class="table table-alerts", der Architect plante
+            # trotzdem einen Patch.
+            from werkstatt.explorer import _datei_inhalt as _di
+            _preview = _di(Path(pd), f)[:4000]
             explorer_result["key_files"].append(
-                {"file": f, "why": "explizit in Aufgabe", "confidence": "high"}
+                {"file": f, "why": "explizit in Aufgabe",
+                 "confidence": "high", "preview": _preview}
             )
     for f in _verwandte:
         if f not in _seen:
             _seen.add(f)
+            from werkstatt.explorer import _datei_inhalt as _di
+            _preview = _di(Path(pd), f)[:2000]
             explorer_result["key_files"].append(
-                {"file": f, "why": "verwandt (M-396)", "confidence": "medium"}
+                {"file": f, "why": "verwandt (M-396)",
+                 "confidence": "medium", "preview": _preview}
             )
     for k in _explorer_key:
         if isinstance(k, dict) and k.get("file") and k["file"] not in _seen:

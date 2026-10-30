@@ -906,6 +906,28 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
                 "diesen Dateien.\n"
                 "</measured_files_hinweis>"
             )
+            # GOLD 2026-10-30: Datei-Inhalte der gemessenen Dateien.
+            # Der Architect muss den Ist-Zustand kennen, sonst plant
+            # er Aenderungen, die schon erledigt sind.
+            _previews = []
+            for _k in _key[:5]:
+                if not isinstance(_k, dict):
+                    continue
+                _pf = _k.get("file", "")
+                _pv = _k.get("preview", "")
+                if _pf and _pv:
+                    _previews.append(
+                        f'<datei_inhalt datei="{_pf}">\n'
+                        f'{_pv[:4000]}\n'
+                        f'</datei_inhalt>'
+                    )
+            if _previews:
+                parts.append(
+                    "<ist_zustand>\n"
+                    "Aktueller Inhalt der genannten Dateien:\n"
+                    + "\n\n".join(_previews)
+                    + "\n</ist_zustand>"
+                )
 
         else:
             # M-405: Keine key_files -> KEIN <pflicht>
