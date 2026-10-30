@@ -685,7 +685,47 @@ def _build_patches_fuer_datei(
 
     # K48: Aider-Format auf Legacy normalisieren (zentraler Helper).
     _gueltig = _normalisiere_aider_patches(_gueltig, pd=pd, pn=pn)
-    return _gueltig
+
+    # GOLD 2026-10-30: Patches filtern, deren old_string NICHT in
+    # der Datei ist, aber deren new_string SCHON in der Datei ist.
+    # Das bedeutet: Auftrag bereits erfuellt. Live-Beleg 2026-10-30
+    # 21:37:34: alerts.html hatte schon class="table table-alerts",
+    # der Builder baute old_string='class="table"'. Apply scheiterte
+    # (old_string_not_found), reviewer_kein_diff_aber_patches ->
+    # fail-closed.
+    _erfuellt: list[dict] = []
+    for _p in _gueltig:
+        if not isinstance(_p, dict):
+            continue
+        if _p.get("action", "update") != "update":
+            _erfuellt.append(_p)
+            continue
+        _old = _p.get("old_string", "") or ""
+        _new = _p.get("new_string", "") or ""
+        if not _old or not _new:
+            _erfuellt.append(_p)
+            continue
+        _old_in_datei = _old in _inhalt
+        _new_in_datei = _new in _inhalt
+        if not _old_in_datei and _new_in_datei:
+            audit("auftrag_bereits_erfuellt",
+                  {"zieldatei": zieldatei,
+                   "grund": "old_nicht_da_aber_new_da",
+                   "old_prefix": _old[:100],
+                   "new_prefix": _new[:100]}, pd, pn)
+            continue  # Patch verwerfen, Auftrag ist erfuellt
+        _erfuellt.append(_p)
+
+    if _gueltig and not _erfuellt:
+        # Alle Patches waren "Auftrag bereits erfuellt".
+        if isinstance(state, object) and hasattr(state, "__dict__"):
+            try:
+                state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
+            except (AttributeError, TypeError):
+                pass
+        return []
+
+    return _erfuellt
 
 
 def _korrigiere_builder_action(

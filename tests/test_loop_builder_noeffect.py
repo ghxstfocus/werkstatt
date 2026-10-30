@@ -30,3 +30,24 @@ def test_reviewer_hat_datei_check():
     assert "## DATEI-CHECK" in s
     assert "AKTUELLER DATEI-INHALT" in s
     assert "entries[-" in s or "_RECENT_CHANGES_LIMIT" in s
+
+
+# =====================================================================
+# GOLD 2026-10-30: old_string-Pruefung in _build_patches_fuer_datei
+# =====================================================================
+
+def test_old_nicht_da_new_da_wird_verworfen(tmp_path):
+    """Wenn old_string nicht in der Datei, aber new_string schon:
+    Patch verwerfen, Auftrag ist erfuellt.
+
+    Regression: Live 2026-10-30 21:37:34 — alerts.html hatte schon
+    class="table table-alerts", der Builder baute old_string='class="table"'.
+    """
+    import inspect
+    from werkstatt import builder
+
+    # Pruefe, dass der Code im Source steht
+    src = inspect.getsource(builder._build_patches_fuer_datei)
+    assert "old_nicht_da_aber_new_da" in src
+    assert "_new_in_datei" in src
+    assert "_old_in_datei" in src
