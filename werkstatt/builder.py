@@ -627,10 +627,10 @@ def _build_patches_fuer_datei(
             except (AttributeError, TypeError):
                 pass
         audit("auftrag_bereits_erfuellt",
-              {"zieldatei": _zieldatei,
+              {"zieldatei": zieldatei,
                "grund": "llm_keine_patches"}, pd, pn)
         audit("builder_keine_patches_gold",
-              {"zieldatei": _zieldatei,
+              {"zieldatei": zieldatei,
                "grund": "llm_keine_patches"}, pd, pn)
         return []
     for p in patches:

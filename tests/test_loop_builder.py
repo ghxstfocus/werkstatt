@@ -272,3 +272,31 @@ def test_hat_symbol_nur_top_level(tmp_path):
     f = tmp_path / "m.py"
     f.write_text("class C:\n    def method(self):\n        pass\n")
     assert builder._hat_symbol(f, "method") is False
+
+
+# =====================================================================
+# Regression: _zieldatei vs. zieldatei in _build_patches_fuer_datei
+# =====================================================================
+
+def test_build_patches_fuer_datei_kein_zieldatei_nameerror():
+    """_build_patches_fuer_datei nutzt 'zieldatei', nicht '_zieldatei'.
+
+    Regression: Live 2026-10-30 21:23:42 — NameError '_zieldatei'
+    is not defined in _build_patches_fuer_datei. Der Parameter heisst
+    'zieldatei', der audit-Aufruf referenzierte '_zieldatei'.
+    """
+    import inspect
+    from werkstatt import builder
+    src = inspect.getsource(builder._build_patches_fuer_datei)
+    assert "zieldatei" in src
+    # Der Bug: _zieldatei (mit Unterstrich) wird in dieser Funktion
+    # nicht definiert. Pruefen wir, dass das nicht mehr vorkommt.
+    # Ausnahme: Docstring/Kommentare.
+    lines = src.splitlines()
+    for i, l in enumerate(lines, 1):
+        if "_zieldatei" in l and not l.strip().startswith("#"):
+            # Koennte in Docstring/Kommentar sein
+            assert "zieldatei" in src, (
+                f"Zeile {i}: _zieldatei in _build_patches_fuer_datei "
+                f"referenziert, aber nicht definiert"
+            )
