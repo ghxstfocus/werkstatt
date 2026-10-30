@@ -1512,6 +1512,33 @@ def _doku_post_check(
                       or "doku" in _aufgabe_lower)
     if not (_has_trigger and _has_doku_ziel):
         return tasks
+    # FIX A v3 2026-10-31: Code-Tasks schuetzen. Wenn der Planner-Split
+    # schon eine Code-Task gebaut hat, war das Absicht. Live-Beleg
+    # 2026-10-30 23:48: t1=scripts/preflight_check.py wurde weggeworfen,
+    # weil die Prosa das Wort "nur" enthielt.
+    _CODE_SUFFIX_V3 = (
+        ".py", ".sql", ".js", ".ts", ".html", ".css",
+        ".yaml", ".yml", ".toml", ".json",
+    )
+    # Code-Task schuetzen NUR wenn:
+    #   - action=create (Architect will neue Datei), ODER
+    #   - Datei in der Aufgabe explizit genannt.
+    # Sonst: Explorer-Muell (update-Task auf fremder .py-Datei).
+    _aufgabe_v3 = aufgabe or ""
+    def _ist_geschuetzter_code_task(_t: dict) -> bool:
+        if not isinstance(_t, dict):
+            return False
+        _files = _t.get("task_files") or []
+        _code = [f for f in _files
+                 if isinstance(f, str) and f.endswith(_CODE_SUFFIX_V3)]
+        if not _code:
+            return False
+        if _t.get("action") == "create":
+            return True
+        return any(f in _aufgabe_v3 for f in _code)
+    _hat_code_task = any(_ist_geschuetzter_code_task(t) for t in tasks)
+    if _hat_code_task:
+        return tasks
     _md_tasks = [
         t for t in tasks
         if isinstance(t, dict)

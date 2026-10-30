@@ -47,3 +47,28 @@ class TestDokuPostCheck:
 
     def test_leere_tasks_bleiben_leer(self) -> None:
         assert _doku_post_check([], "x", None, "t", "x") == []
+
+
+class TestCodeTaskSchutz:
+    """Fix A v3: Code-Tasks werden nicht weggeworfen."""
+
+    def test_code_task_bleibt_erhalten(self) -> None:
+        tasks = [
+            {"id": "t1", "name": "Preflight-Skript",
+             "action": "create", "task_files": ["scripts/preflight.py"]},
+            {"id": "t2", "name": "STATUS updaten",
+             "action": "update", "task_files": ["docs/STATUS.md"]},
+        ]
+        aufgabe = "Nur docs/STATUS.md, keine Python-Datei."  # Trigger
+        r = _doku_post_check(tasks, "prosa", None, "t", aufgabe)
+        assert len(r) == 2, f"Code-Task weggeworfen: {r}"
+
+    def test_nur_md_tasks_reduziert(self) -> None:
+        tasks = [
+            {"id": "t1", "task_files": ["docs/STATUS.md"]},
+            {"id": "t2", "task_files": ["docs/ROADMAP.md"]},
+        ]
+        r = _doku_post_check(tasks, "prosa", None, "t",
+                             "Nur docs/STATUS.md aendern.")
+        assert len(r) == 1
+        assert r[0]["task_files"] == ["docs/STATUS.md"]
