@@ -11,8 +11,9 @@ Commit `2c4703d` (Gold-Umbau: `_baue_api_index` + Reviewer).
 **Werkstatt** (`/opt/werkstatt`):
 - Branch `umbau/phase-2`
 - Suite: **1622 passed, 5 skipped**
-- Ruff Baseline: loop.py 7, planner.py 3, builder.py 2,
-  reviewer.py 0, explorer.py 0
+- Ruff Baseline: loop.py 7, planner.py 1, builder.py 2,
+  reviewer.py 0, explorer.py 0, pipeline.py 2
+  (planner.py 3 -> 1 durch Cleanup 2026-10-30)
 
 **Zielprojekt** (`/opt/security-ai`):
 - Services active, `.env` vollstaendig

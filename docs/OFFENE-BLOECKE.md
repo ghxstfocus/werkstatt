@@ -27,7 +27,7 @@ Merkposten (M-Nummern) in `MERKPOSTEN.md`.
 
 | Block | Aufwand | Kurz |
 |---|---|---|
-| M-345 | mittel | `pipeline.py` (11.639 Z.) loeschen. Erst wenn `werkstatt/agent.py` keine Kopien mehr braucht. |
+| M-345 | gross | `pipeline.py` (11.118 Z., 172 Funktionen, 0 Klassen) ist **Loop-Code in Migration**, nicht toter Code. 146 Symbole werden noch von Tests referenziert (Stand 2026-10-30). Reihenfolge: (1) Symbole nach `werkstatt/*` verschieben, (2) `tests/test_pipeline.py` (11.377 Z., 182 Tests) aufteilen, (3) `tests/conftest.py` entkoppeln (3 Symbole), (4) `pipeline.py` + `tests/test_pipeline.py` + `tests/test_pipeline_integration.py` loeschen. |
 | M-346 | klein | `pipeline._approval_und_human_gate` und `pipeline.load_project_config` in `werkstatt/` verschieben. |
 
 ## CLI
