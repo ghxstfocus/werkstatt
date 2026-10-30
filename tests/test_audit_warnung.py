@@ -46,3 +46,54 @@ def test_audit_unbekannter_kind_schreibt_trotzdem(tmp_path):
           if e.get("kind") == "ganz_neuer_kind"]
     assert len(ev) == 1
     assert ev[0]["y"] == 2
+
+
+# =====================================================================
+# GOLD 2026-10-30: Katalog == Code-Kinds
+# =====================================================================
+
+def test_katalog_enthaelt_alle_code_kinds():
+    """Jeder audit("kind", ...)-Aufruf in werkstatt/*.py muss im
+    Katalog stehen. Verhindert kuenftigen Drift automatisch.
+
+    Wenn dieser Test rot wird: neuen Kind in _AUDIT_KINDS_BEKANNT
+    in werkstatt/audit.py ergaenzen.
+    """
+    import re
+    from pathlib import Path
+    from werkstatt.audit import _AUDIT_KINDS_BEKANNT
+
+    kinds_im_code: set[str] = set()
+    pat = re.compile(r'\baudit\(\s*["\']([a-z_][a-z0-9_]*)["\']')
+    for f in Path("werkstatt").glob("*.py"):
+        src = f.read_text(encoding="utf-8", errors="replace")
+        for m in pat.finditer(src):
+            kinds_im_code.add(m.group(1))
+
+    fehlend = sorted(kinds_im_code - _AUDIT_KINDS_BEKANNT)
+    assert not fehlend, (
+        f"{len(fehlend)} Kinds im Code fehlen im Katalog: {fehlend[:20]}"
+    )
+
+
+def test_katalog_enthaelt_keine_toten_kinds():
+    """Jeder Katalog-Eintrag wird von werkstatt/*.py auch gerufen.
+
+    Ein toter Eintrag ist Alt-Last: kein Aufrufer, keine externe
+    Quelle. Loeschen, nicht behalten.
+    """
+    import re
+    from pathlib import Path
+    from werkstatt.audit import _AUDIT_KINDS_BEKANNT
+
+    kinds_im_code: set[str] = set()
+    pat = re.compile(r'\baudit\(\s*["\']([a-z_][a-z0-9_]*)["\']')
+    for f in Path("werkstatt").glob("*.py"):
+        src = f.read_text(encoding="utf-8", errors="replace")
+        for m in pat.finditer(src):
+            kinds_im_code.add(m.group(1))
+
+    tot = sorted(_AUDIT_KINDS_BEKANNT - kinds_im_code)
+    assert not tot, (
+        f"{len(tot)} tote Katalog-Eintraege (kein Code-Aufruf): {tot[:20]}"
+    )
