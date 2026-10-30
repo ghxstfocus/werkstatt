@@ -221,3 +221,34 @@ def test_phase_review_json_fehler(tmp_path):
                return_value=LLMReply(ok=True, content="nur prosa")):
         assert reviewer.run_phase_end_review(s) is False
     assert len(_kind(tmp_path, "reviewer_phase_json_fehler")) == 1
+
+
+# =====================================================================
+# R-CHECK-1: KONSTANTEN-CHECK im Reviewer-Prompt
+# =====================================================================
+
+def test_reviewer_system_enthaelt_konstanten_check():
+    """Der Reviewer-Prompt prueft numerische Konstanten (R-CHECK-1)."""
+    s = reviewer._reviewer_system()
+    assert "## KONSTANTEN-CHECK" in s
+    assert "R-CHECK-1" in s
+
+
+def test_reviewer_system_konstanten_drei_faelle():
+    """Alle drei HIGH-Bug-Faelle woertlich praesent."""
+    s = reviewer._reviewer_system()
+    # Fall 1: Diff nutzt andere Zahl
+    assert "ANDERE Zahl" in s
+    assert "limit=5" in s
+    assert "limit=10" in s
+    # Fall 2: Zahl nicht gesetzt
+    assert "NICHT setzt" in s
+    # Fall 3: Keine Zahl -> ignorieren
+    assert "KEINE Zahl" in s
+
+
+def test_reviewer_system_konstanten_beleg_pflicht():
+    """Beleg im description-Feld ist vorgeschrieben."""
+    s = reviewer._reviewer_system()
+    assert "description" in s
+    assert "Task fordert" in s
