@@ -62,12 +62,17 @@ def append(
         tmp.write_text(current + block, encoding="utf-8")
         tmp.replace(progress_path)
         return True
-    except OSError:
+    except OSError as _exc:
+        # GOLD 2026-10-30: Exception-Details ins Audit, damit die
+        # Ursache diagnostizierbar ist. Der frueherer {file}-only-
+        # Event hat den Rechte-Bug 4 Tage unentdeckt gelassen.
         try:
             from werkstatt.audit import audit
             audit(
                 "progress_write_failed",
-                {"file": str(progress_path)},
+                {"file": str(progress_path),
+                 "exc_type": type(_exc).__name__,
+                 "exc_str": str(_exc)[:300]},
                 pd, pd.name,
             )
         except Exception:  # noqa: BLE001, S110

@@ -86,3 +86,45 @@ def test_loop_schreibt_progress(tmp_path):
     assert "Status:** done" in content
     # Phase-Ende-Block
     assert "Phase abgeschlossen" in content
+
+
+# =====================================================================
+# GOLD 2026-10-30: progress.append schreibt Exception ins Audit
+# =====================================================================
+
+def test_progress_audit_enthaelt_exc_bei_oserror(tmp_path):
+    """OSError -> audit-Event mit exc_type + exc_str.
+
+    Regression fuer den 4-Tage-Rechte-Bug (2026-10-26 bis 2026-10-30):
+    der alte Event hatte nur {file}, die Ursache war unsichtbar.
+    """
+    import json
+    from unittest.mock import patch
+
+    from werkstatt import progress
+
+    # Schreibpfad unmoeglich machen (Verzeichnis statt Datei).
+    (tmp_path / "PROGRESS.md").mkdir()
+
+    ok = progress.append(
+        tmp_path,
+        name="t1",
+        status="done",
+        dateien=["a.py"],
+    )
+    assert ok is False
+
+    logs = tmp_path / "audit-logs"
+    assert logs.is_dir(), "kein audit-logs-Verzeichnis"
+    events = []
+    for f in logs.glob("agent-pipeline-*.jsonl"):
+        for line in f.read_text().splitlines():
+            if line.strip():
+                events.append(json.loads(line))
+    fehler = [e for e in events if e.get("kind") == "progress_write_failed"]
+    assert len(fehler) == 1
+    ev = fehler[0]
+    assert "file" in ev
+    assert ev["exc_type"] in ("IsADirectoryError", "NotADirectoryError",
+                              "PermissionError", "OSError")
+    assert ev["exc_str"], "exc_str darf nicht leer sein"
