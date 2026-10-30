@@ -238,4 +238,3 @@ LOG="/tmp/rerun_$(date +%Y%m%d-%H%M%S).log"
 
 script -q -e -c "su -s /bin/bash security-ai -c 'cd /opt/werkstatt && PYTHONUNBUFFERED=1 WERKSTATT_RENDER=live WERKSTATT_ARCHITECT_MODEL=deepseek-reasoner exec timeout 2400 python3 -m werkstatt.loop --fresh --project security-ai --aufgabe \"<AUFGABE>\"'" "$LOG"
 ```
-```
