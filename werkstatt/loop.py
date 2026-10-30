@@ -1889,6 +1889,26 @@ def run_pipeline_loop(
             return 1
             return 1
 
+        # GOLD 2026-10-30: Wenn der Builder das auftrag_bereits_erfuellt-
+        # Flag gesetzt hat (weil die Zieldatei den Zielzustand schon
+        # enthaelt), ist der Task erfuellt. Kein Hook, kein Apply, kein
+        # Reviewer. Live-Beleg 21:18:37: Builder setzte Flag, Hook liess
+        # durch, Apply-Loop lief mit leerem state.patches,
+        # reviewer_kein_diff_aber_patches -> fail-closed.
+        if getattr(state, "auftrag_bereits_erfuellt", False):
+            audit("auftrag_bereits_erfuellt",
+                  {"task_id": i,
+                   "name": task_name,
+                   "reason": "loop_flag_vor_hook"},
+                  pd, pn)
+            state.auftrag_bereits_erfuellt = False  # type: ignore[attr-defined]
+            _task_ende(state, phase_state, task_id, ok=True,
+                       name=task_name)
+            audit("loop_task_ok", {"task_id": i, "name": task_name,
+                                   "via": "auftrag_bereits_erfuellt_pre_hook"},
+                  pd, pn)
+            continue
+
         # PreToolUse-Hook (Phase 15): Patch pruefen, BEVOR er angewendet wird.
         # GOLD 2026-10-30: Wenn ein Patch blockiert wird, ueberspringen
         # wir den Apply-Loop komplett. Vorher rief "break" nur aus der
