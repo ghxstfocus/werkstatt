@@ -90,6 +90,9 @@ def _plan_gate(state: RunState) -> bool:
         "project_dir": str(getattr(state, "project_dir", "")),
         # K17c: Architect-Prosa fuer Migrations-Kollisions-Check.
         "architect_prosa": getattr(state, "architect_prosa", "") or "",
+        # GOLD 2026-10-30: Original-Aufgabe, damit der Hook
+        # Doku-Aufgaben erkennen kann.
+        "aufgabe": getattr(state, "aufgabe", "") or "",
     })
     if not _hook_res.get("allow", True):
         # Info fuer Planner-Reflection

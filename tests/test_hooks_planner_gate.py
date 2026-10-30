@@ -151,3 +151,58 @@ def test_doku_only_plan_ohne_doku_aufgabe_abgelehnt():
     result = pg.check_plan(payload)
     assert result["allow"] is False
     assert result["info"]["regel"] == "DOKU_TASK"
+
+
+def test_doku_aufgabe_erlaubt_doku_only_plan_auch_mit_code_kontext():
+    """Wenn die Aufgabe Doku ist, ist Doku-Task erlaubt, auch wenn
+    die Prosa eine Code-Datei als Kontext nennt.
+
+    Regression: Live 2026-10-30 22:26: Aufgabe 'entferne Punkt 1
+    aus docs/STATUS.md', Prosa nennt core/reporting/audit_reader.py
+    als Kontext, Hook lehnte ab (DOKU_TASK).
+    """
+    import sys
+    sys.path.insert(0, "/opt/werkstatt/hooks")
+    import planner_gate as pg
+
+    payload = {
+        "tasks": [
+            {"id": "t1", "action": "update",
+             "task_files": ["docs/STATUS.md"]},
+        ],
+        "phasen": [],
+        "architect_prosa": (
+            "## docs/STATUS.md\n"
+            "In docs/STATUS.md den Punkt 1 entfernen. Die Klasse "
+            "heisst jetzt AuditJsonlError in "
+            "core/reporting/audit_reader.py.\n"
+        ),
+        "aufgabe": (
+            "In docs/STATUS.md den Punkt 1 entfernen. Nur "
+            "docs/STATUS.md aendern, keine Python-Datei."
+        ),
+        "project_dir": "/opt/security-ai",
+    }
+    result = pg.check_plan(payload)
+    assert result["allow"] is True, result
+
+
+def test_code_aufgabe_lehnt_doku_only_plan_ab():
+    """Wenn die Aufgabe Code ist, ist Doku-Only ungueltig."""
+    import sys
+    sys.path.insert(0, "/opt/werkstatt/hooks")
+    import planner_gate as pg
+
+    payload = {
+        "tasks": [
+            {"id": "t1", "action": "update",
+             "task_files": ["docs/STATUS.md"]},
+        ],
+        "phasen": [],
+        "architect_prosa": "## core/foo.py\nIn core/foo.py bar() aendern.\n",
+        "aufgabe": "In core/foo.py die Funktion bar() anpassen.",
+        "project_dir": "/opt/security-ai",
+    }
+    result = pg.check_plan(payload)
+    assert result["allow"] is False
+    assert result["info"]["regel"] == "DOKU_TASK"

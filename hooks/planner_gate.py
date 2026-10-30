@@ -171,6 +171,27 @@ def check_plan(payload: dict) -> dict:
     # docs/STATUS.md', Planner-Split baute 1 Doku-Task, Hook
     # lehnte ab (M-349b) -> 3x Plan-Reflection -> Loop-Abbruch.
     _prosa = payload.get("architect_prosa") or ""
+    _aufgabe = payload.get("aufgabe") or ""
+
+    # GOLD 2026-10-30: Doku-Aufgabe erkennen.
+    # Wenn die ORIGINAL-Aufgabe Doku-Ziele nennt (docs/, STATUS.md,
+    # CHANGELOG.md, "Doku", "Dokumentation"), ist ein Doku-Only-
+    # Plan korrekt. Die Prosa-Pruefung reicht nicht, weil die Prosa
+    # oft auch die Code-Datei als Kontext nennt (z.B. "die Klasse
+    # AuditReaderError existiert nicht mehr in
+    # core/reporting/audit_reader.py").
+    _aufgabe_doku = False
+    if isinstance(_aufgabe, str) and _aufgabe:
+        _doku_marker = (
+            "docs/", "STATUS.md", "CHANGELOG.md", "README.md",
+            "PROGRESS.md", "SECURITY_LOG.md", "DECISIONS.md",
+            "Doku", "Dokumentation", "Markdown",
+        )
+        _aufgabe_doku = any(m in _aufgabe for m in _doku_marker)
+        # Aber: Wenn die Aufgabe explizit "keine Doku" sagt, nicht.
+        if "keine doku" in _aufgabe.lower() or "kein code" in _aufgabe.lower() and "doku" in _aufgabe.lower():
+            _aufgabe_doku = True
+
     _prosa_nur_doku = False
     if isinstance(_prosa, str) and _prosa:
         # Pfade in der Prosa finden
@@ -183,16 +204,8 @@ def check_plan(payload: dict) -> dict:
                 any(pat.match(p) for pat in _DOKU_PATTERNS)
                 for p in _prosa_pfade
             )
-            # Debug-Audit
-            if not _prosa_nur_doku:
-                _nicht_doku = [
-                    p for p in _prosa_pfade
-                    if not any(pat.match(p) for pat in _DOKU_PATTERNS)
-                ]
-                print(f"[DEBUG] _prosa_nur_doku=False, nicht-Doku-Pfade: {_nicht_doku}",
-                      file=__import__("sys").stderr)
 
-    if not _has_code_task and not _prosa_nur_doku:
+    if not _has_code_task and not _prosa_nur_doku and not _aufgabe_doku:
         for t in tasks:
             if not isinstance(t, dict):
                 continue
