@@ -298,11 +298,16 @@ def _extrahiere_pfade(project_dir: Path, md_datei: str) -> list[str]:
     return pfade
 
 
-def _datei_inhalt(project_dir: Path, rel: str) -> str:
+def _datei_inhalt(
+    project_dir: Path, rel: str,
+    suchbegriffe: list[str] | None = None,
+) -> str:
     """K31: Dateiinhalt fuer Explorer-Kontext.
 
     - <= 200 Zeilen: komplett.
-    - > 200 Zeilen: erste 100 + letzte 50, mit Truncation-Marker.
+    - > 200 Zeilen mit suchbegriffen: relevante Zeilen (100 davor +
+      100 danach um jeden Treffer).
+    - > 200 Zeilen ohne suchbegriffe: erste 100 + letzte 50.
     - Binaer/Fehler: "".
     """
     try:
@@ -313,6 +318,42 @@ def _datei_inhalt(project_dir: Path, rel: str) -> str:
         lines = text.splitlines()
         if len(lines) <= 200:
             return text
+
+        # GOLD 2026-10-30: Relevante Zeilen um Suchbegriffe.
+        # Live-Beleg: components.css (966 Zeilen) enthielt
+        # nth-child bei Zeile 462, aber _datei_inhalt lieferte
+        # nur erste 100 + letzte 50 -> Architect sah die
+        # Tabellen-Regeln nicht.
+        if suchbegriffe:
+            treffer_zeilen: set[int] = set()
+            for i, line in enumerate(lines):
+                for begriff in suchbegriffe:
+                    if begriff and begriff in line:
+                        treffer_zeilen.add(i)
+                        break
+            if treffer_zeilen:
+                # 100 Zeilen vor + 100 Zeilen nach jedem Treffer
+                zeige: set[int] = set()
+                for tz in treffer_zeilen:
+                    start = max(0, tz - 100)
+                    ende = min(len(lines), tz + 100)
+                    zeige.update(range(start, ende))
+                # Sortiert ausgeben, mit Truncation-Marker
+                sortiert = sorted(zeige)
+                teile: list[str] = []
+                letzte = -2
+                for i in sortiert:
+                    if i > letzte + 1:
+                        if teile:
+                            teile.append(
+                                f"[... {i - letzte - 1} Zeilen "
+                                f"uebersprungen ...]"
+                            )
+                    teile.append(lines[i])
+                    letzte = i
+                return "\n".join(teile)
+
+        # Fallback: erste 100 + letzte 50
         _skip = len(lines) - 150
         return (
             "\n".join(lines[:100])

@@ -254,3 +254,52 @@ def test_explorer_result_audit(tmp_path):
         out = explorer.run_explorer(s, "frage")
     assert isinstance(out, dict)
     assert len(_kind(tmp_path, "explorer_result")) == 1
+
+
+# =====================================================================
+# GOLD 2026-10-30: _datei_inhalt mit suchbegriffen
+# =====================================================================
+
+def test_datei_inhalt_suchbegriff_findet_relevante_zeilen(tmp_path):
+    """Bei > 200 Zeilen und Suchbegriff: relevante Zeilen statt
+    erste 100 + letzte 50.
+
+    Regression: components.css (966 Zeilen) enthielt nth-child
+    bei Zeile 462, aber _datei_inhalt lieferte nur erste 100 +
+    letzte 50 -> Architect sah die Tabellen-Regeln nicht.
+    """
+    from werkstatt import explorer
+    # 300 Zeilen, 'nth-child' bei Zeile 150
+    lines = [f"zeile_{i}" for i in range(300)]
+    lines[150] = "table.table-alerts th:nth-child(4)"
+    (tmp_path / "big.css").write_text("\n".join(lines))
+
+    # Ohne Suchbegriff: nth-child NICHT drin
+    ohne = explorer._datei_inhalt(tmp_path, "big.css")
+    assert "nth-child" not in ohne
+
+    # Mit Suchbegriff: nth-child drin
+    mit = explorer._datei_inhalt(
+        tmp_path, "big.css", suchbegriffe=["nth-child"])
+    assert "nth-child" in mit
+    assert "zeile_150" in mit or "nth-child" in mit
+
+
+def test_datei_inhalt_suchbegriff_kein_treffer_fallback(tmp_path):
+    """Suchbegriff nicht gefunden -> Fallback erste 100 + letzte 50."""
+    from werkstatt import explorer
+    lines = [f"zeile_{i}" for i in range(300)]
+    (tmp_path / "big.txt").write_text("\n".join(lines))
+    out = explorer._datei_inhalt(
+        tmp_path, "big.txt", suchbegriffe=["gibtsnicht"])
+    assert "zeile_0" in out
+    assert "zeile_299" in out
+
+
+def test_datei_inhalt_klein_ignoriert_suchbegriff(tmp_path):
+    """Datei <= 200 Zeilen: komplett, unabhaengig von Suchbegriffen."""
+    from werkstatt import explorer
+    (tmp_path / "klein.py").write_text("def foo(): pass\n")
+    out = explorer._datei_inhalt(
+        tmp_path, "klein.py", suchbegriffe=["foo"])
+    assert out == "def foo(): pass\n"

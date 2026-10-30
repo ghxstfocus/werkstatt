@@ -1581,9 +1581,34 @@ def run_pipeline_loop(
     # M-396: Ueberspringen, wenn die Aufgabe explizite Dateien nennt.
     import re as _re_explorer
     _explizite_dateien = _re_explorer.findall(
-        r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.(?:py|md|yaml|yml|json|toml))\b',
+        r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.(?:py|md|yaml|yml|json|toml|css|html|js))\b',
         aufgabe,
     )
+
+    # GOLD 2026-10-30: Suchbegriffe aus der Aufgabe extrahieren.
+    # Der Explorer nutzt sie, um bei grossen Dateien die relevanten
+    # Zeilen zu finden statt stumpf erste 100 + letzte 50.
+    _suchbegriffe: list[str] = []
+    # Backticks: `foo_bar`, `class="x"`, `nth-child(n+4)`
+    for _m in _re_explorer.finditer(r'`([^`]{2,80})`', aufgabe):
+        _b = _m.group(1).strip()
+        if _b:
+            _suchbegriffe.append(_b)
+    # CSS-Klassen und Selektoren: nth-child(...), table-xyz
+    for _m in _re_explorer.finditer(
+            r'\b((?:nth-child|table-[a-z]+|class=)[^\s,)\]]{0,40})', aufgabe):
+        _b = _m.group(1).strip()
+        if _b and _b not in _suchbegriffe:
+            _suchbegriffe.append(_b)
+    # Funktions-/Methoden-Namen (def foo, foo_bar())
+    for _m in _re_explorer.finditer(r'\b([a-z_][a-z0-9_]{3,40})\s*\(', aufgabe):
+        _b = _m.group(1)
+        if _b not in _suchbegriffe:
+            _suchbegriffe.append(_b)
+    _suchbegriffe = _suchbegriffe[:20]
+    audit("loop_explorer_suchbegriffe",
+          {"anzahl": len(_suchbegriffe),
+           "begriffe": _suchbegriffe[:10]}, pd, pn)
     # M-396-Fix: Explorer laeuft IMMER, auch bei expliziten Dateien.
     # Genannte Dateien behalten Prioritaet, Explorer ergaenzt verwandte.
     group_start("Phase 1: Explorer")
@@ -1615,7 +1640,7 @@ def run_pipeline_loop(
             # class="table table-alerts", der Architect plante
             # trotzdem einen Patch.
             from werkstatt.explorer import _datei_inhalt as _di
-            _preview = _di(Path(pd), f)[:4000]
+            _preview = _di(Path(pd), f, suchbegriffe=_suchbegriffe)[:12000]
             explorer_result["key_files"].append(
                 {"file": f, "why": "explizit in Aufgabe",
                  "confidence": "high", "preview": _preview}
@@ -1624,7 +1649,7 @@ def run_pipeline_loop(
         if f not in _seen:
             _seen.add(f)
             from werkstatt.explorer import _datei_inhalt as _di
-            _preview = _di(Path(pd), f)[:2000]
+            _preview = _di(Path(pd), f, suchbegriffe=_suchbegriffe)[:6000]
             explorer_result["key_files"].append(
                 {"file": f, "why": "verwandt (M-396)",
                  "confidence": "medium", "preview": _preview}
