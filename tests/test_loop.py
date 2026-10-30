@@ -101,8 +101,6 @@ def test_loop_happy_path(tmp_path):
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("pipeline._approval_und_human_gate", return_value=0), \
-         patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st])
         assert rc == 0
@@ -153,8 +151,6 @@ def test_loop_uses_phase_state(tmp_path):
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("pipeline._approval_und_human_gate", return_value=0), \
-         patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st], phase_state=ps)
     assert rc == 0
@@ -176,8 +172,6 @@ def test_loop_resume_nach_unterbrechung(tmp_path):
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("pipeline._approval_und_human_gate", return_value=0), \
-         patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st], phase_state=ps)
     assert rc == 0
@@ -204,8 +198,6 @@ def test_loop_patch_reflection_bei_old_string_not_found(tmp_path):
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop._reflection_loop", return_value=False), \
-         patch("pipeline._approval_und_human_gate", return_value=0), \
-         patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st])
     assert rc == 1
@@ -224,8 +216,6 @@ def test_loop_patch_post_apply_verify(tmp_path):
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop._reflection_loop", return_value=False), \
-         patch("pipeline._approval_und_human_gate", return_value=0), \
-         patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
         # Patch: old_string existiert, aber new_string wird nicht geschrieben
         # (weil write_text via Mock fehlschlaegt - hier: Patches leer
@@ -286,8 +276,6 @@ def test_loop_preflight_vor_planner(tmp_path):
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("pipeline._approval_und_human_gate", return_value=0), \
-         patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
         _rc = run_pipeline_loop("p", "a", [st])
 
@@ -318,8 +306,6 @@ def test_pre_build_uebersprungen_bei_follow_up(tmp_path):
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop.run_planner", return_value=True), \
-         patch("pipeline._approval_und_human_gate", return_value=0), \
-         patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st])
     assert rc == 0
@@ -400,8 +386,6 @@ def test_pre_build_deterministische_klassifikation(tmp_path):
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop.run_planner", return_value=True), \
-         patch("pipeline._approval_und_human_gate", return_value=0), \
-         patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st])
     assert rc == 0  # Loop lief durch
@@ -514,8 +498,6 @@ def test_loop_task_read_only(tmp_path):
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("pipeline._approval_und_human_gate", return_value=0), \
-         patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st])
 
@@ -549,8 +531,6 @@ def test_loop_reviewer_after_reflection(tmp_path):
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", side_effect=_mock_reviewer), \
          patch("werkstatt.loop._reflection_loop", return_value=True), \
-         patch("pipeline._approval_und_human_gate", return_value=0), \
-         patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st])
 

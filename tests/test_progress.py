@@ -75,8 +75,6 @@ def test_loop_schreibt_progress(tmp_path):
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("pipeline._approval_und_human_gate", return_value=0), \
-         patch("pipeline.load_project_config", return_value={}), \
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st])
 
