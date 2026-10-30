@@ -1824,11 +1824,31 @@ def run_pipeline_loop(
                         pass
         plan_ok = _plan_gate(state)
         # M-349c/d: Plan-Reflection. Max 3 Runden.
+        # GOLD 2026-10-30: Strukturelle Fehler NICHT wiederholen.
+        # Live-Beleg 2026-10-30 22:17-22:24: 3x Scout + Architect +
+        # Planner-Split, weil der Hook DOKU_TASK/TASK_FILE ablehnte.
+        # Ein neuer Plan hilft nicht — der Hook prueft deterministisch.
+        _STRUKTURELLE_REGELN = frozenset({
+            "DOKU_TASK", "TASK_FILE", "MIGRATIONS_KOLLISION",
+            "ACTION", "PHASE_ID", "DATEINAME_AEHNLICH", "PAYLOAD",
+        })
         for _runde in range(3):
             if plan_ok:
                 break
             _info = getattr(state, "last_planner_info", None)
             if not _info:
+                break
+            _regel = (
+                _info.get("regel", "") if isinstance(_info, dict) else ""
+            )
+            if _regel in _STRUKTURELLE_REGELN:
+                audit("loop_plan_reflection_abgebrochen",
+                      {"runde": _runde + 1,
+                       "regel": _regel,
+                       "grund": "struktureller_fehler",
+                       "fakt": (_info.get("fakt", "")
+                                if isinstance(_info, dict) else "")},
+                      pd, pn)
                 break
             audit("loop_plan_reflection",
                   {"runde": _runde + 1, "info": _info}, pd, pn)
