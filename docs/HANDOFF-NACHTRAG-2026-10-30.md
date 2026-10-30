@@ -228,3 +228,62 @@ als Erfolg.
 2. RERUN mit einer NICHT erledigten Aufgabe (z.B. ROADMAP
    Phase 3.6.8x, Phase 3.8 Host-Scanner).
 3. `_hat_task_files`-Bypass im Builder entfernen (Luecke 1).
+
+---
+
+## NACHTRAG 3 (2026-10-30, ab 22:00)
+
+### Loop-Fixes (Werkstatt)
+
+- `2b0aa12` fix(planner): DOKU-AUFGABEN-Regel in
+  PLANNER_SPLIT_SYSTEM.
+- `3045ae2` fix(planner_gate): Doku-Aufgaben erlauben +
+  .md-Suffix.
+- `28b82e2` fix(loop): _plan_reflection bricht bei
+  strukturellen Fehlern ab.
+- `735c7df` fix(loop): Stagnation-Check erweitert
+  (Reviewer-Bugs + patch_nicht_angewendet).
+- `8e22282` fix(loop): applied_count erst nach new_str-Pruefung.
+- `a6ceff5` fix(loop): _alle_done prueft PhaseState, nicht
+  state.tasks.
+
+### Zielprojekt-Commits
+
+- `e6222f4` chore(werkstatt): Phase 3.6.14 aus docs/ROADMAP.md.
+- `669a7de` chore(werkstatt): STATUS.md Punkt 1 entfernen
+  (kein Doku-Diff, nur PROGRESS.md).
+
+### Loop-Status
+
+Der Loop laeuft durch (Tasks: 1/1), aber baut keine Doku-
+Aenderung. Ursache: Builder-LLM (deepseek-chat) baut Patches,
+deren old_string nicht passt (`old_nicht_da_aber_new_da`).
+Task wird als ok markiert (Auftrag "vielleicht erfuellt"),
+aber keine Datei-Aenderung.
+
+### Offener Punkt
+
+Doku-Aufgaben: Builder-LLM zu schwach fuer praezise
+old_string/new_string-Patches. Der Loop erkennt den Fehler
+korrekt (`old_nicht_da_aber_new_da`), aber die Aufgabe wird
+nicht erledigt.
+
+Moegliche Loesungen:
+1. Builder-Prompt mit den exakten Zeilen aus der Task-
+   Description (nicht nur die Prosa).
+2. Anderes Modell fuer den Builder (z.B. reasoner).
+3. Doku-Aufgaben manuell statt Loop.
+
+### Neue Hard-Rules
+
+- Rule 23: `PLANNER_SPLIT_SYSTEM` hat DOKU-AUFGABEN-Regel.
+  Bei reiner Doku-Prosa: genau ein Task, kein Code-Task.
+- Rule 24: `planner_gate` prueft `aufgabe` auf Doku-Marker.
+  Doku-Only-Plan ist erlaubt, wenn die Aufgabe Doku ist.
+- Rule 25: `_plan_reflection` bricht bei strukturellen
+  Fehlern ab (DOKU_TASK, TASK_FILE, MIGRATIONS_KOLLISION,
+  ACTION, PHASE_ID, DATEINAME_AEHNLICH, PAYLOAD).
+- Rule 26: `applied_count` erst nach `new_str in _neu_content2`
+  erhoehen. Sonst `_patches_wirklich_angewendet` True bei
+  nicht angewendetem Patch.
+- Rule 27: `_alle_done` prueft PhaseState, nicht state.tasks.
