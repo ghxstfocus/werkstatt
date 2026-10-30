@@ -252,3 +252,21 @@ def test_reviewer_system_konstanten_beleg_pflicht():
     s = reviewer._reviewer_system()
     assert "description" in s
     assert "Task fordert" in s
+
+
+# =====================================================================
+# GOLD 2026-10-30: SYMBOL-CHECK verhindert Fehltreffer
+# =====================================================================
+
+def test_reviewer_system_enthaelt_symbol_check():
+    """Der Reviewer prueft, ob ein Symbol im Datei-Inhalt steht."""
+    s = reviewer._reviewer_system()
+    assert "## SYMBOL-CHECK" in s
+    assert "AKTUELLER DATEI-INHALT" in s
+    assert "_SCORE_SENTINEL" in s
+
+
+def test_reviewer_system_symbol_check_fehltreffer_beispiel():
+    """Der Prompt enthaelt das konkrete Live-Beispiel _SCORE_SENTINEL."""
+    s = reviewer._reviewer_system()
+    assert "Zeile 65" in s or "kein Bug" in s
