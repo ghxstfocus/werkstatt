@@ -267,3 +267,50 @@ def test_git_diff_for_hook_exception():
                side_effect=RuntimeError("git weg")):
         assert loop._get_git_diff_for_hook() == ""
 
+
+
+# =====================================================================
+# GOLD 2026-10-30: _git_stash_pop mit drop-Fallback
+# =====================================================================
+
+def test_stash_pop_drop_fallback_bei_fehler(tmp_path):
+    """_git_stash_pop droppt den Stash, wenn pop fehlschlaegt.
+
+    Regression: Live 2026-10-30 — 8 offene Stashes nach 8 RERUNs.
+    """
+    from unittest.mock import patch
+
+    calls: list = []
+    def _fake_run(argv, **kw):
+        calls.append(list(argv))
+        rc = 0 if "pop" in argv else 1  # pop schlaegt fehl
+        # Eigentlich: erster Call (pop) rc=1, zweiter (drop) rc=0
+        if "pop" in argv:
+            return type("R", (), {"returncode": 1, "stdout": "",
+                                  "stderr": "conflict"})()
+        return type("R", (), {"returncode": 0, "stdout": "",
+                              "stderr": ""})()
+
+    with patch("werkstatt.loop.subprocess.run", _fake_run):
+        ok = loop._git_stash_pop(tmp_path)
+    assert ok is False
+    # Zwei Calls: pop, drop
+    assert len(calls) == 2
+    assert "pop" in calls[0]
+    assert "drop" in calls[1]
+    assert "stash@{0}" in calls[1]
+
+
+def test_stash_pop_ohne_drop_bei_erfolg(tmp_path):
+    """_git_stash_pop droppt NICHT, wenn pop klappt."""
+    from unittest.mock import patch
+    calls: list = []
+    def _fake_run(argv, **kw):
+        calls.append(list(argv))
+        return type("R", (), {"returncode": 0, "stdout": "",
+                              "stderr": ""})()
+    with patch("werkstatt.loop.subprocess.run", _fake_run):
+        ok = loop._git_stash_pop(tmp_path)
+    assert ok is True
+    assert len(calls) == 1
+    assert "pop" in calls[0]

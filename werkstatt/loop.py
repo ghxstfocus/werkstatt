@@ -1461,14 +1461,27 @@ def _git_stash(pd: Path) -> bool:
 
 
 def _git_stash_pop(pd: Path) -> bool:
-    """M-353b: Holt dirty tree zurueck (bei Erfolg)."""
+    """M-353b: Holt dirty tree zurueck (bei Erfolg).
+
+    GOLD 2026-10-30: Wenn pop fehlschlaegt (Konflikt), drop den
+    Stash. Sonst sammeln sich Stashes an — Live-Beleg 2026-10-30:
+    8 offene Stashes nach 8 RERUNs, alle 'werkstatt-loop'.
+    """
     import subprocess as _sp
     try:
         res = _sp.run(
             ["git", "-C", str(pd), "stash", "pop"],
             capture_output=True, text=True, timeout=30, check=False,
         )
-        return res.returncode == 0
+        if res.returncode == 0:
+            return True
+        # Pop fehlgeschlagen -> drop den obersten Stash, damit
+        # er nicht ewig liegen bleibt.
+        _sp.run(
+            ["git", "-C", str(pd), "stash", "drop", "stash@{0}"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        return False
     except Exception:  # noqa: BLE001
         return False
 
@@ -2212,7 +2225,11 @@ def run_pipeline_loop(
             for t in _tasks
         )
     )
-    _patches_leer = not getattr(state, "patches", None)
+    # GOLD 2026-10-30: Nicht nur state.patches pruefen (die koennen
+    # gefuellt sein, ohne dass etwas angewendet wurde). Sondern
+    # applied_count: hat der Loop tatsaechlich Dateien geaendert?
+    _applied = int(getattr(state, "applied_count", 0) or 0)
+    _patches_leer = _applied == 0
     if _alle_done and _patches_leer:
         audit("loop_phase",
               {"phase": "phase_end_review",

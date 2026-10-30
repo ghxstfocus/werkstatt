@@ -416,3 +416,20 @@ def test_phase_review_skip_bei_leerem_patches():
     _patches_leer = not s.patches
     assert _alle_done
     assert _patches_leer
+
+
+def test_phase_review_skip_prueft_applied_count():
+    """Der Skip prueft applied_count, nicht nur state.patches.
+
+    Regression: Live 2026-10-30 21:33:31 — state.patches war
+    gefuellt (4 no-op-Patches), aber applied_count war 0.
+    Ohne diesen Fix lief der Phase-Review mit leerem Diff
+    und rejected 4x.
+    """
+    import inspect
+    from werkstatt import loop as loop_mod
+    src = inspect.getsource(loop_mod.run_pipeline_loop)
+    # Der Skip-Block muss applied_count pruefen
+    assert "applied_count" in src
+    # und _patches_leer aus applied_count ableiten
+    assert "_patches_leer = _applied == 0" in src or            "_patches_leer = _applied" in src
