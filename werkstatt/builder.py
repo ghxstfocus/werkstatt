@@ -45,6 +45,12 @@ Regeln:
     kuerzeren, eindeutigen old_string (5-10 Zeilen) aus dem aktuellen
     Inhalt.
   - old_string != new_string.
+  - LOESCHE KEINE ZEILEN, die nicht in old_string stehen. Wenn die
+    Task "entferne X" sagt, dann entferne NUR X, nicht den Rest
+    der Datei. old_string muss genau die zu entfernenden Zeilen
+    enthalten, nicht mehr und nicht weniger. Bei Doku-Aufgaben
+    (z.B. "entferne Punkt 1 aus docs/STATUS.md"): old_string =
+    die exakten Zeilen von Punkt 1, new_string = "" (leer).
   - KEIN Aider-Format. KEIN "context" + "old" + "new".
     Nur "old_string" + "new_string".
 

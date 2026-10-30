@@ -941,19 +941,44 @@ def _reflection_loop(
         # Reparatur, wenn Fehler sich aendern (F841 statt RUF-Serie).
         _errs = getattr(state, "last_verify_errors", None) or []
         _ruff_jetzt = sum(1 for e in _errs if isinstance(e, str) and "ruff" in e.lower())
-        if _ruff_vorher is not None and _ruff_jetzt >= _ruff_vorher and _ruff_jetzt > 0:
+        # GOLD 2026-10-30: Stagnation auch bei Reviewer-Bugs zaehlen.
+        # Vorher zaehlte nur _ruff_jetzt; bei Doku-Patches gibt es
+        # keinen Ruff-Fehler, aber der Reviewer meldet denselben Bug
+        # in jeder Runde. Live-Beleg 2026-10-30 22:28: 5 Reflection-
+        # Runden, alle mit demselben Reviewer-Bug.
+        _bugs_jetzt = getattr(state, "reviewer_bugs", None) or []
+        _bug_sigs_jetzt = frozenset(
+            (b.get("severity", ""), b.get("description", "")[:100])
+            for b in _bugs_jetzt if isinstance(b, dict)
+        )
+        _bug_sigs_vorher = getattr(
+            state, "_reflection_bug_sigs_vorher", frozenset())
+        _hat_gleiche_bugs = (
+            _bug_sigs_vorher and _bug_sigs_jetzt == _bug_sigs_vorher
+        )
+        _stagnation_grund = None
+        if (_ruff_vorher is not None
+                and _ruff_jetzt >= _ruff_vorher and _ruff_jetzt > 0):
+            _stagnation_grund = "ruff"
+        elif _hat_gleiche_bugs:
+            _stagnation_grund = "reviewer_bugs"
+        if _stagnation_grund:
             _stagnation += 1
             audit("loop_reflection_stagnation_runde",
                   {"runde": runde, "stagnation": _stagnation,
+                   "grund": _stagnation_grund,
                    "ruff_vorher": _ruff_vorher,
-                   "ruff_jetzt": _ruff_jetzt}, pd, pn)
+                   "ruff_jetzt": _ruff_jetzt,
+                   "gleiche_bugs": _hat_gleiche_bugs}, pd, pn)
             if _stagnation >= 2:
                 audit("loop_reflection_stagnation_abort",
-                      {"runde": runde, "stagnation": _stagnation}, pd, pn)
+                      {"runde": runde, "stagnation": _stagnation,
+                       "grund": _stagnation_grund}, pd, pn)
                 return False
         else:
             _stagnation = 0
         _ruff_vorher = _ruff_jetzt
+        state._reflection_bug_sigs_vorher = _bug_sigs_jetzt  # type: ignore[attr-defined]
 
         audit("loop_reflection_runde", {"runde": runde}, pd, pn)
 
@@ -1018,11 +1043,19 @@ def _reflection_loop(
             })
             if len(_refl_hist) > 5:
                 state.reflection_history = _refl_hist[-5:]  # type: ignore[attr-defined]
-            # K45: patch_nicht_angewendet ist KEINE Stagnation --
-            # der Builder hat etwas versucht. Stagnation-Zaehler
-            # zurücksetzen, damit der naechste echte Stagnations-Fall
-            # erkannt wird (2x in Folge ohne Versuch).
-            _stagnation = 0
+            # GOLD 2026-10-30: patch_nicht_angewendet ZAEHLT als
+            # Stagnation, wenn es mehrfach in Folge passiert.
+            # Live-Beleg 2026-10-30 22:28: 5x patch_nicht_angewendet,
+            # jedes Mal _stagnation=0 -> Loop drehte 5 Runden.
+            _stagnation += 1
+            audit("loop_reflection_stagnation_runde",
+                  {"runde": runde, "stagnation": _stagnation,
+                   "grund": "patch_nicht_angewendet"}, pd, pn)
+            if _stagnation >= 2:
+                audit("loop_reflection_stagnation_abort",
+                      {"runde": runde, "stagnation": _stagnation,
+                       "grund": "patch_nicht_angewendet"}, pd, pn)
+                return False
             _ruff_vorher = None  # naechste Runde frisch zaehlen
             error_context = ""  # Verify in naechster Runde triggern
             continue
