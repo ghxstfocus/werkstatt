@@ -2419,14 +2419,27 @@ def run_pipeline_loop(
     # wuerde mit 'reviewer_phase_kein_diff' fail-closed abbrechen.
     # Live-Beleg 2026-10-30 21:28:25: alle 5 Tasks done, aber
     # reviewer_phase_kein_diff -> Loop-Rollback.
+    # GOLD 2026-10-30: _alle_done aus PhaseState, nicht aus
+    # state.tasks (dort fehlt das status-Feld).
+    # Live-Beleg 2026-10-30 22:37: PhaseState t1=done, aber
+    # state.tasks[0] hatte kein status -> _alle_done=False ->
+    # reviewer_phase_kein_diff -> Loop-Rollback.
     _tasks = getattr(state, "tasks", None) or []
-    _alle_done = (
-        bool(_tasks)
-        and all(
-            isinstance(t, dict) and t.get("status") == "done"
-            for t in _tasks
-        )
-    )
+    _alle_done = bool(_tasks)
+    if _alle_done and phase_state is not None:
+        # Pruefe PhaseState pro Task.
+        for _t in _tasks:
+            if not isinstance(_t, dict):
+                _alle_done = False
+                break
+            _tid = _t.get("id")
+            if not _tid:
+                _alle_done = False
+                break
+            _pt = phase_state.get_task(_tid)
+            if not _pt or _pt.get("status") != "done":
+                _alle_done = False
+                break
     # GOLD 2026-10-30: Nicht nur state.patches pruefen (die koennen
     # gefuellt sein, ohne dass etwas angewendet wurde). Sondern
     # applied_count: hat der Loop tatsaechlich Dateien geaendert?

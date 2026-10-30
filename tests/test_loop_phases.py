@@ -433,3 +433,18 @@ def test_phase_review_skip_prueft_applied_count():
     assert "applied_count" in src
     # und _patches_leer aus applied_count ableiten
     assert "_patches_leer = _applied == 0" in src or            "_patches_leer = _applied" in src
+
+
+def test_alle_done_aus_phasestate():
+    """_alle_done prueft PhaseState, nicht state.tasks.
+
+    Regression: Live 2026-10-30 22:37: PhaseState t1=done, aber
+    state.tasks[0] hatte kein status-Feld -> _alle_done=False ->
+    reviewer_phase_kein_diff.
+    """
+    import inspect
+    from werkstatt import loop as loop_mod
+    src = inspect.getsource(loop_mod.run_pipeline_loop)
+    # Pruefe, dass phase_state.get_task aufgerufen wird
+    assert "phase_state.get_task" in src
+    assert "_alle_done" in src
