@@ -1589,19 +1589,24 @@ def run_pipeline_loop(
     # Der Explorer nutzt sie, um bei grossen Dateien die relevanten
     # Zeilen zu finden statt stumpf erste 100 + letzte 50.
     _suchbegriffe: list[str] = []
-    # Backticks: `foo_bar`, `class="x"`, `nth-child(n+4)`
-    for _m in _re_explorer.finditer(r'`([^`]{2,80})`', aufgabe):
+    # Backticks: `foo_bar`, `nth-child(n+4)` — volle Kette in Backticks
+    for _m in _re_explorer.finditer(r'`([^`]{2,120})`', aufgabe):
         _b = _m.group(1).strip()
         if _b:
             _suchbegriffe.append(_b)
-    # CSS-Klassen und Selektoren: nth-child(...), table-xyz
-    for _m in _re_explorer.finditer(
-            r'\b((?:nth-child|table-[a-z]+|class=)[^\s,)\]]{0,40})', aufgabe):
-        _b = _m.group(1).strip()
-        if _b and _b not in _suchbegriffe:
+    # CSS-Klassen mit table-Praefix: table-alerts, table-inventory
+    for _m in _re_explorer.finditer(r'\b(table-[a-z][a-z0-9-]{1,40})\b', aufgabe):
+        _b = _m.group(1)
+        if _b not in _suchbegriffe:
             _suchbegriffe.append(_b)
-    # Funktions-/Methoden-Namen (def foo, foo_bar())
-    for _m in _re_explorer.finditer(r'\b([a-z_][a-z0-9_]{3,40})\s*\(', aufgabe):
+    # CSS-Selektoren in Klammern: nth-child(...) vollstaendig
+    for _m in _re_explorer.finditer(r'(nth-child\([^)]{1,40}\))', aufgabe):
+        _b = _m.group(1)
+        if _b not in _suchbegriffe:
+            _suchbegriffe.append(_b)
+    # Funktions-/Methoden-Namen mit Unterstrich (def foo_bar, foo_bar())
+    for _m in _re_explorer.finditer(
+            r'\b([a-z][a-z0-9]*_[a-z0-9_]{2,40})\b', aufgabe):
         _b = _m.group(1)
         if _b not in _suchbegriffe:
             _suchbegriffe.append(_b)
@@ -1609,6 +1614,38 @@ def run_pipeline_loop(
     audit("loop_explorer_suchbegriffe",
           {"anzahl": len(_suchbegriffe),
            "begriffe": _suchbegriffe[:10]}, pd, pn)
+    # GOLD 2026-10-30: Wenn die Aufgabe nur einen Ordner nennt
+    # (z.B. "apps/dashboard/static/css/"), finde die konkreten
+    # Dateien im Ordner, die zu den Suchbegriffen passen.
+    # Live-Beleg 2026-10-30 21:53: Aufgabe nannte "apps/dashboard/
+    # static/css/" (Ordner), aber nicht "components.css". Der
+    # Architect bekam deshalb keinen components.css-Inhalt.
+    _ordner_dateien: list[str] = []
+    for _m in _re_explorer.finditer(
+            r'\b((?:[a-zA-Z_][a-zA-Z0-9_-]*/){2,}[a-zA-Z0-9_-]*/)\b',
+            aufgabe):
+        _ordner = _m.group(1).rstrip("/")
+        _dir = Path(pd) / _ordner
+        if not _dir.is_dir():
+            continue
+        for _f in sorted(_dir.glob("*")):
+            if not _f.is_file():
+                continue
+            _rel = str(_f.relative_to(pd))
+            if _rel in _explizite_dateien or _rel in _ordner_dateien:
+                continue
+            # Nur Dateien, die einen Suchbegriff enthalten?
+            # Wir fuegen alle hinzu — der Architect entscheidet.
+            _ordner_dateien.append(_rel)
+            if len(_ordner_dateien) >= 10:
+                break
+    # Ordner-Dateien an explizite Dateien anhaengen (max 10 gesamt)
+    _alle_genannten = list(_explizite_dateien)
+    for _f in _ordner_dateien:
+        if _f not in _alle_genannten:
+            _alle_genannten.append(_f)
+    _alle_genannten = _alle_genannten[:10]
+
     # M-396-Fix: Explorer laeuft IMMER, auch bei expliziten Dateien.
     # Genannte Dateien behalten Prioritaet, Explorer ergaenzt verwandte.
     group_start("Phase 1: Explorer")
@@ -1629,7 +1666,7 @@ def run_pipeline_loop(
         "key_files": [],
         "next_reads": list(_explorer_ergaenzung.get("next_reads") or []),
     }
-    for f in _explizite_dateien[:5]:
+    for f in _alle_genannten[:8]:
         if f not in _seen:
             _seen.add(f)
             # GOLD 2026-10-30: Datei-Inhalt fuer den Architect.
