@@ -1114,6 +1114,31 @@ def run_builder(state: RunState) -> bool:
               {"zieldatei": _zieldatei}, pd, pn)
         return False
 
+    # GOLD 2026-10-30: no_effect-Patches filtern (old == new).
+    # Der Haupt-Pfad filtert schon, der Architect-Pfad bisher nicht.
+    # Live 2026-10-30 20:46:55: builder_patch_no_effect +
+    # builder_patches_erstellt + loop_patch_updated -> Patch ohne
+    # Aenderung wurde angewendet.
+    _effektiv: list = []
+    for _p in patches:
+        if not isinstance(_p, dict):
+            continue
+        if (_p.get("action") == "update"
+                and _p.get("old_string") == _p.get("new_string")):
+            audit("builder_patch_no_effect",
+                  {"file": _p.get("file", "?"),
+                   "grund": "old_eq_new"}, pd, pn)
+            continue
+        _effektiv.append(_p)
+    if not _effektiv:
+        # Alle Patches waren no_effect -> Auftrag ist bereits erfuellt.
+        state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
+        audit("auftrag_bereits_erfuellt",
+              {"zieldatei": _zieldatei,
+               "grund": "alle_patches_no_effect"}, pd, pn)
+        return True
+    patches = _effektiv
+
     # M-337: Jeder Patch MUSS die Zieldatei sein + die Aktion
     # respektieren. Der LLM darf NICHT frei entscheiden.
     for _p in patches:

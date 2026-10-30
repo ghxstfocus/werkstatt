@@ -148,6 +148,19 @@ Antworte NUR mit validem JSON:
   hast: "X nicht im Datei-Inhalt (Zeilen 1-N)".
 - Beispiel: `_SCORE_SENTINEL` ist im Datei-Inhalt bei Zeile 65
   als `_SCORE_SENTINEL = float("-inf")` definiert -> kein Bug.
+
+
+## DATEI-CHECK (HIGH-Bug, verhindert "fehlt im Diff"-Fehltreffer)
+- Wenn eine Task-Anforderung im Diff NICHT sichtbar ist (z.B. "Slice
+  fehlt"), pruefe im Block `AKTUELLER DATEI-INHALT`, ob die
+  Anforderung dort schon erfuellt ist.
+- Wenn die Anforderung im Datei-Inhalt erfuellt ist (z.B.
+  `return entries[-_RECENT_CHANGES_LIMIT:]` oder `entries[-10:]`):
+  KEIN Bug. Der Diff aendert sie nur nicht, weil sie schon da ist.
+- Nur wenn die Anforderung WEDER im Diff noch im Datei-Inhalt
+  erfuellt ist: HIGH-Bug.
+- Belege im `description`-Feld: "Anforderung X fehlt im Diff und
+  im Datei-Inhalt (Zeilen 1-N geprueft)".
 """
 
 
