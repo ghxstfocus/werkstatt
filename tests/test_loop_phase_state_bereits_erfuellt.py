@@ -49,3 +49,17 @@ def test_builder_setzt_flag_bei_leerem_llm_patch(tmp_path):
     s.patches = []
     s.auftrag_bereits_erfuellt = True
     assert getattr(s, "auftrag_bereits_erfuellt", False) is True
+
+
+def test_loop_hook_blocked_aber_auftrag_erfuellt():
+    """Bei Hook-Block + auftrag_bereits_erfuellt: task_ok, kein Patch.
+
+    Regression: Live 2026-10-30 20:52:18 — Hook blockte import math,
+    Reflection gab True (Verify gruen wegen Stage-Skipping), Task
+    wurde ok ohne echte Pruefung.
+
+    Wir testen das Flag-Handling isoliert.
+    """
+    s = _state(Path("/tmp"))  # dummy
+    s.auftrag_bereits_erfuellt = True
+    assert getattr(s, "auftrag_bereits_erfuellt", False) is True

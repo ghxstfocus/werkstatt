@@ -1892,15 +1892,43 @@ def run_pipeline_loop(
                 _blocked_reason = hook_res.get("reason", "")
                 break
         if _hook_blocked:
+            # GOLD 2026-10-30: ZUERST pruefen, ob der Builder das
+            # auftrag_bereits_erfuellt-Flag gesetzt hat (weil die
+            # Zieldatei den Zielzustand schon enthaelt). Dann ist der
+            # Hook-Block irrelevant — der Task ist erfuellt.
+            # Live-Beleg 2026-10-30 20:52:18: Hook blockte import math,
+            # _reflection_loop gab True (weil Verify wegen leerer
+            # Stage-Skipping gruen war), Task wurde als ok markiert,
+            # ohne dass etwas geprueft wurde.
+            if getattr(state, "auftrag_bereits_erfuellt", False):
+                audit("auftrag_bereits_erfuellt",
+                      {"task_id": i,
+                       "name": task_name,
+                       "reason": "hook_blocked_aber_erfuellt",
+                       "blocked_reason": _blocked_reason},
+                      pd, pn)
+                state.auftrag_bereits_erfuellt = False  # type: ignore[attr-defined]
+                _task_ende(state, phase_state, task_id, ok=True,
+                           name=task_name)
+                audit("loop_task_ok", {"task_id": i, "name": task_name,
+                                       "via": "auftrag_bereits_erfuellt"},
+                      pd, pn)
+                continue
             # Reflection versuchen. Sie ruft run_builder + _apply_patches_with_hooks
             # intern; bei True ist der neue Patch schon angewendet.
             if _reflection_loop(state):
                 _task_ende(state, phase_state, task_id, ok=True,
                            name=task_name)
+                audit("loop_task_ok", {"task_id": i, "name": task_name,
+                                       "via": "reflection"},
+                      pd, pn)
             else:
                 _task_ende(state, phase_state, task_id, ok=False,
                            name=task_name,
                            failure=f"hook_blocked: {_blocked_reason}")
+                audit("loop_task_failed",
+                      {"task_id": i, "grund": f"hook_blocked: {_blocked_reason}"},
+                      pd, pn)
             continue
 
         # Patches anwenden (create + update) — NACH dem Hook.
