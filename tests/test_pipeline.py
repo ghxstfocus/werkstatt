@@ -5802,7 +5802,7 @@ class TestRollenKalibrierung:
             "body": "Body",
         }
         prompt = pipeline.build_system_prompt(
-            agent, {}, [], mit_anti_patterns=False)
+            agent, {}, [])
         assert "B13. SPEC-TREUE." in prompt
         assert "B14. SOLVER-BEFUND." in prompt
 
@@ -5812,7 +5812,7 @@ class TestRollenKalibrierung:
             "body": "Body",
         }
         prompt = pipeline.build_system_prompt(
-            agent, {}, [], mit_anti_patterns=False)
+            agent, {}, [])
         assert "R11. SACHFADEN." in prompt
 
 # =====================================================================
@@ -5903,13 +5903,13 @@ class TestNewFileMarker:
     def test_build_system_prompt_builder_b15(self) -> None:
         agent = {"name": "builder", "body": "Body"}
         prompt = pipeline.build_system_prompt(
-            agent, {}, [], mit_anti_patterns=False)
+            agent, {}, [])
         assert "B15. NEW_FILE OHNE MESSUNG." in prompt
 
     def test_build_system_prompt_reviewer_r12(self) -> None:
         agent = {"name": "reviewer", "body": "Body"}
         prompt = pipeline.build_system_prompt(
-            agent, {}, [], mit_anti_patterns=False)
+            agent, {}, [])
         assert "R12. NEW_FILE-MARKER." in prompt
 
     def test_agents_builder_md_new_file(self) -> None:
@@ -5984,7 +5984,7 @@ class TestPhasenHeader:
             self) -> None:
         agent = {"name": "reviewer", "body": "Body"}
         prompt = pipeline.build_system_prompt(
-            agent, {}, [], mit_anti_patterns=False)
+            agent, {}, [])
         assert "R13. PHASEN-TRENNUNG." in prompt
         assert "R14. VERDICT-KONSISTENZ." in prompt
 

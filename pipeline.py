@@ -4874,7 +4874,7 @@ def ask_reviewer_for_recovery(state: RunState, art: str, kontext: str) -> Recove
         build_system_prompt(
             state.agents["reviewer"], state.docs,
             state.agent_docs.get("reviewer", []),
-            mit_anti_patterns=False),
+            ),
         aufgabe,
         state.reviewer_recovery_model,
         0.0,

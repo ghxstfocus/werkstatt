@@ -634,7 +634,6 @@ def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
                         doc_keys: list[str],
                         *,
                         state: RunState | None = None,
-                        mit_anti_patterns: bool = True,
                         stufe: int = 1) -> str:
     """Baut System-Prompt aus Rollen-Body + HARD_RULES_BASE + Rolle + Projekt-Doku.
 
@@ -642,13 +641,6 @@ def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
     HARD_RULES_<ROLLE> (anhand agent["name"]).
     Reihenfolge: Rollen-Body, BASE, Rolle, Projekt-Doku.
 
-    Phase 3c-2 (2026-10-15): Wenn state gesetzt,
-    mit_anti_patterns True und Rolle reviewer, wird
-    der Anti-Pattern-Block angehaengt (Trigger-Grund
-    None, Fallback VV2). Builder bekommt den Block
-    via baue_anker_rueckmeldung (Phase 3b), Solver
-    via rufe_solver (Phase 3c-3). Recovery-Reviewer
-    ruft mit mit_anti_patterns=False (YY3).
     """
     parts = [agent["body"], HARD_RULES_BASE]
     agent_name = agent.get("name", "")
@@ -666,12 +658,6 @@ def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
         for key in doc_keys:
             if key in docs:
                 parts.append(f"\n--- {key} ---\n{docs[key]}")
-    # Phase 3c-2: Reviewer-Anti-Pattern-Block.
-    if (state is not None and mit_anti_patterns
-            and agent_name == "reviewer"):
-        ap_block = _anti_pattern_block(state, "reviewer", None)
-        if ap_block:
-            parts.append("\n\n" + ap_block)
     return "\n".join(parts)
 
 
