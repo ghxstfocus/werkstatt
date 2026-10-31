@@ -302,11 +302,16 @@ def test_loop_skip_plan_gate_bei_auftrag_bereits_erfuellt():
     """
     import inspect
     from werkstatt import loop as loop_mod
-    src = inspect.getsource(loop_mod.run_pipeline_loop)
-    assert "auftrag_bereits_erfuellt" in src
-    assert "skip_plan_gate" in src or "via" in src
-    assert "_task_ende(state, phase_state, \"scout_skip\"" in src or \
-           "scout_skip" in src
+    # Fix AZ Stufe 8-B: Logik liegt jetzt in _phase_plan_and_preflight.
+    # Beide Funktionen pruefen -- robust gegen weitere Refactors.
+    srcs = (
+        inspect.getsource(loop_mod.run_pipeline_loop)
+        + inspect.getsource(loop_mod._phase_plan_and_preflight)
+    )
+    assert "auftrag_bereits_erfuellt" in srcs
+    assert "skip_plan_gate" in srcs or "via" in srcs
+    assert "_task_ende(state, phase_state, \"scout_skip\"" in srcs or \
+           "scout_skip" in srcs
 
 
 def test_scout_abbruch_setzt_tasks_ok():
@@ -318,6 +323,10 @@ def test_scout_abbruch_setzt_tasks_ok():
     """
     import inspect
     from werkstatt import loop as loop_mod
-    src = inspect.getsource(loop_mod.run_pipeline_loop)
+    # Fix AZ Stufe 8-B: Logik liegt jetzt in _phase_plan_and_preflight.
+    srcs = (
+        inspect.getsource(loop_mod.run_pipeline_loop)
+        + inspect.getsource(loop_mod._phase_plan_and_preflight)
+    )
     # tasks_ok = 1 muss im Scout-Abbruch-Block stehen
-    assert "tasks_ok = 1" in src
+    assert "tasks_ok = 1" in srcs
