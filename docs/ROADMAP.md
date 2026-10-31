@@ -1,6 +1,6 @@
 # Roadmap — Werkstatt
 
-Stand: 2026-10-25 (nach M-472, ADaPT).
+Stand: 2026-10-31 (nach Doku-Migration, Scaffolder, Migrator, OP-NNN-Disziplin).
 Uebersicht. Details in `STATUS.md` (Todo)
 und `PROGRESS.md` (Erledigt).
 
@@ -17,15 +17,24 @@ und `PROGRESS.md` (Erledigt).
 | 🟡 | offen, Prioritaet P2 (strukturell) |
 | 🟢 | offen, Prioritaet P3 (Refactor) |
 
-## Ist-Stand (2026-10-25)
+## Ist-Stand (2026-10-31)
 
-**Werkstatt-HEAD:** efe4ffc (M-472 ADaPT).
-**Zielprojekt-HEAD:** f436e42 + ChangeApplier-Code (RERUN-80).
-**Baseline:** 1448 / 13 / 11 / 6 / 162.
+**Baseline (gemessen 2026-10-31):** 945 / 248 / 16 / - / -.
+- pytest: 945 passed, 5 skipped.
+- ruff: 248 errors, 198 fixable (tests/ nie durchgerufft).
+- mypy: 16 errors (werkstatt/, nicht auf .).
+- AST + Katalog: Messung fehlt (AST-Tool entfernt, _KATALOG_SOLL fehlt).
+- quality_gate: exit 1, regression true (Baseline aus 2026-10-25 ist
+  veraltet, Re-Baseline als OP).
 
-**Loop-Status:** Ende-zu-Ende gruen nach ADaPT (RERUN-80).
-ChangeApplier.apply/rollback implementiert (237 Zeilen),
-6/6 Tasks approved, LOOP_RC=0.
+**Loop-Status:** liest `docs/STATUS.md` reproduzierbar (3 Live-Tests:
+OP-005, OP-001, OP-002). OP-NNN-Disziplin greift: bei vager Aufgabe
+waehlt der Scout genau einen Punkt.
+
+**Bekannte Loop-Bugs (Live-Test 3):** OP-034..OP-038 in
+`docs/STATUS.md`. Produktionscode-Aenderungen brauchen noch
+pytest-Regression-Stage, hartes Reviewer-Signal, Datum aus UTC,
+Reflection-Deduplizierung, Commit-Message-Builder.
 
 ## Phasen (aktuell)
 
@@ -111,6 +120,36 @@ Rollen: Explorer, Planner, Builder, Verify, Reviewer, Human-Gate.
 - M-496: Interactive Chat (Intent-Parsing, Bestaetigung per Chat).
 - M-497: UI-Layout (Chrome-Tabs, CLI links, Chat rechts, Reviewer unten).
 
+### Phase 26: Doku-Migration ✅ (2026-10-31)
+
+- Beide Projekte auf DOC_CONVENTIONS.md §2/§3/§5/§6.
+- 24 Werkstatt-Renames, 27 ADRs in security-ai.
+- `PROGRESS.md` (root) als append-only-Historie.
+- Delete-Zone in beiden STATUS.md.
+
+### Phase 27: Loop liest Doku ✅ (2026-10-31)
+
+- `load_docs` sortiert nach §6-Prioritaet.
+- Scout bekommt `## PROJEKT-DOKU`-Sektion (max 4000 Z. je Doc).
+- Planner erkennt vage Aufgaben -> STATUS.md primaer.
+- Scout `## OP-NNN-DISZIPLIN`: bei vager Aufgabe GENAU EINEN OP.
+- Live-Belege: OP-005, OP-001, OP-002.
+
+### Phase 28: Doku-Werkzeuge ✅ (2026-10-31)
+
+- `werkstatt/scaffold.py` + `werkstatt/templates/` (14 Vorlagen).
+- `werkstatt/migrate.py` (§2/§3/§5/§6-Pruefung).
+- Tests: `test_scaffold.py` (9), `test_migrate.py` (16),
+  `test_scout_op_disziplin.py` (5), `test_planner_docs_reihenfolge.py`,
+  `test_planner_vage_aufgabe.py`, `test_manifest_pflichtfelder.py`,
+  `test_scout_liest_doku.py`.
+
+### Phase 29: Loop-Reife Code-Patches 🟠 (OFFEN)
+
+Bugs aus Live-Test 3 (OP-034..OP-038) in `docs/STATUS.md`:
+pytest-Regression, Datum aus UTC, Reflection-Deduplizierung,
+Reviewer-Signal, Commit-Message-Builder.
+
 ## Offene Bloecke (P1/P2)
 
 | Block | Prio | Kurz |
@@ -122,6 +161,18 @@ Rollen: Explorer, Planner, Builder, Verify, Reviewer, Human-Gate.
 | M-344 | 🟢 P3 | PROGRESS.md mit Phasen-Header |
 | M-323b | 🟡 P2 | phase_end-Checkpoint pro Phase |
 | M-162 | 🟢 P3 | Recovery nach Loop messen |
+
+## Loop-Bugs aus Live-Test 3 (OP-034..OP-038)
+
+Akzeptanzkriterien und Test-Namen in `docs/STATUS.md`.
+
+| OP | Titel | Prio |
+|---|---|---|
+| OP-034 | pytest-Stage deckt bestehende Tests nicht ab | 🔴 P1 |
+| OP-037 | Reviewer-Signal invertiert | 🔴 P1 |
+| OP-038 | Commit-Message-Builder nutzt rohe Aufgabe | 🟡 P2 |
+| OP-035 | Doku-Task-Datum wird halluziniert | 🟡 P2 |
+| OP-036 | Reflection dupliziert PROGRESS-Eintraege | 🟢 P3 |
 
 ## Verweise
 
