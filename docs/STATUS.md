@@ -47,6 +47,48 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Tests:** `python3 -m tools.quality_gate --json` -> exit 0.
 - **Blockiert von:** security-ai OP-003 (ruff-Regelschaerfung), security-ai OP-004 (mypy)
 
+### OP-042: docs/glossary.md aktualisieren (Baseline + pipeline.py)
+- **Status:** open
+- **Betroffene Dateien:** `docs/glossary.md`
+- **Akzeptanzkriterien:** (a) `pytest 1290` ersetzt durch `pytest 958` (real 2026-10-31). (b) Referenzen auf `pipeline.py:521` (`_KATALOG_SOLL`) entfernt oder auf neuen Ort (`werkstatt/audit.py`?) umgebogen. (c) Referenz auf `../KEY-ARCHITEKTUR.md` (existiert nicht) entfernt. (d) `grep -c "pipeline.py\|pytest 1290" docs/glossary.md` = 0.
+- **Tests:** `grep -n "pipeline.py\|1290\|KEY-ARCHITEKTUR" docs/glossary.md` liefert 0 Treffer.
+- **Blockiert von:** —
+
+### OP-043: docs/HANDOFF-BASELINE.md als historisch markieren
+- **Status:** open
+- **Betroffene Dateien:** `docs/HANDOFF-BASELINE.md`
+- **Akzeptanzkriterien:** Datei traegt Stand-Datum 2026-10-25 + klaren Hinweis "vor Loop-Neubau, veraltet — siehe AGENTS.md Baseline-Hinweis". Baseline-Werte (pytest 1290, mypy pipeline.py) bleiben als historischer Snapshot. Neuer Snapshot (958 pytest) in AGENTS.md, nicht hier.
+- **Tests:** `head -5 docs/HANDOFF-BASELINE.md` zeigt Stand + Veraltet-Hinweis.
+- **Blockiert von:** —
+
+### OP-044: docs/CONVENTIONS.md entstauben (Selbstverweis + alte Namen)
+- **Status:** open
+- **Betroffene Dateien:** `docs/CONVENTIONS.md`
+- **Akzeptanzkriterien:** (a) Selbstverweis `KONVENTION.md` -> `CONVENTIONS.md`. (b) Ordnerstruktur-Baum zeigt `CONVENTIONS.md`, `ARCHITECTURE.md`, `STATUS.md`, `PROGRESS.md` (nicht die alten Namen). (c) `pipeline.py`-Zeile entfernt oder durch `werkstatt/loop.py` + `werkstatt/pipeline_phases.py` ersetzt. (d) Referenztabelle (Zeilen ~67-71) auf aktuelle Namen aktualisiert oder entfernt.
+- **Tests:** `grep -c "KONVENTION.md\|ARCHITEKTUR.md\|ERLEDIGT.md\|OFFENE-BLOECKE.md\|pipeline.py" docs/CONVENTIONS.md` = 0.
+- **Blockiert von:** —
+
+### OP-045: docs/WORKFLOW.md entstauben (pipeline.py + tote Links)
+- **Status:** open
+- **Betroffene Dateien:** `docs/WORKFLOW.md`
+- **Akzeptanzkriterien:** (a) Alle `pipeline.py`-Referenzen entfernt oder auf `werkstatt/loop.py` + `werkstatt/pipeline_phases.py` umgebogen (10+ Stellen). (b) Tote Links `CONTEXT.md`, `CONTEXT_PROMPT.md`, `REVIEWER.md`, `REVIEWER_HANDOFF.md`, `INCONSISTENCIES_FOUND.md` entfernt oder korrigiert. (c) `pipeline.py --project ...`-CLI-Beispiele durch `python3 -m werkstatt.loop --project ...` ersetzt.
+- **Tests:** `grep -c "pipeline.py\|CONTEXT.md\|REVIEWER.md" docs/WORKFLOW.md` = 0.
+- **Blockiert von:** —
+
+### OP-046: docs/PLANNER-KONZEPT.md + ROLLEN-AUDIT.md + MERKPOSTEN.md entstauben
+- **Status:** open
+- **Betroffene Dateien:** `docs/PLANNER-KONZEPT.md`, `docs/ROLLEN-AUDIT.md`, `docs/MERKPOSTEN.md`
+- **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
+- **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
+- **Blockiert von:** —
+
+### OP-047: Tote Doku-Links systematisch pruefen
+- **Status:** open
+- **Betroffene Dateien:** alle `docs/*.md`, `AGENTS.md`, `README.md`
+- **Akzeptanzkriterien:** Deterministischer Check (Script oder `grep + test -f`) findet keine toten `docs/X.md`-Links mehr ausser in `DOC_CONVENTIONS.md` §3 (Verbots-Tabelle, absichtlich). Aktuelle tote Links: `MERKPOSTEN.md -> MESS-INFRASTRUKTUR.md, SESSION-BILANZ.md`; `ROLLEN-AUDIT.md -> ARCHITEKTUR.md`. Pruef-Script als `tools/check_doku_links.sh` oder `werkstatt/verify.py`-Stage.
+- **Tests:** `bash tools/check_doku_links.sh` exit 0.
+- **Blockiert von:** —
+
 ## Backlog (nicht §5-konform)
 
 Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie haben noch keine §5-konformen Akzeptanz-kriterien (Betroffene Dateien, Tests). Bei Bearbeitung zuerst §5-Format herstellen.
