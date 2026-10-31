@@ -1175,3 +1175,11 @@ laeuft ausschliesslich ueber `werkstatt/*.py`.
 
 ---
 
+
+## 2026-10-31T20:19:05+00:00 -- OP-034: pytest_regression am phase_end
+- **Status:** done
+- **Beleg:** Commits f37d5ae, ee95412, 7a4ba7a, 19098e4. pytest_regression-Stage in verify.json (Werkstatt, Template, security-ai). phase=phase_end (1x pro Loop statt pro Task). Per-Stage timeout konfigurierbar (default 300s, security-ai 900s).
+
+## 2026-10-31T20:19:05+00:00 -- OP-036: Duplikat-Check in progress.append
+- **Status:** done
+- **Beleg:** Commit a965810. progress.append prueft Signatur (name, status, info) vor dem Schreiben. Root-Cause (mehrfache _task_ende-Aufrufe) bleibt als OP-040 offen.

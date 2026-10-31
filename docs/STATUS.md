@@ -238,33 +238,12 @@ Letzte Aktualisierung: 2026-10-31.
 - **Blockiert von:** —
 
 
-### OP-034: pytest-Stage deckt bestehende Tests nicht ab
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/templates/.werkstatt/verify.json`, `werkstatt/verify.py`
-- **Akzeptanzkriterien:** Bei `.py`-Code-Aenderungen OHNE Test-Aenderung laeuft eine zusaetzliche `pytest_regression`-Stage, die mindestens die Tests der betroffenen Module (oder die volle Suite) faehrt. Verhindert Regressionen wie Live-Test 3 (COALESCE-Bug in `upsert_seen`).
-- **Tests:** `tests/test_verify.py::test_pytest_regression_bei_code_aenderung`
-- **Blockiert von:** —
-
 ### OP-035: Doku-Task-Datum wird halluziniert
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/prompts.py` (BUILDER_SYSTEM), `werkstatt/builder.py`
 - **Akzeptanzkriterien:** Builder bekommt das Datum deterministisch (z.B. als Platzhalter `{{date}}` aus `datetime.now(UTC).date()`) statt es aus dem Kontext zu raten. Patches mit falschem Datum (`2026-11-02`, `2026-11-03` beobachtet) werden deterministisch korrigiert oder abgelehnt.
 - **Tests:** `tests/test_builder.py::test_datum_kommt_aus_utc`
 - **Blockiert von:** —
-
-### OP-036: Reflection dupliziert PROGRESS-Eintraege
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/builder.py`
-- **Akzeptanzkriterien:** Nach Abschluss eines Tasks steht hoechstens EIN `### OP-NNN:`-Eintrag pro OP in `PROGRESS.md`. Deterministischer Check: `grep -c "### OP-NNN:" PROGRESS.md` <= 1. Doppelte Reflection-Patches werden erkannt und nicht angewendet.
-- **Tests:** `tests/test_reflection.py::test_kein_doppel_eintrag`
-- **Blockiert von:** —
-
-### OP-037: Reviewer-Signal invertiert
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/reviewer.py`, `werkstatt/prompts.py` (REVIEWER_SYSTEM)
-- **Akzeptanzkriterien:** Reviewer erkennt Semantik-Aenderungen in bestehendem Code, die Zusicherungen brechen (Live-Test 3: `COALESCE(?, last_ip)` bricht `test_upsert_seen_empty_ip_does_not_overwrite`). Signal bei Code-Tasks != Doku-Tasks; Code-Tasks ohne Test-Update werden als HIGH markiert.
-- **Tests:** `tests/test_reviewer.py::test_semantik_regression_erkannt`
-- **Blockiert von:** OP-034
 
 ### OP-038: Commit-Message-Builder nutzt rohe Aufgabe
 - **Status:** open
@@ -285,11 +264,28 @@ Hinweis: Live-Test 4 (2026-10-31) zeigt 1334 Tests in ~660s (~500ms/Test).
 Als `phase_end`-Stage (1x pro Loop) tragbar, aber teuer. Ursachen-Kandidaten:
 DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
+### OP-040: Mehrfache _task_ende-Aufrufe pro Task (Root-Cause OP-036)
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/pipeline_phases.py`
+- **Akzeptanzkriterien:** In `_phase_tasks_loop` gibt es pro Task maximal EINEN `_task_ende`-Aufruf. Alle Fehlerpfade enden mit `continue`. Mitigation (Duplikat-Check in `progress.append`, OP-036) bleibt als Sicherheitsnetz. Grep-Check: in `pipeline_phases.py` sind die `_task_ende`-Aufrufe nach `continue` gruppiert; kein Fall wo derselbe Task zweimal `_task_ende` bekommt.
+- **Tests:** `tests/test_pipeline_phases.py::test_ein_task_ende_pro_task` (pytest-Test mit gemocktem Fehlerpfad).
+- **Blockiert von:** —
+
+### OP-041: Baseline-Revision (quality_gate rot)
+- **Status:** open
+- **Betroffene Dateien:** `tools/quality_gate.py`, `docs/HANDOFF-BASELINE.md`
+- **Akzeptanzkriterien:** Neue Baseline (945 pytest, 0 ruff auf werkstatt/, 0 mypy auf werkstatt/ nach Cleanup — oder explizit als akzeptiert markiert). `quality_gate --json` gibt `exit 0` und `regression: false`.
+- **Tests:** `python3 -m tools.quality_gate --json` -> exit 0.
+- **Blockiert von:** OP-003 (ruff-Regelschaerfung), OP-004 (mypy)
+
 ## Delete-Zone
 
 | Pfad | Warum entfernt | Ersetzt durch | Wiedereinfuehrung |
 |---|---|---|---|
 | — | — | — | — |
+| OP-034 | erledigt 2026-10-31 (f37d5ae/ee95412/7a4ba7a) | pytest_regression am phase_end | – |
+| OP-036 | erledigt 2026-10-31 (a965810) | Duplikat-Check in progress.append | – |
+| OP-037 | kein Bug — Reviewer-Verhalten korrekt (audit-log 183709-29980) | keine Aenderung | – |
 
 ## Verweise
 
