@@ -9,11 +9,14 @@ Grok und Codex nehmen und ein eigenes Agentensystem bauen.
 **Kernprinzip:** On-Demand-Messung + deterministische Gates.
 Der Loop prüft, bevor er baut. Kein LLM-Token ohne Plan.
 
-**Stand 2026-10-25 (nach M-472, ADaPT):**
+**Stand 2026-10-31 (nach Doku-Migration, Scaffolder, Migrator):**
 
-- **Baseline:** 1448 Tests, ruff 13, mypy 11, AST 6, Katalog 162.
-- **HEAD:** efe4ffc. Branch: umbau/phase-2 (origin gepusht).
-- **Loop:** Ende-zu-Ende gruen (RERUN-80, Loop-RC=0).
+- **Baseline:** 945 passed, 5 skipped.
+- **Branch:** umbau/phase-2 (origin gepusht).
+- **Loop:** liest `docs/STATUS.md` reproduzierbar (3 Live-Tests:
+  OP-005, OP-001, OP-002). OP-NNN-Disziplin greift.
+- **Werkzeuge:** `werkstatt.scaffold` + `werkstatt.migrate` fuer
+  neue Projekt-Doku (siehe `docs/index.md`).
 
 ## Loop-Architektur (5+1 Rollen + ADaPT)
 
@@ -28,6 +31,7 @@ Er ruft pro Task:
 3. **Planner-Split** (deepseek-chat) — zerlegt die Prosa in
    Tasks mit `architect_start`/`architect_ende` (wörtliche
    Marker). Rekursiv, max 2 Ebenen (M-469/M-470/M-471).
+
 4. **Builder** (deepseek-chat) — search/replace pro Task.
    Bekommt den wörtlichen Architect-Abschnitt (M-461).
 5. **PreToolUse-Hook** (`hooks/pre_tool_use.py`) — AST-basierte
@@ -48,6 +52,19 @@ wird er in 2–3 Sub-Tasks zerlegt (M-472/M-473/M-474/M-475).
 Max 2 Ebenen tief. Abgeschlossene Tasks bleiben. `get_next_task`
 liefert nur `pending`.
 
+## Doku-Werkzeuge (2026-10-31)
+
+- `python3 -m werkstatt.scaffold <name> --dir <pfad>` legt alle
+  `DOC_CONVENTIONS.md` §2-Pflichtdateien an (idempotent, `--dry-run`,
+  `--force`).
+- `python3 -m werkstatt.migrate <name> --dir <pfad> [--dry-run|--apply]`
+  prueft §2/§3/§5/§6, meldet Verstoesse, legt mit `--apply` fehlende
+  Pflichtdateien an (loescht NICHTS).
+- Der Loop liest die Living Docs in §6-Reihenfolge (entry > status >
+  roadmap > architecture > conventions > adr_index > glossary). Der
+  Scout bekommt `## PROJEKT-DOKU` (priorisiert). Bei vagen Aufgaben
+  waehlt er GENAU EINEN OP-NNN aus `docs/STATUS.md`.
+
 ## Verifikation
 
 - `ruff --fix` vor `_verify_patches` (deterministisch, M-467).
@@ -58,9 +75,8 @@ liefert nur `pending`.
 
 ## Doku
 
-- `docs/index.md` — Diátaxis-Map
-- `docs/ARCHITECTURE.md` — System-Map
-- `docs/NEUBAU-ZIELBILD.md` — Aktueller Loop
-- `PROGRESS.md` — Erledigte Blöcke
-- `docs/STATUS.md` — Offene Blöcke
-- `AGENTS.md` — Agenten-Routing
+- `docs/index.md` — Doku-Einstieg
+- `docs/STATUS.md` — offene Punkte (OP-NNN, §5-Format)
+- `PROGRESS.md` — Historie (append-only)
+- `docs/adr/` — Architecture Decision Records
+- `docs/DOC_CONVENTIONS.md` — Golden-Standard (Meta)
