@@ -1979,8 +1979,12 @@ def run_pipeline_loop(
                 break
             plan_ok = _plan_gate(state)
         if not plan_ok:
-            step(2, "Planner", "kein Plan", ok=False)
-            audit("loop_gate_failed", {"gate": "plan"}, pd, pn)
+            # FIX Z 2026-10-31: Bei Plan-Reject nicht "Tasks: 0/7"
+            # melden (irrefuehrend — Tasks wurden geplant, aber
+            # verworfen). Klarstellen.
+            step(2, "Planner", "Plan verworfen", ok=False)
+            audit("loop_gate_failed", {"gate": "plan",
+                                       "phase": "plan_reject"}, pd, pn)
             return 1
 
     # M-348c: Plan-Human-Gate (nach Plan-Erstellung, vor Builder).

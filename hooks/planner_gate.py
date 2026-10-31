@@ -40,6 +40,10 @@ _VALID_SUFFIXES = (
     ".html", ".css", ".js", ".ts",
     # Doku (GOLD 2026-10-30: Doku-Aufgaben sind legitim)
     ".md", ".rst", ".txt",
+    # FIX Y 2026-10-31: Config-Example-Dateien. Live-Beleg: DeepSeek-
+    # Aufgabe plante t5=...env.example, Gate lehnte ab, Loop exit 1.
+    # .example, .template, .sample, .dist sind uebliche Endungen.
+    ".example", ".template", ".sample", ".dist",
 )
 
 
