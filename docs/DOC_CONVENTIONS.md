@@ -35,7 +35,8 @@ docs/:
 - `CONVENTIONS.md` (Coding-Regeln)
 - `glossary.md` (NICHT `glossary.md`)
 - `adr/README.md` (ADR-Index)
-- `adr/ADR-0001.md` (erste Entscheidung)
+- `adr/ADR-0001.md` oder `adr/ADR-0001-<slug>.md` (erste Entscheidung,
+  Slug-Variante fuer gewachsene Projekte zulaessig)
 
 Manifest:
 - `projects/<name>.yaml`
