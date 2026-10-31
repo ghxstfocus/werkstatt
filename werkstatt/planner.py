@@ -1634,6 +1634,73 @@ def _run_scout(
     return parsed
 
 
+
+
+
+def _deterministic_entfernen_precheck(state) -> bool:
+    """FIX S 2026-10-31: 'entferne X aus Y' wenn X fehlt -> Skip.
+
+    Scout erkennt per LLM nicht zuverlaessig, dass eine
+    Entfernen-Aufgabe bereits erfuellt ist. Dieser Check
+    laeuft deterministisch VOR dem Scout und spart den
+    Architect+Planner-Lauf.
+
+    Beispiele:
+      'In docs/STATUS.md den Punkt 1 entfernen' +
+      Datei hat Punkt 1 nicht -> Skip.
+      'Entferne AuditReaderError aus docs/STATUS.md' +
+      Datei enthaelt 'AuditReaderError' nicht -> Skip.
+    """
+    import re as _re_s
+    _aufgabe = (getattr(state, "aufgabe", "") or "").strip()
+    if not _aufgabe:
+        return False
+    _auf = _aufgabe.lower()
+    # Trigger: Entfernen-Wort UND Punkt ODER Marker
+    if not any(w in _auf for w in (
+        "entfern", "loesch", "lösch", "raum ab", "räum ab",
+        "rausnehmen", "raus nehmen",
+    )):
+        return False
+    _pd = getattr(state, "project_dir", None)
+    if _pd is None:
+        return False
+    _md_paths = _re_s.findall(r"[a-zA-Z_][\w/.-]*\.md", _aufgabe)
+    if not _md_paths:
+        return False
+    _m_punkt = _re_s.search(r"punkt\s+(\d+)", _aufgabe, _re_s.IGNORECASE)
+    _m_marker = _re_s.search(r"\(([A-Za-z][A-Za-z0-9_-]{3,})\)", _aufgabe)
+    if not _m_punkt and not _m_marker:
+        return False
+    _pn = getattr(state, "project_name", "?")
+    for _p_str in _md_paths:
+        _target = Path(_pd) / _p_str
+        if not _target.is_file():
+            continue
+        try:
+            _content = _target.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if _m_punkt:
+            _n = _m_punkt.group(1)
+            if _re_s.search(rf"^\s*{_n}\.\s", _content, _re_s.MULTILINE):
+                return False  # Punkt existiert noch
+        if _m_marker:
+            if _m_marker.group(1) in _content:
+                return False  # Marker existiert noch
+        try:
+            state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
+        except (AttributeError, TypeError):
+            return False
+        audit("planner_precheck_bereits_erfuellt", {
+            "datei": _p_str,
+            "punkt": _m_punkt.group(1) if _m_punkt else None,
+            "marker": _m_marker.group(1) if _m_marker else None,
+        }, _pd, _pn)
+        return True
+    return False
+
+
 def run_planner(state: RunState) -> bool:
     """Erstellt den Plan. Schreibt in state.tasks/tests/akzeptanzkriterien."""
     pd = state.project_dir
@@ -1643,6 +1710,11 @@ def run_planner(state: RunState) -> bool:
     if not api_key:
         audit("planner_kein_key", {}, pd, pn)
         return False
+
+    # FIX S 2026-10-31: Deterministischer Pre-Check VOR dem Scout.
+    # Wenn Aufgabe "entferne X" ist und X fehlt, Loop sauber beenden.
+    if _deterministic_entfernen_precheck(state):
+        return True
 
     aufgabe = getattr(state, "aufgabe", "")
     docs_ctx = ""
