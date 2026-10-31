@@ -13,8 +13,13 @@ class TestTaskFailContinue:
         """Prueft fuer jeden Task-Fail-Pfad: nach `_task_ende(ok=False, ...)
         folgt `continue`, NICHT `return 1`. Zwischen beiden darf etwas
         Code stehen (z.B. Reflection), aber kein `return 1`."""
+        # Fix AZ Stufe 11: Logik liegt jetzt in pipeline_phases.py.
         import werkstatt.loop as _loop
-        src = Path(_loop.__file__).read_text(encoding="utf-8")
+        import werkstatt.pipeline_phases as _pp
+        src = (
+            Path(_loop.__file__).read_text(encoding="utf-8")
+            + Path(_pp.__file__).read_text(encoding="utf-8")
+        )
         for marker in (
             'failure="reviewer_unvollstaendig")',
             'failure="reviewer_rejected_no_patch")',
@@ -37,8 +42,13 @@ class TestTaskFailContinue:
 
     def test_pre_build_gate_bleibt_return_1(self) -> None:
         """pre_build_gate ist echter Abbruch, kein Task-Fail."""
+        # Fix AZ Stufe 11: Logik liegt jetzt in pipeline_phases.py.
         import werkstatt.loop as _loop
-        src = Path(_loop.__file__).read_text(encoding="utf-8")
+        import werkstatt.pipeline_phases as _pp
+        src = (
+            Path(_loop.__file__).read_text(encoding="utf-8")
+            + Path(_pp.__file__).read_text(encoding="utf-8")
+        )
         assert '"gate": "pre_build"' in src
         idx = src.find('"gate": "pre_build"')
         assert idx > 0

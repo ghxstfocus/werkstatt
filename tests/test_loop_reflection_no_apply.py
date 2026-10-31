@@ -15,8 +15,14 @@ class TestReflectionNoApply:
     def test_pruefung_im_loop(self) -> None:
         """Code-Pruefung: nach _reflection_loop wird applied_count
         verglichen."""
+        # Fix AZ Stufe 11: Logik liegt jetzt in pipeline_phases.py.
+        # Alle relevanten Quellen pruefen (loop.py + pipeline_phases.py).
         import werkstatt.loop as _loop
-        src = Path(_loop.__file__).read_text(encoding="utf-8")
+        import werkstatt.pipeline_phases as _pp
+        src = (
+            Path(_loop.__file__).read_text(encoding="utf-8")
+            + Path(_pp.__file__).read_text(encoding="utf-8")
+        )
         assert "_applied_vor_al" in src
         assert "_applied_nach_al" in src
         assert "reflection_ohne_apply" in src

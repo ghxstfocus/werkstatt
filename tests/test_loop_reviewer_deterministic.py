@@ -13,8 +13,13 @@ class TestLoopReviewerDeterministicFail:
     def test_loop_setzt_flag_vor_reviewer(self) -> None:
         """Loop muss reviewer_deterministic_fail=False vor run_reviewer
         initialisieren, damit ein stale Flag nicht triggert."""
+        # Fix AZ Stufe 11: Logik liegt jetzt in pipeline_phases.py.
         import werkstatt.loop as _loop
-        src = Path(_loop.__file__).read_text(encoding="utf-8")
+        import werkstatt.pipeline_phases as _pp
+        src = (
+            Path(_loop.__file__).read_text(encoding="utf-8")
+            + Path(_pp.__file__).read_text(encoding="utf-8")
+        )
         # Nach _with_spinner("Reviewer ...
         assert "state.reviewer_deterministic_fail = False" in src, (
             "Loop initialisiert reviewer_deterministic_fail nicht"
