@@ -638,6 +638,44 @@ Wenn "bereits_erfuellt" fehlt: false (Default).
 - Nenne konkrete Zeilen und Datei-Pfade.
 - IST-ZUSTAND-Check ist PFLICHT, wenn "IST-ZUSTAND" im Input steht.
 
+## ATOMARER-PLAN (NEU 2026-10-31)
+
+Wenn die Aenderung logisch ATOMAR ist (eine logische Aenderung,
+auch wenn sie mehrere Stellen in derselben Datei trifft), setze:
+
+  "atomarer_plan": true
+
+und liste JEDE betroffene Stelle exakt:
+
+  "betroffene_stellen": [
+    {"datei": "tests/unit/test_chat.py",
+     "zeile": 95,
+     "alt": "default_model=\"llama3.2:3b\"",
+     "neu": "default_model=MODEL_DEFAULT",
+     "grund": "Konstante statt Literal"}
+  ]
+
+Wann ist eine Aenderung atomar?
+- "Ersetze alle X durch Y" (auch 22 Stellen in einer Datei) -> ATOMAR.
+- "Fuege X hinzu und passe alle Verwendungen an" -> ATOMAR.
+- "Refactoring einer Datei" (mehrere konsistente Aenderungen) -> ATOMAR.
+- "Mehrere unabhaengige Features" -> NICHT atomar.
+- "Aenderung in mehreren Dateien mit je eigener Logik" -> NICHT atomar.
+
+Wann NICHT atomar (atomarer_plan weglassen oder false):
+- Aufgabe fordert mehrere neue Features.
+- Mehrere Dateien mit unabhaengiger Aenderung.
+- Neue Datei plus Aenderung bestehender Datei.
+
+Bei atomarer_plan=true wird der Architect UEBERSPRUNGEN.
+Der Planner baut EINEN Task pro betroffener Datei mit allen
+Stellen. Der alte Zwischenzustand-Test (pytest nach jedem Task)
+wird NICHT gefahren -- nur nach dem letzten Task.
+Deshalb MUSS betroffene_stellen vollstaendig sein: fehlt eine
+Stelle, ist die Datei halb umgestellt und der Test rot.
+
+Wenn atomarer_plan=true, MUSS betroffene_stellen nicht leer sein.
+
 ## DEIN NACHFOLGER
 
 Der Architect bekommt deinen Auftrag + die Datei-Inhalte und liefert Prosa.
@@ -1701,6 +1739,72 @@ def _deterministic_entfernen_precheck(state) -> bool:
     return False
 
 
+def _tasks_aus_betroffenen_stellen(
+    scout_report: dict, aufgabe: str,
+) -> list[dict]:
+    """Fix AY (2026-10-31): Atomarer Plan -- 1 Task pro Datei.
+
+    Aus scout_report["betroffene_stellen"] (Liste von Dicts mit
+    datei/zeile/alt/neu/grund). Alle Stellen derselben Datei werden
+    in EINEN Task zusammengefasst, damit der Builder sie in einem
+    Rutsch patcht und der Verify-Pfad nur einmal nach dem letzten
+    Patch testet.
+
+    Kein Architect, kein Split. Der Scout hat die Stellen bereits
+    exakt benannt.
+    """
+    _stellen = scout_report.get("betroffene_stellen") or []
+    if not isinstance(_stellen, list) or not _stellen:
+        return []
+
+    # Gruppieren nach Datei
+    _per_file: dict[str, list[dict]] = {}
+    for _s in _stellen:
+        if not isinstance(_s, dict):
+            continue
+        _f = _s.get("datei")
+        if not isinstance(_f, str) or not _f:
+            continue
+        _per_file.setdefault(_f, []).append(_s)
+
+    tasks: list[dict] = []
+    for _idx, (_datei, _stellen_f) in enumerate(_per_file.items(), 1):
+        _zeilen_text: list[str] = []
+        for _s in _stellen_f:
+            _zeile = _s.get("zeile")
+            _alt = _s.get("alt", "")
+            _neu = _s.get("neu", "")
+            _grund = _s.get("grund", "")
+            _z = f"Z. {_zeile}: " if _zeile else ""
+            _zeilen_text.append(
+                f"- {_z}ersetze `{_alt}` durch `{_neu}` ({_grund})"
+            )
+        _desc = (
+            f"## {_datei}\n\n"
+            f"Atomare Aenderung (Scout-Plan, kein Architect).\n"
+            f"Alle Stellen in EINEM Rutsch ersetzen.\n"
+            f"Kein Zwischenzustand testen -- erst nach dem letzten"
+            f" Patch.\n\n"
+            f"### Stellen ({len(_stellen_f)}):\n"
+            + "\n".join(_zeilen_text)
+        )
+        tasks.append({
+            "id": f"t{_idx}",
+            "name": f"{_datei} atomar umstellen",
+            "action": "update",
+            "task_files": [_datei],
+            "description": _desc,
+        })
+
+    # Wenn der Scout mehrere Dateien nennt: atomarer Plan ist
+    # dann NICHT atomar -- warnen und leeren Plan liefern, der
+    # Aufrufer faellt auf den Architect-Pfad zurueck.
+    if len(tasks) > 1:
+        return []
+
+    return tasks
+
+
 def run_planner(state: RunState) -> bool:
     """Erstellt den Plan. Schreibt in state.tasks/tests/akzeptanzkriterien."""
     pd = state.project_dir
@@ -1973,6 +2077,28 @@ def run_planner(state: RunState) -> bool:
                 " dich nach dem CODE-INDEX, nicht nach dem Auftrag:\n"
                 + _w_block
             )
+
+    # Fix AY (2026-10-31): Atomarer Plan -- Architect ueberspringen.
+    # Der Scout hat betroffene_stellen exakt benannt und atomarer_plan
+    # auf true gesetzt. Der Planner baut direkt EINEN Task pro Datei.
+    if _scout_report and _scout_report.get("atomarer_plan") is True:
+        _atom_tasks = _tasks_aus_betroffenen_stellen(_scout_report, aufgabe)
+        if _atom_tasks:
+            audit("planner_atomarer_plan",
+                  {"tasks": len(_atom_tasks),
+                   "dateien": [t["task_files"][0] for t in _atom_tasks]},
+                  pd, pn)
+            state.tasks = _atom_tasks  # type: ignore[attr-defined]
+            # Marker, damit _plan_gate den Plan als gueltig sieht.
+            state.architect_prosa = "[atomarer Plan vom Scout]"
+            state.akzeptanzkriterien = list(
+                getattr(state, "akzeptanzkriterien", []) or []
+            )
+            return True
+        else:
+            audit("planner_atomarer_plan_verworfen",
+                  {"grund": "betroffene_stellen leer oder multi-file"},
+                  pd, pn)
 
     # CALL 1: Architect
     # GOLD: _planner_system baut ARCHITECT_SYSTEM + measured_files.
