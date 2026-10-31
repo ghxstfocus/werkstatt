@@ -116,4 +116,4 @@ def test_pytest_regression_requires_gesetzt():
         stages = data.get("stages", [])
         stage = next(s for s in stages if s.get("id") == "pytest_regression")
         assert stage.get("requires") == "{changed_non_test_py_files}"
-        assert stage.get("phase") == "post_build"
+        assert stage.get("phase") == "phase_end"
