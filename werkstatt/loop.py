@@ -2187,9 +2187,25 @@ def run_pipeline_loop(
             state.tests = data["tests"]  # type: ignore[attr-defined]
         if data.get("akzeptanzkriterien"):
             state.akzeptanzkriterien = data["akzeptanzkriterien"]  # type: ignore[attr-defined]
-        plan_ok = _plan_gate(state)
-        if plan_ok:
-            audit("loop_resume", {"tasks": len(getattr(state, "tasks", []))}, pd, pn)
+        # FIX (Fix AW-Resume) 2026-10-31: PhaseState mit tasks ist
+        # Source of Truth. _plan_gate prueft Planner-Output-Vollstaendigkeit
+        # (tasks+tests+akz). Bei Resume aus einer abgebrochenen PhaseState
+        # sind tests/akz oft nicht mehr befuellt -> _plan_gate False ->
+        # run_planner baut einen NEUEN Plan und ignoriert den PhaseState.
+        # Live-Beleg 2026-10-31 11:18: RERUN gegen security-ai, 7 Tasks
+        # in PhaseState, Resume geladen, aber Planner lieferte
+        # 1-Task-Plan auf 17 SQL-Migrationen. Fix: wenn PhaseState Tasks
+        # liefert, ist der Plan gueltig -- kein Planner.
+        if getattr(state, "tasks", []):
+            plan_ok = True
+            audit("loop_resume", {"tasks": len(getattr(state, "tasks", [])),
+                                  "quelle": "phase_state"}, pd, pn)
+        else:
+            plan_ok = _plan_gate(state)
+            if plan_ok:
+                audit("loop_resume",
+                      {"tasks": len(getattr(state, "tasks", [])),
+                       "quelle": "gate"}, pd, pn)
 
     if not plan_ok:
         audit("loop_plan_missing", {"aufgabe": aufgabe[:100]}, pd, pn)
