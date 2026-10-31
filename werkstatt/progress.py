@@ -53,11 +53,24 @@ def append(
     lines.append("")
     block = "\n".join(lines) + "\n"
 
+    # OP-036: Duplikat-Schutz. Wenn derselbe (name, status, info) schon
+    # in der Datei steht, skip. Verhindert doppelte PROGRESS.md-Eintraege
+    # wenn pipeline_phases bei einem Fehler mehrere _task_ende-Pfade
+    # durchlaeuft bevor `continue` greift.
+    _sig_parts = [f"-- {name}", f"- **Status:** {status}"]
+    if info:
+        _sig_parts.append(f"- **Info:** {info}")
+    _sig = "\n".join(_sig_parts)
+
     try:
         if progress_path.exists():
             current = progress_path.read_text(encoding="utf-8")
         else:
             current = f"# Fortschritt: {pd.name}\n\n"
+
+        # OP-036: schon vorhanden?
+        if _sig in current:
+            return False
         tmp = progress_path.with_suffix(".tmp")
         tmp.write_text(current + block, encoding="utf-8")
         tmp.replace(progress_path)
