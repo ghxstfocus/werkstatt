@@ -2320,9 +2320,10 @@ def run_pipeline_loop(
                 # read-Task mit leerem Patch: echter Fehler (Builder
                 # sollte hier nie laufen). Bei create/update: Idempotenz-
                 # Pfad unten pruefen (M-318).
+                # FIX AR 2026-10-31: continue statt return 1.
                 audit("loop_builder_failed", {"task_id": i, "action": _loop_action}, pd, pn)
                 _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="builder_failed")
-                return 1
+                continue
 
             # Idempotenz-Erkennung (nur create).
             # M-355: Loop-Idempotenz-Check entfernt. Der Builder
@@ -2356,13 +2357,10 @@ def run_pipeline_loop(
             audit("loop_task_failed", {"task_id": i, "grund": _split_failure}, pd, pn)
             _task_ende(state, phase_state, task_id, ok=False,
                        name=task_name, failure=_split_failure)
-            # K43b: bei split_max_tiefe NICHT den ganzen Loop abbrechen.
-            # Der Task ist failed, aber spaetere Tasks koennen weiterlaufen
-            # (die Phase ist dann inkonsistent, aber Loop-Erfolg zeigt es
-            # im footer korrekt als X/N).
-            if _split_failure == "split_max_tiefe":
-                continue
-            return 1
+            # K43b / FIX AR 2026-10-31: Task-Fail -> continue statt
+            # return 1. Spaetere Tasks koennen unabhaengig sein.
+            # Live-Beleg v6: t2 failte, t3-t7 nie versucht.
+            continue
 
         # GOLD 2026-10-30: Wenn der Builder das auftrag_bereits_erfuellt-
         # Flag gesetzt hat (weil die Zieldatei den Zielzustand schon
@@ -2655,7 +2653,8 @@ def run_pipeline_loop(
                 _task_ende(state, phase_state, task_id, ok=False,
                            name=task_name,
                            failure="reviewer_unvollstaendig")
-                return 1
+                # FIX AR 2026-10-31: continue statt return 1.
+                continue
             audit("loop_reviewer_rejected", {"task_id": i}, pd, pn)
             # M-314: Reviewer-Bug-Text als Kontext an Reflection.
             _reviewer_bugs = getattr(state, "reviewer_bugs", []) or []
@@ -2687,10 +2686,11 @@ def run_pipeline_loop(
                     _task_ende(state, phase_state, task_id, ok=False,
                                name=task_name,
                                failure="reviewer_rejected_no_patch")
-                    return 1
+                    # FIX AR 2026-10-31: continue statt return 1.
+                    continue
                 else:
                     _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected")
-                    return 1
+                    continue
             # M-306d Fix 2: Nach erfolgreicher Reflection MUSS der
             # Reviewer erneut pruefen. Sonst fail-open (HR-R9).
             if not run_reviewer(state):
@@ -2718,7 +2718,8 @@ def run_pipeline_loop(
                     _task_ende(state, phase_state, task_id, ok=False,
                                name=task_name,
                                failure="reviewer_divergenz")
-                    return 1
+                    # FIX AR 2026-10-31: continue statt return 1.
+                    continue
                 # M-399b: High-severity Bugs NIE ignorieren.
                 _high_bugs = [
                     b for b in (getattr(state, "reviewer_bugs", []) or [])
@@ -2737,10 +2738,8 @@ def run_pipeline_loop(
                     state.split_failure_grund = None  # type: ignore[attr-defined]
                     _task_ende(state, phase_state, task_id, ok=False,
                                name=task_name, failure=_split_failure)
-                    # K43b: bei split_max_tiefe NICHT abbrechen.
-                    if _split_failure == "split_max_tiefe":
-                        continue
-                    return 1
+                    # FIX AR 2026-10-31: continue statt return 1.
+                    continue
                 elif not _last_errors and _hat_patch:
                     audit("loop_reviewer_reject_ignoriert",
                           {"task_id": i, "grund": "pytest gruen nach Reflection"}, pd, pn)
@@ -2748,10 +2747,11 @@ def run_pipeline_loop(
                     audit("loop_reviewer_reject_fail_closed",
                           {"task_id": i, "grund": "kein_patch_angewendet"}, pd, pn)
                     _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected_no_patch")
-                    return 1
+                    # FIX AR 2026-10-31: continue statt return 1.
+                    continue
                 else:
                     _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected_after_reflection")
-                    return 1
+                    continue
             audit("loop_reviewer_approved_after_reflection", {"task_id": i}, pd, pn)
 
         _el_task = time.monotonic() - _t_task
@@ -2767,6 +2767,14 @@ def run_pipeline_loop(
         audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
 
     # 4. (M-476) Phase-End Verify NACH human_gate.
+
+    # FIX AS 2026-10-31: Partielle Bilanz auditieren, wenn Loop
+    # mit 0 < tasks_ok < total zum Human-Gate geht (Fix AR).
+    _total_tasks_as = len(getattr(state, "tasks", None) or [])
+    if 0 < tasks_ok < _total_tasks_as:
+        audit("loop_task_partial_ok",
+              {"done": tasks_ok, "total": _total_tasks_as,
+               "failed": _total_tasks_as - tasks_ok}, pd, pn)
 
     # K23c: Phase-End-Review VOR Human-Gate.
     group_start("Phase 4: Phase-End-Review")
