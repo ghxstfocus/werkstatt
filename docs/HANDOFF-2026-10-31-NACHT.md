@@ -163,3 +163,37 @@ client.py/ollama_client.py NICHT mehr vorhanden.
 - Zielprojekt-Commit: e94bb90
 - Audit-Log: /opt/werkstatt/audit-logs/agent-pipeline-2026-10-31.jsonl
 - RERUN-Logs: /tmp/rerun_delete{,2,3}.log
+
+## Nachtrag 2026-10-31 (nach AV): DeepSeek-Reste
+
+Zielprojekt-Commits: 10b1635 (get_ollama_base_url-Reste +
+generate_text-Bug), 1faa184 (routes_chat 500->502 + Chat-Tests).
+
+Geschlossen:
+- apps/dashboard/routes_settings.py + templates/settings.html:
+  ollama_base_url -> deepseek_base_url
+- harness/llm/deepseek_client.py: generate_text reichte model=None/
+  max_tokens=None an LLMRequest durch -> ValueError. Fix: nur
+  nicht-None uebergeben.
+- tests/unit/test_llm_client.py (OllamaClient, 17 Tests) ersetzt
+  durch tests/unit/test_deepseek_client.py (25 Tests).
+- apps/dashboard/routes_chat.py: _build_chat_service() war
+  AUSSERHALB des try-Blocks -> 500 statt 502 bei fehlendem Key.
+  Fix + Spec-Test test_chat_api_ohne_key_liefert_502.
+- tests/unit/test_dashboard_chat.py: Autouse-Fixture DEEPSEEK_API_KEY.
+- tests/unit/test_chat.py: 4 Tests auf deepseek-reasoner umgestellt
+  (qwen2.5:7b war hart kodiert).
+
+Befund zu Phase-Review-Bugs t1 aus RERUN 3:
+- Bug 1 (LLMResponse-Felder content/prompt_tokens/completion_tokens):
+  HALLUZINATION. deepseek_client.py nutzt text=, korrekt.
+- Bug 2 (generate_text fehlt): HALLUZINATION. Existiert, aber war
+  intern kaputt (None-Durchreichung) — zufaellig gefunden.
+- Bug 3 (is_available fehlt): HALLUZINATION. Existiert.
+
+Weiter offen (P2):
+- _MODEL_TIMEOUTS in apps/security_ai/chat.py kennt noch
+  llama3.2:3b/qwen2.5:7b. Fallback 60 s greift, aber Kandidat
+  fuer eigene Session.
+- Loop-Footer tasks_ok zaehlt nur Tasks des aktuellen Laufs
+  (siehe HARD-RULE 46).
