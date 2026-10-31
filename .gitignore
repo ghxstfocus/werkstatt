@@ -35,10 +35,9 @@ projects/.*.tmp.*
 projects/.backups/
 
 # W52b (2026-10-18): Laufzeit-State (Messungen, Contracts)
-.werkstatt/
+.werkstatt/*
 !werkstatt/templates/.werkstatt/
 !werkstatt/templates/.werkstatt/**
 !.werkstatt/verify.json
 a8_3_v2.txt
 
-!.werkstatt/verify.json

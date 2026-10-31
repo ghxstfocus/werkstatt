@@ -1,0 +1,68 @@
+{
+  "stages": [
+    {
+      "id": "py_compile_changed",
+      "command": [
+        "python3",
+        "-m",
+        "py_compile",
+        "{changed_py_files}"
+      ],
+      "phase": "post_build"
+    },
+    {
+      "id": "ruff_changed",
+      "command": [
+        "ruff",
+        "check",
+        "{changed_py_files}"
+      ],
+      "phase": "post_build"
+    },
+    {
+      "id": "pytest_changed",
+      "command": [
+        "python3",
+        "-m",
+        "pytest",
+        "{changed_test_files}",
+        "-q"
+      ],
+      "phase": "post_build"
+    },
+    {
+      "id": "py_compile_core",
+      "command": [
+        "python3",
+        "-m",
+        "py_compile",
+        "core/__init__.py",
+        "core/checks/__init__.py"
+      ],
+      "phase": "post_build"
+    },
+    {
+      "id": "pytest_regression",
+      "command": [
+        "python3",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "requires": "{changed_non_test_py_files}",
+      "phase": "phase_end",
+      "timeout": 600
+    },
+    {
+      "id": "pytest_full_checks",
+      "command": [
+        "python3",
+        "-m",
+        "pytest",
+        "tests/unit/test_checks.py",
+        "-q"
+      ],
+      "phase": "phase_end"
+    }
+  ]
+}
