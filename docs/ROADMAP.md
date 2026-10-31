@@ -19,8 +19,8 @@ und `PROGRESS.md` (Erledigt).
 
 ## Ist-Stand (2026-10-31)
 
-**Baseline (gemessen 2026-10-31):** 945 / 248 / 16 / - / -.
-- pytest: 945 passed, 5 skipped.
+**Baseline (gemessen 2026-10-31):** 958 / 248 / 16 / - / -.
+- pytest: 958 passed, 5 skipped.
 - ruff: 248 errors, 198 fixable (tests/ nie durchgerufft).
 - mypy: 16 errors (werkstatt/, nicht auf .).
 - AST + Katalog: Messung fehlt (AST-Tool entfernt, _KATALOG_SOLL fehlt).
@@ -67,9 +67,9 @@ Rollen: Explorer, Planner, Builder, Verify, Reviewer, Human-Gate.
 - `PROGRESS.md` — M-441..M-476 ergaenzen.
 - `docs/STATUS.md` — pruefen.
 
-### Phase 22: pipeline.py loeschen 🟡 (M-345, OFFEN)
+### Phase 22: pipeline.py loeschen ✅ (erledigt 2026-10-31)
 
-- `pipeline.py` (11.639 Zeilen) loeschen.
+- `pipeline.py` (11.639 Zeilen) wurde entfernt (M-345).
 - Voraussetzung: `werkstatt/agent.py` braucht keine Kopien mehr.
 
 ### Phase 23: Effizienz (M-479..M-482) 🔧
@@ -154,7 +154,7 @@ Reviewer-Signal, Commit-Message-Builder.
 
 | Block | Prio | Kurz |
 |---|---|---|
-| M-345 | 🟡 P2 | pipeline.py loeschen (11.639 Zeilen) |
+| ~~M-345~~ | ✅ | pipeline.py geloescht (erledigt) |
 | M-346 | 🟡 P2 | pipeline._approval_und_human_gate verschieben |
 | M-347 | 🟢 P3 | CLI-Einstiegspunkt |
 | M-341 | 🟢 P3 | Explorer ueberspringen bei task_files |

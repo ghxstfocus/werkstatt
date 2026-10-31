@@ -61,7 +61,7 @@ liefert nur pending.
 
 ## Pflicht-Befehle
 
-    pytest -q                              # 945 passed, 5 skipped (2026-10-31)
+    pytest -q                              # 958 passed, 5 skipped (2026-10-31)
     ruff check .                           # 248 errors, 198 fixable
     mypy werkstatt/                        # 16 errors in 7 files
     python3 -m tools.quality_gate --json   # exit 1, regression true (2026-10-31)

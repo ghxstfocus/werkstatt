@@ -11,7 +11,7 @@ Der Loop prüft, bevor er baut. Kein LLM-Token ohne Plan.
 
 **Stand 2026-10-31 (nach Doku-Migration, Scaffolder, Migrator):**
 
-- **Baseline:** 945 passed, 5 skipped.
+- **Baseline:** 958 passed, 5 skipped.
 - **Branch:** umbau/phase-2 (origin gepusht).
 - **Loop:** liest `docs/STATUS.md` reproduzierbar (3 Live-Tests:
   OP-005, OP-001, OP-002). OP-NNN-Disziplin greift.
