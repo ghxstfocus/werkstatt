@@ -239,3 +239,88 @@ Werkstatt: 892 passed, 5 skipped.
     Kategorien (Feld-Semantik, Timeout-Mapping) pruefen, ob eine
     Heuristik erganzt werden muss -- sonst bleibt die Kategorie
     ungefiltert (siehe 6dc67b0).
+
+## Fix AZ (2026-10-31): Agenten- und Loop-Refactor
+
+Commits: 6c31ff4, 6927486, a046adb, f98656f, 5ac9906, 31abe5c,
+ac1961d, bbfdc37, 703947f (9 Commits, umbau/phase-2).
+
+### Ausgangslage
+- loop.py 3247 Zeilen, 36 Top-Level-Funktionen, run_pipeline_loop
+  allein 1140 Zeilen.
+- planner.py 2166 Zeilen, vier LLM-Calls (Scout, Architect, Split,
+  Split-Single) in einer Datei.
+
+### Ziel-Struktur (jetzt)
+| Modul | Zeilen | Inhalt |
+|---|---|---|
+| loop.py | 1612 | main, _k13_rc, _run_with_progress, load_project_config, 4 _phase_*-Funktionen |
+| planner.py | 1517 | run_planner, Split-Logik, Preflight, Re-Exports |
+| scout.py | 476 | SCOUT_SYSTEM, _run_scout, _baue_api_index, _finde_api, _pruefe_api_widerspruch |
+| architect.py | 313 | ARCHITECT_SYSTEM, _planner_system, run_architect (neu) |
+| verify.py | 448 | _verify_patches, _verify_patches_soft, _expand_cmd_placeholders, Heartbeat |
+| reflection.py | 392 | _reflection_loop, _phase_end_reflection |
+| gates.py | 340 | _plan_gate, _human_gate_plan, _human_gate |
+| task_runner.py | 267 | _task_ende, _split_task_on_demand, _pruefe_prior_failed_dependency |
+| apply_patches.py | 234 | _apply_patches_with_hooks, _delete_ziel_erlaubt |
+| committer.py | 219 | _committe_zielprojekt, _task_fortschritt_block |
+| git_ops.py | 118 | 7 git-Wrapper |
+| hooks.py | 38 | _call_hook |
+
+### run_pipeline_loop (82 Zeilen)
+Ruft nur noch 4 Phasen:
+1. _phase_explorer_and_setup(state, aufgabe, project_name, phase_state) -> (rc, phase_state)
+2. _phase_plan_and_preflight(state, aufgabe, project_name, phase_state) -> (rc, done)
+3. _phase_tasks_loop(state, phase_state) -> (rc, tasks_ok, tasks)
+4. _phase_finalize(state, tasks_ok, tasks, project_name, phase_state) -> rc
+
+### Kritischer Mechanismus: Late-Binding-Proxies
+Tests patchen `werkstatt.loop._verify_patches`, `_call_hook`, `audit`,
+`_apply_patches_with_hooks`, `_task_ende`, `_with_spinner`,
+`_run_scout`, `_architect_system_with_builder` etc. Nach der
+Extraktion leben die Bodies in eigenen Modulen. Loesung:
+
+Jedes extrahierte Modul enthaelt Proxy-Funktionen, die den Namen
+bei JEDEM Aufruf aus `werkstatt.loop` (oder `werkstatt.planner`)
+neu aufloesen:
+
+    def _verify_patches(*args, **kwargs):
+        from werkstatt.loop import _verify_patches as _orig
+        return _orig(*args, **kwargs)
+
+Damit sehen Test-Patches auf `werkstatt.loop.X` auch die neuen
+Modul-Funktionen. Auto-Repair-Script fuer kuenftige Extraktionen
+(siehe 5ac9906): AST-Scan pro Modul, fehlende Namen als Proxies
+ergaenzen.
+
+### Test-Anpassungen (Verhalten unveraendert)
+4 Tests pruefen `inspect.getsource(run_pipeline_loop)` auf
+Code-Strings. Nach der Phase-Extraktion leben die Strings in
+_phase_*-Funktionen. Fix: Tests pruefen jetzt beide Quellen:
+
+    srcs = (
+        inspect.getsource(loop_mod.run_pipeline_loop)
+        + inspect.getsource(loop_mod._phase_plan_and_preflight)
+        + inspect.getsource(loop_mod._phase_tasks_loop)
+        + inspect.getsource(loop_mod._phase_finalize)
+    )
+
+Robust gegen weitere Refactor-Schritte. Betroffene Tests:
+- test_loop_planner_split.py (2x)
+- test_loop_phase_state_bereits_erfuellt.py (1x)
+- test_loop_phases.py (2x)
+
+### Offen (P3)
+loop.py 1612 Zeilen enthalten noch die 4 _phase_*-Funktionen
+(~1000 Zeilen zusammen). Kandidat fuer eine eigene Datei
+`pipeline_phases.py`, damit loop.py auf ~600 Zeilen schrumpft.
+Aber: die Phasen teilen sich lokale Variablen (state, phase_state,
+pd, pn, tasks) via Parameter -- sauber, koennte man in ein Modul
+ziehen. Kein Blocker.
+
+## HARD-RULE 48
+
+Bei Extraktion aus einem Modul mit Test-Patches: Late-Binding-
+Proxy statt direktem Import. Sonst sehen Test-Patches auf
+`werkstatt.<altmodul>.X` die neue Modul-Funktion nicht
+(5ac9906 als Muster, Auto-Repair-Script).
