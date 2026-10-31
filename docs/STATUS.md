@@ -1,9 +1,15 @@
-# Offene Bloecke — Werkstatt
+# Status — Werkstatt
+
+Format aus `DOC_CONVENTIONS.md` §5. Aktuell Übergangsformat:
+Tabellen mit Block-IDs (K/M/R). OP-NNN-Migration geplant.
+
+Letzte Aktualisierung: 2026-10-31.
+
 
 Stand: 2026-10-29 (nach P0/P1 Erledigung, RERUN 2026-10-29 20:16).
-Vorherige Liste: `OFFENE-BLOECKE-ARCHIV-2.md`.
+Vorherige Liste: `archiv/offene-bloecke-archiv-2.md`.
 
-Nur **offene** Bloecke. Erledigte stehen in `ERLEDIGT.md`.
+Nur **offene** Bloecke. Erledigte stehen in `PROGRESS.md`.
 Merkposten (M-Nummern) in `MERKPOSTEN.md`.
 
 ## Offene K-Fixes (Session 2026-10-26)
@@ -134,5 +140,5 @@ Das UI ist eine "IDE fuer Agenten": Chrome-Tabs oben (Projekte), CLI links (Live
 ## Verweise
 
 - `ROADMAP.md` — Phasen-Uebersicht.
-- `ERLEDIGT.md` — erledigte Bloecke.
+- `PROGRESS.md` — erledigte Bloecke.
 - `MERKPOSTEN.md` — M-Nummern.

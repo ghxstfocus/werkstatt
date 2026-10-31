@@ -1184,7 +1184,7 @@ NIEDRIG:
 5. ERLEDIGTE MERKPOSTEN (KURZREFERENZ)
 ================================================================
 
-Detaillierte Beschreibungen in Bau-Handoff-Archiv.md,
+Detaillierte Beschreibungen in archiv/bau-handoff-archiv.md,
 Abschnitt B.
 
   2183 A1a, A1b, A1c, A2, A3, A4/A5, B, C
@@ -5963,7 +5963,7 @@ Real gemessen (HEAD 5e50ea6, SCHRITT-Kommentare + AST):
   C9 = Z. 8855-8898 (Human-Gate, input(), Commit-Entscheidung)
   run_pipeline endet bei Z. 8898 (nicht 8841).
   Bereich 8762-8817 = C7-Rest, nicht C8.
-Korrektur ist in docs/OFFENE-BLOECKE.md eingepflegt (Z. 20).
+Korrektur ist in docs/STATUS.md eingepflegt (Z. 20).
 
 
 ---
@@ -5992,7 +5992,7 @@ Korrektur ist in docs/OFFENE-BLOECKE.md eingepflegt (Z. 20).
 
 ## Archiv
 
-Vorheriger Handoff (2026-10-18, W52b) in Bau-Handoff-Archiv.md.
+Vorheriger Handoff (2026-10-18, W52b) in archiv/bau-handoff-archiv.md.
 Vorgaenger-Handoff (2026-10-20, 3a-1c-2b "NO-GO") war ueberholt:
 3a-1c-2b ist done, 3a-1c-3 ist done, C6 gestrichen.
 
@@ -6119,7 +6119,7 @@ Naechster Kontext kann direkt hier ansetzen.
 Archiviert am: 2026-10-30 18:57:11
 
 Dies ist der alte Handoff (Session 2026-10-29 + Loop-Neubau 2026-10-30).
-Der aktuelle Handoff ist `Bau-Handoff.md`.
+Der aktuelle Handoff ist `archiv/bau-handoff.md`.
 
 # Bau-Handoff — Session 2026-10-29 (Durchbruch)
 
@@ -6319,7 +6319,7 @@ laeuft ausschliesslich ueber `werkstatt/*.py`.
 
 ## OFFEN (Prioritaet)
 
-Kanonische offene Liste: `docs/OFFENE-BLOECKE.md`.
+Kanonische offene Liste: `docs/STATUS.md`.
 Dieser Abschnitt fuehrt nur die session-relevanten P0-P4.
 
 ### ✅ P0 — `PLANNER_SPLIT_SYSTEM` an Gold-Format (erledigt `aa7881f`)
@@ -6355,7 +6355,7 @@ manuelle Browser-Tests.
 ### P3 — Doku-Ueberarbeitung
 - `AGENTS.md`: Agent-Kette (Scout, Architect, Planner, Builder,
   Reviewer).
-- `docs/ARCHITEKTUR.md`: Layer, API-Index, Prompt-Kette.
+- `docs/ARCHITECTURE.md`: Layer, API-Index, Prompt-Kette.
 - `docs/RUNBOOK.md`: RERUN, Debug, safe.directory.
 
 ### P4 — K14 / K18 (gross)
@@ -6369,7 +6369,7 @@ manuelle Browser-Tests.
 **Aus Session 2026-10-29 spaet (nach Handoff-Update):**
 
 - **M-487 erledigt** (`31c6ff3`), live bewiesen (`4e860c3`).
-- **Neuer offener Punkt `R-CHECK-1`** (siehe `docs/OFFENE-BLOECKE.md`):
+- **Neuer offener Punkt `R-CHECK-1`** (siehe `docs/STATUS.md`):
   Reviewer prueft Task-Zahlen nicht. Live-Beleg 20:42: Task verlangt
   `limit=10`, Builder schreibt `limit=5`, Phase-Review approved.
   Fix: `## KONSTANTEN-CHECK` in `REVIEWER_SYSTEM`.

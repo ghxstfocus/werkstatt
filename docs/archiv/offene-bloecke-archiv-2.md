@@ -1,8 +1,8 @@
 # Offene Bloecke — Werkstatt (Umbau)
 
 Stand: 2026-10-19 (Umbau-Start, HEAD be0cd3f).
-Vorherige Todos (vor Umbau): `OFFENE-BLOECKE-ARCHIV.md`.
-Uebersicht: `ROADMAP.md`. Erledigt: `ERLEDIGT.md`.
+Vorherige Todos (vor Umbau): `archiv/offene-bloecke-archiv.md`.
+Uebersicht: `ROADMAP.md`. Erledigt: `PROGRESS.md`.
 Ziel: `NEUBAU-ZIELBILD.md`. Inventar: `NEUBAU-INVENTAR.md`.
 
 Chronologisch nach Umbau-Phasen. Append-only pro Phase.
@@ -91,7 +91,7 @@ Noch keine Merkposten. Entstehen hier, sobald 3b abgeschlossen.
 
 | Block | Kategorie | Beschreibung | Aufwand | Status |
 |---|---|---|---|---|
-| Bau-Handoff-Refresh | 2 | `Bau-Handoff.md` nach Session-Ende auf Ist-Stand bringen (HEAD be0cd3f, Branch umbau/phase-2, 1229 Tests, ruff 17, mypy 7, AST 6, Katalog 167). | klein | offen |
+| Bau-Handoff-Refresh | 2 | `archiv/bau-handoff.md` nach Session-Ende auf Ist-Stand bringen (HEAD be0cd3f, Branch umbau/phase-2, 1229 Tests, ruff 17, mypy 7, AST 6, Katalog 167). | klein | offen |
 
 ## Referenz — Deadlock-Kette (dokumentiert, fuer 3a-3)
 
@@ -109,12 +109,12 @@ Der Phase-21-Deadlock war eine Kette:
 ## Verweise
 
 - `ROADMAP.md` — Phasen-Uebersicht.
-- `ERLEDIGT.md` — Erledigte Bloecke mit Commit/Tests.
+- `PROGRESS.md` — Erledigte Bloecke mit Commit/Tests.
 - `NEUBAU-ZIELBILD.md` — Ziel-Architektur.
 - `NEUBAU-INVENTAR.md` — 191 Funktionen, N1-N4, R-3.
 - `NEUBAU-ENTFERNUNG.md` — Entfernungs-Register.
 - `UEBERGABE-3A-2026-10-19.md` — Phase-3a-Uebergabe.
-- `OFFENE-BLOECKE-ARCHIV.md` — Todos vor Umbau.
+- `archiv/offene-bloecke-archiv.md` — Todos vor Umbau.
 
 ## 3a-1c-2b — Abnahme-Bericht (A13/A14/A15, 2026-10-21)
 
@@ -307,7 +307,7 @@ gemessen in Block 3, korrigiert in `6e11718`). Die 9 Parameter:
 
 3a-1c-2b ist **abgenommen** mit zwei Korrekturen an Commit-Body-Zahlen
 (A14-1: VOR 1242, NACH 1245 — korrekt aus ae25e08; 11 -> 9 Parameter war falsch, korrekt 10). Beide Korrekturen sind
-in `OFFENE-BLOECKE.md` als Merkposten dokumentiert.
+in `STATUS.md` als Merkposten dokumentiert.
 
 
 ## M-41 — A14-2-Widerspruch aufgeloest (2026-10-21, ehrlich)

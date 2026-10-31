@@ -4,7 +4,7 @@
 alte Test-Suite sind entfernt. Neue Suite: **432 passed, 5 skipped**.
 Der Loop laeuft ausschliesslich ueber `werkstatt/*.py`.
 
-Alter Handoff: `Bau-Handoff-Archiv.md` (Stand 2026-10-29 + Loop-Neubau).
+Alter Handoff: `archiv/bau-handoff-archiv.md` (Stand 2026-10-29 + Loop-Neubau).
 
 ---
 
@@ -178,7 +178,7 @@ Bugfix-Historie, sondern als Spec:
 
 ### 4. Kleinere offene Punkte
 
-- **`R-CHECK-1`** (in `docs/OFFENE-BLOECKE.md`): Reviewer prueft
+- **`R-CHECK-1`** (in `docs/STATUS.md`): Reviewer prueft
   Task-Zahlen nicht. Live-Beleg 2026-10-29 20:42: Task verlangt
   `limit=10`, Builder schreibt `limit=5`, Phase-Review approved.
   Fix: `## KONSTANTEN-CHECK` in `REVIEWER_SYSTEM`.
@@ -225,7 +225,7 @@ Bugfix-Historie, sondern als Spec:
 - Logs: `/tmp/rerun_*.log`
 - Prompt-Dumps: `/tmp/werkstatt-prompts/` (nur bei `WERKSTATT_PROMPT_DUMP=1`)
 - Backups: `/root/backups/{security-ai,werkstatt}/`
-- Alter Handoff: `/opt/werkstatt/Bau-Handoff-Archiv.md`
+- Alter Handoff: `/opt/werkstatt/archiv/bau-handoff-archiv.md`
 
 ---
 

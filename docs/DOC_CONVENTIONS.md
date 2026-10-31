@@ -33,7 +33,7 @@ docs/:
 - `ROADMAP.md` (Phasen, Milestones)
 - `ARCHITECTURE.md` (Modul-Map)
 - `CONVENTIONS.md` (Coding-Regeln)
-- `glossary.md` (NICHT `glossary/index.md`)
+- `glossary.md` (NICHT `glossary.md`)
 - `adr/README.md` (ADR-Index)
 - `adr/ADR-0001.md` (erste Entscheidung)
 
@@ -46,14 +46,14 @@ Manifest:
 
 | Verboten | Grund | Ersatz |
 |---|---|---|
-| `docs/README.md` | Diaetaxis sagt `index.md` | `docs/index.md` |
-| `docs/INDEX.md` | Kollision mit README | `docs/index.md` |
+| `docs/index.md` | Diaetaxis sagt `index.md` | `docs/index.md` |
+| `docs/index.md` | Kollision mit README | `docs/index.md` |
 | `docs/DECISIONS.md` | nicht ADR-konform | `docs/adr/` |
-| `docs/ERLEDIGT.md` | dupliziert PROGRESS | `STATUS.md#delete-zone` |
-| `docs/OFFENE-BLOECKE.md` | dupliziert STATUS | `STATUS.md` |
+| `PROGRESS.md` | dupliziert PROGRESS | `STATUS.md#delete-zone` |
+| `docs/STATUS.md` | dupliziert STATUS | `STATUS.md` |
 | `projects/<name>.phase.yaml` | dupliziert .werkstatt | `.werkstatt/<name>.phase.yaml` |
 | `docs/glossary/` als Ordner | Overhead | `docs/glossary.md` |
-| `Bau-Handoff-Archiv.md` im Root | unuebersichtlich | `docs/archiv/` |
+| `archiv/bau-handoff-archiv.md` im Root | unuebersichtlich | `docs/archiv/` |
 
 ## 4. Sprach-Regel
 

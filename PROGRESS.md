@@ -1,4 +1,7 @@
-# Erledigt — Werkstatt
+# Fortschritt — Werkstatt
+
+Append-only. Was hier steht, ist erledigt. Offene Punkte: `docs/STATUS.md`.
+
 
 Stand: 2026-10-18
 Append-only. Alte Eintraege nicht loeschen.

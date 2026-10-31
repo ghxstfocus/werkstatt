@@ -1,8 +1,8 @@
 # Roadmap — Werkstatt
 
 Stand: 2026-10-25 (nach M-472, ADaPT).
-Uebersicht. Details in `OFFENE-BLOECKE.md` (Todo)
-und `ERLEDIGT.md` (Erledigt).
+Uebersicht. Details in `STATUS.md` (Todo)
+und `PROGRESS.md` (Erledigt).
 
 ## Symbole
 
@@ -50,13 +50,13 @@ Rollen: Explorer, Planner, Builder, Verify, Reviewer, Human-Gate.
 
 ### Phase 21: Doku-Diataxis 🔧 (IN ARBEIT)
 
-- `docs/README.md` — Diátaxis-Map (angelegt).
+- `docs/index.md` — Diátaxis-Map (angelegt).
 - `AGENTS.md` — Routing (60 Zeilen).
 - `README.md` — Einstieg (66 Zeilen).
-- `docs/ARCHITEKTUR.md` — System-Map (93 Zeilen).
+- `docs/ARCHITECTURE.md` — System-Map (93 Zeilen).
 - `docs/ROADMAP.md` — diese Datei.
-- `docs/ERLEDIGT.md` — M-441..M-476 ergaenzen.
-- `docs/OFFENE-BLOECKE.md` — pruefen.
+- `PROGRESS.md` — M-441..M-476 ergaenzen.
+- `docs/STATUS.md` — pruefen.
 
 ### Phase 22: pipeline.py loeschen 🟡 (M-345, OFFEN)
 
@@ -125,7 +125,7 @@ Rollen: Explorer, Planner, Builder, Verify, Reviewer, Human-Gate.
 
 ## Verweise
 
-- `ERLEDIGT.md` — erledigte Bloecke
-- `OFFENE-BLOECKE.md` — offene Bloecke
+- `PROGRESS.md` — erledigte Bloecke
+- `STATUS.md` — offene Bloecke
 - `MERKPOSTEN.md` — M-Nummern
-- `ARCHITEKTUR.md` — System-Map
+- `ARCHITECTURE.md` — System-Map

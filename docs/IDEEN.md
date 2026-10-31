@@ -110,7 +110,7 @@ nicht loeschen.
   - security-ai: bleibt vorerst bei heutigen
     Namen. Migration spaeter.
 - Werkstatt-Doku:
-  - `docs/KONVENTION.md` (neu) mit vollstaendiger
+  - `docs/CONVENTIONS.md` (neu) mit vollstaendiger
     Konvention.
   - README kurzer Verweis.
 - Wann: vor dem Scaffolder-Block.

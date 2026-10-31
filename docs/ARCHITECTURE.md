@@ -86,8 +86,8 @@ Max 2 Ebenen tief. Abgeschlossene Tasks bleiben.
 
 ## 5. Doku-Verweise
 
-- `docs/README.md` — Diátaxis-Map
+- `docs/index.md` — Diátaxis-Map
 - `docs/NEUBAU-ZIELBILD.md` — Aktueller Loop als Zielbild
 - `docs/ROADMAP.md` — Phasen
-- `docs/ERLEDIGT.md` — Erledigte Blöcke
-- `docs/OFFENE-BLOECKE.md` — Offene Blöcke
+- `PROGRESS.md` — Erledigte Blöcke
+- `docs/STATUS.md` — Offene Blöcke

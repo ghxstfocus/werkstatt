@@ -419,12 +419,12 @@ def test_extract_files_aus_task_files_feld():
     from werkstatt.loop import _extract_files_from_tasks
     tasks = [
         {"id": "t1", "name": "Fix", "task_files": ["core/a.py", "core/b.py"]},
-        {"id": "t2", "name": "Doku", "task_files": ["docs/README.md"]},
+        {"id": "t2", "name": "Doku", "task_files": ["docs/index.md"]},
     ]
     files = _extract_files_from_tasks(tasks)
     assert "core/a.py" in files
     assert "core/b.py" in files
-    assert "docs/README.md" in files
+    assert "docs/index.md" in files
     assert len(files) == 3
 
 

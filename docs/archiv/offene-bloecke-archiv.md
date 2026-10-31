@@ -2,7 +2,7 @@
 
 Stand: 2026-10-18 (letzter Eintrag vor Umbau-Start).
 Dies ist das Archiv der Todo-Liste vor dem Umbau.
-Aktive Todos: siehe `OFFENE-BLOECKE.md`.
+Aktive Todos: siehe `STATUS.md`.
 Alter Inhalt unveraendert (249 Zeilen).
 
 ---
@@ -11,7 +11,7 @@ Alter Inhalt unveraendert (249 Zeilen).
 
 Stand: 2026-10-19 (nach W61-Pro, Feedback-Loop, Phase 21)
 Todo, priorisiert. Append-only.
-Uebersicht in `ROADMAP.md`. Erledigt in `ERLEDIGT.md`.
+Uebersicht in `ROADMAP.md`. Erledigt in `PROGRESS.md`.
 
 ## Prioritaet 1 (akut, blockiert Phase 20b)
 
@@ -112,9 +112,9 @@ messungen/<sha1>.txt` + `index.json` rein.
 ## Verweise
 
 - `ROADMAP.md` — Uebersicht Phasen/W-Bloecke.
-- `ERLEDIGT.md` — Erledigte Bloecke mit Commit/Tests.
-- `ARCHITEKTUR.md` — Ziel, Rollen, Luecken.
-- `KONVENTION.md` — Ordnerstruktur, Datei-Namen.
+- `PROGRESS.md` — Erledigte Bloecke mit Commit/Tests.
+- `ARCHITECTURE.md` — Ziel, Rollen, Luecken.
+- `CONVENTIONS.md` — Ordnerstruktur, Datei-Namen.
 - `ROLLEN-AUDIT.md` — Rollen-Stand (Sektion 8).
 
 ## W52b-E — Bestandsleser (nach W52b C+D+E)

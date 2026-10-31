@@ -4,8 +4,8 @@ Routing für Agenten. Keine Enzyklopädie.
 
 ## First Read
 
-1. `docs/README.md` — Doku-Map (Diátaxis)
-2. `docs/ARCHITEKTUR.md` — System-Map
+1. `docs/index.md` — Doku-Map (Diátaxis)
+2. `docs/ARCHITECTURE.md` — System-Map
 3. `docs/NEUBAU-ZIELBILD.md` — Aktueller Loop
 
 ## Loop-Start
@@ -41,7 +41,7 @@ liefert nur pending.
 ## Pflicht-Befehle
 
 ```bash
-pytest -q                              # 1448 passed
+pytest -q                              # (Zahl siehe pytest-Ausgabe)
 ruff check .                           # 13 errors
 mypy pipeline.py werkstatt/            # 11 errors
 pytest tests/test_audit_kinds.py -q    # 6 passed
@@ -53,8 +53,8 @@ python3 -m tools.quality_gate --json   # Exit 0 = ok
 
 ## Doku
 
-- docs/README.md — Diátaxis-Map
+- docs/index.md — Diátaxis-Map
 - docs/playbooks/ — How-to
 - docs/references/ — Reference
-- docs/ERLEDIGT.md — Erledigte Bloecke
-- docs/OFFENE-BLOECKE.md — Offene Bloecke
+- PROGRESS.md — Erledigte Bloecke
+- docs/STATUS.md — Offene Bloecke

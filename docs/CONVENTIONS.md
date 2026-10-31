@@ -14,7 +14,7 @@ Datei-Namen folgen einer festen Konvention.
     /opt/werkstatt/
     |-- README.md                Einstieg, Ziel, Stand
     |-- Bau-Handoff.md           Aktueller Stand (kompakt, < 500 Z.)
-    |-- Bau-Handoff-Archiv.md    Alte Handoffs (append-only)
+    |-- archiv/bau-handoff-archiv.md    Alte Handoffs (append-only)
     |-- pipeline.py              Orchestrierung
     |-- redaction.py             Redaction vor LLM-Calls
     |
@@ -115,14 +115,14 @@ Nicht committen (W34-Ignore). Enthaelt:
 | Information | Datei | Nicht in |
 |---|---|---|
 | Phasen-Uebersicht | docs/ROADMAP.md | Bau-Handoff.md |
-| Offene Bloecke | docs/OFFENE-BLOECKE.md | docs/ROADMAP.md |
-| Erledigte Bloecke | docs/ERLEDIGT.md | Bau-Handoff.md |
+| Offene Bloecke | docs/STATUS.md | docs/ROADMAP.md |
+| Erledigte Bloecke | PROGRESS.md | Bau-Handoff.md |
 | Aktueller Stand | Bau-Handoff.md | README.md |
 | Ziel des Systems | README.md, ARCHITEKTUR.md | ROADMAP.md |
 | Rollen-Stand | docs/ROLLEN-AUDIT.md | agents/*.md |
 | Rollen-Definition | agents/*.md | README.md |
 | Pipeline-Ablauf | docs/WORKFLOW.md | README.md |
-| Ordner-Konvention | docs/KONVENTION.md | README.md |
+| Ordner-Konvention | docs/CONVENTIONS.md | README.md |
 
 ## 5. Trennung Roadmap / Todo / Erledigt
 
@@ -131,15 +131,15 @@ Nicht committen (W34-Ignore). Enthaelt:
 - W-Bloecke: W31-W61, Status done/offen/blockiert.
 - Meilensteine. Keine Details.
 
-**docs/OFFENE-BLOECKE.md (Todo):**
+**docs/STATUS.md (Todo):**
 - Tabellarisch, priorisiert (P1/P2/P3).
 - Spalten: Block, Kategorie, Beschreibung, Aufwand.
 - Verweis auf ROADMAP.md.
 
-**docs/ERLEDIGT.md (Erledigt):**
+**PROGRESS.md (Erledigt):**
 - Tabellarisch, append-only.
 - Spalten: Block, Kategorie, Commit, Tests, Katalog.
-- Bei > 200 Zeilen: aeltere ins Bau-Handoff-Archiv.md.
+- Bei > 200 Zeilen: aeltere ins archiv/bau-handoff-archiv.md.
 
 ## 6. Bau-Handoff.md — kompakt
 
@@ -148,8 +148,8 @@ Ziel: < 500 Zeilen.
 Inhalt:
 - Kopf: Stand, HEAD (beide Repos), Tests (beide), Branch.
 - Aktueller Bau-Block (naechster Schritt).
-- Verweis auf docs/OFFENE-BLOECKE.md (Todo).
-- Verweis auf docs/ERLEDIGT.md (Erledigt).
+- Verweis auf docs/STATUS.md (Todo).
+- Verweis auf PROGRESS.md (Erledigt).
 - Verweis auf docs/ROADMAP.md (Uebersicht).
 - Wichtige Merkposten (W54-f, W57, W59, W61).
 
@@ -181,8 +181,8 @@ Jeder Doku-Commit nennt im Body:
 |---|---|---|
 | Bau-Handoff.md | 500 Zeilen | Lesbarkeit |
 | docs/ROADMAP.md | 200 Zeilen | Uebersicht |
-| docs/OFFENE-BLOECKE.md | 150 Zeilen | Lesbarkeit |
-| docs/ERLEDIGT.md | 200 Zeilen | danach Archiv |
+| docs/STATUS.md | 150 Zeilen | Lesbarkeit |
+| PROGRESS.md | 200 Zeilen | danach Archiv |
 | agents/builder.md | 300 Zeilen | LLM liest es sonst nicht |
 | agents/planner.md | 150 Zeilen | dito |
 | agents/reviewer.md | 250 Zeilen | dito |
@@ -204,9 +204,9 @@ Rollen-Sanierung fuer builder.md).
 
 ## 11. Verweise
 
-- `docs/ARCHITEKTUR.md` — Ziel-Architektur, Rollen, Luecken.
+- `docs/ARCHITECTURE.md` — Ziel-Architektur, Rollen, Luecken.
 - `docs/ROADMAP.md` — Phasen- und W-Block-Uebersicht.
-- `docs/OFFENE-BLOECKE.md` — Todo, priorisiert.
-- `docs/ERLEDIGT.md` — Abgeschlossene Bloecke.
+- `docs/STATUS.md` — Todo, priorisiert.
+- `PROGRESS.md` — Abgeschlossene Bloecke.
 - `docs/ROLLEN-AUDIT.md` — Rollen-Stand.
 - `docs/WORKFLOW.md` — Pipeline-Ablauf.

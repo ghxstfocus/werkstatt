@@ -98,7 +98,7 @@ statt davor.
 
 - docs/HANDOFF-BASELINE.md — kanonische Messbefehle.
 - docs/SESSION-BILANZ.md — Vor-Comm-SHAs pro Commit.
-- docs/OFFENE-BLOECKE.md — offene Todos.
+- docs/STATUS.md — offene Todos.
 - docs/MESS-INFRASTRUKTUR.md — Block M (Mess-Werkzeuge).
 
 
