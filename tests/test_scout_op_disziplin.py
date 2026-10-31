@@ -1,8 +1,24 @@
-"""Scout-Prompt-Haertung: OP-NNN-Disziplin bei vagen Aufgaben."""
+"""Scout-Prompt-Haertung: OP-NNN-Disziplin bei vagen Aufgaben.
+
+Whitespace-normalisiert, damit Zeilenumbrueche im Prompt-Text
+Tests nicht brechen.
+"""
 from __future__ import annotations
 from pathlib import Path
 
 SCOUT = Path("/opt/werkstatt/werkstatt/scout.py")
+
+
+def _norm(s: str) -> str:
+    return " ".join(s.split())
+
+
+def _section() -> str:
+    src = SCOUT.read_text(encoding="utf-8")
+    i = src.find("## OP-NNN-DISZIPLIN")
+    j = src.find("## DEIN NACHFOLGER")
+    assert i > 0 and j > i
+    return src[i:j]
 
 
 def test_op_disziplin_sektion_existiert():
@@ -11,25 +27,18 @@ def test_op_disziplin_sektion_existiert():
 
 
 def test_op_disziplin_waehlt_genau_einen():
-    src = SCOUT.read_text(encoding="utf-8")
-    i = src.find("## OP-NNN-DISZIPLIN")
-    j = src.find("## DEIN NACHFOLGER")
-    assert i > 0 and j > i
-    section = src[i:j]
-    assert "GENAU EINEN" in section
-    assert "NIEMALS zwei oder alle" in section
-    assert "ziel" in section
-    assert "OP-NNN: <Titel>" in section
+    s = _norm(_section())
+    assert "GENAU EINEN" in s
+    assert "NIEMALS zwei oder alle" in s
+    assert "ziel" in s
+    assert "OP-NNN: <Titel>" in s
 
 
 def test_op_disziplin_vage_erkannt():
-    src = SCOUT.read_text(encoding="utf-8")
-    i = src.find("## OP-NNN-DISZIPLIN")
-    j = src.find("## DEIN NACHFOLGER")
-    section = src[i:j]
+    s = _norm(_section())
     for kw in ("naechster Schritt", "unerledigte", "was ist zu tun",
                "offene Punkte"):
-        assert kw in section, f"Vage-Keyword fehlt: {kw}"
+        assert kw in s, f"Vage-Keyword fehlt: {kw}"
 
 
 def test_op_disziplin_reihenfolge_vor_nachfolger():
@@ -39,8 +48,6 @@ def test_op_disziplin_reihenfolge_vor_nachfolger():
     nf = src.find("## DEIN NACHFOLGER")
     assert op > 0
     assert nf > op
-    # Bereich zwischen den Markern ist im SCOUT_SYSTEM-String
-    # (SCOUT_SYSTEM = startet bei Zeile 34, endet mit schliessendem """)
     scout_start = src.find('SCOUT_SYSTEM = """')
     scout_end = src.find('"""', scout_start + 20) + 3
     assert scout_start < op < scout_end
@@ -48,9 +55,6 @@ def test_op_disziplin_reihenfolge_vor_nachfolger():
 
 def test_op_disziplin_nicht_vage_klausel():
     """Nicht-vage Aufgaben duerfen OP-NNN ignorieren."""
-    src = SCOUT.read_text(encoding="utf-8")
-    i = src.find("## OP-NNN-DISZIPLIN")
-    j = src.find("## DEIN NACHFOLGER")
-    section = src[i:j]
-    assert "NICHT vage" in section
-    assert "ignoriere OP-NNN" in section
+    s = _norm(_section())
+    assert "NICHT vage" in s
+    assert "ignoriere OP-NNN" in s
