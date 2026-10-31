@@ -428,7 +428,11 @@ def test_phase_review_skip_prueft_applied_count():
     """
     import inspect
     from werkstatt import loop as loop_mod
-    src = inspect.getsource(loop_mod.run_pipeline_loop)
+    # Fix AZ Stufe 8-D: Logik liegt jetzt in _phase_finalize.
+    src = (
+        inspect.getsource(loop_mod.run_pipeline_loop)
+        + inspect.getsource(loop_mod._phase_finalize)
+    )
     # Der Skip-Block muss applied_count pruefen
     assert "applied_count" in src
     # und _patches_leer aus applied_count ableiten
@@ -444,7 +448,11 @@ def test_alle_done_aus_phasestate():
     """
     import inspect
     from werkstatt import loop as loop_mod
-    src = inspect.getsource(loop_mod.run_pipeline_loop)
+    # Fix AZ Stufe 8-D: Logik liegt jetzt in _phase_finalize.
+    src = (
+        inspect.getsource(loop_mod.run_pipeline_loop)
+        + inspect.getsource(loop_mod._phase_finalize)
+    )
     # Pruefe, dass phase_state.get_task aufgerufen wird
     assert "phase_state.get_task" in src
     assert "_alle_done" in src
