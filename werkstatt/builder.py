@@ -582,12 +582,24 @@ def _build_patches_fuer_datei(
     pd = state.project_dir
     pn = state.project_name
     _target = pd / zieldatei
+    _ist_neu = False
+    _akt_action_m = ""
+    _task_m = getattr(state, "aktuelle_task", None)
+    if isinstance(_task_m, dict):
+        _akt_action_m = _task_m.get("action", "")
     if not _target.is_file():
-        return []
-    try:
-        _inhalt = _target.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
+        # FIX M 2026-10-31: create-Task — Datei existiert absichtlich
+        # noch nicht. Leerer Inhalt, LLM baut action="create" mit content.
+        if _akt_action_m == "create":
+            _inhalt = ""
+            _ist_neu = True
+        else:
+            return []
+    else:
+        try:
+            _inhalt = _target.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return []
 
     _task_fuer_filter = getattr(state, "aktuelle_task", None) or {}
     if isinstance(_task_fuer_filter, dict):
@@ -682,13 +694,26 @@ def _build_patches_fuer_datei(
     _task_desc = _task.get("description", "") if isinstance(_task, dict) else ""
     _verbote = _extrahiere_verbote(_abschnitt)
     _verbote_prefix = (_verbote + "\n\n") if _verbote else ""
+    if _ist_neu:
+        _datei_block = (
+            "## DATEI IST NEU (action=\"create\")\n"
+            "Die Zieldatei existiert noch nicht. Antworte mit:\n"
+            "{\"patches\": [{\"action\": \"create\", "
+            "\"file\": \"" + zieldatei + "\", "
+            "\"content\": \"<kompletter Datei-Inhalt>\"}]}\n"
+            "KEIN old_string, KEIN new_string. Nur content.\n"
+        )
+    else:
+        _datei_block = (
+            f"## AKTUELLER DATEI-INHALT:\n```\n{_inhalt}\n```\n"
+        )
     _user = (
         f"## ZIELDATEI: {zieldatei}\n\n"
         f"{_verbote_prefix}"
         f"## TASK: {_task_name}\n"
         f"## TASK-BESCHREIBUNG: {_task_desc}\n\n"
         f"## ARCHITECT-BESCHREIBUNG (fuer Kontext):\n{_abschnitt}\n\n"
-        f"## AKTUELLER DATEI-INHALT:\n```python\n{_inhalt}\n```\n"
+        f"{_datei_block}"
         f"{_feedback_block}"
     )
     reply = ask_llm(
