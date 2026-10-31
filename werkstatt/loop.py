@@ -2341,12 +2341,34 @@ def run_pipeline_loop(
                 continue
             # Reflection versuchen. Sie ruft run_builder + _apply_patches_with_hooks
             # intern; bei True ist der neue Patch schon angewendet.
-            if _reflection_loop(state):
+            # FIX AL 2026-10-31: Reflection-OK nur, wenn applied_count
+            # tatsaechlich gestiegen ist. Vorher: _verify_patches gab
+            # True bei "no changed files" (leere Stage), Task wurde
+            # als done markiert, obwohl nichts geschrieben wurde.
+            # Live-Beleg 2026-10-31 10:03 t1.
+            _applied_vor_al = int(
+                getattr(state, "applied_count", 0) or 0)
+            _refl_ok_al = _reflection_loop(state)
+            _applied_nach_al = int(
+                getattr(state, "applied_count", 0) or 0)
+            if _refl_ok_al and _applied_nach_al > _applied_vor_al:
                 _task_ende(state, phase_state, task_id, ok=True,
                            name=task_name)
                 audit("loop_task_ok", {"task_id": i, "name": task_name,
                                        "via": "reflection"},
                       pd, pn)
+            elif _refl_ok_al and _applied_nach_al <= _applied_vor_al:
+                # Reflection sagte "ok", aber nichts angewendet
+                audit("loop_reflection_no_apply",
+                      {"task_id": i,
+                       "applied_vorher": _applied_vor_al,
+                       "applied_nachher": _applied_nach_al}, pd, pn)
+                _task_ende(state, phase_state, task_id, ok=False,
+                           name=task_name,
+                           failure="reflection_ohne_apply")
+                audit("loop_task_failed",
+                      {"task_id": i,
+                       "grund": "reflection_ohne_apply"}, pd, pn)
             else:
                 _task_ende(state, phase_state, task_id, ok=False,
                            name=task_name,
