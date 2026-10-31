@@ -1,8 +1,13 @@
 project: homelab-security-ai
 project_dir: /opt/security-ai
 docs:
+  entry: AGENTS.md
+  status: docs/STATUS.md
+  roadmap: docs/ROADMAP.md
+  architecture: docs/ARCHITECTURE.md
   conventions: docs/CONVENTIONS.md
-  decisions: docs/DECISIONS.md
+  adr_index: docs/adr/README.md
+  glossary: docs/glossary.md
   security_log: docs/SECURITY_LOG.md
   web_security: docs/WEB_SECURITY_CHECKLIST.md
 always_run:

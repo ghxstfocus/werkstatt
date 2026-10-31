@@ -67,6 +67,25 @@ felder:
         kategorie: K
         typ: str
         alias: workflow
+      # DOC_CONVENTIONS.md §6 — Golden-Standard-Pflichtfelder
+      entry:
+        kategorie: K
+        typ: str
+      status:
+        kategorie: K
+        typ: str
+      roadmap:
+        kategorie: K
+        typ: str
+      architecture:
+        kategorie: K
+        typ: str
+      adr_index:
+        kategorie: K
+        typ: str
+      glossary:
+        kategorie: K
+        typ: str
 
   always_run:
     kategorie: K
