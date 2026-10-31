@@ -32,14 +32,6 @@ Letzte Aktualisierung: 2026-10-31.
 Hinweis: Live-Test 4 (2026-10-31) zeigt 1334 Tests in ~660s (~500ms/Test).
 Als `phase_end`-Stage (1x pro Loop) tragbar, aber teuer. Ursachen-Kandidaten:
 DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
-
-### OP-040: Mehrfache _task_ende-Aufrufe pro Task (Root-Cause OP-036)
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/pipeline_phases.py`
-- **Akzeptanzkriterien:** In `_phase_tasks_loop` gibt es pro Task maximal EINEN `_task_ende`-Aufruf. Alle Fehlerpfade enden mit `continue`. Mitigation (Duplikat-Check in `progress.append`, OP-036) bleibt als Sicherheitsnetz. Grep-Check: in `pipeline_phases.py` sind die `_task_ende`-Aufrufe nach `continue` gruppiert; kein Fall wo derselbe Task zweimal `_task_ende` bekommt.
-- **Tests:** `tests/test_pipeline_phases.py::test_ein_task_ende_pro_task` (pytest-Test mit gemocktem Fehlerpfad).
-- **Blockiert von:** —
-
 ### OP-041: Baseline-Revision (quality_gate rot)
 - **Status:** open
 - **Betroffene Dateien:** `tools/quality_gate.py`, `docs/HANDOFF-BASELINE.md`
@@ -340,6 +332,7 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 | OP-001 | Platzhalter ohne Inhalt | – | – |
 | OP-002 (K14) | stale: run_pipeline_loop nutzt 4 Phasen (nicht 7), nicht 601 Z. | – | – |
 | OP-007 (M-345) | pipeline.py geloescht (11.118 Z. -> 0) | erledigt 2026-10-31 | – |
+| OP-040 | erledigt 2026-10-31 (ca9c010) | Idempotenz-Guard in _task_ende | – |
 | OP-034 | erledigt 2026-10-31 (f37d5ae/ee95412/7a4ba7a) | pytest_regression am phase_end | – |
 | OP-036 | erledigt 2026-10-31 (a965810) | Duplikat-Check in progress.append | – |
 | OP-037 | kein Bug — Reviewer-Verhalten korrekt (audit-log 183709-29980) | keine Aenderung | – |

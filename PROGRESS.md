@@ -1183,3 +1183,7 @@ laeuft ausschliesslich ueber `werkstatt/*.py`.
 ## 2026-10-31T20:19:05+00:00 -- OP-036: Duplikat-Check in progress.append
 - **Status:** done
 - **Beleg:** Commit a965810. progress.append prueft Signatur (name, status, info) vor dem Schreiben. Root-Cause (mehrfache _task_ende-Aufrufe) bleibt als OP-040 offen.
+## 2026-10-31T21:58:41+00:00 -- OP-040: Idempotenz-Guard in _task_ende
+- **Status:** done
+- **Beleg:** Commit ca9c010. _task_ende prueft vor dem Schreiben den Task-Status (done/failed -> skip + Audit-Event 'loop_task_ende_skip'). Sicherheitsnetz fuer den Live-Test-5-Befund (patch_write_failed + reviewer_rejected_no_patch in derselben Sekunde). 5 neue Tests. Root-Cause-Aufraeumen in pipeline_phases.py (continue nach jedem Fehlerpfad) bleibt als OP-006-Folge offen.
+
