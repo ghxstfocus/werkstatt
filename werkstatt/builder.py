@@ -1389,9 +1389,14 @@ def run_builder(state: RunState) -> bool:
                    "grund": "falsche Datei"}, pd, pn)
             return False
         _paction = _p.get("action")
-        if _current_action2 == "update" and _paction != "update":
+        # Fix AV-3 2026-10-31: delete als Alternative zu update akzeptieren.
+        # Planner setzt bei "Datei entfernen"-Tasks action="update" (kennt
+        # delete nicht). Builder erkennt die Intention, liefert action=
+        # "delete". Vorher: builder_patch_invalid expected update -> Patch
+        # verworfen -> builder_failed. Live-Beleg 2026-10-31 11:22 t5/t6.
+        if _current_action2 == "update" and _paction not in ("update", "delete"):
             audit("builder_patch_invalid",
-                  {"action": _paction, "expected": "update"}, pd, pn)
+                  {"action": _paction, "expected": "update|delete"}, pd, pn)
             return False
         if _current_action2 == "create" and _paction != "create":
             audit("builder_patch_invalid",
