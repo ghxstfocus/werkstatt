@@ -218,6 +218,7 @@ def _baue_api_index(project_dir) -> dict:
         _entry = {
             "all": [],
             "classes": [],
+            "constants": [],
             "functions": [],
             "imports": [],
         }
@@ -230,6 +231,13 @@ def _baue_api_index(project_dir) -> dict:
                             _entry["all"] = list(_val) if isinstance(_val, (list, tuple)) else []
                         except (ValueError, SyntaxError):
                             pass
+                    elif isinstance(_t, _ast.Name):
+                        # Fix BB: Top-Level-Konstante
+                        _entry["constants"].append(_t.id)
+            elif isinstance(_node, _ast.AnnAssign):
+                # Fix BB: type-annotierte Konstante (X: int = 5)
+                if isinstance(_node.target, _ast.Name):
+                    _entry["constants"].append(_node.target.id)
             elif isinstance(_node, _ast.ClassDef):
                 _methods = []
                 for _m in _node.body:
@@ -299,37 +307,84 @@ def _format_api_index_for_prompt(index: dict, max_files: int = 40) -> str:
     return "\n".join(lines)
 
 
+def _normalisiere_api_name(name: str) -> tuple[str, str]:
+    """Fix BB: normalisiert Scout-Symbole fuer den Index-Match.
+
+    Formen:
+      "DEFAULT_MODEL (Konstante)"  -> ("DEFAULT_MODEL", "")
+      "DeepSeekClient.generate()"  -> ("generate", "DeepSeekClient")
+      "Class.method(...)"          -> ("method", "Class")
+      "func()"                     -> ("func", "")
+    """
+    _n = (name or "").strip()
+    # Suffix " (Konstante)" / " (Klasse)" etc. strippen
+    if " (" in _n:
+        _n = _n.split(" (", 1)[0].strip()
+    # Klammern und Argumente strippen
+    if "(" in _n:
+        _n = _n.split("(", 1)[0].strip()
+    # Punkt-Notation: Class.method
+    if "." in _n:
+        _parts = _n.rsplit(".", 1)
+        return _parts[1], _parts[0]
+    return _n, ""
+
+
 def _finde_api(index: dict, name: str) -> list:
-    """Deterministisch: sucht eine API (Funktion/Klasse/Methode) im Index."""
+    """Deterministisch: sucht eine API im Index.
+
+    Fix BB: akzeptiert Scout-Formen (Konstante-Suffix, Punkt-Notation,
+    Klammern). Sucht in functions, classes, constants, methods.
+    """
+    _clean, _class_hint = _normalisiere_api_name(name)
+    if not _clean:
+        return []
+
     _matches = []
     for _pfad, _info in index.items():
-        for _fn in _info.get("functions", []):
-            if _fn["name"] == name:
-                _matches.append({
-                    "pfad": _pfad,
-                    "kind": "function",
-                    "name": _fn["name"],
-                    "args": _fn["args"],
-                    "return": _fn["return"],
-                })
+        # Top-Level-Funktion (nur wenn kein class_hint)
+        if not _class_hint:
+            for _fn in _info.get("functions", []):
+                if _fn["name"] == _clean:
+                    _matches.append({
+                        "pfad": _pfad,
+                        "kind": "function",
+                        "name": _fn["name"],
+                        "args": _fn["args"],
+                        "return": _fn["return"],
+                    })
+        # Top-Level-Konstante
+        if not _class_hint:
+            for _const in _info.get("constants", []):
+                if _const == _clean:
+                    _matches.append({
+                        "pfad": _pfad,
+                        "kind": "constant",
+                        "name": _const,
+                    })
+        # Klassen
         for _c in _info.get("classes", []):
-            if _c["name"] == name:
+            if not _class_hint and _c["name"] == _clean:
                 _matches.append({
                     "pfad": _pfad,
                     "kind": "class",
                     "name": _c["name"],
                     "methods": [m["name"] for m in _c["methods"]],
                 })
+            # Methoden: nur wenn class_hint passt (oder kein hint)
             for _m in _c["methods"]:
-                if _m["name"] == name:
-                    _matches.append({
-                        "pfad": _pfad,
-                        "kind": "method",
-                        "class": _c["name"],
-                        "name": _m["name"],
-                        "args": _m["args"],
-                        "return": _m["return"],
-                    })
+                if _m["name"] != _clean:
+                    continue
+                if _class_hint and _c["name"] != _class_hint:
+                    continue
+                _matches.append({
+                    "pfad": _pfad,
+                    "kind": "method",
+                    "class": _c["name"],
+                    "name": _m["name"],
+                    "args": _m["args"],
+                    "return": _m["return"],
+                })
     return _matches
 
 

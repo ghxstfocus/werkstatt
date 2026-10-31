@@ -74,7 +74,8 @@ def test_index_leere_datei(tmp_path):
     idx = planner._baue_api_index(tmp_path)
     assert "leer.py" in idx
     assert idx["leer.py"] == {
-        "all": [], "classes": [], "functions": [], "imports": [],
+        "all": [], "classes": [], "constants": [],
+        "functions": [], "imports": [],
     }
 
 
