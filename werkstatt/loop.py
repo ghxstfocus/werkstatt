@@ -2366,6 +2366,10 @@ def run_pipeline_loop(
                 continue
 
         # Reviewer (Phase 9)
+        # FIX R 2026-10-31: Deterministischen Reviewer-Fail nicht
+        # durch "pytest gruen" ignorieren. Flag wird in run_reviewer
+        # gesetzt (z.B. reviewer_unvollstaendig).
+        state.reviewer_deterministic_fail = False  # type: ignore[attr-defined]
         _rev_ok = _with_spinner(f"Reviewer t{i}", lambda: run_reviewer(state))
         # K40: Historie pushen (unabhaengig vom Ergebnis).
         _cur_bugs = getattr(state, "reviewer_bugs", None) or []
@@ -2379,6 +2383,15 @@ def run_pipeline_loop(
             if len(_hist) > 5:
                 state.reviewer_bugs_history = _hist[-5:]  # type: ignore[attr-defined]
         if not _rev_ok:
+            # FIX R 2026-10-31: Deterministischer Fail = sofort
+            # task_fail, kein Reflection, kein Ignore.
+            if getattr(state, "reviewer_deterministic_fail", False):
+                audit("loop_reviewer_deterministic_fail",
+                      {"task_id": i}, pd, pn)
+                _task_ende(state, phase_state, task_id, ok=False,
+                           name=task_name,
+                           failure="reviewer_unvollstaendig")
+                return 1
             audit("loop_reviewer_rejected", {"task_id": i}, pd, pn)
             # M-314: Reviewer-Bug-Text als Kontext an Reflection.
             _reviewer_bugs = getattr(state, "reviewer_bugs", []) or []

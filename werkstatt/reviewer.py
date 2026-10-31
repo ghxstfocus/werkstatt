@@ -475,28 +475,45 @@ def run_reviewer(state: RunState) -> bool:
         _tf_q = _akt_early.get("task_files") or []
         _md_q = [f for f in _tf_q if isinstance(f, str) and f.endswith(".md")]
         if _md_q and _akt_early.get("action") == "create":
-            import re as _re_q
+            # FIX Q v2 2026-10-31: Schlagwort-Check statt Abschnitt-
+            # Anzahl. Der alte Parser zaehlte "ChatService.propose_action
+            # (principal, action, reason)" als 3 Abschnitte.
+            # Neue Regel: pruefe, ob die zentralen Konzept-Schlagworte
+            # aus der Aufgabe in der Datei vorkommen.
             _aufgabe_q = getattr(state, "aufgabe", "") or ""
-            _m_q = _re_q.search(r"Abschnitte:\s*(.+?)(?:\.\s|$)", _aufgabe_q)
-            if _m_q:
-                _abschnitte_q = [
-                    _a.strip() for _a in _m_q.group(1).split(",")
-                    if _a.strip() and len(_a.strip()) > 3
+            _md_pfad_q = Path(pd) / _md_q[0]
+            if _md_pfad_q.is_file():
+                _inhalt_q = _md_pfad_q.read_text(encoding="utf-8").lower()
+                # Bekannte Schlagwort-Gruppen — pro Begriff reicht EIN
+                # Treffer. Reihenfolge ist nur fuer Log-Klarheit.
+                _pflicht_konzepte = [
+                    ("zielbild", "zielbild"),
+                    ("chat_service", "chatservice"),
+                    ("rbac", "rbac"),
+                    ("audit", "audit"),
+                    ("abgrenzung", "abgrenzung"),
+                    ("akzeptanz", "akzeptanz"),
+                    ("test", "test"),
                 ]
-                _pfad_q = Path(pd) / _md_q[0]
-                if _pfad_q.is_file() and _abschnitte_q:
-                    _inhalt_q = _pfad_q.read_text(encoding="utf-8")
-                    _hat_q = len(_re_q.findall(
-                        r"^##\s+\S", _inhalt_q, _re_q.MULTILINE,
-                    ))
-                    _soll_q = len(_abschnitte_q)
-                    if _hat_q < _soll_q:
-                        audit("reviewer_unvollstaendig", {
-                            "datei": _md_q[0],
-                            "soll_abschnitte": _soll_q,
-                            "hat_abschnitte": _hat_q,
-                        }, pd, pn)
-                        return False
+                # Nur pruefen, wenn die Aufgabe diese Konzepte auch nennt
+                _fehlend_q: list[str] = []
+                for _label_q, _marker_q in _pflicht_konzepte:
+                    if _marker_q in _aufgabe_q.lower():
+                        if _marker_q not in _inhalt_q:
+                            _fehlend_q.append(_label_q)
+                if _fehlend_q:
+                    audit("reviewer_unvollstaendig", {
+                        "datei": _md_q[0],
+                        "fehlende_konzepte": _fehlend_q,
+                    }, pd, pn)
+                    # FIX R 2026-10-31: Deterministischer Fail darf
+                    # NICHT vom Loop ignoriert werden ("pytest gruen").
+                    # Flag setzen; loop.py prueft es vor task_ok.
+                    try:
+                        state.reviewer_deterministic_fail = True  # type: ignore[attr-defined]
+                    except (AttributeError, TypeError):
+                        pass
+                    return False
 
     aufgabe = getattr(state, "aufgabe", "")
     tests_ok = getattr(state, "baseline_gruen", True)
