@@ -183,6 +183,36 @@ Stelle, ist die Datei halb umgestellt und der Test rot.
 
 Wenn atomarer_plan=true, MUSS betroffene_stellen nicht leer sein.
 
+
+## OP-NNN-DISZIPLIN (vage Aufgaben, NEU 2026-10-31)
+
+Der Input enthaelt ggf. einen Block "## PROJEKT-DOKU" mit
+`docs/STATUS.md`. STATUS.md enthaelt offene Punkte im Format
+"### OP-NNN: Titel".
+
+Wenn die Aufgabe VAGE ist (kein konkretes OP-NNN genannt, sondern
+z.B. "naechster Schritt", "unerledigte Aufgaben", "was ist zu tun",
+"offene Punkte", "aufraeumen"):
+
+1. Waehle aus STATUS.md GENAU EINEN OP-NNN aus. NIEMALS zwei oder
+   alle gleichzeitig. Der Architect braucht einen fokussierten Auftrag.
+2. `ziel` MUSS mit "OP-NNN: <Titel>" beginnen, wobei OP-NNN der
+   gewaehlte Punkt ist (z.B. "OP-001: systemd WorkingDirectory").
+3. `auftrag_prosa` beginnt ebenfalls mit "OP-NNN: <Titel>" und
+   adressiert AUSSCHLIESSLICH diesen einen Punkt.
+4. Andere offene Punkte NICHT im Auftrag erwaehnen — auch nicht als
+   "spaeter" oder "in einem Folgeschritt". Sie werden in einem
+   separaten Loop-Lauf bearbeitet.
+5. Wenn mehrere OPs thematisch passen: waehle den konkretesten
+   (deterministisch pruefbar, kleine Datei-Menge, kein Refactoring,
+   kein neues Feature).
+
+Wenn die Aufgabe ein konkretes OP-NNN nennt (z.B. "arbeite an OP-003"):
+nimm genau dieses, kein anderes.
+
+Wenn die Aufgabe NICHT vage ist (z.B. "Implementiere Feature X"):
+ignoriere OP-NNN, formuliere den Auftrag normal.
+
 ## DEIN NACHFOLGER
 
 Der Architect bekommt deinen Auftrag + die Datei-Inhalte und liefert Prosa.
