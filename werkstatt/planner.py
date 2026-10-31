@@ -1756,6 +1756,33 @@ def run_planner(state: RunState) -> bool:
             + _erledigt[:3000]
         )
 
+    # FIX AF 2026-10-31: Fehlschlaege aus vorherigem Lauf zeigen.
+    # Bei --resume soll der Planner wissen, was schon gescheitert
+    # ist, statt blind den gleichen Plan zu bauen.
+    try:
+        from werkstatt.phase_state import PhaseState as _PS_af
+        _ps_af = _PS_af(pn, base_dir=Path(pd) / ".werkstatt")
+        if _ps_af.exists() and _ps_af.load():
+            _fails_af = [
+                t for t in (_ps_af.data.get("tasks") or [])
+                if isinstance(t, dict) and t.get("status") == "failed"
+            ]
+            if _fails_af:
+                user_content += "\n\n## VORHERIGE FEHLSCHLAEGE:\n"
+                for _f_af in _fails_af[:10]:
+                    _fid = _f_af.get("id", "?")
+                    _fname = (_f_af.get("name") or "")[:60]
+                    _fg = _f_af.get("failure") or "unbekannt"
+                    user_content += f"- {_fid} {_fname}: {_fg}\n"
+                user_content += (
+                    "\nBeruecksichtige diese Fehlschlaege im neuen Plan. "
+                    "Wenn ein Fehlschlag auf eine fehlende Voraussetzung "
+                    "hindeutet (z.B. Import fehlt, Datei fehlt), sorge "
+                    "dafuer, dass die Voraussetzung zuerst gebaut wird.\n"
+                )
+    except Exception:  # noqa: BLE001, S110
+        pass
+
     # M-375/M-376: Explorer-Kontext lesen (key_files + findings).
     _explorer_ctx = getattr(state, "explorer_context", None)
     if isinstance(_explorer_ctx, dict):

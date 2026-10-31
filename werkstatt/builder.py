@@ -627,9 +627,39 @@ def _build_patches_fuer_datei(
         audit("builder_architect_datei_nicht_beschrieben",
               {"datei": zieldatei}, pd, pn)
         return []
+    # FIX AF 2026-10-31: Vorherige Fehlschlaege fuer diese Zieldatei
+    # aus PhaseState laden. Bei --resume kennt der Builder sonst
+    # nicht, warum der letzte Versuch gescheitert ist.
+    _hist_fail = ""
+    try:
+        from werkstatt.phase_state import PhaseState as _PS_bf
+        _ps_bf = _PS_bf(pn, base_dir=Path(pd) / ".werkstatt")
+        if _ps_bf.exists() and _ps_bf.load():
+            for _t_bf in (_ps_bf.data.get("tasks") or []):
+                if not isinstance(_t_bf, dict):
+                    continue
+                if _t_bf.get("status") != "failed":
+                    continue
+                _tf_bf = _t_bf.get("task_files") or []
+                if zieldatei in _tf_bf:
+                    _fname_bf = (_t_bf.get("name") or "")[:60]
+                    _fg_bf = _t_bf.get("failure") or "unbekannt"
+                    _hist_fail += (
+                        f"- Task {_t_bf.get('id','?')} "
+                        f"({_fname_bf}): {_fg_bf}\n"
+                    )
+    except Exception:  # noqa: BLE001, S110
+        pass
+
     # M-444b: Feedback aus vorherigem Versuch einbauen.
     _feedback = (getattr(state, "builder_feedback", None) or {}).get(zieldatei, "")
     _feedback_block = ""
+    if _hist_fail:
+        _feedback_block = (
+            "\n\n## VORHERIGE FEHLSCHLAEGE FUER DIESE DATEI:\n"
+            + _hist_fail
+            + "Behebe die Ursache, nicht nur die Symptome.\n"
+        )
     if _feedback:
         _feedback_block = (
             f"\n\n## FEEDBACK AUS VORHERIGEM VERSUCH:\n"

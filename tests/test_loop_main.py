@@ -193,7 +193,30 @@ def test_main_fresh_legt_backup(tmp_path, monkeypatch):
 # E. Rollback / Stash-Pop
 # =====================================================================
 
-def test_main_rollback_bei_rc(tmp_path, monkeypatch):
+def test_main_rollback_bei_rc_mit_flag(tmp_path, monkeypatch):
+    """Fix AA: --rollback explizit -> reset wird aufgerufen."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    reset_calls: list = []
+
+    def _fake_reset(pd, ref):
+        reset_calls.append((str(pd), ref))
+        return True
+
+    with _silence_renderer(), _patch_main_config(tmp_path), \
+         patch("werkstatt.loop.run_pipeline_loop", _loop_runner(0, 1)), \
+         patch("werkstatt.loop._git_head", return_value="abc123"), \
+         patch("werkstatt.loop._git_dirty", return_value=False), \
+         patch("werkstatt.loop._git_reset", _fake_reset):
+        rc = loop.main(["--project", "p", "--aufgabe", "a",
+                        "--rollback"])
+    assert rc == 1
+    assert len(reset_calls) == 1
+    assert reset_calls[0][1] == "abc123"
+    assert len(_kind(tmp_path, "loop_rollback")) == 1
+
+
+def test_main_rollback_bei_rc_ohne_flag(tmp_path, monkeypatch):
+    """Fix AA: ohne --rollback bleibt der Tree unveraendert."""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     reset_calls: list = []
 
@@ -208,9 +231,8 @@ def test_main_rollback_bei_rc(tmp_path, monkeypatch):
          patch("werkstatt.loop._git_reset", _fake_reset):
         rc = loop.main(["--project", "p", "--aufgabe", "a"])
     assert rc == 1
-    assert len(reset_calls) == 1
-    assert reset_calls[0][1] == "abc123"
-    assert len(_kind(tmp_path, "loop_rollback")) == 1
+    assert len(reset_calls) == 0, "Rollback ohne --rollback aufgerufen"
+    assert len(_kind(tmp_path, "loop_rollback_skipped")) == 1
 
 
 def test_main_stash_pop_bei_erfolg(tmp_path, monkeypatch):

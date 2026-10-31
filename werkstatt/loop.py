@@ -604,6 +604,26 @@ def _task_ende(
             )
     else:
         phase_state.mark_failed(task_id, failure=failure or "unknown")
+        # FIX AE 2026-10-31: Eigene Spur in .werkstatt/abbrueche.jsonl.
+        # Ueberlebt Rollback (untracked), strukturiert durchsuchbar.
+        if pd is not None:
+            try:
+                import json as _json_ae
+                from datetime import UTC as _UTC_ae
+                from datetime import datetime as _dt_ae
+                _abr = Path(pd) / ".werkstatt" / "abbrueche.jsonl"
+                _abr.parent.mkdir(parents=True, exist_ok=True)
+                with _abr.open("a", encoding="utf-8") as _fh_ae:
+                    _fh_ae.write(_json_ae.dumps({
+                        "ts": _dt_ae.now(_UTC_ae).isoformat(
+                            timespec="seconds"),
+                        "task_id": task_id,
+                        "name": name or "",
+                        "failure": failure or "unknown",
+                        "dateien": list(dateien or []),
+                    }, ensure_ascii=True) + "\n")
+            except (OSError, TypeError):
+                pass
         if pd is not None:
             _progress.append(
                 pd,
@@ -1431,9 +1451,80 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     except Exception:  # noqa: BLE001
         _sha = ""
 
+    # FIX AH 2026-10-31: Flag setzen, damit der Loop-Ende-Pfad
+    # nicht doppelt PROGRESS.md schreibt.
+    try:
+        state.progress_written_at_commit = True  # type: ignore[attr-defined]
+    except (AttributeError, TypeError):
+        pass
     audit("loop_human_gate_committed",
           {"sha": _sha, "msg": _msg_kurz}, pd, pn)
     return True, _sha
+
+
+
+
+
+def _task_fortschritt_block(pd: Path, pn: str) -> str:
+    """FIX AD 2026-10-31: Task-Fortschritt aus PhaseState formatieren.
+
+    Zeigt dem User beim Human-Gate (und nach Resume), welche
+    Tasks bereits done sind und welche noch offen. Ohne diese
+    Anzeige war bei einem abgebrochenen Multi-Task-Lauf (t5
+    failed, t1-t4 ok) nicht sichtbar, dass 4/7 schon gebaut
+    wurden.
+
+    Format pro Task:
+      [x] t1 done
+      [!] t5 failed (grund)
+      [~] t6 running
+      [ ] t7 pending
+      [>] t2 split
+    """
+    from werkstatt.phase_state import PhaseState
+    try:
+        _ps = PhaseState(pn, base_dir=Path(pd) / ".werkstatt")
+        if not _ps.exists():
+            return ""
+        if not _ps.load():
+            return ""
+    except Exception:  # noqa: BLE001, S110
+        return ""
+    _tasks = _ps.data.get("tasks") or []
+    if not _tasks:
+        return ""
+    _done = 0
+    _failed = 0
+    _pending = 0
+    _lines: list[str] = []
+    for _t in _tasks:
+        if not isinstance(_t, dict):
+            continue
+        _st = _t.get("status", "pending")
+        _tid = _t.get("id", "?")
+        _name = (_t.get("name") or "")[:60]
+        if _st == "done":
+            _lines.append(f"  [x] {_tid} {_name}")
+            _done += 1
+        elif _st == "failed":
+            _fail_grund = _t.get("failure") or "unbekannt"
+            _lines.append(f"  [!] {_tid} {_name}  (failed: {_fail_grund})")
+            _failed += 1
+        elif _st == "running":
+            _lines.append(f"  [~] {_tid} {_name}")
+            _pending += 1
+        elif _st == "split":
+            _lines.append(f"  [>] {_tid} {_name}  (split)")
+        else:
+            _lines.append(f"  [ ] {_tid} {_name}")
+            _pending += 1
+    _total = len([t for t in _tasks if isinstance(t, dict)])
+    _head = (
+        f"Tasks: {_done}/{_total} done"
+        + (f", {_failed} failed" if _failed else "")
+        + (f", {_pending} offen" if _pending else "")
+    )
+    return _head + "\n" + "\n".join(_lines) + "\n"
 
 
 def _human_gate(state: RunState) -> int:
@@ -1502,7 +1593,12 @@ def _human_gate(state: RunState) -> int:
     except Exception:  # noqa: BLE001
         _stat_txt = "  (Diff nicht verfuegbar)"
 
-    _gate_body = f"Aenderungen im Zielprojekt:\n{_stat_txt}"
+    # FIX AD 2026-10-31: Task-Fortschritt VOR dem Diff anzeigen.
+    _fortschritt = _task_fortschritt_block(Path(pd), pn)
+    _gate_body = ""
+    if _fortschritt:
+        _gate_body = _fortschritt + "\n"
+    _gate_body += f"Aenderungen im Zielprojekt:\n{_stat_txt}"
     if _diff_txt:
         _gate_body += f"\n\n{_diff_txt}"
     try:
@@ -1838,7 +1934,14 @@ def run_pipeline_loop(
         phase_state = PhaseState(project_name, base_dir=Path(pd) / ".werkstatt")
         if phase_state.exists():
             phase_state.load()
-        # M-310c: failed-Tasks reaktivieren (Resume nach Abbruch).
+    # FIX AB 2026-10-31: resume_failed IMMER aufrufen, nicht nur
+    # wenn phase_state neu angelegt wurde. Vorher: main() uebergibt
+    # phase_state=_ps, also lief resume_failed im CLI-Pfad nie.
+    # Bei Resume eines abgebrochenen Multi-Task-Laufs (t5+failed)
+    # wurden die failed-Tasks nie wieder pending.
+    if phase_state is not None and phase_state.exists():
+        if not phase_state.data:
+            phase_state.load()
         _n_resume = phase_state.resume_failed()
         if _n_resume > 0:
             audit(
@@ -2363,6 +2466,13 @@ def run_pipeline_loop(
                                ok=False, name=task_name,
                                failure="patch_not_applied_nach_reflection")
                     break
+                # FIX AI 2026-10-31: applied_count++ erst NACH
+                # erfolgreichem Post-Verify. Vorher (Fix W) wurde
+                # der alte applied_count++ entfernt, aber nirgends
+                # neu hinzugefuegt. Folge: _patches_wirklich_angewendet
+                # war False, auch bei sauber angewendetem Patch.
+                # Position: nach write_text + nach _after-Check.
+                state.applied_count += 1  # type: ignore[attr-defined]
                 audit("loop_patch_updated", {"file": file}, pd, pn)
 
         # M-334b/M-351: post_tool_use entfernt (prueft Werkstatt statt
@@ -2612,11 +2722,10 @@ def run_pipeline_loop(
         audit("loop_erfolg", {"project_name": project_name}, pd, pn)
 
     # M-307b: Phasen-Ende in PROGRESS.md
-    # FIX 2026-10-31 (Fix K): Bei erfolgreichem Human-Gate-Commit
-    # hat _committe_zielprojekt den Eintrag schon VOR git add -A
-    # geschrieben. Nur bei Nicht-Commit (reject, auto-approve)
-    # hier nachschreiben, sonst doppelter Eintrag.
-    if rc != 0:
+    # FIX AH 2026-10-31: Wurde bei jedem Loop-Ende geschrieben,
+    # ausser wenn _committe_zielprojekt den Eintrag VOR git add
+    # geschrieben hat (Flag progress_written_at_commit).
+    if not getattr(state, "progress_written_at_commit", False):
         from werkstatt import progress as _progress
         _progress.append(
             pd,
@@ -2657,6 +2766,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--project", required=True,
                         help="Projektname (z.B. security-ai)")
+    parser.add_argument(
+        "--rollback",
+        action="store_true",
+        help="Bei Fehler git reset --hard auf Start-HEAD (default: aus). "
+             "Ohne Flag bleiben erfolgreiche Task-Aenderungen im Tree.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Aus .phase.yaml.fresh-bak laden (letzter abgebrochener Lauf). "
+             "Ohne Flag: aktuelle .phase.yaml.",
+    )
     parser.add_argument(
         "--fresh",
         action="store_true",
@@ -2739,9 +2860,18 @@ def main(argv: list[str] | None = None) -> int:
     state_ref: list[RunState] = [_state]
 
     _ps = PhaseState(args.project, base_dir=_pd / ".werkstatt")
-    # K24: --fresh -> alte .phase.yaml verwerfen, Phase neu.
-    if getattr(args, "fresh", False) and _ps.exists():
-        _bak = _ps.path.with_suffix(".yaml.fresh-bak")
+    _bak = _ps.path.with_suffix(".yaml.fresh-bak")
+    # FIX AC 2026-10-31: --resume laedt aus .fresh-bak (letzter
+    # abgebrochener Lauf). Ohne --resume/--fresh: aktuelle .phase.yaml.
+    if getattr(args, "resume", False) and _bak.exists():
+        try:
+            _bak.replace(_ps.path)
+        except OSError:
+            pass
+        _ps.load()
+        audit("loop_resume_from_bak", {"bak": str(_bak)},
+              _pd, args.project)
+    elif getattr(args, "fresh", False) and _ps.exists():
         try:
             _ps.path.replace(_bak)
         except OSError:
@@ -2769,14 +2899,25 @@ def main(argv: list[str] | None = None) -> int:
         except OSError:
             pass
 
+    # FIX AA 2026-10-31: Rollback nur bei explizitem --rollback.
+    # Vorher: bei rc!=0 wurde IMMER git reset --hard gemacht.
+    # Bei Multi-Task-Aufgaben (DeepSeek 7 Tasks) hat das t1-t4
+    # zerstoert, obwohl sie erfolgreich gebaut waren. Resume
+    # war unmoeglich, weil die Datei-Aenderungen weg waren.
+    _do_rollback = getattr(args, "rollback", False)
     if rc != 0:
-        # M-356: Fehler -> Tree auf start-HEAD zuruecksetzen.
-        audit("loop_rollback", {"rc": rc, "start_head": _start_head}, _pd, args.project)
-        _git_reset(_pd, _start_head)
+        if _do_rollback:
+            audit("loop_rollback",
+                  {"rc": rc, "start_head": _start_head,
+                   "grund": "explizit_angefordert"}, _pd, args.project)
+            _git_reset(_pd, _start_head)
+        else:
+            audit("loop_rollback_skipped",
+                  {"rc": rc, "start_head": _start_head,
+                   "grund": "kein_rollback_flag"}, _pd, args.project)
         if _had_stash:
-            _git_stash_pop(_pd)  # Nutzer-Aenderungen zurueckholen
+            _git_stash_pop(_pd)
     else:
-        # Erfolg: Loop-Aenderungen behalten.
         if _had_stash:
             audit("loop_stash_pop", {}, _pd, args.project)
             _git_stash_pop(_pd)
