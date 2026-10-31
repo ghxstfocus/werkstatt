@@ -179,12 +179,27 @@ def group_end() -> None:
         print("::endgroup::")
 
 
+_LAST_HEARTBEAT: dict[str, int] = {}
+
+
 def heartbeat(label: str, elapsed_s: int) -> None:
-    """Lebenszeichen fuer langlaufende Calls."""
-    if IS_LIVE:
+    """Lebenszeichen fuer langlaufende Calls.
+
+    Fix BA 2026-10-31: Fallback auf log_line, wenn kein Spinner
+    aktiv ist. Sonst landet der Heartbeat waehrend pytest_changed
+    (30+ s) im leeren Spinner (spinner_update ist No-Op ohne
+    laufenden Spinner) -- Live-Beleg 2026-10-31 13:04:
+    verify_failed nach 30 s Stille.
+    Throttle: max. alle 5 s dieselbe Zeile.
+    """
+    if IS_LIVE and _live is not None:
         spinner_update(label, f"{elapsed_s}s")
-    else:
-        _emit(f"  · {label} — {elapsed_s}s")
+        return
+    _last = _LAST_HEARTBEAT.get(label, -999)
+    if elapsed_s - _last < 5:
+        return
+    _LAST_HEARTBEAT[label] = elapsed_s
+    log_line(f"[{label}] laeuft ({elapsed_s}s)")
 
 
 TOTAL_PHASES = 5

@@ -308,6 +308,7 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
         if _venv_python != "python3":
             cmd = [_venv_python if c == "python3" else c for c in cmd]
         _executed_stages.append(stage.get("id", "?"))
+        _t_stage = _time.monotonic() if "_time" in dir() else None
         try:
             # M-390: Heartbeat alle 2s waehrend der Stage
             res = _verify_stage_with_heartbeat(

@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 from werkstatt.state import RunState
+from werkstatt.loop_renderer import log_line  # Fix BA
 
 
 def audit(*args, **kwargs):
@@ -86,6 +87,7 @@ def _reflection_loop(
     # K39a: merken, ob wir wegen Reviewer-Reject gestartet sind.
     _had_error_context = bool(error_context)
     for runde in range(1, max_runden + 1):
+        log_line(f"[reflection] Runde {runde}/{max_runden} startet")
         # K3: Wenn error_context gesetzt ist (Reviewer hat abgelehnt),
         # ist ein "Verify gruen" kein Grund zum Abbrechen — der Patch
         # ist semantisch falsch, auch wenn er kompiliert. Dann direkt
@@ -230,6 +232,7 @@ def _reflection_loop(
 
         audit("loop_reflection_patch_applied",
               {"runde": runde, "anzahl": _applied}, pd, pn)
+        log_line(f"[reflection] {_applied} Patches angewendet (Runde {runde})")
 
         # K47: Reflection-History Eintrag.
         _refl_hist = getattr(state, "reflection_history", None)
