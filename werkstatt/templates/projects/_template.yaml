@@ -1,0 +1,49 @@
+# projects/_template.yaml — Manifest (DOC_CONVENTIONS.md §6)
+# Kopieren nach projects/<name>.yaml und anpassen.
+project: <name>
+project_dir: /opt/<name>
+
+docs:
+  entry: AGENTS.md
+  status: docs/STATUS.md
+  roadmap: docs/ROADMAP.md
+  architecture: docs/ARCHITECTURE.md
+  conventions: docs/CONVENTIONS.md
+  adr_index: docs/adr/README.md
+  glossary: docs/glossary.md
+  progress: PROGRESS.md
+  changelog: CHANGELOG.md
+
+always_run:
+  - py_compile
+  - ruff
+  - mypy
+  - test_count
+  - git_status
+  - git_head
+
+optional_catalog:
+  - bandit
+  - pip_audit
+  - read_file
+  - mypy_tests
+
+agent_docs:
+  planner: [entry, status, roadmap, architecture]
+  reviewer: [conventions, glossary]
+  builder: [architecture, conventions]
+  test_generator: [conventions]
+  solver: [architecture, conventions]
+
+file_whitelist:
+  - docs/
+  - tests/
+
+venv_python: /opt/<name>/.venv/bin/python3
+
+require_human_approval: true
+review_commit_package: true
+
+git_author:
+  name: <name>
+  email: <email>
