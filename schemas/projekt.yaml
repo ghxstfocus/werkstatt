@@ -86,6 +86,13 @@ felder:
       glossary:
         kategorie: K
         typ: str
+      # Root-Doku (§2). Verhindert docs/PROGRESS.md-Duplikat.
+      progress:
+        kategorie: O
+        typ: str
+      changelog:
+        kategorie: O
+        typ: str
 
   always_run:
     kategorie: K

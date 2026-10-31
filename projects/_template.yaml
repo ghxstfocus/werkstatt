@@ -11,6 +11,8 @@ docs:
   conventions: docs/CONVENTIONS.md
   adr_index: docs/adr/README.md
   glossary: docs/glossary.md
+  progress: PROGRESS.md
+  changelog: CHANGELOG.md
 
 always_run:
   - py_compile

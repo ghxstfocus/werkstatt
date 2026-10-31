@@ -32,3 +32,23 @@ def test_schema():
     schluessel = schema["felder"]["docs"]["schluessel"]
     for feld in PFLICHT:
         assert feld in schluessel, f"schemas/projekt.yaml: docs.{feld}"
+
+
+def test_manifest_hat_root_doku():
+    """Haertung gegen docs/PROGRESS.md-Duplikat: Root-Dateien im Manifest."""
+    for rel in ("projects/security-ai.yaml", "projects/_template.yaml"):
+        docs = _load(rel).get("docs", {})
+        assert "progress" in docs, f"{rel}: docs.progress fehlt"
+        assert "changelog" in docs, f"{rel}: docs.changelog fehlt"
+
+
+def test_doc_conventions_verbietet_docs_progress():
+    text = (BASE / "docs/DOC_CONVENTIONS.md").read_text(encoding="utf-8")
+    assert "docs/PROGRESS.md" in text
+    assert "Duplikat zur Root-PROGRESS.md" in text or "Root-PROGRESS" in text
+
+
+def test_schema_hat_progress_und_changelog():
+    schluessel = _load("schemas/projekt.yaml")["felder"]["docs"]["schluessel"]
+    assert "progress" in schluessel
+    assert "changelog" in schluessel
