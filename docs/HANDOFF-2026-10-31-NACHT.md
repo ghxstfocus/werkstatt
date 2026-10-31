@@ -197,3 +197,45 @@ Weiter offen (P2):
   fuer eigene Session.
 - Loop-Footer tasks_ok zaehlt nur Tasks des aktuellen Laufs
   (siehe HARD-RULE 46).
+
+## Fix AX (2026-10-31): deterministischer Reviewer-Bug-Verifier
+
+Commit: 6dc67b0 (werkstatt, umbau/phase-2)
+
+Problem: REVIEWER_SYSTEM enthaelt vier Prompt-Checks (SEMANTIK,
+KONSTANTEN, SYMBOL, DATEI), aber keine Python-Funktion prueft die
+LLM-Behauptungen gegen den Code. Drei Halluzinationen aus RERUN 3
+(generate_text fehle, is_available fehle, LLMResponse-Felder falsch)
+liefen ungeprueft in _phase_end_reflection, die einen Reparatur-
+Versuch auf einen nicht-existenten Mangel startete.
+
+Fix: _verifiziere_reviewer_bugs(bugs, project_dir, project_name) in
+reviewer.py Z. 264. Aufruf in run_phase_end_review Z. 500 zwischen
+LLM-JSON-Parsing und high/medium-Zaehlung -- _pe_ok basiert damit
+auf verifizierten Bugs, nicht nur die Reflection.
+
+Heuristiken (konservativ):
+- "X(...) fehlt/nicht vorhanden/existiert nicht" -> ast.parse(file),
+  Symbol als FunctionDef/AsyncFunctionDef/ClassDef/AnnAssign gesucht.
+- "Datei <path> fehlt/existiert nicht" -> Path(project_dir/path).exists().
+- Sonst: Bug bleibt.
+
+Audit: reviewer_bug_widerlegt mit grund=symbol_existiert oder
+datei_existiert. Katalog in audit.py erweitert.
+
+Bewusste Grenze: semantische Behauptungen (HTTPError-Mapping,
+API-Paritaets-Listen, Feld-Semantik) sind nicht per AST pruefbar
+und werden durchgelassen. Diese Grenze ist der Preis dafuer, dass
+der Filter keinen echten Bug unterdrueckt.
+
+Tests: tests/test_reviewer_bug_verifier.py, 8 Faelle.
+Werkstatt: 892 passed, 5 skipped.
+
+## HARD-RULE 47
+
+47. Phase-Review-Behauptungen gegen den Code pruefen, bevor sie
+    an die Reflection gehen. Der Verifier (_verifiziere_reviewer_bugs)
+    faengt Symbol- und Datei-Halluzinationen. Bei neuen Bug-
+    Kategorien (Feld-Semantik, Timeout-Mapping) pruefen, ob eine
+    Heuristik erganzt werden muss -- sonst bleibt die Kategorie
+    ungefiltert (siehe 6dc67b0).
