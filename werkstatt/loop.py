@@ -419,6 +419,75 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
               project_dir, getattr(state, "project_name", "?"))
     return True
 
+
+
+# FIX AT 2026-10-31: Stage-Klassifikation nach Schwere.
+# Harte Stages: Code crasht, Tests brechen, DB-Schema kaputt.
+# Weiche Stages: Style/Lint, blockieren den Commit nicht.
+_HARTE_STAGE_PREFIXES = (
+    "py_compile", "pytest", "test", "test_",
+    "migrations_check", "schema", "import_check",
+)
+_WEICHE_STAGE_PREFIXES = (
+    "ruff", "lint", "mypy", "style", "format", "flake8",
+    "bandit", "pip_audit",
+)
+
+
+def _stage_ist_hart(stage_id: str) -> bool:
+    """FIX AT: Klassifiziert eine Verify-Stage als hart/weich."""
+    _sid = (stage_id or "").lower()
+    for _p in _HARTE_STAGE_PREFIXES:
+        if _sid.startswith(_p):
+            return True
+    for _p in _WEICHE_STAGE_PREFIXES:
+        if _sid.startswith(_p):
+            return False
+    # Unbekannt -> hart (fail-closed). Verhindert, dass
+    # unbekannte Stages stillschweigend ignoriert werden.
+    return True
+
+
+def _verify_patches_soft(
+    state: RunState, phase: str | None = None,
+) -> tuple[bool, list[str]]:
+    """FIX AT: Wie _verify_patches, aber liefert (hart_ok, weiche_errors).
+
+    hart_ok=True, weiche_errors=[...] -> Task war erfolgreich,
+    nur Style-Fehler. Loop markiert task mit Warnung, kein
+    task_failed.
+
+    hart_ok=False -> echter Fehler wie zuvor.
+    """
+    # Rufe _verify_patches auf (setzt last_verify_errors)
+    _ok = _verify_patches(state, phase=phase)
+    if _ok:
+        return True, []
+    _all_errors = list(getattr(state, "last_verify_errors", None) or [])
+    _hart = []
+    _weich = []
+    for _e in _all_errors:
+        _e_str = str(_e)
+        # Format: "stage_id: <message>"
+        _stage = _e_str.split(":", 1)[0].strip()
+        if _stage_ist_hart(_stage):
+            _hart.append(_e_str)
+        else:
+            _weich.append(_e_str)
+    if _hart:
+        # Echter Fehler. Nur harte Errors als last_verify_errors
+        # behalten (Reflection sieht sie).
+        state.last_verify_errors = _hart  # type: ignore[attr-defined]
+        return False, _weich
+    # Nur weiche Errors. Als "hart_ok" markieren.
+    audit("loop_verify_soft_fail",
+          {"errors": _weich, "phase": phase},
+          getattr(state, "project_dir", None) or Path("."),
+          getattr(state, "project_name", "?"))
+    return True, _weich
+
+
+
 def _extract_files_from_tasks(tasks: list) -> list[str]:
     """M-299i + M-306b: Datei-Pfade aus Task-Beschreibungen extrahieren.
 
@@ -2616,16 +2685,23 @@ def run_pipeline_loop(
         _ruff_fix_changed(state)
 
         # Post-Build Verify + Reflection (automatisch)
-        if not _verify_patches(state, phase="post_build"):
+        # FIX AT/AU 2026-10-31: Weiche Verify-Fehler (ruff, mypy)
+        # markieren Task als done mit Warnung, nicht als failed.
+        # Live-Beleg v7: t1 ok bis auf 2 ruff TRY004, als failed
+        # markiert trotz funktionalem Code.
+        _v_hart_ok, _v_weich = _verify_patches_soft(state, phase="post_build")
+        if not _v_hart_ok:
             audit("loop_gate_failed", {"gate": "post_build", "task_id": i}, pd, pn)
             if not _reflection_loop(state):
                 audit("loop_reflection_gescheitert", {"task_id": i}, pd, pn)
                 _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="post_build_verify_failed")
-                # K44b: Loop laeuft weiter, andere Tasks koennen noch
-                # gebaut werden. Phase ist inkonsistent (footer zeigt X/N),
-                # aber ein einzelner gescheiterter Task soll nicht den
-                # ganzen Lauf stoppen (vgl. K43b fuer split_max_tiefe).
                 continue
+        elif _v_weich:
+            # Weiche Fehler: Warnung auditieren, aber Task laeuft weiter
+            # zum Reviewer (der prueft Code-Substanz).
+            audit("loop_task_soft_fail",
+                  {"task_id": i, "warnungen": len(_v_weich),
+                   "errors": _v_weich[:3]}, pd, pn)
 
         # Reviewer (Phase 9)
         # FIX R 2026-10-31: Deterministischen Reviewer-Fail nicht
