@@ -46,14 +46,15 @@ Manifest:
 
 | Verboten | Grund | Ersatz |
 |---|---|---|
-| `docs/index.md` | Diaetaxis sagt `index.md` | `docs/index.md` |
-| `docs/index.md` | Kollision mit README | `docs/index.md` |
+| `docs/README.md` | Diaetaxis sagt `index.md` | `docs/index.md` |
+| `docs/INDEX.md` | Kollision mit README | `docs/index.md` |
 | `docs/DECISIONS.md` | nicht ADR-konform | `docs/adr/` |
-| `PROGRESS.md` | dupliziert PROGRESS | `STATUS.md#delete-zone` |
-| `docs/STATUS.md` | dupliziert STATUS | `STATUS.md` |
+| `docs/ERLEDIGT.md` | dupliziert PROGRESS | `PROGRESS.md` (root) |
+| `docs/OFFENE-BLOECKE.md` | dupliziert STATUS | `docs/STATUS.md` |
+| `docs/PROGRESS.md` | Duplikat zur Root-PROGRESS.md | `PROGRESS.md` (root) |
 | `projects/<name>.phase.yaml` | dupliziert .werkstatt | `.werkstatt/<name>.phase.yaml` |
 | `docs/glossary/` als Ordner | Overhead | `docs/glossary.md` |
-| `archiv/bau-handoff-archiv.md` im Root | unuebersichtlich | `docs/archiv/` |
+| `Bau-Handoff-Archiv.md` im Root | unuebersichtlich | `docs/archiv/` |
 
 ## 4. Sprach-Regel
 
