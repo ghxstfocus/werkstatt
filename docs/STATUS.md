@@ -273,6 +273,18 @@ Letzte Aktualisierung: 2026-10-31.
 - **Tests:** `tests/test_committer.py::test_commit_message_format`
 - **Blockiert von:** —
 
+
+### OP-039: security-ai Test-Suite 11 Min — messen und optimieren
+- **Status:** open
+- **Betroffene Dateien:** `tests/` in `/opt/security-ai`, ggf. `tests/conftest.py`
+- **Akzeptanzkriterien:** `pytest -q` in security-ai laeuft in < 120s (statt ~660s). `pytest --durations=20` zeigt die 20 langsamsten Tests; mind. Top-10 auf < 5s reduziert. Kein `sleep() > 1s` in Tests. Keine echten Netzwerk-Calls ohne Mock.
+- **Tests:** `.venv/bin/python -m pytest -q --durations=20 | tail -25`
+- **Blockiert von:** —
+
+Hinweis: Live-Test 4 (2026-10-31) zeigt 1334 Tests in ~660s (~500ms/Test).
+Als `phase_end`-Stage (1x pro Loop) tragbar, aber teuer. Ursachen-Kandidaten:
+DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
+
 ## Delete-Zone
 
 | Pfad | Warum entfernt | Ersetzt durch | Wiedereinfuehrung |

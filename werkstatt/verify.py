@@ -347,8 +347,11 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
         _t_stage = _time.monotonic() if "_time" in dir() else None
         try:
             # M-390: Heartbeat alle 2s waehrend der Stage
+            # OP-034b: Per-Stage-Timeout aus verify.json (default 300).
+            _stage_timeout = int(stage.get("timeout") or 300)
             res = _verify_stage_with_heartbeat(
                 cmd, str(project_dir), stage.get("id", "?"),
+                timeout=_stage_timeout,
             )
             if res.returncode != 0:
                 # K22a: stderr einbeziehen -- ruff schreibt auf stderr.
