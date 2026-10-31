@@ -219,6 +219,13 @@ def _delete_ziel_erlaubt(
     return True, ""
 
 
+
+def _get_git_diff_for_hook(*args, **kwargs):
+    """Late-Binding-Proxy fuer werkstatt.loop._get_git_diff_for_hook."""
+    from werkstatt.loop import _get_git_diff_for_hook as _orig
+    return _orig(*args, **kwargs)
+
+
 __all__ = [
     '_apply_one_patch',
     '_apply_patches_with_hooks',
