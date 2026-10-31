@@ -32,7 +32,5 @@ def _call_hook(hook_name: str, payload: dict) -> dict:
 
 
 
-PROJECTS_DIR = Path("/opt/werkstatt/projects")
-
 
 __all__ = ['_call_hook']

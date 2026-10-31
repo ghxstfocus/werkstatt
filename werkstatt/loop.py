@@ -80,6 +80,9 @@ from werkstatt.reviewer import run_reviewer
 from werkstatt.state import RunState
 
 
+PROJECTS_DIR = Path("/opt/werkstatt/projects")
+
+
 
 
 def _run_with_progress(
