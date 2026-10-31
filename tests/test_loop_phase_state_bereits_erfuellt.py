@@ -92,8 +92,16 @@ def test_tasks_ok_zaehler_bei_auftrag_bereits_erfuellt():
     """
     import inspect
     from werkstatt import loop as loop_mod
-    src = inspect.getsource(loop_mod.run_pipeline_loop)
-    # tasks_ok += 1 muss im Flag-Pfad stehen
+    # Fix AZ Stufe 8-C: Logik liegt jetzt in _phase_tasks_loop +
+    # _phase_plan_and_preflight. Beide pruefen -- robust gegen
+    # weitere Refactors.
+    src = (
+        inspect.getsource(loop_mod.run_pipeline_loop)
+        + inspect.getsource(loop_mod._phase_tasks_loop)
+        + inspect.getsource(loop_mod._phase_plan_and_preflight)
+    )
+    # tasks_ok += 1 muss in allen Pfaden stehen (Task-Loop +
+    # bereits_erfuellt-Pfad).
     assert src.count("tasks_ok += 1") >= 2, (
         "tasks_ok wird nicht in allen Pfaden hochgezaehlt"
     )

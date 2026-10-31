@@ -656,79 +656,21 @@ def _phase_plan_and_preflight(
     return 0, False
 
 
-def run_pipeline_loop(
-    project_name: str,
-    aufgabe: str,
-    state_ref: list[RunState],
-    *,
-    phasen_state: RunState | None = None,
-    phase_state: PhaseState | None = None,
-) -> int:
-    """Echter Loop: Plan -> Planner -> Builder -> Verify -> Reflection -> Human.
+def _phase_tasks_loop(
+    state: RunState,
+    phase_state,
+) -> tuple[int, int, list]:
+    """Phase 3 (Fix AZ Stufe 8-C, 2026-10-31): Autonomer Task-Loop.
 
-    phase_state: wenn uebergeben, persistiert PhaseState den
-    vollstaendigen Plan (tasks + tests + akz) und den
-    Task-Fortschritt. Resume-faehig.
+    Extrahiert aus run_pipeline_loop. Enthaelt den while-True-Loop
+    mit Task-Build, Reviewer, Reflection, Task-Fail-Continue.
+
+    Rueckgabe: (rc, tasks_ok, tasks).
+    rc=1 -> Caller gibt direkt zurueck (Abbruch).
+    rc=0 -> weiter mit Phase-End + Human-Gate.
     """
-
-    state = phasen_state or (state_ref[-1] if state_ref else None)
-
-    header(f"{project_name} — {aufgabe[:50]}")
-
-    # Projekt-Pfad aus Config aufloesen, falls nicht gesetzt
-    if state is not None and getattr(state, "project_dir", None) is None:
-        cfg = load_project_config(project_name)
-        if cfg.get("project_dir"):
-            state.project_dir = Path(cfg["project_dir"])  # type: ignore[attr-defined]
-
-    if state is None or getattr(state, "project_dir", None) is None:
-        # M-299b: Harter Abbruch statt Fallback auf pipeline.run_pipeline.
-        # Ohne diese Pruefung faellt der Loop still auf den Monolithen
-        # zurueck und "Loop funktioniert" ist nicht von "Loop delegiert
-        # an pipeline" unterscheidbar (HR-R9).
-        #
-        # Wer den Loop aufruft, muss einen state mit project_dir
-        # liefern. main() prueft das vorher (project_dir aus
-        # projects/<name>.yaml), Tests setzen es im _state-Helper.
-        _fb_pd = getattr(state, "project_dir", None) if state else None
-        if not isinstance(_fb_pd, Path):
-            _fb_pd = Path(".")
-        _fb_pn = getattr(state, "project_name", project_name) if state else project_name
-        audit(
-            "loop_fallback_failed",
-            {
-                "project_name": project_name,
-                "aufgabe": aufgabe[:100],
-                "reason": "state_none_or_no_project_dir",
-            },
-            _fb_pd,
-            _fb_pn,
-        )
-        return 1
-
     pd = state.project_dir
     pn = state.project_name
-
-    # 0. Aufgabe in State setzen (fuer Planner)
-    state.aufgabe = aufgabe  # type: ignore[attr-defined]
-
-    # Fix AZ Stufe 8-A: Explorer + Preflight + PhaseState-Init
-    _rc_exp, phase_state = _phase_explorer_and_setup(
-        state, aufgabe, project_name, phase_state,
-    )
-    if _rc_exp != 0:
-        return _rc_exp
-
-    # 1. Plan-Gate (leer -> Planner muss erst laufen)
-    #    Resume: wenn PhaseState vollstaendigen Plan-Checkpoint hat
-    #    (tasks + tests + akz), Planner ueberspringen und
-    #    state.* aus PhaseState befuellen.
-    # Fix AZ Stufe 8-B: Plan-Gate + Planner + Plan-Human-Gate + Pre-Build
-    _rc_plan, _done = _phase_plan_and_preflight(
-        state, aufgabe, project_name, phase_state,
-    )
-    if _done or _rc_plan != 0:
-        return _rc_plan
 
     # 3. Autonomer Task-Loop (Claude-Code-Prinzip)
     #    Alle Tasks werden abgearbeitet ohne Unterbrechung.
@@ -1002,7 +944,7 @@ def run_pipeline_loop(
                     # M-298d: Reflection statt stumm weiterlaufen.
                     if not _reflection_loop(state):
                         _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="old_string_not_found")
-                        return 1
+                        return 1, tasks_ok, tasks
                     break  # Retry mit korrigiertem Patch
                 # M-351a: Patch mit identischem Inhalt = no_effect.
                 if old_str == new_str and _match2 == "exact":
@@ -1025,7 +967,7 @@ def run_pipeline_loop(
                         _task_ende(state, phase_state, task_id,
                                    ok=False, name=task_name,
                                    failure="patch_not_applied")
-                        return 1
+                        return 1, tasks_ok, tasks
                     _task_ende(state, phase_state, task_id,
                                ok=False, name=task_name,
                                failure="patch_not_applied_nach_reflection")
@@ -1055,7 +997,7 @@ def run_pipeline_loop(
                         _task_ende(state, phase_state, task_id,
                                    ok=False, name=task_name,
                                    failure="patch_not_applied")
-                        return 1
+                        return 1, tasks_ok, tasks
                     # Reflection war "erfolgreich", aber der Patch
                     # wurde trotzdem nicht angewendet. Task fail.
                     _task_ende(state, phase_state, task_id,
@@ -1100,7 +1042,7 @@ def run_pipeline_loop(
         if not hook_res.get("allow", False):
             audit("loop_hook_blocked", {"hook": "simplify", "reason": hook_res.get("reason", "")}, pd, pn)
             if not _reflection_loop(state):
-                return 1
+                return 1, tasks_ok, tasks
 
         # M-467: ruff --fix auf geaenderte Dateien (deterministisch).
         # GOLD 2026-10-30: ausgelagert nach _ruff_fix_changed, damit
@@ -1264,6 +1206,88 @@ def run_pipeline_loop(
         state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
         _task_ende(state, phase_state, task_id, ok=True, name=task_name)
         audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
+
+    return 0, tasks_ok, tasks
+
+
+def run_pipeline_loop(
+    project_name: str,
+    aufgabe: str,
+    state_ref: list[RunState],
+    *,
+    phasen_state: RunState | None = None,
+    phase_state: PhaseState | None = None,
+) -> int:
+    """Echter Loop: Plan -> Planner -> Builder -> Verify -> Reflection -> Human.
+
+    phase_state: wenn uebergeben, persistiert PhaseState den
+    vollstaendigen Plan (tasks + tests + akz) und den
+    Task-Fortschritt. Resume-faehig.
+    """
+
+    state = phasen_state or (state_ref[-1] if state_ref else None)
+
+    header(f"{project_name} — {aufgabe[:50]}")
+
+    # Projekt-Pfad aus Config aufloesen, falls nicht gesetzt
+    if state is not None and getattr(state, "project_dir", None) is None:
+        cfg = load_project_config(project_name)
+        if cfg.get("project_dir"):
+            state.project_dir = Path(cfg["project_dir"])  # type: ignore[attr-defined]
+
+    if state is None or getattr(state, "project_dir", None) is None:
+        # M-299b: Harter Abbruch statt Fallback auf pipeline.run_pipeline.
+        # Ohne diese Pruefung faellt der Loop still auf den Monolithen
+        # zurueck und "Loop funktioniert" ist nicht von "Loop delegiert
+        # an pipeline" unterscheidbar (HR-R9).
+        #
+        # Wer den Loop aufruft, muss einen state mit project_dir
+        # liefern. main() prueft das vorher (project_dir aus
+        # projects/<name>.yaml), Tests setzen es im _state-Helper.
+        _fb_pd = getattr(state, "project_dir", None) if state else None
+        if not isinstance(_fb_pd, Path):
+            _fb_pd = Path(".")
+        _fb_pn = getattr(state, "project_name", project_name) if state else project_name
+        audit(
+            "loop_fallback_failed",
+            {
+                "project_name": project_name,
+                "aufgabe": aufgabe[:100],
+                "reason": "state_none_or_no_project_dir",
+            },
+            _fb_pd,
+            _fb_pn,
+        )
+        return 1
+
+    pd = state.project_dir
+    pn = state.project_name
+
+    # 0. Aufgabe in State setzen (fuer Planner)
+    state.aufgabe = aufgabe  # type: ignore[attr-defined]
+
+    # Fix AZ Stufe 8-A: Explorer + Preflight + PhaseState-Init
+    _rc_exp, phase_state = _phase_explorer_and_setup(
+        state, aufgabe, project_name, phase_state,
+    )
+    if _rc_exp != 0:
+        return _rc_exp
+
+    # 1. Plan-Gate (leer -> Planner muss erst laufen)
+    #    Resume: wenn PhaseState vollstaendigen Plan-Checkpoint hat
+    #    (tasks + tests + akz), Planner ueberspringen und
+    #    state.* aus PhaseState befuellen.
+    # Fix AZ Stufe 8-B: Plan-Gate + Planner + Plan-Human-Gate + Pre-Build
+    _rc_plan, _done = _phase_plan_and_preflight(
+        state, aufgabe, project_name, phase_state,
+    )
+    if _done or _rc_plan != 0:
+        return _rc_plan
+
+    # Fix AZ Stufe 8-C: Autonomer Task-Loop
+    _rc_task, tasks_ok, tasks = _phase_tasks_loop(state, phase_state)
+    if _rc_task != 0:
+        return _rc_task
 
     # 4. (M-476) Phase-End Verify NACH human_gate.
 
