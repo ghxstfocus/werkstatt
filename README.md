@@ -58,9 +58,9 @@ liefert nur `pending`.
 
 ## Doku
 
-- `docs/README.md` — Diátaxis-Map
-- `docs/ARCHITEKTUR.md` — System-Map
+- `docs/index.md` — Diátaxis-Map
+- `docs/ARCHITECTURE.md` — System-Map
 - `docs/NEUBAU-ZIELBILD.md` — Aktueller Loop
-- `docs/ERLEDIGT.md` — Erledigte Blöcke
-- `docs/OFFENE-BLOECKE.md` — Offene Blöcke
+- `PROGRESS.md` — Erledigte Blöcke
+- `docs/STATUS.md` — Offene Blöcke
 - `AGENTS.md` — Agenten-Routing
