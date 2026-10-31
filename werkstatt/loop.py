@@ -135,16 +135,30 @@ def _expand_cmd_placeholders(
     if not changed:
         try:
             import subprocess as _sp
+            # FIX V 2026-10-31: status --porcelain -uall erfasst auch
+            # untracked (create-Tasks). diff --name-only verschweigt
+            # sie. Live-Beleg 2026-10-31 08:15: py_compile_changed +
+            # ruff_changed wurden uebersprungen, obwohl
+            # docs/PLAN_CHAT_ACTIONS.md neu war.
             _res = _sp.run(
-                ["git", "-C", str(project_dir), "diff", "--name-only",
-                 "HEAD"],
+                ["git", "-C", str(project_dir), "status", "--porcelain",
+                 "-uall"],
                 capture_output=True, text=True, timeout=10, check=False,
             )
             if _res.returncode == 0 and _res.stdout.strip():
-                changed = [
-                    f for f in _res.stdout.strip().splitlines()
-                    if f and (Path(project_dir) / f).exists()
-                ]
+                # FIX X 2026-10-31: splitlines() OHNE strip() — sonst
+                # geht das fuehrende Leerzeichen von " M path"
+                # verloren (live: ' M a.py' wurde zu '.py').
+                _new_changed = []
+                for _ln in _res.stdout.splitlines():
+                    if not _ln or not _ln.strip():
+                        continue
+                    _p = _ln[3:].strip() if len(_ln) > 3 else ""
+                    if " -> " in _p:
+                        _p = _p.split(" -> ", 1)[1]
+                    if _p and (Path(project_dir) / _p).exists():
+                        _new_changed.append(_p)
+                changed = _new_changed
         except Exception:  # noqa: BLE001, S110
             pass
 
@@ -1337,15 +1351,21 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     # Fake-Done. Nutzt status --porcelain (erfasst auch
     # untracked, die diff --name-only verschweigt).
     try:
-        _status_lines = subprocess.run(
+        # FIX X 2026-10-31: splitlines() OHNE strip() — sonst geht
+        # das fuehrende Leerzeichen von " M path" verloren und
+        # ln[3:] schneidet 2 Zeichen zu weit ab (live: ' M a.py'
+        # wurde zu '.py').
+        _status_raw = subprocess.run(
             ["git", "-C", str(pd), "status", "--porcelain", "-uall"],
             capture_output=True, text=True, check=False, timeout=10,
-        ).stdout.splitlines()
+        ).stdout
     except Exception:  # noqa: BLE001
-        _status_lines = []
+        _status_raw = ""
     _diff_set = set()
-    for _ln in _status_lines:
-        # Format: "XY path" — X=Index, Y=Worktree, path ab Spalte 3
+    for _ln in _status_raw.splitlines():
+        if not _ln or not _ln.strip():
+            continue
+        # Format: "XY path" — path ab Spalte 3 (2 Status + 1 Space)
         _p = _ln[3:].strip() if len(_ln) > 3 else ""
         if _p and " -> " in _p:
             _p = _p.split(" -> ", 1)[1]
@@ -2267,9 +2287,12 @@ def run_pipeline_loop(
                 _neu_content2, _match2 = _apply_one_patch(
                     file_content, old_str, new_str,
                 )
-                if _match2 != "fail":
-                    target.write_text(_neu_content2)
-                    state.applied_count += 1  # type: ignore[attr-defined]
+                # FIX W 2026-10-31: Doppel-Schreiben entfernt. Der
+                # alte write_text+applied_count++ stand hier VOR
+                # dem "erst pruefen, dann schreiben"-Check. Live-
+                # Beleg: applied_count doppelt gezaehlt, und
+                # Schreibfehler beim ersten write_text unbehandelt.
+                # Der korrekte Pfad ist weiter unten (try/except).
                 if _match2 == "fail":
                     audit("loop_patch_old_string_not_found",
                           {"file": file, "old": old_str[:50]}, pd, pn)
