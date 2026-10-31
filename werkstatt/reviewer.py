@@ -467,6 +467,37 @@ def run_reviewer(state: RunState) -> bool:
         audit("reviewer_kein_diff_kein_patch", {}, pd, pn)
         return True  # Nichts zu reviewen (read-only / kein task_files)
 
+    # FIX Q 2026-10-31: Deterministischer Vollstaendigkeits-Check
+    # fuer create-Tasks mit .md-Dateien. Live-Beleg 2026-10-31 08:07:
+    # Datei mit 3/8 Abschnitten, Reviewer hat approved.
+    _akt_early = getattr(state, "aktuelle_task", None)
+    if isinstance(_akt_early, dict):
+        _tf_q = _akt_early.get("task_files") or []
+        _md_q = [f for f in _tf_q if isinstance(f, str) and f.endswith(".md")]
+        if _md_q and _akt_early.get("action") == "create":
+            import re as _re_q
+            _aufgabe_q = getattr(state, "aufgabe", "") or ""
+            _m_q = _re_q.search(r"Abschnitte:\s*(.+?)(?:\.\s|$)", _aufgabe_q)
+            if _m_q:
+                _abschnitte_q = [
+                    _a.strip() for _a in _m_q.group(1).split(",")
+                    if _a.strip() and len(_a.strip()) > 3
+                ]
+                _pfad_q = Path(pd) / _md_q[0]
+                if _pfad_q.is_file() and _abschnitte_q:
+                    _inhalt_q = _pfad_q.read_text(encoding="utf-8")
+                    _hat_q = len(_re_q.findall(
+                        r"^##\s+\S", _inhalt_q, _re_q.MULTILINE,
+                    ))
+                    _soll_q = len(_abschnitte_q)
+                    if _hat_q < _soll_q:
+                        audit("reviewer_unvollstaendig", {
+                            "datei": _md_q[0],
+                            "soll_abschnitte": _soll_q,
+                            "hat_abschnitte": _hat_q,
+                        }, pd, pn)
+                        return False
+
     aufgabe = getattr(state, "aufgabe", "")
     tests_ok = getattr(state, "baseline_gruen", True)
 

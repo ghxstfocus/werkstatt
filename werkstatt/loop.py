@@ -699,7 +699,14 @@ def _apply_patches_with_hooks(
             audit("loop_patch_old_string_not_found",
                   {"file": _f, "phase": phase_label}, pd, pn)
             continue
-        _target.write_text(_neu_content, encoding="utf-8")
+        # FIX N 2026-10-31: Write-Fehler fail-closed.
+        try:
+            _target.write_text(_neu_content, encoding="utf-8")
+        except OSError as _e:
+            audit("loop_patch_write_failed",
+                  {"file": _f, "phase": phase_label, "fehler": str(_e)[:200]},
+                  pd, pn)
+            continue
         audit("loop_patch_applied",
               {"file": _f, "phase": phase_label, "match": _match}, pd, pn)
         _applied += 1
@@ -1451,6 +1458,12 @@ def _human_gate(state: RunState) -> int:
     _stat_txt = ""
     _diff_txt = ""
     try:
+        # FIX O 2026-10-31: Untracked sichtbar machen via intent-to-add.
+        # Sonst zeigt Human-Gate nur PROGRESS.md, nicht die neue Datei.
+        subprocess.run(
+            ["git", "-C", str(pd), "add", "-N", "."],
+            capture_output=True, text=True, check=False, timeout=10,
+        )
         _stat = subprocess.run(
             ["git", "-C", str(pd), "diff", "--stat"],
             capture_output=True, text=True, check=False, timeout=10,
@@ -2233,7 +2246,13 @@ def run_pipeline_loop(
                     audit("loop_patch_file_exists", {"file": file}, pd, pn)
                     continue
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(content)
+                # FIX N 2026-10-31: Write-Fehler fail-closed.
+                try:
+                    target.write_text(content)
+                except OSError as _e:
+                    audit("loop_patch_write_failed",
+                          {"file": file, "fehler": str(_e)[:200]}, pd, pn)
+                    continue
                 state.applied_count += 1  # type: ignore[attr-defined]
                 audit("loop_patch_created", {"file": file}, pd, pn)
             elif action == "update":
@@ -2285,7 +2304,16 @@ def run_pipeline_loop(
                                ok=False, name=task_name,
                                failure="patch_not_applied_nach_reflection")
                     break
-                target.write_text(_neu_content2)
+                # FIX N 2026-10-31: Write-Fehler fail-closed.
+                try:
+                    target.write_text(_neu_content2)
+                except OSError as _e:
+                    audit("loop_patch_write_failed",
+                          {"file": file, "fehler": str(_e)[:200]}, pd, pn)
+                    _task_ende(state, phase_state, task_id,
+                               ok=False, name=task_name,
+                               failure="patch_write_failed")
+                    break
                 # M-298d: Post-Apply-Verifikation (Profi-Ansatz
                 # Overwatcher/Claude-Code edit-verifier).
                 _after = target.read_text()

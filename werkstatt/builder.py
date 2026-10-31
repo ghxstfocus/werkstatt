@@ -695,13 +695,22 @@ def _build_patches_fuer_datei(
     _verbote = _extrahiere_verbote(_abschnitt)
     _verbote_prefix = (_verbote + "\n\n") if _verbote else ""
     if _ist_neu:
+        # FIX P 2026-10-31: ALLE Abschnitte aus der Architektur fordern.
+        # Live-Beleg 2026-10-31 08:07: Datei mit 3/8 Abschnitten gebaut,
+        # obwohl die Aufgabe 8 nannte.
         _datei_block = (
             "## DATEI IST NEU (action=\"create\")\n"
             "Die Zieldatei existiert noch nicht. Antworte mit:\n"
             "{\"patches\": [{\"action\": \"create\", "
             "\"file\": \"" + zieldatei + "\", "
             "\"content\": \"<kompletter Datei-Inhalt>\"}]}\n"
-            "KEIN old_string, KEIN new_string. Nur content.\n"
+            "KEIN old_string, KEIN new_string. Nur content.\n\n"
+            "PFLICHT-VOLLSTAENDIGKEIT: Der content MUSS ALLE in der "
+            "ARCHITECT-BESCHREIBUNG genannten Abschnitte enthalten. "
+            "Jeder Abschnitt bekommt seine eigene \"## <titel>\"-Zeile. "
+            "Wenn die Aufgabe N Abschnitte nennt, hat der content N "
+            "##-Ueberschriften. Kuerze NICHT. Fasse NICHT zusammen. "
+            "Lasse KEINEN Abschnitt weg.\n"
         )
     else:
         _datei_block = (
