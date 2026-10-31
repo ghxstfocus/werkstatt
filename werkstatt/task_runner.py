@@ -49,6 +49,33 @@ def _task_ende(
     """
     from werkstatt import progress as _progress
 
+    # OP-040: Idempotenz-Guard. Schutz vor mehrfachen Aufrufen im
+    # selben Task-Durchlauf (Live-Beleg 2026-10-31: patch_write_failed
+    # + reviewer_rejected_no_patch in derselben Sekunde, derselbe Task,
+    # weil zwischen zwei Fehlerpfaden ein `continue` fehlte).
+    #
+    # Wenn der Task schon done/failed ist, wird der zweite Aufruf
+    # uebersprungen und ein Audit-Event geschrieben. `split` ist
+    # KEIN Endstatus (Parent wird durch Kinder abgeschlossen),
+    # `pending`/`running` sind Zwischenzustaende.
+    _existing = None
+    try:
+        if phase_state is not None:
+            _existing = phase_state.get_task(task_id)
+    except Exception:  # noqa: BLE001, S110
+        _existing = None
+    if _existing and _existing.get("status") in ("done", "failed"):
+        audit(
+            "loop_task_ende_skip",
+            {"task_id": task_id,
+             "status": _existing.get("status"),
+             "new_ok": ok,
+             "new_failure": failure or "unknown"},
+            getattr(state, "project_dir", None),
+            getattr(state, "project_name", "?"),
+        )
+        return
+
     pd = getattr(state, "project_dir", None)
     if ok:
         phase_state.mark_done(task_id)
