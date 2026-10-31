@@ -5,7 +5,7 @@ Der Hook ist die Wahrheit — nicht der Prompt.
 
 Checks:
   1. DOKU_TASK: task_files matcht Doku-Regex.
-  2. ACTION: action muss read/create/update sein.
+  2. ACTION: action muss read/create/update/delete sein.
   3. TASK_FILE: task_files muss Datei mit Suffix sein.
   4. (entfernt K5.2) PHASEN_PFLICHT — Phasen sind optional.
   5. PHASE_ID: phase_id muss in phasen existieren.
@@ -30,7 +30,7 @@ _DOKU_PATTERNS = [
     # = False -> DOKU_TASK abgelehnt.
     re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\.(?:md|rst|txt)$"),
 ]
-_VALID_ACTIONS = {"read", "create", "update"}
+_VALID_ACTIONS = {"read", "create", "update", "delete"}
 _VALID_SUFFIXES = (
     # Code
     ".py", ".sql", ".sh", ".bash",

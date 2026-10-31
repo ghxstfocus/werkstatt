@@ -789,6 +789,38 @@ def _apply_patches_with_hooks(
         _f = _pat.get("file", "")
         _old = _pat.get("old_string", "")
         _new = _pat.get("new_string", "")
+        _action_del = _pat.get("action", "update")
+        if _action_del == "delete":
+            # Fix AV: Delete im Reflection/Phase-Repair-Pfad.
+            # Keine Task-Whitelist (task_files=None), nur harte Checks.
+            if not _f:
+                continue
+            _ok_d, _grund_d = _delete_ziel_erlaubt(
+                Path(_f), None, Path(pd),
+            )
+            if not _ok_d:
+                audit("loop_patch_delete_blocked",
+                      {"file": _f, "grund": _grund_d,
+                       "phase": phase_label, "modus": "reflection"}, pd, pn)
+                continue
+            _target = Path(pd) / _f
+            if not _target.exists():
+                audit("loop_patch_delete_skip_missing",
+                      {"file": _f, "phase": phase_label,
+                       "modus": "reflection"}, pd, pn)
+                continue
+            try:
+                _target.unlink()
+            except OSError as _e:
+                audit("loop_patch_delete_failed",
+                      {"file": _f, "fehler": str(_e)[:200],
+                       "phase": phase_label, "modus": "reflection"}, pd, pn)
+                continue
+            audit("loop_patch_deleted",
+                  {"file": _f, "phase": phase_label,
+                   "modus": "reflection"}, pd, pn)
+            _applied += 1
+            continue
         if not _f or not _old or not _new:
             continue
         _target = Path(pd) / _f
@@ -1857,6 +1889,33 @@ def _git_reset(pd: Path, ref: str) -> bool:
         return False
 
 
+def _delete_ziel_erlaubt(
+    target_rel: Path,
+    task_files,
+    project_dir: Path,
+) -> tuple[bool, str]:
+    """Fix AV: strukturelle Sicherheit fuer action='delete'.
+
+    task_files=None -> Reflection-Modus, kein Whitelist-Check.
+    Rueckgabe: (ok, grund). grund="" bei ok.
+    """
+    _parts = target_rel.parts
+    if target_rel.is_absolute() or ".." in _parts:
+        return False, "pfad"
+    if ".git" in _parts:
+        return False, ".git"
+    if "data" in _parts and "migrations" in _parts:
+        return False, "migrations"
+    if task_files is not None and str(target_rel) not in task_files:
+        return False, "nicht_in_task_files"
+    _pdr = project_dir.resolve()
+    try:
+        (_pdr / target_rel).resolve().relative_to(_pdr)
+    except ValueError:
+        return False, "ausserhalb_project_dir"
+    return True, ""
+
+
 def run_pipeline_loop(
     project_name: str,
     aufgabe: str,
@@ -2550,6 +2609,11 @@ def run_pipeline_loop(
         state.applied_count = 0  # type: ignore[attr-defined]
         backup_dir = Path(pd) / ".werkstatt" / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
+        _allowed_for_task: set[str] = set()
+        for _t_av in (getattr(state, "tasks", []) or []):
+            if isinstance(_t_av, dict) and _t_av.get("id") == task_id:
+                _allowed_for_task = set(_t_av.get("task_files") or [])
+                break
         for patch in patches:
             if not isinstance(patch, dict):
                 continue
@@ -2668,6 +2732,27 @@ def run_pipeline_loop(
                 # Position: nach write_text + nach _after-Check.
                 state.applied_count += 1  # type: ignore[attr-defined]
                 audit("loop_patch_updated", {"file": file}, pd, pn)
+            elif action == "delete":
+                # Fix AV: Datei loeschen. Whitelist = task_files der aktuellen Task.
+                _ok_del, _grund_del = _delete_ziel_erlaubt(
+                    Path(file), _allowed_for_task, Path(pd),
+                )
+                if not _ok_del:
+                    audit("loop_patch_delete_blocked",
+                          {"file": file, "grund": _grund_del}, pd, pn)
+                    continue
+                if not target.exists():
+                    audit("loop_patch_delete_skip_missing",
+                          {"file": file}, pd, pn)
+                    continue
+                try:
+                    target.unlink()
+                except OSError as _e:
+                    audit("loop_patch_delete_failed",
+                          {"file": file, "fehler": str(_e)[:200]}, pd, pn)
+                    continue
+                state.applied_count += 1  # type: ignore[attr-defined]
+                audit("loop_patch_deleted", {"file": file}, pd, pn)
 
         # M-334b/M-351: post_tool_use entfernt (prueft Werkstatt statt
         # Zielprojekt). _verify_patches prueft das Zielprojekt.
