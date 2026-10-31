@@ -13,18 +13,21 @@ import json
 import sys
 from pathlib import Path
 
-# Standard-Library + bekannte Third-Party (nicht pruefbar).
-_KNOWN_ROOTS = {
-    "sys", "os", "json", "re", "ast", "pathlib", "datetime",
-    "typing", "unittest", "argparse", "subprocess", "shutil",
-    "time", "threading", "logging", "collections", "itertools",
-    "functools", "dataclasses", "enum", "io", "base64", "hashlib",
-    "tempfile", "traceback", "warnings", "weakref", "contextlib",
-    "__future__",
+# FIX AM 2026-10-31: stdlib dynamisch aus sys.stdlib_module_names
+# (Python 3.10+). Die manuelle Allowlist war unvollstaendig —
+# 'urllib' fehlte, wurde als "nicht im Projekt" geblockt. Live-
+# Beleg 2026-10-31 10:31 t1: pre_tool_use blockte
+# 'import urllib.error' und killte den DeepSeek-Task.
+_STDLIB_ROOTS = getattr(sys, "stdlib_module_names", frozenset())
+# Zusaetzliche Third-Party, die im Zielprojekt genutzt werden
+# (nicht per stdlib_module_names abgedeckt).
+_THIRD_PARTY_ROOTS = {
     "pytest", "yaml", "requests", "pydantic", "click", "rich",
     "numpy", "pandas", "flask", "django", "fastapi", "httpx",
     "aiohttp", "sqlalchemy", "jinja2", "werkzeug", "boto3",
+    "psutil",
 }
+_KNOWN_ROOTS = _STDLIB_ROOTS | _THIRD_PARTY_ROOTS
 
 
 def _module_exists(name: str, project_dir: Path) -> bool:

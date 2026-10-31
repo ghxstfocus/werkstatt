@@ -1934,6 +1934,43 @@ def run_pipeline_loop(
         audit("loop_explorer_leer", {}, pd, pn)
     group_end()
 
+    # FIX AN 2026-10-31: Schreibrechte-Preflight fuer Task-Dateien.
+    # Live-Beleg 2026-10-31 10:31 t2: git restore als root machte
+    # core/config.py root:root, Loop (security-ai) konnte nicht
+    # schreiben -> patch_write_failed, Reflection-Stagnation, abort.
+    # Preflight erkennt das VOR t1 und meldet mit klarer Aktion
+    # (chown security-ai:security-ai ...).
+    if state is not None:
+        import os as _os_an
+        _pd_an = getattr(state, "project_dir", None)
+        _tasks_an = getattr(state, "tasks", None) or []
+        _rechte_fehler: list[str] = []
+        for _t_an in _tasks_an:
+            if not isinstance(_t_an, dict):
+                continue
+            for _f_an in (_t_an.get("task_files") or []):
+                if not isinstance(_f_an, str) or not _f_an:
+                    continue
+                _p_an = Path(_pd_an) / _f_an if _pd_an else None
+                if _p_an is None:
+                    continue
+                if _p_an.exists() and _p_an.is_file():
+                    if not _os_an.access(str(_p_an), _os_an.W_OK):
+                        _rechte_fehler.append(_f_an)
+        if _rechte_fehler:
+            audit("loop_preflight_rechte",
+                  {"dateien": _rechte_fehler[:10],
+                   "anzahl": len(_rechte_fehler)},
+                  pd, pn)
+            print(
+                f"[FEHLER] Keine Schreibrechte fuer {len(_rechte_fehler)} "
+                f"Task-Datei(en):"
+            )
+            for _f_an in _rechte_fehler[:10]:
+                print(f"  {_f_an}")
+            print("  Fix: chown security-ai:security-ai <datei>")
+            return 1
+
     # PhaseState automatisch anlegen (fuer Resume-Pfad).
     if phase_state is None:
         phase_state = PhaseState(project_name, base_dir=Path(pd) / ".werkstatt")
