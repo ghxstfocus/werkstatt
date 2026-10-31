@@ -24,6 +24,23 @@ def audit(*args, **kwargs):
 from werkstatt.state import RunState
 
 
+def _ist_test_datei(pfad: str) -> bool:
+    """OP-034: strikte Test-Datei-Erkennung (Pfad-basiert)."""
+    p = str(pfad).lower()
+    name = p.rsplit("/", 1)[-1]
+    if name == "conftest.py":
+        return True
+    if name.startswith("test_") and name.endswith(".py"):
+        return True
+    if name.endswith("_test.py"):
+        return True
+    if "/tests/" in ("/" + p) or p.startswith("tests/"):
+        return True
+    if "/test/" in ("/" + p) or p.startswith("test/"):
+        return True
+    return False
+
+
 def _expand_cmd_placeholders(
     cmd: list, state: RunState, project_dir: Path,
 ) -> list[str] | None:
@@ -38,7 +55,8 @@ def _expand_cmd_placeholders(
     cmd_str = " ".join(str(c) for c in cmd)
     if ("{changed_files}" not in cmd_str
             and "{changed_test_files}" not in cmd_str
-            and "{changed_py_files}" not in cmd_str):
+            and "{changed_py_files}" not in cmd_str
+            and "{changed_non_test_py_files}" not in cmd_str):
         return [str(c) for c in cmd]
 
     patches = getattr(state, "patches", []) or []
@@ -90,6 +108,7 @@ def _expand_cmd_placeholders(
     ]
 
     changed_py = [f for f in changed if f.endswith(".py")]
+    changed_non_test_py = [f for f in changed_py if not _ist_test_datei(f)]
 
     out: list[str] = []
     for c in cmd:
@@ -106,6 +125,11 @@ def _expand_cmd_placeholders(
             if not changed:
                 return None
             s = s.replace("{changed_files}", " ".join(changed))
+        if "{changed_non_test_py_files}" in s:
+            if not changed_non_test_py:
+                return None
+            s = s.replace("{changed_non_test_py_files}",
+                          " ".join(changed_non_test_py))
         out.extend(s.split())
     return out
 
@@ -290,6 +314,18 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     # 3. Stages ausfuehren
     _executed_stages = []
     for stage in stages:
+        # OP-034: requires-Gate
+        _req = stage.get("requires")
+        if _req:
+            _req_expanded = _expand_cmd_placeholders(
+                [_req], state, project_dir)
+            if _req_expanded is None:
+                audit("loop_verify_stage_skipped",
+                      {"stage": stage.get("id", "?"),
+                       "reason": "requires not met"},
+                      project_dir,
+                      getattr(state, "project_name", "?"))
+                continue
         cmd = stage.get("command")
         if not cmd:
             continue
