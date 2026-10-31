@@ -722,6 +722,30 @@ def _build_patches_fuer_datei(
     _task = getattr(state, "aktuelle_task", None) or {}
     _task_name = _task.get("name", "") if isinstance(_task, dict) else ""
     _task_desc = _task.get("description", "") if isinstance(_task, dict) else ""
+    # FIX AQ 2026-10-31: Verfuegbare Module im Zielverzeichnis als
+    # Kontext. Live-Beleg 10:36 t1: Builder importierte
+    # 'harness.llm.types' — existiert nicht. Der Hook blockte
+    # korrekt, aber der Loop verlor den Task. Mit Modul-Liste im
+    # Prompt kennt der LLM die echten Namen.
+    _module_hint = ""
+    try:
+        _target_dir_aq = (pd / zieldatei).parent
+        if _target_dir_aq.is_dir():
+            _avail_aq = sorted(
+                f.stem for f in _target_dir_aq.glob("*.py")
+                if f.stem != "__init__"
+            )
+            if _avail_aq:
+                _module_hint = (
+                    "## VERFUEGBARE MODULE IM ZIELVERZEICHNIS\n"
+                    f"{', '.join(_avail_aq)}\n\n"
+                    "Nutze AUSSCHLIESSLICH diese Modulnamen. "
+                    "Rate KEINE wie 'types', 'utils', 'helpers' oder "
+                    "'client2', wenn sie nicht in der Liste stehen.\n\n"
+                )
+    except (OSError, TypeError):
+        pass
+
     _verbote = _extrahiere_verbote(_abschnitt)
     _verbote_prefix = (_verbote + "\n\n") if _verbote else ""
     if _ist_neu:
@@ -748,6 +772,7 @@ def _build_patches_fuer_datei(
         )
     _user = (
         f"## ZIELDATEI: {zieldatei}\n\n"
+        f"{_module_hint}"
         f"{_verbote_prefix}"
         f"## TASK: {_task_name}\n"
         f"## TASK-BESCHREIBUNG: {_task_desc}\n\n"

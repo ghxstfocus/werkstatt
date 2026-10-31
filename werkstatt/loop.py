@@ -766,6 +766,58 @@ def _apply_patches_with_hooks(
     return _applied
 
 
+
+
+
+def _pruefe_prior_failed_dependency(
+    phase_state, task_id: str,
+) -> tuple[bool, list[str]]:
+    """FIX AP 2026-10-31: Prueft, ob ein frueherer Task auf derselben
+    Datei failed ist.
+
+    Live-Beleg 2026-10-31 10:36: t1 (create deepseek_client.py) failte
+    am PreToolUse-Hook. t2-t4 sind update auf derselben Datei —
+    der Builder findet die Datei nicht (builder_zieldatei_nicht_gefunden),
+    Loop bricht bei t2 mit return 1 ab. t5-t14 (unabhaengig) werden
+    nie versucht.
+
+    Rueckgabe: (ist_dependency_failure, task_files)
+    """
+    if phase_state is None:
+        return False, []
+    try:
+        _tasks = phase_state.data.get("tasks") or []
+    except (AttributeError, TypeError):
+        return False, []
+    _curr = None
+    _idx_curr = -1
+    for _i, _t in enumerate(_tasks):
+        if isinstance(_t, dict) and _t.get("id") == task_id:
+            _curr = _t
+            _idx_curr = _i
+            break
+    if _curr is None or _idx_curr <= 0:
+        return False, []
+    _curr_files = set(
+        f for f in (_curr.get("task_files") or [])
+        if isinstance(f, str) and f
+    )
+    if not _curr_files:
+        return False, []
+    for _t in _tasks[:_idx_curr]:
+        if not isinstance(_t, dict):
+            continue
+        if _t.get("status") != "failed":
+            continue
+        _prior_files = set(
+            f for f in (_t.get("task_files") or [])
+            if isinstance(f, str) and f
+        )
+        if _curr_files & _prior_files:
+            return True, sorted(_curr_files)
+    return False, []
+
+
 def _split_task_on_demand(
     state: RunState, task_id: str,
     phase_state=None,
@@ -2289,6 +2341,18 @@ def run_pipeline_loop(
             # K38b: Grund aus split_max_tiefe uebernehmen.
             _split_failure = getattr(state, "split_failure_grund", None) or "builder_failed"
             state.split_failure_grund = None  # type: ignore[attr-defined]
+            # FIX AP 2026-10-31: Dependency-Failure -> continue statt
+            # return 1. Live-Beleg 10:36: t1 (create) failte, t2-t4
+            # (update) fanden Datei nicht, Loop brach bei t2 ab,
+            # t5-t14 (unabhaengig) wurden nie versucht.
+            _is_dep_fail, _dep_files = _pruefe_prior_failed_dependency(
+                phase_state, task_id)
+            if _is_dep_fail:
+                audit("loop_task_failed_dependency",
+                      {"task_id": i, "files": _dep_files}, pd, pn)
+                _task_ende(state, phase_state, task_id, ok=False,
+                           name=task_name, failure="depends_on_failed")
+                continue
             audit("loop_task_failed", {"task_id": i, "grund": _split_failure}, pd, pn)
             _task_ende(state, phase_state, task_id, ok=False,
                        name=task_name, failure=_split_failure)
@@ -2298,7 +2362,6 @@ def run_pipeline_loop(
             # im footer korrekt als X/N).
             if _split_failure == "split_max_tiefe":
                 continue
-            return 1
             return 1
 
         # GOLD 2026-10-30: Wenn der Builder das auftrag_bereits_erfuellt-
