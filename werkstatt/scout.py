@@ -592,6 +592,11 @@ def _run_scout(
                 )
     _previews_str = "\n\n".join(_previews_parts)
 
+        user_content = (
+            "## PROJEKT-DOKU\n\n"
+            + "\n\n".join(_docs_teile)
+            + "\n\n" + user_content
+        )
     # Phase 5c — PROJEKT-DOKU (priorisierte Living Docs, max 4000 Z. je)
     _docs_state = getattr(state, "docs", None) or {}
     _DOCS_PRIO = ["entry", "status", "roadmap", "architecture",
@@ -602,11 +607,6 @@ def _run_scout(
             _v = _docs_state[_k][:4000]
             _docs_teile.append(f"--- {_k} ---\n{_v}")
     if _docs_teile:
-        user_content = (
-            "## PROJEKT-DOKU\n\n"
-            + "\n\n".join(_docs_teile)
-            + "\n\n" + user_content
-        )
 
     user_content = (
         f"## AUFGABE\n{aufgabe}\n\n"
