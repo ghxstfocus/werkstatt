@@ -125,6 +125,26 @@ Wenn "bereits_erfuellt" fehlt: false (Default).
 - Nenne konkrete Zeilen und Datei-Pfade.
 - IST-ZUSTAND-Check ist PFLICHT, wenn "IST-ZUSTAND" im Input steht.
 
+## SUCH-AUFGABEN (NEU 2026-10-31)
+
+Wenn die Aufgabe "aufraeumen", "bereinigen", "entfernen", "loeschen"
+oder "finde X" verlangt UND der Input einen "## GREP-TREFFER"-Block
+enthaelt:
+
+- Die GREP-TREFFER sind die WAHRHEIT. Sie listen alle Stellen mit
+  dem Suchbegriff (Datei + Zeile + Kontext).
+- Der API-AUSZUG ist bei Such-Aufgaben IRRELEVANT -- er zeigt nur
+  Symbole, keine Docstrings.
+- Liste JEDEN Treffer in "betroffene_stellen" mit:
+  {"datei": "<pfad>", "zeile": <int>, "alt": "<text>",
+   "neu": "<ersetzung>", "grund": "<warum>"}
+- Setze "atomarer_plan": true NUR wenn alle Treffer in EINER Datei
+  liegen UND die Ersetzung logisch gleich ist (z.B. "Ollama" ->
+  "DeepSeek" in 4 Docstrings derselben Datei).
+- Bei Treffern in MEHREREN Dateien: "atomarer_plan": false, aber
+  "betroffene_stellen" MUSS trotzdem alle Treffer listen. Der
+  Architect bekommt sie dann als harte Vorgabe.
+
 ## ATOMARER-PLAN (NEU 2026-10-31)
 
 Wenn die Aenderung logisch ATOMAR ist (eine logische Aenderung,
@@ -446,6 +466,99 @@ def _pruefe_api_widerspruch(
     return befunde
 
 
+_GREP_TRIGGER = (
+    "aufraeum", "aufräum", "bereinig", "entfern", "loesch", "lösch",
+    "cleanup", "clean up", "remove", "finde", "suche", "grep",
+    "referenz", "migration", "umgestellt",
+)
+
+
+def _scout_suchbegriffe(aufgabe: str) -> list[str]:
+    """Extrahiert Suchbegriffe fuer Grep (Fix BC 2026-10-31).
+
+    Bei Such-Aufgaben ("raeum Ollama auf") enthaelt die Aufgabe
+    oft keinen Backtick-Identifier. Deshalb zusaetzlich:
+    - Modellnamen wie llama3.2:3b, qwen2.5:7b, deepseek-chat
+    - CamelCase-Identifier aus der Prosa
+    - bekannte Tech-Begriffe (Ollama, DeepSeek, qwen, llama)
+    """
+    import re as _re
+    begriffe: list[str] = []
+
+    # 1. Backtick-Identifier (wie im Explorer)
+    for _m in _re.finditer(r'`([^`]{2,60})`', aufgabe):
+        _b = _m.group(1).strip()
+        if _b and _b not in begriffe:
+            begriffe.append(_b)
+
+    # 2. Modellnamen (llama3.2:3b, qwen2.5:7b, deepseek-chat)
+    for _m in _re.finditer(
+            r"\b([a-z][a-z0-9.-]*[:._-][0-9a-z][a-z0-9.-]*)\b",
+            aufgabe):
+        _b = _m.group(1)
+        if _b and len(_b) >= 5 and _b not in begriffe:
+            begriffe.append(_b)
+
+    # 3. Bekannte Tech-Begriffe (case-insensitiv pruefen, original behalten)
+    _tech = ("Ollama", "DeepSeek", "qwen", "llama", "GPT", "OpenAI")
+    for _t in _tech:
+        if _t.lower() in aufgabe.lower() and _t not in begriffe:
+            begriffe.append(_t)
+
+    return begriffe[:15]
+
+
+def _scout_ist_suchaufgabe(aufgabe: str) -> bool:
+    """True bei Such-/Aufraeum-/Bereinigungs-Aufgaben."""
+    _l = aufgabe.lower()
+    return any(_t in _l for _t in _GREP_TRIGGER)
+
+
+def _grep_projekt(pd, begriffe: list[str], max_per_begriff: int = 30) -> list[dict]:
+    """Case-insensitive Grep ueber .py/.md/.yaml/.yml/.toml/.cfg/.ini.
+
+    Fix BC 2026-10-31: Der Scout braucht bei Such-Aufgaben die
+    Volltext-Treffer, nicht nur den AST-Index (Docstrings fehlen dort).
+    Ignoriert .venv, __pycache__, .git, node_modules, .pytest_cache.
+    """
+    from pathlib import Path as _Path
+    _ignore = {
+        ".venv", "venv", "__pycache__", ".git", "node_modules",
+        ".pytest_cache", ".ruff_cache", ".mypy_cache", ".tox", "build", "dist",
+    }
+    _suffixes = (".py", ".md", ".yaml", ".yml", ".toml", ".cfg", ".ini")
+    _pd = _Path(pd)
+    treffer: list[dict] = []
+    _files_scanned = 0
+    for _f in _pd.rglob("*"):
+        if not _f.is_file() or _f.suffix not in _suffixes:
+            continue
+        if any(_p in _ignore for _p in _f.parts):
+            continue
+        _files_scanned += 1
+        if _files_scanned > 2000:
+            break
+        try:
+            _text = _f.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        _rel = str(_f.relative_to(_pd))
+        for _begriff in begriffe:
+            _count = 0
+            for _lineno, _line in enumerate(_text.splitlines(), 1):
+                if _begriff.lower() in _line.lower():
+                    treffer.append({
+                        "datei": _rel,
+                        "zeile": _lineno,
+                        "begriff": _begriff,
+                        "text": _line.strip()[:200],
+                    })
+                    _count += 1
+                    if _count >= max_per_begriff:
+                        break
+    return treffer
+
+
 def _run_scout(
     state, aufgabe: str, code_index: dict,
     key_files: list, api_key: str,
@@ -489,6 +602,30 @@ def _run_scout(
             f"\n\n## IST-ZUSTAND (Inhalt der genannten Dateien)\n"
             f"{_previews_str}\n"
         )
+
+    # Fix BC 2026-10-31: Grep-Kontext bei Such-Aufgaben.
+    # Der AST-Index enthaelt keine Docstrings -- "Ollama in
+    # errors.py:27" waere sonst unsichtbar.
+    if _scout_ist_suchaufgabe(aufgabe):
+        _begriffe = _scout_suchbegriffe(aufgabe)
+        if _begriffe:
+            _treffer = _grep_projekt(pd, _begriffe)
+            audit("planner_scout_grep",
+                  {"begriffe": _begriffe[:5],
+                   "anzahl": len(_treffer)}, pd, pn)
+            if _treffer:
+                _grep_lines = []
+                for _t in _treffer[:60]:
+                    _grep_lines.append(
+                        f"- {_t['datei']}:{_t['zeile']}: "
+                        f"{_t['text'][:120]}"
+                    )
+                user_content += (
+                    "\n\n## GREP-TREFFER (Volltext-Suche, "
+                    "Wahrheit fuer Such-Aufgaben)\n"
+                    + "\n".join(_grep_lines)
+                    + "\n"
+                )
     reply = _with_spinner(
         "Scout",
         lambda: ask_llm(
