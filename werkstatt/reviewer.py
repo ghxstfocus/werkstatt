@@ -261,6 +261,104 @@ def _reviewer_system() -> str:
     return "\n\n".join(parts)
 
 
+def _verifiziere_reviewer_bugs(
+    bugs: list, project_dir: Path, project_name: str,
+) -> list:
+    """Fix AX 2026-10-31: deterministischer Vorfilter gegen Reviewer-
+    Halluzinationen.
+
+    Konservativ: nur widerlegen, wenn der Code den behaupteten Mangel
+    zweifelsfrei widerlegt. Unpruefbares bleibt unangetastet (kein
+    falsch-negativ, das echte Bugs unterdrueckt).
+
+    Heuristiken:
+      1. Bug nennt "X() fehlt" / "X() fehlt in" / "X() nicht vorhanden":
+         ast.parse(file) -> existiert X als FunctionDef/AsyncFunctionDef/
+         ClassDef/AnnAssign irgendwo? -> Bug widerlegt.
+      2. Bug nennt "Datei <path> fehlt" / "existiert nicht":
+         Path(project_dir/path).exists() True -> Bug widerlegt.
+      3. Sonst: Bug bleibt.
+
+    Widerlegte Bugs werden mit audit("reviewer_bug_widerlegt") geloggt.
+    """
+    import ast as _ast
+    import re as _re
+
+    # Fix 2026-10-31: [^)]* statt \s* — auch "is_available(timeout)"
+    # muss matchen. Vorher griff nur "method()" ohne Argumente.
+    _pat_call_fehl = _re.compile(
+        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)[^.]{0,80}?"
+        r"(fehlt|nicht\s+vorhanden|existiert\s+nicht)",
+        _re.IGNORECASE,
+    )
+    _pat_datei_fehlt = _re.compile(
+        r"Datei\s+[`\"]?(\S+?)[`\"]?\s+"
+        r"(fehlt|existiert\s+nicht)",
+        _re.IGNORECASE,
+    )
+
+    out: list = []
+    for b in bugs:
+        if not isinstance(b, dict):
+            out.append(b)
+            continue
+        _f = b.get("file") or ""
+        _desc = b.get("description") or b.get("beschreibung") or ""
+        if not _f or not _desc:
+            out.append(b)
+            continue
+
+        # Heuristik 1: "X() fehlt"
+        _m1 = _pat_call_fehl.search(_desc)
+        if _m1 and _f.endswith(".py"):
+            _target = Path(project_dir) / _f
+            if _target.is_file():
+                try:
+                    _tree = _ast.parse(
+                        _target.read_text(encoding="utf-8", errors="replace")
+                    )
+                except SyntaxError:
+                    _tree = None
+                if _tree is not None:
+                    _sym = _m1.group(1)
+                    _found = False
+                    for _node in _ast.walk(_tree):
+                        if isinstance(
+                            _node, (_ast.FunctionDef, _ast.AsyncFunctionDef,
+                                    _ast.ClassDef),
+                        ) and _node.name == _sym:
+                            _found = True
+                            break
+                        if isinstance(_node, _ast.AnnAssign) and \
+                                isinstance(_node.target, _ast.Name) and \
+                                _node.target.id == _sym:
+                            _found = True
+                            break
+                    if _found:
+                        audit("reviewer_bug_widerlegt",
+                              {"grund": "symbol_existiert",
+                               "symbol": _sym, "file": _f,
+                               "desc": _desc[:120]},
+                              project_dir, project_name)
+                        continue
+
+        # Heuristik 2: "Datei X fehlt"
+        _m2 = _pat_datei_fehlt.search(_desc)
+        if _m2:
+            _path = _m2.group(1).strip("`\"'.,;:")
+            _target = Path(project_dir) / _path
+            if _target.exists():
+                audit("reviewer_bug_widerlegt",
+                      {"grund": "datei_existiert",
+                       "pfad": _path, "file": _f,
+                       "desc": _desc[:120]},
+                      project_dir, project_name)
+                continue
+
+        out.append(b)
+    return out
+
+
 def run_phase_end_review(state: RunState) -> bool:
     """K23c: Phase-End-Review vor Human-Gate.
 
@@ -400,6 +498,8 @@ def run_phase_end_review(state: RunState) -> bool:
     _bugs = _parsed.get("bugs") or []
     if not isinstance(_bugs, list):
         _bugs = []
+    # Fix AX 2026-10-31: deterministischer Vorfilter.
+    _bugs = _verifiziere_reviewer_bugs(_bugs, Path(pd), pn)
     _high = [b for b in _bugs
              if isinstance(b, dict) and b.get("severity") == "high"]
     _medium = [b for b in _bugs
