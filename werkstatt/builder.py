@@ -33,7 +33,8 @@ Antworte mit JSON:
      "old_string": "<exakter Text aus der Datei>",
      "new_string": "<neuer Text>"},
     {"action": "create", "file": "neue_datei.py",
-     "content": "<kompletter Datei-Inhalt>"}
+     "content": "<kompletter Datei-Inhalt>"},
+    {"action": "delete", "file": "zu_loeschende_datei.py"}
   ]
 }
 
@@ -57,6 +58,12 @@ Regeln:
   - Fuer NEUE Dateien: action="create" mit "content"
     (kompletter Datei-Inhalt, kein old_string).
     Nutze "create", wenn der Task eine neue Datei anlegen soll.
+  - GANZE DATEI LOESCHEN: action="delete" mit "file".
+    KEIN content, KEIN old_string/new_string, KEIN new_string.
+    NUR wenn die Task explizit sagt, die DATEI selbst zu loeschen/
+    entfernen/aufzugeben. NICHT verwechseln mit "entferne Punkt X
+    aus Datei Y" — das ist action="update" mit old_string=die
+    zu entfernenden Zeilen, new_string="" (siehe Regel oben).
   - KEIN write_file. KEINE Tools.
   - Aendere NUR die ZIELDATEI.
   - Code MUSS ruff-konform sein (__all__ sortiert, kein except Exception).
