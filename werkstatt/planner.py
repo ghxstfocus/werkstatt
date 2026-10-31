@@ -1201,6 +1201,12 @@ def run_planner(state: RunState) -> bool:
         # FIX 2026-10-31 (Fix E): Bei Doku-Aufgaben ("nur X.md") nur
         # die betroffene .md + max 5 KB. Sonst: 3 Dateien, je 20 KB.
         _aufgabe_lower = (aufgabe or "").lower()
+        # Phase 5e — vage Aufgaben: STATUS.md ist primaere Quelle.
+        _VAGUE_KW = (
+            "aufraeumen", "aufräumen", "naechster", "nächster",
+            "was ist zu tun", "offene punkte", "todo", "to-do",
+        )
+        _ist_vage_task = any(kw in _aufgabe_lower for kw in _VAGUE_KW)
         _ist_doku_task = (
             ("nur" in _aufgabe_lower or "ausschliesslich" in _aufgabe_lower
              or "keine python" in _aufgabe_lower
@@ -1219,6 +1225,17 @@ def run_planner(state: RunState) -> bool:
                     _found = f"--- {_k} ---\n{_v[:5000]}"
                     break
             docs_ctx = _found
+        elif _ist_vage_task and "status" in state.docs:
+            # Phase 5e — bei vagen Aufgaben STATUS.md zuerst.
+            docs_ctx = (
+                f"--- status (PRIMAERE AUFGABENQUELLE) ---\n"
+                f"{state.docs['status'][:20000]}\n\n"
+            )
+            _rest = [(k, v) for k, v in state.docs.items() if k != "status"][:2]
+            if _rest:
+                docs_ctx += "\n".join(
+                    f"--- {k} ---\n{v[:5000]}" for k, v in _rest
+                )
         else:
             docs_ctx = "\n".join(
                 f"--- {k} ---\n{v[:20000]}"

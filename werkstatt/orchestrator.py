@@ -47,13 +47,33 @@ def load_project_config(project_name: str) -> dict[str, Any]:
     return data
 
 
+
+# DOC_CONVENTIONS.md §6 — Loop-Lese-Reihenfolge.
+# entry > status > roadmap > architecture > conventions > adr_index > glossary.
+# Unbekannte Keys landen alphabetisch am Ende.
+_DOCS_PRIORITAET = [
+    "entry", "status", "roadmap", "architecture",
+    "conventions", "adr_index", "glossary",
+]
+
+
+def _sortiere_docs_nach_prioritaet(
+    docs_config: dict[str, str],
+) -> list[tuple[str, str]]:
+    """Sortiert docs_config nach Loop-Lese-Reihenfolge (DOC_CONVENTIONS.md §6)."""
+    prio = {k: i for i, k in enumerate(_DOCS_PRIORITAET)}
+    return sorted(
+        docs_config.items(),
+        key=lambda kv: (prio.get(kv[0], len(_DOCS_PRIORITAET)), kv[0]),
+    )
+
 def load_docs(docs_config: dict[str, str], project_dir: Path) -> dict[str, str]:
     """Laedt die Pflichtdokumente aus dem Zielprojekt.
 
     M-299d: 1:1 aus pipeline.py:3035-3043.
     """
     docs: dict[str, str] = {}
-    for key, rel in docs_config.items():
+    for key, rel in _sortiere_docs_nach_prioritaet(docs_config):
         path = project_dir / rel
         if not path.exists():
             print(f"[FAIL] Pflichtdokument fehlt: {rel}. Fail closed.")
