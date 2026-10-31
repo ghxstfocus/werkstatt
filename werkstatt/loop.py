@@ -994,7 +994,12 @@ def _reflection_loop(
         )
         _bug_sigs_vorher = getattr(
             state, "_reflection_bug_sigs_vorher", frozenset())
-        _hat_gleiche_bugs = (
+        # FIX AJ 2026-10-31: bool() explizit — Pythons 'and'
+        # gibt das erste falsy-Objekt zurueck (hier: frozenset()),
+        # nicht False. Der Wert landet im Audit-Payload und killt
+        # json.dumps mit TypeError (frozenset not serializable).
+        # Live-Beleg 2026-10-31 10:03 in _reflection_loop.
+        _hat_gleiche_bugs = bool(
             _bug_sigs_vorher and _bug_sigs_jetzt == _bug_sigs_vorher
         )
         _stagnation_grund = None

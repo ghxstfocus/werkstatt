@@ -103,7 +103,14 @@ def audit(kind: str, payload: dict[str, Any], project_dir: Path,
     if _AKTUELLE_RUN_ID:
         entry["run_id"] = _AKTUELLE_RUN_ID
     try:
+        # FIX AK 2026-10-31: default=str, damit Sets, frozensets,
+        # bytes und andere nicht-JSON-Typen den Lauf nicht killen.
+        # Hard-Rule: Audit darf nie crashen. Live-Beleg 2026-10-31
+        # 10:03: frozenset im Payload killte den gesamten Loop mit
+        # Traceback statt zu warnen.
         with datei.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(entry, ensure_ascii=True) + "\n")
-    except OSError as exc:
+            fh.write(
+                json.dumps(entry, ensure_ascii=True, default=str) + "\n",
+            )
+    except (OSError, TypeError, ValueError) as exc:
         print(f"[WARN] Audit-Schreibfehler: {exc}")
