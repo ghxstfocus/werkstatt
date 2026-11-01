@@ -48,17 +48,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-062a: Redaction laeuft vor Reviewer-Prompt — Reviewer urteilt auf falscher Eingabe
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/agent.py`, `werkstatt/reviewer.py`, `werkstatt/prompts.py`, `tests/test_reviewer_redaction.py`
-- **Akzeptanzkriterien:** Wenn ein LLM-Prompt fuer den Reviewer oder Phase-End-Reviewer gebaut wird, MUSS der Code-Inhalt unredigiert bleiben. Redaction darf nur auf Log-/Audit-Payloads angewandt werden, nicht auf LLM-Prompts, deren Aufgabe es ist, den Code semantisch zu pruefen.
-  1. `agent.py:98-99` (`redact_all` auf `user_content`/`system_prompt`) — Redaction muss fuer Reviewer-Pfade abschaltbar sein, oder `redact_all` muss einen "reviewer_modus"-Parameter haben, der Code-Bloecke unangetastet laesst.
-  2. Reviewer-Prompt-Dump muss die echten IPs/Dateiinhalte enthalten, nicht `[IPV4]`.
-  3. Ein Test mit einer Test-Datei, die zwei verschiedene IPs enthaelt, muss im Prompt-Dump beide IPs zeigen (nicht `[IPV4]` und `[IPV4]`).
-- **Tests:** `tests/test_reviewer_redaction.py` (3 Faelle: Reviewer-Prompt mit 2 verschiedenen IPs enthaelt beide; Audit-Payload enthaelt `[IPV4]`; Builder-Prompt enthaelt echte IPs).
-- **Blockiert von:** —
-- **Hinweis:** Live-Beleg Loop-Validierung 15:16 OP-002b3. Prompt-Dump `/tmp/werkstatt-prompts/unbekannt_20261101-151653_511483_user.txt` enthaelt 9x `[IPV4]`. Der Phase-End-Reviewer sieht im Test-Code zwei verschiedene IPs als `[IPV4]` und `[IPV4]` — semantisch identisch. Er urteilt rational korrekt auf Basis dieser Eingabe: "Test ruft upsert_seen zweimal mit DERSELBEN IP auf". Der Test im Repo ist gruen, ruft `1.1.1.1` und `2.2.2.2`. Der Phase-Reviewer rejected 3x hintereinander, dann `loop_phase_reflection_erschoepft`, dann rc=1. Ohne diesen Fix ist jede Phase-End-Review strukturell unzuverlaessig, sobald der Diff IPs, Keys oder andere sensible Strings enthaelt. **Verifikation bei Bearbeitung:** pruefen, ob `agent.py:98-99` der einzige Redaction-Pfad ist oder ob `reviewer.py` selbst nochmal redigiert.
-
 ### OP-062b: Human-Gate zeigt Scout-Auftrag, Reviewer-Bugs und Reflexionen nicht
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/gates.py`, `werkstatt/loop_renderer.py`, `werkstatt/state.py`, `tests/test_human_gate_render.py`
@@ -325,6 +314,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 | OP-059 | erledigt 2026-11-01 (05162e7) | reflection false_positive (partial: human_review-Zweig nicht gebaut, nur done bei verify gruen) | – |
 | OP-060a | erledigt 2026-11-01 (ce5939f) | Patch-Diagnose bei Nicht-Anwendung (partial: human_review + Duplikat-Anker-Regeneration in OP-060b) | – |
 | OP-061 | erledigt 2026-11-01 (05bb2b2) | builder_failed-Klarheit (A: pre-reviewer flag, B: prior-done gleiche Datei) | – |
+| OP-062a | erledigt 2026-11-01 (HEAD) | redact=False fuer Builder + Reviewer (Code-Pruefung) | – |
 
 ## Verweise
 
