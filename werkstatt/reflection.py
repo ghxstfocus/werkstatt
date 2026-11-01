@@ -237,7 +237,6 @@ def _reflection_loop(
             # Ausgangszustand entspricht, ist der Reviewer-Reject
             # ein Fehlalarm (nicht: Task gescheitert).
             _hash_nachher = _diff_hash_for_state(state)
-            _hash_ref = getattr(state, "_reflection_diff_hash", None)
             _applied_vorher = int(
                 getattr(state, "applied_count", 0) or 0)
             # OP-059: Fehler-Filter. Patch-nicht-angewendet-Marker
@@ -253,13 +252,21 @@ def _reflection_loop(
                     or (error_context and _e == error_context)
                 ))
             ]
+            # OP-059-Nachtrag (15:16 Live-Beleg OP-002b3):
+            # _hash_ref-Bedingung entfernt. Sie war zu strikt:
+            # Wenn Runde 1 wirksam war (Hash geaendert) und
+            # Runde 2 idempotent ist (_hash_vorher == _hash_nachher),
+            # dann ist der Reviewer-Reject ein Fehlalarm — auch wenn
+            # _hash_nachher != _hash_ref (Runde 1 hatte ihn geaendert).
+            # Die Idempotenz-Pruefung _hash_vorher == _hash_nachher
+            # + applied_vorher > 0 + leere echte errors + Verify gruen
+            # decken den Fall vollstaendig ab.
             _is_false_positive = (
                 _had_error_context
                 and _applied_vorher > 0
                 and bool(_hash_vorher)
                 and bool(_hash_nachher)
                 and _hash_vorher == _hash_nachher
-                and (_hash_ref is None or _hash_nachher == _hash_ref)
                 and not _echte_errors
             )
             if _is_false_positive:

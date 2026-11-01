@@ -126,3 +126,46 @@ def test_kein_false_positive_wenn_verify_rot(
     assert rc is False
     assert "reviewer_stagnation_false_positive" not in _audits
     assert not getattr(s, "reviewer_stagnation_false_positive", False)
+
+
+def test_false_positive_nach_wirksamer_erster_runde(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Live-Beleg 15:16 OP-002b3: Runde 1 wirksam, Runde 2 idempotent.
+
+    Der Hash aendert sich zwischen _reflection_diff_hash (vor Reflexion)
+    und Runde 2, weil Runde 1 tatsaechlich 2 Patches angewendet hat.
+    Aber Runde 2 selbst ist idempotent (_hash_vorher == _hash_nachher)
+    und Verify gruen + keine echten errors. Das ist ein
+    Reviewer-Fehlalarm, kein Task-Fail.
+
+    Vor Fix: _hash_ref-Bedingung blockierte das, weil
+    _hash_nachher != _hash_ref (Runde 1 hatte den Hash geaendert).
+    Nach Fix: _hash_ref-Bedingung entfernt; _hash_vorher == _hash_nachher
+    reicht als Idempotenz-Beweis.
+    """
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "x.py").write_text("b\n")
+    s = _mk_state(tmp_path)
+
+    # Simuliert: Hash hat sich in Runde 1 geaendert (echte Anwendung),
+    # in Runde 2 idempotent (gleicher Hash vor/nach).
+    _hash_werte = iter(["hash-nach-runde1", "hash-nach-runde1"])
+    monkeypatch.setattr(
+        refl_mod, "_diff_hash_for_state", lambda st: next(_hash_werte),
+    )
+    _setup_common_mocks(monkeypatch, verify_ok=True)
+    _audits = _collect_audits(monkeypatch)
+
+    # _hash_ref ist der Hash VOR Reflexion (nach t1, aber vor R1).
+    # Runde 1 hat ihn geaendert -> _hash_ref != _hash_nachher.
+    s._reflection_diff_hash = "hash-nach-t1"  # type: ignore[attr-defined]
+    rc = refl_mod._reflection_loop(
+        s, max_runden=2, error_context="[]", phase="post_build"
+    )
+    assert rc is True, (
+        "Runde 1 wirksam + Runde 2 idempotent + Verify gruen "
+        "-> false_positive erwartet"
+    )
+    assert "reviewer_stagnation_false_positive" in _audits
+    assert getattr(s, "reviewer_stagnation_false_positive", False) is True
