@@ -163,3 +163,100 @@ def test_success_pfad_bei_spec_widerspruch_setzt_veto(
     assert _t.get("verdict") == "vetoed", (
         f"Verdict nicht vetoed: {_t.get('verdict')}"
     )
+
+
+def test_live_pfad_refl_ok_true_veto(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Live-Pfad Testrunde #4: _refl_ok=True + _rev_ok=True + spec.
+
+    Struktur (exakt wie Live-Beleg 19:10):
+    - _verify_patches_soft -> (False, [])  (mypy hart failed)
+    - _reflection_loop -> True (setzt spec_widerspruch_erkannt)
+    - run_reviewer -> True (approved, LLM sieht Diff als ok)
+    - _task_ende(ok=True) in Zeile ~1311
+
+    Veto MUSS greifen, sonst kein Sticky-Veto.
+    """
+    from werkstatt import loop as loop_mod
+    from werkstatt.state import RunState
+
+    (tmp_path / ".werkstatt").mkdir(exist_ok=True)
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
+    )
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "x.py").write_text("b = 2\n")
+
+    st = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+    st.tasks = [{"id": "t1", "name": "T1", "action": "update",
+                 "task_files": ["core/x.py"]}]
+    st.phasen = []
+
+    _audits: list[tuple] = []
+    monkeypatch.setattr(loop_mod, "audit",
+                        lambda k, p, *a, **kw: _audits.append((k, p)))
+    monkeypatch.setattr(loop_mod, "_plan_gate", lambda s: True)
+    monkeypatch.setattr(
+        loop_mod, "run_explorer",
+        lambda s, a: {"key_files": [], "findings": "", "next_reads": []},
+    )
+
+    def _fake_builder(_s):
+        _s.patches = [{"action": "update", "file": "core/x.py",
+                       "old_string": "a = 1", "new_string": "b = 2"}]
+        _s.applied_count = 1
+        return True
+
+    monkeypatch.setattr(loop_mod, "run_builder", _fake_builder)
+    # HART-FAIL im Verify (mypy) -> Reflection-Pfad
+    monkeypatch.setattr(loop_mod, "_verify_patches_soft",
+                        lambda s, phase=None: (False, []))
+    monkeypatch.setattr(loop_mod, "_call_hook",
+                        lambda n, p: {"allow": True})
+
+    def _fake_reviewer(_s):
+        # Reviewer approved (Live-Beleg: LLM sieht Diff, sagt ok)
+        _s.reviewer_bugs = []
+        return True
+
+    def _fake_reflection(_s, **kw):
+        # OP-059e: Spec-Widerspruch erkannt, Erschoepfung
+        _s.spec_widerspruch_erkannt = True
+        return True
+
+    monkeypatch.setattr(loop_mod, "run_reviewer", _fake_reviewer)
+    monkeypatch.setattr(loop_mod, "_reflection_loop", _fake_reflection)
+
+    from werkstatt import reviewer as _rv_mod
+    monkeypatch.setattr(_rv_mod, "run_phase_end_review", lambda s: True)
+    for _fn in ("header", "step", "task", "task_ok", "task_failed",
+                "group_start", "group_end", "footer"):
+        if hasattr(loop_mod, _fn):
+            monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
+
+    loop_mod.run_pipeline_loop("p", "a", [st])
+
+    kinds = [k for k, _ in _audits]
+    assert "loop_task_spec_widerspruch_veto" in kinds, (
+        f"kein Veto-Audit; kinds={kinds[-10:]}"
+    )
+
+    from werkstatt.phase_state import PhaseState
+    ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    ps.load()
+    _t = ps.get_task("t1")
+    assert _t is not None
+    assert _t.get("status") == "human_review", (
+        f"Status nicht human_review: {_t.get('status')}"
+    )
+    assert _t.get("verdict") == "vetoed", (
+        f"Verdict nicht vetoed: {_t.get('verdict')}"
+    )
+    assert "loop_task_ok" not in kinds, (
+        f"loop_task_ok darf NICHT kommen; kinds={kinds[-10:]}"
+    )

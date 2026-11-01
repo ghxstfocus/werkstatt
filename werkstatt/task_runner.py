@@ -91,6 +91,29 @@ def _task_ende(
         return
 
     pd = getattr(state, "project_dir", None)
+    # OP-064a-Live-Fix (2026-11-01): Spec-Widerspruch aus reflection.py
+    # in Sticky-Veto uebersetzen. Der Haupt-Fix sitzt im Caller
+    # (pipeline_phases._phase_tasks_loop, vor _task_ende(ok=True)) —
+    # damit loop_task_ok nicht auditiert wird. Dieser Guard ist die
+    # defensive Schicht: jeder direkte _task_ende(ok=True)-Aufruf
+    # landet hier und wird zum human_review statt mark_done.
+    # Live-Beleg Testrunde #4 (19:10): _refl_ok=True, _rev_ok=True,
+    # spec_widerspruch=True, aber loop_task_ok + status=done.
+    if getattr(state, "spec_widerspruch_erkannt", False):
+        audit("loop_task_spec_widerspruch_veto",
+              {"task_id": task_id, "ok": ok, "schicht": "task_ende"},
+              getattr(state, "project_dir", None),
+              getattr(state, "project_name", "?"))
+        state.spec_widerspruch_erkannt = False  # type: ignore[attr-defined]
+        if hasattr(phase_state, "mark_vetoed"):
+            phase_state.mark_vetoed(
+                task_id, grund="spec_widerspruch_vermutet",
+            )
+        if hasattr(phase_state, "mark_human_review"):
+            phase_state.mark_human_review(
+                task_id, grund="spec_widerspruch_vermutet",
+            )
+        return
     # OP-064a: Sticky-Veto respektieren. Wenn vetoed und ok=True:
     # kein mark_done, stattdessen human_review.
     # Defensiv: nur echte PhaseState-Instanzen fragen (MagicMock in

@@ -1299,6 +1299,29 @@ def _phase_tasks_loop(
                     continue
             audit("loop_reviewer_approved_after_reflection", {"task_id": i}, pd, pn)
 
+        # OP-064a-Live-Fix (2026-11-01, HR-24): Spec-Widerspruch aus
+        # reflection.py ist ein deterministisches Signal und darf NICHT
+        # zu task_ok fuehren — egal welcher Pfad (reviewer-approved
+        # oder reflection-durch). Der Erfolgs-Pfad ist die einzige
+        # Stelle, an der _task_ende(ok=True) gerufen wird; dieser
+        # Guard sitzt genau davor. Live-Beleg Testrunde #4 (19:10):
+        # _refl_ok=True, _rev_ok=True, spec_widerspruch=True, aber
+        # loop_task_ok + status=done.
+        if getattr(state, "spec_widerspruch_erkannt", False):
+            audit("loop_task_spec_widerspruch_veto",
+                  {"task_id": i,
+                   "grund": "spec_widerspruch_vermutet",
+                   "schicht": "pipeline"}, pd, pn)
+            state.spec_widerspruch_erkannt = False  # type: ignore[attr-defined]
+            phase_state.mark_vetoed(
+                task_id, grund="spec_widerspruch_vermutet",
+            )
+            _task_ende(state, phase_state, task_id,
+                       ok=False, name=task_name,
+                       human_review=True,
+                       failure="spec_widerspruch_vermutet")
+            continue
+
         _el_task = time.monotonic() - _t_task
         task_ok(i, len(tasks), elapsed_s=_el_task)
         try:
