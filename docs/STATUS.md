@@ -48,6 +48,38 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
+### OP-059: reviewer_rejected-False-Positive (Reflection-Bug)
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/reviewer.py`, `werkstatt/pipeline_phases.py`, `tests/test_reviewer_false_positive.py`
+- **Akzeptanzkriterien:** Wenn der Reviewer einen HIGH-Bug meldet und die anschliessende Reflection-Runde denselben Bug erneut meldet (`gleiche_bugs: true` im `loop_reflection_stagnation_runde`-Event), UND der Diff zwischen den Runden identisch ist, dann ist das ein **Reviewer-Fehlalarm** (nicht: Task gescheitert). Der Loop soll:
+  1. Audit `reviewer_stagnation_false_positive` mit Diff-Hash.
+  2. Den Task als **done** markieren, wenn `ruff`/`py_compile`/`pytest` (soweit vorhanden) gruen sind — oder als `human_review` falls kein deterministischer Check greift.
+  3. Am Human-Gate sichtbar machen: "Reviewer meldet HIGH-Bug, aber Diff unveraendert zwischen Runden — Verdacht Fehlalarm, Diff pruefen."
+- **Tests:** `tests/test_reviewer_false_positive.py` (3 Faelle: Diff unveraendert + Bug gleich -> done/human_review; Diff geaendert + Bug gleich -> weiter reflection; Diff unveraendert + Bug anders -> weiter reflection).
+- **Blockiert von:** —
+- **Hinweis:** Session 2026-11-01 Abend. Live-Beleg: OP-002b3-Loop (13:22), t1 `update_last_ip_if_changed commit-Parameter`. Builder-Patch war inhaltlich korrekt (Smoke-Test gruen: d1.last_ip=1.1.1.1, d2.last_ip=2.2.2.2, history mit field_change alt=1.1.1.1 neu=2.2.2.2). Trotzdem `reviewer_rejected` -> `loop_reflection_stagnation_abort (grund=patch_nicht_angewendet)` -> Task als failed. Nach Diff-Pruefung + manuellem Smoke-Test: Patch produktionsreif. Loop-Output war korrekt, Loop-Anzeige log.
+
+### OP-060: reflection_ohne_apply (Reflection-Bug)
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/pipeline_phases.py`, `tests/test_reflection_ohne_apply.py`
+- **Akzeptanzkriterien:** Wenn eine Reflection-Runde einen Patch liefert, aber `_build_patches_fuer_datei` ihn nicht anwendet (`loop_reflection_patch_nicht_angewendet`), muss der Loop:
+  1. Audit `reflection_patch_unwirksam` mit `old_string_len`, `file`, `grund` (kein_match / mehrdeutig / no_effect).
+  2. Wenn nach 2 Runden immer noch `patch_nicht_angewendet` UND `reviewer_bugs` sich nicht aendern: Task mit Status `human_review` markieren (nicht: failed). Am Human-Gate Hinweis "Reflection-Patch unwirksam, manueller Eingriff empfohlen".
+  3. Wenn `old_string` mehrdeutig (Duplikat-Anker, wie OP-054): zusaetzlicher Audit + Vorschlag, den Patch auf eindeutigere Anker zu regenerieren.
+- **Tests:** `tests/test_reflection_ohne_apply.py` (4 Faelle: Patch leer -> retry; Patch no_effect -> audit + retry; Duplikat-Anker -> audit + Vorschlag; nach 2 Runden wirksam -> done).
+- **Blockiert von:** —
+- **Hinweis:** Session 2026-11-01 Abend. Live-Beleg: OP-002b2-Loop (12:51), t2 Test-Builder scheiterte mit `reflection_ohne_apply`. Test wurde manuell in `test_inventory_op002b2.py` geschrieben. Auch OP-002b3 (13:22) t2 mit `builder_failed`. Der Loop baut Methode+Test manchmal, aber der Reflection-Pfad scheitert ohne klaren Grund — schwer zu debuggen, weil Audit-Event nur `{}` schickt.
+
+### OP-061: builder_failed-Zustandsverwirrung (Task-Runner-Bug)
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/builder.py`, `werkstatt/task_runner.py`, `tests/test_builder_failed_ohne_grund.py`
+- **Akzeptanzkriterien:** Wenn `builder_failed` als Task-Status gesetzt wird, MUSS der Audit-Event `loop_task_failed` den Grund enthalten (`grund: builder_empty_patch | builder_old_string_not_found | builder_no_patch | builder_invalid_json | ...`). Leere `{}`-Daten im Audit-Log sind nicht akzeptabel.
+  Zusaetzlich: Wenn zwei Tasks (t1+t2) hintereinander denselben `task_files[0]` haben und t1 bereits einen Patch erfolgreich angewendet hat (siehe `loop_patch_applied`), darf t2 mit `builder_failed` nur dann markiert werden, wenn t2 **keinen wirksamen** Patch geliefert hat. Wenn t2 keinen Patch geliefert hat, aber die Datei durch t1 bereits den erwarteten Zustand hat: Audit `builder_patch_bereits_erfuellt` + Task als done markieren.
+- **Tests:** `tests/test_builder_failed_ohne_grund.py` (3 Faelle: builder leer -> audit mit Grund; t1+t2 gleiche Datei, t1 wirksam, t2 leer -> t2 done via bereits_erfuellt; t2 wirksam -> t2 done normal).
+- **Blockiert von:** —
+- **Hinweis:** Session 2026-11-01 Abend. Live-Beleg OP-002b3-Loop (13:22): t1 meldete `reviewer_rejected`, t2 meldete `builder_failed` — aber der Code enthielt BEIDE Aenderungen (commit-Parameter + upsert_seen-Verdrahtung). Die Task-Zuordnung im Loop ist inkonsistent zur Realitaet. Ohne den vollstaendigen Diff am Human-Gate war der Patch nicht zu bewerten — die Anzeige sagte "Tasks: 1/3 done, 2 failed" obwohl 2/3 des Codes korrekt waren.
+
+
 ## Backlog (nicht §5-konform)
 
 Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie haben noch keine §5-konformen Akzeptanz-kriterien (Betroffene Dateien, Tests). Bei Bearbeitung zuerst §5-Format herstellen.
