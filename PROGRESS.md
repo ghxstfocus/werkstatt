@@ -1311,3 +1311,7 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 ## 2026-11-01T18:36:07+00:00 -- OP-059c: Spec-Widerspruch-Heuristik
 - **Status:** done
 - **Info:** Commit HEAD. Neue Funktion _bug_text_deutet_spec_widerspruch prueft Bug-Texte auf Marker 'Task fordert/verlangt' + 'Der Diff macht'. Bei Treffer in beiden Stagnation-Abort-Pfaden: audit loop_reflection_spec_widerspruch + return True. Bei generischen Bugs: alter Pfad. Erster Fix-Ansatz (Bug-2x ohne Marker) verworfen, weil zu aggressiv. Tests: test_reflection_spec_widerspruch.py (2 Faelle). Live-Beleg Loop-5 18:20 OP-004. Baseline 1073 passed.
+
+## 2026-11-01T18:44:36+00:00 -- OP-060b: human_review-Status (done)
+- **Status:** done
+- **Info:** Commit HEAD. Kompletter human_review-Status: phase_state.mark_human_review + _task_ende(human_review=True) + _propagate_failed_to_parents ignoriert human_review-Kinder + _phase_tasks_loop human_review=True bei spec_widerspruch_erkannt + _phase_finalize rc=2 + Human-Gate [~]-Render. Audit-Kind loop_human_review_offen. Tests: test_human_review_status.py (5 Faelle). Baseline 1075 passed. Loop-Stagnations-Ausweg komplett: OP-059c erkennt Spec-Widerspruch -> OP-060b setzt human_review -> rc=2 -> Mensch entscheidet.
