@@ -48,21 +48,8 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-059c: Reflection wiederholt Spec-Widerspruch statt human_review
-
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/pipeline_phases.py`, `tests/test_reflection_spec_widerspruch.py`
-- **Akzeptanzkriterien:** Wenn der Reviewer einen HIGH-Bug meldet, dessen Inhalt auf einen Widerspruch zwischen OP-Text und technischer Realitaet hinweist (z.B. OP-Text nennt eine API/Technik, die nachweislich nicht funktioniert), und die Reflection 2 Runden lang denselben (falschen) Ansatz wiederholt, soll der Loop:
-  1. Audit `loop_reflection_spec_widerspruch` mit den letzten 2 Reviewer-Bug-Descriptions.
-  2. `_task_ende(..., human_review=True, grund="spec_widerspruch_vermutet")` statt weiterer Reflection-Runden.
-  3. Am Human-Gate Hinweis "Reflection haengt seit 2 Runden am selben Ansatz — moeglicher Spec-Widerspruch, OP-Text pruefen".
-- **Tests:** `tests/test_reflection_spec_widerspruch.py` (2 Faelle: 2 Runden gleicher Bug + gleicher Ansatz -> human_review; 2 Runden verschiedene Bugs -> weiter reflection wie bisher).
-- **Blockiert von:** OP-060b (human_review-Status, partial)
-- **Design-Notiz (2026-11-01 18:30):** Fix-Ansatz 'gleicher Bug 2x -> return True' wurde versucht und zurueckgenommen, weil er die false_positive-Tests bricht (Verify-Stagnation erwartet weiter rc=False). Naechster Versuch braucht feinere Heuristik: (a) Bug-Text-Aehnlichkeit messen (nicht nur frozenset-Equality), (b) Spec-Zitat im Bug-Text erkennen ('Task fordert X'), (c) erst dann human_review.
-- **Hinweis:** Live-Beleg Loop-Validierung #5 (18:20, OP-004). Der Loop hat 4 Reflection-Runden gedreht. Builder-Vorschlaege: 1) `# type: ignore[operator]` (Reviewer: "Task fordert explizites Narrowing, type: ignore ist keine Variante"), 2) `int(min_port)` (mypy: "No overload variant of int matches object"), 3) wieder `int(min_port)`. Der Loop hat korrekt gearbeitet — meine OP-004-Formulierung nannte `int(min_port)` als valide Narrowing-Variante, was technisch falsch ist (mypy kann `int(object)` nicht). Der Reviewer hat das woertlich zitiert: "Task-Beschreibung fordert explizit min_int = int(min_port)". Der Loop konnte den Spec-Widerspruch nicht von einem Builder-Fehler unterscheiden. Nach 2 Runden Stagnation mit demselben Bug-Text waere human_review richtig gewesen. Vorbedingung: OP-060b muss human_review-Status bauen. OP-059c ist die Erkennungs-Logik, OP-060b der Status.
-
 ### OP-060b: human_review-Status + Duplikat-Anker-Regeneration (Design-OP)
-- **Status:** partial (mark_human_review + _task_ende-Support da, Verdrahtung in _phase_tasks_loop fehlt)
+- **Status:** partial (mark_human_review + _task_ende + _propagate + _phase_tasks_loop-Verdrahtung da; **Rest:** _phase_finalize rc=2 + Human-Gate [~]-Render fuer human_review-Tasks)
 - **Betroffene Dateien:** `werkstatt/phase_state.py`, `werkstatt/task_runner.py`, `werkstatt/gates.py`, `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_human_review_status.py`
 - **Akzeptanzkriterien:**
   1. `PhaseState.mark_human_review(task_id, grund)` setzt `status="human_review"`. Neuer Status neben `done`/`failed`/`split`/`pending`/`running`.

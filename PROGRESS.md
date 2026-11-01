@@ -1306,4 +1306,8 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 
 ## 2026-11-01T18:31:49+00:00 -- OP-060b: human_review-Status (partial)
 - **Status:** partial
-- **Info:** Commit HEAD. phase_state.mark_human_review() + _propagate_failed_to_parents ignoriert human_review-Kinder + _task_ende(human_review=True)-Parameter + Idempotenz-Guard. Tests: tests/test_human_review_status.py (3 Faelle). **Rest:** _phase_tasks_loop ruft human_review noch nicht auf — die Verknuepfung zu Reflection-Stagnation (OP-059c) und Human-Gate-Anzeige fehlt. Naechste Session: OP-059c-Design klaeren, dann Verdrahtung.
+- **Info:** Commit HEAD. phase_state.mark_human_review() + _propagate_failed_to_parents ignoriert human_review-Kinder + _task_ende(human_review=True)-Parameter + Idempotenz-Guard. Tests: tests/test_human_review_status.py (3 Faelle). Nachtrag HEAD: _phase_tasks_loop ruft jetzt human_review bei spec_widerspruch_erkannt. **Rest:** _phase_finalize rc=2 + Human-Gate [~]-Render.
+
+## 2026-11-01T18:36:07+00:00 -- OP-059c: Spec-Widerspruch-Heuristik
+- **Status:** done
+- **Info:** Commit HEAD. Neue Funktion _bug_text_deutet_spec_widerspruch prueft Bug-Texte auf Marker 'Task fordert/verlangt' + 'Der Diff macht'. Bei Treffer in beiden Stagnation-Abort-Pfaden: audit loop_reflection_spec_widerspruch + return True. Bei generischen Bugs: alter Pfad. Erster Fix-Ansatz (Bug-2x ohne Marker) verworfen, weil zu aggressiv. Tests: test_reflection_spec_widerspruch.py (2 Faelle). Live-Beleg Loop-5 18:20 OP-004. Baseline 1073 passed.
