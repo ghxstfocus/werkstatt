@@ -60,6 +60,17 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Blockiert von:** OP-060b (human_review-Status existiert noch nicht)
 - **Hinweis:** Live-Beleg Loop-Validierung #5 (18:20, OP-004). Der Loop hat 4 Reflection-Runden gedreht. Builder-Vorschlaege: 1) `# type: ignore[operator]` (Reviewer: "Task fordert explizites Narrowing, type: ignore ist keine Variante"), 2) `int(min_port)` (mypy: "No overload variant of int matches object"), 3) wieder `int(min_port)`. Der Loop hat korrekt gearbeitet — meine OP-004-Formulierung nannte `int(min_port)` als valide Narrowing-Variante, was technisch falsch ist (mypy kann `int(object)` nicht). Der Reviewer hat das woertlich zitiert: "Task-Beschreibung fordert explizit min_int = int(min_port)". Der Loop konnte den Spec-Widerspruch nicht von einem Builder-Fehler unterscheiden. Nach 2 Runden Stagnation mit demselben Bug-Text waere human_review richtig gewesen. Vorbedingung: OP-060b muss human_review-Status bauen. OP-059c ist die Erkennungs-Logik, OP-060b der Status.
 
+### OP-062g: OP-062e greift nicht im Scout-Pfad + Footer zaehlt 1/0
+
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/pipeline_phases.py`, `tests/test_human_gate_render.py`
+- **Akzeptanzkriterien:** Zwei Anzeige-Bugs aus Loop-Validierung #6 (18:25 OP-004 idempotent).
+  1. **OP-062e-Block im Scout-Pfad.** `pipeline_phases.py:479` setzt `state.auftrag_bereits_erfuellt = False` vor `_human_gate(state)`, damit der Status nicht in spaetere Phasen leakt. Folge: `_human_gate_body` sieht das Flag nicht und zeigt keinen 'Erfuellt ohne Aenderung'-Block. Fix: statt Flag leeren einen eigenen Merker setzen (`state.scout_bereits_erfuellt = True`), den `_human_gate_body` rendert. Oder: Flag erst NACH `_human_gate` leeren.
+  2. **Footer `Tasks: 1/0`.** Bei Scout-Skip ist `state.tasks = []` (0 Tasks) aber `tasks_ok = 1` (Scout-Skip zaehlt als Erfolg). Der Footer zeigt `1/0`. Fix: entweder `1/1` (Scout-Skip als virtuellen Task zaehlen) oder eigene Anzeige `'Scout-Skip (Auftrag bereits erfuellt)'`.
+- **Tests:** `tests/test_human_gate_render.py` (1 neuer Fall: Scout-Pfad setzt Merker, Body zeigt Block; Footer-Mock: tasks=0 + tasks_ok=1 ergibt sinnvollen Text).
+- **Blockiert von:** —
+- **Hinweis:** Live-Beleg 18:25 OP-004. Der Scout hat korrekt erkannt: 'Die Zieldatei core/checks/__init__.py enthaelt bereits den geforderten Fix: from typing import cast (Zeile 33) und return min_port <= cast(int, port) <= max_port (Zeile 80) mit erklaerendem OP-004-Kommentar. STATUS.md fuehrt OP-004 in der Delete-Zone.' Loop-Audit: `auftrag_bereits_erfuellt quelle=scout`, dann `auftrag_bereits_erfuellt = False`, dann `_human_gate` mit `(keine Aenderungen)`. Panel zeigte keinen Nullfall-Block. Footer `Tasks: 1/0`. Loop rc=0, alles inhaltlich korrekt — nur Anzeige.
+
 ### OP-060b: human_review-Status + Duplikat-Anker-Regeneration (Design-OP)
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/phase_state.py`, `werkstatt/task_runner.py`, `werkstatt/gates.py`, `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_human_review_status.py`
