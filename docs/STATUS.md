@@ -48,44 +48,17 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-062c: Human-Gate-Renderer polieren (Bug-Sync, Reflexions-Nummern, Diff-Anzeige)
+### OP-062d: Hunk-Summary im Human-Gate verdrahten
 
 - **Status:** open
-- **Betroffene Dateien:** `werkstatt/gates.py`, `werkstatt/loop_renderer.py`, `werkstatt/state.py`, `tests/test_human_gate_render.py`
-- **Akzeptanzkriterien:** Drei Renderer-/Anzeige-Defekte aus Loop-Validierung #2 (17:25 OP-002b3).
-  1. **Bug-Sync:** Der Human-Gate-Block 'Reviewer-Bugs (letzte Runde)' zeigt Bugs, die
-     im Endzustand bereits behoben sind. Wenn `reviewer_stagnation_false_positive` oder
-     `auftrag_bereits_erfuellt` gesetzt wurde, sind die zugehoerigen Task-Bugs erledigt.
-     Fix: `_human_gate_body` markiert solche Bugs als '(vermutlich behoben)' und zaehlt
-     sie nicht als offene Bugs. Genauer: pro Bug-Eintrag ein optionales Feld
-     `behoben: True` setzen, wenn Task done + Verify gruen war.
-  2. **Reflexions-Runden-Nummerierung:** `state.reflection_history` sammelt Runden aus
-     mehreren Tasks; `runde` startet pro Task bei 1. Am Gate nicht unterscheidbar, welcher
-     Task welche Runde hatte. Fix: pro Eintrag ein `task_id`-Feld. Render format:
-     't2 Runde 1: ...' statt nur 'Runde 1: ...'.
-  3. **Diff-Anzeige bei >2000 Zeichen:** Aktuell zeigt der Renderer nur
-     '(Diff zu gross: 5002 Zeichen, siehe git diff)'. Der Mensch muss selbst in die
-     Shell. Fix: Bei >2000 Zeichen einen **Diff-Stat-Block** mit Datei-Endungen
-     und Zeilen +/- anzeigen (kompakt), plus Dateiliste sortiert nach Aenderungs-
-     groesse. Nur die Zahl ersetzen, wenn der Diff stat selbst schon da ist.
-- **Tests:** `tests/test_human_gate_render.py` (3 neue Faelle:
-  * bug wird als behoben markiert wenn state.reviewer_stagnation_false_positive gesetzt;
-  * Reflexions-Runde enthaelt task_id-Prefix;
-  * Diff-Stat-Block bei >2000 Zeichen statt nur '(zu gross)').
-- **Blockiert von:** OP-062b (erledigt)
-- **Hinweis:** Live-Beleg 17:25 OP-002b3. Human-Gate zeigte:
-  * `[high] core/inventory/repository.py: Der Diff entfernt die Guards 'if not ip: return False'`
-    — obwohl alle 4 Tasks `done`. Die Task-Erfuellung hat den Guard entfernt
-    (war nicht in der Task-Spec), der Reviewer markierte es als Regression, dann
-    hat OP-062b den Bug als 'letzte Runde' angezeigt. Ohne Bug-Sync bleibt der
-    HIGH-Bug als Rest-Rauschen sichtbar.
-  * `Runde 1: 1 Patches`, `Runde 2: 0 Patches`, `Runde 1: 2 Patches`,
-    `Runde 1: 1 Patches` — vier Tasks, jede startet bei Runde 1.
-  * `(Diff zu gross: 5002 Zeichen, siehe git diff)` — Diff-Stat war schon
-    im Panel darueber sichtbar, aber der Mensch sieht nicht, ob die Aenderungen
-    sinnvoll sind.
-  Ziel: Human-Gate wird fuer den Menschen **entscheidbar**, ohne dass er
-  manuell in `git diff` oder Audit-Log gehen muss.
+- **Betroffene Dateien:** `werkstatt/gates.py`, `tests/test_human_gate_render.py`
+- **Akzeptanzkriterien:** OP-062c hat `_diff_hunk_summary(diff)` eingebaut (Tests gruen), aber noch nicht in `_human_gate` verdrahtet. Die Diff-Anzeige bei >2000 Zeichen ist unveraendert `'(Diff zu gross: N Zeichen, siehe git diff)'`.
+  1. `_human_gate` ruft `_diff_hunk_summary(_full)` auf, wenn `len(_full) > 2000`.
+  2. Die Hunk-Summary landet im `_gate_body` zwischen Task-Fortschritt und `_human_gate_body` (oder als eigener Block 'Diff-Struktur').
+  3. Test: `_human_gate` mit einem Diff >2000 Zeichen zeigt Hunk-Summary statt nur '(Diff zu gross)'.
+- **Tests:** `tests/test_human_gate_render.py` (1 neuer Fall mit subprocess-Mock fuer `git diff`).
+- **Blockiert von:** OP-062c (erledigt)
+- **Hinweis:** OP-062c hat die Hunk-Summary als pure Funktion geliefert (Tests gruen, Baseline 1051 passed). Verdrahtung braucht `_human_gate`-Aenderung mit subprocess-Mock im Test. Kleiner Schritt, aber eigener Commit.
 
 ### OP-063: Loop-PROGRESS-Einträge leer + Commit-Message abgeschnitten
 
@@ -392,6 +365,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 | OP-061 | erledigt 2026-11-01 (05bb2b2) | builder_failed-Klarheit (A: pre-reviewer flag, B: prior-done gleiche Datei) | – |
 | OP-062a | erledigt 2026-11-01 (HEAD) | redact=False fuer Builder + Reviewer (Code-Pruefung) | – |
 | OP-062b | erledigt 2026-11-01 (HEAD) | Human-Gate zeigt Architect-Plan + Reviewer-Bugs + Reflexionen | – |
+| OP-062c | erledigt 2026-11-01 (83a0407) | Human-Gate Bug-Sync + task_id + Hunk-Summary (partial: Verdrahtung in OP-062d) | – |
 
 ## Verweise
 
