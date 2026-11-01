@@ -9,9 +9,9 @@ M-Nummern: ausfuehrliche Lehre in `../MERKPOSTEN.md`.
 eingefuegt wird. `count(anker) == 1` Pflicht.
 
 **Audit-Kind** — String, mit dem ein Ereignis in `.werkstatt/audit.log`
-protokolliert wird. Katalog in `pipeline.py:521` (`_KATALOG_SOLL`).
+protokolliert wird. Katalog in `werkstatt/audit.py` (`_AUDIT_KINDS_BEKANNT`).
 
-**Baseline** — Verbindliche Soll-Werte: pytest 1290, ruff 13,
+**Baseline** — Verbindliche Soll-Werte: pytest 958, ruff 248,
 mypy 8, AST 6, Katalog 162. Siehe `../HANDOFF-BASELINE.md`.
 
 **Builder** — Rolle, die Code-Patches baut. `agents/builder*.md`.
@@ -29,7 +29,7 @@ Explanation. Siehe `../INDEX.md`.
 **Judge** — Rolle, die Code gegen Contract prueft. `agents/judge.md`.
 
 **Katalog** — Menge aller Audit-Kinds, gegen die `audit("kind", ...)`
-pruefen muss. `_KATALOG_SOLL` in `pipeline.py`.
+pruefen muss. `_AUDIT_KINDS_BEKANNT` in `werkstatt/audit.py`.
 
 **M-Nummer** — Merkposten-Nummer (M-58, M-72, M-186, ...).
 Jede Nummer = eine Lehre. Siehe `../MERKPOSTEN.md`.
@@ -42,7 +42,7 @@ Extraktion als Liste dokumentiert (M-70/M-73).
 
 **SOPS + age** — Key-Architektur. Key liegt verschluesselt in
 `secrets.enc.yaml`, age-Key in `~/.config/sops/age/keys.txt`.
-Siehe `../KEY-ARCHITEKTUR.md`.
+Siehe `adr/ADR-0001-sops-age.md`.
 
 **Skill** — Wiederverwendbares Rollen-Modul. `skills/*/SKILL.md`
 mit Frontmatter `name` + `description`.
@@ -122,4 +122,4 @@ vollstaendig.
 **M-204** — Test, der Commit-Autor prueft, darf nicht auf globalen
 git-config vertrauen.
 
-**M-206** — Baseline 1245 -> 1290 (A3: 14 Skill-Tests).
+**M-206** — Baseline 1245 -> 1290 (A3: 14 Skill-Tests). [historisch, vor Loop-Neubau]
