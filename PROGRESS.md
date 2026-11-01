@@ -1315,3 +1315,7 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 ## 2026-11-01T18:44:36+00:00 -- OP-060b: human_review-Status (done)
 - **Status:** done
 - **Info:** Commit HEAD. Kompletter human_review-Status: phase_state.mark_human_review + _task_ende(human_review=True) + _propagate_failed_to_parents ignoriert human_review-Kinder + _phase_tasks_loop human_review=True bei spec_widerspruch_erkannt + _phase_finalize rc=2 + Human-Gate [~]-Render. Audit-Kind loop_human_review_offen. Tests: test_human_review_status.py (5 Faelle). Baseline 1075 passed. Loop-Stagnations-Ausweg komplett: OP-059c erkennt Spec-Widerspruch -> OP-060b setzt human_review -> rc=2 -> Mensch entscheidet.
+
+## 2026-11-01T19:08:39+00:00 -- OP-064a: Sticky-Veto
+- **Status:** done
+- **Info:** Commit HEAD. phase_state.mark_vetoed + ist_vetoed. verdict orthogonal zu status (sonst Idempotenz-Guard-Konflikt). mark_done hebt Veto auf (Mensch). task_runner._task_ende: Veto-Guard -> mark_human_review statt mark_done bei vetoed. pipeline_phases._phase_tasks_loop: nach Reflection VOR False-Positive-Pfad pruefen, ob spec_widerspruch_erkannt -> mark_vetoed + human_review + Audit, kein 2. Reviewer-Call. Tests: tests/test_sticky_veto.py (4 Faelle, Test 4 echter Loop-Mock). Baseline 1087 passed. Live-Beleg Testrunde 3 (18:54 OP-004): Veto haette den type:ignore-Approval blockiert. Erster Baustein von OP-064 (Completion-Gate-Architektur). Naechste Bausteine: 064b (Antipattern-Scanner), 064c (StuckDetector), 064d (Red-to-Green), 064e (Spec-Pre-Flight), 064f (Feature-JSON).
