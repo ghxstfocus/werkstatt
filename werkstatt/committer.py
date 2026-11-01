@@ -4,6 +4,8 @@ Extrahiert aus loop.py. Re-Export in loop.py erhaelt API-Kompatibilitaet.
 """
 from __future__ import annotations
 
+import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -78,6 +80,150 @@ def _task_fortschritt_block(pd: Path, pn: str) -> str:
     return _head + "\n" + "\n".join(_lines) + "\n"
 
 
+def _doku_nachzug_aktiv() -> bool:
+    """OP-048: Opt-in via WERKSTATT_DOKU_NACHZUG=1."""
+    return os.environ.get("WERKSTATT_DOKU_NACHZUG") == "1"
+
+
+def _op_nnn_aus_aufgabe(aufgabe: str) -> str | None:
+    """OP-048: Erste OP-NNN-Referenz aus der Aufgabe."""
+    m = re.search(r"\bOP-\d{3}[a-z]?\d*\b", aufgabe or "")
+    return m.group(0) if m else None
+
+
+def _status_md_op_entfernen(status_md_path: Path, op_nnn: str) -> tuple[bool, str]:
+    """OP-048: Entfernt '### OP-NNN'-Block bis zur naechsten Ueberschrift."""
+    if not status_md_path.exists():
+        return False, f"STATUS.md nicht gefunden: {status_md_path}"
+    txt = status_md_path.read_text(encoding="utf-8")
+    pat = re.compile(rf"^### {re.escape(op_nnn)}:", re.MULTILINE)
+    m = pat.search(txt)
+    if not m:
+        return False, f"{op_nnn} nicht in STATUS.md"
+    start = m.start()
+    rest = txt[m.end():]
+    end_pat = re.compile(r"^(### |## )", re.MULTILINE)
+    em = end_pat.search(rest)
+    end = (m.end() + em.start()) if em else len(txt)
+    new_txt = txt[:start].rstrip("\n") + "\n\n" + txt[end:].lstrip("\n")
+    status_md_path.write_text(new_txt, encoding="utf-8")
+    return True, ""
+
+
+def _delete_zone_op_append(status_md_path: Path, op_nnn: str, subject: str) -> bool:
+    """OP-048: Ergaenzt OP-NNN in der Delete-Zone-Tabelle."""
+    if not status_md_path.exists():
+        return False
+    txt = status_md_path.read_text(encoding="utf-8")
+    dz_pat = re.compile(r"^## Delete-Zone\s*$", re.MULTILINE)
+    dz_m = dz_pat.search(txt)
+    if not dz_m:
+        return False
+    end_m = re.compile(r"^## ", re.MULTILINE).search(txt, dz_m.end())
+    section_end = end_m.start() if end_m else len(txt)
+    section = txt[dz_m.end():section_end]
+    lines = section.split("\n")
+    last_idx = -1
+    for i, ln in enumerate(lines):
+        if ln.strip().startswith("|"):
+            last_idx = i
+    if last_idx < 0:
+        return False
+    from datetime import date as _date_dz
+    datum = _date_dz.today().isoformat()
+    note = subject.replace("|", "-")[:60]
+    new_row = f"| {op_nnn} | erledigt {datum} | {note} | - |"
+    lines.insert(last_idx + 1, new_row)
+    new_txt = txt[:dz_m.end()] + "\n".join(lines) + txt[section_end:]
+    status_md_path.write_text(new_txt, encoding="utf-8")
+    return True
+
+
+def _progress_op_done(pd: Path, op_nnn: str, subject: str, pn: str) -> bool:
+    """OP-048: Appendiert OP-Done-Eintrag an PROGRESS.md."""
+    try:
+        from werkstatt import progress as _progress_od
+        return _progress_od.append(
+            pd,
+            name=f"{op_nnn}: {subject}",
+            status="done",
+            info=f"Loop-Doku-Nachzug (Ebene 1). Beleg: git log {pn}.",
+        )
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _update_kennzahlen(status_md_path: Path, pd: Path) -> bool:
+    """OP-055: Aktualisiert HEAD-Zeile in '## Kennzahlen' (nur HEAD).
+
+    Tests/ruff/mypy: Follow-up (blockiert von OP-039, pytest --co -q
+    kostet bei security-ai 30-60s).
+    """
+    if not status_md_path.exists():
+        return False
+    try:
+        sha = subprocess.run(
+            ["git", "-C", str(pd), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, check=False, timeout=10,
+        ).stdout.strip()
+    except Exception:  # noqa: BLE001
+        return False
+    if not sha:
+        return False
+    txt = status_md_path.read_text(encoding="utf-8")
+    head_pat = re.compile(r"^(- HEAD: )\S+[^\n]*$", re.MULTILINE)
+    if not head_pat.search(txt):
+        return False
+    new_txt = head_pat.sub("\\g<1>" + sha, txt, count=1)
+    if new_txt == txt:
+        return False
+    status_md_path.write_text(new_txt, encoding="utf-8")
+    return True
+
+
+def _update_changelog(pd: Path, entry: str) -> bool:
+    """OP-056: Fuegt Zeile in '## [Unreleased]' ein. Nur wenn Datei existiert."""
+    changelog = Path(pd) / "CHANGELOG.md"
+    if not changelog.exists():
+        return False
+    txt = changelog.read_text(encoding="utf-8")
+    unrel_pat = re.compile(r"^## \[Unreleased\]\s*$", re.MULTILINE)
+    m = unrel_pat.search(txt)
+    if not m:
+        return False
+    pos = m.end()
+    while pos < len(txt) and txt[pos] == "\n":
+        pos += 1
+    new_txt = txt[:pos] + f"- {entry}\n" + txt[pos:]
+    changelog.write_text(new_txt, encoding="utf-8")
+    return True
+
+
+def _architecture_drift_check(pd: Path) -> dict:
+    """OP-057: Meldet .py neu/geloescht ohne ARCHITECTURE.md-Aenderung."""
+    try:
+        diff = subprocess.run(
+            ["git", "-C", str(pd), "diff", "--name-status", "HEAD"],
+            capture_output=True, text=True, check=False, timeout=10,
+        ).stdout
+    except Exception:  # noqa: BLE001
+        return {"drift": False, "reason": "git_diff_failed"}
+    py_changed = []
+    arch_changed = False
+    for ln in diff.splitlines():
+        parts = ln.split("\t", 1)
+        if len(parts) != 2:
+            continue
+        st, path = parts
+        if path == "docs/ARCHITECTURE.md":
+            arch_changed = True
+        if path.endswith(".py") and st in ("A", "D"):
+            py_changed.append((st, path))
+    if py_changed and not arch_changed:
+        return {"drift": True, "py": py_changed}
+    return {"drift": False, "py": py_changed, "arch_changed": arch_changed}
+
+
 def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     """M-487: Committet uncommittete Aenderungen im Zielprojekt.
 
@@ -118,6 +264,34 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
         )
     except Exception:  # noqa: BLE001, S110
         pass
+
+    # OP-048/055/056/057: Doku-Selbstpflege Ebene 1+2 (opt-in WERKSTATT_DOKU_NACHZUG=1).
+    if _doku_nachzug_aktiv():
+        _op_nnn = _op_nnn_aus_aufgabe(getattr(state, "aufgabe", "") or "")
+        _status_path = Path(pd) / "docs" / "STATUS.md"
+        if not _op_nnn:
+            audit("doku_nachzug_skip", {"reason": "no_op_in_aufgabe"}, pd, pn)
+        elif not _status_path.exists():
+            audit("doku_nachzug_skip",
+                  {"reason": "no_status_md", "op_nnn": _op_nnn}, pd, pn)
+        else:
+            _subject = (getattr(state, "aufgabe", "") or "").strip().split("\n")[0][:60]
+            _rm_ok, _rm_msg = _status_md_op_entfernen(_status_path, _op_nnn)
+            if _rm_ok:
+                _progress_op_done(Path(pd), _op_nnn, _subject, pn)
+                _delete_zone_op_append(_status_path, _op_nnn, _subject)
+                _update_kennzahlen(_status_path, Path(pd))
+                _update_changelog(Path(pd), f"{_op_nnn}: {_subject}")
+                _drift = _architecture_drift_check(Path(pd))
+                if _drift.get("drift"):
+                    audit("committer_architecture_drift",
+                          {"py_changed": _drift.get("py", [])}, pd, pn)
+                    print(f"  WARNUNG: Architecture-Drift: "
+                          f"{len(_drift.get('py', []))} neue/geloeschte .py "
+                          f"ohne ARCHITECTURE.md-Aenderung")
+            else:
+                audit("doku_nachzug_skip",
+                      {"reason": _rm_msg, "op_nnn": _op_nnn}, pd, pn)
 
     # FIX 2026-10-31: Task-File-Pruefung VOR git add.
     # Wenn ein Task als done markiert ist und task_files nennt,

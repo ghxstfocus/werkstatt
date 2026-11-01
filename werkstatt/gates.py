@@ -217,6 +217,102 @@ def _human_gate_plan(state, auto_approve=False):
     return 1
 
 
+def _adr_mini_aktiv() -> bool:
+    """OP-058: Opt-in via WERKSTATT_ADR_MINI=1."""
+    import os as _os_adr
+    return _os_adr.environ.get("WERKSTATT_ADR_MINI") == "1"
+
+
+def _naechste_adr_nummer(adr_dir: Path) -> int:
+    """OP-058: Hoechste existierende ADR-Nummer +1. Fallback 1."""
+    import re as _re_adr
+    if not adr_dir.exists():
+        return 1
+    max_n = 0
+    for f in adr_dir.iterdir():
+        if f.is_file() and f.name.startswith("ADR-"):
+            m = _re_adr.match(r"ADR-(\d+)", f.name)
+            if m:
+                max_n = max(max_n, int(m.group(1)))
+    return max_n + 1
+
+
+def _adr_template(nummer: int, slug: str, aufgabe: str, pd: Path) -> str:
+    """OP-058: Deterministisches ADR-Template (kein LLM, Mensch fuellt)."""
+    from datetime import date as _date_adr
+    datum = _date_adr.today().isoformat()
+    return (
+        f"# ADR-{nummer:04d}: {slug}\n\n"
+        f"- **Datum:** {datum}\n"
+        f"- **Status:** proposed\n"
+        f"- **Kontext:** Loop-Aufgabe in {pd.name}: {aufgabe[:200]}\n\n"
+        f"## Entscheidung\n\n"
+        f"<!-- Vom Menschen zu fuellen: Welche Entscheidung wurde getroffen? -->\n\n"
+        f"## Konsequenzen\n\n"
+        f"<!-- Vom Menschen zu fuellen: Was folgt daraus? -->\n\n"
+        f"## Alternativen\n\n"
+        f"<!-- Vom Menschen zu fuellen: Was wurde verworfen und warum? -->\n"
+    )
+
+
+def _adr_index_append(adr_dir: Path, nummer: int, slug: str, filename: str) -> bool:
+    """OP-058: Ergaenzt Zeile in docs/adr/README.md."""
+    readme = adr_dir / "README.md"
+    if not readme.exists():
+        return False
+    txt = readme.read_text(encoding="utf-8")
+    lines = txt.split("\n")
+    last_row = -1
+    for i, ln in enumerate(lines):
+        if ln.strip().startswith("|") and "ADR-" in ln:
+            last_row = i
+    if last_row < 0:
+        return False
+    new_row = f"| {nummer:04d} | {slug} | [{filename}]({filename}) |"
+    lines.insert(last_row + 1, new_row)
+    readme.write_text("\n".join(lines), encoding="utf-8")
+    return True
+
+
+def _adr_mini_phase(state: RunState) -> bool:
+    """OP-058: Fragt nach ADR, legt ADR an bei 'j'. True = weitermachen."""
+    import os as _os_adr_run
+    if not _adr_mini_aktiv():
+        return True
+    if _os_adr_run.environ.get("WERKSTATT_IN_TEST") == "1":
+        return True
+    pd = getattr(state, "project_dir", None)
+    pn = getattr(state, "project_name", "?")
+    if pd is None:
+        return True
+    adr_dir = Path(pd) / "docs" / "adr"
+    if not adr_dir.exists():
+        audit("adr_mini_skip", {"reason": "no_adr_dir"}, pd, pn)
+        return True
+    try:
+        antwort = input("ADR dokumentieren? [j/n]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return True
+    if antwort not in ("j", "ja", "y", "yes"):
+        audit("adr_mini_skip", {"reason": "user_no"}, pd, pn)
+        return True
+    nummer = _naechste_adr_nummer(adr_dir)
+    aufgabe = (getattr(state, "aufgabe", "") or "").strip()
+    slug = "-".join(aufgabe.lower().split()[:5])[:50] or "loop-entscheidung"
+    filename = f"ADR-{nummer:04d}-{slug}.md"
+    try:
+        (adr_dir / filename).write_text(
+            _adr_template(nummer, slug, aufgabe, Path(pd)),
+            encoding="utf-8",
+        )
+        _adr_index_append(adr_dir, nummer, slug, filename)
+        audit("adr_mini_created", {"file": filename, "nr": nummer}, pd, pn)
+        print(f"  ADR angelegt: docs/adr/{filename}")
+    except Exception as _e:  # noqa: BLE001
+        audit("adr_mini_fehler", {"error": str(_e)[:200]}, pd, pn)
+    return True
+
+
 def _human_gate(state: RunState) -> int:
     """Eigenes Human-Gate im Loop (fail-closed).
 
@@ -311,6 +407,8 @@ def _human_gate(state: RunState) -> int:
 
     if antwort in ("j", "ja", "y", "yes"):
         audit("loop_human_gate_approved", {}, pd, pn)
+        # OP-058: ADR-Mini-Phase (opt-in WERKSTATT_ADR_MINI=1).
+        _adr_mini_phase(state)
         # M-487: Human-Gate committet selbst (nur bei explizitem j).
         _ok, _info = _committe_zielprojekt(state)
         if not _ok:
