@@ -313,6 +313,7 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
 
     # 3. Stages ausfuehren
     _executed_stages = []
+    _hart_stage_ids: set[str] = set()
     for stage in stages:
         # OP-034: requires-Gate
         _req = stage.get("requires")
@@ -343,7 +344,10 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
         # M-306c: "python3" im Stage-Command durch venv_python ersetzen.
         if _venv_python != "python3":
             cmd = [_venv_python if c == "python3" else c for c in cmd]
-        _executed_stages.append(stage.get("id", "?"))
+        _sid = stage.get("id", "?")
+        _executed_stages.append(_sid)
+        if _stage_ist_hart(stage):
+            _hart_stage_ids.add(_sid)
         _t_stage = _time.monotonic() if "_time" in dir() else None
         try:
             # M-390: Heartbeat alle 2s waehrend der Stage
@@ -360,6 +364,11 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{stage.get('id', '?')}-Fehler: {exc}")
 
+    # OP-062f: Hart-Info fuer _verify_patches_soft (Prefix-Match reicht
+    # nicht, wenn stage_dict 'hart': true setzt, aber Aufrufer nur
+    # den Stage-ID-String sieht).
+    if state is not None:
+        state.last_verify_hart_stages = set(_hart_stage_ids)  # type: ignore[attr-defined]
     if errors:
         audit("loop_verify_failed",
               {"errors": errors, "phase": phase,
@@ -446,7 +455,9 @@ def _verify_patches_soft(
         _e_str = str(_e)
         # Format: "stage_id: <message>"
         _stage = _e_str.split(":", 1)[0].strip()
-        if _stage_ist_hart(_stage):
+        # OP-062f: State-Hinweis hat Vorrang vor Prefix-Match.
+        _hart_stages = getattr(state, "last_verify_hart_stages", set())
+        if _stage in _hart_stages or _stage_ist_hart(_stage):
             _hart.append(_e_str)
         else:
             _weich.append(_e_str)
