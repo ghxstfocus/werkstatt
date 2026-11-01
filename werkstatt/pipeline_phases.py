@@ -1371,7 +1371,10 @@ def _hat_human_review_tasks(phase_state) -> bool:
     except Exception:  # noqa: BLE001
         return False
     return any(
-        isinstance(t, dict) and t.get("status") == "human_review"
+        isinstance(t, dict) and (
+            t.get("status") == "human_review"
+            or t.get("verdict") == "vetoed"
+        )
         for t in _tasks
     )
 
