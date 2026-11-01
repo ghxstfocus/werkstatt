@@ -163,3 +163,55 @@ Deterministische Doku-Selbstpflege (OP-048, OP-055, OP-056) ist gebaut, aber **n
 Wenn das klappt, ist der Loop erstmals **selbst-dokumentierend**.
 
 Viel Erfolg. Bei Zweifel: MESSEN, nicht raten.
+
+
+---
+
+## 12. NACHTRAG (nach Handoff-Sektion 11): Loop-Bugs Session-Ende
+
+Nach dem urspruenglichen Handoff wurden 3 echte Loop-Reflection-Bugs
+identifiziert (nicht behoben, als OP-059/060/061 angelegt):
+
+**OP-059 reviewer_rejected-False-Positive.** Builder-Patch korrekt,
+Reviewer lehnt trotzdem ab, Reflexion scheitert, Task als failed.
+Live: OP-002b3-Loop 13:22 t1 (commit-Parameter), Smoke-Test gruen.
+
+**OP-060 reflection_ohne_apply.** Reflection-Runde liefert Patch,
+_build_patches_fuer_datei wendet ihn nicht an. Live: OP-002b2-Loop
+12:51 t2 (Test-Builder). Auch OP-002b3 13:22 t2 builder_failed.
+
+**OP-061 builder_failed-Zustandsverwirrung.** t1+t2 gegen dieselbe
+Datei, t1-Patch enthaelt BEIDE Aenderungen, t2 als builder_failed
+markiert. Task-Zuordnung im Loop inkonsistent zur Realitaet.
+Human-Gate zeigt "1/3 done, 2 failed", Code ist aber 2/3 korrekt.
+
+**Live-Beleg gesamt:** OP-002b3-Loop (13:22) — Builder lieferte
+den funktionierenden Patch, Loop markierte 2 von 3 Tasks als
+failed. Nach Diff-Pruefung + Smoke-Test: Patch produktionsreif,
+manuell uebernommen (Commit ebad370), Test in
+test_inventory_op002b3.py (2 passed).
+
+**Konsequenz fuer naechste Session:** OP-059 zuerst (hoechste
+Prioritaet, weil der Loop-Output am Human-Gate sonst unbrauchbar
+ist — der Mensch kann die Task-Anzeige nicht mehr als Wahrheit
+nehmen). OP-060 und OP-061 danach.
+
+**Session-Commits (vollstaendig):**
+
+Werkstatt (9 Commits heute Abend, `9bdcfc2..065efff`):
+- 9bdcfc2 OP-048 Spec-Split + OP-055/056/057/058
+- 73f3156 Doku-Selbstpflege-Code + ADR-Mini-Phase (27 Tests)
+- 8503976 OP-048/055/056/057/058 nach PROGRESS.md
+- d19ecdb Architect-Prompt: bedingte Test-Scope-Regel
+- bbdceb3 Handoff 2026-11-01 Abend
+- 8b7e3a5 planner_gate: OP-Serien-Namen ausnehmen (K27b, erster Versuch)
+- e50e079 planner_gate: base+opnum statt letter (K27b, Nachtrag)
+- 065efff OP-059/060/061 Loop-Bugs angelegt
+
+security-ai (6 Commits heute Abend, `2c733fc..5cfc8ba`):
+- 262cb5a Migration 0019 device_history feld/alt/neu
+- ef413bd OP-002b2 _insert_device_history + 3 Tests
+- 4810d09 OP-002b2 nach PROGRESS.md
+- 84ac40b Delete-Zone OP-005/OP-054-Zeilen entwirrt
+- ebad370 OP-002b3 upsert_seen History + 2 Tests
+- 5cfc8ba OP-002b3 nach PROGRESS.md
