@@ -61,6 +61,31 @@ def run_reviewer(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
+def _verify_fehler_wiederholt_sich(errors: list) -> bool:
+    """OP-059d: True, wenn verify_errors den gleichen Kern-Fehler 2x hat.
+
+    Erkennt Wiederholungs-Muster: 'mypy_changed: ... : error: ...'
+    mit identischer Error-Signatur (ohne Zeilennummer-Praefix).
+    Dient als Signal fuer Spec-Widerspruch im Verify-Pfad, wo kein
+    Reviewer-Bug-Text vorliegt.
+    """
+    if not errors or len(errors) < 2:
+        return False
+    _sigs: list[str] = []
+    for _e in errors:
+        if not isinstance(_e, str):
+            continue
+        # Nimm den ersten 'error:'-Satz als Signatur
+        _idx = _e.find("error:")
+        if _idx < 0:
+            continue
+        _sig = _e[_idx:_idx + 120].strip()
+        _sigs.append(_sig)
+    if len(_sigs) < 2:
+        return False
+    return _sigs[0] == _sigs[1]
+
+
 def _bug_text_deutet_spec_widerspruch(bugs: list) -> bool:
     """OP-059c: Erkennt Spec-Widerspruch-Muster in Reviewer-Bug-Texten.
 
@@ -179,9 +204,18 @@ def _reflection_loop(
                    "ruff_jetzt": _ruff_jetzt,
                    "gleiche_bugs": _hat_gleiche_bugs}, pd, pn)
             if _stagnation >= 2:
-                # OP-059c: Spec-Widerspruch-Verdacht pruefen.
+                # OP-059c + OP-059d: Spec-Widerspruch pruefen.
+                # Zwei Pfade: (a) Reviewer-Bug-Marker, (b) verify-
+                # Fehler wiederholt sich (mypy, patch_apply).
                 _bugs_fuer_check = getattr(state, "reviewer_bugs", None) or []
-                if _bug_text_deutet_spec_widerspruch(_bugs_fuer_check):
+                _verify_fuer_check = (
+                    getattr(state, "last_verify_errors", None) or []
+                )
+                _is_spec = (
+                    _bug_text_deutet_spec_widerspruch(_bugs_fuer_check)
+                    or _verify_fehler_wiederholt_sich(_verify_fuer_check)
+                )
+                if _is_spec:
                     audit("loop_reflection_spec_widerspruch",
                           {"runde": runde,
                            "bug_text_preview": [
@@ -340,7 +374,14 @@ def _reflection_loop(
                    "grund": "patch_nicht_angewendet"}, pd, pn)
             if _stagnation >= 2:
                 _bugs_fuer_check2 = getattr(state, "reviewer_bugs", None) or []
-                if _bug_text_deutet_spec_widerspruch(_bugs_fuer_check2):
+                _verify_fuer_check2 = (
+                    getattr(state, "last_verify_errors", None) or []
+                )
+                _is_spec2 = (
+                    _bug_text_deutet_spec_widerspruch(_bugs_fuer_check2)
+                    or _verify_fehler_wiederholt_sich(_verify_fuer_check2)
+                )
+                if _is_spec2:
                     audit("loop_reflection_spec_widerspruch",
                           {"runde": runde,
                            "grund": "patch_nicht_angewendet"}, pd, pn)

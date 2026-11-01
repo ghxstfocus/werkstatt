@@ -1107,6 +1107,18 @@ def _phase_tasks_loop(
             audit("loop_gate_failed", {"gate": "post_build", "task_id": i}, pd, pn)
             if not _reflection_loop(state):
                 audit("loop_reflection_gescheitert", {"task_id": i}, pd, pn)
+                # OP-059d: bei Spec-Widerspruch-Verdacht human_review
+                # statt post_build_verify_failed.
+                if getattr(state, "spec_widerspruch_erkannt", False):
+                    audit("loop_verify_failed_human_review",
+                          {"task_id": i,
+                           "grund": "spec_widerspruch_vermutet"}, pd, pn)
+                    state.spec_widerspruch_erkannt = False  # type: ignore[attr-defined]
+                    _task_ende(state, phase_state, task_id,
+                               ok=False, name=task_name,
+                               human_review=True,
+                               failure="spec_widerspruch_vermutet")
+                    continue
                 _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="post_build_verify_failed")
                 continue
         elif _v_weich:
