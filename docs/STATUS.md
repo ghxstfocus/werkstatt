@@ -48,17 +48,20 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-060: reflection_ohne_apply (Reflection-Bug)
+### OP-060b: human_review-Status + Duplikat-Anker-Regeneration (Design-OP)
 - **Status:** open
-- **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/pipeline_phases.py`, `tests/test_reflection_ohne_apply.py`
-- **Akzeptanzkriterien:** Wenn eine Reflection-Runde einen Patch liefert, aber `_build_patches_fuer_datei` ihn nicht anwendet (`loop_reflection_patch_nicht_angewendet`), muss der Loop:
-  1. Audit `reflection_patch_unwirksam` mit `old_string_len`, `file`, `grund` (kein_match / mehrdeutig / no_effect).
-  2. Wenn nach 2 Runden immer noch `patch_nicht_angewendet` UND `reviewer_bugs` sich nicht aendern: Task mit Status `human_review` markieren (nicht: failed). Am Human-Gate Hinweis "Reflection-Patch unwirksam, manueller Eingriff empfohlen".
-  3. Wenn `old_string` mehrdeutig (Duplikat-Anker, wie OP-054): zusaetzlicher Audit + Vorschlag, den Patch auf eindeutigere Anker zu regenerieren.
-- **Tests:** `tests/test_reflection_ohne_apply.py` (4 Faelle: Patch leer -> retry; Patch no_effect -> audit + retry; Duplikat-Anker -> audit + Vorschlag; nach 2 Runden wirksam -> done).
+- **Betroffene Dateien:** `werkstatt/phase_state.py`, `werkstatt/task_runner.py`, `werkstatt/gates.py`, `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_human_review_status.py`
+- **Akzeptanzkriterien:**
+  1. `PhaseState.mark_human_review(task_id, grund)` setzt `status="human_review"`. Neuer Status neben `done`/`failed`/`split`/`pending`/`running`.
+  2. `_task_ende` akzeptiert `human_review=True`: ruft `mark_human_review`, schreibt PROGRESS-Eintrag `Status: human_review`, ist idempotent (zweiter Aufruf mit gleichem task_id no-op via bestehendem Guard, erweitert um human_review).
+  3. `_propagate_failed_to_parents` zaehlt `human_review`-Kinder NICHT als failed — Parent bleibt `split`, bis der Mensch entschieden hat.
+  4. `_phase_finalize`: zaehlt `human_review` separat, rc=2 wenn nur human_review offen (nicht rc=1 wie bei failed).
+  5. `_phase_tasks_loop`: bei 2 Reflexions-Runden `patch_nicht_angewendet` mit gleichen Reviewer-Bugs -> `_task_ende(..., human_review=True, grund="reflection_patch_unwirksam")` statt failed.
+  6. Duplikat-Anker (Diagnose `mehrdeutig`): bei Human-Gate-Review-Hinweis Text "old_string kommt N-mal vor, Patch auf eindeutigeren Anker regenerieren". Optional LLM-Regeneration in einer Folg-OP.
+  7. Am Human-Gate: Task-Zeile mit `[~]`-Prefix + Grund, sichtbar vom bestehenden Diff-Layout getrennt.
+- **Tests:** `tests/test_human_review_status.py` (5 Faelle: mark_human_review setzt Status + Grund; _task_ende idempotent mit human_review; _propagate_failed ignoriert human_review-Kinder; _phase_finalize rc=2; Aufruf aus Reflexion bei 2x patch_nicht_angewendet).
 - **Blockiert von:** —
-- **Hinweis:** Session 2026-11-01 Abend. Live-Beleg: OP-002b2-Loop (12:51), t2 Test-Builder scheiterte mit `reflection_ohne_apply`. Test wurde manuell in `test_inventory_op002b2.py` geschrieben. Auch OP-002b3 (13:22) t2 mit `builder_failed`. Der Loop baut Methode+Test manchmal, aber der Reflection-Pfad scheitert ohne klaren Grund — schwer zu debuggen, weil Audit-Event nur `{}` schickt.
-
+- **Hinweis:** OP-060a (Commit ce5939f) liefert nur die Diagnose-Grundlage (`loop_reflection_patch_unwirksam` mit diagnosen-Liste, u.a. `grund=mehrdeutig` + `vorkommen>1`). human_review ist ein neuer Task-Status und braucht Design-Entscheid (Kollision mit Idempotenz-Guard, Human-Gate-Zaehlung, rc-Berechnung, Parent-Propagation). Aus OP-060 herausgesplittet, weil Code-Umfang deutlich groesser ist als OP-060a.
 ### OP-061: builder_failed-Zustandsverwirrung (Task-Runner-Bug)
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/builder.py`, `werkstatt/task_runner.py`, `tests/test_builder_failed_ohne_grund.py`
@@ -306,6 +309,7 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 | OP-036 | erledigt 2026-10-31 (a965810) | Duplikat-Check in progress.append | – |
 | OP-037 | kein Bug — Reviewer-Verhalten korrekt (audit-log 183709-29980) | keine Aenderung | – |
 | OP-059 | erledigt 2026-11-01 (05162e7) | reflection false_positive (partial: human_review-Zweig nicht gebaut, nur done bei verify gruen) | – |
+| OP-060a | erledigt 2026-11-01 (ce5939f) | Patch-Diagnose bei Nicht-Anwendung (partial: human_review + Duplikat-Anker-Regeneration in OP-060b) | – |
 
 ## Verweise
 
