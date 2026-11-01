@@ -266,6 +266,102 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
     return "\n\n".join(parts)
 
 
+
+
+# =====================================================================
+# Prototyp v2 (2026-11-01): Strukturierter Architect-Docs-Kontext.
+# Ziel: 34801-Z.-User-Prompt auf ~8000 Z. reduzieren, davon 29289 Z.
+# ROADMAP. Reducer behalten die Struktur (Sektionen, Header), kuerzen
+# den Inhalt. Aktiv nur bei WERKSTATT_ARCHITECT_PROMPT=v2.
+# =====================================================================
+
+
+def _reduce_entry(text: str, max_chars: int = 700) -> str:
+    """AGENTS.md: nur '## Zweck' + '## Struktur' behalten."""
+    if not text:
+        return ""
+    parts = []
+    for section in ("Zweck", "Struktur"):
+        marker = f"## {section}"
+        start = text.find(marker)
+        if start < 0:
+            continue
+        rest = text[start + len(marker):]
+        nxt = rest.find("\n## ")
+        body = rest if nxt < 0 else rest[:nxt]
+        parts.append(f"## {section}{body}".rstrip())
+    result = "\n\n".join(parts) if parts else text[:max_chars]
+    return result[:max_chars]
+
+
+def _reduce_status(text: str) -> str:
+    """STATUS.md: nur '## Offene Punkte' + Inhalt, unveraendert."""
+    if not text:
+        return ""
+    marker = "## Offene Punkte"
+    start = text.find(marker)
+    if start < 0:
+        return text
+    rest = text[start:]
+    nxt = rest[len(marker):].find("\n## ")
+    return rest if nxt < 0 else rest[:len(marker) + nxt]
+
+
+def _reduce_roadmap(text: str, max_chars: int = 800) -> str:
+    """ROADMAP.md: nur Zeilen mit '## Phase' + Status-Icons behalten."""
+    if not text:
+        return ""
+    lines = []
+    for ln in text.splitlines():
+        stripped = ln.strip()
+        if stripped.startswith("## Phase") or stripped.startswith("### Phase"):
+            lines.append(stripped)
+    result = "\n".join(lines)
+    return result[:max_chars]
+
+
+def _build_selbst_check_block() -> str:
+    """Strukturierter Selbst-Check vor dem Senden (Prototyp v2)."""
+    return (
+        "## SELBST-CHECK (vor dem Senden)\n"
+        "- Jede genannte API steht in VERFUEGBARE APIS.\n"
+        "- Jede genannte Migrationsnummer ist die naechste freie.\n"
+        "- Ausgabe-Format eingehalten: '## <pfad>'-Ueberschriften, "
+        "Interface / Logik / Integration / Imports.\n"
+        "- Keine Datei genannt, die nicht im Kontext steht.\n"
+        "- Keine Zahl geschaetzt, nur aus MESSWERTE oder 'nicht gemessen'.\n"
+    )
+
+
+def build_architect_docs_section_v2(docs: dict) -> str:
+    """Strukturierter Docs-Kontext fuer den Architect (Prototyp v2).
+
+    Ersetzt den alten '--- entry ---'-Stil. Reihenfolge:
+      1. PROJEKT-ENTRY (Zweck + Struktur)
+      2. PROJEKT-STATUS (offene Punkte, ungekuerzt)
+      3. PROJEKT-ROADMAP (nur Phasen-Header, max 800 Z.)
+
+    Zielgroesse: ~6 KB (statt 29+4+1 = ~35 KB im alten Pfad).
+    """
+    if not docs:
+        return ""
+    parts: list[str] = []
+
+    entry = _reduce_entry(docs.get("entry", ""), max_chars=700)
+    if entry:
+        parts.append("### PROJEKT-ENTRY (Zweck + Struktur)\n" + entry)
+
+    status = _reduce_status(docs.get("status", ""))
+    if status:
+        parts.append("### PROJEKT-STATUS (offene Punkte)\n" + status)
+
+    roadmap = _reduce_roadmap(docs.get("roadmap", ""), max_chars=800)
+    if roadmap:
+        parts.append("### PROJEKT-ROADMAP (nur Phasen-Header)\n" + roadmap)
+
+    return "\n\n".join(parts)
+
+
 def run_architect(
     state, aufgabe: str, user_content: str, api_key: str,
     explorer_ctx: dict | None,
@@ -310,4 +406,9 @@ __all__ = [
     '_architect_system_with_builder',
     '_planner_system',
     'run_architect',
+    'build_architect_docs_section_v2',
+    '_reduce_entry',
+    '_reduce_status',
+    '_reduce_roadmap',
+    '_build_selbst_check_block',
 ]

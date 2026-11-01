@@ -1242,7 +1242,22 @@ def run_planner(state: RunState) -> bool:
                 for k, v in list(state.docs.items())[:3]
             )
 
-    user_content = f"Aufgabe: {aufgabe}\n\nKontext:\n{docs_ctx}"
+    # Prototyp v2 (2026-11-01): Env-Schalter fuer strukturierten
+    # Architect-User-Prompt. Alter Pfad bleibt unveraendert, v2 ist
+    # opt-in. Ziel: 34801 Z. -> ~4400 Z. (-87 %), primär durch
+    # ROADMAP-Reduktion (50011 -> 800 Z., nur Phasen-Header).
+    import os as _os_proto
+    if _os_proto.environ.get("WERKSTATT_ARCHITECT_PROMPT") == "v2":
+        from werkstatt.architect import build_architect_docs_section_v2
+        _v2_docs = build_architect_docs_section_v2(
+            getattr(state, "docs", None) or {},
+        )
+        user_content = (
+            f"## AUFGABE\n{aufgabe}\n\n"
+            f"## KONTEXT (nur relevanter Auszug)\n{_v2_docs}"
+        )
+    else:
+        user_content = f"Aufgabe: {aufgabe}\n\nKontext:\n{docs_ctx}"
 
     # K6: Abgeschlossene Punkte als Signal — verhindert Neu-Planen.
     _erledigt = _erledigte_punkte(getattr(state, "project_dir", None))
@@ -1491,6 +1506,11 @@ def run_planner(state: RunState) -> bool:
             audit("planner_atomarer_plan_verworfen",
                   {"grund": "betroffene_stellen leer oder multi-file"},
                   pd, pn)
+
+    # Prototyp v2: Selbst-Check als letzter Block, nur in v2.
+    if _os_proto.environ.get("WERKSTATT_ARCHITECT_PROMPT") == "v2":
+        from werkstatt.architect import _build_selbst_check_block
+        user_content += "\n\n" + _build_selbst_check_block()
 
     # CALL 1: Architect (Fix AZ Stufe 10: ausgelagert nach architect.py)
     if not run_architect(state, aufgabe, user_content, api_key, _explorer_ctx):
