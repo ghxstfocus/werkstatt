@@ -313,6 +313,71 @@ def _adr_mini_phase(state: RunState) -> bool:
     return True
 
 
+def _human_gate_body(state) -> str:
+    """OP-062b: Kontext-Block fuer das Human-Gate.
+
+    Zeigt dem Menschen am Gate, was der Loop im Hintergrund entschieden
+    hat: Architect-Plan, letzte Reviewer-Bugs, Reflexions-Runden.
+    Ohne diese Anzeige sah der Mensch 15:16 nur Task-Status + Diff-Stat
+    und musste den Audit-Log manuell lesen.
+
+    Reine Funktion, kein Seiteneffekt. Leerer String wenn nichts da ist.
+    """
+    _parts: list[str] = []
+
+    # 1. Architect-Plan / Scout-Marker
+    _prosa = (getattr(state, "architect_prosa", "") or "").strip()
+    if _prosa:
+        if _prosa == "[atomarer Plan vom Scout]":
+            _parts.append("## Plan (vom Scout, atomar zerlegt)")
+        else:
+            # Auf 2000 Zeichen kappen, damit der Panel nicht explodiert.
+            _snippet = _prosa[:2000]
+            if len(_prosa) > 2000:
+                _snippet += "\n... (gekuerzt)"
+            _parts.append("## Architect-Plan\n" + _snippet)
+
+    # 2. Letzte Reviewer-Bugs (aus History, letzte Runde)
+    _hist = getattr(state, "reviewer_bugs_history", None) or []
+    _last_bugs: list = []
+    if _hist:
+        _last_bugs = [b for b in (_hist[-1] or [])
+                      if isinstance(b, dict)]
+    # Fallback: aktuelles reviewer_bugs, falls History leer.
+    if not _last_bugs:
+        _cur = getattr(state, "reviewer_bugs", None) or []
+        _last_bugs = [b for b in _cur if isinstance(b, dict)]
+    if _last_bugs:
+        _lines = [f"## Reviewer-Bugs (letzte Runde, {len(_last_bugs)})"]
+        for _b in _last_bugs[:5]:
+            _sev = _b.get("severity", "?")
+            _file = _b.get("file", "?")
+            _desc = (_b.get("description") or "")[:200]
+            _lines.append(f"  - [{_sev}] {_file}: {_desc}")
+        if len(_last_bugs) > 5:
+            _lines.append(f"  ... ({len(_last_bugs) - 5} weitere)")
+        _parts.append("\n".join(_lines))
+
+    # 3. Reflexions-Runden
+    _refl = getattr(state, "reflection_history", None) or []
+    if _refl:
+        _lines = [f"## Reflexion ({len(_refl)} Runde(n))"]
+        for _r in _refl[-5:]:
+            if not isinstance(_r, dict):
+                continue
+            _nr = _r.get("runde", "?")
+            _n = _r.get("patches_applied", 0)
+            _v = len(_r.get("verify_errors") or [])
+            _b = len(_r.get("reviewer_bugs") or [])
+            _lines.append(
+                f"  - Runde {_nr}: {_n} Patches angewendet, "
+                f"{_v} verify-Fehler offen, {_b} reviewer-Bugs offen"
+            )
+        _parts.append("\n".join(_lines))
+
+    return "\n\n".join(_parts)
+
+
 def _human_gate(state: RunState) -> int:
     """Eigenes Human-Gate im Loop (fail-closed).
 
@@ -384,6 +449,10 @@ def _human_gate(state: RunState) -> int:
     _gate_body = ""
     if _fortschritt:
         _gate_body = _fortschritt + "\n"
+    # OP-062b: Architect-Plan, Reviewer-Bugs, Reflexionen.
+    _detail = _human_gate_body(state)
+    if _detail:
+        _gate_body += "\n" + _detail + "\n"
     _gate_body += f"Aenderungen im Zielprojekt:\n{_stat_txt}"
     if _diff_txt:
         _gate_body += f"\n\n{_diff_txt}"
@@ -435,4 +504,4 @@ def _task_fortschritt_block(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
-__all__ = ['_human_gate', '_human_gate_plan', '_plan_gate']
+__all__ = ['_human_gate', '_human_gate_body', '_human_gate_plan', '_plan_gate']
