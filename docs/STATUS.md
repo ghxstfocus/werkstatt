@@ -48,18 +48,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-062d: Hunk-Summary im Human-Gate verdrahten
-
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/gates.py`, `tests/test_human_gate_render.py`
-- **Akzeptanzkriterien:** OP-062c hat `_diff_hunk_summary(diff)` eingebaut (Tests gruen), aber noch nicht in `_human_gate` verdrahtet. Die Diff-Anzeige bei >2000 Zeichen ist unveraendert `'(Diff zu gross: N Zeichen, siehe git diff)'`.
-  1. `_human_gate` ruft `_diff_hunk_summary(_full)` auf, wenn `len(_full) > 2000`.
-  2. Die Hunk-Summary landet im `_gate_body` zwischen Task-Fortschritt und `_human_gate_body` (oder als eigener Block 'Diff-Struktur').
-  3. Test: `_human_gate` mit einem Diff >2000 Zeichen zeigt Hunk-Summary statt nur '(Diff zu gross)'.
-- **Tests:** `tests/test_human_gate_render.py` (1 neuer Fall mit subprocess-Mock fuer `git diff`).
-- **Blockiert von:** OP-062c (erledigt)
-- **Hinweis:** OP-062c hat die Hunk-Summary als pure Funktion geliefert (Tests gruen, Baseline 1051 passed). Verdrahtung braucht `_human_gate`-Aenderung mit subprocess-Mock im Test. Kleiner Schritt, aber eigener Commit.
-
 ### OP-063: Loop-PROGRESS-Einträge leer + Commit-Message abgeschnitten
 
 - **Status:** open
@@ -366,6 +354,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 | OP-062a | erledigt 2026-11-01 (HEAD) | redact=False fuer Builder + Reviewer (Code-Pruefung) | – |
 | OP-062b | erledigt 2026-11-01 (HEAD) | Human-Gate zeigt Architect-Plan + Reviewer-Bugs + Reflexionen | – |
 | OP-062c | erledigt 2026-11-01 (83a0407) | Human-Gate Bug-Sync + task_id + Hunk-Summary (partial: Verdrahtung in OP-062d) | – |
+| OP-062d | erledigt 2026-11-01 (HEAD) | Hunk-Summary im Human-Gate verdrahtet | – |
 
 ## Verweise
 

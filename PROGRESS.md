@@ -1279,3 +1279,7 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 ## 2026-11-01T17:36:55+00:00 -- OP-062c: Human-Gate-Politur (partial)
 - **Status:** done (partial)
 - **Info:** Commit 83a0407. Drei Fixes: (1) Bug-Sync — _human_gate_body markiert History-Bugs als 'vermutlich behoben', wenn state.reviewer_bugs leer ist (letzter Call gruen); run_phase_end_review leert reviewer_bugs bei Approval. (2) Reflexions-Runden — reflection_history bekommt task_id-Feld, Render zeigt 't2 Runde 1' statt 'Runde 1'. (3) Hunk-Summary — neue Funktion _diff_hunk_summary extrahiert pro Datei die @@-Header. Tests: 4 neue in tests/test_human_gate_render.py. Baseline 1051 passed, 5 skipped. **Partial:** Hunk-Summary ist noch nicht in _human_gate verdrahtet (die Diff-Anzeige bei >2000 Zeichen zeigt weiter '(Diff zu gross)') — als OP-062d angelegt, weil die Verdrahtung subprocess-Mock-Test braucht. OP-062c macht nur den State/Render-Teil, OP-062d die Diff-Anzeige.
+
+## 2026-11-01T17:38:10+00:00 -- OP-062d: Hunk-Summary im Human-Gate verdrahtet
+- **Status:** done
+- **Info:** Commit HEAD. _human_gate ruft bei Diff >2000 Zeichen _diff_hunk_summary auf, zeigt pro Datei die @@-Header statt nur '(Diff zu gross)'. Der Mensch am Gate sieht jetzt die Diff-Struktur direkt, ohne in die Shell zu wechseln. Test: test_human_gate_zeigt_hunk_summary_bei_grossem_diff (subprocess.run gemockt, input()->'j', panel_diff capture). Baseline 1052 passed, 5 skipped.
