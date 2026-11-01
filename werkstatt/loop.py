@@ -377,7 +377,10 @@ def main(argv: list[str] | None = None) -> int:
         # Doku-Ladefehler sind nicht fatal; Planner laeuft ohne Kontext.
         pass
 
+    _git_author_cfg = (_full_cfg.get("git_author", {}) if _full_cfg else {}) or {}
     _state = RunState(
+        git_author_name=_git_author_cfg.get("name", ""),
+        git_author_email=_git_author_cfg.get("email", ""),
         block_id=args.project,
         aufgabe=args.aufgabe,
         start_ts=_dt.now(_UTC).isoformat(timespec="seconds"),

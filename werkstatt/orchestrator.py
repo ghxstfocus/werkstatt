@@ -120,6 +120,10 @@ def build_run_state(
     except Exception:  # noqa: BLE001
         docs = {}
 
+    # OP-053: git_author aus Manifest (projects/<name>.yaml) in RunState.
+    _git_author = cfg.get("git_author", {}) or {}
+    _git_name = _git_author.get("name", "")
+    _git_email = _git_author.get("email", "")
     state = RunState(
         block_id=project_name,
         aufgabe=aufgabe,
