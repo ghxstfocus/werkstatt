@@ -258,16 +258,42 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Tests:** —
 - **Blockiert von:** —
 
-### OP-062i: Success-Pfad ueberstimmt Spec-Widerspruch + type:ignore-Toleranz
+### OP-064: Architektur-Umbau — Completion-Gate mit Vetorecht (Sammel-OP)
 
 - **Status:** open
-- **Betroffene Dateien:** `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_spec_widerspruch_success_pfad.py`
-- **Akzeptanzkriterien:** Zwei zusammenhaengende Spec-Treue-Luecken aus Testrunde 3 (18:54 OP-004).
-  1. **`spec_widerspruch_erkannt` im Success-Pfad auswerten.** In `_phase_tasks_loop` wird der Merker nur im `not _refl_ok`-Zweig geprueft (`_task_ende(human_review=True)`). Wenn `_reflection_loop` dagegen `return True` liefert (weil OP-059e den Erschoepfungs-Check gefeuert hat), laeuft der Erfolgs-Pfad weiter: 2. Reviewer-Call, ggf. `approved`, `task_ok`. Das Spec-Widerspruch-Signal geht verloren. Fix: auch bei `_refl_ok=True` pruefen, ob `state.spec_widerspruch_erkannt` gesetzt ist. Wenn ja: `_task_ende(human_review=True, grund="spec_widerspruch_vermutet")` statt `task_ok`.
-  2. **`# type: ignore` in aktiver Verify-Zone als HIGH-Bug.** Wenn ein Patch `# type: ignore[...]` in einer Datei einfuegt, die eine harte Verify-Stage (mypy) hat, muss der Reviewer das als HIGH-Bug werten (nicht als akzeptablen Fix). Der Reviewer hat das in Testrunde 3 korrekt gemeldet ("Task fordert int-Narrowing, Diff macht type: ignore") — aber der Loop hat es beim 2. Reviewer-Call (nach Reflection) durchgewinkt. Fix: `run_reviewer` deterministisch pruefen lassen, ob ein `type: ignore`-Kommentar im Diff steht und ob eine harte Stage (mypy) fuer die Datei aktiv ist. Bei beidem: fail-closed, unabhaengig vom LLM-Approval.
-- **Tests:** `tests/test_spec_widerspruch_success_pfad.py` (2 Faelle: `_reflection_loop` return True + `spec_widerspruch_erkannt` gesetzt -> human_review statt task_ok; Diff mit `type: ignore` + harte mypy-Stage -> task fail).
+- **Betroffene Dateien:** `werkstatt/state.py`, `werkstatt/phase_state.py`, `werkstatt/pipeline_phases.py`, `werkstatt/antipattern.py` (neu), `werkstatt/stuck.py` (neu), `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`
+- **Akzeptanzkriterien:** Umbau des Loops von "drei konkurrierenden Wahrheiten" (Reflection-Return / Reviewer-Approval / Verify-Gate) auf "eine Hierarchie mit deterministischem Vetorecht". Sechs Bausteine, jeder ein eigener Sub-OP:
+  - **OP-064a** Sticky-Veto (Completion-Gate): einmal `vetoed` -> nur Mensch kann es zuruecksetzen. Ersetzt OP-062i.
+  - **OP-064b** Deterministischer Antipattern-Scanner (`werkstatt/antipattern.py`): scannt Diff auf `# type: ignore`, `noqa`, `eslint-disable`, `|| true`, geloeschte Tests, geschwaechte Assertions. Bei Treffer in aktiver harter Verify-Zone: Veto. Kein LLM.
+  - **OP-064c** StuckDetector (`werkstatt/stuck.py`): ein Modul analysiert `reflection_history` als Ganzes (gleicher Error-Kern, gleicher Patch-Hash, gleiche Bug-Signatur, Budget erschoepft). Ersetzt drei verstreute `_stagnation`-Pfade.
+  - **OP-064d** Red-to-Green-Gate fuer "auftrag_bereits_erfuellt": ein Task gilt erst als verifiziert, wenn ein Test vorher rot war und jetzt gruen ist.
+  - **OP-064e** Spec-Pre-Flight-Linter: vor dem Planner-Lauf OP-Text auf Widersprueche und nicht-existierende APIs pruefen.
+  - **OP-064f** Structured Feature-List: `phase.yaml` bekommt pro Task `verdict: pending|verified|vetoed`. PROGRESS.md bleibt Menschen-Doku.
+- **Tests:** Sub-OP-spezifisch.
 - **Blockiert von:** —
-- **Hinweis:** Live-Beleg Testrunde 3 (18:54). Loop-Reflexion drehte 3 Runden mit `# type: ignore[operator]`-Patches. Reviewer 1: HIGH-Bug "type: ignore erfuellt Task nicht". Reflection Runde 2: `auftrag_bereits_erfuellt` + `spec_widerspruch_erkannt=True` + `return True`. `_phase_tasks_loop` sah `_refl_ok=True`, lief in den Erfolgs-Pfad, 2. Reviewer-Call approved (inkonsistent), `task_ok`. Am Human-Gate: `Tasks: 1/1 done`, aber Diff zeigt `# type: ignore`. Das ist die vierte Iteration fuer "Spec-Widerspruch blockiert nicht durchgaengig": OP-059c (Bug-Text), OP-059d (Verify-Pfad), OP-059e (Erschoepfung), jetzt OP-062i (Success-Pfad + Reviewer-Konsistenz). Empfehlung bei Bearbeitung: alle vier Pfade zusammen denken, nicht einzeln nachziehen. Zentrale Frage: Wo lebt die "Wahrheit" ueber Task-Erfolg? Aktuell drei Stellen (Reflection-Return, Reviewer-Approval, Verify-Gate), die sich widersprechen koennen.
+- **Hinweis:** Design-Referenzen aus der Konkurrenz-Recherche 2026-11-01:
+  - **Harn / Skyvern Completion Gate**: "A strict veto (a source write with a red or missing verifier) is never released by the veto budget."
+  - **fakegreen**: deterministischer Diff-Scanner (kein LLM, unter 100 ms).
+  - **OpenHands StuckDetector**: eigene Klasse analysiert die volle Agent-History.
+  - **rulebridge / skillsaw**: ESLint fuer Agent-Instruktionen.
+  - **GAN-style Red-to-Green**: "Ticks a task only when tests derived from your spec go from red to green."
+  - **Anthropic Long-Running-Agents**: structured `feature_list.json` (JSON, nicht Markdown).
+  - **Goodhart's Law auf Agent-Ebene**: "Mitigations rely on post-hoc review or prompt-based instructions, which are disciplinary rather than architectural and remain gameable."
+  Kern-Erkenntnis: 4 Anlaeufe (OP-059c/d/e/062i) fuer dasselbe Problem. Das ist Symptom-Behandlung. Es braucht Architektur: deterministische Schichten, die nicht durch LLM-Approval ueberschreibbar sind.
+
+### OP-064a: Sticky-Veto — einmal vetoed, nur Mensch setzt zurueck
+
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/phase_state.py`, `werkstatt/pipeline_phases.py`, `werkstatt/task_runner.py`, `tests/test_sticky_veto.py`
+- **Akzeptanzkriterien:**
+  1. **`PhaseState.mark_vetoed(task_id, grund)`** setzt zusaetzlich zu `status` ein Feld `verdict: "vetoed"` (parallel zu `pending|verified`). Einmal `vetoed`, nur durch `mark_done`/`mark_human_review`+Mensch zuruecksetzbar.
+  2. **`PhaseState.ist_vetoed(task_id)`** gibt `True`/`False`.
+  3. **`_task_ende`-Veto-Guard:** wenn `ist_vetoed(task_id)` und `ok=True`: kein `mark_done`, stattdessen `mark_human_review(grund="veto_nicht_aufgehoben")`. Audit `loop_task_veto_respected`.
+  4. **Success-Pfad** in `_phase_tasks_loop`: bei `_refl_ok=True` pruefen, ob `state.spec_widerspruch_erkannt` gesetzt ist. Wenn ja: `mark_vetoed(task_id, grund="spec_widerspruch_vermutet")` + `_task_ende(human_review=True)` statt `task_ok`.
+  5. **`state.spec_widerspruch_erkannt`** wird nur noch in `_phase_tasks_loop` zurueckgesetzt (nach `mark_vetoed`), nicht mehr verstreut in reflection.py/pipeline_phases.py. Veto muss sticky sein.
+- **Tests:** `tests/test_sticky_veto.py` (4 Faelle: mark_vetoed setzt verdict; ist_vetoed erkennt; _task_ende respektiert veto und macht human_review statt done; spec_widerspruch_erkannt im Erfolgs-Pfad -> vetoed+human_review).
+- **Blockiert von:** —
+- **Hinweis:** Live-Beleg Testrunde 3 (18:54 OP-004). Loop-Reflexion setzte `spec_widerspruch_erkannt=True`, `_reflection_loop` gab `return True`. `_phase_tasks_loop` sah `_refl_ok=True`, lief in den Erfolgs-Pfad, 2. Reviewer-Call approved (Reviewer-Inkonsistenz: Runde 1 HIGH, Runde 2 ok), `task_ok`. Am Human-Gate: `Tasks: 1/1 done`, aber Diff enthielt `# type: ignore[operator]`. Veto haette das verhindert. Ersetzt OP-062i.
 
 
 ## Delete-Zone
