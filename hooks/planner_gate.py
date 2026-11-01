@@ -46,6 +46,16 @@ _VALID_SUFFIXES = (
     ".example", ".template", ".sample", ".dist",
 )
 
+# K27b: OP-Serien-Namen (test_foo_op002b2.py) sind bewusste
+# Varianten, nicht Tippfehler. Levenshtein schlaegt sonst Alarm.
+# Live-Beleg 2026-11-01 13:12: OP-002b3 plante
+# test_inventory_op002b3.py, DATEINAME_AEHNLICH lehnte ab
+# (Levenshtein 1 vs test_inventory_op002b2.py) -> Loop-Abbruch
+# ohne User-Frage. Fix: bewusste Serien-Namen ausnehmen.
+_OP_SERIES_RE = re.compile(
+    r"^(?P<base>.+)_op(?P<opnum>\d{3})(?P<letter>[a-z]?)(?P<zaehler>\d+)$"
+)
+
 
 def _deny(regel: str, task_id: str, datei: str,
           erklaerung: str, details: str) -> dict:
@@ -89,6 +99,31 @@ def _levenshtein(a: str, b: str) -> int:
             ))
         prev = curr
     return prev[-1]
+
+
+def _is_op_series_pair(name_a: str, name_b: str) -> bool:
+    """K27b: Bewusste OP-Serien-Namen erkennen.
+
+    Beide Dateinamen muessen dem Muster
+    <base>_op<3 ziffern><optional letter><zaehler> folgen,
+    dieselbe base und dieselbe op-nummer+letter haben.
+    Nur der abschliessende Zaehler darf sich unterscheiden.
+
+    Beispiel: test_foo_op002b2 vs test_foo_op002b3 -> True.
+    Beispiel: changes_detail vs change_detail -> False (kein Muster).
+    """
+    from pathlib import Path as _P
+    sa = _P(name_a).stem
+    sb = _P(name_b).stem
+    ma = _OP_SERIES_RE.match(sa)
+    mb = _OP_SERIES_RE.match(sb)
+    if not ma or not mb:
+        return False
+    return (
+        ma.group("base") == mb.group("base")
+        and ma.group("opnum") == mb.group("opnum")
+        and ma.group("letter") == mb.group("letter")
+    )
 
 
 def _check_dateiname_aehnlich(project_dir: str, tasks: list) -> list[dict]:
@@ -138,6 +173,9 @@ def _check_dateiname_aehnlich(project_dir: str, tasks: list) -> list[dict]:
                     if e.name == name:
                         continue
                     if _levenshtein(name, e.name) <= 2:
+                        if _is_op_series_pair(name, e.name):
+                            # K27b: bewusste OP-Serie, kein Tippfehler.
+                            continue
                         koll.append({
                             "task_id": t.get("id", "?"),
                             "geplant": f,
