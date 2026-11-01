@@ -60,6 +60,19 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Blockiert von:** —
 - **Hinweis:** Live-Beleg 17:58 OP-004: Loop baute einen Fix (Port-Guards umstrukturiert), Tests + Phase-Review gruen, Commit 10799ed durch — aber mypy zeigt weiterhin 2 Fehler in `core/checks/__init__.py:80` (return min_port <= port <= max_port). Der Task ist nicht erfuellt. Loop kann das nicht erkennen, weil verify.json keine mypy-Stage hat. `pytest_full_checks` failt am Ende bei 0s — separates Problem. Frage bei Bearbeitung: soll mypy immer automatisch laufen, oder nur wenn die OP das fordert? Empfehlung: Konvention — Aufgabentext nennt das Tool, Loop baut Stage dynamisch.
 
+### OP-063b: OP-063-Restbugs (OP-NNN-Doppelung, Subject-Abschnitt)
+
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/committer.py`, `tests/test_progress_loop_quality.py`
+- **Akzeptanzkriterien:** Zwei Doku-Bugs, die OP-063 nicht abgedeckt hat. Live-Beleg Loop-Lauf 17:58 OP-004.
+  1. **OP-NNN-Doppelung in PROGRESS.md.** `_progress_op_done` ruft `progress.append(name=f"{op_nnn}: {subject}")`. `subject` ist aber bereits der volle Aufgabenanfang (mit OP-NNN-Praefix). Ergebnis: `## ... -- OP-004: OP-004: In core/checks/__init__.py die Funktion...`. Fix: `_committe_zielprojekt` uebergibt ein Subject **ohne** OP-Praefix an `_progress_op_done`, oder `_progress_op_done` strippt den Praefix falls vorhanden (idempotent).
+  2. **Commit-Subject wird trotz `_build_commit_subject` abgehackt.** Nach dem Helper-Aufruf prueft `_committe_zielprojekt` nochmal `if len(_msg.split("\n")[0]) > 72: _subject = _msg.split("\n")[0][:69] + "..."`. Live-Beleg 10799ed: `fix(security-ai): OP-004: In core/checks/__init__.py die Funktion che...`. Fix: Helper-Aufruf garantiert <= 72 Zeichen inkl. Praefix + Typ + Scope. Der alte 72-Check entfaellt oder schneidet an Wortgrenze.
+- **Tests:** `tests/test_progress_loop_quality.py` (2 neue Faelle:
+  * `_progress_op_done` mit subject der bereits OP-NNN beginnt -> kein Doppel-Praefix;
+  * `_build_commit_subject` + Typ + Scope bleiben <= 72 Zeichen ohne Wortabschnitt).
+- **Blockiert von:** —
+- **Hinweis:** Live-Beleg 10799ed (17:58 OP-004). PROGRESS.md-Eintrag `## 2026-11-01T17:58:50+00:00 -- OP-004: OP-004: In core/checks/__init__.py die Funktion check_port_r` — OP-NNN doppelt, Name abgehackt mitten im Wort (`check_port_r`). Commit-Subject `fix(security-ai): OP-004: In core/checks/__init__.py die Funktion che...` — Wortabschnitt trotz OP-063-Helper. OP-063 hat den Helper eingebaut, aber die Aufrufer-Kette (progress_op_done + 72-Check) nicht konsistent gemacht.
+
 ### OP-060b: human_review-Status + Duplikat-Anker-Regeneration (Design-OP)
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/phase_state.py`, `werkstatt/task_runner.py`, `werkstatt/gates.py`, `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_human_review_status.py`
