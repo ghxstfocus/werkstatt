@@ -258,6 +258,18 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Tests:** —
 - **Blockiert von:** —
 
+### OP-062i: Success-Pfad ueberstimmt Spec-Widerspruch + type:ignore-Toleranz
+
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_spec_widerspruch_success_pfad.py`
+- **Akzeptanzkriterien:** Zwei zusammenhaengende Spec-Treue-Luecken aus Testrunde 3 (18:54 OP-004).
+  1. **`spec_widerspruch_erkannt` im Success-Pfad auswerten.** In `_phase_tasks_loop` wird der Merker nur im `not _refl_ok`-Zweig geprueft (`_task_ende(human_review=True)`). Wenn `_reflection_loop` dagegen `return True` liefert (weil OP-059e den Erschoepfungs-Check gefeuert hat), laeuft der Erfolgs-Pfad weiter: 2. Reviewer-Call, ggf. `approved`, `task_ok`. Das Spec-Widerspruch-Signal geht verloren. Fix: auch bei `_refl_ok=True` pruefen, ob `state.spec_widerspruch_erkannt` gesetzt ist. Wenn ja: `_task_ende(human_review=True, grund="spec_widerspruch_vermutet")` statt `task_ok`.
+  2. **`# type: ignore` in aktiver Verify-Zone als HIGH-Bug.** Wenn ein Patch `# type: ignore[...]` in einer Datei einfuegt, die eine harte Verify-Stage (mypy) hat, muss der Reviewer das als HIGH-Bug werten (nicht als akzeptablen Fix). Der Reviewer hat das in Testrunde 3 korrekt gemeldet ("Task fordert int-Narrowing, Diff macht type: ignore") — aber der Loop hat es beim 2. Reviewer-Call (nach Reflection) durchgewinkt. Fix: `run_reviewer` deterministisch pruefen lassen, ob ein `type: ignore`-Kommentar im Diff steht und ob eine harte Stage (mypy) fuer die Datei aktiv ist. Bei beidem: fail-closed, unabhaengig vom LLM-Approval.
+- **Tests:** `tests/test_spec_widerspruch_success_pfad.py` (2 Faelle: `_reflection_loop` return True + `spec_widerspruch_erkannt` gesetzt -> human_review statt task_ok; Diff mit `type: ignore` + harte mypy-Stage -> task fail).
+- **Blockiert von:** —
+- **Hinweis:** Live-Beleg Testrunde 3 (18:54). Loop-Reflexion drehte 3 Runden mit `# type: ignore[operator]`-Patches. Reviewer 1: HIGH-Bug "type: ignore erfuellt Task nicht". Reflection Runde 2: `auftrag_bereits_erfuellt` + `spec_widerspruch_erkannt=True` + `return True`. `_phase_tasks_loop` sah `_refl_ok=True`, lief in den Erfolgs-Pfad, 2. Reviewer-Call approved (inkonsistent), `task_ok`. Am Human-Gate: `Tasks: 1/1 done`, aber Diff zeigt `# type: ignore`. Das ist die vierte Iteration fuer "Spec-Widerspruch blockiert nicht durchgaengig": OP-059c (Bug-Text), OP-059d (Verify-Pfad), OP-059e (Erschoepfung), jetzt OP-062i (Success-Pfad + Reviewer-Konsistenz). Empfehlung bei Bearbeitung: alle vier Pfade zusammen denken, nicht einzeln nachziehen. Zentrale Frage: Wo lebt die "Wahrheit" ueber Task-Erfolg? Aktuell drei Stellen (Reflection-Return, Reviewer-Approval, Verify-Gate), die sich widersprechen koennen.
+
+
 ## Delete-Zone
 
 | Pfad | Warum entfernt | Ersetzt durch | Wiedereinfuehrung |
