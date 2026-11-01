@@ -48,17 +48,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-059: reviewer_rejected-False-Positive (Reflection-Bug)
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/reviewer.py`, `werkstatt/pipeline_phases.py`, `tests/test_reviewer_false_positive.py`
-- **Akzeptanzkriterien:** Wenn der Reviewer einen HIGH-Bug meldet und die anschliessende Reflection-Runde denselben Bug erneut meldet (`gleiche_bugs: true` im `loop_reflection_stagnation_runde`-Event), UND der Diff zwischen den Runden identisch ist, dann ist das ein **Reviewer-Fehlalarm** (nicht: Task gescheitert). Der Loop soll:
-  1. Audit `reviewer_stagnation_false_positive` mit Diff-Hash.
-  2. Den Task als **done** markieren, wenn `ruff`/`py_compile`/`pytest` (soweit vorhanden) gruen sind — oder als `human_review` falls kein deterministischer Check greift.
-  3. Am Human-Gate sichtbar machen: "Reviewer meldet HIGH-Bug, aber Diff unveraendert zwischen Runden — Verdacht Fehlalarm, Diff pruefen."
-- **Tests:** `tests/test_reviewer_false_positive.py` (3 Faelle: Diff unveraendert + Bug gleich -> done/human_review; Diff geaendert + Bug gleich -> weiter reflection; Diff unveraendert + Bug anders -> weiter reflection).
-- **Blockiert von:** —
-- **Hinweis:** Session 2026-11-01 Abend. Live-Beleg: OP-002b3-Loop (13:22), t1 `update_last_ip_if_changed commit-Parameter`. Builder-Patch war inhaltlich korrekt (Smoke-Test gruen: d1.last_ip=1.1.1.1, d2.last_ip=2.2.2.2, history mit field_change alt=1.1.1.1 neu=2.2.2.2). Trotzdem `reviewer_rejected` -> `loop_reflection_stagnation_abort (grund=patch_nicht_angewendet)` -> Task als failed. Nach Diff-Pruefung + manuellem Smoke-Test: Patch produktionsreif. Loop-Output war korrekt, Loop-Anzeige log.
-
 ### OP-060: reflection_ohne_apply (Reflection-Bug)
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/pipeline_phases.py`, `tests/test_reflection_ohne_apply.py`
@@ -316,6 +305,7 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 | OP-034 | erledigt 2026-10-31 (f37d5ae/ee95412/7a4ba7a) | pytest_regression am phase_end | – |
 | OP-036 | erledigt 2026-10-31 (a965810) | Duplikat-Check in progress.append | – |
 | OP-037 | kein Bug — Reviewer-Verhalten korrekt (audit-log 183709-29980) | keine Aenderung | – |
+| OP-059 | erledigt 2026-11-01 (05162e7) | reflection false_positive (partial: human_review-Zweig nicht gebaut, nur done bei verify gruen) | – |
 
 ## Verweise
 

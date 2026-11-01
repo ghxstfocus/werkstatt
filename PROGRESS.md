@@ -1244,3 +1244,7 @@ laeuft ausschliesslich ueber `werkstatt/*.py`.
 - **Status:** done
 - **Info:** Commit 73f3156. _adr_mini_phase in gates.py:_human_gate, NACH approve, VOR _committe_zielprojekt. Deterministisches Template (kein LLM-Client gefunden — Follow-up). WERKSTATT_ADR_MINI=1.
 
+
+## 2026-11-01T14:49:09+00:00 -- OP-059: reviewer_rejected-False-Positive
+- **Status:** done (partial)
+- **Info:** Commit 05162e7. reflection.py: _diff_hash_for_state + false_positive-Erkennung im _applied==0-Block. Bei unveraendertem Diff vor/nach Builder, applied_count>0, leerem echten verify_errors und gruenem Verify: audit 'reviewer_stagnation_false_positive' + return True. pipeline_phases.py setzt _reflection_diff_hash vor Reflexion und ueberspringt den zweiten run_reviewer-Call, wenn state.reviewer_stagnation_false_positive gesetzt ist. Tests: tests/test_reviewer_false_positive.py (3 Faelle) + tests/test_reviewer_false_positive_aufrufer.py (2 Faelle), Baseline 40 passed. Abweichung zur Spec: Punkt 2 'human_review bei fehlendem deterministischen Check' nicht gebaut — bei rotem Verify bleibt es beim alten reflection-Pfad, kein false_positive. M-059-Nachtrag offen: human_review-Zweig + Human-Gate-Hinweistext (Spec-Punkt 3).
