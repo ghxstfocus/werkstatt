@@ -1186,4 +1186,21 @@ laeuft ausschliesslich ueber `werkstatt/*.py`.
 ## 2026-10-31T21:58:41+00:00 -- OP-040: Idempotenz-Guard in _task_ende
 - **Status:** done
 - **Beleg:** Commit ca9c010. _task_ende prueft vor dem Schreiben den Task-Status (done/failed -> skip + Audit-Event 'loop_task_ende_skip'). Sicherheitsnetz fuer den Live-Test-5-Befund (patch_write_failed + reviewer_rejected_no_patch in derselben Sekunde). 5 neue Tests. Root-Cause-Aufraeumen in pipeline_phases.py (continue nach jedem Fehlerpfad) bleibt als OP-006-Folge offen.
+## 2026-11-01T09:13:25+00:00 -- Abschluss 2026-11-01: 6 OPs erledigt
+
+### OP-038: Commit-Message nach Conventional Commits
+- **Status:** done
+
+### OP-042: glossary.md entstaubt
+- **Status:** done
+
+### OP-043: HANDOFF-BASELINE.md als historisch markiert
+- **Status:** done
+
+### OP-047: Tote Doku-Links repariert
+- **Status:** done
+
+### OP-053: git_author aus Manifest
+- **Status:** done
+- **Beleg:** Commit 1407739. loop.py liest projects/<name>.yaml.git_author.
 

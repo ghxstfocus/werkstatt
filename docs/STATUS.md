@@ -14,14 +14,6 @@ Letzte Aktualisierung: 2026-10-31.
 - **Tests:** `tests/test_builder.py::test_datum_kommt_aus_utc`
 - **Blockiert von:** —
 
-### OP-038: Commit-Message-Builder nutzt rohe Aufgabe
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/committer.py`
-- **Akzeptanzkriterien:** Auto-Commit-Message folgt Schema `docs(<project>): <Kurztitel>` bzw. `feat(<project>): <Kurztitel>` aus dem abgeschlossenen OP/Task, NICHT die abgeschnittene Roh-Aufgabe (`chore(werkstatt): Such im Projekt nach unerledigten...`). Laenge <= 72 Zeichen, ggf. mit Ellipse.
-- **Tests:** `tests/test_committer.py::test_commit_message_format`
-- **Blockiert von:** —
-
-
 ### OP-039: security-ai Test-Suite 11 Min — messen und optimieren
 - **Status:** open
 - **Betroffene Dateien:** `tests/` in `/opt/security-ai`, ggf. `tests/conftest.py`
@@ -37,23 +29,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Betroffene Dateien:** `tools/quality_gate.py`, `docs/HANDOFF-BASELINE.md`
 - **Akzeptanzkriterien:** Neue Baseline (958 pytest, 0 ruff auf werkstatt/, 0 mypy auf werkstatt/ nach Cleanup — oder explizit als akzeptiert markiert). `quality_gate --json` gibt `exit 0` und `regression: false`.
 - **Tests:** `python3 -m tools.quality_gate --json` -> exit 0.
-- **Blockiert von:** security-ai OP-003 (ruff-Regelschaerfung), security-ai OP-004 (mypy)
-
-### OP-042: docs/glossary.md aktualisieren (Baseline + pipeline.py)
-- **Status:** open
-- **Betroffene Dateien:** `docs/glossary.md`
-- **Akzeptanzkriterien:** (a) `pytest 1290` ersetzt durch `pytest 958` (real 2026-10-31). (b) Referenzen auf `pipeline.py:521` (`_KATALOG_SOLL`) entfernt oder auf neuen Ort (`werkstatt/audit.py`?) umgebogen. (c) Referenz auf `../KEY-ARCHITEKTUR.md` (existiert nicht) entfernt. (d) `grep -c "pipeline.py\|pytest 1290" docs/glossary.md` = 0.
-- **Tests:** `grep -n "pipeline.py\|1290\|KEY-ARCHITEKTUR" docs/glossary.md` liefert 0 Treffer.
-- **Blockiert von:** —
-
-### OP-043: docs/HANDOFF-BASELINE.md als historisch markieren
-- **Status:** open
-- **Betroffene Dateien:** `docs/HANDOFF-BASELINE.md`
-- **Akzeptanzkriterien:** Datei traegt Stand-Datum 2026-10-25 + klaren Hinweis "vor Loop-Neubau, veraltet — siehe AGENTS.md Baseline-Hinweis". Baseline-Werte (pytest 1290, mypy pipeline.py) bleiben als historischer Snapshot. Neuer Snapshot (958 pytest) in AGENTS.md, nicht hier.
-- **Tests:** `head -5 docs/HANDOFF-BASELINE.md` zeigt Stand + Veraltet-Hinweis.
-- **Blockiert von:** —
-
-### OP-044: docs/CONVENTIONS.md entstauben (Selbstverweis + alte Namen)
+- **Blockiert von:** security-ai OP-003 (ruff-Regelschaerfung), security-ai OP-004 (mypy)### OP-044: docs/CONVENTIONS.md entstauben (Selbstverweis + alte Namen)
 - **Status:** open
 - **Betroffene Dateien:** `docs/CONVENTIONS.md`
 - **Akzeptanzkriterien:** (a) Selbstverweis `KONVENTION.md` -> `CONVENTIONS.md`. (b) Ordnerstruktur-Baum zeigt `CONVENTIONS.md`, `ARCHITECTURE.md`, `STATUS.md`, `PROGRESS.md` (nicht die alten Namen). (c) `pipeline.py`-Zeile entfernt oder durch `werkstatt/loop.py` + `werkstatt/pipeline_phases.py` ersetzt. (d) Referenztabelle (Zeilen ~67-71) auf aktuelle Namen aktualisiert oder entfernt.
@@ -73,14 +49,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-
-### OP-047: Tote Doku-Links systematisch pruefen
-- **Status:** open
-- **Betroffene Dateien:** alle `docs/*.md`, `AGENTS.md`, `README.md`
-- **Akzeptanzkriterien:** Deterministischer Check (Script oder `grep + test -f`) findet keine toten `docs/X.md`-Links mehr ausser in `DOC_CONVENTIONS.md` §3 (Verbots-Tabelle, absichtlich). Aktuelle tote Links: `MERKPOSTEN.md -> MESS-INFRASTRUKTUR.md, SESSION-BILANZ.md`; `ROLLEN-AUDIT.md -> ARCHITEKTUR.md`. Pruef-Script als `tools/check_doku_links.sh` oder `werkstatt/verify.py`-Stage.
-- **Tests:** `bash tools/check_doku_links.sh` exit 0.
-- **Blockiert von:** —
-
 ## Backlog (nicht §5-konform)
 
 Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie haben noch keine §5-konformen Akzeptanz-kriterien (Betroffene Dateien, Tests). Bei Bearbeitung zuerst §5-Format herstellen.
@@ -333,6 +301,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 | OP-002 (K14) | stale: run_pipeline_loop nutzt 4 Phasen (nicht 7), nicht 601 Z. | – | – |
 | OP-007 (M-345) | pipeline.py geloescht (11.118 Z. -> 0) | erledigt 2026-10-31 | – |
 | OP-040 | erledigt 2026-10-31 (ca9c010) | Idempotenz-Guard in _task_ende | – |
+| OP-038 | erledigt 2026-11-01 | Conventional-Commits | – |
+| OP-042 | erledigt 2026-11-01 | glossary.md | – |
+| OP-043 | erledigt 2026-11-01 | HANDOFF-BASELINE | – |
+| OP-044 | erledigt 2026-11-01 | CONVENTIONS.md | – |
+| OP-047 | erledigt 2026-11-01 | tote Links | – |
+| OP-053 | erledigt 2026-11-01 | git_author | – |
 | OP-034 | erledigt 2026-10-31 (f37d5ae/ee95412/7a4ba7a) | pytest_regression am phase_end | – |
 | OP-036 | erledigt 2026-10-31 (a965810) | Duplikat-Check in progress.append | – |
 | OP-037 | kein Bug — Reviewer-Verhalten korrekt (audit-log 183709-29980) | keine Aenderung | – |
