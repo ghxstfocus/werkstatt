@@ -2,10 +2,9 @@
 
 Format aus `DOC_CONVENTIONS.md` §5. Nur offene Punkte.
 `—` in Feldern = noch nicht spezifiziert (Loop praezisiert bei Bearbeitung).
-Letzte Aktualisierung: 2026-10-31.
+Letzte Aktualisierung: 2026-11-01.
 
 ## Offene Punkte
-
 
 ### OP-035: Doku-Task-Datum wird halluziniert
 - **Status:** open
@@ -49,55 +48,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-055: STATUS.md Kennzahlen deterministisch aktualisieren
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/committer.py`, `tests/test_committer_kennzahlen.py`
-- **Akzeptanzkriterien:** Nach jedem erfolgreichen Loop-Commit in `_committe_zielprojekt` werden in `<projekt>/docs/STATUS.md` die Kennzahlen-Sektion deterministisch aktualisiert (kein LLM):
-  - `- HEAD: <git rev-parse --short HEAD>` (aktueller Commit-Hash)
-  - `- Tests: <pytest --co -q | wc -l> collected`
-  - Optional: `- ruff: <ruff check --statistics | tail -1>`, `- mypy: <mypy ... | tail -1>` wenn Config vorhanden.
-  Nur wenn die Sektion `## Kennzahlen` in der Datei existiert. Sonst skip + Audit.
-- **Tests:** `tests/test_committer_kennzahlen.py` (3 Faelle: Kennzahlen-Sektion gefuellt, ohne Sektion skip, Regex fuer HEAD-Zeile).
-- **Blockiert von:** OP-048 (deterministischer Doku-Nachzug als Vorbedingung)
-- **Hinweis:** Session 2026-11-01: STATUS.md `HEAD: ffef6b4` steht noch, obwohl wir bei `7cdfab0` sind. Veraltete Kennzahlen sind ein Loop-Blocker (Scout/Architect sehen falschen HEAD).
-
-### OP-056: CHANGELOG.md deterministisch aus Commit-Message pflegen
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/committer.py`, `tests/test_committer_changelog.py`
-- **Akzeptanzkriterien:** Nach jedem erfolgreichen Loop-Commit: CHANGELOG.md-Eintrag im Format `## [Unreleased]` (bestehend) bekommt eine Zeile `- <type>: <subject> (<commit-hash>)`. Type/Subject kommen aus der Conventional-Commit-Message (OP-038). Append-only. Nur wenn Datei existiert; sonst skip.
-- **Tests:** `tests/test_committer_changelog.py` (Eintrag angelegt, bestehender Eintrag bleibt, kein File = skip).
-- **Blockiert von:** OP-038 (Commit-Message), OP-048 (Doku-Nachzug)
-
-### OP-057: Architecture-Drift-Warnung bei .py-Aenderungen ohne ARCHITECTURE.md
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/committer.py`, `tests/test_committer_architecture_drift.py`
-- **Akzeptanzkriterien:** Vor dem Commit: Wenn `git diff --name-only HEAD` neue `.py`-Dateien enthaelt (nur `A` create oder `D` delete) UND `docs/ARCHITECTURE.md` nicht im Diff ist: Audit-Event `committer_architecture_drift` mit Liste der neuen/geloeschten Module. Deterministisch, kein LLM. Kein Auto-Fix (Warnung), aber Commit-Skip-Gate fragt Mensch: Architektur geaendert, ARCHITECTURE.md nachziehen? (j/n).
-- **Tests:** `tests/test_committer_architecture_drift.py` (create .py ohne Doc = Warnung, mit Doc = keine Warnung, keine .py = keine Warnung).
-- **Blockiert von:** OP-048
-
-### OP-058: ADR-Mini-Phase vor Human-Gate
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/pipeline_phases.py`, `werkstatt/prompts.py`, `tests/test_adr_mini_phase.py`
-- **Akzeptanzkriterien:** Wenn OP-057 eine Drift-Warnung feuert ODER Commit-Message mit type refactor/feat UND neue Datei angelegt: Vor Human-Gate laeuft eine Mini-Phase:
-  1. Frage Mensch per Gate: Architektur-Entscheidung dokumentieren? (j/n)
-  2. Bei ja: LLM-Call, Prompt "Schreibe ADR-<next_number>-<slug>.md" (Diff + Aufgabe + Testzahl als Input).
-  3. Ergebnis: `docs/adr/ADR-<n>-<slug>.md` angelegt + `docs/adr/README.md` Index erweitert.
-  4. ADR-Datei landet im gleichen Commit.
-- **Tests:** `tests/test_adr_mini_phase.py` (Mock-LLM, 3 Faelle: Gate ja = ADR angelegt, Gate nein = skip, Auto-Modus = skip mit Audit).
-- **Blockiert von:** OP-048, OP-057
-
-### OP-048: Deterministischer Doku-Nachzug — Ebenen-Struktur
-- **Status:** open (bestehend, Spec praezisiert)
-- **Betroffene Dateien:** `werkstatt/committer.py`
-- **Akzeptanzkriterien (NEU):** Der Doku-Nachzug hat drei Ebenen:
-  - **Ebene 1 (deterministisch, immer):** OP-NNN aus STATUS.md entfernen, PROGRESS.md-Eintrag, Delete-Zone-Eintrag, Kennzahlen (OP-055), CHANGELOG (OP-056).
-  - **Ebene 2 (Warnung, kein Auto-Fix):** ARCHITECTURE.md-Drift (OP-057) ins Audit.
-  - **Ebene 3 (explizit, Gate):** ADR-Mini-Phase (OP-058).
-  Alle drei laufen nach Human-Gate-Approve, VOR `git add -A`, im selben Commit wie Code.
-- **Tests:** `tests/test_committer_doku_nachzug.py` (5 Faelle: Ebene 1, Ebene 2, Ebene 3, Env-Var aus = skip, keine OP-NNN = skip).
-- **Hinweis:** Session 2026-11-01. Doku ist Anker des Loops. Ohne Selbstpflege laeuft der Loop auf veralteter Wahrheit (HEAD, Testzahl, OP-Liste).
-
-
 ## Backlog (nicht §5-konform)
 
 Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie haben noch keine §5-konformen Akzeptanz-kriterien (Betroffene Dateien, Tests). Bei Bearbeitung zuerst §5-Format herstellen.
@@ -109,14 +59,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-004: M-323b — `phase_end`-Checkpoint pro logischer Phase. Nach jeder Phase `_verify_patches(state, phase="phase_end")` + Reflection.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** `phase_end`-Checkpoint pro logischer Phase. Nach jeder Phase `_verify_patches(state, phase="phase_end")` + Reflection.
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-005: M-341 — Explorer ueberspringen, wenn `task_files` gesetzt.
 - **Status:** open
@@ -125,14 +73,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-006: M-344 — `PROGRESS.md` mit Phasen-Header (pro Phase, nicht pro Task).
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** `PROGRESS.md` mit Phasen-Header (pro Phase, nicht pro Task).
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-008: M-346 — `pipeline._approval_und_human_gate` und `pipeline.load_project_config` in `werkstatt/` verschieben.
 - **Status:** open
@@ -141,14 +87,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-009: M-347 — CLI-Einstiegspunkt fuer den Loop.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** CLI-Einstiegspunkt fuer den Loop.
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-010: Entkopplung — `werkstatt/verify.py` importiert `harness.*` und `core.changeapplier.*` (nur Introspektion). Ziel: null Fremd-Imports.
 - **Status:** open
@@ -157,14 +101,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-011: 5-mypy — mypy 11 Fehler in 2 Dateien (Baseline 11).
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** mypy 11 Fehler in 2 Dateien (Baseline 11).
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-012: 3c — Alte Tests, die mit dem alten Code fallen, entfernen.
 - **Status:** open
@@ -173,14 +115,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-013: M-162 — „Recovery nach Loop" messen oder schliessen.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** „Recovery nach Loop" messen oder schliessen.
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-014: M-388 — UI-Testing via Chrome DevTools.
 - **Status:** open
@@ -189,14 +129,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-015: M-389 — Doku-Pflege im Loop.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Doku-Pflege im Loop.
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-016: M-479 — Modell-Routing pro Rolle. `ask_llm(role=...)` mit Env-Vars. Architect = `deepseek-reasoner`, Builder/Reviewer = `deepseek-chat`.
 - **Status:** open
@@ -205,14 +143,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-017: M-480 — Kosten-Circuit-Breaker. `RunState.max_budget_usd`. `ask_llm` zaehlt Tokens, bei Ueberschreitung `BudgetExceededError`.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Kosten-Circuit-Breaker. `RunState.max_budget_usd`. `ask_llm` zaehlt Tokens, bei Ueberschreitung `BudgetExceededError`.
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-018: M-481 — Cache-aware Prompts. Stabiler Prefix (System, Architektur) vor variablem Suffix (Aufgabe). 98.6% Cache-Hit-Rate moeglich.
 - **Status:** open
@@ -221,14 +157,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-019: M-482 — LiteLLM Adaptive Router (optional). Lernt, welches Modell fuer welchen Request-Typ am besten ist.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** LiteLLM Adaptive Router (optional). Lernt, welches Modell fuer welchen Request-Typ am besten ist.
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-020: M-478/M-489 — Test-Repair-Loop (TDFlow-Stil). 4 Sub-Agenten: Patch-Propose, Debug, Patch-Revise, Test-Generate. Tests FEST (kein Test-Hacking). Max 3 Runden, dann Eskalation.
 - **Status:** open
@@ -237,14 +171,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-021: M-483 — Sandboxing (OS-Level). Filesystem-Isolation + Netzwerk-Isolation. Linux bubblewrap / macOS seatbelt. Reduziert Permission-Prompts um 84%.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Sandboxing (OS-Level). Filesystem-Isolation + Netzwerk-Isolation. Linux bubblewrap / macOS seatbelt. Reduziert Permission-Prompts um 84%.
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-022: M-484 — SWE-bench-Harness. 50-100 Tasks aus `princeton-nlp/SWE-bench_Verified`. Die einzige Zahl, die mit Aider/OpenHands/Devin vergleichbar ist.
 - **Status:** open
@@ -253,14 +185,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-023: M-485 — Event-Sourcing / Memory. Unveraenderliche Event-Logs statt YAML-Checkpoint. Loop-Spezifikation (Trigger, Goal, Verification, Stopping Rule, Memory).
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Event-Sourcing / Memory. Unveraenderliche Event-Logs statt YAML-Checkpoint. Loop-Spezifikation (Trigger, Goal, Verification, Stopping Rule, Memory).
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-024: M-486 — Cache-aware Cost Model. 98.6% Input-Tokens aus Prefix-Cache. Flat-Pricing ueberschaetzt Kosten um 7.1x.
 - **Status:** open
@@ -269,14 +199,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-025: M-488 — `phase_end` laeuft Vollsuite. `verify.json` + `loop.py` (M-476). Ohne das ist der Loop ein Builder.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** `phase_end` laeuft Vollsuite. `verify.json` + `loop.py` (M-476). Ohne das ist der Loop ein Builder.
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-026: R-CHECK-1 — Reviewer prueft Task-Zahlen nicht. Live-Beleg 20:42: Task verlangt `limit=10`, Code nutzt `limit=5`, Phase-Review approved. In Runde 1 des vorigen RERUN (20:38) hatte der Reviewer denselben Bug als HIGH markiert — Regression. Fix: `## KONSTANTEN-CHECK` in `REVIEWER_SYSTEM` (Zahlen aus Task muessen im Diff als Literal auftauchen, sonst HIGH-Bug).
 - **Status:** open
@@ -285,14 +213,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-027: M-490 — Doku-Staleness-Check (deterministisch, Documentledger). Nach jedem Task: Hash-Vergleich Code -> Doku. Kein LLM.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Doku-Staleness-Check (deterministisch, Documentledger). Nach jedem Task: Hash-Vergleich Code -> Doku. Kein LLM.
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-028: M-491 — Doku-Update-Agent (DocWriter). Bekommt Git-Diff + betroffene Sektionen + Quellcode. Schreibt nur `<!-- AUTO:... -->`-Bloecke neu (docwright).
 - **Status:** open
@@ -301,14 +227,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-029: M-492 — Doku-Critic (DocSync). Prueft DocWriter-Output gegen Code. Max 2 Runden.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Doku-Critic (DocSync). Prueft DocWriter-Output gegen Code. Max 2 Runden.
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-030: M-494 — Web-Backend (FastAPI). Startet den Loop als Subprozess, bietet Web-Sockets fuer Live-Logs und Chat. Zentraler State pro Projekt.
 - **Status:** open
@@ -317,14 +241,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-031: M-495 — Terminal-Proxy. `loop_renderer`-Ausgaben (Spinner, `log_line`, `task_started`) live in den Browser streamen. xterm.js oder `<pre>` mit HTMX.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Terminal-Proxy. `loop_renderer`-Ausgaben (Spinner, `log_line`, `task_started`) live in den Browser streamen. xterm.js oder `<pre>` mit HTMX.
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ### OP-032: M-496 — Interactive Chat. Chat-Fenster rechts, Intent-Parsing (`plan`, `build`, `approve`, `chat_only`). Bestaetigung (j/n) per Chat oder CLI.
 - **Status:** open
@@ -333,14 +255,12 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 - **Tests:** —
 - **Blockiert von:** —
 
-
 ### OP-033: M-497 — UI-Layout. Chrome-Tabs oben (Projekte oeffnen/schliessen), CLI links, Chat rechts, Reviewer unten. Synchronisation: Tab-Wechsel wechselt beide Fenster.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** UI-Layout. Chrome-Tabs oben (Projekte oeffnen/schliessen), CLI links, Chat rechts, Reviewer unten. Synchronisation: Tab-Wechsel wechselt beide Fenster.
 - **Tests:** —
 - **Blockiert von:** —
-
 
 ## Delete-Zone
 
@@ -356,6 +276,11 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 | OP-044 | erledigt 2026-11-01 | CONVENTIONS.md | – |
 | OP-047 | erledigt 2026-11-01 | tote Links | – |
 | OP-053 | erledigt 2026-11-01 | git_author | – |
+| OP-048 | erledigt 2026-11-01 (73f3156) | Doku-Selbstpflege Ebene 1 | – |
+| OP-055 | erledigt 2026-11-01 (73f3156) | HEAD-Kennzahl (partial: Tests = Follow-up, blockiert OP-039) | – |
+| OP-056 | erledigt 2026-11-01 (73f3156) | CHANGELOG-Append | – |
+| OP-057 | erledigt 2026-11-01 (73f3156) | Architecture-Drift-Audit | – |
+| OP-058 | erledigt 2026-11-01 (73f3156) | ADR-Mini-Phase (partial: Template statt LLM) | – |
 | OP-034 | erledigt 2026-10-31 (f37d5ae/ee95412/7a4ba7a) | pytest_regression am phase_end | – |
 | OP-036 | erledigt 2026-10-31 (a965810) | Duplikat-Check in progress.append | – |
 | OP-037 | kein Bug — Reviewer-Verhalten korrekt (audit-log 183709-29980) | keine Aenderung | – |

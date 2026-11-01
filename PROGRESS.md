@@ -1224,3 +1224,23 @@ laeuft ausschliesslich ueber `werkstatt/*.py`.
 - **Neuer Audit-Kind:** builder_patch_duplicate_anchor.
 - **Tests:** 4 neue in tests/test_builder_duplicate_anchor.py.
 
+## 2026-11-01T12:28:16+00:00 -- OP-048: Deterministischer Doku-Nachzug Ebene 1
+- **Status:** done
+- **Info:** Commit 73f3156. _committe_zielprojekt ruft _status_md_op_entfernen + _progress_op_done + _delete_zone_op_append, wenn WERKSTATT_DOKU_NACHZUG=1 und Aufgabe OP-NNN nennt. Skip bei fehlendem OP-NNN, fehlender STATUS.md oder fehlendem Block (Audit doku_nachzug_skip).
+
+## 2026-11-01T12:28:16+00:00 -- OP-055: STATUS.md Kennzahlen deterministisch (HEAD)
+- **Status:** done
+- **Info:** Commit 73f3156. _update_kennzahlen ersetzt HEAD-Zeile aus git rev-parse --short HEAD. Tests/ruff/mypy als Follow-up offen (blockiert von OP-039, pytest-Recollect ~30-60s/Loop-Lauf).
+
+## 2026-11-01T12:28:16+00:00 -- OP-056: CHANGELOG.md aus Commit-Message
+- **Status:** done
+- **Info:** Commit 73f3156. _update_changelog fügt Zeile unter '## [Unreleased]' ein, nur wenn Datei existiert. Format: '- <OP-NNN>: <subject>'.
+
+## 2026-11-01T12:28:16+00:00 -- OP-057: Architecture-Drift-Warnung
+- **Status:** done
+- **Info:** Commit 73f3156. _architecture_drift_check meldet audit('committer_architecture_drift') wenn .py neu/geloescht ohne docs/ARCHITECTURE.md-Aenderung. Kein Auto-Fix (Warnung).
+
+## 2026-11-01T12:28:16+00:00 -- OP-058: ADR-Mini-Phase (partial)
+- **Status:** done
+- **Info:** Commit 73f3156. _adr_mini_phase in gates.py:_human_gate, NACH approve, VOR _committe_zielprojekt. Deterministisches Template (kein LLM-Client gefunden — Follow-up). WERKSTATT_ADR_MINI=1.
+
