@@ -37,7 +37,9 @@ from werkstatt.verify import (  # Fix AZ Stufe 3: Re-Export
 )
 from werkstatt.apply_patches import (  # Fix AZ Stufe 4: Re-Export
     _apply_one_patch,
+    _apply_patches_with_diagnose,
     _apply_patches_with_hooks,
+    _diagnose_patch,
     _delete_ziel_erlaubt,
     _patches_wirklich_angewendet,
 )

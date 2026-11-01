@@ -59,6 +59,27 @@ def _apply_one_patch(
     return content, "fail"
 
 
+def _diagnose_patch(content: str, old: str, new: str) -> dict:
+    """OP-060a: Diagnose eines Patches VOR dem Anwenden.
+
+    Rueckgabe: {grund, old_string_len, vorkommen}.
+    grund: 'leer' | 'kein_match' | 'mehrdeutig' | 'no_effect' | 'ok'.
+    """
+    if not old:
+        return {"grund": "leer", "old_string_len": 0, "vorkommen": 0}
+    _vork = content.count(old)
+    if _vork == 0:
+        return {"grund": "kein_match",
+                "old_string_len": len(old), "vorkommen": 0}
+    if _vork > 1:
+        return {"grund": "mehrdeutig",
+                "old_string_len": len(old), "vorkommen": _vork}
+    if old == new:
+        return {"grund": "no_effect",
+                "old_string_len": len(old), "vorkommen": 1}
+    return {"grund": "ok", "old_string_len": len(old), "vorkommen": 1}
+
+
 def _patches_wirklich_angewendet(state) -> bool:
     """K50: True nur, wenn Patches geliefert UND angewandt wurden.
 
@@ -71,12 +92,12 @@ def _patches_wirklich_angewendet(state) -> bool:
     return bool(getattr(state, "patches", [])) and _applied > 0
 
 
-def _apply_patches_with_hooks(
+def _apply_patches_with_diagnose(
     state: RunState,
     patches: list,
     *,
     phase_label: str = "",
-) -> int:
+) -> tuple[int, list[dict]]:
     """Wendet search/replace-Patches an, MIT Hooks (M-330).
 
     Wird vom Haupt-Pfad UND von der Reflection genutzt.
@@ -85,10 +106,13 @@ def _apply_patches_with_hooks(
       - post_tool_use nach Apply
       - simplify nach Apply
 
-    Rueckgabe: Anzahl angewendeter Patches (0 = keiner).
+    Rueckgabe: (Anzahl, Liste der Diagnosen).
+    Jede Diagnose: {file, old_string_len, vorkommen, grund}.
     """
     pd = state.project_dir
     pn = state.project_name
+
+    diags: list[dict] = []
 
     # 1. PreToolUse pro Patch
     for _pat in patches:
@@ -104,7 +128,13 @@ def _apply_patches_with_hooks(
                   {"hook": "pre_tool_use", "phase": phase_label,
                    "reason": _hook_res.get("reason", "")},
                   pd, pn)
-            return 0
+            for _p in patches:
+                if isinstance(_p, dict):
+                    diags.append({
+                        "file": _p.get("file", ""),
+                        "old_string_len": len(_p.get("old_string", "") or ""),
+                        "grund": "hook_blocked", "vorkommen": 0})
+            return 0, diags
 
     # 2. Apply (search/replace)
     _applied = 0
@@ -133,6 +163,8 @@ def _apply_patches_with_hooks(
                 audit("loop_patch_delete_skip_missing",
                       {"file": _f, "phase": phase_label,
                        "modus": "reflection"}, pd, pn)
+                diags.append({"file": _f, "old_string_len": 0,
+                              "grund": "datei_fehlt", "vorkommen": 0})
                 continue
             try:
                 _target.unlink()
@@ -144,20 +176,36 @@ def _apply_patches_with_hooks(
             audit("loop_patch_deleted",
                   {"file": _f, "phase": phase_label,
                    "modus": "reflection"}, pd, pn)
+            diags.append({"file": _f, "old_string_len": 0,
+                          "grund": "delete_ok", "vorkommen": 1})
             _applied += 1
             continue
         if not _f or not _old or not _new:
+            diags.append({"file": _f, "old_string_len": len(_old or ""),
+                          "grund": "leer", "vorkommen": 0})
             continue
         _target = Path(pd) / _f
         if not _target.exists():
             audit("loop_patch_file_missing",
                   {"file": _f, "phase": phase_label}, pd, pn)
+            diags.append({"file": _f, "old_string_len": len(_old),
+                          "grund": "datei_fehlt", "vorkommen": 0})
             continue
         _content = _target.read_text(encoding="utf-8")
+        _diag = _diagnose_patch(_content, _old, _new)
+        if _diag["grund"] in ("kein_match", "no_effect", "leer"):
+            # Bestehende Audit-Erwartungen (K30): bei kein_match
+            # zusaetzlich loop_patch_old_string_not_found schreiben.
+            if _diag["grund"] == "kein_match":
+                audit("loop_patch_old_string_not_found",
+                      {"file": _f, "phase": phase_label}, pd, pn)
+            diags.append({"file": _f, **_diag})
+            continue
         _neu_content, _match = _apply_one_patch(_content, _old, _new)
         if _match == "fail":
             audit("loop_patch_old_string_not_found",
                   {"file": _f, "phase": phase_label}, pd, pn)
+            diags.append({"file": _f, **_diag})
             continue
         # FIX N 2026-10-31: Write-Fehler fail-closed.
         try:
@@ -166,13 +214,15 @@ def _apply_patches_with_hooks(
             audit("loop_patch_write_failed",
                   {"file": _f, "phase": phase_label, "fehler": str(_e)[:200]},
                   pd, pn)
+            diags.append({"file": _f, **_diag, "grund": "write_failed"})
             continue
         audit("loop_patch_applied",
               {"file": _f, "phase": phase_label, "match": _match}, pd, pn)
+        diags.append({"file": _f, **_diag})
         _applied += 1
 
     if _applied == 0:
-        return 0
+        return 0, diags
 
     # M-334b: post_tool_use entfernt. Der Hook prueft die
     # Werkstatt-Baseline (cwd=/opt/werkstatt), nicht das
@@ -189,7 +239,25 @@ def _apply_patches_with_hooks(
                "reason": _hook_res.get("reason", "")},
               pd, pn)
 
-    return _applied
+    return _applied, diags
+
+
+def _apply_patches_with_hooks(
+    state: RunState,
+    patches: list,
+    *,
+    phase_label: str = "",
+) -> int:
+    """OP-060a: Wrapper fuer Rueckwaerts-Kompatibilitaet.
+
+    Ruft _apply_patches_with_diagnose auf und gibt nur die Anzahl
+    angewendeter Patches zurueck. Bestehende Aufrufer bleiben
+    unveraendert.
+    """
+    applied, _diags = _apply_patches_with_diagnose(
+        state, patches, phase_label=phase_label,
+    )
+    return applied
 
 
 def _delete_ziel_erlaubt(
@@ -229,6 +297,8 @@ def _get_git_diff_for_hook(*args, **kwargs):
 __all__ = [
     '_apply_one_patch',
     '_apply_patches_with_hooks',
+    '_apply_patches_with_diagnose',
+    '_diagnose_patch',
     '_delete_ziel_erlaubt',
     '_patches_wirklich_angewendet',
 ]

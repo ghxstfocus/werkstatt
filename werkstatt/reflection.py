@@ -25,6 +25,12 @@ def _apply_patches_with_hooks(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
+def _apply_patches_with_diagnose(*args, **kwargs):
+    """OP-060a: Late-Binding-Proxy."""
+    from werkstatt.loop import _apply_patches_with_diagnose as _orig
+    return _orig(*args, **kwargs)
+
+
 def _task_ende(*args, **kwargs):
     """Late-Binding-Proxy fuer werkstatt.loop._task_ende."""
     from werkstatt.loop import _task_ende as _orig
@@ -185,7 +191,8 @@ def _reflection_loop(
             continue
 
         # M-330: gemeinsame Apply-Funktion MIT Hooks.
-        _applied = _apply_patches_with_hooks(
+        # OP-060a: diagnose-Variante liefert (applied, diagnosen).
+        _applied, _diagnosen = _apply_patches_with_diagnose(
             state, _patches,
             phase_label=f"reflection-runde-{runde}",
         )
@@ -203,7 +210,9 @@ def _reflection_loop(
             _cur = getattr(state, "last_verify_errors", None) or []
             state.last_verify_errors = list(_cur) + [_patch_err]  # type: ignore[attr-defined]
             audit("loop_reflection_patch_nicht_angewendet",
-                  {"runde": runde}, pd, pn)
+                  {"runde": runde, "diagnosen": _diagnosen}, pd, pn)
+            audit("loop_reflection_patch_unwirksam",
+                  {"runde": runde, "diagnosen": _diagnosen}, pd, pn)
             # K47: auch hier History-Eintrag (Patches=0).
             _refl_hist = getattr(state, "reflection_history", None)
             if _refl_hist is None:
@@ -409,7 +418,7 @@ def _phase_end_reflection(state: RunState) -> bool:
                 audit("loop_phase_reflection_kein_patch",
                       {"datei": _datei, "runde": _runde + 1}, pd, pn)
                 continue
-            _applied = _apply_patches_with_hooks(
+            _applied, _diag_phase = _apply_patches_with_diagnose(
                 state, _patches,
                 phase_label=f"phase-fix-{_datei}-r{_runde + 1}",
             )
@@ -470,4 +479,5 @@ def _diff_hash_for_state(state) -> str:
     ).hexdigest()
 
 
-__all__ = ['_phase_end_reflection', '_reflection_loop']
+__all__ = ['_phase_end_reflection', '_reflection_loop',
+           '_apply_patches_with_diagnose', '_diff_hash_for_state']

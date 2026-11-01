@@ -38,7 +38,11 @@ def _mk_state(
 def _setup_common_mocks(monkeypatch, *, verify_ok: bool):
     monkeypatch.setattr(_builder_mod, "run_builder", lambda st: True)
     monkeypatch.setattr(
-        refl_mod, "_apply_patches_with_hooks", lambda st, p, **kw: 0
+        refl_mod, "_apply_patches_with_diagnose",
+        lambda st, p, **kw: (0, [{"file": "core/x.py",
+                                  "old_string_len": 1,
+                                  "grund": "kein_match",
+                                  "vorkommen": 0}]),
     )
     monkeypatch.setattr(
         refl_mod, "_verify_patches", lambda st, phase=None: verify_ok
