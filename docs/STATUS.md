@@ -48,6 +48,18 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
+### OP-062f: verify.json kann mypy-Stage nicht abbilden
+
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/verify.py`, `docs/WORKFLOW.md`, `tests/test_verify_mypy.py`
+- **Akzeptanzkriterien:** Wenn eine OP ein Tool zur Verifikation fordert (z.B. "mypy muss 0 Fehler zeigen"), muss das Tool als Verify-Stage konfigurierbar sein, damit der Loop Erfolg deterministisch pruefen kann. Aktuell kennt `verify.json` nur `py_compile`/`ruff`/`pytest` — mypy ist nicht abbildbar.
+  1. `verify.py` fuehrt beliebige Stage-`command`-Arrays aus, unabhaengig vom Stage-Namen. `verify.json`-Schema muss freie Stage-IDs erlauben.
+  2. Dokumentation in `docs/WORKFLOW.md`: Beispiel einer mypy-Stage mit `command` = `["python3", "-m", "mypy", "{changed_py_files}", "--no-error-summary"]` und `phase` = `"post_build"`.
+  3. Fuer `security-ai` soll OP-004 mit einer `mypy`-Stage ausgestattet werden, sobald OP-062f erledigt ist (Folge-OP).
+- **Tests:** `tests/test_verify_mypy.py` (2 Faelle: freie Stage-ID mit mypy-Command laeuft; Stage-Fehler schlaegt Loop fehl).
+- **Blockiert von:** —
+- **Hinweis:** Live-Beleg 17:58 OP-004: Loop baute einen Fix (Port-Guards umstrukturiert), Tests + Phase-Review gruen, Commit 10799ed durch — aber mypy zeigt weiterhin 2 Fehler in `core/checks/__init__.py:80` (return min_port <= port <= max_port). Der Task ist nicht erfuellt. Loop kann das nicht erkennen, weil verify.json keine mypy-Stage hat. `pytest_full_checks` failt am Ende bei 0s — separates Problem. Frage bei Bearbeitung: soll mypy immer automatisch laufen, oder nur wenn die OP das fordert? Empfehlung: Konvention — Aufgabentext nennt das Tool, Loop baut Stage dynamisch.
+
 ### OP-060b: human_review-Status + Duplikat-Anker-Regeneration (Design-OP)
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/phase_state.py`, `werkstatt/task_runner.py`, `werkstatt/gates.py`, `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_human_review_status.py`
