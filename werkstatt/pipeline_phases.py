@@ -1286,6 +1286,20 @@ def _phase_tasks_loop(
     return 0, tasks_ok, tasks
 
 
+def _hat_human_review_tasks(phase_state) -> bool:
+    """OP-060b: True, wenn mind. ein Task den Status human_review hat."""
+    if phase_state is None:
+        return False
+    try:
+        _tasks = phase_state.data.get("tasks") or []
+    except Exception:  # noqa: BLE001
+        return False
+    return any(
+        isinstance(t, dict) and t.get("status") == "human_review"
+        for t in _tasks
+    )
+
+
 def _phase_finalize(
     state: RunState,
     tasks_ok: int,
@@ -1339,7 +1353,9 @@ def _phase_finalize(
                 _alle_done = False
                 break
             _pt = phase_state.get_task(_tid)
-            if not _pt or _pt.get("status") != "done":
+            _pt_status = (_pt or {}).get("status")
+            # OP-060b: human_review zaehlt als bearbeitet.
+            if _pt_status not in ("done", "human_review"):
                 _alle_done = False
                 break
     # GOLD 2026-10-30: Nicht nur state.patches pruefen (die koennen
@@ -1383,6 +1399,12 @@ def _phase_finalize(
     audit("loop_phase", {"phase": "human_gate", "status": "start"}, pd, pn)
     rc = _human_gate(state)
     group_end()
+
+    # OP-060b: human_review-Tasks offen + Mensch approved -> rc=2.
+    if rc == 0 and _hat_human_review_tasks(phase_state):
+        audit("loop_human_review_offen",
+              {"phase": "human_gate"}, pd, pn)
+        rc = 2
 
     # M-476: Phase-End Verify (Vollsuite) nach human_gate.
     if rc == 0:

@@ -53,3 +53,51 @@ def test_phase_state_propagate_ignoriert_human_review(tmp_path: Path) -> None:
     assert parent["status"] != "failed", (
         "Parent wurde faelschlich failed markiert trotz human_review-Kind"
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# OP-060b-Rest: _task_fortschritt_block + _hat_human_review_tasks
+# ═══════════════════════════════════════════════════════════════
+
+
+def test_task_fortschritt_zeigt_human_review(tmp_path: Path) -> None:
+    """human_review-Task mit Marker [~] + Grund."""
+    from werkstatt.committer import _task_fortschritt_block
+
+    (tmp_path / ".werkstatt").mkdir()
+    ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    ps.data["tasks"] = [
+        {"id": "t1", "name": "Task Eins", "status": "done"},
+        {"id": "t2", "name": "Task Zwei", "status": "human_review",
+         "failure": "spec_widerspruch_vermutet"},
+    ]
+    ps.save()
+
+    block = _task_fortschritt_block(tmp_path, "p")
+    assert "human_review" in block or "spec" in block.lower(), (
+        f"kein human_review-Marker: {block!r}"
+    )
+    assert "[ ] t2" not in block, (
+        f"t2 faelschlich als pending: {block!r}"
+    )
+
+
+def test_hat_human_review_tasks(tmp_path: Path) -> None:
+    """_hat_human_review_tasks erkennt human_review-Status."""
+    from werkstatt.pipeline_phases import _hat_human_review_tasks
+
+    (tmp_path / ".werkstatt").mkdir()
+    ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    ps.data["tasks"] = [
+        {"id": "t1", "name": "T1", "status": "done"},
+        {"id": "t2", "name": "T2", "status": "human_review"},
+    ]
+    ps.save()
+    assert _hat_human_review_tasks(ps) is True
+
+    ps.data["tasks"] = [
+        {"id": "t1", "name": "T1", "status": "done"},
+        {"id": "t2", "name": "T2", "status": "failed"},
+    ]
+    ps.save()
+    assert _hat_human_review_tasks(ps) is False

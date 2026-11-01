@@ -68,6 +68,13 @@ def _task_fortschritt_block(pd: Path, pn: str) -> str:
             _pending += 1
         elif _st == "split":
             _lines.append(f"  [>] {_tid} {_name}  (split)")
+        elif _st == "human_review":
+            # OP-060b: Mensch muss entscheiden.
+            _hr_grund = _t.get("failure") or "unbekannt"
+            _lines.append(
+                f"  [~] {_tid} {_name}  (human_review: {_hr_grund})"
+            )
+            _pending += 1
         else:
             _lines.append(f"  [ ] {_tid} {_name}")
             _pending += 1
