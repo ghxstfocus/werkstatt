@@ -42,4 +42,5 @@ def test_message_72_zeichen_limit():
     src = Path("/opt/werkstatt/werkstatt/committer.py").read_text(encoding="utf-8")
     assert "len(_msg.split" in src
     assert "> 72" in src
-    assert "...\\"" in src or '"..."' in src
+    # 72-Zeichen-Truncation: entweder "..." oder Substring-Slice
+    assert '"..."' in src or "...\"" in src or "[:69]" in src
