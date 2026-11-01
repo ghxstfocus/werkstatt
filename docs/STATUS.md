@@ -48,15 +48,34 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-062: Reviewer-Audit-Payloads leer ({}) bei reviewer_bug und reviewer_phase_rejected
+### OP-062a: Redaction laeuft vor Reviewer-Prompt — Reviewer urteilt auf falscher Eingabe
 - **Status:** open
-- **Betroffene Dateien:** `werkstatt/reviewer.py`, `werkstatt/pipeline_phases.py`, `tests/test_reviewer_payload.py`
-- **Akzeptanzkriterien:** Wenn der Reviewer HIGH/CRITICAL-Bugs meldet, MUSS der Audit-Event `reviewer_bug` das Feld `description`, `severity` und `file` enthalten. Wenn `reviewer_phase_rejected` geschrieben wird, MUSS das Payload `bugs`, `datei` und `phase` enthalten. Leere `{}`-Payloads sind nicht akzeptabel — ohne Grund kann der Mensch am Human-Gate nicht entscheiden, ob Ablehnung berechtigt war.
-  Zusaetzlich: Bei `loop_phase_reflection_erschoepft` MUSS das Payload den Grund und die verbleibenden Bugs enthalten.
-- **Tests:** `tests/test_reviewer_payload.py` (3 Faelle: reviewer_bug mit vollstaendigem Payload; reviewer_phase_rejected mit bugs-Liste; loop_phase_reflection_erschoepft mit Grund).
+- **Betroffene Dateien:** `werkstatt/agent.py`, `werkstatt/reviewer.py`, `werkstatt/prompts.py`, `tests/test_reviewer_redaction.py`
+- **Akzeptanzkriterien:** Wenn ein LLM-Prompt fuer den Reviewer oder Phase-End-Reviewer gebaut wird, MUSS der Code-Inhalt unredigiert bleiben. Redaction darf nur auf Log-/Audit-Payloads angewandt werden, nicht auf LLM-Prompts, deren Aufgabe es ist, den Code semantisch zu pruefen.
+  1. `agent.py:98-99` (`redact_all` auf `user_content`/`system_prompt`) — Redaction muss fuer Reviewer-Pfade abschaltbar sein, oder `redact_all` muss einen "reviewer_modus"-Parameter haben, der Code-Bloecke unangetastet laesst.
+  2. Reviewer-Prompt-Dump muss die echten IPs/Dateiinhalte enthalten, nicht `[IPV4]`.
+  3. Ein Test mit einer Test-Datei, die zwei verschiedene IPs enthaelt, muss im Prompt-Dump beide IPs zeigen (nicht `[IPV4]` und `[IPV4]`).
+- **Tests:** `tests/test_reviewer_redaction.py` (3 Faelle: Reviewer-Prompt mit 2 verschiedenen IPs enthaelt beide; Audit-Payload enthaelt `[IPV4]`; Builder-Prompt enthaelt echte IPs).
 - **Blockiert von:** —
-- **Hinweis:** Live-Beleg Loop-Validierung 15:16 OP-002b3. Beim t2-Reject standen 4x `reviewer_bug` im Audit, alle mit Payload `{}`. Der Loop hat den Diff dennoch als produktionsreif gebaut (11 Tests gruen, als d611e2b committet) — aber weder Mensch noch Loop konnten nachvollziehen, WARUM der Reviewer ablehnte. Bei der Phase-End-Review dasselbe Muster: 3x `reviewer_phase_rejected` mit `{}`, dann `loop_phase_reflection_erschoepft` ohne Grund -> `loop_gate_failed`. Die OP-059/OP-060/OP-061-Fixes koennen nur greifen, wenn die Diagnose-Daten im Audit stehen.
+- **Hinweis:** Live-Beleg Loop-Validierung 15:16 OP-002b3. Prompt-Dump `/tmp/werkstatt-prompts/unbekannt_20261101-151653_511483_user.txt` enthaelt 9x `[IPV4]`. Der Phase-End-Reviewer sieht im Test-Code zwei verschiedene IPs als `[IPV4]` und `[IPV4]` — semantisch identisch. Er urteilt rational korrekt auf Basis dieser Eingabe: "Test ruft upsert_seen zweimal mit DERSELBEN IP auf". Der Test im Repo ist gruen, ruft `1.1.1.1` und `2.2.2.2`. Der Phase-Reviewer rejected 3x hintereinander, dann `loop_phase_reflection_erschoepft`, dann rc=1. Ohne diesen Fix ist jede Phase-End-Review strukturell unzuverlaessig, sobald der Diff IPs, Keys oder andere sensible Strings enthaelt. **Verifikation bei Bearbeitung:** pruefen, ob `agent.py:98-99` der einzige Redaction-Pfad ist oder ob `reviewer.py` selbst nochmal redigiert.
 
+### OP-062b: Human-Gate zeigt Scout-Auftrag, Reviewer-Bugs und Reflexionen nicht
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/gates.py`, `werkstatt/loop_renderer.py`, `werkstatt/state.py`, `tests/test_human_gate_render.py`
+- **Akzeptanzkriterien:** Am Human-Gate MUSS der Mensch sehen, was der Loop im Hintergrund entschieden hat.
+  1. **Scout-Auftrag** (falls gelaufen): `state.architect_prosa` (bereits in `gates.py:_plan_gate` gerendert) und `state.scout_findings`/`state.scout_key_files` sichtbar machen.
+  2. **Reviewer-Bugs pro Task:** Aus `state.reviewer_bugs_history` die letzte Runde pro Task als Block mit `severity`, `file`, `description` rendern. Nicht nur den Task-Status.
+  3. **Reflexions-Runden pro Task:** Aus `state.reflection_history` pro Runde zeigen: Runde N, patches_applied, offene review_errors, offene reviewer_bugs.
+  4. **Phase-End-Review-Bugs:** Wenn `run_phase_end_review` rejected: Bugs sichtbar machen. Aktuell kein State-Feld dafuer — `reviewer_phase_rejected` schreibt `bugs` nur ins Audit-Log. Neues State-Feld `state.reviewer_phase_bugs` noetig.
+  5. **Diff bleibt sichtbar** (bestehender `(Diff zu gross)`-Hinweis ist OK).
+- **Tests:** `tests/test_human_gate_render.py` (3 Faelle: Human-Gate-String enthaelt Scout-Findings; enthaelt Reviewer-Bug-descriptions; enthaelt Reflexions-Runden).
+- **Blockiert von:** OP-062a (erst muss der Reviewer echte Daten sehen, dann ist der Render sinnvoll)
+- **Hinweis:** Live-Beleg Loop-Validierung 15:16 OP-002b3. Das Human-Gate-Panel zeigte:
+  - `Tasks: 2/3 done, 1 failed`
+  - `[!] t2 upsert_seen History-Schreibung (failed: reviewer_rejected)`
+  - `Aenderungen im Zielprojekt: core/inventory/repository.py | 83 +++/---`
+  - `(Diff zu gross: 2795 Zeichen, siehe git diff)`
+  Der Mensch am Gate sah nicht: dass der Task-Reviewer 4 Bugs gemeldet hatte (die der Reflection-Patch behoben hatte), dass die Reflection 2 Runden lief, dass die Phase-End-Review 3x rejected mit konkreten Bugs. Diese Information steht nur im Audit-Log. Ohne die Anzeige ist die Human-Gate-Entscheidung strukturell blind. Ursprungs-OP-062 ("Payloads leer") war eine Fehldiagnose: die Payloads sind vollstaendig, der Render zeigt sie nur nicht.
 ### OP-060b: human_review-Status + Duplikat-Anker-Regeneration (Design-OP)
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/phase_state.py`, `werkstatt/task_runner.py`, `werkstatt/gates.py`, `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_human_review_status.py`
