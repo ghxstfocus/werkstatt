@@ -120,12 +120,21 @@ GROESSEN-ZIEL:
   (< 30 Zeilen) -> kein reviewbares Interface. Zu gross
   (> 200 Zeilen) -> Semantik-Verlust im Builder.
 
-TESTS SIND OUT-OF-SCOPE:
-  Beschreibe KEINE Test-Dateien (tests/*, test_*.py, *_test.py).
-  Beschreibe KEINE Aenderungen an Test-Dateien. Tests werden
-  vom Menschen geschrieben, nicht vom Loop. Wenn deine Loesung
-  Tests braucht: beschreibe nur, welche Faelle getestet werden
-  sollten, nicht den Test-Code selbst.
+TESTS — BEDINGT IM SCOPE:
+  DEFAULT: Tests sind OUT-OF-SCOPE. Beschreibe KEINE Test-Dateien,
+  KEINE Aenderungen an Test-Dateien. Wenn deine Loesung Tests
+  braucht: beschreibe nur, welche Faelle getestet werden sollten.
+
+  AUSNAHME: Wenn der Auftrag oder der referenzierte OP explizit
+  einen Test-Namen nennt (Pattern test_*, z.B. "test_insert_..."):
+  DANN ist die Test-Datei IM SCOPE. Fuege einen eigenen Block
+  "## tests/<pfad>" hinzu mit:
+    - Test-Funktionsnamen (exakt wie im OP genannt)
+    - Arrange/Act/Assert in Prosa
+    - Welche DB-Zeilen/State nach dem Aufruf erwartet werden
+  Der Builder braucht diesen Block, sonst kann er den Test nicht
+  bauen. Beispiel: OP fordert "Neuer Test test_foo_bar" ->
+  "## tests/unit/test_modul.py" mit test_foo_bar beschreiben.
 
 MIGRATIONS-NUMMERN:
   - Wenn eine Migration noetig ist: pruefe data/migrations/.
