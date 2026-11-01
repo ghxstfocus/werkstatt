@@ -1271,3 +1271,7 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 ## 2026-11-01T17:18:17+00:00 -- OP-062a: redact-Parameter fuer Code-Pruef-LLMs
 - **Status:** done
 - **Info:** Commit HEAD. ask_llm bekommt redact: bool = True (Default Datenschutz-konservativ). Builder, Task-Reviewer und Phase-End-Reviewer rufen mit redact=False — sie pruefen Code semantisch und brauchen echte Werte. Private IPs (10/8, 172.16/12, 192.168/16, 127/8) werden auch bei redact=True nicht maskiert, oeffentliche IPs (1.1.1.1, 8.8.8.8) schon. Live-Beleg 15:16 OP-002b3: Phase-End-Reviewer sah '[IPV4]' und '[IPV4]', meldete 'Test ruft zweimal dieselbe IP auf', rejected 3x -> rc=1. Test im Repo war gruen. Tests: tests/test_reviewer_redaction.py (5 Faelle). Baseline 1042 passed, 5 skipped.
+
+## 2026-11-01T17:21:50+00:00 -- OP-062b: Human-Gate zeigt Architect-Plan + Reviewer-Bugs + Reflexionen
+- **Status:** done
+- **Info:** Commit HEAD. gates.py: neue pure Funktion _human_gate_body(state) rendert aus state.architect_prosa, state.reviewer_bugs_history (letzte Runde) und state.reflection_history (Runde N, X Patches, Y Fehler, Z Bugs). _human_gate ruft sie auf und haengt den Block vor 'Aenderungen im Zielprojekt'. Leerer State -> leerer String. Scout-Marker '[atomarer Plan vom Scout]' wird als solcher gekennzeichnet. Live-Beleg 15:16: Mensch am Gate sah nur Task-Status + Diff-Stat, obwohl 4 reviewer_bugs, 2 Reflexions-Runden und 3 Phase-End-Rejects im Audit standen. Tests: tests/test_human_gate_render.py (5 Faelle). Baseline 1047 passed, 5 skipped.

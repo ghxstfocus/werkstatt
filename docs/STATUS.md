@@ -48,23 +48,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-062b: Human-Gate zeigt Scout-Auftrag, Reviewer-Bugs und Reflexionen nicht
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/gates.py`, `werkstatt/loop_renderer.py`, `werkstatt/state.py`, `tests/test_human_gate_render.py`
-- **Akzeptanzkriterien:** Am Human-Gate MUSS der Mensch sehen, was der Loop im Hintergrund entschieden hat.
-  1. **Scout-Auftrag** (falls gelaufen): `state.architect_prosa` (bereits in `gates.py:_plan_gate` gerendert) und `state.scout_findings`/`state.scout_key_files` sichtbar machen.
-  2. **Reviewer-Bugs pro Task:** Aus `state.reviewer_bugs_history` die letzte Runde pro Task als Block mit `severity`, `file`, `description` rendern. Nicht nur den Task-Status.
-  3. **Reflexions-Runden pro Task:** Aus `state.reflection_history` pro Runde zeigen: Runde N, patches_applied, offene review_errors, offene reviewer_bugs.
-  4. **Phase-End-Review-Bugs:** Wenn `run_phase_end_review` rejected: Bugs sichtbar machen. Aktuell kein State-Feld dafuer — `reviewer_phase_rejected` schreibt `bugs` nur ins Audit-Log. Neues State-Feld `state.reviewer_phase_bugs` noetig.
-  5. **Diff bleibt sichtbar** (bestehender `(Diff zu gross)`-Hinweis ist OK).
-- **Tests:** `tests/test_human_gate_render.py` (3 Faelle: Human-Gate-String enthaelt Scout-Findings; enthaelt Reviewer-Bug-descriptions; enthaelt Reflexions-Runden).
-- **Blockiert von:** OP-062a (erst muss der Reviewer echte Daten sehen, dann ist der Render sinnvoll)
-- **Hinweis:** Live-Beleg Loop-Validierung 15:16 OP-002b3. Das Human-Gate-Panel zeigte:
-  - `Tasks: 2/3 done, 1 failed`
-  - `[!] t2 upsert_seen History-Schreibung (failed: reviewer_rejected)`
-  - `Aenderungen im Zielprojekt: core/inventory/repository.py | 83 +++/---`
-  - `(Diff zu gross: 2795 Zeichen, siehe git diff)`
-  Der Mensch am Gate sah nicht: dass der Task-Reviewer 4 Bugs gemeldet hatte (die der Reflection-Patch behoben hatte), dass die Reflection 2 Runden lief, dass die Phase-End-Review 3x rejected mit konkreten Bugs. Diese Information steht nur im Audit-Log. Ohne die Anzeige ist die Human-Gate-Entscheidung strukturell blind. Ursprungs-OP-062 ("Payloads leer") war eine Fehldiagnose: die Payloads sind vollstaendig, der Render zeigt sie nur nicht.
 ### OP-060b: human_review-Status + Duplikat-Anker-Regeneration (Design-OP)
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/phase_state.py`, `werkstatt/task_runner.py`, `werkstatt/gates.py`, `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_human_review_status.py`
@@ -315,6 +298,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 | OP-060a | erledigt 2026-11-01 (ce5939f) | Patch-Diagnose bei Nicht-Anwendung (partial: human_review + Duplikat-Anker-Regeneration in OP-060b) | – |
 | OP-061 | erledigt 2026-11-01 (05bb2b2) | builder_failed-Klarheit (A: pre-reviewer flag, B: prior-done gleiche Datei) | – |
 | OP-062a | erledigt 2026-11-01 (HEAD) | redact=False fuer Builder + Reviewer (Code-Pruefung) | – |
+| OP-062b | erledigt 2026-11-01 (HEAD) | Human-Gate zeigt Architect-Plan + Reviewer-Bugs + Reflexionen | – |
 
 ## Verweise
 
