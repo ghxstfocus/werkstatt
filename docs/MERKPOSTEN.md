@@ -85,7 +85,7 @@ statt davor.
 - Nach jedem fertigen Block: Doku-Nachzug (Bau-Handoff, ROADMAP,
   ERLEDIGT, OFFENE-BLOECKE) + Push. Sonst sammelt sich Rueckstand.
 - Commit-Body-VOR-Werte brauchen Vor-Comm-SHA (M-57).
-- SESSION-BILANZ.md nachziehen, wenn neue Commit-Body-VOR-Werte
+- archiv/session-bilanz.md nachziehen, wenn neue Commit-Body-VOR-Werte
   auftauchen.
 
 ### Merkposten-Hygiene
@@ -97,9 +97,9 @@ statt davor.
 ## Verweise
 
 - docs/HANDOFF-BASELINE.md — kanonische Messbefehle.
-- docs/SESSION-BILANZ.md — Vor-Comm-SHAs pro Commit.
+- docs/archiv/session-bilanz.md — Vor-Comm-SHAs pro Commit.
 - docs/STATUS.md — offene Todos.
-- docs/MESS-INFRASTRUKTUR.md — Block M (Mess-Werkzeuge).
+- docs/archiv/mess-infrastruktur.md — Block M (Mess-Werkzeuge).
 
 
 ## Aus 3a-2c/3a-2d (2026-10-22)

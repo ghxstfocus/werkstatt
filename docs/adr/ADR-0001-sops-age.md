@@ -59,7 +59,7 @@ Negativ:
 
 ## Referenzen
 
-- `docs/KEY-ARCHITEKTUR.md` — Setup-Anleitung.
+- Diese ADR — SOPS+age-Setup, siehe Kontext und Entscheidung.
 - `docs/MERKPOSTEN.md` — M-186, M-203.
 - getsops/sops: https://github.com/getsops/sops
 - FiloSottile/age: https://github.com/FiloSottile/age
