@@ -1096,6 +1096,14 @@ def _phase_tasks_loop(
             if _reviewer_bugs:
                 import json as _json
                 _bug_ctx = _json.dumps(_reviewer_bugs, ensure_ascii=False)
+            # OP-059: Diff-Hash VOR Reflexion als Referenz fuer
+            # die false_positive-Erkennung (idempotenter Patch).
+            try:
+                from werkstatt.reflection import _diff_hash_for_state as _dh
+                state._reflection_diff_hash = _dh(state)  # type: ignore[attr-defined]
+            except Exception:  # noqa: BLE001
+                state._reflection_diff_hash = None  # type: ignore[attr-defined]
+            state.reviewer_stagnation_false_positive = False  # type: ignore[attr-defined]
             if not _reflection_loop(state, error_context=_bug_ctx):
                 audit("loop_reviewer_reflection_gescheitert", {"task_id": i}, pd, pn)
                 # M-343c: pytest ist das letzte Wort. Wenn der letzte
@@ -1123,9 +1131,17 @@ def _phase_tasks_loop(
                 else:
                     _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected")
                     continue
+            # OP-059: False-Positive erkannt -> erneuten Reviewer-
+            # Call sparen (Reviewer-Bug, nicht Task-Problem).
+            _is_fp = bool(getattr(
+                state, "reviewer_stagnation_false_positive", False))
+            if _is_fp:
+                audit("loop_reviewer_reject_false_positive",
+                      {"task_id": i, "grund": "stagnation_idempotent"}, pd, pn)
+                # Fall durch zum task_ok (kein _task_ende im Else-Zweig)
             # M-306d Fix 2: Nach erfolgreicher Reflection MUSS der
             # Reviewer erneut pruefen. Sonst fail-open (HR-R9).
-            if not run_reviewer(state):
+            elif not run_reviewer(state):
                 audit("loop_reviewer_rejected_after_reflection", {"task_id": i}, pd, pn)
                 # M-343c: pytest ist das letzte Wort.
                 _last_errors = getattr(state, "last_verify_errors", None) or []

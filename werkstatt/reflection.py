@@ -165,6 +165,10 @@ def _reflection_loop(
 
         # M-329: Builder erneut rufen. Er nutzt search/replace.
         # K34: reflection_phase -> _korrigiere_builder_action skip.
+        # OP-059: Diff-Hash VOR Builder. Vergleich nachher
+        # zeigt, ob der Patch wirksam war oder idempotent
+        # (Datei bereits im Zielzustand, Hash unveraendert).
+        _hash_vorher = _diff_hash_for_state(state)
         state.reflection_phase = True  # type: ignore[attr-defined]
         try:
             _builder_ok = run_builder(state)
@@ -217,6 +221,54 @@ def _reflection_loop(
             # Stagnation, wenn es mehrfach in Folge passiert.
             # Live-Beleg 2026-10-30 22:28: 5x patch_nicht_angewendet,
             # jedes Mal _stagnation=0 -> Loop drehte 5 Runden.
+            # OP-059: False-Positive-Erkennung. Wenn der Patch
+            # idempotent war (Diff unveraendert vor/nach Builder),
+            # zuvor bereits ein Patch wirksam wurde, die Datei
+            # keinen echten Verify-Fehler hat und der Hash dem
+            # Ausgangszustand entspricht, ist der Reviewer-Reject
+            # ein Fehlalarm (nicht: Task gescheitert).
+            _hash_nachher = _diff_hash_for_state(state)
+            _hash_ref = getattr(state, "_reflection_diff_hash", None)
+            _applied_vorher = int(
+                getattr(state, "applied_count", 0) or 0)
+            # OP-059: Fehler-Filter. Patch-nicht-angewendet-Marker
+            # und der aktuelle error_context (Reviewer-Bugs) sind
+            # KEINE echten Verify-Fehler — sie werden vom Loop
+            # selbst gesetzt und wuerden die false_positive-
+            # Erkennung immer blockieren.
+            _echte_errors = [
+                _e for _e in (
+                    getattr(state, "last_verify_errors", None) or [])
+                if not (isinstance(_e, str) and (
+                    _e.startswith("reflection: patch_nicht_angewendet")
+                    or (error_context and _e == error_context)
+                ))
+            ]
+            _is_false_positive = (
+                _had_error_context
+                and _applied_vorher > 0
+                and bool(_hash_vorher)
+                and bool(_hash_nachher)
+                and _hash_vorher == _hash_nachher
+                and (_hash_ref is None or _hash_nachher == _hash_ref)
+                and not _echte_errors
+            )
+            if _is_false_positive:
+                _verify_gruen = False
+                try:
+                    _verify_gruen = bool(
+                        _verify_patches(state, phase=phase))
+                except Exception:  # noqa: BLE001
+                    _verify_gruen = False
+                if _verify_gruen:
+                    audit("reviewer_stagnation_false_positive",
+                          {"runde": runde,
+                           "diff_hash": _hash_nachher,
+                           "applied_vorher": _applied_vorher},
+                          pd, pn)
+                    state.reviewer_stagnation_false_positive = (
+                        True)  # type: ignore[attr-defined]
+                    return True
             _stagnation += 1
             audit("loop_reflection_stagnation_runde",
                   {"runde": runde, "stagnation": _stagnation,
@@ -390,6 +442,32 @@ def _ruff_fix_changed(*args, **kwargs):
     """Late-Binding-Proxy fuer werkstatt.loop._ruff_fix_changed."""
     from werkstatt.loop import _ruff_fix_changed as _orig
     return _orig(*args, **kwargs)
+
+
+def _diff_hash_for_state(state) -> str:
+    """OP-059: SHA256 über den aktuellen Task-Diff im Zielprojekt.
+
+    Wird von _reflection_loop genutzt, um idempotente Patches
+    (Datei bereits im Zielzustand) von kaputten Patches zu
+    unterscheiden. Leerer String bei Fehler/kein Diff.
+    """
+    import hashlib
+    from werkstatt.reviewer import _get_git_diff
+
+    pd = getattr(state, "project_dir", None)
+    if pd is None:
+        return ""
+    task = getattr(state, "aktuelle_task", None) or {}
+    task_files = task.get("task_files") if isinstance(task, dict) else None
+    try:
+        diff = _get_git_diff(pd, task_files=task_files)
+    except Exception:
+        return ""
+    if not diff:
+        return ""
+    return hashlib.sha256(
+        diff.encode("utf-8", errors="replace")
+    ).hexdigest()
 
 
 __all__ = ['_phase_end_reflection', '_reflection_loop']
