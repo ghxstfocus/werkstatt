@@ -106,3 +106,46 @@ def test_subject_ohne_op_nnn_wortgrenze() -> None:
     # Kein abgeschnittenes Wort am Ende.
     assert not subj.endswith("mu"), subj
     assert " " in subj  # mehrere Woerter
+
+
+# ═══════════════════════════════════════════════════════════════
+# OP-063b: OP-NNN-Doppelung + Subject-Abschnitt
+# ═══════════════════════════════════════════════════════════════
+
+
+def test_progress_op_done_kein_doppel_praefix(tmp_path: Path) -> None:
+    """Subject enthaelt bereits OP-NNN: _progress_op_done klebt keinen zweiten davor."""
+    from werkstatt.committer import _progress_op_done
+
+    (tmp_path / ".werkstatt").mkdir()
+    progress = tmp_path / "PROGRESS.md"
+    progress.write_text("# Fortschritt\n", encoding="utf-8")
+
+    _progress_op_done(
+        tmp_path, "OP-004",
+        "OP-004: In core/checks/__init__.py die Funktion ...", "p",
+    )
+    txt = progress.read_text(encoding="utf-8")
+    assert "OP-004: OP-004:" not in txt, (
+        f"Doppel-Praefix: {txt!r}"
+    )
+    assert "OP-004:" in txt
+
+
+def test_build_commit_subject_unter_72_zeichen() -> None:
+    """Subject + Typ + Scope bleiben <= 72 Zeichen, kein Wortabschnitt."""
+    from werkstatt.committer import _build_commit_subject
+
+    subj = _build_commit_subject(
+        "OP-004: In core/checks/__init__.py die Funktion "
+        "check_port_range so umschreiben, dass mypy 0 Fehler zeigt. "
+        "Aktuell 2 operator-Fehler in Zeile 76.",
+        "OP-004",
+    )
+    # Subject allein
+    assert len(subj) <= 60, f"subject zu lang: {len(subj)}"
+    # Kein abgeschnittenes Wort am Ende
+    assert not subj.rstrip().endswith("che"), subj
+    # Volles Commit-Subject <= 72
+    full = f"fix(security-ai): {subj}"
+    assert len(full) <= 72, f"full subject zu lang: {len(full)}"

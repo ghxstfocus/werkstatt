@@ -140,12 +140,20 @@ def _delete_zone_op_append(status_md_path: Path, op_nnn: str, subject: str) -> b
 
 
 def _progress_op_done(pd: Path, op_nnn: str, subject: str, pn: str) -> bool:
-    """OP-048: Appendiert OP-Done-Eintrag an PROGRESS.md."""
+    """OP-048: Appendiert OP-Done-Eintrag an PROGRESS.md.
+
+    OP-063b: Idempotent gegenueber bereits enthaltenem OP-Praefix.
+    Sonst entsteht 'OP-004: OP-004: In core/...'.
+    """
+    _subj = (subject or "").strip()
+    _prefix = f"{op_nnn}:"
+    if _subj.upper().startswith(_prefix.upper()):
+        _subj = _subj[len(_prefix):].lstrip()
     try:
         from werkstatt import progress as _progress_od
         return _progress_od.append(
             pd,
-            name=f"{op_nnn}: {subject}",
+            name=f"{op_nnn}: {_subj}",
             status="done",
             info=f"Loop-Doku-Nachzug (Ebene 1). Beleg: git log {pn}.",
         )
@@ -233,7 +241,15 @@ def _build_commit_subject(aufgabe: str, op_nnn: str | None) -> str:
         _rest = _line[len(op_nnn):].lstrip(": ").strip()
         if _rest:
             _line = _rest
-    _limit = 60
+    # OP-063b: Limit gilt fuer das GESAMTE Subject (inkl. OP-Praefix).
+    # Sonst wird z.B. 'OP-004: ' (8 Zeichen) nicht eingerechnet und
+    # 'fix(security-ai): OP-004: ...' landet ueber 72 Zeichen.
+    _total_limit = 55
+    if op_nnn:
+        _prefix_len = len(op_nnn) + 2  # 'OP-NNN: '
+        _limit = max(20, _total_limit - _prefix_len)
+    else:
+        _limit = _total_limit
     if len(_line) > _limit:
         _cut = _line[:_limit]
         _sp = _cut.rfind(" ")
