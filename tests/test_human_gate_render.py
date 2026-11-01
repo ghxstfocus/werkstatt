@@ -313,3 +313,47 @@ def test_human_gate_zeigt_hunk_summary_bei_grossem_diff(
     assert "@@" in body or "bar()" in body, (
         f"kein Hunk-Header; body={body[:600]!r}"
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# OP-062e: Nullfall klar anzeigen
+# ═══════════════════════════════════════════════════════════════
+
+
+def test_human_gate_body_zeigt_auftrag_bereits_erfuellt(
+    tmp_path: Path,
+) -> None:
+    """state.auftrag_bereits_erfuellt=True -> Block 'Erfuellt ohne Aenderung'."""
+    s = _mk_state(tmp_path)
+    s.auftrag_bereits_erfuellt = True
+    s.architect_prosa = "[atomarer Plan vom Scout]"
+    body = _human_gate_body(s)
+    assert "Erfuellt ohne Aenderung" in body or \
+        "erfuellt ohne" in body.lower(), (
+        f"Kein Nullfall-Block; body={body[:600]!r}"
+    )
+
+
+def test_human_gate_body_zeigt_phase_review_skip(
+    tmp_path: Path,
+) -> None:
+    """state.phase_review_uebersprungen=True -> 'uebersprungen'-Hinweis."""
+    s = _mk_state(tmp_path)
+    s.phase_review_uebersprungen = "keine Aenderungen"
+    body = _human_gate_body(s)
+    assert "uebersprungen" in body.lower(), (
+        f"Phase-Review-Skip nicht angezeigt; body={body[:600]!r}"
+    )
+    assert "Phase-End-Review" in body or "Phase-Review" in body
+
+
+def test_human_gate_body_leer_ohne_nullfall_flag(
+    tmp_path: Path,
+) -> None:
+    """Ohne Nullfall-Flags bleibt der Body leer (Fallback erhalten)."""
+    s = _mk_state(tmp_path)
+    # weder auftrag_bereits_erfuellt noch phase_review_uebersprungen
+    body = _human_gate_body(s)
+    assert body == "" or not body.strip(), (
+        f"Body sollte leer sein ohne Flags: {body!r}"
+    )

@@ -362,6 +362,21 @@ def _human_gate_body(state) -> str:
     """
     _parts: list[str] = []
 
+    # 0. OP-062e: Nullfall-Anzeige (keine Aenderungen).
+    if getattr(state, "auftrag_bereits_erfuellt", False):
+        _parts.append(
+            "## Erfuellt ohne Aenderung\n"
+            "Der Builder hat 'auftrag_bereits_erfuellt' gesetzt — "
+            "die Zieldatei war bereits im Zielzustand. Es gab nichts "
+            "zu aendern."
+        )
+    _pe_skip = getattr(state, "phase_review_uebersprungen", None)
+    if _pe_skip:
+        _parts.append(
+            f"## Phase-End-Review (uebersprungen: {_pe_skip})\n"
+            "Kein Diff in der Phase — die Review wurde uebersprungen."
+        )
+
     # 1. Architect-Plan / Scout-Marker
     _prosa = (getattr(state, "architect_prosa", "") or "").strip()
     if _prosa:

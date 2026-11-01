@@ -1331,6 +1331,8 @@ def _phase_finalize(
     _applied = int(getattr(state, "applied_count", 0) or 0)
     _patches_leer = _applied == 0
     if _alle_done and _patches_leer:
+        # OP-062e: Nullfall-Flag fuer Human-Gate.
+        state.phase_review_uebersprungen = "keine Aenderungen"  # type: ignore[attr-defined]
         audit("loop_phase",
               {"phase": "phase_end_review",
                "status": "skipped",
