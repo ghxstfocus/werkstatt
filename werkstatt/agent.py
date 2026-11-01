@@ -81,7 +81,8 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             model: str, temperature: float, timeout: int = 120,
             *, state: RunState | None = None,
             aufgabe: str = "unbekannt",
-            max_tokens: int = 4096) -> LLMReply:
+            max_tokens: int = 4096,
+            redact: bool = True) -> LLMReply:
     """Fragt das LLM.
 
     Auflage 2125: Wenn `state` uebergeben wird, zaehlt
@@ -95,8 +96,15 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
     # Auflage 2113: max_len=100_000, damit Block-Auftraege
     # groesser 2000 Zeichen nicht abgeschnitten werden.
     # Analog 2089 (System-Prompt).
-    user_content, _ = redaction.redact_all(user_content, max_len=100000)
-    system_prompt, _ = redaction.redact_all(system_prompt, max_len=100000)
+    # OP-062a: redact=False fuer Code-Pruef-Pfade (Builder, Reviewer).
+    # Private IPs (10/8, 172.16/12, 192.168/16, 127/8) werden auch
+    # bei redact=True nicht maskiert. Fuer die semantische Code-
+    # Pruefung braucht der Reviewer aber auch oeffentliche Werte
+    # (z.B. 1.1.1.1 in einem Test), sonst sieht er '[IPV4]' und
+    # '[IPV4]' und kann sie nicht unterscheiden.
+    if redact:
+        user_content, _ = redaction.redact_all(user_content, max_len=100000)
+        system_prompt, _ = redaction.redact_all(system_prompt, max_len=100000)
     headers: dict[str, str] = {"Authorization": f"Bearer {api_key}",
                               "Content-Type": "application/json"}
     payload: dict[str, Any] = {"model": model,

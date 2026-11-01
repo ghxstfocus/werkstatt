@@ -468,6 +468,7 @@ def run_phase_end_review(state: RunState) -> bool:
             lambda: ask_llm(
                 api_key, _reviewer_system(), user,
                 model="deepseek-chat", temperature=0.2, max_tokens=4000,
+                redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
             ),
         )
     except Exception as _exc:  # noqa: BLE001
@@ -672,6 +673,7 @@ def run_reviewer(state: RunState) -> bool:
     reply = ask_llm(
         api_key, _reviewer_system(), user_content,
         model="deepseek-chat", temperature=0.0, max_tokens=4000,
+        redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
     )
 
     if not reply.ok:

@@ -790,6 +790,7 @@ def _build_patches_fuer_datei(
     reply = ask_llm(
         api_key, BUILDER_SYSTEM, _user,
         model="deepseek-chat", temperature=0.2, max_tokens=8000,
+        redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
     )
     if not reply.ok:
         audit("builder_architect_llm_fehler",
