@@ -110,6 +110,35 @@ def _expand_cmd_placeholders(
     changed_py = [f for f in changed if f.endswith(".py")]
     changed_non_test_py = [f for f in changed_py if not _ist_test_datei(f)]
 
+    # FIX M-P1 (2026-11-01): Testdateien aus Konvention ableiten, wenn
+    # keine Testdatei geaendert wurde. Verhindert 94%-Skip-Quote von
+    # pytest_changed (Live-Beleg: 93 Skips bei 95 Laeufen heute).
+    # Konvention: core/X/Y.py -> tests/unit/test_Y.py
+    #             core/X/__init__.py -> tests/unit/test_X.py
+    if not changed_tests and changed_non_test_py:
+        _derived: list[str] = []
+        for _f in changed_non_test_py:
+            _parts = _f.replace("\\", "/").split("/")
+            _bn = _parts[-1]
+            if _bn == "__init__.py" and len(_parts) >= 2:
+                _dir = _parts[-2]
+                _cands = [f"tests/unit/test_{_dir}.py",
+                          f"tests/test_{_dir}.py"]
+            else:
+                _stem = _bn[:-3] if _bn.endswith(".py") else _bn
+                _cands = [f"tests/unit/test_{_stem}.py",
+                          f"tests/test_{_stem}.py"]
+                if len(_parts) >= 2:
+                    _cands.insert(
+                        0, f"tests/unit/test_{_parts[-2]}_{_stem}.py")
+            for _cand in _cands:
+                if (Path(project_dir) / _cand).exists():
+                    _derived.append(_cand)
+                    break
+        if _derived:
+            changed_tests = _derived
+
+
     out: list[str] = []
     for c in cmd:
         s = str(c)
