@@ -49,13 +49,54 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-048: Deterministischer Doku-Nachzug nach Human-Gate
+### OP-055: STATUS.md Kennzahlen deterministisch aktualisieren
 - **Status:** open
-- **Betroffene Dateien:** `werkstatt/committer.py`, `tests/test_committer_doku_nachzug.py`
-- **Akzeptanzkriterien:** Wenn der Human-Gate approved UND alle Tasks ok UND pytest_regression gruen UND die Aufgabe eine OP-NNN nennt (Regex `OP-\d{3}[a-z]?`): Der Loop entfernt OP-NNN aus docs/STATUS.md, haengt done-Eintrag an PROGRESS.md, ergaenzt Delete-Zone. Doku-Aenderung landet im selben Commit wie Code. Opt-in per Env-Var WERKSTATT_DOKU_NACHZUG=1 (Default aus, alter Pfad bleibt). Kein Nachzug wenn: OP-NNN nicht in Aufgabe, OP-NNN nicht in STATUS.md, oder Verify rot.
-- **Tests:** `tests/test_committer_doku_nachzug.py` — 5 Faelle: (a) OP-NNN aus Aufgabe + STATUS.md + Code committed -> STATUS.md ohne OP, PROGRESS.md mit OP; (b) Env-Var nicht gesetzt -> keine Aenderung; (c) OP-NNN nicht in Aufgabe -> keine Aenderung; (d) OP-NNN nicht in STATUS.md -> keine Aenderung, Warnung ins Audit; (e) pytest_regression rot -> kein Doku-Nachzug.
-- **Blockiert von:** OP-002a (als Referenz-Lauf abgeschlossen — Live-Beleg 0c0b901), damit die Loop-Sequenz komplett durchlaufen ist.
-- **Hinweis:** Vorschlag aus Session 2026-11-01. Loest manuellen Nachzug ab (3 Commits fuer OP-002a: 4bd9c2a, c1191d1, 213255a waren manuell). DOC_CONVENTIONS.md §5 fordert "erledigt fliegt aus STATUS.md nach PROGRESS.md" — heute nicht automatisiert.
+- **Betroffene Dateien:** `werkstatt/committer.py`, `tests/test_committer_kennzahlen.py`
+- **Akzeptanzkriterien:** Nach jedem erfolgreichen Loop-Commit in `_committe_zielprojekt` werden in `<projekt>/docs/STATUS.md` die Kennzahlen-Sektion deterministisch aktualisiert (kein LLM):
+  - `- HEAD: <git rev-parse --short HEAD>` (aktueller Commit-Hash)
+  - `- Tests: <pytest --co -q | wc -l> collected`
+  - Optional: `- ruff: <ruff check --statistics | tail -1>`, `- mypy: <mypy ... | tail -1>` wenn Config vorhanden.
+  Nur wenn die Sektion `## Kennzahlen` in der Datei existiert. Sonst skip + Audit.
+- **Tests:** `tests/test_committer_kennzahlen.py` (3 Faelle: Kennzahlen-Sektion gefuellt, ohne Sektion skip, Regex fuer HEAD-Zeile).
+- **Blockiert von:** OP-048 (deterministischer Doku-Nachzug als Vorbedingung)
+- **Hinweis:** Session 2026-11-01: STATUS.md `HEAD: ffef6b4` steht noch, obwohl wir bei `7cdfab0` sind. Veraltete Kennzahlen sind ein Loop-Blocker (Scout/Architect sehen falschen HEAD).
+
+### OP-056: CHANGELOG.md deterministisch aus Commit-Message pflegen
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/committer.py`, `tests/test_committer_changelog.py`
+- **Akzeptanzkriterien:** Nach jedem erfolgreichen Loop-Commit: CHANGELOG.md-Eintrag im Format `## [Unreleased]` (bestehend) bekommt eine Zeile `- <type>: <subject> (<commit-hash>)`. Type/Subject kommen aus der Conventional-Commit-Message (OP-038). Append-only. Nur wenn Datei existiert; sonst skip.
+- **Tests:** `tests/test_committer_changelog.py` (Eintrag angelegt, bestehender Eintrag bleibt, kein File = skip).
+- **Blockiert von:** OP-038 (Commit-Message), OP-048 (Doku-Nachzug)
+
+### OP-057: Architecture-Drift-Warnung bei .py-Aenderungen ohne ARCHITECTURE.md
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/committer.py`, `tests/test_committer_architecture_drift.py`
+- **Akzeptanzkriterien:** Vor dem Commit: Wenn `git diff --name-only HEAD` neue `.py`-Dateien enthaelt (nur `A` create oder `D` delete) UND `docs/ARCHITECTURE.md` nicht im Diff ist: Audit-Event `committer_architecture_drift` mit Liste der neuen/geloeschten Module. Deterministisch, kein LLM. Kein Auto-Fix (Warnung), aber Commit-Skip-Gate fragt Mensch: Architektur geaendert, ARCHITECTURE.md nachziehen? (j/n).
+- **Tests:** `tests/test_committer_architecture_drift.py` (create .py ohne Doc = Warnung, mit Doc = keine Warnung, keine .py = keine Warnung).
+- **Blockiert von:** OP-048
+
+### OP-058: ADR-Mini-Phase vor Human-Gate
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/pipeline_phases.py`, `werkstatt/prompts.py`, `tests/test_adr_mini_phase.py`
+- **Akzeptanzkriterien:** Wenn OP-057 eine Drift-Warnung feuert ODER Commit-Message mit type refactor/feat UND neue Datei angelegt: Vor Human-Gate laeuft eine Mini-Phase:
+  1. Frage Mensch per Gate: Architektur-Entscheidung dokumentieren? (j/n)
+  2. Bei ja: LLM-Call, Prompt "Schreibe ADR-<next_number>-<slug>.md" (Diff + Aufgabe + Testzahl als Input).
+  3. Ergebnis: `docs/adr/ADR-<n>-<slug>.md` angelegt + `docs/adr/README.md` Index erweitert.
+  4. ADR-Datei landet im gleichen Commit.
+- **Tests:** `tests/test_adr_mini_phase.py` (Mock-LLM, 3 Faelle: Gate ja = ADR angelegt, Gate nein = skip, Auto-Modus = skip mit Audit).
+- **Blockiert von:** OP-048, OP-057
+
+### OP-048: Deterministischer Doku-Nachzug — Ebenen-Struktur
+- **Status:** open (bestehend, Spec praezisiert)
+- **Betroffene Dateien:** `werkstatt/committer.py`
+- **Akzeptanzkriterien (NEU):** Der Doku-Nachzug hat drei Ebenen:
+  - **Ebene 1 (deterministisch, immer):** OP-NNN aus STATUS.md entfernen, PROGRESS.md-Eintrag, Delete-Zone-Eintrag, Kennzahlen (OP-055), CHANGELOG (OP-056).
+  - **Ebene 2 (Warnung, kein Auto-Fix):** ARCHITECTURE.md-Drift (OP-057) ins Audit.
+  - **Ebene 3 (explizit, Gate):** ADR-Mini-Phase (OP-058).
+  Alle drei laufen nach Human-Gate-Approve, VOR `git add -A`, im selben Commit wie Code.
+- **Tests:** `tests/test_committer_doku_nachzug.py` (5 Faelle: Ebene 1, Ebene 2, Ebene 3, Env-Var aus = skip, keine OP-NNN = skip).
+- **Hinweis:** Session 2026-11-01. Doku ist Anker des Loops. Ohne Selbstpflege laeuft der Loop auf veralteter Wahrheit (HEAD, Testzahl, OP-Liste).
+
 
 ## Backlog (nicht §5-konform)
 
