@@ -62,20 +62,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Tests:** `tests/test_human_review_status.py` (5 Faelle: mark_human_review setzt Status + Grund; _task_ende idempotent mit human_review; _propagate_failed ignoriert human_review-Kinder; _phase_finalize rc=2; Aufruf aus Reflexion bei 2x patch_nicht_angewendet).
 - **Blockiert von:** —
 - **Hinweis:** OP-060a (Commit ce5939f) liefert nur die Diagnose-Grundlage (`loop_reflection_patch_unwirksam` mit diagnosen-Liste, u.a. `grund=mehrdeutig` + `vorkommen>1`). human_review ist ein neuer Task-Status und braucht Design-Entscheid (Kollision mit Idempotenz-Guard, Human-Gate-Zaehlung, rc-Berechnung, Parent-Propagation). Aus OP-060 herausgesplittet, weil Code-Umfang deutlich groesser ist als OP-060a.
-### OP-061: builder_failed-Zustandsverwirrung (Task-Runner-Bug)
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/builder.py`, `werkstatt/task_runner.py`, `tests/test_builder_failed_ohne_grund.py`
-- **Akzeptanzkriterien:** Wenn `builder_failed` als Task-Status gesetzt wird, MUSS der Audit-Event `loop_task_failed` den Grund enthalten (`grund: builder_empty_patch | builder_old_string_not_found | builder_no_patch | builder_invalid_json | ...`). Leere `{}`-Daten im Audit-Log sind nicht akzeptabel.
-  Zusaetzlich: Wenn zwei Tasks (t1+t2) hintereinander denselben `task_files[0]` haben und t1 bereits einen Patch erfolgreich angewendet hat (siehe `loop_patch_applied`), darf t2 mit `builder_failed` nur dann markiert werden, wenn t2 **keinen wirksamen** Patch geliefert hat. Wenn t2 keinen Patch geliefert hat, aber die Datei durch t1 bereits den erwarteten Zustand hat: Audit `builder_patch_bereits_erfuellt` + Task als done markieren.
-- **Tests:** `tests/test_builder_failed_ohne_grund.py` (3 Faelle: builder leer -> audit mit Grund; t1+t2 gleiche Datei, t1 wirksam, t2 leer -> t2 done via bereits_erfuellt; t2 wirksam -> t2 done normal).
-- **Blockiert von:** —
-- **Hinweis:** Session 2026-11-01 Abend. Live-Beleg OP-002b3-Loop (13:22): t1 meldete `reviewer_rejected`, t2 meldete `builder_failed` — aber der Code enthielt BEIDE Aenderungen (commit-Parameter + upsert_seen-Verdrahtung). Die Task-Zuordnung im Loop ist inkonsistent zur Realitaet. Ohne den vollstaendigen Diff am Human-Gate war der Patch nicht zu bewerten — die Anzeige sagte "Tasks: 1/3 done, 2 failed" obwohl 2/3 des Codes korrekt waren.
-
-
-## Backlog (nicht §5-konform)
-
-Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie haben noch keine §5-konformen Akzeptanz-kriterien (Betroffene Dateien, Tests). Bei Bearbeitung zuerst §5-Format herstellen.
-
 ### OP-003: K17 — Architect prueft existierende Migrationsnummern nicht (Kollision 0017/0018 in security-ai). Fix: vor Migrations-Task `ls data/migrations/`.
 - **Status:** open
 - **Betroffene Dateien:** —
@@ -310,6 +296,7 @@ Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie ha
 | OP-037 | kein Bug — Reviewer-Verhalten korrekt (audit-log 183709-29980) | keine Aenderung | – |
 | OP-059 | erledigt 2026-11-01 (05162e7) | reflection false_positive (partial: human_review-Zweig nicht gebaut, nur done bei verify gruen) | – |
 | OP-060a | erledigt 2026-11-01 (ce5939f) | Patch-Diagnose bei Nicht-Anwendung (partial: human_review + Duplikat-Anker-Regeneration in OP-060b) | – |
+| OP-061 | erledigt 2026-11-01 (05bb2b2) | builder_failed-Klarheit (A: pre-reviewer flag, B: prior-done gleiche Datei) | – |
 
 ## Verweise
 
