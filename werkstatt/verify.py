@@ -398,9 +398,21 @@ _WEICHE_STAGE_PREFIXES = (
 )
 
 
-def _stage_ist_hart(stage_id: str) -> bool:
-    """FIX AT: Klassifiziert eine Verify-Stage als hart/weich."""
-    _sid = (stage_id or "").lower()
+def _stage_ist_hart(stage_id) -> bool:
+    """FIX AT + OP-062f: Klassifiziert eine Verify-Stage als hart/weich.
+
+    Akzeptiert str (Rueckwaerts-Kompatibilitaet) ODER dict mit
+    optionalem Feld 'hart': true. hart=true verschaerft, aber
+    hart=false entschaerft NICHT (Prefix-Klassifikation gilt dann).
+    """
+    _flag = None
+    if isinstance(stage_id, dict):
+        _flag = stage_id.get("hart")
+        _sid = (stage_id.get("id") or "").lower()
+    else:
+        _sid = (stage_id or "").lower()
+    if _flag is True:
+        return True
     for _p in _HARTE_STAGE_PREFIXES:
         if _sid.startswith(_p):
             return True
