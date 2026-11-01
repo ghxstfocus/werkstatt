@@ -993,9 +993,21 @@ def _doku_post_check(
     _aufgabe_lower = (aufgabe or "").lower()
     _prosa_lower = (prosa or "").lower()
     _both = _aufgabe_lower + " " + _prosa_lower
-    _trigger_marker = ("nur", "ausschliesslich", "keine python",
-                       "kein code", "nur doku", "keine code")
-    _has_trigger = any(m in _both for m in _trigger_marker)
+    # OP-006 (2026-11-01): "nur" alleine ist zu vage. "NUR Delegation"
+    # und "nur diese .md aendern" sind verschiedene Faelle.
+    # Harte Trigger (explizite Code-Ablehnung):
+    _harte_marker = (
+        "keine python", "kein code", "keine code",
+        "nur doku", "ausschliesslich doku", "nur dokumentation",
+    )
+    _has_hart = any(m in _both for m in _harte_marker)
+    # "nur X.md" / "ausschliesslich X.md" als Regex (Ziel-Datei)
+    import re as _re_op006
+    _nur_md_match = _re_op006.search(
+        r"(?:nur|ausschliesslich)\s+\S+\.md",
+        _both,
+    )
+    _has_trigger = bool(_has_hart or _nur_md_match)
     _has_doku_ziel = (".md" in _aufgabe_lower or "docs/" in _aufgabe_lower
                       or "doku" in _aufgabe_lower)
     if not (_has_trigger and _has_doku_ziel):
@@ -1008,10 +1020,11 @@ def _doku_post_check(
         ".py", ".sql", ".js", ".ts", ".html", ".css",
         ".yaml", ".yml", ".toml", ".json",
     )
-    # Code-Task schuetzen NUR wenn:
-    #   - action=create (Architect will neue Datei), ODER
-    #   - Datei in der Aufgabe explizit genannt.
-    # Sonst: Explorer-Muell (update-Task auf fremder .py-Datei).
+    # OP-006 + Fix-A-v3 kombiniert:
+    # Harte Trigger ("keine python") + Code-Task-Schutz (create/
+    # explizit genannt) = Code-Tasks werden geschuetzt.
+    # Weiche Trigger ("nur Delegation") erreichen diesen Block
+    # nicht (oben schon return).
     _aufgabe_v3 = aufgabe or ""
     def _ist_geschuetzter_code_task(_t: dict) -> bool:
         if not isinstance(_t, dict):
