@@ -49,6 +49,14 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
+### OP-047: Deterministischer Doku-Nachzug nach Human-Gate
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/committer.py`, `tests/test_committer_doku_nachzug.py`
+- **Akzeptanzkriterien:** Wenn der Human-Gate approved UND alle Tasks ok UND pytest_regression gruen UND die Aufgabe eine OP-NNN nennt (Regex `OP-\d{3}[a-z]?`): Der Loop entfernt OP-NNN aus docs/STATUS.md, haengt done-Eintrag an PROGRESS.md, ergaenzt Delete-Zone. Doku-Aenderung landet im selben Commit wie Code. Opt-in per Env-Var WERKSTATT_DOKU_NACHZUG=1 (Default aus, alter Pfad bleibt). Kein Nachzug wenn: OP-NNN nicht in Aufgabe, OP-NNN nicht in STATUS.md, oder Verify rot.
+- **Tests:** `tests/test_committer_doku_nachzug.py` — 5 Faelle: (a) OP-NNN aus Aufgabe + STATUS.md + Code committed -> STATUS.md ohne OP, PROGRESS.md mit OP; (b) Env-Var nicht gesetzt -> keine Aenderung; (c) OP-NNN nicht in Aufgabe -> keine Aenderung; (d) OP-NNN nicht in STATUS.md -> keine Aenderung, Warnung ins Audit; (e) pytest_regression rot -> kein Doku-Nachzug.
+- **Blockiert von:** OP-002a (als Referenz-Lauf abgeschlossen — Live-Beleg 0c0b901), damit die Loop-Sequenz komplett durchlaufen ist.
+- **Hinweis:** Vorschlag aus Session 2026-11-01. Loest manuellen Nachzug ab (3 Commits fuer OP-002a: 4bd9c2a, c1191d1, 213255a waren manuell). DOC_CONVENTIONS.md §5 fordert "erledigt fliegt aus STATUS.md nach PROGRESS.md" — heute nicht automatisiert.
+
 ## Backlog (nicht §5-konform)
 
 Diese OPs sind Migrations-Artefakte aus `OFFENE-BLOECKE.md` (2026-10-31). Sie haben noch keine §5-konformen Akzeptanz-kriterien (Betroffene Dateien, Tests). Bei Bearbeitung zuerst §5-Format herstellen.
