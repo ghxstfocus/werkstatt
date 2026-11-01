@@ -479,7 +479,7 @@ def _human_gate(state: RunState) -> int:
         ).stdout
         _stat_txt = _stat.strip() if _stat.strip() else "  (keine Aenderungen)"
 
-        # Voller Diff nur bei kleiner Aenderung (max 2000 Zeichen)
+        # OP-062d: Voller Diff bei <=2000 Zeichen, sonst Hunk-Summary.
         _full = subprocess.run(
             ["git", "-C", str(pd), "diff"],
             capture_output=True, text=True, check=False, timeout=10,
@@ -487,7 +487,11 @@ def _human_gate(state: RunState) -> int:
         if _full.strip() and len(_full) <= 2000:
             _diff_txt = _full
         elif _full.strip():
-            _diff_txt = f"  (Diff zu gross: {len(_full)} Zeichen, siehe git diff)"
+            _summary = _diff_hunk_summary(_full)
+            _diff_txt = (
+                f"  (Diff {len(_full)} Zeichen, Struktur:)\n"
+                f"{_summary}"
+            )
     except Exception:  # noqa: BLE001
         _stat_txt = "  (Diff nicht verfuegbar)"
 

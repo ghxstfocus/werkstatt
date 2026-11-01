@@ -226,3 +226,90 @@ def test_phase_end_approved_setzt_reviewer_bugs_leer(
     assert s.reviewer_bugs == [], (
         f"state.reviewer_bugs nicht geleert: {s.reviewer_bugs}"
     )
+
+
+def test_human_gate_zeigt_hunk_summary_bei_grossem_diff(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """OP-062d: Bei Diff >2000 Zeichen zeigt das Gate die Hunk-Summary
+    statt nur '(Diff zu gross: N Zeichen)'."""
+    from werkstatt.gates import _human_gate
+
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
+    )
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "x.py").write_text("x = 1\n")
+
+    s = RunState(
+        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
+        always={}, optional={}, file_whitelist=[], api_key="dummy",
+        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
+    )
+
+    # Diff >2000 Zeichen mit Hunk-Header.
+    _big_diff = (
+        "diff --git a/core/x.py b/core/x.py\n"
+        "index abc..def 100644\n"
+        "--- a/core/x.py\n"
+        "+++ b/core/x.py\n"
+        "@@ -10,5 +10,7 @@ def bar():\n"
+        + ("+ x = 1\n" * 300)
+    )
+    assert len(_big_diff) > 2000
+
+    # git diff / git diff --stat mocken.
+    class _FakeCP:
+        def __init__(self, stdout: str) -> None:
+            self.stdout = stdout
+            self.returncode = 0
+            self.stderr = ""
+
+    def _fake_run(argv, *args, **kwargs):
+        if "diff" in argv and "--stat" in argv:
+            return _FakeCP(" core/x.py | 3 +++\n")
+        if "diff" in argv:
+            return _FakeCP(_big_diff)
+        return _FakeCP("")
+
+    monkeypatch.setattr(
+        "werkstatt.gates.subprocess.run", _fake_run,
+    )
+    monkeypatch.setattr(
+        "werkstatt.gates._task_fortschritt_block", lambda pd, pn: "",
+    )
+    # input() -> 'j' (approve), damit _human_gate nicht blockiert.
+    monkeypatch.setenv("WERKSTATT_IN_TEST", "0")
+    monkeypatch.setattr("builtins.input", lambda *a, **kw: "j")
+
+    _captured: list[str] = []
+
+    def _fake_panel(body: str, title: str = "") -> None:
+        _captured.append(body)
+
+    from werkstatt import loop_renderer
+    monkeypatch.setattr(loop_renderer, "panel_diff", _fake_panel)
+    # Audit schlucken.
+    monkeypatch.setattr("werkstatt.gates.audit", lambda *a, **kw: None)
+    # Nachfolgende Calls (ADR, commit) schlucken.
+    monkeypatch.setattr("werkstatt.gates._adr_mini_phase",
+                        lambda st: True)
+    monkeypatch.setattr(
+        "werkstatt.gates._committe_zielprojekt",
+        lambda st: (True, ""),
+    )
+
+    _human_gate(s)
+
+    assert _captured, "panel_diff wurde nicht aufgerufen"
+    body = _captured[0]
+    assert "Diff zu gross" not in body, (
+        f"alter Hinweis noch da; body={body[:600]!r}"
+    )
+    assert "core/x.py" in body, (
+        f"Datei fehlt in Summary; body={body[:600]!r}"
+    )
+    assert "@@" in body or "bar()" in body, (
+        f"kein Hunk-Header; body={body[:600]!r}"
+    )
