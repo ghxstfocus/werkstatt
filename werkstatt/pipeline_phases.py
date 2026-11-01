@@ -728,6 +728,40 @@ def _phase_tasks_loop(
             # M-355: Loop-Idempotenz-Check entfernt. Der Builder
             # (M-352) entscheidet ueber Idempotenz. Der Loop prueft
             # nur noch, ob der Builder erfolgreich war.
+            # OP-061 B: Hat ein prior done-Task die gleiche Datei
+            # bereits geschrieben? Dann ist der Task erfuellt.
+            _task_files_b = (task_obj.get("task_files", [])
+                             if isinstance(task_obj, dict) else [])
+            if _task_files_b and phase_state is not None:
+                _primary = _task_files_b[0]
+                _prior_done = False
+                for _pt in phase_state.data.get("tasks", []):
+                    if _pt.get("id") == task_id:
+                        continue
+                    if _pt.get("status") != "done":
+                        continue
+                    if _primary in (_pt.get("task_files") or []):
+                        _prior_done = True
+                        break
+                if _prior_done:
+                    _v_gruen_b = False
+                    try:
+                        _v_gruen_b = bool(
+                            _verify_patches(state, phase="post_build"))
+                    except Exception:  # noqa: BLE001
+                        _v_gruen_b = False
+                    if _v_gruen_b:
+                        audit("builder_patch_bereits_erfuellt",
+                              {"task_id": i, "file": _primary}, pd, pn)
+                        tasks_ok += 1
+                        state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
+                        _task_ende(state, phase_state, task_id, ok=True,
+                                   name=task_name)
+                        audit("loop_task_ok",
+                              {"task_id": i, "name": task_name,
+                               "via": "builder_patch_bereits_erfuellt"},
+                              pd, pn)
+                        continue
             # M-355b: run_builder=False -> Task gescheitert, KEIN
             # Durchfallen in den Patch-Pfad mit leerem state.patches.
             audit("loop_builder_aufgerufen", {"task_id": i}, pd, pn)
@@ -933,7 +967,25 @@ def _phase_tasks_loop(
                     audit("loop_patch_old_string_not_found",
                           {"file": file, "old": old_str[:50]}, pd, pn)
                     # M-298d: Reflection statt stumm weiterlaufen.
-                    if not _reflection_loop(state):
+                    # OP-061 A: Flag-Check vor fail-Pfad.
+                    _refl_ok = _reflection_loop(state)
+                    if not _refl_ok:
+                        if (getattr(state, "auftrag_bereits_erfuellt", False)
+                                and _verify_patches(state, phase="post_build")):
+                            audit("auftrag_bereits_erfuellt",
+                                  {"task_id": i,
+                                   "reason": "pre_reviewer_patch_fail"},
+                                  pd, pn)
+                            state.auftrag_bereits_erfuellt = False  # type: ignore[attr-defined]
+                            tasks_ok += 1
+                            state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
+                            _task_ende(state, phase_state, task_id, ok=True,
+                                       name=task_name)
+                            audit("loop_task_ok",
+                                  {"task_id": i, "name": task_name,
+                                   "via": "auftrag_bereits_erfuellt_pre_reviewer"},
+                                  pd, pn)
+                            break
                         _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="old_string_not_found")
                         return 1, tasks_ok, tasks
                     break  # Retry mit korrigiertem Patch
