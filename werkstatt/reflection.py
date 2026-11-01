@@ -441,7 +441,35 @@ def _reflection_loop(
                 error_context = _j.dumps(_new_bugs, ensure_ascii=False)
             continue
 
-    return _verify_patches(state, phase=phase)
+    # OP-059e: Erschoepfung mit Fortschritt = Spec-Widerspruch-Verdacht.
+    # Wenn 2+ Runden mit patches_applied>0 gelaufen sind und verify
+    # IMMER NOCH rot ist, kann der Builder die Spec nicht erfuellen —
+    # kein echter Fortschritt, sondern Spec-Fehler. Live-Beleg 18:49
+    # OP-004: 5 Runden, jede applied=1, mypy blieb rot mit int(min_port).
+    _final_verify_ok = _verify_patches(state, phase=phase)
+    if not _final_verify_ok:
+        _hist_e = getattr(state, "reflection_history", None) or []
+        _letzte_e = _hist_e[-2:] if len(_hist_e) >= 2 else []
+        if len(_letzte_e) >= 2:
+            _alle_applied = all(
+                isinstance(r, dict)
+                and int(r.get("patches_applied", 0) or 0) > 0
+                for r in _letzte_e
+            )
+            if _alle_applied:
+                audit("loop_reflection_spec_widerspruch_erschoepft",
+                      {"runden": len(_hist_e),
+                       "letzte_applied": [
+                           int(r.get("patches_applied", 0) or 0)
+                           for r in _letzte_e if isinstance(r, dict)
+                       ],
+                       "letzte_verify_errors": [
+                           (r.get("verify_errors") or [])[:1]
+                           for r in _letzte_e if isinstance(r, dict)
+                       ]}, pd, pn)
+                state.spec_widerspruch_erkannt = True  # type: ignore[attr-defined]
+                return True
+    return _final_verify_ok
 
 
 def _phase_end_reflection(state: RunState) -> bool:
