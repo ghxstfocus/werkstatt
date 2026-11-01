@@ -1299,3 +1299,11 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 ## 2026-11-01T18:16:04+00:00 -- OP-062f: hart-Flag fuer verify.json-Stage
 - **Status:** done
 - **Info:** Commit HEAD. _stage_ist_hart akzeptiert dict (neben str). Optionales Feld 'hart': true ueberschreibt Prefix-Klassifikation. 'hart': false entschaerft NICHT (Prefix gilt weiter, Feld darf nur verschaerfen). Live-Beleg 17:58 OP-004: 'mypy_hart'.startswith('mypy') = True -> weich -> Stage-Fehler blockierte nicht. Tests: tests/test_verify_mypy_hart.py (4 Faelle). Baseline 1065 passed, 5 skipped. Naechster Schritt: security-ai/.werkstatt/verify.json bekommt eine harte mypy-Stage, dann OP-004 erneut im Loop bauen lassen.
+
+## 2026-11-01T18:31:49+00:00 -- OP-062g: Scout-Pfad-Anzeige
+- **Status:** done
+- **Info:** Commit HEAD. pipeline_phases.py setzt state.scout_bereits_erfuellt=True bei Scout-Erkennung, gates.py _human_gate_body rendert '## Erfuellt ohne Aenderung (Scout)'. Live-Beleg Loop-6 18:25: Panel zeigte nur '(keine Aenderungen)' ohne Kontext. Test: test_human_gate_body_zeigt_scout_skip. Baseline 1071 passed.
+
+## 2026-11-01T18:31:49+00:00 -- OP-060b: human_review-Status (partial)
+- **Status:** partial
+- **Info:** Commit HEAD. phase_state.mark_human_review() + _propagate_failed_to_parents ignoriert human_review-Kinder + _task_ende(human_review=True)-Parameter + Idempotenz-Guard. Tests: tests/test_human_review_status.py (3 Faelle). **Rest:** _phase_tasks_loop ruft human_review noch nicht auf — die Verknuepfung zu Reflection-Stagnation (OP-059c) und Human-Gate-Anzeige fehlt. Naechste Session: OP-059c-Design klaeren, dann Verdrahtung.
