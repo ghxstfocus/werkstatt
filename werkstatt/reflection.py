@@ -92,6 +92,11 @@ def _reflection_loop(
     _stagnation = 0
     # K39a: merken, ob wir wegen Reviewer-Reject gestartet sind.
     _had_error_context = bool(error_context)
+    # OP-062c: task_id fuer Reflexions-Runden (Render task-spezifisch).
+    _akt_task = getattr(state, "aktuelle_task", None)
+    _refl_task_id = (
+        _akt_task.get("id") if isinstance(_akt_task, dict) else None
+    )
     for runde in range(1, max_runden + 1):
         log_line(f"[reflection] Runde {runde}/{max_runden} startet")
         # K3: Wenn error_context gesetzt ist (Reviewer hat abgelehnt),
@@ -220,6 +225,7 @@ def _reflection_loop(
                 _refl_hist = state.reflection_history  # type: ignore[attr-defined]
             _refl_hist.append({
                 "runde": runde,
+                "task_id": _refl_task_id,
                 "patches_applied": 0,
                 "verify_errors": list(getattr(state, "last_verify_errors", None) or [])[:3],
                 "reviewer_bugs": list(getattr(state, "reviewer_bugs", None) or [])[:3],
@@ -309,6 +315,7 @@ def _reflection_loop(
             _refl_hist = state.reflection_history  # type: ignore[attr-defined]
         _refl_hist.append({
             "runde": runde,
+            "task_id": _refl_task_id,
             "patches_applied": _applied,
             "verify_errors": list(getattr(state, "last_verify_errors", None) or [])[:3],
             "reviewer_bugs": list(getattr(state, "reviewer_bugs", None) or [])[:3],

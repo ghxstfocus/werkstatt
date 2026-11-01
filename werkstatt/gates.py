@@ -313,6 +313,43 @@ def _adr_mini_phase(state: RunState) -> bool:
     return True
 
 
+def _diff_hunk_summary(diff: str, max_hunks_per_file: int = 5) -> str:
+    """OP-062c: Kompakte Hunk-Summary statt Roh-Diff.
+
+    Pro Datei: Datei + Hunk-Header (@@ ... @@ funcname). Keine '+'-Zeilen,
+    keine '-'-Zeilen, keine Kontext-Zeilen. Nur die Struktur, damit der
+    Mensch sieht 'wo wurde was geaendert' ohne den vollen Diff zu lesen.
+    """
+    _out: list[str] = []
+    _cur: str | None = None
+    _hunks: list[str] = []
+
+    def _flush() -> None:
+        nonlocal _cur, _hunks
+        if _cur is None:
+            return
+        _out.append(_cur)
+        for _h in _hunks[:max_hunks_per_file]:
+            _out.append(f"  {_h}")
+        if len(_hunks) > max_hunks_per_file:
+            _out.append(
+                f"  ... ({len(_hunks) - max_hunks_per_file} weitere Hunks)"
+            )
+        _cur, _hunks = None, []
+
+    for line in diff.splitlines():
+        if line.startswith("diff --git "):
+            _flush()
+            # b/pfad extrahieren
+            _parts = line.split(" b/", 1)
+            _file = _parts[1] if len(_parts) == 2 else line[11:]
+            _cur = _file
+        elif line.startswith("@@") and _cur is not None:
+            _hunks.append(line)
+    _flush()
+    return "\n".join(_out) if _out else "(keine Hunk-Header)"
+
+
 def _human_gate_body(state) -> str:
     """OP-062b: Kontext-Block fuer das Human-Gate.
 
@@ -338,27 +375,35 @@ def _human_gate_body(state) -> str:
             _parts.append("## Architect-Plan\n" + _snippet)
 
     # 2. Letzte Reviewer-Bugs (aus History, letzte Runde)
+    # OP-062c: Bug-Sync. Wenn state.reviewer_bugs leer ist, war der
+    # letzte Reviewer-Call gruen -> History-Bugs sind behoben.
+    _cur_bugs = getattr(state, "reviewer_bugs", None) or []
+    _current_open = bool(_cur_bugs)
     _hist = getattr(state, "reviewer_bugs_history", None) or []
     _last_bugs: list = []
     if _hist:
         _last_bugs = [b for b in (_hist[-1] or [])
                       if isinstance(b, dict)]
-    # Fallback: aktuelles reviewer_bugs, falls History leer.
-    if not _last_bugs:
-        _cur = getattr(state, "reviewer_bugs", None) or []
-        _last_bugs = [b for b in _cur if isinstance(b, dict)]
+    if not _last_bugs and _current_open:
+        _last_bugs = [b for b in _cur_bugs if isinstance(b, dict)]
     if _last_bugs:
-        _lines = [f"## Reviewer-Bugs (letzte Runde, {len(_last_bugs)})"]
+        _status = "offen" if _current_open else "vermutlich behoben"
+        _lines = [
+            f"## Reviewer-Bugs (letzte Runde, {len(_last_bugs)}, {_status})"
+        ]
         for _b in _last_bugs[:5]:
             _sev = _b.get("severity", "?")
             _file = _b.get("file", "?")
             _desc = (_b.get("description") or "")[:200]
-            _lines.append(f"  - [{_sev}] {_file}: {_desc}")
+            _mark = "" if _current_open else " (vermutlich behoben)"
+            _lines.append(f"  - [{_sev}] {_file}: {_desc}{_mark}")
         if len(_last_bugs) > 5:
             _lines.append(f"  ... ({len(_last_bugs) - 5} weitere)")
         _parts.append("\n".join(_lines))
 
     # 3. Reflexions-Runden
+    # OP-062c: task_id-Prefix, damit bei mehreren Tasks die Runden
+    # nicht als 'Runde 1, Runde 1' verwechselt werden.
     _refl = getattr(state, "reflection_history", None) or []
     if _refl:
         _lines = [f"## Reflexion ({len(_refl)} Runde(n))"]
@@ -366,11 +411,13 @@ def _human_gate_body(state) -> str:
             if not isinstance(_r, dict):
                 continue
             _nr = _r.get("runde", "?")
+            _tid = _r.get("task_id")
             _n = _r.get("patches_applied", 0)
             _v = len(_r.get("verify_errors") or [])
             _b = len(_r.get("reviewer_bugs") or [])
+            _label = f"{_tid} Runde {_nr}" if _tid else f"Runde {_nr}"
             _lines.append(
-                f"  - Runde {_nr}: {_n} Patches angewendet, "
+                f"  - {_label}: {_n} Patches angewendet, "
                 f"{_v} verify-Fehler offen, {_b} reviewer-Bugs offen"
             )
         _parts.append("\n".join(_lines))
@@ -504,4 +551,4 @@ def _task_fortschritt_block(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
-__all__ = ['_human_gate', '_human_gate_body', '_human_gate_plan', '_plan_gate']
+__all__ = ['_human_gate', '_diff_hunk_summary', '_human_gate_body', '_human_gate_plan', '_plan_gate']

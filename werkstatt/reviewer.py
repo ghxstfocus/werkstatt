@@ -519,6 +519,9 @@ def run_phase_end_review(state: RunState) -> bool:
           {"bugs_medium": len(_medium),
            "bugs_low": len(_bugs) - len(_high) - len(_medium)},
           pd, pn)
+    # OP-062c: bei Approval alte Bugs leeren, sonst zeigt das
+    # Human-Gate HIGH-Bugs, die laengst behoben sind.
+    state.reviewer_bugs = []  # type: ignore[attr-defined]
     return True
 
 
