@@ -91,6 +91,27 @@ def _task_ende(
         return
 
     pd = getattr(state, "project_dir", None)
+    # OP-064a: Sticky-Veto respektieren. Wenn vetoed und ok=True:
+    # kein mark_done, stattdessen human_review.
+    # Defensiv: nur echte PhaseState-Instanzen fragen (MagicMock in
+    # Tests wuerde sonst truthy zurueckgeben).
+    _vetoed = False
+    if phase_state is not None and hasattr(phase_state, "ist_vetoed"):
+        try:
+            _res = phase_state.ist_vetoed(task_id)
+            # `is True` schuetzt gegen MagicMock (truthy Return ohne bool)
+            _vetoed = _res is True
+        except Exception:  # noqa: BLE001
+            _vetoed = False
+    if _vetoed and ok:
+        audit("loop_task_veto_respected",
+              {"task_id": task_id},
+              getattr(state, "project_dir", None),
+              getattr(state, "project_name", "?"))
+        phase_state.mark_human_review(
+            task_id, grund="veto_nicht_aufgehoben",
+        )
+        return
     if human_review:
         # OP-060b: human_review ist Endstatus, kein done/failed.
         phase_state.mark_human_review(

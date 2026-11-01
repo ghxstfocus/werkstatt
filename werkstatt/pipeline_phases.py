@@ -1212,6 +1212,22 @@ def _phase_tasks_loop(
                         continue
                     _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected")
                     continue
+            # OP-064a: Sticky-Veto. Wenn die Reflection spec_widerspruch
+            # erkannt hat, ist der Task NICHT fertig — auch wenn die
+            # Reflection return True lieferte. Veto + human_review.
+            if getattr(state, "spec_widerspruch_erkannt", False):
+                audit("loop_task_spec_widerspruch_veto",
+                      {"task_id": i,
+                       "grund": "spec_widerspruch_vermutet"}, pd, pn)
+                state.spec_widerspruch_erkannt = False  # type: ignore[attr-defined]
+                phase_state.mark_vetoed(
+                    task_id, grund="spec_widerspruch_vermutet",
+                )
+                _task_ende(state, phase_state, task_id,
+                           ok=False, name=task_name,
+                           human_review=True,
+                           failure="spec_widerspruch_vermutet")
+                continue
             # OP-059: False-Positive erkannt -> erneuten Reviewer-
             # Call sparen (Reviewer-Bug, nicht Task-Problem).
             _is_fp = bool(getattr(

@@ -170,6 +170,31 @@ class PhaseState:
         self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
         self.save()
 
+    def mark_vetoed(self, task_id: str, *, grund: str = "unknown") -> None:
+        """OP-064a: Sticky-Veto. Einmal vetoed, nur Mensch setzt zurueck.
+
+        Setzt verdict='vetoed' UND status='failed' (damit die ueblichen
+        Pfade es als nicht-erledigt sehen). mark_done/mark_human_review
+        setzen verdict zurueck auf None/pending (Mensch-Entscheidung).
+        """
+        task = self.get_task(task_id)
+        if task is None:
+            return
+        task["verdict"] = "vetoed"
+        # OP-064a: status NICHT auf failed setzen — sonst greift der
+        # Idempotenz-Guard in _task_ende vor dem Veto-Check. verdict
+        # ist orthogonal zum status.
+        task["failure"] = grund
+        self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
+        self.save()
+
+    def ist_vetoed(self, task_id: str) -> bool:
+        """OP-064a: True, wenn task_id ein sticky-veto hat."""
+        task = self.get_task(task_id)
+        if task is None:
+            return False
+        return task.get("verdict") == "vetoed"
+
     def mark_human_review(
         self, task_id: str, *, grund: str = "unknown",
     ) -> None:
@@ -181,6 +206,11 @@ class PhaseState:
 
     def mark_done(self, task_id: str, *, decision: str | None = None) -> None:
         self.update_task(task_id, "done", decision=decision)
+        # OP-064a: Mensch-Entscheidung hebt Veto auf.
+        _t = self.get_task(task_id)
+        if _t is not None and _t.get("verdict") == "vetoed":
+            _t["verdict"] = "verified"
+            self.save()
 
     def _propagate_failed_to_parents(self, task_id: str) -> None:
         """K38: Wenn alle Kinder eines Parents failed sind, Parent failed.
