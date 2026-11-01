@@ -101,6 +101,10 @@ class PhaseState:
                     "status": "pending",
                     "decision": None,
                     "failure": None,
+                    # OP-064f: verdict strukturiert (pending|verified|vetoed).
+                    # Default pending — verified bei mark_done, vetoed bei
+                    # deterministischem Guard-Veto.
+                    "verdict": "pending",
                 }
                 for i, t in enumerate(tasks, 1)
             ],
@@ -206,9 +210,14 @@ class PhaseState:
 
     def mark_done(self, task_id: str, *, decision: str | None = None) -> None:
         self.update_task(task_id, "done", decision=decision)
-        # OP-064a: Mensch-Entscheidung hebt Veto auf.
+        # OP-064f: verdict="verified" bei JEDEM mark_done.
+        # Vorher: nur bei Veto-Override. Das fuehrte dazu, dass
+        # normal-done Tasks verdict=None hatten — Semantik invertiert.
+        # Jetzt: pending -> verified bei Erfolg, pending -> vetoed
+        # bei deterministischem Guard-Veto. Mensch-Override (mark_done
+        # auf vetoed) wechselt vetoed -> verified.
         _t = self.get_task(task_id)
-        if _t is not None and _t.get("verdict") == "vetoed":
+        if _t is not None:
             _t["verdict"] = "verified"
             self.save()
 
