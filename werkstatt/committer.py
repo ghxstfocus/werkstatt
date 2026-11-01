@@ -224,6 +224,28 @@ def _architecture_drift_check(pd: Path) -> dict:
     return {"drift": False, "py": py_changed, "arch_changed": arch_changed}
 
 
+def _build_commit_subject(aufgabe: str, op_nnn: str | None) -> str:
+    """OP-063: Commit-Subject aus Aufgabe, wortgrenzen-sicher."""
+    _line = (aufgabe or "").split("\n")[0].strip()
+    if not _line:
+        _line = "update"
+    if op_nnn and _line.upper().startswith(op_nnn.upper()):
+        _rest = _line[len(op_nnn):].lstrip(": ").strip()
+        if _rest:
+            _line = _rest
+    _limit = 60
+    if len(_line) > _limit:
+        _cut = _line[:_limit]
+        _sp = _cut.rfind(" ")
+        if _sp > 20:
+            _line = _cut[:_sp].rstrip(".,;:")
+        else:
+            _line = _cut.rstrip(".,;:")
+    if op_nnn:
+        return f"{op_nnn}: {_line}"
+    return _line
+
+
 def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     """M-487: Committet uncommittete Aenderungen im Zielprojekt.
 
@@ -290,8 +312,25 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
                           f"{len(_drift.get('py', []))} neue/geloeschte .py "
                           f"ohne ARCHITECTURE.md-Aenderung")
             else:
-                audit("doku_nachzug_skip",
-                      {"reason": _rm_msg, "op_nnn": _op_nnn}, pd, pn)
+                # OP-063: OP-NNN steht vielleicht nur noch in der
+                # Delete-Zone (Body schon entfernt). Dann ist
+                # _rm_ok=False, aber der OP-Eintrag in PROGRESS.md
+                # fehlt trotzdem — Retry.
+                _dz_text = (
+                    _status_path.read_text(encoding="utf-8")
+                    if _status_path.exists() else ""
+                )
+                _already_dz = f"| {_op_nnn} |" in _dz_text
+                if _already_dz:
+                    _progress_op_done(
+                        Path(pd), _op_nnn, _subject, pn,
+                    )
+                    audit("doku_nachzug_delete_zone_retry",
+                          {"op_nnn": _op_nnn}, pd, pn)
+                else:
+                    audit("doku_nachzug_skip",
+                          {"reason": _rm_msg, "op_nnn": _op_nnn},
+                          pd, pn)
 
     # FIX 2026-10-31: Task-File-Pruefung VOR git add.
     # Wenn ein Task als done markiert ist und task_files nennt,
@@ -373,8 +412,9 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
         _type = "chore"
     # Scope: Projektname (Manifest hat <name>)
     _scope = getattr(state, "project_name", "") or "werkstatt"
-    # Kurztitel: erste sinnvolle Zeile der Aufgabe, max 60 Z.
-    _msg_kurz = _aufgabe_line[:60].rstrip(". ") if _aufgabe_line else "update"
+    # OP-063: Subject wortgrenzen-sicher, OP-NNN als Praefix.
+    _op_nnn_subj = _op_nnn_aus_aufgabe(_aufgabe) if _aufgabe else None
+    _msg_kurz = _build_commit_subject(_aufgabe or "", _op_nnn_subj)
     # Message bauen
     _msg = f"{_type}({_scope}): {_msg_kurz}\n\nLoop-Auftrag (Werkstatt human_gate)."
     # Laengen-Check: 72 Zeichen Subject-Limit

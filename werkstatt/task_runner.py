@@ -31,6 +31,18 @@ def run_planner(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
+def _hat_op_nnn(state) -> bool:
+    """OP-063: True, wenn state.aufgabe ein OP-NNN nennt.
+
+    Dann uebernimmt _committe_zielprojekt die PROGRESS-Doku als
+    einzige Quelle (HARD-RULE 12). _task_ende schreibt dann keinen
+    eigenen Eintrag, sonst entstehen pro Task leere Bloecke.
+    """
+    import re as _re
+    _auf = getattr(state, "aufgabe", "") or ""
+    return bool(_re.search(r"\bOP-\d{3}[a-z]?\d*\b", _auf))
+
+
 def _task_ende(
     state: RunState,
     phase_state,
@@ -79,7 +91,7 @@ def _task_ende(
     pd = getattr(state, "project_dir", None)
     if ok:
         phase_state.mark_done(task_id)
-        if pd is not None:
+        if pd is not None and not _hat_op_nnn(state):
             _progress.append(
                 pd,
                 name=name or task_id,
@@ -108,7 +120,7 @@ def _task_ende(
                     }, ensure_ascii=True) + "\n")
             except (OSError, TypeError):
                 pass
-        if pd is not None:
+        if pd is not None and not _hat_op_nnn(state):
             _progress.append(
                 pd,
                 name=name or task_id,
