@@ -1295,3 +1295,7 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 ## 2026-11-01T18:14:25+00:00 -- OP-063b: OP-NNN-Doppelung + Subject-Limit
 - **Status:** done
 - **Info:** Commit HEAD. Zwei Fixes: (1) _progress_op_done strippt doppelten OP-Praefix idempotent (vorher 'OP-004: OP-004:'). (2) _build_commit_subject rechnet OP-Praefix ins 60-Zeichen-Limit ein, damit Subject+Typ+Scope <= 72 bleiben. Tests: 2 neue in tests/test_progress_loop_quality.py. Baseline 1061 passed, 5 skipped. Live-Beleg 10799ed (17:58 OP-004).
+
+## 2026-11-01T18:16:04+00:00 -- OP-062f: hart-Flag fuer verify.json-Stage
+- **Status:** done
+- **Info:** Commit HEAD. _stage_ist_hart akzeptiert dict (neben str). Optionales Feld 'hart': true ueberschreibt Prefix-Klassifikation. 'hart': false entschaerft NICHT (Prefix gilt weiter, Feld darf nur verschaerfen). Live-Beleg 17:58 OP-004: 'mypy_hart'.startswith('mypy') = True -> weich -> Stage-Fehler blockierte nicht. Tests: tests/test_verify_mypy_hart.py (4 Faelle). Baseline 1065 passed, 5 skipped. Naechster Schritt: security-ai/.werkstatt/verify.json bekommt eine harte mypy-Stage, dann OP-004 erneut im Loop bauen lassen.

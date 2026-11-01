@@ -48,19 +48,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-062f: verify.json-Stage kann nicht als hart markiert werden (mypy-Prefix-Problem)
-
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/verify.py`, `docs/WORKFLOW.md`, `tests/test_verify_mypy_hart.py`
-- **Akzeptanzkriterien:** Eine Verify-Stage in `verify.json` muss explizit als `"hart": true` markiert werden koennen, um die Prefix-Klassifikation zu ueberschreiben. Ohne das kann eine OP, die "mypy muss 0 Fehler zeigen" fordert, nicht deterministisch geprueft werden.
-  1. `verify.json`-Stage akzeptiert optionales Feld `"hart": true|false`. Wenn gesetzt, ueberschreibt es `_stage_ist_hart`-Prefix-Match.
-  2. `_stage_ist_hart` prueft zuerst `stage.get("hart")`, dann `_HARTE_STAGE_PREFIXES`/`_WEICHE_STAGE_PREFIXES`.
-  3. Dokumentation in `docs/WORKFLOW.md`: Beispiel einer harten mypy-Stage.
-  4. Fuer `security-ai` soll OP-004 mit einer harten mypy-Stage ausgestattet werden, sobald OP-062f erledigt ist (Folge-OP).
-- **Tests:** `tests/test_verify_mypy_hart.py` (3 Faelle: hart=true mit mypy-Stage blockiert Loop; hart=false laesst durch; ohne hart-Feld gilt Prefix-Klassifikation wie bisher).
-- **Blockiert von:** —
-- **Hinweis:** Live-Beleg 17:58 OP-004. Loop baute einen "Fix", Tests gruen, Reviewer+Phase-Review approved, Commit 10799ed durch — aber mypy zeigt weiterhin 2 Fehler in `core/checks/__init__.py:80`. Befund bei Bearbeitung 18:13: `verify.py` ist bereits generisch (freie Stage-IDs laufen). Das eigentliche Problem ist `_stage_ist_hart`: `_WEICHE_STAGE_PREFIXES` enthaelt `"mypy"`, und `_stage_ist_hart` matcht per `startswith`. Selbst `mypy_hart`.startswith("mypy") = True -> weich. Stage-Fehler wuerden also als Warnung durchgehen und den Loop nicht blockieren. Deshalb braucht es das explizite `hart`-Feld in verify.json. Frage bei Bearbeitung: soll `hart` nur true sein duerfen, oder auch explizit `false` (dann kann eine OP ruff/mypy entkraeften)? Empfehlung: nur `true` zusaetzlich erlaubt — Default bleibt Prefix-Klassifikation.
-
 ### OP-060b: human_review-Status + Duplikat-Anker-Regeneration (Design-OP)
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/phase_state.py`, `werkstatt/task_runner.py`, `werkstatt/gates.py`, `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_human_review_status.py`
