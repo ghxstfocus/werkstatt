@@ -1203,4 +1203,11 @@ laeuft ausschliesslich ueber `werkstatt/*.py`.
 ### OP-053: git_author aus Manifest
 - **Status:** done
 - **Beleg:** Commit 1407739. loop.py liest projects/<name>.yaml.git_author.
+## 2026-11-01T09:14:43+00:00 -- OP-044: docs/CONVENTIONS.md entstauben
+- **Status:** done
+- **Beleg:** Commit 69a58ca.
+- **Aenderungen:** 9 Ersetzungen (KONVENTION.md -> CONVENTIONS.md,
+  ARCHITEKTUR.md -> ARCHITECTURE.md, OFFENE-BLOECKE.md -> STATUS.md,
+  ERLEDIGT.md -> PROGRESS.md, pipeline.py -> werkstatt/loop.py,
+  Referenztabelle auf 2026-10-31 aktualisiert).
 
