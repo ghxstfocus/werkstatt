@@ -53,7 +53,7 @@ _VALID_SUFFIXES = (
 # (Levenshtein 1 vs test_inventory_op002b2.py) -> Loop-Abbruch
 # ohne User-Frage. Fix: bewusste Serien-Namen ausnehmen.
 _OP_SERIES_RE = re.compile(
-    r"^(?P<base>.+)_op(?P<opnum>\d{3})(?P<letter>[a-z]?)(?P<zaehler>\d+)$"
+    r"^(?P<base>.+)_op(?P<opnum>\d{3})(?P<letter>[a-z]?)(?P<zaehler>\d*)$"
 )
 
 
@@ -119,10 +119,12 @@ def _is_op_series_pair(name_a: str, name_b: str) -> bool:
     mb = _OP_SERIES_RE.match(sb)
     if not ma or not mb:
         return False
+    # Gleiche base + gleiche OP-Nummer = bewusste Varianten derselben
+    # OP (Sub-OPs wie 002a, 002b1, 002b2, 002b3 duerfen koexistieren).
+    # Letter und Zaehler werden NICHT verglichen.
     return (
         ma.group("base") == mb.group("base")
         and ma.group("opnum") == mb.group("opnum")
-        and ma.group("letter") == mb.group("letter")
     )
 
 
