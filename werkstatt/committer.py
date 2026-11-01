@@ -175,8 +175,39 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     _name = getattr(state, "git_author_name", "") or "builder"
     _email = getattr(state, "git_author_email", "") or "builder@security-ai.local"
     _aufgabe = (getattr(state, "aufgabe", "") or "").strip()
-    _msg_kurz = _aufgabe.split("\n")[0][:80] if _aufgabe else "Werkstatt-RERUN"
-    _msg = f"chore(werkstatt): {_msg_kurz}\n\nRERUN (M-487, human_gate committet selbst)."
+    # OP-038: Konsistente Commit-Message nach Conventional-Commits-Schema.
+    # Format: <type>(<scope>): <kurztitel>  + Body mit Loop-Hinweis.
+    # type: docs (alle .md), feat (code neu), fix (code-patch), chore (mixed)
+    _aufgabe_line = (_aufgabe.split("\n")[0] if _aufgabe else "").strip()
+    # type ableiten: hat der Diff nur .md?
+    _changed = [p["file"] for p in (getattr(state, "patches", None) or [])
+                if isinstance(p, dict) and p.get("file")]
+    _only_md = bool(_changed) and all(f.endswith(".md") for f in _changed)
+    _any_md = any(f.endswith(".md") for f in _changed) if _changed else False
+    if _only_md:
+        _type = "docs"
+    elif _changed and not _any_md:
+        _action = "feat"
+        # feat vs fix: bei create neu, bei update patch
+        _actions = [p.get("action") for p in (state.patches or [])
+                    if isinstance(p, dict)]
+        if all(a == "create" for a in _actions if a):
+            _type = "feat"
+        else:
+            _type = "fix"
+    else:
+        _type = "chore"
+    # Scope: Projektname (Manifest hat <name>)
+    _scope = getattr(state, "project_name", "") or "werkstatt"
+    # Kurztitel: erste sinnvolle Zeile der Aufgabe, max 60 Z.
+    _msg_kurz = _aufgabe_line[:60].rstrip(". ") if _aufgabe_line else "update"
+    # Message bauen
+    _msg = f"{_type}({_scope}): {_msg_kurz}\n\nLoop-Auftrag (Werkstatt human_gate)."
+    # Laengen-Check: 72 Zeichen Subject-Limit
+    if len(_msg.split("\n")[0]) > 72:
+        _subject = _msg.split("\n")[0][:69] + "..."
+        _rest = "\n".join(_msg.split("\n")[1:])
+        _msg = _subject + "\n" + _rest
 
     _commit_argv = [
         "git", "-C", str(pd),
