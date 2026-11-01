@@ -48,6 +48,15 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
+### OP-062: Reviewer-Audit-Payloads leer ({}) bei reviewer_bug und reviewer_phase_rejected
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/reviewer.py`, `werkstatt/pipeline_phases.py`, `tests/test_reviewer_payload.py`
+- **Akzeptanzkriterien:** Wenn der Reviewer HIGH/CRITICAL-Bugs meldet, MUSS der Audit-Event `reviewer_bug` das Feld `description`, `severity` und `file` enthalten. Wenn `reviewer_phase_rejected` geschrieben wird, MUSS das Payload `bugs`, `datei` und `phase` enthalten. Leere `{}`-Payloads sind nicht akzeptabel — ohne Grund kann der Mensch am Human-Gate nicht entscheiden, ob Ablehnung berechtigt war.
+  Zusaetzlich: Bei `loop_phase_reflection_erschoepft` MUSS das Payload den Grund und die verbleibenden Bugs enthalten.
+- **Tests:** `tests/test_reviewer_payload.py` (3 Faelle: reviewer_bug mit vollstaendigem Payload; reviewer_phase_rejected mit bugs-Liste; loop_phase_reflection_erschoepft mit Grund).
+- **Blockiert von:** —
+- **Hinweis:** Live-Beleg Loop-Validierung 15:16 OP-002b3. Beim t2-Reject standen 4x `reviewer_bug` im Audit, alle mit Payload `{}`. Der Loop hat den Diff dennoch als produktionsreif gebaut (11 Tests gruen, als d611e2b committet) — aber weder Mensch noch Loop konnten nachvollziehen, WARUM der Reviewer ablehnte. Bei der Phase-End-Review dasselbe Muster: 3x `reviewer_phase_rejected` mit `{}`, dann `loop_phase_reflection_erschoepft` ohne Grund -> `loop_gate_failed`. Die OP-059/OP-060/OP-061-Fixes koennen nur greifen, wenn die Diagnose-Daten im Audit stehen.
+
 ### OP-060b: human_review-Status + Duplikat-Anker-Regeneration (Design-OP)
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/phase_state.py`, `werkstatt/task_runner.py`, `werkstatt/gates.py`, `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_human_review_status.py`
