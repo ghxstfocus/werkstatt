@@ -1186,6 +1186,18 @@ def _phase_tasks_loop(
                     # FIX AR 2026-10-31: continue statt return 1.
                     continue
                 else:
+                    # OP-060b-Rest: bei Spec-Widerspruch-Verdacht
+                    # human_review statt failed.
+                    if getattr(state, "spec_widerspruch_erkannt", False):
+                        audit("loop_reviewer_reject_human_review",
+                              {"task_id": i,
+                               "grund": "spec_widerspruch_vermutet"}, pd, pn)
+                        state.spec_widerspruch_erkannt = False  # type: ignore[attr-defined]
+                        _task_ende(state, phase_state, task_id,
+                                   ok=False, name=task_name,
+                                   human_review=True,
+                                   failure="spec_widerspruch_vermutet")
+                        continue
                     _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected")
                     continue
             # OP-059: False-Positive erkannt -> erneuten Reviewer-

@@ -61,6 +61,33 @@ def run_reviewer(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
+def _bug_text_deutet_spec_widerspruch(bugs: list) -> bool:
+    """OP-059c: Erkennt Spec-Widerspruch-Muster in Reviewer-Bug-Texten.
+
+    Heuristik: Bug-Text nennt explizit eine Task-Anforderung UND
+    einen Diff-Gegensatz. Typische Marker aus dem Live-Beleg:
+    'Task-Beschreibung fordert', 'Task fordert', 'Die Aufgabe verlangt'
+    in Kombination mit 'Der Diff' / 'Der Patch' / 'Diff fuegt'.
+    """
+    if not bugs:
+        return False
+    _text = " ".join(
+        (b.get("description") or "") for b in bugs if isinstance(b, dict)
+    ).lower()
+    _forder_marker = (
+        "task-beschreibung fordert",
+        "task fordert",
+        "task verlangt",
+        "die aufgabe fordert",
+        "die aufgabe verlangt",
+        "task-spez fordert",
+    )
+    _diff_marker = ("der diff", "der patch", "diff fuegt", "diff macht")
+    has_forder = any(m in _text for m in _forder_marker)
+    has_diff = any(m in _text for m in _diff_marker)
+    return has_forder and has_diff
+
+
 def _reflection_loop(
     state: RunState,
     max_runden: int = 5,
@@ -152,6 +179,22 @@ def _reflection_loop(
                    "ruff_jetzt": _ruff_jetzt,
                    "gleiche_bugs": _hat_gleiche_bugs}, pd, pn)
             if _stagnation >= 2:
+                # OP-059c: Spec-Widerspruch-Verdacht pruefen.
+                _bugs_fuer_check = getattr(state, "reviewer_bugs", None) or []
+                if _bug_text_deutet_spec_widerspruch(_bugs_fuer_check):
+                    audit("loop_reflection_spec_widerspruch",
+                          {"runde": runde,
+                           "bug_text_preview": [
+                               (b.get("description") or "")[:150]
+                               for b in _bugs_fuer_check[:2]
+                               if isinstance(b, dict)
+                           ]}, pd, pn)
+                    state.spec_widerspruch_erkannt = True  # type: ignore[attr-defined]
+                    audit("loop_reflection_stagnation_abort",
+                          {"runde": runde, "stagnation": _stagnation,
+                           "grund": _stagnation_grund,
+                           "folge": "spec_widerspruch_vermutet"}, pd, pn)
+                    return True
                 audit("loop_reflection_stagnation_abort",
                       {"runde": runde, "stagnation": _stagnation,
                        "grund": _stagnation_grund}, pd, pn)
@@ -296,6 +339,17 @@ def _reflection_loop(
                   {"runde": runde, "stagnation": _stagnation,
                    "grund": "patch_nicht_angewendet"}, pd, pn)
             if _stagnation >= 2:
+                _bugs_fuer_check2 = getattr(state, "reviewer_bugs", None) or []
+                if _bug_text_deutet_spec_widerspruch(_bugs_fuer_check2):
+                    audit("loop_reflection_spec_widerspruch",
+                          {"runde": runde,
+                           "grund": "patch_nicht_angewendet"}, pd, pn)
+                    state.spec_widerspruch_erkannt = True  # type: ignore[attr-defined]
+                    audit("loop_reflection_stagnation_abort",
+                          {"runde": runde, "stagnation": _stagnation,
+                           "grund": "patch_nicht_angewendet",
+                           "folge": "spec_widerspruch_vermutet"}, pd, pn)
+                    return True
                 audit("loop_reflection_stagnation_abort",
                       {"runde": runde, "stagnation": _stagnation,
                        "grund": "patch_nicht_angewendet"}, pd, pn)
