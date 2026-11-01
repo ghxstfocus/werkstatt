@@ -1283,3 +1283,7 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 ## 2026-11-01T17:38:10+00:00 -- OP-062d: Hunk-Summary im Human-Gate verdrahtet
 - **Status:** done
 - **Info:** Commit HEAD. _human_gate ruft bei Diff >2000 Zeichen _diff_hunk_summary auf, zeigt pro Datei die @@-Header statt nur '(Diff zu gross)'. Der Mensch am Gate sieht jetzt die Diff-Struktur direkt, ohne in die Shell zu wechseln. Test: test_human_gate_zeigt_hunk_summary_bei_grossem_diff (subprocess.run gemockt, input()->'j', panel_diff capture). Baseline 1052 passed, 5 skipped.
+
+## 2026-11-01T17:40:48+00:00 -- OP-063: Loop-PROGRESS + Commit-Message-Qualitaet
+- **Status:** done
+- **Info:** Commit HEAD. Drei Fixes: (1) task_runner.py fuehrt _hat_op_nnn(state) ein; _task_ende skippt _progress.append bei OP-NNN (sonst 4 leere Task-Eintraege pro Multi-Task-Lauf). (2) committer.py: _committe_zielprojekt erkennt OP-NNN in Delete-Zone-Tabelle, wenn _status_md_op_entfernen fehlschlaegt (Body schon entfernt) — dann Retry von _progress_op_done mit Audit doku_nachzug_delete_zone_retry. (3) committer.py: neue _build_commit_subject(aufgabe, op_nnn) schneidet an Wortgrenze, OP-NNN als Praefix. Tests: tests/test_progress_loop_quality.py (4 Faelle). Baseline 1056 passed, 5 skipped.

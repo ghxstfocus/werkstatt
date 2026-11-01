@@ -48,60 +48,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-063: Loop-PROGRESS-Einträge leer + Commit-Message abgeschnitten
-
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/task_runner.py`, `werkstatt/committer.py`, `werkstatt/progress.py`, `tests/test_progress_loop_quality.py`
-- **Akzeptanzkriterien:** Drei zusammenhaengende Doku-Qualitaets-Defekte im Loop-Lauf.
-  1. **Task-Ende-PROGRESS.append unterdruecken, wenn OP-NNN bekannt.**
-     `_task_ende` (task_runner.py:83 ok, :112 fail) schreibt pro Task einen
-     PROGRESS.md-Eintrag mit nur `name` + `status`. Bei einem 4-Task-Lauf
-     ergibt das 4 leere Bloecke ohne OP-Bezug, ohne Commit, ohne Info.
-     Wenn `state.aufgabe` ein `OP-NNN` enthaelt, soll `_task_ende` den
-     PROGRESS.append unterlassen — der OP-Eintrag in `_committe_zielprojekt`
-     ist die einzige Doku-Quelle (HARD-RULE 12: ein Fakt = eine Quelle).
-     Wenn kein OP-NNN: Verhalten bleibt (Task-Eintrag als Fallback).
-  2. **`_progress_op_done` auch bei Delete-Zone-only-OP.**
-     `_status_md_op_entfernen` (committer.py) schlaegt fehl (`rm_ok=False`),
-     wenn OP-NNN nicht mehr als `### OP-NNN:`-Block in STATUS.md steht,
-     sondern nur in der Delete-Zone-Tabelle. Live-Beleg OP-002b3 17:25:
-     STATUS.md hatte nur Delete-Zone-Zeile, `_rm_ok=False`, deshalb
-     `_progress_op_done` nicht aufgerufen -> kein OP-Eintrag, stattdessen
-     4 leere Task-Eintraege. Fix: `_committe_zielprojekt` prueft zusaetzlich,
-     ob `op_nnn` schon in der Delete-Zone steht — dann ist der OP schon
-     dokumentiert, aber ein sauberer `_progress_op_done`-Eintrag mit SHA
-     fehlt noch und soll trotzdem geschrieben werden (mit Hinweis
-     `already_in_delete_zone`).
-  3. **Commit-Message-Subject bei langem OP-Text.**
-     `_msg_kurz = _aufgabe_line[:60]` (committer.py:377) schneidet mitten
-     im Wort. Live-Beleg 09cb89d: `fix(security-ai): OP-002b3: In
-     core/inventory/repository.py die Metho...` — die Hälfte des Satzes,
-     abgeschnitten. Fix: wenn `op_nnn` bekannt ist, Subject-Format
-     `"<OP-NNN>: <Subject-Kurzform>"` mit Subject aus OP-Titel (STATUS.md)
-     oder einem generischen "<OP-NNN>: Loop-Change". Kein Abschneiden
-     mitten im Wort (Whitespace-Grenze).
-- **Tests:** `tests/test_progress_loop_quality.py` (4 Faelle:
-  * Task-Ende append suppressed wenn OP-NNN in Aufgabe;
-  * Task-Ende append bleibt ohne OP-NNN;
-  * `_committe_zielprojekt` schreibt `_progress_op_done`-Eintrag auch
-    bei Delete-Zone-only (rm_ok=False, but in_delete_zone=True);
-  * Commit-Message mit OP-NNN und sauberem Subject ohne Wortabschnitt).
-- **Blockiert von:** —
-- **Hinweis:** Live-Belege:
-  * OP-002b3-Loop 17:25: PROGRESS.md bekam 4 leere Task-Eintraege
-    (`## 2026-11-01T17:24:03 -- update_last_ip_if_changed commit-Parameter`,
-    `- **Status:** done` — fertig, kein OP-NNN, kein SHA, keine Info).
-    Der manuelle Doku-Commit 722bc77 hat sie durch einen sauberen
-    OP-Eintrag ersetzt — der Loop selbst produziert diesen Muell aber
-    bei jedem Lauf mit OP, der schon in der Delete-Zone steht.
-  * Commit 09cb89d: Subject mitten im Wort abgeschnitten
-    (`...die Metho...`). Der Loop-Text ist ein 3-Satz-Auftrag, kein
-    Commit-Subject.
-  Der Code selbst funktioniert — OP-002b3 4/4 Tasks, rc=0. Es geht
-  ausschliesslich um Doku-Qualitaet. Nach OP-063 ist PROGRESS.md
-  fuer den Menschen lesbar, ohne dass jede Loop-Doku manuell
-  nachpoliert werden muss.
-
 ### OP-060b: human_review-Status + Duplikat-Anker-Regeneration (Design-OP)
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/phase_state.py`, `werkstatt/task_runner.py`, `werkstatt/gates.py`, `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_human_review_status.py`
@@ -355,6 +301,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 | OP-062b | erledigt 2026-11-01 (HEAD) | Human-Gate zeigt Architect-Plan + Reviewer-Bugs + Reflexionen | – |
 | OP-062c | erledigt 2026-11-01 (83a0407) | Human-Gate Bug-Sync + task_id + Hunk-Summary (partial: Verdrahtung in OP-062d) | – |
 | OP-062d | erledigt 2026-11-01 (HEAD) | Hunk-Summary im Human-Gate verdrahtet | – |
+| OP-063 | erledigt 2026-11-01 (HEAD) | Loop-PROGRESS/Commit-Qualitaet (3 Defekte) | – |
 
 ## Verweise
 
