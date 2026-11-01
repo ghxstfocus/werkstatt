@@ -1369,7 +1369,47 @@ def run_builder(state: RunState) -> bool:
             continue
         _effektiv.append(_p)
     if not _effektiv:
-        # Alle Patches waren no_effect -> Auftrag ist bereits erfuellt.
+        # OP-054: no_effect hat zwei Bedeutungen.
+        # (a) Datei enthaelt old_string genau einmal -> Auftrag
+        #     tatsaechlich bereits erfuellt (Builder hat nichts
+        #     geaendert, weil nichts zu aendern war).
+        # (b) Datei enthaelt old_string MEHRFACH -> Duplikat-Anker.
+        #     Builder hat denselben Text zweimal im Ist-Zustand
+        #     gesehen und "ich aendere nichts" geantwortet. Das
+        #     ist ein Fehler, KEIN "bereits erfuellt".
+        # Live-Beleg 2026-11-01: t2 (OP-002b) wurde als "done via
+        # auftrag_bereits_erfuellt_pre_hook" markiert, obwohl t1
+        # eine doppelte Methodendefinition in repository.py
+        # hinterlassen hatte.
+        _ist_zustand_054 = ""
+        try:
+            _ist_zustand_054 = (
+                Path(pd) / _zieldatei
+            ).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            pass
+
+        _duplikat_anker: list[str] = []
+        for _p in patches:
+            if not isinstance(_p, dict):
+                continue
+            _old_anker = _p.get("old_string", "")
+            if not _old_anker:
+                continue
+            if _ist_zustand_054.count(_old_anker) > 1:
+                _duplikat_anker.append(_p.get("file", _zieldatei))
+
+        if _duplikat_anker:
+            audit("builder_patch_duplicate_anchor",
+                  {"zieldatei": _zieldatei,
+                   "anzahl": len(_duplikat_anker),
+                   "files": list(set(_duplikat_anker))[:5]},
+                  pd, pn)
+            # NICHT als "bereits erfuellt" markieren.
+            # Loop muss das als Fehler sehen (task_failed).
+            return False
+
+        # Ansonsten: bisheriges Verhalten — Auftrag ist bereits erfuellt.
         state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
         audit("auftrag_bereits_erfuellt",
               {"zieldatei": _zieldatei,
