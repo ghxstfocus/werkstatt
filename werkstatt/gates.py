@@ -362,7 +362,13 @@ def _human_gate_body(state) -> str:
     """
     _parts: list[str] = []
 
-    # 0. OP-062e: Nullfall-Anzeige (keine Aenderungen).
+    # 0. OP-062e + OP-062g: Nullfall-Anzeige.
+    if getattr(state, "scout_bereits_erfuellt", False):
+        _parts.append(
+            "## Erfuellt ohne Aenderung (Scout)\n"
+            "Der Scout hat erkannt, dass die Zieldatei bereits "
+            "den geforderten Zustand hat. Kein Builder, kein Diff."
+        )
     if getattr(state, "auftrag_bereits_erfuellt", False):
         _parts.append(
             "## Erfuellt ohne Aenderung\n"

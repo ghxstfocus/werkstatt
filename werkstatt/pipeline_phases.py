@@ -473,6 +473,11 @@ def _phase_plan_and_preflight(
             audit("auftrag_bereits_erfuellt",
                   {"quelle": "scout", "aktion": "skip_plan_gate"},
                   pd, pn)
+            # OP-062g: Merker setzen, damit _human_gate_body den
+            # Nullfall-Block rendern kann. Das auftrag_bereits_erfuellt-
+            # Flag wird wie bisher geleert, damit es nicht in spaetere
+            # Phasen leakt.
+            state.scout_bereits_erfuellt = True  # type: ignore[attr-defined]
             state.auftrag_bereits_erfuellt = False  # type: ignore[attr-defined]
             # GOLD 2026-10-30: tasks_ok auf 1 setzen, damit K13
             # (rc=0 nur wenn tasks_ok>0) den Lauf als Erfolg wertet.

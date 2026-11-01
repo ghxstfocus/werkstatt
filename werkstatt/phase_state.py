@@ -170,6 +170,15 @@ class PhaseState:
         self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
         self.save()
 
+    def mark_human_review(
+        self, task_id: str, *, grund: str = "unknown",
+    ) -> None:
+        """OP-060b: Setzt Status human_review (Mensch muss entscheiden)."""
+        self.update_task(
+            task_id, "human_review", failure=grund,
+        )
+        self.save()
+
     def mark_done(self, task_id: str, *, decision: str | None = None) -> None:
         self.update_task(task_id, "done", decision=decision)
 
@@ -218,7 +227,14 @@ class PhaseState:
         if not children:
             return
         # Wenn alle direkten Kinder failed -> Parent failed.
-        if all(c.get("status") == "failed" for c in children):
+        # OP-060b: human_review-Kinder verhindern Parent-failed.
+        _all_failed = all(
+            c.get("status") == "failed" for c in children
+        )
+        _has_review = any(
+            c.get("status") == "human_review" for c in children
+        )
+        if _all_failed and not _has_review:
             for t in self.data.get("tasks", []):
                 if t.get("id") == parent_id:
                     if t.get("status") != "failed":

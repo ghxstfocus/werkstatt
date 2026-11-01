@@ -357,3 +357,18 @@ def test_human_gate_body_leer_ohne_nullfall_flag(
     assert body == "" or not body.strip(), (
         f"Body sollte leer sein ohne Flags: {body!r}"
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# OP-062g: Scout-Pfad-Anzeige
+# ═══════════════════════════════════════════════════════════════
+
+
+def test_human_gate_body_zeigt_scout_skip(tmp_path: Path) -> None:
+    """Scout-Skip-Merker -> Block 'Erfuellt ohne Aenderung'."""
+    s = _mk_state(tmp_path)
+    s.scout_bereits_erfuellt = True
+    body = _human_gate_body(s)
+    assert "Erfuellt ohne Aenderung" in body or "Scout" in body, (
+        f"kein Scout-Skip-Block; body={body[:500]!r}"
+    )

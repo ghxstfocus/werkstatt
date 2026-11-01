@@ -52,6 +52,7 @@ def _task_ende(
     name: str = "",
     failure: str | None = None,
     dateien: list[str] | None = None,
+    human_review: bool = False,
 ) -> None:
     """M-307b (A1): zentrale Task-Ende-Behandlung.
 
@@ -76,7 +77,8 @@ def _task_ende(
             _existing = phase_state.get_task(task_id)
     except Exception:  # noqa: BLE001, S110
         _existing = None
-    if _existing and _existing.get("status") in ("done", "failed"):
+    if _existing and _existing.get("status") in (
+            "done", "failed", "human_review"):
         audit(
             "loop_task_ende_skip",
             {"task_id": task_id,
@@ -89,6 +91,12 @@ def _task_ende(
         return
 
     pd = getattr(state, "project_dir", None)
+    if human_review:
+        # OP-060b: human_review ist Endstatus, kein done/failed.
+        phase_state.mark_human_review(
+            task_id, grund=failure or "unknown",
+        )
+        return
     if ok:
         phase_state.mark_done(task_id)
         if pd is not None and not _hat_op_nnn(state):
