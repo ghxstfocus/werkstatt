@@ -48,30 +48,18 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-062f: verify.json kann mypy-Stage nicht abbilden
+### OP-062f: verify.json-Stage kann nicht als hart markiert werden (mypy-Prefix-Problem)
 
 - **Status:** open
-- **Betroffene Dateien:** `werkstatt/verify.py`, `docs/WORKFLOW.md`, `tests/test_verify_mypy.py`
-- **Akzeptanzkriterien:** Wenn eine OP ein Tool zur Verifikation fordert (z.B. "mypy muss 0 Fehler zeigen"), muss das Tool als Verify-Stage konfigurierbar sein, damit der Loop Erfolg deterministisch pruefen kann. Aktuell kennt `verify.json` nur `py_compile`/`ruff`/`pytest` — mypy ist nicht abbildbar.
-  1. `verify.py` fuehrt beliebige Stage-`command`-Arrays aus, unabhaengig vom Stage-Namen. `verify.json`-Schema muss freie Stage-IDs erlauben.
-  2. Dokumentation in `docs/WORKFLOW.md`: Beispiel einer mypy-Stage mit `command` = `["python3", "-m", "mypy", "{changed_py_files}", "--no-error-summary"]` und `phase` = `"post_build"`.
-  3. Fuer `security-ai` soll OP-004 mit einer `mypy`-Stage ausgestattet werden, sobald OP-062f erledigt ist (Folge-OP).
-- **Tests:** `tests/test_verify_mypy.py` (2 Faelle: freie Stage-ID mit mypy-Command laeuft; Stage-Fehler schlaegt Loop fehl).
+- **Betroffene Dateien:** `werkstatt/verify.py`, `docs/WORKFLOW.md`, `tests/test_verify_mypy_hart.py`
+- **Akzeptanzkriterien:** Eine Verify-Stage in `verify.json` muss explizit als `"hart": true` markiert werden koennen, um die Prefix-Klassifikation zu ueberschreiben. Ohne das kann eine OP, die "mypy muss 0 Fehler zeigen" fordert, nicht deterministisch geprueft werden.
+  1. `verify.json`-Stage akzeptiert optionales Feld `"hart": true|false`. Wenn gesetzt, ueberschreibt es `_stage_ist_hart`-Prefix-Match.
+  2. `_stage_ist_hart` prueft zuerst `stage.get("hart")`, dann `_HARTE_STAGE_PREFIXES`/`_WEICHE_STAGE_PREFIXES`.
+  3. Dokumentation in `docs/WORKFLOW.md`: Beispiel einer harten mypy-Stage.
+  4. Fuer `security-ai` soll OP-004 mit einer harten mypy-Stage ausgestattet werden, sobald OP-062f erledigt ist (Folge-OP).
+- **Tests:** `tests/test_verify_mypy_hart.py` (3 Faelle: hart=true mit mypy-Stage blockiert Loop; hart=false laesst durch; ohne hart-Feld gilt Prefix-Klassifikation wie bisher).
 - **Blockiert von:** —
-- **Hinweis:** Live-Beleg 17:58 OP-004: Loop baute einen Fix (Port-Guards umstrukturiert), Tests + Phase-Review gruen, Commit 10799ed durch — aber mypy zeigt weiterhin 2 Fehler in `core/checks/__init__.py:80` (return min_port <= port <= max_port). Der Task ist nicht erfuellt. Loop kann das nicht erkennen, weil verify.json keine mypy-Stage hat. `pytest_full_checks` failt am Ende bei 0s — separates Problem. Frage bei Bearbeitung: soll mypy immer automatisch laufen, oder nur wenn die OP das fordert? Empfehlung: Konvention — Aufgabentext nennt das Tool, Loop baut Stage dynamisch.
-
-### OP-063b: OP-063-Restbugs (OP-NNN-Doppelung, Subject-Abschnitt)
-
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/committer.py`, `tests/test_progress_loop_quality.py`
-- **Akzeptanzkriterien:** Zwei Doku-Bugs, die OP-063 nicht abgedeckt hat. Live-Beleg Loop-Lauf 17:58 OP-004.
-  1. **OP-NNN-Doppelung in PROGRESS.md.** `_progress_op_done` ruft `progress.append(name=f"{op_nnn}: {subject}")`. `subject` ist aber bereits der volle Aufgabenanfang (mit OP-NNN-Praefix). Ergebnis: `## ... -- OP-004: OP-004: In core/checks/__init__.py die Funktion...`. Fix: `_committe_zielprojekt` uebergibt ein Subject **ohne** OP-Praefix an `_progress_op_done`, oder `_progress_op_done` strippt den Praefix falls vorhanden (idempotent).
-  2. **Commit-Subject wird trotz `_build_commit_subject` abgehackt.** Nach dem Helper-Aufruf prueft `_committe_zielprojekt` nochmal `if len(_msg.split("\n")[0]) > 72: _subject = _msg.split("\n")[0][:69] + "..."`. Live-Beleg 10799ed: `fix(security-ai): OP-004: In core/checks/__init__.py die Funktion che...`. Fix: Helper-Aufruf garantiert <= 72 Zeichen inkl. Praefix + Typ + Scope. Der alte 72-Check entfaellt oder schneidet an Wortgrenze.
-- **Tests:** `tests/test_progress_loop_quality.py` (2 neue Faelle:
-  * `_progress_op_done` mit subject der bereits OP-NNN beginnt -> kein Doppel-Praefix;
-  * `_build_commit_subject` + Typ + Scope bleiben <= 72 Zeichen ohne Wortabschnitt).
-- **Blockiert von:** —
-- **Hinweis:** Live-Beleg 10799ed (17:58 OP-004). PROGRESS.md-Eintrag `## 2026-11-01T17:58:50+00:00 -- OP-004: OP-004: In core/checks/__init__.py die Funktion check_port_r` — OP-NNN doppelt, Name abgehackt mitten im Wort (`check_port_r`). Commit-Subject `fix(security-ai): OP-004: In core/checks/__init__.py die Funktion che...` — Wortabschnitt trotz OP-063-Helper. OP-063 hat den Helper eingebaut, aber die Aufrufer-Kette (progress_op_done + 72-Check) nicht konsistent gemacht.
+- **Hinweis:** Live-Beleg 17:58 OP-004. Loop baute einen "Fix", Tests gruen, Reviewer+Phase-Review approved, Commit 10799ed durch — aber mypy zeigt weiterhin 2 Fehler in `core/checks/__init__.py:80`. Befund bei Bearbeitung 18:13: `verify.py` ist bereits generisch (freie Stage-IDs laufen). Das eigentliche Problem ist `_stage_ist_hart`: `_WEICHE_STAGE_PREFIXES` enthaelt `"mypy"`, und `_stage_ist_hart` matcht per `startswith`. Selbst `mypy_hart`.startswith("mypy") = True -> weich. Stage-Fehler wuerden also als Warnung durchgehen und den Loop nicht blockieren. Deshalb braucht es das explizite `hart`-Feld in verify.json. Frage bei Bearbeitung: soll `hart` nur true sein duerfen, oder auch explizit `false` (dann kann eine OP ruff/mypy entkraeften)? Empfehlung: nur `true` zusaetzlich erlaubt — Default bleibt Prefix-Klassifikation.
 
 ### OP-060b: human_review-Status + Duplikat-Anker-Regeneration (Design-OP)
 - **Status:** open

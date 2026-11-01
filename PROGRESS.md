@@ -1291,3 +1291,7 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 ## 2026-11-01T17:53:36+00:00 -- OP-062e: Human-Gate zeigt Nullfall klar
 - **Status:** done
 - **Info:** Commit HEAD. Drei Fixes: (1) _human_gate_body prueft state.auftrag_bereits_erfuellt und zeigt Block '## Erfuellt ohne Aenderung'. (2) _human_gate_body prueft state.phase_review_uebersprungen und zeigt '## Phase-End-Review (uebersprungen: <grund>)'. (3) pipeline_phases.py setzt bei keine_patches_alle_done das Flag. Tests: 3 neue in tests/test_human_gate_render.py. Baseline 1059 passed, 5 skipped. Live-Beleg 17:45 OP-002b3: 1/1 done, rc=0, keine Aenderungen — aber der Mensch sah keinen Grund.
+
+## 2026-11-01T18:14:25+00:00 -- OP-063b: OP-NNN-Doppelung + Subject-Limit
+- **Status:** done
+- **Info:** Commit HEAD. Zwei Fixes: (1) _progress_op_done strippt doppelten OP-Praefix idempotent (vorher 'OP-004: OP-004:'). (2) _build_commit_subject rechnet OP-Praefix ins 60-Zeichen-Limit ein, damit Subject+Typ+Scope <= 72 bleiben. Tests: 2 neue in tests/test_progress_loop_quality.py. Baseline 1061 passed, 5 skipped. Live-Beleg 10799ed (17:58 OP-004).
