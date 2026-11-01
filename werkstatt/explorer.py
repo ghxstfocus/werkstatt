@@ -424,6 +424,13 @@ def run_explorer(state: RunState, frage: str) -> dict:
         (messungen.get("aufgabe_pfade") or {}).get("dateien") or []
     )
     for name, m in messungen.items():
+        # OP-050: migrations ist Kontext (Migrationsstand), KEINE Fehler-
+        # Dateien. Die SQL-Files in data/migrations/ sind Projekt-
+        # Struktur, keine Task-Ziele. Live-Beleg 2026-11-01: Architect
+        # bekam 17 SQL-Files als "gemessene Dateien mit Fehlern" fuer
+        # eine Ollama-Aufgabe.
+        if name == "migrations":
+            continue
         for datei in m.get("dateien", []):
             if datei.endswith(".md") or datei.startswith("docs/"):
                 if datei in _aufgabe_pfade_set:
