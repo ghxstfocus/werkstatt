@@ -49,7 +49,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-047: Deterministischer Doku-Nachzug nach Human-Gate
+### OP-048: Deterministischer Doku-Nachzug nach Human-Gate
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/committer.py`, `tests/test_committer_doku_nachzug.py`
 - **Akzeptanzkriterien:** Wenn der Human-Gate approved UND alle Tasks ok UND pytest_regression gruen UND die Aufgabe eine OP-NNN nennt (Regex `OP-\d{3}[a-z]?`): Der Loop entfernt OP-NNN aus docs/STATUS.md, haengt done-Eintrag an PROGRESS.md, ergaenzt Delete-Zone. Doku-Aenderung landet im selben Commit wie Code. Opt-in per Env-Var WERKSTATT_DOKU_NACHZUG=1 (Default aus, alter Pfad bleibt). Kein Nachzug wenn: OP-NNN nicht in Aufgabe, OP-NNN nicht in STATUS.md, oder Verify rot.
