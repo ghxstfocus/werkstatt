@@ -1287,3 +1287,7 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 ## 2026-11-01T17:40:48+00:00 -- OP-063: Loop-PROGRESS + Commit-Message-Qualitaet
 - **Status:** done
 - **Info:** Commit HEAD. Drei Fixes: (1) task_runner.py fuehrt _hat_op_nnn(state) ein; _task_ende skippt _progress.append bei OP-NNN (sonst 4 leere Task-Eintraege pro Multi-Task-Lauf). (2) committer.py: _committe_zielprojekt erkennt OP-NNN in Delete-Zone-Tabelle, wenn _status_md_op_entfernen fehlschlaegt (Body schon entfernt) — dann Retry von _progress_op_done mit Audit doku_nachzug_delete_zone_retry. (3) committer.py: neue _build_commit_subject(aufgabe, op_nnn) schneidet an Wortgrenze, OP-NNN als Praefix. Tests: tests/test_progress_loop_quality.py (4 Faelle). Baseline 1056 passed, 5 skipped.
+
+## 2026-11-01T17:53:36+00:00 -- OP-062e: Human-Gate zeigt Nullfall klar
+- **Status:** done
+- **Info:** Commit HEAD. Drei Fixes: (1) _human_gate_body prueft state.auftrag_bereits_erfuellt und zeigt Block '## Erfuellt ohne Aenderung'. (2) _human_gate_body prueft state.phase_review_uebersprungen und zeigt '## Phase-End-Review (uebersprungen: <grund>)'. (3) pipeline_phases.py setzt bei keine_patches_alle_done das Flag. Tests: 3 neue in tests/test_human_gate_render.py. Baseline 1059 passed, 5 skipped. Live-Beleg 17:45 OP-002b3: 1/1 done, rc=0, keine Aenderungen — aber der Mensch sah keinen Grund.

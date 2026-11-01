@@ -48,18 +48,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-062e: Human-Gate zeigt Nullfall (keine Aenderungen) nicht klar
-
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/gates.py`, `werkstatt/pipeline_phases.py`, `tests/test_human_gate_render.py`
-- **Akzeptanzkriterien:** Drei Anzeige-Luecken aus Loop-Validierung #3 (17:45 OP-002b3-Idempotenz-Lauf).
-  1. **auftrag_bereits_erfuellt sichtbar.** Wenn `state.auftrag_bereits_erfuellt` gesetzt ist oder alle Tasks via `auftrag_bereits_erfuellt_pre_hook` done wurden, zeigt `_human_gate_body` einen Block '## Erfuellt ohne Aenderung' mit kurzem Grund. Der Mensch sieht dann nicht nur '(keine Aenderungen)', sondern weiss warum.
-  2. **Phase-End-Review-Skip sichtbar.** Bei `keine_patches_alle_done` wird die Phase-End-Review uebersprungen (kein Diff -> `reviewer_phase_kein_diff` wuerde fail-closed). Im Log fehlt aber die Zeile. Fix: `_phase_review` schreibt audit `reviewer_phase_skipped` mit Grund `keine_aenderungen`, und das Human-Gate zeigt '## Phase-End-Review (uebersprungen: keine Aenderungen)'.
-  3. **Leerer Diff klar begruendet.** Wenn `_human_gate` einen leeren Diff erkennt, prueft es `state.auftrag_bereits_erfuellt` und die Task-Vias. Wenn alle Tasks done via bereits_erfuellt: Hinweis 'Kein Diff — alle Tasks bereits erfuellt', nicht nur '(keine Aenderungen)'.
-- **Tests:** `tests/test_human_gate_render.py` (3 neue Faelle: auftrag_bereits_erfuellt-Flag zeigt '## Erfuellt ohne Aenderung'; Phase-End-Review-Skip zeigt 'uebersprungen'-Hinweis; leerer Diff ohne Flag zeigt weiter '(keine Aenderungen)').
-- **Blockiert von:** —
-- **Hinweis:** Live-Beleg Loop-Validierung #3 (17:45, OP-002b3). Der Lauf war korrekt (1/1 done, rc=0), aber das Human-Gate zeigte nur Task-Liste, '## Plan (vom Scout, atomar zerlegt)' und 'Aenderungen im Zielprojekt: (keine Aenderungen)'. Der Mensch sieht nicht: (a) der Builder hat `auftrag_bereits_erfuellt` gesetzt (Audit: `grund=alle_patches_no_effect`, `reason=loop_flag_vor_hook`), (b) die Phase-End-Review wurde wegen `keine_patches_alle_done` uebersprungen, (c) der Task-Status 'done via auftrag_bereits_erfuellt_pre_hook' war erfuellt, nicht 'done durch Patch'. Diese drei Informationen stehen nur im Audit-Log, nicht im Panel. Ziel: der Mensch kann einen Nullfall (nichts zu tun) von einem echten Build (Diff sichtbar) unterscheiden.
-
 ### OP-060b: human_review-Status + Duplikat-Anker-Regeneration (Design-OP)
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/phase_state.py`, `werkstatt/task_runner.py`, `werkstatt/gates.py`, `werkstatt/pipeline_phases.py`, `werkstatt/reflection.py`, `tests/test_human_review_status.py`
@@ -314,6 +302,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 | OP-062c | erledigt 2026-11-01 (83a0407) | Human-Gate Bug-Sync + task_id + Hunk-Summary (partial: Verdrahtung in OP-062d) | – |
 | OP-062d | erledigt 2026-11-01 (HEAD) | Hunk-Summary im Human-Gate verdrahtet | – |
 | OP-063 | erledigt 2026-11-01 (HEAD) | Loop-PROGRESS/Commit-Qualitaet (3 Defekte) | – |
+| OP-062e | erledigt 2026-11-01 (HEAD) | Human-Gate zeigt Nullfall (Erfuellt ohne Aenderung) | – |
 
 ## Verweise
 
