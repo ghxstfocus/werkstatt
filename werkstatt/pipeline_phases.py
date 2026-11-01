@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from werkstatt.state import RunState
+from werkstatt.antipattern import scan_patches
 from werkstatt.phase_state import PhaseState
 from werkstatt.loop_renderer import (
     group_end,
@@ -1320,6 +1321,30 @@ def _phase_tasks_loop(
                        ok=False, name=task_name,
                        human_review=True,
                        failure="spec_widerspruch_vermutet")
+            continue
+
+        # OP-064b: Antipattern-Scanner (deterministisch, kein LLM).
+        # Greift im Erfolgs-Pfad nach OP-064a. Ein Patch mit
+        # # type: ignore / noqa / eslint-disable / || true / geloeschtem
+        # Test wuerde das Verify-Gate umgehen — auch wenn Verify
+        # (durch das Muster selbst) gruen meldet. Veto statt
+        # task_ok. Referenz: fakegreen, Harn Completion-Gate.
+        _ap_treffer = scan_patches(
+            list(getattr(state, "patches", []) or [])
+        )
+        if _ap_treffer:
+            audit("loop_task_antipattern_veto",
+                  {"task_id": i,
+                   "anzahl": len(_ap_treffer),
+                   "kinds": [a.kind for a in _ap_treffer[:5]],
+                   "files": [a.file for a in _ap_treffer[:5]]},
+                  pd, pn)
+            _ap_grund = f"antipattern:{_ap_treffer[0].kind}"
+            phase_state.mark_vetoed(task_id, grund=_ap_grund)
+            _task_ende(state, phase_state, task_id,
+                       ok=False, name=task_name,
+                       human_review=True,
+                       failure=_ap_grund)
             continue
 
         _el_task = time.monotonic() - _t_task
