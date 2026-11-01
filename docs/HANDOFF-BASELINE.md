@@ -1,5 +1,11 @@
 # Werkstatt-Baseline — verbindliche Definition
 
+> **Status: HISTORISCH (Stand 2026-10-22, vor Loop-Neubau).**
+> Diese Baseline gilt fuer `pipeline.py` (existiert nicht mehr).
+> Aktuelle Zahlen: `AGENTS.md` Baseline-Hinweis oder
+> `python3 -m tools.quality_gate --json`.
+> Datei bleibt als Snapshot erhalten, wird nicht mehr gepflegt.
+
 Stand: 2026-10-22, HEAD 76f4bf1, Branch umbau/phase-2.
 
 > **HISTORISCH.** Diese Datei wird seit 2026-10-24 nicht mehr gepflegt.
