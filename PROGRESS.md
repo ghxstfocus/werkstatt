@@ -1210,4 +1210,17 @@ laeuft ausschliesslich ueber `werkstatt/*.py`.
   ARCHITEKTUR.md -> ARCHITECTURE.md, OFFENE-BLOECKE.md -> STATUS.md,
   ERLEDIGT.md -> PROGRESS.md, pipeline.py -> werkstatt/loop.py,
   Referenztabelle auf 2026-10-31 aktualisiert).
+## 2026-11-01T09:29:21+00:00 -- OP-054: auftrag_bereits_erfuellt-False-Positive
+- **Status:** done
+- **Beleg:** Commit b795e14.
+- **Befund:** Live-Test 5 v2 (security-ai): t2 (_insert_device_history
+  mit Duplikatschutz) wurde als done via auftrag_bereits_erfuellt
+  markiert, obwohl der Ist-Zustand eine doppelte Methodendefinition
+  hatte.
+- **Fix:** no_effect-Filter in _build_patches_fuer_datei prueft vor
+  Flag-Setzen, ob old_string im Datei-Ist-Zustand mehrfach vorkommt.
+  Bei Duplikat-Anker: kein Flag, Audit-Event builder_patch_duplicate_anchor,
+  Builder gibt False zurueck -> Task failed.
+- **Neuer Audit-Kind:** builder_patch_duplicate_anchor.
+- **Tests:** 4 neue in tests/test_builder_duplicate_anchor.py.
 
