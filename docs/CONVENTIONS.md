@@ -15,15 +15,15 @@ Datei-Namen folgen einer festen Konvention.
     |-- README.md                Einstieg, Ziel, Stand
     |-- Bau-Handoff.md           Aktueller Stand (kompakt, < 500 Z.)
     |-- archiv/bau-handoff-archiv.md    Alte Handoffs (append-only)
-    |-- pipeline.py              Orchestrierung
+    |-- werkstatt/loop.py       Orchestrierung
     |-- redaction.py             Redaction vor LLM-Calls
     |
     |-- docs/                    Werkstatt-Doku
-    |   |-- KONVENTION.md        Diese Datei
-    |   |-- ARCHITEKTUR.md       Ziel, Rollen, Luecken
+    |   |-- CONVENTIONS.md       Diese Datei
+    |   |-- ARCHITECTURE.md      Modul-Map
     |   |-- ROADMAP.md           Phasen- und W-Block-Uebersicht
-    |   |-- OFFENE-BLOECKE.md    Todo, priorisiert
-    |   |-- ERLEDIGT.md          Abgeschlossene Bloecke
+    |   |-- STATUS.md            Offene Punkte (OP-NNN)
+    |   |-- ../PROGRESS.md       Historie (append-only)
     |   |-- ROLLEN-AUDIT.md      Rollen-Stand
     |   |-- WORKFLOW.md          Pipeline-Ablauf
     |   +-- PROTOKOLL-*.md       Sitzungs-Protokolle
@@ -64,10 +64,10 @@ Datei-Namen folgen einer festen Konvention.
 
 | Datei | Zweck | Stand |
 |---|---|---|
-| KONVENTION.md | Ordner, Namen, Regeln | 2026-10-18 |
-| ARCHITEKTUR.md | Ziel, Rollen, Luecken | 2026-10-18 |
+| CONVENTIONS.md | Coding-Regeln | 2026-10-31 |
+| ARCHITECTURE.md | Modul-Map | 2026-10-31 |
 | ROADMAP.md | Uebersicht Phasen/W-Bloecke | offen |
-| OFFENE-BLOECKE.md | Todo, priorisiert | 2026-10-18 |
+| STATUS.md | Offene Punkte (OP-NNN) | 2026-10-31 |
 | ERLEDIGT.md | Abgeschlossene Bloecke | offen |
 | IDEEN.md | Wunschliste (2101-2106) | 2026-10-18 |
 | ROLLEN-AUDIT.md | Rollen-Stand | 2026-10-18 |
@@ -154,7 +154,7 @@ Inhalt:
 - Wichtige Merkposten (W54-f, W57, W59, W61).
 
 Nicht in Bau-Handoff.md:
-- Details zu jedem W-Block (gehoert in ERLEDIGT.md).
+- Details zu jedem W-Block (gehoert in PROGRESS.md).
 - Phasen-Uebersicht (gehoert in ROADMAP.md).
 - Rollen-Definitionen (gehoeren in agents/).
 
