@@ -232,9 +232,22 @@ Du musst NICHT "## <pfad>" liefern -- nur den Auftrag formulieren.
 """
 
 
-def _scout_system_with_nachfolger() -> str:
-    """GOLD: SCOUT_SYSTEM + _SCOUT_NACHFOLGER_BLOCK."""
-    return SCOUT_SYSTEM + "\n\n" + _SCOUT_NACHFOLGER_BLOCK
+def _scout_system_with_nachfolger(state=None) -> str:
+    """GOLD: SCOUT_SYSTEM + _SCOUT_NACHFOLGER_BLOCK.
+
+    M-Skills-Scout: Metadata-Block (Level 1). Kein Glob-Trigger,
+    weil Scout VOR dem Plan laeuft (task_files noch nicht bekannt).
+    """
+    parts = [SCOUT_SYSTEM, _SCOUT_NACHFOLGER_BLOCK]
+    try:
+        from werkstatt.skills import load_all_skills, skills_metadata_block
+        _skills = load_all_skills()
+        _meta = skills_metadata_block(_skills)
+        if _meta:
+            parts.append(_meta.rstrip())
+    except Exception:  # noqa: BLE001
+        pass
+    return "\n\n".join(parts)
 
 
 def _baue_api_index(project_dir) -> dict:
@@ -712,7 +725,7 @@ def _run_scout(
     reply = _with_spinner(
         "Scout",
         lambda: ask_llm(
-            api_key, _scout_system_with_nachfolger(), user_content,
+            api_key, _scout_system_with_nachfolger(state), user_content,
             model="deepseek-chat", temperature=0.2, max_tokens=4000,
             aufgabe="scout",
         ),

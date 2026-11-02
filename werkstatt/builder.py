@@ -859,10 +859,37 @@ def _build_patches_fuer_datei(
             )
     except Exception:  # noqa: BLE001
         pass
+    # M-Skills-Builder: metadata + glob (Level 1+2)
+    _skills_block = ""
+    try:
+        from werkstatt.skills import (
+            load_all_skills, skills_metadata_block, skills_aktivieren,
+        )
+        _all_skills = load_all_skills()
+        _meta = skills_metadata_block(_all_skills)
+        _akt = skills_aktivieren(_all_skills, [zieldatei])
+        _akt_block = ""
+        for _s in _akt:
+            _body = _s.get("body") or ""
+            if _body:
+                _akt_block += (
+                    f"\n## Skill: {_s.get('name', '?')}\n" + _body + "\n"
+                )
+                try:
+                    state.geladene_skills.append(_s.get("name", "?"))
+                except (AttributeError, TypeError):
+                    pass
+        if _meta or _akt_block:
+            _skills_block = (
+                _meta + _akt_block + "\n"
+            )
+    except Exception:  # noqa: BLE001
+        pass
     _user = (
         f"## ZIELDATEI: {zieldatei}\n\n"
         f"{_module_hint}"
         f"{_verbote_prefix}"
+        f"{_skills_block}"
         f"## API-SIGNATUREN (Scout-Destillat):\n"
         f"{_format_scout_apis_for_builder(getattr(state, 'scout_api_auszug', {}))}\n\n"
         f"## EXPLORER-FINDINGS:\n"

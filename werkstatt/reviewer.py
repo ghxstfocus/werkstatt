@@ -277,13 +277,45 @@ def _get_git_diff(
         raise RuntimeError(f"git diff fehlgeschlagen: {_exc}") from _exc
 
 
-def _reviewer_system() -> str:
-    """M-374: review-work IMMER laden."""
+def _reviewer_system(state=None, task_files=None) -> str:
+    """M-374: review-work IMMER laden.
+
+    M-Skills-Reviewer: Metadata-Block (Level 1) + Glob-Aktivierung
+    (Level 2, Cursor-Stil) basierend auf task_files.
+    """
     skills = load_all_skills()
     parts = [REVIEWER_SYSTEM]
     rw = load_skill_by_name("review-work", skills)
     if rw and rw["body"]:
         parts.append("## Skill: Review-Work\n" + rw["body"])
+        try:
+            if state is not None:
+                state.geladene_skills.append("review-work")
+        except (AttributeError, TypeError):
+            pass
+
+    # M-Skills-Reviewer: Metadata + Glob
+    try:
+        from werkstatt.skills import skills_metadata_block, skills_aktivieren
+        _meta = skills_metadata_block(skills)
+        if _meta:
+            parts.append(_meta.rstrip())
+        if task_files:
+            _akt = skills_aktivieren(skills, list(task_files))
+            for _s in _akt:
+                _body = _s.get("body") or ""
+                if _body:
+                    parts.append(
+                        f"## Skill: {_s.get('name', '?')}\n" + _body
+                    )
+                    try:
+                        if state is not None:
+                            state.geladene_skills.append(_s.get("name", "?"))
+                    except (AttributeError, TypeError):
+                        pass
+    except Exception:  # noqa: BLE001
+        pass
+
     return "\n\n".join(parts)
 
 
@@ -492,7 +524,7 @@ def run_phase_end_review(state: RunState) -> bool:
         reply = _with_spinner(
             "Phase-Review",
             lambda: ask_llm(
-                api_key, _reviewer_system(), user,
+                api_key, _reviewer_system(state, _phase_files), user,
                 model="deepseek-chat", temperature=0.2, max_tokens=4000,
                 redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
                 aufgabe="reviewer",
@@ -701,7 +733,7 @@ def run_reviewer(state: RunState) -> bool:
                 pass
 
     reply = ask_llm(
-        api_key, _reviewer_system(), user_content,
+        api_key, _reviewer_system(state, _zieldatei), user_content,
         model="deepseek-chat", temperature=0.0, max_tokens=4000,
         redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
         aufgabe="reviewer",

@@ -310,6 +310,17 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
     if _op_block:
         parts.append(_op_block.rstrip())
 
+    # M-Skills-Architect: metadata (Level 1)
+    if state is not None:
+        try:
+            from werkstatt.skills import load_all_skills, skills_metadata_block
+            _skills = load_all_skills()
+            _meta = skills_metadata_block(_skills)
+            if _meta:
+                parts.append(_meta.rstrip())
+        except Exception:  # noqa: BLE001
+            pass
+
     # === M-Welle-I: EXPLORER-FINDINGS + SCOUT-API (Welle E + D3 komplett) ===
     if state is not None:
         _exf = getattr(state, "explorer_findings", None) or {}
