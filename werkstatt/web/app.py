@@ -12,7 +12,6 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 
-from werkstatt.orchestrator import load_project_config
 from werkstatt.phase_state import PhaseState
 from werkstatt.web import ws
 
@@ -38,12 +37,16 @@ def _pruefe_projektname(name: str) -> str:
 def _phasen_snapshot(name: str) -> dict[str, Any]:
     """Liest den zentralen Phasen-State read-only als JSON-taugliches dict.
 
-    Ein fehlender Phasen-State ist ein normaler Zustand fuer das Frontend
-    und wird als ``{"verfuegbar": False, ...}`` zurueckgegeben, nicht als
-    500er. Der State wird nicht mutiert (``PhaseState`` koennte frozen sein).
+    Baut eine PhaseState-Instanz fuer das Projekt und ruft ``load()``
+    als Instanz-Methode. Fehlende Datei ist ein normaler Zustand fuer
+    das Frontend und wird als ``{"verfuegbar": False, ...}`` zurueck-
+    gegeben, nicht als 500er.
     """
     try:
-        phase_state = PhaseState.load()
+        phase_state = PhaseState(name)
+        if not phase_state.exists():
+            return {"verfuegbar": False, "fehler": "phase_state fehlt"}
+        phase_state.load()
     except (FileNotFoundError, OSError, ValueError, KeyError, RuntimeError) as fehler:
         return {"verfuegbar": False, "fehler": str(fehler)}
 
@@ -68,6 +71,7 @@ def _phasen_snapshot(name: str) -> dict[str, Any]:
 def create_app() -> FastAPI:
     """Erzeugt und konfiguriert die FastAPI-Anwendung."""
     app = FastAPI(title="Werkstatt")
+    app.include_router(ws.router)
 
     @app.get("/api/projects/{name}/state")
     def project_state(name: str) -> dict[str, Any]:
