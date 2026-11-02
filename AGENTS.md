@@ -91,7 +91,7 @@ liefert nur pending.
 
     pytest -q                              # 1145 passed, 5 skipped (2026-11-02)
     ruff check .                           # 309 errors (2026-11-02)
-    mypy werkstatt/                        # 22 errors in 9 files (2026-11-02) (2026-11-02)
+    mypy werkstatt/                        # 22 errors in 9 files (2026-11-02)
     python3 -m tools.quality_gate --json   # exit 1, regression true (2026-10-31)
 
 Nicht python -m pytest (Binary python fehlt).
