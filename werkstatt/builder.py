@@ -140,6 +140,24 @@ Wenn du eine dieser Regeln verletzt, wird der Patch verworfen.
   berechtigten Stelle), pruefe danach erneut mit `ruff check`.
   Kein Fix ohne Nachkontrolle.
 
+
+## TYP-NARROWING BEI MYPY-FEHLERN
+
+Wenn mypy Fehler der Form 'Unsupported operand types for ... int and object'
+oder 'No overload variant of int matches argument type object' meldet:
+
+- NIEMALS int(x) schreiben. Das aendert den Laufzeit-Wert: aus '10' wird 10,
+  aber aus 'abc' wird ein ValueError.
+- NIEMALS type:ignore verwenden. Wird von OP-064b als Antipattern geblockt.
+- NUR typing.cast(int, x) NACH einem Runtime-Check verwenden. Der Runtime-
+  Check (isinstance(x, int), check_port(x) oder ein aequivalenter Guard)
+  garantiert zur Laufzeit int, aber mypy sieht das nicht. cast macht die
+  Narrowing-Absicht fuer den Typechecker explizit, ohne den Wert zu aendern.
+
+Beispiel: aus 'return min_port <= port <= max_port' wird
+'return min_port <= cast(int, port) <= max_port' — nach check_port(port)
+als Runtime-Guard. NICHT int(port) und NICHT type:ignore.
+
 """
 
 
@@ -781,6 +799,8 @@ def _build_patches_fuer_datei(
         f"## ZIELDATEI: {zieldatei}\n\n"
         f"{_module_hint}"
         f"{_verbote_prefix}"
+        f"## API-SIGNATUREN (Scout-Destillat):\n"
+        f"{_format_scout_apis_for_builder(getattr(state, 'scout_api_auszug', {}))}\n\n"
         f"## TASK: {_task_name}\n"
         f"## TASK-BESCHREIBUNG: {_task_desc}\n\n"
         f"## ARCHITECT-BESCHREIBUNG (fuer Kontext):\n{_abschnitt}\n\n"
@@ -1467,3 +1487,21 @@ def run_builder(state: RunState) -> bool:
     state.patches = _effective_patches  # type: ignore[attr-defined]
     audit("builder_patches_erstellt", {"anzahl": len(_effective_patches)}, pd, pn)
     return True
+
+def _format_scout_apis_for_builder(apis: dict, max_lines: int = 25) -> str:
+    """M-WelleD: Scout-API-Auszug als Prompt-Block."""
+    if not isinstance(apis, dict) or not apis:
+        return ""
+    lines = []
+    for datei, symbole in list(apis.items())[:10]:
+        if not isinstance(symbole, list):
+            continue
+        for sym in symbole[:5]:
+            if isinstance(sym, str):
+                lines.append("  " + datei + ": " + sym)
+                if len(lines) >= max_lines:
+                    break
+        if len(lines) >= max_lines:
+            break
+    return chr(10).join(lines)
+
