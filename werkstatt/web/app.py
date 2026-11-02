@@ -8,12 +8,15 @@ Threadpool ausfuehrt; die Prozess-Registry ist ein einfaches dict ohne Lock.
 import re
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from werkstatt.phase_state import PhaseState
-from werkstatt.web import ws
+from werkstatt.web import audit_panel, chat, terminal_proxy, ws
 
 __all__ = ["app", "create_app"]
 
@@ -72,6 +75,19 @@ def create_app() -> FastAPI:
     """Erzeugt und konfiguriert die FastAPI-Anwendung."""
     app = FastAPI(title="Werkstatt")
     app.include_router(ws.router)
+    app.include_router(chat.router)
+    app.include_router(audit_panel.router)
+    app.include_router(terminal_proxy.router)
+
+    # Layout/CSS/JS liegen in /opt/werkstatt/static/ (Projekt-Root),
+    # nicht in werkstatt/web/static/ (Modul-Package).
+    static_dir = Path(__file__).resolve().parent.parent.parent / "static"
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    @app.get("/")
+    def index() -> FileResponse:
+        """Liefert das HTML-Layout der Web-UI."""
+        return FileResponse(str(static_dir / "layout.html"))
 
     @app.get("/api/projects/{name}/state")
     def project_state(name: str) -> dict[str, Any]:

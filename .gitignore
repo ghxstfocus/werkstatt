@@ -41,3 +41,6 @@ projects/.backups/
 !.werkstatt/verify.json
 a8_3_v2.txt
 
+
+# Loop-Logs
+logs/
