@@ -671,3 +671,64 @@ def _diff_hash_for_state(state) -> str:
 
 __all__ = ['_phase_end_reflection', '_reflection_loop',
            '_apply_patches_with_diagnose', '_diff_hash_for_state']
+
+
+def _plan_reject_reflection(state) -> bool:
+    """Welle H (2026-11-02): Reject-Grund → Reflection → neuer Plan.
+
+    Wenn der User im Plan-Gate `n` sagt, wird der Grund in
+    state.last_reject_reason gespeichert. Diese Funktion gibt ihn
+    an den Planner weiter, damit er einen revidierten Plan baut.
+
+    Max 1 Runde (nicht 5 wie bei Verify-Reflection). Wenn der zweite
+    Plan auch rejected wird -> fail-closed im Aufrufer.
+
+    Rueckgabe True -> Planner hat einen neuen Plan gebaut.
+    Rueckgabe False -> Planner-Reflection gescheitert.
+    """
+    reason = (getattr(state, "last_reject_reason", "") or "").strip()
+    kind = getattr(state, "last_reject_kind", "") or ""
+    if kind != "plan":
+        return False
+    if not reason:
+        reason = "(kein Grund angegeben — versuche den Plan zu verbessern)"
+
+    pd = getattr(state, "project_dir", None)
+    pn = getattr(state, "project_name", "?")
+    try:
+        audit("loop_plan_reject_reflection_start",
+              {"reason": reason[:200]}, pd, pn)
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+    # Prompt-Variante: urspruengliche Aufgabe + Reject-Grund
+    _orig_aufgabe = getattr(state, "aufgabe", "") or ""
+    _aufgabe_mit_feedback = (
+        f"{_orig_aufgabe}\n\n"
+        f"## REJECT-FEEDBACK (voriger Plan wurde abgelehnt)\n"
+        f"Der Mensch hat den vorigen Plan abgelehnt.\n"
+        f"Reject-Grund: {reason}\n\n"
+        f"Baue einen REVIDIERTEN Plan, der diesen Grund adressiert.\n"
+        f"Behalte die urspruengliche Aufgabe im Scope.\n"
+    )
+
+    # Aufruf des Planner mit Feedback. run_planner liest state.aufgabe.
+    _saved_aufgabe = _orig_aufgabe
+    try:
+        state.aufgabe = _aufgabe_mit_feedback  # type: ignore[attr-defined]
+        from werkstatt.planner import run_planner
+        ok = run_planner(state)
+    finally:
+        state.aufgabe = _saved_aufgabe  # type: ignore[attr-defined]
+
+    # Reject-Felder leeren, damit naechster Lauf sauber startet
+    state.last_reject_kind = ""  # type: ignore[attr-defined]
+    state.last_reject_reason = ""  # type: ignore[attr-defined]
+
+    try:
+        audit("loop_plan_reject_reflection_done",
+              {"ok": bool(ok)}, pd, pn)
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+    return bool(ok)

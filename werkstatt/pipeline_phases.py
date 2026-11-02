@@ -579,7 +579,31 @@ def _phase_plan_and_preflight(
         )
         if _rc_plan != 0:
             audit("loop_phase", {"phase": "plan_gate", "status": "rejected"}, pd, pn)
-            return 1, False
+            # Welle H (2026-11-02): Reflection-Runde bei Plan-Reject
+            _rej_ok = False
+            try:
+                from werkstatt.reflection import _plan_reject_reflection
+                _rej_ok = _plan_reject_reflection(state)
+            except Exception as _rej_exc:  # noqa: BLE001
+                audit("loop_plan_reject_fail_closed",
+                      {"reason": "reflection_exception",
+                       "error": str(_rej_exc)[:200]}, pd, pn)
+                return 1, False
+
+            if _rej_ok:
+                # Revidierter Plan gebaut, nochmal pruefen
+                _plan2_ok = _plan_gate(state)
+                if _plan2_ok:
+                    audit("loop_plan_gate_approved",
+                          {"via": "reflection"}, pd, pn)
+                else:
+                    audit("loop_plan_reject_fail_closed",
+                          {"reason": "reflection_plan_unvollstaendig"}, pd, pn)
+                    return 1, False
+            else:
+                audit("loop_plan_reject_fail_closed",
+                      {"reason": "reflection_failed"}, pd, pn)
+                return 1, False
         audit("loop_phase", {"phase": "plan_gate", "status": "approved"}, pd, pn)
         # PhaseState mit vollstaendigem Plan-Checkpoint initialisieren.
         # K21: auch bei existierender aber leerer .phase.yaml ({})-Datei.

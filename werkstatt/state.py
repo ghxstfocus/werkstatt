@@ -142,6 +142,12 @@ class RunState:
     # Fliesst in Architect- und Builder-Prompt. Format:
     # {"pytest_laufzeit_s": int, "ruff_befunde": list, ...}
     explorer_findings: dict = field(default_factory=dict)
+    # Welle H (2026-11-02): Plan-Reject-Reflection.
+    # last_reject_kind: "plan" | "human" | "" — woher der Reject kam
+    # last_reject_reason: freier Text vom User (beim n-Reject abgefragt)
+    last_reject_kind: str = ""
+    last_reject_reason: str = ""
+
 
 
     # M-WelleB (2026-11-02): Content-Check-Bestätigung.

@@ -185,6 +185,20 @@ def _human_gate_plan(state, auto_approve=False):
             return 0
         if _antwort == "n":
             audit("loop_plan_gate_rejected", {}, pd, pn)
+            # Welle H (2026-11-02): Reject-Grund erfassen fuer Reflection
+            try:
+                _reason = input(
+                    "Reject-Grund (optional, Enter=leer): "
+                ).strip()
+            except (EOFError, KeyboardInterrupt):
+                _reason = ""
+            try:
+                state.last_reject_kind = "plan"  # type: ignore[attr-defined]
+                state.last_reject_reason = _reason  # type: ignore[attr-defined]
+            except (AttributeError, TypeError):
+                pass
+            audit("loop_plan_reject_grund",
+                  {"grund": _reason[:200]}, pd, pn)
             return 1
         if _antwort == "a":
             _plan_file = Path(pd) / ".werkstatt" / f"{pn}.phase.yaml"
