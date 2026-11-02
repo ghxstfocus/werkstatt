@@ -4,6 +4,8 @@ description: |
   Code-Qualitaets-Pruefung. Drei Perspektiven: reuse,
   quality, efficiency. Use when reviewing code for
   simplification opportunities.
+globs:
+  - "**/*.py"
 ---
 
 # Simplify

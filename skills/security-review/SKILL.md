@@ -6,6 +6,13 @@ description: |
   erreichbar, Blast Radius, Exploit-Schritte) und
   Severity-Definitionen. Use when code touches auth,
   input, crypto, network, or file handling.
+globs:
+  - "**/auth/**"
+  - "**/*password*"
+  - "**/*token*"
+  - "**/*secret*"
+  - "**/*crypto*"
+  - "**/security/**"
 ---
 
 # Security-Review

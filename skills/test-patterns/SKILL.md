@@ -5,6 +5,10 @@ description: |
   mocke externe Abhaengigkeiten, pruefe Verhalten
   statt Implementierung. Use when writing or
   reviewing tests.
+globs:
+  - "tests/**/*.py"
+  - "**/test_*.py"
+  - "**/*_test.py"
 ---
 
 # Test-Patterns

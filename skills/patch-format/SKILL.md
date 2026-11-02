@@ -5,6 +5,8 @@ description: |
   typ:patch (bestehende Datei), typ:new_file (neue Datei).
   Nutze diese Skill immer, wenn du Code-Patches lieferst.
   Sie ist statisch im Builder-Prompt.
+globs:
+  - "**/*.py"
 ---
 
 # Patch-Format

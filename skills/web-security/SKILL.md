@@ -4,6 +4,13 @@ description: |
   Web-Sicherheits-Pruefung. XSS, CSRF, SQL-Injection,
   Auth, Session, Secrets. Use when code touches
   authentication, user input, or HTTP responses.
+globs:
+  - "**/*.html"
+  - "**/*.js"
+  - "**/routes_*.py"
+  - "**/views_*.py"
+  - "**/templates/**"
+  - "**/static/**"
 ---
 
 # Web-Security

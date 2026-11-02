@@ -6,6 +6,7 @@ description: |
   eine Messung verlangt (ruff, pytest, Bug), MUSST du
   messen. Rate NICHT.
 allowed-tools: run_readonly
+always: true
 ---
 
 # Using-Werkstatt (Meta-Skill)
