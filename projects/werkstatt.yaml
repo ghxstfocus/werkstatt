@@ -7,6 +7,11 @@ docs:
   conventions: docs/CONVENTIONS.md
   progress: PROGRESS.md
   changelog: CHANGELOG.md
+  # Doku-Vertrag (2026-11-02):
+  # PROGRESS.md  = Auto-Log (jede Task + Phase, immer)
+  # STATUS.md    = Offene Punkte (nur OP-NNN-Tasks werden entfernt/verschoben)
+  # CHANGELOG.md = Manuell bei Release (nicht vom Loop befuellt)
+
 always_run:
 - py_compile
 - ruff
