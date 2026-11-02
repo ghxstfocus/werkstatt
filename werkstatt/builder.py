@@ -964,7 +964,12 @@ def _build_patches_fuer_datei(
     return _erfuellt
 
 
-def _korrigiere_doku_datum(patches: list[dict], heute: str) -> list[dict]:
+def _korrigiere_doku_datum(
+    patches: list[dict],
+    heute: str,
+    pd=None,
+    pn: str = "?",
+) -> list[dict]:
     """Sicherheitsnetz: korrigiert Zukunfts-Daten in Doku-Patches.
 
     Durchsucht new_string und content von STATUS.md/PROGRESS.md-Patches
@@ -997,6 +1002,12 @@ def _korrigiere_doku_datum(patches: list[dict], heute: str) -> list[dict]:
             def _ersetze(m: _re_dd.Match[str]) -> str:
                 _treffer = m.group(1)
                 if _treffer != heute and _treffer > heute:
+                    if pd is not None:
+                        audit(
+                            "builder_patch_datum_korrigiert",
+                            {"file": _file, "alt": _treffer, "neu": heute},
+                            pd, pn,
+                        )
                     return heute
                 return _treffer
 
@@ -1422,7 +1433,10 @@ def run_builder(state: RunState) -> bool:
         state, _zieldatei, _arch_beschreibung, api_key,
     )
     patches = _korrigiere_doku_datum(
-        patches, datetime.now(UTC).date().isoformat(),
+        patches,
+        datetime.now(UTC).date().isoformat(),
+        pd=getattr(state, "project_dir", None),
+        pn=getattr(state, "project_name", "?"),
     )
     if not patches:
         # GOLD 2026-10-30: pruefen, ob der LLM-Pfad bereits das

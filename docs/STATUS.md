@@ -275,3 +275,9 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
   - **Goodhart's Law auf Agent-Ebene**: "Mitigations rely on post-hoc review or prompt-based instructions, which are disciplinary rather than architectural and remain gameable."
   Kern-Erkenntnis: 4 Anlaeufe (OP-059c/d/e/062i) fuer dasselbe Problem. Das ist Symptom-Behandlung. Es braucht Architektur: deterministische Schichten, die nicht durch LLM-Approval ueberschreibbar sind.
 
+
+## Erledigt (Auto-Log)
+
+Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
+
+- 2026-11-02 | OP-035 | Doku-Task-Datum wird halluziniert — deterministisch geloest (BUILDER_SYSTEM + {date}-Ersetzung + _korrigiere_doku_datum Sicherheitsnetz)
