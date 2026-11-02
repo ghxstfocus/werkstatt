@@ -274,27 +274,6 @@ tragen. Roadmap-Phasen sind grobe Etappen aus der Vor-Session
 - **Tests:** Unit-Tests fuer die Validierungs-Logik und den Parser der Roadmap.
 - **Blockiert von:** —
 
-### OP-081: Debugger-Agent — messen → guard → llm-fix → gates → eskalieren
-
-- **Status:** open
-- **Beschreibung:** Setzt `ROADMAP.md` Phase 32 (M-500..M-505) um. Ein Agent,
-  der Lint-, Typ- und Struktur-Fehler deterministisch messt (AST, ruff, mypy,
-  Monkeypatch-Ziele, Re-Export-Namen repo-weit), per Guard verweigert wenn
-  ein Fix unsicher waere, dann LLM-getrieben mit max 3 Iterationen fixt.
-  Nach 3 Runden ohne gruene Gates: `PROGRESS.md`-Eintrag `manual-needed`,
-  kein Commit.
-- **Betroffene Dateien:** `werkstatt/debugger.py` (neu), `tests/test_debugger.py` (neu),
-  `werkstatt/measurement.py` (erweitern), `AGENTS.md` (§Rollen).
-- **Akzeptanzkriterien:** (1) `debugger.measure(datei)` liefert JSON mit
-  AST/Ruff/Mypy/Pytest/Monkeypatch/Re-Export-Status. (2) Guard lehnt Fix ab
-  wenn Name in `__all__`, Monkeypatch-Ziel (`grep "patch\(\"$modul\.$name"`)
-  oder Re-Export (`from $modul import $name` repo-weit) — beweisbar pro Fall.
-  (3) Drei Szenarien in `tests/test_debugger.py` grün: Re-Export-Schutz,
-  Monkeypatch-Schutz, End-to-End-Fix mit Mock-LLM.
-- **Tests:** `pytest tests/test_debugger.py -v`
-- **Blockiert von:** —
-
-
 ### OP-082: Dashboard-Verdrahtung (Rest) — StaticFiles, GET /, Router, Tests
 
 - **Status:** open

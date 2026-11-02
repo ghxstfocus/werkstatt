@@ -1395,3 +1395,24 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
   Architect-Konsistenz-Check, mypy als Verify-Stage, venv-Setup,
   Skills-Welle-Aufräumarbeiten
 - **Verweis:** `git log --since="2026-11-02 00:00" --until="2026-11-03 00:00"`
+
+## 2026-11-02T22:11:13+00:00 -- OP-081: Deterministische Diagnose in Reflection (manuell)
+- **Status:** done
+- **Commit:** 355ba51
+- **Info:** Die Reflection rief bei jedem Verify-Fehler blind den
+  Builder (LLM) erneut. Bekannte deterministische Fehlerklassen wurden
+  nicht erkannt, kosteten 3-5 LLM-Runden (Beleg OP-082-Lauf: 5 Runden
+  LLM-Raten bei NameError + Directory-not-found).
+- **Neu:** `werkstatt/diagnose.py` mit `_diagnose_import_fehlt`,
+  `_diagnose_pfad_not_found`, `_deterministische_diagnose`. Hook in
+  `reflection._reflection_loop` vor `run_builder`: bei Match wird der
+  deterministische Patch angewendet und die Runde per continue beendet.
+- **Wiederverwendet:** `_apply_patches_with_diagnose`, `_setze_runde_patches`,
+  `last_verify_errors`. Kein neuer Loop, keine Duplikation.
+- **Tests:** `tests/test_diagnose.py` — 6 Szenarien.
+- **Baseline nach Commit:** pytest 1175, ruff 179, mypy 18.
+- **Nicht abgedeckt** (separate OP-Kandidaten):
+  - Re-Export-Kill bei `--fix`
+  - Monkeypatch-Ziel-Kill bei `--fix`
+  - Test blockiert auf `receive_json` ohne Endpoint-Response
+
