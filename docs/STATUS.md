@@ -287,7 +287,13 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-066: Reviewer prueft Zwischenstand statt finalen Tree
 
-- **Status:** open
+- **Status:** done (bereits implementiert in `werkstatt/reflection.py:511`)
+- **Befund 2026-11-02:** `_reflection_loop` ruft `run_reviewer` nach jeder
+  Verify-gruenen Runde. Test `test_loop_reviewer_after_reflection` in
+  `tests/test_loop.py` kodiert das bereits (`assert 2 == 2`).
+  Der urspruengliche OP-Versuch hat `_review_nach_reflection_runden`
+  doppelt eingebaut (initialer Call + Loop) und 6 bestehende Tests
+  gebrochen. Nach Rollback: Suite gruen.
 - **Betroffene Dateien:**
   - `werkstatt/pipeline_phases.py` — nach jeder Reflection-Runde `run_reviewer(state)` erneut aufrufen
   - `tests/test_reviewer_final_tree.py` — Test mit 2 Runden, Reviewer 3x erwartet
