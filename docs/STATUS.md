@@ -2,7 +2,7 @@
 
 Format aus `DOC_CONVENTIONS.md` §5. Nur offene Punkte.
 `—` in Feldern = noch nicht spezifiziert (Loop praezisiert bei Bearbeitung).
-Letzte Aktualisierung: 2026-11-01.
+Letzte Aktualisierung: 2026-11-02.
 
 ## Offene Punkte
 
@@ -272,11 +272,11 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 ### OP-064: Architektur-Umbau — Completion-Gate mit Vetorecht (Sammel-OP)
 
 - **Status:** open
-- **Betroffene Dateien:** `werkstatt/state.py`, `werkstatt/phase_state.py`, `werkstatt/pipeline_phases.py`, `werkstatt/antipattern.py` (neu), `werkstatt/stuck.py` (neu), `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`
+- **Betroffene Dateien:** `werkstatt/state.py`, `werkstatt/phase_state.py`, `werkstatt/pipeline_phases.py`, `werkstatt/antipattern.py` (neu), `werkstatt/stuck.py` (nicht existent — pruefen) (neu), `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`
 - **Akzeptanzkriterien:** Umbau des Loops von "drei konkurrierenden Wahrheiten" (Reflection-Return / Reviewer-Approval / Verify-Gate) auf "eine Hierarchie mit deterministischem Vetorecht". Sechs Bausteine, jeder ein eigener Sub-OP:
   - **OP-064a** Sticky-Veto (Completion-Gate): einmal `vetoed` -> nur Mensch kann es zuruecksetzen. Ersetzt OP-062i. **Live verifiziert 2026-11-01 19:22** (Testrunde #5, Commit `09fb4e7`): `_reflection_loop`=True + `_rev_ok`=True + `spec_widerspruch=True` -> `loop_task_spec_widerspruch_veto`, `status=human_review`, `verdict=vetoed`, **kein** `loop_task_ok`. Guard primaer in `pipeline_phases._phase_tasks_loop` vor `_task_ende(ok=True)`; defensiv in `task_runner._task_ende`.
   - **OP-064b** Deterministischer Antipattern-Scanner (`werkstatt/antipattern.py`): scannt `state.patches` auf `# type: ignore`, `noqa`, `eslint-disable`, `|| true` (Shell-Kontext), geloeschte Tests, geschwaechte Assertions. Kein LLM, kein subprocess, unter 100 ms. **Live verifiziert 2026-11-01 19:31** (Testrunde #6, Commit `a7a8e4d`): LLM baute unter Prompt-Anweisung tatsaechlich `# type: ignore[operator]`, Verify gruen (weil type:ignore mypy still macht), Reviewer approved — Guard feuerte vor `_task_ende(ok=True)`: `loop_task_antipattern_veto`, `status=human_review`, `failure=antipattern:type_ignore`, **kein** `loop_task_ok`. Guard sitzt im selben Konvergenz-Punkt wie OP-064a (`pipeline_phases._phase_tasks_loop`).
-  - **OP-064c** StuckDetector (`werkstatt/stuck.py`): ein Modul analysiert `reflection_history` als Ganzes (gleicher Error-Kern, gleicher Patch-Hash, gleiche Bug-Signatur, Budget erschoepft). Ersetzt drei verstreute `_stagnation`-Pfade.
+  - **OP-064c** StuckDetector (`werkstatt/stuck.py` (nicht existent — pruefen)): ein Modul analysiert `reflection_history` als Ganzes (gleicher Error-Kern, gleicher Patch-Hash, gleiche Bug-Signatur, Budget erschoepft). Ersetzt drei verstreute `_stagnation`-Pfade.
   - **OP-064d** Red-to-Green-Gate fuer "auftrag_bereits_erfuellt": ein Task gilt erst als verifiziert, wenn ein Test vorher rot war und jetzt gruen ist.
   - **OP-064e** Spec-Pre-Flight-Linter: vor dem Planner-Lauf OP-Text auf Widersprueche und nicht-existierende APIs pruefen.
   - **OP-064f** Structured Feature-List: `phase.yaml` bekommt pro Task `verdict: pending|verified|vetoed`. PROGRESS.md bleibt Menschen-Doku.
@@ -327,7 +327,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
   gebrochen. Nach Rollback: Suite gruen.
 - **Betroffene Dateien:**
   - `werkstatt/pipeline_phases.py` — nach jeder Reflection-Runde `run_reviewer(state)` erneut aufrufen
-  - `tests/test_reviewer_final_tree.py` — Test mit 2 Runden, Reviewer 3x erwartet
+  - `(nicht existent: tests/test_reviewer_final_tree.py — Rollback 2026-11-02)` — Test mit 2 Runden, Reviewer 3x erwartet
 - **Existiert bereits:**
   - `werkstatt/reviewer.py` — `run_reviewer(state)` prueft Diff auf Bugs
   - `werkstatt/reflection.py` — `_reflection_loop(state)` laeuft bis 5 Runden
@@ -341,7 +341,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:**
   - Nach 2 Reflection-Runden ruft `_phase_tasks_loop` `run_reviewer` ein 3. Mal
   - Der letzte Reviewer-Aufruf sieht den finalen `git diff`
-- **Tests:** `tests/test_reviewer_final_tree.py::test_reviewer_called_after_each_round`
+- **Tests:** `(nicht existent: tests/test_reviewer_final_tree.py — Rollback 2026-11-02)::test_reviewer_called_after_each_round`
 - **Blockiert von:** —
 
 

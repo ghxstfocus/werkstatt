@@ -36,6 +36,34 @@ Routing für Agenten. Keine Enzyklopädie.
   prueft §2/§3/§5/§6, meldet Verstoesse, legt mit --apply fehlende
   Pflichtdateien an (loescht NICHTS).
 
+## Skills (Progressive Disclosure)
+
+20 Skills in `skills/<name>/SKILL.md`. Jeder Skill hat:
+
+- `globs:` — Datei-Muster, die den Skill aktivieren (deterministisch per fnmatch)
+- `rollen:` — Rollen-Filter: `builder`, `reviewer`, `architect`, `scout`,
+  `explorer`, `planner` (leer = alle Rollen)
+- `always:` — in jeder Rolle aktiv (selten; `using-werkstatt` ist der Fall)
+- Body (Markdown) — wird bei Aktivierung in den Prompt geladen
+
+Aktivierung: `skills_aktivieren(skills, task_files, max_total=3, rolle=...)`.
+Ranking nach Glob-Spezifitaet (OP-072): spezifischere Muster gewinnen.
+Max 3 Skills pro Aufruf, um Context-Overload zu verhindern.
+
+**Skills statt Prompt-Bloecke:** Reviewer-Checks (SEMANTIK/KONSTANTEN/
+SYMBOL/SCOPE) und Builder-Regeln (FUNKTION-WAHL/RUFF-GRUNDREGELN/
+TYP-NARROWING) leben als Skills, nicht im Prompt. Ausnahme: `DATUM
+(STRIKT)` bleibt im BUILDER_SYSTEM — Output-Contract, immer gebraucht
+auch bei `.py`-Patches. Referenz: Commits `122b979` und `22b7776`.
+
+**Audit:** `loop_skills_geladen`-Event pro Aufruf mit `rolle` und `neu`
+(dedupliziert). `state.geladene_skills` trackt was bereits im Kontext
+ist — kein doppeltes Laden.
+
+**Pflege:** Neue Skills brauchen Frontmatter mit `globs:` + `rollen:`.
+Skills-Test: `tests/test_skills.py` + `tests/test_skills_loader.py`
+pruefen Anzahl und Struktur.
+
 ## Doku-Vertrag (Loop)
 
 Loop liest Living Docs in §6-Reihenfolge (entry > status > roadmap >
@@ -61,7 +89,7 @@ liefert nur pending.
 
 ## Pflicht-Befehle
 
-    pytest -q                              # 958 passed, 5 skipped (2026-10-31)
+    pytest -q                              # 1145 passed, 5 skipped (2026-11-02)
     ruff check .                           # 248 errors, 198 fixable
     mypy werkstatt/                        # 16 errors in 7 files
     python3 -m tools.quality_gate --json   # exit 1, regression true (2026-10-31)
