@@ -294,6 +294,8 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     phase: wenn gesetzt ("pre_build" oder "post_build"),
     werden nur Stages mit passendem phase-Feld ausgefuehrt.
     Stages ohne phase-Feld laufen immer (Backward-Compat).
+
+    Returns: True wenn alle harten Stages gruen sind, sonst False.
     """
     import json
     project_dir = getattr(state, "project_dir", None)
