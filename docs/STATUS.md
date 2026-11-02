@@ -331,29 +331,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Blockiert von:** —
 
 
-### OP-069: _delete_zone_op_append legt fehlende Sektion an
-
-- **Status:** open
-- **Betroffene Dateien:**
-  - `werkstatt/committer.py` — `_delete_zone_op_append` legt `## Delete-Zone` an wenn fehlt
-  - `tests/test_committer_delete_zone.py` — Test fuer leere STATUS.md
-- **Existiert bereits:**
-  - `werkstatt/committer.py:_delete_zone_op_append` — sucht Sektion, gibt `False` bei Fehlen
-  - `werkstatt/committer.py:_status_md_op_entfernen` — entfernt OP aus aktiver Liste
-  - `werkstatt/committer.py:_committe_zielprojekt` — ruft Append VOR Remove (Fix a344b3a)
-- **Fehlt noch:**
-  - Bei fehlender Sektion `## Delete-Zone` + Tabellen-Header am Datei-Ende anlegen, dann Eintrag
-  - Live-Beleg 2026-11-02 OP-035: Append gab `False`, OP spurlos verloren
-- **Nicht-Ziele:**
-  - KEINE Aenderung an `_committe_zielprojekt`-Reihenfolge
-  - KEINE Aenderung an STATUS.md-Struktur
-- **Akzeptanzkriterien:**
-  - Auf STATUS.md ohne Sektion: `_delete_zone_op_append` -> `True`, Sektion existiert
-  - Auf STATUS.md mit Sektion: OP eingetragen, andere Zeilen unberuehrt
-  - Rueckgabe `True` in beiden Faellen
-- **Tests:** `tests/test_committer_delete_zone.py::test_legt_sektion_an`
-- **Blockiert von:** —
-
 
 ### OP-070: Scout-Redundanz messen vor Umbau
 - **Status:** open
@@ -375,3 +352,4 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - 2026-11-02 | OP-035 | Doku-Task-Datum wird halluziniert — deterministisch geloest (BUILDER_SYSTEM + {date}-Ersetzung + _korrigiere_doku_datum Sicherheitsnetz)
 - 2026-11-02 | OP-068 | Heartbeat-Stage-Name (Builder/Reviewer) — Commit 2c099da
+- 2026-11-02 | OP-069 | Delete-Zone-Sektion anlegen — Commit 6fa1d74 + Fix ebe8049
