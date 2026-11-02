@@ -285,14 +285,12 @@ def _reviewer_system(state=None, task_files=None) -> str:
     """
     skills = load_all_skills()
     parts = [REVIEWER_SYSTEM]
+    _akt_names: list[str] = []
+
     rw = load_skill_by_name("review-work", skills)
     if rw and rw["body"]:
         parts.append("## Skill: Review-Work\n" + rw["body"])
-        try:
-            if state is not None:
-                state.geladene_skills.append("review-work")
-        except (AttributeError, TypeError):
-            pass
+        _akt_names.append("review-work")
 
     # M-Skills-Reviewer: Metadata + Glob
     try:
@@ -308,13 +306,17 @@ def _reviewer_system(state=None, task_files=None) -> str:
                     parts.append(
                         f"## Skill: {_s.get('name', '?')}\n" + _body
                     )
-                    try:
-                        if state is not None:
-                            state.geladene_skills.append(_s.get("name", "?"))
-                    except (AttributeError, TypeError):
-                        pass
+                    _akt_names.append(_s.get("name", "?"))
     except Exception:  # noqa: BLE001
         pass
+
+    # M-Skills-Dedup: zentrale Merk-Funktion (dedup + audit)
+    if _akt_names:
+        try:
+            from werkstatt.skills import _merke_geladene_skills
+            _merke_geladene_skills(state, _akt_names, rolle="reviewer")
+        except Exception:  # noqa: BLE001, S110
+            pass
 
     return "\n\n".join(parts)
 

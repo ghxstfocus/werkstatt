@@ -176,3 +176,44 @@ def skills_aktivieren(
         activated.append(activate_skill(s))
     return activated
 
+
+
+def _merke_geladene_skills(
+    state: Any,
+    names: list[str],
+    rolle: str = "?",
+) -> list[str]:
+    """Dedup + Audit: merkt neue Skill-Namen in state.geladene_skills.
+
+    Rueckgabe: die tatsaechlich NEU gemerkten Namen. Wenn keine neu:
+    leere Liste (dann loggt der Aufrufer auch nicht).
+
+    Robust: wenn state.geladene_skills kein list ist oder fehlt,
+    passiert nichts. Das deckt Test-Fixtures (SimpleNamespace) ab.
+
+    Audit-Event nur bei tatsaechlicher Aenderung -> kein Spam bei
+    mehrfachem Reviewer-Aufruf pro Task.
+    """
+    if state is None:
+        return []
+    _cur = getattr(state, "geladene_skills", None)
+    if not isinstance(_cur, list):
+        return []
+    neu: list[str] = []
+    for n in names:
+        if isinstance(n, str) and n and n not in _cur:
+            _cur.append(n)
+            neu.append(n)
+    if neu:
+        try:
+            from werkstatt.audit import audit
+            audit(
+                "loop_skills_geladen",
+                {"rolle": rolle, "neu": list(neu)},
+                getattr(state, "project_dir", None) or Path("."),
+                getattr(state, "project_name", "?"),
+            )
+        except Exception:  # noqa: BLE001, S110
+            pass
+    return neu
+

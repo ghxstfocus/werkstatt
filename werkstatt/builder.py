@@ -869,16 +869,21 @@ def _build_patches_fuer_datei(
         _meta = skills_metadata_block(_all_skills)
         _akt = skills_aktivieren(_all_skills, [zieldatei])
         _akt_block = ""
+        _akt_names = []
         for _s in _akt:
             _body = _s.get("body") or ""
             if _body:
                 _akt_block += (
                     f"\n## Skill: {_s.get('name', '?')}\n" + _body + "\n"
                 )
-                try:
-                    state.geladene_skills.append(_s.get("name", "?"))
-                except (AttributeError, TypeError):
-                    pass
+                _akt_names.append(_s.get("name", "?"))
+        # M-Skills-Dedup: zentrale Merk-Funktion (dedup + audit)
+        if _akt_names:
+            try:
+                from werkstatt.skills import _merke_geladene_skills
+                _merke_geladene_skills(state, _akt_names, rolle="builder")
+            except Exception:  # noqa: BLE001, S110
+                pass
         if _meta or _akt_block:
             _skills_block = (
                 _meta + _akt_block + "\n"
