@@ -64,6 +64,17 @@ ist — kein doppeltes Laden.
 Skills-Test: `tests/test_skills.py` + `tests/test_skills_loader.py`
 pruefen Anzahl und Struktur.
 
+## Roadmap-to-OP (Vision -> Queue)
+
+Der Loop frisst OPs (`STATUS.md`), aber die Etappen (`ROADMAP.md`) muessen
+in OPs uebersetzt werden. Bis Phase 31 (Roadmap-Compiler) geschieht das
+manuell:
+
+1. Phase aus `ROADMAP.md` waehlen.
+2. Meta-OP in `STATUS.md` anlegen: *"Lies Phase X und zerlege sie in OPs."*
+3. Loop fuehrt den Meta-OP aus -> Architect schreibt die OPs.
+4. Loop arbeitet die neuen OPs ab.
+
 ## Doku-Vertrag (Loop)
 
 Loop liest Living Docs in §6-Reihenfolge (entry > status > roadmap >

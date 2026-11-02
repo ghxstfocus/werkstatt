@@ -398,6 +398,30 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Tests:** —
 - **Blockiert von:** —
 
+
+### OP-072: Phase 30 (UI) in OPs zerlegen (Meta-OP)
+
+- **Status:** open
+- **Beschreibung:** Die Roadmap definiert Phase 30 (Web-Dashboard & Interactive UI).
+  Dieser Meta-OP fordert den Architect auf, das UI-Konzept (Layout, Kopplungs-Mechanik,
+  Chrome-Tabs, Audit-Sidebar) in spezifische, ausfuehrbare Implementierungs-Ops zu zerlegen.
+- **Betroffene Dateien:** `docs/STATUS.md` (Ziel der Zerlegung)
+- **Akzeptanzkriterien:** Neue OPs fuer UI-Backend (FastAPI, WebSockets), Frontend (Tabs, Chat,
+  Audit-Sidebar) und die Integration des `loop_renderer` in den Web-Stream.
+- **Tests:** —
+- **Blockiert von:** —
+
+### OP-073: Werkzeug fuer Roadmap-to-OP Compiler
+
+- **Status:** open
+- **Beschreibung:** Baut das Werkzeug `werkstatt/roadmap_compiler.py`, das wie in Phase 31
+  beschrieben, die naechste ROADMAP-Phase liest und automatisch in STATUS.md-OPs uebersetzt.
+- **Betroffene Dateien:** `werkstatt/roadmap_compiler.py` (neu), `tests/test_roadmap_compiler.py` (neu)
+- **Akzeptanzkriterien:** CLI-Tool, das den Architect aufruft, die Ausgabe validiert
+  (OP-NNN, Akzeptanzkriterien vorhanden) und die OPs formatiert in STATUS.md einfuegt.
+- **Tests:** Unit-Tests fuer die Validierungs-Logik und den Parser der Roadmap.
+- **Blockiert von:** —
+
 ## Erledigt (Auto-Log)
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.

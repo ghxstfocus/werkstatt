@@ -170,6 +170,20 @@ Referenz: Screenshot vom 2026-11-02 (Web-Interface mit Chat und Terminal).
 - OP-032: Interactive Chat (Admin-KI tab-uebergreifend, Bau-Chat tab-gebunden).
 - OP-033: UI-Layout (Tabs = Projekte, Terminal links, Chat rechts, Audit-Panel unten mit Sidebar).
 
+### Phase 31: Roadmap-to-OP Compiler (Meta-Loop) 🟢 (VISION)
+
+**Ziel:** Die Luecke zwischen ROADMAP.md (Vision) und STATUS.md (Queue) schliessen.
+Aktuell muessen wir Roadmap-Phasen manuell in OPs zerlegen. Das soll der Loop selbst lernen.
+
+- Ein neues Werkzeug `werkstatt/roadmap_compiler.py`.
+- Liest die naechste unfertige Phase aus `ROADMAP.md`.
+- Ruft den Architect auf mit dem Prompt: *"Zerlege diese Phase in atomare OPs nach STATUS.md-Format."*
+- Validiert das Ergebnis (OP-NNN, Akzeptanzkriterien, Tests vorhanden?).
+- Haengt die validierten OPs an `docs/STATUS.md` an.
+
+**Konsequenz:** Die Werkstatt kann autonom neue Phasen aus der Roadmap abarbeiten,
+ohne dass ein Mensch die OPs manuell formulieren muss.
+
 ## Offene Bloecke (P1/P2)
 
 | Block | Prio | Kurz |
