@@ -19,13 +19,13 @@ from werkstatt.loop_renderer import _with_spinner
 
 
 # M-442: Architect-Modell konfigurierbar (Default: deepseek-chat).
-# Fuer Messungen: WERKSTATT_ARCHITECT_MODEL=deepseek-reasoner
+# Fuer billigere/schnellere Laeufe: WERKSTATT_ARCHITECT_MODEL=deepseek-chat
 def _is_reasoning_model(model: str) -> bool:
     """M-445: Reasoning-Modelle unterstuetzen temperature/top_p nicht."""
     return "reasoner" in model.lower() or "r1" in model.lower()
 
 
-_ARCHITECT_MODEL = os.environ.get("WERKSTATT_ARCHITECT_MODEL", "deepseek-chat")
+_ARCHITECT_MODEL = os.environ.get("WERKSTATT_ARCHITECT_MODEL", "deepseek-reasoner")
 
 from werkstatt.audit import audit
 # Fix AZ Stufe 9+10: Re-Exports fuer API-Kompatibilitaet.

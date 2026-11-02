@@ -174,7 +174,7 @@ Beispiel: Aufgabe sagt "read_events". API-Auszug hat
 
 
 _BUILDER_SCHNITTSTELLE = """## DER BUILDER (Schnittstelle)
-- Modell: deepseek-chat, max 8000 Tokens.
+- Modell: deepseek-reasoner.
 - Input: eine Zieldatei + dein Abschnitt fuer diese Datei.
 - Output: JSON-Patch mit old_string (aus Datei) + new_string (deine Beschreibung).
 - Grenzen: keine Tools, keine API-Raterei, keine Imports ohne explizite Nennung.
