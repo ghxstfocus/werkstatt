@@ -45,3 +45,27 @@ Bei `.md`-Dateien (STATUS.md, ROADMAP.md, PROGRESS.md) gilt:
 - Nur wenn die `+`/`-`-Zeilen inhaltlich nicht zur Aufgabe passen, ist es
   ein HIGH-Bug.
 
+## PYTHON-PATCHES (OP-080)
+
+Bei `.py`-Dateien gilt fuer Route-/Handler-Pruefungen:
+
+- Route-Handler stehen oft verschachtelt in einer App-Factory
+  (z.B. `def create_app(): @app.get(...) def foo(): ...`).
+- Pruefe den **woertlich genannten Pfad** aus der Task-Beschreibung
+  gegen die `+`-Zeilen des Diffs (z.B. suche nach `"/api/projects/{name}/state"`).
+- Erfinde KEINE Routen, die nicht im Diff stehen. Wenn der Task sagt
+  "GET /api/projects/{name}/state fehlt", dann pruefe, ob genau dieser
+  String in den `+`-Zeilen vorkommt — nicht ob der Handler-Name passt.
+- Ein `@app.get("/api/projects/{name}/state")` in einer verschachtelten
+  Funktion ist eine gueltige Route. Die Verschachtelung ist kein Bug.
+- Wenn im Diff nur die 3 geforderten Routen stehen und du "Over-Delivery"
+  oder "fehlt" meldest: pruefe deine Annahme, bevor du den Bug setzt.
+
+## DATEI-PATCHES: Hunk-Header-Ignorieren (OP-079-Nachtrag)
+
+Fuer alle Patches (`.md` und `.py`) gilt zusaetzlich:
+- Der `@@ -X,Y +A,B @@ <text>`-Header beschreibt den umgebenden Kontext,
+  nicht die semantische Zuordnung des Patches.
+- Bei `docs/STATUS.md` (OP-079): nur `+`/`-`-Zeilen zaehlen.
+- Bei `.py`: nur den Code in `+`-Zeilen pruefen. `@@`-Anker ignorieren.
+

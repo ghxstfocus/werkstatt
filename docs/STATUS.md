@@ -467,6 +467,8 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 
 ### OP-080: Reviewer halluziniert auch bei .py-Hunk-Headern
+- **Status:** done (Fix: review-work-Skill um PYTHON-PATCHES-Regel
+  erweitert)
 
 - **Status:** open
 - **Live-Beleg 2026-11-02 18:22 (OP-074-Lauf):** Der Builder hat `werkstatt/web/app.py` mit exakt den geforderten Routen gebaut (`GET /api/projects/{name}/state`, `POST /api/projects/{name}/start`, `POST /api/projects/{name}/stop` — Zeilen 72, 78, 91). Der Reviewer meldete HIGH-Bug "Task fordert GET /api/projects/{name}/state, Diff implementiert stattdessen GET /api/status/{name}" und MEDIUM "Over-Delivery: /api/config, /api/ws-info". Alle drei Vorwürfe sind frei erfunden — der Code enthaelt weder `/api/status/` noch `/api/config` noch `/api/ws-info`.
