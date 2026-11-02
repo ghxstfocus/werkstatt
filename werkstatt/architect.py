@@ -333,6 +333,17 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
             except Exception:  # noqa: BLE001
                 pass
 
+        # M-Wired-A (2026-11-02): Measurement-Werte in Architect-Prompt
+        try:
+            from werkstatt.measurement import _messwerte_fuer_prompt
+            _mess = _messwerte_fuer_prompt(state)
+            if _mess and isinstance(_mess, str) and _mess.strip():
+                parts.append(
+                    f"<messwerte_explorer>\n{_mess}\n</messwerte_explorer>"
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
     # === K32: MIGRATIONSSTAND ZUERST (hoechste Prioritaet) ===
     # Der Architect darf Migrationsnummern NICHT raten.
     _mig_ctx = None
