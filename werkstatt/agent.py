@@ -8,7 +8,9 @@ Konsumenten: pipeline.py (via Re-Export).
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -75,6 +77,30 @@ def _dump_prompt(aufgabe: str, model: str,
             )
         except Exception:  # noqa: BLE001, S110
             pass
+
+
+def _heartbeat_start(
+        stage_name: str,
+) -> tuple[threading.Thread, threading.Event]:
+    """Startet einen Heartbeat-Thread, der alle 5s eine Zeile ausgibt.
+
+    Gibt (thread, stop_event) zurueck. Der Aufrufer MUSS
+    stop_event.set() und thread.join(timeout=1.0) im finally
+    ausfuehren, damit der Thread beendet wird.
+    """
+    stop_event = threading.Event()
+    start = time.monotonic()
+
+    def _tick() -> None:
+        while not stop_event.is_set():
+            elapsed = int(time.monotonic() - start)
+            print(f"  ... {stage_name} laeuft ({elapsed}s)", flush=True)
+            stop_event.wait(5)
+
+    thread = threading.Thread(
+        target=_tick, daemon=True, name=f"heartbeat-{stage_name}")
+    thread.start()
+    return thread, stop_event
 
 
 def ask_llm(api_key: str, system_prompt: str, user_content: str,
@@ -180,35 +206,40 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
         # (max len(backoffs)), enumerate ist hier
         # nicht passend (Abbruch durch break).
         _versuche_absolut += 1  # noqa: SIM113
+        hb_thread, hb_stop = _heartbeat_start(aufgabe)
         try:
-            res = requests.post(DEEPSEEK_API_URL, headers=headers,
-                                json=payload, timeout=_req_timeout)
-        except requests.Timeout as exc:
-            letzter_fehler = f"HTTP Timeout: {exc}"
-            res = None
-            if state is not None:
-                audit("llm_timeout_read",
-                      {"modell": model,
-                       "aufgabe": aufgabe,
-                       "read_s": _read_adapt,
-                       "versuch": _versuche_absolut},
-                      state.project_dir,
-                      state.project_name)
-        except requests.RequestException as exc:
-            letzter_fehler = f"HTTP: {exc}"
-            res = None
-        else:
-            if res.status_code == 200:
-                break
-            # Nur 429 und 5xx werden wiederholt.
-            if res.status_code != 429 and res.status_code < 500:
-                return LLMReply(
-                    ok=False,
-                    error=f"HTTP {res.status_code}: {res.text[:200]}",
-                    system_len=_system_len,
-                    user_len=_user_len,
-                )
-            letzter_fehler = f"HTTP {res.status_code}: {res.text[:200]}"
+            try:
+                res = requests.post(DEEPSEEK_API_URL, headers=headers,
+                                    json=payload, timeout=_req_timeout)
+            except requests.Timeout as exc:
+                letzter_fehler = f"HTTP Timeout: {exc}"
+                res = None
+                if state is not None:
+                    audit("llm_timeout_read",
+                          {"modell": model,
+                           "aufgabe": aufgabe,
+                           "read_s": _read_adapt,
+                           "versuch": _versuche_absolut},
+                          state.project_dir,
+                          state.project_name)
+            except requests.RequestException as exc:
+                letzter_fehler = f"HTTP: {exc}"
+                res = None
+            else:
+                if res.status_code == 200:
+                    break
+                # Nur 429 und 5xx werden wiederholt.
+                if res.status_code != 429 and res.status_code < 500:
+                    return LLMReply(
+                        ok=False,
+                        error=f"HTTP {res.status_code}: {res.text[:200]}",
+                        system_len=_system_len,
+                        user_len=_user_len,
+                    )
+                letzter_fehler = f"HTTP {res.status_code}: {res.text[:200]}"
+        finally:
+            hb_stop.set()
+            hb_thread.join(timeout=1.0)
         if versuch < len(backoffs):
             time.sleep(warte)
 
@@ -311,7 +342,6 @@ def _schreibe_messung(
     state.mess_protokoll += inhalt
 
 
-
 def run_measurement_mit_argv(m: Measurement, whitelist: list[str],
                              project_dir: Path, extra_arg: str | None = None
                              ) -> tuple[str, bool, list[str]]:
@@ -400,8 +430,6 @@ def run_measurement_mit_argv(m: Measurement, whitelist: list[str],
         out = (f"=== {m.mid} ===\nARGV: {' '.join(argv)}\nRC: {res.returncode}\n"
                f"STDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}\n")
     return out, res.returncode == 0, argv
-
-
 
 
 # =====================================================================
@@ -572,15 +600,11 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
     return ergebnisse
 
 
-
-
-
 # =====================================================================
 # A8-3 (2026-10-23): Anti-Pattern-Hook via subprocess.run.
 # Fail-open: Hook-Fehler -> leerer Block + Audit.
 # =====================================================================
 
-import json
 
 def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
                         doc_keys: list[str],
@@ -611,6 +635,5 @@ def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
             if key in docs:
                 parts.append(f"\n--- {key} ---\n{docs[key]}")
     return "\n".join(parts)
-
 
 
