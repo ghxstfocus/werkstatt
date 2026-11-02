@@ -286,32 +286,74 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Beleg:** Live-Lauf 2026-11-02 12:13, `[2/5] Planner ... 2 tasks (73.1s)`.
 
 ### OP-066: Reviewer prueft Zwischenstand statt finalen Tree
+
 - **Status:** open
-- **Betroffene Dateien:** `werkstatt/pipeline_phases.py` (`_phase_tasks_loop`), `werkstatt/reflection.py`
-- **Akzeptanzkriterien:** Nach jeder Reflection-Runde Reviewer erneut laufen lassen (oder End-Tree pruefen), bevor `loop_gate_failed`. Sonst bleibt Reviewer-Report stale (Live-Beleg 2026-11-02 `audit_signature`-Lauf: 'Doppelte Testfunktionen' gemeldet, nach Reflection-Runde 2 mit `old_eq_new` bereinigt, kein erneuter Reviewer-Lauf).
-- **Tests:** Mock-Lauf mit 2 Reflection-Runden, assert Reviewer 3x aufgerufen (initial + 2 Runden).
+- **Betroffene Dateien:**
+  - `werkstatt/pipeline_phases.py` — nach jeder Reflection-Runde `run_reviewer(state)` erneut aufrufen
+  - `tests/test_reviewer_final_tree.py` — Test mit 2 Runden, Reviewer 3x erwartet
+- **Existiert bereits:**
+  - `werkstatt/reviewer.py` — `run_reviewer(state)` prueft Diff auf Bugs
+  - `werkstatt/reflection.py` — `_reflection_loop(state)` laeuft bis 5 Runden
+- **Fehlt noch:**
+  - In `_phase_tasks_loop`: nach jeder Reflection-Runde Reviewer erneut
+  - Loop-Gate-Fail soll finalen Tree pruefen, nicht Zwischenstand
+  - Live-Beleg: `audit_signature`-Lauf 2026-11-02, Reviewer lief nur initial
+- **Nicht-Ziele:**
+  - KEINE neue Reviewer-Funktion
+  - KEINE Aenderung an `_reflection_loop`-Signatur
+- **Akzeptanzkriterien:**
+  - Nach 2 Reflection-Runden ruft `_phase_tasks_loop` `run_reviewer` ein 3. Mal
+  - Der letzte Reviewer-Aufruf sieht den finalen `git diff`
+- **Tests:** `tests/test_reviewer_final_tree.py::test_reviewer_called_after_each_round`
 - **Blockiert von:** —
+
 
 ### OP-067: pytest_changed feuert in Reflection-Runden nicht
+
 - **Status:** open
-- **Betroffene Dateien:** `werkstatt/verify.py` (`_expand_cmd_placeholders`), `werkstatt/reflection.py`
-- **Akzeptanzkriterien:** Nach Test-File-Änderung in einer Reflection-Runde muss `pytest_changed` neu evaluiert werden. `changed_test_files` wird heute in Reflection-Runden nicht neu berechnet. Live-Beleg: `audit_signature`-Lauf, t2 (Test-File) zeigt `pytest_changed` nur in t1, nicht in t2.
-- **Tests:** Reflection-Runde mit Test-File-Patch, assert `pytest_changed` feuert in der Runde.
+- **Betroffene Dateien:**
+  - `werkstatt/verify.py` — `_expand_cmd_placeholders` soll in Reflection-Runden `changed_test_files` korrekt berechnen
+  - `tests/test_pytest_changed_reflection.py` — Test fuer Stage-Trigger in Reflection
+- **Existiert bereits:**
+  - `werkstatt/verify.py:_expand_cmd_placeholders` — berechnet `{changed_test_files}`
+  - `werkstatt/reflection.py` — ruft `_verify_patches` pro Runde
+- **Fehlt noch:**
+  - In Reflection-Runden ist `state.patches` nach Apply geleert -> `_expand_cmd_placeholders` liefert `None` -> `pytest_changed` skipped
+  - Fix: Reflection soll `state.patches` vor Verify neu setzen, oder `_expand_cmd_placeholders` soll `state.patches_aktuell_runde` pruefen
+  - Live-Beleg: `audit_signature`-Lauf 2026-11-02, t2 (Test-File) hatte kein `pytest_changed`
+- **Nicht-Ziele:**
+  - KEINE Aenderung an `pytest_changed`-Stage in `verify.json`
+  - KEINE Aenderung an `_verify_patches`-Signatur
+- **Akzeptanzkriterien:**
+  - Bei Test-File-Aenderung in Reflection-Runde feuert `pytest_changed`
+  - Bei Nicht-Test-Aenderung skipped weiterhin korrekt
+- **Tests:** `tests/test_pytest_changed_reflection.py::test_pytest_changed_feat_in_reflection`
 - **Blockiert von:** —
 
-### OP-068: Heartbeat-Stage-Name bei Builder/Reviewer `unbekannt`
+
+### OP-069: _delete_zone_op_append legt fehlende Sektion an
+
 - **Status:** open
-- **Betroffene Dateien:** `werkstatt/agent.py` (`ask_llm`), `werkstatt/builder.py`, `werkstatt/reviewer.py`, `werkstatt/planner.py`
-- **Akzeptanzkriterien:** Heartbeat-Zeile zeigt konkreten Stage-Namen (`Builder`, `Reviewer`, `Planner-Split`) statt `unbekannt`. `ask_llm` bekommt einen `stage_name`-Parameter (Default `"?"`), alle Aufrufer setzen ihn. Live-Beleg: 2026-11-02, alle Heartbeats ausser Explorer/Scout/Architect zeigen `... unbekannt laeuft (Xs)`.
-- **Tests:** Mock-ask_llm mit `stage_name='Builder'`, assert `'Builder'` in Heartbeat-Ausgabe.
+- **Betroffene Dateien:**
+  - `werkstatt/committer.py` — `_delete_zone_op_append` legt `## Delete-Zone` an wenn fehlt
+  - `tests/test_committer_delete_zone.py` — Test fuer leere STATUS.md
+- **Existiert bereits:**
+  - `werkstatt/committer.py:_delete_zone_op_append` — sucht Sektion, gibt `False` bei Fehlen
+  - `werkstatt/committer.py:_status_md_op_entfernen` — entfernt OP aus aktiver Liste
+  - `werkstatt/committer.py:_committe_zielprojekt` — ruft Append VOR Remove (Fix a344b3a)
+- **Fehlt noch:**
+  - Bei fehlender Sektion `## Delete-Zone` + Tabellen-Header am Datei-Ende anlegen, dann Eintrag
+  - Live-Beleg 2026-11-02 OP-035: Append gab `False`, OP spurlos verloren
+- **Nicht-Ziele:**
+  - KEINE Aenderung an `_committe_zielprojekt`-Reihenfolge
+  - KEINE Aenderung an STATUS.md-Struktur
+- **Akzeptanzkriterien:**
+  - Auf STATUS.md ohne Sektion: `_delete_zone_op_append` -> `True`, Sektion existiert
+  - Auf STATUS.md mit Sektion: OP eingetragen, andere Zeilen unberuehrt
+  - Rueckgabe `True` in beiden Faellen
+- **Tests:** `tests/test_committer_delete_zone.py::test_legt_sektion_an`
 - **Blockiert von:** —
 
-### OP-069: _delete_zone_op_append scheitert bei fehlender Sektion
-- **Status:** open (Reihenfolge-Fix live seit `a344b3a`, aber Sektion fehlt weiterhin)
-- **Betroffene Dateien:** `werkstatt/committer.py` (`_delete_zone_op_append`), `docs/STATUS.md` (Struktur)
-- **Akzeptanzkriterien:** `_delete_zone_op_append` legt die `## Delete-Zone`-Sektion an, wenn sie fehlt. Alternativ: STATUS.md bekommt die Sektion, Committer schreibt Zeilen. Live-Beleg: OP-035 ging 2026-11-02 spurlos verloren, weil Append `False` gab.
-- **Tests:** Leere STATUS.md, `_delete_zone_op_append` -> True, Sektion erscheint.
-- **Blockiert von:** —
 
 ### OP-070: Scout-Redundanz messen vor Umbau
 - **Status:** open
@@ -332,3 +374,4 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - 2026-11-02 | OP-035 | Doku-Task-Datum wird halluziniert — deterministisch geloest (BUILDER_SYSTEM + {date}-Ersetzung + _korrigiere_doku_datum Sicherheitsnetz)
+- 2026-11-02 | OP-068 | Heartbeat-Stage-Name (Builder/Reviewer) — Commit 2c099da

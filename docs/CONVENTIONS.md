@@ -210,3 +210,39 @@ Rollen-Sanierung fuer builder.md).
 - `PROGRESS.md` — Abgeschlossene Bloecke.
 - `docs/ROLLEN-AUDIT.md` — Rollen-Stand.
 - `docs/WORKFLOW.md` — Pipeline-Ablauf.
+
+## OP-Standard fuer loop-faehige Tasks (2026-11-02)
+
+Jeder loop-faehige OP braucht vier Pflichtfelder. Scout parst Backticks
+bei `Betroffene Dateien` -> Task-Zuordnung. Architect bekommt Akzeptanz
+als Prompt-Kontext.
+
+### Pflichtfelder
+
+- **Status:** open
+- **Betroffene Dateien:** Werkstatt-Pfade mit Backticks + Zweck
+- **Akzeptanzkriterien:** Code-Verhalten (nicht "messen"/"entstauben")
+- **Tests:** Konkreter Test-Name oder Test-Datei-Pfad
+- **Blockiert von:** —
+
+### Optionale Felder (bei Over-Engineering-Gefahr empfohlen)
+
+- **Existiert bereits:** Symbole/Funktionen, die im Code schon da sind
+- **Fehlt noch:** Was tatsaechlich fehlt, nicht vermuten
+- **Nicht-Ziele:** Was NICHT gebaut werden soll (Wrapper, neue APIs)
+
+### Loop-Faehigkeits-Kriterien
+
+Ein OP ist loop-faehig wenn:
+1. Betroffene Dateien unter `werkstatt/` oder `tests/`
+2. Akzeptanz ist Code-Verhalten
+3. 1-3 Dateien, kein Sammel-OP
+4. Konkreter Test benennbar
+
+NICHT loop-faehig: Mess-Aufgaben (OP-065, OP-070),
+Doku-Entstauben (OP-045, OP-046), Baseline-Revision (OP-041),
+Multi-Task-Umbauten (OP-064, OP-039).
+
+Hintergrund: Live-Beleg OP-068 (2026-11-02). Ohne `Existiert bereits`
+hat Architect `ask_llm_in_stage` erfunden, obwohl `ask_llm(aufgabe=)`
+dasselbe leistet. Das Feld verhindert Fehldiagnosen.
