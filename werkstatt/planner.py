@@ -48,6 +48,22 @@ from werkstatt.architect import (  # noqa: F401
 )
 from werkstatt.state import RunState
 
+def _format_explorer_findings(f: dict) -> str:
+    """M-WelleE: Explorer-Findings als Prompt-Block."""
+    if not isinstance(f, dict) or not f:
+        return "(keine)"
+    lines = []
+    for k, v in list(f.items())[:10]:
+        if isinstance(v, list):
+            v_str = ", ".join(str(x) for x in v[:5])
+        elif isinstance(v, dict):
+            v_str = str(v)[:100]
+        else:
+            v_str = str(v)
+        lines.append(f"- {k}: {v_str}")
+    return chr(10).join(lines)
+
+
 
 def _klassifiziere_fehler(stage_id: str, fehlertext: str) -> str:
     """M-299a: Klassifiziert einen Verify-Fehler nach Klasse.
