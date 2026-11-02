@@ -143,7 +143,11 @@ Referenz: Screenshot vom 2026-11-02 (Web-Interface mit Chat und Terminal).
 - **Rechts oben:** Zwei Chat-Fenster.
   - *Admin-KI:* Kann alle Projekte lesen, beantwortet Meta-Fragen (wie ein externer Berater).
   - *Bau-Chat:* Projektspezifischer Chat, um Aufgaben interaktiv zu steuern.
-- **Unten:** Live-Audit-Logs (Echtzeit-Stream der Events, Scrollbar).
+- **Unten:** Audit-Panel mit ein-/ausblendbarer History-Sidebar.
+  - *Live-Stream:* Echtzeit-Ansicht der aktuellen Events (wie ein Terminal).
+  - *History-Sidebar (DeepSeek-Style):* Links einblendbar. Zeigt die
+    vergangenen Tage (z.B. `2026-11-01`, `2026-10-31`). Klick laedt die
+    statischen Logs des jeweiligen Tages (`audit-logs/agent-pipeline-<datum>.jsonl`).
 
 **Kopplungs-Mechanik (Kern des UI):**
 - Chrome-Tabs = Projekte. Ein Tab pro Projekt (z.B. `werkstatt`, `security-ai`).
@@ -158,9 +162,13 @@ Referenz: Screenshot vom 2026-11-02 (Web-Interface mit Chat und Terminal).
 
 **Technische Umsetzung (existierende OPs, erweitert):**
 - OP-030: Web-Backend (FastAPI, Web-Sockets pro Projekt, Tab-Routing).
-- OP-031: Terminal-Proxy (Live-Logs im Browser, `loop_renderer` multi-projekt).
+- OP-031: Terminal/Audit-Proxy.
+  - Live-Modus: Web-Socket-Stream der aktuellen Events (`/ws/{project}`).
+  - History-Modus: REST-Endpoint (`/api/audit/{project}/{date}`) liest statische
+    JSONL-Logs vergangener Tage.
+  - UI: DeepSeek-artige Sidebar (ein-/ausblendbar) zur Datums-Auswahl.
 - OP-032: Interactive Chat (Admin-KI tab-uebergreifend, Bau-Chat tab-gebunden).
-- OP-033: UI-Layout (Chrome-Tabs = Projekte, CLI links, Chat rechts, Logs unten).
+- OP-033: UI-Layout (Tabs = Projekte, Terminal links, Chat rechts, Audit-Panel unten mit Sidebar).
 
 ## Offene Bloecke (P1/P2)
 
