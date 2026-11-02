@@ -20,6 +20,71 @@ from werkstatt.loop_renderer import _with_spinner
 
 # M-442: Architect-Modell konfigurierbar (Default: deepseek-chat).
 # Fuer Messungen: WERKSTATT_ARCHITECT_MODEL=deepseek-reasoner
+def _get_planner_modus(state) -> str:
+    """M-WelleG: liest planner.modus. Fail-safe: multi_call.
+
+    Liest yaml direkt (nicht load_project_config), weil der Config-
+    Loader in Tests mit unvollstaendigem state bricht.
+    """
+    try:
+        import yaml as _yaml
+        from pathlib import Path as _P
+        _name = getattr(state, "project_name", "") or ""
+        if not _name:
+            return "multi_call"
+        _cfg_path = _P("/opt/werkstatt/projects") / f"{_name}.yaml"
+        if not _cfg_path.exists():
+            return "multi_call"
+        _cfg = _yaml.safe_load(_cfg_path.read_text(encoding="utf-8")) or {}
+        return str(_cfg.get("planner", {}).get("modus", "multi_call"))
+    except BaseException:  # noqa: BLE001
+        return "multi_call"
+
+
+def _extract_tasks_from_architect(prosa: str) -> list[dict] | None:
+    """M-WelleG (2026-11-02): Tasks direkt aus Architect-Prosa parsen.
+
+    Abschnitt 2 (Dateien) liefert Task-Files via Backtick-Pfade.
+    Abschnitt 4 (Tests) als Akzeptanz. None -> Fallback multi_call.
+    """
+    import re as _re_g
+    if not prosa or len(prosa) < 50:
+        return None
+    m2 = _re_g.search(
+        r"##\s*2[.\s]*(?:Welche Datei|Dateien)[^\n]*\n(.*?)(?=\n##\s*3|\Z)",
+        prosa, _re_g.DOTALL | _re_g.IGNORECASE,
+    )
+    if not m2:
+        return None
+    pfade = _re_g.findall(
+        r"`([a-zA-Z0-9_./\-]+\.(?:py|md|yaml|json|toml|sql|cfg|ini))`",
+        m2.group(1),
+    )
+    if not pfade:
+        return None
+    seen = set()
+    unique = []
+    for pf in pfade:
+        if pf not in seen:
+            seen.add(pf)
+            unique.append(pf)
+    m4 = _re_g.search(
+        r"##\s*4[.\s]*(?:Welche Tests|Tests)[^\n]*\n(.*?)(?=\n##|\Z)",
+        prosa, _re_g.DOTALL | _re_g.IGNORECASE,
+    )
+    tests_block = m4.group(1).strip()[:500] if m4 else ""
+    tasks = []
+    for i, pf in enumerate(unique[:5], 1):
+        tasks.append({
+            "id": f"t{i}",
+            "name": f"Update {Path(pf).name}",
+            "description": f"Siehe Architect-Beschreibung (Abschnitt 3). Akzeptanz: {tests_block}",
+            "action": "update",
+            "task_files": [pf],
+        })
+    return tasks if tasks else None
+
+
 def _is_reasoning_model(model: str) -> bool:
     """M-445: Reasoning-Modelle unterstuetzen temperature/top_p nicht."""
     return "reasoner" in model.lower() or "r1" in model.lower()
@@ -1577,11 +1642,24 @@ def run_planner(state: RunState) -> bool:
         )
         state.tasks = _sub_tasks  # type: ignore[attr-defined]
     else:
-        state.tasks = [{  # type: ignore[attr-defined]
-            "id": "t1", "name": "Architect-Loesung umsetzen",
-            "action": "update", "description": _arch_prosa,
-            "task_files": _key_files,
-        }]
+        # M-WelleG (2026-11-02): single_call-Modus — Tasks direkt aus Prosa
+        _pm = _get_planner_modus(state)
+        _tasks_arch = None
+        if _pm == "single_call" and _arch_prosa:
+            _tasks_arch = _extract_tasks_from_architect(_arch_prosa)
+        if _tasks_arch:
+            state.tasks = _tasks_arch  # type: ignore[attr-defined]
+            audit("planner_single_call_ok",
+                  {"anzahl": len(_tasks_arch),
+                   "prosa_len": len(_arch_prosa)}, pd, pn)
+        else:
+            if _pm == "single_call":
+                audit("planner_single_call_fallback", {}, pd, pn)
+            state.tasks = [{  # type: ignore[attr-defined]
+                "id": "t1", "name": "Architect-Loesung umsetzen",
+                "action": "update", "description": _arch_prosa,
+                "task_files": _key_files,
+            }]
 
     state.phasen = []  # type: ignore[attr-defined]
     state.tests = []  # type: ignore[attr-defined]
