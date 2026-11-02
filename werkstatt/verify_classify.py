@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 
 # ruff F-Klasse: "ruff_changed: F822 ..."
-_RUFF_F_KLASSE = re.compile(r"ruff[^:]*:\s*F\d{3}\b")
+_RUFF_F_KLASSE = re.compile(r"\bF[0-9]{3}\b")
 _HART_PREFIXE = ("py_compile", "pytest", "test", "test_")
 
 
