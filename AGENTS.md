@@ -90,6 +90,24 @@ reviewer_high_bug_fail_closed), wird er in 2-3 Sub-Tasks zerlegt.
 Max 2 Ebenen tief. Abgeschlossene Tasks bleiben. get_next_task
 liefert nur pending.
 
+## Verify-Stages (post_build, hart/weich)
+
+Nach jedem Builder-Patch laufen (`.werkstatt/verify.json`):
+- `py_compile_changed` (hart)
+- `ruff_changed` (weich fuer Style, hart fuer F-Klasse)
+- `mypy_changed` (weich, mit `--follow-imports=silent`)
+- `pytest_changed` (hart)
+- `pytest_regression` (hart, phase_end)
+
+**Pre-Reviewer-Gate** (`werkstatt/verify_classify.py` + `_phase_tasks_loop`):
+Vor jedem Reviewer-Aufruf werden `_v_weich`-Fehler klassifiziert. Harte
+Fehler (py_compile, pytest, ruff F821/F822) fuehren zu `review_result=rejected`
+OHNE LLM-Call. Verhindert, dass der Reviewer Code approved, der gar nicht
+importiert werden kann.
+
+**Hart** (blockiert): py_compile, pytest, ruff F*
+**Weich** (blockiert nicht): ruff E/C/W, mypy (Baseline-Drift bekannt)
+
 ## Hard Rules
 
 - Fail closed: jeder Fehler -> ApplierError-Subklasse.
@@ -100,7 +118,7 @@ liefert nur pending.
 
 ## Pflicht-Befehle
 
-    pytest -q                              # 1145 passed, 5 skipped (2026-11-02)
+    pytest -q                              # 1164 passed, 5 skipped (2026-11-02)
     ruff check .                           # 309 errors (2026-11-02)
     mypy werkstatt/                        # 22 errors in 9 files (2026-11-02)
     python3 -m tools.quality_gate --json   # exit 1, regression true (2026-10-31)
@@ -108,7 +126,7 @@ liefert nur pending.
 Nicht python -m pytest (Binary python fehlt).
 Nicht mypy . (zaehlt tests/, mehr Fehler).
 
-## Baseline-Hinweis (2026-10-31)
+## Baseline-Hinweis (2026-11-02)
 
 docs/HANDOFF-BASELINE.md und tools/quality_gate.py fuehren eine Baseline
 aus VOR dem Loop-Neubau (pytest 1435, ruff 13, mypy 11, AST 6, Katalog 162).

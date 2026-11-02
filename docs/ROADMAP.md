@@ -1,6 +1,6 @@
 # Roadmap — Werkstatt
 
-Stand: 2026-11-02 (nach Skills-Welle, UI-Vision, OP-Bereinigung).
+Stand: 2026-11-02 abends (UI-Welle + Doku-Aktualisierung).
 Uebersicht. Details in `STATUS.md` (Todo)
 und `PROGRESS.md` (Erledigt).
 
@@ -57,7 +57,7 @@ Rollen: Explorer, Planner, Builder, Verify, Reviewer, Human-Gate.
 - M-474: ADaPT bei `reviewer_high_bug_fail_closed`.
 - M-475: `get_next_task` liefert nur `pending`.
 
-### Phase 21: Doku-Diataxis 🔧 (IN ARBEIT)
+### Phase 21: Doku-Diataxis ✅ (2026-11-02)
 
 - `docs/index.md` — Diátaxis-Map (angelegt).
 - `AGENTS.md` — Routing (60 Zeilen).
@@ -133,7 +133,7 @@ Bugs aus Live-Test 3 (OP-034..OP-038) in `docs/STATUS.md`:
 pytest-Regression, Datum aus UTC, Reflection-Deduplizierung,
 Reviewer-Signal, Commit-Message-Builder.
 
-### Phase 30: Web-Dashboard & Interactive UI 🟢 (VISION)
+### Phase 30: Web-Dashboard & Interactive UI 🔧 (Gerüst fertig 2026-11-02)
 
 **Ziel:** Ein echtes Dashboard, das die Werkstatt visuell begreifbar macht.
 Referenz: Screenshot vom 2026-11-02 (Web-Interface mit Chat und Terminal).
@@ -163,6 +163,15 @@ Referenz: Screenshot vom 2026-11-02 (Web-Interface mit Chat und Terminal).
   `loop_renderer` muss multi-projekt-faehig werden.
 - Admin-KI uebergreift Tabs (darf alle Projekte lesen, Meta-Fragen
   beantworten). Bau-Chat ist tab-gebunden.
+
+**Status 2026-11-02 abends:**
+- Backend (OP-074): ✅ FastAPI mit WebSockets, 3 REST-Routen, 2 Tests
+- Terminal-Proxy (OP-075): ✅ loop_renderer → WebSocket-Bridge
+- Chat (OP-076): ✅ Chat-Fenster mit Maximize/Minimize
+- Audit (OP-077): ✅ REST-History + WebSocket-Live
+- Layout (OP-078): ✅ Tabs + Grid + History-Sidebar
+- Offen: Verdrahtung (layout.html → Backend), FastAPI StaticFiles-Mount,
+  uvicorn-Start-Anleitung. Naechster OP.
 
 **Technische Umsetzung (existierende OPs, erweitert):**
 - OP-030: Web-Backend (FastAPI, Web-Sockets pro Projekt, Tab-Routing).

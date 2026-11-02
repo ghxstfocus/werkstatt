@@ -274,30 +274,11 @@ tragen. Roadmap-Phasen sind grobe Etappen aus der Vor-Session
 - **Tests:** Unit-Tests fuer die Validierungs-Logik und den Parser der Roadmap.
 - **Blockiert von:** —
 
-### OP-076: Zwei Chat-Fenster rechts mit Maximize/Minimize
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/web/chat.py` (neu), `static/chat.js` (neu), `static/chat.css` (neu), `tests/test_chat_windows.py` (neu)
-- **Akzeptanzkriterien:** Rechts sind zwei unabhaengige Chat-Fenster (z.B. Architect-Chat und Builder-Chat) sichtbar. Jedes Fenster hat Maximize/Minimize-Buttons; der Zustand (maximiert/minimiert) wird pro Tab im Frontend-State gehalten und ueberlebt Tab-Wechsel. Intent-Parsing (`plan`, `build`, `approve`, `chat_only`) laeuft serverseitig in `chat.py`; Bestaetigung (j/n) ist per Chat moeglich.
-- **Tests:** `tests/test_chat_windows.py::test_maximize_minimize_state`, `tests/test_chat_windows.py::test_intent_parsing`
-- **Blockiert von:** OP-074
-
-### OP-077: Audit-Panel unten mit Live-Stream und History-Sidebar (REST)
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/web/audit_panel.py` (neu), `static/audit.js` (neu), `tests/test_audit_panel.py` (neu)
-- **Akzeptanzkriterien:** Unten zeigt ein Audit-Panel die `audit()`-Events live (ueber WebSocket des aktiven Tabs). Eine History-Sidebar laedt vergangene Events per REST (`GET /api/projects/{name}/audit?limit=...`) nach. Live-Stream und History sind visuell getrennt; History laesst sich filtern (kind, run_id).
-- **Tests:** `tests/test_audit_panel.py::test_live_stream_und_history`, `tests/test_audit_panel.py::test_history_rest_filter`
-- **Blockiert von:** OP-074
-
-### OP-078: UI-Layout — Chrome-Tabs oben, Terminal links, Chat rechts, Audit unten
-- **Status:** open
-- **Betroffene Dateien:** `static/layout.html` (neu), `static/layout.css` (neu), `static/tabs.js` (neu), `tests/test_ui_layout.py` (neu)
-- **Akzeptanzkriterien:** Chrome-artige Tabs oben erlauben Oeffnen/Schliessen von Projekten. Layout: Terminal-Proxy links, zwei Chat-Fenster rechts, Audit-Panel unten. Tab-Wechsel synchronisiert alle drei Bereiche (Terminal, Chat, Audit) auf den State des gewaehlten Projekts/Tabs. Schliessen eines Tabs beendet den zugehoerigen WS-Kanal und den Loop-Subprozess, sofern kein anderer Tab dasselbe Projekt nutzt.
-- **Tests:** `tests/test_ui_layout.py::test_tab_wechsel_synchronisiert_bereiche`, `tests/test_ui_layout.py::test_tab_schliessen_stoppt_ws`
-- **Blockiert von:** OP-074, OP-075, OP-076, OP-077
-
-
 ## Erledigt (Auto-Log)
 
+- 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)
+- 2026-11-02 | OP-077 | done | Audit-Panel (92b3b69)
+- 2026-11-02 | OP-078 | done | UI-Layout (0f916f9..e75bc7d)
 - 2026-10-30 | OP-071 | `c1e8377`: revertiert
 - 2026-11-02 | OP-003 | wontfix (security-ai-Drift)
 - 2026-11-02 | OP-030 | wontfix (Duplikat zu OP-074)

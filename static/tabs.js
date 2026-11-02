@@ -140,4 +140,100 @@
   // Start: ein Demo-Tab
   var startId = neuerTab("werkstatt");
   wechsle(startId);
+
+  // ============================================================
+  // Store-API (Drift-Guard gegen tests/test_ui_layout.py::Spiegel)
+  // Reine Zustandsfunktionen, kein DOM-Zugriff.
+  // ============================================================
+
+  function neuer_zustand(fabrik) {
+    return {
+      fabrik: fabrik,
+      tabs: {},
+      reihenfolge: [],
+      aktiv: null,
+      kanaele: {},  // projekt -> refcount
+    };
+  }
+
+  function kanal_holen(zustand, projekt) {
+    var vorhanden = zustand.fabrik.hole_kanal(projekt);
+    if (vorhanden) {
+      zustand.kanaele[projekt] = (zustand.kanaele[projekt] || 0) + 1;
+      return vorhanden;
+    }
+    var kanal = zustand.fabrik.neuer_kanal(projekt);
+    zustand.kanaele[projekt] = 1;
+    return kanal;
+  }
+
+  function kanal_freigeben(zustand, projekt) {
+    var anzahl = zustand.kanaele[projekt] || 0;
+    if (anzahl <= 1) {
+      delete zustand.kanaele[projekt];
+      if (zustand.fabrik && typeof zustand.fabrik.schliesse_kanal === "function") {
+        zustand.fabrik.schliesse_kanal(projekt);
+      }
+      return false;
+    }
+    zustand.kanaele[projekt] = anzahl - 1;
+    return true;
+  }
+
+  function oeffne_tab(zustand, projekt, titel) {
+    var id = "tab-" + (Object.keys(zustand.tabs).length + 1);
+    zustand.tabs[id] = {
+      id: id,
+      projekt: projekt,
+      titel: titel || projekt,
+    };
+    zustand.reihenfolge.push(id);
+    kanal_holen(zustand, projekt);
+    return zustand.tabs[id];
+  }
+
+  function wechsle_tab(zustand, tabId) {
+    if (!zustand.tabs[tabId]) {
+      return false;
+    }
+    zustand.aktiv = tabId;
+    return true;
+  }
+
+  function schliesse_tab(zustand, tabId) {
+    var tab = zustand.tabs[tabId];
+    if (!tab) {
+      return false;
+    }
+    kanal_freigeben(zustand, tab.projekt);
+    delete zustand.tabs[tabId];
+    zustand.reihenfolge = zustand.reihenfolge.filter(function (x) {
+      return x !== tabId;
+    });
+    if (zustand.aktiv === tabId) {
+      zustand.aktiv = zustand.reihenfolge[0] || null;
+    }
+    return true;
+  }
+
+  function synchronisiere(zustand) {
+    var aktiv = zustand.aktiv ? zustand.tabs[zustand.aktiv] : null;
+    return {
+      tabs: Object.keys(zustand.tabs),
+      aktiv: zustand.aktiv,
+      projekt: aktiv ? aktiv.projekt : null,
+    };
+  }
+
+  // Export fuer Drift-Guard (Python-Spiegelung) und externe Nutzung
+  window.WerkstattTabs = {
+    neuer_zustand: neuer_zustand,
+    kanal_holen: kanal_holen,
+    kanal_freigeben: kanal_freigeben,
+    oeffne_tab: oeffne_tab,
+    wechsle_tab: wechsle_tab,
+    schliesse_tab: schliesse_tab,
+    synchronisiere: synchronisiere,
+  };
+
 })();
