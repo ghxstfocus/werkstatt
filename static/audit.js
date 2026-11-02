@@ -250,6 +250,46 @@ export function createAuditPanel(options) {
     _verbinde();
   }
 
+  async function oeffne(projekt) {
+    const ziel = projekt ?? "";
+    if (aktuellesProjekt === ziel && (verbunden || socket !== null)) {
+      return;
+    }
+    aktuellesProjekt = ziel;
+    liveEvents = [];
+    reconnectVersuche = 0;
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    _renderLive();
+    await ladeHistory();
+    _verbinde();
+  }
+
+  function schliesse() {
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (socket) {
+      try {
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onerror = null;
+        socket.onclose = null;
+        socket.close(1000, "tab-wechsel");
+      } catch (err) {
+        console.warn("audit: socket close fehlgeschlagen", err);
+      }
+      socket = null;
+    }
+    verbunden = false;
+    aktuellesProjekt = null;
+    liveEvents = [];
+    _renderLive();
+  }
+
   async function ladeHistory() {
     if (!aktuellesProjekt) {
       return;
@@ -348,5 +388,25 @@ export function createAuditPanel(options) {
     setzeProjekt,
     ladeHistory,
     zerstoere,
+    oeffne,
+    schliesse,
+  };
+}
+
+if (typeof window !== "undefined") {
+  window.WerkstattAudit = {
+    oeffne: (projekt) => {
+      const instanz = window.__werkstattAuditInstanz;
+      if (instanz) {
+        return instanz.oeffne(projekt);
+      }
+      return undefined;
+    },
+    schliesse: () => {
+      const instanz = window.__werkstattAuditInstanz;
+      if (instanz) {
+        instanz.schliesse();
+      }
+    },
   };
 }

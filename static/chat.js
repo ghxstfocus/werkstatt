@@ -5,6 +5,7 @@
   const CHAT_LABELS = { admin: "Architect", bau: "Builder" };
   const API_BASIS = "/api/chat";
   const zustandProTab = {};
+  let aktuellerChat = null;
 
   function holeTabZustand(tabId) {
     if (!zustandProTab[tabId]) {
@@ -177,11 +178,105 @@
       });
   }
 
+  function holeSendeButton() {
+    return document.querySelector(".chat-panel__senden");
+  }
+
+  function holeNachrichtenfenster() {
+    return document.querySelector(".chat-panel__body");
+  }
+
+  function haengeBlase(text, klasse) {
+    const fenster = holeNachrichtenfenster();
+    if (!fenster) {
+      return;
+    }
+    const blase = document.createElement("div");
+    blase.className = "chat-blase " + (klasse || "");
+    blase.textContent = text;
+    fenster.appendChild(blase);
+  }
+
+  function setze_chat(chat_id) {
+    if (!chat_id) {
+      schliesse();
+      return;
+    }
+    aktuellerChat = chat_id;
+    const fenster = holeNachrichtenfenster();
+    if (fenster) {
+      fenster.innerHTML = "";
+    }
+    const button = holeSendeButton();
+    if (button) {
+      button.disabled = false;
+    }
+  }
+
+  function schliesse() {
+    aktuellerChat = null;
+    const button = holeSendeButton();
+    if (button) {
+      button.disabled = true;
+    }
+  }
+
+  function sende() {
+    const textarea = document.querySelector(".chat-panel__textarea");
+    const eingabe = textarea ? textarea.value.trim() : "";
+    if (!eingabe) {
+      return Promise.resolve(false);
+    }
+    if (!aktuellerChat) {
+      haengeBlase("Kein Chat ausgewaehlt.", "chat-blase--hinweis");
+      return Promise.resolve(false);
+    }
+    haengeBlase(eingabe, "chat-blase--nutzer");
+    if (textarea) {
+      textarea.disabled = true;
+    }
+    return fetch("/api/chat/" + encodeURIComponent(aktuellerChat), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: eingabe }),
+    })
+      .then(function (response) {
+        if (!response.ok) {
+          haengeBlase(
+            "Fehler: " + response.status,
+            "chat-blase--fehler"
+          );
+          return false;
+        }
+        return response.json().then(function (antwort) {
+          const inhalt =
+            antwort.antwort ?? antwort.text ?? JSON.stringify(antwort);
+          haengeBlase(inhalt, "chat-blase--antwort");
+          if (textarea) {
+            textarea.value = "";
+          }
+          return true;
+        });
+      })
+      .catch(function () {
+        haengeBlase("Fehler: Netzwerk", "chat-blase--fehler");
+        return false;
+      })
+      .finally(function () {
+        if (textarea) {
+          textarea.disabled = false;
+        }
+      });
+  }
+
   window.WerkstattChat = {
     renderChats: renderChats,
     toggleMaximize: toggleMaximize,
     toggleMinimize: toggleMinimize,
     sendeNachricht: sendeNachricht,
     holeTabZustand: holeTabZustand,
+    setze_chat: setze_chat,
+    schliesse: schliesse,
+    sende: sende,
   };
 })();

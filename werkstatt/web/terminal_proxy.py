@@ -11,11 +11,11 @@ import asyncio
 import json
 import re
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
+import yaml
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-
-from werkstatt.loop_renderer import get_emitter
 
 __all__ = ["mount_terminal_proxy", "router"]
 
@@ -23,6 +23,97 @@ router = APIRouter()
 
 _PROJECT_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _QUEUE_MAXSIZE = 1000
+
+_AUDIT_GLOB = "agent-pipeline-*.jsonl"
+_POLL_INTERVALL_S: float = 1.0
+_MAX_ZEILEN_PRO_TICK: int = 500
+_AKTIVE_VERBINDUNGEN: dict[str, int] = {}
+
+
+def _audit_log_verzeichnis(project: str) -> Path:
+    """Ermittelt das Audit-Log-Verzeichnis fuer ein Projekt.
+
+    Liest ``projects/.yaml`` (relativ zum CWD) und entnimmt das Feld
+    ``home``. Faellt bei fehlender Datei, fehlendem Feld oder
+    Parse-Fehler auf ``Path.cwd() / "audit-logs"`` zurueck.
+    """
+    try:
+        konfig = Path("projects") / ".yaml"
+        with konfig.open(encoding="utf-8") as f:
+            daten = yaml.safe_load(f)
+        home = daten["home"]
+        return Path(home) / "audit-logs"
+    except (OSError, yaml.YAMLError, KeyError, TypeError):
+        return Path.cwd() / "audit-logs"
+
+
+def _normalisiere_zeile(zeile: str) -> dict[str, Any] | None:
+    """Normalisiert eine JSONL-Zeile zu einem einheitlichen Event-Schema."""
+    roh = zeile.strip()
+    if not roh:
+        return None
+    try:
+        obj = json.loads(roh)
+    except json.JSONDecodeError:
+        return {"typ": "audit", "event": {"typ": "log", "text": roh}}
+    return {"typ": "audit", "event": obj}
+
+
+def _lese_neue_zeilen(pfad: Path, offset: int) -> tuple[list[str], int]:
+    """Liest neue vollstaendige Zeilen ab ``offset`` (Tail-Semantik)."""
+    try:
+        with pfad.open(encoding="utf-8", errors="replace") as f:
+            f.seek(offset)
+            zeilen: list[str] = []
+            letzte_start = offset
+            for _ in range(_MAX_ZEILEN_PRO_TICK):
+                start = f.tell()
+                zeile = f.readline()
+                if not zeile:
+                    return zeilen, f.tell()
+                if not zeile.endswith("\n"):
+                    return zeilen, start
+                zeilen.append(zeile)
+                letzte_start = f.tell()
+            return zeilen, letzte_start
+    except OSError:
+        return [], offset
+
+
+async def _tail_poll_queue(
+    verzeichnis: Path,
+    queue: asyncio.Queue[dict[str, Any]],
+    stopp: asyncio.Event,
+) -> None:
+    """Pollt das Audit-Log-Verzeichnis und schiebt neue Events in die Queue."""
+    aktueller_pfad: Path | None = None
+    inode: int = -1
+    offset: int = 0
+    while not stopp.is_set():
+        try:
+            kandidaten = sorted(verzeichnis.glob(_AUDIT_GLOB))
+        except OSError:
+            kandidaten = []
+        if kandidaten:
+            neuester = kandidaten[-1]
+            try:
+                neuer_inode = neuester.stat().st_ino
+            except OSError:
+                neuer_inode = -1
+            if neuester != aktueller_pfad or neuer_inode != inode:
+                aktueller_pfad = neuester
+                inode = neuer_inode
+                offset = 0
+            if aktueller_pfad is not None:
+                zeilen, offset = _lese_neue_zeilen(aktueller_pfad, offset)
+                for zeile in zeilen:
+                    event = _normalisiere_zeile(zeile)
+                    if event is not None:
+                        _safe_put(queue, event)
+        try:
+            await asyncio.wait_for(stopp.wait(), timeout=_POLL_INTERVALL_S)
+        except TimeoutError:
+            continue
 
 
 def _safe_put(
@@ -62,7 +153,12 @@ def _make_bridge(
 
 @router.websocket("/ws/terminal/{project}")
 async def terminal_ws(websocket: WebSocket, project: str) -> None:
-    """Streamt Terminal-Events eines Projekts als JSON-Text ueber WebSocket."""
+    """Streamt Audit-Events eines Projekts als JSON-Text ueber WebSocket.
+
+    Transportweg: Tail-Poll auf ``audit-logs/agent-pipeline-*.jsonl``.
+    Der Loop laeuft in einem anderen Prozess, deshalb kein In-Process-
+    Emitter — die Datei ist die einzige verlaessliche Quelle.
+    """
     if not _PROJECT_RE.match(project):
         await websocket.close(code=1008)
         return
@@ -70,8 +166,11 @@ async def terminal_ws(websocket: WebSocket, project: str) -> None:
     await websocket.accept()
 
     queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_QUEUE_MAXSIZE)
-    loop = asyncio.get_running_loop()
-    unsubscribe = get_emitter(project).subscribe(_make_bridge(loop, queue))
+    stopp = asyncio.Event()
+    verzeichnis = _audit_log_verzeichnis(project)
+
+    # Verbindungszaehler fuer Tab-Lifecycle (Frontend + Test).
+    _AKTIVE_VERBINDUNGEN[project] = _AKTIVE_VERBINDUNGEN.get(project, 0) + 1
 
     async def _sender() -> None:
         while True:
@@ -82,6 +181,9 @@ async def terminal_ws(websocket: WebSocket, project: str) -> None:
         while True:
             await websocket.receive_text()
 
+    poll_task = asyncio.create_task(
+        _tail_poll_queue(verzeichnis, queue, stopp)
+    )
     try:
         done, pending = await asyncio.wait(
             {asyncio.create_task(_sender()), asyncio.create_task(_receiver())},
@@ -96,7 +198,15 @@ async def terminal_ws(websocket: WebSocket, project: str) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        unsubscribe()
+        stopp.set()
+        poll_task.cancel()
+        try:
+            await poll_task
+        except BaseException:  # noqa: BLE001, S110 — Cleanup, Fehler egal
+            pass
+        _AKTIVE_VERBINDUNGEN[project] = max(
+            0, _AKTIVE_VERBINDUNGEN.get(project, 1) - 1
+        )
 
 
 def mount_terminal_proxy(app: Any) -> None:

@@ -192,11 +192,42 @@
     return zustand.tabs[id];
   }
 
+  function _tab_ressourcen_schliessen(tab) {
+    if (!tab) {
+      return;
+    }
+    if (tab.typ === "terminal") {
+      window.WerkstattTerminal?.schliesse?.();
+    } else if (tab.typ === "audit") {
+      window.WerkstattAudit?.schliesse?.();
+    } else if (tab.typ === "chat") {
+      window.WerkstattChat?.schliesse?.();
+    }
+  }
+
+  function _tab_ressourcen_oeffnen(tab) {
+    if (!tab) {
+      return;
+    }
+    if (tab.typ === "terminal") {
+      window.WerkstattTerminal?.oeffne?.(tab.projekt);
+    } else if (tab.typ === "audit") {
+      window.WerkstattAudit?.oeffne?.(tab.projekt);
+    } else if (tab.typ === "chat") {
+      window.WerkstattChat?.setze_chat?.(tab.chat_id);
+    }
+  }
+
   function wechsle_tab(zustand, tabId) {
     if (!zustand.tabs[tabId]) {
       return false;
     }
+    var vorher = zustand.aktiv ? zustand.tabs[zustand.aktiv] : null;
+    // OP-083: erst schliessen
+    _tab_ressourcen_schliessen(vorher);
     zustand.aktiv = tabId;
+    // OP-083: dann oeffnen
+    _tab_ressourcen_oeffnen(zustand.tabs[tabId]);
     return true;
   }
 
@@ -205,13 +236,18 @@
     if (!tab) {
       return false;
     }
+    var war_aktiv = zustand.aktiv === tabId;
     kanal_freigeben(zustand, tab.projekt);
     delete zustand.tabs[tabId];
     zustand.reihenfolge = zustand.reihenfolge.filter(function (x) {
       return x !== tabId;
     });
-    if (zustand.aktiv === tabId) {
+    if (war_aktiv) {
       zustand.aktiv = zustand.reihenfolge[0] || null;
+      _tab_ressourcen_schliessen(tab);
+      if (zustand.aktiv) {
+        _tab_ressourcen_oeffnen(zustand.tabs[zustand.aktiv]);
+      }
     }
     return true;
   }

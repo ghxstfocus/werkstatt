@@ -104,6 +104,65 @@ function verbindeTerminal(project, options) {
   };
 }
 
+let socket = null;
+let aktuellesProjekt = null;
+let zeilenZaehler = 0;
+
+function rendereEvent(daten) {
+  let event = daten;
+  if (daten && daten.typ === "audit" && daten.event) {
+    event = daten.event;
+  }
+  let text;
+  if (event && event.typ === "log") {
+    text = event.text || "";
+  } else if (event && (event.text || event.zeile)) {
+    text = event.text || event.zeile;
+  } else {
+    text = JSON.stringify(event);
+  }
+  haengeZeileAn(text);
+  zeilenZaehler += 1;
+}
+
+function schliesse() {
+  if (socket) {
+    socket.onmessage = null;
+    if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+      socket.close(1000, "tab-wechsel");
+    }
+    socket = null;
+  }
+  aktuellesProjekt = null;
+  zeilenZaehler = 0;
+}
+
+function oeffne(project) {
+  if (
+    socket &&
+    aktuellesProjekt === project &&
+    socket.readyState === WebSocket.OPEN
+  ) {
+    return;
+  }
+  schliesse();
+  aktuellesProjekt = project;
+  const protokoll = location.protocol === "https:" ? "wss:" : "ws:";
+  socket = new WebSocket(
+    `${protokoll}//${location.host}/ws/terminal/${encodeURIComponent(project)}`
+  );
+  socket.onmessage = function (event) {
+    let daten;
+    try {
+      daten = JSON.parse(event.data);
+    } catch (err) {
+      console.error("terminal: ungueltiges JSON", err);
+      return;
+    }
+    rendereEvent(daten);
+  };
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   const pre = document.getElementById("terminal");
   if (!pre) {
@@ -111,6 +170,8 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   const project = pre.dataset.project;
   if (project) {
-    verbindeTerminal(project);
+    oeffne(project);
   }
 });
+
+window.WerkstattTerminal = { oeffne, schliesse };
