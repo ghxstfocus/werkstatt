@@ -594,8 +594,18 @@ def _phase_plan_and_preflight(
                 # Revidierter Plan gebaut, nochmal pruefen
                 _plan2_ok = _plan_gate(state)
                 if _plan2_ok:
+                    # Welle H v2: nach Reflection nochmal human_gate_plan
+                    _rc_plan2 = _human_gate_plan(
+                        state,
+                        auto_approve=getattr(state, "auto_approve", False),
+                    )
+                    if _rc_plan2 != 0:
+                        audit("loop_plan_reject_fail_closed",
+                              {"reason": "human_gate_reflection_rejected"},
+                              pd, pn)
+                        return 1, False
                     audit("loop_plan_gate_approved",
-                          {"via": "reflection"}, pd, pn)
+                          {"via": "reflection_and_human"}, pd, pn)
                 else:
                     audit("loop_plan_reject_fail_closed",
                           {"reason": "reflection_plan_unvollstaendig"}, pd, pn)
