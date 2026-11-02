@@ -137,6 +137,8 @@ class RunState:
     # zu builder_model. Frontmatter wird heute nicht gelesen.
     planner_model: str = "deepseek-chat"
     planner_modus: str = "manual"
+    scout_api_auszug: dict = field(default_factory=dict)
+
     # M-WelleB (2026-11-02): Content-Check-Bestätigung.
     # True = Auftrag-bereits-erfuellt wurde durch DETERMINISTISCHEN
     # Content-Check bestätigt (nicht durch LLM-Urteil).

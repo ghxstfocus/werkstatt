@@ -1459,6 +1459,11 @@ def run_planner(state: RunState) -> bool:
     if _scout_report:
         _scout_auftrag = _scout_report.get("auftrag_prosa") or ""
         _scout_apis = _scout_report.get("api_auszug") or {}
+        try:
+            state.scout_api_auszug = _scout_apis  # type: ignore[attr-defined]
+        except (AttributeError, TypeError):
+            pass
+
         _scout_risiken = _scout_report.get("risiken") or []
         if _scout_auftrag:
             user_content += (
