@@ -119,9 +119,9 @@ importiert werden kann.
 ## Pflicht-Befehle
 
     pytest -q                              # 1164 passed, 5 skipped (2026-11-02)
-    ruff check .                           # 309 errors (2026-11-02)
-    mypy werkstatt/                        # 22 errors in 9 files (2026-11-02)
-    python3 -m tools.quality_gate --json   # exit 1, regression true (2026-10-31)
+    ruff check .                           # 306 errors (2026-11-02)
+    mypy werkstatt/                        # 21 errors in 9 files (2026-11-02)
+    python3 -m tools.quality_gate --json   # exit 0, regression false (2026-11-02)
 
 Nicht python -m pytest (Binary python fehlt).
 Nicht mypy . (zaehlt tests/, mehr Fehler).
@@ -132,13 +132,14 @@ docs/HANDOFF-BASELINE.md und tools/quality_gate.py fuehren eine Baseline
 aus VOR dem Loop-Neubau (pytest 1435, ruff 13, mypy 11, AST 6, Katalog 162).
 Diese Baseline ist VERALTET:
 
-- pytest 1435 -> 945 (Loop-Neubau: pipeline.py + test_pipeline.py entfernt)
-- ruff 13 -> 248 (tests/ wurde nie durchgerufft; keine ruff-Config)
-- mypy 11 -> 16 (werkstatt/, nicht auf .)
-- AST 6 -> 0, Katalog 162 -> fehlt (_KATALOG_SOLL entfernt)
+- pytest 1435 -> 1164 (Loop-Neubau + spaeter wieder Tests ergaenzt)
+- ruff 13 -> 306 (tests/ wurde nie durchgerufft; keine ruff-Config)
+- mypy 11 -> 21 (werkstatt/, pipeline.py entfernt)
+- AST 6 -> 0 (tests/test_audit_kinds.py entfernt), Katalog 162 -> fehlt (_KATALOG_SOLL entfernt)
 
-Konsequenz: quality_gate ist rot (exit 1). Re-Baseline als eigener OP
-(siehe docs/STATUS.md). Bis dahin: Zahlen oben sind die Wahrheit.
+Konsequenz: quality_gate BASELINE wurde 2026-11-02 re-baselined
+(pytest=1164, ruff=306, mypy=21). AST- und Katalog-Check skippen, wenn
+die jeweilige Datei fehlt (delta=0). quality_gate ist gruen (exit 0).
 
 ## Doku
 

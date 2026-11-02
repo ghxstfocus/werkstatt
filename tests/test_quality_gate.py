@@ -35,9 +35,9 @@ def _mock_run_factory(pytest_output: str):
         if cmd_str.startswith("pytest"):
             return 0, pytest_output
         if "ruff" in cmd_str:
-            return 0, "Found 13 errors."
+            return 0, f"Found {quality_gate.BASELINE['ruff']} errors."
         if "mypy" in cmd_str:
-            return 0, "Found 11 errors."
+            return 0, f"Found {quality_gate.BASELINE['mypy']} errors."
         return 0, ""
     return _mock_run
 
