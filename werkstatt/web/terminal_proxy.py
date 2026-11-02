@@ -30,6 +30,34 @@ _MAX_ZEILEN_PRO_TICK: int = 500
 _AKTIVE_VERBINDUNGEN: dict[str, int] = {}
 
 
+
+# Fortschritts-Filter: nur diese Kinds kommen ins Terminal-Panel.
+# Debug-Rauschen (builder_file_context, llm_call, command_executed)
+# bleibt im Audit-Panel, nicht im Terminal.
+_TERMINAL_KIND_PREFIXE = (
+    "loop_task_", "loop_phase", "loop_verify_",
+    "loop_reflection_", "loop_patch_", "loop_plan_gate_",
+    "loop_human_gate_", "loop_erfolg", "loop_rollback",
+    "loop_skills_geladen", "loop_resume", "loop_fresh",
+    "planner_plan_erstellt", "planner_split",
+    "planner_architect_ok", "planner_atomarer_plan",
+    "planner_atomarer_plan_verworfen",
+    "reviewer_phase_approved", "reviewer_phase_rejected",
+    "explorer_messung", "explorer_result",
+    "loop_reviewer_", "loop_builder_",
+)
+
+
+def _ist_terminal_wuerdig(event: dict[str, Any]) -> bool:
+    """True = Fortschritt, False = Debug-Noise."""
+    kind = str(event.get("kind", "") or "")
+    if not kind:
+        return False
+    for prefix in _TERMINAL_KIND_PREFIXE:
+        if kind.startswith(prefix):
+            return True
+    return False
+
 def _audit_log_verzeichnis(project: str) -> Path:
     """Ermittelt das Audit-Log-Verzeichnis fuer ein Projekt.
 
@@ -89,6 +117,9 @@ async def _tail_poll_queue(
     aktueller_pfad: Path | None = None
     inode: int = -1
     offset: int = 0
+    # Beim ersten Fund ans Datei-Ende springen: kein Replay historischer
+    # Zeilen. Historie zeigt das Audit-Panel (History-Sidebar via REST).
+    _erster_fund = True
     while not stopp.is_set():
         try:
             kandidaten = sorted(verzeichnis.glob(_AUDIT_GLOB))
@@ -108,6 +139,10 @@ async def _tail_poll_queue(
                 zeilen, offset = _lese_neue_zeilen(aktueller_pfad, offset)
                 for zeile in zeilen:
                     event = _normalisiere_zeile(zeile)
+
+                    if event is not None and not _ist_terminal_wuerdig(event.get("event", {})):
+
+                        event = None
                     if event is not None:
                         _safe_put(queue, event)
         try:

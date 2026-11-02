@@ -145,29 +145,6 @@ def get_audit(
     return {"project": name, "events": gefiltert, "anzahl": len(gefiltert)}
 
 
-@router.websocket("/api/projects/{name}/audit/stream")
-async def ws_audit_stream(websocket: WebSocket, name: str) -> None:
-    """WS-Live-Stream: sendet neue Audit-Events eines Projekts."""
-    await websocket.accept()
-    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=WS_QUEUE_MAX)
-    with _bus_lock:
-        _abonnenten.add(queue)
-        backlog = list(_live_puffer)
-    try:
-        for event in backlog:
-            await websocket.send_json(event)
-        while True:
-            event = await queue.get()
-            await websocket.send_json(event)
-    except WebSocketDisconnect:
-        pass
-    finally:
-        with _bus_lock:
-            _abonnenten.discard(queue)
-
-
-_home_kontext: Path | None = None
-
 
 def _aktuelles_home() -> Path:
     """Liefert das Projekt-Home fuer Audit-Logs.
@@ -201,3 +178,98 @@ def create_app(
         except Exception:
             pass
     return app
+
+# File-Tailing fuer Audit-Live-Stream (Stellschraube 2026-11-03).
+# Der In-Process-Bus oben funktioniert nur wenn ein TerminalEmitter
+# subscribed ist — d.h. nur wenn der Loop im selben Prozess laeuft.
+# Fuer den Browser wollen wir Events unabhaengig vom Loop-Prozess sehen:
+# einfach die audit-logs/*.jsonl tail-en.
+
+async def _tail_audit_logs(
+    verzeichnis: Path,
+    queue: asyncio.Queue[dict[str, Any]],
+    stopp: asyncio.Event,
+) -> None:
+    """Tail-Poll auf audit-logs/*.jsonl. Streamt nur NEUE Zeilen."""
+    aktueller_pfad: Path | None = None
+    inode: int = -1
+    offset: int = 0
+    _erster_fund = True
+    while not stopp.is_set():
+        try:
+            kandidaten = sorted(verzeichnis.glob("agent-pipeline-*.jsonl"))
+        except OSError:
+            kandidaten = []
+        if kandidaten:
+            neuester = kandidaten[-1]
+            try:
+                _inode = neuester.stat().st_ino
+            except OSError:
+                _inode = -1
+            if aktueller_pfad != neuester or inode != _inode:
+                aktueller_pfad = neuester
+                inode = _inode
+                if _erster_fund:
+                    try:
+                        offset = neuester.stat().st_size
+                    except OSError:
+                        offset = 0
+                    _erster_fund = False
+                else:
+                    offset = 0
+            try:
+                with neuester.open(encoding="utf-8", errors="replace") as f:
+                    f.seek(offset)
+                    for _ in range(200):
+                        zeile = f.readline()
+                        if not zeile:
+                            break
+                        if not zeile.endswith("\n"):
+                            break
+                        offset = f.tell()
+                        zeile = zeile.strip()
+                        if not zeile:
+                            continue
+                        try:
+                            event = json.loads(zeile)
+                        except json.JSONDecodeError:
+                            continue
+                        if isinstance(event, dict):
+                            try:
+                                queue.put_nowait(event)
+                            except asyncio.QueueFull:
+                                pass
+            except OSError:
+                pass
+        try:
+            await asyncio.wait_for(stopp.wait(), timeout=1.0)
+        except asyncio.TimeoutError:
+            pass
+
+
+@router.websocket("/api/projects/{name}/audit/stream")
+async def ws_audit_stream_filetail(websocket: WebSocket, name: str) -> None:
+    """WS-Live-Stream via File-Tailing. Unabhaengig vom Loop-Prozess."""
+    await websocket.accept()
+    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=WS_QUEUE_MAX)
+    stopp = asyncio.Event()
+    home = _aktuelles_home()
+    verzeichnis = home / AUDIT_UNTERVERZEICHNIS
+    poll_task = asyncio.create_task(
+        _tail_audit_logs(verzeichnis, queue, stopp)
+    )
+    try:
+        while True:
+            event = await queue.get()
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        stopp.set()
+        poll_task.cancel()
+        try:
+            await poll_task
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            pass
+
+
