@@ -1,0 +1,48 @@
+"""Tests fuer die Delete-Zone-Sektion in STATUS.md."""
+
+from __future__ import annotations
+
+from werkstatt.committer import _delete_zone_op_append
+
+
+def test_legt_sektion_an(tmp_path):
+    status = tmp_path / "STATUS.md"
+    status.write_text("", encoding="utf-8")
+
+    rc = _delete_zone_op_append(status, "OP-999", "Test-Subject")
+
+    assert rc is True
+    text = status.read_text(encoding="utf-8")
+    assert text.count("## Delete-Zone") == 1
+    assert "| OP | Status | Notiz | Commit |" in text
+    assert "|---|---|---|---|" in text
+    assert "| OP-999 |" in text
+    assert text.index("| OP-999 |") > text.index("|---|---|---|---|")
+    assert text.endswith("\n")
+
+
+def test_sektion_existiert_bereits(tmp_path):
+    status = tmp_path / "STATUS.md"
+    status.write_text(
+        "# Status\n\nEine Zeile Inhalt.\n\n"
+        "## Delete-Zone\n\n"
+        "| OP | Status | Notiz | Commit |\n"
+        "|---|---|---|---|\n"
+        "| OP-001 | erledigt 2026-01-01 | alt | abc123 |\n\n"
+        "## Andere Sektion\n\nBleibt stehen.\n",
+        encoding="utf-8",
+    )
+
+    rc = _delete_zone_op_append(status, "OP-999", "Neuer Eintrag")
+
+    assert rc is True
+    text = status.read_text(encoding="utf-8")
+    assert text.count("## Delete-Zone") == 1
+    assert "| OP-999 |" in text
+    assert "# Status" in text
+    assert "Eine Zeile Inhalt." in text
+    assert "| OP-001 | erledigt 2026-01-01 | alt | abc123 |" in text
+    assert "## Andere Sektion" in text
+    assert "Bleibt stehen." in text
+    assert text.index("| OP-999 |") > text.index("| OP-001 |")
+    assert text.index("| OP-999 |") < text.index("## Andere Sektion")

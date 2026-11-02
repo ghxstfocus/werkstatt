@@ -41,7 +41,7 @@ def _task_fortschritt_block(pd: Path, pn: str) -> str:
             return ""
         if not _ps.load():
             return ""
-    except Exception:  # noqa: BLE001, S110
+    except Exception:  # noqa: BLE001
         return ""
     _tasks = _ps.data.get("tasks") or []
     if not _tasks:
@@ -118,31 +118,51 @@ def _status_md_op_entfernen(status_md_path: Path, op_nnn: str) -> tuple[bool, st
 
 
 def _delete_zone_op_append(status_md_path: Path, op_nnn: str, subject: str) -> bool:
-    """OP-048: Ergaenzt OP-NNN in der Delete-Zone-Tabelle."""
-    if not status_md_path.exists():
-        return False
-    txt = status_md_path.read_text(encoding="utf-8")
-    dz_pat = re.compile(r"^## Delete-Zone\s*$", re.MULTILINE)
-    dz_m = dz_pat.search(txt)
-    if not dz_m:
-        return False
-    end_m = re.compile(r"^## ", re.MULTILINE).search(txt, dz_m.end())
-    section_end = end_m.start() if end_m else len(txt)
-    section = txt[dz_m.end():section_end]
-    lines = section.split("\n")
-    last_idx = -1
-    for i, ln in enumerate(lines):
-        if ln.strip().startswith("|"):
-            last_idx = i
-    if last_idx < 0:
-        return False
+    """OP-048: Ergaenzt OP-NNN in der Delete-Zone-Tabelle.
+
+    Legt die Sektion '## Delete-Zone' an, falls sie fehlt.
+    """
     from datetime import date as _date_dz
     datum = _date_dz.today().isoformat()
     note = subject.replace("|", "-")[:60]
     new_row = f"| {op_nnn} | erledigt {datum} | {note} | - |"
-    lines.insert(last_idx + 1, new_row)
-    new_txt = txt[:dz_m.end()] + "\n".join(lines) + txt[section_end:]
-    status_md_path.write_text(new_txt, encoding="utf-8")
+    try:
+        text = (
+            status_md_path.read_text(encoding="utf-8")
+            if status_md_path.exists() else ""
+        )
+        lines = text.splitlines()
+        dz_idx = -1
+        for i, line in enumerate(lines):
+            if line.strip() == "## Delete-Zone":
+                dz_idx = i
+                break
+        if dz_idx < 0:
+            if text and not text.endswith("\n"):
+                text += "\n"
+            text += (
+                "## Delete-Zone\n\n"
+                "| OP | Status | Notiz | Commit |\n"
+                "|---|---|---|---|\n"
+                f"{new_row}\n"
+            )
+        else:
+            section_end = len(lines)
+            for j in range(dz_idx + 1, len(lines)):
+                if lines[j].startswith("## "):
+                    section_end = j
+                    break
+            last_idx = -1
+            for j in range(dz_idx, section_end):
+                if lines[j].startswith("|"):
+                    last_idx = j
+            if last_idx < 0:
+                return False
+            lines.insert(last_idx + 1, new_row)
+            text = "\n".join(lines) + "\n"
+        status_md_path.write_text(text, encoding="utf-8")
+    except OSError:
+        return False
     return True
 
 
