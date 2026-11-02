@@ -828,6 +828,23 @@ def _build_patches_fuer_datei(
         _refl_hint = _frh_b(getattr(state, 'last_verify_errors', []))
     except ImportError:
         _refl_hint = ''
+
+    # M-Wired-B (2026-11-02): Baseline-Error-Details an _refl_hint anhaengen
+    # Der Repair-Hint klassifiziert nur die Fehlerklasse. Der echte
+    # Fehlertext mit Zeilenkontext (aus _get_baseline_error_details) gibt
+    # dem Builder den Kontext fuer den konkreten Fix.
+    try:
+        from werkstatt.verify import _get_baseline_error_details
+        _baseline_details = _get_baseline_error_details(state) or ""
+        if _baseline_details.strip():
+            _refl_hint = (
+                _refl_hint.rstrip()
+                + "\n\n## BASELINE-ERRORS (voller Fehlertext mit Zeilenkontext)\n"
+                + _baseline_details[:3000]
+                + "\n"
+            )
+    except Exception:  # noqa: BLE001
+        pass
     _user = (
         f"## ZIELDATEI: {zieldatei}\n\n"
         f"{_module_hint}"
