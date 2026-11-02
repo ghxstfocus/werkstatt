@@ -1378,3 +1378,20 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - **Status:** phase_ende
 - **Info:** rc=1 tasks_ok=3/4
 
+
+## 2026-11-02T22:00:00+00:00 -- Manuelle Fixes + OP-Bereinigung (Nachtrag)
+- **Status:** done
+- **Info:** 19 OPs aus STATUS.md gelöscht (§5-Konvention). Der Loop
+  hat diese Fixes nicht gesehen (manuelle Commits), deshalb hier als
+  konsolidierter Nachtrag mit Verweis auf git log.
+- **OPs done:** 066 (Reviewer-Tree), 067 (pytest_changed), 072 (UI-
+  Zerlegung), 074 (FastAPI-Backend), 075 (Terminal-Proxy), 076 (Chat),
+  077 (Audit-Panel), 078 (UI-Layout), 079 (Markdown-Hunk), 080
+  (Python-PATCHES)
+- **OPs wontfix:** 003 (security-ai), 026 (Prompt-Block ist Skill),
+  030-033 (Duplikate zu 074-078), 039+041 (security-ai), 065 (Modell-
+  Latenz)
+- **Strukturelle Fixes (in git log):** verify_classify.py + Pre-Gate,
+  Architect-Konsistenz-Check, mypy als Verify-Stage, venv-Setup,
+  Skills-Welle-Aufräumarbeiten
+- **Verweis:** `git log --since="2026-11-02 00:00" --until="2026-11-03 00:00"`
