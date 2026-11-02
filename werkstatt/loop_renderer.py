@@ -20,10 +20,13 @@ API:
 """
 from __future__ import annotations
 
+import contextvars
 import os
 import sys
 import threading
-from datetime import datetime
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
 # === Modus-Wahl ===
 _render_mode_raw = os.environ.get("WERKSTATT_RENDER", "").lower()
@@ -67,9 +70,13 @@ except ImportError:
 # rich nur im pretty/live-Modus aktiv
 _use_rich = _HAS_RICH and RENDER_MODE in ("pretty", "live")
 if _use_rich:
-    _console = _RichConsole(force_terminal=(RENDER_MODE == "live"), width=100)
+    _console: _RichConsole = _RichConsole(
+        force_terminal=(RENDER_MODE == "live"), width=100,
+    )
 else:
-    _console = None
+    # Dummy-Console, die ins Nichts schreibt. Spart None-Checks an
+    # allen .print()-Aufrufen.
+    _console = _RichConsole(quiet=True)
 
 
 # === Farben (ANSI, nur bei TTY oder live/pretty) ===
@@ -90,13 +97,139 @@ def _bold(t: str) -> str: return _c("1", t)
 def _dim(t: str) -> str: return _c("2", t)
 
 
-def _emit(text: str) -> None:
-    """Zentraler Output. CI: mit Zeitstempel. Sonst: plain."""
+def _emit_raw(text: str) -> None:
+    """Direkter stdout-Schreibpfad. CI: mit Zeitstempel. Sonst: plain."""
     if IS_CI:
         ts = datetime.now().strftime("%H:%M:%S")
         print(f"[{ts}] {text}", flush=True)
     else:
         print(text, flush=True)
+
+
+_PROJECT_CTX: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "werkstatt_project", default="default"
+)
+
+
+def get_project() -> str:
+    """Projekt des aktuellen Threads/Contexts (Fallback: 'default')."""
+    return _PROJECT_CTX.get()
+
+
+def set_project(project: str) -> None:
+    """Setzt das Projekt fuer den aktuellen Thread/Context."""
+    if not project:
+        project = "default"
+    _PROJECT_CTX.set(project)
+
+
+def _get_project() -> str:
+    """Projektname aus dem aktuellen Context (Fallback: 'default')."""
+    return get_project()
+
+
+class TerminalEmitter:
+    """Pro-Projekt-Event-Emitter mit Callback-Registry."""
+
+    def __init__(self, project: str) -> None:
+        self.project = project
+        self._callbacks: list[Callable[[dict[str, Any]], None]] = []
+        self._lock = threading.Lock()
+
+    def emit(self, event: dict[str, Any]) -> None:
+        event.setdefault("project", self.project)
+        event.setdefault(
+            "ts", datetime.now(UTC).isoformat(timespec="seconds")
+        )
+        with self._lock:
+            callbacks = list(self._callbacks)
+        for cb in callbacks:
+            try:
+                cb(event)
+            except Exception:  # noqa: BLE001, S110
+                # Ein kaputter Client darf andere Clients nicht blockieren.
+                pass
+
+    def subscribe(
+        self, callback: Callable[[dict[str, Any]], None]
+    ) -> Callable[[], None]:
+        with self._lock:
+            if callback not in self._callbacks:
+                self._callbacks.append(callback)
+
+        def _unsub() -> None:
+            self.unsubscribe(callback)
+
+        return _unsub
+
+    def unsubscribe(self, callback: Callable[[dict[str, Any]], None]) -> None:
+        with self._lock:
+            try:
+                self._callbacks.remove(callback)
+            except ValueError:
+                pass
+
+    def subscriber_count(self) -> int:
+        with self._lock:
+            return len(self._callbacks)
+
+
+_EMITTERS: dict[str, TerminalEmitter] = {}
+_EMITTERS_LOCK = threading.Lock()
+
+
+def get_emitter(project: str | None = None) -> TerminalEmitter:
+    """Liefert die pro-Projekt-Singleton-Instanz (thread-safe)."""
+    name = project if project is not None else get_project()
+    with _EMITTERS_LOCK:
+        emitter = _EMITTERS.get(name)
+        if emitter is None:
+            emitter = TerminalEmitter(name)
+            _EMITTERS[name] = emitter
+        return emitter
+
+
+def _get_emitter() -> TerminalEmitter | None:
+    """Liefert den Emitter fuer das aktuelle Projekt, ohne einen neuen
+    anzulegen. Wird von _publish aufgerufen — fehlender Emitter ist
+    ein normaler Fall (kein Projekt-Kontext), kein Fehler.
+    """
+    project = _get_project()
+    if not project or project == "default":
+        return None
+    return _EMITTERS.get(project)
+
+
+def _publish(event_type: str, text: str, **extra: object) -> None:
+    """Sendet ein strukturiertes Event an den Emitter.
+
+    Ein fehlender Emitter (kein Projekt-Kontext) oder ein defekter
+    Subscriber darf den Loop nie abbrechen.
+    """
+    emitter = _get_emitter()
+    if emitter is None:
+        return
+    event: dict[str, object] = {
+        "type": event_type,
+        "project": _get_project(),
+        "text": text,
+        "ts": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+    event.update(extra)
+    try:
+        emitter.emit(event)
+    except (RuntimeError, OSError, ValueError) as fehler:
+        # Subscriber-Fehler sind selten und duerfen den Loop nicht
+        # abbrechen. Wir protokollieren sie auf stderr, aber nicht
+        # ueber den Emitter (sonst Endlos-Rekursion).
+        import sys as _sys
+        _sys.stderr.write(f"publish-fehler: {fehler!r}\n")
+
+
+def _emit(text: str) -> None:
+    """Zentraler Output. CI: mit Zeitstempel. Sonst: plain."""
+    _emit_raw(text)
+    _publish("log_line", text)
 
 
 # ============================================================
@@ -114,6 +247,7 @@ def spinner_start(label: str, detail: str = "") -> None:
     In ci/pretty: No-Op. In live: Live-Bereich mit Spinner + Text.
     """
     global _live, _spinner_text
+    _publish("spinner", label, state="start", label=label, detail=detail)
     if not IS_LIVE or not _HAS_RICH:
         # Fallback: Heartbeat-Zeile
         _emit(f"  · {label} ... {detail}" if detail else f"  · {label} ...")
@@ -138,6 +272,7 @@ def spinner_start(label: str, detail: str = "") -> None:
 def spinner_update(label: str, detail: str = "") -> None:
     """Aktualisiert den Live-Spinner (nur RENDER_MODE=live)."""
     global _spinner_text
+    _publish("spinner", label, state="update", label=label, detail=detail)
     if not IS_LIVE or not _HAS_RICH or _live is None:
         return
     with _live_lock:
@@ -199,7 +334,11 @@ def heartbeat(label: str, elapsed_s: int) -> None:
     if elapsed_s - _last < 5:
         return
     _LAST_HEARTBEAT[label] = elapsed_s
-    log_line(f"[{label}] laeuft ({elapsed_s}s)")
+    if IS_CI:
+        _emit_raw(f"[{label}] laeuft ({elapsed_s}s)")
+    else:
+        log_line(f"[{label}] laeuft ({elapsed_s}s)")
+    _publish("heartbeat", label, label=label, elapsed_s=elapsed_s)
 
 
 TOTAL_PHASES = 5
@@ -245,7 +384,8 @@ def task(nr: int, total: int, name: str) -> None:
     if IS_LIVE and _HAS_RICH:
         spinner_start(f"Task {nr}/{total}", name[:50])
     else:
-        _emit(f"  {_dim(label)} {_cyan('→')} {name}")
+        _emit_raw(f"  {_dim(label)} {_cyan('→')} {name}")
+    _publish("task_started", f"Task {nr}/{total}: {name}", nr=nr, total=total, name=name)
 
 
 def task_ok(nr: int, total: int, elapsed_s: float | None = None) -> None:
@@ -253,7 +393,8 @@ def task_ok(nr: int, total: int, elapsed_s: float | None = None) -> None:
     timing = f" ({elapsed_s:.1f}s)" if elapsed_s is not None else ""
     if IS_LIVE and _HAS_RICH:
         spinner_stop()
-    _emit(f"  {_dim(label)} {_green('✓')} task ok{timing}")
+    _emit_raw(f"  {_dim(label)} {_green('✓')} task ok{timing}")
+    _publish("task_done", f"Task {nr}/{total}: ok{timing}", nr=nr, total=total, ok=True, elapsed_s=elapsed_s)
 
 
 def task_failed(nr: int, total: int, reason: str = "") -> None:
@@ -261,7 +402,8 @@ def task_failed(nr: int, total: int, reason: str = "") -> None:
     extra = f" — {reason}" if reason else ""
     if IS_LIVE and _HAS_RICH:
         spinner_stop()
-    _emit(f"  {_dim(label)} {_red('✗')} task failed{extra}")
+    _emit_raw(f"  {_dim(label)} {_red('✗')} task failed{extra}")
+    _publish("task_done", f"Task {nr}/{total}: failed{extra}", nr=nr, total=total, ok=False, reason=reason)
 
 
 def hook(name: str, ok: bool, reason: str = "") -> None:
@@ -297,6 +439,7 @@ def footer(success: bool, tasks_total: int, tasks_ok: int) -> None:
         _emit(f"  Tasks: {tasks_ok}/{tasks_total}")
         _emit(_bold("═" * 60))
     _emit("")
+    _publish("summary", "", success=success, tasks_total=tasks_total, tasks_ok=tasks_ok)
 
 
 # ============================================================
@@ -526,18 +669,19 @@ def log_line(
     ts = _timestamp()
     if IS_CI:
         status = "ok" if ok else "fail"
-        print(f"::log::{ts} {status} {label} {detail}")
-        return
-    _el = f" · {elapsed_s:.1f}s" if elapsed_s is not None else ""
-    if _use_rich:
-        mark = "[green]OK[/]" if ok else "[red]X[/]"
-        _console.print(
-            f"[dim]{ts}[/] {mark} [bold]{label}[/]{_el}"
-            + (f" · [dim]{detail}[/]" if detail else "")
-        )
+        _emit_raw(f"::log::{ts} {status} {label} {detail}")
     else:
-        mark = "OK" if ok else "X"
-        print(f"[{ts}] {mark} {label}{_el}" + (f" · {detail}" if detail else ""))
+        _el = f" · {elapsed_s:.1f}s" if elapsed_s is not None else ""
+        if _use_rich:
+            mark = "[green]OK[/]" if ok else "[red]X[/]"
+            _console.print(
+                f"[dim]{ts}[/] {mark} [bold]{label}[/]{_el}"
+                + (f" · [dim]{detail}[/]" if detail else "")
+            )
+        else:
+            mark = "OK" if ok else "X"
+            _emit_raw(f"[{ts}] {mark} {label}{_el}" + (f" · {detail}" if detail else ""))
+    _publish("log_line", label + (f" · {detail}" if detail else ""))
 
 
 def task_started(nr: int, total: int, name: str) -> None:
