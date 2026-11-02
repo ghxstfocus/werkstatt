@@ -119,3 +119,195 @@ body {
     grid-template-areas: "terminal" "chats" "audit";
   }
 }
+
+/* ============================================================
+   Visuelles Styling (Demo-Ansicht)
+   OP-078-Kern war strukturell — Farben hier nachgezogen.
+   ============================================================ */
+body {
+  background: #1a1a1a;
+  color: #ddd;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+}
+
+#tab-leiste {
+  background: #0d0d0d;
+  border-bottom: 1px solid #333;
+  padding: 4px 6px;
+  min-height: 36px;
+}
+
+.tab {
+  background: #252525;
+  border: 1px solid #444;
+  color: #ccc;
+  border-radius: 4px;
+  padding: 6px 12px;
+  margin-right: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tab.ist-aktiv {
+  background: #3a3a3a;
+  color: #fff;
+  border-color: #666;
+}
+.tab-schliessen {
+  color: #888;
+  padding: 0 4px;
+}
+.tab-schliessen:hover {
+  color: #f44;
+}
+#tab-neu {
+  background: #252525;
+  border: 1px solid #444;
+  color: #ccc;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.layout-grid {
+  padding: 8px;
+  gap: 8px;
+}
+
+.bereich {
+  background: #252525;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 8px;
+  overflow: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.bereich.terminal {
+  background: #0d0d0d;
+  color: #5f5;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 13px;
+}
+.bereich.terminal .fenster-titel {
+  color: #5f5;
+  border-bottom-color: #2a2a2a;
+}
+
+.bereich.chat {
+  background: #1a1a2a;
+  color: #ccc;
+}
+
+.rechte-spalte {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.fenster-titel, .panel-kopf {
+  font-weight: 600;
+  color: #fff;
+  padding: 4px 0 8px;
+  border-bottom: 1px solid #444;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fenster-maximieren {
+  background: transparent;
+  border: 1px solid #444;
+  color: #888;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.fenster-maximieren:hover {
+  color: #fff;
+  border-color: #666;
+}
+
+.chat-nachrichten, .scrollback, .audit-live, .audit-history-liste {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  background: #0d0d0d;
+  border: 1px solid #333;
+  border-radius: 3px;
+  padding: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  min-height: 60px;
+}
+.audit-live {
+  color: #fc6;
+}
+.audit-history-liste {
+  color: #8cf;
+}
+
+textarea, input[type="text"], select {
+  background: #1a1a1a;
+  color: #ddd;
+  border: 1px solid #444;
+  border-radius: 3px;
+  padding: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+}
+textarea {
+  resize: vertical;
+  min-height: 40px;
+}
+
+.chat-form {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+button.chat-senden, button {
+  background: #3a3a3a;
+  color: #fff;
+  border: 1px solid #555;
+  border-radius: 3px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  align-self: flex-start;
+}
+button:hover {
+  background: #4a4a4a;
+}
+
+.audit-filter {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.audit-filter label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #aaa;
+}
+.audit-filter select, .audit-filter input {
+  width: auto;
+  margin-top: 0;
+  padding: 3px 6px;
+  font-size: 12px;
+}
