@@ -13,6 +13,59 @@ from werkstatt.state import RunState
 from werkstatt.loop_renderer import log_line  # Fix BA
 
 
+def _klassifiziere_fehler(errors: list) -> str:
+    """M-WelleF (2026-11-02): dominante Fehlerklasse + Repair-Hint."""
+    if not errors:
+        return ""
+    joined = chr(10).join(str(e) for e in errors if e)[:4000]
+    low = joined.lower()
+
+    if "object" in low and ("int" in low or "no overload variant" in low):
+        return (
+            "HINT (mypy_cast): mypy beklagt object/int. Verwende "
+            "typing.cast(int, x) NACH einem Runtime-Check (isinstance/"
+            "check_port/etc). NIEMALS int(x) (aendert Wert), NIEMALS "
+            "# type: ignore (OP-064b-Antipattern)."
+        )
+    if "error:" in low and "mypy" in low:
+        return (
+            "HINT (mypy_other): mypy-Fehler. Lies Zeile, Spalte, Klasse "
+            "genau. Aendere nur die betroffene Stelle. Keine type: ignore."
+        )
+    if "f401" in low or "f811" in low or "imported but unused" in low:
+        return (
+            "HINT (ruff_import): Import-Fehler. Import entfernen oder "
+            "Ziel benutzen. KEINE neue # noqa."
+        )
+    if "old_string_not_found" in low or "patch_not_applied" in low:
+        return (
+            "HINT (patch_not_applied): Patch passt nicht mehr. Lies den "
+            "AKTUELLER DATEI-INHALT-Block neu und baue einen NEUEN Patch "
+            "mit exaktem Anker. NICHT denselben Patch wiederholen."
+        )
+    if "assertionerror" in low or "assert " in low:
+        return (
+            "HINT (pytest_assert): Test schlaegt fehl. Pruefe: "
+            "(a) Code falsch -> Code reparieren. (b) Test falsch -> "
+            "Test reparieren NUR wenn Task das fordert. NIEMALS "
+            "Assertion entfernen oder Test skippen."
+        )
+    if "sim103" in low or "c901" in low:
+        return (
+            "HINT (ruff_complex): Refactor-Hinweis. Nur aendern wenn "
+            "im Scope der Task. Sonst: ignorieren."
+        )
+    return ""
+
+
+def _format_repair_hint(errors: list) -> str:
+    """M-WelleF: formatierter Repair-Block fuer Prompt."""
+    hint = _klassifiziere_fehler(errors)
+    if not hint:
+        return ""
+    return f"## REPAIR-HINT:{chr(10)}{hint}{chr(10)}"
+
+
 def audit(*args, **kwargs):
     """Late-Binding-Proxy fuer werkstatt.loop.audit."""
     from werkstatt.loop import audit as _orig

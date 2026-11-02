@@ -822,6 +822,12 @@ def _build_patches_fuer_datei(
         _datei_block = (
             f"## AKTUELLER DATEI-INHALT:\n```\n{_inhalt}\n```\n"
         )
+    # M-WelleF: Repair-Hint aus last_verify_errors
+    try:
+        from werkstatt.reflection import _format_repair_hint as _frh_b
+        _refl_hint = _frh_b(getattr(state, 'last_verify_errors', []))
+    except ImportError:
+        _refl_hint = ''
     _user = (
         f"## ZIELDATEI: {zieldatei}\n\n"
         f"{_module_hint}"
@@ -830,6 +836,7 @@ def _build_patches_fuer_datei(
         f"{_format_scout_apis_for_builder(getattr(state, 'scout_api_auszug', {}))}\n\n"
         f"## EXPLORER-FINDINGS:\n"
         f"{_format_explorer_findings_b(getattr(state, 'explorer_findings', {}))}\n\n"
+        f"{_refl_hint}"
         f"## TASK: {_task_name}\n"
         f"## TASK-BESCHREIBUNG: {_task_desc}\n\n"
         f"## ARCHITECT-BESCHREIBUNG (fuer Kontext):\n{_abschnitt}\n\n"
