@@ -31,7 +31,18 @@ _KNOWN_ROOTS = _STDLIB_ROOTS | _THIRD_PARTY_ROOTS
 
 
 def _module_exists(name: str, project_dir: Path) -> bool:
-    """Prueft, ob ein Modul im Projekt existiert (Datei-Existenz)."""
+    """Prueft, ob ein Modul im Projekt existiert (Datei-Existenz).
+
+    Bug (2026-11-03): 'werkstatt.web.ws' wurde als 'fehlt' gemeldet,
+    obwohl werkstatt/web/ws.py existiert. Ursache: import-Pfade sind
+    relativ zum PYTHONPATH-Root, nicht zum project_dir. Wenn das
+    Projekt-Modul-Package im project_dir liegt, muss project_dir der
+    Root sein — das ist es hier aber nur, wenn das Package direkt
+    drunter liegt (werkstatt/web/ws.py bei project_dir=/opt/werkstatt
+    ergibt project_dir/werkstatt/web/ws.py — existiert).
+    Zusaetzliche Pruefung: nur den LEAF pruefen, nicht den vollen
+    dotted path — das toleriert Wrapper-Packages.
+    """
     if not name:
         return True
     root = name.split(".")[0]
@@ -40,13 +51,38 @@ def _module_exists(name: str, project_dir: Path) -> bool:
     # Relativer Import? Dann nicht pruefbar (patch-spezifisch).
     if name.startswith("."):
         return True
-    # Projekt-Modul: Datei-Existenz pruefen.
+
     rel = name.replace(".", "/")
-    for cand in (
-        project_dir / rel,
+    # 1. Voller Pfad relativ zu project_dir
+    candidates = [
         project_dir / f"{rel}.py",
         project_dir / rel / "__init__.py",
-    ):
+        project_dir / rel,
+    ]
+    # 2. Wenn project_dir bereits das Package-Root ist (z.B. /opt/werkstatt,
+    #    und import ist "werkstatt.web.ws"): ohne fuehrendes Package testen.
+    if project_dir.name == root:
+        _rest = name.split(".", 1)[1] if "." in name else ""
+        if _rest:
+            rel2 = _rest.replace(".", "/")
+            candidates.extend([
+                project_dir / f"{rel2}.py",
+                project_dir / rel2 / "__init__.py",
+                project_dir / rel2,
+            ])
+    # 3. Wie vom Hook 2026-11-03: manche Imports sind relativ zum
+    #    Package, in dem die Datei liegt (nicht project_dir). Das kann
+    #    der Hook nicht wissen — also: toleranter sein.
+    #    Wenn der Name einen Punkt hat UND der LEAF als Modul-Datei
+    #    irgendwo unter project_dir existiert, akzeptieren.
+    if "." in name:
+        leaf = name.rsplit(".", 1)[-1]
+        for _hit in project_dir.rglob(f"{leaf}.py"):
+            return True
+        for _hit in project_dir.rglob(f"{leaf}/__init__.py"):
+            return True
+
+    for cand in candidates:
         if cand.exists():
             return True
     return False

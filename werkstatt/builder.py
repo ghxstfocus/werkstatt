@@ -23,6 +23,23 @@ _REVIEWER_SCHNITTSTELLE = """## DER REVIEWER (Schnittstelle)
 BUILDER_SYSTEM = """Du bist ein Editor.
 Du bekommst eine ZIELDATEI und eine ARCHITECT-BESCHREIBUNG.
 
+## Task-Action beachten (WICHTIG)
+
+Jeder Task hat ein Feld `action`:
+- **action=create**: Die Zieldatei existiert NOCH NICHT. Du MUSST
+  `"action": "create"` mit komplettem `content` liefern. Wenn die
+  Datei bereits existiert: STOPP und melde `builder_patch_invalid`,
+  der Planner hat dann einen Fehler in der Task-Erkennung.
+- **action=update**: Die Zieldatei existiert BEREITS. Du MUSST
+  `"action": "update"` mit `old_string`/`new_string` liefern. Wenn
+  die Datei nicht existiert: STOPP und melde `builder_patch_invalid`.
+- **action=delete**: Die Zieldatei existiert, soll geloescht werden.
+
+Wenn die tatsaechliche Existenz von der deklarierten Action
+abweicht, korrigiere NICHT stillschweigend — melde den Fehler.
+Haeufigster Bug 2026-11-03: action=create im Task, aber update-Patch
+geliefert (20x an einem Tag).
+
 Deine Aufgabe: Setze die Architect-Beschreibung in search/replace-Patches um.
 
 ## Format (NUR search/replace)
@@ -811,7 +828,9 @@ def _build_patches_fuer_datei(
     _skills_block = ""
     try:
         from werkstatt.skills import (
-            load_all_skills, skills_metadata_block, skills_aktivieren,
+            load_all_skills,
+            skills_aktivieren,
+            skills_metadata_block,
         )
         _all_skills = load_all_skills()
         _meta = skills_metadata_block(_all_skills)

@@ -137,3 +137,27 @@ def test_diagnose_orchestrator_erster_treffer(op082_projekt):
     diag = _deterministische_diagnose(state)
     assert diag is not None
     assert diag["klasse"] == "import_fehlt"
+
+def test_diagnose_fallback_ohne_patches(tmp_path):
+    """Fallback ohne patches: scans alle .py, findet Datei die `mod`
+    benutzt ohne Import, liefert `import mod`-Patch.
+
+    Datei ohne Imports (nur def) -> Anker-Fallback greift (Zeile vor def).
+    """
+    (tmp_path / "mod.py").write_text("x = 1\n")
+    nutzer = tmp_path / "nutzer.py"
+    nutzer.write_text(
+        "def nutze():\n"
+        "    return mod.x\n"
+    )
+    state = SimpleNamespace(
+        project_dir=str(tmp_path),
+        patches=[],
+        last_verify_errors=[
+            "py_compile_changed: NameError: name 'mod' is not defined",
+        ],
+    )
+    diag = _deterministische_diagnose(state)
+    assert diag is not None, "Fallback ohne patches griff nicht"
+    assert diag["klasse"] == "import_fehlt"
+    assert "import mod" in diag["new_string"]

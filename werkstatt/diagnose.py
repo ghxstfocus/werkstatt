@@ -96,7 +96,7 @@ def _importierte_namen(datei: Path) -> set[str]:
 
 
 def _finde_import_quelle(project_dir: Path, name: str) -> str | None:
-    # 1. Modul namens `name`
+    # 1. Modul namens `name` (z.B. nutzer.py benutzt `mod.attr`, mod fehlt)
     for f in project_dir.rglob(f"{name}.py"):
         if any(p in _IGNORE_PARTS for p in f.parts):
             continue
@@ -107,6 +107,20 @@ def _finde_import_quelle(project_dir: Path, name: str) -> str | None:
         parent_mod = ".".join(rel.parts) if rel.parts else ""
         if parent_mod:
             return f"from {parent_mod} import {name}"
+        # Direkt unter project_dir: als Modul importieren
+        return f"import {name}"
+    # 1b. Package-Verzeichnis namens `name` mit __init__.py
+    for f in project_dir.rglob(f"{name}/__init__.py"):
+        if any(p in _IGNORE_PARTS for p in f.parts):
+            continue
+        try:
+            rel = f.parent.parent.relative_to(project_dir)
+        except ValueError:
+            continue
+        parent_mod = ".".join(rel.parts) if rel.parts else ""
+        if parent_mod:
+            return f"from {parent_mod} import {name}"
+        return f"import {name}"
     # 2. Top-Level-Name in einer Datei
     for f in project_dir.rglob("*.py"):
         if any(p in _IGNORE_PARTS for p in f.parts):
@@ -134,6 +148,13 @@ def _finde_import_quelle(project_dir: Path, name: str) -> str | None:
 
 
 def _letzte_import_zeile(datei: Path) -> str | None:
+    """Liefert die letzte Import-Zeile als Anker fuer neue Imports.
+
+    Fallback (2026-11-03): Dateien ohne Imports (z.B. nur def/class)
+    brauchen einen Anker VOR der ersten Definition. Rueckgabe ist die
+    Zeile, NACH der der neue Import eingefuegt wird — wir liefern
+    sie als old_string und haengen den Import an new_string an.
+    """
     try:
         lines = datei.read_text(encoding="utf-8").splitlines(keepends=True)
     except OSError:
@@ -149,9 +170,32 @@ def _letzte_import_zeile(datei: Path) -> str | None:
         elif depth > 0:
             last_import = i
             depth += line.count("(") - line.count(")")
-    if last_import < 0:
+    if last_import >= 0:
+        ln = lines[last_import]
+        return ln if ln.endswith("\n") else ln + "\n"
+
+    # Fallback: keine Imports -> letzte Docstring- oder Leerzeile vor
+    # dem ersten def/class. Wenn die Datei mit from __future__ beginnt,
+    # ist das die letzte "import"-Zeile (schon oben abgedeckt).
+    # Such erstes def/class/async def
+    erstes_def = -1
+    for i, line in enumerate(lines):
+        s = line.lstrip()
+        if s.startswith("def ") or s.startswith("class ") or s.startswith("async def "):
+            erstes_def = i
+            break
+    if erstes_def < 0:
+        # Leere Datei oder nur Code ohne def: erste Zeile als Anker
+        if lines:
+            ln = lines[0]
+            return ln if ln.endswith("\n") else ln + "\n"
         return None
-    ln = lines[last_import]
+    # Anker: Zeile vor dem ersten def (Leerzeile oder Docstring-Ende)
+    if erstes_def == 0:
+        # Kein Platz davor — nimm die erste Zeile (def selbst)
+        ln = lines[0]
+        return ln if ln.endswith("\n") else ln + "\n"
+    ln = lines[erstes_def - 1]
     return ln if ln.endswith("\n") else ln + "\n"
 
 
@@ -260,18 +304,44 @@ def _deterministische_diagnose(state: Any) -> dict | None:
                     res = None
                 if res is not None:
                     return res
-    # Fallback: NameError-Scan ueber alle Projekt-.py
+    # Fallback: NameError-Scan ueber alle Projekt-.py.
+    # Bug (2026-11-03): _scan_alle_dateien_fuer_name sucht Dateien, die
+    # den Namen BENUTZEN — nicht die, die ihn DEFINIEREN. Fuer einen
+    # fehlenden Import brauchen wir die Definitions-Quelle, also
+    # _finde_import_quelle direkt.
+    #
+    # Wenn state.patches leer ist (z.B. py_compile-Fehler VOR Builder),
+    # scannen wir alle .py unter project_dir. Im echten Reflection-Loop
+    # ist patches nie leer (run_builder hat immer was erzeugt), aber
+    # py_compile-Fehler koennen ohne patches auftreten.
+    pd = Path(str(getattr(state, "project_dir", ".") or "."))
+    kandidaten = _kandidaten_dateien(state)
+    if not kandidaten and pd.is_dir():
+        kandidaten = [
+            f for f in pd.rglob("*.py")
+            if not any(part in _IGNORE_PARTS for part in f.parts)
+        ]
     for fehler in errors:
         s = str(fehler)
         name = _extrahiere_nameerror(s)
         if not name:
             continue
-        fallback = _scan_alle_dateien_fuer_name(state, name)
-        if fallback is not None:
-            try:
-                res = _diagnose_import_fehlt(state, fallback, s)
-            except Exception:  # noqa: BLE001
-                res = None
-            if res is not None:
-                return res
+        for datei in kandidaten:
+            if name not in _benutzte_namen(datei):
+                continue
+            if name in _importierte_namen(datei):
+                continue
+            import_zeile = _finde_import_quelle(pd, name)
+            if not import_zeile:
+                continue
+            anchor = _letzte_import_zeile(datei)
+            if not anchor:
+                continue
+            return {
+                "file": _rel_str(datei, pd),
+                "old_string": anchor,
+                "new_string": anchor + import_zeile + "\n",
+                "grund": f"NameError: '{name}' nicht importiert ({import_zeile})",
+                "klasse": "import_fehlt",
+            }
     return None
