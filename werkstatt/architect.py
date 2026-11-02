@@ -13,6 +13,93 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def _extrahiere_op_felder(aufgabe: str, docs_status: str) -> dict:
+    """M-Welle-I (2026-11-02): maschinenlesbare OP-Felder aus STATUS.md.
+
+    Der Architect braucht die strukturierten Felder (Existiert bereits,
+    Nicht-Ziele, Betroffene Dateien) direkt im Prompt. Ohne sie fuellt
+    er Luecken mit Kreativitaet -> Over-Engineering.
+
+    Extrahiert den OP-Block, der zum `aufgabe`-Text passt (OP-NNN-Match),
+    parst die strukturierten Felder und gibt sie als dict zurueck.
+    """
+    import re as _re_op
+    if not aufgabe or not docs_status:
+        return {}
+    # OP-NNN aus aufgabe ziehen
+    m = _re_op.search(r"OP-\d{3}", aufgabe)
+    if not m:
+        return {}
+    op_id = m.group(0)
+    # Block aus STATUS.md schneiden (### OP-NNN bis naechste ### / ##)
+    pat = _re_op.compile(
+        rf"(### {_re_op.escape(op_id)}:[^\n]*\n.*?)(?=\n### OP-|\n## |\Z)",
+        _re_op.DOTALL,
+    )
+    block = pat.search(docs_status)
+    if not block:
+        return {}
+    text = block.group(1)
+
+    # Felder extrahieren (mehrzeilig bis naechstes "- **" oder Ende)
+    def _feld(name: str) -> str:
+        pat = _re_op.compile(
+            rf"- \*\*{_re_op.escape(name)}:\*\*\s*\n?(.*?)(?=\n- \*\*|\Z)",
+            _re_op.DOTALL,
+        )
+        fm = pat.search(text)
+        return fm.group(1).strip() if fm else ""
+
+    return {
+        "id": op_id,
+        "betroffene_dateien": _feld("Betroffene Dateien"),
+        "nicht_ziele": _feld("Nicht-Ziele"),
+        "existiert_bereits": _feld("Existiert bereits"),
+        "fehlt_noch": _feld("Fehlt noch"),
+        "akzeptanz": _feld("Akzeptanzkriterien"),
+        "tests": _feld("Tests"),
+    }
+
+
+def _format_op_felder_for_prompt(felder: dict) -> str:
+    """M-Welle-I: OP-Felder als markierter Prompt-Block."""
+    if not felder:
+        return ""
+    parts = [f"## OP-SPEZIFIKATION ({felder.get('id', '?')}, maschinenlesbar aus STATUS.md)"]
+    for key, label in [
+        ("betroffene_dateien", "Betroffene Dateien (PFLICHT — nur diese)"),
+        ("nicht_ziele", "NICHT-ZIELE (verboten)"),
+        ("existiert_bereits", "EXISTIERT BEREITS (nicht neu bauen)"),
+        ("fehlt_noch", "FEHLT NOCH"),
+        ("akzeptanz", "Akzeptanzkriterien"),
+        ("tests", "Tests"),
+    ]:
+        val = felder.get(key, "").strip()
+        if val:
+            parts.append(f"### {label}\n{val}")
+    if len(parts) == 1:
+        return ""
+    return "\n\n".join(parts) + "\n\n"
+
+
+def _format_scout_apis_arch(apis: dict, max_lines: int = 20) -> str:
+    """M-Welle-I: Scout-API-Auszug als Prompt-Block (Architect)."""
+    if not isinstance(apis, dict) or not apis:
+        return ""
+    lines = []
+    for datei, symbole in list(apis.items())[:10]:
+        if not isinstance(symbole, list):
+            continue
+        for sym in symbole[:5]:
+            if isinstance(sym, str):
+                lines.append(f"  {datei}: {sym}")
+                if len(lines) >= max_lines:
+                    break
+        if len(lines) >= max_lines:
+            break
+    return chr(10).join(lines)
+
+
 def _format_explorer_findings(f: dict) -> str:
     """M-WelleE: Explorer-Findings als Prompt-Block."""
     if not isinstance(f, dict) or not f:
@@ -198,7 +285,7 @@ def _architect_system_with_builder() -> str:
     return ARCHITECT_SYSTEM + "\n\n" + _BUILDER_SCHNITTSTELLE
 
 
-def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
+def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) -> str:
     """M-376: Explorer-Dateien ZUERST (Lost-in-the-Middle).
 
     Goldstandard: Relevante Information an den Anfang des
@@ -206,6 +293,45 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None) -> str:
     Information — sie stehen VOR PLANNER_SYSTEM.
     """
     parts: list[str] = []
+
+    # === M-Welle-I: OP-SPEZIFIKATION ZUERST (maschinenlesbar) ===
+    # Live-Beleg 2026-11-02: Architect plante 5 Dateien statt 2, weil
+    # er die 'Nicht-Ziele' aus STATUS.md nie gesehen hat. Der Block
+    # verhindert Lueckenfuellen mit Kreativitaet.
+    _op_felder = {}
+    if state is not None:
+        try:
+            _op_felder = _extrahiere_op_felder(
+                aufgabe, (getattr(state, "docs", {}) or {}).get("status", "")
+            )
+        except Exception:  # noqa: BLE001
+            _op_felder = {}
+    _op_block = _format_op_felder_for_prompt(_op_felder)
+    if _op_block:
+        parts.append(_op_block.rstrip())
+
+    # === M-Welle-I: EXPLORER-FINDINGS + SCOUT-API (Welle E + D3 komplett) ===
+    if state is not None:
+        _exf = getattr(state, "explorer_findings", None) or {}
+        if _exf:
+            try:
+                _exf_str = _format_explorer_findings(_exf)
+                if _exf_str and _exf_str != "(keine)":
+                    parts.append(
+                        f"<explorer_findings>\n{_exf_str}\n</explorer_findings>"
+                    )
+            except Exception:  # noqa: BLE001
+                pass
+        _scout_apis = getattr(state, "scout_api_auszug", None) or {}
+        if _scout_apis:
+            try:
+                _sa_str = _format_scout_apis_arch(_scout_apis)
+                if _sa_str:
+                    parts.append(
+                        f"<scout_api_auszug>\n{_sa_str}\n</scout_api_auszug>"
+                    )
+            except Exception:  # noqa: BLE001
+                pass
 
     # === K32: MIGRATIONSSTAND ZUERST (hoechste Prioritaet) ===
     # Der Architect darf Migrationsnummern NICHT raten.
@@ -398,7 +524,7 @@ def run_architect(
     """
     pd = state.project_dir
     pn = state.project_name
-    _arch_sys_base = _planner_system(aufgabe, explorer_ctx)
+    _arch_sys_base = _planner_system(aufgabe, explorer_ctx, state)
     _arch_sys = _arch_sys_base + "\n\n" + _BUILDER_SCHNITTSTELLE
     _arch_reply = _with_spinner(
         "Architect",
