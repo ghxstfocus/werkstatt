@@ -6,13 +6,6 @@ Letzte Aktualisierung: 2026-11-01.
 
 ## Offene Punkte
 
-### OP-035: Doku-Task-Datum wird halluziniert
-- **Status:** open
-- **Betroffene Dateien:** `werkstatt/prompts.py` (BUILDER_SYSTEM), `werkstatt/builder.py`
-- **Akzeptanzkriterien:** Builder bekommt das Datum deterministisch (z.B. als Platzhalter `{{date}}` aus `datetime.now(UTC).date()`) statt es aus dem Kontext zu raten. Patches mit falschem Datum (`2026-11-02`, `2026-11-03` beobachtet) werden deterministisch korrigiert oder abgelehnt.
-- **Tests:** `tests/test_builder.py::test_datum_kommt_aus_utc`
-- **Blockiert von:** —
-
 ### OP-039: security-ai Test-Suite 11 Min — messen und optimieren
 - **Status:** open
 - **Betroffene Dateien:** `tests/` in `/opt/security-ai`, ggf. `tests/conftest.py`
