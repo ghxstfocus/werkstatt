@@ -1,0 +1,66 @@
+project: werkstatt
+project_dir: /opt/werkstatt
+docs:
+  entry: README.md
+  status: docs/STATUS.md
+  architecture: docs/ARCHITECTURE.md
+  conventions: docs/CONVENTIONS.md
+  progress: PROGRESS.md
+  changelog: CHANGELOG.md
+always_run:
+- py_compile
+- ruff
+- test_count
+- git_status
+- git_head
+optional_catalog:
+- read_file
+- pytest
+agent_docs:
+  builder:
+  - conventions
+  reviewer:
+  - conventions
+  solver:
+  - conventions
+  planner:
+  - conventions
+file_whitelist:
+- werkstatt/
+- tests/
+- tools/
+- docs/
+- projects/
+- README.md
+- AGENTS.md
+- CHANGELOG.md
+- PROGRESS.md
+venv_python: python3
+budget:
+  max_review_rounds: 2
+  max_minutes: 15
+  max_llm_calls: 30
+  max_builder_runden: 3
+  max_llm_calls_phase: 200
+  max_tokens_builder: 8192
+  max_tokens_reviewer: 1024
+  max_tokens_planner: 8192
+  max_tokens_solver: 2048
+auto_repair:
+  enabled: true
+  max_attempts: 3
+  auto_fix_ruff: true
+  escalate_if_errors_over: 20
+require_human_approval: true
+git_author:
+  name: ghxstfocus
+  email: ghxst.focus@gmail.com
+solver:
+  p1_schwellwert: 0.5
+  p1_min_tokens: 10
+  max_runden: 3
+planner:
+  modus: manual
+  max_runden: 3
+  ask_human_timeout_min: 60
+  phasen_modus: false
