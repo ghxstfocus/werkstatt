@@ -294,7 +294,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
   Kern-Erkenntnis: 4 Anlaeufe (OP-059c/d/e/062i) fuer dasselbe Problem. Das ist Symptom-Behandlung. Es braucht Architektur: deterministische Schichten, die nicht durch LLM-Approval ueberschreibbar sind.
 
 
-
 ### OP-065: Phase-2-Kette messen (60s Rest-Zeit) — FALSCH DIAGNOSTIZIERT
 - **Status:** wontfix (falsche Annahme, siehe Befund 2026-11-02)
 - **Befund 2026-11-02 (Messung):** Die '60 s Rest-Zeit' sind **keine Code-Wartezeit**,
@@ -368,7 +367,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Blockiert von:** —
 
 
-
 ### OP-070: Scout-Redundanz messen vor Umbau
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/scout.py`, `werkstatt/planner.py` (`_run_scout`, `_baue_api_index`)
@@ -421,6 +419,41 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
   (OP-NNN, Akzeptanzkriterien vorhanden) und die OPs formatiert in STATUS.md einfuegt.
 - **Tests:** Unit-Tests fuer die Validierungs-Logik und den Parser der Roadmap.
 - **Blockiert von:** —
+
+### OP-074: Web-Backend (FastAPI) mit WebSockets pro Tab
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/web/__init__.py` (neu), `werkstatt/web/app.py` (neu), `werkstatt/web/ws.py` (neu), `tests/test_web_backend.py` (neu)
+- **Akzeptanzkriterien:** FastAPI-App startet den Loop als Subprozess pro Projekt. Pro geoeffnetem Tab existiert ein eigener WebSocket-Kanal (`/ws/{tab_id}`), der Live-Logs und Chat-Nachrichten unabhaengig streamt. Zentraler State pro Projekt (RunState-Snapshot) wird ueber REST (`GET /api/projects/{name}/state`) bereitgestellt. Tab-Wechsel im Frontend abonniert den passenden WS-Kanal ohne den Loop neu zu starten.
+- **Tests:** `tests/test_web_backend.py::test_ws_pro_tab_isoliert`, `tests/test_web_backend.py::test_loop_subprozess_start_stop`
+- **Blockiert von:** —
+
+### OP-075: Terminal-Proxy links (loop_renderer live in den Browser)
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/web/terminal_proxy.py` (neu), `werkstatt/loop_renderer.py`, `static/terminal.js` (neu), `tests/test_terminal_proxy.py` (neu)
+- **Akzeptanzkriterien:** `loop_renderer`-Ausgaben (`log_line`, `task_started`, `task_done`, `task_ok`, `summary`) werden live ueber den WebSocket des aktiven Tabs an den Browser gestreamt und im linken Terminal-Panel (xterm.js oder `<pre>` mit HTMX) angezeigt. Spinner-Zustand wird als eigener Event-Typ uebertragen. Kein Polling; Push-basiert.
+- **Tests:** `tests/test_terminal_proxy.py::test_log_line_wird_gestreamt`, `tests/test_terminal_proxy.py::test_task_started_event`
+- **Blockiert von:** OP-074
+
+### OP-076: Zwei Chat-Fenster rechts mit Maximize/Minimize
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/web/chat.py` (neu), `static/chat.js` (neu), `static/chat.css` (neu), `tests/test_chat_windows.py` (neu)
+- **Akzeptanzkriterien:** Rechts sind zwei unabhaengige Chat-Fenster (z.B. Architect-Chat und Builder-Chat) sichtbar. Jedes Fenster hat Maximize/Minimize-Buttons; der Zustand (maximiert/minimiert) wird pro Tab im Frontend-State gehalten und ueberlebt Tab-Wechsel. Intent-Parsing (`plan`, `build`, `approve`, `chat_only`) laeuft serverseitig in `chat.py`; Bestaetigung (j/n) ist per Chat moeglich.
+- **Tests:** `tests/test_chat_windows.py::test_maximize_minimize_state`, `tests/test_chat_windows.py::test_intent_parsing`
+- **Blockiert von:** OP-074
+
+### OP-077: Audit-Panel unten mit Live-Stream und History-Sidebar (REST)
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/web/audit_panel.py` (neu), `static/audit.js` (neu), `tests/test_audit_panel.py` (neu)
+- **Akzeptanzkriterien:** Unten zeigt ein Audit-Panel die `audit()`-Events live (ueber WebSocket des aktiven Tabs). Eine History-Sidebar laedt vergangene Events per REST (`GET /api/projects/{name}/audit?limit=...`) nach. Live-Stream und History sind visuell getrennt; History laesst sich filtern (kind, run_id).
+- **Tests:** `tests/test_audit_panel.py::test_live_stream_und_history`, `tests/test_audit_panel.py::test_history_rest_filter`
+- **Blockiert von:** OP-074
+
+### OP-078: UI-Layout — Chrome-Tabs oben, Terminal links, Chat rechts, Audit unten
+- **Status:** open
+- **Betroffene Dateien:** `static/layout.html` (neu), `static/layout.css` (neu), `static/tabs.js` (neu), `tests/test_ui_layout.py` (neu)
+- **Akzeptanzkriterien:** Chrome-artige Tabs oben erlauben Oeffnen/Schliessen von Projekten. Layout: Terminal-Proxy links, zwei Chat-Fenster rechts, Audit-Panel unten. Tab-Wechsel synchronisiert alle drei Bereiche (Terminal, Chat, Audit) auf den State des gewaehlten Projekts/Tabs. Schliessen eines Tabs beendet den zugehoerigen WS-Kanal und den Loop-Subprozess, sofern kein anderer Tab dasselbe Projekt nutzt.
+- **Tests:** `tests/test_ui_layout.py::test_tab_wechsel_synchronisiert_bereiche`, `tests/test_ui_layout.py::test_tab_schliessen_stoppt_ws`
+- **Blockiert von:** OP-074, OP-075, OP-076, OP-077
 
 ## Erledigt (Auto-Log)
 
