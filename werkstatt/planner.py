@@ -834,7 +834,22 @@ def _zerlege_in_sub_tasks(
 ) -> list[dict]:
     """M-453: Zerlegt Architect-Prosa in 3-5 Sub-Tasks."""
     import json as _json
+    # M-Wired-JC (2026-11-02): Measurement-Index fuer Planner
+    try:
+        from werkstatt.measurement import _messwerte_fuer_planner
+        _mess_planner = _messwerte_fuer_planner(state)
+    except Exception:  # noqa: BLE001
+        _mess_planner = ""
+    if _mess_planner and _mess_planner.strip() not in ("", "(keine)"):
+        _mess_planner_block = (
+            f"## MESSWERTE-INDEX (deterministische Messungen):\n"
+            f"{_mess_planner}\n\n"
+        )
+    else:
+        _mess_planner_block = ""
+
     _user = (
+        f"{_mess_planner_block}"
         f"## ARCHITECT-PROSA:\n{prosa}\n\n"
         f"## DATEIEN:\n" + "\n".join(f"- {f}" for f in key_files)
     )
