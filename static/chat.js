@@ -280,3 +280,35 @@
     sende: sende,
   };
 })();
+
+// Init (Stellschraube 2026-11-03): Chat bei DOMContentLoaded initialisieren.
+(function () {
+  function _initChat() {
+    if (typeof window === "undefined") return;
+    if (!window.WerkstattChat) {
+      console.warn("[chat] window.WerkstattChat nicht gesetzt");
+      return;
+    }
+    // Chat-Fenster in den #chat-nachrichten-Container mounten, falls API vorhanden
+    var mountFn = window.WerkstattChat.mount || window.WerkstattChat.init;
+    if (typeof mountFn === "function") {
+      try {
+        mountFn();
+        console.log("[chat] mount ok");
+      } catch (e) {
+        console.error("[chat] mount fehler:", e);
+      }
+    } else if (typeof window.WerkstattChat.setze_chat === "function") {
+      // Fallback: nur setze_chat, Panel bleibt DOM-still.
+      console.log("[chat] setze_chat vorhanden, kein mount");
+    } else {
+      console.warn("[chat] keine mount/setze_chat-API");
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", _initChat);
+  } else {
+    _initChat();
+  }
+})();
+

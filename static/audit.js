@@ -410,3 +410,29 @@ if (typeof window !== "undefined") {
     },
   };
 }
+
+// Init: Instanz erzeugen und mounten, sobald DOM da ist.
+(function () {
+  function _initAudit() {
+    if (typeof window === "undefined") return;
+    if (!window.__werkstattAuditInstanz && typeof createAuditPanel === "function") {
+      try {
+        window.__werkstattAuditInstanz = createAuditPanel({});
+        if (window.__werkstattAuditInstanz && typeof window.__werkstattAuditInstanz.mount === "function") {
+          window.__werkstattAuditInstanz.mount();
+          console.log("[audit] mount ok");
+        } else {
+          console.warn("[audit] createAuditPanel ohne mount");
+        }
+      } catch (e) {
+        console.error("[audit] init fehler:", e);
+      }
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", _initAudit);
+  } else {
+    _initAudit();
+  }
+})();
+
