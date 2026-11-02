@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Werkstatt</title>
   <link rel="stylesheet" href="/static/layout.css">
-  <link rel="stylesheet" href="/static/chat.css">
 </head>
 <body>
+
   <nav id="tab-leiste" role="tablist" aria-label="Projekte">
     <template id="tab-vorlage">
       <button class="tab" role="tab" type="button">
@@ -19,66 +19,51 @@
   </nav>
 
   <main class="layout-grid">
+
+    <!-- Links: Terminal, volle Hoehe -->
     <section class="bereich terminal" data-bereich="terminal">
-      <header class="panel-kopf">
+      <div class="fenster-titel">
         <span id="terminal-titel">Terminal</span>
-      </header>
-      <div id="terminal-scrollback" class="scrollback" role="log" aria-live="polite"></div>
+      </div>
+      <div class="scrollback" id="terminal-scrollback"></div>
     </section>
 
+    <!-- Rechts oben: Chat (pro Projekt) -->
     <section class="bereich chat" data-bereich="chat">
-      <div class="chat-fenster" data-fenster="plan">
-        <header class="panel-kopf">
-          <span class="fenster-titel">Plan</span>
-          <button class="fenster-maximieren" type="button" aria-label="Plan maximieren" data-ziel="plan">&#x26F6;</button>
-        </header>
-        <div class="chat-nachrichten"></div>
-        <form class="chat-form">
-          <textarea class="chat-eingabe" name="nachricht" rows="2"></textarea>
-          <button class="chat-senden" type="submit">Senden</button>
-        </form>
+      <div class="fenster-titel">
+        <span id="chat-titel">Chat</span>
       </div>
-      <div class="chat-fenster" data-fenster="ausfuehrung">
-        <header class="panel-kopf">
-          <span class="fenster-titel">Ausfuehrung</span>
-          <button class="fenster-maximieren" type="button" aria-label="Ausfuehrung maximieren" data-ziel="ausfuehrung">&#x26F6;</button>
-        </header>
-        <div class="chat-nachrichten"></div>
-        <form class="chat-form">
-          <textarea class="chat-eingabe" name="nachricht" rows="2"></textarea>
-          <button class="chat-senden" type="submit">Senden</button>
-        </form>
-      </div>
+      <div class="chat-nachrichten" id="chat-nachrichten"></div>
+      <form class="chat-form" id="chat-form">
+        <textarea id="chat-eingabe" placeholder="Frag zum Projekt... (Strg+Enter sendet)"></textarea>
+        <button class="chat-senden" type="submit">Senden</button>
+      </form>
     </section>
 
-    <aside class="rechte-spalte">
-      <section id="audit-panel" class="bereich audit" data-bereich="audit">
-        <div id="audit-live" class="audit-live">
-          <header class="panel-kopf">
-            <span class="fenster-titel">Live</span>
-          </header>
-          <div id="audit-stream" class="audit-stream" role="log" aria-live="polite"></div>
+    <!-- Rechts unten: Audit Live, mit einklappbarer History-Sidebar -->
+    <section class="bereich audit" data-bereich="audit">
+      <div class="fenster-titel">
+        <span>Audit Live</span>
+        <button class="history-toggle" id="history-toggle" aria-label="History ein-/ausblenden">&#9776;</button>
+      </div>
+      <div class="audit-live" id="audit-live"></div>
+
+      <aside class="history-sidebar" id="history-sidebar">
+        <div class="fenster-titel">
+          <span>History</span>
+          <button class="history-close" id="history-close" aria-label="History schliessen">&times;</button>
         </div>
-        <div id="audit-history" class="audit-history">
-          <header class="panel-kopf">
-            <span class="fenster-titel">History</span>
-          </header>
-          <form class="audit-filter">
-            <label for="audit-filter-kind">Kind</label>
-            <select id="audit-filter-kind" name="kind"></select>
-            <label for="audit-filter-run">Run</label>
-            <input id="audit-filter-run" name="run_id" type="text">
-            <button type="submit">Filtern</button>
-          </form>
-          <ul id="audit-history-liste" class="audit-history-liste"></ul>
+        <div class="audit-filter">
+          <label>Kind <select id="audit-filter-kind"><option value="">alle</option></select></label>
+          <label>Run <input id="audit-filter-run" type="text" placeholder="run_id"></label>
+          <button type="button" id="audit-filter-btn">Filtern</button>
         </div>
-      </section>
-    </aside>
+        <div class="audit-history" id="audit-history"></div>
+      </aside>
+    </section>
+
   </main>
 
-  <script src="/static/chat.js"></script>
-  <script src="/static/audit.js"></script>
   <script src="/static/tabs.js"></script>
-  <script src="/static/terminal.js"></script>
 </body>
 </html>

@@ -1,154 +1,57 @@
-/* Layout-Grundgeruest: Tab-Leiste natuerliche Hoehe, Rest fuellt Viewport. */
+/* ============================================================
+   Werkstatt-Dashboard Layout
+   - Links: Terminal (spans beide Zeilen)
+   - Rechts oben: Chat
+   - Rechts unten: Audit mit History-Sidebar
+   ============================================================ */
+
+* {
+  box-sizing: border-box;
+}
+
 body {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: 100vh;
   margin: 0;
+  background: #1a1a1a;
+  color: #ddd;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
-/* Tab-Leiste: horizontal scrollbar, Tabs schrumpfen nicht. */
+/* ============================================================
+   Tabs oben
+   ============================================================ */
 #tab-leiste {
+  flex: 0 0 auto;
+  height: 40px;
+  background: #0d0d0d;
+  border-bottom: 1px solid #333;
+  padding: 4px 8px;
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 4px;
   overflow-x: auto;
 }
 
-#tab-leiste .tab {
+.tab {
   flex: 0 0 auto;
-}
-
-.tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 8px 8px 0 0;
-}
-
-.tab.ist-aktiv {
-  background: var(--flaeche-hell, #f5f5f5);
-  border-bottom: 2px solid var(--akzent);
-}
-
-.tab:hover {
-  background: var(--flaeche-hover, #ececec);
-}
-
-.tab:focus-visible {
-  outline: 2px solid var(--akzent);
-  outline-offset: -2px;
-}
-
-/* Schliessen-Button: quadratisch, nur bei Hover/aktiv voll sichtbar. */
-.tab-schliessen {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  opacity: 0.4;
-}
-
-.tab:hover .tab-schliessen,
-.tab.ist-aktiv .tab-schliessen {
-  opacity: 1;
-}
-
-/* Haupt-Grid: Terminal links, Chats rechts, Audit unten volle Breite. */
-.layout-grid {
-  display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr);
-  grid-template-rows: minmax(0, 1fr) minmax(180px, 32vh);
-  grid-template-areas: "terminal chats" "audit audit";
-  gap: 8px;
-  min-height: 0;
-}
-
-/* Rechte Spalte mit den beiden Chat-Bereichen. */
-.rechte-spalte {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 0;
-  grid-area: chats;
-}
-
-.bereich.chat {
-  flex: 1 1 0;
-  min-height: 0;
-}
-
-.chat-nachrichten {
-  overflow-y: auto;
-}
-
-/* Maximierung/Verstecken ausschliesslich ueber Klassen aus tabs.js. */
-.bereich.chat.ist-maximiert {
-  flex: 1 1 100%;
-}
-
-.bereich.chat.ist-versteckt {
-  display: none;
-}
-
-/* Audit-Panel: Live-Stream links, History rechts mit Trennlinie. */
-#audit-panel {
-  grid-area: audit;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-}
-
-#audit-live {
-  overflow-y: auto;
-}
-
-#audit-history {
-  border-left: 1px solid var(--trennlinie, #ccc);
-  overflow-y: auto;
-}
-
-/* Einspaltig auf schmalen Viewports, DOM-Reihenfolge bleibt. */
-@media (max-width: 900px) {
-  .layout-grid {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "terminal" "chats" "audit";
-  }
-}
-
-/* ============================================================
-   Visuelles Styling (Demo-Ansicht)
-   OP-078-Kern war strukturell — Farben hier nachgezogen.
-   ============================================================ */
-body {
-  background: #1a1a1a;
-  color: #ddd;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 14px;
-}
-
-#tab-leiste {
-  background: #0d0d0d;
-  border-bottom: 1px solid #333;
-  padding: 4px 6px;
-  min-height: 36px;
-}
-
-.tab {
   background: #252525;
   border: 1px solid #444;
   color: #ccc;
   border-radius: 4px;
-  padding: 6px 12px;
-  margin-right: 4px;
+  padding: 5px 10px;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 12px;
+  height: 28px;
+}
+.tab:hover {
+  background: #2f2f2f;
 }
 .tab.ist-aktiv {
   background: #3a3a3a;
@@ -157,175 +60,275 @@ body {
 }
 .tab-schliessen {
   color: #888;
-  padding: 0 4px;
+  padding: 0 3px;
+  font-size: 14px;
+  line-height: 1;
 }
 .tab-schliessen:hover {
-  color: #f44;
+  color: #f66;
 }
+
 #tab-neu {
+  flex: 0 0 auto;
   background: #252525;
   border: 1px solid #444;
   color: #ccc;
   border-radius: 4px;
-  padding: 6px 12px;
+  padding: 0 10px;
   cursor: pointer;
+  height: 28px;
+  font-size: 14px;
+}
+#tab-neu:hover {
+  background: #333;
 }
 
+/* ============================================================
+   Haupt-Grid
+   ============================================================ */
 .layout-grid {
-  padding: 8px;
-  gap: 8px;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "terminal chat"
+    "terminal audit";
+  gap: 6px;
+  padding: 6px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .bereich {
   background: #252525;
   border: 1px solid #333;
   border-radius: 4px;
-  padding: 8px;
-  overflow: auto;
-  min-height: 0;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
 }
 
-.bereich.terminal {
+.bereich[data-bereich="terminal"] {
+  grid-area: terminal;
   background: #0d0d0d;
   color: #5f5;
   font-family: ui-monospace, "SF Mono", Consolas, monospace;
-  font-size: 13px;
-}
-.bereich.terminal .fenster-titel {
-  color: #5f5;
-  border-bottom-color: #2a2a2a;
 }
 
-.bereich.chat {
-  background: #1a1a2a;
-  color: #ccc;
+.bereich[data-bereich="chat"] {
+  grid-area: chat;
+  background: #16162a;
 }
 
-.rechte-spalte {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 0;
+.bereich[data-bereich="audit"] {
+  grid-area: audit;
+  background: #141414;
 }
 
-.fenster-titel, .panel-kopf {
+/* ============================================================
+   Fenster-Kopf
+   ============================================================ */
+.fenster-titel {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  background: #2a2a2a;
+  border-bottom: 1px solid #333;
+  font-size: 12px;
   font-weight: 600;
   color: #fff;
-  padding: 4px 0 8px;
-  border-bottom: 1px solid #444;
-  margin-bottom: 8px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.fenster-maximieren {
-  background: transparent;
-  border: 1px solid #444;
-  color: #888;
-  border-radius: 3px;
-  padding: 2px 6px;
-  cursor: pointer;
-  font-size: 11px;
+.bereich.terminal .fenster-titel {
+  background: #0d0d0d;
+  color: #5f5;
+  border-bottom-color: #2a2a2a;
 }
-.fenster-maximieren:hover {
+
+/* ============================================================
+   Inhaltsbereiche
+   ============================================================ */
+.scrollback,
+.chat-nachrichten,
+.audit-live,
+.audit-history {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  min-height: 0;
+}
+
+.scrollback {
+  color: #5f5;
+}
+
+.audit-live {
+  color: #fc6;
+  background: #0d0d0d;
+}
+
+.audit-history {
+  color: #8cf;
+  background: #0d0d0d;
+}
+
+.chat-nachrichten {
+  background: #0d0d16;
+  color: #ccc;
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ============================================================
+   Chat-Form
+   ============================================================ */
+.chat-form {
+  flex: 0 0 auto;
+  padding: 6px;
+  background: #1f1f2a;
+  border-top: 1px solid #333;
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.chat-form textarea {
+  flex: 1;
+  background: #0d0d0d;
+  color: #ddd;
+  border: 1px solid #444;
+  border-radius: 3px;
+  padding: 6px 8px;
+  font: inherit;
+  font-family: inherit;
+  resize: none;
+  min-height: 36px;
+  max-height: 100px;
+}
+.chat-form textarea:focus {
+  outline: none;
+  border-color: #6af;
+}
+
+.chat-senden {
+  background: #3a5a9a;
+  color: #fff;
+  border: 1px solid #456;
+  border-radius: 3px;
+  padding: 6px 16px;
+  cursor: pointer;
+  font: inherit;
+  height: 36px;
+}
+.chat-senden:hover {
+  background: #4a6ab0;
+}
+
+/* ============================================================
+   History-Sidebar (in Audit, von rechts einklappbar)
+   ============================================================ */
+.history-toggle,
+.history-close {
+  background: transparent;
+  color: #aaa;
+  border: 1px solid #444;
+  border-radius: 3px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  height: 22px;
+}
+.history-toggle:hover,
+.history-close:hover {
   color: #fff;
   border-color: #666;
 }
 
-.chat-nachrichten, .scrollback, .audit-live, .audit-history-liste {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  background: #0d0d0d;
-  border: 1px solid #333;
-  border-radius: 3px;
-  padding: 6px;
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-  min-height: 60px;
-}
-.audit-live {
-  color: #fc6;
-}
-.audit-history-liste {
-  color: #8cf;
-}
-
-textarea, input[type="text"], select {
+.history-sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 340px;
   background: #1a1a1a;
-  color: #ddd;
-  border: 1px solid #444;
-  border-radius: 3px;
-  padding: 6px;
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-  width: 100%;
-  box-sizing: border-box;
-  margin-top: 4px;
-}
-textarea {
-  resize: vertical;
-  min-height: 40px;
-}
-
-.chat-form {
-  margin-top: 8px;
+  border-left: 1px solid #444;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+  z-index: 10;
+  box-shadow: -4px 0 12px rgba(0,0,0,0.4);
 }
 
-button.chat-senden, button {
-  background: #3a3a3a;
-  color: #fff;
-  border: 1px solid #555;
-  border-radius: 3px;
-  padding: 5px 12px;
-  cursor: pointer;
-  font-size: 12px;
-  align-self: flex-start;
-}
-button:hover {
-  background: #4a4a4a;
+.history-sidebar.ist-offen {
+  transform: translateX(0);
 }
 
 .audit-filter {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  background: #252525;
+  border-bottom: 1px solid #333;
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
-  margin-bottom: 8px;
-  font-size: 12px;
+  flex-wrap: wrap;
+  font-size: 11px;
 }
+
 .audit-filter label {
   display: flex;
   align-items: center;
   gap: 4px;
   color: #aaa;
 }
-.audit-filter select, .audit-filter input {
-  width: auto;
-  margin-top: 0;
+
+.audit-filter select,
+.audit-filter input[type="text"] {
+  background: #0d0d0d;
+  color: #ddd;
+  border: 1px solid #444;
+  border-radius: 3px;
   padding: 3px 6px;
-  font-size: 12px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.audit-filter button {
+  background: #3a3a3a;
+  color: #fff;
+  border: 1px solid #555;
+  border-radius: 3px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 11px;
 }
 
 /* ============================================================
-   Grid-Area-Zuweisungen (Layout-Fix)
-   .layout-grid definiert areas "terminal chats" / "audit audit"
-   aber die Kinder haben keine grid-area — deshalb fallen sie in
-   Grid-Reihenfolge und landen falsch.
+   Scrollbars (dezent)
    ============================================================ */
-[data-bereich="terminal"] {
-  grid-area: terminal;
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
-[data-bereich="chat"],
-.rechte-spalte {
-  grid-area: chats;
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
 }
-[data-bereich="audit"],
-#audit-panel {
-  grid-area: audit;
+::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
 }

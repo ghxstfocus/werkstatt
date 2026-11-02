@@ -1,128 +1,143 @@
 (function () {
   "use strict";
 
-  function standard_kanal_fabrik(projekt) {
-    var basis = location.origin.replace(/^http/, "ws");
-    return new WebSocket(basis + "/ws/projects/" + encodeURIComponent(projekt));
-  }
+  var vorlage = document.getElementById("tab-vorlage");
+  var leiste = document.getElementById("tab-leiste");
+  var neuBtn = document.getElementById("tab-neu");
+  var zaehler = 0;
+  var aktiverTabId = null;
+  var tabDaten = {};  // tabId -> { projekt, terminal: [], chat: [], audit: [] }
 
-  function neuer_zustand(optionen) {
-    var opts = optionen || {};
-    var fabrik = opts.kanal_fabrik || standard_kanal_fabrik;
-    return {
-      tabs: {},
-      reihenfolge: [],
-      aktiv: null,
-      kanaele: {},
-      zaehler: 0,
-      kanal_fabrik: fabrik
-    };
-  }
+  function neuerTab(projekt) {
+    var klon = vorlage.content.cloneNode(true);
+    var btn = klon.querySelector(".tab");
+    var titel = klon.querySelector(".tab-titel");
+    var schliessen = klon.querySelector(".tab-schliessen");
+    var id = "tab-" + (++zaehler);
 
-  function kanal_holen(zustand, projekt) {
-    if (Object.prototype.hasOwnProperty.call(zustand.kanaele, projekt)) {
-      var vorhanden = zustand.kanaele[projekt];
-      vorhanden.nutzer = vorhanden.nutzer + 1;
-      return vorhanden;
-    }
-    var kanal = { projekt: projekt, nutzer: 1, ws: null, audit_abort: null };
-    var ws;
-    try {
-      ws = zustand.kanal_fabrik(projekt);
-    } catch (fehler) {
-      var umhuellt = new Error("Kanal-Fabrik fehlgeschlagen fuer " + projekt);
-      umhuellt.code = "kanal_fabrik_fehler";
-      umhuellt.ursache = fehler;
-      throw umhuellt;
-    }
-    kanal.ws = ws;
-    zustand.kanaele[projekt] = kanal;
-    return kanal;
-  }
+    btn.dataset.tabId = id;
+    btn.dataset.projekt = projekt;
+    titel.textContent = projekt;
 
-  function kanal_freigeben(zustand, projekt) {
-    if (!Object.prototype.hasOwnProperty.call(zustand.kanaele, projekt)) {
-      return;
-    }
-    var kanal = zustand.kanaele[projekt];
-    kanal.nutzer = kanal.nutzer - 1;
-    if (kanal.nutzer > 0) {
-      return;
-    }
-    if (kanal.audit_abort && typeof kanal.audit_abort.abort === "function") {
-      try {
-        kanal.audit_abort.abort();
-      } catch (fehler) {
-        /* Abort-Fehler ignorieren */
-      }
-    }
-    if (kanal.ws && typeof kanal.ws.close === "function") {
-      try {
-        kanal.ws.close();
-      } catch (fehler) {
-        /* Close-Fehler ignorieren */
-      }
-    }
-    delete zustand.kanaele[projekt];
-  }
+    btn.addEventListener("click", function () {
+      wechsle(id);
+    });
+    schliessen.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      schliesse(id);
+    });
 
-  function oeffne_tab(zustand, tab_id, projekt) {
-    if (Object.prototype.hasOwnProperty.call(zustand.tabs, tab_id)) {
-      return zustand.tabs[tab_id];
-    }
-    var kanal = kanal_holen(zustand, projekt);
-    var tab = {
-      id: tab_id,
+    leiste.insertBefore(klon, neuBtn);
+
+    tabDaten[id] = {
       projekt: projekt,
-      kanal: kanal,
-      nachrichten: [],
-      zustand: {}
+      terminal: [],
+      chat: [],
+      audit: [],
     };
-    zustand.tabs[tab_id] = tab;
-    zustand.reihenfolge.push(tab_id);
-    zustand.zaehler = zustand.zaehler + 1;
-    if (zustand.aktiv === null) {
-      zustand.aktiv = tab_id;
-    }
-    return tab;
+    return id;
   }
 
-  function schliesse_tab(zustand, tab_id) {
-    if (!Object.prototype.hasOwnProperty.call(zustand.tabs, tab_id)) {
+  function wechsle(tabId) {
+    if (!tabDaten[tabId]) {
       return;
     }
-    var tab = zustand.tabs[tab_id];
-    kanal_freigeben(zustand, tab.projekt);
-    delete zustand.tabs[tab_id];
-    var idx = zustand.reihenfolge.indexOf(tab_id);
-    if (idx >= 0) {
-      zustand.reihenfolge.splice(idx, 1);
+    aktiverTabId = tabId;
+    document.querySelectorAll(".tab").forEach(function (t) {
+      t.classList.toggle("ist-aktiv", t.dataset.tabId === tabId);
+    });
+    var daten = tabDaten[tabId];
+
+    document.getElementById("terminal-titel").textContent =
+      "Terminal — " + daten.projekt;
+    document.getElementById("chat-titel").textContent =
+      "Chat — " + daten.projekt;
+
+    rendereListe("terminal-scrollback", daten.terminal);
+    rendereListe("chat-nachrichten", daten.chat);
+    rendereListe("audit-live", daten.audit);
+  }
+
+  function schliesse(tabId) {
+    var btn = document.querySelector('.tab[data-tab-id="' + tabId + '"]');
+    if (btn) {
+      btn.remove();
     }
-    if (zustand.aktiv === tab_id) {
-      zustand.aktiv = zustand.reihenfolge.length > 0 ? zustand.reihenfolge[0] : null;
+    delete tabDaten[tabId];
+    if (aktiverTabId === tabId) {
+      var erste = document.querySelector(".tab");
+      if (erste) {
+        wechsle(erste.dataset.tabId);
+      } else {
+        aktiverTabId = null;
+      }
     }
   }
 
-  function wechsle_tab(zustand, tab_id) {
-    if (!Object.prototype.hasOwnProperty.call(zustand.tabs, tab_id)) {
-      return null;
+  function rendereListe(zielId, eintraege) {
+    var ziel = document.getElementById(zielId);
+    if (!ziel) {
+      return;
     }
-    zustand.aktiv = tab_id;
-    return zustand.tabs[tab_id];
+    ziel.textContent = "";
+    eintraege.forEach(function (text) {
+      var div = document.createElement("div");
+      div.textContent = text;
+      ziel.appendChild(div);
+    });
+    ziel.scrollTop = ziel.scrollHeight;
   }
 
-  window.WerkstattTabs = {
-    neuer_zustand: neuer_zustand,
-    kanal_holen: kanal_holen,
-    kanal_freigeben: kanal_freigeben,
-    oeffne_tab: oeffne_tab,
-    schliesse_tab: schliesse_tab,
-    wechsle_tab: wechsle_tab,
-    neuerZustand: neuer_zustand,
-    kanalHolen: kanal_holen,
-    kanalFreigeben: kanal_freigeben,
-    oeffneTab: oeffne_tab,
-    schliesseTab: schliesse_tab,
-    wechsleTab: wechsle_tab
-  };
+  // Neuer Tab
+  neuBtn.addEventListener("click", function () {
+    var name = window.prompt("Projekt-Name:", "werkstatt");
+    if (name) {
+      var id = neuerTab(name);
+      wechsle(id);
+    }
+  });
+
+  // Chat-Form: Text anhaengen
+  var chatForm = document.getElementById("chat-form");
+  if (chatForm) {
+    chatForm.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      if (!aktiverTabId) {
+        return;
+      }
+      var eingabe = document.getElementById("chat-eingabe");
+      var text = eingabe.value.trim();
+      if (!text) {
+        return;
+      }
+      tabDaten[aktiverTabId].chat.push("> " + text);
+      tabDaten[aktiverTabId].chat.push("(Demo: Chat-Backend noch nicht verdrahtet)");
+      eingabe.value = "";
+      rendereListe("chat-nachrichten", tabDaten[aktiverTabId].chat);
+    });
+    document.getElementById("chat-eingabe").addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" && ev.ctrlKey) {
+        chatForm.dispatchEvent(new Event("submit"));
+      }
+    });
+  }
+
+  // History-Sidebar
+  var sidebar = document.getElementById("history-sidebar");
+  var toggle = document.getElementById("history-toggle");
+  var close = document.getElementById("history-close");
+  if (toggle && sidebar) {
+    toggle.addEventListener("click", function () {
+      sidebar.classList.toggle("ist-offen");
+    });
+  }
+  if (close && sidebar) {
+    close.addEventListener("click", function () {
+      sidebar.classList.remove("ist-offen");
+    });
+  }
+
+  // Start: ein Demo-Tab
+  var startId = neuerTab("werkstatt");
+  wechsle(startId);
 })();
