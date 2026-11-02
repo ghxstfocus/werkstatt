@@ -143,9 +143,60 @@
         return;
       }
       tabDaten[aktiverTabId].chat.push("> " + text);
-      tabDaten[aktiverTabId].chat.push("(Demo: Chat-Backend noch nicht verdrahtet)");
+
       eingabe.value = "";
+
       rendereListe("chat-nachrichten", tabDaten[aktiverTabId].chat);
+
+      var _chatId = "admin";
+
+      var _tabId = aktiverTabId;
+
+      fetch("/api/chat/" + encodeURIComponent(_chatId), {
+
+        method: "POST",
+
+        headers: { "Content-Type": "application/json" },
+
+        body: JSON.stringify({ tab_id: _tabId, nachricht: text }),
+
+      })
+
+        .then(function (r) { return r.json().catch(function () { return {}; }); })
+
+        .then(function (daten) {
+
+          var antwort = daten.antwort || daten.message || "(leer)";
+
+          if (tabDaten[_tabId]) {
+
+            tabDaten[_tabId].chat.push("< " + antwort);
+
+            if (aktiverTabId === _tabId) {
+
+              rendereListe("chat-nachrichten", tabDaten[_tabId].chat);
+
+            }
+
+          }
+
+        })
+
+        .catch(function (err) {
+
+          if (tabDaten[_tabId]) {
+
+            tabDaten[_tabId].chat.push("! Fehler: " + err);
+
+            if (aktiverTabId === _tabId) {
+
+              rendereListe("chat-nachrichten", tabDaten[_tabId].chat);
+
+            }
+
+          }
+
+        });
     });
     document.getElementById("chat-eingabe").addEventListener("keydown", function (ev) {
       if (ev.key === "Enter" && ev.ctrlKey) {

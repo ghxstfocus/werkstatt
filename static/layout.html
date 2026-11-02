@@ -42,7 +42,7 @@
     </section>
 
     <!-- Rechts unten: Audit Live, mit einklappbarer History-Sidebar -->
-    <section class="bereich audit" data-bereich="audit">
+    <section class="bereich audit" id="audit-panel" data-bereich="audit">
       <div class="fenster-titel">
         <span>Audit Live</span>
         <button class="history-toggle" id="history-toggle" aria-label="History ein-/ausblenden">&#9776;</button>
@@ -56,10 +56,11 @@
         </div>
         <div class="audit-filter">
           <label>Kind <select id="audit-filter-kind"><option value="">alle</option></select></label>
-          <label>Run <input id="audit-filter-run" type="text" placeholder="run_id"></label>
-          <button type="button" id="audit-filter-btn">Filtern</button>
+          <label>Run <input id="audit-filter-run-id" type="text" placeholder="run_id"></label>
+          <button type="button" id="audit-history-laden">Filtern</button>
         </div>
         <div class="audit-history" id="audit-history"></div>
+        <span id="audit-status"></span>
       </aside>
     </section>
 
