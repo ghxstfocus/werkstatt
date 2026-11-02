@@ -20,10 +20,10 @@ und `PROGRESS.md` (Erledigt).
 ## Ist-Stand (2026-10-31)
 
 **Baseline (gemessen 2026-11-02):** 1145 / 309 / 22 / - / -.
-- pytest: 1145 passed, 5 skipped.
-- ruff: 309 errors (tests/ nie durchgerufft).
-- mypy: 22 errors in 9 files (werkstatt/, nicht auf .).
-- AST + Katalog: Messung fehlt (AST-Tool entfernt, _KATALOG_SOLL fehlt).
+- pytest: 1164 passed, 5 skipped (2026-11-02).
+- ruff: 180 errors (2026-11-02).
+- mypy: 18 errors in 9 files (werkstatt/, nicht auf .).
+- AST + Katalog: skip in quality_gate (Dateien entfernt, delta=0).
 - quality_gate: exit 1, regression true (Baseline aus 2026-10-25 ist
   veraltet, Re-Baseline als OP).
 
@@ -199,6 +199,41 @@ Aktuell muessen wir Roadmap-Phasen manuell in OPs zerlegen. Das soll der Loop se
 
 **Konsequenz:** Die Werkstatt kann autonom neue Phasen aus der Roadmap abarbeiten,
 ohne dass ein Mensch die OPs manuell formulieren muss.
+
+
+### Phase 32: Debugger-Agent — deterministisch messen, LLM-fixen 📋 (NEU 2026-11-02)
+
+Ziel: Ein Agent, der Bugs/Lint/Typ-Fehler findet, per AST+ruff+mypy
+deterministisch prueft ob ein Fix safe ist, und dann LLM-getrieben
+iteriert. Bounded (max 3 Runden), dann Eskalation. Kein Endlos-Loop.
+
+- M-500: `werkstatt/debugger.py` — Measure-Layer. Pro Datei: AST-Dump,
+  Ruff-JSON, Mypy-JSON, betroffene Tests, Monkeypatch-Ziele (`patch("$modul.$name"`),
+  Re-Export-Namen (`from $modul import $name` repo-weit).
+- M-501: Guard-Layer. Verweigert Auto-Fix wenn (a) Name in `__all__` steht,
+  (b) Monkeypatch-Ziel (grep-beweisbar), (c) Re-Export ohne lokalen Gebrauch.
+  Alle drei deterministisch, kein LLM.
+- M-502: Fix-Orchestrator. LLM (deepseek-chat) bekommt (a) Mess-Zustand aus
+  M-500, (b) Guard-Verdikte aus M-501, (c) Gate-Historie. Liefert Patch.
+  Max 3 Iterationen, dann Eskalation.
+- M-503: Gate-Runner. Nach jedem Fix: py_compile, pytest --collect-only,
+  pytest <betroffene>, mypy werkstatt/, ruff <geaenderte Datei>.
+  Rot -> Rollback, naechste Iteration.
+- M-504: Eskalation. Nach 3 Runden ohne gruene Gates: `PROGRESS.md`-Eintrag
+  mit Status `manual-needed`, Diff-Vorschlag, Fehlerkategorien. Kein Commit.
+- M-505: Tests. `tests/test_debugger.py` mit 3 Szenarien:
+  (1) Re-Export-Schutz greift, (2) Monkeypatch-Schutz greift,
+  (3) End-to-End-Fix mit Mock-LLM gruen.
+
+Anlass (2026-11-02): Bei der F401-Welle (Commit 705ae81) sind zwei
+Auto-Fix-Fallen aufgetreten, die der Agent deterministisch pruefen MUSS:
+(a) ruff killt Re-Exports (`werkstatt/loop.py` 47 Namen, von Tests
+importiert).
+(b) ruff killt Monkeypatch-Ziele (`import time`/`subprocess` in loop.py,
+von Tests als `werkstatt.loop.time`/`.subprocess` gepatcht).
+Beide sind per grep/AST vor dem Fix erkennbar. Ein reiner LLM-Debugger
+ohne deterministischen Guard haette beide Fallen reproduziert.
+
 
 ## Offene Bloecke (P1/P2)
 
