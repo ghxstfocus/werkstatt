@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 from werkstatt.agent import ask_llm
@@ -69,6 +70,16 @@ Regeln:
   - Code MUSS ruff-konform sein (__all__ sortiert, kein except Exception).
   - Halte dich EXAKT an den Architect-Text.
   - Keine API-Aenderungen (keine Umbenennungen).
+
+## DATUM (STRIKT)
+
+Datum NIEMALS raten. Verwende exakt den Platzhalter `{{date}}` fuer
+jedes Datum in Doku-Patches (STATUS.md, PROGRESS.md). Der Platzhalter
+wird deterministisch durch das aktuelle UTC-Datum ersetzt. Schreibe
+KEIN hartkodiertes Datum wie 2026-11-02. Fuer historische Eintraege
+(bestehende Zeilen in PROGRESS.md/Changelog) uebernimm das dort
+stehende Datum woertlich aus dem AKTUELLEN DATEI-INHALT — aendere
+es nicht.
 
 ## GOLD: Erweitern statt Ueberschreiben (STRIKT)
 
@@ -192,7 +203,9 @@ def _sammle_projekt_py_files(project_dir: Path, limit: int = 30) -> list[Path]:
 def _builder_system() -> str:
     """M-416: Editor-Modus. Nur Architect-Text + Edit-Format."""
     # GOLD: Reviewer-Schnittstelle anhaengen.
-    return BUILDER_SYSTEM + "\n\n" + _REVIEWER_SCHNITTSTELLE
+    prompt = BUILDER_SYSTEM + "\n\n" + _REVIEWER_SCHNITTSTELLE
+    heute = datetime.now(UTC).date().isoformat()
+    return prompt.replace("{{date}}", heute)
 
 
 def _finde_modul_pfad(modul: str, project_dir: Path) -> Path | None:
@@ -951,6 +964,46 @@ def _build_patches_fuer_datei(
     return _erfuellt
 
 
+def _korrigiere_doku_datum(patches: list[dict], heute: str) -> list[dict]:
+    """Sicherheitsnetz: korrigiert Zukunfts-Daten in Doku-Patches.
+
+    Durchsucht new_string und content von STATUS.md/PROGRESS.md-Patches
+    nach ISO-Daten (YYYY-MM-DD). Treffer, die in der Zukunft relativ
+    zu `heute` liegen, werden durch `heute` ersetzt. Vergangene Daten
+    bleiben unangetastet. Mutiert die dicts in-place.
+    """
+    import re as _re_dd
+    if not patches:
+        return patches
+    _datum_re = _re_dd.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
+    _doku_namen = {"STATUS.md", "PROGRESS.md"}
+    for _p in patches:
+        if not isinstance(_p, dict):
+            continue
+        _file = _p.get("file")
+        if not isinstance(_file, str) or not _file:
+            continue
+        try:
+            _name = Path(_file).name
+        except (TypeError, ValueError):
+            continue
+        if _name not in _doku_namen:
+            continue
+        for _feld in ("new_string", "content"):
+            _text = _p.get(_feld)
+            if not isinstance(_text, str) or not _text:
+                continue
+
+            def _ersetze(m: _re_dd.Match[str]) -> str:
+                _treffer = m.group(1)
+                if _treffer != heute and _treffer > heute:
+                    return heute
+                return _treffer
+
+            _p[_feld] = _datum_re.sub(_ersetze, _text)
+    return patches
+
+
 def _korrigiere_builder_action(
     task: dict, pd: Path, pn: str,
 ) -> str:
@@ -1367,6 +1420,9 @@ def run_builder(state: RunState) -> bool:
     )
     patches = _build_patches_fuer_datei(
         state, _zieldatei, _arch_beschreibung, api_key,
+    )
+    patches = _korrigiere_doku_datum(
+        patches, datetime.now(UTC).date().isoformat(),
     )
     if not patches:
         # GOLD 2026-10-30: pruefen, ob der LLM-Pfad bereits das

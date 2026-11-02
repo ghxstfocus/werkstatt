@@ -186,8 +186,13 @@ def test_sammle_sortiert(tmp_path):
 # =====================================================================
 
 def test_builder_system_enthaelt_reviewer_schnittstelle():
+    from datetime import UTC, datetime
     s = builder._builder_system()
-    assert builder.BUILDER_SYSTEM in s
+    heute = datetime.now(UTC).date().isoformat()
+    # OP-035: _builder_system() substituiert {{date}} deterministisch.
+    # Deshalb BUILDER_SYSTEM mit Datum-Ersetzung pruefen.
+    erwartet = builder.BUILDER_SYSTEM.replace("{{date}}", heute)
+    assert erwartet in s
     assert builder._REVIEWER_SCHNITTSTELLE in s
 
 
