@@ -321,10 +321,18 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
                   {"reason": "no_status_md", "op_nnn": _op_nnn}, pd, pn)
         else:
             _subject = (getattr(state, "aufgabe", "") or "").strip().split("\n")[0][:60]
-            _rm_ok, _rm_msg = _status_md_op_entfernen(_status_path, _op_nnn)
+            # M-Fix-2026-11-02: Delete-Zone-Append VOR dem Entfernen pruefen.
+            # Sonst geht der OP spurlos verloren wenn die Sektion fehlt.
+            _dz_ok = _delete_zone_op_append(_status_path, _op_nnn, _subject)
+            if not _dz_ok:
+                audit("doku_nachzug_skip",
+                      {"reason": "delete_zone_append_failed",
+                       "op_nnn": _op_nnn}, pd, pn)
+            _rm_ok = False
+            if _dz_ok:
+                _rm_ok, _rm_msg = _status_md_op_entfernen(_status_path, _op_nnn)
             if _rm_ok:
                 _progress_op_done(Path(pd), _op_nnn, _subject, pn)
-                _delete_zone_op_append(_status_path, _op_nnn, _subject)
                 _update_kennzahlen(_status_path, Path(pd))
                 _update_changelog(Path(pd), f"{_op_nnn}: {_subject}")
                 _drift = _architecture_drift_check(Path(pd))

@@ -209,7 +209,10 @@ def _apply_patches_with_diagnose(
             continue
         # FIX N 2026-10-31: Write-Fehler fail-closed.
         try:
-            _target.write_text(_neu_content, encoding="utf-8")
+            _target.write_text(
+                _collapse_excess_blank_lines(_neu_content),
+                encoding="utf-8",
+            )
         except OSError as _e:
             audit("loop_patch_write_failed",
                   {"file": _f, "phase": phase_label, "fehler": str(_e)[:200]},
