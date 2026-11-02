@@ -45,16 +45,28 @@ def audit_verzeichnis(tmp_path, monkeypatch):
         terminal_proxy, "_audit_log_verzeichnis", lambda project: verzeichnis
     )
     monkeypatch.setattr(terminal_proxy, "_POLL_INTERVALL_S", 0.02)
+    # Test-Replay: im Test schreiben wir eine Zeile, die gestreamt werden
+    # soll. Production springt ans Datei-Ende (kein Replay), Test liest
+    # von offset=0.
+    monkeypatch.setattr(terminal_proxy, "_REPLAY_HISTORIE", True)
     return verzeichnis, log
 
 
 def test_ws_empfaengt_neue_zeile(audit_verzeichnis):
-    verzeichnis, log = audit_verzeichnis
+    _verzeichnis, log = audit_verzeichnis
     client = TestClient(create_app())
 
+    # Zeile VOR Connect schreiben. _REPLAY_HISTORIE=True aus der Fixture
+    # sorgt dafuer dass der Tail-Poll von offset=0 liest und die Zeile
+    # beim ersten Tick ausliefert.
+    with log.open("a") as f:
+        f.write(json.dumps({
+            "kind": "loop_task_start",
+            "typ": "test_event",
+            "text": "hallo",
+        }) + "\n")
+
     with client.websocket_connect("/ws/terminal/testprojekt") as ws:
-        with log.open("a") as f:
-            f.write(json.dumps({"typ": "test_event", "text": "hallo"}) + "\n")
         daten = _ws_receive_json_mit_timeout(ws, timeout_s=3.0)
 
     assert daten["typ"] == "audit"
@@ -63,15 +75,15 @@ def test_ws_empfaengt_neue_zeile(audit_verzeichnis):
 
 
 def test_tab_wechsel_schliesst_vorherige_ws(audit_verzeichnis):
-    verzeichnis, log = audit_verzeichnis
+    _verzeichnis, _log = audit_verzeichnis
     client = TestClient(create_app())
 
-    with client.websocket_connect("/ws/terminal/testprojekt") as ws_a:
+    with client.websocket_connect("/ws/terminal/testprojekt") as _ws_a:
         assert terminal_proxy._AKTIVE_VERBINDUNGEN.get("testprojekt", 0) == 1
 
     assert terminal_proxy._AKTIVE_VERBINDUNGEN.get("testprojekt", 0) == 0
 
-    with client.websocket_connect("/ws/terminal/testprojekt") as ws_b:
+    with client.websocket_connect("/ws/terminal/testprojekt") as _ws_b:
         assert terminal_proxy._AKTIVE_VERBINDUNGEN.get("testprojekt", 0) == 1
 
     quelle = Path("static/tabs.js").read_text(encoding="utf-8")

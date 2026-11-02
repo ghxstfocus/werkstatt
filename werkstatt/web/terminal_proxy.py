@@ -26,6 +26,13 @@ _QUEUE_MAXSIZE = 1000
 
 _AUDIT_GLOB = "agent-pipeline-*.jsonl"
 _POLL_INTERVALL_S: float = 1.0
+# Replay-Steuerung: False (Production) = kein Replay historischer
+# Zeilen beim ersten Poll. True (Tests) = von offset=0 lesen.
+# Ohne diese Trennung gibt es ein Timing-Race: der Erstfund-Poll
+# kann VOR dem Test-Schreiben laufen und springt dann hinter die
+# Test-Zeile.
+_REPLAY_HISTORIE: bool = False
+
 _MAX_ZEILEN_PRO_TICK: int = 500
 _AKTIVE_VERBINDUNGEN: dict[str, int] = {}
 
@@ -134,7 +141,21 @@ async def _tail_poll_queue(
             if neuester != aktueller_pfad or neuer_inode != inode:
                 aktueller_pfad = neuester
                 inode = neuer_inode
-                offset = 0
+                if _erster_fund and not _REPLAY_HISTORIE:
+
+                    try:
+
+                        offset = aktueller_pfad.stat().st_size
+
+                    except OSError:
+
+                        offset = 0
+
+                    _erster_fund = False
+
+                else:
+
+                    offset = 0
             if aktueller_pfad is not None:
                 zeilen, offset = _lese_neue_zeilen(aktueller_pfad, offset)
                 for zeile in zeilen:
