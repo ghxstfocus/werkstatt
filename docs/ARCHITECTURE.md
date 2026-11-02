@@ -98,3 +98,65 @@ Loop-Kontext verwendet.
 - docs/ROADMAP.md — Phasen
 - PROGRESS.md — Historie (append-only)
 - docs/adr/ — Architecture Decision Records
+
+
+## Daten-Fluesse im Loop (Stand 2026-11-02)
+
+### Explorer-Findings (Welle E)
+
+Der Explorer schreibt `state.explorer_findings` mit:
+- `git_dirty` (bool)
+- `pytest_laufzeit_s` (int)
+- `ruff_befunde` (list)
+
+Diese fliessen in Architect- und Builder-Prompt (`## EXPLORER-FINDINGS`).
+Zweck: Architect/Builder entscheiden mit Ground-Truth statt mit Vermutung.
+Live-Beleg OP-039: Architect schlug "Doku-Eintrag" vor, obwohl pytest
+11 Min laeuft — er wusste es nicht.
+
+### Repair-Hints (Welle F)
+
+`reflection._klassifiziere_fehler` erkennt die dominante Fehlerklasse in
+`state.last_verify_errors` und liefert einen konkreten Hint:
+- mypy object/int -> typing.cast
+- ruff import -> Import reparieren
+- patch_not_applied -> neuen Anker suchen
+- pytest assertion -> Code/Test-Diagnose
+
+Builder-Prompt erhaelt den Hint als `## REPAIR-HINT`-Block.
+Zweck: Reflection mit konkretem Pattern statt "repariere irgendwas".
+Live-Beleg: 3 von 3 Reflection-Stagnationen am 2026-11-02 hatten eine
+Klasse, fuer die es einen klaren Hint gibt.
+
+### Scout-API-Auszug (Welle D3, bereits vorher live)
+
+`state.scout_api_auszug` wird vom Scout gefuellt und in Builder-Prompt
+injiziert (`## API-SIGNATUREN`). Reduziert den AST-Index (13 Dateien) auf
+die relevanten Symbole fuer den Builder.
+
+### Rollen-Kette (unveraendert, bewusst)
+
+Explorer -> Scout -> Architect -> Planner-Split -> Builder -> Verify ->
+Reviewer -> (Reflection bei Fail) -> Phase-Review -> Human-Gate.
+
+Jede Stufe reduziert die Kontextmenge fuer die naechste. Der Builder
+bekommt am Ende: 1 Task-Beschreibung, 1 Datei, relevante API-Signaturen,
+Explorer-Findings, Repair-Hints. Nicht: den ganzen Repo-Index.
+
+Welle G (`single_call`-Modus, Architect liefert Tasks direkt) wurde am
+2026-11-02 versucht und revertiert (`c1e8377`). Grund: Planner-Split
+parst Prosa in logische Task-Granularitaet, nicht in Datei-Granularitaet.
+Ein datei-basierter Extraktor produziert falsche Task-Grenzen.
+
+### Determinismus-Inseln
+
+- `verify.json` als Projekt-Vertrag
+- `_baue_api_index` (AST)
+- `_pruefe_api_widerspruch`
+- `_deterministic_entfernen_precheck`
+- `_stage_anzahl`, `_stage_ids` (Verify-Helpers)
+- `_collapse_excess_blank_lines` (Post-Patch)
+- `_klassifiziere_fehler` (Repair-Hint-Klassifikation)
+- OP-064b Antipattern-Scanner
+- OP-064a Sticky-Veto
+- `_delete_zone_op_append` (Doku-Nachzug)

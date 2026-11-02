@@ -276,6 +276,57 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
   Kern-Erkenntnis: 4 Anlaeufe (OP-059c/d/e/062i) fuer dasselbe Problem. Das ist Symptom-Behandlung. Es braucht Architektur: deterministische Schichten, die nicht durch LLM-Approval ueberschreibbar sind.
 
 
+
+### OP-065: Phase-2-Kette messen (60s Rest-Zeit)
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/pipeline_phases.py` (`_phase_plan_and_preflight`)
+- **Akzeptanzkriterien:** Zeitmessung pro Schritt in Phase 2 (Scout, Architect, Planner-Split, Merge, Normalize, Task-Build). Identifiziert die 60s ausserhalb der 3 LLM-Calls (Scout 5.8s + Architect 5.5s + Planner-Split 1.2s = 12.5s). Ziel: die 60s auf unter 10s reduzieren.
+- **Tests:** Zeit-Assertion in einem Mock-Lauf (Schaetzung, keine echten LLM-Calls).
+- **Blockiert von:** —
+- **Beleg:** Live-Lauf 2026-11-02 12:13, `[2/5] Planner ... 2 tasks (73.1s)`.
+
+### OP-066: Reviewer prueft Zwischenstand statt finalen Tree
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/pipeline_phases.py` (`_phase_tasks_loop`), `werkstatt/reflection.py`
+- **Akzeptanzkriterien:** Nach jeder Reflection-Runde Reviewer erneut laufen lassen (oder End-Tree pruefen), bevor `loop_gate_failed`. Sonst bleibt Reviewer-Report stale (Live-Beleg 2026-11-02 `audit_signature`-Lauf: 'Doppelte Testfunktionen' gemeldet, nach Reflection-Runde 2 mit `old_eq_new` bereinigt, kein erneuter Reviewer-Lauf).
+- **Tests:** Mock-Lauf mit 2 Reflection-Runden, assert Reviewer 3x aufgerufen (initial + 2 Runden).
+- **Blockiert von:** —
+
+### OP-067: pytest_changed feuert in Reflection-Runden nicht
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/verify.py` (`_expand_cmd_placeholders`), `werkstatt/reflection.py`
+- **Akzeptanzkriterien:** Nach Test-File-Änderung in einer Reflection-Runde muss `pytest_changed` neu evaluiert werden. `changed_test_files` wird heute in Reflection-Runden nicht neu berechnet. Live-Beleg: `audit_signature`-Lauf, t2 (Test-File) zeigt `pytest_changed` nur in t1, nicht in t2.
+- **Tests:** Reflection-Runde mit Test-File-Patch, assert `pytest_changed` feuert in der Runde.
+- **Blockiert von:** —
+
+### OP-068: Heartbeat-Stage-Name bei Builder/Reviewer `unbekannt`
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/agent.py` (`ask_llm`), `werkstatt/builder.py`, `werkstatt/reviewer.py`, `werkstatt/planner.py`
+- **Akzeptanzkriterien:** Heartbeat-Zeile zeigt konkreten Stage-Namen (`Builder`, `Reviewer`, `Planner-Split`) statt `unbekannt`. `ask_llm` bekommt einen `stage_name`-Parameter (Default `"?"`), alle Aufrufer setzen ihn. Live-Beleg: 2026-11-02, alle Heartbeats ausser Explorer/Scout/Architect zeigen `... unbekannt laeuft (Xs)`.
+- **Tests:** Mock-ask_llm mit `stage_name='Builder'`, assert `'Builder'` in Heartbeat-Ausgabe.
+- **Blockiert von:** —
+
+### OP-069: _delete_zone_op_append scheitert bei fehlender Sektion
+- **Status:** open (Reihenfolge-Fix live seit `a344b3a`, aber Sektion fehlt weiterhin)
+- **Betroffene Dateien:** `werkstatt/committer.py` (`_delete_zone_op_append`), `docs/STATUS.md` (Struktur)
+- **Akzeptanzkriterien:** `_delete_zone_op_append` legt die `## Delete-Zone`-Sektion an, wenn sie fehlt. Alternativ: STATUS.md bekommt die Sektion, Committer schreibt Zeilen. Live-Beleg: OP-035 ging 2026-11-02 spurlos verloren, weil Append `False` gab.
+- **Tests:** Leere STATUS.md, `_delete_zone_op_append` -> True, Sektion erscheint.
+- **Blockiert von:** —
+
+### OP-070: Scout-Redundanz messen vor Umbau
+- **Status:** open
+- **Betroffene Dateien:** `werkstatt/scout.py`, `werkstatt/planner.py` (`_run_scout`, `_baue_api_index`)
+- **Akzeptanzkriterien:** Auswertung der letzten 10 Loop-Läufe: (a) Wie oft setzt `_run_scout` `bereits_erfuellt == True`? (b) Wie oft liefert `_pruefe_api_widerspruch` einen Befund, den der Architect ohne Scout-Auszug nicht gefunden hätte? (c) Wie oft weicht `api_auszug` von einem reinen Token-Match ab? Entscheidung: Scout-LLM behalten (Wahrscheinlichkeit hoch nach Rollen-Analyse) oder deterministisch ersetzen. Kein Umbau vor Messung.
+- **Tests:** Keine — Mess-Aufgabe.
+- **Blockiert von:** —
+
+### OP-071: Welle G (single_call) — versucht, revertiert
+- **Status:** done (revertiert in `c1e8377`)
+- **Betroffene Dateien:** — (Code entfernt, Historie in `b6360ce` + `c1e8377`)
+- **Akzeptanzkriterien:** Erledigt. `single_call`-Modus wurde in `b6360ce` gebaut, in `c1e8377` revertiert. Grund: `_extract_tasks_from_architect` parst pro Datei, nicht pro logischer Änderung. Planner-Split ist nicht redundant, weil er Prosa in logische Task-Granularität übersetzt. Rollen-Kette bleibt.
+- **Tests:** —
+- **Blockiert von:** —
+
 ## Erledigt (Auto-Log)
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
