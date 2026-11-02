@@ -14,6 +14,8 @@ description: 'Regeln fuer Anker und Ersatz in typ:patch.
 allowed-tools: run_write
 globs:
   - "**/*.py"
+rollen:
+  - builder
 ---
 
 # Anker-Regeln

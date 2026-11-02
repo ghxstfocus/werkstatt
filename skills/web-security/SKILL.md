@@ -11,6 +11,8 @@ globs:
   - "**/views_*.py"
   - "**/templates/**"
   - "**/static/**"
+rollen:
+  - reviewer
 ---
 
 # Web-Security

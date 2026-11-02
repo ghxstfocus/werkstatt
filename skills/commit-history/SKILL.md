@@ -5,6 +5,9 @@ description: |
   Zieldateien. Strukturiert nach Warum/Was/Dateien.
   Use when planning or reviewing to understand
   project history.
+rollen:
+  - reviewer
+  - architect
 ---
 
 # Commit-History

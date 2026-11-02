@@ -10,6 +10,8 @@ description: 'Struktur fuer Phasenplaene. Executable multi-step plans,
 
   '
 allowed-tools: run_readonly
+rollen:
+  - architect
 ---
 
 # Plan-Crafting

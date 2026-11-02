@@ -4,6 +4,8 @@ description: |
   Fuer Phasen mit mehr als 5 Unterbloecken. Gruppen
   bilden, Meilensteine definieren. Use when a phase
   is large (>5 sub-blocks).
+rollen:
+  - planner
 ---
 
 # Milestone-Planning

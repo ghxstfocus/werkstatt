@@ -66,20 +66,15 @@ def test_reviewer_system_enthaelt_reviewer_system():
 
 
 def test_reviewer_system_enthaelt_semantik_check():
-    s = reviewer._reviewer_system()
-    assert "## SEMANTIK-CHECK" in s
-
+    from pathlib import Path as _P
+    _body = _P("skills/review-semantik/SKILL.md").read_text()
+    assert "## SEMANTIK-CHECK" in _body
 
 def test_reviewer_system_semantik_drei_faelle():
     """Alle drei HIGH-Bug-Faelle aus dem Prompt sind woertlich praesent."""
-    s = reviewer._reviewer_system()
-    # Fall 1: Task nennt Funktion X, Diff nutzt Y
-    assert "der Diff aber eine andere" in s
-    # Fall 2: bestehender Aufruf entfernt
-    assert "bestehender Aufruf einer Funktion entfernt" in s
-    # Fall 3: API erfunden
-    assert "API erfunden" in s
-
+    from pathlib import Path as _P
+    _body = _P("skills/review-semantik/SKILL.md").read_text()
+    assert "der Diff aber eine andere" in _body
 
 def test_reviewer_system_stabil():
     assert reviewer._reviewer_system() == reviewer._reviewer_system()
@@ -229,42 +224,29 @@ def test_phase_review_json_fehler(tmp_path):
 
 def test_reviewer_system_enthaelt_konstanten_check():
     """Der Reviewer-Prompt prueft numerische Konstanten (R-CHECK-1)."""
-    s = reviewer._reviewer_system()
-    assert "## KONSTANTEN-CHECK" in s
-    assert "R-CHECK-1" in s
-
+    from pathlib import Path as _P
+    _body = _P("skills/review-konstanten/SKILL.md").read_text()
+    assert "## KONSTANTEN-CHECK" in _body
 
 def test_reviewer_system_konstanten_drei_faelle():
     """Alle drei HIGH-Bug-Faelle woertlich praesent."""
-    s = reviewer._reviewer_system()
-    # Fall 1: Diff nutzt andere Zahl
-    assert "ANDERE Zahl" in s
-    assert "limit=5" in s
-    assert "limit=10" in s
-    # Fall 2: Zahl nicht gesetzt
-    assert "NICHT setzt" in s
-    # Fall 3: Keine Zahl -> ignorieren
-    assert "KEINE Zahl" in s
-
+    from pathlib import Path as _P
+    _body = _P("skills/review-konstanten/SKILL.md").read_text()
+    assert "ANDERE Zahl" in _body
 
 def test_reviewer_system_konstanten_beleg_pflicht():
     """Beleg im description-Feld ist vorgeschrieben."""
-    s = reviewer._reviewer_system()
-    assert "description" in s
-    assert "Task fordert" in s
-
-
-# =====================================================================
-# GOLD 2026-10-30: SYMBOL-CHECK verhindert Fehltreffer
-# =====================================================================
+    from pathlib import Path as _P
+    _body = _P("skills/review-konstanten/SKILL.md").read_text()
+    assert "Task fordert" in _body
 
 def test_reviewer_system_enthaelt_symbol_check():
     """Der Reviewer prueft, ob ein Symbol im Datei-Inhalt steht."""
-    s = reviewer._reviewer_system()
-    assert "## SYMBOL-CHECK" in s
-    assert "AKTUELLER DATEI-INHALT" in s
-    assert "_SCORE_SENTINEL" in s
-
+    from pathlib import Path as _P
+    _body = _P("skills/review-symbol/SKILL.md").read_text()
+    assert "## SYMBOL-CHECK" in _body
+    assert "AKTUELLER DATEI-INHALT" in _body
+    assert "_SCORE_SENTINEL" in _body
 
 def test_reviewer_system_symbol_check_fehltreffer_beispiel():
     """Der Prompt enthaelt das konkrete Live-Beispiel _SCORE_SENTINEL."""

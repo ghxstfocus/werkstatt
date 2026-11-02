@@ -6,6 +6,8 @@ description: |
   simplification opportunities.
 globs:
   - "**/*.py"
+rollen:
+  - reviewer
 ---
 
 # Simplify

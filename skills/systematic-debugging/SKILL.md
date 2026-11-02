@@ -8,6 +8,9 @@ description: 'Reproduce-first bug fixing. Erst reproduzieren, dann
 
   '
 allowed-tools: run_readonly
+rollen:
+  - explorer
+  - builder
 ---
 
 # Systematic-Debugging

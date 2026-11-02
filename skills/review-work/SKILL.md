@@ -6,6 +6,8 @@ description: |
   mess_nach und test_results. Nutze diese Skill immer,
   wenn du als Judge pruefst. Sie ist statisch im
   Judge-Prompt.
+rollen:
+  - reviewer
 ---
 
 # Review-Work

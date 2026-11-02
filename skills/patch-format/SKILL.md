@@ -7,6 +7,8 @@ description: |
   Sie ist statisch im Builder-Prompt.
 globs:
   - "**/*.py"
+rollen:
+  - builder
 ---
 
 # Patch-Format

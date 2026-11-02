@@ -13,6 +13,8 @@ globs:
   - "**/*secret*"
   - "**/*crypto*"
   - "**/security/**"
+rollen:
+  - reviewer
 ---
 
 # Security-Review

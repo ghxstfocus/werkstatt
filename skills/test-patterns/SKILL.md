@@ -9,6 +9,9 @@ globs:
   - "tests/**/*.py"
   - "**/test_*.py"
   - "**/*_test.py"
+rollen:
+  - builder
+  - reviewer
 ---
 
 # Test-Patterns

@@ -7,6 +7,13 @@ description: |
   messen. Rate NICHT.
 allowed-tools: run_readonly
 always: true
+rollen:
+  - builder
+  - reviewer
+  - architect
+  - scout
+  - explorer
+  - planner
 ---
 
 # Using-Werkstatt (Meta-Skill)

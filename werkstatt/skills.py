@@ -47,12 +47,16 @@ def load_all_skills() -> list[dict[str, Any]]:
         _globs = fm.get("globs") or []
         if isinstance(_globs, str):
             _globs = [_globs]
+        _rollen = fm.get("rollen") or []
+        if isinstance(_rollen, str):
+            _rollen = [_rollen]
         skills.append({
             "name": fm.get("name", d.name),
             "description": str(fm.get("description", "")).strip(),
             "allowed_tools": str(fm.get("allowed-tools", "")).strip(),
             "globs": list(_globs),
             "always": bool(fm.get("always", False)),
+            "rollen": [str(r) for r in _rollen],
             "dir": d,
             "body": None,
         })
@@ -118,17 +122,27 @@ def _glob_specificity(pattern: str) -> int:
 def skills_fuer_task(
     skills: list[dict[str, Any]],
     task_files: list[str],
+    rolle: str | None = None,
 ) -> list[dict[str, Any]]:
     """Progressive Disclosure Level 2, deterministischer Trigger.
 
     Laedt Skills deren `globs:` auf mindestens einen Task-File passt.
     Cursor-Stil: fs-path-matching, kein LLM-Call.
 
+    rolle: filtert Skills nach `rollen:`-Feld. Skills ohne rollen-Liste
+    gelten fuer alle Rollen (Backward-Compat).
+
     Reine Funktion, kein Side-Effect.
     """
     import fnmatch
     if not task_files:
         return []
+    # Rolle filtern, wenn angegeben
+    if rolle is not None:
+        skills = [
+            s for s in skills
+            if not (s.get("rollen") or []) or rolle in (s.get("rollen") or [])
+        ]
     # Pro Skill die hoechste Spezifitaet ueber alle matcht Glob-Patterns
     # ermitteln. Skills ohne Match fallen weg.
     matched: list[tuple[int, dict[str, Any]]] = []
@@ -164,13 +178,16 @@ def skills_aktivieren(
     skills: list[dict[str, Any]],
     task_files: list[str],
     max_total: int = 3,
+    rolle: str | None = None,
 ) -> list[dict[str, Any]]:
     """Glob-Trigger + Body laden, mit Limit.
 
     Laedt maximal max_total Skills. Verhindert Context-Overload,
     wenn mehrere Skills gleichzeitig matchen.
+
+    rolle: filtert Skills nach `rollen:`-Feld (siehe skills_fuer_task).
     """
-    matched = skills_fuer_task(skills, task_files)
+    matched = skills_fuer_task(skills, task_files, rolle=rolle)
     activated = []
     for s in matched[:max_total]:
         activated.append(activate_skill(s))

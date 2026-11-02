@@ -117,58 +117,6 @@ Wenn du eine Funktion erweiterst: das alte body-Dict MUSS im
 new_string vollstaendig enthalten sein. Sonst sind bestehende
 Sektionen weg.
 
-## FUNKTION-WAHL (verbindlich)
-- Wenn die Task eine Funktion/Klasse X namentlich nennt: waehle X.
-  Nicht die "aehnlichste", nicht die kuerzere.
-- Bei Namens-Aehnlichkeit (z.B. `_section_timeline` vs.
-  `_section_timeline_entries`): pruefe, welche die Task nennt,
-  und nutze genau diese.
-- Wenn du unsicher bist: Task failen lassen, nicht raten.
-
-## RUFF-GRUNDREGELN (verbindlich)
-
-Der Verify-Schritt faehrt `ruff check` auf den geaenderten Dateien.
-Wenn du eine dieser Regeln verletzt, wird der Patch verworfen.
-
-- **PLR0124 (self-comparison):** Kein `value != value` oder `x == x`.
-  NaN-Check via `math.isnan(value)` (Import `math` ergaenzen) oder
-  `value != value  # noqa: PLR0124` direkt an der Zeile.
-  Kein `# noqa: PLR0124` an einer anderen Zeile als der Verletzung.
-- **F821 (undefined name):** `Mapping` erfordert
-  `from collections.abc import Mapping`. Pruefe VOR dem Patch, ob
-  das Symbol importiert ist; wenn nicht, Import im selben Patch
-  ergaenzen.
-- **F401 (unused import):** Keinen Import hinzufuegen, der nicht
-  benutzt wird. Wenn du einen Import entfernst, pruefe mit Grep,
-  ob er noch gebraucht wird.
-- **E501 (line too long):** Zeilen <= 100 Zeichen. Lange Ausdruecke
-  auf mehrere Zeilen umbrechen.
-- **S110 (try/except/pass):** Kein `except: pass` ohne Logging.
-  Wenn noetig: `except Exception as _e:  # noqa: BLE001` + `audit(...)`
-  oder `logger.warning(...)`.
-- **Allgemein:** Wenn ein Ruff-Fix (`ruff check --fix`) etwas
-  entfernt, was inhaltlich gebraucht wird (z.B. `noqa` an einer
-  berechtigten Stelle), pruefe danach erneut mit `ruff check`.
-  Kein Fix ohne Nachkontrolle.
-
-
-## TYP-NARROWING BEI MYPY-FEHLERN
-
-Wenn mypy Fehler der Form 'Unsupported operand types for ... int and object'
-oder 'No overload variant of int matches argument type object' meldet:
-
-- NIEMALS int(x) schreiben. Das aendert den Laufzeit-Wert: aus '10' wird 10,
-  aber aus 'abc' wird ein ValueError.
-- NIEMALS type:ignore verwenden. Wird von OP-064b als Antipattern geblockt.
-- NUR typing.cast(int, x) NACH einem Runtime-Check verwenden. Der Runtime-
-  Check (isinstance(x, int), check_port(x) oder ein aequivalenter Guard)
-  garantiert zur Laufzeit int, aber mypy sieht das nicht. cast macht die
-  Narrowing-Absicht fuer den Typechecker explizit, ohne den Wert zu aendern.
-
-Beispiel: aus 'return min_port <= port <= max_port' wird
-'return min_port <= cast(int, port) <= max_port' — nach check_port(port)
-als Runtime-Guard. NICHT int(port) und NICHT type:ignore.
-
 """
 
 
@@ -867,7 +815,7 @@ def _build_patches_fuer_datei(
         )
         _all_skills = load_all_skills()
         _meta = skills_metadata_block(_all_skills)
-        _akt = skills_aktivieren(_all_skills, [zieldatei])
+        _akt = skills_aktivieren(_all_skills, [zieldatei], rolle="builder")
         _akt_block = ""
         _akt_names = []
         for _s in _akt:

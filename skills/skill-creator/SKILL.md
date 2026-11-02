@@ -4,6 +4,7 @@ description: |
   Erstellt neue Skills. Interview, Draft, Review,
   Publish. Use when a new skill is needed or an
   existing one should be split.
+rollen: []
 ---
 
 # Skill-Creator

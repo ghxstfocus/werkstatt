@@ -115,41 +115,6 @@ Antworte NUR mit validem JSON:
 }
 
 
-## SEMANTIK-CHECK (HIGH-Bug)
-- Wenn die Task eine Funktion X nennt, der Diff aber eine andere
-  Funktion Y nutzt (z.B. `_section_timeline` statt
-  `_section_timeline_entries`): HIGH-Bug, reject.
-- Wenn ein bestehender Aufruf einer Funktion entfernt wird, ohne
-  dass die Task das verlangt: HIGH-Bug.
-- Wenn eine API erfunden wird (nicht im Import-/Code-Index):
-  HIGH-Bug.
-
-
-## KONSTANTEN-CHECK (HIGH-Bug, R-CHECK-1)
-- Wenn die Task eine numerische Konstante nennt (z.B. `limit=10`,
-  `max_retries=3`, `timeout=60`): pruefe, ob der Diff diese Zahl
-  WOERTLICH enthaelt.
-- Wenn der Diff eine ANDERE Zahl nutzt (`limit=5` statt `limit=10`):
-  HIGH-Bug, reject. Auch wenn der Diff ansonsten korrekt aussieht.
-- Wenn die Task eine Zahl nennt, der Diff sie aber NICHT setzt
-  (z.B. `limit` unveraendert laesst): HIGH-Bug, reject.
-- Wenn die Task KEINE Zahl nennt: ignorieren, kein Bug.
-- Belege die Zahl im `description`-Feld: "Task fordert X=10,
-  Diff nutzt X=5".
-
-
-## SYMBOL-CHECK (HIGH-Bug, verhindert Fehltreffer)
-- Bevor du einen Bug meldest ("Symbol X nicht definiert"): pruefe
-  im Block `AKTUELLER DATEI-INHALT`, ob X dort definiert ist.
-- Wenn X im Datei-Inhalt steht (als Zuweisung, def, class, import):
-  KEIN Bug.
-- Wenn X nirgends definiert ist: HIGH-Bug.
-- Belege im `description`-Feld, ob du X im Datei-Inhalt gesucht
-  hast: "X nicht im Datei-Inhalt (Zeilen 1-N)".
-- Beispiel: `_SCORE_SENTINEL` ist im Datei-Inhalt bei Zeile 65
-  als `_SCORE_SENTINEL = float("-inf")` definiert -> kein Bug.
-
-
 ## DATEI-CHECK (HIGH-Bug, verhindert "fehlt im Diff"-Fehltreffer)
 - Wenn eine Task-Anforderung im Diff NICHT sichtbar ist (z.B. "Slice
   fehlt"), pruefe im Block `AKTUELLER DATEI-INHALT`, ob die
@@ -179,31 +144,6 @@ Der User-Auftrag enthaelt oft NEGATIVE Anweisungen ("nicht X",
 - Wenn keine negativen Anweisungen im Auftrag: kein Bug.
 - Belege im `description`-Feld: "Auftrag sagt 'nicht umnummerieren',
   Diff nummeriert 2->1, 3->2, 4->3".
-
-## SCOPE-CHECK (Over-Delivery)
-
-Zusaetzlich zur fachlichen Pruefung: pruefe, ob der Diff im Scope der
-Task-Beschreibung bleibt. Over-Delivery ist ein HIGH-Bug.
-
-Beispiele:
-- Task: "Einen Docstring-Absatz hinzufuegen". Diff: 20 Zeilen Code +
-  1 neuer Test + __all__-Aenderung. -> HIGH-Bug.
-- Task: "Eine Zeile in __all__ ergaenzen". Diff: 10 Zeilen __all__
-  umgeschrieben mit anderen Anfuehrungszeichen + 2 unbezogene Eintraege
-  hinzugefuegt. -> HIGH-Bug.
-- Task: "Neue Funktion X". Diff: X + 3 unbezogene Refactors in
-  anderen Funktionen. -> HIGH-Bug.
-
-Regel:
-- Jede Zeile im Diff muss durch die Task-Beschreibung gedeckt sein.
-- Refactors, Formatierungs-Aenderungen, Whitespace-Korrekturen ausserhalb
-  des Ziel-Bereichs sind nicht im Scope, auch wenn sie "besser" aussehen.
-- Kosmetische Aenderungen (Anfuehrungszeichen, removesuffix, etc.) ohne
-  Auftrag: HIGH-Bug.
-- Loeschen von Inhalt ausserhalb des Scopes: HIGH-Bug.
-
-Wenn du eine Over-Delivery findest, benenne sie explizit mit der
-betroffenen Zeile und dem Grund. Kein "sieht ok aus" bei unklarem Scope.
 
 """
 
@@ -299,7 +239,7 @@ def _reviewer_system(state=None, task_files=None) -> str:
         if _meta:
             parts.append(_meta.rstrip())
         if task_files:
-            _akt = skills_aktivieren(skills, list(task_files))
+            _akt = skills_aktivieren(skills, list(task_files), rolle="reviewer")
             for _s in _akt:
                 _body = _s.get("body") or ""
                 if _body:
