@@ -274,6 +274,32 @@ tragen. Roadmap-Phasen sind grobe Etappen aus der Vor-Session
 - **Tests:** Unit-Tests fuer die Validierungs-Logik und den Parser der Roadmap.
 - **Blockiert von:** —
 
+
+### OP-083: Dashboard Live-Daten (WS-Terminal, Chat, Tab-Bindung)
+
+- **Status:** open
+- **Beschreibung:** Das Dashboard laedt (017212e), aber Live-Daten fehlen:
+  (a) WS `/ws/terminal/{project}` verbindet, sendet aber nie Events, weil
+  `terminal_proxy.py` einen In-Process-Emitter nutzt — der Loop laeuft
+  in einem anderen Prozess. (b) `chat.js:114` schreibt hart
+  „(Demo: Chat-Backend noch nicht verdrahtet)" statt `fetch`. (c) `tabs.js`
+  ist Store-only; `terminal.js`/`audit.js` verbinden bei `DOMContentLoaded`
+  tab-unabhaengig, mehrere Tabs oeffnen mehrere WS gleichzeitig.
+- **Betroffene Dateien:** `werkstatt/web/terminal_proxy.py`,
+  `static/tabs.js`, `static/terminal.js`, `static/audit.js`, `static/chat.js`
+- **Akzeptanzkriterien:** (a) `terminal_proxy` liest neue Zeilen aus
+  `audit-logs/agent-pipeline-*.jsonl` (Tail-Poll, 1s Intervall,
+  Inode-basiert, nicht-blockierend) und sendet sie ueber die bestehende
+  WS-Verbindung. (b) `chat.js` sendet per `fetch POST /api/chat/{chat_id}`
+  statt Demo-Text. (c) `tabs.js` ruft beim Tab-Wechsel
+  `terminal.oeffne(project)` / `audit.oeffne(project)` /
+  `chat.setze_chat(chat_id)` und beim Tab-Schliessen die jeweiligen
+  `schliesse()`-Funktionen. Kein globaler `DOMContentLoaded`-Connect mehr.
+- **Tests:** `pytest tests/test_web_integration.py -v` (bestehende 5) +
+  `tests/test_web_live.py` (neu): 2 Tests (WS empfaengt neue Zeile aus
+  Test-JSONL, Tab-Wechsel schliesst vorherige WS).
+- **Blockiert von:** —
+
 ## Erledigt (Auto-Log)
 
 - 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)
