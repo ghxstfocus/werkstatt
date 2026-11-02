@@ -306,6 +306,11 @@ class RunState:
     # K47: Historie der Reflection-Runden pro Task.
     # Pro Eintrag: {runde, verify_errors, reviewer_bugs, patches_applied}.
     reflection_history: list[dict] = field(default_factory=list)
+    # Stellschrauben 2026-11-03: Skills-Bloecke pro Rolle.
+    planner_skills_block: str = ""
+    reflection_skill_body: str = ""
+    architect_skills_block: str = ""
+
     # M-299e: Planner-Entscheidung pro Preflight-Fehler.
     # BLOCKER: verhindert die Aufgabe -> in Plan.
     blocker_fehler: list[dict] = field(default_factory=list)

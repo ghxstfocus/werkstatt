@@ -205,6 +205,22 @@ def _reflection_loop(
     pn = state.project_name
     api_key = getattr(state, "api_key", "")
 
+    # Stellschrauben 2026-11-03: reflection-Skill.
+    try:
+        from werkstatt.skills import (
+            _merke_geladene_skills,
+            load_all_skills,
+            load_skill_by_name,
+        )
+        _all = load_all_skills()
+        _sd = load_skill_by_name("systematic-debugging", _all)
+        if _sd:
+            _merke_geladene_skills(
+                state, [_sd.get("name", "systematic-debugging")], rolle="reflection")
+            state.reflection_skill_body = _sd.get("body") or ""
+    except Exception:
+        pass
+
     if not api_key:
         audit("loop_reflection_kein_key", {}, pd, pn)
         return False

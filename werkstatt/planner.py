@@ -27,11 +27,19 @@ def _is_reasoning_model(model: str) -> bool:
 
 _ARCHITECT_MODEL = os.environ.get("WERKSTATT_ARCHITECT_MODEL", "deepseek-reasoner")
 
+from werkstatt.architect import (  # noqa: F401
+    _BUILDER_SCHNITTSTELLE,
+    ARCHITECT_SYSTEM,
+    _architect_system_with_builder,
+    _planner_system,
+    run_architect,
+)
 from werkstatt.audit import audit
+
 # Fix AZ Stufe 9+10: Re-Exports fuer API-Kompatibilitaet.
 from werkstatt.scout import (  # noqa: F401
-    SCOUT_SYSTEM,
     _SCOUT_NACHFOLGER_BLOCK,
+    SCOUT_SYSTEM,
     _baue_api_index,
     _finde_api,
     _format_api_index_for_prompt,
@@ -39,14 +47,8 @@ from werkstatt.scout import (  # noqa: F401
     _run_scout,
     _scout_system_with_nachfolger,
 )
-from werkstatt.architect import (  # noqa: F401
-    ARCHITECT_SYSTEM,
-    _BUILDER_SCHNITTSTELLE,
-    _architect_system_with_builder,
-    _planner_system,
-    run_architect,
-)
 from werkstatt.state import RunState
+
 
 def _format_explorer_findings(f: dict) -> str:
     """M-WelleE: Explorer-Findings als Prompt-Block."""
@@ -1236,6 +1238,30 @@ def run_planner(state: RunState) -> bool:
     if not api_key:
         audit("planner_kein_key", {}, pd, pn)
         return False
+    # Stellschrauben 2026-11-03: Planner-Skills.
+    try:
+        from werkstatt.skills import (
+            _merke_geladene_skills,
+            load_all_skills,
+            load_skill_by_name,
+        )
+        _all = load_all_skills()
+        _geladen = []
+        for _n in ("using-werkstatt", "milestone-planning", "plan-crafting"):
+            _s = load_skill_by_name(_n, _all)
+            if _s:
+                _geladen.append(_s)
+        if _geladen:
+            _merke_geladene_skills(
+                state, [s.get("name", "") for s in _geladen], rolle="planner")
+            _lines = ["## SKILLS (planner)"]
+            for _s in _geladen:
+                _b = _s.get("body") or ""
+                if _b:
+                    _lines.append(f"### {_s.get(chr(34)+chr(34) if False else _s.get('name','?'))}\n{_b}")
+            state.planner_skills_block = "\n\n".join(_lines)
+    except Exception:
+        pass
 
     # FIX S 2026-10-31: Deterministischer Pre-Check VOR dem Scout.
     # Wenn Aufgabe "entferne X" ist und X fehlt, Loop sauber beenden.

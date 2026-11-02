@@ -559,8 +559,38 @@ def run_architect(
     """
     pd = state.project_dir
     pn = state.project_name
+
+    # Stellschrauben 2026-11-03: Architect-Skills.
+    try:
+        from werkstatt.skills import (
+            _merke_geladene_skills,
+            load_all_skills,
+            load_skill_by_name,
+        )
+        _all = load_all_skills()
+        _geladen = []
+        for _n in ("using-werkstatt", "plan-crafting", "commit-history"):
+            _s = load_skill_by_name(_n, _all)
+            if _s:
+                _geladen.append(_s)
+        if _geladen:
+            _merke_geladene_skills(
+                state, [s.get("name", "") for s in _geladen], rolle="architect")
+            _lines = ["## SKILLS (architect)"]
+            for _s in _geladen:
+                _b = _s.get("body") or ""
+                if _b:
+                    _lines.append(f"### {_s.get('name','?')}\n{_b}")
+            state.architect_skills_block = "\n\n".join(_lines)
+    except Exception:
+        pass
+
     _arch_sys_base = _planner_system(aufgabe, explorer_ctx, state)
-    _arch_sys = _arch_sys_base + "\n\n" + _BUILDER_SCHNITTSTELLE
+    _arch_skills_block = getattr(state, "architect_skills_block", "") or ""
+    _arch_sys = (
+        (_arch_skills_block + "\n\n" if _arch_skills_block else "")
+        + _arch_sys_base + "\n\n" + _BUILDER_SCHNITTSTELLE
+    )
     _arch_reply = _with_spinner(
         "Architect",
         lambda: ask_llm(

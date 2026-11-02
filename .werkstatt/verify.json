@@ -8,7 +8,8 @@
         "py_compile",
         "{changed_py_files}"
       ],
-      "phase": "post_build"
+      "phase": "post_build",
+      "timeout": 60
     },
     {
       "id": "ruff_changed",
@@ -19,7 +20,8 @@
         "check",
         "{changed_py_files}"
       ],
-      "phase": "post_build"
+      "phase": "post_build",
+      "timeout": 120
     },
     {
       "id": "mypy_changed",
@@ -43,7 +45,8 @@
         "{changed_test_files}",
         "-q"
       ],
-      "phase": "post_build"
+      "phase": "post_build",
+      "timeout": 300
     },
     {
       "id": "pytest_regression",
