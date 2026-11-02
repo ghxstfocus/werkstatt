@@ -1350,3 +1350,13 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 ## 2026-11-02T11:39:43+00:00 -- Tests fuer Heartbeat anlegen
 - **Status:** done
 
+## 2026-11-02T12:13:20+00:00 -- Neue Funktion _stage_ids in verify.py
+- **Status:** done
+
+## 2026-11-02T12:13:35+00:00 -- Test test_stage_ids in test_loop.py
+- **Status:** done
+
+## 2026-11-02T12:14:49+00:00 -- Phase abgeschlossen: werkstatt
+- **Status:** phase_ende
+- **Info:** tasks_ok=2/2
+

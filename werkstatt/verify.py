@@ -63,6 +63,31 @@ def _stage_anzahl(project_dir: Path) -> int:
     return len(stages)
 
 
+def _stage_ids(project_dir: Path) -> list[str]:
+    """Liest die Stage-IDs aus .werkstatt/verify.json (sortiert).
+
+    Fail-closed: fehlende/kaputte Datei oder falsches Format -> [].
+    """
+    pfad = Path(project_dir) / ".werkstatt" / "verify.json"
+    if not pfad.is_file():
+        return []
+    try:
+        text = pfad.read_text(encoding="utf-8")
+        daten = json.loads(text)
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return []
+    if not isinstance(daten, dict):
+        return []
+    stages = daten.get("stages")
+    if not isinstance(stages, list):
+        return []
+    ids: list[str] = []
+    for stage in stages:
+        if isinstance(stage, dict) and isinstance(stage.get("id"), str):
+            ids.append(stage["id"])
+    return sorted(ids)
+
+
 def _expand_cmd_placeholders(
     cmd: list, state: RunState, project_dir: Path,
 ) -> list[str] | None:
@@ -558,6 +583,7 @@ __all__ = [
     "_resolve_venv_cmd",
     "_ruff_fix_changed",
     "_stage_anzahl",
+    "_stage_ids",
     "_stage_ist_hart",
     "_verify_patches",
     "_verify_patches_soft",

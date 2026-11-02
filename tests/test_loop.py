@@ -11,7 +11,7 @@ from werkstatt import loop as loop_mod
 from werkstatt.loop import _plan_gate, _verify_patches, run_pipeline_loop
 from werkstatt.phase_state import PhaseState
 from werkstatt.state import RunState
-from werkstatt.verify import _stage_anzahl
+from werkstatt.verify import _stage_anzahl, _stage_ids
 
 
 def _state(tmp_path, tasks=True, tests=True, akz=True):
@@ -75,6 +75,19 @@ def test_stage_anzahl(tmp_path):
         '{"stages": [{"id": "a"}, {"id": "b"}, {"id": "c"}, {"id": "d"}]}'
     )
     assert _stage_anzahl(tmp_path) == 4
+
+
+def test_stage_ids(tmp_path):
+    """_stage_ids: [] ohne verify.json, IDs mit vier Stages."""
+    # Fall (a): keine .werkstatt/verify.json -> []
+    assert _stage_ids(tmp_path) == []
+
+    # Fall (b): verify.json mit vier Stages -> IDs in Reihenfolge
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "a"}, {"id": "b"}, {"id": "c"}, {"id": "d"}]}'
+    )
+    assert _stage_ids(tmp_path) == ["a", "b", "c", "d"]
 
 
 def test_loop_planner_fail(tmp_path):
