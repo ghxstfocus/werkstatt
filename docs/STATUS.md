@@ -274,26 +274,6 @@ tragen. Roadmap-Phasen sind grobe Etappen aus der Vor-Session
 - **Tests:** Unit-Tests fuer die Validierungs-Logik und den Parser der Roadmap.
 - **Blockiert von:** —
 
-### OP-082: Dashboard-Verdrahtung (Rest) — StaticFiles, GET /, Router, Tests
-
-- **Status:** open
-- **Beschreibung:** Die UI-Module (OP-074..078) sind fertig, aber nicht in
-  die FastAPI-App verdrahtet. `create_app()` bindet nur `ws.router` ein;
-  `chat.router`, `audit_panel.router`, `terminal_proxy.router` fehlen. Kein
-  `StaticFiles`-Mount, kein `GET /`. `layout.html` laedt nur `tabs.js`.
-  Damit laufen alle JS-Verbindungen ins 404.
-- **Betroffene Dateien:** `werkstatt/web/app.py`, `static/layout.html`,
-  `tests/test_web_integration.py` (neu)
-- **Akzeptanzkriterien:** (a) `GET /static/layout.css` -> 200.
-  (b) `GET /` liefert `layout.html` mit `<!DOCTYPE` und `tabs.js`.
-  (c) `create_app()` bindet `ws.router`, `chat.router`,
-  `audit_panel.router`, `terminal_proxy.router` ein (kollisionsfrei).
-  (d) `layout.html` laedt `tabs.js`, `terminal.js`, `audit.js`, `chat.js`,
-  `layout.css`, `chat.css`. (e) Tests in `tests/test_web_integration.py`
-  decken a-d + `WS /ws/terminal/{project}` + `POST /api/chat/{chat_id}` ab.
-- **Tests:** `pytest tests/test_web_integration.py -v`
-- **Blockiert von:** —
-
 ## Erledigt (Auto-Log)
 
 - 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)

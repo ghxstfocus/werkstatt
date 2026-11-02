@@ -1416,3 +1416,18 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
   - Monkeypatch-Ziel-Kill bei `--fix`
   - Test blockiert auf `receive_json` ohne Endpoint-Response
 
+## 2026-11-02T22:13:51+00:00 -- OP-082: Dashboard-Verdrahtung (manuell nach Loop-Fix)
+- **Status:** done
+- **Commit:** 7d59278
+- **Info:** Loop-Build in 5 Runden gescheitert an drei deterministischen
+  Fehlern (fehlende Imports, falscher static_dir-Pfad, blockierender
+  test_ws_terminal). Manuell gefixt.
+  - app.py: `from werkstatt.web import ws, chat, audit_panel,
+    terminal_proxy` + FastAPI-StaticFiles/FileResponse/Path.
+  - static_dir: `Path(__file__).resolve().parent.parent.parent / "static"`
+    (Layout/CSS/JS liegen in /opt/werkstatt/static/, nicht im Modul).
+  - test_ws_terminal: blockierendes `receive_json()` entfernt — Endpoint
+    sendet keine Antwort auf Client-Nachrichten.
+- **Tests:** 5 Szenarien in tests/test_web_integration.py.
+- **Anlass für OP-081:** Diese drei Fehlerklassen sind deterministisch
+  prüfbar. Siehe Commit 355ba51 (werkstatt/diagnose.py).
