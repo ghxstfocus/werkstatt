@@ -1436,7 +1436,7 @@ def run_builder(state: RunState) -> bool:
 
         # Ansonsten: bisheriges Verhalten — Auftrag ist bereits erfuellt.
         state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
-        state.auftrag_bereits_erfuellt_bestaetigt = True  # type: ignore[attr-defined]
+        state.auftrag_bereits_erfuellt_bestaetigt = False  # type: ignore[attr-defined]
         state.auftrag_bereits_erfuellt_quelle = "builder:alle_patches_no_effect"  # type: ignore[attr-defined]
         audit("auftrag_bereits_erfuellt",
               {"zieldatei": _zieldatei,
