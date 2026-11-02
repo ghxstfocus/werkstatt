@@ -108,9 +108,16 @@ def test_delete_zone_append_erfolg(tmp_path):
 
 
 def test_delete_zone_keine_sektion(tmp_path):
+    """OP-069: Sektion wird angelegt, OP eingetragen, True."""
     f = tmp_path / "STATUS.md"
     f.write_text("# Status\n\nKeine Delete-Zone.\n", encoding="utf-8")
-    assert _delete_zone_op_append(f, "OP-048", "X") is False
+    assert _delete_zone_op_append(f, "OP-048", "X") is True
+    txt = f.read_text(encoding="utf-8")
+    assert "## Delete-Zone" in txt
+    assert "OP-048" in txt
+    # Andere Zeilen unberuehrt
+    assert "# Status" in txt
+    assert "Keine Delete-Zone." in txt
 
 
 def test_delete_zone_datei_fehlt(tmp_path):

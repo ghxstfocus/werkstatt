@@ -127,10 +127,12 @@ def _delete_zone_op_append(status_md_path: Path, op_nnn: str, subject: str) -> b
     note = subject.replace("|", "-")[:60]
     new_row = f"| {op_nnn} | erledigt {datum} | {note} | - |"
     try:
-        text = (
-            status_md_path.read_text(encoding="utf-8")
-            if status_md_path.exists() else ""
-        )
+        # OP-069-Fix (2026-11-02): Datei muss existieren. Sonst False.
+        # Ohne diesen Check legt write_text am Ende die Datei an,
+        # was der Akzeptanz "bei fehlender Datei: False" widerspricht.
+        if not status_md_path.exists():
+            return False
+        text = status_md_path.read_text(encoding="utf-8")
         lines = text.splitlines()
         dz_idx = -1
         for i, line in enumerate(lines):
