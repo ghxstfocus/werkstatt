@@ -110,7 +110,7 @@ def test_doku_only_plan_bei_doku_aufgabe_erlaubt():
     """
     import sys
     sys.path.insert(0, "/opt/werkstatt/hooks")
-    import planner_gate as pg
+    from hooks import planner_gate as pg
 
     payload = {
         "tasks": [
@@ -134,7 +134,7 @@ def test_doku_only_plan_ohne_doku_aufgabe_abgelehnt():
     """Wenn die Prosa Code nennt, ist ein Doku-Only-Plan ungueltig."""
     import sys
     sys.path.insert(0, "/opt/werkstatt/hooks")
-    import planner_gate as pg
+    from hooks import planner_gate as pg
 
     payload = {
         "tasks": [
@@ -163,7 +163,7 @@ def test_doku_aufgabe_erlaubt_doku_only_plan_auch_mit_code_kontext():
     """
     import sys
     sys.path.insert(0, "/opt/werkstatt/hooks")
-    import planner_gate as pg
+    from hooks import planner_gate as pg
 
     payload = {
         "tasks": [
@@ -191,7 +191,7 @@ def test_code_aufgabe_lehnt_doku_only_plan_ab():
     """Wenn die Aufgabe Code ist, ist Doku-Only ungueltig."""
     import sys
     sys.path.insert(0, "/opt/werkstatt/hooks")
-    import planner_gate as pg
+    from hooks import planner_gate as pg
 
     payload = {
         "tasks": [
