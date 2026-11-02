@@ -371,7 +371,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-067: pytest_changed feuert in Reflection-Runden nicht
 
-- **Status:** open
+- **Status:** done (Commit `69889b7`: pytest_changed feuert in Reflection-Runden)
 - **Betroffene Dateien:**
   - `werkstatt/verify.py` — `_expand_cmd_placeholders` soll in Reflection-Runden `changed_test_files` korrekt berechnen
   - `tests/test_pytest_changed_reflection.py` — Test fuer Stage-Trigger in Reflection
@@ -424,7 +424,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-072: Phase 30 (UI) in OPs zerlegen (Meta-OP)
 
-- **Status:** open
+- **Status:** done (Commit `88ab237`: UI-Phase 30 in OPs zerlegt (OP-074..078))
 - **Beschreibung:** Die Roadmap definiert Phase 30 (Web-Dashboard & Interactive UI).
   Dieser Meta-OP fordert den Architect auf, das UI-Konzept (Layout, Kopplungs-Mechanik,
   Chrome-Tabs, Audit-Sidebar) in spezifische, ausfuehrbare Implementierungs-Ops zu zerlegen.
@@ -483,7 +483,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-079: Reviewer verwechselt Kontext-Hunk mit Task-Zuordnung
 
-- **Status:** open
+- **Status:** done (Commit `d023535`: review-work-Skill: Markdown-Hunk-Header ignorieren)
 - **Live-Beleg 2026-11-02 18:02 (OP-072-Lauf):** Der Builder fuegte 5 neue OP-Bloecke (OP-074..078) korrekt in `docs/STATUS.md` ein. Der Reviewer hat den Diff verworfen mit dem HIGH-Bug: "OP-074..078 behandeln voellig andere Themen (Migrationsnummern...)". Grund: Der Reviewer hat den Kontext-Hunk `@@ -294,7 +294,6 @@ DB-Reset zwischen Tests...` (aus OP-039) als Task-Zuordnung gelesen, obwohl die `+`-Zeilen ausschliesslich die UI-OPs waren.
 - **Betroffene Dateien:** `werkstatt/reviewer.py`, `tests/test_loop_reviewer.py`
 - **Akzeptanzkriterien:** Bei `.md`-Patches (STATUS.md, ROADMAP.md, PROGRESS.md) prueft der Reviewer nur die `+`-Zeilen gegen die Task-Description, nicht den `@@`-Kontextanker. Neue Regel im `review-work`-Skill oder als deterministischer Vor-Check in `run_reviewer`. Test: Ein Diff mit Kontextanker "DB-Reset" und `+`-Zeilen "OP-074" muss approved werden.
