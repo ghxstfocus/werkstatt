@@ -7,7 +7,7 @@ Letzte Aktualisierung: 2026-11-02.
 ## Offene Punkte
 
 ### OP-039: security-ai Test-Suite 11 Min — messen und optimieren
-- **Status:** open
+- **Status:** wontfix (gehoert zu **security-ai**, nicht Werkstatt — security-ai Test-Suite)
 - **Betroffene Dateien:** `tests/` in `/opt/security-ai`, ggf. `tests/conftest.py`
 - **Akzeptanzkriterien:** `pytest -q` in security-ai laeuft in < 120s (statt ~660s). `pytest --durations=20` zeigt die 20 langsamsten Tests; mind. Top-10 auf < 5s reduziert. Kein `sleep() > 1s` in Tests. Keine echten Netzwerk-Calls ohne Mock.
 - **Tests:** `.venv/bin/python -m pytest -q --durations=20 | tail -25`
@@ -17,7 +17,7 @@ Hinweis: Live-Test 4 (2026-10-31) zeigt 1334 Tests in ~660s (~500ms/Test).
 Als `phase_end`-Stage (1x pro Loop) tragbar, aber teuer. Ursachen-Kandidaten:
 DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 ### OP-041: Baseline-Revision (quality_gate rot)
-- **Status:** open
+- **Status:** wontfix (gehoert zu **security-ai**, nicht Werkstatt — Baseline-Revision (blockiert von security-ai OP-003))
 - **Betroffene Dateien:** `tools/quality_gate.py`, `docs/HANDOFF-BASELINE.md`
 - **Akzeptanzkriterien:** Neue Baseline (958 pytest, 0 ruff auf werkstatt/, 0 mypy auf werkstatt/ nach Cleanup — oder explizit als akzeptiert markiert). `quality_gate --json` gibt `exit 0` und `regression: false`.
 - **Tests:** `python3 -m tools.quality_gate --json` -> exit 0.
@@ -42,7 +42,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
 ### OP-003: K17 — Architect prueft existierende Migrationsnummern nicht (Kollision 0017/0018 in security-ai). Fix: vor Migrations-Task `ls data/migrations/`.
-- **Status:** open
+- **Status:** wontfix (gehoert zu **security-ai**, nicht Werkstatt — Migrationsnummern-Check)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Architect prueft existierende Migrationsnummern nicht (Kollision 0017/0018 in security-ai). Fix: vor Migrations-Task `ls data/migrations/`.
 - **Tests:** —
@@ -50,6 +50,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-004: M-323b — `phase_end`-Checkpoint pro logischer Phase. Nach jeder Phase `_verify_patches(state, phase="phase_end")` + Reflection.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** `phase_end`-Checkpoint pro logischer Phase. Nach jeder Phase `_verify_patches(state, phase="phase_end")` + Reflection.
 - **Tests:** —
@@ -57,6 +58,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-005: M-341 — Explorer ueberspringen, wenn `task_files` gesetzt.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Explorer ueberspringen, wenn `task_files` gesetzt.
 - **Tests:** —
@@ -64,6 +66,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-006: M-344 — `PROGRESS.md` mit Phasen-Header (pro Phase, nicht pro Task).
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** `PROGRESS.md` mit Phasen-Header (pro Phase, nicht pro Task).
 - **Tests:** —
@@ -71,6 +74,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-008: M-346 — `pipeline._approval_und_human_gate` und `pipeline.load_project_config` in `werkstatt/` verschieben.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** `pipeline._approval_und_human_gate` und `pipeline.load_project_config` in `werkstatt/` verschieben.
 - **Tests:** —
@@ -78,6 +82,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-009: M-347 — CLI-Einstiegspunkt fuer den Loop.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** CLI-Einstiegspunkt fuer den Loop.
 - **Tests:** —
@@ -85,6 +90,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-010: Entkopplung — `werkstatt/verify.py` importiert `harness.*` und `core.changeapplier.*` (nur Introspektion). Ziel: null Fremd-Imports.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** `werkstatt/verify.py` importiert `harness.*` und `core.changeapplier.*` (nur Introspektion). Ziel: null Fremd-Imports.
 - **Tests:** —
@@ -92,6 +98,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-011: 5-mypy — mypy 11 Fehler in 2 Dateien (Baseline 11).
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** mypy 11 Fehler in 2 Dateien (Baseline 11).
 - **Tests:** —
@@ -99,6 +106,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-012: 3c — Alte Tests, die mit dem alten Code fallen, entfernen.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Alte Tests, die mit dem alten Code fallen, entfernen.
 - **Tests:** —
@@ -106,6 +114,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-013: M-162 — „Recovery nach Loop" messen oder schliessen.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** „Recovery nach Loop" messen oder schliessen.
 - **Tests:** —
@@ -113,6 +122,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-014: M-388 — UI-Testing via Chrome DevTools.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** UI-Testing via Chrome DevTools.
 - **Tests:** —
@@ -120,6 +130,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-015: M-389 — Doku-Pflege im Loop.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Doku-Pflege im Loop.
 - **Tests:** —
@@ -127,6 +138,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-016: M-479 — Modell-Routing pro Rolle. `ask_llm(role=...)` mit Env-Vars. Architect = `deepseek-reasoner`, Builder/Reviewer = `deepseek-chat`.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Modell-Routing pro Rolle. `ask_llm(role=...)` mit Env-Vars. Architect = `deepseek-reasoner`, Builder/Reviewer = `deepseek-chat`.
 - **Tests:** —
@@ -134,6 +146,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-017: M-480 — Kosten-Circuit-Breaker. `RunState.max_budget_usd`. `ask_llm` zaehlt Tokens, bei Ueberschreitung `BudgetExceededError`.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Kosten-Circuit-Breaker. `RunState.max_budget_usd`. `ask_llm` zaehlt Tokens, bei Ueberschreitung `BudgetExceededError`.
 - **Tests:** —
@@ -141,6 +154,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-018: M-481 — Cache-aware Prompts. Stabiler Prefix (System, Architektur) vor variablem Suffix (Aufgabe). 98.6% Cache-Hit-Rate moeglich.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Cache-aware Prompts. Stabiler Prefix (System, Architektur) vor variablem Suffix (Aufgabe). 98.6% Cache-Hit-Rate moeglich.
 - **Tests:** —
@@ -148,6 +162,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-019: M-482 — LiteLLM Adaptive Router (optional). Lernt, welches Modell fuer welchen Request-Typ am besten ist.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** LiteLLM Adaptive Router (optional). Lernt, welches Modell fuer welchen Request-Typ am besten ist.
 - **Tests:** —
@@ -155,6 +170,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-020: M-478/M-489 — Test-Repair-Loop (TDFlow-Stil). 4 Sub-Agenten: Patch-Propose, Debug, Patch-Revise, Test-Generate. Tests FEST (kein Test-Hacking). Max 3 Runden, dann Eskalation.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Test-Repair-Loop (TDFlow-Stil). 4 Sub-Agenten: Patch-Propose, Debug, Patch-Revise, Test-Generate. Tests FEST (kein Test-Hacking). Max 3 Runden, dann Eskalation.
 - **Tests:** —
@@ -162,6 +178,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-021: M-483 — Sandboxing (OS-Level). Filesystem-Isolation + Netzwerk-Isolation. Linux bubblewrap / macOS seatbelt. Reduziert Permission-Prompts um 84%.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Sandboxing (OS-Level). Filesystem-Isolation + Netzwerk-Isolation. Linux bubblewrap / macOS seatbelt. Reduziert Permission-Prompts um 84%.
 - **Tests:** —
@@ -169,6 +186,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-022: M-484 — SWE-bench-Harness. 50-100 Tasks aus `princeton-nlp/SWE-bench_Verified`. Die einzige Zahl, die mit Aider/OpenHands/Devin vergleichbar ist.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** SWE-bench-Harness. 50-100 Tasks aus `princeton-nlp/SWE-bench_Verified`. Die einzige Zahl, die mit Aider/OpenHands/Devin vergleichbar ist.
 - **Tests:** —
@@ -176,6 +194,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-023: M-485 — Event-Sourcing / Memory. Unveraenderliche Event-Logs statt YAML-Checkpoint. Loop-Spezifikation (Trigger, Goal, Verification, Stopping Rule, Memory).
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Event-Sourcing / Memory. Unveraenderliche Event-Logs statt YAML-Checkpoint. Loop-Spezifikation (Trigger, Goal, Verification, Stopping Rule, Memory).
 - **Tests:** —
@@ -183,6 +202,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-024: M-486 — Cache-aware Cost Model. 98.6% Input-Tokens aus Prefix-Cache. Flat-Pricing ueberschaetzt Kosten um 7.1x.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Cache-aware Cost Model. 98.6% Input-Tokens aus Prefix-Cache. Flat-Pricing ueberschaetzt Kosten um 7.1x.
 - **Tests:** —
@@ -190,6 +210,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-025: M-488 — `phase_end` laeuft Vollsuite. `verify.json` + `loop.py` (M-476). Ohne das ist der Loop ein Builder.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** `phase_end` laeuft Vollsuite. `verify.json` + `loop.py` (M-476). Ohne das ist der Loop ein Builder.
 - **Tests:** —
@@ -222,6 +243,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-027: M-490 — Doku-Staleness-Check (deterministisch, Documentledger). Nach jedem Task: Hash-Vergleich Code -> Doku. Kein LLM.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Doku-Staleness-Check (deterministisch, Documentledger). Nach jedem Task: Hash-Vergleich Code -> Doku. Kein LLM.
 - **Tests:** —
@@ -229,6 +251,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-028: M-491 — Doku-Update-Agent (DocWriter). Bekommt Git-Diff + betroffene Sektionen + Quellcode. Schreibt nur `<!-- AUTO:... -->`-Bloecke neu (docwright).
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Doku-Update-Agent (DocWriter). Bekommt Git-Diff + betroffene Sektionen + Quellcode. Schreibt nur `<!-- AUTO:... -->`-Bloecke neu (docwright).
 - **Tests:** —
@@ -236,34 +259,35 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ### OP-029: M-492 — Doku-Critic (DocSync). Prueft DocWriter-Output gegen Code. Max 2 Runden.
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Doku-Critic (DocSync). Prueft DocWriter-Output gegen Code. Max 2 Runden.
 - **Tests:** —
 - **Blockiert von:** —
 
 ### OP-030: M-494 — Web-Backend (FastAPI). Startet den Loop als Subprozess, bietet Web-Sockets fuer Live-Logs und Chat. Zentraler State pro Projekt.
-- **Status:** open
+- **Status:** wontfix (Duplikat zu **OP-074** — dieselbe Sache, präziser und loop-fähig)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Web-Backend (FastAPI). Startet den Loop als Subprozess, bietet Web-Sockets fuer Live-Logs und Chat. Zentraler State pro Projekt.
 - **Tests:** —
 - **Blockiert von:** —
 
 ### OP-031: M-495 — Terminal-Proxy. `loop_renderer`-Ausgaben (Spinner, `log_line`, `task_started`) live in den Browser streamen. xterm.js oder `<pre>` mit HTMX.
-- **Status:** open
+- **Status:** wontfix (Duplikat zu **OP-075** — dieselbe Sache, präziser und loop-fähig)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Terminal-Proxy. `loop_renderer`-Ausgaben (Spinner, `log_line`, `task_started`) live in den Browser streamen. xterm.js oder `<pre>` mit HTMX.
 - **Tests:** —
 - **Blockiert von:** —
 
 ### OP-032: M-496 — Interactive Chat. Chat-Fenster rechts, Intent-Parsing (`plan`, `build`, `approve`, `chat_only`). Bestaetigung (j/n) per Chat oder CLI.
-- **Status:** open
+- **Status:** wontfix (Duplikat zu **OP-076** — dieselbe Sache, präziser und loop-fähig)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Interactive Chat. Chat-Fenster rechts, Intent-Parsing (`plan`, `build`, `approve`, `chat_only`). Bestaetigung (j/n) per Chat oder CLI.
 - **Tests:** —
 - **Blockiert von:** —
 
 ### OP-033: M-497 — UI-Layout. Chrome-Tabs oben (Projekte oeffnen/schliessen), CLI links, Chat rechts, Reviewer unten. Synchronisation: Tab-Wechsel wechselt beide Fenster.
-- **Status:** open
+- **Status:** wontfix (Duplikat zu **OP-078** — dieselbe Sache, präziser und loop-fähig)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** UI-Layout. Chrome-Tabs oben (Projekte oeffnen/schliessen), CLI links, Chat rechts, Reviewer unten. Synchronisation: Tab-Wechsel wechselt beide Fenster.
 - **Tests:** —
@@ -272,6 +296,7 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 ### OP-064: Architektur-Umbau — Completion-Gate mit Vetorecht (Sammel-OP)
 
 - **Status:** open
+- **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** `werkstatt/state.py`, `werkstatt/phase_state.py`, `werkstatt/pipeline_phases.py`, `werkstatt/antipattern.py` (neu), `werkstatt/stuck.py` (nicht existent — pruefen) (neu), `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`
 - **Akzeptanzkriterien:** Umbau des Loops von "drei konkurrierenden Wahrheiten" (Reflection-Return / Reviewer-Approval / Verify-Gate) auf "eine Hierarchie mit deterministischem Vetorecht". Sechs Bausteine, jeder ein eigener Sub-OP:
   - **OP-064a** Sticky-Veto (Completion-Gate): einmal `vetoed` -> nur Mensch kann es zuruecksetzen. Ersetzt OP-062i. **Live verifiziert 2026-11-01 19:22** (Testrunde #5, Commit `09fb4e7`): `_reflection_loop`=True + `_rev_ok`=True + `spec_widerspruch=True` -> `loop_task_spec_widerspruch_veto`, `status=human_review`, `verdict=vetoed`, **kein** `loop_task_ok`. Guard primaer in `pipeline_phases._phase_tasks_loop` vor `_task_ende(ok=True)`; defensiv in `task_runner._task_ende`.
@@ -421,14 +446,14 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Blockiert von:** —
 
 ### OP-074: Web-Backend (FastAPI) mit WebSockets pro Tab
-- **Status:** open
+- **Status:** done (Commit `624fb5e`: FastAPI-Backend mit WebSockets pro Tab)
 - **Betroffene Dateien:** `werkstatt/web/__init__.py` (neu), `werkstatt/web/app.py` (neu), `werkstatt/web/ws.py` (neu), `tests/test_web_backend.py` (neu)
 - **Akzeptanzkriterien:** FastAPI-App startet den Loop als Subprozess pro Projekt. Pro geoeffnetem Tab existiert ein eigener WebSocket-Kanal (`/ws/{tab_id}`), der Live-Logs und Chat-Nachrichten unabhaengig streamt. Zentraler State pro Projekt (RunState-Snapshot) wird ueber REST (`GET /api/projects/{name}/state`) bereitgestellt. Tab-Wechsel im Frontend abonniert den passenden WS-Kanal ohne den Loop neu zu starten.
 - **Tests:** `tests/test_web_backend.py::test_ws_pro_tab_isoliert`, `tests/test_web_backend.py::test_loop_subprozess_start_stop`
 - **Blockiert von:** —
 
 ### OP-075: Terminal-Proxy links (loop_renderer live in den Browser)
-- **Status:** open
+- **Status:** done (Commit `b8dce51`: Terminal-Proxy (loop_renderer live im Browser))
 - **Betroffene Dateien:** `werkstatt/web/terminal_proxy.py` (neu), `werkstatt/loop_renderer.py`, `static/terminal.js` (neu), `tests/test_terminal_proxy.py` (neu)
 - **Akzeptanzkriterien:** `loop_renderer`-Ausgaben (`log_line`, `task_started`, `task_done`, `task_ok`, `summary`) werden live ueber den WebSocket des aktiven Tabs an den Browser gestreamt und im linken Terminal-Panel (xterm.js oder `<pre>` mit HTMX) angezeigt. Spinner-Zustand wird als eigener Event-Typ uebertragen. Kein Polling; Push-basiert.
 - **Tests:** `tests/test_terminal_proxy.py::test_log_line_wird_gestreamt`, `tests/test_terminal_proxy.py::test_task_started_event`
@@ -480,6 +505,15 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 ## Erledigt (Auto-Log)
 
+- 2026-11-02 | OP-066 | done | Reviewer prueft Zwischenstand (bereits implementiert)
+- 2026-11-02 | OP-065 | wontfix | Phase-2-Kette (Modell-Latenz, nicht Code)
+- 2026-11-02 | OP-026 | wontfix | R-CHECK-1 Prompt-Block ist Skill
+- 2026-11-02 | OP-067 | done | pytest_changed feuert in Reflection (69889b7)
+- 2026-11-02 | OP-072 | done | UI-Phase 30 in OPs zerlegt (88ab237)
+- 2026-11-02 | OP-074 | done | FastAPI-Backend (624fb5e + c82f537)
+- 2026-11-02 | OP-075 | done | Terminal-Proxy (b8dce51)
+- 2026-11-02 | OP-079 | done | review-work-Skill: Markdown-Hunk-Header (d023535)
+- 2026-11-02 | OP-080 | done | review-work-Skill: Python-PATCHES (3d7fd1f)
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - 2026-11-02 | OP-035 | Doku-Task-Datum wird halluziniert — deterministisch geloest (BUILDER_SYSTEM + {date}-Ersetzung + _korrigiere_doku_datum Sicherheitsnetz)
