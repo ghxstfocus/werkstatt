@@ -161,7 +161,9 @@ def _human_gate_plan(state, auto_approve=False):
             _antwort = input(
                 "\nPlan ausfuehren? [j/n/a]\n"
                 "  j = bauen\n"
-                "  n = ablehnen (Loop bricht ab)\n"
+                "  n = ablehnen (Reflection mit Grund, max 1 Runde)\n"
+                "      - Reject-Grund eingeben -> Planner baut revidierten Plan\n"
+                "      - Grund leer lassen    -> hart abbrechen (kein Reflection)\n"
                 "  a = Plan anpassen\n"
                 "Deine Wahl: "
             ).strip().lower()
@@ -590,4 +592,4 @@ def _task_fortschritt_block(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
-__all__ = ['_human_gate', '_diff_hunk_summary', '_human_gate_body', '_human_gate_plan', '_plan_gate']
+__all__ = ['_diff_hunk_summary', '_human_gate', '_human_gate_body', '_human_gate_plan', '_plan_gate']

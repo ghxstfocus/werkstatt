@@ -747,7 +747,14 @@ def _plan_reject_reflection(state) -> bool:
     if kind != "plan":
         return False
     if not reason:
-        reason = "(kein Grund angegeben — versuche den Plan zu verbessern)"
+        # Leerer Grund = User will hart abbrechen, kein Reflection-Zyklus.
+        # Frueher wurde ein Placeholder eingesetzt und der Planner erneut
+        # gerufen — das widersprach dem Gate-Prompt "n = ablehnen".
+        audit("loop_plan_reject_ohne_grund",
+              {"folge": "hart_abbrechen"},
+              getattr(state, "project_dir", None),
+              getattr(state, "project_name", "?"))
+        return False
 
     pd = getattr(state, "project_dir", None)
     pn = getattr(state, "project_name", "?")
