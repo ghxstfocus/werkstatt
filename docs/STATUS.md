@@ -277,8 +277,21 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 
 
 
-### OP-065: Phase-2-Kette messen (60s Rest-Zeit)
-- **Status:** open
+### OP-065: Phase-2-Kette messen (60s Rest-Zeit) — FALSCH DIAGNOSTIZIERT
+- **Status:** wontfix (falsche Annahme, siehe Befund 2026-11-02)
+- **Befund 2026-11-02 (Messung):** Die '60 s Rest-Zeit' sind **keine Code-Wartezeit**,
+  sondern LLM-Latenz. `run_architect` macht genau einen `ask_llm`-Call; dazwischen
+  ist kein Code. Der Sprung 5-12 s -> 30-78 s korreliert mit Commit `151417a`
+  (deepseek-reasoner als Default, 12:39) plus 5 Prompt-Erweiterungen zwischen
+  13:00 und 15:00 (u.a. `086b1e3` OP-Spec + Scout-API, `9362cc8` Skills-Metadata).
+  Die 60-s-Zahl war 12:13 noch ~10 s und ist durch den Modellwechsel auf
+  deepseek-reasoner auf 30-78 s gestiegen.
+- **Akzeptanzkriterien (Original):** ~~Zeitmessung pro Schritt in Phase 2 (Scout,
+  Architect, Planner-Split, Merge, Normalize, Task-Build). Ziel: die 60 s auf
+  unter 10 s reduzieren.~~ (nicht erreichbar ohne Modell-/Prompt-Aenderung)
+- **Folge-OP-Vorschlag (nicht Teil dieses Commits):** Architect-Modell evaluieren
+  (deepseek-reasoner vs deepseek-chat) und Architect-Prompt-Groesse tracken.
+  Messbasis: `planner_architect_ok`-Event mit `duration_s` + Prompt-Token.
 - **Betroffene Dateien:** `werkstatt/pipeline_phases.py` (`_phase_plan_and_preflight`)
 - **Akzeptanzkriterien:** Zeitmessung pro Schritt in Phase 2 (Scout, Architect, Planner-Split, Merge, Normalize, Task-Build). Identifiziert die 60s ausserhalb der 3 LLM-Calls (Scout 5.8s + Architect 5.5s + Planner-Split 1.2s = 12.5s). Ziel: die 60s auf unter 10s reduzieren.
 - **Tests:** Zeit-Assertion in einem Mock-Lauf (Schaetzung, keine echten LLM-Calls).
@@ -344,6 +357,21 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** Auswertung der letzten 10 Loop-Läufe: (a) Wie oft setzt `_run_scout` `bereits_erfuellt == True`? (b) Wie oft liefert `_pruefe_api_widerspruch` einen Befund, den der Architect ohne Scout-Auszug nicht gefunden hätte? (c) Wie oft weicht `api_auszug` von einem reinen Token-Match ab? Entscheidung: Scout-LLM behalten (Wahrscheinlichkeit hoch nach Rollen-Analyse) oder deterministisch ersetzen. Kein Umbau vor Messung.
 - **Tests:** Keine — Mess-Aufgabe.
 - **Blockiert von:** —
+
+### Notiz 2026-11-02: `explorer_result` fehlt in aktuellen Logs
+
+- **Beobachtung:** `audit("explorer_result", ...)` existiert in
+  `werkstatt/explorer.py`. In Logs vom 23.-25.10. taucht er auf (10-58x),
+  in Logs ab 26.10. **nicht mehr**. Stattdessen gibt es heute 15x
+  `explorer_messung_findings`.
+- **Verdacht:** Der Event wurde bei einer Explorer-Refactor-Welle
+  umbenannt oder der Pfad, der ihn schreibt, wird nicht mehr erreicht.
+- **Konsequenz:** `explorer_context` (den der Scout fuer Datei-Previews
+  braucht) ist moeglicherweise leer -> Scout-Redundanz-Analyse (OP-070)
+  hat keine Basis.
+- **Naechster Schritt:** Pruefen ob `explorer_result` noch erreicht wird;
+  falls nicht, Event wieder aktivieren oder durch `explorer_messung_findings`
+  ersetzen (semantisch gleich?). Kein sofortiger Fix.
 
 ### OP-071: Welle G (single_call) — versucht, revertiert
 - **Status:** done (revertiert in `c1e8377`)

@@ -748,7 +748,10 @@ def _run_scout(
         return None
     audit("planner_scout_ok",
           {"dateien": len(parsed.get("relevante_dateien") or []),
-           "risiken": len(parsed.get("risiken") or [])}, pd, pn)
+           "risiken": len(parsed.get("risiken") or []),
+           # OP-070(a): Auswertung der letzten N Laeufe moeglich machen
+           "bereits_erfuellt": bool(parsed.get("bereits_erfuellt", False))},
+          pd, pn)
     return parsed
 
 
