@@ -20,6 +20,19 @@
       "phase": "post_build"
     },
     {
+      "id": "mypy_changed",
+      "command": [
+        "python3",
+        "-m",
+        "mypy",
+        "--follow-imports=silent",
+        "--no-error-summary",
+        "{changed_py_files}"
+      ],
+      "phase": "post_build",
+      "timeout": 90
+    },
+    {
       "id": "pytest_changed",
       "command": [
         "python3",
