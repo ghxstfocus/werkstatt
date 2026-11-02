@@ -6,8 +6,6 @@ _verify_patches, run_builder, run_reviewer).
 """
 from __future__ import annotations
 
-import subprocess
-from pathlib import Path
 
 from werkstatt.state import RunState
 from werkstatt.loop_renderer import log_line  # Fix BA

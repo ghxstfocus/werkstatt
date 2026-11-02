@@ -1,10 +1,7 @@
 """OP-048/055/056/057: Doku-Selbstpflege im Committer."""
 from __future__ import annotations
-import os
 import sys
-from pathlib import Path
 
-import pytest
 
 sys.path.insert(0, "/opt/werkstatt")
 
@@ -127,7 +124,6 @@ def test_delete_zone_datei_fehlt(tmp_path):
 # ---------- _update_kennzahlen ----------
 
 def test_update_kennzahlen_erfolg(tmp_path, monkeypatch):
-    import subprocess
     f = tmp_path / "STATUS.md"
     f.write_text("## Kennzahlen\n\n- HEAD: old1234\n- Tests: 10\n", encoding="utf-8")
     # Fake git-Repo: wir mocken subprocess.run im committer-Modul

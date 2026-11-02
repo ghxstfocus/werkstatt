@@ -1,7 +1,6 @@
 """OP-050: Migrations-Dateien sind Kontext, keine key_files."""
 from __future__ import annotations
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock
 
 sys.path.insert(0, "/opt/werkstatt")

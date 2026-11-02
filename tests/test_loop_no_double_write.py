@@ -5,7 +5,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, "/opt/werkstatt")
-import pytest
 
 
 class TestNoDoubleWrite:

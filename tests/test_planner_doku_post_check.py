@@ -5,9 +5,7 @@ Fix A v2: Trigger ueber User-Auftrag (nur/ausschliesslich/keine python).
 """
 from __future__ import annotations
 import sys
-from types import SimpleNamespace
 sys.path.insert(0, "/opt/werkstatt")
-import pytest
 from werkstatt.planner import _doku_post_check
 
 

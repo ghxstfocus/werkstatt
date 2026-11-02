@@ -2,7 +2,7 @@
 from __future__ import annotations
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 sys.path.insert(0, "/opt/werkstatt")
 from werkstatt.committer import _committe_zielprojekt  # noqa: F401

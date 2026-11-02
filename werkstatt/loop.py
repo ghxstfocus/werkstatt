@@ -10,8 +10,8 @@ Endzustand; der Fallback wird nach Phase >20 entfernt (M-299+).
 """
 from __future__ import annotations
 
-import subprocess
-import time
+import subprocess  # noqa: F401  # re-export: Tests patchen werkstatt.loop.subprocess
+import time  # noqa: F401  # re-export: Tests patchen werkstatt.loop.time
 from pathlib import Path
 
 from werkstatt.audit import audit
@@ -80,6 +80,77 @@ from werkstatt.phase_state import PhaseState
 from werkstatt.planner import run_planner
 from werkstatt.reviewer import run_reviewer
 from werkstatt.state import RunState
+
+# Oeffentliche API (Re-Exports + lokale Funktionen).
+# ruff F401 entfernt sonst Re-Exports, die von Tests/Aufrufern
+# importiert werden. __all__ ist die offizielle Python-Deklaration.
+__all__ = [
+    "Path",
+    "PhaseState",
+    "RunState",
+    "_Path",
+    "_UTC",
+    "_apply_one_patch",
+    "_apply_patches_with_diagnose",
+    "_apply_patches_with_hooks",
+    "_call_hook",
+    "_committe_zielprojekt",
+    "_delete_ziel_erlaubt",
+    "_diagnose_patch",
+    "_dt",
+    "_expand_cmd_placeholders",
+    "_extract_files_from_tasks",
+    "_get_baseline_error_details",
+    "_get_git_diff_for_hook",
+    "_git_dirty",
+    "_git_head",
+    "_git_reset",
+    "_git_stash",
+    "_git_stash_drop",
+    "_git_stash_pop",
+    "_human_gate",
+    "_human_gate_plan",
+    "_load_cfg",
+    "_load_docs",
+    "_normalize_tasks",
+    "_patches_wirklich_angewendet",
+    "_phase_end_reflection",
+    "_phase_explorer_and_setup",
+    "_phase_finalize",
+    "_phase_plan_and_preflight",
+    "_phase_tasks_loop",
+    "_plan_gate",
+    "_pruefe_prior_failed_dependency",
+    "_r",
+    "_reflection_loop",
+    "_resolve_venv_cmd",
+    "_ruff_fix_changed",
+    "_split_task_on_demand",
+    "_stage_ist_hart",
+    "_task_ende",
+    "_task_fortschritt_block",
+    "_verify_patches",
+    "_verify_patches_soft",
+    "_verify_stage_with_heartbeat",
+    "_with_spinner",
+    "annotations",
+    "audit",
+    "group_end",
+    "group_start",
+    "header",
+    "load_env",
+    "log_line",
+    "run_builder",
+    "run_explorer",
+    "run_planner",
+    "run_reviewer",
+    "step",
+    "summary",
+    "task",
+    "task_done",
+    "task_ok",
+    "task_started",
+]
 
 
 PROJECTS_DIR = Path("/opt/werkstatt/projects")

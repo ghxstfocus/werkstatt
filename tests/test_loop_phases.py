@@ -387,8 +387,6 @@ def test_phase_review_skip_bei_leerem_patches():
     Regression: Live 2026-10-30 21:28:25 — alle 5 Tasks done,
     state.patches leer, reviewer_phase_kein_diff -> Rollback.
     """
-    from unittest.mock import patch
-    from werkstatt import loop as loop_mod
     from werkstatt.state import RunState
     import tempfile
     from pathlib import Path

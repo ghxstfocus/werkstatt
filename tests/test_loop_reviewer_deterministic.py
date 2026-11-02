@@ -2,11 +2,8 @@
 from __future__ import annotations
 import sys
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import patch
 
 sys.path.insert(0, "/opt/werkstatt")
-import pytest
 
 
 class TestLoopReviewerDeterministicFail:

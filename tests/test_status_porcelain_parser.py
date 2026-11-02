@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, "/opt/werkstatt")
-import pytest
 from werkstatt.loop import _expand_cmd_placeholders
 
 

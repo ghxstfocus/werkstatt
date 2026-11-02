@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from unittest.mock import patch as _p
 
 sys.path.insert(0, "/opt/werkstatt")
-import pytest
 
 
 class TestModuleHint:

@@ -7,7 +7,6 @@ obwohl die Aufgabe "nicht umnummerieren" forderte.
 from __future__ import annotations
 import sys
 sys.path.insert(0, "/opt/werkstatt")
-import pytest
 from werkstatt.reviewer import REVIEWER_SYSTEM
 
 

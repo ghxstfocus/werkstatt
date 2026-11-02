@@ -6,8 +6,6 @@ _pruefe_prior_failed_dependency).
 """
 from __future__ import annotations
 
-import re
-import subprocess
 from pathlib import Path
 
 from werkstatt.state import RunState

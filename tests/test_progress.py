@@ -99,7 +99,6 @@ def test_progress_audit_enthaelt_exc_bei_oserror(tmp_path):
     der alte Event hatte nur {file}, die Ursache war unsichtbar.
     """
     import json
-    from unittest.mock import patch
 
     from werkstatt import progress
 

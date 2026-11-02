@@ -5,7 +5,6 @@ Extrahiert aus loop.py. Re-Export in loop.py erhaelt API-Kompatibilitaet
 """
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 from werkstatt.state import RunState

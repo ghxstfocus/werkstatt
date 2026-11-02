@@ -9,8 +9,6 @@ werkstatt.planner aufgeloest werden, damit Test-Patches wirken.
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
 
 
 def audit(*args, **kwargs):

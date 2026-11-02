@@ -18,7 +18,6 @@ from types import SimpleNamespace
 
 sys.path.insert(0, "/opt/werkstatt")
 
-import pytest
 
 
 def _mk_state(tmp_path: Path, tasks: list, aufgabe: str = ""):

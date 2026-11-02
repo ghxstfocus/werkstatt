@@ -13,7 +13,6 @@ from pathlib import Path
 from fastapi import (
     APIRouter,
     FastAPI,
-    HTTPException,
     Query,
     WebSocket,
     WebSocketDisconnect,

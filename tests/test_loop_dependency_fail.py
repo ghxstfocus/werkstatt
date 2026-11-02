@@ -1,10 +1,8 @@
 """Spec: Dependency-Failure fuehrt zu continue, nicht return 1 (Fix AP)."""
 from __future__ import annotations
 import sys
-from pathlib import Path
 
 sys.path.insert(0, "/opt/werkstatt")
-import pytest
 
 
 class _FakePS:

@@ -1,22 +1,18 @@
 """tests fuer werkstatt/migrate.py — DOC_CONVENTIONS.md §2/§3/§5/§6."""
 from __future__ import annotations
 
-import json
 import sys
-from pathlib import Path
 
 sys.path.insert(0, "/opt/werkstatt")
 
 from werkstatt.migrate import (
-    MANIFEST_PFLICHT,
-    VERBOTEN,
     check_manifest,
     check_pflicht,
     check_status,
     check_verbote,
     migriere,
 )
-from werkstatt.scaffold import PFLICHTDATEIEN, scaffold
+from werkstatt.scaffold import scaffold
 
 
 # ---------- §2 Pflicht ----------

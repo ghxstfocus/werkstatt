@@ -8,7 +8,6 @@ Konsumenten: pipeline.py (via Re-Export).
 from __future__ import annotations
 
 import hashlib
-import json
 import subprocess
 import threading
 import time

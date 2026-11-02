@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, "/opt/werkstatt")
-import pytest
 
 
 def _write_phase_state(tmp_path: Path, tasks: list) -> None:

@@ -5,7 +5,6 @@ Test-Patches auf werkstatt.loop._call_hook.
 """
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 

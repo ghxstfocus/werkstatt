@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from werkstatt import commit_input
 from werkstatt.state import RunState

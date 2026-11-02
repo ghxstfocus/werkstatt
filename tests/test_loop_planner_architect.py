@@ -14,7 +14,6 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 from werkstatt import planner
 from werkstatt.state import LLMReply, RunState

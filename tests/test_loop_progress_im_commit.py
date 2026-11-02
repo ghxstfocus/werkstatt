@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, "/opt/werkstatt")
-import pytest
 
 
 def _init_repo(tmp_path: Path) -> None:

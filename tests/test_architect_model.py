@@ -1,7 +1,6 @@
 """M-Arch-Reasoner (2026-11-02): Architect nutzt deepseek-reasoner."""
 import importlib
 
-import pytest
 
 
 def test_architect_model_default_ist_reasoner(monkeypatch):

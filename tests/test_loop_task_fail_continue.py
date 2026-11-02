@@ -1,11 +1,9 @@
 """Spec: Task-Fail -> continue statt return 1 (Fix AR)."""
 from __future__ import annotations
-import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, "/opt/werkstatt")
-import pytest
 
 
 class TestTaskFailContinue:

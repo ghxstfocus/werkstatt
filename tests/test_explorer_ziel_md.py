@@ -6,7 +6,6 @@ der Explorer NICHT 19 Code-Pfade aus ihrem Body extrahieren.
 from __future__ import annotations
 import sys
 sys.path.insert(0, "/opt/werkstatt")
-import pytest
 
 
 class TestExplorerZielMd:
