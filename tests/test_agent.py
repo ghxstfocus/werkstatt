@@ -47,3 +47,13 @@ def test_heartbeat_bei_schnellem_call(capsys, monkeypatch):
 
     out = capsys.readouterr().out
     assert sum(1 for line in out.splitlines() if "laeuft" in line) <= 1
+
+
+def test_heartbeat_stage_name_builder(capsys):
+    thread, stop_event = agent._heartbeat_start("Builder")
+    time.sleep(1.5)
+    stop_event.set()
+    thread.join(timeout=2.0)
+
+    out = capsys.readouterr().out
+    assert "Builder" in out
