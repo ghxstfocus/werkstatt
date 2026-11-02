@@ -311,3 +311,21 @@ button:hover {
   padding: 3px 6px;
   font-size: 12px;
 }
+
+/* ============================================================
+   Grid-Area-Zuweisungen (Layout-Fix)
+   .layout-grid definiert areas "terminal chats" / "audit audit"
+   aber die Kinder haben keine grid-area — deshalb fallen sie in
+   Grid-Reihenfolge und landen falsch.
+   ============================================================ */
+[data-bereich="terminal"] {
+  grid-area: terminal;
+}
+[data-bereich="chat"],
+.rechte-spalte {
+  grid-area: chats;
+}
+[data-bereich="audit"],
+#audit-panel {
+  grid-area: audit;
+}
