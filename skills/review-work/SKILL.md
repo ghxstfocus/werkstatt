@@ -31,3 +31,17 @@ rollen:
 1. Pruefe Contract-Punkt fuer Contract-Punkt.
 2. Zitiere konkrete Zeilen/Regeln, keine Prosa.
 3. Kein eigener Code. Kein eigener Fix.
+
+## MARKDOWN-PATCHES (OP-079)
+
+Bei `.md`-Dateien (STATUS.md, ROADMAP.md, PROGRESS.md) gilt:
+
+- Der `@@`-Hunk-Header (z.B. `@@ -294,7 +294,6 @@ DB-Reset...`) ist 
+  git-Kontext aus dem umgebenden Text. Er gehoert NICHT zur Task-Description.
+- Pruefe Auftrag-Treue **nur** anhand der `+`- und `-`-Zeilen.
+- Beispiel: Der Diff landet im Bereich "DB-Reset", fuegt aber
+  `### OP-074: Web-Backend` ein. Das ist KEIN Auftrag-Treue-Verstoss, 
+  sondern ein normaler Patch am Ende eines Blocks.
+- Nur wenn die `+`/`-`-Zeilen inhaltlich nicht zur Aufgabe passen, ist es
+  ein HIGH-Bug.
+
