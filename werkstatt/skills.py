@@ -44,10 +44,15 @@ def load_all_skills() -> list[dict[str, Any]]:
         fm = _parse_frontmatter(text)
         if not fm.get("name"):
             continue
+        _globs = fm.get("globs") or []
+        if isinstance(_globs, str):
+            _globs = [_globs]
         skills.append({
             "name": fm.get("name", d.name),
             "description": str(fm.get("description", "")).strip(),
             "allowed_tools": str(fm.get("allowed-tools", "")).strip(),
+            "globs": list(_globs),
+            "always": bool(fm.get("always", False)),
             "dir": d,
             "body": None,
         })
@@ -76,3 +81,77 @@ def skills_summary(skills: list[dict[str, Any]]) -> str:
         desc = s["description"].replace("\n", " ")[:120]
         lines.append(f"- {s['name']}: {desc}")
     return "\n".join(lines)
+
+
+def skills_metadata_block(skills: list[dict[str, Any]]) -> str:
+    """Progressive Disclosure Level 1: Name + Description.
+
+    Wird IMMER in den System-Prompt gehaengt. Damit weiss das LLM,
+    welche Skills existieren. Bei Bedarf laedt es einen per Name
+    (Level 2) oder ein Glob-Trigger feuert.
+    """
+    if not skills:
+        return ""
+    lines = ["## VERFUEGBARE SKILLS (Name — Description)"]
+    for s in skills:
+        name = s.get("name") or "?"
+        desc = (s.get("description") or "").strip().replace(chr(10), " ")
+        if len(desc) > 100:
+            desc = desc[:97] + "..."
+        lines.append(f"- **{name}** — {desc}")
+    return chr(10).join(lines) + chr(10) + chr(10)
+
+
+def skills_fuer_task(
+    skills: list[dict[str, Any]],
+    task_files: list[str],
+) -> list[dict[str, Any]]:
+    """Progressive Disclosure Level 2, deterministischer Trigger.
+
+    Laedt Skills deren `globs:` auf mindestens einen Task-File passt.
+    Cursor-Stil: fs-path-matching, kein LLM-Call.
+
+    Reine Funktion, kein Side-Effect.
+    """
+    import fnmatch
+    if not task_files:
+        return []
+    result = []
+    seen = set()
+    for s in skills:
+        name = s.get("name") or ""
+        if name in seen:
+            continue
+        globs = s.get("globs") or []
+        if isinstance(globs, str):
+            globs = [globs]
+        for g in globs:
+            for f in task_files:
+                if not isinstance(f, str):
+                    continue
+                _f = f.replace(chr(92), "/")
+                if fnmatch.fnmatch(f, g) or fnmatch.fnmatch(_f, g):
+                    seen.add(name)
+                    result.append(s)
+                    break
+            if name in seen:
+                break
+    return result
+
+
+def skills_aktivieren(
+    skills: list[dict[str, Any]],
+    task_files: list[str],
+    max_total: int = 3,
+) -> list[dict[str, Any]]:
+    """Glob-Trigger + Body laden, mit Limit.
+
+    Laedt maximal max_total Skills. Verhindert Context-Overload,
+    wenn mehrere Skills gleichzeitig matchen.
+    """
+    matched = skills_fuer_task(skills, task_files)
+    activated = []
+    for s in matched[:max_total]:
+        activated.append(activate_skill(s))
+    return activated
+
