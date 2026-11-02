@@ -10,27 +10,27 @@ HARD-RULE 48).
 """
 from __future__ import annotations
 
-import os
-import re
-import subprocess
 import time
 from pathlib import Path
 
-from werkstatt.state import RunState
 from werkstatt.antipattern import scan_patches
-from werkstatt.phase_state import PhaseState
 from werkstatt.loop_renderer import (
     group_end,
     group_start,
-    header,
+    step,
     summary,
     task,
     task_done,
     task_ok,
     task_started,
-    step,
-    log_line,
 )
+from werkstatt.phase_state import PhaseState
+from werkstatt.state import RunState
+from werkstatt.verify_classify import (
+    filtere_harte_verify_fehler,
+)
+
+
 def audit(*args, **kwargs):
     """Late-Binding-Proxy fuer werkstatt.loop.audit."""
     from werkstatt.loop import audit as _orig
@@ -1170,7 +1170,42 @@ def _phase_tasks_loop(
         # durch "pytest gruen" ignorieren. Flag wird in run_reviewer
         # gesetzt (z.B. reviewer_unvollstaendig).
         state.reviewer_deterministic_fail = False  # type: ignore[attr-defined]
-        _rev_ok = _with_spinner(f"Reviewer t{i}", lambda: run_reviewer(state))
+
+        # Pre-Reviewer-Gate: harte Verify-Fehler verhindern LLM-Review.
+        # Live-Beleg 2026-11-02 (OP-077): Builder hat __all__=["create_app"]
+        # ohne create_app gebaut. ruff F822 (undefined name) hat es gemeldet
+        # (in _v_weich), aber _v_hart_ok war True (ruff ist weiche Stage).
+        # Der Reviewer hat approved -> t1 = done. Test scheitert 5 Runden.
+        #
+        # WICHTIG: Nur _v_weich pruefen (frischer Rueckgabewert von
+        # _verify_patches_soft). NICHT last_verify_errors — das ist global
+        # und enthaelt Reste vom ersten Reviewer-Call.
+        _harte = filtere_harte_verify_fehler(list(_v_weich or []))
+        if _harte:
+            audit(
+                "reviewer_pre_gate_hart",
+                {
+                    "task_id": i,
+                    "anzahl": len(_harte),
+                    "beispiele": [str(e)[:120] for e in _harte[:3]],
+                },
+                pd, pn,
+            )
+            state.reviewer_bugs = [
+                {
+                    "severity": "high",
+                    "description": (
+                        f"Pre-Reviewer-Gate: {len(_harte)} harte Verify-Fehler "
+                        f"vor LLM-Review (nicht uebergangen): "
+                        + "; ".join(str(e)[:80] for e in _harte[:3])
+                    ),
+                }
+            ]
+            # Reviewer ueberspringen, Reflection soll greifen (nicht
+            # deterministic_fail, sonst wird Task sofort gefailt).
+            _rev_ok = False
+        else:
+            _rev_ok = _with_spinner(f"Reviewer t{i}", lambda: run_reviewer(state))
         # K40: Historie pushen (unabhaengig vom Ergebnis).
         _cur_bugs = getattr(state, "reviewer_bugs", None) or []
         if _cur_bugs:
