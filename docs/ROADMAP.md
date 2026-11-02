@@ -143,6 +143,10 @@ Referenz: Screenshot vom 2026-11-02 (Web-Interface mit Chat und Terminal).
 - **Rechts oben:** Zwei Chat-Fenster.
   - *Admin-KI:* Kann alle Projekte lesen, beantwortet Meta-Fragen (wie ein externer Berater).
   - *Bau-Chat:* Projektspezifischer Chat, um Aufgaben interaktiv zu steuern.
+  - *Maximize/Minimize:* Jedes der beiden Chat-Fenster hat einen Button, um es auf
+    die volle rechte Breite/Höhe zu maximieren oder auf eine schmale Leiste
+    zu minimieren. Der Nutzer kann so flexibel zwischen Übersicht (beide Chats)
+    und Fokus (ein Chat) wechseln.
 - **Unten:** Audit-Panel mit ein-/ausblendbarer History-Sidebar.
   - *Live-Stream:* Echtzeit-Ansicht der aktuellen Events (wie ein Terminal).
   - *History-Sidebar (DeepSeek-Style):* Links einblendbar. Zeigt die
@@ -169,6 +173,9 @@ Referenz: Screenshot vom 2026-11-02 (Web-Interface mit Chat und Terminal).
   - UI: DeepSeek-artige Sidebar (ein-/ausblendbar) zur Datums-Auswahl.
 - OP-032: Interactive Chat (Admin-KI tab-uebergreifend, Bau-Chat tab-gebunden).
 - OP-033: UI-Layout (Tabs = Projekte, Terminal links, Chat rechts, Audit-Panel unten mit Sidebar).
+  - *Split-Pane-System:* Die beiden Chat-Fenster auf der rechten Seite (Admin & Bau)
+    koennen per Button maximiert/minimiert werden (Full-Height vs. schmale Leiste).
+    Der Zustand wird im Frontend (React/Vue/htmx) gehalten, ohne das Backend zu belasten.
 
 ### Phase 31: Roadmap-to-OP Compiler (Meta-Loop) 🟢 (VISION)
 
