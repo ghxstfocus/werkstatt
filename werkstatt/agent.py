@@ -107,6 +107,7 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             model: str, temperature: float, timeout: int = 120,
             *, state: RunState | None = None,
             aufgabe: str = "unbekannt",
+            heartbeat: bool = True,
             max_tokens: int = 4096,
             redact: bool = True) -> LLMReply:
     """Fragt das LLM.
@@ -206,7 +207,10 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
         # (max len(backoffs)), enumerate ist hier
         # nicht passend (Abbruch durch break).
         _versuche_absolut += 1  # noqa: SIM113
-        hb_thread, hb_stop = _heartbeat_start(aufgabe)
+        if heartbeat:
+            hb_thread, hb_stop = _heartbeat_start(aufgabe)
+        else:
+            hb_thread, hb_stop = None, None
         try:
             try:
                 res = requests.post(DEEPSEEK_API_URL, headers=headers,
@@ -238,8 +242,9 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
                     )
                 letzter_fehler = f"HTTP {res.status_code}: {res.text[:200]}"
         finally:
-            hb_stop.set()
-            hb_thread.join(timeout=1.0)
+            if hb_stop is not None:
+                hb_stop.set()
+                hb_thread.join(timeout=1.0)
         if versuch < len(backoffs):
             time.sleep(warte)
 

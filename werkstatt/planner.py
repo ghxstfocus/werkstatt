@@ -553,7 +553,9 @@ def _llm_split_einzel_task(
         f"Split-{task.get('id', '?')}",
         lambda: ask_llm(
             api_key, PLANNER_SPLIT_SINGLE_SYSTEM, _user,
-            model="deepseek-chat", temperature=0.2, max_tokens=4000,, aufgabe="planner-split"),
+            model="deepseek-chat", temperature=0.2, max_tokens=4000,
+            aufgabe="planner-split",
+        ),
     )
     if not reply.ok:
         return []
@@ -841,6 +843,7 @@ def _zerlege_in_sub_tasks(
         lambda: ask_llm(
             api_key, PLANNER_SPLIT_SYSTEM, _user,
             model="deepseek-chat", temperature=0.2, max_tokens=8000,
+            aufgabe="planner-split",
         ),
     )
     if not reply.ok:
@@ -1472,6 +1475,25 @@ def run_planner(state: RunState) -> bool:
         state.auftrag_bereits_erfuellt_bestaetigt = False  # type: ignore[attr-defined]
         state.auftrag_bereits_erfuellt_quelle = "planner:scout_llm_urteil"  # type: ignore[attr-defined]
         return True
+
+    # SCOUT_BOX_RENDER (2026-11-02): Scout-Prosa + API-Auszug sichtbar machen
+    if _scout_report:
+        try:
+            from werkstatt import loop_renderer as _r_scout
+            _prosa = _scout_report.get("auftrag_prosa") or ""
+            if _prosa:
+                _r_scout.panel_diff(_prosa, title="SCOUT-AUFRAG")
+            _apis = _scout_report.get("api_auszug") or {}
+            if isinstance(_apis, dict) and _apis:
+                _n_sym = sum(
+                    len(v) for v in _apis.values() if isinstance(v, list)
+                )
+                _r_scout.status_header(
+                    "Scout-API",
+                    f"{len(_apis)} Datei(en) | {_n_sym} Symbol(e)",
+                )
+        except Exception:  # noqa: BLE001, S110
+            pass
 
     if _scout_report:
         _scout_auftrag = _scout_report.get("auftrag_prosa") or ""
