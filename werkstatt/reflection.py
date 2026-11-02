@@ -218,7 +218,7 @@ def _reflection_loop(
             _merke_geladene_skills(
                 state, [_sd.get("name", "systematic-debugging")], rolle="reflection")
             state.reflection_skill_body = _sd.get("body") or ""
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     if not api_key:

@@ -1260,7 +1260,7 @@ def run_planner(state: RunState) -> bool:
                 if _b:
                     _lines.append(f"### {_s.get(chr(34)+chr(34) if False else _s.get('name','?'))}\n{_b}")
             state.planner_skills_block = "\n\n".join(_lines)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     # FIX S 2026-10-31: Deterministischer Pre-Check VOR dem Scout.

@@ -582,7 +582,7 @@ def run_architect(
                 if _b:
                     _lines.append(f"### {_s.get('name','?')}\n{_b}")
             state.architect_skills_block = "\n\n".join(_lines)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     _arch_sys_base = _planner_system(aufgabe, explorer_ctx, state)
