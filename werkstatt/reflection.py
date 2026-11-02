@@ -6,9 +6,8 @@ _verify_patches, run_builder, run_reviewer).
 """
 from __future__ import annotations
 
-
-from werkstatt.state import RunState
 from werkstatt.loop_renderer import log_line  # Fix BA
+from werkstatt.state import RunState
 
 
 def _setze_runde_patches(state, patches: list) -> None:
@@ -323,6 +322,36 @@ def _reflection_loop(
         if error_context and error_context not in _errors:
             _errors = _errors + [error_context]
         state.last_verify_errors = _errors  # type: ignore[attr-defined]
+
+        # OP-081: Deterministische Diagnose VOR LLM-Builder.
+        # Bekannte Fehlerklassen (NameError, Directory-not-found)
+        # werden deterministisch gepatcht. Kein LLM-Call in dieser
+        # Runde. Bei Erfolg: continue, naechste Runde verifiziert.
+        try:
+            from werkstatt.diagnose import (
+                _deterministische_diagnose,
+            )
+            _det = _deterministische_diagnose(state)
+        except Exception:  # noqa: BLE001
+            _det = None
+        if _det is not None:
+            _a_det, _d_det = _apply_patches_with_diagnose(
+                state, [_det],
+                phase_label=f"reflection-det-{runde}",
+            )
+            state.applied_count = (  # type: ignore[attr-defined]
+                getattr(state, "applied_count", 0) + _a_det
+            )
+            _setze_runde_patches(state, [_det])
+            audit(
+                "loop_reflection_det_diagnose",
+                {"runde": runde, "applied": _a_det,
+                 "klasse": _det.get("klasse", ""),
+                 "grund": _det.get("grund", "")},
+                pd, pn,
+            )
+            if _a_det > 0:
+                continue
 
         # M-329: Builder erneut rufen. Er nutzt search/replace.
         # K34: reflection_phase -> _korrigiere_builder_action skip.
@@ -673,6 +702,7 @@ def _diff_hash_for_state(state) -> str:
     unterscheiden. Leerer String bei Fehler/kein Diff.
     """
     import hashlib
+
     from werkstatt.reviewer import _get_git_diff
 
     pd = getattr(state, "project_dir", None)
@@ -691,8 +721,12 @@ def _diff_hash_for_state(state) -> str:
     ).hexdigest()
 
 
-__all__ = ['_phase_end_reflection', '_reflection_loop',
-           '_apply_patches_with_diagnose', '_diff_hash_for_state']
+__all__ = [
+    '_apply_patches_with_diagnose',
+    '_diff_hash_for_state',
+    '_phase_end_reflection',
+    '_reflection_loop',
+]
 
 
 def _plan_reject_reflection(state) -> bool:
