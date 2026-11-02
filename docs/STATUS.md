@@ -455,6 +455,16 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Tests:** `tests/test_ui_layout.py::test_tab_wechsel_synchronisiert_bereiche`, `tests/test_ui_layout.py::test_tab_schliessen_stoppt_ws`
 - **Blockiert von:** OP-074, OP-075, OP-076, OP-077
 
+
+### OP-079: Reviewer verwechselt Kontext-Hunk mit Task-Zuordnung
+
+- **Status:** open
+- **Live-Beleg 2026-11-02 18:02 (OP-072-Lauf):** Der Builder fuegte 5 neue OP-Bloecke (OP-074..078) korrekt in `docs/STATUS.md` ein. Der Reviewer hat den Diff verworfen mit dem HIGH-Bug: "OP-074..078 behandeln voellig andere Themen (Migrationsnummern...)". Grund: Der Reviewer hat den Kontext-Hunk `@@ -294,7 +294,6 @@ DB-Reset zwischen Tests...` (aus OP-039) als Task-Zuordnung gelesen, obwohl die `+`-Zeilen ausschliesslich die UI-OPs waren.
+- **Betroffene Dateien:** `werkstatt/reviewer.py`, `tests/test_loop_reviewer.py`
+- **Akzeptanzkriterien:** Bei `.md`-Patches (STATUS.md, ROADMAP.md, PROGRESS.md) prueft der Reviewer nur die `+`-Zeilen gegen die Task-Description, nicht den `@@`-Kontextanker. Neue Regel im `review-work`-Skill oder als deterministischer Vor-Check in `run_reviewer`. Test: Ein Diff mit Kontextanker "DB-Reset" und `+`-Zeilen "OP-074" muss approved werden.
+- **Tests:** `tests/test_loop_reviewer.py::test_md_patch_kontext_hunk_ignoriert`
+- **Blockiert von:** —
+
 ## Erledigt (Auto-Log)
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.

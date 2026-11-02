@@ -1366,3 +1366,7 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 ## 2026-11-02T13:12:35+00:00 -- Test test_stage_count_by_phase und Import
 - **Status:** done
 
+## 2026-11-02T18:04:05+00:00 -- Phase abgeschlossen: werkstatt
+- **Status:** phase_ende
+- **Info:** rc=1 tasks_ok=0/1
+
