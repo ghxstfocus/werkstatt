@@ -313,6 +313,12 @@ class RunState:
     follow_up_fehler: list[dict] = field(default_factory=list)
     # IGNORE: irrelevant, verworfen.
     ignore_fehler: list[dict] = field(default_factory=list)
+    # OP-067: in der laufenden Reflection-Runde angewendete Patches.
+    # Dient als Fallback-Quelle fuer `_expand_cmd_placeholders`, wenn
+    # `state.patches` bereits geleert wurde. Lebenszyklus: pro Runde
+    # `clear()` + `extend()`, am Rundenende `clear()`.
+    patches_aktuell_runde: list[dict[str, object]] = \
+        field(default_factory=list)
 
 
 

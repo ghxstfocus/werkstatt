@@ -13,6 +13,28 @@ from werkstatt.state import RunState
 from werkstatt.loop_renderer import log_line  # Fix BA
 
 
+def _setze_runde_patches(state, patches: list) -> None:
+    """OP-067: Spiegelt Runden-Patches in state.patches_aktuell_runde.
+
+    Wird pro Reflection-Runde EINMAL aufgerufen, direkt nach
+    _apply_patches_with_diagnose. Damit sieht _expand_cmd_placeholders
+    die Runden-Patches als Fallback, wenn state.patches geleert ist.
+
+    Schutz: state kann ein SimpleNamespace sein (Tests) — dann noop.
+    Ein direkter state.patches_aktuell_runde.clear() wuerde in diesen
+    Tests AttributeError werfen (Live-Beleg 2026-11-02: 11 Tests).
+    """
+    try:
+        _cur = getattr(state, "patches_aktuell_runde", None)
+        if isinstance(_cur, list):
+            _cur.clear()
+            _cur.extend(patches)
+        else:
+            state.patches_aktuell_runde = list(patches)  # type: ignore[attr-defined]
+    except (AttributeError, TypeError):
+        pass
+
+
 def _klassifiziere_fehler(errors: list) -> str:
     """M-WelleF (2026-11-02): dominante Fehlerklasse + Repair-Hint."""
     if not errors:
@@ -332,6 +354,8 @@ def _reflection_loop(
             phase_label=f"reflection-runde-{runde}",
         )
         state.applied_count = getattr(state, "applied_count", 0) + _applied  # type: ignore[attr-defined]
+        # OP-067: Runden-Patches fuer Verify sichtbar machen
+        _setze_runde_patches(state, list(_patches))
 
         if _applied == 0:
             # K30: Konkreten Patch-Fehler in verify_errors anhaengen,

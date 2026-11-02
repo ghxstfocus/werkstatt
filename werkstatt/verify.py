@@ -130,7 +130,11 @@ def _expand_cmd_placeholders(
             and "{changed_non_test_py_files}" not in cmd_str):
         return [str(c) for c in cmd]
 
-    patches = getattr(state, "patches", []) or []
+    patches = getattr(state, "patches", None) or []
+    if not patches:
+        _fallback = getattr(state, "patches_aktuell_runde", None)
+        if _fallback:
+            patches = _fallback
     changed = [
         p["file"] for p in patches
         if isinstance(p, dict) and p.get("file")
