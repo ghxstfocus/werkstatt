@@ -103,7 +103,8 @@ function createAuditPanel(options) {
 
       const zeit = document.createElement("span");
       zeit.className = "audit-zeit";
-      zeit.textContent = _escapeText(_formatiereZeit(ev && ev.ts));
+      // Feld heisst 'timestamp', nicht 'ts'
+      zeit.textContent = _escapeText(_formatiereZeit(ev && (ev.timestamp || ev.ts)));
 
       const art = document.createElement("span");
       art.className = "audit-kind";
@@ -111,7 +112,22 @@ function createAuditPanel(options) {
 
       const text = document.createElement("span");
       text.className = "audit-text";
-      text.textContent = _escapeText(ev && ev.payload);
+      // Es gibt kein 'payload'-Feld. Wir nehmen die Extra-Felder.
+      var _extra = "";
+      if (ev && typeof ev === "object") {
+        var _skip = { audit_id: 1, timestamp: 1, ts: 1, agent: 1, project: 1, kind: 1 };
+        var _teile = [];
+        Object.keys(ev).forEach(function (k) {
+          if (_skip[k]) return;
+          var v = ev[k];
+          var vs;
+          try { vs = JSON.stringify(v); } catch (e) { vs = String(v); }
+          if (vs && vs.length > 80) vs = vs.slice(0, 77) + "...";
+          _teile.push(k + "=" + vs);
+        });
+        _extra = _teile.join(" ");
+      }
+      text.textContent = _escapeText(_extra);
 
       zeile.appendChild(zeit);
       zeile.appendChild(art);
@@ -131,7 +147,7 @@ function createAuditPanel(options) {
 
       const zeit = document.createElement("span");
       zeit.className = "audit-zeit";
-      zeit.textContent = _escapeText(_formatiereZeit(ev && ev.ts));
+      zeit.textContent = _escapeText(_formatiereZeit(ev && (ev.timestamp || ev.ts)));
 
       const art = document.createElement("span");
       art.className = "audit-kind";
@@ -139,11 +155,26 @@ function createAuditPanel(options) {
 
       const runId = document.createElement("span");
       runId.className = "audit-run-id";
-      runId.textContent = _escapeText(ev && ev.run_id);
+      // Feld heisst 'audit_id', nicht 'run_id'
+      runId.textContent = _escapeText(ev && (ev.audit_id || ev.run_id));
 
       const text = document.createElement("span");
       text.className = "audit-text";
-      text.textContent = _escapeText(ev && ev.payload);
+      var _extra = "";
+      if (ev && typeof ev === "object") {
+        var _skip = { audit_id: 1, timestamp: 1, ts: 1, agent: 1, project: 1, kind: 1 };
+        var _teile = [];
+        Object.keys(ev).forEach(function (k) {
+          if (_skip[k]) return;
+          var v = ev[k];
+          var vs;
+          try { vs = JSON.stringify(v); } catch (e) { vs = String(v); }
+          if (vs && vs.length > 120) vs = vs.slice(0, 117) + "...";
+          _teile.push(k + "=" + vs);
+        });
+        _extra = _teile.join(" ");
+      }
+      text.textContent = _escapeText(_extra);
 
       zeile.appendChild(zeit);
       zeile.appendChild(art);
@@ -417,10 +448,15 @@ if (typeof window !== "undefined") {
     if (typeof window === "undefined") return;
     if (!window.__werkstattAuditInstanz && typeof createAuditPanel === "function") {
       try {
-        window.__werkstattAuditInstanz = createAuditPanel({});
+        window.__werkstattAuditInstanz = createAuditPanel({ projekt: "werkstatt" });
         if (window.__werkstattAuditInstanz && typeof window.__werkstattAuditInstanz.mount === "function") {
           window.__werkstattAuditInstanz.mount();
-          console.log("[audit] mount ok");
+          if (typeof window.__werkstattAuditInstanz.oeffne === "function") {
+            window.__werkstattAuditInstanz.oeffne("werkstatt").catch(function (e) {
+              console.warn("[audit] initial oeffne fehler:", e);
+            });
+          }
+          console.log("[audit] mount ok + oeffne(werkstatt)");
         } else {
           console.warn("[audit] createAuditPanel ohne mount");
         }
