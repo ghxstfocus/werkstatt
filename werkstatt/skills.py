@@ -102,6 +102,19 @@ def skills_metadata_block(skills: list[dict[str, Any]]) -> str:
     return chr(10).join(lines) + chr(10) + chr(10)
 
 
+def _glob_specificity(pattern: str) -> int:
+    """Anzahl der Nicht-Wildcard-Zeichen im Glob-Pattern.
+
+    Hoeher = spezifischer. Bei Test-Files soll ein Pattern wie
+    'tests/**/*.py' (score 9) gegen die generischen '**/*.py' (score 3)
+    gewinnen, damit test-patterns nicht durch Alphabet-Reihenfolge
+    abgeschnitten wird.
+    """
+    if not isinstance(pattern, str):
+        return 0
+    return len(pattern.replace("*", "").replace("?", "").strip("/"))
+
+
 def skills_fuer_task(
     skills: list[dict[str, Any]],
     task_files: list[str],
@@ -116,27 +129,35 @@ def skills_fuer_task(
     import fnmatch
     if not task_files:
         return []
-    result = []
-    seen = set()
+    # Pro Skill die hoechste Spezifitaet ueber alle matcht Glob-Patterns
+    # ermitteln. Skills ohne Match fallen weg.
+    matched: list[tuple[int, dict[str, Any]]] = []
+    seen_names: set[str] = set()
     for s in skills:
         name = s.get("name") or ""
-        if name in seen:
+        if name in seen_names:
             continue
         globs = s.get("globs") or []
         if isinstance(globs, str):
             globs = [globs]
+        best_spec = 0
         for g in globs:
             for f in task_files:
                 if not isinstance(f, str):
                     continue
                 _f = f.replace(chr(92), "/")
                 if fnmatch.fnmatch(f, g) or fnmatch.fnmatch(_f, g):
-                    seen.add(name)
-                    result.append(s)
-                    break
-            if name in seen:
-                break
-    return result
+                    spec = _glob_specificity(g)
+                    if spec > best_spec:
+                        best_spec = spec
+        if best_spec > 0:
+            matched.append((best_spec, s))
+            seen_names.add(name)
+    # Stabile Sortierung: hoechste Spezifitaet zuerst.
+    # Bei Gleichstand bleibt die Eingabe-Reihenfolge (aus load_all_skills
+    # alphabetisch sortiert) erhalten -> deterministisch.
+    matched.sort(key=lambda pair: -pair[0])
+    return [s for _, s in matched]
 
 
 def skills_aktivieren(
