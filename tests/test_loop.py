@@ -11,6 +11,7 @@ from werkstatt import loop as loop_mod
 from werkstatt.loop import _plan_gate, _verify_patches, run_pipeline_loop
 from werkstatt.phase_state import PhaseState
 from werkstatt.state import RunState
+from werkstatt.verify import _stage_anzahl
 
 
 def _state(tmp_path, tasks=True, tests=True, akz=True):
@@ -61,6 +62,19 @@ def test_verify_patches_fails(tmp_path):
         '{"stages": [{"id": "fail", "command": ["python3", "-c", "import sys; sys.exit(1)"]}]}'
     )
     assert _verify_patches(st) is False
+
+
+def test_stage_anzahl(tmp_path):
+    """_stage_anzahl: 0 ohne verify.json, 4 mit vier Stages."""
+    # Fall 1: keine .werkstatt/verify.json -> 0
+    assert _stage_anzahl(tmp_path) == 0
+
+    # Fall 2: verify.json mit vier Stages -> 4
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": [{"id": "a"}, {"id": "b"}, {"id": "c"}, {"id": "d"}]}'
+    )
+    assert _stage_anzahl(tmp_path) == 4
 
 
 def test_loop_planner_fail(tmp_path):

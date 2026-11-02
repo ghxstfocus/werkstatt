@@ -1319,3 +1319,16 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 ## 2026-11-01T19:08:39+00:00 -- OP-064a: Sticky-Veto
 - **Status:** done
 - **Info:** Commit HEAD. phase_state.mark_vetoed + ist_vetoed. verdict orthogonal zu status (sonst Idempotenz-Guard-Konflikt). mark_done hebt Veto auf (Mensch). task_runner._task_ende: Veto-Guard -> mark_human_review statt mark_done bei vetoed. pipeline_phases._phase_tasks_loop: nach Reflection VOR False-Positive-Pfad pruefen, ob spec_widerspruch_erkannt -> mark_vetoed + human_review + Audit, kein 2. Reviewer-Call. Tests: tests/test_sticky_veto.py (4 Faelle, Test 4 echter Loop-Mock). Baseline 1087 passed. Live-Beleg Testrunde 3 (18:54 OP-004): Veto haette den type:ignore-Approval blockiert. Erster Baustein von OP-064 (Completion-Gate-Architektur). Naechste Bausteine: 064b (Antipattern-Scanner), 064c (StuckDetector), 064d (Red-to-Green), 064e (Spec-Pre-Flight), 064f (Feature-JSON).
+## 2026-11-02T08:45:57+00:00 -- Neue Funktion _stage_anzahl in verify.py
+- **Status:** done
+
+## 2026-11-02T08:46:02+00:00 -- __all__ in verify.py ergaenzen
+- **Status:** done
+
+## 2026-11-02T08:46:19+00:00 -- Test test_stage_anzahl in test_loop.py
+- **Status:** done
+
+## 2026-11-02T08:48:11+00:00 -- Phase abgeschlossen: werkstatt
+- **Status:** phase_ende
+- **Info:** tasks_ok=3/3
+

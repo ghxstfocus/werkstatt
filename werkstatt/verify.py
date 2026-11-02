@@ -9,6 +9,7 @@ import json
 import subprocess
 from pathlib import Path
 
+
 def audit(*args, **kwargs):
     """Late-Binding-Audit-Proxy (Fix AZ Stufe 3, 2026-10-31).
 
@@ -39,6 +40,27 @@ def _ist_test_datei(pfad: str) -> bool:
     if "/test/" in ("/" + p) or p.startswith("test/"):
         return True
     return False
+
+
+def _stage_anzahl(project_dir: Path) -> int:
+    """Liest die Anzahl der Stages aus .werkstatt/verify.json.
+
+    Fail-closed: fehlende/kaputte Datei oder falsches Format -> 0.
+    """
+    pfad = Path(project_dir) / ".werkstatt" / "verify.json"
+    if not pfad.is_file():
+        return 0
+    try:
+        text = pfad.read_text(encoding="utf-8")
+        daten = json.loads(text)
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return 0
+    if not isinstance(daten, dict):
+        return 0
+    stages = daten.get("stages")
+    if not isinstance(stages, list):
+        return 0
+    return len(stages)
 
 
 def _expand_cmd_placeholders(
@@ -125,7 +147,7 @@ def _expand_cmd_placeholders(
                 _cands = [f"tests/unit/test_{_dir}.py",
                           f"tests/test_{_dir}.py"]
             else:
-                _stem = _bn[:-3] if _bn.endswith(".py") else _bn
+                _stem = _bn.removesuffix(".py")
                 _cands = [f"tests/unit/test_{_stem}.py",
                           f"tests/test_{_stem}.py"]
                 if len(_parts) >= 2:
@@ -529,12 +551,13 @@ def _get_baseline_error_details(
 
 
 __all__ = [
-    '_expand_cmd_placeholders',
-    '_get_baseline_error_details',
-    '_resolve_venv_cmd',
-    '_ruff_fix_changed',
-    '_stage_ist_hart',
-    '_verify_patches',
-    '_verify_patches_soft',
-    '_verify_stage_with_heartbeat',
+    "_expand_cmd_placeholders",
+    "_get_baseline_error_details",
+    "_resolve_venv_cmd",
+    "_ruff_fix_changed",
+    "_stage_anzahl",
+    "_stage_ist_hart",
+    "_verify_patches",
+    "_verify_patches_soft",
+    "_verify_stage_with_heartbeat",
 ]
