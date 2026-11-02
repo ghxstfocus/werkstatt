@@ -196,6 +196,24 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Blockiert von:** —
 
 ### OP-026: R-CHECK-1 — Reviewer prueft Task-Zahlen nicht. Live-Beleg 20:42: Task verlangt `limit=10`, Code nutzt `limit=5`, Phase-Review approved. In Runde 1 des vorigen RERUN (20:38) hatte der Reviewer denselben Bug als HIGH markiert — Regression. Fix: `## KONSTANTEN-CHECK` in `REVIEWER_SYSTEM` (Zahlen aus Task muessen im Diff als Literal auftauchen, sonst HIGH-Bug).
+- **Status:** wontfix fuer den Prompt-Block-Teil
+  (existiert seit 22b7776 als Skill `review-konstanten`);
+  deterministische Durchsetzung siehe Folge-OP-Hinweis unten
+- **Befund 2026-11-02 15:29 (Loop-Lauf):** Architect hat OP-026 als
+  'REVIEWER_SYSTEM um ## KONSTANTEN-CHECK erweitern' interpretiert.
+  Der Reviewer hat das mit `[high] Over-Delivery` korrekt zurueckgewiesen,
+  weil der Block bereits als Skill existiert. Zusaetzlich
+  `spec_widerspruch_vermutet` — der Architect kannte den Stand nach
+  dem Skill-Strip (22b7776) nicht.
+- **Folge-OP (nicht dieser Block):** Die deterministische
+  Durchsetzung fehlt noch — eine Funktion
+  `_konstanten_check(task_text, diff) -> list[dict]` in
+  `werkstatt/reviewer.py`, die Zahlen-Literale aus dem Task-Text
+  extrahiert und im Diff prueft. t1 des Loops hat Ansaetze gebaut
+  (`_extrahiere_zahlen_literale`, `_konstanten_check`), aber ohne
+  Integration in `run_reviewer` — deshalb toter Code, nach Rollback
+  verworfen. Ein kuenftiger Loop-Task muss **beide** Punkte
+  adressieren (Funktion + Integration) und die Test-Datei nennen.
 - **Status:** open
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Reviewer prueft Task-Zahlen nicht. Live-Beleg 20:42: Task verlangt `limit=10`, Code nutzt `limit=5`, Phase-Review approved. In Runde 1 des vorigen RERUN (20:38) hatte der Reviewer denselben Bug als HIGH markiert — Regression. Fix: `## KONSTANTEN-CHECK` in `REVIEWER_SYSTEM` (Zahlen aus Task muessen im Diff als Literal auftauchen, sonst HIGH-Bug).
