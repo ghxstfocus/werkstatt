@@ -335,10 +335,45 @@ def _baue_api_index(project_dir) -> dict:
     return index
 
 
+def _count_symbol_references(index: dict) -> dict:
+    """M-WelleD: Zaehlt, wie oft Symbole aus jeder Datei importiert werden.
+
+    Heuristik fuer Relevanz: Dateien, deren Symbole oft von anderen
+    Dateien importiert werden, sind zentraler (Utility, Shared-Lib).
+    Das ist billiger als PageRank und reicht fuer die Werkstatt.
+    """
+    counts: dict = {}
+    # Symbol -> Datei(en), die es definieren
+    sym_to_files: dict = {}
+    for f, info in index.items():
+        for fn in info.get("functions", []):
+            sym_to_files.setdefault(fn["name"], []).append(f)
+        for c in info.get("classes", []):
+            sym_to_files.setdefault(c["name"], []).append(f)
+        for a in info.get("all", []):
+            sym_to_files.setdefault(a, []).append(f)
+    # Zaehle Importe
+    for f, info in index.items():
+        for imp in info.get("imports", []):
+            for name in imp.get("names", []):
+                for src_file in sym_to_files.get(name, []):
+                    if src_file != f:
+                        counts[src_file] = counts.get(src_file, 0) + 1
+    return counts
+
+
 def _format_api_index_for_prompt(index: dict, max_files: int = 40) -> str:
     """Deterministisch: API-Index -> Prompt-Text."""
     lines = []
-    for i, (f, info) in enumerate(index.items()):
+    # M-WelleD (2026-11-02): Ranking nach eingehender Referenz-Haeufigkeit.
+    # Statt der ersten N Dateien im dict die N Dateien, deren Symbole am
+    # haeufigsten importiert werden (Heuristik fuer Relevanz).
+    _ref_counts = _count_symbol_references(index)
+    _sorted_items = sorted(
+        index.items(),
+        key=lambda kv: -_ref_counts.get(kv[0], 0),
+    )
+    for i, (f, info) in enumerate(_sorted_items):
         if i >= max_files:
             lines.append(f"... und {len(index) - max_files} weitere Dateien")
             break
