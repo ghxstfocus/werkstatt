@@ -10,8 +10,6 @@ werkstatt.planner aufgeloest, damit Test-Patches wirken.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 
 def _extrahiere_op_felder(aufgabe: str, docs_status: str) -> dict:
     """M-Welle-I (2026-11-02): maschinenlesbare OP-Felder aus STATUS.md.
@@ -246,6 +244,32 @@ MIGRATIONS-NUMMERN:
   - Nutze NIEMALS eine Nummer, die bereits als Datei existiert.
 
 Antworte NUR mit diesem Prosa-Text. Kein Code, nur Beschreibung.
+
+## KONSISTENZ BEI MULTI-TASK-PLAENEN (verbindlich)
+
+Wenn ein Plan Code-Tasks (z.B. t1: `werkstatt/web/chat.py`) und Test-Tasks
+(z.B. t4: `tests/test_chat_windows.py`) enthaelt, gelten:
+
+1. API-Signaturen MUESSEN zwischen Code und Test identisch sein.
+   Beispiel: Test ruft `wende_aktion_an(zustand, aktion)` -> Code baut
+   GENAU 2 Parameter, nicht 3.
+
+2. Dict-Keys MUESSEN zwischen Code und Test identisch sein.
+   Beispiel: Test prueft `ergebnis["ziel"]` -> Code gibt Key "ziel"
+   zurueck, NICHT "target" oder "raw".
+
+3. Bei jeder Funktion, die ein Test prueft, MUSS der Code-Task die
+   gleiche Signatur zeigen. Wenn unsicher: Signatur WOERTLICH in beiden
+   Tasks nennen (`wende_aktion_an(zustand: dict, aktion: str)`).
+
+4. Bei Test-Tasks: KEINE selbstwiderspruechlichen Assertions.
+   Falsch: `assert set(x.keys()) == {a, b}` UND `assert x["c"] == ...`
+   (impliziert c ist im dict, widerspricht a,b).
+   Richtig: optionale Keys explizit ausnehmen:
+   `assert set(x.keys()) - {c} == {a, b}`.
+
+5. Wenn Code-Task und Test-Task in derselben Phase laufen, haengen
+   sie zusammen: der Reviewer muss BEIDE genehmigen oder KEINEN.
 
 ## GOLD: SCOUT-KONTEXT
 Du bekommst im User-Content:
@@ -566,11 +590,11 @@ __all__ = [
     'ARCHITECT_SYSTEM',
     '_BUILDER_SCHNITTSTELLE',
     '_architect_system_with_builder',
-    '_planner_system',
-    'run_architect',
-    'build_architect_docs_section_v2',
-    '_reduce_entry',
-    '_reduce_status',
-    '_reduce_roadmap',
     '_build_selbst_check_block',
+    '_planner_system',
+    '_reduce_entry',
+    '_reduce_roadmap',
+    '_reduce_status',
+    'build_architect_docs_section_v2',
+    'run_architect',
 ]
