@@ -7,6 +7,10 @@
   var zaehler = 0;
   var aktiverTabId = null;
   var tabDaten = {};  // tabId -> { projekt, terminal: [], chat: [], audit: [] }
+  // Neue Store-API parallel zu den alten Handlern.
+  // Wird von wechsle/schliesse/neuerTab aufgerufen.
+  var _zustand = null;  // spaet initialisiert
+
 
   function neuerTab(projekt) {
     var klon = vorlage.content.cloneNode(true);
@@ -35,6 +39,12 @@
       chat: [],
       audit: [],
     };
+    // Store-API: Tab oeffnen (Kanal reservieren)
+    if (_zustand) {
+      try {
+        window.WerkstattTabs.oeffne_tab(_zustand, projekt, projekt);
+      } catch (e) { /* Store-API optional */ }
+    }
     return id;
   }
 
@@ -53,12 +63,34 @@
     document.getElementById("chat-titel").textContent =
       "Chat — " + daten.projekt;
 
-    rendereListe("terminal-scrollback", daten.terminal);
+    rendereListe("terminal", daten.terminal);
     rendereListe("chat-nachrichten", daten.chat);
     rendereListe("audit-live", daten.audit);
+
+    // Panel-Verbindungen oeffnen (OP-083 Wiring 2026-11-03)
+    try {
+      if (window.WerkstattTerminal && window.WerkstattTerminal.oeffne) {
+        window.WerkstattTerminal.oeffne(daten.projekt);
+      }
+      if (window.WerkstattAudit && window.WerkstattAudit.oeffne) {
+        window.WerkstattAudit.oeffne(daten.projekt);
+      }
+      if (window.WerkstattChat && window.WerkstattChat.setze_chat) {
+        window.WerkstattChat.setze_chat(daten.projekt);
+      }
+    } catch (e) { /* Panels optional */ }
   }
 
   function schliesse(tabId) {
+    // Panel-Verbindungen schliessen bevor Tab weg
+    try {
+      if (window.WerkstattTerminal && window.WerkstattTerminal.schliesse) {
+        window.WerkstattTerminal.schliesse();
+      }
+      if (window.WerkstattAudit && window.WerkstattAudit.schliesse) {
+        window.WerkstattAudit.schliesse();
+      }
+    } catch (e) { /* Panels optional */ }
     var btn = document.querySelector('.tab[data-tab-id="' + tabId + '"]');
     if (btn) {
       btn.remove();
@@ -135,6 +167,17 @@
     close.addEventListener("click", function () {
       sidebar.classList.remove("ist-offen");
     });
+  }
+
+  // Store-API initialisieren
+  if (window.WerkstattTabs && window.WerkstattTabs.neuer_zustand) {
+    try {
+      _zustand = window.WerkstattTabs.neuer_zustand({
+        hole_kanal: function() { return null; },
+        neuer_kanal: function(p) { return p; },
+        schliesse_kanal: function() {},
+      });
+    } catch (e) { _zustand = null; }
   }
 
   // Start: ein Demo-Tab
