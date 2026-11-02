@@ -820,6 +820,8 @@ def _build_patches_fuer_datei(
         if isinstance(state, object) and hasattr(state, "__dict__"):
             try:
                 state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
+                state.auftrag_bereits_erfuellt_bestaetigt = False  # type: ignore[attr-defined]
+                state.auftrag_bereits_erfuellt_quelle = "builder:llm_keine_patches"  # type: ignore[attr-defined]
             except (AttributeError, TypeError):
                 pass
         audit("auftrag_bereits_erfuellt",
@@ -917,6 +919,8 @@ def _build_patches_fuer_datei(
         if isinstance(state, object) and hasattr(state, "__dict__"):
             try:
                 state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
+                state.auftrag_bereits_erfuellt_bestaetigt = True  # type: ignore[attr-defined]
+                state.auftrag_bereits_erfuellt_quelle = "builder:old_nicht_da_aber_new_da"  # type: ignore[attr-defined]
             except (AttributeError, TypeError):
                 pass
         return []
@@ -1412,6 +1416,8 @@ def run_builder(state: RunState) -> bool:
 
         # Ansonsten: bisheriges Verhalten — Auftrag ist bereits erfuellt.
         state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
+        state.auftrag_bereits_erfuellt_bestaetigt = True  # type: ignore[attr-defined]
+        state.auftrag_bereits_erfuellt_quelle = "builder:alle_patches_no_effect"  # type: ignore[attr-defined]
         audit("auftrag_bereits_erfuellt",
               {"zieldatei": _zieldatei,
                "grund": "alle_patches_no_effect"}, pd, pn)

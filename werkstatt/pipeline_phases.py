@@ -807,7 +807,8 @@ def _phase_tasks_loop(
         # Reviewer. Live-Beleg 21:18:37: Builder setzte Flag, Hook liess
         # durch, Apply-Loop lief mit leerem state.patches,
         # reviewer_kein_diff_aber_patches -> fail-closed.
-        if getattr(state, "auftrag_bereits_erfuellt", False):
+        if (getattr(state, "auftrag_bereits_erfuellt", False)
+            and getattr(state, "auftrag_bereits_erfuellt_bestaetigt", False)):
             audit("auftrag_bereits_erfuellt",
                   {"task_id": i,
                    "name": task_name,
@@ -860,7 +861,8 @@ def _phase_tasks_loop(
             # _reflection_loop gab True (weil Verify wegen leerer
             # Stage-Skipping gruen war), Task wurde als ok markiert,
             # ohne dass etwas geprueft wurde.
-            if getattr(state, "auftrag_bereits_erfuellt", False):
+            if (getattr(state, "auftrag_bereits_erfuellt", False)
+                and getattr(state, "auftrag_bereits_erfuellt_bestaetigt", False)):
                 audit("auftrag_bereits_erfuellt",
                       {"task_id": i,
                        "name": task_name,

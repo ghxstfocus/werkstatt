@@ -137,6 +137,13 @@ class RunState:
     # zu builder_model. Frontmatter wird heute nicht gelesen.
     planner_model: str = "deepseek-chat"
     planner_modus: str = "manual"
+    # M-WelleB (2026-11-02): Content-Check-Bestätigung.
+    # True = Auftrag-bereits-erfuellt wurde durch DETERMINISTISCHEN
+    # Content-Check bestätigt (nicht durch LLM-Urteil).
+    # Quelle: aus welcher Setzen-Stelle (für Audit).
+    auftrag_bereits_erfuellt_bestaetigt: bool = False
+    auftrag_bereits_erfuellt_quelle: str = ""
+
     # W35a-2 (2026-10-17): Planner-Resume-Cap
     # pro uid. Max 1x pro Unterblock pro Prozess.
     planner_resume_anzahl: dict[str, int] = \

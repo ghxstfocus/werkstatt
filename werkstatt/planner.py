@@ -1116,6 +1116,8 @@ def _deterministic_entfernen_precheck(state) -> bool:
                 return False  # Marker existiert noch
         try:
             state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
+            state.auftrag_bereits_erfuellt_bestaetigt = True  # type: ignore[attr-defined]
+            state.auftrag_bereits_erfuellt_quelle = "planner:deterministic_precheck"  # type: ignore[attr-defined]
         except (AttributeError, TypeError):
             return False
         audit("planner_precheck_bereits_erfuellt", {
@@ -1450,6 +1452,8 @@ def run_planner(state: RunState) -> bool:
                "begruendung": _begr[:300]}, pd, pn)
         # Flag fuer den Loop setzen
         state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
+        state.auftrag_bereits_erfuellt_bestaetigt = False  # type: ignore[attr-defined]
+        state.auftrag_bereits_erfuellt_quelle = "planner:scout_llm_urteil"  # type: ignore[attr-defined]
         return True
 
     if _scout_report:
