@@ -1,6 +1,6 @@
 # Roadmap — Werkstatt
 
-Stand: 2026-10-31 (nach Doku-Migration, Scaffolder, Migrator, OP-NNN-Disziplin).
+Stand: 2026-11-02 (nach Skills-Welle, UI-Vision, OP-Bereinigung).
 Uebersicht. Details in `STATUS.md` (Todo)
 und `PROGRESS.md` (Erledigt).
 
@@ -19,10 +19,10 @@ und `PROGRESS.md` (Erledigt).
 
 ## Ist-Stand (2026-10-31)
 
-**Baseline (gemessen 2026-10-31):** 958 / 248 / 16 / - / -.
-- pytest: 958 passed, 5 skipped.
-- ruff: 248 errors, 198 fixable (tests/ nie durchgerufft).
-- mypy: 16 errors (werkstatt/, nicht auf .).
+**Baseline (gemessen 2026-11-02):** 1145 / 309 / 22 / - / -.
+- pytest: 1145 passed, 5 skipped.
+- ruff: 309 errors (tests/ nie durchgerufft).
+- mypy: 22 errors in 9 files (werkstatt/, nicht auf .).
 - AST + Katalog: Messung fehlt (AST-Tool entfernt, _KATALOG_SOLL fehlt).
 - quality_gate: exit 1, regression true (Baseline aus 2026-10-25 ist
   veraltet, Re-Baseline als OP).
@@ -87,32 +87,6 @@ Rollen: Explorer, Planner, Builder, Verify, Reviewer, Human-Gate.
 - M-485: Event-Sourcing / Memory.
 - M-486: Cache-aware Cost Model (7.1x Genauigkeit).
 
-### Phase 22: Grundsystem schliessen (M-487..M-489) 🔴
-
-- M-487: Human-Gate committet selbst.
-- M-488: `phase_end` laeuft Vollsuite.
-- M-489: Test-Repair-Loop (TDFlow-Stil, 94.3% SWE-bench Verified).
-
-### Phase 22b: Doku-Sync (M-490..M-492) 🔴
-
-- M-490: Doku-Staleness-Check (deterministisch, Documentledger).
-- M-491: Doku-Update-Agent (DocWriter, AUTO-Sections).
-- M-492: Doku-Critic (DocSync).
-
-### Phase 23: Effizienz (M-479..M-482) 🔧
-
-- M-479: Modell-Routing pro Rolle.
-- M-480: Kosten-Circuit-Breaker.
-- M-481: Cache-aware Prompts.
-- M-482: LiteLLM Adaptive Router (optional).
-
-### Phase 24: Robustheit (M-483..M-486) 🔴
-
-- M-483: Sandboxing (OS-Level, 84% weniger Permission-Prompts).
-- M-484: SWE-bench-Harness (die einzige vergleichbare Zahl).
-- M-485: Event-Sourcing / Memory.
-- M-486: Cache-aware Cost Model (7.1x Genauigkeit).
-
 ### Phase 25: Web-Interface (M-494..M-497) 📋
 
 - M-494: Web-Backend (FastAPI, Web-Sockets, State pro Projekt).
@@ -144,11 +118,49 @@ Rollen: Explorer, Planner, Builder, Verify, Reviewer, Human-Gate.
   `test_planner_vage_aufgabe.py`, `test_manifest_pflichtfelder.py`,
   `test_scout_liest_doku.py`.
 
+### Phase 29b: Skills-Welle ✅ (2026-11-02)
+
+- 20 Skills in `skills/<name>/SKILL.md` mit Glob-Trigger und Rollen-Filter.
+- `skills_aktivieren(skills, task_files, max_total=3, rolle=...)` in 4 Prompt-Bauern.
+- `loop_skills_geladen`-Audit + `state.geladene_skills` (Dedup).
+- BUILDER_SYSTEM von ~6210 auf ~3700 Zeichen reduziert (-40%).
+- REVIEWER_SYSTEM von ~6806 auf ~2600 Zeichen reduziert (-62%).
+- Ausnahme: `DATUM (STRIKT)` bleibt im Prompt (Output-Contract).
+
 ### Phase 29: Loop-Reife Code-Patches 🟠 (OFFEN)
 
 Bugs aus Live-Test 3 (OP-034..OP-038) in `docs/STATUS.md`:
 pytest-Regression, Datum aus UTC, Reflection-Deduplizierung,
 Reviewer-Signal, Commit-Message-Builder.
+
+### Phase 30: Web-Dashboard & Interactive UI 🟢 (VISION)
+
+**Ziel:** Ein echtes Dashboard, das die Werkstatt visuell begreifbar macht.
+Referenz: Screenshot vom 2026-11-02 (Web-Interface mit Chat und Terminal).
+
+**Layout:**
+- **Links:** CLI / Terminal-Proxy (Live-Output des Loops, farbig).
+- **Rechts oben:** Zwei Chat-Fenster.
+  - *Admin-KI:* Kann alle Projekte lesen, beantwortet Meta-Fragen (wie ein externer Berater).
+  - *Bau-Chat:* Projektspezifischer Chat, um Aufgaben interaktiv zu steuern.
+- **Unten:** Live-Audit-Logs (Echtzeit-Stream der Events, Scrollbar).
+
+**Kopplungs-Mechanik (Kern des UI):**
+- Chrome-Tabs = Projekte. Ein Tab pro Projekt (z.B. `werkstatt`, `security-ai`).
+- Alle Panels (Terminal, Admin-Chat, Bau-Chat, Audit-Logs) sind an den
+  aktiven Tab gekoppelt. Tab-Wechsel = Kontext-Wechsel fuer alle Panels.
+- State-Isolation pro Tab: Terminal-Scrollback, Chat-History und Log-Puffer
+  werden pro Projekt getrennt gehalten.
+- Web-Socket-Namespace pro Tab (`/ws/{project}`), kein globaler Stream.
+  `loop_renderer` muss multi-projekt-faehig werden.
+- Admin-KI uebergreift Tabs (darf alle Projekte lesen, Meta-Fragen
+  beantworten). Bau-Chat ist tab-gebunden.
+
+**Technische Umsetzung (existierende OPs, erweitert):**
+- OP-030: Web-Backend (FastAPI, Web-Sockets pro Projekt, Tab-Routing).
+- OP-031: Terminal-Proxy (Live-Logs im Browser, `loop_renderer` multi-projekt).
+- OP-032: Interactive Chat (Admin-KI tab-uebergreifend, Bau-Chat tab-gebunden).
+- OP-033: UI-Layout (Chrome-Tabs = Projekte, CLI links, Chat rechts, Logs unten).
 
 ## Offene Bloecke (P1/P2)
 
