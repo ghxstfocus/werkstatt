@@ -274,6 +274,26 @@ tragen. Roadmap-Phasen sind grobe Etappen aus der Vor-Session
 - **Tests:** Unit-Tests fuer die Validierungs-Logik und den Parser der Roadmap.
 - **Blockiert von:** —
 
+### OP-081: Debugger-Agent — messen → guard → llm-fix → gates → eskalieren
+
+- **Status:** open
+- **Beschreibung:** Setzt `ROADMAP.md` Phase 32 (M-500..M-505) um. Ein Agent,
+  der Lint-, Typ- und Struktur-Fehler deterministisch messt (AST, ruff, mypy,
+  Monkeypatch-Ziele, Re-Export-Namen repo-weit), per Guard verweigert wenn
+  ein Fix unsicher waere, dann LLM-getrieben mit max 3 Iterationen fixt.
+  Nach 3 Runden ohne gruene Gates: `PROGRESS.md`-Eintrag `manual-needed`,
+  kein Commit.
+- **Betroffene Dateien:** `werkstatt/debugger.py` (neu), `tests/test_debugger.py` (neu),
+  `werkstatt/measurement.py` (erweitern), `AGENTS.md` (§Rollen).
+- **Akzeptanzkriterien:** (1) `debugger.measure(datei)` liefert JSON mit
+  AST/Ruff/Mypy/Pytest/Monkeypatch/Re-Export-Status. (2) Guard lehnt Fix ab
+  wenn Name in `__all__`, Monkeypatch-Ziel (`grep "patch\(\"$modul\.$name"`)
+  oder Re-Export (`from $modul import $name` repo-weit) — beweisbar pro Fall.
+  (3) Drei Szenarien in `tests/test_debugger.py` grün: Re-Export-Schutz,
+  Monkeypatch-Schutz, End-to-End-Fix mit Mock-LLM.
+- **Tests:** `pytest tests/test_debugger.py -v`
+- **Blockiert von:** —
+
 ## Erledigt (Auto-Log)
 
 - 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)
@@ -296,6 +316,9 @@ tragen. Roadmap-Phasen sind grobe Etappen aus der Vor-Session
 - 2026-11-02 | OP-075 | done | Terminal-Proxy (b8dce51)
 - 2026-11-02 | OP-079 | done | review-work-Skill: Markdown-Hunk-Header (d023535)
 - 2026-11-02 | OP-080 | done | review-work-Skill: Python-PATCHES (3d7fd1f)
+
+## Delete-Zone
+
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - 2026-11-02 | OP-035 | Doku-Task-Datum wird halluziniert — deterministisch geloest (BUILDER_SYSTEM + {date}-Ersetzung + _korrigiere_doku_datum Sicherheitsnetz)
