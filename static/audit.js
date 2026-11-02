@@ -43,7 +43,7 @@ function _formatiereZeit(wert) {
   return `${hh}:${mm}:${ss}`;
 }
 
-export function createAuditPanel(options) {
+function createAuditPanel(options) {
   const opts = options || {};
   const basisPfad = opts.basisPfad ?? "";
 
