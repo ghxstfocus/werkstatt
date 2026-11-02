@@ -302,3 +302,31 @@ __all__ = [
     '_delete_ziel_erlaubt',
     '_patches_wirklich_angewendet',
 ]
+
+
+def _collapse_excess_blank_lines(text: str, max_blank: int = 2) -> str:
+    """Reduziert 3+ aufeinanderfolgende Leerzeilen auf max_blank.
+
+    Der Builder fuegt bei update-Tasks gelegentlich Extra-Leerzeilen
+    nach def-Zeilen ein (Live-Beleg 2026-11-02: __all__-Task, Ruff E303).
+
+    Nicht automatisch gehookt: Diagnose-Tests erwarten unveraenderten
+    Content. Manuell aufrufbar als Post-Process:
+
+        content = _collapse_excess_blank_lines(content)
+    """
+    lines = text.splitlines()
+    out = []
+    blank_run = 0
+    for line in lines:
+        if line.strip() == "":
+            blank_run += 1
+            if blank_run <= max_blank:
+                out.append(line)
+        else:
+            blank_run = 0
+            out.append(line)
+    result = chr(10).join(out)
+    if text.endswith(chr(10)):
+        result += chr(10)
+    return result
