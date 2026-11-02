@@ -318,6 +318,41 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
     """
     parts: list[str] = []
 
+    # AST-Info (verkabelt 2026-11-03): Struktur der key_files aus
+    # state.api_index_cache. Wird von run_architect befuellt.
+    if state is not None and explorer_ctx is not None:
+        _api_idx = getattr(state, "api_index_cache", None) or {}
+        _kf = explorer_ctx.get("key_files") or []
+        _kf_paths: list[str] = []
+        for _f in _kf:
+            if isinstance(_f, dict):
+                _p = _f.get("pfad") or _f.get("path") or ""
+            else:
+                _p = str(_f)
+            if _p:
+                _kf_paths.append(_p)
+        if _api_idx and _kf_paths:
+            _ast_lines = ["## DATEI-STRUKTUR (AST)"]
+            for _p in _kf_paths[:10]:
+                _info = _api_idx.get(_p)
+                if not _info:
+                    continue
+                _ast_lines.append(f"### {_p}")
+                _alls = _info.get("all") or []
+                if _alls:
+                    _ast_lines.append(f"__all__: {', '.join(_alls)}")
+                for _fn in _info.get("functions", [])[:20]:
+                    _args = ", ".join(_fn.get("args", []))
+                    _ret = _fn.get("return") or ""
+                    _ast_lines.append(f"  def {_fn.get('name','?')}({_args}){(' -> ' + _ret) if _ret else ''}")
+                for _cls in _info.get("classes", [])[:10]:
+                    _ast_lines.append(f"  class {_cls.get('name','?')}")
+                    for _m in _cls.get("methods", [])[:10]:
+                        _margs = ", ".join(_m.get("args", []))
+                        _ast_lines.append(f"    def {_m.get('name','?')}({_margs})")
+            if len(_ast_lines) > 1:
+                parts.append("\n".join(_ast_lines))
+
     # === M-Welle-I: OP-SPEZIFIKATION ZUERST (maschinenlesbar) ===
     # Live-Beleg 2026-11-02: Architect plante 5 Dateien statt 2, weil
     # er die 'Nicht-Ziele' aus STATUS.md nie gesehen hat. Der Block
@@ -559,6 +594,15 @@ def run_architect(
     """
     pd = state.project_dir
     pn = state.project_name
+
+    # AST-Info: einmal berechnen, in state cachen. Wird auch vom
+    # Builder gelesen. Laufzeit ~0.5-2s (210 Dateien).
+    try:
+        if not getattr(state, "api_index_cache", None):
+            from werkstatt.scout import _baue_api_index
+            state.api_index_cache = _baue_api_index(pd)
+    except Exception:  # noqa: BLE001, S110 — Cache ist optional
+        pass
 
     # Stellschrauben 2026-11-03: Architect-Skills.
     try:

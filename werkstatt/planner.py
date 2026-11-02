@@ -831,6 +831,7 @@ def _normalisiere_task_files(tasks, explorer_ctx, pd, pn) -> list:
 def _zerlege_in_sub_tasks(
     prosa: str, key_files: list[str], api_key: str, pd, pn,
     aufgabe: str = "",
+    state=None,
 ) -> list[dict]:
     """M-453: Zerlegt Architect-Prosa in 3-5 Sub-Tasks."""
     import json as _json
@@ -847,8 +848,12 @@ def _zerlege_in_sub_tasks(
     else:
         _mess_planner_block = ""
 
+    _skb = ""
+    if state is not None:
+        _skb = getattr(state, "planner_skills_block", "") or ""
     _user = (
-        f"{_mess_planner_block}"
+        (f"{_skb}\n\n" if _skb else "")
+        + f"{_mess_planner_block}"
         f"## ARCHITECT-PROSA:\n{prosa}\n\n"
         f"## DATEIEN:\n" + "\n".join(f"- {f}" for f in key_files)
     )
@@ -1627,7 +1632,7 @@ def run_planner(state: RunState) -> bool:
 
     _sub_tasks = _zerlege_in_sub_tasks(
         _arch_prosa, _key_files, api_key, pd, pn,
-        aufgabe=aufgabe,
+        aufgabe=aufgabe, state=state,
     )
 
     if _sub_tasks:

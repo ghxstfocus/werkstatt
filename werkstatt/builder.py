@@ -13,6 +13,7 @@ from pathlib import Path
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.state import RunState
+from werkstatt.scout import _baue_api_index
 
 _REVIEWER_SCHNITTSTELLE = """## DER REVIEWER (Schnittstelle)
 - Prueft: bricht der Code? Task erfuellt? Bestehende Aufrufe erhalten?
@@ -143,6 +144,44 @@ _PY_IGNORE_PARTS = frozenset({
     ".pytest_cache", ".ruff_cache", ".eggs", "build", "dist",
 })
 
+
+
+
+def _ast_block_fuer_zieldatei(state, zieldatei: str) -> str:
+    """Formatiert die AST-Info einer Zieldatei fuer den Builder-Prompt."""
+    if state is None:
+        return ""
+    idx = getattr(state, "api_index_cache", None) or {}
+    if not idx:
+        return ""
+    # relativen Pfad finden (Zieldatei kann absolut oder relativ sein)
+    from pathlib import Path as _P
+    pd = getattr(state, "project_dir", "") or ""
+    rel = zieldatei
+    try:
+        if _P(zieldatei).is_absolute() and pd:
+            rel = str(_P(zieldatei).relative_to(pd))
+    except (ValueError, OSError):
+        pass
+    info = idx.get(rel)
+    if not info:
+        return ""
+    lines = [f"## ZIELDATEI-STRUKTUR (AST): {rel}"]
+    _alls = info.get("all") or []
+    if _alls:
+        lines.append(f"__all__: {', '.join(_alls)}")
+    for _fn in info.get("functions", [])[:30]:
+        _args = ", ".join(_fn.get("args", []))
+        _ret = _fn.get("return") or ""
+        lines.append(f"  def {_fn.get('name','?')}({_args}){(' -> ' + _ret) if _ret else ''}")
+    for _cls in info.get("classes", [])[:15]:
+        lines.append(f"  class {_cls.get('name','?')}")
+        for _m in _cls.get("methods", [])[:15]:
+            _margs = ", ".join(_m.get("args", []))
+            lines.append(f"    def {_m.get('name','?')}({_margs})")
+    if len(lines) <= 1:
+        return ""
+    return "\n".join(lines)
 
 def _format_explorer_findings_b(f: dict) -> str:
     """M-WelleE: Explorer-Findings als Prompt-Block (Builder)."""

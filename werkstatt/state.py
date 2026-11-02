@@ -306,6 +306,10 @@ class RunState:
     # K47: Historie der Reflection-Runden pro Task.
     # Pro Eintrag: {runde, verify_errors, reviewer_bugs, patches_applied}.
     reflection_history: list[dict] = field(default_factory=list)
+    # AST-Info einmal pro Lauf. Wird von run_architect befuellt,
+    # von Builder und Architect-Prompt gelesen.
+    api_index_cache: dict = field(default_factory=dict)
+
     # Stellschrauben 2026-11-03: Skills-Bloecke pro Rolle.
     planner_skills_block: str = ""
     reflection_skill_body: str = ""
