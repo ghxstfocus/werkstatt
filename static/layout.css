@@ -1,0 +1,121 @@
+/* Layout-Grundgeruest: Tab-Leiste natuerliche Hoehe, Rest fuellt Viewport. */
+body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* Tab-Leiste: horizontal scrollbar, Tabs schrumpfen nicht. */
+#tab-leiste {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+}
+
+#tab-leiste .tab {
+  flex: 0 0 auto;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px 8px 0 0;
+}
+
+.tab.ist-aktiv {
+  background: var(--flaeche-hell, #f5f5f5);
+  border-bottom: 2px solid var(--akzent);
+}
+
+.tab:hover {
+  background: var(--flaeche-hover, #ececec);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--akzent);
+  outline-offset: -2px;
+}
+
+/* Schliessen-Button: quadratisch, nur bei Hover/aktiv voll sichtbar. */
+.tab-schliessen {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.4;
+}
+
+.tab:hover .tab-schliessen,
+.tab.ist-aktiv .tab-schliessen {
+  opacity: 1;
+}
+
+/* Haupt-Grid: Terminal links, Chats rechts, Audit unten volle Breite. */
+.layout-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(180px, 32vh);
+  grid-template-areas: "terminal chats" "audit audit";
+  gap: 8px;
+  min-height: 0;
+}
+
+/* Rechte Spalte mit den beiden Chat-Bereichen. */
+.rechte-spalte {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  grid-area: chats;
+}
+
+.bereich.chat {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.chat-nachrichten {
+  overflow-y: auto;
+}
+
+/* Maximierung/Verstecken ausschliesslich ueber Klassen aus tabs.js. */
+.bereich.chat.ist-maximiert {
+  flex: 1 1 100%;
+}
+
+.bereich.chat.ist-versteckt {
+  display: none;
+}
+
+/* Audit-Panel: Live-Stream links, History rechts mit Trennlinie. */
+#audit-panel {
+  grid-area: audit;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+}
+
+#audit-live {
+  overflow-y: auto;
+}
+
+#audit-history {
+  border-left: 1px solid var(--trennlinie, #ccc);
+  overflow-y: auto;
+}
+
+/* Einspaltig auf schmalen Viewports, DOM-Reihenfolge bleibt. */
+@media (max-width: 900px) {
+  .layout-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "terminal" "chats" "audit";
+  }
+}

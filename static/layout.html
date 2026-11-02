@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Werkstatt</title>
+  <link rel="stylesheet" href="/static/layout.css">
+</head>
+<body>
+  <nav id="tab-leiste" role="tablist" aria-label="Projekte">
+    <template id="tab-vorlage">
+      <button class="tab" role="tab" type="button">
+        <span class="tab-titel"></span>
+        <span class="tab-schliessen" role="button" aria-label="Tab schliessen">&times;</span>
+      </button>
+    </template>
+    <button id="tab-neu" type="button" aria-label="Projekt oeffnen">+</button>
+  </nav>
+
+  <main class="layout-grid">
+    <section class="bereich terminal" data-bereich="terminal">
+      <header class="panel-kopf">
+        <span id="terminal-titel">Terminal</span>
+      </header>
+      <div id="terminal-scrollback" class="scrollback" role="log" aria-live="polite"></div>
+    </section>
+
+    <section class="bereich chat" data-bereich="chat">
+      <div class="chat-fenster" data-fenster="plan">
+        <header class="panel-kopf">
+          <span class="fenster-titel">Plan</span>
+          <button class="fenster-maximieren" type="button" aria-label="Plan maximieren" data-ziel="plan">&#x26F6;</button>
+        </header>
+        <div class="chat-nachrichten"></div>
+        <form class="chat-form">
+          <textarea class="chat-eingabe" name="nachricht" rows="2"></textarea>
+          <button class="chat-senden" type="submit">Senden</button>
+        </form>
+      </div>
+      <div class="chat-fenster" data-fenster="ausfuehrung">
+        <header class="panel-kopf">
+          <span class="fenster-titel">Ausfuehrung</span>
+          <button class="fenster-maximieren" type="button" aria-label="Ausfuehrung maximieren" data-ziel="ausfuehrung">&#x26F6;</button>
+        </header>
+        <div class="chat-nachrichten"></div>
+        <form class="chat-form">
+          <textarea class="chat-eingabe" name="nachricht" rows="2"></textarea>
+          <button class="chat-senden" type="submit">Senden</button>
+        </form>
+      </div>
+    </section>
+
+    <aside class="rechte-spalte">
+      <section id="audit-panel" class="bereich audit" data-bereich="audit">
+        <div id="audit-live" class="audit-live">
+          <header class="panel-kopf">
+            <span class="fenster-titel">Live</span>
+          </header>
+          <div id="audit-stream" class="audit-stream" role="log" aria-live="polite"></div>
+        </div>
+        <div id="audit-history" class="audit-history">
+          <header class="panel-kopf">
+            <span class="fenster-titel">History</span>
+          </header>
+          <form class="audit-filter">
+            <label for="audit-filter-kind">Kind</label>
+            <select id="audit-filter-kind" name="kind"></select>
+            <label for="audit-filter-run">Run</label>
+            <input id="audit-filter-run" name="run_id" type="text">
+            <button type="submit">Filtern</button>
+          </form>
+          <ul id="audit-history-liste" class="audit-history-liste"></ul>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="/static/chat.js"></script>
+  <script src="/static/audit.js"></script>
+  <script src="/static/tabs.js"></script>
+</body>
+</html>
