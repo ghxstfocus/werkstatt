@@ -406,7 +406,7 @@ def run_architect(
             api_key, _arch_sys, user_content,
             model=_get_architect_model(),
             temperature=0.2, max_tokens=16000,
-            aufgabe="architect",
+            aufgabe="architect", heartbeat=False,
         ),
     )
     if not _arch_reply.ok:

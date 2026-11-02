@@ -11,7 +11,7 @@ from werkstatt import loop as loop_mod
 from werkstatt.loop import _plan_gate, _verify_patches, run_pipeline_loop
 from werkstatt.phase_state import PhaseState
 from werkstatt.state import RunState
-from werkstatt.verify import _stage_anzahl, _stage_ids
+from werkstatt.verify import _stage_anzahl, _stage_count_by_phase, _stage_ids
 
 
 def _state(tmp_path, tasks=True, tests=True, akz=True):
@@ -88,6 +88,27 @@ def test_stage_ids(tmp_path):
         '{"stages": [{"id": "a"}, {"id": "b"}, {"id": "c"}, {"id": "d"}]}'
     )
     assert _stage_ids(tmp_path) == ["a", "b", "c", "d"]
+
+
+def test_stage_count_by_phase(tmp_path):
+    """_stage_count_by_phase: 0 ohne verify.json (fail-closed), Zaehlung pro Phase."""
+    # Fall (a): keine .werkstatt/verify.json -> 0 (kein FileNotFoundError)
+    assert _stage_count_by_phase(tmp_path, "post_build") == 0
+    assert _stage_count_by_phase(tmp_path, "phase_end") == 0
+
+    # Fall (b): verify.json mit drei Stages -> Zaehlung pro Phase
+    (tmp_path / ".werkstatt").mkdir()
+    (tmp_path / ".werkstatt" / "verify.json").write_text(
+        '{"stages": ['
+        '{"id": "a", "phase": "post_build"}, '
+        '{"id": "b", "phase": "post_build"}, '
+        '{"id": "c", "phase": "phase_end"}'
+        ']}'
+    )
+    assert _stage_count_by_phase(tmp_path, "post_build") == 2
+    assert _stage_count_by_phase(tmp_path, "phase_end") == 1
+    # Schutz gegen versehentliches Mitzaehlen: unbekannte Phase -> 0
+    assert _stage_count_by_phase(tmp_path, "build") == 0
 
 
 def test_loop_planner_fail(tmp_path):

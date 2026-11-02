@@ -553,8 +553,7 @@ def _llm_split_einzel_task(
         f"Split-{task.get('id', '?')}",
         lambda: ask_llm(
             api_key, PLANNER_SPLIT_SINGLE_SYSTEM, _user,
-            model="deepseek-chat", temperature=0.2, max_tokens=4000,
-        ),
+            model="deepseek-chat", temperature=0.2, max_tokens=4000,, aufgabe="planner-split"),
     )
     if not reply.ok:
         return []

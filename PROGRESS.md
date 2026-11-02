@@ -1360,3 +1360,9 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - **Status:** phase_ende
 - **Info:** tasks_ok=2/2
 
+## 2026-11-02T13:12:19+00:00 -- Neue Funktion _stage_count_by_phase
+- **Status:** done
+
+## 2026-11-02T13:12:35+00:00 -- Test test_stage_count_by_phase und Import
+- **Status:** done
+
