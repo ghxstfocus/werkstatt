@@ -4,29 +4,11 @@ Format aus `DOC_CONVENTIONS.md` §5. Nur offene Punkte.
 `—` in Feldern = noch nicht spezifiziert (Loop praezisiert bei Bearbeitung).
 Letzte Aktualisierung: 2026-11-02.
 
+Loop-faehige OPs sind alle, die NICHT `- **Typ:** roadmap-phase`
+tragen. Roadmap-Phasen sind grobe Etappen aus der Vor-Session
+(M-Nummern) und gehoeren nicht in die Loop-Queue.
+
 ## Offene Punkte
-
-### OP-039: security-ai Test-Suite 11 Min — messen und optimieren
-- **Status:** wontfix (gehoert zu **security-ai**, nicht Werkstatt — security-ai Test-Suite)
-- **Betroffene Dateien:** `tests/` in `/opt/security-ai`, ggf. `tests/conftest.py`
-- **Akzeptanzkriterien:** `pytest -q` in security-ai laeuft in < 120s (statt ~660s). `pytest --durations=20` zeigt die 20 langsamsten Tests; mind. Top-10 auf < 5s reduziert. Kein `sleep() > 1s` in Tests. Keine echten Netzwerk-Calls ohne Mock.
-- **Tests:** `.venv/bin/python -m pytest -q --durations=20 | tail -25`
-- **Blockiert von:** —
-
-Hinweis: Live-Test 4 (2026-10-31) zeigt 1334 Tests in ~660s (~500ms/Test).
-Als `phase_end`-Stage (1x pro Loop) tragbar, aber teuer. Ursachen-Kandidaten:
-DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
-### OP-041: Baseline-Revision (quality_gate rot)
-- **Status:** wontfix (gehoert zu **security-ai**, nicht Werkstatt — Baseline-Revision (blockiert von security-ai OP-003))
-- **Betroffene Dateien:** `tools/quality_gate.py`, `docs/HANDOFF-BASELINE.md`
-- **Akzeptanzkriterien:** Neue Baseline (958 pytest, 0 ruff auf werkstatt/, 0 mypy auf werkstatt/ nach Cleanup — oder explizit als akzeptiert markiert). `quality_gate --json` gibt `exit 0` und `regression: false`.
-- **Tests:** `python3 -m tools.quality_gate --json` -> exit 0.
-- **Blockiert von:** security-ai OP-003 (ruff-Regelschaerfung), security-ai OP-004 (mypy)### OP-044: docs/CONVENTIONS.md entstauben (Selbstverweis + alte Namen)
-- **Status:** open
-- **Betroffene Dateien:** `docs/CONVENTIONS.md`
-- **Akzeptanzkriterien:** (a) Selbstverweis `KONVENTION.md` -> `CONVENTIONS.md`. (b) Ordnerstruktur-Baum zeigt `CONVENTIONS.md`, `ARCHITECTURE.md`, `STATUS.md`, `PROGRESS.md` (nicht die alten Namen). (c) `pipeline.py`-Zeile entfernt oder durch `werkstatt/loop.py` + `werkstatt/pipeline_phases.py` ersetzt. (d) Referenztabelle (Zeilen ~67-71) auf aktuelle Namen aktualisiert oder entfernt.
-- **Tests:** `grep -c "KONVENTION.md\|ARCHITEKTUR.md\|ERLEDIGT.md\|OFFENE-BLOECKE.md\|pipeline.py" docs/CONVENTIONS.md` = 0.
-- **Blockiert von:** —
 
 ### OP-045: docs/WORKFLOW.md entstauben (pipeline.py + tote Links)
 - **Status:** open
@@ -41,13 +23,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Akzeptanzkriterien:** (a) `pipeline.py`-CLI-Beispiele in PLANNER-KONZEPT (5+ Stellen) auf `werkstatt.loop` umstellen. (b) `HARD_RULES_* in pipeline.py` -> `werkstatt/prompts.py` oder wo sie heute liegen. (c) ROLLEN-AUDIT: `ARCHITEKTUR.md` -> `ARCHITECTURE.md`. (d) MERKPOSTEN: tote Links `MESS-INFRASTRUKTUR.md`, `SESSION-BILANZ.md` (jetzt in `docs/archiv/`) korrigieren. (e) MERKPOSTEN: `OFFENE-BLOECKE.md`, `ERLEDIGT.md`-Referenzen durch `STATUS.md`, `PROGRESS.md` ersetzen.
 - **Tests:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md" docs/PLANNER-KONZEPT.md docs/ROLLEN-AUDIT.md docs/MERKPOSTEN.md` = 0 (pro Datei).
 - **Blockiert von:** —
-### OP-003: K17 — Architect prueft existierende Migrationsnummern nicht (Kollision 0017/0018 in security-ai). Fix: vor Migrations-Task `ls data/migrations/`.
-- **Status:** wontfix (gehoert zu **security-ai**, nicht Werkstatt — Migrationsnummern-Check)
-- **Betroffene Dateien:** —
-- **Akzeptanzkriterien:** Architect prueft existierende Migrationsnummern nicht (Kollision 0017/0018 in security-ai). Fix: vor Migrations-Task `ls data/migrations/`.
-- **Tests:** —
-- **Blockiert von:** —
-
 ### OP-004: M-323b — `phase_end`-Checkpoint pro logischer Phase. Nach jeder Phase `_verify_patches(state, phase="phase_end")` + Reflection.
 - **Status:** open
 - **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
@@ -216,31 +191,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Tests:** —
 - **Blockiert von:** —
 
-### OP-026: R-CHECK-1 — Reviewer prueft Task-Zahlen nicht. Live-Beleg 20:42: Task verlangt `limit=10`, Code nutzt `limit=5`, Phase-Review approved. In Runde 1 des vorigen RERUN (20:38) hatte der Reviewer denselben Bug als HIGH markiert — Regression. Fix: `## KONSTANTEN-CHECK` in `REVIEWER_SYSTEM` (Zahlen aus Task muessen im Diff als Literal auftauchen, sonst HIGH-Bug).
-- **Status:** wontfix fuer den Prompt-Block-Teil
-  (existiert seit 22b7776 als Skill `review-konstanten`);
-  deterministische Durchsetzung siehe Folge-OP-Hinweis unten
-- **Befund 2026-11-02 15:29 (Loop-Lauf):** Architect hat OP-026 als
-  'REVIEWER_SYSTEM um ## KONSTANTEN-CHECK erweitern' interpretiert.
-  Der Reviewer hat das mit `[high] Over-Delivery` korrekt zurueckgewiesen,
-  weil der Block bereits als Skill existiert. Zusaetzlich
-  `spec_widerspruch_vermutet` — der Architect kannte den Stand nach
-  dem Skill-Strip (22b7776) nicht.
-- **Folge-OP (nicht dieser Block):** Die deterministische
-  Durchsetzung fehlt noch — eine Funktion
-  `_konstanten_check(task_text, diff) -> list[dict]` in
-  `werkstatt/reviewer.py`, die Zahlen-Literale aus dem Task-Text
-  extrahiert und im Diff prueft. t1 des Loops hat Ansaetze gebaut
-  (`_extrahiere_zahlen_literale`, `_konstanten_check`), aber ohne
-  Integration in `run_reviewer` — deshalb toter Code, nach Rollback
-  verworfen. Ein kuenftiger Loop-Task muss **beide** Punkte
-  adressieren (Funktion + Integration) und die Test-Datei nennen.
-- **Status:** open
-- **Betroffene Dateien:** —
-- **Akzeptanzkriterien:** Reviewer prueft Task-Zahlen nicht. Live-Beleg 20:42: Task verlangt `limit=10`, Code nutzt `limit=5`, Phase-Review approved. In Runde 1 des vorigen RERUN (20:38) hatte der Reviewer denselben Bug als HIGH markiert — Regression. Fix: `## KONSTANTEN-CHECK` in `REVIEWER_SYSTEM` (Zahlen aus Task muessen im Diff als Literal auftauchen, sonst HIGH-Bug).
-- **Tests:** —
-- **Blockiert von:** —
-
 ### OP-027: M-490 — Doku-Staleness-Check (deterministisch, Documentledger). Nach jedem Task: Hash-Vergleich Code -> Doku. Kein LLM.
 - **Status:** open
 - **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
@@ -262,34 +212,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
 - **Akzeptanzkriterien:** Doku-Critic (DocSync). Prueft DocWriter-Output gegen Code. Max 2 Runden.
-- **Tests:** —
-- **Blockiert von:** —
-
-### OP-030: M-494 — Web-Backend (FastAPI). Startet den Loop als Subprozess, bietet Web-Sockets fuer Live-Logs und Chat. Zentraler State pro Projekt.
-- **Status:** wontfix (Duplikat zu **OP-074** — dieselbe Sache, präziser und loop-fähig)
-- **Betroffene Dateien:** —
-- **Akzeptanzkriterien:** Web-Backend (FastAPI). Startet den Loop als Subprozess, bietet Web-Sockets fuer Live-Logs und Chat. Zentraler State pro Projekt.
-- **Tests:** —
-- **Blockiert von:** —
-
-### OP-031: M-495 — Terminal-Proxy. `loop_renderer`-Ausgaben (Spinner, `log_line`, `task_started`) live in den Browser streamen. xterm.js oder `<pre>` mit HTMX.
-- **Status:** wontfix (Duplikat zu **OP-075** — dieselbe Sache, präziser und loop-fähig)
-- **Betroffene Dateien:** —
-- **Akzeptanzkriterien:** Terminal-Proxy. `loop_renderer`-Ausgaben (Spinner, `log_line`, `task_started`) live in den Browser streamen. xterm.js oder `<pre>` mit HTMX.
-- **Tests:** —
-- **Blockiert von:** —
-
-### OP-032: M-496 — Interactive Chat. Chat-Fenster rechts, Intent-Parsing (`plan`, `build`, `approve`, `chat_only`). Bestaetigung (j/n) per Chat oder CLI.
-- **Status:** wontfix (Duplikat zu **OP-076** — dieselbe Sache, präziser und loop-fähig)
-- **Betroffene Dateien:** —
-- **Akzeptanzkriterien:** Interactive Chat. Chat-Fenster rechts, Intent-Parsing (`plan`, `build`, `approve`, `chat_only`). Bestaetigung (j/n) per Chat oder CLI.
-- **Tests:** —
-- **Blockiert von:** —
-
-### OP-033: M-497 — UI-Layout. Chrome-Tabs oben (Projekte oeffnen/schliessen), CLI links, Chat rechts, Reviewer unten. Synchronisation: Tab-Wechsel wechselt beide Fenster.
-- **Status:** wontfix (Duplikat zu **OP-078** — dieselbe Sache, präziser und loop-fähig)
-- **Betroffene Dateien:** —
-- **Akzeptanzkriterien:** UI-Layout. Chrome-Tabs oben (Projekte oeffnen/schliessen), CLI links, Chat rechts, Reviewer unten. Synchronisation: Tab-Wechsel wechselt beide Fenster.
 - **Tests:** —
 - **Blockiert von:** —
 
@@ -319,79 +241,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
   Kern-Erkenntnis: 4 Anlaeufe (OP-059c/d/e/062i) fuer dasselbe Problem. Das ist Symptom-Behandlung. Es braucht Architektur: deterministische Schichten, die nicht durch LLM-Approval ueberschreibbar sind.
 
 
-### OP-065: Phase-2-Kette messen (60s Rest-Zeit) — FALSCH DIAGNOSTIZIERT
-- **Status:** wontfix (falsche Annahme, siehe Befund 2026-11-02)
-- **Befund 2026-11-02 (Messung):** Die '60 s Rest-Zeit' sind **keine Code-Wartezeit**,
-  sondern LLM-Latenz. `run_architect` macht genau einen `ask_llm`-Call; dazwischen
-  ist kein Code. Der Sprung 5-12 s -> 30-78 s korreliert mit Commit `151417a`
-  (deepseek-reasoner als Default, 12:39) plus 5 Prompt-Erweiterungen zwischen
-  13:00 und 15:00 (u.a. `086b1e3` OP-Spec + Scout-API, `9362cc8` Skills-Metadata).
-  Die 60-s-Zahl war 12:13 noch ~10 s und ist durch den Modellwechsel auf
-  deepseek-reasoner auf 30-78 s gestiegen.
-- **Akzeptanzkriterien (Original):** ~~Zeitmessung pro Schritt in Phase 2 (Scout,
-  Architect, Planner-Split, Merge, Normalize, Task-Build). Ziel: die 60 s auf
-  unter 10 s reduzieren.~~ (nicht erreichbar ohne Modell-/Prompt-Aenderung)
-- **Folge-OP-Vorschlag (nicht Teil dieses Commits):** Architect-Modell evaluieren
-  (deepseek-reasoner vs deepseek-chat) und Architect-Prompt-Groesse tracken.
-  Messbasis: `planner_architect_ok`-Event mit `duration_s` + Prompt-Token.
-- **Betroffene Dateien:** `werkstatt/pipeline_phases.py` (`_phase_plan_and_preflight`)
-- **Akzeptanzkriterien:** Zeitmessung pro Schritt in Phase 2 (Scout, Architect, Planner-Split, Merge, Normalize, Task-Build). Identifiziert die 60s ausserhalb der 3 LLM-Calls (Scout 5.8s + Architect 5.5s + Planner-Split 1.2s = 12.5s). Ziel: die 60s auf unter 10s reduzieren.
-- **Tests:** Zeit-Assertion in einem Mock-Lauf (Schaetzung, keine echten LLM-Calls).
-- **Blockiert von:** —
-- **Beleg:** Live-Lauf 2026-11-02 12:13, `[2/5] Planner ... 2 tasks (73.1s)`.
-
-### OP-066: Reviewer prueft Zwischenstand statt finalen Tree
-
-- **Status:** done (bereits implementiert in `werkstatt/reflection.py:511`)
-- **Befund 2026-11-02:** `_reflection_loop` ruft `run_reviewer` nach jeder
-  Verify-gruenen Runde. Test `test_loop_reviewer_after_reflection` in
-  `tests/test_loop.py` kodiert das bereits (`assert 2 == 2`).
-  Der urspruengliche OP-Versuch hat `_review_nach_reflection_runden`
-  doppelt eingebaut (initialer Call + Loop) und 6 bestehende Tests
-  gebrochen. Nach Rollback: Suite gruen.
-- **Betroffene Dateien:**
-  - `werkstatt/pipeline_phases.py` — nach jeder Reflection-Runde `run_reviewer(state)` erneut aufrufen
-  - `(nicht existent: tests/test_reviewer_final_tree.py — Rollback 2026-11-02)` — Test mit 2 Runden, Reviewer 3x erwartet
-- **Existiert bereits:**
-  - `werkstatt/reviewer.py` — `run_reviewer(state)` prueft Diff auf Bugs
-  - `werkstatt/reflection.py` — `_reflection_loop(state)` laeuft bis 5 Runden
-- **Fehlt noch:**
-  - In `_phase_tasks_loop`: nach jeder Reflection-Runde Reviewer erneut
-  - Loop-Gate-Fail soll finalen Tree pruefen, nicht Zwischenstand
-  - Live-Beleg: `audit_signature`-Lauf 2026-11-02, Reviewer lief nur initial
-- **Nicht-Ziele:**
-  - KEINE neue Reviewer-Funktion
-  - KEINE Aenderung an `_reflection_loop`-Signatur
-- **Akzeptanzkriterien:**
-  - Nach 2 Reflection-Runden ruft `_phase_tasks_loop` `run_reviewer` ein 3. Mal
-  - Der letzte Reviewer-Aufruf sieht den finalen `git diff`
-- **Tests:** `(nicht existent: tests/test_reviewer_final_tree.py — Rollback 2026-11-02)::test_reviewer_called_after_each_round`
-- **Blockiert von:** —
-
-
-### OP-067: pytest_changed feuert in Reflection-Runden nicht
-
-- **Status:** done (Commit `69889b7`: pytest_changed feuert in Reflection-Runden)
-- **Betroffene Dateien:**
-  - `werkstatt/verify.py` — `_expand_cmd_placeholders` soll in Reflection-Runden `changed_test_files` korrekt berechnen
-  - `tests/test_pytest_changed_reflection.py` — Test fuer Stage-Trigger in Reflection
-- **Existiert bereits:**
-  - `werkstatt/verify.py:_expand_cmd_placeholders` — berechnet `{changed_test_files}`
-  - `werkstatt/reflection.py` — ruft `_verify_patches` pro Runde
-- **Fehlt noch:**
-  - In Reflection-Runden ist `state.patches` nach Apply geleert -> `_expand_cmd_placeholders` liefert `None` -> `pytest_changed` skipped
-  - Fix: Reflection soll `state.patches` vor Verify neu setzen, oder `_expand_cmd_placeholders` soll `state.patches_aktuell_runde` pruefen
-  - Live-Beleg: `audit_signature`-Lauf 2026-11-02, t2 (Test-File) hatte kein `pytest_changed`
-- **Nicht-Ziele:**
-  - KEINE Aenderung an `pytest_changed`-Stage in `verify.json`
-  - KEINE Aenderung an `_verify_patches`-Signatur
-- **Akzeptanzkriterien:**
-  - Bei Test-File-Aenderung in Reflection-Runde feuert `pytest_changed`
-  - Bei Nicht-Test-Aenderung skipped weiterhin korrekt
-- **Tests:** `tests/test_pytest_changed_reflection.py::test_pytest_changed_feat_in_reflection`
-- **Blockiert von:** —
-
-
 ### OP-070: Scout-Redundanz messen vor Umbau
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/scout.py`, `werkstatt/planner.py` (`_run_scout`, `_baue_api_index`)
@@ -414,26 +263,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
   falls nicht, Event wieder aktivieren oder durch `explorer_messung_findings`
   ersetzen (semantisch gleich?). Kein sofortiger Fix.
 
-### OP-071: Welle G (single_call) — versucht, revertiert
-- **Status:** done (revertiert in `c1e8377`)
-- **Betroffene Dateien:** — (Code entfernt, Historie in `b6360ce` + `c1e8377`)
-- **Akzeptanzkriterien:** Erledigt. `single_call`-Modus wurde in `b6360ce` gebaut, in `c1e8377` revertiert. Grund: `_extract_tasks_from_architect` parst pro Datei, nicht pro logischer Änderung. Planner-Split ist nicht redundant, weil er Prosa in logische Task-Granularität übersetzt. Rollen-Kette bleibt.
-- **Tests:** —
-- **Blockiert von:** —
-
-
-### OP-072: Phase 30 (UI) in OPs zerlegen (Meta-OP)
-
-- **Status:** done (Commit `88ab237`: UI-Phase 30 in OPs zerlegt (OP-074..078))
-- **Beschreibung:** Die Roadmap definiert Phase 30 (Web-Dashboard & Interactive UI).
-  Dieser Meta-OP fordert den Architect auf, das UI-Konzept (Layout, Kopplungs-Mechanik,
-  Chrome-Tabs, Audit-Sidebar) in spezifische, ausfuehrbare Implementierungs-Ops zu zerlegen.
-- **Betroffene Dateien:** `docs/STATUS.md` (Ziel der Zerlegung)
-- **Akzeptanzkriterien:** Neue OPs fuer UI-Backend (FastAPI, WebSockets), Frontend (Tabs, Chat,
-  Audit-Sidebar) und die Integration des `loop_renderer` in den Web-Stream.
-- **Tests:** —
-- **Blockiert von:** —
-
 ### OP-073: Werkzeug fuer Roadmap-to-OP Compiler
 
 - **Status:** open
@@ -444,20 +273,6 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
   (OP-NNN, Akzeptanzkriterien vorhanden) und die OPs formatiert in STATUS.md einfuegt.
 - **Tests:** Unit-Tests fuer die Validierungs-Logik und den Parser der Roadmap.
 - **Blockiert von:** —
-
-### OP-074: Web-Backend (FastAPI) mit WebSockets pro Tab
-- **Status:** done (Commit `624fb5e`: FastAPI-Backend mit WebSockets pro Tab)
-- **Betroffene Dateien:** `werkstatt/web/__init__.py` (neu), `werkstatt/web/app.py` (neu), `werkstatt/web/ws.py` (neu), `tests/test_web_backend.py` (neu)
-- **Akzeptanzkriterien:** FastAPI-App startet den Loop als Subprozess pro Projekt. Pro geoeffnetem Tab existiert ein eigener WebSocket-Kanal (`/ws/{tab_id}`), der Live-Logs und Chat-Nachrichten unabhaengig streamt. Zentraler State pro Projekt (RunState-Snapshot) wird ueber REST (`GET /api/projects/{name}/state`) bereitgestellt. Tab-Wechsel im Frontend abonniert den passenden WS-Kanal ohne den Loop neu zu starten.
-- **Tests:** `tests/test_web_backend.py::test_ws_pro_tab_isoliert`, `tests/test_web_backend.py::test_loop_subprozess_start_stop`
-- **Blockiert von:** —
-
-### OP-075: Terminal-Proxy links (loop_renderer live in den Browser)
-- **Status:** done (Commit `b8dce51`: Terminal-Proxy (loop_renderer live im Browser))
-- **Betroffene Dateien:** `werkstatt/web/terminal_proxy.py` (neu), `werkstatt/loop_renderer.py`, `static/terminal.js` (neu), `tests/test_terminal_proxy.py` (neu)
-- **Akzeptanzkriterien:** `loop_renderer`-Ausgaben (`log_line`, `task_started`, `task_done`, `task_ok`, `summary`) werden live ueber den WebSocket des aktiven Tabs an den Browser gestreamt und im linken Terminal-Panel (xterm.js oder `<pre>` mit HTMX) angezeigt. Spinner-Zustand wird als eigener Event-Typ uebertragen. Kein Polling; Push-basiert.
-- **Tests:** `tests/test_terminal_proxy.py::test_log_line_wird_gestreamt`, `tests/test_terminal_proxy.py::test_task_started_event`
-- **Blockiert von:** OP-074
 
 ### OP-076: Zwei Chat-Fenster rechts mit Maximize/Minimize
 - **Status:** open
@@ -481,30 +296,16 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Blockiert von:** OP-074, OP-075, OP-076, OP-077
 
 
-### OP-079: Reviewer verwechselt Kontext-Hunk mit Task-Zuordnung
-
-- **Status:** done (Commit `d023535`: review-work-Skill: Markdown-Hunk-Header ignorieren)
-- **Live-Beleg 2026-11-02 18:02 (OP-072-Lauf):** Der Builder fuegte 5 neue OP-Bloecke (OP-074..078) korrekt in `docs/STATUS.md` ein. Der Reviewer hat den Diff verworfen mit dem HIGH-Bug: "OP-074..078 behandeln voellig andere Themen (Migrationsnummern...)". Grund: Der Reviewer hat den Kontext-Hunk `@@ -294,7 +294,6 @@ DB-Reset zwischen Tests...` (aus OP-039) als Task-Zuordnung gelesen, obwohl die `+`-Zeilen ausschliesslich die UI-OPs waren.
-- **Betroffene Dateien:** `werkstatt/reviewer.py`, `tests/test_loop_reviewer.py`
-- **Akzeptanzkriterien:** Bei `.md`-Patches (STATUS.md, ROADMAP.md, PROGRESS.md) prueft der Reviewer nur die `+`-Zeilen gegen die Task-Description, nicht den `@@`-Kontextanker. Neue Regel im `review-work`-Skill oder als deterministischer Vor-Check in `run_reviewer`. Test: Ein Diff mit Kontextanker "DB-Reset" und `+`-Zeilen "OP-074" muss approved werden.
-- **Tests:** `tests/test_loop_reviewer.py::test_md_patch_kontext_hunk_ignoriert`
-- **Blockiert von:** —
-
-
-### OP-080: Reviewer halluziniert auch bei .py-Hunk-Headern
-- **Status:** done (Fix: review-work-Skill um PYTHON-PATCHES-Regel
-  erweitert)
-
-- **Status:** open
-- **Live-Beleg 2026-11-02 18:22 (OP-074-Lauf):** Der Builder hat `werkstatt/web/app.py` mit exakt den geforderten Routen gebaut (`GET /api/projects/{name}/state`, `POST /api/projects/{name}/start`, `POST /api/projects/{name}/stop` — Zeilen 72, 78, 91). Der Reviewer meldete HIGH-Bug "Task fordert GET /api/projects/{name}/state, Diff implementiert stattdessen GET /api/status/{name}" und MEDIUM "Over-Delivery: /api/config, /api/ws-info". Alle drei Vorwürfe sind frei erfunden — der Code enthaelt weder `/api/status/` noch `/api/config` noch `/api/ws-info`.
-- **Ursache (vermutet):** Analog zu OP-079, aber fuer `.py`-Dateien. Der Reviewer liest den Diff-Kontext und die Handler-Struktur falsch. Neue Handler in `create_app()` werden als verschachtelte Funktionen evtl. nicht als Routen erkannt.
-- **Betroffene Dateien:** `werkstatt/reviewer.py`, `skills/review-work/SKILL.md`
-- **Akzeptanzkriterien:** Bei `.py`-Patches prueft der Reviewer die tatsaechlichen `+`-Zeilen gegen die Task-Description, ohne aus dem `@@`-Header oder der Funktionsstruktur Routen zu halluzinieren. Neue Regel im `review-work`-Skill: "Route-Handler in `create_app()` haben Dekoratoren wie `@app.get(...)`. Suche im Diff woertlich nach dem genannten Pfad-Muster, nicht nach dem Handler-Namen."
-- **Tests:** `tests/test_loop_reviewer.py::test_py_patch_route_halluzination`
-- **Blockiert von:** —
-
 ## Erledigt (Auto-Log)
 
+- 2026-10-30 | OP-071 | `c1e8377`: revertiert
+- 2026-11-02 | OP-003 | wontfix (security-ai-Drift)
+- 2026-11-02 | OP-030 | wontfix (Duplikat zu OP-074)
+- 2026-11-02 | OP-031 | wontfix (Duplikat zu OP-075)
+- 2026-11-02 | OP-032 | wontfix (Duplikat zu OP-076)
+- 2026-11-02 | OP-033 | wontfix (Duplikat zu OP-078)
+- 2026-11-02 | OP-039 | wontfix (security-ai)
+- 2026-11-02 | OP-041 | wontfix (security-ai)
 - 2026-11-02 | OP-066 | done | Reviewer prueft Zwischenstand (bereits implementiert)
 - 2026-11-02 | OP-065 | wontfix | Phase-2-Kette (Modell-Latenz, nicht Code)
 - 2026-11-02 | OP-026 | wontfix | R-CHECK-1 Prompt-Block ist Skill
