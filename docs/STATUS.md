@@ -465,6 +465,17 @@ DB-Reset zwischen Tests, Integration-Tests, Netzwerk ohne Mock.
 - **Tests:** `tests/test_loop_reviewer.py::test_md_patch_kontext_hunk_ignoriert`
 - **Blockiert von:** —
 
+
+### OP-080: Reviewer halluziniert auch bei .py-Hunk-Headern
+
+- **Status:** open
+- **Live-Beleg 2026-11-02 18:22 (OP-074-Lauf):** Der Builder hat `werkstatt/web/app.py` mit exakt den geforderten Routen gebaut (`GET /api/projects/{name}/state`, `POST /api/projects/{name}/start`, `POST /api/projects/{name}/stop` — Zeilen 72, 78, 91). Der Reviewer meldete HIGH-Bug "Task fordert GET /api/projects/{name}/state, Diff implementiert stattdessen GET /api/status/{name}" und MEDIUM "Over-Delivery: /api/config, /api/ws-info". Alle drei Vorwürfe sind frei erfunden — der Code enthaelt weder `/api/status/` noch `/api/config` noch `/api/ws-info`.
+- **Ursache (vermutet):** Analog zu OP-079, aber fuer `.py`-Dateien. Der Reviewer liest den Diff-Kontext und die Handler-Struktur falsch. Neue Handler in `create_app()` werden als verschachtelte Funktionen evtl. nicht als Routen erkannt.
+- **Betroffene Dateien:** `werkstatt/reviewer.py`, `skills/review-work/SKILL.md`
+- **Akzeptanzkriterien:** Bei `.py`-Patches prueft der Reviewer die tatsaechlichen `+`-Zeilen gegen die Task-Description, ohne aus dem `@@`-Header oder der Funktionsstruktur Routen zu halluzinieren. Neue Regel im `review-work`-Skill: "Route-Handler in `create_app()` haben Dekoratoren wie `@app.get(...)`. Suche im Diff woertlich nach dem genannten Pfad-Muster, nicht nach dem Handler-Namen."
+- **Tests:** `tests/test_loop_reviewer.py::test_py_patch_route_halluzination`
+- **Blockiert von:** —
+
 ## Erledigt (Auto-Log)
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.

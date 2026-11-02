@@ -9,6 +9,7 @@ fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
 websockets>=12,<18
 httpx2>=0.1
+httpx>=0.27  # fuer FastAPI TestClient
 
 # Test-Tools (fuer Verifikation im venv)
 pytest>=8,<9
