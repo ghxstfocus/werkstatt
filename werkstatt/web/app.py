@@ -74,6 +74,11 @@ def _phasen_snapshot(name: str) -> dict[str, Any]:
 def create_app() -> FastAPI:
     """Erzeugt und konfiguriert die FastAPI-Anwendung."""
     app = FastAPI(title="Werkstatt")
+    # Audit-Panel: Home auf Projekt-Root setzen, damit
+    # /api/projects/*/audit die audit-logs/ findet.
+    from werkstatt.web import audit_panel as _ap
+    _ap._home_kontext = Path.cwd()
+
     app.include_router(ws.router)
     app.include_router(chat.router)
     app.include_router(audit_panel.router)

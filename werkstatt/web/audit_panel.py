@@ -6,9 +6,8 @@ import asyncio
 import json
 import threading
 from collections import deque
-from typing import Any
-
 from pathlib import Path
+from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -171,8 +170,18 @@ _home_kontext: Path | None = None
 
 
 def _aktuelles_home() -> Path:
+    """Liefert das Projekt-Home fuer Audit-Logs.
+
+    Reihenfolge: explizit gesetzt -> CWD (Projekt-Root) -> $HOME/.werkstatt.
+    CWD-Fallback: in der Werkstatt liegen audit-logs/ im Projekt-Root,
+    nicht unter $HOME/.werkstatt. Frueher lieferte die Funktion immer
+    $HOME/.werkstatt -> /api/projects/*/audit fand nichts.
+    """
     if _home_kontext is not None:
         return _home_kontext
+    cwd = Path.cwd()
+    if (cwd / "audit-logs").is_dir():
+        return cwd
     return Path.home() / ".werkstatt"
 
 
