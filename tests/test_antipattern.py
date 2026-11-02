@@ -15,8 +15,9 @@ Scanner rein deterministisch und testbar.
 """
 from __future__ import annotations
 
-from werkstatt.antipattern import AntiPattern, scan_patches
+from pathlib import Path
 
+from werkstatt.antipattern import AntiPattern, scan_patches
 
 # ---------- type: ignore ----------
 
@@ -165,6 +166,67 @@ def test_sauberer_patch_keine_treffer() -> None:
     assert treffer == []
 
 
+# ---------- audit_signature ----------
+
+def test_audit_mit_zwei_args_wird_erkannt() -> None:
+    patches = [{
+        "action": "update",
+        "file": "core/x.py",
+        "old_string": "x = f()\n",
+        "new_string": "audit('kind', {'a': 1})\n",
+    }]
+    treffer = scan_patches(patches)
+    audit_treffer = [a for a in treffer if a.kind == "audit_signature"]
+    assert len(audit_treffer) == 1
+    assert treffer[0].file == "core/x.py"
+    assert "audit" in treffer[0].sample
+
+
+def test_audit_mit_vier_args_kein_treffer() -> None:
+    patches = [{
+        "action": "update",
+        "file": "core/x.py",
+        "old_string": "x = f()\n",
+        "new_string": "audit('kind', {'a': 1}, pd, pn)\n",
+    }]
+    treffer = scan_patches(patches)
+    assert not any(a.kind == "audit_signature" for a in treffer)
+
+
+def test_audit_mit_drei_args_wird_erkannt() -> None:
+    patches = [{
+        "action": "update",
+        "file": "core/x.py",
+        "old_string": "x = f()\n",
+        "new_string": "audit('kind', {'a': 1}, pd)\n",
+    }]
+    treffer = scan_patches(patches)
+    audit_treffer = [a for a in treffer if a.kind == "audit_signature"]
+    assert len(audit_treffer) == 1
+
+
+def test_kein_audit_call_kein_treffer() -> None:
+    patches = [{
+        "action": "update",
+        "file": "core/x.py",
+        "old_string": "x = f()\n",
+        "new_string": "x = f()\n",
+    }]
+    treffer = scan_patches(patches)
+    assert not any(a.kind == "audit_signature" for a in treffer)
+
+
+def test_audit_syntax_fehler_kein_crash() -> None:
+    patches = [{
+        "action": "update",
+        "file": "core/x.py",
+        "old_string": "x = f()\n",
+        "new_string": "audit('kind', {'a': 1}\n",
+    }]
+    treffer = scan_patches(patches)
+    assert not any(a.kind == "audit_signature" for a in treffer)
+
+
 # ---------- leere Eingabe ----------
 
 def test_leere_eingabe_keine_treffer() -> None:
@@ -185,6 +247,7 @@ def test_live_pfad_antipattern_veto(
     muss das VOR dem Erfolgs-Pfad abfangen.
     """
     from pathlib import Path as _P  # noqa: F401 -- local guard
+
     from werkstatt import loop as loop_mod
     from werkstatt.state import RunState
 

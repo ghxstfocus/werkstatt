@@ -12,6 +12,7 @@ Design-Referenz: fakegreen (deterministischer Diff-Scanner).
 """
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass
 
 
@@ -67,6 +68,80 @@ def _zaehle_assert_mit_vergleich(text: str) -> int:
     return sum(1 for z in text.splitlines() if _hat_vergleich(z))
 
 
+def _fallback_audit_zaehlung(text: str) -> list[str]:
+    """Grobe Klammer-Zaehlung fuer nicht-parsebaren Text.
+
+    Sucht ALLE ``audit(``-Vorkommen. Ist ein Aufruf nicht geschlossen
+    (unvollstaendige Klammer), wird er uebersprungen — ein
+    unvollstaendiges Fragment ist kein belastbarer Befund.
+    """
+    samples: list[str] = []
+    start = 0
+    while True:
+        idx = text.find("audit(", start)
+        if idx < 0:
+            break
+        depth = 1
+        commas = 0
+        i = idx + len("audit(")
+        in_string: str | None = None
+        escaped = False
+        geschlossen = False
+        while i < len(text):
+            ch = text[i]
+            if in_string is not None:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == in_string:
+                    in_string = None
+            elif ch in ("'", '"'):
+                in_string = ch
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    geschlossen = True
+                    i += 1
+                    break
+            elif ch == "," and depth == 1:
+                commas += 1
+            i += 1
+        if geschlossen:
+            arg_count = commas + 1
+            if arg_count < 4:
+                samples.append(f"audit(...) mit {arg_count} Args")
+        start = idx + len("audit(")
+    return samples
+
+
+def _pruefe_audit_signatur(text: str) -> list[str]:
+    """Findet ``audit(...)``-Aufrufe mit weniger als vier Positions-Args.
+
+    Nutzt den AST, wenn ``text`` valides Python ist. Bei ``SyntaxError``
+    (Fragment) faellt sie auf eine grobe Klammer-Zaehlung zurueck.
+    Keyword-Argumente werden bewusst nicht mitgezaehlt.
+    """
+    samples: list[str] = []
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return _fallback_audit_zaehlung(text)
+
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Name) or func.id != "audit":
+            continue
+        if len(node.args) < 4:
+            samples.append(f"audit(...) mit {len(node.args)} Args")
+    return samples
+
+
 # --- Scanner ---
 
 def _scan_einzelnen_patch(patch: dict) -> list[AntiPattern]:
@@ -92,6 +167,10 @@ def _scan_einzelnen_patch(patch: dict) -> list[AntiPattern]:
             treffer.append(AntiPattern("eslint_disable", file, z.strip()))
         if "|| true" in z and _ist_shell_kontext(file):
             treffer.append(AntiPattern("shell_or_true", file, z.strip()))
+
+    # Regel: audit(...) mit zu wenigen Positions-Argumenten
+    for sample in _pruefe_audit_signatur(new):
+        treffer.append(AntiPattern("audit_signature", file, sample))
 
     # Regel: geschwaechte Assertion (weniger asserts mit Vergleich)
     if action == "update" and _ist_test_datei(file):

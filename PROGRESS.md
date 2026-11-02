@@ -1339,3 +1339,11 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - **Status:** phase_ende
 - **Info:** tasks_ok=1/1
 
+## 2026-11-02T09:51:55+00:00 -- AST-Check _pruefe_audit_signatur in antipattern.py
+- **Status:** failed
+- **Info:** reviewer_rejected
+
+## 2026-11-02T09:52:03+00:00 -- Tests fuer audit_signature in test_antipattern.py
+- **Status:** failed
+- **Info:** post_build_verify_failed
+
