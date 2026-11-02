@@ -523,6 +523,8 @@ def _llm_split_einzel_task(
 ) -> list[dict]:
     """M-469: Zerlegt EINEN zu grossen Task in 2-3 Sub-Tasks (LLM)."""
     import json as _json
+    f"## EXPLORER-FINDINGS:\n"
+    f"{_format_explorer_findings(getattr(state, 'explorer_findings', {}))}\n\n"
     _user = (
         f"## ZU GROSSER TASK:\n"
         f"id: {task.get('id')}\n"

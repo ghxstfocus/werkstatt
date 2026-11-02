@@ -527,4 +527,22 @@ def run_explorer(state: RunState, frage: str) -> dict:
         "findings_len": len(result.get("findings", "")),
         "key_files": len(result.get("key_files", [])),
     }, pd, pn)
+    try:
+        state.explorer_findings = {
+            "git_dirty": bool(
+                __import__("subprocess").run(
+                    ["git", "-C", str(getattr(state, "project_dir", ".")),
+                     "status", "--porcelain"],
+                    capture_output=True, text=True, timeout=5,
+                ).stdout.strip()
+            ),
+            "pytest_laufzeit_s": int(
+                getattr(state, "explorer_pytest_laufzeit_s", 0) or 0
+            ),
+            "ruff_befunde": list(
+                getattr(state, "explorer_ruff_befunde", []) or []
+            ),
+        }
+    except Exception:  # noqa: BLE001
+        pass
     return result

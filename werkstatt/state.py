@@ -138,6 +138,11 @@ class RunState:
     planner_model: str = "deepseek-chat"
     planner_modus: str = "manual"
     scout_api_auszug: dict = field(default_factory=dict)
+    # M-WelleE (2026-11-02): strukturierte Explorer-Findings.
+    # Fliesst in Architect- und Builder-Prompt. Format:
+    # {"pytest_laufzeit_s": int, "ruff_befunde": list, ...}
+    explorer_findings: dict = field(default_factory=dict)
+
 
     # M-WelleB (2026-11-02): Content-Check-Bestätigung.
     # True = Auftrag-bereits-erfuellt wurde durch DETERMINISTISCHEN

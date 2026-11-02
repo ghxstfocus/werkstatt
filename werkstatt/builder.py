@@ -179,6 +179,20 @@ _PY_IGNORE_PARTS = frozenset({
 })
 
 
+def _format_explorer_findings_b(f: dict) -> str:
+    """M-WelleE: Explorer-Findings als Prompt-Block (Builder)."""
+    if not isinstance(f, dict) or not f:
+        return ""
+    lines = []
+    for k, v in list(f.items())[:8]:
+        if isinstance(v, list):
+            v_str = ", ".join(str(x) for x in v[:5])
+        else:
+            v_str = str(v)[:100]
+        lines.append(f"- {k}: {v_str}")
+    return chr(10).join(lines)
+
+
 def _sammle_projekt_py_files(project_dir: Path, limit: int = 30) -> list[Path]:
     """K10: Sammelt max `limit` .py-Dateien im Projekt, ohne Ignorier-Pfade.
 
@@ -814,6 +828,8 @@ def _build_patches_fuer_datei(
         f"{_verbote_prefix}"
         f"## API-SIGNATUREN (Scout-Destillat):\n"
         f"{_format_scout_apis_for_builder(getattr(state, 'scout_api_auszug', {}))}\n\n"
+        f"## EXPLORER-FINDINGS:\n"
+        f"{_format_explorer_findings_b(getattr(state, 'explorer_findings', {}))}\n\n"
         f"## TASK: {_task_name}\n"
         f"## TASK-BESCHREIBUNG: {_task_desc}\n\n"
         f"## ARCHITECT-BESCHREIBUNG (fuer Kontext):\n{_abschnitt}\n\n"
