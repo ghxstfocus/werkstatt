@@ -454,7 +454,7 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
         _executed_stages.append(_sid)
         if _stage_ist_hart(stage):
             _hart_stage_ids.add(_sid)
-        _t_stage = _time.monotonic() if "_time" in dir() else None
+        _t_stage = None  # F821: _time war nie im Scope (lokaler Import in anderer Funktion)
         try:
             # M-390: Heartbeat alle 2s waehrend der Stage
             # OP-034b: Per-Stage-Timeout aus verify.json (default 300).

@@ -539,8 +539,6 @@ def _llm_split_einzel_task(
 ) -> list[dict]:
     """M-469: Zerlegt EINEN zu grossen Task in 2-3 Sub-Tasks (LLM)."""
     import json as _json
-    f"## EXPLORER-FINDINGS:\n"
-    f"{_format_explorer_findings(getattr(state, 'explorer_findings', {}))}\n\n"
     _user = (
         f"## ZU GROSSER TASK:\n"
         f"id: {task.get('id')}\n"
@@ -834,12 +832,11 @@ def _zerlege_in_sub_tasks(
 ) -> list[dict]:
     """M-453: Zerlegt Architect-Prosa in 3-5 Sub-Tasks."""
     import json as _json
-    # M-Wired-JC (2026-11-02): Measurement-Index fuer Planner
-    try:
-        from werkstatt.measurement import _messwerte_fuer_planner
-        _mess_planner = _messwerte_fuer_planner(state)
-    except Exception:  # noqa: BLE001
-        _mess_planner = ""
+    # M-Wired-JC (2026-11-02): Measurement-Index fuer Planner.
+    # _zerlege_in_sub_tasks hat keinen state-Zugriff. Frueherer
+    # try/except fing NameError auf "state" und lieferte immer "".
+    # Semantisch identisch, ohne F821.
+    _mess_planner = ""
     if _mess_planner and _mess_planner.strip() not in ("", "(keine)"):
         _mess_planner_block = (
             f"## MESSWERTE-INDEX (deterministische Messungen):\n"
