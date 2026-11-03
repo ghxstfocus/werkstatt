@@ -1,6 +1,6 @@
 # Rollen-Audit — Werkstatt
 
-Stand: 2026-10-18 (nach W61-Label-Fix)
+Stand: 2026-11-03, Einstiegspunkt `werkstatt.loop`
 Anlass: Planner liefert P17-konforme Listen, aber keine Aufträge. Builder und Reviewer zeigen Symptome von Prompt-Überflutung. Vor P20+P21 (Planner-Auftrags-Kontext + Selbst-Kritik) muss das Gesamtbild der Rollen geklärt werden.
 
 ## 1. Ist-Zustand (gemessen 2026-10-17)
@@ -17,7 +17,7 @@ Anlass: Planner liefert P17-konforme Listen, aber keine Aufträge. Builder und R
 | chaos.md | 10 | 244 | Chaos (schmal) |
 | coverage.md | 10 | 246 | Coverage (schmal) |
 
-### HARD_RULES (pipeline.py)
+### HARD_RULES (Rollen-Modul `pipeline`)
 
 | Konstante | Zeilen | Zeichen | Zuordnung |
 |---|---|---|---|
@@ -188,7 +188,7 @@ teilweise gegen die Empfehlung gebaut.
 
 - **reviewer.md: W40 hat die Redundanz aufgelöst.**
   410 -> 56 Zeilen. Die Regeln sind jetzt in
-  HARD_RULES_REVIEWER (pipeline.py), der Roll-Body
+  HARD_RULES_REVIEWER (Rollen-Modul `pipeline`), der Roll-Body
   verweist nur noch.
 
 - **judge.md: neue Rolle (W28b).**
@@ -244,11 +244,11 @@ Beide sind noetig, in dieser Reihenfolge.
 ## Update 2026-10-18 — W61
 
 - **Judge-Labels**: Der Judge-Loop spricht jetzt Judge
-  (vorher Reviewer). Siehe ARCHITEKTUR.md.
+  (vorher Reviewer). Siehe docs/ARCHITECTURE.md.
 - **solver_model**: eigene Rolle (deepseek-reasoner),
   nicht mehr reviewer_verdict_model. W61c.
 - **Subagenten**: explore (aktiv), bash/browser
-  (inaktiv). Siehe ARCHITEKTUR.md.
+  (inaktiv). Siehe ARCHITECTURE.md.
 - **W61a (Reviewer 3->1)**: offen. Reviewer macht
   heute noch Mess-Wahl (Schritt 1), Commit-Review,
   Recovery. Ziel: nur Commit-Review.

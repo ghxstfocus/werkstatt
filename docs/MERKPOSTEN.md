@@ -4,8 +4,12 @@ Stand: 2026-10-22. Diese Datei sammelt Merkposten (M-Nummern), die
 aus konkreten Fehlern im Bau-Prozess entstanden sind — mit der
 jeweiligen Lehre. Ziel: derselbe Fehler passiert nicht zweimal.
 
-Abgenommene Merkposten bleiben hier (nicht in OFFENE-BLOECKE.md
-verschoben), weil sie Prozess-Lehren sind, keine Todos.
+Diese Datei sammelt Prozess-Lehren und fuehrt **keine** Todos.
+Verweise auf offene Arbeit gehen an `docs/STATUS.md`, Verweise auf
+Abgeschlossenes an `PROGRESS.md`.
+
+Abgenommene Merkposten wandern nicht nach `docs/STATUS.md` (dort
+stehen nur offene Punkte), sondern bleiben als Prozess-Lehre hier.
 
 ## Aus 3a-2a (Vorlauf, 20f0e7d)
 
@@ -83,9 +87,9 @@ statt davor.
 
 ### Doku-Disziplin
 - Nach jedem fertigen Block: Doku-Nachzug (Bau-Handoff, ROADMAP,
-  ERLEDIGT, OFFENE-BLOECKE) + Push. Sonst sammelt sich Rueckstand.
+  `PROGRESS.md`, `docs/STATUS.md`) + Push. Sonst sammelt sich Rueckstand.
 - Commit-Body-VOR-Werte brauchen Vor-Comm-SHA (M-57).
-- archiv/session-bilanz.md nachziehen, wenn neue Commit-Body-VOR-Werte
+- docs/archiv/session-bilanz.md nachziehen, wenn neue Commit-Body-VOR-Werte
   auftauchen.
 
 ### Merkposten-Hygiene
