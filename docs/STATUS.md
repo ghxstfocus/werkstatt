@@ -221,6 +221,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-03 | OP-104 | done | control/reflection.py wortgleiche Kopie (manuell, Scout-Plan-Bug)
 - 2026-11-03 | OP-099 | done | Phase 33.6: control_drift als Post-Build-Stage hart (67cd6b0)
 - 2026-11-03 | OP-088 | done | explorer_result in beiden Zweigen (Mess+LLM), audit.py-Katalog (4b6058f)
 - 2026-11-03 | OP-091 | done | audit_panel: _home_kontext Modulebene (Diagnose korrigiert: Writer OK, Reader crasht) (4a10645)
@@ -293,22 +294,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - **Tests:** `tests/test_pipeline_phases.py` (neu).
 - **Blockiert von:** -
 
-### OP-104: reflection.py nach control/ — nur Kopie (ohne Migration)
-
-- **Status:** open
-- **Typ:** architektur (sub-OP, 1 Datei)
-- **Betroffen:** nur `werkstatt/control/reflection.py` (neu)
-- **Auftrag:** Kopiere `werkstatt/reflection.py` 1:1 nach
-  `werkstatt/control/reflection.py`. **Keine Wrapper, keine
-  Delegations-Stubs, keine Änderung an Logik/Signaturen.** Wortgleiche
-  Kopie, inklusive aller 12 Funktionen und der `__all__`-Liste.
-  Import-Zeile im Kopf anpassen (`from werkstatt.state import RunState`
-  bleibt, `from werkstatt.loop_renderer import log_line` bleibt).
-- **Akzeptanz:** `diff <(grep -E "^def |^class |^_" werkstatt/reflection.py) \
-  <(grep -E "^def |^class |^_" werkstatt/control/reflection.py)` = leer.
-  `wc -l` beider Dateien ±5. `python3 -m py_compile` grün.
-- **Nicht-Ziele:** Proxy, Aufrufer-Migration, Tests.
-- **Blockiert von:** -
 
 ### OP-105: reflection.py → Deprecation-Proxy
 
