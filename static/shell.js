@@ -6,6 +6,14 @@
 (function () {
   "use strict";
 
+  // Stub SOFORT setzen, damit onclick garantiert funktioniert —
+  // auch wenn spaetere Initialisierung crasht.
+  window.WerkstattShell = {
+    toggle: function () { console.warn("[shell] noch nicht bereit"); },
+    verbinden: function () {},
+    aktiv: function () { return false; },
+  };
+
   var term = null;
   var fitAddon = null;
   var socket = null;

@@ -573,6 +573,9 @@ body {
 }
 
 #shell-toggle {
+  pointer-events: auto !important;
+  z-index: 100;
+  position: relative;
   padding: 3px 10px;
   background: transparent;
   color: var(--text-dim);
