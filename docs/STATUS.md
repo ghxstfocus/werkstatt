@@ -236,6 +236,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-03 | OP-097 | superseded | aufgeteilt in OP-104 (Kopie) + OP-105 (Proxy) + OP-106 (Aufrufer) + OP-107 (Tests)
 - 2026-11-03 | OP-104 | done | control/reflection.py wortgleiche Kopie (manuell, Scout-Plan-Bug)
 - 2026-11-03 | OP-099 | done | Phase 33.6: control_drift als Post-Build-Stage hart (67cd6b0)
 - 2026-11-03 | OP-088 | done | explorer_result in beiden Zweigen (Mess+LLM), audit.py-Katalog (4b6058f)
@@ -264,16 +265,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   Aufrufer migriert. `tests/test_gates.py` gruen.
 - **Blockiert von:** OP-095
 
-### OP-097: Phase 33.4 — reflection.py nach control/ migrieren
-
-- **Status:** open
-- **Typ:** architektur
-- **Betroffen:** `werkstatt/reflection.py` nach `werkstatt/control/reflection.py`
-- **Problem:** 7 Aufrufer von `_reflection_loop`, 1 von
-  `_plan_reject_reflection`. 12 Funktionen.
-- **Akzeptanzkriterien:** `control/reflection.py` mit 3 Einstiegspunkten.
-  Deprecation-Proxy. Aufrufer migriert. `tests/test_reflection*.py` gruen.
-- **Blockiert von:** OP-095, OP-096
 
 ### OP-098: Phase 33.5 — pipeline_phases.py reduzieren
 
