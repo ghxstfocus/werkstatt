@@ -292,3 +292,51 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   2 human_review-Tasks, Gate liefert `j` → `tasks_ok == total`.
 - **Tests:** `tests/test_pipeline_phases.py` (neu).
 - **Blockiert von:** -
+
+### OP-104: reflection.py nach control/ — nur Kopie (ohne Migration)
+
+- **Status:** open
+- **Typ:** architektur (sub-OP, 1 Datei)
+- **Betroffen:** nur `werkstatt/control/reflection.py` (neu)
+- **Auftrag:** Kopiere `werkstatt/reflection.py` 1:1 nach
+  `werkstatt/control/reflection.py`. **Keine Wrapper, keine
+  Delegations-Stubs, keine Änderung an Logik/Signaturen.** Wortgleiche
+  Kopie, inklusive aller 12 Funktionen und der `__all__`-Liste.
+  Import-Zeile im Kopf anpassen (`from werkstatt.state import RunState`
+  bleibt, `from werkstatt.loop_renderer import log_line` bleibt).
+- **Akzeptanz:** `diff <(grep -E "^def |^class |^_" werkstatt/reflection.py) \
+  <(grep -E "^def |^class |^_" werkstatt/control/reflection.py)` = leer.
+  `wc -l` beider Dateien ±5. `python3 -m py_compile` grün.
+- **Nicht-Ziele:** Proxy, Aufrufer-Migration, Tests.
+- **Blockiert von:** -
+
+### OP-105: reflection.py → Deprecation-Proxy
+
+- **Status:** open
+- **Typ:** architektur (sub-OP, 1 Datei)
+- **Betroffen:** nur `werkstatt/reflection.py`
+- **Auftrag:** Ersetze `reflection.py` durch Proxy via `__getattr__`.
+  Setzt OP-104 voraus (`control/reflection.py` vollständig).
+- **Akzeptanz:** `from werkstatt.reflection import _reflection_loop`
+  funktioniert. `python3 -c "from werkstatt.control.reflection import _reflection_loop"` funktioniert.
+- **Blockiert von:** OP-104
+
+### OP-106: Aufrufer auf control.reflection umstellen
+
+- **Status:** open
+- **Typ:** architektur (sub-OP, 3 Dateien)
+- **Betroffen:** `werkstatt/loop.py`, `werkstatt/pipeline_phases.py`,
+  `werkstatt/task_runner.py` (nur Import-Zeilen)
+- **Auftrag:** Alle `from werkstatt.reflection import X` auf
+  `from werkstatt.control.reflection import X` umstellen. Keine Logik-Änderung.
+- **Akzeptanz:** grep findet keine `from werkstatt.reflection import` mehr
+  (außer in `control/reflection.py`-Docstring + Tests).
+- **Blockiert von:** OP-104, OP-105
+
+### OP-107: Test-Patch-Pfade migrieren
+
+- **Status:** open
+- **Typ:** architektur (sub-OP, mehrere Tests)
+- **Betroffen:** `tests/test_reflection*.py`, `tests/test_loop*.py`
+- **Auftrag:** `mock.patch("werkstatt.reflection.X")` → `mock.patch("werkstatt.control.reflection.X")`.
+- **Blockiert von:** OP-106
