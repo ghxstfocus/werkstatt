@@ -221,6 +221,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-03 | OP-099 | done | Phase 33.6: control_drift als Post-Build-Stage hart (67cd6b0)
 - 2026-11-03 | OP-088 | done | explorer_result in beiden Zweigen (Mess+LLM), audit.py-Katalog (4b6058f)
 - 2026-11-03 | OP-091 | done | audit_panel: _home_kontext Modulebene (Diagnose korrigiert: Writer OK, Reader crasht) (4a10645)
 - 2026-11-03 | OP-095 | done | Phase 33.2a: verify.json hart-Feld explizit + fail-loud (1ac3446)
@@ -271,16 +272,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   Voller Loop-Durchlauf funktioniert.
 - **Blockiert von:** OP-095, OP-096, OP-097
 
-### OP-099: Phase 33.6 — control_drift als Pre-Commit-Gate
-
-- **Status:** open
-- **Typ:** ci (analog OP-094 audit_drift)
-- **Betroffen:** `.werkstatt/verify.json` (neue Stage), AGENTS.md
-- **Problem:** `tools/control_drift.py --check` laeuft nur manuell.
-  Bei Refactor kann eine Kontrolle unbemerkt aus der Registry rutschen.
-- **Akzeptanzkriterien:** Neue Stage `control_drift` in verify.json.
-  Fail blockiert Commit.
-- **Blockiert von:** -
 
 ### OP-101: Loop-Status-Inkonsistenz bei human_review-Tasks
 
