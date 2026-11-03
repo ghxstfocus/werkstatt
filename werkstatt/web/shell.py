@@ -32,7 +32,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from werkstatt.web.auth import is_auth_disabled, is_authed_ws
 
-__all__ = ["PTYSession", "mount_shell", "router"]
+__all__ = ["_AKTIVE_PTYS", "PTYSession", "mount_shell", "router"]
 
 router = APIRouter()
 
@@ -42,6 +42,8 @@ SESSION_TIMEOUT_S: float = 3600.0
 SHELL_BIN: str = "/bin/bash"
 
 _AKTIVE_SESSIONS: dict[str, int] = {}
+# Chat kann Befehle in die aktive PTY-Session schicken.
+_AKTIVE_PTYS: dict[str, PTYSession] = {}
 
 
 def _dbg(msg: str) -> None:
@@ -154,6 +156,22 @@ class PTYSession:
         except (OSError, ValueError):
             pass
 
+    def inject(self, cmd: str) -> bool:
+        """Schickt einen Befehl an die aktive Shell. Sync, thread-safe.
+
+        Wird vom Chat-Agent gerufen, um Befehle abzusetzen ohne dass
+        der User tippt. Output landet wie ueblich im Terminal-Panel.
+        """
+        if self.master_fd < 0:
+            return False
+        try:
+            os.write(self.master_fd, (cmd + "\n").encode("utf-8"))
+            _dbg(f"inject: {cmd[:80]!r}")
+            return True
+        except OSError as exc:
+            _dbg(f"inject OSError: {exc}")
+            return False
+
     async def _reader(self) -> None:
         _dbg(f"reader: gestartet, master_fd={self.master_fd}")
         """Liest PTY-Output via select mit kurzem Timeout.
@@ -209,7 +227,7 @@ class PTYSession:
         try:
             self._oeffne_pty()
             _dbg(f"_oeffne_pty zurueck: fd={self.master_fd} pid={self.pid}")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _dbg(f"_oeffne_pty CRASH: {type(exc).__name__}: {exc}")
             raise
         self._reader_task = asyncio.create_task(self._reader())

@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from werkstatt.web import chat_agent
+
 __all__ = [
     "CHAT_IDS",
     "ChatFensterZustand",
@@ -219,13 +221,21 @@ def post_chat(chat_id: str, nachricht: ChatMessageIn) -> dict[str, object]:
         raise HTTPException(status_code=404, detail="unbekannter Chat")
     zustand = hole_tab_zustand(chat_id)
     panel = zustand[chat_id]
-    panel.anhaengen("user", nachricht.text)
-    intent = parse_intent(nachricht.text)
-    antwort = f"[{CHAT_LABELS[chat_id]}] intent={intent['intent']}"
+    text = nachricht.text
+    panel.anhaengen("user", text)
+
+    # Chat-Agent: deterministische Patterns + LLM-Fallback
+    try:
+        antwort = chat_agent.verarbeite(text, chat_id=chat_id)
+    except Exception as exc:  # noqa: BLE001
+        antwort = f"Chat-Agent-Fehler: {type(exc).__name__}: {exc}"
+
+    intent = parse_intent(text)
     panel.anhaengen("assistant", antwort)
     return {
         "chat_id": chat_id,
         "intent": intent,
+        "antwort": antwort,
         "zustand": panel.als_dict(),
         "layout": layout_fuer(zustand),
     }
