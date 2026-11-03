@@ -155,7 +155,9 @@ def _human_gate_plan(state, auto_approve=False):
     )
 
     # K20c: Leere-Antworten-Zaehler (EOF-aehnlicher Zustand via script-Wrapper).
+    # OP-093: auch ungueltige-Antworten-Zaehler (Fail-closed nach 3 Versuchen).
     _leer_count = 0
+    _ungueltig_count = 0
     while True:
         try:
             _antwort = input(
@@ -228,7 +230,17 @@ def _human_gate_plan(state, auto_approve=False):
                 getattr(state, "akzeptanzkriterien", []) or [],
             )
             continue
-        print("Antworte mit j, n oder a.")
+        # OP-093: Fail-closed nach 3 ungueltigen Antworten.
+        _ungueltig_count += 1
+        if _ungueltig_count >= 3:
+            audit("loop_plan_gate_ungueltig",
+                  {"anzahl": _ungueltig_count,
+                   "letzte_antwort": _antwort[:20]},
+                  pd, pn)
+            return 1
+        print(f"Antworte mit j, n oder a. "
+              f"(Versuch {_ungueltig_count}/3)")
+        continue
 
     return 1
 
