@@ -124,25 +124,56 @@ def _grep(pattern: str) -> str:
     return f"# grep '{pattern}' ({len(lines)} Treffer)\n" + "\n".join(lines)
 
 
-def _shell_exec(cmd: str) -> str:
-    """Schickt Befehl an aktive PTY-Session. Output landet im Terminal."""
+def _shell_exec(cmd: str, timeout_s: float = 30.0) -> str:
+    """Fuehrt Befehl aus. Zwei Wege:
+
+    1. PTY-Inject (Einzeiler + offene Session): Output landet im Terminal-
+       Panel links, Befehl wird sichtbar im User-Shell-Kontext ausgefuehrt.
+    2. subprocess.run-Fallback (Mehrzeiler ODER keine offene Session):
+       Ausfuehren via bash -c, Output kommt als String in den Chat.
+
+    Mehrzeiler (Scripts, Heredocs) gehen nur ueber subprocess — PTY-Inject
+    bricht bei Windows-Paste + Bracketed-Paste-Mode (Heredoc-Parsing).
+    """
     from werkstatt.web import shell as _shell_mod
     project = "werkstatt"
     session = _shell_mod._AKTIVE_PTYS.get(project)
-    if session is None:
-        return (
-            "Keine aktive Shell-Session. Oeffne zuerst das Terminal-Panel "
-            "(Doppelklick auf 'Terminal' oder $-Button), dann kann ich "
-            "Befehle dorthin schicken."
-        )
-    ok = session.inject(cmd)
-    if ok:
-        return (
-            f"Befehl an Shell gesendet: `{cmd}`.\n"
-            f"Output erscheint im Terminal-Panel links."
-        )
-    return "FEHLER: Konnte Befehl nicht senden (master_fd geschlossen)."
+    is_multiline = "\n" in cmd.strip()
 
+    if session is not None and not is_multiline:
+        if session.inject(cmd):
+            return (
+                f"$ {cmd}\n"
+                f"\n"
+                f"\u2192 ausgefuehrt in aktiver Shell. "
+                f"Output im Terminal-Panel links."
+            )
+
+    # subprocess.run-Fallback
+    try:
+        result = subprocess.run(
+            ["bash", "-c", cmd],
+            capture_output=True, text=True, timeout=timeout_s,
+            cwd=str(_PROJEKT_DIR),
+        )
+    except subprocess.TimeoutExpired:
+        return f"$ {cmd[:80]}\n\nTIMEOUT nach {timeout_s:.0f}s."
+    except OSError as exc:
+        return f"$ {cmd[:80]}\n\nFEHLER: {exc}"
+
+    output = (result.stdout or "") + (result.stderr or "")
+    if len(output) > 3000:
+        output = output[:3000] + f"\n... ({len(output) - 3000} Zeichen abgeschnitten)"
+    if not output.strip():
+        output = "(keine Ausgabe)"
+
+    via = "subprocess" if is_multiline or session is None else "shell-inject"
+    return (
+        f"$ {cmd[:200]}\n"
+        f"\n"
+        f"Exit: {result.returncode} ({via})\n"
+        f"```\n{output}\n```"
+    )
 
 def _start_loop(op_id: str | None = None) -> str:
     if op_id:
@@ -332,6 +363,13 @@ def verarbeite(text: str, chat_id: str = "admin") -> str:
     if not text:
         return "(leer)"
 
+    # 0. Expliziter Shell-Befehl via `!`
+    if text.startswith("!"):
+        cmd = text[1:].strip()
+        if cmd:
+            return _shell_exec(cmd)
+        return "(leerer Shell-Befehl)"
+
     # 1. Expliziter Chat-Modus
     if text.startswith("?"):
         inner = text[1:].strip()
@@ -340,7 +378,13 @@ def verarbeite(text: str, chat_id: str = "admin") -> str:
             return answer
         return _llm_antwort(inner)
 
-    # 2. Shell-Befehl
+    # 2. Mehrzeiler ohne ?-Prefix = Shell-Script (Heredoc, for-loop etc.)
+    #    Der erste Token ist oft kein bekannter Befehl (for, while, #!),
+    #    deshalb hier vor dem _ist_shell_befehl-Check routen.
+    if "\n" in text.strip():
+        return _shell_exec(text)
+
+    # 2b. Shell-Befehl (Einzeiler)
     if _ist_shell_befehl(text):
         return _shell_exec(text)
 

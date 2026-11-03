@@ -21,6 +21,8 @@ def tmp_project(tmp_path, monkeypatch):
     chat_agent.init(tmp_path)
     monkeypatch.setattr(shell, "_AKTIVE_PTYS", {})
     yield tmp_path
+    # Cleanup: falls Test Session erzeugt hat
+    shell._AKTIVE_PTYS.clear()
 
 
 def test_parse_open_ops(tmp_project):
@@ -77,11 +79,14 @@ def test_pattern_start_loop_op(monkeypatch, tmp_project):
 
 
 def test_shell_exec_ohne_session(tmp_project):
+    """Ohne PTY-Session -> subprocess-Fallback, Exit-Code sichtbar."""
     a = chat_agent.verarbeite("ls")
-    assert "Keine aktive Shell-Session" in a
+    assert "Exit: 0 (subprocess)" in a
+    assert "$ ls" in a
 
 
 def test_shell_exec_mit_session(monkeypatch, tmp_project):
+    """Einzeiler + offene PTY -> shell.inject, sichtbar im Terminal."""
     class FakeSession:
         def __init__(self):
             self.cmds = []
@@ -91,7 +96,8 @@ def test_shell_exec_mit_session(monkeypatch, tmp_project):
     fake = FakeSession()
     monkeypatch.setattr(shell, "_AKTIVE_PTYS", {"werkstatt": fake})
     a = chat_agent.verarbeite("ls -la")
-    assert "Befehl an Shell gesendet" in a
+    assert "ausgefuehrt in aktiver Shell" in a
+    assert "$ ls -la" in a
     assert fake.cmds == ["ls -la"]
 
 
@@ -109,3 +115,62 @@ def test_fragezeichen_zwingt_chat(tmp_project):
     a = chat_agent.verarbeite("? ls")
     # Ohne DEEPSEEK_API_KEY gibt LLM einen Hinweis zurueck — nicht Shell
     assert "Keine aktive Shell-Session" not in a
+
+def test_bang_prefix_shell(monkeypatch, tmp_project):
+    """!-Prefix erzwingt Shell-Exec."""
+    class FakeSession:
+        def __init__(self):
+            self.cmds = []
+        def inject(self, cmd):
+            self.cmds.append(cmd)
+            return True
+    fake = FakeSession()
+    monkeypatch.setattr(shell, "_AKTIVE_PTYS", {"werkstatt": fake})
+    a = chat_agent.verarbeite("!ls -la")
+    assert "$ ls -la" in a
+    assert fake.cmds == ["ls -la"]
+
+
+def test_bang_prefix_leer(tmp_project):
+    a = chat_agent.verarbeite("!")
+    assert "leerer Shell-Befehl" in a
+
+def test_mehrzeiler_ohne_session(tmp_project):
+    """Mehrzeiliger Befehl ohne PTY-Session -> subprocess.run."""
+    r = chat_agent.verarbeite("echo A\necho B\necho C")
+    assert "Exit: 0" in r
+    assert "A" in r
+    assert "B" in r
+    assert "C" in r
+
+
+def test_mehrzeiler_mit_session_geht_trotzdem_subprocess(monkeypatch, tmp_project):
+    """Mehrzeiler auch mit Session -> subprocess (PTY-Inject waere unsicher)."""
+    class FakeSession:
+        def __init__(self):
+            self.cmds = []
+        def inject(self, cmd):
+            self.cmds.append(cmd)
+            return True
+    fake = FakeSession()
+    monkeypatch.setattr(shell, "_AKTIVE_PTYS", {"werkstatt": fake})
+    r = chat_agent.verarbeite("echo X\necho Y")
+    assert "Exit: 0" in r
+    assert "X" in r
+    # PTY nicht benutzt
+    assert len(fake.cmds) == 0
+
+
+def test_heredoc(tmp_project):
+    """Heredoc geht ueber subprocess.run."""
+    script = "cat << 'ENDX'\nline1\nline2\nENDX\n"
+    r = chat_agent.verarbeite(script)
+    assert "Exit: 0" in r
+    assert "line1" in r
+    assert "line2" in r
+
+
+def test_exit_code_bei_fehler(tmp_project):
+    """!-Prefix erzwingt Shell, Exit != 0 bei fehlendem Befehl."""
+    r = chat_agent.verarbeite("!nonexistentcommand_xyz")
+    assert "Exit: 127" in r or "not found" in r
