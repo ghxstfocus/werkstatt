@@ -25,7 +25,9 @@
     <section class="bereich terminal" data-bereich="terminal">
       <div class="fenster-titel">
         <span id="terminal-titel">Terminal</span>
-        <button id="shell-toggle" type="button" title="Shell">$</button>
+        <span id="shell-diag" style="color:#f87171;font-size:11px;margin-left:8px"></span>
+        <button id="shell-toggle" type="button" title="Shell"
+                onclick="if(window.WerkstattShell&&window.WerkstattShell.toggle){window.WerkstattShell.toggle();}else{alert('shell.js nicht geladen — F12 Console prüfen');}">$</button>
         <span id="terminal-spinner"></span>
       </div>
       <div class="scrollback" id="terminal" data-project="werkstatt"></div>

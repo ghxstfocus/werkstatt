@@ -157,10 +157,19 @@
     }
   }
 
+  // Diagnose beim Laden: prueft was der Browser wirklich sieht
   document.addEventListener("DOMContentLoaded", function () {
-    var btn = document.getElementById("shell-toggle");
-    if (btn) {
-      btn.addEventListener("click", function () { _toggle(); });
+    var diag = document.getElementById("shell-diag");
+    var fehlt = [];
+    if (!window.Terminal) fehlt.push("xterm.js");
+    if (!window.FitAddon) fehlt.push("addon-fit");
+    if (fehlt.length > 0) {
+      var msg = "Fehlt: " + fehlt.join(", ");
+      console.error("[shell] " + msg);
+      if (diag) { diag.textContent = msg; }
+    } else {
+      console.log("[shell] geladen: xterm.js + addon-fit OK");
+      if (diag) { diag.textContent = ""; }
     }
   });
 
