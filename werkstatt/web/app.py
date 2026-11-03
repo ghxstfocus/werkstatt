@@ -114,11 +114,14 @@ def create_app() -> FastAPI:
     from werkstatt.web import audit_panel as _ap
     _ap._home_kontext = Path.cwd()
 
+    # WICHTIG: shell.router VOR ws.router — sonst matcht
+    # /ws/{tab_id} aus ws.router den /ws/shell-Request und der
+    # PTY-Handler wird nie erreicht (Starlette matcht in Reihenfolge).
+    app.include_router(shell.router)
     app.include_router(ws.router)
     app.include_router(chat.router)
     app.include_router(audit_panel.router)
     app.include_router(terminal_proxy.router)
-    app.include_router(shell.router)
 
     # Layout/CSS/JS liegen in /opt/werkstatt/static/ (Projekt-Root),
     # nicht in werkstatt/web/static/ (Modul-Package).

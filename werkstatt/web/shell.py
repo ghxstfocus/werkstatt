@@ -44,6 +44,17 @@ SHELL_BIN: str = "/bin/bash"
 _AKTIVE_SESSIONS: dict[str, int] = {}
 
 
+def _dbg(msg: str) -> None:
+    """Diagnose nach /tmp/shell-dbg.log — unabhaengig von uvicorn-Logger."""
+    try:
+        import time as _t
+        with open("/tmp/shell-dbg.log", "a", encoding="utf-8") as _f:
+            _f.write(f"[{_t.time():.3f}] {msg}\n")
+            _f.flush()
+    except OSError:
+        pass
+
+
 def _shell_enabled() -> bool:
     return os.environ.get("WERKSTATT_SHELL_ENABLED", "true").lower() != "false"
 
@@ -81,6 +92,7 @@ class PTYSession:
         self._start_ts = time.monotonic()
 
     def _oeffne_pty(self) -> None:
+        _dbg("_oeffne_pty betreten")
         """Oeffnet PTY mit subprocess.Popen + preexec_fn.
 
         bash -l -i: login + interactive. preexec_fn macht setsid +
@@ -100,10 +112,10 @@ class PTYSession:
         env["TERM"] = "xterm-256color"
         env["WERKSTATT_SHELL"] = "1"
 
+        _dbg("oeffne_pty: openpty beginnt")
         master_fd, slave_fd = pty.openpty()
+        _dbg(f"oeffne_pty: master={master_fd} slave={slave_fd}")
 
-        # setsid + TIOCSCTTY in preexec_fn: bash braucht controlling
-        # terminal, um interaktiv zu werden.
         def _preexec() -> None:
             try:
                 os.setsid()
@@ -111,15 +123,20 @@ class PTYSession:
             except OSError:
                 pass
 
-        proc = subprocess.Popen(
-            [SHELL_BIN, "-l", "-i"],
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            env=env,
-            preexec_fn=_preexec,  # noqa: PLW1509 — 2 syscalls, keine Locks
-            close_fds=False,
-        )
+        try:
+            proc = subprocess.Popen(
+                [SHELL_BIN, "-l", "-i"],
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                env=env,
+                preexec_fn=_preexec,  # noqa: PLW1509
+                close_fds=False,
+            )
+        except Exception as exc:
+            _dbg(f"oeffne_pty: Popen FAILED: {exc}")
+            raise
+        _dbg(f"oeffne_pty: bash gestartet pid={proc.pid}")
         os.close(slave_fd)
         self.pid = proc.pid
         self._proc = proc
@@ -138,6 +155,7 @@ class PTYSession:
             pass
 
     async def _reader(self) -> None:
+        _dbg(f"reader: gestartet, master_fd={self.master_fd}")
         """Liest PTY-Output via select mit kurzem Timeout.
 
         os.read ohne Timeout waere blocking -> cancel() wirkt nicht,
@@ -159,16 +177,21 @@ class PTYSession:
                 continue
             try:
                 data = os.read(self.master_fd, 4096)
-            except OSError:
+            except OSError as exc:
+                _dbg(f"reader: os.read FEHLER: {exc}")
                 break
             if not data:
+                _dbg("reader: EOF von PTY (leer)")
                 break
+            _dbg(f"reader: {len(data)} bytes gelesen: {data[:80]!r}")
             try:
                 await self.websocket.send_text(
                     data.decode("utf-8", errors="replace")
                 )
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                _dbg(f"reader: WS-send FEHLER: {exc}")
                 break
+        _dbg("reader: beendet")
         self._stopp.set()
 
     def _log_befehl(self, puffer: str) -> None:
@@ -182,8 +205,15 @@ class PTYSession:
         return zeilen[-1]
 
     async def run(self) -> None:
-        self._oeffne_pty()
+        _dbg("run() startet")
+        try:
+            self._oeffne_pty()
+            _dbg(f"_oeffne_pty zurueck: fd={self.master_fd} pid={self.pid}")
+        except Exception as exc:  # noqa: BLE001
+            _dbg(f"_oeffne_pty CRASH: {type(exc).__name__}: {exc}")
+            raise
         self._reader_task = asyncio.create_task(self._reader())
+        _dbg("reader-task erzeugt")
         try:
             while not self._stopp.is_set():
                 try:
@@ -273,6 +303,7 @@ class PTYSession:
 
 @router.websocket("/ws/shell")
 async def shell_ws(websocket: WebSocket) -> None:
+    _dbg("shell_ws betreten")
     """PTY-Shell via WebSocket. Auth via Cookie, max N Sessions.
 
     WICHTIG: Bei Ablehnung accept() + close(1008) — nicht close() allein.
@@ -291,10 +322,13 @@ async def shell_ws(websocket: WebSocket) -> None:
         return
 
     await websocket.accept()
+    _dbg(f"accept ok, sessions={_AKTIVE_SESSIONS.get(project, 0)}")
     _AKTIVE_SESSIONS[project] = _AKTIVE_SESSIONS.get(project, 0) + 1
     session = PTYSession(websocket, project)
+    _dbg("PTYSession erzeugt, rufe run()")
     try:
         await session.run()
+        _dbg("run() zurueck")
     finally:
         _AKTIVE_SESSIONS[project] = max(0, _AKTIVE_SESSIONS.get(project, 1) - 1)
 

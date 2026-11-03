@@ -18,6 +18,26 @@ def _shell_limits(monkeypatch):
     yield
 
 
+@pytest.fixture
+def kein_echtes_pty(monkeypatch):
+    """PTY-Erzeugung mocken — conftest-Guard verbietet bash-subprocess in Tests.
+
+    Der Test prueft nur den Counter-Lifecycle. Echte PTY-Session wird
+    manuell im Browser verifiziert (siehe Commit-Message).
+    """
+    def fake_oeffne_pty(self):
+        self.master_fd = -1  # kein echter FD — os.write/os.close skippen
+        self.pid = 12345
+        self._proc = None
+
+    async def fake_reader(self):
+        # Wartet bis _stopp — keine echten PTY-reads
+        await self._stopp.wait()
+
+    monkeypatch.setattr(shell.PTYSession, "_oeffne_pty", fake_oeffne_pty)
+    monkeypatch.setattr(shell.PTYSession, "_reader", fake_reader)
+
+
 def _client():
     from werkstatt.web.app import create_app
     return TestClient(create_app())
@@ -114,8 +134,12 @@ def test_shell_disabled_via_env(monkeypatch):
     assert shell._AKTIVE_SESSIONS.get("werkstatt", 0) == 0
 
 
-def test_shell_session_count_cleanup():
-    """Nach Session-Ende darf der Zaehler nicht erhoeht bleiben."""
+def test_shell_session_count_cleanup(kein_echtes_pty):
+    """Nach Session-Ende darf der Zaehler nicht erhoeht bleiben.
+
+    PTY gemockt (kein_echtes_pty): conftest-Guard verbietet bash-Popen
+    in Tests. Lifecycle (Counter hoch/runter) wird trotzdem geprueft.
+    """
     c = _client()
     with c.websocket_connect("/ws/shell") as ws:
         ws.send_text('{"typ":"input","data":"echo x\\n"}')
