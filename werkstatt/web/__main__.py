@@ -13,11 +13,23 @@ def main() -> None:
     parser.add_argument("--reload", action="store_true")
     args = parser.parse_args()
 
+    # Token sofort generieren (nicht erst beim ersten Request),
+    # damit der User ihn direkt nach dem Start in die Login-Page
+    # eingeben kann.
+    from werkstatt.web.auth import get_token
+    token = get_token()
+
     if args.host == "0.0.0.0":
         print("WARN: host=0.0.0.0 ohne HTTPS. Auth-Cookie ohne Secure-Flag.")
         print("      Nur in vertrauenswuerdigen Netzen. Empfehlung:")
         print("      --host 127.0.0.1 + SSH-Tunnel:")
         print(f"        ssh -L {args.port}:localhost:{args.port} user@host")
+    print()
+    print("=" * 60)
+    print(f"  Login-Token: {token}")
+    print("  (auch in .werkstatt/auth-token)")
+    print("=" * 60)
+    print()
     print(f"Werkstatt-Dashboard: http://{args.host}:{args.port}/")
     print(f"Audit-History:       http://{args.host}:{args.port}/api/projects/werkstatt/audit")
     uvicorn.run(
