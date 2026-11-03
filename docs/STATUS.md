@@ -299,6 +299,31 @@ tragen. Roadmap-Phasen sind grobe Etappen aus der Vor-Session
 - **Tests:** `pytest tests/test_doku_check.py -v`
 - **Blockiert von:** —
 
+### OP-047: Doku-Filter `doku_post_check_reduziert` killt Multi-File-Tasks
+
+- **Status:** open
+- **Betroffen:** `werkstatt/planner.py`, Funktion `_doku_post_check_reduziert`
+  (Log-Tag: `planner_doku_post_check_reduziert`)
+- **Problem:** Bei Doku-Ops über mehrere `.md`-Dateien (z.B. OP-046 mit
+  `docs/PLANNER-KONZEPT.md`, `docs/ROLLEN-AUDIT.md`, `docs/MERKPOSTEN.md`)
+  reduziert der Post-Check den Plan auf 1 Task. Log-Beleg: `[K36-KEEP]
+  prev=t1(docs/PLANNER-KONZEPT.md) cur=t2(docs/ROLLEN-AUDIT.md)
+  same_file=False same_act=True combined=3291/1800` — der Filter verwirft
+  Tasks mit `same_act=True` (gleiche Aktion = update an .md) auch wenn die
+  Zieldatei unterschiedlich ist. Bei OP-046 wurden so 2 von 3 Tasks verworfen;
+  der Loop lief mit `Tasks: 0/1` am Ende, weil die grep-Abnahme drei Dateien
+  prüft.
+- **Fix:** Filter nur dann `same_act`-basiert zusammenfassen, wenn
+  `same_file=True AND same_act=True`. Bei unterschiedlichen Dateien müssen
+  Tasks stehen bleiben (auch wenn Aktion identisch ist).
+- **Test:** `pytest tests/test_planner.py -k doku_post_check -v` mit einem
+  Fixture, das 3 Tasks auf 3 verschiedene `.md`-Dateien setzt; erwartet:
+  3 Tasks bleiben stehen.
+- **Akzeptanz:** Bei einem Doku-OP mit N verschiedenen Dateien liefert der
+  Planner N Tasks, nicht 1. Verifikation: Test-Lauf mit der Aufgaben-
+  beschreibung von OP-046 liefert 3 Tasks in der PLAN-Anzeige.
+- **Blockiert von:** —
+
 ## Erledigt (Auto-Log)
 
 - 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)
