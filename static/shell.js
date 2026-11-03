@@ -21,7 +21,11 @@
   var verbunden = false;
 
   function _init_xterm() {
-    if (term || !window.Terminal) {
+    if (term) {
+      return true;
+    }
+    if (!window.Terminal) {
+      console.warn("[shell] init abgebrochen: kein Terminal");
       return false;
     }
     var el = document.getElementById("terminal-xterm");
