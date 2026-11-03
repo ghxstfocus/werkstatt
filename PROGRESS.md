@@ -1499,3 +1499,7 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - **Abnahme:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md"` = 0 pro Datei.
 - **Hinweis:** Loop-Lauf 6826cb9 hat nur t1 committet (doku-filter `same_act=True`
   zu aggressiv, filtert Tasks ueber mehrere .md-Dateien weg); Rest manuell nachgezogen.
+## 2026-11-03T17:34:06+00:00 -- Phase abgeschlossen: werkstatt
+- **Status:** phase_ende
+- **Info:** rc=1 tasks_ok=2/4
+
