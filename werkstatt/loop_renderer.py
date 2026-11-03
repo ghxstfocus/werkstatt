@@ -104,10 +104,33 @@ try:
 except ImportError:
     _HAS_RICH = False
 
+# OP-111-Vorbereitung: Rich-Console-Wrapper, der stdout UND tee bedient.
+# Problem: _console.print() schrieb bisher nur an sys.stdout — der
+# Loop-Footer (LOOP FEHLGESCHLAGEN) landete nicht im Render-Log.
+class _TeeWriter:
+    """File-Wrapper: schreibt an stdout + ruft _tee pro Zeile."""
+    def __init__(self, base):
+        self._base = base
+    def write(self, text):
+        n = self._base.write(text)
+        for line in text.split("\n"):
+            line = line.rstrip()
+            if line:
+                _tee(line)
+        return n
+    def flush(self):
+        return self._base.flush()
+    def isatty(self):
+        return self._base.isatty()
+    def fileno(self):
+        return self._base.fileno()
+
 # rich nur im pretty/live-Modus aktiv
 _use_rich = _HAS_RICH and RENDER_MODE in ("pretty", "live")
 if _use_rich:
+    import sys as _sys
     _console: _RichConsole = _RichConsole(
+        file=_TeeWriter(_sys.stdout),
         force_terminal=(RENDER_MODE == "live"), width=100,
     )
 else:
