@@ -153,7 +153,8 @@ __all__ = [
 ]
 
 
-PROJECTS_DIR = Path("/opt/werkstatt/projects")
+from werkstatt.paths import projects_dir as _projects_dir
+PROJECTS_DIR = _projects_dir()
 
 
 

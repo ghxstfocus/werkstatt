@@ -52,13 +52,33 @@ _TERMINAL_KIND_PREFIXE = (
     "loop_task_", "loop_phase", "loop_verify_",
     "loop_reflection_", "loop_patch_", "loop_plan_gate_",
     "loop_human_gate_", "loop_erfolg", "loop_rollback",
-    "loop_skills_geladen", "loop_resume", "loop_fresh",
-    "planner_plan_erstellt", "planner_split",
-    "planner_architect_ok", "planner_atomarer_plan",
-    "planner_atomarer_plan_verworfen",
-    "reviewer_phase_approved", "reviewer_phase_rejected",
-    "explorer_messung", "explorer_result",
-    "loop_reviewer_", "loop_builder_",
+    # Loop-Phasen
+    "loop_",
+    # Planner / Architect
+    "planner_",
+    # Reviewer
+    "reviewer_",
+    # Builder
+    "builder_",
+    # Explorer
+    "explorer_",
+    # LLM-Calls
+    "llm_",
+    # Commands
+    "command_",
+    # Verify
+    "verify_",
+    # ADR-Mini
+    "adr_mini_",
+    # Committer
+    "committer_",
+    # Web
+    "web_",
+    # Doku
+    "doku_",
+    # Sonstige
+    "quelle_invalid", "mess_protokoll_limit_erreicht",
+    "progress_write_failed",
 )
 
 
@@ -80,12 +100,9 @@ def _audit_log_verzeichnis(project: str) -> Path:
     Parse-Fehler auf ``Path.cwd() / "audit-logs"`` zurueck.
     """
     try:
-        konfig = Path("projects") / ".yaml"
-        with konfig.open(encoding="utf-8") as f:
-            daten = yaml.safe_load(f)
-        home = daten["home"]
-        return Path(home) / "audit-logs"
-    except (OSError, yaml.YAMLError, KeyError, TypeError):
+        from werkstatt.paths import audit_logs_dir as _audit_logs_dir
+        return _audit_logs_dir(project)
+    except (OSError, ValueError, TypeError):
         return Path.cwd() / "audit-logs"
 
 

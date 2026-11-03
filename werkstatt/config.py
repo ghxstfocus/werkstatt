@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any
 
 _DEFAULT_VENV = ".venv/bin/python3"
-_DEFAULT_AGENTS_DIR = "/opt/werkstatt/agents"
+from werkstatt.paths import werkstatt_home as _wh
+_DEFAULT_AGENTS_DIR = str(_wh() / "agents")
 
 
 class Config:

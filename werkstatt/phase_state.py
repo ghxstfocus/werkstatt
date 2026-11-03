@@ -17,7 +17,8 @@ from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
-PHASE_DIR = Path("/opt/werkstatt/projects")
+from werkstatt.paths import projects_dir as _pd
+PHASE_DIR = _pd()
 
 
 class PhaseState:

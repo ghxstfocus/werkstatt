@@ -1297,7 +1297,7 @@ def run_planner(state: RunState) -> bool:
             for _s in _geladen:
                 _b = _s.get("body") or ""
                 if _b:
-                    _lines.append(f"### {_s.get(chr(34)+chr(34) if False else _s.get('name','?'))}\n{_b}")
+                    _lines.append(f"### {_s.get('name','?')}\n{_b}")
             state.planner_skills_block = "\n\n".join(_lines)
     except Exception:  # noqa: BLE001, S110
         pass

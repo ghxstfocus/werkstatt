@@ -326,6 +326,10 @@ class RunState:
     # Dient als Fallback-Quelle fuer `_expand_cmd_placeholders`, wenn
     # `state.patches` bereits geleert wurde. Lebenszyklus: pro Runde
     # `clear()` + `extend()`, am Rundenende `clear()`.
+    tasks: list[dict[str, object]] = field(default_factory=list)
+    architect_prosa: str = ""
+    builder_feedback: str = ""
+    patches: list[dict[str, object]] = field(default_factory=list)
     patches_aktuell_runde: list[dict[str, object]] = \
         field(default_factory=list)
 

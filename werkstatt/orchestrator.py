@@ -22,7 +22,8 @@ import yaml  # type: ignore[import-untyped]
 
 from werkstatt.state import RunState
 
-PROJECTS_DIR = Path("/opt/werkstatt/projects")
+from werkstatt.paths import projects_dir as _projects_dir
+PROJECTS_DIR = _projects_dir()
 
 
 def load_project_config(project_name: str) -> dict[str, Any]:

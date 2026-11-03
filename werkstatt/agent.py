@@ -321,7 +321,8 @@ def _schreibe_messung(
         inhalt.encode("utf-8", errors="replace")).hexdigest()
     # Verzeichnis.
     run_id = state.run_id or "unbekannt"
-    mess_dir = Path("/opt/werkstatt/.werkstatt") / run_id \
+    from werkstatt.paths import werkstatt_home as _wh
+    mess_dir = _wh() / ".werkstatt" / run_id \
         / "messungen"
     try:
         mess_dir.mkdir(parents=True, exist_ok=True)

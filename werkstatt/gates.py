@@ -132,12 +132,12 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
         return 0
 
     require = True
-    for cfg_name in (f"/opt/werkstatt/projects/{pn}.yaml",):
-        cfg_path = Path(cfg_name)
-        if cfg_path.exists():
-            try:
-                import yaml  # type: ignore[import-untyped]
-                with cfg_path.open() as fh:
+    from werkstatt.paths import project_config as _project_config
+    cfg_path = _project_config(pn)
+    if cfg_path.exists():
+        try:
+            import yaml  # type: ignore[import-untyped]
+            with cfg_path.open() as fh:
                     cfg = yaml.safe_load(fh) or {}
                 require = bool(cfg.get("require_plan_approval", True))
             except Exception:  # noqa: BLE001, S110
@@ -523,12 +523,12 @@ def _human_gate(state: RunState) -> int:
 
     # Config aus dem Zielprojekt lesen
     require = True
-    for cfg_name in (f"/opt/werkstatt/projects/{pn}.yaml",):
-        cfg_path = Path(cfg_name)
-        if cfg_path.exists():
-            try:
-                import yaml
-                with cfg_path.open() as fh:
+    from werkstatt.paths import project_config as _project_config
+    cfg_path = _project_config(pn)
+    if cfg_path.exists():
+        try:
+            import yaml
+            with cfg_path.open() as fh:
                     cfg = yaml.safe_load(fh) or {}
                 require = bool(cfg.get("require_human_approval", True))
             except Exception:  # noqa: BLE001, S110

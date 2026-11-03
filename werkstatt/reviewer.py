@@ -149,7 +149,7 @@ Der User-Auftrag enthaelt oft NEGATIVE Anweisungen ("nicht X",
 
 
 def _get_git_diff(
-    project_dir: str | Path = "/opt/werkstatt",
+    project_dir: str | Path | None = None,
     task_files: list[str] | None = None,
 ) -> str:
     """Holt den aktuellen Git-Diff im Zielprojekt.
@@ -536,7 +536,8 @@ def run_reviewer(state: RunState) -> bool:
         audit("reviewer_kein_key", {}, pd, pn)
         return False
 
-    pd = getattr(state, "project_dir", None) or Path("/opt/werkstatt")
+    from werkstatt.paths import werkstatt_home as _wh
+    pd = getattr(state, "project_dir", None) or _wh()
     # K4: task_files aus aktuelle_task — Reviewer sieht nur
     # den Diff der aktuellen Task, nicht kumulativ.
     _akt_task_early = getattr(state, "aktuelle_task", None)

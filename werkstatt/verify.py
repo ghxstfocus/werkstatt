@@ -604,8 +604,10 @@ def _get_baseline_error_details(
             return "\n".join(str(e) for e in _errors)[:4000]
     try:
         res = subprocess.run(
-            ["python3", "/opt/werkstatt/tools/quality_gate.py", "--json"],
-            cwd="/opt/werkstatt",
+            ["python3",
+             str(__import__("werkstatt.paths", fromlist=["tools_dir"]).tools_dir() / "quality_gate.py"),
+             "--json"],
+            cwd=str(__import__("werkstatt.paths", fromlist=["werkstatt_home"]).werkstatt_home()),
             capture_output=True, text=True, timeout=300, check=False
         )
         return res.stdout[:4000]

@@ -15,7 +15,8 @@ def _get_git_diff_for_hook() -> str:
     try:
         res = subprocess.run(
             ["git", "diff", "HEAD", "--", ".", ":!PROGRESS.md"],
-            cwd="/opt/werkstatt", capture_output=True, text=True,
+            cwd=str(__import__("werkstatt.paths", fromlist=["werkstatt_home"]).werkstatt_home()),
+            capture_output=True, text=True,
             timeout=30, check=False,
         )
         return res.stdout[:10000]

@@ -12,14 +12,15 @@ from pathlib import Path
 def _call_hook(hook_name: str, payload: dict) -> dict:
     """Ruft einen Hook auf und gibt das JSON-Ergebnis zurueck."""
     import json as _json
-    hook_path = Path(f"/opt/werkstatt/hooks/{hook_name}")
+    from werkstatt.paths import werkstatt_home as _wh
+    hook_path = _wh() / "hooks" / hook_name
     if not hook_path.exists():
         return {"allow": True, "reason": "Hook nicht gefunden (fail-open)"}
     try:
         res = subprocess.run(
             ["python3", str(hook_path)],
             input=_json.dumps(payload),
-            cwd="/opt/werkstatt",
+            cwd=str(__import__("werkstatt.paths", fromlist=["werkstatt_home"]).werkstatt_home()),
             capture_output=True, text=True, timeout=30, check=False,
         )
         if res.returncode != 0:
