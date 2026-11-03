@@ -290,7 +290,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   (via `audit("verify_stage_ohne_hart_flag", {...})`), klassifiziert dann
   per Prefix-Fallback. (c) Neue Tests: 2x (hart=true ist hart, hart=false
   ist weich, fehlend = warnung + prefix-fallback).
-- **Tests:** `pytest tests/test_verify.py -v`
+- **Tests:** `pytest tests/test_verify_mypy_hart.py -v`
 - **Blockiert von:** -
 
 ### OP-096: Phase 33.3 — gates.py nach control/ migrieren

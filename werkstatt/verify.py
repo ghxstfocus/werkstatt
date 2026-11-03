@@ -535,8 +535,7 @@ def _stage_ist_hart(stage_id) -> bool:
         _sid = (stage_id or "").lower()
     if _flag is True:
         return True
-    if _flag is False:
-        return False
+    # hart=false entschaerft NICHT (Docstring): Prefix-Klassifikation gilt.
     for _p in _HARTE_STAGE_PREFIXES:
         if _sid.startswith(_p):
             return True
