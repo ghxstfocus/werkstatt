@@ -281,3 +281,23 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - **Akzeptanzkriterien:** Neue Stage `control_drift` in verify.json.
   Fail blockiert Commit.
 - **Blockiert von:** -
+
+### OP-101: Loop-Status-Inkonsistenz bei human_review-Tasks
+
+- **Status:** open
+- **Typ:** ux-bugfix
+- **Betroffen:** `werkstatt/pipeline_phases.py` (`_phase_tasks_loop`),
+  `werkstatt/task_runner.py` (`_task_ende`)
+- **Problem:** Wenn ein Task `human_review` ist (z.B. `spec_widerspruch_vermutet`)
+  und der User am Human-Gate `j` drückt (approve + commit), werden die
+  Änderungen committet — aber der Loop zählt den Task weiterhin als
+  `failed`. Beim OP-088-Lauf 2026-11-03 19:23: Commit `4b6058f` enthält
+  alle 3 Dateien (`explorer.py`, `audit.py`, `test_loop_explorer.py`),
+  aber der Loop meldet `1/3 Tasks · 2 failed` und `✗ LOOP FEHLGESCHLAGEN`.
+- **Akzeptanzkriterien:** (a) Wenn User am Human-Gate `j` drückt, alle
+  offenen `human_review`-Tasks auf `ok` setzen (nicht `failed`).
+  (b) `LOOP ERFOLGREICH` wenn Commit durch, auch wenn Tasks als
+  `human_review` markiert waren. (c) Test: `_phase_tasks_loop` mit
+  2 human_review-Tasks, Gate liefert `j` → `tasks_ok == total`.
+- **Tests:** `tests/test_pipeline_phases.py` (neu).
+- **Blockiert von:** -
