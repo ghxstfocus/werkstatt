@@ -152,10 +152,22 @@
       if (!verbunden) {
         _verbinde();
       }
+      // Bei Wieder-Öffnen: fit + resize + focus garantieren.
+      // term existiert dann schon, aber fit()/resize muessen erneut
+      // laufen weil das Element vorher hidden war (0x0 Layout).
       setTimeout(function () {
-        if (fitAddon) { try { fitAddon.fit(); } catch (e) {} }
+        if (fitAddon) {
+          try { fitAddon.fit(); } catch (e) { console.warn("[shell] fit:", e); }
+        }
         _sende_resize();
-        if (term) { try { term.focus(); } catch (e) {} }
+        if (term) {
+          try { term.focus(); } catch (e) { console.warn("[shell] focus:", e); }
+        }
+        // Doppel-sicher: nochmal fit nach Browser-Reflow
+        setTimeout(function () {
+          if (fitAddon) { try { fitAddon.fit(); } catch (e) {} }
+          _sende_resize();
+        }, 200);
       }, 100);
     } else {
       elXterm.hidden = true;
