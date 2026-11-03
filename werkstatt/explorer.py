@@ -65,7 +65,6 @@ def _extract_dateien(stdout: str) -> list[str]:
     return dateien
 
 
-
 def _verwandte_dateien(project_dir: Path, dateien: list[str]) -> list[str]:
     """M-396-Fix: Findet verwandte Dateien zu explizit genannten.
 
@@ -210,7 +209,6 @@ def _messen(frage: str, project_dir: Path) -> dict[str, Any]:
                 + "\n".join(f"  - {f}" for f in _aufgabe_pfade)
             ),
         }
-
 
 
     return results
@@ -398,6 +396,23 @@ def _migrations_stand(project_dir: Path) -> dict:
     }
 
 
+def _emittiere_explorer_result(
+    project_dir: Path,
+    project_name: str,
+    findings: str,
+    key_files: list[dict],
+) -> None:
+    """Emittiert genau ein explorer_result-Audit-Event."""
+    audit("explorer_result", {
+        "findings_len": len(findings or ""),
+        "key_files": [
+            k.get("file", "")
+            for k in (key_files or [])
+            if isinstance(k, dict)
+        ],
+    }, project_dir, project_name)
+
+
 def run_explorer(state: RunState, frage: str) -> dict:
     pd = state.project_dir
     pn = state.project_name
@@ -482,6 +497,7 @@ def run_explorer(state: RunState, frage: str) -> dict:
             "n_key_files": len(key_files),
             "findings_len": len(findings),
         }, pd, pn)
+        _emittiere_explorer_result(pd, pn, findings, key_files)
         return {
             "findings": findings,
             "key_files": key_files,
@@ -523,10 +539,11 @@ def run_explorer(state: RunState, frage: str) -> dict:
         audit("explorer_json_fehler", {"raw": raw[:200]}, pd, pn)
         return {"findings": "", "key_files": [], "next_reads": []}
 
-    audit("explorer_result", {
-        "findings_len": len(result.get("findings", "")),
-        "key_files": len(result.get("key_files", [])),
-    }, pd, pn)
+    _emittiere_explorer_result(
+        pd, pn,
+        result.get("findings", ""),
+        result.get("key_files", []),
+    )
     try:
         state.explorer_findings = {
             "git_dirty": bool(
@@ -544,5 +561,5 @@ def run_explorer(state: RunState, frage: str) -> dict:
             ),
         }
     except Exception:  # noqa: BLE001
-        pass
+        audit("explorer_findings_fehler", {}, pd, pn)
     return result

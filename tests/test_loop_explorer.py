@@ -19,26 +19,27 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
-
 
 from werkstatt import explorer
 from werkstatt.state import LLMReply, RunState
-
 
 # =====================================================================
 # Fixtures
 # =====================================================================
 
-def _state(tmp_path: Path, **overrides) -> RunState:
-    kw = dict(
-        block_id="t", aufgabe="aufgabe", start_ts="2026-10-30T00:00:00Z",
-        docs={}, agents={}, always={}, optional={}, file_whitelist=[],
-        api_key="sk-test", budget={}, agent_docs={},
-        project_dir=tmp_path, project_name="testproj",
-    )
+def _state(tmp_path: Path, **overrides: object) -> RunState:
+    kw: dict[str, Any] = {
+        "block_id": "t", "aufgabe": "aufgabe",
+        "start_ts": "2026-10-30T00:00:00Z",
+        "docs": {}, "agents": {}, "always": {}, "optional": {},
+        "file_whitelist": [],
+        "api_key": "sk-test", "budget": {}, "agent_docs": {},
+        "project_dir": tmp_path, "project_name": "testproj",
+    }
     kw.update(overrides)
-    return RunState(**kw)
+    return RunState(**kw)  # type: ignore[arg-type]
 
 
 def _audit_events(tmp_path: Path) -> list[dict]:
@@ -253,6 +254,37 @@ def test_explorer_result_audit(tmp_path):
         out = explorer.run_explorer(s, "frage")
     assert isinstance(out, dict)
     assert len(_kind(tmp_path, "explorer_result")) == 1
+
+
+def test_explorer_result_audit_bei_messungen(tmp_path, monkeypatch):
+    """Mess-Zweig: explorer_result genau einmal, ask_llm nicht aufgerufen."""
+    recorder: list[tuple] = []
+
+    def fake_audit(kind, payload, project_dir, project_name):
+        recorder.append((kind, payload, project_dir, project_name))
+
+    monkeypatch.setattr(explorer, "audit", fake_audit)
+    monkeypatch.setattr(
+        explorer, "_messen",
+        lambda frage, project_dir: {"ruff": {"dateien": ["werkstatt/explorer.py"]}},
+    )
+
+    def fake_ask_llm(*args, **kwargs):
+        raise AssertionError(
+            "LLM darf im Mess-Zweig nicht aufgerufen werden")
+
+    monkeypatch.setattr(explorer, "ask_llm", fake_ask_llm)
+
+    repo_root = Path(__file__).resolve().parent.parent
+    s = _state(tmp_path, project_dir=repo_root, project_name="werkstatt")
+    explorer.run_explorer(s, "ruff fehler")
+
+    result_events = [e for e in recorder if e[0] == "explorer_result"]
+    assert len(result_events) == 1
+    payload = result_events[0][1]
+    assert isinstance(payload.get("findings_len"), int)
+    assert isinstance(payload.get("key_files"), list)
+    assert any(e[0] == "explorer_messung_findings" for e in recorder)
 
 
 # =====================================================================
