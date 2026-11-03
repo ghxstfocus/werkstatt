@@ -158,6 +158,58 @@ def _verify_fehler_wiederholt_sich(errors: list) -> bool:
     return _sigs[0] == _sigs[1]
 
 
+def _test_fehler_signatur(state) -> str | None:
+    """Signatur der pytest-Fehler aus state.last_verify_errors."""
+    _errs = getattr(state, "last_verify_errors", None) or []
+    _sigs: list[str] = []
+    for _e in _errs:
+        try:
+            if isinstance(_e, dict):
+                _stage = _e.get("stage_id") or ""
+                if not (isinstance(_stage, str) and (
+                        _stage == "pytest_changed" or "pytest" in _stage)):
+                    continue
+                _text = _e.get("text") or ""
+                _datei = _e.get("datei") or ""
+            elif isinstance(_e, str):
+                if "pytest" not in _e:
+                    continue
+                _text = _e
+                _datei = ""
+            else:
+                continue
+            if not isinstance(_text, str):
+                continue
+            _test_name = ""
+            _assertion = ""
+            _rest = _text
+            if "::" in _text:
+                _vor, _rest = _text.split("::", 1)
+                if not _datei:
+                    _datei = _vor.strip()
+                _cut = len(_rest)
+                for _sep in (" ", " - "):
+                    _i = _rest.find(_sep)
+                    if 0 <= _i < _cut:
+                        _cut = _i
+                _test_name = _rest[:_cut].strip()
+            if " - " in _text:
+                _assertion = _text.split(" - ", 1)[1].strip()
+            else:
+                for _line in _text.splitlines():
+                    if _line.strip():
+                        _assertion = _line.strip()
+                        break
+            _sigs.append(
+                f"{_datei or ''}::{_test_name or ''}::{_assertion or ''}"
+            )
+        except (KeyError, TypeError, AttributeError):
+            continue
+    if not _sigs:
+        return None
+    return "|".join(sorted(_sigs))
+
+
 def _bug_text_deutet_spec_widerspruch(bugs: list) -> bool:
     """OP-059c: Erkennt Spec-Widerspruch-Muster in Reviewer-Bug-Texten.
 
@@ -229,6 +281,8 @@ def _reflection_loop(
     from werkstatt.builder import run_builder
 
     _ruff_vorher: int | None = None
+    _hash_vorher: str | None = None
+    _test_sig_vorher: str | None = None
     _stagnation = 0
     # K39a: merken, ob wir wegen Reviewer-Reject gestartet sind.
     _had_error_context = bool(error_context)
@@ -277,6 +331,15 @@ def _reflection_loop(
         _hat_gleiche_bugs = bool(
             _bug_sigs_vorher and _bug_sigs_jetzt == _bug_sigs_vorher
         )
+        _hash_jetzt = _diff_hash_for_state(state)
+        _test_sig = _test_fehler_signatur(state)
+        if (_hash_vorher is not None and _hash_vorher == _hash_jetzt
+                and _test_sig_vorher is not None
+                and _test_sig_vorher == _test_sig):
+            audit("reflection_no_progress",
+                  {"runde": runde, "hash": _hash_jetzt,
+                   "test_sig": _test_sig}, pd, pn)
+            return False
         _stagnation_grund = None
         if (_ruff_vorher is not None
                 and _ruff_jetzt >= _ruff_vorher and _ruff_jetzt > 0):
@@ -374,7 +437,8 @@ def _reflection_loop(
         # OP-059: Diff-Hash VOR Builder. Vergleich nachher
         # zeigt, ob der Patch wirksam war oder idempotent
         # (Datei bereits im Zielzustand, Hash unveraendert).
-        _hash_vorher = _diff_hash_for_state(state)
+        _hash_vorher = _hash_jetzt
+        _test_sig_vorher = _test_sig
         state.reflection_phase = True  # type: ignore[attr-defined]
         try:
             _builder_ok = run_builder(state)
@@ -485,8 +549,7 @@ def _reflection_loop(
                            "diff_hash": _hash_nachher,
                            "applied_vorher": _applied_vorher},
                           pd, pn)
-                    state.reviewer_stagnation_false_positive = (
-                        True)  # type: ignore[attr-defined]
+                    state.reviewer_stagnation_false_positive = True  # type: ignore[attr-defined]
                     return True
             _stagnation += 1
             audit("loop_reflection_stagnation_runde",
@@ -701,7 +764,6 @@ def _phase_end_reflection(state: RunState) -> bool:
 
     audit("loop_phase_reflection_erschoepft", {"runden": 2}, pd, pn)
     return False
-
 
 
 def _ruff_fix_changed(*args, **kwargs):
