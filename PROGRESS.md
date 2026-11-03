@@ -1431,3 +1431,27 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - **Tests:** 5 Szenarien in tests/test_web_integration.py.
 - **Anlass für OP-081:** Diese drei Fehlerklassen sind deterministisch
   prüfbar. Siehe Commit 355ba51 (werkstatt/diagnose.py).
+
+## 2026-11-03T12:33:23+00:00 -- OP-083: Dashboard Live-Daten (done)
+- **Status:** done
+- **Commits:** 67eebf7, a16dcf2, 55964ca, afcfd55, 696e22c, 9384aac, da0258b, 5d8c149, 997fb07, 2f53975, 33e3f01
+- **Info:** OP-083 hatte drei Punkte (a) WS-Terminal Datei-Tailing, (b) Chat-Fetch statt Demo, (c) tabs.js Panel-Bindung. Alle drei umgesetzt, plus erweitert:
+  - PTY-Terminal (xterm.js + /ws/shell + bash -l -i) statt nur Render-Mitschnitt. Im Browser verifiziert: ls, cd, Ctrl+C.
+  - Tee-Log: loop_renderer._emit_raw + log_line schreiben ANSI-frei in logs/loop-render-YYYY-MM-DD.log, terminal_proxy streamt Render-Zeilen.
+  - Route-Kollision /ws/shell vs /ws/{tab_id} gefixt (shell.router vor ws.router).
+  - Shell-Toggle-Bug nach Schliessen-und-Oeffnen (init_xterm idempotent).
+  - Paste im xterm via Ctrl+V/Rechtsklick/Shift+Insert (Browser Ctrl+Shift+V funktioniert ohnehin).
+- **Tests:** tests/test_shell.py (2 smoke + 3 slow), test_web_integration.py, test_web_live.py.
+- **Baseline danach:** pytest 1193 (not slow), ruff 186, mypy 27.
+
+## 2026-11-03T12:33:23+00:00 -- Manuelle Session 2026-11-02/03 (Auth, UI, Diagnose, Skills, AST)
+- **Status:** done
+- **Info:** Ad-hoc-Arbeit ohne eigene OPs. Konsolidierter Nachtrag mit Commit-Verweis.
+- **Verweis:** git log --since=2026-11-02 --until=2026-11-04
+- **Auth** (7ee750a, 9cf8a48): werkstatt/web/auth.py — Single-Token, Cookie httponly+samesite=strict+secure-wenn-HTTPS, WS-Handshake-Check is_authed_ws, Login-Page, /api/auth/login+logout, __main__ warnt bei 0.0.0.0 ohne HTTPS. tests/test_auth.py 13 Szenarien.
+- **Diagnose-Fallback** (c8b0aec): werkstatt/diagnose.py _deterministische_diagnose scannt alle .py wenn state.patches leer, _finde_import_quelle unterscheidet Modul vs. Symbol. Hook in reflection._reflection_loop vor run_builder. _module_exists in hooks/pre_tool_use erkennt package-relative Imports.
+- **Skills-Matrix** (104008b): planner, reflection, architect laden jetzt rollen-spezifische Skills (waren vorher leer). builder und reviewer waren schon vollstaendig. Neue state-Felder: planner_skills_block, reflection_skill_body, architect_skills_block.
+- **AST-Verkabelung** (792b31b): run_architect befuellt state.api_index_cache via scout._baue_api_index. _planner_system baut DATEI-STRUKTUR (AST)-Block fuer key_files. _build_patches_fuer_datei haengt ZIELDATEI-STRUKTUR (AST) an.
+- **quality_gate re-baseline** (42a25e8, 355ba51): BASELINE nachgezogen, mypy-Scope werkstatt/ statt ., ast/katalog-Skip wenn Datei fehlt, pytest -m 'not slow' fuer Gate-Runs.
+- **DeepSeek-Look** (f30a13d): static/layout.css komplett neu (~380 Z., CSS-Variablen), chat.css Bubbles, audit.js data-kind fuer Kategorie-Farben.
+- **Tee-Log** (2f53975, 33e3f01): loop_renderer._emit_raw + log_line schreiben ANSI-frei in logs/loop-render-DATUM.log. terminal_proxy streamt Render-Zeilen. Browser zeigt 1:1 SSH-Output.
