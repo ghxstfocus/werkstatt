@@ -77,36 +77,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Blockiert von:** —
 
 
-### OP-047: Doku-Filter `doku_post_check_reduziert` killt Multi-File-Tasks
-
-- **Status:** open
-- **Betroffen:** `werkstatt/planner.py`, Funktion `_doku_post_check`
-  (Zeile 1015–1100; Log-Tag: `planner_doku_post_check_reduziert` in Zeile 1097)
-- **Problem:** Bei Doku-Ops über mehrere `.md`-Dateien (z.B. OP-046 mit
-  `docs/PLANNER-KONZEPT.md`, `docs/ROLLEN-AUDIT.md`, `docs/MERKPOSTEN.md`)
-  reduziert `_doku_post_check` den Plan auf die Tasks EINER Datei. Log-Beleg
-  aus OP-046: `planner_doku_post_check_reduziert original_task_count=3
-  md_task_count=3 behalten=["docs/PLANNER-KONZEPT.md"]` — die beiden Tasks
-  für `ROLLEN-AUDIT.md` und `MERKPOSTEN.md` fallen weg, der Loop committet
-  nur 1 Datei. **Wichtig:** die Merge-Logik in `_reduce_tasks` (Zeile ~734,
-  `if same_file and same_act`) ist NICHT schuld, sie greift korrekt nur bei
-  identischer Datei. Der Bug sitzt ausschließlich im `_doku_post_check`-Filter.
-- **Fix:** `_doku_post_check` darf Tasks nur reduzieren, wenn `same_file=True`
-  ist; unterschiedliche `.md`-Dateien müssen stehen bleiben. Wenn der Filter
-  tatsächlich nur pro Datei eine Task-Auswahl treffen soll (z.B. um doppelte
-  `docs_offen`-Tasks zu einer Datei zu kollabieren), dann NUR bei identischer
-  Datei reduzieren, nie datei-übergreifend.
-- **Test:** Datei `tests/test_planner.py` NEU anlegen (existiert nicht), Test
-  `test_doku_post_check_multi_file` mit 3 Tasks auf 3 verschiedene `.md`-
-  Dateien → erwartet: 3 Tasks bleiben stehen. Plus `test_doku_post_check_
-  same_file_reduziert` mit 3 Tasks auf DIESELBE `.md`-Datei → erwartet:
-  Reduktion auf 1 Task (Regressionsschutz für das eigentliche Ziel des Filters).
-- **Akzeptanz:** Bei einem Doku-OP mit N verschiedenen Dateien liefert der
-  Planner N Tasks, nicht 1. Verifikation: erneuter Loop-Lauf mit der OP-046-
-  Aufgabenbeschreibung liefert `PLAN — 0 Phasen, 3 Tasks` in der PLAN-Anzeige.
-- **Blockiert von:** —
-
-
 
 ### OP-088: `explorer_result`-Event wird nicht mehr geschrieben
 
@@ -131,6 +101,60 @@ Ursprünglicher Notiz-Text (2026-11-02):
 - **Akzeptanzkriterien:** (a) Ursache identifiziert. (b) `explorer_result` wieder aktiv ODER durch `explorer_messung_findings` semantisch ersetzt. (c) Ein Beispiel-Log zeigt `explorer_result` wieder.
 - **Tests:** Kein Test — Verifikation ueber Log-Grep nach einem Loop-Lauf.
 - **Blockiert von:** —
+
+### OP-089: Reflection-Loop ohne Fortschritt (5x gleicher Fehler)
+
+- **Status:** open
+- **Betroffen:** `werkstatt/pipeline_phases.py` (Reflection-Runden-Schleife), `werkstatt/reflection.py`
+- **Problem:** Bei `pytest_changed`-Fehler startet der Loop 5 Reflection-Runden.
+  Wenn der Builder in jeder Runde denselben Patch-Versuch macht (Diff-Hash
+  identisch) und derselbe Test-Fehler bleibt, verbrennt der Loop 5 Runden
+  ohne Fortschritt. Live-Beleg 2026-11-03 16:43: t2-Neue-Test, 5 Runden à 3s,
+  dann LOOP FEHLGESCHLAGEN. Ursache war ein falscher Test (Trigger fehlte),
+  aber der Loop kann Test-Bug nicht von Code-Bug unterscheiden.
+- **Akzeptanzkriterien:** (a) Nach jeder Reflection-Runde `patches_hash`
+  berechnen. (b) Wenn `hash_runde_n == hash_runde_n-1` UND derselbe Test-
+  Fehler (gleicher `test_id` + `assertion_message`), dann Abbruch mit
+  `reflection_no_progress` (neues Audit-Event). (c) Max 2 Runden statt 5.
+- **Tests:** `tests/test_reflection.py` — Mock-Builder liefert 2x denselben
+  Patch, Test schlägt gleich fehl → Runde 2 bricht ab mit Audit-Event.
+- **Blockiert von:** —
+
+### OP-090: Human-Gate-Skip bei erschöpfter Reflection
+
+- **Status:** open
+- **Betroffen:** `werkstatt/pipeline_phases.py` (`_phase_tasks_loop` oder Phase-End)
+- **Problem:** Bei `LOOP FEHLGESCHLAGEN` nach 5 Reflection-Runden wird der
+  Human-Gate komplett übersprungen. Der User sieht nur den Fail, kein
+  `Approve? [j/n/e]`, obwohl Patches auf der Platte liegen.
+- **Akzeptanzkriterien:** (a) Auch bei `reflection_erschoepft` erreicht
+  der Loop den Human-Gate, mit Hinweis „Reflection gab auf nach N Runden".
+  (b) User-Entscheidung: `j` = Patches behalten (commit), `n` = Patches
+  verwerfen (git restore), `e` = manuell editieren. (c) Neuer Modus:
+  `git restore` bei `n` auf die Original-Files vor Task-Start.
+- **Tests:** `tests/test_pipeline_phases.py` — Mock-Reflection liefert
+  Fail nach 3 Runden, Human-Gate wird erreicht, `n` revertiert.
+- **Blockiert von:** —
+
+### OP-091: Audit-Log wird nicht geschrieben
+
+- **Status:** open
+- **Betroffen:** `werkstatt/audit.py` (`AUDIT_FILE_NAME = "agent-pipeline.jsonl"`,
+  Zeile 29; `datei = audit_dir / f"agent-pipeline-{tag}.jsonl"`, Zeile 94)
+- **Problem:** `audit()`-Events landen nicht im erwarteten Log. Nach einem
+  Loop-Lauf 2026-11-03 16:43: kein `agent-pipeline-*.jsonl` in `logs/` oder
+  `.werkstatt/`. Nur `logs/loop-render-2026-11-03.log` (Renderer-Tee).
+  Der `Audit Live` im Dashboard hängt an `werkstatt/web/audit_panel.py`,
+  das `home / AUDIT_UNTERVERZEICHNIS / f"{project_name}.jsonl"` liest —
+  dort ist auch nichts.
+- **Akzeptanzkriterien:** (a) `AUDIT_UNTERVERZEICHNIS`-Konstante identifizieren.
+  (b) Nach einem Loop-Lauf existiert eine Datei, die `audit()`-Events enthält.
+  (c) `Audit Live` im Dashboard zeigt diese Events (WebSocket `/api/projects/
+  {name}/audit/stream` liefert sie).
+- **Tests:** `tests/test_audit.py` — `audit("test_event", {"k": "v"})` schreibt,
+  dann Datei lesen und Event finden.
+- **Blockiert von:** —
+
 
 ## Erledigt (Auto-Log)
 
@@ -159,6 +183,7 @@ Ursprünglicher Notiz-Text (2026-11-02):
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-03 | OP-047 | done | `_doku_post_check` gruppiert pro Datei (bb719b1)
 - 2026-11-02 | OP-035 | Doku-Task-Datum wird halluziniert — deterministisch geloest (BUILDER_SYSTEM + {date}-Ersetzung + _korrigiere_doku_datum Sicherheitsnetz)
 - 2026-11-02 | OP-068 | Heartbeat-Stage-Name (Builder/Reviewer) — Commit 2c099da
 - 2026-11-02 | OP-069 | Delete-Zone-Sektion anlegen — Commit 6fa1d74 + Fix ebe8049
