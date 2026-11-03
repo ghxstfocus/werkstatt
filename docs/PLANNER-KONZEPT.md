@@ -43,7 +43,8 @@ Stufe 2 — Phasen-Planer:
 
 Bestandteil von Block P1:
   - agents/planner.md.
-  - HARD_RULES_PLANNER (in werkstatt/prompts.py).
+  - HARD_RULES_PLANNER (in werkstatt/hard_rules.py,
+    importiert von werkstatt/agent.py).
   - Eintrag in state.agents.
   - Eintrag in agent_docs (welche Doku der Planner sieht).
   - Modell: deepseek-chat, Temp 0.0 (F1).
@@ -86,7 +87,8 @@ Plan.
 4. STUFE 1 — PLANNER ALS PIPELINE-SCHRITT
 ================================================================
 
-  python3 -m werkstatt.loop --project security-ai --planner "<roher Text>"
+  python3 -m werkstatt.loop --project security-ai --aufgabe "<roher Text>"
+  heute: `--project` und `--aufgabe`
 
 Ablauf:
   1. Planner laeuft, liest planner.docs + grep.
@@ -106,7 +108,8 @@ RR-K9: Kein ASK_HUMAN in Stufe 1.
 ================================================================
 
 Ablauf:
-  1. python3 -m werkstatt.loop --project security-ai --phase "<Text>"
+  1. python3 -m werkstatt.loop --project security-ai --aufgabe "<Text>"
+     heute: `--project` und `--aufgabe`
   2. Planner zerlegt in Unterbloecke.
   3. Pipeline zeigt Phasenplan, Mensch bestaetigt.
   4. Pro Unterblock:
@@ -284,7 +287,10 @@ Struktur phase_unterbloecke:
   werkstatt/loop.py (P1):
     + _planner_lauf (Stufe 1)
     + main() --planner (Stufe 1)
+
+  werkstatt/hard_rules.py (P1):
     + HARD_RULES_PLANNER
+    (importiert von werkstatt/agent.py)
 
   werkstatt/loop.py (P2):
     + run_phase, _phase_gesamt_review, _phase_rollback

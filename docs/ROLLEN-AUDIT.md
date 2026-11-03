@@ -17,7 +17,7 @@ Anlass: Planner liefert P17-konforme Listen, aber keine Aufträge. Builder und R
 | chaos.md | 10 | 244 | Chaos (schmal) |
 | coverage.md | 10 | 246 | Coverage (schmal) |
 
-### HARD_RULES (Rollen-Modul `pipeline`)
+### HARD_RULES (Rollen-Modul `werkstatt/loop.py`)
 
 | Konstante | Zeilen | Zeichen | Zuordnung |
 |---|---|---|---|
@@ -188,7 +188,7 @@ teilweise gegen die Empfehlung gebaut.
 
 - **reviewer.md: W40 hat die Redundanz aufgelöst.**
   410 -> 56 Zeilen. Die Regeln sind jetzt in
-  HARD_RULES_REVIEWER (Rollen-Modul `pipeline`), der Roll-Body
+  HARD_RULES_REVIEWER (Rollen-Modul `werkstatt/loop.py`), der Roll-Body
   verweist nur noch.
 
 - **judge.md: neue Rolle (W28b).**

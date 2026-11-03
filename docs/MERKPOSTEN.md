@@ -63,8 +63,8 @@ Unterblock, Z. 2508-2524 Approval). Selektor:
 
 ### Prozess-Lehre — Wortwoertliche Extraktion per `git show`
 Handgeschriebene Kopie des Loop-Bodys = 25 Tests kaputt (3a-2a
-Versuch 1). Wortwoertliche Extraktion per `git show <ref>:pipeline.py`
-+ Zeilenbereich = 0 Verhaltensdelta.
+Versuch 1). Wortwoertliche Extraktion per `git show :` + Zeilenbereich
+= 0 Verhaltensdelta.
 
 ### Prozess-Lehre — Import-Sortierung per `ast`
 Neue Imports nicht "nach letztem bekannten Feld" einfuegen, sondern
@@ -79,7 +79,7 @@ statt davor.
 - `pytest` als Entry-Point (`/usr/bin/pytest`), nicht `python -m pytest`.
 - `ruff check .` — Match auf `Found [0-9]+ errors` (mit `grep -oE`),
   nicht auf die letzte Zeile (`[*] fixable …`).
-- `mypy pipeline.py werkstatt/` ist die Baseline, nicht `mypy .`
+- `mypy werkstatt/` ist die Baseline, nicht `mypy .`
   (tests/ zaehlt 40 Fehler).
 - AST- und Katalog-Test: `pytest tests/test_audit_kinds.py -q` (6 passed)
   + `_KATALOG_SOLL` = 167. "AST+Katalog 14" ist Summen-Konvention,
@@ -89,8 +89,7 @@ statt davor.
 - Nach jedem fertigen Block: Doku-Nachzug (Bau-Handoff, ROADMAP,
   `PROGRESS.md`, `docs/STATUS.md`) + Push. Sonst sammelt sich Rueckstand.
 - Commit-Body-VOR-Werte brauchen Vor-Comm-SHA (M-57).
-- docs/archiv/session-bilanz.md nachziehen, wenn neue Commit-Body-VOR-Werte
-  auftauchen.
+- `PROGRESS.md` nachziehen, wenn neue Commit-Body-VOR-Werte auftauchen.
 
 ### Merkposten-Hygiene
 - Merkposten sofort eintragen, nicht erst am Session-Ende
