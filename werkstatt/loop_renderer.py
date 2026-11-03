@@ -61,11 +61,20 @@ def set_tee_stream(stream: TextIO | None) -> None:
 
 
 def _tee(text: str) -> None:
-    """Schreibt text (ANSI-frei) in den Tee-Stream, falls gesetzt."""
+    """Schreibt text (ANSI-frei, GH-Actions-Prefixe entfernt) in Tee-Stream."""
     if _TEE_STREAM is None:
         return
     try:
         clean = _ANSI_RE.sub("", text)
+        # Bugfix 2026-11-03: ::log::/::group::/::endgroup:: sind
+        # GH-Actions-Syntax, nicht user-facing. Aus dem Logfile
+        # entfernen, sonst liest es sich wie Maschinencode.
+        if clean.startswith("::log::"):
+            clean = clean[len("::log::"):].lstrip()
+        elif clean.startswith("::group::") or clean.startswith("::endgroup::"):
+            return
+        if not clean:
+            return
         with _TEE_LOCK:
             _TEE_STREAM.write(clean + "\n")
             _TEE_STREAM.flush()
@@ -126,11 +135,15 @@ def _dim(t: str) -> str: return _c("2", t)
 
 
 def _emit_raw(text: str) -> None:
-    """Direkter stdout-Schreibpfad. CI: mit Zeitstempel. Sonst: plain."""
+    """Direkter stdout-Schreibpfad. CI: mit Zeitstempel. Sonst: plain.
+
+    Bugfix 2026-11-03: vorher wurde _tee doppelt gerufen (einmal
+    mit Timestamp, einmal clean) -> jede Zeile 2x im Log.
+    Jetzt: stdout bekommt Timestamp (CI), _tee bekommt nur clean.
+    """
     if IS_CI:
         ts = datetime.now().strftime("%H:%M:%S")
         print(f"[{ts}] {text}", flush=True)
-        _tee(f'[{ts}] {text}')
     else:
         print(text, flush=True)
     _tee(text)
@@ -359,13 +372,17 @@ def heartbeat(label: str, elapsed_s: int) -> None:
         spinner_update(label, f"{elapsed_s}s")
         return
     _last = _LAST_HEARTBEAT.get(label, -999)
-    if elapsed_s - _last < 5:
-        return
-    _LAST_HEARTBEAT[label] = elapsed_s
+    # Bugfix 2026-11-03: In CI erst ab 30s und dann alle 15s
+    # (vorher 5s -> Log-Spam bei pytest_changed). In non-CI
+    # 5s-Throttle. _publish nur wenn tatsaechlich ausgegeben.
     if IS_CI:
-        _emit_raw(f"[{label}] laeuft ({elapsed_s}s)")
+        if elapsed_s < 30 or elapsed_s - _last < 15:
+            return
     else:
-        log_line(f"[{label}] laeuft ({elapsed_s}s)")
+        if elapsed_s - _last < 5:
+            return
+    _LAST_HEARTBEAT[label] = elapsed_s
+    _emit(f"  · {label} ({elapsed_s}s)")
     _publish("heartbeat", label, label=label, elapsed_s=elapsed_s)
 
 
@@ -482,6 +499,15 @@ def panel_plan(phasen, tasks, tests, akzeptanzkriterien) -> None:
         _render_plan_plain(phasen, tasks, tests, akzeptanzkriterien)
 
 
+def _emit_wrapped(text: str, width: int = 88, indent: str = "       ") -> None:
+    """Bugfix 2026-11-03: Text auf width umbrechen, jede Zeile indent."""
+    import textwrap as _tw
+    if not text:
+        return
+    for line in _tw.wrap(text, width=width):
+        _emit(f"{indent}{line}")
+
+
 def _render_plan_plain(phasen, tasks, tests, akzeptanzkriterien) -> None:
     _emit("")
     _emit("=" * 62)
@@ -496,7 +522,7 @@ def _render_plan_plain(phasen, tasks, tests, akzeptanzkriterien) -> None:
                 _emit(f"       Zieldatei: {_files}")
                 _desc = (_t.get("description") or "").strip().replace("\n", " ")
                 if _desc:
-                    _emit(f"       {_desc[:150]}")
+                    _emit_wrapped(_desc)
         _emit("")
     # M-410b: Tasks ohne phase_id (flacher Plan, z.B. Architect)
     _ohne_phase = [
@@ -511,7 +537,7 @@ def _render_plan_plain(phasen, tasks, tests, akzeptanzkriterien) -> None:
             _emit(f"       Zieldatei: {_files}")
             _desc = (_t.get("description") or "").strip().replace("\n", " ")
             if _desc:
-                _emit(f"       {_desc[:150]}")
+                _emit_wrapped(_desc)
 
     if tests:
         _emit(f"Tests ({len(tests)}):")
@@ -539,7 +565,7 @@ def _render_plan_rich(phasen, tasks, tests, akzeptanzkriterien) -> None:
                 body.append(f"       [dim]→ {_files}[/]")
                 _desc = (_t.get("description") or "").strip().replace("\n", " ")
                 if _desc:
-                    body.append(f"       [dim]{_desc[:150]}[/]")
+                    body.append(f"       [dim]{_desc[:800]}[/]")
         body.append("")
     # M-410c: Tasks ohne phase_id (flacher Plan, z.B. Architect)
     _ohne_phase = [
@@ -560,7 +586,7 @@ def _render_plan_rich(phasen, tasks, tests, akzeptanzkriterien) -> None:
             body.append(f"       [dim]→ {_files}[/]")
             _desc = (_t.get("description") or "").strip().replace("\n", " ")
             if _desc:
-                body.append(f"       [dim]{_desc[:150]}[/]")
+                body.append(f"       [dim]{_desc[:800]}[/]")
 
     if tests:
         body.append(f"[bold]Tests ({len(tests)}):[/]")

@@ -374,9 +374,11 @@ def main(argv: list[str] | None = None) -> int:
         from datetime import UTC as _TEE_UTC, datetime as _TEE_DT
         from werkstatt import loop_renderer as _TEE_R
         from pathlib import Path as _TEE_P
+        _tee_now = _TEE_DT.now(_TEE_UTC)
         _tee_p = _TEE_P("logs") / (
             "loop-render-"
-            + _TEE_DT.now(_TEE_UTC).date().isoformat()
+            + _tee_now.date().isoformat()
+            + "-" + _tee_now.strftime("%H%M%S")
             + ".log"
         )
         _tee_p.parent.mkdir(parents=True, exist_ok=True)
