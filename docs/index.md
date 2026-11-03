@@ -15,7 +15,6 @@ Einstiegspunkt. Lese-Reihenfolge wie in `AGENTS.md`.
 
 ## Konzept-Dokumente
 
-- [`WORKFLOW.md`](WORKFLOW.md) — Werkstatt-Workflow
 - [`MERKPOSTEN.md`](MERKPOSTEN.md) — M-Nummern
 - [`IDEEN.md`](IDEEN.md) — Ideen 2101-2106
 - [`PLANNER-KONZEPT.md`](PLANNER-KONZEPT.md) — Planner-Konzept v4

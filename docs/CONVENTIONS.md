@@ -25,7 +25,6 @@ Datei-Namen folgen einer festen Konvention.
     |   |-- STATUS.md            Offene Punkte (OP-NNN)
     |   |-- ../PROGRESS.md       Historie (append-only)
     |   |-- ROLLEN-AUDIT.md      Rollen-Stand
-    |   |-- WORKFLOW.md          Pipeline-Ablauf
     |   +-- PROTOKOLL-*.md       Sitzungs-Protokolle
     |
     |-- agents/                  Rollen-Prompts
@@ -71,7 +70,6 @@ Datei-Namen folgen einer festen Konvention.
 | ERLEDIGT.md | Abgeschlossene Bloecke | offen |
 | IDEEN.md | Wunschliste (2101-2106) | 2026-10-18 |
 | ROLLEN-AUDIT.md | Rollen-Stand | 2026-10-18 |
-| WORKFLOW.md | Pipeline-Ablauf | 2026-10-16 |
 | PROTOKOLL-*.md | Sitzungen | fortlaufend |
 
 ### agents/ — Frontmatter
@@ -121,7 +119,6 @@ Nicht committen (W34-Ignore). Enthaelt:
 | Ziel des Systems | README.md, ARCHITEKTUR.md | ROADMAP.md |
 | Rollen-Stand | docs/ROLLEN-AUDIT.md | agents/*.md |
 | Rollen-Definition | agents/*.md | README.md |
-| Pipeline-Ablauf | docs/WORKFLOW.md | README.md |
 | Ordner-Konvention | docs/CONVENTIONS.md | README.md |
 
 ## 5. Trennung Roadmap / Todo / Erledigt
@@ -209,7 +206,6 @@ Rollen-Sanierung fuer builder.md).
 - `docs/STATUS.md` — Todo, priorisiert.
 - `PROGRESS.md` — Abgeschlossene Bloecke.
 - `docs/ROLLEN-AUDIT.md` — Rollen-Stand.
-- `docs/WORKFLOW.md` — Pipeline-Ablauf.
 
 ## OP-Standard fuer loop-faehige Tasks (2026-11-02)
 

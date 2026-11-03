@@ -1472,3 +1472,17 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - **Hinweis:** LLM-First ersetzt Pattern-Fast-Path für freie
   Fragen — natürliche Sprache ('Was ist die nächste OP') geht
   jetzt durch Tool-Calling, nicht durch Regex.
+
+## 2026-11-03T13:49:30+00:00 -- OP-045: WORKFLOW.md geloescht
+- **Status:** done (statt entstauben)
+- **Begruendung:** docs/WORKFLOW.md war nicht in DOC_CONVENTIONS §2
+  als Pflichtdatei gelistet. 696 Zeilen veralteter Pipeline-Ablauf
+  (pipeline.py existiert nicht mehr). Wird nicht gepflegt seit
+  2026-10-31.
+- **Aenderungen:** docs/WORKFLOW.md git-rm. OP-045 aus STATUS
+  entfernt. Referenzen in docs/index.md (1) und docs/CONVENTIONS.md
+  (4) bereinigt. Delete-Zone-Eintrag in STATUS.md.
+- **Nicht geaendert:** docs/IDEEN.md (Wunschliste, nicht Pflicht),
+  docs/archiv/bau-handoff-archiv.md (Historie), audit/ (generiert).
+- **OP-046 bleibt offen** — betrifft andere Dateien (PLANNER-KONZEPT,
+  ROLLEN-AUDIT, MERKPOSTEN), separate Aufgabe.
