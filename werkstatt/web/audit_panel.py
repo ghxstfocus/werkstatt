@@ -24,6 +24,11 @@ __all__ = ["create_app", "router", "veroeffentliche"]
 router = APIRouter()
 
 AUDIT_UNTERVERZEICHNIS = "audit-logs"
+
+# OP-091: Modul-Kontext fuer _aktuelles_home(). Wird via set_home_kontext()
+# oder direkt durch werkstatt.web.app beim App-Start gesetzt. Bleibt None
+# bis explizit gesetzt -> Fallback auf CWD / HOME/.werkstatt.
+_home_kontext: Path | None = None
 STANDARD_LIMIT = 200
 MAX_LIMIT = 5000
 LIVE_PUFFER_MAX = 500

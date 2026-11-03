@@ -124,3 +124,35 @@ def test_history_rest_filter(tmp_path: Path) -> None:
 
         antwort = client.get("/api/projects/demo/audit", params={"limit": 0})
         assert antwort.status_code == 422
+
+
+def test_aktuelles_home_ohne_kontext(monkeypatch, tmp_path):
+    """OP-091: _aktuelles_home() crasht nicht wenn _home_kontext None ist."""
+    import werkstatt.web.audit_panel as _ap
+    monkeypatch.setattr(_ap, "_home_kontext", None)
+    monkeypatch.chdir(tmp_path)
+    result = _ap._aktuelles_home()
+    assert isinstance(result, type(tmp_path))
+
+
+def test_aktuelles_home_mit_kontext(monkeypatch, tmp_path):
+    """OP-091: _home_kontext ueberschreibt CWD."""
+    import werkstatt.web.audit_panel as _ap
+    monkeypatch.setattr(_ap, "_home_kontext", tmp_path)
+    assert _ap._aktuelles_home() == tmp_path
+
+
+def test_lese_events_findet_agent_pipeline(tmp_path):
+    """OP-091: Reader findet agent-pipeline-*.jsonl."""
+    import json
+    import werkstatt.web.audit_panel as _ap
+    audit_dir = tmp_path / "audit-logs"
+    audit_dir.mkdir()
+    datei = audit_dir / "agent-pipeline-2026-11-03.jsonl"
+    datei.write_text(
+        json.dumps({"kind": "loop_erfolg", "project": "probe"}) + "\n",
+        encoding="utf-8",
+    )
+    events = _ap._lese_events(audit_dir)
+    assert len(events) == 1
+    assert events[0]["kind"] == "loop_erfolg"
