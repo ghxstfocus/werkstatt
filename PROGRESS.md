@@ -1490,3 +1490,12 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - **Status:** phase_ende
 - **Info:** tasks_ok=0/3
 
+
+## 2026-11-03 -- OP-046 abgeschlossen: Doku-Entstaubung
+
+- **Dateien:** docs/PLANNER-KONZEPT.md, docs/ROLLEN-AUDIT.md, docs/MERKPOSTEN.md
+- **Aenderungen:** pipeline.py → werkstatt.loop (CLI), HARD_RULES_* → werkstatt/hard_rules.py,
+  ARCHITEKTUR.md → ARCHITECTURE.md, tote Archiv-Links aktualisiert.
+- **Abnahme:** `grep -c "pipeline.py\|ARCHITEKTUR.md\|OFFENE-BLOECKE.md\|ERLEDIGT.md"` = 0 pro Datei.
+- **Hinweis:** Loop-Lauf 6826cb9 hat nur t1 committet (doku-filter `same_act=True`
+  zu aggressiv, filtert Tasks ueber mehrere .md-Dateien weg); Rest manuell nachgezogen.
