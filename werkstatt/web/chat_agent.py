@@ -273,8 +273,17 @@ def _pattern_verarbeite(text: str) -> str:
     if re.search(r"\b(miss|messe?n?)\s+(status|roadmap|beides)", low):
         return _measure_status()
 
-    # Offene OPs
-    if re.search(r"(welche\s+ops?|offene\s+ops?|was ist zu tun|op.liste)", low):
+    # Offene OPs — breit: "welche", "nächste", "nächsten", "Was sind die",
+    # "offene", "offenen", "Was ist zu tun", "OP-Liste", "OP Liste"
+    if re.search(
+        r"(\bwelche[nr]?\s+(offene[nr]?\s+)?ops?"
+        r"|\boffene[nr]?\s+ops?"
+        r"|\bn[aä]chste[nr]?\s+(offene[nr]?\s+)?ops?"
+        r"|\bwas\s+(sind|ist)\s+.*\bops?"
+        r"|\bop[.\s-]?liste"
+        r"|was ist zu tun)",
+        low,
+    ):
         ops = _open_ops()
         if not ops:
             return "Keine offenen OPs in STATUS.md."

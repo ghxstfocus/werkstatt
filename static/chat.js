@@ -222,7 +222,7 @@
   }
 
   function sende() {
-    const textarea = document.querySelector(".chat-panel__textarea");
+    const textarea = document.getElementById("chat-eingabe");
     const eingabe = textarea ? textarea.value.trim() : "";
     if (!eingabe) {
       return Promise.resolve(false);
