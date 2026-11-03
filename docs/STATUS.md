@@ -155,6 +155,90 @@ Ursprünglicher Notiz-Text (2026-11-02):
   dann Datei lesen und Event finden.
 - **Blockiert von:** —
 
+### OP-092: Loop-Agenten mit explizitem Kontext-Vertrag (Sammel-OP)
+
+- **Status:** open
+- **Typ:** architektur (Sammel-OP, 5 Sub-OPs)
+- **Betroffen:** `werkstatt/context_builder.py` (neu), `werkstatt/test_agent.py` (neu),
+  `werkstatt/debugger.py` (neu), `werkstatt/pipeline_phases.py`, `werkstatt/loop.py`,
+  `docs/ARCHITECTURE.md`
+- **Problem:** Builder/Test-Agent/Debugger raten heute. OP-047: Builder schrieb
+  Test mit falschem Trigger (`nur docs/A.md` = single-target statt multi-file).
+  OP-089: Builder rief `_deterministische_diagnose` auf, die es nicht gibt.
+  Beide Fehler wären durch deterministischen Kontext verhindert worden.
+- **Kernidee:** Jeder Agent bekommt VOR seinem LLM-Aufruf einen
+  deterministisch gefüllten Kontext-Vertrag mit vier Feldern:
+  1. **Ziel** — Akzeptanzkriterien aus OP-Text (nicht aus Code)
+  2. **Ist-Zustand** — was existiert (Files, Tests, letzter Diff, vorherige Patches)
+  3. **Design-Entscheidung** — ARCHITECTURE-Auszug, MERKPOSTEN, Commit-History
+  4. **Deterministische Fakten** — `inspect.signature()` der echten API,
+     `dir()` der Module, verfügbare pytest-Marker, Import-Pfade
+
+- **Sub-OPs:**
+  - **092a** `werkstatt/context_builder.py` (neu): Funktion
+    `build_agent_context(role, task, state) -> dict` mit den 4 Feldern.
+    Deterministisch (kein LLM), alle Werte aus `inspect`, `git`, `pytest`,
+    `grep`. Max 500ms pro Aufruf.
+  - **092b** Builder-Scope: `role=builder` schreibt KEINE Tests mehr
+    (`*_test.py` aus Scope). Context-Builder liefert
+    `design.architecture_auszug` + `deterministische_fakten.signaturen`.
+  - **092c** Test-Agent (`test_agent.py`): liest Ziel aus OP + Code-Ist,
+    schreibt `tests/test_*.py`. Darf nur Code lesen, nicht selbst pytest
+    ausführen (pytest ist deterministisch danach).
+  - **092d** Debugger (`debugger.py`, siehe eigener Abschnitt unten)
+  - **092e** Reflection-Loop aus `pipeline_phases.py` raus, in `loop.py`
+    als Orchestrator. Max 2 Runden, Human-Gate bei Runde 2.
+
+- **092d Debugger — Rollenbeschreibung:**
+  - **Rolle:** Professioneller Root-Cause-Analyst, kein Test-Satisfier.
+  - **Kernprinzip:** Erst Code prüfen, dann Test. Nie Test an faulen Code anpassen.
+  - **Ablauf:**
+    1. **Code-Health (deterministisch):** ruff, mypy, py_compile, Signatur-Check.
+       Fehler → Code fixen, Runde+1. Kein LLM nötig.
+    2. **3-Wege-Check (LLM mit Kontext-Vertrag):** Spec (aus OP-Text) ←→ Code ←→ Test.
+       - Code ≠ Spec, Test = Spec → **Fix Code** (Test hatte recht)
+       - Code = Spec, Test ≠ Spec → **Human-Gate** (Test falsch, nicht still patchen)
+       - Code ≠ Spec, Test ≠ Spec → **Human-Gate** (fundamentale Misalignment)
+       - Alle = Spec, Test rot → **Human-Gate** (Infra/flaky/env)
+    3. **Verifikation:** Original-Test + Regression-Suite + ruff/mypy.
+    4. **Max 3 Runden.** Runde 3 ohne Grün → Human-Gate mit kompletter Historie.
+  - **System-Verständnis (Profi-Level):** Import-Graph, Call-Graph,
+    Design-History (ARCHITECTURE, MERKPOSTEN zu ähnlichen Bugs),
+    Git-History (letzte 5 Commits an betroffenen Files),
+    Signatures aller aufgerufenen Funktionen, Konventionen (pytest.ini).
+  - **Test-File-Guard:** `_ist_testdatei(pfad)` prüft `*_test.py` / `test_*.py`.
+    Debugger-Patch auf Test-Datei nur erlaubt wenn (a) nur syntaktisch
+    kaputt (SyntaxError), nicht semantisch; (b) Human-Gate-Freigabe.
+    Sonst `debugger_test_patch_blocked`-Audit + Eskalation.
+  - **API:** `debug(state, failing_test, spec) -> DebugResult`
+    mit `patches: list[dict]`, `escalation: str | None`, `runden: int`,
+    `diagnose: {code_ok, test_ok, spec_klar, ursache: "code|test|spec|infra"}`
+
+- **Akzeptanzkriterien:**
+  - **092a:** `tests/test_context_builder.py` mit 3 Szenarien
+    (leerer State, existierende Files, fehlende API)
+  - **092b:** Builder darf `task_files` mit `*_test.py` nicht mehr
+    akzeptieren → `builder_scope_violation`-Audit-Event
+  - **092c:** Test-Agent-Tests: (a) leerer Code → leerer Test,
+    (b) Code mit Funktion → Test mit `inspect.signature()`-konformem Aufruf,
+    (c) Akzeptanz-Kriterium fehlt → Fail-closed
+  - **092d:** `tests/test_debugger.py` mit 6 Szenarien:
+    (a) Code-Bug → Code-Patch, Test unverändert, grün
+    (b) Test-Bug → Eskalation, kein Test-Patch
+    (c) Spec unklar → Eskalation
+    (d) Code + Test = Spec, Test rot → Log + Eskalation
+    (e) Debugger versucht Test semantisch zu patchen → Assertion-Error
+    (f) Debugger versucht Test-Syntax zu patchen → erlaubt, Audit-Event
+  - **092e:** Reflection-Runden max 2, Human-Gate bei Runde 2 auch ohne
+    `Approve?`-Prompt
+
+- **Tests:** `tests/test_context_builder.py` (neu), `tests/test_test_agent.py`
+  (neu), `tests/test_debugger.py` (neu), `tests/test_pipeline_phases.py` (erweitern)
+
+- **Blockiert von:** OP-089 (Reflection-Bug), OP-090 (Human-Gate-Skip)
+- **Hinweis:** Struktureller Fix für die Klasse OP-047 / OP-089. Nach 092a-e
+  hat der Agent deterministischen Kontext und rät nicht mehr.
+
 
 ## Erledigt (Auto-Log)
 
