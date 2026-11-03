@@ -109,6 +109,7 @@ function createAuditPanel(options) {
       const art = document.createElement("span");
       art.className = "audit-kind";
       art.textContent = _escapeText(ev && ev.kind);
+      art.dataset.kind = String(ev && ev.kind || "");
 
       const text = document.createElement("span");
       text.className = "audit-text";
@@ -152,6 +153,7 @@ function createAuditPanel(options) {
       const art = document.createElement("span");
       art.className = "audit-kind";
       art.textContent = _escapeText(ev && ev.kind);
+      art.dataset.kind = String(ev && ev.kind || "");
 
       const runId = document.createElement("span");
       runId.className = "audit-run-id";
