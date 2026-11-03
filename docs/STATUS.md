@@ -103,24 +103,6 @@ Ursprünglicher Notiz-Text (2026-11-02):
 - **Blockiert von:** —
 
 
-### OP-091: Audit-Log wird nicht geschrieben
-
-- **Status:** open
-- **Betroffen:** `werkstatt/audit.py` (`AUDIT_FILE_NAME = "agent-pipeline.jsonl"`,
-  Zeile 29; `datei = audit_dir / f"agent-pipeline-{tag}.jsonl"`, Zeile 94)
-- **Problem:** `audit()`-Events landen nicht im erwarteten Log. Nach einem
-  Loop-Lauf 2026-11-03 16:43: kein `agent-pipeline-*.jsonl` in `logs/` oder
-  `.werkstatt/`. Nur `logs/loop-render-2026-11-03.log` (Renderer-Tee).
-  Der `Audit Live` im Dashboard hängt an `werkstatt/web/audit_panel.py`,
-  das `home / AUDIT_UNTERVERZEICHNIS / f"{project_name}.jsonl"` liest —
-  dort ist auch nichts.
-- **Akzeptanzkriterien:** (a) `AUDIT_UNTERVERZEICHNIS`-Konstante identifizieren.
-  (b) Nach einem Loop-Lauf existiert eine Datei, die `audit()`-Events enthält.
-  (c) `Audit Live` im Dashboard zeigt diese Events (WebSocket `/api/projects/
-  {name}/audit/stream` liefert sie).
-- **Tests:** `tests/test_audit.py` — `audit("test_event", {"k": "v"})` schreibt,
-  dann Datei lesen und Event finden.
-- **Blockiert von:** —
 
 ### OP-092: Loop-Agenten mit explizitem Kontext-Vertrag (Sammel-OP)
 
@@ -264,6 +246,7 @@ Ursprünglicher Notiz-Text (2026-11-02):
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-03 | OP-091 | done | audit_panel: _home_kontext Modulebene (Diagnose korrigiert: Writer OK, Reader crasht) (4a10645)
 - 2026-11-03 | OP-095 | done | Phase 33.2a: verify.json hart-Feld explizit + fail-loud (1ac3446)
 - 2026-11-03 | OP-089 | done | Reflection-Circuit-Breaker + Katalog-Drift (c00ef17)
 - 2026-11-03 | OP-093 | done | Plan-Gate Fail-closed bei ungültiger Antwort (d0f871a)
