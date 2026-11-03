@@ -131,8 +131,7 @@
 
   // Chat-Form: Text anhaengen
   var chatForm = document.getElementById("chat-form");
-  if (chatForm) {
-    chatForm.addEventListener("submit", function (ev) {
+  if (false) {  // deaktiviert: chat.js übernimmt Form (OP-084)    chatForm.addEventListener("submit", function (ev) {
       ev.preventDefault();
       if (!aktiverTabId) {
         return;

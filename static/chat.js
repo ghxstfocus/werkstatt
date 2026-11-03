@@ -5,7 +5,7 @@
   const CHAT_LABELS = { admin: "Architect", bau: "Builder" };
   const API_BASIS = "/api/chat";
   const zustandProTab = {};
-  let aktuellerChat = null;
+  let aktuellerChat = "admin";
 
   function holeTabZustand(tabId) {
     if (!zustandProTab[tabId]) {
@@ -309,6 +309,85 @@
     document.addEventListener("DOMContentLoaded", _initChat);
   } else {
     _initChat();
+  }
+})();
+
+// OP-084: Form-Handler — eigener POST an /api/chat/admin mit {text}.
+// Unabhängig von sende()/sendeNachricht(), die ggf. aktuellerChat-
+// Probleme haben. tabs.js-Handler ist mit if(false) deaktiviert.
+(function () {
+  function _initChatFormDirect() {
+    var form = document.getElementById("chat-form");
+    var eingabe = document.getElementById("chat-eingabe");
+    var container = document.getElementById("chat-nachrichten");
+    if (!form || !eingabe || !container) {
+      console.warn("[chat] Form-Elemente fehlen");
+      return;
+    }
+    if (form.dataset.bound === "1") {
+      return;  // doppelt binden verhindern
+    }
+    form.dataset.bound = "1";
+    console.log("[chat] Form-Handler gebunden (direct POST)");
+
+    function _appendBubble(text, cls) {
+      var div = document.createElement("div");
+      div.className = "chat-blase " + (cls || "");
+      div.textContent = text;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function _sendeText() {
+      var text = eingabe.value.trim();
+      if (!text) {
+        return;
+      }
+      console.log("[chat] sende:", JSON.stringify(text.slice(0, 50)));
+      _appendBubble(text, "chat-blase--nutzer");
+      eingabe.value = "";
+      eingabe.disabled = true;
+      fetch("/api/chat/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text }),
+      })
+        .then(function (r) {
+          console.log("[chat] HTTP", r.status);
+          return r.json();
+        })
+        .then(function (daten) {
+          console.log("[chat] Antwort:", JSON.stringify(daten).slice(0, 200));
+          var antwort = daten.antwort || daten.text || "(leer)";
+          _appendBubble(antwort, "chat-blase--antwort");
+        })
+        .catch(function (err) {
+          console.error("[chat] fetch error:", err);
+          _appendBubble("Fehler: " + err, "chat-blase--fehler");
+        })
+        .then(function () {
+          eingabe.disabled = false;
+          eingabe.focus();
+        });
+    }
+
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      _sendeText();
+    });
+    eingabe.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" && ev.ctrlKey) {
+        ev.preventDefault();
+        _sendeText();
+      }
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", _initChatFormDirect);
+  } else {
+    _initChatFormDirect();
   }
 })();
 
