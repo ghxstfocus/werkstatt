@@ -1061,30 +1061,51 @@ def _doku_post_check(
     _hat_code_task = any(_ist_geschuetzter_code_task(t) for t in tasks)
     if _hat_code_task:
         return tasks
-    # OP-047: pro Datei-Gruppe kollabieren statt eine Datei auswaehlen.
+    # OP-047 (Nachbesserung 2026-11-03): zwei Filter getrennt behandeln:
+    # (a) "nur docs/X.md" -> nur Tasks mit X.md
+    # (b) "keine python"/"kein code" -> nur .md-Tasks
+    # Danach pro .md-Datei nur 1 Task (Kern: multi-file bleibt multi-file).
     original_task_count = len(tasks)
-    md_task_count = 0
-    for _t in tasks:
-        if not isinstance(_t, dict):
-            continue
-        _files = _t.get("task_files") or []
-        if not isinstance(_files, list):
-            continue
-        if any(
-            isinstance(_f, str) and _f.lower().endswith(".md")
-            for _f in _files
-        ):
-            md_task_count += 1
-    if md_task_count == 0:
+    _target_md: str | None = None
+    if _nur_md_match:
+        _m_target = _re_op006.search(
+            r"(?:nur|ausschliesslich)\s+(\S+\.md)",
+            _both,
+        )
+        if _m_target:
+            _target_md = _m_target.group(1)
+    if _target_md:
+        # OP-047 Nachbesserung: case-insensitive (Task-Files haben oft Großbuchstaben)
+        _target_lower = _target_md.lower()
+        gefiltert = [
+            t for t in tasks
+            if isinstance(t, dict) and any(
+                isinstance(f, str) and f.lower() == _target_lower
+                for f in (t.get("task_files") or [])
+            )
+        ]
+    elif _has_hart:
+        gefiltert = [
+            t for t in tasks
+            if isinstance(t, dict) and any(
+                isinstance(f, str) and f.lower().endswith(_MD_SUFFIX)
+                for f in (t.get("task_files") or [])
+            )
+        ]
+    else:
+        gefiltert = list(tasks)
+    if not gefiltert:
         audit("planner_doku_post_check_leer", {
             "original_task_count": original_task_count,
             "aufgabe_len": len(aufgabe or ""),
+            "target_md": _target_md,
+            "has_hart": _has_hart,
         }, pd, pn)
         return []
     ergebnis: list[dict] = []
     behalten: set[str] = set()
     entfernt = 0
-    for _t in tasks:
+    for _t in gefiltert:
         if not isinstance(_t, dict):
             ergebnis.append(_t)
             continue
@@ -1094,7 +1115,7 @@ def _doku_post_check(
             continue
         _md_files = [
             _f for _f in _files
-            if isinstance(_f, str) and _f.lower().endswith(".md")
+            if isinstance(_f, str) and _f.lower().endswith(_MD_SUFFIX)
         ]
         if not _md_files:
             ergebnis.append(_t)
@@ -1108,9 +1129,9 @@ def _doku_post_check(
     if entfernt > 0:
         audit("planner_doku_post_check_reduziert", {
             "original_task_count": original_task_count,
-            "md_task_count": md_task_count,
             "behalten": sorted(behalten),
             "entfernte_tasks": entfernt,
+            "target_md": _target_md,
         }, pd, pn)
     return ergebnis
 
