@@ -13,6 +13,11 @@ def main() -> None:
     parser.add_argument("--reload", action="store_true")
     args = parser.parse_args()
 
+    if args.host == "0.0.0.0":
+        print("WARN: host=0.0.0.0 ohne HTTPS. Auth-Cookie ohne Secure-Flag.")
+        print("      Nur in vertrauenswuerdigen Netzen. Empfehlung:")
+        print("      --host 127.0.0.1 + SSH-Tunnel:")
+        print(f"        ssh -L {args.port}:localhost:{args.port} user@host")
     print(f"Werkstatt-Dashboard: http://{args.host}:{args.port}/")
     print(f"Audit-History:       http://{args.host}:{args.port}/api/projects/werkstatt/audit")
     uvicorn.run(

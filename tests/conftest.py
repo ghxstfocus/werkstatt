@@ -184,3 +184,20 @@ import pytest as _pytest
 def _werkstatt_in_test(monkeypatch):
     """Setzt WERKSTATT_IN_TEST=1 fuer alle Tests."""
     monkeypatch.setenv("WERKSTATT_IN_TEST", "1")
+
+# Auth-Middleware in Bestands-Tests ausschalten. Auth-Tests heben das auf.
+@pytest.fixture(autouse=True)
+def _auth_disabled_autouse():
+    try:
+        from werkstatt.web.auth import set_auth_disabled
+        set_auth_disabled(True)
+    except ImportError:
+        yield
+        return
+    yield
+    try:
+        from werkstatt.web.auth import set_auth_disabled
+        set_auth_disabled(False)
+    except ImportError:
+        pass
+

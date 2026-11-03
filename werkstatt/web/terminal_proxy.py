@@ -267,7 +267,7 @@ async def _tail_poll_render_log(
                 pass
         try:
             await asyncio.wait_for(stopp.wait(), timeout=_POLL_INTERVALL_S)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
 
@@ -279,6 +279,11 @@ async def terminal_ws(websocket: WebSocket, project: str) -> None:
     Der Loop laeuft in einem anderen Prozess, deshalb kein In-Process-
     Emitter — die Datei ist die einzige verlaessliche Quelle.
     """
+    from werkstatt.web.auth import is_auth_disabled, is_authed_ws
+    if not is_auth_disabled() and not is_authed_ws(websocket):
+        await websocket.close(code=1008)
+        return
+
     if not _PROJECT_RE.match(project):
         await websocket.close(code=1008)
         return

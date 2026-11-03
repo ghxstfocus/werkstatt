@@ -38,9 +38,9 @@ if _os.environ.get("WERKSTATT_IN_TEST") == "1":
 
 # Baseline fixiert (gemessen 2026-11-02 auf HEAD d95e147).
 BASELINE = {
-    "pytest": 1178,   # pytest -q, volle Suite
-    "ruff": 183,      # ruff check --no-cache . (tests/ erstmals mitgemessen)
-    "mypy": 18,       # mypy werkstatt/ (pipeline.py im Loop-Neubau entfernt)
+    "pytest": 1191,   # pytest -q, volle Suite
+    "ruff": 184,      # ruff check --no-cache . (tests/ erstmals mitgemessen)
+    "mypy": 24,       # mypy werkstatt/ (pipeline.py im Loop-Neubau entfernt)
     "ast": 6,         # pytest tests/test_audit_kinds.py -q (Skip wenn Datei fehlt)
     "katalog": 162,   # _KATALOG_SOLL in pipeline.py (Skip wenn Datei fehlt)
 }

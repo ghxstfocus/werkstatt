@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from werkstatt.phase_state import PhaseState
-from werkstatt.web import audit_panel, chat, terminal_proxy, ws
+from werkstatt.web import audit_panel, auth, chat, terminal_proxy, ws
 
 __all__ = ["app", "create_app"]
 
@@ -71,9 +71,44 @@ def _phasen_snapshot(name: str) -> dict[str, Any]:
     }
 
 
+class AuthMiddleware:
+    """Prueft Session-Cookie. Public: /login, /api/auth/*, /static/*."""
+
+    def __init__(self, app):  # type: ignore[no-untyped-def]
+        self.app = app
+
+    async def __call__(self, scope, receive, send):  # type: ignore[no-untyped-def]
+        from starlette.requests import Request
+
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        if auth.is_auth_disabled():
+            return await self.app(scope, receive, send)
+        request = Request(scope)
+        if request.method == "OPTIONS":
+            return await self.app(scope, receive, send)
+        if auth.is_public_path(request.url.path):
+            return await self.app(scope, receive, send)
+        if auth.is_authed(request):
+            return await self.app(scope, receive, send)
+        accept = request.headers.get("accept", "")
+        if "text/html" in accept:
+            from starlette.responses import RedirectResponse
+            response = RedirectResponse("/login", status_code=303)
+        else:
+            from starlette.responses import JSONResponse
+            response = JSONResponse(
+                {"ok": False, "fehler": "unauthorized"},
+                status_code=401,
+            )
+        return await response(scope, receive, send)
+
+
 def create_app() -> FastAPI:
     """Erzeugt und konfiguriert die FastAPI-Anwendung."""
     app = FastAPI(title="Werkstatt")
+    app.add_middleware(AuthMiddleware)
+    app.include_router(auth.make_login_router())
     # Audit-Panel: Home auf Projekt-Root setzen, damit
     # /api/projects/*/audit die audit-logs/ findet.
     from werkstatt.web import audit_panel as _ap

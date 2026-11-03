@@ -243,13 +243,17 @@ async def _tail_audit_logs(
                 pass
         try:
             await asyncio.wait_for(stopp.wait(), timeout=1.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
 
 @router.websocket("/api/projects/{name}/audit/stream")
 async def ws_audit_stream_filetail(websocket: WebSocket, name: str) -> None:
     """WS-Live-Stream via File-Tailing. Unabhaengig vom Loop-Prozess."""
+    from werkstatt.web.auth import is_auth_disabled, is_authed_ws
+    if not is_auth_disabled() and not is_authed_ws(websocket):
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=WS_QUEUE_MAX)
     stopp = asyncio.Event()
