@@ -341,3 +341,30 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - **Akzeptanzkriterien:** Zieldatei existiert -> `update`; fehlt ->
   `create`. 2 Tests in `tests/test_planner.py`.
 - **Blockiert von:** -
+
+### OP-111: Structured Progress Events aus Builder/Planner/Reviewer
+
+- **Status:** open
+- **Typ:** ux-feature
+- **Betroffen:** `werkstatt/builder.py`, `werkstatt/planner.py`,
+  `werkstatt/reviewer.py`, `werkstatt/loop_renderer.py` (neue API)
+- **Problem:** Während eines langlaufenden Builder-Calls (30-90s)
+  sieht der User zwischen "Builder t1 ..." und "OK Builder t1 · 30.3s"
+  nur Heartbeats alle 15s. Das ist "Sekunden ohne Info".
+  Kein Live-Feedback ob DeepSeek antwortet, Patches validiert
+  werden, oder der Builder hängt.
+- **Akzeptanzkriterien:**
+  - Neue Renderer-API `_emit_progress(label, step, detail)` mit
+    eigenem Progress-Tracking (überschreibt vorige Zeile im Live-Mode,
+    loggt sequenziell im CI-Mode).
+  - Builder sendet: `start`, `prompt_sent`, `response_received`,
+    `patches_parsed`, `patches_validated`, `patches_applied`.
+  - Planner/Scout: `scout_start`, `scout_done`, `architect_start`,
+    `architect_done`, `split_start`, `split_done`.
+  - Reviewer: `diff_received`, `analysis_start`, `verdict`.
+  - Heartbeat wird redundant (nur Fallback wenn Sub-Component
+    keine Events sendet).
+- **Tests:** `tests/test_loop_renderer.py` — 3 Tests für
+  `_emit_progress` (Live überschreibt, CI sequenziell, kein
+  Output bei leerem step).
+- **Blockiert von:** -
