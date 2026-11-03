@@ -194,6 +194,21 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Anmerkung:** Discovery 2026-11-03: 163 Patch-Calls (45x _verify_patches,
   93x audit, 10x _plan_gate, 15x sonst). Nicht an einem Tag machbar.
 
+
+### OP-108: Scout generiert `action: update` für create-Aufgaben
+
+- **Status:** open
+- **Typ:** planner-bug
+- **Betroffen:** `werkstatt/planner.py`
+- **Problem:** Scout erzeugt `action: update` statt `action: create`
+  bei "kopiere X nach Y"-Aufgaben. Builder findet Zieldatei nicht,
+  gibt auf (0.0s). Live-Beleg 2026-11-03 23:06 (OP-104).
+- **Akzeptanzkriterien:** (a) Zieldatei-Existenz-Check im Scout,
+  `action: create` wenn fehlt. (b) `source_file` bei Kopier-Aufträgen.
+  (c) Planner-Gate fail-closed bei `action: update` + fehlende Datei.
+- **Tests:** `tests/test_planner.py`.
+- **Blockiert von:** -
+
 ## Erledigt (Auto-Log)
 
 - 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)
