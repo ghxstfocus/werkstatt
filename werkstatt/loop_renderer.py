@@ -130,6 +130,7 @@ def _emit_raw(text: str) -> None:
     if IS_CI:
         ts = datetime.now().strftime("%H:%M:%S")
         print(f"[{ts}] {text}", flush=True)
+        _tee(f'[{ts}] {text}')
     else:
         print(text, flush=True)
     _tee(text)
@@ -709,6 +710,12 @@ def log_line(
             mark = "OK" if ok else "X"
             _emit_raw(f"[{ts}] {mark} {label}{_el}" + (f" · {detail}" if detail else ""))
     _publish("log_line", label + (f" · {detail}" if detail else ""))
+    _status_tee = "OK" if ok else "X"
+    _tee(
+        f"[{ts}] {_status_tee} {label}"
+        + (f" · {detail}" if detail else "")
+        + (f" · {elapsed_s:.1f}s" if elapsed_s is not None else "")
+    )
 
 
 def task_started(nr: int, total: int, name: str) -> None:
