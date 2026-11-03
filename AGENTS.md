@@ -96,7 +96,20 @@ Nach jedem Builder-Patch laufen (`.werkstatt/verify.json`):
 - `py_compile_changed` (hart)
 - `ruff_changed` (weich fuer Style, hart fuer F-Klasse)
 - `mypy_changed` (weich, mit `--follow-imports=silent`)
+- `control_drift` (hart) — faehrt `python3 tools/control_drift.py --check`
 - `pytest_changed` (hart)
+
+### Registry-Drift
+
+Die Stage prueft fuer jede Kontrolle in `CONTROL_REGISTRY` (a) dass ihre
+`source` importierbar ist und (b) dass sie auf die registrierte Funktion
+zeigt. Bei Verstoss ist die Stage hart und blockiert den Commit; die
+Meldung lautet `BROKEN <name>: <source> nicht importierbar` bzw.
+`DEAD <name>: source zeigt auf andere fn`. Manueller Gegencheck:
+`python3 tools/control_drift.py --list` (zeigt alle registrierten
+Kontrollen mit Phase, Haerte, Prioritaet) und `--dead` (zeigt
+unregistrierte Kandidaten) — damit der Mensch bei rotem Gate weiss,
+welches Kommando die Diagnose liefert, ohne den Code zu lesen.
 - `pytest_regression` (hart, phase_end)
 
 **Pre-Reviewer-Gate** (`werkstatt/verify_classify.py` + `_phase_tasks_loop`):
