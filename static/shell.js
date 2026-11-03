@@ -75,6 +75,59 @@
         socket.send(JSON.stringify({ typ: "input", data: data }));
       }
     });
+
+    // Paste-Handling: xterm.js hat's default nur mit Clipboard-API-
+    // Permission. Chrome/Safari in modernen Versionen blockieren das
+    // oft. Wir fangen Ctrl+V/Cmd+V/Shift+Insert zusaetzlich ab und
+    // lesen das Clipboard direkt.
+
+    function _sende_paste(text) {
+      if (!text) { return; }
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ typ: "input", data: text }));
+      }
+    }
+
+    // Ctrl+V, Cmd+V, Shift+Insert abfangen
+    term.attachCustomKeyEventHandler(function (ev) {
+      if (ev.type !== "keydown") { return true; }
+      var is_paste = (
+        ((ev.ctrlKey || ev.metaKey) && (ev.key === "v" || ev.key === "V"))
+        || (ev.shiftKey && ev.key === "Insert")
+      );
+      if (!is_paste) { return true; }
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        navigator.clipboard.readText().then(function (text) {
+          _sende_paste(text);
+        }).catch(function (e) {
+          console.warn("[shell] clipboard read fehlgeschlagen:", e);
+        });
+      }
+      // xterm.js default-Handler NICHT ausfuehren (wir haben paste
+      // schon gesendet)
+      return false;
+    });
+
+    // Browser paste-Event als Fallback (wenn Ctrl+V nicht intercepted)
+    el.addEventListener("paste", function (ev) {
+      var text = (ev.clipboardData || window.clipboardData).getData("text");
+      if (text) {
+        _sende_paste(text);
+        ev.preventDefault();
+      }
+    });
+
+    // Rechtsklick-Paste: Kontextmenue unterdruecken + Paste ausfuehren
+    el.addEventListener("contextmenu", function (ev) {
+      ev.preventDefault();
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        navigator.clipboard.readText().then(function (text) {
+          _sende_paste(text);
+        }).catch(function (e) {
+          console.warn("[shell] contextmenu-paste fehlgeschlagen:", e);
+        });
+      }
+    });
     // Resize-Handler
     var resizeTimer = null;
     window.addEventListener("resize", function () {
