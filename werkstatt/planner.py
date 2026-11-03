@@ -66,7 +66,6 @@ def _format_explorer_findings(f: dict) -> str:
     return chr(10).join(lines)
 
 
-
 def _klassifiziere_fehler(stage_id: str, fehlertext: str) -> str:
     """M-299a: Klassifiziert einen Verify-Fehler nach Klasse.
 
@@ -154,7 +153,6 @@ def _preflight_scan(state: RunState) -> list[dict]:
                 "text": f"Exception: {exc}",
             })
     return fehler
-
 
 
 _TOOL_CALL_TAGS = (
@@ -271,8 +269,6 @@ def _erledigte_punkte(pd) -> str:
     return "\n\n".join(_teile)
 
 
-
-
 PLANNER_SPLIT_SYSTEM = """Du bist ein Task-Zerleger.
 Du bekommst eine Architect-Prosa und eine Liste von Dateien.
 Zerlege die Prosa in so viele Sub-Tasks wie noetig (typisch 3-10).
@@ -367,8 +363,6 @@ Antworte NUR mit JSON:
 Keine Erklaerung, nur JSON."""
 
 
-
-
 def _migrations_stand(pd) -> str:
     """K17: Deterministischer Migrationsstand fuer Architect-Kontext.
 
@@ -446,16 +440,6 @@ def _pruefe_migrations_kollision(
 # =====================================================
 # GOLD: Agent-Schnittstellen (kompakt, deterministisch)
 # =====================================================
-
-
-
-
-
-
-
-
-
-
 
 
 def _normalisiere(text: str) -> str:
@@ -1010,10 +994,8 @@ def _zerlege_in_sub_tasks(
     return _doku_post_check(_final, prosa, pd, pn, aufgabe)
 
 
-
-
 def _doku_post_check(
-    tasks: list[dict], prosa: str, pd, pn,
+    tasks: list[dict], prosa: str = "", pd=None, pn="?",
     aufgabe: str = "",
 ) -> list[dict]:
     """FIX 2026-10-31 v2: Doku-Aufgaben deterministisch auf 1 Task reduzieren.
@@ -1079,27 +1061,58 @@ def _doku_post_check(
     _hat_code_task = any(_ist_geschuetzter_code_task(t) for t in tasks)
     if _hat_code_task:
         return tasks
-    _md_tasks = [
-        t for t in tasks
-        if isinstance(t, dict)
-        and any(
-            isinstance(f, str) and f.endswith(_MD_SUFFIX)
-            for f in (t.get("task_files") or [])
-        )
-    ]
-    if not _md_tasks:
+    # OP-047: pro Datei-Gruppe kollabieren statt eine Datei auswaehlen.
+    original_task_count = len(tasks)
+    md_task_count = 0
+    for _t in tasks:
+        if not isinstance(_t, dict):
+            continue
+        _files = _t.get("task_files") or []
+        if not isinstance(_files, list):
+            continue
+        if any(
+            isinstance(_f, str) and _f.lower().endswith(".md")
+            for _f in _files
+        ):
+            md_task_count += 1
+    if md_task_count == 0:
         audit("planner_doku_post_check_leer", {
-            "original_task_count": len(tasks),
+            "original_task_count": original_task_count,
             "aufgabe_len": len(aufgabe or ""),
         }, pd, pn)
         return []
-    if len(tasks) > 1:
+    ergebnis: list[dict] = []
+    behalten: set[str] = set()
+    entfernt = 0
+    for _t in tasks:
+        if not isinstance(_t, dict):
+            ergebnis.append(_t)
+            continue
+        _files = _t.get("task_files") or []
+        if not isinstance(_files, list):
+            ergebnis.append(_t)
+            continue
+        _md_files = [
+            _f for _f in _files
+            if isinstance(_f, str) and _f.lower().endswith(".md")
+        ]
+        if not _md_files:
+            ergebnis.append(_t)
+            continue
+        _f = _md_files[0]
+        if _f in behalten:
+            entfernt += 1
+            continue
+        behalten.add(_f)
+        ergebnis.append(_t)
+    if entfernt > 0:
         audit("planner_doku_post_check_reduziert", {
-            "original_task_count": len(tasks),
-            "md_task_count": len(_md_tasks),
-            "behalten": _md_tasks[0].get("task_files"),
+            "original_task_count": original_task_count,
+            "md_task_count": md_task_count,
+            "behalten": sorted(behalten),
+            "entfernte_tasks": entfernt,
         }, pd, pn)
-    return _md_tasks[:1]
+    return ergebnis
 
 
 def _deterministic_entfernen_precheck(state) -> bool:
