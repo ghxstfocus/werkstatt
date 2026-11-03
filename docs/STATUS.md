@@ -102,24 +102,6 @@ Ursprünglicher Notiz-Text (2026-11-02):
 - **Tests:** Kein Test — Verifikation ueber Log-Grep nach einem Loop-Lauf.
 - **Blockiert von:** —
 
-### OP-089: Reflection-Loop ohne Fortschritt (5x gleicher Fehler)
-
-- **Status:** open
-- **Betroffen:** `werkstatt/pipeline_phases.py` (Reflection-Runden-Schleife), `werkstatt/reflection.py`
-- **Problem:** Bei `pytest_changed`-Fehler startet der Loop 5 Reflection-Runden.
-  Wenn der Builder in jeder Runde denselben Patch-Versuch macht (Diff-Hash
-  identisch) und derselbe Test-Fehler bleibt, verbrennt der Loop 5 Runden
-  ohne Fortschritt. Live-Beleg 2026-11-03 16:43: t2-Neue-Test, 5 Runden à 3s,
-  dann LOOP FEHLGESCHLAGEN. Ursache war ein falscher Test (Trigger fehlte),
-  aber der Loop kann Test-Bug nicht von Code-Bug unterscheiden.
-- **Akzeptanzkriterien:** (a) Nach jeder Reflection-Runde `patches_hash`
-  berechnen. (b) Wenn `hash_runde_n == hash_runde_n-1` UND derselbe Test-
-  Fehler (gleicher `test_id` + `assertion_message`), dann Abbruch mit
-  `reflection_no_progress` (neues Audit-Event). (c) Max 2 Runden statt 5.
-- **Tests:** `tests/test_reflection.py` — Mock-Builder liefert 2x denselben
-  Patch, Test schlägt gleich fehl → Runde 2 bricht ab mit Audit-Event.
-- **Blockiert von:** —
-
 
 ### OP-091: Audit-Log wird nicht geschrieben
 
@@ -252,6 +234,7 @@ Ursprünglicher Notiz-Text (2026-11-02):
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-03 | OP-089 | done | Reflection-Circuit-Breaker + Katalog-Drift (c00ef17)
 - 2026-11-03 | OP-093 | done | Plan-Gate Fail-closed bei ungültiger Antwort (d0f871a)
 - 2026-11-03 | OP-090 | done | Human-Gate bei Reflection-Erschöpfung (47b6e07)
 - 2026-11-03 | OP-047 | done | `_doku_post_check` gruppiert pro Datei (bb719b1)
