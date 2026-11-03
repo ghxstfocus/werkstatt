@@ -115,7 +115,7 @@ def _plan_gate(state: RunState) -> bool:
     return True
 
 
-def _human_gate_plan(state, auto_approve=False):
+def _human_gate_plan(state, auto_approve=False, kontext=""):
     """M-348b: Plan-Human-Gate (nach Plan-Erstellung, vor Builder)."""
     pd = getattr(state, "project_dir", None)
     pn = getattr(state, "project_name", "?")
@@ -158,17 +158,33 @@ def _human_gate_plan(state, auto_approve=False):
     # OP-093: auch ungueltige-Antworten-Zaehler (Fail-closed nach 3 Versuchen).
     _leer_count = 0
     _ungueltig_count = 0
+    # Nachbesserung OP-089: nach Reflection klar sagen dass es ein
+    # revidierter Plan ist. Kein "a" (Plan anpassen) — sonst
+    # Endlos-Zyklus moeglich.
+    _ist_revidierter = kontext == "revidierter_plan"
+    if _ist_revidierter:
+        _prompt = (
+            "\n== REVIDIERTER PLAN (nach Reflection) ==\n"
+            "Du hattest den vorherigen Plan abgelehnt. Die Reflection hat\n"
+            "einen neuen Plan gebaut. Bitte pruefen.\n"
+            "\nRevidierter Plan OK? [j/n]\n"
+            "  j = bauen\n"
+            "  n = abbrechen (keine weitere Reflection)\n"
+            "Deine Wahl: "
+        )
+    else:
+        _prompt = (
+            "\nPlan ausfuehren? [j/n/a]\n"
+            "  j = bauen\n"
+            "  n = ablehnen (Reflection mit Grund, max 1 Runde)\n"
+            "      - Reject-Grund eingeben -> Planner baut revidierten Plan\n"
+            "      - Grund leer lassen    -> hart abbrechen (kein Reflection)\n"
+            "  a = Plan anpassen\n"
+            "Deine Wahl: "
+        )
     while True:
         try:
-            _antwort = input(
-                "\nPlan ausfuehren? [j/n/a]\n"
-                "  j = bauen\n"
-                "  n = ablehnen (Reflection mit Grund, max 1 Runde)\n"
-                "      - Reject-Grund eingeben -> Planner baut revidierten Plan\n"
-                "      - Grund leer lassen    -> hart abbrechen (kein Reflection)\n"
-                "  a = Plan anpassen\n"
-                "Deine Wahl: "
-            ).strip().lower()
+            _antwort = input(_prompt).strip().lower()
         except (EOFError, KeyboardInterrupt):
             audit("loop_plan_gate_eof", {}, pd, pn)
             return 1
@@ -205,6 +221,15 @@ def _human_gate_plan(state, auto_approve=False):
                   {"grund": _reason[:200]}, pd, pn)
             return 1
         if _antwort == "a":
+            if _ist_revidierter:
+                # Kein Plan-Anpassen im revidierten Modus (Zyklus-Schutz)
+                _ungueltig_count += 1
+                if _ungueltig_count >= 3:
+                    audit("loop_plan_gate_ungueltig",
+                          {"anzahl": _ungueltig_count, "letzte_antwort": "a"}, pd, pn)
+                    return 1
+                print(f"Kein 'a' nach Reflection. Versuch {_ungueltig_count}/3.")
+                continue
             _plan_file = Path(pd) / ".werkstatt" / f"{pn}.phase.yaml"
             print(f"\nPlan-Datei: {_plan_file}")
             input("Enter zum Fortfahren...")

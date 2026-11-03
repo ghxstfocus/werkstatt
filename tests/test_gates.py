@@ -44,3 +44,28 @@ def test_plan_gate_fail_closed_bei_ungueltiger_antwort() -> None:
          patch("werkstatt.gates.audit"):
         rc = _human_gate_plan(state, auto_approve=False)
     assert rc == 1
+
+
+def test_human_gate_plan_revidierter_kontext(monkeypatch, tmp_path):
+    """Nachbesserung: kontext='revidierter_plan' zeigt klareren Prompt."""
+    from unittest.mock import patch
+    from types import SimpleNamespace
+    from werkstatt.gates import _human_gate_plan
+
+    state = SimpleNamespace(
+        project_dir=str(tmp_path),
+        project_name="probe",
+        tasks=[{"id": "t1"}],
+        tests=[], akzeptanzkriterien=[], phasen=[],
+    )
+    captured = []
+    def _fake_input(prompt=""):
+        captured.append(prompt)
+        return "n"
+    with patch.dict("os.environ", {"WERKSTATT_IN_TEST": "0"}), \
+         patch("builtins.input", side_effect=_fake_input), \
+         patch("werkstatt.gates.audit"):
+        rc = _human_gate_plan(state, auto_approve=False, kontext="revidierter_plan")
+    assert rc == 1
+    assert any("REVIDIERTER PLAN" in p for p in captured), f"captured={captured}"
+    assert any("keine weitere Reflection" in p for p in captured)

@@ -598,6 +598,7 @@ def _phase_plan_and_preflight(
                     _rc_plan2 = _human_gate_plan(
                         state,
                         auto_approve=getattr(state, "auto_approve", False),
+                        kontext="revidierter_plan",
                     )
                     if _rc_plan2 != 0:
                         audit("loop_plan_reject_fail_closed",

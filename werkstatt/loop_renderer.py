@@ -494,6 +494,9 @@ def _render_plan_plain(phasen, tasks, tests, akzeptanzkriterien) -> None:
                 _files = ", ".join(_t.get("task_files", [])) or "(keine)"
                 _emit(f"  {_t.get('id')} [{_t.get('action', '?')}] {_t.get('name', '')[:60]}")
                 _emit(f"       Zieldatei: {_files}")
+                _desc = (_t.get("description") or "").strip().replace("\n", " ")
+                if _desc:
+                    _emit(f"       {_desc[:150]}")
         _emit("")
     # M-410b: Tasks ohne phase_id (flacher Plan, z.B. Architect)
     _ohne_phase = [
@@ -506,6 +509,9 @@ def _render_plan_plain(phasen, tasks, tests, akzeptanzkriterien) -> None:
             _files = ", ".join(_t.get("task_files", [])) or "(keine)"
             _emit(f"  {_t.get('id')} [{_t.get('action', '?')}] {_t.get('name', '')[:60]}")
             _emit(f"       Zieldatei: {_files}")
+            _desc = (_t.get("description") or "").strip().replace("\n", " ")
+            if _desc:
+                _emit(f"       {_desc[:150]}")
 
     if tests:
         _emit(f"Tests ({len(tests)}):")
@@ -531,6 +537,9 @@ def _render_plan_rich(phasen, tasks, tests, akzeptanzkriterien) -> None:
                     f"  [{_color}]{_t.get('id')} [{_action}][/] {_t.get('name', '')[:55]}"
                 )
                 body.append(f"       [dim]→ {_files}[/]")
+                _desc = (_t.get("description") or "").strip().replace("\n", " ")
+                if _desc:
+                    body.append(f"       [dim]{_desc[:150]}[/]")
         body.append("")
     # M-410c: Tasks ohne phase_id (flacher Plan, z.B. Architect)
     _ohne_phase = [
@@ -549,6 +558,9 @@ def _render_plan_rich(phasen, tasks, tests, akzeptanzkriterien) -> None:
                 f"{_t.get('name', '')[:55]}"
             )
             body.append(f"       [dim]→ {_files}[/]")
+            _desc = (_t.get("description") or "").strip().replace("\n", " ")
+            if _desc:
+                body.append(f"       [dim]{_desc[:150]}[/]")
 
     if tests:
         body.append(f"[bold]Tests ({len(tests)}):[/]")
