@@ -138,10 +138,10 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
         try:
             import yaml  # type: ignore[import-untyped]
             with cfg_path.open() as fh:
-                    cfg = yaml.safe_load(fh) or {}
-                require = bool(cfg.get("require_plan_approval", True))
-            except Exception:  # noqa: BLE001, S110
-                pass
+                cfg = yaml.safe_load(fh) or {}
+            require = bool(cfg.get("require_plan_approval", True))
+        except Exception:  # noqa: BLE001, S110
+            pass
     if not require:
         audit("loop_plan_gate_auto", {"reason": "require_plan_approval=false"}, pd, pn)
         return 0
@@ -529,10 +529,10 @@ def _human_gate(state: RunState) -> int:
         try:
             import yaml
             with cfg_path.open() as fh:
-                    cfg = yaml.safe_load(fh) or {}
-                require = bool(cfg.get("require_human_approval", True))
-            except Exception:  # noqa: BLE001, S110
-                pass
+                cfg = yaml.safe_load(fh) or {}
+            require = bool(cfg.get("require_human_approval", True))
+        except Exception:  # noqa: BLE001, S110
+            pass
 
     if not require:
         audit("loop_human_gate_auto", {"reason": "require_human_approval=false"}, pd, pn)
