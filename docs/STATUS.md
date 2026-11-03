@@ -195,19 +195,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   93x audit, 10x _plan_gate, 15x sonst). Nicht an einem Tag machbar.
 
 
-### OP-108: Scout generiert `action: update` für create-Aufgaben
-
-- **Status:** open
-- **Typ:** planner-bug
-- **Betroffen:** `werkstatt/planner.py`
-- **Problem:** Scout erzeugt `action: update` statt `action: create`
-  bei "kopiere X nach Y"-Aufgaben. Builder findet Zieldatei nicht,
-  gibt auf (0.0s). Live-Beleg 2026-11-03 23:06 (OP-104).
-- **Akzeptanzkriterien:** (a) Zieldatei-Existenz-Check im Scout,
-  `action: create` wenn fehlt. (b) `source_file` bei Kopier-Aufträgen.
-  (c) Planner-Gate fail-closed bei `action: update` + fehlende Datei.
-- **Tests:** `tests/test_planner.py`.
-- **Blockiert von:** -
 
 ## Erledigt (Auto-Log)
 
@@ -236,6 +223,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-03 | OP-108 | done | Scout create/update + Kopier-Auftrag (3884036)
 - 2026-11-03 | OP-097 | superseded | aufgeteilt in OP-104 (Kopie) + OP-105 (Proxy) + OP-106 (Aufrufer) + OP-107 (Tests)
 - 2026-11-03 | OP-104 | done | control/reflection.py wortgleiche Kopie (manuell, Scout-Plan-Bug)
 - 2026-11-03 | OP-099 | done | Phase 33.6: control_drift als Post-Build-Stage hart (67cd6b0)
@@ -331,3 +319,25 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - **Betroffen:** `tests/test_reflection*.py`, `tests/test_loop*.py`
 - **Auftrag:** `mock.patch("werkstatt.reflection.X")` → `mock.patch("werkstatt.control.reflection.X")`.
 - **Blockiert von:** OP-106
+
+### OP-109: Tests für scout._erkenne_kopier_auftrag
+
+- **Status:** open
+- **Typ:** test
+- **Betroffen:** `tests/test_scout.py` (neu oder erweitern)
+- **Problem:** OP-108 hat `_erkenne_kopier_auftrag` eingebaut, aber
+  die 4 Tests decken nur `_pruefe_zieldatei_existenz` ab.
+- **Akzeptanzkriterien:** 3 Tests: (a) "kopiere a.py nach b.py" ->
+  {quelle, ziel}, (b) ohne "kopiere" -> None, (c) "Kopiere nur" -> None.
+- **Blockiert von:** -
+
+### OP-110: _pruefe_zieldatei_existenz ignoriert existierende Zieldatei
+
+- **Status:** open
+- **Typ:** bugfix
+- **Betroffen:** `werkstatt/planner.py::_pruefe_zieldatei_existenz`
+- **Problem:** Bei Kopier-Auftrag mit existierender Zieldatei wird
+  trotzdem `aktion: create` gesetzt statt `update`.
+- **Akzeptanzkriterien:** Zieldatei existiert -> `update`; fehlt ->
+  `create`. 2 Tests in `tests/test_planner.py`.
+- **Blockiert von:** -
