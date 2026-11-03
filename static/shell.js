@@ -66,6 +66,18 @@
       fitAddon = new window.FitAddon.FitAddon();
       term.loadAddon(fitAddon);
     }
+    // Search-Addon (Ctrl+F / History-Suche)
+    if (window.SearchAddon && window.SearchAddon.SearchAddon) {
+      try {
+        term.loadAddon(new window.SearchAddon.SearchAddon());
+      } catch (e) { console.warn("[shell] Search-Addon:", e); }
+    }
+    // WebLinks-Addon (URLs klickbar)
+    if (window.WebLinksAddon && window.WebLinksAddon.WebLinksAddon) {
+      try {
+        term.loadAddon(new window.WebLinksAddon.WebLinksAddon());
+      } catch (e) { console.warn("[shell] WebLinks-Addon:", e); }
+    }
     term.open(el);
     if (fitAddon) {
       try { fitAddon.fit(); } catch (e) { /* ignore */ }
@@ -91,6 +103,16 @@
     // Ctrl+V, Cmd+V, Shift+Insert abfangen
     term.attachCustomKeyEventHandler(function (ev) {
       if (ev.type !== "keydown") { return true; }
+      // Ctrl+F: Search-Dialog (PowerShell-Feel: History durchsuchen)
+      if ((ev.ctrlKey || ev.metaKey) && ev.key === "f" && !ev.shiftKey) {
+        ev.preventDefault();
+        var query = window.prompt("Search (History/Output):", "");
+        if (query && term._searchAddon) {
+          // Search-Addon unterstuetzt selectPreviousSearch mit default-Optionen
+          try { term._searchAddon.findPrevious(query); } catch (e) {}
+        }
+        return false;
+      }
       var is_paste = (
         ((ev.ctrlKey || ev.metaKey) && (ev.key === "v" || ev.key === "V"))
         || (ev.shiftKey && ev.key === "Insert")

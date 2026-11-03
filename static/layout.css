@@ -601,3 +601,13 @@ body {
   border-color: var(--accent);
 }
 
+/* Chat-Blasen: Newlines erhalten (OP-Listen, Code) */
+.chat-blase,
+.chat-nachrichten > div {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
