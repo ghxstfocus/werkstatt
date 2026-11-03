@@ -552,3 +552,49 @@ body {
 .fehler {
   color: var(--error);
 }
+
+/* ============================================================
+   xterm.js-Container (SSH-Shell)
+   ============================================================ */
+.xterm-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.xterm-wrap .xterm {
+  height: 100%;
+}
+
+.xterm-wrap .xterm-viewport {
+  background: var(--bg) !important;
+}
+
+#shell-toggle {
+  padding: 3px 10px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+#shell-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+#shell-toggle.ist-aktiv {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+

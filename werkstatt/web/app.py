@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from werkstatt.phase_state import PhaseState
-from werkstatt.web import audit_panel, auth, chat, terminal_proxy, ws
+from werkstatt.web import audit_panel, auth, chat, shell, terminal_proxy, ws
 
 __all__ = ["app", "create_app"]
 
@@ -118,6 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(audit_panel.router)
     app.include_router(terminal_proxy.router)
+    app.include_router(shell.router)
 
     # Layout/CSS/JS liegen in /opt/werkstatt/static/ (Projekt-Root),
     # nicht in werkstatt/web/static/ (Modul-Package).
