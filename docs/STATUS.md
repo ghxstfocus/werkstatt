@@ -282,52 +282,34 @@ tragen. Roadmap-Phasen sind grobe Etappen aus der Vor-Session
 
 
 
-### OP-084: Chat-Backend mit LLM-Antwort + Loop-Steuerung aus Chat
+
+### OP-086: Doku-Drift als Verify-Gate (deterministisch)
 
 - **Status:** open
-- **Beschreibung:** Der Chat liefert bisher nur Intent-Klassifikation
-  (`{chat_id, intent, zustand, layout}`) ohne `antwort`-Feld. Frontend
-  zeigt deshalb `(leer)`. Zusaetzlich soll der Chat den Loop aus der
-  Nachricht heraus steuern: "starte den Loop mit der naechsten OP in
-  STATUS.md" oder "starte Loop mit OP-045" triggert POST
-  /api/projects/{name}/start mit entsprechendem `aufgabe`-Text.
-  "Welche OPs sind offen?" liest STATUS.md und antwortet mit Markdown-Liste.
-- **Betroffene Dateien:** `werkstatt/web/chat.py`, `static/chat.js`,
-  `tests/test_chat.py` (neu)
-- **Akzeptanzkriterien:** (a) POST /api/chat/{chat_id} liefert bei jeder
-  Anfrage ein `antwort`-Feld (String, Markdown), abgeleitet aus Intent
-  + LLM-Call (deepseek-chat, max 500 Tokens) oder Template fuer bekannte
-  Intents (status/start/offene-ops). (b) Erkennung "starte loop mit
-  OP-NNN" ruft project_start auf, Antwort bestaetigt mit PID + Log-Pfad.
-  (c) "welche ops sind offen" liest docs/STATUS.md, parst ### OP-NNN,
-  antwortet mit nummerierter Liste (max 30). (d) Frontend rendert
-  `antwort` als Markdown statt `(leer)`.
-- **Tests:** `pytest tests/test_chat.py -v` (Intent-Erkennung, LLM-Fallback,
-  Loop-Trigger mocked, Offene-OPs-Parser)
+- **Beschreibung:** `tools/doku_check.py` ist gebaut, aber noch nicht
+  im Loop-Gate. Commits mit Subject `feat/fix/chore/...` und Code-
+  Aenderung ohne Doku-Aenderung sollen als eigene verify-Stage laufen.
+  Wenn Verdacht: Gate rot, Commit blockiert. Ausnahmen (docs(, test(,
+  ci(, [skip-doku]) bereits implementiert.
+
+  Ziel: Doku-Pflege ist strukturell erzwungen, nicht Erinnerung des
+  Menschen. Begruendung: der Loop liest seine Queue aus docs/STATUS.md.
+  Wenn dort stale OPs stehen (Beispiel 2026-11-03: Chat-Agent
+  empfahl OP-084/085, obwohl beide bereits durch 82502f0..98a53d3
+  erledigt waren), arbeitet der Loop gegen Phantom-Eintraege.
+- **Betroffene Dateien:** `.werkstatt/verify.json` (neue Stage
+  `doku_drift`), `tools/doku_check.py` (nutzen), `tests/test_doku_check.py`
+  (neu), `AGENTS.md` (Pflicht-Befehl dokumentieren)
+- **Akzeptanzkriterien:** (a) `verify.json` enthaelt Stage
+  `doku_drift` mit Command `python3 tools/doku_check.py --strict
+  --limit 5`. (b) Stage ist `hart=True`, blockiert Commit. (c) Tests
+  `tests/test_doku_check.py` mit 4 Szenarien: Verdacht erkannt,
+  Doku-Aenderung da, `[skip-doku]` greift, `docs(`-Scope greift.
+  (d) `python3 tools/doku_check.py --strict` im Repo aktuell
+  exit 0 (kein Verdacht in letzten 5 Commits) — sonst Commit
+  sowieso blockiert.
+- **Tests:** `pytest tests/test_doku_check.py -v`
 - **Blockiert von:** —
-
-### OP-085: Chat-Agent — Projekt-Operationen (Files, Grep, Tests)
-
-- **Status:** open
-- **Beschreibung:** Chat soll nicht nur antworten, sondern Projekt-
-  Operationen ausfuehren wie der Builder: `lies datei X`, `suche nach Y`,
-  `zeig alle tests`, `welche funktion Z in datei W`. LLM bekommt Tool-
-  Definitionen (read_file, grep, list_dir, run_pytest_one), Server fuehrt
-  aus, Ergebnis geht zurueck an LLM. Tool-Use-Loop max 5 Runden.
-  Ergebnis: Antwort basiert auf tatsaechlich gelesenen Daten, nicht auf
-  Halluzination.
-- **Betroffene Dateien:** `werkstatt/web/chat.py` (erweitern),
-  `werkstatt/chat_agent.py` (neu), `static/chat.js`,
-  `tests/test_chat_agent.py` (neu)
-- **Akzeptanzkriterien:** (a) Tool-Use-Loop im chat_agent: LLM gibt
-  Tool-Aufruf zurueck, Server validiert (Whitelist: read_file, grep,
-  list_dir, run_pytest_one), fuehrt aus, Ergebnis zurueck an LLM,
-  max 5 Runden. (b) `lies datei werkstatt/web/chat.py` liefert
-  tatsaechlichen Datei-Inhalt (verifizierbar). (c) `suche nach
-  _approval_und_human_gate` listet Fundstellen mit Datei:Zeile.
-  (d) Kein Zugriff auf Pfade ausserhalb project_dir (Traversal-Schutz).
-- **Tests:** `pytest tests/test_chat_agent.py -v`
-- **Blockiert von:** OP-084
 
 ## Erledigt (Auto-Log)
 

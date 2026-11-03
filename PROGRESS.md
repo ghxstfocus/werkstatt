@@ -1455,3 +1455,20 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - **quality_gate re-baseline** (42a25e8, 355ba51): BASELINE nachgezogen, mypy-Scope werkstatt/ statt ., ast/katalog-Skip wenn Datei fehlt, pytest -m 'not slow' fuer Gate-Runs.
 - **DeepSeek-Look** (f30a13d): static/layout.css komplett neu (~380 Z., CSS-Variablen), chat.css Bubbles, audit.js data-kind fuer Kategorie-Farben.
 - **Tee-Log** (2f53975, 33e3f01): loop_renderer._emit_raw + log_line schreiben ANSI-frei in logs/loop-render-DATUM.log. terminal_proxy streamt Render-Zeilen. Browser zeigt 1:1 SSH-Output.
+
+## 2026-11-03T13:41:47+00:00 -- OP-084 + OP-085: Chat-Backend + Chat-Agent (done)
+- **Status:** done
+- **Commits:** 82502f0, e016f68, 61912bc, 98a53d3, [LLM-First]
+- **OP-084 (Chat-Backend):** POST /api/chat liefert antwort-Feld,
+  'starte Loop mit OP-NNN' triggert subprocess, offene-OP-Liste
+  aus STATUS.md. Frontend rendert antwort als pre-wrap Bubble.
+- **OP-085 (Chat-Agent):** LLM-First mit Function-Calling
+  (DeepSeek). Tools: list_open_ops, read_file, grep, shell_exec,
+  measure_status, start_loop. Max 5 Runden. Shell-Exec: PTY-Inject
+  bei Einzeiler, sonst subprocess.run (Mehrzeiler/Heredoc immer
+  subprocess).
+- **Test-Anpassung:** test_post_chat_antwort_feld mockt jetzt
+  _deepseek_chat statt Live-LLM. In Test-Umgebung kein Key nötig.
+- **Hinweis:** LLM-First ersetzt Pattern-Fast-Path für freie
+  Fragen — natürliche Sprache ('Was ist die nächste OP') geht
+  jetzt durch Tool-Calling, nicht durch Regex.
