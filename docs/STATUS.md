@@ -78,31 +78,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 
 
 
-### OP-088: `explorer_result`-Event wird nicht mehr geschrieben
-
-- **Status:** open
-- **Betroffen:** `werkstatt/explorer.py` (Event-Definition), `werkstatt/scout.py` (Consumer)
-- **Problem:** `audit("explorer_result", ...)` existiert in `werkstatt/explorer.py`, aber in Logs ab 26.10. nicht mehr sichtbar. Heute nur noch `explorer_messung_findings`. `explorer_context` (den der Scout fuer Datei-Previews braucht) ist dadurch moeglicherweise leer — blockiert OP-070.
-
-Ursprünglicher Notiz-Text (2026-11-02):
-- **Beobachtung:** `audit("explorer_result", ...)` existiert in
-  `werkstatt/explorer.py`. In Logs vom 23.-25.10. taucht er auf (10-58x),
-  in Logs ab 26.10. **nicht mehr**. Stattdessen gibt es heute 15x
-  `explorer_messung_findings`.
-- **Verdacht:** Der Event wurde bei einer Explorer-Refactor-Welle
-  umbenannt oder der Pfad, der ihn schreibt, wird nicht mehr erreicht.
-- **Konsequenz:** `explorer_context` (den der Scout fuer Datei-Previews
-  braucht) ist moeglicherweise leer -> Scout-Redundanz-Analyse (OP-070)
-  hat keine Basis.
-- **Naechster Schritt:** Pruefen ob `explorer_result` noch erreicht wird;
-  falls nicht, Event wieder aktivieren oder durch `explorer_messung_findings`
-  ersetzen (semantisch gleich?). Kein sofortiger Fix.
-
-- **Akzeptanzkriterien:** (a) Ursache identifiziert. (b) `explorer_result` wieder aktiv ODER durch `explorer_messung_findings` semantisch ersetzt. (c) Ein Beispiel-Log zeigt `explorer_result` wieder.
-- **Tests:** Kein Test — Verifikation ueber Log-Grep nach einem Loop-Lauf.
-- **Blockiert von:** —
-
-
 
 ### OP-092: Loop-Agenten mit explizitem Kontext-Vertrag (Sammel-OP)
 
@@ -246,6 +221,7 @@ Ursprünglicher Notiz-Text (2026-11-02):
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-03 | OP-088 | done | explorer_result in beiden Zweigen (Mess+LLM), audit.py-Katalog (4b6058f)
 - 2026-11-03 | OP-091 | done | audit_panel: _home_kontext Modulebene (Diagnose korrigiert: Writer OK, Reader crasht) (4a10645)
 - 2026-11-03 | OP-095 | done | Phase 33.2a: verify.json hart-Feld explizit + fail-loud (1ac3446)
 - 2026-11-03 | OP-089 | done | Reflection-Circuit-Breaker + Katalog-Drift (c00ef17)
