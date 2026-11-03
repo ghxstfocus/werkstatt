@@ -302,26 +302,30 @@ tragen. Roadmap-Phasen sind grobe Etappen aus der Vor-Session
 ### OP-047: Doku-Filter `doku_post_check_reduziert` killt Multi-File-Tasks
 
 - **Status:** open
-- **Betroffen:** `werkstatt/planner.py`, Funktion `_doku_post_check_reduziert`
-  (Log-Tag: `planner_doku_post_check_reduziert`)
+- **Betroffen:** `werkstatt/planner.py`, Funktion `_doku_post_check`
+  (Zeile 1015–1100; Log-Tag: `planner_doku_post_check_reduziert` in Zeile 1097)
 - **Problem:** Bei Doku-Ops über mehrere `.md`-Dateien (z.B. OP-046 mit
   `docs/PLANNER-KONZEPT.md`, `docs/ROLLEN-AUDIT.md`, `docs/MERKPOSTEN.md`)
-  reduziert der Post-Check den Plan auf 1 Task. Log-Beleg: `[K36-KEEP]
-  prev=t1(docs/PLANNER-KONZEPT.md) cur=t2(docs/ROLLEN-AUDIT.md)
-  same_file=False same_act=True combined=3291/1800` — der Filter verwirft
-  Tasks mit `same_act=True` (gleiche Aktion = update an .md) auch wenn die
-  Zieldatei unterschiedlich ist. Bei OP-046 wurden so 2 von 3 Tasks verworfen;
-  der Loop lief mit `Tasks: 0/1` am Ende, weil die grep-Abnahme drei Dateien
-  prüft.
-- **Fix:** Filter nur dann `same_act`-basiert zusammenfassen, wenn
-  `same_file=True AND same_act=True`. Bei unterschiedlichen Dateien müssen
-  Tasks stehen bleiben (auch wenn Aktion identisch ist).
-- **Test:** `pytest tests/test_planner.py -k doku_post_check -v` mit einem
-  Fixture, das 3 Tasks auf 3 verschiedene `.md`-Dateien setzt; erwartet:
-  3 Tasks bleiben stehen.
+  reduziert `_doku_post_check` den Plan auf die Tasks EINER Datei. Log-Beleg
+  aus OP-046: `planner_doku_post_check_reduziert original_task_count=3
+  md_task_count=3 behalten=["docs/PLANNER-KONZEPT.md"]` — die beiden Tasks
+  für `ROLLEN-AUDIT.md` und `MERKPOSTEN.md` fallen weg, der Loop committet
+  nur 1 Datei. **Wichtig:** die Merge-Logik in `_reduce_tasks` (Zeile ~734,
+  `if same_file and same_act`) ist NICHT schuld, sie greift korrekt nur bei
+  identischer Datei. Der Bug sitzt ausschließlich im `_doku_post_check`-Filter.
+- **Fix:** `_doku_post_check` darf Tasks nur reduzieren, wenn `same_file=True`
+  ist; unterschiedliche `.md`-Dateien müssen stehen bleiben. Wenn der Filter
+  tatsächlich nur pro Datei eine Task-Auswahl treffen soll (z.B. um doppelte
+  `docs_offen`-Tasks zu einer Datei zu kollabieren), dann NUR bei identischer
+  Datei reduzieren, nie datei-übergreifend.
+- **Test:** Datei `tests/test_planner.py` NEU anlegen (existiert nicht), Test
+  `test_doku_post_check_multi_file` mit 3 Tasks auf 3 verschiedene `.md`-
+  Dateien → erwartet: 3 Tasks bleiben stehen. Plus `test_doku_post_check_
+  same_file_reduziert` mit 3 Tasks auf DIESELBE `.md`-Datei → erwartet:
+  Reduktion auf 1 Task (Regressionsschutz für das eigentliche Ziel des Filters).
 - **Akzeptanz:** Bei einem Doku-OP mit N verschiedenen Dateien liefert der
-  Planner N Tasks, nicht 1. Verifikation: Test-Lauf mit der Aufgaben-
-  beschreibung von OP-046 liefert 3 Tasks in der PLAN-Anzeige.
+  Planner N Tasks, nicht 1. Verifikation: erneuter Loop-Lauf mit der OP-046-
+  Aufgabenbeschreibung liefert `PLAN — 0 Phasen, 3 Tasks` in der PLAN-Anzeige.
 - **Blockiert von:** —
 
 ## Erledigt (Auto-Log)
