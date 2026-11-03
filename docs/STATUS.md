@@ -120,21 +120,6 @@ Ursprünglicher Notiz-Text (2026-11-02):
   Patch, Test schlägt gleich fehl → Runde 2 bricht ab mit Audit-Event.
 - **Blockiert von:** —
 
-### OP-090: Human-Gate-Skip bei erschöpfter Reflection
-
-- **Status:** open
-- **Betroffen:** `werkstatt/pipeline_phases.py` (`_phase_tasks_loop` oder Phase-End)
-- **Problem:** Bei `LOOP FEHLGESCHLAGEN` nach 5 Reflection-Runden wird der
-  Human-Gate komplett übersprungen. Der User sieht nur den Fail, kein
-  `Approve? [j/n/e]`, obwohl Patches auf der Platte liegen.
-- **Akzeptanzkriterien:** (a) Auch bei `reflection_erschoepft` erreicht
-  der Loop den Human-Gate, mit Hinweis „Reflection gab auf nach N Runden".
-  (b) User-Entscheidung: `j` = Patches behalten (commit), `n` = Patches
-  verwerfen (git restore), `e` = manuell editieren. (c) Neuer Modus:
-  `git restore` bei `n` auf die Original-Files vor Task-Start.
-- **Tests:** `tests/test_pipeline_phases.py` — Mock-Reflection liefert
-  Fail nach 3 Runden, Human-Gate wird erreicht, `n` revertiert.
-- **Blockiert von:** —
 
 ### OP-091: Audit-Log wird nicht geschrieben
 
@@ -267,6 +252,7 @@ Ursprünglicher Notiz-Text (2026-11-02):
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-03 | OP-090 | done | Human-Gate bei Reflection-Erschöpfung (47b6e07)
 - 2026-11-03 | OP-047 | done | `_doku_post_check` gruppiert pro Datei (bb719b1)
 - 2026-11-02 | OP-035 | Doku-Task-Datum wird halluziniert — deterministisch geloest (BUILDER_SYSTEM + {date}-Ersetzung + _korrigiere_doku_datum Sicherheitsnetz)
 - 2026-11-02 | OP-068 | Heartbeat-Stage-Name (Builder/Reviewer) — Commit 2c099da
