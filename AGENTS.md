@@ -148,3 +148,23 @@ die jeweilige Datei fehlt (delta=0). quality_gate ist gruen (exit 0).
 - PROGRESS.md — Historie (append-only)
 - docs/adr/ — Architecture Decision Records
 - docs/DOC_CONVENTIONS.md — Golden-Standard (Meta)
+
+## Loop-Kontrollen (werkstatt/control/)
+
+Alle Loop-Kontrollen (Gates, Verify-Stages, Reflections, Guards) sind
+in `werkstatt/control/` als Registry inventarisiert:
+
+- `control/registry.py` — `CONTROL_REGISTRY`, Single Source of Truth.
+- `control/phases.py` — `Phase`-Enum (12 Werte).
+- `control/runner.py` — `run_control(name, ctx)` / `run_phase(phase, ctx)`.
+- `control/drift.py` — `check_drift()` (Registry vs. Code).
+
+**Pflicht-Befehl vor jedem Commit:**
+
+    python3 tools/control_drift.py --check
+
+Exit 0 erwartet. Exit 1 bei Registry-Eintrag dessen `source`-Modul
+nicht importierbar ist oder dessen Funktion fehlt.
+
+Neue Kontrolle: Eintrag in `registry.py`, dann `--check`. Migration
+nach `control/*` schrittweise ueber OPs 095-099.

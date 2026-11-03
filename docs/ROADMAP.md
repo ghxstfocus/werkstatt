@@ -510,3 +510,26 @@ Stand: 2026-11-03, migriert aus STATUS.md.
   Kern-Erkenntnis: 4 Anlaeufe (OP-059c/d/e/062i) fuer dasselbe Problem. Das ist Symptom-Behandlung. Es braucht Architektur: deterministische Schichten, die nicht durch LLM-Approval ueberschreibbar sind.
 
 
+
+## Phase 33: Kontroll-Zentralisierung (werkstatt/control/)
+
+Stand: 2026-11-03, gestartet.
+
+Motivation: 32 Kontrollfunktionen ueber 14 Dateien verstreut, 21
+Phase-Hooks ueber 10 Dateien. Debugging erforderte Grep ueber den
+halben Code. Nach dem pipeline.py-Monolithen die naechste Schicht.
+
+Ziel: `werkstatt/control/` als einzige Stelle fuer Gates,
+Verify-Stages, Reflections und Guards.
+
+| Phase | Inhalt | Status |
+|---|---|---|
+| 33.1 | control/-Skelett + Registry (13 Kontrollen) + Drift-Check | erledigt 2026-11-03 |
+| 33.2 | verify.py nach control/, 5 Proxies weg, verify.json hart-Feld | OP-095 |
+| 33.3 | gates.py nach control/ | OP-096 |
+| 33.4 | reflection.py nach control/ | OP-097 |
+| 33.5 | pipeline_phases.py 1600 auf <400 Zeilen | OP-098 |
+| 33.6 | control_drift als Pre-Commit-Gate | OP-099 |
+
+Guardrail pro Phase: `pytest -q --ignore=tests/test_shell.py` gruen UND
+`python3 tools/control_drift.py --check` Exit 0. Kein Big-Bang.

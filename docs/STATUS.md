@@ -243,3 +243,67 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-02 | OP-069 | Delete-Zone-Sektion anlegen — Commit 6fa1d74 + Fix ebe8049
 - 2026-11-03 | OP-045 | docs/WORKFLOW.md geloescht (nicht mehr gepflegt, nicht in DOC_CONVENTIONS §2 Pflicht)- 2026-11-03 | OP-008 | obsolete (pipeline.py geloescht) — Commit 07a4de6
 - 2026-11-03 | OP-009 | obsolete (python3 -m werkstatt.loop funktioniert (CLI seit Monaten aktiv)) — Commit n/a
+
+### OP-095: Phase 33.2 — verify.py nach control/ migrieren
+
+- **Status:** open
+- **Typ:** architektur
+- **Betroffen:** `werkstatt/verify.py` nach `werkstatt/control/verify.py`,
+  5 `_verify_patches`-Proxies (gates, reflection, pipeline_phases,
+  task_runner), `.werkstatt/verify.json`
+- **Problem:** 5 Proxies auf `_verify_patches` machen die echte
+  Implementierung unauffindbar. `verify.json` hat kein `hart`-Feld,
+  alle Stages laufen ueber Prefix-Match in `_stage_ist_hart`.
+- **Akzeptanzkriterien:** (a) `control/verify.py` existiert, altes
+  `werkstatt/verify.py` Deprecation-Proxy. (b) 5 Proxies entfernt,
+  Aufrufer importieren aus `werkstatt.control.verify`. (c) `verify.json`
+  hat explizites `"hart": true|false` pro Stage.
+- **Tests:** `pytest tests/test_verify.py -v` + `control_drift --check`.
+- **Blockiert von:** -
+
+### OP-096: Phase 33.3 — gates.py nach control/ migrieren
+
+- **Status:** open
+- **Typ:** architektur
+- **Betroffen:** `werkstatt/gates.py` nach `werkstatt/control/gates.py`
+- **Problem:** 16 Funktionen in gates.py, davon 6 echte Gates.
+  13 Aufrufe in pipeline_phases.py.
+- **Akzeptanzkriterien:** `control/gates.py` mit plan_gate,
+  human_gate_plan, human_gate, human_gate_body. Deprecation-Proxy.
+  Aufrufer migriert. `tests/test_gates.py` gruen.
+- **Blockiert von:** OP-095
+
+### OP-097: Phase 33.4 — reflection.py nach control/ migrieren
+
+- **Status:** open
+- **Typ:** architektur
+- **Betroffen:** `werkstatt/reflection.py` nach `werkstatt/control/reflection.py`
+- **Problem:** 7 Aufrufer von `_reflection_loop`, 1 von
+  `_plan_reject_reflection`. 12 Funktionen.
+- **Akzeptanzkriterien:** `control/reflection.py` mit 3 Einstiegspunkten.
+  Deprecation-Proxy. Aufrufer migriert. `tests/test_reflection*.py` gruen.
+- **Blockiert von:** OP-095, OP-096
+
+### OP-098: Phase 33.5 — pipeline_phases.py reduzieren
+
+- **Status:** open
+- **Typ:** architektur (groesster Schritt)
+- **Betroffen:** `werkstatt/pipeline_phases.py` (1600+ Zeilen)
+- **Problem:** 13 Phase-End-Hooks, 3 Pre-Build, 5 Post-Build direkt
+  im Monolithen. Nach 33.2-33.4 sollte diese Datei nur noch
+  `run_phase(Phase.X, state)` aufrufen.
+- **Akzeptanzkriterien:** pipeline_phases.py unter 400 Zeilen. Jede
+  Phase ruft `run_phase`. Keine direkten `_verify_patches`-Aufrufe.
+  Voller Loop-Durchlauf funktioniert.
+- **Blockiert von:** OP-095, OP-096, OP-097
+
+### OP-099: Phase 33.6 — control_drift als Pre-Commit-Gate
+
+- **Status:** open
+- **Typ:** ci (analog OP-094 audit_drift)
+- **Betroffen:** `.werkstatt/verify.json` (neue Stage), AGENTS.md
+- **Problem:** `tools/control_drift.py --check` laeuft nur manuell.
+  Bei Refactor kann eine Kontrolle unbemerkt aus der Registry rutschen.
+- **Akzeptanzkriterien:** Neue Stage `control_drift` in verify.json.
+  Fail blockiert Commit.
+- **Blockiert von:** -
