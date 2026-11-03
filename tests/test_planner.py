@@ -12,7 +12,9 @@ braucht ".md" in der Aufgabe.
 """
 from __future__ import annotations
 
-from werkstatt.planner import _doku_post_check
+from unittest import mock
+
+from werkstatt.planner import _doku_post_check, _pruefe_zieldatei_existenz
 
 
 def test_doku_post_check_multi_file() -> None:
@@ -55,3 +57,62 @@ def test_doku_post_check_single_target_grossbuchstabe() -> None:
 
     assert len(ergebnis) == 1
     assert ergebnis[0]["task_files"][0] == "docs/A.md"
+
+
+def test_pruefe_zieldatei_existenz_create_bei_kopier_auftrag(tmp_path) -> None:
+    """Kopier-Auftrag: Ziel fehlt -> aktion create, source_file gesetzt."""
+    task = {
+        "task_files": ["werkstatt/control/reflection.py"],
+        "aktion": "update",
+        "beschreibung": "kopiere reflection",
+    }
+    aufgabe = "kopiere werkstatt/reflection.py nach werkstatt/control/reflection.py"
+
+    ergebnis = _pruefe_zieldatei_existenz([task], tmp_path, aufgabe)
+
+    assert len(ergebnis) == 1
+    assert ergebnis[0]["aktion"] == "create"
+    assert ergebnis[0]["source_file"] == "werkstatt/reflection.py"
+
+
+def test_pruefe_zieldatei_existenz_update_bei_existierender_datei(tmp_path) -> None:
+    """Existierende Datei: aktion bleibt update, kein source_file."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs/A.md").write_text("x", encoding="utf-8")
+    task = {"task_files": ["docs/A.md"], "aktion": "update"}
+    aufgabe = "docs/A.md ergaenzen"
+
+    ergebnis = _pruefe_zieldatei_existenz([task], tmp_path, aufgabe)
+
+    assert len(ergebnis) == 1
+    assert ergebnis[0]["aktion"] == "update"
+    assert "source_file" not in ergebnis[0]
+
+
+def test_pruefe_zieldatei_existenz_fail_closed_ohne_quelle(tmp_path) -> None:
+    """Ziel fehlt und keine Quelle ermittelbar: fail-closed + audit."""
+    task = {"task_files": ["werkstatt/fehlt.py"], "aktion": "update"}
+    aufgabe = "irgendwas ohne kopier-muster"
+
+    with mock.patch("werkstatt.planner.audit") as mock_audit:
+        ergebnis = _pruefe_zieldatei_existenz([task], tmp_path, aufgabe)
+
+    assert ergebnis == []
+    assert mock_audit.call_count == 1
+    assert mock_audit.call_args.args[0] == "planner_update_ziel_fehlt"
+    assert mock_audit.call_args.args[1]["ziel"] == "werkstatt/fehlt.py"
+
+
+def test_pruefe_zieldatei_existenz_source_file_aus_task(tmp_path) -> None:
+    """source_file direkt aus Task: aktion create, kein audit."""
+    task = {
+        "task_files": ["werkstatt/control/x.py"],
+        "aktion": "update",
+        "source_file": "werkstatt/x.py",
+    }
+
+    ergebnis = _pruefe_zieldatei_existenz([task], tmp_path, "")
+
+    assert len(ergebnis) == 1
+    assert ergebnis[0]["aktion"] == "create"
+    assert ergebnis[0]["source_file"] == "werkstatt/x.py"

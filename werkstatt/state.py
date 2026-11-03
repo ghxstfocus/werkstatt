@@ -327,6 +327,7 @@ class RunState:
     # `state.patches` bereits geleert wurde. Lebenszyklus: pro Runde
     # `clear()` + `extend()`, am Rundenende `clear()`.
     tasks: list[dict[str, object]] = field(default_factory=list)
+    akzeptanzkriterien: list = field(default_factory=list)
     architect_prosa: str = ""
     builder_feedback: str = ""
     patches: list[dict[str, object]] = field(default_factory=list)

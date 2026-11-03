@@ -1136,6 +1136,98 @@ def _doku_post_check(
     return ergebnis
 
 
+def _pruefe_zieldatei_existenz(
+    tasks: list[dict],
+    project_dir: Path,
+    aufgabe: str = "",
+    project_name: str = "",
+) -> list[dict]:
+    """OP-108: Deterministisches Planner-Gate fuer Zieldatei-Existenz.
+
+    - update + Datei fehlt + Kopier-Auftrag -> create + source_file
+    - update + Datei fehlt + kein Kopier-Auftrag -> Task verwerfen (fail-closed)
+    - sonst: Task unveraendert behalten
+
+    Mutiert Task-Dicts in-place (aktion, source_file).
+    """
+    # project_dir normalisieren (fail-soft bei Infra-Fehler).
+    if not isinstance(project_dir, Path):
+        try:
+            project_dir = Path(project_dir)
+        except (TypeError, ValueError):
+            audit(
+                "planner_zieldatei_check_ohne_project_dir",
+                {"project_dir": str(project_dir)[:200]},
+                Path("/tmp"),
+                "werkstatt",
+            )
+            return tasks
+
+    # Kopier-Regex aus der Aufgabe (falls vorhanden).
+    quelle_aus_aufgabe: str | None = None
+    ziel_aus_aufgabe: str | None = None
+    if aufgabe:
+        _m = re.search(
+            r"kopiere\s+(\S+)\s+nach\s+(\S+)",
+            aufgabe,
+            re.IGNORECASE,
+        )
+        if _m:
+            quelle_aus_aufgabe = _m.group(1).rstrip(".,;:")
+            ziel_aus_aufgabe = _m.group(2).rstrip(".,;:")
+
+    ergebnis: list[dict] = []
+    for task in tasks:
+        if not isinstance(task, dict):
+            ergebnis.append(task)
+            continue
+        dateien = task.get("task_files") or []
+        if not dateien:
+            ergebnis.append(task)
+            continue
+        ziel = dateien[0]
+        if not isinstance(ziel, str) or not ziel:
+            ergebnis.append(task)
+            continue
+        ziel_pfad = project_dir / ziel
+
+        # Kopier-Erkennung.
+        ist_kopier = False
+        quelle_pfad: str | None = None
+        _sf = task.get("source_file")
+        if _sf:
+            ist_kopier = True
+            quelle_pfad = _sf
+        elif ziel_aus_aufgabe and quelle_aus_aufgabe:
+            _ziel_lower = ziel.lower()
+            _ziel_aus_lower = ziel_aus_aufgabe.lower()
+            if (
+                _ziel_lower == _ziel_aus_lower
+                or _ziel_lower.endswith(_ziel_aus_lower)
+            ):
+                ist_kopier = True
+                quelle_pfad = quelle_aus_aufgabe
+
+        if task.get("aktion") == "update" and not ziel_pfad.exists():
+            if ist_kopier and quelle_pfad:
+                task["aktion"] = "create"
+                task["source_file"] = quelle_pfad
+                ergebnis.append(task)
+                continue
+            # fail-closed: Task verwerfen.
+            audit(
+                "planner_update_ziel_fehlt",
+                {"ziel": ziel, "aufgabe": aufgabe[:200]},
+                project_dir,
+                project_name or project_dir.name,
+            )
+            continue
+
+        ergebnis.append(task)
+
+    return ergebnis
+
+
 def _deterministic_entfernen_precheck(state) -> bool:
     """FIX S 2026-10-31: 'entferne X aus Y' wenn X fehlt -> Skip.
 

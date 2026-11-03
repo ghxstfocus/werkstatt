@@ -10,7 +10,6 @@ werkstatt.planner aufgeloest werden, damit Test-Patches wirken.
 from __future__ import annotations
 
 
-
 def audit(*args, **kwargs):
     """Late-Binding-Proxy fuer werkstatt.planner.audit."""
     from werkstatt.planner import audit as _orig
@@ -276,7 +275,7 @@ def _baue_api_index(project_dir) -> dict:
         except (OSError, SyntaxError):
             continue
         _rel = str(_f.relative_to(_pd))
-        _entry = {
+        _entry = {  # type: ignore[var-annotated]
             "all": [],
             "classes": [],
             "constants": [],
@@ -635,6 +634,22 @@ def _grep_projekt(pd, begriffe: list[str], max_per_begriff: int = 30) -> list[di
     return treffer
 
 
+def _erkenne_kopier_auftrag(aufgabe: str) -> dict | None:
+    """Deterministisch: erkennt 'kopiere X nach Y' in der Aufgabe.
+
+    Konservativer Regex, kein LLM. Liefert {"quelle", "ziel"} oder None.
+    Dient dem Scout als Fruehsignal fuer den Architect.
+    """
+    import re as _re
+    _m = _re.search(r"kopiere\s+(\S+)\s+nach\s+(\S+)", aufgabe, _re.IGNORECASE)
+    if not _m:
+        return None
+    return {
+        "quelle": _m.group(1).rstrip(".,;:"),
+        "ziel": _m.group(2).rstrip(".,;:"),
+    }
+
+
 def _run_scout(
     state, aufgabe: str, code_index: dict,
     key_files: list, api_key: str,
@@ -750,6 +765,10 @@ def _run_scout(
            # OP-070(a): Auswertung der letzten N Laeufe moeglich machen
            "bereits_erfuellt": bool(parsed.get("bereits_erfuellt", False))},
           pd, pn)
+    kopier = _erkenne_kopier_auftrag(aufgabe)
+    if kopier is not None:
+        parsed["source_file"] = kopier["quelle"]
+        parsed["ziel_datei"] = kopier["ziel"]
     return parsed
 
 
@@ -757,6 +776,7 @@ __all__ = [
     'SCOUT_SYSTEM',
     '_SCOUT_NACHFOLGER_BLOCK',
     '_baue_api_index',
+    '_erkenne_kopier_auftrag',
     '_finde_api',
     '_format_api_index_for_prompt',
     '_pruefe_api_widerspruch',
