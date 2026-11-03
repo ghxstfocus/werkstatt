@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Werkstatt</title>
-  <link rel="stylesheet" href="/static/vendor/xterm.css?v=1793697857">
-  <link rel="stylesheet" href="/static/layout.css?v=1793697857">
+  <link rel="stylesheet" href="/static/vendor/xterm.css?v=1793698168">
+  <link rel="stylesheet" href="/static/layout.css?v=1793698168">
 </head>
 <body>
 
@@ -26,8 +26,7 @@
       <div class="fenster-titel">
         <span id="terminal-titel" style="cursor:pointer;user-select:none" ondblclick="if(window.WerkstattShell){window.WerkstattShell.toggle();}">Terminal <small style="opacity:0.5">(Doppelklick f. Shell)</small></span>
         <span id="shell-diag" style="color:#f87171;font-size:11px;margin-left:8px"></span>
-        <button id="shell-toggle" type="button" title="Shell"
-                onclick="if(window.WerkstattShell&&window.WerkstattShell.toggle){window.WerkstattShell.toggle();}else{alert('shell.js nicht geladen — F12 Console prüfen');}">$</button>
+        <span id="shell-toggle-container"></span>
         <span id="terminal-spinner"></span>
       </div>
       <div class="scrollback" id="terminal" data-project="werkstatt"></div>
@@ -70,12 +69,12 @@
 
   </main>
 
-  <script src="/static/vendor/xterm.js?v=1793697857"></script>
-  <script src="/static/vendor/addon-fit.js?v=1793697857"></script>
-  <script src="/static/shell.js?v=1793697857"></script>
-  <script src="/static/tabs.js?v=1793697857"></script>
-  <script src="/static/terminal.js?v=1793697857"></script>
-  <script src="/static/audit.js?v=1793697857"></script>
-  <script src="/static/chat.js?v=1793697857"></script>
+  <script src="/static/vendor/xterm.js?v=1793698168"></script>
+  <script src="/static/vendor/addon-fit.js?v=1793698168"></script>
+  <script src="/static/shell.js?v=1793698168"></script>
+  <script src="/static/tabs.js?v=1793698168"></script>
+  <script src="/static/terminal.js?v=1793698168"></script>
+  <script src="/static/audit.js?v=1793698168"></script>
+  <script src="/static/chat.js?v=1793698168"></script>
 </body>
 </html>

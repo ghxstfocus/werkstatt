@@ -145,6 +145,9 @@
       if (btn) {
         btn.classList.add("ist-aktiv");
         btn.textContent = "\u25A3";
+        btn.style.background = "#4d6bfe";
+        btn.style.color = "#fff";
+        btn.style.borderColor = "#4d6bfe";
       }
       if (!verbunden) {
         _verbinde();
@@ -161,6 +164,9 @@
       if (btn) {
         btn.classList.remove("ist-aktiv");
         btn.textContent = "$";
+        btn.style.background = "transparent";
+        btn.style.color = "#9ca3af";
+        btn.style.borderColor = "#2c2e33";
       }
     }
   }
@@ -181,9 +187,55 @@
     }
   });
 
+  // Button komplett selbst erzeugen — kein HTML/CSS-Cache-Problem
+  // mehr, keine Duplikate. Wird bei DOMContentLoaded eingefuegt.
+  function _baue_button() {
+    var container = document.getElementById("shell-toggle-container");
+    if (!container) {
+      console.error("[shell] #shell-toggle-container fehlt im HTML");
+      return;
+    }
+    // Alten Button im Container loeschen (idempotent)
+    container.innerHTML = "";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "shell-toggle";
+    btn.textContent = "$";
+    btn.title = "SSH-Shell oeffnen/schliessen";
+    // Inline-Style: robust gegen CSS-Lade-Probleme
+    btn.style.cssText =
+      "padding:3px 10px;background:transparent;color:#9ca3af;" +
+      "border:1px solid #2c2e33;border-radius:6px;cursor:pointer;" +
+      "font-family:monospace;font-size:12px;font-weight:600;" +
+      "line-height:1;pointer-events:auto;position:relative;z-index:100;";
+    btn.addEventListener("mouseenter", function () {
+      btn.style.color = "#e4e4e7";
+      btn.style.borderColor = "#4d6bfe";
+      btn.style.background = "rgba(77,107,254,0.12)";
+    });
+    btn.addEventListener("mouseleave", function () {
+      if (aktiv) return;  // im aktiven Zustand nicht ueberschreiben
+      btn.style.color = "#9ca3af";
+      btn.style.borderColor = "#2c2e33";
+      btn.style.background = "transparent";
+    });
+    btn.addEventListener("click", function (ev) {
+      console.log("[shell] Button-Klick");
+      ev.stopPropagation();
+      _toggle();
+    });
+    container.appendChild(btn);
+    console.log("[shell] Button erzeugt und eingefuegt");
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    _baue_button();
+  });
+
   window.WerkstattShell = {
     toggle: _toggle,
     verbinden: _verbinde,
     aktiv: function () { return aktiv; },
+    baue_button: _baue_button,
   };
 })();
