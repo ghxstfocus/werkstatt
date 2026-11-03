@@ -264,6 +264,7 @@ Ursprünglicher Notiz-Text (2026-11-02):
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-03 | OP-095 | done | Phase 33.2a: verify.json hart-Feld explizit + fail-loud (1ac3446)
 - 2026-11-03 | OP-089 | done | Reflection-Circuit-Breaker + Katalog-Drift (c00ef17)
 - 2026-11-03 | OP-093 | done | Plan-Gate Fail-closed bei ungültiger Antwort (d0f871a)
 - 2026-11-03 | OP-090 | done | Human-Gate bei Reflection-Erschöpfung (47b6e07)
@@ -274,24 +275,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-03 | OP-045 | docs/WORKFLOW.md geloescht (nicht mehr gepflegt, nicht in DOC_CONVENTIONS §2 Pflicht)- 2026-11-03 | OP-008 | obsolete (pipeline.py geloescht) — Commit 07a4de6
 - 2026-11-03 | OP-009 | obsolete (python3 -m werkstatt.loop funktioniert (CLI seit Monaten aktiv)) — Commit n/a
 
-### OP-095: Phase 33.2a — verify.json hart-Feld explizit + fail-loud
-
-- **Status:** open
-- **Typ:** robuster-fix (Phase 2a, kleiner als 33.2b)
-- **Betroffen:** `.werkstatt/verify.json`, `werkstatt/verify.py::_stage_ist_hart`
-- **Problem:** `verify.json` hat kein `hart`-Feld, `_stage_ist_hart` klassifiziert
-  aktuell ueber Prefix-Match in `_HARTE_STAGE_PREFIXES` / `_WEICHE_STAGE_PREFIXES`.
-  Das funktioniert fuer die 5 aktuellen Stages zufaellig, ist aber fragil:
-  eine neue Stage wie "pyright_changed" wuerde unbemerkt als HART klassifiziert
-  (fail-closed auf unbekannt), was einen Commit blockiert der eigentlich nur
-  Warnungen hat. Umgekehrt wuerde ein Typo wie "pytest_xyz" als weich durchgehen.
-- **Akzeptanzkriterien:** (a) Jede Stage in verify.json hat explizites
-  `"hart": true|false`. (b) `_stage_ist_hart` warnt wenn `hart` fehlt
-  (via `audit("verify_stage_ohne_hart_flag", {...})`), klassifiziert dann
-  per Prefix-Fallback. (c) Neue Tests: 2x (hart=true ist hart, hart=false
-  ist weich, fehlend = warnung + prefix-fallback).
-- **Tests:** `pytest tests/test_verify_mypy_hart.py -v`
-- **Blockiert von:** -
 
 ### OP-096: Phase 33.3 — gates.py nach control/ migrieren
 
