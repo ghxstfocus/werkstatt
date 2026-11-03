@@ -1156,7 +1156,25 @@ def _phase_tasks_loop(
                                human_review=True,
                                failure="spec_widerspruch_vermutet")
                     continue
-                _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="post_build_verify_failed")
+                # OP-090: Human-Gate statt sofortigem Fail.
+                # Der User soll den Diff sehen und entscheiden:
+                # j = Patches behalten + committen (Task ok)
+                # n = Patches verwerfen (Task fail, Loop laeuft weiter)
+                state.reflection_erschoepft = True  # type: ignore[attr-defined]
+                _gate_rc = _human_gate(state)
+                state.reflection_erschoepft = False  # type: ignore[attr-defined]
+                if _gate_rc == 0:
+                    audit("loop_human_gate_reflection_erschoepft_approved",
+                          {"task_id": i}, pd, pn)
+                    _task_ende(state, phase_state, task_id,
+                               ok=True, name=task_name,
+                               failure="reflection_erschoepft_approved")
+                    continue
+                audit("loop_human_gate_reflection_erschoepft_rejected",
+                      {"task_id": i}, pd, pn)
+                _task_ende(state, phase_state, task_id,
+                           ok=False, name=task_name,
+                           failure="reflection_erschoepft_rejected")
                 continue
         elif _v_weich:
             # Weiche Fehler: Warnung auditieren, aber Task laeuft weiter
