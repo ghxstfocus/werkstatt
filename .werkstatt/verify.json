@@ -9,7 +9,8 @@
         "{changed_py_files}"
       ],
       "phase": "post_build",
-      "timeout": 60
+      "timeout": 60,
+      "hart": true
     },
     {
       "id": "ruff_changed",
@@ -21,7 +22,8 @@
         "{changed_py_files}"
       ],
       "phase": "post_build",
-      "timeout": 120
+      "timeout": 120,
+      "hart": false
     },
     {
       "id": "mypy_changed",
@@ -34,7 +36,8 @@
         "{changed_py_files}"
       ],
       "phase": "post_build",
-      "timeout": 90
+      "timeout": 90,
+      "hart": false
     },
     {
       "id": "pytest_changed",
@@ -46,7 +49,8 @@
         "-q"
       ],
       "phase": "post_build",
-      "timeout": 300
+      "timeout": 300,
+      "hart": true
     },
     {
       "id": "pytest_regression",
@@ -58,7 +62,8 @@
       ],
       "requires": "{changed_non_test_py_files}",
       "phase": "phase_end",
-      "timeout": 300
+      "timeout": 300,
+      "hart": true
     }
   ]
 }

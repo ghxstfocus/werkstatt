@@ -207,6 +207,36 @@ Ursprünglicher Notiz-Text (2026-11-02):
   hat der Agent deterministischen Kontext und rät nicht mehr.
 
 
+### OP-100: Phase 33.2b — verify-Migration nach control/ (gross)
+
+- **Status:** open
+- **Typ:** architektur-refactor (Multi-Session)
+- **Betroffen:** `werkstatt/verify.py` (620 Zeilen), `werkstatt/loop.py`
+  (Re-Export), 5 `_verify_patches`-Proxies, **163 Test-Patch-Calls**
+- **Problem:** `_verify_patches` existiert 5x als Proxy, echte Impl in
+  verify.py:341. Aber: `verify.py` importiert `loop.py` (via audit-Proxy),
+  `loop.py` re-exportiert `verify`, alle Tests patchen
+  `werkstatt.loop._verify_patches` (21x) und `werkstatt.verify._verify_patches`
+  (22x) und 4 weitere Formen. Ein mechanischer Move bricht 163 Test-Pfade.
+- **Scope (Stufenplan):**
+  - 100a: Late-Binding `audit`-Proxy in verify.py aufloesen (Kern der
+    Zirkularitaet, ~93 Test-Pfade auf `audit`). Vermutlich via
+    `state.audit`-Callable oder direkter `from werkstatt.audit import audit`.
+  - 100b: `verify.py` nach `control/verify.py`, `werkstatt/verify.py`
+    als Deprecation-Proxy.
+  - 100c: `loop.py`-Re-Export entfernen, Aufrufer direkt auf
+    `control.verify` umstellen.
+  - 100d: 5 Proxies in gates/reflection/pipeline_phases/task_runner
+    entfernen.
+  - 100e: 163 Test-Patch-Calls migrieren (separater Sub-OP, pro Datei).
+- **Akzeptanzkriterien:** Nach 100a-e: `_verify_patches` existiert genau
+  1x (in `control/verify.py`). `control_drift --check` gruen. `pytest`
+  gruen. Keine Deprecation-Warnungen mehr.
+- **Tests:** `pytest -q --ignore=tests/test_shell.py` + 163 Patch-Migrationen.
+- **Blockiert von:** OP-095 (hart-Feld zuerst), OP-100a-e in Reihenfolge.
+- **Anmerkung:** Discovery 2026-11-03: 163 Patch-Calls (45x _verify_patches,
+  93x audit, 10x _plan_gate, 15x sonst). Nicht an einem Tag machbar.
+
 ## Erledigt (Auto-Log)
 
 - 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)
@@ -244,21 +274,23 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-03 | OP-045 | docs/WORKFLOW.md geloescht (nicht mehr gepflegt, nicht in DOC_CONVENTIONS §2 Pflicht)- 2026-11-03 | OP-008 | obsolete (pipeline.py geloescht) — Commit 07a4de6
 - 2026-11-03 | OP-009 | obsolete (python3 -m werkstatt.loop funktioniert (CLI seit Monaten aktiv)) — Commit n/a
 
-### OP-095: Phase 33.2 — verify.py nach control/ migrieren
+### OP-095: Phase 33.2a — verify.json hart-Feld explizit + fail-loud
 
 - **Status:** open
-- **Typ:** architektur
-- **Betroffen:** `werkstatt/verify.py` nach `werkstatt/control/verify.py`,
-  5 `_verify_patches`-Proxies (gates, reflection, pipeline_phases,
-  task_runner), `.werkstatt/verify.json`
-- **Problem:** 5 Proxies auf `_verify_patches` machen die echte
-  Implementierung unauffindbar. `verify.json` hat kein `hart`-Feld,
-  alle Stages laufen ueber Prefix-Match in `_stage_ist_hart`.
-- **Akzeptanzkriterien:** (a) `control/verify.py` existiert, altes
-  `werkstatt/verify.py` Deprecation-Proxy. (b) 5 Proxies entfernt,
-  Aufrufer importieren aus `werkstatt.control.verify`. (c) `verify.json`
-  hat explizites `"hart": true|false` pro Stage.
-- **Tests:** `pytest tests/test_verify.py -v` + `control_drift --check`.
+- **Typ:** robuster-fix (Phase 2a, kleiner als 33.2b)
+- **Betroffen:** `.werkstatt/verify.json`, `werkstatt/verify.py::_stage_ist_hart`
+- **Problem:** `verify.json` hat kein `hart`-Feld, `_stage_ist_hart` klassifiziert
+  aktuell ueber Prefix-Match in `_HARTE_STAGE_PREFIXES` / `_WEICHE_STAGE_PREFIXES`.
+  Das funktioniert fuer die 5 aktuellen Stages zufaellig, ist aber fragil:
+  eine neue Stage wie "pyright_changed" wuerde unbemerkt als HART klassifiziert
+  (fail-closed auf unbekannt), was einen Commit blockiert der eigentlich nur
+  Warnungen hat. Umgekehrt wuerde ein Typo wie "pytest_xyz" als weich durchgehen.
+- **Akzeptanzkriterien:** (a) Jede Stage in verify.json hat explizites
+  `"hart": true|false`. (b) `_stage_ist_hart` warnt wenn `hart` fehlt
+  (via `audit("verify_stage_ohne_hart_flag", {...})`), klassifiziert dann
+  per Prefix-Fallback. (c) Neue Tests: 2x (hart=true ist hart, hart=false
+  ist weich, fehlend = warnung + prefix-fallback).
+- **Tests:** `pytest tests/test_verify.py -v`
 - **Blockiert von:** -
 
 ### OP-096: Phase 33.3 — gates.py nach control/ migrieren
