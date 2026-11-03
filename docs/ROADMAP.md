@@ -133,9 +133,15 @@ Bugs aus Live-Test 3 (OP-034..OP-038) in `docs/STATUS.md`:
 pytest-Regression, Datum aus UTC, Reflection-Deduplizierung,
 Reviewer-Signal, Commit-Message-Builder.
 
-### Phase 30: Web-Dashboard & Interactive UI 🔧 (Gerüst fertig 2026-11-02)
+### Phase 30: Web-Dashboard & Interactive UI ✅ (fertig 2026-11-03)
 
 **Ziel:** Ein echtes Dashboard, das die Werkstatt visuell begreifbar macht.
+
+**Status (2026-11-03):** Fertig. Auth-Middleware (Token+Cookie+WS-Check),
+PTY-Terminal via xterm.js (echte bash im Browser), DeepSeek-Look, Audit-
+Live + History farbcodiert nach Kategorie, Chat mit Intent-Klassifikation
+(keine LLM-Antwort — siehe OP-084), Tab-Bindung mit WS-Lifecycle. Server-
+Start: python -m werkstatt.web --host 0.0.0.0 --port 8000.
 Referenz: Screenshot vom 2026-11-02 (Web-Interface mit Chat und Terminal).
 
 **Layout:**

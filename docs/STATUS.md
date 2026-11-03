@@ -71,12 +71,18 @@ tragen. Roadmap-Phasen sind grobe Etappen aus der Vor-Session
 - **Tests:** —
 - **Blockiert von:** —
 
-### OP-011: 5-mypy — mypy 11 Fehler in 2 Dateien (Baseline 11).
+### OP-011: mypy-Restfehler abbauen (Baseline 27, 2026-11-03)
 - **Status:** open
 - **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
-- **Betroffene Dateien:** —
-- **Akzeptanzkriterien:** mypy 11 Fehler in 2 Dateien (Baseline 11).
-- **Tests:** —
+- **Betroffene Dateien:** `werkstatt/*.py` (9 Dateien)
+- **Akzeptanzkriterien:** mypy werkstatt/ = 0 Fehler. Baseline 2026-11-03:
+  27 Fehler. Verteilung: 3x name-defined (planner, verify), 9x attr-defined
+  (RunState-Attribute: tasks, akzeptanzkriterien, architect_prosa,
+  reviewer_stagnation_false_positive, patches, …), 4x var-annotated,
+  2x union-attr, 1x list-item, 1x index, 1x assignment, 1x arg-type,
+  4x shell.py (`object`-Typen). Prioritaet: RunState-Attribut-Definitionen
+  in werkstatt/state.py nachziehen, dann die Kosmetik.
+- **Tests:** `mypy werkstatt/` = 0
 - **Blockiert von:** —
 
 ### OP-012: 3c — Alte Tests, die mit dem alten Code fallen, entfernen.
@@ -275,30 +281,53 @@ tragen. Roadmap-Phasen sind grobe Etappen aus der Vor-Session
 - **Blockiert von:** —
 
 
-### OP-083: Dashboard Live-Daten (WS-Terminal, Chat, Tab-Bindung)
+
+### OP-084: Chat-Backend mit LLM-Antwort + Loop-Steuerung aus Chat
 
 - **Status:** open
-- **Beschreibung:** Das Dashboard laedt (017212e), aber Live-Daten fehlen:
-  (a) WS `/ws/terminal/{project}` verbindet, sendet aber nie Events, weil
-  `terminal_proxy.py` einen In-Process-Emitter nutzt — der Loop laeuft
-  in einem anderen Prozess. (b) `chat.js:114` schreibt hart
-  „(Demo: Chat-Backend noch nicht verdrahtet)" statt `fetch`. (c) `tabs.js`
-  ist Store-only; `terminal.js`/`audit.js` verbinden bei `DOMContentLoaded`
-  tab-unabhaengig, mehrere Tabs oeffnen mehrere WS gleichzeitig.
-- **Betroffene Dateien:** `werkstatt/web/terminal_proxy.py`,
-  `static/tabs.js`, `static/terminal.js`, `static/audit.js`, `static/chat.js`
-- **Akzeptanzkriterien:** (a) `terminal_proxy` liest neue Zeilen aus
-  `audit-logs/agent-pipeline-*.jsonl` (Tail-Poll, 1s Intervall,
-  Inode-basiert, nicht-blockierend) und sendet sie ueber die bestehende
-  WS-Verbindung. (b) `chat.js` sendet per `fetch POST /api/chat/{chat_id}`
-  statt Demo-Text. (c) `tabs.js` ruft beim Tab-Wechsel
-  `terminal.oeffne(project)` / `audit.oeffne(project)` /
-  `chat.setze_chat(chat_id)` und beim Tab-Schliessen die jeweiligen
-  `schliesse()`-Funktionen. Kein globaler `DOMContentLoaded`-Connect mehr.
-- **Tests:** `pytest tests/test_web_integration.py -v` (bestehende 5) +
-  `tests/test_web_live.py` (neu): 2 Tests (WS empfaengt neue Zeile aus
-  Test-JSONL, Tab-Wechsel schliesst vorherige WS).
+- **Beschreibung:** Der Chat liefert bisher nur Intent-Klassifikation
+  (`{chat_id, intent, zustand, layout}`) ohne `antwort`-Feld. Frontend
+  zeigt deshalb `(leer)`. Zusaetzlich soll der Chat den Loop aus der
+  Nachricht heraus steuern: "starte den Loop mit der naechsten OP in
+  STATUS.md" oder "starte Loop mit OP-045" triggert POST
+  /api/projects/{name}/start mit entsprechendem `aufgabe`-Text.
+  "Welche OPs sind offen?" liest STATUS.md und antwortet mit Markdown-Liste.
+- **Betroffene Dateien:** `werkstatt/web/chat.py`, `static/chat.js`,
+  `tests/test_chat.py` (neu)
+- **Akzeptanzkriterien:** (a) POST /api/chat/{chat_id} liefert bei jeder
+  Anfrage ein `antwort`-Feld (String, Markdown), abgeleitet aus Intent
+  + LLM-Call (deepseek-chat, max 500 Tokens) oder Template fuer bekannte
+  Intents (status/start/offene-ops). (b) Erkennung "starte loop mit
+  OP-NNN" ruft project_start auf, Antwort bestaetigt mit PID + Log-Pfad.
+  (c) "welche ops sind offen" liest docs/STATUS.md, parst ### OP-NNN,
+  antwortet mit nummerierter Liste (max 30). (d) Frontend rendert
+  `antwort` als Markdown statt `(leer)`.
+- **Tests:** `pytest tests/test_chat.py -v` (Intent-Erkennung, LLM-Fallback,
+  Loop-Trigger mocked, Offene-OPs-Parser)
 - **Blockiert von:** —
+
+### OP-085: Chat-Agent — Projekt-Operationen (Files, Grep, Tests)
+
+- **Status:** open
+- **Beschreibung:** Chat soll nicht nur antworten, sondern Projekt-
+  Operationen ausfuehren wie der Builder: `lies datei X`, `suche nach Y`,
+  `zeig alle tests`, `welche funktion Z in datei W`. LLM bekommt Tool-
+  Definitionen (read_file, grep, list_dir, run_pytest_one), Server fuehrt
+  aus, Ergebnis geht zurueck an LLM. Tool-Use-Loop max 5 Runden.
+  Ergebnis: Antwort basiert auf tatsaechlich gelesenen Daten, nicht auf
+  Halluzination.
+- **Betroffene Dateien:** `werkstatt/web/chat.py` (erweitern),
+  `werkstatt/chat_agent.py` (neu), `static/chat.js`,
+  `tests/test_chat_agent.py` (neu)
+- **Akzeptanzkriterien:** (a) Tool-Use-Loop im chat_agent: LLM gibt
+  Tool-Aufruf zurueck, Server validiert (Whitelist: read_file, grep,
+  list_dir, run_pytest_one), fuehrt aus, Ergebnis zurueck an LLM,
+  max 5 Runden. (b) `lies datei werkstatt/web/chat.py` liefert
+  tatsaechlichen Datei-Inhalt (verifizierbar). (c) `suche nach
+  _approval_und_human_gate` listet Fundstellen mit Datei:Zeile.
+  (d) Kein Zugriff auf Pfade ausserhalb project_dir (Traversal-Schutz).
+- **Tests:** `pytest tests/test_chat_agent.py -v`
+- **Blockiert von:** OP-084
 
 ## Erledigt (Auto-Log)
 
