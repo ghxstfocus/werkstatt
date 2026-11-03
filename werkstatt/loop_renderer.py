@@ -19,6 +19,7 @@ API:
     panel_plan, panel_diff
 """
 from __future__ import annotations
+import re
 
 import contextvars
 import os
@@ -43,6 +44,33 @@ elif _is_tty:
     RENDER_MODE = "live"
 else:
     RENDER_MODE = "ci"
+
+
+# Tee-Stream fuer Live-Log-Mitschnitt (Terminal-Panel im Browser).
+# Set durch loop.main(), schreibt alle Render-Zeilen in eine Datei.
+_TEE_STREAM: TextIO | None = None
+_TEE_LOCK = threading.Lock()
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def set_tee_stream(stream: TextIO | None) -> None:
+    """Setzt/loescht das Tee-Ziel. Schreibt jede Render-Zeile dort hin."""
+    global _TEE_STREAM
+    with _TEE_LOCK:
+        _TEE_STREAM = stream
+
+
+def _tee(text: str) -> None:
+    """Schreibt text (ANSI-frei) in den Tee-Stream, falls gesetzt."""
+    if _TEE_STREAM is None:
+        return
+    try:
+        clean = _ANSI_RE.sub("", text)
+        with _TEE_LOCK:
+            _TEE_STREAM.write(clean + "\n")
+            _TEE_STREAM.flush()
+    except (OSError, ValueError):
+        pass
 
 IS_CI = RENDER_MODE == "ci"
 IS_LIVE = RENDER_MODE == "live"
@@ -104,8 +132,7 @@ def _emit_raw(text: str) -> None:
         print(f"[{ts}] {text}", flush=True)
     else:
         print(text, flush=True)
-
-
+    _tee(text)
 _PROJECT_CTX: contextvars.ContextVar[str] = contextvars.ContextVar(
     "werkstatt_project", default="default"
 )

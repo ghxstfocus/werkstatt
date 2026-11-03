@@ -25,6 +25,13 @@ _PROJECT_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _QUEUE_MAXSIZE = 1000
 
 _AUDIT_GLOB = "agent-pipeline-*.jsonl"
+_RENDER_LOG_GLOB = "loop-render-*.log"
+
+
+def _render_log_verzeichnis() -> Path:
+    """Verzeichnis mit loop-render-*.log (Monkeypatch-Anker fuer Tests)."""
+    return Path("logs")
+
 _POLL_INTERVALL_S: float = 1.0
 # Replay-Steuerung: False (Production) = kein Replay historischer
 # Zeilen beim ersten Poll. True (Tests) = von offset=0 lesen.
@@ -207,6 +214,63 @@ def _make_bridge(
     return _bridge
 
 
+async def _tail_poll_render_log(
+    verzeichnis: Path,
+    queue: asyncio.Queue[dict[str, Any]],
+    stopp: asyncio.Event,
+) -> None:
+    """Tail-Poll auf logs/loop-render-*.log — plain text, ANSI-frei.
+
+    Schreibt Events als {"typ": "render", "text": "..."} in die Queue.
+    """
+    aktueller_pfad: Path | None = None
+    inode: int = -1
+    offset: int = 0
+    _erster_fund = True
+    while not stopp.is_set():
+        try:
+            kandidaten = sorted(verzeichnis.glob(_RENDER_LOG_GLOB))
+        except OSError:
+            kandidaten = []
+        if kandidaten:
+            neuester = kandidaten[-1]
+            try:
+                neuer_inode = neuester.stat().st_ino
+            except OSError:
+                neuer_inode = -1
+            if neuester != aktueller_pfad or neuer_inode != inode:
+                aktueller_pfad = neuester
+                inode = neuer_inode
+                if _erster_fund and not _REPLAY_HISTORIE:
+                    try:
+                        offset = aktueller_pfad.stat().st_size
+                    except OSError:
+                        offset = 0
+                    _erster_fund = False
+                else:
+                    offset = 0
+            try:
+                with aktueller_pfad.open(encoding="utf-8", errors="replace") as f:
+                    f.seek(offset)
+                    for _ in range(200):
+                        zeile = f.readline()
+                        if not zeile:
+                            break
+                        if not zeile.endswith("\n"):
+                            break
+                        offset = f.tell()
+                        zeile = zeile.rstrip("\n")
+                        if not zeile:
+                            continue
+                        _safe_put(queue, {"typ": "render", "text": zeile})
+            except OSError:
+                pass
+        try:
+            await asyncio.wait_for(stopp.wait(), timeout=_POLL_INTERVALL_S)
+        except asyncio.TimeoutError:
+            pass
+
+
 @router.websocket("/ws/terminal/{project}")
 async def terminal_ws(websocket: WebSocket, project: str) -> None:
     """Streamt Audit-Events eines Projekts als JSON-Text ueber WebSocket.
@@ -240,6 +304,15 @@ async def terminal_ws(websocket: WebSocket, project: str) -> None:
     poll_task = asyncio.create_task(
         _tail_poll_queue(verzeichnis, queue, stopp)
     )
+
+
+    poll_task_render = asyncio.create_task(
+
+
+        _tail_poll_render_log(_render_log_verzeichnis(), queue, stopp)
+
+
+    )
     try:
         done, pending = await asyncio.wait(
             {asyncio.create_task(_sender()), asyncio.create_task(_receiver())},
@@ -256,6 +329,8 @@ async def terminal_ws(websocket: WebSocket, project: str) -> None:
     finally:
         stopp.set()
         poll_task.cancel()
+
+        poll_task_render.cancel()
         try:
             await poll_task
         except BaseException:  # noqa: BLE001, S110 — Cleanup, Fehler egal

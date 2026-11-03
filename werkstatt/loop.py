@@ -365,6 +365,29 @@ def _k13_rc(rc: int, tasks_ok: int) -> int:
 def main(argv: list[str] | None = None) -> int:
     # M-391: .env laden (DEEPSEEK_API_KEY automatisch setzen)
     load_env()
+    # Tee-Stream fuer Browser-Terminal: alle Render-Zeilen in
+    # logs/loop-render-YYYY-MM-DD.log mitschreiben. Wird beim
+    # Beenden geschlossen.
+    _tee_handle = None
+    try:
+        from datetime import UTC as _TEE_UTC, datetime as _TEE_DT
+        from werkstatt import loop_renderer as _TEE_R
+        from pathlib import Path as _TEE_P
+        _tee_p = _TEE_P("logs") / (
+            "loop-render-"
+            + _TEE_DT.now(_TEE_UTC).date().isoformat()
+            + ".log"
+        )
+        _tee_p.parent.mkdir(parents=True, exist_ok=True)
+        _tee_handle = _tee_p.open("a", encoding="utf-8")
+        _TEE_R.set_tee_stream(_tee_handle)
+    except Exception:  # noqa: BLE001
+        _tee_handle = None
+
+    # Sicherheitsnetz: Tee bei Prozess-Ende schliessen
+    import atexit as _atexit
+    if _tee_handle is not None:
+        _atexit.register(_tee_handle.close)
     """CLI-Einstieg: python3 -m werkstatt.loop --project <name> --aufgabe <text> [--dry-run]."""
     import argparse
 

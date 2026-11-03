@@ -159,6 +159,15 @@ function oeffne(project) {
       console.error("terminal: ungueltiges JSON", err);
       return;
     }
+      // Render-Zeile: direkt anzeigen, kein JSON-Parsing
+      if (daten && daten.typ === "render") {
+        haengeZeileAn(daten.text);
+        return;
+      }
+      // JSON-Audit-Events ignorieren (die zeigt das Audit-Panel)
+      if (daten && daten.typ === "audit") {
+        return;
+      }
     rendereEvent(daten);
   };
 }
