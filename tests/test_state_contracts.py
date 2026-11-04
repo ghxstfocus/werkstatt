@@ -1,8 +1,6 @@
 """Tests für werkstatt/state_contracts.py (OP-135a + OP-136)."""
 from pathlib import Path
 
-import pytest
-
 from werkstatt.state import RunState
 from werkstatt.state_contracts import (
     CONTRACTS,

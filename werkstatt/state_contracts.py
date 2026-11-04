@@ -11,8 +11,9 @@ Lazy-Import in state.py verhindert Zirkularität.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 
 class ContractDict:
@@ -30,7 +31,7 @@ class ContractDict:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict | None) -> "ContractDict":
+    def from_dict(cls, d: dict | None) -> ContractDict:
         if not d:
             return cls()
         known = {f.name for f in cls.__dataclass_fields__.values()}
