@@ -444,7 +444,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 ### OP-111: Structured Progress Events aus Builder/Planner/Reviewer
 
-- **Status:** open
+- **Status:** closed (2026-11-04, Etappe 1+2 — Commit 4c0c59d + folgender Etappe-2-Commit)
 - **Typ:** ux-feature
 - **Betroffen:** `werkstatt/builder.py`, `werkstatt/planner.py`,
   `werkstatt/reviewer.py`, `werkstatt/loop_renderer.py` (neue API)
@@ -467,6 +467,45 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - **Tests:** `tests/test_loop_renderer.py` — 3 Tests für
   `_emit_progress` (Live überschreibt, CI sequenziell, kein
   Output bei leerem step).
+- **Blockiert von:** -
+
+
+### OP-115: Progress-Events Builder-Spezifika
+
+- **Status:** open
+- **Typ:** ux-feature
+- **Betroffen:** `werkstatt/builder.py`
+- **Problem:** OP-111 Etappe 1+2 decken `start`, `prompt_sent`,
+  `response_received`, `done` ab. Innerhalb von `_build_patches_fuer_datei`
+  (nach `response_received`, vor `done`) fehlen granulare Schritte.
+  Bei 30s+ Patch-Parsing sieht der User nur Heartbeats.
+- **Akzeptanzkriterien:**
+  - `_emit_progress("Builder tN", "patches_parsed", f"{n} patches")`
+    nach `_normalisiere_aider_patches`.
+  - `_emit_progress("Builder tN", "patches_validated", ...)` nach
+    `_validate_imports_in_patch`-Loop.
+  - `_emit_progress("Builder tN", "patches_applied", ...)` nach
+    Apply-Block.
+- **Tests:** `tests/test_builder.py` — Smoke-Test, dass die drei
+  Events mit dem aktuellen Task-Label emittiert werden (mocken
+  `_emit_progress`, assert call_count).
+- **Blockiert von:** -
+
+### OP-116: Progress-Events Reviewer-Spezifika
+
+- **Status:** open
+- **Typ:** ux-feature
+- **Betroffen:** `werkstatt/reviewer.py`
+- **Problem:** Reviewer-Call (OP-111 Etappe 1+2) zeigt `start`/`done`,
+  aber nicht `diff_received`, `analysis_start`, `verdict`.
+- **Akzeptanzkriterien:**
+  - `_emit_progress("Reviewer tN", "diff_received", f"{n} files")`
+    nach `_get_git_diff`.
+  - `_emit_progress("Reviewer tN", "analysis_start", "")` vor
+    `ask_llm`.
+  - `_emit_progress("Reviewer tN", "verdict", "approved"|"rejected")`
+    nach JSON-Parse.
+- **Tests:** `tests/test_reviewer.py` — Smoke-Test analog OP-115.
 - **Blockiert von:** -
 
 ### OP-112: Antipattern + Skill-Matching in Reflection-Runden
