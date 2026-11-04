@@ -50,6 +50,12 @@ else:
 # Set durch loop.main(), schreibt alle Render-Zeilen in eine Datei.
 _TEE_STREAM: TextIO | None = None
 _TEE_LOCK = threading.Lock()
+
+# OP-111: Progress-Tracking fuer Sub-Component-Live-Events.
+# Live-Mode ueberschreibt die Zeile pro label, CI-Mode appended.
+_PROGRESS_STATE: dict[str, str] = {}
+_PROGRESS_LOCK = threading.Lock()
+_PROGRESS_OPEN: bool = False  # True wenn eine Progress-Zeile ohne \n offen ist
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
@@ -164,6 +170,14 @@ def _emit_raw(text: str) -> None:
     mit Timestamp, einmal clean) -> jede Zeile 2x im Log.
     Jetzt: stdout bekommt Timestamp (CI), _tee bekommt nur clean.
     """
+    global _PROGRESS_OPEN
+    if _PROGRESS_OPEN:
+        try:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        except (OSError, ValueError):
+            pass
+        _PROGRESS_OPEN = False
     if IS_CI:
         ts = datetime.now().strftime("%H:%M:%S")
         print(f"[{ts}] {text}", flush=True)
@@ -294,6 +308,43 @@ def _emit(text: str) -> None:
     """Zentraler Output. CI: mit Zeitstempel. Sonst: plain."""
     _emit_raw(text)
     _publish("log_line", text)
+
+
+def _progress_write(line: str) -> None:
+    """Live-Progress: ueberschreibt die Zeile (\r + clear-line)."""
+    global _PROGRESS_OPEN
+    try:
+        sys.stdout.write("\r\x1b[K" + line)
+        sys.stdout.flush()
+        _PROGRESS_OPEN = True
+    except (OSError, ValueError):
+        pass
+    _tee(line)
+
+
+def _emit_progress(label: str, step: str, detail: str = "") -> None:
+    """Strukturierter Progress-Event aus Sub-Komponenten.
+
+    Live:   ueberschreibt die Zeile pro label (kein \n).
+    CI/plain: sequenzielle Zeilen mit \n (via _emit_raw).
+    Leerer step: no-op (stille Events erlaubt).
+
+    Verwendung: `_emit_progress("Builder", "start", zieldatei)`
+    """
+    if not step:
+        return
+    line = f"[{label}] {step}"
+    if detail:
+        line += f" {detail}"
+
+    if IS_LIVE:
+        with _PROGRESS_LOCK:
+            _PROGRESS_STATE[label] = line
+            _progress_write(line)
+        _publish("progress", line, label=label, step=step, detail=detail)
+    else:
+        _emit_raw(line)
+        _publish("progress", line, label=label, step=step, detail=detail)
 
 
 # ============================================================
