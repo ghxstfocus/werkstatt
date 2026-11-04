@@ -14,7 +14,7 @@ import subprocess  # noqa: F401  # re-export: Tests patchen werkstatt.loop.subpr
 import time  # noqa: F401  # re-export: Tests patchen werkstatt.loop.time
 from pathlib import Path
 
-from werkstatt.audit import audit
+from werkstatt.audit import audit, set_run_id
 from werkstatt.git_ops import (  # Fix AZ Stufe 1: Re-Export
     _get_git_diff_for_hook,
     _git_dirty,
@@ -289,6 +289,11 @@ def run_pipeline_loop(
     """
 
     state = phasen_state or (state_ref[-1] if state_ref else None)
+
+    # OP-122: Run-ID fuer Event-Store und audit-Logs setzen.
+    # Muss VOR dem ersten _publish (header) passieren, sonst bleibt
+    # der Event-Store leer.
+    set_run_id(f"{project_name}-{time.strftime('%Y%m%d-%H%M%S')}")
 
     header(f"{project_name} — {aufgabe[:50]}")
 

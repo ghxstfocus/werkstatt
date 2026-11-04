@@ -19,10 +19,10 @@ API:
     panel_plan, panel_diff
 """
 from __future__ import annotations
-import re
 
 import contextvars
 import os
+import re
 import sys
 import threading
 from collections.abc import Callable
@@ -302,6 +302,29 @@ def _publish(event_type: str, text: str, **extra: object) -> None:
     Ein fehlender Emitter (kein Projekt-Kontext) oder ein defekter
     Subscriber darf den Loop nie abbrechen.
     """
+    try:
+        # Der Store ist eine Zusatz-Senke. Ein Fehler beim Spiegeln darf
+        # den Loop nie abbrechen — dieselbe Regel wie beim Emitter.
+        from werkstatt.audit import get_run_id
+        from werkstatt.event_store import EventStore
+
+        run_id = get_run_id()
+        if run_id:
+            phase = extra.get("phase")
+            if not isinstance(phase, str):
+                phase = None
+            status = extra.get("status")
+            if not isinstance(status, str):
+                status = None
+            EventStore().append(
+                run_id=run_id,
+                kind=event_type,
+                phase=phase,
+                status=status,
+                payload={"text": text, **extra},
+            )
+    except Exception:  # noqa: BLE001
+        pass
     emitter = _get_emitter()
     if emitter is None:
         return

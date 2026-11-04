@@ -15,12 +15,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from werkstatt.event_store import EventStore
 from werkstatt.phase_state import PhaseState
 from werkstatt.web import audit_panel, auth, chat, shell, terminal_proxy, ws
 
 __all__ = ["app", "create_app"]
 
 _PROJEKTNAME_MUSTER = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_RUN_ID_MUSTER = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 
 _LAUFENDE_LOOPS: dict[str, subprocess.Popen] = {}
 
@@ -35,6 +37,18 @@ def _pruefe_projektname(name: str) -> str:
     if not isinstance(name, str) or not _PROJEKTNAME_MUSTER.fullmatch(name):
         raise HTTPException(status_code=400, detail="ungueltiger Projektname")
     return name
+
+
+def _pruefe_run_id(run_id: str) -> str:
+    """Validiert eine Run-ID gegen Injection und unsinnig lange Strings.
+
+    Die Run-ID fliesst in eine SQL-Query (parametrisiert) und in Logs;
+    die Validierung ist die zweite Verteidigungslinie und verhindert
+    Log-Injection ueber unsinnig lange Strings.
+    """
+    if not isinstance(run_id, str) or not _RUN_ID_MUSTER.fullmatch(run_id):
+        raise HTTPException(status_code=400, detail="ungueltige run_id")
+    return run_id
 
 
 def _phasen_snapshot(name: str) -> dict[str, Any]:
@@ -69,6 +83,20 @@ def _phasen_snapshot(name: str) -> dict[str, Any]:
         "state_typ": type(phase_state).__name__,
         "naechste_task_id": naechste_task_id,
     }
+
+
+def _registriere_event_routen(app: FastAPI) -> None:
+    """Registriert den Event-Query-Endpoint fuer einen Run."""
+
+    @app.get("/api/runs/{run_id}/events")
+    def run_events(
+        run_id: str,
+        since_seq: int | None = None,
+        kind: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Liefert Events eines Runs, optional gefiltert."""
+        geprueft = _pruefe_run_id(run_id)
+        return EventStore().query(geprueft, since_seq=since_seq, kind=kind)
 
 
 class AuthMiddleware:
@@ -122,6 +150,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(audit_panel.router)
     app.include_router(terminal_proxy.router)
+    _registriere_event_routen(app)
 
     # Layout/CSS/JS liegen in /opt/werkstatt/static/ (Projekt-Root),
     # nicht in werkstatt/web/static/ (Modul-Package).
