@@ -14,7 +14,6 @@ from werkstatt.architect import (
     build_architect_docs_section_v2,
 )
 
-
 # --- Reducer isoliert ---
 
 def test_reduce_entry_behaelt_zweck_und_struktur():
@@ -110,7 +109,7 @@ def test_selbst_check_block_format():
 def test_planner_hat_env_schalter():
     src = Path("/opt/werkstatt/werkstatt/planner.py").read_text(encoding="utf-8")
     assert "WERKSTATT_ARCHITECT_PROMPT" in src
-    assert '"v2"' in src
+    assert '!= "v1"' in src
     assert "build_architect_docs_section_v2" in src
     assert "_build_selbst_check_block" in src
 
