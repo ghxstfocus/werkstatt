@@ -231,3 +231,24 @@ den vollstaendigen Fluss, niemand prueft Schreiber-Leser-Konsistenz.
 **Loesungsansatz:** State-Contract-Registry analog zu `control/`,
 mit Schreiber/Leser/Format/Pflichtfeldern. Fail-loud bei Verstoss.
 Siehe OP-134..137.
+
+
+## AST-Zugriff pro Rolle ist asymmetrisch (Erkenntnis 2026-11-04)
+
+**Beobachtung:** Der Builder hat vollen AST-Zugriff, der Architect nicht.
+
+- Builder nutzt `_ast_block_fuer_zieldatei`, `_finde_modul_pfad`,
+  `_hat_symbol`, `_validate_imports_in_patch`.
+- Architect nutzt nur `scout_api_auszug` (Symbol-Namen-Liste) und
+  `state.api_index_cache` (gebaut via `_baue_api_index`, aber
+  **nie in den Prompt gehaengt** — toter Cache).
+
+**Konsequenz:** Der Architect plant Aenderungen, ohne zu wissen ob
+Symbole existieren, Signaturen passen, Imports moeglich sind. Der
+Builder entdeckt das erst beim `_validate_imports_in_patch` — zu
+spaet (Patch abgelehnt, Reflection-Runde verschwendet).
+
+**Prinzip:** Rollen die planen sollten das gleiche Daten-Format
+sehen wie Rollen die ausfuehren. Sonst plant man ins Blaue.
+
+**Abgedeckt durch:** OP-134 (Messen), OP-135 (Design), OP-137 (Fix).
