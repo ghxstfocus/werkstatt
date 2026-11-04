@@ -105,8 +105,7 @@ CONTRACTS: dict[str, Contract] = {
     ),
     "explorer_diagnostics": Contract(
         typ="ExplorerDiagnostics",
-        schreiber=["explorer.run_explorer (deterministischer Pfad, "
-                   "neu in OP-135a)"],
+        schreiber=["explorer.run_explorer (deterministischer Pfad, neu in OP-135a)"],
         leser=["architect.run_architect"],
         pflicht=True,
         hinweis="Heute leer im LLM-Fallback; deterministischer Pfad "
@@ -213,7 +212,7 @@ def _do_audit_violation(state, key: str, leer: list[str]) -> None:
             str(getattr(state, "project_dir", "")),
             str(getattr(state, "project_name", "")),
         )
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110
         pass  # Audit-Fehler darf Validation nicht verhindern
 
 
@@ -252,7 +251,7 @@ def validate_transition(
                 str(getattr(state, "project_dir", "")),
                 str(getattr(state, "project_name", "")),
             )
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110
             pass
     else:
         _do_audit_violation(state, key, leer)

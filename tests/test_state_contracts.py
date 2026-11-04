@@ -17,13 +17,13 @@ from werkstatt.state_contracts import (
 
 def _minimal_state(**kwargs):
     """RunState mit Minimal-Pflichtfeldern (siehe state.py RunState-Kopf)."""
-    defaults = dict(
-        block_id="test", aufgabe="test",
-        start_ts="2026-11-05T00:00:00",
-        docs={}, agents={}, always={}, optional={},
-        file_whitelist=[], api_key="", budget={},
-        agent_docs={}, project_dir=Path("/tmp"),
-    )
+    defaults = {
+        "block_id": "test", "aufgabe": "test",
+        "start_ts": "2026-11-05T00:00:00",
+        "docs": {}, "agents": {}, "always": {}, "optional": {},
+        "file_whitelist": [], "api_key": "", "budget": {},
+        "agent_docs": {}, "project_dir": Path("/tmp"),
+    }
     defaults.update(kwargs)
     return RunState(**defaults)
 
