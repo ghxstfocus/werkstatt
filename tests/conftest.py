@@ -201,3 +201,24 @@ def _auth_disabled_autouse():
     except ImportError:
         pass
 
+
+
+# OP-114 (2026-11-04): Modul-Globals von loop_renderer zwischen Tests
+# zuruecksetzen — sonst leaken _PROGRESS_STATE, _TEE_STREAM und _PROJECT_CTX
+# in nachfolgende Tests (test_emit_tty_mode, test_task_started_event, ...).
+import pytest as _pytest
+
+@_pytest.fixture(autouse=True)
+def _isolate_loop_renderer():
+    import werkstatt.loop_renderer as _r
+    _r._PROGRESS_STATE.clear()
+    _r._PROGRESS_OPEN = False
+    _r._TEE_STREAM = None
+    _r._LAST_HEARTBEAT.clear()
+    _r.set_project("default")
+    yield
+    _r._PROGRESS_STATE.clear()
+    _r._PROGRESS_OPEN = False
+    _r._TEE_STREAM = None
+    _r._LAST_HEARTBEAT.clear()
+    _r.set_project("default")

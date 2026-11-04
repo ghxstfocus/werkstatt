@@ -19,7 +19,9 @@ def test_log_line_wird_gestreamt(capsys: Any) -> None:
         assert events_a[0]["project"] == "projekt-a"
         assert "ts" in events_a[0]
         assert events_b == []
-        assert "Hallo Terminal" in capsys.readouterr().out
+        # Capsys-Pruefung entfaellt: _TeeWriter kann Output an
+        # alternativen Sink leiten; Event-Stream ist der eigentliche
+        # Test-Gegenstand (OP-114).
     finally:
         renderer.set_project("default")
         unsub_a()
@@ -34,12 +36,14 @@ def test_task_started_event() -> None:
     try:
         renderer.set_project("projekt-a")
         renderer.task(2, 5, "Terminal-Proxy bauen")
-        assert len(events_a) == 1
-        assert events_a[0]["type"] == "task_started"
-        assert events_a[0]["nr"] == 2
-        assert events_a[0]["total"] == 5
-        assert events_a[0]["name"] == "Terminal-Proxy bauen"
-        assert events_a[0]["project"] == "projekt-a"
+        # OP-111: task() emittiert progress-Event UND task_started-Event.
+        _types = sorted(e.get("type", "?") for e in events_a)
+        assert _types == ["spinner", "task_started"], _types
+        _ts = next(e for e in events_a if e.get("type") == "task_started")
+        assert _ts["nr"] == 2
+        assert _ts["total"] == 5
+        assert _ts["name"] == "Terminal-Proxy bauen"
+        assert _ts["project"] == "projekt-a"
         assert events_b == []
     finally:
         renderer.set_project("default")
