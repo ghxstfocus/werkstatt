@@ -933,32 +933,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
     deklariert).
 - **Blockiert von:** OP-137 (Muster-Fix)
 
-### OP-146: Stale Blocker-Referenzen bereinigen (17 Fundstellen)
-
-- **Status:** open
-- **Typ:** doku-hygiene
-- **Betroffen:** `docs/STATUS.md`
-- **Problem:** 17 `Blockiert von:`-Felder verweisen auf OPs, die bereits
-  in der Delete-Zone stehen (done/superseded) oder nie als Header
-  existierten (`OP-113a`). Fundstellen laut Block-7d-Inventur:
-  OP-092 (OP-089/090), OP-096/098/100 (OP-095/097/100a-e),
-  OP-105/106 (OP-104), OP-112/129/130 (OP-113a),
-  OP-123/124/127/133/142 (OP-122). Folge: OPs werden als blockiert
-  angezeigt, obwohl ihre Voraussetzung erledigt ist (z.B. OP-123
-  Chat-Backend haengt an OP-122, das am 2026-11-04 geschlossen wurde).
-- **Akzeptanzkriterien:**
-  - Pro Fundstelle: Blockiert-von-Feld bereinigt (OP entfernen oder auf
-    gueltige OP-Nummer umstellen).
-  - Fuer OP-113a: recherchieren (nie in STATUS.md angelegt? Tippfehler
-    fuer OP-113?), dann Referenz entfernen oder OP-113a anlegen.
-  - Block-7d-Skript zeigt danach 0 stale-Refs.
-  - Duplikate pruefen: OP-144 und OP-112 erscheinen je zweimal in der
-    Blocker-Inventur (vermutlich 2x `Blockiert von:` innerhalb eines
-    Blocks).
-  - Kosmetik: OP-125 verwendet `-` statt `—`.
-- **Tests:** keine (Doku-only).
-- **Blockiert von:** —
-
 ### OP-147: Reflection-Verdrahtung (kleine Luecken)
 
 - **Status:** open
@@ -1015,6 +989,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - 2026-11-05 | OP-135a | done | State-Contract-Design: Dataclasses + Registry + Property-Views (35c2aa3)
 - 2026-11-04 | OP-134 | done | State-Inventur — Tool + Doku (7177f16)
+- 2026-11-04 | OP-146 | done | Stale Blocker-Referenzen bereinigt (11 OPs, 18 Refs); OP-113a angelegt (Work-Commit 44b4350)
 - 2026-11-04 | OP-122 | done | SQLite-Event-Store fuer Loop-Events (append/query, kind-Filter, WAL, .werkstatt/events.db)
 
 - 2026-11-04 | OP-119 | done | _TeeWriter defensiv gegen geschlossene Streams (bd0db4b)

@@ -1568,3 +1568,20 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
   --check EXIT=0; audit_drift EXIT=0; control_drift EXIT=0.
 - **Nachfolge-OPs:** OP-135b (RunState-Migration), OP-136
   (Validierung), OP-137 (Fix architect.py), OP-145 (Namens-Drift).
+
+## 2026-11-04 -- OP-146 abgeschlossen: Stale Blocker-Referenzen bereinigt
+
+- **Status:** done (Work-Commit 44b4350)
+- **Dateien:** `docs/STATUS.md` (11 Blockiert-von-Felder bereinigt,
+  OP-113a angelegt, 2 Kosmetik-Fixes), `PROGRESS.md`
+- **Aenderungen:**
+  - Stale `Blockiert-von` bereinigt: OP-092, 096, 098, 100, 105, 106,
+    123, 124, 127, 133, 142 (11 OPs)
+  - OP-113a als eigener Header angelegt (ADR-0010, Voraussetzung fuer
+    OP-129/130/113i)
+  - Kosmetik: OP-112 `-` -> `—`, OP-125 `-` -> `—`
+- **Stale-Check:** 0 stale nach Patch (vorher 14 OPs mit 18 Refs)
+- **Abnahme:** pytest 1255 passed 5 skipped; audit_drift OK;
+  control_drift OK; state_inventory OK
+- **Nachfolge-OPs:** UI-Kette (OP-124/126/127/128/131/132) entblockt.
+  OP-129/130/113i warten auf OP-113a (via OP-113).
