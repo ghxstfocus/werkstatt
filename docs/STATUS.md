@@ -498,45 +498,94 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Blockiert von:** OP-122
 
 
-### OP-135: State-Contract-Design (Dataclasses + Registry)
+### OP-135a: State-Contract-Design (Dataclasses + Registry)
 
 - **Status:** open
-- **Typ:** architektur (Design-OP, minimaler Code)
+- **Typ:** architektur (Design-OP, kein Pipeline-Fix)
 - **Betroffen:** `werkstatt/state_contracts.py` (neu),
-  `docs/STATE-CONTRACTS.md` (neu), `werkstatt/state.py`
-- **Problem:** Aufbauend auf OP-134: Es fehlt ein explizites Modell
-  fuer Inter-Role-Uebergaenge. Heute sind `explorer_context` und
-  `explorer_findings` zwei verschieden gemeinte Felder mit
-  aehnlichem Namen — sie werden verwechselt. Ein Vertrag (Format,
-  Schreiber, Leser, Pflichtfelder) wuerde das verhindern.
+  `docs/STATE-CONTRACTS.md` (neu), `tests/test_state_contracts.py` (neu),
+  `werkstatt/pipeline_phases.py` (minimal: `explorer_diagnostics` befuellen)
+- **Problem:** Aufbauend auf OP-134 (siehe `docs/STATE-INVENTUR.md`).
+  25 Ghost-Felder, 47 tote Felder. Inter-Role-Uebergaenge sind heute
+  implizit (dicts ohne Schema). `explorer_findings` (dict mit
+  pytest_laufzeit_s/ruff_befunde) wird im aktuellen Code NUR im
+  LLM-Fallback von `run_explorer` gesetzt, und dieser Pfad ist tot
+  (`_messen()` returnt frueh, siehe STATE-INVENTUR.md Abschnitt
+  Handoff-Korrekturen). Der Architect liest `explorer_findings`
+  (leer), nicht `explorer_context` (Datei-Liste).
 - **Akzeptanzkriterien:**
-  - Dataclasses fuer die 5 wichtigsten Uebergaenge:
-    `ExplorerOutput` (findings, key_files, next_reads),
-    `ExplorerDiagnostics` (git_dirty, pytest_laufzeit_s, ruff_befunde),
-    `ScoutOutput` (api_auszug, widersprueche, bereits_erfuellt),
-    `ArchitectOutput` (prosa, zieldateien),
-    `PlannerOutput` (tasks, tests, akzeptanzkriterien).
-  - `werkstatt/state_contracts.py` mit `CONTRACTS: dict[str, Contract]`.
-    Contract hat: `typ`, `schreiber: list[str]`, `leser: list[str]`,
-    `pflicht: bool`, `validator: Callable | None`.
-  - `RunState` nutzt die Dataclasses anstelle von `dict` fuer die
-    5 Kernfelder (Rueckwaerts-Kompatibilitaet: `dict`-Zugriff
-    weiterhin moeglich via `__getitem__`).
-  - `docs/STATE-CONTRACTS.md` mit ASCII-Diagramm:
-    Rolle -> Feld -> Rolle. Pro Pfeil: Format, Pflicht?.
-  - `explorer_findings` wird zu `explorer_diagnostics` (eindeutiger
-    Name), alter Name bleibt als Deprecation-Property mit Warnung.
-  - **AST-Zugriff im Contract:** `ArchitectInput` (oder
-    aequivalent) muss `ast_block: str` enthalten, das aus
-    `_ast_block_fuer_zieldatei` (Builder-Seite) gewonnen wird.
-    Gleiches Prinzip fuer Reviewer (`ast_block` fuer Zieldateien
-    noetig fuer Diff-Review). Doku in STATE-CONTRACTS.md:
-    welche Rolle bekommt welche Datenform.
-  - **Kein Fix der Pipeline in dieser OP.** Nur Modell + Doku + Dataclasses.
-- **Tests:** `tests/test_state_contracts.py` — Registry-Vollstaendigkeit
-  (jedes Feld in `state.py` mit `schreiber`/`leser` entweder im
-  Contract oder explizit als "intern" markiert).
-- **Blockiert von: —
+  - `werkstatt/state_contracts.py` (neu) mit Dataclasses:
+    `KeyFile(file, why, symbols, preview, confidence)`,
+    `ExplorerOutput(findings: str, key_files: list[KeyFile],
+    next_reads: list[str])`,
+    `ExplorerDiagnostics(git_dirty: bool, pytest_laufzeit_s: int,
+    ruff_befunde: list)`,
+    `ScoutOutput(api_auszug: dict[str, list[str]],
+    bereits_erfuellt: bool)`,
+    `ArchitectOutput(prosa: str)`,
+    `PlannerOutput(tasks: list[dict], tests: list[str],
+    akzeptanzkriterien: list[str])`,
+    `Contract(typ, schreiber, leser, pflicht, validator=None)`,
+    `CONTRACTS: dict[str, Contract]` (5 Eintraege).
+    Alle Dataclasses mit `from_dict()`/`to_dict()`/`__getitem__`/`get()`.
+  - **Nicht deklariert** (bewusste Entscheidung, siehe
+    STATE-CONTRACTS.md Abschnitt "Offene Punkte"):
+    `ScoutOutput.widersprueche` existiert heute nur als Audit-Event
+    (`planner_scout_api_widerspruch`), nicht als State-Feld.
+    `ArchitectOutput.zieldateien` existiert heute nur implizit in
+    `architect_prosa` (Prosa-Parsing durch Planner). Beide Felder
+    wuerden denselben Fehler wie `explorer_findings` produzieren
+    (deklariert, aber tot). Migrations-OPs spaeter.
+  - `docs/STATE-CONTRACTS.md` (neu) mit ASCII-Diagramm
+    Rolle -> Feld -> Rolle; Abschnitt "Datenform pro Rolle" (belegt
+    aus STATE-INVENTUR.md); Abschnitt "Bekannte stille Degradierungen"
+    (25 Ghosts); Abschnitt "Offene Punkte" (o.g.).
+  - `RunState` (state.py) nutzt die Dataclasses als **read-only
+    Property-Views**. Felder bleiben im Konstruktor (kein Bruch fuer
+    Tests, die `RunState(tasks=...)` nutzen). Properties
+    `explorer_output`/`explorer_diagnostics` lesen aus den
+    bestehenden Ghost-Feldern `explorer_context`/`explorer_findings`.
+  - `explorer_diagnostics` minimal befuellen im deterministischen
+    Pfad: in `pipeline_phases._phase_explorer_and_setup` nach
+    `_messen()` die ruff/pytest-Ergebnisse aus dem `messungen`-dict
+    nach `state.explorer_diagnostics` schreiben (3-5 Zeilen).
+    Begruendung: ohne befuelltes Feld kann OP-136
+    `explorer_diagnostics` nicht als Pflichtfeld validieren.
+  - **Kein Pipeline-Fix** ausser der `explorer_diagnostics`-
+    Befuellung. `architect.py:385` bleibt unangetastet (OP-137).
+- **Tests:** `tests/test_state_contracts.py` — Registry-
+  Vollstaendigkeit, `from_dict`/`to_dict` Roundtrip, Property-View-
+  Kompatibilitaet.
+- **Blockiert von:** —
+
+### OP-135b: RunState-Migration auf Contract-Dataclasses
+
+- **Status:** open
+- **Typ:** architektur (Migration)
+- **Betroffen:** `werkstatt/state.py`, `werkstatt/explorer.py`,
+  `werkstatt/builder.py`, `werkstatt/planner.py`, `werkstatt/scout.py`,
+  `werkstatt/architect.py`, `werkstatt/pipeline_phases.py`
+- **Problem:** Nach OP-135a existieren die Contract-Dataclasses als
+  read-only Property-Views, aber `state.py` deklariert die Felder
+  weiterhin als dicts/str. Ghost-Felder (`explorer_context`,
+  `explorer_findings`) sind nicht deklariert. Der Contract ist Modell,
+  aber nicht erzwungen. Nach OP-137 funktioniert der Architect mit
+  Explorer-Dateien — dann ist die Migration Aufraeumarbeit ohne akuten
+  Bug-Druck.
+- **Akzeptanzkriterien:**
+  - `state.py` deklariert die 5 Contract-Felder als Dataclass-Felder.
+  - Alte Namen (`explorer_context`, `explorer_findings`,
+    `scout_api_auszug`, `architect_prosa`, `tasks`/`tests`/
+    `akzeptanzkriterien`) bleiben als Deprecation-Properties mit
+    Warning.
+  - Aufrufer (`builder.py:1305`, `scout.py:673`, `planner.py:1502`,
+    `architect.py:385`) lesen die neuen Namen.
+  - `grep -rn 'getattr(state, "explorer_context"' werkstatt/` = 0.
+  - `state_inventory --check` zeigt danach deutlich reduzierte
+    Ghost-Zahl; Baseline angepasst mit dokumentiertem Grund.
+- **Tests:** `tests/test_state_contracts_migration.py` —
+  Deprecation-Warnings bei alten Namen, neue Namen funktionieren.
+- **Blockiert von:** OP-135a
 
 ### OP-136: State-Contract-Validierung in der Pipeline (fail-loud)
 
@@ -567,7 +616,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     erwartet `ContractViolation` + Audit-Event.
 - **Tests:** `tests/test_state_drift.py` (neu),
   `tests/test_pipeline_contract.py` (neu).
-- **Blockiert von:** OP-135
+- **Blockiert von:** OP-135a
 
 ### OP-137: Fix architect.py + Cross-Role-Smoke-Tests
 
@@ -600,7 +649,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     Task-Zieldateien existieren im Projekt (via `_finde_modul_pfad`).
 - **Tests:** `tests/test_architect_prompt.py` (neu),
   `tests/test_pipeline_smoke.py` (neu).
-- **Blockiert von: OP-135
+- **Blockiert von:** OP-135a
 
 
 ### OP-138: `render/` Submodul-Split (loop_renderer.py zerlegen)
@@ -922,7 +971,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - `python3 tools/state_inventory.py --check` zeigt danach
     **25 - 1 = 24** Geister (falls geloescht) oder **26** (falls
     deklariert).
-- **Blockiert von:** OP-135 (Contract-Design), OP-137 (Muster-Fix)
+- **Blockiert von:** OP-135a (Contract-Design), OP-137 (Muster-Fix)
 
 ## Delete-Zone
 

@@ -306,3 +306,47 @@ Blocker-Referenzen sagt sie nichts. Das ist eine Konventionsluecke.
 
 **Abgedeckt durch:** OP-134 (Tool + Baseline), OP-135 (Contract).
 
+
+
+## Handoff-Schreiben ist auch eine Mess-Aufgabe (Lehre 2026-11-05)
+
+**Regel:** Jede Behauptung in einem Handoff oder einer OP muss
+entweder (a) in der Session, in der sie geschrieben wird,
+**nachgemessen** sein, oder (b) explizit als **Hypothese** markiert
+sein.
+
+**Warum:** Der Handoff vom 2026-11-04 enthielt drei Fehler, die alle
+aus nicht-nachgemessenen Grep-Zahlen oder aus dem Gedaechtnis
+rekonstruierten Zusammenhaengen stammten:
+
+1. "api_index_cache wird gebaut, aber nie in den Prompt gehaengt
+   (toter Cache in architect.py)" — **falsch.** Der Cache wird in
+   architect.py:603 geschrieben und in architect.py:324 /
+   builder.py:154 gelesen; der Architect rendert ihn in
+   `_planner_system` als AST-Block.
+2. "set_run_id fehlt in loop.py" — **falsch.** loop.py:296 ruft
+   `set_run_id(...)` auf.
+3. "Architect hat keinen AST-Zugriff" — **falsch.** Folgt aus
+   Fehler 1: der Architect bekommt AST via `api_index_cache`. Was
+   fehlt, ist die **Explorer-Datei-Liste** (`explorer_context`),
+   nicht AST.
+
+Zusaetzlich: die Zahl "47 tote RunState-Felder" war zufaellig
+richtig, aber nie gemessen. Bei der Nachmessung am 2026-11-05
+bestaetigt.
+
+**Konsequenz fuer Handoffs:**
+
+- Bevor eine Behauptung in einen Handoff geht: **einen Befehl**
+  laufen lassen, der sie belegt (grep, audit-query, roher Payload).
+- Unbelegte Aussagen werden als `(Hypothese: ...)` markiert, nicht
+  als Fakt.
+- Die Regel "erst messen, dann designen, dann fixen" gilt auch fuer
+  den Handoff-Text selbst. Der Handoff ist kein "Session-Ende-
+  Freitext", sondern ein Messbericht.
+
+**Negativ-Beispiel dieser Session:** Der Handoff-Schreibende hat
+am Session-Ende die Regel auf seine eigene Ausgabe nicht angewandt.
+Die OP-134-Nachmessung durch die Folgesession hat drei Fehler
+aufgedeckt, die ein einziger zusaetzlicher Grep pro Behauptung
+verhindert haette.
