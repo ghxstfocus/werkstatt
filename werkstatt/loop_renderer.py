@@ -114,20 +114,38 @@ except ImportError:
 # Problem: _console.print() schrieb bisher nur an sys.stdout — der
 # Loop-Footer (LOOP FEHLGESCHLAGEN) landete nicht im Render-Log.
 class _TeeWriter:
-    """File-Wrapper: schreibt an stdout + ruft _tee pro Zeile."""
+    """File-Wrapper: schreibt an stdout + ruft _tee pro Zeile.
+
+    OP-119 (2026-11-04): Defensiv gegen geschlossene Streams. Nach
+    Test-Ende kann ein noch lebender Thread (Heartbeat, _emit_progress)
+    in den bereits geschlossenen capsys-StringIO schreiben; das loeste
+    ValueError: I/O operation on closed file als stderr-Noise aus.
+    """
     def __init__(self, base):
         self._base = base
     def write(self, text):
-        n = self._base.write(text)
-        for line in text.split("\n"):
-            line = line.rstrip()
-            if line:
-                _tee(line)
+        try:
+            n = self._base.write(text)
+        except (ValueError, OSError):
+            return 0
+        try:
+            for line in text.split("\n"):
+                line = line.rstrip()
+                if line:
+                    _tee(line)
+        except (ValueError, OSError):
+            pass
         return n
     def flush(self):
-        return self._base.flush()
+        try:
+            return self._base.flush()
+        except (ValueError, OSError):
+            return None
     def isatty(self):
-        return self._base.isatty()
+        try:
+            return self._base.isatty()
+        except (ValueError, OSError):
+            return False
     def fileno(self):
         return self._base.fileno()
 
