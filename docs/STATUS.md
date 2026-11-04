@@ -214,27 +214,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   Absaetze zur passenden Problem-Klasse. Prompt-Injektion on-demand,
   nicht ganze DB/Datei.
 
-
-### OP-122: Event-Store (SQLite) fuer Loop-Events
-
-- **Status:** open
-- **Typ:** architektur
-- **Betroffen:** `werkstatt/event_store.py` (neu),
-  `werkstatt/loop_renderer.py` (`_publish`),
-  `werkstatt/web/app.py` (neuer Endpoint)
-- **Problem:** Loop schreibt heute JSONL + CI-Text. Die UI pollt die
-  Datei, was zu doppelten Zeilen und Races fuehrt. Es fehlt ein
-  querybarer, session-orientierter Event-Store mit Run-ID, Phase,
-  Status, Dauer, Payload.
-- **Akzeptanzkriterien:** (a) `EventStore`-Klasse mit
-  `append(run_id, kind, phase, status, payload)` und
-  `query(run_id, since_seq=None, kind=None)` (SQLite, JSON-Payload).
-  (b) `_publish()` schreibt primaer in Store, JSONL bleibt als Export.
-  (c) `GET /api/runs/{run_id}/events?since_seq=N` liefert JSON-Liste.
-  (d) 3 Tests: append+query, Filter, Export.
-- **Tests:** `tests/test_event_store.py` (neu)
-- **Blockiert von:** -
-
 ### OP-123: Gate-Bridge (Loop wartet auf HTTP statt stdin)
 
 - **Status:** open
@@ -626,6 +605,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
+
+- 2026-11-04 | OP-122 | done | SQLite-Event-Store fuer Loop-Events (append/query, kind-Filter, WAL, .werkstatt/events.db)
 
 - 2026-11-04 | OP-119 | done | _TeeWriter defensiv gegen geschlossene Streams (bd0db4b)
 - 2026-11-04 | OP-114 | done | Audit-Events reicher: bugs/grund/gate/fehler (c4b525a)
