@@ -17,6 +17,27 @@ from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
 
 
+def extract_audit_bug_summary(bugs: list) -> list[dict]:
+    """OP-114: Normalisiert eine Reviewer-Bug-Liste fuer Audit-Payloads.
+
+    Liefert immer eine list[dict] mit genau den Keys 'severity' und
+    'description'. Nicht-dict-Eintraege werden zu
+    {'severity': '?', 'description': str(b)[:200]} — so geht kein Bug
+    im Audit verloren. Wirft keine Exception (defensiv auf bugs or []).
+    """
+    _out: list[dict] = []
+    for _b in (bugs or []):
+        if isinstance(_b, dict):
+            _sev = str(_b.get("severity", "?"))[:40]
+            _desc = str(
+                _b.get("description") or _b.get("beschreibung") or ""
+            )[:200]
+            _out.append({"severity": _sev, "description": _desc})
+        else:
+            _out.append({"severity": "?", "description": str(_b)[:200]})
+    return _out
+
+
 def _reviewer_history_block(state: RunState) -> str:
     """K40: Formatiert die Historie der vorherigen Reviewer-Runden.
 
@@ -234,7 +255,7 @@ def _reviewer_system(state=None, task_files=None) -> str:
 
     # M-Skills-Reviewer: Metadata + Glob
     try:
-        from werkstatt.skills import skills_metadata_block, skills_aktivieren
+        from werkstatt.skills import skills_aktivieren, skills_metadata_block
         _meta = skills_metadata_block(skills)
         if _meta:
             parts.append(_meta.rstrip())

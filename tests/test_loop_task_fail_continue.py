@@ -47,8 +47,10 @@ class TestTaskFailContinue:
             Path(_loop.__file__).read_text(encoding="utf-8")
             + Path(_pp.__file__).read_text(encoding="utf-8")
         )
-        assert '"gate": "pre_build"' in src
-        idx = src.find('"gate": "pre_build"')
-        assert idx > 0
-        tail = src[idx:idx+400]
-        assert "return 1" in tail
+        # OP-114 (2026-11-04): Payload wird jetzt via _gate_failed_payload
+        # gebaut. Struktur-Anker ist der _verify_patches-Aufruf mit
+        # phase="pre_build"; danach muss ein return 1 folgen (echter Abbruch).
+        idx = src.find('_verify_patches(state, phase="pre_build")')
+        assert idx > 0, "pre_build-verify-Pfad nicht gefunden"
+        tail = src[idx:idx+2000]
+        assert "return 1" in tail, "pre_build-Pfad endet nicht mit return 1"

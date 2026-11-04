@@ -204,7 +204,6 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
             audit("loop_plan_gate_approved", {}, pd, pn)
             return 0
         if _antwort == "n":
-            audit("loop_plan_gate_rejected", {}, pd, pn)
             # Welle H (2026-11-02): Reject-Grund erfassen fuer Reflection
             try:
                 _reason = input(
@@ -219,6 +218,7 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
                 pass
             audit("loop_plan_reject_grund",
                   {"grund": _reason[:200]}, pd, pn)
+            audit("loop_plan_gate_rejected", {"grund": _reason}, pd, pn)
             return 1
         if _antwort == "a":
             if _ist_revidierter:

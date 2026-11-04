@@ -25,6 +25,7 @@ from werkstatt.loop_renderer import (
     task_started,
 )
 from werkstatt.phase_state import PhaseState
+from werkstatt.reviewer import extract_audit_bug_summary
 from werkstatt.state import RunState
 from werkstatt.verify_classify import (
     filtere_harte_verify_fehler,
@@ -175,6 +176,31 @@ def run_reviewer(*args, **kwargs):
     """Late-Binding-Proxy fuer werkstatt.loop.run_reviewer."""
     from werkstatt.loop import run_reviewer as _orig
     return _orig(*args, **kwargs)
+
+
+def _reviewer_rejected_payload(task_id: str, reviewer_result: dict) -> dict:
+    """Baut das Payload fuer loop_reviewer_rejected (additiv)."""
+    if not isinstance(reviewer_result, dict):
+        reviewer_result = {}
+    return {
+        "task_id": task_id,
+        "bugs": extract_audit_bug_summary(
+            reviewer_result.get("bugs") or []
+        ),
+    }
+
+
+def _gate_failed_payload(
+    gate: str, fehler: list, phase: str | None = None,
+) -> dict:
+    """Baut das Payload fuer loop_gate_failed (additiv)."""
+    payload = {
+        "gate": str(gate),
+        "fehler": [str(f) for f in (fehler or [])],
+    }
+    if phase is not None:
+        payload["phase"] = phase
+    return payload
 
 
 def _normalize_tasks(raw_tasks):
@@ -566,8 +592,9 @@ def _phase_plan_and_preflight(
             # melden (irrefuehrend — Tasks wurden geplant, aber
             # verworfen). Klarstellen.
             step(2, "Planner", "Plan verworfen", ok=False)
-            audit("loop_gate_failed", {"gate": "plan",
-                                       "phase": "plan_reject"}, pd, pn)
+            audit("loop_gate_failed",
+                  _gate_failed_payload("plan", [], "plan_reject"),
+                  pd, pn)
             return 1, False
 
     # M-348c: Plan-Human-Gate (nach Plan-Erstellung, vor Builder).
@@ -668,8 +695,10 @@ def _phase_plan_and_preflight(
         if relevant:
             audit(
                 "loop_gate_failed",
-                {"gate": "pre_build", "blocker": len(relevant),
-                 "dateien": [f.get("datei") for f in relevant]},
+                _gate_failed_payload(
+                    "pre_build",
+                    [f.get("datei") for f in relevant],
+                ),
                 pd, pn,
             )
             return 1, False
@@ -1142,7 +1171,11 @@ def _phase_tasks_loop(
         # markiert trotz funktionalem Code.
         _v_hart_ok, _v_weich = _verify_patches_soft(state, phase="post_build")
         if not _v_hart_ok:
-            audit("loop_gate_failed", {"gate": "post_build", "task_id": i}, pd, pn)
+            audit(
+                "loop_gate_failed",
+                _gate_failed_payload("post_build", []),
+                pd, pn,
+            )
             if not _reflection_loop(state):
                 audit("loop_reflection_gescheitert", {"task_id": i}, pd, pn)
                 # OP-059d: bei Spec-Widerspruch-Verdacht human_review
@@ -1247,7 +1280,14 @@ def _phase_tasks_loop(
                            failure="reviewer_unvollstaendig")
                 # FIX AR 2026-10-31: continue statt return 1.
                 continue
-            audit("loop_reviewer_rejected", {"task_id": i}, pd, pn)
+            audit(
+                "loop_reviewer_rejected",
+                _reviewer_rejected_payload(
+                    task_id,
+                    {"bugs": getattr(state, "reviewer_bugs", []) or []},
+                ),
+                pd, pn,
+            )
             # M-314: Reviewer-Bug-Text als Kontext an Reflection.
             _reviewer_bugs = getattr(state, "reviewer_bugs", []) or []
             # M-441: Bug-Anzahl Runde 1 merken (fuer Divergenz-Check).
@@ -1558,7 +1598,8 @@ def _phase_finalize(
             # K23d: Phase-End-Reflection pro Datei.
             if not _phase_end_reflection(state):
                 audit("loop_gate_failed",
-                      {"gate": "phase_end_review"}, pd, pn)
+                      _gate_failed_payload("phase_end_review", []),
+                      pd, pn)
                 return 1
         audit("loop_phase", {"phase": "phase_end_review", "status": "approved"}, pd, pn)
         group_end()
@@ -1578,7 +1619,8 @@ def _phase_finalize(
     # M-476: Phase-End Verify (Vollsuite) nach human_gate.
     if rc == 0:
         if not _verify_patches(state, phase="phase_end"):
-            audit("loop_gate_failed", {"gate": "phase_end"}, pd, pn)
+            audit("loop_gate_failed",
+                  _gate_failed_payload("phase_end", []), pd, pn)
             rc = 1
 
     if rc == 0:
