@@ -498,66 +498,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Blockiert von:** OP-122
 
 
-### OP-135a: State-Contract-Design (Dataclasses + Registry)
-
-- **Status:** open
-- **Typ:** architektur (Design-OP, kein Pipeline-Fix)
-- **Betroffen:** `werkstatt/state_contracts.py` (neu),
-  `docs/STATE-CONTRACTS.md` (neu), `tests/test_state_contracts.py` (neu),
-  `werkstatt/pipeline_phases.py` (minimal: `explorer_diagnostics` befuellen)
-- **Problem:** Aufbauend auf OP-134 (siehe `docs/STATE-INVENTUR.md`).
-  25 Ghost-Felder, 47 tote Felder. Inter-Role-Uebergaenge sind heute
-  implizit (dicts ohne Schema). `explorer_findings` (dict mit
-  pytest_laufzeit_s/ruff_befunde) wird im aktuellen Code NUR im
-  LLM-Fallback von `run_explorer` gesetzt, und dieser Pfad ist tot
-  (`_messen()` returnt frueh, siehe STATE-INVENTUR.md Abschnitt
-  Handoff-Korrekturen). Der Architect liest `explorer_findings`
-  (leer), nicht `explorer_context` (Datei-Liste).
-- **Akzeptanzkriterien:**
-  - `werkstatt/state_contracts.py` (neu) mit Dataclasses:
-    `KeyFile(file, why, symbols, preview, confidence)`,
-    `ExplorerOutput(findings: str, key_files: list[KeyFile],
-    next_reads: list[str])`,
-    `ExplorerDiagnostics(git_dirty: bool, pytest_laufzeit_s: int,
-    ruff_befunde: list)`,
-    `ScoutOutput(api_auszug: dict[str, list[str]],
-    bereits_erfuellt: bool)`,
-    `ArchitectOutput(prosa: str)`,
-    `PlannerOutput(tasks: list[dict], tests: list[str],
-    akzeptanzkriterien: list[str])`,
-    `Contract(typ, schreiber, leser, pflicht, validator=None)`,
-    `CONTRACTS: dict[str, Contract]` (5 Eintraege).
-    Alle Dataclasses mit `from_dict()`/`to_dict()`/`__getitem__`/`get()`.
-  - **Nicht deklariert** (bewusste Entscheidung, siehe
-    STATE-CONTRACTS.md Abschnitt "Offene Punkte"):
-    `ScoutOutput.widersprueche` existiert heute nur als Audit-Event
-    (`planner_scout_api_widerspruch`), nicht als State-Feld.
-    `ArchitectOutput.zieldateien` existiert heute nur implizit in
-    `architect_prosa` (Prosa-Parsing durch Planner). Beide Felder
-    wuerden denselben Fehler wie `explorer_findings` produzieren
-    (deklariert, aber tot). Migrations-OPs spaeter.
-  - `docs/STATE-CONTRACTS.md` (neu) mit ASCII-Diagramm
-    Rolle -> Feld -> Rolle; Abschnitt "Datenform pro Rolle" (belegt
-    aus STATE-INVENTUR.md); Abschnitt "Bekannte stille Degradierungen"
-    (25 Ghosts); Abschnitt "Offene Punkte" (o.g.).
-  - `RunState` (state.py) nutzt die Dataclasses als **read-only
-    Property-Views**. Felder bleiben im Konstruktor (kein Bruch fuer
-    Tests, die `RunState(tasks=...)` nutzen). Properties
-    `explorer_output`/`explorer_diagnostics` lesen aus den
-    bestehenden Ghost-Feldern `explorer_context`/`explorer_findings`.
-  - `explorer_diagnostics` minimal befuellen im deterministischen
-    Pfad: in `pipeline_phases._phase_explorer_and_setup` nach
-    `_messen()` die ruff/pytest-Ergebnisse aus dem `messungen`-dict
-    nach `state.explorer_diagnostics` schreiben (3-5 Zeilen).
-    Begruendung: ohne befuelltes Feld kann OP-136
-    `explorer_diagnostics` nicht als Pflichtfeld validieren.
-  - **Kein Pipeline-Fix** ausser der `explorer_diagnostics`-
-    Befuellung. `architect.py:385` bleibt unangetastet (OP-137).
-- **Tests:** `tests/test_state_contracts.py` — Registry-
-  Vollstaendigkeit, `from_dict`/`to_dict` Roundtrip, Property-View-
-  Kompatibilitaet.
-- **Blockiert von:** —
-
 ### OP-135b: RunState-Migration auf Contract-Dataclasses
 
 - **Status:** open
@@ -585,7 +525,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     Ghost-Zahl; Baseline angepasst mit dokumentiertem Grund.
 - **Tests:** `tests/test_state_contracts_migration.py` —
   Deprecation-Warnings bei alten Namen, neue Namen funktionieren.
-- **Blockiert von:** OP-135a
+- **Blockiert von:** —
 
 ### OP-136: State-Contract-Validierung in der Pipeline (fail-loud)
 
@@ -616,7 +556,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     erwartet `ContractViolation` + Audit-Event.
 - **Tests:** `tests/test_state_drift.py` (neu),
   `tests/test_pipeline_contract.py` (neu).
-- **Blockiert von:** OP-135a
+- **Blockiert von:** —
 
 ### OP-137: Fix architect.py + Cross-Role-Smoke-Tests
 
@@ -649,7 +589,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     Task-Zieldateien existieren im Projekt (via `_finde_modul_pfad`).
 - **Tests:** `tests/test_architect_prompt.py` (neu),
   `tests/test_pipeline_smoke.py` (neu).
-- **Blockiert von:** OP-135a
+- **Blockiert von:** —
 
 
 ### OP-138: `render/` Submodul-Split (loop_renderer.py zerlegen)
@@ -678,7 +618,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - Bestehende Tests (`test_loop_renderer.py`, `test_terminal_proxy.py`,
     `test_renderer_live.py`) bleiben gruen ohne Aenderung.
 - **Tests:** keine neuen (bestehende decken ab).
-- **Blockiert von:** OP-135a, OP-135b, OP-136, OP-137
+- **Blockiert von:** OP-135b, OP-136, OP-137
 
 ### OP-139: `phases/` Submodul-Split (pipeline_phases.py zerlegen)
 
@@ -730,7 +670,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     Builders zu ziehen.
   - Bestehende `test_builder.py` bleibt gruen ohne Aenderung.
 - **Tests:** keine neuen (AST-Helpers sind bestehend, Tests decken ab).
-- **Blockiert von:** OP-135a, OP-135b (State-Contracts muessen stehen, damit
+- **Blockiert von:** OP-135b (State-Contracts muessen stehen, damit
   die Builder-API klar ist)
 
 ### OP-141: `state/` Submodul-Split (RunState aufteilen)
@@ -759,7 +699,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_state_split.py` (neu),
   bestehende Suite bleibt gruen (mit Anpassungen an geaenderte
   Feld-Pfade).
-- **Blockiert von:** OP-135a, OP-135b, OP-136, OP-137
+- **Blockiert von:** OP-135b, OP-136, OP-137
 
 ### OP-142: `web/routes/` Submodul-Split
 
@@ -971,7 +911,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - `python3 tools/state_inventory.py --check` zeigt danach
     **25 - 1 = 24** Geister (falls geloescht) oder **26** (falls
     deklariert).
-- **Blockiert von:** OP-135a (Contract-Design), OP-137 (Muster-Fix)
+- **Blockiert von:** OP-137 (Muster-Fix)
 
 ### OP-146: Stale Blocker-Referenzen bereinigen (17 Fundstellen)
 
@@ -1003,6 +943,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-05 | OP-135a | done | State-Contract-Design: Dataclasses + Registry + Property-Views (35c2aa3)
 - 2026-11-04 | OP-134 | done | State-Inventur — Tool + Doku (7177f16)
 - 2026-11-04 | OP-122 | done | SQLite-Event-Store fuer Loop-Events (append/query, kind-Filter, WAL, .werkstatt/events.db)
 

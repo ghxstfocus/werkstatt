@@ -1541,3 +1541,30 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
   control_drift EXIT=0.
 - **Nachfolge-OPs:** OP-145 (Namens-Drift, bereits offen),
   OP-135/136/137 (Contract), OP-138..144 (Splits).
+
+## 2026-11-05 -- OP-135a abgeschlossen: State-Contract-Design
+
+- **Status:** done (Work-Commit 35c2aa3)
+- **Dateien:** werkstatt/state_contracts.py (neu),
+  docs/STATE-CONTRACTS.md (neu), tests/test_state_contracts.py (neu),
+  werkstatt/state.py (Property-Views), werkstatt/explorer.py
+  (_git_dirty + Diagnostics-Befuellung)
+- **Aenderungen:** 5 Dataclasses (ExplorerOutput, ExplorerDiagnostics,
+  ScoutOutput, ArchitectOutput, PlannerOutput) + KeyFile + Contract
+  (Registry). ContractDict-Mixin fuer dict-artigen Zugriff. 5
+  read-only Property-Views auf RunState mit Lazy-Imports.
+- **Design-Entscheidungen:**
+  - ScoutOutput.widersprueche NICHT deklariert (existiert nur als
+    Audit-Event planner_scout_api_widerspruch).
+  - ArchitectOutput.zieldateien NICHT deklariert (existiert nur
+    implizit in architect_prosa-Parsing). Beide waeren derselbe
+    Fehler wie explorer_findings (deklariert, aber tot).
+  - RunState-Felder bleiben im Konstruktor (Property-View ist
+    verlustfrei, MESS-2: 0 Tests mit RunState(tasks=...)).
+  - explorer_diagnostics wird ab jetzt im deterministischen
+    Explorer-Pfad befuellt (state.explorer_findings = {...} nach
+    _messen()) — Voraussetzung fuer OP-136.
+- **Abnahme:** pytest 1248 passed, 5 skipped; state_inventory
+  --check EXIT=0; audit_drift EXIT=0; control_drift EXIT=0.
+- **Nachfolge-OPs:** OP-135b (RunState-Migration), OP-136
+  (Validierung), OP-137 (Fix architect.py), OP-145 (Namens-Drift).
