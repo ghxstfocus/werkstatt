@@ -1,8 +1,7 @@
 """Prompt-Bau (Phase 2 / Gate 18, 2026-10-19).
 
 Aus pipeline.py extrahiert (Befund BO/BP, Reviewer-A:
-8 Funktionen, build_system_prompt bleibt in pipeline.py
-wegen _anti_pattern_block-Anker).
+8 eigenstaendige Prompt-Bausteine.
 
 Enthaelt:
 - _build_judge_prompt
@@ -15,7 +14,6 @@ Enthaelt:
 - recovery_hinweis_block
 
 Nicht hier (Phase 3b/6):
-- build_system_prompt: ruft _anti_pattern_block.
 - _anti_pattern_block: Phase 3b, Hooks ersetzen.
 
 Siehe docs/NEUBAU-ENTFERNUNG.md.

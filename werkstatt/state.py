@@ -429,7 +429,7 @@ class PhaseMainVorlaufErgebnis:
       api_key            os.getenv(...).strip()           -> str
       config             _lade_und_pruefe_projekt()       -> dict[str, Any]
       project_dir        Path(...).expanduser()           -> Path
-      agents             load_agents()                    -> dict[str, dict[str, Any]]
+      agents             {}                              -> dict[str, dict[str, Any]]
       docs               load_docs()                      -> dict[str, str]
       file_whitelist     config.get("file_whitelist", []) -> list[str]
       always_kat         build_catalog()[0]               -> dict[str, Measurement]

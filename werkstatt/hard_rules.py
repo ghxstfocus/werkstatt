@@ -4,13 +4,11 @@ Aus pipeline.py extrahiert (Befund BM). Enthaelt NUR
 Konstanten, keine Funktionen (Auflage A-2).
 
 Konsumenten:
-- build_system_prompt (pipeline.py): HARD_RULES_BASE +
-  HARD_RULES_BY_ROLE.
 - _build_judge_prompt (pipeline.py): HARD_RULES_BASE +
   HARD_RULES_JUDGE.
 
 Phase 6 (Prompt-Kuerzung) entscheidet, ob diese
-Konstanten bleiben oder in agents/*.md umverteilt
+Konstanten werden von den aufrufenden Modulen importiert.
 werden (A-4, docs/NEUBAU-ENTFERNUNG.md).
 """
 

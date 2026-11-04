@@ -18,11 +18,6 @@ import requests  # type: ignore[import-untyped]
 
 import redaction
 from werkstatt.audit import audit
-from werkstatt.hard_rules import (
-    HARD_RULES_BASE,
-    HARD_RULES_BY_ROLE,
-    HARD_RULES_PLANNER_STUFE2,
-)
 from werkstatt.state import LLMReply, Measurement, Messung, RunState
 from werkstatt.subprocess_env import subprocess_env
 
@@ -611,35 +606,6 @@ def execute_commands(state: RunState, commands: list[dict[str, str]],
 # =====================================================================
 
 
-def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
-                        doc_keys: list[str],
-                        *,
-                        state: RunState | None = None,
-                        stufe: int = 1) -> str:
-    """Baut System-Prompt aus Rollen-Body + HARD_RULES_BASE + Rolle + Projekt-Doku.
-
-    Auflage 2182: HARD_RULES_BASE + rollenspezifische
-    HARD_RULES_<ROLLE> (anhand agent["name"]).
-    Reihenfolge: Rollen-Body, BASE, Rolle, Projekt-Doku.
-
-    """
-    parts = [agent["body"], HARD_RULES_BASE]
-    agent_name = agent.get("name", "")
-    # stufe wirkt nur fuer rolle=planner (P2a-S5a-A2).
-    # stufe=2 waehlt HARD_RULES_PLANNER_STUFE2.
-    # Jeder andere Wert verhaelt sich wie 1 (BY_ROLE).
-    if agent_name == "planner" and stufe == 2:
-        rollen_rules = HARD_RULES_PLANNER_STUFE2
-    else:
-        rollen_rules = HARD_RULES_BY_ROLE.get(agent_name, "")
-    if rollen_rules:
-        parts.append(rollen_rules)
-    if doc_keys:
-        parts.append("\n\n--- PROJEKT-DOKU ---")
-        for key in doc_keys:
-            if key in docs:
-                parts.append(f"\n--- {key} ---\n{docs[key]}")
-    return "\n".join(parts)
 
 
 
@@ -684,7 +650,7 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             timeout=timeout, state=state, aufgabe=aufgabe,
             heartbeat=heartbeat, max_tokens=max_tokens, redact=redact,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _emit_progress(_label, "response_failed", str(exc)[:80])
         raise
     if reply.ok:
