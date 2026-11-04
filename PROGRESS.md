@@ -1589,3 +1589,25 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
   reproduziert auf parent `6624954`, pre-existing, siehe OP-148.
 - **Nachfolge-OPs:** UI-Kette (OP-124/126/127/128/131/132) entblockt.
   OP-129/130/113i warten auf OP-113a (via OP-113).
+
+## 2026-11-04 -- OP-150 abgeschlossen: control/reflection.py geloescht
+
+- **Status:** done (Work-Commit 1752d76)
+- **Dateien:** `werkstatt/control/reflection.py` (geloescht),
+  `docs/STATUS.md` (Delete-Zone), `PROGRESS.md`
+- **Befund:** `werkstatt/control/reflection.py` war byte-identisch zu
+  `werkstatt/reflection.py` (MD5 `1ffea26252c1425ae9476c069d981ea8`)
+  und wurde von nichts importiert. OP-104 hatte den Zombie als
+  "wortgleiche Kopie" angelegt, die geplante Aufrufer-Migration
+  (OP-106) hat nie stattgefunden.
+- **Aenderung:** Zombie-Datei geloescht. `control/__init__.py` und
+  `control/registry.py` referenzierten sie nicht (Registry zeigt auf
+  `werkstatt.reflection`, nicht `werkstatt.control.reflection`).
+- **Nicht betroffen:** `tests/test_planner.py:65-69` enthaelt nur
+  String-Literale ("kopiere ... nach werkstatt/control/reflection.py")
+  als Fixture-Daten fuer den Planner-Parser, keinen Import.
+- **Abnahme (offizieller Runner, ohne tests/test_shell.py):**
+  pytest 1255 passed, 5 skipped; audit_drift OK; control_drift OK;
+  state_inventory OK
+- **Nachfolge-OPs:** OP-106 (Aufrufer-Migration) ist faktisch
+  erledigt — heute existiert nur noch `werkstatt.reflection`.
