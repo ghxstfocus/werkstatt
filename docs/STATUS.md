@@ -939,6 +939,56 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Tests:** keine (Doku-only).
 - **Blockiert von:** —
 
+### OP-147: Reflection-Verdrahtung (kleine Luecken)
+
+- **Status:** open
+- **Typ:** architektur (klein, komplementaer zu OP-113/129/130/131)
+- **Betroffen:** `werkstatt/reflection.py`,
+  `werkstatt/control/reflection.py`, `werkstatt/prompts.py`,
+  `werkstatt/state.py` (nur Doku)
+- **Ziel (bestaetigt 2026-11-05):** Reflection hat den Zweck, dem
+  Builder bei Reviewer-Reject konkret zurueckzugeben, was schief
+  lief, mit Begruendung + Empfehlung. Das tut `_reflection_loop`
+  heute schon (liest `last_verify_errors`, `reviewer_bugs`, baut
+  Feedback-Prompt, ruft Builder erneut). Diese OP schliesst die
+  drei kleinen Verdrahtungsluecken, die dabei offen sind.
+
+- **Problem (Messung 2026-11-05):**
+  1. **`state.letzter_test_fehler`** (eines der 47 toten Felder)
+     ist konzeptionell ein Reflection-Input, wird aber in
+     `reflection.py` und `control/reflection.py` nirgends gelesen.
+     Der Feld-Kommentar sagt: "Wird in den naechsten Builder-Prompt
+     gerendert" — das passiert nicht.
+  2. **`state.geladene_skills`** (deklariert, getattr_only in
+     `skills.py:merke_geladene_skills`) wird von Reflection mit
+     `_merke_geladene_skills(state, [...])` geschrieben, aber nur
+     fuer Audit-Sichtbarkeit. Keine Verdrahtung zur Auswahl-Strategie.
+  3. **3 Reflection-Varianten** (`_reflection_loop` Z. 240,
+     `_phase_end_reflection` Z. 658, `_plan_reject_reflection` Z.
+     810) nutzen unterschiedliche Kontext-Inputs — kein gemeinsames
+     "Was weiss Reflection?"-Modell.
+
+- **Akzeptanzkriterien:**
+  - **`letzter_test_fehler`:** Wenn `state.letzter_test_fehler`
+    gesetzt ist und `_reflection_loop` laeuft, wird es zusaetzlich
+    zu `last_verify_errors` in den Feedback-Prompt gehaengt
+    (dedupliziert, wenn identisch). Wenn nicht gesetzt: kein
+    Verhalten-Delta.
+  - **`geladene_skills`:** In `state.reflection_skill_body`-Auswahl
+    (heute nur `systematic-debugging`) wird `state.geladene_skills`
+    gelesen, um bereits geladene Skills nicht erneut zu laden.
+    Kein doppelter Skill-Body im Prompt.
+  - **3 Varianten dokumentieren:** In `reflection.py`-Docstring
+    (Kopf) eine 10-zeilige Tabelle: welche Variante liest welche
+    Felder. Vereinheitlichen erst in einer spaeteren OP — heute nur
+    dokumentieren.
+  - **Nicht in dieser OP:** ContractViolation-Retry.
+    `validate_transition` (OP-136) bleibt fail-loud.
+- **Tests:** `tests/test_reflection_verdrahtung.py` (neu) — 3 Tests
+  (letzter_test_fehler landet im Prompt, geladene_skills wird
+  respektiert, Doku-Vollstaendigkeit der 3 Varianten via AST-Read).
+- **Blockiert von:** —
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
