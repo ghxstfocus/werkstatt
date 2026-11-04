@@ -2,7 +2,7 @@
 
 Format aus `DOC_CONVENTIONS.md` §5. Nur offene, **loop-faehige** OPs.
 `—` in Feldern = noch nicht spezifiziert (Loop praezisiert bei Bearbeitung).
-Letzte Aktualisierung: 2026-11-03.
+Letzte Aktualisierung: 2026-11-04.
 
 Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 `docs/ROADMAP.md`, Abschnitt "Aus STATUS.md (Loop-Queue)".
@@ -323,6 +323,9 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-04 | OP-119 | done | _TeeWriter defensiv gegen geschlossene Streams (bd0db4b)
+- 2026-11-04 | OP-114 | done | Audit-Events reicher: bugs/grund/gate/fehler (c4b525a)
+- 2026-11-04 | OP-111 | done | Progress-Events in ask_llm + _with_spinner (4c0c59d, 2c1b30d)
 - 2026-11-03 | OP-108 | done | Scout create/update + Kopier-Auftrag (3884036)
 - 2026-11-03 | OP-097 | superseded | aufgeteilt in OP-104 (Kopie) + OP-105 (Proxy) + OP-106 (Aufrufer) + OP-107 (Tests)
 - 2026-11-03 | OP-104 | done | control/reflection.py wortgleiche Kopie (manuell, Scout-Plan-Bug)
@@ -442,34 +445,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   `create`. 2 Tests in `tests/test_planner.py`.
 - **Blockiert von:** -
 
-### OP-111: Structured Progress Events aus Builder/Planner/Reviewer
-
-- **Status:** closed (2026-11-04, Etappe 1+2 — Commit 4c0c59d + folgender Etappe-2-Commit)
-- **Typ:** ux-feature
-- **Betroffen:** `werkstatt/builder.py`, `werkstatt/planner.py`,
-  `werkstatt/reviewer.py`, `werkstatt/loop_renderer.py` (neue API)
-- **Problem:** Während eines langlaufenden Builder-Calls (30-90s)
-  sieht der User zwischen "Builder t1 ..." und "OK Builder t1 · 30.3s"
-  nur Heartbeats alle 15s. Das ist "Sekunden ohne Info".
-  Kein Live-Feedback ob DeepSeek antwortet, Patches validiert
-  werden, oder der Builder hängt.
-- **Akzeptanzkriterien:**
-  - Neue Renderer-API `_emit_progress(label, step, detail)` mit
-    eigenem Progress-Tracking (überschreibt vorige Zeile im Live-Mode,
-    loggt sequenziell im CI-Mode).
-  - Builder sendet: `start`, `prompt_sent`, `response_received`,
-    `patches_parsed`, `patches_validated`, `patches_applied`.
-  - Planner/Scout: `scout_start`, `scout_done`, `architect_start`,
-    `architect_done`, `split_start`, `split_done`.
-  - Reviewer: `diff_received`, `analysis_start`, `verdict`.
-  - Heartbeat wird redundant (nur Fallback wenn Sub-Component
-    keine Events sendet).
-- **Tests:** `tests/test_loop_renderer.py` — 3 Tests für
-  `_emit_progress` (Live überschreibt, CI sequenziell, kein
-  Output bei leerem step).
-- **Blockiert von:** -
-
-
 ### OP-115: Progress-Events Builder-Spezifika
 
 - **Status:** open
@@ -563,29 +538,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   gefunden, `erfolg=0` sonst. Idempotent per `problem_sig`.
 - **Blockiert von:** OP-113a
 
-### OP-114: Audit-Events fuer Problem-Klassen anreichern
-
-- **Status:** closed (2026-11-04, Commit c4b525a + Test-Fixes f0aa5cd/e77069e)
-- **Typ:** audit-feature
-- **Betroffen:** `werkstatt/pipeline_phases.py`,
-  `werkstatt/reviewer.py`, `werkstatt/gates.py`
-- **Problem:** `loop_reviewer_rejected` (240x), `loop_plan_gate_rejected`
-  (90x), `loop_gate_failed` (153x) enthalten **keine beschreibenden
-  Felder**. Beim Backfill (OP-113i) sind sie deshalb blind. Konkret:
-  `loop_reviewer_rejected` loggt nur `task_id`, obwohl `reviewer_result`
-  (705x) die Bugs+Severity hat. `loop_plan_gate_rejected` loggt keinen
-  Reject-Grund, obwohl `_human_gate_plan` ihn kennt.
-- **Akzeptanz:** (a) `loop_reviewer_rejected`-Event enthaelt
-  `payload={"bugs": [{"severity", "description"}], "task_id": ...}`.
-  (b) `loop_plan_gate_rejected` enthaelt `payload={"grund": "..."}`.
-  (c) `loop_gate_failed` enthaelt `payload={"gate": "...", "fehler": [...]}`
-  (aktuell nur `gate`, `phase`). (d) Nach 3 neuen Loop-Läufen sind
-  in den Audit-Logs genug Felder, um Cluster zu bilden.
-- **Tests:** `tests/test_audit.py` (Erweiterung) — jedes neue Feld
-  vorhanden.
-- **Blockiert von:** -
-
-
 ### OP-117: Scout-Prosa optimieren
 
 - **Status:** open
@@ -620,19 +572,36 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   - Test: 2× `_emit_progress` in 3s → 0 Heartbeats.
 - **Blockiert von:** -
 
-### OP-119: _with_spinner-Thread-Leak
+### OP-120: Revidierter Plan wird nicht gerendert
 
 - **Status:** open
-- **Typ:** bug
-- **Betroffen:** `werkstatt/loop_renderer.py` (`_with_spinner`,
-  `_tee`)
-- **Problem:** Heartbeat-Thread schreibt nach `_hb.join(timeout=1)`
-  in geschlossenen `StringIO` → `ValueError: I/O operation on
-  closed file` als stderr-Warnung im pytest-Lauf. Kein Test-Fail,
-  aber Noise.
+- **Typ:** ux-bug
+- **Betroffen:** `werkstatt/gates.py` (`_human_gate_plan`),
+  `werkstatt/loop_renderer.py` (`plan`)
+- **Problem:** Nach Reject am Plan-Gate laeuft die Reflection und
+  erzeugt einen revidierten Plan. Der Prompt `Revidierter Plan OK?`
+  wird gezeigt, aber **der Plan selbst nicht**. Der User muss blind
+  j/n druecken. Testlauf 2026-11-04 hat das reproduziert.
 - **Akzeptanzkriterien:**
-  - `_tee()` defensiv: `try/except (ValueError, OSError)` um
-    `_TEE_STREAM.write()`.
-  - ODER `_hb.join()` ohne Timeout.
-  - pytest-Lauf zeigt keine `ValueError`-Warnung mehr.
+  - `_human_gate_plan` mit `kontext="revidierter_plan"` ruft
+    `_r.plan(...)` mit `state.tasks`/`tests`/`akzeptanzkriterien`
+    auf, **bevor** `input()`.
+  - Test: Mock-`input`, revidierter Plan da -> `plan()`-Call
+    nachweisbar vor dem Prompt.
+- **Blockiert von:** -
+
+### OP-121: step() und _emit_progress ohne Timestamp im CI-Log
+
+- **Status:** open
+- **Typ:** observability
+- **Betroffen:** `werkstatt/loop_renderer.py` (`step`, `_emit_progress`)
+- **Problem:** In `RENDER_MODE=ci` schreibt `_emit_raw` Timestamps
+  `[HH:MM:SS]`, aber `step()` (Rich-Panel) und `_emit_progress`
+  gehen ueber andere Pfade. Folge: Messungen wie Explorer->Scout-Gap
+  sind aus dem Log nur grob rekonstruierbar (Testlauf 2026-11-04:
+  Gap ~27 s, aber keine exakten Zeitpunkte im Log).
+- **Akzeptanzkriterien:**
+  - `step()`-Aufrufe in CI haben `[HH:MM:SS]`-Prefix im Log.
+  - `_emit_progress`-Aufrufe in CI haben `[HH:MM:SS]`-Prefix im Log.
+  - Bestehende Tests in `test_loop_renderer.py` bleiben gruen.
 - **Blockiert von:** -
