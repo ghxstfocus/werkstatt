@@ -1,4 +1,5 @@
-"""OP-034: pytest_regression-Stage + changed_non_test_py_files + requires-Gate."""
+"""OP-034 + OP-149: pytest_regression-Stage; requires-Gate nutzt jetzt
+changed_py_files (jede .py-Aenderung), nicht nur non_test_py_files."""
 from __future__ import annotations
 
 import json
@@ -115,5 +116,5 @@ def test_pytest_regression_requires_gesetzt():
         data = json.loads(p.read_text())
         stages = data.get("stages", [])
         stage = next(s for s in stages if s.get("id") == "pytest_regression")
-        assert stage.get("requires") == "{changed_non_test_py_files}"
+        assert stage.get("requires") == "{changed_py_files}"  # OP-149
         assert stage.get("phase") == "phase_end"
