@@ -368,3 +368,33 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   `_emit_progress` (Live überschreibt, CI sequenziell, kein
   Output bei leerem step).
 - **Blockiert von:** -
+
+### OP-112: Antipattern + Skill-Matching in Reflection-Runden
+
+- **Status:** open
+- **Typ:** reflection-feature
+- **Betroffen:** `werkstatt/reflection.py`, `werkstatt/antipattern.py`,
+  `werkstatt/skills.py`, `werkstatt/hard_rules.py`
+- **Problem:** Reflection-Runden reagieren nur auf Verify-Fehler +
+  Reviewer-Bugs. Zwei Luecken: (a) `antipattern.scan_patches` laeuft
+  nur am Task-Ende (OP-064b-Veto), nicht pro Reflection-Runde. (b) Die
+  Skills werden beim Loop-Start einmal geladen (`systematic-debugging`
+  fuer Reflection), aber nicht problem-spezifisch gematcht — d.h. bei
+  "Tests rot wegen Import" wird kein Import-Skill zurueckgegeben, bei
+  "Test schwaechen" kein Test-Quality-Skill.
+- **Akzeptanzkriterien:**
+  - `reflection._reflection_loop`: vor dem Builder-Prompt
+    `scan_patches(state.patches)` aufrufen. Treffer werden in den
+    Reflection-Prompt als "## ANTIPATTERN-WARNUNG" eingebaut.
+  - Neuer Helper `skills.match_skills_for_problem(fehler, bugs) -> list`.
+    Matching-Matrix: `ImportError` -> `python-imports`; `type.*ignore`
+    -> `strict-typing`; `pytest assert` geschwaecht -> `test-quality`;
+    `ruff.*F401` -> `unused-imports`. Config in `skills/_matching.yaml`
+    oder hardcoded in `skills.py`.
+  - Reflection-Prompt bekommt "## EMPFOHLENE SKILLS" mit den gematchten
+    Bodies (max 3, je 800 Zeichen).
+  - Bestehender `systematic-debugging`-Skill bleibt als Fallback.
+- **Tests:** `tests/test_reflection.py` — 2 Tests (Antipattern-Warnung
+  im Prompt, Skill-Matching bei ImportError).
+- **Blockiert von:** -
+
