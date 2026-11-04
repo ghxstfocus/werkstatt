@@ -159,7 +159,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_context_builder.py` (neu), `tests/test_test_agent.py`
   (neu), `tests/test_debugger.py` (neu), `tests/test_pipeline_phases.py` (erweitern)
 
-- **Blockiert von:** OP-089 (Reflection-Bug), OP-090 (Human-Gate-Skip)
+- **Blockiert von:** —
 - **Hinweis:** Struktureller Fix für die Klasse OP-047 / OP-089. Nach 092a-e
   hat der Agent deterministischen Kontext und rät nicht mehr.
 
@@ -190,7 +190,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   1x (in `control/verify.py`). `control_drift --check` gruen. `pytest`
   gruen. Keine Deprecation-Warnungen mehr.
 - **Tests:** `pytest -q --ignore=tests/test_shell.py` + 163 Patch-Migrationen.
-- **Blockiert von:** OP-095 (hart-Feld zuerst), OP-100a-e in Reihenfolge.
+- **Blockiert von:** —
 - **Anmerkung:** Discovery 2026-11-03: 163 Patch-Calls (45x _verify_patches,
   93x audit, 10x _plan_gate, 15x sonst). Nicht an einem Tag machbar.
 
@@ -214,6 +214,26 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   Absaetze zur passenden Problem-Klasse. Prompt-Injektion on-demand,
   nicht ganze DB/Datei.
 
+### OP-113a: erfahrung-Tabelle um scope-Spalte erweitern
+
+- **Status:** open
+- **Typ:** feature (Erfahrungs-Gehirn, Sub-OP zu OP-113)
+- **Betroffen:** `werkstatt/erfahrung.py` (neu, siehe OP-113)
+- **Problem:** ADR-0010 legt zweistufige Memory fest. OP-113 legt
+  Basis-Tabelle `erfahrung` an, aber ohne `scope`-Spalte. OP-129
+  (Destillation), OP-130 (Semantic Memory) und OP-113i (Log-Backfill)
+  brauchen `scope TEXT NOT NULL DEFAULT 'projekt'` als Voraussetzung.
+- **Akzeptanzkriterien:**
+  - `erfahrung`-Tabelle hat Spalte `scope TEXT NOT NULL DEFAULT 'projekt'`,
+    CHECK auf `scope IN ('projekt','global')`.
+  - Alle bestehenden Inserts setzen explizit `scope='projekt'`.
+  - Migration idempotent (ALTER TABLE nur wenn Spalte fehlt).
+  - 2 Tests: Insert mit/ohne scope, Constraint-Verletzung.
+- **Tests:** `tests/test_erfahrung.py::test_scope_default`,
+  `tests/test_erfahrung.py::test_scope_constraint`
+- **Blockiert von:** OP-113
+- **Quelle:** `docs/adr/ADR-0010-memory-zweistufig.md`
+
 ### OP-123: Gate-Bridge (Loop wartet auf HTTP statt stdin)
 
 - **Status:** open
@@ -230,7 +250,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   sonst weiter `input()`. (c) `GET /api/runs/{id}/gates` listet offene
   Gates. (d) Test: Mock liefert "j", Gate liefert 0.
 - **Tests:** `tests/test_gate_bridge.py` (neu)
-- **Blockiert von:** OP-122
+- **Blockiert von:** —
 
 ### OP-124: Chat-Agent + read-only Tool-Registry
 
@@ -250,7 +270,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   `tool_call("git_diff")`, Tool-Result landet in Session.
 - **Tests:** `tests/test_chat_agent.py` (neu),
   `tests/test_chat_tools.py` (neu)
-- **Blockiert von:** OP-122, OP-125
+- **Blockiert von:** OP-125
 
 ### OP-125: Chat-Session-Store (SQLite, pro Projekt)
 
@@ -264,7 +284,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   `list_sessions(project)`. (c) `derive_messages()` rekonstruiert
   LLM-Historie aus Events. (d) 3 Tests: append+load, Fork, derive.
 - **Tests:** `tests/test_chat_session.py` (neu)
-- **Blockiert von:** -
+- **Blockiert von:** —
 
 ### OP-126: Chat-UI (Tool-Call-Karten, Session-Anzeige)
 
@@ -310,7 +330,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   keine Framework-Migration.
   (f) Manuell verifiziert gegen Wireframe.
 - **Tests:** keine (UI, visuell)
-- **Blockiert von:** OP-122, OP-126
+- **Blockiert von:** OP-126
 
 
 ### OP-128: Chat-Modus Debugger (evidence-first)
@@ -495,7 +515,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     Aufschluesselung, per-Model-Tabelle, Warnung bei 80 % Verbrauch.
   - Test: Mock-Audit-Events → korrekte Aggregation.
 - **Tests:** `tests/test_stats_api.py` (neu)
-- **Blockiert von:** OP-122
+- **Blockiert von:** —
 
 
 ### OP-135b: RunState-Migration auf Contract-Dataclasses
@@ -720,7 +740,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     enthaelt.
 - **Tests:** `tests/test_web_routes.py` (neu, pro Route-Submodul
   ein Smoke-Test).
-- **Blockiert von:** OP-122
+- **Blockiert von:** —
 
 ### OP-143: `cli/` + Re-Export-Bereinigung
 
@@ -1028,7 +1048,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - **Akzeptanzkriterien:** `control/gates.py` mit plan_gate,
   human_gate_plan, human_gate, human_gate_body. Deprecation-Proxy.
   Aufrufer migriert. `tests/test_gates.py` gruen.
-- **Blockiert von:** OP-095
+- **Blockiert von:** —
 
 
 ### OP-098: Phase 33.5 — pipeline_phases.py reduzieren
@@ -1042,7 +1062,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - **Akzeptanzkriterien:** pipeline_phases.py unter 400 Zeilen. Jede
   Phase ruft `run_phase`. Keine direkten `_verify_patches`-Aufrufe.
   Voller Loop-Durchlauf funktioniert.
-- **Blockiert von:** OP-095, OP-096, OP-097
+- **Blockiert von:** OP-096
 
 
 ### OP-101: Loop-Status-Inkonsistenz bei human_review-Tasks
@@ -1075,7 +1095,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   Setzt OP-104 voraus (`control/reflection.py` vollständig).
 - **Akzeptanz:** `from werkstatt.reflection import _reflection_loop`
   funktioniert. `python3 -c "from werkstatt.control.reflection import _reflection_loop"` funktioniert.
-- **Blockiert von:** OP-104
+- **Blockiert von:** —
 
 ### OP-106: Aufrufer auf control.reflection umstellen
 
@@ -1087,7 +1107,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   `from werkstatt.control.reflection import X` umstellen. Keine Logik-Änderung.
 - **Akzeptanz:** grep findet keine `from werkstatt.reflection import` mehr
   (außer in `control/reflection.py`-Docstring + Tests).
-- **Blockiert von:** OP-104, OP-105
+- **Blockiert von:** OP-105
 
 ### OP-107: Test-Patch-Pfade migrieren
 
@@ -1184,7 +1204,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   - Bestehender `systematic-debugging`-Skill bleibt als Fallback.
 - **Tests:** `tests/test_reflection.py` — 2 Tests (Antipattern-Warnung
   im Prompt, Skill-Matching bei ImportError).
-- **Blockiert von:** -
+- **Blockiert von:** —
 
 
 ### OP-113i: Log-Backfill — DB aus 30k Audit-Events vorfuellen
