@@ -565,7 +565,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 ### OP-114: Audit-Events fuer Problem-Klassen anreichern
 
-- **Status:** open
+- **Status:** closed (2026-11-04, Commit c4b525a + Test-Fixes f0aa5cd/e77069e)
 - **Typ:** audit-feature
 - **Betroffen:** `werkstatt/pipeline_phases.py`,
   `werkstatt/reviewer.py`, `werkstatt/gates.py`
@@ -583,4 +583,56 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   in den Audit-Logs genug Felder, um Cluster zu bilden.
 - **Tests:** `tests/test_audit.py` (Erweiterung) — jedes neue Feld
   vorhanden.
+- **Blockiert von:** -
+
+
+### OP-117: Scout-Prosa optimieren
+
+- **Status:** open
+- **Typ:** ux-fix
+- **Betroffen:** `werkstatt/scout.py` (SCOUT_SYSTEM-Prompt),
+  `werkstatt/loop_renderer.py` (SCOUT-AUFRAG-Panel)
+- **Problem:** Rendering zeigt abgeschnittene Prosa
+  (`… beschreibende Pay`). Aus Handoff §4: "Prosa 150→800 Zeichen
+  + wrap(88)" greift nicht für den Scout-Auftrag, oder die
+  Scout-Prosa selbst ist zu knapp formuliert.
+- **Akzeptanzkriterien:**
+  - Scout-Prompt erzeugt Prosa mit konkreten Payload-Feldern statt
+    generisch (`loop_reviewer_rejected → payload={"bugs": [...]}`).
+  - Panel rendert bis 800 Zeichen ohne Wort-Abschneidung
+    (Wrap, kein Truncate).
+  - Test: 200-Zeichen-Prosa → Panel vollständig sichtbar.
+- **Blockiert von:** -
+
+### OP-118: Heartbeat-Redundanz bei aktivem _emit_progress
+
+- **Status:** open
+- **Typ:** ux-cleanup
+- **Betroffen:** `werkstatt/loop_renderer.py` (`_with_spinner`)
+- **Problem:** OP-111 sagt: "Heartbeat nur Fallback wenn Sub-Component
+  keine Events sendet." Aktuell feuert der Heartbeat trotzdem, auch
+  wenn `start`/`prompt_sent`/`response_received` bereits laufen.
+  Doppelte Info im Terminal.
+- **Akzeptanzkriterien:**
+  - `_with_spinner._heartbeat_loop` unterdrueckt Heartbeat, wenn
+    innerhalb der letzten 15s `_emit_progress` mit gleichem `label`
+    gefeuert wurde.
+  - Test: 2× `_emit_progress` in 3s → 0 Heartbeats.
+- **Blockiert von:** -
+
+### OP-119: _with_spinner-Thread-Leak
+
+- **Status:** open
+- **Typ:** bug
+- **Betroffen:** `werkstatt/loop_renderer.py` (`_with_spinner`,
+  `_tee`)
+- **Problem:** Heartbeat-Thread schreibt nach `_hb.join(timeout=1)`
+  in geschlossenen `StringIO` → `ValueError: I/O operation on
+  closed file` als stderr-Warnung im pytest-Lauf. Kein Test-Fail,
+  aber Noise.
+- **Akzeptanzkriterien:**
+  - `_tee()` defensiv: `try/except (ValueError, OSError)` um
+    `_TEE_STREAM.write()`.
+  - ODER `_hb.join()` ohne Timeout.
+  - pytest-Lauf zeigt keine `ValueError`-Warnung mehr.
 - **Blockiert von:** -
