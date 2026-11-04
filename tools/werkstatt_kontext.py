@@ -225,7 +225,10 @@ def abschnitt_zustand() -> str:
 
     rc, ruff = _run(["python3", "-m", "ruff", "check", "werkstatt/", "tests/"])
     m = re.search(r"Found (\d+) error", ruff)
-    out += f"ruff Baseline: {m.group(1) if m else '0'} errors\n"
+    n_err = m.group(1) if m else "0"
+    out += f"ruff Baseline: {n_err} errors "
+    out += "(Altzustand, nicht durch neue Commits eingefuehrt; "
+    out += "jede OP darf Baseline lassen, Senkung ist Bonus)\n"
 
     try:
         status_text = STATUS.read_text()
@@ -286,6 +289,9 @@ def abschnitt_naechste_ops(max_anzahl: int = 10) -> str:
 
     if stale:
         out += f"\nSTALE-BLOCKER ({len(stale)}) — referenzieren geloeschte OPs:\n"
+        out += "  (Hinweis: Bereinigung ist OP-146. Wenn du in einem der\n"
+        out += "   folgenden OPs arbeiten willst, erst OP-146 abschliessen.\n"
+        out += "   Nicht eigenmaechtig stale-Referenzen fixen.)\n"
         for op in stale[:max_anzahl]:
             out += f"  {op['id']:10s} blockiert von: {op['blocker']}\n"
 
@@ -325,6 +331,21 @@ WICHTIG:
 - Wenn der User sagt 'wie empfohlen' oder 'ja', bestaetigt er deine
   Empfehlung aus der letzten Nachricht.
 
+WENN DU UNSICHER BIST:
+Der Block ist reproduzierbar. Bitte den User:
+
+  python3 tools/werkstatt_kontext.py
+
+Das Skript liegt in tools/ und ist read-only. Es ruft git, pytest,
+Drift-Checks und liest docs/STATUS.md. Wenn der Zustand sich waehrend
+der Session aendert, kann es jederzeit erneut laufen.
+
+SKRIPT-VARIANTEN:
+- `--check`  nur der Zustands-Abschnitt (5), fuer schnelles Re-Check.
+- `--json`   Maschinenlesbar (head, working_tree_clean, ops_open),
+             fuer Skripte oder gezielte Abfragen.
+- (ohne Flag) der volle Block wie hier.
+
 VIEL ERFOLG.
 """
 
@@ -339,6 +360,9 @@ def sammle_alles(nur_zustand: bool = False) -> str:
     return "\n".join([
         "WERKSTATT KONTEXT-BLOCK — bitte komplett in den Chat pasten",
         "(alle Abschnitte read-only, HEAD und Tests gerade gemessen)",
+        "(dieser Block ist der EINZIGE Input des neuen Chats; er hat",
+        " keinen Shell-/Datei-Zugriff und arbeitet nur mit dem, was",
+        " der User zurueckpastet)",
         abschnitt_identitaet(),
         abschnitt_rollen(),
         abschnitt_workflow(),
