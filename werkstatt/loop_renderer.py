@@ -738,6 +738,7 @@ def _with_spinner(label: str, fn):
         pass
 
     _start = _time.monotonic()
+    _emit_progress(label, "start", "")
     _done = _th.Event()
     _result: list = [None]
     _exc: list = [None]
@@ -780,6 +781,13 @@ def _with_spinner(label: str, fn):
         log_line(label, elapsed_s=_elapsed, ok=(_exc[0] is None))
     except Exception:  # noqa: BLE001, S110
         pass
+
+    _elapsed_total = _time.monotonic() - _start
+    _emit_progress(
+        label,
+        "done" if _exc[0] is None else "failed",
+        f"{_elapsed_total:.1f}s",
+    )
 
     if _exc[0] is not None:
         raise _exc[0]
