@@ -9,3 +9,9 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0003](ADR-0003-kontroll-zentralisierung.md) | Kontroll-Zentralisierung in werkstatt/control/ | accepted |
 | [ADR-0004](ADR-0004-deterministische-drift-checks.md) | Deterministische Drift-Checks (audit_drift + control_drift) | accepted |
 | [ADR-0005](ADR-0005-verify-json-hart-asymmetrie.md) | verify.json hart-Feld — asymmetrische Semantik | accepted |
+| [ADR-0006](ADR-0006-event-store-ssot.md) | Event-Store als SSOT fuer Loop-Events | accepted |
+| [ADR-0007](ADR-0007-gate-bridge.md) | Gate-Bridge — Loop headless, Gates ueber HTTP | accepted |
+| [ADR-0008](ADR-0008-chat-eigener-agent.md) | Chat als eigener Agent | accepted |
+| [ADR-0009](ADR-0009-timeline-primaer-layout-a.md) | Timeline primaer, Chat rechts (Layout A) | accepted |
+| [ADR-0010](ADR-0010-memory-zweistufig.md) | Memory zweistufig — project + global | accepted |
+| [ADR-0011](ADR-0011-debugger-chat-modus.md) | Debugger als Chat-Modus (evidence-first) | accepted |
