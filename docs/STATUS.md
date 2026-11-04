@@ -498,41 +498,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Blockiert von:** OP-122
 
 
-### OP-134: State-Inventur — wer schreibt, wer liest, was fehlt
-
-- **Status:** open
-- **Typ:** analyse (MESS-OP, keine Code-Aenderung)
-- **Betroffen:** `docs/STATE-INVENTUR.md` (neu), `tools/state_inventory.py` (neu)
-- **Problem:** Inter-Role-Felder im `RunState` sind historisch gewachsen.
-  Niemand kennt den vollstaendigen Fluss Explorer->Scout->Architect->
-  Planner->Builder->Reviewer->Reflection. Heute (2026-11-04) hat
-  ein einziger falscher Feld-Leser (`architect.py:385` liest
-  `explorer_findings` statt `explorer_context`) einen ganzen
-  Loop-Lauf ruiniert, ohne dass es irgendwo auffiel.
-- **Akzeptanzkriterien:**
-  - `tools/state_inventory.py` (neu, read-only) parst `werkstatt/*.py`
-    auf `state.<feld>`-Zugriffe. Ausgabe: pro Feld `{schreiber:
-    [module.funktion], leser: [...], typ: aus state.py, letzte_befuellung:
-    aus audit-logs}`.
-  - `docs/STATE-INVENTUR.md` (neu) mit Tabelle aller Felder aus
-    `state.py`, Spalten: Feld, Typ, Schreiber, Leser, Pflicht?,
-    Befuellt-in-letzten-5-Runs (aus Audit-Events rekonstruiert).
-  - Mindestens 3 konkrete "stille Degradierungen" dokumentiert
-    (Felder die leer bleiben, ohne dass es auffaellt).
-  - Kandidaten fuer Loeschung (Handoff §7 nennt 47 tote Felder):
-    Liste in `docs/STATE-INVENTUR.md`, Abschnitt "Tote Felder".
-  - **Daten-Form pro Rolle messen:** welche Rollen sehen heute
-    welche Formen? Prosa (str), Symbol-Liste (dict), AST
-    (strukturiert), File-Preview (dict). Explizit messen: hat der
-    Architect AST-Zugriff? (Er nutzt heute nur `scout_api_auszug`
-    und `api_index_cache` — letzterer wird gebaut, aber nicht in
-    den Prompt gehaengt. Bekanntes toten Cache, siehe
-    MERKPOSTEN.md "AST-Zugriff pro Rolle ist asymmetrisch".)
-  - **Keine Code-Aenderung.** Nur Analyse.
-- **Tests:** `tests/test_state_inventory.py` — Parser-Smoke (findet
-  bekannte Felder, ignoriert dynamische `getattr`-Zugriffe).
-- **Blockiert von:** -
-
 ### OP-135: State-Contract-Design (Dataclasses + Registry)
 
 - **Status:** open
@@ -963,6 +928,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-04 | OP-134 | done | State-Inventur — Tool + Doku (7177f16)
 - 2026-11-04 | OP-122 | done | SQLite-Event-Store fuer Loop-Events (append/query, kind-Filter, WAL, .werkstatt/events.db)
 
 - 2026-11-04 | OP-119 | done | _TeeWriter defensiv gegen geschlossene Streams (bd0db4b)

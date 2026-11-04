@@ -1519,3 +1519,25 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - **Status:** phase_ende
 - **Info:** tasks_ok=2/4
 
+
+## 2026-11-04 -- OP-134 abgeschlossen: State-Inventur (MESS-OP)
+
+- **Status:** done (Work-Commit 7177f16)
+- **Dateien:** tools/state_inventory.py (neu), tests/test_state_inventory.py (neu), docs/STATE-INVENTUR.md (neu)
+- **Aenderungen:** Read-only AST-Messung fuer RunState. Kategorien:
+  aktiv (10), read_only (24), write_only (16), getattr_only (7),
+  tot (47), ghosts (25). Baseline-Check via `--check`,
+  Parser-Smoke-Tests (3).
+- **Messbefunde gegen Handoff §7/§11:**
+  - `architect.py:385` liest `explorer_findings` — bestaetigt
+  - `api_index_cache` "toter Cache" — WIDERLEGT (write_only,
+    gelesen via getattr in `architect.py:324` + `builder.py:154`)
+  - `set_run_id` fehlt in `loop.py` — WIDERLEGT (`loop.py:296`)
+  - `explorer_context` ist Ghost (nicht deklariert) — Zusatzbefund
+  - Architect HAT AST-Zugriff via `api_index_cache`
+    (AST-Block ab `architect.py:340-356`)
+- **Abnahme:** pytest 1241 passed, 5 skipped;
+  state_inventory --check EXIT=0; audit_drift EXIT=0;
+  control_drift EXIT=0.
+- **Nachfolge-OPs:** OP-145 (Namens-Drift, bereits offen),
+  OP-135/136/137 (Contract), OP-138..144 (Splits).
