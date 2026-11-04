@@ -214,6 +214,310 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   Absaetze zur passenden Problem-Klasse. Prompt-Injektion on-demand,
   nicht ganze DB/Datei.
 
+
+### OP-122: Event-Store (SQLite) fuer Loop-Events
+
+- **Status:** open
+- **Typ:** architektur
+- **Betroffen:** `werkstatt/event_store.py` (neu),
+  `werkstatt/loop_renderer.py` (`_publish`),
+  `werkstatt/web/app.py` (neuer Endpoint)
+- **Problem:** Loop schreibt heute JSONL + CI-Text. Die UI pollt die
+  Datei, was zu doppelten Zeilen und Races fuehrt. Es fehlt ein
+  querybarer, session-orientierter Event-Store mit Run-ID, Phase,
+  Status, Dauer, Payload.
+- **Akzeptanzkriterien:** (a) `EventStore`-Klasse mit
+  `append(run_id, kind, phase, status, payload)` und
+  `query(run_id, since_seq=None, kind=None)` (SQLite, JSON-Payload).
+  (b) `_publish()` schreibt primaer in Store, JSONL bleibt als Export.
+  (c) `GET /api/runs/{run_id}/events?since_seq=N` liefert JSON-Liste.
+  (d) 3 Tests: append+query, Filter, Export.
+- **Tests:** `tests/test_event_store.py` (neu)
+- **Blockiert von:** -
+
+### OP-123: Gate-Bridge (Loop wartet auf HTTP statt stdin)
+
+- **Status:** open
+- **Typ:** architektur
+- **Betroffen:** `werkstatt/gate_bridge.py` (neu),
+  `werkstatt/gates.py` (`input()` -> `gate_bridge.wait()`),
+  `werkstatt/web/app.py` (`POST /api/runs/{id}/gate`)
+- **Problem:** Loop laeuft nur im Vordergrund mit `input()`.
+  Browser-Betrieb (Buttons statt Terminal) nicht moeglich,
+  Headless-Lauf nicht moeglich.
+- **Akzeptanzkriterien:** (a) `gate_bridge.wait(run_id, gate_id,
+  timeout=300) -> str` blockiert bis POST.
+  (b) `_human_gate_plan` ruft `gate_bridge.wait()` wenn `--headless`,
+  sonst weiter `input()`. (c) `GET /api/runs/{id}/gates` listet offene
+  Gates. (d) Test: Mock liefert "j", Gate liefert 0.
+- **Tests:** `tests/test_gate_bridge.py` (neu)
+- **Blockiert von:** OP-122
+
+### OP-124: Chat-Agent + read-only Tool-Registry
+
+- **Status:** open
+- **Typ:** feature
+- **Betroffen:** `werkstatt/chat_agent.py` (neu),
+  `werkstatt/chat_tools.py` (neu)
+- **Problem:** Der Nutzer will einen Assistenten pro Projekt, der
+  Fragen beantwortet, Audit-Logs liest, Diffs prueft — wie
+  ChatGPT/Claude Code, aber ohne Messbloecke an den Nutzer zu
+  schicken. Heute gibt es keinen Chat-Loop.
+- **Akzeptanzkriterien:** (a) `chat_loop(session, message, tools) ->
+  str` mit Tool-Use-Iteration. (b) `CHAT_TOOLS`-Dict read-only:
+  `read_file`, `grep`, `git_log`, `git_diff`, `audit_query`,
+  `pytest_collect`, `diagnose`, `read_status`. (c) **Kein**
+  `write_file`/`apply_patch`/`git_commit`. (d) Test: Mock-LLM liefert
+  `tool_call("git_diff")`, Tool-Result landet in Session.
+- **Tests:** `tests/test_chat_agent.py` (neu),
+  `tests/test_chat_tools.py` (neu)
+- **Blockiert von:** OP-122, OP-125
+
+### OP-125: Chat-Session-Store (SQLite, pro Projekt)
+
+- **Status:** open
+- **Typ:** feature
+- **Betroffen:** `werkstatt/chat_session.py` (neu)
+- **Problem:** Chat-Sessions muessen pro Projekt persistieren.
+  Heute gibt es nichts.
+- **Akzeptanzkriterien:** (a) SQLite-Tabelle `events(seq, session_id,
+  ts, kind, payload)`. (b) `ChatSession.append`, `load`,
+  `list_sessions(project)`. (c) `derive_messages()` rekonstruiert
+  LLM-Historie aus Events. (d) 3 Tests: append+load, Fork, derive.
+- **Tests:** `tests/test_chat_session.py` (neu)
+- **Blockiert von:** -
+
+### OP-126: Chat-UI (Tool-Call-Karten, Session-Anzeige)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Betroffen:** `werkstatt/web/static/chat.js` (neu),
+  `werkstatt/web/static/style.css`
+- **Problem:** Chat-Panel ist nur ein Eingabefeld. Keine
+  Nachrichtenliste, keine Tool-Call-Karten, keine Session-Anzeige.
+- **Akzeptanzkriterien:** (a) `ChatPanel`-Komponente mit
+  Nachrichtenliste (user/assistant, scrollbar, auto-scroll).
+  (b) `ToolCallCard` einklappbar mit Status (pending/running/ok/Fehler)
+  und I/O-Details. (c) WebSocket-Client fuer
+  `WS /api/projects/{name}/chat`. (d) Datei-Pfade im Chat sind klickbar
+  und oeffnen den Workbench-Drawer mit entsprechender Datei.
+  (e) Manuell verifiziert.
+- **Tests:** keine (UI, visuell)
+- **Blockiert von:** OP-124, OP-125
+
+### OP-127: Timeline + Layout-Umbau Variante A
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Betroffen:** `werkstatt/web/static/layout.js` (neu),
+  `werkstatt/web/static/timeline.js` (neu),
+  `werkstatt/web/static/style.css`
+- **Problem:** Aktuelles Layout ist 2x2-Grid (Terminal links oben,
+  Chat rechts oben, Audit rechts unten). Variante A: Runs-Liste links,
+  Timeline Mitte, Chat rechts (immer sichtbar), Workbench als
+  Collapsible Drawer.
+- **Akzeptanzkriterien:**
+  (a) 3-Spalten-Layout: Runs-Liste (200px, mit Status-Indikatoren
+  pro OP/Run), Timeline (flex), Chat (400px, immer sichtbar).
+  (b) Timeline rendert Phasen-Knoten aus Event-Store-Events
+  (Explorer, Scout, Architect, Planner-Split, Builder tN, Reviewer tN,
+  Reflection, Verify, Gate). Aktiver Knoten mit Spinner.
+  Fehlgeschlagene Knoten rot mit Fehlertext. Aufklappbar: was wurde
+  gelesen, welcher Prompt, welche Patches, welcher Reviewer-Bug.
+  (c) Workbench als Collapsible Drawer (default: geschlossen), Tabs
+  [Dateien] [Diff] [Verify] [Audit] [Terminal].
+  (d) Status-Leiste unten: Tasks, Verify, Drift, Budget, aktive Phase.
+  (e) Style bleibt wie im Screenshot (dunkel, lila Akzente, schlicht) —
+  keine Framework-Migration.
+  (f) Manuell verifiziert gegen Wireframe.
+- **Tests:** keine (UI, visuell)
+- **Blockiert von:** OP-122, OP-126
+
+
+### OP-128: Chat-Modus Debugger (evidence-first)
+
+- **Status:** open
+- **Typ:** feature
+- **Betroffen:** `werkstatt/chat_agent.py` (`chat_loop`),
+  `werkstatt/chat_tools.py`, `werkstatt/web/static/chat.js`
+- **Problem:** Bei fehlgeschlagenem Run soll der Chat zuerst read-only
+  diagnostizieren, dann optional in einen Debugger-Modus wechseln —
+  mit `pytest_run` (nicht nur `--collect-only`) und der Erlaubnis,
+  genau einen temporaeren Test zur Reproduktion anzulegen. Kein
+  Produktionscode, kein Commit. Fix bleibt Diff-Vorschlag.
+- **Akzeptanzkriterien:** (a) `chat_loop(..., modus="chat"|"debugger")`.
+  Im Debugger-Modus zusaetzlich verfuegbar: `pytest_run(path, test)`,
+  `read_file(path, start, end)`, `write_temp_test(content)`.
+  (b) `write_temp_test` schreibt ausschliesslich nach
+  `.werkstatt/temp_tests/` — nie nach `tests/`, nie nach `werkstatt/`.
+  (c) Session-Events markieren `modus` je Turn.
+  (d) Test: Mock-`pytest_run`, Tool-Result landet in Session.
+- **Tests:** `tests/test_chat_debugger.py` (neu)
+- **Blockiert von:** OP-124
+
+### OP-129: Memory-Destillation + Promotion (scope-aware)
+
+- **Status:** open
+- **Typ:** feature (Erfahrungs-Gehirn)
+- **Betroffen:** `werkstatt/erfahrung.py`, `tools/memory_destill.py`
+  (neu), `tools/memory_promote.py` (neu),
+  `tools/memory_drift.py` (neu)
+- **Problem:** OP-113 speichert Episoden, destilliert aber keine Regeln,
+  konsolidiert nicht, promotet nicht. Ergebnis: derselbe Fehler
+  wiederholt sich. Zusaetzlich fehlt eine projektuebergreifende Ebene —
+  Antipatterns wie `# type: ignore` sind universell, werden aber pro
+  Projekt neu gelernt.
+- **Akzeptanzkriterien:**
+  - Tabelle `regeln(id, titel, trigger, anweisung, trust, scope,
+    beobachtungen_json, quelle_episoden, erstellt_am, letzte_nutzung,
+    widerlegt)`. Trust in {candidate, confirmed, canonical};
+    scope in {project, global}.
+  - OP-113a erweitert die `erfahrung`-Tabelle um `scope TEXT NOT NULL
+    DEFAULT 'project'` — Voraussetzung fuer Promotion.
+  - `destilliere_regeln(min_episoden=3, scope='project')`: gruppiert
+    gleiche `(problem_klasse, kontext_hash)`, ruft LLM, legt
+    `candidate`-Regel mit Verweis auf die Episoden an.
+  - `promote(regel_id)`: nach 2-3 erfolgreicher Anwendung → confirmed;
+    nach 5+ ohne Widerlegung → canonical + AGENTS.md-Vorschlag.
+  - `promote_to_global(regel_id)`: prueft, ob dieselbe problem_klasse
+    in ≥2 anderen Projekt-DBs `confirmed` ist → legt globalen
+    `candidate` an.
+  - **Sanitization bei Promotion:** Pfade generalisieren
+    (`/opt/projekt/...` → `<project>/...`), IPs maskieren,
+    Projekt-Namen durch `<project>` ersetzen.
+  - `tools/memory_promote.py --scan`: scannt alle Projekt-DBs, listet
+    Promotionskandidaten und Widersprueche, fuehrt NICHT automatisch
+    aus.
+  - Append-only `memory_ledger(id, ts, aktion, regel_id, payload,
+    commit_sha)` — jede Mutation nachvollziehbar.
+  - `tools/memory_drift.py --check`: (a) jede Canonical hat 5+
+    Beobachtungen, (b) keine Regel widerspricht einer neueren
+    Confirmed-Regel, (c) jede Ledger-Zeile hat `commit_sha` oder
+    `quelle=backfill`.
+  - **Persistenz-Pfad `gehirn-global.db`:** Entscheidung noetig —
+    `~/.werkstatt/gehirn-global.db` (User-Home, mehrere Projekte)
+    oder `docs/gehirn-global.db` (git-getrackt). Empfehlung:
+    `~/.werkstatt/` mit taeglichem Backup nach `.backups/`.
+  - Tests: destilliere_regeln aus 3 synthetischen Episoden ergibt 1
+    candidate; promote zweimal → confirmed; promote_to_global mit
+    3 Projekt-DBs ergibt 1 globalen candidate; memory_drift 0.
+- **Tests:** `tests/test_memory_destill.py` (neu),
+  `tests/test_memory_promote.py` (neu),
+  `tests/test_memory_drift.py` (neu)
+- **Blockiert von:** OP-113a
+
+### OP-130: Semantic Memory (Projekt-Fakten + globale Praeferenzen)
+
+- **Status:** open
+- **Typ:** feature (Erfahrungs-Gehirn)
+- **Betroffen:** `werkstatt/erfahrung.py`,
+  `projects/<name>/profile.yaml`, `werkstatt/chat_tools.py`
+- **Problem:** Chat muss Basics per grep herausfinden (Test-Runner,
+  DB-Typ, Migrationspfad). OP-113 speichert nur Fehler-Episoden.
+  Zusaetzlich fehlt eine globale Ebene fuer User-Praeferenzen
+  (z.B. „User bevorzugt Diff-Vorschlaege statt direkter Aenderung").
+- **Akzeptanzkriterien:**
+  - Tabelle `semantic_memory(schluessel, wert, quelle, ts, confirmed,
+    scope, kontext)`. scope in {project, global}.
+  - `record_semantic(schluessel, wert, quelle, scope='project')` —
+    Default projektlokal. Globale Semantik nur explizit mit
+    scope='global'.
+  - `load_semantic(kontext=None, scope='project')` — liest eine Ebene;
+    `load_all_semantic(kontext)` liest beide (Projekt gewinnt bei
+    Konflikt).
+  - `profile.yaml` (pro Projekt) mit `semantic:`-Block; beim
+    Projekt-Load werden fehlende Eintraege nachgezogen, bestehende
+    confirmed-Eintraege nicht ueberschrieben.
+  - `chat_loop` injiziert top-3 Semantik projektspezifisch + top-2
+    global in den System-Prompt.
+  - Test: record_semantic/load_semantic Roundtrip;
+    chat_loop mit Mock-LLM prueft, dass Semantik im Prompt ist.
+- **Tests:** `tests/test_semantic_memory.py` (neu)
+- **Blockiert von:** OP-113a
+
+### OP-131: Loop-Memory-Panel (was das Gehirn gelernt hat)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Betroffen:** `werkstatt/web/static/memory.js` (neu),
+  `werkstatt/web/app.py` (`/api/memory/*`),
+  `werkstatt/erfahrung.py` (Read-API)
+- **Problem:** Was das Gehirn gelernt hat, ist unsichtbar. Der User
+  kann falsche Regeln nicht erkennen, nicht bestaetigen, nicht
+  verwerfen.
+- **Akzeptanzkriterien:**
+  - `GET /api/memory/summary` → Zaehler (episoden, regeln, proposals,
+    canonical, confirmed, candidates), getrennt nach Scope.
+  - `GET /api/memory/regeln?ebene=canonical|confirmed|candidate&scope=project|global|all`
+    → Liste mit titel, trigger, anweisung, beobachtungen, erstellt_am,
+    letzte_nutzung, widerlegt.
+  - `GET /api/memory/injiziert?run_id=N` → Regeln + Episoden, die
+    dieser Run tatsaechlich in den Prompt bekommen hat (aus
+    Audit-Events rekonstruiert).
+  - Panel-UI mit 5 Sektionen:
+    1. Canonical (global)
+    2. Confirmed (global)
+    3. Projekt-Regeln
+    4. Candidates (unbestaetigt)
+    5. „Diese Runde injiziert" (read-only)
+  - Filter: „nur global", „nur Projekt", „alle". Klick auf Regel
+    oeffnet Inspector mit Beobachtungs-Historie.
+  - Button „Regel fuer global vorschlagen" auf jeder Projekt-confirmed
+    → triggert `promote_to_global`-Vorschlag (manuell bestaetigt).
+  - Manuell verifiziert: Panel zeigt leeren Zustand statt Crash,
+    wenn DB leer.
+- **Tests:** keine (UI, visuell)
+- **Blockiert von:** OP-129, OP-130
+
+### OP-132: "Why did it fail?"-Button (Repair Ladder)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Betroffen:** `werkstatt/web/static/timeline.js`,
+  `werkstatt/web/static/chat.js`, `werkstatt/web/app.py`
+- **Problem:** Bei fehlgeschlagenem Run muss der User manuell
+  entscheiden, was zu tun ist. Es fehlt eine eskalierende
+  Handlungsleiter — drei Stufen, die in Sekunden beginnen und bis zum
+  vollen Loop reichen.
+- **Akzeptanzkriterien:**
+  - Nach `run_failed`-Event erscheint in Timeline und/oder Chat ein
+    Banner: "Run #N fehlgeschlagen (OP-M, X/Y Tasks)" mit drei Buttons.
+  - Button 1 **„Chat analysiert"**: sendet automatisch Nachricht an
+    Chat-Agent (OP-124) mit Auftrag: "Analysiere Run #N: Audit-Logs,
+    Diff, Fehlerursache. Antwort in Sekunden."
+  - Button 2 **„Debugger starten"**: startet Chat im Modus
+    `debugger` (OP-128) mit identischem Diagnose-Auftrag.
+  - Button 3 **„Coding-Loop neu"**: startet neuen Loop-Lauf mit
+    identischer `--aufgabe` (Wiederholung nach Fix, falls manuell
+    durchgefuehrt).
+  - Test: Mock-Event `run_failed` → Panel rendert drei Buttons;
+    Klick auf Button 1 → `POST /api/projects/{name}/chat` mit
+    erwarteter Nachricht.
+- **Tests:** keine (UI, visuell)
+- **Blockiert von:** OP-124, OP-127, OP-128
+
+### OP-133: Cost/Token-Dashboard
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Betroffen:** `werkstatt/web/static/stats.js` (neu),
+  `werkstatt/web/app.py` (`/api/stats/*`),
+  `werkstatt/state.py` (bereits `llm_calls`), `werkstatt/agent.py`
+- **Problem:** Token-Verbrauch und Kosten sind im Terminal nur als
+  Gesamt-Budget sichtbar. DSH und OpenHands zeigen per-Model,
+  per-Phase, per-Tool aufgeschluesselt. Wir haben `state.llm_calls`,
+  aber keine UI und keine Aggregation.
+- **Akzeptanzkriterien:**
+  - `GET /api/stats/run/{run_id}` → `{tokens_in, tokens_out,
+    tokens_cached, cost_usd, per_model, per_phase}`.
+  - `GET /api/stats/project/{name}/aggregat?days=7` → gleiche
+    Struktur, aggregiert.
+  - Dashboard-Panel (read-only): Gesamt-Budget-Bar, per-Phase-
+    Aufschluesselung, per-Model-Tabelle, Warnung bei 80 % Verbrauch.
+  - Test: Mock-Audit-Events → korrekte Aggregation.
+- **Tests:** `tests/test_stats_api.py` (neu)
+- **Blockiert von:** OP-122
+
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
 - **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
