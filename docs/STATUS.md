@@ -195,6 +195,106 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   93x audit, 10x _plan_gate, 15x sonst). Nicht an einem Tag machbar.
 
 
+### OP-113: Erfahrungs-Gehirn — deterministisches Fehler-Gedaechtnis (Sammel-OP)
+
+- **Status:** open
+- **Typ:** architektur (Sammel-OP, 8 Sub-OPs)
+- **Betroffen:** `werkstatt/erfahrung.py` (neu), `werkstatt/skills.py`,
+  `werkstatt/diagnose.py`, `werkstatt/antipattern.py`,
+  `werkstatt/reflection.py`, `werkstatt/reviewer.py`, `docs/MERKPOSTEN.md`
+- **Problem:** Erfahrungen aus geloesten Fehlern verpuffen. `diagnose.py`
+  erkennt deterministisch 2 Fehlerklassen, schreibt aber nicht zurueck.
+  `antipattern.py::scan_patches` findet 6 Anti-Pattern-Klassen, lernt
+  aber nicht. `MERKPOSTEN.md` hat ~30 Prozess-Lehren als Absaetze —
+  nicht durchsuchbar ausser per grep. `state.geladene_skills` ist eine
+  flache Namen-Liste ohne Bezug zu Problem/Loesung. Folge: Loop
+  wiederholt Fehler die in `MERKPOSTEN.md` schon geloest sind.
+- **Kernidee:** SQLite `.werkstatt/erfahrung.db` mit strukturierten
+  Absaetzen (1-3 Saetze pro Eintrag). Retrieval liefert nur die
+  Absaetze zur passenden Problem-Klasse. Prompt-Injektion on-demand,
+  nicht ganze DB/Datei.
+
+## Sub-OPs (Erfolgs-Ebene, deterministisch)
+
+- **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
+  problem_klasse, problem_sig, kontext_hash, absatz, quelle, erfolg,
+  commit_sha, skill_name, erstellt_am, genutzt, letzte_nutzung)`.
+  API: `record_erfahrung(...)` + `match_erfahrung(problem_klasse,
+  max_n=3)`. SQLite via stdlib. Schema-Init idempotent. Tests.
+
+- **113b** `docs/MERKPOSTEN.md`-Import: einmaliges Script
+  `tools/import_merkposten.py`. Parsed `### M-XX — Titel` + Absatz,
+  schreibt als `quelle='manual'`, `problem_klasse='prozess-lehre'`,
+  `erfolg=1`. Idempotent per problem_sig.
+
+- **113c** `diagnose.py`-Write-Hook: nach erfolgreichem Fix (in
+  `reflection._reflection_loop` bei `return True`) →
+  `record_erfahrung(klasse, sig, fix_absatz, quelle='diagnose')`.
+
+- **113d** `antipattern.py`-Write-Hook: bei Treffer der zu
+  `reviewer_rejected` fuehrt → `record_erfahrung('antipattern:<kind>',
+  sig, erklaerung, quelle='antipattern', erfolg=0)`. Bei `approved`
+  → `erfolg=1`.
+
+- **113e** Skills-Matching: `skills/*/SKILL.md`-Frontmatter erweitern
+  um `problem_klassen: [...]`. Neuer Helper
+  `skills.match_for_problem(klasse) -> list[Skill]` (max 3).
+  `_merke_geladene_skills` schreibt zusaetzlich
+  `record_erfahrung(klasse, sig, skill_body_absatz, quelle='skill',
+  skill_name=name)`.
+
+- **113f** Reflection-Injektion: `reflection._reflection_loop` ruft
+  vor Builder-Prompt `match_erfahrung(_problem_klasse, max_n=3)`,
+  injiziert `## ERFAHRUNGEN`-Block (max 800 Zeichen).
+
+## Sub-OPs (Proposal-Ebene, LLM-verallgemeinert)
+
+- **113g** Proposal-Miner: `erfahrung.get_failure_cluster(problem_klasse,
+  kontext_hash, min_count=3) -> dict` mit `{ids, absaetze,
+  letzter_versuch}`. Neue Tabelle `proposal_queue(id, cluster_sig,
+  failure_ids, proposed_absatz, status, erstellt_am, letzte_nutzung,
+  genutzt)` mit `status in {pending, accepted, rejected, expired}`.
+  Nach erschoepfter Reflection (`return False` + Runde=max): wenn
+  Cluster >= 3 Failures UND kein pending/accepted Proposal fuer
+  `cluster_sig` → **ein** LLM-Call mit den 3+ Tracebacks →
+  `proposed_absatz` (1-3 Satz Lehre). Insert mit `status='pending'`.
+  Kein LLM wenn Cluster bekannt.
+
+- **113h** Proposal-Resolution: `match_erfahrung` liefert zusaetzlich
+  pending-Proposals zum Cluster. Reflection-Injektion (113f) bekommt
+  `## UNBESTAETIGTE VORSCHLAEGE (aus N Fehlversuchen)`-Block. Nach
+  `_reflection_loop`:
+  - `return True` + Proposal war im Prompt → `status='accepted'` +
+    `record_erfahrung(..., erfolg=1, quelle='proposal')`.
+  - `return False` + Proposal war im Prompt → `status='rejected'`,
+    nie wieder fuer diesen Cluster.
+
+## Akzeptanz
+
+(a) `erfahrung.db` existiert nach erstem Loop-Lauf.
+(b) `MERKPOSTEN.md` einmalig importiert.
+(c) Nach jedem erfolgreichen Reflection-Fix waechst die DB.
+(d) Naechster aehnlicher Fix findet den Absatz in < 100ms.
+(e) Prompt-Groesse unveraendert +-800 Zeichen.
+(f) 3 identische Failures → genau **1** Proposal (nicht 3).
+(g) Fix klappt nach Proposal → `accepted` + neuer erfahrung-Eintrag.
+(h) Fix klappt nicht → `rejected`, Prompt ohne diesen Absatz.
+(i) Kein LLM-Call wenn Cluster schon bekannt (Idempotenz).
+
+## Reihenfolge
+
+113a → 113b → 113e → 113c → 113f → 113d → 113g → 113h
+
+## Beispiel (OP-091-Fall)
+
+3x `NameError: _home_kontext` in `audit_panel.py` → Miner ruft LLM
+mit 3 Tracebacks → Proposal "NameError auf modul-level-Feld: pruefe
+ob das Feld im Modul deklariert ist". 4. Lauf: gleicher Fehler +
+Proposal im Prompt → Fix klappt → accepted. 5. Lauf: neuer
+NameError in anderem Modul → Match findet den Absatz sofort.
+
+- **Blockiert von:** -
+
 
 ## Erledigt (Auto-Log)
 
