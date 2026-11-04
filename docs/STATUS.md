@@ -521,6 +521,13 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     (Felder die leer bleiben, ohne dass es auffaellt).
   - Kandidaten fuer Loeschung (Handoff §7 nennt 47 tote Felder):
     Liste in `docs/STATE-INVENTUR.md`, Abschnitt "Tote Felder".
+  - **Daten-Form pro Rolle messen:** welche Rollen sehen heute
+    welche Formen? Prosa (str), Symbol-Liste (dict), AST
+    (strukturiert), File-Preview (dict). Explizit messen: hat der
+    Architect AST-Zugriff? (Er nutzt heute nur `scout_api_auszug`
+    und `api_index_cache` — letzterer wird gebaut, aber nicht in
+    den Prompt gehaengt. Bekanntes toten Cache, siehe
+    MERKPOSTEN.md "AST-Zugriff pro Rolle ist asymmetrisch".)
   - **Keine Code-Aenderung.** Nur Analyse.
 - **Tests:** `tests/test_state_inventory.py` — Parser-Smoke (findet
   bekannte Felder, ignoriert dynamische `getattr`-Zugriffe).
@@ -554,6 +561,12 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     Rolle -> Feld -> Rolle. Pro Pfeil: Format, Pflicht?.
   - `explorer_findings` wird zu `explorer_diagnostics` (eindeutiger
     Name), alter Name bleibt als Deprecation-Property mit Warnung.
+  - **AST-Zugriff im Contract:** `ArchitectInput` (oder
+    aequivalent) muss `ast_block: str` enthalten, das aus
+    `_ast_block_fuer_zieldatei` (Builder-Seite) gewonnen wird.
+    Gleiches Prinzip fuer Reviewer (`ast_block` fuer Zieldateien
+    noetig fuer Diff-Review). Doku in STATE-CONTRACTS.md:
+    welche Rolle bekommt welche Datenform.
   - **Kein Fix der Pipeline in dieser OP.** Nur Modell + Doku + Dataclasses.
 - **Tests:** `tests/test_state_contracts.py` — Registry-Vollstaendigkeit
   (jedes Feld in `state.py` mit `schreiber`/`leser` entweder im
@@ -614,11 +627,199 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
       33 `key_files`, prueft dass die Dateinamen im Prompt stehen.
     - `test_builder_sieht_architect_prosa`: analog.
     - `test_reviewer_sieht_builder_diff`: analog.
+  - Architect-Prompt enthaelt `ast_block` fuer alle geplanten
+    Zieldateien (aus `_ast_block_fuer_zieldatei`), nicht nur
+    `scout_api_auszug`.
   - Nach Fix: Loop-Lauf mit OP-119-Aufgabe → Plan hat Task-Zieldateien
-    ⊆ Explorer-`key_files` (nicht erfundene Dateien).
+    ⊆ Explorer-`key_files` (nicht erfundene Dateien) UND alle
+    Task-Zieldateien existieren im Projekt (via `_finde_modul_pfad`).
 - **Tests:** `tests/test_architect_prompt.py` (neu),
   `tests/test_pipeline_smoke.py` (neu).
 - **Blockiert von:** OP-134, OP-135
+
+
+### OP-138: `render/` Submodul-Split (loop_renderer.py zerlegen)
+
+- **Status:** open
+- **Typ:** architektur (Split)
+- **Betroffen:** `werkstatt/render/` (neu), `werkstatt/loop_renderer.py`
+- **Problem:** `loop_renderer.py` (900 Zeilen, 18 oeffentliche APIs)
+  mischt Emit, Progress, Task, Spinner, Tee, Rich, Plan-Rendering.
+  `_with_spinner` hat 5 Sorgen (Thread, Spinner, Events, Elapsed,
+  Logging). Siehe ADR-0012 Muster 2.
+- **Akzeptanzkriterien:**
+  - Neue Struktur `werkstatt/render/`: `__init__.py` (Re-Exports
+    aller bisherigen oeffentlichen APIs), `emit.py` (`_emit`,
+    `_emit_raw`, `_publish`), `progress.py` (`_emit_progress`,
+    `step`, `heartbeat`, `spinner_*`), `tasks.py` (`task`,
+    `task_ok`, `task_failed`), `tee.py` (`_TeeWriter`, `_tee`,
+    `set_tee_stream`), `rich.py` (`_use_rich`, `_console`),
+    `plan.py` (`plan`, `header`, `summary`), `spinner.py`
+    (`_with_spinner`).
+  - `loop_renderer.py` wird zur Deprecation-Proxy-Datei
+    (`from werkstatt.render import *` + `__all__`), damit Tests und
+    Aufrufer weiter funktionieren.
+  - Jede neue Datei < 200 Zeilen. Keine Datei importiert eine
+    andere aus `render/` zirkulaer.
+  - Bestehende Tests (`test_loop_renderer.py`, `test_terminal_proxy.py`,
+    `test_renderer_live.py`) bleiben gruen ohne Aenderung.
+- **Tests:** keine neuen (bestehende decken ab).
+- **Blockiert von:** -
+
+### OP-139: `phases/` Submodul-Split (pipeline_phases.py zerlegen)
+
+- **Status:** open
+- **Typ:** architektur (Split)
+- **Betroffen:** `werkstatt/phases/` (neu), `werkstatt/pipeline_phases.py`
+- **Problem:** `pipeline_phases.py` (1600 Zeilen) mischt
+  Phase-Orchestrierung, Re-Export-Proxies, `_with_spinner`-Proxy,
+  `run_reviewer`-Proxy. Siehe ADR-0012 Muster 1+2.
+- **Akzeptanzkriterien:**
+  - Neue Struktur `werkstatt/phases/`: `__init__.py`
+    (`run_pipeline_loop`-Komposition), `explorer.py`
+    (`_phase_explorer_and_setup`), `plan.py`
+    (`_phase_plan_and_preflight`), `tasks.py` (`_phase_tasks_loop`),
+    `finalize.py` (`_phase_finalize`).
+  - `pipeline_phases.py` wird zur Deprecation-Proxy-Datei.
+  - Keine Datei in `phases/` importiert eine andere aus `phases/`
+    zirkulaer — nur in `__init__.py`.
+  - Re-Export-Proxies (`run_explorer`, `_with_spinner`,
+    `run_reviewer`) werden entfernt, Aufrufer importieren direkt
+    aus `werkstatt.roles.*`.
+  - `pipeline_phases.py` < 100 Zeilen (Proxy).
+  - OP-098 (`pipeline_phases < 400 Zeilen`) ist damit erledigt.
+- **Tests:** `tests/test_pipeline_phases.py` (neu, falls nicht
+  vorhanden), bestehende `test_loop*.py` bleiben gruen.
+- **Blockiert von:** OP-138
+
+### OP-140: `builder/` Submodul-Split (AST isolieren)
+
+- **Status:** open
+- **Typ:** architektur (Split)
+- **Betroffen:** `werkstatt/roles/builder/` (neu), `werkstatt/builder.py`
+- **Problem:** `builder.py` (1400 Zeilen) mischt AST-Helpers,
+  Patch-Parsing, Validation, Apply, LLM-Aufruf, Prompt-Bau. AST-Helpers
+  sind heute nur ueber `builder.py` importierbar — der Architect kann
+  sie nicht nutzen (siehe MERKPOSTEN "AST-Zugriff pro Rolle ist
+  asymmetrisch"). Siehe ADR-0012 Muster 1+2.
+- **Akzeptanzkriterien:**
+  - Neue Struktur `werkstatt/roles/builder/`: `__init__.py`,
+    `ast.py` (`_ast_block_fuer_zieldatei`, `_finde_modul_pfad`,
+    `_hat_symbol`, `_sammle_projekt_py_files`), `patch.py`
+    (`_normalisiere_aider_patches`, Apply-Logik), `validate.py`
+    (`_validate_imports_in_patch`), `prompt.py` (`_builder_system`,
+    Prompt-Bau), `run.py` (`_build_patches_fuer_datei` — die
+    oeffentliche Builder-API).
+  - `builder.py` wird zur Deprecation-Proxy-Datei.
+  - Architect und Reviewer koennen `from werkstatt.roles.builder.ast
+    import _ast_block_fuer_zieldatei` nutzen — ohne den Rest des
+    Builders zu ziehen.
+  - Bestehende `test_builder.py` bleibt gruen ohne Aenderung.
+- **Tests:** keine neuen (AST-Helpers sind bestehend, Tests decken ab).
+- **Blockiert von:** OP-135 (State-Contracts muessen stehen, damit
+  die Builder-API klar ist)
+
+### OP-141: `state/` Submodul-Split (RunState aufteilen)
+
+- **Status:** open
+- **Typ:** architektur (Split, invasiv)
+- **Betroffen:** `werkstatt/state/` (neu), `werkstatt/state.py`
+- **Problem:** `RunState` hat 100+ Felder, keine Doku zu
+  Schreiber/Leser. Handoff §7 nennt 47 tote Felder. Siehe ADR-0012
+  Muster 2+3.
+- **Akzeptanzkriterien:**
+  - Neue Struktur `werkstatt/state/`: `__init__.py` (`RunState`
+    als Komposition), `context.py` (`project_dir`, `aufgabe`,
+    `api_key`, `budget`, `run_id` — reiner Run-Kontext),
+    `explorer.py` (`ExplorerOutput`, `ExplorerDiagnostics`),
+    `scout.py` (`ScoutOutput`), `plan.py` (`ArchitectOutput`,
+    `PlannerOutput`), `tasks.py` (`TaskState`, `AppliedPatches`),
+    `reviewer.py` (`ReviewerOutput`), `reflection.py`
+    (`ReflectionState`).
+  - Alle Dataclasses mit Docstring (Schreiber/Leser/Pflichtfelder)
+    und Contract-Eintrag in `state_contracts.py` (OP-135).
+  - Tote Felder (Liste aus OP-134) entfernt. Kein `getattr`-Hack
+    mehr fuer fehlende Felder.
+  - `RunState` ist Rueckwaerts-kompatibel: `state.explorer_context`
+    delegiert an `state.explorer.output`-Property.
+- **Tests:** `tests/test_state_split.py` (neu),
+  bestehende Suite bleibt gruen (mit Anpassungen an geaenderte
+  Feld-Pfade).
+- **Blockiert von:** OP-134, OP-135, OP-136, OP-137
+
+### OP-142: `web/routes/` Submodul-Split
+
+- **Status:** open
+- **Typ:** architektur (Split)
+- **Betroffen:** `werkstatt/web/routes/` (neu), `werkstatt/web/app.py`
+- **Problem:** `web/app.py` enthaelt alle Routen + Middleware + 6
+  Submodul-Imports (`audit_panel`, `auth`, `chat`, `shell`,
+  `terminal_proxy`, `ws`). `shell.py` und `terminal_proxy.py`
+  ueberschneiden sich. Siehe ADR-0012 Muster 4.
+- **Akzeptanzkriterien:**
+  - Neue Struktur `web/routes/`: `projekte.py`, `runs.py`,
+    `events.py`, `gates.py`, `chat.py`.
+  - `web/app.py` < 100 Zeilen (Komposition).
+  - `shell.py` und `terminal_proxy.py` konsolidiert zu
+    `web/terminal.py`.
+  - Routen-Split so, dass `web/routes/events.py` den OP-122-Endpoint
+    enthaelt.
+- **Tests:** `tests/test_web_routes.py` (neu, pro Route-Submodul
+  ein Smoke-Test).
+- **Blockiert von:** OP-122
+
+### OP-143: `cli/` + Re-Export-Bereinigung
+
+- **Status:** open
+- **Typ:** architektur (Split + Aufraeumen)
+- **Betroffen:** `werkstatt/cli/` (neu), `werkstatt/loop.py`,
+  `werkstatt/pipeline.py` (neu)
+- **Problem:** `loop.py` (500 Zeilen) ist CLI-Einstieg UND
+  Re-Export-Hub. 13 ruff-Fehler (F822 `__all__` undefined,
+  F841 tote Variablen). Tests patchen `werkstatt.loop.audit` etc.
+  Siehe ADR-0012 Muster 1.
+- **Akzeptanzkriterien:**
+  - Neue Struktur: `werkstatt/cli/__init__.py` (leer),
+    `cli/main.py` (`main`, argparse), `pipeline.py`
+    (`run_pipeline_loop`, Phase-Aufrufe).
+  - `loop.py` wird zur Deprecation-Proxy-Datei mit vollstaendigem
+    `__all__`. 13 ruff-Fehler behoben.
+  - Tests patchen den echten Modul-Pfad
+    (`werkstatt.audit.audit` statt `werkstatt.loop.audit`).
+    Betroffen: alle `test_loop*.py`, `test_gates.py`,
+    `test_audit.py`.
+  - Re-Export-Proxies in `pipeline_phases.py` entfallen
+    (Voraussetzung: OP-139).
+- **Tests:** `tests/test_cli.py` (neu).
+- **Blockiert von:** OP-139
+
+### OP-144: `import-linter` als Post-Build-Stage
+
+- **Status:** open
+- **Typ:** architektur (Erzwingung)
+- **Betroffen:** `tools/import_drift.py` (neu), `pyproject.toml`
+  oder `.importlinter`, `.werkstatt/verify.json`
+- **Problem:** Layer-Regeln (ADR-0013) werden ohne Tooling nicht
+  eingehalten. `control_drift` und `audit_drift` haben gezeigt, dass
+  mechanische Pruefung nachhaltig funktioniert.
+- **Akzeptanzkriterien:**
+  - `tools/import_drift.py --check` als Wrapper um `import-linter`.
+  - Layer-Vertrag in `.importlinter` oder `pyproject.toml`:
+    - `cli` darf `phases` importieren, aber nicht `roles` direkt
+    - `phases` darf `roles`, `domain`, `infra` importieren
+    - `roles` darf `domain`, `infra` importieren, nicht andere `roles`
+    - `domain` darf nur `paths` importieren (nichts aus `werkstatt.*`)
+    - `infra` darf nur `paths` importieren
+    - `web` darf `infra`, `phases` importieren, nicht `roles`
+  - Initial Whitelist mit allen bestehenden Verletzungen
+    (dokumentiert im Tool).
+  - `.werkstatt/verify.json` bekommt neue Stage:
+    `"import_drift": {"cmd": "python3 tools/import_drift.py --check",
+    "hart": true}`.
+  - Whitelist wird pro Split-OP (OP-138..143) um die jeweiligen
+    Verletzungen reduziert. Ziel: leere Whitelist nach OP-143.
+- **Tests:** `tests/test_import_drift.py` (Smoke).
+- **Blockiert von:** -
 
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 

@@ -15,3 +15,5 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0009](ADR-0009-timeline-primaer-layout-a.md) | Timeline primaer, Chat rechts (Layout A) | accepted |
 | [ADR-0010](ADR-0010-memory-zweistufig.md) | Memory zweistufig — project + global | accepted |
 | [ADR-0011](ADR-0011-debugger-chat-modus.md) | Debugger als Chat-Modus (evidence-first) | accepted |
+| [ADR-0012](ADR-0012-vier-strukturmuster.md) | Vier Strukturmuster als Ursache fuer Multi-File-Failure | accepted |
+| [ADR-0013](ADR-0013-layer-architektur.md) | Layer-Architektur + Submodul-Split-Reihenfolge | accepted |
