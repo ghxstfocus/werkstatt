@@ -990,6 +990,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-05 | OP-135a | done | State-Contract-Design: Dataclasses + Registry + Property-Views (35c2aa3)
 - 2026-11-04 | OP-134 | done | State-Inventur — Tool + Doku (7177f16)
 - 2026-11-04 | OP-146 | done | Stale Blocker-Referenzen bereinigt (11 OPs, 18 Refs); OP-113a angelegt (Work-Commit 44b4350)
+- 2026-11-04 | OP-148 | done | test_shell.py 3 PTY-Tests auf skip (W36-RP-Guard; Work-Commit 547eab0)
 - 2026-11-04 | OP-150 | done | control/reflection.py geloescht (byte-identisch zu reflection.py, 0 Imports; Work-Commit 1752d76)
 - 2026-11-04 | OP-122 | done | SQLite-Event-Store fuer Loop-Events (append/query, kind-Filter, WAL, .werkstatt/events.db)
 
@@ -1013,28 +1014,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-03 | OP-045 | docs/WORKFLOW.md geloescht (nicht mehr gepflegt, nicht in DOC_CONVENTIONS §2 Pflicht)- 2026-11-03 | OP-008 | obsolete (pipeline.py geloescht) — Commit 07a4de6
 - 2026-11-03 | OP-009 | obsolete (python3 -m werkstatt.loop funktioniert (CLI seit Monaten aktiv)) — Commit n/a
 
-
-### OP-148: tests/test_shell.py an W36-RP-Guard anpassen
-
-- **Status:** open
-- **Typ:** bugfix
-- **Betroffen:** `tests/test_shell.py`, ggf. `tests/conftest.py`
-- **Problem:** 3 Tests (`test_shell_echo_liefert_antwort`,
-  `test_shell_pwd_zeigt_cwd`, `test_shell_resize_event`) rufen den
-  echten `subprocess.Popen(['/bin/bash', '-l', '-i'])` auf und werden
-  von `tests/conftest.py::_pruefe` (W36-RP-Guard) blockiert. Das
-  `kein_echtes_pty`-Fixture existiert bereits in `tests/test_shell.py`,
-  wird aber von diesen 3 Tests nicht genutzt. Reproduziert auf parent
-  `6624954` (MESS 2026-11-04): identische 3 Fails — pre-existing,
-  nicht durch OP-146 eingefuehrt.
-- **Akzeptanzkriterien:**
-  - Alle 5 Tests in `tests/test_shell.py` laufen gruen unter dem
-    W36-RP-Guard (entweder via `kein_echtes_pty`-Fixture oder
-    `@pytest.mark.skip(reason=...)` mit Begruendung).
-  - `pytest tests/test_shell.py` gruen.
-  - `pytest tests/` (voller Lauf inkl. test_shell.py) gruen.
-- **Tests:** `pytest tests/test_shell.py`
-- **Blockiert von:** —
 
 ### OP-096: Phase 33.3 — gates.py nach control/ migrieren
 

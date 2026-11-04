@@ -1611,3 +1611,27 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
   state_inventory OK
 - **Nachfolge-OPs:** OP-106 (Aufrufer-Migration) ist faktisch
   erledigt — heute existiert nur noch `werkstatt.reflection`.
+
+## 2026-11-04 -- OP-148 abgeschlossen: test_shell.py 3 PTY-Tests auf skip
+
+- **Status:** done (Work-Commit 547eab0)
+- **Dateien:** `tests/test_shell.py`
+- **Problem:** 3 PTY-Tests (`test_shell_echo_liefert_antwort`,
+  `test_shell_pwd_zeigt_cwd`, `test_shell_resize_event`) riefen echten
+  `subprocess.Popen(['/bin/bash', '-l', '-i'])` auf und wurden von
+  `tests/conftest.py::_no_gefaehrliche_subprocess` (W36-RP-Guard)
+  blockiert. `@pytest.mark.slow` war reine Doku (pytest.ini hatte
+  kein `addopts = -m "not slow"`).
+- **Aenderung:** 3 Tests von `@pytest.mark.slow` auf
+  `@pytest.mark.skip(reason=...)` umgestellt. Die Tests bleiben als
+  Dokumentation im Code (zeigen die manuelle Browser-Verifikation),
+  laufen aber nicht mehr automatisch.
+- **Abnahme:**
+  - `pytest tests/test_shell.py` -> 2 passed, 3 skipped
+  - `pytest tests/` (voller Lauf, ohne --ignore) -> 1257 passed,
+    8 skipped, 0 failed
+  - audit_drift OK; control_drift OK; state_inventory OK
+- **Baseline-Effekt:** `werkstatt_kontext.py` kann optional das
+  `--ignore=tests/test_shell.py` weglassen — dann Baseline-Zahl
+  `1257 passed, 8 skipped`. Dieses Tool wurde NICHT angepasst
+  (separate Entscheidung).
