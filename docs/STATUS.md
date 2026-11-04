@@ -1013,6 +1013,28 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-03 | OP-009 | obsolete (python3 -m werkstatt.loop funktioniert (CLI seit Monaten aktiv)) — Commit n/a
 
 
+### OP-148: tests/test_shell.py an W36-RP-Guard anpassen
+
+- **Status:** open
+- **Typ:** bugfix
+- **Betroffen:** `tests/test_shell.py`, ggf. `tests/conftest.py`
+- **Problem:** 3 Tests (`test_shell_echo_liefert_antwort`,
+  `test_shell_pwd_zeigt_cwd`, `test_shell_resize_event`) rufen den
+  echten `subprocess.Popen(['/bin/bash', '-l', '-i'])` auf und werden
+  von `tests/conftest.py::_pruefe` (W36-RP-Guard) blockiert. Das
+  `kein_echtes_pty`-Fixture existiert bereits in `tests/test_shell.py`,
+  wird aber von diesen 3 Tests nicht genutzt. Reproduziert auf parent
+  `6624954` (MESS 2026-11-04): identische 3 Fails — pre-existing,
+  nicht durch OP-146 eingefuehrt.
+- **Akzeptanzkriterien:**
+  - Alle 5 Tests in `tests/test_shell.py` laufen gruen unter dem
+    W36-RP-Guard (entweder via `kein_echtes_pty`-Fixture oder
+    `@pytest.mark.skip(reason=...)` mit Begruendung).
+  - `pytest tests/test_shell.py` gruen.
+  - `pytest tests/` (voller Lauf inkl. test_shell.py) gruen.
+- **Tests:** `pytest tests/test_shell.py`
+- **Blockiert von:** —
+
 ### OP-096: Phase 33.3 — gates.py nach control/ migrieren
 
 - **Status:** open

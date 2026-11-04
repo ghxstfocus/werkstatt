@@ -350,3 +350,17 @@ am Session-Ende die Regel auf seine eigene Ausgabe nicht angewandt.
 Die OP-134-Nachmessung durch die Folgesession hat drei Fehler
 aufgedeckt, die ein einziger zusaetzlicher Grep pro Behauptung
 verhindert haette.
+
+
+## Pre-Commit mit pytest: Exit-Code direkt pruefen, nicht durch Pipe
+
+**Erkenntnis 2026-11-04 (OP-146):** `pytest tests/ -q | tail -3; echo $?`
+liefert `$?` von `tail`, nicht von pytest. Der Gate hat 3 Fails durchgelassen
+und Commit + Push erlaubt. Der Fehler war nicht im Code, sondern im Gate.
+
+**Regeln:**
+- `set -o pipefail` in jedem Block, der pytest piped.
+- Oder: `pytest tests/ > /tmp/pt.log 2>&1; PT_EXIT=$?; tail -3 /tmp/pt.log;
+  echo PT_EXIT=$PT_EXIT` — niemals `$?` nach einer Pipe auswerten.
+- Baseline-Runner (`werkstatt_kontext.py`) nutzt `--ignore=tests/test_shell.py`.
+  Wer mit vollem `pytest tests/` vergleicht, misst eine andere Realitaet.

@@ -1581,7 +1581,11 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
     OP-129/130/113i)
   - Kosmetik: OP-112 `-` -> `—`, OP-125 `-` -> `—`
 - **Stale-Check:** 0 stale nach Patch (vorher 14 OPs mit 18 Refs)
-- **Abnahme:** pytest 1255 passed 5 skipped; audit_drift OK;
-  control_drift OK; state_inventory OK
+- **Abnahme (offizieller Runner, ohne tests/test_shell.py):**
+  pytest 1255 passed, 5 skipped; audit_drift OK; control_drift OK;
+  state_inventory OK
+- **Nicht Teil der Baseline:** `tests/test_shell.py` zeigt 3 fails
+  (W36-RP-Guard blockiert `/bin/bash -l -i` in PTY-Tests) —
+  reproduziert auf parent `6624954`, pre-existing, siehe OP-148.
 - **Nachfolge-OPs:** UI-Kette (OP-124/126/127/128/131/132) entblockt.
   OP-129/130/113i warten auf OP-113a (via OP-113).
