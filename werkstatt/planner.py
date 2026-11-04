@@ -1451,7 +1451,7 @@ def run_planner(state: RunState) -> bool:
     # opt-in. Ziel: 34801 Z. -> ~4400 Z. (-87 %), primär durch
     # ROADMAP-Reduktion (50011 -> 800 Z., nur Phasen-Header).
     import os as _os_proto
-    if _os_proto.environ.get("WERKSTATT_ARCHITECT_PROMPT") == "v2":
+    if _os_proto.environ.get("WERKSTATT_ARCHITECT_PROMPT") != "v1":
         from werkstatt.architect import build_architect_docs_section_v2
         _v2_docs = build_architect_docs_section_v2(
             getattr(state, "docs", None) or {},
@@ -1738,7 +1738,7 @@ def run_planner(state: RunState) -> bool:
                   pd, pn)
 
     # Prototyp v2: Selbst-Check als letzter Block, nur in v2.
-    if _os_proto.environ.get("WERKSTATT_ARCHITECT_PROMPT") == "v2":
+    if _os_proto.environ.get("WERKSTATT_ARCHITECT_PROMPT") != "v1":
         from werkstatt.architect import _build_selbst_check_block
         user_content += "\n\n" + _build_selbst_check_block()
 
