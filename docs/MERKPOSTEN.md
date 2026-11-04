@@ -282,5 +282,27 @@ waren 7 Felder, die nur via `getattr` leben.
 der Wahrheit fuer Tote/Geister. Jede Handoff-Zahl ohne diesen
 Check ist eine Hypothese, kein Messwert.
 
+## OP-Close muss Blocker-Referenzen bereinigen (Erkenntnis 2026-11-04)
+
+**Beobachtung:** Beim Schliessen von OP-134 (Close-Commit `38fc036`)
+blieben drei `Blockiert von:`-Felder in `STATUS.md` stehen, die auf
+OP-134 zeigten (OP-135, OP-136, OP-138). Jeder Leser dieser OPs
+haette angenommen, sie seien noch blockiert — obwohl OP-134 erledigt
+war.
+
+**Regel:** Bei jedem OP-Close (`STATUS.md`-Eintrag loeschen):
+1. `grep -n 'Blockiert von:.*OP-NNN' docs/STATUS.md` gegen den
+   geschlossenen OP.
+2. Pro Treffer: OP-NNN aus der Liste entfernen, `str.split(",")`
+   + filtern + `", ".join(...)` — kein Regex.
+3. Wenn Liste leer wird: `—` eintragen.
+4. Commit-Body: Vor-/Nach-Liste der geaenderten Zeilen (M-70/M-73).
+
+**Warum das leicht vergessen wird:** DOC_CONVENTIONS §5 sagt nur
+"erledigte Punkte aus STATUS.md GELOESCHT" — ueber eingehende
+Blocker-Referenzen sagt sie nichts. Das ist eine Konventionsluecke.
+
+**Abgedeckt durch:** OP-134-Close (`38fc036`), dieser Eintrag.
+
 **Abgedeckt durch:** OP-134 (Tool + Baseline), OP-135 (Contract).
 

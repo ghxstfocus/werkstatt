@@ -536,7 +536,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_state_contracts.py` — Registry-Vollstaendigkeit
   (jedes Feld in `state.py` mit `schreiber`/`leser` entweder im
   Contract oder explizit als "intern" markiert).
-- **Blockiert von:** OP-134
+- **Blockiert von: —
 
 ### OP-136: State-Contract-Validierung in der Pipeline (fail-loud)
 
@@ -600,7 +600,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     Task-Zieldateien existieren im Projekt (via `_finde_modul_pfad`).
 - **Tests:** `tests/test_architect_prompt.py` (neu),
   `tests/test_pipeline_smoke.py` (neu).
-- **Blockiert von:** OP-134, OP-135
+- **Blockiert von: OP-135
 
 
 ### OP-138: `render/` Submodul-Split (loop_renderer.py zerlegen)
@@ -710,7 +710,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_state_split.py` (neu),
   bestehende Suite bleibt gruen (mit Anpassungen an geaenderte
   Feld-Pfade).
-- **Blockiert von:** OP-134, OP-135, OP-136, OP-137
+- **Blockiert von: OP-135, OP-136, OP-137
 
 ### OP-142: `web/routes/` Submodul-Split
 
