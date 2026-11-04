@@ -497,6 +497,129 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_stats_api.py` (neu)
 - **Blockiert von:** OP-122
 
+
+### OP-134: State-Inventur — wer schreibt, wer liest, was fehlt
+
+- **Status:** open
+- **Typ:** analyse (MESS-OP, keine Code-Aenderung)
+- **Betroffen:** `docs/STATE-INVENTUR.md` (neu), `tools/state_inventory.py` (neu)
+- **Problem:** Inter-Role-Felder im `RunState` sind historisch gewachsen.
+  Niemand kennt den vollstaendigen Fluss Explorer->Scout->Architect->
+  Planner->Builder->Reviewer->Reflection. Heute (2026-11-04) hat
+  ein einziger falscher Feld-Leser (`architect.py:385` liest
+  `explorer_findings` statt `explorer_context`) einen ganzen
+  Loop-Lauf ruiniert, ohne dass es irgendwo auffiel.
+- **Akzeptanzkriterien:**
+  - `tools/state_inventory.py` (neu, read-only) parst `werkstatt/*.py`
+    auf `state.<feld>`-Zugriffe. Ausgabe: pro Feld `{schreiber:
+    [module.funktion], leser: [...], typ: aus state.py, letzte_befuellung:
+    aus audit-logs}`.
+  - `docs/STATE-INVENTUR.md` (neu) mit Tabelle aller Felder aus
+    `state.py`, Spalten: Feld, Typ, Schreiber, Leser, Pflicht?,
+    Befuellt-in-letzten-5-Runs (aus Audit-Events rekonstruiert).
+  - Mindestens 3 konkrete "stille Degradierungen" dokumentiert
+    (Felder die leer bleiben, ohne dass es auffaellt).
+  - Kandidaten fuer Loeschung (Handoff §7 nennt 47 tote Felder):
+    Liste in `docs/STATE-INVENTUR.md`, Abschnitt "Tote Felder".
+  - **Keine Code-Aenderung.** Nur Analyse.
+- **Tests:** `tests/test_state_inventory.py` — Parser-Smoke (findet
+  bekannte Felder, ignoriert dynamische `getattr`-Zugriffe).
+- **Blockiert von:** -
+
+### OP-135: State-Contract-Design (Dataclasses + Registry)
+
+- **Status:** open
+- **Typ:** architektur (Design-OP, minimaler Code)
+- **Betroffen:** `werkstatt/state_contracts.py` (neu),
+  `docs/STATE-CONTRACTS.md` (neu), `werkstatt/state.py`
+- **Problem:** Aufbauend auf OP-134: Es fehlt ein explizites Modell
+  fuer Inter-Role-Uebergaenge. Heute sind `explorer_context` und
+  `explorer_findings` zwei verschieden gemeinte Felder mit
+  aehnlichem Namen — sie werden verwechselt. Ein Vertrag (Format,
+  Schreiber, Leser, Pflichtfelder) wuerde das verhindern.
+- **Akzeptanzkriterien:**
+  - Dataclasses fuer die 5 wichtigsten Uebergaenge:
+    `ExplorerOutput` (findings, key_files, next_reads),
+    `ExplorerDiagnostics` (git_dirty, pytest_laufzeit_s, ruff_befunde),
+    `ScoutOutput` (api_auszug, widersprueche, bereits_erfuellt),
+    `ArchitectOutput` (prosa, zieldateien),
+    `PlannerOutput` (tasks, tests, akzeptanzkriterien).
+  - `werkstatt/state_contracts.py` mit `CONTRACTS: dict[str, Contract]`.
+    Contract hat: `typ`, `schreiber: list[str]`, `leser: list[str]`,
+    `pflicht: bool`, `validator: Callable | None`.
+  - `RunState` nutzt die Dataclasses anstelle von `dict` fuer die
+    5 Kernfelder (Rueckwaerts-Kompatibilitaet: `dict`-Zugriff
+    weiterhin moeglich via `__getitem__`).
+  - `docs/STATE-CONTRACTS.md` mit ASCII-Diagramm:
+    Rolle -> Feld -> Rolle. Pro Pfeil: Format, Pflicht?.
+  - `explorer_findings` wird zu `explorer_diagnostics` (eindeutiger
+    Name), alter Name bleibt als Deprecation-Property mit Warnung.
+  - **Kein Fix der Pipeline in dieser OP.** Nur Modell + Doku + Dataclasses.
+- **Tests:** `tests/test_state_contracts.py` — Registry-Vollstaendigkeit
+  (jedes Feld in `state.py` mit `schreiber`/`leser` entweder im
+  Contract oder explizit als "intern" markiert).
+- **Blockiert von:** OP-134
+
+### OP-136: State-Contract-Validierung in der Pipeline (fail-loud)
+
+- **Status:** open
+- **Typ:** architektur (Pipeline-Haertung)
+- **Betroffen:** `werkstatt/pipeline_phases.py`,
+  `werkstatt/state_contracts.py` (`validate_transition`),
+  `tools/state_drift.py` (neu)
+- **Problem:** Heute laeuft der Loop stumm weiter, wenn eine Rolle
+  ein Pflichtfeld nicht befuellt. Der Architect bekommt leeres
+  `explorer_context`, halluziniert Zieldateien, Loop scheitert
+  erst am Human-Gate mit falschem Task-Panel.
+- **Akzeptanzkriterien:**
+  - `validate_transition(von: str, zu: str, state: RunState)` in
+    `state_contracts.py`. Prueft alle `pflicht`-Felder fuer den
+    Uebergang. Bei Verstoss: `ContractViolation`-Exception.
+  - `pipeline_phases` ruft `validate_transition` vor jedem
+    Rollenwechsel: Explorer->Scout, Scout->Architect,
+    Architect->Planner-Split, Planner->Builder, Builder->Reviewer.
+  - Bei `ContractViolation`: `audit("state_contract_violation",
+    {...})` und fail-loud (Loop bricht ab, kein stilles Weiterlaufen).
+  - `tools/state_drift.py --check` (analog `audit_drift`): prueft,
+    ob `state.py` und `state_contracts.py` konsistent sind
+    (jedes Feld entweder im Contract oder als `intern` markiert).
+  - `state_drift.py` laeuft als Post-Build-Stage in `.werkstatt/verify.json`
+    (analog `control_drift`).
+  - Test: Pipeline laeuft mit absichtlich leerem `explorer_context`,
+    erwartet `ContractViolation` + Audit-Event.
+- **Tests:** `tests/test_state_drift.py` (neu),
+  `tests/test_pipeline_contract.py` (neu).
+- **Blockiert von:** OP-135
+
+### OP-137: Fix architect.py + Cross-Role-Smoke-Tests
+
+- **Status:** open
+- **Typ:** bugfix + test (Folge-OP nach State-Vertrag)
+- **Betroffen:** `werkstatt/architect.py`,
+  `tests/test_architect_prompt.py` (neu),
+  `tests/test_pipeline_smoke.py` (neu)
+- **Problem:** Konkret aus 2026-11-04: `architect.py:385` liest
+  `getattr(state, "explorer_findings", None)` — das enthaelt nur
+  `{git_dirty, pytest_laufzeit_s, ruff_befunde}`, nicht die
+  33 Explorer-Dateien. Die liegen in `explorer_context`. Der
+  Architect halluziniert infolgedessen Zieldateien. Bei OP-119:
+  32 Zieldateien in 1 Task, Loop scheitert.
+- **Akzeptanzkriterien:**
+  - `architect.py:385` liest `explorer_context` (nach OP-135:
+    `state.explorer_output`), nicht `explorer_findings`.
+  - `_format_explorer_findings` in architect.py erweitert auf
+    `key_files`-Liste (Format wie `builder.py::_format_explorer_findings_b`).
+  - Cross-Role-Smoke-Tests pro Uebergang:
+    - `test_architect_sieht_explorer_dateien`: Mock-State mit
+      33 `key_files`, prueft dass die Dateinamen im Prompt stehen.
+    - `test_builder_sieht_architect_prosa`: analog.
+    - `test_reviewer_sieht_builder_diff`: analog.
+  - Nach Fix: Loop-Lauf mit OP-119-Aufgabe → Plan hat Task-Zieldateien
+    ⊆ Explorer-`key_files` (nicht erfundene Dateien).
+- **Tests:** `tests/test_architect_prompt.py` (neu),
+  `tests/test_pipeline_smoke.py` (neu).
+- **Blockiert von:** OP-134, OP-135
+
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
 - **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,

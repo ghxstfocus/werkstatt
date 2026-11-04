@@ -183,3 +183,51 @@ create/update aus Datei-Existenz ableiten.
 ### M-320 — phase_state.save() bei Loop-Abbruch
 Bei `return 1` fehlt `phase_state.save()`. Resume nach
 Abbruch unmöglich.
+
+
+## Erst messen, dann designen, dann fixen (Lehre 2026-11-04, OP-134..137)
+
+**Regel:** Jede Struktur-OP beginnt mit einer Mess-Phase. Kein Design
+ohne vorherige Fakten. Kein Fix ohne reproduzierten Bug.
+
+**Warum:** Am 2026-11-04 wollten wir den Explorer als Ursache fuer
+32-Dateien-Plaene identifizieren. Zwei Hypothesen wurden falsch
+bestaetigt, weil die Messung nicht sauber war:
+
+1. **Hypothese A** (falsch): Explorer liefert 0 Dateien. Mein Skript
+   las `e["payload"]["files"]`, das echte Audit-Feld ist aber flach
+   `e["files"]`. Ergebnis: 389x "0 files" — falsch. Tatsaechlich
+   liefert der Explorer 33-36 Dateien.
+2. **Hypothese B** (falsch): Architect ignoriert explorer_findings.
+   Der Architekt liest tatsaechlich `explorer_findings` — aber das
+   Feld enthaelt `{git_dirty, pytest_laufzeit_s, ruff_befunde}`,
+   nicht die Datei-Liste. Die Dateien stecken in `explorer_context`,
+   das der Architect nie liest.
+
+**Die echte Ursache wurde erst nach 3 Messschritten klar.** Zwei
+davon waren noetig, um falsche Hypothesen zu widerlegen.
+
+**Konsequenz fuer zukuenftige OPs:**
+- OP-Wortlaut MUSS einen Mess-Abschnitt haben, bevor Code geaendert wird.
+- Mess-Ergebnis ist Teil des OP-Texts (Zahlen, Verteilungen, Rohdaten).
+- Erst nach Messung: Design (OP), dann Fix (OP).
+- "Bauchgefuehl" ist kein Messergebnis. Auch nicht, wenn es plausibel klingt.
+- Audit-Payloads: IMMER erst ein rohes Event anschauen, dann ein Skript schreiben.
+
+## Struktureller Vertragsmangel (Erkenntnis 2026-11-04)
+
+**Das eigentliche Problem ist nicht `architect.py:385`.**
+Es ist: Inter-Role-Felder sind historisch gewachsen, niemand kennt
+den vollstaendigen Fluss, niemand prueft Schreiber-Leser-Konsistenz.
+
+**Bekannte Beispiele (aus einer schnellen Grep-Inventur):**
+- `explorer_context` (33 key_files) wird von Scout + Builder gelesen,
+  der Architect liest `explorer_findings` (git_dirty, ruff_befunde).
+- `scout_api_auszug` wird geschrieben, gelesen nur vom Architect.
+- `architect_prosa` (str) ist der einzige Uebergang Architect -> Planner,
+  aber der Planner erwartet Tasks in strukturierter Form, nicht Prosa.
+- 47 tote RunState-Felder (Handoff §7) sind noch im Code.
+
+**Loesungsansatz:** State-Contract-Registry analog zu `control/`,
+mit Schreiber/Leser/Format/Pflichtfeldern. Fail-loud bei Verstoss.
+Siehe OP-134..137.
