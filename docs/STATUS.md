@@ -498,3 +498,50 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   im Prompt, Skill-Matching bei ImportError).
 - **Blockiert von:** -
 
+
+### OP-113i: Log-Backfill — DB aus 30k Audit-Events vorfuellen
+
+- **Status:** open
+- **Typ:** erfahrung-backfill
+- **Betroffen:** `tools/backfill_erfahrung.py` (neu), `.werkstatt/erfahrung.db`
+- **Erkenntnis (2026-11-03 23:55):** Von 1.253 Problem-Events in
+  `audit-logs/*.jsonl` (12.10.-03.11.) sind nur **~650 cluster-fähig**:
+  - `loop_verify_failed` (490): `errors`, `stages`, `phase` → Sig
+    über `(stage_id, erste-3-error-zeilen-hash)`.
+  - `builder_patch_invalid` (84): `grund`, `file`, `action` → Sig
+    über `(grund, action)`.
+  - `loop_task_failed` (34): `grund` → Sig über `grund`.
+  - `loop_reflection_stagnation_abort` (41): `grund`, `stagnation` → Sig.
+  - **NICHT** backfillbar: `loop_reviewer_rejected` (240),
+    `loop_plan_gate_rejected` (90), `loop_gate_failed` (153) —
+    keine beschreibenden Felder. Siehe OP-114.
+- **Akzeptanz:** `tools/backfill_erfahrung.py` liest alle
+  `agent-pipeline-*.jsonl`, clustert nach den obigen Sigs, filtert
+  Cluster mit `>= 3` Vorkommen und ruft `record_erfahrung(...)`.
+  Lösungs-Absatz aus folgendem Kontext-Fenster: naechster
+  `loop_task_ok` / `reviewer_phase_approved` / `loop_phase=phase_ok`
+  innerhalb 5 min. `quelle='log-backfill'`, `erfolg=1` wenn Lösung
+  gefunden, `erfolg=0` sonst. Idempotent per `problem_sig`.
+- **Blockiert von:** OP-113a
+
+### OP-114: Audit-Events fuer Problem-Klassen anreichern
+
+- **Status:** open
+- **Typ:** audit-feature
+- **Betroffen:** `werkstatt/pipeline_phases.py`,
+  `werkstatt/reviewer.py`, `werkstatt/gates.py`
+- **Problem:** `loop_reviewer_rejected` (240x), `loop_plan_gate_rejected`
+  (90x), `loop_gate_failed` (153x) enthalten **keine beschreibenden
+  Felder**. Beim Backfill (OP-113i) sind sie deshalb blind. Konkret:
+  `loop_reviewer_rejected` loggt nur `task_id`, obwohl `reviewer_result`
+  (705x) die Bugs+Severity hat. `loop_plan_gate_rejected` loggt keinen
+  Reject-Grund, obwohl `_human_gate_plan` ihn kennt.
+- **Akzeptanz:** (a) `loop_reviewer_rejected`-Event enthaelt
+  `payload={"bugs": [{"severity", "description"}], "task_id": ...}`.
+  (b) `loop_plan_gate_rejected` enthaelt `payload={"grund": "..."}`.
+  (c) `loop_gate_failed` enthaelt `payload={"gate": "...", "fehler": [...]}`
+  (aktuell nur `gate`, `phase`). (d) Nach 3 neuen Loop-Läufen sind
+  in den Audit-Logs genug Felder, um Cluster zu bilden.
+- **Tests:** `tests/test_audit.py` (Erweiterung) — jedes neue Feld
+  vorhanden.
+- **Blockiert von:** -
