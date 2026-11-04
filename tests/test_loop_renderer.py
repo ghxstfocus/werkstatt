@@ -92,3 +92,49 @@ def test_group_nicht_verschachtelt():
     out = buf.getvalue()
     assert out.count("::group::") == 2
     assert out.count("::endgroup::") == 2
+
+
+# ============================================================
+# OP-111 (2026-11-04): _emit_progress-Tests.
+# _TEE_STREAM=None ist Pflicht — sonst schreibt der Test in die
+# echte Log-Datei (OP-103-Praevention).
+# ============================================================
+
+
+def test_emit_progress_ci_sequenziell():
+    """CI: [label] step detail als Zeile."""
+    import werkstatt.loop_renderer as r
+    buf = io.StringIO()
+    with patch.object(sys, "stdout", buf), \
+         patch.object(r, "_TEE_STREAM", None), \
+         patch.object(r, "IS_CI", True), \
+         patch.object(r, "IS_LIVE", False), \
+         patch.object(r, "_publish", lambda *a, **kw: None):
+        r._emit_progress("Builder", "start", "x.py")
+    assert "[Builder] start x.py" in buf.getvalue()
+
+
+def test_emit_progress_live_ueberschreibt():
+    """Live: kein Newline im Output."""
+    import werkstatt.loop_renderer as r
+    buf = io.StringIO()
+    with patch.object(sys, "stdout", buf), \
+         patch.object(r, "_TEE_STREAM", None), \
+         patch.object(r, "IS_LIVE", True), \
+         patch.object(r, "_publish", lambda *a, **kw: None):
+        r._emit_progress("Builder", "start", "x.py")
+    out = buf.getvalue()
+    assert "[Builder] start x.py" in out
+    assert "\n" not in out
+
+
+def test_emit_progress_leerer_step_no_op():
+    """Leerer step: kein Output."""
+    import werkstatt.loop_renderer as r
+    buf = io.StringIO()
+    with patch.object(sys, "stdout", buf), \
+         patch.object(r, "_TEE_STREAM", None), \
+         patch.object(r, "IS_CI", True), \
+         patch.object(r, "_publish", lambda *a, **kw: None):
+        r._emit_progress("Builder", "")
+    assert buf.getvalue() == ""

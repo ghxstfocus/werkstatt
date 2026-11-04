@@ -102,7 +102,7 @@ def _heartbeat_start(
     return thread, stop_event
 
 
-def ask_llm(api_key: str, system_prompt: str, user_content: str,
+def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             model: str, temperature: float, timeout: int = 120,
             *, state: RunState | None = None,
             aufgabe: str = "unbekannt",
@@ -642,3 +642,54 @@ def build_system_prompt(agent: dict[str, Any], docs: dict[str, str],
     return "\n".join(parts)
 
 
+
+
+# ============================================================
+# OP-111 (2026-11-04): Oeffentliche ask_llm-API mit Progress-Events.
+# ============================================================
+
+_PROGRESS_LABELS: dict[str, str] = {
+    "builder": "Builder",
+    "scout": "Scout",
+    "architect": "Architect",
+    "planner-split": "Planner",
+    "reviewer": "Reviewer",
+    "explorer": "Explorer",
+    "reflection": "Reflection",
+}
+
+
+def _aufgabe_zu_label(aufgabe: str) -> str:
+    """Mappt ask_llm-Aufgabe auf Progress-Label (OP-111)."""
+    if not aufgabe:
+        return "Agent"
+    return _PROGRESS_LABELS.get(aufgabe, aufgabe.capitalize())
+
+
+def ask_llm(api_key: str, system_prompt: str, user_content: str,
+            model: str, temperature: float, timeout: int = 120,
+            *, state: RunState | None = None,
+            aufgabe: str = "unbekannt",
+            heartbeat: bool = True,
+            max_tokens: int = 4096,
+            redact: bool = True) -> LLMReply:
+    """Oeffentliche LLM-API mit Progress-Events (OP-111)."""
+    from werkstatt.loop_renderer import _emit_progress
+    _label = _aufgabe_zu_label(aufgabe)
+    _t0 = time.monotonic()
+    _emit_progress(_label, "prompt_sent", f"model={model}")
+    try:
+        reply = _ask_llm_impl(
+            api_key, system_prompt, user_content, model, temperature,
+            timeout=timeout, state=state, aufgabe=aufgabe,
+            heartbeat=heartbeat, max_tokens=max_tokens, redact=redact,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _emit_progress(_label, "response_failed", str(exc)[:80])
+        raise
+    if reply.ok:
+        _emit_progress(_label, "response_received",
+                       f"{time.monotonic() - _t0:.1f}s")
+    else:
+        _emit_progress(_label, "response_failed", (reply.error or "?")[:80])
+    return reply
