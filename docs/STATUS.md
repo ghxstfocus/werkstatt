@@ -730,7 +730,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     Builders zu ziehen.
   - Bestehende `test_builder.py` bleibt gruen ohne Aenderung.
 - **Tests:** keine neuen (AST-Helpers sind bestehend, Tests decken ab).
-- **Blockiert von:** OP-135 (State-Contracts muessen stehen, damit
+- **Blockiert von:** OP-135a, OP-135b (State-Contracts muessen stehen, damit
   die Builder-API klar ist)
 
 ### OP-141: `state/` Submodul-Split (RunState aufteilen)
