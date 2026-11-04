@@ -413,6 +413,17 @@ def _emittiere_explorer_result(
     }, project_dir, project_name)
 
 
+def _git_dirty(pd: Path) -> bool:
+    """Helper (OP-135a): deterministischer git-status-Check."""
+    try:
+        return bool(__import__("subprocess").run(
+            ["git", "-C", str(pd), "status", "--porcelain"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def run_explorer(state: RunState, frage: str) -> dict:
     pd = state.project_dir
     pn = state.project_name
@@ -493,9 +504,17 @@ def run_explorer(state: RunState, frage: str) -> dict:
     # M-394: Auch ohne key_files: findings aus Messung liefern.
     if messungen:
         findings = _format_findings(messungen)
+        _ruff = messungen.get("ruff") or {}
+        state.explorer_findings = {
+            "git_dirty": _git_dirty(Path(pd)),
+            "pytest_laufzeit_s": int(
+                getattr(state, "explorer_pytest_laufzeit_s", 0) or 0),
+            "ruff_befunde": list(_ruff.get("dateien") or [])[:50],
+        }
         audit("explorer_messung_findings", {
             "n_key_files": len(key_files),
             "findings_len": len(findings),
+            "diagnostics_befuellt": True,
         }, pd, pn)
         _emittiere_explorer_result(pd, pn, findings, key_files)
         return {

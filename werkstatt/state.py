@@ -334,6 +334,38 @@ class RunState:
     patches_aktuell_runde: list[dict[str, object]] = \
         field(default_factory=list)
 
+    # === OP-135a: Read-only Property-Views (Contract-Dataclasses) ===
+    @property
+    def explorer_output(self):
+        from werkstatt.state_contracts import ExplorerOutput
+        raw = getattr(self, "explorer_context", None) or {}
+        return ExplorerOutput.from_dict(raw)
+
+    @property
+    def explorer_diagnostics(self):
+        from werkstatt.state_contracts import ExplorerDiagnostics
+        raw = getattr(self, "explorer_findings", None) or {}
+        return ExplorerDiagnostics.from_dict(raw)
+
+    @property
+    def scout_output(self):
+        from werkstatt.state_contracts import ScoutOutput
+        return ScoutOutput.from_dict(self.scout_api_auszug or {})
+
+    @property
+    def architect_output(self):
+        from werkstatt.state_contracts import ArchitectOutput
+        return ArchitectOutput(prosa=self.architect_prosa or "")
+
+    @property
+    def planner_output(self):
+        from werkstatt.state_contracts import PlannerOutput
+        return PlannerOutput(
+            tasks=self.tasks or [],
+            tests=getattr(self, "tests", []) or [],
+            akzeptanzkriterien=self.akzeptanzkriterien or [],
+        )
+
 
 
 
