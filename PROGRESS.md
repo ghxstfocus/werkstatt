@@ -1635,3 +1635,31 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
   `--ignore=tests/test_shell.py` weglassen — dann Baseline-Zahl
   `1257 passed, 8 skipped`. Dieses Tool wurde NICHT angepasst
   (separate Entscheidung).
+
+## 2026-11-04 -- OP-149 abgeschlossen: pytest_regression auf changed_py_files
+
+- **Status:** done (Work-Commit 11f02b1)
+- **Dateien:** `.werkstatt/verify.json`,
+  `werkstatt/templates/.werkstatt/verify.json`,
+  `tests/test_verify_regression.py`
+- **Cross-Repo:** `security-ai/.werkstatt/verify.json` geaendert
+  im separaten Repo (Commit ebc7c46, github.com:ghxstfocus/security-ai).
+  `test_verify_regression.py` prueft alle drei Pfade (templates,
+  werkstatt/.werkstatt, security-ai/.werkstatt) auf Konsistenz —
+  Cross-Repo-Patch noetig, damit der Contract-Test gruen bleibt.
+- **Problem:** `pytest_regression` (voller Lauf) lief nur bei
+  `changed_non_test_py_files`. Bei reinen Test-Aenderungen (oder
+  Code+Test-Kombinationen) lief der volle Lauf nicht. Regression-
+  Risiko: modifizierter Test bricht anderen Test, ohne dass es auffaellt.
+- **Aenderung:** `requires` von `"{changed_non_test_py_files}"` auf
+  `"{changed_py_files}"` in allen drei `verify.json`-Pfaden.
+  Damit laeuft `pytest_regression` bei JEDER .py-Aenderung.
+  Redundanz zu `pytest_changed` bei Test-Aenderungen ist gewollt
+  (Sicherheitsnetz).
+- **Lehre (MERKPOSTEN-Kandidat):** Contract-Tests, die Shipped-
+  Configs asserten, muessen vor dem Patch `grep -rn '<alter-wert>'
+  tests/` durchlaufen. Zusaetzlich: ein Test kann MEHRERE Pfade
+  pruefen (hier 3 × verify.json) — Kontext lesen, nicht nur Treffer
+  zaehlen.
+- **Abnahme:** pytest 1257 passed 8 skipped (Werkstatt);
+  audit_drift OK; control_drift OK; state_inventory OK
