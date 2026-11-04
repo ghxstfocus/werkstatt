@@ -1,4 +1,4 @@
-"""Tests für werkstatt/state_contracts.py (OP-135a)."""
+"""Tests für werkstatt/state_contracts.py (OP-135a + OP-136)."""
 from pathlib import Path
 
 import pytest
@@ -7,11 +7,13 @@ from werkstatt.state import RunState
 from werkstatt.state_contracts import (
     CONTRACTS,
     ArchitectOutput,
+    ContractViolation,
     ExplorerDiagnostics,
     ExplorerOutput,
     KeyFile,
     PlannerOutput,
     ScoutOutput,
+    validate_transition,
 )
 
 
@@ -115,3 +117,106 @@ def test_explorer_diagnostics_default():
     assert ed.git_dirty is False
     assert ed.pytest_laufzeit_s == 0
     assert ed.ruff_befunde == []
+
+
+# ============================================================
+# OP-136: validate_transition
+# ============================================================
+
+
+def _state_mit_contracts(
+    *, explorer_output=None, architect_output=None, planner_output=None,
+):
+    st = _minimal_state()
+    if explorer_output is not None:
+        st.explorer_context = explorer_output
+    if architect_output is not None:
+        st.architect_prosa = architect_output
+    if planner_output is not None:
+        st.tasks = planner_output.get("tasks", [])
+        st.tests = planner_output.get("tests", [])
+        st.akzeptanzkriterien = planner_output.get("akzeptanzkriterien", [])
+    return st
+
+
+def test_validate_transition_leer_failt():
+    st = _minimal_state()
+    try:
+        validate_transition("explorer", "scout", st,
+                            audit_fn=lambda *a, **k: None)
+    except ContractViolation as e:
+        assert e.transition == "explorer->scout"
+        assert "explorer_output" in e.felder
+    else:
+        raise AssertionError("ContractViolation erwartet")
+
+
+def test_validate_transition_befuellt_passiert():
+    st = _state_mit_contracts(
+        explorer_output={"findings": "x",
+                         "key_files": [{"file": "a.py"}]},
+    )
+    validate_transition("explorer", "scout", st,
+                        audit_fn=lambda *a, **k: None)
+
+
+def test_validate_transition_architect_to_planner():
+    st = _state_mit_contracts(architect_output="")
+    try:
+        validate_transition("architect", "planner", st,
+                            audit_fn=lambda *a, **k: None)
+    except ContractViolation as e:
+        assert "architect_output" in e.felder
+    else:
+        raise AssertionError("ContractViolation erwartet")
+
+    st2 = _state_mit_contracts(architect_output="plan text")
+    validate_transition("architect", "planner", st2,
+                        audit_fn=lambda *a, **k: None)
+
+
+def test_validate_transition_planner_to_builder():
+    st = _minimal_state()
+    try:
+        validate_transition("planner", "builder", st,
+                            audit_fn=lambda *a, **k: None)
+    except ContractViolation:
+        pass
+    else:
+        raise AssertionError("ContractViolation erwartet")
+
+    st2 = _state_mit_contracts(
+        planner_output={"tasks": [{"id": "t1"}],
+                        "tests": ["pytest"],
+                        "akzeptanzkriterien": ["x"]},
+    )
+    validate_transition("planner", "builder", st2,
+                        audit_fn=lambda *a, **k: None)
+
+
+def test_validate_transition_auto_skip_scout():
+    """scout->architect: leerer scout_output ist OK (auto-Regel)."""
+    st = _minimal_state()
+    validate_transition("scout", "architect", st,
+                        audit_fn=lambda *a, **k: None)
+
+
+def test_validate_transition_unbekannter_uebergang_ist_noop():
+    st = _minimal_state()
+    validate_transition("foo", "bar", st)
+
+
+def test_validate_transition_ruft_audit():
+    calls = []
+    def _fake_audit(*args, **kwargs):
+        calls.append((args, kwargs))
+    st = _minimal_state()
+    try:
+        validate_transition("explorer", "scout", st, audit_fn=_fake_audit)
+    except ContractViolation:
+        pass
+    assert len(calls) == 1
+    args, _ = calls[0]
+    assert args[0] == "state_contract_violation"
+    assert args[1]["transition"] == "explorer->scout"
+    assert "explorer_output" in args[1]["felder"]

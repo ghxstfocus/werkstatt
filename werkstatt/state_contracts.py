@@ -133,3 +133,127 @@ CONTRACTS: dict[str, Contract] = {
         pflicht=True,
     ),
 }
+
+
+# ============================================================
+# OP-136: Contract-Validierung (fail-loud)
+# ============================================================
+
+
+class ContractViolation(Exception):
+    """Pflichtfeld nicht befuellt — Loop muss abbrechen (OP-136)."""
+
+    def __init__(self, transition: str, felder: list[str]):
+        self.transition = transition
+        self.felder = felder
+        super().__init__(
+            f"ContractViolation bei '{transition}': "
+            f"Pflichtfelder leer: {', '.join(felder)}"
+        )
+
+
+# Welche Contract-Felder sind bei welchem Uebergang Pflicht?
+# True = immer Pflicht, "auto" = nur wenn das Feld nicht leer ist.
+TRANSITIONS: dict[str, list[tuple[str, bool | str]]] = {
+    "explorer->scout": [
+        ("explorer_output", True),
+    ],
+    "scout->architect": [
+        ("scout_output", "auto"),  # Scout kann ausbleiben (bereits_erfuellt)
+    ],
+    "architect->planner": [
+        ("architect_output", True),
+    ],
+    "planner->builder": [
+        ("planner_output", True),
+    ],
+    "builder->reviewer": [
+        ("planner_output", True),
+    ],
+}
+
+
+# Mapping Contract-Name -> Property-Name auf RunState.
+# Heute identisch; getrennt, damit Umbenennungen in OP-135b nur hier
+# nachgezogen werden muessen.
+_PROP_NAME: dict[str, str] = {
+    "explorer_output": "explorer_output",
+    "explorer_diagnostics": "explorer_diagnostics",
+    "scout_output": "scout_output",
+    "architect_output": "architect_output",
+    "planner_output": "planner_output",
+}
+
+
+def _ist_leer(prop) -> bool:
+    """Prueft, ob eine Property-View leer ist (alle Felder default)."""
+    if prop is None:
+        return True
+    if isinstance(prop, ContractDict):
+        d = prop.to_dict()
+        return all(not v for v in d.values())
+    return False
+
+
+def _do_audit_violation(state, key: str, leer: list[str]) -> None:
+    """Schreibt das Audit-Event (lazy import gegen Zirkularitaet).
+
+    Der Call heisst bewusst 'audit(...)' (nicht 'audit_fn(...)'),
+    damit tools/audit_drift.py ihn im AST findet.
+    """
+    try:
+        from werkstatt.audit import audit
+    except ImportError:
+        return
+    try:
+        audit(
+            "state_contract_violation",
+            {"transition": key, "felder": leer},
+            str(getattr(state, "project_dir", "")),
+            str(getattr(state, "project_name", "")),
+        )
+    except Exception:  # noqa: BLE001
+        pass  # Audit-Fehler darf Validation nicht verhindern
+
+
+def validate_transition(
+    von: str,
+    zu: str,
+    state,
+    audit_fn=None,
+) -> None:
+    """Prueft Pflichtfelder fuer einen Rollenwechsel (OP-136).
+
+    Wirft ContractViolation bei Verstoss. audit_fn (fuer Tests) ersetzt
+    den Standard-audit()-Call aus _do_audit_violation.
+    """
+    key = f"{von}->{zu}"
+    if key not in TRANSITIONS:
+        return
+
+    leer: list[str] = []
+    for feld_name, regel in TRANSITIONS[key]:
+        if regel == "auto":
+            continue
+        if regel is True:
+            prop = getattr(state, _PROP_NAME[feld_name], None)
+            if _ist_leer(prop):
+                leer.append(feld_name)
+
+    if not leer:
+        return
+
+    if audit_fn is not None:
+        try:
+            audit_fn(
+                "state_contract_violation",
+                {"transition": key, "felder": leer},
+                str(getattr(state, "project_dir", "")),
+                str(getattr(state, "project_name", "")),
+            )
+        except Exception:  # noqa: BLE001
+            pass
+    else:
+        _do_audit_violation(state, key, leer)
+
+    raise ContractViolation(key, leer)
