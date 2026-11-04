@@ -252,3 +252,35 @@ spaet (Patch abgelehnt, Reflection-Runde verschwendet).
 sehen wie Rollen die ausfuehren. Sonst plant man ins Blaue.
 
 **Abgedeckt durch:** OP-134 (Messen), OP-135 (Design), OP-137 (Fix).
+
+## Kategorien write_only vs getattr_only (Erkenntnis 2026-11-04, OP-134)
+
+**Beobachtung:** Beim Messen des `RunState` mit
+`tools/state_inventory.py` reicht "gelesen vs. geschrieben" nicht.
+Zwei Zwischenkategorien sind noetig:
+
+- **`write_only`** — Feld wird geschrieben, aber nie als direkter
+  Attribut-Zugriff (`state.X`) gelesen. Es kann via
+  `getattr(state, "X")` gelesen werden, und lebt dann indirekt.
+  Beispiel: `api_index_cache` (geschrieben in
+  `architect.py:603`, gelesen via `getattr` in `architect.py:324`
+  und `builder.py:154`). Handoff-Behauptung "toter Cache" war
+  falsch — der Cache lebt.
+- **`getattr_only`** — Feld wird NUR via `getattr` gelesen, nie
+  als direkter Zugriff. Beispiel: `api_key` — alle Leser nutzen
+  `getattr(state, "api_key", "")`.
+
+**Lehre:** Bei der Frage "ist Feld X tot?" reicht ein
+Attribut-Grep nicht. `getattr(state, "X", default)`-Muster,
+`# type: ignore[attr-defined]`-Marker und Konstruktor-Kwargs
+muessen mitgezaehlt werden. Sonst entstehen falsche
+Dead-Field-Listen: der Handoff nannte 47 Tote, mein erster
+Skript-Lauf (nur direkte Zugriffe) lieferte 54 — die Differenz
+waren 7 Felder, die nur via `getattr` leben.
+
+**Regel:** `tools/state_inventory.py --check` ist die Quelle
+der Wahrheit fuer Tote/Geister. Jede Handoff-Zahl ohne diesen
+Check ist eine Hypothese, kein Messwert.
+
+**Abgedeckt durch:** OP-134 (Tool + Baseline), OP-135 (Contract).
+

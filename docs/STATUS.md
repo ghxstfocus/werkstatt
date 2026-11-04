@@ -926,6 +926,39 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - 2026-11-02 | OP-079 | done | review-work-Skill: Markdown-Hunk-Header (d023535)
 - 2026-11-02 | OP-080 | done | review-work-Skill: Python-PATCHES (3d7fd1f)
 
+### OP-145: Namens-Drift `auftrag_bereits_erfuellt` (ghost)
+
+- **Status:** open
+- **Typ:** analyse + fix
+- **Betroffen:** `werkstatt/builder.py`, `werkstatt/gates.py`,
+  `werkstatt/planner.py`, `werkstatt/pipeline_phases.py`,
+  `werkstatt/state.py`
+- **Problem:** Zwei Felder fuer dasselbe Konzept:
+  `state.auftrag_bereits_erfuellt` (nicht in `state.py` deklariert,
+  gelesen in `builder.py`, `gates.py`, `planner.py`,
+  `pipeline_phases.py`) und `state.auftrag_bereits_erfuellt_bestaetigt`
+  (in `state.py` deklariert als `bool`, aber von diesen Stellen
+  nicht gelesen). STATE-INVENTUR.md fuehrt `auftrag_bereits_erfuellt`
+  als Ghost, `auftrag_bereits_erfuellt_bestaetigt` als write_only.
+  Folge: der Auftrag-bereits-erfuellt-Pfad entscheidet sich am Feld,
+  das gar nicht im Contract steht. Nachfolge-Bug zu `architect.py:385`
+  (OP-137), dort war es `explorer_findings` vs `explorer_context`.
+- **Akzeptanzkriterien:**
+  - Messung: pro Fundstelle (`builder.py`, `gates.py`, `planner.py`,
+    `pipeline_phases.py`) zaehlen, welches Feld gelesen und welches
+    geschrieben wird (dokumentiert in STATE-INVENTUR.md).
+  - Entscheidung in STATE-INVENTUR.md: Alias, Umbenennung oder
+    Loeschung. Begruendung.
+  - Fix: alle Leser lesen das Contract-Feld; alle Schreiber schreiben
+    das Contract-Feld. Keine `# type: ignore[attr-defined]` mehr
+    auf diesem Paar.
+  - Test: neuer Cross-Role-Smoke-Test — Builder setzt
+    `state.auftrag_bereits_erfuellt = True`, Gate liest es.
+  - `python3 tools/state_inventory.py --check` zeigt danach
+    **25 - 1 = 24** Geister (falls geloescht) oder **26** (falls
+    deklariert).
+- **Blockiert von:** OP-135 (Contract-Design), OP-137 (Muster-Fix)
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
