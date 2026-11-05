@@ -1048,6 +1048,12 @@ def _phase_tasks_loop(
             _applied_nach_al = int(
                 getattr(state, "applied_count", 0) or 0)
             if _refl_ok_al and _applied_nach_al > _applied_vor_al:
+                # OP-167: Counter auch im Reflection-OK-Pfad hochzaehlen.
+                # Loop-Test-8 (2026-11-05): t3/t4 über Reflection
+                # done, aber tasks_ok_counter blieb 0 -> Footer
+                # meldete '8 failed'.
+                tasks_ok += 1
+                state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
                 _task_ende(state, phase_state, task_id, ok=True,
                            name=task_name)
                 audit("loop_task_ok", {"task_id": i, "name": task_name,
@@ -1293,6 +1299,10 @@ def _phase_tasks_loop(
                 if _gate_rc == 0:
                     audit("loop_human_gate_reflection_erschoepft_approved",
                           {"task_id": i}, pd, pn)
+                    # OP-167: Counter auch hier hochzaehlen.
+                    # Reflection-Erschoepft-Gate-approve (User 'j').
+                    tasks_ok += 1
+                    state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
                     _task_ende(state, phase_state, task_id,
                                ok=True, name=task_name,
                                failure="reflection_erschoepft_approved")
