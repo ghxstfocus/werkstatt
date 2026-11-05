@@ -32,7 +32,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   falls nicht, Event wieder aktivieren oder durch `explorer_messung_findings`
   ersetzen (semantisch gleich?). Kein sofortiger Fix.
 
-
 ### OP-073: Werkzeug fuer Roadmap-to-OP Compiler
 
 - **Status:** open
@@ -43,10 +42,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   (OP-NNN, Akzeptanzkriterien vorhanden) und die OPs formatiert in STATUS.md einfuegt.
 - **Tests:** Unit-Tests fuer die Validierungs-Logik und den Parser der Roadmap.
 - **Blockiert von:** —
-
-
-
-
 
 ### OP-086: Doku-Drift als Verify-Gate (deterministisch)
 
@@ -75,9 +70,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   sowieso blockiert.
 - **Tests:** `pytest tests/test_doku_check.py -v`
 - **Blockiert von:** —
-
-
-
 
 ### OP-092: Loop-Agenten mit explizitem Kontext-Vertrag (Sammel-OP)
 
@@ -163,7 +155,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Hinweis:** Struktureller Fix für die Klasse OP-047 / OP-089. Nach 092a-e
   hat der Agent deterministischen Kontext und rät nicht mehr.
 
-
 ### OP-100: Phase 33.2b — verify-Migration nach control/ (gross)
 
 - **Status:** open
@@ -193,7 +184,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Blockiert von:** —
 - **Anmerkung:** Discovery 2026-11-03: 163 Patch-Calls (45x _verify_patches,
   93x audit, 10x _plan_gate, 15x sonst). Nicht an einem Tag machbar.
-
 
 ### OP-113: Erfahrungs-Gehirn — deterministisches Fehler-Gedaechtnis (Sammel-OP)
 
@@ -332,7 +322,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** keine (UI, visuell)
 - **Blockiert von:** OP-126
 
-
 ### OP-128: Chat-Modus Debugger (evidence-first, Ladder)
 
 - **Status:** open
@@ -392,7 +381,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   `tests/test_debugger_memory_hook.py` (neu, OP-160)
 - **Blockiert von:** OP-124
 - **Lern-Hook:** OP-160 (Debugger → Memory)
-
 
 ### OP-129: Memory-Destillation + Promotion (scope-aware)
 
@@ -556,7 +544,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - Test: Mock-Audit-Events → korrekte Aggregation.
 - **Tests:** `tests/test_stats_api.py` (neu)
 - **Blockiert von:** —
-
 
 ### OP-136b: State-Drift-Tool (state_drift.py) + verify-Stage
 
@@ -965,6 +952,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-05 | OP-164 | done | Reviewer versteht Rename-Aufgaben (2dde8cd)
 - 2026-11-05 | OP-135a | done | State-Contract-Design: Dataclasses + Registry + Property-Views (35c2aa3)
 - 2026-11-04 | OP-134 | done | State-Inventur — Tool + Doku (7177f16)
 - 2026-11-04 | OP-146 | done | Stale Blocker-Referenzen bereinigt (11 OPs, 18 Refs); OP-113a angelegt (Work-Commit 44b4350)
@@ -995,7 +983,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-02 | OP-069 | Delete-Zone-Sektion anlegen — Commit 6fa1d74 + Fix ebe8049
 - 2026-11-03 | OP-045 | docs/WORKFLOW.md geloescht (nicht mehr gepflegt, nicht in DOC_CONVENTIONS §2 Pflicht)- 2026-11-03 | OP-008 | obsolete (pipeline.py geloescht) — Commit 07a4de6
 - 2026-11-03 | OP-009 | obsolete (python3 -m werkstatt.loop funktioniert (CLI seit Monaten aktiv)) — Commit n/a
-
 
 ### OP-160: Debugger-Lern-Loop — Debugger-Fixes ins Erfahrungs-Gehirn
 
@@ -1098,34 +1085,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - **Tests:** `tests/test_loop_task_dependencies.py` (neu)
 - **Blockiert von:** —
 
-### OP-164: Reviewer versteht Rename-Aufgaben
-
-- **Status:** open
-- **Typ:** architektur (Reviewer-Haertung)
-- **Betroffen:** `werkstatt/reviewer.py` (`REVIEWER_SYSTEM`)
-- **Problem:** `reviewer.py:98-100` sagt: "Wenn eine `-`-Zeile eine
-  bestehende Zuweisung/Funktion entfernt: HIGH — 'Bestehende
-  Zuweisung/Funktion X entfernt.'" Bei Rename-Aufgaben ist das die
-  Aufgabe selbst. Live-Beleg 2026-11-05 (Loop-Test-3): t3
-  builder.py sollte `auftrag_bereits_erfuellt` auf
-  `auftrag_bereits_erfuellt_bestaetigt` umbenennen. Reviewer meldete
-  3x HIGH "Bestehende Zuweisung entfernt", 5 Reflection-Runden,
-  human_review. Der Builder hatte korrekt gearbeitet (siehe
-  loop-test-3-partial: 4 audit-Strings + 2 neue Zuweisungen,
-  0 lebende Attribut-Zugriffe auf den Ghost).
-- **Akzeptanzkriterien:**
-  - `REVIEWER_SYSTEM`: `-`-Zeile bei Rename-Aufgabe ist nur dann
-    HIGH, wenn die neue Zuweisung im **selben Hunk** nicht erscheint.
-    Alte Zeile weg + neue Zeile da (im selben Diff-Hunk) = OK.
-  - Reviewer-Prompt bekommt Kontext: Task-Text. Wenn Task
-    "umbenennen"/"rename"/"ersetzen durch" enthaelt: Rename-Erkennung
-    greift, `-`+`+`-Paar im selben Hunk = OK.
-  - Tests: 3 Smoke-Tests — (a) Rename-OK (alte Zeile weg, neue da
-    im selben Hunk); (b) Rename-Fehler (alte weg, neue fehlt) → HIGH;
-    (c) normales Entfernen ohne Rename-Kontext → HIGH.
-- **Tests:** `tests/test_reviewer_rename.py` (neu)
-- **Blockiert von:** —
-
 ### OP-165: Contract-Verify pro Task (nicht erst am Ende)
 
 - **Status:** open
@@ -1168,7 +1127,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   Aufrufer migriert. `tests/test_gates.py` gruen.
 - **Blockiert von:** —
 
-
 ### OP-098: Phase 33.5 — pipeline_phases.py reduzieren
 
 - **Status:** open
@@ -1181,7 +1139,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   Phase ruft `run_phase`. Keine direkten `_verify_patches`-Aufrufe.
   Voller Loop-Durchlauf funktioniert.
 - **Blockiert von:** OP-096
-
 
 ### OP-101: Loop-Status-Inkonsistenz bei human_review-Tasks
 
@@ -1202,7 +1159,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   2 human_review-Tasks, Gate liefert `j` → `tasks_ok == total`.
 - **Tests:** `tests/test_pipeline_phases.py` (neu).
 - **Blockiert von:** -
-
 
 ### OP-105: reflection.py → Deprecation-Proxy
 
@@ -1323,7 +1279,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - **Tests:** `tests/test_reflection.py` — 2 Tests (Antipattern-Warnung
   im Prompt, Skill-Matching bei ImportError).
 - **Blockiert von:** —
-
 
 ### OP-113i: Log-Backfill — DB aus 30k Audit-Events vorfuellen
 

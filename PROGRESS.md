@@ -1758,3 +1758,45 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
   `tools/state_drift.py` — bleiben in OP-136b.
 - **Abnahme:** 1262 passed, 8 skipped; audit_drift OK;
   control_drift OK; state_inventory OK.
+
+## 2026-11-05 -- OP-164 abgeschlossen: Reviewer versteht Rename-Aufgaben
+
+- **Status:** done (Commit 2dde8cd)
+- **Dateien:** `werkstatt/reviewer.py`,
+  `tests/test_reviewer_rename.py` (neu)
+- **Problem:** `REVIEWER_SYSTEM` behandelte jede `-`-Zeile mit
+  bestehender Zuweisung/Funktion als HIGH-Bug. Bei Rename-Aufgaben
+  ist das die Aufgabe selbst. Loop-Test-3: t3 (builder.py) sollte
+  `auftrag_bereits_erfuellt` umbenennen, Reviewer meldete 3x HIGH
+  "Bestehende Zuweisung entfernt", 5 Reflection-Runden, human_review.
+- **Aenderung:**
+  - `REVIEWER_SYSTEM`: neuer Abschnitt "RENAME-AUSNAHME (2026-11-05,
+    OP-164)" direkt vor "## Severity-Level". `-`-Zeile mit altem
+    Namen ist OK, wenn im selben Diff-Hunk eine `+`-Zeile mit
+    anderem Identifier steht und die Task-Beschreibung Rename-Marker
+    ("umbenennen", "rename", "ersetzen durch") enthaelt.
+  - `_filter_rename_false_positives(bugs, diff, task_desc)`: neuer
+    deterministischer Post-Processor. Splittet Diff an
+    `^@@ `-Hunks, prueft fuer jeden HIGH-Bug mit
+    "Bestehende Zuweisung/Funktion X entfernt" ob im selben Hunk
+    eine `-`-Zeile mit `X` UND eine `+`-Zeile mit anderem Identifier
+    steht. Bei Match: severity -> medium, description erweitert um
+    "[OP-164: Rename erkannt, +-Zeile im Hunk]".
+  - `run_reviewer`: Aufruf nach JSON-Parse. `_rename_filtered =
+    _bugs_high_before - _bugs_high_after`, `approved` neu berechnet
+    wenn gefiltert und keine HIGH mehr uebrig.
+  - `reviewer_result`-Payload um `rename_filtered` erweitert
+    (additiv, kein neuer Audit-Kind, Katalog bleibt unveraendert).
+- **Tests (neu):**
+  - `test_rename_ok` — Rename-OK: `-alt +neu` im selben Hunk,
+    task_desc "umbenennen" -> medium, approved=True.
+  - `test_rename_fehler` — Rename-Fehler: `-alt` ohne `+neu` im
+    selben Hunk -> HIGH, approved=False.
+  - `test_kein_rename_kontext` — kein Rename-Marker in task_desc
+    -> HIGH bleibt HIGH.
+- **Nicht in OP-164:** semantische Multi-Hunk-Renames (nur
+  gleicher Hunk), nicht-Rename-Bugs mit "entfernt"-Wortlaut.
+  Bewusst eng gehalten.
+- **Abnahme:** 1274 passed, 8 skipped; audit_drift OK;
+  control_drift OK; state_inventory OK.
+
