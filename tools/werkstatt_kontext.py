@@ -139,6 +139,23 @@ KRITISCHE Regeln fuer Block-Bau:
   state_inventory, ruff auf geaenderten Files.
 - Loop niemals mit 'yes j | ...' oder --auto-approve starten.
 - Plan-Gate: <=5 Tasks, plausible Zieldateien -> j. Sonst n + Grund.
+- KEIN 'pytest | tail': $? ist tail-Exit, immer 0.
+  Richtig: pytest > /tmp/pt.log 2>&1; PT=$?
+- Anker mit '\\n'-Prefix bei variabler Einrueckung: sonst Substring-Match
+  (12-Space-Anker matcht 16-Space-Zeile als Substring).
+- Kein Heredoc in 'if/else'-Block: Shell haengt in '>'-Prompt.
+- Baseline-aware Gates: 'AFTER <= BEFORE' ist OK. Nur 'AFTER > BEFORE'
+  (Regress) blockt.
+
+DREI GATES, 'n' bedeutet unterschiedlich:
+
+  Plan-Gate        | n = Reflection mit Grund (1 Runde)
+  Reflection-Gate  | n = Task fail, LOOP LAEUFT WEITER mit naechster Task
+  Commit-Gate      | n = LOOP BRICHT AB (Phase-Reject, kein Commit)
+
+Der User hat das in 5+ Sessions durch Beobachtung gelernt. Wenn du
+selbst einen Block baust: schreib bei jedem 'j/n/a'-Prompt dazu, was
+'n' fuer DIESEN Gate-Zustand bedeutet.
 
 Loop-Start (manuell vom User):
 
@@ -184,11 +201,40 @@ Die wichtigsten Regeln:
    - PROGRESS.md         — erledigt, append-only
    - docs/MERKPOSTEN.md  — Prozess-Lehren, nicht durchsuchbar
 
-7. NEUE ARTEFAKTE (2026-11-05, State-Contract-Welle):
+7. NEUE ARTEFAKTE (Stand 2026-11-05, Ende Session 3):
    - tools/state_inventory.py    — RunState-Inventur (read-only, --check)
-   - docs/STATE-INVENTUR.md      — 104 Felder, 25 Ghosts, 47 Tote
+   - docs/STATE-INVENTUR.md      — 104 Felder, 23 Ghosts, 47 Tote (OP-135b)
    - docs/STATE-CONTRACTS.md     — 5 Dataclasses, 5 Vertraege
    - werkstatt/state_contracts.py — Property-Views, validate_transition
+   - werkstatt/rollen.py         — Rollen-Registry (7 Rollen, fail-closed)
+   - docs/adr/                   — 14 ADRs, u.a. ADR-0013 (Layer),
+                                    ADR-0014 (Rollen-Registry)
+
+8. ROLLEN-REGISTRY (2026-11-05, ADR-0014):
+   werkstatt/rollen.py ist Single Source of Truth fuer Skills,
+   System-Prompts, Tools pro Rolle. Zentrale Regel: Rolle ohne
+   skills + ohne skill_filter_rolle = KEINE Skills (fail-closed).
+   M-446: Architect darf keine Skills haben (plan-crafting enthaelt
+   '## Tools', triggert CoT bei deepseek-reasoner, liefert DSML).
+
+9. GATE-EXIT-CODES EXPLIZIT (2026-11-05):
+   Jeder Gate-Schritt muss explizit sys.exit(1) oder raise
+   SystemExit(1) bei Fehler haben. 'python3 -c "..."' ohne
+   sys.exit gibt immer 0. 'pytest | tail' gibt tail-Exit (0).
+   'if AFTER == BEFORE' blockt Fortschritt (Baseline sinkt).
+
+10. ARCHITEKTUR-DOKU IST WAHRHEIT (2026-11-05):
+    Wenn Code und docs/ARCHITECTURE.md sich widersprechen, folgt
+    der Code der Doku. Jeder Fix, der einen konkreten Fehler
+    verhindert (M-446, K51, K52, ...), bekommt einen Test, der
+    das ALTE Verhalten verbietet — nicht nur einen, der das neue
+    Verhalten prueft. Ohne Test kehrt der Bug zurueck.
+
+11. TEST-CONTRACT BEI VERHALTENS-AENDERUNG (2026-11-05):
+    Vor jedem Patch, der eine Verhaltens-Aenderung durchfuehrt:
+    'grep -rn '<alter_wert>' tests/'. Wenn ein Test das alte
+    Verhalten prueft, im selben Patch-Block umstellen. Sonst
+    ist der Pre-Commit rot ohne Kontext (PT>0, Ursache unklar).
 """
 
 
@@ -313,6 +359,14 @@ Du bist ein neuer Chat, der gerade den obigen Kontext-Block bekommt.
 DEINE ERSTE AUFGABE:
 
   1. Lies alle Abschnitte 1-7.
+  1b. Lies docs/MERKPOSTEN.md — mindestens die letzten 10 Sektionen.
+      Prozess-Lehren aus OP-134..165, u.a.: Gate-Exit-Codes,
+      CoT-Trigger (Self-Check-Block auf Reasoning-Modellen),
+      Anker mit \\n-Prefix, Heredoc in if/else, Test-Contract,
+      Doku-ist-Wahrheit.
+  1c. Lies docs/adr/README.md — 14 Architecture Decision Records.
+      Besonders ADR-0013 (Layer-Architektur) + ADR-0014
+      (Rollen-Registry) fuer das aktuelle Weltbild.
   2. Frage den User EINE Frage: 'Was ist die Session-Aufgabe?'
      Optionen (aus Abschnitt 7 ableitbar):
        - Naechster freier OP
@@ -323,6 +377,17 @@ DEINE ERSTE AUFGABE:
        - KEIN Code, KEINE Aenderung, keine Datei anfassen.
        - Erst messen, dann designen, dann fixen.
   4. Bei Unklarheit: User fragen. Nicht raten.
+
+DIE 4 HAEUFIGSTEN FEHLER DER LETZTEN SESSIONS (2026-11-05):
+
+1. 'pytest | tail' -> Exit-Code von tail, nicht pytest. 3x passiert
+   in einer Session. Nutze 'pytest > /tmp/pt.log 2>&1; PT=$?'.
+2. Anker ohne '\\n'-Prefix -> Substring-Match bei variabler
+   Einrueckung (12-Space matcht 16-Space).
+3. Architektur-Doku ignorieren -> M-446-Regress: Architect lud
+   plan-crafting (mit '## Tools'), deepseek-reasoner lieferte DSML.
+4. Tests bei Verhaltens-Aenderung nicht nachziehen -> PT>0 nach
+   Commit. Immer 'grep tests/' vor dem Patch.
 
 WICHTIG:
 - Du hast KEINEN direkten Shell-/Datei-Zugriff.
