@@ -573,27 +573,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   Feld-Pfade).
 - **Blockiert von:** —
 
-### OP-142: `web/routes/` Submodul-Split
-
-- **Status:** open
-- **Typ:** architektur (Split)
-- **Betroffen:** `werkstatt/web/routes/` (neu), `werkstatt/web/app.py`
-- **Problem:** `web/app.py` enthaelt alle Routen + Middleware + 6
-  Submodul-Imports (`audit_panel`, `auth`, `chat`, `shell`,
-  `terminal_proxy`, `ws`). `shell.py` und `terminal_proxy.py`
-  ueberschneiden sich. Siehe ADR-0012 Muster 4.
-- **Akzeptanzkriterien:**
-  - Neue Struktur `web/routes/`: `projekte.py`, `runs.py`,
-    `events.py`, `gates.py`, `chat.py`.
-  - `web/app.py` < 100 Zeilen (Komposition).
-  - `shell.py` und `terminal_proxy.py` konsolidiert zu
-    `web/terminal.py`.
-  - Routen-Split so, dass `web/routes/events.py` den OP-122-Endpoint
-    enthaelt.
-- **Tests:** `tests/test_web_routes.py` (neu, pro Route-Submodul
-  ein Smoke-Test).
-- **Blockiert von:** —
-
 ### OP-143: `cli/` + Re-Export-Bereinigung
 
 - **Status:** open
@@ -963,6 +942,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-05 | OP-142 | superseded | verworfen: shell.py und terminal_proxy.py machen fundamental verschiedene Dinge (PTY-Ausfuehrung vs. Log-Tailing); 17 identische Code-Zeilen sind Boilerplate (Imports, websocket.accept, except-Klauseln). 5 routes/-Wrapper haetten existierende Module gewrappt statt Duplikate aufzuloesen. Details in PROGRESS.md.
 - 2026-11-05 | OP-140 | done | roles/builder/-Split in 5 Submodule (ast, prompt, validate, patch, run) + _common; builder.py als sys.modules-Alias (6334d80)
 - 2026-11-05 | OP-139 | done | phases/-Split: _common + 5 Phasen-Submodule; pipeline_phases.py als sys.modules-Alias (d41233f)
 - 2026-11-05 | OP-138 | done | render/-Split in 7 Module (tee, rich, emit, spinner, progress, tasks, plan); loop_renderer.py als sys.modules-Alias (b6f75db)

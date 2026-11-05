@@ -2242,3 +2242,59 @@ nutzen, ohne den ganzen Builder zu ziehen.
 - OP-141 (`state/`-Split) und OP-142 (`web/routes/`) frei.
 - OP-143 (`cli/` + Re-Export-Bereinigung): drei Aliase aufzuloesen
   (loop_renderer.py, pipeline_phases.py, builder.py).
+
+
+### 2026-11-05 — OP-142: verworfen (kein Duplikationsbedarf)
+
+**OP-Text forderte:** `web/routes/` Submodul-Split (projekte, runs,
+events, gates, chat), `app.py` < 100 Zeilen, `shell.py` +
+`terminal_proxy.py` zu `web/terminal.py` konsolidieren.
+
+**Messung ergab:**
+
+1. **`shell.py` und `terminal_proxy.py` sind keine Duplikate.**
+   - `shell.py` (355 Z.): PTY-Session via `subprocess` + `pty`,
+     `@router.websocket("/ws/shell")`, `PTYSession`-Klasse.
+   - `terminal_proxy.py` (367 Z.): Log-Tailing (`audit-logs/`,
+     `render-logs/`), `@router.websocket("/ws/terminal/{project}")`,
+     `_tail_poll_queue`/`_tail_poll_render_log`.
+   - **Top-Level-Schnittmenge:** nur `__all__` und `router`
+     (Standard-Boilerplate).
+   - **Zeilen-Schnittmenge:** 17 Zeilen — davon 6 Imports, 4
+     triviale Returns, 3 Except-Klauseln, `await websocket.accept()`,
+     `await websocket.close()`, `from __future__`. **Null
+     fachliche Duplikation.**
+
+2. **`app.py` (200 Zeilen) hat keine Routen-Dekoratoren im
+   Top-Level.** Routen kommen über `module.register(app)` bzw.
+   `app.include_router(module.router)`. Die 3 inline `@app.post`
+   in `create_app()` (project_state/start/stop, ~30 Zeilen)
+   koennten ausgelagert werden — spart 30 Zeilen auf Kosten
+   einer weiteren Datei. Kein echter Strukturgewinn.
+
+3. **5 neue `routes/`-Wrapper waeren Anti-Pattern.** `routes/chat.py`
+   wuerde `chat.py` re-exportieren, `routes/events.py` wuerde
+   `audit_panel.py` re-exportieren. Mehr Nesting, keine
+   Klarheit. Widerspricht dem eigentlichen Ziel
+   "Wiring klarer zu debuggen".
+
+**Entscheidung:** OP verworfen. `shell.py` und `terminal_proxy.py`
+bleiben getrennt — sie loesen verschiedene Probleme. Keine
+`routes/`-Wrapper. `app.py` bleibt ~200 Zeilen (Komposition,
+keine Routen).
+
+**Delete-Zone-Status:** superseded (durch Messung widerlegt).
+
+**Was der nächste Chat stattdessen angehen sollte:**
+- OP-143 (`cli/` + 3 sys.modules-Aliase aufloesen:
+  loop_renderer.py, pipeline_phases.py, builder.py) — echte
+  Struktur-Verbesserung
+- OP-144 (import-linter als Post-Build-Stage) — echte
+  Struktur-Verbesserung
+- OP-141-Modul-Split (state/) — nach OP-141-Vorarbeit jetzt
+  ehrlich machbar (~2-3h)
+
+Baseline unveraendert: 1271 passed, 8 skipped; ruff 197.
+Kein Code geaendert, nur STATUS.md + PROGRESS.md.
+
+OP: OP-142 (verworfen)
