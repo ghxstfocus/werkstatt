@@ -261,6 +261,23 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
         if not content:
             reasoning = msg.get("reasoning_content", "") or ""
             if reasoning:
+                # 2026-11-05: Fail-loud statt Fallback.
+                # Wenn content leer ist und reasoning_content da ist,
+                # hat das Modell sein Token-Budget mit CoT aufgebraucht.
+                # Das Denkprotokoll als "Antwort" zu akzeptieren macht
+                # den gesamten Loop kaputt (Denkprotokoll an Planner-
+                # Split -> Kollaps). Lieber klar abbrechen.
+                return LLMReply(
+                    ok=False,
+                    content="",
+                    error=(
+                        f"leerer content, reasoning_content vorhanden "
+                        f"({len(reasoning)} Zeichen). Modell hat Budget "
+                        f"mit CoT aufgebraucht. Pruefe max_tokens / "
+                        f"CoT-Trigger im Prompt."
+                    ),
+                )
+            if reasoning:
                 # Letzte Zeilen des Reasonings als Antwort.
                 content = reasoning
         if not content:

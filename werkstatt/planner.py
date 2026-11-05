@@ -1737,10 +1737,13 @@ def run_planner(state: RunState) -> bool:
                   {"grund": "betroffene_stellen leer oder multi-file"},
                   pd, pn)
 
-    # Prototyp v2: Selbst-Check als letzter Block, nur in v2.
-    if _os_proto.environ.get("WERKSTATT_ARCHITECT_PROMPT") != "v1":
-        from werkstatt.architect import _build_selbst_check_block
-        user_content += "\n\n" + _build_selbst_check_block()
+    # 2026-11-05: Selbst-Check-Block ENTFERNT.
+    # Regress: deepseek-reasoner interpretiert "pruefe vor dem Senden"
+    # als CoT-Trigger, verbraucht max_tokens=16000 mit Reasoning und
+    # liefert leeren content. Der Fallback in _ask_llm_impl hat dann
+    # reasoning_content als Prosa akzeptiert -> Denkprotokoll an
+    # Planner-Split -> Kollaps. _build_selbst_check_block existiert
+    # weiter, wird aber nicht mehr in den Prompt eingehaengt.
 
     # CALL 1: Architect (Fix AZ Stufe 10: ausgelagert nach architect.py)
     if not run_architect(state, aufgabe, user_content, api_key, _explorer_ctx):

@@ -132,12 +132,16 @@ def test_ohne_state_kein_crash(tmp_path):
     assert r.ok is True
 
 
-def test_reasoning_content_fallback(tmp_path):
+def test_reasoning_content_fail_loud(tmp_path):
+    """2026-11-05: Leerer content + reasoning_content vorhanden
+    -> ok=False (Fail-loud). Vorher wurde reasoning als content
+    akzeptiert, was das Denkprotokoll an den Planner-Split gab."""
     with patch("werkstatt.agent.requests.post",
                return_value=_ok_response("", reasoning="denk-tokens")):
         r = _call(_state(tmp_path))
-    assert r.ok is True
-    assert r.content == "denk-tokens"
+    assert r.ok is False
+    assert "leerer content" in (r.error or "")
+    assert "reasoning_content" in (r.error or "")
 
 
 # ---------------------------------------------------------------------
