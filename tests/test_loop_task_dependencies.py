@@ -21,11 +21,11 @@ def test_task_mit_unerfuellten_deps_wird_skipped(tmp_path):
     }
     assert ps.get_next_task() is None
 
-    _t1 = [t for t in ps.data["tasks"] if t["id"] == "t1"][0]
+    _t1 = next(t for t in ps.data["tasks"] if t["id"] == "t1")
     assert ps._unmet_dependencies(_t1) == ["t2"]
 
     ps.mark_blocked("t1", grund="deps:t2")
-    _t1 = [t for t in ps.data["tasks"] if t["id"] == "t1"][0]
+    _t1 = next(t for t in ps.data["tasks"] if t["id"] == "t1")
     assert _t1["status"] == "blocked"
     assert _t1["failure"].startswith("blocked:")
 

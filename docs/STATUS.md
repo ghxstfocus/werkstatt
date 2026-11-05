@@ -952,6 +952,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-05 | OP-163 | done | Planner-Dependencies als Pflichtfeld durchgesetzt (9797b31)
 - 2026-11-05 | OP-164 | done | Reviewer versteht Rename-Aufgaben (2dde8cd)
 - 2026-11-05 | OP-135a | done | State-Contract-Design: Dataclasses + Registry + Property-Views (35c2aa3)
 - 2026-11-04 | OP-134 | done | State-Inventur — Tool + Doku (7177f16)
@@ -1055,35 +1056,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   `tests/test_reflection_memory_inject.py` (neu)
 - **Blockiert von:** OP-128 (Ladder + strukturierter Fix-Output),
   OP-113a (scope-Spalte), OP-129 (Destillation)
-
-### OP-163: Planner-Dependencies als Pflichtfeld (Loop-Durchsetzung)
-
-- **Status:** open
-- **Typ:** architektur (Planner + Loop)
-- **Betroffen:** `werkstatt/planner.py` (`PLANNER_SPLIT_SYSTEM`),
-  `werkstatt/pipeline_phases.py` (`_phase_tasks_loop`)
-- **Problem:** Planner-Split kennt `dependencies` als Feld, aber der
-  Prompt sagt nicht WANN gesetzt. Der Loop prueft `dependencies`
-  nicht durch — Tasks laufen auch wenn Vorgaenger nicht fertig sind.
-  Live-Beleg 2026-11-05 (Loop-Test-3): t6 (state_inventory Baseline
-  23->22) startete, obwohl t3 (builder.py) mit human_review endete
-  — der Check konnte nie gruen sein. 5 Reflection-Runden, dann
-  Erschoepfung.
-- **Akzeptanzkriterien:**
-  - `PLANNER_SPLIT_SYSTEM`: explizite Regel — Konsequenz-Tasks
-    (Baseline senken, Doku die Endzustand prueft, Cross-Role-Tests)
-    MUESSEN `dependencies` auf alle Tasks setzen, die den
-    Vorbedingungs-Zustand aendern.
-  - `_phase_tasks_loop` prueft vor jedem Task: `dependencies`
-    erfuellt (status == "done")? Wenn nicht: Task als `blockiert`
-    markieren, Loop laeuft weiter mit naechster unabhaengigen Task.
-  - Wenn am Ende Tasks `blockiert` sind (nicht `failed`):
-    Human-Gate zeigt klaren Status, keine Reflection-Versuche.
-  - Tests: 2 Smoke-Tests — (a) Task mit unerfuellten Deps wird
-    skipped und als blockiert markiert; (b) Task nach erfuellter
-    Dep laeuft normal.
-- **Tests:** `tests/test_loop_task_dependencies.py` (neu)
-- **Blockiert von:** —
 
 ### OP-165: Contract-Verify pro Task (nicht erst am Ende)
 

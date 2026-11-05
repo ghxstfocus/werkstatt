@@ -1800,3 +1800,50 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - **Abnahme:** 1274 passed, 8 skipped; audit_drift OK;
   control_drift OK; state_inventory OK.
 
+
+## 2026-11-05 -- OP-163 abgeschlossen: Planner-Dependencies durchgesetzt
+
+- **Status:** done (Commit 9797b31)
+- **Dateien:** `werkstatt/planner.py` (`PLANNER_SPLIT_SYSTEM`),
+  `werkstatt/phase_state.py` (`get_next_task`, `mark_blocked`,
+  `_unmet_dependencies`), `werkstatt/pipeline_phases.py`
+  (`_phase_tasks_loop` Loop-Ende), `werkstatt/audit.py` (Katalog),
+  `tests/test_loop_task_dependencies.py` (neu)
+- **Problem:** Planner-Split kannte `dependencies` als Feld, aber
+  der Prompt sagte nicht WANN setzen. Der Loop pruefte
+  `dependencies` nicht durch. Loop-Test-3: t6 (state_inventory
+  Baseline 23->22) startete, obwohl t3 (builder.py) mit
+  human_review endete. 5 Reflection-Runden, Erschoepfung.
+- **Aenderung:**
+  - `PLANNER_SPLIT_SYSTEM`: explizite Pflicht-Regel. Konsequenz-
+    Tasks (Baseline senken, Doku die Endzustand prueft, Cross-
+    Role-Tests, Ghost-Entfernung in mehreren Dateien) MUESSEN
+    `dependencies` auf alle Tasks setzen, die den Vorbedingungs-
+    Zustand aendern. Reine Datei-Tasks: leere Liste [].
+  - `PhaseState.get_next_task`: filtert Tasks mit unerfuellten
+    `dependencies` (status != "done") dynamisch raus. Pruefung
+    bei jedem Aufruf gegen den aktuellen `data["tasks"]`-Stand.
+  - `PhaseState.mark_blocked(task_id, grund)`: setzt status
+    "blocked" + failure "blocked: deps:<ids>".
+  - `PhaseState._unmet_dependencies(task)`: liefert Liste der
+    unerfuellten dependency-IDs (fehlend oder status != "done").
+  - `_phase_tasks_loop` Loop-Ende: wenn `get_next_task` None
+    liefert, alle verbliebenen `pending`-Tasks auf
+    unerfuellte Deps pruefen, `mark_blocked` + `audit` +
+    `save()`. Kein Reflection-Versuch, Loop laeuft weiter mit
+    naechster unabhaengigen Task.
+  - `audit.py`-Katalog: neuer Kind `loop_task_blocked`
+    (fehlte sonst -> audit_drift rot).
+- **Tests (neu):**
+  - `test_task_mit_unerfuellten_deps_wird_skipped` — t1 (pending,
+    dep=t2) + t2 (failed) -> get_next_task None, t1 blockiert.
+  - `test_task_nach_erfuellter_dep_laeuft` — t1 (pending, dep=t2)
+    + t2 (done) -> t1 wird ausgeliefert.
+- **Nicht in OP-163:** Human-Gate-Anpassung am Phase-Ende (User
+  sieht blocked-Tasks in der Task-Liste, kein separater Prompt
+  noetig). Kann nach Loop-Test-4 nachgezogen werden. Bestehende
+  implizite File-Dependency (`_pruefe_prior_failed_dependency`)
+  bleibt unveraendert — orthogonal zum neuen expliziten Feld.
+- **Abnahme:** 1276 passed, 8 skipped; audit_drift OK;
+  control_drift OK; state_inventory OK.
+
