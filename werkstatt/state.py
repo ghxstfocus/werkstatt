@@ -138,6 +138,10 @@ class RunState:
     planner_model: str = "deepseek-chat"
     planner_modus: str = "manual"
     scout_api_auszug: dict = field(default_factory=dict)
+    # OP-135b: Explorer-Dateiliste (key_files + findings + next_reads).
+    # Struktur identisch zu pipeline_phases.py:explorer_result.
+    explorer_context: dict = field(default_factory=dict)
+
     # M-WelleE (2026-11-02): strukturierte Explorer-Findings.
     # Fliesst in Architect- und Builder-Prompt. Format:
     # {"pytest_laufzeit_s": int, "ruff_befunde": list, ...}
@@ -328,6 +332,8 @@ class RunState:
     # `clear()` + `extend()`, am Rundenende `clear()`.
     tasks: list[dict[str, object]] = field(default_factory=list)
     akzeptanzkriterien: list = field(default_factory=list)
+    # OP-135b: Testliste aus PlannerOutput (Planer->Builder).
+    tests: list = field(default_factory=list)
     architect_prosa: str = ""
     builder_feedback: str = ""
     patches: list[dict[str, object]] = field(default_factory=list)
@@ -338,8 +344,7 @@ class RunState:
     @property
     def explorer_output(self):
         from werkstatt.state_contracts import ExplorerOutput
-        raw = getattr(self, "explorer_context", None) or {}
-        return ExplorerOutput.from_dict(raw)
+        return ExplorerOutput.from_dict(self.explorer_context or {})
 
     @property
     def explorer_diagnostics(self):
@@ -362,7 +367,7 @@ class RunState:
         from werkstatt.state_contracts import PlannerOutput
         return PlannerOutput(
             tasks=self.tasks or [],
-            tests=getattr(self, "tests", []) or [],
+            tests=self.tests or [],
             akzeptanzkriterien=self.akzeptanzkriterien or [],
         )
 

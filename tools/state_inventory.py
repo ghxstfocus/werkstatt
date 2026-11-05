@@ -42,17 +42,12 @@ STATE_NAMEN = {"state", "run_state", "_state"}
 # Baseline Stand 2026-11-04 (Session-Ende). --check failt bei Abweichung.
 # Anpassen NUR mit dokumentiertem Grund (OP-135/136).
 BASELINE_GEISTER = frozenset({
-    "_reflection_bug_sigs_vorher", "_reflection_diff_hash",
-    "aktuelle_task", "applied_count", "auftrag_bereits_erfuellt",
-    "auto_approve", "baseline_gruen", "explorer_context",
-    "explorer_pytest_laufzeit_s", "explorer_ruff_befunde",
-    "last_planner_info", "last_verify_errors", "last_verify_hart_stages",
-    "messungen_nach_apply", "phase_review_uebersprungen",
-    "progress_written_at_commit", "reflection_erschoepft",
-    "reflection_phase", "reviewer_deterministic_fail",
-    "reviewer_stagnation_false_positive", "scout_bereits_erfuellt",
+    "_reflection_bug_sigs_vorher", "_reflection_diff_hash", "aktuelle_task", "applied_count",
+    "auftrag_bereits_erfuellt", "auto_approve", "baseline_gruen", "explorer_pytest_laufzeit_s",
+    "explorer_ruff_befunde", "last_planner_info", "last_verify_errors", "last_verify_hart_stages",
+    "messungen_nach_apply", "phase_review_uebersprungen", "progress_written_at_commit", "reflection_erschoepft",
+    "reflection_phase", "reviewer_deterministic_fail", "reviewer_stagnation_false_positive", "scout_bereits_erfuellt",
     "spec_widerspruch_erkannt", "split_failure_grund", "tasks_ok_counter",
-    "tests",
 })
 BASELINE_TOTE = frozenset({
     "agent_docs", "anker_fehler_in_folge", "auflagen_log", "block_id",
@@ -137,9 +132,10 @@ def scanne_zugriffe() -> tuple[
                             ziel_knoten.add(id(inner))
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute) and _ist_state_var(node.value, modul):
-                if id(node) not in ziel_knoten:
-                    leser[node.attr].add(modul)
+            if (isinstance(node, ast.Attribute)
+                    and _ist_state_var(node.value, modul)
+                    and id(node) not in ziel_knoten):
+                leser[node.attr].add(modul)
 
         for node in ast.walk(tree):
             if (isinstance(node, ast.Call)

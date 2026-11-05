@@ -133,8 +133,6 @@ Auf `state.X` zugegriffen, nicht in `state.py` deklariert.
 dokumentieren." Hier sind 25.**
 
 **Explorer-Pfad (3):**
-`explorer_context`, `explorer_pytest_laufzeit_s`, `explorer_ruff_befunde`.
-`explorer_context` (Datei-Liste) ist der zentrale OP-137-Bug.
 
 **Reflection-Pfad (8):**
 `_reflection_bug_sigs_vorher`, `_reflection_diff_hash`,
