@@ -378,7 +378,7 @@ DEINE ERSTE AUFGABE:
        - Erst messen, dann designen, dann fixen.
   4. Bei Unklarheit: User fragen. Nicht raten.
 
-DIE 4 HAEUFIGSTEN FEHLER DER LETZTEN SESSIONS (2026-11-05):
+DIE 10 HAEUFIGSTEN FEHLER — SESSION 1-4 (2026-11-05):
 
 1. 'pytest | tail' -> Exit-Code von tail, nicht pytest. 3x passiert
    in einer Session. Nutze 'pytest > /tmp/pt.log 2>&1; PT=$?'.
@@ -388,6 +388,60 @@ DIE 4 HAEUFIGSTEN FEHLER DER LETZTEN SESSIONS (2026-11-05):
    plan-crafting (mit '## Tools'), deepseek-reasoner lieferte DSML.
 4. Tests bei Verhaltens-Aenderung nicht nachziehen -> PT>0 nach
    Commit. Immer 'grep tests/' vor dem Patch.
+
+FEHLER AUS SESSION 4 (Loop-Test 4-8, 2026-11-05):
+
+5. Teil-gelesene OP-Texte: 'block[:800]' zeigte nur die Haelfte
+   von OP-145 (1647 Bytes). Chat hat die Entscheidungspassage
+   nicht gesehen und 'Entscheidung: Umbenennung' HALLUZINIERT.
+   OP-Text sagte 'Alias, Umbenennung ODER Loeschung — Wahl offen'.
+   Konsequenz: Loop mit 'n' abgebrochen, Architect zu Unrecht
+   beschuldigt. REGEL: OP-Texte NIE mit 'block[:800]'. Immer
+   'print(block)' oder explizit mit Laengen-Warnung.
+
+6. 'n' ohne vollstaendigen Kontext: Der User verliert korrekt
+   geplante Patches. Vor JEDEM 'n': sicher sein, dass Aufgabe
+   und Akzeptanz den Reject rechtfertigen. Sonst 'j' oder
+   pause + MESS-BLOCK.
+
+7. 'input()' in einer Loop-Funktion bricht pytest:
+   pytest's DontReadFromInput wirft OSError statt EOFError.
+   6 Tests rot bei OP-168, weil input() in _phase_review_gate.
+   FIX: 'sys.stdin.isatty()'-Guard AM ANFANG der Funktion.
+   Kein input() bei non-TTY. Return 1 (fail-closed).
+
+8. max_tokens-Diagnose mit 1 Datenpunkt: Loop-Test-6 failte
+   mit leerer content (55706 Zeichen Reasoning). Erste
+   Hypothese: '16000 reichen nicht.' Fakt: 1 von 6
+   Architect-Calls heute, 0 von 5 gestern. 2. Messung:
+   deepseek-reasoner hat Reasoning+Content im SELBEN max_tokens
+   (seit V3.1 nicht mehr getrennt). 32000 = Default.
+   REGEL: Bei 'X reicht nicht'-Hypothese Haeufigkeit + Modell-
+   Kontext messen, nicht raten.
+
+9. Fehlender 'tasks_ok += 1' in 2 von 7 Erfolgs-Pfaden:
+   '_task_ende(ok=True)' wird an 7 Stellen gerufen. 2 hatten
+   den Counter nicht (Z. 1051 Reflection-OK, Z. 1302
+   Reflection-Erschoepft-Gate-approve). Footer zeigte
+   '0/8 · 8 failed' statt 2 done + 1 failed + 1 human_review
+   + 4 blocked. FIX: AST-Guard-Test
+   'tests/test_task_ok_counter_guard.py' prueft, dass jeder
+   '_task_ende(ok=True)' in den 10 Zeilen davor
+   'tasks_ok += 1' oder 'tasks_ok_counter =' hat.
+
+10. Duplikations-Patch in werkstatt_kontext.py (dieses Skript):
+    Eine fruehere Session hat den 1b/1c-Block und die
+    4-Fehler-Liste doppelt eingefuegt. Wurde via 'git stash'
+    geparkt (stash@{0}). REGEL: Vor Patch auf DIESES Skript
+    'git stash list' pruefen. Stash NICHT poppen — er enthaelt
+    die alte Duplikation.
+
+WORAN MAN MERKT, DASS EIN CHAT HALLUZINIERT:
+- Behauptung 'X sagt woertlich Y' ohne Beleg-Zeile darunter.
+- Die Beleg-Zeile existiert im vorherigen Paste nicht.
+- Konsequenz: bei 'woertlich'-Zitaten IMMER die Beleg-Zeile
+  direkt aus dem Paste nachreichen. Wenn nicht vorhanden:
+  Behauptung zurueckziehen, erneut messen.
 
 WICHTIG:
 - Du hast KEINEN direkten Shell-/Datei-Zugriff.
