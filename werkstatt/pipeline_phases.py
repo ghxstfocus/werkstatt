@@ -166,6 +166,34 @@ def run_explorer(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
+# ─── OP-136a: Contract-Validierung ───
+
+def _validate_contract_safe(
+    von: str, zu: str, state, pd, pn,
+) -> bool:
+    """OP-136a: Contract-Validierung mit Audit-Fallback.
+
+    Ruft state_contracts.validate_transition. Bei ContractViolation:
+    schreibt audit("state_contract_violation") und liefert False
+    (fail-loud, der Aufrufer entscheidet ueber den Loop-Abbruch).
+
+    Unbekannte Uebergaenge (nicht in TRANSITIONS) sind Noop -> True.
+    """
+    from werkstatt.state_contracts import ContractViolation, validate_transition
+    try:
+        validate_transition(von, zu, state)
+        return True
+    except ContractViolation as _cv:
+        _transition = getattr(_cv, "transition", f"{von}->{zu}")
+        _felder = getattr(_cv, "felder", [str(_cv)[:200]])
+        audit(
+            "state_contract_violation",
+            {"transition": _transition, "felder": list(_felder)},
+            pd, pn,
+        )
+        return False
+
+
 def run_planner(*args, **kwargs):
     """Late-Binding-Proxy fuer werkstatt.loop.run_planner."""
     from werkstatt.loop import run_planner as _orig
@@ -362,6 +390,18 @@ def _phase_explorer_and_setup(
         audit("loop_explorer_leer", {}, pd, pn)
     group_end()
 
+    # OP-136a: Contract-Validierung explorer->scout.
+    # Nur wenn der Loop tatsaechlich plant (kein Resume, kein
+    # "bereits erfuellt"). Sonst laeuft er mit vorbelegten Tasks
+    # (Test-Mocks, Resume) weiter.
+    _skip_explorer_check = (
+        bool(getattr(state, "tasks", None))
+        or getattr(state, "auftrag_bereits_erfuellt", False)
+    )
+    if not _skip_explorer_check:
+        if not _validate_contract_safe("explorer", "scout", state, pd, pn):
+            return 1, phase_state
+
     # FIX AN 2026-10-31: Schreibrechte-Preflight fuer Task-Dateien.
     # Live-Beleg 2026-10-31 10:31 t2: git restore als root machte
     # core/config.py root:root, Loop (security-ai) konnte nicht
@@ -491,6 +531,14 @@ def _phase_plan_and_preflight(
         if not run_planner(state):
             audit("loop_planner_failed", {}, pd, pn)
             return 1, False
+
+        # OP-136a: Contract-Validierung planner->builder.
+        # Nullfall "bereits erfuellt" erlaubt leere Tasks — kein Fail.
+        if (not getattr(state, "auftrag_bereits_erfuellt", False)
+                and getattr(state, "tasks", None)):
+            if not _validate_contract_safe(
+                    "planner", "builder", state, pd, pn):
+                return 1, False
 
         # GOLD 2026-10-30: Scout kann bereits_erfuellt melden.
         # Dann ist der Plan leer (Tasks = []), und der Plan-Gate

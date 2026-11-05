@@ -14,7 +14,7 @@ from werkstatt.state import RunState
 from werkstatt.verify import _stage_anzahl, _stage_count_by_phase, _stage_ids
 
 
-def _state(tmp_path, tasks=True, tests=True, akz=True):
+def _state(tmp_path, tasks=True, tests=True, akz=True, explorer_ctx=None):
     st = RunState(
         block_id="t", aufgabe="a", start_ts="",
         docs={}, agents={}, always={}, optional={},
@@ -24,6 +24,17 @@ def _state(tmp_path, tasks=True, tests=True, akz=True):
     st.tasks = ["Task 1"] if tasks else []
     st.tests = ["Test 1"] if tests else []
     st.akzeptanzkriterien = ["Kriterium 1"] if akz else []
+    # OP-136a: explorer_context muss gefuellt sein, damit der
+    # Contract-Check nicht vorzeitig abbricht. Tests, die den
+    # Explorer-Fail pruefen wollen, uebergeben explorer_ctx={}.
+    if explorer_ctx is None:
+        st.explorer_context = {
+            "findings": "test",
+            "key_files": [{"file": "test.py"}],
+            "next_reads": ["test.py"],
+        }
+    else:
+        st.explorer_context = explorer_ctx
     return st
 
 
