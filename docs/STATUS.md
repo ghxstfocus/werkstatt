@@ -545,32 +545,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_stats_api.py` (neu)
 - **Blockiert von:** —
 
-### OP-139: `phases/` Submodul-Split (pipeline_phases.py zerlegen)
-
-- **Status:** open
-- **Typ:** architektur (Split)
-- **Betroffen:** `werkstatt/phases/` (neu), `werkstatt/pipeline_phases.py`
-- **Problem:** `pipeline_phases.py` (1600 Zeilen) mischt
-  Phase-Orchestrierung, Re-Export-Proxies, `_with_spinner`-Proxy,
-  `run_reviewer`-Proxy. Siehe ADR-0012 Muster 1+2.
-- **Akzeptanzkriterien:**
-  - Neue Struktur `werkstatt/phases/`: `__init__.py`
-    (`run_pipeline_loop`-Komposition), `explorer.py`
-    (`_phase_explorer_and_setup`), `plan.py`
-    (`_phase_plan_and_preflight`), `tasks.py` (`_phase_tasks_loop`),
-    `finalize.py` (`_phase_finalize`).
-  - `pipeline_phases.py` wird zur Deprecation-Proxy-Datei.
-  - Keine Datei in `phases/` importiert eine andere aus `phases/`
-    zirkulaer — nur in `__init__.py`.
-  - Re-Export-Proxies (`run_explorer`, `_with_spinner`,
-    `run_reviewer`) werden entfernt, Aufrufer importieren direkt
-    aus `werkstatt.roles.*`.
-  - `pipeline_phases.py` < 100 Zeilen (Proxy).
-  - OP-098 (`pipeline_phases < 400 Zeilen`) ist damit erledigt.
-- **Tests:** `tests/test_pipeline_phases.py` (neu, falls nicht
-  vorhanden), bestehende `test_loop*.py` bleiben gruen.
-- **Blockiert von:** —
-
 ### OP-140: `builder/` Submodul-Split (AST isolieren)
 
 - **Status:** open
@@ -668,9 +642,8 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     Betroffen: alle `test_loop*.py`, `test_gates.py`,
     `test_audit.py`.
   - Re-Export-Proxies in `pipeline_phases.py` entfallen
-    (Voraussetzung: OP-139).
 - **Tests:** `tests/test_cli.py` (neu).
-- **Blockiert von:** OP-139
+- **Blockiert von:** —
 
 ### OP-144: `import-linter` als Post-Build-Stage
 
@@ -695,7 +668,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - `.werkstatt/verify.json` bekommt neue Stage:
     `"import_drift": {"cmd": "python3 tools/import_drift.py --check",
     "hart": true}`.
-  - Whitelist wird pro Split-OP (OP-139..143) um die jeweiligen
+  - Whitelist wird pro Split-OP (OP-140..143) um die jeweiligen
     Verletzungen reduziert. Ziel: leere Whitelist nach OP-143.
 - **Tests:** `tests/test_import_drift.py` (Smoke).
 - **Blockiert von:** -
@@ -1017,6 +990,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-05 | OP-139 | done | phases/-Split: _common + 5 Phasen-Submodule; pipeline_phases.py als sys.modules-Alias (d41233f)
 - 2026-11-05 | OP-138 | done | render/-Split in 7 Module (tee, rich, emit, spinner, progress, tasks, plan); loop_renderer.py als sys.modules-Alias (b6f75db)
 - 2026-11-05 | OP-136b | done | state_drift.py + 3 Registry-Checks + 2 validate_transition-Aufrufe + verify-Stage hart (bfd38e9)
 - 2026-11-05 | OP-167 | done | tasks_ok_counter in 2 Erfolgs-Pfaden + AST-Guard-Test (a3a538b)

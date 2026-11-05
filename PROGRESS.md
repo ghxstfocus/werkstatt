@@ -2097,3 +2097,77 @@ Der Alias haelt sie funktional. Migration gehoert in **OP-143**
 - Close-Commit folgt.
 
 - OP-139 (`phases/`-Split) und OP-140 (`builder/`-Split) frei.
+
+
+### 2026-11-05 — OP-139: phases/-Split (pipeline_phases.py)
+
+**Neue Struktur:**
+- werkstatt/phases/_common.py    (262 Z.) 24 Lazy-Stubs auf
+                                  werkstatt.loop.* + 6 Helper
+- werkstatt/phases/explorer.py   (240 Z.) _phase_explorer_and_setup
+- werkstatt/phases/plan.py       (327 Z.) _phase_plan_and_preflight
+- werkstatt/phases/tasks.py      (846 Z.) _phase_tasks_loop
+- werkstatt/phases/review.py     ( 82 Z.) _phase_review_gate
+- werkstatt/phases/finalize.py   (169 Z.) _phase_finalize
+- werkstatt/phases/__init__.py   ( 59 Z.) Fassade mit Re-Exports
+                                  + Modul-Refs (_explorer_mod, ...)
+- werkstatt/pipeline_phases.py   ( 22 Z.) sys.modules-Alias
+
+**Phasen (Commits):**
+- 750f681 Phase 1: Modul-Umzug (byte-identisch + Alias)
+- d0d18cc Phase 2a: _common.py (Stubs + Helper zentral)
+- d41233f Phase 2b: 5 Phasen-Submodule
+
+**Ehrliche Abweichungen vom OP-Text:**
+
+1. **`pipeline_phases.py` = `sys.modules`-Alias, nicht `from phases import *`:**
+   Analog zu OP-138. Tests patchen Modul-Attribute
+   (patch.object(pp, ...)) und erwarten, dass bare Namen im Body
+   mitgepatcht werden. Alias macht beide Modul-Namen zum selben
+   Objekt. Aufloesung in OP-143 (Re-Export-Bereinigung).
+
+2. **`tasks.py` = 846 Zeilen (OP forderte implizit <200 wie OP-138):**
+   _phase_tasks_loop ist 803 Zeilen — nicht aufteilbar ohne
+   Verhaltensaenderung. Aufteilung waere ein eigener Folge-OP
+   (Refactor innerhalb der Phase). Aktuell 1 Funktion = 1 Datei.
+
+3. **3 AST-Guard-Tests muessen angepasst werden:**
+   test_loop_task_fail_continue.py (2x),
+   test_loop_reflection_no_apply.py (1x),
+   test_loop_reviewer_deterministic.py (1x).
+   Path(_pp.__file__).read_text() ->
+   "\n".join(Path(m.__file__).read_text() for m in
+   [_pp._explorer_mod, _pp._plan_mod, _pp._tasks_mod,
+    _pp._review_mod, _pp._finalize_mod])
+   Grund: OP-Text forderte 'bestehende test_loop*.py bleiben gruen
+   ohne Aenderung'. Stale — die Tests scannen raw-Quelltext und
+   muessen nach Datei-Split alle Phasen-Dateien durchsuchen.
+   Marker (z.B. failure='reviewer_*' in tasks, pre_build-verify
+   in plan) verteilen sich.
+
+4. **Fassade exportiert Modul-Refs `_explorer_mod` etc.:**
+   Nicht im OP-Text, aber fuer AST-Guard-Tests notwendig.
+   Sauberer als 5x `__code__.co_filename` in jedem Test.
+
+**Zirkularitaet geprueft:**
+- phases/_common.py importiert nicht phases/* (nur reviewer, state)
+- phases/{explorer,plan,tasks,review,finalize}.py importieren
+  ._common + werkstatt.{state,phase_state,antipattern,reviewer,
+  verify_classify,render}
+- finalize.py importiert .review (einzige Phasen-Kreuzabhaengigkeit)
+- phases/__init__.py importiert alle Phasen + ._common
+- Kein Zirkel beim Modul-Load.
+
+**Abnahme:**
+- 1305 passed, 5 skipped.
+- ruff . = 201 (2 unter Baseline 203 — durch Header-Extraktion
+  sind phase_state/RunState nicht mehr in der Fassade).
+- audit_drift OK, control_drift OK, state_inventory OK, state_drift OK.
+- Work-Commits: 750f681, d0d18cc, d41233f.
+- Close-Commit folgt.
+
+- OP-140 (`builder/`-Split), OP-142 (`web/routes/`), OP-144
+  (import-linter) frei.
+- OP-143 (`cli/` + Re-Export-Bereinigung) ist jetzt entblockt —
+  dort wird pipeline_phases.py-Alias + loop_renderer.py-Alias
+  aufgeloest.
