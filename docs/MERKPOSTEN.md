@@ -364,3 +364,90 @@ und Commit + Push erlaubt. Der Fehler war nicht im Code, sondern im Gate.
   echo PT_EXIT=$PT_EXIT` — niemals `$?` nach einer Pipe auswerten.
 - Baseline-Runner (`werkstatt_kontext.py`) nutzt `--ignore=tests/test_shell.py`.
   Wer mit vollem `pytest tests/` vergleicht, misst eine andere Realitaet.
+
+
+## pytest-Gate: Exit-Code ohne Pipe (Erkenntnis 2026-11-05)
+
+**Problem:** `pytest tests/ -q 2>&1 | tail -3; echo $?` liefert den
+Exit-Code von `tail`, nicht von `pytest`. Dreimal in einer Session
+passiert. Der Gate hat 6 rote Tests durchgelassen, dann 3 rote Tests,
+dann 1 roten Test — alle als "gruen" markiert.
+
+**Regel:**
+    pytest tests/ -q > /tmp/pt.log 2>&1
+    PT=$?
+    tail -3 /tmp/pt.log
+    echo "PT=$PT"
+**Niemals** `pytest | tail` mit `$?` auswerten. Drei Zeilen statt
+einer, aber zuverlaessig.
+
+## Heredoc in `if/else`-Block — Finger weg (Erkenntnis 2026-11-05)
+
+**Problem:** `python3 <<'PY' ... PY` innerhalb eines `if [ ... ] ... else`
+haengt den User in einem `>`-Prompt. Der Copy-Paste faengt dann alle
+`>`-Praefixe ein und macht die Ausgabe unlesbar.
+
+**Regel:** Kein Heredoc in `if`/`else`. Entweder:
+- Heredoc in einem separaten Block (kein `if`/`else` drum)
+- Oder `&&`-Kette mit Einzelbefehlen (sed, chmod, ...)
+
+## Idempotente Patch-Bloecke (Erkenntnis 2026-11-05)
+
+**Problem:** Ein Loesch-Block mit `assert s.count(old) == 1` crasht beim
+zweiten Lauf, weil beim ersten Lauf schon entfernt.
+
+**Regel:** Jeder Patch-Block prueft VOR dem Schreiben:
+- `c_old == N and c_new == 0` -> applizieren
+- `c_old == 0 and c_new == N` -> skip (schon erledigt)
+- sonst: fail mit klarer Meldung
+
+## Anker-Eindeutigkeit: `\n`-Prefix (Erkenntnis 2026-11-05)
+
+**Problem:** Ein 12-Space-String (`            tests=...`) ist ein
+**Substring** eines 16-Space-Strings (`                tests=...`).
+`str.replace(old, new, 1)` findet dann 2 Treffer im gleichen File.
+
+**Regel:** Bei mehrzeiligen Ankern mit variabler Einrueckung:
+`"\n" + old` als Suchstring verwenden. Damit ist der Anker an den
+Zeilenanfang gebunden und eindeutig.
+
+## Test-Mocks: SimpleNamespace statt `class _St:` (Erkenntnis 2026-11-05)
+
+**Problem:** `class _St: api_index_cache = {...}` als Mock loest
+RUF012 aus (mutable default).
+
+**Regel:**
+    from types import SimpleNamespace
+    st = SimpleNamespace(
+        api_index_cache={...},
+        docs={},
+    )
+Weniger Boilerplate, RUF012-frei, direkt lesbar.
+
+## ruff-Baseline: AFTER <= BEFORE ist OK (Erkenntnis 2026-11-05)
+
+**Problem:** Das Gate `if AFTER == BEFORE` blockiert Commits, wenn
+die Baseline **sinkt** (weil ein unused-import entfernt wurde).
+
+**Regel:** Baseline-Vergleich **vor** und **nach** Patch:
+- `BEFORE`: das ist die Baseline.
+- `AFTER`: nur **neue** Fehler blockieren.
+- `AFTER < BEFORE`: Fortschritt, OK.
+- `AFTER > BEFORE`: Regress, STOP.
+
+Pre-existing Baseline in Prod-Dateien ist kein Blocker.
+
+## Cleanup-Zombie: Commit-Labels ohne STATUS-Header (Erkenntnis 2026-11-05)
+
+**Problem:** Commit-Messages tragen Labels (`OP-161`, `OP-150`, ...),
+die nie als OP-Header in STATUS.md existierten. Die Arbeit ist
+committet und dokumentiert (PROGRESS + Delete-Zone), aber der
+OP-Lifecycle (open -> close) fehlt.
+
+**Regel:** Fuer **jedes** Commit-Paar (Work + Close) muss ein
+STATUS.md-Header existieren. Wenn nicht: in PROGRESS klarstellen
+("OP-161 war Label, gehoert zu OP-135b Stufe 2").
+
+Alternativ: statt Labels freie Commit-Messages ohne OP-Prefix
+verwenden, wenn die Arbeit kein eigenes OP verdient.
+

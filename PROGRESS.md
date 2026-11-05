@@ -1663,3 +1663,70 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
   zaehlen.
 - **Abnahme:** pytest 1257 passed 8 skipped (Werkstatt);
   audit_drift OK; control_drift OK; state_inventory OK
+
+## 2026-11-05 -- OP-135b abgeschlossen: RunState-Contract deklariert
+
+- **Status:** done (Work-Commits 171b10d + 4824c45)
+- **Dateien:** `werkstatt/state.py`, `tools/state_inventory.py`,
+  `docs/STATE-INVENTUR.md`, `werkstatt/planner.py`,
+  `werkstatt/builder.py`, `werkstatt/scout.py`,
+  `werkstatt/architect.py`, `werkstatt/gates.py`,
+  `werkstatt/pipeline_phases.py`, `werkstatt/task_runner.py`,
+  `tests/test_state_inventory.py`, `tests/test_gates.py`,
+  `tests/test_loop_resume_from_phase_state.py`,
+  `tests/test_planner_atomarer_plan.py`
+- **Problem:** 2 Contract-Felder (`explorer_context`, `tests`) waren
+  Ghosts (dynamisch an die Dataclass-Instanz gehaengt, nicht
+  deklariert). Property-Views griffen per `getattr`, Aufrufer
+  ebenfalls.
+- **Aenderung Stufe 1 (171b10d):**
+  - `explorer_context: dict` und `tests: list` als Dataclass-Felder.
+  - Property-Views `explorer_output`/`planner_output` direkt.
+  - `BASELINE_GEISTER` 25 -> 23.
+- **Aenderung Stufe 2 (4824c45, Commit-Label "OP-161"):**
+  - 15 `getattr(state, "X", fallback)` -> `state.X` (Contract-Felder
+    direkt gelesen, Fallback-Werte per `or`-Operator erhalten).
+  - Test-Anpassungen: SimpleNamespace-Stubs um fehlende Felder
+    erweitert (6 Tests).
+  - `test_state_inventory.py`: `explorer_context`-Kategorie
+    `write_only` -> `aktiv`.
+  - ruff-Baseline sinkt 21 -> 17 (unused-import-Removal).
+- **Nicht in OP-135b:** die restlichen 23 Ghosts
+  (`last_verify_errors`, `spec_widerspruch_erkannt`, etc.) —
+  eigene OPs.
+- **Abnahme:** 1259 passed, 8 skipped; audit_drift OK;
+  control_drift OK; state_inventory OK (23/47/7).
+- **Hinweis:** Commit-Label "OP-161" existierte nie als
+  STATUS-Header. Arbeit gehoert zu OP-135b Stufe 2
+  (Akzeptanzkriterium "Aufrufer lesen die neuen Namen").
+
+## 2026-11-05 -- OP-137 abgeschlossen: AST-Block liest file-Feld
+
+- **Status:** done (Work-Commit dbaa40b)
+- **Dateien:** `werkstatt/architect.py`,
+  `tests/test_architect_prompt_v2.py`
+- **Problem:** Der eigentliche OP-119-Bug war nicht
+  `architect.py:385` (`explorer_findings` statt
+  `explorer_context`) — der `_planner_system`-Code enthaelt
+  bereits einen `<measured_files>`-Block mit allen key_files-Namen.
+  Der Bug war: `_kf_paths` liest `pfad`/`path` aus den key_files,
+  die aber `file` heissen. Konsequenz: `_kf_paths` immer leer ->
+  AST-Block nie gebaut -> Architect sieht keine Funktions-/Klassen-
+  Struktur, nur Dateinamen.
+- **Aenderung:**
+  - `_kf_paths` liest `file`, `pfad`, `path` (Fallback-Kette).
+  - Key-files werden nach `confidence` sortiert
+    (high -> medium -> low -> default), damit bei >10 Dateien
+    die wichtigsten im AST-Block landen statt zufaellig 10.
+- **Tests (neu):**
+  - `test_planner_system_liest_file_feld` — Regression: AST-Block
+    enthaelt die Datei aus dem `file`-Feld.
+  - `test_planner_system_sortiert_nach_confidence` — Sortierung
+    high vor medium vor low.
+- **Nicht in OP-137:** die 5 zusaetzlichen Akzeptanzkriterien aus
+  dem alten OP-Text (Cross-Role-Smoke x3, `_format_explorer_findings`-
+  Erweiterung, `ast_block_fuer_zieldatei` im Architect,
+  Feld-Umbenennung auf `explorer_output`). Alle durch existierenden
+  Code abgedeckt (gemessen 2026-11-05).
+- **Abnahme:** 1259 passed, 8 skipped; audit_drift OK;
+  control_drift OK; state_inventory OK.

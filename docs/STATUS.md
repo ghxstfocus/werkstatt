@@ -558,35 +558,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Blockiert von:** —
 
 
-### OP-135b: RunState-Migration auf Contract-Dataclasses
-
-- **Status:** open
-- **Typ:** architektur (Migration)
-- **Betroffen:** `werkstatt/state.py`, `werkstatt/explorer.py`,
-  `werkstatt/builder.py`, `werkstatt/planner.py`, `werkstatt/scout.py`,
-  `werkstatt/architect.py`, `werkstatt/pipeline_phases.py`
-- **Problem:** Nach OP-135a existieren die Contract-Dataclasses als
-  read-only Property-Views, aber `state.py` deklariert die Felder
-  weiterhin als dicts/str. Ghost-Felder (`explorer_context`,
-  `explorer_findings`) sind nicht deklariert. Der Contract ist Modell,
-  aber nicht erzwungen. Nach OP-137 funktioniert der Architect mit
-  Explorer-Dateien — dann ist die Migration Aufraeumarbeit ohne akuten
-  Bug-Druck.
-- **Akzeptanzkriterien:**
-  - `state.py` deklariert die 5 Contract-Felder als Dataclass-Felder.
-  - Alte Namen (`explorer_context`, `explorer_findings`,
-    `scout_api_auszug`, `architect_prosa`, `tasks`/`tests`/
-    `akzeptanzkriterien`) bleiben als Deprecation-Properties mit
-    Warning.
-  - Aufrufer (`builder.py:1305`, `scout.py:673`, `planner.py:1502`,
-    `architect.py:385`) lesen die neuen Namen.
-  - `grep -rn 'getattr(state, "explorer_context"' werkstatt/` = 0.
-  - `state_inventory --check` zeigt danach deutlich reduzierte
-    Ghost-Zahl; Baseline angepasst mit dokumentiertem Grund.
-- **Tests:** `tests/test_state_contracts_migration.py` —
-  Deprecation-Warnings bei alten Namen, neue Namen funktionieren.
-- **Blockiert von:** —
-
 ### OP-136: State-Contract-Validierung in der Pipeline (fail-loud)
 
 - **Status:** open
@@ -617,40 +588,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_state_drift.py` (neu),
   `tests/test_pipeline_contract.py` (neu).
 - **Blockiert von:** —
-
-### OP-137: Fix architect.py + Cross-Role-Smoke-Tests
-
-- **Status:** open
-- **Typ:** bugfix + test (Folge-OP nach State-Vertrag)
-- **Betroffen:** `werkstatt/architect.py`,
-  `tests/test_architect_prompt.py` (neu),
-  `tests/test_pipeline_smoke.py` (neu)
-- **Problem:** Konkret aus 2026-11-04: `architect.py:385` liest
-  `getattr(state, "explorer_findings", None)` — das enthaelt nur
-  `{git_dirty, pytest_laufzeit_s, ruff_befunde}`, nicht die
-  33 Explorer-Dateien. Die liegen in `explorer_context`. Der
-  Architect halluziniert infolgedessen Zieldateien. Bei OP-119:
-  32 Zieldateien in 1 Task, Loop scheitert.
-- **Akzeptanzkriterien:**
-  - `architect.py:385` liest `explorer_context` (nach OP-135:
-    `state.explorer_output`), nicht `explorer_findings`.
-  - `_format_explorer_findings` in architect.py erweitert auf
-    `key_files`-Liste (Format wie `builder.py::_format_explorer_findings_b`).
-  - Cross-Role-Smoke-Tests pro Uebergang:
-    - `test_architect_sieht_explorer_dateien`: Mock-State mit
-      33 `key_files`, prueft dass die Dateinamen im Prompt stehen.
-    - `test_builder_sieht_architect_prosa`: analog.
-    - `test_reviewer_sieht_builder_diff`: analog.
-  - Architect-Prompt enthaelt `ast_block` fuer alle geplanten
-    Zieldateien (aus `_ast_block_fuer_zieldatei`), nicht nur
-    `scout_api_auszug`.
-  - Nach Fix: Loop-Lauf mit OP-119-Aufgabe → Plan hat Task-Zieldateien
-    ⊆ Explorer-`key_files` (nicht erfundene Dateien) UND alle
-    Task-Zieldateien existieren im Projekt (via `_finde_modul_pfad`).
-- **Tests:** `tests/test_architect_prompt.py` (neu),
-  `tests/test_pipeline_smoke.py` (neu).
-- **Blockiert von:** —
-
 
 ### OP-138: `render/` Submodul-Split (loop_renderer.py zerlegen)
 
@@ -1030,6 +967,8 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-05 | OP-135a | done | State-Contract-Design: Dataclasses + Registry + Property-Views (35c2aa3)
 - 2026-11-04 | OP-134 | done | State-Inventur — Tool + Doku (7177f16)
 - 2026-11-04 | OP-146 | done | Stale Blocker-Referenzen bereinigt (11 OPs, 18 Refs); OP-113a angelegt (Work-Commit 44b4350)
+- 2026-11-05 | OP-137 | done | AST-Block liest file-Feld + sortiert nach confidence (dbaa40b)
+- 2026-11-05 | OP-135b | done | explorer_context + tests deklariert, Property-Views direkt, 15 getattr-Callsites auf direkte Felder (171b10d + 4824c45)
 - 2026-11-04 | OP-149 | done | pytest_regression requires -> changed_py_files + security-ai Cross-Repo (ebc7c46; Work-Commit 11f02b1)
 - 2026-11-04 | OP-148 | done | test_shell.py 3 PTY-Tests auf skip (W36-RP-Guard; Work-Commit 547eab0)
 - 2026-11-04 | OP-150 | done | control/reflection.py geloescht (byte-identisch zu reflection.py, 0 Imports; Work-Commit 1752d76)
