@@ -1069,6 +1069,93 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - **Blockiert von:** OP-128 (Ladder + strukturierter Fix-Output),
   OP-113a (scope-Spalte), OP-129 (Destillation)
 
+### OP-163: Planner-Dependencies als Pflichtfeld (Loop-Durchsetzung)
+
+- **Status:** open
+- **Typ:** architektur (Planner + Loop)
+- **Betroffen:** `werkstatt/planner.py` (`PLANNER_SPLIT_SYSTEM`),
+  `werkstatt/pipeline_phases.py` (`_phase_tasks_loop`)
+- **Problem:** Planner-Split kennt `dependencies` als Feld, aber der
+  Prompt sagt nicht WANN gesetzt. Der Loop prueft `dependencies`
+  nicht durch — Tasks laufen auch wenn Vorgaenger nicht fertig sind.
+  Live-Beleg 2026-11-05 (Loop-Test-3): t6 (state_inventory Baseline
+  23->22) startete, obwohl t3 (builder.py) mit human_review endete
+  — der Check konnte nie gruen sein. 5 Reflection-Runden, dann
+  Erschoepfung.
+- **Akzeptanzkriterien:**
+  - `PLANNER_SPLIT_SYSTEM`: explizite Regel — Konsequenz-Tasks
+    (Baseline senken, Doku die Endzustand prueft, Cross-Role-Tests)
+    MUESSEN `dependencies` auf alle Tasks setzen, die den
+    Vorbedingungs-Zustand aendern.
+  - `_phase_tasks_loop` prueft vor jedem Task: `dependencies`
+    erfuellt (status == "done")? Wenn nicht: Task als `blockiert`
+    markieren, Loop laeuft weiter mit naechster unabhaengigen Task.
+  - Wenn am Ende Tasks `blockiert` sind (nicht `failed`):
+    Human-Gate zeigt klaren Status, keine Reflection-Versuche.
+  - Tests: 2 Smoke-Tests — (a) Task mit unerfuellten Deps wird
+    skipped und als blockiert markiert; (b) Task nach erfuellter
+    Dep laeuft normal.
+- **Tests:** `tests/test_loop_task_dependencies.py` (neu)
+- **Blockiert von:** —
+
+### OP-164: Reviewer versteht Rename-Aufgaben
+
+- **Status:** open
+- **Typ:** architektur (Reviewer-Haertung)
+- **Betroffen:** `werkstatt/reviewer.py` (`REVIEWER_SYSTEM`)
+- **Problem:** `reviewer.py:98-100` sagt: "Wenn eine `-`-Zeile eine
+  bestehende Zuweisung/Funktion entfernt: HIGH — 'Bestehende
+  Zuweisung/Funktion X entfernt.'" Bei Rename-Aufgaben ist das die
+  Aufgabe selbst. Live-Beleg 2026-11-05 (Loop-Test-3): t3
+  builder.py sollte `auftrag_bereits_erfuellt` auf
+  `auftrag_bereits_erfuellt_bestaetigt` umbenennen. Reviewer meldete
+  3x HIGH "Bestehende Zuweisung entfernt", 5 Reflection-Runden,
+  human_review. Der Builder hatte korrekt gearbeitet (siehe
+  loop-test-3-partial: 4 audit-Strings + 2 neue Zuweisungen,
+  0 lebende Attribut-Zugriffe auf den Ghost).
+- **Akzeptanzkriterien:**
+  - `REVIEWER_SYSTEM`: `-`-Zeile bei Rename-Aufgabe ist nur dann
+    HIGH, wenn die neue Zuweisung im **selben Hunk** nicht erscheint.
+    Alte Zeile weg + neue Zeile da (im selben Diff-Hunk) = OK.
+  - Reviewer-Prompt bekommt Kontext: Task-Text. Wenn Task
+    "umbenennen"/"rename"/"ersetzen durch" enthaelt: Rename-Erkennung
+    greift, `-`+`+`-Paar im selben Hunk = OK.
+  - Tests: 3 Smoke-Tests — (a) Rename-OK (alte Zeile weg, neue da
+    im selben Hunk); (b) Rename-Fehler (alte weg, neue fehlt) → HIGH;
+    (c) normales Entfernen ohne Rename-Kontext → HIGH.
+- **Tests:** `tests/test_reviewer_rename.py` (neu)
+- **Blockiert von:** —
+
+### OP-165: Contract-Verify pro Task (nicht erst am Ende)
+
+- **Status:** open
+- **Typ:** architektur (Verify-Haertung)
+- **Betroffen:** `werkstatt/pipeline_phases.py` (Task-Loop),
+  `tools/state_inventory.py` (neuer `--changed`-Modus),
+  `.werkstatt/verify.json`, `werkstatt/templates/.werkstatt/verify.json`
+- **Problem:** Contract-Aenderungen (z.B. Feld-Rename) werden heute
+  nur am Ende geprueft (Task "Baseline senken"). Zwischenschritte
+  (`planner.py`, `pipeline_phases.py`) koennen unvollstaendig
+  umbenannt bleiben, ohne dass es auffaellt. Live-Beleg 2026-11-05
+  (Loop-Test-3): t4 (planner.py) und t5 (pipeline_phases.py) wurden
+  als "task ok" markiert, obwohl `state_inventory` im
+  loop-test-3-partial noch Ghost-Reste in beiden Dateien zeigte
+  (`auftrag_bereits_erfuellt ::? in ['pipeline_phases.py',
+  'planner.py']`).
+- **Akzeptanzkriterien:**
+  - Neue post_build-Stage `contract_check` in beiden `verify.json`
+    (hart): prueft pro geaenderter Datei, ob Ghost-Felder noch
+    Attribut-Zugriffe haben.
+  - `state_inventory.py --changed <files...>` als neuer Modus:
+    liefert Exit 1, wenn eines der geaenderten Files noch einen
+    Ghost-Feld-Zugriff hat, der in der Baseline steht.
+  - Fail-loud: bei Contract-Verletzung wird der Task als `failed`
+    markiert, nicht `ok`. Der Task muss die Umbenennung vollenden.
+  - Tests: 2 Smoke-Tests — (a) Task laesst Ghost in geaenderter
+    Datei zurueck → fail; (b) Task entfernt Ghost komplett → ok.
+- **Tests:** `tests/test_verify_contract_stage.py` (neu)
+- **Blockiert von:** —
+
 ### OP-096: Phase 33.3 — gates.py nach control/ migrieren
 
 - **Status:** open
