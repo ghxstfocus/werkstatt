@@ -496,3 +496,75 @@ Rueckgabewerte ohne Pruefung.
 - `python3 -c "..."` wenn Exit-Code zaehlt
 - `if AFTER == BEFORE` — `if AFTER > BEFORE` (Regress)
 
+
+
+## Self-Check-Block auf Reasoning-Modellen = CoT-Trigger (Erkenntnis 2026-11-05)
+
+**Problem:** Der v2-Default (Commit `3cdb9e8`) hing einen
+`_build_selbst_check_block()` an den Architect-Prompt. Der Block
+sagte "vor dem Senden pruefen: ...". Bei `deepseek-reasoner` hat
+das den CoT-Modus ausgeloest: 16000 max_tokens wurden mit
+Reasoning verbraucht, `content` blieb leer. Der Fallback in
+`_ask_llm_impl` akzeptierte dann `reasoning_content` als content
+— Denkprotokoll (Englisch, "Let me understand...") landete als
+Prosa im Planner-Split. 8 Tasks mit kopiertem Denken.
+
+**Regel:** Bei Reasoning-Modellen (deepseek-reasoner, o1, Claude
+mit extended thinking) sind aktive Pruef-Aufforderungen im Prompt
+("pruefe vor dem Senden", "denke nochmal nach", "verifiziere")
+potenzielle CoT-Trigger. Vor Aktivierung testen: liefert das
+Modell noch gefuellten `content`, oder nur `reasoning_content`?
+Passive Regeln ("Ausgabe MUSS Format X haben") sind sicher,
+aktive Pruef-Aufforderungen nicht.
+
+## Architektur-Doku ist Wahrheit, Code folgt (Erkenntnis 2026-11-05)
+
+**Problem:** `docs/ARCHITECTURE.md:20-22` sagt woertlich:
+"Architect: Keine Skills, keine Tools (M-446)". Der Code lud
+aber seit 2026-11-03 hartkodiert drei Skills, darunter
+`plan-crafting` mit `run_readonly(...)`. Ein einziger
+Attribut-Zugriff (`architect_skills_block`) hat den
+Regress-Bug maskiert — niemand hat Code und Doku gegeneinander
+geprueft.
+
+**Regel:** Wenn Code und Architektur-Doku sich widersprechen,
+ist die Doku die Wahrheit. Bei jedem Fix, der einen konkreten
+Fehler verhindert (M-446, K51, K52, etc.), zusaetzlich einen
+Test anlegen, der das alte Verhalten **verbietet** — nicht nur
+einen, der das neue Verhalten prueft. Der Test wird zur
+Regress-Schutz-Barriere. Ohne Test kehrt der Bug mit hoher
+Wahrscheinlichkeit zurueck (M-446-Regress hat 11 Tage gehalten).
+
+## Reflection-Gate vs. Commit-Gate: `n` bedeutet unterschiedlich (Erkenntnis 2026-11-05)
+
+**Problem:** Beide Gates zeigen `j/n/a`. Die Semantik ist aber
+verschieden:
+- Reflection-Gate (nach `reflection_erschoepft`): `n` =
+  Patches dieser Task verwerfen, Task als `failed` markieren,
+  **Loop laeuft weiter** mit naechster Task.
+- Commit-Gate (am Phase-Ende): `n` = Reject, **Loop bricht ab**.
+
+Der User hat das erst durch Beobachtung gelernt (Loop-Test-3:
+`n` am Reflection-Gate, Loop lief weiter mit t7/t8 statt
+abzubrechen). Das ist eine UX-Falle.
+
+**Regel:** Wenn ein Gate `j/n/a` fragt, muss der Textblock
+darueber explizit sagen was `n` **fuer diesen Loop-Zustand**
+bedeutet. Formulierung: "n = <konkrete Aktion>". Kein
+generisches "n = reject", das ist zweideutig.
+
+## Test-Contract bei Verhaltens-Aenderung (Erkenntnis 2026-11-05)
+
+**Problem:** Der Fallback `content` -> `reasoning_content` in
+`_ask_llm_impl` wurde auf fail-loud umgestellt. Aber
+`test_reasoning_content_fallback` in
+`tests/test_loop_ask_llm.py` prueft noch das ALTE Verhalten.
+Beim Pre-Commit-Gate rot, mit unklarer Ursache (PT>0 ohne
+Kontext). Nach Umstellung auf `test_reasoning_content_fail_loud`
+gruen.
+
+**Regel:** Vor jedem Patch, der eine Verhaltens-Aenderung
+durchfuehrt, zuerst `grep -rn '<alter_wert_oder_verhalten>' tests/`
+ausfuehren. Wenn ein Test das alte Verhalten prueft, den Test
+im selben Patch-Block umstellen. Der Test-Contract ist genauso
+verbindlich wie der Produktions-Code-Contract.
