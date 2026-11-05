@@ -545,45 +545,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_stats_api.py` (neu)
 - **Blockiert von:** —
 
-### OP-136b: State-Drift-Tool (state_drift.py) + verify-Stage
-
-- **Status:** open
-- **Typ:** architektur (Tooling)
-- **Betroffen:** `tools/state_drift.py` (neu),
-  `.werkstatt/verify.json`, `werkstatt/templates/.werkstatt/verify.json`
-- **Problem:** Nach OP-136a (Wiring von `validate_transition` an
-  explorer->scout und planner->builder) bleibt ein Rest:
-  `tools/state_drift.py` als Konsistenz-Check zwischen `state.py`
-  und `state_contracts.py` fehlt. Analog `audit_drift`/`control_drift`
-  soll das Tool pruefen, dass die drei Registries (`CONTRACTS`,
-  `TRANSITIONS`, `RunState`-Properties) konsistent sind. Fruehere
-  Formulierung "jedes RunState-Feld in `intern`" war stale:
-  `CONTRACTS` hat kein `felder`-Feld, `TRANSITIONS` ist die echte
-  Feld-Referenz-Registry, 106 RunState-Felder sind Config/Glue,
-  nicht Inter-Role-Contracts.
-  Zusaetzlich fehlen `validate_transition`-Aufrufe fuer zwei
-  reale Uebergaenge (scout->architect, architect->planner), die
-  heute in `planner.run_planner()` stattfinden, aber nicht
-  validiert werden.
-
-- **Akzeptanzkriterien:**
-  - `tools/state_drift.py --check`: prueft 3 Konsistenz-Checks
-    zwischen `CONTRACTS`, `TRANSITIONS` und `RunState`-Properties
-    (jeder Contract hat Property; jeder TRANSITIONS-Eintrag ist
-    bekannter Contract; jeder Contract ist in TRANSITIONS
-    referenziert oder hat `transition_frei=True`). Exit 1 bei Drift.
-  - `state_drift.py` als Post-Build-Stage in beiden `verify.json`.
-  - `validate_transition` wird auch bei den internen Uebergaengen
-    gerufen (scout->architect, architect->planner), entweder
-    direkt in `planner.py` oder ueber einen Wrapper in
-    `pipeline_phases.py`.
-  - Tests: `tests/test_state_drift.py` (neu) fuer das Tool,
-    `tests/test_pipeline_contract.py` erweitert fuer die internen
-    Uebergaenge.
-
-- **Tests:** `tests/test_state_drift.py` (neu)
-- **Blockiert von:** —
-
 ### OP-138: `render/` Submodul-Split (loop_renderer.py zerlegen)
 
 - **Status:** open
@@ -610,7 +571,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - Bestehende Tests (`test_loop_renderer.py`, `test_terminal_proxy.py`,
     `test_renderer_live.py`) bleiben gruen ohne Aenderung.
 - **Tests:** keine neuen (bestehende decken ab).
-- **Blockiert von:** OP-136b
+- **Blockiert von:** —
 
 ### OP-139: `phases/` Submodul-Split (pipeline_phases.py zerlegen)
 
@@ -691,7 +652,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_state_split.py` (neu),
   bestehende Suite bleibt gruen (mit Anpassungen an geaenderte
   Feld-Pfade).
-- **Blockiert von:** OP-136b
+- **Blockiert von:** —
 
 ### OP-142: `web/routes/` Submodul-Split
 
@@ -1084,6 +1045,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-05 | OP-136b | done | state_drift.py + 3 Registry-Checks + 2 validate_transition-Aufrufe + verify-Stage hart (bfd38e9)
 - 2026-11-05 | OP-167 | done | tasks_ok_counter in 2 Erfolgs-Pfaden + AST-Guard-Test (a3a538b)
 - 2026-11-05 | OP-165 | done | Contract-Verify pro Task (contract_check-Stage) (f73dde5)
 - 2026-11-05 | OP-163 | done | Planner-Dependencies als Pflichtfeld durchgesetzt (9797b31); **live-wirkungslos (Loop-Test-4, siehe OP-163b)**
