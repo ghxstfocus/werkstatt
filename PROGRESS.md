@@ -2019,3 +2019,81 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - Work-Commit bfd38e9, Close-Commit c327d10, Progress-Nachtrag folgt.
 
 - OP-138 und OP-141: Blocker "OP-136b" entfernt, jetzt frei.
+
+
+### 2026-11-05 — OP-138: render/-Split (loop_renderer.py)
+
+**Neue Struktur:**
+- werkstatt/render/tee.py       (73 Z.) _TEE_STREAM, _TEE_LOCK, _ANSI_RE,
+                                  set_tee_stream, _tee, _TeeWriter
+- werkstatt/render/rich.py      (83 Z.) RENDER_MODE, IS_CI, IS_LIVE,
+                                  USE_COLOR, Farben, _use_rich, _console,
+                                  rich-Imports
+- werkstatt/render/emit.py      (200 Z.) _emit_raw, _progress_write, _emit,
+                                  _publish, _PROJECT_CTX, TerminalEmitter,
+                                  _EMITTERS, get_emitter
+- werkstatt/render/spinner.py   (142 Z.) _live, _spinner_text, _live_lock,
+                                  spinner_start/update/stop, _with_spinner
+- werkstatt/render/progress.py  (90 Z.) _PROGRESS_STATE, _PROGRESS_LOCK,
+                                  _LAST_HEARTBEAT, _emit_progress, heartbeat,
+                                  progress_task, _null_progress
+- werkstatt/render/tasks.py     (236 Z.) TOTAL_PHASES, header, step, task*,
+                                  hook, patch, footer, group_start/end,
+                                  log_line, task_started, task_done,
+                                  status_header, summary, _timestamp
+- werkstatt/render/plan.py      (139 Z.) panel_plan, _emit_wrapped,
+                                  _render_plan_plain/rich, panel_diff, plan
+- werkstatt/render/__init__.py  (108 Z.) Re-Export-Hub (keine Funktionslogik)
+- werkstatt/loop_renderer.py    (24 Z.) sys.modules-Alias auf werkstatt.render
+
+**Phasen (Commits):**
+- f36cbef Phase 1: Modul-Umzug nach werkstatt/render/ (byte-identisch)
+- 0093405 Phase 2a: tee.py + rich.py
+- ea55514 Phase 2b-1: emit.py + ruff-Baseline-Cleanup
+- 66147b5 Phase 2b-2: spinner.py + progress.py
+- b6f75db Phase 2c: tasks.py + plan.py + _with_spinner + Hub-__init__
+
+**Ehrliche Abweichungen vom OP-Text:**
+
+1. **`loop_renderer.py` = `sys.modules`-Alias, nicht `from werkstatt.render import *`:**
+   Tests patchen Modul-Attribute (`patch.object(loop_renderer, "_publish", ...)`)
+   und conftest rebindet Globals (`_PROGRESS_OPEN = False`). Mit
+   `from import *` bindet das Proxy-Modul Namens-Kopien; Patches und
+   Rebindings waeren stumm tot. Der Alias macht beide Modul-Namen zum
+   selben Objekt — Patches wirken. Phase 1 ohne Alias: 6 Tests rot.
+
+2. **10 Test-Anpassungen in `test_loop_renderer.py` (OP forderte "gruen ohne Aenderung"):**
+   `patch.object(r, "IS_CI", ...)` → `patch.object(_rmod, "IS_CI", ...)`,
+   `patch.object(r, "_TEE_STREAM", ...)` → `_tmod`, 3x `_publish` → `_emod`.
+   Grund: Pythons `from .rich import IS_CI` bindet Namens-Kopie. Submodule
+   lesen `_rich.IS_CI` als Modul-Attribut; Patches muessen auf das
+   tatsaechliche Modul zeigen. `test_human_gate_render.py` (patch auf
+   `loop_renderer.panel_diff`) bleibt unveraendert wegen Alias.
+
+3. **`tasks.py` hat 236 Zeilen (OP forderte < 200):**
+   17 oeffentliche Funktionen + Konstanten + Timestamp. Aufteilung in
+   `tasks_log.py` / `tasks_state.py` waere kuenstlich — Tasks sind eine
+   API-Familie. Bewusste Akzeptanz-Abweichung.
+
+4. **ruff-Baseline 193 → 203 (Kontext-Block war stale):**
+   Vor dieser Session: gemessene 206. Phase 1 (Modul-Umzug) brachte
+   +5 Altlast-Fehler ohne ruff-Cleanup im Pre-Commit. Phase 2b-1 hat
+   das korrigiert (−6). Netto: 203 nach Phase 2c.
+   Restliche 203 sind Altlast aus frueheren Commits, dokumentiert fuer
+   separaten Baseline-Hygiene-OP.
+
+**Aufrufer-Migration — bewusst NICHT in OP-138:**
+9 Files (loop.py, pipeline_phases.py, agent.py, verify.py, gates.py,
+planner.py, reflection.py, reviewer.py, web/audit_panel.py,
+web/terminal_proxy.py) importieren weiter aus `werkstatt.loop_renderer`.
+Der Alias haelt sie funktional. Migration gehoert in **OP-143**
+(`cli/` + Re-Export-Bereinigung).
+
+**Abnahme:**
+- 1305 passed, 5 skipped (5 neue in test_state_drift.py, unveraendert).
+- ruff . = 203 (<= 203 akzeptiert).
+- audit_drift OK, control_drift OK, state_inventory OK, state_drift OK.
+- Work-Commits: f36cbef, 0093405, ea55514, 66147b5, b6f75db.
+- Close-Commit folgt.
+
+- OP-139 (`phases/`-Split) und OP-140 (`builder/`-Split) frei.

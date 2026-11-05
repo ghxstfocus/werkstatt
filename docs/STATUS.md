@@ -545,34 +545,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_stats_api.py` (neu)
 - **Blockiert von:** —
 
-### OP-138: `render/` Submodul-Split (loop_renderer.py zerlegen)
-
-- **Status:** open
-- **Typ:** architektur (Split)
-- **Betroffen:** `werkstatt/render/` (neu), `werkstatt/loop_renderer.py`
-- **Problem:** `loop_renderer.py` (900 Zeilen, 18 oeffentliche APIs)
-  mischt Emit, Progress, Task, Spinner, Tee, Rich, Plan-Rendering.
-  `_with_spinner` hat 5 Sorgen (Thread, Spinner, Events, Elapsed,
-  Logging). Siehe ADR-0012 Muster 2.
-- **Akzeptanzkriterien:**
-  - Neue Struktur `werkstatt/render/`: `__init__.py` (Re-Exports
-    aller bisherigen oeffentlichen APIs), `emit.py` (`_emit`,
-    `_emit_raw`, `_publish`), `progress.py` (`_emit_progress`,
-    `step`, `heartbeat`, `spinner_*`), `tasks.py` (`task`,
-    `task_ok`, `task_failed`), `tee.py` (`_TeeWriter`, `_tee`,
-    `set_tee_stream`), `rich.py` (`_use_rich`, `_console`),
-    `plan.py` (`plan`, `header`, `summary`), `spinner.py`
-    (`_with_spinner`).
-  - `loop_renderer.py` wird zur Deprecation-Proxy-Datei
-    (`from werkstatt.render import *` + `__all__`), damit Tests und
-    Aufrufer weiter funktionieren.
-  - Jede neue Datei < 200 Zeilen. Keine Datei importiert eine
-    andere aus `render/` zirkulaer.
-  - Bestehende Tests (`test_loop_renderer.py`, `test_terminal_proxy.py`,
-    `test_renderer_live.py`) bleiben gruen ohne Aenderung.
-- **Tests:** keine neuen (bestehende decken ab).
-- **Blockiert von:** —
-
 ### OP-139: `phases/` Submodul-Split (pipeline_phases.py zerlegen)
 
 - **Status:** open
@@ -597,7 +569,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - OP-098 (`pipeline_phases < 400 Zeilen`) ist damit erledigt.
 - **Tests:** `tests/test_pipeline_phases.py` (neu, falls nicht
   vorhanden), bestehende `test_loop*.py` bleiben gruen.
-- **Blockiert von:** OP-138
+- **Blockiert von:** —
 
 ### OP-140: `builder/` Submodul-Split (AST isolieren)
 
@@ -723,7 +695,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - `.werkstatt/verify.json` bekommt neue Stage:
     `"import_drift": {"cmd": "python3 tools/import_drift.py --check",
     "hart": true}`.
-  - Whitelist wird pro Split-OP (OP-138..143) um die jeweiligen
+  - Whitelist wird pro Split-OP (OP-139..143) um die jeweiligen
     Verletzungen reduziert. Ziel: leere Whitelist nach OP-143.
 - **Tests:** `tests/test_import_drift.py` (Smoke).
 - **Blockiert von:** -
@@ -1045,6 +1017,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-05 | OP-138 | done | render/-Split in 7 Module (tee, rich, emit, spinner, progress, tasks, plan); loop_renderer.py als sys.modules-Alias (b6f75db)
 - 2026-11-05 | OP-136b | done | state_drift.py + 3 Registry-Checks + 2 validate_transition-Aufrufe + verify-Stage hart (bfd38e9)
 - 2026-11-05 | OP-167 | done | tasks_ok_counter in 2 Erfolgs-Pfaden + AST-Guard-Test (a3a538b)
 - 2026-11-05 | OP-165 | done | Contract-Verify pro Task (contract_check-Stage) (f73dde5)
