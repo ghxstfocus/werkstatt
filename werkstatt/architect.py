@@ -168,12 +168,19 @@ Format (STRIKT einhalten):
      mehrere Funktionen hat: EIN Block pro Funktion.
   4. Welche Tests brauchen wir?
 
+DEINE ROLLE IM LOOP (WICHTIG):
+  - Explorer hat bereits geliefert: WO (Dateien, Zeilennummern,
+    Ist-Zustand — siehe die Explorer-Bloecke im Kontext).
+  - Scout hat bereits geliefert: WAS (Auftrag, API-Widersprueche
+    — siehe den Scout-Block im Kontext).
+  - Deine Aufgabe ist NUR: WIE. Welche Signatur, welche Logik,
+    welche Integration.
+  - Du hast keine Tools. Du misst NICHT. Du beschreibst.
+  - Wenn Explorer+Scout leer sind, ist das ein Pipeline-Fehler
+    (Contract-Violation), KEIN Auftrag zum Selbermessen.
+
 REGELN:
-  - KEINE XML-Tags, KEINE DSML-Tool-Calls.
-    Verboten: <shell_command>, <read_file>, <tool>, <function>,
-    <function_calls>, <invoke>.
-    Du bist Architekt, nicht Tool-Caller. Beschreibe die
-    Loesung als Prosa.
+  - Du lieferst Prosa. Du rufst keine Tools. Du baust nichts.
   - Code muss ruff-konform sein (E, F, I, SIM, RUF, BLE).
   - __all__ sortiert.
   - Kein `except Exception` ohne `# noqa: BLE001`.
@@ -383,16 +390,7 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
     if _op_block:
         parts.append(_op_block.rstrip())
 
-    # M-Skills-Architect: metadata (Level 1)
-    if state is not None:
-        try:
-            from werkstatt.skills import load_all_skills, skills_metadata_block
-            _skills = load_all_skills()
-            _meta = skills_metadata_block(_skills)
-            if _meta:
-                parts.append(_meta.rstrip())
-        except Exception:  # noqa: BLE001
-            pass
+# M-446 (2026-11-05): kein Skills-Metadata im Architect-Prompt.
 
     # === M-Welle-I: EXPLORER-FINDINGS + SCOUT-API (Welle E + D3 komplett) ===
     if state is not None:
@@ -482,14 +480,11 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
                     + "\n</ist_zustand>"
                 )
 
-        else:
-            # M-405: Keine key_files -> KEIN <pflicht>
-            parts.append(
-                "<hinweis>\n"
-                "Keine Dateien gemessen. Nutze <tools> (grep, read_file).\n"
-                "Die findings enthalten Hinweise.\n"
-                "</hinweis>"
-            )
+        # M-446 (2026-11-05): Fallback-Hinweis entfernt.
+        # "Nutze <tools> (grep, read_file)" war ein DSML-Trigger.
+        # Wenn keine Dateien da sind, greift OP-136a (Contract-
+        # Violation) bereits vor diesem Code. Architect soll NIE
+        # zum Messen aufgefordert werden (Explorer liefert WO).
 
     # === GOLD: Architect-Modus IMMER (nicht nur bei "architect") ===
     # FIX 2026-10-30: bis hier wurde `parts` gebaut, aber am Ende
@@ -618,30 +613,14 @@ def run_architect(
     except Exception:  # noqa: BLE001, S110 — Cache ist optional
         pass
 
-    # Stellschrauben 2026-11-03: Architect-Skills.
-    try:
-        from werkstatt.skills import (
-            _merke_geladene_skills,
-            load_all_skills,
-            load_skill_by_name,
-        )
-        _all = load_all_skills()
-        _geladen = []
-        for _n in ("using-werkstatt", "plan-crafting", "commit-history"):
-            _s = load_skill_by_name(_n, _all)
-            if _s:
-                _geladen.append(_s)
-        if _geladen:
-            _merke_geladene_skills(
-                state, [s.get("name", "") for s in _geladen], rolle="architect")
-            _lines = ["## SKILLS (architect)"]
-            for _s in _geladen:
-                _b = _s.get("body") or ""
-                if _b:
-                    _lines.append(f"### {_s.get('name','?')}\n{_b}")
-            state.architect_skills_block = "\n\n".join(_lines)
-    except Exception:  # noqa: BLE001, S110
-        pass
+    # M-446 restauriert (2026-11-05): Architect bekommt KEINE Skills.
+    # Regress 2026-11-03: die drei Skills ("using-werkstatt",
+    # "plan-crafting", "commit-history") wurden wieder eingebaut.
+    # "plan-crafting" enthaelt "## Tools" mit run_readonly(...)-
+    # Beispielen. deepseek-reasoner interpretiert das als echte
+    # Tool-Definitionen und liefert DSML-Syntax statt Prosa.
+    # Siehe docs/ARCHITECTURE.md:20-22 ("Keine Skills, keine Tools").
+    state.architect_skills_block = ""
 
     _arch_sys_base = _planner_system(aufgabe, explorer_ctx, state)
     _arch_skills_block = getattr(state, "architect_skills_block", "") or ""
