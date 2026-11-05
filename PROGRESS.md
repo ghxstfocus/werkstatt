@@ -1730,3 +1730,31 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
   Code abgedeckt (gemessen 2026-11-05).
 - **Abnahme:** 1259 passed, 8 skipped; audit_drift OK;
   control_drift OK; state_inventory OK.
+
+## 2026-11-05 -- OP-136a abgeschlossen: Contract-Validierung explorer->scout + planner->builder
+
+- **Status:** done (Work-Commit b77ee26)
+- **Dateien:** `werkstatt/pipeline_phases.py`,
+  `tests/test_pipeline_contract.py` (neu), `tests/test_loop.py`
+- **Problem:** `validate_transition` (aus frueherer Session) existierte,
+  wurde aber nirgends im Pipeline-Code gerufen. Contract-Verletzungen
+  (leerer `explorer_context`, leerer `planner_output`) liefen stumm
+  durch und brachen erst spaeter mit unklaren Symptomen ab.
+- **Aenderung:**
+  - `_validate_contract_safe(von, zu, state, pd, pn)`: Wrapper um
+    `validate_transition` mit audit-Fallback.
+  - Wiring 1 (`explorer->scout`): greift wenn `state.tasks` leer
+    und nicht `auftrag_bereits_erfuellt`. Fail-loud mit rc=1.
+  - Wiring 2 (`planner->builder`): greift wenn Tasks gefuellt und
+    nicht `auftrag_bereits_erfuellt`. Fail-loud mit rc=1.
+  - `_state`-Helper in `tests/test_loop.py` befuellt `explorer_context`
+    mit Default (Tests koennen `explorer_ctx={}` setzen, um den Fail
+    zu provozieren).
+- **Tests:**
+  - `tests/test_pipeline_contract.py`: 3 neue Tests
+    (ok, leer fail, unbekannter Uebergang noop).
+- **Nicht in OP-136a:** die internen Uebergaenge scout->architect,
+  architect->planner-split (verschachtelt in `run_planner`) und
+  `tools/state_drift.py` — bleiben in OP-136b.
+- **Abnahme:** 1262 passed, 8 skipped; audit_drift OK;
+  control_drift OK; state_inventory OK.

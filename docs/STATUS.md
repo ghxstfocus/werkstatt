@@ -558,35 +558,36 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Blockiert von:** —
 
 
-### OP-136: State-Contract-Validierung in der Pipeline (fail-loud)
+### OP-136b: State-Drift-Tool (state_drift.py) + verify-Stage
 
 - **Status:** open
-- **Typ:** architektur (Pipeline-Haertung)
-- **Betroffen:** `werkstatt/pipeline_phases.py`,
-  `werkstatt/state_contracts.py` (`validate_transition`),
-  `tools/state_drift.py` (neu)
-- **Problem:** Heute laeuft der Loop stumm weiter, wenn eine Rolle
-  ein Pflichtfeld nicht befuellt. Der Architect bekommt leeres
-  `explorer_context`, halluziniert Zieldateien, Loop scheitert
-  erst am Human-Gate mit falschem Task-Panel.
+- **Typ:** architektur (Tooling)
+- **Betroffen:** `tools/state_drift.py` (neu),
+  `.werkstatt/verify.json`, `werkstatt/templates/.werkstatt/verify.json`
+- **Problem:** Nach OP-136a (Wiring von `validate_transition` an
+  explorer->scout und planner->builder) bleibt ein Rest:
+  `tools/state_drift.py` als Konsistenz-Check zwischen `state.py`
+  und `state_contracts.py` fehlt. Analog `audit_drift`/`control_drift`
+  soll das Tool pruefen, dass jedes `RunState`-Feld entweder in
+  `CONTRACTS` registriert oder als `intern` markiert ist.
+  Zusaetzlich fehlt die Validierung der internen Uebergaenge
+  (scout->architect, architect->planner-split), die heute in
+  `planner.run_planner()` verschachtelt sind.
+
 - **Akzeptanzkriterien:**
-  - `validate_transition(von: str, zu: str, state: RunState)` in
-    `state_contracts.py`. Prueft alle `pflicht`-Felder fuer den
-    Uebergang. Bei Verstoss: `ContractViolation`-Exception.
-  - `pipeline_phases` ruft `validate_transition` vor jedem
-    Rollenwechsel: Explorer->Scout, Scout->Architect,
-    Architect->Planner-Split, Planner->Builder, Builder->Reviewer.
-  - Bei `ContractViolation`: `audit("state_contract_violation",
-    {...})` und fail-loud (Loop bricht ab, kein stilles Weiterlaufen).
-  - `tools/state_drift.py --check` (analog `audit_drift`): prueft,
-    ob `state.py` und `state_contracts.py` konsistent sind
-    (jedes Feld entweder im Contract oder als `intern` markiert).
-  - `state_drift.py` laeuft als Post-Build-Stage in `.werkstatt/verify.json`
-    (analog `control_drift`).
-  - Test: Pipeline laeuft mit absichtlich leerem `explorer_context`,
-    erwartet `ContractViolation` + Audit-Event.
-- **Tests:** `tests/test_state_drift.py` (neu),
-  `tests/test_pipeline_contract.py` (neu).
+  - `tools/state_drift.py --check`: prueft ob jedes Feld in `state.py`
+    entweder in `CONTRACTS`-Registry referenziert oder als `intern`
+    markiert ist. Exit 1 bei Abweichung.
+  - `state_drift.py` als Post-Build-Stage in beiden `verify.json`.
+  - `validate_transition` wird auch bei den internen Uebergaengen
+    gerufen (scout->architect, architect->planner), entweder
+    direkt in `planner.py` oder ueber einen Wrapper in
+    `pipeline_phases.py`.
+  - Tests: `tests/test_state_drift.py` (neu) fuer das Tool,
+    `tests/test_pipeline_contract.py` erweitert fuer die internen
+    Uebergaenge.
+
+- **Tests:** `tests/test_state_drift.py` (neu)
 - **Blockiert von:** —
 
 ### OP-138: `render/` Submodul-Split (loop_renderer.py zerlegen)
@@ -969,6 +970,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-04 | OP-146 | done | Stale Blocker-Referenzen bereinigt (11 OPs, 18 Refs); OP-113a angelegt (Work-Commit 44b4350)
 - 2026-11-05 | OP-137 | done | AST-Block liest file-Feld + sortiert nach confidence (dbaa40b)
 - 2026-11-05 | OP-135b | done | explorer_context + tests deklariert, Property-Views direkt, 15 getattr-Callsites auf direkte Felder (171b10d + 4824c45)
+- 2026-11-05 | OP-136a | done | Contract-Validierung explorer->scout + planner->builder (fail-loud) (Work-Commit b77ee26)
 - 2026-11-04 | OP-149 | done | pytest_regression requires -> changed_py_files + security-ai Cross-Repo (ebc7c46; Work-Commit 11f02b1)
 - 2026-11-04 | OP-148 | done | test_shell.py 3 PTY-Tests auf skip (W36-RP-Guard; Work-Commit 547eab0)
 - 2026-11-04 | OP-150 | done | control/reflection.py geloescht (byte-identisch zu reflection.py, 0 Imports; Work-Commit 1752d76)
