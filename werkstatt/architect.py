@@ -168,6 +168,28 @@ Format (STRIKT einhalten):
      mehrere Funktionen hat: EIN Block pro Funktion.
   4. Welche Tests brauchen wir?
 
+  5. Welche Dateien haengen voneinander ab? (PFLICHT)
+
+     Pro Datei eine Zeile. Format EXAKT:
+       - <pfad>: <dep-pfad>, <dep-pfad>
+       - <pfad>: (keine)
+
+     Beispiel:
+       - werkstatt/state.py: (keine)
+       - werkstatt/gates.py: (keine)
+       - tests/test_gates.py: werkstatt/state.py, werkstatt/gates.py
+       - docs/STATE-INVENTUR.md: werkstatt/state.py, tests/test_gates.py
+
+     REGELN:
+       - Jede Datei, die in Abschnitt 3 als '## <pfad>'-Block
+         vorkommt, MUSS hier eine Zeile haben.
+       - Unabhaengige Datei: explizit '(keine)' schreiben.
+       - KEINE Wildcards, KEINE Prosa. Nur konkrete Pfade.
+       - Wenn KEINE Datei von einer anderen abhaengt:
+         eine einzelne Zeile '- (keine)'.
+       - Der Loop baut Tasks in dieser Reihenfolge. Falsche
+         Abhaengigkeiten fuehren zu blockierten Tasks.
+
 DEINE ROLLE IM LOOP (WICHTIG):
   - Explorer hat bereits geliefert: WO (Dateien, Zeilennummern,
     Ist-Zustand — siehe die Explorer-Bloecke im Kontext).

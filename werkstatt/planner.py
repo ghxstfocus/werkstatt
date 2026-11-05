@@ -767,6 +767,163 @@ def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 1800) -> list[dic
     return merged
 
 
+def _parse_architect_deps_block(prosa: str) -> tuple[bool, dict[str, list[str]]]:
+    """OP-163b: Architect-Block 5 parsen.
+
+    Liefert (found, datei_zu_dep_dateien). `found=True` auch wenn
+    Block leer (dann explizit 'keine Abhaengigkeiten').
+    """
+    import re as _re
+    m = _re.search(
+        r"(?:^|\n)(?:##\s*)?5\.\s*Welche Dateien h(?:ä|ae)ngen[^\n]*\n(.*?)(?=\n##\s|\nDEINE ROLLE|\Z)",
+        prosa or "", _re.DOTALL,
+    )
+    if not m:
+        return False, {}
+    block = m.group(1)
+    out: dict[str, list[str]] = {}
+    for line in block.splitlines():
+        lm = _re.match(r"^\s*-\s*(\S+\.\w+):\s*(.+)$", line)
+        if not lm:
+            continue
+        datei = lm.group(1).strip("`")
+        deps_raw = lm.group(2).strip()
+        if deps_raw.lower() in ("(keine)", "keine", "-"):
+            out[datei] = []
+            continue
+        deps = [
+            _re.sub(r"`", "", d).strip()
+            for d in deps_raw.split(",")
+        ]
+        out[datei] = [d for d in deps if d]
+    return True, out
+
+
+def _leite_deps_deterministisch(
+    tasks: list[dict], prosa: str = "", pd=None, pn="?",
+) -> list[dict]:
+    """OP-163b: Deps aus Architect-Block 5, sonst aus task_files.
+
+    Zwei Pfade:
+    1. Architect-Block 5 vorhanden -> Datei-zu-Datei-Deps, gemappt
+       auf Task-IDs via task_files[0]. Block hat Vorrang.
+    2. Kein Block -> Heuristik ueber task_files:
+       test/baseline/doku warten auf alle code-Tasks.
+
+    Loop-Test-4-Bug (2026-11-05): alle 8 Tasks ohne deps.
+    Nachfolger-Design: Architect schreibt Block 5 strukturiert.
+    """
+    if not tasks:
+        return tasks
+
+    found, arch_deps = _parse_architect_deps_block(prosa)
+
+    _datei_to_id: dict[str, str] = {}
+    for t in tasks:
+        if not isinstance(t, dict):
+            continue
+        files = t.get("task_files") or []
+        if files and isinstance(files[0], str):
+            _datei_to_id[files[0]] = t.get("id", "")
+
+    _quelle = "fallback"
+    if found:
+        _quelle = "architect"
+        if not arch_deps:
+            if pd is not None:
+                try:
+                    audit("planner_deps_abgeleitet", {
+                        "quelle": "architect-leer",
+                        "tasks_mit_deps": 0,
+                    }, pd, pn)
+                except Exception:  # noqa: BLE001, S110
+                    pass
+            return tasks
+        for t in tasks:
+            if not isinstance(t, dict):
+                continue
+            files = t.get("task_files") or []
+            if not files or not isinstance(files[0], str):
+                continue
+            _primary = files[0]
+            if _primary not in arch_deps:
+                continue
+            _dep_dateien = arch_deps[_primary]
+            _dep_ids = [
+                _datei_to_id[d] for d in _dep_dateien
+                if d in _datei_to_id
+            ]
+            if not _dep_ids:
+                continue
+            _alt = set(t.get("dependencies") or [])
+            _tid = t.get("id")
+            _merged = sorted((_alt | set(_dep_ids)) - {_tid})
+            t["dependencies"] = _merged
+    else:
+        _CODE = (".py", ".pyi")
+        _DOKU = (".md", ".rst", ".txt")
+
+        def _klass(t: dict) -> str:
+            files = t.get("task_files") or []
+            if not files:
+                return "unbekannt"
+            _fs = " ".join(str(f) for f in files)
+            if "state_inventory" in _fs or "baseline" in _fs.lower():
+                return "baseline"
+            for f in files:
+                if not isinstance(f, str):
+                    continue
+                fl = f.lower()
+                if fl.endswith(_DOKU):
+                    return "doku"
+                if ("/tests/" in fl or fl.startswith("tests/")
+                        or "/test_" in fl or "_test.py" in fl
+                        or fl.startswith("test_")):
+                    return "test"
+                if fl.endswith(_CODE):
+                    return "code"
+            return "unbekannt"
+
+        _klassen = {
+            t.get("id"): _klass(t)
+            for t in tasks if isinstance(t, dict)
+        }
+        _code_ids = sorted(i for i, k in _klassen.items() if k == "code")
+        _test_ids = sorted(i for i, k in _klassen.items() if k == "test")
+        _base_ids = sorted(i for i, k in _klassen.items() if k == "baseline")
+        if _code_ids:
+            for t in tasks:
+                if not isinstance(t, dict):
+                    continue
+                _kl = _klassen.get(t.get("id"), "unbekannt")
+                _tid = t.get("id")
+                _neue: list[str] = []
+                if _kl in ("test", "baseline"):
+                    _neue = [x for x in _code_ids if x != _tid]
+                elif _kl == "doku":
+                    _neue = [
+                        x for x in (_code_ids + _test_ids + _base_ids)
+                        if x != _tid
+                    ]
+                if _neue:
+                    _alt = set(t.get("dependencies") or [])
+                    t["dependencies"] = sorted(_alt | set(_neue))
+
+    if pd is not None:
+        try:
+            _mit = sum(
+                1 for t in tasks
+                if isinstance(t, dict) and t.get("dependencies"))
+            audit("planner_deps_abgeleitet", {
+                "quelle": _quelle,
+                "tasks_mit_deps": _mit,
+            }, pd, pn)
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+    return tasks
+
+
 def _normalisiere_task_files(tasks, explorer_ctx, pd, pn) -> list:
     """K61a: Korrigiert task_files ohne Pfad-Praefix anhand key_files.
 
@@ -991,6 +1148,10 @@ def _zerlege_in_sub_tasks(
         audit("planner_split_merged",
               {"vorher": _vor_merge, "nachher": len(_final)},
               pd, pn)
+
+    # OP-163b: Dep-Extraktion aus Architect-Block 5 (Vorrang)
+    # oder task_files-Heuristik (Fallback).
+    _final = _leite_deps_deterministisch(_final, prosa, pd, pn)
 
     audit("planner_split", {"anzahl": len(_final), "tasks": [
         {"id": t["id"], "files": t["task_files"],
