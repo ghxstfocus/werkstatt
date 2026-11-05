@@ -333,26 +333,66 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Blockiert von:** OP-126
 
 
-### OP-128: Chat-Modus Debugger (evidence-first)
+### OP-128: Chat-Modus Debugger (evidence-first, Ladder)
 
 - **Status:** open
 - **Typ:** feature
 - **Betroffen:** `werkstatt/chat_agent.py` (`chat_loop`),
   `werkstatt/chat_tools.py`, `werkstatt/web/static/chat.js`
-- **Problem:** Bei fehlgeschlagenem Run soll der Chat zuerst read-only
-  diagnostizieren, dann optional in einen Debugger-Modus wechseln —
-  mit `pytest_run` (nicht nur `--collect-only`) und der Erlaubnis,
-  genau einen temporaeren Test zur Reproduktion anzulegen. Kein
-  Produktionscode, kein Commit. Fix bleibt Diff-Vorschlag.
-- **Akzeptanzkriterien:** (a) `chat_loop(..., modus="chat"|"debugger")`.
-  Im Debugger-Modus zusaetzlich verfuegbar: `pytest_run(path, test)`,
-  `read_file(path, start, end)`, `write_temp_test(content)`.
-  (b) `write_temp_test` schreibt ausschliesslich nach
-  `.werkstatt/temp_tests/` — nie nach `tests/`, nie nach `werkstatt/`.
-  (c) Session-Events markieren `modus` je Turn.
-  (d) Test: Mock-`pytest_run`, Tool-Result landet in Session.
-- **Tests:** `tests/test_chat_debugger.py` (neu)
+- **Problem:** Bei fehlgeschlagenem Run soll der Chat dem Menschen
+  eine **Eskalations-Ladder** anbieten. Der Chat entscheidet NICHTS
+  — er stellt die Optionen vor. Der **Mensch** waehlt ueber den
+  Chat, welche Stufe greift. Der Debugger ist eine Faehigkeit des
+  Chats (nur im Modus `debugger` verfuegbar), keine eigene Rolle.
+
+- **Ladder-Modi** (Auswahl durch den Menschen; `chat_loop(...,
+  modus=...)` setzt die Wahl um):
+  - `manuell` — Chat diagnostiziert read-only. Der Mensch
+    entscheidet selbst, was er mit der Diagnose tut. Keine
+    Debugger-Tools. Keine automatische Memory-Schreibung.
+  - `debugger` — Der Mensch hat den Chat in den Debugger-Modus
+    geschaltet. Chat ruft `pytest_run(path, test)`,
+    `read_file(path, start, end)`, `write_temp_test(content)`.
+    `write_temp_test` schreibt ausschliesslich nach
+    `.werkstatt/temp_tests/` — nie nach `tests/`, nie nach
+    `werkstatt/`. Fix bleibt Diff-Vorschlag, kein Auto-Apply.
+    **Nach erfolgreicher Verifikation (Loop-Re-Run gruen):**
+    Lern-Event `debugger_fix_verifiziert` → Memory-Hook (OP-160).
+  - `reject` — Der Mensch lehnt ab, gibt Begruendung ueber den
+    Chat zurueck an Loop. Kein Fix → kein Memory-Eintrag, aber
+    Grund fliesst in Reflection-Kontext.
+
+- **Wichtige Trennung:**
+  - Der Chat ist **Interface**, kein Entscheider.
+  - Der Mensch ist der Entscheider. Er sieht die drei Modi als
+    Auswahl und waehlt einen.
+  - Die Memory-Schreibung ist die **Folge der menschlichen
+    Entscheidung** fuer den Debugger-Modus + einer erfolgreichen
+    deterministischen Verifikation — nicht eine Chat-Automatik.
+
+- **Akzeptanzkriterien:**
+  - (a) `chat_loop(..., modus="manuell"|"debugger"|"reject")`.
+    Der Modus wird vom Menschen gesetzt (UI/CLI-Argument), nicht
+    vom Chat gewaehlt. Modus wird pro Turn in Session-Events
+    markiert.
+  - (b) Debugger-Modus: `pytest_run` (nicht nur
+    `--collect-only`), `read_file`, `write_temp_test` verfuegbar.
+    In den Modi `manuell` und `reject` sind diese Tools NICHT
+    verfuegbar (fail-closed).
+  - (c) `write_temp_test` ausschliesslich nach
+    `.werkstatt/temp_tests/`.
+  - (d) Strukturierter Fix-Output (Dataclass `DebuggerFix`):
+    `{signatur, ursache_tag, diff, betroffene_dateien, confidence}`.
+  - (e) Nach erfolgreichem Re-Run: Event
+    `debugger_fix_verifiziert` mit `{signatur, fix_hash, run_id}`.
+  - (f) Test: Mock-`pytest_run`, Tool-Result landet in Session,
+    Fix-Event bei gruenem Re-Run.
+
+- **Tests:** `tests/test_chat_debugger.py` (neu),
+  `tests/test_debugger_memory_hook.py` (neu, OP-160)
 - **Blockiert von:** OP-124
+- **Lern-Hook:** OP-160 (Debugger → Memory)
+
 
 ### OP-129: Memory-Destillation + Promotion (scope-aware)
 
@@ -1015,6 +1055,78 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-03 | OP-045 | docs/WORKFLOW.md geloescht (nicht mehr gepflegt, nicht in DOC_CONVENTIONS §2 Pflicht)- 2026-11-03 | OP-008 | obsolete (pipeline.py geloescht) — Commit 07a4de6
 - 2026-11-03 | OP-009 | obsolete (python3 -m werkstatt.loop funktioniert (CLI seit Monaten aktiv)) — Commit n/a
 
+
+### OP-160: Debugger-Lern-Loop — Debugger-Fixes ins Erfahrungs-Gehirn
+
+- **Status:** open
+- **Typ:** architektur (Verzahnung OP-128 + OP-113/129)
+- **Betroffen:** `werkstatt/chat_agent.py`, `werkstatt/erfahrung.py`
+  (neu, via OP-113), `werkstatt/reflection.py`,
+  `werkstatt/chat_tools.py`
+- **Problem:** Der Debugger (OP-128) ist der einzige Punkt im System,
+  an dem ein Fix deterministisch verifiziert wird (Loop-Re-Run nach
+  Fix). Diesen verifizierten Fix-Strom soll das Erfahrungs-Gehirn
+  (OP-113/129) als Quelle nutzen — nicht als Freitext-Sammlung,
+  sondern als strukturierte, vertrauenswuerdige Eintraege.
+
+- **Voraussetzung (menschliche Entscheidung):** Ein Fix gelangt nur
+  ins Gedaechtnis, wenn (a) der Mensch den Debugger-Modus im Chat
+  gewaehlt hat, (b) der Debugger einen Fix vorgeschlagen hat,
+  (c) der Mensch den Fix angewendet hat, (d) der Loop-Re-Run
+  deterministisch gruen ist. Ohne (a)-(d) KEINE Schreibung.
+
+- **Datenstrom:**
+  1. Loop scheitert → Chat bietet Ladder an
+  2. Mensch waehlt Modus `debugger` ueber den Chat
+  3. Chat reproduziert + schlaegt Fix vor (Diff, kein Auto-Apply)
+  4. Mensch wendet Fix an → Loop-Re-Run
+  5. **Verify gruen** → `debugger_fix_verifiziert`-Event mit
+     `{signatur, ursache_tag, fix_hash, betroffene_dateien, run_id}`
+  6. **Verify rot** → kein Memory-Eintrag (Fix war falsch)
+
+- **Injektions-Architektur (WICHTIG — nicht standard):**
+  - **Builder Standard-Pfad:** KEINE Memory-Injektion.
+  - **Builder innerhalb `_reflection_loop`:** Memory-Injektion fuer
+    die aktuelle Fehler-Signatur, wenn `confidence >= high`.
+  - **Debugger-Prompt (OP-128):** Memory-Injektion fuer die aktuelle
+    Signatur, wenn `confidence >= medium`.
+  - **Planner / Architect / Scout / Reviewer:** KEINE
+    Memory-Injektion (sie sollen das aktuelle Problem loesen,
+    nicht raten).
+
+- **Reife-Modell (Vorschlag, zu klaeren vor Bau):**
+  - 1. Vorkommen der Signatur: Audit-Event, kein Gedaechtnis
+  - 2. Vorkommen: Eintrag `confidence=low`
+  - 3. Vorkommen + erfolgreicher Fix: `confidence=medium`
+  - 5. Vorkommen + erfolgreicher Fix: `confidence=high`
+
+- **Signatur (zu klaeren vor Bau):** Welche Felder identifizieren
+  einen Fehler eindeutig? Vorschlag: `stage` + `error_class` +
+  `test_id`/`file` + `root_cause_tag`. Ohne diese Struktur wird
+  Aehnlichkeitssuche zur Textsuche und damit wertlos.
+
+- **Fix-Format (zu klaeren vor Bau):** Ein Fix ist nicht immer
+  ein Code-Diff. Moegliche Typen: `patch`, `prompt_aenderung`,
+  `config_aenderung`, `test_aenderung`. Jeder Typ braucht ein
+  eigenes Speicherformat.
+
+- **Akzeptanzkriterien:**
+  - (a) `debugger_fix_verifiziert`-Event wird bei gruenem Re-Run
+    geschrieben (Hook in OP-128).
+  - (b) `erfahrung.py` (via OP-113) hat Tabelle `fix_episode` mit
+    Signatur-Feldern und `fix_hash`.
+  - (c) Reflection injiziert Memory nur bei `confidence >= high`.
+  - (d) Debugger injiziert Memory nur bei `confidence >= medium`.
+  - (e) Builder Standard-Pfad hat KEINE Memory-Injektion
+    (grep auf `memory_inject` in `builder.py` = 0 ausserhalb
+    Reflection).
+  - (f) Test: Fix mit gruenem Re-Run → Eintrag; Fix mit rotem
+    Re-Run → kein Eintrag.
+
+- **Tests:** `tests/test_debugger_memory_hook.py` (neu),
+  `tests/test_reflection_memory_inject.py` (neu)
+- **Blockiert von:** OP-128 (Ladder + strukturierter Fix-Output),
+  OP-113a (scope-Spalte), OP-129 (Destillation)
 
 ### OP-096: Phase 33.3 — gates.py nach control/ migrieren
 
