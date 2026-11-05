@@ -1,5 +1,6 @@
 """Spec: Task-Fail -> continue statt return 1 (Fix AR)."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 
@@ -16,7 +17,7 @@ class TestTaskFailContinue:
         import werkstatt.pipeline_phases as _pp
         src = (
             Path(_loop.__file__).read_text(encoding="utf-8")
-            + Path(_pp.__file__).read_text(encoding="utf-8")
+            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_pp._explorer_mod, _pp._plan_mod, _pp._tasks_mod, _pp._review_mod, _pp._finalize_mod]))
         )
         for marker in (
             'failure="reviewer_unvollstaendig")',
@@ -45,7 +46,7 @@ class TestTaskFailContinue:
         import werkstatt.pipeline_phases as _pp
         src = (
             Path(_loop.__file__).read_text(encoding="utf-8")
-            + Path(_pp.__file__).read_text(encoding="utf-8")
+            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_pp._explorer_mod, _pp._plan_mod, _pp._tasks_mod, _pp._review_mod, _pp._finalize_mod]))
         )
         # OP-114 (2026-11-04): Payload wird jetzt via _gate_failed_payload
         # gebaut. Struktur-Anker ist der _verify_patches-Aufruf mit

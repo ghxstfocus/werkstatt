@@ -1,5 +1,6 @@
 """Spec: Reflection-OK nur bei applied_count-Anstieg (Fix AL)."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 
@@ -20,7 +21,7 @@ class TestReflectionNoApply:
         import werkstatt.pipeline_phases as _pp
         src = (
             Path(_loop.__file__).read_text(encoding="utf-8")
-            + Path(_pp.__file__).read_text(encoding="utf-8")
+            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_pp._explorer_mod, _pp._plan_mod, _pp._tasks_mod, _pp._review_mod, _pp._finalize_mod]))
         )
         assert "_applied_vor_al" in src
         assert "_applied_nach_al" in src

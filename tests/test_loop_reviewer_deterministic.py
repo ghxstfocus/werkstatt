@@ -1,5 +1,6 @@
 """Spec: Loop bricht bei reviewer_deterministic_fail sofort ab (Fix R)."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 
@@ -15,7 +16,7 @@ class TestLoopReviewerDeterministicFail:
         import werkstatt.pipeline_phases as _pp
         src = (
             Path(_loop.__file__).read_text(encoding="utf-8")
-            + Path(_pp.__file__).read_text(encoding="utf-8")
+            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_pp._explorer_mod, _pp._plan_mod, _pp._tasks_mod, _pp._review_mod, _pp._finalize_mod]))
         )
         # Nach _with_spinner("Reviewer ...
         assert "state.reviewer_deterministic_fail = False" in src, (
