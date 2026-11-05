@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
-"""State-Drift-Tool (OP-136b).
+"""State-Drift-Tool (OP-136b, vereinfacht OP-141-Vorarbeit).
 
-Prueft drei Konsistenz-Checks zwischen CONTRACTS, TRANSITIONS und
-den @property-Views auf RunState.
+Prueft Konsistenz zwischen TRANSITIONS und RunState:
 
 Checks:
-  1. Jeder CONTRACTS-Key hat eine gleichnamige @property auf RunState.
-  2. Jeder in TRANSITIONS referenzierte Feld-Name ist bekannter
-     CONTRACTS-Key.
-  3. Jeder CONTRACTS-Key ist in TRANSITIONS referenziert oder hat
-     Contract.transition_frei=True.
+  1. Jeder in TRANSITIONS referenzierte Feld-Name ist in RunState
+     deklariert (via state_inventory.deklarierte_felder).
+  2. Alle 5 erwarteten Uebergaenge sind in TRANSITIONS.
 
 CLI:
   --check    Exit 1 bei Drift
@@ -18,76 +15,49 @@ CLI:
 from __future__ import annotations
 
 import argparse
-import ast
 import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from werkstatt.state_contracts import (
-    CONTRACTS,
-    TRANSITIONS,
-)
+from tools.state_inventory import deklarierte_felder
+from werkstatt.state_contracts import TRANSITIONS
 
-STATE_PY = Path("werkstatt/state.py")
-
-
-def _properties_auf_runstate() -> set[str]:
-    """Sammelt @property-Namen der RunState-Klasse via AST."""
-    tree = ast.parse(STATE_PY.read_text(encoding="utf-8"))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name == "RunState":
-            props: set[str] = set()
-            for item in node.body:
-                if not isinstance(item, ast.FunctionDef):
-                    continue
-                for deco in item.decorator_list:
-                    if isinstance(deco, ast.Name) and deco.id == "property":
-                        props.add(item.name)
-                        break
-            return props
-    return set()
+ERWARTETE_UEBERGAENGE = frozenset({
+    "explorer->scout",
+    "scout->architect",
+    "architect->planner",
+    "planner->builder",
+    "builder->reviewer",
+})
 
 
 def check_drift() -> dict:
-    """Fuehrt die drei Checks aus. Rueckgabe: dict mit Details."""
-    props = _properties_auf_runstate()
-    contracts = set(CONTRACTS.keys())
-
-    fehlende_properties = sorted(contracts - props)
+    """Fuehrt die zwei Checks aus. Rueckgabe: dict mit Details."""
+    deklariert = set(deklarierte_felder().keys())
 
     referenzierte: set[str] = set()
     for felder in TRANSITIONS.values():
         for feld_name, _regel in felder:
             referenzierte.add(feld_name)
-    unbekannte_transitions = sorted(referenzierte - contracts)
 
-    fehlende_transitions = sorted(
-        name for name in contracts
-        if name not in referenzierte
-        and not CONTRACTS[name].transition_frei
-    )
+    unbekannte_felder = sorted(referenzierte - deklariert)
+    fehlende_uebergaenge = sorted(ERWARTETE_UEBERGAENGE - set(TRANSITIONS))
 
-    ok = not (
-        fehlende_properties
-        or unbekannte_transitions
-        or fehlende_transitions
-    )
+    ok = not (unbekannte_felder or fehlende_uebergaenge)
     return {
         "ok": ok,
-        "fehlende_properties": fehlende_properties,
-        "unbekannte_transitions": unbekannte_transitions,
-        "fehlende_transitions": fehlende_transitions,
-        "n_contracts": len(contracts),
-        "n_properties": len(props),
+        "unbekannte_felder": unbekannte_felder,
+        "fehlende_uebergaenge": fehlende_uebergaenge,
         "n_transitions": len(TRANSITIONS),
+        "n_referenzierte_felder": len(referenzierte),
     }
 
 
 def main() -> int:
     p = argparse.ArgumentParser(
-        description="State-Registry-Drift-Check (OP-136b, read-only)."
+        description="State-Drift-Check (OP-136b, read-only)."
     )
     p.add_argument("--check", action="store_true",
                    help="Exit 1 bei Drift")
@@ -102,20 +72,18 @@ def main() -> int:
         return 0 if result["ok"] else 1
 
     if result["ok"]:
-        print(f"\u2713 Kein State-Drift ({result['n_contracts']} Contracts, "
-              f"{result['n_properties']} Properties, "
-              f"{result['n_transitions']} Uebergaenge).")
+        print(f"\u2713 Kein State-Drift "
+              f"({result['n_transitions']} Uebergaenge, "
+              f"{result['n_referenzierte_felder']} Felder).")
         return 0
 
     print("\u2717 State-Drift gefunden:")
-    if result["fehlende_properties"]:
-        print(f"  CONTRACTS ohne @property: {result['fehlende_properties']}")
-    if result["unbekannte_transitions"]:
-        print(f"  TRANSITIONS referenziert unbekannte Contracts: "
-              f"{result['unbekannte_transitions']}")
-    if result["fehlende_transitions"]:
-        print(f"  CONTRACTS ohne TRANSITIONS-Eintrag und ohne "
-              f"transition_frei=True: {result['fehlende_transitions']}")
+    if result["unbekannte_felder"]:
+        print(f"  TRANSITIONS referenziert unbekannte Felder: "
+              f"{result['unbekannte_felder']}")
+    if result["fehlende_uebergaenge"]:
+        print(f"  Fehlende Uebergaenge in TRANSITIONS: "
+              f"{result['fehlende_uebergaenge']}")
     return 1
 
 

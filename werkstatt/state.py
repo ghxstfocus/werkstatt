@@ -273,37 +273,6 @@ class RunState:
     split_failure_grund: str | None = None
     tasks_ok_counter: int = 0
 
-    # === OP-135a: Read-only Property-Views (Contract-Dataclasses) ===
-    @property
-    def explorer_output(self):
-        from werkstatt.state_contracts import ExplorerOutput
-        return ExplorerOutput.from_dict(self.explorer_context or {})
-
-    @property
-    def explorer_diagnostics(self):
-        from werkstatt.state_contracts import ExplorerDiagnostics
-        raw = getattr(self, "explorer_findings", None) or {}
-        return ExplorerDiagnostics.from_dict(raw)
-
-    @property
-    def scout_output(self):
-        from werkstatt.state_contracts import ScoutOutput
-        return ScoutOutput.from_dict(self.scout_api_auszug or {})
-
-    @property
-    def architect_output(self):
-        from werkstatt.state_contracts import ArchitectOutput
-        return ArchitectOutput(prosa=self.architect_prosa or "")
-
-    @property
-    def planner_output(self):
-        from werkstatt.state_contracts import PlannerOutput
-        return PlannerOutput(
-            tasks=self.tasks or [],
-            tests=self.tests or [],
-            akzeptanzkriterien=self.akzeptanzkriterien or [],
-        )
-
 
 @dataclass
 class VorlaufErgebnis:

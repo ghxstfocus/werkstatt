@@ -30,32 +30,12 @@ from werkstatt.state_contracts import TRANSITIONS
 
 BASELINE_PATH = Path(__file__).resolve().parent / "state_flow_baseline.json"
 
-# Property-View zu RunState-Feldern (aus state.py::RunState, OP-135a)
-CONTRACT_FIELD_MAP: dict[str, list[str]] = {
-    "explorer_output": ["explorer_context"],
-    "explorer_diagnostics": ["explorer_findings"],
-    "scout_output": ["scout_api_auszug"],
-    "architect_output": ["architect_prosa"],
-    "planner_output": ["tasks", "tests", "akzeptanzkriterien"],
-}
-
-
-def _feld_to_contracts() -> dict[str, list[str]]:
-    """Rueckwaerts-Map: RunState-Feld -> [Contract-Name, ...]."""
-    out: dict[str, list[str]] = defaultdict(list)
-    for contract_name, fields in CONTRACT_FIELD_MAP.items():
-        for f in fields:
-            out[f].append(contract_name)
-    return dict(out)
-
-
 def _feld_to_transitions() -> dict[str, list[str]]:
     """Rueckwaerts-Map: RunState-Feld -> [Transition-Key, ...]."""
     out: dict[str, list[str]] = defaultdict(list)
-    for trans_key, contract_list in TRANSITIONS.items():
-        for contract_name, _regel in contract_list:
-            for f in CONTRACT_FIELD_MAP.get(contract_name, []):
-                out[f].append(trans_key)
+    for trans_key, felder in TRANSITIONS.items():
+        for feld_name, _regel in felder:
+            out[feld_name].append(trans_key)
     return dict(out)
 
 
@@ -100,13 +80,11 @@ def _risiko(info: dict, contracts: list[str]) -> tuple[str, list[str]]:
 def baue_flow_index() -> dict[str, dict]:
     """Fuer jedes Feld: Kategorie, Writer, Reader, Getattr, Contracts, Transitions, Risiko."""
     idx = kategorisiere()
-    f_to_c = _feld_to_contracts()
     f_to_t = _feld_to_transitions()
 
     ergebnis: dict[str, dict] = {}
     for name, info in idx.items():
-        contracts = f_to_c.get(name, [])
-        risiko, gruende = _risiko(info, contracts)
+        risiko, gruende = _risiko(info, [])
         ergebnis[name] = {
             "kategorie": info["kategorie"],
             "typ": info["typ"],
@@ -114,7 +92,7 @@ def baue_flow_index() -> dict[str, dict]:
             "schreiber": info["schreiber"],
             "leser": info["leser"],
             "getattr": info["getattr"],
-            "contracts": contracts,
+            "contracts": [],
             "transitions": f_to_t.get(name, []),
             "risiko": risiko,
             "gruende": gruende,

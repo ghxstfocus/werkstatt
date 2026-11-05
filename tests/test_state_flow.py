@@ -34,11 +34,11 @@ def test_ghost_felder_im_index():
     )
 
 
-def test_contract_bezug_fuer_tasks():
+def test_transition_bezug_fuer_tasks():
     index = baue_flow_index()
     assert "tasks" in index
-    assert "planner_output" in index["tasks"]["contracts"]
     assert "planner->builder" in index["tasks"]["transitions"]
+    assert "builder->reviewer" in index["tasks"]["transitions"]
 
 
 def test_risiko_hoch_fuer_multi_writer_ohne_contract():
