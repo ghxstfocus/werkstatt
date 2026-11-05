@@ -210,7 +210,7 @@ import pytest as _pytest
 
 @_pytest.fixture(autouse=True)
 def _isolate_loop_renderer():
-    import werkstatt.loop_renderer as _r
+    import werkstatt.render as _r
     _r._PROGRESS_STATE.clear()
     _r._PROGRESS_OPEN = False
     _r._TEE_STREAM = None
