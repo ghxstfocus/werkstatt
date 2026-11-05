@@ -616,7 +616,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - Bestehende Tests (`test_loop_renderer.py`, `test_terminal_proxy.py`,
     `test_renderer_live.py`) bleiben gruen ohne Aenderung.
 - **Tests:** keine neuen (bestehende decken ab).
-- **Blockiert von:** OP-136
+- **Blockiert von:** OP-136b
 
 ### OP-139: `phases/` Submodul-Split (pipeline_phases.py zerlegen)
 
@@ -697,7 +697,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_state_split.py` (neu),
   bestehende Suite bleibt gruen (mit Anpassungen an geaenderte
   Feld-Pfade).
-- **Blockiert von:** OP-136
+- **Blockiert von:** OP-136b
 
 ### OP-142: `web/routes/` Submodul-Split
 
