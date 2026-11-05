@@ -211,14 +211,16 @@ import pytest as _pytest
 @_pytest.fixture(autouse=True)
 def _isolate_loop_renderer():
     import werkstatt.render as _r
+    import werkstatt.render.emit as _re
+    import werkstatt.render.tee as _rt
     _r._PROGRESS_STATE.clear()
-    _r._PROGRESS_OPEN = False
-    _r._TEE_STREAM = None
+    _re._PROGRESS_OPEN = False
+    _rt._TEE_STREAM = None
     _r._LAST_HEARTBEAT.clear()
     _r.set_project("default")
     yield
     _r._PROGRESS_STATE.clear()
-    _r._PROGRESS_OPEN = False
-    _r._TEE_STREAM = None
+    _re._PROGRESS_OPEN = False
+    _rt._TEE_STREAM = None
     _r._LAST_HEARTBEAT.clear()
     _r.set_project("default")
