@@ -118,3 +118,70 @@ def test_alte_user_content_form_noch_da():
     """Der alte Pfad bleibt als else-Zweig erhalten (kein Zwang zu v2)."""
     src = Path("/opt/werkstatt/werkstatt/planner.py").read_text(encoding="utf-8")
     assert 'f"Aufgabe: {aufgabe}' in src
+
+def test_planner_system_liest_file_feld():
+    """OP-137 Regression: key_files haben 'file', nicht 'pfad'/'path'.
+
+    Vor dem Fix war der AST-Block immer leer, weil _kf_paths
+    nur 'pfad'/'path' las — die key_files aber 'file' tragen.
+    """
+    from types import SimpleNamespace
+
+    from werkstatt.architect import _planner_system
+    st = SimpleNamespace(
+        api_index_cache={
+            "core/foo.py": {"functions": [{"name": "hello", "args": ["x"]}]},
+        },
+        docs={},
+        explorer_findings={},
+        scout_api_auszug={},
+    )
+
+    ctx = {"key_files": [{"file": "core/foo.py", "confidence": "high"}]}
+    prompt = _planner_system("test", ctx, st)
+
+    assert "### core/foo.py" in prompt, (
+        "AST-Block muss die Datei enthalten (file-Feld lesen)"
+    )
+    assert "def hello(x)" in prompt, (
+        "AST-Block muss die Funktion enthalten"
+    )
+
+
+def test_planner_system_sortiert_nach_confidence():
+    """OP-137: AST-Block nach confidence sortiert, damit der Architect
+    bei >10 Dateien die wichtigsten sieht (high vor medium vor low)."""
+    from types import SimpleNamespace
+
+    from werkstatt.architect import _planner_system
+    st = SimpleNamespace(
+        api_index_cache={
+            "a_low.py": {"functions": [{"name": "f_low", "args": []}]},
+            "z_high.py": {"functions": [{"name": "f_high", "args": []}]},
+            "m_med.py": {"functions": [{"name": "f_med", "args": []}]},
+        },
+        docs={},
+        explorer_findings={},
+        scout_api_auszug={},
+    )
+
+    ctx = {
+        "key_files": [
+            {"file": "a_low.py", "confidence": "low"},
+            {"file": "z_high.py", "confidence": "high"},
+            {"file": "m_med.py", "confidence": "medium"},
+        ],
+    }
+    prompt = _planner_system("test", ctx, st)
+
+    pos_high = prompt.find("### z_high.py")
+    pos_med = prompt.find("### m_med.py")
+    pos_low = prompt.find("### a_low.py")
+
+    assert pos_high > 0, "high-Datei muss im AST-Block sein"
+    assert pos_med > 0, "medium-Datei muss im AST-Block sein"
+    assert pos_low > 0, "low-Datei muss im AST-Block sein"
+    assert pos_high < pos_med < pos_low, (
+        f"Sortierung falsch: high@{pos_high}, med@{pos_med}, low@{pos_low}"
+    )
+

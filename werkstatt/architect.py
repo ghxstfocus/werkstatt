@@ -323,10 +323,24 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
     if state is not None and explorer_ctx is not None:
         _api_idx = getattr(state, "api_index_cache", None) or {}
         _kf = explorer_ctx.get("key_files") or []
+        # OP-137: key_files haben "file", nicht "pfad"/"path".
+        # Sortiere nach confidence (high -> medium -> low -> default).
+        # Sonst sieht der Architect bei >10 Dateien zufaellig 10
+        # medium und verpasst eine high-confidence-Datei.
+        _CONF_RANK = {"high": 0, "medium": 1, "low": 2}
+
+        def _conf_key(_kf_entry):
+            _c = ((_kf_entry.get("confidence") or "medium").lower()
+                  if isinstance(_kf_entry, dict) else "medium")
+            return _CONF_RANK.get(_c, 3)
+
+        _kf_sorted = sorted(_kf, key=_conf_key)
         _kf_paths: list[str] = []
-        for _f in _kf:
+        for _f in _kf_sorted:
             if isinstance(_f, dict):
-                _p = _f.get("pfad") or _f.get("path") or ""
+                _p = (_f.get("file")
+                      or _f.get("pfad")
+                      or _f.get("path") or "")
             else:
                 _p = str(_f)
             if _p:
@@ -382,7 +396,7 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
 
     # === M-Welle-I: EXPLORER-FINDINGS + SCOUT-API (Welle E + D3 komplett) ===
     if state is not None:
-        _exf = getattr(state, "explorer_findings", None) or {}
+        _exf = state.explorer_findings or {}
         if _exf:
             try:
                 _exf_str = _format_explorer_findings(_exf)
@@ -392,7 +406,7 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
                     )
             except Exception:  # noqa: BLE001
                 pass
-        _scout_apis = getattr(state, "scout_api_auszug", None) or {}
+        _scout_apis = state.scout_api_auszug or {}
         if _scout_apis:
             try:
                 _sa_str = _format_scout_apis_arch(_scout_apis)
