@@ -262,10 +262,17 @@ def _architecture_drift_check(pd: Path) -> dict:
 
 
 def _build_commit_subject(aufgabe: str, op_nnn: str | None) -> str:
-    """OP-063: Commit-Subject aus Aufgabe, wortgrenzen-sicher."""
+    """OP-063: Commit-Subject aus Aufgabe, wortgrenzen-sicher.
+
+    OP-169: Markdown-Header-Prefix (z.B. "### ") vor dem OP-NNN-
+    startswith-Check strippen. Sonst startet _line mit "### " und
+    der OP-Prefix wird doppelt ("OP-145: ### OP-145: ...").
+    """
     _line = (aufgabe or "").split("\n")[0].strip()
     if not _line:
         _line = "update"
+    while _line.startswith("#"):
+        _line = _line[1:].lstrip()
     if op_nnn and _line.upper().startswith(op_nnn.upper()):
         _rest = _line[len(op_nnn):].lstrip(": ").strip()
         if _rest:

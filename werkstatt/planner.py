@@ -994,6 +994,7 @@ def _zerlege_in_sub_tasks(
 
     audit("planner_split", {"anzahl": len(_final), "tasks": [
         {"id": t["id"], "files": t["task_files"],
+         "deps": t.get("dependencies") or [],
          "desc_len": len(t.get("description", ""))} for t in _final
     ]}, pd, pn)
     return _doku_post_check(_final, prosa, pd, pn, aufgabe)
