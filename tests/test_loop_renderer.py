@@ -5,13 +5,16 @@ import io
 import sys
 from unittest.mock import patch
 
+from werkstatt.render import rich as _rmod
+from werkstatt.render import tee as _tmod
+
 
 def test_emit_tty_mode():
     """TTY: plain print ohne Zeitstempel."""
     import werkstatt.loop_renderer as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
-         patch.object(r, "IS_CI", False):
+         patch.object(_rmod, "IS_CI", False):
         r._emit("test-zeile")
     out = buf.getvalue()
     assert "test-zeile" in out
@@ -23,7 +26,7 @@ def test_emit_ci_mode():
     import werkstatt.loop_renderer as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
-         patch.object(r, "IS_CI", True):
+         patch.object(_rmod, "IS_CI", True):
         r._emit("test-zeile")
     out = buf.getvalue()
     assert "test-zeile" in out
@@ -35,7 +38,7 @@ def test_group_start_end_ci():
     import werkstatt.loop_renderer as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
-         patch.object(r, "IS_CI", True):
+         patch.object(_rmod, "IS_CI", True):
         r.group_start("Phase 1: Explorer")
         r.group_end()
     out = buf.getvalue()
@@ -48,7 +51,7 @@ def test_group_start_end_tty():
     import werkstatt.loop_renderer as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
-         patch.object(r, "IS_CI", False):
+         patch.object(_rmod, "IS_CI", False):
         r.group_start("Phase 1: Explorer")
         r.group_end()
     out = buf.getvalue()
@@ -61,7 +64,7 @@ def test_heartbeat_ci():
     import werkstatt.loop_renderer as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
-         patch.object(r, "IS_CI", True):
+         patch.object(_rmod, "IS_CI", True):
         r.heartbeat("Planner", 42)
     out = buf.getvalue()
     assert "Planner" in out
@@ -73,7 +76,7 @@ def test_step_mit_elapsed():
     import werkstatt.loop_renderer as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
-         patch.object(r, "IS_CI", False):
+         patch.object(_rmod, "IS_CI", False):
         r.step(1, "Explorer", "3 files", elapsed_s=1.234)
     out = buf.getvalue()
     assert "1.2s" in out
@@ -84,7 +87,7 @@ def test_group_nicht_verschachtelt():
     import werkstatt.loop_renderer as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
-         patch.object(r, "IS_CI", True):
+         patch.object(_rmod, "IS_CI", True):
         r.group_start("Phase 1")
         r.group_end()
         r.group_start("Phase 2")
@@ -106,9 +109,9 @@ def test_emit_progress_ci_sequenziell():
     import werkstatt.loop_renderer as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
-         patch.object(r, "_TEE_STREAM", None), \
-         patch.object(r, "IS_CI", True), \
-         patch.object(r, "IS_LIVE", False), \
+         patch.object(_tmod, "_TEE_STREAM", None), \
+         patch.object(_rmod, "IS_CI", True), \
+         patch.object(_rmod, "IS_LIVE", False), \
          patch.object(r, "_publish", lambda *a, **kw: None):
         r._emit_progress("Builder", "start", "x.py")
     assert "[Builder] start x.py" in buf.getvalue()
@@ -119,8 +122,8 @@ def test_emit_progress_live_ueberschreibt():
     import werkstatt.loop_renderer as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
-         patch.object(r, "_TEE_STREAM", None), \
-         patch.object(r, "IS_LIVE", True), \
+         patch.object(_tmod, "_TEE_STREAM", None), \
+         patch.object(_rmod, "IS_LIVE", True), \
          patch.object(r, "_publish", lambda *a, **kw: None):
         r._emit_progress("Builder", "start", "x.py")
     out = buf.getvalue()
@@ -133,8 +136,8 @@ def test_emit_progress_leerer_step_no_op():
     import werkstatt.loop_renderer as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
-         patch.object(r, "_TEE_STREAM", None), \
-         patch.object(r, "IS_CI", True), \
+         patch.object(_tmod, "_TEE_STREAM", None), \
+         patch.object(_rmod, "IS_CI", True), \
          patch.object(r, "_publish", lambda *a, **kw: None):
         r._emit_progress("Builder", "")
     assert buf.getvalue() == ""

@@ -29,157 +29,52 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-# === Modus-Wahl ===
-_render_mode_raw = os.environ.get("WERKSTATT_RENDER", "").lower()
-_is_tty = sys.stdout.isatty()
-_in_test = os.environ.get("WERKSTATT_IN_TEST") == "1"
-
-if _in_test or _render_mode_raw == "ci":
-    RENDER_MODE = "ci"
-elif _render_mode_raw == "live":
-    RENDER_MODE = "live"
-elif _render_mode_raw == "pretty":
-    RENDER_MODE = "pretty"
-elif _is_tty:
-    RENDER_MODE = "live"
-else:
-    RENDER_MODE = "ci"
 
 
-# Tee-Stream fuer Live-Log-Mitschnitt (Terminal-Panel im Browser).
-# Set durch loop.main(), schreibt alle Render-Zeilen in eine Datei.
-_TEE_STREAM: TextIO | None = None
-_TEE_LOCK = threading.Lock()
+# OP-138 Phase 2a: tee.py + rich.py.
+# Submodule als Modul importieren (nicht from-import kopieren),
+# damit Tests auf werkstatt.render.rich.X / tee.X patchen koennen.
+from . import rich as _rich  # noqa: E402
+from . import tee as _tee_mod  # noqa: E402
+from .rich import (  # noqa: E402, F401
+    IS_CI,
+    IS_LIVE,
+    RENDER_MODE,
+    USE_COLOR,
+    BarColumn,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    _HAS_RICH,
+    _RichConsole,
+    _RichLive,
+    _RichPanel,
+    _RichProgress,
+    _RichSpinner,
+    _RichSyntax,
+    _bold,
+    _c,
+    _console,
+    _cyan,
+    _dim,
+    _green,
+    _red,
+    _use_rich,
+    _yellow,
+)
+from .tee import (  # noqa: E402, F401
+    _TEE_LOCK,
+    _TEE_STREAM,
+    _TeeWriter,
+    _tee,
+    set_tee_stream,
+)
 
 # OP-111: Progress-Tracking fuer Sub-Component-Live-Events.
 # Live-Mode ueberschreibt die Zeile pro label, CI-Mode appended.
 _PROGRESS_STATE: dict[str, str] = {}
 _PROGRESS_LOCK = threading.Lock()
-_PROGRESS_OPEN: bool = False  # True wenn eine Progress-Zeile ohne \n offen ist
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-
-
-def set_tee_stream(stream: TextIO | None) -> None:
-    """Setzt/loescht das Tee-Ziel. Schreibt jede Render-Zeile dort hin."""
-    global _TEE_STREAM
-    with _TEE_LOCK:
-        _TEE_STREAM = stream
-
-
-def _tee(text: str) -> None:
-    """Schreibt text (ANSI-frei, GH-Actions-Prefixe entfernt) in Tee-Stream."""
-    if _TEE_STREAM is None:
-        return
-    try:
-        clean = _ANSI_RE.sub("", text)
-        # Bugfix 2026-11-03: ::log::/::group::/::endgroup:: sind
-        # GH-Actions-Syntax, nicht user-facing. Aus dem Logfile
-        # entfernen, sonst liest es sich wie Maschinencode.
-        if clean.startswith("::log::"):
-            clean = clean[len("::log::"):].lstrip()
-        elif clean.startswith("::group::") or clean.startswith("::endgroup::"):
-            return
-        if not clean:
-            return
-        with _TEE_LOCK:
-            _TEE_STREAM.write(clean + "\n")
-            _TEE_STREAM.flush()
-    except (OSError, ValueError):
-        pass
-
-IS_CI = RENDER_MODE == "ci"
-IS_LIVE = RENDER_MODE == "live"
-
-# === rich-Import (optional) ===
-try:
-    from rich.console import Console as _RichConsole  # type: ignore[import-not-found]
-    from rich.live import Live as _RichLive  # type: ignore[import-not-found]
-    from rich.panel import Panel as _RichPanel  # type: ignore[import-not-found]
-    from rich.progress import (  # type: ignore[import-not-found]
-        BarColumn,
-        SpinnerColumn,
-        TaskProgressColumn,
-        TextColumn,
-    )
-    from rich.progress import (
-        Progress as _RichProgress,
-    )
-    from rich.spinner import Spinner as _RichSpinner  # type: ignore[import-not-found]
-    from rich.syntax import Syntax as _RichSyntax  # type: ignore[import-not-found]
-    _HAS_RICH = True
-except ImportError:
-    _HAS_RICH = False
-
-# OP-111-Vorbereitung: Rich-Console-Wrapper, der stdout UND tee bedient.
-# Problem: _console.print() schrieb bisher nur an sys.stdout — der
-# Loop-Footer (LOOP FEHLGESCHLAGEN) landete nicht im Render-Log.
-class _TeeWriter:
-    """File-Wrapper: schreibt an stdout + ruft _tee pro Zeile.
-
-    OP-119 (2026-11-04): Defensiv gegen geschlossene Streams. Nach
-    Test-Ende kann ein noch lebender Thread (Heartbeat, _emit_progress)
-    in den bereits geschlossenen capsys-StringIO schreiben; das loeste
-    ValueError: I/O operation on closed file als stderr-Noise aus.
-    """
-    def __init__(self, base):
-        self._base = base
-    def write(self, text):
-        try:
-            n = self._base.write(text)
-        except (ValueError, OSError):
-            return 0
-        try:
-            for line in text.split("\n"):
-                line = line.rstrip()
-                if line:
-                    _tee(line)
-        except (ValueError, OSError):
-            pass
-        return n
-    def flush(self):
-        try:
-            return self._base.flush()
-        except (ValueError, OSError):
-            return None
-    def isatty(self):
-        try:
-            return self._base.isatty()
-        except (ValueError, OSError):
-            return False
-    def fileno(self):
-        return self._base.fileno()
-
-# rich nur im pretty/live-Modus aktiv
-_use_rich = _HAS_RICH and RENDER_MODE in ("pretty", "live")
-if _use_rich:
-    import sys as _sys
-    _console: _RichConsole = _RichConsole(
-        file=_TeeWriter(_sys.stdout),
-        force_terminal=(RENDER_MODE == "live"), width=100,
-    )
-else:
-    # Dummy-Console, die ins Nichts schreibt. Spart None-Checks an
-    # allen .print()-Aufrufen.
-    _console = _RichConsole(quiet=True)
-
-
-# === Farben (ANSI, nur bei TTY oder live/pretty) ===
-USE_COLOR = (_is_tty or RENDER_MODE in ("pretty", "live")) and not IS_CI
-
-
-def _c(code: str, text: str) -> str:
-    if not USE_COLOR:
-        return text
-    return f"\033[{code}m{text}\033[0m"
-
-
-def _green(t: str) -> str: return _c("32", t)
-def _yellow(t: str) -> str: return _c("33", t)
-def _red(t: str) -> str: return _c("31", t)
-def _cyan(t: str) -> str: return _c("36", t)
-def _bold(t: str) -> str: return _c("1", t)
-def _dim(t: str) -> str: return _c("2", t)
-
+_PROGRESS_OPEN: bool = False
 
 def _emit_raw(text: str) -> None:
     """Direkter stdout-Schreibpfad. CI: mit Zeitstempel. Sonst: plain.
@@ -196,12 +91,12 @@ def _emit_raw(text: str) -> None:
         except (OSError, ValueError):
             pass
         _PROGRESS_OPEN = False
-    if IS_CI:
+    if _rich.IS_CI:
         ts = datetime.now().strftime("%H:%M:%S")
         print(f"[{ts}] {text}", flush=True)
     else:
         print(text, flush=True)
-    _tee(text)
+    _tee_mod._tee(text)
 _PROJECT_CTX: contextvars.ContextVar[str] = contextvars.ContextVar(
     "werkstatt_project", default="default"
 )
@@ -360,7 +255,7 @@ def _progress_write(line: str) -> None:
         _PROGRESS_OPEN = True
     except (OSError, ValueError):
         pass
-    _tee(line)
+    _tee_mod._tee(line)
 
 
 def _emit_progress(label: str, step: str, detail: str = "") -> None:
@@ -378,7 +273,7 @@ def _emit_progress(label: str, step: str, detail: str = "") -> None:
     if detail:
         line += f" {detail}"
 
-    if IS_LIVE:
+    if _rich.IS_LIVE:
         with _PROGRESS_LOCK:
             _PROGRESS_STATE[label] = line
             _progress_write(line)
@@ -392,7 +287,7 @@ def _emit_progress(label: str, step: str, detail: str = "") -> None:
 # Live-Spinner (nur RENDER_MODE=live)
 # ============================================================
 
-_live: _RichLive | None = None
+_live: _rich._RichLive | None = None
 _spinner_text = ""
 _live_lock = threading.Lock()
 
@@ -404,7 +299,7 @@ def spinner_start(label: str, detail: str = "") -> None:
     """
     global _live, _spinner_text
     _publish("spinner", label, state="start", label=label, detail=detail)
-    if not IS_LIVE or not _HAS_RICH:
+    if not _rich.IS_LIVE or not _rich._HAS_RICH:
         # Fallback: Heartbeat-Zeile
         _emit(f"  · {label} ... {detail}" if detail else f"  · {label} ...")
         return
@@ -413,11 +308,11 @@ def spinner_start(label: str, detail: str = "") -> None:
         # M-377: idempotent — wenn schon aktiv, nur updaten.
         if _live is not None:
             _spinner_text = f"{label}" + (f" · {detail}" if detail else "")
-            _live.update(_RichSpinner("dots", text=_spinner_text, style="cyan"))
+            _live.update(_rich._RichSpinner("dots", text=_spinner_text, style="cyan"))
             return
         _spinner_text = f"{label}" + (f" · {detail}" if detail else "")
-        _spinner = _RichSpinner("dots", text=_spinner_text, style="cyan")
-        _live = _RichLive(_spinner, console=_console, refresh_per_second=10, transient=True)
+        _spinner = _rich._RichSpinner("dots", text=_spinner_text, style="cyan")
+        _live = _rich._RichLive(_spinner, console=_rich._console, refresh_per_second=10, transient=True)
         try:
             _live.start()
         except Exception:  # noqa: BLE001
@@ -429,17 +324,17 @@ def spinner_update(label: str, detail: str = "") -> None:
     """Aktualisiert den Live-Spinner (nur RENDER_MODE=live)."""
     global _spinner_text
     _publish("spinner", label, state="update", label=label, detail=detail)
-    if not IS_LIVE or not _HAS_RICH or _live is None:
+    if not _rich.IS_LIVE or not _rich._HAS_RICH or _live is None:
         return
     with _live_lock:
         _spinner_text = f"{label}" + (f" · {detail}" if detail else "")
-        _live.update(_RichSpinner("dots", text=_spinner_text, style="cyan"))
+        _live.update(_rich._RichSpinner("dots", text=_spinner_text, style="cyan"))
 
 
 def spinner_stop(final_label: str = "") -> None:
     """Beendet den Live-Spinner (nur RENDER_MODE=live)."""
     global _live
-    if not IS_LIVE or not _HAS_RICH or _live is None:
+    if not _rich.IS_LIVE or not _rich._HAS_RICH or _live is None:
         return
     with _live_lock:
         if _live is not None:
@@ -457,16 +352,16 @@ def spinner_stop(final_label: str = "") -> None:
 
 def group_start(name: str) -> None:
     """Phasen-Header."""
-    if IS_CI:
+    if _rich.IS_CI:
         print(f"::group::{name}")
-    elif _use_rich:
-        _console.rule(f"[bold cyan]{name}[/]")
+    elif _rich._use_rich:
+        _rich._console.rule(f"[bold cyan]{name}[/]")
     else:
         _emit(f"--- {name} ---")
 
 
 def group_end() -> None:
-    if IS_CI:
+    if _rich.IS_CI:
         print("::endgroup::")
 
 
@@ -483,14 +378,14 @@ def heartbeat(label: str, elapsed_s: int) -> None:
     verify_failed nach 30 s Stille.
     Throttle: max. alle 5 s dieselbe Zeile.
     """
-    if IS_LIVE and _live is not None:
+    if _rich.IS_LIVE and _live is not None:
         spinner_update(label, f"{elapsed_s}s")
         return
     _last = _LAST_HEARTBEAT.get(label, -999)
     # Bugfix 2026-11-03: In CI erst ab 30s und dann alle 15s
     # (vorher 5s -> Log-Spam bei pytest_changed). In non-CI
     # 5s-Throttle. _publish nur wenn tatsaechlich ausgegeben.
-    if IS_CI:
+    if _rich.IS_CI:
         if elapsed_s < 30 or elapsed_s - _last < 15:
             return
     else:
@@ -507,8 +402,8 @@ TOTAL_PHASES = 5
 def header(title: str) -> None:
     """Zeigt den Loop-Header (einmal pro Lauf)."""
     _emit("")
-    if _use_rich:
-        _console.print(_RichPanel(
+    if _rich._use_rich:
+        _rich._console.print(_rich._RichPanel(
             f"[bold]Werkstatt Loop[/] — {title}",
             title="[cyan]Loop[/]",
             border_style="cyan",
@@ -541,7 +436,7 @@ def step(
 def task(nr: int, total: int, name: str) -> None:
     """Startet einen Task."""
     label = f"[{nr}/{total}]"
-    if IS_LIVE and _HAS_RICH:
+    if _rich.IS_LIVE and _rich._HAS_RICH:
         spinner_start(f"Task {nr}/{total}", name[:50])
     else:
         _emit_raw(f"  {_dim(label)} {_cyan('→')} {name}")
@@ -551,7 +446,7 @@ def task(nr: int, total: int, name: str) -> None:
 def task_ok(nr: int, total: int, elapsed_s: float | None = None) -> None:
     label = f"[{nr}/{total}]"
     timing = f" ({elapsed_s:.1f}s)" if elapsed_s is not None else ""
-    if IS_LIVE and _HAS_RICH:
+    if _rich.IS_LIVE and _rich._HAS_RICH:
         spinner_stop()
     _emit_raw(f"  {_dim(label)} {_green('✓')} task ok{timing}")
     _publish("task_done", f"Task {nr}/{total}: ok{timing}", nr=nr, total=total, ok=True, elapsed_s=elapsed_s)
@@ -560,7 +455,7 @@ def task_ok(nr: int, total: int, elapsed_s: float | None = None) -> None:
 def task_failed(nr: int, total: int, reason: str = "") -> None:
     label = f"[{nr}/{total}]"
     extra = f" — {reason}" if reason else ""
-    if IS_LIVE and _HAS_RICH:
+    if _rich.IS_LIVE and _rich._HAS_RICH:
         spinner_stop()
     _emit_raw(f"  {_dim(label)} {_red('✗')} task failed{extra}")
     _publish("task_done", f"Task {nr}/{total}: failed{extra}", nr=nr, total=total, ok=False, reason=reason)
@@ -582,10 +477,10 @@ def patch(file: str, action: str = "create") -> None:
 def footer(success: bool, tasks_total: int, tasks_ok: int) -> None:
     """Zeigt den Loop-Abschluss."""
     _emit("")
-    if _use_rich:
+    if _rich._use_rich:
         style = "green" if success else "red"
         text = "✓ LOOP ERFOLGREICH" if success else "✗ LOOP FEHLGESCHLAGEN"
-        _console.print(_RichPanel(
+        _rich._console.print(_rich._RichPanel(
             f"[bold {style}]{text}[/]\n"
             f"  Tasks: {tasks_ok}/{tasks_total}",
             border_style=style,
@@ -608,7 +503,7 @@ def footer(success: bool, tasks_total: int, tasks_ok: int) -> None:
 
 def panel_plan(phasen, tasks, tests, akzeptanzkriterien) -> None:
     """Zeigt den Plan (Box in pretty/live, Plain in ci)."""
-    if _use_rich:
+    if _rich._use_rich:
         _render_plan_rich(phasen, tasks, tests, akzeptanzkriterien)
     else:
         _render_plan_plain(phasen, tasks, tests, akzeptanzkriterien)
@@ -711,7 +606,7 @@ def _render_plan_rich(phasen, tasks, tests, akzeptanzkriterien) -> None:
         body.append(f"[bold]Akzeptanzkriterien ({len(akzeptanzkriterien)}):[/]")
         for _a in akzeptanzkriterien:
             body.append(f"  [dim]-[/] {_a}")
-    _console.print(_RichPanel(
+    _rich._console.print(_rich._RichPanel(
         "\n".join(body),
         title=f"[bold cyan]PLAN[/] — {len(phasen)} Phasen, {len(tasks)} Tasks",
         border_style="cyan",
@@ -720,9 +615,9 @@ def _render_plan_rich(phasen, tasks, tests, akzeptanzkriterien) -> None:
 
 def panel_diff(diff_text: str, title: str = "HUMAN GATE") -> None:
     """Zeigt den Diff (Box mit Syntax-Highlighting)."""
-    if _use_rich:
-        _console.print(_RichPanel(
-            _RichSyntax(diff_text, "diff", theme="monokai", line_numbers=False),
+    if _rich._use_rich:
+        _rich._console.print(_rich._RichPanel(
+            _rich._RichSyntax(diff_text, "diff", theme="monokai", line_numbers=False),
             title=f"[bold yellow]{title}[/]",
             border_style="yellow",
         ))
@@ -747,8 +642,8 @@ plan = panel_plan
 
 def progress_task(nr: int, total: int, name: str):
     """Context-Manager fuer einen Task mit Fortschrittsbalken (nur live)."""
-    if IS_LIVE and _HAS_RICH:
-        return _RichProgress(
+    if _rich.IS_LIVE and _rich._HAS_RICH:
+        return _rich._RichProgress(
             SpinnerColumn(),
             TextColumn(f"[cyan]{nr}/{total}[/] {name[:40]}"),
             BarColumn(),
@@ -856,14 +751,14 @@ def log_line(
     Beispiel: [12:47:16] OK Explorer  . 3.1s . 8 files
     """
     ts = _timestamp()
-    if IS_CI:
+    if _rich.IS_CI:
         status = "ok" if ok else "fail"
         _emit_raw(f"::log::{ts} {status} {label} {detail}")
     else:
         _el = f" · {elapsed_s:.1f}s" if elapsed_s is not None else ""
-        if _use_rich:
+        if _rich._use_rich:
             mark = "[green]OK[/]" if ok else "[red]X[/]"
-            _console.print(
+            _rich._console.print(
                 f"[dim]{ts}[/] {mark} [bold]{label}[/]{_el}"
                 + (f" · [dim]{detail}[/]" if detail else "")
             )
@@ -872,7 +767,7 @@ def log_line(
             _emit_raw(f"[{ts}] {mark} {label}{_el}" + (f" · {detail}" if detail else ""))
     _publish("log_line", label + (f" · {detail}" if detail else ""))
     _status_tee = "OK" if ok else "X"
-    _tee(
+    _tee_mod._tee(
         f"[{ts}] {_status_tee} {label}"
         + (f" · {detail}" if detail else "")
         + (f" · {elapsed_s:.1f}s" if elapsed_s is not None else "")
@@ -882,11 +777,11 @@ def log_line(
 def task_started(nr: int, total: int, name: str) -> None:
     """Permanente Zeile: Task startet."""
     ts = _timestamp()
-    if IS_CI:
+    if _rich.IS_CI:
         print(f"::log::{ts} start Task {nr}/{total}: {name}")
         return
-    if _use_rich:
-        _console.print(
+    if _rich._use_rich:
+        _rich._console.print(
             f"[dim]{ts}[/] [cyan]>[/] [bold]Task {nr}/{total}[/]: {name} [dim](running)[/]"
         )
     else:
@@ -901,15 +796,15 @@ def task_done(
     """Permanente Zeile: Task fertig (ok oder failed)."""
     ts = _timestamp()
     _el = f" · {elapsed_s:.1f}s" if elapsed_s is not None else ""
-    if IS_CI:
+    if _rich.IS_CI:
         status = "ok" if ok else "fail"
         print(f"::log::{ts} {status} Task {nr}/{total}: {name}{_el}")
         return
     mark_ok = "[green]OK[/]" if ok else "[red]X[/]"
     mark_plain = "OK" if ok else "X"
     suffix = f" [dim]({reason})[/]" if reason else ""
-    if _use_rich:
-        _console.print(
+    if _rich._use_rich:
+        _rich._console.print(
             f"[dim]{ts}[/] {mark_ok} [bold]Task {nr}/{total}[/]: {name}{_el}{suffix}"
         )
     else:
@@ -918,7 +813,7 @@ def task_done(
 
 def status_header(label: str, detail: str = "") -> None:
     """Ueberschreibbare Status-Zeile oben (nur live)."""
-    if not IS_LIVE:
+    if not _rich.IS_LIVE:
         return
     try:
         spinner_update(label, detail)
@@ -934,12 +829,12 @@ def summary(
     ts = _timestamp()
     total = tasks_ok + tasks_failed
     _el = f"{elapsed_s:.1f}s"
-    if IS_CI:
+    if _rich.IS_CI:
         print(f"::log::{ts} done {tasks_ok}/{total} tasks in {_el}")
         return
-    if _use_rich:
-        _console.print("")
-        _console.print(
+    if _rich._use_rich:
+        _rich._console.print("")
+        _rich._console.print(
             f"[dim]{ts}[/] [bold green]Done[/] · {_el} · "
             f"[green]{tasks_ok}[/]/{total} Tasks"
             + (f" · [red]{tasks_failed} failed[/]" if tasks_failed else "")
@@ -948,7 +843,7 @@ def summary(
             mark = "[green]OK[/]" if t.get("ok") else "[red]X[/]"
             name = t.get("name", "?")
             el = f" · {t.get('elapsed_s', 0):.1f}s" if t.get("elapsed_s") else ""
-            _console.print(f"  {mark} {name}{el}")
+            _rich._console.print(f"  {mark} {name}{el}")
     else:
         print(f"[{ts}] Done · {_el} · {tasks_ok}/{total} Tasks" + (f" · {tasks_failed} failed" if tasks_failed else ""))
 
