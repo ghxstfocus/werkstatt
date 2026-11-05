@@ -613,13 +613,16 @@ def run_architect(
     except Exception:  # noqa: BLE001, S110 — Cache ist optional
         pass
 
-    # M-446 restauriert (2026-11-05): Architect bekommt KEINE Skills.
-    # Regress 2026-11-03: die drei Skills ("using-werkstatt",
-    # "plan-crafting", "commit-history") wurden wieder eingebaut.
-    # "plan-crafting" enthaelt "## Tools" mit run_readonly(...)-
-    # Beispielen. deepseek-reasoner interpretiert das als echte
-    # Tool-Definitionen und liefert DSML-Syntax statt Prosa.
-    # Siehe docs/ARCHITECTURE.md:20-22 ("Keine Skills, keine Tools").
+    # M-446 + Registry-Pilot (2026-11-05): Architect laedt keine Skills.
+    # Single Source of Truth: werkstatt/rollen.py.
+    from werkstatt.rollen import ROLLEN
+    _arch_rolle = ROLLEN["architect"]
+    _arch_skill_list = _arch_rolle.lade_skills([])
+    if _arch_skill_list:
+        raise RuntimeError(
+            f"M-446-Verstoss: Architect hat {len(_arch_skill_list)} Skills, "
+            f"erwartet 0. Siehe ROLLEN['architect'] in rollen.py."
+        )
     state.architect_skills_block = ""
 
     _arch_sys_base = _planner_system(aufgabe, explorer_ctx, state)
