@@ -469,3 +469,30 @@ wurde nicht angewendet.
 
 **Konsequenz bei Verstoss:** Fix-Forward-Commit noetig (extra
 Commit + Push). Vermeidbar mit 3 Zeilen Vorsichts-Check.
+
+
+## Gate-Exit-Codes explizit erzwingen (Erkenntnis 2026-11-05)
+
+**Problem:** Drei Gate-Muster haben in einer Session versagt:
+1. `pytest | tail` -> `$?` ist `tail`, immer 0.
+2. `python3 -c "..."` ohne `raise SystemExit(1)` -> immer 0.
+3. `if [ AFTER == BEFORE ]` -> blockiert Fortschritt.
+
+**Regel:** Jeder Gate-Schritt muss explizit `sys.exit(1)` oder
+`raise SystemExit(1)` bei Fehler haben. Kein Vertrauen auf
+Rueckgabewerte ohne Pruefung.
+
+**Muster (gut):**
+    python3 <<'PY'
+    import sys
+    if fehler:
+        print('FAIL:', ...)
+        sys.exit(1)
+    print('OK')
+    PY
+    GATE=$?
+
+**Nicht:**
+- `python3 -c "..."` wenn Exit-Code zaehlt
+- `if AFTER == BEFORE` — `if AFTER > BEFORE` (Regress)
+
