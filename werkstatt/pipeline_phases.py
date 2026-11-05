@@ -765,6 +765,31 @@ def _phase_plan_and_preflight(
     return 0, False
 
 
+def _reset_task_state(state: RunState) -> None:
+    """OP-166: Setzt per-Task-State zurueck vor jedem Task.
+
+    Loop-Test-4 (2026-11-05): t7-Reflection sah 5 Runden die
+    gleichen 2 Fehler (aus t2/gates.py), konnte sie aber nicht
+    loesen — Zieldatei t7 war tests/test_gates.py. 0 Patches pro
+    Runde, 5 Runden bis Erschoepfung.
+
+    Reset nur bei Task-Start. Innerhalb einer Task bleiben
+    Fehler kumulativ (K50-Bug-C in reflection.py:394-403),
+    damit Reflection-Runden zusammenhaengen.
+
+    Zusaetzlich `reviewer_bugs` (gleicher Leak-Pfad: builder.py:725
+    liest reviewer_bugs vor dem ersten Reviewer-Call eines Tasks).
+    """
+    try:
+        state.last_verify_errors = []  # type: ignore[attr-defined]
+    except (AttributeError, TypeError):
+        pass
+    try:
+        state.reviewer_bugs = []  # type: ignore[attr-defined]
+    except (AttributeError, TypeError):
+        pass
+
+
 def _phase_tasks_loop(
     state: RunState,
     phase_state,
@@ -826,6 +851,9 @@ def _phase_tasks_loop(
 
         # Builder fuer diesen Task
         state.aktuelle_task = task_obj  # type: ignore[attr-defined]
+        # OP-166: per-Task-State reset, sonst leaken Fehler aus
+        # vorherigen Tasks in Reflection (Loop-Test-4 t7-Bug).
+        _reset_task_state(state)
 
         # M-306d Fix 1: Pro-Task action-Check. read-only Tasks
         # erzeugen keinen Patch, markieren sich direkt als ok.
