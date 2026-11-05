@@ -1936,3 +1936,44 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
   Wirkungslosigkeit reproduziert. Sonst kehrt der Bug zurueck.
 - **Abnahme:** 1281 passed, 8 skipped; audit_drift OK;
   control_drift OK; state_inventory OK.
+
+## 2026-11-05 -- OP-167 abgeschlossen: tasks_ok_counter in 2 Erfolgs-Pfaden
+
+- **Status:** done (Commit a3a538b)
+- **Dateien:** `werkstatt/pipeline_phases.py`,
+  `tests/test_task_ok_counter_guard.py` (neu)
+- **Problem:** Loop-Test-8 (2026-11-05): t3 und t4 waren ueber den
+  Reflection-Pfad `done`, aber `state.tasks_ok_counter` blieb 0.
+  Footer zeigte `Tasks: 0/8`, `_failed = 8 - 0 = 8`. PhaseState
+  zeigte 2 done, 1 failed, 1 human_review, 4 blocked.
+- **Messung:** `_task_ende(ok=True)` wird an 7 Stellen gerufen. 5
+  davon haben `tasks_ok += 1` + `state.tasks_ok_counter = tasks_ok`.
+  Zwei hatten es nicht:
+  - **Z. 1051** (Reflection-OK-Pfad): ohne Counter. Das war der
+    Loop-Test-8-Bug.
+  - **Z. 1302** (Reflection-Erschoepft-Gate-approve-Pfad): ohne
+    Counter. Zweiter Bug, gefunden durch den Guard-Test.
+- **Aenderung:**
+  - Z. 1051 + Z. 1302: `tasks_ok += 1` + `state.tasks_ok_counter
+    = tasks_ok` direkt vor `_task_ende(ok=True)`.
+  - `tests/test_task_ok_counter_guard.py` (neu): AST-basierter
+    Guard-Test. Parst `pipeline_phases.py`, findet alle
+    `_task_ende(..., ok=True, ...)`-Aufrufe, prueft dass in den
+    10 Zeilen davor `tasks_ok += 1` ODER `tasks_ok_counter =`
+    steht. Der zweite Sonderfall (`skip_plan_gate`, Z. 563)
+    setzt `tasks_ok = 1` + Counter explizit — wird akzeptiert.
+- **Abweichung vom OP-Text:** OP-167 forderte
+  `tests/test_task_counter_sync.py`. Umgesetzt als
+  `tests/test_task_ok_counter_guard.py` — der Guard-Name ist
+  praeziser, weil er die Regel (jeder `_task_ende(ok=True)` MUSS
+  Counter setzen) formuliert, nicht nur die konkrete Pfad-Situation.
+- **Warum der Guard-Test wichtig ist:** Der Fix allein (Z. 1051)
+  haette Loop-Test-8 gruen gemacht. Aber ohne Guard-Test waere
+  Z. 1302 unentdeckt geblieben — und jeder neue Erfolgs-Pfad
+  haette denselben Bug reproduzieren koennen. Der Guard-Test
+  ist die Regress-Barriere.
+- **Nicht in OP-167:** `_task_ende` zentralisiert den Counter
+  nicht (das waere ein 7-Stellen-Umbau + Test-Bruch-Risiko).
+  Der Guard-Test faengt zukuenftige Regresse stattdessen.
+- **Abnahme:** 1302 passed, 8 skipped; audit_drift OK;
+  control_drift OK; state_inventory OK.

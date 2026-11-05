@@ -1046,30 +1046,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Tests:** `tests/test_verify_errors_reset.py` (neu)
 - **Blockiert von:** —
 
-### OP-167: PhaseState-Zaehler vs. Loop-Anzeige synchron
-
-- **Status:** open
-- **Typ:** bug (Zaehler)
-- **Betroffen:** `werkstatt/pipeline_phases.py`,
-  `werkstatt/loop_renderer.py`, `tests/test_task_counter_sync.py` (neu)
-- **Problem:** Loop-Test-4: PhaseState zeigte `7 done + 1 human_review`
-  (t1,t3-t8 done, t2 human_review), aber Loop-Footer zeigte `Tasks: 3/8`.
-  Diskrepanz 7 vs. 3. `tasks_ok_counter` wird nur an einer Stelle
-  (Z. 562, GOLD-Fallback) auf `1` gesetzt, statt pro Task-Erfolg
-  inkrementiert. Wenn die Loop-Erfolgspfade (`_task_ende(ok=True)`)
-  durchlaufen, wird `tasks_ok_counter` zwar inkrementiert
-  (Z. 839, 892, 951, 1003, 1118), aber der Footer liest eventuell
-  den falschen Wert.
-- **Akzeptanzkriterien:**
-  - Messung zuerst: welcher Pfad setzt `tasks_ok_counter` nicht?
-    (Builder-Patch-Duplikat, Hook-Pfad, Reflection-Pfad?)
-  - Fix: alle `_task_ende(ok=True)`-Aufrufe rufen einen zentralen
-    Inkrementer.
-  - Test: 2 Smoke-Tests — (a) 3 Tasks done (Pfad A, B, C) -> Counter=3;
-    (b) PhaseState-Endstand `done`-Anzahl == Counter.
-- **Tests:** `tests/test_task_counter_sync.py` (neu)
-- **Blockiert von:** —
-
 ### OP-168: Phase-4-Review braucht Human-Gate zwischen Runden
 
 - **Status:** open
@@ -1101,6 +1077,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-05 | OP-167 | done | tasks_ok_counter in 2 Erfolgs-Pfaden + AST-Guard-Test (a3a538b)
 - 2026-11-05 | OP-165 | done | Contract-Verify pro Task (contract_check-Stage) (f73dde5)
 - 2026-11-05 | OP-163 | done | Planner-Dependencies als Pflichtfeld durchgesetzt (9797b31); **live-wirkungslos (Loop-Test-4, siehe OP-163b)**
 - 2026-11-05 | OP-164 | done | Reviewer versteht Rename-Aufgaben (2dde8cd); **live-wirkungslos (Loop-Test-4, siehe OP-164b)**
