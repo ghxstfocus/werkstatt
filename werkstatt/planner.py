@@ -1527,6 +1527,26 @@ def _tasks_aus_betroffenen_stellen(
     return tasks
 
 
+def _validate_contract_or_audit(
+    von: str, zu: str, state, pd, pn,
+) -> bool:
+    """OP-136b: validate_transition mit Audit-Fallback.
+
+    True = OK oder kein Fehler, False = ContractViolation (Audit geschrieben).
+    """
+    from werkstatt.state_contracts import ContractViolation, validate_transition
+    try:
+        validate_transition(von, zu, state)
+        return True
+    except ContractViolation as _cv:
+        audit(
+            "state_contract_violation",
+            {"transition": f"{von}->{zu}", "felder": list(_cv.felder)},
+            pd, pn,
+        )
+        return False
+
+
 def run_planner(state: RunState) -> bool:
     """Erstellt den Plan. Schreibt in state.tasks/tests/akzeptanzkriterien."""
     pd = state.project_dir
@@ -1913,9 +1933,15 @@ def run_planner(state: RunState) -> bool:
     # weiter, wird aber nicht mehr in den Prompt eingehaengt.
 
     # CALL 1: Architect (Fix AZ Stufe 10: ausgelagert nach architect.py)
+    # OP-136b: Contract-Validierung scout->architect.
+    if not _validate_contract_or_audit("scout", "architect", state, pd, pn):
+        return False
     if not run_architect(state, aufgabe, user_content, api_key, _explorer_ctx):
         return False
     _arch_prosa = state.architect_prosa
+    # OP-136b: Contract-Validierung architect->planner.
+    if not _validate_contract_or_audit("architect", "planner", state, pd, pn):
+        return False
 
     # CALL 2: Planner (JSON aus Prosa)
     _key_files: list[str] = []

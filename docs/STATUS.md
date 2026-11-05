@@ -555,16 +555,23 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   explorer->scout und planner->builder) bleibt ein Rest:
   `tools/state_drift.py` als Konsistenz-Check zwischen `state.py`
   und `state_contracts.py` fehlt. Analog `audit_drift`/`control_drift`
-  soll das Tool pruefen, dass jedes `RunState`-Feld entweder in
-  `CONTRACTS` registriert oder als `intern` markiert ist.
-  Zusaetzlich fehlt die Validierung der internen Uebergaenge
-  (scout->architect, architect->planner-split), die heute in
-  `planner.run_planner()` verschachtelt sind.
+  soll das Tool pruefen, dass die drei Registries (`CONTRACTS`,
+  `TRANSITIONS`, `RunState`-Properties) konsistent sind. Fruehere
+  Formulierung "jedes RunState-Feld in `intern`" war stale:
+  `CONTRACTS` hat kein `felder`-Feld, `TRANSITIONS` ist die echte
+  Feld-Referenz-Registry, 106 RunState-Felder sind Config/Glue,
+  nicht Inter-Role-Contracts.
+  Zusaetzlich fehlen `validate_transition`-Aufrufe fuer zwei
+  reale Uebergaenge (scout->architect, architect->planner), die
+  heute in `planner.run_planner()` stattfinden, aber nicht
+  validiert werden.
 
 - **Akzeptanzkriterien:**
-  - `tools/state_drift.py --check`: prueft ob jedes Feld in `state.py`
-    entweder in `CONTRACTS`-Registry referenziert oder als `intern`
-    markiert ist. Exit 1 bei Abweichung.
+  - `tools/state_drift.py --check`: prueft 3 Konsistenz-Checks
+    zwischen `CONTRACTS`, `TRANSITIONS` und `RunState`-Properties
+    (jeder Contract hat Property; jeder TRANSITIONS-Eintrag ist
+    bekannter Contract; jeder Contract ist in TRANSITIONS
+    referenziert oder hat `transition_frei=True`). Exit 1 bei Drift.
   - `state_drift.py` als Post-Build-Stage in beiden `verify.json`.
   - `validate_transition` wird auch bei den internen Uebergaengen
     gerufen (scout->architect, architect->planner), entweder

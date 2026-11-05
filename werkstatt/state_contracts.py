@@ -93,6 +93,7 @@ class Contract:
     pflicht: bool = True
     validator: Callable | None = None
     hinweis: str = ""
+    transition_frei: bool = False
 
 
 CONTRACTS: dict[str, Contract] = {
@@ -160,6 +161,7 @@ TRANSITIONS: dict[str, list[tuple[str, bool | str]]] = {
     ],
     "scout->architect": [
         ("scout_output", "auto"),  # Scout kann ausbleiben (bereits_erfuellt)
+        ("explorer_diagnostics", "auto"),  # OP-136b
     ],
     "architect->planner": [
         ("architect_output", True),
