@@ -208,19 +208,21 @@ def _auth_disabled_autouse():
 # in nachfolgende Tests (test_emit_tty_mode, test_task_started_event, ...).
 import pytest as _pytest
 
+
 @_pytest.fixture(autouse=True)
 def _isolate_loop_renderer():
     import werkstatt.render as _r
     import werkstatt.render.emit as _re
+    import werkstatt.render.progress as _rp
     import werkstatt.render.tee as _rt
-    _r._PROGRESS_STATE.clear()
+    _rp._PROGRESS_STATE.clear()
     _re._PROGRESS_OPEN = False
     _rt._TEE_STREAM = None
-    _r._LAST_HEARTBEAT.clear()
+    _rp._LAST_HEARTBEAT.clear()
     _r.set_project("default")
     yield
-    _r._PROGRESS_STATE.clear()
+    _rp._PROGRESS_STATE.clear()
     _re._PROGRESS_OPEN = False
     _rt._TEE_STREAM = None
-    _r._LAST_HEARTBEAT.clear()
+    _rp._LAST_HEARTBEAT.clear()
     _r.set_project("default")

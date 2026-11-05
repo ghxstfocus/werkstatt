@@ -5,6 +5,7 @@ import io
 import sys
 from unittest.mock import patch
 
+from werkstatt.render import emit as _emod
 from werkstatt.render import rich as _rmod
 from werkstatt.render import tee as _tmod
 
@@ -112,7 +113,7 @@ def test_emit_progress_ci_sequenziell():
          patch.object(_tmod, "_TEE_STREAM", None), \
          patch.object(_rmod, "IS_CI", True), \
          patch.object(_rmod, "IS_LIVE", False), \
-         patch.object(r, "_publish", lambda *a, **kw: None):
+         patch.object(_emod, "_publish", lambda *a, **kw: None):
         r._emit_progress("Builder", "start", "x.py")
     assert "[Builder] start x.py" in buf.getvalue()
 
@@ -124,7 +125,7 @@ def test_emit_progress_live_ueberschreibt():
     with patch.object(sys, "stdout", buf), \
          patch.object(_tmod, "_TEE_STREAM", None), \
          patch.object(_rmod, "IS_LIVE", True), \
-         patch.object(r, "_publish", lambda *a, **kw: None):
+         patch.object(_emod, "_publish", lambda *a, **kw: None):
         r._emit_progress("Builder", "start", "x.py")
     out = buf.getvalue()
     assert "[Builder] start x.py" in out
@@ -138,6 +139,6 @@ def test_emit_progress_leerer_step_no_op():
     with patch.object(sys, "stdout", buf), \
          patch.object(_tmod, "_TEE_STREAM", None), \
          patch.object(_rmod, "IS_CI", True), \
-         patch.object(r, "_publish", lambda *a, **kw: None):
+         patch.object(_emod, "_publish", lambda *a, **kw: None):
         r._emit_progress("Builder", "")
     assert buf.getvalue() == ""
