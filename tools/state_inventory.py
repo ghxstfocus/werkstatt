@@ -102,15 +102,22 @@ def deklarierte_felder() -> dict[str, str]:
     return felder
 
 
-def scanne_zugriffe() -> tuple[
+def scanne_zugriffe(
+    files: list[Path] | None = None,
+) -> tuple[
     dict[str, set[str]], dict[str, set[str]], dict[str, set[str]]
 ]:
-    """Liefert (leser, schreiber, getattr) -> {feld: {module}}."""
+    """Liefert (leser, schreiber, getattr) -> {feld: {module}}.
+
+    OP-165: `files` optional — wenn gesetzt, werden nur diese
+    Dateien gescannt (statt aller werkstatt/*.py).
+    """
     leser: dict[str, set[str]] = defaultdict(set)
     schreiber: dict[str, set[str]] = defaultdict(set)
     gat: dict[str, set[str]] = defaultdict(set)
 
-    for py in WERKSTATT.rglob("*.py"):
+    quellen = files if files is not None else list(WERKSTATT.rglob("*.py"))
+    for py in quellen:
         modul = str(py)
         try:
             tree = ast.parse(py.read_text(encoding="utf-8"))
@@ -228,6 +235,34 @@ def check_baseline(ergebnis: dict) -> int:
     return 0 if ok else 1
 
 
+def ghosts_in_files(files: list[str]) -> list[str]:
+    """OP-165: Ghost-Felder in den gegebenen Dateien.
+
+    Rueckgabe leer: keine Verletzung.
+    Rueckgabe nicht leer: Fail (--changed -> Exit 1).
+    """
+    pfade: list[Path] = []
+    for f in files:
+        if not isinstance(f, str) or not f:
+            continue
+        fp = Path(f)
+        if not fp.is_file():
+            alt = Path("werkstatt") / f
+            if alt.is_file():
+                fp = alt
+            else:
+                continue
+        pfade.append(fp)
+    if not pfade:
+        return []
+    leser, schreiber, gat = scanne_zugriffe(files=pfade)
+    treffer = [
+        feld for feld in BASELINE_GEISTER
+        if feld in leser or feld in schreiber or feld in gat
+    ]
+    return sorted(treffer)
+
+
 def main() -> int:
     p = argparse.ArgumentParser(
         description="RunState-Inventur (read-only, OP-134)."
@@ -235,7 +270,19 @@ def main() -> int:
     p.add_argument("--json", action="store_true", help="JSON-Ausgabe")
     p.add_argument("--check", action="store_true",
                    help="Baseline-Check, exit 1 bei Drift")
+    p.add_argument("--changed", nargs="*", default=None,
+                   metavar="FILE",
+                   help="Exit 1, wenn eine der Dateien einen Ghost-"
+                        "Feld-Zugriff hat (BASELINE_GEISTER).")
     args = p.parse_args()
+
+    if args.changed is not None:
+        treffer = ghosts_in_files(args.changed)
+        if treffer:
+            print(f"contract_check: Ghost-Felder in {args.changed}: "
+                  f"{treffer}")
+            return 1
+        return 0
 
     ergebnis = kategorisiere()
 

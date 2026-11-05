@@ -127,7 +127,8 @@ def _expand_cmd_placeholders(
     if ("{changed_files}" not in cmd_str
             and "{changed_test_files}" not in cmd_str
             and "{changed_py_files}" not in cmd_str
-            and "{changed_non_test_py_files}" not in cmd_str):
+            and "{changed_non_test_py_files}" not in cmd_str
+            and "{task_files}" not in cmd_str):
         return [str(c) for c in cmd]
 
     patches = getattr(state, "patches", None) or []
@@ -214,9 +215,19 @@ def _expand_cmd_placeholders(
             changed_tests = _derived
 
 
+    # OP-165: {task_files} aus aktuelle_task (pro Task, nicht kumulativ).
+    _tf_task = None
+    _akt_task = getattr(state, "aktuelle_task", None)
+    if isinstance(_akt_task, dict):
+        _tf_task = [f for f in (_akt_task.get("task_files") or []) if f]
+
     out: list[str] = []
     for c in cmd:
         s = str(c)
+        if "{task_files}" in s:
+            if not _tf_task:
+                return None
+            s = s.replace("{task_files}", " ".join(_tf_task))
         if "{changed_py_files}" in s:
             if not changed_py:
                 return None

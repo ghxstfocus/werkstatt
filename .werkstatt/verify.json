@@ -64,6 +64,18 @@
       "hart": true
     },
     {
+      "id": "contract_check",
+      "command": [
+        "python3",
+        "tools/state_inventory.py",
+        "--changed",
+        "{task_files}"
+      ],
+      "phase": "post_build",
+      "timeout": 30,
+      "hart": true
+    },
+    {
       "id": "pytest_regression",
       "command": [
         "python3",
