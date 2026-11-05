@@ -1,5 +1,6 @@
 """OP-054: Duplikat-Anker im no_effect-Filter erkennt echten Bug."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 
@@ -13,7 +14,8 @@ def test_audit_kind_registriert():
 
 def test_fix_ist_im_code():
     """OP-054-Kommentar + Duplikat-Anker-Check vorhanden."""
-    src = Path("/opt/werkstatt/werkstatt/builder.py").read_text(encoding="utf-8")
+    from werkstatt.roles.builder import _build_patches_fuer_datei
+    src = Path(_build_patches_fuer_datei.__code__.co_filename).read_text(encoding="utf-8")
     assert "OP-054" in src
     assert "_duplikat_anker" in src
     assert "_ist_zustand_054" in src
