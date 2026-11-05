@@ -615,7 +615,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - Bestehende Tests (`test_loop_renderer.py`, `test_terminal_proxy.py`,
     `test_renderer_live.py`) bleiben gruen ohne Aenderung.
 - **Tests:** keine neuen (bestehende decken ab).
-- **Blockiert von:** OP-135b, OP-136, OP-137
+- **Blockiert von:** OP-136
 
 ### OP-139: `phases/` Submodul-Split (pipeline_phases.py zerlegen)
 
@@ -667,7 +667,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     Builders zu ziehen.
   - Bestehende `test_builder.py` bleibt gruen ohne Aenderung.
 - **Tests:** keine neuen (AST-Helpers sind bestehend, Tests decken ab).
-- **Blockiert von:** OP-135b (State-Contracts muessen stehen, damit
+- **Blockiert von:** —
   die Builder-API klar ist)
 
 ### OP-141: `state/` Submodul-Split (RunState aufteilen)
@@ -696,7 +696,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_state_split.py` (neu),
   bestehende Suite bleibt gruen (mit Anpassungen an geaenderte
   Feld-Pfade).
-- **Blockiert von:** OP-135b, OP-136, OP-137
+- **Blockiert von:** OP-136
 
 ### OP-142: `web/routes/` Submodul-Split
 
@@ -908,7 +908,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - `python3 tools/state_inventory.py --check` zeigt danach
     **25 - 1 = 24** Geister (falls geloescht) oder **26** (falls
     deklariert).
-- **Blockiert von:** OP-137 (Muster-Fix)
+- **Blockiert von:** —
 
 ### OP-147: Reflection-Verdrahtung (kleine Luecken)
 

@@ -451,3 +451,21 @@ STATUS.md-Header existieren. Wenn nicht: in PROGRESS klarstellen
 Alternativ: statt Labels freie Commit-Messages ohne OP-Prefix
 verwenden, wenn die Arbeit kein eigenes OP verdient.
 
+
+
+## Close-Block-Pflicht: stale-Blocker-Check (Erkenntnis 2026-11-05)
+
+**Problem:** Bei OP-135b/OP-137-Close wurden die Blocker-Referenzen
+in OP-138, OP-140, OP-141, OP-145 uebersehen. Der stale-Check
+schlug danach an. Die Regel (siehe oben §3) war bekannt — sie
+wurde nicht angewendet.
+
+**Regel:** Der Close-Block MUSS zwingend enthalten:
+1. Vor dem Entfernen des OP-Headers: `grep -rn "blockiert von.*<OP>"`
+   oder Python-Check: welche anderen OPs referenzieren <OP>?
+2. Diese Referenzen im selben Close-Block bereinigen.
+3. `stale-Check` **vor** dem Commit ausfuehren, nicht danach.
+4. Wenn stale: **kein Commit** — Fix im gleichen Block.
+
+**Konsequenz bei Verstoss:** Fix-Forward-Commit noetig (extra
+Commit + Push). Vermeidbar mit 3 Zeilen Vorsichts-Check.
