@@ -886,16 +886,27 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - Messung: pro Fundstelle (`builder.py`, `gates.py`, `planner.py`,
     `pipeline_phases.py`) zaehlen, welches Feld gelesen und welches
     geschrieben wird (dokumentiert in STATE-INVENTUR.md).
-  - Entscheidung in STATE-INVENTUR.md: Alias, Umbenennung oder
-    Loeschung. Begruendung.
+  - **Entscheidung (bindend, nicht neu zu waehlen): Umbenennung.**
+    Alle Leser/Schreiber von `state.auftrag_bereits_erfuellt`
+    werden auf `state.auftrag_bereits_erfuellt_bestaetigt`
+    umgestellt. Der Ghost `auftrag_bereits_erfuellt` verschwindet
+    aus dem Code. **KEINE Property `auftrag_bereits_erfuellt`
+    anlegen** (das waere Alias, verworfen). Begruendung: Das
+    Akzeptanzkriterium fordert 'alle Leser lesen das Contract-
+    Feld' — bei Alias wuerden Leser weiter
+    `state.auftrag_bereits_erfuellt` schreiben. Der Architect
+    plant WIE (Datei/Stelle), nicht OB (Rename vs. Alias).
   - Fix: alle Leser lesen das Contract-Feld; alle Schreiber schreiben
     das Contract-Feld. Keine `# type: ignore[attr-defined]` mehr
     auf diesem Paar.
   - Test: neuer Cross-Role-Smoke-Test — Builder setzt
-    `state.auftrag_bereits_erfuellt = True`, Gate liest es.
+    `state.auftrag_bereits_erfuellt_bestaetigt = True`, Gate
+    liest es (ueber dasselbe Feld).
   - `python3 tools/state_inventory.py --check` zeigt danach
-    **25 - 1 = 24** Geister (falls geloescht) oder **26** (falls
-    deklariert).
+    **24** Geister (25 - 1): `auftrag_bereits_erfuellt` wird
+    aus `BASELINE_GEISTER` entfernt, weil der Ghost-String durch
+    das Rename verschwindet. `auftrag_bereits_erfuellt_bestaetigt`
+    bleibt deklariert und zaehlt nicht als Ghost.
 - **Blockiert von:** —
 
 ### OP-147: Reflection-Verdrahtung (kleine Luecken)
