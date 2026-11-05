@@ -32,7 +32,7 @@ def test_prompt_module_existiert():
     import importlib
 
     from werkstatt.rollen import ROLLEN
-    for name, rolle in ROLLEN.items():
+    for rolle in ROLLEN.values():
         if not rolle.prompt_module:
             continue
         mod = importlib.import_module(rolle.prompt_module)
