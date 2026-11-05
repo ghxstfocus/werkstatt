@@ -246,6 +246,33 @@ class RunState:
     patches_aktuell_runde: list[dict[str, object]] = \
         field(default_factory=list)
 
+    # === OP-141 Vorarbeit: Ghost-Felder deklariert (2026-11-05) ===
+    # Vormals nur via state.X = ... gesetzt, nie deklariert. Jetzt sichtbar in
+    # @dataclass, durchsuchbar via grep, typsicher in IDE/Static-Analysis.
+    _reflection_bug_sigs_vorher: list = field(default_factory=list)
+    _reflection_diff_hash: str | None = None
+    aktuelle_task: dict = field(default_factory=dict)
+    applied_count: int = 0
+    auftrag_bereits_erfuellt: bool = False
+    auto_approve: bool = False
+    baseline_gruen: bool = False
+    explorer_pytest_laufzeit_s: int = 0
+    explorer_ruff_befunde: list = field(default_factory=list)
+    last_planner_info: dict = field(default_factory=dict)
+    last_verify_errors: list = field(default_factory=list)
+    last_verify_hart_stages: set = field(default_factory=set)
+    messungen_nach_apply: list = field(default_factory=list)
+    phase_review_uebersprungen: str = ""
+    progress_written_at_commit: bool = False
+    reflection_erschoepft: bool = False
+    reflection_phase: bool = False
+    reviewer_deterministic_fail: bool = False
+    reviewer_stagnation_false_positive: bool = False
+    scout_bereits_erfuellt: bool = False
+    spec_widerspruch_erkannt: bool = False
+    split_failure_grund: str | None = None
+    tasks_ok_counter: int = 0
+
     # === OP-135a: Read-only Property-Views (Contract-Dataclasses) ===
     @property
     def explorer_output(self):

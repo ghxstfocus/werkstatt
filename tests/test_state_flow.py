@@ -21,10 +21,17 @@ def test_index_enthaelt_alle_deklarierten_felder():
 
 
 def test_ghost_felder_im_index():
+    """Nach OP-141-Vorarbeit (2026-11-05): 0 Ghosts.
+
+    Alle ehemaligen Ghost-Felder sind in RunState deklariert.
+    Neue Ghosts sind ein Regress und muessen entweder deklariert
+    oder als bewusster Ghost dokumentiert werden.
+    """
     index = baue_flow_index()
     ghosts = [n for n, i in index.items() if i["kategorie"] == "ghost"]
-    assert len(ghosts) > 0
-    assert "auftrag_bereits_erfuellt" in ghosts
+    assert ghosts == [], (
+        f"Erwartet 0 Ghosts (alle deklariert). Gefunden: {ghosts}"
+    )
 
 
 def test_contract_bezug_fuer_tasks():

@@ -1,26 +1,6 @@
 {
   "generiert_von": "tools/state_flow.py --write-baseline",
-  "ghost_active": [
-    "_reflection_bug_sigs_vorher",
-    "_reflection_diff_hash",
-    "aktuelle_task",
-    "applied_count",
-    "auftrag_bereits_erfuellt",
-    "auto_approve",
-    "last_planner_info",
-    "last_verify_errors",
-    "last_verify_hart_stages",
-    "phase_review_uebersprungen",
-    "progress_written_at_commit",
-    "reflection_erschoepft",
-    "reflection_phase",
-    "reviewer_deterministic_fail",
-    "reviewer_stagnation_false_positive",
-    "scout_bereits_erfuellt",
-    "spec_widerspruch_erkannt",
-    "split_failure_grund",
-    "tasks_ok_counter"
-  ],
+  "ghost_active": [],
   "hinweis": "Nicht von Hand editieren. Regenerieren bei gewollter Baseline-Aenderung.",
   "multi_writer": [
     "aktuelle_task",

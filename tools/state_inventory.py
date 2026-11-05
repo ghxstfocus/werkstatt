@@ -41,14 +41,7 @@ STATE_NAMEN = {"state", "run_state", "_state"}
 
 # Baseline Stand 2026-11-04 (Session-Ende). --check failt bei Abweichung.
 # Anpassen NUR mit dokumentiertem Grund (OP-135/136).
-BASELINE_GEISTER = frozenset({
-    "_reflection_bug_sigs_vorher", "_reflection_diff_hash", "aktuelle_task", "applied_count",
-    "auftrag_bereits_erfuellt", "auto_approve", "baseline_gruen", "explorer_pytest_laufzeit_s",
-    "explorer_ruff_befunde", "last_planner_info", "last_verify_errors", "last_verify_hart_stages",
-    "messungen_nach_apply", "phase_review_uebersprungen", "progress_written_at_commit", "reflection_erschoepft",
-    "reflection_phase", "reviewer_deterministic_fail", "reviewer_stagnation_false_positive", "scout_bereits_erfuellt",
-    "spec_widerspruch_erkannt", "split_failure_grund", "tasks_ok_counter",
-})
+BASELINE_GEISTER = frozenset()
 BASELINE_TOTE = frozenset({
     "agent_docs",
     "block_id",
@@ -56,8 +49,17 @@ BASELINE_TOTE = frozenset({
     "start_ts",
 })
 BASELINE_GETATTR_ONLY = frozenset({
-    "_w51g_gemessen", "api_key", "follow_up_fehler", "geladene_skills",
-    "git_author_email", "git_author_name", "max_total_llm_s",
+    "_w51g_gemessen",
+    "api_key",
+    "baseline_gruen",
+    "explorer_pytest_laufzeit_s",
+    "explorer_ruff_befunde",
+    "follow_up_fehler",
+    "geladene_skills",
+    "git_author_email",
+    "git_author_name",
+    "max_total_llm_s",
+    "messungen_nach_apply",
 })
 
 
