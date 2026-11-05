@@ -144,6 +144,15 @@ def _get_architect_model() -> str:
     return _ARCHITECT_MODEL
 
 
+# OP-172 (2026-11-05): Architect ist ein Reasoning-Modell
+# (deepseek-reasoner). Reasoning + Content teilen sich das
+# max_tokens-Budget. Loop-Test-6 hat gezeigt: 55706 Zeichen
+# Reasoning (~14000 Tokens) bei 16000 max_tokens -> Content
+# bleibt leer, Architect failt mit leerem content.
+# 32000 = Default fuer deepseek-reasoner. Reicht fuer 14K
+# Reasoning + 18K Content.
+ARCHITECT_MAX_TOKENS = 32000
+
 ARCHITECT_SYSTEM = """Du bist ein elite Software-Architekt.
 Beschreibe die Loesung in Prosa. KEIN JSON, KEIN Patch-Format.
 
@@ -187,8 +196,6 @@ Format (STRIKT einhalten):
        - KEINE Wildcards, KEINE Prosa. Nur konkrete Pfade.
        - Wenn KEINE Datei von einer anderen abhaengt:
          eine einzelne Zeile '- (keine)'.
-       - Der Loop baut Tasks in dieser Reihenfolge. Falsche
-         Abhaengigkeiten fuehren zu blockierten Tasks.
 
 DEINE ROLLE IM LOOP (WICHTIG):
   - Explorer hat bereits geliefert: WO (Dateien, Zeilennummern,
@@ -658,7 +665,7 @@ def run_architect(
         lambda: ask_llm(
             api_key, _arch_sys, user_content,
             model=_get_architect_model(),
-            temperature=0.2, max_tokens=16000,
+            temperature=0.2, max_tokens=ARCHITECT_MAX_TOKENS,
             aufgabe="architect", heartbeat=False,
         ),
     )
