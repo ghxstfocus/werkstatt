@@ -545,33 +545,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_stats_api.py` (neu)
 - **Blockiert von:** —
 
-### OP-140: `builder/` Submodul-Split (AST isolieren)
-
-- **Status:** open
-- **Typ:** architektur (Split)
-- **Betroffen:** `werkstatt/roles/builder/` (neu), `werkstatt/builder.py`
-- **Problem:** `builder.py` (1400 Zeilen) mischt AST-Helpers,
-  Patch-Parsing, Validation, Apply, LLM-Aufruf, Prompt-Bau. AST-Helpers
-  sind heute nur ueber `builder.py` importierbar — der Architect kann
-  sie nicht nutzen (siehe MERKPOSTEN "AST-Zugriff pro Rolle ist
-  asymmetrisch"). Siehe ADR-0012 Muster 1+2.
-- **Akzeptanzkriterien:**
-  - Neue Struktur `werkstatt/roles/builder/`: `__init__.py`,
-    `ast.py` (`_ast_block_fuer_zieldatei`, `_finde_modul_pfad`,
-    `_hat_symbol`, `_sammle_projekt_py_files`), `patch.py`
-    (`_normalisiere_aider_patches`, Apply-Logik), `validate.py`
-    (`_validate_imports_in_patch`), `prompt.py` (`_builder_system`,
-    Prompt-Bau), `run.py` (`_build_patches_fuer_datei` — die
-    oeffentliche Builder-API).
-  - `builder.py` wird zur Deprecation-Proxy-Datei.
-  - Architect und Reviewer koennen `from werkstatt.roles.builder.ast
-    import _ast_block_fuer_zieldatei` nutzen — ohne den Rest des
-    Builders zu ziehen.
-  - Bestehende `test_builder.py` bleibt gruen ohne Aenderung.
-- **Tests:** keine neuen (AST-Helpers sind bestehend, Tests decken ab).
-- **Blockiert von:** —
-  die Builder-API klar ist)
-
 ### OP-141: `state/` Submodul-Split (RunState aufteilen)
 
 - **Status:** open
@@ -668,7 +641,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - `.werkstatt/verify.json` bekommt neue Stage:
     `"import_drift": {"cmd": "python3 tools/import_drift.py --check",
     "hart": true}`.
-  - Whitelist wird pro Split-OP (OP-140..143) um die jeweiligen
+  - Whitelist wird pro Split-OP (OP-141..143) um die jeweiligen
     Verletzungen reduziert. Ziel: leere Whitelist nach OP-143.
 - **Tests:** `tests/test_import_drift.py` (Smoke).
 - **Blockiert von:** -
@@ -990,6 +963,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-05 | OP-140 | done | roles/builder/-Split in 5 Submodule (ast, prompt, validate, patch, run) + _common; builder.py als sys.modules-Alias (6334d80)
 - 2026-11-05 | OP-139 | done | phases/-Split: _common + 5 Phasen-Submodule; pipeline_phases.py als sys.modules-Alias (d41233f)
 - 2026-11-05 | OP-138 | done | render/-Split in 7 Module (tee, rich, emit, spinner, progress, tasks, plan); loop_renderer.py als sys.modules-Alias (b6f75db)
 - 2026-11-05 | OP-136b | done | state_drift.py + 3 Registry-Checks + 2 validate_transition-Aufrufe + verify-Stage hart (bfd38e9)

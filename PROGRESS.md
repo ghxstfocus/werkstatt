@@ -2171,3 +2171,74 @@ Der Alias haelt sie funktional. Migration gehoert in **OP-143**
 - OP-143 (`cli/` + Re-Export-Bereinigung) ist jetzt entblockt —
   dort wird pipeline_phases.py-Alias + loop_renderer.py-Alias
   aufgeloest.
+
+
+### 2026-11-05 — OP-140: roles/builder/-Split (builder.py)
+
+**Neue Struktur:**
+- werkstatt/roles/builder/ast.py       (114 Z.) Projekt-Python-Scan,
+                                        Symbol-Checks
+- werkstatt/roles/builder/prompt.py    (166 Z.) BUILDER_SYSTEM +
+                                        Prompt-Bau
+- werkstatt/roles/builder/validate.py  (128 Z.) Import-Validierung
+- werkstatt/roles/builder/patch.py     (313 Z.) Aider-Patch-
+                                        Normalisierung
+- werkstatt/roles/builder/run.py       (972 Z.) _build_patches_fuer_datei
+                                        + run_builder
+- werkstatt/roles/builder/_common.py   ( 11 Z.) ask_llm, audit
+- werkstatt/roles/builder/__init__.py  ( 82 Z.) Fassade
+- werkstatt/builder.py                 ( 20 Z.) sys.modules-Alias
+
+**Phasen (Commits):**
+- f5f36d9 Phase 1: Modul-Umzug (byte-identisch + Alias)
+- 6334d80 Phase 2b: 5 Submodule + _common
+
+**Ehrliche Abweichungen vom OP-Text:**
+
+1. **`builder.py` = `sys.modules`-Alias, nicht `from roles.builder
+   import *`:** 26 Files importieren `from werkstatt.builder import X`,
+   Tests patchen Modul-Attribute. Alias macht beide Namen zum selben
+   Objekt. Aufloesung in OP-143.
+
+2. **`_common.py` zusaetzlich eingefuehrt:**
+   - `ask_llm`, `audit` zentral, damit Tests sie patchen koennen
+   - Alias in patch.py/run.py: `_bglob` (bewusst NICHT `_c` — kollidiert
+     mit lokalem Temp-Var `_c` in run_builder, F823 verhindert)
+
+3. **4 Test-Files muessen angepasst werden (OP-Text nennt nur
+   test_builder.py):**
+   - test_builder_agent.py (33x): werkstatt.builder.ask_llm/audit →
+     werkstatt.roles.builder._common.ask_llm/audit
+   - test_k48_aider_patch.py (4x): dito
+   - test_builder_module_hint.py (1x): patch.object(_b, "ask_llm") →
+     patch.object(_b._common, "ask_llm")
+   - test_builder_create_prompt.py (1x): dito
+   Grund: Tests patchen Modul-Attribute. ask_llm/audit leben jetzt in
+   `_common.py`; Submodule lesen `_bglob.ask_llm()`. Patch auf Fassade
+   wirkt nicht auf Submodul-Consumer.
+
+4. **`run.py` = 972 Zeilen** (436 + 509 + Header). OP-Text fordert
+   die Aufteilung so; `_build_patches_fuer_datei` und `run_builder`
+   sind eine untrennbare API (LLM + Patch-Apply + Progress).
+
+**Fassade-Re-Exports mit as-alias-Pattern + `from . import _common as
+_common`:** der Selbst-Alias markiert ruff den Modul-Import als
+Re-Export (kein F401). `ruff --fix --select I` sortiert nur die
+Import-Reihenfolge, laesst Re-Exports unangetastet.
+
+**OP-137-Asymmetrie geloest:** Der Architect kann jetzt
+`from werkstatt.roles.builder.ast import _ast_block_fuer_zieldatei`
+nutzen, ohne den ganzen Builder zu ziehen.
+
+**Abnahme:**
+- 1305 passed, 5 skipped.
+- ruff . = 198 (5 migrierte Baseline-Fehler in roles/builder/:
+  SIM102, SIM103, B023, 2x S110; Netto 201 → 198 durch Fassade-
+  Schrumpfung).
+- audit_drift OK, control_drift OK, state_inventory OK, state_drift OK.
+- Work-Commits: f5f36d9, 6334d80.
+- Close-Commit folgt.
+
+- OP-141 (`state/`-Split) und OP-142 (`web/routes/`) frei.
+- OP-143 (`cli/` + Re-Export-Bereinigung): drei Aliase aufzuloesen
+  (loop_renderer.py, pipeline_phases.py, builder.py).
