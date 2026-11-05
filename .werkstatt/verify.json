@@ -48,6 +48,16 @@
       "hart": true
     },
     {
+      "id": "import_drift",
+      "command": [
+        "python3",
+        "tools/import_drift.py"
+      ],
+      "phase": "post_build",
+      "timeout": 60,
+      "hart": true
+    },
+    {
       "id": "mypy_changed",
       "command": [
         "python3",

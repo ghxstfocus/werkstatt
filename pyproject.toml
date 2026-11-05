@@ -1,0 +1,31 @@
+[tool.importlinter]
+root_package = "werkstatt"
+include_external_packages = false
+
+[[tool.importlinter.contracts]]
+name = "render ist eine Leaf-Schicht"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["werkstatt.render"]
+forbidden_modules = [
+    "werkstatt.phases",
+    "werkstatt.roles",
+    "werkstatt.web",
+]
+
+[[tool.importlinter.contracts]]
+name = "roles.builder kennt keine phases oder web"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["werkstatt.roles.builder"]
+forbidden_modules = [
+    "werkstatt.phases",
+    "werkstatt.web",
+]
+
+[[tool.importlinter.contracts]]
+name = "phases kennt keine web"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["werkstatt.phases"]
+forbidden_modules = ["werkstatt.web"]
