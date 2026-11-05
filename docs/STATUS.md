@@ -948,13 +948,151 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   respektiert, Doku-Vollstaendigkeit der 3 Varianten via AST-Read).
 - **Blockiert von:** —
 
+### OP-163b: Planner-Dependencies deterministisch aus Prosa
+
+- **Status:** open
+- **Typ:** architektur (Planner)
+- **Betroffen:** `werkstatt/planner.py` (`_zerlege_in_sub_tasks`,
+  `_extrahiere_prosa_abschnitt`), `tests/test_planner_deps.py` (neu)
+- **Problem:** OP-163 hat `PLANNER_SPLIT_SYSTEM` um die Pflicht-Regel
+  "Konsequenz-Tasks MUESSEN dependencies setzen" erweitert (Z. 293-296
+  in planner.py). Loop-Test-4 hat gezeigt: Prompt-Regel wird vom
+  Split-LLM ignoriert. Audit-Event `planner_split` 2026-11-05 14:17:47:
+  alle 8 Tasks `deps=[]`. PhaseState bestaetigt: `deps=[]` bei t1-t8.
+  Der `get_next_task`-Filter aus OP-163 greift ins Leere.
+- **Akzeptanzkriterien:**
+  - Neue deterministische Funktion `_leite_deps_aus_prosa(tasks, prosa)`
+    in `planner.py`: scannt Architect-Prosa nach Marker-Saetzen
+    ("haengt von", "erst nach", "Abhaengigkeiten"), mappt die genannten
+    Task-Namen auf Task-IDs, setzt `dependencies` direkt (LLM-frei).
+  - Fallback: wenn die Prosa keine Marker enthaelt, bleibt
+    `dependencies=[]` (kein Regress fuer unabhaengige Tasks).
+  - `planner_split`-Event loggt `deps` (durch OP-171 bereits da) —
+    Tests pruefen den Live-Beleg.
+  - Tests: 3 Smoke-Tests — (a) Prosa "t3 haengt von t1" -> t3 bekommt
+    `deps=["t1"]`; (b) Prosa "erst nach t2" -> gleiche Wirkung;
+    (c) Prosa ohne Marker -> deps bleibt leer.
+- **Tests:** `tests/test_planner_deps.py` (neu)
+- **Blockiert von:** —
+
+### OP-164b: Reviewer AUFTRAG-TREUE-Check bei Rename-Aufgaben
+
+- **Status:** open
+- **Typ:** architektur (Reviewer)
+- **Betroffen:** `werkstatt/reviewer.py` (`REVIEWER_SYSTEM`,
+  `run_reviewer`), `tests/test_reviewer_auftrag_treue.py` (neu)
+- **Problem:** OP-164 patcht den GOLD-Diff-Block (`-`-Zeile +
+  bestehende Zuweisung entfernt), aber der Live-Beleg aus Loop-Test-4
+  liegt im `AUFTRAG-TREUE-CHECK`-Block (Z. 165-179). Zwei
+  Bug-Klassen wurden live beobachtet:
+  - (a) **Wert statt Feldname ersetzt**: `state.auftrag_bereits_erfuellt
+    = True` -> `state.auftrag_bereits_erfuellt_bestaetigt = False`
+    (Semantik-Kipp True->False). Loop-Test-4 10:13, builder.py:945/1043/1596.
+  - (b) **Neue type-ignore auf fremden Feldern**: Diff fuegt
+    `# type: ignore[attr-defined]` auf `reflection_erschoepft`,
+    `scout_bereits_erfuellt`, `phase_review_uebersprungen` hinzu —
+    Over-Delivery gegen Task-Anweisung "restliche Logik unveraendert".
+    Loop-Test-4 14:20, gates.py:419.
+- **Akzeptanzkriterien:**
+  - Neue deterministische Funktion `_filter_auftrag_treue_false_positives(
+    bugs, diff, task_desc)` in `reviewer.py`: bei Rename-Kontext
+    (`umbenennen`/`rename`/`ersetzen durch`):
+    (a) Bug "Wert X->Y geaendert" auf medium herab, wenn derselbe
+        Hunk eine `+`-Zeile mit `bestaetigt`/`_neu`-Feld und
+        Wert-Gleichheit mit alt (True/True, False/False) zeigt.
+    (b) Bug "type-ignore auf Feld Z hinzugefuegt" auf medium herab,
+        wenn Z nicht in `task_files`-Description erwaehnt ist.
+  - Test-Beleg: Loop-Test-4-Audit-Text als Fixture, Filter setzt
+    severity auf medium.
+  - Tests: 3 Smoke-Tests — (a) Wert-Kipp Rename-OK -> medium,
+    (b) Wert-Kipp ohne Rename-Kontext -> HIGH, (c) type-ignore
+    Over-Delivery -> medium.
+- **Tests:** `tests/test_reviewer_auftrag_treue.py` (neu)
+- **Blockiert von:** OP-166 (kumulative last_verify_errors macht
+  sonst Live-Test unmoeglich)
+
+### OP-166: last_verify_errors pro Task zuruecksetzen
+
+- **Status:** open
+- **Typ:** architektur (Verify + Reflection)
+- **Betroffen:** `werkstatt/pipeline_phases.py` (Task-Loop),
+  `werkstatt/verify.py` (`_verify_patches_soft`),
+  `tests/test_verify_errors_reset.py` (neu)
+- **Problem:** Loop-Test-4 t7: 5 Reflection-Runden, 0 Patches pro
+  Runde, aber 22 Zeilen kumulativ im Diff. Ursache: `last_verify_errors`
+  ist global und enthaelt Fehler aus vorherigen Tasks (z.B. t2's
+  gates.py-Problem). Der Builder sieht diese Fehler als "seine",
+  kann sie aber nicht loesen — weil sie nicht in seiner Zieldatei
+  liegen.
+- **Akzeptanzkriterien:**
+  - `_phase_tasks_loop` setzt `state.last_verify_errors = []` vor
+    jedem Task-Start (analog zu `state.patches = []`).
+  - `_verify_patches_soft` filtert bei der Klassifikation zusaetzlich
+    auf Stage-IDs, die in der aktuellen Task-Runde gelaufen sind
+    (nicht kumulativ).
+  - Tests: 2 Smoke-Tests — (a) Fehler aus Task 1 tauchen in Task 2
+    nicht mehr auf; (b) neue Fehler aus Task 2 werden erkannt.
+- **Tests:** `tests/test_verify_errors_reset.py` (neu)
+- **Blockiert von:** —
+
+### OP-167: PhaseState-Zaehler vs. Loop-Anzeige synchron
+
+- **Status:** open
+- **Typ:** bug (Zaehler)
+- **Betroffen:** `werkstatt/pipeline_phases.py`,
+  `werkstatt/loop_renderer.py`, `tests/test_task_counter_sync.py` (neu)
+- **Problem:** Loop-Test-4: PhaseState zeigte `7 done + 1 human_review`
+  (t1,t3-t8 done, t2 human_review), aber Loop-Footer zeigte `Tasks: 3/8`.
+  Diskrepanz 7 vs. 3. `tasks_ok_counter` wird nur an einer Stelle
+  (Z. 562, GOLD-Fallback) auf `1` gesetzt, statt pro Task-Erfolg
+  inkrementiert. Wenn die Loop-Erfolgspfade (`_task_ende(ok=True)`)
+  durchlaufen, wird `tasks_ok_counter` zwar inkrementiert
+  (Z. 839, 892, 951, 1003, 1118), aber der Footer liest eventuell
+  den falschen Wert.
+- **Akzeptanzkriterien:**
+  - Messung zuerst: welcher Pfad setzt `tasks_ok_counter` nicht?
+    (Builder-Patch-Duplikat, Hook-Pfad, Reflection-Pfad?)
+  - Fix: alle `_task_ende(ok=True)`-Aufrufe rufen einen zentralen
+    Inkrementer.
+  - Test: 2 Smoke-Tests — (a) 3 Tasks done (Pfad A, B, C) -> Counter=3;
+    (b) PhaseState-Endstand `done`-Anzahl == Counter.
+- **Tests:** `tests/test_task_counter_sync.py` (neu)
+- **Blockiert von:** —
+
+### OP-168: Phase-4-Review braucht Human-Gate zwischen Runden
+
+- **Status:** open
+- **Typ:** architektur (Phase-Review + Gates)
+- **Betroffen:** `werkstatt/pipeline_phases.py`
+  (`_phase_end_review_loop`, Z. 1584-1661),
+  `tests/test_phase_review_gate.py` (neu)
+- **Problem:** Loop-Test-4: nach t8 lief `Phase 4: Phase-End-Review`
+  mit 3 Runden Builder+Reviewer — komplett ohne Human-Gate — und
+  endete dann mit `LOOP FEHLGESCHLAGEN`. Der User konnte zwischen
+  den Runden nicht eingreifen. Bei "LOOP FEHLGESCHLAGEN" waren
+  die Phase-4-Patches bereits im Working Tree (dirty), aber nicht
+  committet.
+- **Akzeptanzkriterien:**
+  - `_phase_end_review_loop`: nach jeder Reflection-Runde (Reject)
+    fragt ein Human-Gate ob weitergemacht werden soll
+    (j = noch eine Runde, n = abbrechen ohne weiteren Patch,
+    a = auto-weiter bis max).
+  - Bei Phase-Review-Reject nach max Runden: Human-Gate **vor**
+    `LOOP FEHLGESCHLAGEN`, damit der User die Patches waehlen kann
+    (behalten/verwerfen).
+  - Tests: 2 Smoke-Tests — (a) nach Runde 1 Reject -> Gate wird
+    aufgerufen; (b) Gate n -> Loop endet sauber ohne weitere Runde.
+- **Tests:** `tests/test_phase_review_gate.py` (neu)
+- **Blockiert von:** —
+
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - 2026-11-05 | OP-165 | done | Contract-Verify pro Task (contract_check-Stage) (f73dde5)
-- 2026-11-05 | OP-163 | done | Planner-Dependencies als Pflichtfeld durchgesetzt (9797b31)
-- 2026-11-05 | OP-164 | done | Reviewer versteht Rename-Aufgaben (2dde8cd)
+- 2026-11-05 | OP-163 | done | Planner-Dependencies als Pflichtfeld durchgesetzt (9797b31); **live-wirkungslos (Loop-Test-4, siehe OP-163b)**
+- 2026-11-05 | OP-164 | done | Reviewer versteht Rename-Aufgaben (2dde8cd); **live-wirkungslos (Loop-Test-4, siehe OP-164b)**
 - 2026-11-05 | OP-135a | done | State-Contract-Design: Dataclasses + Registry + Property-Views (35c2aa3)
 - 2026-11-04 | OP-134 | done | State-Inventur — Tool + Doku (7177f16)
 - 2026-11-04 | OP-146 | done | Stale Blocker-Referenzen bereinigt (11 OPs, 18 Refs); OP-113a angelegt (Work-Commit 44b4350)

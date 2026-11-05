@@ -1895,3 +1895,44 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - **Abnahme:** 1278 passed, 8 skipped; audit_drift OK;
   control_drift OK; state_inventory OK.
 
+
+## 2026-11-05 -- Loop-Test-4 (OP-145 live) -- Messbericht
+
+- **Status:** Fehlschlag fuer 2/3 OPs. Kein Close, keine Feier.
+- **Ausgangslage:** 948ba9c (3 neue OPs aus Session 1: OP-163, OP-164,
+  OP-165). Ziel war, alle drei live gegen OP-145 zu validieren.
+- **Verlauf:** Loop gestartet mit `--fresh --aufgabe "$(OP-145-Block)"`.
+  Plan-Gate: 8 Tasks (t1-t8). Loop bis Phase-End, dann
+  `LOOP FEHLGESCHLAGEN Tasks: 3/8` nach 3 Phase-Review-Runden.
+  3 Commits mit doppeltem Subject: `fix(werkstatt): OP-145: ### OP-145:
+  Namens-Drift`. Working Tree nach Loop: 8 Files dirty (+91/-27).
+  Rollback auf 948ba9c durchgefuehrt (Loop-Spur im Reflog).
+- **Live-Ergebnis pro OP:**
+  - **OP-165 (contract_check):** wirkt. Stage lief bei jedem Task
+    mit 0s und ohne Fehlmeldung im Erfolgsfall.
+  - **OP-163 (Planner-Dependencies):** wirkt **nicht**. Audit-Event
+    `planner_split` (14:17:47) zeigt `deps=[]` bei allen 8 Tasks.
+    Prompt-Regel (Z. 293-296) wurde vom Split-LLM ignoriert.
+    `get_next_task`-Filter greift ins Leere. Nachfolger: **OP-163b**.
+  - **OP-164 (Rename-Filter):** wirkt **nicht**. Der Live-Beleg
+    triggert den `AUFTRAG-TREUE-CHECK`-Block (Z. 165-179), nicht
+    den GOLD-Diff-Block, den OP-164 gepatcht hat. Zwei Bug-Klassen:
+    Wert statt Feldname, type-ignore Over-Delivery. Nachfolger:
+    **OP-164b**.
+- **Weitere Befunde (5 neue OPs):**
+  - **OP-166:** `last_verify_errors` kumulativ -> 2 verify-Fehler in
+    jeder Reflection-Runde, Builder kann sie nicht loesen.
+  - **OP-167:** PhaseState `7 done + 1 human_review` vs. Loop-Footer
+    `3/8` -- Zaehler-Diskrepanz.
+  - **OP-168:** Phase-4-Review 3 Runden ohne Human-Gate, dann
+    LOOP FEHLGESCHLAGEN bei dirty Tree.
+  - **OP-169** (closed b11637b): Commit-Subject-Header `### ` nicht
+    gestrippt vor `startswith(op_nnn)`-Check.
+  - **OP-171** (closed b11637b): `planner_split`-Event loggte `deps`
+    nicht -- Loop-Test-4 war blind fuer die Dep-Frage.
+- **Lehre:** Unit-Tests gruen != live wirksam. Bei Struktur-OPs
+  (Prompt-Regeln, Reflection, Phase-Review) reicht ein Test der
+  neuen Funktion nicht -- es braucht einen Test, der die alte
+  Wirkungslosigkeit reproduziert. Sonst kehrt der Bug zurueck.
+- **Abnahme:** 1281 passed, 8 skipped; audit_drift OK;
+  control_drift OK; state_inventory OK.
