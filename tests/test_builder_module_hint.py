@@ -1,5 +1,6 @@
 """Spec: Builder-Prompt erdet Modulnamen (Fix AQ)."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,7 +33,7 @@ class TestModuleHint:
             reviewer_bugs=[], last_verify_errors=[],
             reflection_history=[],
         )
-        with _p.object(_b, "ask_llm", _fake_ask):
+        with _p.object(_b._common, "ask_llm", _fake_ask):
             _b._build_patches_fuer_datei(
                 state, "harness/llm/deepseek_client.py",
                 "## harness/llm/deepseek_client.py\nNeu.", "key",

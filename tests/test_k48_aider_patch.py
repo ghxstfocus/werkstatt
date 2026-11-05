@@ -39,8 +39,8 @@ def test_aider_patch_wird_normalisiert(tmp_path):
     }
     aider_json = json.dumps(patch_obj, ensure_ascii=False)
     st = _st(tmp_path, "a.py")
-    with patch("werkstatt.builder.ask_llm", return_value=_mock_llm(aider_json)), \
-         patch("werkstatt.builder.audit"):
+    with patch("werkstatt.roles.builder._common.ask_llm", return_value=_mock_llm(aider_json)), \
+         patch("werkstatt.roles.builder._common.audit"):
         ok = run_builder(st)
     assert ok is True
     p = st.patches[0]
@@ -63,8 +63,8 @@ def test_legacy_patch_bleibt_unveraendert(tmp_path):
                      "old_string": "x = 1", "new_string": "x = 2"}],
     })
     st = _st(tmp_path, "a.py")
-    with patch("werkstatt.builder.ask_llm", return_value=_mock_llm(legacy_json)), \
-         patch("werkstatt.builder.audit"):
+    with patch("werkstatt.roles.builder._common.ask_llm", return_value=_mock_llm(legacy_json)), \
+         patch("werkstatt.roles.builder._common.audit"):
         ok = run_builder(st)
     assert ok is True
     p = st.patches[0]

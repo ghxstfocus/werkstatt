@@ -35,7 +35,7 @@ def test_builder_erstellt_patches(tmp_path):
         ok = True
         content = fake_json
 
-    with patch("werkstatt.builder.ask_llm", return_value=FakeReply()):
+    with patch("werkstatt.roles.builder._common.ask_llm", return_value=FakeReply()):
         result = run_builder(st)
         assert result is True
         assert len(st.patches) == 1
@@ -59,8 +59,8 @@ def test_builder_read_only_task_kein_patch(tmp_path):
     st = _state(tmp_path)
     st.tasks = [{"id": "t1", "name": "Bestandsaufnahme", "action": "read"}]
 
-    with patch("werkstatt.builder.ask_llm") as mock_llm, \
-         patch("werkstatt.builder.audit"):
+    with patch("werkstatt.roles.builder._common.ask_llm") as mock_llm, \
+         patch("werkstatt.roles.builder._common.audit"):
         result = run_builder(st)
     assert result is True
     assert mock_llm.call_count == 0  # kein LLM-Call
@@ -79,7 +79,7 @@ def test_builder_idempotent_bei_korrekter_datei(tmp_path):
         "def test_foo():\n    assert True\n", encoding="utf-8"
     )
 
-    with patch("werkstatt.builder.audit") as mock_audit:
+    with patch("werkstatt.roles.builder._common.audit") as mock_audit:
         result = run_builder(st)
 
     assert result is True
@@ -102,8 +102,8 @@ def test_builder_reflection_bei_inkorrekter_datei(tmp_path):
         "def test_foo(:\n    assert True\n", encoding="utf-8"
     )
 
-    with patch("werkstatt.builder.ask_llm") as mock_llm, \
-         patch("werkstatt.builder.audit") as mock_audit:
+    with patch("werkstatt.roles.builder._common.ask_llm") as mock_llm, \
+         patch("werkstatt.roles.builder._common.audit") as mock_audit:
         mock_llm.return_value = type("R", (), {"ok": True, "content": '{"patches": []}', "error": ""})()
         _result = run_builder(st)
 
@@ -126,7 +126,7 @@ def test_builder_idempotent_bei_create_und_update(tmp_path):
     # Task: action=create, Datei existiert -> idempotent (nichts zu tun)
     st.tasks = [{"id": "t1", "name": "test_checks.py schreiben", "action": "create"}]
 
-    with patch("werkstatt.builder.audit") as mock_audit:
+    with patch("werkstatt.roles.builder._common.audit") as mock_audit:
         result = run_builder(st)
 
     assert result is True
@@ -153,8 +153,8 @@ def test_builder_update_inkorrekte_datei_nutzt_patch_pfad(tmp_path):
 
     st.tasks = [{"id": "t1", "name": "test_checks.py reparieren", "action": "update"}]
 
-    with patch("werkstatt.builder.ask_llm") as mock_llm, \
-         patch("werkstatt.builder.audit") as mock_audit:
+    with patch("werkstatt.roles.builder._common.ask_llm") as mock_llm, \
+         patch("werkstatt.roles.builder._common.audit") as mock_audit:
         mock_llm.return_value = type("R", (), {
             "ok": True, "content": '{"patches": []}', "error": ""
         })()
@@ -189,8 +189,8 @@ def test_builder_update_kein_idempotenz(tmp_path):
         "def test_foo():\n    assert True\n", encoding="utf-8"
     )
 
-    with patch("werkstatt.builder.audit") as mock_audit, \
-         patch("werkstatt.builder.ask_llm") as mock_llm:
+    with patch("werkstatt.roles.builder._common.audit") as mock_audit, \
+         patch("werkstatt.roles.builder._common.ask_llm") as mock_llm:
         mock_llm.return_value = type("R", (), {
             "ok": True, "content": '{"patches": []}', "error": ""
         })()
@@ -241,8 +241,8 @@ def test_builder_create_task_mit_import_kontext(tmp_path):
     def _mock_audit(kind, payload, *a, **kw):
         _audits.append(kind)
 
-    with patch("werkstatt.builder.audit", side_effect=_mock_audit), \
-         patch("werkstatt.builder.ask_llm") as mock_llm:
+    with patch("werkstatt.roles.builder._common.audit", side_effect=_mock_audit), \
+         patch("werkstatt.roles.builder._common.ask_llm") as mock_llm:
         mock_llm.return_value = type("R", (), {
             "ok": True, "content": '{"patches": []}', "error": ""
         })()
@@ -262,7 +262,7 @@ def test_builder_create_ohne_imports(tmp_path):
     st = _state(tmp_path)
     st.tasks = [{"id": "t1", "name": "leer.py anlegen", "action": "create"}]
 
-    with patch("werkstatt.builder.ask_llm") as mock_llm:
+    with patch("werkstatt.roles.builder._common.ask_llm") as mock_llm:
         mock_llm.return_value = type("R", (), {
             "ok": True, "content": '{"patches": []}', "error": ""
         })()
@@ -295,8 +295,8 @@ def test_builder_task_files_priorisiert(tmp_path):
         if kind == "builder_file_context":
             _file_ctx.extend(payload.get("files", []))
 
-    with patch("werkstatt.builder.audit", side_effect=_mock_audit), \
-         patch("werkstatt.builder.ask_llm") as mock_llm:
+    with patch("werkstatt.roles.builder._common.audit", side_effect=_mock_audit), \
+         patch("werkstatt.roles.builder._common.ask_llm") as mock_llm:
         mock_llm.return_value = type("R", (), {
             "ok": True, "content": '{"patches": []}', "error": ""
         })()
@@ -325,8 +325,8 @@ def test_builder_task_files_leer_fallback(tmp_path):
         if kind == "builder_file_context":
             _file_ctx.extend(payload.get("files", []))
 
-    with patch("werkstatt.builder.audit", side_effect=_mock_audit), \
-         patch("werkstatt.builder.ask_llm") as mock_llm:
+    with patch("werkstatt.roles.builder._common.audit", side_effect=_mock_audit), \
+         patch("werkstatt.roles.builder._common.ask_llm") as mock_llm:
         mock_llm.return_value = type("R", (), {
             "ok": True, "content": '{"patches": []}', "error": ""
         })()
@@ -348,7 +348,7 @@ def test_builder_task_files_nicht_str(tmp_path):
     st.aktuelle_task = st.tasks[0]
 
     # Kein Crash
-    with patch("werkstatt.builder.ask_llm") as mock_llm:
+    with patch("werkstatt.roles.builder._common.ask_llm") as mock_llm:
         mock_llm.return_value = type("R", (), {
             "ok": True, "content": '{"patches": []}', "error": ""
         })()
@@ -378,8 +378,8 @@ def test_builder_ordner_in_task_files(tmp_path):
         if kind == "builder_file_context":
             _file_ctx.extend(payload.get("files", []))
 
-    with patch("werkstatt.builder.audit", side_effect=_mock_audit), \
-         patch("werkstatt.builder.ask_llm") as mock_llm:
+    with patch("werkstatt.roles.builder._common.audit", side_effect=_mock_audit), \
+         patch("werkstatt.roles.builder._common.ask_llm") as mock_llm:
         mock_llm.return_value = type("R", (), {
             "ok": True, "content": '{"patches": []}', "error": ""
         })()
@@ -403,7 +403,7 @@ def test_builder_ordner_leer(tmp_path):
                  "task_files": ["core/leer/"]}]
     st.aktuelle_task = st.tasks[0]
 
-    with patch("werkstatt.builder.ask_llm") as mock_llm:
+    with patch("werkstatt.roles.builder._common.ask_llm") as mock_llm:
         mock_llm.return_value = type("R", (), {
             "ok": True, "content": '{"patches": []}', "error": ""
         })()
@@ -431,8 +431,8 @@ def test_builder_zieldatei_aus_task_files(tmp_path):
         _user_content.append(user_content)
         return type("R", (), {"ok": False, "content": "", "error": "skip"})()
 
-    with patch("werkstatt.builder.ask_llm", side_effect=_mock_ask), \
-         patch("werkstatt.builder.audit"):
+    with patch("werkstatt.roles.builder._common.ask_llm", side_effect=_mock_ask), \
+         patch("werkstatt.roles.builder._common.audit"):
         run_builder(st)
 
     assert _user_content, "ask_llm wurde nicht gerufen"
@@ -465,8 +465,8 @@ def test_builder_patch_falsche_datei_abgelehnt(tmp_path):
             "error": ""
         })()
 
-    with patch("werkstatt.builder.ask_llm", side_effect=_mock_ask), \
-         patch("werkstatt.builder.audit",
+    with patch("werkstatt.roles.builder._common.ask_llm", side_effect=_mock_ask), \
+         patch("werkstatt.roles.builder._common.audit",
                side_effect=lambda k, p, *a, **kw: _audits.append(k)):
         result = run_builder(st)
 
@@ -496,8 +496,8 @@ def test_builder_patch_richtige_datei(tmp_path):
             "error": ""
         })()
 
-    with patch("werkstatt.builder.ask_llm", side_effect=_mock_ask), \
-         patch("werkstatt.builder.audit"):
+    with patch("werkstatt.roles.builder._common.ask_llm", side_effect=_mock_ask), \
+         patch("werkstatt.roles.builder._common.audit"):
         result = run_builder(st)
 
     assert result is True
@@ -527,8 +527,8 @@ def test_builder_task_files_nur_diese(tmp_path):
         if kind == "builder_file_context":
             _file_ctx.extend(payload.get("files", []))
 
-    with patch("werkstatt.builder.ask_llm") as mock_llm, \
-         patch("werkstatt.builder.audit", side_effect=_mock_audit):
+    with patch("werkstatt.roles.builder._common.ask_llm") as mock_llm, \
+         patch("werkstatt.roles.builder._common.audit", side_effect=_mock_audit):
         mock_llm.return_value = type("R", (), {
             "ok": True,
             "content": '{"patches": [{"action": "update", "file": "core/checks.py", "old_string": "x", "new_string": "y"}]}',
@@ -582,8 +582,8 @@ def test_builder_create_zieldatei_fehlt_wird_angelegt(tmp_path):
         content = fake_json
 
     _audits = []
-    with patch("werkstatt.builder.ask_llm", return_value=FakeReply()), \
-         patch("werkstatt.builder.audit",
+    with patch("werkstatt.roles.builder._common.ask_llm", return_value=FakeReply()), \
+         patch("werkstatt.roles.builder._common.audit",
                lambda k, p, *a, **kw: _audits.append(k)):
         result = run_builder(st)
 
@@ -614,7 +614,7 @@ def test_builder_update_zieldatei_fehlt_bleibt_fail_closed(tmp_path):
     assert not (tmp_path / "core" / "fehlt.py").exists()
 
     _audits = []
-    with patch("werkstatt.builder.audit",
+    with patch("werkstatt.roles.builder._common.audit",
                lambda k, p, *a, **kw: _audits.append(k)):
         result = run_builder(st)
 

@@ -1,5 +1,6 @@
 """Spec: Builder-Prompt fuer create-Task (Fix M)."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,7 +31,7 @@ class TestCreatePrompt:
             builder_feedback={}, reviewer_bugs=[],
             last_verify_errors=[], reflection_history=[],
         )
-        with patch.object(_b, "ask_llm", _fake_ask):
+        with patch.object(_b._common, "ask_llm", _fake_ask):
             _b._build_patches_fuer_datei(
                 state, "docs/NEU.md", "## docs/NEU.md\nNeue Datei.", "key",
             )
