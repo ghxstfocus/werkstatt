@@ -568,3 +568,83 @@ durchfuehrt, zuerst `grep -rn '<alter_wert_oder_verhalten>' tests/`
 ausfuehren. Wenn ein Test das alte Verhalten prueft, den Test
 im selben Patch-Block umstellen. Der Test-Contract ist genauso
 verbindlich wie der Produktions-Code-Contract.
+
+
+## Session 2026-11-05 (Nacht) — 6 Lehren aus OP-136b..OP-143a
+
+Die Nacht-Session: 14 Commits, 6 OPs geschlossen (OP-136b, OP-138,
+OP-139, OP-140, OP-144, OP-141-Vorarbeit in 4 Schritten), 1
+verworfen (OP-142), 1 teil-erledigt (OP-143a). Sechs Muster sind
+in dieser Session mehrfach aufgetreten.
+
+### Muster — sys.modules-Alias statt from X import *
+
+Bei Modul-Umzügen, wo Tests patch.object(module, attr) nutzen:
+
+- from werkstatt.render import * bindet Namens-Kopien. Patches
+  wirken nur auf der Kopie, nicht im echten Modul.
+- sys.modules[__name__] = werkstatt.render macht beide Namen
+  zum selben Objekt. Patches wirken.
+
+Fehlversuche in OP-138, OP-139, OP-140: 3x dieselbe Klasse
+übersehen.
+
+### Muster — Namens-Erhalt bei from werkstatt import X
+
+Regex-Umbenennung from werkstatt import loop_renderer ->
+from werkstatt import render ist falsch: der lokale Name
+loop_renderer fehlt danach, Tests werfen NameError.
+
+Richtig:
+- from werkstatt import loop_renderer -> from werkstatt import render as loop_renderer
+- from werkstatt import builder -> from werkstatt.roles import builder as builder
+- import werkstatt.builder -> import werkstatt.roles.builder as builder
+
+Gleiches gilt für patch.multiple(...) und String-Literale
+(rollen.py:prompt_module).
+
+### Muster — _common.py für Modul-Globals
+
+Modul-Globals, die Tests patchen (ask_llm, audit): zentral
+in _common.py, Submodule lesen _bglob.X(). Test patcht
+_common.X. Direkt-Patch auf Fassade wirkt nicht auf
+Submodul-Consumer.
+
+Alias kurz halten (_bglob), NICHT _c: kollidiert mit lokalem
+Temp-Var _c in run_builder, wirft F823 Local variable
+referenced before assignment.
+
+### Muster — as-Selbst-Alias + ruff --fix --select I
+
+Re-Export-Fassaden (__init__.py):
+- from . import _common as _common markiert ruff den Import als
+  Re-Export. Kein F401 unused.
+- ruff --fix --select I sortiert nur Import-Reihenfolge. NICHT
+  ruff --fix . : das löscht F401 unused-Imports und bricht
+  Collection, wenn der Import Side-Effects trägt (in dieser
+  Session: 6 Collection-Errors durch 115 künstliche Fixes).
+
+### Muster — allow_indirect_imports=true bei import-linter
+
+forbidden-Contracts prüfen transitiv. Wenn die ADR "direkt
+nicht importieren" meint (ADR-0013), triggert jeder transitive
+Pfad (roles.builder.run -> verify -> loop -> pipeline_phases ->
+phases) fälschlich.
+
+allow_indirect_imports = true pro Contract macht die Regel
+präzise.
+
+### Muster — cmd | tail; $? ist tail-rc (4x reproduziert)
+
+Vier Mal in dieser Session: OP-138, OP-139, OP-140, OP-144.
+$? nach einer Pipe ist der Exit-Code des letzten Befehls
+(tail), nicht des ersten (pytest, ruff, lint-imports).
+
+Richtig:
+
+    pytest -q > /tmp/pt.log 2>&1
+    PT=$?
+    tail -4 /tmp/pt.log
+    echo "pytest rc=$PT"
+
+M-146 verstärken: "> file; rc=$?" statt Pipe.
