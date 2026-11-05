@@ -1,14 +1,16 @@
 """OP-165: contract_check-Stage + state_inventory --changed."""
 from __future__ import annotations
+
 import sys
-from pathlib import Path
+
 sys.path.insert(0, "/opt/werkstatt")
 sys.path.insert(0, "/opt/werkstatt/tools")
+
 import state_inventory
 
 
 def test_ghost_in_datei_failt(tmp_path):
-    _feld = sorted(state_inventory.BASELINE_GEISTER)[0]
+    _feld = min(state_inventory.BASELINE_GEISTER)
     py = tmp_path / "ghosty.py"
     py.write_text(
         "from werkstatt.state import RunState\n"

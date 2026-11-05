@@ -952,6 +952,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-05 | OP-165 | done | Contract-Verify pro Task (contract_check-Stage) (f73dde5)
 - 2026-11-05 | OP-163 | done | Planner-Dependencies als Pflichtfeld durchgesetzt (9797b31)
 - 2026-11-05 | OP-164 | done | Reviewer versteht Rename-Aufgaben (2dde8cd)
 - 2026-11-05 | OP-135a | done | State-Contract-Design: Dataclasses + Registry + Property-Views (35c2aa3)
@@ -1056,36 +1057,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   `tests/test_reflection_memory_inject.py` (neu)
 - **Blockiert von:** OP-128 (Ladder + strukturierter Fix-Output),
   OP-113a (scope-Spalte), OP-129 (Destillation)
-
-### OP-165: Contract-Verify pro Task (nicht erst am Ende)
-
-- **Status:** open
-- **Typ:** architektur (Verify-Haertung)
-- **Betroffen:** `werkstatt/pipeline_phases.py` (Task-Loop),
-  `tools/state_inventory.py` (neuer `--changed`-Modus),
-  `.werkstatt/verify.json`, `werkstatt/templates/.werkstatt/verify.json`
-- **Problem:** Contract-Aenderungen (z.B. Feld-Rename) werden heute
-  nur am Ende geprueft (Task "Baseline senken"). Zwischenschritte
-  (`planner.py`, `pipeline_phases.py`) koennen unvollstaendig
-  umbenannt bleiben, ohne dass es auffaellt. Live-Beleg 2026-11-05
-  (Loop-Test-3): t4 (planner.py) und t5 (pipeline_phases.py) wurden
-  als "task ok" markiert, obwohl `state_inventory` im
-  loop-test-3-partial noch Ghost-Reste in beiden Dateien zeigte
-  (`auftrag_bereits_erfuellt ::? in ['pipeline_phases.py',
-  'planner.py']`).
-- **Akzeptanzkriterien:**
-  - Neue post_build-Stage `contract_check` in beiden `verify.json`
-    (hart): prueft pro geaenderter Datei, ob Ghost-Felder noch
-    Attribut-Zugriffe haben.
-  - `state_inventory.py --changed <files...>` als neuer Modus:
-    liefert Exit 1, wenn eines der geaenderten Files noch einen
-    Ghost-Feld-Zugriff hat, der in der Baseline steht.
-  - Fail-loud: bei Contract-Verletzung wird der Task als `failed`
-    markiert, nicht `ok`. Der Task muss die Umbenennung vollenden.
-  - Tests: 2 Smoke-Tests — (a) Task laesst Ghost in geaenderter
-    Datei zurueck → fail; (b) Task entfernt Ghost komplett → ok.
-- **Tests:** `tests/test_verify_contract_stage.py` (neu)
-- **Blockiert von:** —
 
 ### OP-096: Phase 33.3 — gates.py nach control/ migrieren
 

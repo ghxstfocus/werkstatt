@@ -1847,3 +1847,51 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
 - **Abnahme:** 1276 passed, 8 skipped; audit_drift OK;
   control_drift OK; state_inventory OK.
 
+
+## 2026-11-05 -- OP-165 abgeschlossen: contract_check pro Task
+
+- **Status:** done (Commit f73dde5)
+- **Dateien:** `werkstatt/verify.py` (Platzhalter `{task_files}`),
+  `tools/state_inventory.py` (`--changed`-Modus + `ghosts_in_files`),
+  `.werkstatt/verify.json` (Stage `contract_check`, hart),
+  `werkstatt/templates/.werkstatt/verify.json` (Stage `contract_check`,
+  weich), `tests/test_verify_contract_stage.py` (neu)
+- **Problem:** Contract-Aenderungen (z.B. Feld-Rename) wurden nur
+  am Ende geprueft. Zwischenschritte (`planner.py`,
+  `pipeline_phases.py`) konnten unvollstaendig umbenannt bleiben,
+  ohne dass es auffiel. Loop-Test-3: t4 + t5 als "task ok",
+  obwohl `state_inventory` noch Ghost-Reste zeigte
+  (`auftrag_bereits_erfuellt` in `pipeline_phases.py` + `planner.py`).
+- **Aenderung:**
+  - `_expand_cmd_placeholders` in `verify.py`: neuer Platzhalter
+    `{task_files}`. Quelle ist `state.aktuelle_task["task_files"]`
+    (pro Task, NICHT kumulativ). Leer -> `return None` = Skip,
+    verhindert Fehlfeuer bei Tasks ohne Zieldatei.
+  - `state_inventory.py`: neue Funktion `ghosts_in_files(files)`
+    filtert `scanne_zugriffe`-Ergebnis auf die übergebenen Pfade und
+    prueft gegen `BASELINE_GEISTER`. Neue CLI `--changed FILE...`
+    (nargs=*) ruft sie, Exit 1 bei Treffer.
+  - `scanne_zugriffe(files=None)`: optionaler `files`-Parameter,
+    damit `--changed` nur die relevanten Dateien parst (Performance,
+    keine Semantik-Aenderung).
+  - `.werkstatt/verify.json`: Stage `contract_check` vor
+    `pytest_regression`, `command: [..., "--changed", "{task_files}"]`,
+    `phase: post_build`, `hart: true`.
+  - `werkstatt/templates/.werkstatt/verify.json`: gleiche Stage,
+    aber `hart: false`. Grund: Template-Zielprojekte haben
+    `tools/state_inventory.py` nicht, mit `hart: true` wuerde die
+    Stage in jedem fremden Projekt fail-loud blocken. Die Haerte
+    ist werkstatt-spezifisch, das Muster bleibt sichtbar.
+- **Tests (neu):**
+  - `test_ghost_in_datei_failt` — Datei mit Ghost-Zugriff ->
+    Treffer-Liste enthaelt den Feldnamen.
+  - `test_datei_ohne_ghost_ok` — Datei ohne Ghost-Zugriff ->
+    leere Liste.
+- **Nicht in OP-165:** Human-Gate-Anpassung am Phase-Ende
+  (contract_check greift pro Task via `_v_hart_ok=False` ->
+  bestehender Fail-Pfad in `_phase_tasks_loop`); semantische
+  Pruefung (Type-Check, Doku-Konsistenz). Bewusst nur
+  Ghost-Feld-Attribut-Zugriffe.
+- **Abnahme:** 1278 passed, 8 skipped; audit_drift OK;
+  control_drift OK; state_inventory OK.
+
