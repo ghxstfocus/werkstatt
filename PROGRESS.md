@@ -1977,3 +1977,45 @@ Narrativ-Korrektur: 'Loop baut produktionsreifen Code, nur Anzeige luegt' war fa
   Der Guard-Test faengt zukuenftige Regresse stattdessen.
 - **Abnahme:** 1302 passed, 8 skipped; audit_drift OK;
   control_drift OK; state_inventory OK.
+
+
+### 2026-11-05 — OP-136b: State-Drift-Tool + 3 Registry-Checks
+
+**Was gebaut:**
+- `tools/state_drift.py` (neu): 3 Konsistenz-Checks zwischen
+  `CONTRACTS`, `TRANSITIONS` und `RunState`-Properties.
+- `Contract.transition_frei: bool = False` (neues Feld, fail-closed).
+- `TRANSITIONS["scout->architect"]` um `("explorer_diagnostics", "auto")`
+  erweitert — der Architect braucht `explorer_findings` (via Property),
+  wurde bisher aber nicht validiert.
+- `planner.py`: `_validate_contract_or_audit`-Helper; ruft
+  `validate_transition("scout", "architect", ...)` vor `run_architect`
+  und `validate_transition("architect", "planner", ...)` nach
+  `run_architect`. Heute No-Op (auto-Regeln bzw. Pflichtfeld bereits
+  durch `run_architect`-return garantiert), aber verdrahtet.
+- `verify.json` (root + template): `state_drift`-Stage `hart: true`.
+- `docs/STATUS.md`: OP-136b-Wortlaut korrigiert — alte Formulierung
+  "jedes RunState-Feld in CONTRACTS/intern" war stale (`CONTRACTS`
+  hat kein `felder`-Feld, `TRANSITIONS` ist die echte
+  Feld-Referenz-Registry).
+
+**Design-Entscheidung waehrend Bau:**
+- Erste Skizze "4 Checks" auf 3 reduziert: `_PROP_NAME` ist privat,
+  Check 2 (CONTRACTS→_PROP_NAME) verworfen. Die Konsistenz ist durch
+  Check 1 (CONTRACTS→@property) + regulaeren Test abgedeckt.
+- `explorer_diagnostics` bekommt `TRANSITIONS`-Eintrag `"auto"`
+  statt `transition_frei=True`: es ist ein echter Inter-Role-Contract
+  (Explorer→Architect), nur der Trigger darf fehlen.
+
+**Baseline-Hinweis:**
+- Kontext-Block sagt ruff 193, tatsaechlich gemessen 206 (vor Commit).
+  Differenz +13 durch fruehere Commits, nicht durch diesen Commit.
+  Baseline-Hygiene ist ein separater OP-Kandidat.
+
+**Abnahme:**
+- 1305 passed, 5 skipped (5 neue in `tests/test_state_drift.py`).
+- audit_drift OK, control_drift OK, state_inventory OK,
+  state_drift OK.
+- Work-Commit bfd38e9, Close-Commit c327d10, Progress-Nachtrag folgt.
+
+- OP-138 und OP-141: Blocker "OP-136b" entfernt, jetzt frei.
