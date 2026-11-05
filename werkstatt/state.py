@@ -18,16 +18,12 @@ class BudgetExhausted(Exception):
     """Wird geworfen, wenn das LLM-Budget erschoepft ist."""
 
 
-
-
 @dataclass(frozen=True)
 class Measurement:
     mid: str
     argv: tuple[str, ...]
     beschreibung: str
     timeout_s: int = SUBPROCESS_TIMEOUT
-
-
 
 
 @dataclass
@@ -128,15 +124,6 @@ class RunState:
     # Agent-Memory A2: Projekt-Stand (aus memory.yaml).
     projekt_stand: dict = field(default_factory=dict)
     start_monotonic: float = 0.0  # Auflage 2080: Zeitmessung
-    # Auflage 2183 P1 (U3): Schwellwert + min_tokens
-    # justierbar, nicht im Code hart.
-    solver_config: dict[str, float] = field(
-        default_factory=dict)
-    # Planner-Konfiguration (Block P1, 2026-10-15).
-    # SS7-(C): Modell als hartcodierter Default, analog
-    # zu builder_model. Frontmatter wird heute nicht gelesen.
-    planner_model: str = "deepseek-chat"
-    planner_modus: str = "manual"
     scout_api_auszug: dict = field(default_factory=dict)
     # OP-135b: Explorer-Dateiliste (key_files + findings + next_reads).
     # Struktur identisch zu pipeline_phases.py:explorer_result.
@@ -153,7 +140,6 @@ class RunState:
     last_reject_reason: str = ""
 
 
-
     # M-WelleB (2026-11-02): Content-Check-Bestätigung.
     # True = Auftrag-bereits-erfuellt wurde durch DETERMINISTISCHEN
     # Content-Check bestätigt (nicht durch LLM-Urteil).
@@ -161,45 +147,15 @@ class RunState:
     auftrag_bereits_erfuellt_bestaetigt: bool = False
     auftrag_bereits_erfuellt_quelle: str = ""
 
-    # W35a-2 (2026-10-17): Planner-Resume-Cap
-    # pro uid. Max 1x pro Unterblock pro Prozess.
-    planner_resume_anzahl: dict[str, int] = \
-        field(default_factory=dict)
-    # W51g (2026-10-18): Format-Fehler-
-    # Kontext fuer den Planner (Runde > 1).
-    letzter_plan_fehler: str = ""
     # W51g: lokales Dedup-Set (Loop-Lebenszyklus,
     # in _planner_lauf gesetzt und verworfen).
     _w51g_gemessen: set[str] = field(default_factory=set)
-    planner_runden: int = 0
-    reviewer_verdict_model: str = "deepseek-chat"
-    reviewer_recovery_model: str = "deepseek-reasoner"
-    # W28b: Judge-Modell (Code-Review mit frischem Kontext).
-    judge_model: str = "deepseek-reasoner"
-    # W61c: Solver-Modell (eigene Rolle, Diagnose).
-    # Reasoner-Klasse, weil Deadlock-Diagnose Reasoning braucht.
-    solver_model: str = "deepseek-reasoner"
-    # W28c: max_tokens pro Rolle.
-    max_tokens_builder: int = 8192
-    # W58: Reasoning-Modell (deepseek-reasoner). Das
-    # Budget deckt Reasoning + sichtbare Antwort.
-    # 8192 reichte nicht (Reasoning verbrauchte alles,
-    # content leer). DeepSeek-R1-Empfehlung: 32K.
-    max_tokens_judge: int = 32768
-    max_tokens_reviewer: int = 1024
-    max_tokens_planner: int = 8192
-    max_tokens_solver: int = 2048
-    builder_model: str = "deepseek-chat"
-    builder_temp: float = 0.3
-    test_gen_model: str = "deepseek-chat"
-    llm_timeout_s: int = 180
     # Timeout-Fix 2026-10-16: Gesamt-Deadline
     # pro ask_llm-Aufruf (Retry-Kette).
     max_total_llm_s: int = 240
     git_author_name: str = ""
     git_author_email: str = ""
     project_name: str = ""
-    coverage_pct: int = -1  # -1 = nicht gemessen
     basis_protokoll: str = ""
     basis_protokoll_nach_apply: str = ""  # UMB-1b
     mess_protokoll: str = ""
@@ -212,14 +168,6 @@ class RunState:
     # Wird parallel zu mess_protokoll gefuellt,
     # bis alle Leser umgestellt sind.
     messungen: list = field(default_factory=list)
-    # W61: Test-Fehler aus dem (b)-Gate. Wird in
-    # den naechsten Builder-Prompt gerendert.
-    letzter_test_fehler: str = ""
-    # W61: Explore-Subagent-Ergebnisse der letzten Runde.
-    # Format: list[dict], je Eintrag {"frage": str, "ergebnis": str}.
-    # Wird vom Builder-Prompt gerendert, damit der Builder
-    # die Suche nicht wiederholt.
-    letzte_explore_ergebnisse: list = field(default_factory=list)
     # W59 (2026-10-18): gelesene Dateien + mtime.
     # Pfad -> mtime. apply_code_patches prueft.
     gelesene_dateien: dict = field(default_factory=dict)
@@ -243,48 +191,13 @@ class RunState:
     # Apply. Kein Reset (mess_protokoll ist
     # akkumulativ).
     mess_protokoll_veraltet: bool = False
-    code_entwurf: str = ""
-    # Auflage 2183 A1b: Historisierung fuer Solver-Vergleich.
-    code_entwurf_historie: list[dict[str, Any]] = \
-        field(default_factory=list)
     # Auflage 2183 A2: run_id fuer Korrelation.
     run_id: str = ""
-    # Auflage 2183 A2: Solver-Befunde.
-    solver_befunde: list[SolverBefund] = \
-        field(default_factory=list)
-    # Auflage 2183 C: Quellen der Solver-Laeufe.
-    solver_trigger_quellen: list[str] = \
-        field(default_factory=list)
-    # Auflage 2183 Block 5: Zaehlt Solver-Versuche
-    # (auch fehlgeschlagene, GG2).
-    solver_aufrufe: int = 0
-    # Stufe 0 Aenderung 2: Anker- und Ersatz-Fehler
-    # im Builder-Loop. Wird in _builder_user_prompt
-    # als Rueckmeldung angezeigt.
-    letzte_anker_fehler: list[tuple[int, str, str, str]] = \
-        field(default_factory=list)
-    letzte_ersatz_fehler: list[tuple[int, str, str]] = \
-        field(default_factory=list)
-    anker_fehler_in_folge: int = 0
-    # P2b-Frage-A / A4: Rueckfrage und Antwort.
-    letzte_builder_frage: str = ""
-    letzte_reviewer_antwort: str = ""
-    # Plan-Korrektur / V-A1: geteilter Zyklus-Zaehler.
-    phase_korrektur_zyklus: int = 0
     # Post-Apply-Fix 2026-10-16: Recovery-Plan aus
     # apply_and_recheck fuer die Builder-Korrektur-Runde.
     letzter_recovery_vorschlag: object = None
-    # Block Auftrag-erfuellt B3: letzter Patch war
-    # wirkungslos (anker == ersatz). Signal fuer B2.
-    letzter_patch_wirkungslos: bool = False
     code_patches: list[dict[str, str]] = field(default_factory=list)  # UMB-1b
-    test_vorschlaege: str = ""
     commit_paket: dict[str, Any] = field(default_factory=dict)
-    commit_review: dict[str, Any] = field(default_factory=dict)
-    review_runden: list[dict[str, Any]] = field(default_factory=list)
-    commands_log: list[dict[str, str]] = field(default_factory=list)
-    auflagen_log: list[list[str]] = field(default_factory=list)
-    empfehlung_log: list[dict[str, str]] = field(default_factory=list)
     llm_calls: int = 0
     # Block P2a: Phasen-Modus (Stufe 2).
     phase_id: str | None = None
@@ -292,8 +205,6 @@ class RunState:
     phase_unterbloecke: list[dict[str, Any]] = \
         field(default_factory=list)
     phase_aktueller_index: int = 0
-    phase_commit_pakete: list[dict[str, Any]] = \
-        field(default_factory=list)
     phase_start_head: str = ""
     phase_aktiv: bool = False
     # M-299a: Preflight-Scan + Fehler-Klassifikation.
@@ -319,13 +230,8 @@ class RunState:
     reflection_skill_body: str = ""
     architect_skills_block: str = ""
 
-    # M-299e: Planner-Entscheidung pro Preflight-Fehler.
-    # BLOCKER: verhindert die Aufgabe -> in Plan.
-    blocker_fehler: list[dict] = field(default_factory=list)
     # FOLLOW_UP: Baseline-Schuld, ueber Phasen erhalten.
     follow_up_fehler: list[dict] = field(default_factory=list)
-    # IGNORE: irrelevant, verworfen.
-    ignore_fehler: list[dict] = field(default_factory=list)
     # OP-067: in der laufenden Reflection-Runde angewendete Patches.
     # Dient als Fallback-Quelle fuer `_expand_cmd_placeholders`, wenn
     # `state.patches` bereits geleert wurde. Lebenszyklus: pro Runde
@@ -372,9 +278,6 @@ class RunState:
         )
 
 
-
-
-
 @dataclass
 class VorlaufErgebnis:
     """C0+C1: Rueckgabe von _vorlauf_und_state.
@@ -405,7 +308,6 @@ class NachlaufErgebnis:
     wahl: str
 
 
-
 @dataclass
 class PhaseVorlaufErgebnis:
     """Ergebnis des Vorlaufs von run_phase (3a-2a).
@@ -422,7 +324,6 @@ class PhaseVorlaufErgebnis:
     unterbloecke: list
     api_key: str
     max_phase: int
-
 
 
 @dataclass

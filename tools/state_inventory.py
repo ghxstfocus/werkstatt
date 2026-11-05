@@ -50,21 +50,10 @@ BASELINE_GEISTER = frozenset({
     "spec_widerspruch_erkannt", "split_failure_grund", "tasks_ok_counter",
 })
 BASELINE_TOTE = frozenset({
-    "agent_docs", "anker_fehler_in_folge", "auflagen_log", "block_id",
-    "blocker_fehler", "budget", "builder_model", "builder_temp",
-    "code_entwurf", "code_entwurf_historie", "commands_log", "commit_review",
-    "coverage_pct", "empfehlung_log", "ignore_fehler", "judge_model",
-    "letzte_anker_fehler", "letzte_builder_frage", "letzte_ersatz_fehler",
-    "letzte_explore_ergebnisse", "letzte_reviewer_antwort",
-    "letzter_patch_wirkungslos", "letzter_plan_fehler", "letzter_test_fehler",
-    "llm_timeout_s", "max_tokens_builder", "max_tokens_judge",
-    "max_tokens_planner", "max_tokens_reviewer", "max_tokens_solver",
-    "phase_commit_pakete", "phase_korrektur_zyklus", "planner_model",
-    "planner_modus", "planner_resume_anzahl", "planner_runden",
-    "review_runden", "reviewer_recovery_model", "reviewer_verdict_model",
-    "solver_aufrufe", "solver_befunde", "solver_config", "solver_model",
-    "solver_trigger_quellen", "start_ts", "test_gen_model",
-    "test_vorschlaege",
+    "agent_docs",
+    "block_id",
+    "budget",
+    "start_ts",
 })
 BASELINE_GETATTR_ONLY = frozenset({
     "_w51g_gemessen", "api_key", "follow_up_fehler", "geladene_skills",

@@ -28,12 +28,14 @@ def test_findet_bekannte_felder_und_kategorien():
     assert erg["tasks"]["kategorie"] == "aktiv"
 
 
-def test_solver_altlast_ist_tot():
-    erg = state_inventory.kategorisiere()
-    # Solver-Felder sind Altlasten (User-Entscheidung 2026-11-04)
-    assert erg["solver_model"]["kategorie"] == "tot"
-    assert erg["solver_befunde"]["kategorie"] == "tot"
-    assert erg["solver_aufrufe"]["kategorie"] == "tot"
+def test_solver_altlast_ist_entfernt():
+    """Solver-Felder wurden in OP-141-Vorarbeit entfernt (2026-11-05)."""
+    from werkstatt.state import RunState
+    for feld in ("solver_model", "solver_befunde", "solver_config",
+                 "solver_aufrufe", "solver_trigger_quellen"):
+        assert not hasattr(RunState, feld), (
+            f"Solver-Feld {feld} sollte entfernt sein"
+        )
 
 
 def test_baseline_ist_konsistent():
