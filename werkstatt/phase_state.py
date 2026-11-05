@@ -99,6 +99,11 @@ class PhaseState:
                     "phase_id": t.get("phase_id"),  # M-323a
                     "parent_id": t.get("parent_id"),  # M-323a
                     "task_files": t.get("task_files", []),  # M-323a
+                    # OP-163b-Bridge: deps aus Planner in PhaseState.
+                    # Ohne dieses Feld filtert init_new dependencies
+                    # weg, get_next_task sieht keine Deps, Tasks
+                    # laufen unabhaengig (Loop-Test-5, 2026-11-05).
+                    "dependencies": t.get("dependencies") or [],
                     "status": "pending",
                     "decision": None,
                     "failure": None,
