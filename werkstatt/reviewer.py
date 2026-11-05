@@ -109,6 +109,19 @@ Wenn der Diff eine bestehende Zeile entfernt (z.B. `updateFast(data);`),
 aber die Datei diese Zeile NICHT mehr enthaelt (weil der Patch sie
 entfernt hat) -> HIGH, weil bestehende Funktionalitaet verloren.
 
+## RENAME-AUSNAHME (2026-11-05, OP-164)
+
+Wenn die TASK-BESCHREIBUNG "umbenennen", "umbenannt", "umbenennung",
+"rename", "renamed" oder "ersetzen durch" enthaelt, ist eine
+`-`-Zeile mit dem alten Namen KEIN HIGH-Bug, sofern im SELBEN
+Diff-Hunk (`@@ ... @@`-Block) eine `+`-Zeile mit einem anderen
+Identifier steht. Alte Zeile weg + neue Zeile da = Rename, kein
+Entfernen.
+
+Nur wenn im selben Hunk KEINE `+`-Zeile mit einem anderen
+Identifier steht: HIGH "Rename unvollstaendig: <alt> entfernt,
+<neu> fehlt im selben Hunk."
+
 ## Severity-Level (WICHTIG)
 
 - "high": Code BRICHT zur Laufzeit, ODER explizite Task-Anforderung
@@ -546,6 +559,80 @@ def run_phase_end_review(state: RunState) -> bool:
     state.reviewer_bugs = []  # type: ignore[attr-defined]
     return True
 
+_RENAME_MARKER = (
+    "umbenennen", "umbenannt", "umbenennung",
+    "rename", "renamed",
+    "ersetzen durch", "ersetzt durch",
+)
+
+
+def _filter_rename_false_positives(
+    bugs: list, diff: str, task_desc: str,
+) -> list:
+    """OP-164: Rename-Aufgabe -> 'X entfernt'-HIGH ist kein Bug,
+    wenn im selben Hunk eine +-Zeile mit anderem Identifier steht.
+    """
+    import re as _re
+
+    if not isinstance(bugs, list) or not isinstance(diff, str):
+        return bugs
+    _desc = (task_desc or "").lower()
+    if not any(_m in _desc for _m in _RENAME_MARKER):
+        return bugs
+    if "@@" not in diff:
+        return bugs
+
+    _pattern = _re.compile(
+        r"(?:Bestehende[rs]?\s+(?:Zuweisung|Funktion)|"
+        r"bestehende[rs]?\s+(?:Zuweisung|Funktion))\s+"
+        r"[\"'`]?(\w+)[\"'`]?\s+entfernt",
+        _re.IGNORECASE,
+    )
+    _hunks = _re.split(r"(?m)^@@ ", diff)
+    out = []
+    for bug in bugs:
+        if not isinstance(bug, dict):
+            out.append(bug)
+            continue
+        if bug.get("severity") != "high":
+            out.append(bug)
+            continue
+        _d = bug.get("description", "") or ""
+        _m = _pattern.search(_d)
+        if not _m:
+            out.append(bug)
+            continue
+        _name = _m.group(1)
+        _name_re = _re.compile(r"\b" + _re.escape(_name) + r"\b")
+        _found_pair = False
+        for _h in _hunks[1:]:
+            _lines = _h.split("\n")
+            _has_minus = any(
+                ln.startswith("-") and _name_re.search(ln)
+                for ln in _lines
+            )
+            if not _has_minus:
+                continue
+            _has_plus = any(
+                ln.startswith("+") and not ln.startswith("+++")
+                and _re.search(r"[A-Za-z_]\w+", ln)
+                and not _name_re.search(ln)
+                for ln in _lines
+            )
+            if _has_plus:
+                _found_pair = True
+                break
+        if _found_pair:
+            _bug2 = dict(bug)
+            _bug2["severity"] = "medium"
+            _bug2["description"] = (
+                _d + " [OP-164: Rename erkannt, +-Zeile im Hunk]"
+            )
+            out.append(_bug2)
+        else:
+            out.append(bug)
+    return out
+
 
 def run_reviewer(state: RunState) -> bool:
     """Prueft den Code. Gibt True zurueck, wenn approved."""
@@ -723,10 +810,25 @@ def run_reviewer(state: RunState) -> bool:
     approved = result.get("approved", False)
     bugs = result.get("bugs", [])
 
+    # OP-164: Rename-Filter (Prompt-Haertung + deterministischer Post-Proc).
+    _bugs_high_before = sum(
+        1 for _b in bugs
+        if isinstance(_b, dict) and _b.get("severity") == "high"
+    )
+    bugs = _filter_rename_false_positives(bugs, diff, _task_desc)
+    _bugs_high_after = sum(
+        1 for _b in bugs
+        if isinstance(_b, dict) and _b.get("severity") == "high"
+    )
+    _rename_filtered = _bugs_high_before - _bugs_high_after
+    if _rename_filtered > 0 and _bugs_high_after == 0:
+        approved = True
+
     audit("reviewer_result", {
         "approved": approved,
         "bugs": len(bugs),
         "summary": result.get("summary", "")[:200],
+        "rename_filtered": _rename_filtered,
     }, pd, pn)
 
     if not approved:
