@@ -792,6 +792,23 @@ def _phase_tasks_loop(
     while True:
         next_task = phase_state.get_next_task()
         if next_task is None:
+            # OP-163: unerfuellte Deps -> als blocked markieren.
+            _pending_after = [
+                _t_b for _t_b in phase_state.data.get("tasks", [])
+                if isinstance(_t_b, dict)
+                and _t_b.get("status") == "pending"
+            ]
+            for _t_b in _pending_after:
+                _unmet = phase_state._unmet_dependencies(_t_b)
+                _tid_b = _t_b.get("id", "?")
+                phase_state.mark_blocked(
+                    _tid_b, grund="deps:" + ",".join(_unmet),
+                )
+                audit("loop_task_blocked",
+                      {"task_id": _tid_b, "unmet_deps": _unmet},
+                      pd, pn)
+            if _pending_after:
+                phase_state.save()
             break
         task_obj = next_task  # Sub-Tasks werden direkt aus PhaseState geholt.
         i += 1

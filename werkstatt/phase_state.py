@@ -124,11 +124,50 @@ class PhaseState:
         und 'split' werden uebersprungen — sonst liefert der Loop
         fehlgeschlagene oder zerlegte Tasks erneut (Cursor-Mismatch
         und Re-Split, siehe OFFENE-BLOECKE.md K1).
+
+        OP-163: Tasks mit unerfuellten `dependencies` werden
+        uebersprungen. Der Loop-End-Check markiert sie als `blocked`.
         """
+        _by_id: dict = {
+            t.get("id"): t for t in self.data.get("tasks", [])
+            if isinstance(t, dict) and t.get("id")
+        }
         for task in self.data.get("tasks", []):
-            if task.get("status") in ("pending", "running"):
-                return task
+            if task.get("status") not in ("pending", "running"):
+                continue
+            _deps = task.get("dependencies") or []
+            if _deps:
+                _unmet = [
+                    d for d in _deps
+                    if d not in _by_id
+                    or _by_id[d].get("status") != "done"
+                ]
+                if _unmet:
+                    continue
+            return task
         return None
+
+    def mark_blocked(
+        self, task_id: str, *, grund: str = "unknown",
+    ) -> None:
+        """OP-163: Markiert Task als blockiert (unerfuellte deps)."""
+        for task in self.data.get("tasks", []):
+            if task.get("id") == task_id:
+                task["status"] = "blocked"
+                task["failure"] = f"blocked: {grund}"
+                return
+
+    def _unmet_dependencies(self, task: dict) -> list[str]:
+        """OP-163: Liste der unerfuellten dependency-IDs."""
+        _by_id = {
+            t.get("id"): t for t in self.data.get("tasks", [])
+            if isinstance(t, dict) and t.get("id")
+        }
+        _deps = task.get("dependencies") or []
+        return [
+            d for d in _deps
+            if d not in _by_id or _by_id[d].get("status") != "done"
+        ]
 
     def resume_failed(self) -> int:
         """M-310c: Setzt failed-Tasks auf pending (Resume nach Abbruch).

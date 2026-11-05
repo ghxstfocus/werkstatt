@@ -290,6 +290,11 @@ Jeder Sub-Task:
   nummerierte Schritte sein (max 3 Schritte dazwischen).
   Wenn ein Task nur 1 Schritt umfasst, setze start = ende.
 - dependencies: Liste von Task-IDs, die vorher fertig sein muessen.
+  WANN setzen (Pflicht): Konsequenz-Tasks (Baseline senken, Doku
+  die Endzustand prueft, Cross-Role-Tests, Ghost-Entfernung in
+  mehreren Dateien) MUESSEN dependencies auf alle Tasks setzen,
+  die den Vorbedingungs-Zustand veraendern. Reine Datei-Tasks
+  ohne Vorbedingung: leere Liste [].
 
 Regeln:
   - INTERFACE-GRENZE: Jede Task liefert EIN vollstaendiges,
