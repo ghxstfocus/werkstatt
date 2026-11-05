@@ -2298,3 +2298,72 @@ Baseline unveraendert: 1271 passed, 8 skipped; ruff 197.
 Kein Code geaendert, nur STATUS.md + PROGRESS.md.
 
 OP: OP-142 (verworfen)
+
+
+### 2026-11-05 — OP-144: import-linter als Post-Build-Stage
+
+**Neue Struktur:**
+- pyproject.toml: [tool.importlinter] mit 3 forbidden-Contracts
+- tools/import_drift.py: Wrapper um lint-imports --no-cache
+- tests/test_import_drift.py: 4 Smoke-Tests
+- .werkstatt/verify.json: import_drift-Stage hart=true, nach
+  control_drift
+- werkstatt/roles/__init__.py: aus OP-140 nachgezogen
+
+**3 Layer-Regeln (allow_indirect_imports = true pro Contract):**
+1. werkstatt.render importiert NICHT direkt:
+   phases, roles, web (Leaf-Schicht)
+2. werkstatt.roles.builder importiert NICHT direkt:
+   phases, web (Rollen kennen keine Phasen)
+3. werkstatt.phases importiert NICHT direkt: web
+   (Phasen kennen kein Web-Frontend)
+
+**Warum allow_indirect_imports = true:**
+ADR-0013 fordert "Rollen kennen keine Phasen direkt".
+Der transitive Weg roles.builder.run -> verify -> loop ->
+pipeline_phases -> phases ist der Verify-Mechanismus, kein
+Rollen-Import von Phasen. Wenn das als Verletzung zaehlte,
+muesste builder.run ohne verify laufen — Funktionsbruch.
+Mit 'nur direkte Importe' ist die Regel praezise und
+durchsetzbar.
+
+**Echter Fund beim Erstlauf:**
+import-linter deckte einen Strukturmangel aus OP-140 auf:
+werkstatt/roles/__init__.py fehlte (nur
+werkstatt/roles/builder/__init__.py angelegt). Python toleriert
+das als Namespace-Package, grimp/import-linter nicht.
+Nachgezogen — genau der Zweck des Tools: strukturelle
+Schlampereien aufdecken, die bei Einzeldatei-Betrachtung
+unsichtbar bleiben.
+
+**Bewusst narrow statt voller ADR-0013:**
+domain/ und infra/ existieren noch nicht. Nach OP-141 (state/)
+und OP-143 (cli/) kommen die restlichen Regeln dazu (roles
+kennen nur domain+infra, web kennt nicht roles direkt,
+domain/infra importieren nur paths).
+
+**Bekannte Grenze:**
+Die 3 Regeln pruefen NICHT:
+- Zirkelimporte zwischen Modulen ausserhalb dieser Pakete
+- `werkstatt.*`-Top-Level-Module untereinander (loop, planner,
+  builder als Flach-Module ohne Layer-Zuordnung)
+Das kommt mit OP-143 (cli/ + Re-Export-Bereinigung), wo
+loop.py aus dem Root in cli/ wandert.
+
+**Sinn des Tools gegen Fehlerklasse aus dieser Session:**
+Der bash-Fehler 'cmd | tail; $? liefert tail-rc' trat in dieser
+Session 4x auf (OP-138, OP-139, OP-140, OP-144).
+import_drift.py ist reines Python + subprocess.run(check=False),
+$? wird nie durch Pipe verfaelscht. Das ist strukturelle
+Absicherung gegen eine konkrete Fehlerklasse.
+
+**Abnahme:**
+- 1275 passed, 8 skipped.
+- ruff . = 197 (unveraendert).
+- audit_drift OK, control_drift OK, state_inventory OK,
+  state_drift OK, state_flow OK, import_drift OK.
+- Commit 30eef6e.
+
+- Alle 6 Drift-Checks gruen.
+- 9 verify.json-Stages (control_drift + state_drift + import_drift
+  als harte Stages).

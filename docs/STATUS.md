@@ -597,34 +597,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_cli.py` (neu).
 - **Blockiert von:** —
 
-### OP-144: `import-linter` als Post-Build-Stage
-
-- **Status:** open
-- **Typ:** architektur (Erzwingung)
-- **Betroffen:** `tools/import_drift.py` (neu), `pyproject.toml`
-  oder `.importlinter`, `.werkstatt/verify.json`
-- **Problem:** Layer-Regeln (ADR-0013) werden ohne Tooling nicht
-  eingehalten. `control_drift` und `audit_drift` haben gezeigt, dass
-  mechanische Pruefung nachhaltig funktioniert.
-- **Akzeptanzkriterien:**
-  - `tools/import_drift.py --check` als Wrapper um `import-linter`.
-  - Layer-Vertrag in `.importlinter` oder `pyproject.toml`:
-    - `cli` darf `phases` importieren, aber nicht `roles` direkt
-    - `phases` darf `roles`, `domain`, `infra` importieren
-    - `roles` darf `domain`, `infra` importieren, nicht andere `roles`
-    - `domain` darf nur `paths` importieren (nichts aus `werkstatt.*`)
-    - `infra` darf nur `paths` importieren
-    - `web` darf `infra`, `phases` importieren, nicht `roles`
-  - Initial Whitelist mit allen bestehenden Verletzungen
-    (dokumentiert im Tool).
-  - `.werkstatt/verify.json` bekommt neue Stage:
-    `"import_drift": {"cmd": "python3 tools/import_drift.py --check",
-    "hart": true}`.
-  - Whitelist wird pro Split-OP (OP-141..143) um die jeweiligen
-    Verletzungen reduziert. Ziel: leere Whitelist nach OP-143.
-- **Tests:** `tests/test_import_drift.py` (Smoke).
-- **Blockiert von:** -
-
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
 - **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
@@ -942,6 +914,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-05 | OP-144 | done | import-linter als Post-Build-Stage (hart), 3 Layer-Regeln aus ADR-0013 (render, roles.builder, phases); allow_indirect_imports=true; werkstatt/roles/__init__.py nachgezogen (30eef6e)
 - 2026-11-05 | OP-142 | superseded | verworfen: shell.py und terminal_proxy.py machen fundamental verschiedene Dinge (PTY-Ausfuehrung vs. Log-Tailing); 17 identische Code-Zeilen sind Boilerplate (Imports, websocket.accept, except-Klauseln). 5 routes/-Wrapper haetten existierende Module gewrappt statt Duplikate aufzuloesen. Details in PROGRESS.md.
 - 2026-11-05 | OP-140 | done | roles/builder/-Split in 5 Submodule (ast, prompt, validate, patch, run) + _common; builder.py als sys.modules-Alias (6334d80)
 - 2026-11-05 | OP-139 | done | phases/-Split: _common + 5 Phasen-Submodule; pipeline_phases.py als sys.modules-Alias (d41233f)
