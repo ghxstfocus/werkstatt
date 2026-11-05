@@ -657,7 +657,7 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             max_tokens: int = 4096,
             redact: bool = True) -> LLMReply:
     """Oeffentliche LLM-API mit Progress-Events (OP-111)."""
-    from werkstatt.loop_renderer import _emit_progress
+    from werkstatt.render import _emit_progress
     _label = _aufgabe_zu_label(aufgabe)
     _t0 = time.monotonic()
     _emit_progress(_label, "prompt_sent", f"model={model}")

@@ -13,11 +13,11 @@ from pathlib import Path
 
 TOOLS = Path("/opt/werkstatt/tools")
 sys.path.insert(0, str(TOOLS))
-import audit as audit_mod
 from unittest.mock import MagicMock, patch
 
+import audit as audit_mod
 from werkstatt.gates import _human_gate_plan
-from werkstatt.pipeline_phases import (
+from werkstatt.phases import (
     _gate_failed_payload,
     _reviewer_rejected_payload,
 )

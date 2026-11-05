@@ -23,7 +23,6 @@ import pytest
 from werkstatt import reviewer
 from werkstatt.state import LLMReply, RunState
 
-
 # =====================================================================
 # Fixtures
 # =====================================================================

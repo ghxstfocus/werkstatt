@@ -4,6 +4,7 @@ Plus Schutz: DOC_CONVENTIONS.md §3 darf nicht durch Cross-Reference-Sed
 korrumpiert werden (Regression-Fall 2026-10-31).
 """
 from __future__ import annotations
+
 from pathlib import Path
 
 import yaml

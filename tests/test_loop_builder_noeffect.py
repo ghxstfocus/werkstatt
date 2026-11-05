@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import inspect
 
-from werkstatt import builder
+from werkstatt.roles import builder as builder
 
 
 def test_builder_hat_no_effect_filter_im_run_builder():
@@ -44,7 +44,8 @@ def test_old_nicht_da_new_da_wird_verworfen(tmp_path):
     class="table table-alerts", der Builder baute old_string='class="table"'.
     """
     import inspect
-    from werkstatt import builder
+
+    from werkstatt.roles import builder as builder
 
     # Pruefe, dass der Code im Source steht
     src = inspect.getsource(builder._build_patches_fuer_datei)

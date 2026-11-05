@@ -12,7 +12,7 @@ from pathlib import Path
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
-from werkstatt.loop_renderer import _with_spinner
+from werkstatt.render import _with_spinner
 from werkstatt.skills import load_all_skills, load_skill_by_name
 from werkstatt.state import RunState
 

@@ -4,7 +4,9 @@ Regression 2026-10-30 23:03: 19 task_files fuer 1 Datei-Aufgabe.
 Fix A v2: Trigger ueber User-Auftrag (nur/ausschliesslich/keine python).
 """
 from __future__ import annotations
+
 import sys
+
 sys.path.insert(0, "/opt/werkstatt")
 from werkstatt.planner import _doku_post_check
 

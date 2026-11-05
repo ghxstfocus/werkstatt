@@ -1,7 +1,7 @@
 """K22: _korrigiere_builder_action testet Action-Live-Korrektur."""
 from pathlib import Path
 
-from werkstatt.builder import _korrigiere_builder_action
+from werkstatt.roles.builder import _korrigiere_builder_action
 
 
 def _mk(tmp_path: Path, rel: str, exists: bool) -> Path:

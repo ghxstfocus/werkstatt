@@ -1,5 +1,6 @@
 """Spec: audit() ueberlebt nicht-JSON-serialisierbare Payloads (Fix AK)."""
 from __future__ import annotations
+
 import json
 import sys
 from pathlib import Path

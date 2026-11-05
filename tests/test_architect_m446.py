@@ -27,6 +27,7 @@ def test_architect_prompt_ohne_plan_crafting():
     Referenzen. Explorer liefert WO, Scout liefert WAS, Architect
     liefert WIE — er misst NICHT selbst."""
     from types import SimpleNamespace
+
     from werkstatt.architect import _planner_system
 
     st = SimpleNamespace(

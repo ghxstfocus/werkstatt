@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from werkstatt.builder import run_builder
+from werkstatt.roles.builder import run_builder
 from werkstatt.state import RunState
 
 
@@ -69,7 +69,7 @@ def test_builder_read_only_task_kein_patch(tmp_path):
 
 def test_builder_idempotent_bei_korrekter_datei(tmp_path):
     """M-317: existierende korrekte Zieldatei + action=create -> idempotent."""
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     st = _state(tmp_path)
     st.tasks = [{"id": "t1", "name": "test_checks.py schreiben", "action": "create"}]
@@ -92,7 +92,7 @@ def test_builder_idempotent_bei_korrekter_datei(tmp_path):
 
 def test_builder_reflection_bei_inkorrekter_datei(tmp_path):
     """M-316: existierende inkorrekte Zieldatei -> kein task_ok, Reflection."""
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     st = _state(tmp_path)
     st.tasks = [{"id": "t1", "name": "test_checks.py schreiben", "action": "write"}]
@@ -115,7 +115,7 @@ def test_builder_reflection_bei_inkorrekter_datei(tmp_path):
 
 def test_builder_idempotent_bei_create_und_update(tmp_path):
     """M-318: Idempotenz-Check bei create+update (M-317 war zu strikt)."""
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     st = _state(tmp_path)
     # Datei existiert + ist korrekt
@@ -143,7 +143,7 @@ def test_builder_update_inkorrekte_datei_nutzt_patch_pfad(tmp_path):
     korrekt ist. Bei inkorrekter Datei muss der Builder durch den
     Patch-Pfad (kein builder_nichts_zu_tun, sondern echte Arbeit).
     """
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     st = _state(tmp_path)
     # Datei existiert, aber ist syntaktisch FALSCH
@@ -178,7 +178,7 @@ def test_builder_update_kein_idempotenz(tmp_path):
     ein update-Task ('Unused Imports entfernen') als 'nichts zu tun'
     gewertet, obwohl die Datei unused imports hat.
     """
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     st = _state(tmp_path)
     st.tasks = [{"id": "t1", "name": "test_checks.py erweitern",
@@ -212,7 +212,7 @@ def test_builder_prompt_import_regeln():
     sind nicht mehr woertlich drin. Stattdessen pruefen wir die
     aktuellen Regeln: ruff-Konformitaet und API-Stabilitaet.
     """
-    from werkstatt.builder import BUILDER_SYSTEM
+    from werkstatt.roles.builder import BUILDER_SYSTEM
     assert "ruff-konform" in BUILDER_SYSTEM
     assert "API-Aenderungen" in BUILDER_SYSTEM or "Umbenennungen" in BUILDER_SYSTEM
 
@@ -221,7 +221,7 @@ def test_builder_create_task_mit_import_kontext(tmp_path):
     """M-333b: Bei create-Task werden Projekt-Imports gesammelt."""
     from unittest.mock import patch
 
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     # Bestehende .py-Datei mit Import
     (tmp_path / "core").mkdir()
@@ -257,7 +257,7 @@ def test_builder_create_ohne_imports(tmp_path):
     """M-333b: Bei create ohne benachbarte .py-Dateien -> kein Crash."""
     from unittest.mock import patch
 
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     st = _state(tmp_path)
     st.tasks = [{"id": "t1", "name": "leer.py anlegen", "action": "create"}]
@@ -275,7 +275,7 @@ def test_builder_task_files_priorisiert(tmp_path):
     """M-335: task_files kommen zuerst in _file_context."""
     from unittest.mock import patch
 
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     # Zwei Dateien
     (tmp_path / "core").mkdir()
@@ -310,7 +310,7 @@ def test_builder_task_files_leer_fallback(tmp_path):
     """M-335: Ohne task_files bleibt altes Verhalten (Task-Text + Explorer)."""
     from unittest.mock import patch
 
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     (tmp_path / "tools").mkdir()
     (tmp_path / "tools" / "port.py").write_text("def port(): pass\n")
@@ -340,7 +340,7 @@ def test_builder_task_files_nicht_str(tmp_path):
     """M-335: task_files mit Nicht-String-Werten werden ignoriert."""
     from unittest.mock import patch
 
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     st = _state(tmp_path)
     st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
@@ -360,7 +360,7 @@ def test_builder_ordner_in_task_files(tmp_path):
     """M-336: task_files mit Ordner -> .py-Dateien im Ordner gelesen."""
     from unittest.mock import patch
 
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     # Ordner mit __init__.py
     (tmp_path / "core" / "checks").mkdir(parents=True)
@@ -394,7 +394,7 @@ def test_builder_ordner_leer(tmp_path):
     """M-336: task_files mit leerem Ordner -> kein Crash."""
     from unittest.mock import patch
 
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     (tmp_path / "core" / "leer").mkdir(parents=True)
 
@@ -415,7 +415,7 @@ def test_builder_zieldatei_aus_task_files(tmp_path):
     """M-337: Zieldatei wird aus task_files bestimmt."""
     from unittest.mock import patch
 
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     (tmp_path / "core").mkdir()
     (tmp_path / "core" / "checks.py").write_text("def check(: pass\n")  # inkorrekt
@@ -447,7 +447,7 @@ def test_builder_patch_falsche_datei_abgelehnt(tmp_path):
     """M-337: Patch mit falscher Datei -> builder_patch_invalid, False."""
     from unittest.mock import patch
 
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     (tmp_path / "core").mkdir()
     (tmp_path / "core" / "checks.py").write_text("x = 1\n")
@@ -478,7 +478,7 @@ def test_builder_patch_richtige_datei(tmp_path):
     """M-337: Patch mit richtiger Datei + Aktion -> True."""
     from unittest.mock import patch
 
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     (tmp_path / "core").mkdir()
     (tmp_path / "core" / "checks.py").write_text("x = 1\n")
@@ -508,7 +508,7 @@ def test_builder_task_files_nur_diese(tmp_path):
     """M-337-b: task_files gesetzt -> NUR task_files in _file_context."""
     from unittest.mock import patch
 
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     (tmp_path / "core").mkdir()
     (tmp_path / "core" / "checks.py").write_text("def broken(:\n")
@@ -562,7 +562,7 @@ def test_builder_create_zieldatei_fehlt_wird_angelegt(tmp_path):
     Builder die erste task_file als Zieldatei, Audit
     builder_zieldatei_create_neu.
     """
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     st = _state(tmp_path)
     st.tasks = [{"id": "t1", "name": "neues Modul anlegen",
@@ -604,7 +604,7 @@ def test_builder_update_zieldatei_fehlt_bleibt_fail_closed(tmp_path):
     M-360 aendert NUR create-Tasks. update-Tasks mit fehlender
     Zieldatei bleiben fail-closed (builder_zieldatei_nicht_gefunden).
     """
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     st = _state(tmp_path)
     st.tasks = [{"id": "t1", "name": "bestehendes Modul aendern",

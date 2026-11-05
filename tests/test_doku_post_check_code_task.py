@@ -1,5 +1,6 @@
 """OP-006: _doku_post_check darf Code-Tasks nicht wegwerfen."""
 from __future__ import annotations
+
 import sys
 from unittest.mock import MagicMock
 

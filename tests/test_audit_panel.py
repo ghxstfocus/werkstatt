@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from werkstatt.loop_renderer import TerminalEmitter
+from werkstatt.render import TerminalEmitter
 
 pytest.importorskip("httpx")
 pytest.importorskip("fastapi.testclient")
@@ -145,6 +145,7 @@ def test_aktuelles_home_mit_kontext(monkeypatch, tmp_path):
 def test_lese_events_findet_agent_pipeline(tmp_path):
     """OP-091: Reader findet agent-pipeline-*.jsonl."""
     import json
+
     import werkstatt.web.audit_panel as _ap
     audit_dir = tmp_path / "audit-logs"
     audit_dir.mkdir()

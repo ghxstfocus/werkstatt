@@ -1,5 +1,6 @@
 """Spec: Rollback opt-in + --resume + Task-Fortschritt (Fixes AA/AB/AC/AD)."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 

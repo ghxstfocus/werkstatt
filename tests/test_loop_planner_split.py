@@ -21,7 +21,6 @@ import pytest
 
 from werkstatt import planner
 
-
 # =====================================================================
 # _normalisiere
 # =====================================================================
@@ -301,6 +300,7 @@ def test_loop_skip_plan_gate_bei_auftrag_bereits_erfuellt():
     'LOOP FEHLGESCHLAGEN'.
     """
     import inspect
+
     from werkstatt import loop as loop_mod
     # Fix AZ Stufe 8-B: Logik liegt jetzt in _phase_plan_and_preflight.
     # Beide Funktionen pruefen -- robust gegen weitere Refactors.
@@ -322,6 +322,7 @@ def test_scout_abbruch_setzt_tasks_ok():
     Footer zeigte LOOP FEHLGESCHLAGEN (tasks_ok=0).
     """
     import inspect
+
     from werkstatt import loop as loop_mod
     # Fix AZ Stufe 8-B: Logik liegt jetzt in _phase_plan_and_preflight.
     srcs = (

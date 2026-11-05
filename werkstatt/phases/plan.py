@@ -142,7 +142,7 @@ def _phase_plan_and_preflight(
         # M-458: Architect-Prosa anzeigen (Planner-Split).
         _arch_prosa = state.architect_prosa
         if _arch_prosa:
-            from werkstatt import loop_renderer as _r_arch
+            from werkstatt import render as _r_arch
             try:
                 _r_arch.panel_diff(
                     _arch_prosa, title="ARCHITECT-BESCHREIBUNG"
@@ -157,7 +157,7 @@ def _phase_plan_and_preflight(
             if _arch_tasks:
                 _arch_desc = _arch_tasks[0].get("description", "")
                 if _arch_desc:
-                    from werkstatt import loop_renderer as _r_arch
+                    from werkstatt import render as _r_arch
                     try:
                         _r_arch.panel_diff(
                             _arch_desc, title="ARCHITECT-BESCHREIBUNG"

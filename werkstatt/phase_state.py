@@ -18,6 +18,7 @@ from typing import Any
 import yaml  # type: ignore[import-untyped]
 
 from werkstatt.paths import projects_dir as _pd
+
 PHASE_DIR = _pd()
 
 

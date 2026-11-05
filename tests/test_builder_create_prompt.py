@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, "/opt/werkstatt")
-import werkstatt.builder as _b
+import werkstatt.roles.builder as _b
 
 
 class TestCreatePrompt:

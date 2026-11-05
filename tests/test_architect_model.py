@@ -2,7 +2,6 @@
 import importlib
 
 
-
 def test_architect_model_default_ist_reasoner(monkeypatch):
     monkeypatch.delenv("WERKSTATT_ARCHITECT_MODEL", raising=False)
     import werkstatt.planner as p

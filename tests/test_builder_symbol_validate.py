@@ -4,7 +4,7 @@ from __future__ import annotations
 
 def test_fehlendes_symbol_wird_erkannt(tmp_path):
     """Wenn Modul existiert, aber Symbol fehlt -> Fehler."""
-    from werkstatt.builder import _validate_imports_in_patch
+    from werkstatt.roles.builder import _validate_imports_in_patch
     (tmp_path / "core").mkdir()
     (tmp_path / "core" / "__init__.py").write_text("")
     # models.py existiert, aber hat KEIN BackupRecord.
@@ -16,7 +16,7 @@ def test_fehlendes_symbol_wird_erkannt(tmp_path):
 
 def test_vorhandenes_symbol_wird_akzeptiert(tmp_path):
     """Symbol existiert im Modul -> OK."""
-    from werkstatt.builder import _validate_imports_in_patch
+    from werkstatt.roles.builder import _validate_imports_in_patch
     (tmp_path / "core").mkdir()
     (tmp_path / "core" / "__init__.py").write_text("")
     (tmp_path / "core" / "models.py").write_text(
@@ -29,7 +29,7 @@ def test_vorhandenes_symbol_wird_akzeptiert(tmp_path):
 
 def test_symbol_im_patch_definiert_wird_akzeptiert(tmp_path):
     """Wenn Symbol im selben Patch definiert wird -> OK, auch wenn Modul es nicht hat."""
-    from werkstatt.builder import _validate_imports_in_patch
+    from werkstatt.roles.builder import _validate_imports_in_patch
     (tmp_path / "core").mkdir()
     (tmp_path / "core" / "__init__.py").write_text("")
     (tmp_path / "core" / "models.py").write_text("class Change: pass\n")

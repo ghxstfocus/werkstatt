@@ -146,7 +146,7 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
         audit("loop_plan_gate_auto", {"reason": "require_plan_approval=false"}, pd, pn)
         return 0
 
-    from werkstatt import loop_renderer as _r
+    from werkstatt import render as _r
     _r.plan(
         getattr(state, "phasen", []) or [],
         getattr(state, "tasks", []) or [],
@@ -547,7 +547,7 @@ def _human_gate(state: RunState) -> int:
     # Interaktiv: fail-closed bei EOFError
     # M-303: Impact-Preview vor dem Gate (Agent-Polis/pi-show-diffs-Muster).
     # M-372: panel_diff statt Plain-Text (rich im pretty/live-Modus).
-    from werkstatt import loop_renderer as _rh
+    from werkstatt import render as _rh
     _stat_txt = ""
     _diff_txt = ""
     try:

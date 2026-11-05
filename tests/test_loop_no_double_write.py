@@ -1,5 +1,6 @@
 """Spec: apply_patches schreibt nur einmal (Fix W)."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 from types import SimpleNamespace

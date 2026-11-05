@@ -1,5 +1,5 @@
 """Tests fuer M-377: Live-Spinner idempotent."""
-from werkstatt import loop_renderer as r
+from werkstatt import render as r
 
 
 def test_spinner_start_idempotent():

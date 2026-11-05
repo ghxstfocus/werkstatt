@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, "/opt/werkstatt")
 
-from werkstatt.pipeline_phases import _phase_review_gate
+from werkstatt.phases import _phase_review_gate
 
 
 def _mk_state():

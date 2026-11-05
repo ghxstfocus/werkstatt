@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import werkstatt.builder as builder_mod
+import werkstatt.roles.builder as builder_mod
 from werkstatt import loop as loop_mod
 from werkstatt.loop import _plan_gate, _verify_patches, run_pipeline_loop
 from werkstatt.phase_state import PhaseState
@@ -188,7 +188,7 @@ def test_loop_cli_requires_project():
 
 def test_loop_cli_dry_run_uses_renderer():
     """CLI --dry-run ruft Renderer header + footer auf, kein LLM."""
-    from werkstatt import loop_renderer
+    from werkstatt import render as loop_renderer
     with patch.object(loop_renderer, "header") as m_h, \
          patch.object(loop_renderer, "footer") as m_f:
         from werkstatt.loop import main
@@ -853,7 +853,7 @@ def test_get_baseline_error_details_fallback_ohne_state():
 
 def test_reflection_patch_anwendung_search_replace(tmp_path, monkeypatch):
     """M-329: Reflection wendet search/replace-Patches an (old_string/new_string)."""
-    import werkstatt.builder as builder_mod
+    import werkstatt.roles.builder as builder_mod
     from werkstatt import loop as loop_mod
     from werkstatt.state import RunState
 
@@ -893,7 +893,7 @@ def test_reflection_patch_anwendung_search_replace(tmp_path, monkeypatch):
 
 def test_reflection_old_string_not_found(tmp_path, monkeypatch):
     """M-329: Wenn old_string fehlt, kein Fehler-Crash, Audit."""
-    import werkstatt.builder as builder_mod
+    import werkstatt.roles.builder as builder_mod
     from werkstatt import loop as loop_mod
     from werkstatt.state import RunState
 
@@ -931,7 +931,7 @@ def test_reflection_old_string_not_found(tmp_path, monkeypatch):
 
 def test_reflection_kein_patch_vom_builder(tmp_path, monkeypatch):
     """M-329: Wenn Builder keine Patches liefert -> loop_reflection_kein_patch."""
-    import werkstatt.builder as builder_mod
+    import werkstatt.roles.builder as builder_mod
     from werkstatt import loop as loop_mod
     from werkstatt.state import RunState
 
@@ -1014,7 +1014,7 @@ def test_apply_patches_with_hooks_allowed(tmp_path, monkeypatch):
 
 def test_reflection_nutzt_hooks(tmp_path, monkeypatch):
     """M-330: Reflection ruft _apply_patches_with_hooks."""
-    import werkstatt.builder as builder_mod
+    import werkstatt.roles.builder as builder_mod
     from werkstatt import loop as loop_mod
     from werkstatt.state import RunState
 
@@ -1090,7 +1090,7 @@ def test_run_with_progress_heartbeat(monkeypatch):
     import time as _time
 
     from werkstatt import loop as loop_mod
-    from werkstatt import loop_renderer as r
+    from werkstatt import render as r
 
     _beats = []
     monkeypatch.setattr(r, "heartbeat",
@@ -1515,7 +1515,7 @@ def test_plan_renderer_zeigt_phasen(tmp_path, capsys, monkeypatch):
     monkeypatch _use_rich=False: sonst schreibt Rich an einer beim
     Import gecachten sys.stdout-Referenz vorbei und capsys sieht nichts.
     """
-    from werkstatt import loop_renderer as r
+    from werkstatt import render as r
     monkeypatch.setattr(r, "_use_rich", False)
     r.plan(
         phasen=[

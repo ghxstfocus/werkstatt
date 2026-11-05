@@ -26,8 +26,9 @@ def test_human_gate_body_kein_erschoepft_hinweis() -> None:
 
 def test_plan_gate_fail_closed_bei_ungueltiger_antwort() -> None:
     """OP-093: 3x ungueltig → return 1 (kein Endlos-Retry)."""
-    from unittest.mock import patch
     from types import SimpleNamespace
+    from unittest.mock import patch
+
     from werkstatt.gates import _human_gate_plan
 
     state = SimpleNamespace(
@@ -48,8 +49,9 @@ def test_plan_gate_fail_closed_bei_ungueltiger_antwort() -> None:
 
 def test_human_gate_plan_revidierter_kontext(monkeypatch, tmp_path):
     """Nachbesserung: kontext='revidierter_plan' zeigt klareren Prompt."""
-    from unittest.mock import patch
     from types import SimpleNamespace
+    from unittest.mock import patch
+
     from werkstatt.gates import _human_gate_plan
 
     state = SimpleNamespace(

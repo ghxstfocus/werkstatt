@@ -1,7 +1,7 @@
 """K10: _sammle_projekt_py_files filtert .venv, site-packages etc."""
 from pathlib import Path
 
-from werkstatt.builder import _sammle_projekt_py_files
+from werkstatt.roles.builder import _sammle_projekt_py_files
 
 
 def test_venv_wird_gefiltert(tmp_path: Path) -> None:

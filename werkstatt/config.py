@@ -14,6 +14,7 @@ from typing import Any
 
 _DEFAULT_VENV = ".venv/bin/python3"
 from werkstatt.paths import werkstatt_home as _wh
+
 _DEFAULT_AGENTS_DIR = str(_wh() / "agents")
 
 

@@ -20,9 +20,9 @@ from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
+from werkstatt.paths import projects_dir as _projects_dir
 from werkstatt.state import RunState
 
-from werkstatt.paths import projects_dir as _projects_dir
 PROJECTS_DIR = _projects_dir()
 
 

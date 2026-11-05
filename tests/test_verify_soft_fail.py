@@ -1,5 +1,6 @@
 """Spec: verify-Soft-Fail trennt Style von echten Fehlern (Fix AT)."""
 from __future__ import annotations
+
 import sys
 
 sys.path.insert(0, "/opt/werkstatt")

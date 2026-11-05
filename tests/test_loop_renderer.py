@@ -12,7 +12,7 @@ from werkstatt.render import tee as _tmod
 
 def test_emit_tty_mode():
     """TTY: plain print ohne Zeitstempel."""
-    import werkstatt.loop_renderer as r
+    import werkstatt.render as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
          patch.object(_rmod, "IS_CI", False):
@@ -24,7 +24,7 @@ def test_emit_tty_mode():
 
 def test_emit_ci_mode():
     """CI: Timestamp im Output."""
-    import werkstatt.loop_renderer as r
+    import werkstatt.render as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
          patch.object(_rmod, "IS_CI", True):
@@ -36,7 +36,7 @@ def test_emit_ci_mode():
 
 def test_group_start_end_ci():
     """CI: ::group:: / ::endgroup:: Marker."""
-    import werkstatt.loop_renderer as r
+    import werkstatt.render as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
          patch.object(_rmod, "IS_CI", True):
@@ -49,7 +49,7 @@ def test_group_start_end_ci():
 
 def test_group_start_end_tty():
     """TTY: keine ::group::-Marker."""
-    import werkstatt.loop_renderer as r
+    import werkstatt.render as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
          patch.object(_rmod, "IS_CI", False):
@@ -62,7 +62,7 @@ def test_group_start_end_tty():
 
 def test_heartbeat_ci():
     """CI: Heartbeat-Zeile mit elapsed."""
-    import werkstatt.loop_renderer as r
+    import werkstatt.render as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
          patch.object(_rmod, "IS_CI", True):
@@ -74,7 +74,7 @@ def test_heartbeat_ci():
 
 def test_step_mit_elapsed():
     """M-302: step() zeigt elapsed_s."""
-    import werkstatt.loop_renderer as r
+    import werkstatt.render as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
          patch.object(_rmod, "IS_CI", False):
@@ -85,7 +85,7 @@ def test_step_mit_elapsed():
 
 def test_group_nicht_verschachtelt():
     """M-302: group_start/group_end paarweise."""
-    import werkstatt.loop_renderer as r
+    import werkstatt.render as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
          patch.object(_rmod, "IS_CI", True):
@@ -107,7 +107,7 @@ def test_group_nicht_verschachtelt():
 
 def test_emit_progress_ci_sequenziell():
     """CI: [label] step detail als Zeile."""
-    import werkstatt.loop_renderer as r
+    import werkstatt.render as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
          patch.object(_tmod, "_TEE_STREAM", None), \
@@ -120,7 +120,7 @@ def test_emit_progress_ci_sequenziell():
 
 def test_emit_progress_live_ueberschreibt():
     """Live: kein Newline im Output."""
-    import werkstatt.loop_renderer as r
+    import werkstatt.render as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
          patch.object(_tmod, "_TEE_STREAM", None), \
@@ -134,7 +134,7 @@ def test_emit_progress_live_ueberschreibt():
 
 def test_emit_progress_leerer_step_no_op():
     """Leerer step: kein Output."""
-    import werkstatt.loop_renderer as r
+    import werkstatt.render as r
     buf = io.StringIO()
     with patch.object(sys, "stdout", buf), \
          patch.object(_tmod, "_TEE_STREAM", None), \

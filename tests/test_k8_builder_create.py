@@ -1,5 +1,5 @@
 """K8: BUILDER_SYSTEM enthaelt create-Format."""
-from werkstatt.builder import BUILDER_SYSTEM
+from werkstatt.roles.builder import BUILDER_SYSTEM
 
 
 def test_create_format_im_prompt() -> None:

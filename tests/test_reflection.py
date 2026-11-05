@@ -58,7 +58,7 @@ def _setup_mocks(monkeypatch):
     task_ende = MagicMock(return_value=None)
     human_gate = MagicMock(return_value=True)
 
-    import werkstatt.builder as _builder
+    import werkstatt.roles.builder as _builder
     monkeypatch.setattr(_builder, "run_builder", run_builder, raising=False)
     monkeypatch.setattr(reflection, "run_builder", run_builder, raising=False)
     monkeypatch.setattr(

@@ -21,10 +21,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-
 from werkstatt import loop
 from werkstatt.state import RunState
-
 
 # =====================================================================
 # Fixtures
@@ -268,6 +266,7 @@ def test_expand_placeholders_git_diff_fallback(tmp_path):
     obwohl nichts geprueft wurde.
     """
     import subprocess
+
     from werkstatt.state import RunState
 
     # Git-Repo anlegen

@@ -1,5 +1,6 @@
 """OP-050: Migrations-Dateien sind Kontext, keine key_files."""
 from __future__ import annotations
+
 import sys
 from unittest.mock import MagicMock
 

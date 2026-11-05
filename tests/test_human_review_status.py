@@ -1,5 +1,6 @@
 """OP-060b: human_review-Status."""
 from __future__ import annotations
+
 from pathlib import Path
 
 from werkstatt.phase_state import PhaseState
@@ -84,7 +85,7 @@ def test_task_fortschritt_zeigt_human_review(tmp_path: Path) -> None:
 
 def test_hat_human_review_tasks(tmp_path: Path) -> None:
     """_hat_human_review_tasks erkennt human_review-Status."""
-    from werkstatt.pipeline_phases import _hat_human_review_tasks
+    from werkstatt.phases import _hat_human_review_tasks
 
     (tmp_path / ".werkstatt").mkdir()
     ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")

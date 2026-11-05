@@ -1,5 +1,6 @@
 """Spec: Dependency-Failure fuehrt zu continue, nicht return 1 (Fix AP)."""
 from __future__ import annotations
+
 import sys
 
 sys.path.insert(0, "/opt/werkstatt")

@@ -18,13 +18,12 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-import werkstatt.builder as _builder_mod
+import werkstatt.roles.builder as _builder_mod
 from werkstatt import reflection as refl_mod
 from werkstatt.apply_patches import (
     _apply_patches_with_diagnose,
     _diagnose_patch,
 )
-
 
 # ═══════════════════════════════════════════════════════════════
 # A. _diagnose_patch — Unit-Tests (4 Faelle aus OP-060-Spec)

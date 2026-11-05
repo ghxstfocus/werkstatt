@@ -13,10 +13,10 @@ Public API:
     )
 """
 from werkstatt.control.control import Control
+from werkstatt.control.drift import check_drift
 from werkstatt.control.phases import Phase
 from werkstatt.control.registry import CONTROL_REGISTRY, list_controls
 from werkstatt.control.runner import run_control, run_phase
-from werkstatt.control.drift import check_drift
 
 __all__ = [
     "Control", "Phase",

@@ -14,7 +14,6 @@ import requests
 from werkstatt import agent
 from werkstatt.state import RunState
 
-
 # ---------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------

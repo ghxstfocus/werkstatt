@@ -1,6 +1,7 @@
 """K21: Leerer aber existierender Phase-State triggert init_new."""
-import yaml
 from pathlib import Path
+
+import yaml
 
 from werkstatt.phase_state import PhaseState
 

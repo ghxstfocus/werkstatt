@@ -14,7 +14,6 @@ from werkstatt.migrate import (
 )
 from werkstatt.scaffold import scaffold
 
-
 # ---------- §2 Pflicht ----------
 
 def test_pflicht_leer(tmp_path):

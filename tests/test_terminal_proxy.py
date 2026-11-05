@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from werkstatt import loop_renderer as renderer
+from werkstatt import render as renderer
 
 
 def test_log_line_wird_gestreamt(capsys: Any) -> None:

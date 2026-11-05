@@ -1,5 +1,6 @@
 """Spec: PROGRESS.md landet im selben Commit wie der Task-Diff (Fix K)."""
 from __future__ import annotations
+
 import subprocess
 import sys
 from pathlib import Path

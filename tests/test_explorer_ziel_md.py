@@ -4,7 +4,9 @@ Fix F 2026-10-31: Wenn docs/STATUS.md Ziel der Aufgabe ist, darf
 der Explorer NICHT 19 Code-Pfade aus ihrem Body extrahieren.
 """
 from __future__ import annotations
+
 import sys
+
 sys.path.insert(0, "/opt/werkstatt")
 
 

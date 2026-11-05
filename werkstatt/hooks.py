@@ -12,6 +12,7 @@ from pathlib import Path
 def _call_hook(hook_name: str, payload: dict) -> dict:
     """Ruft einen Hook auf und gibt das JSON-Ergebnis zurueck."""
     import json as _json
+
     from werkstatt.paths import werkstatt_home as _wh
     hook_path = _wh() / "hooks" / hook_name
     if not hook_path.exists():

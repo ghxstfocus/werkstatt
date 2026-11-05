@@ -1,7 +1,9 @@
 """OP-053: git_author aus Manifest wird in RunState geladen."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, "/opt/werkstatt")
 
 

@@ -1,7 +1,9 @@
 """Phase 5d — Docs-Prioritaet (DOC_CONVENTIONS.md §6)."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, "/opt/werkstatt")
 
 from werkstatt.orchestrator import (

@@ -102,7 +102,7 @@ _reg(Rolle(
 _reg(Rolle(
     name="builder",
     skill_filter_rolle="builder",
-    prompt_module="werkstatt.builder",
+    prompt_module="werkstatt.roles.builder",
     prompt_const="BUILDER_SYSTEM",
     beschreibung="Patch-Editor. Skills dynamisch nach Zieldatei.",
 ))

@@ -15,10 +15,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
-
 from werkstatt import loop
 from werkstatt.state import RunState
-
 
 # =====================================================================
 # Fixtures

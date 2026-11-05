@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from werkstatt.builder import _builder_system, _korrigiere_doku_datum
+from werkstatt.roles.builder import _builder_system, _korrigiere_doku_datum
 
 
 def test_datum_kommt_aus_utc():

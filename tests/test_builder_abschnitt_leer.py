@@ -4,7 +4,7 @@ from __future__ import annotations
 
 def test_abschnitt_leer_wenn_datei_nicht_beschrieben():
     """Wenn die Prosa ## -Ueberschriften hat, aber die Datei fehlt: ''."""
-    from werkstatt.builder import _architect_abschnitt
+    from werkstatt.roles.builder import _architect_abschnitt
     prosa = (
         "## harness/versioning/applier.py\n"
         "Beschreibung Applier.\n"
@@ -17,14 +17,14 @@ def test_abschnitt_leer_wenn_datei_nicht_beschrieben():
 
 def test_abschnitt_ganze_prosa_ohne_ueberschriften():
     """Fallback: keine ## -Ueberschriften -> ganze Prosa."""
-    from werkstatt.builder import _architect_abschnitt
+    from werkstatt.roles.builder import _architect_abschnitt
     prosa = "Nur ein Absatz ohne Ueberschrift."
     assert _architect_abschnitt(prosa, "irgendeine.py") == prosa
 
 
 def test_abschnitt_findet_datei_wenn_vorhanden():
     """Wenn die Datei in der Prosa ist: Abschnitt."""
-    from werkstatt.builder import _architect_abschnitt
+    from werkstatt.roles.builder import _architect_abschnitt
     prosa = (
         "## a.py\n"
         "Text A.\n"

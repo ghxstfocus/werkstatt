@@ -1,5 +1,6 @@
 """Spec: Planner + Builder lesen Failures aus PhaseState (Fix AF)."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 

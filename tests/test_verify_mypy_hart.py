@@ -59,6 +59,7 @@ def test_verify_patches_soft_mypy_hart_landet_in_hart(
 ) -> None:
     """Stage mypy_changed hart=true: Stage-Fehler zaehlt als hart, nicht weich."""
     from types import SimpleNamespace
+
     from werkstatt import verify as verify_mod
 
     # Fake-state: nur noetige Felder.
@@ -95,6 +96,7 @@ def test_verify_patches_soft_mypy_ohne_hart_bleibt_weich(
 ) -> None:
     """Stage mypy_changed ohne hart-Feld: Prefix-Match -> weich (alt)."""
     from types import SimpleNamespace
+
     from werkstatt import verify as verify_mod
 
     state = SimpleNamespace()

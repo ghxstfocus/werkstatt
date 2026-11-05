@@ -1,5 +1,6 @@
 """Spec: Task-Failures landen in .werkstatt/abbrueche.jsonl (Fix AE)."""
 from __future__ import annotations
+
 import json
 import sys
 from pathlib import Path

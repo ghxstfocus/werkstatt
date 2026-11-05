@@ -16,7 +16,6 @@ import pytest
 from werkstatt import loop
 from werkstatt.state import RunState
 
-
 PROJECTS_DIR = Path("/opt/werkstatt/projects")
 CONFIG_NAME = "testproj.yaml"
 CONFIG_PATH = PROJECTS_DIR / CONFIG_NAME

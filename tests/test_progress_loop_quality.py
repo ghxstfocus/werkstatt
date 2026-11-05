@@ -14,7 +14,6 @@ from unittest.mock import patch
 from werkstatt.committer import _build_commit_subject
 from werkstatt.task_runner import _task_ende
 
-
 # ═══════════════════════════════════════════════════════════════
 # A. _task_ende: PROGRESS.append unterdruecken wenn OP-NNN in Aufgabe
 # ═══════════════════════════════════════════════════════════════

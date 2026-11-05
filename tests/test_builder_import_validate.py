@@ -8,14 +8,14 @@ def test_validate_imports_findet_fehlendes_modul(tmp_path):
     Nach M-444b enthaelt 'fehlend' den vollen Modulpfad
     ('core' oder 'core.changeapplier').
     """
-    from werkstatt.builder import _validate_imports_in_patch
+    from werkstatt.roles.builder import _validate_imports_in_patch
     patch = "from core.changeapplier.errors import ApplierError\n"
     fehlend = _validate_imports_in_patch(patch, tmp_path)
     assert any(f.startswith("core") for f in fehlend), f"fehlend={fehlend}"
 
 
 def test_validate_imports_ok_fuer_stdlib(tmp_path):
-    from werkstatt.builder import _validate_imports_in_patch
+    from werkstatt.roles.builder import _validate_imports_in_patch
     patch = "import os\nfrom pathlib import Path\nimport json\n"
     fehlend = _validate_imports_in_patch(patch, tmp_path)
     assert fehlend == []
@@ -23,7 +23,7 @@ def test_validate_imports_ok_fuer_stdlib(tmp_path):
 
 def test_validate_imports_ok_fuer_projektmodul(tmp_path):
     """M-444b: Symbol existiert im Package -> OK."""
-    from werkstatt.builder import _validate_imports_in_patch
+    from werkstatt.roles.builder import _validate_imports_in_patch
     (tmp_path / "core").mkdir()
     (tmp_path / "core" / "__init__.py").write_text("something = None\n")
     patch = "from core import something\n"
@@ -32,7 +32,7 @@ def test_validate_imports_ok_fuer_projektmodul(tmp_path):
 
 
 def test_validate_imports_findet_mehrere(tmp_path):
-    from werkstatt.builder import _validate_imports_in_patch
+    from werkstatt.roles.builder import _validate_imports_in_patch
     patch = "import foo_xyz\nfrom bar_abc import X\nimport os\n"
     fehlend = _validate_imports_in_patch(patch, tmp_path)
     assert "foo_xyz" in fehlend

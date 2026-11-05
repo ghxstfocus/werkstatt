@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, "/opt/werkstatt")
 
-from werkstatt.pipeline_phases import _reset_task_state
+from werkstatt.phases import _reset_task_state
 
 
 def test_reset_clears_last_verify_errors():

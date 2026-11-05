@@ -2,7 +2,7 @@
 import json
 from unittest.mock import patch
 
-from werkstatt.builder import run_builder
+from werkstatt.roles.builder import run_builder
 
 
 def _mock_llm(content: str):
@@ -73,6 +73,6 @@ def test_legacy_patch_bleibt_unveraendert(tmp_path):
 
 
 def test_prompt_enthaelt_aider_format():
-    from werkstatt.builder import BUILDER_SYSTEM
+    from werkstatt.roles.builder import BUILDER_SYSTEM
     assert '"context"' in BUILDER_SYSTEM
     assert "old_string MUSS zeichengenau" in BUILDER_SYSTEM

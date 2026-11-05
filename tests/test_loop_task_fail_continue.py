@@ -14,7 +14,7 @@ class TestTaskFailContinue:
         Code stehen (z.B. Reflection), aber kein `return 1`."""
         # Fix AZ Stufe 11: Logik liegt jetzt in pipeline_phases.py.
         import werkstatt.loop as _loop
-        import werkstatt.pipeline_phases as _pp
+        import werkstatt.phases as _pp
         src = (
             Path(_loop.__file__).read_text(encoding="utf-8")
             + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_pp._explorer_mod, _pp._plan_mod, _pp._tasks_mod, _pp._review_mod, _pp._finalize_mod]))
@@ -43,7 +43,7 @@ class TestTaskFailContinue:
         """pre_build_gate ist echter Abbruch, kein Task-Fail."""
         # Fix AZ Stufe 11: Logik liegt jetzt in pipeline_phases.py.
         import werkstatt.loop as _loop
-        import werkstatt.pipeline_phases as _pp
+        import werkstatt.phases as _pp
         src = (
             Path(_loop.__file__).read_text(encoding="utf-8")
             + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_pp._explorer_mod, _pp._plan_mod, _pp._tasks_mod, _pp._review_mod, _pp._finalize_mod]))

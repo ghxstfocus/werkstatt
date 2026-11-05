@@ -24,7 +24,7 @@ def test_validate_contract_safe_ok(tmp_path):
     """Gefuellter explorer_context -> True, kein Audit."""
     from unittest.mock import patch
 
-    from werkstatt import pipeline_phases as pp
+    from werkstatt import phases as pp
     st = _state(tmp_path)
     st.explorer_context = {
         "findings": "x",
@@ -43,7 +43,7 @@ def test_validate_contract_safe_leer(tmp_path):
     """Leerer explorer_context -> False + Audit-Event."""
     from unittest.mock import patch
 
-    from werkstatt import pipeline_phases as pp
+    from werkstatt import phases as pp
     st = _state(tmp_path)
     audited = []
     with patch("werkstatt.phases._common.audit",
@@ -60,7 +60,7 @@ def test_validate_contract_safe_unbekannter_uebergang(tmp_path):
     """Unbekannter Uebergang -> Noop -> True."""
     from unittest.mock import patch
 
-    from werkstatt import pipeline_phases as pp
+    from werkstatt import phases as pp
     st = _state(tmp_path)
     audited = []
     with patch("werkstatt.phases._common.audit",

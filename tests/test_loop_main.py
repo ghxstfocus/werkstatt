@@ -23,7 +23,6 @@ import pytest
 from werkstatt import loop
 from werkstatt.state import RunState
 
-
 # =====================================================================
 # Fixtures
 # =====================================================================
@@ -47,7 +46,7 @@ def _kind(tmp_path: Path, kind: str) -> list[dict]:
 
 def _silence_renderer():
     return patch.multiple(
-        "werkstatt.loop_renderer",
+        "werkstatt.render",
         header=lambda *a, **kw: None,
         step=lambda *a, **kw: None,
         footer=lambda *a, **kw: None,

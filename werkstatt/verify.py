@@ -260,7 +260,7 @@ def _verify_stage_with_heartbeat(
     import threading as _threading
     import time as _time
 
-    from werkstatt import loop_renderer
+    from werkstatt import render as loop_renderer
 
     _done = _threading.Event()
     _result: list = [None]

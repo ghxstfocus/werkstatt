@@ -1,8 +1,10 @@
 """Spec: Patch-Breiten-Check fuer Doku-Loeschungen (Fix J 2026-10-31)."""
 from __future__ import annotations
+
 import sys
+
 sys.path.insert(0, "/opt/werkstatt")
-from werkstatt.builder import _pruefe_doku_patch_breite
+from werkstatt.roles.builder import _pruefe_doku_patch_breite
 
 
 def _patch(old, new=""):

@@ -1,5 +1,6 @@
 """Spec: verify-Stages erkennen untracked Dateien (Fix V)."""
 from __future__ import annotations
+
 import subprocess
 import sys
 from pathlib import Path

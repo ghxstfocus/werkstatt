@@ -15,10 +15,7 @@ Getestet hier:
 """
 from __future__ import annotations
 
-
-
-from werkstatt import builder
-
+from werkstatt.roles import builder as builder
 
 # =====================================================================
 # _filtere_auf_funktionen (P0/P1-Kernfunktion)
@@ -289,7 +286,8 @@ def test_build_patches_fuer_datei_kein_zieldatei_nameerror():
     'zieldatei', der audit-Aufruf referenzierte '_zieldatei'.
     """
     import inspect
-    from werkstatt import builder
+
+    from werkstatt.roles import builder as builder
     src = inspect.getsource(builder._build_patches_fuer_datei)
     assert "zieldatei" in src
     # Der Bug: _zieldatei (mit Unterstrich) wird in dieser Funktion

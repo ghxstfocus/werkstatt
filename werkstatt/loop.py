@@ -14,7 +14,26 @@ import subprocess  # noqa: F401  # re-export: Tests patchen werkstatt.loop.subpr
 import time  # noqa: F401  # re-export: Tests patchen werkstatt.loop.time
 from pathlib import Path
 
+from werkstatt.apply_patches import (  # Fix AZ Stufe 4: Re-Export
+    _apply_one_patch,
+    _apply_patches_with_diagnose,
+    _apply_patches_with_hooks,
+    _delete_ziel_erlaubt,
+    _diagnose_patch,
+    _patches_wirklich_angewendet,
+)
 from werkstatt.audit import audit, set_run_id
+from werkstatt.committer import (  # Fix AZ Stufe 5a: Re-Export
+    _committe_zielprojekt,
+    _task_fortschritt_block,
+)
+from werkstatt.env_loader import load_env
+from werkstatt.explorer import run_explorer
+from werkstatt.gates import (  # Fix AZ Stufe 5b: Re-Export
+    _human_gate,
+    _human_gate_plan,
+    _plan_gate,
+)
 from werkstatt.git_ops import (  # Fix AZ Stufe 1: Re-Export
     _get_git_diff_for_hook,
     _git_dirty,
@@ -25,6 +44,41 @@ from werkstatt.git_ops import (  # Fix AZ Stufe 1: Re-Export
     _git_stash_pop,
 )
 from werkstatt.hooks import _call_hook  # Fix AZ Stufe 2: Re-Export
+from werkstatt.phase_state import PhaseState
+from werkstatt.phases import (  # Fix AZ Stufe 11: Re-Export
+    _normalize_tasks,
+    _phase_explorer_and_setup,
+    _phase_finalize,
+    _phase_plan_and_preflight,
+    _phase_tasks_loop,
+)
+from werkstatt.planner import run_planner
+from werkstatt.reflection import (  # Fix AZ Stufe 6: Re-Export
+    _phase_end_reflection,
+    _reflection_loop,
+)
+from werkstatt.render import (
+    _with_spinner,
+    group_end,
+    group_start,
+    header,
+    log_line,
+    step,
+    summary,
+    task,
+    task_done,
+    task_ok,
+    task_started,
+)
+from werkstatt.reviewer import run_reviewer
+from werkstatt.roles.builder import run_builder
+from werkstatt.state import RunState
+from werkstatt.task_runner import (  # Fix AZ Stufe 7: Re-Export
+    _extract_files_from_tasks,
+    _pruefe_prior_failed_dependency,
+    _split_task_on_demand,
+    _task_ende,
+)
 from werkstatt.verify import (  # Fix AZ Stufe 3: Re-Export
     _expand_cmd_placeholders,
     _get_baseline_error_details,
@@ -35,51 +89,6 @@ from werkstatt.verify import (  # Fix AZ Stufe 3: Re-Export
     _verify_patches_soft,
     _verify_stage_with_heartbeat,
 )
-from werkstatt.apply_patches import (  # Fix AZ Stufe 4: Re-Export
-    _apply_one_patch,
-    _apply_patches_with_diagnose,
-    _apply_patches_with_hooks,
-    _diagnose_patch,
-    _delete_ziel_erlaubt,
-    _patches_wirklich_angewendet,
-)
-from werkstatt.committer import (  # Fix AZ Stufe 5a: Re-Export
-    _committe_zielprojekt,
-    _task_fortschritt_block,
-)
-from werkstatt.gates import (  # Fix AZ Stufe 5b: Re-Export
-    _human_gate,
-    _human_gate_plan,
-    _plan_gate,
-)
-from werkstatt.reflection import (  # Fix AZ Stufe 6: Re-Export
-    _phase_end_reflection,
-    _reflection_loop,
-)
-from werkstatt.task_runner import (  # Fix AZ Stufe 7: Re-Export
-    _extract_files_from_tasks,
-    _pruefe_prior_failed_dependency,
-    _split_task_on_demand,
-    _task_ende,
-)
-from werkstatt.pipeline_phases import (  # Fix AZ Stufe 11: Re-Export
-    _normalize_tasks,
-    _phase_explorer_and_setup,
-    _phase_finalize,
-    _phase_plan_and_preflight,
-    _phase_tasks_loop,
-)
-from werkstatt.loop_renderer import (
-    _with_spinner, log_line, task_started, task_done, summary,
-)
-from werkstatt.builder import run_builder
-from werkstatt.env_loader import load_env
-from werkstatt.explorer import run_explorer
-from werkstatt.loop_renderer import group_end, group_start, header, step, task, task_ok
-from werkstatt.phase_state import PhaseState
-from werkstatt.planner import run_planner
-from werkstatt.reviewer import run_reviewer
-from werkstatt.state import RunState
 
 # Oeffentliche API (Re-Exports + lokale Funktionen).
 # ruff F401 entfernt sonst Re-Exports, die von Tests/Aufrufern
@@ -154,6 +163,7 @@ __all__ = [
 
 
 from werkstatt.paths import projects_dir as _projects_dir
+
 PROJECTS_DIR = _projects_dir()
 
 
@@ -176,7 +186,7 @@ def _run_with_progress(
     import threading as _threading
     import time as _time
 
-    from werkstatt import loop_renderer as _r
+    from werkstatt import render as _r
 
     _result: list = [None]
     _exc: list = [None]
@@ -376,9 +386,11 @@ def main(argv: list[str] | None = None) -> int:
     # Beenden geschlossen.
     _tee_handle = None
     try:
-        from datetime import UTC as _TEE_UTC, datetime as _TEE_DT
-        from werkstatt import loop_renderer as _TEE_R
+        from datetime import UTC as _TEE_UTC
+        from datetime import datetime as _TEE_DT
         from pathlib import Path as _TEE_P
+
+        from werkstatt import render as _TEE_R
         _tee_now = _TEE_DT.now(_TEE_UTC)
         _tee_p = _TEE_P("logs") / (
             "loop-render-"
@@ -399,7 +411,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI-Einstieg: python3 -m werkstatt.loop --project <name> --aufgabe <text> [--dry-run]."""
     import argparse
 
-    from werkstatt import loop_renderer as _r
+    from werkstatt import render as _r
 
     parser = argparse.ArgumentParser(
         prog="werkstatt.loop",

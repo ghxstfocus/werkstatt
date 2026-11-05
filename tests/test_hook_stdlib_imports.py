@@ -1,5 +1,6 @@
 """Spec: Hook blockt keine stdlib-Imports (Fix AM)."""
 from __future__ import annotations
+
 import json
 import subprocess
 import sys

@@ -1,5 +1,6 @@
 """Phase 5e — Vage Aufgaben: STATUS.md als primaere Quelle."""
 from __future__ import annotations
+
 from pathlib import Path
 
 PLANNER = Path("/opt/werkstatt/werkstatt/planner.py")

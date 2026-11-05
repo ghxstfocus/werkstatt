@@ -1,8 +1,10 @@
 """Spec: Builder isoliert negative Anweisungen aus der Prosa."""
 from __future__ import annotations
+
 import sys
+
 sys.path.insert(0, "/opt/werkstatt")
-from werkstatt.builder import _extrahiere_verbote
+from werkstatt.roles.builder import _extrahiere_verbote
 
 
 class TestVerboteExtraktion:

@@ -1,15 +1,15 @@
 """OP-058: ADR-Mini-Phase."""
 from __future__ import annotations
-import sys
 
+import sys
 
 sys.path.insert(0, "/opt/werkstatt")
 
 from werkstatt.gates import (
-    _adr_mini_aktiv,
-    _naechste_adr_nummer,
-    _adr_template,
     _adr_index_append,
+    _adr_mini_aktiv,
+    _adr_template,
+    _naechste_adr_nummer,
 )
 
 

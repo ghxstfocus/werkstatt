@@ -61,6 +61,7 @@ def test_katalog_enthaelt_alle_code_kinds():
     """
     import re
     from pathlib import Path
+
     from werkstatt.audit import _AUDIT_KINDS_BEKANNT
 
     kinds_im_code: set[str] = set()
@@ -84,6 +85,7 @@ def test_katalog_enthaelt_keine_toten_kinds():
     """
     import re
     from pathlib import Path
+
     from werkstatt.audit import _AUDIT_KINDS_BEKANNT
 
     kinds_im_code: set[str] = set()

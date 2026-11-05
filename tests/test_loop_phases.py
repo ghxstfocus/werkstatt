@@ -24,7 +24,6 @@ import pytest
 from werkstatt import loop
 from werkstatt.state import RunState
 
-
 # =====================================================================
 # Fixtures
 # =====================================================================
@@ -331,6 +330,7 @@ def test_heartbeat_timeout_propagiert(tmp_path):
 def test_ruff_fix_changed_ruft_ruff_auf(tmp_path):
     """_ruff_fix_changed ruft ruff --fix auf geaenderte Dateien."""
     from unittest.mock import patch
+
     from werkstatt.state import RunState
 
     s = RunState(
@@ -359,6 +359,7 @@ def test_ruff_fix_changed_ruft_ruff_auf(tmp_path):
 def test_ruff_fix_changed_leer(tmp_path):
     """Ohne .py-Patches: kein ruff-Aufruf."""
     from unittest.mock import patch
+
     from werkstatt.state import RunState
 
     s = RunState(
@@ -387,9 +388,10 @@ def test_phase_review_skip_bei_leerem_patches():
     Regression: Live 2026-10-30 21:28:25 — alle 5 Tasks done,
     state.patches leer, reviewer_phase_kein_diff -> Rollback.
     """
-    from werkstatt.state import RunState
     import tempfile
     from pathlib import Path
+
+    from werkstatt.state import RunState
 
     tmp = Path(tempfile.mkdtemp())
     s = RunState(
@@ -425,6 +427,7 @@ def test_phase_review_skip_prueft_applied_count():
     und rejected 4x.
     """
     import inspect
+
     from werkstatt import loop as loop_mod
     # Fix AZ Stufe 8-D: Logik liegt jetzt in _phase_finalize.
     src = (
@@ -445,6 +448,7 @@ def test_alle_done_aus_phasestate():
     reviewer_phase_kein_diff.
     """
     import inspect
+
     from werkstatt import loop as loop_mod
     # Fix AZ Stufe 8-D: Logik liegt jetzt in _phase_finalize.
     src = (

@@ -17,7 +17,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 
-from werkstatt.loop_renderer import TerminalEmitter
+from werkstatt.render import TerminalEmitter
 
 __all__ = ["create_app", "router", "veroeffentliche"]
 

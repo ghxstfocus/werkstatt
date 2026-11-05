@@ -288,7 +288,7 @@ def test_human_gate_zeigt_hunk_summary_bei_grossem_diff(
     def _fake_panel(body: str, title: str = "") -> None:
         _captured.append(body)
 
-    from werkstatt import loop_renderer
+    from werkstatt import render as loop_renderer
     monkeypatch.setattr(loop_renderer, "panel_diff", _fake_panel)
     # Audit schlucken.
     monkeypatch.setattr("werkstatt.gates.audit", lambda *a, **kw: None)

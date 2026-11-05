@@ -18,11 +18,15 @@ from pathlib import Path
 
 sys.path.insert(0, "/opt/werkstatt")
 
-_PP = Path("/opt/werkstatt/werkstatt/pipeline_phases.py")
+_PP_DIR = Path("/opt/werkstatt/werkstatt/phases")
 
 
 def test_jeder_task_ende_ok_hat_counter_inkrement():
-    src = _PP.read_text(encoding="utf-8")
+    src = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in sorted(_PP_DIR.glob("*.py"))
+        if p.name != "__init__.py"
+    )
     tree = ast.parse(src)
     lines = src.splitlines()
 
@@ -51,6 +55,6 @@ def test_jeder_task_ende_ok_hat_counter_inkrement():
 
     assert not verstoesse, (
         f"_task_ende(ok=True) ohne tasks_ok += 1 in "
-        f"{_PP.name}: Zeilen {verstoesse}. "
+        f"{_PP_DIR.name}/: Zeilen {verstoesse}. "
         f"Footer zeigt falsche Zahlen."
     )

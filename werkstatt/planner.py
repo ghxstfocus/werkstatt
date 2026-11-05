@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 from werkstatt.agent import ask_llm
-from werkstatt.loop_renderer import _with_spinner
+from werkstatt.render import _with_spinner
 
 
 # M-442: Architect-Modell konfigurierbar (Default: deepseek-chat).
@@ -1835,7 +1835,7 @@ def run_planner(state: RunState) -> bool:
     # SCOUT_BOX_RENDER (2026-11-02): Scout-Prosa + API-Auszug sichtbar machen
     if _scout_report:
         try:
-            from werkstatt import loop_renderer as _r_scout
+            from werkstatt import render as _r_scout
             _prosa = _scout_report.get("auftrag_prosa") or ""
             if _prosa:
                 _r_scout.panel_diff(_prosa, title="SCOUT-AUFRAG")

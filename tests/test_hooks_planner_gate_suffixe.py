@@ -1,6 +1,8 @@
 """Spec: planner_gate erlaubt Config-Example-Dateien (Fix Y)."""
 from __future__ import annotations
+
 import sys
+
 sys.path.insert(0, "/opt/werkstatt")
 
 

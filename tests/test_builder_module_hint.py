@@ -11,7 +11,7 @@ sys.path.insert(0, "/opt/werkstatt")
 
 class TestModuleHint:
     def test_verfuegbare_module_im_prompt(self, tmp_path: Path) -> None:
-        from werkstatt import builder as _b
+        from werkstatt.roles import builder as _b
         (tmp_path / "harness" / "llm").mkdir(parents=True)
         (tmp_path / "harness" / "llm" / "errors.py").write_text("class LLMError: pass\n")
         (tmp_path / "harness" / "llm" / "models.py").write_text("class LLMRequest: pass\n")

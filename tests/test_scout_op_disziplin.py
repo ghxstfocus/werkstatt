@@ -4,6 +4,7 @@ Whitespace-normalisiert, damit Zeilenumbrueche im Prompt-Text
 Tests nicht brechen.
 """
 from __future__ import annotations
+
 from pathlib import Path
 
 SCOUT = Path("/opt/werkstatt/werkstatt/scout.py")

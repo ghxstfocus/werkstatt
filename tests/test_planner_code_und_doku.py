@@ -1,6 +1,8 @@
 """Spec: Fix A v3.1 schuetzt Code+Doku-Kombination (Code-Task create)."""
 from __future__ import annotations
+
 import sys
+
 sys.path.insert(0, "/opt/werkstatt")
 from werkstatt.planner import _doku_post_check
 

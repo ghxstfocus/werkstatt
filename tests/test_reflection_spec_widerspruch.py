@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-import werkstatt.builder as _builder_mod
+import werkstatt.roles.builder as _builder_mod
 from werkstatt import reflection as refl_mod
 
 

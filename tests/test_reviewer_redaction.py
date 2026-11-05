@@ -154,8 +154,8 @@ def test_reviewer_ruft_mit_redact_false(
         "werkstatt.reviewer.ask_llm", _fake_ask,
     )
 
-    from werkstatt.state import RunState
     from werkstatt.reviewer import run_reviewer
+    from werkstatt.state import RunState
 
     (tmp_path / "core").mkdir()
     (tmp_path / "core" / "x.py").write_text("x = 1\n")

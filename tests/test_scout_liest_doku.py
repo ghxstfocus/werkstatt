@@ -3,6 +3,7 @@
 Wirkungspruefung: _docs_prepend wird NACH user_content angehaengt.
 """
 from __future__ import annotations
+
 from pathlib import Path
 
 SCOUT = Path("/opt/werkstatt/werkstatt/scout.py")

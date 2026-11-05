@@ -1,21 +1,20 @@
 """OP-048/055/056/057: Doku-Selbstpflege im Committer."""
 from __future__ import annotations
-import sys
 
+import sys
 
 sys.path.insert(0, "/opt/werkstatt")
 
 from werkstatt import committer
 from werkstatt.committer import (
+    _architecture_drift_check,
+    _delete_zone_op_append,
     _doku_nachzug_aktiv,
     _op_nnn_aus_aufgabe,
     _status_md_op_entfernen,
-    _delete_zone_op_append,
-    _update_kennzahlen,
     _update_changelog,
-    _architecture_drift_check,
+    _update_kennzahlen,
 )
-
 
 # ---------- _doku_nachzug_aktiv ----------
 

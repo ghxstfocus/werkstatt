@@ -13,7 +13,6 @@ from werkstatt.antipattern import scan_patches
 from werkstatt.control.control import Control
 from werkstatt.control.phases import Phase
 
-
 CONTROL_REGISTRY: dict[str, Control] = {}
 
 

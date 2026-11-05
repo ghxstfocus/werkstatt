@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 from werkstatt.state import RunState
 
 
@@ -88,6 +87,7 @@ def test_tasks_ok_zaehler_bei_auftrag_bereits_erfuellt():
     '1/5 Tasks · 4 failed', obwohl alle 5 done waren.
     """
     import inspect
+
     from werkstatt import loop as loop_mod
     # Fix AZ Stufe 8-C: Logik liegt jetzt in _phase_tasks_loop +
     # _phase_plan_and_preflight. Beide pruefen -- robust gegen

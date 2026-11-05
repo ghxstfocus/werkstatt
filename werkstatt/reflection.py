@@ -6,7 +6,7 @@ _verify_patches, run_builder, run_reviewer).
 """
 from __future__ import annotations
 
-from werkstatt.loop_renderer import log_line  # Fix BA
+from werkstatt.render import log_line  # Fix BA
 from werkstatt.state import RunState
 
 
@@ -278,7 +278,7 @@ def _reflection_loop(
         return False
 
     # M-329: Builder importieren (vermeidet Zirkularitaet).
-    from werkstatt.builder import run_builder
+    from werkstatt.roles.builder import run_builder
 
     _ruff_vorher: int | None = None
     _hash_vorher: str | None = None

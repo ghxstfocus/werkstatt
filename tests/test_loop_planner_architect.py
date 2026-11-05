@@ -14,10 +14,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-
 from werkstatt import planner
 from werkstatt.state import LLMReply, RunState
-
 
 # ---------------------------------------------------------------------
 # Fixtures

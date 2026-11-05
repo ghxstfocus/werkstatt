@@ -1,6 +1,8 @@
 """Spec: docs_ctx fuer Doku-Aufgaben ist max 5 KB betroffene Datei."""
 from __future__ import annotations
+
 import sys
+
 sys.path.insert(0, "/opt/werkstatt")
 
 
