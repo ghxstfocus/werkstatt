@@ -31,6 +31,7 @@ def _fake_state(tmp_path: Path):
         phasen=[],
         patches=[],
         plan_gate_errors=None,
+        architect_prosa="",
     )
 
 

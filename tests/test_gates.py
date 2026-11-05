@@ -7,7 +7,7 @@ from types import SimpleNamespace
 def test_human_gate_body_reflection_erschoepft() -> None:
     """Bei reflection_erschoepft=True: Hinweis im Body."""
     from werkstatt.gates import _human_gate_body
-    state = SimpleNamespace()
+    state = SimpleNamespace(architect_prosa="")
     state.reflection_erschoepft = True
     body = _human_gate_body(state)
     assert "Reflection erschoepft" in body
@@ -18,7 +18,7 @@ def test_human_gate_body_reflection_erschoepft() -> None:
 def test_human_gate_body_kein_erschoepft_hinweis() -> None:
     """Ohne Flag: kein Erschoepfungs-Hinweis."""
     from werkstatt.gates import _human_gate_body
-    state = SimpleNamespace()
+    state = SimpleNamespace(architect_prosa="")
     state.reflection_erschoepft = False
     body = _human_gate_body(state)
     assert "Reflection erschoepft" not in body

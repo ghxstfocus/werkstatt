@@ -91,6 +91,7 @@ class TestSkipArchitect:
             akzeptanzkriterien=[],
             preflight_fehler=None,
             explorer_ctx=None,
+            explorer_context={},
         )
         scout = {
             "atomarer_plan": True,
