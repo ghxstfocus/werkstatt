@@ -32,7 +32,7 @@ def test_validate_contract_safe_ok(tmp_path):
         "next_reads": ["a.py"],
     }
     audited = []
-    with patch.object(pp, "audit",
+    with patch("werkstatt.phases._common.audit",
                       side_effect=lambda k, p, pd, pn: audited.append(k)):
         ok = pp._validate_contract_safe("explorer", "scout", st, tmp_path, "t")
     assert ok is True
@@ -46,7 +46,7 @@ def test_validate_contract_safe_leer(tmp_path):
     from werkstatt import pipeline_phases as pp
     st = _state(tmp_path)
     audited = []
-    with patch.object(pp, "audit",
+    with patch("werkstatt.phases._common.audit",
                       side_effect=lambda k, p, pd, pn: audited.append((k, p))):
         ok = pp._validate_contract_safe("explorer", "scout", st, tmp_path, "t")
     assert ok is False
@@ -63,7 +63,7 @@ def test_validate_contract_safe_unbekannter_uebergang(tmp_path):
     from werkstatt import pipeline_phases as pp
     st = _state(tmp_path)
     audited = []
-    with patch.object(pp, "audit",
+    with patch("werkstatt.phases._common.audit",
                       side_effect=lambda k, p, pd, pn: audited.append(k)):
         ok = pp._validate_contract_safe("foo", "bar", st, tmp_path, "t")
     assert ok is True
