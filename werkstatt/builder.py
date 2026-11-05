@@ -13,7 +13,6 @@ from pathlib import Path
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.state import RunState
-from werkstatt.scout import _baue_api_index
 
 _REVIEWER_SCHNITTSTELLE = """## DER REVIEWER (Schnittstelle)
 - Prueft: bricht der Code? Task erfuellt? Bestehende Aufrufe erhalten?
@@ -672,7 +671,7 @@ def _build_patches_fuer_datei(
     # "## <pfad>"-Ueberschrift. Dann auf die volle Architect-Prosa
     # zurueckfallen (state.architect_prosa).
     if not _abschnitt:
-        _volle = getattr(state, "architect_prosa", "") or ""
+        _volle = state.architect_prosa or ""
         if _volle:
             _abschnitt = _architect_abschnitt(
             _volle, zieldatei, task_text=_filter_text,
@@ -1302,7 +1301,7 @@ def run_builder(state: RunState) -> bool:
         and bool(_aktuelle_task.get("task_files"))
     )
     if not _hat_task_files:
-        _expl = getattr(state, "explorer_context", {}) or {}
+        _expl = state.explorer_context or {}
         for _f in _expl.get("key_files", []) or []:
             _f_str = None
             if isinstance(_f, str):

@@ -670,7 +670,7 @@ def _run_scout(
     # Ohne Inhalt kann der Scout nicht pruefen, ob die Aufgabe
     # schon erfuellt ist.
     _previews_parts = []
-    _explorer_ctx = getattr(state, "explorer_context", None)
+    _explorer_ctx = state.explorer_context
     if isinstance(_explorer_ctx, dict):
         for _k in (_explorer_ctx.get("key_files") or [])[:8]:
             if not isinstance(_k, dict):

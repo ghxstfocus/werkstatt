@@ -73,7 +73,7 @@ def _task_ende(
     try:
         if phase_state is not None:
             _existing = phase_state.get_task(task_id)
-    except Exception:  # noqa: BLE001, S110
+    except Exception:  # noqa: BLE001
         _existing = None
     if _existing and _existing.get("status") in (
             "done", "failed", "human_review"):
@@ -189,8 +189,8 @@ def _split_task_on_demand(
     Nur wenn die Task noch nicht zu tief zerlegt ist (max 2 Ebenen).
     Abgeschlossene Tasks bleiben unveraendert.
     """
-    from werkstatt.planner import _llm_split_einzel_task
     from werkstatt.phase_state import PhaseState
+    from werkstatt.planner import _llm_split_einzel_task
 
     pd = state.project_dir
     pn = state.project_name
@@ -228,7 +228,7 @@ def _split_task_on_demand(
     # Fehler-Kontext.
     _errors = getattr(state, "last_verify_errors", None) or []
     _bugs = getattr(state, "reviewer_bugs", None) or []
-    _prosa = getattr(state, "architect_prosa", "") or ""
+    _prosa = state.architect_prosa or ""
 
     # Sub-Tasks vom LLM.
     _sub = _llm_split_einzel_task(

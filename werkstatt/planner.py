@@ -1499,7 +1499,7 @@ def run_planner(state: RunState) -> bool:
         pass
 
     # M-375/M-376: Explorer-Kontext lesen (key_files + findings).
-    _explorer_ctx = getattr(state, "explorer_context", None)
+    _explorer_ctx = state.explorer_context
     if isinstance(_explorer_ctx, dict):
         _key = _explorer_ctx.get("key_files") or []
         _findings = _explorer_ctx.get("findings") or ""

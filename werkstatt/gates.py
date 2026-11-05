@@ -62,7 +62,7 @@ def _plan_gate(state: RunState) -> bool:
 
     # M-457: Planner-Split (Architect+Split) braucht keine
     # tests/akzeptanzkriterien. Tests sind out-of-scope (M-449).
-    _is_split = bool(getattr(state, "architect_prosa", None))
+    _is_split = bool(state.architect_prosa)
     if _is_split:
         if not getattr(state, "tasks", []):
             return False
@@ -102,7 +102,7 @@ def _plan_gate(state: RunState) -> bool:
         "phasen": _phasen,
         "project_dir": str(getattr(state, "project_dir", "")),
         # K17c: Architect-Prosa fuer Migrations-Kollisions-Check.
-        "architect_prosa": getattr(state, "architect_prosa", "") or "",
+        "architect_prosa": state.architect_prosa or "",
         # GOLD 2026-10-30: Original-Aufgabe, damit der Hook
         # Doku-Aufgaben erkennen kann.
         "aufgabe": getattr(state, "aufgabe", "") or "",
@@ -150,7 +150,7 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
     _r.plan(
         getattr(state, "phasen", []) or [],
         getattr(state, "tasks", []) or [],
-        getattr(state, "tests", []) or [],
+        state.tests or [],
         getattr(state, "akzeptanzkriterien", []) or [],
     )
 
@@ -251,7 +251,7 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
             _r.plan(
                 getattr(state, "phasen", []) or [],
                 getattr(state, "tasks", []) or [],
-                getattr(state, "tests", []) or [],
+                state.tests or [],
                 getattr(state, "akzeptanzkriterien", []) or [],
             )
             continue
@@ -447,7 +447,7 @@ def _human_gate_body(state) -> str:
         )
 
     # 1. Architect-Plan / Scout-Marker
-    _prosa = (getattr(state, "architect_prosa", "") or "").strip()
+    _prosa = (state.architect_prosa or "").strip()
     if _prosa:
         if _prosa == "[atomarer Plan vom Scout]":
             _parts.append("## Plan (vom Scout, atomar zerlegt)")

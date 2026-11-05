@@ -17,7 +17,7 @@ def test_findet_bekannte_felder_und_kategorien():
     # OP-135b: explorer_context ist jetzt deklariert, wird aber nur via
     # getattr gelesen → write_only. Nach OP-137 (Architect liest direkt)
     # wird daraus "aktiv". Dann hier auf "aktiv" umstellen.
-    assert erg["explorer_context"]["kategorie"] == "write_only"
+    assert erg["explorer_context"]["kategorie"] == "aktiv"  # OP-161
     # api_index_cache: wird geschrieben, aber nur via getattr gelesen
     # → write_only. Widerlegt Handoff-Satz "toter Cache" (er lebt!),
     # aber auch frühere Behauptung "aktiv" (kein direkter Leser).

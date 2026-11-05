@@ -530,7 +530,7 @@ def _phase_plan_and_preflight(
             return rc, True
 
         # M-458: Architect-Prosa anzeigen (Planner-Split).
-        _arch_prosa = getattr(state, "architect_prosa", None)
+        _arch_prosa = state.architect_prosa
         if _arch_prosa:
             from werkstatt import loop_renderer as _r_arch
             try:
@@ -650,7 +650,7 @@ def _phase_plan_and_preflight(
             phase_state.init_new(
                 aufgabe,
                 _normalize_tasks(getattr(state, "tasks", [])),
-                tests=list(getattr(state, "tests", []) or []),
+                tests=list(state.tests or []),
                 akzeptanzkriterien=list(getattr(state, "akzeptanzkriterien", []) or []),
                 phasen=list(getattr(state, "phasen", []) or []),  # M-323d
             )
@@ -667,7 +667,7 @@ def _phase_plan_and_preflight(
         phase_state.init_new(
             aufgabe,
             _normalize_tasks(getattr(state, "tasks", [])),
-            tests=list(getattr(state, "tests", []) or []),
+            tests=list(state.tests or []),
             akzeptanzkriterien=list(getattr(state, "akzeptanzkriterien", []) or []),
         )
 
