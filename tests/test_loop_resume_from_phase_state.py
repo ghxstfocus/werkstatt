@@ -17,11 +17,23 @@ sys.path.insert(0, "/opt/werkstatt")
 import werkstatt.loop as _loop
 from werkstatt.phase_state import PhaseState
 
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
+
 
 def _fake_state(tmp_path: Path):
-    """Minimaler RunState-Stub, gerade genug fuer den Resume-Branch."""
-    from types import SimpleNamespace
-    return SimpleNamespace(
+    """Minimaler RunState fuer den Resume-Branch (OP-174 P3).
+
+    Vollstaendiger RunState ueber mk_state() — alle Felder in
+    RunState deklariert. Lokaler SimpleNamespace-Import entfernt.
+
+    Zombie-Feld plan_gate_errors entfernt (2026-11-06 gemessen):
+    nicht in RunState, nicht von _plan_gate gelesen, nur hier
+    als Attrappe gesetzt.
+    """
+    return mk_state(
         project_dir=tmp_path,
         project_name="testprojekt",
         aufgabe="egal",
@@ -30,7 +42,6 @@ def _fake_state(tmp_path: Path):
         akzeptanzkriterien=[],
         phasen=[],
         patches=[],
-        plan_gate_errors=None,
         architect_prosa="",
     )
 
