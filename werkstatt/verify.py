@@ -37,9 +37,7 @@ def _ist_test_datei(pfad: str) -> bool:
         return True
     if "/tests/" in ("/" + p) or p.startswith("tests/"):
         return True
-    if "/test/" in ("/" + p) or p.startswith("test/"):
-        return True
-    return False
+    return bool("/test/" in "/" + p or p.startswith("test/"))
 
 
 def _stage_anzahl(project_dir: Path) -> int:

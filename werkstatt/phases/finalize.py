@@ -136,11 +136,10 @@ def _phase_finalize(
         rc = 2
 
     # M-476: Phase-End Verify (Vollsuite) nach human_gate.
-    if rc == 0:
-        if not _verify_patches(state, phase="phase_end"):
-            audit("loop_gate_failed",
-                  _gate_failed_payload("phase_end", []), pd, pn)
-            rc = 1
+    if rc == 0 and not _verify_patches(state, phase="phase_end"):
+        audit("loop_gate_failed",
+              _gate_failed_payload("phase_end", []), pd, pn)
+        rc = 1
 
     if rc == 0:
         audit("loop_erfolg", {"project_name": project_name}, pd, pn)

@@ -40,9 +40,7 @@ def _ist_shell_kontext(file: str) -> bool:
     base = f.rsplit("/", 1)[-1]
     if base in _MAKEFILE_NAMES:
         return True
-    if base.endswith(".mk"):
-        return True
-    return False
+    return bool(base.endswith(".mk"))
 
 
 def _ist_test_datei(file: str) -> bool:
@@ -52,9 +50,7 @@ def _ist_test_datei(file: str) -> bool:
         return False
     if base.startswith("test_") or base.endswith("_test.py"):
         return True
-    if "/tests/" in f or f.startswith("tests/"):
-        return True
-    return False
+    return bool("/tests/" in f or f.startswith("tests/"))
 
 
 def _hat_vergleich(zeile: str) -> bool:

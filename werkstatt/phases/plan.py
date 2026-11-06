@@ -97,10 +97,9 @@ def _phase_plan_and_preflight(
         # OP-136a: Contract-Validierung planner->builder.
         # Nullfall "bereits erfuellt" erlaubt leere Tasks — kein Fail.
         if (not getattr(state, "auftrag_bereits_erfuellt", False)
-                and getattr(state, "tasks", None)):
-            if not _validate_contract_safe(
-                    "planner", "builder", state, pd, pn):
-                return 1, False
+                and getattr(state, "tasks", None)) and not _validate_contract_safe(
+                "planner", "builder", state, pd, pn):
+            return 1, False
 
         # GOLD 2026-10-30: Scout kann bereits_erfuellt melden.
         # Dann ist der Plan leer (Tasks = []), und der Plan-Gate

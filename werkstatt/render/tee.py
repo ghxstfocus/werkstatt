@@ -25,8 +25,7 @@ def _tee(text: str) -> None:
         clean = _ANSI_RE.sub("", text)
         if clean.startswith("::log::"):
             clean = clean[len("::log::"):].lstrip()
-        elif (clean.startswith("::group::")
-              or clean.startswith("::endgroup::")):
+        elif (clean.startswith(("::group::", "::endgroup::"))):
             return
         if not clean:
             return

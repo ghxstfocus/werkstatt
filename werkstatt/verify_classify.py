@@ -25,9 +25,7 @@ def ist_harter_verify_fehler(error: str) -> bool:
     for prefix in _HART_PREFIXE:
         if s.startswith(prefix) or f"{prefix}_" in s or f"{prefix}:" in s:
             return True
-    if _RUFF_F_KLASSE.search(s):
-        return True
-    return False
+    return bool(_RUFF_F_KLASSE.search(s))
 
 
 def filtere_harte_verify_fehler(errors: list) -> list:

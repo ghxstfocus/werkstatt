@@ -163,8 +163,7 @@ def _letzte_import_zeile(datei: Path) -> str | None:
     depth = 0
     for i, line in enumerate(lines):
         stripped = line.lstrip()
-        if depth == 0 and (stripped.startswith("import ")
-                           or stripped.startswith("from ")):
+        if depth == 0 and (stripped.startswith(("import ", "from "))):
             last_import = i
             depth = line.count("(") - line.count(")")
         elif depth > 0:
@@ -181,7 +180,7 @@ def _letzte_import_zeile(datei: Path) -> str | None:
     erstes_def = -1
     for i, line in enumerate(lines):
         s = line.lstrip()
-        if s.startswith("def ") or s.startswith("class ") or s.startswith("async def "):
+        if s.startswith(("def ", "class ", "async def ")):
             erstes_def = i
             break
     if erstes_def < 0:

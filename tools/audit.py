@@ -83,16 +83,15 @@ def _state_zugriffe(tree: ast.Module) -> tuple[
     liest: dict[str, list[int]] = defaultdict(list)
     for node in ast.walk(tree):
         # state.FELD = ...  oder  state.FELD += ...
-        if isinstance(node, ast.Attribute):
-            if (isinstance(node.value, ast.Name)
-                    and node.value.id in ("state", "s", "self")):
-                # A-B1-1: state., s. und self. als Praefix.
-                feld = node.attr
-                ctx = type(node.ctx).__name__
-                if "Store" in ctx or "Del" in ctx:
-                    schreibt[feld].append(node.lineno)
-                elif "Load" in ctx:
-                    liest[feld].append(node.lineno)
+        if isinstance(node, ast.Attribute) and (isinstance(node.value, ast.Name)
+                and node.value.id in ("state", "s", "self")):
+            # A-B1-1: state., s. und self. als Praefix.
+            feld = node.attr
+            ctx = type(node.ctx).__name__
+            if "Store" in ctx or "Del" in ctx:
+                schreibt[feld].append(node.lineno)
+            elif "Load" in ctx:
+                liest[feld].append(node.lineno)
     return dict(schreibt), dict(liest)
 
 

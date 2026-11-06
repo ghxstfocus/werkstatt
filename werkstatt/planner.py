@@ -876,9 +876,7 @@ def _leite_deps_deterministisch(
                 fl = f.lower()
                 if fl.endswith(_DOKU):
                     return "doku"
-                if ("/tests/" in fl or fl.startswith("tests/")
-                        or "/test_" in fl or "_test.py" in fl
-                        or fl.startswith("test_")):
+                if ("/tests/" in fl or fl.startswith(("tests/", "test_")) or "/test_" in fl or "_test.py" in fl):
                     return "test"
                 if fl.endswith(_CODE):
                     return "code"
@@ -1443,9 +1441,8 @@ def _deterministic_entfernen_precheck(state) -> bool:
             _n = _m_punkt.group(1)
             if _re_s.search(rf"^\s*{_n}\.\s", _content, _re_s.MULTILINE):
                 return False  # Punkt existiert noch
-        if _m_marker:
-            if _m_marker.group(1) in _content:
-                return False  # Marker existiert noch
+        if _m_marker and _m_marker.group(1) in _content:
+            return False  # Marker existiert noch
         try:
             state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
             state.auftrag_bereits_erfuellt_bestaetigt = True  # type: ignore[attr-defined]

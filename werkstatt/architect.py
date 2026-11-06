@@ -573,7 +573,7 @@ def _reduce_roadmap(text: str, max_chars: int = 800) -> str:
     lines = []
     for ln in text.splitlines():
         stripped = ln.strip()
-        if stripped.startswith("## Phase") or stripped.startswith("### Phase"):
+        if stripped.startswith(("## Phase", "### Phase")):
             lines.append(stripped)
     result = "\n".join(lines)
     return result[:max_chars]

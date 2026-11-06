@@ -341,12 +341,11 @@ def _datei_inhalt(
                 teile: list[str] = []
                 letzte = -2
                 for i in sortiert:
-                    if i > letzte + 1:
-                        if teile:
-                            teile.append(
-                                f"[... {i - letzte - 1} Zeilen "
-                                f"uebersprungen ...]"
-                            )
+                    if i > letzte + 1 and teile:
+                        teile.append(
+                            f"[... {i - letzte - 1} Zeilen "
+                            f"uebersprungen ...]"
+                        )
                     teile.append(lines[i])
                     letzte = i
                 return "\n".join(teile)

@@ -81,9 +81,7 @@ def _validate_imports_in_patch(
             # Fuer submodule auch den vollen Pfad pruefen.
             if modul != top:
                 sub_path = project_dir / modul.replace(".", "/")
-                if sub_path.with_suffix(".py").is_file() or (sub_path / "__init__.py").is_file():
-                    return True
-                return False
+                return bool(sub_path.with_suffix(".py").is_file() or (sub_path / "__init__.py").is_file())
             return True
         for sp in venv_site_dirs:
             if (sp / top).is_dir() or (sp / f"{top}.py").is_file():

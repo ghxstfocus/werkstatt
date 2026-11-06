@@ -245,12 +245,11 @@ def _tool_shell_exec(args: dict) -> str:
     session = _shell_mod._AKTIVE_PTYS.get(project)
     is_multiline = "\n" in cmd
 
-    if session is not None and not is_multiline:
-        if session.inject(cmd):
-            return (
-                f"$ {cmd}\n\n→ ausgefuehrt in aktiver Shell. "
-                f"Output im Terminal-Panel links."
-            )
+    if session is not None and not is_multiline and session.inject(cmd):
+        return (
+            f"$ {cmd}\n\n→ ausgefuehrt in aktiver Shell. "
+            f"Output im Terminal-Panel links."
+        )
 
     try:
         result = subprocess.run(
