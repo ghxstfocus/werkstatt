@@ -12,12 +12,18 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, "/opt/werkstatt")
 
 import werkstatt.loop as _loop
+from werkstatt.state import RunState
+
+# Import von factories: tests/ ist kein Package, deshalb sys.path.
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 class TestDeleteZielErlaubt:
@@ -76,8 +82,14 @@ class TestDeleteZielErlaubt:
 
 
 class TestApplyPatchesDelete:
-    def _state(self, tmp_path: Path) -> SimpleNamespace:
-        return SimpleNamespace(
+    def _state(self, tmp_path: Path) -> RunState:
+        """Spec-State fuer Delete-Anwendung (OP-174 P3).
+
+        Vollstaendiger RunState ueber mk_state() — fail-loud bei
+        Tippfehler in Feldnamen. Keine Sub-States, keine Zombie-
+        Felder. Alle Felder sind in RunState deklariert.
+        """
+        return mk_state(
             project_dir=tmp_path,
             project_name="testprojekt",
             patches=[],

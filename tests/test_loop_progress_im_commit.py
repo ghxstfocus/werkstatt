@@ -4,9 +4,16 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 sys.path.insert(0, "/opt/werkstatt")
+
+from werkstatt.state import RunState
+
+# Import von factories: tests/ ist kein Package, deshalb sys.path.
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 def _init_repo(tmp_path: Path) -> None:
@@ -21,8 +28,14 @@ def _init_repo(tmp_path: Path) -> None:
     _git("commit", "-q", "-m", "init")
 
 
-def _state(tmp_path: Path, tasks: list):
-    return SimpleNamespace(
+def _state(tmp_path: Path, tasks: list) -> RunState:
+    """Spec-State fuer Commit-Pfad (OP-174 P3).
+
+    Vollstaendiger RunState ueber mk_state(). Alle Felder sind in
+    RunState deklariert (project_dir, project_name, aufgabe, tasks,
+    tasks_ok_counter, git_author_name, git_author_email).
+    """
+    return mk_state(
         project_dir=tmp_path,
         project_name="test",
         aufgabe="x",
