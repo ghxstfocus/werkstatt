@@ -148,7 +148,7 @@ def _phase_finalize(
     # FIX AH 2026-10-31: Wurde bei jedem Loop-Ende geschrieben,
     # ausser wenn _committe_zielprojekt den Eintrag VOR git add
     # geschrieben hat (Flag progress_written_at_commit).
-    if not getattr(state, "progress_written_at_commit", False):
+    if not state.progress_written_at_commit:
         from werkstatt import progress as _progress
         _progress.append(
             pd,

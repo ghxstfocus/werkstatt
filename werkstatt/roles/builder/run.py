@@ -709,7 +709,7 @@ def run_builder(state: RunState) -> bool:
     _is_architect = _current_action2 == "architect"
     # K22b/c: Action live gegen Dateisystem korrigieren.
     # K34: NICHT in Reflection-Runde (Task-Action bleibt wie im Plan).
-    if not _is_architect and not getattr(state, "reflection_phase", False):
+    if not _is_architect and not state.reflection_phase:
         _current_action2 = _korrigiere_builder_action(
             _aktuelle_task, pd, pn,
         )

@@ -97,7 +97,7 @@ def _task_ende(
     # landet hier und wird zum human_review statt mark_done.
     # Live-Beleg Testrunde #4 (19:10): _refl_ok=True, _rev_ok=True,
     # spec_widerspruch=True, aber loop_task_ok + status=done.
-    if getattr(state, "spec_widerspruch_erkannt", False):
+    if state.spec_widerspruch_erkannt:
         audit("loop_task_spec_widerspruch_veto",
               {"task_id": task_id, "ok": ok, "schicht": "task_ende"},
               getattr(state, "project_dir", None),

@@ -416,7 +416,7 @@ def _human_gate_body(state) -> str:
     _parts: list[str] = []
 
     # OP-090: Reflection-Erschoepfungs-Hinweis
-    if getattr(state, "reflection_erschoepft", False):
+    if state.reflection_erschoepft:
         _parts.append(
             "## Reflection erschoepft\n"
             "Der Loop konnte keinen gruenen Test erreichen.\n"
@@ -426,7 +426,7 @@ def _human_gate_body(state) -> str:
         )
 
     # 0. OP-062e + OP-062g: Nullfall-Anzeige.
-    if getattr(state, "scout_bereits_erfuellt", False):
+    if state.scout_bereits_erfuellt:
         _parts.append(
             "## Erfuellt ohne Aenderung (Scout)\n"
             "Der Scout hat erkannt, dass die Zieldatei bereits "

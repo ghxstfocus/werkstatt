@@ -211,7 +211,7 @@ def _phase_plan_and_preflight(
         audit("loop_phase", {"phase": "plan_gate", "status": "start"}, pd, pn)
         _rc_plan = _human_gate_plan(
             state,
-            auto_approve=getattr(state, "auto_approve", False),
+            auto_approve=state.auto_approve,
         )
         if _rc_plan != 0:
             audit("loop_phase", {"phase": "plan_gate", "status": "rejected"}, pd, pn)
@@ -233,7 +233,7 @@ def _phase_plan_and_preflight(
                     # Welle H v2: nach Reflection nochmal human_gate_plan
                     _rc_plan2 = _human_gate_plan(
                         state,
-                        auto_approve=getattr(state, "auto_approve", False),
+                        auto_approve=state.auto_approve,
                         kontext="revidierter_plan",
                     )
                     if _rc_plan2 != 0:

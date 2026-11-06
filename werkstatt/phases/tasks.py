@@ -216,7 +216,7 @@ def _phase_tasks_loop(
         # durch, Apply-Loop lief mit leerem state.patches,
         # reviewer_kein_diff_aber_patches -> fail-closed.
         if (state.auftrag_bereits_erfuellt
-            and getattr(state, "auftrag_bereits_erfuellt_bestaetigt", False)):
+            and state.auftrag_bereits_erfuellt_bestaetigt):
             audit("auftrag_bereits_erfuellt",
                   {"task_id": i,
                    "name": task_name,
@@ -270,7 +270,7 @@ def _phase_tasks_loop(
             # Stage-Skipping gruen war), Task wurde als ok markiert,
             # ohne dass etwas geprueft wurde.
             if (state.auftrag_bereits_erfuellt
-                and getattr(state, "auftrag_bereits_erfuellt_bestaetigt", False)):
+                and state.auftrag_bereits_erfuellt_bestaetigt):
                 audit("auftrag_bereits_erfuellt",
                       {"task_id": i,
                        "name": task_name,
@@ -530,7 +530,7 @@ def _phase_tasks_loop(
                 audit("loop_reflection_gescheitert", {"task_id": i}, pd, pn)
                 # OP-059d: bei Spec-Widerspruch-Verdacht human_review
                 # statt post_build_verify_failed.
-                if getattr(state, "spec_widerspruch_erkannt", False):
+                if state.spec_widerspruch_erkannt:
                     audit("loop_verify_failed_human_review",
                           {"task_id": i,
                            "grund": "spec_widerspruch_vermutet"}, pd, pn)
@@ -626,7 +626,7 @@ def _phase_tasks_loop(
         if not _rev_ok:
             # FIX R 2026-10-31: Deterministischer Fail = sofort
             # task_fail, kein Reflection, kein Ignore.
-            if getattr(state, "reviewer_deterministic_fail", False):
+            if state.reviewer_deterministic_fail:
                 audit("loop_reviewer_deterministic_fail",
                       {"task_id": i}, pd, pn)
                 _task_ende(state, phase_state, task_id, ok=False,
@@ -685,7 +685,7 @@ def _phase_tasks_loop(
                 else:
                     # OP-060b-Rest: bei Spec-Widerspruch-Verdacht
                     # human_review statt failed.
-                    if getattr(state, "spec_widerspruch_erkannt", False):
+                    if state.spec_widerspruch_erkannt:
                         audit("loop_reviewer_reject_human_review",
                               {"task_id": i,
                                "grund": "spec_widerspruch_vermutet"}, pd, pn)
@@ -700,7 +700,7 @@ def _phase_tasks_loop(
             # OP-064a: Sticky-Veto. Wenn die Reflection spec_widerspruch
             # erkannt hat, ist der Task NICHT fertig — auch wenn die
             # Reflection return True lieferte. Veto + human_review.
-            if getattr(state, "spec_widerspruch_erkannt", False):
+            if state.spec_widerspruch_erkannt:
                 audit("loop_task_spec_widerspruch_veto",
                       {"task_id": i,
                        "grund": "spec_widerspruch_vermutet"}, pd, pn)
@@ -715,8 +715,7 @@ def _phase_tasks_loop(
                 continue
             # OP-059: False-Positive erkannt -> erneuten Reviewer-
             # Call sparen (Reviewer-Bug, nicht Task-Problem).
-            _is_fp = bool(getattr(
-                state, "reviewer_stagnation_false_positive", False))
+            _is_fp = bool(state.reviewer_stagnation_false_positive)
             if _is_fp:
                 audit("loop_reviewer_reject_false_positive",
                       {"task_id": i, "grund": "stagnation_idempotent"}, pd, pn)
@@ -792,7 +791,7 @@ def _phase_tasks_loop(
         # Guard sitzt genau davor. Live-Beleg Testrunde #4 (19:10):
         # _refl_ok=True, _rev_ok=True, spec_widerspruch=True, aber
         # loop_task_ok + status=done.
-        if getattr(state, "spec_widerspruch_erkannt", False):
+        if state.spec_widerspruch_erkannt:
             audit("loop_task_spec_widerspruch_veto",
                   {"task_id": i,
                    "grund": "spec_widerspruch_vermutet",
