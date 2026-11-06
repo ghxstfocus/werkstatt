@@ -60,12 +60,12 @@ _use_rich = _HAS_RICH and RENDER_MODE in ("pretty", "live")
 if _use_rich:
     from typing import IO as _IO
     from typing import cast as _cast
-    _console: _RichConsole = _RichConsole(  # type: ignore[misc,call-arg]
+    _console: _RichConsole = _RichConsole(
         file=_cast(_IO[str], _TeeWriter(_sys.stdout)),
         force_terminal=(RENDER_MODE == "live"), width=100,
     )
 else:
-    _console = _RichConsole(quiet=True)  # type: ignore[misc,call-arg]
+    _console = _RichConsole(quiet=True)
 
 
 USE_COLOR = (_is_tty or RENDER_MODE in ("pretty", "live")) and not IS_CI
