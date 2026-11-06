@@ -10,7 +10,7 @@ from werkstatt.state import RunState
 def _phase_review_gate(state: RunState) -> int:
     """OP-168: Human-Gate vor Phase-Review-Loop-Abbruch.
 
-    Wird gerufen, wenn _phase_end_reflection nach 3 Runden
+    Wird gerufen, wenn _phase_end_reflection nach 2 Runden
     aufgegeben hat. Verhindert stummes `LOOP FEHLGESCHLAGEN`
     mit dirty Tree (Loop-Test-4, 2026-11-05).
 
@@ -39,7 +39,7 @@ def _phase_review_gate(state: RunState) -> int:
         return 1
     print()
     print("PHASE-REVIEW GATE")
-    print("  Phase-Review ist nach 3 Runden erschoepft.")
+    print("  Phase-Review ist nach 2 Runden erschoepft.")
     print("  j = Patches behalten, Loop fortsetzen (Phase 5 + Commit)")
     print("  n = Patches verwerfen, Loop abbrechen")
     print("  e = Datei manuell editieren (dann erneut fragen)")
