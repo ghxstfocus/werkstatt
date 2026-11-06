@@ -212,8 +212,9 @@ class PTYSession:
         _dbg("reader: beendet")
         self._stopp.set()
 
-    def _log_befehl(self, puffer: str) -> None:
-        """Loggt abgeschickte Zeilen (Enter-getrennt) ins Audit."""
+    def _log_befehl(self, puffer: str) -> str:
+        """Loggt abgeschickte Zeilen (Enter-getrennt) ins Audit.
+        Liefert den unvollstaendigen Puffer-Rest (nach letztem \r)."""
         zeilen = puffer.split("\r")
         for z in zeilen[:-1]:
             z = z.strip()

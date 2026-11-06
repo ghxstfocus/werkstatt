@@ -252,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
 
     project_dir = Path(args.dir)
     try:
-        bericht = migriere(args.name, project_dir, apply=args.apply)
+        bericht: dict = migriere(args.name, project_dir, apply=args.apply)
     except NotADirectoryError as e:
         print(f"FEHLER: {e}", file=sys.stderr)
         return 1

@@ -322,8 +322,8 @@ def _reflection_loop(
             (b.get("severity", ""), b.get("description", "")[:100])
             for b in _bugs_jetzt if isinstance(b, dict)
         )
-        _bug_sigs_vorher = getattr(
-            state, "_reflection_bug_sigs_vorher", frozenset())
+        _bug_sigs_vorher: frozenset[tuple[str, str]] = frozenset(
+            getattr(state, "_reflection_bug_sigs_vorher", frozenset()))
         # FIX AJ 2026-10-31: bool() explizit — Pythons 'and'
         # gibt das erste falsy-Objekt zurueck (hier: frozenset()),
         # nicht False. Der Wert landet im Audit-Payload und killt

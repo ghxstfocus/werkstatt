@@ -896,8 +896,10 @@ def _leite_deps_deterministisch(
             for t in tasks:
                 if not isinstance(t, dict):
                     continue
-                _kl = _klassen.get(t.get("id"), "unbekannt")
                 _tid = t.get("id")
+                if not isinstance(_tid, str):
+                    continue
+                _kl = _klassen.get(_tid, "unbekannt")
                 _neue: list[str] = []
                 if _kl in ("test", "baseline"):
                     _neue = [x for x in _code_ids if x != _tid]

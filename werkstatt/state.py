@@ -241,7 +241,7 @@ class RunState:
     # OP-135b: Testliste aus PlannerOutput (Planer->Builder).
     tests: list = field(default_factory=list)
     architect_prosa: str = ""
-    builder_feedback: str = ""
+    builder_feedback: dict[str, str] = field(default_factory=dict)
     patches: list[dict[str, object]] = field(default_factory=list)
     patches_aktuell_runde: list[dict[str, object]] = \
         field(default_factory=list)
@@ -249,7 +249,7 @@ class RunState:
     # === OP-141 Vorarbeit: Ghost-Felder deklariert (2026-11-05) ===
     # Vormals nur via state.X = ... gesetzt, nie deklariert. Jetzt sichtbar in
     # @dataclass, durchsuchbar via grep, typsicher in IDE/Static-Analysis.
-    _reflection_bug_sigs_vorher: list = field(default_factory=list)
+    _reflection_bug_sigs_vorher: frozenset = field(default_factory=frozenset)
     _reflection_diff_hash: str | None = None
     aktuelle_task: dict = field(default_factory=dict)
     applied_count: int = 0

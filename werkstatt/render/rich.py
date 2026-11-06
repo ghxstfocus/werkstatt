@@ -58,8 +58,10 @@ except ImportError:
 
 _use_rich = _HAS_RICH and RENDER_MODE in ("pretty", "live")
 if _use_rich:
+    from typing import IO as _IO
+    from typing import cast as _cast
     _console: _RichConsole = _RichConsole(  # type: ignore[misc,call-arg]
-        file=_TeeWriter(_sys.stdout),
+        file=_cast(_IO[str], _TeeWriter(_sys.stdout)),
         force_terminal=(RENDER_MODE == "live"), width=100,
     )
 else:
