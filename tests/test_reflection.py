@@ -8,10 +8,18 @@ Hashes den Loop bis `max_runden` weiterlaufen lassen.
 
 from __future__ import annotations
 
+import sys as _sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from werkstatt import reflection
+
+# Import von factories: tests/ ist kein Package, deshalb sys.path.
+_here = Path(__file__).parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 _VERIFY_ERRORS = [
     {
@@ -23,27 +31,30 @@ _VERIFY_ERRORS = [
 
 
 def _make_state(tmp_path):
-    return SimpleNamespace(
+    """Spec-State fuer _reflection_loop Circuit-Breaker (OP-174 P2).
+
+    Baut ueber mk_state() — vollstaendiger RunState mit Defaults.
+    Nur echte RunState-Felder werden ueberschrieben:
+    - api_key, project_dir, project_name
+    - last_verify_errors (das Signal fuer Circuit-Breaker-Test)
+    - patches, reviewer_bugs (leer, aber explizit)
+
+    Zombie-Felder aus der alten SimpleNamespace-Version entfernt
+    (2026-11-06 gemessen):
+    - phase, runde, reflection_runden, reflection_errors:
+      werden von _reflection_loop nicht gelesen
+    - task (statt aktuelle_task): _reflection_loop liest
+      aktuelle_task als dict, nicht "task"
+    - plan, phase_state, messages, history: nirgends gelesen
+    Alle 9 waren Attrappen ohne Spec-Relevanz.
+    """
+    return mk_state(
         api_key="x",
-        project_dir=str(tmp_path),
+        project_dir=tmp_path,
         project_name="t",
         last_verify_errors=list(_VERIFY_ERRORS),
-        phase="post_build",
-        runde=0,
         patches=[],
-        reflection_runden=[],
-        reflection_errors=[],
-        task=SimpleNamespace(
-            id="t1",
-            title="test",
-            description="test",
-            files=["tests/x.py"],
-            action="update",
-        ),
-        plan=SimpleNamespace(phasen=[], aktuelle_phase=0),
-        phase_state=None,
-        messages=[],
-        history=[],
+        reviewer_bugs=[],
     )
 
 
