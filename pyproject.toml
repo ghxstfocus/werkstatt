@@ -29,3 +29,28 @@ type = "forbidden"
 allow_indirect_imports = true
 source_modules = ["werkstatt.phases"]
 forbidden_modules = ["werkstatt.web"]
+
+[tool.ruff.lint]
+# Bewusst ignoriert (kategorisiert, nicht pauschal):
+#
+#   S110  (try-except-pass) + BLE001 (blind-except) auf LEGITIMEN
+#   fail-soft-Pfaden. Kategorien:
+#
+#   - UI / Web (werkstatt/web/*):       UI darf nie crashen
+#   - Render / Progress / Spinner:      Darstellung ist Kosmetik
+#   - Skills-Laden:                     fehlende Skill-Datei ist ok
+#   - Cache / Prefetch:                 Cache-Miss ist kein Fehler
+#   - Test / CLI / Hooks:               Test-Infra, Skripte
+#
+# NICHT ignoriert: S110/BLE001 in kritischen Pfaden (Contract-
+# Violation, Gate-Fehler, Verify-Stage-Audit). Diese 9 Stellen
+# rufen audit_safe() auf (werkstatt/audit.py), das logger-Fehler
+# sichtbar auf stderr schreibt. Commits 6b30b7c + 7a09ba2.
+#
+# RUF100 ist absichtlich NICHT ignoriert: Re-Export-noqa
+# ('# noqa: F401  # re-export: ...') ist gewollt und muss
+# erhalten bleiben. Redundante BLE001/S110-noqa werden in einem
+# separaten, selektiven Cleanup entfernt (nicht per
+# 'ruff --select RUF100 --fix', das entfernt auch die
+# Re-Export-Marker).
+ignore = ["BLE001", "S110"]
