@@ -927,6 +927,87 @@ def _leite_deps_deterministisch(
     return tasks
 
 
+def _topo_sort_tasks(
+    tasks: list[dict], pd=None, pn="?",
+) -> list[dict]:
+    """OP-175 A: Topologische Sortierung nach dependencies.
+
+    Grund: der Architect-Plan kann Tasks enthalten, die deps auf
+    spaeter stehende Tasks haben (Loop-Test-6 18:27: t1 deps=[t2],
+    aber t1 steht vor t2). Ohne Sort blockt der Task-Loop t1
+    stumm und arbeitet alle anderen fail-closed als blocked ab.
+
+    Stabil: bei mehreren in-degree=0 behaelt die Originalreihen-
+    folge Vorrang. Zyklus: fail-soft (Tasks in Originalreihen-
+    folge zurueck + audit), sonst blockt _unmet_dependencies
+    alle Tasks stumm. Dangling deps (unbekannte IDs) ignoriert.
+    """
+    if not tasks:
+        return tasks
+
+    _by_id: dict[str, dict] = {}
+    _orig_idx: dict[str, int] = {}
+    for _i, _t in enumerate(tasks):
+        if not isinstance(_t, dict):
+            continue
+        _tid = _t.get("id")
+        if isinstance(_tid, str):
+            _by_id[_tid] = _t
+            _orig_idx[_tid] = _i
+
+    if not _by_id:
+        return tasks
+
+    _indeg: dict[str, int] = {_tid: 0 for _tid in _by_id}
+    _dependents: dict[str, list[str]] = {_tid: [] for _tid in _by_id}
+    for _tid, _t in _by_id.items():
+        for _dep in (_t.get("dependencies") or []):
+            if not isinstance(_dep, str):
+                continue
+            if _dep not in _by_id or _dep == _tid:
+                continue
+            _indeg[_tid] += 1
+            _dependents[_dep].append(_tid)
+
+    _queue = sorted(
+        [_tid for _tid, _d in _indeg.items() if _d == 0],
+        key=lambda x: _orig_idx[x],
+    )
+    _result: list[str] = []
+    while _queue:
+        _tid = _queue.pop(0)
+        _result.append(_tid)
+        _neue: list[str] = []
+        for _dep_tid in _dependents[_tid]:
+            _indeg[_dep_tid] -= 1
+            if _indeg[_dep_tid] == 0:
+                _neue.append(_dep_tid)
+        if _neue:
+            _queue.extend(_neue)
+            _queue.sort(key=lambda x: _orig_idx[x])
+
+    if len(_result) != len(_by_id):
+        _zyklisch = sorted(
+            [_tid for _tid, _d in _indeg.items() if _d > 0],
+            key=lambda x: _orig_idx[x],
+        )
+        if pd is not None:
+            try:
+                audit("planner_deps_zyklus", {
+                    "zyklische_ids": _zyklisch,
+                    "anzahl_tasks": len(tasks),
+                }, pd, pn)
+            except Exception:
+                pass
+        return tasks
+
+    _out: list[dict] = [_by_id[_tid] for _tid in _result]
+    for _t in tasks:
+        if not isinstance(_t, dict) or _t.get("id") not in _by_id:
+            _out.append(_t)
+    return _out
+
+
 def _normalisiere_task_files(tasks, explorer_ctx, pd, pn) -> list:
     """K61a: Korrigiert task_files ohne Pfad-Praefix anhand key_files.
 
@@ -1155,6 +1236,8 @@ def _zerlege_in_sub_tasks(
     # OP-163b: Dep-Extraktion aus Architect-Block 5 (Vorrang)
     # oder task_files-Heuristik (Fallback).
     _final = _leite_deps_deterministisch(_final, prosa, pd, pn)
+    # OP-175 A: Topo-Sort, damit Task-Reihenfolge zu deps passt.
+    _final = _topo_sort_tasks(_final, pd, pn)
 
     audit("planner_split", {"anzahl": len(_final), "tasks": [
         {"id": t["id"], "files": t["task_files"],
