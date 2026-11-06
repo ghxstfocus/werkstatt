@@ -7,7 +7,7 @@ Architect-Pfad).
 from __future__ import annotations
 
 import sys
-from types import SimpleNamespace
+from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, "/opt/werkstatt")
@@ -16,6 +16,11 @@ from werkstatt.planner import (
     _tasks_aus_betroffenen_stellen,
     run_planner,
 )
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 class TestTasksAusStellen:
@@ -81,7 +86,7 @@ class TestSkipArchitect:
     def test_atomarer_plan_ruft_keinen_architect(self, tmp_path) -> None:
         """Fix AY: atomarer_plan=True -> run_planner baut Task direkt
         aus betroffene_stellen, ohne Architect-LLM-Call."""
-        st = SimpleNamespace(
+        st = mk_state(
             project_dir=tmp_path,
             project_name="testproj",
             api_key="sk-test",
@@ -89,8 +94,6 @@ class TestSkipArchitect:
             docs=None,
             tasks=[],
             akzeptanzkriterien=[],
-            preflight_fehler=None,
-            explorer_ctx=None,
             explorer_context={},
         )
         scout = {

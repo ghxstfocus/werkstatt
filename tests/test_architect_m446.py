@@ -12,6 +12,11 @@ from pathlib import Path
 
 sys.path.insert(0, "/opt/werkstatt")
 
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
+
 
 def test_architect_laedt_keine_skills():
     """kein load_skill_by_name im architect.py-Quelltext."""
@@ -26,11 +31,9 @@ def test_architect_prompt_ohne_plan_crafting():
     """Funktional: _planner_system enthaelt KEINE Skill- oder Tool-
     Referenzen. Explorer liefert WO, Scout liefert WAS, Architect
     liefert WIE — er misst NICHT selbst."""
-    from types import SimpleNamespace
-
     from werkstatt.architect import _planner_system
 
-    st = SimpleNamespace(
+    st = mk_state(
         api_index_cache={},
         docs={},
         explorer_findings={},
