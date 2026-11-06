@@ -2539,3 +2539,7 @@ wurde — genau der Zweck.
 - **Status:** phase_ende
 - **Info:** tasks_ok=4/6
 
+## 2026-11-06T11:52:42+00:00 -- Phase abgeschlossen: werkstatt
+- **Status:** phase_ende
+- **Info:** tasks_ok=5/6
+

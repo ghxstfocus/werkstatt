@@ -14,10 +14,12 @@ _plan_reject_reflection   | nein                | nein            | nein        
 Die Tabelle ist reine Dokumentation (OP-147). Die Varianten werden
 NICHT vereinheitlicht — das ist einer spaeteren OP vorbehalten.
 Hinweis: `_reflection_loop` haengt den `letzter_test_fehler`-Block nur,
-wenn er nicht schon in `last_verify_errors` steckt.
+wenn er nicht schon in `last_verify_errors` steckt. Die Standard-Variante
+`_reflection_loop` laeuft mit `phase='post_build'`.
 """
 from __future__ import annotations
 
+from werkstatt.prompts import format_letzter_test_fehler_block
 from werkstatt.render import log_line  # Fix BA
 from werkstatt.state import RunState
 
@@ -446,10 +448,12 @@ def _reflection_loop(
             list(getattr(state, "last_verify_errors", None) or []),
         )
         if _ltf_block:
-            _cur_ctx = getattr(state, "error_context", None) or ""
-            state.error_context = (  # type: ignore[attr-defined]
-                (_cur_ctx + chr(10) + _ltf_block) if _cur_ctx else _ltf_block
-            )
+            # Builder liest state.last_verify_errors als Prompt-Kontext.
+            # Den Block dort anhaengen (dedupliziert).
+            _cur_errs = list(getattr(state, "last_verify_errors", None) or [])
+            if _ltf_block not in _cur_errs:
+                _cur_errs.append(_ltf_block)
+                state.last_verify_errors = _cur_errs
         state.reflection_phase = True  # type: ignore[attr-defined]
         try:
             _builder_ok = run_builder(state)

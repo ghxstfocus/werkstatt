@@ -60,6 +60,7 @@ BASELINE_GETATTR_ONLY = frozenset({
     "git_author_name",
     "max_total_llm_s",
     "messungen_nach_apply",
+    "letzter_test_fehler",
 })
 
 
