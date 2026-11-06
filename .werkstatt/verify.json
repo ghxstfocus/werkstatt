@@ -23,7 +23,7 @@
       ],
       "phase": "post_build",
       "timeout": 120,
-      "hart": false
+      "hart": true
     },
     {
       "id": "state_drift",
