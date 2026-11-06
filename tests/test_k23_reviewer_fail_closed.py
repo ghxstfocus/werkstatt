@@ -59,9 +59,8 @@ def test_run_reviewer_fail_closed_wenn_diff_fehler(tmp_path: Path):
     """K23b: _get_git_diff wirft RuntimeError -> False."""
     s = _mk_state(tmp_path, patches=[{"file": "x.py"}])
     with patch("werkstatt.reviewer._get_git_diff",
-               side_effect=RuntimeError("git fail")):
-        with patch("werkstatt.reviewer.audit"):
-            rc = run_reviewer(s)
+               side_effect=RuntimeError("git fail")), patch("werkstatt.reviewer.audit"):
+        rc = run_reviewer(s)
     assert rc is False
 
 

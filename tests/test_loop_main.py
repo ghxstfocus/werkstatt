@@ -84,16 +84,14 @@ def _patch_main_config(tmp_path: Path, cfg: dict | None = None):
 # =====================================================================
 
 def test_main_help():
-    with _silence_renderer():
-        with pytest.raises(SystemExit) as exc:
-            loop.main(["--help"])
+    with _silence_renderer(), pytest.raises(SystemExit) as exc:
+        loop.main(["--help"])
     assert exc.value.code == 0
 
 
 def test_main_ohne_project():
-    with _silence_renderer():
-        with pytest.raises(SystemExit) as exc:
-            loop.main([])
+    with _silence_renderer(), pytest.raises(SystemExit) as exc:
+        loop.main([])
     assert exc.value.code == 2
 
 
