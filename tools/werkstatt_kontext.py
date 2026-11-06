@@ -201,7 +201,7 @@ Die wichtigsten Regeln:
    - PROGRESS.md         — erledigt, append-only
    - docs/MERKPOSTEN.md  — Prozess-Lehren, nicht durchsuchbar
 
-7. NEUE ARTEFAKTE (Stand 2026-11-06, Ende Nacht-Session 4):
+7. NEUE ARTEFAKTE (Stand 2026-11-06, Session 5 — Tests sind Specs):
    State & Diagnose:
    - tools/state_inventory.py    — RunState-Inventur (read-only, --check)
    - tools/state_flow.py         — Wiring-Diagnose pro Feld (Writer/
@@ -219,8 +219,30 @@ Die wichtigsten Regeln:
    - tools/import_drift.py       — import-linter-Wrapper (OP-144)
    - pyproject.toml              — [tool.importlinter] 3 Layer-Contracts
                                     mit allow_indirect_imports=true
-   - docs/adr/                   — 14 ADRs, u.a. ADR-0013 (Layer),
-                                    ADR-0014 (Rollen-Registry)
+   - docs/adr/                   — 15 ADRs, u.a. ADR-0013 (Layer),
+                                    ADR-0014 (Rollen-Registry),
+                                    ADR-0015 (Tests sind Specs)
+   Test-Infrastruktur (ADR-0015, 2026-11-06):
+   - tests/factories.py          — mk_state(**overrides) Factory,
+                                    fail-loud bei unbekanntem Feld
+   - tests/test_factories.py     — 3 Spec-Tests fuer die Factory
+   - RunState mit Defaults fuer alle 12 ehemaligen Pflichtfelder
+                                    (RunState() ohne Argumente baubar)
+   Logger (2026-11-06):
+   - werkstatt/audit.py::audit_safe()
+                                    — wie audit(), crasht aber nie
+                                    (Print auf stderr bei Fehler);
+                                    9 kritische Stellen umgebaut
+   Verify-Kette (Stand 2026-11-06):
+   - 9/9 Stages hart (py_compile, ruff, mypy, pytest_changed,
+     state_drift, control_drift, import_drift, contract_check,
+     pytest_regression)
+   - ruff=0, mypy=0, alle Tests gruen
+   Neue OPs Session 5:
+   - OP-145b (State-Contract auftrag_bereits_erfuellt-Familie)
+   - OP-168b (Phase-Review-Gate zwischen Reflection-Runden)
+   - OP-172  (Verify->Builder-Kette — Builder sieht nur 5 Fehler)
+   - OP-174  (Spec-Tests — RunState-Factory statt SimpleNamespace)
 
 8. ROLLEN-REGISTRY (2026-11-05, ADR-0014):
    werkstatt/rollen.py ist Single Source of Truth fuer Skills,
@@ -266,6 +288,9 @@ def abschnitt_zustand() -> str:
     if rc == 0 and remote:
         out += f"origin/main: {remote.split()[0][:7]}\n"
 
+    # --ignore=tests/test_shell.py: PTY-Tests scheitern haeufig
+    # in CI/Docker ohne tty. Fuer den Kontext-Block reicht die
+    # Restzahl; die skipped-Differenz ist bewusst (3 PTY-Tests).
     rc, tests = _run(
         ["python3", "-m", "pytest", "-q",
          "--ignore=tests/test_shell.py"], timeout=180)
@@ -390,7 +415,7 @@ DEINE ERSTE AUFGABE:
        - Erst messen, dann designen, dann fixen.
   4. Bei Unklarheit: User fragen. Nicht raten.
 
-DIE 16 HAEUFIGSTEN FEHLER — SESSION 1-5 (2026-11-06):
+DIE 22 HAEUFIGSTEN FEHLER — SESSION 1-5+ (2026-11-06):
 
 1. 'pytest | tail' -> Exit-Code von tail, nicht pytest. 3x passiert
    in einer Session. Nutze 'pytest > /tmp/pt.log 2>&1; PT=$?'.
@@ -497,6 +522,42 @@ FEHLER AUS NACHT-SESSION 4 (2026-11-06):
     pipeline_phases -> phases). REGEL:
     'allow_indirect_imports = true' pro Contract.
     Fehlversuch in OP-144.
+
+FEHLER AUS SESSION 5 (Tests sind Specs + Altlasten-Abbau, 2026-11-06):
+
+17. Tests mit hand-rolled State-Mocks (class _State, type("S",())).
+    Fuenf Test-Dateien fielen durch den "SimpleNamespace"-Filter,
+    bauten aber genauso State-Attrappen. Als P4a getattr->state.X
+    ersetzte, brachen alle 5 mit AttributeError. REGEL: State ist
+    IMMER RunState via tests/factories.py::mk_state(). Siehe ADR-0015.
+
+18. 'nonlocal' funktioniert nicht im Heredoc-Modul-Scope
+    (python3 <<'PY'). Fehler: 'no binding for nonlocal'. REGEL:
+    Wenn ein Counter aus einer Closure hochzaehlen soll, mutable
+    [0]-Liste verwenden (counter[0] += 1).
+
+19. Bei 'alle Tests sind X'-Behauptungen AST-basiert pruefen,
+    nicht grep. 'ps = SimpleNamespace()' matcht 's = SimpleNamespace()'
+    als Substring — zaehlt Mock-Bundles als State. Und hand-rolled
+    Mocks (class _State) tauchen gar nicht in grep auf, weil der
+    String 'SimpleNamespace' fehlt. REGEL: ast.parse + ast.walk
+    fuer strukturelle Claims.
+
+20. getattr-Ersatz ohne Typ-Check der Felder. 126 Ersetzungen
+    auf einmal -> 29 mypy-Fehler, weil tasks/patches als
+    dict[str, object] typisiert waren (Element-Zugriff p["file"]
+    unmoeglich). REGEL: Vor getattr-Ersatz mypy pruefen auf den
+    betroffenen Feldern. dict[str, object] -> dict[str, Any].
+
+21. Commit-Message mit Anfuehrungszeichen oder '!' in -m "..."
+    bricht den Commit (shell interpretiert Rest als Pfad).
+    Fehler: "pathspec 'P3 Rest: 14 Dateien.' did not match".
+    REGEL: -m '...' mit single-quotes bei Sonderzeichen, oder
+    Sonderzeichen in der Message vermeiden.
+
+22. Amend + force-push: --force-with-lease, nicht --force.
+    --force ueberschreibt fremde Aenderungen ohne Warnung.
+    --force-with-lease verweigert wenn remote sich bewegt hat.
 
 WORAN MAN MERKT, DASS EIN CHAT HALLUZINIERT:
 - Behauptung 'X sagt woertlich Y' ohne Beleg-Zeile darunter.
