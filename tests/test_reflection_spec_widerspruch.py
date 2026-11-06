@@ -7,25 +7,36 @@ Diff macht Y"). Nicht bei generischen Bug-Texten ("fake bug").
 """
 from __future__ import annotations
 
+import sys as _sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import werkstatt.roles.builder as _builder_mod
 from werkstatt import reflection as refl_mod
+from werkstatt.state import RunState
+
+_here = Path(__file__).parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
-def _mk_state(tmp_path: Path, *, bug_text: str) -> SimpleNamespace:
-    s = SimpleNamespace()
-    s.project_dir = tmp_path
-    s.project_name = "test"
-    s.api_key = "dummy"
-    s.last_verify_errors = []
-    s.reviewer_bugs = [{"severity": "high", "description": bug_text}]
-    s.patches = [{"file": "core/x.py", "old_string": "a", "new_string": "b"}]
-    s.applied_count = 0
-    s.reflection_history = []
-    s.aktuelle_task = {"id": "t1", "task_files": ["core/x.py"]}
-    return s
+def _mk_state(tmp_path: Path, *, bug_text: str) -> RunState:
+    """Spec-State fuer Reflection-Spec-Widerspruch (OP-174 P3).
+
+    Alle Felder in RunState deklariert. mk_state fail-loud bei
+    Tippfehler in Feldnamen. Kein Sub-State.
+    """
+    return mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        api_key="dummy",
+        last_verify_errors=[],
+        reviewer_bugs=[{"severity": "high", "description": bug_text}],
+        patches=[{"file": "core/x.py", "old_string": "a", "new_string": "b"}],
+        applied_count=0,
+        reflection_history=[],
+        aktuelle_task={"id": "t1", "task_files": ["core/x.py"]},
+    )
 
 
 def _run_reflection(s, tmp_path, monkeypatch):

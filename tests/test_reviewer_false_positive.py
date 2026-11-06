@@ -6,11 +6,17 @@ ist das ein Reviewer-Fehlalarm (nicht: Task gescheitert).
 """
 from __future__ import annotations
 
+import sys as _sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import werkstatt.roles.builder as _builder_mod
 from werkstatt import reflection as refl_mod
+from werkstatt.state import RunState
+
+_here = Path(__file__).parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 def _mk_state(
@@ -19,20 +25,25 @@ def _mk_state(
     last_verify_errors: list | None = None,
     reviewer_bugs: list | None = None,
     task_files: list | None = None,
-) -> SimpleNamespace:
-    s = SimpleNamespace()
-    s.project_dir = tmp_path
-    s.project_name = "test"
-    s.api_key = "dummy"
-    s.last_verify_errors = list(last_verify_errors or [])
-    s.reviewer_bugs = list(
-        reviewer_bugs or [{"severity": "high", "description": "fake bug"}]
+) -> RunState:
+    """Spec-State fuer Reviewer-False-Positive (OP-174 P3).
+
+    Alle Felder in RunState deklariert. mk_state fail-loud bei
+    Tippfehler in Feldnamen. Kein Sub-State.
+    """
+    return mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        api_key="dummy",
+        last_verify_errors=list(last_verify_errors or []),
+        reviewer_bugs=list(
+            reviewer_bugs or [{"severity": "high", "description": "fake bug"}]
+        ),
+        patches=[{"file": "core/x.py", "old_string": "a", "new_string": "b"}],
+        applied_count=1,
+        reflection_history=[],
+        aktuelle_task={"task_files": task_files or ["core/x.py"]},
     )
-    s.patches = [{"file": "core/x.py", "old_string": "a", "new_string": "b"}]
-    s.applied_count = 1
-    s.reflection_history = []
-    s.aktuelle_task = {"task_files": task_files or ["core/x.py"]}
-    return s
 
 
 def _setup_common_mocks(monkeypatch, *, verify_ok: bool):

@@ -7,18 +7,26 @@ Wahl zwischen "behalten" und "verwerfen".
 from __future__ import annotations
 
 import sys
-from types import SimpleNamespace
+from pathlib import Path
 
 sys.path.insert(0, "/opt/werkstatt")
 
 from werkstatt.phases import _phase_review_gate
+from werkstatt.state import RunState
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
-def _mk_state():
-    s = SimpleNamespace()
-    s.project_dir = "/tmp"
-    s.project_name = "test"
-    return s
+def _mk_state() -> RunState:
+    """Spec-State fuer Phase-Review-Gate (OP-174 P3).
+
+    Vollstaendiger RunState ueber mk_state(). Alle Felder in
+    RunState deklariert. Keine Sub-States.
+    """
+    return mk_state(project_dir="/tmp", project_name="test")
 
 
 def _mock_interactive(monkeypatch, antworten):
