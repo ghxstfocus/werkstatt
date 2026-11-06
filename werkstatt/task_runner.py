@@ -300,10 +300,10 @@ def _pruefe_prior_failed_dependency(
             break
     if _curr is None or _idx_curr <= 0:
         return False, []
-    _curr_files = set(
+    _curr_files = {
         f for f in (_curr.get("task_files") or [])
         if isinstance(f, str) and f
-    )
+    }
     if not _curr_files:
         return False, []
     for _t in _tasks[:_idx_curr]:
@@ -311,10 +311,10 @@ def _pruefe_prior_failed_dependency(
             continue
         if _t.get("status") != "failed":
             continue
-        _prior_files = set(
+        _prior_files = {
             f for f in (_t.get("task_files") or [])
             if isinstance(f, str) and f
-        )
+        }
         if _curr_files & _prior_files:
             return True, sorted(_curr_files)
     return False, []

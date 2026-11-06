@@ -35,20 +35,20 @@ def _pflicht() -> dict:
     verbunden (genau der Bug, den
     test_mutable_defaults_sind_isoliert sucht).
     """
-    return dict(
-        block_id="b",
-        aufgabe="a",
-        start_ts="2026-10-30T00:00:00Z",
-        docs={},
-        agents={},
-        always={},
-        optional={},
-        file_whitelist=[],
-        api_key="sk-test",
-        budget={},
-        agent_docs={},
-        project_dir=Path("/tmp/x"),
-    )
+    return {
+        "block_id": "b",
+        "aufgabe": "a",
+        "start_ts": "2026-10-30T00:00:00Z",
+        "docs": {},
+        "agents": {},
+        "always": {},
+        "optional": {},
+        "file_whitelist": [],
+        "api_key": "sk-test",
+        "budget": {},
+        "agent_docs": {},
+        "project_dir": Path("/tmp/x"),
+    }
 
 
 def _state(**overrides) -> RunState:

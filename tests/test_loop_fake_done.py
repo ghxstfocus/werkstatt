@@ -94,7 +94,7 @@ class TestCommitTaskFilesGuard:
             "id": "t1", "status": "done",
             "task_files": [],
         }])
-        ok, info = _loop._committe_zielprojekt(state)
+        ok, _info = _loop._committe_zielprojekt(state)
         assert ok is True
 
 

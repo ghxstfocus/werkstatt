@@ -128,7 +128,7 @@ def test_diagnose_kein_match(tmp_path):
 
 
 def test_diagnose_orchestrator_erster_treffer(op082_projekt):
-    tmp_path, app_py = op082_projekt
+    tmp_path, _app_py = op082_projekt
     state = _state(
         tmp_path,
         [{"file": "werkstatt/web/app.py"}],

@@ -63,7 +63,7 @@ def test_post_chat_ruft_chat_agent(client):
         assert r.json()["antwort"] == "MOCK-ANTWORT"
         mock.assert_called_once()
         # Erster Parameter ist der Text
-        args, kwargs = mock.call_args
+        args, _kwargs = mock.call_args
         assert args[0] == "hallo"
 
 

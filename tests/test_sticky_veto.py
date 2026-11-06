@@ -143,7 +143,7 @@ def test_success_pfad_bei_spec_widerspruch_setzt_veto(
         if hasattr(loop_mod, _fn):
             monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
 
-    rc = loop_mod.run_pipeline_loop("p", "a", [st])
+    loop_mod.run_pipeline_loop("p", "a", [st])
 
     # Veto-Event muss im Audit stehen
     kinds = [k for k, _ in _audits]

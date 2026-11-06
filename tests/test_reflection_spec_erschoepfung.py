@@ -98,7 +98,7 @@ def test_erschoepfung_ohne_fortschritt_kein_spec_widerspruch(
     monkeypatch.setattr(refl_mod, "log_line", lambda *a, **kw: None)
 
     s._reflection_diff_hash = "h"  # type: ignore[attr-defined]
-    rc = refl_mod._reflection_loop(
+    refl_mod._reflection_loop(
         s, max_runden=3, error_context="[]", phase="post_build",
     )
     assert getattr(s, "spec_widerspruch_erkannt", False) is False, (
@@ -133,7 +133,7 @@ def test_erschoepfung_nach_einer_runde_kein_spec(
     monkeypatch.setattr(refl_mod, "log_line", lambda *a, **kw: None)
 
     s._reflection_diff_hash = "h"  # type: ignore[attr-defined]
-    rc = refl_mod._reflection_loop(
+    refl_mod._reflection_loop(
         s, max_runden=1, error_context="[]", phase="post_build",
     )
     # 1 Runde reicht nicht fuer Spec-Widerspruch

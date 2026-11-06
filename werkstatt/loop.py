@@ -332,8 +332,6 @@ def run_pipeline_loop(
         )
         return 1
 
-    pd = state.project_dir
-    pn = state.project_name
 
     # 0. Aufgabe in State setzen (fuer Planner)
     state.aufgabe = aufgabe  # type: ignore[attr-defined]

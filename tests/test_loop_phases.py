@@ -29,12 +29,12 @@ from werkstatt.state import RunState
 # =====================================================================
 
 def _state(tmp_path: Path, **overrides) -> RunState:
-    kw = dict(
-        block_id="t", aufgabe="aufgabe", start_ts="2026-10-30T00:00:00Z",
-        docs={}, agents={}, always={}, optional={}, file_whitelist=[],
-        api_key="sk-test", budget={}, agent_docs={},
-        project_dir=tmp_path, project_name="testproj",
-    )
+    kw = {
+        "block_id": "t", "aufgabe": "aufgabe", "start_ts": "2026-10-30T00:00:00Z",
+        "docs": {}, "agents": {}, "always": {}, "optional": {}, "file_whitelist": [],
+        "api_key": "sk-test", "budget": {}, "agent_docs": {},
+        "project_dir": tmp_path, "project_name": "testproj",
+    }
     kw.update(overrides)
     return RunState(**kw)
 
@@ -286,7 +286,7 @@ def test_task_ende_fail(tmp_path):
                         dateien=["a.py"])
     ps.mark_failed.assert_called_once_with("t1", failure="boom")
     ps.mark_done.assert_not_called()
-    args, kw = mock_append.call_args
+    _args, kw = mock_append.call_args
     assert kw["status"] == "failed"
     assert kw["info"] == "boom"
 
@@ -350,7 +350,7 @@ def test_ruff_fix_changed_ruft_ruff_auf(tmp_path):
         loop._ruff_fix_changed(s)
 
     assert len(aufrufe) == 1
-    argv, cwd = aufrufe[0]
+    argv, _cwd = aufrufe[0]
     assert argv[0] == "ruff"
     assert "--fix" in argv
     assert "a.py" in argv

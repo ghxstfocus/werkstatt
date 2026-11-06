@@ -15,12 +15,12 @@ from werkstatt.state import RunState
 
 
 def _state(tmp_path: Path, **overrides) -> RunState:
-    kw = dict(
-        block_id="t", aufgabe="a", start_ts="x",
-        docs={}, agents={}, always={}, optional={},
-        file_whitelist=[], api_key="k", budget={},
-        agent_docs={}, project_dir=tmp_path, project_name="t",
-    )
+    kw = {
+        "block_id": "t", "aufgabe": "a", "start_ts": "x",
+        "docs": {}, "agents": {}, "always": {}, "optional": {},
+        "file_whitelist": [], "api_key": "k", "budget": {},
+        "agent_docs": {}, "project_dir": tmp_path, "project_name": "t",
+    }
     kw.update(overrides)
     return RunState(**kw)
 

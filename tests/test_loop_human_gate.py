@@ -26,12 +26,12 @@ CONFIG_PATH = PROJECTS_DIR / CONFIG_NAME
 # =====================================================================
 
 def _state(tmp_path: Path, **overrides) -> RunState:
-    kw = dict(
-        block_id="t", aufgabe="aufgabe", start_ts="2026-10-30T00:00:00Z",
-        docs={}, agents={}, always={}, optional={}, file_whitelist=[],
-        api_key="sk-test", budget={}, agent_docs={},
-        project_dir=tmp_path, project_name="testproj",
-    )
+    kw = {
+        "block_id": "t", "aufgabe": "aufgabe", "start_ts": "2026-10-30T00:00:00Z",
+        "docs": {}, "agents": {}, "always": {}, "optional": {}, "file_whitelist": [],
+        "api_key": "sk-test", "budget": {}, "agent_docs": {},
+        "project_dir": tmp_path, "project_name": "testproj",
+    }
     kw.update(overrides)
     return RunState(**kw)
 

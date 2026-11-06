@@ -67,7 +67,7 @@ def check_drift() -> dict:
             # Import-Pfad zeigt auf andere Funktion (Refactor-Drift)
             dead.append({"name": name, "source": ctrl.source})
 
-    registriert = {ctrl.source for ctrl in CONTROL_REGISTRY.values()}
+    {ctrl.source for ctrl in CONTROL_REGISTRY.values()}
     registriert_names = set(CONTROL_REGISTRY.keys())
     unregistered: list[str] = []
     for fname, (fpath, fline) in _alle_kandidaten().items():

@@ -47,7 +47,7 @@ def leser(s):
     return x
 """
     tree = ast.parse(quelle)
-    schreibt, liest = audit_mod._state_zugriffe(tree)
+    _schreibt, liest = audit_mod._state_zugriffe(tree)
     assert "letzte_reviewer_antwort" in liest, (
         f"Feld nicht in liest: {liest}")
 

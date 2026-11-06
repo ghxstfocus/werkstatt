@@ -95,7 +95,7 @@ def test_builder_failed_mit_grund(tmp_path: Path, monkeypatch) -> None:
         reflection_fn=_no_refl,
     )
 
-    rc = loop_mod.run_pipeline_loop("p", "a", [st])
+    loop_mod.run_pipeline_loop("p", "a", [st])
     # Task ist failed — aber das Audit MUSS den Grund nennen.
     failed_kinds = [
         p for k, p in _audits if k == "loop_task_failed"
@@ -193,7 +193,7 @@ def test_builder_patch_nicht_erfuellt_ohne_prior(
         reflection_fn=_refl,
     )
 
-    rc = loop_mod.run_pipeline_loop("p", "a", [st])
+    loop_mod.run_pipeline_loop("p", "a", [st])
     via = [p for k, p in _audits
            if k == "loop_task_ok" and isinstance(p, dict)
            and p.get("via") == "builder_patch_bereits_erfuellt"]

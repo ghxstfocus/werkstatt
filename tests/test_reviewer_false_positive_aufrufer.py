@@ -134,6 +134,6 @@ def test_kein_false_positive_normale_reviewer_ablehnung(
         if hasattr(loop_mod, _fn):
             monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
 
-    rc = loop_mod.run_pipeline_loop("p", "a", [st])
+    loop_mod.run_pipeline_loop("p", "a", [st])
     # Ohne false_positive: alter Pfad -> task failed, rc=1 (oder 0, je nach finalizer).
     assert "loop_reviewer_reject_false_positive" not in _audits

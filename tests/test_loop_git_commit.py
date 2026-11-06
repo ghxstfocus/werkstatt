@@ -23,12 +23,12 @@ from werkstatt.state import RunState
 # =====================================================================
 
 def _state(tmp_path: Path, **overrides) -> RunState:
-    kw = dict(
-        block_id="t", aufgabe="aufgabe", start_ts="2026-10-30T00:00:00Z",
-        docs={}, agents={}, always={}, optional={}, file_whitelist=[],
-        api_key="sk-test", budget={}, agent_docs={},
-        project_dir=tmp_path, project_name="testproj",
-    )
+    kw = {
+        "block_id": "t", "aufgabe": "aufgabe", "start_ts": "2026-10-30T00:00:00Z",
+        "docs": {}, "agents": {}, "always": {}, "optional": {}, "file_whitelist": [],
+        "api_key": "sk-test", "budget": {}, "agent_docs": {},
+        "project_dir": tmp_path, "project_name": "testproj",
+    }
     kw.update(overrides)
     return RunState(**kw)
 
@@ -280,7 +280,6 @@ def test_stash_pop_drop_fallback_bei_fehler(tmp_path):
     calls: list = []
     def _fake_run(argv, **kw):
         calls.append(list(argv))
-        rc = 0 if "pop" in argv else 1  # pop schlaegt fehl
         # Eigentlich: erster Call (pop) rc=1, zweiter (drop) rc=0
         if "pop" in argv:
             return type("R", (), {"returncode": 1, "stdout": "",
