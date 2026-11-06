@@ -54,9 +54,9 @@ def test_reviewer_patch_ohne_diff_fail_closed(tmp_path):
     """K23b: Patch da, aber Diff leer -> False (fail-closed)."""
     st = _state(tmp_path)
     st.patches = [{"file": "x.py", "action": "create"}]
-    with patch("werkstatt.reviewer._get_git_diff", return_value=""):
-        with patch("werkstatt.reviewer.audit"):
-            assert run_reviewer(st) is False
+    with (patch("werkstatt.reviewer._get_git_diff", return_value=""),
+          patch("werkstatt.reviewer.audit")):
+        assert run_reviewer(st) is False
 
 
 def test_reviewer_sieht_untracked_dateien(tmp_path):

@@ -841,9 +841,9 @@ def run_reviewer(state: RunState) -> bool:
                 # Nur pruefen, wenn die Aufgabe diese Konzepte auch nennt
                 _fehlend_q: list[str] = []
                 for _label_q, _marker_q in _pflicht_konzepte:
-                    if _marker_q in _aufgabe_q.lower():
-                        if _marker_q not in _inhalt_q:
-                            _fehlend_q.append(_label_q)
+                    if (_marker_q in _aufgabe_q.lower()
+                            and _marker_q not in _inhalt_q):
+                        _fehlend_q.append(_label_q)
                 if _fehlend_q:
                     audit("reviewer_unvollstaendig", {
                         "datei": _md_q[0],

@@ -108,7 +108,8 @@ def _hat_symbol(modul_pfad: Path, symbol: str) -> bool:
             for t in node.targets:
                 if isinstance(t, _ast.Name) and t.id == symbol:
                     return True
-        if isinstance(node, _ast.AnnAssign):
-            if isinstance(node.target, _ast.Name) and node.target.id == symbol:
-                return True
+        if (isinstance(node, _ast.AnnAssign)
+                and isinstance(node.target, _ast.Name)
+                and node.target.id == symbol):
+            return True
     return False

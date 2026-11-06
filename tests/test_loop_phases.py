@@ -307,20 +307,20 @@ def test_heartbeat_erfolg(tmp_path):
 
 def test_heartbeat_exception_propagiert(tmp_path):
     """subprocess.run wirft -> Exception wird im Hauptthread re-raised."""
-    with patch("werkstatt.loop.subprocess.run",
-               side_effect=RuntimeError("boom")):
-        with pytest.raises(RuntimeError, match="boom"):
-            loop._verify_stage_with_heartbeat(
-                ["x"], str(tmp_path), "stage-1", timeout=5)
+    with (patch("werkstatt.loop.subprocess.run",
+                side_effect=RuntimeError("boom")),
+          pytest.raises(RuntimeError, match="boom")):
+        loop._verify_stage_with_heartbeat(
+            ["x"], str(tmp_path), "stage-1", timeout=5)
 
 
 def test_heartbeat_timeout_propagiert(tmp_path):
     """subprocess.run wirft TimeoutExpired -> propagiert."""
     exc = subprocess.TimeoutExpired(cmd=["x"], timeout=5)
-    with patch("werkstatt.loop.subprocess.run", side_effect=exc):
-        with pytest.raises(subprocess.TimeoutExpired):
-            loop._verify_stage_with_heartbeat(
-                ["x"], str(tmp_path), "stage-1", timeout=5)
+    with (patch("werkstatt.loop.subprocess.run", side_effect=exc),
+          pytest.raises(subprocess.TimeoutExpired)):
+        loop._verify_stage_with_heartbeat(
+            ["x"], str(tmp_path), "stage-1", timeout=5)
 
 
 # =====================================================================

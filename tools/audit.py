@@ -70,9 +70,9 @@ def _aufrufe_in(fn: ast.AST) -> set[str]:
         # A-B1-1: RHS einer Zuweisung (Handler-Dict, Tabelle)
         elif isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Subscript):
-                    if isinstance(node.value, ast.Name):
-                        aufrufe.add(node.value.id)
+                if (isinstance(target, ast.Subscript)
+                        and isinstance(node.value, ast.Name)):
+                    aufrufe.add(node.value.id)
     return aufrufe
 
 

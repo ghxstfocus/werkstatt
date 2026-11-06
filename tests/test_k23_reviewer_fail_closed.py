@@ -49,9 +49,9 @@ def test_git_diff_fail_closed_bei_dubious(tmp_path: Path):
 def test_run_reviewer_fail_closed_wenn_patches_aber_kein_diff(tmp_path: Path):
     """K23b: patches da, aber diff leer -> False (fail-closed)."""
     s = _mk_state(tmp_path, patches=[{"file": "x.py", "action": "create"}])
-    with patch("werkstatt.reviewer._get_git_diff", return_value=""):
-        with patch("werkstatt.reviewer.audit"):
-            rc = run_reviewer(s)
+    with (patch("werkstatt.reviewer._get_git_diff", return_value=""),
+          patch("werkstatt.reviewer.audit")):
+        rc = run_reviewer(s)
     assert rc is False
 
 
@@ -67,7 +67,7 @@ def test_run_reviewer_fail_closed_wenn_diff_fehler(tmp_path: Path):
 def test_run_reviewer_kein_patch_kein_diff_ist_legitim(tmp_path: Path):
     """K23b: weder Patch noch Diff -> True (nichts zu reviewen)."""
     s = _mk_state(tmp_path, patches=[])
-    with patch("werkstatt.reviewer._get_git_diff", return_value=""):
-        with patch("werkstatt.reviewer.audit"):
-            rc = run_reviewer(s)
+    with (patch("werkstatt.reviewer._get_git_diff", return_value=""),
+          patch("werkstatt.reviewer.audit")):
+        rc = run_reviewer(s)
     assert rc is True

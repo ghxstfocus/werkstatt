@@ -44,9 +44,10 @@ def finde_code_kinds() -> set[str]:
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
-            if not (isinstance(func, ast.Name) and func.id == "audit"):
-                if not (isinstance(func, ast.Attribute) and func.attr == "audit"):
-                    continue
+            _ist_name = isinstance(func, ast.Name) and func.id == "audit"
+            _ist_attr = isinstance(func, ast.Attribute) and func.attr == "audit"
+            if not (_ist_name or _ist_attr):
+                continue
             if not node.args:
                 continue
             first = node.args[0]

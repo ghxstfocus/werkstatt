@@ -175,9 +175,9 @@ def _phase_explorer_and_setup(
         bool(getattr(state, "tasks", None))
         or getattr(state, "auftrag_bereits_erfuellt", False)
     )
-    if not _skip_explorer_check:
-        if not _validate_contract_safe("explorer", "scout", state, pd, pn):
-            return 1, phase_state
+    if (not _skip_explorer_check
+            and not _validate_contract_safe("explorer", "scout", state, pd, pn)):
+        return 1, phase_state
 
     # FIX AN 2026-10-31: Schreibrechte-Preflight fuer Task-Dateien.
     # Live-Beleg 2026-10-31 10:31 t2: git restore als root machte
@@ -199,9 +199,9 @@ def _phase_explorer_and_setup(
                 _p_an = Path(_pd_an) / _f_an if _pd_an else None
                 if _p_an is None:
                     continue
-                if _p_an.exists() and _p_an.is_file():
-                    if not _os_an.access(str(_p_an), _os_an.W_OK):
-                        _rechte_fehler.append(_f_an)
+                if (_p_an.exists() and _p_an.is_file()
+                        and not _os_an.access(str(_p_an), _os_an.W_OK)):
+                    _rechte_fehler.append(_f_an)
         if _rechte_fehler:
             audit("loop_preflight_rechte",
                   {"dateien": _rechte_fehler[:10],

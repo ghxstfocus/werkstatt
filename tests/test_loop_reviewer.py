@@ -90,9 +90,9 @@ def test_git_diff_runtime_error_bei_rc_fehler(tmp_path):
         "stdout": "",
         "stderr": "fatal: not a git repository",
     })()
-    with patch("werkstatt.reviewer.subprocess.run", return_value=fake):
-        with pytest.raises(RuntimeError) as exc:
-            reviewer._get_git_diff(tmp_path)
+    with (patch("werkstatt.reviewer.subprocess.run", return_value=fake),
+          pytest.raises(RuntimeError) as exc):
+        reviewer._get_git_diff(tmp_path)
     assert "git diff fehlgeschlagen" in str(exc.value)
 
 
@@ -103,9 +103,9 @@ def test_git_diff_runtime_error_bei_dubious(tmp_path):
         "stdout": "",
         "stderr": "fatal: detected dubious ownership in repository",
     })()
-    with patch("werkstatt.reviewer.subprocess.run", return_value=fake):
-        with pytest.raises(RuntimeError):
-            reviewer._get_git_diff(tmp_path)
+    with (patch("werkstatt.reviewer.subprocess.run", return_value=fake),
+          pytest.raises(RuntimeError)):
+        reviewer._get_git_diff(tmp_path)
 
 
 # =====================================================================
