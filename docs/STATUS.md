@@ -900,6 +900,60 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Hinweis:** Loest die verbleibende Luecke aus OP-168 (done).
 
 
+### OP-172: Verify→Builder-Kette — Builder sieht nur 5 Fehler
+
+- **Status:** open
+- **Typ:** architektur (Verify + Builder-Prompt)
+- **Betroffen:** `werkstatt/verify.py` (Z. 479 `_out[-500:]`),
+  `werkstatt/roles/builder/run.py` (Z. 147-156 `_err_lines`),
+  `tests/test_verify_builder_kette.py` (neu)
+- **Problem:** Die Kette Verify→State→Builder-Prompt schneidet
+  Fehler-Information an **drei** Stellen ab:
+  1. **`verify.py:479`** speichert `_out[-500:]` — die **letzten**
+     500 Zeichen. Bei mypy/ruff/pytest steht dort die Statistik
+     ("Found N errors", "N failed"), nicht die Fehler selbst.
+     Der Builder bekommt "3 Fehler" ohne zu wissen **welche**.
+  2. **`run.py:149`** nimmt `[:5]` — nur die ersten 5 Fehler.
+     Bei 20 mypy-Fehlern sieht der Builder 15 nicht.
+  3. **`run.py:149`** schneidet pro Error auf `[:500]`. Langer
+     mypy-Fehler mit Pfad+Zeile+Type wird abgeschnitten.
+  Der Gate blockt zwar (ruff_changed hart seit 8c52cf3,
+  mypy_changed hart seit b950b97), aber der Builder bekommt
+  nicht genug Info zum Reparieren. Er ratet.
+- **Live-Beleg (Loop-Test 5, 2026-11-06):** Builder hat in t4
+  den Import `format_letzter_test_fehler_block` vergessen.
+  Die Reflection sah `F821` im State, aber die konkreten
+  Zeilen (444:22) im Prompt waren ungemessen. Nach 8c52cf3
+  haette der Gate den Fehler geblockt, aber der Builder
+  braucht den **Detail-Text** fuer den Fix.
+- **Akzeptanzkriterien:**
+  - `verify.py:479`: `_out[-500:]` → `_out[:2000]`, mit
+    Fallback auf `_out[-500:]` wenn die ersten 2000 leer
+    sind (Edge-Case: nur whitespace im Anfang).
+  - `run.py:149`: `[:5]` → `[:15]`, `[:500]` → `[:1000]`
+    pro Error.
+  - Neue Formatierung: pro Error nur `<stage>: <file:line: msg>`
+    extrahieren (Regex), den restlichen Traceback verwerfen.
+    Reduziert Prompt-Groesse ohne Info-Verlust.
+  - `_format_repair_hint` bekommt die vollen (nicht mehr
+    gekuerzten) Errors — Klassifikation (F821, ruff TRY004,
+    py_compile) funktioniert damit auf allen Fehlern, nicht
+    nur den ersten 5.
+  - Neuer Test `tests/test_verify_builder_kette.py`:
+    (a) 20 synthetische mypy-Fehler → alle 20 im Builder-Prompt;
+    (b) 1500-Zeichen-Output pro Fehler → auf 1000 gekuerzt,
+        nicht 500;
+    (c) `_out[:2000]` enthaelt die Fehler-Zeilen, nicht nur
+        die Statistik-Zeile.
+- **Tests:** `tests/test_verify_builder_kette.py` (neu)
+- **Blockiert von:** —
+- **Priorität:** hoch — Voraussetzung für sinnvolle
+  Reflection-Runden. Der Gate blockt, aber der Builder
+  kann ohne Detail-Info nur raten.
+- **Quelle:** Messung 2026-11-06 nach Gate-Härtung
+  (ruff=0, mypy=0, alle Stages hart). Naechster logischer
+  Schritt nach Altlastabbau.
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.

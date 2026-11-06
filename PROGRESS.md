@@ -2543,3 +2543,37 @@ wurde — genau der Zweck.
 - **Status:** phase_ende
 - **Info:** tasks_ok=5/6
 
+
+
+### 2026-11-06 — Messung: Verify→Builder-Kette (OP-172)
+
+**Kontext:** Nach ruff=0 + mypy=0 + alle Verify-Stages hart
+(8c52cf3, b950b97) ist die Frage: **sieht der Builder die
+Fehler auch, wenn ein Gate blockt?**
+
+**Messung (read-only, kein Loop-Lauf):**
+
+Drei Einschränkungen in der Kette Verify→State→Builder:
+
+| Stelle | Code | Problem |
+|---|---|---|
+| `verify.py:479` | `_out[-500:]` | nimmt **letzte** 500 Zeichen = Statistik, nicht Fehler |
+| `run.py:149` | `[:5]` | nur erste 5 Fehler |
+| `run.py:149` | `[:500]` | pro Error auf 500 gekuerzt |
+
+**Kette funktioniert strukturell:**
+- `verify.py:492` → `state.last_verify_errors = list(errors)`
+- `run.py:147-156` → `## VERIFY-FEHLER`-Block im Builder-Prompt
+- `run.py:249-250` → `_format_repair_hint(...)` Klassifikation
+
+**Kette funktioniert NICHT vollstaendig:**
+- Bei mypy mit 20 Fehlern: Builder sieht 5
+- Bei ruff `Found N errors`: `[-500:]` schneidet Fehler weg
+- Bei langen mypy-Tracebacks: 500-Zeichen-Limit
+
+**Konsequenz:** Gate blockt (gut), aber Builder bekommt
+nicht genug Info zum Reparieren. Er ratet aus der Statistik.
+
+**Folge-OP:** OP-172 — Verify→Builder-Kette verbessern.
+Prioritaet hoch, weil ohne diesen Fix die Reflection-Runden
+zwar laufen, aber nicht sinnvoll reparieren koennen.
