@@ -97,7 +97,7 @@ def _phase_explorer_and_setup(
             if len(_ordner_dateien) >= 10:
                 break
     # Ordner-Dateien an explizite Dateien anhaengen (max 10 gesamt)
-    _alle_genannten = list(_explizite_dateien)
+    _alle_genannten: list[str] = [str(_p_g) for _p_g in _explizite_dateien]
     for _f in _ordner_dateien:
         if _f not in _alle_genannten:
             _alle_genannten.append(_f)

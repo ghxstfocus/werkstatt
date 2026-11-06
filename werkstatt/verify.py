@@ -332,10 +332,13 @@ def _ruff_fix_changed(state: RunState) -> None:
         pd = getattr(state, "project_dir", None)
         if pd is None:
             return
-        _changed = [
-            p.get("file") for p in (getattr(state, "patches", None) or [])
-            if isinstance(p, dict) and p.get("file")
-        ]
+        _changed: list[str] = []
+        for _p_c in (getattr(state, "patches", None) or []):
+            if not isinstance(_p_c, dict):
+                continue
+            _f_c = _p_c.get("file")
+            if isinstance(_f_c, str) and _f_c:
+                _changed.append(_f_c)
         _py_files = [f for f in _changed if f.endswith(".py")]
         if not _py_files:
             return

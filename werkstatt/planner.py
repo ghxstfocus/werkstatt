@@ -882,10 +882,13 @@ def _leite_deps_deterministisch(
                     return "code"
             return "unbekannt"
 
-        _klassen = {
-            t.get("id"): _klass(t)
-            for t in tasks if isinstance(t, dict)
-        }
+        _klassen: dict[str, str] = {}
+        for _t_k in tasks:
+            if not isinstance(_t_k, dict):
+                continue
+            _tid_k = _t_k.get("id")
+            if isinstance(_tid_k, str):
+                _klassen[_tid_k] = _klass(_t_k)
         _code_ids = sorted(i for i, k in _klassen.items() if k == "code")
         _test_ids = sorted(i for i, k in _klassen.items() if k == "test")
         _base_ids = sorted(i for i, k in _klassen.items() if k == "baseline")

@@ -195,6 +195,11 @@ def _get_git_diff(
     K4: Wenn task_files uebergeben, nur diese Pfade diffen — sonst
     sieht der Reviewer kumulative Aenderungen frueherer Tasks.
     """
+    if project_dir is None:
+        audit("reviewer_diff_fehler",
+              {"fehler": "project_dir ist None"},
+              Path("."), "?")
+        return ""
     try:
         pd = Path(project_dir)
         pathspec = list(task_files) if task_files else ["."]

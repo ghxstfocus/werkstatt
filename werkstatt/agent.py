@@ -238,6 +238,7 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
         finally:
             if hb_stop is not None:
                 hb_stop.set()
+            if hb_thread is not None:
                 hb_thread.join(timeout=1.0)
         if versuch < len(backoffs):
             time.sleep(warte)
