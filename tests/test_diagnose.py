@@ -2,9 +2,17 @@
 from __future__ import annotations
 
 import ast
-from types import SimpleNamespace
+import sys
+from pathlib import Path
 
 import pytest
+
+from werkstatt.state import RunState
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 from werkstatt.diagnose import (
     _deterministische_diagnose,
@@ -34,8 +42,9 @@ def op082_projekt(tmp_path):
     return tmp_path, app_py
 
 
-def _state(tmp_path, patches, errors):
-    return SimpleNamespace(
+def _state(tmp_path, patches, errors) -> RunState:
+    """Spec-State fuer Diagnose-Tests (OP-174 P3)."""
+    return mk_state(
         project_dir=str(tmp_path),
         patches=patches,
         last_verify_errors=errors,
@@ -150,7 +159,7 @@ def test_diagnose_fallback_ohne_patches(tmp_path):
         "def nutze():\n"
         "    return mod.x\n"
     )
-    state = SimpleNamespace(
+    state = mk_state(
         project_dir=str(tmp_path),
         patches=[],
         last_verify_errors=[

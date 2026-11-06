@@ -12,11 +12,17 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 from werkstatt import loop
 from werkstatt.state import RunState
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 # =====================================================================
 # Fixtures
@@ -77,8 +83,7 @@ def _init_repo(tmp_path: Path) -> None:
 
 def test_committe_kein_project_dir():
     """project_dir=None -> (False, "kein project_dir")."""
-    from types import SimpleNamespace
-    st = SimpleNamespace(project_dir=None, project_name="p")
+    st = mk_state(project_dir=None, project_name="p")
     ok, info = loop._committe_zielprojekt(st)
     assert ok is False
     assert "kein project_dir" in info

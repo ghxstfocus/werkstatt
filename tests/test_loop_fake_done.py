@@ -14,14 +14,20 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 sys.path.insert(0, "/opt/werkstatt")
 
+from werkstatt.state import RunState
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
-def _mk_state(tmp_path: Path, tasks: list, aufgabe: str = ""):
-    return SimpleNamespace(
+def _mk_state(tmp_path: Path, tasks: list, aufgabe: str = "") -> RunState:
+    """Spec-State fuer Commit-Pfad (OP-174 P3)."""
+    return mk_state(
         project_dir=tmp_path,
         project_name="test",
         aufgabe=aufgabe,
@@ -118,7 +124,7 @@ class TestReviewerUpdateTaskFailClosed:
                             lambda k, p, pd, pn: seen.append(k))
         monkeypatch.setattr(_rev, "_get_git_diff",
                             lambda pd, task_files=None: "")
-        state = SimpleNamespace(
+        state = mk_state(
             project_dir=tmp_path,
             project_name="t",
             api_key="fake",
@@ -143,7 +149,7 @@ class TestReviewerUpdateTaskFailClosed:
                             lambda k, p, pd, pn: seen.append(k))
         monkeypatch.setattr(_rev, "_get_git_diff",
                             lambda pd, task_files=None: "")
-        state = SimpleNamespace(
+        state = mk_state(
             project_dir=tmp_path,
             project_name="t",
             api_key="fake",
@@ -169,7 +175,7 @@ class TestReviewerUpdateTaskFailClosed:
                             lambda k, p, pd, pn: seen.append(k))
         monkeypatch.setattr(_rev, "_get_git_diff",
                             lambda pd, task_files=None: "")
-        state = SimpleNamespace(
+        state = mk_state(
             project_dir=tmp_path,
             project_name="t",
             api_key="fake",

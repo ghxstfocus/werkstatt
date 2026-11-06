@@ -8,6 +8,7 @@ kollidiert nicht mit echten Projekten (nur security-ai).
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,6 +16,11 @@ import pytest
 
 from werkstatt import loop
 from werkstatt.state import RunState
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 PROJECTS_DIR = Path("/opt/werkstatt/projects")
 CONFIG_NAME = "testproj.yaml"
@@ -78,8 +84,7 @@ def cfg_file():
 # =====================================================================
 
 def test_gate_kein_project_dir():
-    from types import SimpleNamespace
-    st = SimpleNamespace(project_dir=None, project_name="testproj")
+    st = mk_state(project_dir=None, project_name="testproj")
     assert loop._human_gate(st) == 1
 
 

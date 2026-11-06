@@ -15,11 +15,18 @@ OP-060a baut:
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import werkstatt.roles.builder as _builder_mod
 from werkstatt import reflection as refl_mod
+from werkstatt.state import RunState
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
+
 from werkstatt.apply_patches import (
     _apply_patches_with_diagnose,
     _diagnose_patch,
@@ -68,11 +75,9 @@ def test_diagnose_leer() -> None:
 # ═══════════════════════════════════════════════════════════════
 
 
-def _mk_state(tmp_path: Path) -> SimpleNamespace:
-    s = SimpleNamespace()
-    s.project_dir = tmp_path
-    s.project_name = "test"
-    return s
+def _mk_state(tmp_path: Path) -> RunState:
+    """Spec-State fuer Diagnose-Faelle (OP-174 P3)."""
+    return mk_state(project_dir=tmp_path, project_name="test")
 
 
 def _mk_file(tmp_path: Path, rel: str, content: str) -> None:
@@ -150,18 +155,19 @@ def test_apply_diagnose_ok(tmp_path: Path, monkeypatch) -> None:
 # ═══════════════════════════════════════════════════════════════
 
 
-def _mk_refl_state(tmp_path: Path) -> SimpleNamespace:
-    s = SimpleNamespace()
-    s.project_dir = tmp_path
-    s.project_name = "test"
-    s.api_key = "dummy"
-    s.last_verify_errors = []
-    s.reviewer_bugs = [{"severity": "high", "description": "fake"}]
-    s.patches = [{"file": "core/x.py", "old_string": "a", "new_string": "b"}]
-    s.applied_count = 0
-    s.reflection_history = []
-    s.aktuelle_task = {"task_files": ["core/x.py"]}
-    return s
+def _mk_refl_state(tmp_path: Path) -> RunState:
+    """Spec-State fuer Reflection-Audit (OP-174 P3)."""
+    return mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        api_key="dummy",
+        last_verify_errors=[],
+        reviewer_bugs=[{"severity": "high", "description": "fake"}],
+        patches=[{"file": "core/x.py", "old_string": "a", "new_string": "b"}],
+        applied_count=0,
+        reflection_history=[],
+        aktuelle_task={"task_files": ["core/x.py"]},
+    )
 
 
 def test_reflection_audit_enthaelt_diagnosen(
