@@ -229,7 +229,7 @@ def _merke_geladene_skills(
                 getattr(state, "project_dir", None) or Path("."),
                 getattr(state, "project_name", "?"),
             )
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
     return neu
 

@@ -48,7 +48,7 @@ def _recv_mit_timeout(ws, timeout_s: float = 5.0) -> str:
     def _r():
         try:
             result.append(ws.receive_text())
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             result.append(("EXC", exc))
     t = threading.Thread(target=_r, daemon=True)
     t.start()

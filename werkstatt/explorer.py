@@ -46,7 +46,7 @@ def _list_py_files(project_dir: Path, max_files: int = 200) -> list[str]:
             capture_output=True, text=True, timeout=30, check=False,
         )
         return [f for f in res.stdout.split("\n") if f.strip()][:max_files]
-    except Exception:  # noqa: BLE001
+    except Exception:
         return []
 
 
@@ -419,7 +419,7 @@ def _git_dirty(pd: Path) -> bool:
             ["git", "-C", str(pd), "status", "--porcelain"],
             capture_output=True, text=True, timeout=5,
         ).stdout.strip())
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
 
 
@@ -578,6 +578,6 @@ def run_explorer(state: RunState, frage: str) -> dict:
                 getattr(state, "explorer_ruff_befunde", []) or []
             ),
         }
-    except Exception:  # noqa: BLE001
+    except Exception:
         audit("explorer_findings_fehler", {}, pd, pn)
     return result

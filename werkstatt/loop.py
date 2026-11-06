@@ -189,7 +189,7 @@ def _run_with_progress(
     def _worker():
         try:
             _result[0] = fn()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             _exc[0] = e
         finally:
             _done.set()
@@ -214,7 +214,7 @@ def _run_with_progress(
             if _elapsed_hb // 2 > _last_hb // 2:
                 try:
                     _r.heartbeat(f"[{nr}/{total}] {name}", _elapsed_hb)
-                except Exception:  # noqa: BLE001, S110
+                except Exception:
                     pass
                 _last_hb = _elapsed_hb
             _done.wait(timeout=0.5)
@@ -393,7 +393,7 @@ def main(argv: list[str] | None = None) -> int:
         _tee_p.parent.mkdir(parents=True, exist_ok=True)
         _tee_handle = _tee_p.open("a", encoding="utf-8")
         _TEE_R.set_tee_stream(_tee_handle)
-    except Exception:  # noqa: BLE001
+    except Exception:
         _tee_handle = None
 
     # Sicherheitsnetz: Tee bei Prozess-Ende schliessen
@@ -481,7 +481,7 @@ def main(argv: list[str] | None = None) -> int:
         # load_project_config killt bei Fehlern via sys.exit(1).
         # Das ist hier gewollt (fail-closed).
         raise
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         # Doku-Ladefehler sind nicht fatal; Planner laeuft ohne Kontext.
         pass
 

@@ -38,7 +38,7 @@ def spinner_start(label: str, detail: str = "") -> None:
         _live = _rich._RichLive(_spinner, console=_rich._console, refresh_per_second=10, transient=True)
         try:
             _live.start()
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Falls rich trotzdem crasht: Live deaktivieren, kein Loop-Abbruch.
             _live = None
 
@@ -63,7 +63,7 @@ def spinner_stop(final_label: str = "") -> None:
         if _live is not None:
             try:
                 _live.stop()
-            except Exception:  # noqa: BLE001, S110
+            except Exception:
                 # Live-Objekt ist bereits gestoppt oder ungueltig.
                 pass
         _live = None
@@ -82,7 +82,7 @@ def _with_spinner(label: str, fn):
 
     try:
         spinner_start(label)
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass
 
     _start = _time.monotonic()
@@ -94,7 +94,7 @@ def _with_spinner(label: str, fn):
     def _worker():
         try:
             _result[0] = fn()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             _exc[0] = e
         finally:
             _done.set()
@@ -106,7 +106,7 @@ def _with_spinner(label: str, fn):
             if _el // 2 > _last // 2:
                 try:
                     heartbeat(label, _el)
-                except Exception:  # noqa: BLE001, S110
+                except Exception:
                     pass
                 _last = _el
             _done.wait(timeout=0.5)
@@ -120,14 +120,14 @@ def _with_spinner(label: str, fn):
 
     try:
         spinner_stop()
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass
 
     # M-456: permanente Log-Zeile.
     try:
         _elapsed = _time.monotonic() - _start
         log_line(label, elapsed_s=_elapsed, ok=(_exc[0] is None))
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass
 
     _elapsed_total = _time.monotonic() - _start

@@ -354,7 +354,7 @@ async def terminal_ws(websocket: WebSocket, project: str) -> None:
         poll_task_render.cancel()
         try:
             await poll_task
-        except BaseException:  # noqa: BLE001, S110 — Cleanup, Fehler egal
+        except BaseException:  # Cleanup, Fehler egal
             pass
         _AKTIVE_VERBINDUNGEN[project] = max(
             0, _AKTIVE_VERBINDUNGEN.get(project, 1) - 1

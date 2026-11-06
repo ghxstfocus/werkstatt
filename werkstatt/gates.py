@@ -140,7 +140,7 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
             with cfg_path.open() as fh:
                 cfg = yaml.safe_load(fh) or {}
             require = bool(cfg.get("require_plan_approval", True))
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
     if not require:
         audit("loop_plan_gate_auto", {"reason": "require_plan_approval=false"}, pd, pn)
@@ -246,7 +246,7 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
                         state.tests = _d["tests"]
                     if _d.get("akzeptanzkriterien"):
                         state.akzeptanzkriterien = _d["akzeptanzkriterien"]
-                except Exception:  # noqa: BLE001, S110
+                except Exception:
                     pass
             _r.plan(
                 getattr(state, "phasen", []) or [],
@@ -361,7 +361,7 @@ def _adr_mini_phase(state: RunState) -> bool:
         _adr_index_append(adr_dir, nummer, slug, filename)
         audit("adr_mini_created", {"file": filename, "nr": nummer}, pd, pn)
         print(f"  ADR angelegt: docs/adr/{filename}")
-    except Exception as _e:  # noqa: BLE001
+    except Exception as _e:
         audit("adr_mini_fehler", {"error": str(_e)[:200]}, pd, pn)
     return True
 
@@ -531,7 +531,7 @@ def _human_gate(state: RunState) -> int:
             with cfg_path.open() as fh:
                 cfg = yaml.safe_load(fh) or {}
             require = bool(cfg.get("require_human_approval", True))
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
 
     if not require:
@@ -576,7 +576,7 @@ def _human_gate(state: RunState) -> int:
                 f"  (Diff {len(_full)} Zeichen, Struktur:)\n"
                 f"{_summary}"
             )
-    except Exception:  # noqa: BLE001
+    except Exception:
         _stat_txt = "  (Diff nicht verfuegbar)"
 
     # FIX AD 2026-10-31: Task-Fortschritt VOR dem Diff anzeigen.
@@ -593,7 +593,7 @@ def _human_gate(state: RunState) -> int:
         _gate_body += f"\n\n{_diff_txt}"
     try:
         _rh.panel_diff(_gate_body, title="HUMAN GATE")
-    except Exception:  # noqa: BLE001
+    except Exception:
         # Fallback: Plain
         print("\n=== HUMAN GATE ===")
         print(_gate_body)

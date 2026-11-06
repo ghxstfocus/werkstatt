@@ -227,7 +227,7 @@ def post_chat(chat_id: str, nachricht: ChatMessageIn) -> dict[str, object]:
     # Chat-Agent: deterministische Patterns + LLM-Fallback
     try:
         antwort = chat_agent.verarbeite(text, chat_id=chat_id)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         antwort = f"Chat-Agent-Fehler: {type(exc).__name__}: {exc}"
 
     intent = parse_intent(text)

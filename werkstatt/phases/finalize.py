@@ -162,7 +162,7 @@ def _phase_finalize(
         _total = len(tasks)
         _failed = _total - tasks_ok
         summary(tasks_ok, _failed, 0)
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass
 
     return rc

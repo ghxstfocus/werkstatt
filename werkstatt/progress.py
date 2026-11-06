@@ -88,7 +88,7 @@ def append(
                  "exc_str": str(_exc)[:300]},
                 pd, pd.name,
             )
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
         return False
 

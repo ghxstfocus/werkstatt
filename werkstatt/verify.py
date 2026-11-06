@@ -173,7 +173,7 @@ def _expand_cmd_placeholders(
                     if _p and (Path(project_dir) / _p).exists():
                         _new_changed.append(_p)
                 changed = _new_changed
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
 
     changed_tests = [
@@ -270,7 +270,7 @@ def _verify_stage_with_heartbeat(
                 cmd, cwd=cwd, capture_output=True, text=True,
                 timeout=timeout, check=False,
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             _exc[0] = e
         finally:
             _done.set()
@@ -283,7 +283,7 @@ def _verify_stage_with_heartbeat(
             if _el // 2 > _last // 2:
                 try:
                     loop_renderer.heartbeat(f"[verify] {stage_id}", _el)
-                except Exception:  # noqa: BLE001, S110
+                except Exception:
                     pass
                 _last = _el
             _done.wait(timeout=0.5)
@@ -346,7 +346,7 @@ def _ruff_fix_changed(state: RunState) -> None:
             ["ruff", "check", "--fix", "--no-cache", *_py_files],
             cwd=pd, capture_output=True, text=True, timeout=30, check=False,
         )
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass
 
 
@@ -381,7 +381,7 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
             _cfg = load_project_config(_project_name)
             if _cfg.get("venv_python"):
                 _venv_python = _cfg["venv_python"]
-        except (SystemExit, Exception):  # noqa: BLE001, S110
+        except (SystemExit, Exception):
             pass  # Fallback auf python3
 
     # 1. Projekt-Contract lesen
@@ -479,7 +479,7 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
                 # K22a: stderr einbeziehen -- ruff schreibt auf stderr.
                 _out = (res.stdout or "") + (res.stderr or "")
                 errors.append(f"{stage.get('id', '?')}: {_out[-500:]}")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             errors.append(f"{stage.get('id', '?')}-Fehler: {exc}")
 
     # OP-062f: Hart-Info fuer _verify_patches_soft (Prefix-Match reicht
@@ -620,7 +620,7 @@ def _get_baseline_error_details(
             capture_output=True, text=True, timeout=300, check=False
         )
         return res.stdout[:4000]
-    except Exception:  # noqa: BLE001
+    except Exception:
         return "Baseline-Check fehlgeschlagen (Timeout/OSError)"
 
 

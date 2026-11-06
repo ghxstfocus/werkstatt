@@ -122,7 +122,7 @@ def status_header(label: str, detail: str = "") -> None:
         return
     try:
         _spin.spinner_update(label, detail)
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass
 
 

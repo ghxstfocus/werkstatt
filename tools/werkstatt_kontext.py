@@ -38,7 +38,7 @@ def _run(cmd, timeout: int = 60) -> tuple[int, str]:
             check=False,
         )
         return r.returncode, (r.stdout + r.stderr).strip()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return -1, f"[FEHLER: {e}]"
 
 
@@ -49,7 +49,7 @@ def _zeile(titel: str) -> str:
 def _lies(pfad: Path) -> str:
     try:
         return pfad.read_text(encoding="utf-8")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return f"[nicht lesbar: {e}]"
 
 
@@ -292,7 +292,7 @@ def abschnitt_zustand() -> str:
         status_text = STATUS.read_text()
         ops = re.findall(r"^### OP-", status_text, re.MULTILINE)
         out += f"Offene OPs in STATUS.md: {len(ops)}\n"
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         out += f"Offene OPs: [nicht lesbar: {e}]\n"
 
     return out
@@ -308,7 +308,7 @@ def abschnitt_naechste_ops(max_anzahl: int = 10) -> str:
     out = _zeile("7. NAECHSTE OFFENE OPs (nach Blocker-Status)")
     try:
         text = STATUS.read_text()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return out + f"\n[nicht lesbar: {e}]\n"
 
     ops = []
@@ -562,7 +562,7 @@ def sammle_json() -> dict:
     try:
         text = STATUS.read_text()
         ops_count = len(re.findall(r"^### OP-", text, re.MULTILINE))
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass
     return {
         "head": head,

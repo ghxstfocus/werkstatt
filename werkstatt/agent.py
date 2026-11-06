@@ -69,7 +69,7 @@ def _dump_prompt(aufgabe: str, model: str,
                  "exc_str": str(_exc)[:300]},
                 Path("/tmp"), "werkstatt",
             )
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
 
 

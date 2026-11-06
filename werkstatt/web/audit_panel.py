@@ -278,7 +278,7 @@ async def ws_audit_stream_filetail(websocket: WebSocket, name: str) -> None:
         poll_task.cancel()
         try:
             await poll_task
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+        except (asyncio.CancelledError, Exception):
             pass
 
 

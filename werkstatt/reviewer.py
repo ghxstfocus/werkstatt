@@ -286,7 +286,7 @@ def _reviewer_system(state=None, task_files=None) -> str:
                         f"## Skill: {_s.get('name', '?')}\n" + _body
                     )
                     _akt_names.append(_s.get("name", "?"))
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
     # M-Skills-Dedup: zentrale Merk-Funktion (dedup + audit)
@@ -294,7 +294,7 @@ def _reviewer_system(state=None, task_files=None) -> str:
         try:
             from werkstatt.skills import _merke_geladene_skills
             _merke_geladene_skills(state, _akt_names, rolle="reviewer")
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
 
     return "\n\n".join(parts)
@@ -511,7 +511,7 @@ def run_phase_end_review(state: RunState) -> bool:
                 aufgabe="reviewer",
             ),
         )
-    except Exception as _exc:  # noqa: BLE001
+    except Exception as _exc:
         audit("reviewer_phase_call_failed",
               {"fehler": str(_exc)[:300]}, pd, pn)
         return False

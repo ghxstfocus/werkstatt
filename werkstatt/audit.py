@@ -139,7 +139,7 @@ def audit_safe(
             Path(project_dir) if project_dir else Path("."),
             project_name,
         )
-    except Exception as _e:  # noqa: BLE001 — bewusst: logger darf nicht crashen
+    except Exception as _e:  # bewusst: logger darf nicht crashen
         print(
             f"[WARN] audit({kind!r}) fehlgeschlagen: "
             f"{type(_e).__name__}: {_e}",

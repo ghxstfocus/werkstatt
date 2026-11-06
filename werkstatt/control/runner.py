@@ -55,7 +55,7 @@ def run_phase(
             continue
         try:
             res = ctrl.fn(ctx)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             ergebnisse[ctrl.name] = f"EXCEPTION: {exc!r}"
             fehler.append(ctrl.name)
             if ctrl.hart and stop_on_hard:

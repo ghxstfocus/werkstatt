@@ -413,7 +413,7 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
             _op_felder = _extrahiere_op_felder(
                 aufgabe, (getattr(state, "docs", {}) or {}).get("status", "")
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             _op_felder = {}
     _op_block = _format_op_felder_for_prompt(_op_felder)
     if _op_block:
@@ -431,7 +431,7 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
                     parts.append(
                         f"<explorer_findings>\n{_exf_str}\n</explorer_findings>"
                     )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
         _scout_apis = state.scout_api_auszug or {}
         if _scout_apis:
@@ -441,7 +441,7 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
                     parts.append(
                         f"<scout_api_auszug>\n{_sa_str}\n</scout_api_auszug>"
                     )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
     # === K32: MIGRATIONSSTAND ZUERST (hoechste Prioritaet) ===
@@ -639,7 +639,7 @@ def run_architect(
         if not getattr(state, "api_index_cache", None):
             from werkstatt.scout import _baue_api_index
             state.api_index_cache = _baue_api_index(pd)
-    except Exception:  # noqa: BLE001, S110 — Cache ist optional
+    except Exception:  # Cache ist optional
         pass
 
     # M-446 + Registry-Pilot (2026-11-05): Architect laedt keine Skills.

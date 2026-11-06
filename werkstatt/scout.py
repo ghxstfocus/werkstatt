@@ -242,7 +242,7 @@ def _scout_system_with_nachfolger(state=None) -> str:
         _meta = skills_metadata_block(_skills)
         if _meta:
             parts.append(_meta.rstrip())
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     return "\n\n".join(parts)
 

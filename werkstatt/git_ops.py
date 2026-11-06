@@ -20,7 +20,7 @@ def _get_git_diff_for_hook() -> str:
             timeout=30, check=False,
         )
         return res.stdout[:10000]
-    except Exception:  # noqa: BLE001
+    except Exception:
         return ""
 
 
@@ -32,7 +32,7 @@ def _git_dirty(pd: Path) -> bool:
             capture_output=True, text=True, timeout=10, check=False,
         )
         return bool(res.stdout.strip())
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
 
 
@@ -44,7 +44,7 @@ def _git_head(pd: Path) -> str:
             capture_output=True, text=True, timeout=10, check=False,
         )
         return res.stdout.strip()
-    except Exception:  # noqa: BLE001
+    except Exception:
         return ""
 
 
@@ -57,7 +57,7 @@ def _git_stash(pd: Path) -> bool:
             capture_output=True, text=True, timeout=30, check=False,
         )
         return res.returncode == 0
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
 
 
@@ -80,7 +80,7 @@ def _git_stash_pop(pd: Path) -> bool:
             capture_output=True, text=True, timeout=10, check=False,
         )
         return False
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
 
 
@@ -92,7 +92,7 @@ def _git_stash_drop(pd: Path) -> bool:
             capture_output=True, text=True, timeout=30, check=False,
         )
         return res.returncode == 0
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
 
 
@@ -104,7 +104,7 @@ def _git_reset(pd: Path, ref: str) -> bool:
             capture_output=True, text=True, timeout=30, check=False,
         )
         return res.returncode == 0
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
 
 

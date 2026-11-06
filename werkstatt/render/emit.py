@@ -77,7 +77,7 @@ class TerminalEmitter:
         for cb in callbacks:
             try:
                 cb(event)
-            except Exception:  # noqa: BLE001, S110
+            except Exception:
                 # Ein kaputter Client darf andere Clients nicht blockieren.
                 pass
 
@@ -160,7 +160,7 @@ def _publish(event_type: str, text: str, **extra: object) -> None:
                 status=status,
                 payload={"text": text, **extra},
             )
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     emitter = _get_emitter()
     if emitter is None:

@@ -174,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     cwd = Path.cwd()
     try:
         result = check_all(cwd)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[FAIL] Skript-Fehler: {exc}", file=sys.stderr)
         return 2
 

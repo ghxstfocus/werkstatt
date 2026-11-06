@@ -127,7 +127,7 @@ def check_manifest(project_dir: Path) -> dict[str, str]:
         return {feld: "n/a (kein Manifest)" for feld in MANIFEST_PFLICHT}
     try:
         data = yaml.safe_load(mp.read_text(encoding="utf-8")) or {}
-    except Exception:  # noqa: BLE001
+    except Exception:
         return {feld: "n/a (Manifest unlesbar)" for feld in MANIFEST_PFLICHT}
     docs = data.get("docs") or {}
     return {

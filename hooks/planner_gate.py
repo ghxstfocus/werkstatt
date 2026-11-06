@@ -430,7 +430,7 @@ def _check_migrations_kollision(prosa: str, project_dir: str) -> list[dict]:
             if len(koll) >= 20:
                 break
         return koll
-    except Exception:  # noqa: BLE001
+    except Exception:
         return []
 
 

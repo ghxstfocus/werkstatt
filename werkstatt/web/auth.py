@@ -243,7 +243,7 @@ def make_login_router() -> APIRouter:
     async def login(request: Request) -> JSONResponse:
         try:
             body = await request.json()
-        except Exception:  # noqa: BLE001
+        except Exception:
             return JSONResponse({"ok": False, "fehler": "invalid body"},
                                 status_code=400)
         token = (body or {}).get("token", "") if isinstance(body, dict) else ""
@@ -253,7 +253,7 @@ def make_login_router() -> APIRouter:
                 audit("web_login_fail",
                        {"ip": request.client.host if request.client else "?"},
                        Path.cwd(), "_web")
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
             return JSONResponse({"ok": False, "fehler": "invalid token"},
                                 status_code=401)
@@ -264,7 +264,7 @@ def make_login_router() -> APIRouter:
             audit("web_login_ok",
                    {"ip": request.client.host if request.client else "?"},
                    Path.cwd(), "_web")
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
         return response
 
@@ -275,7 +275,7 @@ def make_login_router() -> APIRouter:
             audit("web_logout",
                    {"ip": request.client.host if request.client else "?"},
                    Path.cwd(), "_web")
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
         response = JSONResponse({"ok": True})
         clear_session_cookie(response)

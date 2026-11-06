@@ -108,7 +108,7 @@ def _build_patches_fuer_datei(
                         f"- Task {_t_bf.get('id','?')} "
                         f"({_fname_bf}): {_fg_bf}\n"
                     )
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass
 
     # M-444b: Feedback aus vorherigem Versuch einbauen.
@@ -234,7 +234,7 @@ def _build_patches_fuer_datei(
     try:
         from werkstatt.measurement import _messwerte_fuer_prompt
         _mess_builder = _messwerte_fuer_prompt(state)
-    except Exception:  # noqa: BLE001
+    except Exception:
         _mess_builder = ""
     if _mess_builder and _mess_builder.strip() not in ("", "(keine)"):
         _messwerte_block_b = (
@@ -265,7 +265,7 @@ def _build_patches_fuer_datei(
                 + _baseline_details[:3000]
                 + "\n"
             )
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     # M-Skills-Builder: metadata + glob (Level 1+2)
     _skills_block = ""
@@ -292,13 +292,13 @@ def _build_patches_fuer_datei(
             try:
                 from werkstatt.skills import _merke_geladene_skills
                 _merke_geladene_skills(state, _akt_names, rolle="builder")
-            except Exception:  # noqa: BLE001, S110
+            except Exception:
                 pass
         if _meta or _akt_block:
             _skills_block = (
                 _meta + _akt_block + "\n"
             )
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     _user = (
         f"## ZIELDATEI: {zieldatei}\n\n"

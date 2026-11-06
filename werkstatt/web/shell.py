@@ -206,7 +206,7 @@ class PTYSession:
                 await self.websocket.send_text(
                     data.decode("utf-8", errors="replace")
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _dbg(f"reader: WS-send FEHLER: {exc}")
                 break
         _dbg("reader: beendet")
@@ -288,7 +288,7 @@ class PTYSession:
             self._reader_task.cancel()
             try:
                 await asyncio.wait_for(self._reader_task, timeout=1.0)
-            except (TimeoutError, asyncio.CancelledError, Exception):  # noqa: BLE001
+            except (TimeoutError, asyncio.CancelledError, Exception):
                 pass
         if self._proc is not None and hasattr(self._proc, "terminate"):
             try:

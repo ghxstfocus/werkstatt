@@ -41,7 +41,7 @@ def _task_fortschritt_block(pd: Path, pn: str) -> str:
             return ""
         if not _ps.load():
             return ""
-    except Exception:  # noqa: BLE001
+    except Exception:
         return ""
     _tasks = _ps.data.get("tasks") or []
     if not _tasks:
@@ -186,7 +186,7 @@ def _progress_op_done(pd: Path, op_nnn: str, subject: str, pn: str) -> bool:
             status="done",
             info=f"Loop-Doku-Nachzug (Ebene 1). Beleg: git log {pn}.",
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
 
 
@@ -203,7 +203,7 @@ def _update_kennzahlen(status_md_path: Path, pd: Path) -> bool:
             ["git", "-C", str(pd), "rev-parse", "--short", "HEAD"],
             capture_output=True, text=True, check=False, timeout=10,
         ).stdout.strip()
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
     if not sha:
         return False
@@ -243,7 +243,7 @@ def _architecture_drift_check(pd: Path) -> dict:
             ["git", "-C", str(pd), "diff", "--name-status", "HEAD"],
             capture_output=True, text=True, check=False, timeout=10,
         ).stdout
-    except Exception:  # noqa: BLE001
+    except Exception:
         return {"drift": False, "reason": "git_diff_failed"}
     py_changed = []
     arch_changed = False
@@ -315,7 +315,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             ["git", "-C", str(pd), "status", "--porcelain"],
             capture_output=True, text=True, check=False, timeout=10,
         )
-    except Exception as _e:  # noqa: BLE001
+    except Exception as _e:
         return False, f"git status fehlgeschlagen: {_e}"
     if not status.stdout.strip():
         audit("loop_human_gate_commit_skip",
@@ -336,7 +336,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             status="phase_ende",
             info=f"tasks_ok={_tasks_ok_k}/{_tasks_len_k}",
         )
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass
 
     # OP-048/055/056/057: Doku-Selbstpflege Ebene 1+2 (opt-in WERKSTATT_DOKU_NACHZUG=1).
@@ -406,7 +406,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             ["git", "-C", str(pd), "status", "--porcelain", "-uall"],
             capture_output=True, text=True, check=False, timeout=10,
         ).stdout
-    except Exception:  # noqa: BLE001
+    except Exception:
         _status_raw = ""
     _diff_set = set()
     for _ln in _status_raw.splitlines():
@@ -440,7 +440,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             ["git", "-C", str(pd), "add", "-A"],
             capture_output=True, text=True, check=False, timeout=30,
         )
-    except Exception as _e:  # noqa: BLE001
+    except Exception as _e:
         return False, f"git add fehlgeschlagen: {_e}"
     if add.returncode != 0:
         return False, f"git add rc={add.returncode}: {add.stderr.strip()[:200]}"
@@ -494,7 +494,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             _commit_argv,
             capture_output=True, text=True, check=False, timeout=30,
         )
-    except Exception as _e:  # noqa: BLE001
+    except Exception as _e:
         return False, f"git commit fehlgeschlagen: {_e}"
     if commit.returncode != 0:
         audit("loop_human_gate_commit_fehler",
@@ -507,7 +507,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             capture_output=True, text=True, check=False, timeout=10,
         )
         _sha = _rev.stdout.strip()[:12]
-    except Exception:  # noqa: BLE001
+    except Exception:
         _sha = ""
 
     # FIX AH 2026-10-31: Flag setzen, damit der Loop-Ende-Pfad

@@ -146,7 +146,7 @@ def _phase_plan_and_preflight(
                 _r_arch.panel_diff(
                     _arch_prosa, title="ARCHITECT-BESCHREIBUNG"
                 )
-            except Exception:  # noqa: BLE001, S110
+            except Exception:
                 pass
         else:
             _arch_tasks = [
@@ -161,7 +161,7 @@ def _phase_plan_and_preflight(
                         _r_arch.panel_diff(
                             _arch_desc, title="ARCHITECT-BESCHREIBUNG"
                         )
-                    except Exception:  # noqa: BLE001, S110
+                    except Exception:
                         pass
         plan_ok = _plan_gate(state)
         # M-349c/d: Plan-Reflection. Max 3 Runden.
@@ -220,7 +220,7 @@ def _phase_plan_and_preflight(
             try:
                 from werkstatt.reflection import _plan_reject_reflection
                 _rej_ok = _plan_reject_reflection(state)
-            except Exception as _rej_exc:  # noqa: BLE001
+            except Exception as _rej_exc:
                 audit("loop_plan_reject_fail_closed",
                       {"reason": "reflection_exception",
                        "error": str(_rej_exc)[:200]}, pd, pn)

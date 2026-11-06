@@ -251,7 +251,7 @@ def _hat_human_review_tasks(phase_state) -> bool:
         return False
     try:
         _tasks = phase_state.data.get("tasks") or []
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
     return any(
         isinstance(t, dict) and (

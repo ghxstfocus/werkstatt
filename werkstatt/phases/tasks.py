@@ -94,7 +94,7 @@ def _phase_tasks_loop(
         group_start(f"Task {i}/?: {task_name}")
         try:
             task_started(i, len(tasks), task_name)
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
         _t_task = time.monotonic()
         task(i, len(tasks), task_name)
@@ -162,7 +162,7 @@ def _phase_tasks_loop(
                     try:
                         _v_gruen_b = bool(
                             _verify_patches(state, phase="post_build"))
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         _v_gruen_b = False
                     if _v_gruen_b:
                         audit("builder_patch_bereits_erfuellt",
@@ -655,7 +655,7 @@ def _phase_tasks_loop(
             try:
                 from werkstatt.reflection import _diff_hash_for_state as _dh
                 state._reflection_diff_hash = _dh(state)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 state._reflection_diff_hash = None
             state.reviewer_stagnation_false_positive = False
             if not _reflection_loop(state, error_context=_bug_ctx):
@@ -835,7 +835,7 @@ def _phase_tasks_loop(
         task_ok(i, len(tasks), elapsed_s=_el_task)
         try:
             task_done(i, len(tasks), task_name, elapsed_s=_el_task, ok=True)
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
         group_end()
         tasks_ok += 1

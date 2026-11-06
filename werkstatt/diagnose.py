@@ -299,7 +299,7 @@ def _deterministische_diagnose(state: Any) -> dict | None:
             for fn in diagnosen:
                 try:
                     res = fn(state, datei, s)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     res = None
                 if res is not None:
                     return res

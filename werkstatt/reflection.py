@@ -412,7 +412,7 @@ def _reflection_loop(
                 _deterministische_diagnose,
             )
             _det = _deterministische_diagnose(state)
-        except Exception:  # noqa: BLE001
+        except Exception:
             _det = None
         if _det is not None:
             _a_det, _d_det = _apply_patches_with_diagnose(
@@ -556,7 +556,7 @@ def _reflection_loop(
                 try:
                     _verify_gruen = bool(
                         _verify_patches(state, phase=phase))
-                except Exception:  # noqa: BLE001
+                except Exception:
                     _verify_gruen = False
                 if _verify_gruen:
                     audit("reviewer_stagnation_false_positive",

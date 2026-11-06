@@ -73,7 +73,7 @@ def _run(cmd: str, cwd: Path, allowed: list[str]) -> dict[str, Any]:
         }
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "Timeout (120s)"}
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 

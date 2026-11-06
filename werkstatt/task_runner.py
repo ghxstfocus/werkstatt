@@ -73,7 +73,7 @@ def _task_ende(
     try:
         if phase_state is not None:
             _existing = phase_state.get_task(task_id)
-    except Exception:  # noqa: BLE001
+    except Exception:
         _existing = None
     if _existing and _existing.get("status") in (
             "done", "failed", "human_review"):
@@ -122,7 +122,7 @@ def _task_ende(
             _res = phase_state.ist_vetoed(task_id)
             # `is True` schuetzt gegen MagicMock (truthy Return ohne bool)
             _vetoed = _res is True
-        except Exception:  # noqa: BLE001
+        except Exception:
             _vetoed = False
     if _vetoed and ok:
         audit("loop_task_veto_respected",

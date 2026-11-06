@@ -26,7 +26,7 @@ def _call_hook(hook_name: str, payload: dict) -> dict:
         if res.returncode != 0:
             return {"allow": False, "reason": f"Hook rc={res.returncode}"}
         return _json.loads(res.stdout)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"allow": False, "reason": f"Hook-Fehler: {exc}"}
 
 

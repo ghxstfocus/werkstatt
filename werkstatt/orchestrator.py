@@ -118,7 +118,7 @@ def build_run_state(
         # load_docs ruft sys.exit bei fehlenden Dateien.
         # In build_run_state tolerieren wir das (leerer Kontext).
         docs = {}
-    except Exception:  # noqa: BLE001
+    except Exception:
         docs = {}
 
     # OP-053: git_author aus Manifest (projects/<name>.yaml) in RunState.

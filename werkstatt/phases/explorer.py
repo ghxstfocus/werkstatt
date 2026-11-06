@@ -114,7 +114,7 @@ def _phase_explorer_and_setup(
     try:
         from werkstatt.explorer import _verwandte_dateien as _vw
         _verwandte = _vw(Path(pd), _explizite_dateien) if _explizite_dateien else []
-    except Exception:  # noqa: BLE001
+    except Exception:
         _verwandte = []
 
     _seen: set[str] = set()

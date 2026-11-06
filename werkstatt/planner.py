@@ -145,7 +145,7 @@ def _preflight_scan(state: RunState) -> list[dict]:
                 "datei": _datei,
                 "text": stderr[:500],
             })
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             fehler.append({
                 "klasse": "unknown",
                 "stage_id": stage_id,
@@ -240,7 +240,7 @@ def _erledigte_punkte(pd) -> str:
         )
         if res.stdout.strip():
             _teile.append("Commits mit ✅:\n" + res.stdout.strip())
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
     # K6.1: ROADMAP.md UND STATUS.md als Signal.
@@ -406,7 +406,7 @@ def _migrations_stand(pd) -> str:
             "</migrationsstand>",
         ]
         return "\n".join(lines)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return ""
 
 
@@ -438,7 +438,7 @@ def _pruefe_migrations_kollision(
             if n in existierend:
                 kollisionen.append({"nummer": n, "existiert": True})
         return kollisionen
-    except Exception:  # noqa: BLE001
+    except Exception:
         return []
 
 
@@ -635,7 +635,7 @@ def _korrigiere_aktion(task: dict, pd, pn: str) -> None:
                 "dateien": files, "von": "create", "nach": "update",
                 "grund": "datei_existiert",
             }, pd_path, pn)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return
 
 
@@ -675,7 +675,7 @@ def _korrigiere_aktion_sequenziell(tasks: list[dict], pd, pn: str) -> None:
                 for f in files:
                     if isinstance(f, str):
                         angelegt_bis.add(f)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return
 
 
@@ -836,7 +836,7 @@ def _leite_deps_deterministisch(
                         "quelle": "architect-leer",
                         "tasks_mit_deps": 0,
                     }, pd, pn)
-                except Exception:  # noqa: BLE001, S110
+                except Exception:
                     pass
             return tasks
         for t in tasks:
@@ -921,7 +921,7 @@ def _leite_deps_deterministisch(
                 "quelle": _quelle,
                 "tasks_mit_deps": _mit,
             }, pd, pn)
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
 
     return tasks
@@ -1580,7 +1580,7 @@ def run_planner(state: RunState) -> bool:
                 if _b:
                     _lines.append(f"### {_s.get('name','?')}\n{_b}")
             state.planner_skills_block = "\n\n".join(_lines)
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass
 
     # FIX S 2026-10-31: Deterministischer Pre-Check VOR dem Scout.
@@ -1684,7 +1684,7 @@ def run_planner(state: RunState) -> bool:
                     "hindeutet (z.B. Import fehlt, Datei fehlt), sorge "
                     "dafuer, dass die Voraussetzung zuerst gebaut wird.\n"
                 )
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass
 
     # M-375/M-376: Explorer-Kontext lesen (key_files + findings).
@@ -1740,7 +1740,7 @@ def run_planner(state: RunState) -> bool:
         progress_text = _progress.read_recent(pd, n=10)
         if progress_text:
             user_content += f"\n\nProjekt-Fortschritt (letzte 10):\n{progress_text}"
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass  # PROGRESS.md nicht kritisch
 
     # M-310b: strukturierter Phase-State (wo bin ich jetzt).
@@ -1758,7 +1758,7 @@ def run_planner(state: RunState) -> bool:
                     "\n\nPhase-State (aktueller Stand):\n"
                     + json.dumps(_tasks_status, ensure_ascii=False)
                 )
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass  # PhaseState nicht kritisch fuer Prompt
 
     # M-299e: Preflight-Fehler + Follow_up aus vorheriger Phase.
@@ -1850,7 +1850,7 @@ def run_planner(state: RunState) -> bool:
                     "Scout-API",
                     f"{len(_apis)} Datei(en) | {_n_sym} Symbol(e)",
                 )
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
 
     if _scout_report:

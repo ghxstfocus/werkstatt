@@ -21,7 +21,7 @@ def _ws_receive_json_mit_timeout(ws, timeout_s: float = 3.0):
     def _recv() -> None:
         try:
             result.append(("ok", ws.receive_json()))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             result.append(("err", exc))
 
     t = threading.Thread(target=_recv, daemon=True)

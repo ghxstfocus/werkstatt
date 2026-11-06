@@ -363,7 +363,7 @@ def _execute_tool(name: str, raw_args: str) -> str:
         return f"FEHLER: Tool-Argumente sind kein JSON: {raw_args[:80]}"
     try:
         return fn(args)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return f"FEHLER im Tool {name}: {type(exc).__name__}: {exc}"
 
 
