@@ -69,7 +69,7 @@
       ],
       "phase": "post_build",
       "timeout": 90,
-      "hart": false
+      "hart": true
     },
     {
       "id": "pytest_changed",
