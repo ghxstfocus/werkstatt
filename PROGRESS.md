@@ -2424,3 +2424,63 @@ Auftrag-Treue-Filters maskieren konnten.
 - pytest: 1273 passed, 5 skipped (Kontext-Block §5)
 - ruff: 118 (gemessen 2026-11-06, `ruff check .`)
 - Alle Drift-Checks gruen
+
+
+### 2026-11-06 — OP-145 verworfen (wontfix) — neue OP-145b angelegt
+
+**Messung 2026-11-06 (vor Design):**
+
+Drei Felder mit unterschiedlicher Semantik, kein Alias:
+
+| Feld | Zeile | Rolle |
+|---|---|---|
+| `auftrag_bereits_erfuellt` | state.py:256 | "ein Pfad hat es erkannt" |
+| `auftrag_bereits_erfuellt_bestaetigt` | state.py:147 | "deterministisch bewiesen" |
+| `auftrag_bereits_erfuellt_quelle` | state.py:148 | welcher Pfad |
+
+Writer-Pfade (5):
+- `planner:deterministic_precheck` -> T/T (planner.py:1450-1452)
+- `planner:scout_llm_urteil` -> T/F (planner.py:1830-1832)
+- `builder:llm_keine_patches` -> T/F (builder/run.py:353-355)
+- `builder:old_nicht_da_aber_new_da` -> T/T (builder/run.py:452-454)
+- `builder:alle_patches_no_effect` -> T/F (builder/run.py:921-923)
+
+Reader-Muster (2):
+- `tasks.py:218`: verlangt `_erfuellt` UND `_bestaetigt` (Task-Done)
+- `plan.py:99,109` + `explorer.py:176` + `gates.py:435` +
+  `builder/run.py:857`: lesen nur `_erfuellt` (skip plan gate)
+
+`state_flow` zeigt fuer alle drei: Risiko HOCH (multi-writer(2-4),
+keine Contracts).
+
+**OP-145-Text war stale:**
+
+- "nicht in state.py deklariert" -> falsch, `state.py:256`
+  deklariert seit Commit 37ebf1e.
+- "STATE-INVENTUR fuehrt als Ghost" -> falsch,
+  `BASELINE_GEISTER = frozenset()` seit 37ebf1e (0 Geister).
+- "24 Geister nach Rename" -> falsch, war 0 vorher, bleibt 0.
+
+**Warum wontfix statt Rename:**
+
+Die OP-145-AK forderte `_erfuellt` -> `_bestaetigt` umbenennen.
+Das haette den Scout-Pfad (`planner.py:1830`) regressen:
+Scout setzt bewusst `_erfuellt=True, _bestaetigt=False`, damit
+`plan.py:109` (skip plan gate) triggert, aber `tasks.py:218`
+(Task-Done) NICHT. Beim Rename waeren beide True -> falsches
+Task-Done bei bloßer Scout-LLM-Vermutung.
+
+**Nachfolger: OP-145b**
+
+Statt Rename: State-Contract fuer die Familie. Ein zentraler
+Writer-Helper `setze_auftrag_bereits_erfuellt(state, quelle,
+bestaetigt)` ersetzt die 5 verstreuten Writer-Stellen. Doku
+in `docs/STATE-INVENTUR.md`. Tests decken die 5 Kombinationen
+und die 2 Reader-Muster ab.
+
+**Kein Code geaendert.** Nur STATUS.md + PROGRESS.md.
+
+**Baseline 2026-11-06 (vor diesem Commit):**
+- pytest: 1275 passed, 8 skipped
+- ruff: 118 (gemessen 2026-11-06, `ruff check .`)
+- Alle Drift-Checks gruen

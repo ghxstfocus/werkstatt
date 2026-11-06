@@ -702,49 +702,59 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - 2026-11-02 | OP-079 | done | review-work-Skill: Markdown-Hunk-Header (d023535)
 - 2026-11-02 | OP-080 | done | review-work-Skill: Python-PATCHES (3d7fd1f)
 
-### OP-145: Namens-Drift `auftrag_bereits_erfuellt` (ghost)
+### OP-145b: State-Contract fuer auftrag_bereits_erfuellt-Familie
 
 - **Status:** open
-- **Typ:** analyse + fix
-- **Betroffen:** `werkstatt/builder.py`, `werkstatt/gates.py`,
-  `werkstatt/planner.py`, `werkstatt/pipeline_phases.py`,
-  `werkstatt/state.py`
-- **Problem:** Zwei Felder fuer dasselbe Konzept:
-  `state.auftrag_bereits_erfuellt` (nicht in `state.py` deklariert,
-  gelesen in `builder.py`, `gates.py`, `planner.py`,
-  `pipeline_phases.py`) und `state.auftrag_bereits_erfuellt_bestaetigt`
-  (in `state.py` deklariert als `bool`, aber von diesen Stellen
-  nicht gelesen). STATE-INVENTUR.md fuehrt `auftrag_bereits_erfuellt`
-  als Ghost, `auftrag_bereits_erfuellt_bestaetigt` als write_only.
-  Folge: der Auftrag-bereits-erfuellt-Pfad entscheidet sich am Feld,
-  das gar nicht im Contract steht. Nachfolge-Bug zu `architect.py:385`
-  (OP-137), dort war es `explorer_findings` vs `explorer_context`.
+- **Typ:** architektur (State-Contract)
+- **Betroffen:** `werkstatt/state_contracts.py`,
+  `tests/test_state_contracts_auftrag.py` (neu),
+  `docs/STATE-INVENTUR.md`
+- **Problem:** Drei Felder teilen ein Konzept, haben aber
+  unterschiedliche Semantik:
+  - `auftrag_bereits_erfuellt: bool` (`state.py:256`) — "ein Pfad
+    hat es erkannt" (auch LLM-Vermutung).
+  - `auftrag_bereits_erfuellt_bestaetigt: bool` (`state.py:147`) —
+    "deterministisch bewiesen".
+  - `auftrag_bereits_erfuellt_quelle: str` (`state.py:148`) —
+    welcher Pfad.
+  Writer-Set (5 Pfade, gemessen 2026-11-06):
+  `planner:deterministic_precheck` (T/T),
+  `planner:scout_llm_urteil` (T/F),
+  `builder:llm_keine_patches` (T/F),
+  `builder:old_nicht_da_aber_new_da` (T/T),
+  `builder:alle_patches_no_effect` (T/F).
+  Reader unterscheiden: `phases/tasks.py:218` verlangt beide True;
+  `phases/plan.py:99,109`, `phases/explorer.py:176`, `gates.py:435`,
+  `builder/run.py:857` lesen nur `_erfuellt`.
+  `state_flow` zeigt fuer alle drei: Risiko HOCH (multi-writer,
+  keine Contracts).
+  Die Verwirrung: ein Rename `_erfuellt` -> `_bestaetigt`
+  (urspruengliche OP-145-AK) wuerde `planner.py:1830`
+  (scout_llm_urteil) regressen — scout setzt bewusst
+  `_erfuellt=True, _bestaetigt=False`, damit `plan.py:109`
+  (skip plan gate) triggert, aber `tasks.py:218` (Task-Done)
+  NICHT.
 - **Akzeptanzkriterien:**
-  - Messung: pro Fundstelle (`builder.py`, `gates.py`, `planner.py`,
-    `pipeline_phases.py`) zaehlen, welches Feld gelesen und welches
-    geschrieben wird (dokumentiert in STATE-INVENTUR.md).
-  - **Entscheidung (bindend, nicht neu zu waehlen): Umbenennung.**
-    Alle Leser/Schreiber von `state.auftrag_bereits_erfuellt`
-    werden auf `state.auftrag_bereits_erfuellt_bestaetigt`
-    umgestellt. Der Ghost `auftrag_bereits_erfuellt` verschwindet
-    aus dem Code. **KEINE Property `auftrag_bereits_erfuellt`
-    anlegen** (das waere Alias, verworfen). Begruendung: Das
-    Akzeptanzkriterium fordert 'alle Leser lesen das Contract-
-    Feld' — bei Alias wuerden Leser weiter
-    `state.auftrag_bereits_erfuellt` schreiben. Der Architect
-    plant WIE (Datei/Stelle), nicht OB (Rename vs. Alias).
-  - Fix: alle Leser lesen das Contract-Feld; alle Schreiber schreiben
-    das Contract-Feld. Keine `# type: ignore[attr-defined]` mehr
-    auf diesem Paar.
-  - Test: neuer Cross-Role-Smoke-Test — Builder setzt
-    `state.auftrag_bereits_erfuellt_bestaetigt = True`, Gate
-    liest es (ueber dasselbe Feld).
-  - `python3 tools/state_inventory.py --check` zeigt danach
-    **24** Geister (25 - 1): `auftrag_bereits_erfuellt` wird
-    aus `BASELINE_GEISTER` entfernt, weil der Ghost-String durch
-    das Rename verschwindet. `auftrag_bereits_erfuellt_bestaetigt`
-    bleibt deklariert und zaehlt nicht als Ghost.
+  - `state_contracts.py` deklariert
+    `AUFTRAG_BEREITS_ERFUELLT_FELDER` mit Doku-String pro Feld
+    (Semantik + zulaessige Werte-Kombinationen).
+  - Neuer Helper
+    `setze_auftrag_bereits_erfuellt(state, quelle, bestaetigt)`
+    als einziger Writer (statt 5 verstreuter Stellen), der die
+    drei Felder konsistent setzt.
+  - Alle 5 Writer-Pfade rufen den Helper.
+  - `docs/STATE-INVENTUR.md`: Sektion
+    "auftrag_bereits_erfuellt-Familie" mit Semantik-Tabelle
+    (Writer -> Werte-Kombination, Reader -> welche Felder).
+  - Tests: 3 Writer-Pfade (Scout, Builder-LLM, Builder-deterministisch)
+    setzen die richtigen Werte-Kombinationen; `plan.py` triggert
+    bei `_erfuellt=True` unabhaengig von `_bestaetigt`;
+    `tasks.py` triggert nur bei beiden True.
+- **Tests:** `tests/test_state_contracts_auftrag.py` (neu)
 - **Blockiert von:** —
+- **Hinweis:** Ersetzt OP-145 (verworfen). OP-145 hat einen Rename
+  vorgeschlagen, der Scout-Pfad-Regress verursacht haette.
+  Quelle: Loop-Test-4-Analyse 2026-11-06, Messung der 5 Writer.
 
 ### OP-147: Reflection-Verdrahtung (kleine Luecken)
 
@@ -891,6 +901,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-06 | OP-145 | wontfix | Semantik geklaert: `_erfuellt`/`_bestaetigt`/`_quelle` haben verschiedene Rollen (5 Writer-Pfade, 2 Reader-Muster); Rename haette Scout-Pfad (`planner.py:1830`) regressen. Ersetzt durch OP-145b (State-Contract, in Planung)
 - 2026-11-06 | OP-166 | done | per-Task-State-Reset `last_verify_errors` + `reviewer_bugs` via `_reset_task_state`; 4 Tests; AK (b) bewusst nicht implementiert (K50-Bug-C in reflection.py:394-403); entblockt OP-164b (a720fe0)
 - 2026-11-05 | OP-144 | done | import-linter als Post-Build-Stage (hart), 3 Layer-Regeln aus ADR-0013 (render, roles.builder, phases); allow_indirect_imports=true; werkstatt/roles/__init__.py nachgezogen (30eef6e)
 - 2026-11-05 | OP-142 | superseded | verworfen: shell.py und terminal_proxy.py machen fundamental verschiedene Dinge (PTY-Ausfuehrung vs. Log-Tailing); 17 identische Code-Zeilen sind Boilerplate (Imports, websocket.accept, except-Klauseln). 5 routes/-Wrapper haetten existierende Module gewrappt statt Duplikate aufzuloesen. Details in PROGRESS.md.
