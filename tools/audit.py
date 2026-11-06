@@ -32,9 +32,11 @@ def _schreibe(name: str, inhalt: str) -> None:
     print(f"[+] {name}: {len(inhalt)} Zeichen")
 
 
-def _funktionen(tree: ast.Module) -> dict[str, ast.AST]:
+def _funktionen(
+    tree: ast.Module,
+) -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
     """Alle Top-Level- und Klassen-Funktionen."""
-    fns: dict[str, ast.AST] = {}
+    fns: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             fns[node.name] = node

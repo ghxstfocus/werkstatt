@@ -576,7 +576,7 @@ def _verify_patches_soft(
         # Format: "stage_id: <message>"
         _stage = _e_str.split(":", 1)[0].strip()
         # OP-062f: State-Hinweis hat Vorrang vor Prefix-Match.
-        _hart_stages = getattr(state, "last_verify_hart_stages", set())
+        _hart_stages: set[str] = set(getattr(state, "last_verify_hart_stages", set()))
         if _stage in _hart_stages or _stage_ist_hart(_stage):
             _hart.append(_e_str)
         else:

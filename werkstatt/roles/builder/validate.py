@@ -63,7 +63,7 @@ def _validate_imports_in_patch(
     # M-451: stdlib-Check auf Top-Level. sys.stdlib_module_names
     # enthaelt nur Top-Level (collections), nicht submodule
     # (collections.abc). Submodule sind aber Teil der stdlib.
-    stdlib = getattr(_sys, "stdlib_module_names", set())
+    stdlib: set[str] = set(getattr(_sys, "stdlib_module_names", set()))
     venv_site_dirs: list[Path] = []
     venv_lib = project_dir / ".venv" / "lib"
     if venv_lib.is_dir():

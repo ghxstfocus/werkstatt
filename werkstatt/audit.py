@@ -120,7 +120,7 @@ def audit(kind: str, payload: dict[str, Any], project_dir: Path,
 def audit_safe(
     kind: str,
     payload: dict | None = None,
-    project_dir: Path | None = None,
+    project_dir: Path | str | None = None,
     project_name: str = "?",
 ) -> None:
     """Wie audit(), crasht aber NIE.
@@ -133,7 +133,12 @@ def audit_safe(
     """
     import sys as _sys
     try:
-        audit(kind, payload, project_dir, project_name)
+        audit(
+            kind,
+            payload or {},
+            Path(project_dir) if project_dir else Path("."),
+            project_name,
+        )
     except Exception as _e:  # noqa: BLE001 — bewusst: logger darf nicht crashen
         print(
             f"[WARN] audit({kind!r}) fehlgeschlagen: "

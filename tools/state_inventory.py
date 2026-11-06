@@ -41,7 +41,7 @@ STATE_NAMEN = {"state", "run_state", "_state"}
 
 # Baseline Stand 2026-11-04 (Session-Ende). --check failt bei Abweichung.
 # Anpassen NUR mit dokumentiertem Grund (OP-135/136).
-BASELINE_GEISTER = frozenset()
+BASELINE_GEISTER: frozenset[str] = frozenset()
 BASELINE_TOTE = frozenset({
     "agent_docs",
     "block_id",
