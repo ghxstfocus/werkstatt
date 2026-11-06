@@ -230,6 +230,39 @@ def _bauer_recovery_prompt(state: RunState) -> str:
     )
 
 
+def format_letzter_test_fehler_block(
+        fehler: object,
+        verify_errors: list | None) -> str:
+    """Block fuer den letzten Test-Fehler aus der Vorrunde.
+
+    Rein: kein State-Zugriff, kein LLM, kein Audit.
+    Liefert "" wenn nichts zu rendern ist, oder wenn
+    das Signal bereits in verify_errors steckt.
+    """
+    if not fehler:
+        return ""
+    text = str(fehler).strip()
+    if not text:
+        return ""
+    if len(text) > 2000:
+        text = text[:2000] + " [... gekuerzt ...]"
+    nl = chr(10)
+    for e in verify_errors or []:
+        if isinstance(e, dict):
+            eintrag = e.get("text") or ""
+        else:
+            eintrag = str(e)
+        eintrag = eintrag.strip()
+        if not eintrag:
+            continue
+        if eintrag == text or text in eintrag:
+            return ""
+    return (
+        "## LETZTER TEST-FEHLER (aus vorheriger Runde)"
+        + nl + text + nl + nl
+    )
+
+
 def format_doc_snippets(docs: dict[str, str],
                         max_len: int = 3000) -> str:
     """Auflage 2142: Ausschnitte aus den Doku-Dateien fuer den Builder.

@@ -259,6 +259,12 @@ class RunState:
     explorer_pytest_laufzeit_s: int = 0
     explorer_ruff_befunde: list = field(default_factory=list)
     last_planner_info: dict = field(default_factory=dict)
+    # Letzter Test-Fehler aus einer vorherigen Runde. Wird von
+    # `_reflection_loop` (OP-147) als zusaetzlicher Block in den
+    # Feedback-Prompt gehaengt, sofern er nicht bereits identisch in
+    # `last_verify_errors` enthalten ist (dedupliziert). Bei leerem
+    # Wert kein Verhaltensdelta.
+    letzter_test_fehler: str = ""
     last_verify_errors: list = field(default_factory=list)
     last_verify_hart_stages: set = field(default_factory=set)
     messungen_nach_apply: list = field(default_factory=list)

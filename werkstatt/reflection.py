@@ -3,6 +3,18 @@
 Extrahiert aus loop.py. Re-Export in loop.py erhaelt API-
 Kompatibilitaet (Tests patchen werkstatt.loop._apply_patches_with_hooks,
 _verify_patches, run_builder, run_reviewer).
+
+Reflection-Varianten — welche State-Felder werden gelesen
+----------------------------------------------------------
+Variante                  | letzter_test_fehler | geladene_skills | last_verify_errors | reviewer_bugs
+_reflection_loop          | ja                  | ja              | ja                 | ja
+_phase_end_reflection     | nein                | nein            | ja                 | ja
+_plan_reject_reflection   | nein                | nein            | nein               | nein
+
+Die Tabelle ist reine Dokumentation (OP-147). Die Varianten werden
+NICHT vereinheitlicht — das ist einer spaeteren OP vorbehalten.
+Hinweis: `_reflection_loop` haengt den `letzter_test_fehler`-Block nur,
+wenn er nicht schon in `last_verify_errors` steckt.
 """
 from __future__ import annotations
 
@@ -258,20 +270,7 @@ def _reflection_loop(
     api_key = getattr(state, "api_key", "")
 
     # Stellschrauben 2026-11-03: reflection-Skill.
-    try:
-        from werkstatt.skills import (
-            _merke_geladene_skills,
-            load_all_skills,
-            load_skill_by_name,
-        )
-        _all = load_all_skills()
-        _sd = load_skill_by_name("systematic-debugging", _all)
-        if _sd:
-            _merke_geladene_skills(
-                state, [_sd.get("name", "systematic-debugging")], rolle="reflection")
-            state.reflection_skill_body = _sd.get("body") or ""
-    except Exception:  # noqa: BLE001, S110
-        pass
+    _skill_body_fuer_reflection(state)
 
     if not api_key:
         audit("loop_reflection_kein_key", {}, pd, pn)
@@ -439,6 +438,18 @@ def _reflection_loop(
         # (Datei bereits im Zielzustand, Hash unveraendert).
         _hash_vorher = _hash_jetzt
         _test_sig_vorher = _test_sig
+        # OP-147: letzter_test_fehler-Block an den Prompt haengen,
+        # bevor der Builder gerufen wird. Dedup: nur wenn nicht
+        # schon in last_verify_errors enthalten.
+        _ltf_block = format_letzter_test_fehler_block(
+            getattr(state, "letzter_test_fehler", ""),
+            list(getattr(state, "last_verify_errors", None) or []),
+        )
+        if _ltf_block:
+            _cur_ctx = getattr(state, "error_context", None) or ""
+            state.error_context = (  # type: ignore[attr-defined]
+                (_cur_ctx + chr(10) + _ltf_block) if _cur_ctx else _ltf_block
+            )
         state.reflection_phase = True  # type: ignore[attr-defined]
         try:
             _builder_ok = run_builder(state)
@@ -805,6 +816,34 @@ __all__ = [
     '_phase_end_reflection',
     '_reflection_loop',
 ]
+
+
+def _skill_body_fuer_reflection(state) -> str:
+    """Laedt den systematic-debugging-Body hoechstens einmal pro Run."""
+    namen = ["systematic-debugging"]
+    geladen = getattr(state, "geladene_skills", None) or []
+    if any(n in geladen for n in namen):
+        return getattr(state, "reflection_skill_body", "") or ""
+
+    from werkstatt.skills import (
+        _merke_geladene_skills,
+        load_all_skills,
+        load_skill_by_name,
+    )
+
+    _all = load_all_skills()
+    skill = load_skill_by_name("systematic-debugging", _all)
+    if not skill:
+        return ""
+    body = skill.get("body") or ""
+    if not isinstance(body, str):
+        body = ""
+    try:
+        state.reflection_skill_body = body
+    except (AttributeError, TypeError):
+        pass
+    _merke_geladene_skills(state, namen, rolle="reflection")
+    return body
 
 
 def _plan_reject_reflection(state) -> bool:

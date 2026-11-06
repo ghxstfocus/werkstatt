@@ -2535,3 +2535,7 @@ wurde — genau der Zweck.
 - pytest: 1279 passed, 8 skipped
 - ruff: 118 (gemessen `ruff check .`, `grep -- '-->'` zaehlt)
 - Alle Drift-Checks gruen
+## 2026-11-06T11:51:18+00:00 -- Phase abgeschlossen: werkstatt
+- **Status:** phase_ende
+- **Info:** tasks_ok=4/6
+
