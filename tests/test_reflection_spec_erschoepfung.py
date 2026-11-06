@@ -11,21 +11,42 @@ applied>0 und verify rot gelaufen sind. Dann spec_widerspruch.
 """
 from __future__ import annotations
 
+import sys as _sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import werkstatt.roles.builder as _builder_mod
 from werkstatt import reflection as refl_mod
+from werkstatt.state import RunState
+
+# Import von factories: tests/ ist kein Package, deshalb sys.path.
+_here = Path(__file__).parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
-def _mk_state(tmp_path: Path) -> SimpleNamespace:
-    s = SimpleNamespace()
-    s.project_dir = tmp_path
-    s.project_name = "test"
-    s.api_key = "dummy"
-    s.last_verify_errors = []
-    s.reviewer_bugs = []
-    s.patches = [{"file": "core/x.py", "old_string": "a", "new_string": "b"}]
+def _mk_state(tmp_path: Path) -> RunState:
+    """Spec-State fuer _reflection_loop (OP-174 P2).
+
+    Baut ueber mk_state() — fail-loud bei Tippfehler in RunState-
+    Feldern. Test-spezifische Felder, die (Stand 2026-11-06) nicht
+    in RunState.__dataclass_fields__ sind, werden per setattr
+    gesetzt:
+    - applied_count: RunState-Feld, aber wir dokumentieren die
+      Absicht hier explizit statt implizit ueber setattr.
+    - reflection_history: Reflection-Historie, kein RunState-Kern.
+    - aktuelle_task: Task-Dict (Reflection liest es), nicht
+      RunState-Feld.
+    """
+    s = mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        api_key="dummy",
+        last_verify_errors=[],
+        reviewer_bugs=[],
+        patches=[{"file": "core/x.py",
+                  "old_string": "a", "new_string": "b"}],
+    )
     s.applied_count = 0
     s.reflection_history = []
     s.aktuelle_task = {"id": "t1", "task_files": ["core/x.py"]}
