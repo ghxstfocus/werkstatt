@@ -870,37 +870,41 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 
 
-### OP-168: Phase-4-Review braucht Human-Gate zwischen Runden
+### OP-168b: Phase-Review-Gate zwischen jeder Reflection-Runde
 
 - **Status:** open
 - **Typ:** architektur (Phase-Review + Gates)
-- **Betroffen:** `werkstatt/pipeline_phases.py`
-  (`_phase_end_review_loop`, Z. 1584-1661),
-  `tests/test_phase_review_gate.py` (neu)
-- **Problem:** Loop-Test-4: nach t8 lief `Phase 4: Phase-End-Review`
-  mit 3 Runden Builder+Reviewer — komplett ohne Human-Gate — und
-  endete dann mit `LOOP FEHLGESCHLAGEN`. Der User konnte zwischen
-  den Runden nicht eingreifen. Bei "LOOP FEHLGESCHLAGEN" waren
-  die Phase-4-Patches bereits im Working Tree (dirty), aber nicht
-  committet.
+- **Betroffen:** `werkstatt/phases/_common.py`
+  (`_phase_end_reflection`), `werkstatt/phases/finalize.py`
+  (Aufrufkontext Z. 117), `tests/test_phase_review_gate.py`
+  (erweitern)
+- **Problem:** OP-168 hat `_phase_review_gate` gebaut und in
+  `_phase_finalize` (Z. 117) verdrahtet — aber das Gate sitzt
+  **NACH** `_phase_end_reflection`, nicht zwischen den internen
+  Runden. Loop-Test-4 zeigte 3 Runden Builder+Reviewer ohne
+  Eingriff. Der User konnte erst am Ende eingreifen. Der Docstring
+  von `_phase_review_gate` (phases/review.py:1) markiert das
+  selbst als "Teilfix: OP-168b".
 - **Akzeptanzkriterien:**
-  - `_phase_end_review_loop`: nach jeder Reflection-Runde (Reject)
-    fragt ein Human-Gate ob weitergemacht werden soll
-    (j = noch eine Runde, n = abbrechen ohne weiteren Patch,
-    a = auto-weiter bis max).
-  - Bei Phase-Review-Reject nach max Runden: Human-Gate **vor**
-    `LOOP FEHLGESCHLAGEN`, damit der User die Patches waehlen kann
-    (behalten/verwerfen).
-  - Tests: 2 Smoke-Tests — (a) nach Runde 1 Reject -> Gate wird
-    aufgerufen; (b) Gate n -> Loop endet sauber ohne weitere Runde.
-- **Tests:** `tests/test_phase_review_gate.py` (neu)
+  - `_phase_end_reflection` (in `phases/_common.py`) ruft nach
+    jeder Reject-Runde `_phase_review_gate(state)`.
+  - Bei `n`: Reflection bricht mit `return False` ab (kein
+    weiterer Builder-Patch).
+  - Bei `a`: Auto-Modus bis max Runden (kein weiteres Gate).
+  - Bei `j`: naechste Runde Builder+Reviewer.
+  - 2 neue Smoke-Tests in `tests/test_phase_review_gate.py`:
+    (a) Reject Runde 1 -> Gate wird gerufen; (b) Gate `n` ->
+    `_phase_end_reflection` returns False.
+- **Tests:** `tests/test_phase_review_gate.py` (erweitern)
 - **Blockiert von:** —
+- **Hinweis:** Loest die verbleibende Luecke aus OP-168 (done).
 
 
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-06 | OP-168 | done | `_phase_review_gate` in phases/review.py:11 + 6 Tests + Verdrahtung in phases/finalize.py:117; AK (b) erfuellt; AK (a) (Gate zwischen jeder Reflection-Runde) als OP-168b angelegt
 - 2026-11-06 | OP-145 | wontfix | Semantik geklaert: `_erfuellt`/`_bestaetigt`/`_quelle` haben verschiedene Rollen (5 Writer-Pfade, 2 Reader-Muster); Rename haette Scout-Pfad (`planner.py:1830`) regressen. Ersetzt durch OP-145b (State-Contract, in Planung)
 - 2026-11-06 | OP-166 | done | per-Task-State-Reset `last_verify_errors` + `reviewer_bugs` via `_reset_task_state`; 4 Tests; AK (b) bewusst nicht implementiert (K50-Bug-C in reflection.py:394-403); entblockt OP-164b (a720fe0)
 - 2026-11-05 | OP-144 | done | import-linter als Post-Build-Stage (hart), 3 Layer-Regeln aus ADR-0013 (render, roles.builder, phases); allow_indirect_imports=true; werkstatt/roles/__init__.py nachgezogen (30eef6e)

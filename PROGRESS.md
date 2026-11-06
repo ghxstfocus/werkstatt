@@ -2484,3 +2484,54 @@ und die 2 Reader-Muster ab.
 - pytest: 1275 passed, 8 skipped
 - ruff: 118 (gemessen 2026-11-06, `ruff check .`)
 - Alle Drift-Checks gruen
+
+
+### 2026-11-06 — OP-168 als done geschlossen (Teilfix), OP-168b angelegt
+
+**Befund 2026-11-06:**
+
+`_phase_review_gate` existiert (`phases/review.py:11`) und ist
+verdrahtet (`phases/finalize.py:117`), 6 Tests gruen. Was fehlt:
+das Gate sitzt **nach** `_phase_end_reflection`, nicht zwischen
+den internen Runden. Der Docstring von `_phase_review_gate`
+markiert das selbst:
+
+> "Teilfix: Gate sitzt NACH _phase_end_reflection, nicht
+> zwischen den internen Runden. Vollstaendig: OP-168b."
+
+**AK-Bewertung OP-168:**
+
+| AK | Status |
+|---|---|
+| (b) Gate vor LOOP FEHLGESCHLAGEN | erfuellt (`finalize.py:117`) |
+| (b) Gate `n` -> Loop endet sauber | erfuellt (`test_n_gibt_1`) |
+| (a) Gate zwischen jeder Reflection-Runde | **fehlt** |
+
+Da die verbleibende Arbeit in OP-168b passt und der Code selbst
+schon auf OP-168b verweist: OP-168 auf `done`, OP-168b neu.
+
+**Nachfolger: OP-168b**
+
+Ruft `_phase_review_gate` zusaetzlich in `_phase_end_reflection`
+nach jeder Reject-Runde. Ergaenzt 2 Smoke-Tests in
+`tests/test_phase_review_gate.py`. Blockiert nicht.
+
+**Test-Contract-Check:** `grep -rn 'OP-168' werkstatt/ tests/`
+ergab 4 Treffer — alle Docstrings/Kommentare, keine Assertion
+haengt an der OP-Nummer. Patch ist safe.
+
+**Dry-Run-Fehler in Block C (dokumentiert):**
+
+Erster Patch-Versuch verwendete `op168_block + "\n\n\n### OP-160:"`
+als after_anchor. Falsch: OP-168 ist der **letzte** OP vor der
+Delete-Zone. OP-160 und alle anderen OPs kommen **nach** der
+Delete-Zone. Korrektur: `after_anchor = op168_block + "\n\n\n## Delete-Zone"`.
+Der Dry-Run hat den Fehler gefangen, bevor irgendetwas geschrieben
+wurde — genau der Zweck.
+
+**Kein Code geaendert.** Nur STATUS.md + PROGRESS.md.
+
+**Baseline 2026-11-06 (vor diesem Commit):**
+- pytest: 1279 passed, 8 skipped
+- ruff: 118 (gemessen `ruff check .`, `grep -- '-->'` zaehlt)
+- Alle Drift-Checks gruen
