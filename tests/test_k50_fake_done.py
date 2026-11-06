@@ -7,14 +7,20 @@ wirklich angewandt wurden. K50 fuehrt state.applied_count ein und
 _patches_wirklich_angewendet(state) als zentralen Check.
 """
 
-from types import SimpleNamespace
+import sys
+from pathlib import Path
 
 from werkstatt.loop import _patches_wirklich_angewendet
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 def test_hat_patch_false_when_zero_applied():
     """patches truthy, applied_count 0 -> fail-closed False."""
-    state = SimpleNamespace(
+    state = mk_state(
         patches=[{"file": "x.py", "old_string": "a", "new_string": "b"}],
         applied_count=0,
     )
@@ -23,7 +29,7 @@ def test_hat_patch_false_when_zero_applied():
 
 def test_hat_patch_true_when_applied():
     """patches truthy, applied_count > 0 -> True."""
-    state = SimpleNamespace(
+    state = mk_state(
         patches=[{"file": "x.py", "old_string": "a", "new_string": "b"}],
         applied_count=2,
     )
@@ -32,7 +38,7 @@ def test_hat_patch_true_when_applied():
 
 def test_hat_patch_false_when_no_patches():
     """patches leer -> False, unabhaengig von applied_count."""
-    state = SimpleNamespace(patches=[], applied_count=3)
+    state = mk_state(patches=[], applied_count=3)
     assert _patches_wirklich_angewendet(state) is False
 
 
@@ -43,8 +49,12 @@ def test_hat_patch_false_when_applied_count_missing():
     ihn auf 0 (fail-closed) gedreht. Dieser Test schuetzt die
     Korrektur.
     """
-    state = SimpleNamespace(
+    state = mk_state(
         patches=[{"file": "x.py", "old_string": "a", "new_string": "b"}],
-        # applied_count absichtlich NICHT gesetzt
     )
+    # OP-174 P3: mk_state() setzt applied_count=0 (RunState-Default).
+    # Um den "Feld fehlt"-Fall explizit zu testen, entfernen wir das
+    # Attribut nach mk_state() — das simuliert "Feld nicht deklariert",
+    # das _patches_wirklich_angewendet robust behandeln muss.
+    delattr(state, "applied_count")
     assert _patches_wirklich_angewendet(state) is False
