@@ -27,20 +27,20 @@ IS_LIVE = RENDER_MODE == "live"
 
 # === rich-Import (optional) ===
 try:
-    from rich.console import Console as _RichConsole  # type: ignore[import-not-found]
-    from rich.live import Live as _RichLive  # type: ignore[import-not-found]
-    from rich.panel import Panel as _RichPanel  # type: ignore[import-not-found]
-    from rich.progress import (  # type: ignore[import-not-found]
+    from rich.console import Console as _RichConsole
+    from rich.live import Live as _RichLive
+    from rich.panel import Panel as _RichPanel
+    from rich.progress import (
         BarColumn,
         SpinnerColumn,
         TaskProgressColumn,
         TextColumn,
     )
-    from rich.progress import (  # type: ignore[import-not-found]
+    from rich.progress import (
         Progress as _RichProgress,
     )
-    from rich.spinner import Spinner as _RichSpinner  # type: ignore[import-not-found]
-    from rich.syntax import Syntax as _RichSyntax  # type: ignore[import-not-found]
+    from rich.spinner import Spinner as _RichSpinner
+    from rich.syntax import Syntax as _RichSyntax
     _HAS_RICH = True
 except ImportError:
     _HAS_RICH = False

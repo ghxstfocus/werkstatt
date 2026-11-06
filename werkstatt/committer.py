@@ -513,7 +513,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     # FIX AH 2026-10-31: Flag setzen, damit der Loop-Ende-Pfad
     # nicht doppelt PROGRESS.md schreibt.
     try:
-        state.progress_written_at_commit = True  # type: ignore[attr-defined]
+        state.progress_written_at_commit = True
     except (AttributeError, TypeError):
         pass
     audit("loop_human_gate_committed",

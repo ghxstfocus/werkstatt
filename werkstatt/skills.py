@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
 

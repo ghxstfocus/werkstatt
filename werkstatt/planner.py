@@ -1449,9 +1449,9 @@ def _deterministic_entfernen_precheck(state) -> bool:
         if _m_marker and _m_marker.group(1) in _content:
             return False  # Marker existiert noch
         try:
-            state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
-            state.auftrag_bereits_erfuellt_bestaetigt = True  # type: ignore[attr-defined]
-            state.auftrag_bereits_erfuellt_quelle = "planner:deterministic_precheck"  # type: ignore[attr-defined]
+            state.auftrag_bereits_erfuellt = True
+            state.auftrag_bereits_erfuellt_bestaetigt = True
+            state.auftrag_bereits_erfuellt_quelle = "planner:deterministic_precheck"
         except (AttributeError, TypeError):
             return False
         audit("planner_precheck_bereits_erfuellt", {
@@ -1829,9 +1829,9 @@ def run_planner(state: RunState) -> bool:
               {"quelle": "scout",
                "begruendung": _begr[:300]}, pd, pn)
         # Flag fuer den Loop setzen
-        state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
-        state.auftrag_bereits_erfuellt_bestaetigt = False  # type: ignore[attr-defined]
-        state.auftrag_bereits_erfuellt_quelle = "planner:scout_llm_urteil"  # type: ignore[attr-defined]
+        state.auftrag_bereits_erfuellt = True
+        state.auftrag_bereits_erfuellt_bestaetigt = False
+        state.auftrag_bereits_erfuellt_quelle = "planner:scout_llm_urteil"
         return True
 
     # SCOUT_BOX_RENDER (2026-11-02): Scout-Prosa + API-Auszug sichtbar machen
@@ -1857,7 +1857,7 @@ def run_planner(state: RunState) -> bool:
         _scout_auftrag = _scout_report.get("auftrag_prosa") or ""
         _scout_apis = _scout_report.get("api_auszug") or {}
         try:
-            state.scout_api_auszug = _scout_apis  # type: ignore[attr-defined]
+            state.scout_api_auszug = _scout_apis
         except (AttributeError, TypeError):
             pass
 
@@ -1914,7 +1914,7 @@ def run_planner(state: RunState) -> bool:
                   {"tasks": len(_atom_tasks),
                    "dateien": [t["task_files"][0] for t in _atom_tasks]},
                   pd, pn)
-            state.tasks = _atom_tasks  # type: ignore[attr-defined]
+            state.tasks = _atom_tasks
             # Marker, damit _plan_gate den Plan als gueltig sieht.
             state.architect_prosa = "[atomarer Plan vom Scout]"
             state.akzeptanzkriterien = list(
@@ -1963,20 +1963,20 @@ def run_planner(state: RunState) -> bool:
         _sub_tasks = _normalisiere_task_files(
             _sub_tasks, _explorer_ctx, pd, pn,
         )
-        state.tasks = _sub_tasks  # type: ignore[attr-defined]
+        state.tasks = _sub_tasks
     else:
-        state.tasks = [{  # type: ignore[attr-defined]
+        state.tasks = [{
             "id": "t1", "name": "Architect-Loesung umsetzen",
             "action": "update", "description": _arch_prosa,
             "task_files": _key_files,
         }]
 
-    state.phasen = []  # type: ignore[attr-defined]
-    state.tests = []  # type: ignore[attr-defined]
-    state.akzeptanzkriterien = []  # type: ignore[attr-defined]
+    state.phasen = []
+    state.tests = []
+    state.akzeptanzkriterien = []
 
     audit("planner_plan_erstellt",
           {"tasks": len(state.tasks),
            "prosa_len": len(_arch_prosa)}, pd, pn)
 
-    return bool(state.tasks)  # type: ignore[attr-defined]
+    return bool(state.tasks)

@@ -41,7 +41,7 @@ def _setze_runde_patches(state, patches: list) -> None:
             _cur.clear()
             _cur.extend(patches)
         else:
-            state.patches_aktuell_runde = list(patches)  # type: ignore[attr-defined]
+            state.patches_aktuell_runde = list(patches)
     except (AttributeError, TypeError):
         pass
 
@@ -375,7 +375,7 @@ def _reflection_loop(
                                for b in _bugs_fuer_check[:2]
                                if isinstance(b, dict)
                            ]}, pd, pn)
-                    state.spec_widerspruch_erkannt = True  # type: ignore[attr-defined]
+                    state.spec_widerspruch_erkannt = True
                     audit("loop_reflection_stagnation_abort",
                           {"runde": runde, "stagnation": _stagnation,
                            "grund": _stagnation_grund,
@@ -388,7 +388,7 @@ def _reflection_loop(
         else:
             _stagnation = 0
         _ruff_vorher = _ruff_jetzt
-        state._reflection_bug_sigs_vorher = _bug_sigs_jetzt  # type: ignore[attr-defined]
+        state._reflection_bug_sigs_vorher = _bug_sigs_jetzt
 
         audit("loop_reflection_runde", {"runde": runde}, pd, pn)
 
@@ -401,7 +401,7 @@ def _reflection_loop(
         _errors = list(getattr(state, "last_verify_errors", None) or [])
         if error_context and error_context not in _errors:
             _errors = _errors + [error_context]
-        state.last_verify_errors = _errors  # type: ignore[attr-defined]
+        state.last_verify_errors = _errors
 
         # OP-081: Deterministische Diagnose VOR LLM-Builder.
         # Bekannte Fehlerklassen (NameError, Directory-not-found)
@@ -419,7 +419,7 @@ def _reflection_loop(
                 state, [_det],
                 phase_label=f"reflection-det-{runde}",
             )
-            state.applied_count = (  # type: ignore[attr-defined]
+            state.applied_count = (
                 getattr(state, "applied_count", 0) + _a_det
             )
             _setze_runde_patches(state, [_det])
@@ -454,11 +454,11 @@ def _reflection_loop(
             if _ltf_block not in _cur_errs:
                 _cur_errs.append(_ltf_block)
                 state.last_verify_errors = _cur_errs
-        state.reflection_phase = True  # type: ignore[attr-defined]
+        state.reflection_phase = True
         try:
             _builder_ok = run_builder(state)
         finally:
-            state.reflection_phase = False  # type: ignore[attr-defined]
+            state.reflection_phase = False
         if not _builder_ok:
             audit("loop_reflection_builder_failed", {"runde": runde}, pd, pn)
             continue
@@ -475,7 +475,7 @@ def _reflection_loop(
             state, _patches,
             phase_label=f"reflection-runde-{runde}",
         )
-        state.applied_count = getattr(state, "applied_count", 0) + _applied  # type: ignore[attr-defined]
+        state.applied_count = getattr(state, "applied_count", 0) + _applied
         # OP-067: Runden-Patches fuer Verify sichtbar machen
         _setze_runde_patches(state, list(_patches))
 
@@ -489,7 +489,7 @@ def _reflection_loop(
                 "MUSS zeichengenau aus dem aktuellen Inhalt kopiert sein."
             )
             _cur = getattr(state, "last_verify_errors", None) or []
-            state.last_verify_errors = list(_cur) + [_patch_err]  # type: ignore[attr-defined]
+            state.last_verify_errors = list(_cur) + [_patch_err]
             audit("loop_reflection_patch_nicht_angewendet",
                   {"runde": runde, "diagnosen": _diagnosen}, pd, pn)
             audit("loop_reflection_patch_unwirksam",
@@ -497,8 +497,8 @@ def _reflection_loop(
             # K47: auch hier History-Eintrag (Patches=0).
             _refl_hist = getattr(state, "reflection_history", None)
             if _refl_hist is None:
-                state.reflection_history = []  # type: ignore[attr-defined]
-                _refl_hist = state.reflection_history  # type: ignore[attr-defined]
+                state.reflection_history = []
+                _refl_hist = state.reflection_history
             _refl_hist.append({
                 "runde": runde,
                 "task_id": _refl_task_id,
@@ -507,7 +507,7 @@ def _reflection_loop(
                 "reviewer_bugs": list(getattr(state, "reviewer_bugs", None) or [])[:3],
             })
             if len(_refl_hist) > 5:
-                state.reflection_history = _refl_hist[-5:]  # type: ignore[attr-defined]
+                state.reflection_history = _refl_hist[-5:]
             # GOLD 2026-10-30: patch_nicht_angewendet ZAEHLT als
             # Stagnation, wenn es mehrfach in Folge passiert.
             # Live-Beleg 2026-10-30 22:28: 5x patch_nicht_angewendet,
@@ -564,7 +564,7 @@ def _reflection_loop(
                            "diff_hash": _hash_nachher,
                            "applied_vorher": _applied_vorher},
                           pd, pn)
-                    state.reviewer_stagnation_false_positive = True  # type: ignore[attr-defined]
+                    state.reviewer_stagnation_false_positive = True
                     return True
             _stagnation += 1
             audit("loop_reflection_stagnation_runde",
@@ -583,7 +583,7 @@ def _reflection_loop(
                     audit("loop_reflection_spec_widerspruch",
                           {"runde": runde,
                            "grund": "patch_nicht_angewendet"}, pd, pn)
-                    state.spec_widerspruch_erkannt = True  # type: ignore[attr-defined]
+                    state.spec_widerspruch_erkannt = True
                     audit("loop_reflection_stagnation_abort",
                           {"runde": runde, "stagnation": _stagnation,
                            "grund": "patch_nicht_angewendet",
@@ -604,8 +604,8 @@ def _reflection_loop(
         # K47: Reflection-History Eintrag.
         _refl_hist = getattr(state, "reflection_history", None)
         if _refl_hist is None:
-            state.reflection_history = []  # type: ignore[attr-defined]
-            _refl_hist = state.reflection_history  # type: ignore[attr-defined]
+            state.reflection_history = []
+            _refl_hist = state.reflection_history
         _refl_hist.append({
             "runde": runde,
             "task_id": _refl_task_id,
@@ -614,7 +614,7 @@ def _reflection_loop(
             "reviewer_bugs": list(getattr(state, "reviewer_bugs", None) or [])[:3],
         })
         if len(_refl_hist) > 5:
-            state.reflection_history = _refl_hist[-5:]  # type: ignore[attr-defined]
+            state.reflection_history = _refl_hist[-5:]
 
         # K39a: Verify NACH jeder Runde pruefen (nicht nur am Ende).
         # Sonst reparieren die Runden 1-3 nur Reviewer-Bugs und bauen
@@ -624,7 +624,7 @@ def _reflection_loop(
         _ruff_fix_changed(state)
         if not _verify_patches(state, phase=phase):
             # Verify-Fehler -> naechste Runde triggert Verify erneut.
-            error_context = ""  # type: ignore[assignment]
+            error_context = ""
             continue
         # Verify gruen -- wenn wir Reflection wegen Reviewer-Reject
         # gestartet haben, jetzt pruefen ob Reviewer jetzt approved.
@@ -665,7 +665,7 @@ def _reflection_loop(
                            (r.get("verify_errors") or [])[:1]
                            for r in _letzte_e if isinstance(r, dict)
                        ]}, pd, pn)
-                state.spec_widerspruch_erkannt = True  # type: ignore[attr-defined]
+                state.spec_widerspruch_erkannt = True
                 return True
     return _final_verify_ok
 
@@ -732,7 +732,7 @@ def _phase_end_reflection(state: RunState) -> bool:
                 for b in _datei_bugs
             )
             # Synthetischer Task.
-            state.aktuelle_task = {  # type: ignore[attr-defined]
+            state.aktuelle_task = {
                 "id": f"phase-fix-{_datei}",
                 "name": f"Phase-Fix: {_datei}",
                 "action": "update",
@@ -743,7 +743,7 @@ def _phase_end_reflection(state: RunState) -> bool:
                 ),
             }
             # Builder rufen.
-            state.patches = []  # type: ignore[attr-defined]
+            state.patches = []
             if not run_builder(state):
                 audit("loop_phase_reflection_builder_failed",
                       {"datei": _datei, "runde": _runde + 1}, pd, pn)
@@ -757,7 +757,7 @@ def _phase_end_reflection(state: RunState) -> bool:
                 state, _patches,
                 phase_label=f"phase-fix-{_datei}-r{_runde + 1}",
             )
-            state.applied_count = getattr(state, "applied_count", 0) + _applied  # type: ignore[attr-defined]
+            state.applied_count = getattr(state, "applied_count", 0) + _applied
             if _applied > 0:
                 _repaired += 1
                 audit("loop_phase_reflection_patch_applied",
@@ -897,15 +897,15 @@ def _plan_reject_reflection(state) -> bool:
     # Aufruf des Planner mit Feedback. run_planner liest state.aufgabe.
     _saved_aufgabe = _orig_aufgabe
     try:
-        state.aufgabe = _aufgabe_mit_feedback  # type: ignore[attr-defined]
+        state.aufgabe = _aufgabe_mit_feedback
         from werkstatt.planner import run_planner
         ok = run_planner(state)
     finally:
-        state.aufgabe = _saved_aufgabe  # type: ignore[attr-defined]
+        state.aufgabe = _saved_aufgabe
 
     # Reject-Felder leeren, damit naechster Lauf sauber startet
-    state.last_reject_kind = ""  # type: ignore[attr-defined]
-    state.last_reject_reason = ""  # type: ignore[attr-defined]
+    state.last_reject_kind = ""
+    state.last_reject_reason = ""
 
     audit_safe("loop_plan_reject_reflection_done",
                {"ok": bool(ok)}, pd, pn)

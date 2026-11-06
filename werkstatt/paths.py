@@ -54,7 +54,7 @@ def audit_logs_dir(project_name: str | None = None) -> Path:
     """
     if project_name:
         try:
-            import yaml  # type: ignore[import-untyped]
+            import yaml
             with project_config(project_name).open(encoding="utf-8") as fh:
                 cfg = yaml.safe_load(fh) or {}
             home = cfg.get("home")

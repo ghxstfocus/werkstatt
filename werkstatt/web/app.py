@@ -102,10 +102,10 @@ def _registriere_event_routen(app: FastAPI) -> None:
 class AuthMiddleware:
     """Prueft Session-Cookie. Public: /login, /api/auth/*, /static/*."""
 
-    def __init__(self, app):  # type: ignore[no-untyped-def]
+    def __init__(self, app):
         self.app = app
 
-    async def __call__(self, scope, receive, send):  # type: ignore[no-untyped-def]
+    async def __call__(self, scope, receive, send):
         from starlette.requests import Request
 
         if scope["type"] != "http":

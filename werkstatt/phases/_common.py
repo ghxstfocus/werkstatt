@@ -236,11 +236,11 @@ def _reset_task_state(state: RunState) -> None:
     liest reviewer_bugs vor dem ersten Reviewer-Call eines Tasks).
     """
     try:
-        state.last_verify_errors = []  # type: ignore[attr-defined]
+        state.last_verify_errors = []
     except (AttributeError, TypeError):
         pass
     try:
-        state.reviewer_bugs = []  # type: ignore[attr-defined]
+        state.reviewer_bugs = []
     except (AttributeError, TypeError):
         pass
 

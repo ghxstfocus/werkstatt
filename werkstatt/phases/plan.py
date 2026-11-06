@@ -47,11 +47,11 @@ def _phase_plan_and_preflight(
     if not plan_ok and phase_state.exists():
         data = phase_state.data
         if data.get("tasks"):
-            state.tasks = data["tasks"]  # type: ignore[attr-defined]
+            state.tasks = data["tasks"]
         if data.get("tests"):
-            state.tests = data["tests"]  # type: ignore[attr-defined]
+            state.tests = data["tests"]
         if data.get("akzeptanzkriterien"):
-            state.akzeptanzkriterien = data["akzeptanzkriterien"]  # type: ignore[attr-defined]
+            state.akzeptanzkriterien = data["akzeptanzkriterien"]
         # FIX (Fix AW-Resume) 2026-10-31: PhaseState mit tasks ist
         # Source of Truth. _plan_gate prueft Planner-Output-Vollstaendigkeit
         # (tasks+tests+akz). Bei Resume aus einer abgebrochenen PhaseState
@@ -80,7 +80,7 @@ def _phase_plan_and_preflight(
         if not getattr(state, "preflight_fehler", None):
             from werkstatt.planner import _preflight_scan
             _pf = _preflight_scan(state)
-            state.preflight_fehler = _pf  # type: ignore[attr-defined]
+            state.preflight_fehler = _pf
             if _pf:
                 audit(
                     "loop_preflight_fehler",
@@ -113,14 +113,14 @@ def _phase_plan_and_preflight(
             # Nullfall-Block rendern kann. Das auftrag_bereits_erfuellt-
             # Flag wird wie bisher geleert, damit es nicht in spaetere
             # Phasen leakt.
-            state.scout_bereits_erfuellt = True  # type: ignore[attr-defined]
-            state.auftrag_bereits_erfuellt = False  # type: ignore[attr-defined]
+            state.scout_bereits_erfuellt = True
+            state.auftrag_bereits_erfuellt = False
             # GOLD 2026-10-30: tasks_ok auf 1 setzen, damit K13
             # (rc=0 nur wenn tasks_ok>0) den Lauf als Erfolg wertet.
             # Live-Beleg 2026-10-30 21:59: Commit 30decc63 durch,
             # aber Footer zeigte LOOP FEHLGESCHLAGEN (tasks_ok=0).
             tasks_ok = 1
-            state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
+            state.tasks_ok_counter = tasks_ok
             _task_ende(state, phase_state, "scout_skip", ok=True,
                        name="Auftrag bereits erfuellt")
             # Direkt zum Human-Gate (Phase 5), Plan-Gate ueberspringen.

@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-import requests  # type: ignore[import-untyped]
+import requests
 
 import redaction
 from werkstatt.audit import audit

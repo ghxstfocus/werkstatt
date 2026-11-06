@@ -161,7 +161,7 @@ def _phase_explorer_and_setup(
     if explorer_result.get("key_files"):
         step(1, "Explorer", f"{len(explorer_result['key_files'])} files", elapsed_s=_el_exp)
         audit("loop_explorer_ok", {"files": len(explorer_result["key_files"])}, pd, pn)
-        state.explorer_context = explorer_result  # type: ignore[attr-defined]
+        state.explorer_context = explorer_result
     else:
         step(1, "Explorer", "0 files", ok=False, elapsed_s=_el_exp)
         audit("loop_explorer_leer", {}, pd, pn)

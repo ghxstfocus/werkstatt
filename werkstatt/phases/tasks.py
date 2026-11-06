@@ -101,7 +101,7 @@ def _phase_tasks_loop(
         audit("loop_task_start", {"task_id": i, "name": task_name}, pd, pn)
 
         # Builder fuer diesen Task
-        state.aktuelle_task = task_obj  # type: ignore[attr-defined]
+        state.aktuelle_task = task_obj
         # OP-166: per-Task-State reset, sonst leaken Fehler aus
         # vorherigen Tasks in Reflection (Loop-Test-4 t7-Bug).
         _reset_task_state(state)
@@ -115,7 +115,7 @@ def _phase_tasks_loop(
             task_ok(i, len(tasks), elapsed_s=_el_task)
             group_end()
             tasks_ok += 1
-            state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
+            state.tasks_ok_counter = tasks_ok
             _task_ende(state, phase_state, task_id, ok=True, name=task_name)
             audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
             continue
@@ -168,7 +168,7 @@ def _phase_tasks_loop(
                         audit("builder_patch_bereits_erfuellt",
                               {"task_id": i, "file": _primary}, pd, pn)
                         tasks_ok += 1
-                        state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
+                        state.tasks_ok_counter = tasks_ok
                         _task_ende(state, phase_state, task_id, ok=True,
                                    name=task_name)
                         audit("loop_task_ok",
@@ -188,7 +188,7 @@ def _phase_tasks_loop(
                 continue  # naechster Task (Sub-Task)
             # K38b: Grund aus split_max_tiefe uebernehmen.
             _split_failure = getattr(state, "split_failure_grund", None) or "builder_failed"
-            state.split_failure_grund = None  # type: ignore[attr-defined]
+            state.split_failure_grund = None
             # FIX AP 2026-10-31: Dependency-Failure -> continue statt
             # return 1. Live-Beleg 10:36: t1 (create) failte, t2-t4
             # (update) fanden Datei nicht, Loop brach bei t2 ab,
@@ -222,12 +222,12 @@ def _phase_tasks_loop(
                    "name": task_name,
                    "reason": "loop_flag_vor_hook"},
                   pd, pn)
-            state.auftrag_bereits_erfuellt = False  # type: ignore[attr-defined]
+            state.auftrag_bereits_erfuellt = False
             # GOLD 2026-10-30: tasks_ok auch bei auftrag_bereits_erfuellt
             # hochzaehlen. Sonst zeigt der Footer "1/5", obwohl alle 5
             # Tasks done sind (Live-Beleg 2026-10-30 21:41:45).
             tasks_ok += 1
-            state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
+            state.tasks_ok_counter = tasks_ok
             _task_ende(state, phase_state, task_id, ok=True,
                        name=task_name)
             audit("loop_task_ok", {"task_id": i, "name": task_name,
@@ -277,9 +277,9 @@ def _phase_tasks_loop(
                        "reason": "hook_blocked_aber_erfuellt",
                        "blocked_reason": _blocked_reason},
                       pd, pn)
-                state.auftrag_bereits_erfuellt = False  # type: ignore[attr-defined]
+                state.auftrag_bereits_erfuellt = False
                 tasks_ok += 1
-                state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
+                state.tasks_ok_counter = tasks_ok
                 _task_ende(state, phase_state, task_id, ok=True,
                            name=task_name)
                 audit("loop_task_ok", {"task_id": i, "name": task_name,
@@ -304,7 +304,7 @@ def _phase_tasks_loop(
                 # done, aber tasks_ok_counter blieb 0 -> Footer
                 # meldete '8 failed'.
                 tasks_ok += 1
-                state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
+                state.tasks_ok_counter = tasks_ok
                 _task_ende(state, phase_state, task_id, ok=True,
                            name=task_name)
                 audit("loop_task_ok", {"task_id": i, "name": task_name,
@@ -333,7 +333,7 @@ def _phase_tasks_loop(
 
         # Patches anwenden (create + update) — NACH dem Hook.
         # K50b: applied_count zaehlen.
-        state.applied_count = 0  # type: ignore[attr-defined]
+        state.applied_count = 0
         backup_dir = Path(pd) / ".werkstatt" / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
         _allowed_for_task: set[str] = set()
@@ -365,7 +365,7 @@ def _phase_tasks_loop(
                     audit("loop_patch_write_failed",
                           {"file": file, "fehler": str(_e)[:200]}, pd, pn)
                     continue
-                state.applied_count += 1  # type: ignore[attr-defined]
+                state.applied_count += 1
                 audit("loop_patch_created", {"file": file}, pd, pn)
             elif action == "update":
                 old_str = patch.get("old_string", "")
@@ -398,9 +398,9 @@ def _phase_tasks_loop(
                                   {"task_id": i,
                                    "reason": "pre_reviewer_patch_fail"},
                                   pd, pn)
-                            state.auftrag_bereits_erfuellt = False  # type: ignore[attr-defined]
+                            state.auftrag_bereits_erfuellt = False
                             tasks_ok += 1
-                            state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
+                            state.tasks_ok_counter = tasks_ok
                             _task_ende(state, phase_state, task_id, ok=True,
                                        name=task_name)
                             audit("loop_task_ok",
@@ -475,7 +475,7 @@ def _phase_tasks_loop(
                 # neu hinzugefuegt. Folge: _patches_wirklich_angewendet
                 # war False, auch bei sauber angewendetem Patch.
                 # Position: nach write_text + nach _after-Check.
-                state.applied_count += 1  # type: ignore[attr-defined]
+                state.applied_count += 1
                 audit("loop_patch_updated", {"file": file}, pd, pn)
             elif action == "delete":
                 # Fix AV: Datei loeschen. Whitelist = task_files der aktuellen Task.
@@ -496,7 +496,7 @@ def _phase_tasks_loop(
                     audit("loop_patch_delete_failed",
                           {"file": file, "fehler": str(_e)[:200]}, pd, pn)
                     continue
-                state.applied_count += 1  # type: ignore[attr-defined]
+                state.applied_count += 1
                 audit("loop_patch_deleted", {"file": file}, pd, pn)
 
         # M-334b/M-351: post_tool_use entfernt (prueft Werkstatt statt
@@ -534,7 +534,7 @@ def _phase_tasks_loop(
                     audit("loop_verify_failed_human_review",
                           {"task_id": i,
                            "grund": "spec_widerspruch_vermutet"}, pd, pn)
-                    state.spec_widerspruch_erkannt = False  # type: ignore[attr-defined]
+                    state.spec_widerspruch_erkannt = False
                     _task_ende(state, phase_state, task_id,
                                ok=False, name=task_name,
                                human_review=True,
@@ -544,16 +544,16 @@ def _phase_tasks_loop(
                 # Der User soll den Diff sehen und entscheiden:
                 # j = Patches behalten + committen (Task ok)
                 # n = Patches verwerfen (Task fail, Loop laeuft weiter)
-                state.reflection_erschoepft = True  # type: ignore[attr-defined]
+                state.reflection_erschoepft = True
                 _gate_rc = _human_gate(state)
-                state.reflection_erschoepft = False  # type: ignore[attr-defined]
+                state.reflection_erschoepft = False
                 if _gate_rc == 0:
                     audit("loop_human_gate_reflection_erschoepft_approved",
                           {"task_id": i}, pd, pn)
                     # OP-167: Counter auch hier hochzaehlen.
                     # Reflection-Erschoepft-Gate-approve (User 'j').
                     tasks_ok += 1
-                    state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
+                    state.tasks_ok_counter = tasks_ok
                     _task_ende(state, phase_state, task_id,
                                ok=True, name=task_name,
                                failure="reflection_erschoepft_approved")
@@ -575,7 +575,7 @@ def _phase_tasks_loop(
         # FIX R 2026-10-31: Deterministischen Reviewer-Fail nicht
         # durch "pytest gruen" ignorieren. Flag wird in run_reviewer
         # gesetzt (z.B. reviewer_unvollstaendig).
-        state.reviewer_deterministic_fail = False  # type: ignore[attr-defined]
+        state.reviewer_deterministic_fail = False
 
         # Pre-Reviewer-Gate: harte Verify-Fehler verhindern LLM-Review.
         # Live-Beleg 2026-11-02 (OP-077): Builder hat __all__=["create_app"]
@@ -617,12 +617,12 @@ def _phase_tasks_loop(
         if _cur_bugs:
             _hist = getattr(state, "reviewer_bugs_history", None)
             if _hist is None:
-                state.reviewer_bugs_history = []  # type: ignore[attr-defined]
-                _hist = state.reviewer_bugs_history  # type: ignore[attr-defined]
+                state.reviewer_bugs_history = []
+                _hist = state.reviewer_bugs_history
             _hist.append(list(_cur_bugs))
             # Limit auf 5 Runden (RAM-Schutz).
             if len(_hist) > 5:
-                state.reviewer_bugs_history = _hist[-5:]  # type: ignore[attr-defined]
+                state.reviewer_bugs_history = _hist[-5:]
         if not _rev_ok:
             # FIX R 2026-10-31: Deterministischer Fail = sofort
             # task_fail, kein Reflection, kein Ignore.
@@ -654,10 +654,10 @@ def _phase_tasks_loop(
             # die false_positive-Erkennung (idempotenter Patch).
             try:
                 from werkstatt.reflection import _diff_hash_for_state as _dh
-                state._reflection_diff_hash = _dh(state)  # type: ignore[attr-defined]
+                state._reflection_diff_hash = _dh(state)
             except Exception:  # noqa: BLE001
-                state._reflection_diff_hash = None  # type: ignore[attr-defined]
-            state.reviewer_stagnation_false_positive = False  # type: ignore[attr-defined]
+                state._reflection_diff_hash = None
+            state.reviewer_stagnation_false_positive = False
             if not _reflection_loop(state, error_context=_bug_ctx):
                 audit("loop_reviewer_reflection_gescheitert", {"task_id": i}, pd, pn)
                 # M-343c: pytest ist das letzte Wort. Wenn der letzte
@@ -689,7 +689,7 @@ def _phase_tasks_loop(
                         audit("loop_reviewer_reject_human_review",
                               {"task_id": i,
                                "grund": "spec_widerspruch_vermutet"}, pd, pn)
-                        state.spec_widerspruch_erkannt = False  # type: ignore[attr-defined]
+                        state.spec_widerspruch_erkannt = False
                         _task_ende(state, phase_state, task_id,
                                    ok=False, name=task_name,
                                    human_review=True,
@@ -704,7 +704,7 @@ def _phase_tasks_loop(
                 audit("loop_task_spec_widerspruch_veto",
                       {"task_id": i,
                        "grund": "spec_widerspruch_vermutet"}, pd, pn)
-                state.spec_widerspruch_erkannt = False  # type: ignore[attr-defined]
+                state.spec_widerspruch_erkannt = False
                 phase_state.mark_vetoed(
                     task_id, grund="spec_widerspruch_vermutet",
                 )
@@ -765,7 +765,7 @@ def _phase_tasks_loop(
                         continue
                     # K38b: Grund aus split_max_tiefe uebernehmen.
                     _split_failure = getattr(state, "split_failure_grund", None) or "reviewer_high_bug"
-                    state.split_failure_grund = None  # type: ignore[attr-defined]
+                    state.split_failure_grund = None
                     _task_ende(state, phase_state, task_id, ok=False,
                                name=task_name, failure=_split_failure)
                     # FIX AR 2026-10-31: continue statt return 1.
@@ -797,7 +797,7 @@ def _phase_tasks_loop(
                   {"task_id": i,
                    "grund": "spec_widerspruch_vermutet",
                    "schicht": "pipeline"}, pd, pn)
-            state.spec_widerspruch_erkannt = False  # type: ignore[attr-defined]
+            state.spec_widerspruch_erkannt = False
             phase_state.mark_vetoed(
                 task_id, grund="spec_widerspruch_vermutet",
             )
@@ -839,7 +839,7 @@ def _phase_tasks_loop(
             pass
         group_end()
         tasks_ok += 1
-        state.tasks_ok_counter = tasks_ok  # type: ignore[attr-defined]
+        state.tasks_ok_counter = tasks_ok
         _task_ende(state, phase_state, task_id, ok=True, name=task_name)
         audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
 

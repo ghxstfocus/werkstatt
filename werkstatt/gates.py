@@ -109,7 +109,7 @@ def _plan_gate(state: RunState) -> bool:
     })
     if not _hook_res.get("allow", True):
         # Info fuer Planner-Reflection
-        state.last_planner_info = _hook_res.get("info", {})  # type: ignore[attr-defined]
+        state.last_planner_info = _hook_res.get("info", {})
         return False
 
     return True
@@ -136,7 +136,7 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
     cfg_path = _project_config(pn)
     if cfg_path.exists():
         try:
-            import yaml  # type: ignore[import-untyped]
+            import yaml
             with cfg_path.open() as fh:
                 cfg = yaml.safe_load(fh) or {}
             require = bool(cfg.get("require_plan_approval", True))
@@ -212,8 +212,8 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
             except (EOFError, KeyboardInterrupt):
                 _reason = ""
             try:
-                state.last_reject_kind = "plan"  # type: ignore[attr-defined]
-                state.last_reject_reason = _reason  # type: ignore[attr-defined]
+                state.last_reject_kind = "plan"
+                state.last_reject_reason = _reason
             except (AttributeError, TypeError):
                 pass
             audit("loop_plan_reject_grund",
@@ -235,7 +235,7 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
             input("Enter zum Fortfahren...")
             if _plan_file.exists():
                 try:
-                    import yaml  # type: ignore[import-untyped]
+                    import yaml
                     with _plan_file.open() as fh:
                         _d = yaml.safe_load(fh) or {}
                     if _d.get("tasks"):

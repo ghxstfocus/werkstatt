@@ -85,7 +85,7 @@ def _phase_finalize(
     _patches_leer = _applied == 0
     if _alle_done and _patches_leer:
         # OP-062e: Nullfall-Flag fuer Human-Gate.
-        state.phase_review_uebersprungen = "keine Aenderungen"  # type: ignore[attr-defined]
+        state.phase_review_uebersprungen = "keine Aenderungen"
         audit("loop_phase",
               {"phase": "phase_end_review",
                "status": "skipped",
@@ -98,11 +98,11 @@ def _phase_finalize(
         if _pe_bugs:
             _hist = getattr(state, "reviewer_bugs_history", None)
             if _hist is None:
-                state.reviewer_bugs_history = []  # type: ignore[attr-defined]
-                _hist = state.reviewer_bugs_history  # type: ignore[attr-defined]
+                state.reviewer_bugs_history = []
+                _hist = state.reviewer_bugs_history
             _hist.append(list(_pe_bugs))
             if len(_hist) > 5:
-                state.reviewer_bugs_history = _hist[-5:]  # type: ignore[attr-defined]
+                state.reviewer_bugs_history = _hist[-5:]
         if not _pe_ok:
             audit("loop_phase", {"phase": "phase_end_review", "status": "rejected"}, pd, pn)
             group_end()

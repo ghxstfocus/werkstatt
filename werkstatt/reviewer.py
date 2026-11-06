@@ -552,7 +552,7 @@ def run_phase_end_review(state: RunState) -> bool:
                "bugs_high": len(_high),
                "bugs_medium": len(_medium),
                "bugs": _bugs[:5]}, pd, pn)
-        state.reviewer_bugs = _bugs  # type: ignore[attr-defined]
+        state.reviewer_bugs = _bugs
         return False
 
     audit("reviewer_phase_approved",
@@ -561,7 +561,7 @@ def run_phase_end_review(state: RunState) -> bool:
           pd, pn)
     # OP-062c: bei Approval alte Bugs leeren, sonst zeigt das
     # Human-Gate HIGH-Bugs, die laengst behoben sind.
-    state.reviewer_bugs = []  # type: ignore[attr-defined]
+    state.reviewer_bugs = []
     return True
 
 _RENAME_MARKER = (
@@ -858,7 +858,7 @@ def run_reviewer(state: RunState) -> bool:
                     # NICHT vom Loop ignoriert werden ("pytest gruen").
                     # Flag setzen; loop.py prueft es vor task_ok.
                     try:
-                        state.reviewer_deterministic_fail = True  # type: ignore[attr-defined]
+                        state.reviewer_deterministic_fail = True
                     except (AttributeError, TypeError):
                         pass
                     return False
@@ -973,8 +973,8 @@ def run_reviewer(state: RunState) -> bool:
         for bug in bugs:
             audit("reviewer_bug", bug, pd, pn)
         # M-314: bugs in State persistieren (fuer Reflection).
-        state.reviewer_bugs = list(bugs)  # type: ignore[attr-defined]
+        state.reviewer_bugs = list(bugs)
     else:
-        state.reviewer_bugs = []  # type: ignore[attr-defined]
+        state.reviewer_bugs = []
 
     return approved

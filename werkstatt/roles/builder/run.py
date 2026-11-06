@@ -350,9 +350,9 @@ def _build_patches_fuer_datei(
         # Jetzt: Flag setzen, run_builder entscheidet.
         if isinstance(state, object) and hasattr(state, "__dict__"):
             try:
-                state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
-                state.auftrag_bereits_erfuellt_bestaetigt = False  # type: ignore[attr-defined]
-                state.auftrag_bereits_erfuellt_quelle = "builder:llm_keine_patches"  # type: ignore[attr-defined]
+                state.auftrag_bereits_erfuellt = True
+                state.auftrag_bereits_erfuellt_bestaetigt = False
+                state.auftrag_bereits_erfuellt_quelle = "builder:llm_keine_patches"
             except (AttributeError, TypeError):
                 pass
         _bglob.audit("auftrag_bereits_erfuellt",
@@ -406,11 +406,11 @@ def _build_patches_fuer_datei(
     # M-444b: Feedback speichern, damit der naechste Aufruf es sieht.
     if _feedback_neu:
         if not getattr(state, "builder_feedback", None):
-            state.builder_feedback = {}  # type: ignore[attr-defined]
-        state.builder_feedback[zieldatei] = "\n".join(_feedback_neu)  # type: ignore[attr-defined]
+            state.builder_feedback = {}
+        state.builder_feedback[zieldatei] = "\n".join(_feedback_neu)
     else:
         if getattr(state, "builder_feedback", None):
-            state.builder_feedback.pop(zieldatei, None)  # type: ignore[attr-defined]
+            state.builder_feedback.pop(zieldatei, None)
 
     # K48: Aider-Format auf Legacy normalisieren (zentraler Helper).
     _gueltig = _normalisiere_aider_patches(_gueltig, pd=pd, pn=pn)
@@ -449,9 +449,9 @@ def _build_patches_fuer_datei(
         # Alle Patches waren "Auftrag bereits erfuellt".
         if isinstance(state, object) and hasattr(state, "__dict__"):
             try:
-                state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
-                state.auftrag_bereits_erfuellt_bestaetigt = True  # type: ignore[attr-defined]
-                state.auftrag_bereits_erfuellt_quelle = "builder:old_nicht_da_aber_new_da"  # type: ignore[attr-defined]
+                state.auftrag_bereits_erfuellt = True
+                state.auftrag_bereits_erfuellt_bestaetigt = True
+                state.auftrag_bereits_erfuellt_quelle = "builder:old_nicht_da_aber_new_da"
             except (AttributeError, TypeError):
                 pass
         return []
@@ -488,7 +488,7 @@ def run_builder(state: RunState) -> bool:
 
     if all(_is_read_only(t) for t in tasks):
         _bglob.audit("builder_read_only", {"tasks": len(tasks)}, pd, pn)
-        state.patches = []  # type: ignore[attr-defined]
+        state.patches = []
         return True
 
     # M-317: Idempotenz-Check NUR bei action="create".
@@ -580,7 +580,7 @@ def run_builder(state: RunState) -> bool:
             # Nur bei create-Tasks (M-317).
             _bglob.audit("builder_nichts_zu_tun",
                   {"files": [str(f.name) for f in _target_files]}, pd, pn)
-            state.patches = []  # type: ignore[attr-defined]
+            state.patches = []
             return True
 
     # M-298d: On-demand Zieldatei lesen.
@@ -918,9 +918,9 @@ def run_builder(state: RunState) -> bool:
             return False
 
         # Ansonsten: bisheriges Verhalten — Auftrag ist bereits erfuellt.
-        state.auftrag_bereits_erfuellt = True  # type: ignore[attr-defined]
-        state.auftrag_bereits_erfuellt_bestaetigt = False  # type: ignore[attr-defined]
-        state.auftrag_bereits_erfuellt_quelle = "builder:alle_patches_no_effect"  # type: ignore[attr-defined]
+        state.auftrag_bereits_erfuellt = True
+        state.auftrag_bereits_erfuellt_bestaetigt = False
+        state.auftrag_bereits_erfuellt_quelle = "builder:alle_patches_no_effect"
         _bglob.audit("auftrag_bereits_erfuellt",
               {"zieldatei": _zieldatei,
                "grund": "alle_patches_no_effect"}, pd, pn)
@@ -967,6 +967,6 @@ def run_builder(state: RunState) -> bool:
     if not _effective_patches:
         _bglob.audit("builder_keine_wirksamen_patches", {}, pd, pn)
         return False
-    state.patches = _effective_patches  # type: ignore[attr-defined]
+    state.patches = _effective_patches
     _bglob.audit("builder_patches_erstellt", {"anzahl": len(_effective_patches)}, pd, pn)
     return True

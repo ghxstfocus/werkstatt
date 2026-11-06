@@ -292,7 +292,7 @@ class PTYSession:
                 pass
         if self._proc is not None and hasattr(self._proc, "terminate"):
             try:
-                self._proc.terminate()  # type: ignore[attr-defined]
+                self._proc.terminate()
                 for _ in range(20):
                     if self._proc.poll() is not None:  # type: ignore[attr-defined]
                         break

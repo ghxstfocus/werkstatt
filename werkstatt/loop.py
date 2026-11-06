@@ -253,7 +253,7 @@ def load_project_config(project_name: str) -> dict:
     Liefert ein dict mit 'project_dir' (Pfad zum Zielprojekt).
     Fallback: /opt/<project_name>, wenn keine YAML existiert.
     """
-    import yaml  # type: ignore[import-untyped]
+    import yaml
     cfg_path = PROJECTS_DIR / f"{project_name}.yaml"
     if cfg_path.exists():
         try:
@@ -305,7 +305,7 @@ def run_pipeline_loop(
     if state is not None and getattr(state, "project_dir", None) is None:
         cfg = load_project_config(project_name)
         if cfg.get("project_dir"):
-            state.project_dir = Path(cfg["project_dir"])  # type: ignore[attr-defined]
+            state.project_dir = Path(cfg["project_dir"])
 
     if state is None or getattr(state, "project_dir", None) is None:
         # M-299b: Harter Abbruch statt Fallback auf pipeline.run_pipeline.
@@ -334,7 +334,7 @@ def run_pipeline_loop(
 
 
     # 0. Aufgabe in State setzen (fuer Planner)
-    state.aufgabe = aufgabe  # type: ignore[attr-defined]
+    state.aufgabe = aufgabe
 
     # Fix AZ Stufe 8-A: Explorer + Preflight + PhaseState-Init
     _rc_exp, phase_state = _phase_explorer_and_setup(
@@ -504,7 +504,7 @@ def main(argv: list[str] | None = None) -> int:
         project_name=args.project,
     )
     _state.start_monotonic = _time.monotonic()
-    _state.auto_approve = bool(args.auto_approve)  # type: ignore[attr-defined]
+    _state.auto_approve = bool(args.auto_approve)
     state_ref: list[RunState] = [_state]
 
     _ps = PhaseState(args.project, base_dir=_pd / ".werkstatt")

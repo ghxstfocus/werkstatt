@@ -486,14 +486,14 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     # nicht, wenn stage_dict 'hart': true setzt, aber Aufrufer nur
     # den Stage-ID-String sieht).
     if state is not None:
-        state.last_verify_hart_stages = set(_hart_stage_ids)  # type: ignore[attr-defined]
+        state.last_verify_hart_stages = set(_hart_stage_ids)
     if errors:
         audit("loop_verify_failed",
               {"errors": errors, "phase": phase,
                "stages": _executed_stages},
               project_dir, getattr(state, "project_name", "?"))
         # M-326a: Errors fuer Reflection verfuegbar machen.
-        state.last_verify_errors = list(errors)  # type: ignore[attr-defined]
+        state.last_verify_errors = list(errors)
         return False
 
     # M-322: Erfolg sichtbar machen.
@@ -587,7 +587,7 @@ def _verify_patches_soft(
     if _hart:
         # Echter Fehler. Nur harte Errors als last_verify_errors
         # behalten (Reflection sieht sie).
-        state.last_verify_errors = _hart  # type: ignore[attr-defined]
+        state.last_verify_errors = _hart
         return False, _weich
     # Nur weiche Errors. Als "hart_ok" markieren.
     audit("loop_verify_soft_fail",

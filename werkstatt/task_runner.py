@@ -102,7 +102,7 @@ def _task_ende(
               {"task_id": task_id, "ok": ok, "schicht": "task_ende"},
               getattr(state, "project_dir", None),
               getattr(state, "project_name", "?"))
-        state.spec_widerspruch_erkannt = False  # type: ignore[attr-defined]
+        state.spec_widerspruch_erkannt = False
         if hasattr(phase_state, "mark_vetoed"):
             phase_state.mark_vetoed(
                 task_id, grund="spec_widerspruch_vermutet",
@@ -210,7 +210,7 @@ def _split_task_on_demand(
     if _tiefe >= 2:
         audit("loop_split_max_tiefe", {"task_id": task_id}, pd, pn)
         # K38b: Grund merken, damit Aufrufer korrektes failure setzt.
-        state.split_failure_grund = "split_max_tiefe"  # type: ignore[attr-defined]
+        state.split_failure_grund = "split_max_tiefe"
         return False
 
     # K43a/K44a: ADaPT nur bei WIRKLICH grossen Tasks (> 2500 Zeichen).
@@ -261,7 +261,7 @@ def _split_task_on_demand(
         for j, st in enumerate(_sub):
             st["split_tiefe"] = _tiefe + 1
             _tasks.insert(_idx + 1 + j, st)
-        state.tasks = _tasks  # type: ignore[attr-defined]
+        state.tasks = _tasks
 
     audit("loop_task_split",
           {"task_id": task_id,
