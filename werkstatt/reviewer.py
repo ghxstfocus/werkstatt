@@ -634,6 +634,135 @@ def _filter_rename_false_positives(
     return out
 
 
+_WERT_KIPP_MARKER = (
+    "wert geändert", "wert geaendert", "wert kippt",
+    "semantik kippt", "semantik umgekehrt",
+    "true->false", "false->true",
+    "true -> false", "false -> true",
+    "true nach false", "false nach true",
+)
+
+_TYPE_IGNORE_MARKER = (
+    "type: ignore", "type:ignore", "type-ignore", "type ignore",
+)
+
+_TYP_IGNORE_STOP = frozenset({
+    "ignore", "type", "feld", "hinzugef", "hinzugefuegt", "hinzugefügt",
+    "erwaehnt", "erwähnt", "nicht", "attribute", "attr", "defined",
+    "bool", "true", "false", "none", "zusaetzlich", "zusaetzliche",
+})
+
+
+def _filter_auftrag_treue_false_positives(
+    bugs: list,
+    diff: str,
+    task_desc: str,
+    task_files: list[str] | None = None,
+) -> list:
+    """OP-164b: Auftrag-Treue-Filter fuer Rename-Aufgaben."""
+    import re as _re
+
+    if not isinstance(bugs, list) or not isinstance(diff, str):
+        return bugs
+    _desc = (task_desc or "").lower()
+    if not any(_m in _desc for _m in _RENAME_MARKER):
+        return bugs
+    if "@@" not in diff:
+        return bugs
+
+    _tf_str = " ".join(list(task_files or [])).lower()
+
+    _hunks = _re.split(r"(?m)^@@ ", diff)
+    _wert_pairs: list = []
+    for _h in _hunks[1:]:
+        _minus: dict = {}
+        _plus: dict = {}
+        for _ln in _h.split("\n"):
+            _m = _re.match(
+                r"^-\s*(?:state\.)?([a-z_][a-z0-9_]*)\s*=\s*(True|False)\b",
+                _ln,
+            )
+            if _m:
+                _minus[_m.group(1)] = _m.group(2)
+                continue
+            _m = _re.match(
+                r"^\+\s*(?:state\.)?([a-z_][a-z0-9_]*(?:_bestaetigt|_neu))"
+                r"\s*=\s*(True|False)\b",
+                _ln,
+            )
+            if _m:
+                _plus[_m.group(1)] = _m.group(2)
+        for _alt_name, _alt_wert in _minus.items():
+            for _suffix in ("_bestaetigt", "_neu"):
+                _neu_name = _alt_name + _suffix
+                if _plus.get(_neu_name) == _alt_wert:
+                    _wert_pairs.append(
+                        (_alt_name, _alt_wert, _neu_name, _alt_wert)
+                    )
+
+    _typ_ignore_identifiers: set = set()
+    for _ln in diff.split("\n"):
+        if not _ln.startswith("+") or _ln.startswith("+++"):
+            continue
+        if not any(_m in _ln.lower() for _m in _TYPE_IGNORE_MARKER):
+            continue
+        for _m in _re.finditer(r"[a-z_][a-z0-9_]{4,}", _ln):
+            _id = _m.group(0)
+            if _id in _TYP_IGNORE_STOP:
+                continue
+            _typ_ignore_identifiers.add(_id)
+
+    out = []
+    for bug in bugs:
+        if not isinstance(bug, dict):
+            out.append(bug)
+            continue
+        if bug.get("severity") != "high":
+            out.append(bug)
+            continue
+        _d = bug.get("description", "") or ""
+        _d_lower = _d.lower()
+
+        _ist_wert_kipp = any(_m in _d_lower for _m in _WERT_KIPP_MARKER)
+        if _ist_wert_kipp and _wert_pairs:
+            _matched = False
+            for _alt_name, _alt_wert, _neu_name, _neu_wert in _wert_pairs:
+                if _alt_name in _d:
+                    _matched = True
+                    break
+            if _matched:
+                _bug2 = dict(bug)
+                _bug2["severity"] = "medium"
+                _bug2["description"] = (
+                    _d + " [OP-164b: Wert-Gleichheit im Rename-Hunk]"
+                )
+                out.append(_bug2)
+                continue
+
+        _ist_typ_ignore = any(_m in _d_lower for _m in _TYPE_IGNORE_MARKER)
+        if _ist_typ_ignore and _typ_ignore_identifiers:
+            _fremdes_feld = None
+            for _id in sorted(_typ_ignore_identifiers):
+                if _id in _desc:
+                    continue
+                if _id in _tf_str:
+                    continue
+                if _id in _d:
+                    _fremdes_feld = _id
+                    break
+            if _fremdes_feld:
+                _bug2 = dict(bug)
+                _bug2["severity"] = "medium"
+                _bug2["description"] = (
+                    _d + " [OP-164b: Fremdfeld-type-ignore, nicht in Task]"
+                )
+                out.append(_bug2)
+                continue
+
+        out.append(bug)
+    return out
+
+
 def run_reviewer(state: RunState) -> bool:
     """Prueft den Code. Gibt True zurueck, wenn approved."""
     pd = state.project_dir
@@ -811,24 +940,28 @@ def run_reviewer(state: RunState) -> bool:
     bugs = result.get("bugs", [])
 
     # OP-164: Rename-Filter (Prompt-Haertung + deterministischer Post-Proc).
+    # OP-164b: Auftrag-Treue-Filter (Wert-Kipp, type-ignore Over-Delivery).
     _bugs_high_before = sum(
         1 for _b in bugs
         if isinstance(_b, dict) and _b.get("severity") == "high"
     )
     bugs = _filter_rename_false_positives(bugs, diff, _task_desc)
+    bugs = _filter_auftrag_treue_false_positives(
+        bugs, diff, _task_desc, task_files=_tf_early,
+    )
     _bugs_high_after = sum(
         1 for _b in bugs
         if isinstance(_b, dict) and _b.get("severity") == "high"
     )
-    _rename_filtered = _bugs_high_before - _bugs_high_after
-    if _rename_filtered > 0 and _bugs_high_after == 0:
+    _filtered_total = _bugs_high_before - _bugs_high_after
+    if _filtered_total > 0 and _bugs_high_after == 0:
         approved = True
 
     audit("reviewer_result", {
         "approved": approved,
         "bugs": len(bugs),
         "summary": result.get("summary", "")[:200],
-        "rename_filtered": _rename_filtered,
+        "filtered": _filtered_total,
     }, pd, pn)
 
     if not approved:
