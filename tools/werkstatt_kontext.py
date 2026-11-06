@@ -288,12 +288,13 @@ def abschnitt_zustand() -> str:
     if rc == 0 and remote:
         out += f"origin/main: {remote.split()[0][:7]}\n"
 
-    # --ignore=tests/test_shell.py: PTY-Tests scheitern haeufig
-    # in CI/Docker ohne tty. Fuer den Kontext-Block reicht die
-    # Restzahl; die skipped-Differenz ist bewusst (3 PTY-Tests).
+    # test_shell.py laeuft komplett mit. Die 3 PTY-Tests sind
+    # mit @pytest.mark.skip markiert (W36-RP-Guard) und skippen
+    # sich selbst; 2 normale Tests laufen gruen. Kein --ignore
+    # mehr, damit die Kontext-Zahl (1285/8) zur direkten
+    # `pytest -q`-Ausgabe passt.
     rc, tests = _run(
-        ["python3", "-m", "pytest", "-q",
-         "--ignore=tests/test_shell.py"], timeout=180)
+        ["python3", "-m", "pytest", "-q"], timeout=180)
     last = tests.split("\n")[-1] if tests else "?"
     out += f"\nTests: {last}\n"
 
