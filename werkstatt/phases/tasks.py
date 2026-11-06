@@ -60,7 +60,7 @@ def _phase_tasks_loop(
     # 3. Autonomer Task-Loop (Claude-Code-Prinzip)
     #    Alle Tasks werden abgearbeitet ohne Unterbrechung.
     #    Human-Gate kommt nur am Ende der Phase.
-    tasks = getattr(state, "tasks", [])
+    tasks = state.tasks
     tasks_ok = 0
     i = 0
     # M-473: while-Loop statt for. Nach ADaPT-Split wird die
@@ -240,7 +240,7 @@ def _phase_tasks_loop(
         # wir den Apply-Loop komplett. Vorher rief "break" nur aus der
         # Hook-Schleife aus — der Apply-Loop darunter wendete dieselben
         # blockierten Patches trotzdem an (Audit loop_patch_updated).
-        patches = getattr(state, "patches", [])
+        patches = state.patches
         _hook_blocked = False
         _blocked_reason = ""
         for patch in patches:
@@ -337,7 +337,7 @@ def _phase_tasks_loop(
         backup_dir = Path(pd) / ".werkstatt" / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
         _allowed_for_task: set[str] = set()
-        for _t_av in (getattr(state, "tasks", []) or []):
+        for _t_av in (state.tasks or []):
             if isinstance(_t_av, dict) and _t_av.get("id") == task_id:
                 _allowed_for_task = set(_t_av.get("task_files") or [])
                 break
@@ -613,7 +613,7 @@ def _phase_tasks_loop(
         else:
             _rev_ok = _with_spinner(f"Reviewer t{i}", lambda: run_reviewer(state))
         # K40: Historie pushen (unabhaengig vom Ergebnis).
-        _cur_bugs = getattr(state, "reviewer_bugs", None) or []
+        _cur_bugs = state.reviewer_bugs or []
         if _cur_bugs:
             _hist = getattr(state, "reviewer_bugs_history", None)
             if _hist is None:
@@ -638,12 +638,12 @@ def _phase_tasks_loop(
                 "loop_reviewer_rejected",
                 _reviewer_rejected_payload(
                     task_id,
-                    {"bugs": getattr(state, "reviewer_bugs", []) or []},
+                    {"bugs": state.reviewer_bugs or []},
                 ),
                 pd, pn,
             )
             # M-314: Reviewer-Bug-Text als Kontext an Reflection.
-            _reviewer_bugs = getattr(state, "reviewer_bugs", []) or []
+            _reviewer_bugs = state.reviewer_bugs or []
             # M-441: Bug-Anzahl Runde 1 merken (fuer Divergenz-Check).
             _bugs_runde1 = len(_reviewer_bugs)
             _bug_ctx = ""
@@ -663,7 +663,7 @@ def _phase_tasks_loop(
                 # M-343c: pytest ist das letzte Wort. Wenn der letzte
                 # _verify_patches-Lauf gruen war (last_verify_errors leer),
                 # ist der Reviewer-Reject eine Halluzination.
-                _last_errors = getattr(state, "last_verify_errors", None) or []
+                _last_errors = state.last_verify_errors or []
                 # K50-Bug-A: wie BUG-B, gleicher semantischer
                 # _hat_patch-Check. Ohne diesen Zweig war der
                 # erste Reject-Pfad fail-open, der zweite fail-
@@ -726,7 +726,7 @@ def _phase_tasks_loop(
             elif not run_reviewer(state):
                 audit("loop_reviewer_rejected_after_reflection", {"task_id": i}, pd, pn)
                 # M-343c: pytest ist das letzte Wort.
-                _last_errors = getattr(state, "last_verify_errors", None) or []
+                _last_errors = state.last_verify_errors or []
                 # M-359: pytest gruen reicht NICHT, wenn der Patch
                 # gar nicht angewendet wurde (old_string_not_found).
                 # Dann ist der Task fail-closed.
@@ -739,7 +739,7 @@ def _phase_tasks_loop(
                 # M-441: Divergenz-Check. Wenn der Reviewer in Runde 2
                 # MEHR Bugs findet als in Runde 1, hat die Reflection
                 # nichts geholfen — fail-closed, keine dritte Runde.
-                _bugs_runde2 = len(getattr(state, "reviewer_bugs", []) or [])
+                _bugs_runde2 = len(state.reviewer_bugs or [])
                 if _bugs_runde2 > _bugs_runde1:
                     audit("loop_reviewer_divergenz",
                           {"task_id": i,
@@ -752,7 +752,7 @@ def _phase_tasks_loop(
                     continue
                 # M-399b: High-severity Bugs NIE ignorieren.
                 _high_bugs = [
-                    b for b in (getattr(state, "reviewer_bugs", []) or [])
+                    b for b in (state.reviewer_bugs or [])
                     if isinstance(b, dict) and b.get("severity") == "high"
                 ]
                 if _high_bugs:
@@ -814,7 +814,7 @@ def _phase_tasks_loop(
         # (durch das Muster selbst) gruen meldet. Veto statt
         # task_ok. Referenz: fakegreen, Harn Completion-Gate.
         _ap_treffer = scan_patches(
-            list(getattr(state, "patches", []) or [])
+            list(state.patches or [])
         )
         if _ap_treffer:
             audit("loop_task_antipattern_veto",

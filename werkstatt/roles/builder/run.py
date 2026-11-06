@@ -61,7 +61,7 @@ def _build_patches_fuer_datei(
         except OSError:
             return []
 
-    _task_fuer_filter = getattr(state, "aktuelle_task", None) or {}
+    _task_fuer_filter = state.aktuelle_task or {}
     if isinstance(_task_fuer_filter, dict):
         _filter_text = (
             (_task_fuer_filter.get("name") or "") + "\n"
@@ -112,7 +112,7 @@ def _build_patches_fuer_datei(
         pass
 
     # M-444b: Feedback aus vorherigem Versuch einbauen.
-    _feedback = (getattr(state, "builder_feedback", None) or {}).get(zieldatei, "")
+    _feedback = (state.builder_feedback or {}).get(zieldatei, "")
     _feedback_block = ""
     if _hist_fail:
         _feedback_block = (
@@ -127,7 +127,7 @@ def _build_patches_fuer_datei(
             f"Behebe das in dieser Antwort.\n"
         )
     # M-466: Reviewer-Bugs aus letzter Runde in den Prompt.
-    _reviewer_bugs = getattr(state, "reviewer_bugs", None) or []
+    _reviewer_bugs = state.reviewer_bugs or []
     if _reviewer_bugs:
         _bug_lines = []
         for _b in _reviewer_bugs:
@@ -144,7 +144,7 @@ def _build_patches_fuer_datei(
                 + "\nBehebe diese Bugs in dieser Antwort.\n"
             )
     # K33: Verify-Fehler (Ruff/Compile) aus letzter Runde als Feedback.
-    _verify_errs = getattr(state, "last_verify_errors", None) or []
+    _verify_errs = state.last_verify_errors or []
     if _verify_errs:
         _err_lines = [str(e)[:500] for e in _verify_errs[:5]]
         _feedback_block += (
@@ -153,7 +153,7 @@ def _build_patches_fuer_datei(
             + "\nBehebe diese Fehler in dieser Antwort.\n"
         )
     # K47: Reflection-Historie -- was in vorherigen Runden passiert ist.
-    _refl_hist = getattr(state, "reflection_history", None) or []
+    _refl_hist = state.reflection_history or []
     if _refl_hist:
         _refl_lines = ["\n\n## VORHERIGE REFLECTION-RUNDEN (was du bereits versucht hast):\n"]
         for _r in _refl_hist[-3:]:  # max 3 Runden
@@ -179,7 +179,7 @@ def _build_patches_fuer_datei(
         )
         _feedback_block += "".join(_refl_lines)
     # M-466: Task-Name + Beschreibung fuer Kontext.
-    _task = getattr(state, "aktuelle_task", None) or {}
+    _task = state.aktuelle_task or {}
     _task_name = _task.get("name", "") if isinstance(_task, dict) else ""
     _task_desc = _task.get("description", "") if isinstance(_task, dict) else ""
     # FIX AQ 2026-10-31: Verfuegbare Module im Zielverzeichnis als
@@ -247,7 +247,7 @@ def _build_patches_fuer_datei(
     # M-WelleF: Repair-Hint aus last_verify_errors
     try:
         from werkstatt.reflection import _format_repair_hint as _frh_b
-        _refl_hint = _frh_b(getattr(state, 'last_verify_errors', []))
+        _refl_hint = _frh_b(state.last_verify_errors)
     except ImportError:
         _refl_hint = ''
 
@@ -306,9 +306,9 @@ def _build_patches_fuer_datei(
         f"{_verbote_prefix}"
         f"{_skills_block}"
         f"## API-SIGNATUREN (Scout-Destillat):\n"
-        f"{_format_scout_apis_for_builder(getattr(state, 'scout_api_auszug', {}))}\n\n"
+        f"{_format_scout_apis_for_builder(state.scout_api_auszug)}\n\n"
         f"## EXPLORER-FINDINGS:\n"
-        f"{_format_explorer_findings_b(getattr(state, 'explorer_findings', {}))}\n\n"
+        f"{_format_explorer_findings_b(state.explorer_findings)}\n\n"
         f"{_messwerte_block_b}"
         f"{_refl_hint}"
         f"## TASK: {_task_name}\n"
@@ -466,13 +466,13 @@ def run_builder(state: RunState) -> bool:
     """Erstellt Patches. Schreibt sie in state.patches (oder wendet sie an)."""
     pd = state.project_dir
     pn = state.project_name
-    api_key = getattr(state, "api_key", "")
+    api_key = state.api_key
 
     if not api_key:
         _bglob.audit("builder_kein_key", {}, pd, pn)
         return False
 
-    tasks = getattr(state, "tasks", [])
+    tasks = state.tasks
     if not tasks:
         _bglob.audit("builder_keine_tasks", {}, pd, pn)
         return False

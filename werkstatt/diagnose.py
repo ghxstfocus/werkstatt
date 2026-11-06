@@ -43,7 +43,7 @@ def _extrahiere_dirnotfound(fehler: str) -> str | None:
 def _kandidaten_dateien(state: Any) -> list[Path]:
     pd = Path(str(getattr(state, "project_dir", ".") or "."))
     dateien: list[Path] = []
-    for p in (getattr(state, "patches", None) or []):
+    for p in (state.patches or []):
         if not isinstance(p, dict):
             continue
         f = p.get("file")
@@ -52,7 +52,7 @@ def _kandidaten_dateien(state: Any) -> list[Path]:
         full = Path(f) if Path(f).is_absolute() else (pd / f)
         if full.exists() and full not in dateien:
             dateien.append(full)
-    for err in (getattr(state, "last_verify_errors", None) or []):
+    for err in (state.last_verify_errors or []):
         for m in _PFAD_IN_TRACEBACK_RE.finditer(str(err)):
             cand = pd / m.group(1)
             if cand.exists() and cand not in dateien:
@@ -290,7 +290,7 @@ def _scan_alle_dateien_fuer_name(state: Any, name: str) -> Path | None:
 
 def _deterministische_diagnose(state: Any) -> dict | None:
     """Erster Match aus bekannten Fehlerklassen (deterministisch)."""
-    errors = getattr(state, "last_verify_errors", None) or []
+    errors = state.last_verify_errors or []
     dateien = _kandidaten_dateien(state)
     diagnosen = (_diagnose_import_fehlt, _diagnose_pfad_not_found)
     for fehler in errors:

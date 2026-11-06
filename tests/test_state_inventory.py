@@ -21,9 +21,14 @@ def test_findet_bekannte_felder_und_kategorien():
     # api_index_cache: wird geschrieben, aber nur via getattr gelesen
     # → write_only. Widerlegt Handoff-Satz "toter Cache" (er lebt!),
     # aber auch frühere Behauptung "aktiv" (kein direkter Leser).
-    assert erg["api_index_cache"]["kategorie"] == "write_only"
-    # api_key ist getattr_only (nicht tot — Korrektur an früherer Messung)
-    assert erg["api_key"]["kategorie"] == "getattr_only"
+    # P4b (2026-11-06): api_index_cache wird jetzt direkt gelesen
+    # (getattr entfernt), ist deshalb "aktiv" nicht mehr "write_only".
+    assert erg["api_index_cache"]["kategorie"] == "aktiv"
+    # P4b (2026-11-06): api_key wird jetzt direkt gelesen (getattr entfernt).
+    # Kategorie: read_only — Feld wird beim RunState(...)-Aufbau als
+    # Keyword gesetzt (kein "state.api_key = ..." im Code), danach nur
+    # gelesen. "read_only" ist die korrekte Kategorie.
+    assert erg["api_key"]["kategorie"] == "read_only"
     # tasks ist aktiv (wird geschrieben und gelesen)
     assert erg["tasks"]["kategorie"] == "aktiv"
 

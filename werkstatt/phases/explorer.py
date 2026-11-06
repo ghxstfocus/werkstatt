@@ -188,7 +188,7 @@ def _phase_explorer_and_setup(
     if state is not None:
         import os as _os_an
         _pd_an = getattr(state, "project_dir", None)
-        _tasks_an = getattr(state, "tasks", None) or []
+        _tasks_an = state.tasks or []
         _rechte_fehler: list[str] = []
         for _t_an in _tasks_an:
             if not isinstance(_t_an, dict):

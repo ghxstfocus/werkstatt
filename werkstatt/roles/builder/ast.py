@@ -14,7 +14,7 @@ def _ast_block_fuer_zieldatei(state, zieldatei: str) -> str:
     """Formatiert die AST-Info einer Zieldatei fuer den Builder-Prompt."""
     if state is None:
         return ""
-    idx = getattr(state, "api_index_cache", None) or {}
+    idx = state.api_index_cache or {}
     if not idx:
         return ""
     # relativen Pfad finden (Zieldatei kann absolut oder relativ sein)

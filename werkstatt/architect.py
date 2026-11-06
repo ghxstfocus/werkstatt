@@ -357,7 +357,7 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
     # AST-Info (verkabelt 2026-11-03): Struktur der key_files aus
     # state.api_index_cache. Wird von run_architect befuellt.
     if state is not None and explorer_ctx is not None:
-        _api_idx = getattr(state, "api_index_cache", None) or {}
+        _api_idx = state.api_index_cache or {}
         _kf = explorer_ctx.get("key_files") or []
         # OP-137: key_files haben "file", nicht "pfad"/"path".
         # Sortiere nach confidence (high -> medium -> low -> default).
@@ -411,7 +411,7 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
     if state is not None:
         try:
             _op_felder = _extrahiere_op_felder(
-                aufgabe, (getattr(state, "docs", {}) or {}).get("status", "")
+                aufgabe, (state.docs or {}).get("status", "")
             )
         except Exception:
             _op_felder = {}
@@ -655,7 +655,7 @@ def run_architect(
     state.architect_skills_block = ""
 
     _arch_sys_base = _planner_system(aufgabe, explorer_ctx, state)
-    _arch_skills_block = getattr(state, "architect_skills_block", "") or ""
+    _arch_skills_block = state.architect_skills_block or ""
     _arch_sys = (
         (_arch_skills_block + "\n\n" if _arch_skills_block else "")
         + _arch_sys_base + "\n\n" + _BUILDER_SCHNITTSTELLE

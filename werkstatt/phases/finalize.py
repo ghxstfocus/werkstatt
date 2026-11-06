@@ -39,7 +39,7 @@ def _phase_finalize(
 
     # FIX AS 2026-10-31: Partielle Bilanz auditieren, wenn Loop
     # mit 0 < tasks_ok < total zum Human-Gate geht (Fix AR).
-    _total_tasks_as = len(getattr(state, "tasks", None) or [])
+    _total_tasks_as = len(state.tasks or [])
     if 0 < tasks_ok < _total_tasks_as:
         audit("loop_task_partial_ok",
               {"done": tasks_ok, "total": _total_tasks_as,
@@ -60,7 +60,7 @@ def _phase_finalize(
     # Live-Beleg 2026-10-30 22:37: PhaseState t1=done, aber
     # state.tasks[0] hatte kein status -> _alle_done=False ->
     # reviewer_phase_kein_diff -> Loop-Rollback.
-    _tasks = getattr(state, "tasks", None) or []
+    _tasks = state.tasks or []
     _alle_done = bool(_tasks)
     if _alle_done and phase_state is not None:
         # Pruefe PhaseState pro Task.
@@ -94,7 +94,7 @@ def _phase_finalize(
         from werkstatt.reviewer import run_phase_end_review as _phase_review
         _pe_ok = _with_spinner("Phase-Review", lambda: _phase_review(state))
         # K40: Historie pushen.
-        _pe_bugs = getattr(state, "reviewer_bugs", None) or []
+        _pe_bugs = state.reviewer_bugs or []
         if _pe_bugs:
             _hist = getattr(state, "reviewer_bugs_history", None)
             if _hist is None:

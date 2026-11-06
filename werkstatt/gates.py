@@ -51,7 +51,7 @@ def _plan_gate(state: RunState) -> bool:
     Flacher Plan (phasen leer) bleibt gueltig.
     """
     # M-408c: Architect-Modus braucht keine tests/akzeptanzkriterien
-    _tasks_check = getattr(state, "tasks", []) or []
+    _tasks_check = state.tasks or []
     _is_architect = any(
         isinstance(_t, dict) and _t.get("action") == "architect"
         for _t in _tasks_check
@@ -64,17 +64,17 @@ def _plan_gate(state: RunState) -> bool:
     # tests/akzeptanzkriterien. Tests sind out-of-scope (M-449).
     _is_split = bool(state.architect_prosa)
     if _is_split:
-        if not getattr(state, "tasks", []):
+        if not state.tasks:
             return False
     elif not all((
-        getattr(state, 'tasks', []),
-        getattr(state, 'tests', []),
-        getattr(state, 'akzeptanzkriterien', [])
+        state.tasks,
+        state.tests,
+        state.akzeptanzkriterien
     )):
         return False
 
-    _phasen = getattr(state, "phasen", []) or []
-    _tasks = getattr(state, "tasks", []) or []
+    _phasen = state.phasen or []
+    _tasks = state.tasks or []
 
     # K5: Phasen-Validierung nur wenn phasen existieren. Der
     # Doku-Filter-Hook unten laeuft IMMER — auch bei flachem Plan.
@@ -148,10 +148,10 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
 
     from werkstatt import render as _r
     _r.plan(
-        getattr(state, "phasen", []) or [],
-        getattr(state, "tasks", []) or [],
+        state.phasen or [],
+        state.tasks or [],
         state.tests or [],
-        getattr(state, "akzeptanzkriterien", []) or [],
+        state.akzeptanzkriterien or [],
     )
 
     # K20c: Leere-Antworten-Zaehler (EOF-aehnlicher Zustand via script-Wrapper).
@@ -249,10 +249,10 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
                 except Exception:
                     pass
             _r.plan(
-                getattr(state, "phasen", []) or [],
-                getattr(state, "tasks", []) or [],
+                state.phasen or [],
+                state.tasks or [],
                 state.tests or [],
-                getattr(state, "akzeptanzkriterien", []) or [],
+                state.akzeptanzkriterien or [],
             )
             continue
         # OP-093: Fail-closed nach 3 ungueltigen Antworten.
@@ -461,9 +461,9 @@ def _human_gate_body(state) -> str:
     # 2. Letzte Reviewer-Bugs (aus History, letzte Runde)
     # OP-062c: Bug-Sync. Wenn state.reviewer_bugs leer ist, war der
     # letzte Reviewer-Call gruen -> History-Bugs sind behoben.
-    _cur_bugs = getattr(state, "reviewer_bugs", None) or []
+    _cur_bugs = state.reviewer_bugs or []
     _current_open = bool(_cur_bugs)
-    _hist = getattr(state, "reviewer_bugs_history", None) or []
+    _hist = state.reviewer_bugs_history or []
     _last_bugs: list = []
     if _hist:
         _last_bugs = [b for b in (_hist[-1] or [])
@@ -488,7 +488,7 @@ def _human_gate_body(state) -> str:
     # 3. Reflexions-Runden
     # OP-062c: task_id-Prefix, damit bei mehreren Tasks die Runden
     # nicht als 'Runde 1, Runde 1' verwechselt werden.
-    _refl = getattr(state, "reflection_history", None) or []
+    _refl = state.reflection_history or []
     if _refl:
         _lines = [f"## Reflexion ({len(_refl)} Runde(n))"]
         for _r in _refl[-5:]:

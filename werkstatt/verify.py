@@ -129,7 +129,7 @@ def _expand_cmd_placeholders(
             and "{task_files}" not in cmd_str):
         return [str(c) for c in cmd]
 
-    patches = getattr(state, "patches", None) or []
+    patches = state.patches or []
     if not patches:
         _fallback = getattr(state, "patches_aktuell_runde", None)
         if _fallback:
@@ -333,7 +333,7 @@ def _ruff_fix_changed(state: RunState) -> None:
         if pd is None:
             return
         _changed: list[str] = []
-        for _p_c in (getattr(state, "patches", None) or []):
+        for _p_c in (state.patches or []):
             if not isinstance(_p_c, dict):
                 continue
             _f_c = _p_c.get("file")
@@ -374,7 +374,7 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     # dass Verify im Zielprojekt mit System-Python laeuft und
     # Dependencies nicht findet).
     _venv_python = "python3"  # Fallback
-    _project_name = getattr(state, "project_name", "")
+    _project_name = state.project_name
     if _project_name:
         try:
             from werkstatt.orchestrator import load_project_config
@@ -571,7 +571,7 @@ def _verify_patches_soft(
     _ok = _verify_patches(state, phase=phase)
     if _ok:
         return True, []
-    _all_errors = list(getattr(state, "last_verify_errors", None) or [])
+    _all_errors = list(state.last_verify_errors or [])
     _hart = []
     _weich = []
     for _e in _all_errors:

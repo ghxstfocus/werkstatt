@@ -194,11 +194,11 @@ def _split_task_on_demand(
 
     pd = state.project_dir
     pn = state.project_name
-    api_key = getattr(state, "api_key", "")
+    api_key = state.api_key
 
     # Task finden.
     _task = None
-    for t in (getattr(state, "tasks", None) or []):
+    for t in (state.tasks or []):
         if isinstance(t, dict) and t.get("id") == task_id:
             _task = t
             break
@@ -226,8 +226,8 @@ def _split_task_on_demand(
         return False
 
     # Fehler-Kontext.
-    _errors = getattr(state, "last_verify_errors", None) or []
-    _bugs = getattr(state, "reviewer_bugs", None) or []
+    _errors = state.last_verify_errors or []
+    _bugs = state.reviewer_bugs or []
     _prosa = state.architect_prosa or ""
 
     # Sub-Tasks vom LLM.
@@ -251,7 +251,7 @@ def _split_task_on_demand(
         _ps.split_task(task_id, _sub)
 
     # state.tasks: Sub-Tasks an Position von _task einfuegen.
-    _tasks = list(getattr(state, "tasks", []) or [])
+    _tasks = list(state.tasks or [])
     _idx = -1
     for i, t in enumerate(_tasks):
         if isinstance(t, dict) and t.get("id") == task_id:

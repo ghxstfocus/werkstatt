@@ -999,7 +999,7 @@ def _zerlege_in_sub_tasks(
 
     _skb = ""
     if state is not None:
-        _skb = getattr(state, "planner_skills_block", "") or ""
+        _skb = state.planner_skills_block or ""
     _user = (
         (f"{_skb}\n\n" if _skb else "")
         + f"{_mess_planner_block}"
@@ -1553,7 +1553,7 @@ def run_planner(state: RunState) -> bool:
     """Erstellt den Plan. Schreibt in state.tasks/tests/akzeptanzkriterien."""
     pd = state.project_dir
     pn = state.project_name
-    api_key = getattr(state, "api_key", "")
+    api_key = state.api_key
     
     if not api_key:
         audit("planner_kein_key", {}, pd, pn)
@@ -1643,7 +1643,7 @@ def run_planner(state: RunState) -> bool:
     if _os_proto.environ.get("WERKSTATT_ARCHITECT_PROMPT") != "v1":
         from werkstatt.architect import build_architect_docs_section_v2
         _v2_docs = build_architect_docs_section_v2(
-            getattr(state, "docs", None) or {},
+            state.docs or {},
         )
         user_content = (
             f"## AUFGABE\n{aufgabe}\n\n"
@@ -1762,8 +1762,8 @@ def run_planner(state: RunState) -> bool:
         pass  # PhaseState nicht kritisch fuer Prompt
 
     # M-299e: Preflight-Fehler + Follow_up aus vorheriger Phase.
-    preflight = getattr(state, "preflight_fehler", []) or []
-    follow_up_prev = getattr(state, "follow_up_fehler", []) or []
+    preflight = state.preflight_fehler or []
+    follow_up_prev = state.follow_up_fehler or []
     if preflight:
         user_content += (
             "\n\nPreflight-Fehler (aktuell):\n"
@@ -1918,7 +1918,7 @@ def run_planner(state: RunState) -> bool:
             # Marker, damit _plan_gate den Plan als gueltig sieht.
             state.architect_prosa = "[atomarer Plan vom Scout]"
             state.akzeptanzkriterien = list(
-                getattr(state, "akzeptanzkriterien", []) or []
+                state.akzeptanzkriterien or []
             )
             return True
         else:

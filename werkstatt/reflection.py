@@ -174,7 +174,7 @@ def _verify_fehler_wiederholt_sich(errors: list) -> bool:
 
 def _test_fehler_signatur(state) -> str | None:
     """Signatur der pytest-Fehler aus state.last_verify_errors."""
-    _errs = getattr(state, "last_verify_errors", None) or []
+    _errs = state.last_verify_errors or []
     _sigs: list[str] = []
     for _e in _errs:
         try:
@@ -269,7 +269,7 @@ def _reflection_loop(
     """
     pd = state.project_dir
     pn = state.project_name
-    api_key = getattr(state, "api_key", "")
+    api_key = state.api_key
 
     # Stellschrauben 2026-11-03: reflection-Skill.
     _skill_body_fuer_reflection(state)
@@ -310,14 +310,14 @@ def _reflection_loop(
         # (gleiche Fehler-Anzahl UND keine Verbesserung in 2 Runden).
         # Vorher: abort bei 1 Runde ohne Rueckgang -> verhinderte
         # Reparatur, wenn Fehler sich aendern (F841 statt RUF-Serie).
-        _errs = getattr(state, "last_verify_errors", None) or []
+        _errs = state.last_verify_errors or []
         _ruff_jetzt = sum(1 for e in _errs if isinstance(e, str) and "ruff" in e.lower())
         # GOLD 2026-10-30: Stagnation auch bei Reviewer-Bugs zaehlen.
         # Vorher zaehlte nur _ruff_jetzt; bei Doku-Patches gibt es
         # keinen Ruff-Fehler, aber der Reviewer meldet denselben Bug
         # in jeder Runde. Live-Beleg 2026-10-30 22:28: 5 Reflection-
         # Runden, alle mit demselben Reviewer-Bug.
-        _bugs_jetzt = getattr(state, "reviewer_bugs", None) or []
+        _bugs_jetzt = state.reviewer_bugs or []
         _bug_sigs_jetzt = frozenset(
             (b.get("severity", ""), b.get("description", "")[:100])
             for b in _bugs_jetzt if isinstance(b, dict)
@@ -359,9 +359,9 @@ def _reflection_loop(
                 # OP-059c + OP-059d: Spec-Widerspruch pruefen.
                 # Zwei Pfade: (a) Reviewer-Bug-Marker, (b) verify-
                 # Fehler wiederholt sich (mypy, patch_apply).
-                _bugs_fuer_check = getattr(state, "reviewer_bugs", None) or []
+                _bugs_fuer_check = state.reviewer_bugs or []
                 _verify_fuer_check = (
-                    getattr(state, "last_verify_errors", None) or []
+                    state.last_verify_errors or []
                 )
                 _is_spec = (
                     _bug_text_deutet_spec_widerspruch(_bugs_fuer_check)
@@ -398,7 +398,7 @@ def _reflection_loop(
         # spaeterer reject-Pfad (Z. ~1933) ein leeres _last_errors
         # sah und den Task trotz gescheitertem Patch als task_ok
         # markierte.
-        _errors = list(getattr(state, "last_verify_errors", None) or [])
+        _errors = list(state.last_verify_errors or [])
         if error_context and error_context not in _errors:
             _errors = _errors + [error_context]
         state.last_verify_errors = _errors
@@ -444,13 +444,13 @@ def _reflection_loop(
         # bevor der Builder gerufen wird. Dedup: nur wenn nicht
         # schon in last_verify_errors enthalten.
         _ltf_block = format_letzter_test_fehler_block(
-            getattr(state, "letzter_test_fehler", ""),
-            list(getattr(state, "last_verify_errors", None) or []),
+            state.letzter_test_fehler,
+            list(state.last_verify_errors or []),
         )
         if _ltf_block:
             # Builder liest state.last_verify_errors als Prompt-Kontext.
             # Den Block dort anhaengen (dedupliziert).
-            _cur_errs = list(getattr(state, "last_verify_errors", None) or [])
+            _cur_errs = list(state.last_verify_errors or [])
             if _ltf_block not in _cur_errs:
                 _cur_errs.append(_ltf_block)
                 state.last_verify_errors = _cur_errs
@@ -464,7 +464,7 @@ def _reflection_loop(
             continue
 
         # Wenn der Builder neue Patches erzeugt hat: anwenden.
-        _patches = getattr(state, "patches", []) or []
+        _patches = state.patches or []
         if not _patches:
             audit("loop_reflection_kein_patch", {"runde": runde}, pd, pn)
             continue
@@ -488,7 +488,7 @@ def _reflection_loop(
                 "Pruefe den aktuellen Dateiinhalt exakt -- old_string "
                 "MUSS zeichengenau aus dem aktuellen Inhalt kopiert sein."
             )
-            _cur = getattr(state, "last_verify_errors", None) or []
+            _cur = state.last_verify_errors or []
             state.last_verify_errors = list(_cur) + [_patch_err]
             audit("loop_reflection_patch_nicht_angewendet",
                   {"runde": runde, "diagnosen": _diagnosen}, pd, pn)
@@ -503,8 +503,8 @@ def _reflection_loop(
                 "runde": runde,
                 "task_id": _refl_task_id,
                 "patches_applied": 0,
-                "verify_errors": list(getattr(state, "last_verify_errors", None) or [])[:3],
-                "reviewer_bugs": list(getattr(state, "reviewer_bugs", None) or [])[:3],
+                "verify_errors": list(state.last_verify_errors or [])[:3],
+                "reviewer_bugs": list(state.reviewer_bugs or [])[:3],
             })
             if len(_refl_hist) > 5:
                 state.reflection_history = _refl_hist[-5:]
@@ -528,7 +528,7 @@ def _reflection_loop(
             # Erkennung immer blockieren.
             _echte_errors = [
                 _e for _e in (
-                    getattr(state, "last_verify_errors", None) or [])
+                    state.last_verify_errors or [])
                 if not (isinstance(_e, str) and (
                     _e.startswith("reflection: patch_nicht_angewendet")
                     or (error_context and _e == error_context)
@@ -571,9 +571,9 @@ def _reflection_loop(
                   {"runde": runde, "stagnation": _stagnation,
                    "grund": "patch_nicht_angewendet"}, pd, pn)
             if _stagnation >= 2:
-                _bugs_fuer_check2 = getattr(state, "reviewer_bugs", None) or []
+                _bugs_fuer_check2 = state.reviewer_bugs or []
                 _verify_fuer_check2 = (
-                    getattr(state, "last_verify_errors", None) or []
+                    state.last_verify_errors or []
                 )
                 _is_spec2 = (
                     _bug_text_deutet_spec_widerspruch(_bugs_fuer_check2)
@@ -610,8 +610,8 @@ def _reflection_loop(
             "runde": runde,
             "task_id": _refl_task_id,
             "patches_applied": _applied,
-            "verify_errors": list(getattr(state, "last_verify_errors", None) or [])[:3],
-            "reviewer_bugs": list(getattr(state, "reviewer_bugs", None) or [])[:3],
+            "verify_errors": list(state.last_verify_errors or [])[:3],
+            "reviewer_bugs": list(state.reviewer_bugs or [])[:3],
         })
         if len(_refl_hist) > 5:
             state.reflection_history = _refl_hist[-5:]
@@ -633,7 +633,7 @@ def _reflection_loop(
             if _run_rev(state):
                 return True
             # sonst: neue Reviewer-Bugs -> naechste Runde
-            _new_bugs = getattr(state, "reviewer_bugs", None) or []
+            _new_bugs = state.reviewer_bugs or []
             if _new_bugs:
                 import json as _j
                 error_context = _j.dumps(_new_bugs, ensure_ascii=False)
@@ -646,7 +646,7 @@ def _reflection_loop(
     # OP-004: 5 Runden, jede applied=1, mypy blieb rot mit int(min_port).
     _final_verify_ok = _verify_patches(state, phase=phase)
     if not _final_verify_ok:
-        _hist_e = getattr(state, "reflection_history", None) or []
+        _hist_e = state.reflection_history or []
         _letzte_e = _hist_e[-2:] if len(_hist_e) >= 2 else []
         if len(_letzte_e) >= 2:
             _alle_applied = all(
@@ -682,7 +682,7 @@ def _phase_end_reflection(state: RunState) -> bool:
 
     pd = state.project_dir
     pn = state.project_name
-    bugs = getattr(state, "reviewer_bugs", []) or []
+    bugs = state.reviewer_bugs or []
 
     for _runde in range(2):
         if not bugs:
@@ -703,7 +703,7 @@ def _phase_end_reflection(state: RunState) -> bool:
         # K37b: Wenn keine file-Felder in bugs (LLM hat Schema verletzt),
         # Fallback auf alle Task-Dateien.
         if not _bug_files:
-            for _t in (getattr(state, "tasks", []) or []):
+            for _t in (state.tasks or []):
                 if not isinstance(_t, dict):
                     continue
                 for _f in (_t.get("task_files") or []):
@@ -748,7 +748,7 @@ def _phase_end_reflection(state: RunState) -> bool:
                 audit("loop_phase_reflection_builder_failed",
                       {"datei": _datei, "runde": _runde + 1}, pd, pn)
                 continue
-            _patches = getattr(state, "patches", None) or []
+            _patches = state.patches or []
             if not _patches:
                 audit("loop_phase_reflection_kein_patch",
                       {"datei": _datei, "runde": _runde + 1}, pd, pn)
@@ -775,7 +775,7 @@ def _phase_end_reflection(state: RunState) -> bool:
             audit("loop_phase_reflection_approved",
                   {"runde": _runde + 1, "repaired": _repaired}, pd, pn)
             return True
-        bugs = getattr(state, "reviewer_bugs", []) or []
+        bugs = state.reviewer_bugs or []
 
     audit("loop_phase_reflection_erschoepft", {"runden": 2}, pd, pn)
     return False
@@ -801,7 +801,7 @@ def _diff_hash_for_state(state) -> str:
     pd = getattr(state, "project_dir", None)
     if pd is None:
         return ""
-    task = getattr(state, "aktuelle_task", None) or {}
+    task = state.aktuelle_task or {}
     task_files = task.get("task_files") if isinstance(task, dict) else None
     try:
         diff = _get_git_diff(pd, task_files=task_files)
@@ -825,9 +825,9 @@ __all__ = [
 def _skill_body_fuer_reflection(state) -> str:
     """Laedt den systematic-debugging-Body hoechstens einmal pro Run."""
     namen = ["systematic-debugging"]
-    geladen = getattr(state, "geladene_skills", None) or []
+    geladen = state.geladene_skills or []
     if any(n in geladen for n in namen):
-        return getattr(state, "reflection_skill_body", "") or ""
+        return state.reflection_skill_body or ""
 
     from werkstatt.skills import (
         _merke_geladene_skills,
@@ -863,8 +863,8 @@ def _plan_reject_reflection(state) -> bool:
     Rueckgabe True -> Planner hat einen neuen Plan gebaut.
     Rueckgabe False -> Planner-Reflection gescheitert.
     """
-    reason = (getattr(state, "last_reject_reason", "") or "").strip()
-    kind = getattr(state, "last_reject_kind", "") or ""
+    reason = (state.last_reject_reason or "").strip()
+    kind = state.last_reject_kind or ""
     if kind != "plan":
         return False
     if not reason:

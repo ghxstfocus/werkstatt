@@ -50,17 +50,10 @@ BASELINE_TOTE = frozenset({
 })
 BASELINE_GETATTR_ONLY = frozenset({
     "_w51g_gemessen",
-    "api_key",
     "baseline_gruen",
     "explorer_pytest_laufzeit_s",
-    "explorer_ruff_befunde",
-    "follow_up_fehler",
-    "geladene_skills",
-    "git_author_email",
-    "git_author_name",
     "max_total_llm_s",
     "messungen_nach_apply",
-    "letzter_test_fehler",
 })
 
 

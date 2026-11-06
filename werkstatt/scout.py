@@ -684,7 +684,7 @@ def _run_scout(
     _previews_str = "\n\n".join(_previews_parts)
 
     # Phase 5c — PROJEKT-DOKU (priorisierte Living Docs, max 4000 Z. je)
-    _docs_state = getattr(state, "docs", None) or {}
+    _docs_state = state.docs or {}
     _DOCS_PRIO = ["entry", "status", "roadmap", "architecture",
                     "conventions", "adr_index", "glossary"]
     _docs_teile = []

@@ -328,7 +328,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     # uncommitted (Live-Beleg 2026-10-30: 53db3b0).
     try:
         from werkstatt import progress as _progress_k
-        _tasks_len_k = len(getattr(state, "tasks", None) or [])
+        _tasks_len_k = len(state.tasks or [])
         _tasks_ok_k = int(getattr(state, "tasks_ok_counter", 0) or 0)
         _progress_k.append(
             pd,
@@ -418,7 +418,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             _p = _p.split(" -> ", 1)[1]
         if _p:
             _diff_set.add(_p)
-    _tasks_state = getattr(state, "tasks", None) or []
+    _tasks_state = state.tasks or []
     for _t in _tasks_state:
         if not isinstance(_t, dict):
             continue
@@ -445,15 +445,15 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     if add.returncode != 0:
         return False, f"git add rc={add.returncode}: {add.stderr.strip()[:200]}"
 
-    _name = getattr(state, "git_author_name", "") or "builder"
-    _email = getattr(state, "git_author_email", "") or "builder@security-ai.local"
+    _name = state.git_author_name or "builder"
+    _email = state.git_author_email or "builder@security-ai.local"
     _aufgabe = (state.aufgabe or "").strip()
     # OP-038: Konsistente Commit-Message nach Conventional-Commits-Schema.
     # Format: <type>(<scope>): <kurztitel>  + Body mit Loop-Hinweis.
     # type: docs (alle .md), feat (code neu), fix (code-patch), chore (mixed)
     _aufgabe_line = (_aufgabe.split("\n")[0] if _aufgabe else "").strip()
     # type ableiten: hat der Diff nur .md?
-    _changed = [p["file"] for p in (getattr(state, "patches", None) or [])
+    _changed = [p["file"] for p in (state.patches or [])
                 if isinstance(p, dict) and p.get("file")]
     _only_md = bool(_changed) and all(f.endswith(".md") for f in _changed)
     _any_md = any(f.endswith(".md") for f in _changed) if _changed else False
@@ -471,7 +471,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     else:
         _type = "chore"
     # Scope: Projektname (Manifest hat <name>)
-    _scope = getattr(state, "project_name", "") or "werkstatt"
+    _scope = state.project_name or "werkstatt"
     # OP-063: Subject wortgrenzen-sicher, OP-NNN als Praefix.
     _op_nnn_subj = _op_nnn_aus_aufgabe(_aufgabe) if _aufgabe else None
     _msg_kurz = _build_commit_subject(_aufgabe or "", _op_nnn_subj)

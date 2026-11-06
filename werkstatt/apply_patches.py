@@ -88,7 +88,7 @@ def _patches_wirklich_angewendet(state) -> bool:
     -> False -> Reviewer-Reject wird NICHT ignoriert.
     """
     _applied = int(state.applied_count or 0)
-    return bool(getattr(state, "patches", [])) and _applied > 0
+    return bool(state.patches) and _applied > 0
 
 
 def _apply_patches_with_diagnose(

@@ -68,7 +68,7 @@ def _do_audit_violation(state, key: str, leer: list[str]) -> None:
         "state_contract_violation",
         {"transition": key, "felder": leer},
         getattr(state, "project_dir", None),
-        str(getattr(state, "project_name", "")),
+        str(state.project_name),
     )
 
 
@@ -104,7 +104,7 @@ def validate_transition(
             "state_contract_violation",
             {"transition": key, "felder": leer},
             str(getattr(state, "project_dir", "")),
-            str(getattr(state, "project_name", "")),
+            str(state.project_name),
         )
     else:
         _do_audit_violation(state, key, leer)

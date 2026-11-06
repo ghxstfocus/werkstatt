@@ -44,7 +44,7 @@ def _reviewer_history_block(state: RunState) -> str:
     Verhindert, dass der Reviewer behobene Bugs erneut meldet.
     Max 3 Runden -- aeltere sind meist schon repariert.
     """
-    _history = getattr(state, "reviewer_bugs_history", None) or []
+    _history = state.reviewer_bugs_history or []
     if not _history:
         return ""
     _lines = ["\n## REVIEWER-HISTORIE (vorherige Runden):\n"]
@@ -411,7 +411,7 @@ def run_phase_end_review(state: RunState) -> bool:
     """
     pd = state.project_dir
     pn = state.project_name
-    api_key = getattr(state, "api_key", "")
+    api_key = state.api_key
     if not api_key:
         audit("reviewer_phase_kein_key", {}, pd, pn)
         return False
@@ -420,7 +420,7 @@ def run_phase_end_review(state: RunState) -> bool:
     # Sonst sieht Reviewer alte RERUN-Reste (core/alerts/) und meldet
     # Bugs, die nicht zur Phase gehoeren.
     _phase_files: list[str] = []
-    for _t in (getattr(state, "tasks", []) or []):
+    for _t in (state.tasks or []):
         if not isinstance(_t, dict):
             continue
         for _f in (_t.get("task_files") or []):
@@ -442,7 +442,7 @@ def run_phase_end_review(state: RunState) -> bool:
         return False  # fail-closed: Phase ohne Diff = Bug
 
     tasks_summary = []
-    for _t in (getattr(state, "tasks", []) or []):
+    for _t in (state.tasks or []):
         if isinstance(_t, dict):
             tasks_summary.append({
                 "id": _t.get("id"), "name": _t.get("name"),
@@ -450,7 +450,7 @@ def run_phase_end_review(state: RunState) -> bool:
                 "status": _t.get("status"),
             })
     aufgabe = state.aufgabe
-    akz = getattr(state, "akzeptanzkriterien", []) or []
+    akz = state.akzeptanzkriterien or []
 
     import json as _json
     user = (
@@ -772,7 +772,7 @@ def run_reviewer(state: RunState) -> bool:
     """Prueft den Code. Gibt True zurueck, wenn approved."""
     pd = state.project_dir
     pn = state.project_name
-    api_key = getattr(state, "api_key", "")
+    api_key = state.api_key
 
     if not api_key:
         audit("reviewer_kein_key", {}, pd, pn)
@@ -798,7 +798,7 @@ def run_reviewer(state: RunState) -> bool:
     # Leerer Diff OHNE Patches = legitim NUR bei action="read".
     # FIX 2026-10-31: update-Task + task_files + leerer Diff
     # ist Fake-Done. Fail-closed.
-    _patches = getattr(state, "patches", None) or []
+    _patches = state.patches or []
     if not diff:
         if _patches:
             audit("reviewer_kein_diff_aber_patches",

@@ -426,7 +426,7 @@ def _git_dirty(pd: Path) -> bool:
 def run_explorer(state: RunState, frage: str) -> dict:
     pd = state.project_dir
     pn = state.project_name
-    api_key = getattr(state, "api_key", "")
+    api_key = state.api_key
 
     # === M-373: Deterministische Messung ZUERST ===
     messungen = _messen(frage, Path(pd))
@@ -575,7 +575,7 @@ def run_explorer(state: RunState, frage: str) -> dict:
                 getattr(state, "explorer_pytest_laufzeit_s", 0) or 0
             ),
             "ruff_befunde": list(
-                getattr(state, "explorer_ruff_befunde", []) or []
+                state.explorer_ruff_befunde or []
             ),
         }
     except Exception:

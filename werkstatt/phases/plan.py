@@ -61,15 +61,15 @@ def _phase_plan_and_preflight(
         # in PhaseState, Resume geladen, aber Planner lieferte
         # 1-Task-Plan auf 17 SQL-Migrationen. Fix: wenn PhaseState Tasks
         # liefert, ist der Plan gueltig -- kein Planner.
-        if getattr(state, "tasks", []):
+        if state.tasks:
             plan_ok = True
-            audit("loop_resume", {"tasks": len(getattr(state, "tasks", [])),
+            audit("loop_resume", {"tasks": len(state.tasks),
                                   "quelle": "phase_state"}, pd, pn)
         else:
             plan_ok = _plan_gate(state)
             if plan_ok:
                 audit("loop_resume",
-                      {"tasks": len(getattr(state, "tasks", [])),
+                      {"tasks": len(state.tasks),
                        "quelle": "gate"}, pd, pn)
 
     if not plan_ok:
@@ -150,7 +150,7 @@ def _phase_plan_and_preflight(
                 pass
         else:
             _arch_tasks = [
-                t for t in (getattr(state, "tasks", []) or [])
+                t for t in (state.tasks or [])
                 if isinstance(t, dict) and t.get("action") == "architect"
             ]
             if _arch_tasks:
@@ -258,10 +258,10 @@ def _phase_plan_and_preflight(
                 or not phase_state.data.get("tasks")):
             phase_state.init_new(
                 aufgabe,
-                _normalize_tasks(getattr(state, "tasks", [])),
+                _normalize_tasks(state.tasks),
                 tests=list(state.tests or []),
-                akzeptanzkriterien=list(getattr(state, "akzeptanzkriterien", []) or []),
-                phasen=list(getattr(state, "phasen", []) or []),  # M-323d
+                akzeptanzkriterien=list(state.akzeptanzkriterien or []),
+                phasen=list(state.phasen or []),  # M-323d
             )
 
     # M-298d: init_new-Fallback. Wenn der Plan von Anfang an gruen
@@ -272,16 +272,16 @@ def _phase_plan_and_preflight(
     # K21: auch bei leerer existierender Datei.
     if ((not phase_state.exists()
          or not phase_state.data.get("tasks"))
-            and getattr(state, "tasks", [])):
+            and state.tasks):
         phase_state.init_new(
             aufgabe,
-            _normalize_tasks(getattr(state, "tasks", [])),
+            _normalize_tasks(state.tasks),
             tests=list(state.tests or []),
-            akzeptanzkriterien=list(getattr(state, "akzeptanzkriterien", []) or []),
+            akzeptanzkriterien=list(state.akzeptanzkriterien or []),
         )
 
     _el_plan = time.monotonic() - _t_plan
-    step(2, "Planner", f"{len(getattr(state, 'tasks', []))} tasks", elapsed_s=_el_plan)
+    step(2, "Planner", f"{len(state.tasks)} tasks", elapsed_s=_el_plan)
     audit("loop_phase", {"phase": "plan", "status": "ok"}, pd, pn)
     group_end()
 
@@ -289,8 +289,8 @@ def _phase_plan_and_preflight(
     # Profi-Ansatz (dxkit, GitAuto): Baseline-Schuld blockiert nicht.
     # Nur Fehler, deren Datei in den Task-Dateien ist, sind BLOCKER.
     if not _verify_patches(state, phase="pre_build"):
-        task_files = _extract_files_from_tasks(getattr(state, "tasks", []))
-        preflight = getattr(state, "preflight_fehler", []) or []
+        task_files = _extract_files_from_tasks(state.tasks)
+        preflight = state.preflight_fehler or []
 
         relevant: list[dict] = []
         follow_up: list[dict] = []
