@@ -1,14 +1,19 @@
 """OP-090: Human-Gate zeigt Hinweis bei erschoepfter Reflection."""
 from __future__ import annotations
 
-from types import SimpleNamespace
+import sys
+from pathlib import Path
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 def test_human_gate_body_reflection_erschoepft() -> None:
     """Bei reflection_erschoepft=True: Hinweis im Body."""
     from werkstatt.gates import _human_gate_body
-    state = SimpleNamespace(architect_prosa="")
-    state.reflection_erschoepft = True
+    state = mk_state(architect_prosa="", reflection_erschoepft=True)
     body = _human_gate_body(state)
     assert "Reflection erschoepft" in body
     assert "j = Patches behalten" in body
@@ -18,20 +23,18 @@ def test_human_gate_body_reflection_erschoepft() -> None:
 def test_human_gate_body_kein_erschoepft_hinweis() -> None:
     """Ohne Flag: kein Erschoepfungs-Hinweis."""
     from werkstatt.gates import _human_gate_body
-    state = SimpleNamespace(architect_prosa="")
-    state.reflection_erschoepft = False
+    state = mk_state(architect_prosa="", reflection_erschoepft=False)
     body = _human_gate_body(state)
     assert "Reflection erschoepft" not in body
 
 
 def test_plan_gate_fail_closed_bei_ungueltiger_antwort() -> None:
     """OP-093: 3x ungueltig → return 1 (kein Endlos-Retry)."""
-    from types import SimpleNamespace
     from unittest.mock import patch
 
     from werkstatt.gates import _human_gate_plan
 
-    state = SimpleNamespace(
+    state = mk_state(
         project_dir="/tmp",
         project_name="test",
         tasks=[{"id": "t1"}],
@@ -49,12 +52,11 @@ def test_plan_gate_fail_closed_bei_ungueltiger_antwort() -> None:
 
 def test_human_gate_plan_revidierter_kontext(monkeypatch, tmp_path):
     """Nachbesserung: kontext='revidierter_plan' zeigt klareren Prompt."""
-    from types import SimpleNamespace
     from unittest.mock import patch
 
     from werkstatt.gates import _human_gate_plan
 
-    state = SimpleNamespace(
+    state = mk_state(
         project_dir=str(tmp_path),
         project_name="probe",
         tasks=[{"id": "t1"}],

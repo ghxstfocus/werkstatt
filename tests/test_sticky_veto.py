@@ -10,11 +10,16 @@ es nicht aufheben. Nur mark_human_review/mark_done durch Mensch.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 from werkstatt.phase_state import PhaseState
 from werkstatt.task_runner import _task_ende
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 def _mk_ps(tmp_path: Path) -> PhaseState:
@@ -47,11 +52,12 @@ def test_task_ende_respektiert_veto(tmp_path: Path) -> None:
     (tmp_path / ".werkstatt").mkdir(exist_ok=True)
     (tmp_path / "PROGRESS.md").write_text("# Fortschritt\n", encoding="utf-8")
 
-    s = SimpleNamespace()
-    s.project_dir = tmp_path
-    s.project_name = "p"
-    s.aufgabe = "ohne OP"
-    s.tasks_ok_counter = 0
+    s = mk_state(
+        project_dir=tmp_path,
+        project_name="p",
+        aufgabe="ohne OP",
+        tasks_ok_counter=0,
+    )
 
     ps = _mk_ps(tmp_path)
     ps.mark_vetoed("t1", grund="spec_widerspruch_vermutet")
