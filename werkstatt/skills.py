@@ -162,8 +162,7 @@ def skills_fuer_task(
                 _f = f.replace(chr(92), "/")
                 if fnmatch.fnmatch(f, g) or fnmatch.fnmatch(_f, g):
                     spec = _glob_specificity(g)
-                    if spec > best_spec:
-                        best_spec = spec
+                    best_spec = max(best_spec, spec)
         if best_spec > 0:
             matched.append((best_spec, s))
             seen_names.add(name)

@@ -19,8 +19,11 @@ from werkstatt.control.registry import CONTROL_REGISTRY, list_controls
 from werkstatt.control.runner import run_control, run_phase
 
 __all__ = [
-    "Control", "Phase",
-    "CONTROL_REGISTRY", "list_controls",
-    "run_control", "run_phase",
+    "CONTROL_REGISTRY",
+    "Control",
+    "Phase",
     "check_drift",
+    "list_controls",
+    "run_control",
+    "run_phase",
 ]

@@ -298,10 +298,10 @@ def _get_git_diff_for_hook(*args, **kwargs):
 
 __all__ = [
     '_apply_one_patch',
-    '_apply_patches_with_hooks',
     '_apply_patches_with_diagnose',
-    '_diagnose_patch',
+    '_apply_patches_with_hooks',
     '_delete_ziel_erlaubt',
+    '_diagnose_patch',
     '_patches_wirklich_angewendet',
 ]
 

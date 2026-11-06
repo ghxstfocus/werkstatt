@@ -79,7 +79,7 @@ def _audit_events(project_dir: Path) -> list[dict]:
 
 def _call(state: RunState | None = None,
           system: str = "SYS",
-          user: str = "USER") -> "agent.LLMReply":
+          user: str = "USER") -> agent.LLMReply:
     return agent.ask_llm(
         api_key="sk-test",
         system_prompt=system,

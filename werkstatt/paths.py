@@ -71,9 +71,9 @@ def tools_dir() -> Path:
 
 
 __all__ = [
-    "werkstatt_home",
-    "projects_dir",
-    "project_config",
     "audit_logs_dir",
+    "project_config",
+    "projects_dir",
     "tools_dir",
+    "werkstatt_home",
 ]
