@@ -14,6 +14,11 @@ from werkstatt.architect import (
     build_architect_docs_section_v2,
 )
 
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
+
 # --- Reducer isoliert ---
 
 def test_reduce_entry_behaelt_zweck_und_struktur():
@@ -125,10 +130,8 @@ def test_planner_system_liest_file_feld():
     Vor dem Fix war der AST-Block immer leer, weil _kf_paths
     nur 'pfad'/'path' las — die key_files aber 'file' tragen.
     """
-    from types import SimpleNamespace
-
     from werkstatt.architect import _planner_system
-    st = SimpleNamespace(
+    st = mk_state(
         api_index_cache={
             "core/foo.py": {"functions": [{"name": "hello", "args": ["x"]}]},
         },
@@ -151,10 +154,8 @@ def test_planner_system_liest_file_feld():
 def test_planner_system_sortiert_nach_confidence():
     """OP-137: AST-Block nach confidence sortiert, damit der Architect
     bei >10 Dateien die wichtigsten sieht (high vor medium vor low)."""
-    from types import SimpleNamespace
-
     from werkstatt.architect import _planner_system
-    st = SimpleNamespace(
+    st = mk_state(
         api_index_cache={
             "a_low.py": {"functions": [{"name": "f_low", "args": []}]},
             "z_high.py": {"functions": [{"name": "f_high", "args": []}]},
