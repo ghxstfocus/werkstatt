@@ -2622,3 +2622,22 @@ Test-Kompatibilitaet, aber er kompromittiert Spec-Qualitaet.
 OP-174 definiert P1-P6: RunState-Defaults, mk_state-Factory,
 167 Tests migrieren, 262 getattr rueckbauen, 20 Spec-Reviews.
 Aufwand ~13-15h.
+
+
+### 2026-11-06 — OP-175: Loop-Test 6 zeigte 4 Bugs
+
+Loop-Test 6 (18:27-18:31) mit OP-168b als Aufgabe: 0/4 Tasks,
+4 Reviewer-Bugs, 5-Runden-Stagnation, kein Commit.
+
+**4 bestaetigte Bugs:** Planner-Rueckwaerts-Deps (A),
+5-Runden-Stagnation (B), Phase-Review-Kontext (C), Zombie-Feld
+per setattr (D). Bug E (Verify-Stages 0s) **widerlegt** —
+`_expand_cmd_placeholders` funktioniert korrekt, mein Test war
+falsch (Datei existierte nicht).
+
+**Erfolge trotz Muell:** 9/9 Verify-Stages hart griffen — nichts
+committet. Reviewer hat D als medium-Bug gefangen. Ohne die
+heutige Arbeit (ruff/mypy=0, ADR-0015) waere Muell in HEAD.
+
+**Naechster Chat:** OP-175 als Auftrag, Reihenfolge A → C → B → D → E.
+Bug E ist Investigation, kein Fix.
