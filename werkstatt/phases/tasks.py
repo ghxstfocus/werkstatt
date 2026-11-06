@@ -121,7 +121,7 @@ def _phase_tasks_loop(
             continue
 
         if not _run_with_progress(
-            lambda: _with_spinner(f"Builder t{i}", lambda: run_builder(state)),
+            lambda i=i: _with_spinner(f"Builder t{i}", lambda: run_builder(state)),
             i, len(tasks), task_name,
         ):
             # M-316 + M-317: Idempotenz-Erkennung NUR bei

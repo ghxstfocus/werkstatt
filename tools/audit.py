@@ -109,9 +109,9 @@ def _ask_llm_aufrufe(tree: ast.Module) -> list[dict]:
                 continue
             # Argumente: api_key, system_prompt, user_content,
             # model, temp, timeout, ...
-            def _arg(i: int) -> str:
-                if i < len(node.args):
-                    a = node.args[i]
+            def _arg(i: int, _node=node) -> str:
+                if i < len(_node.args):
+                    a = _node.args[i]
                     try:
                         return ast.unparse(a)
                     except Exception:

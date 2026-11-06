@@ -6,7 +6,6 @@ Test-Patches auf werkstatt.loop._call_hook.
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
 
 def _call_hook(hook_name: str, payload: dict) -> dict:

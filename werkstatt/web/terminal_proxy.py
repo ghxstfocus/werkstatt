@@ -14,7 +14,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import yaml
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 __all__ = ["mount_terminal_proxy", "router"]

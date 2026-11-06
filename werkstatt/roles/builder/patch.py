@@ -263,13 +263,17 @@ def _korrigiere_doku_datum(
             if not isinstance(_text, str) or not _text:
                 continue
 
-            def _ersetze(m: _re_dd.Match[str]) -> str:
+            def _ersetze(
+                m: _re_dd.Match[str],
+                _file=_file,
+            ) -> str:
                 _treffer = m.group(1)
                 if _treffer != heute and _treffer > heute:
                     if pd is not None:
                         _bglob.audit(
                             "builder_patch_datum_korrigiert",
-                            {"file": _file, "alt": _treffer, "neu": heute},
+                            {"file": _file,
+                             "alt": _treffer, "neu": heute},
                             pd, pn,
                         )
                     return heute
