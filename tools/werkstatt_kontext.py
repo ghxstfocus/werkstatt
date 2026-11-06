@@ -201,12 +201,24 @@ Die wichtigsten Regeln:
    - PROGRESS.md         — erledigt, append-only
    - docs/MERKPOSTEN.md  — Prozess-Lehren, nicht durchsuchbar
 
-7. NEUE ARTEFAKTE (Stand 2026-11-05, Ende Session 3):
+7. NEUE ARTEFAKTE (Stand 2026-11-06, Ende Nacht-Session 4):
+   State & Diagnose:
    - tools/state_inventory.py    — RunState-Inventur (read-only, --check)
-   - docs/STATE-INVENTUR.md      — 104 Felder, 23 Ghosts, 47 Tote (OP-135b)
-   - docs/STATE-CONTRACTS.md     — 5 Dataclasses, 5 Vertraege
-   - werkstatt/state_contracts.py — Property-Views, validate_transition
+   - tools/state_flow.py         — Wiring-Diagnose pro Feld (Writer/
+                                    Reader/Contract/Risiko, --check,
+                                    --field X, --risk HOCH, --markdown)
+   - tools/state_flow_baseline.json — Drift-Anker fuer state_flow --check
+   - docs/STATE-FLOW.md          — generierter Report (--markdown)
+   - werkstatt/state_contracts.py — TRANSITIONS (feld-basiert),
+                                    validate_transition, ContractViolation
+   Rollen & Layer:
    - werkstatt/rollen.py         — Rollen-Registry (7 Rollen, fail-closed)
+   - werkstatt/roles/builder/    — 5 Submodule + _common (OP-140)
+   - werkstatt/render/           — 7 Module (OP-138)
+   - werkstatt/phases/           — _common + 5 Phasen (OP-139)
+   - tools/import_drift.py       — import-linter-Wrapper (OP-144)
+   - pyproject.toml              — [tool.importlinter] 3 Layer-Contracts
+                                    mit allow_indirect_imports=true
    - docs/adr/                   — 14 ADRs, u.a. ADR-0013 (Layer),
                                     ADR-0014 (Rollen-Registry)
 
@@ -378,7 +390,7 @@ DEINE ERSTE AUFGABE:
        - Erst messen, dann designen, dann fixen.
   4. Bei Unklarheit: User fragen. Nicht raten.
 
-DIE 10 HAEUFIGSTEN FEHLER — SESSION 1-4 (2026-11-05):
+DIE 16 HAEUFIGSTEN FEHLER — SESSION 1-5 (2026-11-06):
 
 1. 'pytest | tail' -> Exit-Code von tail, nicht pytest. 3x passiert
    in einer Session. Nutze 'pytest > /tmp/pt.log 2>&1; PT=$?'.
@@ -435,6 +447,56 @@ FEHLER AUS SESSION 4 (Loop-Test 4-8, 2026-11-05):
     geparkt (stash@{0}). REGEL: Vor Patch auf DIESES Skript
     'git stash list' pruefen. Stash NICHT poppen — er enthaelt
     die alte Duplikation.
+
+FEHLER AUS NACHT-SESSION 4 (2026-11-06):
+
+11. 'cmd | tail; $?' -> Exit-Code von tail, nicht cmd. 4x
+    reproduziert in Nacht-Session 4 (OP-138, OP-139, OP-140,
+    OP-144). Der Fehler steht schon in M-146, wird aber
+    wiederholt, weil der Chat den Merkposten als Text behandelt,
+    nicht als Guard. REGEL: 'cmd > /tmp/x.log 2>&1; RC=$?;
+    tail /tmp/x.log' statt Pipe. Gilt fuer pytest, ruff,
+    lint-imports, alle rc-relevanten Aufrufe.
+
+12. 'from werkstatt.render import *' in Proxy-Dateien bindet
+    Namens-Kopien. Tests, die 'patch.object(proxy, attr)' machen,
+    wirken nur auf der Kopie, nicht im echten Modul. REGEL:
+    sys.modules-Alias verwenden:
+    'sys.modules[__name__] = werkstatt.render'. Beide Namen
+    werden dasselbe Objekt, Patches wirken. 3x Fehlversuch in
+    OP-138/139/140.
+
+13. Umbenennungs-Regex 'from werkstatt import loop_renderer' ->
+    'from werkstatt import render' verliert den lokalen Namen
+    'loop_renderer'. Tests werfen danach NameError. REGEL: den
+    lokalen Namen erhalten: 'from werkstatt import render as
+    loop_renderer'. Gleiches Muster fuer 'from werkstatt import
+    builder' -> 'from werkstatt.roles import builder as builder'
+    und 'import werkstatt.builder' -> 'import
+    werkstatt.roles.builder as builder'. 2x reproduziert in
+    OP-143a.
+
+14. Modul-Globals, die Tests patchen (ask_llm, audit), gehoeren
+    in _common.py. Submodule lesen _bglob.X(). Der Alias-Name
+    darf NICHT '_c' sein — kollidiert mit lokalem Temp-Var _c
+    in run_builder, wirft 'F823 Local variable referenced
+    before assignment'. Fehlversuch in OP-140.
+
+15. 'ruff --fix .' ohne '--select' loescht F401 unused-Imports.
+    In Test-Files bricht das Collection, wenn der Import
+    Side-Effects traegt (Fixtures, Marker). 6 Collection-Errors
+    in einer Runde (OP-143a v2). REGEL: 'ruff --fix --select I'
+    fuer Re-Export-Fassaden — sortiert nur, loescht nichts.
+    Fuer Re-Exports 'from . import X as X' (Selbst-Alias)
+    verwenden, das markiert ruff als gewollten Re-Export.
+
+16. import-linter forbidden-Contracts pruefen transitiv. Wenn
+    die ADR 'direkt nicht importieren' meint (ADR-0013: 'Rollen
+    kennen keine Phasen direkt'), triggeren transitive Pfade
+    faelschlich (roles.builder.run -> verify -> loop ->
+    pipeline_phases -> phases). REGEL:
+    'allow_indirect_imports = true' pro Contract.
+    Fehlversuch in OP-144.
 
 WORAN MAN MERKT, DASS EIN CHAT HALLUZINIERT:
 - Behauptung 'X sagt woertlich Y' ohne Beleg-Zeile darunter.
