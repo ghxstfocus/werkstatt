@@ -7,25 +7,41 @@ einem anderen Identifier zeigt, ist das ein Rename, kein Entfernen.
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
+sys.path.insert(0, "/opt/werkstatt")
+
 import werkstatt.reviewer as rv
+from werkstatt.state import RunState
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
-def _mk_state(tmp_path, *, task_desc: str):
-    s = SimpleNamespace()
-    s.project_dir = tmp_path
-    s.project_name = "test"
-    s.api_key = "dummy"
-    s.baseline_gruen = True
-    s.aktuelle_task = {
-        "id": "t1",
-        "name": "rename",
-        "description": task_desc,
-        "task_files": ["x.py"],
-        "action": "update",
-    }
-    return s
+def _mk_state(tmp_path, *, task_desc: str) -> RunState:
+    """Spec-State fuer Reviewer-Rename (OP-174 P3).
+
+    Alle Felder in RunState deklariert. mk_state fail-loud bei
+    Tippfehler in Feldnamen. SimpleNamespace-Import bleibt fuer
+    Mock-Bundles (ns = SimpleNamespace() im Test).
+    """
+    return mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        api_key="dummy",
+        baseline_gruen=True,
+        aktuelle_task={
+            "id": "t1",
+            "name": "rename",
+            "description": task_desc,
+            "task_files": ["x.py"],
+            "action": "update",
+        },
+    )
 
 
 def _mk_reply(bugs):

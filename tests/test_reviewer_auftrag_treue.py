@@ -8,12 +8,19 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, "/opt/werkstatt")
 
 import werkstatt.reviewer as rv
 from werkstatt.reviewer import REVIEWER_SYSTEM
+from werkstatt.state import RunState
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 class TestReviewerAuftragTreue:
@@ -43,20 +50,26 @@ class TestReviewerAuftragTreue:
 # ===========================================================================
 
 
-def _mk_state(tmp_path, *, task_desc: str, task_files=None):
-    s = SimpleNamespace()
-    s.project_dir = tmp_path
-    s.project_name = "test"
-    s.api_key = "dummy"
-    s.baseline_gruen = True
-    s.aktuelle_task = {
-        "id": "t1",
-        "name": "test",
-        "description": task_desc,
-        "task_files": task_files or ["x.py"],
-        "action": "update",
-    }
-    return s
+def _mk_state(tmp_path, *, task_desc: str, task_files=None) -> RunState:
+    """Spec-State fuer Reviewer-Auftrag-Treue (OP-174 P3).
+
+    Alle Felder in RunState deklariert. mk_state fail-loud bei
+    Tippfehler in Feldnamen. SimpleNamespace-Import bleibt fuer
+    Mock-Bundles (ns = SimpleNamespace() im Test).
+    """
+    return mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        api_key="dummy",
+        baseline_gruen=True,
+        aktuelle_task={
+            "id": "t1",
+            "name": "test",
+            "description": task_desc,
+            "task_files": task_files or ["x.py"],
+            "action": "update",
+        },
+    )
 
 
 def _mk_reply(bugs):
