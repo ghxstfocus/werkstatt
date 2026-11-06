@@ -1,11 +1,10 @@
 """Phase: _phase_review_gate (OP-139 Phase 2b)."""
 from __future__ import annotations
 
-from werkstatt.state import RunState
+import sys as _sys
 
-from ._common import (
-    audit,
-)
+from werkstatt.audit import audit_safe
+from werkstatt.state import RunState
 
 
 def _phase_review_gate(state: RunState) -> int:
@@ -28,19 +27,15 @@ def _phase_review_gate(state: RunState) -> int:
     pn = getattr(state, "project_name", "?")
     # OP-168: Non-interactive stdin (pytest, pipe, cron) -> fail-closed.
     # Sonst wirft pytest's DontReadFromInput OSError statt EOFError.
-    import sys as _sys
     try:
         _is_tty = _sys.stdin.isatty()
     except (AttributeError, OSError):
         _is_tty = False
     if not _is_tty:
-        try:
-            audit("loop_human_gate_eof",
-                  {"gate": "phase_review",
-                   "reason": "non_interactive"},
-                  pd, pn)
-        except Exception:  # noqa: BLE001, S110
-            pass
+        audit_safe("loop_human_gate_eof",
+                   {"gate": "phase_review",
+                    "reason": "non_interactive"},
+                   pd, pn)
         return 1
     print()
     print("PHASE-REVIEW GATE")
@@ -52,25 +47,16 @@ def _phase_review_gate(state: RunState) -> int:
         try:
             antwort = input("Deine Wahl [j/n/e]: ").strip().lower()
         except EOFError:
-            try:
-                audit("loop_human_gate_eof",
-                      {"gate": "phase_review"}, pd, pn)
-            except Exception:  # noqa: BLE001, S110
-                pass
+            audit_safe("loop_human_gate_eof",
+                       {"gate": "phase_review"}, pd, pn)
             return 1
         if antwort == "j":
-            try:
-                audit("loop_human_gate_approved",
-                      {"gate": "phase_review"}, pd, pn)
-            except Exception:  # noqa: BLE001, S110
-                pass
+            audit_safe("loop_human_gate_approved",
+                       {"gate": "phase_review"}, pd, pn)
             return 0
         if antwort == "n":
-            try:
-                audit("loop_human_gate_rejected",
-                      {"gate": "phase_review"}, pd, pn)
-            except Exception:  # noqa: BLE001, S110
-                pass
+            audit_safe("loop_human_gate_rejected",
+                       {"gate": "phase_review"}, pd, pn)
             return 1
         if antwort == "e":
             print("Bitte Datei manuell bearbeiten, dann Enter.")

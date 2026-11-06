@@ -65,7 +65,7 @@ def test_katalog_enthaelt_alle_code_kinds():
     from werkstatt.audit import _AUDIT_KINDS_BEKANNT
 
     kinds_im_code: set[str] = set()
-    pat = re.compile(r'\baudit\(\s*["\']([a-z_][a-z0-9_]*)["\']')
+    pat = re.compile(r'\baudit(?:_safe)?\(\s*["\']([a-z_][a-z0-9_]*)["\']')
     for f in Path("werkstatt").rglob("*.py"):
         src = f.read_text(encoding="utf-8", errors="replace")
         for m in pat.finditer(src):
@@ -89,7 +89,7 @@ def test_katalog_enthaelt_keine_toten_kinds():
     from werkstatt.audit import _AUDIT_KINDS_BEKANNT
 
     kinds_im_code: set[str] = set()
-    pat = re.compile(r'\baudit\(\s*["\']([a-z_][a-z0-9_]*)["\']')
+    pat = re.compile(r'\baudit(?:_safe)?\(\s*["\']([a-z_][a-z0-9_]*)["\']')
     for f in Path("werkstatt").rglob("*.py"):
         src = f.read_text(encoding="utf-8", errors="replace")
         for m in pat.finditer(src):

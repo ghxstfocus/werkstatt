@@ -879,11 +879,9 @@ def _plan_reject_reflection(state) -> bool:
 
     pd = getattr(state, "project_dir", None)
     pn = getattr(state, "project_name", "?")
-    try:
-        audit("loop_plan_reject_reflection_start",
-              {"reason": reason[:200]}, pd, pn)
-    except Exception:  # noqa: BLE001, S110
-        pass
+    from werkstatt.audit import audit_safe
+    audit_safe("loop_plan_reject_reflection_start",
+               {"reason": reason[:200]}, pd, pn)
 
     # Prompt-Variante: urspruengliche Aufgabe + Reject-Grund
     _orig_aufgabe = getattr(state, "aufgabe", "") or ""
@@ -909,10 +907,7 @@ def _plan_reject_reflection(state) -> bool:
     state.last_reject_kind = ""  # type: ignore[attr-defined]
     state.last_reject_reason = ""  # type: ignore[attr-defined]
 
-    try:
-        audit("loop_plan_reject_reflection_done",
-              {"ok": bool(ok)}, pd, pn)
-    except Exception:  # noqa: BLE001, S110
-        pass
+    audit_safe("loop_plan_reject_reflection_done",
+               {"ok": bool(ok)}, pd, pn)
 
     return bool(ok)

@@ -61,18 +61,15 @@ def _do_audit_violation(state, key: str, leer: list[str]) -> None:
     damit tools/audit_drift.py ihn im AST findet.
     """
     try:
-        from werkstatt.audit import audit
+        from werkstatt.audit import audit_safe
     except ImportError:
         return
-    try:
-        audit(
-            "state_contract_violation",
-            {"transition": key, "felder": leer},
-            str(getattr(state, "project_dir", "")),
-            str(getattr(state, "project_name", "")),
-        )
-    except Exception:  # noqa: BLE001, S110
-        pass
+    audit_safe(
+        "state_contract_violation",
+        {"transition": key, "felder": leer},
+        str(getattr(state, "project_dir", "")),
+        str(getattr(state, "project_name", "")),
+    )
 
 
 def validate_transition(
@@ -103,15 +100,12 @@ def validate_transition(
         return
 
     if audit_fn is not None:
-        try:
-            audit_fn(
-                "state_contract_violation",
-                {"transition": key, "felder": leer},
-                str(getattr(state, "project_dir", "")),
-                str(getattr(state, "project_name", "")),
-            )
-        except Exception:  # noqa: BLE001, S110
-            pass
+        audit_fn(
+            "state_contract_violation",
+            {"transition": key, "felder": leer},
+            str(getattr(state, "project_dir", "")),
+            str(getattr(state, "project_name", "")),
+        )
     else:
         _do_audit_violation(state, key, leer)
 

@@ -535,11 +535,8 @@ def _stage_ist_hart(stage_id) -> bool:
         _sid = (stage_id.get("id") or "").lower()
         # OP-095: hart-Feld fehlt -> warnen + Prefix-Fallback
         if _flag is None:
-            try:
-                from werkstatt.audit import audit as _audit
-                _audit("verify_stage_ohne_hart_flag", {"id": _sid})
-            except Exception:  # noqa: BLE001
-                pass
+            from werkstatt.audit import audit_safe
+            audit_safe("verify_stage_ohne_hart_flag", {"id": _sid})
     else:
         _sid = (stage_id or "").lower()
     if _flag is True:
