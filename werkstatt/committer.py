@@ -341,7 +341,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
 
     # OP-048/055/056/057: Doku-Selbstpflege Ebene 1+2 (opt-in WERKSTATT_DOKU_NACHZUG=1).
     if _doku_nachzug_aktiv():
-        _op_nnn = _op_nnn_aus_aufgabe(getattr(state, "aufgabe", "") or "")
+        _op_nnn = _op_nnn_aus_aufgabe(state.aufgabe or "")
         _status_path = Path(pd) / "docs" / "STATUS.md"
         if not _op_nnn:
             audit("doku_nachzug_skip", {"reason": "no_op_in_aufgabe"}, pd, pn)
@@ -349,7 +349,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             audit("doku_nachzug_skip",
                   {"reason": "no_status_md", "op_nnn": _op_nnn}, pd, pn)
         else:
-            _subject = (getattr(state, "aufgabe", "") or "").strip().split("\n")[0][:60]
+            _subject = (state.aufgabe or "").strip().split("\n")[0][:60]
             # M-Fix-2026-11-02: Delete-Zone-Append VOR dem Entfernen pruefen.
             # Sonst geht der OP spurlos verloren wenn die Sektion fehlt.
             _dz_ok = _delete_zone_op_append(_status_path, _op_nnn, _subject)
@@ -447,7 +447,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
 
     _name = getattr(state, "git_author_name", "") or "builder"
     _email = getattr(state, "git_author_email", "") or "builder@security-ai.local"
-    _aufgabe = (getattr(state, "aufgabe", "") or "").strip()
+    _aufgabe = (state.aufgabe or "").strip()
     # OP-038: Konsistente Commit-Message nach Conventional-Commits-Schema.
     # Format: <type>(<scope>): <kurztitel>  + Body mit Loop-Hinweis.
     # type: docs (alle .md), feat (code neu), fix (code-patch), chore (mixed)

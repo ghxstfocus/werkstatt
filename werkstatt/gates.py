@@ -105,7 +105,7 @@ def _plan_gate(state: RunState) -> bool:
         "architect_prosa": state.architect_prosa or "",
         # GOLD 2026-10-30: Original-Aufgabe, damit der Hook
         # Doku-Aufgaben erkennen kann.
-        "aufgabe": getattr(state, "aufgabe", "") or "",
+        "aufgabe": state.aufgabe or "",
     })
     if not _hook_res.get("allow", True):
         # Info fuer Planner-Reflection
@@ -350,7 +350,7 @@ def _adr_mini_phase(state: RunState) -> bool:
         audit("adr_mini_skip", {"reason": "user_no"}, pd, pn)
         return True
     nummer = _naechste_adr_nummer(adr_dir)
-    aufgabe = (getattr(state, "aufgabe", "") or "").strip()
+    aufgabe = (state.aufgabe or "").strip()
     slug = "-".join(aufgabe.lower().split()[:5])[:50] or "loop-entscheidung"
     filename = f"ADR-{nummer:04d}-{slug}.md"
     try:
@@ -432,7 +432,7 @@ def _human_gate_body(state) -> str:
             "Der Scout hat erkannt, dass die Zieldatei bereits "
             "den geforderten Zustand hat. Kein Builder, kein Diff."
         )
-    if getattr(state, "auftrag_bereits_erfuellt", False):
+    if state.auftrag_bereits_erfuellt:
         _parts.append(
             "## Erfuellt ohne Aenderung\n"
             "Der Builder hat 'auftrag_bereits_erfuellt' gesetzt — "

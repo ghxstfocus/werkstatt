@@ -215,7 +215,7 @@ def _phase_tasks_loop(
         # Reviewer. Live-Beleg 21:18:37: Builder setzte Flag, Hook liess
         # durch, Apply-Loop lief mit leerem state.patches,
         # reviewer_kein_diff_aber_patches -> fail-closed.
-        if (getattr(state, "auftrag_bereits_erfuellt", False)
+        if (state.auftrag_bereits_erfuellt
             and getattr(state, "auftrag_bereits_erfuellt_bestaetigt", False)):
             audit("auftrag_bereits_erfuellt",
                   {"task_id": i,
@@ -269,7 +269,7 @@ def _phase_tasks_loop(
             # _reflection_loop gab True (weil Verify wegen leerer
             # Stage-Skipping gruen war), Task wurde als ok markiert,
             # ohne dass etwas geprueft wurde.
-            if (getattr(state, "auftrag_bereits_erfuellt", False)
+            if (state.auftrag_bereits_erfuellt
                 and getattr(state, "auftrag_bereits_erfuellt_bestaetigt", False)):
                 audit("auftrag_bereits_erfuellt",
                       {"task_id": i,
@@ -294,10 +294,10 @@ def _phase_tasks_loop(
             # als done markiert, obwohl nichts geschrieben wurde.
             # Live-Beleg 2026-10-31 10:03 t1.
             _applied_vor_al = int(
-                getattr(state, "applied_count", 0) or 0)
+                state.applied_count or 0)
             _refl_ok_al = _reflection_loop(state)
             _applied_nach_al = int(
-                getattr(state, "applied_count", 0) or 0)
+                state.applied_count or 0)
             if _refl_ok_al and _applied_nach_al > _applied_vor_al:
                 # OP-167: Counter auch im Reflection-OK-Pfad hochzaehlen.
                 # Loop-Test-8 (2026-11-05): t3/t4 über Reflection
@@ -392,7 +392,7 @@ def _phase_tasks_loop(
                     # OP-061 A: Flag-Check vor fail-Pfad.
                     _refl_ok = _reflection_loop(state)
                     if not _refl_ok:
-                        if (getattr(state, "auftrag_bereits_erfuellt", False)
+                        if (state.auftrag_bereits_erfuellt
                                 and _verify_patches(state, phase="post_build")):
                             audit("auftrag_bereits_erfuellt",
                                   {"task_id": i,

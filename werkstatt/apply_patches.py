@@ -87,7 +87,7 @@ def _patches_wirklich_angewendet(state) -> bool:
     fail-closed: state.patches truthy, aber applied_count 0/None
     -> False -> Reviewer-Reject wird NICHT ignoriert.
     """
-    _applied = int(getattr(state, "applied_count", 0) or 0)
+    _applied = int(state.applied_count or 0)
     return bool(getattr(state, "patches", [])) and _applied > 0
 
 

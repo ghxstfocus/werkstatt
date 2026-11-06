@@ -173,7 +173,7 @@ def _phase_explorer_and_setup(
     # (Test-Mocks, Resume) weiter.
     _skip_explorer_check = (
         bool(getattr(state, "tasks", None))
-        or getattr(state, "auftrag_bereits_erfuellt", False)
+        or state.auftrag_bereits_erfuellt
     )
     if (not _skip_explorer_check
             and not _validate_contract_safe("explorer", "scout", state, pd, pn)):

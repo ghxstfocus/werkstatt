@@ -1413,7 +1413,7 @@ def _deterministic_entfernen_precheck(state) -> bool:
       Datei enthaelt 'AuditReaderError' nicht -> Skip.
     """
     import re as _re_s
-    _aufgabe = (getattr(state, "aufgabe", "") or "").strip()
+    _aufgabe = (state.aufgabe or "").strip()
     if not _aufgabe:
         return False
     _auf = _aufgabe.lower()
@@ -1588,7 +1588,7 @@ def run_planner(state: RunState) -> bool:
     if _deterministic_entfernen_precheck(state):
         return True
 
-    aufgabe = getattr(state, "aufgabe", "")
+    aufgabe = state.aufgabe
     docs_ctx = ""
     if getattr(state, "docs", None):
         # FIX 2026-10-31 (Fix E): Bei Doku-Aufgaben ("nur X.md") nur

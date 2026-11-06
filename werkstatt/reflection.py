@@ -420,7 +420,7 @@ def _reflection_loop(
                 phase_label=f"reflection-det-{runde}",
             )
             state.applied_count = (
-                getattr(state, "applied_count", 0) + _a_det
+                state.applied_count + _a_det
             )
             _setze_runde_patches(state, [_det])
             audit(
@@ -475,7 +475,7 @@ def _reflection_loop(
             state, _patches,
             phase_label=f"reflection-runde-{runde}",
         )
-        state.applied_count = getattr(state, "applied_count", 0) + _applied
+        state.applied_count = state.applied_count + _applied
         # OP-067: Runden-Patches fuer Verify sichtbar machen
         _setze_runde_patches(state, list(_patches))
 
@@ -520,7 +520,7 @@ def _reflection_loop(
             # ein Fehlalarm (nicht: Task gescheitert).
             _hash_nachher = _diff_hash_for_state(state)
             _applied_vorher = int(
-                getattr(state, "applied_count", 0) or 0)
+                state.applied_count or 0)
             # OP-059: Fehler-Filter. Patch-nicht-angewendet-Marker
             # und der aktuelle error_context (Reviewer-Bugs) sind
             # KEINE echten Verify-Fehler — sie werden vom Loop
@@ -757,7 +757,7 @@ def _phase_end_reflection(state: RunState) -> bool:
                 state, _patches,
                 phase_label=f"phase-fix-{_datei}-r{_runde + 1}",
             )
-            state.applied_count = getattr(state, "applied_count", 0) + _applied
+            state.applied_count = state.applied_count + _applied
             if _applied > 0:
                 _repaired += 1
                 audit("loop_phase_reflection_patch_applied",
@@ -884,7 +884,7 @@ def _plan_reject_reflection(state) -> bool:
                {"reason": reason[:200]}, pd, pn)
 
     # Prompt-Variante: urspruengliche Aufgabe + Reject-Grund
-    _orig_aufgabe = getattr(state, "aufgabe", "") or ""
+    _orig_aufgabe = state.aufgabe or ""
     _aufgabe_mit_feedback = (
         f"{_orig_aufgabe}\n\n"
         f"## REJECT-FEEDBACK (voriger Plan wurde abgelehnt)\n"

@@ -81,7 +81,7 @@ def _phase_finalize(
     # GOLD 2026-10-30: Nicht nur state.patches pruefen (die koennen
     # gefuellt sein, ohne dass etwas angewendet wurde). Sondern
     # applied_count: hat der Loop tatsaechlich Dateien geaendert?
-    _applied = int(getattr(state, "applied_count", 0) or 0)
+    _applied = int(state.applied_count or 0)
     _patches_leer = _applied == 0
     if _alle_done and _patches_leer:
         # OP-062e: Nullfall-Flag fuer Human-Gate.

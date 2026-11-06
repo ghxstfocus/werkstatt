@@ -449,7 +449,7 @@ def run_phase_end_review(state: RunState) -> bool:
                 "files": _t.get("task_files"),
                 "status": _t.get("status"),
             })
-    aufgabe = getattr(state, "aufgabe", "")
+    aufgabe = state.aufgabe
     akz = getattr(state, "akzeptanzkriterien", []) or []
 
     import json as _json
@@ -828,7 +828,7 @@ def run_reviewer(state: RunState) -> bool:
             # (principal, action, reason)" als 3 Abschnitte.
             # Neue Regel: pruefe, ob die zentralen Konzept-Schlagworte
             # aus der Aufgabe in der Datei vorkommen.
-            _aufgabe_q = getattr(state, "aufgabe", "") or ""
+            _aufgabe_q = state.aufgabe or ""
             _md_pfad_q = Path(pd) / _md_q[0]
             if _md_pfad_q.is_file():
                 _inhalt_q = _md_pfad_q.read_text(encoding="utf-8").lower()
@@ -863,7 +863,7 @@ def run_reviewer(state: RunState) -> bool:
                         pass
                     return False
 
-    aufgabe = getattr(state, "aufgabe", "")
+    aufgabe = state.aufgabe
     tests_ok = getattr(state, "baseline_gruen", True)
 
     # M-459: Reviewer prueft Task-Description, nicht Gesamtaufgabe.

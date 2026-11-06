@@ -96,7 +96,7 @@ def _phase_plan_and_preflight(
 
         # OP-136a: Contract-Validierung planner->builder.
         # Nullfall "bereits erfuellt" erlaubt leere Tasks — kein Fail.
-        if (not getattr(state, "auftrag_bereits_erfuellt", False)
+        if (not state.auftrag_bereits_erfuellt
                 and getattr(state, "tasks", None)) and not _validate_contract_safe(
                 "planner", "builder", state, pd, pn):
             return 1, False
@@ -105,7 +105,7 @@ def _phase_plan_and_preflight(
         # Dann ist der Plan leer (Tasks = []), und der Plan-Gate
         # wuerde fail-closed abbrechen. Wir springen direkt zum
         # Human-Gate.
-        if getattr(state, "auftrag_bereits_erfuellt", False):
+        if state.auftrag_bereits_erfuellt:
             audit("auftrag_bereits_erfuellt",
                   {"quelle": "scout", "aktion": "skip_plan_gate"},
                   pd, pn)

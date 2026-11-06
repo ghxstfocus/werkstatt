@@ -37,7 +37,7 @@ def _hat_op_nnn(state) -> bool:
     eigenen Eintrag, sonst entstehen pro Task leere Bloecke.
     """
     import re as _re
-    _auf = getattr(state, "aufgabe", "") or ""
+    _auf = state.aufgabe or ""
     return bool(_re.search(r"\bOP-\d{3}[a-z]?\d*\b", _auf))
 
 

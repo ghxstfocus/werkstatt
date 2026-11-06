@@ -457,7 +457,7 @@ def _build_patches_fuer_datei(
         return []
 
     _erfuellt = _pruefe_doku_patch_breite(
-        _erfuellt, getattr(state, 'aufgabe', ''), zieldatei, pd, pn,
+        _erfuellt, state.aufgabe, zieldatei, pd, pn,
     )
     return _erfuellt
 
@@ -800,7 +800,7 @@ def run_builder(state: RunState) -> bool:
         except (OSError, UnicodeDecodeError):
             pass
 
-    aufgabe = getattr(state, "aufgabe", "")
+    aufgabe = state.aufgabe
 
     # Aktuellen Code lesen (vereinfacht: aus state.docs oder direkt)
     # Fuer Phase 6 nehmen wir einen Platzhalter, spaeter wird das aus dem Repo gelesen.
@@ -854,7 +854,7 @@ def run_builder(state: RunState) -> bool:
     if not patches:
         # GOLD 2026-10-30: pruefen, ob der LLM-Pfad bereits das
         # auftrag_bereits_erfuellt-Flag gesetzt hat.
-        if getattr(state, "auftrag_bereits_erfuellt", False):
+        if state.auftrag_bereits_erfuellt:
             return True
         _bglob.audit("builder_keine_patches_gold",
               {"zieldatei": _zieldatei}, pd, pn)
