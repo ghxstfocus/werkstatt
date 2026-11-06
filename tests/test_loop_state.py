@@ -24,7 +24,12 @@ from werkstatt.state import (
 )
 
 # ---------------------------------------------------------------------
-# Pflicht-Felder (kein Default -> TypeError bei Weglassen)
+# Feld-Defaults (OP-174 P1, 2026-11-06)
+#
+# Vor OP-174 waren 12 Felder Pflicht (RunState() warf TypeError).
+# Seit P1 haben alle Defaults (sentinel-sicher). Tests bauen ueber
+# tests/factories.py::mk_state(). Prod-Code nutzt state.X direkt
+# ohne getattr-Fallback.
 # ---------------------------------------------------------------------
 
 def _pflicht() -> dict:
@@ -57,9 +62,31 @@ def _state(**overrides) -> RunState:
     return RunState(**kw)
 
 
-def test_pflicht_felder_fehlen_wirft():
-    with pytest.raises(TypeError):
-        RunState(block_id="b")  # type: ignore[call-arg]
+def test_ehemalige_pflichtfelder_haben_defaults():
+    """Spec: ehemalige Pflichtfelder (12) haben sentinel-sichere Defaults.
+
+    Vor OP-174 war RunState(block_id="b") ein TypeError, weil 12
+    Felder Pflicht waren. Nach OP-174 P1 sind alle 12 optional mit
+    neutralen Defaults — RunState() ohne Argumente baubar.
+
+    Der Test prueft: jede dieser 12 Felder hat den erwarteten
+    sentinel-Wert. Regress (z.B. versehentlicher Pflichtfeld-
+    Rueckbau) wird sofort rot.
+    """
+    s = RunState()  # ohne Argumente baubar
+
+    assert s.block_id == ""
+    assert s.aufgabe == ""
+    assert s.start_ts == ""
+    assert s.docs == {}
+    assert s.agents == {}
+    assert s.always == {}
+    assert s.optional == {}
+    assert s.file_whitelist == []
+    assert s.api_key == ""
+    assert s.budget == {}
+    assert s.agent_docs == {}
+    assert s.project_dir == Path(".")
 
 
 def test_pflicht_felder_gesetzt():

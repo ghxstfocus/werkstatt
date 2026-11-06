@@ -109,18 +109,18 @@ class RecoveryVorschlag:
 
 @dataclass
 class RunState:
-    block_id: str
-    aufgabe: str
-    start_ts: str
-    docs: dict[str, str]
-    agents: dict[str, dict[str, Any]]
-    always: dict[str, Measurement]
-    optional: dict[str, Measurement]
-    file_whitelist: list[str]
-    api_key: str
-    budget: dict[str, int]
-    agent_docs: dict[str, list[str]]
-    project_dir: Path
+    block_id: str = ""
+    aufgabe: str = ""
+    start_ts: str = ""
+    docs: dict[str, str] = field(default_factory=dict)
+    agents: dict[str, dict[str, Any]] = field(default_factory=dict)
+    always: dict[str, Measurement] = field(default_factory=dict)
+    optional: dict[str, Measurement] = field(default_factory=dict)
+    file_whitelist: list[str] = field(default_factory=list)
+    api_key: str = ""
+    budget: dict[str, int] = field(default_factory=dict)
+    agent_docs: dict[str, list[str]] = field(default_factory=dict)
+    project_dir: Path = field(default_factory=lambda: Path("."))
     # Agent-Memory A2: Projekt-Stand (aus memory.yaml).
     projekt_stand: dict = field(default_factory=dict)
     start_monotonic: float = 0.0  # Auflage 2080: Zeitmessung
