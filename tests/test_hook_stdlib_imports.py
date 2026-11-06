@@ -16,7 +16,7 @@ class TestHookStdlibImports:
             input=json.dumps({"patch": patch,
                               "project_dir": str(project_dir),
                               "action": "create"}),
-            capture_output=True, text=True,
+            capture_output=True, text=True, check=False,
         )
         return json.loads(p.stdout)
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -39,7 +39,7 @@ PFLICHTDATEIEN = [
 
 
 def _today() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
+    return datetime.now(UTC).date().isoformat()
 
 
 def substitute(content: str, name: str, project_dir: Path) -> str:

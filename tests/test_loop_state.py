@@ -140,7 +140,8 @@ def test_llmreply_fehlerfall():
 
 def test_measurement_frozen():
     m = Measurement(mid="m", argv=("true",), beschreibung="x")
-    with pytest.raises(Exception):  # FrozenInstanceError
+    from dataclasses import FrozenInstanceError
+    with pytest.raises(FrozenInstanceError):
         m.mid = "anders"  # type: ignore[misc]
 
 

@@ -49,7 +49,7 @@ class TestProgressImCommit:
         head_files = subprocess.run(
             ["git", "-C", str(tmp_path), "diff-tree", "--no-commit-id",
              "--name-only", "-r", "HEAD"],
-            capture_output=True, text=True,
+            capture_output=True, text=True, check=False,
         ).stdout.splitlines()
         assert "docs/STATUS.md" in head_files
         assert "PROGRESS.md" in head_files, (
@@ -72,7 +72,7 @@ class TestProgressImCommit:
         assert ok is True
         status = subprocess.run(
             ["git", "-C", str(tmp_path), "status", "--porcelain", "-uall"],
-            capture_output=True, text=True,
+            capture_output=True, text=True, check=False,
         ).stdout.strip()
         # audit-logs/ darf als untracked uebrig bleiben
         relevant = [

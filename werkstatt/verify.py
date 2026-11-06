@@ -341,7 +341,7 @@ def _ruff_fix_changed(state: RunState) -> None:
             return
         _sp.run(
             ["ruff", "check", "--fix", "--no-cache", *_py_files],
-            cwd=pd, capture_output=True, text=True, timeout=30,
+            cwd=pd, capture_output=True, text=True, timeout=30, check=False,
         )
     except Exception:  # noqa: BLE001, S110
         pass

@@ -209,10 +209,8 @@ def _datei_infos() -> list[dict]:
         WERKSTATT / "werkstatt" / "state.py",
         WERKSTATT / "werkstatt" / "parser.py",
     ]
-    for p in sorted((WERKSTATT / "agents").glob("*.md")):
-        dateien.append(p)
-    for p in sorted((WERKSTATT / "docs").glob("*.md")):
-        dateien.append(p)
+    dateien.extend(sorted((WERKSTATT / "agents").glob("*.md")))
+    dateien.extend(sorted((WERKSTATT / "docs").glob("*.md")))
     infos: list[dict] = []
     for p in dateien:
         if not p.exists():

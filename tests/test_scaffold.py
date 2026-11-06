@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, "/opt/werkstatt")
@@ -24,7 +24,7 @@ def test_pflichtdateien_liste():
 
 
 def test_substitute_platzhalter():
-    heute = datetime.now(timezone.utc).date().isoformat()
+    heute = datetime.now(UTC).date().isoformat()
     out = substitute("{{project_name}} / {{project_dir}} / {{date}}",
                      "demo", Path("/tmp/demo"))
     assert "demo" in out
