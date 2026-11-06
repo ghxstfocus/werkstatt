@@ -172,6 +172,97 @@ def _verify_fehler_wiederholt_sich(errors: list) -> bool:
     return _sigs[0] == _sigs[1]
 
 
+def _fehler_signatur_normalisiert(errors: list) -> str:
+    """OP-175 B: Signatur einer Fehlerliste, zeilenunabhaengig.
+
+    Erfasst mypy (error:-Anker), ruff (CODE-Format wie BLE001),
+    pytest (Test-Name + Assertion) und path-mapping-Notizen.
+    Zeilennummern (`:59:`, `:88:`) werden entfernt, weil derselbe
+    Fehler nach einem Builder-Patch an anderer Stelle stehen kann.
+    Liefert "" bei leerer Eingabe.
+    """
+    import re as _re
+
+    _sigs: list[str] = []
+    for _e in errors:
+        if isinstance(_e, dict):
+            _text = _e.get("text") or ""
+        elif isinstance(_e, str):
+            _text = _e
+        else:
+            continue
+        if not isinstance(_text, str) or not _text:
+            continue
+        # mypy-Style: "...: error: <msg>"
+        _m = _re.search(r"error:\s*([^\n]+)", _text)
+        if _m:
+            _sigs.append(_m.group(1).strip()[:150])
+            continue
+        # ruff-Style: CODE (z.B. BLE001, B010, SIM114) + Kurz-Text
+        _m2 = _re.search(r"\b([A-Z]+\d{3,})\b[^\n]{0,120}", _text)
+        if _m2:
+            _sigs.append(_m2.group(0).strip()[:150])
+            continue
+        # Fallback: erste Zeile, Zeilennummern normalisieren
+        _first = _text.split("\n", 1)[0]
+        _first = _re.sub(r":\d+:", ":LINE:", _first)
+        _sigs.append(_first[:150])
+    if not _sigs:
+        return ""
+    return "||".join(sorted(_sigs))
+
+
+def _verify_fehler_zwischen_runden_gleich(state) -> bool:
+    """OP-175 B: True, wenn Verify-Stage-Muster von Runde i-1 und i gleich.
+
+    Loop-Test-6 (18:29): 10x mypy-Fehler, aber Format wechselte
+    (path-mapping -> attr-defined). Byte-Sig-Vergleich scheiterte,
+    _stagnation blieb 0. Stage-basierter Vergleich ist robust
+    gegen Format-Wechsel: nur die betroffenen Stage-IDs zaehlen.
+
+    Filter: nur bei applied>0 in der Vorrunde — bei applied=0
+    hat der Builder gar nichts angewendet, das ist ein separater
+    Pfad (patch_nicht_angewendet) und kein verify_gleich.
+
+    Nutzt reflection_history[-1]["verify_errors"] (Errors VOR dem
+    Patch dieser Runde = Errors NACH dem Patch der Vorrunde).
+    """
+    import re as _re
+
+    _hist = getattr(state, "reflection_history", None) or []
+    if not _hist:
+        return False
+    _prev = _hist[-1] if isinstance(_hist[-1], dict) else {}
+    if int(_prev.get("patches_applied", 0) or 0) <= 0:
+        return False
+    _vorher = _prev.get("verify_errors") or []
+    _jetzt = state.last_verify_errors or []
+
+    _STAGE_RE = _re.compile(
+        r"^(py_compile(?:_changed|_fallback)?|ruff(?:_changed)?|"
+        r"mypy(?:_changed)?|pytest(?:_changed|_regression)?|"
+        r"state_drift|control_drift|import_drift|contract_check)\b"
+    )
+
+    def _stages(errs: list) -> tuple[str, ...]:
+        _seen: set[str] = set()
+        for _e in errs:
+            _text = (_e.get("text") if isinstance(_e, dict)
+                     else _e if isinstance(_e, str) else "")
+            if not _text:
+                continue
+            _m = _STAGE_RE.match(_text.strip())
+            if _m:
+                _seen.add(_m.group(1))
+        return tuple(sorted(_seen))
+
+    _s_v = _stages(_vorher)
+    _s_j = _stages(_jetzt)
+    if not _s_v and not _s_j:
+        return False
+    return _s_v == _s_j
+
+
 def _test_fehler_signatur(state) -> str | None:
     """Signatur der pytest-Fehler aus state.last_verify_errors."""
     _errs = state.last_verify_errors or []
@@ -347,6 +438,11 @@ def _reflection_loop(
             _stagnation_grund = "ruff"
         elif _hat_gleiche_bugs:
             _stagnation_grund = "reviewer_bugs"
+        elif _verify_fehler_zwischen_runden_gleich(state):
+            # OP-175 B: mypy/pytest/ruff-Fehler unveraendert zwischen
+            # Runden, aber nicht als ruff- oder reviewer_bugs-Stagnation
+            # erkannt (z.B. Loop-Test-6: 10x mypy attr-defined).
+            _stagnation_grund = "verify_gleich"
         if _stagnation_grund:
             _stagnation += 1
             audit("loop_reflection_stagnation_runde",

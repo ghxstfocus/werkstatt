@@ -114,11 +114,32 @@ def test_reflection_no_progress_abbruch(tmp_path, monkeypatch):
 
 
 def test_reflection_fortschritt_kein_abbruch(tmp_path, monkeypatch):
+    """Spec (OP-175-B-Update): echter Fortschritt = anderer Hash UND
+    andere verify-Fehler. Vor Loop-Test-6 reichte "anderer Hash"
+    allein als Fortschritts-Signal -- das war falsch (Builder baut
+    neuen Patch, Fehler bleibt -> keine Reparatur). Neuer Vertrag:
+    wechselnde Fehler + wechselnder Hash = kein Abbruch."""
     state = _make_state(tmp_path)
     mocks = _setup_mocks(monkeypatch)
     hashes = iter(["h1", "h2", "h3", "h4"])
     monkeypatch.setattr(
         reflection, "_diff_hash_for_state", lambda s: next(hashes), raising=False
+    )
+
+    _runde = [0]
+    def _verify_mit_wechselnden_errors(st, phase=None):
+        _runde[0] += 1
+        st.last_verify_errors = [
+            {
+                "stage_id": "pytest_changed",
+                "datei": "tests/x.py",
+                "text": f"FAILED tests/x.py::test_y - AssertionError: boom{_runde[0]}",
+            }
+        ]
+        return False
+    monkeypatch.setattr(
+        reflection, "_verify_patches",
+        _verify_mit_wechselnden_errors, raising=False,
     )
 
     result = reflection._reflection_loop(state, max_runden=3)
