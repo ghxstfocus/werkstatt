@@ -8,9 +8,15 @@ Klassifikation ueberschreibt.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from werkstatt.verify import _stage_ist_hart
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 def test_hart_flag_ueberschreibt_mypy_weich() -> None:
@@ -58,17 +64,19 @@ def test_verify_patches_soft_mypy_hart_landet_in_hart(
     tmp_path: Path, monkeypatch,
 ) -> None:
     """Stage mypy_changed hart=true: Stage-Fehler zaehlt als hart, nicht weich."""
-    from types import SimpleNamespace
-
     from werkstatt import verify as verify_mod
 
     # Fake-state: nur noetige Felder.
-    state = SimpleNamespace()
-    state.project_dir = tmp_path
-    state.project_name = "p"
-    state.last_verify_errors = []
-    state.last_verify_hart_stages = set()
-    state.changed_files = ["core/x.py"]
+    # OP-174 P3: changed_files war Attrappe. {changed_files} in
+    # verify.json-Cmds wird aus state.patches expandiert
+    # (verify.py:_expand_cmd_placeholders), nicht aus
+    # state.changed_files — Feld existiert nicht in RunState.
+    state = mk_state(
+        project_dir=tmp_path,
+        project_name="p",
+        last_verify_errors=[],
+        last_verify_hart_stages=set(),
+    )
 
     # _verify_patches mocken: setzt Fehler + hart_stage_set wie _verify_patches.
     def _fake_verify(state_arg, phase=None):
@@ -95,16 +103,18 @@ def test_verify_patches_soft_mypy_ohne_hart_bleibt_weich(
     tmp_path: Path, monkeypatch,
 ) -> None:
     """Stage mypy_changed ohne hart-Feld: Prefix-Match -> weich (alt)."""
-    from types import SimpleNamespace
-
     from werkstatt import verify as verify_mod
 
-    state = SimpleNamespace()
-    state.project_dir = tmp_path
-    state.project_name = "p"
-    state.last_verify_errors = []
-    state.last_verify_hart_stages = set()
-    state.changed_files = ["core/x.py"]
+    # OP-174 P3: changed_files war Attrappe. {changed_files} in
+    # verify.json-Cmds wird aus state.patches expandiert
+    # (verify.py:_expand_cmd_placeholders), nicht aus
+    # state.changed_files — Feld existiert nicht in RunState.
+    state = mk_state(
+        project_dir=tmp_path,
+        project_name="p",
+        last_verify_errors=[],
+        last_verify_hart_stages=set(),
+    )
 
     def _fake_verify(state_arg, phase=None):
         state_arg.last_verify_errors = [
