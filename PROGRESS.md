@@ -2611,3 +2611,14 @@ sondern nur "dieser Codepfad laeuft ohne AttributeError".
 der Test-Unterbau die naechste Vertrauensstufe. Ohne
 Spec-Tests testet der Loop gegen Attrappen — jeder weitere
 Eingriff baut auf wackeligem Fundament.
+
+
+### 2026-11-06 — OP-174 angelegt: Spec-Tests
+
+Messung: 262/263 getattr in Prod deklariert (0 Ghosts),
+167 Test-Dateien mit SimpleNamespace. Der getattr-Wald ist
+Test-Kompatibilitaet, aber er kompromittiert Spec-Qualitaet.
+
+OP-174 definiert P1-P6: RunState-Defaults, mk_state-Factory,
+167 Tests migrieren, 262 getattr rueckbauen, 20 Spec-Reviews.
+Aufwand ~13-15h.

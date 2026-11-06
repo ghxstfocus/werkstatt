@@ -1020,6 +1020,51 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   0 Ghost). Nach ruff=0/mypy=0/Verify-Kette hart ist das der
   naechste strukturelle Schritt.
 
+### OP-174: Spec-Tests — RunState-Factory statt SimpleNamespace
+
+- **Status:** open
+- **Typ:** architektur (Test-Infrastruktur + Spec-Qualitaet)
+- **Betroffen:** `werkstatt/state.py` (RunState Defaults),
+  `tests/factories.py` (neu), 167 Test-Dateien (schrittweise),
+  `werkstatt/*` (getattr-Rueckbau nach Migration)
+- **Ziel:** Tests sind Specs. Jeder Test sagt per Docstring aus,
+  welches Verhalten er erzwingt. Kein Test haengt von zufaelligen
+  `SimpleNamespace`-Feldern ab. Prod-Code nutzt `state.x` statt
+  `getattr(state, "x", default)`.
+- **Problem (Messung 2026-11-06):**
+  1. **262/263 `getattr(state, ...)`** in Prod beziehen sich auf
+     deklarierte RunState-Felder (0 Ghosts). Aber noetig, weil
+     **167 Test-Dateien `SimpleNamespace`** uebergeben.
+  2. **28 `# type: ignore[attr-defined]`** in Prod bleiben noetig.
+  3. Tests testen Implementation, nicht Spec-Vertrag.
+  4. `getattr`-Wald bremst Refactoring: mypy findet umbenannte
+     Felder nicht.
+  5. `SimpleNamespace`-Fallback-Werte sind zufaellig: fehlendes
+     Feld → `getattr`-Default statt Spec-Bruch.
+- **Akzeptanzkriterien:**
+  - **P1 (Basis):** `RunState` Defaults fuer alle 12 Pflichtfelder.
+    `RunState()` ohne Argumente baubar.
+    `tests/factories.py::mk_state(**overrides) -> RunState`
+    als einzige Test-Konstruktion.
+  - **P2 (Pilot):** 2 Test-Dateien migriert
+    (`test_reflection.py`, `test_reflection_spec_erschoepfung.py`).
+  - **P3 (Migration):** alle 167 Dateien umgestellt.
+    `SimpleNamespace` nur, wo explizit "Feld fehlt"-Verhalten
+    getestet wird (max 5 Dateien).
+  - **P4 (Prod-Rueckbau):** 262 `getattr` → `state.x`.
+    Kein `# type: ignore[attr-defined]` mehr.
+  - **P5 (Spec-Review):** 20 wichtigste Tests mit Spec-Vertrag,
+    `arrange-act-assert`, keine White-Box-Mock-Assertions.
+  - **P6 (Metriken):** `state_flow --check` zeigt 0 getattr-only
+    in Prod. `grep -c 'type: ignore' werkstatt/` = 0 ausser
+    `import-untyped`.
+- **Tests:** `tests/test_factories.py` (neu, 3 Spec-Tests),
+  Pilot in `test_reflection.py` + `test_reflection_spec_erschoepfung.py`.
+- **Reihenfolge:** P1 → P2 → P3 → P4 → P5 → P6.
+- **Blockiert von:** —
+- **Prioritaet:** hoch — Voraussetzung fuer vertrauenswuerdige
+  Loop-Tests.
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
