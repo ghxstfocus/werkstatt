@@ -2367,3 +2367,60 @@ Absicherung gegen eine konkrete Fehlerklasse.
 - Alle 6 Drift-Checks gruen.
 - 9 verify.json-Stages (control_drift + state_drift + import_drift
   als harte Stages).
+
+
+### 2026-11-06 — OP-166: last_verify_errors pro Task zuruecksetzen (Close)
+
+**Work-Commit:** a720fe0 (`fix(loop): OP-166 — per-Task-State-Reset`)
+
+**Ist-Stand (gemessen 2026-11-06):**
+
+- `_reset_task_state` in `werkstatt/phases/_common.py:223`, gerufen
+  aus `werkstatt/phases/tasks.py:107` **vor** jedem Task-Start.
+  Setzt `last_verify_errors = []` und `reviewer_bugs = []`.
+- `_verify_patches_soft` wird in `phases/tasks.py:522` gerufen —
+  also **nach** dem Reset. Reihenfolge korrekt.
+- `tests/test_verify_errors_reset.py` mit 4 Tests (collection
+  RC=0, alle gruen).
+- Akzeptanz (b) — Stage-Filter in `_verify_patches_soft` — **nicht
+  implementiert**.
+
+**Entscheidung zu AK (b):**
+
+AK (b) wird **nicht** implementiert. Begruendung: `reflection.py:394-403`
+(K50-Bug-C) haelt `last_verify_errors` bewusst kumulativ **innerhalb**
+einer Task, damit mehrtaegige Reflection-Runden die vorherigen Fehler
+nicht verlieren. Der Docstring von `_reset_task_state` dokumentiert
+diese Semantik explizit:
+
+> "Reset nur bei Task-Start. Innerhalb einer Task bleiben Fehler
+> kumulativ (K50-Bug-C in reflection.py:394-403), damit
+> Reflection-Runden zusammenhaengen."
+
+Ein Stage-Filter in `_verify_patches_soft` waere entweder redundant
+(weil `_reset_task_state` schon Task-Grenzen zieht) oder wuerde
+K50-Bug-C regressen (Reflection saehe bei der 2. Runde die Fehler
+der 1. Runde nicht mehr).
+
+Die Task-Isolation ist durch (a) vollstaendig sichergestellt.
+`test_zwei_task_isolation` belegt das deterministisch.
+
+**Nebenbeobachtung (nicht Teil dieser OP):**
+
+`tools/state_flow.py --field last_verify_errors` klassifiziert das
+Feld als Risiko **HOCH**: 3 Writer ohne Contract, 6
+getattr-only-Reader, 0 Reader mit Contract. Eine
+State-Contract-Ergaenzung fuer `last_verify_errors` waere sinnvoll —
+Vorschlag: OP-136c nach OP-136a/b-Muster. **Nicht hier geloest.**
+
+**Entblockt:** OP-164b (Reviewer AUFTRAG-TREUE-Check bei
+Rename-Aufgaben). Der Live-Test war zuvor nicht aussagekraeftig,
+weil kumulative `last_verify_errors` den Effekt des
+Auftrag-Treue-Filters maskieren konnten.
+
+**Art der Aenderung:** nur `docs/STATUS.md` + `PROGRESS.md`. Kein Code.
+
+**Baseline 2026-11-06 (vor Close-Commit):**
+- pytest: 1273 passed, 5 skipped (Kontext-Block §5)
+- ruff: 118 (gemessen 2026-11-06, `ruff check .`)
+- Alle Drift-Checks gruen

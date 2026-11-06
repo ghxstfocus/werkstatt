@@ -856,32 +856,9 @@ NameError in anderem Modul → Match findet den Absatz sofort.
     (b) Wert-Kipp ohne Rename-Kontext -> HIGH, (c) type-ignore
     Over-Delivery -> medium.
 - **Tests:** `tests/test_reviewer_auftrag_treue.py` (neu)
-- **Blockiert von:** OP-166 (kumulative last_verify_errors macht
-  sonst Live-Test unmoeglich)
-
-### OP-166: last_verify_errors pro Task zuruecksetzen
-
-- **Status:** open
-- **Typ:** architektur (Verify + Reflection)
-- **Betroffen:** `werkstatt/pipeline_phases.py` (Task-Loop),
-  `werkstatt/verify.py` (`_verify_patches_soft`),
-  `tests/test_verify_errors_reset.py` (neu)
-- **Problem:** Loop-Test-4 t7: 5 Reflection-Runden, 0 Patches pro
-  Runde, aber 22 Zeilen kumulativ im Diff. Ursache: `last_verify_errors`
-  ist global und enthaelt Fehler aus vorherigen Tasks (z.B. t2's
-  gates.py-Problem). Der Builder sieht diese Fehler als "seine",
-  kann sie aber nicht loesen — weil sie nicht in seiner Zieldatei
-  liegen.
-- **Akzeptanzkriterien:**
-  - `_phase_tasks_loop` setzt `state.last_verify_errors = []` vor
-    jedem Task-Start (analog zu `state.patches = []`).
-  - `_verify_patches_soft` filtert bei der Klassifikation zusaetzlich
-    auf Stage-IDs, die in der aktuellen Task-Runde gelaufen sind
-    (nicht kumulativ).
-  - Tests: 2 Smoke-Tests — (a) Fehler aus Task 1 tauchen in Task 2
-    nicht mehr auf; (b) neue Fehler aus Task 2 werden erkannt.
-- **Tests:** `tests/test_verify_errors_reset.py` (neu)
 - **Blockiert von:** —
+
+
 
 ### OP-168: Phase-4-Review braucht Human-Gate zwischen Runden
 
@@ -914,6 +891,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-06 | OP-166 | done | per-Task-State-Reset `last_verify_errors` + `reviewer_bugs` via `_reset_task_state`; 4 Tests; AK (b) bewusst nicht implementiert (K50-Bug-C in reflection.py:394-403); entblockt OP-164b (a720fe0)
 - 2026-11-05 | OP-144 | done | import-linter als Post-Build-Stage (hart), 3 Layer-Regeln aus ADR-0013 (render, roles.builder, phases); allow_indirect_imports=true; werkstatt/roles/__init__.py nachgezogen (30eef6e)
 - 2026-11-05 | OP-142 | superseded | verworfen: shell.py und terminal_proxy.py machen fundamental verschiedene Dinge (PTY-Ausfuehrung vs. Log-Tailing); 17 identische Code-Zeilen sind Boilerplate (Imports, websocket.accept, except-Klauseln). 5 routes/-Wrapper haetten existierende Module gewrappt statt Duplikate aufzuloesen. Details in PROGRESS.md.
 - 2026-11-05 | OP-140 | done | roles/builder/-Split in 5 Submodule (ast, prompt, validate, patch, run) + _common; builder.py als sys.modules-Alias (6334d80)
