@@ -45,7 +45,7 @@ def test_task_ende_skip_progress_bei_op_nnn(tmp_path: Path) -> None:
     assert "T1" not in txt, (
         f"Task-Eintrag trotz OP-NNN geschrieben: {txt!r}"
     )
-    assert "loop_task_ende_skip_progress" in _audits or True  # optional
+    assert True  # optional
 
 
 def test_task_ende_schreibt_progress_ohne_op_nnn(tmp_path: Path) -> None:

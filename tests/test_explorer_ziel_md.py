@@ -23,7 +23,7 @@ class TestExplorerZielMd:
             (messungen.get("aufgabe_pfade") or {}).get("dateien") or []
         )
         key_files = []
-        for name, m in messungen.items():
+        for m in messungen.values():
             for datei in m.get("dateien", []):
                 if datei.endswith(".md") or datei.startswith("docs/"):
                     if datei in aufgabe_pfade_set:
@@ -44,7 +44,7 @@ class TestExplorerZielMd:
             (messungen.get("aufgabe_pfade") or {}).get("dateien") or []
         )
         key_files = []
-        for name, m in messungen.items():
+        for m in messungen.values():
             for datei in m.get("dateien", []):
                 if datei.endswith(".md") or datei.startswith("docs/"):
                     if datei in aufgabe_pfade_set:
