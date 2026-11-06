@@ -648,3 +648,36 @@ Richtig:
     echo "pytest rc=$PT"
 
 M-146 verstärken: "> file; rc=$?" statt Pipe.
+
+
+## mk_state() statt hand-rolled State-Mocks (Erkenntnis 2026-11-06)
+
+**Problem:** Tests bauten ihren State auf drei Wegen:
+1. `SimpleNamespace(project_dir=..., aufgabe=...)` — Felder nach Bedarf
+2. `class _State: def __init__(self): self.X = ...` — hand-rolled
+3. `type("S", (), {"X": ..., "Y": ...})()` — inline type()-Attrappe
+
+Alle drei erlauben **beliebige** Felder und **vergessen** leicht die,
+die der Prod-Code liest. Konsequenzen:
+
+- `getattr(state, "X", default)` wird noetig, um Test-Mocks mit
+  fehlenden Feldern zu tolerieren. Das maskiert echte Fehler.
+- **`mypy` findet Feld-Umbenennungen nicht** — `getattr(state, "alter_name")`
+  ist ein String, kein Attribut-Zugriff.
+- **Tippfehler in Test-Feldern bleiben unentdeckt** (`apikey` statt `api_key`).
+- **Zombie-Felder in Tests** (`explorer_ctx` statt `explorer_context`,
+  `plan_gate_errors`, `architect_beschreibung`) — reine Attrappen,
+  niemand liest sie, aber sie taeuschen vor, dass etwas passiert.
+
+Live-Messung 2026-11-06: 262/263 `getattr` in Prod beziehen sich
+auf deklarierte Felder. Der `getattr` ist reine Verteidigung gegen
+Test-Mocks, kein echtes Feature. 5 Test-Dateien mit hand-rolled
+`_State`-Klassen sind beim P4a-Versuch mit AttributeError gescheitert.
+
+**Regel:** Test-State ist **immer** `mk_state(**overrides)` aus
+`tests/factories.py`. Das liefert vollstaendigen `RunState` mit
+Defaults, fail-loud bei unbekanntem Feld (Tippfehler-Schutz).
+`SimpleNamespace` bleibt erlaubt, aber **nur** fuer Mock-Bundles
+(LLM-Reply, Function-Referenzen) — **nie** als State-Attrappe.
+
+**Siehe:** ADR-0015, OP-174, Commit f91cb1a (hand-rolled Mocks migriert)

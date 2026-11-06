@@ -62,7 +62,21 @@ bleiben. get_next_task liefert nur pending. while-Loop (M-473).
 
 ## 4. Verifikation
 
-- ruff --fix vor _verify_patches (M-467).
+**Tests sind Specs, keine Attrappen** (ADR-0015, 2026-11-06).
+
+Jeder Test baut seinen State ueber `tests/factories.py::mk_state(**overrides)`.
+Damit ist garantiert:
+- Alle `RunState`-Felder existieren (Defaults greifen fuer nicht-ueberschriebene)
+- Tippfehler in Test-Feldern fail-loud (`mk_state(apikey=...)` wirft)
+- mypy findet Feld-Umbenennungen in Tests
+- Prod-Code kann `state.X` direkt nutzen (kein `getattr`-Fallback noetig)
+
+`SimpleNamespace` bleibt nur fuer **Mock-Bundles** erlaubt (LLM-Reply,
+Function-Referenzen wie `SimpleNamespace(run_builder=..., audit=...)`).
+State-Attrappen mit `SimpleNamespace(project_dir=..., aufgabe=...)` oder
+`class _State: def __init__(self): self.X = ...` sind verboten.
+
+Verifikations-Pipeline:- ruff --fix vor _verify_patches (M-467).
 - Circuit Breaker in _reflection_loop (M-467).
 - Kein except Exception ohne # noqa: BLE001.
 - Fail closed: jeder Fehler -> ApplierError-Subklasse.

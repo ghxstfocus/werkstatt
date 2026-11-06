@@ -17,3 +17,5 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0011](ADR-0011-debugger-chat-modus.md) | Debugger als Chat-Modus (evidence-first) | accepted |
 | [ADR-0012](ADR-0012-vier-strukturmuster.md) | Vier Strukturmuster als Ursache fuer Multi-File-Failure | accepted |
 | [ADR-0013](ADR-0013-layer-architektur.md) | Layer-Architektur + Submodul-Split-Reihenfolge | accepted |
+| [ADR-0014](ADR-0014-rollen-registry.md) | Rollen-Registry als Single Source of Truth | accepted |
+| [ADR-0015](ADR-0015-tests-sind-specs.md) | Tests sind Specs, keine Attrappen | accepted |
