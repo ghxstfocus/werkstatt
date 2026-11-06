@@ -954,6 +954,72 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   (ruff=0, mypy=0, alle Stages hart). Naechster logischer
   Schritt nach Altlastabbau.
 
+### OP-173: Spec-Tests — RunState-Factory statt SimpleNamespace
+
+- **Status:** open
+- **Typ:** architektur (Test-Infrastruktur + Spec-Qualitaet)
+- **Betroffen:** `werkstatt/state.py` (RunState Defaults),
+  `tests/factories.py` (neu), 167 Test-Dateien (schrittweise),
+  `werkstatt/*` (getattr-Rueckbau nach Migration)
+- **Ziel (bestaetigt 2026-11-06):** Tests sind Specs, nicht
+  White-Box-Implementierungspruefungen. Jeder Test sagt mit
+  Docstring aus, welches Verhalten er erzwingt. Kein Test
+  haengt von zufaelligen `SimpleNamespace`-Feldern ab.
+  Prod-Code nutzt `state.x` statt `getattr(state, "x", default)`.
+- **Problem (Messung 2026-11-06):**
+  1. **262 von 263 `getattr(state, ...)`-Stellen** in Prod-Code
+     beziehen sich auf DEKLARIERTE RunState-Felder. Kein
+     Ghost-getattr. Aber der Aufruf ist noetig, weil **167
+     Test-Dateien `SimpleNamespace`** statt `RunState` uebergeben.
+     `state.x` wuerde dort mit `AttributeError` crashen.
+  2. **28 `# type: ignore[attr-defined]`** in Prod bleiben
+     bestehen, weil mypy die `getattr`-Aufrufe als potentiell
+     fehlend markiert.
+  3. **Test-Qualitaet**: viele Tests sind technisch gruen, aber
+     testen Implementation statt Verhalten. Beispiel: `assert
+     state.letzter_test_fehler == "..."` mit
+     `SimpleNamespace`-State sagt nichts ueber den Spec-Vertrag
+     von `_reflection_loop` aus.
+  4. **`getattr`-Wald bremst Refactoring**: Feldname umbenennen
+     → grep findet 262 Stellen, aber mypy findet 0 (weil
+     `getattr` strings sind). Bei `state.x` wuerde mypy alles
+     zeigen.
+  5. **`SimpleNamespace`-Fallback-Werte** sind zufaellig. Ein
+     Test mit `SimpleNamespace()` und einem Feld `api_key`
+     fehlt → `getattr(state, "api_key", "")` gibt `""`,
+     Test "funktioniert". Spec sagt aber "api_key MUSS
+     vorhanden sein".
+- **Akzeptanzkriterien:**
+  - **P1 (Basis):** `RunState` hat Defaults fuer alle 13
+    Pflichtfelder. `RunState()` ohne Argumente baubar.
+    `tests/factories.py::mk_state(**overrides) -> RunState`
+    als einzige Test-Konstruktion.
+  - **P2 (Pilot):** 2 Test-Dateien auf `mk_state` umgestellt.
+    `SimpleNamespace`-Import entfernt. Alle Tests gruen.
+  - **P3 (Migration):** alle 167 Test-Dateien umgestellt.
+    `SimpleNamespace` nur noch, wo explizit
+    "Feld fehlt"-Verhalten getestet wird (max 5 Dateien).
+  - **P4 (Prod-Rueckbau):** 262 `getattr(state, "x", default)`
+    → `state.x`. Kein `# type: ignore[attr-defined]` mehr in
+    Prod (nur noch bei externen Typ-Stubs).
+  - **P5 (Spec-Review):** die 20 wichtigsten Tests
+    (reflection, builder, verify, gates, planner) haben
+    Docstring mit Spec-Vertrag. `arrange-act-assert`-Struktur.
+    Keine `mock.assert_called_with(...)`-White-Box-Assertions.
+  - **P6 (Metriken):** `state_flow --check` zeigt 0
+    getattr-only Felder in Prod. `grep -c 'type: ignore'
+    werkstatt/` = 0 ausser `import-untyped`.
+- **Tests:** `tests/test_factories.py` (neu, 3 Tests fuer
+  `mk_state`), Pilot in `tests/test_reflection.py` +
+  `tests/test_reflection_spec_erschoepfung.py`.
+- **Reihenfolge:** P1 → P2 → P3 → P4 → P5 → P6.
+- **Blockiert von:** —
+- **Prioritaet:** hoch — Voraussetzung fuer vertrauenswuerdige
+  Loop-Tests. Ohne Spec-Tests testet der Loop gegen Attrappen.
+- **Quelle:** Messung 2026-11-06 (262/263 getattr deklariert,
+  0 Ghost). Nach ruff=0/mypy=0/Verify-Kette hart ist das der
+  naechste strukturelle Schritt.
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.

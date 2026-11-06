@@ -2577,3 +2577,37 @@ nicht genug Info zum Reparieren. Er ratet aus der Statistik.
 **Folge-OP:** OP-172 — Verify→Builder-Kette verbessern.
 Prioritaet hoch, weil ohne diesen Fix die Reflection-Runden
 zwar laufen, aber nicht sinnvoll reparieren koennen.
+
+
+### 2026-11-06 — OP-173 angelegt: Spec-Tests (RunState-Factory)
+
+**Messung:**
+
+- **262/263** `getattr(state, ...)`-Stellen in Prod beziehen
+  sich auf DEKLARIERTE RunState-Felder (`state_inventory
+  --check` bestaetigt 0 Ghost).
+- **167 Test-Dateien** nutzen `SimpleNamespace` statt `RunState`.
+- **28 `# type: ignore[attr-defined]`** in Prod bleiben noetig,
+  weil `getattr` in Tests noetig ist.
+
+**Kernproblem:**
+
+Der `getattr`-Wald ist **notwendige Test-Kompatibilitaets-
+Infrastruktur**, aber er kompromittiert die Test-Qualitaet:
+Tests sagen nicht aus, welches Spec-Verhalten sie erzwingen,
+sondern nur "dieser Codepfad laeuft ohne AttributeError".
+
+**Profi-Ansatz:**
+
+1. `RunState` mit Defaults fuer alle Pflichtfelder
+2. `tests/factories.py::mk_state(**overrides) -> RunState`
+3. 167 Test-Dateien migrieren
+4. 262 `getattr` in Prod → `state.x` (mypy prueft dann)
+5. Spec-Review der 20 wichtigsten Tests
+
+**Aufwand:** 3-4 Sessions, ~13-15h.
+
+**Warum jetzt:** Nach ruff=0, mypy=0, Verify-Kette hart ist
+der Test-Unterbau die naechste Vertrauensstufe. Ohne
+Spec-Tests testet der Loop gegen Attrappen — jeder weitere
+Eingriff baut auf wackeligem Fundament.
