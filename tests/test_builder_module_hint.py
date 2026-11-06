@@ -8,6 +8,11 @@ from unittest.mock import patch as _p
 
 sys.path.insert(0, "/opt/werkstatt")
 
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
+
 
 class TestModuleHint:
     def test_verfuegbare_module_im_prompt(self, tmp_path: Path) -> None:
@@ -22,7 +27,7 @@ class TestModuleHint:
             gesehener_prompt["user"] = user
             return SimpleNamespace(ok=True, content='{"patches": []}')
 
-        state = SimpleNamespace(
+        state = mk_state(
             project_dir=tmp_path, project_name="t",
             aktuelle_task={
                 "id": "t1", "action": "create",

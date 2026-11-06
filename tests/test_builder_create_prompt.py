@@ -9,6 +9,11 @@ from unittest.mock import patch
 sys.path.insert(0, "/opt/werkstatt")
 import werkstatt.roles.builder as _b
 
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
+
 
 class TestCreatePrompt:
     def test_create_task_ruft_llm_auch_wenn_datei_fehlt(self, tmp_path: Path) -> None:
@@ -18,7 +23,7 @@ class TestCreatePrompt:
             gesehener_prompt["user"] = user
             return SimpleNamespace(ok=True, content='{"patches": []}')
 
-        state = SimpleNamespace(
+        state = mk_state(
             project_dir=tmp_path,
             project_name="test",
             aktuelle_task={
@@ -42,7 +47,7 @@ class TestCreatePrompt:
         assert 'action="create"' in gesehener_prompt["user"]
 
     def test_update_task_fehler_datei_bleibt_fail_closed(self, tmp_path: Path) -> None:
-        state = SimpleNamespace(
+        state = mk_state(
             project_dir=tmp_path,
             project_name="test",
             aktuelle_task={
