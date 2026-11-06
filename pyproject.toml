@@ -47,10 +47,12 @@ forbidden_modules = ["werkstatt.web"]
 # rufen audit_safe() auf (werkstatt/audit.py), das logger-Fehler
 # sichtbar auf stderr schreibt. Commits 6b30b7c + 7a09ba2.
 #
-# RUF100 ist absichtlich NICHT ignoriert: Re-Export-noqa
-# ('# noqa: F401  # re-export: ...') ist gewollt und muss
-# erhalten bleiben. Redundante BLE001/S110-noqa werden in einem
-# separaten, selektiven Cleanup entfernt (nicht per
-# 'ruff --select RUF100 --fix', das entfernt auch die
-# Re-Export-Marker).
-ignore = ["BLE001", "S110"]
+# RUF100 (unused-noqa) ebenfalls ignoriert: Nach BLE001/S110-
+# Ignore werden die ~115 existierenden '# noqa: BLE001, S110'-
+# Kommentare redundant. Sie bleiben im Code (harmlos), aber
+# 'ruff --select RUF100 --fix' wuerde auch die legitimen
+# '# noqa: F401  # re-export: ...'-Marker entfernen — 107
+# Fehler wurden dabei sichtbar (Commit c08e899-Kontext).
+# Redundante noqa werden in einer eigenen OP selektiv entfernt
+# (siehe PROGRESS.md / OP-147d).
+ignore = ["BLE001", "S110", "RUF100"]
