@@ -7,12 +7,18 @@ Drei Defekte aus Loop-Validierung #2 (17:25 OP-002b3):
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from werkstatt.committer import _build_commit_subject
 from werkstatt.task_runner import _task_ende
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 # ═══════════════════════════════════════════════════════════════
 # A. _task_ende: PROGRESS.append unterdruecken wenn OP-NNN in Aufgabe
@@ -25,11 +31,12 @@ def test_task_ende_skip_progress_bei_op_nnn(tmp_path: Path) -> None:
     progress_p = tmp_path / "PROGRESS.md"
     progress_p.write_text("# Fortschritt\n", encoding="utf-8")
 
-    s = SimpleNamespace()
-    s.project_dir = tmp_path
-    s.project_name = "test"
-    s.aufgabe = "OP-002b3: upsert_seen erweitern"
-    s.tasks_ok_counter = 0
+    s = mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        aufgabe="OP-002b3: upsert_seen erweitern",
+        tasks_ok_counter=0,
+    )
 
     ps = SimpleNamespace()
     ps.mark_done = lambda tid, **kw: None
@@ -54,11 +61,12 @@ def test_task_ende_schreibt_progress_ohne_op_nnn(tmp_path: Path) -> None:
     progress_p = tmp_path / "PROGRESS.md"
     progress_p.write_text("# Fortschritt\n", encoding="utf-8")
 
-    s = SimpleNamespace()
-    s.project_dir = tmp_path
-    s.project_name = "test"
-    s.aufgabe = "Freies Experiment ohne OP-Bezug"
-    s.tasks_ok_counter = 0
+    s = mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        aufgabe="Freies Experiment ohne OP-Bezug",
+        tasks_ok_counter=0,
+    )
 
     ps = SimpleNamespace()
     ps.mark_done = lambda tid, **kw: None

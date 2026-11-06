@@ -7,12 +7,17 @@ Alle Tests sind deterministisch: kein LLM, kein echter Skill-Dateizugriff.
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import werkstatt.prompts as _p
 import werkstatt.reflection as _refl
 import werkstatt.skills as _skills
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 ## test_letzter_test_fehler_landet_im_prompt
 
@@ -52,7 +57,7 @@ def test_geladene_skills_wird_respektiert(monkeypatch) -> None:
     def _boom(*_a, **_kw):
         raise AssertionError("Skill erneut geladen")
 
-    state_geladen = SimpleNamespace(
+    state_geladen = mk_state(
         geladene_skills=["systematic-debugging"],
         reflection_skill_body="BODY",
     )
@@ -64,7 +69,7 @@ def test_geladene_skills_wird_respektiert(monkeypatch) -> None:
     def _rec(*a, **kw):
         recorder.append((a, kw))
 
-    state_leer = SimpleNamespace(geladene_skills=[], reflection_skill_body="")
+    state_leer = mk_state(geladene_skills=[], reflection_skill_body="")
     monkeypatch.setattr(_skills, "load_all_skills", list)
     monkeypatch.setattr(_skills, "load_skill_by_name", lambda *_a, **_kw: {"body": "SKILL-BODY"})
     monkeypatch.setattr(_skills, "_merke_geladene_skills", _rec)

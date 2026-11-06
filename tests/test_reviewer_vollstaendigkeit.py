@@ -3,11 +3,15 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, "/opt/werkstatt")
 import werkstatt.reviewer as _r
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 class TestReviewerVollstaendigkeit:
@@ -17,7 +21,7 @@ class TestReviewerVollstaendigkeit:
             "# Titel\n\n## Zielbild\n## RBAC\n"
         )
         with patch.object(_r, "_get_git_diff", lambda pd, task_files=None: "diff"):
-            state = SimpleNamespace(
+            state = mk_state(
                 project_dir=tmp_path, project_name="test",
                 api_key="fake", patches=[{"a": "b"}],
                 aktuelle_task={
@@ -40,7 +44,7 @@ class TestReviewerVollstaendigkeit:
             "## Test-Skizzen\n"
         )
         with patch.object(_r, "_get_git_diff", lambda pd, task_files=None: ""):
-            state = SimpleNamespace(
+            state = mk_state(
                 project_dir=tmp_path, project_name="test",
                 api_key="fake", patches=[],
                 aktuelle_task={
