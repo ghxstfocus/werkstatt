@@ -1,18 +1,26 @@
 """K3: _reflection_loop ruft run_builder bei error_context auch wenn verify gruen."""
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 from werkstatt import loop as _loop
 
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
-class _State:
-    def __init__(self) -> None:
-        self.project_dir = Path("/tmp")
-        self.project_name = "k3"
-        self.api_key = "x"
-        self.last_verify_errors: list = []
-        self.reviewer_bugs: list = []
-        self.architect_prosa = ""
+
+def _State():
+    """Spec-State fuer Reflection-Error-Context-Tests (OP-174 P3-Nachtrag)."""
+    return mk_state(
+        project_dir=Path("/tmp"),
+        project_name="k3",
+        api_key="x",
+        last_verify_errors=[],
+        reviewer_bugs=[],
+        architect_prosa="",
+    )
 
 
 def test_k3_error_context_ruft_builder_obwohl_verify_gruen() -> None:

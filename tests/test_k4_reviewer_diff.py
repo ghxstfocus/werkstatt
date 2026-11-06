@@ -1,8 +1,14 @@
 """K4: Reviewer diffed nur task_files der aktuellen Task."""
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 from werkstatt import reviewer as _rv
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 def test_k4_git_diff_mit_task_files() -> None:
@@ -49,15 +55,15 @@ def test_k4_ohne_task_files_nutzt_dot() -> None:
 
 def test_k4_run_reviewer_reicht_task_files_durch() -> None:
     """run_reviewer mit aktuelle_task.task_files -> _get_git_diff bekommt sie."""
-    class _State:
-        def __init__(self):
-            self.project_dir = Path("/tmp")
-            self.project_name = "k4"
-            self.api_key = "x"
-            self.aufgabe = "x"
-            self.baseline_gruen = True
-            self.aktuelle_task = {"name": "t", "description": "d",
-                                  "task_files": ["only_this.py"]}
+    state = mk_state(
+        project_dir=Path("/tmp"),
+        project_name="k4",
+        api_key="x",
+        aufgabe="x",
+        baseline_gruen=True,
+        aktuelle_task={"name": "t", "description": "d",
+                       "task_files": ["only_this.py"]},
+    )
 
     captured = {}
     def _fake_diff(pd, task_files=None):
@@ -65,7 +71,7 @@ def test_k4_run_reviewer_reicht_task_files_durch() -> None:
         return ""
 
     with patch.object(_rv, "_get_git_diff", side_effect=_fake_diff):
-        _rv.run_reviewer(_State())
+        _rv.run_reviewer(state)
 
     assert captured["task_files"] == ["only_this.py"], captured
 

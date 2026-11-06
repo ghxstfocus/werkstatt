@@ -1,8 +1,15 @@
 """K48: Aider-Format (context+old+new) -> old_string/new_string."""
 import json
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
 from werkstatt.roles.builder import run_builder
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 def _mock_llm(content: str):
@@ -10,17 +17,29 @@ def _mock_llm(content: str):
 
 
 def _st(tmp_path, datei: str):
+    """Spec-State fuer Aider-Patch-Tests (OP-174 P3-Nachtrag).
+
+    Vorher type("S", (), {...})() — hand-rolled State-Attrappe.
+    architect_beschreibung weggelassen: nicht in RunState deklariert,
+    nicht von run_builder gelesen (2026-11-06 gemessen). War Zombie.
+    """
     ziel = tmp_path / datei
-    return type("S", (), {
-        "project_dir": tmp_path, "project_name": "t", "api_key": "x",
-        "aktuelle_task": {"id": "t1", "name": "x", "description": "x",
-                          "action": "update", "task_files": [datei]},
-        "tasks": [{"task_files": [datei]}], "file_whitelist": [datei],
-        "gelesene_dateien": {datei: ziel.stat().st_mtime},
-        "patches": [], "builder_feedback": {}, "reviewer_bugs": [],
-        "last_verify_errors": [], "reflection_history": [],
-        "reflection_phase": False, "architect_beschreibung": "",
-    })()
+    return mk_state(
+        project_dir=tmp_path,
+        project_name="t",
+        api_key="x",
+        aktuelle_task={"id": "t1", "name": "x", "description": "x",
+                       "action": "update", "task_files": [datei]},
+        tasks=[{"task_files": [datei]}],
+        file_whitelist=[datei],
+        gelesene_dateien={datei: ziel.stat().st_mtime},
+        patches=[],
+        builder_feedback={},
+        reviewer_bugs=[],
+        last_verify_errors=[],
+        reflection_history=[],
+        reflection_phase=False,
+    )
 
 
 def test_aider_patch_wird_normalisiert(tmp_path):

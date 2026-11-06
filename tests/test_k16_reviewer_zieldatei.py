@@ -1,21 +1,29 @@
 """K16: run_reviewer haengt die volle Zieldatei immer an."""
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 from werkstatt import reviewer as _rv
 
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
-class _State:
-    def __init__(self, tmp: Path):
-        self.project_dir = tmp
-        self.project_name = "k16"
-        self.api_key = "x"
-        self.aufgabe = "x"
-        self.baseline_gruen = True
-        self.aktuelle_task = {
+
+def _State(tmp: Path):
+    """Spec-State fuer Reviewer-Zieldatei-Tests (OP-174 P3-Nachtrag)."""
+    return mk_state(
+        project_dir=tmp,
+        project_name="k16",
+        api_key="x",
+        aufgabe="x",
+        baseline_gruen=True,
+        aktuelle_task={
             "name": "t", "description": "d",
             "task_files": ["zieldatei.py"],
-        }
+        },
+    )
 
 
 def _fake_llm(api_key, system, user_content, **_):

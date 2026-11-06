@@ -1,17 +1,25 @@
 """K5: _plan_gate ruft Doku-Hook auch bei flachem Plan."""
+import sys
 from pathlib import Path
 
 from werkstatt import loop as _loop
 
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
-class _State:
-    def __init__(self):
-        self.project_dir = Path("/tmp/k5")
-        self.tasks: list = []
-        self.tests: list = [{"name": "t"}]
-        self.akzeptanzkriterien: list = [{"name": "a"}]
-        self.phasen: list = []
-        self.architect_prosa = None
+
+def _State():
+    """Spec-State fuer _plan_gate-Hook-Tests (OP-174 P3-Nachtrag)."""
+    return mk_state(
+        project_dir=Path("/tmp/k5"),
+        tasks=[],
+        tests=[{"name": "t"}],
+        akzeptanzkriterien=[{"name": "a"}],
+        phasen=[],
+        architect_prosa=None,
+    )
 
 
 def test_k5_doku_task_ohne_phasen_wird_abgelehnt() -> None:
