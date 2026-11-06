@@ -4,10 +4,14 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 sys.path.insert(0, "/opt/werkstatt")
 from werkstatt.loop import _expand_cmd_placeholders
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 def _init_repo(tmp_path: Path) -> None:
@@ -26,7 +30,7 @@ class TestStatusPorcelainParser:
     def test_modified_tracked_wird_erkannt(self, tmp_path: Path) -> None:
         _init_repo(tmp_path)
         (tmp_path / "a.py").write_text("geaendert\n")
-        state = SimpleNamespace(patches=[])
+        state = mk_state(patches=[])
         cmd = ["python3", "-m", "py_compile", "{changed_py_files}"]
         result = _expand_cmd_placeholders(cmd, state, tmp_path)
         assert result is not None, "modified tracked wurde nicht erkannt"
@@ -35,7 +39,7 @@ class TestStatusPorcelainParser:
     def test_untracked_wird_erkannt(self, tmp_path: Path) -> None:
         _init_repo(tmp_path)
         (tmp_path / "b.py").write_text("x = 1\n")
-        state = SimpleNamespace(patches=[])
+        state = mk_state(patches=[])
         cmd = ["python3", "-m", "py_compile", "{changed_py_files}"]
         result = _expand_cmd_placeholders(cmd, state, tmp_path)
         assert result is not None
@@ -46,7 +50,7 @@ class TestStatusPorcelainParser:
         (tmp_path / "a.py").write_text("neu\n")
         subprocess.run(["git", "-C", str(tmp_path), "add", "-A"],
                        check=True, capture_output=True)
-        state = SimpleNamespace(patches=[])
+        state = mk_state(patches=[])
         cmd = ["python3", "-m", "py_compile", "{changed_py_files}"]
         result = _expand_cmd_placeholders(cmd, state, tmp_path)
         assert result is not None
@@ -56,7 +60,7 @@ class TestStatusPorcelainParser:
         _init_repo(tmp_path)
         (tmp_path / "a.py").write_text("geaendert\n")
         (tmp_path / "b.py").write_text("neu\n")
-        state = SimpleNamespace(patches=[])
+        state = mk_state(patches=[])
         cmd = ["python3", "-m", "py_compile", "{changed_py_files}"]
         result = _expand_cmd_placeholders(cmd, state, tmp_path)
         assert result is not None
