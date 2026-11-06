@@ -2641,3 +2641,24 @@ heutige Arbeit (ruff/mypy=0, ADR-0015) waere Muell in HEAD.
 
 **Naechster Chat:** OP-175 als Auftrag, Reihenfolge A → C → B → D → E.
 Bug E ist Investigation, kein Fix.
+
+### 2026-11-06 — OP-175 abgeschlossen: 3 von 5 Bugs gefixt, 1 verworfen, 1 zurueckgezogen
+
+Mit OP-175 als Auftrag gemessen und gefixt. Urspruengliches
+Ziel (4 Bugs + 1 Investigation) hat die Messung nicht
+bestaetigt — nur A, B, C blieben nach Messung uebrig.
+
+Commits:
+- 2538174 fix(phases): Bug C — Message 3 -> 2 Runden
+- 6aa8694 fix(planner): Bug A — Topo-Sort nach deps
+- f204965 fix(reflection): Bug B — verify_gleich als Stagnations-Grund
+
+Bug D verworfen: Loop-Log 18:29:44 zeigt ruff B010 —
+mypy+ruff+spec_widerspruch haben den Agent-Patch gefangen,
+kein Repo-Bug. Haertung als OP-176 angelegt.
+Bug E zurueckgezogen: 46 loop_verify-Events am Tag, 0s
+korrekt (Heartbeat feuert erst ab 30s), Bug war Fehlmessung.
+
+Was bleibt: OP-168b (Gate zwischen Task-Reflection-Runden)
+ist weiterhin offen — Bug C im STATUS hatte das mit dem
+Message-Bug vermischt. Loop-Test 7 kann jetzt laufen.

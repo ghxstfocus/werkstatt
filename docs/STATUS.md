@@ -1065,89 +1065,46 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Prioritaet:** hoch — Voraussetzung fuer vertrauenswuerdige
   Loop-Tests.
 
-### OP-175: Loop-Test 6 Befunde — 4 Bugs + 1 Investigation
+### OP-176: contract_check-Haertung — setattr(state, "<unbekannt>") deterministisch fangen
 
 - **Status:** open
-- **Typ:** analyse + fix (Multi-Bug, sequenziell)
-- **Betroffen:** `werkstatt/planner.py` (A),
-  `werkstatt/reflection.py` (B, C), `werkstatt/phases/review.py`
-  (C, D), `werkstatt/state.py` (D), `werkstatt/verify.py` (E)
-- **Problem:** Loop-Test 6 (2026-11-06, Aufgabe OP-168b)
-  endete 0/4 Tasks done, 3 HIGH + 1 medium Reviewer-Bugs,
-  5-Runden-Stagnation. Kein Commit (`n` am Commit-Gate).
-  4 Bugs **bestaetigt** durch `.phase.yaml`- und Code-Messung.
-  1 Investigation (E) — Verhalten ist korrekt, Ursache offen.
-
-  **Bug A — Planner setzt Rueckwaerts-Dependencies:**
-  `.phase.yaml` 18:31 zeigt:
-  `t1: blocked, deps:t2` (t1 haengt von t2 = Rueckwaerts!),
-  `t3/t4: blocked, deps:t1,t2`. Nur t2 lief. Task-Schleife
-  reagiert **korrekt** auf blocked-Marker. Der Planner ist die
-  Ursache: `_leite_deps_aus_prosa` (OP-163b). Live-Beleg:
-  `.phase.yaml` Task-Reihenfolge vs deps-Map.
-
-  **Bug B — 5-Runden-Stagnation ohne Abbruch:**
-  Builder t2 baute 5x "1 Patch", Verify blieb rot. Der
-  Stagnation-Block (`reflection.py` Z.344-395) greift nicht.
-  K50-Bug-C-Zone lebt weiter. Live-Beleg: Loop-Log t2-Runden
-  1-5, jeweils "1 Patches angewendet, 1 verify-Fehler offen".
-  Messpunkt: `_reflection_bug_sigs_vorher`, `_hash_vorher`.
-
-  **Bug C — Phase-Review-Gate im falschen Kontext:**
-  `phases/review.py:42` hat hardcoded "Phase-Review ist nach
-  3 Runden erschoepft". Gate wird nach **t2-Reflection**
-  gerufen, nicht nach Phase-Review. Kontext-Verwechslung.
-  Live-Beleg: Loop-Log Phase-Review 4.1s, Gate meldet
-  "3 Runden erschoepft", t2 hatte 5 Reflection-Runden.
-
-  **Bug D — Zombie-RunState-Feld per setattr:**
-  `phases/review.py:59`: `setattr(state, "phase_review_gate_auto", True)`.
-  Feld nicht in `RunState`, nicht in `state_contracts`. mypy
-  blind (String opak). Reviewer hat es als medium-Bug gefangen
-  (gut!), aber ruff/mypy/contract_check blind. Verletzt
-  ADR-0015. Live-Beleg: Reviewer-Bug-Liste, `grep
-  phase_review_gate_auto`.
-
-  **Investigation E — Verify-Stages 0s (kein Bug):**
-  Loop-Log zeigt 7 Stages mit 0s. Messung: `_expand_cmd_placeholders`
-  funktioniert korrekt (echte Dateien werden expandiert,
-  nicht-existente → `None` → Stage skippt). Die 0s sind
-  vermutlich schnelle Erfolge (state_drift etc.) oder Skips
-  (weil `state.patches = []` zum Verify-Zeitpunkt). **Kein
-  Bug**, aber offene Frage: warum wurden `loop_verify_*`-Events
-  nicht in `audit-logs/agent-pipeline-*.jsonl` geschrieben?
-  Messpunkt: `audit()`-Ziel + Event-Store-Schema.
+- **Typ:** architektur (Verteidigungskette)
+- **Betroffen:** `tools/contract_check.py` (oder neues Modul in
+  `werkstatt/`), `werkstatt/state_contracts.py`,
+  `tests/test_contract_check_setattr.py` (neu)
+- **Problem:** Loop-Test 6 (2026-11-06, Bug D aus OP-175): Der
+  Builder versuchte zweimal, ein fehlendes RunState-Feld zu
+  setzen — erst `state.phase_review_gate_auto = True` (mypy
+  fing `attr-defined`), dann `setattr(state, "phase_review_gate_auto",
+  True)` (ruff B010 fing es in der Folge-Runde). Die
+  Verteidigungskette hat funktioniert, aber `setattr` mit
+  String ist heute nur durch ruff-Regel B010 und Zufall
+  gedeckt. Deterministische AST-Regel im `contract_check`
+  schliesst die Luecke.
 
 - **Akzeptanzkriterien:**
-  - **A:** `tests/test_planner_deps_richtung.py` (neu): Prosa
-    "t2 auf t1" → `t2.deps=["t1"]`, NICHT `t1.deps=["t2"]`.
-  - **B:** `tests/test_reflection_stagnation_5_runden.py` (neu):
-    3x identischer Fehler → Stagnation-Abbruch nach 2 Runden.
-  - **C:** `tests/test_phase_review_gate_kontext.py` (neu):
-    Gate nach Task-Reflection → anderer Prompt, nicht
-    "Phase-Review erschoepft".
-  - **D:** `tests/test_state_zombie_guard.py` (neu): Builder
-    setzt unbekanntes Feld → `contract_check` blockt ODER
-    Reviewer HIGH-Bug. RunState fail-closed.
-  - **E:** Investigation-Aufgabe: wo landen `loop_verify_*`-
-    Events? Kein Fix ohne Messung.
+  - AST-Walk ueber `werkstatt/` findet jeden
+    `setattr(<state-var>, "<const>", ...)`-Aufruf.
+  - Prueft: Attribut existiert in `RunState.__dataclass_fields__`.
+  - Fail-closed mit klarer Fehlermeldung (Datei, Zeile,
+    Feldname).
+  - `tests/test_contract_check_setattr.py`: (a) unbekanntes
+    Feld -> fail; (b) bekanntes Feld -> ok; (c) `setattr(x,
+    var, ...)` mit dynamischem Namen -> skip (statisch nicht
+    aufloesbar).
 
-- **Tests:** je Bug neue Test-Datei (siehe AK).
+- **Tests:** siehe AK.
 - **Blockiert von:** —
-- **Prioritaet:** hoch — Loop-Test 7 ohne Fixes reproduziert
-  denselben Muell.
-- **Reihenfolge:** A → C → B → D → E.
-- **Quelle:** Loop-Test 6, 2026-11-06, HEAD `e25b212`.
-- **Hinweis:** Verify-Kette (9/9 hart) hat den Muell **nicht
-  committet**, aber auch nicht **geblockt** — ruff/mypy waren
-  gruen (Code syntaktisch ok), nur der Reviewer hat D gefangen.
-  Erweiterung von `contract_check` um `setattr(state, "<unbekannt>")`
-  wuerde D frueher fangen.
+- **Blockiert:** nichts (Loop-Test 7 laeuft ohne).
+- **Prioritaet:** mittel — Verteidigungskette funktioniert
+  heute, aber nur durch zufaellig aktive ruff-Regel B010.
+- **Quelle:** OP-175 Bug D, Loop-Test 6, 2026-11-06.
 
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-06 | OP-175 | done | Bugs A, B, C gefixt (6aa8694 Topo-Sort, f204965 verify_gleich, 2538174 Gate-Message). Bug D nicht reproduzierbar: Builder versuchte aktiv mypy-Umgehung (state.X = -> setattr), Verteidigungskette (mypy+ruff B010+spec_widerspruch) hat es gefangen; Haertung als OP-176. Bug E zurueckgezogen: Fehlmessung (Audit-Events existieren, 0s korrekt). Test-Namen AK-abweichend: test_planner_deps_sortierung.py statt test_planner_deps_richtung.py (Bug war Sortierung, nicht Richtung), test_reflection_stagnation_verify.py statt test_reflection_stagnation_5_runden.py, test_phase_review_gate_kontext.py nicht angelegt (Bug C war Message-Bug, kein Code-Gate). Hinweis: OP-168b (Gate zwischen Task-Reflection-Runden) bleibt offen.
 - 2026-11-06 | OP-168 | done | `_phase_review_gate` in phases/review.py:11 + 6 Tests + Verdrahtung in phases/finalize.py:117; AK (b) erfuellt; AK (a) (Gate zwischen jeder Reflection-Runde) als OP-168b angelegt
 - 2026-11-06 | OP-145 | wontfix | Semantik geklaert: `_erfuellt`/`_bestaetigt`/`_quelle` haben verschiedene Rollen (5 Writer-Pfade, 2 Reader-Muster); Rename haette Scout-Pfad (`planner.py:1830`) regressen. Ersetzt durch OP-145b (State-Contract, in Planung)
 - 2026-11-06 | OP-166 | done | per-Task-State-Reset `last_verify_errors` + `reviewer_bugs` via `_reset_task_state`; 4 Tests; AK (b) bewusst nicht implementiert (K50-Bug-C in reflection.py:394-403); entblockt OP-164b (a720fe0)
