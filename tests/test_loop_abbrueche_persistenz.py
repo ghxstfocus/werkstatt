@@ -4,9 +4,13 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 sys.path.insert(0, "/opt/werkstatt")
+
+_here = Path(__file__).parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+from factories import mk_state  # noqa: E402
 
 
 class _FakePS:
@@ -19,7 +23,7 @@ class _FakePS:
 class TestAbbruechePersistenz:
     def test_failed_task_schreibt_jsonl(self, tmp_path: Path) -> None:
         from werkstatt.loop import _task_ende
-        state = SimpleNamespace(
+        state = mk_state(
             project_dir=tmp_path, project_name="t",
             aufgabe="x", tasks=[], tasks_ok_counter=0,
         )
@@ -37,7 +41,7 @@ class TestAbbruechePersistenz:
 
     def test_done_task_schreibt_keine_jsonl(self, tmp_path: Path) -> None:
         from werkstatt.loop import _task_ende
-        state = SimpleNamespace(
+        state = mk_state(
             project_dir=tmp_path, project_name="t",
             aufgabe="x", tasks=[], tasks_ok_counter=0,
         )
@@ -47,7 +51,7 @@ class TestAbbruechePersistenz:
 
     def test_mehrere_failures_append(self, tmp_path: Path) -> None:
         from werkstatt.loop import _task_ende
-        state = SimpleNamespace(
+        state = mk_state(
             project_dir=tmp_path, project_name="t",
             aufgabe="x", tasks=[], tasks_ok_counter=0,
         )
