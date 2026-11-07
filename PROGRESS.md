@@ -2683,3 +2683,15 @@ Commit c713033: phase_review_auto + Gate in _phase_end_reflection. State_flow_ba
 Bewusste Scope-Grenze: Task-Reflection-Gate in `_reflection_loop` ist NICHT umgesetzt — OP-Text nennt `_phase_end_reflection` als Ziel. Falls das spaeter gewuenscht wird, eigene OP.
 
 Lehre: `pytest` ohne aktiviertes venv lief System-Pytest 7.2.1, fastapi fehlt dort → 7 Collection-Errors. Siehe Merkposten.
+
+### 2026-11-07 — OP-178 abgeschlossen: Registry-Migration aller Aufrufer
+
+ADR-0014 dokumentierte die Registry als Single Source of Truth, aber nur `architect.py` nutzte sie (Messblock 23). Migration in 3 Commits:
+
+- **0388d1b** — planner/builder/reviewer/reflection: eigene Ladelogik durch `ROLLEN[name].lade_skills()` ersetzt. Verhaltensneutral.
+- **8954f83** — Alias-Cleanup: `_ROLLEN_plan`/`_ROLLEN_b`/`_ROLLEN_r` durch direkten `ROLLEN`-Import ersetzt, damit Migration-Test greift.
+- **5a5c941** — Explorer migriert + `systematic-debugging` raus. Explorer laedt nur noch `using-werkstatt`. `SKILL.md`-Frontmatter auf `rollen: [builder]` korrigiert.
+
+Neuer Test `test_rollen_registry_migration.py`: AST-Scan ueber `werkstatt/` prueft, dass jede Rolle mit nicht-leeren `skills` oder `skill_filter_rolle` mindestens einen `ROLLEN[name]`-Zugriff hat. Failt bei kuenftigen Rollen, die die Registry umgehen.
+
+Verhaltensaenderung Explorer: `systematic-debugging` gehoert semantisch zum geplanten Debugger (OP-128/OP-160), nicht zum Datei-Sucher. Test `test_explorer_system_kein_systematic_debugging` verbietet die alte Zuordnung. Loest ADR-0014-Offen-Absatz fuer 5 Aufrufer ein.
