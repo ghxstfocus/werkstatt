@@ -87,6 +87,9 @@
       if (window.WerkstattStatus && window.WerkstattStatus.lade) {
         window.WerkstattStatus.lade(daten.projekt);
       }
+      if (window.WerkstattWorkbench && window.WerkstattWorkbench.setProjekt) {
+        window.WerkstattWorkbench.setProjekt(daten.projekt);
+      }
     } catch (e) { /* Panels optional */ }
   }
 

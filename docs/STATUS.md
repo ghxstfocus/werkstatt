@@ -1083,6 +1083,21 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   `ok: true, regression: false`, alle Deltas 0, exit 0.
 - **Quelle:** Session 2026-11-07, Commit `69e0e66`.
 
+### OP-296: Workbench-Panes Diff/Verify/Files
+
+- **Status:** done (2026-11-07)
+- **Typ:** ui-feature
+- **Betroffen:** `static/layout.html`, `static/layout.css`,
+  `static/workbench.js`, `werkstatt/web/app.py`
+- **Problem:** Workbench-Drawer (OP-233) hatte nur Audit + Terminal,
+  Diff/Verify/Files waren disabled.
+- **Fix:** 3 neue Endpoints (`/api/projects/{name}/diff`,
+  `/verify`, `/files`) + 3 Panes mit Loader + Refresh-Buttons +
+  Datei-Navigation im Files-Tab.
+- **Tests:** Smoke-Test: `/diff` 12.186 Z. Diff, `/verify` 5 Events,
+  `/files` 25 Eintraege. Gate: 8/8 gruen.
+- **Quelle:** Session 2026-11-07, Commit `0564732`.
+
 ### OP-214: Mutation-Gate als verify-Stage
 
 - **Status:** open
