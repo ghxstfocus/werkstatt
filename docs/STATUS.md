@@ -10,7 +10,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 
 ## Offene Punkte
 
-### OP-070: Scout-Redundanz messen vor Umbau
+### OP-101: Scout-Redundanz messen vor Umbau
 - **Status:** open
 - **Betroffene Dateien:** `werkstatt/scout.py`, `werkstatt/planner.py` (`_run_scout`, `_baue_api_index`)
 - **Akzeptanzkriterien:** Auswertung der letzten 10 Loop-Läufe: (a) Wie oft setzt `_run_scout` `bereits_erfuellt == True`? (b) Wie oft liefert `_pruefe_api_widerspruch` einen Befund, den der Architect ohne Scout-Auszug nicht gefunden hätte? (c) Wie oft weicht `api_auszug` von einem reinen Token-Match ab? Entscheidung: Scout-LLM behalten (Wahrscheinlichkeit hoch nach Rollen-Analyse) oder deterministisch ersetzen. Kein Umbau vor Messung.
@@ -26,13 +26,13 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Verdacht:** Der Event wurde bei einer Explorer-Refactor-Welle
   umbenannt oder der Pfad, der ihn schreibt, wird nicht mehr erreicht.
 - **Konsequenz:** `explorer_context` (den der Scout fuer Datei-Previews
-  braucht) ist moeglicherweise leer -> Scout-Redundanz-Analyse (OP-070)
+  braucht) ist moeglicherweise leer -> Scout-Redundanz-Analyse (OP-101)
   hat keine Basis.
 - **Naechster Schritt:** Pruefen ob `explorer_result` noch erreicht wird;
   falls nicht, Event wieder aktivieren oder durch `explorer_messung_findings`
   ersetzen (semantisch gleich?). Kein sofortiger Fix.
 
-### OP-073: Werkzeug fuer Roadmap-to-OP Compiler
+### OP-102: Werkzeug fuer Roadmap-to-OP Compiler
 
 - **Status:** open
 - **Beschreibung:** Baut das Werkzeug `werkstatt/roadmap_compiler.py`, das wie in Phase 31
@@ -43,7 +43,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** Unit-Tests fuer die Validierungs-Logik und den Parser der Roadmap.
 - **Blockiert von:** —
 
-### OP-086: Doku-Drift als Verify-Gate (deterministisch)
+### OP-100: Doku-Drift als Verify-Gate (deterministisch)
 
 - **Status:** open
 - **Beschreibung:** `tools/doku_check.py` ist gebaut, aber noch nicht
@@ -71,7 +71,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `pytest tests/test_doku_check.py -v`
 - **Blockiert von:** —
 
-### OP-092: Loop-Agenten mit explizitem Kontext-Vertrag (Sammel-OP)
+### OP-070: Loop-Agenten mit explizitem Kontext-Vertrag (Sammel-OP)
 
 - **Status:** open
 - **Typ:** architektur (Sammel-OP, 5 Sub-OPs)
@@ -155,7 +155,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Hinweis:** Struktureller Fix für die Klasse OP-047 / OP-089. Nach 092a-e
   hat der Agent deterministischen Kontext und rät nicht mehr.
 
-### OP-100: Phase 33.2b — verify-Migration nach control/ (gross)
+### OP-076: Phase 33.2b — verify-Migration nach control/ (gross)
 
 - **Status:** open
 - **Typ:** architektur-refactor (Multi-Session)
@@ -185,7 +185,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Anmerkung:** Discovery 2026-11-03: 163 Patch-Calls (45x _verify_patches,
   93x audit, 10x _plan_gate, 15x sonst). Nicht an einem Tag machbar.
 
-### OP-113: Erfahrungs-Gehirn — deterministisches Fehler-Gedaechtnis (Sammel-OP)
+### OP-020: Erfahrungs-Gehirn — deterministisches Fehler-Gedaechtnis (Sammel-OP)
 
 - **Status:** open
 - **Typ:** architektur (Sammel-OP, 8 Sub-OPs)
@@ -204,14 +204,14 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   Absaetze zur passenden Problem-Klasse. Prompt-Injektion on-demand,
   nicht ganze DB/Datei.
 
-### OP-113a: erfahrung-Tabelle um scope-Spalte erweitern
+### OP-020a: erfahrung-Tabelle um scope-Spalte erweitern
 
 - **Status:** open
-- **Typ:** feature (Erfahrungs-Gehirn, Sub-OP zu OP-113)
-- **Betroffen:** `werkstatt/erfahrung.py` (neu, siehe OP-113)
-- **Problem:** ADR-0010 legt zweistufige Memory fest. OP-113 legt
-  Basis-Tabelle `erfahrung` an, aber ohne `scope`-Spalte. OP-129
-  (Destillation), OP-130 (Semantic Memory) und OP-113i (Log-Backfill)
+- **Typ:** feature (Erfahrungs-Gehirn, Sub-OP zu OP-020)
+- **Betroffen:** `werkstatt/erfahrung.py` (neu, siehe OP-020)
+- **Problem:** ADR-0010 legt zweistufige Memory fest. OP-020 legt
+  Basis-Tabelle `erfahrung` an, aber ohne `scope`-Spalte. OP-021
+  (Destillation), OP-022 (Semantic Memory) und OP-020i (Log-Backfill)
   brauchen `scope TEXT NOT NULL DEFAULT 'projekt'` als Voraussetzung.
 - **Akzeptanzkriterien:**
   - `erfahrung`-Tabelle hat Spalte `scope TEXT NOT NULL DEFAULT 'projekt'`,
@@ -221,10 +221,10 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - 2 Tests: Insert mit/ohne scope, Constraint-Verletzung.
 - **Tests:** `tests/test_erfahrung.py::test_scope_default`,
   `tests/test_erfahrung.py::test_scope_constraint`
-- **Blockiert von:** OP-113
+- **Blockiert von:** OP-020
 - **Quelle:** `docs/adr/ADR-0010-memory-zweistufig.md`
 
-### OP-123: Gate-Bridge (Loop wartet auf HTTP statt stdin)
+### OP-002: Gate-Bridge (Loop wartet auf HTTP statt stdin)
 
 - **Status:** open
 - **Typ:** architektur
@@ -242,7 +242,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_gate_bridge.py` (neu)
 - **Blockiert von:** —
 
-### OP-124: Chat-Agent + read-only Tool-Registry
+### OP-031: Chat-Agent + read-only Tool-Registry
 
 - **Status:** open
 - **Typ:** feature
@@ -260,9 +260,9 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   `tool_call("git_diff")`, Tool-Result landet in Session.
 - **Tests:** `tests/test_chat_agent.py` (neu),
   `tests/test_chat_tools.py` (neu)
-- **Blockiert von:** OP-125
+- **Blockiert von:** OP-030
 
-### OP-125: Chat-Session-Store (SQLite, pro Projekt)
+### OP-030: Chat-Session-Store (SQLite, pro Projekt)
 
 - **Status:** open
 - **Typ:** feature
@@ -276,7 +276,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_chat_session.py` (neu)
 - **Blockiert von:** —
 
-### OP-126: Chat-UI (Tool-Call-Karten, Session-Anzeige)
+### OP-032: Chat-UI (Tool-Call-Karten, Session-Anzeige)
 
 - **Status:** open
 - **Typ:** ui-feature
@@ -292,9 +292,9 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   und oeffnen den Workbench-Drawer mit entsprechender Datei.
   (e) Manuell verifiziert.
 - **Tests:** keine (UI, visuell)
-- **Blockiert von:** OP-124, OP-125
+- **Blockiert von:** OP-031, OP-030
 
-### OP-127: Timeline + Layout-Umbau Variante A
+### OP-033: Timeline + Layout-Umbau Variante A
 
 - **Status:** open
 - **Typ:** ui-feature
@@ -320,9 +320,9 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   keine Framework-Migration.
   (f) Manuell verifiziert gegen Wireframe.
 - **Tests:** keine (UI, visuell)
-- **Blockiert von:** OP-126
+- **Blockiert von:** OP-032
 
-### OP-128: Chat-Modus Debugger (evidence-first, Ladder)
+### OP-040: Chat-Modus Debugger (evidence-first, Ladder)
 
 - **Status:** open
 - **Typ:** feature
@@ -346,7 +346,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     `.werkstatt/temp_tests/` — nie nach `tests/`, nie nach
     `werkstatt/`. Fix bleibt Diff-Vorschlag, kein Auto-Apply.
     **Nach erfolgreicher Verifikation (Loop-Re-Run gruen):**
-    Lern-Event `debugger_fix_verifiziert` → Memory-Hook (OP-160).
+    Lern-Event `debugger_fix_verifiziert` → Memory-Hook (OP-043).
   - `reject` — Der Mensch lehnt ab, gibt Begruendung ueber den
     Chat zurueck an Loop. Kein Fix → kein Memory-Eintrag, aber
     Grund fliesst in Reflection-Kontext.
@@ -378,18 +378,18 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     Fix-Event bei gruenem Re-Run.
 
 - **Tests:** `tests/test_chat_debugger.py` (neu),
-  `tests/test_debugger_memory_hook.py` (neu, OP-160)
-- **Blockiert von:** OP-124
-- **Lern-Hook:** OP-160 (Debugger → Memory)
+  `tests/test_debugger_memory_hook.py` (neu, OP-043)
+- **Blockiert von:** OP-031
+- **Lern-Hook:** OP-043 (Debugger → Memory)
 
-### OP-129: Memory-Destillation + Promotion (scope-aware)
+### OP-021: Memory-Destillation + Promotion (scope-aware)
 
 - **Status:** open
 - **Typ:** feature (Erfahrungs-Gehirn)
 - **Betroffen:** `werkstatt/erfahrung.py`, `tools/memory_destill.py`
   (neu), `tools/memory_promote.py` (neu),
   `tools/memory_drift.py` (neu)
-- **Problem:** OP-113 speichert Episoden, destilliert aber keine Regeln,
+- **Problem:** OP-020 speichert Episoden, destilliert aber keine Regeln,
   konsolidiert nicht, promotet nicht. Ergebnis: derselbe Fehler
   wiederholt sich. Zusaetzlich fehlt eine projektuebergreifende Ebene —
   Antipatterns wie `# type: ignore` sind universell, werden aber pro
@@ -399,7 +399,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     beobachtungen_json, quelle_episoden, erstellt_am, letzte_nutzung,
     widerlegt)`. Trust in {candidate, confirmed, canonical};
     scope in {project, global}.
-  - OP-113a erweitert die `erfahrung`-Tabelle um `scope TEXT NOT NULL
+  - OP-020a erweitert die `erfahrung`-Tabelle um `scope TEXT NOT NULL
     DEFAULT 'project'` — Voraussetzung fuer Promotion.
   - `destilliere_regeln(min_episoden=3, scope='project')`: gruppiert
     gleiche `(problem_klasse, kontext_hash)`, ruft LLM, legt
@@ -431,16 +431,16 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_memory_destill.py` (neu),
   `tests/test_memory_promote.py` (neu),
   `tests/test_memory_drift.py` (neu)
-- **Blockiert von:** OP-113a
+- **Blockiert von:** OP-020a
 
-### OP-130: Semantic Memory (Projekt-Fakten + globale Praeferenzen)
+### OP-022: Semantic Memory (Projekt-Fakten + globale Praeferenzen)
 
 - **Status:** open
 - **Typ:** feature (Erfahrungs-Gehirn)
 - **Betroffen:** `werkstatt/erfahrung.py`,
   `projects/<name>/profile.yaml`, `werkstatt/chat_tools.py`
 - **Problem:** Chat muss Basics per grep herausfinden (Test-Runner,
-  DB-Typ, Migrationspfad). OP-113 speichert nur Fehler-Episoden.
+  DB-Typ, Migrationspfad). OP-020 speichert nur Fehler-Episoden.
   Zusaetzlich fehlt eine globale Ebene fuer User-Praeferenzen
   (z.B. „User bevorzugt Diff-Vorschlaege statt direkter Aenderung").
 - **Akzeptanzkriterien:**
@@ -460,9 +460,9 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - Test: record_semantic/load_semantic Roundtrip;
     chat_loop mit Mock-LLM prueft, dass Semantik im Prompt ist.
 - **Tests:** `tests/test_semantic_memory.py` (neu)
-- **Blockiert von:** OP-113a
+- **Blockiert von:** OP-020a
 
-### OP-131: Loop-Memory-Panel (was das Gehirn gelernt hat)
+### OP-050: Loop-Memory-Panel (was das Gehirn gelernt hat)
 
 - **Status:** open
 - **Typ:** ui-feature
@@ -494,9 +494,9 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - Manuell verifiziert: Panel zeigt leeren Zustand statt Crash,
     wenn DB leer.
 - **Tests:** keine (UI, visuell)
-- **Blockiert von:** OP-129, OP-130
+- **Blockiert von:** OP-021, OP-022
 
-### OP-132: "Why did it fail?"-Button (Repair Ladder)
+### OP-042: "Why did it fail?"-Button (Repair Ladder)
 
 - **Status:** open
 - **Typ:** ui-feature
@@ -510,10 +510,10 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   - Nach `run_failed`-Event erscheint in Timeline und/oder Chat ein
     Banner: "Run #N fehlgeschlagen (OP-M, X/Y Tasks)" mit drei Buttons.
   - Button 1 **„Chat analysiert"**: sendet automatisch Nachricht an
-    Chat-Agent (OP-124) mit Auftrag: "Analysiere Run #N: Audit-Logs,
+    Chat-Agent (OP-031) mit Auftrag: "Analysiere Run #N: Audit-Logs,
     Diff, Fehlerursache. Antwort in Sekunden."
   - Button 2 **„Debugger starten"**: startet Chat im Modus
-    `debugger` (OP-128) mit identischem Diagnose-Auftrag.
+    `debugger` (OP-040) mit identischem Diagnose-Auftrag.
   - Button 3 **„Coding-Loop neu"**: startet neuen Loop-Lauf mit
     identischer `--aufgabe` (Wiederholung nach Fix, falls manuell
     durchgefuehrt).
@@ -521,9 +521,9 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
     Klick auf Button 1 → `POST /api/projects/{name}/chat` mit
     erwarteter Nachricht.
 - **Tests:** keine (UI, visuell)
-- **Blockiert von:** OP-124, OP-127, OP-128
+- **Blockiert von:** OP-031, OP-033, OP-040
 
-### OP-133: Cost/Token-Dashboard
+### OP-103: Cost/Token-Dashboard
 
 - **Status:** open
 - **Typ:** ui-feature
@@ -545,7 +545,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_stats_api.py` (neu)
 - **Blockiert von:** —
 
-### OP-141: `state/` Submodul-Split (RunState aufteilen)
+### OP-071: `state/` Submodul-Split (RunState aufteilen)
 
 - **Status:** open
 - **Typ:** architektur (Split, invasiv)
@@ -573,7 +573,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   Feld-Pfade).
 - **Blockiert von:** —
 
-### OP-143: `cli/` + Re-Export-Bereinigung
+### OP-072: `cli/` + Re-Export-Bereinigung
 
 - **Status:** open
 - **Typ:** architektur (Split + Aufraeumen)
@@ -702,7 +702,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - 2026-11-02 | OP-079 | done | review-work-Skill: Markdown-Hunk-Header (d023535)
 - 2026-11-02 | OP-080 | done | review-work-Skill: Python-PATCHES (3d7fd1f)
 
-### OP-145b: State-Contract fuer auftrag_bereits_erfuellt-Familie
+### OP-073: State-Contract fuer auftrag_bereits_erfuellt-Familie
 
 - **Status:** open
 - **Typ:** architektur (State-Contract)
@@ -756,10 +756,10 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   vorgeschlagen, der Scout-Pfad-Regress verursacht haette.
   Quelle: Loop-Test-4-Analyse 2026-11-06, Messung der 5 Writer.
 
-### OP-147: Reflection-Verdrahtung (kleine Luecken)
+### OP-062: Reflection-Verdrahtung (kleine Luecken)
 
 - **Status:** open
-- **Typ:** architektur (klein, komplementaer zu OP-113/129/130/131)
+- **Typ:** architektur (klein, komplementaer zu OP-020/129/130/131)
 - **Betroffen:** `werkstatt/reflection.py`,
   `werkstatt/control/reflection.py`, `werkstatt/prompts.py`,
   `werkstatt/state.py` (nur Doku)
@@ -806,7 +806,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   respektiert, Doku-Vollstaendigkeit der 3 Varianten via AST-Read).
 - **Blockiert von:** —
 
-### OP-163b: Planner-Dependencies deterministisch aus Prosa
+### OP-074: Planner-Dependencies deterministisch aus Prosa
 
 - **Status:** open
 - **Typ:** architektur (Planner)
@@ -833,7 +833,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Tests:** `tests/test_planner_deps.py` (neu)
 - **Blockiert von:** —
 
-### OP-164b: Reviewer AUFTRAG-TREUE-Check bei Rename-Aufgaben
+### OP-075: Reviewer AUFTRAG-TREUE-Check bei Rename-Aufgaben
 
 - **Status:** open
 - **Typ:** architektur (Reviewer)
@@ -870,7 +870,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 
 
-### OP-174: Spec-Tests — RunState-Factory statt SimpleNamespace
+### OP-114: Spec-Tests — RunState-Factory statt SimpleNamespace
 
 - **Status:** open
 - **Typ:** architektur (Test-Infrastruktur + Spec-Qualitaet)
@@ -915,7 +915,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Prioritaet:** hoch — Voraussetzung fuer vertrauenswuerdige
   Loop-Tests.
 
-### OP-184: Loop-PROGRESS.md-Format an DOC_CONVENTIONS §5 angleichen
+### OP-060: Loop-PROGRESS.md-Format an DOC_CONVENTIONS §5 angleichen
 
 - **Status:** open
 - **Typ:** fix (Doku-Konsistenz)
@@ -947,10 +947,10 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Blockiert von:** —
 - **Blockiert:** —
 - **Prioritaet:** mittel — kosmetisch, aber Doku-Drift ist der
-  naechste Kandidat fuer OP-086.
+  naechste Kandidat fuer OP-100.
 - **Quelle:** OP-181-Close (2026-11-07, Commit `5529df6`).
 
-### OP-185: Loop-Push-Option (`--auto-push` / `--no-push`)
+### OP-061: Loop-Push-Option (`--auto-push` / `--no-push`)
 
 - **Status:** open
 - **Typ:** feature (Loop-Ergonomie)
@@ -988,7 +988,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Quelle:** OP-181-Close (2026-11-07), `grep 'git push' werkstatt/`
   leer.
 
-### OP-188: Test-Loop-Phase mit Qualification und Freeze
+### OP-010: Test-Loop-Phase mit Qualification und Freeze
 
 - **Status:** open
 - **Typ:** architektur (Tests + Spec)
@@ -1013,21 +1013,21 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - **(d)** Freeze: SHA256 in `state.test_manifest`.
   - **(e)** Max 2 Runden, dann `_phase_review_gate`.
   - **(f)** Tests fuer (a)-(e).
-  - **(g)** Test-Thaw-Mechanik integriert (siehe OP-192):
+  - **(g)** Test-Thaw-Mechanik integriert (siehe OP-013):
     bei Test-Bug `state.test_thawed=True`,
     `state.test_manifest={}`, Audit `test_thawed`,
     zurueck zu Phase 2b.
   - **`pytest` gruen, ruff/mypy 0.**
 - **Tests:** `tests/test_test_agent.py` (neu),
   `tests/test_phase_test_loop.py` (neu).
-- **Blockiert von:** OP-092 (Context-Vertrag), OP-195
+- **Blockiert von:** OP-070 (Context-Vertrag), OP-001
   (pyproject `test-tools` optional-dependencies).
-- **Blockiert:** OP-189, OP-191.
+- **Blockiert:** OP-011, OP-191.
 - **Prioritaet:** hoch.
 - **Quelle:** ADR-0016 (2026-11-07), Loop-Test 9/10, Benchmark
   /tmp/mutbench.
 
-### OP-189: Builder test-blind + verify-Stages test_integrity/must_fail
+### OP-011: Builder test-blind + verify-Stages test_integrity/must_fail
 
 - **Status:** open
 - **Typ:** architektur (Tests + Spec)
@@ -1052,12 +1052,12 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - **`pytest` gruen.**
 - **Tests:** `tests/test_builder_test_blind.py` (neu),
   `tests/test_verify_test_stages.py` (neu).
-- **Blockiert von:** OP-188.
-- **Blockiert:** OP-190.
+- **Blockiert von:** OP-010.
+- **Blockiert:** OP-014.
 - **Prioritaet:** hoch.
 - **Quelle:** ADR-0016.
 
-### OP-190: Mutation-Gate als verify-Stage
+### OP-014: Mutation-Gate als verify-Stage
 
 - **Status:** open
 - **Typ:** architektur (Tests + Qualitaet)
@@ -1077,16 +1077,16 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - **(e)** Tests fuer (a)-(c).
   - **`pytest` gruen.**
 - **Tests:** `tests/test_mutation_gate_stage.py` (neu).
-- **Blockiert von:** OP-189, OP-195.
+- **Blockiert von:** OP-011, OP-001.
 - **Blockiert:** —
 - **Prioritaet:** mittel.
 - **Quelle:** ADR-0017, Benchmark 2026-11-07.
 
-### OP-192: Test-Thaw-Mechanik (an OP-188 gekoppelt)
+### OP-013: Test-Thaw-Mechanik (an OP-010 gekoppelt)
 
 - **Status:** open
 - **Typ:** architektur (Tests + Spec)
-- **Betroffen:** `werkstatt/phases/test_loop.py` (neu, via OP-188),
+- **Betroffen:** `werkstatt/phases/test_loop.py` (neu, via OP-010),
   `werkstatt/phases/tasks.py` (Thaw-Trigger),
   `tests/test_test_thaw.py` (neu).
 - **Problem:** Wenn ein eingefrorener Test sich als falsch
@@ -1103,12 +1103,12 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - **(e)** Tests fuer (a)-(d).
   - **`pytest` gruen.**
 - **Tests:** `tests/test_test_thaw.py` (neu).
-- **Blockiert von:** OP-188 (Test-Loop-Phase).
+- **Blockiert von:** OP-010 (Test-Loop-Phase).
 - **Blockiert:** —
 - **Prioritaet:** hoch.
-- **Quelle:** ADR-0016, Chat-Debugger (OP-128) als Thaw-Trigger.
+- **Quelle:** ADR-0016, Chat-Debugger (OP-040) als Thaw-Trigger.
 
-### OP-193: Hypothesis als optionale Dependency + erste Property-Tests
+### OP-015: Hypothesis als optionale Dependency + erste Property-Tests
 
 - **Status:** open
 - **Typ:** architektur (Tests + Qualitaet)
@@ -1131,12 +1131,12 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - **`pytest` gruen.**
 - **Tests:** `tests/test_property_planner.py` (neu),
   `tests/test_property_reflection.py` (neu).
-- **Blockiert von:** OP-195.
+- **Blockiert von:** OP-001.
 - **Blockiert:** —
 - **Prioritaet:** mittel.
 - **Quelle:** ADR-0016, Benchmark 2026-11-07.
 
-### OP-194: Architektur-Doku aktualisieren (Test-Loop + Debugger)
+### OP-016: Architektur-Doku aktualisieren (Test-Loop + Debugger)
 
 - **Status:** open
 - **Typ:** doku
@@ -1155,13 +1155,13 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - **(d)** `docs/adr/README.md`: ADR-0016/0017/0018 im Index
     (falls nicht schon da).
 - **Tests:** keine — reine Doku-Aufgabe.
-- **Blockiert von:** OP-188, OP-191 (Architektur muss erst
+- **Blockiert von:** OP-010, OP-191 (Architektur muss erst
   gebaut sein, dann dokumentiert).
 - **Blockiert:** —
 - **Prioritaet:** mittel.
 - **Quelle:** ADR-0016/0017/0018.
 
-### OP-195: `pyproject.toml` — Package-Registrierung + test-tools
+### OP-001: `pyproject.toml` — Package-Registrierung + test-tools
 
 - **Status:** open
 - **Typ:** infrastruktur (Build + Dependencies)
@@ -1174,8 +1174,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   `tests/test_package_registrierung.py` (neu).
 - **Problem:** `werkstatt` ist heute kein installiertes Package
   (`pip show werkstatt` -> "Package(s) not found"). Der Loop
-  laeuft ueber cwd-Import. `pytest-gremlins` (OP-190) und
-  `hypothesis` (OP-193) brauchen Package-Registrierung, um
+  laeuft ueber cwd-Import. `pytest-gremlins` (OP-014) und
+  `hypothesis` (OP-015) brauchen Package-Registrierung, um
   ohne cwd-Zwang zu funktionieren.
 - **Akzeptanzkriterien:**
   - **(a)** Erweiterung ohne Beschaedigung: `[tool.importlinter]`
@@ -1199,18 +1199,18 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   `pytest.ini`, `mypy.ini`, `[tool.importlinter]`,
   `[tool.ruff.lint]` unveraendert sind).
 - **Blockiert von:** —
-- **Blockiert:** OP-190, OP-193.
-- **Prioritaet:** hoch (Voraussetzung fuer OP-190, OP-193).
+- **Blockiert:** OP-014, OP-015.
+- **Prioritaet:** hoch (Voraussetzung fuer OP-014, OP-015).
 - **Quelle:** Messung 2026-11-07: `pip show werkstatt` leer,
   `pyproject.toml` mit 58 Zeilen aber ohne `[project]`.
 
 
-### OP-196: Test-Spec-Validator (unabhaengige Pruefung der Architect-Spec)
+### OP-012: Test-Spec-Validator (unabhaengige Pruefung der Architect-Spec)
 
 - **Status:** open
 - **Typ:** architektur (Tests + Spec-Validierung)
 - **Betroffen:** `werkstatt/test_spec_validator.py` (neu),
-  `werkstatt/phases/test_loop.py` (neu, via OP-188),
+  `werkstatt/phases/test_loop.py` (neu, via OP-010),
   `tests/test_test_spec_validator.py` (neu).
 - **Problem:** Architect und Test-Agent sind beide LLMs, koennen
   dieselbe falsche Interpretation der Anforderung uebernehmen.
@@ -1228,12 +1228,12 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - **(e)** Tests fuer (a)-(d).
   - **`pytest` gruen.**
 - **Tests:** `tests/test_test_spec_validator.py` (neu).
-- **Blockiert von:** OP-188 (test_spec-Feld).
-- **Blockiert:** OP-188 (Validator-Integration).
+- **Blockiert von:** OP-010 (test_spec-Feld).
+- **Blockiert:** OP-010 (Validator-Integration).
 - **Prioritaet:** hoch.
 - **Quelle:** ADR-0016 Nachtrag 2026-11-07, externer Review.
 
-### OP-197: Debugger-Sandbox (isolierte Ausfuehrung temporaerer Tests)
+### OP-041: Debugger-Sandbox (isolierte Ausfuehrung temporaerer Tests)
 
 - **Status:** open
 - **Typ:** architektur (Sicherheit)
@@ -1256,7 +1256,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - **(e)** Tests fuer (a)-(d).
   - **`pytest` gruen.**
 - **Tests:** `tests/test_debugger_sandbox.py` (neu).
-- **Blockiert von:** OP-128 (Chat-Debugger).
+- **Blockiert von:** OP-040 (Chat-Debugger).
 - **Blockiert:** —
 - **Prioritaet:** mittel (Sicherheits-Backstop, nicht Blocker).
 - **Quelle:** Punkt 4 aus externem Review 2026-11-07.
@@ -1269,19 +1269,19 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-07 | OP-181 | done | Reviewer-Dead-Code-Erkennung (Commits `9b700e3` t1, `fdb01df` t3+t4). Loop-Lauf 13:23 baute t1 (REVIEWER_SYSTEM-`DEAD-CODE-CHECK`-Abschnitt mit 3 Regeln), brach dann bei t2 ab (Planner-Fehler: Verifikations-Task als update formuliert, Builder setzte `auftrag_bereits_erfuellt`, Reviewer meldete HIGH-Bug). OP-182-Fix begrenzte den Loop auf 2 Reflection-Runden, aber t3+t4 blieben offen. Manueller Nachzug: t3 = `run_reviewer` ruft `_pruefe_neue_module_genutzt(pd, diff)` nach den LLM-Filtern und vor `reviewer_result`-Audit; HIGH-Bug setzt `approved=False`. t4 = `tests/test_reviewer_dead_code.py` mit 3 AK-(c)-Tests + AST-Wiring-Test (`test_run_reviewer_ruft_pre_check_auf`, analog `test_rollen_registry_migration.py`) — kodiert die Lehre aus Loop-Test 9, dass die Funktion sonst toter Code werden kann. pytest 1342 passed, ruff/mypy 0, alle Drift-Checks gruen. **Lehre (Loop-Test 10, eingeplant als OP):** Planner-Task-Typ „pruefe/verifiziere X" braucht eigenes `action: verify`, sonst falscher Builder-Pfad. Siehe Stufe-2-Planung.
 - 2026-11-07 | OP-183 | done | Planner-Task-Typ `action: verify` (Commits `c3e308f` t1-t3 + 3 Tests, `f9243a8` Test (iv)). Loop-Lauf 15:24 hat t1 (Planner `_ist_verify_task` + `PLANNER_SPLIT_SYSTEM` vierter Action-Wert + `_korrigiere_aktion`-Vorspann), t2 (`phases/tasks.py` verify-Dispatch ohne Builder), t3 (`reviewer.py` `_filter_auftrag_treue_false_positives` `action`-Parameter + System-Prompt VERIFY-TASK-Block) gebaut. t4 (Tests) hatte 3/4 gruen, Test (iv) `test_verify_setzt_kein_auftrag_bereits_erfuellt` fehlte — manuell nachgezogen als deterministischer Text-Scan-Test. pytest 1364 passed. **Lehre:** Loop-Reflection kann bei Test-Tasks mit >3 Tests die letzte Assertion verlieren, wenn der Builder die gesamte Test-Datei zu gross plant. **Nachtrag 2026-11-07:** Delete-Zone-Eintrag fehlte, pytest-Fail `test_status_md_konsistenz` entdeckt und hier nachgetragen.
 - 2026-11-07 | OP-182 | done | verify_alternierend als Stagnations-Grund (Commit `4de3a65`). Loop-Test 9 (5 Runden statt 2): alternierende Verify-Fehler (PIE810 / mypy Duplicate / beide) haben `_verify_fehler_zwischen_runden_gleich` (Stage-Set exakt, OP-175 Bug B) nie gematcht, Counter sprang 1->0->1. Fix: neuer Grund `verify_alternierend` in `_reflection_loop` via `_verify_fehler_alternierend` (Signatur-Set-Intersection ueber `_fehler_signatur_normalisiert`, nicht-leer und nicht-identisch). Option Y: `_is_spec` wird bei diesem Grund uebersprungen -> normaler Task-Fail statt `spec_widerspruch_erschoepft`. 5 Unit-Tests + 1 Integration-Test (`test_reflection_alternierende_fehler_stagniert`). Konsequenz: 3 Builder-Aufrufe statt 5 in Loop-Test-9-Szenario.
-- 2026-11-07 | OP-173 | superseded | Duplikat zu OP-174. Beide OPs haben identischen Titel "Spec-Tests — RunState-Factory statt SimpleNamespace". OP-174 bleibt als einzige Version offen. Kein Code geaendert, kein Test.
+- 2026-11-07 | OP-173 | superseded | Duplikat zu OP-114. Beide OPs haben identischen Titel "Spec-Tests — RunState-Factory statt SimpleNamespace". OP-114 bleibt als einzige Version offen. Kein Code geaendert, kein Test.
 - 2026-11-07 | OP-187 | done | Planner-Dependency-Hybrid (Commit `e960a40`, Doku `91102a7`). Architect-Aussagen in Block 5 sind ab jetzt verbindlich: `_leite_deps_deterministisch` wertet Architect-Dependencies aus (Multi-File), Heuristik nur als Ergaenzung fuer Tasks ohne Architect-Aussage. Explizites `- (keine)` im Architect-Block stoppt Heuristik. Fallback-Pfad ruft Deps + Topo-Sort ebenfalls. 10 Unit-Tests in `test_planner_deps_hybrid.py`. **Nachtrag 2026-11-07:** DZ-Eintrag fehlte beim Close-Commit `91102a7`, hier nachgetragen.
 - 2026-11-07 | OP-176 | done | contract_check-Haertung gegen `setattr(state, "<unbekannt>", ...)` (Commit `7eab26d`, Loop-Test 8, 11:50-11:58). AST-Walk findet setattr-Aufrufe auf RunState-Felder, die nicht in `RunState.__dataclass_fields__` sind. Wiring ueber `state_inventory.py --changed` (verify.json contract_check-Stage). 3 Unit-Tests (test_contract_check_setattr.py) + 2 Integration-Tests (test_verify_contract_stage.py erweitert). Fail-closed mit rc=1 bei unbekanntem Feld, rc=0 bei deklariertem. Bug-D aus OP-175 (Loop-Test 6, Agent-Patch mit `setattr(state, "phase_review_gate_auto", True)`) ist jetzt deterministisch gefangen — vorher fing nur ruff B010 den Umgehungs-Versuch. Die zwei Integration-Tests verifizieren das Ende-zu-Ende-Wiring (Subprocess `python3 tools/state_inventory.py --changed <file>`).
 - 2026-11-07 | OP-180 | wontfix | Reviewer-Praezision (Konfidenz-Feld + Pre-Check): falsche Problem-Annahme. Loop-Test 7 hatte keinen Reviewer-Bug, sondern OP-179 (mypy Duplicate-Module) — die 3 HIGH reviewer_phase_rejected-Bugs waren ALLE berechtigt (t3/t4/t5 wurden wegen OP-179 nicht gebaut). Konfidenz-Feld und Pre-Check basieren auf "Reviewer meldet falsche Bugs" — das war nie wahr. Kein Code angelegt, kein Test, wird nicht gebraucht.
 - 2026-11-07 | OP-179 | wontfix | mypy-Setup "Duplicate-Module": **falsche Problem-Annahme**. Ich habe den truncated mypy-Output aus Loop-Test 7 (`(also at "werkstatt/phases/review.py")`) als "Source file found twice" interpretiert — das war eine Fehldeutung des OP-172-Truncation-Artefakts. Reproduktion (Block 33, 2026-11-07): alle vier mypy-Varianten rc=0 auf aktuellem Code-State, kein Duplicate-Module-Fehler, kein Top-Level-`phases/`-Konflikt, `__init__.py` ueberall da. Wahre Loop-Test-7-Ursache fuer t3/t4-Fails: der Loop baute zuerst t2 (`review.py`, setzt `state.phase_review_gate_auto`), aber t1 (`state.py`, deklariert das Feld) war noch nicht gebaut — Planner erkannte Cross-Task-Feldabhaengigkeit nicht. **Bereits behoben** durch OP-168b (c713033): Feld ist jetzt in RunState deklariert, Loop-Test 8 findet es. Kein Code angelegt, kein Test.
 - 2026-11-07 | OP-177 | wontfix | Reviewer-Kontext-Vertrag: falsche Problem-Annahme. _phase_files (alle Task-Dateien der Phase) liefert vollstaendigen Diff — bestaetigt durch Messblock 31. Die 3 HIGH-Bugs aus Loop-Test 7 waren berechtigt, weil t3/t4/t5 tatsaechlich nicht gebaut wurden (OP-179). Der Reviewer-Selbst-Hinweis "nur der Anfang von _phase_end_reflection ist sichtbar" war praezise Diagnose ("Patch fehlt im sichtbaren Kontext"), nicht Truncation-Beschwerde. Kein Code angelegt, kein Test. Ursache fuer "3 von 4 Tasks nicht gebaut" ist OP-179 (mypy Setup) + OP-172 (Verify-Truncation, heute gefixt).
 - 2026-11-07 | OP-172 | done | Fehlerkern-Extraktion in verify.py (`_extrahiere_fehlerkern`) statt `_out[-500:]` (8effad1). mypy-Fehler-Output wird auf `error:`-Zeilen + Kontext reduziert, `note:`/`help:`/Statistik verworfen. Live-Beleg Loop-Test 7 (18:29:11): der alte Truncation-Pfad schnitt den error-Kopf ab, sodass der Builder nur "(also at ...)" + Notes sah. Jetzt sieht er "error: Source file found twice under different module names: \"werkstatt.phases.review\" and \"phases.review\"" — das Setup-Problem ist damit **diagnostizierbar**, aber nicht behebbar (eigene OP-179). 9 neue Tests (test_verify_fehlerkern.py).
-- 2026-11-07 | OP-178 | done | Rollen-Registry-Migration: planner/builder/reviewer/reflection via ROLLEN[name].lade_skills() (0388d1b), Alias-Cleanup (8954f83), Explorer-Migration + systematic-debugging-Rausnahme (5a5c941). 5 von 5 Aufrufern migriert, scout bleibt fail-closed-leer. Neuer Migration-Test test_rollen_registry_migration.py (AST-Scan: jede Rolle mit skills/filter_rolle muss ROLLEN[name] nutzen). Verhaltensaenderung Explorer: systematic-debugging wird nicht mehr geladen (auch nicht bei Trigger); SKILL.md-Frontmatter `rollen: [builder]`. systematic-debugging-Zuordnung zum geplanten Debugger (OP-128/OP-160) dort offen, keine eigene OP.
+- 2026-11-07 | OP-178 | done | Rollen-Registry-Migration: planner/builder/reviewer/reflection via ROLLEN[name].lade_skills() (0388d1b), Alias-Cleanup (8954f83), Explorer-Migration + systematic-debugging-Rausnahme (5a5c941). 5 von 5 Aufrufern migriert, scout bleibt fail-closed-leer. Neuer Migration-Test test_rollen_registry_migration.py (AST-Scan: jede Rolle mit skills/filter_rolle muss ROLLEN[name] nutzen). Verhaltensaenderung Explorer: systematic-debugging wird nicht mehr geladen (auch nicht bei Trigger); SKILL.md-Frontmatter `rollen: [builder]`. systematic-debugging-Zuordnung zum geplanten Debugger (OP-040/OP-043) dort offen, keine eigene OP.
 - 2026-11-06 | OP-168b | done | Gate in `_phase_end_reflection` nach jeder Reject-Runde (c713033), `phase_review_auto: bool` in RunState (state_flow_baseline nachgezogen), 2 Smoke-Tests in test_phase_review_gate.py. Live-Beleg Loop-Test 7 (18:xx): Gate nach Runde 1 in Phase-End-Reflection. Reviewer-Bugs aus Loop-Test 7 geprueft: nur Test-Luecke berechtigt (jetzt gefuellt); Bug 1/2/5 waren false positives (Reviewer interpretierte AK-Text falsch, Code liest phase_review_auto nach Gate-Aufruf). Test-Spec-Abweichung: 2 Tests test_reflection_reject_ruft_gate + test_gate_n_bricht_reflection_ab. Task-Reflection-Gate (`_reflection_loop`) explizit NICHT im Scope — OP-Text nennt `_phase_end_reflection`.
 - 2026-11-06 | OP-175 | done | Bugs A, B, C gefixt (6aa8694 Topo-Sort, f204965 verify_gleich, 2538174 Gate-Message). Bug D nicht reproduzierbar: Builder versuchte aktiv mypy-Umgehung (state.X = -> setattr), Verteidigungskette (mypy+ruff B010+spec_widerspruch) hat es gefangen; Haertung als OP-176. Bug E zurueckgezogen: Fehlmessung (Audit-Events existieren, 0s korrekt). Test-Namen AK-abweichend: test_planner_deps_sortierung.py statt test_planner_deps_richtung.py (Bug war Sortierung, nicht Richtung), test_reflection_stagnation_verify.py statt test_reflection_stagnation_5_runden.py, test_phase_review_gate_kontext.py nicht angelegt (Bug C war Message-Bug, kein Code-Gate). Hinweis: OP-168b (Gate zwischen Task-Reflection-Runden) bleibt offen.
 - 2026-11-06 | OP-168 | done | `_phase_review_gate` in phases/review.py:11 + 6 Tests + Verdrahtung in phases/finalize.py:117; AK (b) erfuellt; AK (a) (Gate zwischen jeder Reflection-Runde) als OP-168b angelegt
-- 2026-11-06 | OP-145 | wontfix | Semantik geklaert: `_erfuellt`/`_bestaetigt`/`_quelle` haben verschiedene Rollen (5 Writer-Pfade, 2 Reader-Muster); Rename haette Scout-Pfad (`planner.py:1830`) regressen. Ersetzt durch OP-145b (State-Contract, in Planung)
-- 2026-11-06 | OP-166 | done | per-Task-State-Reset `last_verify_errors` + `reviewer_bugs` via `_reset_task_state`; 4 Tests; AK (b) bewusst nicht implementiert (K50-Bug-C in reflection.py:394-403); entblockt OP-164b (a720fe0)
+- 2026-11-06 | OP-145 | wontfix | Semantik geklaert: `_erfuellt`/`_bestaetigt`/`_quelle` haben verschiedene Rollen (5 Writer-Pfade, 2 Reader-Muster); Rename haette Scout-Pfad (`planner.py:1830`) regressen. Ersetzt durch OP-073 (State-Contract, in Planung)
+- 2026-11-06 | OP-166 | done | per-Task-State-Reset `last_verify_errors` + `reviewer_bugs` via `_reset_task_state`; 4 Tests; AK (b) bewusst nicht implementiert (K50-Bug-C in reflection.py:394-403); entblockt OP-075 (a720fe0)
 - 2026-11-05 | OP-144 | done | import-linter als Post-Build-Stage (hart), 3 Layer-Regeln aus ADR-0013 (render, roles.builder, phases); allow_indirect_imports=true; werkstatt/roles/__init__.py nachgezogen (30eef6e)
 - 2026-11-05 | OP-142 | superseded | verworfen: shell.py und terminal_proxy.py machen fundamental verschiedene Dinge (PTY-Ausfuehrung vs. Log-Tailing); 17 identische Code-Zeilen sind Boilerplate (Imports, websocket.accept, except-Klauseln). 5 routes/-Wrapper haetten existierende Module gewrappt statt Duplikate aufzuloesen. Details in PROGRESS.md.
 - 2026-11-05 | OP-140 | done | roles/builder/-Split in 5 Submodule (ast, prompt, validate, patch, run) + _common; builder.py als sys.modules-Alias (6334d80)
@@ -1290,11 +1290,11 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-05 | OP-136b | done | state_drift.py + 3 Registry-Checks + 2 validate_transition-Aufrufe + verify-Stage hart (bfd38e9)
 - 2026-11-05 | OP-167 | done | tasks_ok_counter in 2 Erfolgs-Pfaden + AST-Guard-Test (a3a538b)
 - 2026-11-05 | OP-165 | done | Contract-Verify pro Task (contract_check-Stage) (f73dde5)
-- 2026-11-05 | OP-163 | done | Planner-Dependencies als Pflichtfeld durchgesetzt (9797b31); **live-wirkungslos (Loop-Test-4, siehe OP-163b)**
-- 2026-11-05 | OP-164 | done | Reviewer versteht Rename-Aufgaben (2dde8cd); **live-wirkungslos (Loop-Test-4, siehe OP-164b)**
+- 2026-11-05 | OP-163 | done | Planner-Dependencies als Pflichtfeld durchgesetzt (9797b31); **live-wirkungslos (Loop-Test-4, siehe OP-074)**
+- 2026-11-05 | OP-164 | done | Reviewer versteht Rename-Aufgaben (2dde8cd); **live-wirkungslos (Loop-Test-4, siehe OP-075)**
 - 2026-11-05 | OP-135a | done | State-Contract-Design: Dataclasses + Registry + Property-Views (35c2aa3)
 - 2026-11-04 | OP-134 | done | State-Inventur — Tool + Doku (7177f16)
-- 2026-11-04 | OP-146 | done | Stale Blocker-Referenzen bereinigt (11 OPs, 18 Refs); OP-113a angelegt (Work-Commit 44b4350)
+- 2026-11-04 | OP-146 | done | Stale Blocker-Referenzen bereinigt (11 OPs, 18 Refs); OP-020a angelegt (Work-Commit 44b4350)
 - 2026-11-05 | OP-137 | done | AST-Block liest file-Feld + sortiert nach confidence (dbaa40b)
 - 2026-11-05 | OP-135b | done | explorer_context + tests deklariert, Property-Views direkt, 15 getattr-Callsites auf direkte Felder (171b10d + 4824c45)
 - 2026-11-05 | OP-136a | done | Contract-Validierung explorer->scout + planner->builder (fail-loud) (Work-Commit b77ee26)
@@ -1307,7 +1307,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-04 | OP-114 | done | Audit-Events reicher: bugs/grund/gate/fehler (c4b525a)
 - 2026-11-04 | OP-111 | done | Progress-Events in ask_llm + _with_spinner (4c0c59d, 2c1b30d)
 - 2026-11-03 | OP-108 | done | Scout create/update + Kopier-Auftrag (3884036)
-- 2026-11-03 | OP-097 | superseded | aufgeteilt in OP-104 (Kopie) + OP-105 (Proxy) + OP-106 (Aufrufer) + OP-107 (Tests)
+- 2026-11-03 | OP-097 | superseded | aufgeteilt in OP-104 (Kopie) + OP-079 (Proxy) + OP-080 (Aufrufer) + OP-081 (Tests)
 - 2026-11-03 | OP-104 | done | control/reflection.py wortgleiche Kopie (manuell, Scout-Plan-Bug)
 - 2026-11-03 | OP-099 | done | Phase 33.6: control_drift als Post-Build-Stage hart (67cd6b0)
 - 2026-11-03 | OP-088 | done | explorer_result in beiden Zweigen (Mess+LLM), audit.py-Katalog (4b6058f)
@@ -1323,17 +1323,17 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-03 | OP-045 | docs/WORKFLOW.md geloescht (nicht mehr gepflegt, nicht in DOC_CONVENTIONS §2 Pflicht)- 2026-11-03 | OP-008 | obsolete (pipeline.py geloescht) — Commit 07a4de6
 - 2026-11-03 | OP-009 | obsolete (python3 -m werkstatt.loop funktioniert (CLI seit Monaten aktiv)) — Commit n/a
 
-### OP-160: Debugger-Lern-Loop — Debugger-Fixes ins Erfahrungs-Gehirn
+### OP-043: Debugger-Lern-Loop — Debugger-Fixes ins Erfahrungs-Gehirn
 
 - **Status:** open
-- **Typ:** architektur (Verzahnung OP-128 + OP-113/129)
+- **Typ:** architektur (Verzahnung OP-040 + OP-020/129)
 - **Betroffen:** `werkstatt/chat_agent.py`, `werkstatt/erfahrung.py`
-  (neu, via OP-113), `werkstatt/reflection.py`,
+  (neu, via OP-020), `werkstatt/reflection.py`,
   `werkstatt/chat_tools.py`
-- **Problem:** Der Debugger (OP-128) ist der einzige Punkt im System,
+- **Problem:** Der Debugger (OP-040) ist der einzige Punkt im System,
   an dem ein Fix deterministisch verifiziert wird (Loop-Re-Run nach
   Fix). Diesen verifizierten Fix-Strom soll das Erfahrungs-Gehirn
-  (OP-113/129) als Quelle nutzen — nicht als Freitext-Sammlung,
+  (OP-020/129) als Quelle nutzen — nicht als Freitext-Sammlung,
   sondern als strukturierte, vertrauenswuerdige Eintraege.
 
 - **Voraussetzung (menschliche Entscheidung):** Ein Fix gelangt nur
@@ -1355,7 +1355,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   - **Builder Standard-Pfad:** KEINE Memory-Injektion.
   - **Builder innerhalb `_reflection_loop`:** Memory-Injektion fuer
     die aktuelle Fehler-Signatur, wenn `confidence >= high`.
-  - **Debugger-Prompt (OP-128):** Memory-Injektion fuer die aktuelle
+  - **Debugger-Prompt (OP-040):** Memory-Injektion fuer die aktuelle
     Signatur, wenn `confidence >= medium`.
   - **Planner / Architect / Scout / Reviewer:** KEINE
     Memory-Injektion (sie sollen das aktuelle Problem loesen,
@@ -1379,8 +1379,8 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - **Akzeptanzkriterien:**
   - (a) `debugger_fix_verifiziert`-Event wird bei gruenem Re-Run
-    geschrieben (Hook in OP-128).
-  - (b) `erfahrung.py` (via OP-113) hat Tabelle `fix_episode` mit
+    geschrieben (Hook in OP-040).
+  - (b) `erfahrung.py` (via OP-020) hat Tabelle `fix_episode` mit
     Signatur-Feldern und `fix_hash`.
   - (c) Reflection injiziert Memory nur bei `confidence >= high`.
   - (d) Debugger injiziert Memory nur bei `confidence >= medium`.
@@ -1392,10 +1392,10 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - **Tests:** `tests/test_debugger_memory_hook.py` (neu),
   `tests/test_reflection_memory_inject.py` (neu)
-- **Blockiert von:** OP-128 (Ladder + strukturierter Fix-Output),
-  OP-113a (scope-Spalte), OP-129 (Destillation)
+- **Blockiert von:** OP-040 (Ladder + strukturierter Fix-Output),
+  OP-020a (scope-Spalte), OP-021 (Destillation)
 
-### OP-096: Phase 33.3 — gates.py nach control/ migrieren
+### OP-077: Phase 33.3 — gates.py nach control/ migrieren
 
 - **Status:** open
 - **Typ:** architektur
@@ -1407,7 +1407,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   Aufrufer migriert. `tests/test_gates.py` gruen.
 - **Blockiert von:** —
 
-### OP-098: Phase 33.5 — pipeline_phases.py reduzieren
+### OP-078: Phase 33.5 — pipeline_phases.py reduzieren
 
 - **Status:** open
 - **Typ:** architektur (groesster Schritt)
@@ -1418,9 +1418,9 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - **Akzeptanzkriterien:** pipeline_phases.py unter 400 Zeilen. Jede
   Phase ruft `run_phase`. Keine direkten `_verify_patches`-Aufrufe.
   Voller Loop-Durchlauf funktioniert.
-- **Blockiert von:** OP-096
+- **Blockiert von:** OP-077
 
-### OP-101: Loop-Status-Inkonsistenz bei human_review-Tasks
+### OP-104: Loop-Status-Inkonsistenz bei human_review-Tasks
 
 - **Status:** open
 - **Typ:** ux-bugfix
@@ -1440,7 +1440,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - **Tests:** `tests/test_pipeline_phases.py` (neu).
 - **Blockiert von:** -
 
-### OP-105: reflection.py → Deprecation-Proxy
+### OP-079: reflection.py → Deprecation-Proxy
 
 - **Status:** open
 - **Typ:** architektur (sub-OP, 1 Datei)
@@ -1451,7 +1451,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   funktioniert. `python3 -c "from werkstatt.control.reflection import _reflection_loop"` funktioniert.
 - **Blockiert von:** —
 
-### OP-106: Aufrufer auf control.reflection umstellen
+### OP-080: Aufrufer auf control.reflection umstellen
 
 - **Status:** open
 - **Typ:** architektur (sub-OP, 3 Dateien)
@@ -1461,17 +1461,17 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   `from werkstatt.control.reflection import X` umstellen. Keine Logik-Änderung.
 - **Akzeptanz:** grep findet keine `from werkstatt.reflection import` mehr
   (außer in `control/reflection.py`-Docstring + Tests).
-- **Blockiert von:** OP-105
+- **Blockiert von:** OP-079
 
-### OP-107: Test-Patch-Pfade migrieren
+### OP-081: Test-Patch-Pfade migrieren
 
 - **Status:** open
 - **Typ:** architektur (sub-OP, mehrere Tests)
 - **Betroffen:** `tests/test_reflection*.py`, `tests/test_loop*.py`
 - **Auftrag:** `mock.patch("werkstatt.reflection.X")` → `mock.patch("werkstatt.control.reflection.X")`.
-- **Blockiert von:** OP-106
+- **Blockiert von:** OP-080
 
-### OP-109: Tests für scout._erkenne_kopier_auftrag
+### OP-112: Tests für scout._erkenne_kopier_auftrag
 
 - **Status:** open
 - **Typ:** test
@@ -1482,7 +1482,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   {quelle, ziel}, (b) ohne "kopiere" -> None, (c) "Kopiere nur" -> None.
 - **Blockiert von:** -
 
-### OP-110: _pruefe_zieldatei_existenz ignoriert existierende Zieldatei
+### OP-113: _pruefe_zieldatei_existenz ignoriert existierende Zieldatei
 
 - **Status:** open
 - **Typ:** bugfix
@@ -1493,7 +1493,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   `create`. 2 Tests in `tests/test_planner.py`.
 - **Blockiert von:** -
 
-### OP-115: Progress-Events Builder-Spezifika
+### OP-109: Progress-Events Builder-Spezifika
 
 - **Status:** open
 - **Typ:** ux-feature
@@ -1514,7 +1514,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   `_emit_progress`, assert call_count).
 - **Blockiert von:** -
 
-### OP-116: Progress-Events Reviewer-Spezifika
+### OP-110: Progress-Events Reviewer-Spezifika
 
 - **Status:** open
 - **Typ:** ux-feature
@@ -1528,10 +1528,10 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
     `ask_llm`.
   - `_emit_progress("Reviewer tN", "verdict", "approved"|"rejected")`
     nach JSON-Parse.
-- **Tests:** `tests/test_reviewer.py` — Smoke-Test analog OP-115.
+- **Tests:** `tests/test_reviewer.py` — Smoke-Test analog OP-109.
 - **Blockiert von:** -
 
-### OP-112: Antipattern + Skill-Matching in Reflection-Runden
+### OP-111: Antipattern + Skill-Matching in Reflection-Runden
 
 - **Status:** open
 - **Typ:** reflection-feature
@@ -1560,7 +1560,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   im Prompt, Skill-Matching bei ImportError).
 - **Blockiert von:** —
 
-### OP-113i: Log-Backfill — DB aus 30k Audit-Events vorfuellen
+### OP-020i: Log-Backfill — DB aus 30k Audit-Events vorfuellen
 
 - **Status:** open
 - **Typ:** erfahrung-backfill
@@ -1583,9 +1583,9 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   `loop_task_ok` / `reviewer_phase_approved` / `loop_phase=phase_ok`
   innerhalb 5 min. `quelle='log-backfill'`, `erfolg=1` wenn Lösung
   gefunden, `erfolg=0` sonst. Idempotent per `problem_sig`.
-- **Blockiert von:** OP-113a
+- **Blockiert von:** OP-020a
 
-### OP-117: Scout-Prosa optimieren
+### OP-105: Scout-Prosa optimieren
 
 - **Status:** open
 - **Typ:** ux-fix
@@ -1603,7 +1603,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   - Test: 200-Zeichen-Prosa → Panel vollständig sichtbar.
 - **Blockiert von:** -
 
-### OP-118: Heartbeat-Redundanz bei aktivem _emit_progress
+### OP-106: Heartbeat-Redundanz bei aktivem _emit_progress
 
 - **Status:** open
 - **Typ:** ux-cleanup
@@ -1619,7 +1619,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   - Test: 2× `_emit_progress` in 3s → 0 Heartbeats.
 - **Blockiert von:** -
 
-### OP-120: Revidierter Plan wird nicht gerendert
+### OP-107: Revidierter Plan wird nicht gerendert
 
 - **Status:** open
 - **Typ:** ux-bug
@@ -1637,7 +1637,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
     nachweisbar vor dem Prompt.
 - **Blockiert von:** -
 
-### OP-121: step() und _emit_progress ohne Timestamp im CI-Log
+### OP-108: step() und _emit_progress ohne Timestamp im CI-Log
 
 - **Status:** open
 - **Typ:** observability
