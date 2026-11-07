@@ -870,72 +870,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 
 
-### OP-173: Spec-Tests — RunState-Factory statt SimpleNamespace
-
-- **Status:** open
-- **Typ:** architektur (Test-Infrastruktur + Spec-Qualitaet)
-- **Betroffen:** `werkstatt/state.py` (RunState Defaults),
-  `tests/factories.py` (neu), 167 Test-Dateien (schrittweise),
-  `werkstatt/*` (getattr-Rueckbau nach Migration)
-- **Ziel (bestaetigt 2026-11-06):** Tests sind Specs, nicht
-  White-Box-Implementierungspruefungen. Jeder Test sagt mit
-  Docstring aus, welches Verhalten er erzwingt. Kein Test
-  haengt von zufaelligen `SimpleNamespace`-Feldern ab.
-  Prod-Code nutzt `state.x` statt `getattr(state, "x", default)`.
-- **Problem (Messung 2026-11-06):**
-  1. **262 von 263 `getattr(state, ...)`-Stellen** in Prod-Code
-     beziehen sich auf DEKLARIERTE RunState-Felder. Kein
-     Ghost-getattr. Aber der Aufruf ist noetig, weil **167
-     Test-Dateien `SimpleNamespace`** statt `RunState` uebergeben.
-     `state.x` wuerde dort mit `AttributeError` crashen.
-  2. **28 `# type: ignore[attr-defined]`** in Prod bleiben
-     bestehen, weil mypy die `getattr`-Aufrufe als potentiell
-     fehlend markiert.
-  3. **Test-Qualitaet**: viele Tests sind technisch gruen, aber
-     testen Implementation statt Verhalten. Beispiel: `assert
-     state.letzter_test_fehler == "..."` mit
-     `SimpleNamespace`-State sagt nichts ueber den Spec-Vertrag
-     von `_reflection_loop` aus.
-  4. **`getattr`-Wald bremst Refactoring**: Feldname umbenennen
-     → grep findet 262 Stellen, aber mypy findet 0 (weil
-     `getattr` strings sind). Bei `state.x` wuerde mypy alles
-     zeigen.
-  5. **`SimpleNamespace`-Fallback-Werte** sind zufaellig. Ein
-     Test mit `SimpleNamespace()` und einem Feld `api_key`
-     fehlt → `getattr(state, "api_key", "")` gibt `""`,
-     Test "funktioniert". Spec sagt aber "api_key MUSS
-     vorhanden sein".
-- **Akzeptanzkriterien:**
-  - **P1 (Basis):** `RunState` hat Defaults fuer alle 13
-    Pflichtfelder. `RunState()` ohne Argumente baubar.
-    `tests/factories.py::mk_state(**overrides) -> RunState`
-    als einzige Test-Konstruktion.
-  - **P2 (Pilot):** 2 Test-Dateien auf `mk_state` umgestellt.
-    `SimpleNamespace`-Import entfernt. Alle Tests gruen.
-  - **P3 (Migration):** alle 167 Test-Dateien umgestellt.
-    `SimpleNamespace` nur noch, wo explizit
-    "Feld fehlt"-Verhalten getestet wird (max 5 Dateien).
-  - **P4 (Prod-Rueckbau):** 262 `getattr(state, "x", default)`
-    → `state.x`. Kein `# type: ignore[attr-defined]` mehr in
-    Prod (nur noch bei externen Typ-Stubs).
-  - **P5 (Spec-Review):** die 20 wichtigsten Tests
-    (reflection, builder, verify, gates, planner) haben
-    Docstring mit Spec-Vertrag. `arrange-act-assert`-Struktur.
-    Keine `mock.assert_called_with(...)`-White-Box-Assertions.
-  - **P6 (Metriken):** `state_flow --check` zeigt 0
-    getattr-only Felder in Prod. `grep -c 'type: ignore'
-    werkstatt/` = 0 ausser `import-untyped`.
-- **Tests:** `tests/test_factories.py` (neu, 3 Tests fuer
-  `mk_state`), Pilot in `tests/test_reflection.py` +
-  `tests/test_reflection_spec_erschoepfung.py`.
-- **Reihenfolge:** P1 → P2 → P3 → P4 → P5 → P6.
-- **Blockiert von:** —
-- **Prioritaet:** hoch — Voraussetzung fuer vertrauenswuerdige
-  Loop-Tests. Ohne Spec-Tests testet der Loop gegen Attrappen.
-- **Quelle:** Messung 2026-11-06 (262/263 getattr deklariert,
-  0 Ghost). Nach ruff=0/mypy=0/Verify-Kette hart ist das der
-  naechste strukturelle Schritt.
-
 ### OP-174: Spec-Tests — RunState-Factory statt SimpleNamespace
 
 - **Status:** open
@@ -1053,33 +987,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   noetig (Default-Verhalten darf sich nicht still aendern).
 - **Quelle:** OP-181-Close (2026-11-07), `grep 'git push' werkstatt/`
   leer.
-
-### OP-187: Planner-Dependency-Hybrid — Architect + Heuristik
-
-- **Status:** open (Fix in Commit `ae2d5a2`-Folge)
-- **Typ:** architektur (Planner + Task-Graph)
-- **Betroffen:** `werkstatt/planner.py`
-  (`_leite_deps_deterministisch`, `_check_explicit_keine_in_prosa`,
-  `_planner_pipeline`), `tests/test_planner_deps_hybrid.py` (neu).
-- **Problem:** User-Anforderung aus Loop-Test 10: Architect-Aussagen
-  in Block 5 muessen in Task-Dependencies landen. Vor dem Fix drei
-  Luecken: (1) `found=True, arch_deps={}` -> fruehes `return`,
-  Heuristik lief nie. (2) Architect-Teil-Abdeckung uebersprang
-  Heuristik fuer nicht abgedeckte Tasks. (3) `_datei_to_id` mappte
-  nur `task_files[0]`. Plus: Fallback-Pfad im JSON-Fehler-Split
-  rief `_leite_deps_deterministisch` gar nicht auf.
-- **Akzeptanzkriterien:** (a) Architect-Vorrang, (b) Heuristik-
-  Ergaenzung fuer Tasks ohne Architect-Aussage, (c) explizite
-  `(keine)` stoppt Heuristik, (d) Multi-File-Dep-Mapping,
-  (e) Fallback-Pfad ruft Deps+Topo-Sort, (f) Tests in
-  `tests/test_planner_deps_hybrid.py`. Alle erfuellt.
-- **Tests:** `tests/test_planner_deps_hybrid.py` (neu).
-- **Blockiert von:** —
-- **Blockiert:** Loop-Test 10 mit Multi-Task-OP und
-  Architect-Block-5-Dependencies.
-- **Prioritaet:** hoch.
-- **Quelle:** Loop-Test 10 (2026-11-07).
-
 
 ### OP-188: Test-Loop-Phase mit Qualification und Freeze
 
@@ -1298,6 +1205,63 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   `pyproject.toml` mit 58 Zeilen aber ohne `[project]`.
 
 
+### OP-196: Test-Spec-Validator (unabhaengige Pruefung der Architect-Spec)
+
+- **Status:** open
+- **Typ:** architektur (Tests + Spec-Validierung)
+- **Betroffen:** `werkstatt/test_spec_validator.py` (neu),
+  `werkstatt/phases/test_loop.py` (neu, via OP-188),
+  `tests/test_test_spec_validator.py` (neu).
+- **Problem:** Architect und Test-Agent sind beide LLMs, koennen
+  dieselbe falsche Interpretation der Anforderung uebernehmen.
+  Technisch korrekte Tests, die falsches Verhalten bestaetigen.
+- **Akzeptanzkriterien:**
+  - **(a)** `validate_test_spec(original_requirement, test_spec)
+    -> ValidationResult` mit `{deckt_ab: bool, fehlende_ak: list,
+    negativ_faelle_ok: bool, mehrdeutigkeiten: list}`.
+  - **(b)** Eigenstaendiger LLM-Call mit eigenem Prompt (nicht
+    Architect-Prompt), der Spec gegen Original-Anforderung prueft.
+  - **(c)** Mehrdeutigkeiten fuehren zu Human-Gate VOR Test-Loop.
+  - **(d)** `test_spec`-Struktur erweitert um
+    `requirement_id`, `acceptance_criteria` (mit `id`, `condition`,
+    `verification`), `negative_cases`.
+  - **(e)** Tests fuer (a)-(d).
+  - **`pytest` gruen.**
+- **Tests:** `tests/test_test_spec_validator.py` (neu).
+- **Blockiert von:** OP-188 (test_spec-Feld).
+- **Blockiert:** OP-188 (Validator-Integration).
+- **Prioritaet:** hoch.
+- **Quelle:** ADR-0016 Nachtrag 2026-11-07, externer Review.
+
+### OP-197: Debugger-Sandbox (isolierte Ausfuehrung temporaerer Tests)
+
+- **Status:** open
+- **Typ:** architektur (Sicherheit)
+- **Betroffen:** `werkstatt/debugger_sandbox.py` (neu),
+  `werkstatt/chat_tools.py` (Wiring),
+  `tests/test_debugger_sandbox.py` (neu).
+- **Problem:** `write_temp_test` schreibt nur nach
+  `.werkstatt/temp_tests/`, aber temporaere Tests koennen sensible
+  Dateien lesen, Netzwerk aufbauen, `.env` auslesen. Isolation
+  fehlt.
+- **Akzeptanzkriterien:**
+  - **(a)** Temporare Tests laufen in isolierter Umgebung:
+    eigener `tmp`-Root, `.env` nicht lesbar, kein Netzwerk
+    (Loopback erlaubt).
+  - **(b)** Allowlist fuer Umgebungsvariablen
+    (`PATH`, `PYTHONPATH`, `WERKSTATT_IN_TEST`).
+  - **(c)** Zeitlimit 30s pro Test, Speicherlimit 512 MB.
+  - **(d)** Audit `debugger_sandbox_ok` / `debugger_sandbox_escape`
+    mit Details.
+  - **(e)** Tests fuer (a)-(d).
+  - **`pytest` gruen.**
+- **Tests:** `tests/test_debugger_sandbox.py` (neu).
+- **Blockiert von:** OP-128 (Chat-Debugger).
+- **Blockiert:** —
+- **Prioritaet:** mittel (Sicherheits-Backstop, nicht Blocker).
+- **Quelle:** Punkt 4 aus externem Review 2026-11-07.
+
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
@@ -1305,6 +1269,8 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-07 | OP-181 | done | Reviewer-Dead-Code-Erkennung (Commits `9b700e3` t1, `fdb01df` t3+t4). Loop-Lauf 13:23 baute t1 (REVIEWER_SYSTEM-`DEAD-CODE-CHECK`-Abschnitt mit 3 Regeln), brach dann bei t2 ab (Planner-Fehler: Verifikations-Task als update formuliert, Builder setzte `auftrag_bereits_erfuellt`, Reviewer meldete HIGH-Bug). OP-182-Fix begrenzte den Loop auf 2 Reflection-Runden, aber t3+t4 blieben offen. Manueller Nachzug: t3 = `run_reviewer` ruft `_pruefe_neue_module_genutzt(pd, diff)` nach den LLM-Filtern und vor `reviewer_result`-Audit; HIGH-Bug setzt `approved=False`. t4 = `tests/test_reviewer_dead_code.py` mit 3 AK-(c)-Tests + AST-Wiring-Test (`test_run_reviewer_ruft_pre_check_auf`, analog `test_rollen_registry_migration.py`) — kodiert die Lehre aus Loop-Test 9, dass die Funktion sonst toter Code werden kann. pytest 1342 passed, ruff/mypy 0, alle Drift-Checks gruen. **Lehre (Loop-Test 10, eingeplant als OP):** Planner-Task-Typ „pruefe/verifiziere X" braucht eigenes `action: verify`, sonst falscher Builder-Pfad. Siehe Stufe-2-Planung.
 - 2026-11-07 | OP-183 | done | Planner-Task-Typ `action: verify` (Commits `c3e308f` t1-t3 + 3 Tests, `f9243a8` Test (iv)). Loop-Lauf 15:24 hat t1 (Planner `_ist_verify_task` + `PLANNER_SPLIT_SYSTEM` vierter Action-Wert + `_korrigiere_aktion`-Vorspann), t2 (`phases/tasks.py` verify-Dispatch ohne Builder), t3 (`reviewer.py` `_filter_auftrag_treue_false_positives` `action`-Parameter + System-Prompt VERIFY-TASK-Block) gebaut. t4 (Tests) hatte 3/4 gruen, Test (iv) `test_verify_setzt_kein_auftrag_bereits_erfuellt` fehlte — manuell nachgezogen als deterministischer Text-Scan-Test. pytest 1364 passed. **Lehre:** Loop-Reflection kann bei Test-Tasks mit >3 Tests die letzte Assertion verlieren, wenn der Builder die gesamte Test-Datei zu gross plant. **Nachtrag 2026-11-07:** Delete-Zone-Eintrag fehlte, pytest-Fail `test_status_md_konsistenz` entdeckt und hier nachgetragen.
 - 2026-11-07 | OP-182 | done | verify_alternierend als Stagnations-Grund (Commit `4de3a65`). Loop-Test 9 (5 Runden statt 2): alternierende Verify-Fehler (PIE810 / mypy Duplicate / beide) haben `_verify_fehler_zwischen_runden_gleich` (Stage-Set exakt, OP-175 Bug B) nie gematcht, Counter sprang 1->0->1. Fix: neuer Grund `verify_alternierend` in `_reflection_loop` via `_verify_fehler_alternierend` (Signatur-Set-Intersection ueber `_fehler_signatur_normalisiert`, nicht-leer und nicht-identisch). Option Y: `_is_spec` wird bei diesem Grund uebersprungen -> normaler Task-Fail statt `spec_widerspruch_erschoepft`. 5 Unit-Tests + 1 Integration-Test (`test_reflection_alternierende_fehler_stagniert`). Konsequenz: 3 Builder-Aufrufe statt 5 in Loop-Test-9-Szenario.
+- 2026-11-07 | OP-173 | superseded | Duplikat zu OP-174. Beide OPs haben identischen Titel "Spec-Tests — RunState-Factory statt SimpleNamespace". OP-174 bleibt als einzige Version offen. Kein Code geaendert, kein Test.
+- 2026-11-07 | OP-187 | done | Planner-Dependency-Hybrid (Commit `e960a40`, Doku `91102a7`). Architect-Aussagen in Block 5 sind ab jetzt verbindlich: `_leite_deps_deterministisch` wertet Architect-Dependencies aus (Multi-File), Heuristik nur als Ergaenzung fuer Tasks ohne Architect-Aussage. Explizites `- (keine)` im Architect-Block stoppt Heuristik. Fallback-Pfad ruft Deps + Topo-Sort ebenfalls. 10 Unit-Tests in `test_planner_deps_hybrid.py`. **Nachtrag 2026-11-07:** DZ-Eintrag fehlte beim Close-Commit `91102a7`, hier nachgetragen.
 - 2026-11-07 | OP-176 | done | contract_check-Haertung gegen `setattr(state, "<unbekannt>", ...)` (Commit `7eab26d`, Loop-Test 8, 11:50-11:58). AST-Walk findet setattr-Aufrufe auf RunState-Felder, die nicht in `RunState.__dataclass_fields__` sind. Wiring ueber `state_inventory.py --changed` (verify.json contract_check-Stage). 3 Unit-Tests (test_contract_check_setattr.py) + 2 Integration-Tests (test_verify_contract_stage.py erweitert). Fail-closed mit rc=1 bei unbekanntem Feld, rc=0 bei deklariertem. Bug-D aus OP-175 (Loop-Test 6, Agent-Patch mit `setattr(state, "phase_review_gate_auto", True)`) ist jetzt deterministisch gefangen — vorher fing nur ruff B010 den Umgehungs-Versuch. Die zwei Integration-Tests verifizieren das Ende-zu-Ende-Wiring (Subprocess `python3 tools/state_inventory.py --changed <file>`).
 - 2026-11-07 | OP-180 | wontfix | Reviewer-Praezision (Konfidenz-Feld + Pre-Check): falsche Problem-Annahme. Loop-Test 7 hatte keinen Reviewer-Bug, sondern OP-179 (mypy Duplicate-Module) — die 3 HIGH reviewer_phase_rejected-Bugs waren ALLE berechtigt (t3/t4/t5 wurden wegen OP-179 nicht gebaut). Konfidenz-Feld und Pre-Check basieren auf "Reviewer meldet falsche Bugs" — das war nie wahr. Kein Code angelegt, kein Test, wird nicht gebraucht.
 - 2026-11-07 | OP-179 | wontfix | mypy-Setup "Duplicate-Module": **falsche Problem-Annahme**. Ich habe den truncated mypy-Output aus Loop-Test 7 (`(also at "werkstatt/phases/review.py")`) als "Source file found twice" interpretiert — das war eine Fehldeutung des OP-172-Truncation-Artefakts. Reproduktion (Block 33, 2026-11-07): alle vier mypy-Varianten rc=0 auf aktuellem Code-State, kein Duplicate-Module-Fehler, kein Top-Level-`phases/`-Konflikt, `__init__.py` ueberall da. Wahre Loop-Test-7-Ursache fuer t3/t4-Fails: der Loop baute zuerst t2 (`review.py`, setzt `state.phase_review_gate_auto`), aber t1 (`state.py`, deklariert das Feld) war noch nicht gebaut — Planner erkannte Cross-Task-Feldabhaengigkeit nicht. **Bereits behoben** durch OP-168b (c713033): Feld ist jetzt in RunState deklariert, Loop-Test 8 findet es. Kein Code angelegt, kein Test.
