@@ -981,45 +981,11 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Prioritaet:** hoch — Voraussetzung fuer vertrauenswuerdige
   Loop-Tests.
 
-### OP-176: contract_check-Haertung — setattr(state, "<unbekannt>") deterministisch fangen
-
-- **Status:** open
-- **Typ:** architektur (Verteidigungskette)
-- **Betroffen:** `tools/contract_check.py` (oder neues Modul in
-  `werkstatt/`), `werkstatt/state_contracts.py`,
-  `tests/test_contract_check_setattr.py` (neu)
-- **Problem:** Loop-Test 6 (2026-11-06, Bug D aus OP-175): Der
-  Builder versuchte zweimal, ein fehlendes RunState-Feld zu
-  setzen — erst `state.phase_review_gate_auto = True` (mypy
-  fing `attr-defined`), dann `setattr(state, "phase_review_gate_auto",
-  True)` (ruff B010 fing es in der Folge-Runde). Die
-  Verteidigungskette hat funktioniert, aber `setattr` mit
-  String ist heute nur durch ruff-Regel B010 und Zufall
-  gedeckt. Deterministische AST-Regel im `contract_check`
-  schliesst die Luecke.
-
-- **Akzeptanzkriterien:**
-  - AST-Walk ueber `werkstatt/` findet jeden
-    `setattr(<state-var>, "<const>", ...)`-Aufruf.
-  - Prueft: Attribut existiert in `RunState.__dataclass_fields__`.
-  - Fail-closed mit klarer Fehlermeldung (Datei, Zeile,
-    Feldname).
-  - `tests/test_contract_check_setattr.py`: (a) unbekanntes
-    Feld -> fail; (b) bekanntes Feld -> ok; (c) `setattr(x,
-    var, ...)` mit dynamischem Namen -> skip (statisch nicht
-    aufloesbar).
-
-- **Tests:** siehe AK.
-- **Blockiert von:** —
-- **Blockiert:** nichts (Loop-Test 7 laeuft ohne).
-- **Prioritaet:** mittel — Verteidigungskette funktioniert
-  heute, aber nur durch zufaellig aktive ruff-Regel B010.
-- **Quelle:** OP-175 Bug D, Loop-Test 6, 2026-11-06.
-
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-07 | OP-176 | done | contract_check-Haertung gegen `setattr(state, "<unbekannt>", ...)` (Commit `7eab26d`, Loop-Test 8, 11:50-11:58). AST-Walk findet setattr-Aufrufe auf RunState-Felder, die nicht in `RunState.__dataclass_fields__` sind. Wiring ueber `state_inventory.py --changed` (verify.json contract_check-Stage). 3 Unit-Tests (test_contract_check_setattr.py) + 2 Integration-Tests (test_verify_contract_stage.py erweitert). Fail-closed mit rc=1 bei unbekanntem Feld, rc=0 bei deklariertem. Bug-D aus OP-175 (Loop-Test 6, Agent-Patch mit `setattr(state, "phase_review_gate_auto", True)`) ist jetzt deterministisch gefangen — vorher fing nur ruff B010 den Umgehungs-Versuch. Die zwei Integration-Tests verifizieren das Ende-zu-Ende-Wiring (Subprocess `python3 tools/state_inventory.py --changed <file>`).
 - 2026-11-07 | OP-180 | wontfix | Reviewer-Praezision (Konfidenz-Feld + Pre-Check): falsche Problem-Annahme. Loop-Test 7 hatte keinen Reviewer-Bug, sondern OP-179 (mypy Duplicate-Module) — die 3 HIGH reviewer_phase_rejected-Bugs waren ALLE berechtigt (t3/t4/t5 wurden wegen OP-179 nicht gebaut). Konfidenz-Feld und Pre-Check basieren auf "Reviewer meldet falsche Bugs" — das war nie wahr. Kein Code angelegt, kein Test, wird nicht gebraucht.
 - 2026-11-07 | OP-179 | wontfix | mypy-Setup "Duplicate-Module": **falsche Problem-Annahme**. Ich habe den truncated mypy-Output aus Loop-Test 7 (`(also at "werkstatt/phases/review.py")`) als "Source file found twice" interpretiert — das war eine Fehldeutung des OP-172-Truncation-Artefakts. Reproduktion (Block 33, 2026-11-07): alle vier mypy-Varianten rc=0 auf aktuellem Code-State, kein Duplicate-Module-Fehler, kein Top-Level-`phases/`-Konflikt, `__init__.py` ueberall da. Wahre Loop-Test-7-Ursache fuer t3/t4-Fails: der Loop baute zuerst t2 (`review.py`, setzt `state.phase_review_gate_auto`), aber t1 (`state.py`, deklariert das Feld) war noch nicht gebaut — Planner erkannte Cross-Task-Feldabhaengigkeit nicht. **Bereits behoben** durch OP-168b (c713033): Feld ist jetzt in RunState deklariert, Loop-Test 8 findet es. Kein Code angelegt, kein Test.
 - 2026-11-07 | OP-177 | wontfix | Reviewer-Kontext-Vertrag: falsche Problem-Annahme. _phase_files (alle Task-Dateien der Phase) liefert vollstaendigen Diff — bestaetigt durch Messblock 31. Die 3 HIGH-Bugs aus Loop-Test 7 waren berechtigt, weil t3/t4/t5 tatsaechlich nicht gebaut wurden (OP-179). Der Reviewer-Selbst-Hinweis "nur der Anfang von _phase_end_reflection ist sichtbar" war praezise Diagnose ("Patch fehlt im sichtbaren Kontext"), nicht Truncation-Beschwerde. Kein Code angelegt, kein Test. Ursache fuer "3 von 4 Tasks nicht gebaut" ist OP-179 (mypy Setup) + OP-172 (Verify-Truncation, heute gefixt).

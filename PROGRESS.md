@@ -2695,3 +2695,26 @@ ADR-0014 dokumentierte die Registry als Single Source of Truth, aber nur `archit
 Neuer Test `test_rollen_registry_migration.py`: AST-Scan ueber `werkstatt/` prueft, dass jede Rolle mit nicht-leeren `skills` oder `skill_filter_rolle` mindestens einen `ROLLEN[name]`-Zugriff hat. Failt bei kuenftigen Rollen, die die Registry umgehen.
 
 Verhaltensaenderung Explorer: `systematic-debugging` gehoert semantisch zum geplanten Debugger (OP-128/OP-160), nicht zum Datei-Sucher. Test `test_explorer_system_kein_systematic_debugging` verbietet die alte Zuordnung. Loest ADR-0014-Offen-Absatz fuer 5 Aufrufer ein.
+
+### 2026-11-07 — OP-176 abgeschlossen: contract_check-Haertung (Loop-Test 8)
+
+**Loop-Test 8 (11:50-11:58)**: erster durchgelaufener Loop seit Tagen. 2/2 Tasks, Phase-Review approved, Commit `7eab26d` mit 192 Zeilen.
+
+Der Loop baute eigenstaendig:
+- `tools/contract_check.py` — `_state_felder()` + `_pruefe_setattr_aufrufe()` (AST-Walk, 64 Zeilen)
+- `tests/test_contract_check_setattr.py` — 3 Unit-Tests (48 Zeilen)
+- `tools/state_inventory.py` — Wiring ueber `--changed`-Pfad (31 Zeilen)
+- `tests/test_verify_contract_stage.py` — 2 Integration-Tests fuer Ende-zu-Ende-Wiring (49 Zeilen)
+
+Das Wiring und die Integration-Tests habe ich waehrend der `e`-Phase am Human-Gate ergaenzt (Commit-Message erwaehnt nur "Loop-Auftrag", 192 Zeilen im Diff). Der Loop hatte den Kern gebaut, aber vergessen an `state_inventory.py --changed` anzuschliessen — der Architect-Plan hat das Wiring implizit gelassen, ich habe es im `e`-Pfad nachgezogen.
+
+**Bug D aus OP-175** (Agent versuchte `setattr(state, "phase_review_gate_auto", True)` mit nicht-deklariertem Feld) ist ab jetzt deterministisch gefangen — vorher nur durch ruff-Regel B010, also Zufall. Der AST-Walk prueft gegen `RunState.__dataclass_fields__`.
+
+**Loop-Test 8 bewies:**
+- Planner baut kleine Tasks (2) bei kleiner OP
+- Builder + Reflection greifen (keine Fails → keine Reflection-Runde noetig)
+- Phase-Review approved (Reviewer qualifizierte Bugs korrekt)
+- Commit-Gate funktioniert (kein Auto-Approve)
+- Audit-Kette vollstaendig: `reviewer_result` → `loop_phase approved` → `loop_human_gate_committed`
+
+**Was noch fehlt:** Loop committet lokal, pusht nicht. Der Push muss manuell erfolgen — mache ich hier mit.
