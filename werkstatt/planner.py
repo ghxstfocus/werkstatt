@@ -929,6 +929,36 @@ def _parse_architect_deps_block(prosa: str) -> tuple[bool, dict[str, list[str]]]
     return True, out
 
 
+def _check_explicit_keine_in_prosa(prosa: str) -> bool:
+    """OP-187: prueft, ob Architect-Block 5 explizit 'keine' sagt.
+
+    Wenn der Architect im Block-5-Bereich `- (keine)` schreibt,
+    ist das eine bewusste Aussage: keine Abhaengigkeiten zwischen
+    Dateien. Die Heuristik darf dann NICHT laufen (sonst wuerde
+    sie der Architect-Aussage widersprechen).
+
+    Abgrenzung zu `_parse_architect_deps_block`:
+    - `found=False` = Block 5 fehlt komplett (LLM hat ausgelassen).
+    - `found=True, arch_deps={}, _explicit_keine=True` = Block 5
+      da, explizit 'keine'.
+    - `found=True, arch_deps={}, _explicit_keine=False` = Block 5
+      da, aber Inhalt leer/Muell.
+    """
+    import re as _re
+    m = _re.search(
+        r"(?:^|\n)(?:##\s*)?5\.\s*Welche Dateien h[^\n]*\n"
+        r"(.*?)(?=\n##\s|\nDEINE ROLLE|\Z)",
+        prosa or "", _re.DOTALL,
+    )
+    if not m:
+        return False
+    block = m.group(1)
+    for line in block.splitlines():
+        if _re.match(r"^\s*-\s*\(keine\)\s*$", line):
+            return True
+    return False
+
+
 def _leite_deps_deterministisch(
     tasks: list[dict], prosa: str = "", pd=None, pn="?",
 ) -> list[dict]:
@@ -953,43 +983,46 @@ def _leite_deps_deterministisch(
         if not isinstance(t, dict):
             continue
         files = t.get("task_files") or []
-        if files and isinstance(files[0], str):
-            _datei_to_id[files[0]] = t.get("id", "")
+        _tid = t.get("id", "")
+        for f in files:
+            if isinstance(f, str) and f not in _datei_to_id:
+                _datei_to_id[f] = _tid
 
-    _quelle = "fallback"
-    if found:
-        _quelle = "architect"
-        if not arch_deps:
-            if pd is not None:
-                try:
-                    audit("planner_deps_abgeleitet", {
-                        "quelle": "architect-leer",
-                        "tasks_mit_deps": 0,
-                    }, pd, pn)
-                except Exception:
-                    pass
-            return tasks
+    # OP-187: Architect-Aussage anwenden (Multi-File-Support).
+    # Jede Task kann mehrere task_files haben; fuer jede Datei im
+    # Architect-Block wird die Dep auf die produzierende Task gemappt.
+    _arch_tasks: set[str] = set()
+    _quelle_parts: list[str] = []
+    if found and arch_deps:
+        _quelle_parts.append("architect")
         for t in tasks:
             if not isinstance(t, dict):
                 continue
-            files = t.get("task_files") or []
-            if not files or not isinstance(files[0], str):
-                continue
-            _primary = files[0]
-            if _primary not in arch_deps:
-                continue
-            _dep_dateien = arch_deps[_primary]
-            _dep_ids = [
-                _datei_to_id[d] for d in _dep_dateien
-                if d in _datei_to_id
-            ]
-            if not _dep_ids:
-                continue
-            _alt = set(t.get("dependencies") or [])
             _tid = t.get("id")
-            _merged = sorted((_alt | set(_dep_ids)) - {_tid})
+            files = t.get("task_files") or []
+            _dep_ids: set[str] = set()
+            _has_arch = False
+            for f in files:
+                if not isinstance(f, str):
+                    continue
+                if f in arch_deps:
+                    _has_arch = True
+                    for d in arch_deps[f]:
+                        if d in _datei_to_id:
+                            _dep_ids.add(_datei_to_id[d])
+            if not _has_arch:
+                continue
+            if isinstance(_tid, str):
+                _arch_tasks.add(_tid)
+            _alt = set(t.get("dependencies") or [])
+            _merged = sorted((_alt | _dep_ids) - {_tid})
             t["dependencies"] = _merged
-    else:
+
+    # OP-187: explizite "keine"-Aussage im Architect-Block 5 -> keine
+    # Heuristik (Architect sagt bewusst "keine Abhaengigkeiten").
+    _explicit_keine = _check_explicit_keine_in_prosa(prosa)
+
+    if not _explicit_keine:
         _CODE = (".py", ".pyi")
         _DOKU = (".md", ".rst", ".txt")
 
@@ -1029,6 +1062,9 @@ def _leite_deps_deterministisch(
                 _tid = t.get("id")
                 if not isinstance(_tid, str):
                     continue
+                if _tid in _arch_tasks:
+                    # Architect-Aussage hat Vorrang — keine Heuristik.
+                    continue
                 _kl = _klassen.get(_tid, "unbekannt")
                 _neue: list[str] = []
                 if _kl in ("test", "baseline"):
@@ -1041,6 +1077,16 @@ def _leite_deps_deterministisch(
                 if _neue:
                     _alt = set(t.get("dependencies") or [])
                     t["dependencies"] = sorted(_alt | set(_neue))
+        if _arch_tasks:
+            _quelle_parts.append("heuristik-ergaenzung")
+        else:
+            _quelle_parts.append("heuristik")
+    else:
+        _quelle_parts.append("architect-explicit-keine")
+
+    if not _quelle_parts:
+        _quelle_parts.append("fallback")
+    _quelle = "+".join(_quelle_parts)
 
     if pd is not None:
         try:
@@ -2172,7 +2218,14 @@ def run_planner(state: RunState) -> bool:
         # OP-186: Fallback-Task nur mit EINER Zieldatei.
         # Vorher: alle 30 key_files als task_files (38er-Plan-Bug
         # bei JSON-Split-Fehler, Loop-Test 10 13:42).
-        state.tasks = [_fallback_task_von_prosa(_arch_prosa, _key_files)]
+        # OP-187: Deps + Topo-Sort auch im Fallback-Pfad ableiten
+        # (strukturell konsistent mit dem LLM-Split-Pfad).
+        _fb_tasks = _leite_deps_deterministisch(
+            [_fallback_task_von_prosa(_arch_prosa, _key_files)],
+            _arch_prosa, pd, pn,
+        )
+        _fb_tasks = _topo_sort_tasks(_fb_tasks, pd, pn)
+        state.tasks = _fb_tasks
 
     state.phasen = []
     state.tests = []
