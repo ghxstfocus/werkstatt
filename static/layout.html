@@ -118,6 +118,19 @@
 
   </main>
 
+  <aside class="gate-panel" id="gate-panel"></aside>
+
+  <aside class="detail-drawer" id="detail-drawer" data-offen="false">
+    <nav class="dd-tabs">
+      <button class="dd-tab aktiv" data-tab="plan">Plan</button>
+      <button class="dd-tab" data-tab="evidence">Evidence</button>
+      <button class="dd-tab" data-tab="handoffs">Handoffs</button>
+      <button class="dd-tab" data-tab="diff">Plan-Diff</button>
+      <button class="dd-close" id="dd-close">&times;</button>
+    </nav>
+    <div class="dd-body" id="dd-body"></div>
+  </aside>
+
   <footer class="statusleiste" id="statusleiste">
     <span class="status-item" id="status-tasks">Tasks: -</span>
     <span class="status-item" id="status-verify">Verify: -</span>
@@ -142,5 +155,7 @@
   <script src="/static/timeline.js?v=20261107a"></script>
   <script src="/static/statusleiste.js?v=20261107a"></script>
   <script src="/static/workbench.js?v=20261107a"></script>
+  <script src="/static/gate_panel.js?v=20261108a"></script>
+  <script src="/static/detail_drawer.js?v=20261108a"></script>
 </body>
 </html>

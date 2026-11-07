@@ -92,8 +92,12 @@
     if (_leseState(k.id) === "1") el.classList.add("offen");
 
     el.addEventListener("click", function () {
+      var warOffen = el.classList.contains("offen");
       el.classList.toggle("offen");
       _schreibeState(k.id, el.classList.contains("offen"));
+      if (!warOffen && window.WerkstattDetail) {
+        window.WerkstattDetail.oeffne("plan");
+      }
     });
 
     return el;

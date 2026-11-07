@@ -90,6 +90,12 @@
       if (window.WerkstattWorkbench && window.WerkstattWorkbench.setProjekt) {
         window.WerkstattWorkbench.setProjekt(daten.projekt);
       }
+      if (window.WerkstattGate && window.WerkstattGate.lade) {
+        window.WerkstattGate.lade(daten.projekt);
+      }
+      if (window.WerkstattDetail && window.WerkstattDetail.setProjekt) {
+        window.WerkstattDetail.setProjekt(daten.projekt);
+      }
     } catch (e) { /* Panels optional */ }
   }
 

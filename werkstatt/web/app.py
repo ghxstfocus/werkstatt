@@ -282,6 +282,30 @@ def create_app() -> FastAPI:
         projekt = _pruefe_projektname(name)
         return _insp.aggregate_tokens(projekt, run_id=run_id)
 
+    @app.get("/api/projects/{name}/gate/context")
+    def gate_context(name: str, run_id: str | None = None) -> dict[str, Any]:
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        return _insp.aggregate_gate_context(projekt, run_id=run_id)
+
+    @app.get("/api/projects/{name}/plan/versions")
+    def plan_versions(name: str, run_id: str | None = None) -> dict[str, Any]:
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        return {"versionen": _insp.aggregate_plan_versions(projekt, run_id=run_id)}
+
+    @app.get("/api/projects/{name}/handoffs")
+    def handoffs(name: str, run_id: str | None = None) -> dict[str, Any]:
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        return {"handoffs": _insp.aggregate_handoffs(projekt, run_id=run_id)}
+
+    @app.get("/api/projects/{name}/evidence")
+    def evidence_links(name: str, run_id: str | None = None) -> dict[str, Any]:
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        return {"links": _insp.aggregate_evidence_links(projekt, run_id=run_id)}
+
     @app.get("/api/projects/{name}/diff")
     def project_diff(name: str, ref: str = "HEAD") -> dict[str, Any]:
         """git diff gegen ref (default HEAD), als Text + Stat."""
