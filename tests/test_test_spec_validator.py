@@ -3,11 +3,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from werkstatt.test_spec import AcceptanceCriterion, TestSpec
 from werkstatt.test_spec_validator import (
-    ValidationResult,
     _detect_smoke_tests,
     _parse_validator_response,
     validate_test_spec,

@@ -11,7 +11,6 @@ von OP-210 (Test-Loop-Phase) verdrahtet.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass, field
 
 from werkstatt.agent import ask_llm

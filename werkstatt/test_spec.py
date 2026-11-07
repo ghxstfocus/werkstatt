@@ -99,18 +99,18 @@ def parse_test_spec(raw: dict[str, Any]) -> TestSpec:
     berichten, nicht crashen).
     """
     if not isinstance(raw, dict):
-        raise ValueError(f"test_spec ist kein Dict: {type(raw).__name__}")
+        raise ValueError(f"test_spec ist kein Dict: {type(raw).__name__}")  # noqa: TRY004
     rid = raw.get("requirement_id")
     acs_raw = raw.get("acceptance_criteria") or []
     ncs_raw = raw.get("negative_cases") or []
     if not isinstance(acs_raw, list):
-        raise ValueError("acceptance_criteria ist keine Liste")
+        raise ValueError("acceptance_criteria ist keine Liste")  # noqa: TRY004
     if not isinstance(ncs_raw, list):
-        raise ValueError("negative_cases ist keine Liste")
+        raise ValueError("negative_cases ist keine Liste")  # noqa: TRY004
     acs: list[AcceptanceCriterion] = []
     for entry in acs_raw:
         if not isinstance(entry, dict):
-            raise ValueError(f"AC-Eintrag ist kein Dict: {type(entry).__name__}")
+            raise ValueError(f"AC-Eintrag ist kein Dict: {type(entry).__name__}")  # noqa: TRY004
         acs.append(AcceptanceCriterion(
             id=str(entry.get("id", "")),
             condition=str(entry.get("condition", "")),
