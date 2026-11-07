@@ -267,6 +267,37 @@ def main() -> int:
             print(f"contract_check: Ghost-Felder in {args.changed}: "
                   f"{treffer}")
             return 1
+        # OP-176: setattr-Check fuer unbekannte RunState-Felder.
+        # OP-176: sibling-Import (tools/ ist kein Package, Script-
+        # Aufruf `python3 tools/state_inventory.py` hat tools/ nicht
+        # im sys.path). Zusaetzlich das Elternverzeichnis (das ist
+        # der Projekt-Root), damit contract_check.py seinerseits
+        # `from werkstatt.state import RunState` aufloesen kann.
+        _root_dir = str(Path(__file__).resolve().parent.parent)
+        if _root_dir not in sys.path:
+            sys.path.insert(0, _root_dir)
+        _tools_dir = str(Path(__file__).resolve().parent)
+        if _tools_dir not in sys.path:
+            sys.path.insert(0, _tools_dir)
+        from contract_check import _pruefe_setattr_aufrufe, _state_felder
+
+        _sf = _state_felder()
+        _setattr_fehler: list[str] = []
+        for _f in args.changed:
+            if not isinstance(_f, str) or not _f:
+                continue
+            _fp = Path(_f)
+            if not _fp.is_file():
+                _alt = Path("werkstatt") / _f
+                if _alt.is_file():
+                    _fp = _alt
+                else:
+                    continue
+            _setattr_fehler.extend(_pruefe_setattr_aufrufe(_fp, _sf))
+        if _setattr_fehler:
+            for _e in _setattr_fehler:
+                print(f"contract_check: {_e}")
+            return 1
         return 0
 
     ergebnis = kategorisiere()

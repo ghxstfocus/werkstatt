@@ -40,3 +40,52 @@ def test_datei_ohne_ghost_ok(tmp_path):
         encoding="utf-8",
     )
     assert state_inventory.ghosts_in_files([str(py)]) == []
+
+
+# =====================================================================
+# OP-176: setattr-Check im --changed-Pfad verdrahtet
+# =====================================================================
+
+def test_changed_pfad_findet_setattr_auf_unbekanntes_feld(tmp_path):
+    """Spec: --changed ruft _pruefe_setattr_aufrufe und gibt rc=1.
+
+    Anlass: OP-176-AK verlangt fail-closed. Ohne dieses Wiring
+    laeuft die Pruefung nie — tools/contract_check.py wird dann
+    von keiner verify.json-Stage gerufen.
+    """
+    import subprocess
+
+    probe = tmp_path / "probe.py"
+    probe.write_text(
+        "def f(state):\n"
+        "    setattr(state, \"gibt_es_nicht\", True)\n"
+    )
+    r = subprocess.run(
+        ["python3", "tools/state_inventory.py", "--changed", str(probe)],
+        capture_output=True, text=True, check=False,
+    )
+    assert r.returncode == 1, (
+        f"rc={r.returncode}; stdout={r.stdout!r}; stderr={r.stderr!r}"
+    )
+    assert "gibt_es_nicht" in r.stdout
+
+
+def test_changed_pfad_laesst_gueltiges_setattr_durch(tmp_path):
+    """Spec: --changed gibt rc=0 bei deklariertem RunState-Feld."""
+    import subprocess
+
+    from werkstatt.state import RunState
+    _feld = next(iter(RunState.__dataclass_fields__.keys()))
+
+    probe = tmp_path / "probe.py"
+    probe.write_text(
+        "def f(state):\n"
+        f"    setattr(state, \"{_feld}\", True)\n"
+    )
+    r = subprocess.run(
+        ["python3", "tools/state_inventory.py", "--changed", str(probe)],
+        capture_output=True, text=True, check=False,
+    )
+    assert r.returncode == 0, (
+        f"rc={r.returncode}; stdout={r.stdout!r}; stderr={r.stderr!r}"
+    )
