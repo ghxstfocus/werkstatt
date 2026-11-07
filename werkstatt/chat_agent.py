@@ -73,6 +73,7 @@ def _deepseek_chat_stream(
         "messages": messages,
         "temperature": 0.0,
         "stream": True,
+        "stream_options": {"include_usage": True},
     }
     if tools:
         body["tools"] = tools
@@ -80,6 +81,7 @@ def _deepseek_chat_stream(
 
     content_acc = ""
     tool_calls_acc: dict[int, dict[str, Any]] = {}
+    usage_acc: dict[str, Any] | None = None
     with requests.post(
         _DEEPSEEK_URL,
         json=body,
@@ -100,6 +102,14 @@ def _deepseek_chat_stream(
                 obj = json.loads(data)
             except json.JSONDecodeError:
                 continue
+            _u = obj.get("usage")
+            if isinstance(_u, dict) and _u.get("total_tokens"):
+                usage_acc = {
+                    "prompt_tokens": int(_u.get("prompt_tokens", 0) or 0),
+                    "completion_tokens": int(_u.get("completion_tokens", 0) or 0),
+                    "total_tokens": int(_u.get("total_tokens", 0) or 0),
+                    "model": os.environ.get("DEEPSEEK_MODEL", _DEFAULT_MODEL),
+                }
             choices = obj.get("choices") or []
             if not choices:
                 continue
@@ -127,6 +137,8 @@ def _deepseek_chat_stream(
     msg["content"] = content_acc or None
     if tool_calls_acc:
         msg["tool_calls"] = [tool_calls_acc[i] for i in sorted(tool_calls_acc)]
+    if usage_acc is not None:
+        msg["_usage"] = usage_acc
     return msg
 
 
@@ -135,7 +147,9 @@ def _deepseek_chat(
     tools: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Non-streaming Wrapper. Test-Boundary (monkeypatch-Attr)."""
-    return {"choices": [{"message": _deepseek_chat_stream(messages, tools, None)}]}
+    inner = _deepseek_chat_stream(messages, tools, None)
+    usage = inner.pop("_usage", None)
+    return {"choices": [{"message": inner}], "usage": usage}
 
 
 def chat_loop(
@@ -159,6 +173,9 @@ def chat_loop(
 
     for _ in range(max_rounds):
         resp = _deepseek_chat(messages, tools=schemas)
+        _usage = resp.get("usage")
+        if _usage and _usage.get("total_tokens"):
+            session.append("token_usage", _usage)
         msg = resp["choices"][0]["message"]
         tool_calls = msg.get("tool_calls") or []
         if not tool_calls:

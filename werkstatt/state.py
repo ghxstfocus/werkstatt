@@ -50,6 +50,10 @@ class LLMReply:
     # MESS-1: Prompt-Laengen (Zeichen nach Redaktion, vor HTTP).
     system_len: int = 0
     user_len: int = 0
+    # OP-233: Token-Usage aus LLM-Response (DeepSeek "usage"-Block).
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
 
 
 class SolverDiagnose(Enum):

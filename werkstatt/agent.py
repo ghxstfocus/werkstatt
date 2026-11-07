@@ -253,6 +253,19 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
                         user_len=_user_len)
     try:
         data = res.json()
+        _usage = data.get("usage") or {}
+        _pt = int(_usage.get("prompt_tokens", 0) or 0)
+        _ct = int(_usage.get("completion_tokens", 0) or 0)
+        _tt = int(_usage.get("total_tokens", 0) or 0)
+        if state is not None and _tt > 0:
+            audit("llm_usage",
+                  {"agent": aufgabe,
+                   "model": model,
+                   "prompt_tokens": _pt,
+                   "completion_tokens": _ct,
+                   "total_tokens": _tt},
+                  state.project_dir,
+                  state.project_name)
         msg = data["choices"][0]["message"]
         content = msg.get("content", "") or ""
         # W58: deepseek-reasoner liefert reasoning_content
@@ -291,7 +304,10 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             )
         return LLMReply(ok=True, content=content,
                         system_len=_system_len,
-                        user_len=_user_len)
+                        user_len=_user_len,
+                        prompt_tokens=_pt,
+                        completion_tokens=_ct,
+                        total_tokens=_tt)
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         return LLMReply(ok=False, error=f"Parsing: {exc}",
                         system_len=_system_len,

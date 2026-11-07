@@ -275,6 +275,13 @@ def create_app() -> FastAPI:
         _LAUFENDE_LOOPS.pop(projektname, None)
         return {"gestoppt": True, "returncode": returncode}
 
+    @app.get("/api/projects/{name}/tokens")
+    def project_tokens(name: str, run_id: str | None = None) -> dict[str, Any]:
+        """Token-Verbrauch: Loop (pro Run) und Chat (pro Projekt)."""
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        return _insp.aggregate_tokens(projekt, run_id=run_id)
+
     @app.get("/api/projects/{name}/chat/sessions")
     def chat_sessions(name: str) -> dict[str, Any]:
         """Listet alle Chat-Session-IDs eines Projekts."""
