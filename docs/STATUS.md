@@ -1161,50 +1161,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Prioritaet:** mittel.
 - **Quelle:** ADR-0016/0017/0018.
 
-### OP-201: `pyproject.toml` — Package-Registrierung + test-tools
-
-- **Status:** open
-- **Typ:** infrastruktur (Build + Dependencies)
-- **Betroffen:** `pyproject.toml` (Erweiterung um `[project]`,
-  `[project.optional-dependencies].test-tools`,
-  `[tool.setuptools]`, `[tool.pytest-gremlins]`),
-  `requirements.txt` (Kommentar-Zeilen),
-  `.gitignore` (`*.egg-info/`),
-  `docs/ARCHITECTURE.md` (Abschnitt "Installation"),
-  `tests/test_package_registrierung.py` (neu).
-- **Problem:** `werkstatt` ist heute kein installiertes Package
-  (`pip show werkstatt` -> "Package(s) not found"). Der Loop
-  laeuft ueber cwd-Import. `pytest-gremlins` (OP-214) und
-  `hypothesis` (OP-215) brauchen Package-Registrierung, um
-  ohne cwd-Zwang zu funktionieren.
-- **Akzeptanzkriterien:**
-  - **(a)** Erweiterung ohne Beschaedigung: `[tool.importlinter]`
-    und `[tool.ruff.lint]` byte-identisch.
-    `pytest.ini`, `mypy.ini`, `requirements.txt` bleiben aktive
-    Configs.
-  - **(b)** `pip install -e ".[test-tools]"` laeuft gruen.
-    `pip show werkstatt` zeigt Version 0.1.0.
-    `hypothesis` und `pytest-gremlins` installiert.
-  - **(c)** cwd-Import bleibt Fallback: `pytest tests/` gruen
-    mit und ohne installiertes Package.
-  - **(d)** `.egg-info` in `.gitignore`.
-  - **(e)** `requirements.txt`: 2 Kommentar-Zeilen fuer
-    test-tools, keine aktive Zeile.
-  - **(f)** `docs/ARCHITECTURE.md`: Abschnitt "Installation" mit
-    beiden Wegen (cwd vs. `pip install -e .`).
-  - **(g)** Tests fuer (a)-(c).
-  - **`pytest` gruen, ruff/mypy 0.**
-- **Tests:** `tests/test_package_registrierung.py` (neu),
-  `tests/test_config_integritaet.py` (erweitern: prueft dass
-  `pytest.ini`, `mypy.ini`, `[tool.importlinter]`,
-  `[tool.ruff.lint]` unveraendert sind).
-- **Blockiert von:** —
-- **Blockiert:** OP-214, OP-215.
-- **Prioritaet:** hoch (Voraussetzung fuer OP-214, OP-215).
-- **Quelle:** Messung 2026-11-07: `pip show werkstatt` leer,
-  `pyproject.toml` mit 58 Zeilen aber ohne `[project]`.
-
-
 ### OP-212: Test-Spec-Validator (unabhaengige Pruefung der Architect-Spec)
 
 - **Status:** open
@@ -1270,6 +1226,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-07 | OP-183 | done | Planner-Task-Typ `action: verify` (Commits `c3e308f` t1-t3 + 3 Tests, `f9243a8` Test (iv)). Loop-Lauf 15:24 hat t1 (Planner `_ist_verify_task` + `PLANNER_SPLIT_SYSTEM` vierter Action-Wert + `_korrigiere_aktion`-Vorspann), t2 (`phases/tasks.py` verify-Dispatch ohne Builder), t3 (`reviewer.py` `_filter_auftrag_treue_false_positives` `action`-Parameter + System-Prompt VERIFY-TASK-Block) gebaut. t4 (Tests) hatte 3/4 gruen, Test (iv) `test_verify_setzt_kein_auftrag_bereits_erfuellt` fehlte — manuell nachgezogen als deterministischer Text-Scan-Test. pytest 1364 passed. **Lehre:** Loop-Reflection kann bei Test-Tasks mit >3 Tests die letzte Assertion verlieren, wenn der Builder die gesamte Test-Datei zu gross plant. **Nachtrag 2026-11-07:** Delete-Zone-Eintrag fehlte, pytest-Fail `test_status_md_konsistenz` entdeckt und hier nachgetragen.
 - 2026-11-07 | OP-182 | done | verify_alternierend als Stagnations-Grund (Commit `4de3a65`). Loop-Test 9 (5 Runden statt 2): alternierende Verify-Fehler (PIE810 / mypy Duplicate / beide) haben `_verify_fehler_zwischen_runden_gleich` (Stage-Set exakt, OP-175 Bug B) nie gematcht, Counter sprang 1->0->1. Fix: neuer Grund `verify_alternierend` in `_reflection_loop` via `_verify_fehler_alternierend` (Signatur-Set-Intersection ueber `_fehler_signatur_normalisiert`, nicht-leer und nicht-identisch). Option Y: `_is_spec` wird bei diesem Grund uebersprungen -> normaler Task-Fail statt `spec_widerspruch_erschoepft`. 5 Unit-Tests + 1 Integration-Test (`test_reflection_alternierende_fehler_stagniert`). Konsequenz: 3 Builder-Aufrufe statt 5 in Loop-Test-9-Szenario.
 - 2026-11-07 | OP-173 | superseded | Duplikat zu OP-174. Beide OPs haben identischen Titel "Spec-Tests — RunState-Factory statt SimpleNamespace". OP-174 bleibt als einzige Version offen. Kein Code geaendert, kein Test.
+- 2026-11-07 | OP-201 | done | pyproject.toml Paket-Registrierung + test-tools (Commit `a1eee3b`). Loop-Lauf 19:46-19:56 baute 6/6 Tasks, Phase-Review rejected wegen 3 roter Tests, Human-Gate `n` + manuelle Nachziehung. `[project]` mit name=werkstatt, version=0.1.0, `[project.optional-dependencies].test-tools = [hypothesis>=6.100, pytest-gremlins>=1.13.2]`, `[tool.setuptools.packages.find]`, `[tool.pytest-gremlins]`. `[tool.importlinter]` + `[tool.ruff.lint]` byte-identisch. 2 neue Test-Dateien (`test_package_registrierung.py`, `test_config_integritaet.py`). Manuelle Nachträge: `pytest.ini` um testpaths/python_files, requirements.txt Kommentarzeilen mit Markern, `tools/quality_gate.py`-Guard vom Import in `main()` verschoben (behebt `--collect-only`-INTERNALERROR). `pip install -e ".[test-tools]"` grün, `pip show werkstatt` zeigt Version 0.1.0, pytest 1384 passed. Entblockt OP-214 (Mutation-Gate) und OP-215 (Hypothesis).
 - 2026-11-07 | OP-174 | re-numbered | -> OP-294 (Backlog). Grund: Umnummerierung nach Phasen-Reihenfolge. Der PROGRESS.md-Header "OP-174: Spec-Tests" stammt aus der Zeit vor der Umnummerierung und bleibt als Historie. OP-294 ist der aktive OP.
 - 2026-11-07 | OP-187 | done | Planner-Dependency-Hybrid (Commit `e960a40`, Doku `91102a7`). Architect-Aussagen in Block 5 sind ab jetzt verbindlich: `_leite_deps_deterministisch` wertet Architect-Dependencies aus (Multi-File), Heuristik nur als Ergaenzung fuer Tasks ohne Architect-Aussage. Explizites `- (keine)` im Architect-Block stoppt Heuristik. Fallback-Pfad ruft Deps + Topo-Sort ebenfalls. 10 Unit-Tests in `test_planner_deps_hybrid.py`. **Nachtrag 2026-11-07:** DZ-Eintrag fehlte beim Close-Commit `91102a7`, hier nachgetragen.
 - 2026-11-07 | OP-176 | done | contract_check-Haertung gegen `setattr(state, "<unbekannt>", ...)` (Commit `7eab26d`, Loop-Test 8, 11:50-11:58). AST-Walk findet setattr-Aufrufe auf RunState-Felder, die nicht in `RunState.__dataclass_fields__` sind. Wiring ueber `state_inventory.py --changed` (verify.json contract_check-Stage). 3 Unit-Tests (test_contract_check_setattr.py) + 2 Integration-Tests (test_verify_contract_stage.py erweitert). Fail-closed mit rc=1 bei unbekanntem Feld, rc=0 bei deklariertem. Bug-D aus OP-175 (Loop-Test 6, Agent-Patch mit `setattr(state, "phase_review_gate_auto", True)`) ist jetzt deterministisch gefangen — vorher fing nur ruff B010 den Umgehungs-Versuch. Die zwei Integration-Tests verifizieren das Ende-zu-Ende-Wiring (Subprocess `python3 tools/state_inventory.py --changed <file>`).

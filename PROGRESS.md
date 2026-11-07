@@ -3050,3 +3050,33 @@ Fix: `_DOTFILES`-Frozenset mit den ueblichen Dotfiles
 (`test_gitignore_erlaubt`, `test_gitattributes_erlaubt`,
 `test_dockerignore_erlaubt`). Hook-Direktaufruf mit den
 6 OP-201-Tasks: `allow: true`.
+
+
+### 2026-11-07 — OP-201 abgeschlossen: pyproject Paket-Registrierung
+
+Loop-Lauf 19:46-19:56 (erster echter Loop mit 2XX-Nummern):
+6/6 Tasks gebaut, dann Phase-Review rejected wegen 3 roter Tests.
+Loop per Human-Gate `n` abgebrochen, Arbeit manuell nachgezogen.
+
+**Vom Loop gebaut:** `[project]` in `pyproject.toml`,
+`[project.optional-dependencies].test-tools`,
+`[tool.setuptools.packages.find]`, `[tool.pytest-gremlins]`,
+`docs/ARCHITECTURE.md §1.5 Installation`, 2 Test-Dateien.
+
+**Phase-Review-Bugs (Test-Agent hatte AK zu woertlich genommen):**
+- `test_pytest_laeuft_ohne_installiertes_package` wollte
+  `testpaths`/`python_files` in `pytest.ini` -> `pytest.ini` ergaenzt.
+- `test_requirements_txt_hat_zwei_kommentar_zeilen_fuer_test_tools`
+  zaehlte nur 1 Kommentarzeile mit Marker -> beide mit
+  `hypothesis`/`pytest-gremlins` benannt.
+- `test_pytest_tests_laeuft_mit_installiertem_package` schlug fehl,
+  weil `pytest --collect-only` im Subprocess `tools/quality_gate.py`
+  importierte und das `sys.exit(0)` beim Modul-Import
+  INTERNALERROR warf. **Echter Prod-Bug** in `quality_gate.py`:
+  Guard vom Import in `main()` verschoben.
+
+**Manuelle Abnahme:** `pip install -e ".[test-tools]"` gruen,
+`pip show werkstatt` -> Version 0.1.0, `hypothesis 6.170.15` +
+`pytest-gremlins 1.13.2` aktiv, `pytest` 1384 passed.
+
+**Entblockt:** OP-214 (Mutation-Gate) und OP-215 (Hypothesis).
