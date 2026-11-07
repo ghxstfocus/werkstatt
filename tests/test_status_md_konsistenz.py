@@ -143,3 +143,25 @@ def test_progress_header_op_ids_wohlgeformt():
     assert not falsch, (
         f"Unwohlgeformte OP-IDs im PROGRESS.md: {falsch}"
     )
+
+
+# =====================================================================
+# Regel 5: Keine OP doppelt in Delete-Zone
+# =====================================================================
+
+def test_keine_op_doppelt_in_delete_zone():
+    """Spec: jede OP erscheint hoechstens einmal in der Delete-Zone.
+
+    Anlass (2026-11-07): OP-179 wurde durch einen fehlerhaften Patch
+    doppelt eingefuegt — der Guard-Test hat es nicht gefangen, weil
+    Regel 2 nur "offen UND Delete-Zone" prueft, nicht "2x Delete-Zone".
+    """
+    import collections
+    src = _lies(STATUS)
+    dz_ops = list(RE_DELETE_ZONE_ENTRY.findall(src))
+    cnt = collections.Counter(dz_ops)
+    doppelt = [op for op, n in cnt.items() if n > 1]
+    assert not doppelt, (
+        f"OPs doppelt in Delete-Zone: {doppelt}. "
+        f"Jede OP darf nur einen Eintrag haben."
+    )
