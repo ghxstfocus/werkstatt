@@ -800,3 +800,8 @@ body {
   line-height: 1.5;
 }
 .tl-leer { font-style: italic; opacity: 0.5; }
+
+/* OP-233d: stale-Status (Run beendet, Task nicht abgeschlossen) */
+.tl-knoten[data-status="stale"] { opacity: 0.55; }
+.tl-knoten[data-status="stale"] .tl-dot { background: #6b7280; }
+.tl-knoten[data-status="stale"] .tl-label { font-style: italic; }

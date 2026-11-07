@@ -29,6 +29,12 @@
     el.className = "tl-knoten";
     el.dataset.status = k.status;
     el.dataset.id = k.id;
+    var statusLabel = {
+      running: "laeuft", ok: "erfolgreich", error: "fehlgeschlagen",
+      stale: "verwaist (Run beendet)"
+    }[k.status] || k.status;
+    el.title = k.label + " -- " + statusLabel +
+               "\nKlick zum Auf-/Zuklappen";
 
     var head = document.createElement("div");
     head.className = "tl-head";

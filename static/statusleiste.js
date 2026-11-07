@@ -20,15 +20,20 @@
     }
     var v = _el("status-verify");
     if (v) {
-      if (d.verify && d.verify.ok === true) { v.textContent = "Verify: \u2713"; v.style.color = "#10b981"; }
-      else if (d.verify && d.verify.ok === false) { v.textContent = "Verify: \u2717"; v.style.color = "#ef4444"; }
-      else { v.textContent = "Verify: -"; v.style.color = ""; }
+      if (d.verify && d.verify.ok === true) { v.textContent = "Verify: OK"; v.dataset.state = "ok"; }
+      else if (d.verify && d.verify.ok === false) { v.textContent = "Verify: FEHLER"; v.dataset.state = "error"; }
+      else if (d.verify && d.verify.kind) { v.textContent = "Verify: " + d.verify.kind; v.dataset.state = "warn"; }
+      else { v.textContent = "Verify: -"; v.dataset.state = ""; }
     }
     var dr = _el("status-drift");
     if (dr) {
-      if (d.drift && d.drift.ok === true) { dr.textContent = "Drift: \u2713"; dr.style.color = "#10b981"; }
-      else if (d.drift && d.drift.ok === false) { dr.textContent = "Drift: \u2717"; dr.style.color = "#ef4444"; }
-      else { dr.textContent = "Drift: -"; dr.style.color = ""; }
+      if (d.drift && d.drift.ok === true) { dr.textContent = "Drift: OK"; dr.dataset.state = "ok"; }
+      else if (d.drift && d.drift.ok === false) { dr.textContent = "Drift: FEHLER"; dr.dataset.state = "error"; }
+      else if (d.drift && d.drift.status === "ungemessen") {
+        dr.textContent = "Drift: -"; dr.dataset.state = "";
+        dr.title = "python3 -m tools.quality_gate --hook";
+      }
+      else { dr.textContent = "Drift: -"; dr.dataset.state = ""; }
     }
     var ph = _el("status-phase");
     if (ph) ph.textContent = "Phase: " + (d.phase || "-");

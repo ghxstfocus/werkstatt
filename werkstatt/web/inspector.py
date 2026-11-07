@@ -277,6 +277,26 @@ def _lese_audit_jsonl(pfad: Path) -> list[dict[str, Any]]:
     return ergebnis
 
 
+def _run_aktiv(es: EventStore, run_id: str, schwelle_s: int = 120) -> bool:
+    """True wenn der letzte Event des Runs juenger als schwelle_s ist."""
+    from datetime import UTC, datetime
+
+    try:
+        with sqlite3.connect(es.db_pfad) as c:
+            row = c.execute(
+                "SELECT ts FROM events WHERE run_id=? ORDER BY seq DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+        if not row or not row[0]:
+            return False
+        ts = datetime.fromisoformat(str(row[0]))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=UTC)
+        return (datetime.now(UTC) - ts).total_seconds() < schwelle_s
+    except (sqlite3.Error, ValueError, OSError):
+        return False
+
+
 def aggregate_timeline(
     projekt: str,
     run_id: str | None = None,
@@ -293,6 +313,7 @@ def aggregate_timeline(
     if run_id is None:
         return []
 
+    run_aktiv = _run_aktiv(es, run_id)
     knoten: list[dict[str, Any]] = []
     try:
         with sqlite3.connect(es.db_pfad) as c:
@@ -318,7 +339,7 @@ def aggregate_timeline(
                 "id": key,
                 "label": name,
                 "kind": "task",
-                "status": "running",
+                "status": "running" if run_aktiv else "stale",
                 "start_ts": ts,
                 "end_ts": None,
                 "phase": phase,
