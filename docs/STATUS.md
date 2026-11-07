@@ -1016,61 +1016,12 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   heute, aber nur durch zufaellig aktive ruff-Regel B010.
 - **Quelle:** OP-175 Bug D, Loop-Test 6, 2026-11-06.
 
-### OP-179: mypy-Setup — Duplicate-Module bei workspace-relativen Pfaden
-
-- **Status:** open
-- **Typ:** fix (verify-Setup)
-- **Betroffen:** `.werkstatt/verify.json` (mypy_changed-Stage),
-  `pyproject.toml` (mypy-Sektion), `tests/test_verify_mypy_setup.py` (neu)
-- **Problem:** Loop-Test 7 (18:29:11): `mypy_changed`-Stage
-  meldet `"Source file found twice under different module names:
-  werkstatt.phases.review and phases.review"`. Ursache: die Stage
-  ruft `mypy --follow-imports=silent --no-error-summary
-  {changed_py_files}`. Wenn `changed_py_files` einen Pfad wie
-  `werkstatt/phases/review.py` enthaelt UND dieser sowohl als
-  `werkstatt.phases.review` (Package-Pfad) als auch als
-  `phases.review` (Sub-Package-Pfad) importierbar ist, findet
-  mypy zwei Modul-Identitaeten und bricht ab. Der Fehler ist ein
-  Setup-Artefakt, kein Code-Bug — der Builder kann ihn nicht
-  reparieren, weil er die Umgebung nicht aendern kann.
-  Live-Beleg Loop-Test 7: 10 verify_failed-Events mit diesem
-  Fehler-Format, davon 2 mit abgeschnittenem error-Kopf (durch
-  OP-172 jetzt behoben), 8 mit vollem error-Kopf.
-- **Akzeptanzkriterien:**
-  - **Diagnose (a):** In einem Test-Setup reproduzieren:
-    `werkstatt/phases/review.py` unter zwei Modul-Pfaden
-    importierbar, dann `mypy --follow-imports=silent
-    werkstatt/phases/review.py` ausfuehren. Der Fehler MUSS
-    auftreten. (Kein "ich glaube, das ist der Grund".)
-  - **Fix (b):** Eine der drei Optionen waehlen:
-    (1) `--explicit-package-bases` in der Stage-Definition,
-    (2) `MYPYPATH=.` in der Stage-Umgebung,
-    (3) `__init__.py` in `werkstatt/phases/` anlegen (falls
-    fehlend), damit der Package-Pfad eindeutig ist.
-    Wahl erst nach (a)-Diagnose.
-  - **Test (c):** Neuer `tests/test_verify_mypy_setup.py`:
-    - Ruft die reale `mypy_changed`-Stage aus `verify.json`
-      gegen eine Fixture-Datei auf.
-    - Erwartet: **kein** `"Source file found twice"` im Output.
-    - Failt bei Regress (wenn die Stage wieder doppeldeutige
-      Pfade akzeptiert).
-  - `pytest` gruen, keine neuen ruff/mypy-Fehler.
-- **Tests:** `tests/test_verify_mypy_setup.py` (neu)
-- **Blockiert von:** —
-- **Blockiert:** Loop-Test 8 (indirekt — der Loop laeuft, aber
-  jeder mypy-Fehler triggert das Setup-Artefakt statt echte
-  Fehler).
-- **Prioritaet:** hoch — Root-Cause von Loop-Test 6+7-Blockaden.
-- **Quelle:** Loop-Test 7 (18:29:11), OP-172-Folge, Block 26
-  Messung (26b.3/26b.5 zeigten: das Artefakt entsteht NICHT bei
-  einfachem fehlendem `__init__.py`, sondern bei doppelter
-  Modul-Aufloesung).
-
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - 2026-11-07 | OP-180 | wontfix | Reviewer-Praezision (Konfidenz-Feld + Pre-Check): falsche Problem-Annahme. Loop-Test 7 hatte keinen Reviewer-Bug, sondern OP-179 (mypy Duplicate-Module) — die 3 HIGH reviewer_phase_rejected-Bugs waren ALLE berechtigt (t3/t4/t5 wurden wegen OP-179 nicht gebaut). Konfidenz-Feld und Pre-Check basieren auf "Reviewer meldet falsche Bugs" — das war nie wahr. Kein Code angelegt, kein Test, wird nicht gebraucht.
+- 2026-11-07 | OP-179 | wontfix | mypy-Setup "Duplicate-Module": **falsche Problem-Annahme**. Ich habe den truncated mypy-Output aus Loop-Test 7 (`(also at "werkstatt/phases/review.py")`) als "Source file found twice" interpretiert — das war eine Fehldeutung des OP-172-Truncation-Artefakts. Reproduktion (Block 33, 2026-11-07): alle vier mypy-Varianten rc=0 auf aktuellem Code-State, kein Duplicate-Module-Fehler, kein Top-Level-`phases/`-Konflikt, `__init__.py` ueberall da. Wahre Loop-Test-7-Ursache fuer t3/t4-Fails: der Loop baute zuerst t2 (`review.py`, setzt `state.phase_review_gate_auto`), aber t1 (`state.py`, deklariert das Feld) war noch nicht gebaut — Planner erkannte Cross-Task-Feldabhaengigkeit nicht. **Bereits behoben** durch OP-168b (c713033): Feld ist jetzt in RunState deklariert, Loop-Test 8 findet es. Kein Code angelegt, kein Test.
 - 2026-11-07 | OP-177 | wontfix | Reviewer-Kontext-Vertrag: falsche Problem-Annahme. _phase_files (alle Task-Dateien der Phase) liefert vollstaendigen Diff — bestaetigt durch Messblock 31. Die 3 HIGH-Bugs aus Loop-Test 7 waren berechtigt, weil t3/t4/t5 tatsaechlich nicht gebaut wurden (OP-179). Der Reviewer-Selbst-Hinweis "nur der Anfang von _phase_end_reflection ist sichtbar" war praezise Diagnose ("Patch fehlt im sichtbaren Kontext"), nicht Truncation-Beschwerde. Kein Code angelegt, kein Test. Ursache fuer "3 von 4 Tasks nicht gebaut" ist OP-179 (mypy Setup) + OP-172 (Verify-Truncation, heute gefixt).
 - 2026-11-07 | OP-172 | done | Fehlerkern-Extraktion in verify.py (`_extrahiere_fehlerkern`) statt `_out[-500:]` (8effad1). mypy-Fehler-Output wird auf `error:`-Zeilen + Kontext reduziert, `note:`/`help:`/Statistik verworfen. Live-Beleg Loop-Test 7 (18:29:11): der alte Truncation-Pfad schnitt den error-Kopf ab, sodass der Builder nur "(also at ...)" + Notes sah. Jetzt sieht er "error: Source file found twice under different module names: \"werkstatt.phases.review\" and \"phases.review\"" — das Setup-Problem ist damit **diagnostizierbar**, aber nicht behebbar (eigene OP-179). 9 neue Tests (test_verify_fehlerkern.py).
 - 2026-11-07 | OP-178 | done | Rollen-Registry-Migration: planner/builder/reviewer/reflection via ROLLEN[name].lade_skills() (0388d1b), Alias-Cleanup (8954f83), Explorer-Migration + systematic-debugging-Rausnahme (5a5c941). 5 von 5 Aufrufern migriert, scout bleibt fail-closed-leer. Neuer Migration-Test test_rollen_registry_migration.py (AST-Scan: jede Rolle mit skills/filter_rolle muss ROLLEN[name] nutzen). Verhaltensaenderung Explorer: systematic-debugging wird nicht mehr geladen (auch nicht bei Trigger); SKILL.md-Frontmatter `rollen: [builder]`. systematic-debugging-Zuordnung zum geplanten Debugger (OP-128/OP-160) dort offen, keine eigene OP.
