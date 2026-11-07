@@ -1103,6 +1103,32 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Quelle:** OP-181-Close (2026-11-07), `grep 'git push' werkstatt/`
   leer.
 
+### OP-187: Planner-Dependency-Hybrid — Architect + Heuristik
+
+- **Status:** open (Fix in Commit `ae2d5a2`-Folge)
+- **Typ:** architektur (Planner + Task-Graph)
+- **Betroffen:** `werkstatt/planner.py`
+  (`_leite_deps_deterministisch`, `_check_explicit_keine_in_prosa`,
+  `_planner_pipeline`), `tests/test_planner_deps_hybrid.py` (neu).
+- **Problem:** User-Anforderung aus Loop-Test 10: Architect-Aussagen
+  in Block 5 muessen in Task-Dependencies landen. Vor dem Fix drei
+  Luecken: (1) `found=True, arch_deps={}` -> fruehes `return`,
+  Heuristik lief nie. (2) Architect-Teil-Abdeckung uebersprang
+  Heuristik fuer nicht abgedeckte Tasks. (3) `_datei_to_id` mappte
+  nur `task_files[0]`. Plus: Fallback-Pfad im JSON-Fehler-Split
+  rief `_leite_deps_deterministisch` gar nicht auf.
+- **Akzeptanzkriterien:** (a) Architect-Vorrang, (b) Heuristik-
+  Ergaenzung fuer Tasks ohne Architect-Aussage, (c) explizite
+  `(keine)` stoppt Heuristik, (d) Multi-File-Dep-Mapping,
+  (e) Fallback-Pfad ruft Deps+Topo-Sort, (f) Tests in
+  `tests/test_planner_deps_hybrid.py`. Alle erfuellt.
+- **Tests:** `tests/test_planner_deps_hybrid.py` (neu).
+- **Blockiert von:** —
+- **Blockiert:** Loop-Test 10 mit Multi-Task-OP und
+  Architect-Block-5-Dependencies.
+- **Prioritaet:** hoch.
+- **Quelle:** Loop-Test 10 (2026-11-07).
+
 
 ## Delete-Zone
 

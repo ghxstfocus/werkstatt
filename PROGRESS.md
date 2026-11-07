@@ -2857,3 +2857,27 @@ OP-184 setzt auf dem Ergebnis von OP-183 auf.
 **Loop-Test 10 (nach OP-183):** Verifikations-Task + Bau-Task
 in einer OP, Erwartung 3/3 done, keine Reflection-Runde, Commit.
 Kandidat: OP-086 (Doku-Drift als Verify-Gate).
+
+
+### 2026-11-07 — OP-187: Dependency-Hybrid im Planner
+
+User-Anforderung aus Loop-Test 10: "Wenn der Architect
+Abhaengigkeiten deklariert, muss der Planner diese auch in den
+Tasks so planen."
+
+Fix:
+
+- `_check_explicit_keine_in_prosa`: erkennt explizite
+  `- (keine)` im Architect-Block 5.
+- `_leite_deps_deterministisch`: Architect-Aussage anwenden
+  (Multi-File), Heuristik ergaenzend fuer Tasks OHNE
+  Architect-Aussage, explizite `(keine)` stoppt Heuristik.
+- Fallback-Pfad (JSON-Split-Fehler) ruft
+  `_leite_deps_deterministisch` + `_topo_sort_tasks` auf.
+
+Tests: `tests/test_planner_deps_hybrid.py` (10 Unit-Tests).
+
+**Lehre:** Der LLM-Split ist eine Quelle, nicht die einzige. Wenn
+er scheitert, muss der Fallback-Pfad dieselben Nachbearbeitungen
+(Deps, Topo-Sort) durchlaufen — sonst sind Architect-Aussagen
+still verloren.
