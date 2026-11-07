@@ -119,6 +119,50 @@ def aggregate_status(projekt: str) -> dict[str, Any]:
                 aus["verify"] = {"raw": v[0]}
         if ph:
             aus["phase"] = ph[0]
+        if aus["phase"] is None:
+            py = werkstatt_home() / ".werkstatt" / f"{projekt}.phase.yaml"
+            if py.exists():
+                try:
+                    text = py.read_text(encoding="utf-8")
+                    mm = re.search(r"^phase_id:\s*(\S+)", text, re.MULTILINE)
+                    if mm:
+                        aus["phase"] = mm.group(1)
+                    else:
+                        mm = re.search(r"^status:\s*(\S+)", text, re.MULTILINE)
+                        if mm:
+                            aus["phase"] = mm.group(1)
+                except OSError:
+                    pass
+        # Verify aus JSONL-Audit (verify_*)
+        if aus["verify"] is None:
+            audit_dir = werkstatt_home() / "audit-logs"
+            if audit_dir.exists():
+                kand = sorted(audit_dir.glob("agent-pipeline-*.jsonl"))
+                if kand:
+                    try:
+                        with kand[-1].open(encoding="utf-8", errors="replace") as f:
+                            zeilen = f.readlines()[-2000:]
+                        for z in reversed(zeilen):
+                            z = z.strip()
+                            if not z:
+                                continue
+                            try:
+                                obj = json.loads(z)
+                            except json.JSONDecodeError:
+                                continue
+                            k = str(obj.get("kind", ""))
+                            if k.startswith("verify_"):
+                                ok_val = k.endswith(("_ok", "_passed"))
+                                bad = k.endswith(("_fail", "_failed", "_error"))
+                                aus["verify"] = {
+                                    "ok": True if ok_val else (False if bad else None),
+                                    "kind": k,
+                                    "ts": obj.get("ts"),
+                                }
+                                break
+                    except OSError:
+                        pass
+
         # Drift: aus .werkstatt/quality_gate.log (letzter Eintrag)
         qg = werkstatt_home() / ".werkstatt" / "quality_gate.log"
         if qg.exists():
@@ -127,6 +171,8 @@ def aggregate_status(projekt: str) -> dict[str, Any]:
                 aus["drift"] = json.loads(letzte)
             except (OSError, json.JSONDecodeError):
                 pass
+        if aus["drift"] is None:
+            aus["drift"] = {"status": "ungemessen", "hinweis": "python3 -m tools.quality_gate --hook"}
     except sqlite3.Error:
         pass
     return aus

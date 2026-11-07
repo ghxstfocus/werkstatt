@@ -1,7 +1,8 @@
-// Timeline (OP-233): Phasen-Knoten aus /api/projects/{name}/timeline
+// Timeline (OP-233): Phasen-Knoten. Click-anywhere-to-toggle + persist.
 (function () {
   "use strict";
   var aktuellesProjekt = "werkstatt";
+  var PREFIX = "werkstatt-tl-";
 
   function _el(id) { return document.getElementById(id); }
 
@@ -10,39 +11,83 @@
     var s = new Date(start), e = new Date(ende);
     if (isNaN(s) || isNaN(e)) return "";
     var ms = e - s;
+    if (ms < 0) return "";
     if (ms < 1000) return ms + "ms";
     if (ms < 60000) return (ms / 1000).toFixed(1) + "s";
     return (ms / 60000).toFixed(1) + "min";
   }
 
+  function _leseState(id) {
+    try { return localStorage.getItem(PREFIX + id); } catch (e) { return null; }
+  }
+  function _schreibeState(id, offen) {
+    try { localStorage.setItem(PREFIX + id, offen ? "1" : "0"); } catch (e) {}
+  }
+
+  function _knotenBauen(k) {
+    var el = document.createElement("div");
+    el.className = "tl-knoten";
+    el.dataset.status = k.status;
+    el.dataset.id = k.id;
+
+    var head = document.createElement("div");
+    head.className = "tl-head";
+
+    var dot = document.createElement("span");
+    dot.className = "tl-dot";
+
+    var lbl = document.createElement("span");
+    lbl.className = "tl-label";
+    lbl.textContent = k.label || "?";
+
+    var dur = document.createElement("span");
+    dur.className = "tl-dauer";
+    dur.textContent = _fmtDauer(k.start_ts, k.end_ts);
+
+    head.appendChild(dot);
+    head.appendChild(lbl);
+    head.appendChild(dur);
+    el.appendChild(head);
+
+    var body = document.createElement("div");
+    body.className = "tl-body";
+    var kinder = k.children || [];
+    if (kinder.length === 0) {
+      var leer = document.createElement("div");
+      leer.className = "tl-child tl-leer";
+      leer.textContent = "keine Details";
+      body.appendChild(leer);
+    }
+    kinder.forEach(function (ch) {
+      var c = document.createElement("div");
+      c.className = "tl-child";
+      c.textContent = (ch.ts || "") + "  " + (ch.kind || "");
+      body.appendChild(c);
+    });
+    el.appendChild(body);
+
+    if (_leseState(k.id) === "1") el.classList.add("offen");
+
+    el.addEventListener("click", function () {
+      el.classList.toggle("offen");
+      _schreibeState(k.id, el.classList.contains("offen"));
+    });
+
+    return el;
+  }
+
   function _rendere(knoten) {
     var box = _el("timeline");
     if (!box) return;
+    var alt = {};
+    box.querySelectorAll(".tl-knoten").forEach(function (n) {
+      alt[n.dataset.id] = n.classList.contains("offen");
+    });
     box.innerHTML = "";
     knoten.forEach(function (k) {
-      var det = document.createElement("details");
-      det.className = "tl-knoten";
-      det.dataset.status = k.status;
-      var sum = document.createElement("summary");
-      sum.textContent = k.label + " ";
-      var dauer = _fmtDauer(k.start_ts, k.end_ts);
-      if (dauer) {
-        var sp = document.createElement("span");
-        sp.className = "tl-kind";
-        sp.textContent = dauer;
-        sum.appendChild(sp);
-      }
-      det.appendChild(sum);
-      (k.children || []).forEach(function (ch) {
-        var c = document.createElement("div");
-        c.className = "tl-kind";
-        c.textContent = ch.ts + "  " + (ch.kind || "") + (ch.detail ? " — " + ch.detail : "");
-        det.appendChild(c);
-      });
-      box.appendChild(det);
+      if (alt[k.id] !== undefined) _schreibeState(k.id, alt[k.id]);
+      box.appendChild(_knotenBauen(k));
     });
-    var r = _el("timeline-run");
-    if (r) r.textContent = "";
   }
 
   function lade(projekt) {

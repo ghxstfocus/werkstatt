@@ -1,4 +1,4 @@
-// Runs-Liste (OP-233): OPs aus docs/STATUS.md via /api/projects/{name}/ops
+// Runs-Liste (OP-233): OPs aus /api/projects/{name}/ops
 (function () {
   "use strict";
   var aktuellesProjekt = "werkstatt";
@@ -16,21 +16,32 @@
       div.dataset.status = op.status;
       div.dataset.opId = op.id;
       div.title = op.titel;
+
+      var dot = document.createElement("span");
+      dot.className = "runs-dot";
+      div.appendChild(dot);
+
       var id = document.createElement("span");
       id.className = "runs-id";
       id.textContent = op.id;
+      div.appendChild(id);
+
+      var titel = document.createElement("span");
+      titel.className = "runs-titel";
+      titel.textContent = op.titel;
+      div.appendChild(titel);
+
       var status = document.createElement("span");
       status.className = "runs-status";
       status.textContent = op.status;
-      div.appendChild(id);
-      div.appendChild(document.createTextNode(op.titel.length > 22 ? op.titel.slice(0, 22) + "…" : op.titel));
       div.appendChild(status);
+
       box.appendChild(div);
       if (op.status === "open") offen++;
       else if (op.status === "done") done++;
     });
     var c = _el("runs-counter");
-    if (c) c.textContent = offen + " offen / " + done + " done";
+    if (c) c.textContent = offen + " offen · " + done + " done";
   }
 
   function lade(projekt) {
