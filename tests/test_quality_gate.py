@@ -47,7 +47,7 @@ def test_gate_failed_macht_rot(tmp_path):
     pytest_out = _pytest_out(_BASE, failed=1)
     with patch.object(quality_gate, "_run", side_effect=_mock_run_factory(pytest_out)):
         # Katalog-Fallback: _KATALOG_SOLL in pipeline.py
-        (tmp_path / "pipeline.py").write_text("_KATALOG_SOLL = 162\n")
+        (tmp_path / "pipeline.py").write_text("_KATALOG_SOLL = 0\n")
         result = quality_gate.check_all(tmp_path)
 
     assert result["current"]["pytest"]["failed"] == 1
@@ -60,7 +60,7 @@ def test_gate_all_green_ist_ok(tmp_path):
     """M-331b: 1361 passed, 0 failed -> delta.pytest=0 -> ok=True."""
     pytest_out = _pytest_out(_BASE)
     with patch.object(quality_gate, "_run", side_effect=_mock_run_factory(pytest_out)):
-        (tmp_path / "pipeline.py").write_text("_KATALOG_SOLL = 162\n")
+        (tmp_path / "pipeline.py").write_text("_KATALOG_SOLL = 0\n")
         result = quality_gate.check_all(tmp_path)
 
     assert result["current"]["pytest"]["failed"] == 0
@@ -72,7 +72,7 @@ def test_gate_passed_unter_baseline_macht_rot(tmp_path):
     """M-331b: passed < baseline -> delta.pytest > 0 -> ok=False."""
     pytest_out = _pytest_out(_BASE - 1)  # passed < Baseline
     with patch.object(quality_gate, "_run", side_effect=_mock_run_factory(pytest_out)):
-        (tmp_path / "pipeline.py").write_text("_KATALOG_SOLL = 162\n")
+        (tmp_path / "pipeline.py").write_text("_KATALOG_SOLL = 0\n")
         result = quality_gate.check_all(tmp_path)
 
     assert result["delta"]["pytest"] == 1

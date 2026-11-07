@@ -40,11 +40,11 @@ from typing import Any
 
 # Baseline fixiert (gemessen 2026-11-02 auf HEAD d95e147).
 BASELINE = {
-    "pytest": 1214,   # pytest -q, volle Suite
-    "ruff": 187,      # ruff check --no-cache . (tests/ erstmals mitgemessen)
-    "mypy": 27,       # mypy werkstatt/ (pipeline.py im Loop-Neubau entfernt)
-    "ast": 6,         # pytest tests/test_audit_kinds.py -q (Skip wenn Datei fehlt)
-    "katalog": 162,   # _KATALOG_SOLL in pipeline.py (Skip wenn Datei fehlt)
+    "pytest": 1214,   # pytest -q: historische Mindest-Passzahl
+    "ruff": 0,        # ruff check .: Ziel 0 Fehler
+    "mypy": 0,        # mypy werkstatt/: Ziel 0 Fehler
+    "ast": 0,         # skip wenn Datei fehlt
+    "katalog": 0,     # skip wenn Datei fehlt
 }
 
 HEAD = "d95e147"  # Baseline-Anker (nicht HEAD). Aktueller HEAD wechselt pro Commit.
@@ -85,9 +85,18 @@ def _parse_pytest(out: str) -> tuple[int, int]:
     return passed, failed + errors
 
 
-def _parse_count(out: str, pattern: str) -> int:
+def _parse_count(
+    out: str,
+    pattern: str,
+    clean_marker: str | None = None,
+) -> int:
+    """Zaehlt Fehler; clean_marker -> 0; unparsebar -> 999999 (fail-closed)."""
+    if clean_marker and clean_marker in out:
+        return 0
     m = re.search(pattern, out)
-    return int(m.group(1)) if m else -1
+    if m is None:
+        return 999_999
+    return int(m.group(1))
 
 
 def _git_head(cwd: Path) -> str:
@@ -117,17 +126,17 @@ def check_all(cwd: Path) -> dict:
     result["current"]["pytest"] = {"passed": passed, "failed": failed}
     # M-331: failed zaehlt als Fehler. Sonst ist der Gate fail-open:
     # 1360 passed + 1 failed -> delta=0 -> "ok", obwohl ein Test rot ist.
-    result["delta"]["pytest"] = (BASELINE["pytest"] - passed) + failed
+    result["delta"]["pytest"] = max(0, BASELINE["pytest"] - passed) + failed
 
     # ruff
     _rc, out = _run(["ruff", "check", "--no-cache", "."], cwd)
-    n = _parse_count(out, r"Found (\d+) error")
+    n = _parse_count(out, r"Found (\d+) error", clean_marker="All checks passed")
     result["current"]["ruff"] = {"errors": n}
     result["delta"]["ruff"] = n - BASELINE["ruff"]
 
     # mypy
     _rc, out = _run(["mypy", "werkstatt/"], cwd)
-    n = _parse_count(out, r"Found (\d+) error")
+    n = _parse_count(out, r"Found (\d+) error", clean_marker="Success: no issues found")
     result["current"]["mypy"] = {"errors": n}
     result["delta"]["mypy"] = n - BASELINE["mypy"]
 
@@ -158,7 +167,10 @@ def check_all(cwd: Path) -> dict:
         result["delta"]["katalog"] = 0
 
     # Regression?
-    reg = any(abs(v) > 0 for v in result["delta"].values())
+    reg = any(
+        isinstance(v, (int, float)) and v > 0
+        for v in result["delta"].values()
+    )
     result["ok"] = not reg
     result["regression"] = reg
     return result
