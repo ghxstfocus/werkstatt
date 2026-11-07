@@ -1061,6 +1061,27 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Prioritaet:** hoch.
 - **Quelle:** ADR-0016.
 
+### OP-295: Quality-Gate reparieren (Parser, Baseline, Regression)
+
+- **Status:** done (2026-11-07)
+- **Typ:** fix
+- **Betroffen:** `tools/quality_gate.py`, `tests/test_quality_gate.py`
+- **Problem:** Das Gate war fail-closed gegen sich selbst: ruff/mypy
+  gaben bei clean `All checks passed` / `Success: no issues found`
+  aus, der Parser erwartete `Found N errors` und lieferte `-1`
+  (= „nicht messbar"). Baseline ruff/mypy stand auf historischen
+  Alt-Akzeptanzwerten (187/27), jede Verbesserung wurde als
+  `regression: true` markiert (Logik: `any(abs(delta) > 0)`).
+- **Fix:** Parser clean-safe (`clean_marker`-Parameter, unparsebar
+  -> 999999 fail-closed statt -1), Baseline ruff/mypy/katalog = 0
+  (Ziel-Werte, nicht Alt-Akzeptanz), pytest-Delta `max(0, …)`,
+  Regression nur bei `delta > 0` (Verbesserung ist kein Fehler).
+- **Tests:** `tests/test_quality_gate.py` angepasst
+  (`_KATALOG_SOLL = 0` in Fixture).
+- **Verifikation:** `python3 -m tools.quality_gate --json` ->
+  `ok: true, regression: false`, alle Deltas 0, exit 0.
+- **Quelle:** Session 2026-11-07, Commit `69e0e66`.
+
 ### OP-214: Mutation-Gate als verify-Stage
 
 - **Status:** open
