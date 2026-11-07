@@ -1081,6 +1081,254 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Quelle:** Loop-Test 10 (2026-11-07).
 
 
+### OP-188: Test-Loop-Phase mit Qualification und Freeze
+
+- **Status:** open
+- **Typ:** architektur (Tests + Spec)
+- **Betroffen:** `werkstatt/phases/test_loop.py` (neu),
+  `werkstatt/test_agent.py` (neu), `werkstatt/loop.py`
+  (Phase einhaengen), `werkstatt/state.py` (`test_spec` +
+  `test_manifest`), `tests/test_test_agent.py` (neu),
+  `tests/test_phase_test_loop.py` (neu).
+- **Problem:** ADR-0016 umsetzen. Tests werden heute im selben
+  LLM-Call wie der Code gebaut — Code und Test bestaetigen sich
+  gegenseitig, aber Spec-Abweichungen bleiben unsichtbar
+  (Loop-Test 9, OP-181, OP-183). Der Benchmark 2026-11-07 zeigt
+  3/18 ueberlebende Mutanten auf einem Mini-Modul.
+- **Akzeptanzkriterien:**
+  - **(a)** `state.test_spec` wird von `run_architect` befuellt
+    (Block 6 im `ARCHITECT_SYSTEM`: `[{name, target_file,
+    assertion_prose}]`).
+  - **(b)** Test-Agent baut Test-Datei aus `test_spec`, keine
+    Code-Interna.
+  - **(c)** Qualification: Test auf unveraendertem Repo MUSS rot
+    sein (sonst testet er den Ist-Zustand).
+  - **(d)** Freeze: SHA256 in `state.test_manifest`.
+  - **(e)** Max 2 Runden, dann `_phase_review_gate`.
+  - **(f)** Tests fuer (a)-(e).
+  - **`pytest` gruen, ruff/mypy 0.**
+- **Tests:** `tests/test_test_agent.py` (neu),
+  `tests/test_phase_test_loop.py` (neu).
+- **Blockiert von:** OP-092 (Context-Vertrag), OP-195
+  (pyproject `test-tools` optional-dependencies).
+- **Blockiert:** OP-189, OP-191.
+- **Prioritaet:** hoch.
+- **Quelle:** ADR-0016 (2026-11-07), Loop-Test 9/10, Benchmark
+  /tmp/mutbench.
+
+### OP-189: Builder test-blind + verify-Stages test_integrity/must_fail
+
+- **Status:** open
+- **Typ:** architektur (Tests + Spec)
+- **Betroffen:** `werkstatt/roles/builder/run.py` (Filter),
+  `.werkstatt/verify.json` (2 neue Stages),
+  `tools/test_integrity.py` (neu),
+  `tools/test_must_fail.py` (neu),
+  `tests/test_builder_test_blind.py` (neu).
+- **Problem:** Builder sieht heute Test-Dateien im Prompt, wenn
+  `task_files` sie enthaelt. Zusaetzlich fehlen verify-Stages,
+  die SHA256 des Test-Manifests pruefen und die Qualification
+  erzwingen.
+- **Akzeptanzkriterien:**
+  - **(a)** Builder filtert `tests/` und `test_*.py` aus
+    `task_files`. Wenn nach Filter leer: fail-closed mit Audit
+    `builder_test_file_rejected`.
+  - **(b)** Stage `test_integrity` failt bei Hash-Mismatch
+    (`state.test_manifest` vs. aktuelle Test-Dateien).
+  - **(c)** Stage `test_must_fail_initial` failt bei gruenem Test
+    auf unveraendertem Repo.
+  - **(d)** Tests fuer (a)-(c).
+  - **`pytest` gruen.**
+- **Tests:** `tests/test_builder_test_blind.py` (neu),
+  `tests/test_verify_test_stages.py` (neu).
+- **Blockiert von:** OP-188.
+- **Blockiert:** OP-190.
+- **Prioritaet:** hoch.
+- **Quelle:** ADR-0016.
+
+### OP-190: Mutation-Gate als verify-Stage
+
+- **Status:** open
+- **Typ:** architektur (Tests + Qualitaet)
+- **Betroffen:** `.werkstatt/verify.json` (1 neue Stage),
+  `pyproject.toml` (`[tool.pytest-gremlins]`),
+  `tests/test_mutation_gate_stage.py` (neu).
+- **Problem:** Test-Qualitaet wird heute nicht mechanisch
+  gemessen. Ein gruener Test kann unvollstaendig sein.
+- **Akzeptanzkriterien:**
+  - **(a)** Stage `mutation_gate` in `verify.json` mit
+    `hart: false`.
+  - **(b)** `pytest-gremlins` laeuft auf geaenderte Files
+    (`paths` dynamisch pro Task gesetzt).
+  - **(c)** Score < 0.8: Audit `mutation_gate_low_score`,
+    kein Hard-Block in Runde 1.
+  - **(d)** Nach 4 Wochen: auf `hart: true` pruefen (eigene OP).
+  - **(e)** Tests fuer (a)-(c).
+  - **`pytest` gruen.**
+- **Tests:** `tests/test_mutation_gate_stage.py` (neu).
+- **Blockiert von:** OP-189, OP-195.
+- **Blockiert:** —
+- **Prioritaet:** mittel.
+- **Quelle:** ADR-0017, Benchmark 2026-11-07.
+
+### OP-191: Debugger-Rolle mit 3-Wege-Check
+
+- **Status:** open
+- **Typ:** architektur (Debugger + Spec)
+- **Betroffen:** `werkstatt/debugger.py` (neu),
+  `werkstatt/rollen.py` (debugger-Rolle),
+  `skills/systematic-debugging/SKILL.md`
+  (`rollen: [debugger]`), `werkstatt/phases/tasks.py`
+  (Verdrahtung), `tests/test_debugger.py` (neu).
+- **Problem:** `systematic-debugging` ist heute fuer `builder` und
+  `reflection` registriert. Das ist semantisch falsch — Debugging
+  ist eine eigene Rolle mit eigener Verantwortung. ADR-0018
+  setzt die Rolle auf.
+- **Akzeptanzkriterien:**
+  - **(a)** `ROLLEN["debugger"]` mit
+    `skills=("systematic-debugging",)`.
+  - **(b)** `ROLLEN["builder"].skill_filter_rolle` laedt
+    `systematic-debugging` NICHT mehr.
+  - **(c)** `ROLLEN["reflection"]`: `systematic-debugging` aus
+    der Skill-Liste entfernt.
+  - **(d)** 3-Wege-Check: Code != Spec, Test = Spec -> Fix Code.
+  - **(e)** 3-Wege-Check: Code = Spec, Test != Spec ->
+    Test-Thaw (Human-Gate).
+  - **(f)** 3-Wege-Check: Alle = Spec, Test rot -> Human-Gate.
+  - **(g)** Verdrahtung in `phases/tasks.py`: bei `_verify_patches`
+    rot UND `_reflection_loop` bereits 1x ohne Erfolg ->
+    Debugger statt Reflection.
+  - **(h)** Tests fuer (a)-(g).
+  - **`pytest` gruen.**
+- **Tests:** `tests/test_debugger.py` (neu),
+  `tests/test_rollen_registry.py` (erweitern).
+- **Blockiert von:** OP-188.
+- **Blockiert:** OP-192.
+- **Prioritaet:** hoch.
+- **Quelle:** ADR-0018, OP-092 Z.114-118.
+
+### OP-192: Test-Thaw-Mechanik
+
+- **Status:** open
+- **Typ:** architektur (Tests + Spec)
+- **Betroffen:** `werkstatt/debugger.py` (Thaw-Pfad),
+  `werkstatt/phases/test_loop.py` (Re-Entry),
+  `tests/test_test_thaw.py` (neu).
+- **Problem:** Wenn der Debugger entscheidet, dass ein Test falsch
+  ist, muss der Test-Thaw auditierbar sein und
+  `state.test_manifest` invalidieren. Sonst kann ein Loop still
+  Tests aendern und die Test-Spec unterlaufen.
+- **Akzeptanzkriterien:**
+  - **(a)** Test-Thaw invalidiert `state.test_manifest`.
+  - **(b)** Audit-Event `test_thawed` mit Grund.
+  - **(c)** Test-Loop startet neu nach Thaw.
+  - **(d)** `state.test_thawed=True` bis zur naechsten
+    Qualification.
+  - **(e)** Tests fuer (a)-(d).
+  - **`pytest` gruen.**
+- **Tests:** `tests/test_test_thaw.py` (neu).
+- **Blockiert von:** OP-191.
+- **Blockiert:** —
+- **Prioritaet:** hoch.
+- **Quelle:** ADR-0016, ADR-0018.
+
+### OP-193: Hypothesis als optionale Dependency + erste Property-Tests
+
+- **Status:** open
+- **Typ:** architektur (Tests + Qualitaet)
+- **Betroffen:** `pyproject.toml`
+  (`[project.optional-dependencies].test-tools`),
+  `tests/conftest.py` (CI-Profil),
+  `tests/test_property_planner.py` (neu),
+  `tests/test_property_reflection.py` (neu).
+- **Problem:** Property-Based-Tests fehlen komplett. Fuer
+  deterministische Funktionen (JSON-Repair, Signatur-
+  Normalisierung, Task-Klassifikation) sind sie ideal.
+- **Akzeptanzkriterien:**
+  - **(a)** `pip install -e ".[test-tools]"` installiert
+    `hypothesis`.
+  - **(b)** 3 Property-Tests: `_parse_json_robust`,
+    `_fehler_signatur_normalisiert`, `_ist_verify_task`.
+  - **(c)** CI-Profil in `tests/conftest.py` mit
+    `derandomize=True, max_examples=10`.
+  - **(d)** Tests fuer (a)-(c).
+  - **`pytest` gruen.**
+- **Tests:** `tests/test_property_planner.py` (neu),
+  `tests/test_property_reflection.py` (neu).
+- **Blockiert von:** OP-195.
+- **Blockiert:** —
+- **Prioritaet:** mittel.
+- **Quelle:** ADR-0016, Benchmark 2026-11-07.
+
+### OP-194: Architektur-Doku aktualisieren (Test-Loop + Debugger)
+
+- **Status:** open
+- **Typ:** doku
+- **Betroffen:** `docs/ARCHITECTURE.md` (Rollen + Ablauf),
+  `docs/adr/README.md` (Index).
+- **Problem:** Architektur-Doku (Wahrheits-Quelle laut
+  Merkposten §8) kennt Test-Loop und Debugger-Rolle nicht.
+  Nach ADR-0016/0017/0018 muss sie nachgezogen werden.
+- **Akzeptanzkriterien:**
+  - **(a)** `docs/ARCHITECTURE.md`: neuer Abschnitt
+    "Test-Loop-Phase" (Ablauf, Qualification, Freeze).
+  - **(b)** `docs/ARCHITECTURE.md`: neue Rolle "Debugger"
+    (3-Wege-Check, Test-File-Guard).
+  - **(c)** `docs/ARCHITECTURE.md`: Rollen-Registry-Abschnitt
+    um `debugger` ergaenzen.
+  - **(d)** `docs/adr/README.md`: ADR-0016/0017/0018 im Index
+    (falls nicht schon da).
+- **Tests:** keine — reine Doku-Aufgabe.
+- **Blockiert von:** OP-188, OP-191 (Architektur muss erst
+  gebaut sein, dann dokumentiert).
+- **Blockiert:** —
+- **Prioritaet:** mittel.
+- **Quelle:** ADR-0016/0017/0018.
+
+### OP-195: `pyproject.toml` — Package-Registrierung + test-tools
+
+- **Status:** open
+- **Typ:** infrastruktur (Build + Dependencies)
+- **Betroffen:** `pyproject.toml` (Erweiterung um `[project]`,
+  `[project.optional-dependencies].test-tools`,
+  `[tool.setuptools]`, `[tool.pytest-gremlins]`),
+  `requirements.txt` (Kommentar-Zeilen),
+  `.gitignore` (`*.egg-info/`),
+  `docs/ARCHITECTURE.md` (Abschnitt "Installation"),
+  `tests/test_package_registrierung.py` (neu).
+- **Problem:** `werkstatt` ist heute kein installiertes Package
+  (`pip show werkstatt` -> "Package(s) not found"). Der Loop
+  laeuft ueber cwd-Import. `pytest-gremlins` (OP-190) und
+  `hypothesis` (OP-193) brauchen Package-Registrierung, um
+  ohne cwd-Zwang zu funktionieren.
+- **Akzeptanzkriterien:**
+  - **(a)** Erweiterung ohne Beschaedigung: `[tool.importlinter]`
+    und `[tool.ruff.lint]` byte-identisch.
+    `pytest.ini`, `mypy.ini`, `requirements.txt` bleiben aktive
+    Configs.
+  - **(b)** `pip install -e ".[test-tools]"` laeuft gruen.
+    `pip show werkstatt` zeigt Version 0.1.0.
+    `hypothesis` und `pytest-gremlins` installiert.
+  - **(c)** cwd-Import bleibt Fallback: `pytest tests/` gruen
+    mit und ohne installiertes Package.
+  - **(d)** `.egg-info` in `.gitignore`.
+  - **(e)** `requirements.txt`: 2 Kommentar-Zeilen fuer
+    test-tools, keine aktive Zeile.
+  - **(f)** `docs/ARCHITECTURE.md`: Abschnitt "Installation" mit
+    beiden Wegen (cwd vs. `pip install -e .`).
+  - **(g)** Tests fuer (a)-(c).
+  - **`pytest` gruen, ruff/mypy 0.**
+- **Tests:** `tests/test_package_registrierung.py` (neu),
+  `tests/test_config_integritaet.py` (erweitern: prueft dass
+  `pytest.ini`, `mypy.ini`, `[tool.importlinter]`,
+  `[tool.ruff.lint]` unveraendert sind).
+- **Blockiert von:** —
+- **Blockiert:** OP-190, OP-193.
+- **Prioritaet:** hoch (Voraussetzung fuer OP-190, OP-193).
+- **Quelle:** Messung 2026-11-07: `pip show werkstatt` leer,
+  `pyproject.toml` mit 58 Zeilen aber ohne `[project]`.
+
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.

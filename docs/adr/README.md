@@ -19,3 +19,6 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0013](ADR-0013-layer-architektur.md) | Layer-Architektur + Submodul-Split-Reihenfolge | accepted |
 | [ADR-0014](ADR-0014-rollen-registry.md) | Rollen-Registry als Single Source of Truth | accepted |
 | [ADR-0015](ADR-0015-tests-sind-specs.md) | Tests sind Specs, keine Attrappen | accepted |
+| 0016 | Spec-First Test-Loop | [ADR-0016-spec-first-test-loop.md](ADR-0016-spec-first-test-loop.md) |
+| 0017 | Mutation-Gate mit pytest-gremlins | [ADR-0017-mutation-gate.md](ADR-0017-mutation-gate.md) |
+| 0018 | Debugger als eigene Rolle | [ADR-0018-debugger-rolle.md](ADR-0018-debugger-rolle.md) |

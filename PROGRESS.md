@@ -2922,3 +2922,58 @@ Builder die gesamte Test-Datei in einem Task plant. Konsequenz:
 Test-Tasks im Planner auf max ~50 Zeilen / ~3 Tests pro Task
 begrenzen, oder Test-Datei-Erstellung als `action: create`
 atomarer behandeln.
+
+
+### 2026-11-07 — Stufe 2: Test-Loop-Serie angelegt (OP-188 bis OP-195)
+
+Nach 6+ Stunden Loop-Arbeit (OP-182, 183, 186, 187 geschlossen)
+und vollstaendiger IST-Messung des Loops wurde die naechste
+Architektur-Stufe als Doku vorbereitet:
+
+- **3 ADRs:**
+  - **ADR-0016** (Spec-First Test-Loop) — Tests vor Code,
+    Qualification + Freeze, Test-Thaw, Builder test-blind.
+  - **ADR-0017** (Mutation-Gate mit pytest-gremlins) — stable
+    1.13.2, native pytest-Integration, Score-Schwelle 0.8,
+    `hart: false` im ersten Rollout.
+  - **ADR-0018** (Debugger als eigene Rolle) — 3-Wege-Check
+    (Spec, Code, Test), `systematic-debugging` wandert von
+    `builder`/`reflection` zu `debugger`.
+
+- **8 OPs:**
+  - **OP-188** Test-Loop-Phase mit Qualification und Freeze.
+  - **OP-189** Builder test-blind + verify-Stages
+    `test_integrity`/`test_must_fail_initial`.
+  - **OP-190** Mutation-Gate als verify-Stage.
+  - **OP-191** Debugger-Rolle mit 3-Wege-Check.
+  - **OP-192** Test-Thaw-Mechanik.
+  - **OP-193** Hypothesis als optionale Dependency.
+  - **OP-194** Architektur-Doku aktualisieren.
+  - **OP-195** `pyproject.toml` Package-Registrierung +
+    test-tools.
+
+- **Reihenfolge:** 195 -> 188 -> 189 -> 190 parallel 193;
+  188 -> 191 -> 192; 194 nach 188+191.
+
+**Bewusste Einschraenkungen dieser Session:**
+- Kein Code geschrieben ausser den heute geschlossenen
+  Bugfixes (OP-182, 183, 186, 187).
+- Keine Aenderung an `pyproject.toml`, `requirements.txt`,
+  `pytest.ini`, `mypy.ini`.
+- OP-092 nicht aktualisiert — der Sammel-OP-Text referenziert
+  noch `pipeline_phases.py` (existiert seit OP-139 nicht).
+  Das ist eine eigene Aufgabe (siehe unten).
+
+**Naechste Session (Stufe 3):**
+- OP-195 bauen (`pyproject.toml`).
+- OP-092-Body aktualisieren: `pipeline_phases.py`-Referenzen
+  raus, auf `phases/tasks.py` umstellen. Sub-Items 092c/092d
+  als ausgelagert markieren (-> OP-188, OP-191).
+- Danach OP-188 bauen.
+
+**Benchmark-Ergebnis (2026-11-07):**
+- pytest-gremlins 1.13.2 auf Mini-Modul (4 Funktionen, 4
+  naive Tests): 18 Mutanten, 15 zapped (83%), 3 survived
+  (17%), 6s Laufzeit.
+- cosmic-ray 8.7.0: ConfigError in isoliertem venv.
+- `hypothesis` 6.170.15 verfuegbar.
