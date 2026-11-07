@@ -1016,78 +1016,63 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   heute, aber nur durch zufaellig aktive ruff-Regel B010.
 - **Quelle:** OP-175 Bug D, Loop-Test 6, 2026-11-06.
 
-### OP-177: Reviewer-Praezision — False Positives messen und reduzieren
+### OP-177: Reviewer-Kontext-Vertrag — Reviewer sieht truncated Diff
 
 - **Status:** open
-- **Typ:** architektur (Reviewer + Gates)
-- **Betroffen:** `werkstatt/reviewer.py` (Prompt, Bug-Klassifikation),
-  `tests/test_reviewer_false_positive_aufrufer.py`,
-  `tests/test_reviewer_false_positive.py` (erweitern),
-  `docs/STATUS.md` (Loop-Log-Auswertung)
-- **Problem:** Loop-Test 7 (2026-11-06, OP-168b) hatte
-  5 Reviewer-Bugs (3 HIGH, 2 medium). Messung gegen AK-Text
-  und Code (Messblock 14) zeigte: nur 1 Bug berechtigt
-  (Test-Luecke), 3 HIGH waren false positives:
-
-  - Bug 1 HIGH: "Gate in `_reflection_loop` fehlt" —
-    AK-Text sagt explizit `_phase_end_reflection` als Ziel.
-    Reviewer interpretierte den Auftrag semantisch statt
-    woertlich.
-  - Bug 2 HIGH: "`phase_review_auto = False` vor Gate-
-    Aufruf macht `a`-Zweig unwirksam" — Code liest
-    `phase_review_auto` NACH dem Gate-Aufruf. Reviewer
-    las falsche Code-Stelle.
-  - Bug 5 medium: "Gate im falschen Reject-Pfad" — Code
-    hat dort gar kein Gate. Reviewer hatte veraltete Diff-
-    Version (Patch war bereits durch eine spaetere Runde
-    ueberschrieben).
-
-  Muster: Reviewer-LLM faellt bei zwei Klassen von Bugs
-  systematisch daneben — (a) AK-Interpretation, (b) Diff-
-  Snapshot-Aktualitaet. Beide sind per deterministischem
-  Pre-Check adressierbar.
-
+- **Typ:** architektur (Reviewer + Diff-Kontext)
+- **Betroffen:** `werkstatt/reviewer.py` (`_get_git_diff`,
+  `_reviewer_system`, `run_reviewer`, `run_phase_end_review`),
+  `tests/test_reviewer_kontext.py` (neu)
+- **Problem (Korrektur 2026-11-07):** Loop-Test 7 (18:29) hatte
+  einen `reviewer_phase_rejected` mit 3 HIGH + 1 medium. Meine
+  erste Interpretation ("3 von 5 Bugs false positives, Reviewer
+  schlecht") war **falsch** — die Audit-Logs zeigen etwas anderes:
+  - 1 HIGH war berechtigt (2 Smoke-Tests fehlten tatsaechlich)
+  - **2 HIGH enthielten den Reviewer-Selbst-Hinweis "nur der
+    Anfang von `_phase_end_reflection` ist sichtbar"** — der
+    Reviewer hat praezise gemeldet, was er im Kontext sah, und
+    explizit gemacht, dass der Kontext truncated war.
+  - 1 medium war zum Review-Zeitpunkt berechtigt (t1 war noch
+    nicht gepatcht).
+  Der Reviewer urteilte korrekt. Das Problem ist der
+  **Reviewer-Kontext-Vertrag**: welchen Diff sieht der Reviewer,
+  wie viel davon ist truncated, und wie wirkt sich das auf die
+  Bug-Meldungen aus?
 - **Akzeptanzkriterien:**
-  - **Messung (a):** Auswertung der letzten 10 Loop-Laeufe
-    (audit-logs/agent-pipeline-*.jsonl): Reviewer-Praezision =
-    berechtigte Bugs / alle gemeldeten Bugs, pro Loop-Lauf.
-    Baseline erheben, in PROGRESS.md festhalten.
-  - **Pre-Check (b):** Deterministische Vorpruefung fuer
-    Bugs, die per AST/String-Vergleich pruefbar sind:
-    - Wenn Bug sagt "Funktion X fehlt", pruefe AST, ob X im
-      Code existiert. Wenn ja: Bug als "unwahrscheinlich"
-      markieren (nicht verwerfen, aber Flag).
-    - Wenn Bug sagt "Datei Y hat Zeile Z nicht", pruefe den
-      aktuellen Diff-Hash gegen den im Bug referenzierten
-      Snapshot.
-  - **Bug-Klassifikation (c):** Reviewer-Bugs bekommen ein
-    zusaetzliches Feld `konfidenz: hoch | mittel | niedrig`.
-    `hoch` = deterministischer Pre-Check stimmt zu.
-    `mittel` = weder bestaetigt noch widerlegt.
-    `niedrig` = Pre-Check widerspricht.
-  - **Task-Fail-Trigger (d):** Nur `konfidenz: hoch` fuehrt
-    zu automatischem Task-Fail. `mittel`/`niedrig` erfordern
-    User-Bestaetigung am Gate (Prompt-Text erweitern:
-    "Reviewer meldet [niedrig] — pruefen?").
-  - **Smoke-Tests:** 2 neue Tests:
-    (a) Reviewer-Bug mit `konfidenz: niedrig` fuehrt NICHT
-    zu Task-Fail; (b) `konfidenz: hoch` fuehrt zu Task-Fail.
-
-- **Tests:** `tests/test_reviewer_false_positive_aufrufer.py`,
-  `tests/test_reviewer_false_positive.py` (erweitern)
+  - **Messung (a):** Reviewer-Kontext-Groesse dokumentieren —
+    wie viel Diff sieht `run_reviewer` / `run_phase_end_review`
+    tatsaechlich? Aus `reviewer_result`-Audit-Payloads ueber
+    die letzten 10 Loop-Laeufe: durchschnittliche `diff_len`,
+    wie oft truncated, welche Dateien fehlen.
+  - **Diagnose (b):** Wenn truncated — wo genau? `_get_git_diff`
+    mit `pathspec = task_files` liefert pro Task nur dessen
+    Dateien. Das ist Absicht (K4), aber bei mehreren Tasks in
+    Folge sieht der Reviewer die kumulative Aenderung nicht.
+    Messen: bei Loop-Test 7 sah der Reviewer den
+    `_reflection_loop`-Patch (Task t3) tatsaechlich nicht, weil
+    `run_phase_end_review` nur `_phase_files` diffte.
+  - **Fix-Optionen (c), nach (a) und (b):**
+    (1) `_phase_files` erweitern auf alle Task-Dateien der Phase
+    (2) `_get_git_diff` mit `pathspec = ["."]` (voller Diff)
+        fuer Phase-Review
+    (3) Deterministischer Vor-Check: "Reviewer-Kontext ist
+        truncated" explizit als medium-Bug melden, statt als HIGH
+    Wahl erst nach Messung.
+  - **Test (d):** `tests/test_reviewer_kontext.py`:
+    (a) `run_phase_end_review` mit 3 Tasks, die je eine Datei
+        patchen — der Reviewer-Diff MUSS alle 3 Dateien enthalten.
+    (b) Wenn truncated: das muss als `reviewer_diff_truncated`-
+        Audit-Event sichtbar sein.
+  - `pytest` gruen, keine neuen ruff/mypy-Fehler.
+- **Tests:** `tests/test_reviewer_kontext.py` (neu)
 - **Blockiert von:** —
-- **Blockiert:** nichts (Loop-Test 8 laeuft ohne; OP-172 ist
-  unabhaengiger Blocker)
-- **Prioritaet:** mittel — Loop-Test 7 hat gezeigt, dass
-  Reviewer-FPs den User-Zeit-Aufwand erhoehen (3 Iterationen
-  im `e`-Pfad), aber die Sicherheits-Kette funktioniert
-  (kein Auto-Approve).
-- **Quelle:** Loop-Test 7 (18:27-19:55, OP-168b),
-  Commit `749172c`, Merkposten "Reviewer-LLM produziert
-  false positives bei AK-Text".
-- **Hinweis:** Loest NICHT das Problem, dass der Reviewer
-  Bugs uebersieht (Recall). Nur Praezision. Recall-Messung
-  ist eigene OP, wenn Praezision steht.
+- **Blockiert:** OP-180 (Reviewer-Praezision ist sinnlos, solange
+  der Reviewer truncated Kontext sieht).
+- **Prioritaet:** hoch — Root-Cause der "false-positive"-Diskussion
+  vom 2026-11-07.
+- **Quelle:** Loop-Test 7 (18:29), Audit-Log-Auswertung
+  Messblock 29 (2026-11-07), Korrektur meiner urspruenglichen
+  Fehleinschaetzung.
 
 ### OP-179: mypy-Setup — Duplicate-Module bei workspace-relativen Pfaden
 
