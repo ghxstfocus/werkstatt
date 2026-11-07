@@ -2780,3 +2780,51 @@ Voller pytest-Lauf: 1338 passed, 8 skipped. ruff/mypy sauber.
 - **Status:** phase_ende
 - **Info:** tasks_ok=1/4
 
+
+
+### 2026-11-07 — OP-181 abgeschlossen: Reviewer-Dead-Code-Erkennung
+
+Loop-Lauf 13:23 (OP-181 als Auftrag) baute t1 (REVIEWER_SYSTEM um
+`DEAD-CODE-CHECK`-Abschnitt erweitert, Commit `9b700e3`), brach dann
+ab: t2 war als Verifikations-Task formuliert (`_pruefe_neue_module_genutzt
+auf Soll-Stand pruefen`), Planner waehlte `action: update`, Builder
+setzte `auftrag_bereits_erfuellt`, Reviewer meldete HIGH-Bug
+"Task-Beschreibung verlangt explizit die Funktion". Reflexion
+lief 2 Runden (OP-182-Fix hat den 5-Runden-Reflex verhindert),
+dann Human-Gate reject -> Loop-Ende nach 1/4 Tasks.
+
+Manueller Nachzug in Commit `fdb01df`:
+
+- **t3 (Wiring):** `run_reviewer` ruft
+  `_pruefe_neue_module_genutzt(pd, diff)` nach
+  `_filter_auftrag_treue_false_positives` und vor
+  `audit("reviewer_result", ...)`. HIGH-Bug aus dem Pre-Check setzt
+  `approved=False`. Merge nach den LLM-Filtern, damit
+  Prompt-Heuristiken deterministische Befunde nicht wegfiltern.
+- **t4 (Tests):** `tests/test_reviewer_dead_code.py` mit 3
+  AK-(c)-Tests (neues Modul + nur Test-Import -> HIGH;
+  neues Modul + werkstatt-Import -> kein Bug; bestehendes Modul
+  geaendert -> skip) + AST-Wiring-Test
+  `test_run_reviewer_ruft_pre_check_auf` (analog
+  `test_rollen_registry_migration.py`).
+
+Der AST-Wiring-Test ist eine begruendete AK-Erweiterung, keine
+Scope-Ausweitung: Loop-Test 9 hat gezeigt, dass eine Funktion ohne
+Aufrufer toter Code ist — genau das Anti-Pattern, das OP-181
+aufdecken soll. Ohne den Test kehrt der Bug bei Refactors zurueck
+(M-446-Lehre).
+
+Pre-Commit-Gates: pytest 1342 passed, 8 skipped; ruff 0; mypy 0;
+audit_drift / control_drift / state_inventory OK.
+
+**Stufe-2-Kandidaten (aus diesem Lauf):**
+
+- Planner-Task-Typ "pruefe/verifiziere X" braucht eigenes
+  `action: verify` (kein Diff erwartet). Ohne diese Erweiterung
+  verbrennt jeder Loop-Lauf mit Verifikations-Tasks 2 Reflection-
+  Runden + 1 Reviewer-False-Positive.
+- Loop schreibt in PROGRESS.md mit Format
+  `## 2026-11-07T13:23:18+00:00 -- Phase abgeschlossen: ...`,
+  nicht `### YYYY-MM-DD — OP-NNN abgeschlossen`. Format-Bruch.
+- Loop committet lokal, pusht nicht (Konvention, aber Reibung im
+  Workflow — manueller Push noetig).

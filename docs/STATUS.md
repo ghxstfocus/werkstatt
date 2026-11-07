@@ -981,48 +981,11 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Prioritaet:** hoch — Voraussetzung fuer vertrauenswuerdige
   Loop-Tests.
 
-### OP-181: Reviewer-Erweiterung — Dead-Code bei neuen Modulen erkennen
-
-- **Status:** partial (t1 done, t2-t4 offen)
-- **Typ:** architektur (Reviewer + Dead-Code-Erkennung)
-- **Betroffen:** `werkstatt/reviewer.py`
-  (`_pruefe_neue_module_genutzt`, Reviewer-Prompt),
-  `tests/test_reviewer_dead_code.py` (neu)
-- **Problem:** Loop-Test 8 (2026-11-07) baute
-  `tools/contract_check.py` + Tests, aber der Architect plante
-  keinen Aufrufer. Die Pruefung lief nie in der Verify-Kette.
-  Manuell nachgeholt im `e`-Pfad (Wiring ueber
-  `state_inventory.py --changed`). **Architect-Seite ist
-  heute behoben** (AUFRUFER-PFLICHT im ARCHITECT_SYSTEM +
-  Guard-Regel 6 `test_keine_toten_tools_skripte`) — Reviewer-
-  Seite bleibt offen.
-- **Akzeptanzkriterien:**
-  - **Deterministischer Pre-Check (a):** Bei jedem neuen
-    `.py`-File im Diff (Datei existiert vor Patch nicht):
-    grep nach dem Modul-Stem in `werkstatt/` und
-    `tools/<andere>`. Wenn nur `tests/` es referenziert →
-    HIGH-Bug `"Neues Modul <name> wird nur von Tests
-    importiert — Dead-Code-Verdacht"`.
-  - **Reviewer-Prompt-Ergaenzung (b):** Im `REVIEWER_SYSTEM`
-    wird die Dead-Code-Regel ergaenzt (parallel zur
-    Architect-PFLICHT).
-  - **Test (c):** `tests/test_reviewer_dead_code.py`:
-    (a) neues Modul + nur Test-Import → HIGH-Bug;
-    (b) neues Modul + `werkstatt/`-Import → kein Bug;
-    (c) bestehendes Modul geaendert → skip.
-- **Tests:** `tests/test_reviewer_dead_code.py` (neu)
-- **Blockiert von:** —
-- **Blockiert:** Loop-Test 9 mit einer OP, die ein neues
-  Modul anlegt (Regression-Schutz).
-- **Prioritaet:** mittel — Architect-Seite greift heute;
-  Reviewer-Seite ist Defense-in-Depth.
-- **Quelle:** Loop-Test 8 (11:50-11:58), Commit `7eab26d`,
-  manuelles Wiring am `e`-Gate.
-
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-07 | OP-181 | done | Reviewer-Dead-Code-Erkennung (Commits `9b700e3` t1, `fdb01df` t3+t4). Loop-Lauf 13:23 baute t1 (REVIEWER_SYSTEM-`DEAD-CODE-CHECK`-Abschnitt mit 3 Regeln), brach dann bei t2 ab (Planner-Fehler: Verifikations-Task als update formuliert, Builder setzte `auftrag_bereits_erfuellt`, Reviewer meldete HIGH-Bug). OP-182-Fix begrenzte den Loop auf 2 Reflection-Runden, aber t3+t4 blieben offen. Manueller Nachzug: t3 = `run_reviewer` ruft `_pruefe_neue_module_genutzt(pd, diff)` nach den LLM-Filtern und vor `reviewer_result`-Audit; HIGH-Bug setzt `approved=False`. t4 = `tests/test_reviewer_dead_code.py` mit 3 AK-(c)-Tests + AST-Wiring-Test (`test_run_reviewer_ruft_pre_check_auf`, analog `test_rollen_registry_migration.py`) — kodiert die Lehre aus Loop-Test 9, dass die Funktion sonst toter Code werden kann. pytest 1342 passed, ruff/mypy 0, alle Drift-Checks gruen. **Lehre (Loop-Test 10, eingeplant als OP):** Planner-Task-Typ „pruefe/verifiziere X" braucht eigenes `action: verify`, sonst falscher Builder-Pfad. Siehe Stufe-2-Planung.
 - 2026-11-07 | OP-182 | done | verify_alternierend als Stagnations-Grund (Commit `4de3a65`). Loop-Test 9 (5 Runden statt 2): alternierende Verify-Fehler (PIE810 / mypy Duplicate / beide) haben `_verify_fehler_zwischen_runden_gleich` (Stage-Set exakt, OP-175 Bug B) nie gematcht, Counter sprang 1->0->1. Fix: neuer Grund `verify_alternierend` in `_reflection_loop` via `_verify_fehler_alternierend` (Signatur-Set-Intersection ueber `_fehler_signatur_normalisiert`, nicht-leer und nicht-identisch). Option Y: `_is_spec` wird bei diesem Grund uebersprungen -> normaler Task-Fail statt `spec_widerspruch_erschoepft`. 5 Unit-Tests + 1 Integration-Test (`test_reflection_alternierende_fehler_stagniert`). Konsequenz: 3 Builder-Aufrufe statt 5 in Loop-Test-9-Szenario.
 - 2026-11-07 | OP-176 | done | contract_check-Haertung gegen `setattr(state, "<unbekannt>", ...)` (Commit `7eab26d`, Loop-Test 8, 11:50-11:58). AST-Walk findet setattr-Aufrufe auf RunState-Felder, die nicht in `RunState.__dataclass_fields__` sind. Wiring ueber `state_inventory.py --changed` (verify.json contract_check-Stage). 3 Unit-Tests (test_contract_check_setattr.py) + 2 Integration-Tests (test_verify_contract_stage.py erweitert). Fail-closed mit rc=1 bei unbekanntem Feld, rc=0 bei deklariertem. Bug-D aus OP-175 (Loop-Test 6, Agent-Patch mit `setattr(state, "phase_review_gate_auto", True)`) ist jetzt deterministisch gefangen — vorher fing nur ruff B010 den Umgehungs-Versuch. Die zwei Integration-Tests verifizieren das Ende-zu-Ende-Wiring (Subprocess `python3 tools/state_inventory.py --changed <file>`).
 - 2026-11-07 | OP-180 | wontfix | Reviewer-Praezision (Konfidenz-Feld + Pre-Check): falsche Problem-Annahme. Loop-Test 7 hatte keinen Reviewer-Bug, sondern OP-179 (mypy Duplicate-Module) — die 3 HIGH reviewer_phase_rejected-Bugs waren ALLE berechtigt (t3/t4/t5 wurden wegen OP-179 nicht gebaut). Konfidenz-Feld und Pre-Check basieren auf "Reviewer meldet falsche Bugs" — das war nie wahr. Kein Code angelegt, kein Test, wird nicht gebraucht.
