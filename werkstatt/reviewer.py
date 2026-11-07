@@ -1101,6 +1101,19 @@ def run_reviewer(state: RunState) -> bool:
     if _filtered_total > 0 and _bugs_high_after == 0:
         approved = True
 
+    # OP-181 (a): Deterministischer Dead-Code-Pre-Check.
+    # Nach den LLM-Filtern gemerged, damit Prompt-Heuristiken
+    # deterministische Befunde nicht wegfiltern koennen.
+    # Findet neue .py-Module, die nur von Tests referenziert werden.
+    _dc_bugs = _pruefe_neue_module_genutzt(pd, diff)
+    if _dc_bugs:
+        bugs = list(bugs) + _dc_bugs
+        if any(
+            isinstance(_b, dict) and _b.get("severity") == "high"
+            for _b in _dc_bugs
+        ):
+            approved = False
+
     audit("reviewer_result", {
         "approved": approved,
         "bugs": len(bugs),
