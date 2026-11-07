@@ -99,6 +99,64 @@ def _registriere_event_routen(app: FastAPI) -> None:
         return EventStore().query(geprueft, since_seq=since_seq, kind=kind)
 
 
+    @app.get("/api/runs/{run_id}/gates")
+    def run_gates(run_id: str) -> list[dict[str, Any]]:
+        """Listet offene Gates: gate_open ohne passende gate_answered."""
+        geprueft = _pruefe_run_id(run_id)
+        store = EventStore()
+        opens = store.query(geprueft, kind="gate_open")
+        beantwortet = {
+            (ev.get("payload") or {}).get("gate_id")
+            for ev in store.query(geprueft, kind="gate_answered")
+        }
+        ergebnis: list[dict[str, Any]] = []
+        for ev in opens:
+            payload = ev.get("payload") or {}
+            gid = payload.get("gate_id")
+            if gid in beantwortet:
+                continue
+            ergebnis.append({
+                "gate_id": gid,
+                "prompt": payload.get("prompt"),
+                "optionen": payload.get("optionen"),
+                "seq": ev.get("seq"),
+                "ts": ev.get("ts"),
+            })
+        return ergebnis
+
+    @app.post("/api/runs/{run_id}/gate")
+    def run_gate_answer(
+        run_id: str, body: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Beantwortet ein offenes Gate: {gate_id, answer}."""
+        geprueft = _pruefe_run_id(run_id)
+        gate_id = body.get("gate_id")
+        answer = body.get("answer")
+        if not isinstance(gate_id, str) or not gate_id:
+            raise HTTPException(status_code=400, detail="gate_id fehlt")
+        if not isinstance(answer, str) or not answer:
+            raise HTTPException(status_code=400, detail="answer fehlt")
+        store = EventStore()
+        offen = {
+            (ev.get("payload") or {}).get("gate_id")
+            for ev in store.query(geprueft, kind="gate_open")
+        }
+        beantwortet = {
+            (ev.get("payload") or {}).get("gate_id")
+            for ev in store.query(geprueft, kind="gate_answered")
+        }
+        if gate_id not in offen:
+            raise HTTPException(status_code=404, detail="gate nicht offen")
+        if gate_id in beantwortet:
+            raise HTTPException(status_code=409, detail="gate schon beantwortet")
+        store.append(
+            run_id=geprueft,
+            kind="gate_answered",
+            payload={"gate_id": gate_id, "answer": answer},
+        )
+        return {"ok": True, "gate_id": gate_id}
+
+
 class AuthMiddleware:
     """Prueft Session-Cookie. Public: /login, /api/auth/*, /static/*."""
 
@@ -176,11 +234,24 @@ def create_app() -> FastAPI:
         if laufend is not None and laufend.poll() is None:
             return {"gestartet": False, "pid": laufend.pid,
                     "grund": "laeuft_bereits"}
+        import secrets as _secrets
+        import time as _time
+        run_id = (
+            f"{projektname}-{_time.strftime('%Y%m%d-%H%M%S')}"
+            f"-{_secrets.token_hex(4)}"
+        )
         prozess = subprocess.Popen(
-            [sys.executable, "-m", "werkstatt.loop", "--project", projektname],
+            [sys.executable, "-m", "werkstatt.loop",
+             "--project", projektname,
+             "--headless",
+             "--run-id", run_id],
         )
         _LAUFENDE_LOOPS[projektname] = prozess
-        return {"gestartet": True, "pid": prozess.pid}
+        return {
+            "gestartet": True,
+            "pid": prozess.pid,
+            "run_id": run_id,
+        }
 
     @app.post("/api/projects/{name}/stop")
     def project_stop(name: str) -> dict[str, Any]:

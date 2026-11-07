@@ -55,13 +55,18 @@ def test_loop_subprozess_start_stop(monkeypatch: pytest.MonkeyPatch) -> None:
     daten = antwort.json()
     assert daten["gestartet"] is True
     assert daten["pid"] == 4242
-    assert aufrufe[0] == [
+    assert aufrufe[0][:5] == [
         sys.executable,
         "-m",
         "werkstatt.loop",
         "--project",
         "demo",
     ]
+    assert "--headless" in aufrufe[0]
+    assert "--run-id" in aufrufe[0]
+    run_id_idx = aufrufe[0].index("--run-id")
+    assert aufrufe[0][run_id_idx + 1].startswith("demo-")
+    assert daten["run_id"] == aufrufe[0][run_id_idx + 1]
     assert "demo" in app_modul._LAUFENDE_LOOPS
 
     zweite = client.post("/api/projects/demo/start")

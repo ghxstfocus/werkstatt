@@ -41,6 +41,33 @@ def _verify_patches_soft(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
+_HEADLESS: bool = False
+
+
+def set_headless(flag: bool) -> None:
+    """Aktiviert den headless-Modus (OP-202, ADR-0007)."""
+    global _HEADLESS
+    _HEADLESS = flag
+
+
+def _frage_gate(kind: str, prompt: str, optionen: str = "jna") -> str:
+    """Fragt interaktiv (input) oder per Event-Store (gate_bridge)."""
+    if not _HEADLESS:
+        return input(prompt)
+    from werkstatt import gate_bridge
+    from werkstatt.audit import get_run_id
+
+    run_id = get_run_id()
+    if not run_id:
+        raise RuntimeError(
+            "headless-Modus ohne set_run_id() -- Gate kann nicht "
+            "adressiert werden"
+        )
+    gate_id = gate_bridge.make_gate_id(kind)
+    gate_bridge.signal_open(run_id, gate_id, prompt, optionen)
+    return gate_bridge.wait(run_id, gate_id)
+
+
 def _plan_gate(state: RunState) -> bool:
     """B1: Plan-Gate (deterministisch).
 
@@ -184,7 +211,7 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
         )
     while True:
         try:
-            _antwort = input(_prompt).strip().lower()
+            _antwort = _frage_gate("plan", _prompt).strip().lower()
         except (EOFError, KeyboardInterrupt):
             audit("loop_plan_gate_eof", {}, pd, pn)
             return 1
@@ -206,7 +233,7 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
         if _antwort == "n":
             # Welle H (2026-11-02): Reject-Grund erfassen fuer Reflection
             try:
-                _reason = input(
+                _reason = _frage_gate("plan_reason", 
                     "Reject-Grund (optional, Enter=leer): "
                 ).strip()
             except (EOFError, KeyboardInterrupt):
@@ -604,7 +631,7 @@ def _human_gate(state: RunState) -> int:
     print("  n = reject (Loop bricht ab)")
     print("  e = Datei manuell bearbeiten (dann erneut fragen)")
     try:
-        antwort = input("Deine Wahl: ").strip().lower()
+        antwort = _frage_gate("commit", "Deine Wahl: ", "jne").strip().lower()
     except (EOFError, KeyboardInterrupt):
         audit("loop_human_gate_eof", {"reason": "EOFError/KeyboardInterrupt"}, pd, pn)
         return 1
@@ -625,7 +652,8 @@ def _human_gate(state: RunState) -> int:
     if antwort == "e":
         # Manueller Edit-Modus: Nutzer oeffnet Editor, dann erneut fragen
         print("  Bitte Datei(en) manuell bearbeiten. Enter druecken zum Fortfahren.")
-        input()
+        if not _HEADLESS:
+            input()
         # Rekursiv erneut fragen (Diff neu anzeigen)
         return _human_gate(state)
     audit("loop_human_gate_rejected", {"antwort": antwort}, pd, pn)
@@ -639,4 +667,4 @@ def _task_fortschritt_block(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
-__all__ = ['_diff_hunk_summary', '_human_gate', '_human_gate_body', '_human_gate_plan', '_plan_gate']
+__all__ = ['_diff_hunk_summary', '_frage_gate', '_human_gate', '_human_gate_body', '_human_gate_plan', '_plan_gate', 'set_headless']

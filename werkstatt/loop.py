@@ -22,7 +22,7 @@ from werkstatt.apply_patches import (  # Fix AZ Stufe 4: Re-Export
     _diagnose_patch,
     _patches_wirklich_angewendet,
 )
-from werkstatt.audit import audit, set_run_id
+from werkstatt.audit import audit, get_run_id, set_run_id
 from werkstatt.committer import (  # Fix AZ Stufe 5a: Re-Export
     _committe_zielprojekt,
     _task_fortschritt_block,
@@ -297,7 +297,8 @@ def run_pipeline_loop(
     # OP-122: Run-ID fuer Event-Store und audit-Logs setzen.
     # Muss VOR dem ersten _publish (header) passieren, sonst bleibt
     # der Event-Store leer.
-    set_run_id(f"{project_name}-{time.strftime('%Y%m%d-%H%M%S')}")
+    if not get_run_id():
+        set_run_id(f"{project_name}-{time.strftime('%Y%m%d-%H%M%S')}")
 
     header(f"{project_name} — {aufgabe[:50]}")
 
@@ -430,12 +431,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--aufgabe", default="",
                         help="Aufgabentext (leer = dry-run-aehnlich)")
+    parser.add_argument("--headless", action="store_true",
+                        help="Gates per Event-Store statt stdin (ADR-0007).")
+    parser.add_argument("--run-id", default="",
+                        help="Externe run_id vom Web (Pflicht bei --headless).")
     parser.add_argument("--dry-run", action="store_true",
                         help="Nur Plan-Gate + Renderer, kein LLM, kein Patch")
     parser.add_argument("--auto-approve", action="store_true",
                         help="Plan-Gate + Human-Gate automatisch approven (Skript-Runs)")
 
     args = parser.parse_args(argv)
+    if args.headless and not args.run_id:
+        parser.error("--headless erfordert --run-id")
+    if args.run_id and not args.headless:
+        parser.error("--run-id nur mit --headless")
+    from werkstatt.gates import set_headless as _set_headless
+    _set_headless(bool(args.headless))
+    if args.run_id:
+        set_run_id(args.run_id)
 
     _r.header(f"Loop: {args.project}")
 
