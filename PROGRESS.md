@@ -2776,3 +2776,7 @@ Tests:
 
 Konsequenz: 3 Builder-Aufrufe statt 5 im Loop-Test-9-Szenario.
 Voller pytest-Lauf: 1338 passed, 8 skipped. ruff/mypy sauber.
+## 2026-11-07T13:23:18+00:00 -- Phase abgeschlossen: werkstatt
+- **Status:** phase_ende
+- **Info:** tasks_ok=1/4
+

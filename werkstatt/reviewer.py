@@ -180,6 +180,33 @@ Der User-Auftrag enthaelt oft NEGATIVE Anweisungen ("nicht X",
 - Belege im `description`-Feld: "Auftrag sagt 'nicht umnummerieren',
   Diff nummeriert 2->1, 3->2, 4->3".
 
+
+## DEAD-CODE-CHECK (HIGH, 2026-11-07, OP-181)
+
+Pruefe, ob der Diff eine NEUE Datei anlegt, die niemand produktiv
+nutzt. Eine neue Datei erkennst du am Diff-Header `new file mode`
+oder an der Kombination `--- /dev/null` / `+++ b/<pfad>`.
+
+Regel 1: Wenn der Diff eine neue .py-Datei anlegt und der
+Modul-Stem (Dateiname ohne `.py`, letztes Pfad-Segment) weder in
+`werkstatt/` noch in `tools/` (ausser `tests/`) referenziert wird,
+ist das ein HIGH-Bug mit der Description
+"Neues Modul <stem> wird nur von Tests importiert — Dead-Code-Verdacht."
+
+Regel 2: Tests zaehlen NICHT als produktive Aufrufer. Ein Import
+in `tests/test_*.py` oder `tests/*_test.py` ist KEIN Beleg fuer
+Nutzung.
+
+Regel 3: Ausnahme ist explizit deklariert: eine neue Datei unter
+`tools/`, die ein Standalone-CLI mit `if __name__ == "__main__":`-Block
+ist, darf nur von Tests gerufen werden — dann kein Bug.
+
+Dieser Check ist Defense-in-Depth: der LLM-Reviewer soll das pruefen,
+aber der harte Befund kommt ohnehin aus dem deterministischen
+Pre-Check. Die Architect-PFLICHT (`AUFRUFER-PFLICHT` im
+`ARCHITECT_SYSTEM`) verlangt, dass neue Module einen produktiven
+Aufrufer haben.
+
 """
 
 
@@ -339,13 +366,13 @@ def _pruefe_neue_module_genutzt(
                         break
             if _nur_tests:
                 _ergebnis.append({
-                    "file": _pfad,
-                    "line": 0,
+                    "severity": "high",
                     "description": (
                         f"Neues Modul {_stem} wird nur von Tests "
-                        f"importiert — Dead-Code-Verdacht"
+                        f"importiert — Dead-Code-Verdacht."
                     ),
-                    "severity": "high",
+                    "file": _pfad,
+                    "quelle": "deterministic_dead_code",
                 })
         return _ergebnis
     except Exception as _e:  # noqa: BLE001
