@@ -2740,3 +2740,39 @@ Das Wiring und die Integration-Tests habe ich waehrend der `e`-Phase am Human-Ga
 - 3 Tests
 
 OP-181 bleibt `partial`: t1 done, t2-t4 offen (Wiring in run_reviewer, REVIEWER_SYSTEM-Erweiterung, Tests). Naechster Loop-Lauf mit OP-181 in kompletter Form oder Loop-Test 10 mit anderer OP.
+
+
+### 2026-11-07 — OP-182 abgeschlossen: verify_alternierend als Stagnations-Grund
+
+Loop-Test 9 (2026-11-07 12:14-12:16) hatte 5 Reflection-Runden statt 2
+gebraucht. Ursache gemessen: Verify-Fehler wechselten zwischen Runden
+(ruff PIE810 / mypy Duplicate / beide). `_verify_fehler_zwischen_runden_gleich`
+(OP-175 Bug B) vergleicht Stage-Sets mit exakter Gleichheit — bei
+Alternation kein Match, Counter sprang 1->0->1 und die Erschoepfung-Heuristik
+feuerte statt des Stagnation-Abbruchs.
+
+Reproduktion vor Fix: `test_reflection_alternierende_fehler_stagniert`
+in `tests/test_reflection_stagnation_verify.py` FAILte mit `assert True is
+False` (Loop gab True zurueck via `spec_widerspruch_erschoepft`).
+
+Fix in `werkstatt/reflection.py` (Commit `4de3a65`):
+
+- Neue Funktion `_verify_fehler_alternierend(state)`: vergleicht
+  Signatur-Sets via `_fehler_signatur_normalisiert`, True bei
+  nicht-leerem Schnitt UND verschiedenen Sets (Alternative 2 aus dem
+  OP-Text, weil zeilenunabhaengig und praeziser als Stage-Set-Overlap).
+- Neuer Zweig in `_reflection_loop`: `elif _verify_fehler_alternierend(state):`
+  setzt `_stagnation_grund = "verify_alternierend"`.
+- Option Y: `_is_spec` wird bei `grund == "verify_alternierend"`
+  uebersprungen — Alternation ist kein Spec-Widerspruch-Signal, sondern
+  echter Task-Fail. Damit landet der Loop bei normalem `return False`
+  statt `spec_widerspruch_erkannt=True`.
+
+Tests:
+- 5 Unit-Tests fuer `_verify_fehler_alternierend` (keine History,
+  identisch, disjoint, overlap, applied=0).
+- Integrationstest `test_reflection_alternierende_fehler_stagniert`
+  (5 Runden, call_count<=4, spec_widerspruch_erkannt False).
+
+Konsequenz: 3 Builder-Aufrufe statt 5 im Loop-Test-9-Szenario.
+Voller pytest-Lauf: 1338 passed, 8 skipped. ruff/mypy sauber.

@@ -1019,65 +1019,11 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Quelle:** Loop-Test 8 (11:50-11:58), Commit `7eab26d`,
   manuelles Wiring am `e`-Gate.
 
-### OP-182: Bug-B-Luecke — verify_gleich greift nicht bei alternierenden Fehlern
-
-- **Status:** open
-- **Typ:** fix (Reflection-Stagnation)
-- **Betroffen:** `werkstatt/reflection.py`
-  (`_verify_fehler_zwischen_runden_gleich`, `_reflection_loop`
-  Stagnation-Block), `tests/test_reflection_stagnation_verify.py`
-  (erweitern)
-- **Problem:** Loop-Test 9 (2026-11-07 12:14-12:16) zeigte einen
-  Loop-Lauf mit 5 Reflection-Runden, in dem der Stagnation-Counter
-  `1 -> 0 -> 1` sprang statt `1 -> 2 -> abort`. Ursache: die
-  Verify-Fehler wechselten zwischen Runden:
-  - Runde 1: `ruff_changed: PIE810`
-  - Runde 2: `mypy_changed: audit(...) arg-type`
-  - Runde 3: `ruff_changed: PIE810` + `mypy_changed: Duplicate`
-  - Runde 4: `mypy_changed: Duplicate`
-  - Runde 5: `ruff_changed: PIE810`
-
-  `_verify_fehler_zwischen_runden_gleich` (OP-175 Bug B) vergleicht
-  Stage-Sets mit exakter Gleichheit. Bei wechselnden Fehlern kein
-  Match, Counter resettet sich. Bug-B-Fix greift nur bei
-  byte-identischen Fehlern.
-
-- **Akzeptanzkriterien:**
-  - **Diagnose (a):** Nachstellen in einem Test: State mit
-    alternierenden Fehlerlisten (PIE810 / Duplicate / PIE810+Duplicate)
-    ueber 5 Runden. Counter MUSS mindestens einmal `>= 2` erreichen
-    und `loop_reflection_stagnation_abort` emittieren.
-  - **Fix (b):** `_verify_fehler_zwischen_runden_gleich` erweitern:
-    - Alternative 1: **Stage-Mengen-Overlap** statt exakter Gleichheit.
-      Wenn `_s_v & _s_j` nicht-leer UND `_s_v - _s_j` und
-      `_s_j - _s_v` beide leer → exakt gleich. Wenn nur Overlap mit
-      wechselnden Zusatz-Fehlern: neuer Grund
-      `verify_alternierend` (schwaechere Stagnation).
-    - Alternative 2: **Fehler-Signatur-Set mit Zeilen-Normalisierung**.
-      `_fehler_signatur_normalisiert` (aus OP-175 Bug B) auf jede
-      Fehlerliste anwenden, Sets vergleichen.
-    Wahl erst nach (a).
-  - **Test (c):** In `tests/test_reflection_stagnation_verify.py`
-    einen Test `test_reflection_alternierende_fehler_stagniert`
-    ergaenzen: 5 Runden mit wechselnden Fehler-Sets, `_reflection_loop`
-    bricht nach spaetestens 4 Runden ab (nicht nach 5 mit
-    spec_widerspruch_erschoepft).
-  - `pytest` gruen, keine neuen ruff/mypy-Fehler.
-- **Tests:** `tests/test_reflection_stagnation_verify.py` (erweitern)
-- **Blockiert von:** —
-- **Blockiert:** Loop-Test 10 mit einer OP, die mehrere
-  Reflection-Runden triggert (Regression-Schutz).
-- **Prioritaet:** hoch — Loop-Test 9 brauchte 5 Runden statt 2
-  wegen dieses Bugs. Jeder reale Builder-Fail mit wechselnden
-  Fehlern kostet 3 Extra-Runden.
-- **Quelle:** Loop-Test 9 (2026-11-07 12:14-12:16),
-  `loop_reflection_spec_widerspruch_erschoepft`-Event mit
-  `runden: 5, letzte_applied: [1, 2]`.
-
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-07 | OP-182 | done | verify_alternierend als Stagnations-Grund (Commit `4de3a65`). Loop-Test 9 (5 Runden statt 2): alternierende Verify-Fehler (PIE810 / mypy Duplicate / beide) haben `_verify_fehler_zwischen_runden_gleich` (Stage-Set exakt, OP-175 Bug B) nie gematcht, Counter sprang 1->0->1. Fix: neuer Grund `verify_alternierend` in `_reflection_loop` via `_verify_fehler_alternierend` (Signatur-Set-Intersection ueber `_fehler_signatur_normalisiert`, nicht-leer und nicht-identisch). Option Y: `_is_spec` wird bei diesem Grund uebersprungen -> normaler Task-Fail statt `spec_widerspruch_erschoepft`. 5 Unit-Tests + 1 Integration-Test (`test_reflection_alternierende_fehler_stagniert`). Konsequenz: 3 Builder-Aufrufe statt 5 in Loop-Test-9-Szenario.
 - 2026-11-07 | OP-176 | done | contract_check-Haertung gegen `setattr(state, "<unbekannt>", ...)` (Commit `7eab26d`, Loop-Test 8, 11:50-11:58). AST-Walk findet setattr-Aufrufe auf RunState-Felder, die nicht in `RunState.__dataclass_fields__` sind. Wiring ueber `state_inventory.py --changed` (verify.json contract_check-Stage). 3 Unit-Tests (test_contract_check_setattr.py) + 2 Integration-Tests (test_verify_contract_stage.py erweitert). Fail-closed mit rc=1 bei unbekanntem Feld, rc=0 bei deklariertem. Bug-D aus OP-175 (Loop-Test 6, Agent-Patch mit `setattr(state, "phase_review_gate_auto", True)`) ist jetzt deterministisch gefangen — vorher fing nur ruff B010 den Umgehungs-Versuch. Die zwei Integration-Tests verifizieren das Ende-zu-Ende-Wiring (Subprocess `python3 tools/state_inventory.py --changed <file>`).
 - 2026-11-07 | OP-180 | wontfix | Reviewer-Praezision (Konfidenz-Feld + Pre-Check): falsche Problem-Annahme. Loop-Test 7 hatte keinen Reviewer-Bug, sondern OP-179 (mypy Duplicate-Module) — die 3 HIGH reviewer_phase_rejected-Bugs waren ALLE berechtigt (t3/t4/t5 wurden wegen OP-179 nicht gebaut). Konfidenz-Feld und Pre-Check basieren auf "Reviewer meldet falsche Bugs" — das war nie wahr. Kein Code angelegt, kein Test, wird nicht gebraucht.
 - 2026-11-07 | OP-179 | wontfix | mypy-Setup "Duplicate-Module": **falsche Problem-Annahme**. Ich habe den truncated mypy-Output aus Loop-Test 7 (`(also at "werkstatt/phases/review.py")`) als "Source file found twice" interpretiert — das war eine Fehldeutung des OP-172-Truncation-Artefakts. Reproduktion (Block 33, 2026-11-07): alle vier mypy-Varianten rc=0 auf aktuellem Code-State, kein Duplicate-Module-Fehler, kein Top-Level-`phases/`-Konflikt, `__init__.py` ueberall da. Wahre Loop-Test-7-Ursache fuer t3/t4-Fails: der Loop baute zuerst t2 (`review.py`, setzt `state.phase_review_gate_auto`), aber t1 (`state.py`, deklariert das Feld) war noch nicht gebaut — Planner erkannte Cross-Task-Feldabhaengigkeit nicht. **Bereits behoben** durch OP-168b (c713033): Feld ist jetzt in RunState deklariert, Loop-Test 8 findet es. Kein Code angelegt, kein Test.
