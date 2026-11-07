@@ -265,7 +265,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 
 ### OP-230: Chat-Session-Store (SQLite, pro Projekt)
 
-- **Status:** open
+- **Status:** done (2026-11-07)
 - **Typ:** feature
 - **Betroffen:** `werkstatt/chat_session.py` (neu)
 - **Problem:** Chat-Sessions muessen pro Projekt persistieren.
@@ -276,6 +276,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   LLM-Historie aus Events. (d) 3 Tests: append+load, Fork, derive.
 - **Tests:** `tests/test_chat_session.py` (neu)
 - **Blockiert von:** —
+- **Nachtrag 2026-11-07:** Umgesetzt. Zusaetzlich zu AK (d): 7 Tests (statt 3) — `test_append_und_load_runde`, `test_persistenz_ueber_neue_instanz`, `test_list_sessions`, `test_list_sessions_leer`, `test_fork_kopiert_bis_at_seq`, `test_fork_ohne_at_seq_kopiert_alles`, `test_derive_messages_mapping`. Zusaetzliche API: `fork(project, parent_session_id, at_seq)` (Fork-Faehigkeit war in SOLL §5 gefordert, nicht in OP-AK). DB-Pfad pro Projekt: `.werkstatt/<project>/chat-sessions.db`. Nicht in diesem OP: `chat_agent`-Anschluss (OP-231), Web-Endpoints (OP-232).
 
 ### OP-232: Chat-UI (Tool-Call-Karten, Session-Anzeige)
 
