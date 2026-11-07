@@ -3017,3 +3017,17 @@ als Ziel, mit Widerspruchs-Regel ADR > SOLL.md > ARCHITECTURE.md.
 **Naechster Schritt (Stufe 1):** OP-123 (Gate-Bridge) +
 OP-195 (pyproject) bauen — Voraussetzung fuer Loop-headless
 und test-tools.
+
+
+### 2026-11-07 — Doku-Nummern-Mapping auf 2XX
+
+Nach OP-Umnummerierung (`e24e307`) sind alle Referenzen in SOLL.md,
+ADR-0010/0016/0017 und README.md auf 2XX-Nummern umgestellt.
+
+- 5 Dateien, konsistente 2XX-Referenzen.
+- OP-191 (geloeschte Debugger-Rolle) in README durch OP-240
+  (Chat-Debugger-Modus) ersetzt.
+- Historische done-OPs (181, 182, 183, 186, 187, 122) bleiben als
+  Erwaehnung im Text.
+
+Kein Code geaendert.

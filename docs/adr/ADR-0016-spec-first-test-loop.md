@@ -2,7 +2,7 @@
 
 - **Datum:** 2026-11-07
 - **Status:** proposed
-- **Ergaenzt:** ADR-0015 (Tests sind Specs), OP-092 (Loop-Agenten mit Kontext-Vertrag)
+- **Ergaenzt:** ADR-0015 (Tests sind Specs), OP-260 (Loop-Agenten mit Kontext-Vertrag)
 
 ## Kontext
 
@@ -76,7 +76,7 @@ Konkret:
 - Architect muss `test_spec` praezise formulieren — Qualitaetsrisiko.
 
 **Nicht abgedeckt:**
-- Property-Based Tests (Hypothesis) — OP-193.
+- Property-Based Tests (Hypothesis) — OP-215.
 - Cross-Modul-Property-Tests — eigene OP.
 - Test-Agent-Qualitaet selbst — nur durch Mutation-Gate messbar.
 
@@ -85,8 +85,64 @@ Konkret:
 - ADR-0015 (Tests sind Specs, 2026-11-06)
 - ADR-0017 (Mutation-Gate mit pytest-gremlins)
 - ADR-0018 (Debugger als eigene Rolle)
-- OP-092 (Loop-Agenten mit Kontext-Vertrag)
-- OP-188 (Test-Loop-Phase)
-- OP-189 (Builder test-blind + verify-Stages)
-- OP-190 (Mutation-Gate)
+- OP-260 (Loop-Agenten mit Kontext-Vertrag)
+- OP-210 (Test-Loop-Phase)
+- OP-211 (Builder test-blind + verify-Stages)
+- OP-214 (Mutation-Gate)
 - Messung: /tmp/mutbench Benchmark, 2026-11-07
+
+## Nachtrag 2026-11-07 (Punkt 1 + 2 aus externem Review)
+
+### Testblindheit technisch erzwingen
+
+Die reine Prompt-Regel "Builder sieht tests/ nicht" ist zu schwach.
+Zusaetzlich:
+
+- **Tool-Trennung:** Builder-Tool-Registry hat keinen Zugriff auf
+  `read_file(tests/**)` oder `apply_patch(tests/**)`. Fail-closed
+  mit Audit `builder_test_access_denied`.
+- **Keine Offenlegung via Feedback-Kanaele:** pytest-Fehlermeldungen
+  koennen Test-Code leaken (Assertion-Messages). Reflection-Prompt
+  bekommt bei Test-Fail nur: `stage`, `error_class`, `test_id` —
+  NICHT den Assertion-Text.
+- **Manifest ausserhalb Builder-Zugriffs:** `state.test_manifest`
+  wird vom Test-Loop geschrieben, Builder hat nur Leserecht auf
+  die *Existenz*, nicht den Inhalt.
+- **Integritaets-Verify:** `test_integrity`-Stage prueft SHA256
+  gegen aktuellen Test-Code. Bei Mismatch: fail-closed, kein Commit.
+- **Audit:** jeder Manipulationsversuch (Patch auf tests/,
+  read_file auf tests/, SHA256-Mismatch) erzeugt Audit-Event.
+
+**Abnahme:** Automatisierte Tests weisen nach, dass Builder weder
+lesen noch schreiben kann.
+
+### Test-Spec unabhaengig validieren
+
+Architect und Test-Agent sind beide LLMs, koennten dieselbe falsche
+Interpretation der Anforderung uebernehmen. Konsequenz: technisch
+korrekte Tests, die falsches Verhalten bestaetigen.
+
+Gegenmassnahme:
+
+- **Original-Anforderung** (OP-Text) bleibt als Referenz erhalten
+  in `state.original_requirement`.
+- **Architect** erstellt `test_spec` aus der Anforderung (Block 6).
+- **Unabhaengige Validierung** (eigener LLM-Call, eigener Prompt)
+  prueft: deckt `test_spec` die Anforderung vollstaendig ab? Fehlen
+  Negativ-Faelle? Sind AK pruefbar formuliert?
+- **Mehrdeutigkeit** fuehrt zu Human-Gate VOR Implementierung,
+  nicht zu Loop-Fail.
+- **Struktur der test_spec** erweitert:
+      {
+        "requirement_id": "OP-NNN",
+        "acceptance_criteria": [
+          {"id": "AC-NNN", "condition": "...", "verification": "..."}
+        ],
+        "negative_cases": ["...", "..."]
+      }
+
+**Abnahme:** Test-Spec ist auf Original-Anforderung rueckverfolgbar.
+Kritische AK werden nicht allein durch dieselbe Agenteninterpretation
+bestaetigt.
+
+**Neue OP:** OP-212 (Test-Spec-Validator).

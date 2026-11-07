@@ -60,7 +60,7 @@ pip install -r requirements.txt
 Der Loop läuft aus dem Arbeitsverzeichnis: `python3 -m werkstatt.loop
 --project <name> --aufgabe "..."`. Kein `pip install` nötig.
 
-### Zukünftig: Package-Install (nach OP-195)
+### Zukünftig: Package-Install (nach OP-201)
 
     pip install -e ".[test-tools]"
 
@@ -69,7 +69,7 @@ Registriert `werkstatt` als Package und installiert `hypothesis` +
 bleibt Fallback.
 
 **Status:** `pyproject.toml` existiert, hat aber noch keine
-`[project]`-Sektion. OP-195 ergänzt sie.
+`[project]`-Sektion. OP-201 ergänzt sie.
 
 ### API-Key
 
@@ -197,7 +197,7 @@ Die Zielarchitektur hat **vier Schichten**:
 |---|---|---|
 | 1. Loop | Motor, baut Code headless | 123, 188, 189, 190, 193, 195 |
 | 2. Chat | Interface, read-only Diagnose | 124, 125, 126, 127 |
-| 3. Chat-Debugger | Reparatur-Modus (OP-128) | 128, 132 |
+| 3. Chat-Debugger | Reparatur-Modus (OP-240) | 128, 132 |
 | 4. Erfahrungs-Gehirn | Zweistufiges Gedächtnis | 113, 113a, 113i, 129, 130, 131, 160 |
 
 **Drei Prinzipien:**
@@ -311,13 +311,13 @@ Vor `## Delete-Zone` in `docs/STATUS.md` einfügen:
 
 ## Roadmap
 
-**Kurzfristig (Stufe 3):** OP-195 pyproject.toml, OP-092 Body
-aktualisieren, OP-188 Test-Loop-Phase.
+**Kurzfristig (Stufe 3):** OP-201 pyproject.toml, OP-260 Body
+aktualisieren, OP-210 Test-Loop-Phase.
 
-**Mittelfristig (Stufe 4):** OP-189 Builder test-blind, OP-190
-Mutation-Gate, OP-191 Debugger-Rolle, OP-192 Test-Thaw-Mechanik.
+**Mittelfristig (Stufe 4):** OP-211 Builder test-blind, OP-214
+Mutation-Gate, OP-240 Chat-Debugger-Modus, OP-213 Test-Thaw.
 
-**Langfristig (Stufe 5):** OP-193 Hypothesis, OP-194 Architektur-
+**Langfristig (Stufe 5):** OP-215 Hypothesis, OP-216 Architektur-
 Doku, Loop-Test 11 (Verifikation).
 
 **Weitere Baustellen:** siehe `docs/STATUS.md` (54 offene OPs).
@@ -326,14 +326,14 @@ Doku, Loop-Test 11 (Verifikation).
 
 ## Was Werkstatt NICHT ist
 
-- **Kein Chat-Agent.** Die Chat-Erweiterung (OP-124-132) ist
+- **Kein Chat-Agent.** Die Chat-Erweiterung (OP-231-132) ist
   geplant, aber eigenes System.
 - **Kein CI/CD-Ersatz.** Werkstatt committet lokal. CI ist ein
   separater Schritt.
 - **Kein Bugfixer für fremde Codebasen.** Werkstatt arbeitet an
   ihrem eigenen Repo (oder explizit konfigurierten Zielprojekten).
 - **Keine stabile API.** `RunState`-Felder und Modul-Struktur
-  sind in Bewegung (siehe OP-141, OP-143).
+  sind in Bewegung (siehe OP-261, OP-262).
 
 ---
 

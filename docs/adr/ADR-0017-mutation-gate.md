@@ -95,4 +95,36 @@ Konkret:
 - ADR-0016 (Spec-First Test-Loop)
 - pytest-gremlins: https://github.com/smartt/pytest-gremlins
 - Benchmark: /tmp/mutbench, 2026-11-07
-- OP-190 (Mutation-Gate als verify-Stage)
+- OP-214 (Mutation-Gate als verify-Stage)
+
+## Nachtrag 2026-11-07 (Punkt 5 aus externem Review)
+
+### Mutation-Report aussagekraeftiger
+
+Score allein ist zu wenig. Zusaetzlich speichern:
+
+- Anzahl erzeugter Mutationen
+- Anzahl erkannter (zapped) Mutationen
+- Anzahl ueberlebender (survived) Mutationen
+- **Art der ueberlebenden Mutationen** (comparison, arithmetic, boundary)
+- **Betroffene Dateien und Funktionen** (welche Stelle im Code)
+- **Nicht ausreichend abgedeckte Anforderungen** (Rueckbezug auf AC-NNN)
+- **Gruende fuer nicht ausfuehrbare Mutationen** (timeout, syntax, os)
+
+### Rollout-Strategie konkretisiert
+
+- **Woche 1-2:** `hart: false`, Score wird auditiert, nicht blockiert.
+  Ziel: Baseline der ueberlebenden Mutanten pro Modul verstehen.
+- **Woche 3-4:** `hart: false`, aber Warnung im Commit-Gate bei
+  Score < 0.8 (Mensch sieht es, entscheidet).
+- **Nach 4 Wochen:** Entscheidung ueber `hart: true` anhand realer
+  Daten. Kriterien: Score stabil? Ueberlebende Mutanten alle
+  bewertet? False-Positives bekannt?
+
+### Neue Audit-Events
+
+- `mutation_gate_low_score` mit Detail-Report
+- `mutation_gate_survived` mit Datei, Funktion, Mutant-Typ
+- `mutation_gate_skipped` (timeout, nicht ausfuehrbar)
+
+**Neue OP:** OP-214-AK erweitert (Report-Struktur + Rollout).
