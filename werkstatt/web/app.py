@@ -282,6 +282,29 @@ def create_app() -> FastAPI:
         projekt = _pruefe_projektname(name)
         return _insp.aggregate_tokens(projekt, run_id=run_id)
 
+    @app.get("/api/projects/{name}/ops")
+    def project_ops(name: str) -> dict[str, Any]:
+        """OPs aus docs/STATUS.md (Runs-Liste)."""
+        from werkstatt.web import inspector as _insp
+        _pruefe_projektname(name)
+        return {"ops": _insp.parse_ops()}
+
+    @app.get("/api/projects/{name}/timeline")
+    def project_timeline(name: str, run_id: str | None = None) -> dict[str, Any]:
+        """Phasen-Knoten aus Event-Store + JSONL-Audit."""
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        knoten = _insp.aggregate_timeline(projekt, run_id=run_id)
+        st = _insp.aggregate_status(projekt)
+        return {"run_id": run_id or st.get("run_id"), "knoten": knoten}
+
+    @app.get("/api/projects/{name}/status")
+    def project_status(name: str) -> dict[str, Any]:
+        """Tasks/Verify/Drift/Phase fuer Statusleiste."""
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        return _insp.aggregate_status(projekt)
+
     @app.get("/api/projects/{name}/chat/sessions")
     def chat_sessions(name: str) -> dict[str, Any]:
         """Listet alle Chat-Session-IDs eines Projekts."""

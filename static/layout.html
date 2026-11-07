@@ -21,19 +21,25 @@
 
   <main class="layout-grid">
 
-    <!-- Links: Terminal, volle Hoehe -->
-    <section class="bereich terminal" data-bereich="terminal">
+    <!-- Spalte 1: Runs-Liste -->
+    <section class="bereich runs" data-bereich="runs">
       <div class="fenster-titel">
-        <span id="terminal-titel" style="cursor:pointer;user-select:none" ondblclick="if(window.WerkstattShell){window.WerkstattShell.toggle();}">Terminal <small style="opacity:0.5">(Doppelklick f. Shell)</small></span>
-        <span id="shell-diag" style="color:#f87171;font-size:11px;margin-left:8px"></span>
-        <span id="shell-toggle-container"></span>
-        <span id="terminal-spinner"></span>
+        <span>Runs</span>
+        <span id="runs-counter" class="counter"></span>
       </div>
-      <div class="scrollback" id="terminal" data-project="werkstatt"></div>
-        <div class="xterm-wrap" id="terminal-xterm" hidden></div>
+      <div id="runs-liste" class="runs-liste"></div>
     </section>
 
-    <!-- Rechts oben: Chat (pro Projekt) -->
+    <!-- Spalte 2: Timeline -->
+    <section class="bereich timeline" data-bereich="timeline">
+      <div class="fenster-titel">
+        <span>Timeline</span>
+        <span id="timeline-run" class="dim"></span>
+      </div>
+      <div id="timeline" class="timeline-liste"></div>
+    </section>
+
+    <!-- Spalte 3: Chat -->
     <section class="bereich chat" data-bereich="chat">
       <div class="fenster-titel">
         <span id="chat-titel">Chat</span>
@@ -48,30 +54,58 @@
       </form>
     </section>
 
-    <!-- Rechts unten: Audit Live, mit einklappbarer History-Sidebar -->
-    <section class="bereich audit" id="audit-panel" data-bereich="audit">
-      <div class="fenster-titel">
-        <span>Audit Live</span>
-        <button class="history-toggle" id="history-toggle" aria-label="History ein-/ausblenden">&#9776;</button>
+    <!-- Workbench-Drawer (collapsible) -->
+    <section class="workbench-drawer" id="workbench-drawer" data-offen="false">
+      <nav class="workbench-tabs">
+        <button class="wb-tab" data-tab="audit">Audit</button>
+        <button class="wb-tab" data-tab="terminal">Terminal</button>
+        <button class="wb-tab" data-tab="diff" disabled>Diff</button>
+        <button class="wb-tab" data-tab="verify" disabled>Verify</button>
+        <button class="wb-tab" data-tab="files" disabled>Dateien</button>
+        <button class="wb-toggle" id="wb-toggle" aria-label="Workbench">&#9776;</button>
+      </nav>
+      <div class="workbench-body">
+        <div class="wb-pane" data-pane="audit">
+          <div class="audit-live" id="audit-live"></div>
+          <aside class="history-sidebar" id="history-sidebar">
+            <div class="fenster-titel">
+              <span>History</span>
+              <button class="history-close" id="history-close" aria-label="History schliessen">&times;</button>
+            </div>
+            <div class="audit-filter">
+              <label>Kind <select id="audit-filter-kind"><option value="">alle</option></select></label>
+              <label>Run <input id="audit-filter-run-id" type="text" placeholder="run_id"></label>
+              <button type="button" id="audit-history-laden">Filtern</button>
+            </div>
+            <div class="audit-history" id="audit-history"></div>
+            <span id="audit-status"></span>
+          </aside>
+        </div>
+        <div class="wb-pane" data-pane="terminal">
+          <div class="fenster-titel">
+            <span id="terminal-titel" style="cursor:pointer;user-select:none" ondblclick="if(window.WerkstattShell){window.WerkstattShell.toggle();}">Terminal <small style="opacity:0.5">(Doppelklick f. Shell)</small></span>
+            <span id="shell-diag" style="color:#f87171;font-size:11px;margin-left:8px"></span>
+            <span id="shell-toggle-container"></span>
+            <span id="terminal-spinner"></span>
+          </div>
+          <div class="scrollback" id="terminal" data-project="werkstatt"></div>
+          <div class="xterm-wrap" id="terminal-xterm" hidden></div>
+        </div>
       </div>
-      <div class="audit-live" id="audit-live"></div>
-
-      <aside class="history-sidebar" id="history-sidebar">
-        <div class="fenster-titel">
-          <span>History</span>
-          <button class="history-close" id="history-close" aria-label="History schliessen">&times;</button>
-        </div>
-        <div class="audit-filter">
-          <label>Kind <select id="audit-filter-kind"><option value="">alle</option></select></label>
-          <label>Run <input id="audit-filter-run-id" type="text" placeholder="run_id"></label>
-          <button type="button" id="audit-history-laden">Filtern</button>
-        </div>
-        <div class="audit-history" id="audit-history"></div>
-        <span id="audit-status"></span>
-      </aside>
     </section>
 
   </main>
+
+  <footer class="statusleiste" id="statusleiste">
+    <span class="status-item" id="status-tasks">Tasks: -</span>
+    <span class="status-item" id="status-verify">Verify: -</span>
+    <span class="status-item" id="status-drift">Drift: -</span>
+    <span class="status-item" id="status-phase">Phase: -</span>
+    <span class="status-spacer"></span>
+    <span class="status-token" id="status-tokens-loop" title="Loop-Token (Prompt / Completion)">Loop: -</span>
+    <span class="status-token" id="status-tokens-chat" title="Chat-Token (Prompt / Completion)">Chat: -</span>
+    <span class="status-run" id="status-run"></span>
+  </footer>
 
   <script src="/static/vendor/xterm.js?v=1793719449"></script>
   <script src="/static/vendor/addon-search.js?v=1793719449"></script>
@@ -82,5 +116,9 @@
   <script src="/static/terminal.js?v=1793719449"></script>
   <script src="/static/audit.js?v=1793719449"></script>
   <script src="/static/chat.js?v=20261107a"></script>
+  <script src="/static/runs.js?v=20261107a"></script>
+  <script src="/static/timeline.js?v=20261107a"></script>
+  <script src="/static/statusleiste.js?v=20261107a"></script>
+  <script src="/static/workbench.js?v=20261107a"></script>
 </body>
 </html>
