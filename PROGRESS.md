@@ -2718,3 +2718,25 @@ Das Wiring und die Integration-Tests habe ich waehrend der `e`-Phase am Human-Ga
 - Audit-Kette vollstaendig: `reviewer_result` → `loop_phase approved` → `loop_human_gate_committed`
 
 **Was noch fehlt:** Loop committet lokal, pusht nicht. Der Push muss manuell erfolgen — mache ich hier mit.
+
+### 2026-11-07 — Loop-Test 9: AUFRUFER-PFLICHT greift, drei Bugs aufgedeckt
+
+**Loop-Lauf (12:14-12:16, OP-181)**: 4 Tasks geplant, t1 gebaut, t2-t4 blocked. Phase-Review rejected (korrekt: t2/t3/t4 fehlen). Loop nach 5 Reflection-Runden abgebrochen (spec_widerspruch_erschoepft). Commit `7eab26d` **nicht** erstellt.
+
+**Positiv:**
+- AUFRUFER-PFLICHT aus Block 39b hat gegriffen: der Architect-Plan nannte den Aufrufer fuer `_pruefe_neue_module_genutzt` explizit in t3 (run_reviewer-Integration).
+- OP-172-Fehlerkern-Extraktion funktioniert: der echte mypy-Fehler (`Duplicate module named werkstatt.reviewer`) ist jetzt sichtbar, nicht truncated.
+- Bug-B (verify_gleich) hat nach Runde 3 den ersten Stagnations-Counter gesetzt.
+
+**Drei aufgedeckte Bugs:**
+1. **`_expand_cmd_placeholders` dedupliziert nicht.** Nach 5 Reflection-Runden hatte `state.patches` 5x `werkstatt/reviewer.py`. `mypy {changed_py_files}` expandierte zu 5 Argumenten, mypy meldete `Duplicate module named werkstatt.reviewer`. Kuenstlicher Fehler, nie behebbar. **Gefixt** (`dict.fromkeys`), 3 Tests.
+2. **Katalog-Drift.** Builder baute `audit("reviewer_dead_code_parse_fehler")` ohne Eintrag in `_AUDIT_KINDS_BEKANNT`. `test_audit_warnung.py` hat es gefangen. **Gefixt** in audit.py.
+3. **Bug-B-Luecke.** `verify_gleich` greift nicht bei alternierenden Fehlern (Stage-Sets wechseln PIE810 <-> Duplicate <-> beide). Counter sprang 1->0->1 statt 1->2->abort. **Als OP-182 angelegt.**
+
+**Working Tree nach Loop-Abbruch committet in **einem** Commit:**
+- t1-Feature (vom Loop gebaut, 101 Zeilen)
+- verify.py Dedupe-Fix
+- audit.py Katalog-Fix
+- 3 Tests
+
+OP-181 bleibt `partial`: t1 done, t2-t4 offen (Wiring in run_reviewer, REVIEWER_SYSTEM-Erweiterung, Tests). Naechster Loop-Lauf mit OP-181 in kompletter Form oder Loop-Test 10 mit anderer OP.

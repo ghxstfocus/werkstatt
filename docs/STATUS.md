@@ -983,7 +983,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 ### OP-181: Reviewer-Erweiterung — Dead-Code bei neuen Modulen erkennen
 
-- **Status:** open
+- **Status:** partial (t1 done, t2-t4 offen)
 - **Typ:** architektur (Reviewer + Dead-Code-Erkennung)
 - **Betroffen:** `werkstatt/reviewer.py`
   (`_pruefe_neue_module_genutzt`, Reviewer-Prompt),
@@ -1018,6 +1018,61 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   Reviewer-Seite ist Defense-in-Depth.
 - **Quelle:** Loop-Test 8 (11:50-11:58), Commit `7eab26d`,
   manuelles Wiring am `e`-Gate.
+
+### OP-182: Bug-B-Luecke — verify_gleich greift nicht bei alternierenden Fehlern
+
+- **Status:** open
+- **Typ:** fix (Reflection-Stagnation)
+- **Betroffen:** `werkstatt/reflection.py`
+  (`_verify_fehler_zwischen_runden_gleich`, `_reflection_loop`
+  Stagnation-Block), `tests/test_reflection_stagnation_verify.py`
+  (erweitern)
+- **Problem:** Loop-Test 9 (2026-11-07 12:14-12:16) zeigte einen
+  Loop-Lauf mit 5 Reflection-Runden, in dem der Stagnation-Counter
+  `1 -> 0 -> 1` sprang statt `1 -> 2 -> abort`. Ursache: die
+  Verify-Fehler wechselten zwischen Runden:
+  - Runde 1: `ruff_changed: PIE810`
+  - Runde 2: `mypy_changed: audit(...) arg-type`
+  - Runde 3: `ruff_changed: PIE810` + `mypy_changed: Duplicate`
+  - Runde 4: `mypy_changed: Duplicate`
+  - Runde 5: `ruff_changed: PIE810`
+
+  `_verify_fehler_zwischen_runden_gleich` (OP-175 Bug B) vergleicht
+  Stage-Sets mit exakter Gleichheit. Bei wechselnden Fehlern kein
+  Match, Counter resettet sich. Bug-B-Fix greift nur bei
+  byte-identischen Fehlern.
+
+- **Akzeptanzkriterien:**
+  - **Diagnose (a):** Nachstellen in einem Test: State mit
+    alternierenden Fehlerlisten (PIE810 / Duplicate / PIE810+Duplicate)
+    ueber 5 Runden. Counter MUSS mindestens einmal `>= 2` erreichen
+    und `loop_reflection_stagnation_abort` emittieren.
+  - **Fix (b):** `_verify_fehler_zwischen_runden_gleich` erweitern:
+    - Alternative 1: **Stage-Mengen-Overlap** statt exakter Gleichheit.
+      Wenn `_s_v & _s_j` nicht-leer UND `_s_v - _s_j` und
+      `_s_j - _s_v` beide leer → exakt gleich. Wenn nur Overlap mit
+      wechselnden Zusatz-Fehlern: neuer Grund
+      `verify_alternierend` (schwaechere Stagnation).
+    - Alternative 2: **Fehler-Signatur-Set mit Zeilen-Normalisierung**.
+      `_fehler_signatur_normalisiert` (aus OP-175 Bug B) auf jede
+      Fehlerliste anwenden, Sets vergleichen.
+    Wahl erst nach (a).
+  - **Test (c):** In `tests/test_reflection_stagnation_verify.py`
+    einen Test `test_reflection_alternierende_fehler_stagniert`
+    ergaenzen: 5 Runden mit wechselnden Fehler-Sets, `_reflection_loop`
+    bricht nach spaetestens 4 Runden ab (nicht nach 5 mit
+    spec_widerspruch_erschoepft).
+  - `pytest` gruen, keine neuen ruff/mypy-Fehler.
+- **Tests:** `tests/test_reflection_stagnation_verify.py` (erweitern)
+- **Blockiert von:** —
+- **Blockiert:** Loop-Test 10 mit einer OP, die mehrere
+  Reflection-Runden triggert (Regression-Schutz).
+- **Prioritaet:** hoch — Loop-Test 9 brauchte 5 Runden statt 2
+  wegen dieses Bugs. Jeder reale Builder-Fail mit wechselnden
+  Fehlern kostet 3 Extra-Runden.
+- **Quelle:** Loop-Test 9 (2026-11-07 12:14-12:16),
+  `loop_reflection_spec_widerspruch_erschoepft`-Event mit
+  `runden: 5, letzte_applied: [1, 2]`.
 
 ## Delete-Zone
 
