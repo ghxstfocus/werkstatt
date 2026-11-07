@@ -2662,3 +2662,8 @@ korrekt (Heartbeat feuert erst ab 30s), Bug war Fehlmessung.
 Was bleibt: OP-168b (Gate zwischen Task-Reflection-Runden)
 ist weiterhin offen — Bug C im STATUS hatte das mit dem
 Message-Bug vermischt. Loop-Test 7 kann jetzt laufen.
+
+## 2026-11-06T19:55:52+00:00 -- Phase abgeschlossen: werkstatt
+- **Status:** phase_ende
+- **Info:** rc=1 tasks_ok=2/5
+

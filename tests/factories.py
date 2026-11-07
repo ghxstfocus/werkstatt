@@ -29,6 +29,7 @@ def mk_state(**overrides) -> RunState:
     state = RunState(
         project_dir=overrides.pop("project_dir", Path("/tmp/test")),
         project_name=overrides.pop("project_name", "test"),
+        phase_review_auto=overrides.pop("phase_review_auto", False),
     )
     for k, v in overrides.items():
         if not hasattr(state, k):

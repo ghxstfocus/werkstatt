@@ -269,6 +269,12 @@ class RunState:
     last_verify_hart_stages: set = field(default_factory=set)
     messungen_nach_apply: list = field(default_factory=list)
     phase_review_uebersprungen: str = ""
+    # Schreiber: `_phase_review_gate` (bei Antwort `a`).
+    # Leser: `_reflection_loop` (skip-Gate in nachfolgenden
+    # Reject-Runden einer `_phase_end_reflection`-Invocation).
+    # Wird vor jedem Gate-Aufruf in `_reflection_loop` auf `False`
+    # zurueckgesetzt — der Wert gilt nur innerhalb einer Invocation.
+    phase_review_auto: bool = False
     progress_written_at_commit: bool = False
     reflection_erschoepft: bool = False
     reflection_phase: bool = False

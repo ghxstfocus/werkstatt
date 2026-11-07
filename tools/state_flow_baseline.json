@@ -15,6 +15,7 @@
     "last_reject_reason",
     "last_verify_errors",
     "patches",
+    "phase_review_auto",
     "phasen",
     "reviewer_bugs",
     "reviewer_bugs_history",

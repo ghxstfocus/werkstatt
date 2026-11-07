@@ -18,8 +18,9 @@ def _phase_review_gate(state: RunState) -> int:
       j = Patches behalten, Loop fortsetzen (Phase 5 + Commit)
       n = Patches verwerfen, Loop abbrechen
       e = Datei manuell editieren, dann erneut fragen
+      a = Auto bis Ende (phase_review_auto=True)
 
-    Rueckgabe: 0 (j), 1 (n oder EOF). Fail-closed bei EOFError.
+    Rueckgabe: 0 (j oder a), 1 (n oder EOF). Fail-closed bei EOFError.
     Teilfix: Gate sitzt NACH _phase_end_reflection, nicht
     zwischen den internen Runden. Vollstaendig: OP-168b.
     """
@@ -43,9 +44,12 @@ def _phase_review_gate(state: RunState) -> int:
     print("  j = Patches behalten, Loop fortsetzen (Phase 5 + Commit)")
     print("  n = Patches verwerfen, Loop abbrechen")
     print("  e = Datei manuell editieren (dann erneut fragen)")
+    print("  a = auto bis Ende")
     while True:
         try:
-            antwort = input("Deine Wahl [j/n/e]: ").strip().lower()
+            antwort = input(
+                "Deine Wahl [j] behalten / [n] verwerfen / [e] manuell / [a] auto bis Ende: "
+            ).strip().lower()
         except EOFError:
             audit_safe("loop_human_gate_eof",
                        {"gate": "phase_review"}, pd, pn)
@@ -65,4 +69,9 @@ def _phase_review_gate(state: RunState) -> int:
             except EOFError:
                 return 1
             continue
-        print("Ungueltige Eingabe. Erlaubt: j, n, e.")
+        if antwort == "a":
+            state.phase_review_auto = True
+            audit_safe("loop_human_gate_auto",
+                       {"gate": "phase_review"}, pd, pn)
+            return 0
+        print("Ungueltige Eingabe. Erlaubt: j, n, e, a.")
