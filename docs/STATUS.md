@@ -1143,6 +1143,44 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   Bugs uebersieht (Recall). Nur Praezision. Recall-Messung
   ist eigene OP, wenn Praezision steht.
 
+### OP-178: Rollen-Registry-Migration der 5 restlichen Aufrufer
+
+- **Status:** in_progress
+- **Typ:** architektur (Konsistenz Rollen-Registry)
+- **Betroffen:** `werkstatt/planner.py` (`_run_scout`,
+  `run_architect`, `run_planner`), `werkstatt/phases/tasks.py`
+  (`run_builder`, `run_reviewer`), `werkstatt/explorer.py`
+  (`run_explorer`), `werkstatt/reflection.py` (Re-Exports),
+  `tests/test_rollen_registry_migration.py` (neu)
+- **Problem:** ADR-0014 (2026-11-05) dokumentiert die
+  Rollen-Registry als Single Source of Truth. Messung 2026-11-07
+  (Block 20): nur `architect.py:648` nutzt `ROLLEN["architect"]`
+  direkt. Die restlichen 5 Aufrufer (`planner`, `builder`,
+  `reviewer`, `explorer`, `scout`) laden ihre Skills/Prompts
+  weiterhin ueber eigene Pfade, nicht ueber
+  `ROLLEN[name].lade_skills(...)`. Folge: Registry ist Doku,
+  nicht Enforcement — eine neue Rolle ohne Registry-Eintrag
+  wuerde nicht auffallen.
+- **Akzeptanzkriterien:**
+  - Alle 7 Rollen laden Skills/System-Prompt ueber
+    `ROLLEN[name].lade_skills(...)` bzw.
+    `ROLLEN[name].lade_system_prompt(...)`.
+  - Keine direkte Skill-Ladelogik in Aufrufer-Modulen ausser
+    `werkstatt/rollen.py` selbst.
+  - Neuer Test `tests/test_rollen_registry_migration.py`:
+    AST-Scan ueber `werkstatt/` prueft, dass
+    `ROLLEN["<name>"]` fuer alle 7 Rollen mindestens einmal
+    aufgerufen wird. Fehlt eine, fail.
+  - `ruff` und `pytest` gruen.
+- **Tests:** siehe AK.
+- **Blockiert von:** —
+- **Blockiert:** nichts (laufender Code funktioniert).
+- **Prioritaet:** niedrig — kein Bug, sondern Konsistenz.
+  Migration laeuft in dieser Session (2026-11-07), nicht als
+  spaetere Aufgabe.
+- **Quelle:** Block 20-Messung 2026-11-07, ADR-0014 "Offen"-
+  Absatz Zeilen 57-59.
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.

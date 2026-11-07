@@ -7,7 +7,7 @@ Stand: 2026-10-31 (nach Doku-Migration, Scaffolder, Migrator, OP-NNN-Disziplin).
 Die Werkstatt ist ein Multi-Agent-System mit 5+1 Rollen und
 ADaPT (On-Demand-Zerlegung). Der Mensch ist das letzte Gate.
 
-    Explorer -> Architect -> Planner-Split -> Builder -> Verify -> Reviewer -> Human-Gate
+    Explorer -> Scout -> Architect -> Planner-Split -> Builder -> Verify -> Reviewer -> Human-Gate
 
 ## 2. Rollen
 
