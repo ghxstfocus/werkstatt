@@ -525,11 +525,146 @@ def _extrahiere_prosa_abschnitt(
     return _result
 
 
+def _parse_json_robust(raw: str) -> dict | None:
+    """OP-186: toleriert abgeschnittene LLM-JSON-Antworten.
+
+    Bisher: raw.find("{")..raw.rfind("}")+1 — bei fehlender
+    schliessender Klammer (LLM truncated) gab es kein '}', also
+    kein Match -> kompletter Parse-Fehler -> Fallback auf 30
+    key_files als task_files (Loop-Test 10, 13:42:24).
+
+    Strategien (in Reihenfolge):
+    1. Normaler Slice find("{")..rfind("}")+1
+    2. raw_decode ab dem ersten "{", wenn das Ergebnis "tasks" hat
+    3. Klammern-Balance-Repair: fehlende }/] anhaengen
+    """
+    import json as _json
+    if not raw:
+        return None
+    _start = raw.find("{")
+    _end = raw.rfind("}") + 1
+    # Strategie 1
+    if _start >= 0 and _end > _start:
+        try:
+            return _json.loads(raw[_start:_end])
+        except _json.JSONDecodeError:
+            pass
+    # Strategie 2: raw_decode ab dem ersten "{"
+    if _start >= 0:
+        _decoder = _json.JSONDecoder()
+        try:
+            _obj, _ = _decoder.raw_decode(raw[_start:])
+            if isinstance(_obj, dict) and "tasks" in _obj:
+                return _obj
+        except _json.JSONDecodeError:
+            pass
+    # Strategie 3: Klammern-Balance-Repair
+    if _start >= 0:
+        _slice = raw[_start:]
+        _buf: list[str] = []
+        _depth_brace = 0
+        _depth_bracket = 0
+        _in_str = False
+        _esc = False
+        for _c in _slice:
+            _buf.append(_c)
+            if _esc:
+                _esc = False
+                continue
+            if _c == "\\":
+                _esc = True
+                continue
+            if _c == '"':
+                _in_str = not _in_str
+                continue
+            if _in_str:
+                continue
+            if _c == "{":
+                _depth_brace += 1
+            elif _c == "}":
+                _depth_brace -= 1
+            elif _c == "[":
+                _depth_bracket += 1
+            elif _c == "]":
+                _depth_bracket -= 1
+        if _depth_brace > 0 or _depth_bracket > 0:
+            _repaired = (
+                "".join(_buf)
+                + ("]" * max(0, _depth_bracket))
+                + ("}" * max(0, _depth_brace))
+            )
+            try:
+                _obj = _json.loads(_repaired)
+                if isinstance(_obj, dict):
+                    return _obj
+            except _json.JSONDecodeError:
+                pass
+    return None
+
+
+def _fallback_task_von_prosa(arch_prosa: str, key_files: list[str]) -> dict:
+    """OP-186: Fallback-Task bei leerem LLM-Split.
+
+    Vorher: alle key_files als task_files (30 Stueck im Loop-Test 10).
+    Jetzt: nur die ERSTE Zieldatei. Weitere Dateien gehoeren in
+    eigene Tasks, die der naechste Loop-Lauf bauen kann.
+
+    Live-Beleg Loop-Test 10 (13:42): JSON-Split truncated
+    (planner_split_json_fehler), Fallback setzte 30 key_files
+    auf t1 "Architect-Loesung umsetzen" — Builder-fatal.
+    """
+    _tf = list(key_files)[:1] if key_files else []
+    return {
+        "id": "t1",
+        "name": "Architect-Loesung umsetzen",
+        "action": "update",
+        "description": arch_prosa,
+        "task_files": _tf,
+    }
+
+
+def _cap_task_files(
+    tasks: list[dict], pd, pn: str, max_files: int = 5,
+) -> list[dict]:
+    """OP-186: Defense-in-Depth gegen Zieldatei-Explosion.
+
+    Loop-Test 10 (13:42): der JSON-Split scheiterte, der Fallback
+    setzte 30 key_files als task_files eines Tasks. Builder kann
+    so einen Task nicht reviewen. Cap: max 5 Files pro Task,
+    Rest wird abgeschnitten + Audit.
+
+    Zweite Verteidigungslinie: der Fallback-Fix reduziert auf 1
+    File, dieser Cap greift bei jeder kuenftigen Quelle.
+    """
+    if not tasks:
+        return tasks
+    out: list[dict] = []
+    for t in tasks:
+        if not isinstance(t, dict):
+            out.append(t)
+            continue
+        _files = t.get("task_files") or []
+        if not isinstance(_files, list):
+            out.append(t)
+            continue
+        if len(_files) > max_files:
+            audit(
+                "planner_task_files_cap",
+                {"id": t.get("id"), "vorher": len(_files),
+                 "nachher": max_files,
+                 "dateien": _files[:max_files]},
+                pd, pn,
+            )
+            t = dict(t)
+            t["task_files"] = _files[:max_files]
+        out.append(t)
+    return out
+
+
 def _llm_split_einzel_task(
     prosa: str, task: dict, api_key: str, pd, pn,
 ) -> list[dict]:
     """M-469: Zerlegt EINEN zu grossen Task in 2-3 Sub-Tasks (LLM)."""
-    import json as _json
     _user = (
         f"## ZU GROSSER TASK:\n"
         f"id: {task.get('id')}\n"
@@ -549,13 +684,8 @@ def _llm_split_einzel_task(
     if not reply.ok:
         return []
     raw = reply.content.strip()
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    if start < 0 or end <= start:
-        return []
-    try:
-        parsed = _json.loads(raw[start:end])
-    except _json.JSONDecodeError:
+    parsed = _parse_json_robust(raw)
+    if parsed is None:
         return []
     tasks_raw = parsed.get("tasks", [])
     if not isinstance(tasks_raw, list):
@@ -1064,7 +1194,6 @@ def _zerlege_in_sub_tasks(
     state=None,
 ) -> list[dict]:
     """M-453: Zerlegt Architect-Prosa in 3-5 Sub-Tasks."""
-    import json as _json
     # M-Wired-JC (2026-11-02): Measurement-Index fuer Planner.
     # _zerlege_in_sub_tasks hat keinen state-Zugriff. Frueherer
     # try/except fing NameError auf "state" und lieferte immer "".
@@ -1099,14 +1228,8 @@ def _zerlege_in_sub_tasks(
         audit("planner_split_llm_fehler", {"fehler": reply.error}, pd, pn)
         return []
     raw = reply.content.strip()
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    if start < 0 or end <= start:
-        audit("planner_split_json_fehler", {"raw": raw[:200]}, pd, pn)
-        return []
-    try:
-        parsed = _json.loads(raw[start:end])
-    except _json.JSONDecodeError:
+    parsed = _parse_json_robust(raw)
+    if parsed is None:
         audit("planner_split_json_fehler", {"raw": raw[:200]}, pd, pn)
         return []
     tasks_raw = parsed.get("tasks", [])
@@ -1206,6 +1329,8 @@ def _zerlege_in_sub_tasks(
     _final = _normalisiere_task_files(
         _final, {"key_files": key_files}, pd, pn,
     )
+    # OP-186: Defense-in-Depth gegen Zieldatei-Explosion.
+    _final = _cap_task_files(_final, pd, pn)
     # K20: Action anhand Datei-Existenz korrigieren (vor Merge).
     for _t_korr in _final:
         if isinstance(_t_korr, dict):
@@ -2044,11 +2169,10 @@ def run_planner(state: RunState) -> bool:
         )
         state.tasks = _sub_tasks
     else:
-        state.tasks = [{
-            "id": "t1", "name": "Architect-Loesung umsetzen",
-            "action": "update", "description": _arch_prosa,
-            "task_files": _key_files,
-        }]
+        # OP-186: Fallback-Task nur mit EINER Zieldatei.
+        # Vorher: alle 30 key_files als task_files (38er-Plan-Bug
+        # bei JSON-Split-Fehler, Loop-Test 10 13:42).
+        state.tasks = [_fallback_task_von_prosa(_arch_prosa, _key_files)]
 
     state.phasen = []
     state.tests = []
