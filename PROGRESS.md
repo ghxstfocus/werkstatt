@@ -2828,3 +2828,32 @@ audit_drift / control_drift / state_inventory OK.
   nicht `### YYYY-MM-DD — OP-NNN abgeschlossen`. Format-Bruch.
 - Loop committet lokal, pusht nicht (Konvention, aber Reibung im
   Workflow — manueller Push noetig).
+
+
+### 2026-11-07 — Stufe-2-Planung: 3 OPs aus Loop-Test 10 angelegt
+
+Loop-Lauf 13:23 (OP-181) hat drei strukturelle Schwaechen gezeigt,
+die als OPs angelegt wurden:
+
+- **OP-183** Planner-Task-Typ `action: verify` (hoechster Hebel).
+  Verifikations-Tasks („pruefe X") werden vom Planner als `update`
+  klassifiziert -> Builder setzt `auftrag_bereits_erfuellt` ->
+  Reviewer meldet HIGH-Bug -> 2 Reflection-Runden + Loop-Abbruch.
+  Fix: neuer Task-Typ ohne Builder-Pflicht.
+- **OP-184** Loop-PROGRESS.md-Format. Der Loop schreibt
+  `## ISO-Timestamp -- Phase abgeschlossen: <proj>` (M-307b), der
+  Mensch `### YYYY-MM-DD — OP-NNN abgeschlossen`. Zwei Formate in
+  einer Datei. Fix: OP-Extraktion aus `state.aufgabe`, analoger
+  Header.
+- **OP-185** Loop-Push-Option. `grep 'git push' werkstatt/` ist
+  leer, Push ist komplett manuell. Fix: `--auto-push` (Default aus)
+  + `--no-push`, Audit-Event bei Fehler, Loop bricht nicht ab.
+
+**Nicht angelegt, aber vermerkt:** Loop schreibt `state.aufgabe`
+nicht in den Phasen-Ende-Progress, daher ist OP-183 erst der
+Voraussetzungs-Fix fuer aussagekraeftige Loop-Progress-Eintraege.
+OP-184 setzt auf dem Ergebnis von OP-183 auf.
+
+**Loop-Test 10 (nach OP-183):** Verifikations-Task + Bau-Task
+in einer OP, Erwartung 3/3 done, keine Reflection-Runde, Commit.
+Kandidat: OP-086 (Doku-Drift als Verify-Gate).

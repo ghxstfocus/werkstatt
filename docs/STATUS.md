@@ -981,6 +981,129 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Prioritaet:** hoch — Voraussetzung fuer vertrauenswuerdige
   Loop-Tests.
 
+### OP-183: Planner-Task-Typ `action: verify` — Verifikations-Tasks ohne Builder-Diff
+
+- **Status:** open
+- **Typ:** architektur (Planner + Task-Klassifikation)
+- **Betroffen:** `werkstatt/planner.py` (`PLANNER_SPLIT_SYSTEM`
+  Z. 272-346, `_split_tasks_kontext`), `werkstatt/phases/tasks.py`
+  (Task-Dispatch Z. 111/353/370/480), `werkstatt/reviewer.py`
+  (`_filter_auftrag_treue_false_positives`, Dead-Code-Pre-Check),
+  `tests/test_planner_verify_action.py` (neu).
+- **Problem:** Loop-Lauf 13:23 (OP-181) hatte t2 als Verifikations-
+  Task formuliert (`_pruefe_neue_module_genutzt auf Soll-Stand
+  pruefen`). Planner kennt nur `update|create|read|delete` und
+  setzte `action: update`, Builder setzte `auftrag_bereits_erfuellt`,
+  Reviewer meldete HIGH-Bug „Task verlangt Funktion X, Diff hat sie
+  nicht". 2 Reflection-Runden, dann Loop-Abbruch. Dasselbe Muster wie
+  Loop-Test 9 (dort t2/t3/t4 als update). Jeder Loop-Lauf mit
+  Verifikations-Tasks verbrennt 2 Runden + 1 Reviewer-False-Positive.
+- **Akzeptanzkriterien:**
+  - **Planner (a):** `PLANNER_SPLIT_SYSTEM` bekommt
+    `action: verify` als vierten Wert, mit Definition:
+    „Task prueft einen Zustand, aendert KEINE Datei.
+    `task_files` nennt die zu pruefenden Dateien,
+    `description` sagt WAS geprueft wird."
+  - **Planner-Heuristik (b):** Wenn `name`/`description` mit
+    „pruefe", „verifiziere", „stelle sicher", „check" beginnt
+    → `action: verify` (deterministisch vor dem LLM-Split,
+    als Pre-Check).
+  - **Phase-Dispatch (c):** `phases/tasks.py` behandelt
+    `action == "verify"`: Builder **nicht** aufrufen, direkt
+    `_verify_patches` + `run_reviewer` mit Kontext
+    „Verify-Task, Diff-Erwartung: leer". `auftrag_bereits_erfuellt`
+    darf nicht gesetzt werden (Test-Contract).
+  - **Reviewer (d):** `_filter_auftrag_treue_false_positives`
+    erkennt Task `action == "verify"` und filtert Bugs der Form
+    „Diff fehlt Datei X" / „Task verlangt Funktion Y, Diff hat sie
+    nicht" — das sind bei verify-Tasks keine Bugs.
+  - **Tests (e):** `tests/test_planner_verify_action.py`:
+    (i) Planner klassifiziert „pruefe X" als `action: verify`;
+    (ii) `phases/tasks.py` ruft `run_builder` NICHT auf bei
+    `action: verify`; (iii) Reviewer filtert Diff-Erwartungs-
+    Bugs raus; (iv) `auftrag_bereits_erfuellt` wird nicht gesetzt.
+  - `pytest` gruen, keine neuen ruff/mypy-Fehler.
+- **Tests:** `tests/test_planner_verify_action.py` (neu),
+  `tests/test_phase_tasks.py` (erweitern).
+- **Blockiert von:** —
+- **Blockiert:** Loop-Test 10 mit Verifikations-Task-Anteil.
+- **Prioritaet:** hoch — hoechster Hebel aus Loop-Test 10.
+- **Quelle:** Loop-Lauf 13:23 (2026-11-07, OP-181).
+
+### OP-184: Loop-PROGRESS.md-Format an DOC_CONVENTIONS §5 angleichen
+
+- **Status:** open
+- **Typ:** fix (Doku-Konsistenz)
+- **Betroffen:** `werkstatt/progress.py` (`append_progress`,
+  `PROGRESS_FILE`), `werkstatt/phases/finalize.py` (Z. 147-156
+  `M-307b: Phasen-Ende in PROGRESS.md`), `tests/test_progress.py`
+  (erweitern).
+- **Problem:** Der Loop schreibt am Phasen-Ende
+  `## 2026-11-07T13:23:18+00:00 -- Phase abgeschlossen: werkstatt`
+  mit `- **Status:** phase_ende`. Menschliche OP-Eintraege sind
+  `### YYYY-MM-DD — OP-NNN abgeschlossen: Titel`. Zwei Formate in
+  derselben Datei. Siehe PROGRESS.md-Ende nach OP-181-Close.
+- **Akzeptanzkriterien:**
+  - **Format (a):** Wenn `state.aufgabe` einen OP-Header enthaelt
+    (`### OP-NNN: ...`, Regex wie im Loop-Startbefehl), schreibt
+    `_phase_end_progress`-Pfad
+    `### YYYY-MM-DD — OP-NNN abgeschlossen: <op-titel>` +
+    Fliesstext. Sonst Fallback auf das bestehende
+    `## ISO-Timestamp -- Phase abgeschlossen`.
+  - **Verdrahtung (b):** `phases/finalize.py:147` reicht
+    `state.aufgabe` an `progress.append_progress` weiter
+    (oder ermittelt OP-NNN selbst per Regex).
+  - **Test (c):** `tests/test_progress.py`:
+    (i) mit OP-Aufgabe -> `### YYYY-MM-DD — OP-NNN abgeschlossen`;
+    (ii) ohne OP-Aufgabe -> `## ISO-Timestamp -- Phase abgeschlossen`;
+    (iii) idempotent (kein Duplikat bei zweitem Aufruf).
+  - `pytest` gruen.
+- **Tests:** `tests/test_progress.py` (erweitern).
+- **Blockiert von:** —
+- **Blockiert:** —
+- **Prioritaet:** mittel — kosmetisch, aber Doku-Drift ist der
+  naechste Kandidat fuer OP-086.
+- **Quelle:** OP-181-Close (2026-11-07, Commit `5529df6`).
+
+### OP-185: Loop-Push-Option (`--auto-push` / `--no-push`)
+
+- **Status:** open
+- **Typ:** feature (Loop-Ergonomie)
+- **Betroffen:** `werkstatt/loop.py` (CLI-Args),
+  `werkstatt/phases/finalize.py` (Commit-Pfad),
+  `werkstatt/git_ops.py` (`push`-Funktion, falls fehlt),
+  `tests/test_loop_push.py` (neu).
+- **Problem:** `grep 'git push' werkstatt/` liefert 0 Treffer. Der
+  Loop committet lokal, der Push ist komplett manuell. Jeder
+  erfolgreiche Loop-Lauf erzeugt Reibung: User muss nach dem
+  Commit-Gate manuell `git push` tippen. Bei Loop-Tests ist das
+  in Ordnung, im Alltag Unterbrechung.
+- **Akzeptanzkriterien:**
+  - **CLI (a):** `--auto-push` (Default: **aus**, opt-in) und
+    `--no-push` (Default-Wert fuer Rueckwaerts-Kompatibilitaet).
+    Beide Parameter in `loop.py`-`argparse`.
+  - **Push-Pfad (b):** Nach erfolgreichem Commit-Gate
+    (Approved `j`) ruft der Loop `git push origin <branch>`
+    via `git_ops.push(pd)` auf, aber **nur wenn `auto_push=True`**.
+    Bei Fehler (non-zero rc): Audit-Event `loop_push_failed`,
+    aber Loop **bricht nicht ab** (Commit bleibt gueltig,
+    Push ist nachholbar).
+  - **Test (c):** `tests/test_loop_push.py`:
+    (i) Default-Verhalten: kein Push-Aufruf;
+    (ii) `--auto-push`: Push-Aufruf nach Commit;
+    (iii) Push-Fehler: Loop laeuft weiter, Audit-Event geschrieben.
+  - **Doku (d):** `docs/ARCHITECTURE.md`-Abschnitt „Loop-CLI"
+    ergaenzt die zwei Flags (Architektur-Doku ist Wahrheit).
+  - `pytest` gruen, keine neuen ruff/mypy-Fehler.
+- **Tests:** `tests/test_loop_push.py` (neu).
+- **Blockiert von:** —
+- **Blockiert:** —
+- **Prioritaet:** mittel — Ergonomie, aber explizite User-Entscheidung
+  noetig (Default-Verhalten darf sich nicht still aendern).
+- **Quelle:** OP-181-Close (2026-11-07), `grep 'git push' werkstatt/`
+  leer.
+
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
