@@ -981,6 +981,44 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Prioritaet:** hoch — Voraussetzung fuer vertrauenswuerdige
   Loop-Tests.
 
+### OP-181: Reviewer-Erweiterung — Dead-Code bei neuen Modulen erkennen
+
+- **Status:** open
+- **Typ:** architektur (Reviewer + Dead-Code-Erkennung)
+- **Betroffen:** `werkstatt/reviewer.py`
+  (`_pruefe_neue_module_genutzt`, Reviewer-Prompt),
+  `tests/test_reviewer_dead_code.py` (neu)
+- **Problem:** Loop-Test 8 (2026-11-07) baute
+  `tools/contract_check.py` + Tests, aber der Architect plante
+  keinen Aufrufer. Die Pruefung lief nie in der Verify-Kette.
+  Manuell nachgeholt im `e`-Pfad (Wiring ueber
+  `state_inventory.py --changed`). **Architect-Seite ist
+  heute behoben** (AUFRUFER-PFLICHT im ARCHITECT_SYSTEM +
+  Guard-Regel 6 `test_keine_toten_tools_skripte`) — Reviewer-
+  Seite bleibt offen.
+- **Akzeptanzkriterien:**
+  - **Deterministischer Pre-Check (a):** Bei jedem neuen
+    `.py`-File im Diff (Datei existiert vor Patch nicht):
+    grep nach dem Modul-Stem in `werkstatt/` und
+    `tools/<andere>`. Wenn nur `tests/` es referenziert →
+    HIGH-Bug `"Neues Modul <name> wird nur von Tests
+    importiert — Dead-Code-Verdacht"`.
+  - **Reviewer-Prompt-Ergaenzung (b):** Im `REVIEWER_SYSTEM`
+    wird die Dead-Code-Regel ergaenzt (parallel zur
+    Architect-PFLICHT).
+  - **Test (c):** `tests/test_reviewer_dead_code.py`:
+    (a) neues Modul + nur Test-Import → HIGH-Bug;
+    (b) neues Modul + `werkstatt/`-Import → kein Bug;
+    (c) bestehendes Modul geaendert → skip.
+- **Tests:** `tests/test_reviewer_dead_code.py` (neu)
+- **Blockiert von:** —
+- **Blockiert:** Loop-Test 9 mit einer OP, die ein neues
+  Modul anlegt (Regression-Schutz).
+- **Prioritaet:** mittel — Architect-Seite greift heute;
+  Reviewer-Seite ist Defense-in-Depth.
+- **Quelle:** Loop-Test 8 (11:50-11:58), Commit `7eab26d`,
+  manuelles Wiring am `e`-Gate.
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
