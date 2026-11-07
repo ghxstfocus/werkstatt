@@ -270,14 +270,15 @@ def _build_patches_fuer_datei(
     # M-Skills-Builder: metadata + glob (Level 1+2)
     _skills_block = ""
     try:
+        from werkstatt.rollen import ROLLEN as _ROLLEN_b
         from werkstatt.skills import (
             load_all_skills,
-            skills_aktivieren,
             skills_metadata_block,
         )
         _all_skills = load_all_skills()
         _meta = skills_metadata_block(_all_skills)
-        _akt = skills_aktivieren(_all_skills, [zieldatei], rolle="builder")
+        _akt = _ROLLEN_b["builder"].lade_skills(
+            _all_skills, task_files=[zieldatei])
         _akt_block = ""
         _akt_names = []
         for _s in _akt:

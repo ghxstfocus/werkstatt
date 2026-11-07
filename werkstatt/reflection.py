@@ -941,16 +941,17 @@ def _skill_body_fuer_reflection(state) -> str:
     if any(n in geladen for n in namen):
         return state.reflection_skill_body or ""
 
+    from werkstatt.rollen import ROLLEN as _ROLLEN_r
     from werkstatt.skills import (
         _merke_geladene_skills,
         load_all_skills,
-        load_skill_by_name,
     )
 
     _all = load_all_skills()
-    skill = load_skill_by_name("systematic-debugging", _all)
-    if not skill:
+    _geladen = _ROLLEN_r["reflection"].lade_skills(_all)
+    if not _geladen:
         return ""
+    skill = _geladen[0]
     body = skill.get("body") or ""
     if not isinstance(body, str):
         body = ""

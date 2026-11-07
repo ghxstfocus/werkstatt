@@ -13,7 +13,7 @@ from pathlib import Path
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.render import _with_spinner
-from werkstatt.skills import load_all_skills, load_skill_by_name
+from werkstatt.skills import load_all_skills
 from werkstatt.state import RunState
 
 
@@ -266,28 +266,39 @@ def _reviewer_system(state=None, task_files=None) -> str:
     parts = [REVIEWER_SYSTEM]
     _akt_names: list[str] = []
 
-    rw = load_skill_by_name("review-work", skills)
-    if rw and rw["body"]:
-        parts.append("## Skill: Review-Work\n" + rw["body"])
-        _akt_names.append("review-work")
+    from werkstatt.rollen import ROLLEN as _ROLLEN_r
+    _tf = list(task_files) if task_files else None
+    _geladen = _ROLLEN_r["reviewer"].lade_skills(skills, task_files=_tf)
+    _static_names = set(_ROLLEN_r["reviewer"].skills)
 
-    # M-Skills-Reviewer: Metadata + Glob
+    # Reihenfolge wie vor Migration: statische Bodies -> metadata -> dynamische.
+    for _s in _geladen:
+        if _s.get("name") in _static_names:
+            _body = _s.get("body") or ""
+            if _body:
+                parts.append(
+                    f"## Skill: {_s.get('name', '?')}\n" + _body
+                )
+                _akt_names.append(_s.get("name", "?"))
+
+    # M-Skills-Reviewer: Metadata-Block (Level 1)
     try:
-        from werkstatt.skills import skills_aktivieren, skills_metadata_block
+        from werkstatt.skills import skills_metadata_block
         _meta = skills_metadata_block(skills)
         if _meta:
             parts.append(_meta.rstrip())
-        if task_files:
-            _akt = skills_aktivieren(skills, list(task_files), rolle="reviewer")
-            for _s in _akt:
-                _body = _s.get("body") or ""
-                if _body:
-                    parts.append(
-                        f"## Skill: {_s.get('name', '?')}\n" + _body
-                    )
-                    _akt_names.append(_s.get("name", "?"))
     except Exception:
         pass
+
+    # Dynamische Bodies (task_files-basiert)
+    for _s in _geladen:
+        if _s.get("name") not in _static_names:
+            _body = _s.get("body") or ""
+            if _body:
+                parts.append(
+                    f"## Skill: {_s.get('name', '?')}\n" + _body
+                )
+                _akt_names.append(_s.get("name", "?"))
 
     # M-Skills-Dedup: zentrale Merk-Funktion (dedup + audit)
     if _akt_names:
