@@ -941,14 +941,14 @@ def _skill_body_fuer_reflection(state) -> str:
     if any(n in geladen for n in namen):
         return state.reflection_skill_body or ""
 
-    from werkstatt.rollen import ROLLEN as _ROLLEN_r
+    from werkstatt.rollen import ROLLEN
     from werkstatt.skills import (
         _merke_geladene_skills,
         load_all_skills,
     )
 
     _all = load_all_skills()
-    _geladen = _ROLLEN_r["reflection"].lade_skills(_all)
+    _geladen = ROLLEN["reflection"].lade_skills(_all)
     if not _geladen:
         return ""
     skill = _geladen[0]

@@ -266,10 +266,10 @@ def _reviewer_system(state=None, task_files=None) -> str:
     parts = [REVIEWER_SYSTEM]
     _akt_names: list[str] = []
 
-    from werkstatt.rollen import ROLLEN as _ROLLEN_r
+    from werkstatt.rollen import ROLLEN
     _tf = list(task_files) if task_files else None
-    _geladen = _ROLLEN_r["reviewer"].lade_skills(skills, task_files=_tf)
-    _static_names = set(_ROLLEN_r["reviewer"].skills)
+    _geladen = ROLLEN["reviewer"].lade_skills(skills, task_files=_tf)
+    _static_names = set(ROLLEN["reviewer"].skills)
 
     # Reihenfolge wie vor Migration: statische Bodies -> metadata -> dynamische.
     for _s in _geladen:

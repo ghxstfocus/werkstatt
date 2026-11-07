@@ -1643,13 +1643,13 @@ def run_planner(state: RunState) -> bool:
         return False
     # Stellschrauben 2026-11-03: Planner-Skills.
     try:
-        from werkstatt.rollen import ROLLEN as _ROLLEN_plan
+        from werkstatt.rollen import ROLLEN
         from werkstatt.skills import (
             _merke_geladene_skills,
             load_all_skills,
         )
         _all = load_all_skills()
-        _geladen = _ROLLEN_plan["planner"].lade_skills(_all)
+        _geladen = ROLLEN["planner"].lade_skills(_all)
         if _geladen:
             _merke_geladene_skills(
                 state, [s.get("name", "") for s in _geladen], rolle="planner")
