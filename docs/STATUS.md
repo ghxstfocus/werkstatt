@@ -1016,64 +1016,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   heute, aber nur durch zufaellig aktive ruff-Regel B010.
 - **Quelle:** OP-175 Bug D, Loop-Test 6, 2026-11-06.
 
-### OP-177: Reviewer-Kontext-Vertrag — Reviewer sieht truncated Diff
-
-- **Status:** open
-- **Typ:** architektur (Reviewer + Diff-Kontext)
-- **Betroffen:** `werkstatt/reviewer.py` (`_get_git_diff`,
-  `_reviewer_system`, `run_reviewer`, `run_phase_end_review`),
-  `tests/test_reviewer_kontext.py` (neu)
-- **Problem (Korrektur 2026-11-07):** Loop-Test 7 (18:29) hatte
-  einen `reviewer_phase_rejected` mit 3 HIGH + 1 medium. Meine
-  erste Interpretation ("3 von 5 Bugs false positives, Reviewer
-  schlecht") war **falsch** — die Audit-Logs zeigen etwas anderes:
-  - 1 HIGH war berechtigt (2 Smoke-Tests fehlten tatsaechlich)
-  - **2 HIGH enthielten den Reviewer-Selbst-Hinweis "nur der
-    Anfang von `_phase_end_reflection` ist sichtbar"** — der
-    Reviewer hat praezise gemeldet, was er im Kontext sah, und
-    explizit gemacht, dass der Kontext truncated war.
-  - 1 medium war zum Review-Zeitpunkt berechtigt (t1 war noch
-    nicht gepatcht).
-  Der Reviewer urteilte korrekt. Das Problem ist der
-  **Reviewer-Kontext-Vertrag**: welchen Diff sieht der Reviewer,
-  wie viel davon ist truncated, und wie wirkt sich das auf die
-  Bug-Meldungen aus?
-- **Akzeptanzkriterien:**
-  - **Messung (a):** Reviewer-Kontext-Groesse dokumentieren —
-    wie viel Diff sieht `run_reviewer` / `run_phase_end_review`
-    tatsaechlich? Aus `reviewer_result`-Audit-Payloads ueber
-    die letzten 10 Loop-Laeufe: durchschnittliche `diff_len`,
-    wie oft truncated, welche Dateien fehlen.
-  - **Diagnose (b):** Wenn truncated — wo genau? `_get_git_diff`
-    mit `pathspec = task_files` liefert pro Task nur dessen
-    Dateien. Das ist Absicht (K4), aber bei mehreren Tasks in
-    Folge sieht der Reviewer die kumulative Aenderung nicht.
-    Messen: bei Loop-Test 7 sah der Reviewer den
-    `_reflection_loop`-Patch (Task t3) tatsaechlich nicht, weil
-    `run_phase_end_review` nur `_phase_files` diffte.
-  - **Fix-Optionen (c), nach (a) und (b):**
-    (1) `_phase_files` erweitern auf alle Task-Dateien der Phase
-    (2) `_get_git_diff` mit `pathspec = ["."]` (voller Diff)
-        fuer Phase-Review
-    (3) Deterministischer Vor-Check: "Reviewer-Kontext ist
-        truncated" explizit als medium-Bug melden, statt als HIGH
-    Wahl erst nach Messung.
-  - **Test (d):** `tests/test_reviewer_kontext.py`:
-    (a) `run_phase_end_review` mit 3 Tasks, die je eine Datei
-        patchen — der Reviewer-Diff MUSS alle 3 Dateien enthalten.
-    (b) Wenn truncated: das muss als `reviewer_diff_truncated`-
-        Audit-Event sichtbar sein.
-  - `pytest` gruen, keine neuen ruff/mypy-Fehler.
-- **Tests:** `tests/test_reviewer_kontext.py` (neu)
-- **Blockiert von:** —
-- **Blockiert:** OP-180 (Reviewer-Praezision ist sinnlos, solange
-  der Reviewer truncated Kontext sieht).
-- **Prioritaet:** hoch — Root-Cause der "false-positive"-Diskussion
-  vom 2026-11-07.
-- **Quelle:** Loop-Test 7 (18:29), Audit-Log-Auswertung
-  Messblock 29 (2026-11-07), Korrektur meiner urspruenglichen
-  Fehleinschaetzung.
-
 ### OP-179: mypy-Setup — Duplicate-Module bei workspace-relativen Pfaden
 
 - **Status:** open
@@ -1124,67 +1066,12 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   einfachem fehlendem `__init__.py`, sondern bei doppelter
   Modul-Aufloesung).
 
-### OP-180: Reviewer-Praezision — Konfidenz-Feld + deterministischer Pre-Check
-
-- **Status:** open
-- **Typ:** architektur (Reviewer + Bug-Klassifikation)
-- **Betroffen:** `werkstatt/reviewer.py` (Reviewer-Prompt,
-  Bug-Filter), `tests/test_reviewer_konfidenz.py` (neu),
-  `tests/test_reviewer_false_positive.py` (erweitern)
-- **Problem:** Nach OP-177 (Kontext-Vertrag) bleibt eine
-  Praezisions-Luecke: der Reviewer-LLM setzt alle Bugs auf
-  `severity: high`, wenn er den Kontext nicht sicher beurteilen
-  kann. Es gibt heute **kein** Signal "dieser Bug ist unsicher".
-  Folge: ein mittelmaessig belegter Bug kann als HIGH einen Task
-  failen und 5 Reflection-Runden kosten (Reviewer-Prompt warnt
-  selbst: "Ein falscher high-Bug kostet 5 Reflection-Runden").
-- **Akzeptanzkriterien:**
-  - **Bug-Feld `konfidenz` (a):** Reviewer-LLM liefert pro Bug
-    zusaetzlich `konfidenz: hoch | mittel | niedrig`.
-  - **Deterministischer Pre-Check (b):** Vor Task-Fail-Trigger:
-    - Wenn Bug sagt "Funktion X fehlt", pruefe AST, ob X im
-      aktuellen Code existiert. Existiert sie → Bug auf
-      `konfidenz=niedrig` herabstufen.
-    - Wenn Bug sagt "Diff beruehrt Datei Y nicht", pruefe mit
-      `_get_git_diff`, ob Y im aktuellen Diff steht. Steht sie
-      → Bug auf `konfidenz=niedrig`.
-    - Wenn Bug `file` nennt, Datei aber nicht im Diff: pruefen,
-      ob sie zur Phase gehoert.
-  - **Task-Fail-Trigger (c):**
-    - `konfidenz=hoch` → HIGH-Bug blockt wie bisher.
-    - `konfidenz=mittel` → HIGH-Bug blockt, aber Audit-Event
-      `reviewer_bug_mittel_blockt`.
-    - `konfidenz=niedrig` → HIGH-Bug blockt NICHT; landet im
-      `reviewer_bugs`-State mit Flag, User entscheidet am
-      Commit-Gate.
-  - **Smoke-Tests (d):** `tests/test_reviewer_konfidenz.py`:
-    (a) HIGH-Bug mit `konfidenz=niedrig` fuehrt NICHT zu
-        Task-Fail;
-    (b) HIGH-Bug mit `konfidenz=hoch` fuehrt zu Task-Fail;
-    (c) Pre-Check stuft "Funktion fehlt"-Bug herab, wenn
-        AST sagt sie existiert.
-  - Bestehende `_filter_rename_false_positives` und
-    `_filter_auftrag_treue_false_positives` bleiben unveraendert
-    (komplementaer, nicht Ersatz).
-- **Tests:** `tests/test_reviewer_konfidenz.py` (neu),
-  `tests/test_reviewer_false_positive.py` (erweitern)
-- **Blockiert von:** OP-177 (Kontext-Vertrag). Solange der
-  Reviewer truncated Kontext sieht, produzieren Pre-Check und
-  Konfidenz-Feld zu viele False-Negatives ("Funktion fehlt"
-  ist dann wahr, obwohl im truncated Kontext die Funktion
-  steht — Pre-Check sieht den Code, Reviewer sieht ihn nicht).
-- **Blockiert:** nichts (laufender Code funktioniert).
-- **Prioritaet:** mittel — wartet auf OP-177. Wenn OP-177
-  geloest ist, sinkt die Notwendigkeit von Konfidenz-Feld
-  massiv, weil der Reviewer vollstaendigen Kontext hat.
-- **Quelle:** Loop-Test 7 (18:29), Audit-Log-Auswertung
-  Messblock 29 (2026-11-07). Reviewer-Prompt warnt selbst:
-  "Ein falscher high-Bug kostet 5 Reflection-Runden."
-
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-07 | OP-180 | wontfix | Reviewer-Praezision (Konfidenz-Feld + Pre-Check): falsche Problem-Annahme. Loop-Test 7 hatte keinen Reviewer-Bug, sondern OP-179 (mypy Duplicate-Module) — die 3 HIGH reviewer_phase_rejected-Bugs waren ALLE berechtigt (t3/t4/t5 wurden wegen OP-179 nicht gebaut). Konfidenz-Feld und Pre-Check basieren auf "Reviewer meldet falsche Bugs" — das war nie wahr. Kein Code angelegt, kein Test, wird nicht gebraucht.
+- 2026-11-07 | OP-177 | wontfix | Reviewer-Kontext-Vertrag: falsche Problem-Annahme. _phase_files (alle Task-Dateien der Phase) liefert vollstaendigen Diff — bestaetigt durch Messblock 31. Die 3 HIGH-Bugs aus Loop-Test 7 waren berechtigt, weil t3/t4/t5 tatsaechlich nicht gebaut wurden (OP-179). Der Reviewer-Selbst-Hinweis "nur der Anfang von _phase_end_reflection ist sichtbar" war praezise Diagnose ("Patch fehlt im sichtbaren Kontext"), nicht Truncation-Beschwerde. Kein Code angelegt, kein Test. Ursache fuer "3 von 4 Tasks nicht gebaut" ist OP-179 (mypy Setup) + OP-172 (Verify-Truncation, heute gefixt).
 - 2026-11-07 | OP-172 | done | Fehlerkern-Extraktion in verify.py (`_extrahiere_fehlerkern`) statt `_out[-500:]` (8effad1). mypy-Fehler-Output wird auf `error:`-Zeilen + Kontext reduziert, `note:`/`help:`/Statistik verworfen. Live-Beleg Loop-Test 7 (18:29:11): der alte Truncation-Pfad schnitt den error-Kopf ab, sodass der Builder nur "(also at ...)" + Notes sah. Jetzt sieht er "error: Source file found twice under different module names: \"werkstatt.phases.review\" and \"phases.review\"" — das Setup-Problem ist damit **diagnostizierbar**, aber nicht behebbar (eigene OP-179). 9 neue Tests (test_verify_fehlerkern.py).
 - 2026-11-07 | OP-178 | done | Rollen-Registry-Migration: planner/builder/reviewer/reflection via ROLLEN[name].lade_skills() (0388d1b), Alias-Cleanup (8954f83), Explorer-Migration + systematic-debugging-Rausnahme (5a5c941). 5 von 5 Aufrufern migriert, scout bleibt fail-closed-leer. Neuer Migration-Test test_rollen_registry_migration.py (AST-Scan: jede Rolle mit skills/filter_rolle muss ROLLEN[name] nutzen). Verhaltensaenderung Explorer: systematic-debugging wird nicht mehr geladen (auch nicht bei Trigger); SKILL.md-Frontmatter `rollen: [builder]`. systematic-debugging-Zuordnung zum geplanten Debugger (OP-128/OP-160) dort offen, keine eigene OP.
 - 2026-11-06 | OP-168b | done | Gate in `_phase_end_reflection` nach jeder Reject-Runde (c713033), `phase_review_auto: bool` in RunState (state_flow_baseline nachgezogen), 2 Smoke-Tests in test_phase_review_gate.py. Live-Beleg Loop-Test 7 (18:xx): Gate nach Runde 1 in Phase-End-Reflection. Reviewer-Bugs aus Loop-Test 7 geprueft: nur Test-Luecke berechtigt (jetzt gefuellt); Bug 1/2/5 waren false positives (Reviewer interpretierte AK-Text falsch, Code liest phase_review_auto nach Gate-Aufruf). Test-Spec-Abweichung: 2 Tests test_reflection_reject_ruft_gate + test_gate_n_bricht_reflection_ab. Task-Reflection-Gate (`_reflection_loop`) explizit NICHT im Scope — OP-Text nennt `_phase_end_reflection`.
