@@ -110,6 +110,88 @@ def _stage_count_by_phase(project_dir: Path, phase: str) -> int:
     )
 
 
+def _extrahiere_fehlerkern(text: str, max_chars: int = 3000) -> str:
+    """OP-172: Extrahiert Fehler-Zeilen aus Tool-Output.
+
+    Live-Beleg Loop-Test 7 (18:29:11): mypy-Output enthielt
+    "error: Source file found twice..." + 5 "note:"-Zeilen. Der
+    alte Code `_out[-500:]` schnitt den error-Kopf ab, sodass der
+    Builder nur "(also at ...)" + Notes sah und nicht reparieren
+    konnte.
+
+    Verwirft:
+    - "note:"-Zeilen (mypy-Erklaerungen)
+    - "help:"-Zeilen (ruff-Erklaerungen)
+    - Statistik-Zeilen ("Found N errors", "X passed", "X failed")
+
+    Behaelt:
+    - Zeilen mit " error: " (mypy)
+    - Zeilen mit Code-Praefix wie E501/BLE001/F401 (ruff)
+    - Zeilen mit "FAILED " oder "AssertionError" oder "assert " (pytest)
+    - Je 1 Kontextzeile davor (der Aufhaenger wie "(also at ...)")
+    - Je 1 Kontextzeile danach (z.B. "assert False")
+
+    Fallback: letzte max_chars Zeichen (wenn nichts erkannt wurde).
+    """
+    import re as _re
+    if not text:
+        return ""
+
+    lines = text.splitlines()
+    kerne: list[str] = []
+    seen: set[str] = set()
+
+    def _add(s: str) -> None:
+        if s and s not in seen:
+            kerne.append(s)
+            seen.add(s)
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Verwirf explizit
+        if stripped.startswith(("note:", "help:")):
+            continue
+        if _re.match(r"^\[?\d+\s+(passed|failed|errors?|warnings?|skipped)",
+                     stripped, _re.IGNORECASE):
+            continue
+        if stripped.lower().startswith("found ") and " error" in stripped.lower():
+            continue
+
+        is_err = (
+            " error: " in line
+            or line.startswith("FAILED ")
+            or "AssertionError" in line
+            or _re.match(r"^[A-Z]\d{3,4}\b", stripped)
+        )
+        if not is_err:
+            continue
+
+        # 1 Kontextzeile davor (Aufhaenger wie "(also at ...)")
+        if i > 0:
+            prev = lines[i - 1].rstrip()
+            if (prev and not prev.strip().startswith(("note:", "help:"))
+                    and " error: " not in prev):
+                _add(prev)
+        _add(line.rstrip())
+        # 1 Kontextzeile danach (assert-Body bei pytest)
+        if i + 1 < len(lines):
+            nxt = lines[i + 1]
+            if ("assert" in nxt.lower()
+                    and not nxt.strip().startswith(("note:", "help:"))):
+                _add(nxt.rstrip())
+
+    if not kerne:
+        return text[-max_chars:]
+
+    # Join mit echtem Newline (Zeichen-Code 10).
+    result = chr(10).join(kerne)
+    if len(result) > max_chars:
+        result = result[:max_chars] + chr(10) + "[...]"
+    return result
+
+
 def _expand_cmd_placeholders(
     cmd: list, state: RunState, project_dir: Path,
 ) -> list[str] | None:
@@ -478,7 +560,8 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
             if res.returncode != 0:
                 # K22a: stderr einbeziehen -- ruff schreibt auf stderr.
                 _out = (res.stdout or "") + (res.stderr or "")
-                errors.append(f"{stage.get('id', '?')}: {_out[-500:]}")
+                _kern = _extrahiere_fehlerkern(_out)
+                errors.append(f"{stage.get('id', '?')}: {_kern}")
         except Exception as exc:
             errors.append(f"{stage.get('id', '?')}-Fehler: {exc}")
 
