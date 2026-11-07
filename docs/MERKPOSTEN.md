@@ -681,3 +681,76 @@ Defaults, fail-loud bei unbekanntem Feld (Tippfehler-Schutz).
 (LLM-Reply, Function-Referenzen) — **nie** als State-Attrappe.
 
 **Siehe:** ADR-0015, OP-174, Commit f91cb1a (hand-rolled Mocks migriert)
+
+
+## Aus Session 6 (Loop-Test 7, 2026-11-06/07)
+
+### Muster — venv vor jedem pytest/Drift-Check aktivieren
+
+Nach jedem SSH-Reconnect `source .venv/bin/activate`. Der
+Prompt-Indikator ist die Klammer `(.venv)` vor dem Hostnamen —
+fehlt sie, laeuft System-Python und System-Pytest.
+
+Konkrete Folge in dieser Session:
+
+- `which pytest` zeigt `/usr/bin/pytest` (System 7.2.1) statt
+  `.venv/bin/pytest` (8.4.2)
+- 7 Collection-Errors in `tests/test_web_*.py` — fastapi und
+  uvicorn sind nur im venv installiert
+- Drift-Checks laufen mit falschem `sys.path`, Ergebnisse nicht
+  vergleichbar mit frueheren Laeufen
+
+Regel: vor jedem `pytest` in einem Block:
+
+    which pytest | grep -q "\.venv" || { echo "venv fehlt"; return 1; }
+
+oder hart: `source .venv/bin/activate` an den Blockanfang.
+
+### Muster — Reviewer-LLM produziert false positives bei AK-Text
+
+Loop-Test 7 (2026-11-06, OP-168b): Reviewer meldete 5 Bugs
+(3 HIGH, 2 medium). Messung gegen AK-Text und Code ergab:
+nur Test-Luecke berechtigt, 3 HIGH waren false positives.
+
+- Bug 1: "Gate in `_reflection_loop` fehlt" — AK-Text sagt
+  explizit `_phase_end_reflection`. Reviewer interpretierte
+  den Auftrag semantisch, statt den AK-Text woertlich zu
+  lesen.
+- Bug 2: "`phase_review_auto = False` vor Gate-Aufruf macht
+  `a`-Zweig unwirksam" — Code liest `phase_review_auto` NACH
+  dem Gate-Aufruf. Der Reviewer hatte die Code-Stelle falsch
+  gelesen.
+- Bug 5: "Gate im falschen Reject-Pfad" — Code hat dort gar
+  kein Gate. Reviewer hatte eine veraltete Diff-Version.
+
+Konsequenzen:
+
+1. **Reviewer-Qualitaet messen**, nicht "hat Bugs gemeldet"
+   als Erfolg zaehlen. Praezision/Recall pro Loop-Lauf
+   notieren.
+2. **Deterministischer Pre-Check** vor Reviewer fuer
+   AK-Verletzungen, die per AST/String-Vergleich pruefbar
+   sind (z. B. "Nenne die Ziel-Funktion aus dem AK-Text").
+3. **Reviewer-Bugs nicht 1:1 als Task-Fail behandeln** —
+   mindestens kurz gegen AK-Text und Code pruefen.
+
+Siehe PROGRESS.md-Eintrag "OP-168b abgeschlossen" und
+Commit 749172c.
+
+### Muster — state_flow.py --write-baseline schreibt auf stdout
+
+`python3 tools/state_flow.py --write-baseline` gibt den
+Baseline-JSON auf **stdout** aus, schreibt nicht in
+`tools/state_flow_baseline.json`. Der Help-Text ist
+irrefuehrend ("JSON nach stdout" vs. Docstring-Kopf
+"JSON nach tools/state_flow_baseline.json (stdout)").
+
+Richtig:
+
+    python3 tools/state_flow.py --write-baseline \
+        > tools/state_flow_baseline.json
+    python3 tools/state_flow.py --check  # muss gruen sein
+
+Bei Baseline-Aenderung vorher `diff` gegen die alte Datei
+laufen — nur additive Aenderungen akzeptieren (neue Felder),
+keine Umsortierung durch Format-Wechsel.
