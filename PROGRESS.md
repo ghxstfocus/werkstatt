@@ -2885,3 +2885,40 @@ still verloren.
 - **Status:** phase_ende
 - **Info:** tasks_ok=3/4
 
+
+
+### 2026-11-07 — OP-183 abgeschlossen: Planner-Task-Typ `action: verify`
+
+Loop-Lauf 15:24 hat t1-t3 + 3 von 4 Tests gebaut (Commit `c3e308f`):
+
+- **t1** (Planner): `_ist_verify_task(name, description) -> bool` als
+  deterministischer Pre-Check gegen die vier Marker `pruefe`,
+  `verifiziere`, `stelle sicher`, `check`. `PLANNER_SPLIT_SYSTEM`
+  um vierten Action-Wert `verify` erweitert (4 statt 3 Actions).
+  `_korrigiere_aktion`-Vorspann ruft den Pre-Check vor der
+  LLM-Korrektur — die Klassifikation kann nicht überschrieben werden.
+- **t2** (`phases/tasks.py`): verify-Zweig in `_phase_tasks_loop`
+  direkt nach `_is_read`. Ruft `_verify_patches` + `run_reviewer`,
+  **nicht** `run_builder`. Kein neues Audit-Event (Katalog-Drift
+  vermieden — der bestehende `loop_task_start`-Event reicht).
+- **t3** (`reviewer.py`): `_filter_auftrag_treue_false_positives` um
+  optionalen `action`-Parameter erweitert. Bei `action="verify"`
+  werden Bugs der Form "Diff fehlt Datei X" / "Task verlangt
+  Funktion Y, Diff hat sie nicht" rausgefiltert — bei Verify-Tasks
+  sind das korrekte Beobachtungen, keine Bugs. `_reviewer_system`
+  hängt bei `action="verify"` einen VERIFY-TASK-Block mit
+  Diff-Erwartung: leer vor den Standard-Prompt.
+
+**t4-Problem (3/4 Tests grün):** `test_verify_setzt_kein_auftrag_bereits_erfuellt`
+fehlte. Reflection konnte ihn nicht fertigstellen, weil die
+Test-Datei zu groß war. Manuell nachgezogen als deterministischer
+Text-Scan-Test: prüft per `find("_is_verify")` → `find("continue")`,
+dass der verify-Block `auftrag_bereits_erfuellt` nicht setzt.
+Robuster als Mock-basiert, weil er die AK direkt prüft.
+
+**Lehre für Loop-Test 10 (Kandidat für eigenes OP):**
+Reflection scheitert bei Test-Tasks mit >3 Assertions, wenn der
+Builder die gesamte Test-Datei in einem Task plant. Konsequenz:
+Test-Tasks im Planner auf max ~50 Zeilen / ~3 Tests pro Task
+begrenzen, oder Test-Datei-Erstellung als `action: create`
+atomarer behandeln.
