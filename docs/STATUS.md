@@ -300,7 +300,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 
 ### OP-233: Timeline + Layout-Umbau Variante A
 
-- **Status:** open
+- **Status:** done (2026-11-07)
 - **Typ:** ui-feature
 - **Betroffen:** `werkstatt/web/static/layout.js` (neu),
   `werkstatt/web/static/timeline.js` (neu),
@@ -325,6 +325,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   (f) Manuell verifiziert gegen Wireframe.
 - **Tests:** keine (UI, visuell)
 - **Blockiert von:** OP-232
+- **Nachtrag 2026-11-07:** Umgesetzt in 4 Commits. (1) Token-Tracking: `state.LLMReply` um prompt/completion/total_tokens, `agent.py` liest DeepSeek-"usage", `chat_agent.py` setzt `stream_options.include_usage=true` und persistiert `token_usage`-Events, `inspector.aggregate_tokens` + `/api/projects/{name}/tokens`. (2) Layout: 3-Spalten-Grid (runs 200px / timeline flex / chat 400px), Workbench-Drawer (collapsible), Statusleiste mit zwei Token-Anzeigen. (3) Neue Module: `inspector.py` + 3 Endpoints (/ops, /timeline, /status) + 4 JS-Module (runs, timeline, statusleiste, workbench), in tabs.js an Projektwechsel angebunden. Alle AK (a)-(e) erfuellt. AK (f) manuelle Verifikation steht aus. Timeline nutzt Event-Store (task_started/done) + JSONL-Audit.
 
 ### OP-240: Chat-Modus Debugger (evidence-first, Ladder)
 
