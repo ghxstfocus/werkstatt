@@ -2667,3 +2667,19 @@ Message-Bug vermischt. Loop-Test 7 kann jetzt laufen.
 - **Status:** phase_ende
 - **Info:** rc=1 tasks_ok=2/5
 
+
+### 2026-11-06 — OP-168b abgeschlossen: Gate in _phase_end_reflection
+
+Loop-Test 7 (18:27–19:55) mit OP-168b als Aufgabe. Reviewer hat 5 Bugs gemeldet, davon 3 HIGH — Messung zeigt: nur Test-Luecke berechtigt. Bugs 1/2/5 waren false positives (Reviewer interpretierte AK-Text falsch, Code liest `phase_review_auto` nach Gate-Aufruf statt davor).
+
+Live-Beweise aus Loop-Test 7 fuer OP-175-Fixes:
+- Bug A (Topo-Sort): 5 Tasks korrekt sortiert, keine Zyklen
+- Bug B (verify_gleich): Stagnation-Abbruch nach 2 Runden (Loop-Log 19:44:44→19:44:46)
+- Bug C (Message): "nach 2 Runden erschoepft" statt 3
+- OP-172 bestaetigt: Verify meldet truncated `statt.reflection"` statt des echten mypy-Fehlers
+
+Commit c713033: phase_review_auto + Gate in _phase_end_reflection. State_flow_baseline um phase_review_auto erweitert. Test-Spec 2 Smoke-Tests (test_reflection_reject_ruft_gate, test_gate_n_bricht_reflection_ab).
+
+Bewusste Scope-Grenze: Task-Reflection-Gate in `_reflection_loop` ist NICHT umgesetzt — OP-Text nennt `_phase_end_reflection` als Ziel. Falls das spaeter gewuenscht wird, eigene OP.
+
+Lehre: `pytest` ohne aktiviertes venv lief System-Pytest 7.2.1, fastapi fehlt dort → 7 Collection-Errors. Siehe Merkposten.

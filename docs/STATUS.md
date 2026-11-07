@@ -870,36 +870,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 
 
-### OP-168b: Phase-Review-Gate zwischen jeder Reflection-Runde
-
-- **Status:** open
-- **Typ:** architektur (Phase-Review + Gates)
-- **Betroffen:** `werkstatt/phases/_common.py`
-  (`_phase_end_reflection`), `werkstatt/phases/finalize.py`
-  (Aufrufkontext Z. 117), `tests/test_phase_review_gate.py`
-  (erweitern)
-- **Problem:** OP-168 hat `_phase_review_gate` gebaut und in
-  `_phase_finalize` (Z. 117) verdrahtet — aber das Gate sitzt
-  **NACH** `_phase_end_reflection`, nicht zwischen den internen
-  Runden. Loop-Test-4 zeigte 3 Runden Builder+Reviewer ohne
-  Eingriff. Der User konnte erst am Ende eingreifen. Der Docstring
-  von `_phase_review_gate` (phases/review.py:1) markiert das
-  selbst als "Teilfix: OP-168b".
-- **Akzeptanzkriterien:**
-  - `_phase_end_reflection` (in `phases/_common.py`) ruft nach
-    jeder Reject-Runde `_phase_review_gate(state)`.
-  - Bei `n`: Reflection bricht mit `return False` ab (kein
-    weiterer Builder-Patch).
-  - Bei `a`: Auto-Modus bis max Runden (kein weiteres Gate).
-  - Bei `j`: naechste Runde Builder+Reviewer.
-  - 2 neue Smoke-Tests in `tests/test_phase_review_gate.py`:
-    (a) Reject Runde 1 -> Gate wird gerufen; (b) Gate `n` ->
-    `_phase_end_reflection` returns False.
-- **Tests:** `tests/test_phase_review_gate.py` (erweitern)
-- **Blockiert von:** —
-- **Hinweis:** Loest die verbleibende Luecke aus OP-168 (done).
-
-
 ### OP-172: Verify→Builder-Kette — Builder sieht nur 5 Fehler
 
 - **Status:** open
@@ -1104,6 +1074,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-06 | OP-168b | done | Gate in `_phase_end_reflection` nach jeder Reject-Runde (c713033), `phase_review_auto: bool` in RunState (state_flow_baseline nachgezogen), 2 Smoke-Tests in test_phase_review_gate.py. Live-Beleg Loop-Test 7 (18:xx): Gate nach Runde 1 in Phase-End-Reflection. Reviewer-Bugs aus Loop-Test 7 geprueft: nur Test-Luecke berechtigt (jetzt gefuellt); Bug 1/2/5 waren false positives (Reviewer interpretierte AK-Text falsch, Code liest phase_review_auto nach Gate-Aufruf). Test-Spec-Abweichung: 2 Tests test_reflection_reject_ruft_gate + test_gate_n_bricht_reflection_ab. Task-Reflection-Gate (`_reflection_loop`) explizit NICHT im Scope — OP-Text nennt `_phase_end_reflection`.
 - 2026-11-06 | OP-175 | done | Bugs A, B, C gefixt (6aa8694 Topo-Sort, f204965 verify_gleich, 2538174 Gate-Message). Bug D nicht reproduzierbar: Builder versuchte aktiv mypy-Umgehung (state.X = -> setattr), Verteidigungskette (mypy+ruff B010+spec_widerspruch) hat es gefangen; Haertung als OP-176. Bug E zurueckgezogen: Fehlmessung (Audit-Events existieren, 0s korrekt). Test-Namen AK-abweichend: test_planner_deps_sortierung.py statt test_planner_deps_richtung.py (Bug war Sortierung, nicht Richtung), test_reflection_stagnation_verify.py statt test_reflection_stagnation_5_runden.py, test_phase_review_gate_kontext.py nicht angelegt (Bug C war Message-Bug, kein Code-Gate). Hinweis: OP-168b (Gate zwischen Task-Reflection-Runden) bleibt offen.
 - 2026-11-06 | OP-168 | done | `_phase_review_gate` in phases/review.py:11 + 6 Tests + Verdrahtung in phases/finalize.py:117; AK (b) erfuellt; AK (a) (Gate zwischen jeder Reflection-Runde) als OP-168b angelegt
 - 2026-11-06 | OP-145 | wontfix | Semantik geklaert: `_erfuellt`/`_bestaetigt`/`_quelle` haben verschiedene Rollen (5 Writer-Pfade, 2 Reader-Muster); Rename haette Scout-Pfad (`planner.py:1830`) regressen. Ersetzt durch OP-145b (State-Contract, in Planung)
