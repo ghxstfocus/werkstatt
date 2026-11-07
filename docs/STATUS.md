@@ -1070,6 +1070,79 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   heute, aber nur durch zufaellig aktive ruff-Regel B010.
 - **Quelle:** OP-175 Bug D, Loop-Test 6, 2026-11-06.
 
+### OP-177: Reviewer-Praezision — False Positives messen und reduzieren
+
+- **Status:** open
+- **Typ:** architektur (Reviewer + Gates)
+- **Betroffen:** `werkstatt/reviewer.py` (Prompt, Bug-Klassifikation),
+  `tests/test_reviewer_false_positive_aufrufer.py`,
+  `tests/test_reviewer_false_positive.py` (erweitern),
+  `docs/STATUS.md` (Loop-Log-Auswertung)
+- **Problem:** Loop-Test 7 (2026-11-06, OP-168b) hatte
+  5 Reviewer-Bugs (3 HIGH, 2 medium). Messung gegen AK-Text
+  und Code (Messblock 14) zeigte: nur 1 Bug berechtigt
+  (Test-Luecke), 3 HIGH waren false positives:
+
+  - Bug 1 HIGH: "Gate in `_reflection_loop` fehlt" —
+    AK-Text sagt explizit `_phase_end_reflection` als Ziel.
+    Reviewer interpretierte den Auftrag semantisch statt
+    woertlich.
+  - Bug 2 HIGH: "`phase_review_auto = False` vor Gate-
+    Aufruf macht `a`-Zweig unwirksam" — Code liest
+    `phase_review_auto` NACH dem Gate-Aufruf. Reviewer
+    las falsche Code-Stelle.
+  - Bug 5 medium: "Gate im falschen Reject-Pfad" — Code
+    hat dort gar kein Gate. Reviewer hatte veraltete Diff-
+    Version (Patch war bereits durch eine spaetere Runde
+    ueberschrieben).
+
+  Muster: Reviewer-LLM faellt bei zwei Klassen von Bugs
+  systematisch daneben — (a) AK-Interpretation, (b) Diff-
+  Snapshot-Aktualitaet. Beide sind per deterministischem
+  Pre-Check adressierbar.
+
+- **Akzeptanzkriterien:**
+  - **Messung (a):** Auswertung der letzten 10 Loop-Laeufe
+    (audit-logs/agent-pipeline-*.jsonl): Reviewer-Praezision =
+    berechtigte Bugs / alle gemeldeten Bugs, pro Loop-Lauf.
+    Baseline erheben, in PROGRESS.md festhalten.
+  - **Pre-Check (b):** Deterministische Vorpruefung fuer
+    Bugs, die per AST/String-Vergleich pruefbar sind:
+    - Wenn Bug sagt "Funktion X fehlt", pruefe AST, ob X im
+      Code existiert. Wenn ja: Bug als "unwahrscheinlich"
+      markieren (nicht verwerfen, aber Flag).
+    - Wenn Bug sagt "Datei Y hat Zeile Z nicht", pruefe den
+      aktuellen Diff-Hash gegen den im Bug referenzierten
+      Snapshot.
+  - **Bug-Klassifikation (c):** Reviewer-Bugs bekommen ein
+    zusaetzliches Feld `konfidenz: hoch | mittel | niedrig`.
+    `hoch` = deterministischer Pre-Check stimmt zu.
+    `mittel` = weder bestaetigt noch widerlegt.
+    `niedrig` = Pre-Check widerspricht.
+  - **Task-Fail-Trigger (d):** Nur `konfidenz: hoch` fuehrt
+    zu automatischem Task-Fail. `mittel`/`niedrig` erfordern
+    User-Bestaetigung am Gate (Prompt-Text erweitern:
+    "Reviewer meldet [niedrig] — pruefen?").
+  - **Smoke-Tests:** 2 neue Tests:
+    (a) Reviewer-Bug mit `konfidenz: niedrig` fuehrt NICHT
+    zu Task-Fail; (b) `konfidenz: hoch` fuehrt zu Task-Fail.
+
+- **Tests:** `tests/test_reviewer_false_positive_aufrufer.py`,
+  `tests/test_reviewer_false_positive.py` (erweitern)
+- **Blockiert von:** —
+- **Blockiert:** nichts (Loop-Test 8 laeuft ohne; OP-172 ist
+  unabhaengiger Blocker)
+- **Prioritaet:** mittel — Loop-Test 7 hat gezeigt, dass
+  Reviewer-FPs den User-Zeit-Aufwand erhoehen (3 Iterationen
+  im `e`-Pfad), aber die Sicherheits-Kette funktioniert
+  (kein Auto-Approve).
+- **Quelle:** Loop-Test 7 (18:27-19:55, OP-168b),
+  Commit `749172c`, Merkposten "Reviewer-LLM produziert
+  false positives bei AK-Text".
+- **Hinweis:** Loest NICHT das Problem, dass der Reviewer
+  Bugs uebersieht (Recall). Nur Praezision. Recall-Messung
+  ist eigene OP, wenn Praezision steht.
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
