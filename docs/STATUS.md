@@ -1139,6 +1139,63 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   einfachem fehlendem `__init__.py`, sondern bei doppelter
   Modul-Aufloesung).
 
+### OP-180: Reviewer-Praezision — Konfidenz-Feld + deterministischer Pre-Check
+
+- **Status:** open
+- **Typ:** architektur (Reviewer + Bug-Klassifikation)
+- **Betroffen:** `werkstatt/reviewer.py` (Reviewer-Prompt,
+  Bug-Filter), `tests/test_reviewer_konfidenz.py` (neu),
+  `tests/test_reviewer_false_positive.py` (erweitern)
+- **Problem:** Nach OP-177 (Kontext-Vertrag) bleibt eine
+  Praezisions-Luecke: der Reviewer-LLM setzt alle Bugs auf
+  `severity: high`, wenn er den Kontext nicht sicher beurteilen
+  kann. Es gibt heute **kein** Signal "dieser Bug ist unsicher".
+  Folge: ein mittelmaessig belegter Bug kann als HIGH einen Task
+  failen und 5 Reflection-Runden kosten (Reviewer-Prompt warnt
+  selbst: "Ein falscher high-Bug kostet 5 Reflection-Runden").
+- **Akzeptanzkriterien:**
+  - **Bug-Feld `konfidenz` (a):** Reviewer-LLM liefert pro Bug
+    zusaetzlich `konfidenz: hoch | mittel | niedrig`.
+  - **Deterministischer Pre-Check (b):** Vor Task-Fail-Trigger:
+    - Wenn Bug sagt "Funktion X fehlt", pruefe AST, ob X im
+      aktuellen Code existiert. Existiert sie → Bug auf
+      `konfidenz=niedrig` herabstufen.
+    - Wenn Bug sagt "Diff beruehrt Datei Y nicht", pruefe mit
+      `_get_git_diff`, ob Y im aktuellen Diff steht. Steht sie
+      → Bug auf `konfidenz=niedrig`.
+    - Wenn Bug `file` nennt, Datei aber nicht im Diff: pruefen,
+      ob sie zur Phase gehoert.
+  - **Task-Fail-Trigger (c):**
+    - `konfidenz=hoch` → HIGH-Bug blockt wie bisher.
+    - `konfidenz=mittel` → HIGH-Bug blockt, aber Audit-Event
+      `reviewer_bug_mittel_blockt`.
+    - `konfidenz=niedrig` → HIGH-Bug blockt NICHT; landet im
+      `reviewer_bugs`-State mit Flag, User entscheidet am
+      Commit-Gate.
+  - **Smoke-Tests (d):** `tests/test_reviewer_konfidenz.py`:
+    (a) HIGH-Bug mit `konfidenz=niedrig` fuehrt NICHT zu
+        Task-Fail;
+    (b) HIGH-Bug mit `konfidenz=hoch` fuehrt zu Task-Fail;
+    (c) Pre-Check stuft "Funktion fehlt"-Bug herab, wenn
+        AST sagt sie existiert.
+  - Bestehende `_filter_rename_false_positives` und
+    `_filter_auftrag_treue_false_positives` bleiben unveraendert
+    (komplementaer, nicht Ersatz).
+- **Tests:** `tests/test_reviewer_konfidenz.py` (neu),
+  `tests/test_reviewer_false_positive.py` (erweitern)
+- **Blockiert von:** OP-177 (Kontext-Vertrag). Solange der
+  Reviewer truncated Kontext sieht, produzieren Pre-Check und
+  Konfidenz-Feld zu viele False-Negatives ("Funktion fehlt"
+  ist dann wahr, obwohl im truncated Kontext die Funktion
+  steht — Pre-Check sieht den Code, Reviewer sieht ihn nicht).
+- **Blockiert:** nichts (laufender Code funktioniert).
+- **Prioritaet:** mittel — wartet auf OP-177. Wenn OP-177
+  geloest ist, sinkt die Notwendigkeit von Konfidenz-Feld
+  massiv, weil der Reviewer vollstaendigen Kontext hat.
+- **Quelle:** Loop-Test 7 (18:29), Audit-Log-Auswertung
+  Messblock 29 (2026-11-07). Reviewer-Prompt warnt selbst:
+  "Ein falscher high-Bug kostet 5 Reflection-Runden."
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
