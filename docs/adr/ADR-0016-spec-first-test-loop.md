@@ -146,3 +146,68 @@ Kritische AK werden nicht allein durch dieselbe Agenteninterpretation
 bestaetigt.
 
 **Neue OP:** OP-212 (Test-Spec-Validator).
+
+
+## Nachtrag 2026-11-07 (OP-201-Erkenntnis)
+
+### Test-Agent prueft Verhalten, nicht Config-Details
+
+**Beobachtung OP-201 (Loop-Lauf 19:46-19:56):** Der Test-Agent
+produzierte drei Tests, die den Ist-Zustand der Config
+festschrieben, statt Spec-Verhalten zu testen:
+
+- `test_pytest_laeuft_ohne_installiertes_package` verlangte
+  `testpaths` in `pytest.ini` — das ist eine Pytest-Konvention,
+  kein Spec-Kriterium aus OP-201.
+- `test_requirements_txt_hat_zwei_kommentar_zeilen_fuer_test_tools`
+  zaehlte exakt 2 Marker-Zeilen — Implementierungs-Detail.
+- `test_pytest_tests_laeuft_mit_installiertem_package` verlangte
+  gruenen `--collect-only` — Smoke-Test, kein Spec-Test.
+
+Folge: Phase-Review rejected (korrekt), Phase-End-Reflection
+konnte die Tests nicht selbst fixen (Test-Bug vs. Spec-Bug
+unklar). Loop per Human-Gate `n` abgebrochen, manuelle
+Nachziehung.
+
+**Regel:** Der Test-Agent prueft Spec-Verhalten, nicht die
+woertliche AK-Formulierung.
+
+Konkret:
+
+1. **AK in Verhalten uebersetzen.** Aus
+   "`pyproject.toml` enthaelt 2 Kommentar-Zeilen fuer test-tools"
+   folgt Verhalten "beide Tools sind in `pip install -e
+   .[test-tools]` verfuegbar", nicht "teste 2 Zeilen in
+   requirements.txt".
+
+2. **Config-Dateien sind Implementierungs-Detail.** Tests duerfen
+   `pytest.ini`, `mypy.ini`, `requirements.txt`, `.gitignore`
+   nur pruefen, wenn die AK das explizit fordert
+   ("Konfig-Integritaet pruefen"). Dann sind sie Smoke-Tests,
+   keine Spec-Tests, und gehoeren in eine eigene Test-Datei mit
+   `test_config_integritaet.py`-Namensschema.
+
+3. **`test_spec`-Schema erweitert:**
+       {
+         "requirement_id": "OP-NNN",
+         "acceptance_criteria": [
+           {
+             "id": "AC-NNN",
+             "condition": "...",
+             "expected_behavior": "...",
+             "verification": "public_api|cli_output|file_content"
+           }
+         ]
+       }
+   `expected_behavior` ist Verhalten, nicht Datei-Inhalt.
+   `verification` sagt, welches Test-Idiom erwartet wird
+   (public_api bevorzugt, file_content nur bei expliziter
+   Config-Integritaets-AK).
+
+4. **Post-Test-Validation:** Wenn ein Test nur Config-Dateien
+   prueft (pytest.ini, requirements.txt, .gitignore) ohne
+   `expected_behavior`-Feld in der Spec, emittiert der Test-Loop
+   ein Audit-Event `test_spec_smoke_test_verdacht` und bittet
+   den Test-Agent um Runde 2.
+
+**Neue OP:** OP-217 (Test-Agent-Spec-Qualitaet).

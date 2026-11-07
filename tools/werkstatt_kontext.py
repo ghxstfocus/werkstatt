@@ -72,6 +72,13 @@ Pipeline: Explorer -> Scout -> Architect -> Planner/Split -> Builder
 
 Kern-Idee: Der Loop liest docs/STATUS.md (offene OPs), waehlt einen
 Punkt, baut ihn, testet ihn, und committet wenn alles gruen ist.
+
+ZIELBILD (SOLL): Der Mensch arbeitet mit einer Web-UI. Der Loop ist
+Motor (headless), der Chat ist Interface (read-only Diagnose), der
+Chat-Debugger ist Reparatur-Modus (OP-240), das Erfahrungs-Gehirn
+ist zweistufiges Gedaechtnis (ADR-0010). Vollstaendige
+Ziel-Architektur: docs/SOLL.md. IST-Zustand:
+docs/ARCHITECTURE.md.
 """
 
 
@@ -205,48 +212,54 @@ Die wichtigsten Regeln:
    - PROGRESS.md         — erledigt, append-only
    - docs/MERKPOSTEN.md  — Prozess-Lehren, nicht durchsuchbar
 
-7. NEUE ARTEFAKTE (Stand 2026-11-06, Session 5 — Tests sind Specs):
-   State & Diagnose:
-   - tools/state_inventory.py    — RunState-Inventur (read-only, --check)
-   - tools/state_flow.py         — Wiring-Diagnose pro Feld (Writer/
-                                    Reader/Contract/Risiko, --check,
-                                    --field X, --risk HOCH, --markdown)
-   - tools/state_flow_baseline.json — Drift-Anker fuer state_flow --check
-   - docs/STATE-FLOW.md          — generierter Report (--markdown)
-   - werkstatt/state_contracts.py — TRANSITIONS (feld-basiert),
-                                    validate_transition, ContractViolation
-   Rollen & Layer:
-   - werkstatt/rollen.py         — Rollen-Registry (7 Rollen, fail-closed)
-   - werkstatt/roles/builder/    — 5 Submodule + _common (OP-140)
-   - werkstatt/render/           — 7 Module (OP-138)
-   - werkstatt/phases/           — _common + 5 Phasen (OP-139)
-   - tools/import_drift.py       — import-linter-Wrapper (OP-144)
-   - pyproject.toml              — [tool.importlinter] 3 Layer-Contracts
-                                    mit allow_indirect_imports=true
-   - docs/adr/                   — 15 ADRs, u.a. ADR-0013 (Layer),
-                                    ADR-0014 (Rollen-Registry),
-                                    ADR-0015 (Tests sind Specs)
-   Test-Infrastruktur (ADR-0015, 2026-11-06):
-   - tests/factories.py          — mk_state(**overrides) Factory,
-                                    fail-loud bei unbekanntem Feld
-   - tests/test_factories.py     — 3 Spec-Tests fuer die Factory
-   - RunState mit Defaults fuer alle 12 ehemaligen Pflichtfelder
-                                    (RunState() ohne Argumente baubar)
-   Logger (2026-11-06):
-   - werkstatt/audit.py::audit_safe()
-                                    — wie audit(), crasht aber nie
-                                    (Print auf stderr bei Fehler);
-                                    9 kritische Stellen umgebaut
-   Verify-Kette (Stand 2026-11-06):
-   - 9/9 Stages hart (py_compile, ruff, mypy, pytest_changed,
+7. STATUS 2026-11-07 (nach OP-201 + SOLL-Doku):
+   IST-Pipeline (5 Phasen, docs/ARCHITECTURE.md):
+     Explorer -> Plan-Gate + Planner -> Task-Loop -> Phase-Review
+     -> Human-Gate + Commit
+   SOLL-Pipeline (7 Phasen, docs/SOLL.md):
+     Explorer -> Plan+test_spec -> TEST-LOOP (OP-210)
+     -> CODE-LOOP test-blind (OP-211) -> Phase-Review
+     -> MUTATION-GATE (OP-214) -> Commit-Gate (HTTP, OP-202)
+   18 ADRs (2026-11-07):
+     - ADR-0010 (Memory zweistufig)     — Basis fuer OP-220..223
+     - ADR-0015 (Tests sind Specs)      — mk_state-Factory
+     - ADR-0016 (Spec-First Test-Loop)  — Tests vor Code
+     - ADR-0017 (Mutation-Gate)         — pytest-gremlins
+     - ADR-0018 (Debugger ist Chat-Modus)
+   Aktuelle OP-Nummern (2XX-Bereich nach Umnummerierung 2026-11-07):
+     201-209 Loop headless (201 done)
+     210-217 Test-Loop (210-215, 216 Arch-Doku, 217 Test-Spec-Qualitaet)
+     220-223 Gehirn
+     230-233 Chat-Infra
+     240-243 Chat-Debugger
+     250 Memory-UI
+     255-257 Quick Wins
+     260-271 Architektur-Schulden
+     280-294 Backlog
+   Test-Infrastruktur (ADR-0015, 2026-11-07):
+     - tests/factories.py        — mk_state(**overrides), fail-loud
+     - RunState() ohne Args baubar (alle Felder haben Defaults)
+     - pyproject.toml            — [project] mit version 0.1.0
+                                    test-tools-Extra (hypothesis,
+                                    pytest-gremlins) via
+                                    pip install -e ".[test-tools]"
+   Produktive Tools (in verify.json oder werkstatt/ referenziert):
+     - tools/state_inventory.py — RunState-Inventur (--check)
+     - tools/state_flow.py      — Wiring-Diagnose pro Feld
+     - tools/state_drift.py     — State-Drift (verify-Stage)
+     - tools/control_drift.py   — Control-Drift (verify-Stage)
+     - tools/import_drift.py    — import-linter (verify-Stage)
+     - tools/quality_gate.py    — Baseline-Gate (manuell + Hook)
+   Verify-Kette (9/9 hart): py_compile, ruff, mypy, pytest_changed,
      state_drift, control_drift, import_drift, contract_check,
-     pytest_regression)
-   - ruff=0, mypy=0, alle Tests gruen
-   Neue OPs Session 5:
-   - OP-145b (State-Contract auftrag_bereits_erfuellt-Familie)
-   - OP-168b (Phase-Review-Gate zwischen Reflection-Runden)
-   - OP-172  (Verify->Builder-Kette — Builder sieht nur 5 Fehler)
-   - OP-174  (Spec-Tests — RunState-Factory statt SimpleNamespace)
+     pytest_regression.
+   SOLL-Erweiterung (OP-211): + test_integrity, test_must_fail_initial
+     (beide hart), mutation_gate (zunaechst weich, OP-214).
+   Test-Agent-Regel (ADR-0016-Nachtrag 2026-11-07, OP-217):
+     Test-Agent prueft Spec-Verhalten, NICHT Config-Details.
+     Aus "pyproject enthaelt 2 Kommentar-Zeilen" folgt
+     "beide Tools installierbar", NICHT "teste 2 Zeilen".
+     Config-Integritaets-Tests gehoeren in eigene Datei.
 
 8. ROLLEN-REGISTRY (2026-11-05, ADR-0014):
    werkstatt/rollen.py ist Single Source of Truth fuer Skills,

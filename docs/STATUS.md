@@ -1161,6 +1161,49 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Prioritaet:** mittel.
 - **Quelle:** ADR-0016/0017/0018.
 
+### OP-217: Test-Agent-Spec-Qualitaet (Verhalten statt Config)
+
+- **Status:** open
+- **Typ:** architektur (Tests + Spec-Qualitaet)
+- **Betroffen:** `werkstatt/test_agent.py` (neu, via OP-210),
+  `werkstatt/test_spec_validator.py` (neu, via OP-212),
+  `tests/test_test_agent_spec.py` (neu).
+- **Problem:** OP-201 (Loop-Lauf 19:46-19:56) zeigte: der
+  Test-Agent prueft Config-Details, statt Spec-Verhalten.
+  Drei Tests schrieben `pytest.ini`, `requirements.txt` und
+  `--collect-only`-Smoke fest, statt AK-Verhalten abzubilden.
+  Folge: Phase-Review rejected, Loop-Abbruch, manuelle
+  Nachziehung. Das ist ein systematisches Muster, nicht
+  OP-spezifisch.
+- **Akzeptanzkriterien:**
+  - **(a)** `test_spec`-Schema erweitert um
+    `expected_behavior: str` und
+    `verification: str` (public_api|cli_output|file_content).
+  - **(b)** Test-Agent-Prompt-Regel: "Uebersetze AK in
+    Verhalten. Config-Details sind Implementierungs-Detail,
+    wenn AK sie nicht explizit fordert."
+  - **(c)** Post-Test-Validation: Tests, die nur
+    `pytest.ini`/`requirements.txt`/`.gitignore` pruefen und
+    `verification='file_content'` mit
+    `expected_behavior` fehlt → Audit
+    `test_spec_smoke_test_verdacht`, Test-Loop-Runde 2.
+  - **(d)** Config-Integritaets-Tests gehoeren in eigene
+    Datei `test_config_integritaet.py`, Spec-Validierung
+    prueft die Trennung.
+  - **(e)** Tests fuer (a)-(d).
+  - **`pytest` gruen.**
+- **Tests:** `tests/test_test_agent_spec.py` (neu),
+  `tests/test_test_spec_validator.py` (erweitern).
+- **Blockiert von:** OP-210 (Test-Loop), OP-212 (Spec-Validator).
+- **Blockiert:** OP-214 (Mutation-Gate) — indirekt, weil
+  Mutation-Score sonst falsch (Config-Smoke-Tests sind nicht
+  mutierbar).
+- **Prioritaet:** hoch (Erkenntnis aus OP-201, echte
+  Schwaechung des Test-Agents).
+- **Quelle:** OP-201-Loop-Lauf 2026-11-07 19:46-19:56,
+  ADR-0016-Nachtrag 2026-11-07.
+
+
 ### OP-212: Test-Spec-Validator (unabhaengige Pruefung der Architect-Spec)
 
 - **Status:** open

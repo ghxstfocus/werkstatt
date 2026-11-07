@@ -3080,3 +3080,24 @@ Loop per Human-Gate `n` abgebrochen, Arbeit manuell nachgezogen.
 `pytest-gremlins 1.13.2` aktiv, `pytest` 1384 passed.
 
 **Entblockt:** OP-214 (Mutation-Gate) und OP-215 (Hypothesis).
+
+
+### 2026-11-07 — OP-217 angelegt + ADR-0016-Nachtrag + kontext-Update
+
+Nach OP-201 (Loop-Lauf 19:46-19:56) wurde das systematische
+Problem dokumentiert: der Test-Agent prueft Config-Details
+(pytest.ini, requirements.txt), statt Spec-Verhalten.
+
+- **ADR-0016-Nachtrag:** "Test-Agent prueft Verhalten, nicht
+  Config-Details". Konkrete Regel: Config-Dateien sind
+  Implementierungs-Detail. Test-Spec-Schema erweitert um
+  `expected_behavior` + `verification`.
+- **OP-217 (Test-Agent-Spec-Qualitaet):** neuer OP, blockiert
+  von OP-210 und OP-212. Adressiert das Muster direkt.
+- **`tools/werkstatt_kontext.py`:** Identitaets-Abschnitt
+  erweitert um SOLL/ZIELBILD-Verweis. Regeln Punkt 7
+  aktualisiert auf "Status 2026-11-07": 18 ADRs, 2XX-OPs,
+  SOLL-Pipeline, Test-Agent-Regel, produktive Tools inkl.
+  state_flow.py (Test-Konsistenz-Anker).
+
+Kein Code geaendert (nur Doku + Kontext-Generator).
