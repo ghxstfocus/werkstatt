@@ -27,3 +27,17 @@ class TestPlannerGateSuffixe:
         from hooks.planner_gate import _VALID_SUFFIXES
         for s in (".py", ".sql", ".md", ".yaml", ".json"):
             assert s in _VALID_SUFFIXES, f"{s} fehlt"
+
+
+class TestPlannerGateDotfiles:
+    def test_gitignore_erlaubt(self) -> None:
+        from hooks.planner_gate import _DOTFILES
+        assert ".gitignore" in _DOTFILES
+
+    def test_gitattributes_erlaubt(self) -> None:
+        from hooks.planner_gate import _DOTFILES
+        assert ".gitattributes" in _DOTFILES
+
+    def test_dockerignore_erlaubt(self) -> None:
+        from hooks.planner_gate import _DOTFILES
+        assert ".dockerignore" in _DOTFILES

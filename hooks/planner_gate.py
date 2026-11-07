@@ -45,6 +45,15 @@ _VALID_SUFFIXES = (
     # .example, .template, .sample, .dist sind uebliche Endungen.
     ".example", ".template", ".sample", ".dist",
 )
+# K2026-11-07: Dotfiles ohne klassisches Suffix. `.gitignore` endet
+# auf kein erlaubtes Suffix (der Punkt ist Praefix, keine Extension)
+# und ist auch keine Doku-Datei. TASK_FILE lehnte ab -> Loop-Abbruch
+# ohne Reflection (TASK_FILE ist strukturell). Whitelist fuer die
+# ueblichen Dotfiles.
+_DOTFILES = frozenset({
+    ".gitignore", ".gitattributes", ".dockerignore",
+    ".editorconfig", ".gitkeep",
+})
 
 # K27b: OP-Serien-Namen (test_foo_op002b2.py) sind bewusste
 # Varianten, nicht Tippfehler. Levenshtein schlaegt sonst Alarm.
@@ -307,6 +316,8 @@ def check_plan(payload: dict) -> dict:
                     f"Erlaubt: Datei mit Suffix "
                     f"{sorted(_VALID_SUFFIXES)}.",
                 )
+            if f in _DOTFILES:
+                continue
             if not f.endswith(_VALID_SUFFIXES):
                 # K5.1: Doku-Datei mit Code-Task daneben ist erlaubt
                 # (Doku-Nachtrag vom Architect geplant).

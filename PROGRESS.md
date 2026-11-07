@@ -3031,3 +3031,22 @@ ADR-0010/0016/0017 und README.md auf 2XX-Nummern umgestellt.
   Erwaehnung im Text.
 
 Kein Code geaendert.
+
+
+### 2026-11-07 — planner_gate: Dotfiles-Whitelist (.gitignore)
+
+Loop-Lauf OP-201 (19:38) brach ab: Task t3 aenderte `.gitignore`,
+`TASK_FILE`-Regel lehnte ab (`.gitignore` endet auf kein
+`_VALID_SUFFIXES`-Suffix, matcht kein `_DOKU_PATTERNS`). Weil
+`TASK_FILE` in `_STRUKTURELLE_REGELN`, kein Reflection-Retry,
+Loop sofort tot.
+
+Fix: `_DOTFILES`-Frozenset mit den ueblichen Dotfiles
+(`.gitignore`, `.gitattributes`, `.dockerignore`,
+`.editorconfig`, `.gitkeep`). In der TASK_FILE-Schleife:
+`if f in _DOTFILES: continue` vor dem Suffix-Check.
+
+3 neue Spec-Tests in `test_hooks_planner_gate_suffixe.py`
+(`test_gitignore_erlaubt`, `test_gitattributes_erlaubt`,
+`test_dockerignore_erlaubt`). Hook-Direktaufruf mit den
+6 OP-201-Tasks: `allow: true`.
