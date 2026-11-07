@@ -276,6 +276,45 @@ Die wichtigsten Regeln:
 """
 
 
+# ============================================================
+# Abschnitt 8: MERKPOSTEN (dynamisch aus docs/MERKPOSTEN.md)
+# ============================================================
+
+MERKPOSTEN = WERKSTATT / "docs" / "MERKPOSTEN.md"
+
+
+def abschnitt_merkposten(max_sektionen: int = 20) -> str:
+    """Laedt die letzten N Sektionen aus docs/MERKPOSTEN.md.
+
+    MERKPOSTEN.md ist chronologisch (append-only). Neueste Sektionen
+    zuerst ausgeben — die enthalten die aktuellsten Lehren.
+    Sektionen werden an '## ' oder '### M-' erkannt.
+    """
+    try:
+        text = MERKPOSTEN.read_text(encoding="utf-8")
+    except Exception as e:
+        return (_zeile("8. MERKPOSTEN (nicht lesbar)")
+                + f"\nMERKPOSTEN.md nicht lesbar: {e}\n")
+
+    teile = re.split(r'\n(?=## |### M-\d)', text)
+    sektionen = [s for s in teile if s.strip()]
+    sektionen.reverse()
+    gewaehlt = sektionen[:max_sektionen]
+
+    out = _zeile(
+        f"8. MERKPOSTEN (letzte {len(gewaehlt)} von "
+        f"{len(sektionen)} Sektionen aus docs/MERKPOSTEN.md)"
+    )
+    out += (
+        "\nQuelle: docs/MERKPOSTEN.md — chronologisch, neueste zuerst."
+        "\nVollstaendig lesbar bei Bedarf mit:  less docs/MERKPOSTEN.md\n\n"
+    )
+    for s in gewaehlt:
+        out += s.rstrip() + "\n\n"
+    return out
+
+
+
 def abschnitt_zustand() -> str:
     out = _zeile("5. AKTUELLER ZUSTAND (gemessen gerade)")
 
@@ -395,174 +434,27 @@ def abschnitt_naechste_ops(max_anzahl: int = 10) -> str:
 
 
 def abschnitt_erste_aufgabe() -> str:
-    return _zeile("8. DEINE ERSTE AUFGABE (neuer Chat)") + """
+    return _zeile("9. DEINE ERSTE AUFGABE (neuer Chat)") + """
 Du bist ein neuer Chat, der gerade den obigen Kontext-Block bekommt.
 
 DEINE ERSTE AUFGABE:
 
-  1. Lies alle Abschnitte 1-7.
-  1b. Lies docs/MERKPOSTEN.md — mindestens die letzten 10 Sektionen.
-      Prozess-Lehren aus OP-134..165, u.a.: Gate-Exit-Codes,
-      CoT-Trigger (Self-Check-Block auf Reasoning-Modellen),
-      Anker mit \\n-Prefix, Heredoc in if/else, Test-Contract,
-      Doku-ist-Wahrheit.
-  1c. Lies docs/adr/README.md — 14 Architecture Decision Records.
-      Besonders ADR-0013 (Layer-Architektur) + ADR-0014
-      (Rollen-Registry) fuer das aktuelle Weltbild.
-  2. Frage den User EINE Frage: 'Was ist die Session-Aufgabe?'
-     Optionen (aus Abschnitt 7 ableitbar):
-       - Naechster freier OP
+  1. Lies die Abschnitte 1-4 (statisches Weltbild: Werkstatt,
+     Rollen, Workflow, Konventionen).
+  2. Lies Abschnitt 5 (Zustand) und Abschnitt 7 (Offene OPs).
+  3. Lies Abschnitt 8 (Merkposten) — die haeufigsten Fehler und
+     Lehren aus allen Sessions. Diese Liste wird dynamisch aus
+     docs/MERKPOSTEN.md geladen und waechst mit jeder Session.
+  4. Frage den User EINE Frage: 'Was ist die Session-Aufgabe?'
+     Optionen:
+       - Naechster freier OP aus Abschnitt 7
        - Ein bestimmter OP aus der Liste
        - Etwas anderes (Bugfix, Doku, ...)
-  3. Wenn die Aufgabe klar ist:
+  5. Wenn die Aufgabe klar ist:
        - Beginne mit einem MESS-BLOCK (read-only).
        - KEIN Code, KEINE Aenderung, keine Datei anfassen.
        - Erst messen, dann designen, dann fixen.
-  4. Bei Unklarheit: User fragen. Nicht raten.
-
-DIE 22 HAEUFIGSTEN FEHLER — SESSION 1-5+ (2026-11-06):
-
-1. 'pytest | tail' -> Exit-Code von tail, nicht pytest. 3x passiert
-   in einer Session. Nutze 'pytest > /tmp/pt.log 2>&1; PT=$?'.
-2. Anker ohne '\\n'-Prefix -> Substring-Match bei variabler
-   Einrueckung (12-Space matcht 16-Space).
-3. Architektur-Doku ignorieren -> M-446-Regress: Architect lud
-   plan-crafting (mit '## Tools'), deepseek-reasoner lieferte DSML.
-4. Tests bei Verhaltens-Aenderung nicht nachziehen -> PT>0 nach
-   Commit. Immer 'grep tests/' vor dem Patch.
-
-FEHLER AUS SESSION 4 (Loop-Test 4-8, 2026-11-05):
-
-5. Teil-gelesene OP-Texte: 'block[:800]' zeigte nur die Haelfte
-   von OP-145 (1647 Bytes). Chat hat die Entscheidungspassage
-   nicht gesehen und 'Entscheidung: Umbenennung' HALLUZINIERT.
-   OP-Text sagte 'Alias, Umbenennung ODER Loeschung — Wahl offen'.
-   Konsequenz: Loop mit 'n' abgebrochen, Architect zu Unrecht
-   beschuldigt. REGEL: OP-Texte NIE mit 'block[:800]'. Immer
-   'print(block)' oder explizit mit Laengen-Warnung.
-
-6. 'n' ohne vollstaendigen Kontext: Der User verliert korrekt
-   geplante Patches. Vor JEDEM 'n': sicher sein, dass Aufgabe
-   und Akzeptanz den Reject rechtfertigen. Sonst 'j' oder
-   pause + MESS-BLOCK.
-
-7. 'input()' in einer Loop-Funktion bricht pytest:
-   pytest's DontReadFromInput wirft OSError statt EOFError.
-   6 Tests rot bei OP-168, weil input() in _phase_review_gate.
-   FIX: 'sys.stdin.isatty()'-Guard AM ANFANG der Funktion.
-   Kein input() bei non-TTY. Return 1 (fail-closed).
-
-8. max_tokens-Diagnose mit 1 Datenpunkt: Loop-Test-6 failte
-   mit leerer content (55706 Zeichen Reasoning). Erste
-   Hypothese: '16000 reichen nicht.' Fakt: 1 von 6
-   Architect-Calls heute, 0 von 5 gestern. 2. Messung:
-   deepseek-reasoner hat Reasoning+Content im SELBEN max_tokens
-   (seit V3.1 nicht mehr getrennt). 32000 = Default.
-   REGEL: Bei 'X reicht nicht'-Hypothese Haeufigkeit + Modell-
-   Kontext messen, nicht raten.
-
-9. Fehlender 'tasks_ok += 1' in 2 von 7 Erfolgs-Pfaden:
-   '_task_ende(ok=True)' wird an 7 Stellen gerufen. 2 hatten
-   den Counter nicht (Z. 1051 Reflection-OK, Z. 1302
-   Reflection-Erschoepft-Gate-approve). Footer zeigte
-   '0/8 · 8 failed' statt 2 done + 1 failed + 1 human_review
-   + 4 blocked. FIX: AST-Guard-Test
-   'tests/test_task_ok_counter_guard.py' prueft, dass jeder
-   '_task_ende(ok=True)' in den 10 Zeilen davor
-   'tasks_ok += 1' oder 'tasks_ok_counter =' hat.
-
-10. Duplikations-Patch in werkstatt_kontext.py (dieses Skript):
-    Eine fruehere Session hat den 1b/1c-Block und die
-    4-Fehler-Liste doppelt eingefuegt. Wurde via 'git stash'
-    geparkt (stash@{0}). REGEL: Vor Patch auf DIESES Skript
-    'git stash list' pruefen. Stash NICHT poppen — er enthaelt
-    die alte Duplikation.
-
-FEHLER AUS NACHT-SESSION 4 (2026-11-06):
-
-11. 'cmd | tail; $?' -> Exit-Code von tail, nicht cmd. 4x
-    reproduziert in Nacht-Session 4 (OP-138, OP-139, OP-140,
-    OP-144). Der Fehler steht schon in M-146, wird aber
-    wiederholt, weil der Chat den Merkposten als Text behandelt,
-    nicht als Guard. REGEL: 'cmd > /tmp/x.log 2>&1; RC=$?;
-    tail /tmp/x.log' statt Pipe. Gilt fuer pytest, ruff,
-    lint-imports, alle rc-relevanten Aufrufe.
-
-12. 'from werkstatt.render import *' in Proxy-Dateien bindet
-    Namens-Kopien. Tests, die 'patch.object(proxy, attr)' machen,
-    wirken nur auf der Kopie, nicht im echten Modul. REGEL:
-    sys.modules-Alias verwenden:
-    'sys.modules[__name__] = werkstatt.render'. Beide Namen
-    werden dasselbe Objekt, Patches wirken. 3x Fehlversuch in
-    OP-138/139/140.
-
-13. Umbenennungs-Regex 'from werkstatt import loop_renderer' ->
-    'from werkstatt import render' verliert den lokalen Namen
-    'loop_renderer'. Tests werfen danach NameError. REGEL: den
-    lokalen Namen erhalten: 'from werkstatt import render as
-    loop_renderer'. Gleiches Muster fuer 'from werkstatt import
-    builder' -> 'from werkstatt.roles import builder as builder'
-    und 'import werkstatt.builder' -> 'import
-    werkstatt.roles.builder as builder'. 2x reproduziert in
-    OP-143a.
-
-14. Modul-Globals, die Tests patchen (ask_llm, audit), gehoeren
-    in _common.py. Submodule lesen _bglob.X(). Der Alias-Name
-    darf NICHT '_c' sein — kollidiert mit lokalem Temp-Var _c
-    in run_builder, wirft 'F823 Local variable referenced
-    before assignment'. Fehlversuch in OP-140.
-
-15. 'ruff --fix .' ohne '--select' loescht F401 unused-Imports.
-    In Test-Files bricht das Collection, wenn der Import
-    Side-Effects traegt (Fixtures, Marker). 6 Collection-Errors
-    in einer Runde (OP-143a v2). REGEL: 'ruff --fix --select I'
-    fuer Re-Export-Fassaden — sortiert nur, loescht nichts.
-    Fuer Re-Exports 'from . import X as X' (Selbst-Alias)
-    verwenden, das markiert ruff als gewollten Re-Export.
-
-16. import-linter forbidden-Contracts pruefen transitiv. Wenn
-    die ADR 'direkt nicht importieren' meint (ADR-0013: 'Rollen
-    kennen keine Phasen direkt'), triggeren transitive Pfade
-    faelschlich (roles.builder.run -> verify -> loop ->
-    pipeline_phases -> phases). REGEL:
-    'allow_indirect_imports = true' pro Contract.
-    Fehlversuch in OP-144.
-
-FEHLER AUS SESSION 5 (Tests sind Specs + Altlasten-Abbau, 2026-11-06):
-
-17. Tests mit hand-rolled State-Mocks (class _State, type("S",())).
-    Fuenf Test-Dateien fielen durch den "SimpleNamespace"-Filter,
-    bauten aber genauso State-Attrappen. Als P4a getattr->state.X
-    ersetzte, brachen alle 5 mit AttributeError. REGEL: State ist
-    IMMER RunState via tests/factories.py::mk_state(). Siehe ADR-0015.
-
-18. 'nonlocal' funktioniert nicht im Heredoc-Modul-Scope
-    (python3 <<'PY'). Fehler: 'no binding for nonlocal'. REGEL:
-    Wenn ein Counter aus einer Closure hochzaehlen soll, mutable
-    [0]-Liste verwenden (counter[0] += 1).
-
-19. Bei 'alle Tests sind X'-Behauptungen AST-basiert pruefen,
-    nicht grep. 'ps = SimpleNamespace()' matcht 's = SimpleNamespace()'
-    als Substring — zaehlt Mock-Bundles als State. Und hand-rolled
-    Mocks (class _State) tauchen gar nicht in grep auf, weil der
-    String 'SimpleNamespace' fehlt. REGEL: ast.parse + ast.walk
-    fuer strukturelle Claims.
-
-20. getattr-Ersatz ohne Typ-Check der Felder. 126 Ersetzungen
-    auf einmal -> 29 mypy-Fehler, weil tasks/patches als
-    dict[str, object] typisiert waren (Element-Zugriff p["file"]
-    unmoeglich). REGEL: Vor getattr-Ersatz mypy pruefen auf den
-    betroffenen Feldern. dict[str, object] -> dict[str, Any].
-
-21. Commit-Message mit Anfuehrungszeichen oder '!' in -m "..."
-    bricht den Commit (shell interpretiert Rest als Pfad).
-    Fehler: "pathspec 'P3 Rest: 14 Dateien.' did not match".
-    REGEL: -m '...' mit single-quotes bei Sonderzeichen, oder
-    Sonderzeichen in der Message vermeiden.
-
-22. Amend + force-push: --force-with-lease, nicht --force.
-    --force ueberschreibt fremde Aenderungen ohne Warnung.
-    --force-with-lease verweigert wenn remote sich bewegt hat.
+  6. Bei Unklarheit: User fragen. Nicht raten.
 
 WORAN MAN MERKT, DASS EIN CHAT HALLUZINIERT:
 - Behauptung 'X sagt woertlich Y' ohne Beleg-Zeile darunter.
@@ -583,18 +475,9 @@ Der Block ist reproduzierbar. Bitte den User:
 
   python3 tools/werkstatt_kontext.py
 
-Das Skript liegt in tools/ und ist read-only. Es ruft git, pytest,
-Drift-Checks und liest docs/STATUS.md. Wenn der Zustand sich waehrend
-der Session aendert, kann es jederzeit erneut laufen.
-
-SKRIPT-VARIANTEN:
-- `--check`  nur der Zustands-Abschnitt (5), fuer schnelles Re-Check.
-- `--json`   Maschinenlesbar (head, working_tree_clean, ops_open),
-             fuer Skripte oder gezielte Abfragen.
-- (ohne Flag) der volle Block wie hier.
-
-VIEL ERFOLG.
+Das Skript liegt in tools/ und ist read-only.
 """
+
 
 
 # ============================================================
@@ -606,7 +489,8 @@ def sammle_alles(nur_zustand: bool = False) -> str:
         return abschnitt_zustand()
     return "\n".join([
         "WERKSTATT KONTEXT-BLOCK — bitte komplett in den Chat pasten",
-        "(alle Abschnitte read-only, HEAD und Tests gerade gemessen)",
+        "(Statischer Teil: Werkstatt, Rollen, Workflow, Konventionen)",
+        "(Dynamischer Teil: Zustand, Commits, OPs, Merkposten)",
         "(dieser Block ist der EINZIGE Input des neuen Chats; er hat",
         " keinen Shell-/Datei-Zugriff und arbeitet nur mit dem, was",
         " der User zurueckpastet)",
@@ -617,8 +501,10 @@ def sammle_alles(nur_zustand: bool = False) -> str:
         abschnitt_zustand(),
         abschnitt_commits(10),
         abschnitt_naechste_ops(),
+        abschnitt_merkposten(),
         abschnitt_erste_aufgabe(),
     ])
+
 
 
 def sammle_json() -> dict:
