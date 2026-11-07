@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import time
 from pathlib import Path
 from typing import Any
 
@@ -297,100 +298,322 @@ def _run_aktiv(es: EventStore, run_id: str, schwelle_s: int = 120) -> bool:
         return False
 
 
-def aggregate_timeline(
-    projekt: str,
-    run_id: str | None = None,
-    limit: int = 200,
-) -> list[dict[str, Any]]:
-    """Phasen-Knoten fuer die Timeline.
+_TL_LABELS: dict[str, str] = {
+    "explorer_messung": "Explorer: Messung",
+    "explorer_messung_findings": "Explorer: Befunde",
+    "explorer_result": "Explorer: Ergebnis",
+    "loop_explorer_ok": "Explorer: abgeschlossen",
+    "loop_explorer_leer": "Explorer: leer",
+    "loop_explorer_ergaenzt": "Explorer: ergaenzt",
+    "loop_explorer_suchbegriffe": "Explorer: Suchbegriffe",
+    "loop_skills_geladen": "Skills geladen",
+    "builder_import_context": "Builder: Import-Kontext",
+    "builder_file_context": "Builder: Datei-Kontext",
+    "builder_patches_erstellt": "Builder: Patches erstellt",
+    "builder_keine_patches_gold": "Builder: keine Patches",
+    "builder_patch_bereits_erfuellt": "Builder: bereits erfuellt",
+    "loop_task_start": "Task startet",
+    "loop_task_ok": "Task erfolgreich",
+    "loop_task_failed": "Task fehlgeschlagen",
+    "loop_patch_applied": "Patch angewendet",
+    "loop_patch_updated": "Patch aktualisiert",
+    "loop_patch_created": "Patch erstellt",
+    "loop_patch_fallback_used": "Patch-Fallback",
+    "loop_patch_delete_blocked": "Patch-Loeschung blockiert",
+    "reviewer_result": "Reviewer: Ergebnis",
+    "reviewer_phase_rejected": "Reviewer: Phase abgelehnt",
+    "reviewer_phase_approved": "Reviewer: Phase freigegeben",
+    "phase_end_review": "Phase-Review",
+    "loop_verify_ok": "Verify: OK",
+    "loop_verify_failed": "Verify: Fehler",
+    "loop_verify_stage_skipped": "Verify: Stage uebersprungen",
+    "verify_stage_ohne_hart_flag": "Verify: Stage ohne Hart-Flag",
+    "loop_reflection_runde": "Reflection Runde",
+    "loop_reflection_kein_patch": "Reflection: kein Patch",
+    "loop_reflection_patch_applied": "Reflection: Patch angewendet",
+    "loop_phase_reflection_runde": "Reflection Runde",
+    "loop_phase_reflection_approved": "Reflection: freigegeben",
+    "loop_phase_reflection_erschoepft": "Reflection: erschoepft",
+    "loop_phase_reflection_verify_failed": "Reflection: verify failed",
+    "loop_phase_reflection_builder_failed": "Reflection: builder failed",
+    "loop_phase_reflection_keine_bugs": "Reflection: keine Bugs",
+    "loop_erfolg": "Loop erfolgreich",
+    "loop_rollback": "Loop Rollback",
+    "loop_dirty_tree": "Dirty Tree erkannt",
+    "loop_gate_failed": "Gate fehlgeschlagen",
+    "loop_hook_blocked": "Hook blockiert",
+    "loop_plan_gate_approved": "Plan-Gate: freigegeben",
+    "loop_plan_gate_rejected": "Plan-Gate: abgelehnt",
+    "loop_human_gate_approved": "Human-Gate: freigegeben",
+    "loop_human_gate_rejected": "Human-Gate: abgelehnt",
+    "loop_human_gate_committed": "Human-Gate: committed",
+    "llm_call": "LLM-Aufruf",
+    "llm_usage": "LLM-Token",
+    "llm_timeout_read": "LLM-Timeout (read)",
+    "llm_timeout_gesamt": "LLM-Timeout (gesamt)",
+    "command_executed": "Befehl ausgefuehrt",
+    "command_rejected": "Befehl abgelehnt",
+}
 
-    Quellen: Event-Store (task_started/task_done) + neueste
-    JSONL-Audit-Datei (explorer_*, builder_*, reviewer_*, ...).
+_TL_SKIP: frozenset[str] = frozenset({
+    "heartbeat", "spinner", "log_line", "progress", "summary",
+})
+
+_TL_PHASEN_NAMEN: dict[str, str] = {
+    # Laengere Keys zuerst — sonst matcht "plan" auch "planner"
+    "plan_gate": "Plan-Gate",
+    "human_gate": "Human-Gate",
+    "end_review": "Phase-Review",
+    "reflection": "Reflection",
+    "explorer": "Explorer",
+    "architect": "Architect",
+    "planner": "Planner",
+    "builder": "Builder",
+    "reviewer": "Reviewer",
+    "verify": "Verify",
+    "plan": "Plan",
+    "build": "Build",
+    "review": "Review",
+    "reflect": "Reflection",
+    "explore": "Explorer",
+}
+
+
+def _tl_status(kind: str, payload: dict[str, Any]) -> str:
+    if any(w in kind for w in ("failed", "error", "abgelehnt", "erschoepft",
+                                 "rollback", "blocked")):
+        return "error"
+    if any(w in kind for w in ("_ok", "erfolg", "approved", "committed")):
+        return "ok"
+    if any(w in kind for w in ("start", "_phase", "runde")):
+        return "running"
+    if payload.get("ok") is True:
+        return "ok"
+    if payload.get("ok") is False:
+        return "error"
+    return "running"
+
+
+def _tl_label(kind: str, payload: dict[str, Any]) -> str:
+    if kind == "loop_phase":
+        pname = str(payload.get("phase") or payload.get("name") or "phase")
+        low = pname.lower()
+        # Laengste Keys zuerst probieren (plan_gate vor plan)
+        for key, label in sorted(
+            _TL_PHASEN_NAMEN.items(), key=lambda kv: -len(kv[0])
+        ):
+            if key == low or key in low:
+                return label
+        return pname
+    return _TL_LABELS.get(kind, kind)
+
+
+def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
+    """Kurze, menschenlesbare Zusatz-Info pro Event (1 Zeile)."""
+    if kind == "loop_task_start":
+        return str(payload.get("text", ""))
+    if kind in ("loop_task_ok", "loop_task_failed"):
+        parts: list[str] = []
+        e = payload.get("elapsed_s")
+        if isinstance(e, (int, float)):
+            parts.append(f"{e:.2f}s")
+        g = payload.get("grund") or payload.get("reason")
+        if g:
+            parts.append(str(g)[:80])
+        return " ".join(parts)
+    if kind in ("loop_verify_failed", "verify_fehler"):
+        f = payload.get("fehler") or payload.get("errors") or ""
+        return str(f)[:120]
+    if kind == "loop_verify_ok":
+        stage = payload.get("stage") or payload.get("name") or ""
+        return str(stage)[:60] if stage else ""
+    if kind == "builder_patches_erstellt":
+        pat = payload.get("patches") or []
+        dateien = sorted({
+            str(p.get("file", "")) for p in pat if isinstance(p, dict)
+        } - {""})
+        head = f"{len(pat)} Patch(es)"
+        if dateien:
+            head += ": " + ", ".join(dateien[:3])
+            if len(dateien) > 3:
+                head += f" +{len(dateien) - 3}"
+        return head
+    if kind == "builder_file_context":
+        n = payload.get("anzahl") or payload.get("count")
+        if n is None and isinstance(payload.get("files"), list):
+            n = len(payload["files"])
+        return f"{n} Datei(en)" if n else ""
+    if kind == "builder_import_context":
+        n = payload.get("anzahl") or payload.get("count")
+        if n is None and isinstance(payload.get("imports"), list):
+            n = len(payload["imports"])
+        return f"{n} Imports" if n else ""
+    if kind in ("loop_patch_updated", "loop_patch_applied", "loop_patch_created"):
+        f = payload.get("file") or payload.get("path") or ""
+        return str(f) if f else ""
+    if kind == "reviewer_result":
+        v = payload.get("verdict") if payload.get("verdict") is not None else payload.get("ok")
+        return f"verdict={v}" if v is not None else ""
+    if kind == "loop_skills_geladen":
+        n = payload.get("anzahl")
+        if n is None and isinstance(payload.get("skills"), list):
+            n = len(payload["skills"])
+        return f"{n} Skills" if n else ""
+    if kind == "llm_usage":
+        return (
+            f"prompt={payload.get('prompt_tokens', 0)} "
+            f"completion={payload.get('completion_tokens', 0)}"
+        )
+    if kind in ("loop_reflection_runde", "loop_phase_reflection_runde"):
+        return f"Runde {payload.get('runde', '?')}"
+    if kind == "loop_human_gate_committed":
+        return str(payload.get("info", ""))[:100]
+    if kind == "verify_stage_ohne_hart_flag":
+        return "nur weiche Stufe aktiv"
+    return ""
+
+
+def _tl_menschliche_phase(pname: str) -> str:
+    low = pname.lower()
+    for key, label in _TL_PHASEN_NAMEN.items():
+        if key in low:
+            return label
+    return pname or "Phase"
+
+
+def aggregate_timeline(
+    projekt: str, run_id: str | None = None, limit: int = 200,
+) -> list[dict[str, Any]]:
+    """Phasen-Knoten aus JSONL-Audit (menschlich lesbar).
+
+    Die JSONL-Audit-Datei traegt die Phasen-Events (loop_phase,
+    explorer_*, builder_*, verify_*, reviewer_*) — der Event-Store
+    hat nur Task-Events ohne Kontext. Wir gruppieren nach
+    loop_phase-Bloecken, mit Prolog-Block fuer alles davor.
     """
-    es = EventStore()
-    if run_id is None:
-        run_id = _letzter_run_id(es)
-    if run_id is None:
+    audit_dir = werkstatt_home() / "audit-logs"
+    if not audit_dir.exists():
+        return []
+    kandidaten = sorted(audit_dir.glob("agent-pipeline-*.jsonl"))
+    if not kandidaten:
+        return []
+    datei = kandidaten[-1]
+
+    try:
+        mtime = datei.stat().st_mtime
+        aktiv = (time.time() - mtime) < 120
+    except OSError:
+        aktiv = False
+
+    events: list[dict[str, Any]] = []
+    try:
+        with datei.open(encoding="utf-8", errors="replace") as f:
+            for zeile in f:
+                zeile = zeile.strip()
+                if not zeile:
+                    continue
+                try:
+                    obj = json.loads(zeile)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(obj, dict):
+                    events.append(obj)
+    except OSError:
         return []
 
-    run_aktiv = _run_aktiv(es, run_id)
+    letzte_run_id: str | None = None
+    for ev in reversed(events):
+        rid = ev.get("run_id")
+        if rid:
+            letzte_run_id = str(rid)
+            break
+    ziel_run = run_id or letzte_run_id
+    if ziel_run:
+        events = [e for e in events if str(e.get("run_id", "")) == ziel_run]
+
     knoten: list[dict[str, Any]] = []
-    try:
-        with sqlite3.connect(es.db_pfad) as c:
-            rows = c.execute(
-                "SELECT seq, kind, phase, status, payload, ts FROM events "
-                "WHERE run_id=? AND kind IN ('task_started','task_done') "
-                "ORDER BY seq ASC LIMIT ?",
-                (run_id, limit),
-            ).fetchall()
-    except sqlite3.Error:
-        rows = []
+    aktuell: dict[str, Any] | None = None
+    prolog: list[dict[str, Any]] = []
 
-    task_offen: dict[str, dict[str, Any]] = {}
-    for seq, kind, phase, status, payload, ts in rows:
-        try:
-            p = json.loads(payload) if payload else {}
-        except json.JSONDecodeError:
-            p = {}
-        name = str(p.get("name") or p.get("task") or f"Task {seq}")
-        if kind == "task_started":
-            key = f"seq-{seq}"
-            knoten.append({
-                "id": key,
-                "label": name,
-                "kind": "task",
-                "status": "running" if run_aktiv else "stale",
+    def _flush() -> None:
+        nonlocal aktuell
+        if aktuell is not None:
+            knoten.append(aktuell)
+            aktuell = None
+
+    for ev in events:
+        kind = str(ev.get("kind", ""))
+        if not kind or kind in _TL_SKIP:
+            continue
+        payload = ev.get("payload")
+        if not isinstance(payload, dict):
+            payload = ev
+        label = _tl_label(kind, payload)
+        status = _tl_status(kind, payload)
+        ts = str(ev.get("ts", ""))
+        detail = _tl_detail(kind, payload)
+
+        if kind == "loop_phase":
+            _flush()
+            pname = str(payload.get("phase") or payload.get("name") or "phase")
+            aktuell = {
+                "id": f"phase-{len(knoten)}-{pname}",
+                "label": _tl_menschliche_phase(pname),
+                "kind": "phase",
+                "status": "running" if aktiv else "ok",
                 "start_ts": ts,
-                "end_ts": None,
-                "phase": phase,
+                "end_ts": None if aktiv else ts,
+                "phase": pname,
                 "children": [],
-            })
-            task_offen[name] = knoten[-1]
-        elif kind == "task_done":
-            ziel = task_offen.pop(name, None)
-            if ziel is not None:
-                ziel["end_ts"] = ts
-                ziel["status"] = "ok" if p.get("ok", True) else "error"
+            }
+        else:
+            detail_text = label
+            if detail:
+                detail_text += " - " + detail
+            child = {
+                "ts": ts,
+                "kind": kind,
+                "detail": detail_text,
+                "status": status,
+            }
+            if aktuell is not None:
+                aktuell["children"].append(child)
+                aktuell["end_ts"] = ts
+                if status == "error":
+                    aktuell["status"] = "error"
             else:
-                knoten.append({
-                    "id": f"seq-{seq}",
-                    "label": name,
-                    "kind": "task",
-                    "status": "ok" if p.get("ok", True) else "error",
-                    "start_ts": None,
-                    "end_ts": ts,
-                    "phase": phase,
-                    "children": [],
-                })
+                prolog.append(child)
 
-    # JSONL-Audit neueste Datei
-    audit_dir = werkstatt_home() / "audit-logs"
-    if audit_dir.exists():
-        kandidaten = sorted(audit_dir.glob("agent-pipeline-*.jsonl"))
-        if kandidaten:
-            jsonl = _lese_audit_jsonl(kandidaten[-1])
-            gruppen: dict[str, dict[str, Any]] = {}
-            for ev in jsonl:
-                schluessel = ev["label"]
-                if schluessel not in gruppen:
-                    gruppen[schluessel] = {
-                        "id": f"phase-{schluessel.lower()}",
-                        "label": schluessel,
-                        "kind": "phase",
-                        "status": "ok",
-                        "start_ts": ev["ts"],
-                        "end_ts": ev["ts"],
-                        "children": [],
-                    }
-                g = gruppen[schluessel]
-                g["end_ts"] = ev["ts"]
-                g["children"].append({
-                    "kind": ev["kind"],
-                    "ts": ev["ts"],
-                    "detail": ev["payload"].get("status") or ev["payload"].get("result"),
-                })
-                if "fehler" in ev["kind"] or "error" in ev["kind"]:
-                    g["status"] = "error"
-            knoten.extend(gruppen.values())
+    _flush()
+
+    # Leere Phasen filtern (0 Kinder und <2s Dauer)
+    def _pha_to_ts(ts: str) -> float:
+        from datetime import datetime as _dt
+        try:
+            return _dt.fromisoformat(ts).timestamp()
+        except (ValueError, TypeError):
+            return 0.0
+
+    knoten = [
+        k for k in knoten
+        if k.get("children") or (
+            k.get("start_ts") and k.get("end_ts")
+            and abs(_pha_to_ts(k["end_ts"]) - _pha_to_ts(k["start_ts"])) > 2
+        )
+    ]
+
+    if prolog:
+        knoten.insert(0, {
+            "id": "phase-prolog",
+            "label": "Vorbereitung",
+            "kind": "phase",
+            "status": "ok",
+            "start_ts": prolog[0]["ts"],
+            "end_ts": prolog[-1]["ts"],
+            "phase": "prolog",
+            "children": prolog,
+        })
 
     return knoten[:limit]
+
+

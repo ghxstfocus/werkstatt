@@ -65,10 +65,27 @@
       body.appendChild(leer);
     }
     kinder.forEach(function (ch) {
-      var c = document.createElement("div");
-      c.className = "tl-child";
-      c.textContent = (ch.ts || "") + "  " + (ch.kind || "");
-      body.appendChild(c);
+      var row = document.createElement("div");
+      row.className = "tl-child";
+      row.dataset.status = ch.status || "";
+      row.title = (ch.kind || "") + (ch.ts ? "\n" + ch.ts : "");
+
+      var dot = document.createElement("span");
+      dot.className = "tl-child-dot";
+
+      var lbl = document.createElement("span");
+      lbl.className = "tl-child-label";
+      lbl.textContent = ch.detail || ch.kind || "";
+
+      var ts = document.createElement("span");
+      ts.className = "tl-child-ts";
+      var m = (ch.ts || "").match(/T(\d{2}:\d{2}:\d{2})/);
+      ts.textContent = m ? m[1] : "";
+
+      row.appendChild(dot);
+      row.appendChild(lbl);
+      row.appendChild(ts);
+      body.appendChild(row);
     });
     el.appendChild(body);
 

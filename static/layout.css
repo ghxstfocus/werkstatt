@@ -805,3 +805,63 @@ body {
 .tl-knoten[data-status="stale"] { opacity: 0.55; }
 .tl-knoten[data-status="stale"] .tl-dot { background: #6b7280; }
 .tl-knoten[data-status="stale"] .tl-label { font-style: italic; }
+
+/* OP-233e: Timeline-Detailzeilen — readbar + strukturiert */
+.tl-child {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 6px 3px 14px;
+  position: relative;
+  font-size: 11px;
+  line-height: 1.45;
+  border-radius: 3px;
+  transition: background 80ms ease;
+  font-family: inherit;
+}
+.tl-child::before {
+  content: "";
+  position: absolute;
+  left: 6px; top: 4px; bottom: 4px;
+  width: 1px;
+  background: rgba(255,255,255,0.06);
+}
+.tl-child:hover { background: rgba(255,255,255,0.025); }
+.tl-child-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.18);
+  flex: 0 0 5px;
+  margin-top: 5px;
+  align-self: flex-start;
+}
+.tl-child[data-status="ok"] .tl-child-dot { background: #4ade80; box-shadow: 0 0 4px rgba(74,222,128,0.3); }
+.tl-child[data-status="error"] .tl-child-dot { background: #f87171; box-shadow: 0 0 4px rgba(248,113,113,0.3); }
+.tl-child[data-status="running"] .tl-child-dot { background: #60a5fa; }
+.tl-child-label {
+  flex: 1;
+  color: var(--text);
+  font-size: 11px;
+  font-family: inherit;
+  word-break: break-word;
+}
+.tl-child-ts {
+  color: var(--text-dim);
+  font-family: monospace;
+  font-size: 9px;
+  flex: 0 0 auto;
+  opacity: 0.55;
+}
+.tl-leer {
+  font-style: italic;
+  opacity: 0.5;
+  padding: 4px 6px 4px 14px;
+}
+
+/* Body offener Karten scrollt bei vielen Kindern */
+.tl-knoten.offen .tl-body {
+  max-height: 700px;
+  overflow-y: auto;
+  margin-top: 6px;
+  padding-right: 2px;
+}
