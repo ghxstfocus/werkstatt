@@ -120,6 +120,59 @@ def test_zwischen_runden_gleich_false_bei_verschieden(tmp_path) -> None:
     assert reflection._verify_fehler_zwischen_runden_gleich(s) is False
 
 
+# ============ Unit: _verify_fehler_alternierend (OP-182) ============
+
+def test_alternierend_false_ohne_history(tmp_path) -> None:
+    s = _mk_history_state(tmp_path)
+    assert reflection._verify_fehler_alternierend(s) is False
+
+
+def test_alternierend_false_bei_identischem_set(tmp_path) -> None:
+    """Exakt gleiche Sets -> False (verify_gleich zustaendig)."""
+    s = _mk_history_state(tmp_path)
+    e = 'mypy_changed: x.py:1: error: foo'
+    s.reflection_history = [{
+        "runde": 1, "patches_applied": 1, "verify_errors": [e]}]
+    s.last_verify_errors = [e]
+    assert reflection._verify_fehler_alternierend(s) is False
+
+
+def test_alternierend_false_bei_disjoint(tmp_path) -> None:
+    """Verschiedene Fehler ohne Overlap -> False."""
+    s = _mk_history_state(tmp_path)
+    s.reflection_history = [{
+        "runde": 1, "patches_applied": 1,
+        "verify_errors": ['ruff_changed: PIE810 foo']}]
+    s.last_verify_errors = ['mypy_changed: x.py:1: error: bar']
+    assert reflection._verify_fehler_alternierend(s) is False
+
+
+def test_alternierend_true_bei_overlap(tmp_path) -> None:
+    """{ruff} vs {ruff, mypy}: Overlap, nicht identisch -> True."""
+    s = _mk_history_state(tmp_path)
+    s.reflection_history = [{
+        "runde": 1, "patches_applied": 1,
+        "verify_errors": ['ruff_changed: PIE810 foo']}]
+    s.last_verify_errors = [
+        'ruff_changed: PIE810 foo',
+        'mypy_changed: x.py:1: error: bar',
+    ]
+    assert reflection._verify_fehler_alternierend(s) is True
+
+
+def test_alternierend_false_bei_applied_null(tmp_path) -> None:
+    """patches_applied=0 -> False (patch_nicht_angewendet ist separat)."""
+    s = _mk_history_state(tmp_path)
+    s.reflection_history = [{
+        "runde": 1, "patches_applied": 0,
+        "verify_errors": ['ruff_changed: PIE810 foo']}]
+    s.last_verify_errors = [
+        'ruff_changed: PIE810 foo',
+        'mypy_changed: x.py:1: error: bar',
+    ]
+    assert reflection._verify_fehler_alternierend(s) is False
+
+
 # ============ Integration: _reflection_loop mit verify_gleich ============
 
 def _setup_mocks(monkeypatch):
@@ -216,3 +269,67 @@ def test_reflection_loop_stagnation_verify_gleich(tmp_path, monkeypatch):
     # (STATUS-AK verlangt Abbruch, nicht spec_widerspruch). Der
     # Abbruch erfolgt als normaler Task-Fail (return False).
     assert getattr(s, "spec_widerspruch_erkannt", False) is False
+
+
+# ============ Integration: alternierende Fehler (OP-182) ============
+
+# Loop-Test-9-Muster (2026-11-07 12:14-12:16): Stage-Sets wechseln
+# zwischen Runden, sodass weder _ruff_vorher- noch verify_gleich-
+# Zweig greift. R2 und R4 sind zufaellig gleich (beide {mypy_changed}),
+# aber R3 ({ruff,mypy}) und R5 ({ruff}) resetten den Counter.
+_FEHLER_ALTERNIEREND = [
+    # Runde 1: nur ruff
+    ['ruff_changed: PIE810 Do not use a list comprehension in reversed'],
+    # Runde 2: nur mypy
+    ['mypy_changed: x.py:1: error: audit(...) arg-type'],
+    # Runde 3: ruff + mypy
+    ['ruff_changed: PIE810 Do not use a list comprehension in reversed',
+     'mypy_changed: x.py:1: error: Duplicate module named "werkstatt.reviewer"'],
+    # Runde 4: nur mypy
+    ['mypy_changed: x.py:1: error: Duplicate module named "werkstatt.reviewer"'],
+    # Runde 5: nur ruff
+    ['ruff_changed: PIE810 Do not use a list comprehension in reversed'],
+]
+
+
+def test_reflection_alternierende_fehler_stagniert(tmp_path, monkeypatch):
+    """OP-182 Diagnose (a): Alternierende Stage-Sets (ruff/mypy/beide)
+    duerfen nicht 5 Runden laufen.
+
+    Erwartung MIT Fix: run_builder.call_count <= 4, spec_widerspruch_
+    erkannt ist False (normaler Task-Fail, kein Spec-Widerspruch).
+    Erwartung OHNE Fix (heute): call_count == 5, Erschoepfung-Pfad
+    setzt spec_widerspruch_erkannt = True.
+    """
+    s = mk_state(
+        api_key="x",
+        project_dir=tmp_path,
+        project_name="t",
+        patches=[{"file": "x.py", "old_string": "a", "new_string": "b"}],
+        reviewer_bugs=[],
+        last_verify_errors=[],
+    )
+    s.reflection_history = []
+    s.aktuelle_task = {"id": "t1", "task_files": ["x.py"]}
+    mocks = _setup_mocks(monkeypatch)
+
+    def _verify_alternierend(st, phase=None):
+        _idx = min(len(st.reflection_history),
+                   len(_FEHLER_ALTERNIEREND) - 1)
+        st.last_verify_errors = list(_FEHLER_ALTERNIEREND[_idx])
+        return False
+    monkeypatch.setattr(reflection, "_verify_patches",
+                        _verify_alternierend, raising=False)
+
+    rc = reflection._reflection_loop(s, max_runden=5)
+
+    assert rc is False
+    assert mocks.run_builder.call_count <= 4, (
+        f"Loop lief {mocks.run_builder.call_count} Runden, "
+        f"erwartet <= 4 (alternierende Fehler muessen nach 3-4 "
+        f"Runden abbrechen, nicht 5)"
+    )
+    assert getattr(s, "spec_widerspruch_erkannt", False) is False, (
+        "Alternation-Stagnation ist normaler Task-Fail, nicht "
+        "spec_widerspruch_erschoepft"
+    )

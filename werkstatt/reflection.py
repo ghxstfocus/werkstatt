@@ -263,6 +263,52 @@ def _verify_fehler_zwischen_runden_gleich(state) -> bool:
     return _s_v == _s_j
 
 
+def _verify_fehler_alternierend(state) -> bool:
+    """OP-182: True, wenn Signatur-Sets zwischen Runden ueberlappen
+    (aber nicht identisch sind).
+
+    Bei Loop-Test 9 (2026-11-07 12:14-12:16) wechselten die Verify-
+    Fehler zwischen Runden (ruff PIE810 / mypy Duplicate / beide).
+    `_verify_fehler_zwischen_runden_gleich` (OP-175 Bug B) vergleicht
+    Stage-Sets exakt; bei Alternation matcht nie ein aufeinander-
+    folgendes Paar, der Stagnations-Counter resettet.
+
+    Heuristik: `_fehler_signatur_normalisiert` auf jede Fehlerliste,
+    zerlegen in Set, Intersection pruefen.
+
+    - exakt gleiche Sets   -> False (dann greift verify_gleich)
+    - Intersection leer    -> False (voellig verschiedene Fehler)
+    - Intersection nicht leer, aber Sets verschieden -> True
+
+    Gate: nur bei patches_applied > 0 in der Vorrunde — bei 0 hat der
+    Builder nichts getan, das ist patch_nicht_angewendet (separater
+    Pfad).
+
+    Wird in `_reflection_loop` als Grund `verify_alternierend`
+    eingetragen. Schwaechere Stagnation als verify_gleich: bei
+    `_stagnation >= 2` fuehrt sie zu normalem Task-Fail, NICHT zu
+    `spec_widerspruch_erkannt=True` (Option Y).
+    """
+    _hist = getattr(state, "reflection_history", None) or []
+    if not _hist:
+        return False
+    _prev = _hist[-1] if isinstance(_hist[-1], dict) else {}
+    if int(_prev.get("patches_applied", 0) or 0) <= 0:
+        return False
+    _vorher = _prev.get("verify_errors") or []
+    _jetzt = state.last_verify_errors or []
+
+    _sig_v = _fehler_signatur_normalisiert(_vorher)
+    _sig_j = _fehler_signatur_normalisiert(_jetzt)
+    if not _sig_v or not _sig_j:
+        return False
+    _set_v = frozenset(_sig_v.split("||"))
+    _set_j = frozenset(_sig_j.split("||"))
+    if _set_v == _set_j:
+        return False
+    return bool(_set_v & _set_j)
+
+
 def _test_fehler_signatur(state) -> str | None:
     """Signatur der pytest-Fehler aus state.last_verify_errors."""
     _errs = state.last_verify_errors or []
@@ -443,6 +489,12 @@ def _reflection_loop(
             # Runden, aber nicht als ruff- oder reviewer_bugs-Stagnation
             # erkannt (z.B. Loop-Test-6: 10x mypy attr-defined).
             _stagnation_grund = "verify_gleich"
+        elif _verify_fehler_alternierend(state):
+            # OP-182: Fehler-Set wechselt, aber Signatur-Intersection
+            # nicht leer (z.B. Loop-Test-9: ruff/mypy/beide wechseln).
+            # Ohne diesen Zweig resettet der Counter bei jeder
+            # Set-Aenderung -> Loop laeuft alle 5 Runden.
+            _stagnation_grund = "verify_alternierend"
         if _stagnation_grund:
             _stagnation += 1
             audit("loop_reflection_stagnation_runde",
@@ -460,8 +512,11 @@ def _reflection_loop(
                     state.last_verify_errors or []
                 )
                 _is_spec = (
-                    _bug_text_deutet_spec_widerspruch(_bugs_fuer_check)
-                    or _verify_fehler_wiederholt_sich(_verify_fuer_check)
+                    _stagnation_grund != "verify_alternierend"
+                    and (
+                        _bug_text_deutet_spec_widerspruch(_bugs_fuer_check)
+                        or _verify_fehler_wiederholt_sich(_verify_fuer_check)
+                    )
                 )
                 if _is_spec:
                     audit("loop_reflection_spec_widerspruch",
