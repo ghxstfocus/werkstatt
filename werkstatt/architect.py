@@ -307,6 +307,27 @@ Wenn ein Plan Code-Tasks (z.B. t1: `werkstatt/web/chat.py`) und Test-Tasks
 5. Wenn Code-Task und Test-Task in derselben Phase laufen, haengen
    sie zusammen: der Reviewer muss BEIDE genehmigen oder KEINEN.
 
+## AUFRUFER-PFLICHT (verbindlich, ab 2026-11-07)
+
+Wenn dein Plan eine NEUE Datei (Modul, Helper, Tool) erstellt,
+MUSST du im Plan explizit eine der beiden Angaben machen:
+
+(a) **Aufrufer:** "<bestehendes Modul>" ruft "<neue Datei>.<funktion>"
+    ODER <neue Datei> wird in <bestehendes Modul> importiert.
+(b) **Standalone:** "<neue Datei> ist ein eigenstaendiges
+    User-Tool und wird NICHT von anderen Modulen importiert."
+
+Ohne (a) oder (b) ist der Plan UNVOLLSTAENDIG. Grund: Loop-Test 8
+(2026-11-07) zeigte, dass ein neues Tool (tools/contract_check.py)
+gebaut wurde, aber niemand es rief — die Pruefung lief nie.
+Live-Beleg: 64 Zeilen toter Code, nur von Tests importiert.
+
+**Konkret im Plan:**
+- Bei "neue Datei X.py anlegen" immer dazuschreiben, WER X.py ruft.
+- Bei "neuer Helper in bestehender Datei" immer dazuschreiben, WER
+  den Helper aufruft (nicht nur "wird von Test Y getestet").
+- Wenn nur Tests rufen: das ist Dead-Code im Produktivpfad.
+
 ## GOLD: SCOUT-KONTEXT
 Du bekommst im User-Content:
 - "SCOUT-AUFTRAG" (vorformuliert).

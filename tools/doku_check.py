@@ -22,6 +22,10 @@ Aufruf:
   python3 tools/doku_check.py --limit 50          # mehr Commits pruefen
   python3 tools/doku_check.py --json              # maschinenlesbar
 """
+# standalone: Manueller Doku-Drift-Reporter. Kein Aufruf aus
+# werkstatt/ oder verify.json. Vorarbeit fuer OP-086 (Doku-Drift
+# als Verify-Gate) — dort wird der Aufruf nachgezogen.
+
 from __future__ import annotations
 
 import argparse

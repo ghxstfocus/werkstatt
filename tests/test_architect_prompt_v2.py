@@ -186,3 +186,23 @@ def test_planner_system_sortiert_nach_confidence():
         f"Sortierung falsch: high@{pos_high}, med@{pos_med}, low@{pos_low}"
     )
 
+
+
+# =====================================================================
+# OP-181: Architect-Prompt — AUFRUFER-PFLICHT
+# =====================================================================
+
+def test_architect_prompt_hat_aufrufer_pflicht():
+    """Spec: der Architect-Prompt nennt die AUFRUFER-PFLICHT.
+
+    Anlass: Loop-Test 8 (2026-11-07) baute tools/contract_check.py,
+    das von niemandem gerufen wurde. Der Architect hatte keinen
+    Zwang, einen Aufrufer zu nennen.
+    """
+    from werkstatt.architect import ARCHITECT_SYSTEM
+    assert "AUFRUFER-PFLICHT" in ARCHITECT_SYSTEM, (
+        "ARCHITECT_SYSTEM muss die Sektion 'AUFRUFER-PFLICHT' enthalten"
+    )
+    # Beide Varianten (a) und (b) muessen erwaehnt sein
+    assert "**Aufrufer:**" in ARCHITECT_SYSTEM
+    assert "**Standalone:**" in ARCHITECT_SYSTEM

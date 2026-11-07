@@ -165,3 +165,65 @@ def test_keine_op_doppelt_in_delete_zone():
         f"OPs doppelt in Delete-Zone: {doppelt}. "
         f"Jede OP darf nur einen Eintrag haben."
     )
+
+
+# =====================================================================
+# Regel 6: Keine Tools ohne produktive Referenz (Dead-Code-Schutz)
+# =====================================================================
+
+def test_keine_toten_tools_skripte():
+    """Spec: jedes tools/<name>.py ist produktiv referenziert.
+
+    Tests zaehlen NICHT als Aufrufer — sonst waere tools/contract_check.py
+    heute (Loop-Test 8, 2026-11-07) gruen gewesen, obwohl nur
+    test_contract_check_setattr.py es importierte. Die Pruefung lief
+    nie in verify.json, bis das Wiring manuell nachgeholt wurde.
+
+    Erlaubte Referenz-Quellen:
+    - werkstatt/**/*.py (importiert das Tool)
+    - tools/<anderes>.py (importiert das Tool als sibling)
+    - .werkstatt/verify.json (ruft das Tool als Stage)
+
+    Ausnahmen: Tools duerfen mit einem Kommentar `# standalone: <grund>`
+    in den ersten 2000 Zeichen markiert werden (User-Tools wie
+    werkstatt_kontext.py).
+    """
+    import re
+
+    root = pathlib.Path("/opt/werkstatt")
+    tools_dir = root / "tools"
+    werkstatt_dir = root / "werkstatt"
+    verify_json = root / ".werkstatt" / "verify.json"
+
+    if not tools_dir.is_dir():
+        return  # Sandbox/CI ohne tools/ — skip
+
+    quellen = list(werkstatt_dir.rglob("*.py")) + list(tools_dir.glob("*.py"))
+    if verify_json.is_file():
+        quellen.append(verify_json)
+
+    verwaist: list[str] = []
+    for tool in tools_dir.glob("*.py"):
+        if tool.name == "__init__.py":
+            continue
+        if "# standalone:" in tool.read_text(errors="ignore")[:2000]:
+            continue
+        stem = tool.stem
+        # Suche in allen Quellen AUSSER der Tool-Datei selbst
+        treffer = False
+        for q in quellen:
+            if not q.exists() or q.resolve() == tool.resolve():
+                continue
+            if re.search(rf"\b{re.escape(stem)}\b",
+                         q.read_text(errors="ignore")):
+                treffer = True
+                break
+        if not treffer:
+            verwaist.append(tool.name)
+
+    assert not verwaist, (
+        f"Tools ohne produktive Referenz (nur in Tests oder gar nicht): "
+        f"{sorted(verwaist)}. "
+        f"Entweder in verify.json / werkstatt/*.py / tools/*.py verdrahten "
+        f"oder als `# standalone: <grund>` markieren."
+    )

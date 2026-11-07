@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""werkstatt_kontext.py — Onboarding-Block fuer neue Chat-Sessions.
+"""
+# standalone: Chat-Onboarding-Block fuer den User. Manuell
+# aufgerufen (python3 tools/werkstatt_kontext.py), NICHT aus
+# dem Loop. Reines Read-only-Werkzeug.
+werkstatt_kontext.py — Onboarding-Block fuer neue Chat-Sessions.
 
 Zweck: Ein neuer Chat (LLM) bekommt mit EINEM Paste-Block alles,
 um Werkstatt zu verstehen und weiterzumachen.
