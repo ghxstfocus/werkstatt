@@ -3101,3 +3101,43 @@ Problem dokumentiert: der Test-Agent prueft Config-Details
   state_flow.py (Test-Konsistenz-Anker).
 
 Kein Code geaendert (nur Doku + Kontext-Generator).
+
+
+### 2026-11-07 — OP-212 (Test-Spec-Validator) — Code + Tests
+
+Code-Baustein fuer Spec-First Test-Loop gebaut, Verdrahtung in
+OP-210 (Test-Loop-Phase) bleibt offen.
+
+**Neu:**
+- `werkstatt/test_spec.py` — `TestSpec`, `AcceptanceCriterion`
+  Dataclasses, `validate_schema()` (Pflichtfelder, Duplikate,
+  verification-Enum), `parse_test_spec()` (akzeptiert auch
+  unvollstaendige Specs fuer Validator-Reporting).
+  `TestSpec.__test__ = False` verhindert pytest-Collection-Warning.
+- `werkstatt/test_spec_validator.py` — `validate_test_spec(
+  original_requirement, spec, api_key)`. Deterministische
+  Smoke-Test-Heuristik (AK mit verification=file_content auf
+  Config-Datei, die im OP-Text NICHT genannt ist) plus
+  LLM-Validator-Call mit eigenem Prompt. Fail-closed bei
+  fehlendem api_key, LLM-Fehler oder unparsebarer Antwort.
+  Robuster JSON-Parser (Slice + Klammern-Repair).
+- `tests/test_test_spec.py` — 11 Schema-Tests.
+- `tests/test_test_spec_validator.py` — 14 Tests (4x Heuristik,
+  4x Parser, 6x validate_test_spec inkl. Fail-closed-Faelle).
+
+**OP-212 AK-Status:**
+- (a) `validate_test_spec` mit `ValidationResult` — done
+- (b) Eigener LLM-Call mit eigenem Prompt — done
+- (c) Mehrdeutigkeiten fuehren zu Human-Gate VOR Test-Loop
+  — offen, braucht OP-210
+- (d) `test_spec`-Struktur erweitert — done
+- (e) Tests — done (25 Tests)
+
+**OP-217 AK-Status:**
+- (a) `expected_behavior` + `verification` — done (in test_spec.py)
+- (b) Test-Agent-Prompt-Regel — offen (Test-Agent existiert
+  noch nicht, kommt in OP-210)
+- (c) Post-Test-Validation — offen (OP-210)
+- (d) Config-Integritaets-Trennung — done (Smoke-Test-Heuristik
+  in test_spec_validator.py)
+- (e) Tests — teilweise (Validator-Seite done)

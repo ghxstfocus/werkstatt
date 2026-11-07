@@ -1206,7 +1206,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 ### OP-212: Test-Spec-Validator (unabhaengige Pruefung der Architect-Spec)
 
-- **Status:** open
+- **Status:** partial (Code+Tests done, Verdrahtung in OP-210 offen)
 - **Typ:** architektur (Tests + Spec-Validierung)
 - **Betroffen:** `werkstatt/test_spec_validator.py` (neu),
   `werkstatt/phases/test_loop.py` (neu, via OP-210),
