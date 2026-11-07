@@ -870,60 +870,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 
 
-### OP-172: Verify→Builder-Kette — Builder sieht nur 5 Fehler
-
-- **Status:** open
-- **Typ:** architektur (Verify + Builder-Prompt)
-- **Betroffen:** `werkstatt/verify.py` (Z. 479 `_out[-500:]`),
-  `werkstatt/roles/builder/run.py` (Z. 147-156 `_err_lines`),
-  `tests/test_verify_builder_kette.py` (neu)
-- **Problem:** Die Kette Verify→State→Builder-Prompt schneidet
-  Fehler-Information an **drei** Stellen ab:
-  1. **`verify.py:479`** speichert `_out[-500:]` — die **letzten**
-     500 Zeichen. Bei mypy/ruff/pytest steht dort die Statistik
-     ("Found N errors", "N failed"), nicht die Fehler selbst.
-     Der Builder bekommt "3 Fehler" ohne zu wissen **welche**.
-  2. **`run.py:149`** nimmt `[:5]` — nur die ersten 5 Fehler.
-     Bei 20 mypy-Fehlern sieht der Builder 15 nicht.
-  3. **`run.py:149`** schneidet pro Error auf `[:500]`. Langer
-     mypy-Fehler mit Pfad+Zeile+Type wird abgeschnitten.
-  Der Gate blockt zwar (ruff_changed hart seit 8c52cf3,
-  mypy_changed hart seit b950b97), aber der Builder bekommt
-  nicht genug Info zum Reparieren. Er ratet.
-- **Live-Beleg (Loop-Test 5, 2026-11-06):** Builder hat in t4
-  den Import `format_letzter_test_fehler_block` vergessen.
-  Die Reflection sah `F821` im State, aber die konkreten
-  Zeilen (444:22) im Prompt waren ungemessen. Nach 8c52cf3
-  haette der Gate den Fehler geblockt, aber der Builder
-  braucht den **Detail-Text** fuer den Fix.
-- **Akzeptanzkriterien:**
-  - `verify.py:479`: `_out[-500:]` → `_out[:2000]`, mit
-    Fallback auf `_out[-500:]` wenn die ersten 2000 leer
-    sind (Edge-Case: nur whitespace im Anfang).
-  - `run.py:149`: `[:5]` → `[:15]`, `[:500]` → `[:1000]`
-    pro Error.
-  - Neue Formatierung: pro Error nur `<stage>: <file:line: msg>`
-    extrahieren (Regex), den restlichen Traceback verwerfen.
-    Reduziert Prompt-Groesse ohne Info-Verlust.
-  - `_format_repair_hint` bekommt die vollen (nicht mehr
-    gekuerzten) Errors — Klassifikation (F821, ruff TRY004,
-    py_compile) funktioniert damit auf allen Fehlern, nicht
-    nur den ersten 5.
-  - Neuer Test `tests/test_verify_builder_kette.py`:
-    (a) 20 synthetische mypy-Fehler → alle 20 im Builder-Prompt;
-    (b) 1500-Zeichen-Output pro Fehler → auf 1000 gekuerzt,
-        nicht 500;
-    (c) `_out[:2000]` enthaelt die Fehler-Zeilen, nicht nur
-        die Statistik-Zeile.
-- **Tests:** `tests/test_verify_builder_kette.py` (neu)
-- **Blockiert von:** —
-- **Priorität:** hoch — Voraussetzung für sinnvolle
-  Reflection-Runden. Der Gate blockt, aber der Builder
-  kann ohne Detail-Info nur raten.
-- **Quelle:** Messung 2026-11-06 nach Gate-Härtung
-  (ruff=0, mypy=0, alle Stages hart). Naechster logischer
-  Schritt nach Altlastabbau.
-
 ### OP-173: Spec-Tests — RunState-Factory statt SimpleNamespace
 
 - **Status:** open
@@ -1143,10 +1089,61 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   Bugs uebersieht (Recall). Nur Praezision. Recall-Messung
   ist eigene OP, wenn Praezision steht.
 
+### OP-179: mypy-Setup — Duplicate-Module bei workspace-relativen Pfaden
+
+- **Status:** open
+- **Typ:** fix (verify-Setup)
+- **Betroffen:** `.werkstatt/verify.json` (mypy_changed-Stage),
+  `pyproject.toml` (mypy-Sektion), `tests/test_verify_mypy_setup.py` (neu)
+- **Problem:** Loop-Test 7 (18:29:11): `mypy_changed`-Stage
+  meldet `"Source file found twice under different module names:
+  werkstatt.phases.review and phases.review"`. Ursache: die Stage
+  ruft `mypy --follow-imports=silent --no-error-summary
+  {changed_py_files}`. Wenn `changed_py_files` einen Pfad wie
+  `werkstatt/phases/review.py` enthaelt UND dieser sowohl als
+  `werkstatt.phases.review` (Package-Pfad) als auch als
+  `phases.review` (Sub-Package-Pfad) importierbar ist, findet
+  mypy zwei Modul-Identitaeten und bricht ab. Der Fehler ist ein
+  Setup-Artefakt, kein Code-Bug — der Builder kann ihn nicht
+  reparieren, weil er die Umgebung nicht aendern kann.
+  Live-Beleg Loop-Test 7: 10 verify_failed-Events mit diesem
+  Fehler-Format, davon 2 mit abgeschnittenem error-Kopf (durch
+  OP-172 jetzt behoben), 8 mit vollem error-Kopf.
+- **Akzeptanzkriterien:**
+  - **Diagnose (a):** In einem Test-Setup reproduzieren:
+    `werkstatt/phases/review.py` unter zwei Modul-Pfaden
+    importierbar, dann `mypy --follow-imports=silent
+    werkstatt/phases/review.py` ausfuehren. Der Fehler MUSS
+    auftreten. (Kein "ich glaube, das ist der Grund".)
+  - **Fix (b):** Eine der drei Optionen waehlen:
+    (1) `--explicit-package-bases` in der Stage-Definition,
+    (2) `MYPYPATH=.` in der Stage-Umgebung,
+    (3) `__init__.py` in `werkstatt/phases/` anlegen (falls
+    fehlend), damit der Package-Pfad eindeutig ist.
+    Wahl erst nach (a)-Diagnose.
+  - **Test (c):** Neuer `tests/test_verify_mypy_setup.py`:
+    - Ruft die reale `mypy_changed`-Stage aus `verify.json`
+      gegen eine Fixture-Datei auf.
+    - Erwartet: **kein** `"Source file found twice"` im Output.
+    - Failt bei Regress (wenn die Stage wieder doppeldeutige
+      Pfade akzeptiert).
+  - `pytest` gruen, keine neuen ruff/mypy-Fehler.
+- **Tests:** `tests/test_verify_mypy_setup.py` (neu)
+- **Blockiert von:** —
+- **Blockiert:** Loop-Test 8 (indirekt — der Loop laeuft, aber
+  jeder mypy-Fehler triggert das Setup-Artefakt statt echte
+  Fehler).
+- **Prioritaet:** hoch — Root-Cause von Loop-Test 6+7-Blockaden.
+- **Quelle:** Loop-Test 7 (18:29:11), OP-172-Folge, Block 26
+  Messung (26b.3/26b.5 zeigten: das Artefakt entsteht NICHT bei
+  einfachem fehlendem `__init__.py`, sondern bei doppelter
+  Modul-Aufloesung).
+
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-07 | OP-172 | done | Fehlerkern-Extraktion in verify.py (`_extrahiere_fehlerkern`) statt `_out[-500:]` (8effad1). mypy-Fehler-Output wird auf `error:`-Zeilen + Kontext reduziert, `note:`/`help:`/Statistik verworfen. Live-Beleg Loop-Test 7 (18:29:11): der alte Truncation-Pfad schnitt den error-Kopf ab, sodass der Builder nur "(also at ...)" + Notes sah. Jetzt sieht er "error: Source file found twice under different module names: \"werkstatt.phases.review\" and \"phases.review\"" — das Setup-Problem ist damit **diagnostizierbar**, aber nicht behebbar (eigene OP-179). 9 neue Tests (test_verify_fehlerkern.py).
 - 2026-11-07 | OP-178 | done | Rollen-Registry-Migration: planner/builder/reviewer/reflection via ROLLEN[name].lade_skills() (0388d1b), Alias-Cleanup (8954f83), Explorer-Migration + systematic-debugging-Rausnahme (5a5c941). 5 von 5 Aufrufern migriert, scout bleibt fail-closed-leer. Neuer Migration-Test test_rollen_registry_migration.py (AST-Scan: jede Rolle mit skills/filter_rolle muss ROLLEN[name] nutzen). Verhaltensaenderung Explorer: systematic-debugging wird nicht mehr geladen (auch nicht bei Trigger); SKILL.md-Frontmatter `rollen: [builder]`. systematic-debugging-Zuordnung zum geplanten Debugger (OP-128/OP-160) dort offen, keine eigene OP.
 - 2026-11-06 | OP-168b | done | Gate in `_phase_end_reflection` nach jeder Reject-Runde (c713033), `phase_review_auto: bool` in RunState (state_flow_baseline nachgezogen), 2 Smoke-Tests in test_phase_review_gate.py. Live-Beleg Loop-Test 7 (18:xx): Gate nach Runde 1 in Phase-End-Reflection. Reviewer-Bugs aus Loop-Test 7 geprueft: nur Test-Luecke berechtigt (jetzt gefuellt); Bug 1/2/5 waren false positives (Reviewer interpretierte AK-Text falsch, Code liest phase_review_auto nach Gate-Aufruf). Test-Spec-Abweichung: 2 Tests test_reflection_reject_ruft_gate + test_gate_n_bricht_reflection_ab. Task-Reflection-Gate (`_reflection_loop`) explizit NICHT im Scope — OP-Text nennt `_phase_end_reflection`.
 - 2026-11-06 | OP-175 | done | Bugs A, B, C gefixt (6aa8694 Topo-Sort, f204965 verify_gleich, 2538174 Gate-Message). Bug D nicht reproduzierbar: Builder versuchte aktiv mypy-Umgehung (state.X = -> setattr), Verteidigungskette (mypy+ruff B010+spec_widerspruch) hat es gefangen; Haertung als OP-176. Bug E zurueckgezogen: Fehlmessung (Audit-Events existieren, 0s korrekt). Test-Namen AK-abweichend: test_planner_deps_sortierung.py statt test_planner_deps_richtung.py (Bug war Sortierung, nicht Richtung), test_reflection_stagnation_verify.py statt test_reflection_stagnation_5_runden.py, test_phase_review_gate_kontext.py nicht angelegt (Bug C war Message-Bug, kein Code-Gate). Hinweis: OP-168b (Gate zwischen Task-Reflection-Runden) bleibt offen.
