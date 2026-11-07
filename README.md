@@ -185,75 +185,56 @@ Hart heißt: bei rc!=0 blockt der Commit.
 
 ---
 
-## Architektur — SOLL (Ziel, ADR-0016/0017/0018)
+## Architektur — SOLL (Ziel)
 
-### Spec-First Test-Loop (ADR-0016)
+**Vollständige Ziel-Architektur: `docs/SOLL.md`.** Die folgenden
+Abschnitte sind eine Kurzfassung. Bei Widersprüchen gewinnt
+`docs/SOLL.md`.
 
-Der Loop baut heute Code und Tests im selben Builder-Call. Code und
-Test bestätigen sich gegenseitig, aber Spec-Abweichungen bleiben
-unsichtbar. Der Benchmark (2026-11-07) zeigt: 3 von 18 Mutanten
-überleben auf einem Mini-Modul, weil Grenzfälle nicht getestet sind.
+Die Zielarchitektur hat **vier Schichten**:
 
-**Ziel-Ablauf:**
-
-    Architect
-      → AK + test_spec (Test-Namen + Assertion-Prosa, KEIN Code)
-    Test-Loop (Phase 2b)
-      → Test-Agent baut Tests aus test_spec
-      → Qualification: Tests MÜSSEN auf unverändertem Repo rot sein
-      → Freeze: SHA256 in state.test_manifest
-    Code-Loop (Phase 3, test-blind)
-      → Builder sieht tests/ NICHT
-      → verify-Stage test_integrity prüft SHA256
-      → verify-Stage pytest_changed läuft auf eingefrorenen Tests
-    Mutation-Gate
-      → pytest-gremlins auf geänderte Files
-      → Score < 0.8: Audit (kein Hard-Block in Runde 1)
-    Debugger (bei Wiederholungs-Fail)
-      → 3-Wege-Check: Spec ↔ Code ↔ Test
-      → Test-Thaw nur über Human-Gate (auditierbar)
-
-### Mutation-Gate (ADR-0017)
-
-`pytest-gremlins` 1.13.2. Native pytest-Integration. Mutation
-Switching statt fork-basiertem Neuladen — schnell genug für
-"pro Task". Score-Schwelle 0.8, im ersten Rollout `hart: false`.
-
-Cosmic-ray als Alternative dokumentiert, aber nicht gewählt
-(ConfigError im Benchmark, CLI-lastiger).
-
-### Debugger als eigene Rolle (ADR-0018)
-
-`systematic-debugging` wandert von `builder`/`reflection` zu einer
-eigenen Rolle `debugger`. Der Debugger implementiert den 3-Wege-Check:
-
-| Code | Test | Aktion |
+| Schicht | Aufgabe | OPs |
 |---|---|---|
-| ≠ Spec | = Spec | Fix Code (Test hatte recht) |
-| = Spec | ≠ Spec | Test-Thaw (Human-Gate) |
-| ≠ Spec | ≠ Spec | Human-Gate (fundamentale Misalignment) |
-| = Spec | = Spec, rot | Human-Gate (Infra/flaky/env) |
+| 1. Loop | Motor, baut Code headless | 123, 188, 189, 190, 193, 195 |
+| 2. Chat | Interface, read-only Diagnose | 124, 125, 126, 127 |
+| 3. Chat-Debugger | Reparatur-Modus (OP-128) | 128, 132 |
+| 4. Erfahrungs-Gehirn | Zweistufiges Gedächtnis | 113, 113a, 113i, 129, 130, 131, 160 |
 
-**Test-File-Guard:** Debugger-Patch auf Test-Datei nur bei
-Syntax-Fehler oder Human-Gate-Freigabe.
+**Drei Prinzipien:**
 
-### OP-Serie (Reihenfolge)
+1. **Der Mensch entscheidet.** Chat und Loop schlagen vor,
+   der Mensch wählt an Gates und in der Repair Ladder.
+2. **Loop ist Motor, nicht Interface.** Er läuft headless,
+   die UI steuert ihn über HTTP-Gates.
+3. **Tests sind Spec.** Code folgt Spec, nicht umgekehrt.
+   Der Builder ist test-blind.
 
-| OP | Titel | Blockiert von |
+### Die SOLL-Pipeline (7 Phasen)
+
+    Phase 1: Explorer → Phase 2: Plan + test_spec
+    → Phase 2b: TEST-LOOP (Tests rot + eingefroren)
+    → Phase 3: CODE-LOOP (test-blind)
+    → Phase 4: PHASE-REVIEW
+    → Phase 4b: MUTATION-GATE
+    → Phase 5: COMMIT-GATE (HTTP)
+
+### Die 6 Stufen (was zuerst, was hängt an was)
+
+| Stufe | Was | OPs |
 |---|---|---|
-| OP-195 | `pyproject.toml` Package-Registrierung + test-tools | — |
-| OP-188 | Test-Loop-Phase mit Qualification und Freeze | OP-092, OP-195 |
-| OP-189 | Builder test-blind + verify-Stages | OP-188 |
-| OP-190 | Mutation-Gate als verify-Stage | OP-189, OP-195 |
-| OP-191 | Debugger-Rolle mit 3-Wege-Check | OP-188 |
-| OP-192 | Test-Thaw-Mechanik | OP-191 |
-| OP-193 | Hypothesis als optionale Dependency | OP-195 |
-| OP-194 | Architektur-Doku aktualisieren | OP-188, OP-191 |
+| 1 | Loop headless | 123, 195 |
+| 2 | Loop-Motor testbar | 188, 189, 190, 193, 194 |
+| 3 | Gehirn-Basis | 113, 113a, 113i, 129 |
+| 4 | Chat-Infrastruktur | 124, 125, 126, 127 |
+| 5 | Chat-Debugger + Ladder | 128, 132, 160 |
+| 6 | Semantic + Memory-UI | 130, 131 |
 
-**Reihenfolge:** 195 → 188 → 189 → 190 (parallel 193); 188 → 191 → 192;
-194 am Ende.
+### ADRs
 
----
+- **ADR-0010** — Memory zweistufig (Projekt + Global)
+- **ADR-0016** — Spec-First Test-Loop
+- **ADR-0017** — Mutation-Gate mit pytest-gremlins
+- **ADR-0018** — Debugger ist Chat-Modus (nicht Loop-Rolle)
 
 ## Verzeichnisse
 

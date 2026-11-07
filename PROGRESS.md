@@ -2977,3 +2977,43 @@ Architektur-Stufe als Doku vorbereitet:
   (17%), 6s Laufzeit.
 - cosmic-ray 8.7.0: ConfigError in isoliertem venv.
 - `hypothesis` 6.170.15 verfuegbar.
+
+
+### 2026-11-07 — SOLL.md: Ziel-Architektur dokumentiert
+
+Nach Session mit 10 Commits (OP-182, 183, 186, 187 + ADRs 0016-0018
++ OPs 188-195) ist die Ziel-Architektur in `docs/SOLL.md`
+festgehalten (708 Zeilen).
+
+**Inhalt SOLL.md:**
+
+- **Vision in einem Satz:** Mensch arbeitet mit Web-UI, Loop ist
+  Motor, Chat ist Interface, Erfahrungs-Gehirn ist Gedaechtnis.
+- **4 Schichten** (Loop, Chat, Chat-Debugger, Gehirn) mit
+  je eigenen Skizzen.
+- **7-Phasen-SOLL-Pipeline** (Test-Loop + Mutation-Gate sind neu).
+- **3 Kernprinzipien** (Mensch entscheidet, Loop ist Motor,
+  Tests sind Spec).
+- **6 Stufen** mit 23 OPs (13-23) und expliziten Abhaengigkeiten.
+- **Glossar** (25+ Begriffe).
+- **Lese-Anleitung** fuer LLMs, Menschen, neue Chats.
+
+**Korrekturen gegenueber frueherer OP-Serie:**
+
+- **OP-191 entfernt.** War doppelt zu OP-128 (Debugger ist
+  Chat-Modus, keine eigene Loop-Rolle).
+- **OP-192 umformuliert.** Test-Thaw gehoert an OP-188
+  (Test-Loop-Phase), nicht an Debugger.
+- **OP-188 erweitert** um AK (g) Test-Thaw-Mechanik integriert.
+
+**README neu** (~348 Zeilen): 4 Schichten statt nur Test-Loop,
+Verweis auf docs/SOLL.md.
+
+**ARCHITECTURE.md** (184 Zeilen): Blockquote-Verweis auf SOLL.md
+als Ziel, mit Widerspruchs-Regel ADR > SOLL.md > ARCHITECTURE.md.
+
+**Keine Code-Aenderung** in dieser Erweiterung — reine Doku.
+
+**Naechster Schritt (Stufe 1):** OP-123 (Gate-Bridge) +
+OP-195 (pyproject) bauen — Voraussetzung fuer Loop-headless
+und test-tools.

@@ -1,5 +1,13 @@
 # Architektur — Werkstatt
 
+
+> **IST-Zustand.** Diese Datei beschreibt, was heute läuft.
+>
+> **SOLL-Zustand:** `docs/SOLL.md` — die Ziel-Architektur
+> (Chat-UI, Chat-Debugger, Erfahrungs-Gehirn, Test-Loop).
+>
+> **Bei Widersprüchen:** ADR > `docs/SOLL.md` > diese Datei.
+>
 Stand: 2026-10-31 (nach Doku-Migration, Scaffolder, Migrator, OP-NNN-Disziplin).
 
 ## 1. Ziel-Architektur

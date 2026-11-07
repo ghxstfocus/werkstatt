@@ -1106,6 +1106,10 @@ NameError in anderem Modul → Match findet den Absatz sofort.
   - **(d)** Freeze: SHA256 in `state.test_manifest`.
   - **(e)** Max 2 Runden, dann `_phase_review_gate`.
   - **(f)** Tests fuer (a)-(e).
+  - **(g)** Test-Thaw-Mechanik integriert (siehe OP-192):
+    bei Test-Bug `state.test_thawed=True`,
+    `state.test_manifest={}`, Audit `test_thawed`,
+    zurueck zu Phase 2b.
   - **`pytest` gruen, ruff/mypy 0.**
 - **Tests:** `tests/test_test_agent.py` (neu),
   `tests/test_phase_test_loop.py` (neu).
@@ -1171,66 +1175,31 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Prioritaet:** mittel.
 - **Quelle:** ADR-0017, Benchmark 2026-11-07.
 
-### OP-191: Debugger-Rolle mit 3-Wege-Check
-
-- **Status:** open
-- **Typ:** architektur (Debugger + Spec)
-- **Betroffen:** `werkstatt/debugger.py` (neu),
-  `werkstatt/rollen.py` (debugger-Rolle),
-  `skills/systematic-debugging/SKILL.md`
-  (`rollen: [debugger]`), `werkstatt/phases/tasks.py`
-  (Verdrahtung), `tests/test_debugger.py` (neu).
-- **Problem:** `systematic-debugging` ist heute fuer `builder` und
-  `reflection` registriert. Das ist semantisch falsch — Debugging
-  ist eine eigene Rolle mit eigener Verantwortung. ADR-0018
-  setzt die Rolle auf.
-- **Akzeptanzkriterien:**
-  - **(a)** `ROLLEN["debugger"]` mit
-    `skills=("systematic-debugging",)`.
-  - **(b)** `ROLLEN["builder"].skill_filter_rolle` laedt
-    `systematic-debugging` NICHT mehr.
-  - **(c)** `ROLLEN["reflection"]`: `systematic-debugging` aus
-    der Skill-Liste entfernt.
-  - **(d)** 3-Wege-Check: Code != Spec, Test = Spec -> Fix Code.
-  - **(e)** 3-Wege-Check: Code = Spec, Test != Spec ->
-    Test-Thaw (Human-Gate).
-  - **(f)** 3-Wege-Check: Alle = Spec, Test rot -> Human-Gate.
-  - **(g)** Verdrahtung in `phases/tasks.py`: bei `_verify_patches`
-    rot UND `_reflection_loop` bereits 1x ohne Erfolg ->
-    Debugger statt Reflection.
-  - **(h)** Tests fuer (a)-(g).
-  - **`pytest` gruen.**
-- **Tests:** `tests/test_debugger.py` (neu),
-  `tests/test_rollen_registry.py` (erweitern).
-- **Blockiert von:** OP-188.
-- **Blockiert:** OP-192.
-- **Prioritaet:** hoch.
-- **Quelle:** ADR-0018, OP-092 Z.114-118.
-
-### OP-192: Test-Thaw-Mechanik
+### OP-192: Test-Thaw-Mechanik (an OP-188 gekoppelt)
 
 - **Status:** open
 - **Typ:** architektur (Tests + Spec)
-- **Betroffen:** `werkstatt/debugger.py` (Thaw-Pfad),
-  `werkstatt/phases/test_loop.py` (Re-Entry),
+- **Betroffen:** `werkstatt/phases/test_loop.py` (neu, via OP-188),
+  `werkstatt/phases/tasks.py` (Thaw-Trigger),
   `tests/test_test_thaw.py` (neu).
-- **Problem:** Wenn der Debugger entscheidet, dass ein Test falsch
-  ist, muss der Test-Thaw auditierbar sein und
-  `state.test_manifest` invalidieren. Sonst kann ein Loop still
-  Tests aendern und die Test-Spec unterlaufen.
+- **Problem:** Wenn ein eingefrorener Test sich als falsch
+  herausstellt (Code = Spec, Test != Spec), muss der Test
+  auditierbar invalidiert werden. Heute gibt es keinen
+  Mechanismus dafuer.
 - **Akzeptanzkriterien:**
   - **(a)** Test-Thaw invalidiert `state.test_manifest`.
-  - **(b)** Audit-Event `test_thawed` mit Grund.
+  - **(b)** Audit-Event `test_thawed` mit Grund und
+    betroffener Test-Datei.
   - **(c)** Test-Loop startet neu nach Thaw.
   - **(d)** `state.test_thawed=True` bis zur naechsten
     Qualification.
   - **(e)** Tests fuer (a)-(d).
   - **`pytest` gruen.**
 - **Tests:** `tests/test_test_thaw.py` (neu).
-- **Blockiert von:** OP-191.
+- **Blockiert von:** OP-188 (Test-Loop-Phase).
 - **Blockiert:** —
 - **Prioritaet:** hoch.
-- **Quelle:** ADR-0016, ADR-0018.
+- **Quelle:** ADR-0016, Chat-Debugger (OP-128) als Thaw-Trigger.
 
 ### OP-193: Hypothesis als optionale Dependency + erste Property-Tests
 
