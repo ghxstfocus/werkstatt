@@ -158,18 +158,19 @@ def test_verwandte_pfad_fehlt(tmp_path):
 # =====================================================================
 
 def test_explorer_system_enthaelt_explorer_system():
-    s = explorer._explorer_system("irgendeine frage")
+    s = explorer._explorer_system()
     assert explorer.EXPLORER_SYSTEM in s
 
 
-def test_explorer_system_trigger_debugging():
-    s = explorer._explorer_system("ruff meckert im build")
-    assert "## Skill: Systematic-Debugging" in s
+def test_explorer_system_kein_systematic_debugging():
+    """OP-178b: Explorer laedt systematic-debugging NICHT.
 
-
-def test_explorer_system_ohne_trigger():
-    s = explorer._explorer_system("was ist die struktur")
-    assert "## Skill: Systematic-Debugging" not in s
+    Der Skill gehoert zum geplanten Debugger (OP-128/OP-160),
+    nicht zum Explorer. Historische Trigger-Logik entfernt.
+    """
+    s = explorer._explorer_system()
+    assert "Systematic-Debugging" not in s
+    assert "systematic-debugging" not in s.lower()
 
 
 # =====================================================================

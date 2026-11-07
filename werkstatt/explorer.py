@@ -14,7 +14,7 @@ from typing import Any
 
 from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
-from werkstatt.skills import load_all_skills, load_skill_by_name
+from werkstatt.skills import load_all_skills
 from werkstatt.state import RunState
 from werkstatt.tools import run_readonly
 
@@ -248,20 +248,22 @@ def _format_findings(messungen: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _explorer_system(frage: str) -> str:
-    """Haengt systematic-debugging + using-werkstatt an."""
+def _explorer_system() -> str:
+    """EXPLORER_SYSTEM + Registry-Skills (using-werkstatt).
+
+    OP-178b: systematic-debugging gehoert nicht hierher (Debugger
+    kommt spaeter, OP-128/OP-160). Registry ist Soll: nur
+    using-werkstatt fuer den Explorer.
+    """
+    from werkstatt.rollen import ROLLEN
     skills = load_all_skills()
     parts = [EXPLORER_SYSTEM]
-    # Meta-Skill IMMER
-    uw = load_skill_by_name("using-werkstatt", skills)
-    if uw and uw["body"]:
-        parts.append("## Skill: Using-Werkstatt\n" + uw["body"])
-    # systematic-debugging bei Trigger
-    trigger = ("ruff", "test", "bug", "fehler", "debug", "pytest")
-    if any(w in frage.lower() for w in trigger):
-        sd = load_skill_by_name("systematic-debugging", skills)
-        if sd and sd["body"]:
-            parts.append("## Skill: Systematic-Debugging\n" + sd["body"])
+    for s in ROLLEN["explorer"].lade_skills(skills):
+        body = s.get("body") or ""
+        if body:
+            parts.append(
+                f"## Skill: {s.get('name', '?')}\n" + body
+            )
     return "\n\n".join(parts)
 
 
@@ -537,7 +539,7 @@ def run_explorer(state: RunState, frage: str) -> dict:
     )
 
     reply = ask_llm(
-        api_key, _explorer_system(frage), context,
+        api_key, _explorer_system(), context,
         model="deepseek-chat", temperature=0.0, max_tokens=3000,
     )
     if not reply.ok:

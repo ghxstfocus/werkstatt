@@ -118,7 +118,7 @@ _reg(Rolle(
 
 _reg(Rolle(
     name="explorer",
-    skills=("using-werkstatt", "systematic-debugging"),
+    skills=("using-werkstatt",),
     prompt_module="werkstatt.explorer",
     prompt_const="EXPLORER_SYSTEM",
     beschreibung="Read-only Explorer.",
