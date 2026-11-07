@@ -245,7 +245,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 
 ### OP-231: Chat-Agent + read-only Tool-Registry
 
-- **Status:** open
+- **Status:** done (2026-11-07)
 - **Typ:** feature
 - **Betroffen:** `werkstatt/chat_agent.py` (neu),
   `werkstatt/chat_tools.py` (neu)
@@ -262,6 +262,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_chat_agent.py` (neu),
   `tests/test_chat_tools.py` (neu)
 - **Blockiert von:** OP-230
+- **Nachtrag 2026-11-07:** Umgesetzt. Neue Module: `werkstatt/chat_tools.py` (8 read-only Tools, `mode`-Feld fuer spaetere opt-in write-Erweiterung), `werkstatt/chat_agent.py` (chat_loop mit Streaming-Callbacks on_chunk/on_tool_call/on_tool_result). Alter Admin-Chat (`web/chat_agent.py`, `web/chat.py`) geloescht. 33 neue Tests (test_chat_tools 14, test_chat_agent 8, test_web_chat 11).
 
 ### OP-230: Chat-Session-Store (SQLite, pro Projekt)
 
@@ -280,7 +281,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 
 ### OP-232: Chat-UI (Tool-Call-Karten, Session-Anzeige)
 
-- **Status:** open
+- **Status:** done (2026-11-07)
 - **Typ:** ui-feature
 - **Betroffen:** `werkstatt/web/static/chat.js` (neu),
   `werkstatt/web/static/style.css`
@@ -295,6 +296,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   (e) Manuell verifiziert.
 - **Tests:** keine (UI, visuell)
 - **Blockiert von:** OP-231, OP-230
+- **Nachtrag 2026-11-07:** Umgesetzt. `static/chat.js` neu (270 Z.): Session-Sidebar, Tool-Call-Karten, Streaming-Renderer. `layout.html` + `layout.css` angepasst. Endpoints: POST /chat, WS /chat/stream, GET /chat/history, GET /chat/sessions, POST /chat/new.
 
 ### OP-233: Timeline + Layout-Umbau Variante A
 
