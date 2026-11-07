@@ -17,6 +17,25 @@ ADaPT (On-Demand-Zerlegung). Der Mensch ist das letzte Gate.
 
     Explorer -> Scout -> Architect -> Planner-Split -> Builder -> Verify -> Reviewer -> Human-Gate
 
+## 1.5 Installation
+
+Zwei gleichwertige Wege — beide funktionieren:
+
+**cwd-Import (Default, keine Installation nötig):**
+Aus dem Repo-Root heraus. `pytest tests/` importiert `werkstatt` über
+`sys.path[0]`. Funktioniert ohne venv-Setup, ohne `pip install`.
+Bevorzugt für Loop-Läufe, lokale Entwicklung und CI ohne Wheel-Cache.
+
+**Editable-Install (`pip install -e ".[test-tools]"`):**
+`pip show werkstatt` zeigt dann `Version: 0.1.0` und `Name: werkstatt`.
+Die Extras-Gruppe `test-tools` zieht `hypothesis` und
+`pytest-gremlins` nach. Funktioniert auch aus anderen Verzeichnissen
+heraus (z.B. wenn `pytest` nicht aus dem Repo-Root gestartet wird).
+Voraussetzung für Mutation-Gate (OP-190) und Hypothesis-Tests (OP-193).
+
+Beide Wege bleiben dauerhaft unterstützt. Kein Migrationszwang, keine
+`[tool.pytest.ini_options]` — `pytest.ini` bleibt aktive Config.
+
 ## 2. Rollen
 
 ### 2.1 Explorer (werkstatt/explorer.py)

@@ -1,3 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "werkstatt"
+version = "0.1.0"
+description = "Meta-Loop-System fuer LLM-gesteuerte Software-Entwicklung"
+requires-python = ">=3.11"
+readme = {text = "Werkstatt — Meta-Loop-System.", content-type = "text/markdown"}
+license = {text = "AGPL-3.0-or-later"}
+authors = [{name = "Alexander Nohl"}]
+# Bewusst KEINE [project.dependencies] — requirements.txt bleibt die
+# aktive Laufzeit-Quelle (Akzeptanzkriterium (a)). Die Extras-Gruppe
+# [test-tools] ist rein optional.
+
+[project.optional-dependencies]
+test-tools = [
+    "hypothesis>=6.100",
+    "pytest-gremlins>=1.13.2",
+]
+
+[tool.setuptools.packages.find]
+include = ["werkstatt*"]
+exclude = ["tests*", "tools*", "docs*", ".werkstatt*"]
+
+[tool.setuptools.package-data]
+werkstatt = ["templates/**/*", "web/static/**/*", "**/SKILL.md"]
+
+[tool.pytest-gremlins]
+# Platzhalter-Konfiguration. Wird von OP-190 (Mutation-Gate in verify)
+# mit echten Werten befuellt.
+
 [tool.importlinter]
 root_package = "werkstatt"
 include_external_packages = false

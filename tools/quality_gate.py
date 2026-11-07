@@ -30,10 +30,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-if _os.environ.get("WERKSTATT_IN_TEST") == "1":
-    import sys as _sys
-    print('{"ok": true, "regression": false, "skipped": "WERKSTATT_IN_TEST=1"}')
-    _sys.exit(0)
+# Recursion-Guard gegen unbeabsichtigte Endlos-Rekursion, wenn
+# pytest im Test-Kontext `python -m tools.quality_gate` aufruft.
+# NICHT als Import-Guard — der killte `pytest --collect-only`
+# mit INTERNALERROR (Test test_pytest_tests_laeuft_mit_installiertem_package).
+# Stattdessen in main() pruefen, damit der Modul-Import nicht
+# in sys.exit(0) laeuft.
 
 
 # Baseline fixiert (gemessen 2026-11-02 auf HEAD d95e147).
@@ -163,6 +165,10 @@ def check_all(cwd: Path) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Entry-Point. Enthaelt den WERKSTATT_IN_TEST-Guard."""
+    if _os.environ.get("WERKSTATT_IN_TEST") == "1":
+        print('{"ok": true, "regression": false, "skipped": "WERKSTATT_IN_TEST=1"}')
+        return 0
     parser = argparse.ArgumentParser(
         description="Quality-Gate: pytest/ruff/mypy/AST/Katalog")
     parser.add_argument("--hook", action="store_true",

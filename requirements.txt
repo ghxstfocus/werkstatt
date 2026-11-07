@@ -16,3 +16,6 @@ pytest>=8,<9
 pytest-asyncio>=0.23
 ruff>=0.6
 mypy>=1.11
+
+# test-tools (hypothesis, pytest-gremlins): nicht aktiv installieren.
+# `pip install -e ".[test-tools]"` zieht hypothesis + pytest-gremlins nach.
