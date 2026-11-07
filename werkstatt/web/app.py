@@ -282,6 +282,91 @@ def create_app() -> FastAPI:
         projekt = _pruefe_projektname(name)
         return _insp.aggregate_tokens(projekt, run_id=run_id)
 
+    @app.get("/api/projects/{name}/diff")
+    def project_diff(name: str, ref: str = "HEAD") -> dict[str, Any]:
+        """git diff gegen ref (default HEAD), als Text + Stat."""
+        import subprocess as _sp
+        _pruefe_projektname(name)
+        basis = Path("/opt/werkstatt")
+        try:
+            stat = _sp.run(
+                ["git", "diff", "--stat", ref],
+                capture_output=True, text=True, timeout=10,
+                cwd=str(basis), check=False,
+            ).stdout
+            diff = _sp.run(
+                ["git", "diff", ref],
+                capture_output=True, text=True, timeout=20,
+                cwd=str(basis), check=False,
+            ).stdout
+        except (_sp.TimeoutExpired, OSError) as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return {"ref": ref, "stat": stat[:20_000], "diff": diff[:200_000]}
+
+    @app.get("/api/projects/{name}/verify")
+    def project_verify(name: str) -> dict[str, Any]:
+        """Letzte Verify-Ausgabe aus audit-logs/ (verify_*)."""
+        import json as _json
+        _pruefe_projektname(name)
+        aus: dict[str, Any] = {"events": [], "anzahl": 0}
+        basis = Path.cwd() / "audit-logs"
+        if not basis.is_dir():
+            return aus
+        kandidaten = sorted(basis.glob("agent-pipeline-*.jsonl"))
+        if not kandidaten:
+            return aus
+        try:
+            with kandidaten[-1].open(encoding="utf-8", errors="replace") as f:
+                for zeile in f:
+                    zeile = zeile.strip()
+                    if not zeile:
+                        continue
+                    try:
+                        obj = _json.loads(zeile)
+                    except _json.JSONDecodeError:
+                        continue
+                    if isinstance(obj, dict) and str(obj.get("kind", "")).startswith("verify_"):
+                        aus["events"].append(obj)
+                        if len(aus["events"]) >= 200:
+                            break
+        except OSError:
+            pass
+        aus["anzahl"] = len(aus["events"])
+        return aus
+
+    @app.get("/api/projects/{name}/files")
+    def project_files(name: str, pfad: str = "") -> dict[str, Any]:
+        """Datei-Browser unterhalb des Projekt-Roots."""
+        basis = Path("/opt/werkstatt").resolve()
+        ziel = (basis / pfad).resolve() if pfad else basis
+        try:
+            ziel.relative_to(basis)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Pfad ausserhalb Projekt") from exc
+        if not ziel.exists():
+            raise HTTPException(status_code=404, detail="Pfad nicht gefunden")
+        if ziel.is_file():
+            try:
+                inhalt = ziel.read_text(encoding="utf-8", errors="replace")[:50_000]
+            except OSError as exc:
+                raise HTTPException(status_code=500, detail=str(exc)) from exc
+            return {"pfad": pfad, "typ": "file", "inhalt": inhalt}
+        eintraege: list[dict[str, Any]] = []
+        try:
+            for kind in sorted(ziel.iterdir(), key=lambda x: (x.is_file(), x.name)):
+                if kind.name.startswith(".") and kind.name not in (".werkstatt",):
+                    continue
+                if kind.name in ("__pycache__", "node_modules", ".git"):
+                    continue
+                eintraege.append({
+                    "name": kind.name,
+                    "typ": "dir" if kind.is_dir() else "file",
+                    "groesse": kind.stat().st_size if kind.is_file() else 0,
+                })
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return {"pfad": pfad, "typ": "dir", "eintraege": eintraege[:500]}
+
     @app.get("/api/projects/{name}/ops")
     def project_ops(name: str) -> dict[str, Any]:
         """OPs aus docs/STATUS.md (Runs-Liste)."""

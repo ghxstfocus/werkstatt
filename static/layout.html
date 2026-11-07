@@ -59,9 +59,9 @@
       <nav class="workbench-tabs">
         <button class="wb-tab" data-tab="audit">Audit</button>
         <button class="wb-tab" data-tab="terminal">Terminal</button>
-        <button class="wb-tab" data-tab="diff" disabled>Diff</button>
-        <button class="wb-tab" data-tab="verify" disabled>Verify</button>
-        <button class="wb-tab" data-tab="files" disabled>Dateien</button>
+        <button class="wb-tab" data-tab="diff">Diff</button>
+        <button class="wb-tab" data-tab="verify">Verify</button>
+        <button class="wb-tab" data-tab="files">Dateien</button>
         <button class="wb-toggle" id="wb-toggle" aria-label="Workbench">&#9776;</button>
       </nav>
       <div class="workbench-body">
@@ -90,6 +90,28 @@
           </div>
           <div class="scrollback" id="terminal" data-project="werkstatt"></div>
           <div class="xterm-wrap" id="terminal-xterm" hidden></div>
+        </div>
+        <div class="wb-pane" data-pane="diff">
+          <div class="fenster-titel">
+            <span>Diff</span>
+            <button class="wb-refresh" data-pane-refresh="diff">Aktualisieren</button>
+          </div>
+          <pre id="diff-stat" class="wb-pre"></pre>
+          <pre id="diff-inhalt" class="wb-pre wb-diff"></pre>
+        </div>
+        <div class="wb-pane" data-pane="verify">
+          <div class="fenster-titel">
+            <span>Verify</span>
+            <button class="wb-refresh" data-pane-refresh="verify">Aktualisieren</button>
+          </div>
+          <div id="verify-inhalt" class="wb-verify"></div>
+        </div>
+        <div class="wb-pane" data-pane="files">
+          <div class="fenster-titel">
+            <span id="files-pfad">Dateien</span>
+            <button class="wb-refresh" data-pane-refresh="files">Aktualisieren</button>
+          </div>
+          <div id="files-inhalt" class="wb-files"></div>
         </div>
       </div>
     </section>
