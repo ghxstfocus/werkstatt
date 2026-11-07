@@ -226,7 +226,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 
 ### OP-202: Gate-Bridge (Loop wartet auf HTTP statt stdin)
 
-- **Status:** open
+- **Status:** done (2026-11-07)
 - **Typ:** architektur
 - **Betroffen:** `werkstatt/gate_bridge.py` (neu),
   `werkstatt/gates.py` (`input()` -> `gate_bridge.wait()`),
@@ -241,6 +241,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   Gates. (d) Test: Mock liefert "j", Gate liefert 0.
 - **Tests:** `tests/test_gate_bridge.py` (neu)
 - **Blockiert von:** —
+- **Nachtrag 2026-11-07:** Umgesetzt in Commit `c0f4542`. Zusaetzlich zu AK (b) ist auch `_human_gate` (Commit-Gate) headless-faehig. Bekannte Luecken, nicht in diesem OP: (1) UI-Buttons fuer Gates sind OP-232/233-Scope; (2) expliziter CSRF-Token im POST-Body fehlt (Auth-Middleware greift, aber kein Body-Token) -- Folge-OP; (3) `_human_gate`-Edit-Pfad (Antwort `e`) verlangt externe Dateibearbeitung im headless-Betrieb -- Verhalten dokumentiert, nicht geaendert.
 
 ### OP-231: Chat-Agent + read-only Tool-Registry
 
