@@ -216,11 +216,16 @@ def _expand_cmd_placeholders(
         _fallback = getattr(state, "patches_aktuell_runde", None)
         if _fallback:
             patches = _fallback
-    changed = [
+    # 2026-11-07: Dedupe. Nach mehreren Reflection-Runden hat
+    # state.patches denselben File-Pfad mehrfach. Ohne Dedupe bekommt
+    # z.B. `mypy {changed_py_files}` denselben Pfad 5x und meldet
+    # "Duplicate module named ..." — kuenstlicher Fehler, der nie
+    # verschwindet. dict.fromkeys dedupliziert und bewahrt Reihenfolge.
+    changed = list(dict.fromkeys(
         p["file"] for p in patches
         if isinstance(p, dict) and p.get("file")
         and (Path(project_dir) / p["file"]).exists()
-    ]
+    ))
 
     # GOLD 2026-10-30: Fallback via git diff --name-only, wenn
     # state.patches leer ist. Der Loop leert state.patches nach
@@ -254,7 +259,8 @@ def _expand_cmd_placeholders(
                         _p = _p.split(" -> ", 1)[1]
                     if _p and (Path(project_dir) / _p).exists():
                         _new_changed.append(_p)
-                changed = _new_changed
+                # 2026-11-07: Dedupe wie bei `changed`.
+                changed = list(dict.fromkeys(_new_changed))
         except Exception:
             pass
 

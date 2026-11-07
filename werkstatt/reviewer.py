@@ -7,6 +7,7 @@ Kein GO/NO_GO-Raten, sondern konkrete Bug-Funde.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -254,6 +255,106 @@ def _get_git_diff(
         if isinstance(_exc, RuntimeError):
             raise
         raise RuntimeError(f"git diff fehlgeschlagen: {_exc}") from _exc
+
+
+def _pruefe_neue_module_genutzt(
+    project_dir: str | Path | None, diff: str,
+) -> list[dict]:
+    """Dead-Code-Check: neue .py-Module, die nur von Tests importiert werden.
+
+    Parst den Diff zeilenweise. Neue .py-Dateien werden erkannt an
+    `--- /dev/null` oder `new file mode` im Datei-Block, gefolgt von
+    einer `+++ b/...py`-Zeile. Fuer jede neue Datei wird geprueft, ob
+    der Stem im Produktivpfad (werkstatt/, tools/) referenziert wird.
+    Wenn nur Tests den Stem referenzieren: HIGH-Bug.
+    Fail-closed: bei Parse-Fehlern leere Liste + audit-Event.
+    """
+    if not project_dir or not diff:
+        return []
+    _project_name = Path(project_dir).name if project_dir else ""
+    try:
+        _neue: list[str] = []
+        _im_neuen_file = False
+        for _line in diff.splitlines():
+            if _line.startswith("diff --git "):
+                _im_neuen_file = False
+                continue
+            if _line.startswith(("new file mode", "--- /dev/null")):
+                _im_neuen_file = True
+                continue
+            if _im_neuen_file and _line.startswith("+++ b/"):
+                _pfad = _line[len("+++ b/"):].strip()
+                if _pfad.endswith(".py"):
+                    _neue.append(_pfad)
+                _im_neuen_file = False
+
+        _basis = Path(project_dir)
+        _ergebnis: list[dict] = []
+        for _pfad in _neue:
+            if _pfad.startswith("tests/") or "/tests/" in _pfad:
+                continue
+            _stem = Path(_pfad).stem
+            _pat = re.compile(r"\b" + re.escape(_stem) + r"\b")
+
+            _produktiv = False
+            for _root in ("werkstatt", "tools"):
+                _dir = _basis / _root
+                if not _dir.is_dir():
+                    continue
+                for _f in _dir.rglob("*.py"):
+                    try:
+                        _rel = _f.relative_to(_basis).as_posix()
+                    except ValueError:
+                        _rel = str(_f)
+                    if _rel == _pfad:
+                        continue
+                    if _rel.startswith("tests/") or "/tests/" in _rel:
+                        continue
+                    try:
+                        _txt = _f.read_text(
+                            encoding="utf-8", errors="replace"
+                        )
+                    except (OSError, UnicodeDecodeError):
+                        continue
+                    if _pat.search(_txt):
+                        _produktiv = True
+                        break
+                if _produktiv:
+                    break
+            if _produktiv:
+                continue
+
+            _nur_tests = False
+            _tdir = _basis / "tests"
+            if _tdir.is_dir():
+                for _f in _tdir.rglob("*.py"):
+                    try:
+                        _txt = _f.read_text(
+                            encoding="utf-8", errors="replace"
+                        )
+                    except (OSError, UnicodeDecodeError):
+                        continue
+                    if _pat.search(_txt):
+                        _nur_tests = True
+                        break
+            if _nur_tests:
+                _ergebnis.append({
+                    "file": _pfad,
+                    "line": 0,
+                    "description": (
+                        f"Neues Modul {_stem} wird nur von Tests "
+                        f"importiert — Dead-Code-Verdacht"
+                    ),
+                    "severity": "high",
+                })
+        return _ergebnis
+    except Exception as _e:  # noqa: BLE001
+        audit(
+            "reviewer_dead_code_parse_fehler",
+            {"fehler": str(_e)[:200], "diff_len": len(diff)},
+            Path(project_dir), _project_name,
+        )
+        return []
 
 
 def _reviewer_system(state=None, task_files=None) -> str:
