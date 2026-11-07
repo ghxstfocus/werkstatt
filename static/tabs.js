@@ -78,6 +78,15 @@
       if (window.WerkstattChat && window.WerkstattChat.setze_chat) {
         window.WerkstattChat.setze_chat(daten.projekt);
       }
+      if (window.WerkstattRuns && window.WerkstattRuns.lade) {
+        window.WerkstattRuns.lade(daten.projekt);
+      }
+      if (window.WerkstattTimeline && window.WerkstattTimeline.lade) {
+        window.WerkstattTimeline.lade(daten.projekt);
+      }
+      if (window.WerkstattStatus && window.WerkstattStatus.lade) {
+        window.WerkstattStatus.lade(daten.projekt);
+      }
     } catch (e) { /* Panels optional */ }
   }
 
