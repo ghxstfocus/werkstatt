@@ -120,6 +120,26 @@ def _phase_tasks_loop(
             audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
             continue
 
+        # Verify-Task: kein Builder, direkt Verify + Reviewer.
+        _is_verify = isinstance(task_obj, dict) and task_obj.get("action") == "verify"
+        if _is_verify:
+            _v_ok = bool(_verify_patches(state, phase="post_build"))
+            if _v_ok:
+                _r_ok = bool(run_reviewer(state))
+            else:
+                _r_ok = False
+            _el_task = time.monotonic() - _t_task
+            if _v_ok and _r_ok:
+                task_ok(i, len(tasks), elapsed_s=_el_task)
+                group_end()
+                tasks_ok += 1
+                state.tasks_ok_counter = tasks_ok
+                _task_ende(state, phase_state, task_id, ok=True, name=task_name)
+            else:
+                group_end()
+                _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="verify_failed")
+            continue
+
         if not _run_with_progress(
             lambda i=i: _with_spinner(f"Builder t{i}", lambda: run_builder(state)),
             i, len(tasks), task_name,

@@ -2881,3 +2881,7 @@ Tests: `tests/test_planner_deps_hybrid.py` (10 Unit-Tests).
 er scheitert, muss der Fallback-Pfad dieselben Nachbearbeitungen
 (Deps, Topo-Sort) durchlaufen — sonst sind Architect-Aussagen
 still verloren.
+## 2026-11-07T15:27:23+00:00 -- Phase abgeschlossen: werkstatt
+- **Status:** phase_ende
+- **Info:** tasks_ok=3/4
+

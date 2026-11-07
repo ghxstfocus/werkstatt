@@ -277,7 +277,16 @@ Nicht mehr, nicht weniger als die Aufgabe braucht.
 Jeder Sub-Task:
 - id: "t1", "t2", ... (aufsteigend)
 - name: kurzer Titel (< 50 Zeichen)
-- action: "update" (Datei existiert) oder "create" (neue Datei)
+- action: "create" | "update" | "read" | "verify"
+  - "create": neue Datei anlegen
+  - "update": bestehende Datei aendern
+  - "read": Task liest nur, aendert KEINE Datei
+  - "verify": Task prueft einen Zustand, aendert KEINE Datei.
+    `task_files` nennt die zu pruefenden Dateien, `description`
+    sagt WAS geprueft wird.
+  Hinweis: Verifikations-Aufgaben (nur pruefen, nichts aendern)
+  bevorzugt als "verify" klassifizieren. Der deterministische
+  Pre-Check im Planner ist die harte Garantie, nicht der Prompt.
 - task_files: Liste der Dateien, die dieser Sub-Task aendert
   (max 1 Datei pro Task, wenn moeglich)
 - architect_start: ERSTE Zeile des Architect-Abschnitts,
@@ -724,6 +733,25 @@ def _llm_split_einzel_task(
     return out
 
 
+def _ist_verify_task(name: str, description: str) -> bool:
+    """Deterministischer Pre-Check: ist die Task eine Verifikation?
+
+    Liest name und description, normalisiert beide per
+    str(text or "").strip().lower() und prueft, ob einer der
+    vier Marker als Praefix vorkommt. Defensiv: None/nicht-str
+    werfen keine Exception.
+    """
+    _marker = ("pruefe", "verifiziere", "stelle sicher", "check")
+    for _text in (name, description):
+        _norm = str(_text or "").strip().lower()
+        if not _norm:
+            continue
+        for _m in _marker:
+            if _norm.startswith(_m):
+                return True
+    return False
+
+
 def _korrigiere_aktion(task: dict, pd, pn: str) -> None:
     """K20: Korrigiert action anhand Datei-Existenz (deterministisch).
 
@@ -734,7 +762,18 @@ def _korrigiere_aktion(task: dict, pd, pn: str) -> None:
     (manche existieren, manche nicht) -> keine Aenderung
     (unsicher, Architect oder Gate soll entscheiden).
     Audit-Eintrag pro Korrektur.
+
+    Vorspann: deterministischer Verify-Pre-Check. Wenn die Task
+    eine Verifikation ist, wird action='verify' gesetzt und die
+    Funktion kehrt sofort zurueck -- die LLM-Korrektur kann die
+    Klassifikation nicht mehr ueberschreiben.
     """
+    _n = task.get("name", "") if isinstance(task, dict) else ""
+    _d = task.get("description", "") if isinstance(task, dict) else ""
+    if _ist_verify_task(_n, _d):
+        if isinstance(task, dict):
+            task["action"] = "verify"
+        return
     try:
         act = task.get("action", "update")
         if act not in ("update", "create"):

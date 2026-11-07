@@ -391,7 +391,17 @@ def _reviewer_system(state=None, task_files=None) -> str:
     (Level 2, Cursor-Stil) basierend auf task_files.
     """
     skills = load_all_skills()
-    parts = [REVIEWER_SYSTEM]
+    parts = []
+    _akt_task = getattr(state, "aktuelle_task", None) if state is not None else None
+    if isinstance(_akt_task, dict) and _akt_task.get("action") == "verify":
+        parts.append(
+            "## VERIFY-TASK (Diff-Erwartung: leer)\n"
+            "Diese Task aendert KEINE Datei. Der Diff MUSS leer sein. "
+            "Melde KEINEN Bug der Form 'Diff fehlt Datei X' oder "
+            "'Task verlangt Funktion Y, Diff hat sie nicht' — das sind "
+            "bei Verify-Tasks korrekte Beobachtungen, keine Bugs."
+        )
+    parts.append(REVIEWER_SYSTEM)
     _akt_names: list[str] = []
 
     from werkstatt.rollen import ROLLEN
@@ -802,12 +812,34 @@ def _filter_auftrag_treue_false_positives(
     diff: str,
     task_desc: str,
     task_files: list[str] | None = None,
+    action: str | None = None,
 ) -> list:
     """OP-164b: Auftrag-Treue-Filter fuer Rename-Aufgaben."""
     import re as _re
 
     if not isinstance(bugs, list) or not isinstance(diff, str):
         return bugs
+    if (action or "").lower() == "verify":
+        _verify_patterns = (
+            "diff fehlt",
+            "diff hat sie nicht",
+            "diff enthält nicht",
+            "diff enthaelt nicht",
+            "neues modul nicht genutzt",
+            "neues modul wurde nicht genutzt",
+        )
+        _bugs_verify: list = []
+        for _b in bugs:
+            if isinstance(_b, dict):
+                _bd = (
+                    _b.get("description")
+                    or _b.get("beschreibung")
+                    or ""
+                ).lower()
+                if any(_p in _bd for _p in _verify_patterns):
+                    continue
+            _bugs_verify.append(_b)
+        bugs = _bugs_verify
     _desc = (task_desc or "").lower()
     if not any(_m in _desc for _m in _RENAME_MARKER):
         return bugs
@@ -1092,6 +1124,10 @@ def run_reviewer(state: RunState) -> bool:
     bugs = _filter_rename_false_positives(bugs, diff, _task_desc)
     bugs = _filter_auftrag_treue_false_positives(
         bugs, diff, _task_desc, task_files=_tf_early,
+        action=(
+            (state.aktuelle_task or {}).get("action")
+            if isinstance(state.aktuelle_task, dict) else None
+        ),
     )
     _bugs_high_after = sum(
         1 for _b in bugs
