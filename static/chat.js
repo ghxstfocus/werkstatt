@@ -1,393 +1,270 @@
+// Werkstatt Chat (OP-232). Vanilla JS, kein Framework.
+// Ein Panel pro Projekt, Session-Sidebar, Tool-Call-Karten,
+// Streaming via WS /api/projects/{name}/chat/stream.
+// API fuer tabs.js: window.WerkstattChat.setze_chat(projekt).
+
 (function () {
   "use strict";
 
-  const CHAT_IDS = ["admin", "bau"];
-  const CHAT_LABELS = { admin: "Architect", bau: "Builder" };
-  const API_BASIS = "/api/chat";
-  const zustandProTab = {};
-  let aktuellerChat = "admin";
-
-  function holeTabZustand(tabId) {
-    if (!zustandProTab[tabId]) {
-      zustandProTab[tabId] = {
-        admin: { maximiert: false, minimiert: false },
-        bau: { maximiert: false, minimiert: false },
-      };
-    }
-    return zustandProTab[tabId];
-  }
-
-  function layoutKlasse(tabId) {
-    const zustand = holeTabZustand(tabId);
-    const maximiert = CHAT_IDS.filter(function (chatId) {
-      return zustand[chatId].maximiert;
-    });
-    if (maximiert.length === 1) {
-      return { modus: "chat-focus", fokus: maximiert[0] };
-    }
-    return { modus: "chat-split", fokus: "" };
-  }
-
-  function bauePanel(tabId, chatId) {
-    const zustand = holeTabZustand(tabId);
-    const layout = layoutKlasse(tabId);
-
-    const panel = document.createElement("section");
-    panel.className = "chat-panel";
-    panel.dataset.chatId = chatId;
-
-    const kopf = document.createElement("div");
-    kopf.className = "chat-panel__kopf";
-
-    const titel = document.createElement("span");
-    titel.className = "chat-panel__titel";
-    titel.textContent = CHAT_LABELS[chatId];
-    kopf.appendChild(titel);
-
-    const aktionen = document.createElement("div");
-    aktionen.className = "chat-panel__aktionen";
-
-    const maxButton = document.createElement("button");
-    maxButton.type = "button";
-    maxButton.className = "chat-panel__button";
-    maxButton.textContent = "\u25A2";
-    maxButton.setAttribute("aria-label", "Chat maximieren");
-    maxButton.addEventListener("click", function () {
-      toggleMaximize(tabId, chatId);
-    });
-    aktionen.appendChild(maxButton);
-
-    const minButton = document.createElement("button");
-    minButton.type = "button";
-    minButton.className = "chat-panel__button";
-    minButton.textContent = "\u2013";
-    minButton.setAttribute("aria-label", "Chat minimieren");
-    minButton.addEventListener("click", function () {
-      toggleMinimize(tabId, chatId);
-    });
-    aktionen.appendChild(minButton);
-
-    kopf.appendChild(aktionen);
-    panel.appendChild(kopf);
-
-    const body = document.createElement("div");
-    body.className = "chat-panel__body";
-    panel.appendChild(body);
-
-    const eingabe = document.createElement("div");
-    eingabe.className = "chat-panel__eingabe";
-
-    const textarea = document.createElement("textarea");
-    textarea.className = "chat-panel__textarea";
-    textarea.setAttribute("aria-label", "Nachricht an " + CHAT_LABELS[chatId]);
-    eingabe.appendChild(textarea);
-
-    const sendenButton = document.createElement("button");
-    sendenButton.type = "button";
-    sendenButton.className = "chat-panel__senden";
-    sendenButton.textContent = "Senden";
-    sendenButton.addEventListener("click", function () {
-      sendeNachricht(tabId, chatId, textarea.value).then(function (ok) {
-        if (ok) {
-          textarea.value = "";
-        }
-      });
-    });
-    eingabe.appendChild(sendenButton);
-
-    panel.appendChild(eingabe);
-
-    if (zustand[chatId].minimiert) {
-      panel.classList.add("chat-panel--minimiert");
-    }
-    if (layout.fokus === chatId) {
-      panel.classList.add("chat-panel--fokus");
-    }
-
-    return panel;
-  }
-
-  function aktualisiereLayout(tabId, container) {
-    const layout = layoutKlasse(tabId);
-    container.classList.toggle("chat-split", layout.modus === "chat-split");
-    container.classList.toggle("chat-focus", layout.modus === "chat-focus");
-
-    const panels = container.querySelectorAll(".chat-panel");
-    panels.forEach(function (panel) {
-      const chatId = panel.dataset.chatId;
-      panel.classList.toggle("chat-panel--fokus", layout.fokus === chatId);
-      panel.classList.toggle(
-        "chat-panel--minimiert",
-        holeTabZustand(tabId)[chatId].minimiert
-      );
-    });
-  }
-
-  function renderChats(tabId, container) {
-    if (!container) {
-      return;
-    }
-    container.innerHTML = "";
-    CHAT_IDS.forEach(function (chatId) {
-      container.appendChild(bauePanel(tabId, chatId));
-    });
-    aktualisiereLayout(tabId, container);
-  }
-
-  function toggleMaximize(tabId, chatId) {
-    const zustand = holeTabZustand(tabId);
-    const neuerWert = !zustand[chatId].maximiert;
-    CHAT_IDS.forEach(function (id) {
-      zustand[id].maximiert = false;
-    });
-    zustand[chatId].maximiert = neuerWert;
-    const container = document.querySelector(
-      '[data-tab-id="' + tabId + '"] .chat-container'
-    );
-    if (container) {
-      aktualisiereLayout(tabId, container);
-    }
-  }
-
-  function toggleMinimize(tabId, chatId) {
-    const zustand = holeTabZustand(tabId);
-    zustand[chatId].minimiert = !zustand[chatId].minimiert;
-    const container = document.querySelector(
-      '[data-tab-id="' + tabId + '"] .chat-container'
-    );
-    if (container) {
-      aktualisiereLayout(tabId, container);
-    }
-  }
-
-  function sendeNachricht(tabId, chatId, text) {
-    const inhalt = (text || "").trim();
-    if (!inhalt) {
-      return Promise.resolve(false);
-    }
-    return fetch(API_BASIS + "/" + encodeURIComponent(chatId), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tab: tabId, nachricht: inhalt }),
-    })
-      .then(function (antwort) {
-        return antwort.ok;
-      })
-      .catch(function () {
-        return false;
-      });
-  }
-
-  function holeSendeButton() {
-    return document.querySelector(".chat-panel__senden");
-  }
-
-  function holeNachrichtenfenster() {
-    return document.querySelector(".chat-panel__body");
-  }
-
-  function haengeBlase(text, klasse) {
-    const fenster = holeNachrichtenfenster();
-    if (!fenster) {
-      return;
-    }
-    const blase = document.createElement("div");
-    blase.className = "chat-blase " + (klasse || "");
-    blase.textContent = text;
-    fenster.appendChild(blase);
-  }
-
-  function setze_chat(chat_id) {
-    if (!chat_id) {
-      schliesse();
-      return;
-    }
-    aktuellerChat = chat_id;
-    const fenster = holeNachrichtenfenster();
-    if (fenster) {
-      fenster.innerHTML = "";
-    }
-    const button = holeSendeButton();
-    if (button) {
-      button.disabled = false;
-    }
-  }
-
-  function schliesse() {
-    aktuellerChat = null;
-    const button = holeSendeButton();
-    if (button) {
-      button.disabled = true;
-    }
-  }
-
-  function sende() {
-    const textarea = document.getElementById("chat-eingabe");
-    const eingabe = textarea ? textarea.value.trim() : "";
-    if (!eingabe) {
-      return Promise.resolve(false);
-    }
-    if (!aktuellerChat) {
-      haengeBlase("Kein Chat ausgewaehlt.", "chat-blase--hinweis");
-      return Promise.resolve(false);
-    }
-    haengeBlase(eingabe, "chat-blase--nutzer");
-    if (textarea) {
-      textarea.disabled = true;
-    }
-    return fetch("/api/chat/" + encodeURIComponent(aktuellerChat), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: eingabe }),
-    })
-      .then(function (response) {
-        if (!response.ok) {
-          haengeBlase(
-            "Fehler: " + response.status,
-            "chat-blase--fehler"
-          );
-          return false;
-        }
-        return response.json().then(function (antwort) {
-          const inhalt =
-            antwort.antwort ?? antwort.text ?? JSON.stringify(antwort);
-          haengeBlase(inhalt, "chat-blase--antwort");
-          if (textarea) {
-            textarea.value = "";
-          }
-          return true;
-        });
-      })
-      .catch(function () {
-        haengeBlase("Fehler: Netzwerk", "chat-blase--fehler");
-        return false;
-      })
-      .finally(function () {
-        if (textarea) {
-          textarea.disabled = false;
-        }
-      });
-  }
-
-  window.WerkstattChat = {
-    renderChats: renderChats,
-    toggleMaximize: toggleMaximize,
-    toggleMinimize: toggleMinimize,
-    sendeNachricht: sendeNachricht,
-    holeTabZustand: holeTabZustand,
-    setze_chat: setze_chat,
-    schliesse: schliesse,
-    sende: sende,
+  var zustand = {
+    projekt: "werkstatt",
+    sessionId: null,
+    socket: null,
+    streamBuf: "",
+    streamAktiv: false,
   };
-})();
 
-// Init (Stellschraube 2026-11-03): Chat bei DOMContentLoaded initialisieren.
-(function () {
-  function _initChat() {
-    if (typeof window === "undefined") return;
-    if (!window.WerkstattChat) {
-      console.warn("[chat] window.WerkstattChat nicht gesetzt");
-      return;
-    }
-    // Chat-Fenster in den #chat-nachrichten-Container mounten, falls API vorhanden
-    var mountFn = window.WerkstattChat.mount || window.WerkstattChat.init;
-    if (typeof mountFn === "function") {
-      try {
-        mountFn();
-        console.log("[chat] mount ok");
-      } catch (e) {
-        console.error("[chat] mount fehler:", e);
-      }
-    } else if (typeof window.WerkstattChat.setze_chat === "function") {
-      // Fallback: nur setze_chat, Panel bleibt DOM-still.
-      console.log("[chat] setze_chat vorhanden, kein mount");
-    } else {
-      console.warn("[chat] keine mount/setze_chat-API");
-    }
+  function _el(id) { return document.getElementById(id); }
+
+  function _neueSession(projekt) {
+    return fetch("/api/projects/" + encodeURIComponent(projekt) + "/chat/new",
+                 {method: "POST", credentials: "same-origin"})
+      .then(function (r) { return r.json(); })
+      .then(function (d) { zustand.sessionId = d.session_id; return d.session_id; });
   }
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", _initChat);
-  } else {
-    _initChat();
+
+  function _ladeSessions(projekt) {
+    return fetch("/api/projects/" + encodeURIComponent(projekt) + "/chat/sessions",
+                 {credentials: "same-origin"})
+      .then(function (r) { return r.json(); })
+      .then(function (d) { return d.sessions || []; });
   }
-})();
 
-// OP-084: Form-Handler — eigener POST an /api/chat/admin mit {text}.
-// Unabhängig von sende()/sendeNachricht(), die ggf. aktuellerChat-
-// Probleme haben. tabs.js-Handler ist mit if(false) deaktiviert.
-(function () {
-  function _initChatFormDirect() {
-    var form = document.getElementById("chat-form");
-    var eingabe = document.getElementById("chat-eingabe");
-    var container = document.getElementById("chat-nachrichten");
-    if (!form || !eingabe || !container) {
-      console.warn("[chat] Form-Elemente fehlen");
-      return;
-    }
-    if (form.dataset.bound === "1") {
-      return;  // doppelt binden verhindern
-    }
-    form.dataset.bound = "1";
-    console.log("[chat] Form-Handler gebunden (direct POST)");
+  function _ladeHistory(projekt, sid) {
+    return fetch("/api/projects/" + encodeURIComponent(projekt) +
+                 "/chat/history?session_id=" + encodeURIComponent(sid),
+                 {credentials: "same-origin"})
+      .then(function (r) { return r.json(); })
+      .then(function (d) { return d.events || []; });
+  }
 
-    function _appendBubble(text, cls) {
-      var div = document.createElement("div");
-      div.className = "chat-blase " + (cls || "");
-      div.textContent = text;
-      container.appendChild(div);
-      container.scrollTop = container.scrollHeight;
-    }
+  function _rendereSidebar(sessions) {
+    var box = _el("chat-sessions");
+    if (!box) return;
+    box.innerHTML = "";
+    sessions.forEach(function (sid) {
+      var btn = document.createElement("button");
+      btn.className = "chat-session" + (sid === zustand.sessionId ? " aktiv" : "");
+      btn.textContent = sid.slice(0, 10);
+      btn.dataset.sessionId = sid;
+      btn.addEventListener("click", function () {
+        _wechsleSession(sid);
+      });
+      box.appendChild(btn);
+    });
+    var neu = document.createElement("button");
+    neu.className = "chat-session neu";
+    neu.textContent = "+ Neu";
+    neu.addEventListener("click", function () {
+      _neueSession(zustand.projekt).then(function () {
+        var _box = document.getElementById("chat-nachrichten");
+        if (_box) _box.innerHTML = "";
+        _renderSidebarAktuell();
+      });
+    });
+    box.appendChild(neu);
+  }
 
-    function _sendeText() {
-      var text = eingabe.value.trim();
-      if (!text) {
+  function _renderSidebarAktuell() {
+    _ladeSessions(zustand.projekt).then(_rendereSidebar);
+  }
+
+  function _wechsleSession(sid) {
+    zustand.sessionId = sid;
+    var box = _el("chat-nachrichten");
+    if (!box) return;
+    box.innerHTML = "";
+    _ladeHistory(zustand.projekt, sid).then(function (events) {
+      events.forEach(function (ev) {
+        var kind = ev.kind;
+        var p = ev.payload || {};
+        if (kind === "user") _karte("user", p.text || "");
+        else if (kind === "assistant") _karte("assistant", p.text || "");
+        else if (kind === "tool_call") {
+          (p.tool_calls || []).forEach(function (tc) {
+            _toolKarte(tc.function && tc.function.name || "?", null, "ok");
+          });
+        }
+      });
+    });
+    _renderSidebarAktuell();
+  }
+
+  function _karte(rolle, text) {
+    var box = _el("chat-nachrichten");
+    if (!box) return null;
+    var k = document.createElement("div");
+    k.className = "chat-msg " + rolle;
+    k.textContent = text;
+    box.appendChild(k);
+    box.scrollTop = box.scrollHeight;
+    return k;
+  }
+
+  function _toolKarte(name, args, status) {
+    var box = _el("chat-nachrichten");
+    if (!box) return null;
+    var k = document.createElement("details");
+    k.className = "chat-tool " + status;
+    var s = document.createElement("summary");
+    s.textContent = "🔧 " + name + (status === "running" ? " …" : "");
+    k.appendChild(s);
+    if (args) {
+      var pre = document.createElement("pre");
+      pre.textContent = JSON.stringify(args, null, 2);
+      k.appendChild(pre);
+    }
+    box.appendChild(k);
+    box.scrollTop = box.scrollHeight;
+    return k;
+  }
+
+  function _stelleToolErgebnis(name, inhalt) {
+    var box = _el("chat-nachrichten");
+    if (!box) return;
+    var karten = box.querySelectorAll("details.chat-tool.running");
+    for (var i = karten.length - 1; i >= 0; i--) {
+      if (karten[i].querySelector("summary").textContent.indexOf(name) >= 0) {
+        karten[i].classList.remove("running");
+        karten[i].classList.add("ok");
+        var pre = document.createElement("pre");
+        pre.textContent = inhalt;
+        karten[i].appendChild(pre);
         return;
       }
-      console.log("[chat] sende:", JSON.stringify(text.slice(0, 50)));
-      _appendBubble(text, "chat-blase--nutzer");
-      eingabe.value = "";
-      eingabe.disabled = true;
-      fetch("/api/chat/admin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text }),
-      })
-        .then(function (r) {
-          console.log("[chat] HTTP", r.status);
-          return r.json();
-        })
-        .then(function (daten) {
-          console.log("[chat] Antwort:", JSON.stringify(daten).slice(0, 200));
-          var antwort = daten.antwort || daten.text || "(leer)";
-          _appendBubble(antwort, "chat-blase--antwort");
-        })
-        .catch(function (err) {
-          console.error("[chat] fetch error:", err);
-          _appendBubble("Fehler: " + err, "chat-blase--fehler");
-        })
-        .then(function () {
-          eingabe.disabled = false;
-          eingabe.focus();
-        });
     }
+  }
 
-    form.addEventListener("submit", function (ev) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      _sendeText();
+  function _socketVerbinde() {
+    if (zustand.socket) {
+      try { zustand.socket.close(); } catch (e) {}
+    }
+    var proto = location.protocol === "https:" ? "wss:" : "ws:";
+    var url = proto + "//" + location.host + "/api/projects/" +
+              encodeURIComponent(zustand.projekt) + "/chat/stream";
+    var sock = new WebSocket(url);
+    sock.addEventListener("message", _socketNachricht);
+    sock.addEventListener("close", function () {
+      zustand.socket = null;
+      if (zustand.streamAktiv) {
+        _karte("assistant", "[Verbindung unterbrochen]");
+        zustand.streamAktiv = false;
+      }
     });
-    eingabe.addEventListener("keydown", function (ev) {
-      if (ev.key === "Enter" && ev.ctrlKey) {
-        ev.preventDefault();
-        _sendeText();
+    zustand.socket = sock;
+  }
+
+  function _socketNachricht(evt) {
+    var obj;
+    try { obj = JSON.parse(evt.data); } catch (e) { return; }
+    if (obj.type === "chunk") {
+      _streamChunk(obj.text || "");
+    } else if (obj.type === "tool_call") {
+      _toolKarte(obj.name || "?", obj.args, "running");
+    } else if (obj.type === "tool_result") {
+      _stelleToolErgebnis(obj.name || "?", obj.content || "");
+    } else if (obj.type === "done") {
+      _streamDone(obj.antwort || "");
+    } else if (obj.type === "error") {
+      _karte("assistant", "[Fehler] " + (obj.detail || "unbekannt"));
+      zustand.streamAktiv = false;
+    }
+  }
+
+  function _streamChunk(text) {
+    if (!zustand.streamAktiv) {
+      zustand.streamBuf = "";
+      zustand.aktuelleKarte = _karte("assistant", "");
+      zustand.streamAktiv = true;
+    }
+    zustand.streamBuf += text;
+    if (zustand.aktuelleKarte) {
+      zustand.aktuelleKarte.textContent = zustand.streamBuf;
+      var box = _el("chat-nachrichten");
+      if (box) box.scrollTop = box.scrollHeight;
+    }
+  }
+
+  function _streamDone(voll) {
+    if (!zustand.streamAktiv && voll) {
+      _karte("assistant", voll);
+    } else if (zustand.aktuelleKarte) {
+      zustand.aktuelleKarte.textContent = voll || zustand.streamBuf;
+    }
+    zustand.streamAktiv = false;
+    zustand.streamBuf = "";
+    zustand.aktuelleKarte = null;
+    _renderSidebarAktuell();
+  }
+
+  function _sende(text) {
+    if (!text) return;
+    if (!zustand.sessionId) {
+      _neueSession(zustand.projekt).then(function () {
+        _sende(text);
+      });
+      return;
+    }
+    _karte("user", text);
+    if (!zustand.socket || zustand.socket.readyState !== WebSocket.OPEN) {
+      _socketVerbinde();
+      setTimeout(function () {
+        _sendeUeberSocket(text);
+      }, 150);
+    } else {
+      _sendeUeberSocket(text);
+    }
+  }
+
+  function _sendeUeberSocket(text) {
+    if (!zustand.socket || zustand.socket.readyState !== WebSocket.OPEN) {
+      _karte("assistant", "[Verbindung nicht bereit]");
+      return;
+    }
+    zustand.socket.send(JSON.stringify({
+      session_id: zustand.sessionId,
+      message: text,
+      mode: "read",
+    }));
+  }
+
+  function setze_chat(projekt) {
+    if (!projekt) return;
+    zustand.projekt = projekt;
+    zustand.sessionId = null;
+    zustand.socket = null;
+    var titel = _el("chat-titel");
+    if (titel) titel.textContent = "Chat — " + projekt;
+    _renderSidebarAktuell();
+    _ladeSessions(projekt).then(function (sessions) {
+      if (sessions.length > 0) {
+        _wechsleSession(sessions[sessions.length - 1]);
       }
     });
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", _initChatFormDirect);
-  } else {
-    _initChatFormDirect();
-  }
-})();
+  window.WerkstattChat = { setze_chat: setze_chat };
 
+  document.addEventListener("DOMContentLoaded", function () {
+    var form = _el("chat-form");
+    var eingabe = _el("chat-eingabe");
+    if (form) {
+      form.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        if (!eingabe) return;
+        var text = eingabe.value.trim();
+        if (!text) return;
+        eingabe.value = "";
+        _sende(text);
+      });
+    }
+    if (eingabe) {
+      eingabe.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+          ev.preventDefault();
+          if (form) form.dispatchEvent(new Event("submit"));
+        }
+      });
+    }
+  });
+})();

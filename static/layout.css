@@ -611,3 +611,20 @@ body {
   line-height: 1.5;
 }
 
+
+/* OP-232: Chat-Sidebar + Tool-Karten */
+.bereich.chat { display: flex; flex-direction: column; }
+.chat-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.chat-sessions { width: 110px; flex: 0 0 110px; overflow-y: auto; border-right: 1px solid #333; padding: 4px; }
+.chat-session { display: block; width: 100%; text-align: left; background: transparent; border: 1px solid #444; color: #ddd; padding: 4px 6px; margin: 2px 0; border-radius: 4px; font: inherit; font-size: 11px; cursor: pointer; }
+.chat-session.aktiv { background: #4b2a7a; border-color: #8a5cf6; }
+.chat-session.neu { border-style: dashed; }
+.chat-nachrichten { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.chat-msg { margin: 2px 0; padding: 6px 10px; border-radius: 6px; max-width: 85%; white-space: pre-wrap; word-wrap: break-word; }
+.chat-msg.user { background: #333; align-self: flex-end; margin-left: auto; }
+.chat-msg.assistant { background: #2a1f4a; }
+.chat-tool { border: 1px solid #555; border-radius: 4px; padding: 4px 8px; margin: 4px 0; background: #1a1a2e; font-size: 12px; }
+.chat-tool summary { cursor: pointer; }
+.chat-tool.running summary::before { content: "... "; }
+.chat-tool.ok summary::before { content: "OK "; }
+.chat-tool pre { margin: 4px 0 0 0; font-size: 11px; max-height: 200px; overflow: auto; white-space: pre-wrap; }

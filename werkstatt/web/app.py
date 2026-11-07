@@ -5,19 +5,20 @@ bereit. Die Handler sind bewusst synchron (``def``), damit FastAPI sie im
 Threadpool ausfuehrt; die Prozess-Registry ist ein einfaches dict ohne Lock.
 """
 
+import asyncio
 import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from werkstatt.event_store import EventStore
 from werkstatt.phase_state import PhaseState
-from werkstatt.web import audit_panel, auth, chat, shell, terminal_proxy, ws
+from werkstatt.web import audit_panel, auth, shell, terminal_proxy, ws
 
 __all__ = ["app", "create_app"]
 
@@ -49,6 +50,16 @@ def _pruefe_run_id(run_id: str) -> str:
     if not isinstance(run_id, str) or not _RUN_ID_MUSTER.fullmatch(run_id):
         raise HTTPException(status_code=400, detail="ungueltige run_id")
     return run_id
+
+
+_SESSION_ID_MUSTER = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+def _pruefe_session_id(session_id: str) -> str:
+    """Validiert eine Chat-Session-ID (SQL-Injection-Schutz)."""
+    if not isinstance(session_id, str) or not _SESSION_ID_MUSTER.fullmatch(session_id):
+        raise HTTPException(status_code=400, detail="ungueltige session_id")
+    return session_id
 
 
 def _phasen_snapshot(name: str) -> dict[str, Any]:
@@ -205,7 +216,6 @@ def create_app() -> FastAPI:
     # PTY-Handler wird nie erreicht (Starlette matcht in Reihenfolge).
     app.include_router(shell.router)
     app.include_router(ws.router)
-    app.include_router(chat.router)
     app.include_router(audit_panel.router)
     app.include_router(terminal_proxy.router)
     _registriere_event_routen(app)
@@ -264,6 +274,126 @@ def create_app() -> FastAPI:
         returncode = prozess.wait()
         _LAUFENDE_LOOPS.pop(projektname, None)
         return {"gestoppt": True, "returncode": returncode}
+
+    @app.get("/api/projects/{name}/chat/sessions")
+    def chat_sessions(name: str) -> dict[str, Any]:
+        """Listet alle Chat-Session-IDs eines Projekts."""
+        from werkstatt import chat_session as _cs
+        projekt = _pruefe_projektname(name)
+        return {"sessions": _cs.list_sessions(projekt)}
+
+    @app.get("/api/projects/{name}/chat/history")
+    def chat_history(name: str, session_id: str) -> dict[str, Any]:
+        """Liefert die Event-Historie einer Session."""
+        from werkstatt import chat_session as _cs
+        projekt = _pruefe_projektname(name)
+        sid = _pruefe_session_id(session_id)
+        return {"events": _cs.ChatSession(projekt, sid).load()}
+
+    @app.post("/api/projects/{name}/chat/new")
+    def chat_new(name: str) -> dict[str, Any]:
+        """Erzeugt eine neue (leere) Session-ID."""
+        import uuid as _uuid
+        _pruefe_projektname(name)
+        return {"session_id": _uuid.uuid4().hex}
+
+    @app.post("/api/projects/{name}/chat")
+    def chat_send(name: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Sendet Nachricht, antwortet non-streaming."""
+        from werkstatt import chat_agent as _ca
+        from werkstatt import chat_session as _cs
+        projekt = _pruefe_projektname(name)
+        session_id = body.get("session_id")
+        message = body.get("message")
+        mode = str(body.get("mode", "read"))
+        if not isinstance(session_id, str) or not session_id:
+            raise HTTPException(status_code=400, detail="session_id fehlt")
+        if not isinstance(message, str) or not message:
+            raise HTTPException(status_code=400, detail="message fehlt")
+        if mode not in ("read", "write"):
+            raise HTTPException(status_code=400, detail="mode ungueltig")
+        sid = _pruefe_session_id(session_id)
+        session = _cs.ChatSession(projekt, sid)
+        try:
+            antwort = _ca.chat_loop(session, message, mode=mode)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return {"session_id": sid, "antwort": antwort}
+
+    @app.websocket("/api/projects/{name}/chat/stream")
+    async def chat_stream(websocket: WebSocket, name: str) -> None:
+        """Streaming-Chat: Client sendet {session_id, message, mode},
+        Server sendet {type: chunk|tool_call|tool_result|done|error}."""
+        from werkstatt import chat_agent as _ca
+        from werkstatt import chat_session as _cs
+        from werkstatt.web.auth import is_auth_disabled, is_authed_ws
+
+        if not is_auth_disabled() and not is_authed_ws(websocket):
+            await websocket.close(code=1008)
+            return
+        try:
+            projekt = _pruefe_projektname(name)
+        except HTTPException:
+            await websocket.accept()
+            await websocket.close(code=1008)
+            return
+
+        await websocket.accept()
+        loop = asyncio.get_running_loop()
+
+        async def _send(daten: dict[str, Any]) -> None:
+            await websocket.send_json(daten)
+
+        def _sync_send(daten: dict[str, Any]) -> None:
+            fut = asyncio.run_coroutine_threadsafe(_send(daten), loop)
+            try:
+                fut.result(timeout=10)
+            except Exception:
+                pass
+
+        try:
+            while True:
+                roh = await websocket.receive_json()
+                if not isinstance(roh, dict):
+                    await _send({"type": "error", "detail": "ungueltiges JSON"})
+                    continue
+                try:
+                    sid = _pruefe_session_id(roh.get("session_id", ""))
+                    message = roh.get("message")
+                    if not isinstance(message, str) or not message:
+                        raise HTTPException(status_code=400, detail="message fehlt")
+                    mode = str(roh.get("mode", "read"))
+                    if mode not in ("read", "write"):
+                        raise HTTPException(status_code=400, detail="mode ungueltig")
+                except HTTPException as exc:
+                    await _send({"type": "error", "detail": str(exc.detail)})
+                    continue
+
+                session = _cs.ChatSession(projekt, sid)
+
+                def on_chunk(text: str) -> None:
+                    _sync_send({"type": "chunk", "text": text})
+
+                def on_tool_call(n: str, a: dict[str, Any]) -> None:
+                    _sync_send({"type": "tool_call", "name": n, "args": a})
+
+                def on_tool_result(n: str, r: str) -> None:
+                    _sync_send({"type": "tool_result", "name": n, "content": r})
+
+                try:
+                    antwort = await asyncio.to_thread(
+                        _ca.chat_loop, session, message,
+                        mode=mode,
+                        on_chunk=on_chunk,
+                        on_tool_call=on_tool_call,
+                        on_tool_result=on_tool_result,
+                    )
+                except RuntimeError as exc:
+                    await _send({"type": "error", "detail": str(exc)})
+                    continue
+                await _send({"type": "done", "antwort": antwort})
+        except WebSocketDisconnect:
+            return
 
     return app
 

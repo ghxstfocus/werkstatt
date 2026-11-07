@@ -42,10 +42,11 @@ def test_ws_terminal(client):
 
 
 def test_chat_post(client):
-    payload = {"tab_id": "tab-1", "nachricht": "hallo"}
-    r = client.post("/api/chat/admin", json=payload)
-    assert r.status_code in (200, 202)
+    """OP-231: alte /api/chat/{id}-Route ersetzt durch /chat/new."""
+    r = client.post("/api/projects/werkstatt/chat/new")
+    assert r.status_code == 200
     assert r.headers["content-type"].startswith("application/json")
+    assert "session_id" in r.json()
 
 
 def test_audit_history(client):

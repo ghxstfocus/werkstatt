@@ -1,237 +1,171 @@
-"""Tests fuer werkstatt.web.chat_agent (OP-084 + OP-085).
-
-LLM-First-Architektur: die meisten Tests mocken _deepseek_chat und
-prüfen den Tool-Loop. Fast-Path (!cmd, starte Loop) wird direkt getestet.
-"""
+"""Tests fuer OP-231: chat_loop mit Mock-LLM."""
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from typing import Any
 
 import pytest
 
-from werkstatt.web import chat_agent, shell
+from werkstatt import chat_agent
+from werkstatt.chat_session import ChatSession
 
 
 @pytest.fixture
-def tmp_project(tmp_path, monkeypatch):
-    (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "STATUS.md").write_text(
-        "### OP-100: Test-OP Eins\n- **Status:** open\n\n"
-        "### OP-101: Test-OP Zwei\n- **Status:** open\n\n"
-        "## Erledigt (Auto-Log)\n",
-        encoding="utf-8",
+def session(tmp_path: Path) -> ChatSession:
+    return ChatSession("demo", "sess-1", db_pfad=tmp_path / "chat.db")
+
+
+@pytest.fixture
+def fake_llm(monkeypatch):
+    antworten: list[dict[str, Any]] = []
+
+    def _set(*items: dict[str, Any]) -> None:
+        antworten.clear()
+        antworten.extend(items)
+
+    def _fake(messages, tools=None):
+        if not antworten:
+            raise AssertionError("fake_llm: keine Antwort mehr")
+        return {"choices": [{"message": antworten.pop(0)}]}
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", _fake)
+    return _set
+
+
+def test_chat_loop_ohne_tool(session, fake_llm) -> None:
+    fake_llm({"role": "assistant", "content": "Hallo!"})
+    antwort = chat_agent.chat_loop(session, "Hi")
+    assert antwort == "Hallo!"
+    evs = session.load()
+    assert [e["kind"] for e in evs] == ["user", "assistant"]
+    assert evs[0]["payload"]["text"] == "Hi"
+    assert evs[1]["payload"]["text"] == "Hallo!"
+
+
+def test_chat_loop_mit_tool_call(session, fake_llm) -> None:
+    fake_llm(
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "c1",
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "arguments": json.dumps({"path": "pyproject.toml"}),
+                },
+            }],
+        },
+        {"role": "assistant", "content": "Datei gelesen."},
     )
-    (tmp_path / "test.py").write_text(
-        "def foo():\n    return 42\n", encoding="utf-8"
-    )
-    chat_agent.init(tmp_path)
-    monkeypatch.setattr(shell, "_AKTIVE_PTYS", {})
-    yield tmp_path
-    shell._AKTIVE_PTYS.clear()
+    antwort = chat_agent.chat_loop(session, "Was steht drin?")
+    assert "gelesen" in antwort
+    kinds = [e["kind"] for e in session.load()]
+    assert kinds == ["user", "tool_call", "tool_result", "assistant"]
+    tr = next(e for e in session.load() if e["kind"] == "tool_result")
+    assert tr["payload"]["tool_call_id"] == "c1"
+    assert tr["payload"]["name"] == "read_file"
+    assert len(tr["payload"]["content"]) > 0
 
 
-def _mock_response(content: str = "", tool_calls: list | None = None) -> dict:
-    """Baut eine DeepSeek-Response."""
-    msg: dict = {"role": "assistant", "content": content}
-    if tool_calls:
-        msg["tool_calls"] = tool_calls
-    return {"choices": [{"message": msg}]}
-
-
-def _tool_call(name: str, args: dict, call_id: str = "tc1") -> dict:
-    return {
-        "id": call_id,
-        "type": "function",
-        "function": {"name": name, "arguments": json.dumps(args)},
+def test_chat_loop_max_rounds(session, fake_llm) -> None:
+    wieder = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{
+            "id": "cx",
+            "type": "function",
+            "function": {"name": "diagnose", "arguments": "{}"},
+        }],
     }
+    fake_llm(*([wieder] * 3))
+    antwort = chat_agent.chat_loop(session, "loop", max_rounds=3)
+    assert "max_rounds" in antwort
 
 
-# --- Fast-Path ---
-
-def test_bang_prefix_shell(monkeypatch, tmp_project):
-    """!-Prefix erzwingt Shell."""
-    class FakeSession:
-        def __init__(self):
-            self.cmds = []
-        def inject(self, cmd):
-            self.cmds.append(cmd)
-            return True
-    fake = FakeSession()
-    monkeypatch.setattr(shell, "_AKTIVE_PTYS", {"werkstatt": fake})
-    a = chat_agent.verarbeite("!ls -la")
-    assert "$ ls -la" in a
-    assert fake.cmds == ["ls -la"]
-
-
-def test_bang_mehrzeiler_subprocess(tmp_project):
-    """! mit Mehrzeiler -> subprocess, Exit-Code sichtbar."""
-    a = chat_agent.verarbeite("!echo A\necho B")
-    assert "Exit: 0" in a
-    assert "A" in a
+def test_chat_loop_unbekanntes_tool(session, fake_llm) -> None:
+    fake_llm(
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "bad",
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "arguments": json.dumps({"path": "x"}),
+                },
+            }],
+        },
+        {"role": "assistant", "content": "Konnte nicht schreiben."},
+    )
+    chat_agent.chat_loop(session, "schreib")
+    tr = next(e for e in session.load() if e["kind"] == "tool_result")
+    assert "nicht in Registry" in tr["payload"]["content"]
 
 
-def test_starte_loop_fast_path(monkeypatch, tmp_project):
-    """'starte Loop mit OP-101' -> deterministischer Start."""
-    started = []
-    class FakeProc:
-        pid = 9999
-    def fake_popen(cmd, **kw):
-        started.append(cmd)
-        return FakeProc()
-    monkeypatch.setattr(chat_agent.subprocess, "Popen", fake_popen)
-    a = chat_agent.verarbeite("starte Loop mit OP-101")
-    assert "Loop gestartet" in a
-    assert "OP-101" in a
-    assert len(started) == 1
+def test_chat_loop_ungueltiges_json_im_tool_call(session, fake_llm) -> None:
+    fake_llm(
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "u1",
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "arguments": "KEIN JSON",
+                },
+            }],
+        },
+        {"role": "assistant", "content": "ok"},
+    )
+    antwort = chat_agent.chat_loop(session, "x")
+    assert antwort == "ok"
 
 
-# --- LLM-First mit Tools ---
-
-def test_llm_direkt_ohne_tool(monkeypatch, tmp_project):
-    """Freie Frage -> LLM antwortet ohne Tools."""
-    def fake_chat(messages, tools=None):
-        return _mock_response("Hallo, ich bin da.")
-    monkeypatch.setattr(chat_agent, "_deepseek_chat", fake_chat)
-    a = chat_agent.verarbeite("hallo")
-    assert a == "Hallo, ich bin da."
+def test_on_chunk_callback_wird_gerufen(session, fake_llm) -> None:
+    fake_llm({"role": "assistant", "content": "Antwort"})
+    chunks: list[str] = []
+    chat_agent.chat_loop(session, "x", on_chunk=chunks.append)
+    assert chunks == ["Antwort"]
 
 
-def test_llm_ruft_list_open_ops(monkeypatch, tmp_project):
-    """'nächste offene OP' -> LLM ruft list_open_ops, antwortet mit einer OP."""
-    calls = []
-    def fake_chat(messages, tools=None):
-        calls.append((messages, tools))
-        if len(calls) == 1:
-            # LLM will Tool list_open_ops
-            return _mock_response(tool_calls=[_tool_call("list_open_ops", {})])
-        # Zweite Runde: LLM hat Tool-Result, antwortet
-        return _mock_response("Die nächste offene OP ist OP-100.")
-    monkeypatch.setattr(chat_agent, "_deepseek_chat", fake_chat)
-    a = chat_agent.verarbeite("Was ist die nächste offene OP")
-    assert "OP-100" in a
-    # Tools wurden gesendet
-    assert calls[0][1] is not None
-    # Tool-Result in messages der zweiten Runde
-    assert any(m.get("role") == "tool" for m in calls[1][0])
+def test_on_tool_callbacks(session, fake_llm) -> None:
+    fake_llm(
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "c1",
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "arguments": json.dumps({"path": "pyproject.toml"}),
+                },
+            }],
+        },
+        {"role": "assistant", "content": "done"},
+    )
+    calls: list[tuple[str, dict]] = []
+    results: list[tuple[str, str]] = []
+    chat_agent.chat_loop(
+        session, "x",
+        on_tool_call=lambda n, a: calls.append((n, a)),
+        on_tool_result=lambda n, r: results.append((n, r)),
+    )
+    assert calls and calls[0][0] == "read_file"
+    assert calls[0][1] == {"path": "pyproject.toml"}
+    assert results and results[0][0] == "read_file"
+    assert len(results[0][1]) > 0
 
 
-def test_llm_ruft_read_file(monkeypatch, tmp_project):
-    """'was steht in test.py' -> read_file."""
-    calls = []
-    def fake_chat(messages, tools=None):
-        calls.append(messages)
-        if len(calls) == 1:
-            return _mock_response(tool_calls=[_tool_call("read_file", {"path": "test.py"})])
-        # Prüfen dass Tool-Result in messages
-        tool_msg = next((m for m in messages if m.get("role") == "tool"), None)
-        assert tool_msg is not None
-        assert "return 42" in tool_msg["content"]
-        return _mock_response("In test.py steht eine Funktion foo() die 42 zurückgibt.")
-    monkeypatch.setattr(chat_agent, "_deepseek_chat", fake_chat)
-    a = chat_agent.verarbeite("was steht in test.py")
-    assert "foo" in a
-
-
-def test_llm_ruft_grep(monkeypatch, tmp_project):
-    """'suche return 42' -> grep."""
-    calls = []
-    def fake_chat(messages, tools=None):
-        calls.append(messages)
-        if len(calls) == 1:
-            return _mock_response(tool_calls=[_tool_call("grep", {"pattern": "return 42"})])
-        return _mock_response("Gefunden in test.py:2.")
-    monkeypatch.setattr(chat_agent, "_deepseek_chat", fake_chat)
-    a = chat_agent.verarbeite("suche return 42")
-    assert "test.py" in a
-
-
-def test_llm_ruft_shell_exec(monkeypatch, tmp_project):
-    """'git status' via Tool -> shell_exec, Exit sichtbar."""
-    calls = []
-    def fake_chat(messages, tools=None):
-        calls.append(messages)
-        if len(calls) == 1:
-            return _mock_response(tool_calls=[_tool_call("shell_exec", {"cmd": "echo HELLO"})])
-        tool_msg = next((m for m in messages if m.get("role") == "tool"), None)
-        assert "HELLO" in tool_msg["content"]
-        return _mock_response("Befehl lief durch.")
-    monkeypatch.setattr(chat_agent, "_deepseek_chat", fake_chat)
-    a = chat_agent.verarbeite("echo HELLO")
-    assert "lief durch" in a
-
-
-def test_llm_tool_error_wird_gefangen(monkeypatch, tmp_project):
-    """Tool-Crash -> Fehlertext an LLM, keine Exception."""
-    calls = []
-    def fake_chat(messages, tools=None):
-        calls.append(messages)
-        if len(calls) == 1:
-            return _mock_response(tool_calls=[_tool_call("read_file", {"path": "nixda.py"})])
-        tool_msg = next((m for m in messages if m.get("role") == "tool"), None)
-        assert "existiert nicht" in tool_msg["content"]
-        return _mock_response("Datei existiert nicht.")
-    monkeypatch.setattr(chat_agent, "_deepseek_chat", fake_chat)
-    a = chat_agent.verarbeite("lies nixda.py")
-    assert "existiert nicht" in a
-
-
-def test_llm_kein_api_key(monkeypatch, tmp_project):
-    """Ohne DEEPSEEK_API_KEY -> Fehlermeldung, kein Crash."""
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-    def fake_chat(messages, tools=None):
-        raise RuntimeError("DEEPSEEK_API_KEY nicht gesetzt.")
-    monkeypatch.setattr(chat_agent, "_deepseek_chat", fake_chat)
-    a = chat_agent.verarbeite("hallo")
-    assert "LLM-Fehler" in a
-
-
-def test_tool_read_file_traversal_blocked(tmp_project):
-    """read_file mit ../ -> Fehler."""
-    r = chat_agent._tool_read_file({"path": "../../../etc/passwd"})
-    assert "FEHLER" in r
-    assert "ausserhalb" in r
-
-
-def test_tool_read_file_fehlend(tmp_project):
-    r = chat_agent._tool_read_file({"path": "nixda.py"})
-    assert "FEHLER" in r
-
-
-def test_tool_shell_exec_subprocess(tmp_project):
-    """Ohne Session -> subprocess, Exit im Output."""
-    r = chat_agent._tool_shell_exec({"cmd": "echo M1"})
-    assert "Exit: 0" in r
-    assert "M1" in r
-
-
-def test_tool_shell_exec_mit_session(monkeypatch, tmp_project):
-    class FakeSession:
-        def __init__(self):
-            self.cmds = []
-        def inject(self, cmd):
-            self.cmds.append(cmd)
-            return True
-    fake = FakeSession()
-    monkeypatch.setattr(shell, "_AKTIVE_PTYS", {"werkstatt": fake})
-    r = chat_agent._tool_shell_exec({"cmd": "ls"})
-    assert "ausgefuehrt in aktiver Shell" in r
-    assert fake.cmds == ["ls"]
-
-
-def test_tool_measure_status(tmp_project):
-    r = chat_agent._tool_measure_status({})
-    assert "OP-100" in r
-    assert "OP-101" in r
-    assert "Projekt-Messung" in r
-
-
-def test_tool_list_open_ops(tmp_project):
-    r = chat_agent._tool_list_open_ops({})
-    assert "2 offene OPs" in r
-    assert "OP-100" in r
-    assert "OP-101" in r
-
-
-def test_tool_unbekannt(tmp_project):
-    r = chat_agent._execute_tool("unbekannt", "{}")
-    assert "unbekannt" in r
+def test_baue_messages_aus_session(session) -> None:
+    session.append("user", {"text": "a"})
+    session.append("assistant", {"text": "b"})
+    msgs = chat_agent._baue_messages(session.load())
+    assert msgs == [
+        {"role": "user", "content": "a"},
+        {"role": "assistant", "content": "b"},
+    ]
