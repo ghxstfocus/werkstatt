@@ -214,6 +214,25 @@ function createAuditPanel(options) {
     // Reviewer
     if (k === "reviewer_result") return "Reviewer: " + (g("verdict") || "?");
 
+    // Skills
+    if (k === "loop_skills_geladen") {
+      var rolle = g("rolle") || "?";
+      var neu = g("neu") || [];
+      if (neu.length === 0) return "Skills geladen (Rolle " + rolle + ")";
+      return "Rolle " + rolle + " — " + neu.length + " Skills: " + neu.join(", ");
+    }
+    if (k === "skills_geladen") return "Skills geladen";
+
+    // Plan-Reflection
+    if (k === "loop_reflection_patch_applied") {
+      var a = g("anzahl") || 0;
+      var r = g("runde") || 0;
+      return "Reflection Runde " + r + ": " + a + " Patches angewendet";
+    }
+    if (k === "loop_reflection_spec_widerspruch") return "Reflection: Spec-Widerspruch erkannt";
+    if (k === "loop_reflection_stagnation_runde") return "Reflection: Stagnation — " + (g("grund") || "?");
+    if (k === "loop_reflection_stagnation_abort") return "Reflection: Stagnation-Abbruch nach " + (g("runde") || "?") + " Runden";
+
     // Reflection
     if (k === "loop_reflection_runde") return "Reflection Runde " + (g("runde") || "?");
     if (k === "loop_reflection_patch_applied") return "Reflection-Patch: " + (g("anzahl") || 0);
@@ -267,7 +286,12 @@ function createAuditPanel(options) {
         });
         _extra = _teile.join(" ");
       }
-      text.textContent = _escapeText(_extra);
+      var _human = _humanSummary(ev);
+      if (_human) {
+        text.textContent = _human;
+      } else {
+        text.textContent = _escapeText(_extra);
+      }
 
       zeile.appendChild(zeit);
       zeile.appendChild(art);

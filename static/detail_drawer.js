@@ -16,6 +16,11 @@
   function _setTab(name) {
     var d = _el("detail-drawer");
     if (!d) return;
+    // Sonderfall: Rollen-Tab → in Rollen-Modus zurueck
+    if (name === "__rolle__" && window.__letzteRolle) {
+      oeffneRolle(window.__letzteRolle);
+      return;
+    }
     d.querySelectorAll(".dd-tab").forEach(function (b) {
       b.classList.toggle("aktiv", b.dataset.tab === name);
     });
@@ -208,6 +213,156 @@
     handle.addEventListener("touchstart", onStart);
   }
 
+  function _renderRolle(body, rolle) {
+    var titel = document.createElement("div");
+    titel.className = "dd-rolle-titel";
+    titel.textContent = rolle.toUpperCase();
+    body.appendChild(titel);
+
+    var status = document.createElement("div");
+    status.className = "dd-rolle-leer";
+    status.textContent = "lade...";
+    body.appendChild(status);
+
+    fetch("/api/projects/" + encodeURIComponent(aktuellesProjekt) +
+          "/role/" + encodeURIComponent(rolle),
+          {credentials: "same-origin"})
+      .then(function (r) { return r.ok ? r.json() : {events: []}; })
+      .then(function (d) {
+        body.innerHTML = "";
+        body.appendChild(titel);
+        var events = d.events || [];
+        if (events.length === 0) {
+          var leer = document.createElement("div");
+          leer.className = "dd-rolle-leer";
+          leer.textContent = "keine Events fuer Rolle " + rolle;
+          body.appendChild(leer);
+          return;
+        }
+        var liste = document.createElement("div");
+        liste.className = "dd-rolle-liste";
+        events.forEach(function (ev) {
+          var karte = document.createElement("div");
+          karte.className = "dd-rolle-event";
+          karte.dataset.kind = ev.kind;
+
+          var head = document.createElement("div");
+          head.className = "dd-rolle-head";
+          var kind = document.createElement("span");
+          kind.className = "dd-rolle-kind";
+          kind.textContent = ev.kind;
+          var ts = document.createElement("span");
+          ts.className = "dd-rolle-ts";
+          var m = (ev.ts || "").match(/T(\d{2}:\d{2}:\d{2})/);
+          ts.textContent = m ? m[1] : "";
+          head.appendChild(kind);
+          head.appendChild(ts);
+          karte.appendChild(head);
+
+          var payload = ev.payload || {};
+          var skip = ["audit_id", "agent", "project", "kind",
+                      "timestamp", "run_id", "ts"];
+          var zeilen = Object.keys(payload).filter(function (k) {
+            if (skip.indexOf(k) >= 0) return false;
+            var v = payload[k];
+            return v !== null && v !== undefined && v !== "";
+          });
+
+          if (zeilen.length === 0) {
+            var nix = document.createElement("div");
+            nix.className = "dd-rolle-empty";
+            nix.textContent = "(keine Details)";
+            karte.appendChild(nix);
+          } else {
+            zeilen.forEach(function (k) {
+              var v = payload[k];
+              var zeile = document.createElement("div");
+              zeile.className = "dd-rolle-feld";
+              var lbl = document.createElement("span");
+              lbl.className = "dd-rolle-key";
+              lbl.textContent = k;
+              var val = document.createElement("span");
+              val.className = "dd-rolle-val";
+              if (typeof v === "string") {
+                if (v.length > 300) {
+                  var det = document.createElement("details");
+                  var sum = document.createElement("summary");
+                  sum.textContent = v.slice(0, 120) + " ... (" + v.length + " Z.)";
+                  var pre = document.createElement("pre");
+                  pre.textContent = v;
+                  pre.className = "dd-rolle-pre";
+                  det.appendChild(sum);
+                  det.appendChild(pre);
+                  val.appendChild(det);
+                } else {
+                  val.textContent = v;
+                }
+              } else if (typeof v === "number" || typeof v === "boolean") {
+                val.textContent = String(v);
+              } else {
+                var pre2 = document.createElement("pre");
+                pre2.className = "dd-rolle-pre";
+                try { pre2.textContent = JSON.stringify(v, null, 2); }
+                catch (e) { pre2.textContent = String(v); }
+                val.appendChild(pre2);
+              }
+              zeile.appendChild(lbl);
+              zeile.appendChild(val);
+              karte.appendChild(zeile);
+            });
+          }
+          liste.appendChild(karte);
+        });
+        body.appendChild(liste);
+      })
+      .catch(function (err) {
+        body.innerHTML = "";
+        body.appendChild(titel);
+        var fehler = document.createElement("div");
+        fehler.className = "dd-rolle-leer";
+        fehler.textContent = "Fehler: " + err;
+        body.appendChild(fehler);
+      });
+  }
+
+  function oeffneRolle(rolle) {
+    var d = _el("detail-drawer");
+    if (!d) return;
+    d.dataset.offen = "true";
+    window.__letzteRolle = rolle;
+
+    // Dynamischen Rollen-Tab anlegen oder updaten
+    var tabsNav = d.querySelector(".dd-tabs");
+    if (tabsNav) {
+      var rollenTab = tabsNav.querySelector(".dd-tab.dd-rolle-tab");
+      if (!rollenTab) {
+        rollenTab = document.createElement("button");
+        rollenTab.className = "dd-tab dd-rolle-tab";
+        rollenTab.dataset.tab = "__rolle__";
+        rollenTab.addEventListener("click", function () {
+          if (window.__letzteRolle) oeffneRolle(window.__letzteRolle);
+        });
+        var closeBtn = tabsNav.querySelector(".dd-close");
+        if (closeBtn) {
+          tabsNav.insertBefore(rollenTab, closeBtn);
+        } else {
+          tabsNav.appendChild(rollenTab);
+        }
+      }
+      rollenTab.textContent = rolle.charAt(0).toUpperCase() + rolle.slice(1);
+    }
+
+    // Nur Rollen-Tab aktiv, andere inaktiv
+    d.querySelectorAll(".dd-tab").forEach(function (b) {
+      b.classList.toggle("aktiv", b.dataset.tab === "__rolle__");
+    });
+
+    var body = _el("dd-body");
+    if (!body) return;
+    body.innerHTML = "";
+    _renderRolle(body, rolle);
+  }
+
   function oeffne(tab) {
     var d = _el("detail-drawer");
     if (!d) return;
@@ -224,7 +379,12 @@
     if (p) aktuellesProjekt = p;
   }
 
-  window.WerkstattDetail = { oeffne: oeffne, schliesse: schliesse, setProjekt: setProjekt };
+  window.WerkstattDetail = {
+    oeffne: oeffne,
+    oeffneRolle: oeffneRolle,
+    schliesse: schliesse,
+    setProjekt: setProjekt
+  };
 
   document.addEventListener("DOMContentLoaded", function () {
     var d = _el("detail-drawer");
