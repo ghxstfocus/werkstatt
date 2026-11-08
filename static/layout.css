@@ -221,6 +221,10 @@ body {
 .status-item, .status-token, .status-run { white-space: nowrap; }
 .status-token { padding: 1px 6px; border: 1px solid var(--border-subtle); border-radius: 3px; }
 .status-token.aktiv { color: var(--text); border-color: var(--sem-action); }
+
+.status-item[data-state="warn"] { color: var(--sem-warn); }
+.status-item[data-state="ok"]   { color: var(--sem-ok); }
+.status-item[data-state="error"] { color: var(--sem-error); }
 .status-spacer { flex: 1; }
 .counter, .dim { color: var(--text-dim); font-size: 11px; }
 

@@ -16,7 +16,6 @@ Fehler, kein "und noch schnell X mitnehmen").
 from __future__ import annotations
 
 import json
-import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -25,6 +24,8 @@ if TYPE_CHECKING:
     from werkstatt.state import RunState
 
 # Konstanten (aus pipeline.py:131, 132, 3969, 3976).
+import uuid
+
 AUDIT_DIR_NAME = "audit-logs"
 AUDIT_FILE_NAME = "agent-pipeline.jsonl"
 
@@ -33,6 +34,27 @@ _STREAM_KINDS: frozenset[str] = frozenset({
     "log_line", "progress", "spinner",
     "heartbeat", "task_started", "task_done",
 })
+
+
+# OP-323: Flush-Hook. Nach 100 Events wird Projector.tail() gerufen.
+_EVENT_COUNTER = 0
+_FLUSH_INTERVAL = 100
+_FLUSH_LOCK = __import__("threading").Lock()
+
+
+def _maybe_flush() -> None:
+    """Zaehlt Events, ruft bei 100 Projector.tail(). Fehler still."""
+    global _EVENT_COUNTER
+    with _FLUSH_LOCK:
+        _EVENT_COUNTER += 1
+        if _EVENT_COUNTER < _FLUSH_INTERVAL:
+            return
+        _EVENT_COUNTER = 0
+    try:
+        from werkstatt.projection import Projector
+        Projector().tail()
+    except Exception:
+        pass
 
 
 def _event_id(run_id: str, audit_id: str) -> str:
@@ -105,7 +127,7 @@ def audit(kind: str, payload: dict[str, Any], project_dir: Path,
     audit_dir.mkdir(parents=True, exist_ok=True)
     tag = datetime.now(UTC).strftime("%Y-%m-%d")
     datei = audit_dir / f"agent-pipeline-{tag}.jsonl"
-    _aid = f"PIPE-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{int(time.time()*1000)%100000}"
+    _aid = f"PIPE-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
     entry = {
         "audit_id": _aid,
         "event_id": _event_id(_AKTUELLE_RUN_ID, _aid),
@@ -129,6 +151,7 @@ def audit(kind: str, payload: dict[str, Any], project_dir: Path,
             )
     except (OSError, TypeError, ValueError) as exc:
         print(f"[WARN] Audit-Schreibfehler: {exc}")
+    _maybe_flush()
 
 
 
@@ -145,7 +168,7 @@ def stream(kind: str, payload: dict[str, Any], project_dir: Path,
     audit_dir.mkdir(parents=True, exist_ok=True)
     tag = datetime.now(UTC).strftime("%Y-%m-%d")
     datei = audit_dir / f"stream-{tag}.jsonl"
-    _aid = f"STREAM-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{int(time.time()*1000)%100000}"
+    _aid = f"STREAM-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
     entry = {
         "audit_id": _aid,
         "event_id": _event_id(_AKTUELLE_RUN_ID, _aid),
@@ -162,6 +185,7 @@ def stream(kind: str, payload: dict[str, Any], project_dir: Path,
             fh.write(json.dumps(entry, ensure_ascii=True, default=str) + "\n")
     except (OSError, TypeError, ValueError) as exc:
         print(f"[WARN] Stream-Schreibfehler: {exc}")
+    _maybe_flush()
 
 def audit_safe(
     kind: str,

@@ -69,6 +69,27 @@
     if (projekt) aktuellesProjekt = projekt;
     _fetch("/status").then(_status);
     _fetch("/tokens").then(_tokens);
+    _projection("/api/projects/" + encodeURIComponent(aktuellesProjekt) + "/projection/status");
+  }
+
+  function _projection(pfad) {
+    var el = _el("status-projection");
+    if (!el) return;
+    fetch(pfad, {credentials: "same-origin"})
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (d) {
+        if (!d) { el.textContent = ""; el.dataset.state = ""; return; }
+        if (d.diff > 0) {
+          el.textContent = "Proj: " + d.diff + " offen";
+          el.dataset.state = "warn";
+          el.title = "JSONL: " + d.jsonl_events + " / SQLite: " + d.sqlite_rows;
+        } else {
+          el.textContent = "Proj: OK";
+          el.dataset.state = "ok";
+          el.title = "JSONL=" + d.jsonl_events + " SQLite=" + d.sqlite_rows;
+        }
+      });
   }
 
   window.WerkstattStatus = { lade: lade };

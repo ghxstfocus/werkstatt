@@ -44,3 +44,6 @@ a8_3_v2.txt
 
 # Loop-Logs
 logs/
+
+# OP-323: Stream-Events (hochfrequent, nicht ins git)
+audit-logs/stream-*.jsonl

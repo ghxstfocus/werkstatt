@@ -134,7 +134,7 @@ def _get_emitter() -> TerminalEmitter | None:
 
 
 def _publish(event_type: str, text: str, **extra: object) -> None:
-    """Event an JSONL (autoritativ) + SQLite (Uebergang) + Emitter.
+    """Event an JSONL (autoritativ) + Emitter. OP-323: SQLite-Write entfernt.
 
     OP-321: JSONL ist ab jetzt autoritativ (audit/stream). SQLite wird
     in OP-323 entfernt, sobald der Projektor (OP-322) die DB aus JSONL
@@ -145,7 +145,7 @@ def _publish(event_type: str, text: str, **extra: object) -> None:
     """
     from pathlib import Path as _Path
 
-    from werkstatt.audit import _STREAM_KINDS, audit, get_run_id, stream
+    from werkstatt.audit import _STREAM_KINDS, audit, stream
 
     # 1. JSONL (autoritativ, neu)
     project_name = _get_project() or "?"
@@ -158,28 +158,7 @@ def _publish(event_type: str, text: str, **extra: object) -> None:
     except Exception:
         pass
 
-    # 2. SQLite (Uebergangsphase, OP-323 entfernt das)
-    try:
-        from werkstatt.event_store import EventStore
-        run_id = get_run_id()
-        if run_id:
-            phase = extra.get("phase")
-            if not isinstance(phase, str):
-                phase = None
-            status = extra.get("status")
-            if not isinstance(status, str):
-                status = None
-            EventStore().append(
-                run_id=run_id,
-                kind=event_type,
-                phase=phase,
-                status=status,
-                payload={"text": text, **extra},
-            )
-    except Exception:
-        pass
-
-    # 3. Emitter (unveraendert)
+    # 2. Emitter (SQLite-Write entfernt, OP-323: JSONL ist einzige Quelle)
     emitter = _get_emitter()
     if emitter is None:
         return

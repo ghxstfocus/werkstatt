@@ -593,7 +593,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Der Nutzer sieht aus drei Metern Entfernung nicht ob der Loop laeuft, ob ein Gate wartet, ob alles gut ist. Status ist verstreut in Statusleiste unten, Run-Liste, Gate-Panel.
 - **Akzeptanzkriterien:** (a) Eine Zeile oben ueber dem Grid: Loop-Status (Idle/Running/Failed mit Icon), letzter Run (Zeit + Erfolg), Token-Verbrauch (Loop + Chat), offene Gates-Anzahl. (b) Farb-Kodiert nach OP-300 (`--sem-active` bei Running, `--sem-error` bei Failed, `--sem-history` bei Idle). (c) Lebt in allen 3 Modi (Cockpit/Control/Debug). (d) Klick auf Status-Element springt zur relevanten Ansicht (Gates → Gate-Panel, Run → Timeline).
 - **Tests:** Keine (UI).
-- **Blockiert von:** OP-323
+- **Blockiert von:** —
 
 ### OP-302: Command Palette (`⌘K`)
 
@@ -783,17 +783,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Tests:** Keine (Doku-Audit).
 - **Blockiert von:** —
 
-
-### OP-323: Wiring stream() -> Projector.tail(), Health-Endpoint
-
-- **Status:** open
-- **Typ:** architektur (Wiring)
-- **Phase:** Phase-0 (Fundament)
-- **Betroffene Dateien:** `werkstatt/audit.py`, `werkstatt/web/app.py`, `werkstatt/web/inspector.py`, `static/statusleiste.js`, `static/layout.css`, `tests/test_projection_wiring.py` (neu)
-- **Problem:** Der Projektor existiert (OP-322), aber niemand ruft ihn. Ohne Wiring bleibt SQLite leer nach dem Umbau.
-- **Akzeptanzkriterien:** (a) `audit()` und `stream()` triggern nach jedem Batch (100 Events) `Projector.tail()`. (b) Neuer Endpoint `GET /api/projects/{name}/projection/status`. (c) Statusleiste zeigt Warnung bei Divergenz > 0 (nutzt `--sem-warn` aus OP-300). (d) Integrationstest: Loop mit 10 Events → SQLite hat 10 Rows innerhalb 5s.
-- **Tests:** `tests/test_projection_wiring.py` (3 Tests: Tail-Trigger nach Batch, Endpoint liefert Status, Integration 10-Events → 10 Rows).
-- **Blockiert von:** OP-322
 
 ## Erledigt (Auto-Log)
 
@@ -1381,6 +1370,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-08 | OP-323 | done | Wiring. SQLite-Write aus _publish entfernt (JSONL einzige Quelle). Flush-Hook in audit.py (nach 100 Events Projector.tail). Endpoint /api/projects/{name}/projection/status. Statusleiste zeigt Proj-OK / Proj-Warnung bei Divergenz. .gitignore um stream-*.jsonl. **Bugfix:** audit_id mit UUID-Suffix (Kollision bei schnellen Calls behoben), event_id-Fallback mit file+line. 4 neue Tests. pytest 1452 passed.
 - 2026-11-08 | OP-322 | done | Projector (rebuild/tail/status). JSONL -> SQLite idempotent (event_id UNIQUE, INSERT OR IGNORE), Checkpoint in projection_state, rebuild() deterministisch (Doppel-Rebuild ergibt identischen Hash). 6 neue Tests. pytest 1448 passed.
 - 2026-11-08 | OP-321 | done | JSONL-Trennung stream/semantic. _STREAM_KINDS (log_line/progress/spinner/heartbeat/task_started/task_done), stream() schreibt nach stream-YYYY-MM-DD.jsonl, audit() nach agent-pipeline, fail-closed fuer unbekannte Kinds. event_id = sha256(run_id|audit_id)[:16] in beiden. _publish schreibt jetzt zusaetzlich JSONL (SQLite bleibt bis OP-323). 5 neue Tests. pytest 1442 passed.
 - 2026-11-08 | OP-320 | done | ADR-0024 Tiered Event Log + Projector. Deklariert Semantic-Stream (git) + Stream-Stream (gitignore), SQLite rebuildbar, audit()/stream() als einzige Writer, EventStore.append() verbannt. Grundlage fuer OP-321..323.

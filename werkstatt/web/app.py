@@ -429,6 +429,13 @@ def create_app() -> FastAPI:
         projekt = _pruefe_projektname(name)
         return _insp.aggregate_status(projekt)
 
+    @app.get("/api/projects/{name}/projection/status")
+    def projection_status(name: str) -> dict[str, Any]:
+        """OP-323: JSONL vs. SQLite Divergenz."""
+        _pruefe_projektname(name)
+        from werkstatt.projection import Projector
+        return Projector().status()
+
     @app.get("/api/projects/{name}/chat/sessions")
     def chat_sessions(name: str) -> dict[str, Any]:
         """Listet alle Chat-Session-IDs eines Projekts."""

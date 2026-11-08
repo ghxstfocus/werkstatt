@@ -62,12 +62,14 @@ class Projector:
             out.extend(sorted(d.glob(pat)))
         return out
 
-    def _read_events(self, von_audit_id: str | None = None) -> list[dict[str, Any]]:
-        alle: list[dict[str, Any]] = []
+    def _read_events(
+        self, von_audit_id: str | None = None
+    ) -> list[tuple[dict[str, Any], str, int]]:
+        alle: list[tuple[dict[str, Any], str, int]] = []
         found_start = von_audit_id is None
         for f in self._jsonl_files():
             with f.open(encoding="utf-8") as fh:
-                for line in fh:
+                for line_idx, line in enumerate(fh):
                     line = line.strip()
                     if not line:
                         continue
@@ -79,7 +81,7 @@ class Projector:
                         if d.get("audit_id") == von_audit_id:
                             found_start = True
                         continue
-                    alle.append(d)
+                    alle.append((d, f.name, line_idx))
         return alle
 
     def _count_jsonl(self) -> int:
@@ -91,13 +93,21 @@ class Projector:
                         total += 1
         return total
 
-    def _insert(self, conn: sqlite3.Connection, ev: dict[str, Any]) -> bool:
+    def _insert(
+        self,
+        conn: sqlite3.Connection,
+        ev: dict[str, Any],
+        file_name: str = "?",
+        line_num: int = 0,
+    ) -> bool:
         run_id = ev.get("run_id") or ""
         kind = ev.get("kind") or "?"
         event_id = ev.get("event_id")
         if not event_id:
             aid = ev.get("audit_id") or ""
-            event_id = hashlib.sha256(f"{run_id}|{aid}".encode()).hexdigest()[:16]
+            event_id = hashlib.sha256(
+                f"{run_id}|{aid}|{file_name}|{line_num}".encode()
+            ).hexdigest()[:16]
         payload = {
             k: v
             for k, v in ev.items()
@@ -150,8 +160,8 @@ class Projector:
         uebersprungen = 0
         letzter = checkpoint
         with closing(self._connect()) as conn:
-            for ev in events:
-                if self._insert(conn, ev):
+            for ev, fname, lnum in events:
+                if self._insert(conn, ev, fname, lnum):
                     eingefuegt += 1
                 else:
                     uebersprungen += 1
