@@ -1153,28 +1153,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Tests:** Smoke: `POST /start` aus UI-Klick ruft Endpoint. Kein pytest (UI-Verhalten).
 - **Blockiert von:** —
 
-### OP-304: Shortcut Help (`?`)
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `static/help.js` (neu), `static/layout.html`, `static/layout.css`
-- **Problem:** Shortcuts existieren, sind aber nirgends dokumentiert. Der Nutzer entdeckt sie nur durch Zufall oder Studieren des Codes.
-- **Akzeptanzkriterien:** (a) Taste `?` (ohne Modifier) oeffnet Overlay. (b) Shortcuts gruppiert: Navigation, Run-Control, Chat, Modus, Aktionen. (c) Jeder Eintrag: Tastenkombination (in `<kbd>`-Tag), Aktion, "auch klickbar via ..."-Hinweis. (d) Erreichbar auch via Command Palette (`help shortcuts`) und `?`-Icon oben rechts. (e) Esc oder Klick ausserhalb schliesst. (f) Erste Nutzung: Overlay oeffnet sich nicht automatisch, aber Ambient Bar zeigt Tag 1 "Druecke ? fuer Shortcuts".
-- **Tests:** Keine (UI).
-- **Blockiert von:** —
-
-### OP-305: Klickwege parallel zu allen Shortcuts
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `static/*.js` (alle UI-Module), `static/layout.html`
-- **Problem:** Wenn etwas nur per Shortcut erreichbar ist, verliert der Nutzer der den Shortcut nicht kennt den Zugang.
-- **Akzeptanzkriterien:** (a) Fuer jede Palette-Aktion existiert ein sichtbarer Klickweg (Button, Menue, Link) in der UI. (b) Jeder Shortcut-Hinweis im `?`-Overlay enthaelt "→ auch klickbar via [X]". (c) Verifikation: alle `window.Werkstatt*.oeffne`-Aufrufe sind auch per Click-Handler erreichbar. (d) Ein Test-Fall in `?`-Overlay dokumentiert: nichts geht nur via Shortcut.
-- **Tests:** `grep`-Guard: keine `addEventListener('keydown'`-Aktion ohne zugehoerigen Click-Handler.
-- **Blockiert von:** OP-304
-
 ### OP-306: Mode-Switch (Cockpit / Control / Debug)
 
 - **Status:** open
@@ -1485,6 +1463,39 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Tests:** `tests/test_redaction.py` (10 Tests: pro Typ Positiv, Negativ-Kontexte, Performance <5ms/10k Zeichen).
 - **Blockiert von:** —
 
+### OP-306a: Tab-Persistenz (localStorage)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-2 (Focus)
+- **Betroffene Dateien:** `static/tabs.js`, `tests/test_tabs_persist.py` (neu)
+- **Problem:** Bei Browser-Reload sind alle Tabs weg ausser `werkstatt` (startId-Hardcode in tabs.js:251). Der User muss nach jedem Reload alle Projekte neu anlegen/oeffnen.
+- **Akzeptanzkriterien:** (a) Offene Tabs werden in `localStorage["werkstatt_tabs"]` als JSON gespeichert: `[{projekt, aktiv}, ...]`. (b) Bei `DOMContentLoaded`: gespeicherte Tabs wiederherstellen (statt startId-Hardcode). (c) Aktiver Tab bleibt aktiv nach Reload. (d) "Tab schliessen" entfernt aus localStorage. (e) Fallback: wenn localStorage leer/unparsebar -> Default `werkstatt`. (f) Rekursiv: 0 Tabs geschlossen -> Default-Tab.
+- **Tests:** `tests/test_tabs_persist.py` (4 Tests: save/load, schliessen, leerer state, unparsebar).
+- **Blockiert von:** —
+
+### OP-306b: Projekt-Selector (alle /opt/-Projekte)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-2 (Focus)
+- **Betroffene Dateien:** `werkstatt/web/app.py` (`GET /api/projects/list`), `static/tabs.js` (`+`-Button-Dropdown erweitern), `tests/test_project_list.py` (neu)
+- **Problem:** Projekte die in `/opt/` liegen aber keinen Tab haben, sind unsichtbar. Man kann sie nur per Modal neu anlegen (was bei existierendem Verzeichnis 409 gibt).
+- **Akzeptanzkriterien:** (a) `GET /api/projects/list` scannt `/opt/*/docs/STATUS.md`, liefert `[{name, pfad, letzter_run, ops_count}]`. (b) `+`-Modal bekommt Selector "Existierendes oeffnen" vs. "Neu anlegen". (c) Bei "Oeffnen": Tab wird geoeffnet (kein API-Create). (d) `POST /api/projects/{name}/open` markiert Projekt als geoeffnet (schreibt project-eigene `state`). (e) Nur lesbarer Pfad `/opt/`.
+- **Tests:** `tests/test_project_list.py` (5 Tests: list, filter, ein neues Projekt, ungueltiger Name, oeffnen).
+- **Blockiert von:** OP-306a (weil Tabs persistiert sein muessen um sie zu listen)
+
+### OP-306c: Multi-Projekt-Datenquellen (SQLite `project`-Spalte)
+
+- **Status:** open
+- **Typ:** architektur (Datenmodell)
+- **Phase:** Phase-3 (Urgroßvater)
+- **Betroffene Dateien:** `werkstatt/projection.py`, `werkstatt/audit.py`, `werkstatt/web/inspector.py`, `static/*.js`
+- **Problem:** `/ambient`, `/status`, `/timeline`, `/tokens` liefern Werkstatt-Daten auch fuer fremde Projekte. SQLite-Event-Tabelle hat keine `project`-Spalte. Der User sieht in test16-Tab: Werkstatt-Timeline, Werkstatt-Letzter-Run, Werkstatt-Projektion-Status.
+- **Akzeptanzkriterien:** (a) `events`-Tabelle bekommt `project TEXT NOT NULL DEFAULT 'werkstatt'`. (b) Migration: `ALTER TABLE events ADD COLUMN project ...` + bestehende Events auf `werkstatt` setzen. (c) `audit()` und `stream()` schreiben `project` ins JSONL. (d) `Projector._insert` reicht `project` durch. (e) `aggregate_ambient`, `aggregate_status`, `aggregate_timeline`, `aggregate_tokens`, `aggregate_ops_run_status` filtern `WHERE project=?`. (f) Frontend-Aufrufe uebergeben aktuelles Projekt.
+- **Tests:** `tests/test_multi_projekt_daten.py` (8 Tests: Migration, Filterung in jedem Endpoint, Isolation, Fallback-Werkstatt).
+- **Blockiert von:** —
+
 ## Erledigt (Auto-Log)
 
 - 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)
@@ -1517,6 +1528,8 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-08 | OP-321 | done | JSONL-Trennung stream/semantic. _STREAM_KINDS (log_line/progress/spinner/heartbeat/task_started/task_done), stream() schreibt nach stream-YYYY-MM-DD.jsonl, audit() nach agent-pipeline, fail-closed fuer unbekannte Kinds. event_id = sha256(run_id|audit_id)[:16] in beiden. _publish schreibt jetzt zusaetzlich JSONL (SQLite bleibt bis OP-323). 5 neue Tests. pytest 1442 passed.
 - 2026-11-08 | OP-320 | done | ADR-0024 Tiered Event Log + Projector. Deklariert Semantic-Stream (git) + Stream-Stream (gitignore), SQLite rebuildbar, audit()/stream() als einzige Writer, EventStore.append() verbannt. Grundlage fuer OP-321..323.
 - 2026-11-08 | OP-319 | done | Event-Architektur-Messung. 32804 JSONL-Events (320 Kinds, 267 Runs) vs. 374353 SQLite-Events (10 Kinds, 5290 Runs). Schnittmenge: 0 Kinds, 25 Runs. Beweis fuer Dual-Write-Anti-Pattern (Confluent/Microsoft-CQRS/AutoMQ). Grundlage fuer OP-320..323.
+- 2026-11-08 | OP-304 | done | Shortcut-Help-Overlay (?-Taste). shortcut_help.js, 3 Kategorien (Navigation/Chat/Palette), kbd-Boxen. 6 Tests. pytest 1497 passed.
+- 2026-11-08 | OP-305 | done | Utility-Bar + Klickwege + Projekt-Anlage. utility_bar.js (⌘K/?-Buttons), Alt+N-Shortcut (Chrome-Konflikt behoben), project_create.js mit Modal + POST /api/projects/create + multi-projekt-Sicherheit (_PROJECTS_BASE-Konstante, /start validiert docs/STATUS.md, /ops + Palette projekt-spezifisch). Ambient-Projektname prominent. **Lehren:** (a) Python-Docstring """...""" in JS = SyntaxError, Node-fehlt-Guard zu streng. (b) if(false)-Block mit Kommentar schluckte function-Definition, Bracket-Matcher half. (c) Clone-von-tab-neu brach insertBefore-Referenz, dynamischer Lookup noetig. (d) Test-Fixture-Falle: Path("/opt") in Produktion muss via _PROJECTS_BASE-Konstante testbar sein. (e) Auth-Disable ist _AUTH_DISABLED, nicht _AUTH_DISABLED_OVERRIDE. 19 Tests (4 Help + 5 Utility + 11 Project-Create + Multi-Projekt). pytest 1515 passed.
 - 2026-11-08 | OP-302 | done | Command Palette (Ctrl+K). Backend aggregate_palette() + /palette-Endpoint, Server-Filter. Frontend palette.js mit Overlay (blur), 4 Kategorien (AKTION/NAVIGATION/OP/SESSION/RUN), Icons ▸ → ⚙ ◆ ↻, Keyboard-Nav (↑↓ Enter Esc), Klick-Ausfuehrung, Race-Schutz via _letzterQuery. **Bekannter Datenfehler:** OP-221 zeigt „blockiert von: OP-221" (Selbstverweis) — vermutlich Tippfehler in STATUS.md, sollte OP-220a sein. Eigene OP fuer Doku-Aufraeumen. 10 Tests (4 Backend + 6 Frontend-Smoke). pytest 1497 passed.
 - 2026-11-08 | OP-301 | done | Ambient Status Bar. Drei Elemente zwischen Tab-Leiste und Grid: Loop-Status (○ Idle / ◉ Läuft / ● Fertig / ✗ Fehler — ● statt ✓ verhindert Kollision mit Run-✓), letzter Run (relativ mit ✓/✗), Gates (hidden bei 0, pulsierend bei >0). Polling 3s. Klick Timeline / Gate-Panel. **Option A Redundanz-Fix:** Tokens und Phase raus (Diagnose, Statusbar). Ambient = Handlungsampel, Statusbar = Diagnose mit Icons ↻ Loop / ◆ Chat. **Backend:** aggregate_ambient() + /ambient, loop_erfolg-Semantik-Fix (Event-Name impliziert Erfolg, payload hat kein erfolg/success). Fallback: loop_erfolg > loop_ended > loop_failed > idle. **Naming:** Chat bleibt Chat (kein Assistent-Synonym; Cursor/Claude-Code-Vorbild: zwei Begriffe für zwei Dinge). 13 Tests (6 Backend + 7 Frontend-Smoke inkl. Icon-Kollisions-Test). pytest 1467 passed.
 - 2026-11-08 | OP-300 | done | Semantic Colors System (Commit `320b029`). 6 semantische CSS-Variablen (`--sem-action`, `--sem-active`, `--sem-ok`, `--sem-warn`, `--sem-error`, `--sem-history`) + 7 Shades + 4 Struct-Variablen im `:root`. 57 Hex-Vorkommen ausserhalb `:root` ersetzt. Explorer-Cyan `#06b6d4` -> `var(--sem-active)` (bewusster Farbwechsel, Frage 1a). `.diff-hunk` -> `var(--sem-active)` (Frage 3: Diff im laufenden Build ist Ist-Zustand, nicht Vergangenheit). chat.css hatte schon 0 Hex, unveraendert. Guard: Hex ausserhalb `:root` == 0. pytest 1437 passed, ruff/mypy 0, alle 5 Drifts 0. **Lehre:** Erster Patch-Versuch zerstoerte `:root`-Block durch fehlerhaftes Reassembly (`s = body` statt `s = head + neuer_root + tail`); In-Python-Guard SEM==0 hat Commit verhindert, Rollback manuell. Zweiter Versuch mit Guards vor `write_text` erfolgreich. **Strukturelle Altlast:** zwischen `## Erledigt (Auto-Log)` und `## Delete-Zone` stehen 16 offene OPs (OP-263, OP-257, ..., OP-241) faelschlich unter Auto-Log.

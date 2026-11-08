@@ -3303,3 +3303,45 @@ Explorer respektiert die Liste fail-closed.
 
 Industrie-Beleg (Cursor/Claude Code): Zugriffsvermeidung robuster
 als Redaction fuer Code-Pipelines.
+
+
+## 2026-11-08 — OP-304 + OP-305 (Shortcut-Help + Klickwege + Projekt-Anlage)
+
+**OP-304 Shortcut-Help-Overlay (?-Taste):**
+`?` oeffnet Overlay mit Kategorien (Navigation, Chat, Palette),
+kbd-Boxen, Footer-Hinweis. Ausserhalb von Input-Feldern aktiv.
+6 Tests.
+
+**OP-305 Utility-Bar + Klickwege + Projekt-Anlage:**
+- `⌘K` und `?`-Buttons in Tab-Leiste (Klickwege parallel zu Shortcuts).
+- `Alt+N` fuer Projekt-Anlage (statt `Shift+N` — Chrome-Konflikt).
+- `+`-Button funktional: Modal mit Name/Pfad, Auto-Fill `/opt/<name>`,
+  Backend `POST /api/projects/create` (scaffold + Validierung).
+- Ambient-Bar zeigt aktives Projekt prominent (◆ + fett).
+- Multi-Projekt-Sicherheit: `_PROJECTS_BASE`-Konstante (testbar via
+  monkeypatch), `/start` validiert docs/STATUS.md (404 sonst), `/ops`
+  + Palette projekt-spezifisch.
+
+**Lehren aus der Session:**
+- Python-Docstring `"""..."""` in JS = SyntaxError beim Browser.
+  Der Fehler war unsichtbar bis Cache-Buster + Hard-Refresh. Konsequenz:
+  JS-Files immer mit `node --check` validieren vor Commit.
+- `if (false) {  // comment    code` schluckt function-Definition im
+  Kommentar. Bracket-Matcher identifizierte 72-Zeilen-Block. Konsequenz:
+  tote Bloecke loeschen, nicht auskommentieren.
+- Clone-von-tab-neu brach insertBefore-Referenz in tabs.js. Dynamischer
+  Lookup (getElementById) statt gespeicherter Referenz.
+- `Path("/opt")` hardcoded in Produktion ist untestbar. `_PROJECTS_BASE`-
+  Konstante auf Modul-Ebene + monkeypatch in Tests.
+- Auth-disable: `auth._AUTH_DISABLED` (nicht `_AUTH_DISABLED_OVERRIDE`).
+
+19 Tests insgesamt (4 Help + 5 Utility + 11 Project-Create/Multi-Projekt).
+pytest 1515 passed.
+
+**Bewusst offen (3 neue OPs angelegt):**
+- OP-306a Tab-Persistenz (Reload behaelt Tabs)
+- OP-306b Projekt-Selector (alle /opt/-Projekte sichtbar)
+- OP-306c Multi-Projekt-Datenquellen (SQLite project-Spalte fuer
+  /ambient /status /timeline /tokens)
+
+pytest 1515 passed.
