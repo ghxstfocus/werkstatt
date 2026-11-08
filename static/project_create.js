@@ -34,18 +34,22 @@
     var nameEl = _el("project-create-name");
     var pfadEl = _el("project-create-pfad");
     if (!nameEl || !pfadEl) return;
+    // User hat Pfad manuell editiert -> nicht ueberschreiben
+    if (pfadEl.dataset.manuell === "1") return;
     var n = nameEl.value.trim();
-    if (n && !pfadEl.value) {
-      pfadEl.value = "/opt/" + n;
-    }
+    pfadEl.value = n ? "/opt/" + n : "";
   }
 
   function _anlegen() {
     var nameEl = _el("project-create-name");
     var pfadEl = _el("project-create-pfad");
-    if (!nameEl || !pfadEl) return;
+    if (!nameEl || !pfadEl) {
+      console.warn("[create] name/pfad el nicht gefunden");
+      return;
+    }
     var name = nameEl.value.trim();
     var pfad = pfadEl.value.trim();
+    console.log("[create] _anlegen fired", {name: name, pfad: pfad});
     if (!name) { _fehler("Name fehlt"); return; }
     if (!/^[a-z][a-z0-9_-]{0,50}$/.test(name)) {
       _fehler("Name ungueltig: a-z, 0-9, _, - (beginnt mit Buchstabe)");
@@ -57,6 +61,7 @@
     var btn = _el("project-create-submit");
     if (btn) { btn.disabled = true; btn.textContent = "Lege an…"; }
 
+    console.log("[create] fetch POST /api/projects/create", {name: name, pfad: pfad});
     fetch("/api/projects/create", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -67,9 +72,10 @@
         return r.json().then(function (d) { return {ok: r.ok, data: d, status: r.status}; });
       })
       .then(function (res) {
+        console.log("[create] response", {ok: res.ok, status: res.status, data: res.data});
         if (btn) { btn.disabled = false; btn.textContent = "Anlegen"; }
         if (!res.ok) {
-          _fehler((res.data && res.data.detail) || "Fehler beim Anlegen");
+          _fehler((res.data && res.data.detail) || (res.data && res.data.fehler) || ("HTTP " + res.status));
           return;
         }
         _schliessen();
@@ -85,6 +91,7 @@
         }
       })
       .catch(function (err) {
+        console.error("[create] catch", err);
         if (btn) { btn.disabled = false; btn.textContent = "Anlegen"; }
         _fehler("Netzwerkfehler: " + err);
       });
@@ -104,7 +111,12 @@
     var cancelBtn = _el("project-create-cancel");
     if (cancelBtn) cancelBtn.addEventListener("click", _schliessen);
     var submitBtn = _el("project-create-submit");
-    if (submitBtn) submitBtn.addEventListener("click", _anlegen);
+    if (submitBtn) {
+      submitBtn.addEventListener("click", _anlegen);
+      console.log("[create] submit-Handler gebunden");
+    } else {
+      console.warn("[create] submit-btn nicht gefunden");
+    }
 
     var ov = _el("project-create-overlay");
     if (ov) {
@@ -115,6 +127,11 @@
 
     var nameEl = _el("project-create-name");
     if (nameEl) nameEl.addEventListener("input", _autoPfad);
+
+    var pfadElInput = _el("project-create-pfad");
+    if (pfadElInput) pfadElInput.addEventListener("input", function () {
+      pfadElInput.dataset.manuell = "1";
+    });
 
     // Enter im Name-Feld -> weiter zu Pfad; Enter im Pfad -> anlegen
     var pfadEl = _el("project-create-pfad");
