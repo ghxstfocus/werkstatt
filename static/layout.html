@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Werkstatt</title>
-  <link rel="stylesheet" href="/static/layout.css?v=1794162032">
+  <link rel="stylesheet" href="/static/layout.css?v=1794162069">
 </head>
 <body>
 
@@ -15,7 +15,15 @@
         <span class="tab-schliessen" role="button" aria-label="Tab schliessen">&times;</span>
       </button>
     </template>
-    <button id="tab-neu" type="button" aria-label="Projekt oeffnen">+</button>
+    <button id="tab-neu" type="button" aria-label="Projekt oeffnen" title="Projekt hinzufügen (Shift+N)">+</button>
+    <div class="utility-bar">
+      <button type="button" class="utility-btn" id="utility-palette" title="Command Palette (Ctrl+K)">
+        <kbd>⌘K</kbd>
+      </button>
+      <button type="button" class="utility-btn" id="utility-help" title="Tastenkürzel (?)">
+        <kbd>?</kbd>
+      </button>
+    </div>
   </nav>
 
   <div class="ambient-bar" id="ambient-bar" role="status" aria-live="polite">
@@ -235,6 +243,7 @@
   <script src="/static/statusleiste.js?v=1794155056a"></script>
   <script src="/static/palette.js?v=1794160262"></script>
   <script src="/static/shortcut_help.js?v=1794162032"></script>
+  <script src="/static/utility_bar.js?v=1794162069"></script>
   <script src="/static/workbench.js?v=20261107a"></script>
   <script src="/static/gate_panel.js?v=20261108a"></script>
   <script src="/static/detail_drawer.js?v=20261108a"></script>
