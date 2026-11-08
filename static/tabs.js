@@ -60,6 +60,8 @@
 
     document.getElementById("terminal-titel").textContent =
       "Terminal — " + daten.projekt;
+    var ambProj = document.getElementById("ambient-project-name");
+    if (ambProj) ambProj.textContent = daten.projekt;
     document.getElementById("chat-titel").textContent =
       "Chat — " + daten.projekt;
 

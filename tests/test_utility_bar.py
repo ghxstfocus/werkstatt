@@ -28,10 +28,10 @@ def test_js_hat_handler():
     assert "WerkstattShortcutHelp" in js
 
 
-def test_shift_n_handler():
+def test_alt_n_handler():
     js = _js()
-    assert "e.shiftKey" in js
-    assert 'e.key !== "N"' in js
+    assert "e.altKey" in js
+    assert 'e.key !== "n"' in js
     assert "tab-neu" in js
 
 

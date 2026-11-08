@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Werkstatt</title>
-  <link rel="stylesheet" href="/static/layout.css?v=1794162069">
+  <link rel="stylesheet" href="/static/layout.css?v=1794162607">
 </head>
 <body>
 
@@ -27,6 +27,10 @@
   </nav>
 
   <div class="ambient-bar" id="ambient-bar" role="status" aria-live="polite">
+    <span class="ambient-item ambient-project" id="ambient-project" title="Aktives Projekt">
+      <span class="ambient-icon" aria-hidden="true">◆</span>
+      <span class="ambient-project-name" id="ambient-project-name">—</span>
+    </span>
     <span class="ambient-item" id="ambient-loop" data-state="idle" title="Loop-Status">
       <span class="ambient-icon">○</span>
       <span class="ambient-label">Idle</span>
@@ -173,7 +177,7 @@
     <span class="status-run" id="status-run"></span>
   </footer>
 
-  <script src="/static/tabs.js?v=1793719449"></script>
+  <script src="/static/tabs.js?v=1794162607"></script>
   <script src="/static/terminal.js?v=20261108b"></script>
   <script src="/static/audit.js?v=1794155946"></script>
   <script src="/static/chat.js?v=20261107a"></script>
@@ -192,7 +196,7 @@
           <span class="shortcut-help-txt">Command Palette öffnen</span>
         </div>
         <div class="shortcut-help-zeile">
-          <span class="shortcut-help-keys"><kbd>Shift</kbd>+<kbd>N</kbd></span>
+          <span class="shortcut-help-keys"><kbd>Alt</kbd>+<kbd>N</kbd></span>
           <span class="shortcut-help-txt">Neues Projekt</span>
         </div>
         <div class="shortcut-help-zeile">
@@ -243,7 +247,7 @@
   <script src="/static/statusleiste.js?v=1794155056a"></script>
   <script src="/static/palette.js?v=1794160262"></script>
   <script src="/static/shortcut_help.js?v=1794162032"></script>
-  <script src="/static/utility_bar.js?v=1794162069"></script>
+  <script src="/static/utility_bar.js?v=1794162607"></script>
   <script src="/static/workbench.js?v=20261107a"></script>
   <script src="/static/gate_panel.js?v=20261108a"></script>
   <script src="/static/detail_drawer.js?v=20261108a"></script>

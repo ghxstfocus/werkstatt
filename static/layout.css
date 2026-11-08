@@ -243,6 +243,24 @@ body {
 /* OP-301 fix: [hidden] respektieren (display: inline-flex überschreibt sonst) */
 .ambient-item[hidden] { display: none !important; }
 
+/* OP-305: Aktives Projekt prominent links */
+.ambient-project {
+  font-weight: 600;
+  color: var(--text);
+  padding-right: 12px;
+  margin-right: 4px;
+  border-right: 1px solid var(--border-subtle);
+}
+.ambient-project .ambient-icon {
+  color: var(--sem-action);
+  font-size: 12px;
+}
+.ambient-project-name {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+
 /* OP-301 fix: Pulse nur bei data-state="action" (semantisch: Handeln nötig) */
 .ambient-item[data-state="action"] { animation: ambient-pulse 1.5s ease-in-out infinite; }
 

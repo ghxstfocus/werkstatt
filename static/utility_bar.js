@@ -27,10 +27,10 @@
     if (paletteBtn) paletteBtn.addEventListener("click", _oeffnePalette);
     if (helpBtn) helpBtn.addEventListener("click", _oeffneHelp);
 
-    // Shift+N: Neues Projekt (ausser in Inputs)
+    // Alt+N: Neues Projekt (Shift+N ist Chrome-Inkognito-Shortcut)
     document.addEventListener("keydown", function (e) {
-      if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key !== "N" && e.key !== "n") return;
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (e.key !== "n" && e.key !== "N") return;
       var a = document.activeElement;
       if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable)) return;
       e.preventDefault();
