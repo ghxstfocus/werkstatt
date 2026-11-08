@@ -502,454 +502,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_cli.py` (neu).
 - **Blockiert von:** —
 
-## Sub-OPs (Erfolgs-Ebene, deterministisch)
-
-- **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
-  problem_klasse, problem_sig, kontext_hash, absatz, quelle, erfolg,
-  commit_sha, skill_name, erstellt_am, genutzt, letzte_nutzung)`.
-  API: `record_erfahrung(...)` + `match_erfahrung(problem_klasse,
-  max_n=3)`. SQLite via stdlib. Schema-Init idempotent. Tests.
-
-- **113b** `docs/MERKPOSTEN.md`-Import: einmaliges Script
-  `tools/import_merkposten.py`. Parsed `### M-XX — Titel` + Absatz,
-  schreibt als `quelle='manual'`, `problem_klasse='prozess-lehre'`,
-  `erfolg=1`. Idempotent per problem_sig.
-
-- **113c** `diagnose.py`-Write-Hook: nach erfolgreichem Fix (in
-  `reflection._reflection_loop` bei `return True`) →
-  `record_erfahrung(klasse, sig, fix_absatz, quelle='diagnose')`.
-
-- **113d** `antipattern.py`-Write-Hook: bei Treffer der zu
-  `reviewer_rejected` fuehrt → `record_erfahrung('antipattern:<kind>',
-  sig, erklaerung, quelle='antipattern', erfolg=0)`. Bei `approved`
-  → `erfolg=1`.
-
-- **113e** Skills-Matching: `skills/*/SKILL.md`-Frontmatter erweitern
-  um `problem_klassen: [...]`. Neuer Helper
-  `skills.match_for_problem(klasse) -> list[Skill]` (max 3).
-  `_merke_geladene_skills` schreibt zusaetzlich
-  `record_erfahrung(klasse, sig, skill_body_absatz, quelle='skill',
-  skill_name=name)`.
-
-- **113f** Reflection-Injektion: `reflection._reflection_loop` ruft
-  vor Builder-Prompt `match_erfahrung(_problem_klasse, max_n=3)`,
-  injiziert `## ERFAHRUNGEN`-Block (max 800 Zeichen).
-
-## Sub-OPs (Proposal-Ebene, LLM-verallgemeinert)
-
-- **113g** Proposal-Miner: `erfahrung.get_failure_cluster(problem_klasse,
-  kontext_hash, min_count=3) -> dict` mit `{ids, absaetze,
-  letzter_versuch}`. Neue Tabelle `proposal_queue(id, cluster_sig,
-  failure_ids, proposed_absatz, status, erstellt_am, letzte_nutzung,
-  genutzt)` mit `status in {pending, accepted, rejected, expired}`.
-  Nach erschoepfter Reflection (`return False` + Runde=max): wenn
-  Cluster >= 3 Failures UND kein pending/accepted Proposal fuer
-  `cluster_sig` → **ein** LLM-Call mit den 3+ Tracebacks →
-  `proposed_absatz` (1-3 Satz Lehre). Insert mit `status='pending'`.
-  Kein LLM wenn Cluster bekannt.
-
-- **113h** Proposal-Resolution: `match_erfahrung` liefert zusaetzlich
-  pending-Proposals zum Cluster. Reflection-Injektion (113f) bekommt
-  `## UNBESTAETIGTE VORSCHLAEGE (aus N Fehlversuchen)`-Block. Nach
-  `_reflection_loop`:
-  - `return True` + Proposal war im Prompt → `status='accepted'` +
-    `record_erfahrung(..., erfolg=1, quelle='proposal')`.
-  - `return False` + Proposal war im Prompt → `status='rejected'`,
-    nie wieder fuer diesen Cluster.
-
-## Akzeptanz
-
-(a) `erfahrung.db` existiert nach erstem Loop-Lauf.
-(b) `MERKPOSTEN.md` einmalig importiert.
-(c) Nach jedem erfolgreichen Reflection-Fix waechst die DB.
-(d) Naechster aehnlicher Fix findet den Absatz in < 100ms.
-(e) Prompt-Groesse unveraendert +-800 Zeichen.
-(f) 3 identische Failures → genau **1** Proposal (nicht 3).
-(g) Fix klappt nach Proposal → `accepted` + neuer erfahrung-Eintrag.
-(h) Fix klappt nicht → `rejected`, Prompt ohne diesen Absatz.
-(i) Kein LLM-Call wenn Cluster schon bekannt (Idempotenz).
-
-## Reihenfolge
-
-113a → 113b → 113e → 113c → 113f → 113d → 113g → 113h
-
-## Beispiel (OP-091-Fall)
-
-3x `NameError: _home_kontext` in `audit_panel.py` → Miner ruft LLM
-mit 3 Tracebacks → Proposal "NameError auf modul-level-Feld: pruefe
-ob das Feld im Modul deklariert ist". 4. Lauf: gleicher Fehler +
-Proposal im Prompt → Fix klappt → accepted. 5. Lauf: neuer
-NameError in anderem Modul → Match findet den Absatz sofort.
-
-- **Blockiert von:** -
-
-
-### OP-303: Loop-Start-Button + Run-Status-Badge
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `static/runs.js`, `werkstatt/web/app.py` (`/api/projects/{name}/ops` liefert run_status pro OP)
-- **Problem:** Der Nutzer kann keinen Loop starten ohne SSH. Die Runs-Liste zeigt OPs, aber nicht welcher davon gerade laeuft.
-- **Akzeptanzkriterien:** (a) Jede OP-Zeile in Runs-Liste hat Status-Badge: `○ idle`, `● running`, `✓ done`, `✗ failed` (basiert auf letztem `loop_started`/`loop_ended`/`loop_failed` dieses OPs). (b) Hover ueber OP-Zeile zeigt Ghost-Preview: "OP-213: Test-Thaw. Blockiert von OP-210 (open). [Trotzdem starten]". (c) Klick auf `▶`-Button startet Loop mit dieser OP-Aufgabe. (d) Bei laufendem Loop: OP wird blau markiert, ein "Stop"-Button erscheint. (e) Nach Loop-Ende: Badge aktualisiert innerhalb 5s via Polling.
-- **Tests:** Smoke: `POST /start` aus UI-Klick ruft Endpoint. Kein pytest (UI-Verhalten).
-- **Blockiert von:** —
-
-### OP-304: Shortcut Help (`?`)
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `static/help.js` (neu), `static/layout.html`, `static/layout.css`
-- **Problem:** Shortcuts existieren, sind aber nirgends dokumentiert. Der Nutzer entdeckt sie nur durch Zufall oder Studieren des Codes.
-- **Akzeptanzkriterien:** (a) Taste `?` (ohne Modifier) oeffnet Overlay. (b) Shortcuts gruppiert: Navigation, Run-Control, Chat, Modus, Aktionen. (c) Jeder Eintrag: Tastenkombination (in `<kbd>`-Tag), Aktion, "auch klickbar via ..."-Hinweis. (d) Erreichbar auch via Command Palette (`help shortcuts`) und `?`-Icon oben rechts. (e) Esc oder Klick ausserhalb schliesst. (f) Erste Nutzung: Overlay oeffnet sich nicht automatisch, aber Ambient Bar zeigt Tag 1 "Druecke ? fuer Shortcuts".
-- **Tests:** Keine (UI).
-- **Blockiert von:** —
-
-### OP-305: Klickwege parallel zu allen Shortcuts
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `static/*.js` (alle UI-Module), `static/layout.html`
-- **Problem:** Wenn etwas nur per Shortcut erreichbar ist, verliert der Nutzer der den Shortcut nicht kennt den Zugang.
-- **Akzeptanzkriterien:** (a) Fuer jede Palette-Aktion existiert ein sichtbarer Klickweg (Button, Menue, Link) in der UI. (b) Jeder Shortcut-Hinweis im `?`-Overlay enthaelt "→ auch klickbar via [X]". (c) Verifikation: alle `window.Werkstatt*.oeffne`-Aufrufe sind auch per Click-Handler erreichbar. (d) Ein Test-Fall in `?`-Overlay dokumentiert: nichts geht nur via Shortcut.
-- **Tests:** `grep`-Guard: keine `addEventListener('keydown'`-Aktion ohne zugehoerigen Click-Handler.
-- **Blockiert von:** OP-304
-
-### OP-306: Mode-Switch (Cockpit / Control / Debug)
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `static/mode.js` (neu), `static/layout.html`, `static/layout.css`, `static/tabs.js`
-- **Problem:** Das UI hat genau einen Modus. Der Cockpit-Typ wird erschlagen von drei Spalten, der Kontrollraum-Typ will mehr Dichte. ADR-0022 fordert 3 Modi.
-- **Akzeptanzkriterien:** (a) Drei Modi: `cockpit` (default, 3 Spalten wie heute), `control` (Focus-View, breite Timeline, Chat schwebend), `debug` (Timeline + Audit gekoppelt). (b) Wechsel via `Shift+Space` zyklisch, via Command Palette (`mode cockpit`), via URL `?mode=control`, via Dropdown oben links. (c) Persistiert in localStorage und URL. (d) Mode-Name oben sichtbar. (e) Guard: bei Wechsel waehrend laufendem Run → Warnung "Run laeuft, Modus wechseln?". (f) Alle drei Modi nutzen dieselben semantischen Farben (OP-300).
-- **Tests:** Keine (UI).
-- **Blockiert von:** —
-
-### OP-307: Chat Tool-Call-Karten
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `static/chat.js`, `static/layout.css`, `static/chat.css` (neu wenn noetig)
-- **Problem:** Chat zeigt Tool-Calls als rohe Textbloecke. Grep-Output, JSON-Payloads, read_file-Inhalte stehen ungefiltert im Verlauf. Der Nutzer kann den Verlauf nicht schnell ueberfliegen.
-- **Akzeptanzkriterien:** (a) Jeder `tool_call` rendert als Karte: Icon (📄 read_file, 🔍 grep, 📝 git_diff, …), Tool-Name, Status-Badge (⏳ running / ✓ ok / ✗ error), Laufzeit. (b) Karte aufklappbar: Input-Parameter + Output (human-readable). (c) Roher JSON nur im "Details"-Toggle innerhalb der Karte. (d) Mehrere Tool-Calls in einer Assistant-Runde: als verschachtelte Container-Karte. (e) Karten scrollen mit der Konversation, keine Modal-Overlays. (f) Farb-Kodiert nach OP-300.
-- **Tests:** Keine (UI).
-- **Blockiert von:** —
-
-### OP-308: Focus-View (Control-Modus) mit horizontalem Phasen-Wasserfall
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-2 (Focus)
-- **Betroffene Dateien:** `static/waterfall.js` (neu), `static/layout.html`, `static/layout.css`
-- **Problem:** Die Timeline ist vertikal und listenartig. Bei einem laufenden Run mit 8+ Phasen und 30+ Sub-Events ist nicht erkennbar wo der Run steht und wie die Phasen zueinander stehen.
-- **Akzeptanzkriterien:** (a) Im Control-Modus: Timeline als horizontaler Wasserfall (a la Chrome DevTools Performance-Panel). Jede Phase = ein Block, Breite proportional zur Dauer. (b) Aktive Phase blau, fertige gruen, fehlgeschlagene rot. (c) Klick auf Phase: Detail-Bereich darunter mit vertikalen Events (wie heute). (d) Hover auf Phase: Tooltip mit Name + Dauer + Status. (e) Zoom via Scroll-Rad (Zeit-Achse). (f) Im Cockpit-Modus bleibt die vertikale Timeline — Wasserfall nur im Control-Modus.
-- **Tests:** Keine (UI).
-- **Blockiert von:** OP-306
-
-### OP-309: Chat schwebend im Control-Modus
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-2 (Focus)
-- **Betroffene Dateien:** `static/chat.js`, `static/layout.css`
-- **Problem:** Im Control-Modus ist der Chat als dritte Spalte zu schmal fuer Laengere Konversation, waehrend der Wasserfall den Platz braucht.
-- **Akzeptanzkriterien:** (a) Im Control-Modus: Chat als schwebendes Panel unten rechts (max 400×300px, resizable). (b) Panel-Zustand (offen/geschlossen, Groesse) in localStorage. (c) Doppelklick auf Chat-Header: Maximieren (volle rechte Spalte). (d) Chat weiss im Control-Modus welcher Run aktiv ist → "Frage zu diesem Run" als Placeholder. (e) Im Cockpit- und Debug-Modus bleibt Chat als feste Spalte (wie heute).
-- **Tests:** Keine (UI).
-- **Blockiert von:** OP-308
-
-### OP-310: Run-Pause/Resume
-
-- **Status:** open
-- **Typ:** architektur
-- **Phase:** Phase-2 (Focus)
-- **Betroffene Dateien:** `werkstatt/loop.py`, `werkstatt/gates.py`, `werkstatt/web/app.py`, `static/runs.js`
-- **Problem:** Ein laufender Loop kann nur mit `stop` (kill) beendet werden. Kein sanftes Pausieren, kein Fortsetzen von einem Checkpoint. Der User kann nicht eingreifen ohne den ganzen Run zu verlieren.
-- **Akzeptanzkriterien:** (a) `POST /api/projects/{name}/pause` setzt ein Pause-Flag; Loop prueft vor jedem Phase-Start. (b) Pausierter Loop schreibt `loop_paused`-Event, Zustand ist `paused`. (c) `POST /api/projects/{name}/resume` setzt Pause-Flag zurueck, Loop laeuft weiter. (d) UI: `⏸`- und `▶`-Buttons neben laufendem Run. (e) Timeout: Pausierter Run bleibt maximal 1 Stunde pausiert, danach fail-closed (loop_failed mit grund=pause_timeout). (f) Pause/Resume sind idempotent und race-free (Lock).
-- **Tests:** `tests/test_loop_pause_resume.py` (neu): (1) Pause-Flag→Loop haelt an, (2) Resume→Loop laeuft weiter, (3) Timeout→fail-closed.
-- **Blockiert von:** OP-308
-
-### OP-311: Audit-Filterleiste + Tag-Gruppierung
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-3 (Urgrossvater)
-- **Betroffene Dateien:** `static/audit.js`, `static/layout.css`, `werkstatt/web/audit_panel.py`
-- **Problem:** Das Audit-Panel zeigt 100+ Events, aber Filter sind rudimentaer (nur `kind` und `run_id`). Kein Volltext-Suche, keine Zeitraum-Filter, keine Tag-Gruppierung. Als Analyse-Werkzeug kaum brauchbar.
-- **Akzeptanzkriterien:** (a) Filterleiste: Volltext-Suche, Event-Type-Dropdown (mit Live-Counts), Run-ID-Filter, Zeitraum (24h / 7d / 30d / All). (b) Events gruppiert nach Tag mit Collapsible-Header ("Heute · 143 Events"). (c) Export als CSV und JSON (mit Permission-Gate). (d) Filter persistieren in URL (`?kind=loop_*&days=7`). (e) Kombinierbar mit OP-302 Command Palette (`audit kind:loop_* heute`).
-- **Tests:** `tests/test_audit_filter.py` (neu): Query-Parameter→korrekt gefiltert.
-- **Blockiert von:** —
-
-### OP-312: Semantic Zoom (Tag ↔ Run ↔ Phase)
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-3 (Urgrossvater)
-- **Betroffene Dateien:** `static/zoom.js` (neu), `static/timeline.js`, `static/layout.css`
-- **Problem:** Kalender, Runs-Liste, Timeline sind drei getrennte Views mit drei Navigationswegen. Der Nutzer muss wissen welcher View welchen Zeitraum zeigt.
-- **Akzeptanzkriterien:** (a) Drei Zoom-Stufen: Monat (Kalender), Run (Phasen-Uebersicht), Phase (Events). (b) Uebergang per Scroll-Rad (vertikal) oder `Cmd+0/1/2`. (c) Sanfte Animation (300ms ease). (d) Aktuelle Zoom-Stufe sichtbar (Breadcrumb oben: "November 2026 › Run 0425 › Phase 3 Builder"). (e) In jeder Stufe: Klick auf Element zoomt naechste Stufe tiefer. (f) Breadcrumb-Klick zoomt zurueck.
-- **Tests:** Keine (UI).
-- **Blockiert von:** OP-308
-
-### OP-313: Ghost Intents (plan_intent + Vorschau + Blockieren)
-
-- **Status:** open
-- **Typ:** architektur
-- **Phase:** Phase-3 (Urgrossvater)
-- **Betroffene Dateien:** `werkstatt/builder.py`, `werkstatt/reviewer.py`, `werkstatt/loop.py`, `static/timeline.js`
-- **Problem:** Der Loop schreibt Events erst nach der Aktion. Der Nutzer sieht nichts von geplanten Aktionen. Kein Eingreifen bevor Code geschrieben ist.
-- **Akzeptanzkriterien:** (a) Builder/Reviewer schreiben `plan_intent`-Event BEVOR sie eine Datei aendern: `{intent: "patch"|"write"|"delete", file: ..., estimated_lines: N, reason: ...}`. (b) UI zeigt Intent-Karten als "Ghost"-Vorschau (gestrichelter Rand, gedaempfte Farbe). (c) Nutzer kann Intent blockieren: `POST /api/runs/{id}/intents/{intent_id}/block` → Loop bricht diese Aktion ab, schreibt `intent_blocked`-Event. (d) Timeout: Unbeantwortete Intents nach 30s automatisch approven (default) ODER fail-closed (config). (e) Config-Setting: `intent_mode: "ghost"|"blind"` pro Projekt.
-- **Tests:** `tests/test_plan_intent.py` (neu): Intent→block→Loop-Abbruch; Intent→timeout→approve.
-- **Blockiert von:** OP-310
-
-### OP-314: Explaining Presence (Right-Click → Chat erklaert)
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-3 (Urgrossvater)
-- **Betroffene Dateien:** `static/timeline.js`, `static/chat.js`, `static/contextmenu.js` (neu)
-- **Problem:** Wenn der Nutzer ein Event im Audit sieht, muss er selbst interpretieren was es bedeutet. Er kann nicht "Was ist hier passiert?" fragen.
-- **Akzeptanzkriterien:** (a) Rechtsklick auf Timeline-Knoten / Audit-Event / Chat-Message: Kontextmenue mit "Was passierte hier?". (b) Klick sendet Nachricht an Chat mit Event-ID + Kontext: "Erklaere dieses Event: <kind> <payload>. Nutze read_status und grep um Kontext zu sammeln." (c) Chat-Antwort ist im Chat sichtbar UND als Tooltip/Popup direkt am Element. (d) Erreichbar auch via Command Palette: "explain last error" / "explain this event".
-- **Tests:** Keine (UI).
-- **Blockiert von:** OP-307
-
-### OP-315: Causal Chain (Initiator-Referenzen in Timeline)
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-3 (Urgrossvater)
-- **Betroffene Dateien:** `static/timeline.js`, `werkstatt/audit.py`
-- **Problem:** Ein Timeline-Knoten zeigt "explorer_result" — aber nicht warum. Der Nutzer muss Events manuell in Beziehung setzen.
-- **Akzeptanzkriterien:** (a) Audit-Events bekommen optional ein `caused_by`-Feld (seq oder audit_id des Vorgaengers). (b) Timeline zeigt pro Knoten eine "Initiator"-Zeile: `← loop_explorer_suchbegriffe ← explorer_messung → planner_scout_ok`. (c) Klick auf Initiator springt zu diesem Event. (d) Events ohne `caused_by`: Heuristik (chronologisch letzter Event derselben Rolle).
-- **Tests:** `tests/test_causal_chain.py` (neu): Heuristik findet korrekte Vorgaenger.
-- **Blockiert von:** —
-
-### OP-316: Living Typography
-
-- **Status:** open
-- **Typ:** ui-politur
-- **Phase:** Phase-4 (Politur)
-- **Betroffene Dateien:** `static/layout.css`
-- **Problem:** Schriftgroessen sind heute fix (11/12/13px). Bei "active" Runs ist die UI genauso ruhig wie im Idle — kein visuelles Signal dass etwas wichtig ist.
-- **Akzeptanzkriterien:** (a) Font-Size-Scale skaliert mit Modus und Status: Idle = 11px body, Active Run = 13px, Failure = 14px. (b) Line-Height skaliert mit (1.4/1.5/1.6). (c) Semantische Font-Familien: User-Messages Serif (Absicht), Agent-Antworten Sans (Reaktion), Tool-Calls Mono (Aktion), System-Hinweise Small-caps (Kontext). (d) Schriftgroessen-Wechsel animiert 200ms.
-- **Tests:** Keine (visuell).
-- **Blockiert von:** OP-306
-
-### OP-317: Hover-Previews mit Konsequenz-Vorschau
-
-- **Status:** open
-- **Typ:** ui-politur
-- **Phase:** Phase-4 (Politur)
-- **Betroffene Dateien:** `static/hover_preview.js` (neu), `static/layout.css`
-- **Problem:** Hover zeigt heute nur Tooltip mit Titel. Der Nutzer muss klicken um zu sehen was passieren wuerde.
-- **Akzeptanzkriterien:** (a) Hover ueber OP-Zeile: Ghost-Preview mit Blockiert-von-Status, geschaetzter Dauer, Token-Schaetzung. (b) Hover ueber "Start Loop"-Button: Preview mit Aufgabe, Phasen-Schaetzung, Zeit-Schaetzung. (c) Hover ueber Gate-Button: Preview mit Konsequenz ("j = bauen, n = Loop-Abbruch"). (d) Preview erscheint nach 400ms Hover, verschwindet nach 100ms ohne Hover. (e) Preview ist klickbar (Link zur Detail-Ansicht).
-- **Tests:** Keine (UI).
-- **Blockiert von:** OP-305
-
-
-### OP-318: Legacy-OPs 1XX auditieren
-
-- **Status:** open
-- **Typ:** doku-cleanup
-- **Phase:** Phase-0 (Vorbereitung)
-- **Betroffene Dateien:** `docs/STATUS.md`, `PROGRESS.md`, `docs/adr/`
-- **Problem:** 15 OPs im 1XX-Bereich (OP-101, 105-107, 109-110, 112-113i, 115-118, 120-121) stammen aus der Pre-Loop-Neubau-Zeit. Manche sind nach dem Neubau obsolet (Legacy-Refactorings, alte Pfade), andere nicht. Ohne Pruefung ist die Liste mit Zombie-OPs ueberladen — der Loop kann sie nicht sinnvoll priorisieren.
-- **Akzeptanzkriterien:** (a) Jede 1XX-OP einzeln gegen aktuellen Code pruefen: betroffene Datei existiert noch? Fordert das was der Code heute nicht hat? (b) Kategorisierung: `kill` (obsolet, in Delete-Zone), `keep` (weiterhin relevant), `transform` (AK an aktuellen Code anpassen). (c) Ergebnis als Tabelle in `PROGRESS.md` dokumentiert. (d) Kill-Kandidaten in Delete-Zone verschieben (mit Begruendung + Commit-Referenz).
-- **Tests:** Keine (Doku-Audit).
-- **Blockiert von:** —
-
-
-### OP-330: Skill script-bank (Manifest + Struktur)
-
-- **Status:** open
-- **Typ:** skill-fundament
-- **Phase:** Phase-2 (Intelligenz)
-- **Betroffene Dateien:** `skills/script-bank/SKILL.md` (neu), `skills/script-bank/MANIFEST.yaml` (neu), `skills/script-bank/tools/` (neu), `werkstatt/script_bank.py` (neu)
-- **Problem:** Chat-Debugger und Loop schreiben Analyse-Scripts jedes Mal neu. Kein Manifest, keine Versionierung, keine Variable-Bindung an Projekt-Kontext.
-- **Akzeptanzkriterien:** (a) `MANIFEST.yaml` mit Schema: `name`, `beschreibung`, `parameter`, `kategorie` (analyze|debug|test|verify), `sicherheitsstufe` (read|write-dry|write-sandbox). (b) `script_bank.py` mit `list_scripts(kategorie=None)`, `call(name, params, project_root)`. (c) Scaffolder-Vertrag dokumentiert (Pflicht-Variablen: `project_root`, `python_bin`, `test_command`). (d) 0 Scripts (nur Geruest).
-- **Tests:** `tests/test_script_bank.py` (3 Tests).
-- **Blockiert von:** —
-
-### OP-331: Script-Bank — erste 6 Kern-Scripts
-
-- **Status:** open
-- **Typ:** skill-inhalt
-- **Phase:** Phase-2 (Intelligenz)
-- **Betroffene Dateien:** `skills/script-bank/tools/pytest_analyze.py`, `ruff_analyze.py`, `mypy_analyze.py`, `git_diff_analyze.py`, `test_integrity.py`, `dependency_graph.py`, `MANIFEST.yaml`
-- **Problem:** Erste sechs Analyse-Scripts fehlen. Decken 90% der Alltags-Fehler ab.
-- **Akzeptanzkriterien:** (a) Jedes Script: `analyze()` liefert `{kategorie, ursache, betroffene_dateien[], beispiel_ohne_code, confidence}`. (b) Parameter aus ENV/Config. (c) Alle <5s. (d) Read-only.
-- **Tests:** `tests/test_script_bank_tools.py` (6 Tests).
-- **Blockiert von:** OP-330
-
-### OP-332: Scaffolder-Vertrag Script-Bank
-
-- **Status:** open
-- **Typ:** skill-fundament
-- **Phase:** Phase-2 (Intelligenz)
-- **Betroffene Dateien:** `werkstatt/scaffold.py`, `skills/script-bank/SKILL.md`, `werkstatt/templates/werkstatt/script-bank.yaml` (neu)
-- **Problem:** Scripts brauchen Projekt-Kontext. Ohne Scaffolder-Vertrag fehleranfaellig.
-- **Akzeptanzkriterien:** (a) Scaffolder schreibt `.werkstatt/script-bank.yaml`. (b) `script_bank.call()` liest fehlende Parameter daraus. (c) Template vorhanden. (d) Fehlende Variablen: fail-loud.
-- **Tests:** `tests/test_scaffold_scriptbank.py` (3 Tests).
-- **Blockiert von:** OP-330
-
-### OP-333: Chat-Debugger-Integration Script-Bank
-
-- **Status:** open
-- **Typ:** skill-wiring
-- **Phase:** Phase-2 (Intelligenz)
-- **Betroffene Dateien:** `werkstatt/chat_tools.py`, `werkstatt/chat_agent.py`, `tests/test_chat_script_bank.py` (neu)
-- **Problem:** Chat-Agent hat 8 Tools, aber keinen Script-Aufruf. Debugger schreibt Analyse-Scripts jedes Mal neu.
-- **Akzeptanzkriterien:** (a) Chat-Tool `run_script {name, params}`. (b) Sicherheitspruefung: `write-sandbox` nur mit `mode=write`. (c) Rueckgabe JSON. (d) In `openai_schemas()`.
-- **Tests:** `tests/test_chat_script_bank.py` (3 Tests).
-- **Blockiert von:** OP-330, OP-331
-
-### OP-334: Loop-Reflection-Integration Script-Bank
-
-- **Status:** open
-- **Typ:** skill-wiring
-- **Phase:** Phase-2 (Intelligenz)
-- **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/verify.py`, `tests/test_reflection_script_bank.py` (neu)
-- **Problem:** Reflection bekommt `last_verify_errors` als Rohtext. Typisierter Fehler waere besser.
-- **Akzeptanzkriterien:** (a) `verify.py` liefert `fehler_kategorie`. (b) Reflection ruft passenden Analyzer. (c) Fallback Rohtext. (d) Kein Aufruf bei Erfolg.
-- **Tests:** `tests/test_reflection_script_bank.py` (4 Tests).
-- **Blockiert von:** OP-331
-
-### OP-340: Reviewer-Bug-Schema loesungsorientiert
-
-- **Status:** open
-- **Typ:** prompt-fundament
-- **Phase:** Phase-2 (Intelligenz)
-- **Betroffene Dateien:** `werkstatt/reviewer.py`, `tests/test_reviewer_schema.py` (neu)
-- **Problem:** Heute: `{file, line, description, severity}`. Kein `warum`, kein `wie_loesen`, kein `beispiel`. Reflection bekommt nur "X ist falsch".
-- **Akzeptanzkriterien:** (a) Neues Schema: `{file, line, severity, warum, wie_loesen, beispiel_ohne_code}`. (b) `description` als Alias auf `warum` (rueckwaertskompatibel). (c) `REVIEWER_SYSTEM` fordert Prosa, keine Codebloecke. (d) `beispiel_ohne_code` max 3 Saetze.
-- **Tests:** `tests/test_reviewer_schema.py` (3 Tests).
-- **Blockiert von:** —
-
-### OP-341: Reflection + Hook + Gedaechtnis auf loesungsorientiert
-
-- **Status:** open
-- **Typ:** prompt-fundament
-- **Phase:** Phase-2 (Intelligenz)
-- **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/phases/*`, `werkstatt/erfahrung.py`, `tests/test_reflection_loesungsorientiert.py` (neu)
-- **Problem:** Reflection-Feedback uneinheitlich. Kein Loesungs-Schema.
-- **Akzeptanzkriterien:** (a) Einheitliches Schema: `{warum, wie_loesen, beispiel_ohne_code, confidence}`. (b) Reflection-Prompt: "Analysiere + Repariere". (c) Hook: gleicher Vertrag. (d) Gedaechtnis: `record_erfahrung(warum, wie, beispiel, ...)`. (e) **Bug mit Zeilen-Kontext:** Jeder Bug traegt `{file, line_start, line_end, code_ausschnitt}` (max 20 Zeilen). Ohne Zeilenangabe ist der Bug ungueltig — fail-loud. (f) **Vollstaendiger Verlauf im Prompt:** Der Reviewer sieht alle vorherigen Bug-Meldungen ALLER Runden (nicht nur n-1), jede mit Zeilen und Code-Ausschnitt. Kontext bleibt eng: pro Runde max 5 Bugs (aeltere werden zusammengefasst, nie stumm verworfen). (g) **Delta-Klassifikation:** Pro Bug einer von `bestehend | behoben | neu | verschoben`. Identitaet = Hash aus `(file, kategorie, code_ausschnitt_normalisiert)`. (h) **Kausale Kette bei `bestehend`:** Pflichtfelder `alter_vorschlag`, `warum_alter_vorschlag_scheiterte`, `kausale_kette` ("Patch Runde N hat Zeile X-Y geaendert, dadurch brach Zeile Z"), `neuer_vorschlag`. Reines Neuvorschlagen ohne Kette = Fail. Bei `neu` reicht frischer Vorschlag. Grund: ohne kausale Rekonstruktion raet der Agent blind und der Loop dreht im Kreis (Zirkel-Falle).
-- **Tests:** `tests/test_reflection_loesungsorientiert.py` (8 Tests).
-- **Blockiert von:** OP-340
-
-### OP-342: Prompt-Engineering pro Rolle (Lichtkegel-Prinzip)
-
-- **Status:** open
-- **Typ:** prompt-fundament
-- **Phase:** Phase-2 (Intelligenz)
-- **Betroffene Dateien:** `werkstatt/planner.py`, `werkstatt/builder.py`, `werkstatt/reviewer.py`, `werkstatt/reflection.py`, `werkstatt/architect.py`, `werkstatt/scout.py`, `werkstatt/explorer.py`
-- **Problem:** System-Prompts gewachsen, nicht entworfen. Rollen sehen zu viel oder zu wenig.
-- **Akzeptanzkriterien:** (a) Pro Rolle dokumentiert: Sichtfeld, Ziel, Loesungsvertrag. (b) Prompt-Abschnitte entfernt falls redundant. (c) `_build_selbst_check_block` nur auf Nicht-Reasoning. (d) Token-Verbrauch pro Rolle dokumentiert.
-- **Tests:** `tests/test_prompt_kontrakte.py` (7 Tests).
-- **Blockiert von:** OP-340, OP-341
-
-### OP-350: Scaffolder Greenfield-Modus
-
-- **Status:** open
-- **Typ:** feature-fundament
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `werkstatt/scaffold.py`, `werkstatt/templates/greenfield/` (neu), `tests/test_scaffold_greenfield.py` (neu)
-- **Problem:** `scaffold.py` legt PFLICHTDATEIEN an, aber ohne Greenfield-Struktur (leere Verzeichnisse, minimale Config, Verify-Kette, OP-Stub, Script-Bank-Variablen).
-- **Akzeptanzkriterien:** (a) `scaffold(name, dir, greenfield=True)` erzeugt: `src/`, `tests/`, `.werkstatt/`, `docs/adr/`, `docs/STATUS.md` mit 3 Starter-OPs. (b) `.gitkeep`. (c) `.werkstatt/script-bank.yaml` mit `excluded_from_explorer`-Liste (`.env`, `.env.*`, `*.secret`, `*.pem`, `*.key`, `credentials*`, `*token*`). (d) `.env`-Template mit Platzhaltern statt echten Werten (`DB_HOST=<set-me>`). (e) Explorer (`werkstatt/explorer.py`) respektiert `excluded_from_explorer` aus `script-bank.yaml` — fail-closed wenn Datei fehlt: `.env`-Dateien werden NIE gelesen, auch ohne Config. (f) Idempotent, `--dry-run`.
-- **Tests:** `tests/test_scaffold_greenfield.py` (6 Tests: Struktur, idempotent, dry-run, fehlendes Arg, `.env`-Template, Explorer-Filter).
-- **Blockiert von:** OP-332
-
-### OP-351: UI-Maske Projekt-Anlage
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `static/layout.html`, `static/tabs.js`, `static/layout.css`, `werkstatt/web/app.py` (`POST /api/projects/create`), `tests/test_project_create_api.py` (neu)
-- **Problem:** Projekte heute nur per CLI. Kein UI-Weg.
-- **Akzeptanzkriterien:** (a) `+`-Button oeffnet Modal: Name, Pfad, greenfield. (b) `POST /api/projects/create` ruft `scaffold`. (c) Nach Erfolg Tab. (d) Fehler-Feedback. (e) Pfad nur unter `/opt/`.
-- **Tests:** `tests/test_project_create_api.py` (4 Tests).
-- **Blockiert von:** OP-350
-
-### OP-352: Scaffolder-Drift-Check + Tests
-
-- **Status:** open
-- **Typ:** verify-fundament
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `tools/scaffold_drift.py` (neu), `tools/verify.json`, `tests/test_scaffold_drift.py` (neu)
-- **Problem:** Konventions-Aenderung → niemand merkt ausser manueller `migrate.py`.
-- **Akzeptanzkriterien:** (a) `--check` prueft alle `/opt/*` gegen `PFLICHTDATEIEN`. (b) Rueckgabe fehlender Dateien. (c) verify-Stage `scaffold_drift` (weich). (d) `migrate.py` nutzt gleiche Logik.
-- **Tests:** `tests/test_scaffold_drift.py` (3 Tests).
-- **Blockiert von:** OP-350, OP-351
-
-### OP-360: Skill senior-architekt
-
-- **Status:** open
-- **Typ:** skill-fundament
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `skills/senior-architekt/SKILL.md` (neu), `skills/senior-architekt/WERKZEUGE.md` (neu)
-- **Problem:** Leeres Geruest, Idee im Kopf, kein Weg zu Architektur + OPs.
-- **Akzeptanzkriterien:** (a) SKILL.md mit Rolle, Dialog-Fokus, Konventionen, Ergebnisformat. (b) Werkzeuge: File-Explorer, Konventions-Lookup, OP-Writer, Roadmap-Compiler (OP-282). (c) Beispiel-Dialog. (d) Fail-closed ohne User-Input.
-- **Tests:** `tests/test_skill_senior_architekt.py` (2 Tests).
-- **Blockiert von:** OP-282, OP-350
-
-### OP-361: Senior-Architekt Dialog-Flow
-
-- **Status:** open
-- **Typ:** skill-wiring
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `werkstatt/chat_agent.py` (oder `arch_agent.py`), `static/chat.js`, `tests/test_arch_dialog.py` (neu)
-- **Problem:** Skill alleine reicht nicht — Dialog mit User noetig.
-- **Akzeptanzkriterien:** (a) Chat-Modus `architekt`. (b) Schrittweise: Idee → Anforderungen → Ordnerstruktur → Komponenten → erste OPs. (c) Jede Antwort: Rueckfrage oder naechster Schritt. (d) "Fertig" schreibt nach `docs/`.
-- **Tests:** `tests/test_arch_dialog.py` (3 Tests).
-- **Blockiert von:** OP-360
-
-### OP-362: Senior-Architekt schreibt Plan-Artefakte
-
-- **Status:** open
-- **Typ:** skill-wiring
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `werkstatt/arch_agent.py`, Templates, `tests/test_arch_output.py` (neu)
-- **Problem:** Am Ende muss Architekt konkrete Artefakte schreiben.
-- **Akzeptanzkriterien:** (a) `schreibe_plan(idee, struktur, komponenten)` → 3 Dateien. (b) OPs OP-001..OP-005 mit Blocker-Ketten. (c) `docs/ARCHITECTURE.md` nennt Ordner, Komponenten, Abhaengigkeiten. (d) User-Bestaetigung.
-- **Tests:** `tests/test_arch_output.py` (3 Tests).
-- **Blockiert von:** OP-360, OP-361
-
-### OP-370: detect() — Secret-Detection ohne Redaction
-
-- **Status:** open
-- **Typ:** security
-- **Phase:** Phase-3 (Politur, aber früh)
-- **Betroffene Dateien:** `werkstatt/redaction.py` (neu), `werkstatt/audit.py`, `static/statusleiste.js`, `static/layout.css`, `tests/test_redaction.py` (neu)
-- **Problem:** Werkstatt arbeitet an Code, aber Explorer/Builder/Reviewer lesen Dateien die API-Keys, .env-Werte, IPs oder Credentials-URLs enthalten können. Die landen dann im LLM-Prompt (DeepSeek) im Klartext. Kein Schutz, kein Warnsystem.
-- **Akzeptanzkriterien:** (a) `detect(text) -> list[Finding]` mit Finding=`{typ, start, ende}`. Katalog: `ip4`, `ip6`, `api_key` (sk-, ghp_, xoxb-, AKIA, ...), `email`, `credential_url` (scheme://user:pass@...), `private_path` (/home/<user>/, /Users/<user>/). (b) `audit()` prueft Payload bei jedem Aufruf — bei Finding: Event `secret_detected {typ, quelle_kind}` (NICHT der Original-Wert). (c) Statusbar zeigt Warnung `\u26a0 N Secrets` (`--sem-warn`) bei `secret_detected` in letzten 24h. (d) Kein Restore, keine Redaction, keine LLM-Aenderung. (e) Doku-Klarstellung im SKILL: Detect ist Hinweis, keine Garantie — bei echten Secrets lokales Modell waehlen.
-- **Tests:** `tests/test_redaction.py` (10 Tests: pro Typ Positiv, Negativ-Kontexte, Performance <5ms/10k Zeichen).
-- **Blockiert von:** —
-
-## Erledigt (Auto-Log)
-
-- 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)
-- 2026-11-02 | OP-077 | done | Audit-Panel (92b3b69)
-- 2026-11-02 | OP-078 | done | UI-Layout (0f916f9..e75bc7d)
-- 2026-10-30 | OP-071 | `c1e8377`: revertiert
-- 2026-11-02 | OP-003 | wontfix (security-ai-Drift)
-- 2026-11-02 | OP-030 | wontfix (Duplikat zu OP-074)
-- 2026-11-02 | OP-031 | wontfix (Duplikat zu OP-075)
-- 2026-11-02 | OP-032 | wontfix (Duplikat zu OP-076)
-- 2026-11-02 | OP-033 | wontfix (Duplikat zu OP-078)
-- 2026-11-02 | OP-039 | wontfix (security-ai)
-- 2026-11-02 | OP-041 | wontfix (security-ai)
-- 2026-11-02 | OP-066 | done | Reviewer prueft Zwischenstand (bereits implementiert)
-- 2026-11-02 | OP-065 | wontfix | Phase-2-Kette (Modell-Latenz, nicht Code)
-- 2026-11-02 | OP-026 | wontfix | R-CHECK-1 Prompt-Block ist Skill
-- 2026-11-02 | OP-067 | done | pytest_changed feuert in Reflection (69889b7)
-- 2026-11-02 | OP-072 | done | UI-Phase 30 in OPs zerlegt (88ab237)
-- 2026-11-02 | OP-074 | done | FastAPI-Backend (624fb5e + c82f537)
-- 2026-11-02 | OP-075 | done | Terminal-Proxy (b8dce51)
-- 2026-11-02 | OP-079 | done | review-work-Skill: Markdown-Hunk-Header (d023535)
-- 2026-11-02 | OP-080 | done | review-work-Skill: Python-PATCHES (3d7fd1f)
-
 ### OP-263: State-Contract fuer auftrag_bereits_erfuellt-Familie
 
 - **Status:** open
@@ -1508,6 +1060,453 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Prioritaet:** mittel (Sicherheits-Backstop, nicht Blocker).
 - **Quelle:** Punkt 4 aus externem Review 2026-11-07.
 
+## Sub-OPs (Erfolgs-Ebene, deterministisch)
+
+- **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
+  problem_klasse, problem_sig, kontext_hash, absatz, quelle, erfolg,
+  commit_sha, skill_name, erstellt_am, genutzt, letzte_nutzung)`.
+  API: `record_erfahrung(...)` + `match_erfahrung(problem_klasse,
+  max_n=3)`. SQLite via stdlib. Schema-Init idempotent. Tests.
+
+- **113b** `docs/MERKPOSTEN.md`-Import: einmaliges Script
+  `tools/import_merkposten.py`. Parsed `### M-XX — Titel` + Absatz,
+  schreibt als `quelle='manual'`, `problem_klasse='prozess-lehre'`,
+  `erfolg=1`. Idempotent per problem_sig.
+
+- **113c** `diagnose.py`-Write-Hook: nach erfolgreichem Fix (in
+  `reflection._reflection_loop` bei `return True`) →
+  `record_erfahrung(klasse, sig, fix_absatz, quelle='diagnose')`.
+
+- **113d** `antipattern.py`-Write-Hook: bei Treffer der zu
+  `reviewer_rejected` fuehrt → `record_erfahrung('antipattern:<kind>',
+  sig, erklaerung, quelle='antipattern', erfolg=0)`. Bei `approved`
+  → `erfolg=1`.
+
+- **113e** Skills-Matching: `skills/*/SKILL.md`-Frontmatter erweitern
+  um `problem_klassen: [...]`. Neuer Helper
+  `skills.match_for_problem(klasse) -> list[Skill]` (max 3).
+  `_merke_geladene_skills` schreibt zusaetzlich
+  `record_erfahrung(klasse, sig, skill_body_absatz, quelle='skill',
+  skill_name=name)`.
+
+- **113f** Reflection-Injektion: `reflection._reflection_loop` ruft
+  vor Builder-Prompt `match_erfahrung(_problem_klasse, max_n=3)`,
+  injiziert `## ERFAHRUNGEN`-Block (max 800 Zeichen).
+
+## Sub-OPs (Proposal-Ebene, LLM-verallgemeinert)
+
+- **113g** Proposal-Miner: `erfahrung.get_failure_cluster(problem_klasse,
+  kontext_hash, min_count=3) -> dict` mit `{ids, absaetze,
+  letzter_versuch}`. Neue Tabelle `proposal_queue(id, cluster_sig,
+  failure_ids, proposed_absatz, status, erstellt_am, letzte_nutzung,
+  genutzt)` mit `status in {pending, accepted, rejected, expired}`.
+  Nach erschoepfter Reflection (`return False` + Runde=max): wenn
+  Cluster >= 3 Failures UND kein pending/accepted Proposal fuer
+  `cluster_sig` → **ein** LLM-Call mit den 3+ Tracebacks →
+  `proposed_absatz` (1-3 Satz Lehre). Insert mit `status='pending'`.
+  Kein LLM wenn Cluster bekannt.
+
+- **113h** Proposal-Resolution: `match_erfahrung` liefert zusaetzlich
+  pending-Proposals zum Cluster. Reflection-Injektion (113f) bekommt
+  `## UNBESTAETIGTE VORSCHLAEGE (aus N Fehlversuchen)`-Block. Nach
+  `_reflection_loop`:
+  - `return True` + Proposal war im Prompt → `status='accepted'` +
+    `record_erfahrung(..., erfolg=1, quelle='proposal')`.
+  - `return False` + Proposal war im Prompt → `status='rejected'`,
+    nie wieder fuer diesen Cluster.
+
+## Akzeptanz
+
+(a) `erfahrung.db` existiert nach erstem Loop-Lauf.
+(b) `MERKPOSTEN.md` einmalig importiert.
+(c) Nach jedem erfolgreichen Reflection-Fix waechst die DB.
+(d) Naechster aehnlicher Fix findet den Absatz in < 100ms.
+(e) Prompt-Groesse unveraendert +-800 Zeichen.
+(f) 3 identische Failures → genau **1** Proposal (nicht 3).
+(g) Fix klappt nach Proposal → `accepted` + neuer erfahrung-Eintrag.
+(h) Fix klappt nicht → `rejected`, Prompt ohne diesen Absatz.
+(i) Kein LLM-Call wenn Cluster schon bekannt (Idempotenz).
+
+## Reihenfolge
+
+113a → 113b → 113e → 113c → 113f → 113d → 113g → 113h
+
+## Beispiel (OP-091-Fall)
+
+3x `NameError: _home_kontext` in `audit_panel.py` → Miner ruft LLM
+mit 3 Tracebacks → Proposal "NameError auf modul-level-Feld: pruefe
+ob das Feld im Modul deklariert ist". 4. Lauf: gleicher Fehler +
+Proposal im Prompt → Fix klappt → accepted. 5. Lauf: neuer
+NameError in anderem Modul → Match findet den Absatz sofort.
+
+- **Blockiert von:** -
+
+
+### OP-303: Loop-Start-Button + Run-Status-Badge
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/runs.js`, `werkstatt/web/app.py` (`/api/projects/{name}/ops` liefert run_status pro OP)
+- **Problem:** Der Nutzer kann keinen Loop starten ohne SSH. Die Runs-Liste zeigt OPs, aber nicht welcher davon gerade laeuft.
+- **Akzeptanzkriterien:** (a) Jede OP-Zeile in Runs-Liste hat Status-Badge: `○ idle`, `● running`, `✓ done`, `✗ failed` (basiert auf letztem `loop_started`/`loop_ended`/`loop_failed` dieses OPs). (b) Hover ueber OP-Zeile zeigt Ghost-Preview: "OP-213: Test-Thaw. Blockiert von OP-210 (open). [Trotzdem starten]". (c) Klick auf `▶`-Button startet Loop mit dieser OP-Aufgabe. (d) Bei laufendem Loop: OP wird blau markiert, ein "Stop"-Button erscheint. (e) Nach Loop-Ende: Badge aktualisiert innerhalb 5s via Polling.
+- **Tests:** Smoke: `POST /start` aus UI-Klick ruft Endpoint. Kein pytest (UI-Verhalten).
+- **Blockiert von:** —
+
+### OP-304: Shortcut Help (`?`)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/help.js` (neu), `static/layout.html`, `static/layout.css`
+- **Problem:** Shortcuts existieren, sind aber nirgends dokumentiert. Der Nutzer entdeckt sie nur durch Zufall oder Studieren des Codes.
+- **Akzeptanzkriterien:** (a) Taste `?` (ohne Modifier) oeffnet Overlay. (b) Shortcuts gruppiert: Navigation, Run-Control, Chat, Modus, Aktionen. (c) Jeder Eintrag: Tastenkombination (in `<kbd>`-Tag), Aktion, "auch klickbar via ..."-Hinweis. (d) Erreichbar auch via Command Palette (`help shortcuts`) und `?`-Icon oben rechts. (e) Esc oder Klick ausserhalb schliesst. (f) Erste Nutzung: Overlay oeffnet sich nicht automatisch, aber Ambient Bar zeigt Tag 1 "Druecke ? fuer Shortcuts".
+- **Tests:** Keine (UI).
+- **Blockiert von:** —
+
+### OP-305: Klickwege parallel zu allen Shortcuts
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/*.js` (alle UI-Module), `static/layout.html`
+- **Problem:** Wenn etwas nur per Shortcut erreichbar ist, verliert der Nutzer der den Shortcut nicht kennt den Zugang.
+- **Akzeptanzkriterien:** (a) Fuer jede Palette-Aktion existiert ein sichtbarer Klickweg (Button, Menue, Link) in der UI. (b) Jeder Shortcut-Hinweis im `?`-Overlay enthaelt "→ auch klickbar via [X]". (c) Verifikation: alle `window.Werkstatt*.oeffne`-Aufrufe sind auch per Click-Handler erreichbar. (d) Ein Test-Fall in `?`-Overlay dokumentiert: nichts geht nur via Shortcut.
+- **Tests:** `grep`-Guard: keine `addEventListener('keydown'`-Aktion ohne zugehoerigen Click-Handler.
+- **Blockiert von:** OP-304
+
+### OP-306: Mode-Switch (Cockpit / Control / Debug)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/mode.js` (neu), `static/layout.html`, `static/layout.css`, `static/tabs.js`
+- **Problem:** Das UI hat genau einen Modus. Der Cockpit-Typ wird erschlagen von drei Spalten, der Kontrollraum-Typ will mehr Dichte. ADR-0022 fordert 3 Modi.
+- **Akzeptanzkriterien:** (a) Drei Modi: `cockpit` (default, 3 Spalten wie heute), `control` (Focus-View, breite Timeline, Chat schwebend), `debug` (Timeline + Audit gekoppelt). (b) Wechsel via `Shift+Space` zyklisch, via Command Palette (`mode cockpit`), via URL `?mode=control`, via Dropdown oben links. (c) Persistiert in localStorage und URL. (d) Mode-Name oben sichtbar. (e) Guard: bei Wechsel waehrend laufendem Run → Warnung "Run laeuft, Modus wechseln?". (f) Alle drei Modi nutzen dieselben semantischen Farben (OP-300).
+- **Tests:** Keine (UI).
+- **Blockiert von:** —
+
+### OP-307: Chat Tool-Call-Karten
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/chat.js`, `static/layout.css`, `static/chat.css` (neu wenn noetig)
+- **Problem:** Chat zeigt Tool-Calls als rohe Textbloecke. Grep-Output, JSON-Payloads, read_file-Inhalte stehen ungefiltert im Verlauf. Der Nutzer kann den Verlauf nicht schnell ueberfliegen.
+- **Akzeptanzkriterien:** (a) Jeder `tool_call` rendert als Karte: Icon (📄 read_file, 🔍 grep, 📝 git_diff, …), Tool-Name, Status-Badge (⏳ running / ✓ ok / ✗ error), Laufzeit. (b) Karte aufklappbar: Input-Parameter + Output (human-readable). (c) Roher JSON nur im "Details"-Toggle innerhalb der Karte. (d) Mehrere Tool-Calls in einer Assistant-Runde: als verschachtelte Container-Karte. (e) Karten scrollen mit der Konversation, keine Modal-Overlays. (f) Farb-Kodiert nach OP-300.
+- **Tests:** Keine (UI).
+- **Blockiert von:** —
+
+### OP-308: Focus-View (Control-Modus) mit horizontalem Phasen-Wasserfall
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-2 (Focus)
+- **Betroffene Dateien:** `static/waterfall.js` (neu), `static/layout.html`, `static/layout.css`
+- **Problem:** Die Timeline ist vertikal und listenartig. Bei einem laufenden Run mit 8+ Phasen und 30+ Sub-Events ist nicht erkennbar wo der Run steht und wie die Phasen zueinander stehen.
+- **Akzeptanzkriterien:** (a) Im Control-Modus: Timeline als horizontaler Wasserfall (a la Chrome DevTools Performance-Panel). Jede Phase = ein Block, Breite proportional zur Dauer. (b) Aktive Phase blau, fertige gruen, fehlgeschlagene rot. (c) Klick auf Phase: Detail-Bereich darunter mit vertikalen Events (wie heute). (d) Hover auf Phase: Tooltip mit Name + Dauer + Status. (e) Zoom via Scroll-Rad (Zeit-Achse). (f) Im Cockpit-Modus bleibt die vertikale Timeline — Wasserfall nur im Control-Modus.
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-306
+
+### OP-309: Chat schwebend im Control-Modus
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-2 (Focus)
+- **Betroffene Dateien:** `static/chat.js`, `static/layout.css`
+- **Problem:** Im Control-Modus ist der Chat als dritte Spalte zu schmal fuer Laengere Konversation, waehrend der Wasserfall den Platz braucht.
+- **Akzeptanzkriterien:** (a) Im Control-Modus: Chat als schwebendes Panel unten rechts (max 400×300px, resizable). (b) Panel-Zustand (offen/geschlossen, Groesse) in localStorage. (c) Doppelklick auf Chat-Header: Maximieren (volle rechte Spalte). (d) Chat weiss im Control-Modus welcher Run aktiv ist → "Frage zu diesem Run" als Placeholder. (e) Im Cockpit- und Debug-Modus bleibt Chat als feste Spalte (wie heute).
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-308
+
+### OP-310: Run-Pause/Resume
+
+- **Status:** open
+- **Typ:** architektur
+- **Phase:** Phase-2 (Focus)
+- **Betroffene Dateien:** `werkstatt/loop.py`, `werkstatt/gates.py`, `werkstatt/web/app.py`, `static/runs.js`
+- **Problem:** Ein laufender Loop kann nur mit `stop` (kill) beendet werden. Kein sanftes Pausieren, kein Fortsetzen von einem Checkpoint. Der User kann nicht eingreifen ohne den ganzen Run zu verlieren.
+- **Akzeptanzkriterien:** (a) `POST /api/projects/{name}/pause` setzt ein Pause-Flag; Loop prueft vor jedem Phase-Start. (b) Pausierter Loop schreibt `loop_paused`-Event, Zustand ist `paused`. (c) `POST /api/projects/{name}/resume` setzt Pause-Flag zurueck, Loop laeuft weiter. (d) UI: `⏸`- und `▶`-Buttons neben laufendem Run. (e) Timeout: Pausierter Run bleibt maximal 1 Stunde pausiert, danach fail-closed (loop_failed mit grund=pause_timeout). (f) Pause/Resume sind idempotent und race-free (Lock).
+- **Tests:** `tests/test_loop_pause_resume.py` (neu): (1) Pause-Flag→Loop haelt an, (2) Resume→Loop laeuft weiter, (3) Timeout→fail-closed.
+- **Blockiert von:** OP-308
+
+### OP-311: Audit-Filterleiste + Tag-Gruppierung
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-3 (Urgrossvater)
+- **Betroffene Dateien:** `static/audit.js`, `static/layout.css`, `werkstatt/web/audit_panel.py`
+- **Problem:** Das Audit-Panel zeigt 100+ Events, aber Filter sind rudimentaer (nur `kind` und `run_id`). Kein Volltext-Suche, keine Zeitraum-Filter, keine Tag-Gruppierung. Als Analyse-Werkzeug kaum brauchbar.
+- **Akzeptanzkriterien:** (a) Filterleiste: Volltext-Suche, Event-Type-Dropdown (mit Live-Counts), Run-ID-Filter, Zeitraum (24h / 7d / 30d / All). (b) Events gruppiert nach Tag mit Collapsible-Header ("Heute · 143 Events"). (c) Export als CSV und JSON (mit Permission-Gate). (d) Filter persistieren in URL (`?kind=loop_*&days=7`). (e) Kombinierbar mit OP-302 Command Palette (`audit kind:loop_* heute`).
+- **Tests:** `tests/test_audit_filter.py` (neu): Query-Parameter→korrekt gefiltert.
+- **Blockiert von:** —
+
+### OP-312: Semantic Zoom (Tag ↔ Run ↔ Phase)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-3 (Urgrossvater)
+- **Betroffene Dateien:** `static/zoom.js` (neu), `static/timeline.js`, `static/layout.css`
+- **Problem:** Kalender, Runs-Liste, Timeline sind drei getrennte Views mit drei Navigationswegen. Der Nutzer muss wissen welcher View welchen Zeitraum zeigt.
+- **Akzeptanzkriterien:** (a) Drei Zoom-Stufen: Monat (Kalender), Run (Phasen-Uebersicht), Phase (Events). (b) Uebergang per Scroll-Rad (vertikal) oder `Cmd+0/1/2`. (c) Sanfte Animation (300ms ease). (d) Aktuelle Zoom-Stufe sichtbar (Breadcrumb oben: "November 2026 › Run 0425 › Phase 3 Builder"). (e) In jeder Stufe: Klick auf Element zoomt naechste Stufe tiefer. (f) Breadcrumb-Klick zoomt zurueck.
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-308
+
+### OP-313: Ghost Intents (plan_intent + Vorschau + Blockieren)
+
+- **Status:** open
+- **Typ:** architektur
+- **Phase:** Phase-3 (Urgrossvater)
+- **Betroffene Dateien:** `werkstatt/builder.py`, `werkstatt/reviewer.py`, `werkstatt/loop.py`, `static/timeline.js`
+- **Problem:** Der Loop schreibt Events erst nach der Aktion. Der Nutzer sieht nichts von geplanten Aktionen. Kein Eingreifen bevor Code geschrieben ist.
+- **Akzeptanzkriterien:** (a) Builder/Reviewer schreiben `plan_intent`-Event BEVOR sie eine Datei aendern: `{intent: "patch"|"write"|"delete", file: ..., estimated_lines: N, reason: ...}`. (b) UI zeigt Intent-Karten als "Ghost"-Vorschau (gestrichelter Rand, gedaempfte Farbe). (c) Nutzer kann Intent blockieren: `POST /api/runs/{id}/intents/{intent_id}/block` → Loop bricht diese Aktion ab, schreibt `intent_blocked`-Event. (d) Timeout: Unbeantwortete Intents nach 30s automatisch approven (default) ODER fail-closed (config). (e) Config-Setting: `intent_mode: "ghost"|"blind"` pro Projekt.
+- **Tests:** `tests/test_plan_intent.py` (neu): Intent→block→Loop-Abbruch; Intent→timeout→approve.
+- **Blockiert von:** OP-310
+
+### OP-314: Explaining Presence (Right-Click → Chat erklaert)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-3 (Urgrossvater)
+- **Betroffene Dateien:** `static/timeline.js`, `static/chat.js`, `static/contextmenu.js` (neu)
+- **Problem:** Wenn der Nutzer ein Event im Audit sieht, muss er selbst interpretieren was es bedeutet. Er kann nicht "Was ist hier passiert?" fragen.
+- **Akzeptanzkriterien:** (a) Rechtsklick auf Timeline-Knoten / Audit-Event / Chat-Message: Kontextmenue mit "Was passierte hier?". (b) Klick sendet Nachricht an Chat mit Event-ID + Kontext: "Erklaere dieses Event: <kind> <payload>. Nutze read_status und grep um Kontext zu sammeln." (c) Chat-Antwort ist im Chat sichtbar UND als Tooltip/Popup direkt am Element. (d) Erreichbar auch via Command Palette: "explain last error" / "explain this event".
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-307
+
+### OP-315: Causal Chain (Initiator-Referenzen in Timeline)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-3 (Urgrossvater)
+- **Betroffene Dateien:** `static/timeline.js`, `werkstatt/audit.py`
+- **Problem:** Ein Timeline-Knoten zeigt "explorer_result" — aber nicht warum. Der Nutzer muss Events manuell in Beziehung setzen.
+- **Akzeptanzkriterien:** (a) Audit-Events bekommen optional ein `caused_by`-Feld (seq oder audit_id des Vorgaengers). (b) Timeline zeigt pro Knoten eine "Initiator"-Zeile: `← loop_explorer_suchbegriffe ← explorer_messung → planner_scout_ok`. (c) Klick auf Initiator springt zu diesem Event. (d) Events ohne `caused_by`: Heuristik (chronologisch letzter Event derselben Rolle).
+- **Tests:** `tests/test_causal_chain.py` (neu): Heuristik findet korrekte Vorgaenger.
+- **Blockiert von:** —
+
+### OP-316: Living Typography
+
+- **Status:** open
+- **Typ:** ui-politur
+- **Phase:** Phase-4 (Politur)
+- **Betroffene Dateien:** `static/layout.css`
+- **Problem:** Schriftgroessen sind heute fix (11/12/13px). Bei "active" Runs ist die UI genauso ruhig wie im Idle — kein visuelles Signal dass etwas wichtig ist.
+- **Akzeptanzkriterien:** (a) Font-Size-Scale skaliert mit Modus und Status: Idle = 11px body, Active Run = 13px, Failure = 14px. (b) Line-Height skaliert mit (1.4/1.5/1.6). (c) Semantische Font-Familien: User-Messages Serif (Absicht), Agent-Antworten Sans (Reaktion), Tool-Calls Mono (Aktion), System-Hinweise Small-caps (Kontext). (d) Schriftgroessen-Wechsel animiert 200ms.
+- **Tests:** Keine (visuell).
+- **Blockiert von:** OP-306
+
+### OP-317: Hover-Previews mit Konsequenz-Vorschau
+
+- **Status:** open
+- **Typ:** ui-politur
+- **Phase:** Phase-4 (Politur)
+- **Betroffene Dateien:** `static/hover_preview.js` (neu), `static/layout.css`
+- **Problem:** Hover zeigt heute nur Tooltip mit Titel. Der Nutzer muss klicken um zu sehen was passieren wuerde.
+- **Akzeptanzkriterien:** (a) Hover ueber OP-Zeile: Ghost-Preview mit Blockiert-von-Status, geschaetzter Dauer, Token-Schaetzung. (b) Hover ueber "Start Loop"-Button: Preview mit Aufgabe, Phasen-Schaetzung, Zeit-Schaetzung. (c) Hover ueber Gate-Button: Preview mit Konsequenz ("j = bauen, n = Loop-Abbruch"). (d) Preview erscheint nach 400ms Hover, verschwindet nach 100ms ohne Hover. (e) Preview ist klickbar (Link zur Detail-Ansicht).
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-305
+
+
+### OP-318: Legacy-OPs 1XX auditieren
+
+- **Status:** open
+- **Typ:** doku-cleanup
+- **Phase:** Phase-0 (Vorbereitung)
+- **Betroffene Dateien:** `docs/STATUS.md`, `PROGRESS.md`, `docs/adr/`
+- **Problem:** 15 OPs im 1XX-Bereich (OP-101, 105-107, 109-110, 112-113i, 115-118, 120-121) stammen aus der Pre-Loop-Neubau-Zeit. Manche sind nach dem Neubau obsolet (Legacy-Refactorings, alte Pfade), andere nicht. Ohne Pruefung ist die Liste mit Zombie-OPs ueberladen — der Loop kann sie nicht sinnvoll priorisieren.
+- **Akzeptanzkriterien:** (a) Jede 1XX-OP einzeln gegen aktuellen Code pruefen: betroffene Datei existiert noch? Fordert das was der Code heute nicht hat? (b) Kategorisierung: `kill` (obsolet, in Delete-Zone), `keep` (weiterhin relevant), `transform` (AK an aktuellen Code anpassen). (c) Ergebnis als Tabelle in `PROGRESS.md` dokumentiert. (d) Kill-Kandidaten in Delete-Zone verschieben (mit Begruendung + Commit-Referenz).
+- **Tests:** Keine (Doku-Audit).
+- **Blockiert von:** —
+
+
+### OP-330: Skill script-bank (Manifest + Struktur)
+
+- **Status:** open
+- **Typ:** skill-fundament
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `skills/script-bank/SKILL.md` (neu), `skills/script-bank/MANIFEST.yaml` (neu), `skills/script-bank/tools/` (neu), `werkstatt/script_bank.py` (neu)
+- **Problem:** Chat-Debugger und Loop schreiben Analyse-Scripts jedes Mal neu. Kein Manifest, keine Versionierung, keine Variable-Bindung an Projekt-Kontext.
+- **Akzeptanzkriterien:** (a) `MANIFEST.yaml` mit Schema: `name`, `beschreibung`, `parameter`, `kategorie` (analyze|debug|test|verify), `sicherheitsstufe` (read|write-dry|write-sandbox). (b) `script_bank.py` mit `list_scripts(kategorie=None)`, `call(name, params, project_root)`. (c) Scaffolder-Vertrag dokumentiert (Pflicht-Variablen: `project_root`, `python_bin`, `test_command`). (d) 0 Scripts (nur Geruest).
+- **Tests:** `tests/test_script_bank.py` (3 Tests).
+- **Blockiert von:** —
+
+### OP-331: Script-Bank — erste 6 Kern-Scripts
+
+- **Status:** open
+- **Typ:** skill-inhalt
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `skills/script-bank/tools/pytest_analyze.py`, `ruff_analyze.py`, `mypy_analyze.py`, `git_diff_analyze.py`, `test_integrity.py`, `dependency_graph.py`, `MANIFEST.yaml`
+- **Problem:** Erste sechs Analyse-Scripts fehlen. Decken 90% der Alltags-Fehler ab.
+- **Akzeptanzkriterien:** (a) Jedes Script: `analyze()` liefert `{kategorie, ursache, betroffene_dateien[], beispiel_ohne_code, confidence}`. (b) Parameter aus ENV/Config. (c) Alle <5s. (d) Read-only.
+- **Tests:** `tests/test_script_bank_tools.py` (6 Tests).
+- **Blockiert von:** OP-330
+
+### OP-332: Scaffolder-Vertrag Script-Bank
+
+- **Status:** open
+- **Typ:** skill-fundament
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `werkstatt/scaffold.py`, `skills/script-bank/SKILL.md`, `werkstatt/templates/werkstatt/script-bank.yaml` (neu)
+- **Problem:** Scripts brauchen Projekt-Kontext. Ohne Scaffolder-Vertrag fehleranfaellig.
+- **Akzeptanzkriterien:** (a) Scaffolder schreibt `.werkstatt/script-bank.yaml`. (b) `script_bank.call()` liest fehlende Parameter daraus. (c) Template vorhanden. (d) Fehlende Variablen: fail-loud.
+- **Tests:** `tests/test_scaffold_scriptbank.py` (3 Tests).
+- **Blockiert von:** OP-330
+
+### OP-333: Chat-Debugger-Integration Script-Bank
+
+- **Status:** open
+- **Typ:** skill-wiring
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `werkstatt/chat_tools.py`, `werkstatt/chat_agent.py`, `tests/test_chat_script_bank.py` (neu)
+- **Problem:** Chat-Agent hat 8 Tools, aber keinen Script-Aufruf. Debugger schreibt Analyse-Scripts jedes Mal neu.
+- **Akzeptanzkriterien:** (a) Chat-Tool `run_script {name, params}`. (b) Sicherheitspruefung: `write-sandbox` nur mit `mode=write`. (c) Rueckgabe JSON. (d) In `openai_schemas()`.
+- **Tests:** `tests/test_chat_script_bank.py` (3 Tests).
+- **Blockiert von:** OP-330, OP-331
+
+### OP-334: Loop-Reflection-Integration Script-Bank
+
+- **Status:** open
+- **Typ:** skill-wiring
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/verify.py`, `tests/test_reflection_script_bank.py` (neu)
+- **Problem:** Reflection bekommt `last_verify_errors` als Rohtext. Typisierter Fehler waere besser.
+- **Akzeptanzkriterien:** (a) `verify.py` liefert `fehler_kategorie`. (b) Reflection ruft passenden Analyzer. (c) Fallback Rohtext. (d) Kein Aufruf bei Erfolg.
+- **Tests:** `tests/test_reflection_script_bank.py` (4 Tests).
+- **Blockiert von:** OP-331
+
+### OP-340: Reviewer-Bug-Schema loesungsorientiert
+
+- **Status:** open
+- **Typ:** prompt-fundament
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `werkstatt/reviewer.py`, `tests/test_reviewer_schema.py` (neu)
+- **Problem:** Heute: `{file, line, description, severity}`. Kein `warum`, kein `wie_loesen`, kein `beispiel`. Reflection bekommt nur "X ist falsch".
+- **Akzeptanzkriterien:** (a) Neues Schema: `{file, line, severity, warum, wie_loesen, beispiel_ohne_code}`. (b) `description` als Alias auf `warum` (rueckwaertskompatibel). (c) `REVIEWER_SYSTEM` fordert Prosa, keine Codebloecke. (d) `beispiel_ohne_code` max 3 Saetze.
+- **Tests:** `tests/test_reviewer_schema.py` (3 Tests).
+- **Blockiert von:** —
+
+### OP-341: Reflection + Hook + Gedaechtnis auf loesungsorientiert
+
+- **Status:** open
+- **Typ:** prompt-fundament
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/phases/*`, `werkstatt/erfahrung.py`, `tests/test_reflection_loesungsorientiert.py` (neu)
+- **Problem:** Reflection-Feedback uneinheitlich. Kein Loesungs-Schema.
+- **Akzeptanzkriterien:** (a) Einheitliches Schema: `{warum, wie_loesen, beispiel_ohne_code, confidence}`. (b) Reflection-Prompt: "Analysiere + Repariere". (c) Hook: gleicher Vertrag. (d) Gedaechtnis: `record_erfahrung(warum, wie, beispiel, ...)`. (e) **Bug mit Zeilen-Kontext:** Jeder Bug traegt `{file, line_start, line_end, code_ausschnitt}` (max 20 Zeilen). Ohne Zeilenangabe ist der Bug ungueltig — fail-loud. (f) **Vollstaendiger Verlauf im Prompt:** Der Reviewer sieht alle vorherigen Bug-Meldungen ALLER Runden (nicht nur n-1), jede mit Zeilen und Code-Ausschnitt. Kontext bleibt eng: pro Runde max 5 Bugs (aeltere werden zusammengefasst, nie stumm verworfen). (g) **Delta-Klassifikation:** Pro Bug einer von `bestehend | behoben | neu | verschoben`. Identitaet = Hash aus `(file, kategorie, code_ausschnitt_normalisiert)`. (h) **Kausale Kette bei `bestehend`:** Pflichtfelder `alter_vorschlag`, `warum_alter_vorschlag_scheiterte`, `kausale_kette` ("Patch Runde N hat Zeile X-Y geaendert, dadurch brach Zeile Z"), `neuer_vorschlag`. Reines Neuvorschlagen ohne Kette = Fail. Bei `neu` reicht frischer Vorschlag. Grund: ohne kausale Rekonstruktion raet der Agent blind und der Loop dreht im Kreis (Zirkel-Falle).
+- **Tests:** `tests/test_reflection_loesungsorientiert.py` (8 Tests).
+- **Blockiert von:** OP-340
+
+### OP-342: Prompt-Engineering pro Rolle (Lichtkegel-Prinzip)
+
+- **Status:** open
+- **Typ:** prompt-fundament
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `werkstatt/planner.py`, `werkstatt/builder.py`, `werkstatt/reviewer.py`, `werkstatt/reflection.py`, `werkstatt/architect.py`, `werkstatt/scout.py`, `werkstatt/explorer.py`
+- **Problem:** System-Prompts gewachsen, nicht entworfen. Rollen sehen zu viel oder zu wenig.
+- **Akzeptanzkriterien:** (a) Pro Rolle dokumentiert: Sichtfeld, Ziel, Loesungsvertrag. (b) Prompt-Abschnitte entfernt falls redundant. (c) `_build_selbst_check_block` nur auf Nicht-Reasoning. (d) Token-Verbrauch pro Rolle dokumentiert.
+- **Tests:** `tests/test_prompt_kontrakte.py` (7 Tests).
+- **Blockiert von:** OP-340, OP-341
+
+### OP-350: Scaffolder Greenfield-Modus
+
+- **Status:** open
+- **Typ:** feature-fundament
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `werkstatt/scaffold.py`, `werkstatt/templates/greenfield/` (neu), `tests/test_scaffold_greenfield.py` (neu)
+- **Problem:** `scaffold.py` legt PFLICHTDATEIEN an, aber ohne Greenfield-Struktur (leere Verzeichnisse, minimale Config, Verify-Kette, OP-Stub, Script-Bank-Variablen).
+- **Akzeptanzkriterien:** (a) `scaffold(name, dir, greenfield=True)` erzeugt: `src/`, `tests/`, `.werkstatt/`, `docs/adr/`, `docs/STATUS.md` mit 3 Starter-OPs. (b) `.gitkeep`. (c) `.werkstatt/script-bank.yaml` mit `excluded_from_explorer`-Liste (`.env`, `.env.*`, `*.secret`, `*.pem`, `*.key`, `credentials*`, `*token*`). (d) `.env`-Template mit Platzhaltern statt echten Werten (`DB_HOST=<set-me>`). (e) Explorer (`werkstatt/explorer.py`) respektiert `excluded_from_explorer` aus `script-bank.yaml` — fail-closed wenn Datei fehlt: `.env`-Dateien werden NIE gelesen, auch ohne Config. (f) Idempotent, `--dry-run`.
+- **Tests:** `tests/test_scaffold_greenfield.py` (6 Tests: Struktur, idempotent, dry-run, fehlendes Arg, `.env`-Template, Explorer-Filter).
+- **Blockiert von:** OP-332
+
+### OP-351: UI-Maske Projekt-Anlage
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/layout.html`, `static/tabs.js`, `static/layout.css`, `werkstatt/web/app.py` (`POST /api/projects/create`), `tests/test_project_create_api.py` (neu)
+- **Problem:** Projekte heute nur per CLI. Kein UI-Weg.
+- **Akzeptanzkriterien:** (a) `+`-Button oeffnet Modal: Name, Pfad, greenfield. (b) `POST /api/projects/create` ruft `scaffold`. (c) Nach Erfolg Tab. (d) Fehler-Feedback. (e) Pfad nur unter `/opt/`.
+- **Tests:** `tests/test_project_create_api.py` (4 Tests).
+- **Blockiert von:** OP-350
+
+### OP-352: Scaffolder-Drift-Check + Tests
+
+- **Status:** open
+- **Typ:** verify-fundament
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `tools/scaffold_drift.py` (neu), `tools/verify.json`, `tests/test_scaffold_drift.py` (neu)
+- **Problem:** Konventions-Aenderung → niemand merkt ausser manueller `migrate.py`.
+- **Akzeptanzkriterien:** (a) `--check` prueft alle `/opt/*` gegen `PFLICHTDATEIEN`. (b) Rueckgabe fehlender Dateien. (c) verify-Stage `scaffold_drift` (weich). (d) `migrate.py` nutzt gleiche Logik.
+- **Tests:** `tests/test_scaffold_drift.py` (3 Tests).
+- **Blockiert von:** OP-350, OP-351
+
+### OP-360: Skill senior-architekt
+
+- **Status:** open
+- **Typ:** skill-fundament
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `skills/senior-architekt/SKILL.md` (neu), `skills/senior-architekt/WERKZEUGE.md` (neu)
+- **Problem:** Leeres Geruest, Idee im Kopf, kein Weg zu Architektur + OPs.
+- **Akzeptanzkriterien:** (a) SKILL.md mit Rolle, Dialog-Fokus, Konventionen, Ergebnisformat. (b) Werkzeuge: File-Explorer, Konventions-Lookup, OP-Writer, Roadmap-Compiler (OP-282). (c) Beispiel-Dialog. (d) Fail-closed ohne User-Input.
+- **Tests:** `tests/test_skill_senior_architekt.py` (2 Tests).
+- **Blockiert von:** OP-282, OP-350
+
+### OP-361: Senior-Architekt Dialog-Flow
+
+- **Status:** open
+- **Typ:** skill-wiring
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `werkstatt/chat_agent.py` (oder `arch_agent.py`), `static/chat.js`, `tests/test_arch_dialog.py` (neu)
+- **Problem:** Skill alleine reicht nicht — Dialog mit User noetig.
+- **Akzeptanzkriterien:** (a) Chat-Modus `architekt`. (b) Schrittweise: Idee → Anforderungen → Ordnerstruktur → Komponenten → erste OPs. (c) Jede Antwort: Rueckfrage oder naechster Schritt. (d) "Fertig" schreibt nach `docs/`.
+- **Tests:** `tests/test_arch_dialog.py` (3 Tests).
+- **Blockiert von:** OP-360
+
+### OP-362: Senior-Architekt schreibt Plan-Artefakte
+
+- **Status:** open
+- **Typ:** skill-wiring
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `werkstatt/arch_agent.py`, Templates, `tests/test_arch_output.py` (neu)
+- **Problem:** Am Ende muss Architekt konkrete Artefakte schreiben.
+- **Akzeptanzkriterien:** (a) `schreibe_plan(idee, struktur, komponenten)` → 3 Dateien. (b) OPs OP-001..OP-005 mit Blocker-Ketten. (c) `docs/ARCHITECTURE.md` nennt Ordner, Komponenten, Abhaengigkeiten. (d) User-Bestaetigung.
+- **Tests:** `tests/test_arch_output.py` (3 Tests).
+- **Blockiert von:** OP-360, OP-361
+
+### OP-370: detect() — Secret-Detection ohne Redaction
+
+- **Status:** open
+- **Typ:** security
+- **Phase:** Phase-3 (Politur, aber früh)
+- **Betroffene Dateien:** `werkstatt/redaction.py` (neu), `werkstatt/audit.py`, `static/statusleiste.js`, `static/layout.css`, `tests/test_redaction.py` (neu)
+- **Problem:** Werkstatt arbeitet an Code, aber Explorer/Builder/Reviewer lesen Dateien die API-Keys, .env-Werte, IPs oder Credentials-URLs enthalten können. Die landen dann im LLM-Prompt (DeepSeek) im Klartext. Kein Schutz, kein Warnsystem.
+- **Akzeptanzkriterien:** (a) `detect(text) -> list[Finding]` mit Finding=`{typ, start, ende}`. Katalog: `ip4`, `ip6`, `api_key` (sk-, ghp_, xoxb-, AKIA, ...), `email`, `credential_url` (scheme://user:pass@...), `private_path` (/home/<user>/, /Users/<user>/). (b) `audit()` prueft Payload bei jedem Aufruf — bei Finding: Event `secret_detected {typ, quelle_kind}` (NICHT der Original-Wert). (c) Statusbar zeigt Warnung `\u26a0 N Secrets` (`--sem-warn`) bei `secret_detected` in letzten 24h. (d) Kein Restore, keine Redaction, keine LLM-Aenderung. (e) Doku-Klarstellung im SKILL: Detect ist Hinweis, keine Garantie — bei echten Secrets lokales Modell waehlen.
+- **Tests:** `tests/test_redaction.py` (10 Tests: pro Typ Positiv, Negativ-Kontexte, Performance <5ms/10k Zeichen).
+- **Blockiert von:** —
+
+## Erledigt (Auto-Log)
+
+- 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)
+- 2026-11-02 | OP-077 | done | Audit-Panel (92b3b69)
+- 2026-11-02 | OP-078 | done | UI-Layout (0f916f9..e75bc7d)
+- 2026-10-30 | OP-071 | `c1e8377`: revertiert
+- 2026-11-02 | OP-003 | wontfix (security-ai-Drift)
+- 2026-11-02 | OP-030 | wontfix (Duplikat zu OP-074)
+- 2026-11-02 | OP-031 | wontfix (Duplikat zu OP-075)
+- 2026-11-02 | OP-032 | wontfix (Duplikat zu OP-076)
+- 2026-11-02 | OP-033 | wontfix (Duplikat zu OP-078)
+- 2026-11-02 | OP-039 | wontfix (security-ai)
+- 2026-11-02 | OP-041 | wontfix (security-ai)
+- 2026-11-02 | OP-066 | done | Reviewer prueft Zwischenstand (bereits implementiert)
+- 2026-11-02 | OP-065 | wontfix | Phase-2-Kette (Modell-Latenz, nicht Code)
+- 2026-11-02 | OP-026 | wontfix | R-CHECK-1 Prompt-Block ist Skill
+- 2026-11-02 | OP-067 | done | pytest_changed feuert in Reflection (69889b7)
+- 2026-11-02 | OP-072 | done | UI-Phase 30 in OPs zerlegt (88ab237)
+- 2026-11-02 | OP-074 | done | FastAPI-Backend (624fb5e + c82f537)
+- 2026-11-02 | OP-075 | done | Terminal-Proxy (b8dce51)
+- 2026-11-02 | OP-079 | done | review-work-Skill: Markdown-Hunk-Header (d023535)
+- 2026-11-02 | OP-080 | done | review-work-Skill: Python-PATCHES (3d7fd1f)
 
 ## Delete-Zone
 

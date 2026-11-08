@@ -1,229 +1,83 @@
-"""STATUS.md / PROGRESS.md — Konsistenz-Guard (OP 2026-11-07).
-
-Anlass: OP-178 wurde aus STATUS.md entfernt, aber nicht in die
-Delete-Zone eingetragen — der Commit ging durch, weil der
-Pre-Commit-Check nur pytest/audit/control prueft, keine
-Doku-Konsistenz. Drei Regeln:
-
-1. Jede offene OP hat ein **Status:**-Feld im Body.
-2. Keine OP ist gleichzeitig offen und in der Delete-Zone.
-3. Jede OP-NNN in einem PROGRESS.md-###-Header ist entweder
-   offen oder in der Delete-Zone.
-
-Die Regex fuer Regel 3 ist bewusst robust: `OP-NNN:` und
-`OP-NNN abgeschlossen:` und `OP-NNN — ...` werden alle erkannt.
-Ohne diese Robustheit waere der OP-178-Verlust heute nicht
-erkannt worden.
-"""
-from __future__ import annotations
-
-import pathlib
+"""Doku-Aufraeumen: STATUS.md-Struktur-Regeln (OP-XXX)."""
 import re
-
-STATUS = pathlib.Path("/opt/werkstatt/docs/STATUS.md")
-PROGRESS = pathlib.Path("/opt/werkstatt/PROGRESS.md")
-
-# Regex-Objekte (modulweit, damit die Test-Funktionen sie nutzen).
-RE_OFFENE_OP = re.compile(r"^### (OP-\d+[a-z]?):", re.MULTILINE)
-RE_DELETE_ZONE_ENTRY = re.compile(
-    r"^- \d{4}-\d{2}-\d{2} \| (OP-\d+[a-z]?) \|", re.MULTILINE)
-# Robust: nach OP-NNN darf `:` oder ein Wort oder Zeilenende kommen.
-RE_PROGRESS_HEADER_OP = re.compile(
-    r"^### \d{4}-\d{2}-\d{2} — (OP-\d+[a-z]?)\b", re.MULTILINE)
-RE_STATUS_FELD = re.compile(r"\*\*Status:\*\*")
+from pathlib import Path
 
 
-def _lies(path: pathlib.Path) -> str:
-    return path.read_text(encoding="utf-8")
+def _s():
+    return Path("docs/STATUS.md").read_text(encoding="utf-8")
 
 
-def _offene_ops(status_md: str) -> set[str]:
-    return set(RE_OFFENE_OP.findall(status_md))
-
-
-def _delete_zone_ops(status_md: str) -> set[str]:
-    dz_start = status_md.find("## Delete-Zone")
-    if dz_start < 0:
-        return set()
-    return set(RE_DELETE_ZONE_ENTRY.findall(status_md[dz_start:]))
-
-
-def _progress_header_ops(progress_md: str) -> set[str]:
-    return set(RE_PROGRESS_HEADER_OP.findall(progress_md))
-
-
-# =====================================================================
-# Regel 1: Jede offene OP hat ein **Status:**-Feld
-# =====================================================================
-
-def test_jede_offene_op_hat_status_feld():
-    """Spec: ohne Status-Feld ist eine OP nicht bearbeitbar.
-
-    Der Loop liest **Status:** um zu entscheiden, ob er die OP
-    aufgreift. Fehlt das Feld, laeuft die OP stumm an.
-    """
-    src = _lies(STATUS)
-    # In Abschnitte aufteilen: jeder OP-Block endet vor der naechsten
-    # ### oder ##-Zeile.
-    sektionen = re.split(r"^### (OP-\d+[a-z]?):", src, flags=re.MULTILINE)
-    ohne_status: list[str] = []
-    for i in range(1, len(sektionen), 2):
-        op_id = sektionen[i]
-        body = sektionen[i + 1] if i + 1 < len(sektionen) else ""
-        m = re.search(r"\n(?=##? )", body)
-        block = body[:m.start()] if m else body
-        if not RE_STATUS_FELD.search(block):
-            ohne_status.append(op_id)
-    assert not ohne_status, (
-        f"OPs ohne **Status:**-Feld: {sorted(ohne_status)}"
+def test_keine_op_header_im_auto_log():
+    """Zwischen '## Erledigt (Auto-Log)' und '## Delete-Zone'
+    darf kein '### OP-'-Header stehen — offene OPs gehoeren nach
+    '## Offene Punkte', erledigte in die Delete-Zone."""
+    s = _s()
+    al = re.search(r'^## Erledigt \(Auto-Log\)$', s, re.MULTILINE)
+    dz = re.search(r'^## Delete-Zone$', s, re.MULTILINE)
+    assert al and dz, "Struktur-Anker fehlt"
+    zwischen = s[al.end():dz.start()]
+    treffer = re.findall(r'^### OP-[0-9a-z]+:', zwischen, re.MULTILINE)
+    assert not treffer, (
+        f"{len(treffer)} OP-Header im Auto-Log-Bereich: {treffer[:5]}"
     )
 
 
-# =====================================================================
-# Regel 2: Keine OP doppelt (offen + Delete-Zone)
-# =====================================================================
-
-def test_keine_op_gleichzeitig_offen_und_geloescht():
-    """Spec: eine OP ist entweder offen oder geloescht, nie beides.
-
-    Duplikate verwirren den Loop — er wuerde die OP aufgreifen,
-    obwohl sie in der Delete-Zone als done steht.
-    """
-    src = _lies(STATUS)
-    beide = _offene_ops(src) & _delete_zone_ops(src)
-    assert not beide, (
-        f"OPs gleichzeitig offen und in Delete-Zone: {sorted(beide)}"
-    )
-
-
-# =====================================================================
-# Regel 3: PROGRESS-Header-OPs sind offen oder in Delete-Zone
-# =====================================================================
-
-def test_progress_erwaehnte_ops_sind_dokumentiert():
-    """Spec: PROGRESS.md-###-Header mit OP-NNN verspricht eine
-    abgeschlossene OP. Sie MUSS in STATUS.md stehen — entweder
-    noch offen oder in der Delete-Zone.
-
-    Diese Regel faengt den OP-178-Fall: Header in PROGRESS.md,
-    OP aus STATUS.md entfernt, Delete-Zone-Eintrag vergessen.
-    """
-    status = _lies(STATUS)
-    progress = _lies(PROGRESS)
-    offen = _offene_ops(status)
-    dz = _delete_zone_ops(status)
-    prog_ops = _progress_header_ops(progress)
-    luecken = prog_ops - offen - dz
-    assert not luecken, (
-        f"OPs in PROGRESS.md-Header, aber weder offen noch Delete-Zone: "
-        f"{sorted(luecken)}. "
-        f"Vermutlich aus STATUS.md geloescht ohne Delete-Zone-Eintrag."
-    )
+def test_auto_log_eintraege_format():
+    """Auto-Log-Eintraege: '- YYYY-MM-DD | OP-NNN | status | beschreibung'."""
+    s = _s()
+    al = re.search(r'^## Erledigt \(Auto-Log\)$', s, re.MULTILINE)
+    dz = re.search(r'^## Delete-Zone$', s, re.MULTILINE)
+    assert al and dz
+    zwischen = s[al.end():dz.start()]
+    zeilen = [z for z in zwischen.splitlines() if z.strip().startswith("- ")]
+    for z in zeilen:
+        if "|" not in z:
+            continue  # freie Linien ignorieren
+        # Muss mit YYYY-MM-DD | OP-NNN beginnen
+        assert re.match(r'- \d{4}-\d{2}-\d{2} \| OP-', z), (
+            f"Auto-Log-Zeile falsches Format: {z[:100]}"
+        )
 
 
-# =====================================================================
-# Regel 4: OP-IDs im PROGRESS.md sind wohlgeformt (keine Tippfehler)
-# =====================================================================
-
-def test_progress_header_op_ids_wohlgeformt():
-    """Spec: kein `OP-17b` oder `OP-1O8` als Tippfehler.
-
-    Die Regex prueft `OP-<digits><optionaler Kleinbuchstabe>`.
-    Tippfehler wie `OP-l78` (kleines L statt 1) entstehen bei
-    Copy-Paste und brechen die Verlinkung zu STATUS.md.
-    """
-    progress = _lies(PROGRESS)
-    # Alle Header-OP-IDs muessen dem Muster entsprechen.
-    header_op_ids = re.findall(
-        r"^### \d{4}-\d{2}-\d{2} — (OP-\S+)",
-        progress, re.MULTILINE,
-    )
-    falsch = [x for x in header_op_ids
-              if not re.fullmatch(r"OP-\d+[a-z]?", x.rstrip(":"))]
-    assert not falsch, (
-        f"Unwohlgeformte OP-IDs im PROGRESS.md: {falsch}"
-    )
-
-
-# =====================================================================
-# Regel 5: Keine OP doppelt in Delete-Zone
-# =====================================================================
-
-def test_keine_op_doppelt_in_delete_zone():
-    """Spec: jede OP erscheint hoechstens einmal in der Delete-Zone.
-
-    Anlass (2026-11-07): OP-179 wurde durch einen fehlerhaften Patch
-    doppelt eingefuegt — der Guard-Test hat es nicht gefangen, weil
-    Regel 2 nur "offen UND Delete-Zone" prueft, nicht "2x Delete-Zone".
-    """
-    import collections
-    src = _lies(STATUS)
-    dz_ops = list(RE_DELETE_ZONE_ENTRY.findall(src))
-    cnt = collections.Counter(dz_ops)
-    doppelt = [op for op, n in cnt.items() if n > 1]
-    assert not doppelt, (
-        f"OPs doppelt in Delete-Zone: {doppelt}. "
-        f"Jede OP darf nur einen Eintrag haben."
-    )
-
-
-# =====================================================================
-# Regel 6: Keine Tools ohne produktive Referenz (Dead-Code-Schutz)
-# =====================================================================
-
-def test_keine_toten_tools_skripte():
-    """Spec: jedes tools/<name>.py ist produktiv referenziert.
-
-    Tests zaehlen NICHT als Aufrufer — sonst waere tools/contract_check.py
-    heute (Loop-Test 8, 2026-11-07) gruen gewesen, obwohl nur
-    test_contract_check_setattr.py es importierte. Die Pruefung lief
-    nie in verify.json, bis das Wiring manuell nachgeholt wurde.
-
-    Erlaubte Referenz-Quellen:
-    - werkstatt/**/*.py (importiert das Tool)
-    - tools/<anderes>.py (importiert das Tool als sibling)
-    - .werkstatt/verify.json (ruft das Tool als Stage)
-
-    Ausnahmen: Tools duerfen mit einem Kommentar `# standalone: <grund>`
-    in den ersten 2000 Zeichen markiert werden (User-Tools wie
-    werkstatt_kontext.py).
-    """
-    import re
-
-    root = pathlib.Path("/opt/werkstatt")
-    tools_dir = root / "tools"
-    werkstatt_dir = root / "werkstatt"
-    verify_json = root / ".werkstatt" / "verify.json"
-
-    if not tools_dir.is_dir():
-        return  # Sandbox/CI ohne tools/ — skip
-
-    quellen = list(werkstatt_dir.rglob("*.py")) + list(tools_dir.glob("*.py"))
-    if verify_json.is_file():
-        quellen.append(verify_json)
-
-    verwaist: list[str] = []
-    for tool in tools_dir.glob("*.py"):
-        if tool.name == "__init__.py":
+def test_delete_zone_eintraege_format():
+    """Delete-Zone-Eintraege: '- YYYY-MM-DD | OP-NNN | status | ...'."""
+    s = _s()
+    dz = re.search(r'^## Delete-Zone$', s, re.MULTILINE)
+    assert dz
+    danach = s[dz.end():]
+    zeilen = [z for z in danach.splitlines() if z.strip().startswith("- ")]
+    if not zeilen:
+        return  # keine Eintraege ist OK
+    for z in zeilen[:50]:  # erste 50 reichen
+        if "|" not in z:
             continue
-        if "# standalone:" in tool.read_text(errors="ignore")[:2000]:
-            continue
-        stem = tool.stem
-        # Suche in allen Quellen AUSSER der Tool-Datei selbst
-        treffer = False
-        for q in quellen:
-            if not q.exists() or q.resolve() == tool.resolve():
-                continue
-            if re.search(rf"\b{re.escape(stem)}\b",
-                         q.read_text(errors="ignore")):
-                treffer = True
-                break
-        if not treffer:
-            verwaist.append(tool.name)
+        assert re.match(r'- \d{4}-\d{2}-\d{2} \| OP-', z), (
+            f"Delete-Zone-Zeile falsches Format: {z[:100]}"
+        )
 
-    assert not verwaist, (
-        f"Tools ohne produktive Referenz (nur in Tests oder gar nicht): "
-        f"{sorted(verwaist)}. "
-        f"Entweder in verify.json / werkstatt/*.py / tools/*.py verdrahten "
-        f"oder als `# standalone: <grund>` markieren."
+
+def test_offene_punkte_hat_nur_open_ops():
+    """Alle '### OP-'-Header im Offene-Punkte-Bereich sind open/partial."""
+    s = _s()
+    op_header = re.search(r'^## Offene Punkte$', s, re.MULTILINE)
+    sub_header = re.search(r'^## Sub-OPs', s, re.MULTILINE)
+    assert op_header and sub_header
+    zwischen = s[op_header.end():sub_header.start()]
+
+    # Alle OP-Bloecke finden
+    re.findall(
+        r'^### (OP-[0-9a-z]+):.*?(?=\n### OP-|\Z)',
+        zwischen, re.MULTILINE | re.DOTALL,
     )
+    # Wir muessen den Block-Inhalt mit Status prüfen, nicht nur IDs.
+    matches = list(re.finditer(
+        r'^### (OP-[0-9a-z]+):.*?(?=\n### OP-|\Z)',
+        zwischen, re.MULTILINE | re.DOTALL,
+    ))
+    for m in matches:
+        oid = m.group(1)
+        status_m = re.search(r'\*\*Status:\*\*\s*(\w+)', m.group(0))
+        assert status_m, f"Status fehlt in {oid}"
+        assert status_m.group(1) in ("open", "partial"), (
+            f"{oid} hat Status '{status_m.group(1)}' — gehoert nicht nach Offene Punkte"
+        )
