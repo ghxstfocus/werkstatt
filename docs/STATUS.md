@@ -584,17 +584,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Blockiert von:** -
 
 
-### OP-302: Command Palette (`⌘K`)
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `static/palette.js` (neu), `static/layout.html`, `static/layout.css`
-- **Problem:** Um Aktionen zu starten muss der Nutzer durch Kacheln, Buttons, Dropdowns. Keine einheitliche "Ich will X tun"-Flaeche.
-- **Akzeptanzkriterien:** (a) `⌘K` (Mac) / `Ctrl+K` (Win/Linux) oeffnet Overlay mittig. (b) Fuzzy-Search ueber: offene OPs (`start op 213`), Runs (`run 0425`), Sessions (`session heute`), Gates (`gate`), Aktionen (`start loop`, `stop loop`, `mode control`, `help shortcuts`, `explain last error`). (c) Enter fuehrt aus, Esc schliesst. (d) Jeder Eintrag zeigt Kategorie links, Shortcut rechts (falls vorhanden). (e) Leerzustand: "Was willst du tun? (Tippe oder druecke ? fuer alle Shortcuts)". (f) Jede Aktion ist AUCH per Klick erreichbar (Palette ist Optimierung, kein Ersatz).
-- **Tests:** Keine (UI).
-- **Blockiert von:** —
-
 ### OP-303: Loop-Start-Button + Run-Status-Badge
 
 - **Status:** open
@@ -615,7 +604,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Shortcuts existieren, sind aber nirgends dokumentiert. Der Nutzer entdeckt sie nur durch Zufall oder Studieren des Codes.
 - **Akzeptanzkriterien:** (a) Taste `?` (ohne Modifier) oeffnet Overlay. (b) Shortcuts gruppiert: Navigation, Run-Control, Chat, Modus, Aktionen. (c) Jeder Eintrag: Tastenkombination (in `<kbd>`-Tag), Aktion, "auch klickbar via ..."-Hinweis. (d) Erreichbar auch via Command Palette (`help shortcuts`) und `?`-Icon oben rechts. (e) Esc oder Klick ausserhalb schliesst. (f) Erste Nutzung: Overlay oeffnet sich nicht automatisch, aber Ambient Bar zeigt Tag 1 "Druecke ? fuer Shortcuts".
 - **Tests:** Keine (UI).
-- **Blockiert von:** OP-302
+- **Blockiert von:** —
 
 ### OP-305: Klickwege parallel zu allen Shortcuts
 
@@ -626,7 +615,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Wenn etwas nur per Shortcut erreichbar ist, verliert der Nutzer der den Shortcut nicht kennt den Zugang.
 - **Akzeptanzkriterien:** (a) Fuer jede Palette-Aktion existiert ein sichtbarer Klickweg (Button, Menue, Link) in der UI. (b) Jeder Shortcut-Hinweis im `?`-Overlay enthaelt "→ auch klickbar via [X]". (c) Verifikation: alle `window.Werkstatt*.oeffne`-Aufrufe sind auch per Click-Handler erreichbar. (d) Ein Test-Fall in `?`-Overlay dokumentiert: nichts geht nur via Shortcut.
 - **Tests:** `grep`-Guard: keine `addEventListener('keydown'`-Aktion ohne zugehoerigen Click-Handler.
-- **Blockiert von:** OP-302, OP-304
+- **Blockiert von:** OP-304
 
 ### OP-306: Mode-Switch (Cockpit / Control / Debug)
 
@@ -725,7 +714,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Wenn der Nutzer ein Event im Audit sieht, muss er selbst interpretieren was es bedeutet. Er kann nicht "Was ist hier passiert?" fragen.
 - **Akzeptanzkriterien:** (a) Rechtsklick auf Timeline-Knoten / Audit-Event / Chat-Message: Kontextmenue mit "Was passierte hier?". (b) Klick sendet Nachricht an Chat mit Event-ID + Kontext: "Erklaere dieses Event: <kind> <payload>. Nutze read_status und grep um Kontext zu sammeln." (c) Chat-Antwort ist im Chat sichtbar UND als Tooltip/Popup direkt am Element. (d) Erreichbar auch via Command Palette: "explain last error" / "explain this event".
 - **Tests:** Keine (UI).
-- **Blockiert von:** OP-302, OP-307
+- **Blockiert von:** OP-307
 
 ### OP-315: Causal Chain (Initiator-Referenzen in Timeline)
 
@@ -1529,6 +1518,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-08 | OP-321 | done | JSONL-Trennung stream/semantic. _STREAM_KINDS (log_line/progress/spinner/heartbeat/task_started/task_done), stream() schreibt nach stream-YYYY-MM-DD.jsonl, audit() nach agent-pipeline, fail-closed fuer unbekannte Kinds. event_id = sha256(run_id|audit_id)[:16] in beiden. _publish schreibt jetzt zusaetzlich JSONL (SQLite bleibt bis OP-323). 5 neue Tests. pytest 1442 passed.
 - 2026-11-08 | OP-320 | done | ADR-0024 Tiered Event Log + Projector. Deklariert Semantic-Stream (git) + Stream-Stream (gitignore), SQLite rebuildbar, audit()/stream() als einzige Writer, EventStore.append() verbannt. Grundlage fuer OP-321..323.
 - 2026-11-08 | OP-319 | done | Event-Architektur-Messung. 32804 JSONL-Events (320 Kinds, 267 Runs) vs. 374353 SQLite-Events (10 Kinds, 5290 Runs). Schnittmenge: 0 Kinds, 25 Runs. Beweis fuer Dual-Write-Anti-Pattern (Confluent/Microsoft-CQRS/AutoMQ). Grundlage fuer OP-320..323.
+- 2026-11-08 | OP-302 | done | Command Palette (Ctrl+K). Backend aggregate_palette() + /palette-Endpoint, Server-Filter. Frontend palette.js mit Overlay (blur), 4 Kategorien (AKTION/NAVIGATION/OP/SESSION/RUN), Icons ▸ → ⚙ ◆ ↻, Keyboard-Nav (↑↓ Enter Esc), Klick-Ausfuehrung, Race-Schutz via _letzterQuery. **Bekannter Datenfehler:** OP-221 zeigt „blockiert von: OP-221" (Selbstverweis) — vermutlich Tippfehler in STATUS.md, sollte OP-220a sein. Eigene OP fuer Doku-Aufraeumen. 10 Tests (4 Backend + 6 Frontend-Smoke). pytest 1497 passed.
 - 2026-11-08 | OP-301 | done | Ambient Status Bar. Drei Elemente zwischen Tab-Leiste und Grid: Loop-Status (○ Idle / ◉ Läuft / ● Fertig / ✗ Fehler — ● statt ✓ verhindert Kollision mit Run-✓), letzter Run (relativ mit ✓/✗), Gates (hidden bei 0, pulsierend bei >0). Polling 3s. Klick Timeline / Gate-Panel. **Option A Redundanz-Fix:** Tokens und Phase raus (Diagnose, Statusbar). Ambient = Handlungsampel, Statusbar = Diagnose mit Icons ↻ Loop / ◆ Chat. **Backend:** aggregate_ambient() + /ambient, loop_erfolg-Semantik-Fix (Event-Name impliziert Erfolg, payload hat kein erfolg/success). Fallback: loop_erfolg > loop_ended > loop_failed > idle. **Naming:** Chat bleibt Chat (kein Assistent-Synonym; Cursor/Claude-Code-Vorbild: zwei Begriffe für zwei Dinge). 13 Tests (6 Backend + 7 Frontend-Smoke inkl. Icon-Kollisions-Test). pytest 1467 passed.
 - 2026-11-08 | OP-300 | done | Semantic Colors System (Commit `320b029`). 6 semantische CSS-Variablen (`--sem-action`, `--sem-active`, `--sem-ok`, `--sem-warn`, `--sem-error`, `--sem-history`) + 7 Shades + 4 Struct-Variablen im `:root`. 57 Hex-Vorkommen ausserhalb `:root` ersetzt. Explorer-Cyan `#06b6d4` -> `var(--sem-active)` (bewusster Farbwechsel, Frage 1a). `.diff-hunk` -> `var(--sem-active)` (Frage 3: Diff im laufenden Build ist Ist-Zustand, nicht Vergangenheit). chat.css hatte schon 0 Hex, unveraendert. Guard: Hex ausserhalb `:root` == 0. pytest 1437 passed, ruff/mypy 0, alle 5 Drifts 0. **Lehre:** Erster Patch-Versuch zerstoerte `:root`-Block durch fehlerhaftes Reassembly (`s = body` statt `s = head + neuer_root + tail`); In-Python-Guard SEM==0 hat Commit verhindert, Rollback manuell. Zweiter Versuch mit Guards vor `write_text` erfolgreich. **Strukturelle Altlast:** zwischen `## Erledigt (Auto-Log)` und `## Delete-Zone` stehen 16 offene OPs (OP-263, OP-257, ..., OP-241) faelschlich unter Auto-Log.
 
