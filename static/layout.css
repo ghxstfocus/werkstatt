@@ -497,21 +497,18 @@ body {
   background: var(--bg-elevated);
 }
 
+/* OP-301+: Audit ruhig - 1 Zeile, Icon links, Kind rechts klein */
 .audit-live-zeile,
 .audit-history-zeile {
   display: grid;
-  grid-template-columns: 70px 180px 1fr;
-  gap: 10px;
-  padding: 4px 8px;
-  border-radius: 4px;
+  grid-template-columns: 46px 18px 1fr 160px;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 3px;
   align-items: baseline;
+  cursor: pointer;
   transition: background 0.1s;
 }
-
-.audit-history-zeile {
-  grid-template-columns: 70px 180px 90px 1fr;
-}
-
 .audit-live-zeile:hover,
 .audit-history-zeile:hover {
   background: var(--panel-hover);
@@ -523,22 +520,77 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.audit-kind {
-  color: var(--accent);
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 1px 6px;
-  background: var(--accent-dim);
-  border-radius: 3px;
-  font-size: 11px;
-  display: inline-block;
+.audit-icon {
+  font-size: 12px;
+  text-align: center;
+  line-height: 1;
+  color: var(--text-muted);
 }
 
-/* Kategorie-Farben für .audit-kind via data-kind */
-.audit-kind[data-kind^="loop_task"],
-.audit-kind[data-kind^="loop_phase"]   { color: var(--success); background: rgba(16,185,129,0.1); }
+.audit-history-zeile[data-kat="loop"] .audit-icon,
+.audit-history-zeile[data-kat="explorer"] .audit-icon,
+.audit-history-zeile[data-kat="scout"] .audit-icon { color: var(--sem-active); }
+.audit-history-zeile[data-kat="builder"] .audit-icon,
+.audit-history-zeile[data-kat="planner"] .audit-icon { color: var(--sem-action); }
+.audit-history-zeile[data-kat="reflection"] .audit-icon { color: var(--sem-action-muted); }
+.audit-history-zeile[data-kat="gate"] .audit-icon { color: var(--sem-warn); }
+
+.audit-history-zeile[data-state="ok"] .audit-icon { color: var(--sem-ok); }
+.audit-history-zeile[data-state="error"] .audit-icon { color: var(--sem-error); }
+.audit-history-zeile[data-state="warn"] .audit-icon { color: var(--sem-warn); }
+.audit-history-zeile[data-state="error"] .audit-text { color: var(--sem-error); }
+
+.audit-text {
+  color: var(--text-dim);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.audit-kind-mini {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+.audit-detail {
+  display: none;
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  border-left: 2px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow: auto;
+}
+.audit-history-zeile.expanded .audit-detail { display: block; }
+
+.audit-run-gruppe {
+  padding: 8px 8px 4px;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-top: 1px solid var(--border-subtle);
+}
+.audit-run-gruppe:first-child {
+  margin-top: 0;
+  border-top: none;
+}
+
 .audit-kind[data-kind^="planner_"],
 .audit-kind[data-kind^="loop_plan"]     { color: var(--info); background: rgba(59,130,246,0.1); }
 .audit-kind[data-kind^="builder_"],
@@ -1572,18 +1624,6 @@ body {
   font-family: monospace !important;
   font-size: 10px !important;
   white-space: nowrap !important;
-  min-width: 0 !important;
-}
-.audit-history-zeile .audit-kind {
-  color: var(--sem-active) !important;
-  font-family: monospace !important;
-  font-size: 10px !important;
-  padding: 1px 6px !important;
-  background: rgba(96,165,250,0.08) !important;
-  border-radius: 3px !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
   min-width: 0 !important;
 }
 .audit-history-zeile .audit-run-id {

@@ -101,53 +101,73 @@ function createAuditPanel(options) {
   }
 
   function _renderLive() {
-    if (!elLive) {
-      return;
-    }
+    if (!elLive) return;
     elLive.textContent = "";
-    for (const ev of liveEvents) {
-      const zeile = document.createElement("div");
-      zeile.className = "audit-live-zeile";
+    var slice = liveEvents.slice(-50); // letzte 50
+    slice.forEach(function (ev) {
+      var z = _zeileBauen(ev);
+      z.classList.add("audit-live-zeile");
+      elLive.appendChild(z);
+    });
+  }
 
-      const zeit = document.createElement("span");
-      zeit.className = "audit-zeit";
-      // Feld heisst 'timestamp', nicht 'ts'
-      zeit.textContent = _escapeText(_formatiereZeit(ev && (ev.timestamp || ev.ts)));
+  function _kategorie(kind) {
+    if (!kind) return "";
+    if (kind === "reviewer_bug") return "reviewer";
+    var p = kind.split("_")[0];
+    return p || "";
+  }
 
-      const art = document.createElement("span");
-      art.className = "audit-kind";
-      art.textContent = _escapeText(ev && ev.kind);
-      art.dataset.kind = String(ev && ev.kind || "");
+  function _state(kind) {
+    if (!kind) return "";
+    if (kind === "reviewer_bug") return "error";
+    if (/_failed$|_fail$|_fehler$|_crashed$|_rejected$/.test(kind)) return "error";
+    if (/_ok$|_approved$|_erfolg$|_committed$/.test(kind)) return "ok";
+    if (kind === "gate_expired" || kind === "loop_gate_timeout") return "warn";
+    return "";
+  }
 
-      const text = document.createElement("span");
-      text.className = "audit-text";
-      // Es gibt kein 'payload'-Feld. Wir nehmen die Extra-Felder.
-      var _extra = "";
-      if (ev && typeof ev === "object") {
-        var _skip = { audit_id: 1, timestamp: 1, ts: 1, agent: 1, project: 1, kind: 1, run_id: 1 };
-        var _teile = [];
-        Object.keys(ev).forEach(function (k) {
-          if (_skip[k]) return;
-          var v = ev[k];
-          var vs;
-          try { vs = JSON.stringify(v); } catch (e) { vs = String(v); }
-          if (vs && vs.length > 80) vs = vs.slice(0, 77) + "...";
-          _teile.push(k + "=" + vs);
-        });
-        _extra = _teile.join(" ");
-      }
-      var _human = _humanSummary(ev);
-      if (_human) {
-        text.textContent = _human;
-      } else {
-        text.textContent = _escapeText(_extra);
-      }
+  function _icon(kind) {
+    if (!kind) return "\u00b7";
+    var st = _state(kind);
+    if (st === "error") return "\u2717";
+    if (st === "ok")    return "\u2713";
+    if (st === "warn")  return "\u2691";
+    var k = _kategorie(kind);
+    if (k === "loop")       return "\u21bb";
+    if (k === "builder")    return "\u2699";
+    if (k === "explorer")   return "\u2315";
+    if (k === "planner")    return "\u270e";
+    if (k === "scout")      return "\u25ce";
+    if (k === "reviewer")   return "\u2713";
+    if (k === "verify")     return "\u2713";
+    if (k === "reflection") return "\u21ba";
+    if (k === "gate")       return "\u2691";
+    if (k === "task")       return "\u25b8";
+    if (k === "llm")        return "\u25c8";
+    return "\u00b7";
+  }
 
-      zeile.appendChild(zeit);
-      zeile.appendChild(art);
-      zeile.appendChild(text);
-      elLive.appendChild(zeile);
-    }
+  function _zeitKurz(iso) {
+    if (!iso) return "";
+    var m = String(iso).match(/T(\d{2}:\d{2})/);
+    return m ? m[1] : String(iso).slice(-8, -3);
+  }
+
+  function _extraText(ev) {
+    if (!ev || typeof ev !== "object") return "";
+    var skip = {audit_id:1, timestamp:1, ts:1, agent:1, project:1, kind:1, run_id:1};
+    var teile = [];
+    Object.keys(ev).forEach(function (k) {
+      if (skip[k]) return;
+      var v = ev[k], vs;
+      if (typeof v === "string") vs = v;
+      else if (typeof v === "number" || typeof v === "boolean") vs = String(v);
+      else { try { vs = JSON.stringify(v); } catch (e) { vs = String(v); } }
+      if (vs && vs.length > 80) vs = vs.slice(0, 77) + "...";
+      teile.push(k + ": " + vs);
+    });
+    return teile.join(" \u00b7 ");
   }
 
   function _humanSummary(ev) {
@@ -329,64 +349,83 @@ function createAuditPanel(options) {
   }
 
   function _renderHistory() {
-    if (!elHistory) {
-      return;
-    }
+    if (!elHistory) return;
     elHistory.textContent = "";
+    if (!historyEvents.length) return;
+
+    // Gruppieren nach run_id (Reihenfolge bleibt wie geliefert)
+    var gruppen = [];
+    var akt = null;
     for (const ev of historyEvents) {
-      const zeile = document.createElement("div");
-      zeile.className = "audit-history-zeile";
-
-      const zeit = document.createElement("span");
-      zeit.className = "audit-zeit";
-      zeit.textContent = _escapeText(_formatiereZeit(ev && (ev.timestamp || ev.ts)));
-
-      const art = document.createElement("span");
-      art.className = "audit-kind";
-      art.textContent = _escapeText(ev && ev.kind);
-      art.dataset.kind = String(ev && ev.kind || "");
-
-      const runId = document.createElement("span");
-      runId.className = "audit-run-id";
-      // run_id ist die Loop-Kennung (test-ui-xxx), audit_id nur Event-UID
-      runId.textContent = _escapeText(ev && (ev.run_id || ev.audit_id || ""));
-
-      const text = document.createElement("span");
-      text.className = "audit-text";
-      var _extra = "";
-      if (ev && typeof ev === "object") {
-        var _skip = { audit_id: 1, timestamp: 1, ts: 1, agent: 1, project: 1, kind: 1 };
-        var _teile = [];
-        Object.keys(ev).forEach(function (k) {
-          if (_skip[k]) return;
-          var v = ev[k];
-          var vs;
-          if (typeof v === "string") {
-            vs = v;
-            if (vs.length > 120) vs = vs.slice(0, 117) + "...";
-          } else if (typeof v === "number" || typeof v === "boolean") {
-            vs = String(v);
-          } else {
-            try { vs = JSON.stringify(v); } catch (e) { vs = String(v); }
-            if (vs && vs.length > 120) vs = vs.slice(0, 117) + "...";
-          }
-          _teile.push(k + ": " + vs);
-        });
-        _extra = _teile.join(" ");
+      var rid = (ev && ev.run_id) || "";
+      if (!akt || akt.runId !== rid) {
+        akt = {runId: rid, events: []};
+        gruppen.push(akt);
       }
-      var _human = _humanSummary(ev);
-      if (_human) {
-        text.textContent = _human;
-      } else {
-        text.textContent = _escapeText(_extra);
-      }
-
-      zeile.appendChild(zeit);
-      zeile.appendChild(art);
-      zeile.appendChild(runId);
-      zeile.appendChild(text);
-      elHistory.appendChild(zeile);
+      akt.events.push(ev);
     }
+
+    gruppen.forEach(function (g) {
+      if (g.runId) {
+        var hdr = document.createElement("div");
+        hdr.className = "audit-run-gruppe";
+        hdr.textContent = "\u2500\u2500 Run " + g.runId + "  \u00b7  " + g.events.length + " Events";
+        elHistory.appendChild(hdr);
+      }
+      g.events.forEach(function (ev) {
+        elHistory.appendChild(_zeileBauen(ev));
+      });
+    });
+  }
+
+  function _zeileBauen(ev) {
+    var kind = String((ev && ev.kind) || "");
+    var st = _state(kind);
+    var zeile = document.createElement("div");
+    zeile.className = "audit-history-zeile";
+    if (st) zeile.dataset.state = st;
+    zeile.dataset.kat = _kategorie(kind);
+
+    var zeit = document.createElement("span");
+    zeit.className = "audit-zeit";
+    zeit.textContent = _zeitKurz(ev && (ev.timestamp || ev.ts));
+
+    var icon = document.createElement("span");
+    icon.className = "audit-icon";
+    icon.textContent = _icon(kind);
+    icon.setAttribute("aria-hidden", "true");
+
+    var text = document.createElement("span");
+    text.className = "audit-text";
+    var human = _humanSummary(ev);
+    if (!human) human = _extraText(ev);
+    if (!human) human = kind;
+    text.textContent = human;
+    text.title = kind;
+
+    var kindEl = document.createElement("span");
+    kindEl.className = "audit-kind-mini";
+    kindEl.textContent = kind;
+    kindEl.dataset.kind = kind;
+
+    zeile.appendChild(zeit);
+    zeile.appendChild(icon);
+    zeile.appendChild(text);
+    zeile.appendChild(kindEl);
+
+    // Klick -> Expand mit Payload
+    zeile.addEventListener("click", function () {
+      zeile.classList.toggle("expanded");
+    });
+
+    // Detail-Bereich
+    var detail = document.createElement("div");
+    detail.className = "audit-detail";
+    var dtl = _extraText(ev);
+    detail.textContent = dtl || "(kein Payload)";
+    zeile.appendChild(detail);
+
+    return zeile;
   }
 
   function _schliesseSocket() {
