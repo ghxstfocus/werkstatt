@@ -161,11 +161,15 @@ def get_audit(
 
     gefiltert: list[dict[str, Any]] = []
     for e in alle:
+        # Projekt-Filter: nur eigene oder System-Events (_web)
+        _ev_proj = str(e.get("project", ""))
+        if _ev_proj and _ev_proj not in (name, "_web", ""):
+            continue
         if kind is not None and str(e.get("kind", "")) != kind:
             continue
         if run_id is not None and str(e.get("run_id", "")) != run_id:
             continue
-        ts = str(e.get("ts", ""))
+        ts = str(e.get("ts") or e.get("timestamp") or "")
         datum = ts[:10] if len(ts) >= 10 else ""
         if datum_von is not None and datum < datum_von:
             continue
