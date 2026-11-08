@@ -1093,6 +1093,62 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_ambient_aggregation.py` +1 (leere-run_id), `tests/test_projection.py` +3 (backfill-methode).
 - **Blockiert von:** —
 
+
+### OP-375: Erfolgsquote-Detail-Sektion (Donut + Fehlerklassen)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-2 (Focus)
+- **Blockiert von:** OP-306b (Etappe 2)
+- **Betroffene Dateien:** `werkstatt/web/inspector.py` (`aggregate_erfolgsquote`), `static/overview.js` (Donut + Segmentbar + Fehlerklassen-Tabelle), `static/layout.css` (Donut-SVG + Segmentbar), `tests/test_erfolgsquote_backend.py` (neu), `tests/test_overview_shell_spec.py` (Spec-Erweiterung)
+- **Problem:** Overview-Shell (OP-306b) zeigt Projekt-Karten, aber keine aggregierte Erfolgs-Sicht. Fehlerklassen (`reviewer_bug`, `loop_verify_failed`, `loop_failed`) liegen in SQLite, werden aber nirgends aufgeschluesselt. Ohne diese Sicht hat der User keine Handlungsgrundlage fuer den Selbstverbesserungs-Loop (ADR-0027).
+- **Akzeptanzkriterien:**
+  (a) Backend `aggregate_erfolgsquote()` in `inspector.py` liefert: Gesamt-Donut-Daten (Erfolg/Fehlgeschlagen/Abgebrochen), Projekt-Segmentbar (pro Projekt eine Zeile), Fehlerklassen-Top-3 (normalisiert, mit Count).
+  (b) Frontend-Sektion unter der Overview: Gesamt-Donut (2-4 Segmente, kein 3D, KPI-Wert gross im Zentrum), Projekt-Segmentbar (horizontale Balken), Fehlerklassen-Tabelle mit sem-Farben.
+  (c) Bei leeren 30-Tage-Daten: Hinweis "keine Daten", kein leerer Donut.
+  (d) Bei genau 2 Segmenten: Halb-Donut.
+  (e) Pre-OP-303-Erkennung: security-ai mit `run_id=''`-Runs wird als "vor OP-303, keine Zuordnung" markiert (Tooltip).
+  (f) Klick auf Fehlerklasse: Detail-Panel mit 5 juengsten Events, Verweis auf OP-376.
+  (g) Kein externer Chart-Lib-Import (SVG + CSS only).
+- **Tests:** `tests/test_erfolgsquote_backend.py` (4 Tests: leere Daten, gemischte Daten, 2-Segmente-Halb-Donut, Pre-OP-303-Marker) + `tests/test_overview_shell_spec.py` (2 Spec-Tests: Donut-Rendering-Aufruf, Klick-Handler). Spec-First nach ADR-0015/0016.
+- **ADR:** ADR-0025 (Erfolgsquoten-Visualisierung)
+
+### OP-376: Fehler-Cluster-Aggregation (aggregate_fehler_cluster)
+
+- **Status:** open
+- **Typ:** architektur (Datenmodell)
+- **Phase:** Phase-3 (Fundament Selbstverbesserung)
+- **Blockiert von:** —
+- **Betroffene Dateien:** `werkstatt/web/inspector.py` (`aggregate_fehler_cluster`, `aggregate_fehler_trend`), `tests/test_fehler_cluster.py` (neu)
+- **Problem:** Fehlerdaten liegen in SQLite (`reviewer_bug`, `loop_verify_failed`, `loop_failed`, `verify_stage_ohne_hart_flag`), aber niemand gruppiert sie. Fuer ADR-0027 Phase 1 (Analyse) brauchen wir normalisierte Cluster: welche Fehler-Klasse tritt wie oft auf, in welcher Datei, mit welcher Signatur. Ohne diese Aggregation ist der Selbstverbesserungs-Loop blind.
+- **Akzeptanzkriterien:**
+  (a) `aggregate_fehler_cluster(projekt, tage=30)` liefert normalisierte Cluster als `[{signatur, haeufigkeit, datei, bug_typ, kontext_hash, letzte_ts, run_ids}]`. Signatur aus `reviewer_bug`-Payload: Datei + Bug-Typ + normalisierter Kontext (Whitespace, Zahlen).
+  (b) `aggregate_fehler_trend(projekt, tage=30)` liefert pro Cluster eine Tages-Serie (Fehlerrate pro Tag).
+  (c) Fail-loud bei kaputtem Payload-JSON (kein stilles skip). Leere Payload-Felder fuehren zu Signatur "unbekannt", nicht zu Crash.
+  (d) Deterministisch: gleiche Eingabe -> gleiche Cluster-Reihenfolge (sortiert nach Haeufigkeit desc, dann Signatur).
+  (e) Live: lauffaehig gegen die 387.487 Werkstatt-Events, Anzahl Cluster messbar.
+- **Tests:** `tests/test_fehler_cluster.py` (5 Tests: leere DB, ein Cluster, mehrere Cluster sortiert, kaputte Payload, pre-OP-303-events ohne run_id). Spec-First nach ADR-0015/0016.
+- **ADR:** ADR-0027 (Phase 1)
+
+### OP-377: Selbstreflexions-Phase (Analyse -> OP-Entwurf)
+
+- **Status:** open
+- **Typ:** architektur (LLM-getrieben, Meta)
+- **Phase:** Phase-3 (Fundament Selbstverbesserung)
+- **Blockiert von:** OP-376 (Fehler-Cluster), OP-220 (Erfahrungs-Gedaechtnis)
+- **Betroffene Dateien:** `werkstatt/selbstverbesserung.py` (neu), `tests/test_selbstverbesserung.py` (neu)
+- **Problem:** Der Loop kann heute seine eigenen Fehler-Cluster nicht in OP-Entwuerfe uebersetzen. ADR-0027 Phase 2 fordert: pro Cluster identifiziert das LLM den verantwortlichen Code-Pfad und schlaegt einen OP-Entwurf vor (Titel, AK, Zieldateien). Ohne diese Phase bleibt der Selbstverbesserungs-Loop ein Messwerkzeug, kein Verbesserer.
+- **Akzeptanzkriterien:**
+  (a) Neue Datei `selbstverbesserung.py` mit `analysiere_cluster(cluster, codebase_pfad) -> OPEntwurf | None`.
+  (b) `schreibe_op_entwurf(entwurf, projekt_dir)` haengt den Entwurf als neuen OP-Block in `docs/STATUS.md` (Format nach DOC_CONVENTIONS §5).
+  (c) LLM-Prompt enthaelt: Cluster-Signatur, Haeufigkeit, 3 juengste Evidenz-Events, Code-Auszug der betroffenen Datei (max 200 Zeilen).
+  (d) `None`-Rueckgabe bei: unklarer Ursache, Code fehlt, Aufwand > 1 Session (LLM schaetzt).
+  (e) Kein Auto-Commit. Kein Auto-Start. Der OP landet in STATUS.md als `Status: open`, wartet auf Human-Gate.
+  (f) Cluster-ID + Evidenz-IDs werden im OP-Block als Kommentar vermerkt (Nachvollziehbarkeit).
+- **Tests:** `tests/test_selbstverbesserung.py` (4 Tests: LLM-Entwurf, None bei klarer Ursache, OP-Schreiben idempotent, Evidenz-IDs im Text). Spec-First nach ADR-0015/0016.
+- **ADR:** ADR-0027 (Phase 2)
+
+
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
 - **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
