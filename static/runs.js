@@ -13,10 +13,10 @@
 
   function _runBadge(state) {
     var map = {
-      idle:    ["\\u25cb", "idle"],
-      running: ["\\u25cf", "l\\u00e4uft"],
-      done:    ["\\u2713", "fertig"],
-      failed:  ["\\u2717", "fehler"],
+      idle:    ["○", "idle"],
+      running: ["●", "läuft"],
+      done:    ["✓", "fertig"],
+      failed:  ["✗", "fehler"],
     };
     return map[state] || map.idle;
   }
@@ -57,7 +57,7 @@
       badge.className = "runs-run-badge";
       var b = _runBadge(state);
       badge.textContent = b[0] + " " + b[1];
-      if (isRunning) badge.title = "Loop l\\u00e4uft (run " + (rs.run_id || "?") + ")";
+      if (isRunning) badge.title = "Loop läuft (run " + (rs.run_id || "?") + ")";
       else if (state === "done") badge.title = "Letzter Run fertig";
       else if (state === "failed") badge.title = "Letzter Run fehlgeschlagen";
       else badge.title = "Noch kein Run";
@@ -73,11 +73,11 @@
       btn.className = "runs-action-btn";
       btn.type = "button";
       if (isRunning) {
-        btn.textContent = "\\u25a0";
+        btn.textContent = "■";
         btn.title = "Loop stoppen";
         btn.dataset.action = "stop";
       } else {
-        btn.textContent = "\\u25b6";
+        btn.textContent = "▶";
         var blockInfo = op.blockiert_von ? " (blockiert von " + op.blockiert_von + ")" : "";
         btn.title = "Loop mit " + op.id + " starten" + blockInfo;
         btn.dataset.action = "start";
@@ -93,7 +93,7 @@
       else if (op.status === "done") done++;
     });
     var c = _el("runs-counter");
-    if (c) c.textContent = offen + " offen \\u00b7 " + done + " done";
+    if (c) c.textContent = offen + " offen · " + done + " done";
   }
 
   function _klickAktion(opId, aktion) {
