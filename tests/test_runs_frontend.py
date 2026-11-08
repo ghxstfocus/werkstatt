@@ -47,3 +47,5 @@ def test_pfeil_und_stop_symbole():
     # Play U+25B6, Stop U+25A0
     assert "\\u25b6" in js or "\u25b6" in js
     assert "\\u25a0" in js or "\u25a0" in js
+
+
