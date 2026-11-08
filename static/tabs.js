@@ -11,6 +11,55 @@
   // Wird von wechsle/schliesse/neuerTab aufgerufen.
   var _zustand = null;  // spaet initialisiert
 
+  // OP-306a: Tab-Persistenz in localStorage (versioniert, validiert, debounced)
+  var PERSIST_KEY = "werkstatt-tabs:v1";
+  var _rehydriere_laeuft = false;
+  var _persist_timer = null;
+
+
+  // OP-306a: Persistenz-Helfer
+  function _persistiere_tabs() {
+    if (_rehydriere_laeuft) { return; }
+    if (_persist_timer !== null) { return; }
+    _persist_timer = setTimeout(function () {
+      _persist_timer = null;
+      try {
+        var eintraege = [];
+        var knoten = document.querySelectorAll(".tab");
+        for (var i = 0; i < knoten.length; i++) {
+          var tid = knoten[i].dataset.tabId;
+          var d = tabDaten[tid];
+          if (!d) { continue; }
+          if (typeof d.projekt !== "string" || d.projekt.length === 0) { continue; }
+          eintraege.push({projekt: d.projekt, aktiv: tid === aktiverTabId});
+        }
+        if (eintraege.length === 0) {
+          localStorage.removeItem(PERSIST_KEY);
+        } else {
+          localStorage.setItem(PERSIST_KEY, JSON.stringify(eintraege));
+        }
+      } catch (e) { /* localStorage nicht verfuegbar */ }
+    }, 50);
+  }
+
+  function _lade_gespeicherte_tabs() {
+    try {
+      var raw = localStorage.getItem(PERSIST_KEY);
+      if (!raw) { return []; }
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) { return []; }
+      var sauber = [];
+      for (var i = 0; i < arr.length; i++) {
+        var e = arr[i];
+        if (!e) { continue; }
+        if (typeof e.projekt !== "string" || e.projekt.length === 0) { continue; }
+        sauber.push({projekt: e.projekt, aktiv: e.aktiv === true});
+      }
+      return sauber;
+    } catch (err) {
+      return [];
+    }
+  }
 
   function neuerTab(projekt) {
     var klon = vorlage.content.cloneNode(true);
@@ -50,6 +99,7 @@
         window.WerkstattTabs.oeffne_tab(_zustand, projekt, projekt);
       } catch (e) { /* Store-API optional */ }
     }
+    _persistiere_tabs();
     return id;
   }
 
@@ -58,6 +108,7 @@
       return;
     }
     aktiverTabId = tabId;
+    _persistiere_tabs();
     document.querySelectorAll(".tab").forEach(function (t) {
       t.classList.toggle("ist-aktiv", t.dataset.tabId === tabId);
     });
@@ -128,6 +179,7 @@
         aktiverTabId = null;
       }
     }
+    _persistiere_tabs();
   }
 
   function rendereListe(zielId, eintraege) {
@@ -176,9 +228,27 @@
     } catch (e) { _zustand = null; }
   }
 
-  // Start: ein Demo-Tab
-  var startId = neuerTab("werkstatt");
-  wechsle(startId);
+  // OP-306a: Rehydration aus localStorage mit Default-Fallback
+  var _gespeicherte = _lade_gespeicherte_tabs();
+  if (_gespeicherte.length === 0) {
+    var startId = neuerTab("werkstatt");
+    wechsle(startId);
+  } else {
+    _rehydriere_laeuft = true;
+    var _aktiverId = null;
+    for (var _i = 0; _i < _gespeicherte.length; _i++) {
+      var _tid = neuerTab(_gespeicherte[_i].projekt);
+      if (_gespeicherte[_i].aktiv) { _aktiverId = _tid; }
+    }
+    _rehydriere_laeuft = false;
+    if (_aktiverId !== null) {
+      wechsle(_aktiverId);
+    } else {
+      var _erste = document.querySelector(".tab");
+      if (_erste) { wechsle(_erste.dataset.tabId); }
+    }
+    _persistiere_tabs();
+  }
 
   // ============================================================
   // Store-API (Drift-Guard gegen tests/test_ui_layout.py::Spiegel)
