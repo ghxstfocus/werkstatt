@@ -128,6 +128,9 @@ class Projector:
             event_id = hashlib.sha256(
                 f"{run_id}|{aid}|{file_name}|{line_num}".encode()
             ).hexdigest()[:16]
+        # OP-306c: project bekommt eigene Spalte (single source of
+        # truth), wird deshalb bewusst aus payload entfernt. Doppel-
+        # Speicherung waere Drift-Risiko.
         payload = {
             k: v
             for k, v in ev.items()
@@ -138,8 +141,8 @@ class Projector:
         }
         cur = conn.execute(
             "INSERT OR IGNORE INTO events "
-            "(event_id, run_id, kind, phase, status, payload, ts) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(event_id, run_id, kind, phase, status, payload, ts, project) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 event_id,
                 run_id,
@@ -148,6 +151,7 @@ class Projector:
                 ev.get("status"),
                 json.dumps(payload, ensure_ascii=False),
                 ev.get("timestamp") or ev.get("ts") or "",
+                ev.get("project") or "werkstatt",
             ),
         )
         return cur.rowcount > 0

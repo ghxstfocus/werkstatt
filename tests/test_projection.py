@@ -214,3 +214,38 @@ def test_schema_migration_project(tmp_path):
     # Idempotent: zweiter Aufruf darf nicht crashen
     Projector(db_pfad=db)
 
+def test_insert_schreibt_project_in_spalte(tmp_path, monkeypatch):
+    """OP-306c Etappe 2: _insert reicht project in Spalte durch, nicht payload.
+
+    Zwei Events: eins mit project='test16' (JSONL-Feld), eins ohne.
+    Erwartung: Spalte 1 = 'test16', Spalte 2 = Default 'werkstatt'.
+    In beiden Faellen: payload enthaelt KEIN 'project'-Feld (single
+    source of truth ist die Spalte).
+    """
+    from werkstatt import projection
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+    _write(tmp_path, "semantic-2026-11-08.jsonl", [
+        {"audit_id": "a1", "event_id": "e1", "run_id": "r1",
+         "kind": "loop_ended", "timestamp": "2026-11-08T00:00:00",
+         "project": "test16"},
+        {"audit_id": "a2", "event_id": "e2", "run_id": "r2",
+         "kind": "loop_ended", "timestamp": "2026-11-08T00:00:01"},
+    ])
+    proj = _pj(tmp_path)
+    proj.tail()
+    with sqlite3.connect(str(tmp_path / "events.db")) as c:
+        zeilen = c.execute(
+            "SELECT project, payload FROM events ORDER BY seq"
+        ).fetchall()
+    assert len(zeilen) == 2
+    assert zeilen[0][0] == "test16", (
+        f"Spalte 1 soll 'test16' sein, ist {zeilen[0][0]!r}"
+    )
+    assert "project" not in json.loads(zeilen[0][1]), (
+        "payload darf project nicht enthalten (single source of truth)"
+    )
+    assert zeilen[1][0] == "werkstatt", (
+        f"Spalte 2 soll Default 'werkstatt' sein, ist {zeilen[1][0]!r}"
+    )
+    assert "project" not in json.loads(zeilen[1][1])
+
