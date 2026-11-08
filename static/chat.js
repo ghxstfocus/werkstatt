@@ -255,15 +255,6 @@
   window.WerkstattChat = { setze_chat: setze_chat };
 
   document.addEventListener("DOMContentLoaded", function () {
-    // Initial: erste Session laden oder neue anlegen, damit Sidebar + Neu sichtbar.
-    if (window.WerkstattChat) {
-      setTimeout(function () {
-        if (!zustand.sessionId) {
-          _neueSession(zustand.projekt).then(_renderSidebarAktuell);
-        }
-      }, 200);
-    }
-
     var form = _el("chat-form");
     var eingabe = _el("chat-eingabe");
     if (form) {
