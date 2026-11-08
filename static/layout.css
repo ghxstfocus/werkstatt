@@ -275,18 +275,6 @@ body {
 /* Tokens */
 #ambient-tokens { color: var(--text-dim); }
 /* Gates */
-/* OP-301: Token-Split mit Icons (Loop ↻ / Chat ◆) */
-.ambient-tokens { gap: 6px; }
-.ambient-token-part { display: inline-flex; align-items: center; gap: 3px; }
-.ambient-token-part .ambient-icon {
-  font-size: 12px; color: var(--text-dim); line-height: 1;
-}
-.ambient-token-part .ambient-label {
-  color: var(--text-dim); font-size: 11px; letter-spacing: 0.02em;
-}
-.ambient-token-part .ambient-val { color: var(--text); font-weight: 500; }
-.ambient-token-sep { color: var(--text-muted); margin: 0 2px; }
-
 .ambient-gates {
   color: var(--sem-action);
   padding: 1px 6px;
@@ -297,6 +285,14 @@ body {
 
 .status-item, .status-token, .status-run { white-space: nowrap; }
 .status-token { padding: 1px 6px; border: 1px solid var(--border-subtle); border-radius: 3px; }
+.status-token .token-icon {
+  color: var(--text-dim);
+  margin-right: 3px;
+  font-size: 11px;
+}
+.status-token .token-text {
+  color: inherit;
+}
 .status-token.aktiv { color: var(--text); border-color: var(--sem-action); }
 
 .status-item[data-state="warn"] { color: var(--sem-warn); }

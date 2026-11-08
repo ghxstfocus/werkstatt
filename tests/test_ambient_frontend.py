@@ -14,9 +14,8 @@ def test_html_hat_alle_ambient_ids():
     html = _html()
     for eid in (
         "ambient-bar", "ambient-loop", "ambient-last-run",
-        "ambient-tokens", "ambient-gates",
-        "ambient-token-loop", "ambient-token-chat", "ambient-token-sep",
-    ):
+        "ambient-gates",
+        ):
         assert f'id="{eid}"' in html, f"ID fehlt: {eid}"
 
 
@@ -38,13 +37,20 @@ def test_chat_benennung_nicht_assistent():
     assert "Assistent" not in html, "UI darf nicht 'Assistent' sagen"
 
 
-def test_loop_bei_0_ausblendbar():
-    js = _js()
-    assert "loopEl.hidden" in js
-    assert "chatEl.hidden" in js
-
 
 def test_kein_kindisches_emoji():
     html = _html()
     assert "\U0001F916" not in html
     assert "\U0001F4AC" not in html
+
+
+def test_ambient_hat_keine_tokens():
+    """OP-301 Option A: Tokens nur in Statusbar, nicht in Ambient-Bar."""
+    html = _html()
+    # Ambient-Bar darf keine ambient-token-* haben
+    assert "ambient-token-loop" not in html
+    assert "ambient-token-chat" not in html
+    # Statusbar darf token-icon haben
+    assert "token-icon" in html
+    assert 'id="status-tokens-loop"' in html
+    assert 'id="status-tokens-chat"' in html

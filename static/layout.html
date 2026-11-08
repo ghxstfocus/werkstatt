@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Werkstatt</title>
-  <link rel="stylesheet" href="/static/layout.css?v=1794154831">
+  <link rel="stylesheet" href="/static/layout.css?v=1794155056">
 </head>
 <body>
 
@@ -24,15 +24,6 @@
       <span class="ambient-label">Idle</span>
     </span>
     <span class="ambient-item" id="ambient-last-run" data-ziel="timeline" title="Letzter Run">Letzter Run: —</span>
-    <span class="ambient-item ambient-tokens" id="ambient-tokens" title="Loop- und Chat-Token" hidden>
-      <span class="ambient-token-part" id="ambient-token-loop" hidden>
-        <span class="ambient-icon" aria-hidden="true">↻</span><span class="ambient-label">Loop</span> <span class="ambient-val">0</span>
-      </span>
-      <span class="ambient-token-sep" id="ambient-token-sep" hidden>·</span>
-      <span class="ambient-token-part" id="ambient-token-chat" hidden>
-        <span class="ambient-icon" aria-hidden="true">◆</span><span class="ambient-label">Chat</span> <span class="ambient-val">0</span>
-      </span>
-    </span>
     <span class="ambient-item ambient-gates" id="ambient-gates" data-ziel="gate-panel" hidden>Gates offen</span>
   </div>
 
@@ -168,8 +159,8 @@
     <span class="status-item" id="status-drift">Drift: -</span>
     <span class="status-item" id="status-phase">Phase: -</span>
     <span class="status-spacer"></span>
-    <span class="status-token" id="status-tokens-loop" title="Loop-Token (Prompt / Completion)">Loop: -</span>
-    <span class="status-token" id="status-tokens-chat" title="Chat-Token (Prompt / Completion)">Chat: -</span>
+    <span class="status-token" id="status-tokens-loop" title="Loop-Token (Prompt / Completion)"><span class="token-icon" aria-hidden="true">↻</span><span class="token-text">Loop: -</span></span>
+    <span class="status-token" id="status-tokens-chat" title="Chat-Token (Prompt / Completion)"><span class="token-icon" aria-hidden="true">◆</span><span class="token-text">Chat: -</span></span>
     <span class="status-item" id="status-projection"></span>
     <span class="status-run" id="status-run"></span>
   </footer>
@@ -180,10 +171,10 @@
   <script src="/static/chat.js?v=20261107a"></script>
   <script src="/static/runs.js?v=20261107a"></script>
   <script src="/static/timeline.js?v=20261107a"></script>
-  <script src="/static/statusleiste.js?v=1794149062a"></script>
+  <script src="/static/statusleiste.js?v=1794155056a"></script>
   <script src="/static/workbench.js?v=20261107a"></script>
   <script src="/static/gate_panel.js?v=20261108a"></script>
   <script src="/static/detail_drawer.js?v=20261108a"></script>
-  <script src="/static/ambient_status.js?v=1794154831"></script>
+  <script src="/static/ambient_status.js?v=1794155056"></script>
 </body>
 </html>

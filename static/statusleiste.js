@@ -5,6 +5,14 @@
 
   function _el(id) { return document.getElementById(id); }
 
+  function _setTokenText(rootId, text) {
+    var root = _el(rootId);
+    if (!root) return;
+    var t = root.querySelector(".token-text");
+    if (t) t.textContent = text;
+    else root.textContent = text;
+  }
+
   function _fmtTokens(n) {
     if (typeof n !== "number" || n <= 0) return "0";
     if (n < 1000) return n.toString();
@@ -45,14 +53,14 @@
     var loop = _el("status-tokens-loop");
     if (loop) {
       var L = d.loop || {prompt: 0, completion: 0, total: 0};
-      loop.textContent = "Loop: " + _fmtTokens(L.prompt) + " \u2191 / " + _fmtTokens(L.completion) + " \u2193";
+      _setTokenText("status-tokens-loop", "Loop: " + _fmtTokens(L.prompt) + " \u2191 / " + _fmtTokens(L.completion) + " \u2193");
       loop.title = "Loop (run " + (L.run_id || "-") + "): " + L.total + " Token total, " + L.calls + " Calls";
       loop.classList.toggle("aktiv", L.total > 0);
     }
     var chat = _el("status-tokens-chat");
     if (chat) {
       var C = d.chat || {prompt: 0, completion: 0, total: 0};
-      chat.textContent = "Chat: " + _fmtTokens(C.prompt) + " \u2191 / " + _fmtTokens(C.completion) + " \u2193";
+      _setTokenText("status-tokens-chat", "Chat: " + _fmtTokens(C.prompt) + " \u2191 / " + _fmtTokens(C.completion) + " \u2193");
       chat.title = "Chat (" + C.sessions + " Sessions): " + C.total + " Token total, " + C.calls + " Calls";
       chat.classList.toggle("aktiv", C.total > 0);
     }

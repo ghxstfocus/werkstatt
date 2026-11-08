@@ -6,12 +6,6 @@
 
   function _el(id) { return document.getElementById(id); }
 
-  function _fmtTok(n) {
-    if (typeof n !== "number" || n <= 0) return "0";
-    if (n < 1000) return n.toString();
-    if (n < 1000000) return (n / 1000).toFixed(1) + "k";
-    return (n / 1000000).toFixed(2) + "M";
-  }
 
   function _fmtRel(iso) {
     if (!iso) return "—";
@@ -26,14 +20,14 @@
     } catch (e) { return "—"; }
   }
 
-  function _setLoop(status, phase) {
+  function _setLoop(status) {
     var el = _el("ambient-loop");
     if (!el) return;
     var icon = el.querySelector(".ambient-icon");
     var label = el.querySelector(".ambient-label");
     var map = {
       idle:    ["○", "Idle"],
-      running: ["●", "Läuft" + (phase ? ": " + phase : "")],
+      running: ["●", "Läuft"],
       done:    ["✓", "Fertig"],
       failed:  ["✗", "Fehler"]
     };
@@ -58,37 +52,6 @@
     if (lr.run_id) el.dataset.runId = lr.run_id;
   }
 
-  function _setTokens(t) {
-    var root = _el("ambient-tokens");
-    var loopEl = _el("ambient-token-loop");
-    var chatEl = _el("ambient-token-chat");
-    var sepEl = _el("ambient-token-sep");
-    if (!root || !loopEl || !chatEl) return;
-
-    var L = (t && t.loop_total) || 0;
-    var C = (t && t.chat_total) || 0;
-
-    if (L > 0) {
-      loopEl.hidden = false;
-      var lv = loopEl.querySelector(".ambient-val");
-      if (lv) lv.textContent = _fmtTok(L);
-    } else {
-      loopEl.hidden = true;
-    }
-
-    if (C > 0) {
-      chatEl.hidden = false;
-      var cv = chatEl.querySelector(".ambient-val");
-      if (cv) cv.textContent = _fmtTok(C);
-    } else {
-      chatEl.hidden = true;
-    }
-
-    var beide = !loopEl.hidden && !chatEl.hidden;
-    if (sepEl) sepEl.hidden = !beide;
-
-    root.hidden = loopEl.hidden && chatEl.hidden;
-  }
 
   function _setGates(n) {
     var el = _el("ambient-gates");
@@ -113,9 +76,8 @@
 
   function _daten(d) {
     if (!d) return;
-    _setLoop(d.loop_status, d.loop_phase);
+    _setLoop(d.loop_status);
     _setLastRun(d.last_run);
-    _setTokens(d.tokens);
     _setGates(d.gates_open);
   }
 
