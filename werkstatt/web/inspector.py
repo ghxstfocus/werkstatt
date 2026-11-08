@@ -94,6 +94,7 @@ def _letzter_run_id(
         with sqlite3.connect(es.db_pfad) as c:
             row = c.execute(
                 "SELECT run_id FROM events WHERE project=? "
+                "AND run_id IS NOT NULL AND run_id != '' "
                 "ORDER BY seq DESC LIMIT 1",
                 (projekt,),
             ).fetchone()
@@ -488,6 +489,7 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
                     "SELECT run_id, ts, kind FROM events "
                     "WHERE kind IN ('loop_erfolg', 'loop_failed', 'loop_ended') "
                     "AND project=? "
+                    "AND run_id IS NOT NULL AND run_id != '' "
                     "ORDER BY seq DESC LIMIT 1",
                     (projekt,),
                 ).fetchone()
@@ -969,6 +971,132 @@ def aggregate_timeline(
     return knoten[:limit]
 
 
+
+
+# ---------------------------------------------------------------------------
+# OP-306b: Overview-Aggregation (Multi-Projekt-Karten)
+# ---------------------------------------------------------------------------
+
+def _scan_projekte() -> list[Path]:
+    """Listet Projekt-Verzeichnisse unter _PROJECTS_BASE mit docs/STATUS.md."""
+    if not _PROJECTS_BASE.exists():
+        return []
+    out: list[Path] = []
+    for p in sorted(_PROJECTS_BASE.iterdir()):
+        if not p.is_dir():
+            continue
+        if not (p / "docs" / "STATUS.md").exists():
+            continue
+        out.append(p)
+    return out
+
+
+def _sparkline_30d(es: EventStore, projekt: str) -> list[int]:
+    """30-Tage-Bucket-Liste (aeltester zuerst) aus Terminal-Events."""
+    from datetime import date, timedelta
+
+    buckets: dict[str, int] = {}
+    try:
+        with sqlite3.connect(es.db_pfad) as c:
+            rows = c.execute(
+                "SELECT substr(ts, 1, 10), COUNT(*) FROM events "
+                "WHERE kind IN ('loop_erfolg', 'loop_failed', 'loop_ended') "
+                "AND project=? AND ts >= date('now', '-30 days') "
+                "GROUP BY 1",
+                (projekt,),
+            ).fetchall()
+        for tag, n in rows:
+            buckets[str(tag)] = int(n)
+    except sqlite3.Error:
+        pass
+    heute = date.today()
+    return [
+        buckets.get((heute - timedelta(days=i)).isoformat(), 0)
+        for i in range(29, -1, -1)
+    ]
+
+
+def _erfolgsquote_30d(es: EventStore, projekt: str) -> float | None:
+    """Anteil erfolgreicher Terminal-Events (loop_erfolg+loop_ended) 30d."""
+    try:
+        with sqlite3.connect(es.db_pfad) as c:
+            erfolg = c.execute(
+                "SELECT COUNT(*) FROM events "
+                "WHERE project=? AND kind IN ('loop_erfolg', 'loop_ended') "
+                "AND ts >= date('now', '-30 days')",
+                (projekt,),
+            ).fetchone()[0]
+            total = c.execute(
+                "SELECT COUNT(*) FROM events "
+                "WHERE project=? AND kind IN "
+                "('loop_erfolg', 'loop_failed', 'loop_ended') "
+                "AND ts >= date('now', '-30 days')",
+                (projekt,),
+            ).fetchone()[0]
+    except sqlite3.Error:
+        return None
+    if not total:
+        return None
+    return round(erfolg / total, 2)
+
+
+def aggregate_overview() -> dict[str, Any]:
+    """OP-306b Etappe 1: Projekt-Liste mit KPI + Sparkline + letzter Run."""
+    from datetime import UTC, datetime
+
+    es = EventStore()
+    projekte: list[dict[str, Any]] = []
+    for p in _scan_projekte():
+        name = p.name
+        try:
+            ops = parse_ops(p)
+            ops_offen = sum(
+                1 for op in ops
+                if str(op.get("status", "")).lower() in ("open", "partial", "")
+            )
+        except (OSError, ValueError):
+            ops_offen = 0
+
+        try:
+            ambient = aggregate_ambient(name)
+        except (sqlite3.Error, ValueError):
+            ambient = {"loop_status": "idle", "last_run": None}
+
+        spark = _sparkline_30d(es, name)
+        quote = _erfolgsquote_30d(es, name)
+
+        status_md = p / "docs" / "STATUS.md"
+        try:
+            mtime = datetime.fromtimestamp(
+                status_md.stat().st_mtime, tz=UTC,
+            ).isoformat()
+        except OSError:
+            mtime = None
+
+        projekte.append({
+            "name": name,
+            "pfad": str(p),
+            "ops_offen": ops_offen,
+            "loop_status": ambient.get("loop_status", "idle"),
+            "letzter_run": ambient.get("last_run"),
+            "runs_30d": spark,
+            "runs_30d_total": sum(spark),
+            "erfolgsquote_30d": quote,
+            "status_md_mtime": mtime,
+        })
+
+    top_3 = sorted(
+        projekte,
+        key=lambda x: (x["runs_30d_total"], x["ops_offen"]),
+        reverse=True,
+    )[:3]
+    top_3_namen = [x["name"] for x in top_3 if x["runs_30d_total"] > 0]
+
+    return {
+        "projekte": projekte,
+        "top_3": top_3_namen,
+        "generated_at": datetime.now(UTC).isoformat(),
+    }
 
 
 # ============================================================

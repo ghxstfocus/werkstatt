@@ -130,3 +130,19 @@ def test_ambient_letzter_erfolg_gewinnt_wenn_neuer(tmp_path, monkeypatch):
     assert aus["last_run"]["run_id"] == "r-new"
     assert aus["last_run"]["erfolg"] is True
 
+def test_ambient_terminal_event_ohne_run_id_ignoriert(tmp_path, monkeypatch):
+    """Terminal-Event mit leerer run_id darf nicht als 'letzter Run' zaehlen.
+
+    Pre-OP-303-Aera (Loop-Bug): loop_erfolg wurde geschrieben, aber
+    set_run_id() nicht aufgerufen. Diese Events sind ehrlich: kein
+    zuordenbarer Run. aggregate_ambient muss sie ignorieren statt
+    last_run={run_id: ''} zu zeigen.
+    """
+    from werkstatt.web.inspector import aggregate_ambient
+    _s, db = _store(tmp_path, monkeypatch)
+    # Terminal-Event mit leerer run_id (pre-OP-303)
+    _event(db, "", "loop_erfolg", {}, ts=datetime.now(UTC).isoformat())
+    aus = aggregate_ambient("werkstatt")
+    assert aus["loop_status"] == "idle"
+    assert aus["last_run"] is None
+

@@ -245,6 +245,12 @@ def create_app() -> FastAPI:
         """Liefert das HTML-Layout der Web-UI."""
         return FileResponse(str(static_dir / "layout.html"))
 
+    @app.get("/api/overview")
+    def overview() -> dict[str, Any]:
+        """OP-306b Etappe 1: Projekt-Liste + Sparkline + KPI."""
+        from werkstatt.web import inspector as _insp
+        return _insp.aggregate_overview()
+
     @app.get("/api/projects/{name}/state")
     def project_state(name: str) -> dict[str, Any]:
         """Liefert den Phasen-Snapshot eines Projekts."""
