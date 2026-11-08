@@ -249,6 +249,120 @@ def aggregate_tokens(projekt: str, run_id: str | None = None) -> dict[str, Any]:
     return aus
 
 
+def aggregate_ambient(projekt: str) -> dict[str, Any]:
+    """OP-301: Loop-Status, letzter Run, Tokens, offene Gates in einem Call.
+
+    Fallbacks:
+    - running: letzter heartbeat < 60s
+    - done/failed: loop_erfolg.payload.erfolg|success, sonst loop_ended
+    - gates: DISTINCT gate_id ueber open/answered/expired
+    """
+    from datetime import UTC, datetime
+
+    es = EventStore()
+    run_id = _letzter_run_id(es)
+    aus: dict[str, Any] = {
+        "loop_status": "idle",
+        "loop_phase": None,
+        "last_run": None,
+        "tokens": {"loop_total": 0, "chat_total": 0},
+        "gates_open": 0,
+    }
+    if run_id is None:
+        return aus
+
+    try:
+        with sqlite3.connect(es.db_pfad) as c:
+            # 1. Heartbeat -> running
+            hb = c.execute(
+                "SELECT ts FROM events WHERE kind='heartbeat' "
+                "ORDER BY seq DESC LIMIT 1"
+            ).fetchone()
+            if hb:
+                try:
+                    ts_hb = datetime.fromisoformat(str(hb[0]))
+                    if (datetime.now(UTC) - ts_hb).total_seconds() < 60:
+                        aus["loop_status"] = "running"
+                except (ValueError, TypeError):
+                    pass
+
+            # 2. Letzter Erfolg/Misserfolg (nur wenn nicht running)
+            # OP-301: loop_erfolg = semantisch Erfolg (Event-Name impliziert
+            # erfolg, payload enthaelt in Produktion kein erfolg/success).
+            # Reihenfolge: loop_erfolg > loop_ended > loop_failed > idle.
+            if aus["loop_status"] != "running":
+                le = c.execute(
+                    "SELECT run_id, ts FROM events "
+                    "WHERE kind='loop_erfolg' ORDER BY seq DESC LIMIT 1"
+                ).fetchone()
+                if le:
+                    aus["loop_status"] = "done"
+                    aus["last_run"] = {
+                        "run_id": le[0],
+                        "ts": le[1],
+                        "erfolg": True,
+                    }
+                else:
+                    lf = c.execute(
+                        "SELECT run_id, ts FROM events "
+                        "WHERE kind='loop_failed' ORDER BY seq DESC LIMIT 1"
+                    ).fetchone()
+                    if lf:
+                        aus["loop_status"] = "failed"
+                        aus["last_run"] = {
+                            "run_id": lf[0],
+                            "ts": lf[1],
+                            "erfolg": False,
+                        }
+                    else:
+                        lend = c.execute(
+                            "SELECT run_id, ts FROM events "
+                            "WHERE kind='loop_ended' ORDER BY seq DESC LIMIT 1"
+                        ).fetchone()
+                        if lend:
+                            aus["loop_status"] = "done"
+                            aus["last_run"] = {
+                                "run_id": lend[0],
+                                "ts": lend[1],
+                                "erfolg": True,
+                            }
+
+            # 3. Gates: DISTINCT auf allen drei
+            opens = {
+                r[0] for r in c.execute(
+                    "SELECT DISTINCT json_extract(payload, '$.gate_id') "
+                    "FROM events WHERE kind='gate_open'"
+                ) if r[0]
+            }
+            answered = {
+                r[0] for r in c.execute(
+                    "SELECT DISTINCT json_extract(payload, '$.gate_id') "
+                    "FROM events WHERE kind='gate_answered'"
+                ) if r[0]
+            }
+            expired = {
+                r[0] for r in c.execute(
+                    "SELECT DISTINCT json_extract(payload, '$.gate_id') "
+                    "FROM events WHERE kind='gate_expired'"
+                ) if r[0]
+            }
+            aus["gates_open"] = len(opens - answered - expired)
+    except sqlite3.Error:
+        pass
+
+    # 4. Tokens
+    try:
+        tok = aggregate_tokens(projekt, run_id)
+        aus["tokens"] = {
+            "loop_total": tok["loop"]["total"],
+            "chat_total": tok["chat"]["total"],
+        }
+    except Exception:  # noqa: BLE001
+        pass
+
+    return aus
+
+
 def _phasen_label(kind: str) -> str | None:
     for prefix, label in _PHASEN_LABELS.items():
         if kind.startswith(prefix):

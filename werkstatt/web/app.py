@@ -445,6 +445,13 @@ def create_app() -> FastAPI:
         from werkstatt.projection import Projector
         return Projector().status()
 
+    @app.get("/api/projects/{name}/ambient")
+    def ambient(name: str) -> dict[str, Any]:
+        """OP-301: Loop-Status + letzter Run + Tokens + Gates."""
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        return _insp.aggregate_ambient(projekt)
+
     @app.get("/api/projects/{name}/chat/sessions")
     def chat_sessions(name: str) -> dict[str, Any]:
         """Listet alle Chat-Session-IDs eines Projekts."""
