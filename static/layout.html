@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Werkstatt</title>
-  <link rel="stylesheet" href="/static/layout.css?v=1794160056">
+  <link rel="stylesheet" href="/static/layout.css?v=1794160262">
 </head>
 <body>
 
@@ -171,7 +171,20 @@
   <script src="/static/chat.js?v=20261107a"></script>
   <script src="/static/runs.js?v=1794160056"></script>
   <script src="/static/timeline.js?v=20261107a"></script>
+  <div class="palette-overlay" id="palette-overlay">
+    <div class="palette-box">
+      <input type="text" id="palette-input" placeholder="Was willst du tun? (OP, Aktion, Session, Run)" autocomplete="off">
+      <div class="palette-treffer" id="palette-treffer"></div>
+      <div class="palette-footer">
+        <span>↑↓ navigieren</span>
+        <span>↵ ausführen</span>
+        <span>Esc schließen</span>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/statusleiste.js?v=1794155056a"></script>
+  <script src="/static/palette.js?v=1794160262"></script>
   <script src="/static/workbench.js?v=20261107a"></script>
   <script src="/static/gate_panel.js?v=20261108a"></script>
   <script src="/static/detail_drawer.js?v=20261108a"></script>

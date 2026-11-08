@@ -447,6 +447,13 @@ def create_app() -> FastAPI:
         projekt = _pruefe_projektname(name)
         return {"run_status": _insp.aggregate_ops_run_status(projekt)}
 
+    @app.get("/api/projects/{name}/palette")
+    def project_palette(name: str, q: str = "") -> dict[str, Any]:
+        """OP-302: Server-Filter fuer Command Palette."""
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        return _insp.aggregate_palette(projekt, q)
+
     @app.get("/api/projects/{name}/timeline")
     def project_timeline(name: str, run_id: str | None = None) -> dict[str, Any]:
         """Phasen-Knoten aus Event-Store + JSONL-Audit."""

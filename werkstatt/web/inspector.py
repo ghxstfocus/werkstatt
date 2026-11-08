@@ -200,6 +200,101 @@ def aggregate_status(projekt: str) -> dict[str, Any]:
     return aus
 
 
+def aggregate_palette(projekt: str, q: str) -> dict[str, list[dict]]:
+    """OP-302: Server-Filter fuer Command Palette.
+
+    Liefert 4 Kategorien von Treffern. Nur bei nicht-leerem q.
+    Bei leerem q: Aktions-Hints (was man tun kann).
+    """
+    q_low = (q or "").strip().lower()
+    ops: list[dict] = []
+    sessions: list[dict] = []
+    runs: list[dict] = []
+    actions: list[dict] = []
+
+    # Aktionen: fixe Liste, immer verfuegbar
+    AKTIONEN: list[dict[str, Any]] = [
+        {"typ": "action", "titel": "Loop mit naechster OP starten",
+         "action": "start_loop", "shortcut": ""},
+        {"typ": "action", "titel": "Loop stoppen",
+         "action": "stop_loop", "shortcut": ""},
+        {"typ": "nav", "titel": "Audit oeffnen",
+         "action": "open_tab", "params": {"tab": "audit"}, "shortcut": ""},
+        {"typ": "nav", "titel": "Loop-Log oeffnen",
+         "action": "open_tab", "params": {"tab": "terminal"}, "shortcut": ""},
+        {"typ": "nav", "titel": "Diff oeffnen",
+         "action": "open_tab", "params": {"tab": "diff"}, "shortcut": ""},
+        {"typ": "nav", "titel": "Verify oeffnen",
+         "action": "open_tab", "params": {"tab": "verify"}, "shortcut": ""},
+        {"typ": "nav", "titel": "Dateien oeffnen",
+         "action": "open_tab", "params": {"tab": "files"}, "shortcut": ""},
+        {"typ": "nav", "titel": "Projekt hinzufuegen",
+         "action": "new_project", "shortcut": ""},
+    ]
+
+    # OPs durchsuchen
+    for op in parse_ops():
+        titel = op.get("titel", "")
+        oid = op.get("id", "")
+        if not q_low or q_low in oid.lower() or q_low in titel.lower():
+            ops.append({
+                "typ": "op",
+                "titel": f"{oid}: {titel}",
+                "untertitel": f"blockiert von: {op.get('blockiert_von') or '—'}",
+                "action": "start_op",
+                "params": {"op_id": oid},
+            })
+
+    # Aktionen durchsuchen
+    for a in AKTIONEN:
+        if not q_low or q_low in a["titel"].lower():
+            actions.append(a)
+
+    # Sessions durchsuchen (nur bei q >= 2 Zeichen)
+    if q_low and len(q_low) >= 2:
+        try:
+            from werkstatt.chat_session import list_sessions
+            for sid in list_sessions(projekt)[:30]:
+                if q_low in sid.lower():
+                    sessions.append({
+                        "typ": "session",
+                        "titel": f"Session {sid[:8]}",
+                        "untertitel": sid,
+                        "action": "open_session",
+                        "params": {"session_id": sid},
+                    })
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Runs durchsuchen (nur bei q >= 4 Zeichen — sonst zu viele)
+    if q_low and len(q_low) >= 4:
+        try:
+            es = EventStore()
+            with sqlite3.connect(es.db_pfad) as c:
+                for rid, ts, kind in c.execute(
+                    "SELECT DISTINCT run_id, ts, kind FROM events "
+                    "WHERE run_id LIKE ? ORDER BY seq DESC LIMIT 10",
+                    (f"%{q_low}%",),
+                ):
+                    if rid:
+                        runs.append({
+                            "typ": "run",
+                            "titel": rid,
+                            "untertitel": kind + " " + str(ts)[:16],
+                            "action": "open_run",
+                            "params": {"run_id": rid},
+                        })
+        except sqlite3.Error:
+            pass
+
+    return {
+        "ops": ops[:15],
+        "actions": actions[:10],
+        "sessions": sessions[:8],
+        "runs": runs[:8],
+    }
+
+
 def aggregate_ops_run_status(projekt: str) -> dict[str, dict[str, Any]]:
     """OP-303: Run-Status pro OP aus SQLite-Events.
 
