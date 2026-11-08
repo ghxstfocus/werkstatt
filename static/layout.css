@@ -501,7 +501,7 @@ body {
 .audit-live-zeile,
 .audit-history-zeile {
   display: grid;
-  grid-template-columns: 46px 18px 1fr 160px;
+  grid-template-columns: 46px 1fr 200px;
   gap: 8px;
   padding: 3px 8px;
   border-radius: 3px;
@@ -520,24 +520,28 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.audit-icon {
+.audit-text .audit-icon {
   font-size: 12px;
-  text-align: center;
   line-height: 1;
   color: var(--text-muted);
+  margin-right: 3px;
+  display: inline-block;
+  width: 13px;
+  text-align: center;
+  vertical-align: baseline;
 }
 
-.audit-history-zeile[data-kat="loop"] .audit-icon,
-.audit-history-zeile[data-kat="explorer"] .audit-icon,
-.audit-history-zeile[data-kat="scout"] .audit-icon { color: var(--sem-active); }
-.audit-history-zeile[data-kat="builder"] .audit-icon,
-.audit-history-zeile[data-kat="planner"] .audit-icon { color: var(--sem-action); }
-.audit-history-zeile[data-kat="reflection"] .audit-icon { color: var(--sem-action-muted); }
-.audit-history-zeile[data-kat="gate"] .audit-icon { color: var(--sem-warn); }
+.audit-history-zeile[data-kat="loop"] .audit-text .audit-icon,
+.audit-history-zeile[data-kat="explorer"] .audit-text .audit-icon,
+.audit-history-zeile[data-kat="scout"] .audit-text .audit-icon { color: var(--sem-active); }
+.audit-history-zeile[data-kat="builder"] .audit-text .audit-icon,
+.audit-history-zeile[data-kat="planner"] .audit-text .audit-icon { color: var(--sem-action); }
+.audit-history-zeile[data-kat="reflection"] .audit-text .audit-icon { color: var(--sem-action-muted); }
+.audit-history-zeile[data-kat="gate"] .audit-text .audit-icon { color: var(--sem-warn); }
 
-.audit-history-zeile[data-state="ok"] .audit-icon { color: var(--sem-ok); }
-.audit-history-zeile[data-state="error"] .audit-icon { color: var(--sem-error); }
-.audit-history-zeile[data-state="warn"] .audit-icon { color: var(--sem-warn); }
+.audit-history-zeile[data-state="ok"] .audit-text .audit-icon { color: var(--sem-ok); }
+.audit-history-zeile[data-state="error"] .audit-text .audit-icon { color: var(--sem-error); }
+.audit-history-zeile[data-state="warn"] .audit-text .audit-icon { color: var(--sem-warn); }
 .audit-history-zeile[data-state="error"] .audit-text { color: var(--sem-error); }
 
 .audit-text {

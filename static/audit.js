@@ -390,17 +390,17 @@ function createAuditPanel(options) {
     zeit.className = "audit-zeit";
     zeit.textContent = _zeitKurz(ev && (ev.timestamp || ev.ts));
 
+    var text = document.createElement("span");
+    text.className = "audit-text";
     var icon = document.createElement("span");
     icon.className = "audit-icon";
     icon.textContent = _icon(kind);
     icon.setAttribute("aria-hidden", "true");
-
-    var text = document.createElement("span");
-    text.className = "audit-text";
     var human = _humanSummary(ev);
     if (!human) human = _extraText(ev);
     if (!human) human = kind;
-    text.textContent = human;
+    text.appendChild(icon);
+    text.appendChild(document.createTextNode(" " + human));
     text.title = kind;
 
     var kindEl = document.createElement("span");
@@ -409,7 +409,6 @@ function createAuditPanel(options) {
     kindEl.dataset.kind = kind;
 
     zeile.appendChild(zeit);
-    zeile.appendChild(icon);
     zeile.appendChild(text);
     zeile.appendChild(kindEl);
 

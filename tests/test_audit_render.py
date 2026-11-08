@@ -19,7 +19,7 @@ def test_icon_helper_vorhanden():
 
 def test_icon_farben_aus_sem():
     css = _css()
-    assert '.audit-history-zeile[data-kat="loop"] .audit-icon' in css
+    assert '.audit-history-zeile[data-kat="loop"] .audit-text .audit-icon' in css
     assert "--sem-active" in css
     assert "--sem-action" in css
     assert "--sem-error" in css
@@ -38,7 +38,7 @@ def test_audit_kind_nicht_mehr_badge():
 
 def test_grid_ein_zeilig():
     css = _css()
-    assert "grid-template-columns: 46px 18px 1fr 160px" in css
+    assert "grid-template-columns: 46px 1fr 200px" in css
 
 
 def test_gruppierung_existiert():
