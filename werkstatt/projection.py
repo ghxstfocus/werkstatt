@@ -74,17 +74,36 @@ class Projector:
             conn.commit()
 
     def _jsonl_files(self) -> list[Path]:
+        """Liefert alle fortlaufenden JSONL-Dateien (OP-306c-Fix).
+
+        OP-323-Migrationsdateien (`*-migrated-*.jsonl`) sind statische
+        DB-Dumps, keine fortlaufende Quelle — sie wuerden den Checkpoint
+        auf einen Sentinel-Wert setzen und den naechsten tail() blockieren.
+        """
         d = _werkstatt_home() / AUDIT_DIR_NAME
         if not d.exists():
             return []
         out: list[Path] = []
         for pat in ("semantic-*.jsonl", "stream-*.jsonl", "agent-pipeline-*.jsonl"):
-            out.extend(sorted(d.glob(pat)))
+            for f in sorted(d.glob(pat)):
+                if "-migrated-" in f.name:
+                    continue
+                out.append(f)
         return out
 
     def _read_events(
         self, von_audit_id: str | None = None
     ) -> list[tuple[dict[str, Any], str, int]]:
+        """Liest Events ab `von_audit_id` (exklusive) aus allen JSONL-Dateien.
+
+        OP-306c-Fix: Fail-loud bei unbekanntem Checkpoint. Vorher: stumm
+        leere Liste zurueckgegeben -> tail() sah 0 neue Events, Checkpoint
+        blieb haengen, Projector stand fuer immer (Deadlock).
+
+        Live-Bug 2026-11-08: Checkpoint `MIGRATED-SEM-352017` (aus
+        Migration) stand in der alphabetisch letzten `migrated-*.jsonl`
+        Zeile 33/33 — alle nachfolgenden Events wurden verworfen.
+        """
         alle: list[tuple[dict[str, Any], str, int]] = []
         found_start = von_audit_id is None
         for f in self._jsonl_files():
@@ -102,6 +121,13 @@ class Projector:
                             found_start = True
                         continue
                     alle.append((d, f.name, line_idx))
+        if not found_start:
+            raise ValueError(
+                f"Checkpoint {von_audit_id!r} nicht in JSONL gefunden. "
+                f"Reset in projection_state noetig "
+                f"(UPDATE projection_state SET value='<letzter_echter_audit_id>' "
+                f"WHERE key='last_audit_id')."
+            )
         return alle
 
     def _count_jsonl(self) -> int:

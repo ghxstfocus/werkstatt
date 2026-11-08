@@ -249,3 +249,83 @@ def test_insert_schreibt_project_in_spalte(tmp_path, monkeypatch):
     )
     assert "project" not in json.loads(zeilen[1][1])
 
+# ---------------------------------------------------------------------------
+# OP-306c-Fix: Migrationsdateien ignorieren + fail-loud bei unbekanntem Checkpoint
+# ---------------------------------------------------------------------------
+
+def test_jsonl_files_ignoriert_migrated(tmp_path, monkeypatch):
+    """migrated-*.jsonl sind statische Dumps, keine fortlaufende Quelle.
+
+    Live-Bug 2026-11-08: Checkpoint MIGRATED-SEM-352017 stand in der
+    alphabetisch letzten agent-pipeline-migrated-2026-11-08.jsonl Zeile
+    33/33 — alle nachfolgenden Events wurden verworfen, Deadlock.
+    """
+    from werkstatt import projection
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+    d = tmp_path / "audit-logs"
+    d.mkdir()
+    (d / "agent-pipeline-2026-11-08.jsonl").write_text("")
+    (d / "agent-pipeline-migrated-2026-11-08.jsonl").write_text("")
+    (d / "stream-2026-11-08.jsonl").write_text("")
+    (d / "stream-migrated-2026-11-08.jsonl").write_text("")
+    (d / "semantic-2026-11-08.jsonl").write_text("")
+    (d / "semantic-migrated-2026-11-08.jsonl").write_text("")
+    p = _pj(tmp_path)
+    namen = [f.name for f in p._jsonl_files()]
+    assert "agent-pipeline-migrated-2026-11-08.jsonl" not in namen
+    assert "stream-migrated-2026-11-08.jsonl" not in namen
+    assert "semantic-migrated-2026-11-08.jsonl" not in namen
+    assert "agent-pipeline-2026-11-08.jsonl" in namen
+    assert "stream-2026-11-08.jsonl" in namen
+    assert "semantic-2026-11-08.jsonl" in namen
+
+
+def test_read_events_wirft_bei_unbekanntem_checkpoint(tmp_path, monkeypatch):
+    """Fail-loud statt stumm 0 Events (verhindert Deadlock)."""
+    from werkstatt import projection
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+    _write(tmp_path, "agent-pipeline-2026-11-08.jsonl", [
+        {"audit_id": "a1", "event_id": "e1", "run_id": "r1",
+         "kind": "loop_ended", "timestamp": "2026-11-08T00:00:00"},
+    ])
+    p = _pj(tmp_path)
+    try:
+        p._read_events(von_audit_id="GIBT-ES-NICHT")
+    except ValueError as e:
+        assert "GIBT-ES-NICHT" in str(e)
+        assert "Reset in projection_state" in str(e)
+    else:
+        raise AssertionError("ValueError erwartet")
+
+
+def test_tail_nach_reset_liest_alle_neuen_events(tmp_path, monkeypatch):
+    """Checkpoint korrekt gesetzt -> tail() liest alle Events danach."""
+    from werkstatt import projection
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+    _write(tmp_path, "agent-pipeline-2026-11-08.jsonl", [
+        {"audit_id": "a1", "event_id": "e1", "run_id": "r1",
+         "kind": "loop_started", "timestamp": "2026-11-08T00:00:00"},
+        {"audit_id": "a2", "event_id": "e2", "run_id": "r1",
+         "kind": "loop_erfolg", "timestamp": "2026-11-08T00:00:01"},
+        {"audit_id": "a3", "event_id": "e3", "run_id": "r1",
+         "kind": "summary", "timestamp": "2026-11-08T00:00:02"},
+    ])
+    p = _pj(tmp_path)
+    import sqlite3 as _sq
+    with _sq.connect(str(tmp_path / "events.db")) as c:
+        c.execute(
+            "INSERT INTO projection_state(key, value) VALUES(?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            ("last_audit_id", "a1"),
+        )
+        c.commit()
+    res = p.tail()
+    assert res["eingefuegt"] == 2, f"2 neue Events erwartet, {res}"
+    with _sq.connect(str(tmp_path / "events.db")) as c:
+        ck = c.execute(
+            "SELECT value FROM projection_state WHERE key='last_audit_id'"
+        ).fetchone()[0]
+        n = c.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+    assert ck == "a3", f"Checkpoint sollte a3 sein, ist {ck!r}"
+    assert n == 2
+
