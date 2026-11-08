@@ -20,7 +20,14 @@
     return fetch("/api/projects/" + encodeURIComponent(projekt) + "/chat/new",
                  {method: "POST", credentials: "same-origin"})
       .then(function (r) { return r.json(); })
-      .then(function (d) { zustand.sessionId = d.session_id; return d.session_id; });
+      .then(function (d) {
+        zustand.sessionId = d.session_id;
+        return fetch("/api/projects/" + encodeURIComponent(projekt) +
+                     "/chat/history?session_id=" + encodeURIComponent(d.session_id),
+                     {credentials: "same-origin"})
+          .catch(function () {})
+          .then(function () { return d.session_id; });
+      });
   }
 
   function _ladeSessions(projekt) {
@@ -52,17 +59,17 @@
       });
       box.appendChild(btn);
     });
-    var neu = document.createElement("button");
-    neu.className = "chat-session neu";
-    neu.textContent = "+ Neu";
-    neu.addEventListener("click", function () {
-      _neueSession(zustand.projekt).then(function () {
-        var _box = document.getElementById("chat-nachrichten");
-        if (_box) _box.innerHTML = "";
-        _renderSidebarAktuell();
+    // Aktuelle Session, falls nicht in Liste (z.B. weil noch leer)
+    if (zustand.sessionId && sessions.indexOf(zustand.sessionId) < 0) {
+      var ghost = document.createElement("button");
+      ghost.className = "chat-session aktiv";
+      ghost.textContent = zustand.sessionId.slice(0, 10);
+      ghost.dataset.sessionId = zustand.sessionId;
+      ghost.addEventListener("click", function () {
+        _wechsleSession(zustand.sessionId);
       });
-    });
-    box.appendChild(neu);
+      box.appendChild(ghost);
+    }
   }
 
   function _renderSidebarAktuell() {
@@ -269,10 +276,27 @@
     }
     if (eingabe) {
       eingabe.addEventListener("keydown", function (ev) {
-        if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+        if (ev.key === "Enter" && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey) {
           ev.preventDefault();
           if (form) form.dispatchEvent(new Event("submit"));
         }
+      });
+      var _autoResize = function () {
+        eingabe.style.height = "auto";
+        eingabe.style.height = Math.min(eingabe.scrollHeight, 160) + "px";
+      };
+      eingabe.addEventListener("input", _autoResize);
+    }
+
+    // Header-Button: neue Session
+    var neuBtn = _el("chat-neu");
+    if (neuBtn) {
+      neuBtn.addEventListener("click", function () {
+        _neueSession(zustand.projekt).then(function () {
+          var box = _el("chat-nachrichten");
+          if (box) box.innerHTML = "";
+          _renderSidebarAktuell();
+        });
       });
     }
   });
