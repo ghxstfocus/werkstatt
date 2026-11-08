@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Werkstatt</title>
-  <link rel="stylesheet" href="/static/layout.css?v=1794162607">
+  <link rel="stylesheet" href="/static/layout.css?v=1794162644">
 </head>
 <body>
 
@@ -232,6 +232,32 @@
     </div>
   </div>
 
+  <div class="project-create-overlay" id="project-create-overlay">
+    <div class="project-create-box">
+      <div class="project-create-header">
+        <span class="project-create-titel">Neues Projekt</span>
+        <button type="button" class="project-create-close" id="project-create-close" aria-label="Schließen">×</button>
+      </div>
+      <div class="project-create-body">
+        <label class="project-create-label">
+          <span>Name</span>
+          <input type="text" id="project-create-name" placeholder="mein-projekt" autocomplete="off">
+          <small>a-z, 0-9, _, - (beginnt mit Buchstabe)</small>
+        </label>
+        <label class="project-create-label">
+          <span>Pfad</span>
+          <input type="text" id="project-create-pfad" placeholder="/opt/mein-projekt" autocomplete="off">
+          <small>muss unter /opt/ liegen, nicht existieren oder leer sein</small>
+        </label>
+        <div class="project-create-fehler" id="project-create-fehler" hidden></div>
+      </div>
+      <div class="project-create-footer">
+        <button type="button" class="project-create-btn" id="project-create-cancel">Abbrechen</button>
+        <button type="button" class="project-create-btn project-create-primary" id="project-create-submit">Anlegen</button>
+      </div>
+    </div>
+  </div>
+
   <div class="palette-overlay" id="palette-overlay">
     <div class="palette-box">
       <input type="text" id="palette-input" placeholder="Was willst du tun? (OP, Aktion, Session, Run)" autocomplete="off">
@@ -248,6 +274,7 @@
   <script src="/static/palette.js?v=1794160262"></script>
   <script src="/static/shortcut_help.js?v=1794162032"></script>
   <script src="/static/utility_bar.js?v=1794162607"></script>
+  <script src="/static/project_create.js?v=1794162644"></script>
   <script src="/static/workbench.js?v=20261107a"></script>
   <script src="/static/gate_panel.js?v=20261108a"></script>
   <script src="/static/detail_drawer.js?v=20261108a"></script>

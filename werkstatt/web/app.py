@@ -248,6 +248,58 @@ def create_app() -> FastAPI:
         projektname = _pruefe_projektname(name)
         return _phasen_snapshot(projektname)
 
+    @app.post("/api/projects/create")
+    def project_create(body: dict[str, Any]) -> dict[str, Any]:
+        """OP-305: Neues Projekt anlegen (scaffold)."""
+        import re as _re
+        name = str(body.get("name") or "").strip()
+        pfad = str(body.get("pfad") or "").strip()
+        if not _re.fullmatch(r"[a-z][a-z0-9_-]{0,50}", name):
+            raise HTTPException(
+                status_code=400,
+                detail="Projektname ungueltig: a-z, 0-9, _, - (max 51)",
+            )
+        if not pfad.startswith("/opt/"):
+            raise HTTPException(
+                status_code=400,
+                detail="Pfad muss unter /opt/ liegen",
+            )
+        try:
+            projekt_dir = Path(pfad).resolve()
+        except (OSError, RuntimeError) as exc:
+            raise HTTPException(status_code=400, detail=f"Pfad ungueltig: {exc}")
+        if not str(projekt_dir).startswith("/opt/"):
+            raise HTTPException(
+                status_code=400,
+                detail="Pfad muss unter /opt/ bleiben (Symlink?)",
+            )
+        if projekt_dir.exists():
+            if not projekt_dir.is_dir():
+                raise HTTPException(
+                    status_code=409,
+                    detail="Pfad existiert und ist keine Verzeichnis",
+                )
+            try:
+                if any(projekt_dir.iterdir()):
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Zielverzeichnis nicht leer",
+                    )
+            except OSError as exc:
+                raise HTTPException(status_code=500, detail=f"Lesen: {exc}")
+        projekt_dir.mkdir(parents=True, exist_ok=True)
+        from werkstatt.scaffold import scaffold
+        try:
+            bericht = scaffold(name, projekt_dir)
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        return {
+            "ok": True,
+            "name": name,
+            "pfad": str(projekt_dir),
+            "bericht": bericht,
+        }
+
     @app.post("/api/projects/{name}/start")
     def project_start(name: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         """Startet den Loop fuer ein Projekt als Subprozess.
