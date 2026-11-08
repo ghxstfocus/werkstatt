@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Werkstatt</title>
-  <link rel="stylesheet" href="/static/layout.css?v=1794160262">
+  <link rel="stylesheet" href="/static/layout.css?v=1794162032">
 </head>
 <body>
 
@@ -171,6 +171,55 @@
   <script src="/static/chat.js?v=20261107a"></script>
   <script src="/static/runs.js?v=1794160056"></script>
   <script src="/static/timeline.js?v=20261107a"></script>
+  <div class="shortcut-help-overlay" id="shortcut-help-overlay">
+    <div class="shortcut-help-box">
+      <div class="shortcut-help-header">
+        <span class="shortcut-help-titel">Tastenkürzel</span>
+        <button type="button" class="shortcut-help-close" id="shortcut-help-close" aria-label="Schließen">×</button>
+      </div>
+      <div class="shortcut-help-body">
+        <div class="shortcut-help-kategorie">Navigation</div>
+        <div class="shortcut-help-zeile">
+          <span class="shortcut-help-keys"><kbd>Ctrl</kbd>+<kbd>K</kbd></span>
+          <span class="shortcut-help-txt">Command Palette öffnen</span>
+        </div>
+        <div class="shortcut-help-zeile">
+          <span class="shortcut-help-keys"><kbd>Shift</kbd>+<kbd>N</kbd></span>
+          <span class="shortcut-help-txt">Neues Projekt</span>
+        </div>
+        <div class="shortcut-help-zeile">
+          <span class="shortcut-help-keys"><kbd>?</kbd></span>
+          <span class="shortcut-help-txt">Diese Hilfe</span>
+        </div>
+        <div class="shortcut-help-zeile">
+          <span class="shortcut-help-keys"><kbd>Esc</kbd></span>
+          <span class="shortcut-help-txt">Overlay schließen</span>
+        </div>
+        <div class="shortcut-help-kategorie">Chat</div>
+        <div class="shortcut-help-zeile">
+          <span class="shortcut-help-keys"><kbd>Enter</kbd></span>
+          <span class="shortcut-help-txt">Nachricht senden</span>
+        </div>
+        <div class="shortcut-help-zeile">
+          <span class="shortcut-help-keys"><kbd>Shift</kbd>+<kbd>Enter</kbd></span>
+          <span class="shortcut-help-txt">Neue Zeile</span>
+        </div>
+        <div class="shortcut-help-kategorie">Palette</div>
+        <div class="shortcut-help-zeile">
+          <span class="shortcut-help-keys"><kbd>↑</kbd> <kbd>↓</kbd></span>
+          <span class="shortcut-help-txt">Navigieren</span>
+        </div>
+        <div class="shortcut-help-zeile">
+          <span class="shortcut-help-keys"><kbd>Enter</kbd></span>
+          <span class="shortcut-help-txt">Ausführen</span>
+        </div>
+      </div>
+      <div class="shortcut-help-footer">
+        <span>Diese Hilfe öffnet sich mit <kbd>?</kbd> — außer in Text-Feldern.</span>
+      </div>
+    </div>
+  </div>
+
   <div class="palette-overlay" id="palette-overlay">
     <div class="palette-box">
       <input type="text" id="palette-input" placeholder="Was willst du tun? (OP, Aktion, Session, Run)" autocomplete="off">
@@ -185,6 +234,7 @@
 
   <script src="/static/statusleiste.js?v=1794155056a"></script>
   <script src="/static/palette.js?v=1794160262"></script>
+  <script src="/static/shortcut_help.js?v=1794162032"></script>
   <script src="/static/workbench.js?v=20261107a"></script>
   <script src="/static/gate_panel.js?v=20261108a"></script>
   <script src="/static/detail_drawer.js?v=20261108a"></script>

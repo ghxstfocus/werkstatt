@@ -1951,3 +1951,110 @@ body {
   font-size: 10px;
   color: var(--text-muted);
 }
+
+/* ── OP-304: Shortcut Help Overlay (?) ── */
+.shortcut-help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 10vh;
+  z-index: 10000;
+}
+.shortcut-help-overlay.offen { display: flex; }
+
+.shortcut-help-box {
+  width: 100%;
+  max-width: 520px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: 78vh;
+}
+
+.shortcut-help-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.shortcut-help-titel {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.shortcut-help-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 6px;
+  line-height: 1;
+}
+.shortcut-help-close:hover { color: var(--text); }
+
+.shortcut-help-body {
+  padding: 8px 18px 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.shortcut-help-kategorie {
+  padding: 14px 0 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 6px;
+}
+.shortcut-help-zeile {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 12px;
+  align-items: center;
+}
+.shortcut-help-keys {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--text-dim);
+}
+.shortcut-help-keys kbd {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+  min-width: 20px;
+  text-align: center;
+}
+.shortcut-help-txt { color: var(--text-dim); }
+
+.shortcut-help-footer {
+  padding: 8px 18px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.shortcut-help-footer kbd {
+  background: var(--bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
