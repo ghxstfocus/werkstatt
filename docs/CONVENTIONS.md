@@ -1,6 +1,6 @@
 # Konvention — Werkstatt
 
-Stand: 2026-10-18
+Stand: 2026-11-08
 Zweck: Ordnerstruktur, Datei-Namen, Verantwortlichkeiten.
 
 ## 1. Ziel
@@ -9,53 +9,72 @@ Die Werkstatt ist ein Agenten-System, das Projekte baut.
 Sie ist unabhaengig von jedem Ziel-Projekt. Ordner und
 Datei-Namen folgen einer festen Konvention.
 
-## 2. Ordner-Struktur (verbindlich)
+## 2. Ordner-Struktur (verbindlich, Stand 2026-11-08)
 
     /opt/werkstatt/
     |-- README.md                Einstieg, Ziel, Stand
-    |-- Bau-Handoff.md           Aktueller Stand (kompakt, < 500 Z.)
-    |-- archiv/bau-handoff-archiv.md    Alte Handoffs (append-only)
-    |-- werkstatt/loop.py       Orchestrierung
-    |-- redaction.py             Redaction vor LLM-Calls
-    |
+    |-- PROGRESS.md              Historie (append-only)
+    |-- AGENTS.md                Constitution, Lese-Reihenfolge
+    |-- .werkstatt/              Laufzeit (nicht im git)
+    |   |-- events.db            SQLite-Projektion (rebuildbar)
+    |   |-- verify.json          Verify-Stage-Vertrag
+    |   +-- auth-token           Web-UI-Auth
+    |-- audit-logs/              Event-Log (JSONL)
+    |   |-- semantic-*.jsonl     semantische Events (git)
+    |   +-- stream-*.jsonl       Laufzeit-Events (gitignored)
+    |-- projects/                Projekt-Registry (YAML pro Projekt)
+    |-- werkstatt/               Python-Paket
+    |   |-- loop.py              Orchestrierung, CLI
+    |   |-- audit.py             JSONL-Writer (audit + stream)
+    |   |-- projection.py        JSONL -> SQLite Projektor
+    |   |-- event_store.py       SQLite-Reader fuer UI
+    |   |-- scaffold.py          Projekt-Pflichtdateien
+    |   |-- migrate.py           Doku-Konsistenz-Check
+    |   |-- orchestrator.py      RunState + Config-Loader
+    |   |-- explorer.py          Rolle Explorer
+    |   |-- scout.py             Rolle Scout
+    |   |-- planner.py           Architect + Planner-Split
+    |   |-- reviewer.py          Rolle Reviewer
+    |   |-- reflection.py        Rolle Reflection
+    |   |-- rollen.py            Rollen-Registry (Single Source of Truth)
+    |   |-- skills.py            Skill-Loader
+    |   |-- chat_agent.py        Chat-Agent
+    |   |-- chat_session.py      Session-Persistenz
+    |   |-- chat_tools.py        Read-only Tool-Registry
+    |   |-- roles/               Rollen-Module (builder/, etc.)
+    |   |-- phases/              Loop-Phasen
+    |   |-- render/              Terminal-Rendering
+    |   |-- web/                 FastAPI-Backend
+    |   |   |-- app.py           HTTP-Endpoints
+    |   |   |-- inspector.py     Aggregatoren
+    |   |   |-- auth.py          Login-Middleware
+    |   |   +-- audit_panel.py   Audit-Endpoints
+    |   +-- templates/           Scaffold-Templates
+    |-- static/                  Web-UI (kein Build-Schritt)
+    |   |-- layout.html          HTML-Grundgeruest
+    |   |-- layout.css           Styles (sem-Farben aus OP-300)
+    |   |-- ambient_status.js    Ambient-Bar (OP-301)
+    |   |-- palette.js           Command Palette (OP-302)
+    |   |-- runs.js              Runs-Liste + Start/Stop (OP-303)
+    |   |-- shortcut_help.js     `?`-Overlay (OP-304)
+    |   |-- utility_bar.js       ⌘K/?-Buttons (OP-305)
+    |   |-- project_create.js    Projekt-Anlage-Modal (OP-305)
+    |   |-- audit.js             Audit-Panel
+    |   |-- timeline.js          Timeline
+    |   |-- chat.js              Chat-Pane
+    |   +-- tabs.js              Tab-Verwaltung
+    |-- skills/                  On-Demand-Workflows (SKILL.md + tools/)
     |-- docs/                    Werkstatt-Doku
     |   |-- CONVENTIONS.md       Diese Datei
-    |   |-- ARCHITECTURE.md      Modul-Map
-    |   |-- ROADMAP.md           Phasen- und W-Block-Uebersicht
+    |   |-- ARCHITECTURE.md      IST-Zustand
+    |   |-- SOLL.md              Ziel-Architektur
     |   |-- STATUS.md            Offene Punkte (OP-NNN)
-    |   |-- ../PROGRESS.md       Historie (append-only)
-    |   |-- ROLLEN-AUDIT.md      Rollen-Stand
-    |   +-- PROTOKOLL-*.md       Sitzungs-Protokolle
-    |
-    |-- agents/                  Rollen-Prompts
-    |   |-- planner.md
-    |   |-- builder.md
-    |   |-- solver.md
-    |   |-- judge.md
-    |   |-- reviewer.md
-    |   |-- test_generator.md
-    |   |-- coverage.md
-    |   +-- chaos.md
-    |
-    |-- skills/                  Workflows (W25)
-    |-- anti-patterns/           Katalog (W37)
-    |-- schemas/                 JSON-Schemas
-    |-- werkstatt/               Modularisiert (W31-W47)
-    |   |-- state.py
-    |   |-- parser.py
-    |   +-- (planner.py, audit.py,
-    |        judge.py, apply.py, measurements.py
-    |        -- W36/W52 offen)
-    |
-    |-- projects/                Projekt-Configs
-    |   |-- <name>.yaml
-    |   |-- <name>.phase.yaml
-    |   |-- <name>.memory.yaml
-    |   +-- _template.yaml
-    |
-    |-- audit-logs/              JSONL pro Tag
-    |-- tests/                   Werkstatt-Tests
-    +-- .werkstatt/              Laufzeit-State (W34-Ignore)
+    |   |-- ROADMAP.md           Phasen
+    |   |-- MERKPOSTEN.md        Prozess-Lehren (append-only)
+    |   |-- DOC_CONVENTIONS.md   Meta-Regeln fuer Ziel-Projekte
+    |   |-- glossary.md          Begriffe
+    |   +-- adr/                 Architecture Decision Records
+    +-- tests/                   pytest (1515 passed am 2026-11-08)
 
 ## 3. Datei-Verantwortlichkeiten
 

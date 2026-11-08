@@ -7,7 +7,7 @@ keinem Projekt — sie arbeitet an jedem.
 **Kernprinzip:** Erst messen, dann designen, dann bauen.
 Deterministische Gates vor jedem Commit. Kein LLM-Token ohne Plan.
 
-**Python:** 3.11 · **Tests:** 1364 passed, 8 skipped · **Version:** 0.1.0 (in Arbeit)
+**Python:** 3.11 · **Tests:** 1515 passed, 5 skipped · **Version:** 0.1.0 (in Arbeit)
 
 ---
 
@@ -18,16 +18,24 @@ Der Loop liest offene Aufgaben aus `docs/STATUS.md` (Format: OP-NNN),
 wählt einen Punkt, baut ihn, testet ihn, und committet nur, wenn alle
 Verifikationen grün sind.
 
-**Was heute funktioniert (Stand 2026-11-07):**
+**Was heute funktioniert (Stand 2026-11-08):**
 
-- 7 spezialisierte Rollen (Explorer, Scout, Architect, Planner,
-  Builder, Reviewer, Reflection)
+- 9 spezialisierte Rollen (Explorer, Scout, Architect, Planner-Split,
+  Builder, Verify, Reviewer, Reflection, Human-Gate)
 - Loop-Läufe bauen eigenständig Bugfixes und Features (siehe
   `PROGRESS.md` für ~15 dokumentierte Loop-Tests)
 - 9 harte Verify-Stages vor jedem Commit
 - 4 Human-Gates (Plan, Reflection, Phase-Review, Commit)
 - 1364 Tests, `ruff`-Baseline 0, `mypy` sauber
 - 20 Skills (on-demand geladen pro Rolle)
+- **Event-Architektur** (ADR-0024, 2026-11-08): JSONL als
+  Single-Writer, SQLite als rebuildbare Projektion, `Projector`
+  rekonstruiert deterministisch
+- **Web-UI** (OP-300..305, 2026-11-08): Ambient-Status-Bar,
+  Command Palette (Ctrl+K), Loop-Start pro OP, Shortcut-Help,
+  Projekt-Anlage-Modal, Multi-Projekt-Kontext (ADR-0023)
+- **1494 zusaetzliche Tests** seit 2026-11-07 (Sessions-Historie:
+  `PROGRESS.md`)
 - Vollständige Audit-Historie (`audit-logs/agent-pipeline-*.jsonl`)
 
 **Was in Planung ist (SOLL, ADR-0016/0017/0018):**

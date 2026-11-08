@@ -12,10 +12,11 @@ Stand: 2026-11-08 (Event-Architektur via ADR-0024 + UI-Layer + Multi-Projekt via
 
 ## 1. Ziel-Architektur
 
-Die Werkstatt ist ein Multi-Agent-System mit 5+1 Rollen und
-ADaPT (On-Demand-Zerlegung). Der Mensch ist das letzte Gate.
+Die Werkstatt ist ein Multi-Agent-System mit 9 spezialisierten
+Rollen (Detail §2) und ADaPT (On-Demand-Zerlegung). Der Mensch ist
+das letzte Gate.
 
-    Explorer -> Scout -> Architect -> Planner-Split -> Builder -> Verify -> Reviewer -> Human-Gate
+    Explorer -> Scout -> Architect -> Planner-Split -> Builder -> Verify -> Reviewer -> Reflection -> Human-Gate
 
 ## 1.5 Installation
 
