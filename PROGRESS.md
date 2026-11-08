@@ -3242,3 +3242,29 @@ rebuild() deterministisch (DELETE + replay), tail() idempotent per
 event_id UNIQUE + INSERT OR IGNORE, status() liefert jsonl/sqlite/diff.
 Checkpoint in projection_state. 6 neue Tests (test_projection.py).
 pytest 1448 passed.
+
+
+## 2026-11-08 — 14 neue OPs (Scriptbank + Loesungsorientierung + Scaffolder + Greenfield)
+
+Vier Komplexe, auf Basis Ist-Zustand:
+scaffold.py existiert (CLI), chat_tools.py 8 Tools, Reviewer-Bug
+{file, line, description, severity} ohne Loesungsfelder.
+
+**Scriptbank (OP-330..334):** Manifest + 6 Kern-Scripts +
+Scaffolder-Vertrag + Chat-Integration + Reflection-Integration.
+
+**Loesungsorientierung (OP-340..342):** Reviewer-Bug-Schema
+{warum, wie_loesen, beispiel_ohne_code}. Reflection + Hook +
+Gedaechtnis auf gleichen Vertrag. Prompt-Engineering Lichtkegel.
+
+**Scaffolder-UI (OP-350..352):** Greenfield-Modus + UI-Maske
++ Drift-Check.
+
+**Greenfield-Architekt (OP-360..362):** Senior-Architekt-Skill
++ Dialog-Flow + Plan-Artefakte.
+
+Blocker-Ketten:
+330 frei; 331<-330; 332<-330; 333<-330,331; 334<-331;
+340 frei; 341<-340; 342<-340,341;
+350<-332; 351<-350; 352<-350,351;
+360<-282,350; 361<-360; 362<-360,361.

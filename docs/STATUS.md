@@ -784,6 +784,160 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Blockiert von:** —
 
 
+### OP-330: Skill script-bank (Manifest + Struktur)
+
+- **Status:** open
+- **Typ:** skill-fundament
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `skills/script-bank/SKILL.md` (neu), `skills/script-bank/MANIFEST.yaml` (neu), `skills/script-bank/tools/` (neu), `werkstatt/script_bank.py` (neu)
+- **Problem:** Chat-Debugger und Loop schreiben Analyse-Scripts jedes Mal neu. Kein Manifest, keine Versionierung, keine Variable-Bindung an Projekt-Kontext.
+- **Akzeptanzkriterien:** (a) `MANIFEST.yaml` mit Schema: `name`, `beschreibung`, `parameter`, `kategorie` (analyze|debug|test|verify), `sicherheitsstufe` (read|write-dry|write-sandbox). (b) `script_bank.py` mit `list_scripts(kategorie=None)`, `call(name, params, project_root)`. (c) Scaffolder-Vertrag dokumentiert (Pflicht-Variablen: `project_root`, `python_bin`, `test_command`). (d) 0 Scripts (nur Geruest).
+- **Tests:** `tests/test_script_bank.py` (3 Tests).
+- **Blockiert von:** —
+
+### OP-331: Script-Bank — erste 6 Kern-Scripts
+
+- **Status:** open
+- **Typ:** skill-inhalt
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `skills/script-bank/tools/pytest_analyze.py`, `ruff_analyze.py`, `mypy_analyze.py`, `git_diff_analyze.py`, `test_integrity.py`, `dependency_graph.py`, `MANIFEST.yaml`
+- **Problem:** Erste sechs Analyse-Scripts fehlen. Decken 90% der Alltags-Fehler ab.
+- **Akzeptanzkriterien:** (a) Jedes Script: `analyze()` liefert `{kategorie, ursache, betroffene_dateien[], beispiel_ohne_code, confidence}`. (b) Parameter aus ENV/Config. (c) Alle <5s. (d) Read-only.
+- **Tests:** `tests/test_script_bank_tools.py` (6 Tests).
+- **Blockiert von:** OP-330
+
+### OP-332: Scaffolder-Vertrag Script-Bank
+
+- **Status:** open
+- **Typ:** skill-fundament
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `werkstatt/scaffold.py`, `skills/script-bank/SKILL.md`, `werkstatt/templates/werkstatt/script-bank.yaml` (neu)
+- **Problem:** Scripts brauchen Projekt-Kontext. Ohne Scaffolder-Vertrag fehleranfaellig.
+- **Akzeptanzkriterien:** (a) Scaffolder schreibt `.werkstatt/script-bank.yaml`. (b) `script_bank.call()` liest fehlende Parameter daraus. (c) Template vorhanden. (d) Fehlende Variablen: fail-loud.
+- **Tests:** `tests/test_scaffold_scriptbank.py` (3 Tests).
+- **Blockiert von:** OP-330
+
+### OP-333: Chat-Debugger-Integration Script-Bank
+
+- **Status:** open
+- **Typ:** skill-wiring
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `werkstatt/chat_tools.py`, `werkstatt/chat_agent.py`, `tests/test_chat_script_bank.py` (neu)
+- **Problem:** Chat-Agent hat 8 Tools, aber keinen Script-Aufruf. Debugger schreibt Analyse-Scripts jedes Mal neu.
+- **Akzeptanzkriterien:** (a) Chat-Tool `run_script {name, params}`. (b) Sicherheitspruefung: `write-sandbox` nur mit `mode=write`. (c) Rueckgabe JSON. (d) In `openai_schemas()`.
+- **Tests:** `tests/test_chat_script_bank.py` (3 Tests).
+- **Blockiert von:** OP-330, OP-331
+
+### OP-334: Loop-Reflection-Integration Script-Bank
+
+- **Status:** open
+- **Typ:** skill-wiring
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/verify.py`, `tests/test_reflection_script_bank.py` (neu)
+- **Problem:** Reflection bekommt `last_verify_errors` als Rohtext. Typisierter Fehler waere besser.
+- **Akzeptanzkriterien:** (a) `verify.py` liefert `fehler_kategorie`. (b) Reflection ruft passenden Analyzer. (c) Fallback Rohtext. (d) Kein Aufruf bei Erfolg.
+- **Tests:** `tests/test_reflection_script_bank.py` (4 Tests).
+- **Blockiert von:** OP-331
+
+### OP-340: Reviewer-Bug-Schema loesungsorientiert
+
+- **Status:** open
+- **Typ:** prompt-fundament
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `werkstatt/reviewer.py`, `tests/test_reviewer_schema.py` (neu)
+- **Problem:** Heute: `{file, line, description, severity}`. Kein `warum`, kein `wie_loesen`, kein `beispiel`. Reflection bekommt nur "X ist falsch".
+- **Akzeptanzkriterien:** (a) Neues Schema: `{file, line, severity, warum, wie_loesen, beispiel_ohne_code}`. (b) `description` als Alias auf `warum` (rueckwaertskompatibel). (c) `REVIEWER_SYSTEM` fordert Prosa, keine Codebloecke. (d) `beispiel_ohne_code` max 3 Saetze.
+- **Tests:** `tests/test_reviewer_schema.py` (3 Tests).
+- **Blockiert von:** —
+
+### OP-341: Reflection + Hook + Gedaechtnis auf loesungsorientiert
+
+- **Status:** open
+- **Typ:** prompt-fundament
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/phases/*`, `werkstatt/erfahrung.py`, `tests/test_reflection_loesungsorientiert.py` (neu)
+- **Problem:** Reflection-Feedback uneinheitlich. Kein Loesungs-Schema.
+- **Akzeptanzkriterien:** (a) Einheitliches Schema: `{warum, wie_loesen, beispiel_ohne_code, confidence}`. (b) Reflection-Prompt: "Analysiere + Repariere". (c) Hook: gleicher Vertrag. (d) Gedaechtnis: `record_erfahrung(warum, wie, beispiel, ...)`.
+- **Tests:** `tests/test_reflection_loesungsorientiert.py` (5 Tests).
+- **Blockiert von:** OP-340
+
+### OP-342: Prompt-Engineering pro Rolle (Lichtkegel-Prinzip)
+
+- **Status:** open
+- **Typ:** prompt-fundament
+- **Phase:** Phase-2 (Intelligenz)
+- **Betroffene Dateien:** `werkstatt/planner.py`, `werkstatt/builder.py`, `werkstatt/reviewer.py`, `werkstatt/reflection.py`, `werkstatt/architect.py`, `werkstatt/scout.py`, `werkstatt/explorer.py`
+- **Problem:** System-Prompts gewachsen, nicht entworfen. Rollen sehen zu viel oder zu wenig.
+- **Akzeptanzkriterien:** (a) Pro Rolle dokumentiert: Sichtfeld, Ziel, Loesungsvertrag. (b) Prompt-Abschnitte entfernt falls redundant. (c) `_build_selbst_check_block` nur auf Nicht-Reasoning. (d) Token-Verbrauch pro Rolle dokumentiert.
+- **Tests:** `tests/test_prompt_kontrakte.py` (7 Tests).
+- **Blockiert von:** OP-340, OP-341
+
+### OP-350: Scaffolder Greenfield-Modus
+
+- **Status:** open
+- **Typ:** feature-fundament
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `werkstatt/scaffold.py`, `werkstatt/templates/greenfield/` (neu), `tests/test_scaffold_greenfield.py` (neu)
+- **Problem:** `scaffold.py` legt PFLICHTDATEIEN an, aber ohne Greenfield-Struktur (leere Verzeichnisse, minimale Config, Verify-Kette, OP-Stub, Script-Bank-Variablen).
+- **Akzeptanzkriterien:** (a) `scaffold(name, dir, greenfield=True)` erzeugt: `src/`, `tests/`, `.werkstatt/`, `docs/adr/`, `docs/STATUS.md` mit 3 Starter-OPs. (b) `.gitkeep`. (c) `.werkstatt/script-bank.yaml`. (d) Idempotent, `--dry-run`.
+- **Tests:** `tests/test_scaffold_greenfield.py` (4 Tests).
+- **Blockiert von:** OP-332
+
+### OP-351: UI-Maske Projekt-Anlage
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/layout.html`, `static/tabs.js`, `static/layout.css`, `werkstatt/web/app.py` (`POST /api/projects/create`), `tests/test_project_create_api.py` (neu)
+- **Problem:** Projekte heute nur per CLI. Kein UI-Weg.
+- **Akzeptanzkriterien:** (a) `+`-Button oeffnet Modal: Name, Pfad, greenfield. (b) `POST /api/projects/create` ruft `scaffold`. (c) Nach Erfolg Tab. (d) Fehler-Feedback. (e) Pfad nur unter `/opt/`.
+- **Tests:** `tests/test_project_create_api.py` (4 Tests).
+- **Blockiert von:** OP-350
+
+### OP-352: Scaffolder-Drift-Check + Tests
+
+- **Status:** open
+- **Typ:** verify-fundament
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `tools/scaffold_drift.py` (neu), `tools/verify.json`, `tests/test_scaffold_drift.py` (neu)
+- **Problem:** Konventions-Aenderung → niemand merkt ausser manueller `migrate.py`.
+- **Akzeptanzkriterien:** (a) `--check` prueft alle `/opt/*` gegen `PFLICHTDATEIEN`. (b) Rueckgabe fehlender Dateien. (c) verify-Stage `scaffold_drift` (weich). (d) `migrate.py` nutzt gleiche Logik.
+- **Tests:** `tests/test_scaffold_drift.py` (3 Tests).
+- **Blockiert von:** OP-350, OP-351
+
+### OP-360: Skill senior-architekt
+
+- **Status:** open
+- **Typ:** skill-fundament
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `skills/senior-architekt/SKILL.md` (neu), `skills/senior-architekt/WERKZEUGE.md` (neu)
+- **Problem:** Leeres Geruest, Idee im Kopf, kein Weg zu Architektur + OPs.
+- **Akzeptanzkriterien:** (a) SKILL.md mit Rolle, Dialog-Fokus, Konventionen, Ergebnisformat. (b) Werkzeuge: File-Explorer, Konventions-Lookup, OP-Writer, Roadmap-Compiler (OP-282). (c) Beispiel-Dialog. (d) Fail-closed ohne User-Input.
+- **Tests:** `tests/test_skill_senior_architekt.py` (2 Tests).
+- **Blockiert von:** OP-282, OP-350
+
+### OP-361: Senior-Architekt Dialog-Flow
+
+- **Status:** open
+- **Typ:** skill-wiring
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `werkstatt/chat_agent.py` (oder `arch_agent.py`), `static/chat.js`, `tests/test_arch_dialog.py` (neu)
+- **Problem:** Skill alleine reicht nicht — Dialog mit User noetig.
+- **Akzeptanzkriterien:** (a) Chat-Modus `architekt`. (b) Schrittweise: Idee → Anforderungen → Ordnerstruktur → Komponenten → erste OPs. (c) Jede Antwort: Rueckfrage oder naechster Schritt. (d) "Fertig" schreibt nach `docs/`.
+- **Tests:** `tests/test_arch_dialog.py` (3 Tests).
+- **Blockiert von:** OP-360
+
+### OP-362: Senior-Architekt schreibt Plan-Artefakte
+
+- **Status:** open
+- **Typ:** skill-wiring
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `werkstatt/arch_agent.py`, Templates, `tests/test_arch_output.py` (neu)
+- **Problem:** Am Ende muss Architekt konkrete Artefakte schreiben.
+- **Akzeptanzkriterien:** (a) `schreibe_plan(idee, struktur, komponenten)` → 3 Dateien. (b) OPs OP-001..OP-005 mit Blocker-Ketten. (c) `docs/ARCHITECTURE.md` nennt Ordner, Komponenten, Abhaengigkeiten. (d) User-Bestaetigung.
+- **Tests:** `tests/test_arch_output.py` (3 Tests).
+- **Blockiert von:** OP-360, OP-361
+
 ## Erledigt (Auto-Log)
 
 - 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)
