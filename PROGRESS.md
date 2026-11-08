@@ -3565,3 +3565,59 @@ Richtungen). Bestehende Tests bleiben gruen. pytest 1538 passed.
 
 **Live-Effekt:** ambient('werkstatt') = failed, last_run = 19:41
 loop_failed. UI zeigt jetzt die Wahrheit.
+
+
+## Backfill project-Spalte aus JSONL — Vorbereitung (2026-11-08)
+
+**Symptom:** aggregate_ambient('security-ai') zeigte 'idle', obwohl
+security-ai 236 Runs und 23.289 Werkstatt-Laeufe hatte (JSONL 12.10.–
+08.11.).
+
+**Ursache:** OP-306c-Migration hat alle 410k Events auf
+project='werkstatt' gesetzt (Annahme "alle historischen Events
+stammen aus Werkstatt"). Das war falsch — pruefte nie die
+project-Verteilung in JSONL.
+
+**Messung:** Alle 23.289 security-ai event_ids sind in SQLite, aber
+mit project='werkstatt'. Davon 5.124 mit run_id (236 runs), 18.165
+ohne run_id (Pre-run_id-Aera). event_id-Fallback funktioniert
+zuverlaessig fuer beide Gruppen.
+
+**Wichtig:** Zwei getrennte audit-Systeme:
+- /opt/werkstatt/audit-logs/agent-pipeline-*.jsonl -> Werkstatt-Laeufe
+  gegen Projekt security-ai -> GEHOEREN in Werkstatt-SQLite (Backfill-Ziel)
+- /opt/security-ai/audit-logs/*.jsonl -> security-ai's EIGENES System
+  (Format {agent: security_ai, audit_id: AUD-...}) -> NICHT anfassen
+
+**Fix:** Backfill via event_id-IN-Liste (Sicherheit: event_ids sind
+eindeutig aus JSONL mit project=security-ai abgeleitet).
+
+
+## OP-373 abgeschlossen (2026-11-08)
+
+**Ausgefuehrt:** Manueller SQL-UPDATE mit event_id-IN-Liste.
+23.289 Werkstatt-Events von project='werkstatt' auf 'security-ai'
+korrigiert.
+
+**Sicherheit:** event_ids eindeutig aus JSONL-Zeilen mit
+project=security-ai abgeleitet. `WHERE project='werkstatt'` als
+zweite Bedingung. Dry-Run vor Ausfuehrung, DB-Backup in
+/tmp/events.db.vor-backfill.
+
+**Verifikation:**
+- project-Verteilung: werkstatt=387487, security-ai=23289, default=9
+- Idempotent (2. Lauf = 0 Aenderungen)
+- ambient('security-ai') nicht mehr 'idle' (zeigt aber leeren
+  run_id — siehe OP-374)
+- ambient('werkstatt') unveraendert (failed, 19:41)
+
+**Bewusst NICHT gemacht (in OP-374):**
+- Kein reproduzierbarer Code (nur manuelles SQL)
+- `_letzter_run_id` filtert nicht auf run_id != ''
+- 18.165 security-ai Events ohne run_id (Loop-Bug 18.10.-02.11.)
+- ops_run_status findet 0 security-ai-OPs (pre-OP-303 op_id-Luecke)
+
+**Wichtig:** /opt/security-ai/audit-logs/ ist security-ai's EIGENES
+audit-System (Format {agent: security_ai, audit_id: AUD-...}) und
+NICHT Teil des Werkstatt-Backfills. Nur Werkstatt-JSONL und
+Werkstatt-SQLite waren Ziel.

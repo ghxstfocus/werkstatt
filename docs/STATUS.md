@@ -1072,6 +1072,27 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Tests:** `tests/test_projection.py` (2 Tests: status mit korrekter Basis, status ohne Migration).
 - **Blockiert von:** —
 
+
+### OP-374: security-ai ehrliche Anzeige + Backfill-Reproduzierbarkeit (Sammel-OP)
+
+- **Status:** open
+- **Typ:** bugfix (Sammel-OP, mehrere Teilpunkte)
+- **Phase:** Phase-2 (Focus)
+- **Betroffene Dateien:** `werkstatt/projection.py`, `werkstatt/web/inspector.py`, `tests/test_projection.py`, `tests/test_ambient_aggregation.py`
+- **Problem (aus OP-373-Backfill 2026-11-08):** Nach dem Projekt-Backfill zeigt `aggregate_ambient('security-ai')` ehrliche aber verwirrende Werte. Vier zusammenhaengende Teilprobleme, die einzeln zu klein fuer eigene OPs sind:
+  - **(a) `_letzter_run_id` filtert nicht:** `SELECT run_id ... ORDER BY seq DESC LIMIT 1` liefert `run_id=''` (Events ohne run_id dominieren chronologisch). Live: ambient('security-ai') zeigt `last_run.run_id=''` obwohl der letzte echte Run `20261018-223549-256043` ist.
+  - **(b) Kein reproduzierbarer Backfill:** OP-373 wurde als einmaliges SQL ausgefuehrt. `Projector.backfill_project_from_jsonl()` als Methode fehlt. Bei kuenftigen Migrationen (z.B. wenn weitere Projekte auftauchen) muss der Backfill wieder manuell geschrieben werden.
+  - **(c) 18.165 Events ohne run_id (18.10.-02.11.):** Loop-Bug vor OP-303 (`set_run_id()` wurde nicht aufgerufen). Information ueber Run-Zugehoerigkeit ist verloren — nicht rekonstruierbar. Muss ehrlich dokumentiert sein.
+  - **(d) `ops_run_status` fuer pre-OP-303-Runs:** 0 OPs weil `pipeline_start.payload` kein `op_id` hat. Ehrliche Luecke, keine Regression. UI sollte das nicht als '0 Runs' zeigen, sondern 'vor OP-303, keine Zuordnung'.
+- **Akzeptanzkriterien:**
+  (a1) `_letzter_run_id` filtert `run_id IS NOT NULL AND run_id != ''`. Tests: bestehende Tests bleiben gruen, neuer Test `test_letzter_run_id_ignoriert_leere`. Live: ambient('security-ai').last_run.run_id = `20261018-223549-256043`.
+  (b1) `Projector.backfill_project_from_jsonl()` als Methode: liest `agent-pipeline-*.jsonl`, baut `event_id -> project`-Map, `UPDATE events SET project=? WHERE event_id IN (...)`, idempotent. Tests: 3 (setzt-project, idempotent, wirft-bei-fremdem-project). Hinweis: `-migrated-*` wird von `_jsonl_files` bereits excludet (siehe a640b19).
+  (c1) Doku-Klarstellung: `events` mit `run_id=''` sind pre-OP-303-Runs und werden in Sparklines/Ambient **nicht** als Runs gezaehlt. Keine automatische Rekonstruktion.
+  (d1) `static/ambient_status.js` bei `gates_open=0 AND last_run=null AND pre_op303=True` zeigt Tooltip 'Vor OP-303, keine Run-Zuordnung' statt 'Idle'.
+  (e1) `pytest tests/test_ambient_aggregation.py tests/test_projection.py` >1538 passed, ruff/mypy/Drifts gruen.
+- **Tests:** `tests/test_ambient_aggregation.py` +1 (leere-run_id), `tests/test_projection.py` +3 (backfill-methode).
+- **Blockiert von:** —
+
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
 - **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
@@ -1531,6 +1552,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
+
+- 2026-11-08 | OP-373 | done | Backfill project-Spalte: 23.289 Werkstatt-Events von project='werkstatt' auf 'security-ai' korrigiert. Ausgefuehrt als manueller SQL-UPDATE mit event_id-IN-Liste (event_ids eindeutig aus JSONL-Zeilen mit project=security-ai abgeleitet, keine Kollisionsgefahr). project-Verteilung: werkstatt=387487, security-ai=23289, default=9. Idempotent (2. Lauf = 0 Aenderungen). **Ehrlich offen (in OP-374):** (a) Kein reproduzierbarer Code (nur manuelles SQL); (b) `_letzter_run_id` filtert nicht auf `run_id != ''` — security-ai zeigt leere run_id als 'letzter Run'; (c) 18.165 security-ai Events (18.10.-02.11.) ohne run_id durch Loop-Bug vor OP-303; (d) `ops_run_status` findet 0 security-ai-OPs weil pre-OP-303 `op_id` fehlt (ehrliche Luecke). pytest 1538 passed.
 
 - 2026-11-08 | OP-371 | done | Ambient-Loop-Status: neuestes Terminal-Event entscheidet (loop_erfolg|loop_failed|loop_ended). Vorher 3-stufige Kaskade mit loop_erfolg zuerst -> ein spaeteres loop_failed wurde ignoriert. Live 2026-11-08 22:10: ambient('werkstatt') zeigte 'done' (loop_erfolg 01:26), obwohl um 19:41 loop_failed das letzte Terminal-Event war. Fix: 1 Query mit IN-Klausel + ORDER BY seq DESC LIMIT 1, kind des Neuesten entscheidet. 2 neue Tests (Konflikt-Reihenfolge in beide Richtungen). pytest 1538 passed.
 
