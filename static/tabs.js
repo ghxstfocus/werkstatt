@@ -31,7 +31,12 @@
       schliesse(id);
     });
 
-    leiste.insertBefore(klon, neuBtn);
+    var _neuBtnLive = document.getElementById("tab-neu");
+    if (_neuBtnLive && _neuBtnLive.parentNode === leiste) {
+      leiste.insertBefore(klon, _neuBtnLive);
+    } else {
+      leiste.appendChild(klon);
+    }
 
     tabDaten[id] = {
       projekt: projekt,

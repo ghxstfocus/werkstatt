@@ -106,12 +106,17 @@
   }
 
   function _init() {
-    // Ersetze + Button (klont um alte Handler zu entfernen)
+    // OP-305: + Button - direkter Listener, kein Clone (tabs.js hat eigene
+    // Referenz auf das Original, Clone wuerde insertBefore brechen)
     var neuBtn = _el("tab-neu");
     if (neuBtn) {
-      var clone = neuBtn.cloneNode(true);
-      neuBtn.parentNode.replaceChild(clone, neuBtn);
-      clone.addEventListener("click", _oeffnen);
+      neuBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        _oeffnen();
+      });
+      console.log("[create] + Button-Handler gebunden");
+    } else {
+      console.warn("[create] tab-neu nicht gefunden");
     }
 
     var closeBtn = _el("project-create-close");
