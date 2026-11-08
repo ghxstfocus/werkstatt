@@ -1,7 +1,7 @@
 # SOLL-Zustand — Werkstatt
 
 **Status:** Zielarchitektur (nicht gebaut)
-**Stand:** 2026-11-07
+**Stand:** 2026-11-08 (Event-Architektur + 3XX-UI)
 **Zweck:** Diese Datei beschreibt, wohin Werkstatt sich entwickelt.
 Jedes LLM, das in diesem Repo arbeitet, soll daraus das Ziel
 verstehen — nicht nur den IST-Zustand (siehe `docs/ARCHITECTURE.md`).
@@ -608,6 +608,48 @@ Folgende Punkte sind **nur Doku/ADR, Code pending** (ADR accepted, kein Code):
 
 ---
 
+### 8.4 Event-Architektur + UI-Layer (2026-11-08 implementiert)
+
+Zwei grosse Etappen die zwischen SOLL-Erstfassung (2026-11-07) und
+heute gebaut wurden. Beide sind **implementiert**, nicht mehr nur
+Zielbild.
+
+**Event-Architektur (ADR-0024, OP-319..323):**
+Tiered Event Log als Write Model + SQLite als rebuildbare
+Projektion. `audit()` schreibt semantische Events nach
+`audit-logs/semantic-*.jsonl`, `stream()` schreibt hochfrequente
+Events nach `audit-logs/stream-*.jsonl`. `werkstatt/projection.py::
+Projector` rekonstruiert SQLite deterministisch aus JSONL.
+Single-Writer-Regel: `EventStore().append()` aus Production
+verbannt. Health-Check `/api/projects/{name}/projection/status`.
+Details: ADR-0024, `docs/ARCHITECTURE.md` §8.
+
+**UI-Layer (OP-300..305, 3XX-Reihe):**
+Die Cockpit-UI als Handlungsampel, nicht als Log-Viewer.
+Sechs Bausteine:
+
+| OP | Was | Status |
+|----|-----|--------|
+| OP-300 | Semantic Colors (6 sem-Rollen, 17 CSS-Variablen) | done |
+| OP-301 | Ambient Status Bar (Loop-Status, Letzter Run, Gates) | done |
+| OP-302 | Command Palette (`Ctrl+K`, Server-Filter) | done |
+| OP-303 | Loop-Start pro OP (`▶`/`■`, Run-Status-Badge) | done |
+| OP-304 | Shortcut Help (`?`-Overlay) | done |
+| OP-305 | Utility-Bar + Projekt-Anlage-Modal + Multi-Projekt (ADR-0023) | done |
+
+**Offen (3 neue OPs):**
+- OP-306a Tab-Persistenz (Reload behaelt Tabs)
+- OP-306b Projekt-Selector (alle `/opt/*`-Projekte sichtbar)
+- OP-306c Multi-Projekt-Datenquellen (SQLite `project`-Spalte fuer
+  `/ambient` `/status` `/timeline` `/tokens`)
+
+**Was das fuer SOLL.md bedeutet:** Die UI ist nicht mehr nur
+"Interface des Loops" (§5), sondern hat eine **eigene Architektur-
+Schicht** zwischen Tab-Leiste und Workbench. Details in
+`docs/ARCHITECTURE.md` §9. Die 4-Schichten-Architektur (§3) bleibt
+gueltig, aber §9 (UI) ist neu hinzugekommen als operative
+Bedien-Schicht.
+
 ## 9. Die drei Kernprinzipien (nochmal explizit)
 
 ### 9.1 Der Mensch entscheidet
@@ -687,6 +729,18 @@ Der Chat und der Loop schlagen vor. Der Mensch wählt.
 - `PROGRESS.md` — erledigte OPs
 
 ---
+
+**Neue ADRs (2026-11-08):**
+- `docs/adr/ADR-0023-multi-projekt-kontext.md` — Multi-Projekt-Kontext
+  (Projekt-Pfad-Basis, `/start`-Validierung, projekt-spezifische
+  Datenquellen)
+- `docs/adr/ADR-0024-tiered-event-log.md` — Tiered Event Log +
+  Projector (CQRS-light)
+
+**Neue OPs (2026-11-08):**
+- 3XX-Reihe (OP-300..306c) — UI-Fundament
+- OP-319..323 — Event-Architektur
+
 
 ## 12. Was diese Datei NICHT ist
 
