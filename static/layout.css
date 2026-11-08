@@ -218,6 +218,64 @@ body {
   background: var(--panel); border-top: 1px solid var(--border-subtle);
   font-size: 11px; color: var(--text-dim); min-height: 24px; align-items: center;
 }
+
+/* ── OP-301: Ambient Status Bar (oben) ── */
+.ambient-bar {
+  display: flex;
+  gap: 16px;
+  padding: 4px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.ambient-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  cursor: default;
+}
+.ambient-item[data-ziel] { cursor: pointer; }
+.ambient-item[data-ziel]:hover { color: var(--text); }
+.ambient-icon {
+  font-size: 14px;
+  line-height: 1;
+  display: inline-block;
+}
+/* Loop-Status */
+#ambient-loop[data-state="idle"] .ambient-icon,
+#ambient-loop[data-state="idle"] .ambient-label { color: var(--sem-history); }
+#ambient-loop[data-state="running"] .ambient-icon,
+#ambient-loop[data-state="running"] .ambient-label {
+  color: var(--sem-active);
+  animation: ambient-pulse 1.5s ease-in-out infinite;
+}
+#ambient-loop[data-state="done"] .ambient-icon,
+#ambient-loop[data-state="done"] .ambient-label { color: var(--sem-ok); }
+#ambient-loop[data-state="failed"] .ambient-icon,
+#ambient-loop[data-state="failed"] .ambient-label { color: var(--sem-error); }
+@keyframes ambient-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+/* Letzter Run */
+#ambient-last-run[data-ok="true"] { color: var(--sem-ok); }
+#ambient-last-run[data-ok="false"] { color: var(--sem-error); }
+#ambient-last-run[data-ok="none"] { color: var(--text-muted); }
+/* Tokens */
+#ambient-tokens { color: var(--text-dim); }
+/* Gates */
+.ambient-gates {
+  color: var(--sem-action);
+  animation: ambient-pulse 1.5s ease-in-out infinite;
+  padding: 1px 6px;
+  border: 1px solid var(--sem-action);
+  border-radius: 3px;
+  font-weight: 600;
+}
+
 .status-item, .status-token, .status-run { white-space: nowrap; }
 .status-token { padding: 1px 6px; border: 1px solid var(--border-subtle); border-radius: 3px; }
 .status-token.aktiv { color: var(--text); border-color: var(--sem-action); }

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Werkstatt</title>
-  <link rel="stylesheet" href="/static/layout.css?v=1794149062">
+  <link rel="stylesheet" href="/static/layout.css?v=1794153886">
 </head>
 <body>
 
@@ -17,6 +17,16 @@
     </template>
     <button id="tab-neu" type="button" aria-label="Projekt oeffnen">+</button>
   </nav>
+
+  <div class="ambient-bar" id="ambient-bar" role="status" aria-live="polite">
+    <span class="ambient-item" id="ambient-loop" data-state="idle" title="Loop-Status">
+      <span class="ambient-icon">○</span>
+      <span class="ambient-label">Idle</span>
+    </span>
+    <span class="ambient-item" id="ambient-last-run" data-ziel="timeline" title="Letzter Run">Letzter Run: —</span>
+    <span class="ambient-item" id="ambient-tokens" title="Loop-Token / Chat-Token">Loop 0 · Chat 0</span>
+    <span class="ambient-item ambient-gates" id="ambient-gates" data-ziel="gate-panel" hidden>Gates offen</span>
+  </div>
 
   <main class="layout-grid">
 
@@ -166,5 +176,6 @@
   <script src="/static/workbench.js?v=20261107a"></script>
   <script src="/static/gate_panel.js?v=20261108a"></script>
   <script src="/static/detail_drawer.js?v=20261108a"></script>
+  <script src="/static/ambient_status.js?v=1794153886"></script>
 </body>
 </html>
