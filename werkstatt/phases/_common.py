@@ -104,12 +104,6 @@ def _run_with_progress(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
-def _split_task_on_demand(*args, **kwargs):
-    """Late-Binding-Proxy fuer werkstatt.loop._split_task_on_demand."""
-    from werkstatt.loop import _split_task_on_demand as _orig
-    return _orig(*args, **kwargs)
-
-
 def _task_ende(*args, **kwargs):
     """Late-Binding-Proxy fuer werkstatt.loop._task_ende."""
     from werkstatt.loop import _task_ende as _orig

@@ -50,7 +50,7 @@ Rollen: Explorer, Planner, Builder, Verify, Reviewer, Human-Gate.
 - Fail-closed, Idempotenz, Backup/Restore.
 - 6/6 Tasks approved, LOOP_RC=0.
 
-### Phase 20: ADaPT ✅ (M-472..M-475)
+### Phase 20: ADaPT ~~✅~~ entfernt 2026-11-08 (zu selten, kein Audit-Trail)
 
 - M-472: On-Demand-Zerlegung (`_split_task_on_demand`).
 - M-473: `while`-Loop statt `for` (Sub-Tasks werden gebaut).

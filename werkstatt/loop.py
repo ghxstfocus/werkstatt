@@ -76,7 +76,6 @@ from werkstatt.state import RunState
 from werkstatt.task_runner import (  # Fix AZ Stufe 7: Re-Export
     _extract_files_from_tasks,
     _pruefe_prior_failed_dependency,
-    _split_task_on_demand,
     _task_ende,
 )
 from werkstatt.verify import (  # Fix AZ Stufe 3: Re-Export
@@ -128,7 +127,6 @@ __all__ = [
     "_reflection_loop",
     "_resolve_venv_cmd",
     "_ruff_fix_changed",
-    "_split_task_on_demand",
     "_stage_ist_hart",
     "_task_ende",
     "_task_fortschritt_block",

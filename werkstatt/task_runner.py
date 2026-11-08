@@ -180,97 +180,6 @@ def _task_ende(
             )
 
 
-def _split_task_on_demand(
-    state: RunState, task_id: str,
-    phase_state=None,
-) -> bool:
-    """M-472: Zerlegt eine fehlgeschlagene Task in Sub-Tasks (ADaPT).
-
-    Nur wenn die Task noch nicht zu tief zerlegt ist (max 2 Ebenen).
-    Abgeschlossene Tasks bleiben unveraendert.
-    """
-    from werkstatt.phase_state import PhaseState
-    from werkstatt.planner import _llm_split_einzel_task
-
-    pd = state.project_dir
-    pn = state.project_name
-    api_key = state.api_key
-
-    # Task finden.
-    _task = None
-    for t in (state.tasks or []):
-        if isinstance(t, dict) and t.get("id") == task_id:
-            _task = t
-            break
-    if _task is None:
-        return False
-
-    # Tiefe pruefen (max 2).
-    _tiefe = _task.get("split_tiefe", 0)
-    if _tiefe >= 2:
-        audit("loop_split_max_tiefe", {"task_id": task_id}, pd, pn)
-        # K38b: Grund merken, damit Aufrufer korrektes failure setzt.
-        state.split_failure_grund = "split_max_tiefe"
-        return False
-
-    # K43a/K44a: ADaPT nur bei WIRKLICH grossen Tasks (> 2500 Zeichen).
-    # K43a-Schwelle 1500 war zu niedrig: t2 (Service-Methode + Validierung,
-    # ~2000 Zeichen) wurde in 3 Subtasks gesplittet, t2_b nochmal in 3 --
-    # mit Doppelung ("Route+Template" als Subtask, obwohl eigener Task).
-    # K15c sagt: 50-150 Zeilen Code = ~1000-1800 Zeichen. Bei 2500 ist
-    # der Task ~200+ Zeilen -- dann ist ADaPT sinnvoll.
-    _desc_len = len(_task.get("description", ""))
-    if _desc_len < 2500:
-        audit("loop_split_skip_klein",
-              {"task_id": task_id, "desc_len": _desc_len}, pd, pn)
-        return False
-
-    # Fehler-Kontext.
-    _errors = state.last_verify_errors or []
-    _bugs = state.reviewer_bugs or []
-    _prosa = state.architect_prosa or ""
-
-    # Sub-Tasks vom LLM.
-    _sub = _llm_split_einzel_task(
-        _prosa, _task, api_key, pd, pn,
-    )
-    if not _sub:
-        audit("loop_split_fehler", {"task_id": task_id}, pd, pn)
-        return False
-
-    # K26: NUTZE die uebergebene phase_state (statt eigene Instanz).
-    _ps = phase_state
-    if _ps is None:
-        _ps = PhaseState(pn, base_dir=Path(pd) / ".werkstatt")
-        if _ps.exists():
-            _ps.load()
-    _existing = _ps.get_task(task_id)
-    if _existing and _existing.get("status") == "split":
-        audit("loop_split_bereits_erledigt", {"task_id": task_id}, pd, pn)
-    else:
-        _ps.split_task(task_id, _sub)
-
-    # state.tasks: Sub-Tasks an Position von _task einfuegen.
-    _tasks = list(state.tasks or [])
-    _idx = -1
-    for i, t in enumerate(_tasks):
-        if isinstance(t, dict) and t.get("id") == task_id:
-            _idx = i
-            break
-    if _idx >= 0:
-        for j, st in enumerate(_sub):
-            st["split_tiefe"] = _tiefe + 1
-            _tasks.insert(_idx + 1 + j, st)
-        state.tasks = _tasks
-
-    audit("loop_task_split",
-          {"task_id": task_id,
-           "anzahl_sub": len(_sub),
-           "sub_ids": [st.get("id") for st in _sub],
-           "tiefe": _tiefe + 1}, pd, pn)
-    return True
-
-
 def _pruefe_prior_failed_dependency(
     phase_state, task_id: str,
 ) -> tuple[bool, list[str]]:
@@ -351,6 +260,5 @@ def _extract_files_from_tasks(tasks: list) -> list[str]:
 __all__ = [
     '_extract_files_from_tasks',
     '_pruefe_prior_failed_dependency',
-    '_split_task_on_demand',
     '_task_ende',
 ]

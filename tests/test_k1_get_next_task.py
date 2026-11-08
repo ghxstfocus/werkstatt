@@ -16,13 +16,6 @@ def test_get_next_task_ueberspringt_failed(tmp_path: Path) -> None:
     assert ps.get_next_task()["id"] == "t2"
 
 
-def test_get_next_task_ueberspringt_split(tmp_path: Path) -> None:
-    ps = _ps(tmp_path, [{"id": "t1"}, {"id": "t2"}])
-    ps.split_task("t1", [{"id": "t1a", "name": "a"}])
-    nxt = ps.get_next_task()
-    assert nxt["id"] == "t1a"
-
-
 def test_get_next_task_liefert_pending(tmp_path: Path) -> None:
     ps = _ps(tmp_path, [{"id": "t1"}])
     assert ps.get_next_task()["id"] == "t1"
@@ -46,8 +39,3 @@ def test_get_next_task_alle_failed(tmp_path: Path) -> None:
     assert ps.get_next_task() is None
 
 
-def test_split_task_idempotent_status_split(tmp_path: Path) -> None:
-    """Nach split_task ist t1 status=split, nicht mehr pending."""
-    ps = _ps(tmp_path, [{"id": "t1"}])
-    ps.split_task("t1", [{"id": "t1a", "name": "a"}])
-    assert ps.get_task("t1")["status"] == "split"

@@ -54,7 +54,6 @@ def test_phase_tasks_verify_ruft_run_builder_nicht(monkeypatch):
     monkeypatch.setattr(tasks_mod, "_task_ende", lambda *a, **k: None)
     monkeypatch.setattr(tasks_mod, "audit", lambda *a, **k: None)
     monkeypatch.setattr(tasks_mod, "_reset_task_state", lambda *a, **k: None)
-    monkeypatch.setattr(tasks_mod, "_split_task_on_demand", lambda *a, **k: None)
     monkeypatch.setattr(tasks_mod, "group_start", lambda *a, **k: None)
     monkeypatch.setattr(tasks_mod, "group_end", lambda *a, **k: None)
     monkeypatch.setattr(tasks_mod, "task", lambda *a, **k: None)

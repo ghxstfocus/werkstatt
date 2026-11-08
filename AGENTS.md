@@ -87,12 +87,14 @@ PROJEKT-DOKU-Sektion (priorisiert, max 4000 Z. je Doc). Bei vagen
 Aufgaben waehlt Scout GENAU EINEN OP-NNN aus docs/STATUS.md
 (OP-NNN-Disziplin, SCOUT_SYSTEM).
 
-## ADaPT (On-Demand-Zerlegung)
+## Task-Zerlegung (Plan-first)
 
-Wenn ein Task scheitert (builder_failed, post_build_verify_failed,
-reviewer_high_bug_fail_closed), wird er in 2-3 Sub-Tasks zerlegt.
-Max 2 Ebenen tief. Abgeschlossene Tasks bleiben. get_next_task
-liefert nur pending.
+Der Planner zerlegt die Architect-Prosa von Anfang an logisch
+(Interface -> Backend -> Tests), `_leite_deps_deterministisch`
+(OP-187) uebersetzt Architect-Aussagen in Dependencies, Topo-Sort
+bestimmt die Reihenfolge. Kein On-Demand-Split bei Fehlschlag
+(ADaPT entfernt 2026-11-08).
+
 
 ## Verify-Stages (post_build, hart/weich)
 

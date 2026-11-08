@@ -66,8 +66,6 @@ def _task_fortschritt_block(pd: Path, pn: str) -> str:
         elif _st == "running":
             _lines.append(f"  [~] {_tid} {_name}")
             _pending += 1
-        elif _st == "split":
-            _lines.append(f"  [>] {_tid} {_name}  (split)")
         elif _st == "human_review":
             # OP-060b: Mensch muss entscheiden.
             _hr_grund = _t.get("failure") or "unbekannt"

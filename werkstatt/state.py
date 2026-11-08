@@ -286,7 +286,6 @@ class RunState:
     reviewer_stagnation_false_positive: bool = False
     scout_bereits_erfuellt: bool = False
     spec_widerspruch_erkannt: bool = False
-    split_failure_grund: str | None = None
     tasks_ok_counter: int = 0
 
 

@@ -30,7 +30,6 @@ from ._common import (
     _reviewer_rejected_payload,
     _ruff_fix_changed,
     _run_with_progress,
-    _split_task_on_demand,
     _task_ende,
     _verify_patches,
     _verify_patches_soft,
@@ -201,14 +200,7 @@ def _phase_tasks_loop(
             audit("loop_builder_aufgerufen", {"task_id": i}, pd, pn)
             _task_ende(state, phase_state, task_id, ok=False,
                        name=task_name, failure="builder_failed")
-            # M-472: On-Demand-Zerlegung (ADaPT).
-            if _split_task_on_demand(state, task_id, phase_state):
-                audit("loop_task_retry_nach_split",
-                      {"task_id": task_id}, pd, pn)
-                continue  # naechster Task (Sub-Task)
-            # K38b: Grund aus split_max_tiefe uebernehmen.
-            _split_failure = getattr(state, "split_failure_grund", None) or "builder_failed"
-            state.split_failure_grund = None
+            _split_failure = "builder_failed"
             # FIX AP 2026-10-31: Dependency-Failure -> continue statt
             # return 1. Live-Beleg 10:36: t1 (create) failte, t2-t4
             # (update) fanden Datei nicht, Loop brach bei t2 ab,
@@ -777,14 +769,7 @@ def _phase_tasks_loop(
                 if _high_bugs:
                     audit("loop_reviewer_high_bug_fail_closed",
                           {"task_id": i, "high_bugs": len(_high_bugs)}, pd, pn)
-                    # M-474: ADaPT bei High-Bugs.
-                    if _split_task_on_demand(state, task_id, phase_state):
-                        audit("loop_task_retry_nach_split",
-                              {"task_id": task_id}, pd, pn)
-                        continue
-                    # K38b: Grund aus split_max_tiefe uebernehmen.
-                    _split_failure = getattr(state, "split_failure_grund", None) or "reviewer_high_bug"
-                    state.split_failure_grund = None
+                    _split_failure = "reviewer_high_bug"
                     _task_ende(state, phase_state, task_id, ok=False,
                                name=task_name, failure=_split_failure)
                     # FIX AR 2026-10-31: continue statt return 1.

@@ -81,12 +81,24 @@ deepseek-chat. Prueft die Task-Description, nicht die Gesamtaufgabe
 
 Plan-Gate (nach Planner) + Ergebnis-Gate (nach Reviewer). fail-closed.
 
-## 3. ADaPT (On-Demand-Zerlegung)
+## 3. Task-Zerlegung (Plan-first, kein On-Demand)
 
-Wenn ein Task scheitert (builder_failed, post_build_verify_failed,
-reviewer_high_bug_fail_closed), wird er in 2-3 Sub-Tasks zerlegt
-(M-472/M-473/M-474/M-475). Max 2 Ebenen tief. Abgeschlossene Tasks
-bleiben. get_next_task liefert nur pending. while-Loop (M-473).
+Der Planner zerlegt die Architect-Prosa **von Anfang an** logisch:
+Interface vor Backend vor Tests. `_leite_deps_deterministisch`
+(OP-187) uebersetzt Architect-Aussagen aus Block 5 in Datei-zu-Datei-
+Dependencies, mappt auf Task-IDs via `task_files[0]`. Topo-Sort in
+`_planner_split` bestimmt die Reihenfolge.
+
+Der Loop laeuft strikt in dieser Reihenfolge: Explorer -> Scout ->
+Architect -> Planner-Split -> Builder -> Verify -> Reviewer. Kein
+Task wird bei Fehlschlag zerlegt (ADaPT entfernt 2026-11-08).
+
+**Warum kein On-Demand-Split mehr:** ADaPT feuerte in 237 modernen
+Runs 1-2x (nur bei `builder_failed`/`reviewer_high_bug`), hatte
+keinen Audit-Trail, und die Qualitaet der Sub-Task-Zerlegung aus
+einer fehlgeschlagenen Task war unzuverlaessig. Wenn der Plan
+schlecht ist, ist die Loesung **den Plan zu verbessern**, nicht
+ihn on-demand zu zersplittern.
 
 ## 4. Verifikation
 
