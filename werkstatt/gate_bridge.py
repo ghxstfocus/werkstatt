@@ -93,3 +93,40 @@ def wait(
     raise GateTimeout(
         f"Gate {gate_id} nach {timeout}s nicht beantwortet"
     )
+
+
+def expire_for_run(run_id: str, grund: str = "loop_ended") -> int:
+    """Schliesst alle offenen Gates eines Runs atomar.
+
+    Wird vom Loop-Lifecycle (loop.main() -> finally) gerufen:
+    sobald der Loop-Prozess endet, sind alle seine Gates abgebrochen.
+    Kein PID-Check, kein Heartbeat, kein Timeout — der Lifecycle
+    ist der Vertrag.
+    """
+    if not run_id:
+        return 0
+    es = EventStore()
+    opens = es.query(run_id, kind="gate_open")
+    if not opens:
+        return 0
+    beantwortet = {
+        (e.get("payload") or {}).get("gate_id")
+        for e in es.query(run_id, kind="gate_answered")
+    }
+    bereits_expired = {
+        (e.get("payload") or {}).get("gate_id")
+        for e in es.query(run_id, kind="gate_expired")
+    }
+    n = 0
+    for ev in opens:
+        gid = (ev.get("payload") or {}).get("gate_id")
+        if not gid or gid in beantwortet or gid in bereits_expired:
+            continue
+        es.append(
+            run_id=run_id,
+            kind="gate_expired",
+            payload={"gate_id": gid, "grund": grund, "auto": True},
+        )
+        n += 1
+    return n
+

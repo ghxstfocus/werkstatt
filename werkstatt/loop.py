@@ -371,7 +371,7 @@ def _k13_rc(rc: int, tasks_ok: int) -> int:
     return rc
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main_inner(argv: list[str] | None = None) -> int:
     # M-391: .env laden (DEEPSEEK_API_KEY automatisch setzen)
     load_env()
     # Tee-Stream fuer Browser-Terminal: alle Render-Zeilen in
@@ -589,6 +589,62 @@ def main(argv: list[str] | None = None) -> int:
     _erfolg = (rc == 0) and (_tasks_ok > 0)
     _r.footer(success=_erfolg, tasks_total=_tasks_total, tasks_ok=_tasks_ok)
     return _k13_rc(rc, _tasks_ok)
+
+
+def _emit_lifecycle_end(erfolg: bool) -> None:
+    """Lifecycle-Vertrag: jeder Loop-Lauf endet mit Terminal-Event.
+
+    Bei Erfolg: loop_ended. Bei Exception: loop_failed.
+    In beiden Faellen werden alle offenen Gates des Runs expiret.
+
+    Nicht erfasst: SIGKILL. Dafuer greift das 300s-Netz in wait().
+    """
+    try:
+        from pathlib import Path as _P
+
+        from werkstatt.audit import audit, get_run_id
+        from werkstatt.gate_bridge import expire_for_run
+    except Exception:  # noqa: BLE001
+        return
+    run_id = get_run_id()
+    if not run_id:
+        return
+    if erfolg:
+        try:
+            audit("loop_ended", {"erfolg": True, "run_id": run_id},
+                  _P.cwd(), "werkstatt")
+        except Exception:  # noqa: BLE001
+            pass
+        _grund = "loop_ended"
+    else:
+        try:
+            audit("loop_failed", {"erfolg": False, "run_id": run_id},
+                  _P.cwd(), "werkstatt")
+        except Exception:  # noqa: BLE001
+            pass
+        _grund = "loop_failed"
+    try:
+        expire_for_run(run_id, grund=_grund)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Lifecycle-Wrapper um _main_inner.
+
+    Garantiert: loop_ended/loop_failed + alle Gates des Runs geschlossen,
+    egal wie der Loop endet (return, Exception, KeyboardInterrupt).
+    """
+    erfolg = False
+    try:
+        rc = _main_inner(argv)
+        erfolg = (rc == 0)
+        return rc
+    except BaseException:
+        erfolg = False
+        raise
+    finally:
+        _emit_lifecycle_end(erfolg)
 
 
 if __name__ == "__main__":
