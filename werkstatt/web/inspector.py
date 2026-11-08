@@ -134,35 +134,37 @@ def aggregate_status(projekt: str) -> dict[str, Any]:
                             aus["phase"] = mm.group(1)
                 except OSError:
                     pass
-        # Verify aus JSONL-Audit (verify_*)
+        # Verify aus JSONL-Audit (verify_*) — ueber die letzten 3 Dateien
         if aus["verify"] is None:
             audit_dir = werkstatt_home() / "audit-logs"
             if audit_dir.exists():
-                kand = sorted(audit_dir.glob("agent-pipeline-*.jsonl"))
-                if kand:
+                kand = sorted(audit_dir.glob("agent-pipeline-*.jsonl"))[-3:]
+                for kandidat in reversed(kand):
+                    if aus["verify"] is not None:
+                        break
                     try:
-                        with kand[-1].open(encoding="utf-8", errors="replace") as f:
-                            zeilen = f.readlines()[-2000:]
-                        for z in reversed(zeilen):
-                            z = z.strip()
-                            if not z:
-                                continue
-                            try:
-                                obj = json.loads(z)
-                            except json.JSONDecodeError:
-                                continue
-                            k = str(obj.get("kind", ""))
-                            if k.startswith("verify_"):
-                                ok_val = k.endswith(("_ok", "_passed"))
-                                bad = k.endswith(("_fail", "_failed", "_error"))
-                                aus["verify"] = {
-                                    "ok": True if ok_val else (False if bad else None),
-                                    "kind": k,
-                                    "ts": obj.get("ts"),
-                                }
-                                break
+                        with kandidat.open(encoding="utf-8", errors="replace") as f:
+                            zeilen = f.readlines()[-5000:]
                     except OSError:
-                        pass
+                        continue
+                    for z in reversed(zeilen):
+                        z = z.strip()
+                        if not z:
+                            continue
+                        try:
+                            obj = json.loads(z)
+                        except json.JSONDecodeError:
+                            continue
+                        k = str(obj.get("kind", ""))
+                        if k.startswith("verify_"):
+                            ok_val = k.endswith(("_ok", "_passed"))
+                            bad = k.endswith(("_fail", "_failed", "_error"))
+                            aus["verify"] = {
+                                "ok": True if ok_val else (False if bad else None),
+                                "kind": k,
+                                "ts": obj.get("ts"),
+                            }
+                            break
 
         # Drift: aus .werkstatt/quality_gate.log (letzter Eintrag)
         qg = werkstatt_home() / ".werkstatt" / "quality_gate.log"
@@ -640,28 +642,29 @@ def _payload_von(ev: dict[str, Any]) -> dict[str, Any]:
 
 
 def _audit_events(run_id: str | None = None) -> list[dict[str, Any]]:
-    """Liest die aktuelle JSONL-Audit-Datei, optional auf run_id gefiltert."""
+    """Liest die letzten 3 JSONL-Audit-Dateien, optional auf run_id gefiltert."""
     audit_dir = werkstatt_home() / "audit-logs"
     if not audit_dir.exists():
         return []
-    kand = sorted(audit_dir.glob("agent-pipeline-*.jsonl"))
+    kand = sorted(audit_dir.glob("agent-pipeline-*.jsonl"))[-3:]
     if not kand:
         return []
     events: list[dict[str, Any]] = []
-    try:
-        with kand[-1].open(encoding="utf-8", errors="replace") as f:
-            for zeile in f:
-                zeile = zeile.strip()
-                if not zeile:
-                    continue
-                try:
-                    obj = json.loads(zeile)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(obj, dict):
-                    events.append(obj)
-    except OSError:
-        return []
+    for datei in kand:
+        try:
+            with datei.open(encoding="utf-8", errors="replace") as f:
+                for zeile in f:
+                    zeile = zeile.strip()
+                    if not zeile:
+                        continue
+                    try:
+                        obj = json.loads(zeile)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(obj, dict):
+                        events.append(obj)
+        except OSError:
+            continue
     if run_id:
         return [e for e in events if str(e.get("run_id", "")) == run_id]
     # Default: letzter Run
