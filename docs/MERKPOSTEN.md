@@ -1000,3 +1000,41 @@ uebernehmen. Kein Modul-Import raten.
 - 1 Projector-Deadlock behoben (7h Stillstand)
 - 6 eigene Fehler, alle dokumentiert
 
+### Live-Test Loop-aus-UI (2026-11-08 23:25) — 4 Bugs auf einmal
+
+Loop aus der UI gestartet (`POST /api/projects/werkstatt/start` mit
+`op_id=OP-324`). Der Loop lief korrekt an, schrieb `loop_started`,
+`loop_phase`, `loop_plan_shown`, `gate_open` (`plan-4ce22f2a`) und
+wartete 5+ Minuten. **Die UI zeigte nichts davon.**
+
+Vier unabhaengige Bugs, alle im UI-Loop-Datenfluss:
+
+1. `_audit_events` liest `ev.get("ts")`, JSONL-Events haben aber
+   `"timestamp"` → alle `ts` leer im Gate-Context.
+2. `offene_gates: []` obwohl `gate_open` in SQLite (Folgefehler
+   oder eigenstaendig — nicht abschliessend geklaert).
+3. Ambient zeigt `failed`/`idle`, weil `aggregate_ambient` nur
+   `heartbeat` in letzten 60s als running wertet. Bei `gate_bridge.
+   wait()` schreibt der Loop aber keinen `heartbeat` — er blockiert.
+4. `POST /api/runs/{run_id}/gate` existiert, aber der Subprozess-
+   Loop pollt `gate_answered`-Events. Kein Endpoint schreibt sie
+   fuer einen laufenden Loop.
+
+**Regel:** Bei jedem "Feature funktioniert"-Test aus der UI:
+**zuerst** in DevTools `Network`-Tab schauen, ob Requests
+tatsaechlich ankommen. Wenn `POST /start` zurueckkommt mit
+`{gestartet: true, pid: ...}`, aber das UI nichts zeigt, ist es
+**kein** Backend-Bug, sondern der **UI-zu-Backend**-Datenfluss.
+
+Bei diesem Test war der Beweis der SQLite-`seq`-Vergleich:
+vor Klick 788762, nach Klick 788765 (+3 Events). Backend lief,
+UI war blind. Ohne diesen Datenbank-Blick waere die Diagnose
+"nichts passiert" falsch gewesen.
+
+**Angelegt:** OP-381 (Sammel-OP Loop-UI-Interaktion, 6 Tests
++ Live-Test).
+
+**Konsequenz fuer OP-306 (Mode-Switch/Wasserfall):** OP-306 setzt
+auf funktionierendem Loop-UI-Datenfluss auf. OP-381 muss vor
+OP-306 gebaut werden.
+

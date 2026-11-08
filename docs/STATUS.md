@@ -1206,6 +1206,30 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **ADR:** ADR-0026 (Memory-Graph-Visualisierung)
 
 
+
+### OP-381: Loop-UI-Interaktion (Gate-Bridge + Ambient-Live-Status)
+
+- **Status:** open
+- **Typ:** bugfix (Sammel-OP)
+- **Phase:** Phase-2 (Focus, blockiert Loop-Nutzung aus der UI)
+- **Blockiert von:** —
+- **Betroffene Dateien:** `werkstatt/web/app.py` (`POST /api/runs/{run_id}/gate` an Live-Loop anbinden), `werkstatt/web/inspector.py` (`_audit_events`-Feld-Mapping, `aggregate_ambient`-Gate-Wait-Erkennung, `aggregate_gate_context`-Gate-Parsing), `werkstatt/gate_bridge.py` (`_finde_antwort` erweitern: schreibt `gate_answered` in SQLite/JSONL), `static/gate_panel.js` (Polling + Submit), `static/ambient_status.js`
+- **Problem (aus Live-Test 2026-11-08 23:25):** Loop aus UI gestartet (`POST /start` mit OP-324). Loop lief korrekt an, öffnete Plan-Gate (`plan-4ce22f2a`), wartete 5+ Minuten. UI zeigte **nichts** — kein running, kein Gate, keine Antwort. Vier unabhängige Bugs, alle im UI↔Loop-Datenfluss:
+  - **(A) `_audit_events` liest `ts` statt `timestamp`:** JSONL-Events haben `"timestamp"`. Parser im `aggregate_gate_context` liest `ev.get("ts")` → alle `ts` leer. Folgefehler: keine Historie in der UI erkennbar.
+  - **(B) `offene_gates: []` trotz `gate_open` in SQLite:** Folgefehler A oder eigenständig — `_audit_events`-basierte Gate-Erkennung scheitert.
+  - **(C) Ambient zeigt nicht `running`:** Der Loop schreibt keinen `heartbeat` während `gate_bridge.wait()` blockiert. `aggregate_ambient` prüft nur `heartbeat` in letzten 60s → sieht Loop als idle/failed. Gate-Wait-Events (`gate_open` in letzten 60s) müssten als running zählen.
+  - **(D) UI kann Gate nicht beantworten:** `POST /api/runs/{run_id}/gate` existiert, aber `gate_bridge.wait()` pollt nur `gate_answered`-Events. Kein Endpoint schreibt `gate_answered` für einen laufenden Subprozess-Loop. Folge: Loop hängt bis Timeout.
+- **Akzeptanzkriterien:**
+  (a) `_audit_events` mappt `timestamp → ts` beim Einlesen (oder liest beide Felder). Unit-Test.
+  (b) `aggregate_gate_context` liefert bei offenem Gate in JSONL `offene_gates: [{gate_id, prompt, optionen, ts}]`. Test: `gate_open` im JSONL → Gate in offene_gates.
+  (c) `aggregate_ambient` erkennt Loop als `running`, wenn in letzten 60s **entweder** `heartbeat` **oder** `gate_open` mit noch nicht beantwortetem `gate_id` vorliegt. Test: Loop im Gate-Wait → ambient.running.
+  (d) Neue Route/Logik: UI-Gate-Antwort (`POST /api/runs/{run_id}/gate`) schreibt `gate_answered`-Event in die SQLite/JSONL, so dass `gate_bridge._finde_antwort` es beim nächsten Poll sieht. Live-Test: Loop aus UI, Plan-Gate, Klick auf „j" im Gate-Panel, Loop läuft weiter.
+  (e) `gate_panel.js` pollt `GET /api/projects/{name}/gate/context` alle 2s, zeigt offene Gates, Submit → `POST /api/runs/{run_id}/gate`.
+  (f) Ende-zu-Ende-Live-Test (in PROGRESS.md dokumentiert): Loop aus UI starten, Gate beantworten, Loop bis Commit durchlaufen lassen.
+- **Tests:** `tests/test_gate_bridge_ui.py` (~6 Tests: `_audit_events`-Mapping, `gate_open`-Erkennung, ambient-running-bei-gate-wait, `gate_answered`-Event-Schreiben, Poll-Loop) + Frontend-Spec `tests/test_gate_panel_spec.py` (~3 Tests).
+- **Grund:** Loop kann heute aus der UI gestartet werden, aber nicht durchlaufen — er hängt am ersten Gate. Ohne Fix ist Loop-aus-UI praktisch nicht nutzbar. Blocker für OP-306 (Mode-Switch).
+
+
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
 - **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
