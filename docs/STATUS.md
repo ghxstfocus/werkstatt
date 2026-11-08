@@ -784,17 +784,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Blockiert von:** —
 
 
-### OP-321: Event-Klassifikation + stream()-Funktion
-
-- **Status:** open
-- **Typ:** architektur (Refactor)
-- **Phase:** Phase-0 (Fundament)
-- **Betroffene Dateien:** `werkstatt/audit.py`, `werkstatt/render/progress.py`, `werkstatt/render/tasks.py`, `werkstatt/gate_bridge.py`, `tests/test_audit_stream_klassifikation.py` (neu)
-- **Problem:** Heute ruft `_publish()` SQLite direkt, `audit()` JSONL direkt. Keine Deklaration welcher Kind wohin gehoert. Divergenz entsteht still.
-- **Akzeptanzkriterien:** (a) Konstante `_STREAM_KINDS: frozenset[str]` in `audit.py` mit `log_line`, `progress`, `spinner`, `heartbeat`, `task_started`, `task_done`. (b) Neue Funktion `stream(kind, payload, ...)` schreibt nach `audit-logs/stream-YYYY-MM-DD.jsonl`. (c) `audit()` schreibt zusaetzlich `event_id = sha256(run_id+seq+kind+ts)[:16]`. (d) Bestehende `_publish()`-Aufrufer (5 Stellen) auf `stream()` umgestellt. (e) Test: unbekannter Kind → fail-closed → Semantic.
-- **Tests:** `tests/test_audit_stream_klassifikation.py` (4 Tests: stream/semantic-Trennung, event_id deterministisch, fail-closed, stream-Kinds vollstaendig).
-- **Blockiert von:** OP-320
-
 ### OP-322: Projector-Modul (rebuild + tail + status)
 
 - **Status:** open
@@ -1403,6 +1392,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-08 | OP-321 | done | JSONL-Trennung stream/semantic. _STREAM_KINDS (log_line/progress/spinner/heartbeat/task_started/task_done), stream() schreibt nach stream-YYYY-MM-DD.jsonl, audit() nach agent-pipeline, fail-closed fuer unbekannte Kinds. event_id = sha256(run_id|audit_id)[:16] in beiden. _publish schreibt jetzt zusaetzlich JSONL (SQLite bleibt bis OP-323). 5 neue Tests. pytest 1442 passed.
 - 2026-11-08 | OP-320 | done | ADR-0024 Tiered Event Log + Projector. Deklariert Semantic-Stream (git) + Stream-Stream (gitignore), SQLite rebuildbar, audit()/stream() als einzige Writer, EventStore.append() verbannt. Grundlage fuer OP-321..323.
 - 2026-11-08 | OP-319 | done | Event-Architektur-Messung. 32804 JSONL-Events (320 Kinds, 267 Runs) vs. 374353 SQLite-Events (10 Kinds, 5290 Runs). Schnittmenge: 0 Kinds, 25 Runs. Beweis fuer Dual-Write-Anti-Pattern (Confluent/Microsoft-CQRS/AutoMQ). Grundlage fuer OP-320..323.
 - 2026-11-08 | OP-300 | done | Semantic Colors System (Commit `320b029`). 6 semantische CSS-Variablen (`--sem-action`, `--sem-active`, `--sem-ok`, `--sem-warn`, `--sem-error`, `--sem-history`) + 7 Shades + 4 Struct-Variablen im `:root`. 57 Hex-Vorkommen ausserhalb `:root` ersetzt. Explorer-Cyan `#06b6d4` -> `var(--sem-active)` (bewusster Farbwechsel, Frage 1a). `.diff-hunk` -> `var(--sem-active)` (Frage 3: Diff im laufenden Build ist Ist-Zustand, nicht Vergangenheit). chat.css hatte schon 0 Hex, unveraendert. Guard: Hex ausserhalb `:root` == 0. pytest 1437 passed, ruff/mypy 0, alle 5 Drifts 0. **Lehre:** Erster Patch-Versuch zerstoerte `:root`-Block durch fehlerhaftes Reassembly (`s = body` statt `s = head + neuer_root + tail`); In-Python-Guard SEM==0 hat Commit verhindert, Rollback manuell. Zweiter Versuch mit Guards vor `write_text` erfolgreich. **Strukturelle Altlast:** zwischen `## Erledigt (Auto-Log)` und `## Delete-Zone` stehen 16 offene OPs (OP-263, OP-257, ..., OP-241) faelschlich unter Auto-Log.

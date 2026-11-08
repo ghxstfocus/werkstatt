@@ -3221,3 +3221,15 @@ Eigene OP noetig (Doku-Aufraeumen).
 OP-302 (Command Palette), OP-307 (Chat Tool-Call-Karten),
 OP-311 (Audit-Filterleiste), OP-315 (Causal Chain). OP-303 und
 OP-306 bleiben an OP-301 gebunden.
+
+
+## 2026-11-08 — OP-321 JSONL-Trennung stream/semantic (Commit de3be1e)
+
+Zwei JSONL-Streams: semantic (git) + stream (gitignore).
+_STREAM_KINDS = {log_line, progress, spinner, heartbeat, task_started,
+task_done}. Fail-closed: unbekannter Kind geht in Semantic.
+event_id = sha256(run_id|audit_id)[:16] in beiden Funktionen.
+_publish in emit.py ruft zusaetzlich audit()/stream(); SQLite-Write
+bleibt als Uebergangsphase bis OP-323.
+
+Tests: test_audit_stream_klassifikation.py (5). pytest 1442 passed.
