@@ -181,3 +181,41 @@ def test_aggregate_timeline_filtert_projekt(tmp_path, monkeypatch):
     assert not builder_in_a, f"a-timeline darf b-Phase nicht sehen: {builder_in_a}"
     assert not explorer_in_b, f"b-timeline darf a-Phase nicht sehen: {explorer_in_b}"
 
+# ---------------------------------------------------------------------------
+# OP-381: Loop-UI-Interaktion (A + C)
+# ---------------------------------------------------------------------------
+
+def test_audit_events_mappt_timestamp_zu_ts(tmp_path, monkeypatch):
+    """OP-381 Bug A: JSONL hat 'timestamp', Gate-Context liest 'ts'."""
+    import json as _json
+
+    from werkstatt.web import inspector as _insp
+    monkeypatch.setattr(_insp, "werkstatt_home", lambda: tmp_path)
+    al = tmp_path / "audit-logs"
+    al.mkdir()
+    with (al / "agent-pipeline-2026-11-09.jsonl").open("w") as fh:
+        fh.write(_json.dumps({
+            "run_id": "r1", "kind": "loop_plan_shown",
+            "timestamp": "2026-11-09T00:00:00+00:00",
+            "project": "werkstatt",
+            "plan_text": "test plan",
+        }) + "\n")
+    events = _insp._audit_events(run_id="r1")
+    assert len(events) == 1
+    assert events[0].get("ts") == "2026-11-09T00:00:00+00:00"
+    assert events[0].get("timestamp") == "2026-11-09T00:00:00+00:00"
+
+
+def test_ambient_running_wenn_gate_open_kürzlich(tmp_path, monkeypatch):
+    """OP-381 Bug C: Loop im Gate-Wait schreibt keinen Heartbeat — aber
+    ein gate_open <300s soll ambient 'running' zeigen."""
+    _s, db = _store(tmp_path, monkeypatch)
+    jetzt = datetime.now(UTC).isoformat()
+    _event(db, "run-gate", "gate_open",
+           {"gate_id": "g1", "prompt": "test?", "optionen": "jna"},
+           ts=jetzt, project="werkstatt")
+    from werkstatt.web.inspector import aggregate_ambient
+    aus = aggregate_ambient("werkstatt")
+    assert aus["loop_status"] == "running", f"erwartet running, ist {aus['loop_status']}"
+    assert aus.get("loop_phase") == "gate_wait"
+

@@ -465,7 +465,9 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
 
     try:
         with sqlite3.connect(es.db_pfad) as c:
-            # 1. Heartbeat -> running
+            # 1. Running-Erkennung (OP-381)
+            # 1a: Heartbeat <60s -> running
+            # 1b: offenes gate_open <60s -> running (Loop wartet am Gate)
             hb = c.execute(
                 "SELECT ts FROM events "
                 "WHERE kind='heartbeat' AND project=? "
@@ -479,6 +481,21 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
                         aus["loop_status"] = "running"
                 except (ValueError, TypeError):
                     pass
+            if aus["loop_status"] != "running":
+                go = c.execute(
+                    "SELECT ts FROM events "
+                    "WHERE kind='gate_open' AND project=? "
+                    "ORDER BY seq DESC LIMIT 1",
+                    (projekt,),
+                ).fetchone()
+                if go:
+                    try:
+                        ts_go = datetime.fromisoformat(str(go[0]))
+                        if (datetime.now(UTC) - ts_go).total_seconds() < 300:
+                            aus["loop_status"] = "running"
+                            aus["loop_phase"] = "gate_wait"
+                    except (ValueError, TypeError):
+                        pass
 
             # 2. Neuestes Terminal-Event entscheidet (OP-371)
             # Frueher: 3-stufige Kaskade mit loop_erfolg zuerst -> ein
@@ -1140,6 +1157,9 @@ def _audit_events(run_id: str | None = None) -> list[dict[str, Any]]:
                     except json.JSONDecodeError:
                         continue
                     if isinstance(obj, dict):
+                        # OP-381: JSONL hat "timestamp", Code liest "ts"
+                        if "ts" not in obj and "timestamp" in obj:
+                            obj["ts"] = obj["timestamp"]
                         events.append(obj)
         except OSError:
             continue
