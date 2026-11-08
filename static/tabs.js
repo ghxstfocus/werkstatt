@@ -140,14 +140,8 @@
     ziel.scrollTop = ziel.scrollHeight;
   }
 
-  // Neuer Tab
-  neuBtn.addEventListener("click", function () {
-    var name = window.prompt("Projekt-Name:", "werkstatt");
-    if (name) {
-      var id = neuerTab(name);
-      wechsle(id);
-    }
-  });
+  // OP-305: Der + Button wird in project_create.js geklont und bekommt
+  // dort einen Modal-Handler. Alter prompt() entfernt — kein Doppel-Handler.
 
   // Chat-Form: Text anhaengen
   var chatForm = document.getElementById("chat-form");
@@ -375,11 +369,19 @@
   }
 
   // Export fuer Drift-Guard (Python-Spiegelung) und externe Nutzung
+  function neuer_tab(name) {
+    """OP-305: Oeffentliche UI-Methode — neuen Tab anlegen + aktivieren."""
+    var id = neuerTab(name);
+    wechsle(id);
+    return id;
+  }
+
   window.WerkstattTabs = {
     neuer_zustand: neuer_zustand,
     kanal_holen: kanal_holen,
     kanal_freigeben: kanal_freigeben,
     oeffne_tab: oeffne_tab,
+    neuer_tab: neuer_tab,
     wechsle_tab: wechsle_tab,
     schliesse_tab: schliesse_tab,
     synchronisiere: synchronisiere,

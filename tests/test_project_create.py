@@ -59,3 +59,12 @@ def test_shift_n_zu_alt_n():
     assert "e.altKey" in js
     # shiftKey darf NICHT der Trigger sein (kein "if (e.shiftKey)" ohne altKey)
     assert "if (!e.altKey" in js or "if (e.altKey" in js
+
+
+def test_neuer_tab_api():
+    """OP-305: WerkstattTabs exportiert neuer_tab() als UI-Methode."""
+    js = Path("static/tabs.js").read_text(encoding="utf-8")
+    assert "function neuer_tab(name)" in js
+    assert "neuer_tab: neuer_tab" in js
+    # Kein alter prompt() mehr
+    assert "window.prompt(\"Projekt-Name:" not in js

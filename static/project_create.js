@@ -73,13 +73,14 @@
           return;
         }
         _schliessen();
-        // Tab oeffnen
-        if (window.WerkstattTabs && window.WerkstattTabs.oeffne_tab) {
+        // OP-305: Tab oeffnen via neuer_tab (UI-Methode, nicht Store-Helper)
+        if (window.WerkstattTabs && window.WerkstattTabs.neuer_tab) {
           try {
-            window.WerkstattTabs.oeffne_tab(name);
-          } catch (e) { /* fallback */ }
+            window.WerkstattTabs.neuer_tab(name);
+          } catch (e) {
+            window.location.reload();
+          }
         } else {
-          // Fallback: reload
           window.location.reload();
         }
       })
