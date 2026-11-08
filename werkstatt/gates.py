@@ -65,7 +65,22 @@ def _frage_gate(kind: str, prompt: str, optionen: str = "jna") -> str:
         )
     gate_id = gate_bridge.make_gate_id(kind)
     gate_bridge.signal_open(run_id, gate_id, prompt, optionen)
-    return gate_bridge.wait(run_id, gate_id)
+    try:
+        return gate_bridge.wait(run_id, gate_id)
+    except gate_bridge.GateTimeout as exc:
+        # Fail-closed: Loop-Antwort 'n' (= reject), Reflection kann greifen.
+        # _frage_gate hat keinen RunState -> EventStore direkt.
+        try:
+            from werkstatt.event_store import EventStore as _ES
+            _ES().append(
+                run_id=run_id,
+                kind="loop_gate_timeout",
+                payload={"gate_id": gate_id, "kind": kind,
+                         "error": str(exc)[:200]},
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        return "n"
 
 
 def _plan_gate(state: RunState) -> bool:

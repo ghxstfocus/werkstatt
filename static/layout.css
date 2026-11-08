@@ -169,10 +169,8 @@ body {
   flex: 1 1 auto;
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr) 400px;
-  grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "runs timeline chat"
-    "drawer drawer drawer";
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "runs timeline chat";
   gap: 8px;
   padding: 8px;
   min-height: 0;
@@ -210,7 +208,7 @@ body {
 
 
 .workbench-drawer {
-  grid-area: drawer;
+  flex: 0 0 auto;
   display: flex; flex-direction: column;
   background: var(--panel); border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);

@@ -678,6 +678,12 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
     _label = _aufgabe_zu_label(aufgabe)
     _t0 = time.monotonic()
     _emit_progress(_label, "prompt_sent", f"model={model}")
+    if state is not None:
+        audit("llm_call_start",
+              {"agent": aufgabe, "model": model,
+               "system_len": len(system_prompt),
+               "user_len": len(user_content)},
+              state.project_dir, state.project_name)
     try:
         reply = _ask_llm_impl(
             api_key, system_prompt, user_content, model, temperature,
@@ -687,9 +693,17 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
     except Exception as exc:
         _emit_progress(_label, "response_failed", str(exc)[:80])
         raise
+    _elapsed = time.monotonic() - _t0
     if reply.ok:
-        _emit_progress(_label, "response_received",
-                       f"{time.monotonic() - _t0:.1f}s")
+        _emit_progress(_label, "response_received", f"{_elapsed:.1f}s")
     else:
         _emit_progress(_label, "response_failed", (reply.error or "?")[:80])
+    if state is not None:
+        audit("llm_call_end",
+              {"agent": aufgabe, "model": model,
+               "ok": bool(reply.ok),
+               "elapsed_s": round(_elapsed, 2),
+               "content_len": len(reply.content or ""),
+               "error": (reply.error or "")[:200]},
+              state.project_dir, state.project_name)
     return reply

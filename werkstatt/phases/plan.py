@@ -93,6 +93,14 @@ def _phase_plan_and_preflight(
         if not run_planner(state):
             audit("loop_planner_failed", {}, pd, pn)
             return 1, False
+        _plan_text = getattr(state, "architect_prosa", "") or ""
+        audit("loop_plan_shown",
+              {"plan_text": _plan_text[:80_000],
+               "plan_laenge": len(_plan_text),
+               "phasen": len(state.phasen or []),
+               "tasks": len(state.tasks or []),
+               "quelle": "planner_phase"},
+              pd, pn)
 
         # OP-136a: Contract-Validierung planner->builder.
         # Nullfall "bereits erfuellt" erlaubt leere Tasks — kein Fail.

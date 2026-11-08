@@ -349,7 +349,10 @@ _TL_LABELS: dict[str, str] = {
     "loop_human_gate_approved": "Human-Gate: freigegeben",
     "loop_human_gate_rejected": "Human-Gate: abgelehnt",
     "loop_human_gate_committed": "Human-Gate: committed",
+    "progress": "Fortschritt",
     "llm_call": "LLM-Aufruf",
+    "llm_call_start": "LLM-Call startet",
+    "llm_call_end": "LLM-Call beendet",
     "llm_usage": "LLM-Token",
     "llm_timeout_read": "LLM-Timeout (read)",
     "llm_timeout_gesamt": "LLM-Timeout (gesamt)",
@@ -358,7 +361,7 @@ _TL_LABELS: dict[str, str] = {
 }
 
 _TL_SKIP: frozenset[str] = frozenset({
-    "heartbeat", "spinner", "log_line", "progress", "summary",
+    "heartbeat", "spinner", "log_line", "summary",
 })
 
 _TL_PHASEN_NAMEN: dict[str, str] = {
@@ -461,6 +464,14 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
         if n is None and isinstance(payload.get("skills"), list):
             n = len(payload["skills"])
         return f"{n} Skills" if n else ""
+    if kind == "llm_call_end":
+        return (
+            f"{payload.get('agent', '?')}: "
+            f"{payload.get('elapsed_s', 0)}s, "
+            f"{payload.get('content_len', 0)} Zeichen"
+        )
+    if kind == "llm_call_start":
+        return f"{payload.get('agent', '?')}: startet ..."
     if kind == "llm_usage":
         return (
             f"prompt={payload.get('prompt_tokens', 0)} "
@@ -835,6 +846,9 @@ def aggregate_gate_context(
             beantwortet = {
                 (e.get("payload") or {}).get("gate_id")
                 for e in es.query(letzte_run_id, kind="gate_answered")
+            } | {
+                (e.get("payload") or {}).get("gate_id")
+                for e in es.query(letzte_run_id, kind="gate_expired")
             }
             for ev in opens:
                 pa = ev.get("payload") or {}

@@ -84,6 +84,12 @@ def wait(
         if antwort is not None:
             return antwort
         time.sleep(poll_interval)
+    # OP-304: Timeout sichtbar machen — sonst bleibt gate_open ewig stehen
+    EventStore().append(
+        run_id=run_id,
+        kind="gate_expired",
+        payload={"gate_id": gate_id, "timeout_s": timeout},
+    )
     raise GateTimeout(
         f"Gate {gate_id} nach {timeout}s nicht beantwortet"
     )

@@ -156,8 +156,15 @@ def _registriere_event_routen(app: FastAPI) -> None:
             (ev.get("payload") or {}).get("gate_id")
             for ev in store.query(geprueft, kind="gate_answered")
         }
+        abgelaufen = {
+            (ev.get("payload") or {}).get("gate_id")
+            for ev in store.query(geprueft, kind="gate_expired")
+        }
         if gate_id not in offen:
             raise HTTPException(status_code=404, detail="gate nicht offen")
+        if gate_id in abgelaufen:
+            raise HTTPException(status_code=410,
+                                detail="gate abgelaufen (timeout)")
         if gate_id in beantwortet:
             raise HTTPException(status_code=409, detail="gate schon beantwortet")
         store.append(
