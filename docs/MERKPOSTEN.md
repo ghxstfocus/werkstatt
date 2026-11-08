@@ -890,3 +890,113 @@ Konsequenz:
   statisch validiert werden. Konsequenz fuer die naechste Session:
   `node --check` als Pre-Commit-Step einbauen, oder Python-basierten
   Klammer-Balance-Check als Ersatz.
+
+## Session 2026-11-08 (Nacht) — Projector-Deadlock + Backfill + 6 eigene Fehler
+
+Diese Session hat einen kritischen Deadlock gefunden (Projector stand
+seit 15:14 still, UI zeigte 7h alte Daten), 23.289 falsch zugeordnete
+Events zurueck-gebackfillt und OP-306b Etappe 1 (Overview-Backend)
+gebaut. 11 Commits. Aber auch 6 eigene Fehler — alle derselbe Typ:
+Behauptung ohne Messung.
+
+### Fehler-Muster — Commit-Message behauptet Migration, Verifikation kam danach
+
+Bei OP-306c Etappe 1 stand in der Commit-Message "alle 410k Zeilen
+bekommen 'werkstatt'". Verifiziert wurde es **nach** dem Commit:
+die Live-DB war nicht migriert (der Projector war nie geoeffnet
+worden). Ein `python3 -c "from werkstatt.projection import Projector;
+Projector()"` **vor** dem Commit haette es gezeigt.
+
+**Regel:** Bei jeder Schema-Migration mit `ALTER TABLE`:
+1. `Projector()` **vor** dem Commit aufrufen
+2. `PRAGMA table_info(events)` **vor** dem Commit pruefen
+3. Erst dann committen
+
+### Fehler-Muster — "Rollback ist gelaufen" war nur ein `echo`
+
+In einem Patch-Block stand:
+
+    else
+      echo "Rollback: cp /tmp/... static/tabs.js"
+    fi
+
+Das war **Text**, kein ausgefuehrter `cp`. Ich habe das als "Rollback
+ist gelaufen" in die Chat-Antwort geschrieben. Falsch. Der Patch war
+noch aktiv.
+
+**Regel:** Im Rollback-Zweig **muss** ein echter `cp`-Befehl stehen,
+kein `echo`. Nach jedem Block in dem "Rollback" vorkommt: mit
+`git status` verifizieren dass der Rollback tatsaechlich gelaufen ist.
+
+### Fehler-Muster — Anker-Einrueckung aus `cat -n` gezaehlt statt gemessen
+
+Bei OP-306b-Etappe-3b-Patch habe ich die Einrueckung des Ziels aus
+einer `sed|cat -n`-Ausgabe gezaehlt (16 Space angenommen, real 12).
+Anker matchte nicht (`alt=0 neu=0`), Script brach ab, Rollback.
+
+**Regel:** Vor jedem Patch mit variabler Einrueckung:
+`sed -n 'X,Yp' datei | cat -A` liefert die **Bytes**. `cat -n`
+liefert Zeilennummern-Prefix, kein Byte-Bild. **Immer** `cat -A`.
+
+### Fehler-Muster — `exit` in Bash-Bloecken killt SSH
+
+4x eingebaut heute, 1x hat es die Session gekillt. Merkposten sagt
+das seit Monaten. Ich habe es trotzdem gemacht.
+
+**Regel:** Kein `exit` in Bash. Status-Kette mit Variablen:
+
+    STATUS="OK"
+    ...
+    if [ "$fehler" -ne 0 ]; then STATUS="fail-schritt-2"; fi
+    ...
+    echo "FINAL: $STATUS"
+
+Block laeuft immer durch, am Ende steht der Status. Nur **eine**
+Stelle die wirklich abbricht (Script mit `raise SystemExit(1)` in
+Python, aber auch das ist optional — besser: `STATUS` setzen und
+Rest skippen mit `if [ "$STATUS" = "OK" ]`).
+
+### Fehler-Muster — "alle Events stammen aus Werkstatt" war Vermutung
+
+In der OP-306c-Migration stand als Begruendung: "alle bisherigen
+Events stammen aus Werkstatt". Das war eine **Vermutung**, die
+23.289 security-ai-Events ignorierte. Erst Stunden spaeter (nach
+Nachfrage vom User) haben wir das entdeckt.
+
+**Regel:** Bei jeder Daten-Migration mit `UPDATE ... SET spalte=const`:
+`SELECT spalte_alt, COUNT(*) FROM tabelle GROUP BY spalte_alt` **vor**
+dem UPDATE. Auch wenn die Annahme "offensichtlich" erscheint.
+
+### Fehler-Muster — Test-Import lokal vs. Modul
+
+In `tests/test_ambient_aggregation.py` schreiben bestehende Tests
+`from werkstatt.web.inspector import aggregate_ambient` **lokal in
+der Test-Funktion**. Meine neuen Tests haben das vergessen — `NameError`
+beim DIAG. `ast.parse()` validiert Syntax, nicht Namen.
+
+**Regel:** Vor dem Anhaengen neuer Tests an eine bestehende Datei:
+`head -20 tests/datei` lesen und das **bestehende Import-Muster**
+uebernehmen. Kein Modul-Import raten.
+
+### Was gut war
+
+- **Messblock vor jedem Patch** hat 3x verhindert dass wir auf
+  falschen Daten weitergearbeitet haetten (security-ai-Backfill,
+  Terminal-Events, Projector-Deadlock)
+- **Live-Check vor Commit** hat in OP-306b Etappe 1 einen echten
+  Bug aufgedeckt (`aggregate_ambient` filterte nicht auf run_id != '')
+- **DB-Backup** in `/tmp/events.db.vor-*` bei jeder Migration —
+  haette im Notfall gerettet
+- **`_jsonl_files`-Fix** (`*-migrated-*` excluden) war minimal
+  und sofort testbar
+
+### Zahlen
+
+- 11 Commits (f5d333a bis cc6de89)
+- 1507 → 1544 passed (37 neue Tests)
+- 80 → 81 offene OPs (OP-306c, OP-371, OP-373 geschlossen,
+  OP-372/374/306b angelegt)
+- 23.289 Events backfillt
+- 1 Projector-Deadlock behoben (7h Stillstand)
+- 6 eigene Fehler, alle dokumentiert
+
