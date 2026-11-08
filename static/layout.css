@@ -1467,3 +1467,57 @@ body {
 
 /* Alte Sidebar-CSS deaktivieren (Element existiert nicht mehr) */
 .history-sidebar { display: none !important; }
+
+/* OP-315: Audit-History-Zeile redsign */
+.audit-history-zeile {
+  padding: 6px 8px !important;
+  border-bottom: 1px solid rgba(255,255,255,0.04) !important;
+  display: grid !important;
+  grid-template-columns: 65px 200px 1fr !important;
+  gap: 10px !important;
+  align-items: baseline !important;
+  font-size: 10px !important;
+  line-height: 1.4 !important;
+  background: transparent !important;
+  border-radius: 3px !important;
+}
+.audit-history-zeile:hover {
+  background: rgba(255,255,255,0.025) !important;
+}
+.audit-history-zeile .audit-zeit {
+  color: var(--text-dim) !important;
+  font-family: monospace !important;
+  font-size: 10px !important;
+  white-space: nowrap !important;
+  min-width: 0 !important;
+}
+.audit-history-zeile .audit-kind {
+  color: #60a5fa !important;
+  font-family: monospace !important;
+  font-size: 10px !important;
+  padding: 1px 6px !important;
+  background: rgba(96,165,250,0.08) !important;
+  border-radius: 3px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  min-width: 0 !important;
+}
+.audit-history-zeile .audit-run-id {
+  display: none !important; /* run_id in Detail-Zeile zeigen */
+}
+.audit-history-zeile .audit-text {
+  color: var(--text) !important;
+  font-family: monospace !important;
+  font-size: 10px !important;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  grid-column: 1 / -1 !important; /* über alle Spalten */
+  padding-left: 65px !important;
+  margin-top: 2px !important;
+  opacity: 0.75 !important;
+  font-size: 9px !important;
+}
+

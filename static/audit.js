@@ -165,8 +165,8 @@ function createAuditPanel(options) {
 
       const runId = document.createElement("span");
       runId.className = "audit-run-id";
-      // Feld heisst 'audit_id', nicht 'run_id'
-      runId.textContent = _escapeText(ev && (ev.audit_id || ev.run_id));
+      // run_id ist die Loop-Kennung (test-ui-xxx), audit_id nur Event-UID
+      runId.textContent = _escapeText(ev && (ev.run_id || ev.audit_id || ""));
 
       const text = document.createElement("span");
       text.className = "audit-text";
