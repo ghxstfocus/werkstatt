@@ -1132,3 +1132,12 @@ body {
 .chat-session.aktiv::before { background: #a78bfa; box-shadow: 0 0 6px rgba(167, 139, 250, 0.5); }
 .chat-session:hover { background: rgba(255, 255, 255, 0.06); }
 .chat-session.aktiv { font-weight: 600; background: rgba(138, 92, 246, 0.18); }
+
+/* OP-306: Info-Status in Timeline (grau, nicht rot) */
+.tl-child[data-status="info"] .tl-child-dot {
+  background: #94a3b8;
+  box-shadow: 0 0 4px rgba(148, 163, 184, 0.3);
+}
+.tl-knoten[data-status="info"] .tl-dot {
+  background: #94a3b8;
+}

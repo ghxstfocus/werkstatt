@@ -385,6 +385,10 @@ _TL_PHASEN_NAMEN: dict[str, str] = {
 
 
 def _tl_status(kind: str, payload: dict[str, Any]) -> str:
+    # Info-Events (kein Fehler, nur Hinweis auf Fallback/Start)
+    if kind in ("loop_plan_missing", "loop_preflight_fehler",
+                "loop_plan_reflection"):
+        return "info"
     if any(w in kind for w in ("failed", "error", "abgelehnt", "erschoepft",
                                  "rollback", "blocked")):
         return "error"
@@ -472,6 +476,29 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
         )
     if kind == "llm_call_start":
         return f"{payload.get('agent', '?')}: startet ..."
+    if kind == "loop_plan_missing":
+        auf = str(payload.get("aufgabe", ""))[:80]
+        return f"kein initialer Plan — Aufgabe: {auf}" if auf else "kein initialer Plan"
+    if kind == "loop_plan_reflection_abgebrochen":
+        regel = payload.get("regel", "?")
+        fakt = str(payload.get("fakt", ""))[:80]
+        return f"regel={regel} — {fakt}" if fakt else f"regel={regel}"
+    if kind == "planner_plan_erstellt":
+        n = payload.get("tasks", 0)
+        pl = payload.get("prosa_len", 0)
+        return f"{n} Tasks, {pl} Zeichen Prosa"
+    if kind == "planner_architect_ok":
+        return f"prosa_len={payload.get('prosa_len', 0)}"
+    if kind == "planner_split":
+        return f"{payload.get('anzahl', 0)} Tasks"
+    if kind == "planner_split_vor_merge":
+        return f"{payload.get('anzahl', 0)} Tasks"
+    if kind == "planner_scout_ok":
+        n = len(payload.get("dateien") or [])
+        r = len(payload.get("risiken") or [])
+        return f"{n} Dateien, {r} Risiken"
+    if kind == "loop_gate_failed":
+        return f"gate={payload.get('gate', '?')}, grund={payload.get('grund', '?')}"
     if kind == "llm_usage":
         return (
             f"prompt={payload.get('prompt_tokens', 0)} "
