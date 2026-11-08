@@ -370,7 +370,7 @@
 
   // Export fuer Drift-Guard (Python-Spiegelung) und externe Nutzung
   function neuer_tab(name) {
-    """OP-305: Oeffentliche UI-Methode — neuen Tab anlegen + aktivieren."""
+    // OP-305: Oeffentliche UI-Methode — neuen Tab anlegen + aktivieren.
     var id = neuerTab(name);
     wechsle(id);
     return id;
