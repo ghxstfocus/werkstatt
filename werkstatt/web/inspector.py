@@ -86,11 +86,16 @@ def parse_ops(projekt_dir: Path | None = None) -> list[dict[str, str]]:
     return ergebnis
 
 
-def _letzter_run_id(es: EventStore) -> str | None:
+def _letzter_run_id(
+    es: EventStore, projekt: str = "werkstatt",
+) -> str | None:
+    """OP-306c: Liefert letzten run_id NUR fuer `projekt`."""
     try:
         with sqlite3.connect(es.db_pfad) as c:
             row = c.execute(
-                "SELECT run_id FROM events ORDER BY seq DESC LIMIT 1"
+                "SELECT run_id FROM events WHERE project=? "
+                "ORDER BY seq DESC LIMIT 1",
+                (projekt,),
             ).fetchone()
         return str(row[0]) if row else None
     except (sqlite3.Error, OSError):
@@ -100,7 +105,7 @@ def _letzter_run_id(es: EventStore) -> str | None:
 def aggregate_status(projekt: str) -> dict[str, Any]:
     """Liefert Tasks/Verify/Drift/Phase fuer die Status-Leiste."""
     es = EventStore()
-    run_id = _letzter_run_id(es)
+    run_id = _letzter_run_id(es, projekt)
     aus: dict[str, Any] = {
         "run_id": run_id,
         "tasks": {"started": 0, "done": 0},
@@ -114,25 +119,25 @@ def aggregate_status(projekt: str) -> dict[str, Any]:
         with sqlite3.connect(es.db_pfad) as c:
             started = c.execute(
                 "SELECT COUNT(*) FROM events "
-                "WHERE run_id=? AND kind='task_started'",
-                (run_id,),
+                "WHERE run_id=? AND kind='task_started' AND project=?",
+                (run_id, projekt),
             ).fetchone()[0]
             done = c.execute(
                 "SELECT COUNT(*) FROM events "
-                "WHERE run_id=? AND kind='task_done'",
-                (run_id,),
+                "WHERE run_id=? AND kind='task_done' AND project=?",
+                (run_id, projekt),
             ).fetchone()[0]
             v = c.execute(
                 "SELECT payload FROM events "
-                "WHERE run_id=? AND kind LIKE 'verify_%' "
+                "WHERE run_id=? AND kind LIKE 'verify_%' AND project=? "
                 "ORDER BY seq DESC LIMIT 1",
-                (run_id,),
+                (run_id, projekt),
             ).fetchone()
             ph = c.execute(
                 "SELECT phase FROM events "
-                "WHERE run_id=? AND phase IS NOT NULL "
+                "WHERE run_id=? AND phase IS NOT NULL AND project=? "
                 "ORDER BY seq DESC LIMIT 1",
-                (run_id,),
+                (run_id, projekt),
             ).fetchone()
         aus["tasks"] = {"started": int(started), "done": int(done)}
         if v:
@@ -317,8 +322,9 @@ def aggregate_ops_run_status(projekt: str) -> dict[str, dict[str, Any]]:
             run_to_op: dict[str, str] = {}
             for _kind in ("loop_started", "pipeline_start"):
                 for run_id, payload in c.execute(
-                    "SELECT run_id, payload FROM events WHERE kind=?",
-                    (_kind,),
+                    "SELECT run_id, payload FROM events "
+                    "WHERE kind=? AND project=?",
+                    (_kind, projekt),
                 ):
                     try:
                         d = json.loads(payload or "{}")
@@ -379,7 +385,7 @@ def aggregate_tokens(projekt: str, run_id: str | None = None) -> dict[str, Any]:
     """
     es = EventStore()
     if run_id is None:
-        run_id = _letzter_run_id(es)
+        run_id = _letzter_run_id(es, projekt)
 
     aus: dict[str, Any] = {
         "loop": {"run_id": run_id, "prompt": 0, "completion": 0, "total": 0, "calls": 0},
@@ -392,8 +398,8 @@ def aggregate_tokens(projekt: str, run_id: str | None = None) -> dict[str, Any]:
             with sqlite3.connect(es.db_pfad) as c:
                 rows = c.execute(
                     "SELECT payload FROM events "
-                    "WHERE run_id=? AND kind='llm_usage'",
-                    (run_id,),
+                    "WHERE run_id=? AND kind='llm_usage' AND project=?",
+                    (run_id, projekt),
                 ).fetchall()
             for (payload,) in rows:
                 try:
@@ -442,7 +448,7 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
     from datetime import UTC, datetime
 
     es = EventStore()
-    run_id = _letzter_run_id(es)
+    run_id = _letzter_run_id(es, projekt)
     aus: dict[str, Any] = {
         "loop_status": "idle",
         "loop_phase": None,

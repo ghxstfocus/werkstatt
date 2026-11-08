@@ -8,6 +8,8 @@ def _store(tmp_path, monkeypatch):
     db = tmp_path / ".werkstatt" / "events.db"
     db.parent.mkdir(parents=True, exist_ok=True)
     from werkstatt.event_store import EventStore
+    from werkstatt.projection import Projector
+    Projector(db_pfad=db)  # OP-306c: 9-Spalten-Schema (project)
     s = EventStore(db)
     from werkstatt.web import inspector as _insp
     monkeypatch.setattr(_insp, "EventStore", lambda: s)
