@@ -584,17 +584,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Blockiert von:** -
 
 
-### OP-301: Ambient Status Bar
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `static/layout.html`, `static/statusleiste.js`, `static/layout.css`
-- **Problem:** Der Nutzer sieht aus drei Metern Entfernung nicht ob der Loop laeuft, ob ein Gate wartet, ob alles gut ist. Status ist verstreut in Statusleiste unten, Run-Liste, Gate-Panel.
-- **Akzeptanzkriterien:** (a) Eine Zeile oben ueber dem Grid: Loop-Status (Idle/Running/Failed mit Icon), letzter Run (Zeit + Erfolg), Token-Verbrauch (Loop + Chat), offene Gates-Anzahl. (b) Farb-Kodiert nach OP-300 (`--sem-active` bei Running, `--sem-error` bei Failed, `--sem-history` bei Idle). (c) Lebt in allen 3 Modi (Cockpit/Control/Debug). (d) Klick auf Status-Element springt zur relevanten Ansicht (Gates → Gate-Panel, Run → Timeline).
-- **Tests:** Keine (UI).
-- **Blockiert von:** —
-
 ### OP-302: Command Palette (`⌘K`)
 
 - **Status:** open
@@ -615,7 +604,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Der Nutzer kann keinen Loop starten ohne SSH. Die Runs-Liste zeigt OPs, aber nicht welcher davon gerade laeuft.
 - **Akzeptanzkriterien:** (a) Jede OP-Zeile in Runs-Liste hat Status-Badge: `○ idle`, `● running`, `✓ done`, `✗ failed` (basiert auf letztem `loop_started`/`loop_ended`/`loop_failed` dieses OPs). (b) Hover ueber OP-Zeile zeigt Ghost-Preview: "OP-213: Test-Thaw. Blockiert von OP-210 (open). [Trotzdem starten]". (c) Klick auf `▶`-Button startet Loop mit dieser OP-Aufgabe. (d) Bei laufendem Loop: OP wird blau markiert, ein "Stop"-Button erscheint. (e) Nach Loop-Ende: Badge aktualisiert innerhalb 5s via Polling.
 - **Tests:** Smoke: `POST /start` aus UI-Klick ruft Endpoint. Kein pytest (UI-Verhalten).
-- **Blockiert von:** OP-301
+- **Blockiert von:** —
 
 ### OP-304: Shortcut Help (`?`)
 
@@ -648,7 +637,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Das UI hat genau einen Modus. Der Cockpit-Typ wird erschlagen von drei Spalten, der Kontrollraum-Typ will mehr Dichte. ADR-0022 fordert 3 Modi.
 - **Akzeptanzkriterien:** (a) Drei Modi: `cockpit` (default, 3 Spalten wie heute), `control` (Focus-View, breite Timeline, Chat schwebend), `debug` (Timeline + Audit gekoppelt). (b) Wechsel via `Shift+Space` zyklisch, via Command Palette (`mode cockpit`), via URL `?mode=control`, via Dropdown oben links. (c) Persistiert in localStorage und URL. (d) Mode-Name oben sichtbar. (e) Guard: bei Wechsel waehrend laufendem Run → Warnung "Run laeuft, Modus wechseln?". (f) Alle drei Modi nutzen dieselben semantischen Farben (OP-300).
 - **Tests:** Keine (UI).
-- **Blockiert von:** OP-301
+- **Blockiert von:** —
 
 ### OP-307: Chat Tool-Call-Karten
 
@@ -1529,6 +1518,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-08 | OP-321 | done | JSONL-Trennung stream/semantic. _STREAM_KINDS (log_line/progress/spinner/heartbeat/task_started/task_done), stream() schreibt nach stream-YYYY-MM-DD.jsonl, audit() nach agent-pipeline, fail-closed fuer unbekannte Kinds. event_id = sha256(run_id|audit_id)[:16] in beiden. _publish schreibt jetzt zusaetzlich JSONL (SQLite bleibt bis OP-323). 5 neue Tests. pytest 1442 passed.
 - 2026-11-08 | OP-320 | done | ADR-0024 Tiered Event Log + Projector. Deklariert Semantic-Stream (git) + Stream-Stream (gitignore), SQLite rebuildbar, audit()/stream() als einzige Writer, EventStore.append() verbannt. Grundlage fuer OP-321..323.
 - 2026-11-08 | OP-319 | done | Event-Architektur-Messung. 32804 JSONL-Events (320 Kinds, 267 Runs) vs. 374353 SQLite-Events (10 Kinds, 5290 Runs). Schnittmenge: 0 Kinds, 25 Runs. Beweis fuer Dual-Write-Anti-Pattern (Confluent/Microsoft-CQRS/AutoMQ). Grundlage fuer OP-320..323.
+- 2026-11-08 | OP-301 | done | Ambient Status Bar. Drei Elemente zwischen Tab-Leiste und Grid: Loop-Status (○ Idle / ◉ Läuft / ● Fertig / ✗ Fehler — ● statt ✓ verhindert Kollision mit Run-✓), letzter Run (relativ mit ✓/✗), Gates (hidden bei 0, pulsierend bei >0). Polling 3s. Klick Timeline / Gate-Panel. **Option A Redundanz-Fix:** Tokens und Phase raus (Diagnose, Statusbar). Ambient = Handlungsampel, Statusbar = Diagnose mit Icons ↻ Loop / ◆ Chat. **Backend:** aggregate_ambient() + /ambient, loop_erfolg-Semantik-Fix (Event-Name impliziert Erfolg, payload hat kein erfolg/success). Fallback: loop_erfolg > loop_ended > loop_failed > idle. **Naming:** Chat bleibt Chat (kein Assistent-Synonym; Cursor/Claude-Code-Vorbild: zwei Begriffe für zwei Dinge). 13 Tests (6 Backend + 7 Frontend-Smoke inkl. Icon-Kollisions-Test). pytest 1467 passed.
 - 2026-11-08 | OP-300 | done | Semantic Colors System (Commit `320b029`). 6 semantische CSS-Variablen (`--sem-action`, `--sem-active`, `--sem-ok`, `--sem-warn`, `--sem-error`, `--sem-history`) + 7 Shades + 4 Struct-Variablen im `:root`. 57 Hex-Vorkommen ausserhalb `:root` ersetzt. Explorer-Cyan `#06b6d4` -> `var(--sem-active)` (bewusster Farbwechsel, Frage 1a). `.diff-hunk` -> `var(--sem-active)` (Frage 3: Diff im laufenden Build ist Ist-Zustand, nicht Vergangenheit). chat.css hatte schon 0 Hex, unveraendert. Guard: Hex ausserhalb `:root` == 0. pytest 1437 passed, ruff/mypy 0, alle 5 Drifts 0. **Lehre:** Erster Patch-Versuch zerstoerte `:root`-Block durch fehlerhaftes Reassembly (`s = body` statt `s = head + neuer_root + tail`); In-Python-Guard SEM==0 hat Commit verhindert, Rollback manuell. Zweiter Versuch mit Guards vor `write_text` erfolgreich. **Strukturelle Altlast:** zwischen `## Erledigt (Auto-Log)` und `## Delete-Zone` stehen 16 offene OPs (OP-263, OP-257, ..., OP-241) faelschlich unter Auto-Log.
 
 - 2026-11-07 | OP-181 | done | Reviewer-Dead-Code-Erkennung (Commits `9b700e3` t1, `fdb01df` t3+t4). Loop-Lauf 13:23 baute t1 (REVIEWER_SYSTEM-`DEAD-CODE-CHECK`-Abschnitt mit 3 Regeln), brach dann bei t2 ab (Planner-Fehler: Verifikations-Task als update formuliert, Builder setzte `auftrag_bereits_erfuellt`, Reviewer meldete HIGH-Bug). OP-182-Fix begrenzte den Loop auf 2 Reflection-Runden, aber t3+t4 blieben offen. Manueller Nachzug: t3 = `run_reviewer` ruft `_pruefe_neue_module_genutzt(pd, diff)` nach den LLM-Filtern und vor `reviewer_result`-Audit; HIGH-Bug setzt `approved=False`. t4 = `tests/test_reviewer_dead_code.py` mit 3 AK-(c)-Tests + AST-Wiring-Test (`test_run_reviewer_ruft_pre_check_auf`, analog `test_rollen_registry_migration.py`) — kodiert die Lehre aus Loop-Test 9, dass die Funktion sonst toter Code werden kann. pytest 1342 passed, ruff/mypy 0, alle Drift-Checks gruen. **Lehre (Loop-Test 10, eingeplant als OP):** Planner-Task-Typ „pruefe/verifiziere X" braucht eigenes `action: verify`, sonst falscher Builder-Pfad. Siehe Stufe-2-Planung.
