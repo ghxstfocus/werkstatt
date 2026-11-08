@@ -1149,6 +1149,63 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **ADR:** ADR-0027 (Phase 2)
 
 
+
+### OP-378: Preservation-Gate (verify-Stage)
+
+- **Status:** open
+- **Typ:** architektur (Verify-Stage)
+- **Phase:** Phase-3 (Fundament Selbstverbesserung)
+- **Blockiert von:** OP-377 (Selbstreflexions-Phase)
+- **Betroffene Dateien:** `verify.json` (neue Stage), `werkstatt/verify.py` (preservation_gate-Handler), `tests/test_preservation_gate.py` (neu)
+- **Problem:** ADR-0027 Phase 4 fordert: vor Commit pruefen, ob der Fix alte Fehler nicht wiederbringt ("Beneath the Surface": alle 16 evolvierten Agenten verloren alte Tasks). Der bestehende Verify (9 Stages) prueft nur aktuelle Tests, nicht die Fehler-Cluster-Rate gegen Baseline. Ohne Preservation-Gate kann ein Selbstverbesserungs-Patch alte Fehler wieder einbauen, ohne dass es auffaellt.
+- **Akzeptanzkriterien:**
+  (a) Neue verify-Stage `preservation_gate` in `verify.json`, hart, laeuft nach `pytest_regression`.
+  (b) Baseline-Vergleich: die Top-N Cluster aus OP-376 muessen `AFTER <= BEFORE` sein (nach jeder neuen Event-Batch). Baseline-Ableitung: letzte 30 Tage.
+  (c) Wenn `AFTER > BEFORE` in irgendeinem Cluster: Gate rot, Commit blockiert.
+  (d) Wenn keine Baseline vorhanden (frisches Projekt): Gate gelb (nicht hart) mit Hinweis "keine Preservation-Baseline".
+  (e) Konfigurierbar pro Projekt in `projects/<name>.yaml` (opt-out moeglich mit explizitem Grund in STATUS.md).
+  (f) Fail-safe: bei SQLite-Fehler Gate rot (nicht "gruen aus Unsicherheit").
+- **Tests:** `tests/test_preservation_gate.py` (4 Tests: Baseline vorhanden + keine Regression -> gruen; Regression -> rot; keine Baseline -> gelb; SQLite-Fehler -> rot). Spec-First nach ADR-0015/0016.
+- **ADR:** ADR-0027 (Phase 4)
+
+### OP-379: Trace-Evolution-Messung (Seed-Band)
+
+- **Status:** open
+- **Typ:** architektur (Messung)
+- **Phase:** Phase-3 (Fundament Selbstverbesserung)
+- **Blockiert von:** OP-378 (Preservation-Gate)
+- **Betroffene Dateien:** `werkstatt/evolution.py` (neu), `tests/test_evolution.py` (neu)
+- **Problem:** ADR-0027 Phase 5 fordert: nach N Runs messen, ob der Fix die Fehlerrate gesenkt hat, mit Seed-Band (Trace Evolution Bench: kein Text-Update-Verfahren bleibt auf jedem Seed ueber seinem Rauschband, ein gepa_llm-Seed faellt um -12,5 Punkte). Ohne Seed-Band messen wir Rauschen als Fortschritt.
+- **Akzeptanzkriterien:**
+  (a) Neue Datei `evolution.py` mit `messe_cluster_trend(projekt, cluster_signatur, referenz_runs=3) -> TrendErgebnis`.
+  (b) Ergebnis-Format: `{cluster, vorher_rate, nachher_rate, band, delta, signifikant}`. Band aus den 3 Referenz-Runs (min/max).
+  (c) `signifikant=True` nur wenn `delta > band_breite`. Sonst "keine Aussage".
+  (d) Ergebnisse landen in `erfahrung.db` (OP-220-Schema): neue Tabelle `evolution_messung(cluster_signatur, run_id, ts, vorher, nachher, band, signifikant)`.
+  (e) CLI-Aufruf `python3 -m werkstatt.evolution --projekt <name> --cluster <sig>` (manuell, kein Auto-Trigger).
+  (f) Wenn keine 3 Referenz-Runs: `signifikant=False` mit Grund "zu wenig Referenz-Runs".
+- **Tests:** `tests/test_evolution.py` (3 Tests: signifikanter Fix, nicht-signifikanter Fix (Rauschen), zu wenig Runs). Spec-First nach ADR-0015/0016.
+- **ADR:** ADR-0027 (Phase 5)
+
+### OP-380: Memory-Graph-UI (2D Ring-Layout, Evidence-Panel)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-3 (Fundament Selbstverbesserung)
+- **Blockiert von:** OP-221 (Memory-Destillation), OP-222 (Semantic Memory)
+- **Betroffene Dateien:** `static/memory_graph.js` (neu), `static/layout.css` (Graph-Styling), `werkstatt/web/app.py` (`GET /api/projects/{name}/memory/graph`), `werkstatt/web/inspector.py` (`aggregate_memory_graph`), `tests/test_memory_graph_backend.py` (neu), `tests/test_memory_graph_spec.py` (neu)
+- **Problem:** Nach OP-221/222 entstehen Erfahrungs-Eintraege. Ohne Visualisierung bleibt dem User verborgen, welche Loesungen gegriffen haben, welche Fehler zusammenhaengen, wo die Evidenz liegt. ADR-0026 begruendet: 2D-Canvas + Ring-Layout (heym) + Evidence-Panel (Cognee/AgentFlow/Langfuse). Kein 3D als Start.
+- **Akzeptanzkriterien:**
+  (a) `GET /api/projects/{name}/memory/graph` liefert `{nodes, edges}` mit Node-Typen (`fehler`, `loesung`, `evidenz`, `projekt`, `op`) und Kanten (`loeste`, `trat_auf`, `verwandt`, `blockierte`). Verwandtschaft opt-in via `?verwandt=1`.
+  (b) Frontend: 2D-Canvas, Ring-Layout (stabile Position per `hash(node_id) -> (radius, angle)`), SVG bei <200 Nodes, Canvas ab 200.
+  (c) Node-Farbe nach sem-Variablen (sem-error, sem-ok, sem-history, sem-active, sem-action).
+  (d) Klick auf Node -> Evidence-Panel (rechts, einklappbar): Node-Info, direkte Nachbarn, letzte 10 SQLite-Events als Evidenz, verwandte OPs aus STATUS.md.
+  (e) Hover auf Kante: opacity 0.3 -> 1.0.
+  (f) Bei >20 Nachbarn pro Node: gruppieren nach Typ (Klapp-Header).
+  (g) Kein 3D, keine fliessenden Kanten, keine externe Chart-Library.
+- **Tests:** `tests/test_memory_graph_backend.py` (3 Tests: leere DB, ein Fehler + Evidenz, mehrere Typen gemischt) + `tests/test_memory_graph_spec.py` (5 Spec-Tests: Layout-Stabilitaet, Evidence-Panel-Trigger, Hover-Verhalten, Verwandtschaft-opt-in, Node-Farbe-Konstanten). Spec-First nach ADR-0015/0016.
+- **ADR:** ADR-0026 (Memory-Graph-Visualisierung)
+
+
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
 - **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
