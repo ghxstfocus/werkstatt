@@ -58,12 +58,11 @@
     });
     var daten = tabDaten[tabId];
 
-    document.getElementById("terminal-titel").textContent =
-      "Terminal — " + daten.projekt;
+    // Loop-Log hat keinen Titel mehr (Terminal->Loop-Log Umbau), skip
     var ambProj = document.getElementById("ambient-project-name");
     if (ambProj) ambProj.textContent = daten.projekt;
-    document.getElementById("chat-titel").textContent =
-      "Chat — " + daten.projekt;
+    var chatTitel = document.getElementById("chat-titel");
+    if (chatTitel) chatTitel.textContent = "Chat — " + daten.projekt;
 
     rendereListe("terminal", daten.terminal);
     rendereListe("chat-nachrichten", daten.chat);
