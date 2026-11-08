@@ -92,7 +92,7 @@
       }
     });
 
-    function baueZeile(ch) {
+    function baueZeile(ch, rolle) {
       var row = document.createElement("div");
       row.className = "tl-child";
       row.dataset.status = ch.status || "";
@@ -109,10 +109,12 @@
       row.appendChild(dot);
       row.appendChild(lbl);
       row.appendChild(ts);
-      // Klick auf Zeile: Evidence oeffnen
+      // Klick auf Zeile: Rollen-Details oeffnen (nicht Evidence)
       row.addEventListener("click", function (ev) {
         ev.stopPropagation();
-        if (window.WerkstattDetail) window.WerkstattDetail.oeffne("evidence");
+        if (window.WerkstattDetail && window.WerkstattDetail.oeffneRolle) {
+          window.WerkstattDetail.oeffneRolle(rolle || "explorer");
+        }
       });
       return row;
     }
@@ -148,7 +150,7 @@
         ev.stopPropagation();
       });
       grpDet.appendChild(grpSum);
-      items.forEach(function (ch) { grpDet.appendChild(baueZeile(ch)); });
+      items.forEach(function (ch) { grpDet.appendChild(baueZeile(ch, prefix)); });
       body.appendChild(grpDet);
     });
     Object.keys(gruppen).forEach(function (prefix) {
@@ -165,10 +167,10 @@
         ev.stopPropagation();
       });
       grpDet.appendChild(grpSum);
-      items.forEach(function (ch) { grpDet.appendChild(baueZeile(ch)); });
+      items.forEach(function (ch) { grpDet.appendChild(baueZeile(ch, prefix)); });
       body.appendChild(grpDet);
     });
-    andere.forEach(function (ch) { body.appendChild(baueZeile(ch)); });
+    andere.forEach(function (ch) { body.appendChild(baueZeile(ch, "explorer")); });
     el.appendChild(body);
 
     if (_leseState(k.id) === "1") el.classList.add("offen");

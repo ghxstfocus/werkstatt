@@ -1521,3 +1521,100 @@ body {
   font-size: 9px !important;
 }
 
+
+/* OP-316: Rollen-spezifischer Detail-Drawer */
+.dd-rolle-titel {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #a78bfa;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(138,92,246,0.2);
+}
+.dd-rolle-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dd-rolle-event {
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 5px;
+}
+.dd-rolle-event[data-kind*="failed"],
+.dd-rolle-event[data-kind*="fehler"],
+.dd-rolle-event[data-kind*="error"] {
+  border-left: 2px solid #f87171;
+}
+.dd-rolle-event[data-kind*="_ok"],
+.dd-rolle-event[data-kind*="_erstellt"] {
+  border-left: 2px solid #4ade80;
+}
+.dd-rolle-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.dd-rolle-kind {
+  font-family: monospace;
+  font-size: 11px;
+  color: #60a5fa;
+  font-weight: 600;
+}
+.dd-rolle-ts {
+  margin-left: auto;
+  font-family: monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.6;
+}
+.dd-rolle-feld {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 11px;
+  align-items: baseline;
+}
+.dd-rolle-key {
+  color: var(--text-dim);
+  font-family: monospace;
+  font-size: 10px;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dd-rolle-val {
+  color: var(--text);
+  font-size: 11px;
+  word-break: break-word;
+}
+.dd-rolle-val details summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-family: monospace;
+  font-size: 10px;
+}
+.dd-rolle-pre {
+  margin: 4px 0 0 0;
+  padding: 6px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 10px;
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.dd-rolle-leer, .dd-rolle-empty {
+  padding: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+  text-align: center;
+  font-size: 11px;
+}

@@ -1039,6 +1039,42 @@ def aggregate_handoffs(
     return handoffs
 
 
+def aggregate_role_events(
+    projekt: str, rolle: str, run_id: str | None = None
+) -> dict[str, Any]:
+    """Alle Events einer Rolle (explorer/scout/builder/reviewer/verify/reflection).
+
+    Liefert kind + payload + ts, damit der Frontend-Drawer die tatsaechliche
+    Arbeit der Rolle zeigt (z.B. Reviewer-Verdict, Builder-Patches).
+    """
+    _ROLE_PREFIXES: dict[str, tuple[str, ...]] = {
+        "explorer": ("explorer_", "loop_explorer_"),
+        "scout": ("scout_", "planner_scout_"),
+        "planner": ("planner_", "loop_plan_"),
+        "architect": ("planner_architect_", "architect_"),
+        "builder": ("builder_", "loop_patch_", "loop_builder_"),
+        "reviewer": ("reviewer_", "reviewer"),
+        "verify": ("verify_", "loop_verify_"),
+        "reflection": ("reflection_", "loop_reflection_"),
+        "phase_review": ("reviewer_phase_", "loop_phase_review"),
+        "llm": ("llm_call_", "llm_usage", "llm_timeout_"),
+    }
+    prefixe = _ROLE_PREFIXES.get(rolle, (rolle + "_",))
+    events = _audit_events(run_id)
+    treffer: list[dict[str, Any]] = []
+    for ev in events:
+        kind = str(ev.get("kind", ""))
+        if any(kind.startswith(p) or kind == p.rstrip("_") for p in prefixe):
+            payload = _payload_von(ev)
+            ts = str(ev.get("ts", "") or ev.get("timestamp", ""))
+            treffer.append({
+                "kind": kind,
+                "ts": ts,
+                "payload": payload,
+            })
+    return {"rolle": rolle, "anzahl": len(treffer), "events": treffer}
+
+
 def aggregate_evidence_links(
     projekt: str, run_id: str | None = None
 ) -> list[dict[str, Any]]:

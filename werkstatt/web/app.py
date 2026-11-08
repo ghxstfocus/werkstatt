@@ -307,6 +307,18 @@ def create_app() -> FastAPI:
         projekt = _pruefe_projektname(name)
         return {"handoffs": _insp.aggregate_handoffs(projekt, run_id=run_id)}
 
+    @app.get("/api/projects/{name}/role/{rolle}")
+    def project_role_events(name: str, rolle: str,
+                            run_id: str | None = None) -> dict[str, Any]:
+        """Events einer Rolle (builder/reviewer/verify/explorer/...)."""
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        if rolle not in ("explorer", "scout", "planner", "architect",
+                          "builder", "reviewer", "verify", "reflection",
+                          "phase_review", "llm"):
+            raise HTTPException(status_code=400, detail="unbekannte rolle")
+        return _insp.aggregate_role_events(projekt, rolle, run_id=run_id)
+
     @app.get("/api/projects/{name}/evidence")
     def evidence_links(name: str, run_id: str | None = None) -> dict[str, Any]:
         from werkstatt.web import inspector as _insp
