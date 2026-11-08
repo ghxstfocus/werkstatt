@@ -17,6 +17,9 @@ from typing import Any
 from werkstatt.event_store import EventStore
 from werkstatt.paths import werkstatt_home
 
+# OP-305: Basis fuer Multi-Projekt-Pfade (testbar via monkeypatch)
+_PROJECTS_BASE = Path("/opt")
+
 __all__ = ["aggregate_status", "aggregate_timeline", "aggregate_tokens", "parse_ops"]
 
 _OPS_RE = re.compile(r"^### (OP-\d+):\s*(.+?)\s*$", re.MULTILINE)
@@ -232,8 +235,8 @@ def aggregate_palette(projekt: str, q: str) -> dict[str, list[dict]]:
          "action": "new_project", "shortcut": ""},
     ]
 
-    # OPs durchsuchen
-    for op in parse_ops():
+    # OPs durchsuchen — projekt-spezifischer Pfad (OP-305)
+    for op in parse_ops(_PROJECTS_BASE / projekt):
         titel = op.get("titel", "")
         oid = op.get("id", "")
         if not q_low or q_low in oid.lower() or q_low in titel.lower():

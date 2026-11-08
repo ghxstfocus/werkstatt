@@ -98,3 +98,49 @@ def test_run_status_legacy_pipeline_start(tmp_path, monkeypatch):
     aus = aggregate_ops_run_status("werkstatt")
     assert "OP-OLD" in aus
     assert aus["OP-OLD"]["state"] == "done"
+
+
+def test_parse_ops_projekt_spezifisch(tmp_path):
+    """OP-305: parse_ops(projekt_dir) liest aus dem uebergebenen Verzeichnis."""
+    from werkstatt.web.inspector import parse_ops
+    # Projekt A mit OP-100
+    a = tmp_path / "projekt-a" / "docs"
+    a.mkdir(parents=True)
+    (a / "STATUS.md").write_text(
+        "### OP-100: A-Projekt-OP\n- **Status:** open\n- **Blockiert von:** —\n"
+    )
+    # Projekt B mit OP-200
+    b = tmp_path / "projekt-b" / "docs"
+    b.mkdir(parents=True)
+    (b / "STATUS.md").write_text(
+        "### OP-200: B-Projekt-OP\n- **Status:** open\n- **Blockiert von:** —\n"
+    )
+
+    ops_a = parse_ops(tmp_path / "projekt-a")
+    ops_b = parse_ops(tmp_path / "projekt-b")
+
+    ids_a = {o["id"] for o in ops_a}
+    ids_b = {o["id"] for o in ops_b}
+    assert "OP-100" in ids_a
+    assert "OP-200" not in ids_a
+    assert "OP-200" in ids_b
+    assert "OP-100" not in ids_b
+
+
+def test_start_validierung_ohne_status_md(tmp_path, monkeypatch):
+    """OP-305: /start lehnt Projekt ohne docs/STATUS.md ab."""
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_modul
+    from werkstatt.web import auth
+
+    # Auth deaktivieren (offizielle API)
+    monkeypatch.setattr(auth, "_AUTH_DISABLED", True)
+    # _PROJECTS_BASE auf tmp_path, damit /opt/ leer bleibt
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+
+    client = TestClient(app_modul.create_app())
+    # Projektname valide, aber kein <tmp_path>/<name>/docs/STATUS.md
+    r = client.post("/api/projects/zzz-nicht-existent/start", json={})
+    assert r.status_code == 404, r.text
+    assert "STATUS.md" in r.text or "docs" in r.text

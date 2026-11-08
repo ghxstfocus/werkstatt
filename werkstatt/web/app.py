@@ -25,6 +25,9 @@ __all__ = ["app", "create_app"]
 _PROJEKTNAME_MUSTER = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _RUN_ID_MUSTER = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 
+# OP-305: Basis fuer Multi-Projekt-Pfade (testbar via monkeypatch)
+_PROJECTS_BASE = Path("/opt")
+
 _LAUFENDE_LOOPS: dict[str, subprocess.Popen] = {}
 
 
@@ -308,6 +311,14 @@ def create_app() -> FastAPI:
         Ohne aufgabe: Loop liest selbst die naechste OP aus STATUS.md.
         """
         projektname = _pruefe_projektname(name)
+        # OP-305: Projekt muss minimal initialisiert sein (STATUS.md da),
+        # sonst startet der Loop ins Leere (oder falschen Kontext).
+        _pd = _PROJECTS_BASE / projektname
+        if not (_pd / "docs" / "STATUS.md").is_file():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Projekt {projektname!r} hat kein docs/STATUS.md",
+            )
         laufend = _LAUFENDE_LOOPS.get(projektname)
         if laufend is not None and laufend.poll() is None:
             return {"gestartet": False, "pid": laufend.pid,
@@ -330,7 +341,7 @@ def create_app() -> FastAPI:
             if op_id and not aufgabe:
                 # aus STATUS.md ziehen
                 from werkstatt.web import inspector as _insp
-                for op in _insp.parse_ops(Path("/opt") / projektname):
+                for op in _insp.parse_ops(_PROJECTS_BASE / projektname):
                     if op.get("id") == op_id:
                         aufgabe = f"{op_id}: {op.get('titel', '')}"
                         break

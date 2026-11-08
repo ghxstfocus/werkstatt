@@ -1,6 +1,7 @@
 """Tests fuer das FastAPI-Backend (OP-074)."""
 
 import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -37,12 +38,21 @@ def _fake_popen(aufrufe: list[list[str]], pid: int = 4242) -> Any:
     return _popen
 
 
-def test_loop_subprozess_start_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_loop_subprozess_start_stop(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     pytest.importorskip("fastapi")
     pytest.importorskip("httpx")
     from fastapi.testclient import TestClient
 
     from werkstatt.web import app as app_modul
+
+    # OP-305: /start pruefen wir mit _PROJECTS_BASE = tmp_path
+    # (Path("/opt") wuerde auf echte Verzeichnisse schauen)
+    demo_dir = tmp_path / "demo" / "docs"
+    demo_dir.mkdir(parents=True)
+    (demo_dir / "STATUS.md").write_text("### OP-999: Test\n")
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
 
     aufrufe: list[list[str]] = []
     app_modul._LAUFENDE_LOOPS.clear()
