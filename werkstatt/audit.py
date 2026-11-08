@@ -27,6 +27,18 @@ if TYPE_CHECKING:
 # Konstanten (aus pipeline.py:131, 132, 3969, 3976).
 AUDIT_DIR_NAME = "audit-logs"
 AUDIT_FILE_NAME = "agent-pipeline.jsonl"
+
+# OP-321: Stream-Kinds (hochfrequent, gitignore). Alle anderen Kinds -> Semantic.
+_STREAM_KINDS: frozenset[str] = frozenset({
+    "log_line", "progress", "spinner",
+    "heartbeat", "task_started", "task_done",
+})
+
+
+def _event_id(run_id: str, audit_id: str) -> str:
+    """Deterministische event_id fuer Replay-Idempotenz (OP-321)."""
+    import hashlib
+    return hashlib.sha256(f"{run_id}|{audit_id}".encode()).hexdigest()[:16]
 _AUDIT_RAW_MAX_LEN = 32768
 _AUDIT_RAW_REDACTION_LIMIT = 1_000_000
 
@@ -93,8 +105,10 @@ def audit(kind: str, payload: dict[str, Any], project_dir: Path,
     audit_dir.mkdir(parents=True, exist_ok=True)
     tag = datetime.now(UTC).strftime("%Y-%m-%d")
     datei = audit_dir / f"agent-pipeline-{tag}.jsonl"
+    _aid = f"PIPE-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{int(time.time()*1000)%100000}"
     entry = {
-        "audit_id": f"PIPE-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{int(time.time()*1000)%100000}",
+        "audit_id": _aid,
+        "event_id": _event_id(_AKTUELLE_RUN_ID, _aid),
         "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds"),
         "agent": "agent_pipeline",
         "project": project_name,
@@ -116,6 +130,38 @@ def audit(kind: str, payload: dict[str, Any], project_dir: Path,
     except (OSError, TypeError, ValueError) as exc:
         print(f"[WARN] Audit-Schreibfehler: {exc}")
 
+
+
+def stream(kind: str, payload: dict[str, Any], project_dir: Path,
+           project_name: str) -> None:
+    """Stream-Event nach audit-logs/stream-YYYY-MM-DD.jsonl (OP-321).
+
+    Fail-closed: unbekannter Kind geht via audit() nach Semantic.
+    """
+    if kind not in _STREAM_KINDS:
+        audit(kind, payload, project_dir, project_name)
+        return
+    audit_dir = _werkstatt_home() / AUDIT_DIR_NAME
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    tag = datetime.now(UTC).strftime("%Y-%m-%d")
+    datei = audit_dir / f"stream-{tag}.jsonl"
+    _aid = f"STREAM-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{int(time.time()*1000)%100000}"
+    entry = {
+        "audit_id": _aid,
+        "event_id": _event_id(_AKTUELLE_RUN_ID, _aid),
+        "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds"),
+        "agent": "agent_pipeline",
+        "project": project_name,
+        "kind": kind,
+        **payload,
+    }
+    if _AKTUELLE_RUN_ID:
+        entry["run_id"] = _AKTUELLE_RUN_ID
+    try:
+        with datei.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=True, default=str) + "\n")
+    except (OSError, TypeError, ValueError) as exc:
+        print(f"[WARN] Stream-Schreibfehler: {exc}")
 
 def audit_safe(
     kind: str,

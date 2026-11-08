@@ -134,17 +134,33 @@ def _get_emitter() -> TerminalEmitter | None:
 
 
 def _publish(event_type: str, text: str, **extra: object) -> None:
-    """Sendet ein strukturiertes Event an den Emitter.
+    """Event an JSONL (autoritativ) + SQLite (Uebergang) + Emitter.
 
-    Ein fehlender Emitter (kein Projekt-Kontext) oder ein defekter
-    Subscriber darf den Loop nie abbrechen.
+    OP-321: JSONL ist ab jetzt autoritativ (audit/stream). SQLite wird
+    in OP-323 entfernt, sobald der Projektor (OP-322) die DB aus JSONL
+    fuellt. Emitter bleibt unveraendert (WebSocket-Live-Kanal).
+
+    Ein fehlender Emitter oder defekter Subscriber darf den Loop nie
+    abbrechen.
     """
-    try:
-        # Der Store ist eine Zusatz-Senke. Ein Fehler beim Spiegeln darf
-        # den Loop nie abbrechen — dieselbe Regel wie beim Emitter.
-        from werkstatt.audit import get_run_id
-        from werkstatt.event_store import EventStore
+    from pathlib import Path as _Path
 
+    from werkstatt.audit import _STREAM_KINDS, audit, get_run_id, stream
+
+    # 1. JSONL (autoritativ, neu)
+    project_name = _get_project() or "?"
+    payload_j = {"text": text, **extra}
+    try:
+        if event_type in _STREAM_KINDS:
+            stream(event_type, payload_j, _Path("."), project_name)
+        else:
+            audit(event_type, payload_j, _Path("."), project_name)
+    except Exception:
+        pass
+
+    # 2. SQLite (Uebergangsphase, OP-323 entfernt das)
+    try:
+        from werkstatt.event_store import EventStore
         run_id = get_run_id()
         if run_id:
             phase = extra.get("phase")
@@ -162,6 +178,8 @@ def _publish(event_type: str, text: str, **extra: object) -> None:
             )
     except Exception:
         pass
+
+    # 3. Emitter (unveraendert)
     emitter = _get_emitter()
     if emitter is None:
         return
