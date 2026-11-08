@@ -11,7 +11,14 @@
     d.dataset.offen = offen ? "true" : "false";
     try { localStorage.setItem("werkstatt-workbench", offen ? "1" : "0"); } catch (e) {}
     if (offen && !d.dataset.initialisiert) {
-      _aktiviereTab("audit");
+      // Initial: Audit als Default, aber OHNE _aktiviereTab zu rufen
+      // (das wuerde _setDrawer(true) erneut aufrufen → Rekursion).
+      d.querySelectorAll(".wb-tab").forEach(function (b) {
+        b.classList.toggle("aktiv", b.dataset.tab === "audit");
+      });
+      d.querySelectorAll(".wb-pane").forEach(function (p) {
+        p.classList.toggle("aktiv", p.dataset.pane === "audit");
+      });
       d.dataset.initialisiert = "1";
     }
   }
@@ -101,7 +108,10 @@
     d.querySelectorAll(".wb-pane").forEach(function (p) {
       p.classList.toggle("aktiv", p.dataset.pane === name);
     });
-    _setDrawer(true);
+    // Drawer oeffnen nur wenn noch zu — kein Rekursions-Aufruf
+    if (d.dataset.offen !== "true") {
+      _setDrawer(true);
+    }
     if (name === "diff") _ladeDiff();
     else if (name === "verify") _ladeVerify();
     else if (name === "files") _ladeFiles("");

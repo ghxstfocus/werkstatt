@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from werkstatt.event_store import EventStore
 from werkstatt.phase_state import PhaseState
-from werkstatt.web import audit_panel, auth, shell, terminal_proxy, ws
+from werkstatt.web import audit_panel, auth, terminal_proxy, ws
 
 __all__ = ["app", "create_app"]
 
@@ -218,10 +218,6 @@ def create_app() -> FastAPI:
     from werkstatt.web import audit_panel as _ap
     _ap._home_kontext = Path.cwd()
 
-    # WICHTIG: shell.router VOR ws.router — sonst matcht
-    # /ws/{tab_id} aus ws.router den /ws/shell-Request und der
-    # PTY-Handler wird nie erreicht (Starlette matcht in Reihenfolge).
-    app.include_router(shell.router)
     app.include_router(ws.router)
     app.include_router(audit_panel.router)
     app.include_router(terminal_proxy.router)

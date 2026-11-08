@@ -71,8 +71,7 @@ _TERMINAL_KIND_PREFIXE = (
     "adr_mini_",
     # Committer
     "committer_",
-    # Web
-    "web_",
+    # Web (bewusst NICHT im Loop-Log)
     # Doku
     "doku_",
     # Sonstige

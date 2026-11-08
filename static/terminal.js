@@ -31,7 +31,7 @@ function formatiereEvent(event) {
 }
 
 function haengeZeileAn(text) {
-  const pre = document.getElementById("terminal");
+  const pre = document.getElementById("loop-log");
   if (!pre) {
     return;
   }
@@ -43,7 +43,7 @@ function haengeZeileAn(text) {
 }
 
 function haengeSpinnerAn(text) {
-  const spinner = document.getElementById("terminal-spinner");
+  const spinner = document.getElementById("loop-log-status");
   if (!spinner) {
     return;
   }
@@ -173,7 +173,7 @@ function oeffne(project) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-  const pre = document.getElementById("terminal");
+  const pre = document.getElementById("loop-log");
   if (!pre) {
     return;
   }

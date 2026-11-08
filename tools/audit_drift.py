@@ -47,13 +47,23 @@ def finde_code_kinds() -> set[str]:
             _audit_namen = frozenset({"audit", "audit_safe"})
             _ist_name = isinstance(func, ast.Name) and func.id in _audit_namen
             _ist_attr = isinstance(func, ast.Attribute) and func.attr in _audit_namen
-            if not (_ist_name or _ist_attr):
+            # Klassischer audit("kind", ...)-Aufruf
+            if _ist_name or _ist_attr:
+                if not node.args:
+                    continue
+                first = node.args[0]
+                if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                    kinds.add(first.value)
                 continue
-            if not node.args:
-                continue
-            first = node.args[0]
-            if isinstance(first, ast.Constant) and isinstance(first.value, str):
-                kinds.add(first.value)
+            # OP-321: EventStore().append(kind="...")-Aufruf
+            # (gate_open, gate_answered, gate_expired, loop_gate_timeout,
+            #  token_usage, gate_waiting, loop_started, ...)
+            if isinstance(func, ast.Attribute) and func.attr == "append":
+                for kw in node.keywords:
+                    if (kw.arg == "kind"
+                            and isinstance(kw.value, ast.Constant)
+                            and isinstance(kw.value.value, str)):
+                        kinds.add(kw.value.value)
     return kinds
 
 
