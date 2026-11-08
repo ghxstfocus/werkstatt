@@ -63,9 +63,15 @@
       else badge.title = "Noch kein Run";
       div.appendChild(badge);
 
+      // OPEN-Status redundant (parse_ops filtert done raus) — nur
+      // bei partial/blocked zeigen.
       var status = document.createElement("span");
       status.className = "runs-status";
-      status.textContent = op.status;
+      if (op.status && op.status !== "open") {
+        status.textContent = op.status;
+      } else {
+        status.hidden = true;
+      }
       div.appendChild(status);
 
       // Action-Button (OP-303)
