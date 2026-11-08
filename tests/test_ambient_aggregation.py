@@ -99,3 +99,34 @@ def test_endpoint_registriert():
     from werkstatt.web import app as web_app
     routes = [r.path for r in web_app.app.routes if hasattr(r, "path")]
     assert "/api/projects/{name}/ambient" in routes
+
+def test_ambient_letztes_terminal_gewinnt(tmp_path, monkeypatch):
+    """OP-371: Neuestes Terminal-Event entscheidet, nicht loop_erfolg-Prioritaet.
+
+    Live-Bug 2026-11-08 22:10: ambient('werkstatt') zeigte 'done'
+    (loop_erfolg 01:26), obwohl um 19:41 loop_failed das letzte
+    Terminal-Event war. Nach Fix: 'failed'.
+    """
+    from werkstatt.web.inspector import aggregate_ambient
+    _s, db = _store(tmp_path, monkeypatch)
+    alt = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+    _event(db, "r-old", "loop_erfolg", {}, ts=alt)
+    _event(db, "r-new", "loop_failed", {}, ts=datetime.now(UTC).isoformat())
+    aus = aggregate_ambient("werkstatt")
+    assert aus["loop_status"] == "failed"
+    assert aus["last_run"]["run_id"] == "r-new"
+    assert aus["last_run"]["erfolg"] is False
+
+
+def test_ambient_letzter_erfolg_gewinnt_wenn_neuer(tmp_path, monkeypatch):
+    """OP-371: Auch umgekehrt — loop_erfolg nach loop_failed -> done."""
+    from werkstatt.web.inspector import aggregate_ambient
+    _s, db = _store(tmp_path, monkeypatch)
+    alt = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+    _event(db, "r-old", "loop_failed", {}, ts=alt)
+    _event(db, "r-new", "loop_erfolg", {}, ts=datetime.now(UTC).isoformat())
+    aus = aggregate_ambient("werkstatt")
+    assert aus["loop_status"] == "done"
+    assert aus["last_run"]["run_id"] == "r-new"
+    assert aus["last_run"]["erfolg"] is True
+

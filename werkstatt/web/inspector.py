@@ -442,7 +442,10 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
 
     Fallbacks:
     - running: letzter heartbeat < 60s
-    - done/failed: loop_erfolg.payload.erfolg|success, sonst loop_ended
+    - done/failed: neuestes Terminal-Event (loop_erfolg|loop_failed|
+      loop_ended) entscheidet. Frueher wurde loop_erfolg priorisiert —
+      Bug OP-371, Live 2026-11-08 22:10: ambient zeigte 'done' obwohl
+      das letzte Event loop_failed (19:41) war.
     - gates: DISTINCT gate_id ueber open/answered/expired
     """
     from datetime import UTC, datetime
@@ -476,52 +479,26 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
                 except (ValueError, TypeError):
                     pass
 
-            # 2. Letzter Erfolg/Misserfolg (nur wenn nicht running)
-            # OP-301: loop_erfolg = semantisch Erfolg (Event-Name impliziert
-            # erfolg, payload enthaelt in Produktion kein erfolg/success).
-            # Reihenfolge: loop_erfolg > loop_ended > loop_failed > idle.
+            # 2. Neuestes Terminal-Event entscheidet (OP-371)
+            # Frueher: 3-stufige Kaskade mit loop_erfolg zuerst -> ein
+            # spaeteres loop_failed wurde ignoriert (Bug OP-371). Jetzt:
+            # eine Query ueber alle 3 Kinds, kind des Neuesten entscheidet.
             if aus["loop_status"] != "running":
-                le = c.execute(
-                    "SELECT run_id, ts FROM events "
-                    "WHERE kind='loop_erfolg' AND project=? "
+                term = c.execute(
+                    "SELECT run_id, ts, kind FROM events "
+                    "WHERE kind IN ('loop_erfolg', 'loop_failed', 'loop_ended') "
+                    "AND project=? "
                     "ORDER BY seq DESC LIMIT 1",
                     (projekt,),
                 ).fetchone()
-                if le:
-                    aus["loop_status"] = "done"
+                if term:
+                    ist_failed = term[2] == "loop_failed"
+                    aus["loop_status"] = "failed" if ist_failed else "done"
                     aus["last_run"] = {
-                        "run_id": le[0],
-                        "ts": le[1],
-                        "erfolg": True,
+                        "run_id": term[0],
+                        "ts": term[1],
+                        "erfolg": not ist_failed,
                     }
-                else:
-                    lf = c.execute(
-                        "SELECT run_id, ts FROM events "
-                        "WHERE kind='loop_failed' AND project=? "
-                        "ORDER BY seq DESC LIMIT 1",
-                        (projekt,),
-                    ).fetchone()
-                    if lf:
-                        aus["loop_status"] = "failed"
-                        aus["last_run"] = {
-                            "run_id": lf[0],
-                            "ts": lf[1],
-                            "erfolg": False,
-                        }
-                    else:
-                        lend = c.execute(
-                            "SELECT run_id, ts FROM events "
-                            "WHERE kind='loop_ended' AND project=? "
-                            "ORDER BY seq DESC LIMIT 1",
-                            (projekt,),
-                        ).fetchone()
-                        if lend:
-                            aus["loop_status"] = "done"
-                            aus["last_run"] = {
-                                "run_id": lend[0],
-                                "ts": lend[1],
-                                "erfolg": True,
-                            }
 
             # 3. Gates: DISTINCT auf allen drei
             opens = {

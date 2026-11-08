@@ -3536,3 +3536,32 @@ siehe neue OP.
 - **OP-372:** Projection-Status-Diff vergleicht JSONL (33k) mit
   SQLite (410k) und zeigt -377.834 an. Semantisch falsch, aber
   kein Datenproblem.
+
+
+## OP-371: Ambient-Loop-Status zeigt neuestes Terminal-Event (2026-11-08)
+
+**Symptom:** Ambient-Bar zeigte "Fertig", obwohl der letzte Run mit
+`loop_failed` endete.
+
+**Live-Beleg 2026-11-08 22:10:**
+- SQLite: letzte Terminal-Events = loop_failed (19:41)
+- ambient('werkstatt') = "done" (mit last_run = loop_erfolg 01:26)
+
+**Ursache:** aggregate_ambient hatte 3-stufige Kaskade
+(loop_erfolg -> loop_failed -> loop_ended). Ein spaeteres loop_failed
+wurde ignoriert, weil der aeltere loop_erfolg bereits den Status setzte.
+
+**Fix:** Eine Query mit
+`WHERE kind IN ('loop_erfolg','loop_failed','loop_ended') AND project=?`
++ `ORDER BY seq DESC LIMIT 1`. Das kind des neuesten Events entscheidet:
+- loop_failed -> failed
+- loop_erfolg|loop_ended -> done
+
+last_run zeigt das juengste Terminal-Event, nicht das juengste
+Erfolgs-Event.
+
+**Tests:** 2 neue Verhaltens-Tests (Konflikt-Reihenfolge in beide
+Richtungen). Bestehende Tests bleiben gruen. pytest 1538 passed.
+
+**Live-Effekt:** ambient('werkstatt') = failed, last_run = 19:41
+loop_failed. UI zeigt jetzt die Wahrheit.

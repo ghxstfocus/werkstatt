@@ -1060,16 +1060,6 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Prioritaet:** mittel (Sicherheits-Backstop, nicht Blocker).
 - **Quelle:** Punkt 4 aus externem Review 2026-11-07.
 
-### OP-371: Ambient-Loop-Status zeigt letzten Erfolg statt letzten Zustand
-
-- **Status:** open
-- **Typ:** bugfix
-- **Phase:** Phase-2 (Focus)
-- **Betroffene Dateien:** `werkstatt/web/inspector.py` (`aggregate_ambient`), `tests/test_ambient_aggregation.py`
-- **Problem:** `aggregate_ambient` zeigt `loop_status='done'`, wenn der **letzte** Terminal-Event ein `loop_erfolg` war — auch wenn **danach** ein `loop_failed` kam. Live-Beleg 2026-11-08 22:10: Werkstatt-Ambient zeigte 'done' (loop_erfolg 01:26), obwohl um 19:41 ein `loop_failed` in SQLite steht. Ursache: `SELECT ... WHERE kind='loop_erfolg' ORDER BY seq DESC LIMIT 1` gewinnt immer, `loop_failed`/`loop_ended` werden nur im `else`-Zweig geprueft, nie im Vergleich gegen `loop_erfolg`.
-- **Akzeptanzkriterien:** (a) `loop_erfolg`, `loop_failed`, `loop_ended` werden in einer gemeinsamen Query mit `ORDER BY seq DESC LIMIT 1` geholt, `kind` des neuesten entscheidet ueber `loop_status` (erfolg/ended -> done, failed -> failed). (b) `last_run` zeigt das juengste Terminal-Event, nicht das juengste Erfolgs-Event. (c) `loop_erfolg`-Semantik rueckwaerts-kompatibel. (d) Live: nach `loop_failed` 19:41 zeigt `aggregate_ambient('werkstatt')` 'failed'.
-- **Tests:** `tests/test_ambient_aggregation.py` (3 Tests: loop_failed nach loop_erfolg -> failed, loop_erfolg als letztes -> done, beide Reihenfolgen).
-- **Blockiert von:** —
 
 ### OP-372: Projection-Status-Diff vergleicht JSONL mit SQLite semantisch falsch
 
@@ -1541,6 +1531,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
+
+- 2026-11-08 | OP-371 | done | Ambient-Loop-Status: neuestes Terminal-Event entscheidet (loop_erfolg|loop_failed|loop_ended). Vorher 3-stufige Kaskade mit loop_erfolg zuerst -> ein spaeteres loop_failed wurde ignoriert. Live 2026-11-08 22:10: ambient('werkstatt') zeigte 'done' (loop_erfolg 01:26), obwohl um 19:41 loop_failed das letzte Terminal-Event war. Fix: 1 Query mit IN-Klausel + ORDER BY seq DESC LIMIT 1, kind des Neuesten entscheidet. 2 neue Tests (Konflikt-Reihenfolge in beide Richtungen). pytest 1538 passed.
 
 - 2026-11-08 | OP-306c-Fix | done | Projector-Deadlock behoben (Commit a640b19). Sentinel-Checkpoint MIGRATED-SEM-352017 (aus OP-323-Migration) stand in der alphabetisch letzten agent-pipeline-migrated-2026-11-08.jsonl Zeile 33/33 — _read_events() fand ihn nie in den echten Tagesdateien, uebersprang stumm alle Events, Checkpoint blieb Sentinel. Folge: SQLite stand seit 15:14 still, JSONL hatte 31 echte Events nach 15:14 (u.a. loop_started 17:57 OP-280, loop_failed 19:41). Fix: _jsonl_files() excludet *-migrated-*.jsonl (statische DB-Dumps); _read_events() wirft ValueError bei unbekanntem Checkpoint statt stumm 0. 3 neue Tests. Daten-Reset: Checkpoint auf PIPE-20261108-151341-a8a36a -> tail() las 31 Events ein (2 wegen event_id-Kollision uebersprungen, harmlos). tail#2 idempotent. Checkpoint landet auf PIPE-20261108-194159-bd35bf. COUNT 410754 -> 410785, MAX(seq) 788707 -> 788736. pytest 1536 passed.
 
