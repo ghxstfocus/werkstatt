@@ -110,15 +110,31 @@ class ChatSession:
         return ergebnis
 
 
-def list_sessions(project: str, db_pfad: Path | None = None) -> list[str]:
-    """Alle Session-IDs im Projekt, sortiert."""
+def list_sessions(
+    project: str,
+    db_pfad: Path | None = None,
+    *,
+    mit_inhalt: bool = False,
+) -> list[str]:
+    """Alle Session-IDs im Projekt, sortiert.
+
+    mit_inhalt=True: nur Sessions mit mindestens einem user-Event
+    (blendet leere session_start-Sessions aus, z.B. Reload-Artefakte).
+    """
     pfad = Path(db_pfad) if db_pfad else _db_pfad(project)
     if not pfad.exists():
         return []
     with closing(sqlite3.connect(pfad)) as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT session_id FROM events ORDER BY session_id"
-        ).fetchall()
+        if mit_inhalt:
+            rows = conn.execute(
+                "SELECT DISTINCT session_id FROM events "
+                "WHERE kind IN ('user', 'assistant') "
+                "ORDER BY session_id"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT DISTINCT session_id FROM events ORDER BY session_id"
+            ).fetchall()
     return [str(r[0]) for r in rows]
 
 

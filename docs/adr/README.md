@@ -25,3 +25,4 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0019](ADR-0019-gate-lifecycle.md) | Gate-Lifecycle-Vertrag statt PID/Heartbeat/Timeout | accepted |
 | [ADR-0020](ADR-0020-human-readable-audit.md) | Human-Readable Audit-Trail im Frontend | accepted |
 | [ADR-0021](ADR-0021-rollen-detail-ansicht.md) | Rollen-spezifische Detail-Ansicht im Chat-Drawer | accepted |
+| [ADR-0022](ADR-0022-hybrid-ui-modi.md) | Hybrid-UI-Modi (Cockpit / Control / Debug) | accepted |

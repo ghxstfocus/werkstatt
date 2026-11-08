@@ -176,13 +176,8 @@
     if (_leseState(k.id) === "1") el.classList.add("offen");
 
     el.addEventListener("click", function (ev) {
-      // Klick auf Kind-Zeile: Drawer oeffnen, Karte bleibt offen
-      var istKind = ev.target.closest(".tl-child");
-      if (istKind) {
-        ev.stopPropagation();
-        if (window.WerkstattDetail) window.WerkstattDetail.oeffne("evidence");
-        return;
-      }
+      // Kind-Klicks werden von row-Handler gestoppt. Hier kommt nur
+      // Karten-Header (tl-head) an -> Karte auf/zu.
       var warOffen = el.classList.contains("offen");
       el.classList.toggle("offen");
       _schreibeState(k.id, el.classList.contains("offen"));

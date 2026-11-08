@@ -434,7 +434,7 @@ def create_app() -> FastAPI:
         """Listet alle Chat-Session-IDs eines Projekts."""
         from werkstatt import chat_session as _cs
         projekt = _pruefe_projektname(name)
-        return {"sessions": _cs.list_sessions(projekt)}
+        return {"sessions": _cs.list_sessions(projekt, mit_inhalt=True)}
 
     @app.get("/api/projects/{name}/chat/history")
     def chat_history(name: str, session_id: str) -> dict[str, Any]:

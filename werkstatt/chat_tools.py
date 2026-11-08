@@ -147,17 +147,33 @@ def _diagnose(_args: dict[str, Any]) -> str:
 
 
 def _read_status(_args: dict[str, Any]) -> str:
-    aus: list[str] = []
+    """STATUS.md + PROGRESS.md plus strukturierte OP-Zusammenfassung."""
+    teile: list[str] = []
+    try:
+        from werkstatt.web.inspector import parse_ops
+        ops = parse_ops(_PROJEKT_DIR)
+        counts: dict[str, int] = {}
+        for o in ops:
+            counts[o["status"]] = counts.get(o["status"], 0) + 1
+        status_str = ", ".join(f"{n} {st}" for st, n in sorted(counts.items()))
+        teile.append(
+            "## OP-Zusammenfassung (parse_ops, authoritative)\n"
+            f"Total {len(ops)} offene OPs ({status_str}).\n"
+        )
+    except Exception as exc:  # noqa: BLE001
+        teile.append(f"## OP-Zusammenfassung: Fehler ({exc})\n")
+
     for name in ("docs/STATUS.md", "docs/PROGRESS.md"):
-        p = _PROJEKT_DIR / name
-        if p.is_file():
+        pfad = _PROJEKT_DIR / name
+        if pfad.is_file():
             try:
-                text = p.read_text(encoding="utf-8", errors="replace")[:10_000]
+                limit = 200_000 if "STATUS" in name else 20_000
+                text = pfad.read_text(encoding="utf-8", errors="replace")[:limit]
             except OSError:
                 continue
-            aus.append(f"## {name}\n{text}\n")
-    return "\n".join(aus) or "(STATUS.md/PROGRESS.md nicht gefunden)"
+            teile.append(f"## {name}\n{text}\n")
 
+    return "\n".join(teile) if teile else "(STATUS.md/PROGRESS.md nicht gefunden)"
 
 CHAT_TOOLS: dict[str, dict[str, Any]] = {
     "read_file": {

@@ -409,6 +409,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   entscheiden, was zu tun ist. Es fehlt eine eskalierende
   Handlungsleiter — drei Stufen, die in Sekunden beginnen und bis zum
   vollen Loop reichen.
+- **Siehe auch:** OP-306 (Mode-Switch), OP-308 (Focus-View)
 - **Akzeptanzkriterien:**
   - Nach `run_failed`-Event erscheint in Timeline und/oder Chat ein
     Banner: "Run #N fehlgeschlagen (OP-M, X/Y Tasks)" mit drei Buttons.
@@ -437,6 +438,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   Gesamt-Budget sichtbar. DSH und OpenHands zeigen per-Model,
   per-Phase, per-Tool aufgeschluesselt. Wir haben `state.llm_calls`,
   aber keine UI und keine Aggregation.
+- **Siehe auch:** OP-301 (Ambient Status Bar — Basis-Token-Anzeige), OP-307 (Tool-Call-Karten — per-Tool Detail)
 - **Akzeptanzkriterien:**
   - `GET /api/stats/run/{run_id}` → `{tokens_in, tokens_out,
     tokens_cached, cost_usd, per_model, per_phase}`.
@@ -581,6 +583,205 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 - **Blockiert von:** -
 
+
+
+### OP-300: Semantic Colors System
+
+- **Status:** open
+- **Typ:** ui-fundament
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/layout.css`
+- **Problem:** Farben heute sind dekorativ gewaehlt. Lila, Blau, Gruen, Rot, Gelb tauchen an verschiedenen Stellen mit verschiedenen Shades auf. Keine Farbe bedeutet etwas. Der Nutzer muss lernen welcher Farbton was heisst.
+- **Akzeptanzkriterien:** (a) Sechs semantische CSS-Variablen: `--sem-action` (lila = Mensch muss handeln), `--sem-active` (blau = System arbeitet), `--sem-ok` (gruen = erfolgreich), `--sem-warn` (gelb = geschafft mit Warnung), `--sem-error` (rot = blockiert), `--sem-history` (grau = vergangen). (b) Alle bestehenden Hex-Werte auf eine der sechs Variablen gemappt (kein Hex mehr ausserhalb der Variablen-Definitionen). (c) Kein Element nutzt eine Farbe ausserhalb ihrer semantischen Rolle.
+- **Tests:** Keine (visuell). Guard: `grep -cE "#[0-9a-fA-F]{6}" static/layout.css` darf nur in `:root`-Block Treffer zeigen.
+- **Blockiert von:** —
+
+### OP-301: Ambient Status Bar
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/layout.html`, `static/statusleiste.js`, `static/layout.css`
+- **Problem:** Der Nutzer sieht aus drei Metern Entfernung nicht ob der Loop laeuft, ob ein Gate wartet, ob alles gut ist. Status ist verstreut in Statusleiste unten, Run-Liste, Gate-Panel.
+- **Akzeptanzkriterien:** (a) Eine Zeile oben ueber dem Grid: Loop-Status (Idle/Running/Failed mit Icon), letzter Run (Zeit + Erfolg), Token-Verbrauch (Loop + Chat), offene Gates-Anzahl. (b) Farb-Kodiert nach OP-300 (`--sem-active` bei Running, `--sem-error` bei Failed, `--sem-history` bei Idle). (c) Lebt in allen 3 Modi (Cockpit/Control/Debug). (d) Klick auf Status-Element springt zur relevanten Ansicht (Gates → Gate-Panel, Run → Timeline).
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-300
+
+### OP-302: Command Palette (`⌘K`)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/palette.js` (neu), `static/layout.html`, `static/layout.css`
+- **Problem:** Um Aktionen zu starten muss der Nutzer durch Kacheln, Buttons, Dropdowns. Keine einheitliche "Ich will X tun"-Flaeche.
+- **Akzeptanzkriterien:** (a) `⌘K` (Mac) / `Ctrl+K` (Win/Linux) oeffnet Overlay mittig. (b) Fuzzy-Search ueber: offene OPs (`start op 213`), Runs (`run 0425`), Sessions (`session heute`), Gates (`gate`), Aktionen (`start loop`, `stop loop`, `mode control`, `help shortcuts`, `explain last error`). (c) Enter fuehrt aus, Esc schliesst. (d) Jeder Eintrag zeigt Kategorie links, Shortcut rechts (falls vorhanden). (e) Leerzustand: "Was willst du tun? (Tippe oder druecke ? fuer alle Shortcuts)". (f) Jede Aktion ist AUCH per Klick erreichbar (Palette ist Optimierung, kein Ersatz).
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-300
+
+### OP-303: Loop-Start-Button + Run-Status-Badge
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/runs.js`, `werkstatt/web/app.py` (`/api/projects/{name}/ops` liefert run_status pro OP)
+- **Problem:** Der Nutzer kann keinen Loop starten ohne SSH. Die Runs-Liste zeigt OPs, aber nicht welcher davon gerade laeuft.
+- **Akzeptanzkriterien:** (a) Jede OP-Zeile in Runs-Liste hat Status-Badge: `○ idle`, `● running`, `✓ done`, `✗ failed` (basiert auf letztem `loop_started`/`loop_ended`/`loop_failed` dieses OPs). (b) Hover ueber OP-Zeile zeigt Ghost-Preview: "OP-213: Test-Thaw. Blockiert von OP-210 (open). [Trotzdem starten]". (c) Klick auf `▶`-Button startet Loop mit dieser OP-Aufgabe. (d) Bei laufendem Loop: OP wird blau markiert, ein "Stop"-Button erscheint. (e) Nach Loop-Ende: Badge aktualisiert innerhalb 5s via Polling.
+- **Tests:** Smoke: `POST /start` aus UI-Klick ruft Endpoint. Kein pytest (UI-Verhalten).
+- **Blockiert von:** OP-300, OP-301
+
+### OP-304: Shortcut Help (`?`)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/help.js` (neu), `static/layout.html`, `static/layout.css`
+- **Problem:** Shortcuts existieren, sind aber nirgends dokumentiert. Der Nutzer entdeckt sie nur durch Zufall oder Studieren des Codes.
+- **Akzeptanzkriterien:** (a) Taste `?` (ohne Modifier) oeffnet Overlay. (b) Shortcuts gruppiert: Navigation, Run-Control, Chat, Modus, Aktionen. (c) Jeder Eintrag: Tastenkombination (in `<kbd>`-Tag), Aktion, "auch klickbar via ..."-Hinweis. (d) Erreichbar auch via Command Palette (`help shortcuts`) und `?`-Icon oben rechts. (e) Esc oder Klick ausserhalb schliesst. (f) Erste Nutzung: Overlay oeffnet sich nicht automatisch, aber Ambient Bar zeigt Tag 1 "Druecke ? fuer Shortcuts".
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-302
+
+### OP-305: Klickwege parallel zu allen Shortcuts
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/*.js` (alle UI-Module), `static/layout.html`
+- **Problem:** Wenn etwas nur per Shortcut erreichbar ist, verliert der Nutzer der den Shortcut nicht kennt den Zugang.
+- **Akzeptanzkriterien:** (a) Fuer jede Palette-Aktion existiert ein sichtbarer Klickweg (Button, Menue, Link) in der UI. (b) Jeder Shortcut-Hinweis im `?`-Overlay enthaelt "→ auch klickbar via [X]". (c) Verifikation: alle `window.Werkstatt*.oeffne`-Aufrufe sind auch per Click-Handler erreichbar. (d) Ein Test-Fall in `?`-Overlay dokumentiert: nichts geht nur via Shortcut.
+- **Tests:** `grep`-Guard: keine `addEventListener('keydown'`-Aktion ohne zugehoerigen Click-Handler.
+- **Blockiert von:** OP-302, OP-304
+
+### OP-306: Mode-Switch (Cockpit / Control / Debug)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/mode.js` (neu), `static/layout.html`, `static/layout.css`, `static/tabs.js`
+- **Problem:** Das UI hat genau einen Modus. Der Cockpit-Typ wird erschlagen von drei Spalten, der Kontrollraum-Typ will mehr Dichte. ADR-0022 fordert 3 Modi.
+- **Akzeptanzkriterien:** (a) Drei Modi: `cockpit` (default, 3 Spalten wie heute), `control` (Focus-View, breite Timeline, Chat schwebend), `debug` (Timeline + Audit gekoppelt). (b) Wechsel via `Shift+Space` zyklisch, via Command Palette (`mode cockpit`), via URL `?mode=control`, via Dropdown oben links. (c) Persistiert in localStorage und URL. (d) Mode-Name oben sichtbar. (e) Guard: bei Wechsel waehrend laufendem Run → Warnung "Run laeuft, Modus wechseln?". (f) Alle drei Modi nutzen dieselben semantischen Farben (OP-300).
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-300, OP-301
+
+### OP-307: Chat Tool-Call-Karten
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `static/chat.js`, `static/layout.css`, `static/chat.css` (neu wenn noetig)
+- **Problem:** Chat zeigt Tool-Calls als rohe Textbloecke. Grep-Output, JSON-Payloads, read_file-Inhalte stehen ungefiltert im Verlauf. Der Nutzer kann den Verlauf nicht schnell ueberfliegen.
+- **Akzeptanzkriterien:** (a) Jeder `tool_call` rendert als Karte: Icon (📄 read_file, 🔍 grep, 📝 git_diff, …), Tool-Name, Status-Badge (⏳ running / ✓ ok / ✗ error), Laufzeit. (b) Karte aufklappbar: Input-Parameter + Output (human-readable). (c) Roher JSON nur im "Details"-Toggle innerhalb der Karte. (d) Mehrere Tool-Calls in einer Assistant-Runde: als verschachtelte Container-Karte. (e) Karten scrollen mit der Konversation, keine Modal-Overlays. (f) Farb-Kodiert nach OP-300.
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-300
+
+### OP-308: Focus-View (Control-Modus) mit horizontalem Phasen-Wasserfall
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-2 (Focus)
+- **Betroffene Dateien:** `static/waterfall.js` (neu), `static/layout.html`, `static/layout.css`
+- **Problem:** Die Timeline ist vertikal und listenartig. Bei einem laufenden Run mit 8+ Phasen und 30+ Sub-Events ist nicht erkennbar wo der Run steht und wie die Phasen zueinander stehen.
+- **Akzeptanzkriterien:** (a) Im Control-Modus: Timeline als horizontaler Wasserfall (a la Chrome DevTools Performance-Panel). Jede Phase = ein Block, Breite proportional zur Dauer. (b) Aktive Phase blau, fertige gruen, fehlgeschlagene rot. (c) Klick auf Phase: Detail-Bereich darunter mit vertikalen Events (wie heute). (d) Hover auf Phase: Tooltip mit Name + Dauer + Status. (e) Zoom via Scroll-Rad (Zeit-Achse). (f) Im Cockpit-Modus bleibt die vertikale Timeline — Wasserfall nur im Control-Modus.
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-306
+
+### OP-309: Chat schwebend im Control-Modus
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-2 (Focus)
+- **Betroffene Dateien:** `static/chat.js`, `static/layout.css`
+- **Problem:** Im Control-Modus ist der Chat als dritte Spalte zu schmal fuer Laengere Konversation, waehrend der Wasserfall den Platz braucht.
+- **Akzeptanzkriterien:** (a) Im Control-Modus: Chat als schwebendes Panel unten rechts (max 400×300px, resizable). (b) Panel-Zustand (offen/geschlossen, Groesse) in localStorage. (c) Doppelklick auf Chat-Header: Maximieren (volle rechte Spalte). (d) Chat weiss im Control-Modus welcher Run aktiv ist → "Frage zu diesem Run" als Placeholder. (e) Im Cockpit- und Debug-Modus bleibt Chat als feste Spalte (wie heute).
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-308
+
+### OP-310: Run-Pause/Resume
+
+- **Status:** open
+- **Typ:** architektur
+- **Phase:** Phase-2 (Focus)
+- **Betroffene Dateien:** `werkstatt/loop.py`, `werkstatt/gates.py`, `werkstatt/web/app.py`, `static/runs.js`
+- **Problem:** Ein laufender Loop kann nur mit `stop` (kill) beendet werden. Kein sanftes Pausieren, kein Fortsetzen von einem Checkpoint. Der User kann nicht eingreifen ohne den ganzen Run zu verlieren.
+- **Akzeptanzkriterien:** (a) `POST /api/projects/{name}/pause` setzt ein Pause-Flag; Loop prueft vor jedem Phase-Start. (b) Pausierter Loop schreibt `loop_paused`-Event, Zustand ist `paused`. (c) `POST /api/projects/{name}/resume` setzt Pause-Flag zurueck, Loop laeuft weiter. (d) UI: `⏸`- und `▶`-Buttons neben laufendem Run. (e) Timeout: Pausierter Run bleibt maximal 1 Stunde pausiert, danach fail-closed (loop_failed mit grund=pause_timeout). (f) Pause/Resume sind idempotent und race-free (Lock).
+- **Tests:** `tests/test_loop_pause_resume.py` (neu): (1) Pause-Flag→Loop haelt an, (2) Resume→Loop laeuft weiter, (3) Timeout→fail-closed.
+- **Blockiert von:** OP-308
+
+### OP-311: Audit-Filterleiste + Tag-Gruppierung
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-3 (Urgrossvater)
+- **Betroffene Dateien:** `static/audit.js`, `static/layout.css`, `werkstatt/web/audit_panel.py`
+- **Problem:** Das Audit-Panel zeigt 100+ Events, aber Filter sind rudimentaer (nur `kind` und `run_id`). Kein Volltext-Suche, keine Zeitraum-Filter, keine Tag-Gruppierung. Als Analyse-Werkzeug kaum brauchbar.
+- **Akzeptanzkriterien:** (a) Filterleiste: Volltext-Suche, Event-Type-Dropdown (mit Live-Counts), Run-ID-Filter, Zeitraum (24h / 7d / 30d / All). (b) Events gruppiert nach Tag mit Collapsible-Header ("Heute · 143 Events"). (c) Export als CSV und JSON (mit Permission-Gate). (d) Filter persistieren in URL (`?kind=loop_*&days=7`). (e) Kombinierbar mit OP-302 Command Palette (`audit kind:loop_* heute`).
+- **Tests:** `tests/test_audit_filter.py` (neu): Query-Parameter→korrekt gefiltert.
+- **Blockiert von:** OP-300
+
+### OP-312: Semantic Zoom (Tag ↔ Run ↔ Phase)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-3 (Urgrossvater)
+- **Betroffene Dateien:** `static/zoom.js` (neu), `static/timeline.js`, `static/layout.css`
+- **Problem:** Kalender, Runs-Liste, Timeline sind drei getrennte Views mit drei Navigationswegen. Der Nutzer muss wissen welcher View welchen Zeitraum zeigt.
+- **Akzeptanzkriterien:** (a) Drei Zoom-Stufen: Monat (Kalender), Run (Phasen-Uebersicht), Phase (Events). (b) Uebergang per Scroll-Rad (vertikal) oder `Cmd+0/1/2`. (c) Sanfte Animation (300ms ease). (d) Aktuelle Zoom-Stufe sichtbar (Breadcrumb oben: "November 2026 › Run 0425 › Phase 3 Builder"). (e) In jeder Stufe: Klick auf Element zoomt naechste Stufe tiefer. (f) Breadcrumb-Klick zoomt zurueck.
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-308
+
+### OP-313: Ghost Intents (plan_intent + Vorschau + Blockieren)
+
+- **Status:** open
+- **Typ:** architektur
+- **Phase:** Phase-3 (Urgrossvater)
+- **Betroffene Dateien:** `werkstatt/builder.py`, `werkstatt/reviewer.py`, `werkstatt/loop.py`, `static/timeline.js`
+- **Problem:** Der Loop schreibt Events erst nach der Aktion. Der Nutzer sieht nichts von geplanten Aktionen. Kein Eingreifen bevor Code geschrieben ist.
+- **Akzeptanzkriterien:** (a) Builder/Reviewer schreiben `plan_intent`-Event BEVOR sie eine Datei aendern: `{intent: "patch"|"write"|"delete", file: ..., estimated_lines: N, reason: ...}`. (b) UI zeigt Intent-Karten als "Ghost"-Vorschau (gestrichelter Rand, gedaempfte Farbe). (c) Nutzer kann Intent blockieren: `POST /api/runs/{id}/intents/{intent_id}/block` → Loop bricht diese Aktion ab, schreibt `intent_blocked`-Event. (d) Timeout: Unbeantwortete Intents nach 30s automatisch approven (default) ODER fail-closed (config). (e) Config-Setting: `intent_mode: "ghost"|"blind"` pro Projekt.
+- **Tests:** `tests/test_plan_intent.py` (neu): Intent→block→Loop-Abbruch; Intent→timeout→approve.
+- **Blockiert von:** OP-310
+
+### OP-314: Explaining Presence (Right-Click → Chat erklaert)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-3 (Urgrossvater)
+- **Betroffene Dateien:** `static/timeline.js`, `static/chat.js`, `static/contextmenu.js` (neu)
+- **Problem:** Wenn der Nutzer ein Event im Audit sieht, muss er selbst interpretieren was es bedeutet. Er kann nicht "Was ist hier passiert?" fragen.
+- **Akzeptanzkriterien:** (a) Rechtsklick auf Timeline-Knoten / Audit-Event / Chat-Message: Kontextmenue mit "Was passierte hier?". (b) Klick sendet Nachricht an Chat mit Event-ID + Kontext: "Erklaere dieses Event: <kind> <payload>. Nutze read_status und grep um Kontext zu sammeln." (c) Chat-Antwort ist im Chat sichtbar UND als Tooltip/Popup direkt am Element. (d) Erreichbar auch via Command Palette: "explain last error" / "explain this event".
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-302, OP-307
+
+### OP-315: Causal Chain (Initiator-Referenzen in Timeline)
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-3 (Urgrossvater)
+- **Betroffene Dateien:** `static/timeline.js`, `werkstatt/audit.py`
+- **Problem:** Ein Timeline-Knoten zeigt "explorer_result" — aber nicht warum. Der Nutzer muss Events manuell in Beziehung setzen.
+- **Akzeptanzkriterien:** (a) Audit-Events bekommen optional ein `caused_by`-Feld (seq oder audit_id des Vorgaengers). (b) Timeline zeigt pro Knoten eine "Initiator"-Zeile: `← loop_explorer_suchbegriffe ← explorer_messung → planner_scout_ok`. (c) Klick auf Initiator springt zu diesem Event. (d) Events ohne `caused_by`: Heuristik (chronologisch letzter Event derselben Rolle).
+- **Tests:** `tests/test_causal_chain.py` (neu): Heuristik findet korrekte Vorgaenger.
+- **Blockiert von:** OP-300
+
+### OP-316: Living Typography
+
+- **Status:** open
+- **Typ:** ui-politur
+- **Phase:** Phase-4 (Politur)
+- **Betroffene Dateien:** `static/layout.css`
+- **Problem:** Schriftgroessen sind heute fix (11/12/13px). Bei "active" Runs ist die UI genauso ruhig wie im Idle — kein visuelles Signal dass etwas wichtig ist.
+- **Akzeptanzkriterien:** (a) Font-Size-Scale skaliert mit Modus und Status: Idle = 11px body, Active Run = 13px, Failure = 14px. (b) Line-Height skaliert mit (1.4/1.5/1.6). (c) Semantische Font-Familien: User-Messages Serif (Absicht), Agent-Antworten Sans (Reaktion), Tool-Calls Mono (Aktion), System-Hinweise Small-caps (Kontext). (d) Schriftgroessen-Wechsel animiert 200ms.
+- **Tests:** Keine (visuell).
+- **Blockiert von:** OP-306
+
+### OP-317: Hover-Previews mit Konsequenz-Vorschau
+
+- **Status:** open
+- **Typ:** ui-politur
+- **Phase:** Phase-4 (Politur)
+- **Betroffene Dateien:** `static/hover_preview.js` (neu), `static/layout.css`
+- **Problem:** Hover zeigt heute nur Tooltip mit Titel. Der Nutzer muss klicken um zu sehen was passieren wuerde.
+- **Akzeptanzkriterien:** (a) Hover ueber OP-Zeile: Ghost-Preview mit Blockiert-von-Status, geschaetzter Dauer, Token-Schaetzung. (b) Hover ueber "Start Loop"-Button: Preview mit Aufgabe, Phasen-Schaetzung, Zeit-Schaetzung. (c) Hover ueber Gate-Button: Preview mit Konsequenz ("j = bauen, n = Loop-Abbruch"). (d) Preview erscheint nach 400ms Hover, verschwindet nach 100ms ohne Hover. (e) Preview ist klickbar (Link zur Detail-Ansicht).
+- **Tests:** Keine (UI).
+- **Blockiert von:** OP-305
 
 ## Erledigt (Auto-Log)
 
