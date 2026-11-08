@@ -857,8 +857,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Phase:** Phase-2 (Intelligenz)
 - **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/phases/*`, `werkstatt/erfahrung.py`, `tests/test_reflection_loesungsorientiert.py` (neu)
 - **Problem:** Reflection-Feedback uneinheitlich. Kein Loesungs-Schema.
-- **Akzeptanzkriterien:** (a) Einheitliches Schema: `{warum, wie_loesen, beispiel_ohne_code, confidence}`. (b) Reflection-Prompt: "Analysiere + Repariere". (c) Hook: gleicher Vertrag. (d) Gedaechtnis: `record_erfahrung(warum, wie, beispiel, ...)`.
-- **Tests:** `tests/test_reflection_loesungsorientiert.py` (5 Tests).
+- **Akzeptanzkriterien:** (a) Einheitliches Schema: `{warum, wie_loesen, beispiel_ohne_code, confidence}`. (b) Reflection-Prompt: "Analysiere + Repariere". (c) Hook: gleicher Vertrag. (d) Gedaechtnis: `record_erfahrung(warum, wie, beispiel, ...)`. (e) **Bug mit Zeilen-Kontext:** Jeder Bug traegt `{file, line_start, line_end, code_ausschnitt}` (max 20 Zeilen). Ohne Zeilenangabe ist der Bug ungueltig — fail-loud. (f) **Vollstaendiger Verlauf im Prompt:** Der Reviewer sieht alle vorherigen Bug-Meldungen ALLER Runden (nicht nur n-1), jede mit Zeilen und Code-Ausschnitt. Kontext bleibt eng: pro Runde max 5 Bugs (aeltere werden zusammengefasst, nie stumm verworfen). (g) **Delta-Klassifikation:** Pro Bug einer von `bestehend | behoben | neu | verschoben`. Identitaet = Hash aus `(file, kategorie, code_ausschnitt_normalisiert)`. (h) **Kausale Kette bei `bestehend`:** Pflichtfelder `alter_vorschlag`, `warum_alter_vorschlag_scheiterte`, `kausale_kette` ("Patch Runde N hat Zeile X-Y geaendert, dadurch brach Zeile Z"), `neuer_vorschlag`. Reines Neuvorschlagen ohne Kette = Fail. Bei `neu` reicht frischer Vorschlag. Grund: ohne kausale Rekonstruktion raet der Agent blind und der Loop dreht im Kreis (Zirkel-Falle).
+- **Tests:** `tests/test_reflection_loesungsorientiert.py` (8 Tests).
 - **Blockiert von:** OP-340
 
 ### OP-342: Prompt-Engineering pro Rolle (Lichtkegel-Prinzip)

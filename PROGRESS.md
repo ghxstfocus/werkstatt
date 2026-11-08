@@ -3268,3 +3268,20 @@ Blocker-Ketten:
 340 frei; 341<-340; 342<-340,341;
 350<-332; 351<-350; 352<-350,351;
 360<-282,350; 361<-360; 362<-360,361.
+
+
+## 2026-11-08 — OP-341 AK erweitert (kausale Rekonstruktion statt nur Delta)
+
+User-Klarstellung: Delta allein reicht nicht. Der Reviewer muss
+(1) Zeilen-Kontext pro Bug tragen (file, line_start, line_end,
+code_ausschnitt), (2) ALLE vorherigen Runden sehen (nicht nur
+n-1), (3) pro bestehendem Bug die kausale Kette liefern
+("Patch Runde N hat Zeile X geaendert, dadurch brach Zeile Y"),
+(4) Delta klassifizieren (bestehend|behoben|neu|verschoben).
+
+Der alte Vorschlag + Grund des Scheiterns sind Teil des Prompts,
+nicht nur des Logs. Nur so kann der Builder aus seinen Fehlern
+lernen statt neu zu raten. Zirkel-Falle: ohne kausale Rekonstruktion
+dreht der Loop im Kreis.
+
+AK (a)-(h), Tests 5 -> 8.
