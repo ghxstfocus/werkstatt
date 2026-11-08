@@ -53,11 +53,6 @@
     details.addEventListener("toggle", function () {
       try { localStorage.setItem(key, details.open ? "1" : "0"); } catch (e) {}
     });
-    var key = "werkstatt-gate-scout-offen";
-    try { if (localStorage.getItem(key) === "1") details.open = true; } catch (e) {}
-    details.addEventListener("toggle", function () {
-      try { localStorage.setItem(key, details.open ? "1" : "0"); } catch (e) {}
-    });
     var sum = document.createElement("summary");
     var n = (scout.befehle || []).length + (scout.dateien || []).length + (scout.findings || []).length;
     sum.textContent = "Scout/Explorer (" + n + ")";
@@ -139,6 +134,34 @@
       det.appendChild(preDiff);
     }
     box.appendChild(det);
+  }
+
+  function _machDraggable(box, handle) {
+    var offsetX = 0, offsetY = 0, dragging = false;
+    function _down(e) {
+      dragging = true;
+      var rect = box.getBoundingClientRect();
+      offsetX = e.clientX - rect.left;
+      offsetY = e.clientY - rect.top;
+      box.style.left = rect.left + "px";
+      box.style.top = rect.top + "px";
+      box.style.right = "auto";
+      document.addEventListener("mousemove", _move);
+      document.addEventListener("mouseup", _up);
+      e.preventDefault();
+    }
+    function _move(e) {
+      if (!dragging) return;
+      box.style.left = (e.clientX - offsetX) + "px";
+      box.style.top = (e.clientY - offsetY) + "px";
+    }
+    function _up() {
+      dragging = false;
+      document.removeEventListener("mousemove", _move);
+      document.removeEventListener("mouseup", _up);
+    }
+    handle.addEventListener("mousedown", _down);
+    handle.style.cursor = "move";
   }
 
   function _renderGate(box, ctx) {
@@ -230,7 +253,9 @@
         box.classList.add("aktiv");
         _renderGate(box, ctx);
       })
-      .catch(function () {});
+      .catch(function (err) {
+        console.error("[gate_panel] poll:", err);
+      });
   }
 
   function lade(projekt) {
