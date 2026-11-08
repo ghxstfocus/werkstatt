@@ -584,17 +584,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Blockiert von:** -
 
 
-### OP-300: Semantic Colors System
-
-- **Status:** open
-- **Typ:** ui-fundament
-- **Phase:** Phase-1 (Cockpit-Fundament)
-- **Betroffene Dateien:** `static/layout.css`
-- **Problem:** Farben heute sind dekorativ gewaehlt. Lila, Blau, Gruen, Rot, Gelb tauchen an verschiedenen Stellen mit verschiedenen Shades auf. Keine Farbe bedeutet etwas. Der Nutzer muss lernen welcher Farbton was heisst.
-- **Akzeptanzkriterien:** (a) Sechs semantische CSS-Variablen: `--sem-action` (lila = Mensch muss handeln), `--sem-active` (blau = System arbeitet), `--sem-ok` (gruen = erfolgreich), `--sem-warn` (gelb = geschafft mit Warnung), `--sem-error` (rot = blockiert), `--sem-history` (grau = vergangen). (b) Alle bestehenden Hex-Werte auf eine der sechs Variablen gemappt (kein Hex mehr ausserhalb der Variablen-Definitionen). (c) Kein Element nutzt eine Farbe ausserhalb ihrer semantischen Rolle.
-- **Tests:** Keine (visuell). Guard: `grep -cE "#[0-9a-fA-F]{6}" static/layout.css` darf nur in `:root`-Block Treffer zeigen.
-- **Blockiert von:** —
-
 ### OP-301: Ambient Status Bar
 
 - **Status:** open
@@ -604,7 +593,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Der Nutzer sieht aus drei Metern Entfernung nicht ob der Loop laeuft, ob ein Gate wartet, ob alles gut ist. Status ist verstreut in Statusleiste unten, Run-Liste, Gate-Panel.
 - **Akzeptanzkriterien:** (a) Eine Zeile oben ueber dem Grid: Loop-Status (Idle/Running/Failed mit Icon), letzter Run (Zeit + Erfolg), Token-Verbrauch (Loop + Chat), offene Gates-Anzahl. (b) Farb-Kodiert nach OP-300 (`--sem-active` bei Running, `--sem-error` bei Failed, `--sem-history` bei Idle). (c) Lebt in allen 3 Modi (Cockpit/Control/Debug). (d) Klick auf Status-Element springt zur relevanten Ansicht (Gates → Gate-Panel, Run → Timeline).
 - **Tests:** Keine (UI).
-- **Blockiert von:** OP-300
+- **Blockiert von:** —
 
 ### OP-302: Command Palette (`⌘K`)
 
@@ -615,7 +604,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Um Aktionen zu starten muss der Nutzer durch Kacheln, Buttons, Dropdowns. Keine einheitliche "Ich will X tun"-Flaeche.
 - **Akzeptanzkriterien:** (a) `⌘K` (Mac) / `Ctrl+K` (Win/Linux) oeffnet Overlay mittig. (b) Fuzzy-Search ueber: offene OPs (`start op 213`), Runs (`run 0425`), Sessions (`session heute`), Gates (`gate`), Aktionen (`start loop`, `stop loop`, `mode control`, `help shortcuts`, `explain last error`). (c) Enter fuehrt aus, Esc schliesst. (d) Jeder Eintrag zeigt Kategorie links, Shortcut rechts (falls vorhanden). (e) Leerzustand: "Was willst du tun? (Tippe oder druecke ? fuer alle Shortcuts)". (f) Jede Aktion ist AUCH per Klick erreichbar (Palette ist Optimierung, kein Ersatz).
 - **Tests:** Keine (UI).
-- **Blockiert von:** OP-300
+- **Blockiert von:** —
 
 ### OP-303: Loop-Start-Button + Run-Status-Badge
 
@@ -626,7 +615,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Der Nutzer kann keinen Loop starten ohne SSH. Die Runs-Liste zeigt OPs, aber nicht welcher davon gerade laeuft.
 - **Akzeptanzkriterien:** (a) Jede OP-Zeile in Runs-Liste hat Status-Badge: `○ idle`, `● running`, `✓ done`, `✗ failed` (basiert auf letztem `loop_started`/`loop_ended`/`loop_failed` dieses OPs). (b) Hover ueber OP-Zeile zeigt Ghost-Preview: "OP-213: Test-Thaw. Blockiert von OP-210 (open). [Trotzdem starten]". (c) Klick auf `▶`-Button startet Loop mit dieser OP-Aufgabe. (d) Bei laufendem Loop: OP wird blau markiert, ein "Stop"-Button erscheint. (e) Nach Loop-Ende: Badge aktualisiert innerhalb 5s via Polling.
 - **Tests:** Smoke: `POST /start` aus UI-Klick ruft Endpoint. Kein pytest (UI-Verhalten).
-- **Blockiert von:** OP-300, OP-301
+- **Blockiert von:** OP-301
 
 ### OP-304: Shortcut Help (`?`)
 
@@ -659,7 +648,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Das UI hat genau einen Modus. Der Cockpit-Typ wird erschlagen von drei Spalten, der Kontrollraum-Typ will mehr Dichte. ADR-0022 fordert 3 Modi.
 - **Akzeptanzkriterien:** (a) Drei Modi: `cockpit` (default, 3 Spalten wie heute), `control` (Focus-View, breite Timeline, Chat schwebend), `debug` (Timeline + Audit gekoppelt). (b) Wechsel via `Shift+Space` zyklisch, via Command Palette (`mode cockpit`), via URL `?mode=control`, via Dropdown oben links. (c) Persistiert in localStorage und URL. (d) Mode-Name oben sichtbar. (e) Guard: bei Wechsel waehrend laufendem Run → Warnung "Run laeuft, Modus wechseln?". (f) Alle drei Modi nutzen dieselben semantischen Farben (OP-300).
 - **Tests:** Keine (UI).
-- **Blockiert von:** OP-300, OP-301
+- **Blockiert von:** OP-301
 
 ### OP-307: Chat Tool-Call-Karten
 
@@ -670,7 +659,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Chat zeigt Tool-Calls als rohe Textbloecke. Grep-Output, JSON-Payloads, read_file-Inhalte stehen ungefiltert im Verlauf. Der Nutzer kann den Verlauf nicht schnell ueberfliegen.
 - **Akzeptanzkriterien:** (a) Jeder `tool_call` rendert als Karte: Icon (📄 read_file, 🔍 grep, 📝 git_diff, …), Tool-Name, Status-Badge (⏳ running / ✓ ok / ✗ error), Laufzeit. (b) Karte aufklappbar: Input-Parameter + Output (human-readable). (c) Roher JSON nur im "Details"-Toggle innerhalb der Karte. (d) Mehrere Tool-Calls in einer Assistant-Runde: als verschachtelte Container-Karte. (e) Karten scrollen mit der Konversation, keine Modal-Overlays. (f) Farb-Kodiert nach OP-300.
 - **Tests:** Keine (UI).
-- **Blockiert von:** OP-300
+- **Blockiert von:** —
 
 ### OP-308: Focus-View (Control-Modus) mit horizontalem Phasen-Wasserfall
 
@@ -714,7 +703,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Das Audit-Panel zeigt 100+ Events, aber Filter sind rudimentaer (nur `kind` und `run_id`). Kein Volltext-Suche, keine Zeitraum-Filter, keine Tag-Gruppierung. Als Analyse-Werkzeug kaum brauchbar.
 - **Akzeptanzkriterien:** (a) Filterleiste: Volltext-Suche, Event-Type-Dropdown (mit Live-Counts), Run-ID-Filter, Zeitraum (24h / 7d / 30d / All). (b) Events gruppiert nach Tag mit Collapsible-Header ("Heute · 143 Events"). (c) Export als CSV und JSON (mit Permission-Gate). (d) Filter persistieren in URL (`?kind=loop_*&days=7`). (e) Kombinierbar mit OP-302 Command Palette (`audit kind:loop_* heute`).
 - **Tests:** `tests/test_audit_filter.py` (neu): Query-Parameter→korrekt gefiltert.
-- **Blockiert von:** OP-300
+- **Blockiert von:** —
 
 ### OP-312: Semantic Zoom (Tag ↔ Run ↔ Phase)
 
@@ -758,7 +747,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Ein Timeline-Knoten zeigt "explorer_result" — aber nicht warum. Der Nutzer muss Events manuell in Beziehung setzen.
 - **Akzeptanzkriterien:** (a) Audit-Events bekommen optional ein `caused_by`-Feld (seq oder audit_id des Vorgaengers). (b) Timeline zeigt pro Knoten eine "Initiator"-Zeile: `← loop_explorer_suchbegriffe ← explorer_messung → planner_scout_ok`. (c) Klick auf Initiator springt zu diesem Event. (d) Events ohne `caused_by`: Heuristik (chronologisch letzter Event derselben Rolle).
 - **Tests:** `tests/test_causal_chain.py` (neu): Heuristik findet korrekte Vorgaenger.
-- **Blockiert von:** OP-300
+- **Blockiert von:** —
 
 ### OP-316: Living Typography
 
@@ -1380,6 +1369,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
+
+- 2026-11-08 | OP-300 | done | Semantic Colors System (Commit `320b029`). 6 semantische CSS-Variablen (`--sem-action`, `--sem-active`, `--sem-ok`, `--sem-warn`, `--sem-error`, `--sem-history`) + 7 Shades + 4 Struct-Variablen im `:root`. 57 Hex-Vorkommen ausserhalb `:root` ersetzt. Explorer-Cyan `#06b6d4` -> `var(--sem-active)` (bewusster Farbwechsel, Frage 1a). `.diff-hunk` -> `var(--sem-active)` (Frage 3: Diff im laufenden Build ist Ist-Zustand, nicht Vergangenheit). chat.css hatte schon 0 Hex, unveraendert. Guard: Hex ausserhalb `:root` == 0. pytest 1437 passed, ruff/mypy 0, alle 5 Drifts 0. **Lehre:** Erster Patch-Versuch zerstoerte `:root`-Block durch fehlerhaftes Reassembly (`s = body` statt `s = head + neuer_root + tail`); In-Python-Guard SEM==0 hat Commit verhindert, Rollback manuell. Zweiter Versuch mit Guards vor `write_text` erfolgreich. **Strukturelle Altlast:** zwischen `## Erledigt (Auto-Log)` und `## Delete-Zone` stehen 16 offene OPs (OP-263, OP-257, ..., OP-241) faelschlich unter Auto-Log.
 
 - 2026-11-07 | OP-181 | done | Reviewer-Dead-Code-Erkennung (Commits `9b700e3` t1, `fdb01df` t3+t4). Loop-Lauf 13:23 baute t1 (REVIEWER_SYSTEM-`DEAD-CODE-CHECK`-Abschnitt mit 3 Regeln), brach dann bei t2 ab (Planner-Fehler: Verifikations-Task als update formuliert, Builder setzte `auftrag_bereits_erfuellt`, Reviewer meldete HIGH-Bug). OP-182-Fix begrenzte den Loop auf 2 Reflection-Runden, aber t3+t4 blieben offen. Manueller Nachzug: t3 = `run_reviewer` ruft `_pruefe_neue_module_genutzt(pd, diff)` nach den LLM-Filtern und vor `reviewer_result`-Audit; HIGH-Bug setzt `approved=False`. t4 = `tests/test_reviewer_dead_code.py` mit 3 AK-(c)-Tests + AST-Wiring-Test (`test_run_reviewer_ruft_pre_check_auf`, analog `test_rollen_registry_migration.py`) — kodiert die Lehre aus Loop-Test 9, dass die Funktion sonst toter Code werden kann. pytest 1342 passed, ruff/mypy 0, alle Drift-Checks gruen. **Lehre (Loop-Test 10, eingeplant als OP):** Planner-Task-Typ „pruefe/verifiziere X" braucht eigenes `action: verify`, sonst falscher Builder-Pfad. Siehe Stufe-2-Planung.
 - 2026-11-07 | OP-183 | done | Planner-Task-Typ `action: verify` (Commits `c3e308f` t1-t3 + 3 Tests, `f9243a8` Test (iv)). Loop-Lauf 15:24 hat t1 (Planner `_ist_verify_task` + `PLANNER_SPLIT_SYSTEM` vierter Action-Wert + `_korrigiere_aktion`-Vorspann), t2 (`phases/tasks.py` verify-Dispatch ohne Builder), t3 (`reviewer.py` `_filter_auftrag_treue_false_positives` `action`-Parameter + System-Prompt VERIFY-TASK-Block) gebaut. t4 (Tests) hatte 3/4 gruen, Test (iv) `test_verify_setzt_kein_auftrag_bereits_erfuellt` fehlte — manuell nachgezogen als deterministischer Text-Scan-Test. pytest 1364 passed. **Lehre:** Loop-Reflection kann bei Test-Tasks mit >3 Tests die letzte Assertion verlieren, wenn der Builder die gesamte Test-Datei zu gross plant. **Nachtrag 2026-11-07:** Delete-Zone-Eintrag fehlte, pytest-Fail `test_status_md_konsistenz` entdeckt und hier nachgetragen.

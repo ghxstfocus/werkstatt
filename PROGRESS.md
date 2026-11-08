@@ -3187,3 +3187,37 @@ mit state=state — llm_usage-Events kommen jetzt an.
 **Rollen-Detail-Ansicht (ADR-0021):** WerkstattDetail.oeffneRolle().
 
 **Tests:** 1439 passed, 8 skipped. ruff clean, mypy clean.
+
+
+## 2026-11-08 — OP-300 Semantic Colors System (Commit 320b029)
+
+Farbsystem semantisch. 6 Rollen (`--sem-action`, `--sem-active`,
+`--sem-ok`, `--sem-warn`, `--sem-error`, `--sem-history`),
+7 Shades, 4 Struct-Variablen im `:root`. 57 Hex-Vorkommen
+ausserhalb `:root` ersetzt in `static/layout.css`. chat.css
+hatte schon 0 Hex (blieb unangetastet).
+
+**Bewusste Farbwechsel (Design-Entscheidung mit User):**
+- Explorer-Cyan `#06b6d4` -> `var(--sem-active)` (blau)
+- `.diff-hunk` -> `var(--sem-active)` (Diff im laufenden Build
+  ist Ist-Zustand, nicht Vergangenheit)
+
+**Guard:** `grep -cE "#[0-9a-fA-F]{6}"` ausserhalb `:root` == 0.
+pytest 1437 passed, ruff/mypy 0, alle 5 Drifts 0.
+
+**Lehre (in MERKPOSTEN aufnehmen):** Erstversuch zerstoerte
+`:root`-Block durch fehlerhaftes Reassembly (`s = body` statt
+`s = head + neuer_root + tail`). In-Python-Guard `SEM==0` hat
+Commit verhindert. Zweiter Versuch mit Guards **vor** `write_text`
+erfolgreich. Konsequenz: bei "ausschneiden und wieder einsetzen"
+immer Reassembly explizit, nie `s = body`.
+
+**Strukturelle Altlast entdeckt:** zwischen
+`## Erledigt (Auto-Log)` und `## Delete-Zone` stehen 16 offene
+OPs (OP-263, OP-257, …, OP-241) faelschlich unter Auto-Log.
+Eigene OP noetig (Doku-Aufraeumen).
+
+**Nachfolge-OPs entblockt:** OP-301 (Ambient Status Bar),
+OP-302 (Command Palette), OP-307 (Chat Tool-Call-Karten),
+OP-311 (Audit-Filterleiste), OP-315 (Causal Chain). OP-303 und
+OP-306 bleiben an OP-301 gebunden.
