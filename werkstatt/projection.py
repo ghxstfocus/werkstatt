@@ -36,13 +36,22 @@ class Projector:
                 "phase TEXT, "
                 "status TEXT, "
                 "payload TEXT NOT NULL, "
-                "ts TEXT NOT NULL)"
+                "ts TEXT NOT NULL, "
+                "project TEXT NOT NULL DEFAULT 'werkstatt')"
             )
-            # OP-323c: Schema-Migration. Aeltere EventStore-Init erzeugt
-            # events ohne event_id. Hier ergaenzen, sonst scheitert INSERT.
+            # OP-323c + OP-306c: Schema-Migration. Aeltere EventStore-Init
+            # erzeugt events ohne event_id und ohne project. Beide Spalten
+            # idempotent ergaenzen (Snapshot cols vor beiden Checks).
             cols = {r[1] for r in conn.execute("PRAGMA table_info(events)")}
             if "event_id" not in cols:
                 conn.execute("ALTER TABLE events ADD COLUMN event_id TEXT")
+            if "project" not in cols:
+                # OP-306c: Alle historischen Events stammen aus Werkstatt,
+                # DEFAULT 'werkstatt' ist ehrlich (kein Backfill aus JSONL).
+                conn.execute(
+                    "ALTER TABLE events ADD COLUMN project TEXT NOT NULL "
+                    "DEFAULT 'werkstatt'"
+                )
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_event_id "
                 "ON events(event_id)"
@@ -50,6 +59,12 @@ class Projector:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_events_run_seq "
                 "ON events(run_id, seq)"
+            )
+            # OP-306c: Performance-Index fuer project-Filter (sonst
+            # linear scan ueber 410k Zeilen in _letzter_run_id).
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_project_seq "
+                "ON events(project, seq)"
             )
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS projection_state ("

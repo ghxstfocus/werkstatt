@@ -165,3 +165,52 @@ def test_schema_migration_event_id(tmp_path, monkeypatch):
     )
     r = proj.rebuild()
     assert r["eingefuegt"] == 1
+
+def test_schema_migration_project(tmp_path):
+    """OP-306c: ALTER TABLE project bei DB mit event_id (mittleres Alter).
+
+    Bestehende Zeilen bekommen DEFAULT 'werkstatt' (ehrlich: alle
+    historischen Events stammen aus Werkstatt). Zweiter Projector-Aufruf
+    ist idempotent (PRAGMA-Check, kein ALTER-Fehler).
+    """
+    db = tmp_path / "events.db"
+    with sqlite3.connect(str(db)) as c:
+        c.execute(
+            "CREATE TABLE events ("
+            "seq INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "event_id TEXT, "
+            "run_id TEXT NOT NULL, "
+            "kind TEXT NOT NULL, "
+            "phase TEXT, "
+            "status TEXT, "
+            "payload TEXT NOT NULL, "
+            "ts TEXT NOT NULL)"
+        )
+        c.execute(
+            "INSERT INTO events (event_id, run_id, kind, payload, ts) "
+            "VALUES ('e1', 'r1', 'loop_ended', '{}', '2026-11-08T00:00:00')"
+        )
+        c.commit()
+
+    from werkstatt.projection import Projector
+    Projector(db_pfad=db)
+
+    with sqlite3.connect(str(db)) as c:
+        cols = {r[1] for r in c.execute("PRAGMA table_info(events)")}
+        assert "project" in cols, "project-Spalte fehlt nach Migration"
+        projekte = c.execute("SELECT DISTINCT project FROM events").fetchall()
+        assert projekte == [("werkstatt",)], (
+            f"historische Zeilen muessen 'werkstatt' haben: {projekte}"
+        )
+        indexes = {
+            r[0] for r in c.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'"
+            )
+        }
+        assert "idx_events_project_seq" in indexes, (
+            f"project-Index fehlt: {indexes}"
+        )
+
+    # Idempotent: zweiter Aufruf darf nicht crashen
+    Projector(db_pfad=db)
+
