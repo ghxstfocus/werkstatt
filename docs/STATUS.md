@@ -593,7 +593,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Der Nutzer sieht aus drei Metern Entfernung nicht ob der Loop laeuft, ob ein Gate wartet, ob alles gut ist. Status ist verstreut in Statusleiste unten, Run-Liste, Gate-Panel.
 - **Akzeptanzkriterien:** (a) Eine Zeile oben ueber dem Grid: Loop-Status (Idle/Running/Failed mit Icon), letzter Run (Zeit + Erfolg), Token-Verbrauch (Loop + Chat), offene Gates-Anzahl. (b) Farb-Kodiert nach OP-300 (`--sem-active` bei Running, `--sem-error` bei Failed, `--sem-history` bei Idle). (c) Lebt in allen 3 Modi (Cockpit/Control/Debug). (d) Klick auf Status-Element springt zur relevanten Ansicht (Gates → Gate-Panel, Run → Timeline).
 - **Tests:** Keine (UI).
-- **Blockiert von:** —
+- **Blockiert von:** OP-323
 
 ### OP-302: Command Palette (`⌘K`)
 
@@ -783,6 +783,50 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Tests:** Keine (Doku-Audit).
 - **Blockiert von:** —
 
+
+### OP-320: ADR-0024 Tiered Event Log + Projector
+
+- **Status:** open
+- **Typ:** architektur (Doku)
+- **Phase:** Phase-0 (Fundament)
+- **Betroffene Dateien:** `docs/adr/0024-tiered-event-log.md` (neu), `docs/ARCHITECTURE.md`
+- **Problem:** Zwei Event-Systeme (JSONL via `audit()`, SQLite via `_publish()`) ohne deklarierte Rollen. OP-319-Messung: 320 vs. 10 Kinds, 0 Schnittmenge, 25 gemeinsame Runs. Das ist Dual-Write — Anti-Pattern nach Confluent, Microsoft CQRS, AutoMQ.
+- **Akzeptanzkriterien:** (a) ADR-0024 mit Kontext, Entscheidung, Konsequenzen. (b) Deklariert Semantic-Stream (`audit-logs/semantic-*.jsonl`, git) + Stream-Stream (`audit-logs/stream-*.jsonl`, gitignore), SQLite = rebuildbare Projektion. (c) Deklariert `audit()` + `stream()` als einzige Writer, `EventStore.append()` verbannt. (d) `docs/ARCHITECTURE.md` verweist auf ADR-0024.
+- **Tests:** Keine (Doku).
+- **Blockiert von:** —
+
+### OP-321: Event-Klassifikation + stream()-Funktion
+
+- **Status:** open
+- **Typ:** architektur (Refactor)
+- **Phase:** Phase-0 (Fundament)
+- **Betroffene Dateien:** `werkstatt/audit.py`, `werkstatt/render/progress.py`, `werkstatt/render/tasks.py`, `werkstatt/gate_bridge.py`, `tests/test_audit_stream_klassifikation.py` (neu)
+- **Problem:** Heute ruft `_publish()` SQLite direkt, `audit()` JSONL direkt. Keine Deklaration welcher Kind wohin gehoert. Divergenz entsteht still.
+- **Akzeptanzkriterien:** (a) Konstante `_STREAM_KINDS: frozenset[str]` in `audit.py` mit `log_line`, `progress`, `spinner`, `heartbeat`, `task_started`, `task_done`. (b) Neue Funktion `stream(kind, payload, ...)` schreibt nach `audit-logs/stream-YYYY-MM-DD.jsonl`. (c) `audit()` schreibt zusaetzlich `event_id = sha256(run_id+seq+kind+ts)[:16]`. (d) Bestehende `_publish()`-Aufrufer (5 Stellen) auf `stream()` umgestellt. (e) Test: unbekannter Kind → fail-closed → Semantic.
+- **Tests:** `tests/test_audit_stream_klassifikation.py` (4 Tests: stream/semantic-Trennung, event_id deterministisch, fail-closed, stream-Kinds vollstaendig).
+- **Blockiert von:** OP-320
+
+### OP-322: Projector-Modul (rebuild + tail + status)
+
+- **Status:** open
+- **Typ:** architektur (Kernmodul)
+- **Phase:** Phase-0 (Fundament)
+- **Betroffene Dateien:** `werkstatt/projection.py` (neu), `tests/test_projection.py` (neu)
+- **Problem:** SQLite wird heute von `_publish()` direkt geschrieben und ist nicht aus JSONL rekonstruierbar. Kein Checkpoint, keine Idempotenz, kein Health-Check.
+- **Akzeptanzkriterien:** (a) `Projector.rebuild(von_seq=0)` liest alle `semantic-*.jsonl` + `stream-*.jsonl`, schreibt SQLite deterministisch. (b) `Projector.tail()` liest ab Checkpoint inkrementell. (c) `Projector.status()` liefert `{jsonl_events, sqlite_rows, diff, last_checkpoint}`. (d) SQLite-Schema erweitert: `event_id TEXT UNIQUE`, `INSERT ... ON CONFLICT IGNORE`, Tabelle `projection_state(key, value)`. (e) Test: `rebuild()` zweimal → identischer `sqlite_hash`.
+- **Tests:** `tests/test_projection.py` (6 Tests: Rebuild deterministisch, Rebuild idempotent, Tail nach Rebuild → 0 Duplikate, Status-Divergenz erkannt, Checkpoint persistiert, Event-ID-Kollision ignoriert).
+- **Blockiert von:** OP-321
+
+### OP-323: Wiring stream() -> Projector.tail(), Health-Endpoint
+
+- **Status:** open
+- **Typ:** architektur (Wiring)
+- **Phase:** Phase-0 (Fundament)
+- **Betroffene Dateien:** `werkstatt/audit.py`, `werkstatt/web/app.py`, `werkstatt/web/inspector.py`, `static/statusleiste.js`, `static/layout.css`, `tests/test_projection_wiring.py` (neu)
+- **Problem:** Der Projektor existiert (OP-322), aber niemand ruft ihn. Ohne Wiring bleibt SQLite leer nach dem Umbau.
+- **Akzeptanzkriterien:** (a) `audit()` und `stream()` triggern nach jedem Batch (100 Events) `Projector.tail()`. (b) Neuer Endpoint `GET /api/projects/{name}/projection/status`. (c) Statusleiste zeigt Warnung bei Divergenz > 0 (nutzt `--sem-warn` aus OP-300). (d) Integrationstest: Loop mit 10 Events → SQLite hat 10 Rows innerhalb 5s.
+- **Tests:** `tests/test_projection_wiring.py` (3 Tests: Tail-Trigger nach Batch, Endpoint liefert Status, Integration 10-Events → 10 Rows).
+- **Blockiert von:** OP-322
 
 ## Erledigt (Auto-Log)
 
@@ -1370,6 +1414,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-08 | OP-319 | done | Event-Architektur-Messung. 32804 JSONL-Events (320 Kinds, 267 Runs) vs. 374353 SQLite-Events (10 Kinds, 5290 Runs). Schnittmenge: 0 Kinds, 25 Runs. Beweis fuer Dual-Write-Anti-Pattern (Confluent/Microsoft-CQRS/AutoMQ). Grundlage fuer OP-320..323.
 - 2026-11-08 | OP-300 | done | Semantic Colors System (Commit `320b029`). 6 semantische CSS-Variablen (`--sem-action`, `--sem-active`, `--sem-ok`, `--sem-warn`, `--sem-error`, `--sem-history`) + 7 Shades + 4 Struct-Variablen im `:root`. 57 Hex-Vorkommen ausserhalb `:root` ersetzt. Explorer-Cyan `#06b6d4` -> `var(--sem-active)` (bewusster Farbwechsel, Frage 1a). `.diff-hunk` -> `var(--sem-active)` (Frage 3: Diff im laufenden Build ist Ist-Zustand, nicht Vergangenheit). chat.css hatte schon 0 Hex, unveraendert. Guard: Hex ausserhalb `:root` == 0. pytest 1437 passed, ruff/mypy 0, alle 5 Drifts 0. **Lehre:** Erster Patch-Versuch zerstoerte `:root`-Block durch fehlerhaftes Reassembly (`s = body` statt `s = head + neuer_root + tail`); In-Python-Guard SEM==0 hat Commit verhindert, Rollback manuell. Zweiter Versuch mit Guards vor `write_text` erfolgreich. **Strukturelle Altlast:** zwischen `## Erledigt (Auto-Log)` und `## Delete-Zone` stehen 16 offene OPs (OP-263, OP-257, ..., OP-241) faelschlich unter Auto-Log.
 
 - 2026-11-07 | OP-181 | done | Reviewer-Dead-Code-Erkennung (Commits `9b700e3` t1, `fdb01df` t3+t4). Loop-Lauf 13:23 baute t1 (REVIEWER_SYSTEM-`DEAD-CODE-CHECK`-Abschnitt mit 3 Regeln), brach dann bei t2 ab (Planner-Fehler: Verifikations-Task als update formuliert, Builder setzte `auftrag_bereits_erfuellt`, Reviewer meldete HIGH-Bug). OP-182-Fix begrenzte den Loop auf 2 Reflection-Runden, aber t3+t4 blieben offen. Manueller Nachzug: t3 = `run_reviewer` ruft `_pruefe_neue_module_genutzt(pd, diff)` nach den LLM-Filtern und vor `reviewer_result`-Audit; HIGH-Bug setzt `approved=False`. t4 = `tests/test_reviewer_dead_code.py` mit 3 AK-(c)-Tests + AST-Wiring-Test (`test_run_reviewer_ruft_pre_check_auf`, analog `test_rollen_registry_migration.py`) — kodiert die Lehre aus Loop-Test 9, dass die Funktion sonst toter Code werden kann. pytest 1342 passed, ruff/mypy 0, alle Drift-Checks gruen. **Lehre (Loop-Test 10, eingeplant als OP):** Planner-Task-Typ „pruefe/verifiziere X" braucht eigenes `action: verify`, sonst falscher Builder-Pfad. Siehe Stufe-2-Planung.
