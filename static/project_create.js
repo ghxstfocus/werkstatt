@@ -80,14 +80,22 @@
         }
         _schliessen();
         // OP-305: Tab oeffnen via neuer_tab (UI-Methode, nicht Store-Helper)
-        if (window.WerkstattTabs && window.WerkstattTabs.neuer_tab) {
-          try {
-            window.WerkstattTabs.neuer_tab(name);
-          } catch (e) {
-            window.location.reload();
-          }
-        } else {
-          window.location.reload();
+        if (!window.WerkstattTabs) {
+          console.error("[create] WerkstattTabs nicht geladen — tabs.js fehlt oder gecacht");
+          _fehler("UI-Fehler: bitte Strg+Shift+R (Hard-Reload)");
+          return;
+        }
+        if (!window.WerkstattTabs.neuer_tab) {
+          console.error("[create] neuer_tab nicht exportiert — tabs.js-Version veraltet");
+          _fehler("UI veraltet: bitte Strg+Shift+R (Hard-Reload)");
+          return;
+        }
+        try {
+          window.WerkstattTabs.neuer_tab(name);
+          console.log("[create] neuer_tab(name) aufgerufen für:", name);
+        } catch (e) {
+          console.error("[create] neuer_tab threw:", e);
+          _fehler("Tab-Anlage fehlgeschlagen: " + e.message);
         }
       })
       .catch(function (err) {
