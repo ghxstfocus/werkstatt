@@ -8,7 +8,7 @@
 >
 > **Bei Widersprüchen:** ADR > `docs/SOLL.md` > diese Datei.
 >
-Stand: 2026-10-31 (nach Doku-Migration, Scaffolder, Migrator, OP-NNN-Disziplin).
+Stand: 2026-11-08 (Event-Architektur via ADR-0024 + UI-Layer + Multi-Projekt via ADR-0023).
 
 ## 1. Ziel-Architektur
 
@@ -201,3 +201,114 @@ Ein datei-basierter Extraktor produziert falsche Task-Grenzen.
 - OP-064b Antipattern-Scanner
 - OP-064a Sticky-Veto
 - `_delete_zone_op_append` (Doku-Nachzug)
+
+## 8. Event-Architektur (2026-11-08, ADR-0024)
+
+Zwei Ebenen, single-writer, rebuildbar.
+
+### 8.1 Write Model — zwei JSONL-Streams
+
+`audit()` schreibt semantische Events, `stream()` hochfrequente
+Laufzeit-Events. Beide bauen ein JSON-Schema mit
+`event_id = sha256(run_id|audit_id)[:16]`.
+
+    Stream     Datei                                  git      Inhalt
+    Semantic   audit-logs/semantic-YYYY-MM-DD.jsonl   ja       loop_*, builder_*, reviewer_*, gate_*, pipeline_start, summary, explorer_*
+    Stream     audit-logs/stream-YYYY-MM-DD.jsonl     nein     log_line, progress, spinner, heartbeat, task_started, task_done
+
+Zuordnung in `werkstatt/audit.py::_STREAM_KINDS`. Fail-closed:
+unbekannter Kind geht in Semantic.
+
+### 8.2 Read Model — SQLite als Projektion
+
+`werkstatt/projection.py::Projector` liest JSONL und schreibt SQLite
+idempotent:
+
+- `rebuild(von_seq=0)` — alle JSONL → SQLite, DELETE + replay
+- `tail()` — ab Checkpoint inkrementell
+- `status()` — `{jsonl_events, sqlite_rows, diff, last_checkpoint}`
+
+Schema: `events(event_id UNIQUE, ...)` mit `INSERT ... ON CONFLICT
+IGNORE`. Checkpoint in `projection_state(key, value)`.
+
+**Kern-Regel:** SQLite wird ausschliesslich vom Projektor beschrieben.
+`EventStore().append()` ist aus der Produktion verbannt (gestern in
+`gate_bridge.py` und `web/app.py` migriert).
+
+### 8.3 Health
+
+`GET /api/projects/{name}/projection/status` liefert Divergenz JSONL
+vs. SQLite. Statusbar zeigt Warnung bei `diff > 0`.
+
+### 8.4 Regel
+
+Alte SQLite bleibt unangetastet bis `rebuild()` gruen und
+`db_hash_identisch()` nach Doppel-Rebuild. Bei Fehler: alte DB
+zurueck, kein Datenverlust.
+
+## 9. UI-Layer (2026-11-08)
+
+Die Web-UI ist dreischichtig: Ambient (Handlungsampel), Panels
+(Diagnose), Palette (Navigation).
+
+### 9.1 Ambient Status Bar (OP-301)
+
+Zeile zwischen Tab-Leiste und Grid. Drei Elemente:
+
+- Loop-Status: `○ Idle` / `◉ Laeuft` / `● Fertig` / `✗ Fehler`
+- Letzter Run (relativ mit ✓/✗)
+- Gates (hidden bei 0, pulsierend bei > 0)
+
+Polling 3 s gegen `/ambient`. Klick Ziele: Timeline / Gate-Panel.
+
+**Design-Entscheidung:** Tokens und Phase sind **nicht** in der
+Ambient-Bar — sie sind Diagnose, nicht Handlung. Sie leben in der
+Statusbar unten.
+
+### 9.2 Command Palette (OP-302)
+
+`Ctrl+K` / `Cmd+K` oeffnet Overlay. Server-Filter ueber `/palette?q=`
+mit 4 Kategorien: Aktionen, OPs, Sessions, Runs. Icons ▸ → ⚙
+◆ ↻. Keyboard-Nav: ↑↓ Enter Esc.
+
+### 9.3 Runs-Liste mit Run-Status + Start/Stop (OP-303)
+
+Pro OP-Zeile: Run-Status-Badge (○ idle / ● laeuft / ✓ fertig /
+✗ fehler), Start-Button ▶, Stop-Button ■. Polling 5 s.
+Hover-Tooltip mit Blockiert-von-Info.
+
+Backend: `aggregate_ops_run_status()` liest `loop_started`-Marker
+(primär) und `pipeline_start` (Legacy-Fallback).
+
+### 9.4 Audit-Panel (ruhiges Layout)
+
+Ein-Zeilen-Layout pro Event, Icon inline vor Text, Kind-Name klein
+rechts. Run-Gruppierung mit duennen Trennern. Klick expandiert
+Payload. Kategorie-Icons (↻ Loop, ⚙ Builder, ⌕ Explorer,
+✓/✗ Verify/Reviewer, ⚑ Gate).
+
+Sem-Farben aus OP-300: `--sem-action` (lila), `--sem-active` (blau),
+`--sem-ok` (gruen), `--sem-warn` (gelb), `--sem-error` (rot),
+`--sem-history` (grau).
+
+### 9.5 Shortcut-Help + Utility-Bar (OP-304/305)
+
+`?`-Taste oeffnet Overlay mit Kategorien (Navigation, Chat, Palette).
+Utility-Bar oben rechts: `⌘K`-Button, `?`-Button. Klickwege
+parallel zu Shortcuts.
+
+### 9.6 Projekt-Anlage (OP-305)
+
+`+`-Button oder `Alt+N` oeffnet Modal. Name + Pfad (Auto-Fill
+`/opt/<name>`). Backend `POST /api/projects/create` ruft
+`scaffold()` + schreibt Projekt-Pflichtdateien. Ambient zeigt aktives
+Projekt prominent.
+
+### 9.7 Multi-Projekt-Kontext (ADR-0023)
+
+`_PROJECTS_BASE`-Konstante in app.py + inspector.py, testbar via
+monkeypatch. `/start` validiert `docs/STATUS.md` (404 sonst). `/ops`
++ Palette lesen projekt-spezifisch.
+
+Offen (OP-306a/b/c): Tab-Persistenz, Projekt-Selector, SQLite-
+`project`-Spalte fuer `/ambient` `/status` `/timeline` `/tokens`.
