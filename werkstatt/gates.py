@@ -181,6 +181,42 @@ def _human_gate_plan(state, auto_approve=False, kontext=""):
         state.akzeptanzkriterien or [],
     )
 
+    # OP-299: Plan-Text auditieren, damit er in der UI nachlesbar bleibt.
+    # Der Architect-Prosa-Text ist die eigentliche Planung — kein UI-Weg
+    # sonst, weil _r.plan() nur ins Terminal rendert.
+    _plan_text = getattr(state, "architect_prosa", "") or ""
+    if not _plan_text:
+        # Fallback: strukturierter Plan als Text
+        _parts: list[str] = []
+        if state.phasen:
+            _parts.append("Phasen:")
+            for _ph in state.phasen:
+                if isinstance(_ph, dict):
+                    _parts.append(f"  - {_ph.get('id', '?')}: {_ph.get('titel', '')}")
+        if state.tasks:
+            _parts.append("")
+            _parts.append("Tasks:")
+            for _t in state.tasks:
+                if isinstance(_t, dict):
+                    _parts.append(f"  - {_t.get('id', '?')}: {_t.get('name', '')}")
+        if state.akzeptanzkriterien:
+            _parts.append("")
+            _parts.append("Akzeptanzkriterien:")
+            for _ak in state.akzeptanzkriterien:
+                if isinstance(_ak, dict):
+                    _parts.append(f"  - {_ak.get('id', '?')}: {_ak.get('text', '')}")
+        _plan_text = "\n".join(_parts)
+
+    if _plan_text:
+        audit("loop_plan_shown",
+              {
+                  "plan_text": _plan_text[:80_000],
+                  "plan_laenge": len(_plan_text),
+                  "phasen_anzahl": len(state.phasen or []),
+                  "tasks_anzahl": len(state.tasks or []),
+              },
+              pd, pn)
+
     # K20c: Leere-Antworten-Zaehler (EOF-aehnlicher Zustand via script-Wrapper).
     # OP-093: auch ungueltige-Antworten-Zaehler (Fail-closed nach 3 Versuchen).
     _leer_count = 0

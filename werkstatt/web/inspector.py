@@ -778,7 +778,13 @@ def aggregate_gate_context(
         kind = str(ev.get("kind", ""))
         ts = str(ev.get("ts", ""))
         payload = _payload_von(ev)
-        if kind.startswith("architect_") or kind == "loop_plan_gate_approved":
+        if kind == "loop_plan_shown":
+            txt = str(payload.get("plan_text") or "")
+            if txt:
+                plan_laenge = len(plan["text"]) if plan is not None else 0
+                if len(txt) > plan_laenge:
+                    plan = {"text": txt, "ts": ts, "kind": kind}
+        elif kind.startswith("architect_") or kind == "loop_plan_gate_approved":
             txt = _extract_plan_text(payload)
             if txt:
                 plan_laenge = len(plan["text"]) if plan is not None else 0
