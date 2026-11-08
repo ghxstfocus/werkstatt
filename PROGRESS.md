@@ -3393,3 +3393,83 @@ Synchronitaet).
 **OP-306b wird aufgewertet** zu "Workspace-Overview-Shell"
 (Projekt-Karten + Sparklines + KPI + Home-Navigation) — Startansicht
 wird Overview statt Default-Tab. Siehe STATUS.md OP-306b.
+
+## OP-306c: Multi-Projekt-Datenquellen (2026-11-08)
+
+**Commits:** 71cc471 (Etappe 1 Schema), 60a0f92 (Etappe 2 Writer),
+0ce6852 (Etappe 3a Reader SQL), 62a6cdd (Etappe 3b Reader ambient+timeline)
+
+**Was:** SQLite `events`-Tabelle bekommt `project`-Spalte. Alle
+aggregate_*()-Funktionen filtern nach aktuellem Projekt. Der
+test16-Tab zeigt keine Werkstatt-Daten mehr.
+
+**4 Etappen, jede einzeln committet:**
+
+**Etappe 1 (Schema):**
+- `Projector._init_schema`: CREATE + ALTER TABLE fuer project TEXT
+  NOT NULL DEFAULT 'werkstatt', idempotent per PRAGMA-Check
+- Neuer Index idx_events_project_seq fuer schnelle Filter
+- Migration auf Live-DB: 410.754 Zeilen bekommen 'werkstatt'
+  (alle bisherigen Events stammen aus Werkstatt, kein Backfill
+  aus JSONL — der ist ohnehin juenger als SQLite)
+
+**Etappe 2 (Writer):**
+- `Projector._insert`: project aus JSONL in Spalte, aus payload
+  entfernt (single source of truth)
+
+**Etappe 3a (Reader SQL):**
+- `_letzter_run_id(es, projekt='werkstatt')` — zentrale Stelle mit
+  WHERE project=?
+- `aggregate_status`: 4 Queries + project
+- `aggregate_tokens`: llm_usage-Query + project
+- `aggregate_ops_run_status`: run_to_op-Ermittlung + project
+- `aggregate_ambient`: NUR _letzter_run_id-Aufruf (Queries kamen
+  in 3b)
+
+**Etappe 3b (Reader ambient + timeline):**
+- `aggregate_ambient`: 7 Queries (heartbeat, loop_erfolg,
+  loop_failed, loop_ended, gate_open/answered/expired) + project
+- `aggregate_timeline`: JSONL-Events nach project filtern
+  (Fallback 'werkstatt' fuer Events vor OP-306c); explizites
+  run_id umgeht Filter
+
+**AK-Anpassungen (User-bestaetigt, ehrlich dokumentiert):**
+- AK (c): `audit()`/`stream()` schrieben `project` schon vor
+  OP-306c ins JSONL (audit.py:141/179). War bereits erfuellt.
+- AK (f): Frontend-URLs waren schon `/api/projects/{name}/...`.
+  War bereits erfuellt.
+- Tests: 10 statt 8 (6 in Etappe 3a: _letzter_run_id-Filter,
+  status/tokens/ops_run_status-Filter, leeres Fremdprojekt,
+  Default ohne Projekt-Arg. 4 in Etappe 3b: ambient-heartbeat,
+  ambient-loop_erfolg, ambient-gates, timeline-JSONL-Filter).
+
+**Live-Verifikation nach Etappe 3b:**
+- werkstatt: loop_status=done, gates_open=0
+- test16: loop_status=idle, gates_open=0
+
+**Test-Setup-Anpassung:** `_store` in test_ambient_aggregation.py
+und test_ops_run_status.py ruft `Projector(db_pfad=db)` VOR
+`EventStore(db)` — legt 9-Spalten-Schema an. `_event`-Helper ohne
+project-Spalte nutzt DEFAULT 'werkstatt'.
+
+**pytest:** 1533 passed, 5 skipped.
+
+**Bugs unterwegs, alle in MERKPOSTEN:**
+- Etappe 1: Verifikation kam NACH Commit statt davor → Live-DB
+  war nicht migriert, obwohl Commit-Message es behauptete.
+  Nachgeholt mit Etappe 1.5 (Projector() aufrufen).
+- Etappe 3a-Versuch-1: `_store`-Patch Anker nicht gematcht
+  (Top-Level-Import statt inline), Script brach ab, DB blieb
+  7-Spalten → 8 Test-Fails. Erst nach exakter Messung mit
+  `sed|cat -A` korrigiert.
+- Etappe 3a-Versuch-2: `cmd | tail; $?` misst tail-rc, nicht
+  cmd-rc. Diagnose-Block lief trotz roter Tests durch. Merkposten
+  bereits 4x dokumentiert.
+- Etappe 3b-Versuch-1: Anker-Einrückung falsch abgezählt (16
+  statt 12 Space), kein Match. Korrigiert mit cat -A-Ausgabe.
+- Etappe 3b-Versuch-2: Test-Design-Fehler — timeline-Test schrieb
+  nur loop_phase ohne Kinder. Der Leere-Phasen-Filter (>0 Kinder
+  ODER >2s Dauer) warf die Phase raus. Korrigiert mit Kind-Events
+  pro Projekt.
+- `exit` in Bash-Bloecken killt SSH. Mehrfach reproduziert. Ab
+  jetzt nur noch Flag-basiert mit STATUS-Kette und FINAL STATUS.

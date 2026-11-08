@@ -1482,17 +1482,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Tests:** `tests/test_overview.py` (~12 Tests: Backend-Aggregation, Sparkline-Daten, Top-3, Erfolgsquote, Fallback bei 0 Projekten) + `tests/test_overview_shell_spec.py` (~8 Tests: Spec-First via `OverviewSpiegel`-Klasse: Home-Klick, Projekt-Klick, Tab-Pause, Default-Overview, Fallback). Spec-First nach ADR-0015/0016.
 - **Blockiert von:** —
 
-### OP-306c: Multi-Projekt-Datenquellen (SQLite `project`-Spalte)
-
-- **Status:** open
-- **Typ:** architektur (Datenmodell)
-- **Phase:** Phase-3 (Urgroßvater)
-- **Betroffene Dateien:** `werkstatt/projection.py`, `werkstatt/audit.py`, `werkstatt/web/inspector.py`, `static/*.js`
-- **Problem:** `/ambient`, `/status`, `/timeline`, `/tokens` liefern Werkstatt-Daten auch fuer fremde Projekte. SQLite-Event-Tabelle hat keine `project`-Spalte. Der User sieht in test16-Tab: Werkstatt-Timeline, Werkstatt-Letzter-Run, Werkstatt-Projektion-Status.
-- **Akzeptanzkriterien:** (a) `events`-Tabelle bekommt `project TEXT NOT NULL DEFAULT 'werkstatt'`. (b) Migration: `ALTER TABLE events ADD COLUMN project ...` + bestehende Events auf `werkstatt` setzen. (c) `audit()` und `stream()` schreiben `project` ins JSONL. (d) `Projector._insert` reicht `project` durch. (e) `aggregate_ambient`, `aggregate_status`, `aggregate_timeline`, `aggregate_tokens`, `aggregate_ops_run_status` filtern `WHERE project=?`. (f) Frontend-Aufrufe uebergeben aktuelles Projekt.
-- **Tests:** `tests/test_multi_projekt_daten.py` (8 Tests: Migration, Filterung in jedem Endpoint, Isolation, Fallback-Werkstatt).
-- **Blockiert von:** —
-
 ### OP-324: Planner-Qualitaet haerten (Architect-Block 5 strukturell)
 
 - **Status:** open
@@ -1530,6 +1519,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
+
+- 2026-11-08 | OP-306c | done | Multi-Projekt-Datenquellen (SQLite project-Spalte). Commits 71cc471 (Etappe 1 Schema), 60a0f92 (Etappe 2 Writer), 0ce6852 (Etappe 3a Reader SQL), 62a6cdd (Etappe 3b Reader ambient+timeline). Migration: ALTER TABLE events ADD COLUMN project TEXT NOT NULL DEFAULT 'werkstatt', 410754 historische Zeilen bekommen 'werkstatt' (ehrlich: alle bisherigen Events stammen aus Werkstatt). Index idx_events_project_seq. Projector._insert reicht project aus JSONL in Spalte (single source of truth, aus payload entfernt). _letzter_run_id(es, projekt='werkstatt') zentral + 4 aggregate_*-Funktionen (status, tokens, ops_run_status, ambient) + aggregate_timeline-JSONL-Filter filtern AND project=?. **AK-Anpassungen:** (c) audit()/stream() schrieben project schon vor OP-306c ins JSONL — war bereits erfuellt. (f) Frontend-URLs waren schon /api/projects/{name}/... — war bereits erfuellt. Tests: 10 statt 8 (6 in Etappe 3a, 4 in Etappe 3b), Test-Datei tests/test_multi_projekt_daten.py. Live: test16=idle/0, werkstatt=done/0. pytest 1533 passed.
 
 - 2026-11-08 | OP-306a | done | Tab-Persistenz via localStorage. Commit f5d333a. 10 Verhaltens-Tests + 4 Drift-Guards (Spec-First nach ADR-0015/0016), Klammer-Balance als node--check-Ersatz. Key `werkstatt-tabs:v1` statt AK-`werkstatt_tabs` — Schema-Versionierung, User-bestaetigt 2026-11-08. Test-Datei `tests/test_ui_tab_persistenz.py` statt AK-`tests/test_tabs_persist.py`, 14 statt 4 Tests. AK-Punkt (f) als Lesart A interpretiert (leerer Storage -> Default-Tab `werkstatt`); Overview-Screen als Startansicht ist OP-306b (Workspace-Overview-Shell). pytest 1521 passed.
 
