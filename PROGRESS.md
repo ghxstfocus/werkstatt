@@ -3473,3 +3473,66 @@ project-Spalte nutzt DEFAULT 'werkstatt'.
   pro Projekt.
 - `exit` in Bash-Bloecken killt SSH. Mehrfach reproduziert. Ab
   jetzt nur noch Flag-basiert mit STATUS-Kette und FINAL STATUS.
+
+
+## Projector-Deadlock behoben (2026-11-08)
+
+**Commit:** a640b19
+
+**Symptom:** SQLite stand seit 2026-11-08 15:14 still, JSONL hatte
+31 echte Events nach 15:14. UI zeigte "letzter Run: 01:26", obwohl
+der Loop um 17:57 (OP-280) gestartet und um 19:41 mit `loop_failed`
+geendet war. Ambient-Bar zeigte "Fertig".
+
+**Ursache (Bug-Kette):**
+
+1. `Projector._jsonl_files()` las auch `*-migrated-*.jsonl` mit ein
+   (statische DB-Dumps aus OP-323).
+2. `_read_events()` suchte den Checkpoint `MIGRATED-SEM-352017`
+   sequenziell in den JSONL-Dateien. Er steht nur in
+   `agent-pipeline-migrated-2026-11-08.jsonl` Zeile 33/33 — der
+   alphabetisch letzten Datei.
+3. Die echten Tagesdateien werden **vor** der migrated-Datei gelesen.
+   Sentinel wurde dort nie gefunden, `found_start` blieb `False`,
+   alle Events wurden stumm uebersprungen.
+4. `tail()`: `eingefuegt == 0` -> `if letzter and eingefuegt > 0`
+   greift nicht -> Checkpoint blieb `MIGRATED-SEM-352017`.
+5. Deadlock: Jeder weitere Flush las wieder 0 Events.
+
+**Fix (a640b19):**
+
+- `_jsonl_files()` excludet `*-migrated-*.jsonl` (statische Dumps,
+  keine fortlaufende Quelle).
+- `_read_events()` wirft `ValueError` bei unbekanntem Checkpoint,
+  statt still 0 zurueckzugeben. Deadlock wird sichtbar statt
+  unsichtbar.
+
+**Daten-Reset:**
+
+- `UPDATE projection_state SET value='PIPE-20261108-151341-a8a36a'
+  WHERE key='last_audit_id'` (letzter echter audit_id vor dem Stau).
+- `tail()` -> 31 Events eingelesen, 2 wegen `event_id`-Kollision
+  uebersprungen (harmlos, `INSERT OR IGNORE`).
+- `tail#2` -> 0 eingefuegt (idempotent).
+- Checkpoint landet auf `PIPE-20261108-194159-bd35bf`.
+- `COUNT` 410754 -> 410785, `MAX(seq)` 788707 -> 788736.
+
+**3 neue Tests** in `tests/test_projection.py`:
+`test_jsonl_files_ignoriert_migrated`,
+`test_read_events_wirft_bei_unbekanntem_checkpoint`,
+`test_tail_nach_reset_liest_alle_neuen_events`.
+pytest 1536 passed.
+
+**Live-Effekt nach Reset:** Ambient zeigt jetzt den echten Stand
+(letzter Eintrag 19:41). Dass es weiterhin `done` ist statt
+`failed`, liegt an einem separaten Bug in `aggregate_ambient` —
+siehe neue OP.
+
+**2 neue OPs angelegt:**
+
+- **OP-371:** Ambient-Loop-Status zeigt letzten Erfolg statt
+  letzten Zustand. Live-Beleg: `loop_failed` 19:41 wird ignoriert,
+  `loop_erfolg` 01:26 gewinnt.
+- **OP-372:** Projection-Status-Diff vergleicht JSONL (33k) mit
+  SQLite (410k) und zeigt -377.834 an. Semantisch falsch, aber
+  kein Datenproblem.

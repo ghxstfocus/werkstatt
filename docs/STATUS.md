@@ -1060,6 +1060,28 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Prioritaet:** mittel (Sicherheits-Backstop, nicht Blocker).
 - **Quelle:** Punkt 4 aus externem Review 2026-11-07.
 
+### OP-371: Ambient-Loop-Status zeigt letzten Erfolg statt letzten Zustand
+
+- **Status:** open
+- **Typ:** bugfix
+- **Phase:** Phase-2 (Focus)
+- **Betroffene Dateien:** `werkstatt/web/inspector.py` (`aggregate_ambient`), `tests/test_ambient_aggregation.py`
+- **Problem:** `aggregate_ambient` zeigt `loop_status='done'`, wenn der **letzte** Terminal-Event ein `loop_erfolg` war — auch wenn **danach** ein `loop_failed` kam. Live-Beleg 2026-11-08 22:10: Werkstatt-Ambient zeigte 'done' (loop_erfolg 01:26), obwohl um 19:41 ein `loop_failed` in SQLite steht. Ursache: `SELECT ... WHERE kind='loop_erfolg' ORDER BY seq DESC LIMIT 1` gewinnt immer, `loop_failed`/`loop_ended` werden nur im `else`-Zweig geprueft, nie im Vergleich gegen `loop_erfolg`.
+- **Akzeptanzkriterien:** (a) `loop_erfolg`, `loop_failed`, `loop_ended` werden in einer gemeinsamen Query mit `ORDER BY seq DESC LIMIT 1` geholt, `kind` des neuesten entscheidet ueber `loop_status` (erfolg/ended -> done, failed -> failed). (b) `last_run` zeigt das juengste Terminal-Event, nicht das juengste Erfolgs-Event. (c) `loop_erfolg`-Semantik rueckwaerts-kompatibel. (d) Live: nach `loop_failed` 19:41 zeigt `aggregate_ambient('werkstatt')` 'failed'.
+- **Tests:** `tests/test_ambient_aggregation.py` (3 Tests: loop_failed nach loop_erfolg -> failed, loop_erfolg als letztes -> done, beide Reihenfolgen).
+- **Blockiert von:** —
+
+### OP-372: Projection-Status-Diff vergleicht JSONL mit SQLite semantisch falsch
+
+- **Status:** open
+- **Typ:** bugfix
+- **Phase:** Phase-2 (Focus)
+- **Betroffene Dateien:** `werkstatt/projection.py` (`status`), `static/statusleiste.js` (Anzeige), `tests/test_projection.py`
+- **Problem:** `Projector.status()` vergleicht `jsonl_events` (aktuelle Tagesdateien seit OP-320, ~33k) mit `sqlite_rows` (Gesamtzeilen inkl. Vor-OP-320-Migration, ~410k). Diff ist **immer** stark negativ (-377.834 am 2026-11-08). User sieht im UI bei 'Projection-Status' eine scheinbare Katastrophe, obwohl der Projector korrekt arbeitet. Ursache: Aepfel-mit-Birnen-Vergleich — `_count_jsonl()` zaehlt nur aktuelle Tagesdateien, SQLite enthaelt zusaetzlich die Vor-JSONL-Aera.
+- **Akzeptanzkriterien:** (a) `status()` liefert zusaetzlich `jsonl_rows_seit_migration` (nur Zeilen ab dem ersten echten `last_audit_id`-Anker). (b) `diff` relativ zu dieser Basis, nicht zur SQLite-Gesamtsumme. (c) Felder `basis` und `vergleich_seit` fuer Nachvollziehbarkeit. (d) `static/statusleiste.js` zeigt nur den semantisch korrekten `diff`, roher SQLite-Count als Diagnose-Detail (nicht prominent). (e) Bestehende Tests bleiben gruen.
+- **Tests:** `tests/test_projection.py` (2 Tests: status mit korrekter Basis, status ohne Migration).
+- **Blockiert von:** —
+
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
 - **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
@@ -1519,6 +1541,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
+
+- 2026-11-08 | OP-306c-Fix | done | Projector-Deadlock behoben (Commit a640b19). Sentinel-Checkpoint MIGRATED-SEM-352017 (aus OP-323-Migration) stand in der alphabetisch letzten agent-pipeline-migrated-2026-11-08.jsonl Zeile 33/33 — _read_events() fand ihn nie in den echten Tagesdateien, uebersprang stumm alle Events, Checkpoint blieb Sentinel. Folge: SQLite stand seit 15:14 still, JSONL hatte 31 echte Events nach 15:14 (u.a. loop_started 17:57 OP-280, loop_failed 19:41). Fix: _jsonl_files() excludet *-migrated-*.jsonl (statische DB-Dumps); _read_events() wirft ValueError bei unbekanntem Checkpoint statt stumm 0. 3 neue Tests. Daten-Reset: Checkpoint auf PIPE-20261108-151341-a8a36a -> tail() las 31 Events ein (2 wegen event_id-Kollision uebersprungen, harmlos). tail#2 idempotent. Checkpoint landet auf PIPE-20261108-194159-bd35bf. COUNT 410754 -> 410785, MAX(seq) 788707 -> 788736. pytest 1536 passed.
 
 - 2026-11-08 | OP-306c | done | Multi-Projekt-Datenquellen (SQLite project-Spalte). Commits 71cc471 (Etappe 1 Schema), 60a0f92 (Etappe 2 Writer), 0ce6852 (Etappe 3a Reader SQL), 62a6cdd (Etappe 3b Reader ambient+timeline). Migration: ALTER TABLE events ADD COLUMN project TEXT NOT NULL DEFAULT 'werkstatt', 410754 historische Zeilen bekommen 'werkstatt' (ehrlich: alle bisherigen Events stammen aus Werkstatt). Index idx_events_project_seq. Projector._insert reicht project aus JSONL in Spalte (single source of truth, aus payload entfernt). _letzter_run_id(es, projekt='werkstatt') zentral + 4 aggregate_*-Funktionen (status, tokens, ops_run_status, ambient) + aggregate_timeline-JSONL-Filter filtern AND project=?. **AK-Anpassungen:** (c) audit()/stream() schrieben project schon vor OP-306c ins JSONL — war bereits erfuellt. (f) Frontend-URLs waren schon /api/projects/{name}/... — war bereits erfuellt. Tests: 10 statt 8 (6 in Etappe 3a, 4 in Etappe 3b), Test-Datei tests/test_multi_projekt_daten.py. Live: test16=idle/0, werkstatt=done/0. pytest 1533 passed.
 
