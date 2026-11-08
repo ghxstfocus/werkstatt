@@ -3233,3 +3233,12 @@ _publish in emit.py ruft zusaetzlich audit()/stream(); SQLite-Write
 bleibt als Uebergangsphase bis OP-323.
 
 Tests: test_audit_stream_klassifikation.py (5). pytest 1442 passed.
+
+
+## 2026-11-08 — OP-322 Projector (rebuild/tail/status)
+
+werkstatt/projection.py: JSONL (semantic + stream) -> SQLite.
+rebuild() deterministisch (DELETE + replay), tail() idempotent per
+event_id UNIQUE + INSERT OR IGNORE, status() liefert jsonl/sqlite/diff.
+Checkpoint in projection_state. 6 neue Tests (test_projection.py).
+pytest 1448 passed.

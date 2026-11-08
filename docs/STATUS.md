@@ -784,17 +784,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Blockiert von:** —
 
 
-### OP-322: Projector-Modul (rebuild + tail + status)
-
-- **Status:** open
-- **Typ:** architektur (Kernmodul)
-- **Phase:** Phase-0 (Fundament)
-- **Betroffene Dateien:** `werkstatt/projection.py` (neu), `tests/test_projection.py` (neu)
-- **Problem:** SQLite wird heute von `_publish()` direkt geschrieben und ist nicht aus JSONL rekonstruierbar. Kein Checkpoint, keine Idempotenz, kein Health-Check.
-- **Akzeptanzkriterien:** (a) `Projector.rebuild(von_seq=0)` liest alle `semantic-*.jsonl` + `stream-*.jsonl`, schreibt SQLite deterministisch. (b) `Projector.tail()` liest ab Checkpoint inkrementell. (c) `Projector.status()` liefert `{jsonl_events, sqlite_rows, diff, last_checkpoint}`. (d) SQLite-Schema erweitert: `event_id TEXT UNIQUE`, `INSERT ... ON CONFLICT IGNORE`, Tabelle `projection_state(key, value)`. (e) Test: `rebuild()` zweimal → identischer `sqlite_hash`.
-- **Tests:** `tests/test_projection.py` (6 Tests: Rebuild deterministisch, Rebuild idempotent, Tail nach Rebuild → 0 Duplikate, Status-Divergenz erkannt, Checkpoint persistiert, Event-ID-Kollision ignoriert).
-- **Blockiert von:** OP-321
-
 ### OP-323: Wiring stream() -> Projector.tail(), Health-Endpoint
 
 - **Status:** open
@@ -1392,6 +1381,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-08 | OP-322 | done | Projector (rebuild/tail/status). JSONL -> SQLite idempotent (event_id UNIQUE, INSERT OR IGNORE), Checkpoint in projection_state, rebuild() deterministisch (Doppel-Rebuild ergibt identischen Hash). 6 neue Tests. pytest 1448 passed.
 - 2026-11-08 | OP-321 | done | JSONL-Trennung stream/semantic. _STREAM_KINDS (log_line/progress/spinner/heartbeat/task_started/task_done), stream() schreibt nach stream-YYYY-MM-DD.jsonl, audit() nach agent-pipeline, fail-closed fuer unbekannte Kinds. event_id = sha256(run_id|audit_id)[:16] in beiden. _publish schreibt jetzt zusaetzlich JSONL (SQLite bleibt bis OP-323). 5 neue Tests. pytest 1442 passed.
 - 2026-11-08 | OP-320 | done | ADR-0024 Tiered Event Log + Projector. Deklariert Semantic-Stream (git) + Stream-Stream (gitignore), SQLite rebuildbar, audit()/stream() als einzige Writer, EventStore.append() verbannt. Grundlage fuer OP-321..323.
 - 2026-11-08 | OP-319 | done | Event-Architektur-Messung. 32804 JSONL-Events (320 Kinds, 267 Runs) vs. 374353 SQLite-Events (10 Kinds, 5290 Runs). Schnittmenge: 0 Kinds, 25 Runs. Beweis fuer Dual-Write-Anti-Pattern (Confluent/Microsoft-CQRS/AutoMQ). Grundlage fuer OP-320..323.
