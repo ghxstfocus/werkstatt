@@ -124,7 +124,7 @@ function createAuditPanel(options) {
       // Es gibt kein 'payload'-Feld. Wir nehmen die Extra-Felder.
       var _extra = "";
       if (ev && typeof ev === "object") {
-        var _skip = { audit_id: 1, timestamp: 1, ts: 1, agent: 1, project: 1, kind: 1 };
+        var _skip = { audit_id: 1, timestamp: 1, ts: 1, agent: 1, project: 1, kind: 1, run_id: 1 };
         var _teile = [];
         Object.keys(ev).forEach(function (k) {
           if (_skip[k]) return;
@@ -233,6 +233,87 @@ function createAuditPanel(options) {
     if (k === "loop_reflection_stagnation_runde") return "Reflection: Stagnation — " + (g("grund") || "?");
     if (k === "loop_reflection_stagnation_abort") return "Reflection: Stagnation-Abbruch nach " + (g("runde") || "?") + " Runden";
 
+    // Explorer-Ergänzung
+    if (k === "loop_explorer_ergaenzt") {
+      var e1 = g("explizit") || 0;
+      var v1 = g("verwandt") || 0;
+      return "Explorer: " + e1 + " explizit + " + v1 + " verwandt";
+    }
+
+    // Preflight
+    if (k === "loop_preflight_fehler") {
+      var kl = g("klassen") || [];
+      var anz = g("anzahl") || kl.length;
+      return "Preflight: " + anz + " Befunde (" + kl.join(", ") + ")";
+    }
+
+    // Planner-Split
+    if (k === "planner_split_vor_merge") {
+      return "Split (vor Merge): " + (g("anzahl") || 0) + " Tasks";
+    }
+
+    // Phase
+    if (k === "loop_phase") {
+      var ph = g("phase") || "?";
+      var st = g("status") || "?";
+      return "Phase: " + ph + " → " + st;
+    }
+
+    // Rollback
+    if (k === "loop_rollback_skipped") return "Rollback übersprungen (kein --rollback)";
+    if (k === "loop_rollback") return "Rollback durchgeführt";
+
+    // Plan-Gate-Ende
+    if (k === "loop_plan_gate_eof") return "Plan-Gate: EOF (Loop-Eingabe beendet)";
+    if (k === "loop_plan_gate_test") return "Plan-Gate: Test-Modus";
+    if (k === "loop_plan_gate_auto") return "Plan-Gate: Auto-Approve";
+    if (k === "loop_plan_reject_fail_closed") return "Plan-Reject fail-closed: " + (g("reason") || "?");
+    if (k === "loop_gate_failed") return "Gate fehlgeschlagen: " + (g("gate") || "?") + " (" + (g("grund") || "?") + ")";
+
+    // Web
+    if (k === "web_login_ok") return "Login: " + (g("ip") || "?");
+
+    // Tasks (mit name fallback)
+    if (k === "loop_task_start") {
+      var t = g("text") || g("name") || g("task_id") || "";
+      return t ? "Task startet: " + t : "Task startet";
+    }
+    if (k === "loop_task_ok") {
+      var e = g("elapsed_s") || 0;
+      return "Task OK (" + e.toFixed(1) + "s)";
+    }
+
+    // Patches
+    if (k === "loop_patch_created") return "Patch erstellt: " + (g("file") || "?");
+    if (k === "loop_patch_updated") return "Patch aktualisiert: " + (g("file") || "?");
+    if (k === "loop_patch_applied") return "Patch angewendet: " + (g("file") || "?");
+    if (k === "loop_patch_deleted") return "Datei gelöscht: " + (g("file") || "?");
+    if (k === "loop_patch_no_effect") return "Patch ohne Effekt: " + (g("file") || "?");
+    if (k === "loop_patch_old_string_not_found") return "Patch-Anker nicht gefunden: " + (g("file") || "?");
+    if (k === "loop_patch_write_failed") return "Patch-Schreiben fehlgeschlagen: " + (g("file") || "?");
+
+    // Verify-Stages
+    if (k === "loop_verify_stage_skipped") {
+      return "Verify-Stage übersprungen: " + (g("stage") || "?") + " (" + (g("reason") || "?") + ")";
+    }
+
+    // Reviewer (verdict-Fallback)
+    if (k === "reviewer_result") {
+      var vd = g("verdict") || g("ok") || g("approved");
+      if (vd === undefined || vd === null) vd = "?";
+      return "Reviewer: " + vd;
+    }
+    if (k === "reviewer_phase_approved") {
+      return "Phase-Review: approved (" + (g("bugs_medium") || 0) + " medium, " + (g("bugs_low") || 0) + " low)";
+    }
+    if (k === "reviewer_phase_rejected") {
+      return "Phase-Review: rejected (" + (g("bugs_medium") || 0) + " medium)";
+    }
+
+    // Loop-Ende
+    if (k === "loop_ended") return "Loop beendet (erfolg=" + (g("erfolg")) + ")";
+    if (k === "loop_started") return "Loop gestartet";
+
     // Reflection
     if (k === "loop_reflection_runde") return "Reflection Runde " + (g("runde") || "?");
     if (k === "loop_reflection_patch_applied") return "Reflection-Patch: " + (g("anzahl") || 0);
@@ -280,9 +361,16 @@ function createAuditPanel(options) {
           if (_skip[k]) return;
           var v = ev[k];
           var vs;
-          try { vs = JSON.stringify(v); } catch (e) { vs = String(v); }
-          if (vs && vs.length > 120) vs = vs.slice(0, 117) + "...";
-          _teile.push(k + "=" + vs);
+          if (typeof v === "string") {
+            vs = v;
+            if (vs.length > 120) vs = vs.slice(0, 117) + "...";
+          } else if (typeof v === "number" || typeof v === "boolean") {
+            vs = String(v);
+          } else {
+            try { vs = JSON.stringify(v); } catch (e) { vs = String(v); }
+            if (vs && vs.length > 120) vs = vs.slice(0, 117) + "...";
+          }
+          _teile.push(k + ": " + vs);
         });
         _extra = _teile.join(" ");
       }
