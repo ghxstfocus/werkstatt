@@ -861,6 +861,29 @@ def aggregate_gate_context(
         except Exception:  # noqa: S110
             pass
 
+    # Run-Tod-Filter: wenn letzter Event >120s her und Gate noch offen,
+    # gehoert das Gate zu einem toten Run. Nicht als "offen" anzeigen.
+    if offene and letzte_run_id:
+        try:
+            es = EventStore()
+            import sqlite3 as _sq3
+            from datetime import UTC as _UTC
+            from datetime import datetime as _dt
+            with _sq3.connect(es.db_pfad) as _c:
+                _row = _c.execute(
+                    "SELECT ts FROM events WHERE run_id=? "
+                    "ORDER BY seq DESC LIMIT 1",
+                    (letzte_run_id,),
+                ).fetchone()
+            if _row and _row[0]:
+                _ts = _dt.fromisoformat(str(_row[0]))
+                if _ts.tzinfo is None:
+                    _ts = _ts.replace(tzinfo=_UTC)
+                if (_dt.now(_UTC) - _ts).total_seconds() > 120:
+                    offene = []
+        except Exception:  # noqa: S110
+            pass
+
     # Empfehlung
     empfehlung = "prüfen"
     grund_teile: list[str] = []
