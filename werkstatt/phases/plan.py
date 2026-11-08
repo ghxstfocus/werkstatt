@@ -78,8 +78,14 @@ def _phase_plan_and_preflight(
         # Baseline-Fehler, damit der Planner BLOCKER/FOLLOW_UP/
         # IGNORE entscheiden kann.
         if not getattr(state, "preflight_fehler", None):
+            import time as _t_pf
+            _pf_t0 = _t_pf.monotonic()
+            audit("loop_preflight_start", {}, pd, pn)
             from werkstatt.planner import _preflight_scan
             _pf = _preflight_scan(state)
+            audit("loop_preflight_done",
+                  {"elapsed_s": round(_t_pf.monotonic() - _pf_t0, 2),
+                   "befunde": len(_pf) if _pf else 0}, pd, pn)
             state.preflight_fehler = _pf
             if _pf:
                 audit(

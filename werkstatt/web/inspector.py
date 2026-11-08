@@ -56,6 +56,14 @@ def parse_ops(projekt_dir: Path | None = None) -> list[dict[str, str]]:
         block = text[m.end():ende]
         sm = _STATUS_RE.search(block)
         status = sm.group(1).lower() if sm else "?"
+        # STATUS.md-Header sagt: nur offene, loop-faehige OPs.
+        # done-OPs gehoeren nach PROGRESS.md (separater OP).
+        if status in ("done", "erledigt", "closed"):
+            continue
+        # STATUS.md-Header: nur offene, loop-faehige OPs.
+        # done-OPs gehoeren nach PROGRESS.md (separater OP).
+        if status in ("done", "erledigt", "closed"):
+            continue
         ergebnis.append({
             "id": op_id,
             "titel": titel,
@@ -928,6 +936,26 @@ def aggregate_gate_context(
     if any("rot" in g or "rejected" in g for g in grund_teile):
         empfehlung = "n"
 
+    # Diff-Info: was vor dem j/n-Klick geaendert wurde
+    diff_stat = ""
+    diff_text = ""
+    if offene:
+        import subprocess as _sp
+        basis = Path("/opt/werkstatt")
+        try:
+            diff_stat = _sp.run(
+                ["git", "diff", "--stat", "HEAD"],
+                capture_output=True, text=True, timeout=10,
+                cwd=str(basis), check=False,
+            ).stdout[:5000]
+            diff_text = _sp.run(
+                ["git", "diff", "HEAD"],
+                capture_output=True, text=True, timeout=15,
+                cwd=str(basis), check=False,
+            ).stdout[:100_000]
+        except (_sp.TimeoutExpired, OSError):
+            pass
+
     return {
         "run_id": letzte_run_id,
         "plan": plan,
@@ -938,6 +966,8 @@ def aggregate_gate_context(
         "historie": historie[-10:],
         "empfehlung": empfehlung,
         "empfehlung_grund": ", ".join(grund_teile) or "keine Bewertung möglich",
+        "diff_stat": diff_stat,
+        "diff": diff_text,
     }
 
 

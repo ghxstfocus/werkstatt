@@ -541,6 +541,7 @@ def run_explorer(state: RunState, frage: str) -> dict:
     reply = ask_llm(
         api_key, _explorer_system(), context,
         model="deepseek-chat", temperature=0.0, max_tokens=3000,
+        state=state, aufgabe="explorer",
     )
     if not reply.ok:
         audit("explorer_llm_fehler", {"fehler": reply.error}, pd, pn)

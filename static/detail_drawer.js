@@ -156,6 +156,58 @@
     });
   }
 
+  function _machDraggable(box, handle) {
+    var key = "werkstatt-detail-pos";
+    try {
+      var gespeichert = localStorage.getItem(key);
+      if (gespeichert) {
+        var pos = JSON.parse(gespeichert);
+        if (pos && typeof pos.left === "number") {
+          box.style.left = pos.left + "px";
+          box.style.top = pos.top + "px";
+          box.style.right = "auto";
+        }
+      }
+    } catch (e) {}
+    var startX = 0, startY = 0, startL = 0, startT = 0, dragging = false;
+    function onStart(ev) {
+      // Klicks auf Tabs/Close nicht als Drag interpretieren
+      if (ev.target.closest(".dd-tab") || ev.target.closest(".dd-close")) return;
+      ev.preventDefault();
+      var t = ev.touches ? ev.touches[0] : ev;
+      var rect = box.getBoundingClientRect();
+      startX = t.clientX; startY = t.clientY;
+      startL = rect.left; startT = rect.top;
+      dragging = true;
+      box.style.left = startL + "px";
+      box.style.top = startT + "px";
+      box.style.right = "auto";
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onEnd);
+      document.addEventListener("touchmove", onMove);
+      document.addEventListener("touchend", onEnd);
+    }
+    function onMove(ev) {
+      if (!dragging) return;
+      var t = ev.touches ? ev.touches[0] : ev;
+      box.style.left = (startL + t.clientX - startX) + "px";
+      box.style.top = (startT + t.clientY - startY) + "px";
+    }
+    function onEnd() {
+      dragging = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onEnd);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onEnd);
+      try {
+        var r = box.getBoundingClientRect();
+        localStorage.setItem(key, JSON.stringify({left: r.left, top: r.top}));
+      } catch (e) {}
+    }
+    handle.addEventListener("mousedown", onStart);
+    handle.addEventListener("touchstart", onStart);
+  }
+
   function oeffne(tab) {
     var d = _el("detail-drawer");
     if (!d) return;
@@ -182,5 +234,12 @@
     });
     var schliessenBtn = _el("dd-close");
     if (schliessenBtn) schliessenBtn.addEventListener("click", schliesse);
+    // Drag am Tab-Header
+    var tabsNav = d.querySelector(".dd-tabs");
+    if (tabsNav) {
+      tabsNav.style.cursor = "move";
+      tabsNav.title = "Ziehen zum Verschieben";
+      _machDraggable(d, tabsNav);
+    }
   });
 })();

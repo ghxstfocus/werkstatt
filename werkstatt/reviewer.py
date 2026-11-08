@@ -657,7 +657,7 @@ def run_phase_end_review(state: RunState) -> bool:
                 api_key, _reviewer_system(state, _phase_files), user,
                 model="deepseek-chat", temperature=0.2, max_tokens=4000,
                 redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
-                aufgabe="reviewer",
+                aufgabe="reviewer", state=state,
             ),
         )
     except Exception as _exc:
@@ -1092,7 +1092,7 @@ def run_reviewer(state: RunState) -> bool:
         api_key, _reviewer_system(state, _zieldatei), user_content,
         model="deepseek-chat", temperature=0.0, max_tokens=4000,
         redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
-        aufgabe="reviewer",
+        aufgabe="reviewer", state=state,
     )
 
     if not reply.ok:

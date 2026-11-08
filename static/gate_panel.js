@@ -26,6 +26,14 @@
   function _renderPlan(box, plan) {
     var details = document.createElement("details");
     details.className = "gate-block";
+    // Persistenter Offen-State (Poll-Rebuild zerstoert sonst den State)
+    var key = "werkstatt-gate-plan-offen";
+    try {
+      if (localStorage.getItem(key) === "1") details.open = true;
+    } catch (e) {}
+    details.addEventListener("toggle", function () {
+      try { localStorage.setItem(key, details.open ? "1" : "0"); } catch (e) {}
+    });
     var sum = document.createElement("summary");
     sum.textContent = "Plan (" + (plan.text ? plan.text.length : 0) + " Zeichen)";
     details.appendChild(sum);
@@ -40,6 +48,16 @@
     if (!scout) return;
     var details = document.createElement("details");
     details.className = "gate-block";
+    var key = "werkstatt-gate-scout-offen";
+    try { if (localStorage.getItem(key) === "1") details.open = true; } catch (e) {}
+    details.addEventListener("toggle", function () {
+      try { localStorage.setItem(key, details.open ? "1" : "0"); } catch (e) {}
+    });
+    var key = "werkstatt-gate-scout-offen";
+    try { if (localStorage.getItem(key) === "1") details.open = true; } catch (e) {}
+    details.addEventListener("toggle", function () {
+      try { localStorage.setItem(key, details.open ? "1" : "0"); } catch (e) {}
+    });
     var sum = document.createElement("summary");
     var n = (scout.befehle || []).length + (scout.dateien || []).length + (scout.findings || []).length;
     sum.textContent = "Scout/Explorer (" + n + ")";
@@ -79,13 +97,59 @@
     box.appendChild(details);
   }
 
+  function _renderDiff(box, ctx) {
+    var stat = ctx.diff_stat || "";
+    var diff = ctx.diff || "";
+    if (!stat && !diff) return;
+    var det = document.createElement("details");
+    det.className = "gate-block";
+    var key = "werkstatt-gate-diff-offen";
+    try { if (localStorage.getItem(key) === "1") det.open = true; } catch (e) {}
+    det.addEventListener("toggle", function () {
+      try { localStorage.setItem(key, det.open ? "1" : "0"); } catch (e) {}
+    });
+    var sum = document.createElement("summary");
+    var dateien = stat ? stat.trim().split("\n").length - 1 : 0;
+    sum.textContent = "Aenderungen (" + dateien + " Dateien)";
+    det.appendChild(sum);
+    if (stat) {
+      var preStat = document.createElement("pre");
+      preStat.className = "gate-plan gate-diff-stat";
+      preStat.textContent = stat;
+      det.appendChild(preStat);
+    }
+    if (diff) {
+      var preDiff = document.createElement("pre");
+      preDiff.className = "gate-plan gate-diff-body";
+      diff.split("\n").forEach(function (linie) {
+        var zeile = document.createElement("span");
+        zeile.className = "diff-line";
+        if (linie.startsWith("+++") || linie.startsWith("---")) {
+          zeile.className += " diff-meta";
+        } else if (linie.startsWith("+")) {
+          zeile.className += " diff-plus";
+        } else if (linie.startsWith("-")) {
+          zeile.className += " diff-minus";
+        } else if (linie.startsWith("@@")) {
+          zeile.className += " diff-hunk";
+        }
+        zeile.textContent = linie + "\n";
+        preDiff.appendChild(zeile);
+      });
+      det.appendChild(preDiff);
+    }
+    box.appendChild(det);
+  }
+
   function _renderGate(box, ctx) {
     _clear(box);
 
     var header = document.createElement("div");
     header.className = "gate-header";
     header.textContent = "Human-Gate offen";
+    header.title = "Ziehen zum Verschieben";
     box.appendChild(header);
+    _machDraggable(box, header);
 
     var status = document.createElement("div");
     status.className = "gate-status";
@@ -106,6 +170,7 @@
     box.appendChild(grund);
 
     _renderPlan(box, ctx.plan || { text: "" });
+    _renderDiff(box, ctx);
     _renderScout(box, ctx.scout);
     _renderHistorie(box, ctx.historie);
 

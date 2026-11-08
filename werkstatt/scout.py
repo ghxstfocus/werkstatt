@@ -740,7 +740,7 @@ def _run_scout(
         lambda: ask_llm(
             api_key, _scout_system_with_nachfolger(state), user_content,
             model="deepseek-chat", temperature=0.2, max_tokens=4000,
-            aufgabe="scout",
+            aufgabe="scout", state=state,
         ),
     )
     if not reply.ok:

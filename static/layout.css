@@ -1141,3 +1141,41 @@ body {
 .tl-knoten[data-status="info"] .tl-dot {
   background: #94a3b8;
 }
+
+/* OP-310: Workbench feste Hoehe, intern scrollen */
+.workbench-drawer {
+  flex: 0 0 40vh !important;
+  max-height: 40vh !important;
+}
+.workbench-drawer[data-offen="false"] { flex: 0 0 32px !important; }
+.workbench-body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+.wb-pane.aktiv {
+  position: absolute; inset: 0;
+  overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column;
+}
+.audit-live, .audit-history { flex: 1; min-height: 0; overflow-y: auto; }
+
+/* Timeline-Gruppen */
+.tl-group { margin: 4px 0 4px 4px; border-left: 1px solid rgba(255,255,255,0.06); }
+.tl-group > summary {
+  cursor: pointer; padding: 3px 8px;
+  font-size: 11px; color: var(--text-dim);
+  list-style: none; border-radius: 3px;
+  display: flex; align-items: center; gap: 6px;
+}
+.tl-group > summary:hover { background: rgba(255,255,255,0.03); color: var(--text); }
+.tl-group > summary::-webkit-details-marker { display: none; }
+.tl-group > summary::before { content: "\25B8"; display: inline-block;
+  transition: transform 120ms; opacity: 0.5; }
+.tl-group[open] > summary::before { transform: rotate(90deg); }
+
+/* Gate-Panel Draggable + Diff */
+.gate-header { cursor: move; user-select: none; }
+.gate-diff-stat { color: var(--text-dim) !important; font-size: 10px !important; max-height: 120px; }
+.gate-diff-body { max-height: 400px; font-size: 10px !important; }
+.diff-line { display: block; }
+.diff-plus { color: #4ade80; background: rgba(74,222,128,0.05); }
+.diff-minus { color: #f87171; background: rgba(248,113,113,0.05); }
+.diff-hunk { color: #60a5fa; opacity: 0.7; }
+.diff-meta { color: var(--text-dim); }

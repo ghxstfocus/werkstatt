@@ -64,29 +64,91 @@
       leer.textContent = "keine Details";
       body.appendChild(leer);
     }
+
+    var GROUPS = {
+      "builder": "Builder", "verify": "Verify", "reviewer": "Reviewer",
+      "explorer": "Explorer", "scout": "Scout", "planner": "Planner",
+      "loop_plan": "Plan-Gate", "loop_human": "Human-Gate",
+      "loop_reflection": "Reflection", "reflection": "Reflection",
+      "loop_patch": "Patches", "loop_task": "Tasks",
+      "llm": "LLM-Calls", "skill": "Skills",
+    };
+    var gruppen = {};
+    var andere = [];
     kinder.forEach(function (ch) {
+      var kind = (ch.kind || "").toLowerCase();
+      var treffer = null;
+      for (var prefix in GROUPS) {
+        if (kind.startsWith(prefix + "_") || kind === prefix) {
+          treffer = prefix;
+          break;
+        }
+      }
+      if (treffer) {
+        if (!gruppen[treffer]) gruppen[treffer] = [];
+        gruppen[treffer].push(ch);
+      } else {
+        andere.push(ch);
+      }
+    });
+
+    function baueZeile(ch) {
       var row = document.createElement("div");
       row.className = "tl-child";
       row.dataset.status = ch.status || "";
       row.title = (ch.kind || "") + (ch.ts ? "\n" + ch.ts : "");
-
       var dot = document.createElement("span");
       dot.className = "tl-child-dot";
-
       var lbl = document.createElement("span");
       lbl.className = "tl-child-label";
       lbl.textContent = ch.detail || ch.kind || "";
-
       var ts = document.createElement("span");
       ts.className = "tl-child-ts";
       var m = (ch.ts || "").match(/T(\d{2}:\d{2}:\d{2})/);
       ts.textContent = m ? m[1] : "";
-
       row.appendChild(dot);
       row.appendChild(lbl);
       row.appendChild(ts);
-      body.appendChild(row);
+      return row;
+    }
+
+    var reihenfolge = ["explorer", "scout", "planner", "loop_plan",
+                       "builder", "loop_patch", "loop_task",
+                       "verify", "reviewer",
+                       "loop_reflection", "reflection",
+                       "loop_human", "llm", "skill"];
+    var verarbeitet = {};
+    reihenfolge.forEach(function (prefix) {
+      if (!gruppen[prefix]) return;
+      verarbeitet[prefix] = true;
+      var items = gruppen[prefix];
+      var grpDet = document.createElement("details");
+      grpDet.className = "tl-group";
+      var grpKey = "werkstatt-tl-group-" + prefix;
+      try { if (localStorage.getItem(grpKey) === "1") grpDet.open = true; } catch (e) {}
+      grpDet.addEventListener("toggle", function () {
+        try { localStorage.setItem(grpKey, grpDet.open ? "1" : "0"); } catch (e) {}
+      });
+      var grpSum = document.createElement("summary");
+      var errCount = items.filter(function (x) { return x.status === "error"; }).length;
+      grpSum.textContent = GROUPS[prefix] + " (" + items.length + ")" +
+                           (errCount > 0 ? "  \u2717 " + errCount : "");
+      grpDet.appendChild(grpSum);
+      items.forEach(function (ch) { grpDet.appendChild(baueZeile(ch)); });
+      body.appendChild(grpDet);
     });
+    Object.keys(gruppen).forEach(function (prefix) {
+      if (verarbeitet[prefix]) return;
+      var items = gruppen[prefix];
+      var grpDet = document.createElement("details");
+      grpDet.className = "tl-group";
+      var grpSum = document.createElement("summary");
+      grpSum.textContent = (GROUPS[prefix] || prefix) + " (" + items.length + ")";
+      grpDet.appendChild(grpSum);
+      items.forEach(function (ch) { grpDet.appendChild(baueZeile(ch)); });
+      body.appendChild(grpDet);
+    });
+    andere.forEach(function (ch) { body.appendChild(baueZeile(ch)); });
     el.appendChild(body);
 
     if (_leseState(k.id) === "1") el.classList.add("offen");
