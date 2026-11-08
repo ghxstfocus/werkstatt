@@ -3285,3 +3285,21 @@ lernen statt neu zu raten. Zirkel-Falle: ohne kausale Rekonstruktion
 dreht der Loop im Kreis.
 
 AK (a)-(h), Tests 5 -> 8.
+
+
+## 2026-11-08 — OP-370 (detect) + OP-350 AK (.env-Schutz)
+
+**OP-370: detect() — Secret-Detection ohne Redaction.**
+Nachnutzen statt redact+restore: detect() findet IPv4/6, API-Keys,
+E-Mails, credential_urls, private_paths in Payloads. audit()
+schreibt secret_detected-Event (Typ, nicht Wert). Statusbar warnt.
+Keine Redaction, keine LLM-Aenderung. Begruendung: Werkstatt baut
+Code, kein User-Daten-Pipeline. Restore-Risiko > Leak-Risiko.
+
+**OP-350 AK erweitert um .env-Schutz.**
+Scaffolder schreibt excluded_from_explorer-Liste in
+.werkstatt/script-bank.yaml. .env-Template mit Platzhaltern.
+Explorer respektiert die Liste fail-closed.
+
+Industrie-Beleg (Cursor/Claude Code): Zugriffsvermeidung robuster
+als Redaction fuer Code-Pipelines.

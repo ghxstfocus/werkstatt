@@ -868,8 +868,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Phase:** Phase-1 (Cockpit-Fundament)
 - **Betroffene Dateien:** `werkstatt/scaffold.py`, `werkstatt/templates/greenfield/` (neu), `tests/test_scaffold_greenfield.py` (neu)
 - **Problem:** `scaffold.py` legt PFLICHTDATEIEN an, aber ohne Greenfield-Struktur (leere Verzeichnisse, minimale Config, Verify-Kette, OP-Stub, Script-Bank-Variablen).
-- **Akzeptanzkriterien:** (a) `scaffold(name, dir, greenfield=True)` erzeugt: `src/`, `tests/`, `.werkstatt/`, `docs/adr/`, `docs/STATUS.md` mit 3 Starter-OPs. (b) `.gitkeep`. (c) `.werkstatt/script-bank.yaml`. (d) Idempotent, `--dry-run`.
-- **Tests:** `tests/test_scaffold_greenfield.py` (4 Tests).
+- **Akzeptanzkriterien:** (a) `scaffold(name, dir, greenfield=True)` erzeugt: `src/`, `tests/`, `.werkstatt/`, `docs/adr/`, `docs/STATUS.md` mit 3 Starter-OPs. (b) `.gitkeep`. (c) `.werkstatt/script-bank.yaml` mit `excluded_from_explorer`-Liste (`.env`, `.env.*`, `*.secret`, `*.pem`, `*.key`, `credentials*`, `*token*`). (d) `.env`-Template mit Platzhaltern statt echten Werten (`DB_HOST=<set-me>`). (e) Explorer (`werkstatt/explorer.py`) respektiert `excluded_from_explorer` aus `script-bank.yaml` — fail-closed wenn Datei fehlt: `.env`-Dateien werden NIE gelesen, auch ohne Config. (f) Idempotent, `--dry-run`.
+- **Tests:** `tests/test_scaffold_greenfield.py` (6 Tests: Struktur, idempotent, dry-run, fehlendes Arg, `.env`-Template, Explorer-Filter).
 - **Blockiert von:** OP-332
 
 ### OP-351: UI-Maske Projekt-Anlage
@@ -926,6 +926,17 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Akzeptanzkriterien:** (a) `schreibe_plan(idee, struktur, komponenten)` → 3 Dateien. (b) OPs OP-001..OP-005 mit Blocker-Ketten. (c) `docs/ARCHITECTURE.md` nennt Ordner, Komponenten, Abhaengigkeiten. (d) User-Bestaetigung.
 - **Tests:** `tests/test_arch_output.py` (3 Tests).
 - **Blockiert von:** OP-360, OP-361
+
+### OP-370: detect() — Secret-Detection ohne Redaction
+
+- **Status:** open
+- **Typ:** security
+- **Phase:** Phase-3 (Politur, aber früh)
+- **Betroffene Dateien:** `werkstatt/redaction.py` (neu), `werkstatt/audit.py`, `static/statusleiste.js`, `static/layout.css`, `tests/test_redaction.py` (neu)
+- **Problem:** Werkstatt arbeitet an Code, aber Explorer/Builder/Reviewer lesen Dateien die API-Keys, .env-Werte, IPs oder Credentials-URLs enthalten können. Die landen dann im LLM-Prompt (DeepSeek) im Klartext. Kein Schutz, kein Warnsystem.
+- **Akzeptanzkriterien:** (a) `detect(text) -> list[Finding]` mit Finding=`{typ, start, ende}`. Katalog: `ip4`, `ip6`, `api_key` (sk-, ghp_, xoxb-, AKIA, ...), `email`, `credential_url` (scheme://user:pass@...), `private_path` (/home/<user>/, /Users/<user>/). (b) `audit()` prueft Payload bei jedem Aufruf — bei Finding: Event `secret_detected {typ, quelle_kind}` (NICHT der Original-Wert). (c) Statusbar zeigt Warnung `\u26a0 N Secrets` (`--sem-warn`) bei `secret_detected` in letzten 24h. (d) Kein Restore, keine Redaction, keine LLM-Aenderung. (e) Doku-Klarstellung im SKILL: Detect ist Hinweis, keine Garantie — bei echten Secrets lokales Modell waehlen.
+- **Tests:** `tests/test_redaction.py` (10 Tests: pro Typ Positiv, Negativ-Kontexte, Performance <5ms/10k Zeichen).
+- **Blockiert von:** —
 
 ## Erledigt (Auto-Log)
 
