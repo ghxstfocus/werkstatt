@@ -36,6 +36,17 @@ def make_gate_id(kind: str) -> str:
     return f"{kind}-{uuid.uuid4().hex[:8]}"
 
 
+def _flush_projection() -> None:
+    """OP-323c: JSONL -> SQLite sofort, damit EventStore.query() das
+    Gate-Event sieht. Gates sind kritisch, kein Batch-Wait."""
+    try:
+        from werkstatt.projection import Projector
+        Projector().tail()
+    except Exception as exc:
+        import sys as _sys
+        _sys.stderr.write(f"gate_bridge._flush_projection: {exc!r}\n")
+
+
 def signal_open(
     run_id: str,
     gate_id: str,
@@ -43,15 +54,17 @@ def signal_open(
     optionen: str = "jna",
 ) -> None:
     """Schreibt ein gate_open-Event, damit die UI das Gate anzeigen kann."""
-    EventStore().append(
-        run_id=run_id,
-        kind=KIND_OPEN,
-        payload={
-            "gate_id": gate_id,
-            "prompt": prompt,
-            "optionen": optionen,
-        },
-    )
+    # OP-323: audit() statt EventStore().append (JSONL autoritativ)
+    from pathlib import Path as _Path
+
+    from werkstatt.audit import audit
+    audit("gate_open", {
+        "gate_id": gate_id,
+        "prompt": prompt,
+        "optionen": optionen,
+        "run_id": run_id,
+    }, _Path("."), "werkstatt")
+    _flush_projection()
 
 
 def _finde_antwort(
@@ -85,11 +98,16 @@ def wait(
             return antwort
         time.sleep(poll_interval)
     # OP-304: Timeout sichtbar machen — sonst bleibt gate_open ewig stehen
-    EventStore().append(
-        run_id=run_id,
-        kind="gate_expired",
-        payload={"gate_id": gate_id, "timeout_s": timeout},
-    )
+    # OP-323: audit() statt EventStore().append
+    from pathlib import Path as _Path2
+
+    from werkstatt.audit import audit
+    audit("gate_expired", {
+        "gate_id": gate_id,
+        "timeout_s": timeout,
+        "run_id": run_id,
+    }, _Path2("."), "werkstatt")
+    _flush_projection()
     raise GateTimeout(
         f"Gate {gate_id} nach {timeout}s nicht beantwortet"
     )
@@ -122,11 +140,15 @@ def expire_for_run(run_id: str, grund: str = "loop_ended") -> int:
         gid = (ev.get("payload") or {}).get("gate_id")
         if not gid or gid in beantwortet or gid in bereits_expired:
             continue
-        es.append(
-            run_id=run_id,
-            kind="gate_expired",
-            payload={"gate_id": gid, "grund": grund, "auto": True},
-        )
+        # OP-323c: audit() statt EventStore().append
+        from pathlib import Path as _Path3
+
+        from werkstatt.audit import audit
+        audit("gate_expired", {
+            "gate_id": gid,
+            "grund": grund,
+            "run_id": run_id,
+        }, _Path3("."), "werkstatt")
         n += 1
     return n
 

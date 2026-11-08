@@ -167,11 +167,20 @@ def _registriere_event_routen(app: FastAPI) -> None:
                                 detail="gate abgelaufen (timeout)")
         if gate_id in beantwortet:
             raise HTTPException(status_code=409, detail="gate schon beantwortet")
-        store.append(
-            run_id=geprueft,
-            kind="gate_answered",
-            payload={"gate_id": gate_id, "answer": answer},
-        )
+        # OP-323c: audit() statt store.append() + flush fuer wait()
+        from pathlib import Path as _Path
+
+        from werkstatt.audit import audit
+        from werkstatt.projection import Projector as _Projector
+        audit("gate_answered", {
+            "gate_id": gate_id,
+            "answer": answer,
+            "run_id": geprueft,
+        }, _Path("."), "werkstatt")
+        try:
+            _Projector().tail()
+        except Exception:
+            pass
         return {"ok": True, "gate_id": gate_id}
 
 

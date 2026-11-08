@@ -127,3 +127,41 @@ def test_stream_und_semantic_beide(tmp_path, monkeypatch):
     proj = _pj(tmp_path)
     r = proj.rebuild()
     assert r["eingefuegt"] == 2
+
+def test_schema_migration_event_id(tmp_path, monkeypatch):
+    """OP-323c: Projector muss fehlende event_id-Spalte nachruesten."""
+    from werkstatt import projection
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+
+    # Alte EventStore-Inits nachbilden: Tabelle OHNE event_id
+    db = tmp_path / ".werkstatt" / "events.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    import sqlite3
+    with sqlite3.connect(str(db)) as c:
+        c.execute(
+            "CREATE TABLE events ("
+            "seq INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "run_id TEXT NOT NULL, kind TEXT NOT NULL, "
+            "phase TEXT, status TEXT, payload TEXT NOT NULL, ts TEXT NOT NULL)"
+        )
+        c.execute("INSERT INTO events (run_id, kind, payload, ts) "
+                  "VALUES ('old', 'test', '{}', 't0')")
+
+    # Projector init sollte ALTER COLUMN machen + Rebuild funktionieren
+    from werkstatt.projection import Projector
+    proj = Projector()
+    cols = {r[1] for r in sqlite3.connect(str(db)).execute(
+        "PRAGMA table_info(events)"
+    )}
+    assert "event_id" in cols
+
+    # Rebuild mit JSONL-Event
+    d = tmp_path / "audit-logs"
+    d.mkdir(exist_ok=True)
+    import json
+    (d / "semantic-2026-11-08.jsonl").write_text(
+        json.dumps({"audit_id": "a1", "event_id": "e1", "run_id": "r1",
+                    "kind": "loop_ended", "timestamp": "t1"}) + "\n"
+    )
+    r = proj.rebuild()
+    assert r["eingefuegt"] == 1

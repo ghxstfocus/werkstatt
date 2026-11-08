@@ -47,3 +47,4 @@ logs/
 
 # OP-323: Stream-Events (hochfrequent, nicht ins git)
 audit-logs/stream-*.jsonl
+audit-logs/stream-migrated-*.jsonl

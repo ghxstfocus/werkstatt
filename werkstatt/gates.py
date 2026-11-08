@@ -50,7 +50,7 @@ def set_headless(flag: bool) -> None:
     _HEADLESS = flag
 
 
-def _frage_gate(kind: str, prompt: str, optionen: str = "jna") -> str:
+def _frage_gate(kind: str, prompt: str, optionen: str = "jna", timeout: float | None = None) -> str:
     """Fragt interaktiv (input) oder per Event-Store (gate_bridge)."""
     if not _HEADLESS:
         return input(prompt)
@@ -66,7 +66,8 @@ def _frage_gate(kind: str, prompt: str, optionen: str = "jna") -> str:
     gate_id = gate_bridge.make_gate_id(kind)
     gate_bridge.signal_open(run_id, gate_id, prompt, optionen)
     try:
-        return gate_bridge.wait(run_id, gate_id)
+        _kw = {} if timeout is None else {"timeout": timeout}
+        return gate_bridge.wait(run_id, gate_id, **_kw)
     except gate_bridge.GateTimeout as exc:
         # Fail-closed: Loop-Antwort 'n' (= reject), Reflection kann greifen.
         # _frage_gate hat keinen RunState -> EventStore direkt.

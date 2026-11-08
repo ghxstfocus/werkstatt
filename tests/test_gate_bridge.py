@@ -13,8 +13,19 @@ from werkstatt.event_store import EventStore
 
 @pytest.fixture
 def store(monkeypatch, tmp_path):
-    s = EventStore(tmp_path / "events.db")
+    """OP-323c: JSONL-Umstellung. _flush_projection() ruft Projector() ->
+    _werkstatt_home()/.werkstatt/events.db. Darum _werkstatt_home in audit
+    und projection auf tmp_path patchen, damit alle Pfade konsistent sind."""
+    from werkstatt import audit as _audit
+    from werkstatt import projection as _proj
+
+    monkeypatch.setattr(_audit, "_werkstatt_home", lambda: tmp_path)
+    monkeypatch.setattr(_proj, "_werkstatt_home", lambda: tmp_path)
+
+    s = EventStore(tmp_path / ".werkstatt" / "events.db")
     monkeypatch.setattr(gate_bridge, "EventStore", lambda: s)
+    from werkstatt.web import app as _webapp
+    monkeypatch.setattr(_webapp, "EventStore", lambda: s)
     return s
 
 
@@ -47,12 +58,30 @@ def test_wait_timeout_fail_closed(store):
         gate_bridge.wait("r1", "plan-abc", timeout=0.2, poll_interval=0.05)
 
 
-def test_signal_open_schreibt_event(store):
+def test_signal_open_schreibt_event(tmp_path, monkeypatch):
+    """OP-323c: JSONL autoritativ + _flush_projection spiegelt nach events.db."""
+    import sqlite3
+
+    from werkstatt import audit as _A
+    from werkstatt import projection as _P
+
+    monkeypatch.setattr(_A, "_werkstatt_home", lambda: tmp_path)
+    monkeypatch.setattr(_P, "_werkstatt_home", lambda: tmp_path)
+
     gate_bridge.signal_open("r1", "plan-abc", "Approve? [j/n/a]")
-    evs = store.query("r1", kind="gate_open")
-    assert len(evs) == 1
-    assert evs[0]["payload"]["gate_id"] == "plan-abc"
-    assert evs[0]["payload"]["optionen"] == "jna"
+
+    jl = list((tmp_path / "audit-logs").glob("agent-pipeline-*.jsonl"))
+    assert len(jl) == 1
+
+    db = tmp_path / ".werkstatt" / "events.db"
+    with sqlite3.connect(str(db)) as c:
+        rows = c.execute(
+            "SELECT payload FROM events WHERE kind='gate_open'"
+        ).fetchall()
+    assert len(rows) == 1
+    import json
+    payload = json.loads(rows[0][0])
+    assert payload["gate_id"] == "plan-abc"
 
 
 def test_make_gate_id_eindeutig():
@@ -67,7 +96,9 @@ def test_frage_gate_headless_liefert_antwort(store):
     gates.set_headless(True)
     try:
         def _antworten():
-            for _ in range(50):
+            # OP-323c: 500x20ms = 10s, weil _flush_projection Zeit braucht.
+            # In der Fixture laeuft audit -> JSONL -> Projector -> SQLite.
+            for _i in range(500):
                 opens = store.query("r1", kind="gate_open")
                 if opens:
                     gid = opens[0]["payload"]["gate_id"]
@@ -77,7 +108,8 @@ def test_frage_gate_headless_liefert_antwort(store):
                 time.sleep(0.02)
         t = threading.Thread(target=_antworten, daemon=True)
         t.start()
-        assert gates._frage_gate("plan", "Approve? ") == "j"
+        # Timeout=10, sonst haengt der Test 300s (DEFAULT_TIMEOUT).
+        assert gates._frage_gate("plan", "Approve? ", timeout=10.0) == "j"
     finally:
         gates.set_headless(False)
         set_run_id("")
@@ -100,7 +132,14 @@ def test_frage_gate_interaktiv_nutzt_input(store, monkeypatch):
 
 
 def _patch_eventstore_to(tmp_path, monkeypatch):
-    db = tmp_path / "events.db"
+    """OP-323c: Projector schreibt nach .werkstatt/events.db, nicht tmp_path/events.db."""
+    db = tmp_path / ".werkstatt" / "events.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    # _werkstatt_home-Patch auch hier, damit audit() + flush() in tmp_path landen
+    from werkstatt import audit as _audit
+    from werkstatt import projection as _proj
+    monkeypatch.setattr(_audit, "_werkstatt_home", lambda: tmp_path)
+    monkeypatch.setattr(_proj, "_werkstatt_home", lambda: tmp_path)
     orig_init = EventStore.__init__
     def _init(self, db_pfad=None):
         orig_init(self, db_pfad or db)

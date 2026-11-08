@@ -38,6 +38,11 @@ class Projector:
                 "payload TEXT NOT NULL, "
                 "ts TEXT NOT NULL)"
             )
+            # OP-323c: Schema-Migration. Aeltere EventStore-Init erzeugt
+            # events ohne event_id. Hier ergaenzen, sonst scheitert INSERT.
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(events)")}
+            if "event_id" not in cols:
+                conn.execute("ALTER TABLE events ADD COLUMN event_id TEXT")
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_event_id "
                 "ON events(event_id)"
