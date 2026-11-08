@@ -239,6 +239,14 @@ body {
 }
 .ambient-item[data-ziel] { cursor: pointer; }
 .ambient-item[data-ziel]:hover { color: var(--text); }
+
+/* OP-301 fix: [hidden] respektieren (display: inline-flex überschreibt sonst) */
+.ambient-item[hidden] { display: none !important; }
+
+/* OP-301 fix: Pulse nur bei data-state="action" (semantisch: Handeln nötig) */
+.ambient-item[data-state="action"] { animation: ambient-pulse 1.5s ease-in-out infinite; }
+
+
 .ambient-icon {
   font-size: 14px;
   line-height: 1;
@@ -269,7 +277,6 @@ body {
 /* Gates */
 .ambient-gates {
   color: var(--sem-action);
-  animation: ambient-pulse 1.5s ease-in-out infinite;
   padding: 1px 6px;
   border: 1px solid var(--sem-action);
   border-radius: 3px;
