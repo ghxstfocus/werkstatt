@@ -1179,3 +1179,291 @@ body {
 .diff-minus { color: #f87171; background: rgba(248,113,113,0.05); }
 .diff-hunk { color: #60a5fa; opacity: 0.7; }
 .diff-meta { color: var(--text-dim); }
+
+
+/* OP-312: Audit-Kalender v2 — kompakt, zentriert, elegant */
+.audit-kalender {
+  flex: 0 0 auto;
+  width: 260px;
+  max-width: 90vw;
+  margin: 12px auto 16px !important;
+  padding: 10px 12px 12px !important;
+  background: linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px solid rgba(255,255,255,0.06) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.kal-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 8px !important;
+  padding: 0 !important;
+}
+
+.kal-nav {
+  width: 22px !important;
+  height: 22px !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 4px !important;
+  color: var(--text-dim) !important;
+  cursor: pointer;
+  font-size: 10px !important;
+  transition: background 120ms, color 120ms;
+}
+.kal-nav:hover {
+  background: rgba(138, 92, 246, 0.15) !important;
+  color: var(--text) !important;
+  border-color: transparent !important;
+}
+
+.kal-titel {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--text) !important;
+  text-transform: capitalize !important;
+  letter-spacing: 0.02em !important;
+  text-align: center !important;
+  flex: 1 !important;
+}
+
+.kal-grid {
+  display: grid !important;
+  grid-template-columns: repeat(7, 1fr) !important;
+  gap: 2px !important;
+  width: 100% !important;
+}
+
+.kal-wtag {
+  text-align: center !important;
+  font-size: 9px !important;
+  color: var(--text-dim) !important;
+  opacity: 0.5 !important;
+  padding: 4px 0 6px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  font-weight: 500 !important;
+}
+
+.kal-tag {
+  aspect-ratio: 1 / 1 !important;
+  width: 100% !important;
+  min-height: 28px !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  color: var(--text-dim) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+  font-family: inherit !important;
+  position: relative !important;
+  padding: 0 !important;
+  transition: background 120ms, color 120ms, border-color 120ms;
+  opacity: 1 !important;
+}
+
+.kal-tag.leer {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.kal-tag.keine-events {
+  color: var(--text-dim) !important;
+  opacity: 0.25 !important;
+  cursor: default !important;
+  pointer-events: none !important;
+}
+
+.kal-tag.hat-events {
+  color: var(--text) !important;
+}
+.kal-tag.hat-events:hover {
+  background: rgba(138, 92, 246, 0.18) !important;
+  color: #c4b5fd !important;
+}
+
+.kal-tag.hat-events::after {
+  content: "" !important;
+  position: absolute !important;
+  bottom: 3px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: 3px !important;
+  height: 3px !important;
+  border-radius: 50% !important;
+  background: #60a5fa !important;
+}
+
+.kal-tag.heute {
+  border-color: rgba(167, 139, 250, 0.7) !important;
+  color: #c4b5fd !important;
+  font-weight: 600 !important;
+}
+
+.kal-tag.aktiv {
+  background: #8a5cf6 !important;
+  color: white !important;
+  font-weight: 600 !important;
+  border-color: #8a5cf6 !important;
+  box-shadow: 0 2px 8px rgba(138, 92, 246, 0.4) !important;
+}
+
+.kal-tag.aktiv::after {
+  background: white !important;
+  bottom: 4px !important;
+}
+
+
+
+/* OP-313: Audit-Kalender als Collapsible */
+.audit-kalender-wrap {
+  flex: 0 0 auto;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  background: rgba(0,0,0,0.1) !important;
+}
+.audit-kalender-toggle {
+  padding: 6px 10px !important;
+  font-size: 11px !important;
+  cursor: pointer;
+  color: var(--text-dim) !important;
+  list-style: none !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  user-select: none;
+  border: none !important;
+}
+.audit-kalender-toggle::-webkit-details-marker { display: none !important; }
+.audit-kalender-toggle::before {
+  content: "\25B8";
+  font-size: 9px;
+  opacity: 0.5;
+  transition: transform 120ms;
+  display: inline-block;
+}
+.audit-kalender-wrap[open] .audit-kalender-toggle::before {
+  transform: rotate(90deg);
+}
+.audit-kalender-toggle:hover {
+  color: var(--text) !important;
+  background: rgba(255,255,255,0.02);
+}
+.audit-kalender-count {
+  margin-left: auto;
+  font-size: 10px;
+  opacity: 0.6;
+  font-family: monospace;
+}
+.audit-kalender-wrap[open] .audit-kalender {
+  display: block !important;
+}
+.audit-kalender {
+  display: none !important;
+  width: 260px !important;
+  max-width: calc(100% - 20px) !important;
+  margin: 0 10px 10px 10px !important;
+  padding: 8px 10px 10px 10px !important;
+  background: rgba(0,0,0,0.15) !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255,255,255,0.04) !important;
+  box-shadow: none !important;
+}
+
+
+/* OP-314: Audit-Pane — sichtbare History, horizontale Filter-Bar */
+.audit-filter-bar {
+  display: flex !important;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  align-items: center;
+  background: rgba(0,0,0,0.05);
+}
+.audit-filter-bar select,
+.audit-filter-bar input {
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 10px;
+  padding: 3px 6px;
+  font-family: inherit;
+}
+.audit-filter-bar select { min-width: 100px; }
+.audit-filter-bar input { flex: 1; min-width: 80px; }
+.audit-filter-bar input::placeholder { color: var(--text-dim); opacity: 0.5; }
+.audit-filter-bar button {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+  width: 26px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.audit-filter-bar button:hover {
+  background: rgba(138,92,246,0.15);
+  color: var(--text);
+}
+.audit-filter-bar #audit-status {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-left: auto;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+/* History jetzt als Haupt-Content sichtbar */
+.audit-history {
+  flex: 1 !important;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 8px;
+  border: none !important;
+  background: transparent !important;
+}
+
+/* Live (falls WS-Stream) als Overlay unten */
+.audit-live {
+  flex: 0 0 auto !important;
+  max-height: 30vh;
+  overflow-y: auto;
+  padding: 4px 8px;
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(0,0,0,0.08);
+}
+.audit-live:empty { display: none; }
+
+/* History-Zeilen kompakter */
+.audit-history-zeile {
+  padding: 2px 4px;
+  font-size: 10px;
+  font-family: monospace;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  display: grid;
+  grid-template-columns: 60px 180px 1fr;
+  gap: 6px;
+  align-items: baseline;
+}
+.audit-history-zeile:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+/* Alte Sidebar-CSS deaktivieren (Element existiert nicht mehr) */
+.history-sidebar { display: none !important; }

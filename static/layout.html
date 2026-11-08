@@ -82,21 +82,23 @@
       </nav>
       <div class="workbench-body">
         <div class="wb-pane" data-pane="audit">
-          <div class="audit-kalender" id="audit-kalender"></div>
-          <div class="audit-live" id="audit-live"></div>
-          <aside class="history-sidebar" id="history-sidebar">
-            <div class="fenster-titel">
-              <span>History</span>
-              <button class="history-close" id="history-close" aria-label="History schliessen">&times;</button>
-            </div>
-            <div class="audit-filter">
-              <label>Kind <select id="audit-filter-kind"><option value="">alle</option></select></label>
-              <label>Run <input id="audit-filter-run-id" type="text" placeholder="run_id"></label>
-              <button type="button" id="audit-history-laden">Filtern</button>
-            </div>
-            <div class="audit-history" id="audit-history"></div>
+          <details class="audit-kalender-wrap" id="audit-kalender-wrap">
+            <summary class="audit-kalender-toggle">
+              <span id="audit-kalender-label">Heute</span>
+              <span id="audit-kalender-count" class="audit-kalender-count"></span>
+            </summary>
+            <div class="audit-kalender" id="audit-kalender"></div>
+          </details>
+          <div class="audit-filter-bar">
+            <select id="audit-filter-kind" title="Kind">
+              <option value="">alle Kinds</option>
+            </select>
+            <input id="audit-filter-run-id" type="text" placeholder="run_id filtern" />
+            <button type="button" id="audit-history-laden" title="Neu laden">↻</button>
             <span id="audit-status"></span>
-          </aside>
+          </div>
+          <div class="audit-history" id="audit-history"></div>
+          <div class="audit-live" id="audit-live"></div>
         </div>
         <div class="wb-pane" data-pane="terminal">
           <div class="fenster-titel">

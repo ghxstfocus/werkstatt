@@ -355,6 +355,17 @@ function createAuditPanel(options) {
 
   function _renderKalender(monat, tage) {
     if (!elKalender) return;
+    // Label im Toggle-Summary aktualisieren
+    var lbl = document.getElementById("audit-kalender-label");
+    if (lbl && gewaehlterTag) {
+      var t = new Date(gewaehlterTag + "T00:00:00");
+      var heute = new Date().toISOString().slice(0, 10);
+      if (gewaehlterTag === heute) {
+        lbl.textContent = "Heute, " + t.toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
+      } else {
+        lbl.textContent = t.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "short" });
+      }
+    }
     elKalender.innerHTML = "";
     const teile = monat.split("-").map(Number);
     const jahr = teile[0], monatNr = teile[1];
@@ -421,6 +432,9 @@ function createAuditPanel(options) {
         gewaehlterTag = datum;
         kalenderMonat = monat;
         _renderKalender(monat, tage);
+        // Kalender wieder einklappen
+        var wrap = document.getElementById("audit-kalender-wrap");
+        if (wrap) wrap.open = false;
         ladeHistory();
       });
       grid.appendChild(btn);
@@ -458,6 +472,11 @@ function createAuditPanel(options) {
       }
       _renderHistory();
       _setzeStatus(`${historyEvents.length} eintraege`);
+      // Count im Toggle-Summary
+      var cnt = document.getElementById("audit-kalender-count");
+      if (cnt) {
+        cnt.textContent = historyEvents.length > 0 ? "(" + historyEvents.length + ")" : "";
+      }
     } catch (err) {
       console.warn("audit: history laden fehlgeschlagen", err);
       _setzeStatus("history-fehler");
