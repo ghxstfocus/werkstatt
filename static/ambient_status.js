@@ -59,11 +59,35 @@
   }
 
   function _setTokens(t) {
-    var el = _el("ambient-tokens");
-    if (!el) return;
-    var loop = _fmtTok((t && t.loop_total) || 0);
-    var chat = _fmtTok((t && t.chat_total) || 0);
-    el.textContent = "Loop " + loop + " · Chat " + chat;
+    var root = _el("ambient-tokens");
+    var loopEl = _el("ambient-token-loop");
+    var chatEl = _el("ambient-token-chat");
+    var sepEl = _el("ambient-token-sep");
+    if (!root || !loopEl || !chatEl) return;
+
+    var L = (t && t.loop_total) || 0;
+    var C = (t && t.chat_total) || 0;
+
+    if (L > 0) {
+      loopEl.hidden = false;
+      var lv = loopEl.querySelector(".ambient-val");
+      if (lv) lv.textContent = _fmtTok(L);
+    } else {
+      loopEl.hidden = true;
+    }
+
+    if (C > 0) {
+      chatEl.hidden = false;
+      var cv = chatEl.querySelector(".ambient-val");
+      if (cv) cv.textContent = _fmtTok(C);
+    } else {
+      chatEl.hidden = true;
+    }
+
+    var beide = !loopEl.hidden && !chatEl.hidden;
+    if (sepEl) sepEl.hidden = !beide;
+
+    root.hidden = loopEl.hidden && chatEl.hidden;
   }
 
   function _setGates(n) {

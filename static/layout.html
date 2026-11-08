@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Werkstatt</title>
-  <link rel="stylesheet" href="/static/layout.css?v=1794154255">
+  <link rel="stylesheet" href="/static/layout.css?v=1794154831">
 </head>
 <body>
 
@@ -24,7 +24,15 @@
       <span class="ambient-label">Idle</span>
     </span>
     <span class="ambient-item" id="ambient-last-run" data-ziel="timeline" title="Letzter Run">Letzter Run: —</span>
-    <span class="ambient-item" id="ambient-tokens" title="Loop-Token / Chat-Token">Loop 0 · Chat 0</span>
+    <span class="ambient-item ambient-tokens" id="ambient-tokens" title="Loop- und Chat-Token" hidden>
+      <span class="ambient-token-part" id="ambient-token-loop" hidden>
+        <span class="ambient-icon" aria-hidden="true">↻</span><span class="ambient-label">Loop</span> <span class="ambient-val">0</span>
+      </span>
+      <span class="ambient-token-sep" id="ambient-token-sep" hidden>·</span>
+      <span class="ambient-token-part" id="ambient-token-chat" hidden>
+        <span class="ambient-icon" aria-hidden="true">◆</span><span class="ambient-label">Chat</span> <span class="ambient-val">0</span>
+      </span>
+    </span>
     <span class="ambient-item ambient-gates" id="ambient-gates" data-ziel="gate-panel" hidden>Gates offen</span>
   </div>
 
@@ -176,6 +184,6 @@
   <script src="/static/workbench.js?v=20261107a"></script>
   <script src="/static/gate_panel.js?v=20261108a"></script>
   <script src="/static/detail_drawer.js?v=20261108a"></script>
-  <script src="/static/ambient_status.js?v=1794154255"></script>
+  <script src="/static/ambient_status.js?v=1794154831"></script>
 </body>
 </html>
