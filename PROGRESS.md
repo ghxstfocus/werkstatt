@@ -3345,3 +3345,51 @@ pytest 1515 passed.
   /ambient /status /timeline /tokens)
 
 pytest 1515 passed.
+
+## OP-306a: Tab-Persistenz via localStorage (2026-11-08)
+
+**Commit:** f5d333a
+
+**Was:** `static/tabs.js` persistiert offene Tabs in
+`localStorage["werkstatt-tabs:v1"]`. Bei Reload werden sie
+wiederhergestellt (Shape-Validierung, Debouncing, In-Memory-Fallback
+bei localStorage-Fehler, `removeItem` bei 0 Tabs).
+
+**Implementierungs-Details:**
+- `_persistiere_tabs()`: 50ms debounce, Shape-Validierung,
+  `removeItem` bei 0 Tabs
+- `_lade_gespeicherte_tabs()`: JSON.parse + Array- und
+  projekt-String-Validierung (defensiv gegen korrupte/manuell
+  editierte Daten)
+- `_rehydriere_laeuft`-Guard gegen Persist waehrend Rehydration
+- Rehydration ersetzt hardcoded `startId = neuerTab("werkstatt")`
+- Zaehler waechst beim Rehydrieren mit, keine ID-Kollision
+
+**Tests:** `tests/test_ui_tab_persistenz.py` (14 Tests, Spec-First
+nach ADR-0015/0016): `TabSpiegel`-Klasse bildet JS-Verhalten nach.
+10 Verhaltens-Tests (leerer Storage -> Default, gespeichert ->
+wiederhergestellt, korruptes JSON -> Default, stale -> gefiltert,
+Zaehler-Kollision, letzter Tab loescht Key, finale Persistenz,
+Aktiv-Persistenz). 4 Drift-Guards (Key-Literal im JS, Funktions-
+Existenz, Klammer-Balance als node--check-Ersatz, Cache-Buster-
+Synchronitaet).
+
+**AK-Anpassungen (User-bestaetigt 2026-11-08):**
+- Key `werkstatt-tabs:v1` statt AK-`werkstatt_tabs` (Versionierung,
+  Schema-Migration moeglich)
+- Test-Datei `test_ui_tab_persistenz.py` statt `test_tabs_persist.py`,
+  14 statt 4 Tests (Spec-First)
+- AK-Punkt (f) als Lesart A interpretiert: leerer Storage -> Default-
+  Tab `werkstatt`. Overview-Screen als Startansicht wird OP-306b
+  (Workspace-Overview-Shell), nicht in OP-306a.
+
+**Geaendert:**
+- `static/tabs.js`: +100 Zeilen (Konstanten + Helper + Rehydration)
+- `static/layout.html`: Cache-Buster synchron auf 1794171554
+- `tests/test_ui_tab_persistenz.py`: neu (14 Tests)
+
+**pytest:** 1521 passed, 5 skipped.
+
+**OP-306b wird aufgewertet** zu "Workspace-Overview-Shell"
+(Projekt-Karten + Sparklines + KPI + Home-Navigation) — Startansicht
+wird Overview statt Default-Tab. Siehe STATUS.md OP-306b.

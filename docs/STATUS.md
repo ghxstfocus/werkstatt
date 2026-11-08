@@ -1463,27 +1463,24 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Tests:** `tests/test_redaction.py` (10 Tests: pro Typ Positiv, Negativ-Kontexte, Performance <5ms/10k Zeichen).
 - **Blockiert von:** —
 
-### OP-306a: Tab-Persistenz (localStorage)
+### OP-306b: Workspace-Overview-Shell (Projekt-Karten + Sparklines + Home-Navigation)
 
 - **Status:** open
 - **Typ:** ui-feature
 - **Phase:** Phase-2 (Focus)
-- **Betroffene Dateien:** `static/tabs.js`, `tests/test_tabs_persist.py` (neu)
-- **Problem:** Bei Browser-Reload sind alle Tabs weg ausser `werkstatt` (startId-Hardcode in tabs.js:251). Der User muss nach jedem Reload alle Projekte neu anlegen/oeffnen.
-- **Akzeptanzkriterien:** (a) Offene Tabs werden in `localStorage["werkstatt_tabs"]` als JSON gespeichert: `[{projekt, aktiv}, ...]`. (b) Bei `DOMContentLoaded`: gespeicherte Tabs wiederherstellen (statt startId-Hardcode). (c) Aktiver Tab bleibt aktiv nach Reload. (d) "Tab schliessen" entfernt aus localStorage. (e) Fallback: wenn localStorage leer/unparsebar -> Default `werkstatt`. (f) Rekursiv: 0 Tabs geschlossen -> Default-Tab.
-- **Tests:** `tests/test_tabs_persist.py` (4 Tests: save/load, schliessen, leerer state, unparsebar).
+- **Betroffene Dateien:** `werkstatt/web/app.py` (`GET /api/overview`), `werkstatt/web/aggregate.py` (Sparkline/KPI-Aggregation, falls nicht vorhanden: neu), `static/overview.js` (neu), `static/tabs.js` (Home-Button + Pause-Logik), `static/layout.html` (Overview-Screen + Home-Button + CSS-Variablen), `tests/test_overview.py` (neu), `tests/test_overview_shell_spec.py` (neu)
+- **Problem:** (1) Angelegte Projekte in `/opt/*` sind unsichtbar wenn sie keinen Tab haben. (2) Der Startzustand ist ein einzelner `werkstatt`-Tab statt einer Uebersicht — Profi-Standard (JetBrains New UI, VS Code Welcome, Linear, Notion) ist ein Overview-Screen mit Projekt-Karten und dauerhaft erreichbarer Home-Navigation. (3) Kein visuelles Feedback zur Bau-Aktivitaet pro Projekt, obwohl die Daten (Event-Architektur OP-319..323) vorhanden sind.
+- **Akzeptanzkriterien:**
+  (a) Overview-Screen als Default bei leerem Storage (statt `werkstatt`-Tab) — ersetzt OP-306a-Fallback.
+  (b) Overview zeigt Projekt-Karten fuer alle `/opt/*`-Projekte mit `docs/STATUS.md`.
+  (c) Jede Karte zeigt: Status-Dot (Loop laeuft / fertig / Fehler / idle), 30-Tage-Sparkline der Loop-Runs (SVG `<polyline>`), KPI-Zeile (Runs total, Erfolgsquote, offene OPs), relativer letzter Run.
+  (d) Top-Bereich "Diese Woche am meisten gebaut": Top-3 Projekte nach Run-Anzahl (7-Tage-Fenster).
+  (e) Home-Button in der Tab-Leiste (immer sichtbar): klick → Overview kommt nach vorne, Tabs bleiben im Hintergrund erhalten.
+  (f) Klick auf Projekt-Karte → Tab wird erstellt (falls nicht vorhanden) + aktiv.
+  (g) Klick auf Tab (der im Hintergrund war) → zurueck in Projekt, Overview wird pausiert.
+  (h) Fallback: keine Projekte → Overview mit Hinweis "Keine Projekte — Neues anlegen" (nutzt `project_create.js`-Modal).
+- **Tests:** `tests/test_overview.py` (~12 Tests: Backend-Aggregation, Sparkline-Daten, Top-3, Erfolgsquote, Fallback bei 0 Projekten) + `tests/test_overview_shell_spec.py` (~8 Tests: Spec-First via `OverviewSpiegel`-Klasse: Home-Klick, Projekt-Klick, Tab-Pause, Default-Overview, Fallback). Spec-First nach ADR-0015/0016.
 - **Blockiert von:** —
-
-### OP-306b: Projekt-Selector (alle /opt/-Projekte)
-
-- **Status:** open
-- **Typ:** ui-feature
-- **Phase:** Phase-2 (Focus)
-- **Betroffene Dateien:** `werkstatt/web/app.py` (`GET /api/projects/list`), `static/tabs.js` (`+`-Button-Dropdown erweitern), `tests/test_project_list.py` (neu)
-- **Problem:** Projekte die in `/opt/` liegen aber keinen Tab haben, sind unsichtbar. Man kann sie nur per Modal neu anlegen (was bei existierendem Verzeichnis 409 gibt).
-- **Akzeptanzkriterien:** (a) `GET /api/projects/list` scannt `/opt/*/docs/STATUS.md`, liefert `[{name, pfad, letzter_run, ops_count}]`. (b) `+`-Modal bekommt Selector "Existierendes oeffnen" vs. "Neu anlegen". (c) Bei "Oeffnen": Tab wird geoeffnet (kein API-Create). (d) `POST /api/projects/{name}/open` markiert Projekt als geoeffnet (schreibt project-eigene `state`). (e) Nur lesbarer Pfad `/opt/`.
-- **Tests:** `tests/test_project_list.py` (5 Tests: list, filter, ein neues Projekt, ungueltiger Name, oeffnen).
-- **Blockiert von:** OP-306a (weil Tabs persistiert sein muessen um sie zu listen)
 
 ### OP-306c: Multi-Projekt-Datenquellen (SQLite `project`-Spalte)
 
@@ -1533,6 +1530,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
+
+- 2026-11-08 | OP-306a | done | Tab-Persistenz via localStorage. Commit f5d333a. 10 Verhaltens-Tests + 4 Drift-Guards (Spec-First nach ADR-0015/0016), Klammer-Balance als node--check-Ersatz. Key `werkstatt-tabs:v1` statt AK-`werkstatt_tabs` — Schema-Versionierung, User-bestaetigt 2026-11-08. Test-Datei `tests/test_ui_tab_persistenz.py` statt AK-`tests/test_tabs_persist.py`, 14 statt 4 Tests. AK-Punkt (f) als Lesart A interpretiert (leerer Storage -> Default-Tab `werkstatt`); Overview-Screen als Startansicht ist OP-306b (Workspace-Overview-Shell). pytest 1521 passed.
 
 - 2026-11-08 | OP-323 | done | Wiring. SQLite-Write aus _publish entfernt (JSONL einzige Quelle). Flush-Hook in audit.py (nach 100 Events Projector.tail). Endpoint /api/projects/{name}/projection/status. Statusleiste zeigt Proj-OK / Proj-Warnung bei Divergenz. .gitignore um stream-*.jsonl. **Bugfix:** audit_id mit UUID-Suffix (Kollision bei schnellen Calls behoben), event_id-Fallback mit file+line. 4 neue Tests. pytest 1452 passed.
 - 2026-11-08 | OP-322 | done | Projector (rebuild/tail/status). JSONL -> SQLite idempotent (event_id UNIQUE, INSERT OR IGNORE), Checkpoint in projection_state, rebuild() deterministisch (Doppel-Rebuild ergibt identischen Hash). 6 neue Tests. pytest 1448 passed.
