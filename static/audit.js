@@ -13,6 +13,7 @@ const SELEKTOREN = {
   filterRunId: "#audit-filter-run-id",
   buttonLaden: "#audit-history-laden",
   status: "#audit-status",
+  kalender: "#audit-kalender",
 };
 
 // Einheitliche Stringifizierung. Wird NIE als HTML interpretiert.
@@ -62,6 +63,9 @@ function createAuditPanel(options) {
   let elFilterRunId = null;
   let elButtonLaden = null;
   let elStatus = null;
+  let elKalender = null;
+  let gewaehlterTag = null;
+  let kalenderMonat = null;
 
   let debounceTimer = null;
 
@@ -73,7 +77,7 @@ function createAuditPanel(options) {
     return `${protokoll}//${host}${pfad}`;
   }
 
-  function _historyUrl(projekt, kind, runId) {
+  function _historyUrl(projekt, kind, runId, datum) {
     const basis = `${basisPfad}/api/projects/${encodeURIComponent(projekt)}/audit`;
     const params = new URLSearchParams();
     params.set("limit", String(HISTORY_LIMIT));
@@ -82,6 +86,10 @@ function createAuditPanel(options) {
     }
     if (runId) {
       params.set("run_id", runId);
+    }
+    if (datum) {
+      params.set("datum_von", datum);
+      params.set("datum_bis", datum);
     }
     return `${basis}?${params.toString()}`;
   }
@@ -296,6 +304,13 @@ function createAuditPanel(options) {
       reconnectTimer = null;
     }
     _renderLive();
+    if (!gewaehlterTag) {
+      gewaehlterTag = new Date().toISOString().slice(0, 10);
+    }
+    if (!kalenderMonat) {
+      kalenderMonat = gewaehlterTag.slice(0, 7);
+    }
+    await _ladeKalenderTage(kalenderMonat);
     await ladeHistory();
     _verbinde();
   }
@@ -323,6 +338,96 @@ function createAuditPanel(options) {
     _renderLive();
   }
 
+  async function _ladeKalenderTage(monat) {
+    if (!elKalender || !aktuellesProjekt) return;
+    try {
+      const antwort = await fetch(
+        "/api/projects/" + encodeURIComponent(aktuellesProjekt) + "/audit/days?month=" + encodeURIComponent(monat),
+        { headers: { Accept: "application/json" } }
+      );
+      if (!antwort.ok) return;
+      const daten = await antwort.json();
+      _renderKalender(daten.month, daten.tage || {});
+    } catch (err) {
+      console.warn("[audit] kalender fehler:", err);
+    }
+  }
+
+  function _renderKalender(monat, tage) {
+    if (!elKalender) return;
+    elKalender.innerHTML = "";
+    const teile = monat.split("-").map(Number);
+    const jahr = teile[0], monatNr = teile[1];
+    const titel = new Date(jahr, monatNr - 1, 1).toLocaleDateString("de-DE", { month: "long", year: "numeric" });
+    const header = document.createElement("div");
+    header.className = "kal-header";
+    const prev = document.createElement("button");
+    prev.className = "kal-nav";
+    prev.textContent = "\u25C0";
+    prev.addEventListener("click", function () {
+      const d = new Date(jahr, monatNr - 2, 1);
+      _ladeKalenderTage(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"));
+    });
+    const titelEl = document.createElement("span");
+    titelEl.className = "kal-titel";
+    titelEl.textContent = titel;
+    const next = document.createElement("button");
+    next.className = "kal-nav";
+    next.textContent = "\u25B6";
+    next.addEventListener("click", function () {
+      const d = new Date(jahr, monatNr, 1);
+      _ladeKalenderTage(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"));
+    });
+    header.appendChild(prev);
+    header.appendChild(titelEl);
+    header.appendChild(next);
+    elKalender.appendChild(header);
+
+    const grid = document.createElement("div");
+    grid.className = "kal-grid";
+    ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].forEach(function (w) {
+      const h = document.createElement("div");
+      h.className = "kal-wtag";
+      h.textContent = w;
+      grid.appendChild(h);
+    });
+    const ersterTag = new Date(jahr, monatNr - 1, 1);
+    const letzterTag = new Date(jahr, monatNr, 0).getDate();
+    let startWtag = ersterTag.getDay() - 1;
+    if (startWtag < 0) startWtag = 6;
+    for (let i = 0; i < startWtag; i++) {
+      const leer = document.createElement("div");
+      leer.className = "kal-tag leer";
+      grid.appendChild(leer);
+    }
+    const heuteStr = new Date().toISOString().slice(0, 10);
+    for (let d = 1; d <= letzterTag; d++) {
+      const datum = monat + "-" + String(d).padStart(2, "0");
+      const anzahl = tage[datum] || 0;
+      const btn = document.createElement("button");
+      btn.className = "kal-tag";
+      btn.textContent = d;
+      btn.dataset.datum = datum;
+      if (anzahl > 0) {
+        btn.classList.add("hat-events");
+        btn.title = anzahl + " Events";
+      } else {
+        btn.classList.add("keine-events");
+        btn.disabled = true;
+      }
+      if (datum === heuteStr) btn.classList.add("heute");
+      if (datum === gewaehlterTag) btn.classList.add("aktiv");
+      btn.addEventListener("click", function () {
+        gewaehlterTag = datum;
+        kalenderMonat = monat;
+        _renderKalender(monat, tage);
+        ladeHistory();
+      });
+      grid.appendChild(btn);
+    }
+    elKalender.appendChild(grid);
+  }
+
   async function ladeHistory() {
     if (!aktuellesProjekt) {
       return;
@@ -331,7 +436,7 @@ function createAuditPanel(options) {
     const runId = elFilterRunId ? _escapeText(elFilterRunId.value).trim() : "";
     let url;
     try {
-      url = _historyUrl(aktuellesProjekt, kind, runId);
+      url = _historyUrl(aktuellesProjekt, kind, runId, gewaehlterTag);
     } catch (err) {
       console.warn("audit: history-url fehlgeschlagen", err);
       return;
@@ -377,6 +482,7 @@ function createAuditPanel(options) {
     elFilterRunId = document.querySelector(SELEKTOREN.filterRunId);
     elButtonLaden = document.querySelector(SELEKTOREN.buttonLaden);
     elStatus = document.querySelector(SELEKTOREN.status);
+    elKalender = document.querySelector(SELEKTOREN.kalender);
 
     if (!elPanel || !elLive || !elHistory) {
       console.warn("audit: Pflichtelemente fehlen, mount abgebrochen");

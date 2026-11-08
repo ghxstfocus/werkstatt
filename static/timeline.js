@@ -133,6 +133,10 @@
       var errCount = items.filter(function (x) { return x.status === "error"; }).length;
       grpSum.textContent = GROUPS[prefix] + " (" + items.length + ")" +
                            (errCount > 0 ? "  \u2717 " + errCount : "");
+      // Gruppen-Summary: Klick oeffnet nur die Gruppe, nicht den Evidence-Drawer
+      grpSum.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+      });
       grpDet.appendChild(grpSum);
       items.forEach(function (ch) { grpDet.appendChild(baueZeile(ch)); });
       body.appendChild(grpDet);
@@ -144,6 +148,9 @@
       grpDet.className = "tl-group";
       var grpSum = document.createElement("summary");
       grpSum.textContent = (GROUPS[prefix] || prefix) + " (" + items.length + ")";
+      grpSum.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+      });
       grpDet.appendChild(grpSum);
       items.forEach(function (ch) { grpDet.appendChild(baueZeile(ch)); });
       body.appendChild(grpDet);

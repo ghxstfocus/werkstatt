@@ -113,6 +113,32 @@ def _lese_events(verzeichnis: Path) -> list[dict[str, Any]]:
     return alle
 
 
+@router.get("/api/projects/{name}/audit/days")
+def get_audit_days(
+    name: str,
+    month: str | None = Query(default=None),
+) -> dict[str, Any]:
+    """Listet Tage mit Events im Monat (Format YYYY-MM, default heute).
+
+    Liefert {"month": "YYYY-MM", "tage": {"YYYY-MM-DD": count, ...}}.
+    Leere Tage fehlen.
+    """
+    import re as _re
+    from datetime import datetime as _dt
+    if month is None or not _re.fullmatch(r"\d{4}-\d{2}", month):
+        month = _dt.now().strftime("%Y-%m")
+    home = _aktuelles_home()
+    verzeichnis = home / AUDIT_UNTERVERZEICHNIS
+    alle = _lese_events(verzeichnis)
+    tage: dict[str, int] = {}
+    for ev in alle:
+        ts = str(ev.get("ts", ""))
+        datum = ts[:10] if len(ts) >= 10 else ""
+        if datum.startswith(month):
+            tage[datum] = tage.get(datum, 0) + 1
+    return {"month": month, "tage": tage}
+
+
 @router.get("/api/projects/{name}/audit")
 def get_audit(
     name: str,
@@ -123,6 +149,9 @@ def get_audit(
     datum_bis: str | None = Query(default=None),
 ) -> dict[str, Any]:
     """REST-History: liefert Audit-Events mit optionalen Filtern."""
+    # Kein Default-Datumsfilter im Backend — das ist UX-Entscheidung
+    # des Frontends. Der Aufrufer bestimmt ob er alle Events will
+    # (Filter leer) oder nur einen Tag (datum_von + datum_bis).
     home = _aktuelles_home()
     verzeichnis = home / AUDIT_UNTERVERZEICHNIS
     alle = _lese_events(verzeichnis)
