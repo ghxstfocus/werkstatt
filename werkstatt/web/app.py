@@ -498,10 +498,12 @@ def create_app() -> FastAPI:
 
     @app.get("/api/projects/{name}/ops")
     def project_ops(name: str) -> dict[str, Any]:
-        """OPs aus docs/STATUS.md (Runs-Liste)."""
+        """OPs aus docs/STATUS.md des AKTIVEN Projekts (Runs-Liste)."""
         from werkstatt.web import inspector as _insp
-        _pruefe_projektname(name)
-        return {"ops": _insp.parse_ops()}
+        projektname = _pruefe_projektname(name)
+        # OP-305: projekt-spezifischer Pfad statt globaler Fallback
+        projekt_dir = _PROJECTS_BASE / projektname
+        return {"ops": _insp.parse_ops(projekt_dir)}
 
     @app.get("/api/projects/{name}/ops/run-status")
     def project_ops_run_status(name: str) -> dict[str, Any]:
