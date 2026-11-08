@@ -1119,3 +1119,18 @@ body {
   cursor: default;
   transform: none;
 }
+
+/* OP-302: Sessions deutlicher */
+.chat-sidebar-header { background: rgba(0, 0, 0, 0.15); }
+.chat-session { position: relative; padding-left: 16px; }
+.chat-session::before {
+  content: "";
+  position: absolute; left: 6px; top: 50%;
+  transform: translateY(-50%);
+  width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+}
+.chat-session:hover::before { background: rgba(167, 139, 250, 0.6); }
+.chat-session.aktiv::before { background: #a78bfa; box-shadow: 0 0 6px rgba(167, 139, 250, 0.5); }
+.chat-session:hover { background: rgba(255, 255, 255, 0.06); }
+.chat-session.aktiv { font-weight: 600; background: rgba(138, 92, 246, 0.18); }

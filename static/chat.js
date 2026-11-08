@@ -78,6 +78,8 @@
 
   function _wechsleSession(sid) {
     zustand.sessionId = sid;
+    var titel = _el("chat-titel");
+    if (titel) titel.textContent = "Chat · " + sid.slice(0, 8);
     var box = _el("chat-nachrichten");
     if (!box) return;
     box.innerHTML = "";

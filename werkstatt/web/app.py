@@ -431,10 +431,15 @@ def create_app() -> FastAPI:
 
     @app.post("/api/projects/{name}/chat/new")
     def chat_new(name: str) -> dict[str, Any]:
-        """Erzeugt eine neue (leere) Session-ID."""
+        """Erzeugt eine neue Session mit Marker-Event (damit sie in
+        list_sessions erscheint, auch ohne Nachricht)."""
         import uuid as _uuid
-        _pruefe_projektname(name)
-        return {"session_id": _uuid.uuid4().hex}
+
+        from werkstatt import chat_session as _cs
+        projekt = _pruefe_projektname(name)
+        sid = _uuid.uuid4().hex
+        _cs.ChatSession(projekt, sid).append("session_start", {})
+        return {"session_id": sid}
 
     @app.post("/api/projects/{name}/chat")
     def chat_send(name: str, body: dict[str, Any]) -> dict[str, Any]:
