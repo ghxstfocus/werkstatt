@@ -187,7 +187,7 @@ body {
 .layout-grid {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr) 560px;
+  grid-template-columns: 280px minmax(0, 1fr) 560px;
   grid-template-rows: minmax(0, 1fr);
   grid-template-areas: "runs timeline chat";
   gap: 8px;
