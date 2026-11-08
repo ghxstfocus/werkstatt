@@ -463,8 +463,10 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
         with sqlite3.connect(es.db_pfad) as c:
             # 1. Heartbeat -> running
             hb = c.execute(
-                "SELECT ts FROM events WHERE kind='heartbeat' "
-                "ORDER BY seq DESC LIMIT 1"
+                "SELECT ts FROM events "
+                "WHERE kind='heartbeat' AND project=? "
+                "ORDER BY seq DESC LIMIT 1",
+                (projekt,),
             ).fetchone()
             if hb:
                 try:
@@ -481,7 +483,9 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
             if aus["loop_status"] != "running":
                 le = c.execute(
                     "SELECT run_id, ts FROM events "
-                    "WHERE kind='loop_erfolg' ORDER BY seq DESC LIMIT 1"
+                    "WHERE kind='loop_erfolg' AND project=? "
+                    "ORDER BY seq DESC LIMIT 1",
+                    (projekt,),
                 ).fetchone()
                 if le:
                     aus["loop_status"] = "done"
@@ -493,7 +497,9 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
                 else:
                     lf = c.execute(
                         "SELECT run_id, ts FROM events "
-                        "WHERE kind='loop_failed' ORDER BY seq DESC LIMIT 1"
+                        "WHERE kind='loop_failed' AND project=? "
+                        "ORDER BY seq DESC LIMIT 1",
+                        (projekt,),
                     ).fetchone()
                     if lf:
                         aus["loop_status"] = "failed"
@@ -505,7 +511,9 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
                     else:
                         lend = c.execute(
                             "SELECT run_id, ts FROM events "
-                            "WHERE kind='loop_ended' ORDER BY seq DESC LIMIT 1"
+                            "WHERE kind='loop_ended' AND project=? "
+                            "ORDER BY seq DESC LIMIT 1",
+                            (projekt,),
                         ).fetchone()
                         if lend:
                             aus["loop_status"] = "done"
@@ -519,19 +527,22 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
             opens = {
                 r[0] for r in c.execute(
                     "SELECT DISTINCT json_extract(payload, '$.gate_id') "
-                    "FROM events WHERE kind='gate_open'"
+                    "FROM events WHERE kind='gate_open' AND project=?",
+                    (projekt,),
                 ) if r[0]
             }
             answered = {
                 r[0] for r in c.execute(
                     "SELECT DISTINCT json_extract(payload, '$.gate_id') "
-                    "FROM events WHERE kind='gate_answered'"
+                    "FROM events WHERE kind='gate_answered' AND project=?",
+                    (projekt,),
                 ) if r[0]
             }
             expired = {
                 r[0] for r in c.execute(
                     "SELECT DISTINCT json_extract(payload, '$.gate_id') "
-                    "FROM events WHERE kind='gate_expired'"
+                    "FROM events WHERE kind='gate_expired' AND project=?",
+                    (projekt,),
                 ) if r[0]
             }
             aus["gates_open"] = len(opens - answered - expired)
@@ -876,6 +887,14 @@ def aggregate_timeline(
                     events.append(obj)
     except OSError:
         return []
+
+    # OP-306c: JSONL-Events nach Projekt filtern. Fallback 'werkstatt'
+    # fuer Events vor OP-306c. Explizites run_id umgeht den Filter.
+    if run_id is None:
+        events = [
+            e for e in events
+            if (e.get("project") or "werkstatt") == projekt
+        ]
 
     letzte_run_id: str | None = None
     for ev in reversed(events):

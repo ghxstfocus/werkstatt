@@ -111,3 +111,73 @@ def test_default_ohne_projekt_arg_ist_werkstatt(tmp_path, monkeypatch):
     from werkstatt.web.inspector import _letzter_run_id
     assert _letzter_run_id(_s) == _letzter_run_id(_s, "werkstatt")
     assert _letzter_run_id(_s) == "run-w"
+
+# ---------------------------------------------------------------------------
+# OP-306c Etappe 3b: aggregate_ambient filtert heartbeat/loop_*/gates
+# ---------------------------------------------------------------------------
+
+def test_aggregate_ambient_filtert_projekt_heartbeat(tmp_path, monkeypatch):
+    _s, db = _store(tmp_path, monkeypatch)
+    jetzt = datetime.now(UTC).isoformat()
+    _event(db, "run-a", "heartbeat", {}, ts=jetzt, project="a")
+    _event(db, "run-b", "heartbeat", {}, ts=jetzt, project="b")
+    from werkstatt.web.inspector import aggregate_ambient
+    assert aggregate_ambient("a")["loop_status"] == "running"
+    assert aggregate_ambient("b")["loop_status"] == "running"
+    assert aggregate_ambient("test16")["loop_status"] == "idle"
+
+
+def test_aggregate_ambient_filtert_projekt_loop_erfolg(tmp_path, monkeypatch):
+    _s, db = _store(tmp_path, monkeypatch)
+    _event(db, "run-a", "loop_erfolg", {}, project="a")
+    from werkstatt.web.inspector import aggregate_ambient
+    assert aggregate_ambient("a")["loop_status"] == "done"
+    assert aggregate_ambient("b")["loop_status"] == "idle"
+
+
+def test_aggregate_ambient_filtert_projekt_gates(tmp_path, monkeypatch):
+    _s, db = _store(tmp_path, monkeypatch)
+    _event(db, "run-a", "gate_open", {"gate_id": "ga"}, project="a")
+    _event(db, "run-b", "gate_open", {"gate_id": "gb"}, project="b")
+    from werkstatt.web.inspector import aggregate_ambient
+    assert aggregate_ambient("a")["gates_open"] == 1
+    assert aggregate_ambient("b")["gates_open"] == 1
+    assert aggregate_ambient("test16")["gates_open"] == 0
+
+
+def test_aggregate_timeline_filtert_projekt(tmp_path, monkeypatch):
+    """JSONL mit 2 Projekten, je Phase + Kind. timeline('a') sieht nur a.
+
+    Kind-Events sind Pflicht: leere Phasen ohne Kinder werden vom
+    Aggregator rausgefiltert (0 Kinder + <2s Dauer).
+    """
+    from werkstatt.web import inspector as _insp
+    monkeypatch.setattr(_insp, "werkstatt_home", lambda: tmp_path)
+    al = tmp_path / "audit-logs"
+    al.mkdir()
+    events = [
+        {"run_id": "run-a", "kind": "loop_phase", "project": "a",
+         "ts": "2026-11-08T00:00:00", "payload": {"phase": "explorer"}},
+        {"run_id": "run-a", "kind": "task_started", "project": "a",
+         "ts": "2026-11-08T00:00:01", "payload": {"task_id": "t1"}},
+        {"run_id": "run-b", "kind": "loop_phase", "project": "b",
+         "ts": "2026-11-08T00:00:02", "payload": {"phase": "builder"}},
+        {"run_id": "run-b", "kind": "task_started", "project": "b",
+         "ts": "2026-11-08T00:00:03", "payload": {"task_id": "t2"}},
+    ]
+    with (al / "agent-pipeline-2026-11-08.jsonl").open("w") as fh:
+        for ev in events:
+            fh.write(json.dumps(ev) + "\n")
+    knoten_a = _insp.aggregate_timeline("a")
+    knoten_b = _insp.aggregate_timeline("b")
+    phasen_a = [k for k in knoten_a
+                if k.get("kind") == "phase" and k.get("phase") == "explorer"]
+    phasen_b = [k for k in knoten_b
+                if k.get("kind") == "phase" and k.get("phase") == "builder"]
+    assert len(phasen_a) == 1, f"a-timeline sollte explorer-Phase haben: {knoten_a}"
+    assert len(phasen_b) == 1, f"b-timeline sollte builder-Phase haben: {knoten_b}"
+    builder_in_a = [k for k in knoten_a if k.get("phase") == "builder"]
+    explorer_in_b = [k for k in knoten_b if k.get("phase") == "explorer"]
+    assert not builder_in_a, f"a-timeline darf b-Phase nicht sehen: {builder_in_a}"
+    assert not explorer_in_b, f"b-timeline darf a-Phase nicht sehen: {explorer_in_b}"
+
