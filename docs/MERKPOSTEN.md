@@ -754,3 +754,139 @@ Richtig:
 Bei Baseline-Aenderung vorher `diff` gegen die alte Datei
 laufen — nur additive Aenderungen akzeptieren (neue Felder),
 keine Umsortierung durch Format-Wechsel.
+
+## Session 2026-11-08 — UI + Event-Architektur + Multi-Projekt
+
+Diese Session hat die 3XX-UI-Reihe komplett gebaut (OP-300..305),
+die Event-Architektur auf CQRS-light umgestellt (OP-319..323) und
+Multi-Projekt-Kontext eingefuehrt (ADR-0023). Sechs Lehren, jede aus
+einem konkreten Bug.
+
+### Muster — Python-Docstring in JS ist SyntaxError
+
+In `static/tabs.js` stand:
+
+    function neuer_tab(name) {
+        """OP-305: Oeffentliche UI-Methode..."""
+        ...
+    }
+
+Python-Docstrings funktionieren in JavaScript nicht. Der Browser
+warf `Uncaught SyntaxError: Unexpected token`. Der Fehler war
+unsichtbar bis zum Hard-Refresh, weil der Cache-Buster nicht synchron
+erhoeht wurde.
+
+Konsequenz:
+
+1. JS-Files immer mit `node --check <file>` validieren vor Commit.
+   Wenn node fehlt: Klammer-Balance-Check in Python (`s.count('{')`).
+2. Bei Shell->Python->JS-Kette: `ast.parse()`-Check auf Python-Seite
+   hilft nicht. Python-Syntax ist ok, JS-Syntax ist das Problem.
+3. Cache-Buster synchron erhoehen — alle Files mit demselben
+   Timestamp, sonst laedt der Browser Mix aus alt und neu.
+
+### Muster — if (false) mit Kommentar schluckt function-Definition
+
+In `static/tabs.js` stand 72 Zeilen toter Code:
+
+    if (false) {  // deaktiviert: chat.js uebernimmt Form (OP-084)
+        chatForm.addEventListener("submit", function (ev) {
+        ... 70 Zeilen ...
+    });
+
+Der `//`-Kommentar beginnt **innerhalb der if-Klammer** und laeuft bis
+zum Zeilenende. Alles nach dem `//` wird geschluckt — inklusive
+`chatForm.addEventListener("submit", function (ev) {`. Der Code
+darunter referenziert `ev` (undefined), die function-Klammer nie
+geschlossen, bis irgendwo ein `});` kommt — dann "Unexpected `)`".
+
+Konsequenz:
+
+1. Toten Code **loeschen**, nicht auskommentieren. `if (false)` ist
+   auch toter Code.
+2. Bei hartnaeckigen SyntaxErrors: Bracket-Matcher mit
+   Kommentar/String-Erkennung (Zustand `normal|line_comment|
+   block_comment|string`) laeuft zeichenweise und findet das echte
+   Ende.
+
+### Muster — Clone-von-tab-neu bricht insertBefore
+
+OP-305 (Projekt-Anlage) brauchte einen neuen Click-Handler auf dem
+`+`-Button. Erster Versuch: `cloneNode(true)` + `replaceChild`, um
+den alten prompt-Handler zu entfernen.
+
+`tabs.js` hatte aber eine gespeicherte Referenz `neuBtn` auf das
+**Original**-Element. Nach dem Clone zeigt diese Referenz auf ein
+entferntes DOM-Element. `leiste.insertBefore(klon, neuBtn)` wirft
+`NotFoundError: The node before which the new node is to be inserted
+is not a child of this node.`
+
+Konsequenz:
+
+1. Wenn zwei Module dasselbe DOM-Element manipulieren: **niemals
+   clone+replace**. Stattdessen `getElementById()` live, oder
+   `addEventListener` mit pruefendem Handler (`e.stopImmediatePropagation()`).
+2. Bei Aenderungen an einem Element, das andere Module halten:
+   `grep` nach dem Element-ID in allen JS-Dateien vor dem Patch.
+
+### Muster — Path("/opt") hardcoded ist untestbar
+
+`parse_ops()` und `/start` hatten `Path("/opt")` fest im Code. Tests
+mussten entweder `/opt/<fake>` anlegen (root-only, nicht idempotent)
+oder mit `pytest.skip` ausweichen.
+
+Konsequenz:
+
+1. Pfad-Basis als Modul-Konstante deklarieren:
+   `_PROJECTS_BASE = Path("/opt")` auf Modul-Ebene.
+2. Tests monkeypatchen `_PROJECTS_BASE` auf `tmp_path`.
+3. Kein `Path("/opt")` mehr direkt im Produktivcode.
+
+Gilt fuer alle aehnlichen Faelle (`AUDIT_DIR_NAME`, `_werkstatt_home`).
+
+### Muster — Auth-Disable ist _AUTH_DISABLED
+
+Test-Fixture setzte `auth._AUTH_DISABLED_OVERRIDE = True`. Die
+Funktion `is_auth_disabled()` liest aber `_AUTH_DISABLED` — anderer
+Name, keine Wirkung. Der Test bekam 401 statt 404.
+
+Konsequenz:
+
+1. Vor Test-Fixture: `grep -n "def is_" <modul>.py` — welche API
+   liest welche Variable.
+2. `monkeypatch.setattr(modul, "_AUTH_DISABLED", True)` statt direkt
+   auf private Variablen schreiben. Monkeypatch raeumt nach dem Test
+   auf, direktes Setzen nicht.
+
+### Muster — Cache-Buster synchron und Hard-Refresh
+
+Zwei getrennte Bugs an einem Tag:
+
+- `tabs.js?v=alt` aber `project_create.js?v=neu` — Browser lud
+  Mix-Version.
+- Hard-Refresh (`Strg+Shift+R`) laedt `layout.html` neu, aber
+  `<script src="...?v=alt">` zeigt auf alte JS-Version.
+
+Konsequenz:
+
+1. **Alle** Cache-Buster in einer Datei (`layout.html`) mit
+   **demselben** Timestamp ersetzen. Nicht pro Datei einzeln.
+2. Anti-Cache-Meta-Tags im `<head>`:
+   `<meta http-equiv="Cache-Control" content="no-store, must-revalidate">`
+3. Bei hartnaeckigen Cache-Problemen: F12 -> Network -> "Disable
+   cache" aktivieren, dann Hard-Refresh.
+4. `curl -s` von Server-Log pruefen: kommt `GET /static/x.js?v=neu
+   HTTP/1.1" 200 OK` oder `304 Not Modified`?
+
+### Session-Kontext
+
+- 31 Commits, 1515 Tests gruen, ruff/mypy clean.
+- 8 OPs geschlossen (OP-300..305, OP-319..323), 3 neue OPs
+  angelegt (OP-306a/b/c fuer Tab-Persistenz, Projekt-Selector,
+  Multi-Projekt-Datenquellen).
+- 1 ADR angelegt (0023), 1 ADR (0024) war Basis.
+- Alle 3 heutigen SyntaxErrors (Docstring, `if(false)`, Clone) waren
+  **erst im Browser sichtbar**, weil node/npm fehlt und JS-Files nie
+  statisch validiert werden. Konsequenz fuer die naechste Session:
+  `node --check` als Pre-Commit-Step einbauen, oder Python-basierten
+  Klammer-Balance-Check als Ersatz.
