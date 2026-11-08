@@ -823,16 +823,65 @@ body {
   gap: 1px;
 }
 .runs-eintrag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 5px 8px;
+  border-radius: 4px;
+  cursor: default;
+  position: relative;
+  transition: background 0.1s;
+}
+.runs-eintrag[data-run-state="running"] {
+  border-left: 3px solid var(--sem-active);
+  padding-left: 5px;
+}
+.runs-eintrag[data-run-state="done"] .runs-run-badge { color: var(--sem-ok); }
+.runs-eintrag[data-run-state="failed"] .runs-run-badge { color: var(--sem-error); }
+.runs-eintrag[data-run-state="running"] .runs-run-badge {
+  color: var(--sem-active);
+  animation: runs-pulse 1.5s ease-in-out infinite;
+}
+@keyframes runs-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.runs-run-badge {
+  font-size: 11px;
+  color: var(--sem-history);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+.runs-action-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  width: 22px;
+  height: 22px;
   border-radius: 4px;
   cursor: pointer;
   font-size: 11px;
-  color: var(--text);
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  transition: background 120ms ease;
-  user-select: none;
+  justify-content: center;
+  padding: 0;
+  flex: 0 0 auto;
+  transition: all 0.15s;
+}
+.runs-action-btn:hover {
+  border-color: var(--sem-ok);
+  color: var(--sem-ok);
+  background: rgba(74,222,128,0.08);
+}
+.runs-action-btn[data-action="stop"] {
+  border-color: var(--sem-error);
+  color: var(--sem-error);
+}
+.runs-action-btn[data-action="stop"]:hover {
+  background: rgba(248,113,113,0.1);
+  border-color: var(--sem-error);
+  color: var(--sem-error);
 }
 .runs-eintrag:hover { background: rgba(138,92,246,0.08); }
 .runs-dot {
