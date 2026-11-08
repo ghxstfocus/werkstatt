@@ -1496,6 +1496,17 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Tests:** `tests/test_multi_projekt_daten.py` (8 Tests: Migration, Filterung in jedem Endpoint, Isolation, Fallback-Werkstatt).
 - **Blockiert von:** —
 
+### OP-324: Planner-Qualitaet haerten (Architect-Block 5 strukturell)
+
+- **Status:** open
+- **Typ:** architektur (Prompt + Dependency-Qualitaet)
+- **Phase:** Phase-1 (Cockpit-Fundament)
+- **Betroffene Dateien:** `werkstatt/planner.py`, `tests/test_planner_deps_hybrid.py`, `tests/test_planner_struktur.py` (neu)
+- **Problem:** ADaPT war Nothelfer fuer schlechte Plaene und wurde 2026-11-08 entfernt (Commit c94ed52). Ohne ADaPT muss der Plan von Anfang an logisch korrekt sein (Interface -> Backend -> Tests). `_leite_deps_deterministisch` (OP-187) existiert, aber Architect-Block 5 ("Dependencies") wird als Freitext geliefert, nicht strukturell. Ohne strukturierten Block 5 greift die Heuristik (test/baseline/doku warten auf alle code-Tasks), was zu groben Deps fuehrt.
+- **Akzeptanzkriterien:** (a) ARCHITECT-Prompt fordert `## BLOCK 5: DATEI-ABHAENGIGKEITEN` mit Format `<datei>: <deps>` — fail-loud bei fehlendem Block. (b) Test: Architect-Output ohne Block 5 fuehrt zu `audit("architect_block5_fehlt")` (neuer Kind). (c) Neuer Test `test_planner_struktur.py`: 5 Szenarien (einfach, multi-file, kreisfoermig, fehlend, explizit-"keine") gegen `_leite_deps_deterministisch`. (d) `_parse_architect_deps_block` haerten: parst Whitespace-Varianten (`<datei> -> <deps>`, `<datei>: <deps>`), lehnt Freitext explizit ab. (e) Mindestens 3 echte Loop-Tests mit vollstaendigem Architect-Block 5, in PROGRESS.md dokumentiert.
+- **Tests:** `tests/test_planner_struktur.py` (5 Szenarien) + Erweiterung `tests/test_planner_deps_hybrid.py` (+3 Block-5-Format-Tests). Gesamt 8 neue Tests.
+- **Blockiert von:** —
+
 ## Erledigt (Auto-Log)
 
 - 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)
