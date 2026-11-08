@@ -7,7 +7,7 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0001](ADR-0001-sops-age.md) | Key-Architektur mit SOPS + age | accepted |
 | [ADR-0002](ADR-0002-loop-neubau.md) | Loop-Neubau aus pipeline.py-Monolith | accepted |
 | [ADR-0003](ADR-0003-kontroll-zentralisierung.md) | Kontroll-Zentralisierung in werkstatt/control/ | accepted |
-| [ADR-0004](ADR-0004-deterministische-drift-checks.md) | Deterministische Drift-Checks (audit_drift + control_drift) | accepted |
+| [ADR-0004](ADR-0004-deterministische-drift-checks.md) | Deterministische Drift-Checks | accepted |
 | [ADR-0005](ADR-0005-verify-json-hart-asymmetrie.md) | verify.json hart-Feld — asymmetrische Semantik | accepted |
 | [ADR-0006](ADR-0006-event-store-ssot.md) | Event-Store als SSOT fuer Loop-Events | accepted |
 | [ADR-0007](ADR-0007-gate-bridge.md) | Gate-Bridge — Loop headless, Gates ueber HTTP | accepted |
@@ -19,6 +19,9 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0013](ADR-0013-layer-architektur.md) | Layer-Architektur + Submodul-Split-Reihenfolge | accepted |
 | [ADR-0014](ADR-0014-rollen-registry.md) | Rollen-Registry als Single Source of Truth | accepted |
 | [ADR-0015](ADR-0015-tests-sind-specs.md) | Tests sind Specs, keine Attrappen | accepted |
-| 0016 | Spec-First Test-Loop | [ADR-0016-spec-first-test-loop.md](ADR-0016-spec-first-test-loop.md) |
-| 0017 | Mutation-Gate mit pytest-gremlins | [ADR-0017-mutation-gate.md](ADR-0017-mutation-gate.md) |
-| 0018 | Debugger als eigene Rolle | [ADR-0018-debugger-rolle.md](ADR-0018-debugger-rolle.md) |
+| [ADR-0016](ADR-0016-spec-first-test-loop.md) | Spec-First Test-Loop — Tests vor Code | proposed |
+| [ADR-0017](ADR-0017-mutation-gate.md) | Mutation-Gate mit pytest-gremlins | proposed |
+| [ADR-0018](ADR-0018-debugger-rolle.md) | Debugger als eigene Rolle | proposed |
+| [ADR-0019](ADR-0019-gate-lifecycle.md) | Gate-Lifecycle-Vertrag statt PID/Heartbeat/Timeout | accepted |
+| [ADR-0020](ADR-0020-human-readable-audit.md) | Human-Readable Audit-Trail im Frontend | accepted |
+| [ADR-0021](ADR-0021-rollen-detail-ansicht.md) | Rollen-spezifische Detail-Ansicht im Chat-Drawer | accepted |

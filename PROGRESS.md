@@ -3147,3 +3147,43 @@ OP-210 (Test-Loop-Phase) bleibt offen.
 ## 2026-11-08T01:24:32+00:00 -- Tests fuer add in test_math_utils.py anlegen
 - **Status:** done
 
+
+### 2026-11-08 — Web-UI-Stack + Gate-Lifecycle + Audit-Human-Readable
+
+Massive Session. Werkstatt hat jetzt ein vollstaendiges Web-UI mit
+Chat, Timeline, Audit-Kalender und Gate-Panel. Gate-Lifecycle
+strukturell geloest. ~26 Commits, c0f4542 bis 856f1f0.
+
+**Gate-Bridge (OP-202):** Loop wartet auf HTTP statt stdin.
+`gate_bridge.py` mit `wait()`, `signal_open()`, `expire_for_run()`.
+`--headless`-Flag im Loop-CLI. Endpoints `POST /api/runs/{id}/gate`,
+`GET /api/runs/{id}/gates`.
+
+**Chat-Stack (OP-230/231/232):** Alter Admin-Chat komplett ersetzt.
+`ChatSession` (SQLite, pro Projekt, fork-faehig), `chat_tools.py`
+(8 read-only Tools), `chat_agent.py` mit Token-Streaming.
+
+**Timeline + Layout (OP-233):** 3-Spalten-Grid (Runs / Timeline /
+Chat), Workbench-Drawer (Audit/Terminal/Diff/Verify/Dateien),
+Statusleiste mit Token-Anzeige. Timeline gruppiert nach Rolle,
+Klick auf Kind oeffnet Rollen-Drawer.
+
+**Quality-Gate (OP-295):** Parser clean-safe, Baseline
+ruff/mypy/katalog=0, Regression nur bei delta > 0.
+
+**Informed Gate (OP-298):** Gate-Panel zeigt Plan, Scout-Findings,
+Diff, Verify, Reviewer-Verdict, Empfehlung. Draggable.
+
+**Gate-Lifecycle (ADR-0019):** PID/Heartbeat/Timeout verworfen.
+try/finally in main() -> loop_ended/loop_failed -> expire_for_run().
+
+**Token-Tracking:** ask_llm in Explorer/Scout/Architect/Reviewer
+mit state=state — llm_usage-Events kommen jetzt an.
+
+**Audit-Kalender (OP-311):** Collapsible Kalender mit Tages-Filter.
+
+**Audit Human-Readable (ADR-0020):** _humanSummary() pro Kind.
+
+**Rollen-Detail-Ansicht (ADR-0021):** WerkstattDetail.oeffneRolle().
+
+**Tests:** 1439 passed, 8 skipped. ruff clean, mypy clean.
