@@ -50,7 +50,10 @@ def test_history_leer(app_client) -> None:
         f"/api/projects/demo/chat/history?session_id={sid}"
     )
     assert r.status_code == 200
-    assert r.json() == {"events": []}
+    events = r.json()["events"]
+    # Neue Session enthaelt nur das session_start-Marker-Event
+    assert len(events) == 1
+    assert events[0]["kind"] == "session_start"
 
 
 def test_history_mit_events(app_client) -> None:
@@ -62,9 +65,11 @@ def test_history_mit_events(app_client) -> None:
     )
     assert r.status_code == 200
     events = r.json()["events"]
-    assert len(events) == 1
-    assert events[0]["kind"] == "user"
-    assert events[0]["payload"]["text"] == "frage"
+    # session_start + user
+    assert len(events) == 2
+    assert events[0]["kind"] == "session_start"
+    assert events[1]["kind"] == "user"
+    assert events[1]["payload"]["text"] == "frage"
 
 
 def test_history_ungueltige_session_id(app_client) -> None:
