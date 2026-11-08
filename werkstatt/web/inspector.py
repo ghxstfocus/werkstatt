@@ -494,8 +494,14 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
     if kind == "planner_split_vor_merge":
         return f"{payload.get('anzahl', 0)} Tasks"
     if kind == "planner_scout_ok":
-        n = len(payload.get("dateien") or [])
-        r = len(payload.get("risiken") or [])
+        def _zahl(v):
+            if isinstance(v, int):
+                return v
+            if isinstance(v, (list, tuple, dict)):
+                return len(v)
+            return 0
+        n = _zahl(payload.get("dateien"))
+        r = _zahl(payload.get("risiken"))
         return f"{n} Dateien, {r} Risiken"
     if kind == "loop_gate_failed":
         return f"gate={payload.get('gate', '?')}, grund={payload.get('grund', '?')}"
