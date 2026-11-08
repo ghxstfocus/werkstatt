@@ -27,8 +27,8 @@
     var label = el.querySelector(".ambient-label");
     var map = {
       idle:    ["○", "Idle"],
-      running: ["●", "Läuft"],
-      done:    ["✓", "Fertig"],
+      running: ["◉", "Läuft"],
+      done:    ["●", "Fertig"],
       failed:  ["✗", "Fehler"]
     };
     var v = map[status] || map.idle;

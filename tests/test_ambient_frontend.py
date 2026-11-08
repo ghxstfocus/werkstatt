@@ -54,3 +54,11 @@ def test_ambient_hat_keine_tokens():
     assert "token-icon" in html
     assert 'id="status-tokens-loop"' in html
     assert 'id="status-tokens-chat"' in html
+
+
+def test_loop_done_icon_nicht_haken():
+    """Loop-done ist ● (nicht ✓), um Kollision mit Run-✓ zu vermeiden."""
+    js = _js()
+    assert '["✓", "Fertig"]' not in js
+    assert 'done:    ["●"' in js or 'done: ["●"' in js
+    assert 'running: ["◉"' in js
