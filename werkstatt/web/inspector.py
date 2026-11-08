@@ -1141,7 +1141,15 @@ def _audit_events(run_id: str | None = None) -> list[dict[str, Any]]:
     audit_dir = werkstatt_home() / "audit-logs"
     if not audit_dir.exists():
         return []
-    kand = sorted(audit_dir.glob("agent-pipeline-*.jsonl"))[-3:]
+    # OP-381 Bug B: *-migrated-*.jsonl sind statische DB-Dumps, keine
+    # fortlaufende Quelle. Alphabetisch sortiert kommen sie NACH den
+    # Tagesdateien (weil 'm' > '2'), und _audit_events(None) nimmt den
+    # letzten run_id aus der kombinierten Liste -> landet in der migrated-
+    # Datei statt im aktuellen Run. Filter wie projection.py (a640b19).
+    kand = sorted(
+        f for f in audit_dir.glob("agent-pipeline-*.jsonl")
+        if "-migrated-" not in f.name
+    )[-3:]
     if not kand:
         return []
     events: list[dict[str, Any]] = []

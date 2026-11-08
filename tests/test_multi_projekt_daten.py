@@ -219,3 +219,32 @@ def test_ambient_running_wenn_gate_open_kürzlich(tmp_path, monkeypatch):
     assert aus["loop_status"] == "running", f"erwartet running, ist {aus['loop_status']}"
     assert aus.get("loop_phase") == "gate_wait"
 
+def test_audit_events_ignoriert_migrated_dateien(tmp_path, monkeypatch):
+    """OP-381 Bug B: -migrated-*.jsonl sind statische DB-Dumps, nicht
+    fortlaufende Quelle. Sie duerfen den Default-Run nicht bestimmen."""
+    import json as _json
+
+    from werkstatt.web import inspector as _insp
+    monkeypatch.setattr(_insp, "werkstatt_home", lambda: tmp_path)
+    al = tmp_path / "audit-logs"
+    al.mkdir()
+    # Echte Tages-Datei mit aktuellem Run
+    with (al / "agent-pipeline-2026-11-09.jsonl").open("w") as fh:
+        fh.write(_json.dumps({
+            "run_id": "run-aktuell", "kind": "loop_plan_shown",
+            "timestamp": "2026-11-09T10:00:00+00:00",
+            "project": "werkstatt", "plan_text": "neu",
+        }) + "\n")
+    # Migrated-Datei mit "spaeterem" run_id (alphabetisch nach Tagesdatei)
+    with (al / "agent-pipeline-migrated-2026-11-09.jsonl").open("w") as fh:
+        fh.write(_json.dumps({
+            "run_id": "run-migriert", "kind": "loop_plan_shown",
+            "timestamp": "2026-11-09T12:00:00+00:00",
+            "project": "werkstatt", "plan_text": "alt",
+        }) + "\n")
+
+    events = _insp._audit_events()
+    rids = {str(e.get("run_id", "")) for e in events}
+    assert "run-aktuell" in rids, f"aktueller Run fehlt: {rids}"
+    assert "run-migriert" not in rids, f"migrated-Run darf nicht dabei sein: {rids}"
+
