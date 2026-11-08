@@ -584,7 +584,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Blockiert von:** -
 
 
-
 ### OP-300: Semantic Colors System
 
 - **Status:** open
@@ -782,6 +781,19 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Akzeptanzkriterien:** (a) Hover ueber OP-Zeile: Ghost-Preview mit Blockiert-von-Status, geschaetzter Dauer, Token-Schaetzung. (b) Hover ueber "Start Loop"-Button: Preview mit Aufgabe, Phasen-Schaetzung, Zeit-Schaetzung. (c) Hover ueber Gate-Button: Preview mit Konsequenz ("j = bauen, n = Loop-Abbruch"). (d) Preview erscheint nach 400ms Hover, verschwindet nach 100ms ohne Hover. (e) Preview ist klickbar (Link zur Detail-Ansicht).
 - **Tests:** Keine (UI).
 - **Blockiert von:** OP-305
+
+
+### OP-318: Legacy-OPs 1XX auditieren
+
+- **Status:** open
+- **Typ:** doku-cleanup
+- **Phase:** Phase-0 (Vorbereitung)
+- **Betroffene Dateien:** `docs/STATUS.md`, `PROGRESS.md`, `docs/adr/`
+- **Problem:** 15 OPs im 1XX-Bereich (OP-101, 105-107, 109-110, 112-113i, 115-118, 120-121) stammen aus der Pre-Loop-Neubau-Zeit. Manche sind nach dem Neubau obsolet (Legacy-Refactorings, alte Pfade), andere nicht. Ohne Pruefung ist die Liste mit Zombie-OPs ueberladen — der Loop kann sie nicht sinnvoll priorisieren.
+- **Akzeptanzkriterien:** (a) Jede 1XX-OP einzeln gegen aktuellen Code pruefen: betroffene Datei existiert noch? Fordert das was der Code heute nicht hat? (b) Kategorisierung: `kill` (obsolet, in Delete-Zone), `keep` (weiterhin relevant), `transform` (AK an aktuellen Code anpassen). (c) Ergebnis als Tabelle in `PROGRESS.md` dokumentiert. (d) Kill-Kandidaten in Delete-Zone verschieben (mit Begruendung + Commit-Referenz).
+- **Tests:** Keine (Doku-Audit).
+- **Blockiert von:** —
+
 
 ## Erledigt (Auto-Log)
 
@@ -1724,23 +1736,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   - Test: 2× `_emit_progress` in 3s → 0 Heartbeats.
 - **Blockiert von:** -
 
-### OP-120: Revidierter Plan wird nicht gerendert
-
-- **Status:** open
-- **Typ:** ux-bug
-- **Betroffen:** `werkstatt/gates.py` (`_human_gate_plan`),
-  `werkstatt/loop_renderer.py` (`plan`)
-- **Problem:** Nach Reject am Plan-Gate laeuft die Reflection und
-  erzeugt einen revidierten Plan. Der Prompt `Revidierter Plan OK?`
-  wird gezeigt, aber **der Plan selbst nicht**. Der User muss blind
-  j/n druecken. Testlauf 2026-11-04 hat das reproduziert.
-- **Akzeptanzkriterien:**
-  - `_human_gate_plan` mit `kontext="revidierter_plan"` ruft
-    `_r.plan(...)` mit `state.tasks`/`tests`/`akzeptanzkriterien`
-    auf, **bevor** `input()`.
-  - Test: Mock-`input`, revidierter Plan da -> `plan()`-Call
-    nachweisbar vor dem Prompt.
-- **Blockiert von:** -
 
 ### OP-121: step() und _emit_progress ohne Timestamp im CI-Log
 
