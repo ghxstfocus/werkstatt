@@ -3141,3 +3141,9 @@ OP-210 (Test-Loop-Phase) bleibt offen.
 - (d) Config-Integritaets-Trennung — done (Smoke-Test-Heuristik
   in test_spec_validator.py)
 - (e) Tests — teilweise (Validator-Seite done)
+## 2026-11-08T01:23:47+00:00 -- add-Funktion in math_utils.py anlegen
+- **Status:** done
+
+## 2026-11-08T01:24:32+00:00 -- Tests fuer add in test_math_utils.py anlegen
+- **Status:** done
+
