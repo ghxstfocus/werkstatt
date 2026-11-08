@@ -249,8 +249,12 @@ def create_app() -> FastAPI:
         return _phasen_snapshot(projektname)
 
     @app.post("/api/projects/{name}/start")
-    def project_start(name: str) -> dict[str, Any]:
-        """Startet den Loop fuer ein Projekt als Subprozess."""
+    def project_start(name: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Startet den Loop fuer ein Projekt als Subprozess.
+
+        OP-303: optionaler body {aufgabe: str} oder {op_id: "OP-303"}.
+        Ohne aufgabe: Loop liest selbst die naechste OP aus STATUS.md.
+        """
         projektname = _pruefe_projektname(name)
         laufend = _LAUFENDE_LOOPS.get(projektname)
         if laufend is not None and laufend.poll() is None:
@@ -262,17 +266,31 @@ def create_app() -> FastAPI:
             f"{projektname}-{_time.strftime('%Y%m%d-%H%M%S')}"
             f"-{_secrets.token_hex(4)}"
         )
-        prozess = subprocess.Popen(
-            [sys.executable, "-m", "werkstatt.loop",
-             "--project", projektname,
-             "--headless",
-             "--run-id", run_id],
-        )
+        args = [sys.executable, "-m", "werkstatt.loop",
+                "--project", projektname,
+                "--headless",
+                "--run-id", run_id]
+        aufgabe = ""
+        op_id = ""
+        if body and isinstance(body, dict):
+            op_id = str(body.get("op_id") or "").strip()
+            aufgabe = str(body.get("aufgabe") or "").strip()
+            if op_id and not aufgabe:
+                # aus STATUS.md ziehen
+                from werkstatt.web import inspector as _insp
+                for op in _insp.parse_ops(Path("/opt") / projektname):
+                    if op.get("id") == op_id:
+                        aufgabe = f"{op_id}: {op.get('titel', '')}"
+                        break
+        if aufgabe:
+            args.extend(["--aufgabe", aufgabe])
+        prozess = subprocess.Popen(args)
         _LAUFENDE_LOOPS[projektname] = prozess
         return {
             "gestartet": True,
             "pid": prozess.pid,
             "run_id": run_id,
+            "aufgabe": aufgabe or "(automatisch aus STATUS.md)",
         }
 
     @app.post("/api/projects/{name}/stop")
@@ -421,6 +439,13 @@ def create_app() -> FastAPI:
         from werkstatt.web import inspector as _insp
         _pruefe_projektname(name)
         return {"ops": _insp.parse_ops()}
+
+    @app.get("/api/projects/{name}/ops/run-status")
+    def project_ops_run_status(name: str) -> dict[str, Any]:
+        """OP-303: Run-Status pro OP."""
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        return {"run_status": _insp.aggregate_ops_run_status(projekt)}
 
     @app.get("/api/projects/{name}/timeline")
     def project_timeline(name: str, run_id: str | None = None) -> dict[str, Any]:

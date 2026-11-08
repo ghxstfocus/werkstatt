@@ -302,6 +302,15 @@ def run_pipeline_loop(
 
     header(f"{project_name} — {aufgabe[:50]}")
 
+    # OP-303: Loop-Start-Marker fuer Run-Status pro OP.
+    import re as _re_loop
+    _op_m = _re_loop.search(r"\bOP-(\d+[a-z]?)\b", aufgabe or "")
+    _op_id_start = ("OP-" + _op_m.group(1)) if _op_m else ""
+    audit("loop_started", {
+        "op_id": _op_id_start,
+        "aufgabe_kurz": (aufgabe or "")[:200],
+    }, Path("."), project_name)
+
     # Projekt-Pfad aus Config aufloesen, falls nicht gesetzt
     if state is not None and getattr(state, "project_dir", None) is None:
         cfg = load_project_config(project_name)

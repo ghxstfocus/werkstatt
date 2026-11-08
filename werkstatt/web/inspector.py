@@ -64,10 +64,21 @@ def parse_ops(projekt_dir: Path | None = None) -> list[dict[str, str]]:
         # done-OPs gehoeren nach PROGRESS.md (separater OP).
         if status in ("done", "erledigt", "closed"):
             continue
+        # OP-303: blockiert_von extrahieren (nur IDs, nicht Freitext)
+        bv_match = re.search(
+            r"\*\*Blockiert von:\*\*\s*([^\n]+)", block
+        )
+        blockiert_von = ""
+        if bv_match:
+            roh = bv_match.group(1).strip()
+            ids = re.findall(r"OP-\d+[a-z]?", roh)
+            blockiert_von = ", ".join(ids) if ids else ""
+
         ergebnis.append({
             "id": op_id,
             "titel": titel,
             "status": status,
+            "blockiert_von": blockiert_von,
         })
     return ergebnis
 
@@ -184,6 +195,79 @@ def aggregate_status(projekt: str) -> dict[str, Any]:
                 pass
         if aus["drift"] is None:
             aus["drift"] = {"status": "ungemessen", "hinweis": "python3 -m tools.quality_gate --hook"}
+    except sqlite3.Error:
+        pass
+    return aus
+
+
+def aggregate_ops_run_status(projekt: str) -> dict[str, dict[str, Any]]:
+    """OP-303: Run-Status pro OP aus SQLite-Events.
+
+    Ableitung:
+    - pipeline_start mit op_id -> welcher run_id gehoert zu welcher OP
+    - loop_erfolg / loop_failed / summary -> Ergebnis
+    - heartbeat in letzten 60s -> running (falls kein Terminal-Event)
+    """
+    import json
+    from datetime import UTC, datetime
+
+    es = EventStore()
+    aus: dict[str, dict[str, Any]] = {}
+    try:
+        with sqlite3.connect(es.db_pfad) as c:
+            # 1. OP-303: primaer loop_started, fallback pipeline_start (Legacy)
+            run_to_op: dict[str, str] = {}
+            for _kind in ("loop_started", "pipeline_start"):
+                for run_id, payload in c.execute(
+                    "SELECT run_id, payload FROM events WHERE kind=?",
+                    (_kind,),
+                ):
+                    try:
+                        d = json.loads(payload or "{}")
+                    except json.JSONDecodeError:
+                        continue
+                    oid = d.get("op_id") or ""
+                    if oid:
+                        run_to_op[run_id] = oid
+
+            # 2. Pro OP: letzter run_id
+            op_to_run: dict[str, str] = {}
+            for run_id, op_id in run_to_op.items():
+                op_to_run[op_id] = run_id  # spaeterer ueberschreibt
+
+            # 3. Status pro run_id ableiten
+            for op_id, run_id in op_to_run.items():
+                # Terminal-Event?
+                term = c.execute(
+                    "SELECT kind, ts FROM events WHERE run_id=? AND kind IN "
+                    "('loop_erfolg','loop_failed') ORDER BY seq DESC LIMIT 1",
+                    (run_id,)
+                ).fetchone()
+                # Heartbeat?
+                hb = c.execute(
+                    "SELECT ts FROM events WHERE run_id=? AND kind='heartbeat' "
+                    "ORDER BY seq DESC LIMIT 1",
+                    (run_id,)
+                ).fetchone()
+
+                state = "idle"
+                ts = ""
+                if term:
+                    state = "done" if term[0] == "loop_erfolg" else "failed"
+                    ts = term[1]
+                elif hb:
+                    try:
+                        ts_hb = datetime.fromisoformat(str(hb[0]))
+                        if (datetime.now(UTC) - ts_hb).total_seconds() < 60:
+                            state = "running"
+                            ts = hb[0]
+                    except (ValueError, TypeError):
+                        pass
+                aus[op_id] = {
+                    "state": state,
+                    "run_id": run_id,
+                    "ts": ts,
+                }
     except sqlite3.Error:
         pass
     return aus
