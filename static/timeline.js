@@ -109,6 +109,11 @@
       row.appendChild(dot);
       row.appendChild(lbl);
       row.appendChild(ts);
+      // Klick auf Zeile: Evidence oeffnen
+      row.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        if (window.WerkstattDetail) window.WerkstattDetail.oeffne("evidence");
+      });
       return row;
     }
 
@@ -137,6 +142,11 @@
       grpSum.addEventListener("click", function (ev) {
         ev.stopPropagation();
       });
+      // Auch grpDet selbst: Klick irgendwo in die Gruppe darf NICHT
+      // den tl-knoten-Handler ausloesen
+      grpDet.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+      });
       grpDet.appendChild(grpSum);
       items.forEach(function (ch) { grpDet.appendChild(baueZeile(ch)); });
       body.appendChild(grpDet);
@@ -149,6 +159,9 @@
       var grpSum = document.createElement("summary");
       grpSum.textContent = (GROUPS[prefix] || prefix) + " (" + items.length + ")";
       grpSum.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+      });
+      grpDet.addEventListener("click", function (ev) {
         ev.stopPropagation();
       });
       grpDet.appendChild(grpSum);

@@ -136,13 +136,96 @@ function createAuditPanel(options) {
         });
         _extra = _teile.join(" ");
       }
-      text.textContent = _escapeText(_extra);
+      var _human = _humanSummary(ev);
+      if (_human) {
+        text.textContent = _human;
+      } else {
+        text.textContent = _escapeText(_extra);
+      }
 
       zeile.appendChild(zeit);
       zeile.appendChild(art);
       zeile.appendChild(text);
       elLive.appendChild(zeile);
     }
+  }
+
+  function _humanSummary(ev) {
+    if (!ev || typeof ev !== "object") return "";
+    var k = String(ev.kind || "");
+    var g = function (field) { return ev[field]; };
+
+    // Loop-Lifecycle
+    if (k === "loop_fresh_reset") return "Frischer Start (bak gespeichert)";
+    if (k === "loop_erfolg") return "Loop erfolgreich abgeschlossen";
+    if (k === "loop_gate_failed") return "Gate fehlgeschlagen: " + (g("gate") || "?");
+    if (k === "loop_plan_missing") return "Kein initialer Plan — Fallback auf Planner";
+    if (k === "loop_planner_failed") return "Planner fehlgeschlagen";
+    if (k === "loop_plan_shown") return "Plan an Mensch gezeigt (" + (ev.plan_laenge || 0) + " Zeichen)";
+    if (k === "loop_plan_reflection_abgebrochen") return "Plan-Reflection abgebrochen: Regel " + (g("regel") || "?");
+    if (k === "loop_plan_gate_approved") return "Plan-Gate freigegeben";
+    if (k === "loop_plan_gate_rejected") return "Plan-Gate abgelehnt: " + (g("grund") || "?");
+    if (k === "loop_human_gate_approved") return "Commit-Gate freigegeben";
+    if (k === "loop_human_gate_rejected") return "Commit-Gate abgelehnt";
+    if (k === "loop_human_gate_committed") return "Commit durchgeführt";
+    if (k === "loop_gate_timeout") return "Gate-Timeout: " + (g("kind") || "?") + " nach " + (g("timeout_s") || "?") + "s";
+
+    // Explorer
+    if (k === "loop_explorer_suchbegriffe") {
+      var b = g("begriffe") || [];
+      return b.length + " Suchbegriffe: " + b.slice(0, 3).join(", ");
+    }
+    if (k === "explorer_messung") {
+      var bef = g("befehle") || [];
+      return bef.length + " Befehle ausgeführt: " + bef.slice(0, 3).join(", ");
+    }
+    if (k === "explorer_messung_findings") return (g("findings_len") || 0) + " Findings, " + (g("n_key_files") || 0) + " Key-Files";
+    if (k === "explorer_result") return (g("findings_len") || 0) + " Findings erfasst";
+    if (k === "loop_explorer_ok") return "Explorer abgeschlossen (" + (g("dateien") || g("files") || 0) + " Dateien)";
+    if (k === "explorer_llm_fehler") return "Explorer LLM-Fehler: " + (g("fehler") || "?");
+    if (k === "explorer_json_fehler") return "Explorer JSON-Parse-Fehler";
+
+    // Planner
+    if (k === "planner_scout_ok") return "Scout: " + (g("dateien") || 0) + " Dateien, " + (g("risiken") || 0) + " Risiken";
+    if (k === "planner_scout_api_widerspruch") return "Scout: " + (g("anzahl") || 0) + " API-Widersprüche";
+    if (k === "planner_architect_ok") return "Architect: " + (g("prosa_len") || 0) + " Zeichen Prosa";
+    if (k === "planner_plan_erstellt") return "Plan erstellt: " + (g("tasks") || 0) + " Tasks";
+    if (k === "planner_split") return "Planner-Split: " + (g("anzahl") || 0) + " Tasks";
+    if (k === "planner_deps_abgeleitet") return "Dependencies abgeleitet";
+    if (k === "planner_action_korrigiert") return "Action korrigiert: " + (g("von") || "?") + " → " + (g("nach") || "?");
+
+    // Builder
+    if (k === "builder_patches_erstellt") return (g("anzahl") || 0) + " Patches erstellt";
+    if (k === "builder_keine_patches_gold") return "Keine Patches nötig";
+    if (k === "builder_import_context") return (g("anzahl") || (g("imports") || []).length) + " Imports analysiert";
+    if (k === "builder_file_context") return (g("anzahl") || (g("files") || []).length) + " Dateien gelesen";
+    if (k === "builder_zieldatei_create_neu") return "Neue Datei: " + (g("zieldatei") || "?");
+
+    // Tasks
+    if (k === "loop_task_start") return "Task startet: " + (g("text") || "");
+    if (k === "loop_task_ok") return "Task OK (" + (g("elapsed_s") || 0).toFixed(1) + "s)";
+    if (k === "loop_task_failed") return "Task fehlgeschlagen";
+
+    // Verify
+    if (k === "loop_verify_ok") return "Verify OK";
+    if (k === "loop_verify_failed") return "Verify fehlgeschlagen: " + (g("fehler") || "");
+    if (k === "verify_stage_ohne_hart_flag") return "Verify nur weiche Stufe";
+
+    // Reviewer
+    if (k === "reviewer_result") return "Reviewer: " + (g("verdict") || "?");
+
+    // Reflection
+    if (k === "loop_reflection_runde") return "Reflection Runde " + (g("runde") || "?");
+    if (k === "loop_reflection_patch_applied") return "Reflection-Patch: " + (g("anzahl") || 0);
+
+    // LLM
+    if (k === "llm_call_start") return "LLM-Aufruf startet: " + (g("agent") || "?");
+    if (k === "llm_call_end") return "LLM-Antwort nach " + (g("elapsed_s") || 0) + "s";
+    if (k === "llm_usage") return "Token: " + (g("prompt_tokens") || 0) + " ↑ / " + (g("completion_tokens") || 0) + " ↓";
+    if (k === "llm_timeout_read") return "LLM-Timeout (read)";
+
+    // Fallback: Kind + kompakte Felder
+    return "";
   }
 
   function _renderHistory() {
