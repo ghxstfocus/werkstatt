@@ -77,6 +77,11 @@ async def websocket_kanaele(websocket: WebSocket, tab_id: str) -> None:
         await websocket.close(code=1008)
         return
 
+    from werkstatt.web.auth import require_ws_auth
+
+    if not await require_ws_auth(websocket):
+        return
+
     await websocket.accept()
     manager.connect(tab_id, websocket)
     try:

@@ -35,6 +35,7 @@ __all__ = [
     "is_authed_ws",
     "is_public_path",
     "make_login_router",
+    "require_ws_auth",
     "set_auth_disabled",
     "set_session_cookie",
 ]
@@ -125,6 +126,20 @@ def is_authed_ws(websocket: Any) -> bool:
     if not cookie:
         return False
     return secrets.compare_digest(cookie, get_token())
+
+
+async def require_ws_auth(websocket: Any) -> bool:
+    """Autorisiert einen WebSocket-Handshake vor ``accept()``.
+
+    Rueckgabe:
+        ``True``  - Handshake autorisiert, Aufrufer darf ``accept()``.
+        ``False`` - Socket wurde bereits mit Close-Code 1008 geschlossen;
+                    der Aufrufer muss ``return``.
+    """
+    if is_auth_disabled() or is_authed_ws(websocket):
+        return True
+    await websocket.close(code=1008)
+    return False
 
 
 def is_public_path(path: str) -> bool:
