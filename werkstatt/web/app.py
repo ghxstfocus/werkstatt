@@ -434,9 +434,9 @@ def create_app() -> FastAPI:
     def project_diff(name: str, ref: str = "HEAD") -> dict[str, Any]:
         """git diff gegen ref (default HEAD), als Text + Stat."""
         import subprocess as _sp
-        _pruefe_projektname(name)
+        projektname = _pruefe_projektname(name)
         ref = _pruefe_ref(ref)
-        basis = Path("/opt/werkstatt")
+        basis = _PROJECTS_BASE / projektname
         try:
             stat = _sp.run(
                 ["git", "diff", "--stat", ref, "--"],
@@ -486,7 +486,8 @@ def create_app() -> FastAPI:
     @app.get("/api/projects/{name}/files")
     def project_files(name: str, pfad: str = "") -> dict[str, Any]:
         """Datei-Browser unterhalb des Projekt-Roots."""
-        basis = Path("/opt/werkstatt").resolve()
+        projektname = _pruefe_projektname(name)
+        basis = (_PROJECTS_BASE / projektname).resolve()
         ziel = (basis / pfad).resolve() if pfad else basis
         try:
             ziel.relative_to(basis)
