@@ -938,6 +938,41 @@ selbst nicht befolgt.
   falsch sind, sind teurer als eine ehrliche Vermutung — sie
   verhindern das Nachmessen.
 
+
+### Nachtrag 2026-11-10 — [A] und [E] widerlegt, [D] war echt
+
+Fortsetzung der Fortsetzungs-Session: nach Messung bleiben von den
+5 Handoff-Bugs (§3 [A]-[E]) nur zwei uebrig, die reproduzierbar
+und echt waren.
+
+**[A] Builder-Typ-Bug — widerlegt.** Der Handoff nannte eine
+Funktion `aggregate_fehler_cluster` (existiert nirgends im Repo,
+0 Treffer in `grep -rn`) und einen Run `werkstatt-20261109-222702-
+a8c4dac4` (nicht im Repo auffindbar). Das /tmp-Backup
+`/tmp/builder_op376_22_27_fail.py` existiert (82 KB) und enthaelt
+in Zeile 1250-1252 exakt den `for rolle, balken in lanes.items():`-
+Block, der mit `1869182` gefixt wurde. Zeitachse: `ca6f0e7` (OP-381i,
+21:26) fuehrte den `balken`-Konflikt ein; Run 22:27 scheiterte daran;
+`1869182` (heute) behob ihn. **Der Builder hat den Fehler geerbt,
+nicht erzeugt.** Handoff-Ursachenanalyse war falsch.
+
+**[E] Scout-Datei-Validierung — nicht reproduzierbar.** Der
+Handoff nennt einen 22:15-Run mit halluziniertem Pfad
+`werkstatt_aggregate.py`. Weder der Run noch der Pfad sind im Repo
+auffindbar (`find . -path "*221502*"` → nur alte .werkstatt/-
+Reste und git objects). Ohne Reproduktion nicht fixen.
+
+**[D] Commit-Gate-Prompt — bestaetigt und gefixt.** `gates.py:697`
+hatte `_frage_gate("commit", "Deine Wahl: ", "jne")` ohne Kontext.
+Neu: mehrzeiliger Prompt analog zu den Plan-Gates, mit expliziten
+j/n/e-Bedeutungen (commit / Abbruch / edit).
+
+**Erkenntnis:** 3 von 5 Handoff-Bugs der Vorsession waren falsch
+oder nicht reproduzierbar. Das Muster ist konsistent mit dem
+2026-11-09-Abschnitt oben ("Handoff ist Behauptung, nicht Messung").
+Jeder mit konkreten Dateinamen/Funktionen/Zeilen belegte Handoff-
+Punkt braucht `grep`/`find` VOR dem Design.
+
 ### Was gut lief in dieser Fortsetzungs-Session
 
 - Der User hat das STOPP-Kriterium "Wenn was abweicht: STOP, melden"

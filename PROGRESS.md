@@ -3871,3 +3871,11 @@ Alle mit hartem Revert-Beweis, Baseline 1550 -> 1591.
 
 Commits: 1869182, c1dcb4d, 63248c4
 
+**Nachtrag 2026-11-10 — Handoff-Korrektur nach Messung:**
+- [A] Builder-Typ-Bug: widerlegt. `aggregate_fehler_cluster` existiert
+  nicht; Run `a8c4dac4` nicht im Repo. Der /tmp-Snapshot zeigt den
+  bereits gefixten `balken`-Konflikt aus OP-381i — Builder erbte den
+  Fehler, erzeugte ihn nicht.
+- [E] Scout-Datei-Validierung: nicht reproduzierbar, Run fehlt.
+- [D] Commit-Gate-Prompt explizit gemacht (gates.py:697).
+
