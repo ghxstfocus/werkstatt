@@ -1205,9 +1205,9 @@ def aggregate_swimlane(
                 "balken": lanes[rolle],
             })
     # Sonstige Rollen (falls neue dazukommen)
-    for rolle, balken in lanes.items():
-        if rolle not in ROLLEN_REIHENFOLGE and balken:
-            lanes_liste.append({"rolle": rolle, "balken": balken})
+    for rolle, balken_liste in lanes.items():
+        if rolle not in ROLLEN_REIHENFOLGE and balken_liste:
+            lanes_liste.append({"rolle": rolle, "balken": balken_liste})
 
     return {
         "run_id": run_id,
