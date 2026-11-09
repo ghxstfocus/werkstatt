@@ -1351,6 +1351,129 @@ noch nicht vollstaendig.
 - **Nicht blockiert:** OP-306b Etappe 2 (Overview-Shell) — kann parallel gebaut werden, weil sie unabhängig vom Loop-Start ist.
 - **ADR:** —
 
+
+### OP-383: LLM-Token-Verbrauch pro Rolle tracken (Messung)
+
+- **Status:** open
+- **Typ:** messung
+- **Phase:** Phase-2 (Loop-Stabilisierung, Context-Engineering-Achse)
+- **Blockiert von:** —
+- **Blockiert:** OP-384, OP-385
+- **Betroffene Dateien:** `werkstatt/architect.py`, `werkstatt/planner.py`, `werkstatt/roles/builder/run.py`, `werkstatt/roles/reviewer.py`, `werkstatt/reflection.py`, `tests/test_llm_usage_pro_rolle.py` (neu)
+- **Problem:** Aus Live-Messung 2026-11-09 (Run `test-clean-1794181131`): max **35.550 prompt-Tokens** in einem einzigen Call, 95.263 prompt-Tokens total über 5 Calls. Aber: das Feld `agent` im `llm_usage`-Payload ist NULL (`json_extract` gibt NULL) — **wir wissen nicht, welche Rolle die Tokens verbraucht**. Ohne diese Zuordnung ist jede Context-Optimierung blind.
+  **Forschung 2025/26:** "Context Rot" (Chroma 2025): Selbstgenerierte Wiederholungen in rekursiven KI-Schleifen verschmutzen den Kontext. Größere Fenster ≠ besser. "Lost-in-the-Middle" (Liu et al.): Modelle ignorieren Informationen in der Mitte langer Kontexte. Wir müssen wissen *wer* wie viel schickt, *bevor* wir kürzen.
+- **Akzeptanzkriterien:**
+  (a) Jeder `_ask_llm`-Aufrufer setzt `audit("llm_usage", {"agent": "<rolle>", ...})` mit explizitem Rollen-Namen: `architect`, `planner`, `builder`, `reviewer`, `reflection`, `explorer`, `scout`, `debugger`.
+  (b) Neue SQL-View (in `tools/` oder als Helper): `SELECT agent, COUNT(*), AVG(prompt_tokens), MAX(prompt_tokens), SUM(total_tokens) FROM events WHERE kind='llm_usage' GROUP BY agent ORDER BY 5 DESC`.
+  (c) Neue Funktion `aggregate_tokens_per_rolle()` in `inspector.py` (liefert die Aggregation).
+  (d) Live: Nach dem naechsten Loop-Run ist pro Rolle eine Zeile sichtbar.
+- **Tests:** `tests/test_llm_usage_pro_rolle.py` (2 Tests: Payload enthaelt `agent`, Aggregation summiert korrekt).
+- **ADR:** —
+- **Kontext:** Erste OP der Context-Engineering-Achse (Phase 2). Muss vor OP-384/385 laufen, sonst sind deren Zahlen geraten.
+
+### OP-384: Context-Budget pro Rolle (hartes Token-Limit)
+
+- **Status:** open
+- **Typ:** architektur
+- **Phase:** Phase-2 (Loop-Stabilisierung)
+- **Blockiert von:** OP-383 (Messung: welche Rolle zieht wie viel)
+- **Blockiert:** OP-387, OP-388
+- **Betroffene Dateien:** `werkstatt/context_budget.py` (neu), `werkstatt/architect.py`, `werkstatt/planner.py`, `werkstatt/roles/builder/prompt.py`, `werkstatt/reflection.py`, `tests/test_context_budget.py` (neu)
+- **Problem:** Kein Prompt-Builder hat ein **hartes Token-Budget**. `explorer_findings`, `scout_api_auszug` und `api_index_cache` gehen ungekuerzt in den Architect-Prompt. Bei wachsender Codebase waechst der Prompt unbegrenzt. `planner.py:1991` hat als einzige echte Truncation `_findings[:2000]`. Alles andere: unbegrenzt.
+  **Forschung:** Anthropic "Effective context engineering" (2025): "Find the smallest possible set of high-signal tokens." Structured Eviction statt simpler LLM-Kompression. Context Rot: mehr Tokens ≠ mehr Leistung.
+- **Akzeptanzkriterien:**
+  (a) Neue Datei `context_budget.py` mit `budgetiere(felder: list[tuple[str, str, int]], max_tokens: int) -> tuple[str, dict]`. Jedes Feld hat `(name, content, prioritaet)`. Funktion baut den finalen Prompt zusammen, respektiert das Limit, gibt `weggelassen`-Dict zurueck.
+  (b) **Prioritaeten** (hoch nach niedrig): `OP-Spec` > `Akzeptanzkriterien` > `task_files` > `explorer_findings` > `api_index_cache` > `scout_api_auszug` > `historie` > `patches`.
+  (c) Bei Erreichen des Limits: abschneiden + Hinweis `[… {N} Tokens weggelassen, Prioritaet {X}]` im Prompt sichtbar.
+  (d) Pro Rolle konfigurierbar (Default-Werte, ueberschreibbar):
+      - Architect: 12_000 Tokens
+      - Planner: 6_000
+      - Builder: 8_000
+      - Reviewer: 8_000
+      - Reflection: 10_000
+      - Debugger (spaeter): 15_000
+  (e) `audit("context_budget_angewendet", {"rolle": ..., "weggelassen": ..., "final_tokens": ...})` bei jeder Anwendung.
+- **Tests:** `tests/test_context_budget.py` (4 Tests: Prioritaet wirkt, Kuerzung, Limit-Erkennung, leeres Feld).
+- **ADR:** —
+- **Kontext:** Nach OP-383 wissen wir die echten Zahlen. Diese OP setzt die Limits basierend darauf.
+
+### OP-385: Redundanz-Analyse Architect-Kontext
+
+- **Status:** open
+- **Typ:** messung + architektur
+- **Phase:** Phase-2 (Loop-Stabilisierung)
+- **Blockiert von:** OP-383 (Messung der Token-Groessen)
+- **Betroffene Dateien:** `werkstatt/architect.py`, `tests/test_architect_kontext_redundanz.py` (neu)
+- **Problem:** Der Architect-Prompt bekommt drei Informationsquellen:
+  1. `explorer_findings` — was der Explorer gefunden hat (aus frueheren Events: 1.020 findings!)
+  2. `scout_api_auszug` — welche APIs der Scout identifiziert hat
+  3. `api_index_cache` — AST-Struktur der 10 wichtigsten Dateien
+  Diese drei ueberlappen wahrscheinlich stark (Funktionsnamen tauchen in allen drei auf). Der Overlap ist ungemessen. Wenn z.B. 40 % der Informationen redundant sind, verschmutzen sie den Kontext ohne Mehrwert (Context Rot).
+- **Akzeptanzkriterien:**
+  (a) Messblock: Fuer 5 reale Runs die drei Felder extrahieren, Overlap messen (gleicher Datei-Pfad, gleiche Funktions-Namen). Overlap-Quote dokumentieren.
+  (b) Wenn Overlap > 30 % in einer Kategorie: Reduktion implementieren (nur reichste Quelle behalten, andere kuertzen).
+  (c) Fail-loud bei widerspruechlichen Informationen (z.B. Scout sagt API X existiert, AST sagt nein) — `audit("architect_kontext_widerspruch", ...)`.
+  (d) Live: Nach dem Fix ist der Architect-Prompt messbar kleiner (Vergleich vorher/nachher in PROGRESS.md).
+- **Tests:** `tests/test_architect_kontext_redundanz.py` (3 Tests: Overlap-Erkennung, Reduktion, Fail-loud bei Widerspruch).
+- **ADR:** —
+
+### OP-386: Reflection-Kontext bereinigen (Diff statt Patches)
+
+- **Status:** open
+- **Typ:** architektur
+- **Phase:** Phase-2 (Loop-Stabilisierung)
+- **Blockiert von:** —
+- **Betroffene Dateien:** `werkstatt/reflection.py`, `tests/test_reflection_kontext.py` (neu)
+- **Problem:** Die Reflection-Phase bekommt drei Felder:
+  1. `patches` — vollstaendiger Patch-Text (alle Zeilen, alle Dateien)
+  2. `last_verify_errors` — Fehler-Ausgabe (z.T. 500+ Zeilen mit Stacktraces)
+  3. `reviewer_bugs` — Bugs vom Reviewer (auch `medium` und `low`)
+  Redundanz: `patches` enthaelt oft genau das, was `last_verify_errors` schon beschreibt. `reviewer_bugs` mit `medium`-Severity sind oft Rauschen (Forschung: Reflection ohne externes Signal verschlechtert Leistung — Self-Refine-Papers 2025).
+- **Akzeptanzkriterien:**
+  (a) `patches` durch den tatsaechlichen `git diff` ersetzen (nicht den ganzen Datei-Inhalt — nur die geaenderten Zeilen).
+  (b) `last_verify_errors` nur die `error:`-Zeilen (via `_extrahiere_fehlerkern`, existiert schon in `verify.py`).
+  (c) `reviewer_bugs` nur `severity in ("HIGH", "critical")`, `medium`/`low` weg.
+  (d) Fallback: wenn nach Filterung nichts uebrig, alle Bugs zeigen (fail-safe).
+  (e) Live: Reflection-Prompt messbar kleiner (Vergleich in PROGRESS.md).
+- **Tests:** `tests/test_reflection_kontext.py` (4 Tests: Diff statt Datei, Fehlerkern-Extraktion, Severity-Filter, Fallback).
+- **ADR:** —
+
+### OP-387: JIT-Retrieval fuer Architect (view_api-Tool)
+
+- **Status:** open
+- **Typ:** architektur (gross)
+- **Phase:** Phase-2 (Loop-Stabilisierung)
+- **Blockiert von:** OP-384 (Context-Budget), OP-385 (Redundanz-Analyse)
+- **Betroffene Dateien:** `werkstatt/architect.py`, `werkstatt/roles/architect_tools.py` (neu), `tests/test_architect_jit.py` (neu)
+- **Problem:** Der Architect bekommt heute den `api_index_cache` fuer 10 Dateien **vorab geladen** (AST-Struktur im Prompt). Statt On-Demand: er bekommt die **Liste der 10 Pfade** und ruft selbst ab, was er fuer den Plan braucht. Anthropic "Effective context engineering" (2025): JIT-Retrieval ist der zentrale Hebel gegen Context Rot.
+  **Aber:** grosser Umbau — Architect wird zum Agenten mit Tools statt einmaligem Prompt-Builder.
+- **Akzeptanzkriterien:**
+  (a) Neue Datei `architect_tools.py` mit `view_api(path)` — liefert AST-Struktur einer Datei (wie heute `api_index_cache[path]`).
+  (b) Architect-Prompt enthaelt nur: `Verfuegbare Dateien: <10 Pfade>` und die Tool-Definition.
+  (c) Architect ruft `view_api(path)` selbst auf, maximal 5x pro Plan-Erstellung.
+  (d) Fallback: wenn Architect nach 5 Calls keinen Plan hat, greift der alte Code-Pfad (volle `api_index_cache` im Prompt).
+  (e) Live: Architect-Prompt messbar kleiner, Plan-Qualitaet gleich oder besser (Test-Suite).
+- **Tests:** `tests/test_architect_jit.py` (6+ Tests: Tool-Definition, Tool-Aufruf, Fallback, End-to-End mit Mock-LLM).
+- **ADR:** —
+- **Kontext:** Groesster Umbau der Achse. Eigene Session. Erst nach OP-384/385.
+
+### OP-388: Context-Budget als Verify-Stage (Praeventiv)
+
+- **Status:** open
+- **Typ:** verify-stage
+- **Phase:** Phase-2 (Loop-Stabilisierung)
+- **Blockiert von:** OP-384 (Context-Budget)
+- **Betroffene Dateien:** `verify.json`, `werkstatt/verify.py`, `tools/context_drift.py` (neu), `tests/test_context_drift.py` (neu)
+- **Problem:** Damit kuenftige Aenderungen die Budget-Limits nicht wieder aufheben. Wenn OP-384 ein 12k-Limit setzt, aber ein spaeterer Patch `explorer_findings` wieder unbegrenzt durchlaesst, faellt das niemandem auf — bis die Prompts wieder 35k Tokens haben.
+- **Akzeptanzkriterien:**
+  (a) Neues Tool `tools/context_drift.py`: prueft den **letzten** `llm_usage`-Event pro Rolle gegen das konfigurierte Limit.
+  (b) Neue **weiche** Stage `context_drift` in `verify.json` (Start: warnen, nicht blocken).
+  (c) Nach 14 Tagen ohne Warnung: auf hart umstellen (eigene OP).
+  (d) Baseline-aware: nur `AFTER > BEFORE + 20 %` blockt (Toleranz fuer Ausreisser).
+- **Tests:** `tests/test_context_drift.py` (2 Tests: Limit-Ueberschreitung wird erkannt, Baseline-Toleranz).
+- **ADR:** —
+
+
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
 - **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
