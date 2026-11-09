@@ -3621,3 +3621,51 @@ zweite Bedingung. Dry-Run vor Ausfuehrung, DB-Backup in
 audit-System (Format {agent: security_ai, audit_id: AUD-...}) und
 NICHT Teil des Werkstatt-Backfills. Nur Werkstatt-JSONL und
 Werkstatt-SQLite waren Ziel.
+
+
+## OP-389: WebSocket-Auth-Bypass in /ws/{tab_id} (2026-11-09)
+
+**Ausgefuehrt:** Commit 8880d04. Neuer async-Helper
+`require_ws_auth(websocket) -> bool` in `werkstatt/web/auth.py`:
+prueft `is_auth_disabled()` oder `is_authed_ws(websocket)` vor
+`accept()`; schliesst mit Close-Code 1008 wenn nicht autorisiert.
+`ws.py:websocket_kanaele` nutzt den Helper. Damit sind alle 4
+existierenden WebSocket-Endpoints gegen Unauth geschuetzt —
+`/api/projects/{name}/chat/stream`, `/api/projects/{name}/audit/stream`
+und `/ws/terminal/{project}` waren bereits geschuetzt, `/ws/{tab_id}`
+war die Luecke.
+
+**Spec-Tests:** `tests/test_ws_auth.py`, 13 Tests.
+- 4x unauth → Close 1008 vor accept (parametrisiert ueber alle 4 WS-Pfade)
+- 4x mit gueltigem Cookie → akzeptiert
+- 4x `_AUTH_DISABLED=True` → akzeptiert (Test-Workflow)
+- 1x Meta-Test: Source-Scan aller `@(app|router).websocket`-Routen,
+  muss in `WS_ROUTEN_SOURCE` eingetragen sein. Neue WS-Endpoints ohne
+  Auth-Test faellt sofort auf.
+
+**Regress-Barriere verifiziert (Revert-Beweis):** Bei Entfernen des
+Auth-Checks aus `ws.py` wird genau
+`test_unauth_ws_wird_abgelehnt_vor_accept[/ws/abc]` rot; die 3
+anderen parametrisierten WS-Pfade bleiben gruen (Bestandsschutz ist
+vorhanden, der Test deckt exakt die Luecke). Revert-Beweis ist damit
+hart erbracht, nicht "Test ist halt gruen".
+
+**Baseline:** 1550 → 1563 passed, 5 skipped. ruff clean, mypy clean,
+alle 5 Drifts (audit/control/import/state/state_inventory) gruen.
+
+**Folge-OP (angelegt):** OP-389b — `app.py`, `audit_panel.py`,
+`terminal_proxy.py` auf denselben Helper migrieren (DRY, kein
+Verhaltenswechsel, aber Regress-Risiko an 3 funktionierenden
+Endpoints → eigene Session mit eigenem Source-Scan-Meta-Test).
+
+**Lehren aus der Session:**
+- `Path("werkstatt/web")` nach `monkeypatch.chdir(tmp_path)` ist ein
+  leerer Glob. Meta-Test mit `Path(__file__).resolve().parent.parent
+  / "werkstatt" / "web"` — relatives Pfad-Handling nach chdir ist
+  immer falsch.
+- `import pytest` muss **vor** `from fastapi...` stehen (isort-Konvention).
+  `str.replace` traf es nicht, `ruff --fix --select I` auf die eine
+  Datei schon. `ruff --fix .` bleibt verboten (loescht F401).
+- Ein Test, der zweimal hintereinander im selben Block laeuft, nachdem
+  Code geaendert wurde, sollte besser als eigener Sub-Block verifiziert
+  werden — Test-Fix und Code-Fix nicht in einem Rutsch.
