@@ -3669,3 +3669,61 @@ Endpoints → eigene Session mit eigenem Source-Scan-Meta-Test).
 - Ein Test, der zweimal hintereinander im selben Block laeuft, nachdem
   Code geaendert wurde, sollte besser als eigener Sub-Block verifiziert
   werden — Test-Fix und Code-Fix nicht in einem Rutsch.
+
+
+## OP-390: Git-Diff-Argument-Injection (2026-11-09)
+
+**Ausgefuehrt:** Commit f4952ff (Code) + c13a6a9 (Test-Isolation).
+Neues zentrales Modul `werkstatt/validierung.py` mit REF_MUSTER
+und pruefe_ref(). Muster erlaubt Branch/Tag/SHA/HEAD~N/HEAD^/
+origin/main/refs/heads/x; verbietet fuehrendes '-' (Option-
+Interpretation: --output=, -p, --ext-diff), Leerzeichen,
+Shell-Metazeichen, Laenge > 128. `app.py:/api/projects/{name}/diff`
+ruft `_pruefe_ref(ref)` vor git-diff (HTTP-Adapter wandelt
+ValueError in HTTPException 400). `chat_tools._git_diff` ruft
+`pruefe_ref(ref)` vor subprocess; ValueError -> return
+'git_diff: ungueltiger ref ...'.
+
+**Spec-Tests:** `tests/test_diff_ref_validation.py`, 22 Tests
+(8x gueltig-param, 7x ungueltig-param, 3x HTTP-Endpoint inkl.
+400-Vor-Validierung, 2x chat-tools mit subprocess-Mock, 1x Meta,
+1x Endpoint-200).
+
+**Regress-Barriere verifiziert (Revert-Beweis):** bei Revert der
+chat_tools-Pruefung werden BEIDE chat-tools-Tests rot
+(output-option: prueft mock_run.assert_not_called;
+leerer-ref: analog). Staerker als OP-389 (dort nur 1 rot).
+
+**AK-Abweichungen (dokumentiert im Commit):**
+- (a) REF_MUSTER zentral in `werkstatt/validierung.py` statt
+  `app.py` — `chat_tools.py` (Kern) darf `werkstatt/web/` nicht
+  importieren (import_drift-Contract). Ein Helper, zwei Aufrufer.
+- (e) '--' steht NACH ref (`git diff {ref} --`), nicht davor. Der
+  AK-Text 'git diff -- {ref}' verwechselt Pathspec-Trenner mit
+  checkout-Semantik: `git diff -- HEAD` interpretiert HEAD als
+  Pfad, liefert leer, haette den Endpoint funktional gebrochen.
+
+**Bewusst NICHT gemacht (nicht im Scope, OP-Kandidaten):** andere
+subprocess.run-Aufrufe in app.py/chat_tools.py (Zeilen 63, 77, 125)
+auf unvalidierte Argumente pruefen — eigene OPs, nicht Teil von
+OP-390.
+
+**Baseline:** 1563 -> 1585 passed, 5 skipped. ruff/mypy clean,
+alle 5 Drifts gruen.
+
+**Lehren aus der Session (3):**
+- `git status --porcelain` gibt ` M file` (Leerzeichen + M), nicht
+  `M file`. Ich habe das Pattern aus dem Kopf geraten, Precondition
+  war zwangslaeufig rot. **Shell-Format nie raten — einmal
+  `echo "[$VAR]"` und gut.**
+- Test-Write VOR Precondition-Check killt den Block. **Precondition
+  ist die erste Zeile, jede Schreib-Operation danach.** Zweimal
+  hintereinander verletzt; ab jetzt strukturell: Precondition als
+  eigener Sub-Block vor allen `cat`-Aufrufen.
+- Test der `git diff HEAD` gegen den echten Working Tree macht,
+  ist nicht isoliert. `test_chat_tools_git_diff_normaler_ref` war
+  in Isolation gruen, in der vollen Suite rot, weil der
+  uncommittete STATUS.md-Diff den String 'ungueltiger ref' enthielt.
+  **Test-Isolation durch `subprocess.run`-Mock, nicht durch
+  Hoffnung auf clean tree.** Betrifft jede Test-Funktion, die
+  `subprocess`, `git`, `Path.cwd`, `os.environ` oder HTTP beruehrt.
