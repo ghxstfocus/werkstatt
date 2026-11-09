@@ -97,26 +97,53 @@ def test_endpoint_200_bei_normalem_ref(monkeypatch) -> None:
 # ---------------------------------------------------------------------
 
 def test_chat_tools_git_diff_normaler_ref() -> None:
-    """Normaler ref -> kein Validierungsfehler."""
-    aus = chat_tools._git_diff({"ref": "HEAD"})
-    assert isinstance(aus, str)
+    """Normaler ref -> pruefe_ref laesst durch, subprocess mit '--'.
+
+    Deterministisch: subprocess.run wird gemockt. Der nicht-gemockte
+    Test (2026-11-09) war ein False-Positive: ``git diff HEAD`` enthielt
+    den eigenen Delete-Zone-Text mit dem String ``ungueltiger ref``
+    und fiel nur wegen des Working Tree. Isolation > Zufall.
+    """
+    from unittest.mock import MagicMock, patch
+
+    fake = MagicMock()
+    fake.stdout = "diff --git a/x b/x\n"
+    with patch.object(chat_tools.subprocess, "run", return_value=fake) as mock_run:
+        aus = chat_tools._git_diff({"ref": "HEAD"})
     assert "ungueltiger ref" not in aus
+    mock_run.assert_called_once()
+    aufruf_argv = mock_run.call_args[0][0]
+    assert aufruf_argv == ["git", "diff", "HEAD", "--"], (
+        "Belt-and-Suspenders: '--' MUSS nach ref stehen (nicht davor), "
+        f"sonst interpretiert git ref als Pathspec. Aufruf war: {aufruf_argv}"
+    )
 
 
 def test_chat_tools_git_diff_output_option_abgelehnt() -> None:
-    """``--output=...`` -> Fehler-String, KEIN git-Aufruf.
+    """``--output=...`` -> Fehler-String, subprocess NICHT aufgerufen.
 
-    Regress-Barriere: dieser Test wird rot, sobald der pruefe_ref-
-    Aufruf aus _git_diff entfernt wird.
+    Regress-Barriere verstaerkt: zusaetzlich zu 'Fehler-String zurueck'
+    wird explizit 'subprocess.run NICHT aufgerufen' geprueft.
+    Deterministisch: vorher konnte der Test zufaellig gruen sein, wenn
+    der Working Tree ``git diff HEAD`` den String ``ungueltiger ref``
+    enthielt (z.B. der eigene Delete-Zone-Eintrag).
     """
-    aus = chat_tools._git_diff({"ref": "--output=/tmp/owned"})
+    from unittest.mock import patch
+
+    with patch.object(chat_tools.subprocess, "run") as mock_run:
+        aus = chat_tools._git_diff({"ref": "--output=/tmp/owned"})
     assert "ungueltiger ref" in aus
+    mock_run.assert_not_called()
 
 
 def test_chat_tools_git_diff_leerer_ref_abgelehnt() -> None:
-    """Leerer ref -> Fehler-String."""
-    aus = chat_tools._git_diff({"ref": ""})
+    """Leerer ref -> Fehler-String, subprocess NICHT aufgerufen."""
+    from unittest.mock import patch
+
+    with patch.object(chat_tools.subprocess, "run") as mock_run:
+        aus = chat_tools._git_diff({"ref": ""})
     assert "ungueltiger ref" in aus
+    mock_run.assert_not_called()
 
 
 # ---------------------------------------------------------------------
