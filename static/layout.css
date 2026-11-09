@@ -2309,3 +2309,59 @@ body[data-mode="debug"] .bereich.runs {
 .layout-grid {
   transition: grid-template-columns 180ms ease-out;
 }
+
+/* ===================================================================
+   OP-381i: Control-Modus-Wasserfall
+   =================================================================== */
+
+.control-waterfall-bereich {
+  padding: 12px 16px;
+  overflow: auto;
+}
+
+.control-waterfall {
+  width: 100%;
+  min-height: 100px;
+}
+
+.wf-svg {
+  display: block;
+  max-width: 100%;
+}
+
+.wf-leer {
+  padding: 20px;
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 12px;
+  text-align: center;
+}
+
+.wf-balken {
+  transition: opacity 120ms ease-out;
+}
+.wf-balken:hover { opacity: 1; }
+.wf-balken.wf-idle { opacity: 0.6; }
+
+/* Puls fuer die aktive Rolle */
+@keyframes wf-pulse-anim {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.2); }
+}
+.wf-pulse {
+  animation: wf-pulse-anim 1.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-pulse { animation: none; opacity: 0.8; }
+}
+
+/* Mode-Schaltung: im Control-Modus Timeline verstecken, Wasserfall zeigen */
+body[data-mode="control"] .bereich.timeline { display: none; }
+body[data-mode="control"] .control-waterfall-bereich { display: flex; flex-direction: column; }
+body[data-mode="control"] .control-waterfall-bereich[hidden] { display: flex; }
+/* grid-area: control-waterfall nutzt "timeline"-Zelle */
+body[data-mode="control"] .control-waterfall-bereich {
+  grid-area: timeline;
+}
