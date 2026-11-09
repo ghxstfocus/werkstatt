@@ -1293,6 +1293,37 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Grund für Blockierung von OP-306:** Mode-Switch/Wasserfall zeigt Gates prominent. Ohne funktionierendes Modal wäre der Wasserfall blind.
 - **ADR:** ADR-0028 (Gate-Modal-Pattern — wird mit OP-381c angelegt, dokumentiert Warum-Vollbild statt Panel)
 
+
+### OP-382: Dogfooding-Phase — UI-Loop 10× stabil im Betrieb
+
+- **Status:** open
+- **Typ:** meta (Prozess-OP, keine Code-OP)
+- **Phase:** Phase-2 (Focus, **vor jedem neuen Feature**)
+- **Blockiert von:** OP-381c (funktionierendes Gate-Modal), OP-381b (Freitext-Gate)
+- **Blockiert:** alle OPs mit `Phase: Phase-3` (Selbstverbesserung OP-376..379, Memory-Graph OP-380, Mode-Switch OP-306)
+- **Prinzip:** „Eat your own dogfood." Große Software-Firmen testen Produkte intern im echten Betrieb, bevor neue Features gebaut werden. Dabei fallen die Bugs auf, die Unit-Tests nicht finden — weil der Entwickler blind für die eigene Denkweise ist.
+- **Problem:** Werkstatt hat heute (2026-11-09) einen kritischen Zustand erreicht: der Loop kann aus der UI gestartet werden, Gates werden im Browser angezeigt, Klicks kommen an. **Aber**: jede Live-Nutzung deckt 1-2 weitere Bugs auf (heute: 4 Bugs bei einem einzigen Loop-Versuch, danach noch der `KeyboardInterrupt` im Test-Lauf). Neue Features (Selbstverbesserung, Memory-Graph) zu bauen, während der Kern noch wackelt, wäre Roulette. Erst muss der **Kern im Betrieb stabil sein**, dann wachsen die Features organisch aus echter Nutzung.
+- **Akzeptanzkriterien (Dogfooding-Zyklus):**
+  **(Phase A: Stabilisierung)**
+  (a) OP-381c (Gate-Modal) gebaut + live getestet.
+  (b) OP-381b (Freitext-Gate) gebaut + live getestet.
+  (c) `pytest` 100 % grün, `ruff`/`mypy`/5 Drifts grün, Server mit aktueller Code-Version, `DEEPSEEK_API_KEY` gesetzt.
+  **(Phase B: Betrieb)**
+  (d) 10 echte OPs aus STATUS.md werden **vollständig über die UI** durchgebaut (Start → Gates → Verify → Commit). Kein Terminal-Eingriff außer Beobachten.
+  (e) Jede Frustration / jeder Bug / jede Unklarheit wird **sofort** als eigene OP angelegt (`docs/STATUS.md`, `Typ: bugfix` oder `ui-feature`).
+  (f) Nach jedem der 10 Runs: Tagebuch-Eintrag in `PROGRESS.md` mit
+       - Was lief gut?
+       - Was hat genervt?
+       - Was fehlte?
+  **(Phase C: Auswertung)**
+  (g) Nach 10 Runs: Konsolidierung der Notizen. **Welche 3 Dinge** tauchen am häufigsten auf? Diese 3 werden in den nächsten Sprint priorisiert.
+  (h) Erst wenn alle 10 Runs stabil durchliefen: Freigabe für Phase-3-OPs (Selbstverbesserung, Memory-Graph, Mode-Switch).
+- **Tests:** Keine klassischen Tests (Meta-OP). Stattdessen: 10 PROGRESS-Einträge + 1 Abschluss-Reflexion in MERKPOSTEN.
+- **Warum diese Phase:** Unit-Tests finden Bugs im Code. Nur echte Nutzung findet **Usability-Bugs** (zu kleines Gate-Panel, fehlender Copy-Button, Drag sinnlos), **Infrastruktur-Bugs** (Server-Neustart vergessen, Cache-Buster-Mix) und **Denkfehler** (Freitext-Gate vs. j/n/a-Gate verwechselt). Genau diese 3 Kategorien sind die, die ein Produkt „fertig" vs. „nutzbar" unterscheiden.
+- **Grund für Blockierung von Phase-3:** Selbstverbesserung und Memory-Graph setzen auf einem **stabilen Loop** auf. Wenn der Loop selbst noch alle 2 Runs abstürzt, ist jeder Gewinn aus Selbstverbesserung nicht messbar (Rauschen > Signal).
+- **Nicht blockiert:** OP-306b Etappe 2 (Overview-Shell) — kann parallel gebaut werden, weil sie unabhängig vom Loop-Start ist.
+- **ADR:** —
+
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
 - **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
