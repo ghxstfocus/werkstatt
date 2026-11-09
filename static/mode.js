@@ -76,6 +76,26 @@
   function setMode(m) {
     if (!_istModus(m)) return;
     _apply(m);
+    // Beim Modus-Wechsel: runs-Zustand zuruecksetzen
+    _applyRunsOpen(false);
+  }
+
+  // OP-381i: Runs-Sidebar Toggle (Control-Modus)
+  function _applyRunsOpen(offen) {
+    var body = document.body;
+    if (!body) return;
+    body.setAttribute("data-runs-open", offen ? "true" : "false");
+    var btn = document.getElementById("runs-toggle");
+    if (btn) btn.setAttribute("data-open", offen ? "true" : "false");
+    var bd = document.getElementById("runs-backdrop");
+    if (bd) bd.hidden = !offen;
+  }
+
+  function toggleRuns() {
+    var body = document.body;
+    if (!body) return;
+    var jetztOffen = body.getAttribute("data-runs-open") === "true";
+    _applyRunsOpen(!jetztOffen);
   }
 
   function cycle() {
@@ -104,6 +124,13 @@
       if (e.key === "1") { e.preventDefault(); _apply("cockpit"); return; }
       if (e.key === "2") { e.preventDefault(); _apply("control"); return; }
       if (e.key === "3") { e.preventDefault(); _apply("debug"); return; }
+      // OP-381i: 'r' togglet Runs-Sidebar (nur im Control-Modus)
+      if ((e.key === "r" || e.key === "R") &&
+          document.body.getAttribute("data-mode") === "control") {
+        e.preventDefault();
+        toggleRuns();
+        return;
+      }
     }
   });
 
@@ -119,6 +146,23 @@
     }
     // Nochmal apply, damit Dropdown-Markierung passt
     _apply(getMode());
+
+    // OP-381i: Runs-Toggle-Button + Backdrop
+    var runsBtn = document.getElementById("runs-toggle");
+    if (runsBtn) {
+      runsBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        toggleRuns();
+      });
+    }
+    var backdrop = document.getElementById("runs-backdrop");
+    if (backdrop) {
+      backdrop.addEventListener("click", function () {
+        _applyRunsOpen(false);
+      });
+    }
+    // Initial: runs zu
+    _applyRunsOpen(false);
   });
 
   // Public API fuer Command Palette / andere Module
@@ -126,6 +170,7 @@
     getMode: getMode,
     setMode: setMode,
     cycle: cycle,
+    toggleRuns: toggleRuns,
     MODI: MODI.slice()
   };
 })();

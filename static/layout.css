@@ -2365,3 +2365,82 @@ body[data-mode="control"] .control-waterfall-bereich[hidden] { display: flex; }
 body[data-mode="control"] .control-waterfall-bereich {
   grid-area: timeline;
 }
+
+/* ===================================================================
+   OP-381i: Runs-Sidebar im Control-Modus (togglebar)
+   =================================================================== */
+
+/* Wrapper fuer Mode-Switch + Runs-Toggle */
+.top-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+}
+
+.runs-toggle {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.runs-toggle:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+.runs-toggle[data-open="true"] {
+  background: var(--sem-action);
+  color: white;
+  border-color: var(--sem-action);
+}
+.runs-toggle-icon { font-size: 14px; line-height: 1; }
+
+/* Nur im Control-Modus sichtbar */
+body[data-mode="control"] .runs-toggle { display: inline-flex; }
+
+/* Im Control-Modus: Runs-Bereich aus dem Grid nehmen */
+body[data-mode="control"] .layout-grid {
+  grid-template-columns: 0 minmax(0, 1fr) 360px;
+}
+body[data-mode="control"] .bereich.runs {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 280px;
+  z-index: 180;
+  background: var(--panel);
+  border-right: 1px solid var(--border-subtle);
+  box-shadow: 4px 0 20px rgba(0,0,0,0.4);
+  transform: translateX(-100%);
+  transition: transform 180ms ease-out;
+  padding: 12px;
+  overflow-y: auto;
+}
+body[data-mode="control"][data-runs-open="true"] .bereich.runs {
+  transform: translateX(0);
+}
+
+/* Backdrop (nur sichtbar wenn runs-offen) */
+.runs-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 170;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(2px);
+}
+.runs-backdrop[hidden] { display: none !important; }
+body[data-mode="control"][data-runs-open="true"] .runs-backdrop:not([hidden]) {
+  display: block;
+}
+
+/* In Cockpit/Debug: top-controls normal, keine Sonderregeln */
+body[data-mode="cockpit"] .runs-toggle,
+body[data-mode="debug"] .runs-toggle {
+  display: none;
+}

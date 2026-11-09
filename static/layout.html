@@ -9,13 +9,21 @@
   <title>Werkstatt</title>
   <link rel="stylesheet" href="/static/layout.css?v=1794182103">
 </head>
-<body data-mode="cockpit">
+<body data-mode="cockpit" data-runs-open="false">
 
-  <div class="mode-switch" id="mode-switch" role="group" aria-label="UI-Modus">
-    <button type="button" class="mode-btn" data-mode-btn="cockpit" aria-pressed="true" title="Cockpit (1)">Cockpit</button>
-    <button type="button" class="mode-btn" data-mode-btn="control" aria-pressed="false" title="Control (2)">Control</button>
-    <button type="button" class="mode-btn" data-mode-btn="debug" aria-pressed="false" title="Debug (3)">Debug</button>
+  <div class="top-controls">
+    <div class="mode-switch" id="mode-switch" role="group" aria-label="UI-Modus">
+      <button type="button" class="mode-btn" data-mode-btn="cockpit" aria-pressed="true" title="Cockpit (1)">Cockpit</button>
+      <button type="button" class="mode-btn" data-mode-btn="control" aria-pressed="false" title="Control (2)">Control</button>
+      <button type="button" class="mode-btn" data-mode-btn="debug" aria-pressed="false" title="Debug (3)">Debug</button>
+    </div>
+    <button type="button" class="runs-toggle" id="runs-toggle" aria-label="Runs-Sidebar" title="Runs ein-/ausblenden (R)" hidden>
+      <span class="runs-toggle-icon">☰</span>
+      <span class="runs-toggle-label">Runs</span>
+    </button>
   </div>
+
+  <div class="runs-backdrop" id="runs-backdrop" hidden></div>
 
   <nav id="tab-leiste" role="tablist" aria-label="Projekte">
     <template id="tab-vorlage">
