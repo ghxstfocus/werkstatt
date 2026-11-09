@@ -1010,6 +1010,213 @@ def _tl_aggregate_aktiv(
     }
 
 
+def aggregate_swimlane(
+    projekt: str, run_id: str | None = None,
+) -> dict[str, Any]:
+    """OP-381i: Swimlane-Wasserfall-Daten fuer den Control-Modus.
+
+    Liefert pro Rolle (explorer, scout, architect, ...) eine Lane mit
+    Zeit-Balken. Jeder Balken hat start_ts, end_ts, dauer_s, status,
+    kind, detail. Aktiv-Lane wird markiert.
+
+    Gruppierung:
+      * _start/_end-Paare (llm_call_start + llm_call_end) -> ein Balken
+      * loop_task_start + loop_task_ok/failed -> ein Balken mit Task-ID
+      * Einzel-Events -> 0.5s-Balken (Sichtbarkeit vor Genauigkeit)
+
+    Filter: -migrated-*-Dateien (statische Dumps) werden ignoriert.
+    Fallback run_id: letzter Run in der aktuellsten Datei.
+
+    Kein UI-Code — Frontend (waterfall.js) folgt im naechsten Block.
+    """
+    from datetime import datetime as _dt
+
+    audit_dir = werkstatt_home() / "audit-logs"
+    if not audit_dir.exists():
+        return {"run_id": "", "lanes": [], "zeitspanne": None, "aktiv": {}}
+
+    kandidaten = sorted(
+        f for f in audit_dir.glob("agent-pipeline-*.jsonl")
+        if "-migrated-" not in f.name
+    )
+    if not kandidaten:
+        return {"run_id": "", "lanes": [], "zeitspanne": None, "aktiv": {}}
+
+    datei = kandidaten[-1]
+    events: list[dict[str, Any]] = []
+    try:
+        with datei.open(encoding="utf-8", errors="replace") as f:
+            for zeile in f:
+                zeile = zeile.strip()
+                if not zeile:
+                    continue
+                try:
+                    obj = json.loads(zeile)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(obj, dict):
+                    events.append(obj)
+    except OSError:
+        return {"run_id": "", "lanes": [], "zeitspanne": None, "aktiv": {}}
+
+    # Run-Filter
+    if run_id is None:
+        for ev in reversed(events):
+            rid = ev.get("run_id")
+            if rid:
+                run_id = str(rid)
+                break
+    if not run_id:
+        return {"run_id": "", "lanes": [], "zeitspanne": None, "aktiv": {}}
+    events = [e for e in events if str(e.get("run_id", "")) == run_id]
+    if not events:
+        return {"run_id": run_id, "lanes": [], "zeitspanne": None, "aktiv": {}}
+
+    # Nach Zeit sortieren
+    def _ts_key(e: dict[str, Any]) -> float:
+        ts = e.get("timestamp") or e.get("ts") or ""
+        try:
+            dt = _dt.fromisoformat(str(ts))
+            if dt.tzinfo is None:
+                from datetime import UTC
+                dt = dt.replace(tzinfo=UTC)
+            return dt.timestamp()
+        except (ValueError, TypeError):
+            return 0.0
+
+    events_sorted = sorted(events, key=_ts_key)
+
+    # Start-/End-Paare erkennen: map "gate_id/pseudo-key" -> start-event
+    # Wir bauen Balken: jedes Event mit "_start" endet mit passendem "_end";
+    # loop_task_start endet mit loop_task_ok/_failed; alles andere = 0.5s.
+    lanes: dict[str, list[dict[str, Any]]] = {}
+
+    # Helper
+    def _add_balken(rolle: str, balken: dict[str, Any]) -> None:
+        if rolle not in lanes:
+            lanes[rolle] = []
+        lanes[rolle].append(balken)
+
+    def _make_balken(ev: dict[str, Any], ende_ev: dict[str, Any] | None) -> dict[str, Any]:
+        rolle = _tl_rolle(
+            str(ev.get("agent", "")), str(ev.get("kind", ""))
+        )
+        ts_start = _ts_key(ev)
+        ts_ende = _ts_key(ende_ev) if ende_ev else ts_start + 0.5
+        dauer = max(0.0, ts_ende - ts_start)
+        kind = str(ev.get("kind", ""))
+        payload = ev.get("payload")
+        if not isinstance(payload, dict):
+            payload = {}
+        detail = _tl_detail(kind, {**ev, **payload}) or kind
+        return {
+            "rolle": rolle,
+            "kind": kind,
+            "start_ts": ev.get("timestamp") or ev.get("ts") or "",
+            "end_ts": (ende_ev.get("timestamp") or ende_ev.get("ts") or "")
+                      if ende_ev else "",
+            "dauer_s": round(dauer, 3),
+            "status": _tl_status(kind, {**ev, **payload}),
+            "detail": str(detail)[:120],
+            "task_id": str(payload.get("task_id", "") or payload.get("id", "")),
+            "agent": str(ev.get("agent", "")),
+        }
+
+    # Paar-Logik: nimm das naechste "passende" End-Event
+    verbraucht: set[int] = set()
+    i = 0
+    while i < len(events_sorted):
+        if i in verbraucht:
+            i += 1
+            continue
+        ev = events_sorted[i]
+        kind = str(ev.get("kind", ""))
+        ende: dict[str, Any] | None = None
+
+        if kind.endswith("_start"):
+            # Suche das naechste *_end / *_ok / *_failed zur gleichen Rolle+Kind-Familie
+            basis = kind[:-6]  # "llm_call_start" -> "llm_call"
+            for j in range(i + 1, len(events_sorted)):
+                if j in verbraucht:
+                    continue
+                kj = str(events_sorted[j].get("kind", ""))
+                if kj in (basis + "_end", basis + "_ok", basis + "_failed"):
+                    ende = events_sorted[j]
+                    verbraucht.add(j)
+                    break
+        elif kind == "loop_task_start":
+            for j in range(i + 1, len(events_sorted)):
+                if j in verbraucht:
+                    continue
+                kj = str(events_sorted[j].get("kind", ""))
+                if kj in ("loop_task_ok", "loop_task_failed", "loop_task_blocked"):
+                    ende = events_sorted[j]
+                    verbraucht.add(j)
+                    break
+        elif kind == "loop_phase" and (
+            (ev.get("status") if "status" in ev else
+             (ev.get("payload") or {}).get("status")) == "start"
+        ):
+            pname = (ev.get("phase")
+                     or (ev.get("payload") or {}).get("phase") or "")
+            for j in range(i + 1, len(events_sorted)):
+                if j in verbraucht:
+                    continue
+                evj = events_sorted[j]
+                kj = str(evj.get("kind", ""))
+                pj = (evj.get("phase")
+                      or (evj.get("payload") or {}).get("phase") or "")
+                if kj == "loop_phase" and pj == pname:
+                    ende = evj
+                    verbraucht.add(j)
+                    break
+
+        balken = _make_balken(ev, ende)
+        _add_balken(balken["rolle"], balken)
+        i += 1
+
+    # Zeitspanne total
+    if events_sorted:
+        start_first = _ts_key(events_sorted[0])
+        end_last = _ts_key(events_sorted[-1])
+        zeitspanne = {
+            "start_ts": events_sorted[0].get("timestamp")
+                        or events_sorted[0].get("ts") or "",
+            "end_ts": events_sorted[-1].get("timestamp")
+                      or events_sorted[-1].get("ts") or "",
+            "dauer_s": round(max(0.0, end_last - start_first), 3),
+        }
+    else:
+        zeitspanne = None
+
+    # Aktiv-Rolle aus letztem Event
+    aktiv = _tl_aggregate_aktiv(events_sorted)
+
+    # Lanes in Rollen-Reihenfolge (ADSK: Explorer zuerst, Loop zuletzt)
+    ROLLEN_REIHENFOLGE = [
+        "explorer", "scout", "architect", "planner",
+        "builder", "verify", "reviewer", "reflection", "loop",
+    ]
+    lanes_liste: list[dict[str, Any]] = []
+    for rolle in ROLLEN_REIHENFOLGE:
+        if lanes.get(rolle):
+            lanes_liste.append({
+                "rolle": rolle,
+                "balken": lanes[rolle],
+            })
+    # Sonstige Rollen (falls neue dazukommen)
+    for rolle, balken in lanes.items():
+        if rolle not in ROLLEN_REIHENFOLGE and balken:
+            lanes_liste.append({"rolle": rolle, "balken": balken})
+
+    return {
+        "run_id": run_id,
+        "lanes": lanes_liste,
+        "zeitspanne": zeitspanne,
+        "aktiv": aktiv,
+    }
+
+
 def aggregate_timeline_aktiv(
     projekt: str, run_id: str | None = None,
 ) -> dict[str, Any]:

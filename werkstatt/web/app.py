@@ -558,6 +558,13 @@ def create_app() -> FastAPI:
             "aktiv": aktiv,
         }
 
+    @app.get("/api/projects/{name}/swimlane")
+    def project_swimlane(name: str, run_id: str | None = None) -> dict[str, Any]:
+        """OP-381i: Swimlane-Wasserfall-Daten (Rollen-Lanes + Zeit-Balken)."""
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        return _insp.aggregate_swimlane(projekt, run_id=run_id)
+
     @app.get("/api/projects/{name}/status")
     def project_status(name: str) -> dict[str, Any]:
         """Tasks/Verify/Drift/Phase fuer Statusleiste."""
