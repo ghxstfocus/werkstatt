@@ -1236,7 +1236,7 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Status:** open
 - **Typ:** bugfix (Sub-OP zu OP-381)
 - **Phase:** Phase-2 (Focus)
-- **Blockiert von:** —
+- **Blockiert von:** OP-381c (Modal-Redesign, Textarea sitzt im Modal)
 - **Betroffene Dateien:** `static/gate_panel.js`, `static/layout.css`, `werkstatt/web/inspector.py` (Gate-Typ-Erkennung), `werkstatt/gates.py` + `werkstatt/gate_bridge.py` (typ-Feld im Payload)
 - **Problem (Live 2026-11-09 23:56):** Der Loop hat zwei strukturell verschiedene Gate-Typen:
   **(1) Plan-Gate** — `j/n/a` (Plan ausführen?) mit Buttons.
@@ -1253,6 +1253,45 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
   (e) Live-Test: Loop mit OP-324 starten, Plan-Gate ablehnen, `plan_reason`-Gate im UI als Textarea, Freitext eingeben, Loop macht Reflection mit dem Grund.
 - **Tests:** `tests/test_gate_panel_typ.py` (~4 Tests: jna default, freitext-Erkennung im Payload, POST mit Freitext-Antwort, Fallback). Frontend-Spec in `tests/test_gate_panel_spec.py` (Textarea-Rendering).
 - **ADR:** —
+
+
+### OP-381c: Gate-Modal-Redesign (Vollbild, Backdrop-Blur, Copy, Freitext)
+
+- **Status:** open
+- **Typ:** ui-feature (Sammel-OP: Layout + Interaktion)
+- **Phase:** Phase-2 (Focus, **Voraussetzung fuer Loop-Nutzung aus der UI**)
+- **Blockiert von:** —
+- **Blockiert:** OP-381b (Freitext-Gate), OP-306 (Mode-Switch/Wasserfall)
+- **Betroffene Dateien:** `static/gate_panel.js` (komplett neu strukturieren, 270 → ~350 Z.), `static/layout.css` (Modal + Backdrop + Animation + Copy-Button), `static/layout.html` (Banner-Container + Modal-Root), `werkstatt/web/inspector.py` (`aggregate_gate_context` liefert `typ`-Feld pro Gate), `werkstatt/gates.py` + `werkstatt/gate_bridge.py` (`signal_open` setzt `typ`), `tests/test_gate_modal.py` (neu, Spec-First), `tests/test_gate_panel_spec.py` (Textarea + Copy-Button)
+- **Problem (Live 2026-11-09 23:56, User-Feedback):** Das Gate-Panel ist heute eine **460px × max-90vh-Box** rechts oben. Der Plan-Text ist im Schnitt 3.000+ Zeichen, oft mit Markdown-Struktur (## Überschriften, Listen, Code-Blöcke). Das ist im aktuellen Panel **kaum lesbar** — zu schmal, Monospace mit word-break, 320px max-height auf dem Plan. Zusätzlich: **kein Copy-Button**, Text markieren aus `<pre>` ist fummelig. Und: das Panel ist verschiebbar (`_machDraggable`) — was bei einem Modal-Muster nicht sinnvoll ist. Der User will ein **Vollbild-Modal mit Backdrop-Blur**, das die UI in den Hintergrund stellt und den Plan groß und strukturiert zeigt.
+- **Akzeptanzkriterien:**
+  **(Banner-Zustand)**
+  (a) Solange ein Gate offen ist, erscheint oben mittig ein **sticky Banner** („⚠ Human-Gate offen — Plan prüfen") mit Pulse-Animation (2s Zyklus, soft), `sem-error`-Hintergrund.
+  (b) Klick auf Banner → Modal öffnet.
+  (c) Banner hat `[×]`-Dismiss, kommt aber bei jedem neuen Gate wieder.
+  
+  **(Modal-Zustand)**
+  (d) Modal: `max-width: 900px, max-height: 90vh`, zentriert, `border-radius: 12px`, `backdrop-filter: blur(8px)` + `background: rgba(0,0,0,0.6)` als Backdrop über der gesamten UI.
+  (e) Öffnen-Animation: `transform: scale(0.96) → 1`, `opacity: 0 → 1`, 180ms ease-out. Schließen umgekehrt.
+  (f) Drei Status-Cards oben (Verify / Reviewer / Empfehlung) — bleiben wie heute.
+  (g) Plan-Bereich: **groß, scrollbar**, Monospace, Markdown-freundliche Formatierung (Zeilenumbrüche, `## `-Header hervorgehoben, `- `-Listen eingerückt — nur CSS, kein Markdown-Parser).
+  (h) **Copy-Button** oben rechts über dem Plan: „📋 Als Markdown kopieren", nutzt `navigator.clipboard.writeText`. Nach Klick 2s „✓ Kopiert".
+  (i) Sections darunter als `details`: Änderungen (Diff), Scout/Explorer, Historie — einklappbar, jeder mit eigener Scroll-Höhe (`max-height: 300px`).
+  (j) **Actions-Sticky**: die `j/n/a`-Buttons (oder bei `typ=freitext`: Textarea + Senden) sind **am unteren Rand des Modals sticky**, immer sichtbar auch beim Scrollen.
+  (k) `Escape` schließt Modal (kein Antwort-Senden). Klick auf Backdrop schließt Modal.
+  
+  **(Gate-Typ-Erkennung)**
+  (l) `aggregate_gate_context` liefert pro Gate ein neues Feld `typ: "jna" | "freitext"`. Backend setzt es in `gate_bridge.signal_open()` als neuen Parameter (Default `"jna"`).
+  (m) `plan_reason`-Gate (Reflection-Reject-Grund) wird auf `typ="freitext"` gesetzt — dann rendert das Modal **Textarea + Senden-Button** statt Buttons. Enter sendet, Shift+Enter macht Zeilenumbruch.
+  (n) Fallback bei fehlendem `typ`: `"jna"` (rückwärtskompatibel).
+  
+  **(Was wegfällt)**
+  (o) `_machDraggable` wird entfernt (kein Drag mehr — Modal-Muster).
+  (p) Altes 460px-Panel-Layout entfällt komplett.
+- **Tests:** `tests/test_gate_modal.py` (~8 Spec-First-Verhaltens-Tests: Banner-Erscheinen bei offenem Gate, Klick öffnet Modal, Backdrop-Klick schließt, Escape schließt, Copy-Button ruft clipboard API, typ=jna → Buttons, typ=freitext → Textarea, Enter sendet bei freitext). `tests/test_gate_panel_spec.py` (~3 Frontend-Smokes: IDs existieren, CSS-Klassen, keine Drag-Referenz mehr).
+- **Grund für Blockierung von OP-381b:** Freitext-Textarea muss im Modal sitzen. Doppelt bauen wäre 2x Aufwand.
+- **Grund für Blockierung von OP-306:** Mode-Switch/Wasserfall zeigt Gates prominent. Ohne funktionierendes Modal wäre der Wasserfall blind.
+- **ADR:** ADR-0028 (Gate-Modal-Pattern — wird mit OP-381c angelegt, dokumentiert Warum-Vollbild statt Panel)
 
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
@@ -1356,7 +1395,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Problem:** Das UI hat genau einen Modus. Der Cockpit-Typ wird erschlagen von drei Spalten, der Kontrollraum-Typ will mehr Dichte. ADR-0022 fordert 3 Modi.
 - **Akzeptanzkriterien:** (a) Drei Modi: `cockpit` (default, 3 Spalten wie heute), `control` (Focus-View, breite Timeline, Chat schwebend), `debug` (Timeline + Audit gekoppelt). (b) Wechsel via `Shift+Space` zyklisch, via Command Palette (`mode cockpit`), via URL `?mode=control`, via Dropdown oben links. (c) Persistiert in localStorage und URL. (d) Mode-Name oben sichtbar. (e) Guard: bei Wechsel waehrend laufendem Run → Warnung "Run laeuft, Modus wechseln?". (f) Alle drei Modi nutzen dieselben semantischen Farben (OP-300).
 - **Tests:** Keine (UI).
-- **Blockiert von:** —
+- **Blockiert von:** OP-381c (Gate-Modal, Wasserfall braucht ordentliches Gate)
 
 ### OP-307: Chat Tool-Call-Karten
 
