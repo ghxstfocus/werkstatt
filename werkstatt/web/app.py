@@ -542,12 +542,21 @@ def create_app() -> FastAPI:
 
     @app.get("/api/projects/{name}/timeline")
     def project_timeline(name: str, run_id: str | None = None) -> dict[str, Any]:
-        """Phasen-Knoten aus Event-Store + JSONL-Audit."""
+        """Phasen-Knoten aus Event-Store + JSONL-Audit.
+
+        OP-381h: zusaetzlich ``aktiv`` — welche Rolle arbeitet JETZT?
+        Leer wenn nichts laeuft oder letztes Event > 300s alt (stale).
+        """
         from werkstatt.web import inspector as _insp
         projekt = _pruefe_projektname(name)
         knoten = _insp.aggregate_timeline(projekt, run_id=run_id)
         st = _insp.aggregate_status(projekt)
-        return {"run_id": run_id or st.get("run_id"), "knoten": knoten}
+        aktiv = _insp.aggregate_timeline_aktiv(projekt, run_id=run_id)
+        return {
+            "run_id": run_id or st.get("run_id"),
+            "knoten": knoten,
+            "aktiv": aktiv,
+        }
 
     @app.get("/api/projects/{name}/status")
     def project_status(name: str) -> dict[str, Any]:

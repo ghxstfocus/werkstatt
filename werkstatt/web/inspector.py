@@ -881,6 +881,155 @@ def _tl_menschliche_phase(pname: str) -> str:
     return pname or "Phase"
 
 
+# ---------------------------------------------------------------------------
+# OP-381h (2026-11-09): Timeline-Rollen — welche Rolle gehoert zu welchem Event?
+# Wird im UI als Farbcodierung genutzt (sem-Farben, siehe layout.css).
+# ---------------------------------------------------------------------------
+
+_TL_AGENT_ROLLEN: dict[str, str] = {
+    "explorer": "explorer",
+    "scout": "scout",
+    "architect": "architect",
+    "planner": "planner",
+    "builder": "builder",
+    "reviewer": "reviewer",
+    "reflection": "reflection",
+    "verify": "verify",
+    "agent_pipeline": "loop",
+}
+
+_TL_KIND_ROLLEN: tuple[tuple[str, str], ...] = (
+    ("builder_", "builder"),
+    ("reviewer_", "reviewer"),
+    ("reflection_", "reflection"),
+    ("loop_reflection_", "reflection"),
+    ("explorer_", "explorer"),
+    ("scout_", "scout"),
+    ("planner_", "planner"),
+    ("architect_", "architect"),
+    ("verify_", "verify"),
+    ("loop_verify_", "verify"),
+    ("loop_plan_gate_", "loop"),
+    ("loop_human_gate_", "loop"),
+    ("loop_plan_", "loop"),
+    ("loop_task_", "loop"),
+    ("loop_phase", "loop"),
+    ("gate_", "loop"),
+)
+
+
+def _tl_rolle(agent: str, kind: str) -> str:
+    """Mappt agent-Feld + kind auf semantische Rolle (fuer Farbe im UI)."""
+    a = (agent or "").lower()
+    if a in _TL_AGENT_ROLLEN:
+        return _TL_AGENT_ROLLEN[a]
+    k = (kind or "").lower()
+    for prefix, rolle in _TL_KIND_ROLLEN:
+        if k.startswith(prefix):
+            return rolle
+    return "loop"
+
+
+def _tl_aggregate_aktiv(
+    run_events: list[dict[str, Any]],
+    stale_after_s: int = 300,
+) -> dict[str, Any]:
+    """Wer arbeitet JETZT am Run?
+
+    Kriterium: letztes Event ist 'in progress' (endet auf _start, ist
+    llm_call, llm_call_start oder loop_task_start). Wenn dieses Event
+    hoechstens ``stale_after_s`` alt ist, liefert die Funktion
+    {rolle, aktion, seit_s, kind}. Sonst {} (haengt oder nichts laeuft).
+
+    Die 300s-Grenze ist Absicht: ein Loop, der 5 Minuten kein Event
+    schreibt, ist entweder gecrasht oder blockiert — dann soll die UI
+    nicht faelschlich 'laeuft' zeigen.
+    """
+    from datetime import UTC
+    from datetime import datetime as _dt
+
+    if not run_events:
+        return {}
+    letztes = run_events[-1]
+    kind = str(letztes.get("kind", ""))
+    agent = str(letztes.get("agent", ""))
+    ts_raw = letztes.get("timestamp") or letztes.get("ts") or ""
+
+    ist_aktiv = (
+        kind.endswith("_start")
+        or kind in ("llm_call", "llm_call_start", "loop_task_start")
+    )
+    if not ist_aktiv:
+        return {}
+
+    try:
+        ts = _dt.fromisoformat(str(ts_raw))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=UTC)
+        delta_s = (_dt.now(UTC) - ts).total_seconds()
+    except (ValueError, TypeError):
+        return {}
+    if delta_s < 0 or delta_s > stale_after_s:
+        return {}
+
+    payload = letztes.get("payload")
+    if not isinstance(payload, dict):
+        payload = {}
+    aktion = _tl_detail(kind, {**letztes, **payload}) or kind
+    return {
+        "rolle": _tl_rolle(agent, kind),
+        "aktion": str(aktion)[:120],
+        "seit_s": int(delta_s),
+        "kind": kind,
+    }
+
+
+def aggregate_timeline_aktiv(
+    projekt: str, run_id: str | None = None,
+) -> dict[str, Any]:
+    """Endpoint-Helper: liest JSONL, ruft _tl_aggregate_aktiv.
+
+    Doppelt Events lesen (aggregate_timeline liest auch) — der
+    Overhead ist ~10ms, das ist billiger als ein Modul-Cache.
+    """
+    audit_dir = werkstatt_home() / "audit-logs"
+    if not audit_dir.exists():
+        return {}
+    kandidaten = sorted(
+        f for f in audit_dir.glob("agent-pipeline-*.jsonl")
+        if "-migrated-" not in f.name
+    )
+    if not kandidaten:
+        return {}
+    datei = kandidaten[-1]
+    events: list[dict[str, Any]] = []
+    try:
+        with datei.open(encoding="utf-8", errors="replace") as f:
+            for zeile in f:
+                zeile = zeile.strip()
+                if not zeile:
+                    continue
+                try:
+                    obj = json.loads(zeile)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(obj, dict):
+                    events.append(obj)
+    except OSError:
+        return {}
+
+    # Run-Filter
+    if run_id is None:
+        for ev in reversed(events):
+            rid = ev.get("run_id")
+            if rid:
+                run_id = str(rid)
+                break
+    if run_id:
+        events = [e for e in events if str(e.get("run_id", "")) == run_id]
+    return _tl_aggregate_aktiv(events)
+
+
 def aggregate_timeline(
     projekt: str, run_id: str | None = None, limit: int = 200,
 ) -> list[dict[str, Any]]:
@@ -1034,6 +1183,14 @@ def aggregate_timeline(
             "phase": "prolog",
             "children": prolog,
         })
+
+    # OP-381h: Rolle pro Kind anreichern (fuer Farbcodierung im UI).
+    for _k in knoten:
+        for _ch in _k.get("children") or []:
+            if isinstance(_ch, dict) and "rolle" not in _ch:
+                _ch["rolle"] = _tl_rolle(
+                    str(_ch.get("agent", "")), str(_ch.get("kind", ""))
+                )
 
     return knoten[:limit]
 
