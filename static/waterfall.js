@@ -60,6 +60,18 @@
     return isNaN(d) ? NaN : d.getTime() / 1000;
   }
 
+  // Kompakter Tick-Format: 0ms / 5s / 1m / 2m30 (ohne .5)
+  function _fmtTick(sek) {
+    if (!isFinite(sek) || sek < 0) return "0";
+    if (sek < 1) return Math.round(sek * 1000) + "ms";
+    if (sek < 60) return Math.round(sek) + "s";
+    var m = Math.floor(sek / 60);
+    var s = Math.round(sek - m * 60);
+    if (s === 0) return m + "m";
+    if (s === 60) return (m + 1) + "m";
+    return m + "m" + s + "s";
+  }
+
   // Zeit-Achse: 3-5 Ticks abhaengig von Breite
   function _zeitTicks(t0, t1, breite) {
     var dauer = Math.max(t1 - t0, 0.001);
@@ -70,7 +82,7 @@
       ticks.push({
         x_fraction: frac,
         sekunden: frac * dauer,
-        label: _fmtDauer(frac * dauer)
+        label: _fmtTick(frac * dauer)
       });
     }
     return ticks;
@@ -81,7 +93,7 @@
     var start = _tsSekunden(balken.start_ts) - t0;
     var dauer = Math.max(balken.dauer_s || 0.5, 0.2);
     var x_px = x0 + (breite * start / (t1 - t0));
-    var w_px = Math.max(2, breite * dauer / (t1 - t0));
+    var w_px = Math.max(8, breite * dauer / (t1 - t0));
     var stil = _balkenStil(balken.status);
 
     var g = document.createElementNS("http://www.w3.org/2000/svg", "g");

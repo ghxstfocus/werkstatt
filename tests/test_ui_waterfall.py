@@ -79,3 +79,26 @@ def test_css_pulse_accessible():
     css = _css()
     assert "prefers-reduced-motion" in css
     assert ".wf-pulse" in css
+
+
+def test_balken_minimum_breite():
+    """Balken >= 8px, damit auch 1s-Events sichtbar sind.
+
+    Live-Bug 2026-11-09: min 2px war zu duenn bei 4min-Runs
+    (1s-Event = 2px, nicht klickbar).
+    """
+    js = _js()
+    assert "Math.max(8," in js, "Balken-Minimum muss 8px sein"
+
+
+def test_fmt_tick_kompakt():
+    """Tick-Labels kompakt: 42s statt 42.5s."""
+    js = _js()
+    assert "function _fmtTick" in js
+    # keine 42.5s-Formatierung mehr in Ticks
+    import re
+    # Der Tick-Push nutzt _fmtTick, nicht _fmtDauer
+    idx = js.find("_zeitTicks")
+    assert idx > 0
+    fenster = js[idx:idx + 800]
+    assert "_fmtTick" in fenster
