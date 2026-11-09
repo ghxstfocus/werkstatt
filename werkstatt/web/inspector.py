@@ -1352,6 +1352,9 @@ def aggregate_gate_context(
                         "gate_id": pa.get("gate_id"),
                         "prompt": pa.get("prompt"),
                         "optionen": pa.get("optionen", "jna"),
+                        # OP-381c: typ aus Payload, Fallback "jna" (AK n,
+                        # rueckwaertskompatibel fuer alte Gates ohne typ)
+                        "typ": pa.get("typ", "jna"),
                     })
         except Exception:  # noqa: S110
             pass

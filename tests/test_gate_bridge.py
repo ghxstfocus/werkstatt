@@ -212,3 +212,62 @@ def test_e2e_get_gates_listet_offene(tmp_path, monkeypatch):
     assert r.status_code == 200
     gids = {g["gate_id"] for g in r.json()}
     assert gids == {"commit-bbb"}
+
+
+# =====================================================================
+# OP-381c Etappe 1: Backend typ-Feld (jna | freitext)
+# =====================================================================
+
+
+def test_signal_open_setzt_typ_default_jna(store):
+    """signal_open ohne typ -> Payload-Feld typ='jna' (rueckwaertskompatibel)."""
+    gate_bridge.signal_open("r1", "plan-abc", "Approve?")
+    evs = store.query("r1", kind="gate_open")
+    assert len(evs) == 1
+    pa = evs[0].get("payload") or {}
+    assert pa.get("typ") == "jna", (
+        f"AK n: Default-typ MUSS 'jna' sein, war {pa.get('typ')!r}"
+    )
+
+
+def test_signal_open_setzt_typ_freitext(store):
+    """signal_open mit typ='freitext' -> Payload-Feld typ='freitext'."""
+    gate_bridge.signal_open("r1", "plan-abc", "Reject-Grund?", typ="freitext")
+    evs = store.query("r1", kind="gate_open")
+    assert len(evs) == 1
+    pa = evs[0].get("payload") or {}
+    assert pa.get("typ") == "freitext", (
+        f"AK l: signal_open muss typ durchreichen, war {pa.get('typ')!r}"
+    )
+
+
+def test_frage_gate_plan_reason_setzt_typ_freitext(store, monkeypatch):
+    """_frage_gate('plan_reason') -> signal_open bekommt typ='freitext'.
+
+    Regress-Barriere (AK m): bei Entfernen der Ableitung in _frage_gate
+    landet typ='jna' im Payload und der Test wird rot.
+    """
+    aufrufe: list[dict] = []
+
+    def _fake_signal(run_id, gate_id, prompt, optionen="jna", typ="jna"):
+        aufrufe.append({"typ": typ})
+        # sofort antworten, damit wait() nicht blockiert
+        store.append(
+            run_id=run_id, kind="gate_answered",
+            payload={"gate_id": gate_id, "answer": "zu kaputt"},
+        )
+
+    monkeypatch.setattr(gate_bridge, "signal_open", _fake_signal)
+    set_run_id("test-run-plan-reason")
+    monkeypatch.setattr(gates, "_HEADLESS", True)
+    try:
+        antwort = gates._frage_gate("plan_reason", "Reject-Grund?")
+    finally:
+        set_run_id("")
+
+    assert antwort == "zu kaputt"
+    assert len(aufrufe) == 1
+    assert aufrufe[0]["typ"] == "freitext", (
+        f"AK m: plan_reason MUSS typ='freitext' bekommen, "
+        f"war {aufrufe[0]['typ']!r}"
+    )

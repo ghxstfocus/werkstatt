@@ -52,8 +52,13 @@ def signal_open(
     gate_id: str,
     prompt: str,
     optionen: str = "jna",
+    typ: str = "jna",
 ) -> None:
-    """Schreibt ein gate_open-Event, damit die UI das Gate anzeigen kann."""
+    """Schreibt ein gate_open-Event, damit die UI das Gate anzeigen kann.
+
+    ``typ`` (OP-381c): "jna" (Buttons) oder "freitext" (Textarea).
+    Default "jna" — rueckwaertskompatibel fuer alle bestehenden Aufrufer.
+    """
     # OP-323: audit() statt EventStore().append (JSONL autoritativ)
     from pathlib import Path as _Path
 
@@ -62,6 +67,7 @@ def signal_open(
         "gate_id": gate_id,
         "prompt": prompt,
         "optionen": optionen,
+        "typ": typ,
         "run_id": run_id,
     }, _Path("."), "werkstatt")
     _flush_projection()

@@ -50,8 +50,18 @@ def set_headless(flag: bool) -> None:
     _HEADLESS = flag
 
 
-def _frage_gate(kind: str, prompt: str, optionen: str = "jna", timeout: float | None = None) -> str:
-    """Fragt interaktiv (input) oder per Event-Store (gate_bridge)."""
+def _frage_gate(
+    kind: str,
+    prompt: str,
+    optionen: str = "jna",
+    timeout: float | None = None,
+) -> str:
+    """Fragt interaktiv (input) oder per Event-Store (gate_bridge).
+
+    OP-381c: typ wird aus ``kind`` abgeleitet — ``plan_reason`` bekommt
+    typ="freitext" (Reflection-Reject-Grund ist ein Textfeld, keine
+    j/n/a-Buttons). Alle anderen kinds bleiben "jna".
+    """
     if not _HEADLESS:
         return input(prompt)
     from werkstatt import gate_bridge
@@ -64,7 +74,8 @@ def _frage_gate(kind: str, prompt: str, optionen: str = "jna", timeout: float | 
             "adressiert werden"
         )
     gate_id = gate_bridge.make_gate_id(kind)
-    gate_bridge.signal_open(run_id, gate_id, prompt, optionen)
+    _typ = "freitext" if kind == "plan_reason" else "jna"
+    gate_bridge.signal_open(run_id, gate_id, prompt, optionen, typ=_typ)
     try:
         _kw = {} if timeout is None else {"timeout": timeout}
         return gate_bridge.wait(run_id, gate_id, **_kw)
