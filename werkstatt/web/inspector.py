@@ -22,7 +22,13 @@ _PROJECTS_BASE = Path("/opt")
 
 __all__ = ["aggregate_status", "aggregate_timeline", "aggregate_tokens", "parse_ops"]
 
-_OPS_RE = re.compile(r"^### (OP-\d+):\s*(.+?)\s*$", re.MULTILINE)
+# OP-389b-Fix: OP-Suffixe (a/b/c) MUESSEN erkannt werden. Dieselbe
+# Konvention wie in parse_ops() Zeile 77 (blockiert_von-Regex) —
+# Inkonsistenz innerhalb derselben Datei. Ohne diese Erweiterung
+# findet parse_ops() keine Sub-OPs, /start bricht mit leerer Aufgabe
+# ab, Loop crasht mit State-Contract-Verletzung (Live 2026-11-09
+# 18:58: 13 Events in 1.6s, dann loop_failed).
+_OPS_RE = re.compile(r"^### (OP-\d+[a-z]?):\s*(.+?)\s*$", re.MULTILINE)
 _STATUS_RE = re.compile(r"\*\*Status:\*\*\s*(\S+)", re.IGNORECASE)
 
 _PHASEN_PREFIXE = (
