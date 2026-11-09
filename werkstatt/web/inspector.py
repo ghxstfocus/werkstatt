@@ -896,7 +896,18 @@ def aggregate_timeline(
     audit_dir = werkstatt_home() / "audit-logs"
     if not audit_dir.exists():
         return []
-    kandidaten = sorted(audit_dir.glob("agent-pipeline-*.jsonl"))
+    # OP-381f: -migrated-*-Dateien sind statische DB-Dumps (aus
+    # OP-323), keine fortlaufende Quelle. Ohne diesen Filter waehlt
+    # kandidaten[-1] die alphabetisch letzte Datei — das ist
+    # `agent-pipeline-migrated-2026-11-08.jsonl` (weil 'm' > '2'),
+    # nicht die aktuelle `agent-pipeline-2026-11-09.jsonl`. Live-Bug
+    # 2026-11-09: Timeline zeigte nur 4 alte gate_open-Events aus
+    # einem Oktober-Run statt 143 Events aus dem 191006-Run.
+    # Gleiches Muster wie Projector._jsonl_files() Zeile 85.
+    kandidaten = sorted(
+        f for f in audit_dir.glob("agent-pipeline-*.jsonl")
+        if "-migrated-" not in f.name
+    )
     if not kandidaten:
         return []
     datei = kandidaten[-1]
