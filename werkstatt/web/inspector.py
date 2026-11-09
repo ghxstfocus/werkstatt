@@ -983,7 +983,7 @@ def _tl_aggregate_aktiv(
 
     ist_aktiv = (
         kind.endswith("_start")
-        or kind in ("llm_call", "llm_call_start", "loop_task_start")
+        or kind in ("llm_call", "llm_call_start", "loop_task_start", "gate_open")
     )
     if not ist_aktiv:
         return {}
@@ -997,6 +997,14 @@ def _tl_aggregate_aktiv(
         return {}
     if delta_s < 0 or delta_s > stale_after_s:
         return {}
+
+    if kind == "gate_open":
+        return {
+            "rolle": "loop",
+            "aktion": "wartet auf Antwort",
+            "seit_s": int(delta_s),
+            "kind": kind,
+        }
 
     payload = letztes.get("payload")
     if not isinstance(payload, dict):

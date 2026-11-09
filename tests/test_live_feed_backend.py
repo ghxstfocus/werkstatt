@@ -124,3 +124,22 @@ def test_run_filter(projektion, tmp_path):
     assert feed["run_id"] == "neu"
     kinds = [s["kind"] for s in feed.get("steps") or []]
     assert "old_event" not in kinds
+
+
+def test_gate_open_als_aktiv(projektion, tmp_path):
+    """OP-381: gate_open am Ende -> aktiv.kind=gate_open, rolle=loop."""
+    jetzt = datetime.now(UTC)
+    _schreibe(tmp_path, [
+        {"kind": "loop_started", "run_id": "r1", "project": "werkstatt",
+         "timestamp": (jetzt - timedelta(seconds=10)).isoformat(),
+         "agent": "agent_pipeline"},
+        {"kind": "gate_open", "run_id": "r1", "project": "werkstatt",
+         "timestamp": jetzt.isoformat(), "agent": "agent_pipeline",
+         "payload": {"gate_id": "g1", "prompt": "Plan ausfuehren?"}},
+    ])
+    feed = inspector.aggregate_live_feed("werkstatt")
+    aktiv = feed.get("aktiv") or {}
+    assert aktiv.get("kind") == "gate_open"
+    assert aktiv.get("rolle") == "loop"
+    assert "wart" in aktiv.get("aktion", "").lower()
+
