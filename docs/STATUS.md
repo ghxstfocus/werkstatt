@@ -1514,25 +1514,6 @@ noch nicht vollstaendig.
 - **ADR:** —
 
 
-### OP-392: [P2] loop.py: _full_cfg UnboundLocalError + Stash-Verlust bei Exception
-
-- **Status:** open
-- **Typ:** bugfix
-- **Phase:** Phase-2 (Loop-Stabilisierung)
-- **Blockiert von:** —
-- **Quelle:** Externer Review 2026-11-09 16:54
-- **Betroffene Dateien:** `werkstatt/loop.py`, `tests/test_loop_main.py`
-- **Problem (2 Fehlerpfade):**
-  **(a) `_full_cfg` UnboundLocalError (loop.py:504-508):** `_full_cfg = _load_cfg(args.project)` steht **innerhalb** `try`. Wirft `_load_cfg` eine gewöhnliche `Exception` (z.B. kaputte YAML), wird sie gefangen → `_full_cfg` **nie zugewiesen**. Zeile 508 liest `_full_cfg` trotzdem → `UnboundLocalError`.
-  **(b) Stash-Verlust bei Exception (loop.py:552-570):** `run_pipeline_loop()` wird **ohne** `try/finally` aufgerufen. Bei Exception: `_ps.save()` und `_git_stash_pop()` werden übersprungen. Änderungen bleiben in Git-Stash, fehlen im Working Tree → **Datenverlust im Arbeitsverzeichnis**.
-- **Akzeptanzkriterien:**
-  (a) `_full_cfg: dict = {}` **vor** dem `try` initialisieren. Falls `_load_cfg` scheitert, bleibt es `{}` (Verhalten wie `if _full_cfg else {}` in Zeile 508 zeigt — Absicht war offenbar "leerer Fallback").
-  (b) `run_pipeline_loop()` in `try/finally` einwickeln. `finally`-Block: `if _ps.data: _ps.save()` + `if _had_stash: _git_stash_pop(_pd)`.
-  (c) Bei normalem Erfolg/Fehler (kein Exception): Verhalten unverändert (Stash-Pop wie heute in `if rc != 0`-Zweig).
-  (d) `KeyboardInterrupt` auch als Exception behandeln → `finally` räumt auf (Stash zurück).
-- **Tests:** `tests/test_loop_main.py` (2 Tests: kaputte Config → kein UnboundLocalError, Exception in run_pipeline_loop → Stash zurück).
-- **ADR:** —
-
 
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
@@ -1993,6 +1974,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
+
+- 2026-11-09 | OP-392 | done | `loop.py` _full_cfg UnboundLocalError + Stash-Verlust bei Exception (Commit 9c29910). **Bug A:** `_full_cfg: dict = {}` vor try initialisiert (Zeile 493-508), sonst bei kaputter YAML (ValueError aus `_load_cfg`) UnboundLocalError. **Bug B:** `run_pipeline_loop` in `try/except BaseException/finally` eingewickelt; `_ps.save()` und `_git_stash_pop` laufen auch bei Exception (Datenrettung). `except BaseException` faengt `KeyboardInterrupt` mit (AK d), Propagation bleibt durch `raise`, `main()` emittiert `loop_failed` via existierendem `_emit_lifecycle_end` (bereits exception-safe). **Design:** `rc=1` safe-default, `_hat_exception` unterscheidet Fehlerpfad-Audits (`loop_rollback`/`loop_rollback_skipped`/`loop_stash_pop`) von Exception (kein Reset, aber pop). Reihenfolge reset→pop bleibt (alle 12 bestehenden Tests in `test_loop_main.py` gruen). **Spec-Tests:** 2 neu in `tests/test_loop_main.py`: (1) kaputte Config -> kein UnboundLocalError, `main()` laeuft durch; (2) `RuntimeError` in `run_pipeline_loop` -> `pop_calls == 1` (Datenrettung), Exception propagiert. **Regress-Barriere verifiziert (zwei Reverts):** Fix-A-Weg -> Test 1 rot mit exakt `UnboundLocalError` Zeile 508; Fix-B-Weg (pop im finally weg) -> Test 2 rot mit `AssertionError` (pop_calls leer). Baseline: 1589 -> 1591 passed, 5 skipped. ruff/mypy clean, alle 5 Drifts gruen. **Bewusst NICHT gemacht:** Reihenfolge reset→pop nicht umgestellt (Referenz-Tests binden sie explizit); kein `finally` um `_emit_lifecycle_end` (das ist bereits in `main()` aussen).
 
 - 2026-11-09 | OP-391 | done | Files-/Diff-Endpoint respektieren den Projektnamen (Commit 0cb8ae0). `/diff`: `basis = _PROJECTS_BASE / _pruefe_projektname(name)` statt `Path("/opt/werkstatt")`; Rueckgabe von `_pruefe_projektname` wird jetzt abgefangen und verwendet (vorher verworfen). `/files`: analog, `_pruefe_projektname(name)` wird jetzt ueberhaupt aufgerufen (vorher gar nicht — Multi-Projekt war halb fertig seit OP-306c). **Spec-Tests:** `tests/test_files_projekt.py`, 4 Tests: (1) files fuer test-a zeigt nur test-a-Dateien (nicht test-b), (2) `?pfad=../test-b/x` bleibt 400 (Root-Check unveraendert), (3) unbekanntes Projekt -> 404, (4) diff ruft `subprocess.run` mit `cwd=<PROJECTS_BASE>/test-a`. Isolation: `_PROJECTS_BASE` via monkeypatch auf `tmp_path`, `subprocess.run` fuer /diff gemockt — Test haengt nicht vom Working Tree ab. **Regress-Barriere verifiziert:** bei Revert beider basis-Zeilen werden 3 von 4 Tests rot (files-beruecksichtigt, files-404, diff-cwd); `pfad_traversal_blockiert` bleibt gruen (Root-Check unveraendert). Baseline: 1585 -> 1589 passed, 5 skipped. ruff/mypy clean, alle 5 Drifts gruen. **Bewusst NICHT gemacht (nicht im Scope):** andere Endpoints mit hardcoded Pfaden pruefen — sie nutzen bereits `_PROJECTS_BASE` (Zeilen 335, 363, 525), sauber.
 

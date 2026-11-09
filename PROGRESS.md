@@ -3761,3 +3761,45 @@ alle 5 Drifts gruen.
 und `subprocess.run`-Mock sind jetzt Standard bei jedem Endpoint-
 Test, der Pfade oder git anfasst. Kein Test haengt mehr vom
 Working Tree ab — das war bei OP-390 noch anders.
+
+
+## OP-392: loop.py _full_cfg UnboundLocalError + Stash-Verlust (2026-11-09)
+
+**Ausgefuehrt:** Commit 9c29910. Zwei Fehlerpfade in `werkstatt/loop.py`.
+
+**Bug A (_full_cfg, Zeile 493-508):** `_full_cfg = _load_cfg(...)`
+steht innerhalb try. Bei gewoehnlicher Exception (ValueError aus
+kaputter YAML) greift `except Exception: pass`, `_full_cfg` bleibt
+unzugewiesen, Zeile 508 (`if _full_cfg else {}`) wirft
+UnboundLocalError. Fix: `_full_cfg: dict = {}` vor try.
+
+**Bug B (Stash-Verlust, Zeile 560):** `run_pipeline_loop` ohne
+try/finally. Bei Exception werden `_ps.save()` und `_git_stash_pop`
+uebersprungen -> Stash bleibt im Repo, Working Tree leer,
+Datenverlust. Fix: `try/except BaseException/finally` um den Aufruf.
+
+**Design:** `except BaseException` faengt KeyboardInterrupt mit
+(AK d), `raise` propagiert, `main()` emittiert `loop_failed` via
+existierendem `_emit_lifecycle_end` (bereits exception-safe).
+`rc=1` als safe-default; `_hat_exception` unterscheidet Fehlerpfad-
+Audits (loop_rollback / loop_rollback_skipped / loop_stash_pop) von
+Exception (kein Reset, aber pop). Reihenfolge reset->pop bleibt
+(Referenz-Tests binden sie).
+
+**Spec-Tests:** 2 neu in `tests/test_loop_main.py`.
+- test_main_kaputte_config_kein_unbound_local_error
+- test_main_stash_pop_bei_exception
+
+**Regress-Barriere verifiziert (zwei Reverts):**
+- Fix A weg -> Test 1 rot mit exakt `UnboundLocalError` Zeile 508.
+- Fix B weg (pop im finally raus) -> Test 2 rot (pop_calls leer).
+
+**Baseline:** 1589 -> 1591 passed, 5 skipped. ruff/mypy clean,
+alle 5 Drifts gruen.
+
+**Session-Bilanz P1/P2-Serie (4 OPs aus externem Review):**
+- OP-389 WebSocket-Auth (f4952ff + c13a6a9 + 7cca2a6 + 6b80e5b)
+- OP-390 Git-Diff-Injection (8880d04 + 5 Commits Doku+Test-Isolation)
+- OP-391 Files/Diff-Projektname (0cb8ae0 + 00206fb)
+- OP-392 loop.py _full_cfg + Stash (9c29910)
+Alle mit hartem Revert-Beweis, Baseline 1550 -> 1591.
