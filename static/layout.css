@@ -2461,3 +2461,175 @@ body[data-mode="cockpit"] .runs-toggle,
 body[data-mode="debug"] .runs-toggle {
   display: none;
 }
+
+/* ===================================================================
+   OP-381j: Live-Feed im Control-Modus
+   Ersetzt die Timeline-Liste (chronologische Redundanz vermeiden).
+   =================================================================== */
+
+.live-feed-bereich {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
+  overflow: hidden;
+}
+
+/* Modus-Regeln */
+body[data-mode="cockpit"] .live-feed-bereich { display: none; }
+body[data-mode="debug"] .live-feed-bereich { display: none; }
+body[data-mode="control"] .bereich.timeline { display: none; }
+body[data-mode="control"] .live-feed-bereich {
+  display: flex;
+  grid-area: timeline;
+  height: 100%;
+}
+
+/* Grundgeruest */
+.control-live-feed {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  font-size: 12px;
+  gap: 10px;
+}
+
+/* Aktiv-Block (oben, prominent) */
+.lf-aktiv {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.02);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.lf-aktiv-idle {
+  opacity: 0.6;
+}
+.lf-aktiv-live {
+  border-width: 2px;
+  background: rgba(96,165,250,0.06);
+  animation: lf-aktiv-pulse 2s ease-in-out infinite;
+}
+@keyframes lf-aktiv-pulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(96,165,250,0.0); }
+  50%      { box-shadow: 0 0 12px rgba(96,165,250,0.3); }
+}
+.lf-aktiv-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.lf-aktiv-rolle {
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.lf-aktiv-aktion {
+  flex: 1;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lf-aktiv-seit {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.lf-aktiv-label {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* Steps-Liste (chronologisch) */
+.lf-steps {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 6px;
+}
+.lf-step {
+  display: grid;
+  grid-template-columns: 70px 90px 1fr 20px;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 3px;
+  align-items: center;
+  font-size: 11px;
+  transition: background 100ms;
+}
+.lf-step:hover { background: rgba(255,255,255,0.04); }
+.lf-step-ts {
+  color: var(--text-muted);
+  font-family: monospace;
+  font-size: 10px;
+}
+.lf-step-rolle {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lf-step-detail {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lf-step-sym {
+  text-align: center;
+  font-weight: 700;
+}
+.lf-step-sym.lf-ok       { color: var(--sem-ok); }
+.lf-step-sym.lf-err      { color: var(--sem-error); }
+.lf-step-sym.lf-running  { color: var(--sem-active); }
+.lf-step-sym.lf-idle     { color: var(--text-muted); }
+
+/* Neue Step einblenden */
+@keyframes lf-step-flash {
+  from { background: rgba(96,165,250,0.2); }
+  to   { background: transparent; }
+}
+.lf-step-neu {
+  animation: lf-step-flash 1.5s ease-out;
+}
+
+/* Naechster-Schritt-Hinweis */
+.lf-naechster {
+  padding: 6px 14px;
+  border-top: 1px dashed var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.lf-naechster-label {
+  margin-right: 6px;
+}
+.lf-naechster-rolle {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.lf-leer {
+  padding: 20px;
+  color: var(--text-dim);
+  font-style: italic;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lf-aktiv-live { animation: none; }
+  .lf-step-neu { animation: none; }
+}
