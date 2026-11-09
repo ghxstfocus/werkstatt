@@ -1686,6 +1686,23 @@ def _pruefe_zieldatei_existenz(
             )
             continue
 
+        # OP-110-Erweiterung 2026-11-09: create + Datei existiert -> update.
+        # Planner-LLM waehlt oft "create" fuer "in Datei X ergaenzen"-Tasks,
+        # auch wenn die Datei existiert. Builder korrigiert dann eigenmaechtig
+        # auf "update" (Datei-Realitaet), Builder-Check erwartet aber "create"
+        # -> builder_patch_invalid -> Reflection 5x gleicher Fehler -> loop_failed.
+        # Live-Beleg 2026-11-09 19:10 (Run werkstatt-20261109-191006-be4d9479):
+        # OP-376 t1 (inspector.py ergaenzen) wurde als create/update-Konflikt
+        # nicht gebaut, 5 Reflection-Runden, loop_failed.
+        if task.get("aktion") == "create" and ziel_pfad.exists():
+            audit(
+                "planner_create_ziel_existiert",
+                {"ziel": ziel, "aufgabe": aufgabe[:200]},
+                project_dir,
+                project_name or project_dir.name,
+            )
+            task["aktion"] = "update"
+
         ergebnis.append(task)
 
     return ergebnis

@@ -116,3 +116,38 @@ def test_pruefe_zieldatei_existenz_source_file_aus_task(tmp_path) -> None:
     assert len(ergebnis) == 1
     assert ergebnis[0]["aktion"] == "create"
     assert ergebnis[0]["source_file"] == "werkstatt/x.py"
+
+
+def test_pruefe_zieldatei_existenz_create_bei_existierender_datei_wird_update(
+    tmp_path,
+) -> None:
+    """OP-110-Erweiterung: existierende Datei + aktion=create -> update.
+
+    Live-Bug 2026-11-09 19:10: Planner gab OP-376 t1 (inspector.py
+    ergaenzen) aktion=create, obwohl inspector.py existierte. Builder
+    machte update (Datei-Realitaet), Check erwartete create ->
+    builder_patch_invalid -> Reflection 5x gleicher Fehler -> loop_failed.
+
+    Vorher korrigierte die Funktion nur update->create (Datei fehlt),
+    nicht create->update (Datei existiert).
+    """
+    (tmp_path / "werkstatt").mkdir()
+    (tmp_path / "werkstatt" / "inspector.py").write_text(
+        "# existiert", encoding="utf-8"
+    )
+    task = {
+        "task_files": ["werkstatt/inspector.py"],
+        "aktion": "create",
+    }
+
+    with mock.patch("werkstatt.planner.audit") as mock_audit:
+        ergebnis = _pruefe_zieldatei_existenz([task], tmp_path, "")
+
+    assert len(ergebnis) == 1
+    assert ergebnis[0]["aktion"] == "update", (
+        f"Existierende Datei + create MUSS zu update werden, "
+        f"war {ergebnis[0]['aktion']!r}"
+    )
+    assert mock_audit.call_count == 1
+    assert mock_audit.call_args.args[0] == "planner_create_ziel_existiert"
+    assert mock_audit.call_args.args[1]["ziel"] == "werkstatt/inspector.py"
