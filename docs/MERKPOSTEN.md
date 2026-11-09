@@ -1086,3 +1086,36 @@ nur j/n/a-Buttons. Klick auf `j` gibt Reject-Grund "j" oder leer
 **Konsequenz fuer OP-306 (Mode-Switch):** Erst OP-381b fixen,
 dann Mode-Switch. Sonst zeigt der Wasserfall jedes Gate falsch.
 
+### Externer Review als Pflicht nach jeder Code-Session (2026-11-09)
+
+**Beobachtung:** Nach ~6 Stunden eigener Code-Arbeit (OP-381 A/B/C/D
++ Env-Loader + Port-Fix) hat ein externer Reviewer in ~4 Minuten
+**5 echte Bugs** gefunden, die ich nicht gesehen habe:
+
+- [P1] WebSocket-Auth-Bypass in /ws/{tab_id} (ws.py:70-88)
+- [P1] Git-Diff-Argument-Injection in /diff + chat_tools (ref ungeprueft)
+- [P2] /files + /diff ignorieren den Projektnamen (Path hardcoded)
+- [P2] loop.py _full_cfg UnboundLocalError bei Config-Fehler
+- [P2] loop.py Stash-Verlust bei Exception (kein try/finally)
+
+**Alle 5 waren im Code sichtbar** — Zeile fuer Zeile. Ich habe
+sie uebersehen, weil ich fokussiert war auf meinen Auftrag
+(immer nur eine Stelle, nie das ganze Bild).
+
+**Regel:** Nach jeder Session mit Code-Aenderungen, die nicht
+rein mechanisch sind (Doku, Umbenennungen, kleine Bugfixes):
+
+1. Externen Review laufen lassen (codex, github copilot review,
+   oder ein LLM mit vollem Repo-Kontext).
+2. Die Befunde pruefen (nicht blind uebernehmen — heute war
+   EIN Reviewer-Pfad falsch: "app.py:99-111 Middleware-Skip",
+   die Auth-Middleware liegt woanders).
+3. Als OPs anlegen, auch wenn "nur P2". Der WebSocket-Bypass
+   war P1 und ich habe ihn stundenlang uebersehen.
+
+**Warum das zaehlt:** Der Loop baut auf einer Sicherheitsleine.
+Wenn die Leine Luecken hat, ist jeder Selbstverbesserungs-Loop
+riskant. Externer Review ist die zweite Leine.
+
+**Angelegt:** OP-389, OP-390, OP-391, OP-392.
+

@@ -1474,6 +1474,80 @@ noch nicht vollstaendig.
 - **ADR:** —
 
 
+
+### OP-389: [P1] WebSocket-Auth-Bypass in /ws/{tab_id}
+
+- **Status:** open
+- **Typ:** security
+- **Phase:** Phase-2 (Sicherheit vor Stabilität)
+- **Blockiert von:** —
+- **Quelle:** Externer Review 2026-11-09 16:52
+- **Betroffene Dateien:** `werkstatt/web/ws.py`, `werkstatt/web/app.py`, `tests/test_ws_auth.py` (neu)
+- **Problem:** `/ws/{tab_id}` (`ws.py:70-88`) prüft nur `_pruefe_tab_id()`, dann direkt `websocket.accept()`. Kein `is_authed_ws()`-Check wie bei `/api/projects/{name}/chat/stream` (app.py:616). Die HTTP-Middleware überspringt WebSocket-Verbindungen. Folge: **jeder ohne Login** kann beliebig viele WebSocket-Verbindungen öffnen und Ressourcen binden. Der Kanal liefert heute keine Events (kein akuter Daten-Leak), aber die Autorisierungslücke ist real.
+- **Akzeptanzkriterien:**
+  (a) `_websocket_kanaele` (ws.py) prüft vor `accept()`: `if not is_auth_disabled() and not is_authed_ws(websocket): await websocket.close(code=1008); return`.
+  (b) `is_authed_ws` aus `werkstatt.web.auth` wird importiert (existiert schon, wird bei `/api/projects/{name}/chat/stream` benutzt).
+  (c) Fallback `is_auth_disabled()` = True: kein Check (Tests können WS ohne Auth nutzen).
+- **Tests:** `tests/test_ws_auth.py` (3 Tests: ohne Cookie → close 1008, mit Cookie → accept, `_AUTH_DISABLED=True` → accept ohne Cookie).
+- **ADR:** —
+
+### OP-390: [P1] Git-Diff-Argument-Injection (ref ungeprüft)
+
+- **Status:** open
+- **Typ:** security
+- **Phase:** Phase-2 (Sicherheit vor Stabilität)
+- **Blockiert von:** —
+- **Quelle:** Externer Review 2026-11-09 16:55
+- **Betroffene Dateien:** `werkstatt/web/app.py`, `werkstatt/chat_tools.py`, `tests/test_diff_ref_validation.py` (neu)
+- **Problem:** Sowohl `/api/projects/{name}/diff` (app.py:420) als auch `chat_tools._git_diff` (chat_tools.py:87-97) übergeben `ref` **ungeprüft** an `git diff`. Ein `ref` wie `--output=/pfad/zur/datei` wird von Git als Option statt als Revision interpretiert — der Endpoint kann damit eine Datei überschreiben, auf die der Prozess Schreibzugriff hat. Beide Endpunkte sind authentifiziert, aber Defense-in-depth heißt: **niemals User-Input als Git-Argument ohne Validierung**.
+- **Akzeptanzkriterien:**
+  (a) Neues Muster `_REF_MUSTER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-/~^@{}]{0,127}$")` in `werkstatt/web/app.py`.
+  (b) Neue Funktion `_pruefe_ref(ref: str) -> str` analog `_pruefe_projektname` (400 bei Verstoß).
+  (c) In `/api/projects/{name}/diff`: `ref = _pruefe_ref(ref)` **vor** `git diff`.
+  (d) In `chat_tools._git_diff`: gleiche Prüfung, `ValueError` → `return f"git_diff: ungültiger ref {ref!r}"`.
+  (e) `--`-Trennzeichen als zusätzliche Defense: `git diff -- {ref}` verhindert Option-Interpretation (belt-and-suspenders).
+  (f) `subprocess.run` mit `check=False` bleibt (nicht auf Return-Code verlassen).
+- **Tests:** `tests/test_diff_ref_validation.py` (4 Tests: normaler ref ok, `--output=…` → 400/Fehler, `-p` → 400, leerer ref → 400).
+- **ADR:** —
+
+### OP-391: [P2] Files-/Diff-Endpoint ignorieren Projektnamen
+
+- **Status:** open
+- **Typ:** bugfix (Multi-Projekt-Vollständigkeit)
+- **Phase:** Phase-2 (Loop-Stabilisierung)
+- **Blockiert von:** —
+- **Quelle:** Externer Review 2026-11-09 16:55
+- **Betroffene Dateien:** `werkstatt/web/app.py`, `tests/test_files_projekt.py` (neu)
+- **Problem:** `/api/projects/{name}/files` (app.py:472) und `/api/projects/{name}/diff` (app.py:420) haben `Path("/opt/werkstatt")` **hardcoded**. Der `name`-Parameter wird nicht benutzt. Folge: Bei einem anderen ausgewählten Projekt (z.B. security-ai, test16) zeigt die UI Dateien und Diff von Werkstatt statt vom richtigen Projekt. **Seit OP-306c ist Multi-Projekt halb fertig** — Datenquellen gefixt, aber Files/Diff nicht.
+- **Akzeptanzkriterien:**
+  (a) In `/api/projects/{name}/files`: `basis = (_PROJECTS_BASE / _pruefe_projektname(name)).resolve()`, dann `ziel = (basis / pfad).resolve() if pfad else basis`.
+  (b) In `/api/projects/{name}/diff`: `basis = _PROJECTS_BASE / _pruefe_projektname(name)`.
+  (c) `_PROJECTS_BASE` als Modul-Konstante (existiert schon: `Path("/opt")`).
+  (d) Root-Check bleibt (`ziel.relative_to(basis)` gegen Pfad-Traversal).
+  (e) Live-Test: `/api/projects/security-ai/files` zeigt security-ai-Dateien, nicht Werkstatt.
+- **Tests:** `tests/test_files_projekt.py` (3 Tests: files für `test-a` zeigt test-a, nicht werkstatt; diff für `test-a`; Pfad-Traversal weiter blockiert).
+- **ADR:** —
+
+### OP-392: [P2] loop.py: _full_cfg UnboundLocalError + Stash-Verlust bei Exception
+
+- **Status:** open
+- **Typ:** bugfix
+- **Phase:** Phase-2 (Loop-Stabilisierung)
+- **Blockiert von:** —
+- **Quelle:** Externer Review 2026-11-09 16:54
+- **Betroffene Dateien:** `werkstatt/loop.py`, `tests/test_loop_main.py`
+- **Problem (2 Fehlerpfade):**
+  **(a) `_full_cfg` UnboundLocalError (loop.py:504-508):** `_full_cfg = _load_cfg(args.project)` steht **innerhalb** `try`. Wirft `_load_cfg` eine gewöhnliche `Exception` (z.B. kaputte YAML), wird sie gefangen → `_full_cfg` **nie zugewiesen**. Zeile 508 liest `_full_cfg` trotzdem → `UnboundLocalError`.
+  **(b) Stash-Verlust bei Exception (loop.py:552-570):** `run_pipeline_loop()` wird **ohne** `try/finally` aufgerufen. Bei Exception: `_ps.save()` und `_git_stash_pop()` werden übersprungen. Änderungen bleiben in Git-Stash, fehlen im Working Tree → **Datenverlust im Arbeitsverzeichnis**.
+- **Akzeptanzkriterien:**
+  (a) `_full_cfg: dict = {}` **vor** dem `try` initialisieren. Falls `_load_cfg` scheitert, bleibt es `{}` (Verhalten wie `if _full_cfg else {}` in Zeile 508 zeigt — Absicht war offenbar "leerer Fallback").
+  (b) `run_pipeline_loop()` in `try/finally` einwickeln. `finally`-Block: `if _ps.data: _ps.save()` + `if _had_stash: _git_stash_pop(_pd)`.
+  (c) Bei normalem Erfolg/Fehler (kein Exception): Verhalten unverändert (Stash-Pop wie heute in `if rc != 0`-Zweig).
+  (d) `KeyboardInterrupt` auch als Exception behandeln → `finally` räumt auf (Stash zurück).
+- **Tests:** `tests/test_loop_main.py` (2 Tests: kaputte Config → kein UnboundLocalError, Exception in run_pipeline_loop → Stash zurück).
+- **ADR:** —
+
+
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
 - **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,
