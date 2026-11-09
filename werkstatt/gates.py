@@ -694,7 +694,15 @@ def _human_gate(state: RunState) -> int:
     print("  n = reject (Loop bricht ab)")
     print("  e = Datei manuell bearbeiten (dann erneut fragen)")
     try:
-        antwort = _frage_gate("commit", "Deine Wahl: ", "jne").strip().lower()
+        antwort = _frage_gate(
+            "commit",
+            "\nPhase committed werden? [j/n/e]\n"
+            "  j = ja (committen)\n"
+            "  n = nein (Abbruch, kein Commit)\n"
+            "  e = edit (Aenderungen pruefen, dann neu fragen)\n"
+            "Deine Wahl: ",
+            "jne",
+        ).strip().lower()
     except (EOFError, KeyboardInterrupt):
         audit("loop_human_gate_eof", {"reason": "EOFError/KeyboardInterrupt"}, pd, pn)
         return 1

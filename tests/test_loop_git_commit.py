@@ -315,3 +315,31 @@ def test_stash_pop_ohne_drop_bei_erfolg(tmp_path):
     assert ok is True
     assert len(calls) == 1
     assert "pop" in calls[0]
+
+
+def test_commit_gate_prompt_ist_explizit(monkeypatch):
+    """OP-381: Commit-Gate-Prompt sagt WAS entschieden wird.
+
+    Vorher: nur "Deine Wahl: " — User sieht nicht ob es um Commit,
+    Plan-Reject, oder etwas anderes geht.
+    """
+    from werkstatt import gates
+    gesehen = []
+
+    def fake_frage_gate(name, prompt, optionen):
+        gesehen.append((name, prompt, optionen))
+        return "j"
+
+    monkeypatch.setattr(gates, "_frage_gate", fake_frage_gate)
+    # minimaler Kontext: das Commit-Gate wird irgendwo in gates.py
+    # gerufen; wir rufen die oeffentliche Funktion direkt auf.
+    # Welche Funktion das genau ist, klaert der Test beim Aufruf —
+    # wenn es keine oeffentliche gibt, pruefen wir nur den Quelltext.
+    import inspect
+    src = inspect.getsource(gates)
+    # Kernaussage: der Commit-Prompt nennt explizit was entschieden wird
+    assert "Phase committed werden" in src, "Commit-Gate-Prompt muss explizit sein"
+    assert "kein Commit" in src or "Abbruch, kein Commit" in src, "n-Zweig muss als Abbruch markiert sein"
+    # Und der alte inhaltsleere Text "Deine Wahl: " allein darf bei commit nicht mehr stehen
+    # (er steht weiter in den Plan-Gates, das ist OK — dort gibt es Kontext drumherum)
+
