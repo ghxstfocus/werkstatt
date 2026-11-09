@@ -56,6 +56,7 @@ def test_loop_subprozess_start_stop(
 
     aufrufe: list[list[str]] = []
     app_modul._LAUFENDE_LOOPS.clear()
+    app_modul._LOOP_LOG_HANDLES.clear()
     monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
 
     client = TestClient(app_modul.app)

@@ -30,6 +30,7 @@ _RUN_ID_MUSTER = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _PROJECTS_BASE = Path("/opt")
 
 _LAUFENDE_LOOPS: dict[str, subprocess.Popen] = {}
+_LOOP_LOG_HANDLES: dict[str, Any] = {}
 
 
 def _pruefe_projektname(name: str) -> str:
@@ -351,22 +352,53 @@ def create_app() -> FastAPI:
         args = [sys.executable, "-m", "werkstatt.loop",
                 "--project", projektname,
                 "--headless",
-                "--run-id", run_id]
+                "--run-id", run_id,
+                "--fresh"]
         aufgabe = ""
         op_id = ""
         if body and isinstance(body, dict):
             op_id = str(body.get("op_id") or "").strip()
             aufgabe = str(body.get("aufgabe") or "").strip()
             if op_id and not aufgabe:
-                # aus STATUS.md ziehen
-                from werkstatt.web import inspector as _insp
-                for op in _insp.parse_ops(_PROJECTS_BASE / projektname):
-                    if op.get("id") == op_id:
-                        aufgabe = f"{op_id}: {op.get('titel', '')}"
-                        break
+                # Volltext aus STATUS.md (nicht nur Titel): der Explorer
+                # braucht Backtick-Symbole/Pfade als Suchbegriffe.
+                # Kurztitel "OP-XXX: Titel" hat oft keine -> explorer_context=[].
+                _status_md = _pd / "docs" / "STATUS.md"
+                try:
+                    _status_text = _status_md.read_text(
+                        encoding="utf-8", errors="replace")
+                except OSError:
+                    _status_text = ""
+                _m_op = re.search(
+                    rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\Z)",
+                    _status_text, re.MULTILINE | re.DOTALL)
+                if _m_op:
+                    aufgabe = _m_op.group(0).strip()
+                else:
+                    from werkstatt.web import inspector as _insp
+                    for op in _insp.parse_ops(_PROJECTS_BASE / projektname):
+                        if op.get("id") == op_id:
+                            aufgabe = f"{op_id}: {op.get('titel', '')}"
+                            break
         if aufgabe:
             args.extend(["--aufgabe", aufgabe])
-        prozess = subprocess.Popen(args)
+        # Log-File pro Run, stdout/stderr umleiten (sonst sind
+        # Loop-Crashes unsichtbar). Handle in _LOOP_LOG_HANDLES halten,
+        # damit project_stop es schliessen kann.
+        _log_dir = _pd / ".werkstatt" / "logs"
+        _log_fh = None
+        try:
+            _log_dir.mkdir(parents=True, exist_ok=True)
+            _log_fh = (_log_dir / f"loop-{run_id}.log").open("ab")
+        except OSError:
+            _log_fh = None
+        if _log_fh is not None:
+            _LOOP_LOG_HANDLES[projektname] = _log_fh
+        prozess = subprocess.Popen(
+            args,
+            stdout=_log_fh if _log_fh is not None else subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
         _LAUFENDE_LOOPS[projektname] = prozess
         return {
             "gestartet": True,
@@ -385,6 +417,12 @@ def create_app() -> FastAPI:
         prozess.terminate()
         returncode = prozess.wait()
         _LAUFENDE_LOOPS.pop(projektname, None)
+        _log_fh = _LOOP_LOG_HANDLES.pop(projektname, None)
+        if _log_fh is not None:
+            try:
+                _log_fh.close()
+            except OSError:
+                pass
         return {"gestoppt": True, "returncode": returncode}
 
     @app.get("/api/projects/{name}/tokens")
