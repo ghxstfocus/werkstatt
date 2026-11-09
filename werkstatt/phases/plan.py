@@ -44,7 +44,23 @@ def _phase_plan_and_preflight(
     group_start("Phase 2: Planner")
     _t_plan = time.monotonic()
     plan_ok = _plan_gate(state)
-    if not plan_ok and phase_state.exists():
+    # OP-381k (2026-11-09): Resume-Aufgabe-Check.
+    # Ohne diesen Check wuerde ein Loop-Start mit anderer Aufgabe die
+    # Tasks aus der alten PhaseState laden, Architect/Planner ueberspringen.
+    _resume_erlaubt = True
+    if phase_state.exists():
+        try:
+            _ps_aufgabe = str(phase_state.data.get("aufgabe") or "").strip()
+            if _ps_aufgabe and _ps_aufgabe != (aufgabe or "").strip():
+                _resume_erlaubt = False
+                audit("loop_resume_verworfen",
+                      {"phase_aufgabe": _ps_aufgabe[:100],
+                       "aktuelle_aufgabe": (aufgabe or "")[:100],
+                       "grund": "aufgabe_geaendert"}, pd, pn)
+        except (AttributeError, TypeError):
+            pass
+
+    if not plan_ok and phase_state.exists() and _resume_erlaubt:
         data = phase_state.data
         if data.get("tasks"):
             state.tasks = data["tasks"]

@@ -19,8 +19,20 @@ from werkstatt.web import inspector
 
 @pytest.fixture
 def isoliert(monkeypatch, tmp_path):
+    """Alle werkstatt_home-Bindings patchen.
+
+    Live-Bug 2026-11-09 22:20: Test war gruen solange die ECHTE DB
+    keine offenen Gates hatte. Der 22:15-Loop liess ein Commit-Gate
+    offen -> Test rot, weil er die echte DB las (Fixture fehlte
+    inspector + _es). Lehre: alle 4 Bindings patchen, nicht nur 2.
+    """
+    from werkstatt import event_store as _es
+    from werkstatt.web import inspector
+
     monkeypatch.setattr(_audit, "_werkstatt_home", lambda: tmp_path)
     monkeypatch.setattr(_proj, "_werkstatt_home", lambda: tmp_path)
+    monkeypatch.setattr(_es, "werkstatt_home", lambda: tmp_path)
+    monkeypatch.setattr(inspector, "werkstatt_home", lambda: tmp_path)
     return tmp_path
 
 
