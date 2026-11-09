@@ -39,6 +39,7 @@ noch nicht vollstaendig.
 
 ### OP-281: Scout-Redundanz messen vor Umbau
 - **Status:** open
+- **Blockiert von:** OP-385 (Scout-Kette reparieren — Messung erst sinnvoll wenn Architect nur Scout-Output sieht)
 - **Betroffene Dateien:** `werkstatt/scout.py`, `werkstatt/planner.py` (`_run_scout`, `_baue_api_index`)
 - **Akzeptanzkriterien:** Auswertung der letzten 10 Loop-Läufe: (a) Wie oft setzt `_run_scout` `bereits_erfuellt == True`? (b) Wie oft liefert `_pruefe_api_widerspruch` einen Befund, den der Architect ohne Scout-Auszug nicht gefunden hätte? (c) Wie oft weicht `api_auszug` von einem reinen Token-Match ab? Entscheidung: Scout-LLM behalten (Wahrscheinlichkeit hoch nach Rollen-Analyse) oder deterministisch ersetzen. Kein Umbau vor Messung.
 - **Tests:** Keine — Mess-Aufgabe.
@@ -1397,25 +1398,45 @@ noch nicht vollstaendig.
 - **ADR:** —
 - **Kontext:** Nach OP-383 wissen wir die echten Zahlen. Diese OP setzt die Limits basierend darauf.
 
-### OP-385: Redundanz-Analyse Architect-Kontext
+### OP-385: Scout-Kette reparieren — Auftrag als Hauptzweck + einziger Architect-Input
 
 - **Status:** open
-- **Typ:** messung + architektur
-- **Phase:** Phase-2 (Loop-Stabilisierung)
-- **Blockiert von:** OP-383 (Messung der Token-Groessen)
-- **Betroffene Dateien:** `werkstatt/architect.py`, `tests/test_architect_kontext_redundanz.py` (neu)
-- **Problem:** Der Architect-Prompt bekommt drei Informationsquellen:
-  1. `explorer_findings` — was der Explorer gefunden hat (aus frueheren Events: 1.020 findings!)
-  2. `scout_api_auszug` — welche APIs der Scout identifiziert hat
-  3. `api_index_cache` — AST-Struktur der 10 wichtigsten Dateien
-  Diese drei ueberlappen wahrscheinlich stark (Funktionsnamen tauchen in allen drei auf). Der Overlap ist ungemessen. Wenn z.B. 40 % der Informationen redundant sind, verschmutzen sie den Kontext ohne Mehrwert (Context Rot).
+- **Typ:** architektur (Design + Umbau, Phase 2.5)
+- **Phase:** Phase-2.5 (Context-Architektur, vor Phase-3)
+- **Blockiert von:** —
+- **Blockiert:** OP-281 (Scout-Messung erst nach Kette sinnvoll), OP-387 (JIT-Retrieval erst nach sauberem Input)
+- **Verwandt:** OP-342 (Mutter-OP Prompt-Engineering pro Rolle), OP-260 (Kontext-Vertrag fuer Builder/Test/Debugger — Scout nicht drin)
+- **Betroffene Dateien:** `werkstatt/scout.py` (Prompt), `werkstatt/architect.py` (Prompt-Bau), `werkstatt/state.py` (neues Feld `scout_auftrag`), `tests/test_scout_kette.py` (neu)
+- **Problem (zwei zusammenhaengende Brueche):**
+  **Original-Design:** Explorer -> Scout -> Architect. Explorer sucht breit, Scout formt daraus einen praezisen Auftrag mit AST + nur relevanten Infos, Architect bekommt genau diesen Auftrag. Der Sinn: Architect ist der erste echte Inputgeber fuer die ganze Kette. Je praeziser sein Input, desto besser die Kette.
+  
+  **Brueche in der Praxis:**
+  (a) **Scout-Prompt:** Fordert schon "Du formulierst einen Auftrag fuer den Architect" (Zeile 1-2 SCOUT_SYSTEM). ABER: Der Auftrag ist Nebenprodukt. 90 % des Prompts drehen sich um Widerspruch-Checks, IST-ZUSTAND-Checks, atomare Plaene, OP-Disziplin. Ein `auftrag_prosa` entsteht "nebenbei" — nicht als Hauptziel. Live: Scout laeuft 8.6s, `api_auszug` ist da, aber `auftrag_prosa` bleibt vage.
+  (b) **Architect-Input:** Architect bekommt **direkt** `explorer_findings` (1.020 Findings) aus dem State (architect.py:447-453). Zusaetzlich `scout_api_auszug` und `api_index_cache`. **Explorer-Rohdaten und Scout-Filter parallel.** Der Schnitt, der die Kette sauber halten soll, ist damit aufgehoben.
+  
+  **Konsequenz:** Architect-Prompt 35.550 prompt-Tokens (Live 2026-11-09). 1.020 Findings + AST 10 Dateien + Scout-Output parallel. Context Rot.
 - **Akzeptanzkriterien:**
-  (a) Messblock: Fuer 5 reale Runs die drei Felder extrahieren, Overlap messen (gleicher Datei-Pfad, gleiche Funktions-Namen). Overlap-Quote dokumentieren.
-  (b) Wenn Overlap > 30 % in einer Kategorie: Reduktion implementieren (nur reichste Quelle behalten, andere kuertzen).
-  (c) Fail-loud bei widerspruechlichen Informationen (z.B. Scout sagt API X existiert, AST sagt nein) — `audit("architect_kontext_widerspruch", ...)`.
-  (d) Live: Nach dem Fix ist der Architect-Prompt messbar kleiner (Vergleich vorher/nachher in PROGRESS.md).
-- **Tests:** `tests/test_architect_kontext_redundanz.py` (3 Tests: Overlap-Erkennung, Reduktion, Fail-loud bei Widerspruch).
-- **ADR:** —
+  **(a) Scout-Prompt: Auftrag ist Hauptziel**
+  - `SCOUT_SYSTEM` umstrukturiert: `auftrag_prosa` als **erstes** Output-Feld, Checks sekundaer
+  - Neuer Block im Prompt: `## DEIN HAUPTZIEL\nFormuliere den Auftrag fuer den Architect. Der Architect braucht:\n- Einen praezisen Auftrag (3-10 Saetze)\n- AST der relevanten Dateien (aus api_auszug)\n- Nur was wirklich relevant ist\nKein Ballast, keine Rohdaten. Der Architect ist der wichtigste Punkt in der Kette.`
+  
+  **(b) Scout-Output als einziges Architect-Input**
+  - Neues State-Feld `scout_auftrag: dict` in `werkstatt/state.py`
+  - Scout fuellt `scout_auftrag` mit allen Output-Feldern
+  - `architect.py`: `explorer_findings` **nicht mehr** direkt in den Prompt (architect.py:447-453 entfernen)
+  - `architect.py`: `api_index_cache` kommt aus `scout.auftrag.api_auszug` (nicht mehr parallel)
+  - Architect-Prompt: nur noch `scout_auftrag`-Felder + OP-Spec + Migrationsstand
+  
+  **(c) Fallback fuer alte Runs**
+  - Wenn `scout_auftrag` leer: Fallback auf altes Verhalten (`explorer_findings` direkt)
+  - Fail-safe, damit bestehende Runs nicht brechen
+  
+  **(d) `bereits_erfuellt`-Check bleibt harter Filter**
+  - Wenn `scout.bereits_erfuellt == true`: Loop bricht ab, Architect uebersprungen
+  
+  **(e) Live: Architect-Prompt 30-50 % kleiner, Plan-Qualitaet gleich oder besser**
+- **Tests:** `tests/test_scout_kette.py` (5 Tests: HAUPTZIEL-Block im Prompt, `scout_auftrag` gefuellt, Architect nutzt `scout_auftrag` statt `explorer_findings`, Fallback bei leerem `scout_auftrag`, `bereits_erfuellt`-Check).
+- **ADR:** ADR-0028 (Scout-Kette als Kontext-Verengung — wird mit OP-385 angelegt)
 
 ### OP-386: Reflection-Kontext bereinigen (Diff statt Patches)
 
@@ -1442,8 +1463,8 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (gross)
-- **Phase:** Phase-2 (Loop-Stabilisierung)
-- **Blockiert von:** OP-384 (Context-Budget), OP-385 (Redundanz-Analyse)
+- **Phase:** Phase-2.5 (Context-Architektur)
+- **Blockiert von:** OP-384 (Context-Budget), OP-385 (Scout-Kette muss erst sauber sein)
 - **Betroffene Dateien:** `werkstatt/architect.py`, `werkstatt/roles/architect_tools.py` (neu), `tests/test_architect_jit.py` (neu)
 - **Problem:** Der Architect bekommt heute den `api_index_cache` fuer 10 Dateien **vorab geladen** (AST-Struktur im Prompt). Statt On-Demand: er bekommt die **Liste der 10 Pfade** und ruft selbst ab, was er fuer den Plan braucht. Anthropic "Effective context engineering" (2025): JIT-Retrieval ist der zentrale Hebel gegen Context Rot.
   **Aber:** grosser Umbau — Architect wird zum Agenten mit Tools statt einmaligem Prompt-Builder.

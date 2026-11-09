@@ -1119,3 +1119,34 @@ riskant. Externer Review ist die zweite Leine.
 
 **Angelegt:** OP-389, OP-390, OP-391, OP-392.
 
+### Scout-Kette: Design vs. Praxis (2026-11-09)
+
+**Design:** Explorer -> Scout -> Architect. Scout formt praezisen
+Auftrag mit AST, nur relevanten Infos. Architect bekommt diesen
+Auftrag als einzigen Input. Sinn: Architect ist der erste echte
+Inputgeber fuer die ganze Kette. Je praeziser sein Input, desto
+besser die Kette.
+
+**Praxis:** Scout-Prompt fordert den Auftrag schon (SCOUT_SYSTEM
+Zeile 1: "Du formulierst einen Auftrag fuer den Architect").
+ABER: Architect bekommt ZUSAETZLICH explorer_findings direkt
+(architect.py:447-453). 1.020 Findings parallel zum Scout-Output.
+Die Verengung durch den Scout ist damit aufgehoben.
+
+Live-Messung 2026-11-09: Architect-Prompt 35.550 prompt-Tokens.
+1020 explorer_findings + ast_index 10 Dateien + scout_api_auszug
+parallel. Context Rot.
+
+**Erkenntnis:** Ein "Verengungs-Agent" (Scout) nuetzt nur, wenn
+der Konsument (Architect) NUR dessen Output bekommt. Sonst:
+Parallel-Input = kein Filter. Die Filter-Wirkung wird durch
+den zweiten Kanal (explorer_findings direkt) aufgehoben.
+
+**Fix (OP-385):** Scout-Output als einziges Architect-Input.
+Explorer-Rohdaten fliessen in Scout (nicht in Architect).
+Neues State-Feld `scout_auftrag` als zentraler Kanal.
+
+**Nebenbei-Befund:** Scout-Prompt macht den Auftrag zum Neben-
+produkt (90 % Checks, 10 % Auftrag). Bei OP-385 wird das um-
+gestellt: Auftrag ist Hauptziel, Checks sekundaer.
+
