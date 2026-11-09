@@ -565,6 +565,17 @@ def create_app() -> FastAPI:
         projekt = _pruefe_projektname(name)
         return _insp.aggregate_swimlane(projekt, run_id=run_id)
 
+    @app.get("/api/projects/{name}/live-feed")
+    def project_live_feed(
+        name: str, run_id: str | None = None, limit: int = 30,
+    ) -> dict[str, Any]:
+        """OP-381j: Live-Feed fuer Control-Modus (vertikale Chronologie)."""
+        from werkstatt.web import inspector as _insp
+        projekt = _pruefe_projektname(name)
+        if limit < 1 or limit > 200:
+            raise HTTPException(status_code=400, detail="limit 1-200")
+        return _insp.aggregate_live_feed(projekt, run_id=run_id, limit=limit)
+
     @app.get("/api/projects/{name}/status")
     def project_status(name: str) -> dict[str, Any]:
         """Tasks/Verify/Drift/Phase fuer Statusleiste."""

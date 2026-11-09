@@ -1217,6 +1217,170 @@ def aggregate_swimlane(
     }
 
 
+# OP-381j: Naechster-Schritt-Heuristik fuer Live-Feed.
+# Aus aktiv.rolle -> wahrscheinliche naechste Rolle.
+_NAECHSTER_NACH_ROLLE: dict[str, str] = {
+    "explorer": "scout",
+    "scout": "architect",
+    "architect": "planner",
+    "planner": "builder",
+    "builder": "verify",
+    "verify": "reviewer",
+    "reviewer": "loop",       # Phase-Ende oder naechster Task
+    "reflection": "builder",  # zurueck in den Builder nach Repair
+    "loop": "",               # Loop-intern, kein Vorhersage-Wert
+}
+
+
+def aggregate_live_feed(
+    projekt: str, run_id: str | None = None, limit: int = 30,
+) -> dict[str, Any]:
+    """OP-381j: Vertikale Chronologie fuer den Control-Modus.
+
+    Liefert die letzten ``limit`` Events als sequenzielle Steps
+    (aufsteigend sortiert — aelteste zuerst, damit das Frontend wie
+    ein Log liest). Zusaetzlich:
+
+    - ``aktiv``: {rolle, aktion, seit_s, kind} aus dem aktuell
+      laufenden Event (aus _tl_aggregate_aktiv).
+    - ``naechster``: {rolle, kind} Heuristik aus aktiv.rolle, oder
+      leer wenn nichts laeuft.
+    - ``zeitspanne``: {start_ts, end_ts, dauer_s}.
+
+    Unterschied zu aggregate_swimlane:
+    - swimlane: aggregiert pro Rolle, Zeit-Balken (Nachanalyse).
+    - live_feed: sequenziell, jede Zeile ein Event (Live-Verfolgung).
+    """
+    from datetime import datetime as _dt
+
+    audit_dir = werkstatt_home() / "audit-logs"
+    leer: dict[str, Any] = {
+        "run_id": "", "steps": [], "aktiv": {},
+        "naechster": {}, "zeitspanne": None,
+    }
+    if not audit_dir.exists():
+        return leer
+
+    kandidaten = sorted(
+        f for f in audit_dir.glob("agent-pipeline-*.jsonl")
+        if "-migrated-" not in f.name
+    )
+    if not kandidaten:
+        return leer
+
+    datei = kandidaten[-1]
+    events: list[dict[str, Any]] = []
+    try:
+        with datei.open(encoding="utf-8", errors="replace") as f:
+            for zeile in f:
+                zeile = zeile.strip()
+                if not zeile:
+                    continue
+                try:
+                    obj = json.loads(zeile)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(obj, dict):
+                    events.append(obj)
+    except OSError:
+        return leer
+
+    # Run-Filter
+    if run_id is None:
+        for ev in reversed(events):
+            rid = ev.get("run_id")
+            if rid:
+                run_id = str(rid)
+                break
+    if not run_id:
+        return leer
+    events = [e for e in events if str(e.get("run_id", "")) == run_id]
+    if not events:
+        return {**leer, "run_id": run_id}
+
+    # Nach Zeit sortieren
+    def _ts_key(e: dict[str, Any]) -> float:
+        ts = e.get("timestamp") or e.get("ts") or ""
+        try:
+            dt = _dt.fromisoformat(str(ts))
+            if dt.tzinfo is None:
+                from datetime import UTC
+                dt = dt.replace(tzinfo=UTC)
+            return dt.timestamp()
+        except (ValueError, TypeError):
+            return 0.0
+
+    events_sorted = sorted(events, key=_ts_key)
+
+    # Aktiv-Snapshot: letzter 'in progress'-Event
+    aktiv_raw = _tl_aggregate_aktiv(events_sorted)
+
+    # Letzte N Events (aufsteigend) als Steps
+    # Aktiv-Event wird NICHT als normaler Step gezaehlt (kommt extra).
+    aktiv_ts = ""
+    if aktiv_raw and events_sorted:
+        letzter = events_sorted[-1]
+        if (str(letzter.get("kind", "")) == aktiv_raw.get("kind")
+                and _tl_rolle(str(letzter.get("agent", "")),
+                              str(letzter.get("kind", "")))
+                == aktiv_raw.get("rolle")):
+            aktiv_ts = str(letzter.get("timestamp") or letzter.get("ts") or "")
+    steps_quellen = [
+        e for e in events_sorted
+        if str(e.get("timestamp") or e.get("ts") or "") != aktiv_ts
+    ] if aktiv_ts else events_sorted
+    letzte = steps_quellen[-limit:] if len(steps_quellen) > limit else steps_quellen
+
+    steps: list[dict[str, Any]] = []
+    for ev in letzte:
+        kind = str(ev.get("kind", ""))
+        agent = str(ev.get("agent", ""))
+        payload = ev.get("payload")
+        if not isinstance(payload, dict):
+            payload = {}
+        detail = _tl_detail(kind, {**ev, **payload}) or kind
+        steps.append({
+            "ts": ev.get("timestamp") or ev.get("ts") or "",
+            "rolle": _tl_rolle(agent, kind),
+            "kind": kind,
+            "detail": str(detail)[:200],
+            "status": _tl_status(kind, {**ev, **payload}),
+            "task_id": str(payload.get("task_id", "")
+                           or payload.get("id", "")),
+        })
+
+    # Naechster-Schritt-Heuristik
+    naechster: dict[str, str] = {}
+    if aktiv_raw:
+        rolle = str(aktiv_raw.get("rolle", ""))
+        nxt = _NAECHSTER_NACH_ROLLE.get(rolle, "")
+        if nxt:
+            naechster = {"rolle": nxt}
+
+    # Zeitspanne
+    if events_sorted:
+        zeitspanne = {
+            "start_ts": events_sorted[0].get("timestamp")
+                        or events_sorted[0].get("ts") or "",
+            "end_ts": events_sorted[-1].get("timestamp")
+                      or events_sorted[-1].get("ts") or "",
+            "dauer_s": round(
+                max(0.0, _ts_key(events_sorted[-1])
+                    - _ts_key(events_sorted[0])), 3,
+            ),
+        }
+    else:
+        zeitspanne = None
+
+    return {
+        "run_id": run_id,
+        "steps": steps,
+        "aktiv": aktiv_raw,
+        "naechster": naechster,
+        "zeitspanne": zeitspanne,
+    }
+
+
 def aggregate_timeline_aktiv(
     projekt: str, run_id: str | None = None,
 ) -> dict[str, Any]:
