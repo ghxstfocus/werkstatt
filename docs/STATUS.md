@@ -2,7 +2,7 @@
 
 Format aus `DOC_CONVENTIONS.md` §5. Nur offene, **loop-faehige** OPs.
 `—` in Feldern = noch nicht spezifiziert (Loop praezisiert bei Bearbeitung).
-Letzte Aktualisierung: 2026-11-04.
+Letzte Aktualisierung: 2026-11-09.
 
 Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 `docs/ROADMAP.md`, Abschnitt "Aus STATUS.md (Loop-Queue)".
@@ -1496,20 +1496,21 @@ noch nicht vollstaendig.
 
 
 
-### OP-389: [P1] WebSocket-Auth-Bypass in /ws/{tab_id}
+### OP-389b: [P3] DRY-Migration der WS-Auth auf `require_ws_auth`
 
 - **Status:** open
-- **Typ:** security
-- **Phase:** Phase-2 (Sicherheit vor Stabilität)
+- **Typ:** refactor (klein, tech-debt)
+- **Phase:** Phase-2 (Sauberkeit; kein Sicherheitsproblem)
 - **Blockiert von:** —
-- **Quelle:** Externer Review 2026-11-09 16:52
-- **Betroffene Dateien:** `werkstatt/web/ws.py`, `werkstatt/web/app.py`, `tests/test_ws_auth.py` (neu)
-- **Problem:** `/ws/{tab_id}` (`ws.py:70-88`) prüft nur `_pruefe_tab_id()`, dann direkt `websocket.accept()`. Kein `is_authed_ws()`-Check wie bei `/api/projects/{name}/chat/stream` (app.py:616). Die HTTP-Middleware überspringt WebSocket-Verbindungen. Folge: **jeder ohne Login** kann beliebig viele WebSocket-Verbindungen öffnen und Ressourcen binden. Der Kanal liefert heute keine Events (kein akuter Daten-Leak), aber die Autorisierungslücke ist real.
+- **Quelle:** Folge-OP aus OP-389 (Commit 8880d04, 2026-11-09). Im OP-389-Close bewusst nicht mitgemacht (Regress-Risiko an 3 funktionierenden Endpoints).
+- **Betroffene Dateien:** `werkstatt/web/app.py`, `werkstatt/web/audit_panel.py`, `werkstatt/web/terminal_proxy.py`, `tests/test_ws_endpoint_helpers.py` (neu)
+- **Problem:** Nach OP-389 gibt es einen Helper `require_ws_auth(websocket)` in `werkstatt/web/auth.py`. Die drei Bestandsendpoints (`/api/projects/{name}/chat/stream` app.py:616, `/api/projects/{name}/audit/stream` audit_panel.py:292, `/ws/terminal/{project}` terminal_proxy.py:298) nutzen aber noch die 4-Zeilen-Kopie inline: `if not is_auth_disabled() and not is_authed_ws(websocket): await websocket.close(code=1008); return`. Bei einer künftigen Änderung an der Auth-Logik (z.B. Cookie-Name, neuer Header) müssten 4 Stellen gepflegt werden — echte technische Schuld, kein akuter Bug.
 - **Akzeptanzkriterien:**
-  (a) `_websocket_kanaele` (ws.py) prüft vor `accept()`: `if not is_auth_disabled() and not is_authed_ws(websocket): await websocket.close(code=1008); return`.
-  (b) `is_authed_ws` aus `werkstatt.web.auth` wird importiert (existiert schon, wird bei `/api/projects/{name}/chat/stream` benutzt).
-  (c) Fallback `is_auth_disabled()` = True: kein Check (Tests können WS ohne Auth nutzen).
-- **Tests:** `tests/test_ws_auth.py` (3 Tests: ohne Cookie → close 1008, mit Cookie → accept, `_AUTH_DISABLED=True` → accept ohne Cookie).
+  (a) Die drei Bestandsendpoints rufen `await require_ws_auth(websocket)` statt der Inline-Kopie auf. Semantisch identisch (close 1008 vor accept()).
+  (b) `from werkstatt.web.auth import require_ws_auth` als lokaler Import am Funktionskopf (Muster wie bisheriger `from werkstatt.web.auth import is_auth_disabled, is_authed_ws`).
+  (c) Kein Verhaltenswechsel — `tests/test_ws_auth.py` (13 Tests aus OP-389) bleibt grün.
+  (d) Meta-Test in `tests/test_ws_endpoint_helpers.py`: Source-Scan über `werkstatt/web/{app,audit_panel,terminal_proxy,ws}.py` verbietet das Muster `if not is_auth_disabled() and not is_authed_ws` (Regress-Barriere: taucht es wieder auf, wird's rot).
+- **Tests:** `tests/test_ws_endpoint_helpers.py` (1-2 Tests: Source-Scan). `tests/test_ws_auth.py` unverändert — bleibt grün als Verhaltensbeweis.
 - **ADR:** —
 
 ### OP-390: [P1] Git-Diff-Argument-Injection (ref ungeprüft)
@@ -2028,6 +2029,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
+
+- 2026-11-09 | OP-389 | done | WebSocket-Auth-Bypass in /ws/{tab_id} geschlossen (Commit 8880d04). Neuer async-Helper `require_ws_auth(websocket)` in auth.py: prueft is_auth_disabled() oder is_authed_ws() vor accept(), schliesst mit Close 1008 wenn nicht autorisiert. ws.py:websocket_kanaele nutzt ihn. Damit 4 WS-Endpoints gegen Unauth geschuetzt (chat/stream, audit/stream, terminal_ws waren schon geschuetzt; /ws/{tab_id} war die Luecke). **Spec-Tests:** tests/test_ws_auth.py, 13 Tests: 4x unauth->1008-vor-accept (parametrisiert pro WS-Pfad), 4x mit-Cookie->akzeptiert, 4x _AUTH_DISABLED=True->akzeptiert, 1x Meta-Test (jede @websocket-Route muss in WS_ROUTEN_SOURCE eingetragen sein — faengt neue Endpoints ohne Auth-Test). **Regress-Barriere verifiziert:** bei Revert von ws.py wird genau test_unauth_ws_wird_abgelehnt_vor_accept[/ws/abc] rot; die 3 anderen Pfade bleiben gruen (Bestandsschutz vorhanden, Test deckt exakt die Luecke). Baseline: 1550 -> 1563 passed, 5 skipped. ruff/mypy clean, alle 5 Drifts gruen. **Folge-OP:** OP-389b — app.py, audit_panel.py, terminal_proxy.py auf denselben Helper migrieren (DRY, kein Verhaltenswechsel; bewusst in eigener Session wegen Regress-Risiko an funktionierenden Endpoints).
 
 - 2026-11-08 | OP-373 | done | Backfill project-Spalte: 23.289 Werkstatt-Events von project='werkstatt' auf 'security-ai' korrigiert. Ausgefuehrt als manueller SQL-UPDATE mit event_id-IN-Liste (event_ids eindeutig aus JSONL-Zeilen mit project=security-ai abgeleitet, keine Kollisionsgefahr). project-Verteilung: werkstatt=387487, security-ai=23289, default=9. Idempotent (2. Lauf = 0 Aenderungen). **Ehrlich offen (in OP-374):** (a) Kein reproduzierbarer Code (nur manuelles SQL); (b) `_letzter_run_id` filtert nicht auf `run_id != ''` — security-ai zeigt leere run_id als 'letzter Run'; (c) 18.165 security-ai Events (18.10.-02.11.) ohne run_id durch Loop-Bug vor OP-303; (d) `ops_run_status` findet 0 security-ai-OPs weil pre-OP-303 `op_id` fehlt (ehrliche Luecke). pytest 1538 passed.
 
