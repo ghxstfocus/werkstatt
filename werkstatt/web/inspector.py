@@ -508,19 +508,31 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
                     pass
             if aus["loop_status"] != "running":
                 go = c.execute(
-                    "SELECT ts FROM events "
+                    "SELECT seq, ts FROM events "
                     "WHERE kind='gate_open' AND project=? "
                     "ORDER BY seq DESC LIMIT 1",
                     (projekt,),
                 ).fetchone()
                 if go:
-                    try:
-                        ts_go = datetime.fromisoformat(str(go[0]))
-                        if (datetime.now(UTC) - ts_go).total_seconds() < 300:
-                            aus["loop_status"] = "running"
-                            aus["loop_phase"] = "gate_wait"
-                    except (ValueError, TypeError):
-                        pass
+                    # OP-381: Terminal-Event nach gate_open -> Loop tot,
+                    # auch wenn das Gate juenger als 300s ist.
+                    go_seq, go_ts = go[0], go[1]
+                    _term_nach_go = c.execute(
+                        "SELECT 1 FROM events "
+                        "WHERE kind IN ('loop_erfolg', 'loop_failed', 'loop_ended') "
+                        "AND project=? "
+                        "AND run_id IS NOT NULL AND run_id != '' "
+                        "AND seq > ? LIMIT 1",
+                        (projekt, go_seq),
+                    ).fetchone()
+                    if not _term_nach_go:
+                        try:
+                            ts_go = datetime.fromisoformat(str(go_ts))
+                            if (datetime.now(UTC) - ts_go).total_seconds() < 300:
+                                aus["loop_status"] = "running"
+                                aus["loop_phase"] = "gate_wait"
+                        except (ValueError, TypeError):
+                            pass
 
             # 2. Neuestes Terminal-Event entscheidet (OP-371)
             # Frueher: 3-stufige Kaskade mit loop_erfolg zuerst -> ein

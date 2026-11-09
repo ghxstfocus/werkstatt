@@ -146,3 +146,23 @@ def test_ambient_terminal_event_ohne_run_id_ignoriert(tmp_path, monkeypatch):
     assert aus["loop_status"] == "idle"
     assert aus["last_run"] is None
 
+
+def test_ambient_terminal_nach_gate_open(tmp_path, monkeypatch):
+    """OP-381: loop_failed nach gate_open -> failed (nicht running)."""
+    _s, db = _store(tmp_path, monkeypatch)
+    from werkstatt.web.inspector import aggregate_ambient
+    _event(db, "r1", "gate_open", {"gate_id": "g1", "prompt": "?"})
+    _event(db, "r1", "loop_failed", {"grund": "test"})
+    aus = aggregate_ambient("werkstatt")
+    assert aus["loop_status"] == "failed"
+
+
+def test_ambient_gate_open_jung_bleibt_running(tmp_path, monkeypatch):
+    """OP-381: ohne Terminal-Event bleibt ein frisches gate_open running."""
+    _s, db = _store(tmp_path, monkeypatch)
+    from werkstatt.web.inspector import aggregate_ambient
+    _event(db, "r1", "gate_open", {"gate_id": "g1", "prompt": "?"})
+    aus = aggregate_ambient("werkstatt")
+    assert aus["loop_status"] == "running"
+    assert aus["loop_phase"] == "gate_wait"
+
