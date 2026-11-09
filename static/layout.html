@@ -9,7 +9,13 @@
   <title>Werkstatt</title>
   <link rel="stylesheet" href="/static/layout.css?v=1794182103">
 </head>
-<body>
+<body data-mode="cockpit">
+
+  <div class="mode-switch" id="mode-switch" role="group" aria-label="UI-Modus">
+    <button type="button" class="mode-btn" data-mode-btn="cockpit" aria-pressed="true" title="Cockpit (1)">Cockpit</button>
+    <button type="button" class="mode-btn" data-mode-btn="control" aria-pressed="false" title="Control (2)">Control</button>
+    <button type="button" class="mode-btn" data-mode-btn="debug" aria-pressed="false" title="Debug (3)">Debug</button>
+  </div>
 
   <nav id="tab-leiste" role="tablist" aria-label="Projekte">
     <template id="tab-vorlage">
@@ -279,6 +285,7 @@
   <script src="/static/utility_bar.js?v=1794182103"></script>
   <script src="/static/project_create.js?v=1794182103"></script>
   <script src="/static/workbench.js?v=1794182103"></script>
+  <script src="/static/mode.js?v=1794182103"></script>
   <script src="/static/gate_panel.js?v=1794182103"></script>
   <script src="/static/detail_drawer.js?v=1794182103"></script>
   <script src="/static/ambient_status.js?v=1794182103"></script>

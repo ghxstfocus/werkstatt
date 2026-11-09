@@ -2231,3 +2231,81 @@ body {
   filter: brightness(1.1);
   color: white;
 }
+
+/* ===================================================================
+   OP-306a: UI-Modi (Cockpit / Control / Debug) — ADR-0022
+   Grid-Varianten via body[data-mode="..."]. Default Cockpit.
+   =================================================================== */
+
+/* Mode-Switch oben links (Pill mit 3 Buttons) */
+.mode-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  margin: 4px 8px 4px 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-size: 11px;
+}
+.mode-btn {
+  background: transparent;
+  color: var(--text-dim);
+  border: 0;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+}
+.mode-btn:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+.mode-btn.aktiv {
+  background: var(--sem-action);
+  color: white;
+}
+
+/* Cockpit (default) — 3 Spalten wie heute */
+body[data-mode="cockpit"] .layout-grid {
+  grid-template-columns: 280px minmax(0, 1fr) 560px;
+  grid-template-areas: "runs timeline chat";
+}
+
+/* Control — Runs schmal (Icon-Liste), Chat schwebend klein, Timeline gross */
+body[data-mode="control"] .layout-grid {
+  grid-template-columns: 80px minmax(0, 1fr) 360px;
+  grid-template-areas: "runs timeline chat";
+}
+body[data-mode="control"] .bereich.runs .bereich-titel span:not([class]),
+body[data-mode="control"] .bereich.runs .bereich-titel h2 {
+  font-size: 10px;
+}
+body[data-mode="control"] .runs-liste .run-titel {
+  display: none;
+}
+body[data-mode="control"] .runs-liste .run {
+  padding: 6px 4px;
+  justify-content: center;
+}
+body[data-mode="control"] .timeline-liste {
+  font-size: 13px;
+}
+body[data-mode="control"] .bereich.chat .chat-sidebar {
+  display: none;
+}
+body[data-mode="control"] .bereich.chat .chat-body {
+  grid-template-columns: 1fr;
+}
+
+/* Debug — keine Runs-Liste, Timeline + Chat/Audit gekoppelt */
+body[data-mode="debug"] .layout-grid {
+  grid-template-columns: minmax(0, 1fr) 500px;
+  grid-template-areas: "timeline chat";
+}
+body[data-mode="debug"] .bereich.runs {
+  display: none;
+}
+
+/* Mode-Wechsel-Animation: sanfte Grid-Umstellung */
+.layout-grid {
+  transition: grid-template-columns 180ms ease-out;
+}
