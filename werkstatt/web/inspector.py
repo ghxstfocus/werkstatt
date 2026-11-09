@@ -899,16 +899,26 @@ _TL_AGENT_ROLLEN: dict[str, str] = {
 }
 
 _TL_KIND_ROLLEN: tuple[tuple[str, str], ...] = (
+    # Loop-emittierte Rollen-Events haben "loop_"-Prefix
+    # (loop_explorer_*, loop_scout_*, loop_planner_*, loop_architect_*).
+    # Die reinen Prefixe (explorer_*, ...) matchen nur Events von
+    # den Rollen-Agenten selbst.
+    ("loop_explorer_", "explorer"),
+    ("loop_scout_", "scout"),
+    ("loop_planner_", "planner"),
+    ("loop_architect_", "architect"),
+    ("loop_builder_", "builder"),
+    ("loop_reviewer_", "reviewer"),
+    ("loop_reflection_", "reflection"),
+    ("loop_verify_", "verify"),
     ("builder_", "builder"),
     ("reviewer_", "reviewer"),
     ("reflection_", "reflection"),
-    ("loop_reflection_", "reflection"),
     ("explorer_", "explorer"),
     ("scout_", "scout"),
     ("planner_", "planner"),
     ("architect_", "architect"),
     ("verify_", "verify"),
-    ("loop_verify_", "verify"),
     ("loop_plan_gate_", "loop"),
     ("loop_human_gate_", "loop"),
     ("loop_plan_", "loop"),
@@ -919,11 +929,27 @@ _TL_KIND_ROLLEN: tuple[tuple[str, str], ...] = (
 
 
 def _tl_rolle(agent: str, kind: str) -> str:
-    """Mappt agent-Feld + kind auf semantische Rolle (fuer Farbe im UI)."""
+    """Mappt agent-Feld + kind auf semantische Rolle (fuer Farbe im UI).
+
+    Prioritaet:
+    1. Agent ist eine ECHTE Rolle (explorer, builder, architect, ...) —
+       gewinnt immer (das ist wer den Code ausfuehrt).
+    2. Sonst kind-Prefix — der Loop (``agent_pipeline``) emittiert
+       Rollen-Events mit kind-Praefix (``loop_explorer_*``,
+       ``loop_builder_*``) und meint damit die Rolle im Namen.
+    3. Fallback ``loop`` (Loop-interne Events ohne Rollenbezug).
+
+    ``agent_pipeline`` bekommt bewusst KEINEN Vorrang: sonst wuerde
+    ``loop_explorer_suchbegriffe`` (agent=agent_pipeline, kind-Prefix
+    ``loop_explorer_``) als ``loop`` statt ``explorer`` markiert und
+    die Timeline-Farbcodierung wird einfarbig.
+    """
     a = (agent or "").lower()
-    if a in _TL_AGENT_ROLLEN:
-        return _TL_AGENT_ROLLEN[a]
     k = (kind or "").lower()
+    # Echte Rolle aus agent (Loop-Marker ueberspringen)
+    if a and a != "agent_pipeline" and a in _TL_AGENT_ROLLEN:
+        return _TL_AGENT_ROLLEN[a]
+    # Rollen-Praefix aus kind (Loop-emittierte Events)
     for prefix, rolle in _TL_KIND_ROLLEN:
         if k.startswith(prefix):
             return rolle
@@ -1145,6 +1171,7 @@ def aggregate_timeline(
                 "kind": kind,
                 "detail": detail_text,
                 "status": status,
+                "agent": str(ev.get("agent", "")),
             }
             if aktuell is not None:
                 aktuell["children"].append(child)

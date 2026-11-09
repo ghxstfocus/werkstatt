@@ -108,3 +108,50 @@ def test_kein_aktives_event(projektion, tmp_path):
     ])
     aktiv = inspector.aggregate_timeline_aktiv("werkstatt")
     assert aktiv == {}
+
+
+def test_loop_prefix_rollen(projektion, tmp_path):
+    """Loop-emittierte Events (loop_explorer_*, loop_architect_*) kriegen Rolle."""
+    jetzt = datetime.now(UTC).isoformat()
+    _schreibe(tmp_path, [
+        {"kind": "loop_phase", "phase": "vorbereitung", "run_id": "r1",
+         "project": "werkstatt", "timestamp": jetzt, "agent": "agent_pipeline"},
+        {"kind": "loop_explorer_suchbegriffe", "run_id": "r1",
+         "project": "werkstatt", "timestamp": jetzt, "agent": "agent_pipeline",
+         "anzahl": 1, "begriffe": ["x"]},
+        {"kind": "loop_architect_ok", "run_id": "r1",
+         "project": "werkstatt", "timestamp": jetzt, "agent": "agent_pipeline"},
+    ])
+    knoten = inspector.aggregate_timeline("werkstatt")
+    rollen = {}
+    for k in knoten:
+        for ch in k.get("children") or []:
+            rollen[ch.get("kind")] = ch.get("rolle")
+    assert rollen.get("loop_explorer_suchbegriffe") == "explorer"
+    assert rollen.get("loop_architect_ok") == "architect"
+
+
+def test_agent_feld_hat_vorrang(projektion, tmp_path):
+    """Wenn agent gesetzt ist, gewinnt es vor kind-Prefix.
+
+    Live-Bug 2026-11-09: aggregate_timeline reichte agent nicht an
+    child durch -> _tl_rolle fiel auf kind-Prefix zurueck, llm_call_start
+    wurde 'loop' statt 'architect'.
+    """
+    jetzt = datetime.now(UTC).isoformat()
+    _schreibe(tmp_path, [
+        {"kind": "loop_phase", "phase": "vorbereitung", "run_id": "r1",
+         "project": "werkstatt", "timestamp": jetzt, "agent": "agent_pipeline"},
+        {"kind": "llm_call_start", "run_id": "r1", "project": "werkstatt",
+         "timestamp": jetzt, "agent": "architect", "model": "deepseek-reasoner"},
+    ])
+    knoten = inspector.aggregate_timeline("werkstatt")
+    for k in knoten:
+        for ch in k.get("children") or []:
+            if ch.get("kind") == "llm_call_start":
+                assert ch.get("rolle") == "architect", (
+                    f"agent=architect muss Vorrang haben vor kind=llm_call_start, "
+                    f"war {ch.get('rolle')}"
+                )
+                return
+    pytest.fail("llm_call_start nicht in Timeline gefunden")
