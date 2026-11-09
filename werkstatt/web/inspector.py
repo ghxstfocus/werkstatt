@@ -109,8 +109,26 @@ def _letzter_run_id(
         return None
 
 
+def _frische_projektion() -> None:
+    """OP-381e: SQLite vor UI-Reads aktualisieren.
+
+    Hintergrund: audit._maybe_flush triggert Projector.tail() erst
+    nach _FLUSH_INTERVAL (100) Events. Bei kurzen Runs (< 100 Events)
+    bleibt SQLite hinter JSONL. UI-Renders lesen SQLite und sehen
+    nichts — Read-Through macht jeden UI-Read aktuell (idempotent).
+
+    Fail-soft: bei Fehler wird der Read mit alten Daten ausgefuehrt.
+    """
+    try:
+        from werkstatt.projection import Projector
+        Projector().tail()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def aggregate_status(projekt: str) -> dict[str, Any]:
     """Liefert Tasks/Verify/Drift/Phase fuer die Status-Leiste."""
+    _frische_projektion()
     es = EventStore()
     run_id = _letzter_run_id(es, projekt)
     aus: dict[str, Any] = {
@@ -455,6 +473,7 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
       das letzte Event loop_failed (19:41) war.
     - gates: DISTINCT gate_id ueber open/answered/expired
     """
+    _frische_projektion()
     from datetime import UTC, datetime
 
     es = EventStore()
@@ -872,6 +891,8 @@ def aggregate_timeline(
     hat nur Task-Events ohne Kontext. Wir gruppieren nach
     loop_phase-Bloecken, mit Prolog-Block fuer alles davor.
     """
+    # aggregate_timeline liest JSONL direkt (nicht SQLite) — kein
+    # Read-Through noetig, die Datei ist immer aktuell.
     audit_dir = werkstatt_home() / "audit-logs"
     if not audit_dir.exists():
         return []
@@ -1288,6 +1309,7 @@ def aggregate_gate_context(
     projekt: str, run_id: str | None = None
 ) -> dict[str, Any]:
     """Alles was der Mensch braucht um ein Gate informiert zu entscheiden."""
+    _frische_projektion()
     events = _audit_events(run_id)
     letzte_run_id = (
         str(events[-1].get("run_id") or run_id or "")
