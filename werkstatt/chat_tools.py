@@ -13,6 +13,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from werkstatt.validierung import pruefe_ref
+
 __all__ = ["CHAT_TOOLS", "execute_tool", "openai_schemas"]
 
 _PROJEKT_DIR = Path("/opt/werkstatt").resolve()
@@ -87,8 +89,12 @@ def _git_log(args: dict[str, Any]) -> str:
 def _git_diff(args: dict[str, Any]) -> str:
     ref = str(args.get("ref", "HEAD"))
     try:
+        ref = pruefe_ref(ref)
+    except ValueError as exc:
+        return f"git_diff: {exc}"
+    try:
         r = subprocess.run(
-            ["git", "diff", ref],
+            ["git", "diff", ref, "--"],
             capture_output=True, text=True, check=False, timeout=_TIMEOUT_GIT_S,
             cwd=_PROJEKT_DIR,
         )

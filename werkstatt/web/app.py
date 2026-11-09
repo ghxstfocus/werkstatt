@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from werkstatt.event_store import EventStore
 from werkstatt.phase_state import PhaseState
+from werkstatt.validierung import pruefe_ref as _pruefe_ref_kern
 from werkstatt.web import audit_panel, auth, terminal_proxy, ws
 
 __all__ = ["app", "create_app"]
@@ -53,6 +54,18 @@ def _pruefe_run_id(run_id: str) -> str:
     if not isinstance(run_id, str) or not _RUN_ID_MUSTER.fullmatch(run_id):
         raise HTTPException(status_code=400, detail="ungueltige run_id")
     return run_id
+
+
+def _pruefe_ref(ref: str) -> str:
+    """HTTP-Adapter um werkstatt.validierung.pruefe_ref.
+
+    Wandelt ValueError in HTTPException(400), damit der Endpoint
+    einheitlich mit _pruefe_projektname und _pruefe_run_id antwortet.
+    """
+    try:
+        return _pruefe_ref_kern(ref)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 _SESSION_ID_MUSTER = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -422,15 +435,16 @@ def create_app() -> FastAPI:
         """git diff gegen ref (default HEAD), als Text + Stat."""
         import subprocess as _sp
         _pruefe_projektname(name)
+        ref = _pruefe_ref(ref)
         basis = Path("/opt/werkstatt")
         try:
             stat = _sp.run(
-                ["git", "diff", "--stat", ref],
+                ["git", "diff", "--stat", ref, "--"],
                 capture_output=True, text=True, timeout=10,
                 cwd=str(basis), check=False,
             ).stdout
             diff = _sp.run(
-                ["git", "diff", ref],
+                ["git", "diff", ref, "--"],
                 capture_output=True, text=True, timeout=20,
                 cwd=str(basis), check=False,
             ).stdout
