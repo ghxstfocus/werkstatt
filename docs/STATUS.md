@@ -1283,44 +1283,6 @@ noch nicht vollstaendig.
 - **ADR:** —
 
 
-### OP-381c: Gate-Modal-Redesign (Vollbild, Backdrop-Blur, Copy, Freitext)
-
-- **Status:** open
-- **Typ:** ui-feature (Sammel-OP: Layout + Interaktion)
-- **Phase:** Phase-2 (Focus, **Voraussetzung fuer Loop-Nutzung aus der UI**)
-- **Blockiert von:** —
-- **Blockiert:** OP-381b (Freitext-Gate), OP-306 (Mode-Switch/Wasserfall)
-- **Betroffene Dateien:** `static/gate_panel.js` (komplett neu strukturieren, 270 → ~350 Z.), `static/layout.css` (Modal + Backdrop + Animation + Copy-Button), `static/layout.html` (Banner-Container + Modal-Root), `werkstatt/web/inspector.py` (`aggregate_gate_context` liefert `typ`-Feld pro Gate), `werkstatt/gates.py` + `werkstatt/gate_bridge.py` (`signal_open` setzt `typ`), `tests/test_gate_modal.py` (neu, Spec-First), `tests/test_gate_panel_spec.py` (Textarea + Copy-Button)
-- **Problem (Live 2026-11-09 23:56, User-Feedback):** Das Gate-Panel ist heute eine **460px × max-90vh-Box** rechts oben. Der Plan-Text ist im Schnitt 3.000+ Zeichen, oft mit Markdown-Struktur (## Überschriften, Listen, Code-Blöcke). Das ist im aktuellen Panel **kaum lesbar** — zu schmal, Monospace mit word-break, 320px max-height auf dem Plan. Zusätzlich: **kein Copy-Button**, Text markieren aus `<pre>` ist fummelig. Und: das Panel ist verschiebbar (`_machDraggable`) — was bei einem Modal-Muster nicht sinnvoll ist. Der User will ein **Vollbild-Modal mit Backdrop-Blur**, das die UI in den Hintergrund stellt und den Plan groß und strukturiert zeigt.
-- **Akzeptanzkriterien:**
-  **(Banner-Zustand)**
-  (a) Solange ein Gate offen ist, erscheint oben mittig ein **sticky Banner** („⚠ Human-Gate offen — Plan prüfen") mit Pulse-Animation (2s Zyklus, soft), `sem-error`-Hintergrund.
-  (b) Klick auf Banner → Modal öffnet.
-  (c) Banner hat `[×]`-Dismiss, kommt aber bei jedem neuen Gate wieder.
-  
-  **(Modal-Zustand)**
-  (d) Modal: `max-width: 900px, max-height: 90vh`, zentriert, `border-radius: 12px`, `backdrop-filter: blur(8px)` + `background: rgba(0,0,0,0.6)` als Backdrop über der gesamten UI.
-  (e) Öffnen-Animation: `transform: scale(0.96) → 1`, `opacity: 0 → 1`, 180ms ease-out. Schließen umgekehrt.
-  (f) Drei Status-Cards oben (Verify / Reviewer / Empfehlung) — bleiben wie heute.
-  (g) Plan-Bereich: **groß, scrollbar**, Monospace, Markdown-freundliche Formatierung (Zeilenumbrüche, `## `-Header hervorgehoben, `- `-Listen eingerückt — nur CSS, kein Markdown-Parser).
-  (h) **Copy-Button** oben rechts über dem Plan: „📋 Als Markdown kopieren", nutzt `navigator.clipboard.writeText`. Nach Klick 2s „✓ Kopiert".
-  (i) Sections darunter als `details`: Änderungen (Diff), Scout/Explorer, Historie — einklappbar, jeder mit eigener Scroll-Höhe (`max-height: 300px`).
-  (j) **Actions-Sticky**: die `j/n/a`-Buttons (oder bei `typ=freitext`: Textarea + Senden) sind **am unteren Rand des Modals sticky**, immer sichtbar auch beim Scrollen.
-  (k) `Escape` schließt Modal (kein Antwort-Senden). Klick auf Backdrop schließt Modal.
-  
-  **(Gate-Typ-Erkennung)**
-  (l) `aggregate_gate_context` liefert pro Gate ein neues Feld `typ: "jna" | "freitext"`. Backend setzt es in `gate_bridge.signal_open()` als neuen Parameter (Default `"jna"`).
-  (m) `plan_reason`-Gate (Reflection-Reject-Grund) wird auf `typ="freitext"` gesetzt — dann rendert das Modal **Textarea + Senden-Button** statt Buttons. Enter sendet, Shift+Enter macht Zeilenumbruch.
-  (n) Fallback bei fehlendem `typ`: `"jna"` (rückwärtskompatibel).
-  
-  **(Was wegfällt)**
-  (o) `_machDraggable` wird entfernt (kein Drag mehr — Modal-Muster).
-  (p) Altes 460px-Panel-Layout entfällt komplett.
-- **Tests:** `tests/test_gate_modal.py` (~8 Spec-First-Verhaltens-Tests: Banner-Erscheinen bei offenem Gate, Klick öffnet Modal, Backdrop-Klick schließt, Escape schließt, Copy-Button ruft clipboard API, typ=jna → Buttons, typ=freitext → Textarea, Enter sendet bei freitext). `tests/test_gate_panel_spec.py` (~3 Frontend-Smokes: IDs existieren, CSS-Klassen, keine Drag-Referenz mehr).
-- **Grund für Blockierung von OP-381b:** Freitext-Textarea muss im Modal sitzen. Doppelt bauen wäre 2x Aufwand.
-- **Grund für Blockierung von OP-306:** Mode-Switch/Wasserfall zeigt Gates prominent. Ohne funktionierendes Modal wäre der Wasserfall blind.
-- **ADR:** ADR-0028 (Gate-Modal-Pattern — wird mit OP-381c angelegt, dokumentiert Warum-Vollbild statt Panel)
-
 
 ### OP-382: Dogfooding-Phase — UI-Loop 10× stabil im Betrieb
 
@@ -1975,6 +1937,12 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
+- 2026-11-09 | OP-110 | done | `_pruefe_zieldatei_existenz` erkennt create-bei-existierender-Datei (Commit 72a8d4f). **Live-Bug 22:15:** Planner-LLM gab `action=create` fuer `inspector.py` (existiert), Builder korrigierte auf `update` (Datei-Realitaet), Builder-Check erwartete `create` -> `builder_patch_invalid` -> 5x Reflection -> `loop_failed`. Fix: neue Bedingung `if aktion==create and ziel_pfad.exists(): aktion = update` analog zur bestehenden `update->create`-Regel. **Spec-Test:** `tests/test_planner.py::test_pruefe_zieldatei_existenz_create_bei_existierender_datei_wird_update`. **Revert-Beweis:** Regel raus -> Test rot. Baseline: 1604 -> 1605 passed.
+
+- 2026-11-09 | OP-381c | done | Gate-Modal ersetzt 460px-Draggable-Panel (Commits de77082 + 05bc3fc). **Backend (`de77082`, Etappe 1):** `signal_open(typ="jna")`, `_frage_gate` leitet `typ` aus `kind` ab (`plan_reason` -> `freitext`), `aggregate_gate_context` reicht `typ` durch. **Frontend (`05bc3fc`):** neues Modal (max 900px, max 90vh, scale 0.96->1 180ms), Backdrop mit `backdrop-filter: blur(8px)`, Banner oben mit Pulse + Dismiss, Copy-Button (`navigator.clipboard`), Plan-Bereich 400px scrollbar mit `.gm-h2`/`.gm-li`-CSS-Markdown, Sections (Diff/Scout/Historie) als `<details>` mit 300px, Actions sticky. `typ=jna` -> Buttons, `typ=freitext` -> Textarea (Enter sendet, Shift+Enter Zeilenumbruch). `Escape`/Backdrop schliessen. `_machDraggable` entfernt. **Spec-Tests:** `tests/test_gate_bridge.py` 3 neu, `tests/test_ui_gate_modal.py` 15 Source-Scan. **Revert-Beweise:** 2 Tests (Bridge), Source-Scan. Baseline: 1591 -> 1682 passed (kumulativ mit 381d-k).
+
+- 2026-11-09 | OP-381-Serie (d/e/f/g/h/i/j/k) + Ad-hoc-Fixes | done | Ad-hoc-Serie ohne eigene STATUS-Header (im Chat abgenickt, in Commits dokumentiert). **381d (a1caf53):** `aggregate_ambient.gates_open` konsistent mit `aggregate_gate_context` (vorher 2 vs 0-Widerspruch). **381e (5b05f43):** Read-Through `_frische_projektion()` (Projector.tail vor UI-Aggregatoren) gegen SQLite-Lag bei <100 Events. **381f (c868fc1):** `aggregate_timeline` ignoriert `-migrated-*-Dateien` (vorher las es den statischen OP-323-Dump, zeigte 4 alte Events statt 143). **381g (b35502d):** `loop_phase:build`-Marker in `_phase_tasks_loop` (Timeline gruppiert Builder/Verify/Reflection jetzt unter Build statt Plan). **381h (e5a4101 + b44da43):** Rollen pro Kind (`_tl_rolle` mit `agent`-Vorrang + `loop_*`-Prefixe fuer Loop-Events), `aggregate_timeline_aktiv` (Live-Rollen-Status 300s-Fenster), `_TL_AGENT_ROLLEN` + `_TL_KIND_ROLLEN`-Map. **381i (ca6f0e7 + 1200484 + e3a6299 + 697fe46 + 3671fe9):** Swimlane-Wasserfall Backend (`aggregate_swimlane`: start/end-Paar-Gruppierung, 5s-Einzel-Events, Lanes nach Rollen-Reihenfolge) + Frontend (`waterfall.js`: SVG-Renderer, Zeit-Achse, Rollen-Farben aus sem-Variablen, 8px-Balken, `_fmtTick` kompakt) + Runs-Sidebar togglebar (`body[data-runs-open]`, Taste `r`) + Umzug ins Cockpit als Nachanalyse (ADR-0022a). **381j (262ed8b + e37b705 + ba78af5):** Live-Feed Backend (`aggregate_live_feed`: chronologische Steps, `aktiv` aus `_tl_aggregate_aktiv`, `naechster`-Heuristik explorer->scout->architect->planner->builder->verify->reviewer->loop) + Frontend (`live_feed.js`: vertikale Chronologie, Aktiv-Block prominent, Codex-Polish: Braille-Spinner 80ms, animierte Dots, Shimmer-Gradient, `_just_finished`-Transition, STEPS_LIMIT=8, prefers-reduced-motion) im Control-Modus. **381k (8af1d99):** Resume-Aufgabe-Check in `phases/plan.py` (`_resume_erlaubt`-Flag, `phase_state.data['aufgabe'] != aufgabe` -> verwerfen). **Ad-hoc:** `_OPS_RE` erkennt OP-Suffixe a/b/c (f90e427, Loop-Crash bei OP-389b behoben), Explorer-Fallback-Grep bei leeren key_files (15ec8b9, verhindert `loop_explorer_leer` bei Backtick-Suchbegriffen), Fixture-Isolation fuer `test_ambient_gate_konsistenz.py` (4 Bindings). **Mode-Switch-Fundament:** OP-306a (85a29db, Cockpit/Control/Debug via Shift+Space + 1/2/3 + URL + localStorage + Dropdown + CSS-Grid-Varianten), OP-306 bleibt offen fuer Etappe 2-4. **Architect-Kontext-Verengung:** OP-385a (1ad363f, `scout_auftrag` als einzige Quelle, `explorer_findings`-Block in Fallback, Baseline-Prompt 100k user_len -> erwartet <60k), OP-385b (Scout-Prompt-Umbau: Auftrag als Hauptzweck) bleibt offen. Baseline: 1550 -> 1686 passed (+136), alle Commits mit Revert-Beweis oder Source-Scan-Test.
+
 - 2026-11-09 | OP-392 | done | `loop.py` _full_cfg UnboundLocalError + Stash-Verlust bei Exception (Commit 9c29910). **Bug A:** `_full_cfg: dict = {}` vor try initialisiert (Zeile 493-508), sonst bei kaputter YAML (ValueError aus `_load_cfg`) UnboundLocalError. **Bug B:** `run_pipeline_loop` in `try/except BaseException/finally` eingewickelt; `_ps.save()` und `_git_stash_pop` laufen auch bei Exception (Datenrettung). `except BaseException` faengt `KeyboardInterrupt` mit (AK d), Propagation bleibt durch `raise`, `main()` emittiert `loop_failed` via existierendem `_emit_lifecycle_end` (bereits exception-safe). **Design:** `rc=1` safe-default, `_hat_exception` unterscheidet Fehlerpfad-Audits (`loop_rollback`/`loop_rollback_skipped`/`loop_stash_pop`) von Exception (kein Reset, aber pop). Reihenfolge reset→pop bleibt (alle 12 bestehenden Tests in `test_loop_main.py` gruen). **Spec-Tests:** 2 neu in `tests/test_loop_main.py`: (1) kaputte Config -> kein UnboundLocalError, `main()` laeuft durch; (2) `RuntimeError` in `run_pipeline_loop` -> `pop_calls == 1` (Datenrettung), Exception propagiert. **Regress-Barriere verifiziert (zwei Reverts):** Fix-A-Weg -> Test 1 rot mit exakt `UnboundLocalError` Zeile 508; Fix-B-Weg (pop im finally weg) -> Test 2 rot mit `AssertionError` (pop_calls leer). Baseline: 1589 -> 1591 passed, 5 skipped. ruff/mypy clean, alle 5 Drifts gruen. **Bewusst NICHT gemacht:** Reihenfolge reset→pop nicht umgestellt (Referenz-Tests binden sie explizit); kein `finally` um `_emit_lifecycle_end` (das ist bereits in `main()` aussen).
 
 - 2026-11-09 | OP-391 | done | Files-/Diff-Endpoint respektieren den Projektnamen (Commit 0cb8ae0). `/diff`: `basis = _PROJECTS_BASE / _pruefe_projektname(name)` statt `Path("/opt/werkstatt")`; Rueckgabe von `_pruefe_projektname` wird jetzt abgefangen und verwendet (vorher verworfen). `/files`: analog, `_pruefe_projektname(name)` wird jetzt ueberhaupt aufgerufen (vorher gar nicht — Multi-Projekt war halb fertig seit OP-306c). **Spec-Tests:** `tests/test_files_projekt.py`, 4 Tests: (1) files fuer test-a zeigt nur test-a-Dateien (nicht test-b), (2) `?pfad=../test-b/x` bleibt 400 (Root-Check unveraendert), (3) unbekanntes Projekt -> 404, (4) diff ruft `subprocess.run` mit `cwd=<PROJECTS_BASE>/test-a`. Isolation: `_PROJECTS_BASE` via monkeypatch auf `tmp_path`, `subprocess.run` fuer /diff gemockt — Test haengt nicht vom Working Tree ab. **Regress-Barriere verifiziert:** bei Revert beider basis-Zeilen werden 3 von 4 Tests rot (files-beruecksichtigt, files-404, diff-cwd); `pfad_traversal_blockiert` bleibt gruen (Root-Check unveraendert). Baseline: 1585 -> 1589 passed, 5 skipped. ruff/mypy clean, alle 5 Drifts gruen. **Bewusst NICHT gemacht (nicht im Scope):** andere Endpoints mit hardcoded Pfaden pruefen — sie nutzen bereits `_PROJECTS_BASE` (Zeilen 335, 363, 525), sauber.
@@ -2222,16 +2190,6 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   {quelle, ziel}, (b) ohne "kopiere" -> None, (c) "Kopiere nur" -> None.
 - **Blockiert von:** -
 
-### OP-110: _pruefe_zieldatei_existenz ignoriert existierende Zieldatei
-
-- **Status:** open
-- **Typ:** bugfix
-- **Betroffen:** `werkstatt/planner.py::_pruefe_zieldatei_existenz`
-- **Problem:** Bei Kopier-Auftrag mit existierender Zieldatei wird
-  trotzdem `aktion: create` gesetzt statt `update`.
-- **Akzeptanzkriterien:** Zieldatei existiert -> `update`; fehlt ->
-  `create`. 2 Tests in `tests/test_planner.py`.
-- **Blockiert von:** -
 
 ### OP-115: Progress-Events Builder-Spezifika
 

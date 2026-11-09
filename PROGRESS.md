@@ -3803,3 +3803,49 @@ alle 5 Drifts gruen.
 - OP-391 Files/Diff-Projektname (0cb8ae0 + 00206fb)
 - OP-392 loop.py _full_cfg + Stash (9c29910)
 Alle mit hartem Revert-Beweis, Baseline 1550 -> 1591.
+
+
+## Session 2026-11-09 (Abend) — 24 Commits, 1550 -> 1686 Tests
+
+**Ziel der Session:** Loop aus der UI startbar machen und UI auf "Top Notch" bringen (Codex/Claude-Code-Feel, multi-projekt).
+
+**Was gebaut wurde (chronologisch):**
+
+**Sicherheits- und Loop-Härtung (P1/P2, externer Review):**
+- OP-389 WebSocket-Auth (f4952ff + c13a6a9 + 7cca2a6 + 6b80e5b): `require_ws_auth`-Helper, alle 4 WS-Endpoints geschützt. `OP-389b` (DRY-Migration) offen.
+- OP-390 Git-Diff-Injection (f4952ff + 5 Commits + Doku): `werkstatt/validierung.py` zentral, `pruefe_ref`-Helper, `--`-Trenner nach ref.
+- OP-391 Files/Diff-Projektname (0cb8ae0 + 00206fb): `_PROJECTS_BASE / _pruefe_projektname(name)`.
+- OP-392 loop.py `_full_cfg` + Stash (9c29910): try/finally um `run_pipeline_loop`, `_full_cfg` vor try.
+
+**Loop-Crash-Ursachen gefunden und behoben:**
+- `_OPS_RE` erkennt OP-Suffixe (f90e427): `OP-389b` wurde vom `parse_ops` nicht gefunden -> `POST /start` mit leerer Aufgabe -> `loop_failed` nach 2s.
+- Explorer-Fallback-Grep (15ec8b9): Aufgabe mit Backtick-Suchbegriff ohne `.py`-Pfad -> `key_files=[]` -> `loop_explorer_leer`. Fallback grept deterministisch ueber `.py`.
+- OP-110 Planner create/update (72a8d4f): `create` bei existierender Datei wird zu `update`.
+- OP-381k Resume-Aufgabe-Check (8af1d99): `_resume_erlaubt`-Flag, `phase_state.data['aufgabe']` vs. `aufgabe`.
+
+**Context-Engineering (Token sparen):**
+- OP-385a (1ad363f): `scout_auftrag` als einzige Architect-Quelle. Vorher 4 parallele Explorer/Scout-Kanaele -> 100.000 user_len Truncation. Baseline erwartet <60k.
+
+**UI-Modi (ADR-0022):**
+- OP-306a (85a29db): Mode-Switch Fundament. 3 Modi via Shift+Space + 1/2/3 + URL `?mode=...` + localStorage + Dropdown. CSS-Grid-Varianten. Tests `test_ui_mode_switch.py` (7). **OP-306 offen fuer Etappe 2-4.**
+- Wasserfall ins Cockpit (3671fe9, ADR-0022a): Nachanalyse-Tool. Control bekommt Live-Feed.
+
+**Timeline / Live-Daten:**
+- OP-381d (a1caf53): ambient `gates_open` konsistent mit `gate_context`.
+- OP-381e (5b05f43): Read-Through (`Projector.tail()` vor UI-Aggregatoren).
+- OP-381f (c868fc1): `aggregate_timeline` ignoriert `-migrated-`-Dateien.
+- OP-381g (b35502d): `loop_phase:build`-Marker.
+- OP-381h (e5a4101 + b44da43): Rollen pro Kind, `aggregate_timeline_aktiv`.
+- OP-381i (ca6f0e7..e3a6299): Swimlane-Wasserfall (SVG, Rollen-Lanes, sem-Farben) + Runs-Sidebar togglebar.
+- OP-381j (262ed8b..ba78af5): Live-Feed (Backend + Frontend + Codex-Polish: Spinner, Dots, Shimmer, Transition).
+
+**Gate-Modal (OP-381c, 05bc3fc):**
+- 900px-Vollbild, Backdrop-Blur, Copy-Button, Markdown-CSS, Sections, Actions sticky, Freitext-Textarea (typ=freitext), Escape, Banner-Dismiss. `_machDraggable` entfernt.
+
+**Was NICHT funktioniert (bekannt, morgen):**
+- **Loop scheitert an Verify nach Builder-Patch.** Live-Beleg Run `werkstatt-20261109-222702-a8c4dac4`: Builder baut `inspector.py`, ruff SIM102 bei Zeile 70, Reflection fixt -> mypy `Incompatible types (list vs dict)` bei Zeile 1248, Reflection fixt -> mypy gleicher Fehler bei Zeile 1250, `stagnation_abort`. **Loop-Verhalten korrekt** (nach 2 Stagnationen aufgeben), aber der Builder produziert typ-invaliden Code.
+- **`aggregate_ambient.loop_status` haengt bei `running`** wenn Loop tot ist (Gate-Timeout 300s > Loop-Lifetime).
+- **`aggregate_live_feed.aktiv = {}`** bei offenem Gate (`_tl_aggregate_aktiv` erkennt `gate_open` nicht als in-progress).
+- **`prompt: "Deine Wahl: "`** im Commit-Gate inhaltsleer.
+
+**Baseline:** 1550 -> 1686 passed, 5 skipped. Alle 5 Drifts gruen. ruff/mypy clean.
