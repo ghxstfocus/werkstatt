@@ -492,6 +492,7 @@ def _main_inner(argv: list[str] | None = None) -> int:
 
     # docs-Inhalte laden (Planner-Kontext). Fehler tolerieren.
     _docs: dict = {}
+    _full_cfg: dict = {}  # Bug A (OP-392): vor try, sonst UnboundLocalError
     try:
         from werkstatt.orchestrator import load_docs as _load_docs
         from werkstatt.orchestrator import load_project_config as _load_cfg
@@ -556,38 +557,50 @@ def _main_inner(argv: list[str] | None = None) -> int:
         audit("loop_dirty_tree", {"aktion": "stash"}, _pd, args.project)
         _had_stash = _git_stash(_pd)
 
-    rc = run_pipeline_loop(args.project, args.aufgabe, state_ref, phase_state=_ps)
+    # Bug B (OP-392): try/finally — PhaseState-Persistenz + Stash-Pop
+    # muessen auch bei Exception laufen, sonst Datenverlust im Working Tree.
+    # rc=1 als safe-default, falls run_pipeline_loop eine Exception wirft.
+    # _hat_exception steuert, dass Rollback-Audits (loop_rollback/
+    # loop_rollback_skipped/loop_stash_pop) nur bei normalem rc-Pfad
+    # emittiert werden — bei Exception kein Reset, aber pop (Datenrettung).
+    rc = 1
+    _hat_exception = False
+    try:
+        rc = run_pipeline_loop(args.project, args.aufgabe, state_ref, phase_state=_ps)
+    except BaseException:
+        _hat_exception = True
+        raise
+    finally:
+        # K1b/Schritt1: PhaseState am Loop-Ende persistieren (K14-neutral).
+        # Auch bei rc=1 schreiben -> Resume-Basis nach Abbruch.
+        # K21: leeren State nicht persistieren (sonst ueberschreibt {} die Tasks).
+        if _ps.data:
+            try:
+                _ps.save()
+            except OSError:
+                pass
 
-    # K1b/Schritt1: PhaseState am Loop-Ende persistieren (K14-neutral).
-    # Auch bei rc=1 schreiben -> Resume-Basis nach Abbruch.
-    # K21: leeren State nicht persistieren (sonst ueberschreibt {} die Tasks).
-    if _ps.data:
-        try:
-            _ps.save()
-        except OSError:
-            pass
+        # FIX AA 2026-10-31: Rollback nur bei explizitem --rollback.
+        # Reihenfolge wie bisher: reset VOR stash-pop.
+        # Bei Exception: kein reset (kein rc != 0-Zweig), aber pop (siehe unten).
+        _do_rollback = getattr(args, "rollback", False)
+        if rc != 0 and not _hat_exception:
+            if _do_rollback:
+                audit("loop_rollback",
+                      {"rc": rc, "start_head": _start_head,
+                       "grund": "explizit_angefordert"}, _pd, args.project)
+                _git_reset(_pd, _start_head)
+            else:
+                audit("loop_rollback_skipped",
+                      {"rc": rc, "start_head": _start_head,
+                       "grund": "kein_rollback_flag"}, _pd, args.project)
 
-    # FIX AA 2026-10-31: Rollback nur bei explizitem --rollback.
-    # Vorher: bei rc!=0 wurde IMMER git reset --hard gemacht.
-    # Bei Multi-Task-Aufgaben (DeepSeek 7 Tasks) hat das t1-t4
-    # zerstoert, obwohl sie erfolgreich gebaut waren. Resume
-    # war unmoeglich, weil die Datei-Aenderungen weg waren.
-    _do_rollback = getattr(args, "rollback", False)
-    if rc != 0:
-        if _do_rollback:
-            audit("loop_rollback",
-                  {"rc": rc, "start_head": _start_head,
-                   "grund": "explizit_angefordert"}, _pd, args.project)
-            _git_reset(_pd, _start_head)
-        else:
-            audit("loop_rollback_skipped",
-                  {"rc": rc, "start_head": _start_head,
-                   "grund": "kein_rollback_flag"}, _pd, args.project)
+        # Bug B (OP-392): Stash-Pop IMMER — auch bei Exception.
+        # loop_stash_pop-Audit nur bei normalem rc=0-Pfad (nicht bei
+        # rc!=0 und nicht bei Exception — sonst irrefuehrende Semantik).
         if _had_stash:
-            _git_stash_pop(_pd)
-    else:
-        if _had_stash:
-            audit("loop_stash_pop", {}, _pd, args.project)
+            if rc == 0 and not _hat_exception:
+                audit("loop_stash_pop", {}, _pd, args.project)
             _git_stash_pop(_pd)
     # M-358: Footer mit echten Task-Zahlen (aus state).
     _tasks_total = len(getattr(_state, "tasks", []) or [])

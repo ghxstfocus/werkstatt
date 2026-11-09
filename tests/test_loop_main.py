@@ -289,3 +289,71 @@ def test_hook_blocked_ueberspringt_apply_loop(tmp_path, monkeypatch):
     assert n == 0
     # Datei unveraendert.
     assert (tmp_path / "a.py").read_text() == "alte zeile\n"
+
+
+# =====================================================================
+# OP-392: Bug A (_full_cfg UnboundLocalError) + Bug B (Stash-Verlust)
+# =====================================================================
+
+
+def test_main_kaputte_config_kein_unbound_local_error(tmp_path, monkeypatch):
+    """Bug A (OP-392): kaputte Config -> kein UnboundLocalError.
+
+    Reproduziert: _load_cfg wirft ValueError (kein SystemExit),
+    ``except Exception: pass`` schluckt es, _full_cfg wird nie
+    zugewiesen, danach ``if _full_cfg else {}`` -> UnboundLocalError.
+    """
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    cfg = _base_config(tmp_path)
+
+    def _boom(name):
+        raise ValueError("kaputte YAML")
+
+    with _silence_renderer(), \
+         patch("werkstatt.loop.load_project_config", return_value=cfg), \
+         patch("werkstatt.orchestrator.load_project_config", _boom), \
+         patch("werkstatt.orchestrator.load_docs", return_value={}), \
+         patch("werkstatt.loop.load_env", return_value=None), \
+         patch("werkstatt.loop.run_pipeline_loop", _loop_runner(1, 0)), \
+         patch("werkstatt.loop._git_head", return_value="abc"), \
+         patch("werkstatt.loop._git_dirty", return_value=False):
+        rc = loop.main(["--project", "p", "--aufgabe", "a"])
+    assert rc == 0
+
+
+def test_main_stash_pop_bei_exception(tmp_path, monkeypatch):
+    """Bug B (OP-392): Exception in run_pipeline_loop -> Stash trotzdem gepoppt.
+
+    Reproduziert: run_pipeline_loop ohne try/finally, Exception
+    ueberspringt _ps.save() und _git_stash_pop -> Stash bleibt im
+    Repo, Working Tree bleibt leer, Datenverlust.
+
+    Der Test prueft nur, dass der Pop gelaufen ist (Datenrettung),
+    nicht die Exception selbst — die MUSS propagieren.
+    """
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    pop_calls: list = []
+
+    def _fake_pop(pd):
+        pop_calls.append(str(pd))
+        return True
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("run_pipeline_loop boom")
+
+    with (
+        _silence_renderer(),
+        _patch_main_config(tmp_path),
+        patch("werkstatt.loop.run_pipeline_loop", _boom),
+        patch("werkstatt.loop._git_head", return_value="abc"),
+        patch("werkstatt.loop._git_dirty", return_value=True),
+        patch("werkstatt.loop._git_stash", return_value=True),
+        patch("werkstatt.loop._git_stash_pop", _fake_pop),
+        pytest.raises(RuntimeError, match="run_pipeline_loop boom"),
+    ):
+        loop.main(["--project", "p", "--aufgabe", "a"])
+
+    assert len(pop_calls) == 1, (
+        f"Stash-Pop MUSS bei Exception laufen, sonst Datenverlust. "
+        f"pop_calls={pop_calls}"
+    )
