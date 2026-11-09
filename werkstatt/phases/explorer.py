@@ -152,6 +152,51 @@ def _phase_explorer_and_setup(
         if isinstance(k, dict) and k.get("file") and k["file"] not in _seen:
             _seen.add(k["file"])
             explorer_result["key_files"].append(k)
+    # OP-XXX (2026-11-09): Fallback-Grep bei leeren key_files.
+    # Live-Bug 2026-11-09 20:25 (Run werkstatt-20261109-202502-4e5bfd9c):
+    # Aufgabe "OP-389b: DRY-Migration auf `require_ws_auth`" enthaelt
+    # keine .py-Pfade, aber einen Backtick-Suchbegriff. _messen() fand
+    # nichts (kein Pfad, keine Migration), _explorer_key leer,
+    # _alle_genannten leer, _verwandte leer -> key_files=[]. Explorer
+    # endete mit 0 files -> state_contract_violation -> loop_failed
+    # nach 2 Sekunden.
+    # Fix: wenn _suchbegriffe gesetzt und key_files leer, deterministisch
+    # grep ueber .py-Dateien. Kein LLM, testbar.
+    if not explorer_result["key_files"] and _suchbegriffe:
+        _pd_path = Path(pd)
+        _b_lower_cache: list[str] = [b.lower() for b in _suchbegriffe]
+        for _py_file in sorted(_pd_path.rglob("*.py")):
+            # Skip typische noise-Ordner
+            _parts = _py_file.parts
+            if any(x in _parts for x in (
+                ".venv", "__pycache__", ".git", "node_modules", "venv",
+            )):
+                continue
+            try:
+                _content = _py_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            _content_lower = _content.lower()
+            _hit_b = next((b for b in _b_lower_cache if b in _content_lower), None)
+            if _hit_b is None:
+                continue
+            _rel = str(_py_file.relative_to(_pd_path))
+            if _rel in _seen:
+                continue
+            _seen.add(_rel)
+            from werkstatt.explorer import _datei_inhalt as _di_fb
+            _preview = _di_fb(Path(pd), _rel, suchbegriffe=_suchbegriffe)[:6000]
+            explorer_result["key_files"].append({
+                "file": _rel,
+                "why": f"grep:{_hit_b}",
+                "confidence": "medium",
+                "preview": _preview,
+            })
+            audit("loop_explorer_grep_fallback",
+                  {"file": _rel, "begriff": _hit_b}, pd, pn)
+            if len(explorer_result["key_files"]) >= 5:
+                break
+
     audit("loop_explorer_ergaenzt",
           {"explizit": len(_explizite_dateien[:5]),
            "verwandt": len(_verwandte),
