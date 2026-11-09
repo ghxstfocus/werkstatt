@@ -1513,25 +1513,6 @@ noch nicht vollstaendig.
 - **Tests:** `tests/test_ws_endpoint_helpers.py` (1-2 Tests: Source-Scan). `tests/test_ws_auth.py` unverändert — bleibt grün als Verhaltensbeweis.
 - **ADR:** —
 
-### OP-390: [P1] Git-Diff-Argument-Injection (ref ungeprüft)
-
-- **Status:** open
-- **Typ:** security
-- **Phase:** Phase-2 (Sicherheit vor Stabilität)
-- **Blockiert von:** —
-- **Quelle:** Externer Review 2026-11-09 16:55
-- **Betroffene Dateien:** `werkstatt/web/app.py`, `werkstatt/chat_tools.py`, `tests/test_diff_ref_validation.py` (neu)
-- **Problem:** Sowohl `/api/projects/{name}/diff` (app.py:420) als auch `chat_tools._git_diff` (chat_tools.py:87-97) übergeben `ref` **ungeprüft** an `git diff`. Ein `ref` wie `--output=/pfad/zur/datei` wird von Git als Option statt als Revision interpretiert — der Endpoint kann damit eine Datei überschreiben, auf die der Prozess Schreibzugriff hat. Beide Endpunkte sind authentifiziert, aber Defense-in-depth heißt: **niemals User-Input als Git-Argument ohne Validierung**.
-- **Akzeptanzkriterien:**
-  (a) Neues Muster `_REF_MUSTER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-/~^@{}]{0,127}$")` in `werkstatt/web/app.py`.
-  (b) Neue Funktion `_pruefe_ref(ref: str) -> str` analog `_pruefe_projektname` (400 bei Verstoß).
-  (c) In `/api/projects/{name}/diff`: `ref = _pruefe_ref(ref)` **vor** `git diff`.
-  (d) In `chat_tools._git_diff`: gleiche Prüfung, `ValueError` → `return f"git_diff: ungültiger ref {ref!r}"`.
-  (e) `--`-Trennzeichen als zusätzliche Defense: `git diff -- {ref}` verhindert Option-Interpretation (belt-and-suspenders).
-  (f) `subprocess.run` mit `check=False` bleibt (nicht auf Return-Code verlassen).
-- **Tests:** `tests/test_diff_ref_validation.py` (4 Tests: normaler ref ok, `--output=…` → 400/Fehler, `-p` → 400, leerer ref → 400).
-- **ADR:** —
-
 ### OP-391: [P2] Files-/Diff-Endpoint ignorieren Projektnamen
 
 - **Status:** open
@@ -2029,6 +2010,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
+
+- 2026-11-09 | OP-390 | done | Git-Diff-Argument-Injection (ref ungeprueft) geschlossen (Commit f4952ff). Neues zentrales Modul `werkstatt/validierung.py` mit REF_MUSTER (Branch/Tag/SHA/HEAD~N/HEAD^/origin/main/refs/heads/x; verbietet fuehrendes '-', Leerzeichen, Shell-Metazeichen, >128 Zeichen) und pruefe_ref(). `app.py:/diff` ruft `_pruefe_ref(ref)` vor git-diff, HTTP-Adapter wandelt ValueError in HTTPException(400). `chat_tools._git_diff` ruft `pruefe_ref(ref)` vor subprocess, ValueError -> `return 'git_diff: ungueltiger ref ...'`. **Spec-Tests:** `tests/test_diff_ref_validation.py`, 22 Tests (8x gueltig-param, 7x ungueltig-param, 3x HTTP-Endpoint inkl. 400-Vor-Validierung, 2x chat-tools, 1x Meta, 1x Endpoint-200). **Regress-Barriere verifiziert:** bei Revert der chat_tools-Pruefung werden BEIDE chat-tools-Tests rot (output-option + leerer-ref) — staerker als OP-389 (dort nur 1 rot). **AK-Abweichungen (dokumentiert im Commit):** (a) REF_MUSTER zentral in `werkstatt/validierung.py` statt app.py, weil chat_tools.py (Kern) werkstatt/web/ nicht importieren darf (import_drift-Contract). (e) `--` steht NACH ref (`git diff {ref} --`), nicht davor — `git diff -- {ref}` interpretiert ref als Pathspec und haette den Endpoint funktional gebrochen (git diff -- HEAD = leer). **Bewusst NICHT gemacht (nicht im Scope):** andere subprocess.run-Aufrufe in app.py/chat_tools.py (Zeilen 63, 77, 125) auf unvalidierte Argumente pruefen — eigene OP-Kandidaten, nicht Teil von OP-390. Baseline: 1563 -> 1585 passed, 5 skipped. ruff/mypy clean, alle 5 Drifts gruen.
 
 - 2026-11-09 | OP-389 | done | WebSocket-Auth-Bypass in /ws/{tab_id} geschlossen (Commit 8880d04). Neuer async-Helper `require_ws_auth(websocket)` in auth.py: prueft is_auth_disabled() oder is_authed_ws() vor accept(), schliesst mit Close 1008 wenn nicht autorisiert. ws.py:websocket_kanaele nutzt ihn. Damit 4 WS-Endpoints gegen Unauth geschuetzt (chat/stream, audit/stream, terminal_ws waren schon geschuetzt; /ws/{tab_id} war die Luecke). **Spec-Tests:** tests/test_ws_auth.py, 13 Tests: 4x unauth->1008-vor-accept (parametrisiert pro WS-Pfad), 4x mit-Cookie->akzeptiert, 4x _AUTH_DISABLED=True->akzeptiert, 1x Meta-Test (jede @websocket-Route muss in WS_ROUTEN_SOURCE eingetragen sein — faengt neue Endpoints ohne Auth-Test). **Regress-Barriere verifiziert:** bei Revert von ws.py wird genau test_unauth_ws_wird_abgelehnt_vor_accept[/ws/abc] rot; die 3 anderen Pfade bleiben gruen (Bestandsschutz vorhanden, Test deckt exakt die Luecke). Baseline: 1550 -> 1563 passed, 5 skipped. ruff/mypy clean, alle 5 Drifts gruen. **Folge-OP:** OP-389b — app.py, audit_panel.py, terminal_proxy.py auf denselben Helper migrieren (DRY, kein Verhaltenswechsel; bewusst in eigener Session wegen Regress-Risiko an funktionierenden Endpoints).
 
