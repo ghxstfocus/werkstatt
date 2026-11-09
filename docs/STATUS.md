@@ -1513,23 +1513,6 @@ noch nicht vollstaendig.
 - **Tests:** `tests/test_ws_endpoint_helpers.py` (1-2 Tests: Source-Scan). `tests/test_ws_auth.py` unverändert — bleibt grün als Verhaltensbeweis.
 - **ADR:** —
 
-### OP-391: [P2] Files-/Diff-Endpoint ignorieren Projektnamen
-
-- **Status:** open
-- **Typ:** bugfix (Multi-Projekt-Vollständigkeit)
-- **Phase:** Phase-2 (Loop-Stabilisierung)
-- **Blockiert von:** —
-- **Quelle:** Externer Review 2026-11-09 16:55
-- **Betroffene Dateien:** `werkstatt/web/app.py`, `tests/test_files_projekt.py` (neu)
-- **Problem:** `/api/projects/{name}/files` (app.py:472) und `/api/projects/{name}/diff` (app.py:420) haben `Path("/opt/werkstatt")` **hardcoded**. Der `name`-Parameter wird nicht benutzt. Folge: Bei einem anderen ausgewählten Projekt (z.B. security-ai, test16) zeigt die UI Dateien und Diff von Werkstatt statt vom richtigen Projekt. **Seit OP-306c ist Multi-Projekt halb fertig** — Datenquellen gefixt, aber Files/Diff nicht.
-- **Akzeptanzkriterien:**
-  (a) In `/api/projects/{name}/files`: `basis = (_PROJECTS_BASE / _pruefe_projektname(name)).resolve()`, dann `ziel = (basis / pfad).resolve() if pfad else basis`.
-  (b) In `/api/projects/{name}/diff`: `basis = _PROJECTS_BASE / _pruefe_projektname(name)`.
-  (c) `_PROJECTS_BASE` als Modul-Konstante (existiert schon: `Path("/opt")`).
-  (d) Root-Check bleibt (`ziel.relative_to(basis)` gegen Pfad-Traversal).
-  (e) Live-Test: `/api/projects/security-ai/files` zeigt security-ai-Dateien, nicht Werkstatt.
-- **Tests:** `tests/test_files_projekt.py` (3 Tests: files für `test-a` zeigt test-a, nicht werkstatt; diff für `test-a`; Pfad-Traversal weiter blockiert).
-- **ADR:** —
 
 ### OP-392: [P2] loop.py: _full_cfg UnboundLocalError + Stash-Verlust bei Exception
 
@@ -2010,6 +1993,8 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 ## Delete-Zone
 
 Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
+
+- 2026-11-09 | OP-391 | done | Files-/Diff-Endpoint respektieren den Projektnamen (Commit 0cb8ae0). `/diff`: `basis = _PROJECTS_BASE / _pruefe_projektname(name)` statt `Path("/opt/werkstatt")`; Rueckgabe von `_pruefe_projektname` wird jetzt abgefangen und verwendet (vorher verworfen). `/files`: analog, `_pruefe_projektname(name)` wird jetzt ueberhaupt aufgerufen (vorher gar nicht — Multi-Projekt war halb fertig seit OP-306c). **Spec-Tests:** `tests/test_files_projekt.py`, 4 Tests: (1) files fuer test-a zeigt nur test-a-Dateien (nicht test-b), (2) `?pfad=../test-b/x` bleibt 400 (Root-Check unveraendert), (3) unbekanntes Projekt -> 404, (4) diff ruft `subprocess.run` mit `cwd=<PROJECTS_BASE>/test-a`. Isolation: `_PROJECTS_BASE` via monkeypatch auf `tmp_path`, `subprocess.run` fuer /diff gemockt — Test haengt nicht vom Working Tree ab. **Regress-Barriere verifiziert:** bei Revert beider basis-Zeilen werden 3 von 4 Tests rot (files-beruecksichtigt, files-404, diff-cwd); `pfad_traversal_blockiert` bleibt gruen (Root-Check unveraendert). Baseline: 1585 -> 1589 passed, 5 skipped. ruff/mypy clean, alle 5 Drifts gruen. **Bewusst NICHT gemacht (nicht im Scope):** andere Endpoints mit hardcoded Pfaden pruefen — sie nutzen bereits `_PROJECTS_BASE` (Zeilen 335, 363, 525), sauber.
 
 - 2026-11-09 | OP-390 | done | Git-Diff-Argument-Injection (ref ungeprueft) geschlossen (Commit f4952ff). Neues zentrales Modul `werkstatt/validierung.py` mit REF_MUSTER (Branch/Tag/SHA/HEAD~N/HEAD^/origin/main/refs/heads/x; verbietet fuehrendes '-', Leerzeichen, Shell-Metazeichen, >128 Zeichen) und pruefe_ref(). `app.py:/diff` ruft `_pruefe_ref(ref)` vor git-diff, HTTP-Adapter wandelt ValueError in HTTPException(400). `chat_tools._git_diff` ruft `pruefe_ref(ref)` vor subprocess, ValueError -> `return 'git_diff: ungueltiger ref ...'`. **Spec-Tests:** `tests/test_diff_ref_validation.py`, 22 Tests (8x gueltig-param, 7x ungueltig-param, 3x HTTP-Endpoint inkl. 400-Vor-Validierung, 2x chat-tools, 1x Meta, 1x Endpoint-200). **Regress-Barriere verifiziert:** bei Revert der chat_tools-Pruefung werden BEIDE chat-tools-Tests rot (output-option + leerer-ref) — staerker als OP-389 (dort nur 1 rot). **AK-Abweichungen (dokumentiert im Commit):** (a) REF_MUSTER zentral in `werkstatt/validierung.py` statt app.py, weil chat_tools.py (Kern) werkstatt/web/ nicht importieren darf (import_drift-Contract). (e) `--` steht NACH ref (`git diff {ref} --`), nicht davor — `git diff -- {ref}` interpretiert ref als Pathspec und haette den Endpoint funktional gebrochen (git diff -- HEAD = leer). **Bewusst NICHT gemacht (nicht im Scope):** andere subprocess.run-Aufrufe in app.py/chat_tools.py (Zeilen 63, 77, 125) auf unvalidierte Argumente pruefen — eigene OP-Kandidaten, nicht Teil von OP-390. Baseline: 1563 -> 1585 passed, 5 skipped. ruff/mypy clean, alle 5 Drifts gruen.
 

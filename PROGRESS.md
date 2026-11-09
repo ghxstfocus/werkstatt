@@ -3727,3 +3727,37 @@ alle 5 Drifts gruen.
   **Test-Isolation durch `subprocess.run`-Mock, nicht durch
   Hoffnung auf clean tree.** Betrifft jede Test-Funktion, die
   `subprocess`, `git`, `Path.cwd`, `os.environ` oder HTTP beruehrt.
+
+
+## OP-391: Files-/Diff-Endpoint respektieren den Projektnamen (2026-11-09)
+
+**Ausgefuehrt:** Commit 0cb8ae0. Zwei hardcoded Stellen in
+`werkstatt/web/app.py` ersetzt:
+- `/diff` (Zeile 433): `basis = _PROJECTS_BASE / _pruefe_projektname(name)`
+  statt `Path("/opt/werkstatt")`. Rueckgabe von `_pruefe_projektname`
+  wird jetzt abgefangen und verwendet (vorher verworfen).
+- `/files` (Zeile 486): analog. `_pruefe_projektname(name)` wird
+  jetzt ueberhaupt aufgerufen — vorher gar nicht, Multi-Projekt war
+  halb fertig seit OP-306c.
+
+**Spec-Tests:** `tests/test_files_projekt.py`, 4 Tests.
+Isolation: `_PROJECTS_BASE` via monkeypatch auf `tmp_path`,
+`subprocess.run` fuer /diff gemockt.
+
+**Regress-Barriere verifiziert:** bei Revert beider basis-Zeilen
+werden 3 von 4 Tests rot (files-beruecksichtigt, files-404,
+diff-cwd). `pfad_traversal_blockiert` bleibt gruen — richtig, weil
+der Root-Check unveraendert bleibt.
+
+**AK-Pruefung:** (a) files: erfuellt. (b) diff: erfuellt.
+(c) `_PROJECTS_BASE`: war schon Modul-Konstante. (d) Root-Check:
+unveraendert. (e) Live-Test: via Test-Client gegen tmp_path
+verifiziert.
+
+**Baseline:** 1585 -> 1589 passed, 5 skipped. ruff/mypy clean,
+alle 5 Drifts gruen.
+
+**Lehre (Test-Isolation konsequent):** `_PROJECTS_BASE`-Monkeypatch
+und `subprocess.run`-Mock sind jetzt Standard bei jedem Endpoint-
+Test, der Pfade oder git anfasst. Kein Test haengt mehr vom
+Working Tree ab — das war bei OP-390 noch anders.
