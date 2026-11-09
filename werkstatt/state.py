@@ -129,6 +129,12 @@ class RunState:
     projekt_stand: dict = field(default_factory=dict)
     start_monotonic: float = 0.0  # Auflage 2080: Zeitmessung
     scout_api_auszug: dict = field(default_factory=dict)
+    # OP-385: Scout-Report komplett (auftrag_prosa, api_auszug,
+    # risiken, bereits_erfuellt). Wird vom Planner befuellt. Wenn
+    # gesetzt, nutzt der Architect NUR diesen Block (statt
+    # explorer_findings + scout_api_auszug + measured_files
+    # parallel). Fallback: altes Verhalten bei leerem dict.
+    scout_auftrag: dict = field(default_factory=dict)
     # OP-135b: Explorer-Dateiliste (key_files + findings + next_reads).
     # Struktur identisch zu pipeline_phases.py:explorer_result.
     explorer_context: dict = field(default_factory=dict)

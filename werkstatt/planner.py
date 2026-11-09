@@ -2162,6 +2162,13 @@ def run_planner(state: RunState) -> bool:
     if _scout_report:
         _scout_auftrag = _scout_report.get("auftrag_prosa") or ""
         _scout_apis = _scout_report.get("api_auszug") or {}
+        # OP-385: Scout-Report komplett in State, damit der Architect
+        # NUR scout_auftrag nutzt (statt explorer_findings + scout_api
+        # + measured_files parallel = 100k user_len truncation).
+        try:
+            state.scout_auftrag = dict(_scout_report)
+        except (AttributeError, TypeError):
+            pass
         try:
             state.scout_api_auszug = _scout_apis
         except (AttributeError, TypeError):

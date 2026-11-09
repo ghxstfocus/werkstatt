@@ -98,6 +98,40 @@ def _format_scout_apis_arch(apis: dict, max_lines: int = 20) -> str:
     return chr(10).join(lines)
 
 
+def _format_scout_auftrag(auftrag: dict, max_prosa: int = 3000) -> str:
+    """OP-385: Scout-Report als einzigen Architect-Prompt-Block rendern.
+
+    Enthaelt alles, was der Architect braucht: Auftrag-Prosa,
+    API-Auszug, Risiken. Keine Explorer-Rohdaten — die sind
+    absichtlich nicht drin (Kontext-Verengung durch Scout).
+    """
+    if not isinstance(auftrag, dict) or not auftrag:
+        return ""
+    teile = ["<scout_auftrag>", "## Auftrag (vom Scout)"]
+    prosa = str(auftrag.get("auftrag_prosa") or "").strip()
+    teile.append(prosa[:max_prosa] if prosa else "(kein Prosa-Auftrag vom Scout)")
+    apis = auftrag.get("api_auszug") or {}
+    if isinstance(apis, dict) and apis:
+        apis_str = _format_scout_apis_arch(apis)
+        if apis_str:
+            teile.append("")
+            teile.append("## API-Auszug (relevante Symbole)")
+            teile.append(apis_str)
+    risiken = auftrag.get("risiken") or []
+    if isinstance(risiken, list) and risiken:
+        teile.append("")
+        teile.append("## Risiken (vom Scout)")
+        for r in risiken[:10]:
+            teile.append(f"- {str(r)[:200]}")
+    bereits = auftrag.get("bereits_erfuellt")
+    if bereits:
+        teile.append("")
+        teile.append("## Hinweis")
+        teile.append("Scout meldet: Auftrag moeglicherweise bereits erfuellt.")
+    teile.append("</scout_auftrag>")
+    return "\n".join(teile)
+
+
 def _format_explorer_findings(f: dict) -> str:
     """M-WelleE: Explorer-Findings als Prompt-Block."""
     if not isinstance(f, dict) or not f:
@@ -375,9 +409,19 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
     """
     parts: list[str] = []
 
+    # OP-385: Wenn scout_auftrag gesetzt ist, ist das die EINZIGE
+    # Quelle fuer den Architect. Explorer-Rohdaten (AST-Block,
+    # explorer_findings, scout_api_auszug, measured_files) kommen
+    # dann NICHT mehr rein. Grund: Live 2026-11-09, 100.000 user_len
+    # truncation durch 4 parallele Quellen (OP-385).
+    _hat_scout_auftrag = bool(
+        state is not None
+        and getattr(state, "scout_auftrag", None)
+    )
+
     # AST-Info (verkabelt 2026-11-03): Struktur der key_files aus
     # state.api_index_cache. Wird von run_architect befuellt.
-    if state is not None and explorer_ctx is not None:
+    if (not _hat_scout_auftrag) and state is not None and explorer_ctx is not None:
         _api_idx = state.api_index_cache or {}
         _kf = explorer_ctx.get("key_files") or []
         # OP-137: key_files haben "file", nicht "pfad"/"path".
@@ -442,8 +486,15 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
 
 # M-446 (2026-11-05): kein Skills-Metadata im Architect-Prompt.
 
+    # OP-385: Scout-Auftrag als einzige Kontext-Quelle (wenn gesetzt).
+    if _hat_scout_auftrag:
+        _sa_str = _format_scout_auftrag(state.scout_auftrag)
+        if _sa_str:
+            parts.append(_sa_str)
+
     # === M-Welle-I: EXPLORER-FINDINGS + SCOUT-API (Welle E + D3 komplett) ===
-    if state is not None:
+    # OP-385: Fallback-Pfad — nur wenn scout_auftrag leer/nicht gesetzt.
+    if (not _hat_scout_auftrag) and state is not None:
         _exf = state.explorer_findings or {}
         if _exf:
             try:
@@ -482,7 +533,8 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
         )
 
     # === M-376: GEMESSENE DATEIEN ZUERST (hoechste Prioritaet) ===
-    if isinstance(explorer_ctx, dict):
+    # OP-385: Fallback-Pfad — nur wenn scout_auftrag leer.
+    if (not _hat_scout_auftrag) and isinstance(explorer_ctx, dict):
         _key = explorer_ctx.get("key_files") or []
         _files = [
             k.get("file") for k in _key
