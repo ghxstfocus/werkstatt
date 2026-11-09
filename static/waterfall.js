@@ -255,8 +255,10 @@
 
   function _lade(projekt) {
     if (projekt) _aktuellesProjekt = projekt;
-    // Nur rendern, wenn Control-Modus aktiv
-    if (document.body.getAttribute("data-mode") !== "control") return;
+    // OP-381i-Nachtrag: Wasserfall ist Nachanalyse-Tool, sichtbar im
+    // Cockpit. Control bekommt Live-Feed (OP-381j).
+    var mode = document.body.getAttribute("data-mode");
+    if (mode !== "cockpit") return;
     fetch("/api/projects/" + encodeURIComponent(_aktuellesProjekt) + "/swimlane",
           {credentials: "same-origin"})
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -284,12 +286,12 @@
   // Bei Modus-Wechsel: start/stop automatisch
   document.addEventListener("werkstatt:mode-change", function (ev) {
     var m = ev.detail && ev.detail.mode;
-    if (m === "control") start();
+    if (m === "cockpit") start();
     else stop();
   });
 
   document.addEventListener("DOMContentLoaded", function () {
-    if (document.body.getAttribute("data-mode") === "control") start();
+    if (document.body.getAttribute("data-mode") === "cockpit") start();
   });
 
   window.WerkstattWaterfall = { start: start, stop: stop, lade: _lade };

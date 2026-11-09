@@ -59,19 +59,30 @@ def test_waterfall_two_signal():
     assert "\\u2717" in js or "\u2717" in js, "Fehler-Symbol fehlt"
 
 
-def test_html_hat_control_waterfall():
+def test_html_hat_wasserfall_bereich():
+    """Wasserfall-Container im Cockpit (Nachanalyse)."""
     html = _html()
     assert 'id="control-waterfall"' in html
-    assert 'data-bereich="control-waterfall"' in html
+    assert 'class="bereich wasserfall-bereich"' in html
+    assert 'data-bereich="wasserfall"' in html
     assert "/static/waterfall.js" in html
 
 
-def test_css_control_mode_schaltet():
-    """Im Control-Modus: Timeline versteckt, Wasserfall sichtbar."""
+def test_css_cockpit_zeigt_wasserfall():
+    """OP-381i-Nachtrag 2026-11-09: Wasserfall im Cockpit, nicht Control.
+
+    Control bekommt Live-Feed (OP-381j). Grund: Wasserfall aggregiert
+    nach Rolle, zeigt keine Reihenfolge -> ungeeignet fuer 'was laeuft
+    jetzt?', gut fuer Nachanalyse.
+    """
     css = _css()
-    assert 'body[data-mode="control"] .bereich.timeline' in css
-    assert "display: none" in css
-    assert ".control-waterfall" in css
+    # Wasserfall-Bereich existiert
+    assert ".wasserfall-bereich" in css
+    # Im Control versteckt
+    assert 'body[data-mode="control"] .wasserfall-bereich' in css
+    # Cockpit-Grid hat 2 Rows
+    assert "grid-template-rows" in css
+    assert "wasserfall" in css
 
 
 def test_css_pulse_accessible():
@@ -96,7 +107,6 @@ def test_fmt_tick_kompakt():
     js = _js()
     assert "function _fmtTick" in js
     # keine 42.5s-Formatierung mehr in Ticks
-    import re
     # Der Tick-Push nutzt _fmtTick, nicht _fmtDauer
     idx = js.find("_zeitTicks")
     assert idx > 0
