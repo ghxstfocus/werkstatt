@@ -541,9 +541,21 @@ def aggregate_ambient(projekt: str) -> dict[str, Any]:
                     (projekt,),
                 ) if r[0]
             }
-            aus["gates_open"] = len(opens - answered - expired)
+            # OP-381d: Konsistenz mit aggregate_gate_context herstellen.
+            # Vorher: ambient zaehlte projektweit (alle Runs), context
+            # nur letzte_run_id -> Widerspruch (Live 2026-11-09: 2 vs 0).
+            # Alte Zaehlung bleibt als Fallback, falls aggregate_gate_context
+            # selbst fehlschlaegt.
+            _alt_zaehlung = len(opens - answered - expired)
     except sqlite3.Error:
-        pass
+        _alt_zaehlung = 0
+
+    # OP-381d: Eine Wahrheit. aggregate_gate_context ist die Quelle.
+    try:
+        _gc = aggregate_gate_context(projekt, run_id=run_id)
+        aus["gates_open"] = len(_gc.get("offene_gates") or [])
+    except Exception:  # noqa: BLE001
+        aus["gates_open"] = _alt_zaehlung
 
     # 4. Tokens
     try:
