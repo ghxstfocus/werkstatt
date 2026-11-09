@@ -56,6 +56,14 @@ def _phase_tasks_loop(
     pd = state.project_dir
     pn = state.project_name
 
+    # OP-381g: loop_phase-Marker fuer Timeline-Gruppierung.
+    # Ohne diesen Marker landen alle Builder/Verify/Reflection/Reviewer-
+    # Events unter dem letzten loop_phase-Knoten (Plan) statt in einem
+    # eigenen "Build"-Knoten. Live-Bug 2026-11-09: 104 children unter
+    # "Plan", Timeline-Gruppierung kaputt (aggregate_timeline schliesst
+    # Knoten nur bei naechstem loop_phase-Event, siehe inspector.py Z.965).
+    audit("loop_phase", {"phase": "build", "status": "start"}, pd, pn)
+
     # 3. Autonomer Task-Loop (Claude-Code-Prinzip)
     #    Alle Tasks werden abgearbeitet ohne Unterbrechung.
     #    Human-Gate kommt nur am Ende der Phase.
