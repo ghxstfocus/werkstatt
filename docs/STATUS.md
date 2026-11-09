@@ -1230,6 +1230,30 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 - **Grund:** Loop kann heute aus der UI gestartet werden, aber nicht durchlaufen — er hängt am ersten Gate. Ohne Fix ist Loop-aus-UI praktisch nicht nutzbar. Blocker für OP-306 (Mode-Switch).
 
 
+
+### OP-381b: Freitext-Gates im UI (plan_reason / Reflection-Reject-Grund)
+
+- **Status:** open
+- **Typ:** bugfix (Sub-OP zu OP-381)
+- **Phase:** Phase-2 (Focus)
+- **Blockiert von:** —
+- **Betroffene Dateien:** `static/gate_panel.js`, `static/layout.css`, `werkstatt/web/inspector.py` (Gate-Typ-Erkennung), `werkstatt/gates.py` + `werkstatt/gate_bridge.py` (typ-Feld im Payload)
+- **Problem (Live 2026-11-09 23:56):** Der Loop hat zwei strukturell verschiedene Gate-Typen:
+  **(1) Plan-Gate** — `j/n/a` (Plan ausführen?) mit Buttons.
+  **(2) Reflection-Reject-Grund-Gate** — `plan_reason`, **Freitext** ("Reject-Grund eingeben"). Kommt nach Plan-Reject (oder Plan-Gate-Timeout) als Teil der Reflection-Phase. Der User gibt optional einen Grund ein; leer = harter Abbruch.
+  
+  `gate_panel.js` rendert **alle** Gates als j/n/a-Buttons. Klick auf `j` für ein `plan_reason`-Gate sendet `answer="j"` → Loop interpretiert als Reject-Grund "j" (oder leer) → **LOOP FEHLGESCHLAGEN Tasks: 0/7**. Beleg: run `test-clean-1794181131`, seq 788855 (`gate_open plan_reason-0fbc146e`, prompt="Reject-Grund (optional, Enter=leer)") + seq 788856 (`gate_answered answer=j`), Log "Tasks: 0/7".
+  
+  **Wichtig zur Semantik:** Der Freitext vom **Architect** (Prosa) geht an den **Planner** (macht Splits) — das ist ein anderer Pfad. `plan_reason` ist **Reflection-Input**, nicht Architect-Input.
+- **Akzeptanzkriterien:**
+  (a) Gate-Payload bekommt neues Feld `typ: "jna" | "freitext"`. Backend setzt es bei `gate_bridge.signal_open()` basierend auf `optionen`-Feld oder explizitem Parameter.
+  (b) `gate_panel.js` rendert bei `typ="freitext"` ein `<textarea>` + `Senden`-Button statt j/n/a-Buttons.
+  (c) `POST /api/runs/{run_id}/gate` akzeptiert `answer` als beliebigen String (schon so, aber Validierung auf max-len prüfen).
+  (d) Fallback bei fehlendem `typ`: `jna` (rückwärtskompatibel, weil alte Gates den typ nicht haben).
+  (e) Live-Test: Loop mit OP-324 starten, Plan-Gate ablehnen, `plan_reason`-Gate im UI als Textarea, Freitext eingeben, Loop macht Reflection mit dem Grund.
+- **Tests:** `tests/test_gate_panel_typ.py` (~4 Tests: jna default, freitext-Erkennung im Payload, POST mit Freitext-Antwort, Fallback). Frontend-Spec in `tests/test_gate_panel_spec.py` (Textarea-Rendering).
+- **ADR:** —
+
 ## Sub-OPs (Erfolgs-Ebene, deterministisch)
 
 - **113a** `werkstatt/erfahrung.py` (neu): Schema `erfahrung(id,

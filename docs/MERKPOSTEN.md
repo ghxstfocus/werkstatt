@@ -1038,3 +1038,51 @@ UI war blind. Ohne diesen Datenbank-Blick waere die Diagnose
 auf funktionierendem Loop-UI-Datenfluss auf. OP-381 muss vor
 OP-306 gebaut werden.
 
+### Loop-UI Live-Erfolg + Server-Neustart (2026-11-09 23:56)
+
+**Erfolg:** Loop aus der UI gestartet (`POST /start`), Loop lief
+Explorer -> Scout -> Architect -> Planner -> **Plan-Gate im Browser
+sichtbar**, Klick auf `j — Ja`, `gate_answered` in SQLite. Der
+UI-Loop-Datenfluss funktioniert.
+
+**Die richtige Kette (wichtig fuer OP-381b):**
+
+    Architect (Prosa, Freitext)
+      -> Planner (macht Splits/Tasks)
+      -> Loop zeigt Plan-Gate (j/n/a): "Plan ausfuehren?"
+      -> bei n oder Timeout: Reflection fragt Reject-Grund
+         (plan_reason-Gate, FREITEXT)
+      -> Loop baut mit Grund einen revidierten Plan
+
+  Der Architect-Freitext geht also an den Planner, NICHT durch ein
+  UI-Gate. `plan_reason` ist Reflection-Input, nicht Architect-Input.
+
+**Was wir unterwegs gefixt haben (OP-381 A/B/C/D):**
+
+1. `_audit_events` liest `ts`, JSONL hat `timestamp` (A)
+2. `_audit_events` liest `-migrated-*` alphabetisch falsch (B)
+3. `aggregate_ambient` wertet Gate-Wait nicht als running (C)
+4. `_machDraggable` war aufgerufen aber nie definiert (D)
+
+**Der wichtigste Bug war aber ein anderer:** Der **Web-Server
+lief 25 Stunden mit altem Python-Code** (PID 3582321 seit gestern
+22:00). Alle Backend-Fixes waren committed, aber die HTTP-Antworten
+kamen aus dem alten Prozess.
+
+**Regel:** Nach jedem Commit der `werkstatt/web/*.py` beruehrt:
+**Server neu starten.** Der Loop laeuft davon unabhaengig, aber
+UI-Tests gehen sonst gegen alte Daten.
+
+**Detektions-Muster das geholfen hat:** `curl /api/projects/X/gate/
+context` **ohne** Browser. Response mit altem `run_id` (`test-ui-...
+statt test-clean-...) = Server-Problem, nicht UI-Problem.
+
+**Was noch fehlt (OP-381b):** Freitext-Gates im UI. `plan_reason`
+(Reflection-Reject-Grund) will Freitext, `gate_panel.js` rendert
+nur j/n/a-Buttons. Klick auf `j` gibt Reject-Grund "j" oder leer
+-> Loop bricht mit `Tasks: 0/7` ab. Live-Beweis: seq 788855 +
+788856.
+
+**Konsequenz fuer OP-306 (Mode-Switch):** Erst OP-381b fixen,
+dann Mode-Switch. Sonst zeigt der Wasserfall jedes Gate falsch.
+
