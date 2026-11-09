@@ -5,11 +5,16 @@ import argparse
 
 import uvicorn
 
+# OP-382: .env laden (sonst fehlt DEEPSEEK_API_KEY im Server)
+from werkstatt.env_loader import load_env  # noqa: E402
+
+load_env()
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Werkstatt Web-Dashboard")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=8001)
     parser.add_argument("--reload", action="store_true")
     args = parser.parse_args()
 
