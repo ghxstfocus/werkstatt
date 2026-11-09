@@ -891,6 +891,62 @@ Konsequenz:
   `node --check` als Pre-Commit-Step einbauen, oder Python-basierten
   Klammer-Balance-Check als Ersatz.
 
+## Session 2026-11-09 Abend (Fortsetzung) — Handoff-Behauptung ist Messauftrag
+
+Die Fortsetzungs-Session hat 3 echte Code-Fixes gemacht (mypy-Regress
+OP-381i, gate_open als aktiv im Live-Feed, Terminal-Event-Vorrang in
+aggregate_ambient). Aber der wichtigere Befund ist methodisch: der
+Handoff der Vorsession enthielt drei Behauptungen, die beim Nachmessen
+FALSCH waren.
+
+### Fehler-Muster — Handoff ist eine Behauptung, keine Messung
+
+Der Handoff 2026-11-09 Abend (Vorsession) sagte:
+
+1. "mypy: clean" in Abschnitt 1.
+   Gemessen: 1 error in 1 file (werkstatt/web/inspector.py:1208,
+   Incompatible types list[dict] vs dict). Reproduzierbar mit
+   mypy 2.4.1, .mypy_cache vom 7. Nov — kein Cache-Artefakt.
+
+2. "aggregate_fehler_cluster produziert list[dict] statt dict"
+   in Abschnitt 4.
+   Gemessen: `grep -rn aggregate_fehler_cluster --include="*.py" .`
+   -> KEIN Treffer. Die Funktion existiert im gesamten Repo nicht.
+
+3. "Live-Beleg Run werkstatt-20261109-222702-a8c4dac4".
+   Gemessen: `find . -path "*a8c4dac4*"` -> KEIN Treffer im Repo.
+   /tmp/builder_op376_22_27_fail.py existiert (82 KB), aber der
+   Handoff-Run-Ordner ist nicht auffindbar.
+
+Der Handoff-Schreibende hatte in Abschnitt 5 "HANDOFF IST MESSBERICHT.
+Jede Behauptung entweder nachgemessen oder als Hypothese markiert"
+als bindendes Prinzip formuliert — und dann Abschnitt 1 und 3/4
+selbst nicht befolgt.
+
+### Konsequenz fuer die Praxis
+
+- Jede Handoff-Behauptung, die mit konkreten Zahlen/Zeilennummern/
+  Dateinamen belegt ist, gilt als Hypothese bis zur Messung.
+  Auch wenn sie in einem Abschnitt "ZUSTAND (gemessen)" steht.
+- "mypy: clean" ohne gezeigten Befehl ist ein Warnsignal. Der
+  Messblock in Abschnitt 8 zeigt `mypy werkstatt` — dessen Ausgabe
+  haette "Found 1 error in 1 file" gezeigt.
+- Wenn eine Handoff-Vermutung eine Funktion oder einen Run nennt,
+  erst `grep`/`find`, dann designen. Beides kostet 2 Sekunden.
+- Handoff-Abschnitte, die mit "Vermutung:" markiert sind, sind
+  ehrlich. Abschnitte, die mit "gemessen" markiert sind und dann
+  falsch sind, sind teurer als eine ehrliche Vermutung — sie
+  verhindern das Nachmessen.
+
+### Was gut lief in dieser Fortsetzungs-Session
+
+- Der User hat das STOPP-Kriterium "Wenn was abweicht: STOP, melden"
+  korrekt befolgt (1 falscher mypy-Status -> STOP -> Nachmessung).
+- Nach dem mypy-Fix war die gesamte Handoff-Bug-Hypothese [A]
+  widerlegt, BEVOR wir Code dafuer gebaut haben.
+- Die 2 echten Bugs [B]+[C] waren im Handoff korrekt beschrieben
+  (Handoff-Qualitaet schwankt: Fakt vs. Vermutung).
+
 ## Session 2026-11-08 (Nacht) — Projector-Deadlock + Backfill + 6 eigene Fehler
 
 Diese Session hat einen kritischen Deadlock gefunden (Projector stand

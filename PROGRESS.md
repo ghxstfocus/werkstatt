@@ -3849,3 +3849,25 @@ Alle mit hartem Revert-Beweis, Baseline 1550 -> 1591.
 - **`prompt: "Deine Wahl: "`** im Commit-Gate inhaltsleer.
 
 **Baseline:** 1550 -> 1686 passed, 5 skipped. Alle 5 Drifts gruen. ruff/mypy clean.
+
+### 2026-11-09 Abend (Fortsetzung) — 3 Code-Fixes + Handoff-Korrektur
+
+- **mypy-Fix (1869182):** OP-381i-Regress in aggregate_swimlane —
+  Variablenname `balken` doppelt belegt (dict vs list[dict]).
+  Handoff §1 behauptete "mypy: clean", war aber 1 error in
+  inspector.py:1208.
+- **Live-Feed (c1dcb4d):** `_tl_aggregate_aktiv` erkennt `gate_open`
+  als "in progress". Loop am Gate ist jetzt im Control-Modus
+  sichtbar (Rolle `loop`, Aktion "wartet auf Antwort").
+- **Ambient (63248c4):** `aggregate_ambient` bevorzugt das
+  Terminal-Event nach `gate_open`. Loop tot mit juengem Gate ->
+  ambient zeigt `failed`, nicht `running`.
+- **Handoff-Korrektur:** Abschnitt 3 [A] teilweise widerlegt —
+  `aggregate_fehler_cluster` existiert nicht, Run `a8c4dac4`
+  nicht im Repo. Merkposten-Abschnitt "Handoff ist Behauptung"
+  dokumentiert das Muster.
+- **Stand:** 1689 passed, 5 skipped. Alle 5 Drifts OK. Server
+  neu gestartet (PID 3847746).
+
+Commits: 1869182, c1dcb4d, 63248c4
+
