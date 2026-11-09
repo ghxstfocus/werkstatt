@@ -1,270 +1,378 @@
-// Informed Gate Panel (OP-298). Zeigt offene Gates mit vollem Kontext,
-// Empfehlung und Antwort-Buttons. Pollt /gate/context alle 2s.
+// OP-381c: Human-Gate als Modal.
 (function () {
   "use strict";
-  var aktuellesProjekt = "werkstatt";
+
   var POLL_MS = 2000;
+  var _aktuellesProjekt = "werkstatt";
   var _timer = null;
+  var _aktuelleCtx = null;
+  var _bannerDismissed = false;
 
   function _el(id) { return document.getElementById(id); }
-  function _clear(box) { if (box) box.innerHTML = ""; }
 
-  function _karte(label, wert, klass) {
+  function _zeigeBanner() {
+    var b = _el("gate-banner");
+    if (b && !_bannerDismissed) b.hidden = false;
+  }
+  function _versteckeBanner() {
+    var b = _el("gate-banner");
+    if (b) b.hidden = true;
+  }
+
+  function _oeffneModal() {
+    var m = _el("gate-modal");
+    var bd = _el("gate-backdrop");
+    if (m) m.hidden = false;
+    if (bd) { bd.hidden = false; requestAnimationFrame(function () { bd.classList.add("aktiv"); }); }
+    requestAnimationFrame(function () { if (m) m.classList.add("aktiv"); });
+    _bannerDismissed = true;
+    _versteckeBanner();
+  }
+  function _schliesseModal() {
+    var m = _el("gate-modal");
+    var bd = _el("gate-backdrop");
+    if (m) m.classList.remove("aktiv");
+    if (bd) bd.classList.remove("aktiv");
+    setTimeout(function () {
+      if (m) m.hidden = true;
+      if (bd) bd.hidden = true;
+    }, 200);
+    _bannerDismissed = false;
+  }
+
+  function _karte(label, wert, klasse) {
     var d = document.createElement("div");
-    d.className = "gate-card " + (klass || "");
+    d.className = "gm-card " + (klasse || "");
     var l = document.createElement("div");
-    l.className = "gate-card-label";
+    l.className = "gm-card-label";
     l.textContent = label;
     var v = document.createElement("div");
-    v.className = "gate-card-wert";
+    v.className = "gm-card-wert";
     v.textContent = wert || "—";
     d.appendChild(l);
     d.appendChild(v);
     return d;
   }
 
-  function _renderPlan(box, plan) {
-    var details = document.createElement("details");
-    details.className = "gate-block";
-    // Persistenter Offen-State (Poll-Rebuild zerstoert sonst den State)
-    var key = "werkstatt-gate-plan-offen";
-    try {
-      if (localStorage.getItem(key) === "1") details.open = true;
-    } catch (e) {}
-    details.addEventListener("toggle", function () {
-      try { localStorage.setItem(key, details.open ? "1" : "0"); } catch (e) {}
+  function _renderPlanMarkdown(pre, text) {
+    pre.innerHTML = "";
+    var zeilen = (text || "").split("\n");
+    for (var i = 0; i < zeilen.length; i++) {
+      var z = zeilen[i];
+      var sp = document.createElement("span");
+      if (/^##\s/.test(z)) {
+        sp.className = "gm-h2";
+        sp.textContent = z.replace(/^##\s+/, "");
+      } else if (/^[-*]\s/.test(z)) {
+        sp.className = "gm-li";
+        sp.textContent = "\u2022 " + z.replace(/^[-*]\s+/, "");
+      } else {
+        sp.textContent = z;
+      }
+      pre.appendChild(sp);
+      pre.appendChild(document.createTextNode("\n"));
+    }
+  }
+
+  function _renderPlan(container, planText) {
+    var wrap = document.createElement("div");
+    wrap.className = "gm-plan-wrap";
+
+    var toolbar = document.createElement("div");
+    toolbar.className = "gm-plan-toolbar";
+    var titel = document.createElement("span");
+    titel.className = "gm-plan-titel";
+    titel.textContent = "Plan (" + (planText ? planText.length : 0) + " Zeichen)";
+    toolbar.appendChild(titel);
+
+    var copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "gm-copy-btn";
+    copyBtn.textContent = "\uD83D\uDCCB Als Markdown kopieren";
+    copyBtn.addEventListener("click", function () {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(planText || "").then(function () {
+          copyBtn.textContent = "\u2713 Kopiert";
+          copyBtn.classList.add("kopiert");
+          setTimeout(function () {
+            copyBtn.textContent = "\uD83D\uDCCB Als Markdown kopieren";
+            copyBtn.classList.remove("kopiert");
+          }, 2000);
+        });
+      }
     });
-    var sum = document.createElement("summary");
-    sum.textContent = "Plan (" + (plan.text ? plan.text.length : 0) + " Zeichen)";
-    details.appendChild(sum);
+    toolbar.appendChild(copyBtn);
+    wrap.appendChild(toolbar);
+
     var pre = document.createElement("pre");
-    pre.className = "gate-plan";
-    pre.textContent = (plan && plan.text) || "(kein Plan)";
-    details.appendChild(pre);
-    box.appendChild(details);
+    pre.className = "gm-plan";
+    _renderPlanMarkdown(pre, planText || "(kein Plan)");
+    wrap.appendChild(pre);
+
+    container.appendChild(wrap);
   }
 
-  function _renderScout(box, scout) {
-    if (!scout) return;
-    var details = document.createElement("details");
-    details.className = "gate-block";
-    var key = "werkstatt-gate-scout-offen";
-    try { if (localStorage.getItem(key) === "1") details.open = true; } catch (e) {}
-    details.addEventListener("toggle", function () {
-      try { localStorage.setItem(key, details.open ? "1" : "0"); } catch (e) {}
-    });
+  function _renderSection(container, titel, inhaltFn) {
+    var det = document.createElement("details");
+    det.className = "gm-section";
     var sum = document.createElement("summary");
-    var n = (scout.befehle || []).length + (scout.dateien || []).length + (scout.findings || []).length;
-    sum.textContent = "Scout/Explorer (" + n + ")";
-    details.appendChild(sum);
-    var list = document.createElement("ul");
-    list.className = "gate-list";
-    (scout.befehle || []).forEach(function (b) {
-      var li = document.createElement("li");
-      li.textContent = "Befehl: " + b;
-      list.appendChild(li);
-    });
-    (scout.dateien || []).slice(0, 10).forEach(function (f) {
-      var li = document.createElement("li");
-      li.textContent = "Datei: " + f;
-      list.appendChild(li);
-    });
-    details.appendChild(list);
-    box.appendChild(details);
+    sum.textContent = titel;
+    det.appendChild(sum);
+    inhaltFn(det);
+    container.appendChild(det);
   }
 
-  function _renderHistorie(box, hist) {
-    if (!hist || hist.length === 0) return;
-    var details = document.createElement("details");
-    details.className = "gate-block";
-    var sum = document.createElement("summary");
-    sum.textContent = "Historie (" + hist.length + ")";
-    details.appendChild(sum);
-    var list = document.createElement("ul");
-    list.className = "gate-list";
-    hist.forEach(function (h) {
-      var li = document.createElement("li");
-      var zeit = (h.ts || "").match(/T(\d{2}:\d{2}:\d{2})/);
-      li.textContent = (zeit ? zeit[1] + " — " : "") + (h.kind || "");
-      list.appendChild(li);
-    });
-    details.appendChild(list);
-    box.appendChild(details);
-  }
-
-  function _renderDiff(box, ctx) {
+  function _renderDiff(container, ctx) {
     var stat = ctx.diff_stat || "";
     var diff = ctx.diff || "";
     if (!stat && !diff) return;
-    var det = document.createElement("details");
-    det.className = "gate-block";
-    var key = "werkstatt-gate-diff-offen";
-    try { if (localStorage.getItem(key) === "1") det.open = true; } catch (e) {}
-    det.addEventListener("toggle", function () {
-      try { localStorage.setItem(key, det.open ? "1" : "0"); } catch (e) {}
+    var dateien = stat ? (stat.trim().split("\n").length - 1) : 0;
+    _renderSection(container, "\u00c4nderungen (" + dateien + " Dateien)", function (det) {
+      var pre = document.createElement("pre");
+      pre.className = "gm-section-pre";
+      pre.textContent = stat + (diff ? "\n\n" + diff : "");
+      det.appendChild(pre);
     });
-    var sum = document.createElement("summary");
-    var dateien = stat ? stat.trim().split("\n").length - 1 : 0;
-    sum.textContent = "Aenderungen (" + dateien + " Dateien)";
-    det.appendChild(sum);
-    if (stat) {
-      var preStat = document.createElement("pre");
-      preStat.className = "gate-plan gate-diff-stat";
-      preStat.textContent = stat;
-      det.appendChild(preStat);
-    }
-    if (diff) {
-      var preDiff = document.createElement("pre");
-      preDiff.className = "gate-plan gate-diff-body";
-      diff.split("\n").forEach(function (linie) {
-        var zeile = document.createElement("span");
-        zeile.className = "diff-line";
-        if (linie.startsWith("+++") || linie.startsWith("---")) {
-          zeile.className += " diff-meta";
-        } else if (linie.startsWith("+")) {
-          zeile.className += " diff-plus";
-        } else if (linie.startsWith("-")) {
-          zeile.className += " diff-minus";
-        } else if (linie.startsWith("@@")) {
-          zeile.className += " diff-hunk";
-        }
-        zeile.textContent = linie + "\n";
-        preDiff.appendChild(zeile);
+  }
+
+  function _renderScout(container, scout) {
+    if (!scout) return;
+    var n = (scout.befehle || []).length + (scout.dateien || []).length
+          + (scout.findings || []).length;
+    if (n === 0) return;
+    _renderSection(container, "Scout/Explorer (" + n + ")", function (det) {
+      var ul = document.createElement("ul");
+      ul.className = "gm-list";
+      (scout.befehle || []).forEach(function (b) {
+        var li = document.createElement("li");
+        li.textContent = "Befehl: " + b;
+        ul.appendChild(li);
       });
-      det.appendChild(preDiff);
-    }
-    box.appendChild(det);
+      (scout.dateien || []).slice(0, 10).forEach(function (f) {
+        var li = document.createElement("li");
+        li.textContent = "Datei: " + f;
+        ul.appendChild(li);
+      });
+      det.appendChild(ul);
+    });
   }
 
-  function _machDraggable(box, handle) {
-    var offsetX = 0, offsetY = 0, dragging = false;
-    function _down(e) {
-      dragging = true;
-      var rect = box.getBoundingClientRect();
-      offsetX = e.clientX - rect.left;
-      offsetY = e.clientY - rect.top;
-      box.style.left = rect.left + "px";
-      box.style.top = rect.top + "px";
-      box.style.right = "auto";
-      document.addEventListener("mousemove", _move);
-      document.addEventListener("mouseup", _up);
-      e.preventDefault();
-    }
-    function _move(e) {
-      if (!dragging) return;
-      box.style.left = (e.clientX - offsetX) + "px";
-      box.style.top = (e.clientY - offsetY) + "px";
-    }
-    function _up() {
-      dragging = false;
-      document.removeEventListener("mousemove", _move);
-      document.removeEventListener("mouseup", _up);
-    }
-    handle.addEventListener("mousedown", _down);
-    handle.style.cursor = "move";
+  function _renderHistorie(container, hist) {
+    if (!hist || hist.length === 0) return;
+    _renderSection(container, "Historie (" + hist.length + ")", function (det) {
+      var ul = document.createElement("ul");
+      ul.className = "gm-list";
+      hist.forEach(function (h) {
+        var li = document.createElement("li");
+        var zeit = (h.ts || "").match(/T(\d{2}:\d{2}:\d{2})/);
+        li.textContent = (zeit ? zeit[1] + " \u2014 " : "") + (h.kind || "");
+        ul.appendChild(li);
+      });
+      det.appendChild(ul);
+    });
   }
 
-  function _renderGate(box, ctx) {
-    _clear(box);
+  function _sendeAntwort(ctx, gateId, antwort) {
+    return fetch("/api/runs/" + encodeURIComponent(ctx.run_id) + "/gate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      credentials: "same-origin",
+      body: JSON.stringify({gate_id: gateId, answer: antwort}),
+    }).then(function (r) { return r.ok; });
+  }
 
-    var header = document.createElement("div");
-    header.className = "gate-header";
-    header.textContent = "Human-Gate offen";
-    header.title = "Ziehen zum Verschieben";
-    box.appendChild(header);
-    _machDraggable(box, header);
-
-    var status = document.createElement("div");
-    status.className = "gate-status";
-    status.appendChild(_karte("Verify",
-      ctx.verify ? ctx.verify.status : "—",
-      ctx.verify && ctx.verify.status === "ok" ? "ok" :
-        (ctx.verify && ctx.verify.status === "error" ? "error" : "")));
-    status.appendChild(_karte("Reviewer",
-      ctx.reviewer ? ctx.reviewer.verdict : "—", ""));
-    status.appendChild(_karte("Empfehlung", ctx.empfehlung,
-      ctx.empfehlung === "j" ? "ok" :
-        (ctx.empfehlung === "n" ? "error" : "warn")));
-    box.appendChild(status);
-
-    var grund = document.createElement("div");
-    grund.className = "gate-grund";
-    grund.textContent = "Grund: " + (ctx.empfehlung_grund || "—");
-    box.appendChild(grund);
-
-    _renderPlan(box, ctx.plan || { text: "" });
-    _renderDiff(box, ctx);
-    _renderScout(box, ctx.scout);
-    _renderHistorie(box, ctx.historie);
-
-    ctx.offene_gates.forEach(function (g) {
+  function _renderActions(container, ctx) {
+    (ctx.offene_gates || []).forEach(function (g) {
       var kasten = document.createElement("div");
-      kasten.className = "gate-kasten";
+      kasten.className = "gm-gate-kasten";
+
       var prompt = document.createElement("div");
-      prompt.className = "gate-prompt";
+      prompt.className = "gm-gate-prompt";
       prompt.textContent = g.prompt || "Antwort?";
       kasten.appendChild(prompt);
-      var btns = document.createElement("div");
-      btns.className = "gate-buttons";
-      (g.optionen || "jna").split("").forEach(function (opt) {
-        var b = document.createElement("button");
-        b.className = "gate-btn gate-btn-" + opt;
-        b.textContent = {j: "j — Ja", n: "n — Nein", a: "a — Auto"}[opt] || opt;
-        b.addEventListener("click", function () {
-          b.disabled = true;
-          b.textContent = "…";
-          fetch("/api/runs/" + encodeURIComponent(ctx.run_id) + "/gate",
-                {method: "POST",
-                 headers: {"Content-Type": "application/json"},
-                 credentials: "same-origin",
-                 body: JSON.stringify({gate_id: g.gate_id, answer: opt})})
-            .then(function (r) { return r.ok; })
-            .then(function (ok) {
-              if (!ok) {
+
+      var typ = g.typ || "jna";
+
+      if (typ === "freitext") {
+        var ta = document.createElement("textarea");
+        ta.className = "gm-textarea";
+        ta.placeholder = "Freitext eingeben (Enter sendet, Shift+Enter = Zeilenumbruch)";
+        ta.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            _abschicken();
+          }
+        });
+        kasten.appendChild(ta);
+
+        var hinweis = document.createElement("div");
+        hinweis.className = "gm-textarea-hinweis";
+        hinweis.textContent = "Enter sendet, Shift+Enter macht Zeilenumbruch.";
+        kasten.appendChild(hinweis);
+
+        var senden = document.createElement("button");
+        senden.type = "button";
+        senden.className = "gm-btn gm-btn-j";
+        senden.textContent = "Senden";
+        senden.style.marginTop = "8px";
+        kasten.appendChild(senden);
+
+        var _abschicken = function () {
+          var antwort = ta.value || "";
+          ta.disabled = true;
+          senden.disabled = true;
+          senden.textContent = "\u2026";
+          _sendeAntwort(ctx, g.gate_id, antwort).then(function (ok) {
+            if (ok) {
+              _schliesseModal();
+            } else {
+              ta.disabled = false;
+              senden.disabled = false;
+              senden.textContent = "Fehler, nochmal";
+            }
+          }).catch(function () {
+            ta.disabled = false;
+            senden.disabled = false;
+            senden.textContent = "Netz-Fehler";
+          });
+        };
+        senden.addEventListener("click", _abschicken);
+      } else {
+        var btns = document.createElement("div");
+        btns.className = "gm-btn-group";
+        (g.optionen || "jna").split("").forEach(function (opt) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "gm-btn gm-btn-" + opt;
+          b.textContent = {
+            j: "j \u2014 Ja",
+            n: "n \u2014 Nein",
+            a: "a \u2014 Auto",
+            e: "e \u2014 Edit",
+          }[opt] || opt;
+          b.addEventListener("click", function () {
+            b.disabled = true;
+            b.textContent = "\u2026";
+            _sendeAntwort(ctx, g.gate_id, opt).then(function (ok) {
+              if (ok) {
+                _schliesseModal();
+              } else {
                 b.disabled = false;
                 b.textContent = "Fehler";
-                setTimeout(_poll, 500);
               }
-            })
-            .catch(function () {
+            }).catch(function () {
               b.disabled = false;
               b.textContent = "Netz-Fehler";
             });
+          });
+          btns.appendChild(b);
         });
-        btns.appendChild(b);
-      });
-      kasten.appendChild(btns);
-      box.appendChild(kasten);
+        kasten.appendChild(btns);
+      }
+
+      container.appendChild(kasten);
     });
   }
 
+  function _renderModal(ctx) {
+    _aktuelleCtx = ctx;
+    var body = _el("gate-modal-body");
+    var actions = _el("gate-modal-actions");
+    if (!body || !actions) return;
+    body.innerHTML = "";
+    actions.innerHTML = "";
+
+    var status = document.createElement("div");
+    status.className = "gm-status";
+    status.appendChild(_karte(
+      "Verify",
+      ctx.verify ? ctx.verify.status : "\u2014",
+      ctx.verify && ctx.verify.status === "ok" ? "ok"
+        : (ctx.verify && ctx.verify.status === "error" ? "error" : "")
+    ));
+    status.appendChild(_karte(
+      "Reviewer",
+      ctx.reviewer ? ctx.reviewer.verdict : "\u2014",
+      ""
+    ));
+    status.appendChild(_karte(
+      "Empfehlung",
+      ctx.empfehlung,
+      ctx.empfehlung === "j" ? "ok"
+        : (ctx.empfehlung === "n" ? "error" : "warn")
+    ));
+    body.appendChild(status);
+
+    var grund = document.createElement("div");
+    grund.className = "gm-grund";
+    grund.textContent = "Grund: " + (ctx.empfehlung_grund || "\u2014");
+    body.appendChild(grund);
+
+    _renderPlan(body, (ctx.plan || {}).text || "");
+
+    _renderDiff(body, ctx);
+    _renderScout(body, ctx.scout);
+    _renderHistorie(body, ctx.historie);
+
+    _renderActions(actions, ctx);
+  }
+
   function _poll() {
-    fetch("/api/projects/" + encodeURIComponent(aktuellesProjekt) + "/gate/context",
+    fetch("/api/projects/" + encodeURIComponent(_aktuellesProjekt) + "/gate/context",
           {credentials: "same-origin"})
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (ctx) {
-        var box = _el("gate-panel");
-        if (!box) return;
-        if (!ctx || !ctx.offene_gates || ctx.offene_gates.length === 0) {
-          _clear(box);
-          box.classList.remove("aktiv");
+        var hatGates = ctx && ctx.offene_gates && ctx.offene_gates.length > 0;
+        if (!hatGates) {
+          _versteckeBanner();
+          _schliesseModal();
           return;
         }
-        box.classList.add("aktiv");
-        _renderGate(box, ctx);
+        _renderModal(ctx);
+        var m = _el("gate-modal");
+        var modalOffen = m && !m.hidden;
+        if (!modalOffen && !_bannerDismissed) _zeigeBanner();
       })
-      .catch(function (err) {
-        console.error("[gate_panel] poll:", err);
-      });
+      .catch(function (err) { console.error("[gate_panel] poll:", err); });
   }
 
-  function lade(projekt) {
-    if (projekt) aktuellesProjekt = projekt;
-    if (_timer) clearInterval(_timer);
+  document.addEventListener("DOMContentLoaded", function () {
+    var banner = _el("gate-banner");
+    if (banner) {
+      banner.addEventListener("click", function (e) {
+        if (e.target.id === "gate-banner-close") return;
+        _oeffneModal();
+      });
+    }
+    var bClose = _el("gate-banner-close");
+    if (bClose) {
+      bClose.addEventListener("click", function (e) {
+        e.stopPropagation();
+        _bannerDismissed = true;
+        _versteckeBanner();
+      });
+    }
+    var mClose = _el("gate-modal-close");
+    if (mClose) mClose.addEventListener("click", _schliesseModal);
+    var bd = _el("gate-backdrop");
+    if (bd) bd.addEventListener("click", _schliesseModal);
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        var m = _el("gate-modal");
+        if (m && !m.hidden) _schliesseModal();
+      }
+    });
+
     _poll();
     _timer = setInterval(_poll, POLL_MS);
-  }
+  });
 
-  window.WerkstattGate = { lade: lade };
-  document.addEventListener("DOMContentLoaded", function () { lade(); });
+  window.WerkstattGate = {
+    lade: function (projekt) {
+      if (projekt) _aktuellesProjekt = projekt;
+      _poll();
+    },
+    oeffne: _oeffneModal,
+    schliesse: _schliesseModal,
+  };
 })();

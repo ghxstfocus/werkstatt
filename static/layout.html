@@ -56,6 +56,27 @@
     <span class="ambient-item ambient-gates" id="ambient-gates" data-ziel="gate-panel" hidden>Gates offen</span>
   </div>
 
+  <div class="gate-banner" id="gate-banner" hidden>
+    <span class="gate-banner-text">\u26a0 Human-Gate offen \u2014 Plan pr\u00fcfen</span>
+    <button type="button" class="gate-banner-close" id="gate-banner-close"
+            aria-label="Banner schliessen">&times;</button>
+  </div>
+
+  <div class="gate-backdrop" id="gate-backdrop" hidden></div>
+
+  <div class="gate-modal" id="gate-modal" role="dialog" aria-modal="true"
+       aria-labelledby="gate-modal-title" hidden>
+    <div class="gate-modal-inner">
+      <header class="gate-modal-header">
+        <h2 id="gate-modal-title">Human-Gate offen</h2>
+        <button type="button" class="gate-modal-close" id="gate-modal-close"
+                aria-label="Modal schliessen">&times;</button>
+      </header>
+      <div class="gate-modal-body" id="gate-modal-body"></div>
+      <footer class="gate-modal-actions" id="gate-modal-actions"></footer>
+    </div>
+  </div>
+
   <main class="layout-grid">
 
     <!-- Spalte 1: Runs-Liste -->
@@ -185,7 +206,6 @@
       </div>
     </section>
 
-  <aside class="gate-panel" id="gate-panel"></aside>
 
   <aside class="detail-drawer" id="detail-drawer" data-offen="false">
     <nav class="dd-tabs">
