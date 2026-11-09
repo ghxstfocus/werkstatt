@@ -8,6 +8,33 @@ Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 `docs/ROADMAP.md`, Abschnitt "Aus STATUS.md (Loop-Queue)".
 
 
+## Roadmap 2026-11 (User-Direktive 2026-11-10)
+
+**Phase 1 — UI ready fuer die eigentliche Arbeit**
+
+1. OP-381c — Gate-Modal-Redesign (Vollbild, Copy, strukturiert)
+2. OP-381b — Freitext-Gate (plan_reason im Modal)
+3. OP-306  — 3 Modi: Wasserfall + Debug + Cockpit
+4. OP-306b — Etappe 2-4: Startseite / Overview
+5. Interfaces — Verify/CI-Status, Rollen-Details, Debug-Ansicht
+
+**Phase 2 — Loop stabilisieren, mit UI im Betrieb**
+
+6. OP-382  — Dogfooding: 10x echte OPs durch die UI
+7. Debugger-Modus als wichtigstes Werkzeug (Kette fertig machen)
+8. Loop zuverlaessig: konstant Erfolge, keine Abbrueche
+
+**Phase 3 — Kernarbeit am Loop**
+
+9. Erst wenn Phase 2 gruen: Selbstverbesserung (OP-376-379),
+   Memory-Graph (OP-380), Gehirn (OP-220 ff.)
+
+**Regel:** Phase 3 ist gesperrt bis Phase 2 nachweislich stabil ist.
+Die Kette selbst ist in Phase 2 fertig zu bauen — sie ist heute
+noch nicht vollstaendig.
+
+---
+
 ## Offene Punkte
 
 ### OP-281: Scout-Redundanz messen vor Umbau
