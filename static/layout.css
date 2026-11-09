@@ -2633,3 +2633,42 @@ body[data-mode="control"] .live-feed-bereich {
   .lf-aktiv-live { animation: none; }
   .lf-step-neu { animation: none; }
 }
+
+/* OP-381j-Codex: Live-Feed Polish (Spinner, Dots, Shimmer) */
+.lf-spinner { display: inline-flex; align-items: center; font-family: monospace; font-size: 14px; width: 14px; flex-shrink: 0; color: var(--sem-active); }
+.lf-spinner-char { display: inline-block; min-width: 12px; }
+.lf-dots::after { content: "..."; display: inline-block; min-width: 1.6em; text-align: left; animation: lf-dots-anim 1.2s steps(4, end) infinite; }
+@keyframes lf-dots-anim {
+  0%   { content: "."; }
+  25%  { content: ".."; }
+  50%  { content: "..."; }
+  75%  { content: ".."; }
+  100% { content: "."; }
+}
+.lf-aktiv-live { background: linear-gradient(100deg, rgba(96,165,250,0.04) 0%, rgba(96,165,250,0.12) 50%, rgba(96,165,250,0.04) 100%); background-size: 200% 100%; animation: lf-shimmer 3s ease-in-out infinite, lf-aktiv-pulse 2s ease-in-out infinite; }
+@keyframes lf-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+.lf-aktiv-neu { animation: lf-aktiv-in 220ms ease-out; }
+@keyframes lf-aktiv-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.lf-aktiv-gleich { transition: background 200ms; }
+.lf-aktiv-wartend { background: rgba(255,255,255,0.02); border-style: dashed; }
+@keyframes lf-step-slide-in {
+  from { opacity: 0; transform: translateY(-8px); background: rgba(96,165,250,0.15); }
+  to   { opacity: 1; transform: translateY(0); background: transparent; }
+}
+.lf-step-neu { animation: lf-step-slide-in 350ms ease-out; }
+.lf-step-fertig { background: rgba(74,222,128,0.06); }
+.lf-step { opacity: 0.75; transition: opacity 120ms; }
+.lf-step:hover { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .lf-aktiv-live { animation: none; }
+  .lf-aktiv-neu  { animation: none; }
+  .lf-step-neu   { animation: none; }
+  .lf-dots::after { animation: none; content: "..."; }
+  .lf-spinner    { display: none; }
+}
