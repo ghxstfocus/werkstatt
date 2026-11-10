@@ -68,13 +68,15 @@ noch nicht vollstaendig.
 - **Akzeptanzkriterien:**
   - Lange Diagnose- und Verify-Aufgaben erhalten stabile Job-IDs und laufen ausserhalb des Chat-Request-Lifecycles.
   - Job-Events verknuepfen Projekt, Chat-Session und optional run_id; Fortschritt, Erfolg, Fehler, Abbruch und Replay sind persistent und nach Reconnect lesbar.
-  - Doppelte Requests mit gleicher Idempotency-Key erzeugen keinen doppelten Job; Session-Turns werden gegen konkurrierende Schreibzugriffe serialisiert.
+  - Doppelte Requests mit gleicher Idempotency-Key erzeugen keinen doppelten Job. Read-Jobs derselben Session duerfen parallel inferieren, wenn jeder einen beim Annehmen fixierten Snapshot abgeschlossener Turns und einen eigenen Transcript-Zweig nutzt; Tool-Traces werden isoliert und erfolgreiche User-/Assistant-Paare idempotent in die Eltern-Session projiziert. Fehlgeschlagene oder unvollstaendige Turns gelangen nicht in fremde Prompts.
   - Chat-Nachrichten koennen waehrend aktivem Loop und Hintergrundjob unabhaengig beantwortet werden.
   - Jede Aktion zeigt im Chat und in der UI sofort Status, Ergebnis oder konkreten Fehler; Konsolen-Logs allein genuegen nicht.
   - Pro Projekt gibt es hoechstens einen schreibenden Loop-Run; lesende Diagnosejobs duerfen parallel laufen.
   - Tests decken Job-Lifecycle, Reconnect/Replay, Idempotenz, Parallelitaet, Abbruch, Checkpoint-Pause, Planrevision mit neuem Human-Gate sowie Ablehnung ohne Working-Tree-Aenderung ab.
 - **Stand 2026-11-10 (Serververifiziert bis `9c505cb`):** Chatjobs haben persistente Session-Serialisierung/FIFO, Worker-Lease-Recovery, Idempotenzkonflikte, Fehler-/Abbruch-Reconnect und kooperativen Abbruch; der Job-Event-Replay ist an die Chat-Session gebunden. SSE-Abbruch wird an Chunk-Grenzen verarbeitet; bei stiller Verbindung begrenzt ein 30-Sekunden-Read-Timeout die Wartezeit. Gezielte Tests: 50 bestanden; Gesamtsuite: 1885 passed / 5 skipped; Ruff/Mypy 0; AST 369 Dateien / 0 Fehler; Audit-Katalogtest bestanden; Quality Gate `ok: true`.
 - **OP-397 bleibt offen:** Es fehlen Run-/Event-Store-Verknuepfung, tatsaechlich unabhaengige Antworten im selben Chat waehrend eines laufenden Hintergrundjobs, exklusiver Projekt-Schreibslot, Chat-Steuerung des aktiven Loop sowie Checkpoint-Pause und revisioniertes Plan-Gate mit Reject/Expiry-Tests.
+- **Verifikation der Queue-Race-Korrektur auf Server-HEAD `81a923c`:** Chat-Job-Tests 24 bestanden; Gesamtsuite 1887 passed / 5 skipped; Ruff 0; Quality Gate `ok: true`, keine Regression. Der Doku-Check muss nach dem Commit-Referenzformat-Fix erneut laufen.
+- **Parallele Read-Jobs bleiben Implementierungsarbeit:** ADR-0029 spezifiziert jetzt unveraenderliche Turn-Snapshots und isolierte Transcript-Zweige; die aktuelle Session-FIFO implementiert diesen Vertrag noch nicht.
 - **Blockiert von:** —
 
 ### OP-398: Evidenzbasierte Auswahl autonomer Arbeit
