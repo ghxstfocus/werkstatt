@@ -59,6 +59,80 @@ def test_event_replay_cursor_returns_only_new_events(tmp_path: Path) -> None:
     assert replay["events"][-1]["payload"] == {"text": "Teil"}
 
 
+def test_run_job_uses_snapshot_and_merges_completed_turn_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_agent, chat_jobs, chat_session
+
+    db_path = tmp_path / "jobs.db"
+    chat_db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
+    parent = chat_session.ChatSession("demo", "session-a")
+    parent.append("user", {"text": "Vorherige Frage"})
+    parent.append("assistant", {"text": "Vorherige Antwort"})
+    context_seq = parent.max_seq()
+    job, _ = ChatJobStore(db_path).create(
+        "session-a", "Neue Frage", "read", "request-key-snapshot-001",
+        context_seq=context_seq,
+    )
+    parent.append("user", {"text": "Spaeter eingereicht"})
+    gesehen: list[tuple[str, list[str]]] = []
+
+    def _fake_chat_loop(session, message, **_kwargs):
+        gesehen.append((
+            session.session_id,
+            [event["payload"].get("text", "") for event in session.load()],
+        ))
+        assert message == "Neue Frage"
+        session.append("user", {"text": message, "job_id": job["job_id"]})
+        session.append("assistant", {"text": "Neue Antwort"})
+        return "Neue Antwort"
+
+    monkeypatch.setattr(chat_agent, "chat_loop", _fake_chat_loop)
+    monkeypatch.setattr(chat_jobs, "_WORKER_ID", "worker-test")
+
+    assert chat_jobs._run_job(db_path, "demo", tmp_path, job["job_id"]) is True
+    assert gesehen == [(
+        job["job_id"], ["Vorherige Frage", "Vorherige Antwort"],
+    )]
+    merged = parent.load()
+    job_turns = [event for event in merged if event["kind"] == "job_turn"]
+    assert len(job_turns) == 1
+    assert job_turns[0]["payload"]["user_text"] == "Neue Frage"
+    assert job_turns[0]["payload"]["assistant_text"] == "Neue Antwort"
+    result = ChatJobStore(db_path).get(job["job_id"])
+    assert result is not None
+    assert result["state"] == "succeeded"
+
+
+def test_sync_completed_job_turns_repairs_missing_parent_projection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_jobs, chat_session
+
+    chat_db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _ = store.create(
+        "session-a", "Frage", "read", "request-key-reconcile-001",
+    )
+    assert store.claim(job["job_id"])
+    assert store.finish(job["job_id"], answer="Antwort")
+
+    assert chat_jobs.sync_completed_job_turns(
+        "demo", "session-a", db_path=store.db_path,
+    ) == 1
+    assert chat_jobs.sync_completed_job_turns(
+        "demo", "session-a", db_path=store.db_path,
+    ) == 0
+    events = chat_session.ChatSession(
+        "demo", "session-a", db_pfad=chat_db,
+    ).load()
+    assert [event["kind"] for event in events] == ["job_turn"]
+
+
 def test_job_failure_is_visible_and_terminal(tmp_path: Path) -> None:
     store = ChatJobStore(tmp_path / "jobs.db")
     job, _ = store.create("session-a", "Frage", "read", "request-key-0004")
