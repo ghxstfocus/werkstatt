@@ -3977,3 +3977,14 @@ noch den nichtnumerischen Cache-Buster; targeted tests und Ruff waren
 grün. Der Numeric-Fix und Prozessgruppenänderungen brauchen einen
 erneuten Serverlauf.
 
+### 2026-11-10 — Stop-Eskalation der Prozessgruppe getestet
+
+**Commit:** 5746b30.
+
+Ein Backend-Regressionstest deckt jetzt auch den Timeout-Pfad ab:
+Nach ausbleibender Beendigung erhält die Prozessgruppe SIGKILL, und die
+API liefert erst danach den finalen Prozessstatus. Der Test fängt
+SIGTERM/SIGKILL ab und startet keinen echten Loop-Prozess.
+
+**Prüfung:** Test ergänzt; Ausführung auf dem Server steht noch aus.
+
