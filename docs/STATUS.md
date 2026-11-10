@@ -1407,15 +1407,15 @@ noch nicht vollstaendig.
 - **Typ:** architektur
 - **Phase:** Phase-2 (Loop-Stabilisierung)
 - **Blockiert von:** —
-- **Betroffene Dateien:** `werkstatt/reflection.py`, `tests/test_reflection_kontext.py` (neu)
+- **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/roles/builder/run.py`, `werkstatt/verify.py`, `tests/test_reflection_kontext.py` (neu)
 - **Problem:** Die Reflection-Phase bekommt drei Felder:
   1. `patches` — vollstaendiger Patch-Text (alle Zeilen, alle Dateien)
   2. `last_verify_errors` — Fehler-Ausgabe (z.T. 500+ Zeilen mit Stacktraces)
   3. `reviewer_bugs` — Bugs vom Reviewer (auch `medium` und `low`)
   Redundanz: `patches` enthaelt oft genau das, was `last_verify_errors` schon beschreibt. `reviewer_bugs` mit `medium`-Severity sind oft Rauschen (Forschung: Reflection ohne externes Signal verschlechtert Leistung — Self-Refine-Papers 2025).
 - **Akzeptanzkriterien:**
-  (a) `patches` durch den tatsaechlichen `git diff` ersetzen (nicht den ganzen Datei-Inhalt — nur die geaenderten Zeilen).
-  (b) `last_verify_errors` nur die `error:`-Zeilen (via `_extrahiere_fehlerkern`, existiert schon in `verify.py`).
+  (a) `patches` durch den tatsaechlichen `git diff` fuer die betroffenen Task-Dateien ersetzen (nicht den ganzen Datei-Inhalt — nur die geaenderten Zeilen). Diff-Pfade kommen aus dem Task-Scope, nicht aus einem unbeschraenkten Repository-Diff.
+  (b) `last_verify_errors` via `_extrahiere_fehlerkern` (existiert schon in `verify.py`) zu einem kurzen Fehlerkern verdichten; falls die Extraktion leer ist, einen begrenzten Fail-closed-Auszug behalten statt den Verify-Fehler zu verwerfen.
   (c) `reviewer_bugs` nur `severity in ("HIGH", "critical")`, `medium`/`low` weg.
   (d) Wenn keine HIGH-/critical-Bugs uebrig bleiben, werden keine medium-/low-Bugs nachgeschoben. Der Prompt enthaelt stattdessen einen expliziten Hinweis, dass der Severity-Filter keine Reviewer-Bugs uebrigliess. Deterministische Verify-Fehler bleiben davon unberuehrt.
   (e) Live: Reflection-Prompt messbar kleiner (Vergleich in PROGRESS.md).
