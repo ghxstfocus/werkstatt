@@ -4120,3 +4120,15 @@ derselben ID sowie einen davon abhaengigen OP.
 - **Commit:** `c88091e9f6c8` — Testdatei-Formatierung fuer Ruff.
 - Server-Verifikation steht aus; vor Ausweitung des Selectors ist ausserdem
   der konkrete Mypy-Befund aus dem Quality Gate zu klaeren.
+
+### Quality-Gate — Mypy-Diagnose im JSON sichtbar machen (2026-11-10)
+
+Der Quality-Gate-Bericht hat bisher nur die Mypy-Fehleranzahl gespeichert;
+der konkrete Compiler-Output wurde verworfen und `fehler` blieb dadurch
+`null`. Bei einem Fehler enthaelt `current.mypy` jetzt Exit-Code und
+Diagnose, auf 4000 Zeichen begrenzt. Damit bleiben Datei/Zeile und Error-Code
+im Gate-JSON nachvollziehbar.
+
+- **Commit:** `b8d18f929eaf` — Diagnoseausgabe und Exit-Code im Mypy-Bericht.
+- **Commit:** `1d75c375e39c` — Regressionstest fuer den erhaltenen Output.
+- Server-Verifikation steht aus.
