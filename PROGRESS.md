@@ -4574,3 +4574,46 @@ liegen.
 - **Commit:** `f523e4c3ecef044948cd2934c8ed57cb16b5f1c1` — Future-Rueckgabewert fuer die Claim-Retry-Entscheidung typisieren.
 - **Commit:** `f3bf56c58545fbf8be0672e0a935ae36eac89607` — Regressionstests fuer aktive Sessions und erneuten Dispatch nach Claim-Verlust.
 - **Serververifikation:** nach Pull noch ausstehend.
+
+
+### OP-397 — parallele Read-Jobs mit isolierten Transcript-Snapshots (2026-11-10)
+
+Die bisherige Session-FIFO machte zwar mehrere Anfragen annehmbar, liess
+spaetere Fragen aber hinter einer langen LLM-Inferenz warten. Ein
+Session-Lock war noetig, weil alle Worker dasselbe append-only Transcript
+veraenderten. OP-397 verlangt unabhaengige Antworten; die parallele Ausfuehrung
+darf dabei keine partiellen Tool-Traces oder gekreuzten Turns in die
+Modellhistorie mischen.
+
+Jeder Job speichert jetzt beim Annehmen den hoechsten Event-Seq-Wert der
+Eltern-Session. Der Worker erstellt daraus idempotent eine eigene
+ChatSession mit job_id als Branch-ID und fuehrt den Turn ausschliesslich dort
+aus. Gleichzeitige Jobs derselben Session koennen parallel claimen und
+inferenzieren. Erfolgreiche Antworten werden als ein idempotentes
+`job_turn`-Event in die Eltern-Session projiziert; fehlgeschlagene oder
+abgebrochene Branches werden nicht als erledigte Konversation uebernommen.
+Beim Laden der Historie sowie vor neuen Jobs gleicht der Server erfolgreiche
+Jobs erneut ab, um einen Prozessabbruch zwischen Jobabschluss und
+Transcript-Projektion zu reparieren. Die UI zeigt fuer jeden Auftrag eine
+eigene Antwortkarte direkt nach der zugehoerigen Frage und behaelt den
+Working-Status, solange andere Jobs aktiv sind.
+
+- **Commit:** `fede9aca75bd51ad0403183e012a052c85c58ac8` — stabile Session-Snapshots und idempotente Job-Turn-Projektion.
+- **Commit:** `071c2cbf90d49e576930c230fab1be100064eb28` — abgeschlossene Job-Turns in der allgemeinen Verlaufskonvertierung abbilden.
+- **Commit:** `6d4e70a2cad8e0c5e3063557eda923630a111f4a` — abgeschlossene Job-Turns im Chat-Agent-Kontext abbilden.
+- **Commit:** `ba20a0b61e2c5740eecf86c278d0cb70aa04ca30` — Kontext-Wasserstand persistieren, Session-Serialisierung entfernen, Branches ausfuehren und Recovery-Projektion ergaenzen.
+- **Commit:** `5a86d4d0d22b6772aadef2ecd202c9735cc02de9` — Chat-Historie und Jobannahme mit Turn-Reconciliation/Wasserstand verbinden.
+- **Commit:** `15057fd3f87fca1e50aa18b2e597aa1a3bda4124` — zusammengehoerige User-/Assistant-Paare nach Reload rendern.
+- **Commit:** `aea5a4b202760212a2d067d386cd9b4fbb551ab0` — parallele Antwortkarten am jeweiligen Auftrag verankern und Laufstatus fuer uebrige Jobs erhalten.
+- **Commit:** `7aa3ffdd285977dbf0ac26e5b3852b35d2340cc9` — Chat-Asset-Cache aktualisieren.
+- **Commit:** `0142a7ceea444900bdaa9ff131ba72596e7fbeac` — Job-Claim-Vertrag an isolierte Branches anpassen.
+- **Commit:** `e3439e03067cca50cbfbc31c31241f0445c83fca` — Fehler bei Snapshot-Aufbau als fehlgeschlagene Jobs abschliessen.
+- **Commit:** `d81f5092970c21a903668b59e4e381ba8559c846` — Idempotenz erhaelt den urspruenglichen Kontext-Wasserstand.
+- **Commit:** `0969c532f042654ab4ed745e23442ad5c0c59941` — Snapshot-Wasserstand und Job-Turn-Projektion testen.
+- **Commit:** `295598fe65193b2bfbff410213f00146db444f94` — Chat-Agent-Prompt fuer abgeschlossene Job-Turns testen.
+- **Commit:** `8a4c8bfcd4cd1be71953a27246fc925bf562231c` — gleiche Session kann unabhaengige Job-Worker dispatchen.
+- **Commit:** `4dbac6b7c550fe78484451ddaff8e766c0f8bef7` — isolierte Job-Ausfuehrung und Recovery-Projektion testen.
+- **Commit:** `584e862c9381719f62be48af36d2db8ef7aae788` — History-Endpunkt repariert fehlende Projektion nach Worker-Abbruch.
+- **Commit:** `274a9cc30a028a9cfc47e89babd74427f25e52ff` — UI-Vertrag fuer History-Rendering der Job-Turn-Paare testen.
+- **Commit:** `f6857ff98937085edc5e557314f571ccb3978132` — API-Test fuer den uebergebenen Kontext-Wasserstand.
+- **Serververifikation:** gezielte Tests, UI/Ruff, Doku-Check und Quality Gate nach Pull stehen noch aus.
