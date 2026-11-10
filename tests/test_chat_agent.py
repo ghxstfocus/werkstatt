@@ -203,3 +203,12 @@ def test_system_prompt_routes_next_work_questions_through_selector() -> None:
     assert "next_op" in chat_agent._SYSTEM_PROMPT
     assert "Bei Mehrdeutigkeit fragst du" in chat_agent._SYSTEM_PROMPT
     assert "veraendert nichts" in chat_agent._SYSTEM_PROMPT
+
+def test_chat_loop_cancelled_before_request_does_not_call_llm(session) -> None:
+    with pytest.raises(chat_agent.ChatCancelled):
+        chat_agent.chat_loop(
+            session, "Abbrechen", cancel_check=lambda: True,
+        )
+
+    assert session.load() == []
+
