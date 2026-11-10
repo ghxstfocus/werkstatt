@@ -80,3 +80,11 @@ def test_legacy_model_names_are_canonicalized(
     current: str,
 ) -> None:
     assert canonical_model_name(legacy) == current
+
+
+def test_unknown_agent_label_cannot_select_architect_model() -> None:
+    route = route_for_role("future-agent", requested_model="deepseek-reasoner")
+
+    assert route.model == "deepseek-flash"
+    assert route.thinking == "disabled"
+    assert route.reasoning_effort is None
