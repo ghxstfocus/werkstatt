@@ -1036,30 +1036,36 @@ noch nicht vollstaendig.
 - **Prioritaet:** mittel.
 - **Quelle:** ADR-0016, Benchmark 2026-11-07.
 
-### OP-216: Architektur-Doku aktualisieren (Test-Loop + Debugger)
+### OP-216: Architektur-Doku an Test-Loop und Chat-Debugger angleichen
 
 - **Status:** open
 - **Typ:** doku
-- **Betroffen:** `docs/ARCHITECTURE.md` (Rollen + Ablauf),
-  `docs/adr/README.md` (Index).
-- **Problem:** Architektur-Doku (Wahrheits-Quelle laut
-  Merkposten §8) kennt Test-Loop und Debugger-Rolle nicht.
-  Nach ADR-0016/0017/0018 muss sie nachgezogen werden.
+- **Betroffene Dateien:** `docs/ARCHITECTURE.md`, `docs/SOLL.md`,
+  `docs/adr/README.md`.
+- **Problem:** Die OP-Beschreibung basiert teilweise auf ADR-0018,
+  das verworfen wurde. Die akzeptierte Architektur behandelt Debugging
+  als Chat-Modus (ADR-0011/0029), nicht als eigene Loop-Rolle. Die
+  Architektur-Doku muss IST und Zielbild sauber trennen.
 - **Akzeptanzkriterien:**
-  - **(a)** `docs/ARCHITECTURE.md`: neuer Abschnitt
-    "Test-Loop-Phase" (Ablauf, Qualification, Freeze).
-  - **(b)** `docs/ARCHITECTURE.md`: neue Rolle "Debugger"
-    (3-Wege-Check, Test-File-Guard).
-  - **(c)** `docs/ARCHITECTURE.md`: Rollen-Registry-Abschnitt
-    um `debugger` ergaenzen.
-  - **(d)** `docs/adr/README.md`: ADR-0016/0017/0018 im Index
-    (falls nicht schon da).
-- **Tests:** keine — reine Doku-Aufgabe.
-- **Blockiert von:** OP-210, OP-191 (Architektur muss erst
-  gebaut sein, dann dokumentiert).
-- **Blockiert:** —
+  - **(a)** `docs/ARCHITECTURE.md` dokumentiert die Test-Loop mit
+    Qualification, Freeze und Test-Blindheit als implementierten IST
+    nur, soweit OP-210/211 dies belegen; verbleibendes Zielverhalten
+    ist als SOLL markiert.
+  - **(b)** Debugging ist als Chat-Modus nach ADR-0011/0029 beschrieben:
+    Reproduktion, ausschliesslich temporaere Tests, strukturierter
+    Patch, einmalige Freigabe und Uebergabe an den normalen Loop mit
+    Plan-Gate, Verify, Review und Human-Gate.
+  - **(c)** Es wird keine separate `debugger`-Loop-Rolle erfunden;
+    der Rollen-Registry-Abschnitt bleibt auf tatsaechlich registrierte
+    Rollen beschraenkt.
+  - **(d)** `docs/SOLL.md` beschreibt noch nicht implementierte
+    Test-Loop-/Debugger-Faehigkeiten als Ziel, nicht als IST.
+  - **(e)** ADR-Index stimmt mit den ADR-Statusfeldern ueberein
+    (ADR-0016/0017 proposed; ADR-0018 rejected).
+- **Tests:** keine — Doku-Konsistenz gegen ADR-0011/0016/0017/0018/0029.
+- **Blockiert von:** OP-210, OP-211, OP-240.
 - **Prioritaet:** mittel.
-- **Quelle:** ADR-0016/0017/0018.
+- **Quelle:** ADR-0011/0016/0017/0018/0029.
 
 ### OP-217: Test-Agent-Spec-Qualitaet (Verhalten statt Config)
 
