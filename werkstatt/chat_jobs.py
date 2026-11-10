@@ -533,10 +533,12 @@ def sync_completed_job_turns(
     session = ChatSession(project, session_id)
     added = 0
     for job in completed:
+        job_id = str(job["job_id"])
         if job.get("answer") is not None and session.append_job_turn(
-            str(job["job_id"]), str(job["message"]), str(job["answer"]),
+            job_id, str(job["message"]), str(job["answer"]),
         ):
             added += 1
+        session.delete_snapshot(job_id)
     return added
 
 
