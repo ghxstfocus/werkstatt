@@ -86,3 +86,31 @@ def test_mode_write_aktiviert_write_tools_nicht() -> None:
 def test_execute_tool_mit_mode_write_bei_read_tool() -> None:
     r = chat_tools.execute_tool("diagnose", {}, mode="write")
     assert "bekannte_fehlerklassen" in r
+
+
+
+def test_chat_tools_isolate_project_roots(tmp_path) -> None:
+    alpha = tmp_path / "alpha"
+    beta = tmp_path / "beta"
+    alpha.mkdir()
+    beta.mkdir()
+    (alpha / "secret.txt").write_text("alpha", encoding="utf-8")
+    (beta / "secret.txt").write_text("beta", encoding="utf-8")
+
+    assert chat_tools.execute_tool(
+        "read_file", {"path": "secret.txt"},
+        project_dir=alpha, project_name="alpha",
+    ) == "alpha"
+    assert chat_tools.execute_tool(
+        "read_file", {"path": "secret.txt"},
+        project_dir=beta, project_name="beta",
+    ) == "beta"
+
+
+def test_audit_query_rejects_other_project_run_id(tmp_path) -> None:
+    tmp_path.mkdir(exist_ok=True)
+    result = chat_tools.execute_tool(
+        "audit_query", {"run_id": "beta-run-123"},
+        project_dir=tmp_path, project_name="alpha",
+    )
+    assert "gehoert nicht zum aktiven Projekt" in result
