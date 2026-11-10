@@ -738,10 +738,17 @@ def run_architect(
             audit("planner_scout_json_fehler",
                   {"grund": "auftrag_prosa_fehlt"}, pd, pn)
             return False
-        # OP-385: Der Scout-Report ist die einzige Aufgabenquelle des
-        # Architect. Alle vorher aufgebauten Explorer-/Historienbloecke
-        # bleiben beim Planner, werden aber nicht doppelt uebergeben.
-        _arch_user_content = ""
+        # OP-385/OP-396: Der Scout bleibt die einzige Quelle fuer
+        # Code-/Explorer-Fakten. Kompakte Laufhistorie (Fortschritt,
+        # Fehler und Gate-Feedback) wird getrennt uebergeben, damit der
+        # Architect abgeschlossene Arbeit nicht wiederholt.
+        _execution_context = getattr(
+            state, "architect_execution_context", "",
+        )
+        _arch_user_content = (
+            str(_execution_context)[:12000]
+            if isinstance(_execution_context, str) else ""
+        )
 
     _arch_sys_base = _planner_system(aufgabe, explorer_ctx, state)
     _arch_skills_block = state.architect_skills_block or ""

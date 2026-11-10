@@ -1976,6 +1976,7 @@ def run_planner(state: RunState) -> bool:
             + _erledigt[:3000]
         )
 
+    _fails_af: list[dict] = []
     # FIX AF 2026-10-31: Fehlschlaege aus vorherigem Lauf zeigen.
     # Bei --resume soll der Planner wissen, was schon gescheitert
     # ist, statt blind den gleichen Plan zu bauen.
@@ -2051,6 +2052,7 @@ def run_planner(state: RunState) -> bool:
             )
 
     # M-307b: letzte 10 PROGRESS.md-Eintraege als Kontext.
+    progress_text = ""
     try:
         from werkstatt import progress as _progress
         progress_text = _progress.read_recent(pd, n=10)
@@ -2060,6 +2062,7 @@ def run_planner(state: RunState) -> bool:
         pass  # PROGRESS.md nicht kritisch
 
     # M-310b: strukturierter Phase-State (wo bin ich jetzt).
+    _tasks_status: list[dict] = []
     try:
         from werkstatt.phase_state import PhaseState
         _ps = PhaseState(pn, base_dir=pd / ".werkstatt")
@@ -2114,6 +2117,50 @@ def run_planner(state: RunState) -> bool:
         "Beginne deine Antwort mit '{' und ende mit '}'. "
         "Erst Dateien lesen, DANN planen -- in einer Antwort."
         )
+
+    # OP-396: Expliziter, kompakter Laufkontext fuer den Architect.
+    # Scout liefert Code-/Explorer-Fakten; diese Liste erhaelt nur
+    # Projektfortschritt, verifizierte Historie und Kontrollfeedback.
+    _architect_execution_parts: list[str] = []
+    if _erledigt:
+        _architect_execution_parts.append(
+            "## BEREITS ERLEDIGT (nicht erneut planen)\n" + _erledigt[:3000]
+        )
+    if _fails_af:
+        _architect_execution_parts.append(
+            "## VORHERIGE FEHLSCHLAEGE\n"
+            + json.dumps(_fails_af[:10], ensure_ascii=False)[:3000]
+        )
+    if progress_text:
+        _architect_execution_parts.append(
+            "## PROJEKT-FORTSCHRITT (letzte 10 Eintraege)\n"
+            + progress_text[:5000]
+        )
+    if _tasks_status:
+        _architect_execution_parts.append(
+            "## PHASE-STATE\n"
+            + json.dumps(_tasks_status, ensure_ascii=False)[:2000]
+        )
+    if preflight:
+        _architect_execution_parts.append(
+            "## PREFLIGHT-FEHLER\n"
+            + json.dumps(preflight[:10], ensure_ascii=False)[:2000]
+        )
+    if follow_up_prev:
+        _architect_execution_parts.append(
+            "## FOLLOW-UP AUS VORHERIGER PHASE\n"
+            + json.dumps(follow_up_prev[:10], ensure_ascii=False)[:2000]
+        )
+    if _mig_stand:
+        _architect_execution_parts.append(_mig_stand[:2000])
+    if _planner_info:
+        _architect_execution_parts.append(
+            "## ABGELEHNTER PLAN\n"
+            + json.dumps(_planner_info, ensure_ascii=False)[:2000]
+        )
+    state.architect_execution_context = "\n\n".join(
+        _architect_execution_parts
+    )[:12000]
 
     # M-398: Tool-Use-Loop (max 3 Runden).
     # GOLD: Tool-Use nur 1 Runde. Architect soll PLANEN, nicht

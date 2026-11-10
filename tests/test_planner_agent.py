@@ -288,17 +288,17 @@ def test_planner_liest_progress(tmp_path):
         return reply
 
     with patch("werkstatt.planner._run_scout", return_value={
-    "auftrag_prosa": "Arbeite die angeforderte Aufgabe in den betroffenen Dateien um.",
-    "api_auszug": {},
-    "risiken": [],
-    "bereits_erfuellt": False,
-}), \
+        "auftrag_prosa": "Arbeite die angeforderte Aufgabe in den betroffenen Dateien um.",
+        "api_auszug": {},
+        "risiken": [],
+        "bereits_erfuellt": False,
+    }), \
          patch("werkstatt.planner.ask_llm", side_effect=_mock_ask_llm):
         rc = run_planner(st)
 
     assert rc is True
-    # GOLD: captured["calls"][0]=Scout, [1]=Architect, [2]=Planner-Split.
-    # PROGRESS.md-Inhalt geht in den Architect-Call (user_content).
+    # Der Scout ist gemockt; Architect und Planner-Split folgen.
+    # PROGRESS.md-Inhalt geht an den Architect als Ausfuehrungskontext.
     _alle = "\n".join(captured["calls"])
     assert "Projekt-Fortschritt" in _alle
     assert "Vorheriger Task 1" in _alle

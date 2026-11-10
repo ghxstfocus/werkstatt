@@ -157,3 +157,47 @@ def test_run_architect_faellt_bei_unvollstaendigem_scout_fail_closed(
         state, "Aufgabe", "Explorer-Rohdaten", "key", None,
     )
     assert calls == []
+
+def test_run_architect_uebergibt_laufkontext_ohne_explorer_duplikat(
+    monkeypatch, tmp_path,
+):
+    """OP-396: Historie bleibt erhalten, Explorer-Rohtext wird nicht dupliziert."""
+    from types import SimpleNamespace
+
+    from werkstatt import architect
+
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        api_index_cache={"already_built": True},
+        docs={},
+        scout_auftrag={
+            "auftrag_prosa": "Fuege eine validierte Funktion hinzu.",
+            "api_auszug": {},
+            "risiken": [],
+            "bereits_erfuellt": False,
+        },
+        architect_execution_context=(
+            "## PROJEKT-FORTSCHRITT\nOP-123 wurde bereits verifiziert."
+        ),
+    )
+    captured = {}
+
+    class _Reply:
+        ok = True
+        content = "Architect-Plan. " * 8
+
+    def _ask_llm(_key, _system, user, **_kwargs):
+        captured["user"] = user
+        return _Reply()
+
+    monkeypatch.setattr(architect, "_with_spinner", lambda _label, call: call())
+    monkeypatch.setattr(architect, "ask_llm", _ask_llm)
+    monkeypatch.setattr(architect, "audit", lambda *_args, **_kwargs: None)
+
+    assert architect.run_architect(
+        state, "Aufgabe", "Explorer-Rohdaten-Duplikat", "key", None,
+    )
+    assert "PROJEKT-FORTSCHRITT" in captured["user"]
+    assert "OP-123 wurde bereits verifiziert." in captured["user"]
+    assert "Explorer-Rohdaten-Duplikat" not in captured["user"]
