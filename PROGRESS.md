@@ -3913,3 +3913,18 @@ OP-389b-konform migriert. Diff verworfen, weil unvollstaendig (t4
 `tests/test_ws_endpoint_helpers.py` fehlt, t1 failte). Der Patch-Beweis
 ist im Merkposten dokumentiert.
 
+### 2026-11-10 — Control-Chat-UI und Session-Race
+
+**Commits:** a90c161, b7dd53b, d79a509, b7b1f96, bbeae4d, 0f8ce77.
+
+Control erhielt eine breitere Chat-Arbeitsfläche, eine sichtbare Loop-
+Steuerleiste und lesbare Ereignislabels mit Rohdaten im Tooltip.
+Der Projektwechsel leert den bisherigen Chat sofort. Verspätete
+Session-Erstellungen werden jetzt über Projekt-/Anfragegeneration
+gebunden; ein altes Session-Promise kann keinen neuen Projektzustand
+zurücksetzen. „Neue Session“ prüft dieselbe Generation, bevor sie
+Nachrichtenbereich und Status aktualisiert.
+
+**Prüfung:** Chat-JavaScript syntaktisch geparst. Python-/Browser-Gates
+und Server-Render sind noch nicht ausgeführt; OP-396 bleibt offen.
+
