@@ -169,3 +169,31 @@ def test_baue_messages_aus_session(session) -> None:
         {"role": "user", "content": "a"},
         {"role": "assistant", "content": "b"},
     ]
+
+def test_chat_tool_uses_explicit_project_root(session, fake_llm, tmp_path) -> None:
+    (tmp_path / "project-only.txt").write_text(
+        "ausgewaehltes Projekt", encoding="utf-8",
+    )
+    fake_llm(
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "project-read",
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "arguments": json.dumps({"path": "project-only.txt"}),
+                },
+            }],
+        },
+        {"role": "assistant", "content": "gelesen"},
+    )
+
+    chat_agent.chat_loop(
+        session, "lies die Datei",
+        project_dir=tmp_path,
+    )
+
+    tr = next(e for e in session.load() if e["kind"] == "tool_result")
+    assert tr["payload"]["content"] == "ausgewaehltes Projekt"
