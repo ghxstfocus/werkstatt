@@ -132,3 +132,19 @@ def test_progress_completion_does_not_hide_duplicate_status_identity() -> None:
         "Unbekannte oder widerspruechliche Blocker" in " ".join(item["gruende"])
         for item in result["ausgeschlossen"]
     )
+
+
+
+def test_resolves_status_autolog_done_row_as_completed_dependency() -> None:
+    status = (
+        "- 2026-11-09 | OP-381c | done | Gate-Modal fertig.\n"
+        "OP-999 mentioned in explanatory prose is not a completion row.\n"
+    )
+
+    result = select_next_op(
+        _op("OP-002", blockers="OP-381c"),
+        completed_ids=parse_completed_op_ids("", status),
+    )
+
+    assert result["zustand"] == "selected"
+    assert result["auswahl"]["id"] == "OP-002"
