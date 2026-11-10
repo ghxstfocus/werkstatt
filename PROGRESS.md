@@ -4106,3 +4106,16 @@ Akzeptanzkriterien und keine Lauf-/Testbelege.
   Dateien fehlen.
 - Der einzelne Mypy-Befund ist noch zu beheben und erneut auf dem Server zu
   verifizieren; die Suite allein ist damit kein vollstaendig gruener Gate-Lauf.
+
+### OP-398 — doppelte OP-IDs fail-closed (2026-11-10)
+
+Der Selector behandelt wiederholte IDs in `docs/STATUS.md` jetzt als
+widerspruechliche Identitaet: keine der gleichnamigen Zeilen wird ausgewaehlt
+und Abhaengigkeiten auf diese ID gelten als nicht aufloesbar.
+Ein Regressionstest kombiniert eine erledigte und eine offene Zeile mit
+derselben ID sowie einen davon abhaengigen OP.
+
+- **Commit:** `90ddd6067a0c` — doppelte Identitaeten fail-closed behandeln.
+- **Commit:** `2af3194df0b7` — Regressionstest fuer Auswahl und Abhaengigkeit.
+- Server-Verifikation steht aus; vor Ausweitung des Selectors ist ausserdem
+  der konkrete Mypy-Befund aus dem Quality Gate zu klaeren.
