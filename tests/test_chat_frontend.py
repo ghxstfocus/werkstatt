@@ -60,6 +60,11 @@ def test_reconnect_renders_failed_background_jobs() -> None:
     assert re.search(r'_jobFertig\(\s*job,\s*item\.state,\s*""', resume)
     assert "if (aktiveJobs)" in resume
 
+def test_job_polling_is_scoped_to_chat_session() -> None:
+    js = _chat_js()
+    assert '"?session_id=" + encodeURIComponent(job.sessionId)' in js
+
+
 def test_chat_can_cancel_background_jobs_without_blocking_composer() -> None:
     js = _chat_js()
     html = Path("static/layout.html").read_text(encoding="utf-8")
