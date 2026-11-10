@@ -28,6 +28,10 @@
     var box = _el("runs-liste");
     if (!box) return;
     box.innerHTML = "";
+    var toolbarHost = document.body.getAttribute("data-mode") === "control"
+      ? document.getElementById("control-run-toolbar")
+      : null;
+    if (toolbarHost) toolbarHost.innerHTML = "";
     var control = loopControl || {state: "idle"};
     var loopAktiv = control.state === "running" || control.state === "paused";
     var steuerung = document.createElement("div");
@@ -70,7 +74,7 @@
     meldung.setAttribute("aria-live", "polite");
     meldung.textContent = _aktionMeldung;
     steuerung.appendChild(meldung);
-    box.appendChild(steuerung);
+    (toolbarHost || box).appendChild(steuerung);
 
     var offen = 0, done = 0;
     ops.forEach(function (op) {
