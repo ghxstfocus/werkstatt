@@ -512,6 +512,7 @@ def create_app() -> FastAPI:
                     "Abhaengigkeiten" in grund
                     or "Blocker-Angabe" in grund
                     or "Unbekannte oder widerspruechliche Blocker" in grund
+                    or "OP-ID kommt mehrfach" in grund
                     or "Status fehlt" in grund
                     or "Phase-3 gesperrt" in grund
                 )
