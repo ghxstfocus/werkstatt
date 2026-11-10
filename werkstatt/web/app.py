@@ -488,7 +488,7 @@ def create_app() -> FastAPI:
                         status_code=500, detail="STATUS.md nicht lesbar",
                     ) from exc
                 _entscheidung = select_next_op(_status_text)
-                _ausgeschlossen = next(
+                _ausgeschlossen: dict[str, Any] = next(
                     (
                         item for item in _entscheidung["ausgeschlossen"]
                         if item.get("id") == op_id
