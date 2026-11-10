@@ -108,9 +108,25 @@ class ChatJobStore:
         return [dict(row) for row in rows]
 
     def claim(self, job_id: str) -> bool:
+        """Beansprucht hoechstens einen gleichzeitigen Turn pro Session."""
         now = _now()
         with closing(self._connect()) as conn:
             conn.execute("BEGIN IMMEDIATE")
+            job = conn.execute(
+                "SELECT session_id FROM jobs "
+                "WHERE job_id=? AND state='queued'",
+                (job_id,),
+            ).fetchone()
+            if job is None:
+                conn.commit()
+                return False
+            active = conn.execute(
+                "SELECT 1 FROM jobs WHERE session_id=? AND state='running' LIMIT 1",
+                (job["session_id"],),
+            ).fetchone()
+            if active is not None:
+                conn.commit()
+                return False
             cur = conn.execute(
                 "UPDATE jobs SET state='running',updated_at=? "
                 "WHERE job_id=? AND state='queued'",
@@ -238,13 +254,20 @@ def _run_job(
         store.finish(
             job_id, error=f"{type(exc).__name__}: {exc}",
         )
+    finally:
+        _dispatch_pending(db_path, project, project_dir)
 
 
 def _dispatch_pending(
     db_path: Path, project: str, project_dir: Path,
 ) -> None:
     store = ChatJobStore(db_path)
+    submitted_sessions: set[str] = set()
     for job in store.queued():
+        session_id = str(job["session_id"])
+        if session_id in submitted_sessions:
+            continue
+        submitted_sessions.add(session_id)
         key = f"{db_path.resolve()}:{job['job_id']}"
         with _FUTURES_LOCK:
             current = _FUTURES.get(key)
