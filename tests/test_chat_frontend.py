@@ -49,3 +49,13 @@ def test_chat_eingabe_nutzt_ganze_composer_breite():
     assert "#chat-eingabe" in css
     assert "width: 100%;" in css
     assert "box-sizing: border-box;" in css
+
+def test_reconnect_renders_failed_background_jobs() -> None:
+    js = _chat_js()
+    start = js.index("function _resumeChatJobs")
+    ende = js.index("function _sende", start)
+    resume = js[start:ende]
+    assert 'if (item.state === "failed")' in resume
+    assert '_jobFertig(job, "failed", "", item.error' in resume
+    assert "if (aktiveJobs)" in resume
+
