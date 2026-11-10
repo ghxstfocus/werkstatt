@@ -535,9 +535,8 @@ def sync_completed_job_turns(
 ) -> int:
     """Reconciles successful jobs into the parent transcript after a crash."""
     path = Path(db_path) if db_path else _db_path(project)
-    completed = ChatJobStore(path).succeeded_for_session(session_id)
-    if not completed:
-        return 0
+    store = ChatJobStore(path)
+    completed = store.succeeded_for_session(session_id)
     from werkstatt.chat_session import ChatSession
 
     session = ChatSession(project, session_id)
@@ -548,7 +547,7 @@ def sync_completed_job_turns(
             job_id, str(job["message"]), str(job["answer"]),
         ):
             added += 1
-    for job in ChatJobStore(path).terminal_for_session(session_id):
+    for job in store.terminal_for_session(session_id):
         session.delete_snapshot(str(job["job_id"]))
     return added
 
