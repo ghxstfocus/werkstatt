@@ -251,7 +251,7 @@ def _next_op(_args: dict[str, Any]) -> str:
         progress_text = ""
     result = select_next_op(
         status_text,
-        completed_ids=parse_completed_op_ids(progress_text),
+        completed_ids=parse_completed_op_ids(progress_text, status_text),
     )
     excluded = result.pop("ausgeschlossen", [])
     result["quelle"] = "docs/STATUS.md"
