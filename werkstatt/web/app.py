@@ -24,7 +24,7 @@ from werkstatt.event_store import EventStore
 from werkstatt.phase_state import PhaseState
 from werkstatt.validierung import pruefe_ref as _pruefe_ref_kern
 from werkstatt.web import audit_panel, auth, terminal_proxy, ws
-from werkstatt.web.op_selector import select_next_op
+from werkstatt.web.op_selector import parse_completed_op_ids, select_next_op
 
 __all__ = ["app", "create_app"]
 
@@ -142,6 +142,18 @@ def _pruefe_session_id(session_id: str) -> str:
     if not isinstance(session_id, str) or not _SESSION_ID_MUSTER.fullmatch(session_id):
         raise HTTPException(status_code=400, detail="ungueltige session_id")
     return session_id
+
+
+def _completed_op_ids(project_dir: Path) -> set[str]:
+    """Liest explizite Abschlussbelege aus der Projekt-Historie."""
+    progress_path = project_dir / "PROGRESS.md"
+    try:
+        progress_text = progress_path.read_text(
+            encoding="utf-8", errors="replace",
+        )
+    except OSError:
+        return set()
+    return parse_completed_op_ids(progress_text)
 
 
 def _phasen_snapshot(name: str) -> dict[str, Any]:
@@ -487,7 +499,7 @@ def create_app() -> FastAPI:
                     raise HTTPException(
                         status_code=500, detail="STATUS.md nicht lesbar",
                     ) from exc
-                _entscheidung = select_next_op(_status_text)
+                _entscheidung = select_next_op(_status_text, _completed_op_ids(_pd))
                 _ausgeschlossen: dict[str, Any] = next(
                     (
                         item for item in _entscheidung["ausgeschlossen"]
@@ -537,7 +549,7 @@ def create_app() -> FastAPI:
                 raise HTTPException(
                     status_code=500, detail="STATUS.md nicht lesbar",
                 ) from exc
-            entscheidung = select_next_op(status_text)
+            entscheidung = select_next_op(status_text, _completed_op_ids(_pd))
             if entscheidung["zustand"] == "needs_input":
                 raise HTTPException(
                     status_code=409,
