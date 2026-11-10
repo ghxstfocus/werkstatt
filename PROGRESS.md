@@ -4090,3 +4090,18 @@ die Selector-/Chat-Beschreibung und `docs/SOLL.md §5.3` dokumentiert:
 
 Diese Referenzen machen die Doku-Zuordnung pruefbar; sie ersetzen keine
 Akzeptanzkriterien und keine Lauf-/Testbelege.
+
+
+### 2026-11-10 — Serververifikation OP-398/Chat-Selector (HEAD 54b95f0)
+
+- Gezielte Tests: 83 passed.
+- Vollstaendige Suite: 1815 passed, 5 skipped.
+- Ruff: 0 Fehler.
+- Mypy: 1 Fehler; Quality-Gate meldet deshalb Regression (delta +1).
+- Doku-Drift: keine verdaechtigen Commits; der Worktree meldet weiterhin die
+  uncommitteten Aenderungen an `werkstatt/web/audit_panel.py` und
+  `werkstatt/web/terminal_proxy.py`.
+- AST/Katalog: wie im Gate ausgewiesen uebersprungen, da die jeweiligen
+  Dateien fehlen.
+- Der einzelne Mypy-Befund ist noch zu beheben und erneut auf dem Server zu
+  verifizieren; die Suite allein ist damit kein vollstaendig gruener Gate-Lauf.
