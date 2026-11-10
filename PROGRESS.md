@@ -4391,3 +4391,18 @@ Working Tree nicht veraendern.
 - **Commit:** `feb496d7c55a` — Inbox-, Job- und Checkpoint-Vertrag.
 - **Implementierung:** noch offen in OP-397; Serververifikation der Doku
   ausstehend.
+
+
+### Manifest-Vertrag — Pflicht-Living-Docs fail-closed erzwingen (2026-11-10)
+
+Die Konfigurationspruefung stellte sicher, dass Werkstatt die fehlenden
+Doku-Quellen laedt. Zusaetzlich verlangt `load_project_config` jetzt fuer
+jedes Projektmanifest die DOC_CONVENTIONS-§6-Kernschluessel
+`entry/status/roadmap/architecture/conventions/adr_index/glossary`. Damit
+verlassen sich neue Projekte nicht allein auf ein korrekt gepflegtes Template;
+ein unvollstaendiges Manifest wird vor dem Loop-Start abgewiesen.
+
+- **Loader:** `dc063a94c81e` — Pflichtschluessel validieren.
+- **Test:** `28827edf5bd5` — unvollstaendiges Manifest wird abgewiesen.
+- **Testformatierung:** `e0d4d697fc3a` — Newline-Literale korrigieren.
+- **Serververifikation:** nach Pull ausstehend.
