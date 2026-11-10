@@ -4459,3 +4459,16 @@ fehlendem/kaputtem Pflichtkontext sicher gestoppt.
 - **Commit:** `c03b94c86cefe744a321d60` — Debugger-Modus der Chat-Rolle zugeordnet.
 - **Commit:** `67e288ee4eb1d14db08f69e` — Import-Reihenfolge nach Server-Ruff korrigiert.
 - **Commit:** `eab316ae50e119d3752a5765` — Audit-/Payload-Tests auf kanonische Flash-ID aktualisiert.
+
+## OP-397 — Chat-Job-Turns pro Session serialisiert (2026-11-10)
+
+Die SQLite-Claim-Transaktion laesst pro Chat-Session nur einen Job gleichzeitig
+in den Zustand `running`. Die Queue nimmt je Session den aeltesten Job an;
+nach Jobabschluss wird der naechste wieder eingeplant. Unterschiedliche
+Sessions bleiben parallel. OP-397 bleibt offen: Prozessabsturz-Recovery,
+Abbruch, Chat waehrend Run und Checkpoint-/Planrevision sind damit noch nicht
+vollstaendig umgesetzt oder verifiziert.
+
+- **Commit:** `ca7e6814fad5b99726f5404e` — serialisierte Session-Claims und Queue-Fortsetzung.
+- **Commit:** `8f65f2a76f31872d3c86beff` — Tests fuer Session-Serialisierung und parallele Sessions.
+- **Serververifikation:** noch ausstehend.
