@@ -440,3 +440,101 @@ def test_idle_loop_state_does_not_expose_stale_run_id(
     assert registry.set_state("demo", "run-stale", "idle") is True
     idle = client.get("/api/projects/demo/loop").json()
     assert idle == {"state": "idle", "pid": None, "run_id": None}
+
+
+def test_start_waehlt_einzige_pruefbare_offene_op(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "STATUS.md").write_text(
+        "### OP-101: Eindeutige Arbeit\\n"
+        "- **Status:** open\\n"
+        "- **Blockiert von:** —\\n"
+        "- **Akzeptanzkriterien:** Verhalten ist belegt.\\n"
+        "- **Tests:** pytest -q tests/test_feature.py\\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    _reset_loop_registry(app_modul)
+    monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
+    aufrufe: list[list[str]] = []
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    client = TestClient(app_modul.app)
+
+    antwort = client.post("/api/projects/demo/start")
+
+    assert antwort.status_code == 200
+    assert antwort.json()["op_id"] == "OP-101"
+    assert antwort.json()["auswahl"]["id"] == "OP-101"
+    assert "### OP-101:" in antwort.json()["aufgabe"]
+    assert aufrufe
+
+
+def test_start_fragt_bei_mehreren_pruefbaren_ops_nach(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    one = (
+        "### OP-101: Erstes Thema\\n- **Status:** open\\n"
+        "- **Blockiert von:** —\\n"
+        "- **Akzeptanzkriterien:** Prüfergebnis A.\\n"
+        "- **Tests:** pytest -q tests/test_a.py\\n"
+    )
+    two = one.replace("OP-101: Erstes Thema", "OP-102: Zweites Thema").replace(
+        "Prüfergebnis A", "Prüfergebnis B"
+    ).replace("test_a.py", "test_b.py")
+    (docs_dir / "STATUS.md").write_text(one + "\\n" + two, encoding="utf-8")
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    _reset_loop_registry(app_modul)
+    monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
+    aufrufe: list[list[str]] = []
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    client = TestClient(app_modul.app)
+
+    antwort = client.post("/api/projects/demo/start")
+
+    assert antwort.status_code == 409
+    detail = antwort.json()["detail"]
+    assert detail["code"] == "autonomy_selection_required"
+    assert [item["id"] for item in detail["kandidaten"]] == ["OP-101", "OP-102"]
+    assert aufrufe == []
+
+
+def test_direct_task_precedes_invalid_op_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "STATUS.md").write_text("# no OP needed\\n", encoding="utf-8")
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    _reset_loop_registry(app_modul)
+    aufrufe: list[list[str]] = []
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    client = TestClient(app_modul.app)
+
+    antwort = client.post(
+        "/api/projects/demo/start",
+        json={"op_id": "not-an-op", "aufgabe": "Direkter Auftrag"},
+    )
+
+    assert antwort.status_code == 200
+    assert antwort.json()["op_id"] is None
+    assert antwort.json()["aufgabe"] == "Direkter Auftrag"
+    assert aufrufe[0][aufrufe[0].index("--aufgabe") + 1] == "Direkter Auftrag"
