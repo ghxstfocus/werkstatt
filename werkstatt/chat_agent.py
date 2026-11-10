@@ -58,6 +58,11 @@ def _baue_messages(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
             msgs.append({"role": "user", "content": p.get("text", "")})
         elif kind == "assistant":
             msgs.append({"role": "assistant", "content": p.get("text", "")})
+        elif kind == "job_turn":
+            msgs.extend([
+                {"role": "user", "content": p.get("user_text", "")},
+                {"role": "assistant", "content": p.get("assistant_text", "")},
+            ])
         elif kind == "tool_call":
             msgs.append({
                 "role": "assistant",
