@@ -511,6 +511,7 @@ def create_app() -> FastAPI:
                 if (
                     "Abhaengigkeiten" in grund
                     or "Blocker-Angabe" in grund
+                    or "Unbekannte oder widerspruechliche Blocker" in grund
                     or "Status fehlt" in grund
                     or "Phase-3 gesperrt" in grund
                 )
