@@ -137,7 +137,13 @@ def check_all(cwd: Path) -> dict:
     # mypy
     _rc, out = _run(["mypy", "werkstatt/"], cwd)
     n = _parse_count(out, r"Found (\d+) error", clean_marker="Success: no issues found")
-    result["current"]["mypy"] = {"errors": n}
+    mypy_result: dict[str, Any] = {"errors": n, "exit_code": _rc}
+    if n > BASELINE["mypy"] or _rc != 0:
+        diagnostic = out.strip()
+        if len(diagnostic) > 4000:
+            diagnostic = diagnostic[:4000] + "\n...[truncated]"
+        mypy_result["diagnostic"] = diagnostic or "mypy failed without diagnostic output"
+    result["current"]["mypy"] = mypy_result
     result["delta"]["mypy"] = n - BASELINE["mypy"]
 
     # ast
