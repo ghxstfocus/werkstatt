@@ -106,7 +106,7 @@
       badge.className = "runs-run-badge";
       var b = _runBadge(state);
       badge.textContent = b[0] + " " + b[1];
-      if (isRunning) badge.title = "Loop läuft (run " + (rs.run_id || "?") + ")";
+      if (state === "running") badge.title = "Loop läuft (run " + (rs.run_id || "?") + ")";
       else if (state === "done") badge.title = "Letzter Run fertig";
       else if (state === "failed") badge.title = "Letzter Run fehlgeschlagen";
       else badge.title = "Noch kein Run";
