@@ -19,6 +19,7 @@ import requests
 import redaction
 from werkstatt.audit import audit
 from werkstatt.state import LLMReply, Measurement, Messung, RunState
+from werkstatt.model_routing import route_for_role
 from werkstatt.subprocess_env import subprocess_env
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
@@ -125,6 +126,8 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
     ob der Call erfolgreich ist. Fehlschlaege zaehlen
     ebenfalls (konservativ, Budget-Schutz).
     """
+    route = route_for_role(rolle or aufgabe, model)
+    model = route.model
     if state is not None:
         state.llm_calls += 1
     # Redaction: vor dem Senden anwenden
@@ -142,11 +145,19 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
         system_prompt, _ = redaction.redact_all(system_prompt, max_len=100000)
     headers: dict[str, str] = {"Authorization": f"Bearer {api_key}",
                               "Content-Type": "application/json"}
-    payload: dict[str, Any] = {"model": model,
+    payload: dict[str, Any] = {
+        "model": model,
         "max_tokens": max_tokens,
-                               "messages": [{"role": "system", "content": system_prompt},
-                                            {"role": "user", "content": user_content}],
-                               "temperature": temperature}
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ],
+        "thinking": {"type": route.thinking},
+    }
+    if route.reasoning_effort is not None:
+        payload["reasoning_effort"] = route.reasoning_effort
+    else:
+        payload["temperature"] = temperature
 
     # MESS-1: Laengen nach Redaktion, vor HTTP. Werden in jeden
     # LLMReply-Return gesetzt und einmal pro Call auditiert.
@@ -690,6 +701,8 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             redact: bool = True) -> LLMReply:
     """Oeffentliche LLM-API mit Progress-Events (OP-111)."""
     from werkstatt.render import _emit_progress
+    route = route_for_role(rolle or aufgabe, model)
+    model = route.model
     _label = _aufgabe_zu_label(aufgabe)
     _t0 = time.monotonic()
     _emit_progress(_label, "prompt_sent", f"model={model}")
