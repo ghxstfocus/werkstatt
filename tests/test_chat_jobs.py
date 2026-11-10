@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -180,4 +181,24 @@ def test_only_claiming_worker_can_renew_lease(tmp_path: Path) -> None:
 
     assert store.heartbeat(job["job_id"], "worker-b") is False
     assert store.heartbeat(job["job_id"], "worker-a") is True
+
+def test_store_migrates_existing_jobs_table_for_worker_leases(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "legacy-jobs.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "CREATE TABLE jobs ("
+            "job_id TEXT PRIMARY KEY,session_id TEXT NOT NULL,"
+            "idempotency_key TEXT NOT NULL,message TEXT NOT NULL,"
+            "mode TEXT NOT NULL,state TEXT NOT NULL,answer TEXT,error TEXT,"
+            "created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
+            "UNIQUE(session_id,idempotency_key))"
+        )
+
+    ChatJobStore(db_path)
+    with sqlite3.connect(db_path) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+
+    assert {"worker_id", "heartbeat_at"} <= columns
 
