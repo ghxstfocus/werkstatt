@@ -17,20 +17,27 @@ Routing für Agenten. Keine Enzyklopädie.
 
     python3 -m werkstatt.loop --project NAME --aufgabe "TEXT"
 
-## Rollen (5+1)
+## Agentenrollen und Kontrollschritte
 
-1. Explorer (werkstatt/explorer.py) — read-only, messt deterministisch.
-2. Scout (werkstatt/scout.py) — Content-Check + api_auszug.
-3. Architect (deepseek-v4-pro, Thinking high) — Prosa, numerierte Schritte.
-4. Planner-Split (deepseek-flash, Thinking aus) — zerlegt Prosa in Tasks.
-5. Builder (deepseek-flash, Thinking aus) — search/replace pro Task.
-6. Verify (verify.json-Stages) — deterministisch, post_build.
-7. Reviewer (deepseek-flash, Thinking aus) — prueft Task-Description.
-   Alle uebrigen Rollen (Scout, Explorer, Validator, Reflection, Debugger und Chat)
-   nutzen deepseek-flash mit Thinking aus.
-8. Reflection — bei Reject: Feedback + Builder erneut.
-9. Human-Gate — Plan-Gate + Commit-Gate, fail-closed.
-6. Human-Gate — Plan-Gate + Ergebnis-Gate.
+1. Explorer (werkstatt/explorer.py) — read-only Kontext und Befunde
+   (deepseek-flash, Thinking aus).
+2. Scout (werkstatt/scout.py) — Auftrags- und API-Kontext
+   (deepseek-flash, Thinking aus).
+3. Architect (werkstatt/planner.py) — strukturierter Plan
+   (deepseek-v4-pro, Thinking high).
+4. Planner-Split (werkstatt/planner.py) — Architect-Prosa in Tasks
+   (deepseek-flash, Thinking aus).
+5. Builder (werkstatt/roles/builder/run.py) — Patch pro Task
+   (deepseek-flash, Thinking aus).
+6. Verify (verify.json-Stages) — deterministische Pruefungen.
+7. Reviewer (werkstatt/reviewer.py) — Task-Review
+   (deepseek-flash, Thinking aus).
+8. Reflection (werkstatt/reflection.py) — Feedback bei Reject
+   (deepseek-flash, Thinking aus).
+9. Chat (werkstatt/chat_agent.py) — projektbezogene Diagnose
+   (deepseek-flash, Thinking aus). Der Debugger-Modus ist eine Chat-
+   Faehigkeit gemaess ADR-0011/ADR-0018, keine eigene Loop-Rolle.
+10. Human-Gates — Plan- und Ergebnisfreigabe, fail-closed.
 
 ## Werkzeuge (CLI)
 
