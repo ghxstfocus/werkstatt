@@ -4405,6 +4405,8 @@ ein unvollstaendiges Manifest wird vor dem Loop-Start abgewiesen.
 - **Loader:** `dc063a94c81e` — Pflichtschluessel validieren.
 - **Test:** `28827edf5bd5` — unvollstaendiges Manifest wird abgewiesen.
 - **Testformatierung:** `e0d4d697fc3a` — Newline-Literale korrigieren.
+- **Commit:** `b51033c2d1bab10a328b236538814d138eb6440b` — Snapshot-Return-Typ Ruff-konform machen.
+- **Commit:** `a17b7901a3d83e8589b49a45a0924c44e244843a` — lokale Chat-Job-Imports Ruff-konform umbrechen.
 - **Serververifikation:** nach Pull ausstehend.
 - **Commit:** `ac0af29e9419153cdb8f7ea8d8efd3916201cba3` — offene OP-397-Punkte an den parallelen Read-Job-Stand anpassen.
 
@@ -4637,6 +4639,7 @@ Working-Status, solange andere Jobs aktiv sind.
 Beim Reconnect werden abgelaufene Worker-Leases zuerst recovered; danach entfernt die Reconciliation Transcript-Branches aller terminalen Jobs, auch bei Fehler oder Abbruch. Erfolgreiche Job-Turns bleiben idempotent in die Eltern-Session projiziert. Regressionstest deckt einen fehlgeschlagenen Job mit stehengebliebenem Branch ab.
 
 - **Commit:** `c3ebc2ef3dba0b67767c0cd997f179dd792d4fa1` — terminale Job-Branches bei Reconnect bereinigen.
+- **Commit:** `66f5c60bdf9a63e4a9800f8e33276931e0ad891a` — Transcript-Branches fuer alle terminalen Jobs bereinigen.
 - **Commit:** `26e70f9b8941fef1faa0c2be848d0d1f12190aa5` — Lease-Recovery vor Reconnect-Bereinigung ausfuehren.
 - **Commit:** `d9f7a475a025d96f7b466b66b187c64ce4c18c01` — Regressionstest fuer fehlgeschlagenen Job-Branch.
 - **Commit:** `b5d2c825716b4e35bd7055cd9f8ffcde142d4cd5` — STATUS um Reconnect-Verhalten ergaenzen.
