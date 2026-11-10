@@ -300,7 +300,7 @@ def test_planner_liest_progress(tmp_path):
     # Der Scout ist gemockt; Architect und Planner-Split folgen.
     # PROGRESS.md-Inhalt geht an den Architect als Ausfuehrungskontext.
     _alle = "\n".join(captured["calls"])
-    assert "Projekt-Fortschritt" in _alle
+    assert "PROJEKT-FORTSCHRITT" in _alle
     assert "Vorheriger Task 1" in _alle
     assert "Vorheriger Task 2" in _alle
     assert "builder_failed" in _alle
