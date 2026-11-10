@@ -181,11 +181,11 @@ def test_start_verwirft_op_mit_unbekanntem_blocker(
     docs_dir = tmp_path / "demo" / "docs"
     docs_dir.mkdir(parents=True)
     (docs_dir / "STATUS.md").write_text(
-        "### OP-002: Arbeit mit unbekannter Voraussetzung\\n"
-        "- **Status:** open\\n"
-        "- **Blockiert von:** OP-999\\n"
-        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\\n"
-        "- **Tests:** pytest -q tests/test_002.py\\n",
+        "### OP-002: Arbeit mit unbekannter Voraussetzung\n"
+        "- **Status:** open\n"
+        "- **Blockiert von:** OP-999\n"
+        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\n"
+        "- **Tests:** pytest -q tests/test_002.py\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
