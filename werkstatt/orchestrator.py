@@ -24,6 +24,10 @@ from werkstatt.paths import projects_dir as _projects_dir
 from werkstatt.state import RunState
 
 PROJECTS_DIR = _projects_dir()
+_REQUIRED_DOC_KEYS = {
+    "entry", "status", "roadmap", "architecture",
+    "conventions", "adr_index", "glossary",
+}
 
 
 def load_project_config(project_name: str) -> dict[str, Any]:
@@ -44,6 +48,17 @@ def load_project_config(project_name: str) -> dict[str, Any]:
         data = yaml.safe_load(fh)
     if not isinstance(data, dict):
         print(f"[FAIL] Projekt-Konfiguration ist kein dict: {path}. Fail closed.")
+        sys.exit(1)
+    docs = data.get("docs")
+    if not isinstance(docs, dict):
+        print(f"[FAIL] docs-Konfiguration fehlt oder ist ungueltig: {path}. Fail closed.")
+        sys.exit(1)
+    missing_docs = sorted(_REQUIRED_DOC_KEYS - docs.keys())
+    if missing_docs:
+        print(
+            f"[FAIL] Pflicht-Doku-Keys fehlen in {path}: "
+            f"{', '.join(missing_docs)}. Fail closed."
+        )
         sys.exit(1)
     return data
 
