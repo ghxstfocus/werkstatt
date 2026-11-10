@@ -2159,77 +2159,36 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 - 2026-11-03 | OP-045 | docs/WORKFLOW.md geloescht (nicht mehr gepflegt, nicht in DOC_CONVENTIONS §2 Pflicht)- 2026-11-03 | OP-008 | obsolete (pipeline.py geloescht) — Commit 07a4de6
 - 2026-11-03 | OP-009 | obsolete (python3 -m werkstatt.loop funktioniert (CLI seit Monaten aktiv)) — Commit n/a
 
-### OP-160: Debugger-Lern-Loop — Debugger-Fixes ins Erfahrungs-Gehirn
+### OP-160: Verifizierte Debugger-Fixes ins Erfahrungs-Gedaechtnis ueberfuehren
 
 - **Status:** open
-- **Typ:** architektur (Verzahnung OP-128 + OP-113/129)
-- **Betroffen:** `werkstatt/chat_agent.py`, `werkstatt/erfahrung.py`
-  (neu, via OP-113), `werkstatt/reflection.py`,
-  `werkstatt/chat_tools.py`
-- **Problem:** Der Debugger (OP-128) ist der einzige Punkt im System,
-  an dem ein Fix deterministisch verifiziert wird (Loop-Re-Run nach
-  Fix). Diesen verifizierten Fix-Strom soll das Erfahrungs-Gehirn
-  (OP-113/129) als Quelle nutzen — nicht als Freitext-Sammlung,
-  sondern als strukturierte, vertrauenswuerdige Eintraege.
+- **Typ:** architektur (Debugger und projektuebergreifendes Memory)
+- **Phase:** Phase-3; Umsetzung erst nach Abschluss von OP-382
+- **Betroffene Dateien:** `werkstatt/chat_agent.py`, `werkstatt/chat_tools.py`, `werkstatt/erfahrung.py`, `werkstatt/reflection.py`, Event-Schema und zugehoerige Tests
+- **Problem:** Der fruehere Entwurf koppelt die Arbeit an OP-128 und OP-113/129. OP-128 wurde durch die akzeptierte Chat-Debugger-Architektur in OP-240 ersetzt; OP-113a und OP-129 sind nicht mehr offene STATUS-OPs. Der Lernpfad muss an das aktuelle projektlokale und globale Memory aus OP-220/220a/221 anschliessen.
 
-- **Voraussetzung (menschliche Entscheidung):** Ein Fix gelangt nur
-  ins Gedaechtnis, wenn (a) der Mensch den Debugger-Modus im Chat
-  gewaehlt hat, (b) der Debugger einen Fix vorgeschlagen hat,
-  (c) der Mensch den Fix angewendet hat, (d) der Loop-Re-Run
-  deterministisch gruen ist. Ohne (a)-(d) KEINE Schreibung.
+- **Vertrauensgrenze:** Ein Diagnosevorschlag oder angezeigter Diff ist keine Erfahrung. Ein Fix darf erst nach einmaliger Freigabe des konkreten Patch-Hashes an den Coding-Loop und nach erfolgreichem Plan-Gate, Verify und Review als verifizierte Episode gespeichert werden. Bei fehlgeschlagener Verifikation entsteht kein erfolgreicher Memory-Eintrag. Die bestehenden Human-Gates bleiben verbindlich.
 
 - **Datenstrom:**
-  1. Loop scheitert → Chat bietet Ladder an
-  2. Mensch waehlt Modus `debugger` ueber den Chat
-  3. Chat reproduziert + schlaegt Fix vor (Diff, kein Auto-Apply)
-  4. Mensch wendet Fix an → Loop-Re-Run
-  5. **Verify gruen** → `debugger_fix_verifiziert`-Event mit
-     `{signatur, ursache_tag, fix_hash, betroffene_dateien, run_id}`
-  6. **Verify rot** → kein Memory-Eintrag (Fix war falsch)
+  1. Fehlgeschlagener Run wird im Chat mit Projekt- und Run-Kontext diagnostiziert.
+  2. Der Mensch waehlt den Debugger-Modus; der Chat erstellt einen strukturierten Fix mit betroffenen Dateien und Diff.
+  3. Der Mensch gibt genau diesen Patch-Hash frei; der Coding-Loop uebernimmt den Patch ohne Copy/Paste und durchlaeuft seine verpflichtenden Gates.
+  4. Erst nach erfolgreichem Verify und Review wird ein provenance-behaftetes `debugger_fix_verifiziert`-Event fuer die Projekt-Memory-Episode erzeugt.
+  5. Fehlgeschlagene oder abgelehnte Aenderungen werden nicht als erfolgreiche Fix-Erfahrung gespeichert.
 
-- **Injektions-Architektur (WICHTIG — nicht standard):**
-  - **Builder Standard-Pfad:** KEINE Memory-Injektion.
-  - **Builder innerhalb `_reflection_loop`:** Memory-Injektion fuer
-    die aktuelle Fehler-Signatur, wenn `confidence >= high`.
-  - **Debugger-Prompt (OP-128):** Memory-Injektion fuer die aktuelle
-    Signatur, wenn `confidence >= medium`.
-  - **Planner / Architect / Scout / Reviewer:** KEINE
-    Memory-Injektion (sie sollen das aktuelle Problem loesen,
-    nicht raten).
-
-- **Reife-Modell (Vorschlag, zu klaeren vor Bau):**
-  - 1. Vorkommen der Signatur: Audit-Event, kein Gedaechtnis
-  - 2. Vorkommen: Eintrag `confidence=low`
-  - 3. Vorkommen + erfolgreicher Fix: `confidence=medium`
-  - 5. Vorkommen + erfolgreicher Fix: `confidence=high`
-
-- **Signatur (zu klaeren vor Bau):** Welche Felder identifizieren
-  einen Fehler eindeutig? Vorschlag: `stage` + `error_class` +
-  `test_id`/`file` + `root_cause_tag`. Ohne diese Struktur wird
-  Aehnlichkeitssuche zur Textsuche und damit wertlos.
-
-- **Fix-Format (zu klaeren vor Bau):** Ein Fix ist nicht immer
-  ein Code-Diff. Moegliche Typen: `patch`, `prompt_aenderung`,
-  `config_aenderung`, `test_aenderung`. Jeder Typ braucht ein
-  eigenes Speicherformat.
+- **Memory-Regeln:** Schema, `scope`, Provenance und Trust-Stufen folgen ADR-0010 sowie OP-220/220a/221. Keine automatische Promotion ins globale Memory. Retrieval und Prompt-Injektion bleiben bis zum erfolgreichen Abschluss der Dogfooding-Phase ausgeschaltet; danach nur passend zum Fehlerkontext, mit Herkunftsnachweis und ohne Injektion in Scout, Architect oder Reviewer.
 
 - **Akzeptanzkriterien:**
-  - (a) `debugger_fix_verifiziert`-Event wird bei gruenem Re-Run
-    geschrieben (Hook in OP-128).
-  - (b) `erfahrung.py` (via OP-113) hat Tabelle `fix_episode` mit
-    Signatur-Feldern und `fix_hash`.
-  - (c) Reflection injiziert Memory nur bei `confidence >= high`.
-  - (d) Debugger injiziert Memory nur bei `confidence >= medium`.
-  - (e) Builder Standard-Pfad hat KEINE Memory-Injektion
-    (grep auf `memory_inject` in `builder.py` = 0 ausserhalb
-    Reflection).
-  - (f) Test: Fix mit gruenem Re-Run → Eintrag; Fix mit rotem
-    Re-Run → kein Eintrag.
+  - (a) Das Event ist an Projekt, Run, Patch-Hash, betroffene Dateien, Verify-/Review-Beleg und Herkunft gebunden.
+  - (b) Gruener Verify- und Review-Abschluss erzeugt genau eine idempotente Episode; roter Verify, Reject oder abgelaufene Freigabe erzeugt keine erfolgreiche Episode.
+  - (c) Projekt- und globale Memory-Grenzen sowie Provenance aus ADR-0010 werden eingehalten; Promotion benoetigt einen getrennten expliziten Vorgang.
+  - (d) Es gibt keinen Memory-Retrieval-Pfad vor Abschluss von OP-382. Danach decken Tests erlaubte kontextbezogene Retrievals und ausgeschlossene Rollen ab.
+  - (e) Tests decken Patch-Hash-Bindung, Wiederholung/Idempotenz, erfolgreiche und fehlgeschlagene Verifikation sowie Projektisolation ab.
 
-- **Tests:** `tests/test_debugger_memory_hook.py` (neu),
-  `tests/test_reflection_memory_inject.py` (neu)
-- **Blockiert von:** OP-128 (Ladder + strukturierter Fix-Output),
-  OP-113a (scope-Spalte), OP-129 (Destillation)
+- **Tests:** `tests/test_debugger_memory_hook.py`, `tests/test_reflection_memory_inject.py`
+- **Blockiert von:** OP-240, OP-220, OP-220a, OP-221, OP-382
+- **Quelle:** ADR-0010, ADR-0011, ADR-0029
+
 
 ### OP-096: Phase 33.3 — gates.py nach control/ migrieren
 
@@ -2386,30 +2345,25 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
   im Prompt, Skill-Matching bei ImportError).
 - **Blockiert von:** —
 
-### OP-113i: Log-Backfill — DB aus 30k Audit-Events vorfuellen
+### OP-113i: Audit-Log-Backfill — geeignete Problem-Events ins Erfahrungs-Memory
 
 - **Status:** open
 - **Typ:** erfahrung-backfill
-- **Betroffen:** `tools/backfill_erfahrung.py` (neu), `.werkstatt/erfahrung.db`
-- **Erkenntnis (2026-11-03 23:55):** Von 1.253 Problem-Events in
-  `audit-logs/*.jsonl` (12.10.-03.11.) sind nur **~650 cluster-fähig**:
-  - `loop_verify_failed` (490): `errors`, `stages`, `phase` → Sig
-    über `(stage_id, erste-3-error-zeilen-hash)`.
-  - `builder_patch_invalid` (84): `grund`, `file`, `action` → Sig
-    über `(grund, action)`.
-  - `loop_task_failed` (34): `grund` → Sig über `grund`.
-  - `loop_reflection_stagnation_abort` (41): `grund`, `stagnation` → Sig.
-  - **NICHT** backfillbar: `loop_reviewer_rejected` (240),
-    `loop_plan_gate_rejected` (90), `loop_gate_failed` (153) —
-    keine beschreibenden Felder. Siehe OP-114.
-- **Akzeptanz:** `tools/backfill_erfahrung.py` liest alle
-  `agent-pipeline-*.jsonl`, clustert nach den obigen Sigs, filtert
-  Cluster mit `>= 3` Vorkommen und ruft `record_erfahrung(...)`.
-  Lösungs-Absatz aus folgendem Kontext-Fenster: naechster
-  `loop_task_ok` / `reviewer_phase_approved` / `loop_phase=phase_ok`
-  innerhalb 5 min. `quelle='log-backfill'`, `erfolg=1` wenn Lösung
-  gefunden, `erfolg=0` sonst. Idempotent per `problem_sig`.
-- **Blockiert von:** OP-113a
+- **Phase:** Phase-3; Umsetzung erst nach Abschluss von OP-382
+- **Betroffene Dateien:** `tools/backfill_erfahrung.py` (neu), projektlokale Memory-Datenbank aus OP-220
+- **Erkenntnis (2026-11-03 23:55):** Die damalige Inventur fand 1.253 Problem-Events in `audit-logs/*.jsonl`; nur ungefaehr 650 sind anhand ihrer Payloads belastbar clusterfaehig. Backfill darf nur Events mit ausreichender strukturierter Provenance und reproduzierbarer Signatur uebernehmen. Reviewer-, Gate- und Plan-Rejects ohne beschreibende Fehlerfelder sind keine geeignete Trainings-/Memory-Grundlage.
+
+- **Akzeptanzkriterien:**
+  - Das Werkzeug liest die dokumentierten Event-Dateien read-only und clustert nur die belegten Klassen `loop_verify_failed`, `builder_patch_invalid`, `loop_task_failed` und `loop_reflection_stagnation_abort`.
+  - Loesungskontext wird nur bei einem korrelierten erfolgreichen Folge-Event innerhalb des dokumentierten Zeitfensters eingetragen; andernfalls bleibt die Episode als unverifiziert markiert.
+  - Herkunft, Projekt, Run-ID, Signatur und Erfolg/Verifikation werden gemass ADR-0010 gespeichert; andere Projekte und globale Memory werden nicht veraendert.
+  - Wiederholte Ausfuehrung ist idempotent; Dry-Run zeigt Anzahl und Beispiele vor jedem Schreibvorgang.
+  - Tests decken jede Signaturklasse, fehlenden Loesungskontext, Projektisolation und Idempotenz ab.
+
+- **Tests:** `tests/test_backfill_erfahrung.py` (neu)
+- **Blockiert von:** OP-220a, OP-382
+- **Quelle:** ADR-0010
+
 
 ### OP-117: Scout-Prosa optimieren
 
