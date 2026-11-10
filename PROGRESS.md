@@ -4431,25 +4431,31 @@ fehlendem/kaputtem Pflichtkontext sicher gestoppt.
 ## M-479 — Rollenbasiertes DeepSeek-Modellrouting (2026-11-10)
 
 - Architect: `deepseek-v4-pro`, Thinking enabled, Effort high.
-- Builder, Planner-Split, Reviewer, Scout, Explorer, Validator, Reflection,
-  Debugger und Chat: `deepseek-flash`, Thinking disabled.
+- Builder, Planner-Split, Reviewer, Scout, Explorer, Validator und Reflection:
+  `deepseek-flash`, Thinking disabled. Chat und Debugger-Modus nutzen dieselbe
+  Flash-Route; Debugger ist gemaess ADR-0018 keine eigene Loop-Rolle.
 - Die zentrale `ask_llm`-Schicht setzt Modell und Thinking fuer bekannte Rollen;
   alte Modellnamen aus Call-Sites koennen die Policy nicht mehr umgehen.
 - Rollenbezogene Overrides: `WERKSTATT_MODEL_<ROLLE>`; die bisherige
   `WERKSTATT_ARCHITECT_MODEL`-Variable bleibt kompatibel.
 - Der direkte UI-Chat nutzt dieselbe Flash-Rollenpolicy.
-- **Commit:** 8c9b143 — Rollenpolicy und aktuelle Modell-IDs.
-- **Commit:** c47f389 — Rollenrouting in der zentralen LLM-Schicht.
-- **Commit:** f408ce1 — Reviewer-Kurzlabel auf Flash geroutet.
-- **Commit:** 13ca4fc — UI-Chat an die Flash-Policy gebunden.
-- **Commit:** 2317891 — Architect-Default auf V4-Pro gestellt.
-- **Commit:** 9d03b72 — Rollenvertraege im Architect-Prompt korrigiert.
-- **Commit:** c8ec2b8 — Architect-Modelltest aktualisiert.
-- **Commit:** 54b47e7 — Test-Umgebung und Erwartungswert korrigiert.
+- **Commit:** `8c9b1433070722263af6130` — Rollenpolicy und aktuelle Modell-IDs.
+- **Commit:** `c47f389778f30f008d1c516b` — Rollenrouting in der zentralen LLM-Schicht.
+- **Commit:** `f408ce1689a9a80469715612` — Reviewer-Kurzlabel auf Flash geroutet.
+- **Commit:** `13ca4fc65b82db1df049a57b` — UI-Chat an die Flash-Policy gebunden.
+- **Commit:** `2317891f3d8cb467c0053ddf` — Architect-Default auf V4-Pro gestellt.
+- **Commit:** `9d03b72c956a0bb810eca8b7` — Rollenvertraege im Architect-Prompt korrigiert.
+- **Commit:** `c8ec2b8c0cd850187c038114` — Architect-Modelltest aktualisiert.
+- **Commit:** `54b47e726112e1f0219fdac0` — Test-Umgebung und Erwartungswert korrigiert.
 - Code und Tests sind auf GitHub eingetragen; Laufzeittests wurden hier nicht
   ausgefuehrt. Server-Verifikation steht noch aus.
 
-- **Commit:** 3b108ac — API-Antwortmodell im LLM-Usage-Audit protokolliert.
-- **Commit:** ee50914 — Provider-Modell-ID auch im Chat-Usage-Datensatz sichtbar.
+- **Commit:** `3b108acc01ae32c011b71252` — API-Antwortmodell im LLM-Usage-Audit protokolliert.
+- **Commit:** `ee50914b1e6955d33b3196d7` — Provider-Modell-ID auch im Chat-Usage-Datensatz sichtbar.
 
-- **Commit:** fcfe693 — veraltete Chat-Modellkonstante entfernt.
+- **Commit:** `fcfe69339bdfb4fd5f1faa1d` — veraltete Chat-Modellkonstante entfernt.
+
+- **Commit:** `64ecf7df45e56f05680aeb1f` — Rollenrouting eingefuehrt.
+- **Commit:** `c03b94c86cefe744a321d60` — Debugger-Modus der Chat-Rolle zugeordnet.
+- **Commit:** `67e288ee4eb1d14db08f69e` — Import-Reihenfolge nach Server-Ruff korrigiert.
+- **Commit:** `eab316ae50e119d3752a5765` — Audit-/Payload-Tests auf kanonische Flash-ID aktualisiert.
