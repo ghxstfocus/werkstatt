@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 from werkstatt import orchestrator
@@ -63,3 +64,15 @@ def test_build_run_state_does_not_suppress_missing_docs(tmp_path, monkeypatch):
 
     with pytest.raises(SystemExit):
         orchestrator.build_run_state("demo", "Aufgabe", project_dir=tmp_path)
+
+
+def test_werkstatt_manifest_loads_required_living_docs() -> None:
+    config = yaml.safe_load(
+        Path("projects/werkstatt.yaml").read_text(encoding="utf-8")
+    )
+    docs = config["docs"]
+
+    assert docs["entry"] == "AGENTS.md"
+    assert {
+        "status", "roadmap", "architecture", "conventions", "adr_index",
+    } <= docs.keys()
