@@ -4063,3 +4063,14 @@ kann.
 Server-Verifikation steht noch aus. Der Selector buendelt keine OPs und
 rankt mehrdeutige Kandidaten absichtlich noch nicht; diese OP-398-
 Teilarbeit muss vor dem naechsten Ausbau verifiziert und erweitert werden.
+
+
+## OP-396 — read-only Backlog-Beratung im Chat
+
+Das projektgebundene Chat-Tool `next_op` verwendet den OP-398-Selector,
+zeigt Kandidaten und Ausschlussgruende aus dem aktiven `docs/STATUS.md`
+und startet oder aendert nichts. Der Chat-Systemprompt nutzt dieses Tool
+bei Fragen nach offenen OPs oder dem naechsten sinnvollen Arbeitsschritt
+und fragt bei Mehrdeutigkeit nach einer Nutzerauswahl.
+
+Server-Verifikation steht noch aus.
