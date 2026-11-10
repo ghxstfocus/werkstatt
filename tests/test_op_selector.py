@@ -4,10 +4,13 @@ from werkstatt.web.op_selector import parse_completed_op_ids, select_next_op
 
 def _op(op_id: str, *, title: str = "Arbeit", status: str = "open",
         blockers: str = "—", criteria: str = "Ergebnis ist korrekt.",
-        tests: str = "pytest -q tests/test_feature.py") -> str:
+        tests: str = "pytest -q tests/test_feature.py",
+        phase: str = "") -> str:
+    phase_field = f"- **Phase:** {phase}\\n" if phase else ""
     return (
-        f"### {op_id}: {title}\n"
-        f"- **Status:** {status}\n"
+        f"### {op_id}: {title}\\n"
+        f"{phase_field}"
+        f"- **Status:** {status}\\n"
         f"- **Blockiert von:** {blockers}\n"
         f"- **Akzeptanzkriterien:** {criteria}\n"
         f"- **Tests:** {tests}\n"
@@ -148,3 +151,17 @@ def test_resolves_status_autolog_done_row_as_completed_dependency() -> None:
 
     assert result["zustand"] == "selected"
     assert result["auswahl"]["id"] == "OP-002"
+
+
+def test_phase_three_requires_completed_dogfooding_op() -> None:
+    phase_three = _op("OP-101", phase="Phase-3 (Memory)")
+
+    blocked = select_next_op(phase_three)
+    assert blocked["zustand"] == "no_candidate"
+    assert "Phase-3 gesperrt bis OP-382 abgeschlossen" in " ".join(
+        blocked["ausgeschlossen"][0]["gruende"]
+    )
+
+    released = select_next_op(phase_three, completed_ids={"OP-382"})
+    assert released["zustand"] == "selected"
+    assert released["auswahl"]["id"] == "OP-101"
