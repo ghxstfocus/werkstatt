@@ -3999,4 +3999,4 @@ Der Serverlauf auf `37324a1` meldete 1774 passed, 3 failed und Ruff `PIE807`; my
 
 ### 2026-11-10 — Idle-Loop-Status gibt keine alte Run-ID mehr aus
 
-Bei einem persistenten Registry-Eintrag blieb nach dem Übergang in `idle` die vorherige `run_id` im Status-Endpoint sichtbar. Die API gibt die Run-ID nun nur noch für eine aktive Startreservierung aus; ein Backend-Regressionstest prüft `starting → idle`. Fix: nachfolgender Commit. **Verifikation:** Serverlauf steht aus.
+Bei einem persistenten Registry-Eintrag blieb nach dem Übergang in `idle` die vorherige `run_id` im Status-Endpoint sichtbar. Die API gibt die Run-ID nun nur noch für eine aktive Startreservierung aus; ein Backend-Regressionstest prüft `starting → idle`. Fix: `f0a9cc0`. **Verifikation:** Serverlauf steht aus.
