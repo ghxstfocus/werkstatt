@@ -4515,3 +4515,8 @@ Die Reconnect-Abfrage liefert neben queued/running Jobs die letzten 20 fehlgesch
 ## OP-397 — Chatjobs abbrechbar (2026-11-10)
 
 Chatjobs koennen jetzt projekt- und sessiongebunden abgebrochen werden. Wartende Jobs wechseln direkt auf `cancelled`; laufende Jobs erhalten eine persistente Cancel-Anfrage und der LLM-Stream prueft diese an Chunk-Grenzen. Die UI bietet einen separaten Abbrechen-Button, sodass der Composer waehrenddessen weiter nutzbar bleibt. Der SSE-Read-Timeout ist auf 30 Sekunden begrenzt, damit ein ausbleibender Chunk den Abbruch nicht minutenlang verzoegert. Tests decken Store-Lifecycle, API-Session-Scope, Chat-Agent und UI-Vertrag ab. Serververifikation steht aus; OP-397 bleibt offen.
+
+
+## Reconnect-Assertion fuer Chatjobs robust gemacht (2026-11-10)
+
+Der Frontend-Vertragstest akzeptiert jetzt den mehrzeiligen `_jobFertig`-Aufruf fuer fehlgeschlagene und abgebrochene Jobs. Das bisherige Literal-Matching schlug fehl, obwohl die Reconnect-UI den terminalen Zustand samt Fehlertext korrekt anzeigte. Serververifikation steht aus.
