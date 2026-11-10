@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from werkstatt.chat_jobs import ChatJobStore
 
 
@@ -91,7 +93,7 @@ def test_jobs_in_different_sessions_can_run_in_parallel(tmp_path: Path) -> None:
 
 def test_queue_order_is_fifo_when_timestamps_collide(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from werkstatt import chat_jobs
 
@@ -103,4 +105,6 @@ def test_queue_order_is_fifo_when_timestamps_collide(
     assert [job["job_id"] for job in store.queued()] == [
         first["job_id"], second["job_id"],
     ]
-    assert [job["job_id"] for job in store.active_for_session("session-a")] == []
+    assert [job["job_id"] for job in store.active_for_session("session-a")] == [
+        first["job_id"], second["job_id"],
+    ]
