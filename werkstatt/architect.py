@@ -376,7 +376,7 @@ Beispiel: Aufgabe sagt "read_events". API-Auszug hat
 
 
 _BUILDER_SCHNITTSTELLE = """## DER BUILDER (Schnittstelle)
-- Modell: deepseek-reasoner.
+- Modell: deepseek-flash.
 - Input: eine Zieldatei + dein Abschnitt fuer diese Datei.
 - Output: JSON-Patch mit old_string (aus Datei) + new_string (deine Beschreibung).
 - Grenzen: keine Tools, keine API-Raterei, keine Imports ohne explizite Nennung.
@@ -386,7 +386,7 @@ _BUILDER_SCHNITTSTELLE = """## DER BUILDER (Schnittstelle)
 _ARCHITECT_SCHNITTSTELLE = """## DER ARCHITECT (Schnittstelle)
 - Liefert: Prosa mit "## <pfad>", Interface, Logik, Integration.
 - Plant modular: welche Datei, welche Klasse, welcher Datenfluss.
-- Modell: deepseek-reasoner.
+- Modell: deepseek-v4-pro (Thinking, hoher Effort).
 """
 
 _REVIEWER_SCHNITTSTELLE = """## DER REVIEWER (Schnittstelle)
