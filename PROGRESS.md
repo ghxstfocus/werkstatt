@@ -4131,4 +4131,5 @@ im Gate-JSON nachvollziehbar.
 
 - **Commit:** `b8d18f929eaf` — Diagnoseausgabe und Exit-Code im Mypy-Bericht.
 - **Commit:** `1d75c375e39c` — Regressionstest fuer den erhaltenen Output.
+- **Commit:** `dc7fa117c817` — Formatierung des neuen Gate-Regressionstests.
 - Server-Verifikation steht aus.
