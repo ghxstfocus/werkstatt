@@ -10,7 +10,11 @@ from typing import Any
 import pytest
 
 
-def _fake_popen(aufrufe: list[list[str]], pid: int = 4242) -> Any:
+def _fake_popen(
+    aufrufe: list[list[str]],
+    pid: int = 4242,
+    kwargs_log: list[dict[str, Any]] | None = None,
+) -> Any:
     """Fabrik fuer einen Fake-Popen, der argv protokolliert."""
 
     class _FakeProzess:
@@ -36,6 +40,8 @@ def _fake_popen(aufrufe: list[list[str]], pid: int = 4242) -> Any:
 
     def _popen(argv: list[str], *args: Any, **kwargs: Any) -> _FakeProzess:
         aufrufe.append(list(argv))
+        if kwargs_log is not None:
+            kwargs_log.append(dict(kwargs))
         return _FakeProzess(list(argv))
 
     return _popen
@@ -74,8 +80,18 @@ def test_loop_subprozess_start_stop(
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
 
     aufrufe: list[list[str]] = []
+    popen_kwargs: list[dict[str, Any]] = []
+    gruppensignale: list[tuple[int, int]] = []
+    if app_modul.os.name == "posix":
+        monkeypatch.setattr(
+            app_modul.os, "killpg",
+            lambda pgid, sig: gruppensignale.append((pgid, sig)),
+        )
     _reset_loop_registry(app_modul)
-    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    monkeypatch.setattr(
+        app_modul.subprocess, "Popen",
+        _fake_popen(aufrufe, kwargs_log=popen_kwargs),
+    )
     monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
 
     client = TestClient(app_modul.app)
@@ -102,6 +118,7 @@ def test_loop_subprozess_start_stop(
     run_id_idx = aufrufe[0].index("--run-id")
     assert aufrufe[0][run_id_idx + 1].startswith("demo-")
     assert daten["run_id"] == aufrufe[0][run_id_idx + 1]
+    assert popen_kwargs[0]["start_new_session"] is (app_modul.os.name == "posix")
     assert "demo" in app_modul._LAUFENDE_LOOPS
 
     zweite = client.post("/api/projects/demo/start")
@@ -114,6 +131,8 @@ def test_loop_subprozess_start_stop(
     stop_daten = stop.json()
     assert stop_daten["gestoppt"] is True
     assert stop_daten["returncode"] == 0
+    if app_modul.os.name == "posix":
+        assert gruppensignale == [(daten["pid"], signal.SIGTERM)]
     assert "demo" not in app_modul._LAUFENDE_LOOPS
 
 
@@ -187,6 +206,8 @@ def test_parallele_starts_starten_nur_einen_loop(
     (docs_dir / "STATUS.md").write_text("# start concurrent test\n")
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
     _reset_loop_registry(app_modul)
+    if app_modul.os.name == "posix":
+        monkeypatch.setattr(app_modul.os, "killpg", lambda *_: None)
 
     entered = Event()
     release = Event()
@@ -246,8 +267,8 @@ def test_pause_resume_loop_control(
     monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
     signale: list[tuple[int, int]] = []
     monkeypatch.setattr(
-        app_modul.os, "kill",
-        lambda pid, sig: signale.append((pid, sig)),
+        app_modul.os, "killpg",
+        lambda pgid, sig: signale.append((pgid, sig)),
     )
     audit_events: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
@@ -282,6 +303,7 @@ def test_pause_resume_loop_control(
     assert stop.status_code == 200
     assert stop.json()["gestoppt"] is True
     assert stop.json()["audit_event"] is True
+    assert signale[-1] == (pid, signal.SIGTERM)
     assert [event[0][1] for event in audit_events] == [
         "web_loop_paused", "web_loop_resumed", "web_loop_stopped",
     ]
