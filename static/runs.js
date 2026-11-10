@@ -69,6 +69,8 @@
     } else if (control.state === "paused") {
       controlButton("resume", "▶ Fortsetzen");
       controlButton("stop", "■ Stop");
+    } else if (control.state === "idle") {
+      controlButton("start-next", "▶ Nächsten eindeutigen OP starten");
     }
     steuerung.appendChild(aktionen);
 
@@ -163,10 +165,12 @@
 
   function _klickAktion(opId, aktion) {
     if (_aktionLaeuft) return;
-    var url = _baseUrl() + "/" + aktion;
+    var startNext = aktion === "start-next";
+    var url = _baseUrl() + (startNext ? "/start" : "/" + aktion);
     var body = aktion === "start" ? {op_id: opId} : {};
     var label = {
       start: "Start",
+      "start-next": "Nächster eindeutiger OP",
       pause: "Pause",
       resume: "Fortsetzen",
       stop: "Stop",
@@ -188,7 +192,16 @@
       })
       .then(function (res) {
         if (!res.ok) {
-          throw new Error((res.data && res.data.detail) || "HTTP-Fehler");
+          var detail = res.data && res.data.detail;
+          if (detail && typeof detail === "object"
+              && detail.code === "autonomy_selection_required") {
+            var kandidaten = (detail.kandidaten || []).map(function (op) {
+              return op.id + " " + op.titel;
+            });
+            throw new Error("Mehrere passende OPs: " + kandidaten.join(" · ")
+              + ". Bitte einen OP aus der Liste auswählen.");
+          }
+          throw new Error(typeof detail === "string" ? detail : "HTTP-Fehler");
         }
         if (res.data && res.data.grund === "laeuft_bereits") {
           _aktionMeldung = "Für dieses Projekt läuft bereits ein Loop.";
