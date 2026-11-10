@@ -4045,3 +4045,18 @@ Verifiziert auf Server-HEAD `c3a28db`: Gate-/Chat-Tests 32 passed; vollstaendige
 ### 2026-11-10 — Doku-Drift vor Commit fail-closed pruefen
 
 OP-280 wird gegen den tatsaechlichen Verify-Zeitpunkt abgesichert: Die bisherige `doku_check.py` wertete nur bereits committete Historie aus und konnte den gerade entstehenden Patch vor dem Commit nicht beurteilen. Ergaenzt wurden ein Working-Tree-Modus fuer staged, unstaged und untracked Dateien, eine harte `phase_end`-Verify-Stage und Tests. Die Historienpruefung bleibt als Zusatzdiagnose erhalten. **Serververifikation ausstehend.**
+
+
+## OP-398 — konservative Auswahlstufe (2026-11-10)
+
+Der Web-Start kann ohne expliziten Auftrag den einzigen eindeutig
+startfaehigen STATUS-OP auswaehlen. Voraussetzung sind Status `open`,
+aufgeloeste Blocker, Akzeptanzkriterien und ein konkreter Test/Nachweis.
+Bei mehreren Kandidaten startet der Server keinen Run, sondern liefert
+strukturierte Auswahloptionen; ohne geeignete OP erklaert die Antwort die
+Ausschlussgruende. Ein direkter Auftrag hat Vorrang vor einer zusaetzlichen
+OP-ID. Plan-Gate bleibt im Loop verpflichtend.
+
+Server-Verifikation steht noch aus. Der Selector buendelt keine OPs und
+rankt mehrdeutige Kandidaten absichtlich noch nicht; diese OP-398-
+Teilarbeit muss vor dem naechsten Ausbau verifiziert und erweitert werden.
