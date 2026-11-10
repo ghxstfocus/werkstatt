@@ -882,6 +882,51 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
         return str(payload.get("info", ""))[:100]
     if kind == "verify_stage_ohne_hart_flag":
         return "nur weiche Stufe aktiv"
+    # OP-394: semantische Aktionen fuer loop_phase (statt technischer Kinds)
+    if kind == "loop_phase":
+        phase = str(payload.get("phase") or payload.get("name") or "").lower()
+        if "architect" in phase:
+            return "denkt nach"
+        if "planner" in phase:
+            return "splittet Plan"
+        if "explorer" in phase or "explore" in phase:
+            return "durchsucht Repo"
+        if "scout" in phase:
+            return "prüft Auftrag"
+        if "builder" in phase or phase == "build":
+            return "baut"
+        if "reviewer" in phase or phase == "review":
+            return "prüft Code"
+        if "verify" in phase:
+            return "verifiziert"
+        if "reflection" in phase or "reflect" in phase:
+            return "reflektiert"
+        if "plan_gate" in phase:
+            return "wartet auf Plan-Freigabe"
+        if "human_gate" in phase:
+            return "wartet auf Antwort"
+        return phase or ""
+    # OP-394: Gate-Events sichtbar machen
+    if kind == "gate_open":
+        prompt = str(payload.get("prompt") or "")[:60].strip()
+        return f"öffnet Gate: {prompt}" if prompt else "öffnet Gate"
+    if kind == "gate_answered":
+        ans = payload.get("answer") or payload.get("antwort") or "?"
+        return f"Antwort: {ans}"
+    if kind == "loop_plan_shown":
+        return "Plan-Gate geöffnet (j/n/a)"
+    if kind == "loop_plan_gate_approved":
+        return "Plan freigegeben"
+    if kind == "loop_plan_gate_rejected":
+        return "Plan abgelehnt"
+    if kind == "loop_started":
+        return "Loop startet"
+    if kind == "loop_fresh_reset":
+        return "Fresh-Start (alte Phase verworfen)"
+    if kind == "summary":
+        return "Loop beendet"
+    if kind == "loop_human_gate_eof":
+        return "⚠️ Human-Gate EOF (stdin geschlossen)"
     return ""
 
 
@@ -971,6 +1016,7 @@ def _tl_rolle(agent: str, kind: str) -> str:
 def _tl_aggregate_aktiv(
     run_events: list[dict[str, Any]],
     stale_after_s: int = 300,
+    grace_s: int = 0,
 ) -> dict[str, Any]:
     """Wer arbeitet JETZT am Run?
 
@@ -998,6 +1044,25 @@ def _tl_aggregate_aktiv(
         or kind in ("llm_call", "llm_call_start", "loop_task_start", "gate_open")
     )
     if not ist_aktiv:
+        # OP-394: Grace-Fenster — gerade-fertig-Events grace_s lang zeigen
+        if grace_s > 0 and (
+            kind.endswith(("_ok", "_failed", "_done")) or kind == "summary"
+        ):
+            try:
+                ts_g = _dt.fromisoformat(str(ts_raw))
+                if ts_g.tzinfo is None:
+                    ts_g = ts_g.replace(tzinfo=UTC)
+                delta_g = (_dt.now(UTC) - ts_g).total_seconds()
+            except (ValueError, TypeError):
+                return {}
+            if 0 <= delta_g < grace_s:
+                return {
+                    "rolle": _tl_rolle(agent, kind),
+                    "aktion": _tl_detail(kind, letztes) or kind,
+                    "seit_s": int(delta_g),
+                    "kind": kind,
+                    "gerade_fertig": True,
+                }
         return {}
 
     try:
@@ -1333,12 +1398,12 @@ def aggregate_live_feed(
     events_sorted = sorted(events, key=_ts_key)
 
     # Aktiv-Snapshot: letzter 'in progress'-Event
-    aktiv_raw = _tl_aggregate_aktiv(events_sorted)
+    aktiv_raw = _tl_aggregate_aktiv(events_sorted, grace_s=5)
 
     # Letzte N Events (aufsteigend) als Steps
     # Aktiv-Event wird NICHT als normaler Step gezaehlt (kommt extra).
     aktiv_ts = ""
-    if aktiv_raw and events_sorted:
+    if aktiv_raw and events_sorted and not aktiv_raw.get("gerade_fertig"):
         letzter = events_sorted[-1]
         if (str(letzter.get("kind", "")) == aktiv_raw.get("kind")
                 and _tl_rolle(str(letzter.get("agent", "")),

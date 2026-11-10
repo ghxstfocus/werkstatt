@@ -143,3 +143,21 @@ def test_gate_open_als_aktiv(projektion, tmp_path):
     assert aktiv.get("rolle") == "loop"
     assert "wart" in aktiv.get("aktion", "").lower()
 
+
+def test_aktiv_grace_5s(projektion, tmp_path):
+    """OP-394: gerade-fertig-Events <5s erscheinen als aktiv mit gerade_fertig=True."""
+    jetzt = datetime.now(UTC)
+    _schreibe(tmp_path, [
+        {"kind": "loop_started", "run_id": "r1", "project": "werkstatt",
+         "timestamp": (jetzt - timedelta(seconds=10)).isoformat(),
+         "agent": "agent_pipeline"},
+        {"kind": "loop_task_ok", "run_id": "r1", "project": "werkstatt",
+         "timestamp": (jetzt - timedelta(seconds=2)).isoformat(),
+         "agent": "agent_pipeline",
+         "payload": {"elapsed_s": 1.5}},
+    ])
+    feed = inspector.aggregate_live_feed("werkstatt")
+    aktiv = feed.get("aktiv") or {}
+    assert aktiv.get("gerade_fertig") is True, aktiv
+    assert aktiv.get("kind") == "loop_task_ok"
+
