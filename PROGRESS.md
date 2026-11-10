@@ -4594,7 +4594,10 @@ inferenzieren. Erfolgreiche Antworten werden als ein idempotentes
 abgebrochene Branches werden nicht als erledigte Konversation uebernommen.
 Beim Laden der Historie sowie vor neuen Jobs gleicht der Server erfolgreiche
 Jobs erneut ab, um einen Prozessabbruch zwischen Jobabschluss und
-Transcript-Projektion zu reparieren. Die UI zeigt fuer jeden Auftrag eine
+Transcript-Projektion zu reparieren. Bei vor der Migration angelegten Jobs
+bleibt der Kontext-Wasserstand NULL und wird einmalig aus der Session beim
+ersten Worker-Start aufgenommen; neue Jobs speichern den Wasserstand bereits
+bei der Annahme. Die UI zeigt fuer jeden Auftrag eine
 eigene Antwortkarte direkt nach der zugehoerigen Frage und behaelt den
 Working-Status, solange andere Jobs aktiv sind.
 
@@ -4616,4 +4619,6 @@ Working-Status, solange andere Jobs aktiv sind.
 - **Commit:** `584e862c9381719f62be48af36d2db8ef7aae788` — History-Endpunkt repariert fehlende Projektion nach Worker-Abbruch.
 - **Commit:** `274a9cc30a028a9cfc47e89babd74427f25e52ff` — UI-Vertrag fuer History-Rendering der Job-Turn-Paare testen.
 - **Commit:** `f6857ff98937085edc5e557314f571ccb3978132` — API-Test fuer den uebergebenen Kontext-Wasserstand.
+- **Commit:** `9302abe9dafe98c019606103536a047467d947c0` — Legacy-Jobs ohne historischen Wasserstand beim ersten Start kompatibel behandeln.
+- **Commit:** `393b9d0bc3a75c8f2ef4ae283daf604adc4f9d21` — Migrationstest fuer NULL-Wasserstand bestehender Jobs.
 - **Serververifikation:** gezielte Tests, UI/Ruff, Doku-Check und Quality Gate nach Pull stehen noch aus.
