@@ -448,8 +448,7 @@ def test_job_events_are_projected_to_timeline_exactly_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import werkstatt.audit as audit_mod
-    import werkstatt.event_store as event_store
-    import werkstatt.projection as projection
+    from werkstatt import event_store, projection
 
     monkeypatch.setattr(audit_mod, "_werkstatt_home", lambda: tmp_path)
     monkeypatch.setattr(event_store, "werkstatt_home", lambda: tmp_path)

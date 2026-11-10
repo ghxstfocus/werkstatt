@@ -173,10 +173,8 @@ def test_chat_job_events_join_project_live_feed(projektion, tmp_path):
             "kind": "chat_job_started", "run_id": "r-chat",
             "project": "demo", "timestamp": jetzt.isoformat(),
             "agent": "agent_pipeline",
-            "payload": {
-                "job_id": "job-1", "session_id": "session-1",
-                "job_event_seq": 1, "status": "running",
-            },
+            "job_id": "job-1", "session_id": "session-1",
+            "job_event_seq": 1, "status": "running",
         },
     ])
     store = _es.EventStore()

@@ -4708,3 +4708,8 @@ Der Event-Store kann Events jetzt mit Projektbezug und deterministischer Event-I
 ## Event-Log-Regressionstests nach Serverlauf (2026-11-11)
 
 - Serverlauf auf `c3f34a4` bestaetigte Syntaxreparatur und 51 gezielte Tests, legte aber drei Testannahmen offen: `EventStore.query()` liefert keine Event-ID, `Projector` liegt im Modul `werkstatt.projection`, und das Duplikat-Fixture brauchte die persistierte Job-Sequenz. Die Tests sind an die echten Schnittstellen angepasst; erneute Verifikation steht aus.
+
+
+## Live-Feed-Testfixture nach JSONL-Format korrigiert (2026-11-11)
+
+- Der Serverlauf auf `15bbeab` bestaetigte 53/54 gezielte Tests, aber das JSONL-Fixture legte den Job-Status faelschlich unter `payload` ab. Audit-JSONL flacht Event-Payloads auf die oberste Ebene ab; das Fixture folgt jetzt diesem Format. Ruff-Importe sind ebenfalls angepasst. Erneute Verifikation steht aus.
