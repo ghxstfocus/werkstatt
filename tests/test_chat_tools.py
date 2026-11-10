@@ -12,10 +12,10 @@ def test_verbotene_tools_fehlen() -> None:
         assert name not in chat_tools.CHAT_TOOLS
 
 
-def test_acht_soll_tools_vorhanden() -> None:
+def test_neun_soll_tools_vorhanden() -> None:
     erwartet = {
         "read_file", "grep", "git_log", "git_diff",
-        "audit_query", "pytest_collect", "diagnose", "read_status",
+        "audit_query", "pytest_collect", "diagnose", "read_status", "next_op",
     }
     assert set(chat_tools.CHAT_TOOLS) == erwartet
 
@@ -27,7 +27,7 @@ def test_alle_tools_mode_read() -> None:
 
 def test_openai_schemas_anzahl() -> None:
     schemas = chat_tools.openai_schemas()
-    assert len(schemas) == 8
+    assert len(schemas) == 9
     for s in schemas:
         assert s["type"] == "function"
         assert s["function"]["name"] in chat_tools.CHAT_TOOLS
@@ -80,7 +80,7 @@ def test_git_log_funktioniert() -> None:
 def test_mode_write_aktiviert_write_tools_nicht() -> None:
     """Heute gibt es keine write-Tools — Registry bleibt stabil."""
     schemas = chat_tools.openai_schemas(mode="write")
-    assert len(schemas) == 8
+    assert len(schemas) == 9
 
 
 def test_execute_tool_mit_mode_write_bei_read_tool() -> None:
@@ -142,3 +142,24 @@ def test_read_file_validiert_offsets_und_haelt_bereich_semantik(tmp_path):
     assert "ganze Zahlen" in chat_tools.execute_tool(
         "read_file", {"path": "small.txt", "start": "x"}, project_dir=tmp_path,
     )
+
+
+def test_next_op_liest_aktives_projekt_und_startet_nichts(tmp_path) -> None:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "### OP-321: Eindeutige Arbeit\\n"
+        "- **Status:** open\\n"
+        "- **Blockiert von:** —\\n"
+        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\\n"
+        "- **Tests:** pytest -q tests/test_321.py\\n",
+        encoding="utf-8",
+    )
+
+    result = chat_tools.execute_tool(
+        "next_op", {}, project_dir=tmp_path, project_name="demo",
+    )
+
+    assert '"zustand": "selected"' in result
+    assert '"id": "OP-321"' in result
+    assert '"quelle": "docs/STATUS.md"' in result
