@@ -4165,3 +4165,17 @@ Derselbe Lauf bestaetigte Mypy mit 0 Fehlern; Volltests und Ruff waren wegen
 des Syntaxfehlers nicht ausfuehrbar und muessen erneut laufen.
 
 - **Commit:** `4c87b0552a66` — Syntaxfehler im neuen UI-Regressionstest behoben.
+
+### OP-398 — Backlog-Schema-Audit fuer Ranking (2026-11-10)
+
+Der bestehende STATUS-Vertrag in `docs/DOC_CONVENTIONS.md` §5 standardisiert
+Status, betroffene Dateien, Akzeptanzkriterien, Tests und Blocker, aber keine
+Prioritaet, Risiko- oder Projektziel-Relevanz. Eine strukturelle Auswertung
+von `docs/STATUS.md` auf Commit `47f27930a98a` fand 101 OP-Ueberschriften,
+davon 100 mit Status `open`; nur 12 offene OPs enthalten ein Prioritaetsfeld,
+keiner ein Risiko- oder Projektziel-Feld. Der aktuelle Selector bleibt deshalb
+bei eindeutiger Auswahl bzw. sichtbarer Abstention und kann OP-398s gefordertes
+Ranking/Buendeln noch nicht belastbar beanspruchen. Naechster Architektur-
+Schritt: normalisiertes, rueckwaertskompatibles Kandidaten-Metadaten-Schema
+mit Validierung und Migrationsstrategie, bevor Ranking als Entscheidungsgrund
+verwendet wird.
