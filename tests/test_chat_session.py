@@ -81,6 +81,20 @@ def test_snapshot_to_is_stable_and_limited_to_context_watermark(db: Path) -> Non
     assert parent.snapshot_to("job-1", at_seq=parent.max_seq()).load() == branch.load()
 
 
+def test_job_snapshot_is_hidden_from_session_list_and_cleaned(db: Path) -> None:
+    parent = ChatSession("demo", "parent", db_pfad=db)
+    parent.append("user", {"text": "Frage"})
+    branch = parent.snapshot_to("job-branch", at_seq=parent.max_seq())
+    branch.append("user", {"text": "Jobfrage"})
+
+    assert list_sessions("demo", db_pfad=db) == ["parent"]
+    assert list_sessions("demo", db_pfad=db, mit_inhalt=True) == ["parent"]
+    assert parent.delete_snapshot("job-branch") is True
+    assert parent.delete_snapshot("job-branch") is False
+    assert branch.load() == []
+    assert parent.load()[0]["payload"]["text"] == "Frage"
+
+
 def test_append_job_turn_is_idempotent_and_reconstructs_history(db: Path) -> None:
     session = ChatSession("demo", "parent", db_pfad=db)
 
