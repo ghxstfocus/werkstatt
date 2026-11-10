@@ -93,9 +93,20 @@
 
   function _setzeChatStatus(text, typ) {
     var status = _el("chat-status");
-    if (!status) return;
-    status.textContent = text;
-    status.dataset.status = typ || "idle";
+    if (status) {
+      status.textContent = text;
+      status.dataset.status = typ || "idle";
+    }
+    var abbrechen = _el("chat-abbrechen");
+    if (abbrechen) {
+      var hatAktiveJobs = Object.keys(zustand.jobs).some(function (key) {
+        var job = zustand.jobs[key];
+        return !job.done && job.project === zustand.projekt &&
+          job.sessionId === zustand.sessionId;
+      });
+      abbrechen.hidden = !hatAktiveJobs;
+      abbrechen.disabled = typ === "cancelling";
+    }
   }
 
   function _zeigeLeerzustand() {
@@ -485,14 +496,16 @@
       }
     } else if (sichtbar) {
       var detail = error || "Unbekannter Hintergrundfehler";
-      if (job.assistantCard) _renderMarkdown(job.assistantCard, "Fehler: " + detail);
-      else _karte("assistant", "Fehler: " + detail);
+      var text = state === "cancelled" ? "Auftrag abgebrochen." : "Fehler: " + detail;
+      if (job.assistantCard) _renderMarkdown(job.assistantCard, text);
+      else _karte("assistant", text);
     }
     delete zustand.jobs[job.key];
     if (sichtbar) {
       _setzeChatStatus(
-        state === "succeeded" ? "Antwort fertig · " + job.project : "Aktion fehlgeschlagen.",
-        state === "succeeded" ? "ready" : "error"
+        state === "succeeded" ? "Antwort fertig · " + job.project :
+          state === "cancelled" ? "Auftrag abgebrochen." : "Aktion fehlgeschlagen.",
+        state === "succeeded" ? "ready" : state === "cancelled" ? "idle" : "error"
       );
       _renderSidebarAktuell();
     }
@@ -512,6 +525,12 @@
       _jobToolResult(job, p.name || "?", p.content || "");
     } else if (ev.kind === "succeeded") {
       _jobFertig(job, "succeeded", p.answer || "", null);
+    } else if (ev.kind === "cancel_requested") {
+      if (_jobAktiv(job.project, job.sessionId, job.request)) {
+        _setzeChatStatus("Abbruch wird ausgeführt …", "cancelling");
+      }
+    } else if (ev.kind === "cancelled") {
+      _jobFertig(job, "cancelled", "", p.error || "Auftrag abgebrochen.");
     } else if (ev.kind === "failed") {
       _jobFertig(job, "failed", "", p.error || "Unbekannter Fehler");
     }
@@ -532,10 +551,15 @@
         _handleJobEvent(job, ev);
       });
       if (job.done) return;
+      if (data.cancel_requested && _jobAktiv(job.project, job.sessionId, job.request)) {
+        _setzeChatStatus("Abbruch wird ausgeführt …", "cancelling");
+      }
       if (data.state === "succeeded") {
         _jobFertig(job, data.state, data.answer || "", null);
       } else if (data.state === "failed") {
         _jobFertig(job, data.state, "", data.error || "Unbekannter Fehler");
+      } else if (data.state === "cancelled") {
+        _jobFertig(job, data.state, "", "Auftrag abgebrochen.");
       } else {
         window.setTimeout(function () { _pollChatJob(job, pollToken); }, 500);
       }
@@ -631,8 +655,12 @@
       (data.jobs || []).forEach(function (item) {
         var job = _neuerJobState(projekt, sid, item.job_id, item.message, request);
         if (!bekannteIds[item.job_id]) _karte("user", item.message || "");
-        if (item.state === "failed") {
-          _jobFertig(job, "failed", "", item.error || "Auftrag wurde unterbrochen.");
+        if (item.state === "failed" || item.state === "cancelled") {
+          _jobFertig(
+            job, item.state, "",
+            item.error || (item.state === "cancelled"
+              ? "Auftrag abgebrochen." : "Auftrag wurde unterbrochen."),
+          );
           return;
         }
         aktiveJobs += 1;
@@ -642,6 +670,42 @@
         _setzeChatStatus("Aktiver Auftrag wieder verbunden.", "working");
       }
     }).catch(function () {});
+  }
+
+  function _abbrechenAktiveJobs() {
+    var jobs = Object.keys(zustand.jobs).map(function (key) {
+      return zustand.jobs[key];
+    }).filter(function (job) {
+      return !job.done && job.project === zustand.projekt &&
+        job.sessionId === zustand.sessionId;
+    });
+    if (!jobs.length) return;
+    _setzeChatStatus("Abbruch wird angefragt …", "cancelling");
+    jobs.forEach(function (job) {
+      fetch("/api/projects/" + encodeURIComponent(job.project) +
+        "/chat/jobs/" + encodeURIComponent(job.jobId) + "/cancel", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({session_id: job.sessionId}),
+        }).then(function (response) {
+          return response.json().then(function (data) {
+            if (!response.ok) throw new Error(data.detail || ("Status " + response.status));
+            return data;
+          });
+        }).then(function (data) {
+          if (job.done) return;
+          if (data.state === "cancelled") {
+            _jobFertig(job, "cancelled", "", "Auftrag abgebrochen.");
+          } else {
+            _setzeChatStatus("Abbruch wird ausgeführt …", "cancelling");
+          }
+        }).catch(function (error) {
+          if (!job.done) {
+            _setzeChatStatus("Abbruch fehlgeschlagen: " + error.message, "error");
+          }
+        });
+    });
   }
 
   function _sende(text) {
@@ -804,6 +868,22 @@
         eingabe.style.height = Math.min(eingabe.scrollHeight, 160) + "px";
       };
       eingabe.addEventListener("input", _autoResize);
+    }
+
+    // Abbruch-Steuerung fuer laufende Hintergrundjobs.
+    var abbrechenBtn = _el("chat-abbrechen");
+    var chatHeader = document.querySelector(".chat-header");
+    var chatStatus = _el("chat-status");
+    if (!abbrechenBtn && chatHeader && chatStatus) {
+      abbrechenBtn = document.createElement("button");
+      abbrechenBtn.type = "button";
+      abbrechenBtn.id = "chat-abbrechen";
+      abbrechenBtn.className = "chat-cancel-btn";
+      abbrechenBtn.textContent = "Abbrechen";
+      abbrechenBtn.hidden = true;
+      abbrechenBtn.setAttribute("aria-label", "Laufende Chat-Aufträge abbrechen");
+      abbrechenBtn.addEventListener("click", _abbrechenAktiveJobs);
+      chatHeader.insertBefore(abbrechenBtn, chatStatus);
     }
 
     // Header-Button: neue Session
