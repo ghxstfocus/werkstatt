@@ -4299,3 +4299,28 @@ aus dem Selector heraus startbar ist. OP-220a verwendet jetzt wie ADR-0010
 - **STATUS:** `f3f3c2645f9b` — Phase-3-Sperre und ADR-konformes Memory-Scope festhalten.
 - **Serververifikation der STATUS-Neufassung:** noch ausstehend; sie erfolgte
   nach dem gemeldeten Serverlauf auf `61eeb75`.
+
+
+### Roadmap-Sperre Phase 3 an Startpfaden durchsetzen (2026-11-10)
+
+Der OP-Audit zeigte, dass der Selector das STATUS-Feld `Phase:` ignorierte.
+Obwohl die aktuelle Roadmap OP-382 als Dogfooding-Gate vor Phase 3 festlegt,
+konnten Phase-3-Aufgaben ohne explizites Blockerfeld sowohl autonom als auch
+per direkter OP-ID gestartet werden. Der Selector schliesst solche Aufgaben
+jetzt aus, bis ein expliziter Abschlussbeleg fuer OP-382 vorliegt; der direkte
+Web-Start nutzt dieselbe Ablehnung. Tests decken autonome Abstention,
+Freigabe nach OP-382 und das Ausbleiben eines Subprozessstarts bei direkter
+OP-ID ab.
+
+Der Queue-Abgleich hat ausserdem alle offenen OP-Abhaengigkeiten gegen STATUS
+und explizite Abschlussledger geprueft: keine unbekannten Blocker mehr.
+OP-160/113i wurden auf aktuelle ADR-/OP-IDs umgestellt, OP-220 sperrt als
+Memory-Grundlage die abhaengigen Memory-Arbeiten bis OP-382, und OP-220a ist
+an ADR-0010s `project`-Scope angepasst.
+
+- **Selector:** `2cb294b0713d`, `028673d2fda2`.
+- **Web-Start:** `a9db0602cf63`.
+- **Tests:** `f6b87f1d02c2`, `b0da89951598`, `e7f33a50a3b1`, `5e26589c3577`.
+- **STATUS:** `8db8d84ccd5d`, `f3f3c2645f9b`.
+- **Serververifikation:** zielgerichtete Tests, Ruff, Doku-Check und
+  Quality-Gate nach Pull noch ausstehend.
