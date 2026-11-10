@@ -4248,9 +4248,9 @@ zur PROGRESS-Historie. Freitext-Erwaehnungen und andere Ledger-Statuswerte
 loesen Abhaengigkeiten weiterhin nicht auf. Web-Start und Chat nutzen dieselbe
 Abschlussmenge.
 
-- **Code-Commit:** `d452003a7b20` — STATUS-Auto-Log-Zeilen auswerten.
-- **Code-Commit:** `900c26c54529` — Web-Start mit STATUS-Auto-Log verbinden.
-- **Code-Commit:** `78be2bef8063` — Chat-Auswahl mit STATUS-Auto-Log verbinden.
+- **Commit:** `d452003a7b20` — STATUS-Auto-Log-Zeilen auswerten.
+- **Commit:** `900c26c54529` — Web-Start mit STATUS-Auto-Log verbinden.
+- **Commit:** `78be2bef8063` — Chat-Auswahl mit STATUS-Auto-Log verbinden.
 - **Tests:** `784c5f9e39fd`, `3555f4d0193f`, `08dc2cf807e2` — Selector, autonomer Web-Start und Chat.
 - **Formatierung:** `9a713fec9d54`.
 - **Verifikation auf Server-HEAD `78be2be`:** 41 gezielte Tests,
