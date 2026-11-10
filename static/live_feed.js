@@ -48,7 +48,8 @@
     "verify":     "var(--sem-ok)",
     "reviewer":   "var(--sem-ok-strong)",
     "reflection": "var(--sem-action-muted)",
-    "loop":       "var(--sem-history)"
+    "loop":       "var(--sem-history)",
+    "chat":       "var(--sem-action)"
   };
 
   function _rolleFarbe(rolle) {
@@ -157,6 +158,15 @@
   }
 
   var EVENT_TITEL = {
+    chat_job_queued: "Chat-Auftrag angenommen",
+    chat_job_started: "Chat-Pruefung gestartet",
+    chat_job_chunk: "Chat-Antwort",
+    chat_job_tool_call: "Chat-Tool gestartet",
+    chat_job_tool_result: "Chat-Tool abgeschlossen",
+    chat_job_succeeded: "Chat-Antwort fertig",
+    chat_job_failed: "Chat-Auftrag fehlgeschlagen",
+    chat_job_cancelled: "Chat-Auftrag abgebrochen",
+    chat_job_cancel_requested: "Chat-Abbruch angefordert",
     loop_started: "Run gestartet",
     loop_ended: "Run beendet",
     loop_failed: "Run fehlgeschlagen",
