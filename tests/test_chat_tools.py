@@ -190,3 +190,25 @@ def test_next_op_resolves_completed_dependency_from_project_progress(
 
     assert '"zustand": "selected"' in result
     assert '"id": "OP-322"' in result
+
+
+
+def test_next_op_resolves_completed_dependency_from_status_autolog(tmp_path) -> None:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "- 2026-11-09 | OP-381c | done | Gate-Modal fertig.\n\n"
+        "### OP-323: Folgearbeit\n"
+        "- **Status:** open\n"
+        "- **Blockiert von:** OP-381c\n"
+        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\n"
+        "- **Tests:** pytest -q tests/test_323.py\n",
+        encoding="utf-8",
+    )
+
+    result = chat_tools.execute_tool(
+        "next_op", {}, project_dir=tmp_path, project_name="demo",
+    )
+
+    assert '"zustand": "selected"' in result
+    assert '"id": "OP-323"' in result
