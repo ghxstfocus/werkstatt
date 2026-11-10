@@ -14,7 +14,7 @@ _BASE = quality_gate.BASELINE["pytest"]
 def _prepare_tree(tmp_path):
     (tmp_path / "tests").mkdir(exist_ok=True)
     (tmp_path / "tests" / "test_audit_warnung.py").write_text(
-        "# fixture for the dedicated audit catalog test\\n",
+        "# fixture for the dedicated audit catalog test\n",
         encoding="utf-8",
     )
 
@@ -54,7 +54,6 @@ def test_gate_failed_macht_rot(tmp_path):
     """M-331b: 1 failed -> delta.pytest > 0 -> ok=False."""
     pytest_out = _pytest_out(_BASE, failed=1)
     with patch.object(quality_gate, "_run", side_effect=_mock_run_factory(pytest_out)):
-        # Katalog-Fallback: _KATALOG_SOLL in pipeline.py
         _prepare_tree(tmp_path)
         result = quality_gate.check_all(tmp_path)
 
@@ -120,7 +119,7 @@ def test_quality_gate_detects_python_syntax_error(tmp_path):
     _prepare_tree(tmp_path)
     source = tmp_path / "werkstatt"
     source.mkdir()
-    (source / "broken.py").write_text("def broken(:\\n", encoding="utf-8")
+    (source / "broken.py").write_text("def broken(:\n", encoding="utf-8")
     with patch.object(
         quality_gate, "_run",
         side_effect=_mock_run_factory(_pytest_out(_BASE)),
