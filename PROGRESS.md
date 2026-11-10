@@ -4427,3 +4427,24 @@ fehlendem/kaputtem Pflichtkontext sicher gestoppt.
 - **Serververifikation:** gezielte Tests, Ruff, Doku-Check, Vollsuite und
   Quality Gate nach diesem Nachtrag noch ausstehend. Letzter Stand auf
   `706db33`: 1833 passed / 5 skipped; Ruff 1, mypy 0, Quality Gate rot.
+
+## M-479 — Rollenbasiertes DeepSeek-Modellrouting (2026-11-10)
+
+- Architect: `deepseek-v4-pro`, Thinking enabled, Effort high.
+- Builder, Planner-Split, Reviewer, Scout, Explorer, Validator, Reflection,
+  Debugger und Chat: `deepseek-flash`, Thinking disabled.
+- Die zentrale `ask_llm`-Schicht setzt Modell und Thinking fuer bekannte Rollen;
+  alte Modellnamen aus Call-Sites koennen die Policy nicht mehr umgehen.
+- Rollenbezogene Overrides: `WERKSTATT_MODEL_<ROLLE>`; die bisherige
+  `WERKSTATT_ARCHITECT_MODEL`-Variable bleibt kompatibel.
+- Der direkte UI-Chat nutzt dieselbe Flash-Rollenpolicy.
+- **Commit:** 8c9b143 — Rollenpolicy und aktuelle Modell-IDs.
+- **Commit:** c47f389 — Rollenrouting in der zentralen LLM-Schicht.
+- **Commit:** f408ce1 — Reviewer-Kurzlabel auf Flash geroutet.
+- **Commit:** 13ca4fc — UI-Chat an die Flash-Policy gebunden.
+- **Commit:** 2317891 — Architect-Default auf V4-Pro gestellt.
+- **Commit:** 9d03b72 — Rollenvertraege im Architect-Prompt korrigiert.
+- **Commit:** c8ec2b8 — Architect-Modelltest aktualisiert.
+- **Commit:** 54b47e7 — Test-Umgebung und Erwartungswert korrigiert.
+- Code und Tests sind auf GitHub eingetragen; Laufzeittests wurden hier nicht
+  ausgefuehrt. Server-Verifikation steht noch aus.
