@@ -4257,3 +4257,19 @@ Abschlussmenge.
   1823 volle Tests, Ruff 0, Mypy 0, Quality Gate gruen. Dieser Lauf
   enthaelt noch nicht die danach hinzugefuegten drei Regressionstests;
   erneuter Lauf auf dem aktuellen HEAD steht aus.
+
+
+### OP-398 — STATUS-Abschlussledger auch ohne PROGRESS lesen (2026-11-10)
+
+Der Serverlauf meldete, dass der autonome Start fuer OP-322 trotz eines
+expliziten `OP-381c | done`-Eintrags in `docs/STATUS.md` mit HTTP 422
+abgelehnt wurde. Ursache: fehlendes projektbezogenes `PROGRESS.md` liess
+den Hilfsleser vorzeitig mit einer leeren Abschlussmenge zurueckkehren und
+STATUS gar nicht mehr parsen. Fehlendes PROGRESS gilt jetzt als leerer Text;
+die STATUS-Abschlusszeilen werden trotzdem ausgewertet. Der bestehende
+Backend-Regressionstest bildet genau diesen Fall ohne PROGRESS-Datei ab.
+
+- **Commit:** `8edd8749717d` — STATUS-Ledger auch ohne PROGRESS lesen.
+- **Serververifikation:** Zieltest, Ruff und vollstaendiges Quality-Gate nach
+  Pull ausstehend. Die lokalen Aenderungen an `audit_panel.py` und
+  `terminal_proxy.py` bleiben unberuehrt.
