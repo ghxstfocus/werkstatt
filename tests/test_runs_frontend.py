@@ -82,3 +82,12 @@ def test_autonomous_start_button_and_ambiguity_feedback():
     assert 'controlButton("start-next", "▶ Nächsten eindeutigen OP starten")' in js
     assert 'detail.code === "autonomy_selection_required"' in js
     assert "Bitte einen OP aus der Liste auswählen." in js
+
+def test_loop_control_actions_use_full_size_text_buttons():
+    js = _js()
+    css = _css()
+    assert 'button.className = "runs-action-btn runs-control-action"' in js
+    assert ".runs-control .runs-control-action" in css
+    assert "min-width: max-content;" in css
+    assert "white-space: nowrap;" in css
+\n
