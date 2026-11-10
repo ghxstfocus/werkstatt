@@ -496,12 +496,21 @@ def _main_inner(argv: list[str] | None = None) -> int:
         _full_cfg = _load_cfg(args.project)
         _docs = _load_docs(_full_cfg.get("docs", {}), _pd)
     except SystemExit:
-        # load_project_config killt bei Fehlern via sys.exit(1).
-        # Das ist hier gewollt (fail-closed).
+        # load_project_config/load_docs signalisieren Pflichtfehler per sys.exit.
         raise
-    except Exception:
-        # Doku-Ladefehler sind nicht fatal; Planner laeuft ohne Kontext.
-        pass
+    except (OSError, UnicodeError, ValueError, TypeError, AttributeError) as exc:
+        _fehler = f"{type(exc).__name__}: {exc}"[:500]
+        audit(
+            "loop_docs_load_failed",
+            {"error": _fehler},
+            _pd,
+            args.project,
+        )
+        _r.step(
+            0, "docs", f"Pflichtdokumente nicht lesbar: {_fehler}", ok=False,
+        )
+        _r.footer(success=False, tasks_total=0, tasks_ok=0)
+        return 1
 
     _git_author_cfg = (_full_cfg.get("git_author", {}) if _full_cfg else {}) or {}
     _state = RunState(
