@@ -21,6 +21,16 @@ __all__ = ["chat_loop"]
 _DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 _DEFAULT_MAX_ROUNDS = 5
 
+
+class ChatCancelled(RuntimeError):
+    """Chat-Auftrag wurde kooperativ abgebrochen."""
+
+
+def _check_cancel(cancel_check: Callable[[], bool] | None) -> None:
+    if cancel_check is not None and cancel_check():
+        raise ChatCancelled("Chat-Auftrag abgebrochen")
+
+
 _SYSTEM_PROMPT = """Du bist der Chat-Agent fuer das aktuell ausgewaehlte Projekt.
 Du untersuchst das Repo mit projektgebundenen read-only Tools und erklaerst
 deine Aussagen mit Datei-, Zeilen-, Run- oder Test-Belegen. Du schreibst keine
@@ -67,6 +77,7 @@ def _deepseek_chat_stream(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None = None,
     on_chunk: Callable[[str], None] | None = None,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     """Echtes Token-Streaming. Ruft on_chunk pro Content-Delta."""
     import requests
@@ -87,6 +98,7 @@ def _deepseek_chat_stream(
         body["tools"] = tools
         body["tool_choice"] = "auto"
 
+    _check_cancel(cancel_check)
     content_acc = ""
     tool_calls_acc: dict[int, dict[str, Any]] = {}
     usage_acc: dict[str, Any] | None = None
@@ -100,6 +112,7 @@ def _deepseek_chat_stream(
     ) as resp:
         resp.raise_for_status()
         for raw in resp.iter_lines():
+            _check_cancel(cancel_check)
             if not raw:
                 continue
             if not raw.startswith(b"data: "):
@@ -145,6 +158,7 @@ def _deepseek_chat_stream(
                 if fn.get("arguments"):
                     slot["function"]["arguments"] += fn["arguments"]
 
+    _check_cancel(cancel_check)
     msg: dict[str, Any] = {"role": "assistant"}
     msg["content"] = content_acc or None
     if tool_calls_acc:
@@ -157,9 +171,10 @@ def _deepseek_chat_stream(
 def _deepseek_chat(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None = None,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     """Non-streaming Wrapper. Test-Boundary (monkeypatch-Attr)."""
-    inner = _deepseek_chat_stream(messages, tools, None)
+    inner = _deepseek_chat_stream(messages, tools, None, cancel_check)
     usage = inner.pop("_usage", None)
     return {"choices": [{"message": inner}], "usage": usage}
 
@@ -175,9 +190,11 @@ def chat_loop(
     max_rounds: int = _DEFAULT_MAX_ROUNDS,
     project_dir: Path | str | None = None,
     request_id: str | None = None,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> str:
     """User-Nachricht -> LLM-Loop -> Assistant-Antwort."""
     tools = tools if tools is not None else CHAT_TOOLS
+    _check_cancel(cancel_check)
     user_payload: dict[str, Any] = {"text": message}
     if request_id is not None:
         user_payload["job_id"] = request_id
@@ -194,7 +211,13 @@ def chat_loop(
     schemas = openai_schemas(tools, mode=mode)
 
     for _ in range(max_rounds):
-        resp = _deepseek_chat(messages, tools=schemas)
+        _check_cancel(cancel_check)
+        if cancel_check is None:
+            resp = _deepseek_chat(messages, tools=schemas)
+        else:
+            resp = _deepseek_chat(
+                messages, tools=schemas, cancel_check=cancel_check,
+            )
         _usage = resp.get("usage")
         if _usage and _usage.get("total_tokens"):
             session.append("token_usage", _usage)
@@ -223,6 +246,7 @@ def chat_loop(
                 args = {}
             if not isinstance(args, dict):
                 args = {}
+            _check_cancel(cancel_check)
             if on_tool_call is not None:
                 on_tool_call(name, args)
             ergebnis = execute_tool(
