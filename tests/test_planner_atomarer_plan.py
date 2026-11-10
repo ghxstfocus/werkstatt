@@ -27,10 +27,6 @@ class TestTasksAusStellen:
     def test_eine_datei_mehrere_stellen_ein_task(self) -> None:
         scout = {
             "atomarer_plan": True,
-            "auftrag_prosa": "Setze die gemeldeten Stellen um.",
-            "api_auszug": {},
-            "risiken": [],
-            "bereits_erfuellt": False,
             "betroffene_stellen": [
                 {"datei": "a.py", "zeile": 10, "alt": "x",
                  "neu": "y", "grund": "g1"},
@@ -102,6 +98,10 @@ class TestSkipArchitect:
         )
         scout = {
             "atomarer_plan": True,
+            "auftrag_prosa": "Setze die gemeldeten Stellen um.",
+            "api_auszug": {},
+            "risiken": [],
+            "bereits_erfuellt": False,
             "betroffene_stellen": [
                 {"datei": "a.py", "zeile": 10, "alt": "x",
                  "neu": "y", "grund": "g1"},

@@ -131,7 +131,7 @@ def test_planner_blocker_follow_up_ignore(tmp_path):
     "auftrag_prosa": "Arbeite die angeforderte Aufgabe in den betroffenen Dateien um.",
     "api_auszug": {},
     "risiken": [],
-    "bereits_erfuellt": false,
+    "bereits_erfuellt": False,
 }), \
          patch("werkstatt.planner.ask_llm", return_value=mock_reply):
         rc = run_planner(st)
@@ -202,7 +202,13 @@ def test_planner_deklariert_task_files(tmp_path):
         "ignore": [],
     })
 
-    with patch("werkstatt.planner.ask_llm", return_value=mock_reply):
+    with patch("werkstatt.planner._run_scout", return_value={
+            "auftrag_prosa": "Arbeite die angeforderte Aufgabe in den betroffenen Dateien um.",
+            "api_auszug": {},
+            "risiken": [],
+            "bereits_erfuellt": False,
+        }), \
+         patch("werkstatt.planner.ask_llm", return_value=mock_reply):
         rc = run_planner(st)
 
     assert rc is True
@@ -285,7 +291,7 @@ def test_planner_liest_progress(tmp_path):
     "auftrag_prosa": "Arbeite die angeforderte Aufgabe in den betroffenen Dateien um.",
     "api_auszug": {},
     "risiken": [],
-    "bereits_erfuellt": false,
+    "bereits_erfuellt": False,
 }), \
          patch("werkstatt.planner.ask_llm", side_effect=_mock_ask_llm):
         rc = run_planner(st)
@@ -357,7 +363,13 @@ def test_planner_action_create_update(tmp_path):
         "blocker": [], "follow_up": [], "ignore": [],
     })
 
-    with patch("werkstatt.planner.ask_llm", return_value=mock_reply):
+    with patch("werkstatt.planner._run_scout", return_value={
+            "auftrag_prosa": "Arbeite die angeforderte Aufgabe in den betroffenen Dateien um.",
+            "api_auszug": {},
+            "risiken": [],
+            "bereits_erfuellt": False,
+        }), \
+         patch("werkstatt.planner.ask_llm", return_value=mock_reply):
         rc = run_planner(st)
 
     assert rc is True
