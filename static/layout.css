@@ -892,6 +892,10 @@ body {
   color: var(--sem-ok);
   background: rgba(74,222,128,0.08);
 }
+.runs-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
 .runs-action-btn[data-action="stop"] {
   border-color: var(--sem-error);
   color: var(--sem-error);

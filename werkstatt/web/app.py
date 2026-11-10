@@ -327,8 +327,8 @@ def create_app() -> FastAPI:
     def project_start(name: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         """Startet den Loop fuer ein Projekt als Subprozess.
 
-        OP-303: optionaler body {aufgabe: str} oder {op_id: "OP-303"}.
-        Ohne aufgabe: Loop liest selbst die naechste OP aus STATUS.md.
+        OP-303: body enthaelt entweder eine explizite {aufgabe: str}
+        oder {op_id: "OP-303"}. Ohne beides wird kein leerer Run gestartet.
         """
         projektname = _pruefe_projektname(name)
         # OP-305: Projekt muss minimal initialisiert sein (STATUS.md da),
@@ -359,29 +359,47 @@ def create_app() -> FastAPI:
         if body and isinstance(body, dict):
             op_id = str(body.get("op_id") or "").strip()
             aufgabe = str(body.get("aufgabe") or "").strip()
-            if op_id and not aufgabe:
+
+        if op_id:
+            if not re.fullmatch(r"OP-\d+[a-z]?", op_id):
+                raise HTTPException(status_code=400, detail="ungueltige op_id")
+            from werkstatt.web import inspector as _insp
+            ops = _insp.parse_ops(_pd)
+            auswahl = next((op for op in ops if op.get("id") == op_id), None)
+            if auswahl is None:
+                raise HTTPException(status_code=404, detail="OP nicht offen oder nicht gefunden")
+            if auswahl.get("status") != "open":
+                raise HTTPException(status_code=409, detail="OP ist nicht als offen markiert")
+            if auswahl.get("blockiert_von"):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"OP ist blockiert von {auswahl['blockiert_von']}",
+                )
+
+            if not aufgabe:
                 # Volltext aus STATUS.md (nicht nur Titel): der Explorer
-                # braucht Backtick-Symbole/Pfade als Suchbegriffe.
-                # Kurztitel "OP-XXX: Titel" hat oft keine -> explorer_context=[].
+                # braucht konkrete Symbole und Pfade als Suchbegriffe.
                 _status_md = _pd / "docs" / "STATUS.md"
                 try:
                     _status_text = _status_md.read_text(
                         encoding="utf-8", errors="replace")
-                except OSError:
-                    _status_text = ""
+                except OSError as exc:
+                    raise HTTPException(
+                        status_code=500, detail="STATUS.md nicht lesbar",
+                    ) from exc
                 _m_op = re.search(
                     rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\Z)",
                     _status_text, re.MULTILINE | re.DOTALL)
-                if _m_op:
-                    aufgabe = _m_op.group(0).strip()
-                else:
-                    from werkstatt.web import inspector as _insp
-                    for op in _insp.parse_ops(_PROJECTS_BASE / projektname):
-                        if op.get("id") == op_id:
-                            aufgabe = f"{op_id}: {op.get('titel', '')}"
-                            break
-        if aufgabe:
-            args.extend(["--aufgabe", aufgabe])
+                if not _m_op:
+                    raise HTTPException(status_code=404, detail="OP-Text nicht gefunden")
+                aufgabe = _m_op.group(0).strip()
+
+        if not aufgabe:
+            raise HTTPException(
+                status_code=422,
+                detail="aufgabe oder offene, nicht blockierte op_id erforderlich",
+            )
+        args.extend(["--aufgabe", aufgabe])
         # Log-File pro Run, stdout/stderr umleiten (sonst sind
         # Loop-Crashes unsichtbar). Handle in _LOOP_LOG_HANDLES halten,
         # damit project_stop es schliessen kann.

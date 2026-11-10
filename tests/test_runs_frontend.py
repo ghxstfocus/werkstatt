@@ -48,4 +48,8 @@ def test_pfeil_und_stop_symbole():
     assert "\\u25b6" in js or "\u25b6" in js
     assert "\\u25a0" in js or "\u25a0" in js
 
-
+def test_blockierte_ops_haben_keinen_startknopf():
+    js = _js()
+    assert 'op.status === "open" && !op.blockiert_von' in js
+    assert 'btn.disabled = true' in js
+    assert 'btn.dataset.action = "blocked"' in js

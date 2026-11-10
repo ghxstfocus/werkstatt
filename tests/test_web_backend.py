@@ -51,7 +51,9 @@ def test_loop_subprozess_start_stop(
     # (Path("/opt") wuerde auf echte Verzeichnisse schauen)
     demo_dir = tmp_path / "demo" / "docs"
     demo_dir.mkdir(parents=True)
-    (demo_dir / "STATUS.md").write_text("### OP-999: Test\n")
+    (demo_dir / "STATUS.md").write_text(
+        "### OP-999: Test\n- **Status:** open\n- **Blockiert von:** —\n"
+    )
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
 
     aufrufe: list[list[str]] = []
@@ -61,7 +63,9 @@ def test_loop_subprozess_start_stop(
 
     client = TestClient(app_modul.app)
 
-    antwort = client.post("/api/projects/demo/start")
+    antwort = client.post(
+        "/api/projects/demo/start", json={"op_id": "OP-999"},
+    )
     assert antwort.status_code == 200
     daten = antwort.json()
     assert daten["gestartet"] is True
@@ -75,6 +79,9 @@ def test_loop_subprozess_start_stop(
     ]
     assert "--headless" in aufrufe[0]
     assert "--run-id" in aufrufe[0]
+    assert "--aufgabe" in aufrufe[0]
+    task_idx = aufrufe[0].index("--aufgabe")
+    assert "### OP-999: Test" in aufrufe[0][task_idx + 1]
     run_id_idx = aufrufe[0].index("--run-id")
     assert aufrufe[0][run_id_idx + 1].startswith("demo-")
     assert daten["run_id"] == aufrufe[0][run_id_idx + 1]
@@ -91,3 +98,60 @@ def test_loop_subprozess_start_stop(
     assert stop_daten["gestoppt"] is True
     assert stop_daten["returncode"] == 0
     assert "demo" not in app_modul._LAUFENDE_LOOPS
+
+
+def test_start_verwirft_blockierte_op(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "STATUS.md").write_text(
+        "### OP-001: Voraussetzung\n- **Status:** open\n- **Blockiert von:** —\n\n"
+        "### OP-002: Folgearbeit\n- **Status:** open\n- **Blockiert von:** OP-001\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    app_modul._LAUFENDE_LOOPS.clear()
+    app_modul._LOOP_LOG_HANDLES.clear()
+    aufrufe: list[list[str]] = []
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+
+    client = TestClient(app_modul.app)
+    antwort = client.post(
+        "/api/projects/demo/start", json={"op_id": "OP-002"},
+    )
+
+    assert antwort.status_code == 409
+    assert "blockiert" in antwort.json()["detail"]
+    assert aufrufe == []
+
+
+def test_start_verwirft_leere_aufgabe(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "STATUS.md").write_text("# keine OP\n", encoding="utf-8")
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    app_modul._LAUFENDE_LOOPS.clear()
+    app_modul._LOOP_LOG_HANDLES.clear()
+    aufrufe: list[list[str]] = []
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+
+    client = TestClient(app_modul.app)
+    antwort = client.post("/api/projects/demo/start")
+
+    assert antwort.status_code == 422
+    assert aufrufe == []

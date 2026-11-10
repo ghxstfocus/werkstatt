@@ -74,18 +74,25 @@
       }
       div.appendChild(status);
 
-      // Action-Button (OP-303)
+      // Action-Button (OP-303): nur offene, freigegebene OPs starten.
       var btn = document.createElement("button");
       btn.className = "runs-action-btn";
       btn.type = "button";
+      var istStartbar = op.status === "open" && !op.blockiert_von;
       if (isRunning) {
         btn.textContent = "■";
         btn.title = "Loop stoppen";
         btn.dataset.action = "stop";
+      } else if (!istStartbar) {
+        btn.textContent = "⊘";
+        btn.disabled = true;
+        btn.title = op.blockiert_von
+          ? "OP blockiert von " + op.blockiert_von
+          : "OP ist nicht als offen freigegeben";
+        btn.dataset.action = "blocked";
       } else {
         btn.textContent = "▶";
-        var blockInfo = op.blockiert_von ? " (blockiert von " + op.blockiert_von + ")" : "";
-        btn.title = "Loop mit " + op.id + " starten" + blockInfo;
+        btn.title = "Loop mit " + op.id + " starten";
         btn.dataset.action = "start";
       }
       btn.addEventListener("click", function (e) {
