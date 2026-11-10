@@ -170,6 +170,10 @@
         } else if (kind === "assistant") {
           hatNachricht = true;
           _karte("assistant", p.text || "");
+        } else if (kind === "job_turn") {
+          hatNachricht = true;
+          _karte("user", p.user_text || "");
+          _karte("assistant", p.assistant_text || "");
         } else if (kind === "tool_call") {
           (p.tool_calls || []).forEach(function (tc) {
             _toolKarte(tc.function && tc.function.name || "?", null, "ok");
