@@ -4520,3 +4520,8 @@ Chatjobs koennen jetzt projekt- und sessiongebunden abgebrochen werden. Wartende
 ## Reconnect-Assertion fuer Chatjobs robust gemacht (2026-11-10)
 
 Der Frontend-Vertragstest akzeptiert jetzt den mehrzeiligen `_jobFertig`-Aufruf fuer fehlgeschlagene und abgebrochene Jobs. Das bisherige Literal-Matching schlug fehl, obwohl die Reconnect-UI den terminalen Zustand samt Fehlertext korrekt anzeigte. Serververifikation steht aus.
+
+
+## Chatjob-Replay an Session gebunden (2026-11-10)
+
+Der Event-Replay-Endpunkt akzeptiert jetzt eine Session-ID und liefert einen Job nur fuer die Session aus, die ihn angelegt hat. Der Poller sendet den Session-Kontext mit; API-Tests pruefen Zugriff innerhalb der Session und Verbergen bei fremder Session. Vor einem Reconnect-Dispatch wird zuerst die Session-Zugehoerigkeit geprueft. Serververifikation steht aus.
