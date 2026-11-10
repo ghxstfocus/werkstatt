@@ -4153,4 +4153,5 @@ Mindestbreite; auf schmalen Ansichten darf die Beschriftung umbrechen.
 - **Commit:** `22b45f559ae3` — eigene Klasse fuer Control-Aktionen.
 - **Commit:** `ad139c58c199` — volle Toolbar-Breite und lesbare Knopfmasse.
 - **Commit:** `da8728270bea` — UI-Regressionstest.
+- **Commit:** `8eb817c55863` — gemeinsamer Asset-Cache-Buster fuer den Browser-Reload.
 - Screenshot-/Browser-Verifikation und Servertests stehen aus.
