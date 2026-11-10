@@ -1166,6 +1166,37 @@ def create_app() -> FastAPI:
             ],
         }
 
+    @app.post("/api/projects/{name}/chat/jobs/{job_id}/cancel")
+    def chat_job_cancel(
+        name: str, job_id: str, body: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Bricht einen wartenden Job ab oder fordert Worker-Abbruch an."""
+        from werkstatt.chat_jobs import ChatJobStore, resume_chat_jobs
+
+        projekt = _pruefe_projektname(name)
+        if not re.fullmatch(r"[a-f0-9]{32}", job_id):
+            raise HTTPException(status_code=400, detail="job_id ungueltig")
+        session_id = body.get("session_id")
+        if not isinstance(session_id, str) or not session_id:
+            raise HTTPException(status_code=400, detail="session_id fehlt")
+        sid = _pruefe_session_id(session_id)
+        db_path = _PROJECTS_BASE / ".werkstatt" / "chat-jobs" / f"{projekt}.db"
+        try:
+            store = ChatJobStore(db_path)
+            result = store.request_cancel(job_id, sid)
+            if result is None:
+                raise HTTPException(status_code=404, detail="Chat-Job nicht gefunden")
+            resume_chat_jobs(
+                projekt, (_PROJECTS_BASE / projekt).resolve(), db_path=db_path,
+            )
+        except HTTPException:
+            raise
+        except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
+            raise HTTPException(
+                status_code=500, detail=f"Chat-Job konnte nicht abgebrochen werden: {exc}",
+            ) from exc
+        return result
+
     @app.get("/api/projects/{name}/chat/jobs/{job_id}")
     def chat_job_get(
         name: str, job_id: str, since_seq: int = 0,
