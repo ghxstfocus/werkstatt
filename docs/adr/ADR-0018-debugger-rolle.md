@@ -1,7 +1,7 @@
 # ADR-0018: Debugger als eigene Rolle
 
 - **Datum:** 2026-11-07
-- **Status:** proposed
+- **Status:** rejected (2026-11-10; siehe ADR-0011 und ADR-0029)
 - **Ersetzt teilweise:** OP-092 Sub-Item 092d (Debugger als Teil
   des Sammel-OPs)
 
@@ -27,10 +27,29 @@ Repair Ladder) ist ein umfangreiches Feature (OP-128, OP-160),
 das als eigenstaendige Rolle besser skalierbar ist als als
 Skill-Anhang zum Builder.
 
+## Verworfener Vorschlag
+
+Der Vorschlag einer separaten Loop-Rolle `debugger` wird nicht
+angenommen. ADR-0011 waehlt den Debugger als Chat-Modus; ADR-0029
+bestaetigt Chat als Koordinator und den Coding-Loop als ausfuehrenden
+Pfad. Die hier beschriebenen 3-Wege-Checks und Test-File-Guards sind
+als moegliche Anforderungen fuer den Debugger-Modus zu pruefen, aber
+begründen keine eigene Rolle.
+
+`systematic-debugging` bleibt bis zu einer neuen akzeptierten
+Architekturentscheidung beim bestehenden Skill-/Reflection-Vertrag.
+Die Zuordnung darf nicht allein aufgrund dieses verworfenen ADRs
+aus Builder oder Reflection entfernt werden.
+
 ## Entscheidung
 
-Eigene Rolle `debugger`. `systematic-debugging`-Skill ist
-exklusiv fuer `debugger` zugeordnet.
+Kein separates `debugger`-Rollenobjekt und keine Verdrahtung als
+Loop-Phase. Debugging wird als Chat-Faehigkeit gemaess ADR-0011/OP-240
+umgesetzt; schreibende Codearbeit wird nach expliziter Chat-Freigabe an
+den normalen Coding-Loop uebergeben (ADR-0029).
+
+Die folgenden Rollen-, Verdrahtungs- und Testdetails dokumentieren den
+verworfenen Vorschlag und sind keine aktive Implementierungsanforderung.
 
 **3-Wege-Check (aus OP-092 Z.114-118):**
 - Spec <-> Code <-> Test
@@ -57,7 +76,7 @@ Reflection.
   Liste entfernen. Reflection behaelt die Reflection-Loop-
   Logik, aber ohne Debugging-Skill.
 
-## Konsequenzen
+## Historische Abwaegung (Vorschlag nicht umgesetzt)
 
 **Positiv:**
 - Debugging bekommt eigene Verantwortung.

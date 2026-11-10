@@ -306,11 +306,7 @@ noch nicht vollstaendig.
 - **Typ:** feature
 - **Betroffen:** `werkstatt/chat_agent.py` (`chat_loop`),
   `werkstatt/chat_tools.py`, `werkstatt/web/static/chat.js`
-- **Problem:** Bei fehlgeschlagenem Run soll der Chat dem Menschen
-  eine **Eskalations-Ladder** anbieten. Der Chat entscheidet NICHTS
-  — er stellt die Optionen vor. Der **Mensch** waehlt ueber den
-  Chat, welche Stufe greift. Der Debugger ist eine Faehigkeit des
-  Chats (nur im Modus `debugger` verfuegbar), keine eigene Rolle.
+- **Problem:** Bei fehlgeschlagenem Run oder offenem Gate soll der Chat dem Menschen eine **Eskalations-Ladder** und direkte Kontextuebergabe anbieten. Der Chat entscheidet nichts und beantwortet keine Gates. Der Mensch waehlt Diagnose, Patch-Uebergabe oder Loop-Neustart. Der Debugger ist eine Faehigkeit des Chats (Modus `debugger`), keine eigene Loop-Rolle (ADR-0011/0029; ADR-0018 verworfen).
 
 - **Ladder-Modi** (Auswahl durch den Menschen; `chat_loop(...,
   modus=...)` setzt die Wahl um):
@@ -322,7 +318,11 @@ noch nicht vollstaendig.
     `read_file(path, start, end)`, `write_temp_test(content)`.
     `write_temp_test` schreibt ausschliesslich nach
     `.werkstatt/temp_tests/` — nie nach `tests/`, nie nach
-    `werkstatt/`. Fix bleibt Diff-Vorschlag, kein Auto-Apply.
+    `werkstatt/`. Debugger schreibt Produktionscode nicht direkt.
+    Der strukturierte Fix kann nach Anzeige des exakten Diffs und
+    einmaliger ausdruecklicher Freigabe ohne Copy/Paste als Auftrag
+    an den Coding-Loop uebergeben werden; verpflichtendes Plan-Gate,
+    Verify, Review und Human-Gate bleiben erhalten (ADR-0029).
     **Nach erfolgreicher Verifikation (Loop-Re-Run gruen):**
     Lern-Event `debugger_fix_verifiziert` → Memory-Hook (OP-243).
   - `reject` — Der Mensch lehnt ab, gibt Begruendung ueber den
@@ -354,6 +354,16 @@ noch nicht vollstaendig.
     `debugger_fix_verifiziert` mit `{signatur, fix_hash, run_id}`.
   - (f) Test: Mock-`pytest_run`, Tool-Result landet in Session,
     Fix-Event bei gruenem Re-Run.
+  - (g) Aktion „Datei bearbeiten“ an einem offenen Gate uebergibt
+    Projekt, run_id, gate_id, Fehler-/Verify-Belege und betroffene
+    Datei an den Debug-Chat. Das Gate bleibt offen; Chat-Text oder
+    Patch-Freigabe beantwortet es nicht. Nur eine separate explizite
+    Gate-Antwort setzt den Lauf fort.
+  - (h) Nach ausdruecklicher Freigabe uebergibt der Chat den exakten
+    strukturierten Patch samt Projekt- und Run-Kontext maschinenlesbar
+    an den Coding-Loop. Kein manueller Copy/Paste-Schritt und kein
+    vom Chat frei formulierter Ersatzauftrag. Freigabe ist einmalig
+    und an Patch-Hash/Umfang gebunden.
 
 - **Tests:** `tests/test_chat_debugger.py` (neu),
   `tests/test_debugger_memory_hook.py` (neu, OP-243)
@@ -492,10 +502,17 @@ noch nicht vollstaendig.
     Chat-Agent (OP-231) mit Auftrag: "Analysiere Run #N: Audit-Logs,
     Diff, Fehlerursache. Antwort in Sekunden."
   - Button 2 **„Debugger starten"**: startet Chat im Modus
-    `debugger` (OP-240) mit identischem Diagnose-Auftrag.
+    `debugger` (OP-240) mit identischem Diagnose-Auftrag und bindet
+    Run, Gate, betroffene Datei und Fehlerbelege als Kontext.
+  - Bei Auswahl **„Datei bearbeiten"** an einem offenen Gate wird
+    derselbe strukturierte Gate-Kontext an den Debug-Chat uebergeben;
+    das Gate bleibt offen und wartet auf eine separate Gate-Antwort.
   - Button 3 **„Coding-Loop neu"**: startet neuen Loop-Lauf mit
     identischer `--aufgabe` (Wiederholung nach Fix, falls manuell
     durchgefuehrt).
+  - Eine vom Menschen freigegebene Debugger-Aenderung wird als
+    strukturierter Patch-Inhalt direkt an den Coding-Loop uebergeben;
+    kein Copy/Paste und kein automatisches Beantworten des Gates.
   - Test: Mock-Event `run_failed` → Panel rendert drei Buttons;
     Klick auf Button 1 → `POST /api/projects/{name}/chat` mit
     erwarteter Nachricht.

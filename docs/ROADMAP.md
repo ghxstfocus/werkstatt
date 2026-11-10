@@ -28,7 +28,10 @@ begruendeter, evidenzbasierter Selector statt einer blinden Zeilenfolge.
 
 1. **Phase 1 — UI bereitstellen:** OP-396, OP-397, OP-398, OP-381c,
    OP-381b, OP-306, OP-306b und Interfaces (Verify/CI-Status,
-   Rollen-Details, Debug-Ansicht).
+   Rollen-Details, Debug-Ansicht). Gate-Edit uebergibt den offenen
+   Gate-Kontext an den Debug-Chat. Nach einmaliger Patch-Freigabe
+   uebergibt der Chat den Patch-Inhalt direkt an den Coding-Loop;
+   manueller Copy/Paste und Gate-Antwort als Codefreigabe sind ausgeschlossen.
 2. **Phase 2 — Loop im UI-Betrieb stabilisieren:** OP-382 Dogfooding mit
    zehn vollständigen realen OPs, Debugger-Kette und konstante erfolgreiche
    Runs ohne Abbrüche.
