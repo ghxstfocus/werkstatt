@@ -161,3 +161,34 @@ def test_aktiv_grace_5s(projektion, tmp_path):
     assert aktiv.get("gerade_fertig") is True, aktiv
     assert aktiv.get("kind") == "loop_task_ok"
 
+def test_chat_job_events_join_project_live_feed(projektion, tmp_path):
+    jetzt = datetime.now(UTC)
+    _schreibe(tmp_path, [
+        {
+            "kind": "loop_started", "run_id": "r-chat",
+            "project": "demo", "timestamp": jetzt.isoformat(),
+            "agent": "agent_pipeline",
+        },
+    ])
+    store = _es.EventStore()
+    store.append(
+        "r-chat", "chat_job_started", "chat", "running",
+        {"job_id": "job-1", "session_id": "session-1"},
+        event_id="chat-job:job-1:1", project="demo",
+    )
+    store.append(
+        "r-chat", "chat_job_failed", "chat", "failed",
+        {"job_id": "job-other", "session_id": "session-2"},
+        event_id="chat-job:job-other:1", project="other-project",
+    )
+
+    feed = inspector.aggregate_live_feed("demo")
+    chat_steps = [
+        step for step in feed["steps"] if step["kind"] == "chat_job_started"
+    ]
+
+    assert len(chat_steps) == 1
+    assert chat_steps[0]["rolle"] == "chat"
+    assert chat_steps[0]["status"] == "running"
+    assert chat_steps[0]["detail"] == "Projekt wird geprueft"
+
