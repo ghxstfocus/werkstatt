@@ -462,7 +462,13 @@ def test_start_waehlt_einzige_pruefbare_offene_op(
     )
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
     _reset_loop_registry(app_modul)
-    monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
+    audit_events: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    class _CapturingEventStore:
+        def append(self, *args: Any, **kwargs: Any) -> None:
+            audit_events.append((args, kwargs))
+
+    monkeypatch.setattr(app_modul, "EventStore", _CapturingEventStore)
     aufrufe: list[list[str]] = []
     monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
     client = TestClient(app_modul.app)
@@ -471,6 +477,8 @@ def test_start_waehlt_einzige_pruefbare_offene_op(
 
     assert antwort.status_code == 200
     assert antwort.json()["op_id"] == "OP-101"
+    assert audit_events[0][0][1] == "web_op_selected"
+    assert audit_events[0][1]["payload"]["op_id"] == "OP-101"
     assert antwort.json()["auswahl"]["id"] == "OP-101"
     assert "### OP-101:" in antwort.json()["aufgabe"]
     assert aufrufe
