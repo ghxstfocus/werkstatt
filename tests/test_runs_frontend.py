@@ -1,4 +1,4 @@
-"""OP-303 Frontend-Smoke: runs.js run-status + Start/Stop."""
+"""Runs-Frontend: Loop-Status, Steuerung und Feedback."""
 from pathlib import Path
 
 
@@ -13,7 +13,7 @@ def _css():
 def test_js_fetcht_run_status():
     js = _js()
     assert "/ops/run-status" in js
-    assert "_rendere(ops, runStatus)" in js or "_rendere(_letzteOps, rs)" in js
+    assert "_rendere(ops, runStatus, loopControl)" in js or "_rendere(_letzteOps, rs, _loopControl)" in js
 
 
 def test_js_hat_start_stop():
@@ -22,6 +22,8 @@ def test_js_hat_start_stop():
     # Aktion ist Variable (start/stop), URL wird dynamisch gebaut
     assert '"start"' in js or "'start'" in js
     assert '"stop"' in js or "'stop'" in js
+    assert '"pause"' in js or "'pause'" in js
+    assert '"resume"' in js or "'resume'" in js
     assert '"/" + aktion' in js or "'/'" in js or 'aktion' in js
 
 
@@ -53,3 +55,17 @@ def test_blockierte_ops_haben_keinen_startknopf():
     assert 'op.status === "open" && !op.blockiert_von' in js
     assert 'btn.disabled = true' in js
     assert 'btn.dataset.action = "blocked"' in js
+
+
+def test_js_fetcht_loop_status_und_zeigt_aktionsfeedback():
+    js = _js()
+    assert 'base + "/loop"' in js
+    assert 'setAttribute("aria-live", "polite")' in js
+    assert "fehlgeschlagen:" in js
+    assert "erfolgreich." in js
+
+
+def test_css_hat_loop_control_bar():
+    css = _css()
+    assert ".runs-control" in css
+    assert '.runs-action-btn[data-action="pause"]' in css
