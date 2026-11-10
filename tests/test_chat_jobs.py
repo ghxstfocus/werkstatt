@@ -200,5 +200,40 @@ def test_store_migrates_existing_jobs_table_for_worker_leases(
     with sqlite3.connect(db_path) as conn:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
 
-    assert {"worker_id", "heartbeat_at"} <= columns
+    assert {"worker_id", "heartbeat_at", "cancel_requested"} <= columns
+
+def test_queued_job_can_be_cancelled_once(tmp_path: Path) -> None:
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _created = store.create(
+        "session-a", "Frage", "read", "request-key-cancel-001",
+    )
+
+    result = store.request_cancel(job["job_id"], "session-a")
+
+    assert result == {"job_id": job["job_id"], "state": "cancelled"}
+    assert store.claim(job["job_id"]) is False
+    cancelled = store.get(job["job_id"])
+    assert cancelled is not None
+    assert cancelled["state"] == "cancelled"
+    assert cancelled["events"][-1]["kind"] == "cancelled"
+
+
+def test_running_job_cancellation_is_cooperative_and_terminal(
+    tmp_path: Path,
+) -> None:
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _created = store.create(
+        "session-a", "Frage", "read", "request-key-cancel-002",
+    )
+    assert store.claim(job["job_id"], "worker-a")
+
+    result = store.request_cancel(job["job_id"], "session-a")
+
+    assert result == {"job_id": job["job_id"], "state": "cancelling"}
+    assert store.cancellation_requested(job["job_id"], "worker-a")
+    assert store.finish(job["job_id"], cancelled=True)
+    cancelled = store.get(job["job_id"])
+    assert cancelled is not None
+    assert cancelled["state"] == "cancelled"
+    assert cancelled["events"][-1]["kind"] == "cancelled"
 
