@@ -121,6 +121,7 @@ def select_next_op(status_text: str) -> dict[str, Any]:
     else:
         state = "no_candidate"
         explanation = "Kein OP erfuellt alle Startkriterien."
+
     def public(item: dict[str, Any]) -> dict[str, Any]:
         return {key: value for key, value in item.items() if key != "aufgabe"}
     return {
