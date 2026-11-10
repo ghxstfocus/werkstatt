@@ -69,6 +69,32 @@ def test_fork_ohne_at_seq_kopiert_alles(db: Path) -> None:
     assert len(kopie) == 2
 
 
+def test_snapshot_to_is_stable_and_limited_to_context_watermark(db: Path) -> None:
+    parent = ChatSession("demo", "parent", db_pfad=db)
+    parent.append("user", {"text": "Frage 1"})
+    cutoff = parent.max_seq()
+    parent.append("assistant", {"text": "Antwort 1"})
+    branch = parent.snapshot_to("job-1", at_seq=cutoff)
+    parent.append("user", {"text": "spaeter eingereicht"})
+
+    assert [event["payload"]["text"] for event in branch.load()] == ["Frage 1"]
+    assert parent.snapshot_to("job-1", at_seq=parent.max_seq()).load() == branch.load()
+
+
+def test_append_job_turn_is_idempotent_and_reconstructs_history(db: Path) -> None:
+    session = ChatSession("demo", "parent", db_pfad=db)
+
+    assert session.append_job_turn("job-1", "Frage", "Antwort")
+    assert session.append_job_turn("job-1", "Frage", "Antwort") is False
+    events = session.load()
+    assert len(events) == 1
+    assert events[0]["kind"] == "job_turn"
+    assert derive_messages(events) == [
+        {"role": "user", "content": "Frage"},
+        {"role": "assistant", "content": "Antwort"},
+    ]
+
+
 def test_derive_messages_mapping(db: Path) -> None:
     s = ChatSession("demo", "s1", db_pfad=db)
     s.append("user", {"text": "was ist x?"})
