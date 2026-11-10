@@ -25,7 +25,13 @@ from werkstatt.model_routing import canonical_model_name, route_for_role
 )
 def test_operational_roles_use_flash_without_thinking(
     role: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    route_label = "chat" if role == "debugger" else role
+    monkeypatch.delenv(
+        f"WERKSTATT_MODEL_{route_label.upper().replace('-', '_')}",
+        raising=False,
+    )
     route = route_for_role(role, requested_model="deepseek-v4-pro")
 
     assert route.model == "deepseek-flash"
@@ -33,7 +39,11 @@ def test_operational_roles_use_flash_without_thinking(
     assert route.reasoning_effort is None
 
 
-def test_architect_uses_pro_thinking_for_legacy_reasoner_alias() -> None:
+def test_architect_uses_pro_thinking_for_legacy_reasoner_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("WERKSTATT_MODEL_ARCHITECT", raising=False)
+    monkeypatch.delenv("WERKSTATT_ARCHITECT_MODEL", raising=False)
     route = route_for_role("architect", requested_model="deepseek-reasoner")
 
     assert route.model == "deepseek-v4-pro"
@@ -45,6 +55,7 @@ def test_role_override_is_scoped_and_keeps_role_thinking_policy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("WERKSTATT_MODEL_BUILDER", "deepseek-v4-pro")
+    monkeypatch.delenv("WERKSTATT_MODEL_REVIEWER", raising=False)
 
     builder = route_for_role("builder")
     reviewer = route_for_role("reviewer")
