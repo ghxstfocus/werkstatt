@@ -75,3 +75,25 @@ def test_query_since_seq_export(tmp_path: Path) -> None:
 
     export_json = json.dumps(export, default=str)
     assert json.loads(export_json)[0]["seq"] == seq_zweit
+
+def test_append_with_event_id_is_idempotent_and_project_scoped(
+    tmp_path: Path,
+) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+
+    first = store.append(
+        "run-a", "chat_job_queued", "chat", "queued",
+        {"job_id": "job-1"}, event_id="chat-job:job-1:1", project="demo",
+    )
+    retry = store.append(
+        "run-a", "chat_job_queued", "chat", "queued",
+        {"job_id": "job-1", "retry": True},
+        event_id="chat-job:job-1:1", project="demo",
+    )
+
+    assert retry == first
+    events = store.query("run-a", project="demo")
+    assert len(events) == 1
+    assert events[0]["payload"] == {"job_id": "job-1"}
+    assert store.query("run-a", project="other") == []
+
