@@ -130,7 +130,7 @@ class ChatSession:
 
     def snapshot_to(
         self, target_session_id: str, *, at_seq: int | None = None,
-    ) -> "ChatSession":
+    ) -> ChatSession:
         """Kopiert einen unveraenderlichen Kontext-Snapshot idempotent."""
         if target_session_id == self.session_id:
             raise ValueError("Snapshot-Ziel muss eine eigene Session sein")
