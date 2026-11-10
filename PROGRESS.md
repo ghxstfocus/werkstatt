@@ -4550,6 +4550,6 @@ Die AST-Pruefung parst nun alle Python-Quellen im Repository ausser virtuellen U
 
 ## Serververifikation fuer Chat-Replay, OP-398 und Quality-Gate-Tests (2026-11-10)
 
-Auf `/opt/werkstatt` wurde `9c505cb` getestet: gezielt 50 Tests bestanden, Ruff ohne Fehler, Gesamtsuite 1885 passed / 5 skipped. `doku_check --strict --limit 10 --worktree` erkannte die bereits in dieser Datei referenzierten Code-Commits fuer den OP-398- und Quality-Gate-Fix; uebrig blieb der Working-Tree-Drift fuer lokale Aenderungen an `werkstatt/web/audit_panel.py` und `werkstatt/web/terminal_proxy.py`. Die abschliessende JSON-Ausgabe von `tools.quality_gate` war im Laufprotokoll nicht enthalten; AST-/Katalog-Ergebnis fuer den neuen Gate-Code ist daher noch nicht bestaetigt.
+Auf `/opt/werkstatt` wurde `9c505cb` getestet: gezielt 50 Tests bestanden, Ruff ohne Fehler, Gesamtsuite 1885 passed / 5 skipped. `doku_check --strict --limit 10 --worktree` erkannte die bereits in dieser Datei referenzierten Code-Commits fuer den OP-398- und Quality-Gate-Fix; uebrig blieb der Working-Tree-Drift fuer lokale Aenderungen an `werkstatt/web/audit_panel.py` und `werkstatt/web/terminal_proxy.py`. `tools.quality_gate --json` lief ebenfalls erfolgreich: 1885 passed / 0 failed, Ruff 0, Mypy 0, AST 369 Dateien / 0 Fehler und Audit-Katalog 1 passed / 0 Fehler; `ok: true`, `regression: false`.
 
 - **Commit:** `9c505cbc9e521fc20a99d5def5a6ce45dd03a232`
