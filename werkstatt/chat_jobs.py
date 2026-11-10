@@ -265,6 +265,20 @@ class ChatJobStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def reconnect_for_session(
+        self, session_id: str, *, failed_limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Aktive Jobs plus letzte Fehler einer Session in Erstellreihenfolge."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT * FROM jobs WHERE session_id=? AND ("
+                "state IN ('queued','running') OR job_id IN ("
+                "SELECT job_id FROM jobs WHERE session_id=? AND state='failed' "
+                "ORDER BY rowid DESC LIMIT ?)) ORDER BY rowid",
+                (session_id, session_id, max(0, failed_limit)),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def get(
         self, job_id: str, *, since_seq: int = 0,
     ) -> dict[str, Any] | None:
