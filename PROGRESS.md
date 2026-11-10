@@ -4525,3 +4525,8 @@ Der Frontend-Vertragstest akzeptiert jetzt den mehrzeiligen `_jobFertig`-Aufruf 
 ## Chatjob-Replay an Session gebunden (2026-11-10)
 
 Der Event-Replay-Endpunkt akzeptiert jetzt eine Session-ID und liefert einen Job nur fuer die Session aus, die ihn angelegt hat. Der Poller sendet den Session-Kontext mit; API-Tests pruefen Zugriff innerhalb der Session und Verbergen bei fremder Session. Vor einem Reconnect-Dispatch wird zuerst die Session-Zugehoerigkeit geprueft. Serververifikation steht aus.
+
+
+## Expliziter OP-Start blockiert bei unbekannter Abhaengigkeit (2026-11-10)
+
+Der Web-Start-Endpunkt verweigerte bereits erkannte offene Blocker, uebersah aber unbekannte oder widerspruechliche Blocker bei einer expliziten OP-Auswahl. Der Ausschlussgrund wird jetzt ebenfalls als 409 zurueckgegeben; ein API-Regressionstest prueft, dass kein Prozess startet. Serververifikation steht aus.
