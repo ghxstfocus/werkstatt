@@ -2849,6 +2849,20 @@ body[data-mode="control"] .lf-step-detail {
 .chat-status[data-status="working"] { color: #c4b5fd; }
 .chat-status[data-status="error"] { color: #fca5a5; }
 .chat-status[data-status="loading"] { color: #c4b5fd; }
+.chat-status[data-status="cancelling"] { color: #fda4af; }
+.chat-cancel-btn {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.16);
+  color: #fca5a5;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.chat-cancel-btn:hover:not(:disabled) { background: rgba(127, 29, 29, 0.32); }
+.chat-cancel-btn:disabled { cursor: wait; opacity: 0.65; }
 .chat-composer { flex: 1 1 auto; min-width: 0; }
 .chat-composer-hint {
   display: block;
