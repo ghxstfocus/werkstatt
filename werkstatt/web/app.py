@@ -870,6 +870,8 @@ def create_app() -> FastAPI:
                         projektname, run_id, "web_loop_stopped", "stopped",
                         {"pid": prozess.pid},
                     )
+                except (OSError, RuntimeError, sqlite3.Error, ValueError):
+                    audit_ok = False
             _loop_registry().set_state(projektname, run_id, "idle")
             _LAUFENDE_LOOPS.pop(projektname, None)
             _LOOP_RUN_IDS.pop(projektname, None)

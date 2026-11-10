@@ -4698,3 +4698,8 @@ Der Event-Store kann Events jetzt mit Projektbezug und deterministischer Event-I
 - Web-Control- und Chat-Job-Ereignisse werden dauerhaft in Semantic-JSONL geschrieben; SQLite wird nur noch durch den Projektor beschrieben.
 - Job-Events nutzen stabile Event-IDs und eine Outbox-Migration, sodass ein Read-Model-Rebuild sie wiederherstellt. Live-Feed dedupliziert JSONL- und Read-Model-Kopien.
 - Tests und Dokumentation ergänzt. Serververifikation nach Pull steht aus.
+
+
+## Syntax-Reparatur fuer Audit-Projektor-Patch (2026-11-11)
+
+- Server-Testsammlung meldete einen fehlerhaften Katalogabschluss in `werkstatt/audit.py` und ein fehlendes `except` im Web-Stop-Handler. Beide Syntaxfehler sind repariert; erneute Serververifikation ausstehend.
