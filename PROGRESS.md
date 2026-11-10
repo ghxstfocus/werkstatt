@@ -4324,3 +4324,16 @@ an ADR-0010s `project`-Scope angepasst.
 - **STATUS:** `8db8d84ccd5d`, `f3f3c2645f9b`.
 - **Serververifikation:** zielgerichtete Tests, Ruff, Doku-Check und
   Quality-Gate nach Pull noch ausstehend.
+
+
+### OP-398 — explizite OP-Starts ohne Blockerfeld gegen Phase-Gate pruefen (2026-11-10)
+
+Beim Nachpruefen des neuen Backend-Tests fiel auf, dass der direkte Startpfad
+Blocker nur dann erneut auswertete, wenn `inspector.parse_ops` ein nichtleeres
+`Blockiert von`-Feld lieferte. Phase-3-OPs ohne Blockerfeld konnten dadurch am
+Roadmap-Gate vorbeilaufen. Der direkte Start wertet jetzt fuer jede explizite
+OP-ID die Selector-Ausschlussgruende aus; die bestehende Testfixture mit
+`Blockiert von: —` prueft genau diesen Bypass.
+
+- **Commit:** `0ea9b8878c33` — Phase-Gate auch ohne Blockerfeld erzwingen.
+- **Serververifikation:** nach Pull noch ausstehend.
