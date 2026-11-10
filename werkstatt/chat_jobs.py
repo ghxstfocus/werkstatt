@@ -26,7 +26,7 @@ class IdempotencyConflict(ValueError):
 
 _EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="werkstatt-chat")
 _FUTURES: dict[str, Future[None]] = {}
-_FUTURES_LOCK = threading.Lock()
+_FUTURES_LOCK = threading.RLock()
 
 
 def _now() -> str:
@@ -282,10 +282,23 @@ def _dispatch_pending(
             current = _FUTURES.get(key)
             if current is not None and not current.done():
                 continue
-            _FUTURES[key] = _EXECUTOR.submit(
+            future = _EXECUTOR.submit(
                 _run_job, db_path, project, project_dir, job["job_id"],
             )
+            _FUTURES[key] = future
+            future.add_done_callback(
+                lambda completed, future_key=key: _forget_future(
+                    future_key, completed,
+                ),
+            )
 
+
+
+def _forget_future(key: str, future: Future[None]) -> None:
+    """Entfernt abgeschlossene Futures ohne neuere Eintraege zu loeschen."""
+    with _FUTURES_LOCK:
+        if _FUTURES.get(key) is future:
+            _FUTURES.pop(key, None)
 
 def resume_chat_jobs(
     project: str, project_dir: Path, *, db_path: Path | None = None,
