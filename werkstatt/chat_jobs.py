@@ -164,6 +164,16 @@ class ChatJobStore:
             conn.commit()
             return cur.rowcount == 1
 
+    def active_for_session(self, session_id: str) -> list[dict[str, Any]]:
+        """Liefert queued/running Jobs fuer UI-Reconnect in Erstellreihenfolge."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT * FROM jobs WHERE session_id=? "
+                "AND state IN ('queued','running') ORDER BY created_at,job_id",
+                (session_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def get(
         self, job_id: str, *, since_seq: int = 0,
     ) -> dict[str, Any] | None:
