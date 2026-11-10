@@ -55,8 +55,8 @@ def test_reconnect_renders_failed_background_jobs() -> None:
     start = js.index("function _resumeChatJobs")
     ende = js.index("function _sende", start)
     resume = js[start:ende]
-    assert 'if (item.state === "failed")' in resume
-    assert '_jobFertig(job, "failed", "", item.error' in resume
+    assert 'item.state === "failed" || item.state === "cancelled"' in resume
+    assert '_jobFertig(job, item.state, ""' in resume
     assert "if (aktiveJobs)" in resume
 
 def test_chat_can_cancel_background_jobs_without_blocking_composer() -> None:
