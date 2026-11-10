@@ -61,11 +61,13 @@ konkrete Aktion und ihren Umfang und wartet auf ausdrueckliche
 Freigabe. Diese Freigabe gilt nur fuer genau diese Aktion und ersetzt
 weder Loop-Gates noch weitere Freigaben fuer neue Schreibaktionen.
 Schreibende Code-Arbeit laeuft durch denselben Patch-, Verify-,
-Review- und Human-Gate-Pfad wie ein normaler Loop-Lauf. Das Plan-Gate
-ist immer verpflichtend: kein CLI-Schalter und keine Projektoption
-duerfen es ueberspringen. Start, Pause, Resume und Stop sind explizite
-Kontrollaktionen. Gates und menschliche Entscheidungen werden nie aus
-Chat-Prosa abgeleitet oder automatisch bestaetigt.
+Review- und Human-Gate-Pfad wie ein normaler Loop-Lauf. Plan-Gate und
+abschliessendes Human-Gate sind verpflichtend: weder CLI-Schalter noch
+Projektkonfiguration (einschliesslich des Legacy-Felds
+`require_human_approval`) duerfen sie ueberspringen. Start, Pause, Resume
+und Stop sind explizite Kontrollaktionen. Gates und menschliche
+Entscheidungen werden nie aus Chat-Prosa abgeleitet oder automatisch
+bestaetigt.
 
 ### 3. Hintergrundarbeit bleibt asynchron und sichtbar
 

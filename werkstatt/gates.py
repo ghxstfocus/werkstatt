@@ -615,9 +615,8 @@ def _human_gate_body(state) -> str:
 def _human_gate(state: RunState, *, defer_commit: bool = False) -> int:
     """Eigenes Human-Gate im Loop (fail-closed).
 
-    Liest require_human_approval aus der Zielprojekt-Config.
-    - false: automatisch approve (rc=0).
-    - true: Gate-Antwort abwarten, bei EOF/Abbruch -> reject (rc=1).
+    Projektkonfiguration kann dieses Human-Gate nicht deaktivieren.
+    Bei EOF/Abbruch wird fail-closed abgelehnt (rc=1).
     - defer_commit=True: explizites j gibt rc=2 zurueck; der Aufrufer
       muss erst nach erfolgreichem Verify committen.
     """
@@ -625,23 +624,6 @@ def _human_gate(state: RunState, *, defer_commit: bool = False) -> int:
     pn = getattr(state, "project_name", "?")
     if pd is None:
         return 1
-
-    # Config aus dem Zielprojekt lesen
-    require = True
-    from werkstatt.paths import project_config as _project_config
-    cfg_path = _project_config(pn)
-    if cfg_path.exists():
-        try:
-            import yaml
-            with cfg_path.open() as fh:
-                cfg = yaml.safe_load(fh) or {}
-            require = bool(cfg.get("require_human_approval", True))
-        except Exception:
-            pass
-
-    if not require:
-        audit("loop_human_gate_auto", {"reason": "require_human_approval=false"}, pd, pn)
-        return 0
 
     # Im Test-Kontext: automatisch approven (kein input())
     import os as _os

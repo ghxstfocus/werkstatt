@@ -89,17 +89,22 @@ def test_gate_kein_project_dir():
 
 
 # =====================================================================
-# Pfad 2: require_human_approval=false -> auto approve
+# Pfad 2: Projektconfig darf Human-Gate nicht deaktivieren
 # =====================================================================
 
-def test_gate_auto_approve(tmp_path, cfg_file):
+def test_gate_config_false_bleibt_fail_closed(tmp_path, monkeypatch, cfg_file):
     cfg_file.write_text("require_human_approval: false\n",
                         encoding="utf-8")
+    monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
+
+    def _raise_eof(*_args, **_kwargs):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", _raise_eof)
     s = _state(tmp_path)
-    assert loop._human_gate(s) == 0
-    ev = _kind(tmp_path, "loop_human_gate_auto")
-    assert len(ev) == 1
-    assert ev[0]["reason"] == "require_human_approval=false"
+    assert loop._human_gate(s) == 1
+    assert not _kind(tmp_path, "loop_human_gate_auto")
+    assert len(_kind(tmp_path, "loop_human_gate_eof")) == 1
 
 
 # =====================================================================

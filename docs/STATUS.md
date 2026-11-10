@@ -49,6 +49,7 @@ noch nicht vollstaendig.
   - Vor jeder schreibenden Chat-Aktion fragt das System nach ausdruecklicher Freigabe; die Freigabe gilt nur fuer die konkret beschriebene Aktion und ihren Umfang.
   - Das Plan-Gate ist immer verpflichtend und darf weder per CLI-Flag noch Projektkonfiguration automatisch bestaetigt oder deaktiviert werden. Auch Chat-Freigabe ersetzt dieses Gate nicht; der Scout-No-Op-Pfad muss den Befund ebenfalls vor dem Ergebnis-Gate freigeben lassen.
   - Code-Aenderungen durchlaufen weiterhin Verify, Review und das bestehende Human-Gate. Chat kann kein Gate implizit bestaetigen.
+  - Auch das abschliessende Human-Gate bleibt verpflichtend; `require_human_approval: false` darf keine automatische Freigabe ausloesen.
   - Lange Tool-Aufrufe blockieren weder Loop-Prozess noch weitere Chat-Nachrichten.
 - **Tests:** Projekt-Isolation, Belegdarstellung, explizite Loop-Kontrolle, Human-Gate-Invariante und Chat waehrend aktivem Run.
 - **Blockiert von:** —

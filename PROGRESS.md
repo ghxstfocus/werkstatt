@@ -4727,3 +4727,10 @@ Der Event-Store kann Events jetzt mit Projektbezug und deterministischer Event-I
 - Code-Audit gegen ADR-0029 fand im Phase-Review-Gate die Option `a = auto bis Ende`. Sie setzte `phase_review_auto`, wodurch ein spaeteres Human-Gate derselben Reflection-Invocation uebersprungen wurde.
 - Die Auto-Option und der Skip-Merker sind entfernt. Nach jeder Reviewer-Ablehnung wird erneut eine konkrete menschliche Entscheidung verlangt; unbekannte Antworten wie `a` geben nicht frei und werden erneut abgefragt. Tests sichern die UI/Gate-Optionen und beide Reject-Runden.
 - Serververifikation nach Pull steht aus.
+
+
+## Finales Human-Gate nicht per Projektconfig abschaltbar (2026-11-11)
+
+- Der Code-Audit fand im finalen Human-Gate einen zweiten Auto-Freigabe-Pfad: `require_human_approval: false` beendete das Gate mit Erfolg, bevor eine menschliche Antwort eingeholt wurde.
+- Der Config-Bypass ist entfernt. Eine Legacy-Konfiguration mit `false` bleibt fail-closed und verlangt weiterhin eine ausdrueckliche menschliche Antwort; EOF wird abgelehnt. Tests und ADR-0029/OP-396-Doku aktualisiert.
+- Serververifikation nach Pull steht aus.
