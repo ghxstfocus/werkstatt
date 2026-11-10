@@ -577,6 +577,8 @@ def test_autonomous_start_resolves_dependency_completed_in_progress(
     )
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
     _reset_loop_registry(app_modul)
+    if app_modul.os.name == "posix":
+        monkeypatch.setattr(app_modul.os, "killpg", lambda *_: None)
     aufrufe: list[list[str]] = []
     monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
     monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
