@@ -1419,7 +1419,7 @@ noch nicht vollstaendig.
   (c) `reviewer_bugs` nur `severity in ("HIGH", "critical")`, `medium`/`low` weg.
   (d) Wenn keine HIGH-/critical-Bugs uebrig bleiben, werden keine medium-/low-Bugs nachgeschoben. Der Prompt enthaelt stattdessen einen expliziten Hinweis, dass der Severity-Filter keine Reviewer-Bugs uebrigliess. Deterministische Verify-Fehler bleiben davon unberuehrt.
   (e) Live: Reflection-Prompt messbar kleiner (Vergleich in PROGRESS.md).
-- **Tests:** `tests/test_builder_agent.py` (HIGH/critical-Filter und leerer Filter-Fallback); `tests/test_reflection_kontext.py` (Diff statt Datei, Fehlerkern-Extraktion, Severity-Filter und bounded fallback).
+- **Tests:** `tests/test_builder_agent.py` (HIGH/critical-Filter, leerer Filter-Fallback, beide Resume-Feedbackquellen); `tests/test_reflection_kontext.py` (Diff statt Datei, Fehlerkern-Extraktion, Severity-Filter und begrenzter Fallback).
 - **ADR:** —
 
 ### OP-387: JIT-Retrieval fuer Architect (view_api-Tool)
