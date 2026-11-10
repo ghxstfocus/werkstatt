@@ -4040,3 +4040,8 @@ Der Gate-API-Endpunkt liest jetzt die Spezifikation des konkreten offenen Gates 
 ### 2026-11-10 — Serververifikation: Gate-API-Optionsschutz
 
 Verifiziert auf Server-HEAD `c3a28db`: Gate-/Chat-Tests 32 passed; vollstaendige Suite 1791 passed, 5 skipped; Ruff 0; mypy 0; Quality-Gate `ok: true`, `regression: false`. Unzulaessige Button-Antworten werden ohne `gate_answered`-Event zurueckgewiesen; gueltige Optionen und Freitext-Gates bestehen. AST- und Katalogpruefungen bleiben uebersprungen, weil `tests/test_audit_kinds.py` und `pipeline.py` fehlen.
+
+
+### 2026-11-10 — Doku-Drift vor Commit fail-closed pruefen
+
+OP-280 wird gegen den tatsaechlichen Verify-Zeitpunkt abgesichert: Die bisherige `doku_check.py` wertete nur bereits committete Historie aus und konnte den gerade entstehenden Patch vor dem Commit nicht beurteilen. Ergaenzt wurden ein Working-Tree-Modus fuer staged, unstaged und untracked Dateien, eine harte `phase_end`-Verify-Stage und Tests. Die Historienpruefung bleibt als Zusatzdiagnose erhalten. **Serververifikation ausstehend.**

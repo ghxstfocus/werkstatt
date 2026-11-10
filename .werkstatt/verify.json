@@ -97,6 +97,20 @@
       "hart": true
     },
     {
+      "id": "doku_drift",
+      "command": [
+        "python3",
+        "tools/doku_check.py",
+        "--strict",
+        "--limit",
+        "5",
+        "--worktree"
+      ],
+      "phase": "phase_end",
+      "timeout": 30,
+      "hart": true
+    },
+    {
       "id": "pytest_regression",
       "command": [
         "python3",

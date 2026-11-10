@@ -121,28 +121,32 @@ noch nicht vollstaendig.
 ### OP-280: Doku-Drift als Verify-Gate (deterministisch)
 
 - **Status:** open
-- **Beschreibung:** `tools/doku_check.py` ist gebaut, aber noch nicht
-  im Loop-Gate. Commits mit Subject `feat/fix/chore/...` und Code-
-  Aenderung ohne Doku-Aenderung sollen als eigene verify-Stage laufen.
-  Wenn Verdacht: Gate rot, Commit blockiert. Ausnahmen (docs(, test(,
-  ci(, [skip-doku]) bereits implementiert.
-
+- **Beschreibung:** `tools/doku_check.py` prueft bisher nur
+  bereits committete Historie. Eine Verify-Stage vor dem Commit muss
+  zusaetzlich staged, unstaged und untracked Aenderungen im aktuellen
+  Working Tree pruefen; sonst kann sie den gerade entstehenden Patch
+  nicht absichern. Code-Aenderungen ohne Doku-Aenderung blockieren den
+  Commit. Die Commit-Historie bleibt eine zusaetzliche Drift-Diagnose.
+  Ausnahmen fuer Commit-Subjects (`docs(`, `test(`, `ci(`,
+  [skip-doku]) gelten nur fuer die Historienpruefung.
   Ziel: Doku-Pflege ist strukturell erzwungen, nicht Erinnerung des
   Menschen. Begruendung: der Loop liest seine Queue aus docs/STATUS.md.
   Wenn dort stale OPs stehen (Beispiel 2026-11-03: Chat-Agent
   empfahl OP-084/085, obwohl beide bereits durch 82502f0..98a53d3
   erledigt waren), arbeitet der Loop gegen Phantom-Eintraege.
-- **Betroffene Dateien:** `.werkstatt/verify.json` (neue Stage
-  `doku_drift`), `tools/doku_check.py` (nutzen), `tests/test_doku_check.py`
-  (neu), `AGENTS.md` (Pflicht-Befehl dokumentieren)
-- **Akzeptanzkriterien:** (a) `verify.json` enthaelt Stage
-  `doku_drift` mit Command `python3 tools/doku_check.py --strict
-  --limit 5`. (b) Stage ist `hart=True`, blockiert Commit. (c) Tests
-  `tests/test_doku_check.py` mit 4 Szenarien: Verdacht erkannt,
-  Doku-Aenderung da, `[skip-doku]` greift, `docs(`-Scope greift.
-  (d) `python3 tools/doku_check.py --strict` im Repo aktuell
-  exit 0 (kein Verdacht in letzten 5 Commits) — sonst Commit
-  sowieso blockiert.
+- **Betroffene Dateien:** `.werkstatt/verify.json` (harte
+  `phase_end`-Stage `doku_drift`), `tools/doku_check.py`,
+  `tests/test_doku_check.py`, `AGENTS.md`.
+- **Akzeptanzkriterien:** (a) Verify-Stage ruft
+  `python3 tools/doku_check.py --strict --limit 5 --worktree` in
+  `phase_end` auf, nach allen Builder-Tasks und vor dem Commit.
+  (b) Staged, unstaged und untracked Code-Aenderungen ohne
+  Doku-Aenderung blockieren. Geloeschte Doku allein gilt nicht als
+  Update. (c) Historienpruefung behaelt die Ausnahmen `docs(`,
+  `test(`, `ci(`, `[skip-doku]`). (d) Tests decken Code-only,
+  Code-plus-Doku, geloeschte Doku, untracked Code und die vier
+  Historienfaelle ab. (e) `python3 tools/doku_check.py --strict
+  --limit 5 --worktree` auf dem Werkstatt-Repo ist gruen.
 - **Tests:** `pytest tests/test_doku_check.py -v`
 - **Blockiert von:** —
 

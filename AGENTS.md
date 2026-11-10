@@ -117,6 +117,10 @@ Kontrollen mit Phase, Haerte, Prioritaet) und `--dead` (zeigt
 unregistrierte Kandidaten) — damit der Mensch bei rotem Gate weiss,
 welches Kommando die Diagnose liefert, ohne den Code zu lesen.
 - `pytest_regression` (hart, phase_end)
+- `doku_drift` (hart, phase_end) — prueft letzte 5 Commits und
+  staged, unstaged sowie untracked Working-Tree-Aenderungen mit
+  `python3 tools/doku_check.py --strict --limit 5 --worktree`.
+  Code-Aenderungen ohne geaenderte Projektdoku blockieren den Commit.
 
 **Pre-Reviewer-Gate** (`werkstatt/verify_classify.py` + `_phase_tasks_loop`):
 Vor jedem Reviewer-Aufruf werden `_v_weich`-Fehler klassifiziert. Harte
