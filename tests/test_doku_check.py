@@ -117,3 +117,25 @@ def test_main_strict_blockiert_worktree_drift(
 
     assert doku_check.main(["--strict", "--worktree"]) == 1
     assert "Working Tree" in capsys.readouterr().out
+
+
+def test_pruefe_commits_akzeptiert_explizite_progress_hash_referenz(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sha = "1234567890abcdef" * 2 + "12345678"
+    (tmp_path / "PROGRESS.md").write_text(
+        f"- **Commit:** `{sha[:12]}` — dokumentierter OP-Fix.\n",
+        encoding="utf-8",
+    )
+
+    def fake_git(*args: str, cwd: Path | None = None) -> str:
+        if args[:1] == ("log",):
+            return f"{sha}|feat(chat): add selected work tool\n"
+        if args[:1] == ("show",):
+            return "werkstatt/chat_tools.py\n"
+        raise AssertionError(f"unerwarteter git-Aufruf: {args}")
+
+    monkeypatch.setattr(doku_check, "_git", fake_git)
+
+    assert doku_check.pruefe_commits(limit=5, cwd=tmp_path) == []
