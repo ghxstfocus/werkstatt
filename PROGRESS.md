@@ -4030,3 +4030,8 @@ Der STATUS-Parser listet OP-231 und OP-233 nicht mehr als offene Punkte; PROGRES
 ### 2026-11-10 — Serververifikation: Gate-Chat-Uebergabe
 
 Verifiziert auf Server-HEAD `af91cf6`: Gate-/Chat-Tests 28 passed; vollstaendige Suite 1787 passed, 5 skipped; Ruff 0; mypy 0; Quality-Gate `ok: true`, `regression: false`. Die Option „Im Chat debuggen“ uebergibt den Projekt-/Run-/Gate-Kontext an den Chat, ohne das Gate zu beantworten. Die Option `a` ist als „Plan anpassen“ beschriftet; revidierte/Scout-No-Op-Plaene haben nur `j/n`. AST- und Katalogpruefungen bleiben uebersprungen, weil `tests/test_audit_kinds.py` und `pipeline.py` im Serverstand fehlen. Die maschinenlesbare Patch-Freigabe und Uebergabe an den Loop bleibt noch offen.
+
+
+### 2026-11-10 — Gate-Antworten serverseitig an Optionen binden
+
+Der Gate-API-Endpunkt liest jetzt die Spezifikation des konkreten offenen Gates und akzeptiert bei Button-Gates nur eine einzelne angebotene Auswahl. Freitext-Gates bleiben unterstützt; leere oder überlange Antworten werden abgewiesen. Neue API-Tests decken unzulässige Zustimmungen, gültige Button-Auswahl und Freitext ab. Die Änderung folgt der Human-Gate-Invariante aus ADR-0029: nur eine explizite, tatsächlich angebotene Gate-Antwort darf den Loop fortsetzen. **Serververifikation ausstehend.**

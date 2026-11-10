@@ -227,11 +227,23 @@ def _registriere_event_routen(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail="gate_id fehlt")
         if not isinstance(answer, str) or not answer:
             raise HTTPException(status_code=400, detail="answer fehlt")
+        answer = answer.strip()
+        if not answer:
+            raise HTTPException(status_code=400, detail="answer fehlt")
+        if len(answer) > 20_000:
+            raise HTTPException(status_code=413, detail="answer zu lang")
+
         store = EventStore()
-        offen = {
-            (ev.get("payload") or {}).get("gate_id")
-            for ev in store.query(geprueft, kind="gate_open")
-        }
+        gate_events = store.query(geprueft, kind="gate_open")
+        gate_event = next(
+            (
+                ev for ev in gate_events
+                if (ev.get("payload") or {}).get("gate_id") == gate_id
+            ),
+            None,
+        )
+        if gate_event is None:
+            raise HTTPException(status_code=404, detail="gate nicht offen")
         beantwortet = {
             (ev.get("payload") or {}).get("gate_id")
             for ev in store.query(geprueft, kind="gate_answered")
@@ -240,13 +252,30 @@ def _registriere_event_routen(app: FastAPI) -> None:
             (ev.get("payload") or {}).get("gate_id")
             for ev in store.query(geprueft, kind="gate_expired")
         }
-        if gate_id not in offen:
-            raise HTTPException(status_code=404, detail="gate nicht offen")
         if gate_id in abgelaufen:
             raise HTTPException(status_code=410,
                                 detail="gate abgelaufen (timeout)")
         if gate_id in beantwortet:
             raise HTTPException(status_code=409, detail="gate schon beantwortet")
+
+        gate_payload = gate_event.get("payload") or {}
+        if gate_payload.get("typ") != "freitext":
+            optionen = gate_payload.get("optionen", "jna")
+            if (
+                not isinstance(optionen, str)
+                or not optionen
+                or any(zeichen not in "jnea" for zeichen in optionen)
+            ):
+                raise HTTPException(
+                    status_code=422, detail="Gate-Optionen ungueltig",
+                )
+            answer = answer.lower()
+            if len(answer) != 1 or answer not in optionen:
+                raise HTTPException(
+                    status_code=422,
+                    detail="answer ist keine angebotene Gate-Option",
+                )
+
         # OP-323c: audit() statt store.append() + flush fuer wait()
         from pathlib import Path as _Path
 
