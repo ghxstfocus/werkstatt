@@ -1093,7 +1093,7 @@ def create_app() -> FastAPI:
     @app.post("/api/projects/{name}/chat/jobs", status_code=202)
     def chat_job_create(name: str, body: dict[str, Any]) -> dict[str, Any]:
         """Persistiert Chat-Arbeit und kehrt sofort mit einer Job-ID zurueck."""
-        from werkstatt.chat_jobs import enqueue_chat_job
+        from werkstatt.chat_jobs import IdempotencyConflict, enqueue_chat_job
 
         projekt = _pruefe_projektname(name)
         session_id = body.get("session_id")
@@ -1127,6 +1127,8 @@ def create_app() -> FastAPI:
                 idempotency_key,
                 db_path=db_path,
             )
+        except IdempotencyConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
             raise HTTPException(
                 status_code=500, detail=f"Chat-Job konnte nicht gestartet werden: {exc}",
