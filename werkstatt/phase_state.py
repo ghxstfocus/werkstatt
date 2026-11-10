@@ -176,15 +176,16 @@ class PhaseState:
         ]
 
     def resume_failed(self) -> int:
-        """M-310c: Setzt failed-Tasks auf pending (Resume nach Abbruch).
+        """Setzt failed-, running- und blockierte Tasks beim Resume zurueck.
 
         Returns: Anzahl reaktivierter Tasks.
         """
         n = 0
         for task in self.data.get("tasks", []):
-            # K1: failed UND running zuruecksetzen. running-Tasks
-            # sind Reste eines abgebrochenen Laufs.
-            if task.get("status") in ("failed", "running"):
+            # K1: running-Tasks sind Reste eines abgebrochenen Laufs.
+            # OP-163: Blocked-Tasks muessen ebenfalls reaktiviert werden,
+            # damit sie nach erfolgreichem Resume ihrer Abhaengigkeit laufen.
+            if task.get("status") in ("failed", "running", "blocked"):
                 task["status"] = "pending"
                 task["failure"] = None
                 n += 1

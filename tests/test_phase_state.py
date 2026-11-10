@@ -86,3 +86,22 @@ def test_resume_failed_keine_failed_tasks(tmp_path):
     ps.mark_done("t1")
     n = ps.resume_failed()
     assert n == 0
+
+
+def test_resume_blocked_wird_nach_erfolgreicher_dependency_ausfuehrbar(tmp_path):
+    """Blocked-Tasks werden beim Resume reaktiviert und koennen deps nachholen."""
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.data = {
+        "tasks": [
+            {"id": "t1", "status": "failed", "dependencies": []},
+            {"id": "t2", "status": "blocked", "dependencies": ["t1"],
+             "failure": "blocked: deps:t1"},
+        ],
+    }
+
+    assert ps.resume_failed() == 2
+    assert ps.get_task("t1")["status"] == "pending"
+    assert ps.get_task("t2")["status"] == "pending"
+
+    ps.mark_done("t1")
+    assert ps.get_next_task()["id"] == "t2"
