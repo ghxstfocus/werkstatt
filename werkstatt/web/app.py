@@ -506,7 +506,7 @@ def create_app() -> FastAPI:
                 if _blocker_grund:
                     raise HTTPException(
                         status_code=409,
-                        detail="; ".join(_blocker_grund),
+                        detail="OP ist blockiert: " + "; ".join(_blocker_grund),
                     )
 
             if not aufgabe:
