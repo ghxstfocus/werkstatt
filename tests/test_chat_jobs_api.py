@@ -123,3 +123,25 @@ def test_chat_job_rejects_same_idempotency_key_with_different_message(
     assert second.status_code == 409
     assert "andere Anfrage" in second.json()["detail"]
 
+def test_chat_job_reconnect_includes_persisted_failures(
+    client_and_base: tuple[Any, Path],
+) -> None:
+    client, base = client_and_base
+    store = ChatJobStore(base / ".werkstatt" / "chat-jobs" / "demo.db")
+    job, _created = store.create(
+        "session-1", "Pruefe den Loop", "read", "request-key-fail-001",
+    )
+    assert store.claim(job["job_id"], "worker-test")
+    assert store.finish(job["job_id"], error="RuntimeError: Provider offline")
+
+    response = client.get(
+        "/api/projects/demo/chat/jobs?session_id=session-1",
+    )
+
+    assert response.status_code == 200
+    jobs = response.json()["jobs"]
+    assert len(jobs) == 1
+    assert jobs[0]["job_id"] == job["job_id"]
+    assert jobs[0]["state"] == "failed"
+    assert jobs[0]["error"] == "RuntimeError: Provider offline"
+
