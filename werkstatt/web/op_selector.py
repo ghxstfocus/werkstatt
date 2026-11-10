@@ -11,6 +11,23 @@ _FIELD = re.compile(
 )
 _OP_ID = re.compile(r"OP-\d+[a-z]?", re.IGNORECASE)
 _PLACEHOLDER = {"", "—", "-", "keine", "n/a", "nicht zutreffend"}
+_COMPLETED_OP_HEADING = re.compile(
+    r"^###\s+\d{4}-\d{2}-\d{2}\s+[—-]\s+"
+    r"(OP-\d+[a-z]?)\s+abgeschlossen\b",
+    re.MULTILINE | re.IGNORECASE,
+)
+_COMPLETED_OP_ROW = re.compile(
+    r"^\s*-\s+\d{4}-\d{2}-\d{2}\s*\|\s*"
+    r"(OP-\d+[a-z]?)\s*\|\s*done\s*\|",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+def parse_completed_op_ids(progress_text: str) -> set[str]:
+    """Liest nur explizite Abschlussbelege aus dem append-only PROGRESS."""
+    ids = _COMPLETED_OP_HEADING.findall(progress_text)
+    ids.extend(_COMPLETED_OP_ROW.findall(progress_text))
+    return {op_id.upper() for op_id in ids}
 
 
 def _felder(block: str) -> dict[str, str]:
@@ -27,8 +44,12 @@ def _ausfuellbar(value: str | None) -> bool:
     return normalisiert not in _PLACEHOLDER
 
 
-def select_next_op(status_text: str) -> dict[str, Any]:
-    """Waehlt nur einen eindeutig startfaehigen OP; sonst erklaert es Gruende."""
+def select_next_op(
+    status_text: str,
+    completed_ids: set[str] | frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """Waehlt startfaehige OPs; erledigte Blocker kommen aus PROGRESS."""
+    completed = {op_id.upper() for op_id in completed_ids}
     treffer = list(_OP_HEADING.finditer(status_text))
     ops: list[dict[str, Any]] = []
     for index, match in enumerate(treffer):
@@ -91,6 +112,8 @@ def select_next_op(status_text: str) -> dict[str, Any]:
         for dep_id in dep_ids:
             dependency = by_id.get(dep_id)
             if dependency is None:
+                if dep_id not in id_counts and dep_id in completed:
+                    continue
                 stale.append(dep_id)
             elif dependency["status"] in {"done", "erledigt", "closed", "complete", "completed"}:
                 continue
