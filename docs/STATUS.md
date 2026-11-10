@@ -73,6 +73,7 @@ noch nicht vollstaendig.
   - Jede Aktion zeigt im Chat und in der UI sofort Status, Ergebnis oder konkreten Fehler; Konsolen-Logs allein genuegen nicht.
   - Pro Projekt gibt es hoechstens einen schreibenden Loop-Run; lesende Diagnosejobs duerfen parallel laufen.
   - Tests decken Job-Lifecycle, Reconnect/Replay, Idempotenz, Parallelitaet, Abbruch, Checkpoint-Pause, Planrevision mit neuem Human-Gate sowie Ablehnung ohne Working-Tree-Aenderung ab.
+- **Stand 2026-11-10:** Chatjobs haben persistente Session-Serialisierung, FIFO, Worker-Lease-Recovery, Idempotenzkonflikte, Reconnect fuer Fehler und kooperativen Abbruch. Fuer laufende Streams wird der Abbruch an SSE-Chunk-Grenzen verarbeitet; bei stiller Verbindung begrenzt ein 30-Sekunden-Read-Timeout die Wartezeit. Noch offen sind u.a. Run-/Event-Store-Verknuepfung, Chat parallel zum aktiven Loop, Projekt-Schreibslot und Checkpoint-gesteuerte Planrevision.
 - **Blockiert von:** —
 
 ### OP-398: Evidenzbasierte Auswahl autonomer Arbeit
