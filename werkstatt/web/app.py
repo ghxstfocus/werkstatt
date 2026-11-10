@@ -549,7 +549,9 @@ def create_app() -> FastAPI:
                 raise HTTPException(
                     status_code=500, detail="STATUS.md nicht lesbar",
                 ) from exc
-            entscheidung = select_next_op(status_text, _completed_op_ids(_pd, status_text))
+            entscheidung = select_next_op(
+                status_text, _completed_op_ids(_pd, status_text),
+            )
             if entscheidung["zustand"] == "needs_input":
                 raise HTTPException(
                     status_code=409,
