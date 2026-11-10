@@ -921,7 +921,7 @@ noch nicht vollstaendig.
   `tests/test_phase_test_loop.py` (neu).
 - **Blockiert von:** OP-260 (Context-Vertrag), OP-201
   (pyproject `test-tools` optional-dependencies).
-- **Blockiert:** OP-211, OP-191.
+- **Blockiert:** OP-211.
 - **Prioritaet:** hoch.
 - **Quelle:** ADR-0016 (2026-11-07), Loop-Test 9/10, Benchmark
   /tmp/mutbench.
