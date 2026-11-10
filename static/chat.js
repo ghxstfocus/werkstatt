@@ -435,7 +435,7 @@
   }
 
   function _jobKey(projekt, sid, jobId) {
-    return projekt + \"|\" + sid + \"|\" + jobId;
+    return projekt + "|" + sid + "|" + jobId;
   }
 
   function _jobAktiv(projekt, sid, anfrage) {
@@ -445,26 +445,29 @@
 
   function _jobChunk(job, text) {
     if (!text) return;
-    if (!job.assistantCard) job.assistantCard = _karte(\"assistant\", \"\");
     job.buffer += text;
+    if (!_jobAktiv(job.project, job.sessionId, job.request)) return;
+    if (!job.assistantCard) job.assistantCard = _karte("assistant", "");
     job.assistantCard.textContent = job.buffer;
-    var box = _el(\"chat-nachrichten\");
+    var box = _el("chat-nachrichten");
     if (box) box.scrollTop = box.scrollHeight;
   }
 
   function _jobToolCall(job, name, args) {
-    var card = _toolKarte(name || \"?\", args, \"running\");
-    job.toolCards.push({name: name || \"?\", card: card});
+    if (!_jobAktiv(job.project, job.sessionId, job.request)) return;
+    var card = _toolKarte(name || "?", args, "running");
+    job.toolCards.push({name: name || "?", card: card});
   }
 
   function _jobToolResult(job, name, content) {
+    if (!_jobAktiv(job.project, job.sessionId, job.request)) return;
     for (var i = job.toolCards.length - 1; i >= 0; i--) {
       var item = job.toolCards[i];
-      if (item.name !== name || !item.card || !item.card.classList.contains(\"running\")) continue;
-      item.card.classList.remove(\"running\");
-      item.card.classList.add(\"ok\");
-      var pre = document.createElement(\"pre\");
-      pre.textContent = content || \"\";
+      if (item.name !== name || !item.card || !item.card.classList.contains("running")) continue;
+      item.card.classList.remove("running");
+      item.card.classList.add("ok");
+      var pre = document.createElement("pre");
+      pre.textContent = content || "";
       item.card.appendChild(pre);
       return;
     }
@@ -473,22 +476,23 @@
   function _jobFertig(job, state, answer, error) {
     if (job.done) return;
     job.done = true;
-    if (state === \"succeeded\") {
+    var sichtbar = _jobAktiv(job.project, job.sessionId, job.request);
+    if (sichtbar && state === "succeeded") {
       if (job.assistantCard) {
         _renderMarkdown(job.assistantCard, answer || job.buffer);
       } else if (answer) {
-        _karte(\"assistant\", answer);
+        _karte("assistant", answer);
       }
-    } else {
-      var detail = error || \"Unbekannter Hintergrundfehler\";
-      if (job.assistantCard) _renderMarkdown(job.assistantCard, \"Fehler: \" + detail);
-      else _karte(\"assistant\", \"Fehler: \" + detail);
+    } else if (sichtbar) {
+      var detail = error || "Unbekannter Hintergrundfehler";
+      if (job.assistantCard) _renderMarkdown(job.assistantCard, "Fehler: " + detail);
+      else _karte("assistant", "Fehler: " + detail);
     }
     delete zustand.jobs[job.key];
-    if (_jobAktiv(job.project, job.sessionId, job.request)) {
+    if (sichtbar) {
       _setzeChatStatus(
-        state === \"succeeded\" ? \"Antwort fertig · \" + job.project : \"Aktion fehlgeschlagen.\",
-        state === \"succeeded\" ? \"ready\" : \"error\"
+        state === "succeeded" ? "Antwort fertig · " + job.project : "Aktion fehlgeschlagen.",
+        state === "succeeded" ? "ready" : "error"
       );
       _renderSidebarAktuell();
     }
@@ -496,58 +500,72 @@
 
   function _handleJobEvent(job, ev) {
     var p = ev.payload || {};
-    if (ev.kind === \"started\") {
+    if (ev.kind === "started") {
       if (_jobAktiv(job.project, job.sessionId, job.request)) {
-        _setzeChatStatus(\"Prüfe Projekt im Hintergrund …\", \"working\");
+        _setzeChatStatus("Prüfe Projekt im Hintergrund …", "working");
       }
-    } else if (ev.kind === \"chunk\") {
-      _jobChunk(job, p.text || \"\");
-    } else if (ev.kind === \"tool_call\") {
-      _jobToolCall(job, p.name || \"?\", p.args || {});
-    } else if (ev.kind === \"tool_result\") {
-      _jobToolResult(job, p.name || \"?\", p.content || \"\");
-    } else if (ev.kind === \"succeeded\") {
-      _jobFertig(job, \"succeeded\", p.answer || \"\", null);
-    } else if (ev.kind === \"failed\") {
-      _jobFertig(job, \"failed\", \"\", p.error || \"Unbekannter Fehler\");
+    } else if (ev.kind === "chunk") {
+      _jobChunk(job, p.text || "");
+    } else if (ev.kind === "tool_call") {
+      _jobToolCall(job, p.name || "?", p.args || {});
+    } else if (ev.kind === "tool_result") {
+      _jobToolResult(job, p.name || "?", p.content || "");
+    } else if (ev.kind === "succeeded") {
+      _jobFertig(job, "succeeded", p.answer || "", null);
+    } else if (ev.kind === "failed") {
+      _jobFertig(job, "failed", "", p.error || "Unbekannter Fehler");
     }
   }
 
-  function _pollChatJob(job) {
+  function _pollChatJob(job, token) {
     if (job.done) return;
-    var base = \"/api/projects/\" + encodeURIComponent(job.project) + \"/chat/jobs/\" +
-      encodeURIComponent(job.jobId) + \"?since_seq=\" + job.cursor;
-    fetch(base, {credentials: \"same-origin\"}).then(function (response) {
-      if (!response.ok) throw new Error(\"Status \" + response.status);
+    var pollToken = token === undefined ? job.pollToken : token;
+    var base = "/api/projects/" + encodeURIComponent(job.project) + "/chat/jobs/" +
+      encodeURIComponent(job.jobId) + "?since_seq=" + job.cursor;
+    fetch(base, {credentials: "same-origin"}).then(function (response) {
+      if (!response.ok) throw new Error("Status " + response.status);
       return response.json();
     }).then(function (data) {
+      if (pollToken !== job.pollToken) return;
       (data.events || []).forEach(function (ev) {
         job.cursor = Math.max(job.cursor, Number(ev.seq) || 0);
         _handleJobEvent(job, ev);
       });
       if (job.done) return;
-      if (data.state === \"succeeded\") {
-        _jobFertig(job, data.state, data.answer || \"\", null);
-      } else if (data.state === \"failed\") {
-        _jobFertig(job, data.state, \"\", data.error || \"Unbekannter Fehler\");
+      if (data.state === "succeeded") {
+        _jobFertig(job, data.state, data.answer || "", null);
+      } else if (data.state === "failed") {
+        _jobFertig(job, data.state, "", data.error || "Unbekannter Fehler");
       } else {
-        window.setTimeout(function () { _pollChatJob(job); }, 500);
+        window.setTimeout(function () { _pollChatJob(job, pollToken); }, 500);
       }
     }).catch(function () {
+      if (pollToken !== job.pollToken) return;
       if (!job.done && _jobAktiv(job.project, job.sessionId, job.request)) {
-        _setzeChatStatus(\"Verbindung unterbrochen · Job bleibt gespeichert und wird erneut geladen.\", \"working\");
+        _setzeChatStatus("Verbindung unterbrochen · Job bleibt gespeichert und wird erneut geladen.", "working");
       }
-      if (!job.done) window.setTimeout(function () { _pollChatJob(job); }, 1500);
+      if (!job.done) window.setTimeout(function () { _pollChatJob(job, pollToken); }, 1500);
     });
   }
 
   function _neuerJobState(projekt, sid, jobId, message, request) {
     var key = _jobKey(projekt, sid, jobId);
-    if (zustand.jobs[key]) return zustand.jobs[key];
+    var existing = zustand.jobs[key];
+    if (existing) {
+      if (existing.request !== request) {
+        existing.request = request;
+        existing.cursor = 0;
+        existing.buffer = "";
+        existing.assistantCard = null;
+        existing.toolCards = [];
+        existing.pollToken += 1;
+      }
+      return existing;
+    }
     var job = {
       key: key, project: projekt, sessionId: sid, jobId: jobId,
-      message: message, request: request, cursor: 0, buffer: \"\",
-      assistantCard: null, toolCards: [], done: false,
+      message: message, request: request, cursor: 0, buffer: "",
+      assistantCard: null, toolCards: [], done: false, pollToken: 0,
     };
     zustand.jobs[key] = job;
     return job;
@@ -557,19 +575,19 @@
     var idempotencyKey = (window.crypto && window.crypto.randomUUID)
       ? window.crypto.randomUUID()
       : (Date.now().toString(36) + Math.random().toString(36).slice(2));
-    var url = \"/api/projects/\" + encodeURIComponent(projekt) + \"/chat/jobs\";
+    var url = "/api/projects/" + encodeURIComponent(projekt) + "/chat/jobs";
     var body = {
-      session_id: sid, message: text, mode: \"read\",
+      session_id: sid, message: text, mode: "read",
       idempotency_key: idempotencyKey,
     };
     function submit(attempt) {
       return fetch(url, {
-        method: \"POST\", credentials: \"same-origin\",
-        headers: { \"Content-Type\": \"application/json\" },
+        method: "POST", credentials: "same-origin",
+        headers: {"Content-Type": "application/json"},
         body: JSON.stringify(body),
       }).then(function (response) {
         return response.json().then(function (data) {
-          if (!response.ok) throw new Error(data.detail || (\"Status \" + response.status));
+          if (!response.ok) throw new Error(data.detail || ("Status " + response.status));
           return data;
         });
       }).catch(function (error) {
@@ -584,39 +602,38 @@
     submit(0).then(function (data) {
       if (projekt !== zustand.projekt || sid !== zustand.sessionId) return;
       var job = _neuerJobState(projekt, sid, data.job_id, text, request);
-      if (data.state === \"succeeded\") _jobFertig(job, data.state, data.answer || \"\", null);
-      else _pollChatJob(job);
+      _pollChatJob(job, job.pollToken);
       if (_jobAktiv(projekt, sid, request)) {
-        _setzeChatStatus(\"Auftrag angenommen · läuft im Hintergrund.\", \"working\");
+        _setzeChatStatus("Auftrag angenommen · läuft im Hintergrund.", "working");
       }
     }).catch(function (error) {
       if (projekt !== zustand.projekt || sid !== zustand.sessionId) return;
-      _karte(\"assistant\", \"Chat-Auftrag konnte nicht angenommen werden: \" + error.message);
-      _setzeChatStatus(\"Aktion konnte nicht gestartet werden.\", \"error\");
+      _karte("assistant", "Chat-Auftrag konnte nicht angenommen werden: " + error.message);
+      _setzeChatStatus("Aktion konnte nicht gestartet werden.", "error");
     });
   }
 
   function _resumeChatJobs(projekt, sid, events, request) {
-    var url = \"/api/projects/\" + encodeURIComponent(projekt) + \"/chat/jobs?session_id=\" +
+    var url = "/api/projects/" + encodeURIComponent(projekt) + "/chat/jobs?session_id=" +
       encodeURIComponent(sid);
-    fetch(url, {credentials: \"same-origin\"}).then(function (response) {
-      if (!response.ok) throw new Error(\"Status \" + response.status);
+    fetch(url, {credentials: "same-origin"}).then(function (response) {
+      if (!response.ok) throw new Error("Status " + response.status);
       return response.json();
     }).then(function (data) {
       if (!_jobAktiv(projekt, sid, request)) return;
       var bekannteIds = Object.create(null);
       events.forEach(function (ev) {
-        if (ev.kind === \"user\" && ev.payload && ev.payload.job_id) {
+        if (ev.kind === "user" && ev.payload && ev.payload.job_id) {
           bekannteIds[ev.payload.job_id] = true;
         }
       });
       (data.jobs || []).forEach(function (item) {
         var job = _neuerJobState(projekt, sid, item.job_id, item.message, request);
-        if (!bekannteIds[item.job_id]) _karte(\"user\", item.message || \"\");
-        _pollChatJob(job);
+        if (!bekannteIds[item.job_id]) _karte("user", item.message || "");
+        _pollChatJob(job, job.pollToken);
       });
       if ((data.jobs || []).length) {
-        _setzeChatStatus(\"Aktiver Auftrag wieder verbunden.\", \"working\");
+        _setzeChatStatus("Aktiver Auftrag wieder verbunden.", "working");
       }
     }).catch(function () {});
   }
