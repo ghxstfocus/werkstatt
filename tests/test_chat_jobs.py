@@ -67,3 +67,23 @@ def test_job_failure_is_visible_and_terminal(tmp_path: Path) -> None:
     assert failed["state"] == "failed"
     assert failed["error"] == "RuntimeError: LLM nicht verfuegbar"
     assert failed["events"][-1]["payload"]["error"].startswith("RuntimeError")
+
+
+def test_claim_serializes_turns_within_one_session(tmp_path: Path) -> None:
+    store = ChatJobStore(tmp_path / "jobs.db")
+    first, _ = store.create("session-a", "Erste Frage", "read", "request-key-a001")
+    second, _ = store.create("session-a", "Zweite Frage", "read", "request-key-a002")
+
+    assert store.claim(first["job_id"]) is True
+    assert store.claim(second["job_id"]) is False
+    assert store.finish(first["job_id"], answer="Erledigt") is True
+    assert store.claim(second["job_id"]) is True
+
+
+def test_jobs_in_different_sessions_can_run_in_parallel(tmp_path: Path) -> None:
+    store = ChatJobStore(tmp_path / "jobs.db")
+    first, _ = store.create("session-a", "Frage A", "read", "request-key-b001")
+    second, _ = store.create("session-b", "Frage B", "read", "request-key-b002")
+
+    assert store.claim(first["job_id"]) is True
+    assert store.claim(second["job_id"]) is True
