@@ -20,7 +20,8 @@ from werkstatt.paths import werkstatt_home
 # OP-305: Basis fuer Multi-Projekt-Pfade (testbar via monkeypatch)
 _PROJECTS_BASE = Path("/opt")
 
-__all__ = ["aggregate_status", "aggregate_timeline", "aggregate_tokens", "parse_ops"]
+__all__ = ["aggregate_status", "aggregate_timeline", "aggregate_tokens",
+           "aggregate_tokens_per_rolle", "parse_ops"]
 
 # OP-389b-Fix: OP-Suffixe (a/b/c) MUESSEN erkannt werden. Dieselbe
 # Konvention wie in parse_ops() Zeile 77 (blockiert_von-Regex) —
@@ -459,6 +460,46 @@ def aggregate_tokens(projekt: str, run_id: str | None = None) -> dict[str, Any]:
     except Exception:
         pass
 
+    return aus
+
+
+def aggregate_tokens_per_rolle(
+    projekt: str, run_id: str | None = None,
+) -> dict[str, dict[str, int]]:
+    """Aggregiert Loop-Token pro Rolle, inklusive Spitzenwert je Call."""
+    es = EventStore()
+    if run_id is None:
+        run_id = _letzter_run_id(es, projekt)
+    if run_id is None:
+        return {}
+    try:
+        with sqlite3.connect(es.db_pfad) as c:
+            rows = c.execute(
+                "SELECT payload FROM events "
+                "WHERE run_id=? AND kind='llm_usage' AND project=?",
+                (run_id, projekt),
+            ).fetchall()
+    except sqlite3.Error:
+        return {}
+    aus: dict[str, dict[str, int]] = {}
+    for (payload,) in rows:
+        try:
+            event = json.loads(payload)
+            rolle = str(event.get("rolle") or "unbekannt")
+            prompt = int(event.get("prompt_tokens", 0) or 0)
+            completion = int(event.get("completion_tokens", 0) or 0)
+            total = int(event.get("total_tokens", 0) or 0)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue
+        stats = aus.setdefault(rolle, {
+            "calls": 0, "prompt": 0, "completion": 0, "total": 0,
+            "max_prompt": 0,
+        })
+        stats["calls"] += 1
+        stats["prompt"] += prompt
+        stats["completion"] += completion
+        stats["total"] += total
+        stats["max_prompt"] = max(stats["max_prompt"], prompt)
     return aus
 
 

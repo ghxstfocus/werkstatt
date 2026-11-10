@@ -1326,9 +1326,9 @@ noch nicht vollstaendig.
 - **Problem:** Aus Live-Messung 2026-11-09 (Run `test-clean-1794181131`): max **35.550 prompt-Tokens** in einem einzigen Call, 95.263 prompt-Tokens total über 5 Calls. Aber: das Feld `agent` im `llm_usage`-Payload ist NULL (`json_extract` gibt NULL) — **wir wissen nicht, welche Rolle die Tokens verbraucht**. Ohne diese Zuordnung ist jede Context-Optimierung blind.
   **Forschung 2025/26:** "Context Rot" (Chroma 2025): Selbstgenerierte Wiederholungen in rekursiven KI-Schleifen verschmutzen den Kontext. Größere Fenster ≠ besser. "Lost-in-the-Middle" (Liu et al.): Modelle ignorieren Informationen in der Mitte langer Kontexte. Wir müssen wissen *wer* wie viel schickt, *bevor* wir kürzen.
 - **Akzeptanzkriterien:**
-  (a) Jeder `_ask_llm`-Aufrufer setzt `audit("llm_usage", {"agent": "<rolle>", ...})` mit explizitem Rollen-Namen: `architect`, `planner`, `builder`, `reviewer`, `reflection`, `explorer`, `scout`, `debugger`.
-  (b) Neue SQL-View (in `tools/` oder als Helper): `SELECT agent, COUNT(*), AVG(prompt_tokens), MAX(prompt_tokens), SUM(total_tokens) FROM events WHERE kind='llm_usage' GROUP BY agent ORDER BY 5 DESC`.
-  (c) Neue Funktion `aggregate_tokens_per_rolle()` in `inspector.py` (liefert die Aggregation).
+  (a) Jeder `llm_usage`-Event enthaelt ein eigenes Feld `rolle` mit einem der stabilen Namen `architect`, `planner`, `builder`, `reviewer`, `reflection`, `explorer`, `scout`, `debugger`; unbekannte Tasks werden als `unbekannt` ausgewiesen. Das Audit-Umschlagfeld `agent` bleibt `agent_pipeline` und wird nicht fuer Tasknamen ueberschrieben.
+  (b) Rollenaggregation liest die JSON-Payload-Felder aus dem Event-Store (keine nicht vorhandenen SQL-Spalten) und liefert Anzahl, Summen sowie maximalen Prompt pro Call.
+  (c) Neue Funktion `aggregate_tokens_per_rolle()` in `inspector.py` liefert die Aggregation fuer Projekt und Run.
   (d) Live: Nach dem naechsten Loop-Run ist pro Rolle eine Zeile sichtbar.
 - **Tests:** `tests/test_llm_usage_pro_rolle.py` (2 Tests: Payload enthaelt `agent`, Aggregation summiert korrekt).
 - **ADR:** —
@@ -1449,7 +1449,7 @@ noch nicht vollstaendig.
 - **Betroffene Dateien:** `verify.json`, `werkstatt/verify.py`, `tools/context_drift.py` (neu), `tests/test_context_drift.py` (neu)
 - **Problem:** Damit kuenftige Aenderungen die Budget-Limits nicht wieder aufheben. Wenn OP-384 ein 12k-Limit setzt, aber ein spaeterer Patch `explorer_findings` wieder unbegrenzt durchlaesst, faellt das niemandem auf — bis die Prompts wieder 35k Tokens haben.
 - **Akzeptanzkriterien:**
-  (a) Neues Tool `tools/context_drift.py`: prueft den **letzten** `llm_usage`-Event pro Rolle gegen das konfigurierte Limit.
+  (a) Neues Tool `tools/context_drift.py`: prueft jeden `llm_usage`-Event pro Rolle gegen das konfigurierte harte Limit und meldet zusaetzlich den Spitzenwert je Rolle; ein spaeterer kleiner Call darf einen frueheren Ausreisser nicht verdecken.
   (b) Neue **weiche** Stage `context_drift` in `verify.json` (Start: warnen, nicht blocken).
   (c) Nach 14 Tagen ohne Warnung: auf hart umstellen (eigene OP).
   (d) Baseline-aware: nur `AFTER > BEFORE + 20 %` blockt (Toleranz fuer Ausreisser).

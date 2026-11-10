@@ -97,10 +97,24 @@ def _heartbeat_start(
     return thread, stop_event
 
 
+def _rolle_aus_aufgabe(aufgabe: str) -> str:
+    """Mappt stabile Rollenlabels; freie Task-Namen bleiben unbekannt."""
+    label = (aufgabe or "").strip().lower().replace("_", "-")
+    if label in {"architect", "planner", "builder", "reviewer",
+                 "reflection", "explorer", "scout", "debugger"}:
+        return label
+    if label.startswith("planner-"):
+        return "planner"
+    if label.startswith("reflection-"):
+        return "reflection"
+    return "unbekannt"
+
+
 def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             model: str, temperature: float, timeout: int = 120,
             *, state: RunState | None = None,
             aufgabe: str = "unbekannt",
+            rolle: str | None = None,
             heartbeat: bool = True,
             max_tokens: int = 4096,
             redact: bool = True) -> LLMReply:
@@ -259,7 +273,7 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
         _tt = int(_usage.get("total_tokens", 0) or 0)
         if state is not None and _tt > 0:
             audit("llm_usage",
-                  {"agent": aufgabe,
+                  {"rolle": rolle or _rolle_aus_aufgabe(aufgabe),
                    "model": model,
                    "prompt_tokens": _pt,
                    "completion_tokens": _ct,
@@ -670,6 +684,7 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             model: str, temperature: float, timeout: int = 120,
             *, state: RunState | None = None,
             aufgabe: str = "unbekannt",
+            rolle: str | None = None,
             heartbeat: bool = True,
             max_tokens: int = 4096,
             redact: bool = True) -> LLMReply:
@@ -688,7 +703,7 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
         reply = _ask_llm_impl(
             api_key, system_prompt, user_content, model, temperature,
             timeout=timeout, state=state, aufgabe=aufgabe,
-            heartbeat=heartbeat, max_tokens=max_tokens, redact=redact,
+            rolle=rolle, heartbeat=heartbeat, max_tokens=max_tokens, redact=redact,
         )
     except Exception as exc:
         _emit_progress(_label, "response_failed", str(exc)[:80])
