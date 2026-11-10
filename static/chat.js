@@ -506,11 +506,18 @@
     }
     delete zustand.jobs[job.key];
     if (sichtbar) {
-      _setzeChatStatus(
+      var weitereAktiv = Object.keys(zustand.jobs).some(function (key) {
+        var other = zustand.jobs[key];
+        return !other.done && other.project === job.project &&
+          other.sessionId === job.sessionId;
+      });
+      var statusText = weitereAktiv ? "Weitere Antworten laufen · " + job.project :
         state === "succeeded" ? "Antwort fertig · " + job.project :
-          state === "cancelled" ? "Auftrag abgebrochen." : "Aktion fehlgeschlagen.",
-        state === "succeeded" ? "ready" : state === "cancelled" ? "idle" : "error"
-      );
+          state === "cancelled" ? "Auftrag abgebrochen." : "Aktion fehlgeschlagen.";
+      var statusArt = weitereAktiv || state === "succeeded" ? "working" :
+        state === "cancelled" ? "idle" : "error";
+      if (!weitereAktiv && state === "succeeded") statusArt = "ready";
+      _setzeChatStatus(statusText, statusArt);
       _renderSidebarAktuell();
     }
   }
@@ -577,7 +584,7 @@
     });
   }
 
-  function _neuerJobState(projekt, sid, jobId, message, request) {
+  function _neuerJobState(projekt, sid, jobId, message, request, assistantCard) {
     var key = _jobKey(projekt, sid, jobId);
     var existing = zustand.jobs[key];
     if (existing) {
@@ -585,22 +592,24 @@
         existing.request = request;
         existing.cursor = 0;
         existing.buffer = "";
-        existing.assistantCard = null;
+        existing.assistantCard = assistantCard || null;
         existing.toolCards = [];
         existing.pollToken += 1;
+      } else if (!existing.assistantCard && assistantCard) {
+        existing.assistantCard = assistantCard;
       }
       return existing;
     }
     var job = {
       key: key, project: projekt, sessionId: sid, jobId: jobId,
       message: message, request: request, cursor: 0, buffer: "",
-      assistantCard: null, toolCards: [], done: false, pollToken: 0,
+      assistantCard: assistantCard || null, toolCards: [], done: false, pollToken: 0,
     };
     zustand.jobs[key] = job;
     return job;
   }
 
-  function _startChatJob(text, projekt, sid, request) {
+  function _startChatJob(text, projekt, sid, request, assistantCard) {
     var idempotencyKey = (window.crypto && window.crypto.randomUUID)
       ? window.crypto.randomUUID()
       : (Date.now().toString(36) + Math.random().toString(36).slice(2));
@@ -630,14 +639,18 @@
     }
     submit(0).then(function (data) {
       if (projekt !== zustand.projekt || sid !== zustand.sessionId) return;
-      var job = _neuerJobState(projekt, sid, data.job_id, text, request);
+      var job = _neuerJobState(
+        projekt, sid, data.job_id, text, request, assistantCard,
+      );
       _pollChatJob(job, job.pollToken);
       if (_jobAktiv(projekt, sid, request)) {
         _setzeChatStatus("Auftrag angenommen · läuft im Hintergrund.", "working");
       }
     }).catch(function (error) {
       if (projekt !== zustand.projekt || sid !== zustand.sessionId) return;
-      _karte("assistant", "Chat-Auftrag konnte nicht angenommen werden: " + error.message);
+      var fehlermeldung = "Chat-Auftrag konnte nicht angenommen werden: " + error.message;
+      if (assistantCard) _renderMarkdown(assistantCard, fehlermeldung);
+      else _karte("assistant", fehlermeldung);
       _setzeChatStatus("Aktion konnte nicht gestartet werden.", "error");
     });
   }
@@ -669,6 +682,9 @@
           return;
         }
         aktiveJobs += 1;
+        if (!job.assistantCard) {
+          job.assistantCard = _karte("assistant", "Wird bearbeitet …");
+        }
         _pollChatJob(job, job.pollToken);
       });
       if (aktiveJobs) {
@@ -744,8 +760,9 @@
       return;
     }
     _karte("user", text);
+    var antwortKarte = _karte("assistant", "Wird bearbeitet …");
     _setzeChatStatus("Nachricht wird übermittelt …", "working");
-    _startChatJob(text, projekt, zustand.sessionId, anfrage);
+    _startChatJob(text, projekt, zustand.sessionId, anfrage, antwortKarte);
   }
 
   function _sendeUeberSocket(text) {
