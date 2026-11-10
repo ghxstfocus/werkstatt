@@ -373,3 +373,32 @@ def test_payload_korrekt(tmp_path):
     timeout = args.kwargs["timeout"]
     assert isinstance(timeout, tuple)
     assert len(timeout) == 2
+
+def test_llm_usage_hat_stabile_rolle_ohne_agent_zu_ueberschreiben(tmp_path):
+    """OP-383: Rolle lebt im Payload; Audit-Agent bleibt stabil."""
+    state = _state(tmp_path)
+    response = _ok_response("antwort")
+    response.json.return_value["usage"] = {
+        "prompt_tokens": 12,
+        "completion_tokens": 5,
+        "total_tokens": 17,
+    }
+    with patch("werkstatt.agent.requests.post", return_value=response):
+        agent.ask_llm(
+            api_key="sk-test",
+            system_prompt="SYS",
+            user_content="USER",
+            model="deepseek-chat",
+            temperature=0.0,
+            state=state,
+            aufgabe="planner-split",
+        )
+
+    usage = [
+        event for event in _audit_events(tmp_path)
+        if event.get("kind") == "llm_usage"
+    ]
+    assert len(usage) == 1
+    assert usage[0]["rolle"] == "planner"
+    assert usage[0]["agent"] == "agent_pipeline"
+    assert usage[0]["prompt_tokens"] == 12
