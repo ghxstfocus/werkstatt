@@ -7,6 +7,7 @@ abrufbar und koennen nach einem UI-Reconnect wieder abgespielt werden.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 import uuid
@@ -27,7 +28,7 @@ class IdempotencyConflict(ValueError):
 _EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="werkstatt-chat")
 _FUTURES: dict[str, Future[None]] = {}
 _FUTURES_LOCK = threading.RLock()
-_WORKER_ID = f"{__import__('os').getpid()}:{uuid.uuid4().hex}"
+_WORKER_ID = f"{os.getpid()}:{uuid.uuid4().hex}"
 _WORKER_LEASE_SECONDS = 90
 _WORKER_HEARTBEAT_SECONDS = 15
 
