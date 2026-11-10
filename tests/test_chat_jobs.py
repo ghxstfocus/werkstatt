@@ -369,6 +369,7 @@ def test_store_migrates_existing_jobs_table_for_worker_leases(
 
     assert {
         "worker_id", "heartbeat_at", "cancel_requested", "context_seq",
+        "run_id",
     } <= columns
     assert context_seq is None
 
