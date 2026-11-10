@@ -18,7 +18,11 @@ from typing import Any
 
 from werkstatt.paths import werkstatt_home
 
-__all__ = ["ChatJobStore", "enqueue_chat_job"]
+__all__ = ["ChatJobStore", "IdempotencyConflict", "enqueue_chat_job"]
+
+
+class IdempotencyConflict(ValueError):
+    """Raised when a key is reused for a different chat request."""
 
 _EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="werkstatt-chat")
 _FUTURES: dict[str, Future[None]] = {}
@@ -80,6 +84,11 @@ class ChatJobStore:
                 (session_id, idempotency_key),
             ).fetchone()
             if row:
+                if row["message"] != message or row["mode"] != mode:
+                    conn.rollback()
+                    raise IdempotencyConflict(
+                        "idempotency_key wurde bereits fuer eine andere Anfrage verwendet",
+                    )
                 conn.commit()
                 return dict(row), False
             job_id = uuid.uuid4().hex
