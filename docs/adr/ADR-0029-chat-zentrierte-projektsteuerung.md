@@ -141,6 +141,16 @@ Belege fortgeschrieben. Ein groesseres autonomes Batch ist ein
 ausdruecklich gewaehlter Modus mit klarer Obergrenze, kein unendliches
 Weiterarbeiten nach einem OP.
 
+Bei Code-Arbeit enthaelt der freigegebene Plan getrennte Code- und
+Test-Specs. Der Test-Builder qualifiziert die Tests am unveraenderten
+Stand und friert sie ein; der Code-Builder erhaelt keine Einsicht in
+die Testdateien. Danach prueft Verify die Aenderungen gegen diese Tests
+und die konfigurierten Qualitaets-Gates. Eine Reflection-Reparatur
+invalidiert oder umgeht den Test-Freeze nicht; nach jeder Reparatur
+laufen die betroffenen Pruefungen erneut. Diese Test-Loop-/Freeze-
+Kette ist Zielzustand aus OP-210/211 und im aktuellen Loop noch nicht
+vollstaendig gebaut.
+
 ## Konsequenzen
 
 - Der Chat wird zur Bedien- und Erklaerungsschicht, nicht zu einem
@@ -156,7 +166,8 @@ Weiterarbeiten nach einem OP.
   Zustimmung; pauschale Zustimmung fuer spaetere Aktionen gibt es nicht.
 - Planfreigabe bleibt auch bei automatisierten Skript-Runs verpflichtend;
   headless bedeutet nur, dass die menschliche Antwort ueber den Gate-Store
-  statt stdin eingeht.
+  statt stdin eingeht. Der isolierte Testmodus ist die einzige Ausnahme fuer
+  automatisierte Testlaeufe.
 - Die heutige Aussage im Web-Start-Endpunkt, ohne Aufgabe werde die
   naechste STATUS-OP gelesen, muss gegen tatsaechlichen Code verifiziert
   und entweder implementiert oder korrigiert werden.
@@ -170,7 +181,7 @@ Weiterarbeiten nach einem OP.
 - Selector ueberspringt blockierte/erledigte OPs, begruendet seine Wahl
   und fragt bei Mehrdeutigkeit.
 - Wiederholte Start-Requests erzeugen keinen zweiten Schreib-Run.
-- Tests beweisen, dass Chat keinen Human-Gate-Entscheid automatisiert,
+- Tests beweisen, dass auch der Scout-No-Op-Pfad das Plan-Gate nicht ueberspringt, Chat keinen Human-Gate-Entscheid automatisiert,
   keine schreibende Chat-Aktion ohne vorherige Zustimmung ausfuehrt,
   das Plan-Gate weder durch CLI noch Projektkonfiguration umgangen wird
   und Code-Aenderungen weiterhin durch Verify/Review laufen.

@@ -246,8 +246,10 @@ Status, Ergebnis oder Fehler im Chat und in der UI.
 Schreibende Chat-Aktionen benoetigen vor der Ausfuehrung eine
 ausdrueckliche Freigabe fuer den konkret beschriebenen Umfang. Die
 Freigabe ist kein pauschaler Schreibmodus und bestaetigt kein Loop-Gate.
-Das Plan-Gate bleibt vor jedem Builder-Lauf zwingend menschlich zu
-bestaetigen, unabhaengig von CLI-Flags oder Projektkonfiguration.
+Das Plan-Gate bleibt zwingend menschlich zu bestaetigen, auch wenn der
+Scout einen No-Op meldet; in dem Fall bestaetigt es den Befund vor der
+Ergebnispruefung. CLI-Flags oder Projektkonfiguration koennen es nicht
+ueberspringen.
 Control bietet Start, Pause, Fortsetzen und Stop; dieselben Aktionen
 sind als Chat-Befehle moeglich. Pause erfolgt kooperativ an sicheren
 Checkpoints.

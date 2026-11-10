@@ -131,29 +131,32 @@ def _phase_plan_and_preflight(
                 "planner", "builder", state, pd, pn):
             return 1, False
 
-        # GOLD 2026-10-30: Scout kann bereits_erfuellt melden.
-        # Dann ist der Plan leer (Tasks = []), und der Plan-Gate
-        # wuerde fail-closed abbrechen. Wir springen direkt zum
-        # Human-Gate.
+        # Der Scout kann einen No-Op melden. Auch dieser Befund muss
+        # vor der Ergebnispruefung durch das verpflichtende Plan-Gate.
         if state.auftrag_bereits_erfuellt:
             audit("auftrag_bereits_erfuellt",
-                  {"quelle": "scout", "aktion": "skip_plan_gate"},
+                  {"quelle": "scout", "aktion": "no_op_plan_gate"},
                   pd, pn)
-            # OP-062g: Merker setzen, damit _human_gate_body den
-            # Nullfall-Block rendern kann. Das auftrag_bereits_erfuellt-
-            # Flag wird wie bisher geleert, damit es nicht in spaetere
-            # Phasen leakt.
+            # Merker fuer die No-Op-Plananzeige und das Human-Gate.
             state.scout_bereits_erfuellt = True
             state.auftrag_bereits_erfuellt = False
-            # GOLD 2026-10-30: tasks_ok auf 1 setzen, damit K13
-            # (rc=0 nur wenn tasks_ok>0) den Lauf als Erfolg wertet.
-            # Live-Beleg 2026-10-30 21:59: Commit 30decc63 durch,
-            # aber Footer zeigte LOOP FEHLGESCHLAGEN (tasks_ok=0).
+            audit("loop_phase",
+                  {"phase": "plan_gate", "status": "start",
+                   "reason": "auftrag_bereits_erfuellt"}, pd, pn)
+            if _human_gate_plan(state) != 0:
+                audit("loop_phase",
+                      {"phase": "plan_gate", "status": "rejected",
+                       "reason": "auftrag_bereits_erfuellt"}, pd, pn)
+                group_end()
+                return 1, True
+            audit("loop_phase",
+                  {"phase": "plan_gate", "status": "approved",
+                   "reason": "auftrag_bereits_erfuellt"}, pd, pn)
+            # Aufgabenzaehler erst nach Freigabe auf Erfolg setzen.
             tasks_ok = 1
             state.tasks_ok_counter = tasks_ok
             _task_ende(state, phase_state, "scout_skip", ok=True,
                        name="Auftrag bereits erfuellt")
-            # Direkt zum Human-Gate (Phase 5), Plan-Gate ueberspringen.
             group_end()  # Phase 2: Planner
             group_start("Phase 5: Human-Gate")
             audit("loop_phase", {"phase": "human_gate",

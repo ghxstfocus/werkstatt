@@ -290,28 +290,24 @@ def test_planner_system_ohne_preview_kein_ist_zustand():
 # GOLD 2026-10-30: Scout-Abbruch -> skip_plan_gate
 # =====================================================================
 
-def test_loop_skip_plan_gate_bei_auftrag_bereits_erfuellt():
-    """Wenn run_planner auftrag_bereits_erfuellt setzt, springt der
-    Loop direkt zum Human-Gate (Plan-Gate ueberspringen).
-
-    Regression: Live 2026-10-30 21:58 — Scout meldete
-    bereits_erfuellt, run_planner gab True zurueck, aber der
-    Plan-Gate failte (Tasks leer), Loop brach ab mit
-    'LOOP FEHLGESCHLAGEN'.
-    """
+def test_scout_noop_still_requires_plan_gate():
+    """Ein Scout-No-Op wird vor Taskabschluss und Human-Gate freigegeben."""
     import inspect
 
-    from werkstatt import loop as loop_mod
-    # Fix AZ Stufe 8-B: Logik liegt jetzt in _phase_plan_and_preflight.
-    # Beide Funktionen pruefen -- robust gegen weitere Refactors.
-    srcs = (
-        inspect.getsource(loop_mod.run_pipeline_loop)
-        + inspect.getsource(loop_mod._phase_plan_and_preflight)
+    from werkstatt.phases.plan import _phase_plan_and_preflight
+
+    src = inspect.getsource(_phase_plan_and_preflight)
+    start = src.index('if state.auftrag_bereits_erfuellt:')
+    end = src.index('# M-458: Architect-Prosa anzeigen', start)
+    branch = src[start:end]
+    assert '_human_gate_plan(state)' in branch
+    assert branch.index('_human_gate_plan(state)') < branch.index(
+        '_task_ende(state, phase_state, "scout_skip"'
     )
-    assert "auftrag_bereits_erfuellt" in srcs
-    assert "skip_plan_gate" in srcs or "via" in srcs
-    assert "_task_ende(state, phase_state, \"scout_skip\"" in srcs or \
-           "scout_skip" in srcs
+    assert branch.index('_human_gate_plan(state)') < branch.index(
+        '_human_gate(state)'
+    )
+    assert '"status": "rejected"' in branch
 
 
 def test_scout_abbruch_setzt_tasks_ok():

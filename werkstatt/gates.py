@@ -196,7 +196,16 @@ def _human_gate_plan(state, kontext=""):
     # OP-299: Plan-Text auditieren, damit er in der UI nachlesbar bleibt.
     # Der Architect-Prosa-Text ist die eigentliche Planung — kein UI-Weg
     # sonst, weil _r.plan() nur ins Terminal rendert.
+    _is_noop_scout = bool(
+        getattr(state, "scout_bereits_erfuellt", False)
+    )
     _plan_text = getattr(state, "architect_prosa", "") or ""
+    if _is_noop_scout:
+        _plan_text = (
+            "NO-OP-PLAN: Der Scout meldet den Auftrag bereits als erfuellt. "
+            "Es sind keine Datei-Aenderungen geplant; die Freigabe erlaubt "
+            "nur den Uebergang zur Ergebnispruefung."
+        )
     if not _plan_text:
         # Fallback: strukturierter Plan als Text
         _parts: list[str] = []
@@ -237,7 +246,18 @@ def _human_gate_plan(state, kontext=""):
     # revidierter Plan ist. Kein "a" (Plan anpassen) — sonst
     # Endlos-Zyklus moeglich.
     _ist_revidierter = kontext == "revidierter_plan"
-    if _ist_revidierter:
+    if _is_noop_scout:
+        _prompt = (
+            "\n== NO-OP-PLAN (Scout-Befund) ==\n"
+            "Der Scout meldet, dass der Auftrag bereits erfuellt ist.\n"
+            "Es sind keine Code-Aenderungen geplant. Die Freigabe setzt\n"
+            "den Lauf nur zur Ergebnispruefung fort.\n"
+            "\nDiesen Befund zur Ergebnispruefung freigeben? [j/n]\n"
+            "  j = Ergebnispruefung fortsetzen\n"
+            "  n = ablehnen und Lauf beenden\n"
+            "Deine Wahl: "
+        )
+    elif _ist_revidierter:
         _prompt = (
             "\n== REVIDIERTER PLAN (nach Reflection) ==\n"
             "Du hattest den vorherigen Plan abgelehnt. Die Reflection hat\n"
@@ -296,14 +316,19 @@ def _human_gate_plan(state, kontext=""):
             audit("loop_plan_gate_rejected", {"grund": _reason}, pd, pn)
             return 1
         if _antwort == "a":
-            if _ist_revidierter:
+            if _ist_revidierter or _is_noop_scout:
                 # Kein Plan-Anpassen im revidierten Modus (Zyklus-Schutz)
                 _ungueltig_count += 1
                 if _ungueltig_count >= 3:
                     audit("loop_plan_gate_ungueltig",
                           {"anzahl": _ungueltig_count, "letzte_antwort": "a"}, pd, pn)
                     return 1
-                print(f"Kein 'a' nach Reflection. Versuch {_ungueltig_count}/3.")
+                _hinweis = (
+                    "Kein 'a' in diesem No-Op-Gate."
+                    if _is_noop_scout
+                    else "Kein 'a' nach Reflection."
+                )
+                print(f"{_hinweis} Versuch {_ungueltig_count}/3.")
                 continue
             _plan_file = Path(pd) / ".werkstatt" / f"{pn}.phase.yaml"
             print(f"\nPlan-Datei: {_plan_file}")

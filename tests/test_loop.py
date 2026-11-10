@@ -1562,6 +1562,36 @@ def test_plan_gate_config_cannot_disable_approval(tmp_path, monkeypatch):
     assert "loop_plan_gate_rejected" in _audits
 
 
+
+def test_noop_scout_plan_gate_shows_befund(tmp_path, monkeypatch):
+    """Der No-Op-Pfad zeigt seinen Befund und verlangt j/n-Freigabe."""
+    from werkstatt import gates, loop as loop_mod, render
+    from werkstatt.state import RunState
+
+    st = RunState(
+        project_dir=tmp_path,
+        project_name="p",
+        scout_bereits_erfuellt=True,
+    )
+    monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
+    monkeypatch.setattr(gates, "_HEADLESS", False)
+    monkeypatch.setattr(render, "plan", lambda *args: None)
+    prompts = []
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda prompt="": prompts.append(prompt) or "j",
+    )
+    events = []
+    monkeypatch.setattr(
+        loop_mod, "audit", lambda kind, payload, *a, **kw:
+        events.append((kind, payload)),
+    )
+
+    assert loop_mod._human_gate_plan(st) == 0
+    assert prompts and "NO-OP-PLAN" in prompts[0]
+    shown = next(payload for kind, payload in events if kind == "loop_plan_shown")
+    assert "bereits erfuellt" in shown["plan_text"]
+
 def test_human_gate_plan_test_kontext(tmp_path, monkeypatch):
     """M-348b: WERKSTATT_IN_TEST=1 -> rc=0."""
     from werkstatt import loop as loop_mod
