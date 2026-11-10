@@ -27,8 +27,7 @@ def _phase_finalize(
     project_name: str,
     phase_state,
 ) -> int:
-    """Phase 4+5 (Fix AZ Stufe 8-D, 2026-10-31): Phase-End-Review +
-    Human-Gate + Phase-End-Verify + PROGRESS + Summary.
+    """Phase 4+5: Phase-End-Review, Human-Gate, Verify, Commit, PROGRESS.
 
     Rueckgabe: rc (0 = Erfolg, 1 = Abbruch).
     """
@@ -126,7 +125,10 @@ def _phase_finalize(
     # 5. Human-Gate (eigenes, fail-closed)
     group_start("Phase 5: Human-Gate")
     audit("loop_phase", {"phase": "human_gate", "status": "start"}, pd, pn)
-    rc = _human_gate(state)
+    # 2 = explizit freigegeben, Commit wird bis nach Verify aufgeschoben.
+    _gate_rc = _human_gate(state, defer_commit=True)
+    _commit_requested = _gate_rc == 2
+    rc = 0 if _commit_requested else _gate_rc
     group_end()
 
     # OP-060b: human_review-Tasks offen + Mensch approved -> rc=2.
@@ -140,6 +142,19 @@ def _phase_finalize(
         audit("loop_gate_failed",
               _gate_failed_payload("phase_end", []), pd, pn)
         rc = 1
+
+    # Commit erst nach bestandenem Phase-End-Verify. Bei rotem Verify oder
+    # offenen human_review-Tasks bleibt der Working Tree uncommitted.
+    if rc == 0 and _commit_requested:
+        from werkstatt.committer import _committe_zielprojekt
+        _commit_ok, _commit_info = _committe_zielprojekt(state)
+        if not _commit_ok:
+            audit("loop_human_gate_commit_abort",
+                  {"info": _commit_info}, pd, pn)
+            print(f"  FEHLER beim Commit: {_commit_info}")
+            rc = 1
+        elif _commit_info:
+            print(f"  Commit: {_commit_info}")
 
     if rc == 0:
         audit("loop_erfolg", {"project_name": project_name}, pd, pn)

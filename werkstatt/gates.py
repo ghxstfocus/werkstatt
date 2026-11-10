@@ -599,12 +599,14 @@ def _human_gate_body(state) -> str:
     return "\n\n".join(_parts)
 
 
-def _human_gate(state: RunState) -> int:
+def _human_gate(state: RunState, *, defer_commit: bool = False) -> int:
     """Eigenes Human-Gate im Loop (fail-closed).
 
     Liest require_human_approval aus der Zielprojekt-Config.
     - false: automatisch approve (rc=0).
-    - true: interaktiv input() aufrufen, bei EOFError -> reject (rc=1).
+    - true: Gate-Antwort abwarten, bei EOF/Abbruch -> reject (rc=1).
+    - defer_commit=True: explizites j gibt rc=2 zurueck; der Aufrufer
+      muss erst nach erfolgreichem Verify committen.
     """
     pd = getattr(state, "project_dir", None)
     pn = getattr(state, "project_name", "?")
@@ -711,6 +713,11 @@ def _human_gate(state: RunState) -> int:
         audit("loop_human_gate_approved", {}, pd, pn)
         # OP-058: ADR-Mini-Phase (opt-in WERKSTATT_ADR_MINI=1).
         _adr_mini_phase(state)
+        # In Phase 5 muss das harte Phase-End-Verify erst ueber
+        # denselben, gegebenenfalls manuell geaenderten Diff laufen.
+        # Rueckgabewert 2 signalisiert: explizit freigegeben, Commit offen.
+        if defer_commit:
+            return 2
         # M-487: Human-Gate committet selbst (nur bei explizitem j).
         _ok, _info = _committe_zielprojekt(state)
         if not _ok:
@@ -726,7 +733,7 @@ def _human_gate(state: RunState) -> int:
         if not _HEADLESS:
             input()
         # Rekursiv erneut fragen (Diff neu anzeigen)
-        return _human_gate(state)
+        return _human_gate(state, defer_commit=defer_commit)
     audit("loop_human_gate_rejected", {"antwort": antwort}, pd, pn)
     return 1
 

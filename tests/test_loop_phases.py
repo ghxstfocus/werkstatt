@@ -381,3 +381,60 @@ def test_alle_done_aus_phasestate():
     # Pruefe, dass phase_state.get_task aufgerufen wird
     assert "phase_state.get_task" in src
     assert "_alle_done" in src
+
+
+def _run_finalize_commit_order(tmp_path, monkeypatch, verify_ok):
+    from werkstatt.phases import finalize
+
+    state = _state(tmp_path)
+    state.tasks = [{"id": "t1"}]
+    state.applied_count = 0
+    phase_state = MagicMock()
+    phase_state.get_task.return_value = {"status": "done"}
+    order = []
+
+    def _human_gate(_state, *, defer_commit=False):
+        assert defer_commit is True
+        return 2
+
+    def _verify(_state, phase=None):
+        assert phase == "phase_end"
+        order.append("verify")
+        return verify_ok
+
+    def _commit(_state):
+        order.append("commit")
+        _state.progress_written_at_commit = True
+        return True, "abc123"
+
+    monkeypatch.setattr(finalize, "_human_gate", _human_gate)
+    monkeypatch.setattr(finalize, "_verify_patches", _verify)
+    monkeypatch.setattr(finalize, "_hat_human_review_tasks", lambda _ps: False)
+    monkeypatch.setattr(finalize, "audit", lambda *a, **kw: None)
+    monkeypatch.setattr(finalize, "group_start", lambda *a, **kw: None)
+    monkeypatch.setattr(finalize, "group_end", lambda *a, **kw: None)
+    monkeypatch.setattr(finalize, "summary", lambda *a, **kw: None)
+    monkeypatch.setattr("werkstatt.committer._committe_zielprojekt", _commit)
+    monkeypatch.setattr("werkstatt.progress.append", lambda *a, **kw: None)
+
+    rc = finalize._phase_finalize(
+        state, tasks_ok=1, tasks=state.tasks,
+        project_name="testproj", phase_state=phase_state,
+    )
+    return rc, order
+
+
+def test_finalize_committet_erst_nach_bestandenem_phase_end_verify(
+    tmp_path, monkeypatch,
+):
+    rc, order = _run_finalize_commit_order(tmp_path, monkeypatch, True)
+    assert rc == 0
+    assert order == ["verify", "commit"]
+
+
+def test_finalize_committet_nicht_wenn_phase_end_verify_scheitert(
+    tmp_path, monkeypatch,
+):
+    rc, order = _run_finalize_commit_order(tmp_path, monkeypatch, False)
+    assert rc == 1
+    assert order == ["verify"]

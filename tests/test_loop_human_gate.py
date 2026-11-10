@@ -224,3 +224,13 @@ def test_gate_edit_rekursiv(tmp_path, monkeypatch, cfg_file):
         assert loop._human_gate(s) == 0
     # approved-Audit genau einmal (aus der zweiten Runde).
     assert len(_kind(tmp_path, "loop_human_gate_approved")) == 1
+
+
+def test_gate_approved_deferred_commit(tmp_path, monkeypatch, cfg_file):
+    """Explizites j gibt Freigabe zurueck, committet aber noch nicht."""
+    cfg_file.write_text("require_human_approval: true\n", encoding="utf-8")
+    monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
+    monkeypatch.setattr("builtins.input", lambda *a, **kw: "j")
+    with patch("werkstatt.loop._committe_zielprojekt") as commit:
+        assert loop._human_gate(_state(tmp_path), defer_commit=True) == 2
+    commit.assert_not_called()
