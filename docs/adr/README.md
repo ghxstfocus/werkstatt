@@ -21,7 +21,7 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0015](ADR-0015-tests-sind-specs.md) | Tests sind Specs, keine Attrappen | accepted |
 | [ADR-0016](ADR-0016-spec-first-test-loop.md) | Spec-First Test-Loop — Tests vor Code | proposed |
 | [ADR-0017](ADR-0017-mutation-gate.md) | Mutation-Gate mit pytest-gremlins | proposed |
-| [ADR-0018](ADR-0018-debugger-rolle.md) | Debugger als eigene Rolle | proposed |
+| [ADR-0018](ADR-0018-debugger-rolle.md) | Debugger als eigene Rolle | rejected |
 | [ADR-0019](ADR-0019-gate-lifecycle.md) | Gate-Lifecycle-Vertrag statt PID/Heartbeat/Timeout | accepted |
 | [ADR-0020](ADR-0020-human-readable-audit.md) | Human-Readable Audit-Trail im Frontend | accepted |
 | [ADR-0021](ADR-0021-rollen-detail-ansicht.md) | Rollen-spezifische Detail-Ansicht im Chat-Drawer | accepted |
