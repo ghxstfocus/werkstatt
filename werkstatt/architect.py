@@ -727,6 +727,22 @@ def run_architect(
         )
     state.architect_skills_block = ""
 
+    _scout_auftrag = getattr(state, "scout_auftrag", None)
+    _arch_user_content = user_content
+    if _scout_auftrag:
+        if (
+            not isinstance(_scout_auftrag, dict)
+            or not isinstance(_scout_auftrag.get("auftrag_prosa"), str)
+            or not _scout_auftrag["auftrag_prosa"].strip()
+        ):
+            audit("planner_scout_json_fehler",
+                  {"grund": "auftrag_prosa_fehlt"}, pd, pn)
+            return False
+        # OP-385: Der Scout-Report ist die einzige Aufgabenquelle des
+        # Architect. Alle vorher aufgebauten Explorer-/Historienbloecke
+        # bleiben beim Planner, werden aber nicht doppelt uebergeben.
+        _arch_user_content = ""
+
     _arch_sys_base = _planner_system(aufgabe, explorer_ctx, state)
     _arch_skills_block = state.architect_skills_block or ""
     _arch_sys = (
@@ -736,7 +752,7 @@ def run_architect(
     _arch_reply = _with_spinner(
         "Architect",
         lambda: ask_llm(
-            api_key, _arch_sys, user_content,
+            api_key, _arch_sys, _arch_user_content,
             model=_get_architect_model(),
             temperature=0.2, max_tokens=ARCHITECT_MAX_TOKENS,
             aufgabe="architect", heartbeat=False, state=state,

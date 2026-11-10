@@ -1398,7 +1398,7 @@ noch nicht vollstaendig.
   - Wenn `scout.bereits_erfuellt == true`: Loop bricht ab, Architect uebersprungen
   
   **(e) Live: Architect-Prompt 30-50 % kleiner, Plan-Qualitaet gleich oder besser**
-- **Tests:** `tests/test_scout_kette.py` (5 Tests: HAUPTZIEL-Block im Prompt, `scout_auftrag` gefuellt, Architect nutzt `scout_auftrag` statt `explorer_findings`, Fallback bei leerem `scout_auftrag`, `bereits_erfuellt`-Check).
+- **Tests:** `tests/test_scout_kette.py` (5 Tests: Scout-Auftrag im Systemprompt, kein doppelter Explorer-User-Kontext, fail-closed bei unvollstaendigem Report, Legacy-Fallback, `bereits_erfuellt`-Check).
 - **ADR:** ADR-0028 (Scout-Kette als Kontext-Verengung — wird mit OP-385 angelegt)
 
 ### OP-386: Reflection-Kontext bereinigen (Diff statt Patches)

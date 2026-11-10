@@ -66,6 +66,16 @@ def _format_explorer_findings(f: dict) -> str:
     return chr(10).join(lines)
 
 
+
+
+def _scout_report_hat_architect_auftrag(report: object) -> bool:
+    """True nur wenn Scout einen verwertbaren Architect-Auftrag lieferte."""
+    if not isinstance(report, dict):
+        return False
+    prosa = report.get("auftrag_prosa")
+    return isinstance(prosa, str) and bool(prosa.strip())
+
+
 def _klassifiziere_fehler(stage_id: str, fehlertext: str) -> str:
     """M-299a: Klassifiziert einen Verify-Fehler nach Klasse.
 
@@ -2126,6 +2136,10 @@ def run_planner(state: RunState) -> bool:
     _scout_report = _run_scout(
         state, aufgabe, _code_index, _key_files_scan, api_key,
     )
+    if not isinstance(_scout_report, dict):
+        audit("planner_scout_json_fehler",
+              {"grund": "kein_structured_scout_report"}, pd, pn)
+        return False
 
     # GOLD 2026-10-30: Scout kann "bereits_erfuellt" melden.
     # Dann brechen wir ab: kein Architect, kein Planner, kein Builder.
@@ -2139,6 +2153,11 @@ def run_planner(state: RunState) -> bool:
         state.auftrag_bereits_erfuellt_bestaetigt = False
         state.auftrag_bereits_erfuellt_quelle = "planner:scout_llm_urteil"
         return True
+
+    if not _scout_report_hat_architect_auftrag(_scout_report):
+        audit("planner_scout_json_fehler",
+              {"grund": "auftrag_prosa_fehlt"}, pd, pn)
+        return False
 
     # SCOUT_BOX_RENDER (2026-11-02): Scout-Prosa + API-Auszug sichtbar machen
     if _scout_report:
@@ -2160,41 +2179,14 @@ def run_planner(state: RunState) -> bool:
             pass
 
     if _scout_report:
-        _scout_auftrag = _scout_report.get("auftrag_prosa") or ""
         _scout_apis = _scout_report.get("api_auszug") or {}
-        # OP-385: Scout-Report komplett in State, damit der Architect
-        # NUR scout_auftrag nutzt (statt explorer_findings + scout_api
-        # + measured_files parallel = 100k user_len truncation).
-        try:
-            state.scout_auftrag = dict(_scout_report)
-        except (AttributeError, TypeError):
-            pass
-        try:
-            state.scout_api_auszug = _scout_apis
-        except (AttributeError, TypeError):
-            pass
-
-        _scout_risiken = _scout_report.get("risiken") or []
-        if _scout_auftrag:
-            user_content += (
-                "\n\n## SCOUT-AUFTRAG (vorformuliert):\n"
-                + _scout_auftrag[:3000]
-            )
-        if _scout_apis:
-            _api_lines = []
-            for _af, _asyms in list(_scout_apis.items())[:10]:
-                _api_lines.append(f"-- {_af}")
-                for _asym in (_asyms or [])[:20]:
-                    _api_lines.append(f"   {_asym}")
-            user_content += (
-                "\n\n## VERFUEGBARE APIS (aus Code-Index):\n"
-                + "\n".join(_api_lines)[:4000]
-            )
-        if _scout_risiken:
-            user_content += (
-                "\n\n## SCOUT-RISIKEN:\n"
-                + "\n".join(f"- {r}" for r in _scout_risiken[:10])
-            )
+        if not isinstance(_scout_apis, dict):
+            _scout_apis = {}
+        # OP-385: Der Scout-Report wird an genau einer Stelle gespeichert.
+        # run_architect setzt ihn in den Systemkontext; Rohdaten werden
+        # nicht parallel in user_content wiederholt.
+        state.scout_auftrag = dict(_scout_report)
+        state.scout_api_auszug = _scout_apis
 
         # GOLD-Neu 2026-10-30: Widerspruchs-Check Auftrag vs Code-Index.
         _widersprueche = _pruefe_api_widerspruch(_scout_report, _code_index)

@@ -90,3 +90,70 @@ def test_bereits_erfuellt_hinweis_im_scout_block():
     assert "bereits erfuellt" in prompt.lower(), (
         "bereits_erfuellt-Hinweis MUSS im scout_auftrag-Block stehen"
     )
+
+def test_run_architect_nutzt_scout_nicht_doppelten_user_context(
+    monkeypatch, tmp_path,
+):
+    """OP-385: Scout-Auftrag wird einmal im Systemprompt uebergeben."""
+    from werkstatt import architect
+
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        api_index_cache={"already_built": True},
+        docs={},
+        scout_auftrag={
+            "auftrag_prosa": "Ersetze A durch B in auth.py.",
+            "api_auszug": {"auth.py": ["verify_token"]},
+            "risiken": ["Cookie-Fallback bleibt kompatibel"],
+            "bereits_erfuellt": False,
+        },
+        scout_api_auszug={},
+    )
+    captured = {}
+
+    class _Reply:
+        ok = True
+        content = "Architect-Plan. " * 8
+
+    def _ask_llm(_key, system, user, **_kwargs):
+        captured["system"] = system
+        captured["user"] = user
+        return _Reply()
+
+    monkeypatch.setattr(architect, "_with_spinner", lambda _label, call: call())
+    monkeypatch.setattr(architect, "ask_llm", _ask_llm)
+    monkeypatch.setattr(architect, "audit", lambda *_args, **_kwargs: None)
+
+    assert architect.run_architect(
+        state, "Aufgabe", "Explorer-Rohdaten-Duplikat", "key", None,
+    )
+    assert "<scout_auftrag>" in captured["system"]
+    assert "Ersetze A durch B in auth.py." in captured["system"]
+    assert captured["user"] == ""
+    assert "Explorer-Rohdaten-Duplikat" not in captured["system"]
+
+
+def test_run_architect_faellt_bei_unvollstaendigem_scout_fail_closed(
+    monkeypatch, tmp_path,
+):
+    """OP-385: Report ohne Architect-Auftrag darf den Fallback nicht oeffnen."""
+    from types import SimpleNamespace
+
+    from werkstatt import architect
+
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        api_index_cache={"already_built": True},
+        docs={},
+        scout_auftrag={"risiken": ["Risiko ohne Auftrag"]},
+    )
+    calls = []
+    monkeypatch.setattr(architect, "ask_llm", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(architect, "audit", lambda *_args, **_kwargs: None)
+
+    assert not architect.run_architect(
+        state, "Aufgabe", "Explorer-Rohdaten", "key", None,
+    )
+    assert calls == []
