@@ -325,6 +325,7 @@ def test_main_kaputte_config_fail_closed_und_auditiert(tmp_path, monkeypatch):
         for event in _audit_events(tmp_path)
     )
 
+
 def test_main_stash_pop_bei_exception(tmp_path, monkeypatch):
     """Bug B (OP-392): Exception in run_pipeline_loop -> Stash trotzdem gepoppt.
 
