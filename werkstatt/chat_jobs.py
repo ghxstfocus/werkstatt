@@ -67,6 +67,7 @@ class ChatJobStore:
                 " answer TEXT, error TEXT, created_at TEXT NOT NULL,"
                 " updated_at TEXT NOT NULL, worker_id TEXT,"
                 " heartbeat_at TEXT, cancel_requested INTEGER NOT NULL DEFAULT 0,"
+                " context_seq INTEGER NOT NULL DEFAULT 0,"
                 " UNIQUE(session_id, idempotency_key));"
                 "CREATE TABLE IF NOT EXISTS job_events ("
                 " seq INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -88,10 +89,16 @@ class ChatJobStore:
                     "ALTER TABLE jobs ADD COLUMN cancel_requested INTEGER "
                     "NOT NULL DEFAULT 0"
                 )
+            if "context_seq" not in columns:
+                conn.execute(
+                    "ALTER TABLE jobs ADD COLUMN context_seq INTEGER "
+                    "NOT NULL DEFAULT 0"
+                )
             conn.commit()
 
     def create(
         self, session_id: str, message: str, mode: str, idempotency_key: str,
+        *, context_seq: int = 0,
     ) -> tuple[dict[str, Any], bool]:
         """Atomar anlegen; wiederholter Key liefert den bestehenden Job."""
         now = _now()
@@ -112,9 +119,10 @@ class ChatJobStore:
             job_id = uuid.uuid4().hex
             conn.execute(
                 "INSERT INTO jobs(job_id,session_id,idempotency_key,message,"
-                "mode,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+                "mode,state,created_at,updated_at,context_seq) "
+                "VALUES(?,?,?,?,?,?,?,?,?)",
                 (job_id, session_id, idempotency_key, message, mode,
-                 "queued", now, now),
+                 "queued", now, now, max(0, context_seq)),
             )
             conn.execute(
                 "INSERT INTO job_events(job_id,kind,payload,ts) VALUES(?,?,?,?)",
@@ -126,6 +134,16 @@ class ChatJobStore:
             conn.commit()
         assert row is not None
         return dict(row), True
+
+    def succeeded_for_session(self, session_id: str) -> list[dict[str, Any]]:
+        """Liefert erfolgreiche Jobs fuer idempotente Session-Reconciliation."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT * FROM jobs WHERE session_id=? AND state='succeeded' "
+                "ORDER BY rowid",
+                (session_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def queued(self) -> list[dict[str, Any]]:
         with closing(self._connect()) as conn:
@@ -153,13 +171,6 @@ class ChatJobStore:
                 (job_id,),
             ).fetchone()
             if job is None:
-                conn.commit()
-                return False
-            active = conn.execute(
-                "SELECT 1 FROM jobs WHERE session_id=? AND state='running' LIMIT 1",
-                (job["session_id"],),
-            ).fetchone()
-            if active is not None:
                 conn.commit()
                 return False
             cur = conn.execute(
@@ -406,6 +417,11 @@ def _run_job(
     from werkstatt.chat_agent import ChatCancelled, chat_loop
     from werkstatt.chat_session import ChatSession
 
+    parent_session = ChatSession(project, job["session_id"])
+    worker_session = parent_session.snapshot_to(
+        job_id, at_seq=int(job.get("context_seq") or 0),
+    )
+
     def event(kind: str, **payload: Any) -> None:
         store.append_event(job_id, kind, payload)
 
@@ -430,7 +446,7 @@ def _run_job(
     heartbeat_thread.start()
     try:
         answer = chat_loop(
-            ChatSession(project, job["session_id"]),
+            worker_session,
             job["message"],
             mode=job["mode"],
             project_dir=project_dir,
@@ -444,7 +460,8 @@ def _run_job(
             ),
             request_id=job_id,
         )
-        store.finish(job_id, answer=answer)
+        if store.finish(job_id, answer=answer):
+            parent_session.append_job_turn(job_id, job["message"], answer)
     except ChatCancelled:
         store.finish(job_id, cancelled=True)
     except Exception as exc:
@@ -463,13 +480,7 @@ def _dispatch_pending(
 ) -> None:
     store = ChatJobStore(db_path)
     store.recover_abandoned_jobs()
-    running_sessions = store.running_sessions()
-    submitted_sessions: set[str] = set()
     for job in store.queued():
-        session_id = str(job["session_id"])
-        if session_id in running_sessions or session_id in submitted_sessions:
-            continue
-        submitted_sessions.add(session_id)
         key = f"{db_path.resolve()}:{job['job_id']}"
         with _FUTURES_LOCK:
             current = _FUTURES.get(key)
@@ -507,6 +518,23 @@ def _future_cleanup_callback(
 
     return cleanup
 
+def sync_completed_job_turns(
+    project: str, session_id: str, *, db_path: Path | None = None,
+) -> int:
+    """Reconciles successful jobs into the parent transcript after a crash."""
+    path = Path(db_path) if db_path else _db_path(project)
+    from werkstatt.chat_session import ChatSession
+
+    session = ChatSession(project, session_id)
+    added = 0
+    for job in ChatJobStore(path).succeeded_for_session(session_id):
+        if job.get("answer") is not None and session.append_job_turn(
+            str(job["job_id"]), str(job["message"]), str(job["answer"]),
+        ):
+            added += 1
+    return added
+
+
 def resume_chat_jobs(
     project: str, project_dir: Path, *, db_path: Path | None = None,
 ) -> None:
@@ -524,12 +552,14 @@ def enqueue_chat_job(
     idempotency_key: str,
     *,
     db_path: Path | None = None,
+    context_seq: int = 0,
 ) -> dict[str, Any]:
-    """Persistiert den Job und startet queued Jobs ausserhalb des Requests."""
+    """Persistiert einen Job mit festem Kontext-Wasserstand und dispatcht ihn."""
     path = Path(db_path) if db_path else _db_path(project)
     store = ChatJobStore(path)
     job, created = store.create(
         session_id, message, mode, idempotency_key,
+        context_seq=context_seq,
     )
     _dispatch_pending(path, project, Path(project_dir))
     return {"job": job, "created": created}
