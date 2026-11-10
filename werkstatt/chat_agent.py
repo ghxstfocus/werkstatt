@@ -168,10 +168,14 @@ def chat_loop(
     on_tool_result: Callable[[str, str], None] | None = None,
     max_rounds: int = _DEFAULT_MAX_ROUNDS,
     project_dir: Path | str | None = None,
+    request_id: str | None = None,
 ) -> str:
     """User-Nachricht -> LLM-Loop -> Assistant-Antwort."""
     tools = tools if tools is not None else CHAT_TOOLS
-    session.append("user", {"text": message})
+    user_payload: dict[str, Any] = {"text": message}
+    if request_id is not None:
+        user_payload["job_id"] = request_id
+    session.append("user", user_payload)
     _project_context = f"Aktives Projekt: {session.project}."
     if project_dir is not None:
         _project_context += (
