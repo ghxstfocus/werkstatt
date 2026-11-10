@@ -4689,3 +4689,5 @@ Der Event-Store kann Events jetzt mit Projektbezug und deterministischer Event-I
 - Serverlauf auf `73d2893` fand einen API-Fehler: `enqueue_chat_job` erhielt `project` zugleich positional und als Keyword. Den doppelten Keyword-Parameter entfernt; der API-Test sichert die Argumentform.
 - Der Live-Feed behandelt einen laufenden `chat_job_started` als aktuelle Aktivität und blendet ihn aus `steps` aus, um Doppelanzeige zu vermeiden. Den Test auf diesen Vertrag umgestellt und Projekt-Isolation des fehlgeschlagenen Fremdprojekts mitgeprüft.
 - Verifikation auf dem Server nach Pull steht aus.
+
+- **Mehrprojekt-Audit:** Web-Auswahl-, Pause-, Resume- und Stop-Events erhalten nun auch die Event-Store-Projektspalte. Payload-Projekt allein reichte fuer projektgefilterte Timeline-Abfragen nicht; Tests pruefen den Projektbezug.
