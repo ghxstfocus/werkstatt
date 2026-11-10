@@ -21,11 +21,13 @@ Routing für Agenten. Keine Enzyklopädie.
 
 1. Explorer (werkstatt/explorer.py) — read-only, messt deterministisch.
 2. Scout (werkstatt/scout.py) — Content-Check + api_auszug.
-3. Architect (deepseek-reasoner) — Prosa, numerierte Schritte.
-4. Planner-Split (deepseek-chat) — zerlegt Prosa in Tasks.
-5. Builder (deepseek-chat) — search/replace pro Task.
+3. Architect (deepseek-v4-pro, Thinking high) — Prosa, numerierte Schritte.
+4. Planner-Split (deepseek-flash, Thinking aus) — zerlegt Prosa in Tasks.
+5. Builder (deepseek-flash, Thinking aus) — search/replace pro Task.
 6. Verify (verify.json-Stages) — deterministisch, post_build.
-7. Reviewer (deepseek-chat) — prueft Task-Description.
+7. Reviewer (deepseek-flash, Thinking aus) — prueft Task-Description.
+   Alle uebrigen Rollen (Scout, Explorer, Validator, Reflection, Debugger und Chat)
+   nutzen deepseek-flash mit Thinking aus.
 8. Reflection — bei Reject: Feedback + Builder erneut.
 9. Human-Gate — Plan-Gate + Commit-Gate, fail-closed.
 6. Human-Gate — Plan-Gate + Ergebnis-Gate.
