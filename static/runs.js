@@ -54,7 +54,7 @@
     function controlButton(action, label) {
       var button = document.createElement("button");
       button.type = "button";
-      button.className = "runs-action-btn";
+      button.className = "runs-action-btn runs-control-action";
       button.dataset.action = action;
       button.textContent = label;
       button.disabled = _aktionLaeuft;
