@@ -215,13 +215,13 @@ def test_start_verwirft_op_mit_doppelter_id(
     docs_dir = tmp_path / "demo" / "docs"
     docs_dir.mkdir(parents=True)
     op = (
-        "### OP-002: Doppelte Aufgabe\\n"
-        "- **Status:** open\\n"
-        "- **Blockiert von:** —\\n"
-        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\\n"
-        "- **Tests:** pytest -q tests/test_002.py\\n"
+        "### OP-002: Doppelte Aufgabe\n"
+        "- **Status:** open\n"
+        "- **Blockiert von:** —\n"
+        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\n"
+        "- **Tests:** pytest -q tests/test_002.py\n"
     )
-    (docs_dir / "STATUS.md").write_text(op + "\\n" + op, encoding="utf-8")
+    (docs_dir / "STATUS.md").write_text(op + "\n" + op, encoding="utf-8")
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
     _reset_loop_registry(app_modul)
     aufrufe: list[list[str]] = []
