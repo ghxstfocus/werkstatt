@@ -22,6 +22,7 @@ _ROLE_MODELS = {
     "architect": "deepseek-v4-pro",
     "builder": "deepseek-flash",
     "reviewer": "deepseek-flash",
+    "review": "deepseek-flash",
     "reflection": "deepseek-flash",
     "debugger": "deepseek-flash",
     "solver": "deepseek-flash",
