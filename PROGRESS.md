@@ -4179,3 +4179,15 @@ Ranking/Buendeln noch nicht belastbar beanspruchen. Naechster Architektur-
 Schritt: normalisiertes, rueckwaertskompatibles Kandidaten-Metadaten-Schema
 mit Validierung und Migrationsstrategie, bevor Ranking als Entscheidungsgrund
 verwendet wird.
+
+### Serververifikation — OP-398, Mypy und Control-Toolbar (HEAD 4eb7e41)
+
+- Zieltests fuer Quality-Gate, Selector, Web-Backend, Runs-Frontend und Tab-Persistenz: 47 passed.
+- Ruff: 0 Fehler.
+- Vollsuite: 1818 passed, 5 skipped.
+- Mypy: 0 Fehler; Quality Gate: `ok=true`, `regression=false`.
+- Doku-Check warnt ausschliesslich vor den lokalen, uncommitteten Aenderungen an `werkstatt/web/audit_panel.py` und `werkstatt/web/terminal_proxy.py`; diese wurden nicht veraendert.
+- AST/Katalog wurden wie vorgesehen uebersprungen, da die Dateien fehlen.
+- **Commit:** `95a4b6832a94` — _ausgeschlossen fuer Mypy annotiert.
+- **Commit:** `4c87b0552a66` — UI-Test-Syntaxfehler behoben.
+- Diese Gate-Ergebnisse verifizieren API/Tests, aber nicht die visuelle Toolbar nach Browser-Cache-Reload.
