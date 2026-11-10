@@ -430,6 +430,8 @@ def _run_job(
         name=f"werkstatt-chat-heartbeat-{job_id[:8]}",
         daemon=True,
     )
+    parent_session = None
+    worker_session = None
     heartbeat_thread.start()
     try:
         parent_session = ChatSession(project, job["session_id"])
@@ -462,6 +464,13 @@ def _run_job(
             job_id, error=f"{type(exc).__name__}: {exc}",
         )
     finally:
+        if parent_session is not None and worker_session is not None:
+            try:
+                parent_session.delete_snapshot(job_id)
+            except (OSError, sqlite3.Error) as exc:
+                store.append_event(
+                    job_id, "branch_cleanup_failed", {"error": str(exc)},
+                )
         heartbeat_stop.set()
         heartbeat_thread.join(timeout=_WORKER_HEARTBEAT_SECONDS + 1)
         _dispatch_pending(db_path, project, project_dir)
