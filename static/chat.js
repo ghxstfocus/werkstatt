@@ -19,12 +19,15 @@
 
   function _el(id) { return document.getElementById(id); }
 
-  function _neueSession(projekt) {
+  function _neueSession(projekt, anfrage) {
+    if (anfrage === undefined) anfrage = zustand.historyRequest;
     return fetch("/api/projects/" + encodeURIComponent(projekt) + "/chat/new",
                  {method: "POST", credentials: "same-origin"})
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (zustand.projekt === projekt) zustand.sessionId = d.session_id;
+        if (zustand.projekt === projekt && zustand.historyRequest === anfrage) {
+          zustand.sessionId = d.session_id;
+        }
         return fetch("/api/projects/" + encodeURIComponent(projekt) +
                      "/chat/history?session_id=" + encodeURIComponent(d.session_id),
                      {credentials: "same-origin"})
@@ -298,16 +301,30 @@
   function _sende(text) {
     if (!text) return;
     var projekt = zustand.projekt;
+    var anfrage = zustand.historyRequest;
     if (!zustand.sessionId) {
       if (!zustand.sessionPromise) {
-        zustand.sessionPromise = _neueSession(projekt).finally(function () {
-          zustand.sessionPromise = null;
+        var sessionPromise = _neueSession(projekt, anfrage);
+        zustand.sessionPromise = sessionPromise;
+        sessionPromise.then(function () {
+          if (zustand.sessionPromise === sessionPromise) {
+            zustand.sessionPromise = null;
+          }
+        }, function () {
+          if (zustand.sessionPromise === sessionPromise) {
+            zustand.sessionPromise = null;
+          }
         });
       }
-      zustand.sessionPromise.then(function () {
-        if (projekt === zustand.projekt) _sende(text);
+      var wartendeSession = zustand.sessionPromise;
+      wartendeSession.then(function () {
+        if (projekt === zustand.projekt && anfrage === zustand.historyRequest) {
+          _sende(text);
+        }
       }).catch(function () {
-        _setzeChatStatus("Neue Session konnte nicht erstellt werden.", "error");
+        if (projekt === zustand.projekt && anfrage === zustand.historyRequest) {
+          _setzeChatStatus("Neue Session konnte nicht erstellt werden.", "error");
+        }
       });
       return;
     }
@@ -416,10 +433,28 @@
     var neuBtn = _el("chat-neu");
     if (neuBtn) {
       neuBtn.addEventListener("click", function () {
-        _neueSession(zustand.projekt).then(function () {
-          var box = _el("chat-nachrichten");
-          if (box) box.innerHTML = "";
+        var projekt = zustand.projekt;
+        var anfrage = ++zustand.historyRequest;
+        if (zustand.socket) {
+          try { zustand.socket.close(); } catch (e) {}
+          zustand.socket = null;
+        }
+        zustand.sessionId = null;
+        zustand.sendQueue = [];
+        zustand.streamAktiv = false;
+        zustand.streamBuf = "";
+        zustand.aktuelleKarte = null;
+        var box = _el("chat-nachrichten");
+        if (box) box.innerHTML = "";
+        _setzeChatStatus("Neue Session wird erstellt …", "loading");
+        _neueSession(projekt, anfrage).then(function () {
+          if (projekt !== zustand.projekt || anfrage !== zustand.historyRequest) return;
+          _zeigeLeerzustand();
+          _setzeChatStatus("Bereit · " + projekt, "ready");
           _renderSidebarAktuell();
+        }).catch(function () {
+          if (projekt !== zustand.projekt || anfrage !== zustand.historyRequest) return;
+          _setzeChatStatus("Neue Session konnte nicht erstellt werden.", "error");
         });
       });
     }
