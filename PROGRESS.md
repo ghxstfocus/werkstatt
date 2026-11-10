@@ -4451,3 +4451,5 @@ fehlendem/kaputtem Pflichtkontext sicher gestoppt.
 
 - **Commit:** 3b108ac — API-Antwortmodell im LLM-Usage-Audit protokolliert.
 - **Commit:** ee50914 — Provider-Modell-ID auch im Chat-Usage-Datensatz sichtbar.
+
+- **Commit:** fcfe693 — veraltete Chat-Modellkonstante entfernt.
