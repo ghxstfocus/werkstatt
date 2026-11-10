@@ -1131,6 +1131,13 @@ def create_app() -> FastAPI:
         try:
             sync_completed_job_turns(projekt, sid, db_path=db_path)
             context_seq = ChatSession(projekt, sid).max_seq()
+            loop_record = _loop_registry().read(projekt)
+            run_id = (
+                str(loop_record["run_id"])
+                if loop_record is not None
+                and loop_record["state"] in ("starting", "running", "paused")
+                else None
+            )
             accepted = enqueue_chat_job(
                 projekt,
                 (_PROJECTS_BASE / projekt).resolve(),
@@ -1140,6 +1147,7 @@ def create_app() -> FastAPI:
                 idempotency_key,
                 db_path=db_path,
                 context_seq=context_seq,
+                run_id=run_id,
             )
         except IdempotencyConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1152,6 +1160,7 @@ def create_app() -> FastAPI:
             "job_id": job["job_id"],
             "state": job["state"],
             "created": accepted["created"],
+            "run_id": job.get("run_id"),
         }
 
     @app.get("/api/projects/{name}/chat/jobs")
@@ -1180,7 +1189,7 @@ def create_app() -> FastAPI:
             "jobs": [
                 {"job_id": job["job_id"], "message": job["message"],
                  "state": job["state"], "error": job["error"],
-                 "created_at": job["created_at"]}
+                 "created_at": job["created_at"], "run_id": job["run_id"]}
                 for job in jobs
             ],
         }
