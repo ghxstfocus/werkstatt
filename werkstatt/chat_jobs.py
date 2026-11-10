@@ -66,7 +66,7 @@ class ChatJobStore:
                 " mode TEXT NOT NULL, state TEXT NOT NULL,"
                 " answer TEXT, error TEXT, created_at TEXT NOT NULL,"
                 " updated_at TEXT NOT NULL, worker_id TEXT,"
-                " heartbeat_at TEXT,"
+                " heartbeat_at TEXT, cancel_requested INTEGER NOT NULL DEFAULT 0,"
                 " UNIQUE(session_id, idempotency_key));"
                 "CREATE TABLE IF NOT EXISTS job_events ("
                 " seq INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -83,6 +83,11 @@ class ChatJobStore:
                 conn.execute("ALTER TABLE jobs ADD COLUMN worker_id TEXT")
             if "heartbeat_at" not in columns:
                 conn.execute("ALTER TABLE jobs ADD COLUMN heartbeat_at TEXT")
+            if "cancel_requested" not in columns:
+                conn.execute(
+                    "ALTER TABLE jobs ADD COLUMN cancel_requested INTEGER "
+                    "NOT NULL DEFAULT 0"
+                )
             conn.commit()
 
     def create(
@@ -163,6 +168,60 @@ class ChatJobStore:
             conn.commit()
             return cur.rowcount == 1
 
+    def request_cancel(
+        self, job_id: str, session_id: str,
+    ) -> dict[str, Any] | None:
+        """Bricht queued sofort ab oder fordert kooperativen Worker-Abbruch an."""
+        now = _now()
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT state,cancel_requested FROM jobs "
+                "WHERE job_id=? AND session_id=?",
+                (job_id, session_id),
+            ).fetchone()
+            if row is None:
+                conn.commit()
+                return None
+            state = str(row["state"])
+            if state == "queued":
+                conn.execute(
+                    "UPDATE jobs SET state='cancelled',updated_at=? "
+                    "WHERE job_id=? AND state='queued'",
+                    (now, job_id),
+                )
+                conn.execute(
+                    "INSERT INTO job_events(job_id,kind,payload,ts) "
+                    "VALUES(?,?,?,?)",
+                    (job_id, "cancelled", json.dumps({"reason": "cancelled_queued"}), now),
+                )
+                state = "cancelled"
+            elif state == "running" and not row["cancel_requested"]:
+                conn.execute(
+                    "UPDATE jobs SET cancel_requested=1,updated_at=? "
+                    "WHERE job_id=? AND state='running'",
+                    (now, job_id),
+                )
+                conn.execute(
+                    "INSERT INTO job_events(job_id,kind,payload,ts) "
+                    "VALUES(?,?,?,?)",
+                    (job_id, "cancel_requested", "{}", now),
+                )
+                state = "cancelling"
+            elif state == "running":
+                state = "cancelling"
+            conn.commit()
+            return {"job_id": job_id, "state": state}
+
+    def cancellation_requested(self, job_id: str, worker_id: str) -> bool:
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT cancel_requested FROM jobs "
+                "WHERE job_id=? AND state='running' AND worker_id=?",
+                (job_id, worker_id),
+            ).fetchone()
+        return bool(row and row["cancel_requested"])
+
     def heartbeat(self, job_id: str, worker_id: str) -> bool:
         """Erneuert die Lease nur fuer den Worker, der den Job beansprucht hat."""
         now = _now()
@@ -234,13 +293,31 @@ class ChatJobStore:
 
     def finish(
         self, job_id: str, *, answer: str | None = None,
-        error: str | None = None,
+        error: str | None = None, cancelled: bool = False,
     ) -> bool:
-        state = "failed" if error is not None else "succeeded"
         now = _now()
-        payload = {"error": error} if error is not None else {"answer": answer or ""}
         with closing(self._connect()) as conn:
             conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT cancel_requested FROM jobs "
+                "WHERE job_id=? AND state='running'",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                conn.commit()
+                return False
+            was_cancelled = cancelled or bool(row["cancel_requested"])
+            state = "cancelled" if was_cancelled else (
+                "failed" if error is not None else "succeeded"
+            )
+            error = (
+                "Auftrag abgebrochen." if was_cancelled else error
+            )
+            payload = (
+                {"reason": "cancelled"} if was_cancelled
+                else {"error": error} if error is not None
+                else {"answer": answer or ""}
+            )
             cur = conn.execute(
                 "UPDATE jobs SET state=?,answer=?,error=?,updated_at=?,"
                 "worker_id=NULL WHERE job_id=? AND state='running'",
@@ -273,7 +350,8 @@ class ChatJobStore:
             rows = conn.execute(
                 "SELECT * FROM jobs WHERE session_id=? AND ("
                 "state IN ('queued','running') OR job_id IN ("
-                "SELECT job_id FROM jobs WHERE session_id=? AND state='failed' "
+                "SELECT job_id FROM jobs WHERE session_id=? "
+                "AND state IN ('failed','cancelled') "
                 "ORDER BY rowid DESC LIMIT ?)) ORDER BY rowid",
                 (session_id, session_id, max(0, failed_limit)),
             ).fetchall()
@@ -323,6 +401,9 @@ def _run_job(
     def event(kind: str, **payload: Any) -> None:
         store.append_event(job_id, kind, payload)
 
+    def cancel_check() -> bool:
+        return store.cancellation_requested(job_id, _WORKER_ID)
+
     heartbeat_stop = threading.Event()
 
     def maintain_lease() -> None:
@@ -345,6 +426,7 @@ def _run_job(
             job["message"],
             mode=job["mode"],
             project_dir=project_dir,
+            cancel_check=cancel_check,
             on_chunk=lambda text: event("chunk", text=text),
             on_tool_call=lambda name, args: event(
                 "tool_call", name=name, args=args,
@@ -356,9 +438,14 @@ def _run_job(
         )
         store.finish(job_id, answer=answer)
     except Exception as exc:
-        store.finish(
-            job_id, error=f"{type(exc).__name__}: {exc}",
-        )
+        from werkstatt.chat_agent import ChatCancelled
+
+        if isinstance(exc, ChatCancelled):
+            store.finish(job_id, cancelled=True)
+        else:
+            store.finish(
+                job_id, error=f"{type(exc).__name__}: {exc}",
+            )
     finally:
         heartbeat_stop.set()
         heartbeat_thread.join(timeout=_WORKER_HEARTBEAT_SECONDS + 1)
