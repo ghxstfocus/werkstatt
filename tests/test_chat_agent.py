@@ -197,3 +197,9 @@ def test_chat_tool_uses_explicit_project_root(session, fake_llm, tmp_path) -> No
 
     tr = next(e for e in session.load() if e["kind"] == "tool_result")
     assert tr["payload"]["content"] == "ausgewaehltes Projekt"
+
+
+def test_system_prompt_routes_next_work_questions_through_selector() -> None:
+    assert "next_op" in chat_agent._SYSTEM_PROMPT
+    assert "Bei Mehrdeutigkeit fragst du" in chat_agent._SYSTEM_PROMPT
+    assert "veraendert nichts" in chat_agent._SYSTEM_PROMPT
