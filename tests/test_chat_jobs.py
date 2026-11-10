@@ -1,6 +1,7 @@
 """Persistente Chat-Job-Zustaende und Event-Replay (OP-397)."""
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -136,4 +137,47 @@ def test_completed_future_is_removed_from_registry(
     chat_jobs._dispatch_pending(db_path, "demo", project_dir)
 
     assert key not in chat_jobs._FUTURES
+
+def test_expired_worker_lease_fails_job_and_persists_reason(tmp_path: Path) -> None:
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _created = store.create(
+        "session-a", "Frage", "read", "request-key-lease-001",
+    )
+    assert store.claim(job["job_id"], "worker-a")
+    expired_at = datetime.now(UTC) + timedelta(seconds=91)
+
+    assert store.recover_abandoned_jobs(now=expired_at) == 1
+    failed = store.get(job["job_id"])
+    assert failed is not None
+    assert failed["state"] == "failed"
+    assert failed["error"] == (
+        "Worker-Lease abgelaufen; Job nach Prozessunterbrechung beendet."
+    )
+    assert failed["events"][-1]["payload"]["reason"] == "worker_lease_expired"
+
+
+def test_live_worker_lease_is_not_expired_on_reconnect(tmp_path: Path) -> None:
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _created = store.create(
+        "session-a", "Frage", "read", "request-key-lease-002",
+    )
+    assert store.claim(job["job_id"], "worker-a")
+    assert store.heartbeat(job["job_id"], "worker-a")
+    reconnect_at = datetime.now(UTC) + timedelta(seconds=89)
+
+    assert store.recover_abandoned_jobs(now=reconnect_at) == 0
+    current = store.get(job["job_id"])
+    assert current is not None
+    assert current["state"] == "running"
+
+
+def test_only_claiming_worker_can_renew_lease(tmp_path: Path) -> None:
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _created = store.create(
+        "session-a", "Frage", "read", "request-key-lease-003",
+    )
+    assert store.claim(job["job_id"], "worker-a")
+
+    assert store.heartbeat(job["job_id"], "worker-b") is False
+    assert store.heartbeat(job["job_id"], "worker-a") is True
 
