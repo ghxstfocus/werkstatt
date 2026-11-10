@@ -67,7 +67,7 @@ class ChatJobStore:
                 " answer TEXT, error TEXT, created_at TEXT NOT NULL,"
                 " updated_at TEXT NOT NULL, worker_id TEXT,"
                 " heartbeat_at TEXT, cancel_requested INTEGER NOT NULL DEFAULT 0,"
-                " context_seq INTEGER NOT NULL DEFAULT 0,"
+                " context_seq INTEGER,"
                 " UNIQUE(session_id, idempotency_key));"
                 "CREATE TABLE IF NOT EXISTS job_events ("
                 " seq INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -91,14 +91,13 @@ class ChatJobStore:
                 )
             if "context_seq" not in columns:
                 conn.execute(
-                    "ALTER TABLE jobs ADD COLUMN context_seq INTEGER "
-                    "NOT NULL DEFAULT 0"
+                    "ALTER TABLE jobs ADD COLUMN context_seq INTEGER"
                 )
             conn.commit()
 
     def create(
         self, session_id: str, message: str, mode: str, idempotency_key: str,
-        *, context_seq: int = 0,
+        *, context_seq: int | None = None,
     ) -> tuple[dict[str, Any], bool]:
         """Atomar anlegen; wiederholter Key liefert den bestehenden Job."""
         now = _now()
@@ -122,7 +121,8 @@ class ChatJobStore:
                 "mode,state,created_at,updated_at,context_seq) "
                 "VALUES(?,?,?,?,?,?,?,?,?)",
                 (job_id, session_id, idempotency_key, message, mode,
-                 "queued", now, now, max(0, context_seq)),
+                 "queued", now, now,
+                 None if context_seq is None else max(0, context_seq)),
             )
             conn.execute(
                 "INSERT INTO job_events(job_id,kind,payload,ts) VALUES(?,?,?,?)",
@@ -433,8 +433,10 @@ def _run_job(
     heartbeat_thread.start()
     try:
         parent_session = ChatSession(project, job["session_id"])
+        context_seq = job.get("context_seq")
         worker_session = parent_session.snapshot_to(
-            job_id, at_seq=int(job.get("context_seq") or 0),
+            job_id,
+            at_seq=None if context_seq is None else int(context_seq),
         )
         answer = chat_loop(
             worker_session,
@@ -546,7 +548,7 @@ def enqueue_chat_job(
     idempotency_key: str,
     *,
     db_path: Path | None = None,
-    context_seq: int = 0,
+    context_seq: int | None = None,
 ) -> dict[str, Any]:
     """Persistiert einen Job mit festem Kontext-Wasserstand und dispatcht ihn."""
     path = Path(db_path) if db_path else _db_path(project)
