@@ -540,7 +540,8 @@
     if (job.done) return;
     var pollToken = token === undefined ? job.pollToken : token;
     var base = "/api/projects/" + encodeURIComponent(job.project) + "/chat/jobs/" +
-      encodeURIComponent(job.jobId) + "?since_seq=" + job.cursor;
+      encodeURIComponent(job.jobId) + "?session_id=" + encodeURIComponent(job.sessionId) +
+      "&since_seq=" + job.cursor;
     fetch(base, {credentials: "same-origin"}).then(function (response) {
       if (!response.ok) throw new Error("Status " + response.status);
       return response.json();
