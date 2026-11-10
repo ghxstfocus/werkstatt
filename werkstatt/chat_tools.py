@@ -1,6 +1,6 @@
 """Read-only Tool-Registry fuer den Chat-Agent (OP-231, ADR-0008).
 
-Acht Tools (SOLL §5.3). Kein write_file/apply_patch/git_commit/shell_exec.
+Neun Tools (SOLL §5.3). Kein write_file/apply_patch/git_commit/shell_exec.
 Alle Tools haben Timeouts und Groessenlimits. ``mode``-Feld pro Tool
 bereitet opt-in write-Tools vor (heute alle read).
 """
@@ -226,6 +226,33 @@ def _read_status(_args: dict[str, Any]) -> str:
 
     return "\n".join(teile) if teile else "(STATUS.md/PROGRESS.md nicht gefunden)"
 
+def _next_op(_args: dict[str, Any]) -> str:
+    """Liefert begruendete STATUS-OP-Auswahl ohne einen Run zu starten."""
+    status_path = _aktives_projekt_dir() / "docs" / "STATUS.md"
+    if not status_path.is_file():
+        return json.dumps({
+            "zustand": "no_status",
+            "detail": "docs/STATUS.md fehlt im aktiven Projekt.",
+        }, ensure_ascii=False)
+    try:
+        status_text = status_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return json.dumps({
+            "zustand": "error",
+            "detail": f"STATUS.md kann nicht gelesen werden: {exc}",
+        }, ensure_ascii=False)
+
+    from werkstatt.web.op_selector import select_next_op
+
+    result = select_next_op(status_text)
+    excluded = result.pop("ausgeschlossen", [])
+    result["quelle"] = "docs/STATUS.md"
+    result["ausgeschlossen_anzahl"] = len(excluded)
+    result["ausgeschlossen"] = excluded[:20]
+    result["ausgeschlossen_gekürzt"] = len(excluded) > 20
+    return json.dumps(result, ensure_ascii=False)
+
+
 CHAT_TOOLS: dict[str, dict[str, Any]] = {
     "read_file": {
         "description": "Liest Datei-Inhalt (max 50 KB).",
@@ -304,6 +331,16 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
         "description": "STATUS.md + PROGRESS.md (Kopf).",
         "parameters": {"type": "object", "properties": {}},
         "fn": _read_status,
+        "mode": "read",
+    },
+    "next_op": {
+        "description": (
+            "Analysiert docs/STATUS.md des aktiven Projekts und liefert "
+            "startfaehige OP-Kandidaten, Abhaengigkeiten und Ausschlussgruende. "
+            "Startet oder aendert nichts."
+        ),
+        "parameters": {"type": "object", "properties": {}},
+        "fn": _next_op,
         "mode": "read",
     },
 }
