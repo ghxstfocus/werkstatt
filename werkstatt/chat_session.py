@@ -69,6 +69,16 @@ class ChatSession:
                 "CREATE INDEX IF NOT EXISTS idx_events_session_seq "
                 "ON events(session_id, seq)"
             )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS chat_snapshots ("
+                "target_session_id TEXT PRIMARY KEY,"
+                "parent_session_id TEXT NOT NULL,source_seq INTEGER NOT NULL)"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS chat_job_turns ("
+                "session_id TEXT NOT NULL,job_id TEXT NOT NULL,"
+                "PRIMARY KEY(session_id,job_id))"
+            )
             conn.commit()
 
     def append(
@@ -108,6 +118,76 @@ class ChatSession:
                 "payload": payload_obj,
             })
         return ergebnis
+
+    def max_seq(self) -> int:
+        """Hoechste gespeicherte Event-Sequenz dieser Session."""
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT COALESCE(MAX(seq),0) FROM events WHERE session_id=?",
+                (self.session_id,),
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+    def snapshot_to(
+        self, target_session_id: str, *, at_seq: int | None = None,
+    ) -> "ChatSession":
+        """Kopiert einen unveraenderlichen Kontext-Snapshot idempotent."""
+        if target_session_id == self.session_id:
+            raise ValueError("Snapshot-Ziel muss eine eigene Session sein")
+        target = ChatSession(self.project, target_session_id, db_pfad=self.db_pfad)
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            existing = conn.execute(
+                "SELECT 1 FROM chat_snapshots WHERE target_session_id=?",
+                (target_session_id,),
+            ).fetchone()
+            if existing is None:
+                cutoff = self.max_seq() if at_seq is None else max(0, at_seq)
+                rows = conn.execute(
+                    "SELECT ts,kind,payload FROM events "
+                    "WHERE session_id=? AND seq<=? ORDER BY seq",
+                    (self.session_id, cutoff),
+                ).fetchall()
+                for ts, kind, payload in rows:
+                    conn.execute(
+                        "INSERT INTO events(session_id,ts,kind,payload) "
+                        "VALUES(?,?,?,?)",
+                        (target_session_id, ts, kind, payload),
+                    )
+                conn.execute(
+                    "INSERT INTO chat_snapshots("
+                    "target_session_id,parent_session_id,source_seq) "
+                    "VALUES(?,?,?)",
+                    (target_session_id, self.session_id, cutoff),
+                )
+            conn.commit()
+        return target
+
+    def append_job_turn(
+        self, job_id: str, user_text: str, assistant_text: str,
+    ) -> bool:
+        """Fuegt ein erfolgreiches Job-Turn-Paar genau einmal zur Session hinzu."""
+        ts = datetime.now(UTC).isoformat()
+        payload = json.dumps(
+            {"job_id": job_id, "user_text": user_text,
+             "assistant_text": assistant_text},
+            ensure_ascii=False,
+        )
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            inserted = conn.execute(
+                "INSERT OR IGNORE INTO chat_job_turns(session_id,job_id) "
+                "VALUES(?,?)",
+                (self.session_id, job_id),
+            )
+            if inserted.rowcount:
+                conn.execute(
+                    "INSERT INTO events(session_id,ts,kind,payload) "
+                    "VALUES(?,?,?,?)",
+                    (self.session_id, ts, "job_turn", payload),
+                )
+            conn.commit()
+        return bool(inserted.rowcount)
 
 
 def list_sessions(
