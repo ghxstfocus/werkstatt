@@ -4644,3 +4644,15 @@ Beim Reconnect werden abgelaufene Worker-Leases zuerst recovered; danach entfern
 - **Commit:** `d9f7a475a025d96f7b466b66b187c64ce4c18c01` — Regressionstest fuer fehlgeschlagenen Job-Branch.
 - **Commit:** `b5d2c825716b4e35bd7055cd9f8ffcde142d4cd5` — STATUS um Reconnect-Verhalten ergaenzen.
 - **Serververifikation:** nach Pull ausstehend.
+
+## 2026-11-10 — Chat-Jobs dem aktiven Loop-Run zuordnen
+
+Der Job-Speicher fuehrt jetzt ein optionales `run_id`-Feld mit Migration fuer bestehende Datenbanken. Die Web-API liest den aktuellen Zustand aus der persistenten Loop-Registry; bei `starting`, `running` oder `paused` bindet sie die Job-Annahme an diese Run-ID. Idempotente Wiederholungen behalten den urspruenglichen Run-Kontext. Create- und Reconnect-Antworten geben die Zuordnung aus.
+
+- **Commit:** `94ba0dd642b0b332235f97964b33d62474d12a74` — optionales Run-Feld in Chat-Jobs speichern.
+- **Commit:** `6ae75f5dc9ceb62fbb10e8c669a9e7e8959dd70d` — aktive Run-ID aus Registry an Job-API uebergeben.
+- **Commit:** `22ac864c3e6936da6d21ba71de2b5ead77202e80` — Idempotenz behaelt Run-Zuordnung der ersten Annahme.
+- **Commit:** `cad1cab22bd1638e02691dbf9b75e87d52baf2a1` — API-Test fuer Run-ID bei aktivem Loop.
+- **Commit:** `074abc529ba14fb30f54e815a956c79e47ef9fbf` — Migrationstest fuer Run-ID-Spalte.
+- **Commit:** `430ce24736773e8056fb689a12592941d30818eb` — STATUS um Run-Verknuepfung und verbleibende Event-Store-Luecke ergaenzen.
+- **Serververifikation:** nach Pull ausstehend.
