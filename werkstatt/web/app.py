@@ -6,7 +6,9 @@ Threadpool ausfuehrt; Start und Stop pro Projekt werden serialisiert.
 """
 
 import asyncio
+import os
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -32,6 +34,8 @@ _PROJECTS_BASE = Path("/opt")
 
 _LAUFENDE_LOOPS: dict[str, subprocess.Popen] = {}
 _LOOP_LOG_HANDLES: dict[str, Any] = {}
+_LOOP_RUN_IDS: dict[str, str] = {}
+_PAUSIERTE_LOOPS: set[str] = set()
 _LOOP_LOCKS: dict[str, Any] = {}
 _LOOP_LOCKS_GUARD = threading.Lock()
 
@@ -348,6 +352,13 @@ def create_app() -> FastAPI:
                 status_code=404,
                 detail=f"Projekt {projektname!r} hat kein docs/STATUS.md",
             )
+        # Bereits laufende Arbeit hat Vorrang vor der Validierung einer
+        # neuen Eingabe. Der spaetere Lock um Popen schliesst die Race-Luecke.
+        with _projekt_loop_lock(projektname):
+            laufend = _LAUFENDE_LOOPS.get(projektname)
+            if laufend is not None and laufend.poll() is None:
+                return {"gestartet": False, "pid": laufend.pid,
+                        "grund": "laeuft_bereits"}
         import secrets as _secrets
         import time as _time
         run_id = (
@@ -414,6 +425,8 @@ def create_app() -> FastAPI:
                 return {"gestartet": False, "pid": laufend.pid,
                         "grund": "laeuft_bereits"}
             _LAUFENDE_LOOPS.pop(projektname, None)
+            _LOOP_RUN_IDS.pop(projektname, None)
+            _PAUSIERTE_LOOPS.discard(projektname)
             _altes_log = _LOOP_LOG_HANDLES.pop(projektname, None)
             if _altes_log is not None:
                 try:
@@ -443,6 +456,7 @@ def create_app() -> FastAPI:
                     status_code=500, detail=f"Loop konnte nicht starten: {exc}",
                 ) from exc
             _LAUFENDE_LOOPS[projektname] = prozess
+            _LOOP_RUN_IDS[projektname] = run_id
             if _log_fh is not None:
                 _LOOP_LOG_HANDLES[projektname] = _log_fh
             return {
@@ -452,6 +466,97 @@ def create_app() -> FastAPI:
                 "aufgabe": aufgabe or "(automatisch aus STATUS.md)",
             }
 
+    @app.get("/api/projects/{name}/loop")
+    def project_loop_control(name: str) -> dict[str, Any]:
+        """Liefert den Prozesszustand fuer die Projekt-Steuerung."""
+        projektname = _pruefe_projektname(name)
+        with _projekt_loop_lock(projektname):
+            prozess = _LAUFENDE_LOOPS.get(projektname)
+            if prozess is None or prozess.poll() is not None:
+                return {
+                    "state": "idle",
+                    "pid": None,
+                    "run_id": _LOOP_RUN_IDS.get(projektname),
+                }
+            return {
+                "state": "paused" if projektname in _PAUSIERTE_LOOPS else "running",
+                "pid": prozess.pid,
+                "run_id": _LOOP_RUN_IDS.get(projektname),
+            }
+
+    def _audit_loop_control(
+        projektname: str, prozess: subprocess.Popen, kind: str, status: str,
+    ) -> bool:
+        run_id = _LOOP_RUN_IDS.get(projektname)
+        if not run_id:
+            return False
+        try:
+            EventStore().append(
+                run_id, kind, status=status,
+                payload={"project": projektname, "pid": prozess.pid},
+            )
+        except Exception:
+            return False
+        return True
+
+    @app.post("/api/projects/{name}/pause")
+    def project_pause(name: str) -> dict[str, Any]:
+        """Pausiert den Loop-Prozess auf POSIX-Ebene."""
+        projektname = _pruefe_projektname(name)
+        if os.name != "posix":
+            raise HTTPException(
+                status_code=501, detail="Pause wird nur auf POSIX-Systemen unterstuetzt",
+            )
+        with _projekt_loop_lock(projektname):
+            prozess = _LAUFENDE_LOOPS.get(projektname)
+            if prozess is None or prozess.poll() is not None:
+                raise HTTPException(status_code=404, detail="kein laufender Loop")
+            if projektname in _PAUSIERTE_LOOPS:
+                return {"pausiert": True, "bereits_pausiert": True}
+            try:
+                os.kill(prozess.pid, signal.SIGSTOP)
+            except ProcessLookupError as exc:
+                raise HTTPException(
+                    status_code=409, detail="Loop wurde bereits beendet",
+                ) from exc
+            except OSError as exc:
+                raise HTTPException(status_code=500, detail=f"Pause fehlgeschlagen: {exc}") from exc
+            _PAUSIERTE_LOOPS.add(projektname)
+            audit_ok = _audit_loop_control(
+                projektname, prozess, "web_loop_paused", "paused",
+            )
+            return {"pausiert": True, "audit_event": audit_ok}
+
+    @app.post("/api/projects/{name}/resume")
+    def project_resume(name: str) -> dict[str, Any]:
+        """Setzt einen pausierten POSIX-Loop fort."""
+        projektname = _pruefe_projektname(name)
+        if os.name != "posix":
+            raise HTTPException(
+                status_code=501, detail="Resume wird nur auf POSIX-Systemen unterstuetzt",
+            )
+        with _projekt_loop_lock(projektname):
+            prozess = _LAUFENDE_LOOPS.get(projektname)
+            if prozess is None or prozess.poll() is not None:
+                raise HTTPException(status_code=404, detail="kein laufender Loop")
+            if projektname not in _PAUSIERTE_LOOPS:
+                return {"fortgesetzt": True, "bereits_laufend": True}
+            try:
+                os.kill(prozess.pid, signal.SIGCONT)
+            except ProcessLookupError as exc:
+                raise HTTPException(
+                    status_code=409, detail="Loop wurde bereits beendet",
+                ) from exc
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=500, detail=f"Fortsetzen fehlgeschlagen: {exc}",
+                ) from exc
+            _PAUSIERTE_LOOPS.discard(projektname)
+            audit_ok = _audit_loop_control(
+                projektname, prozess, "web_loop_resumed", "running",
+            )
+            return {"fortgesetzt": True, "audit_event": audit_ok}
+
     @app.post("/api/projects/{name}/stop")
     def project_stop(name: str) -> dict[str, Any]:
         """Stoppt den laufenden Loop eines Projekts."""
@@ -460,6 +565,13 @@ def create_app() -> FastAPI:
             prozess = _LAUFENDE_LOOPS.get(projektname)
             if prozess is None or prozess.poll() is not None:
                 raise HTTPException(status_code=404, detail="kein laufender Loop")
+            run_id = _LOOP_RUN_IDS.get(projektname, "")
+            if projektname in _PAUSIERTE_LOOPS and os.name == "posix":
+                try:
+                    os.kill(prozess.pid, signal.SIGCONT)
+                except ProcessLookupError:
+                    pass
+            _PAUSIERTE_LOOPS.discard(projektname)
             try:
                 prozess.terminate()
             except ProcessLookupError:
@@ -474,14 +586,28 @@ def create_app() -> FastAPI:
                     raise HTTPException(
                         status_code=504, detail="Loop reagiert nicht auf Stop",
                     ) from exc
+            audit_ok = False
+            if run_id:
+                try:
+                    EventStore().append(
+                        run_id, "web_loop_stopped", status="stopped",
+                        payload={"project": projektname, "pid": prozess.pid},
+                    )
+                    audit_ok = True
+                except Exception:
+                    pass
             _LAUFENDE_LOOPS.pop(projektname, None)
+            _LOOP_RUN_IDS.pop(projektname, None)
             _log_fh = _LOOP_LOG_HANDLES.pop(projektname, None)
             if _log_fh is not None:
                 try:
                     _log_fh.close()
                 except OSError:
                     pass
-            return {"gestoppt": True, "returncode": returncode}
+            return {
+                "gestoppt": True, "returncode": returncode,
+                "audit_event": audit_ok,
+            }
 
     @app.get("/api/projects/{name}/tokens")
     def project_tokens(name: str, run_id: str | None = None) -> dict[str, Any]:
