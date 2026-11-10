@@ -148,7 +148,8 @@ KRITISCHE Regeln fuer Block-Bau:
   mehrzeiligem Anker + count==1-Assert.
 - Pre-Commit-Pflicht: py_compile, pytest, audit_drift, control_drift,
   state_inventory, ruff auf geaenderten Files.
-- Loop niemals mit 'yes j | ...' oder --auto-approve starten.
+- Schreib-Runs brauchen ein konkretes Ziel; --auto-approve ist entfernt.
+- Plan-Gate immer menschlich entscheiden, auch bei Headless-Runs.
 - Plan-Gate: <=5 Tasks, plausible Zieldateien -> j. Sonst n + Grund.
 - KEIN 'pytest | tail': $? ist tail-Exit, immer 0.
   Richtig: pytest > /tmp/pt.log 2>&1; PT=$?

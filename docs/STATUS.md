@@ -41,11 +41,13 @@ noch nicht vollstaendig.
 - **Status:** open
 - **Typ:** ui-orchestration
 - **Betroffene Dateien:** `werkstatt/chat_agent.py`, `werkstatt/chat_tools.py`, `werkstatt/web/app.py`, `static/chat.js`, `static/layout.css`, Chat- und Web-Tests
-- **Problem:** Der Chat ist read-only und getrennt von der Loop-Steuerung. Projektfragen sollen natuerlich formuliert werden koennen; der Chat muss das Repo untersuchen, Belege liefern, Aktionen verstaendlich erklaeren und waehrend eines Runs ansprechbar bleiben.
+- **Problem:** Der Chat ist read-only und getrennt von der Loop-Steuerung. Projektfragen sollen natuerlich formuliert werden koennen; der Chat muss das Repo untersuchen, Belege liefern, Aktionen verstaendlich erklaeren und waehrend eines Runs ansprechbar bleiben. Schreibende Aktionen erfordern eine ausdrueckliche Freigabe im Chat, bevor Aenderungen ausgefuehrt werden.
 - **Akzeptanzkriterien:**
   - Chat ist in Cockpit, Control und Debug der primaere, dauerhaft sichtbare Interaktionspunkt.
   - Repo-Antworten verwenden projektgebundene Tools und nennen Datei/Zeile oder konkreten Run-/Test-Beleg.
-  - Der Chat kann explizit einen Loop starten, pausieren, fortsetzen oder stoppen; jede Aktion wird vor Ausfuehrung angezeigt und auditiert.
+  - Der Chat kann explizit einen Loop starten, pausieren, fortsetzen oder stoppen; jede Aktion wird vor Ausfuehrung angezeigt und auditiert. UI und Chat zeigen Erfolg, Ablehnung, laufenden Zustand und Fehler direkt sichtbar.
+  - Vor jeder schreibenden Chat-Aktion fragt das System nach ausdruecklicher Freigabe; die Freigabe gilt nur fuer die konkret beschriebene Aktion und ihren Umfang.
+  - Das Plan-Gate ist immer verpflichtend und darf weder per CLI-Flag noch Projektkonfiguration automatisch bestaetigt oder deaktiviert werden. Auch Chat-Freigabe ersetzt dieses Gate nicht.
   - Code-Aenderungen durchlaufen weiterhin Verify, Review und das bestehende Human-Gate. Chat kann kein Gate implizit bestaetigen.
   - Lange Tool-Aufrufe blockieren weder Loop-Prozess noch weitere Chat-Nachrichten.
 - **Tests:** Projekt-Isolation, Belegdarstellung, explizite Loop-Kontrolle, Human-Gate-Invariante und Chat waehrend aktivem Run.
@@ -61,6 +63,7 @@ noch nicht vollstaendig.
   - Job-Events verknuepfen Projekt, Chat-Session und optional run_id; Fortschritt, Erfolg, Fehler und Abbruch sind persistent und nach Reconnect lesbar.
   - Doppelte Requests mit gleicher Idempotency-Key erzeugen keinen doppelten Job.
   - Chat-Nachrichten koennen waehrend aktivem Loop und Hintergrundjob unabhaengig beantwortet werden.
+  - Jede Aktion zeigt im Chat und in der UI sofort Status, Ergebnis oder konkreten Fehler; Konsolen-Logs allein genuegen nicht.
   - Pro Projekt gibt es hoechstens einen schreibenden Loop-Run; lesende Diagnosejobs duerfen parallel laufen.
 - **Tests:** Job-Lifecycle, Reconnect/Replay, Idempotenz, Parallelitaet und Abbruch.
 - **Blockiert von:** —
@@ -71,11 +74,11 @@ noch nicht vollstaendig.
 - **Betroffene Dateien:** `werkstatt/loop.py`, `werkstatt/planner.py`, `werkstatt/web/app.py`, STATUS-Parser, Selector- und Loop-Tests
 - **Problem:** STATUS ist eine menschenlesbare Arbeitsliste, aber Zeilenreihenfolge ist keine ausreichende Auswahlstrategie. Der Web-Start-Endpunkt verspricht eine naechste OP-Auswahl ohne Aufgabentext; der Loop muss diese Auswahl nachweisbar und sicher treffen.
 - **Akzeptanzkriterien:**
-  - Der Selector bildet ausschliesslich explizite, offene OPs mit erfuellten Abhaengigkeiten als Kandidaten.
-  - Direkter Nutzerauftrag oder ausgewaehlte OP haben Vorrang vor autonomer Auswahl.
+  - Der Selector bildet ausschliesslich explizite, offene OPs mit erfuellten Abhaengigkeiten als Kandidaten und kann eng verwandte OPs zu einem gemeinsam begrenzten, verifizierbaren Arbeitsblock buendeln.
+  - Direkter Nutzerauftrag oder ausgewaehlte OP haben Vorrang vor autonomer Auswahl. Eine OP-Buendelung nennt gemeinsamen Zweck, Reihenfolge, Abhaengigkeiten und Abbruchgrenzen und wird vor Ausfuehrung im Plan-Gate freigegeben.
   - Ranking-Begruendung nennt Prioritaet, Relevanz zum Projektziel, Risiko und verfuegbare Verifikation; Ergebnis wird auditiert.
   - Bei Gleichstand, fehlenden Akzeptanzkriterien, veralteten Blockern oder widerspruechlichem Status wird nicht geraten: Kandidaten werden erklaert und der Chat fragt nach.
-  - Erfolg wird nur nach Verify/Review mit Referenzen auf Run und Commit als abgeschlossen markiert; Fehlschlaege aktualisieren Versuch/Blocker, nicht den Abschlussstatus.
+  - Erfolg des gesamten Arbeitsblocks wird nur nach Verify/Review mit Referenzen auf Run und Commit als abgeschlossen markiert; Teilerfolge und ungelöste OPs bleiben getrennt sichtbar. Fehlschlaege aktualisieren Versuch/Blocker, nicht den Abschlussstatus.
   - Runs haben begrenzte Versuche, Checkpoints und klare Stop-Bedingungen; parallele Schreib-Runs fuer dasselbe Projekt sind gesperrt.
 - **Tests:** Parser/Statusvarianten, Dependency-Aufloesung, Ranking, Ambiguitaet, Fail-closed und Abschlussbelege.
 - **Blockiert von:** —

@@ -267,7 +267,6 @@ class RunState:
     aktuelle_task: dict = field(default_factory=dict)
     applied_count: int = 0
     auftrag_bereits_erfuellt: bool = False
-    auto_approve: bool = False
     baseline_gruen: bool = False
     explorer_pytest_laufzeit_s: int = 0
     explorer_ruff_befunde: list = field(default_factory=list)

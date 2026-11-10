@@ -239,10 +239,7 @@ def _phase_plan_and_preflight(
     # M-348c: Plan-Human-Gate (nach Plan-Erstellung, vor Builder).
     if plan_ok:
         audit("loop_phase", {"phase": "plan_gate", "status": "start"}, pd, pn)
-        _rc_plan = _human_gate_plan(
-            state,
-            auto_approve=state.auto_approve,
-        )
+        _rc_plan = _human_gate_plan(state)
         if _rc_plan != 0:
             audit("loop_phase", {"phase": "plan_gate", "status": "rejected"}, pd, pn)
             # Welle H (2026-11-02): Reflection-Runde bei Plan-Reject
@@ -262,9 +259,7 @@ def _phase_plan_and_preflight(
                 if _plan2_ok:
                     # Welle H v2: nach Reflection nochmal human_gate_plan
                     _rc_plan2 = _human_gate_plan(
-                        state,
-                        auto_approve=state.auto_approve,
-                        kontext="revidierter_plan",
+                        state, kontext="revidierter_plan",
                     )
                     if _rc_plan2 != 0:
                         audit("loop_plan_reject_fail_closed",

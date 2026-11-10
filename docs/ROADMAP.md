@@ -13,9 +13,12 @@ deren Rollen, Gates, Audit und Projektgrenzen nachvollziehbar zusammenarbeiten.
 
 ### Bedien- und Autonomie-Fundament — ADR-0029
 
-Chat wird zur zentralen Projekteingabe und Erklaerung. Runs bleiben
-ansprechbar und transparent, waehrend Diagnose und Verify im Hintergrund
-laufen. STATUS liefert genehmigte Arbeitsauftraege; die Auswahl trifft ein
+Chat wird zur zentralen Projekteingabe, Erklaerung und Steuerung. Jede
+schreibende Chat-Aktion braucht eine konkrete vorherige Freigabe. Das
+Plan-Gate bleibt immer verpflichtend. Runs bleiben ansprechbar und
+transparent, waehrend Diagnose und Verify im Hintergrund laufen. Control
+bietet Start, Pause, Fortsetzen und Stop mit sichtbarer Rueckmeldung.
+STATUS liefert genehmigte Arbeitsauftraege; die Auswahl trifft ein
 begruendeter, evidenzbasierter Selector statt einer blinden Zeilenfolge.
 
 - **OP-396:** Chat als projektbezogene Hauptoberflaeche.

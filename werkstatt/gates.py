@@ -169,35 +169,20 @@ def _plan_gate(state: RunState) -> bool:
     return True
 
 
-def _human_gate_plan(state, auto_approve=False, kontext=""):
-    """M-348b: Plan-Human-Gate (nach Plan-Erstellung, vor Builder)."""
+def _human_gate_plan(state, kontext=""):
+    """Verlangt immer menschliche Planfreigabe vor dem Builder.
+
+    Weder CLI-Option noch Projektkonfiguration duerfen das verpflichtende
+    Plan-Gate umgehen.
+    """
     pd = getattr(state, "project_dir", None)
     pn = getattr(state, "project_name", "?")
     if pd is None:
         return 1
 
-    if auto_approve:
-        audit("loop_plan_gate_auto", {"reason": "auto_approve"}, pd, pn)
-        return 0
-
     import os as _os
     if _os.environ.get("WERKSTATT_IN_TEST") == "1":
         audit("loop_plan_gate_test", {"reason": "WERKSTATT_IN_TEST=1"}, pd, pn)
-        return 0
-
-    require = True
-    from werkstatt.paths import project_config as _project_config
-    cfg_path = _project_config(pn)
-    if cfg_path.exists():
-        try:
-            import yaml
-            with cfg_path.open() as fh:
-                cfg = yaml.safe_load(fh) or {}
-            require = bool(cfg.get("require_plan_approval", True))
-        except Exception:
-            pass
-    if not require:
-        audit("loop_plan_gate_auto", {"reason": "require_plan_approval=false"}, pd, pn)
         return 0
 
     from werkstatt import render as _r

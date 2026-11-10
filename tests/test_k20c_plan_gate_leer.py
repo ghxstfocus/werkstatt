@@ -25,7 +25,7 @@ def test_leerer_input_drei_mal_bricht_ab(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
     s = _mk_state(tmp_path)
     with patch("builtins.input", side_effect=["", "", "", "", ""]) as m:
-        rc = _human_gate_plan(s, auto_approve=False)
+        rc = _human_gate_plan(s, )
     assert rc == 1
     # Nach 3 leeren Versuchen Abbruch -- nicht alle 5 verbraucht.
     assert m.call_count == 3
@@ -35,7 +35,7 @@ def test_j_nach_zwei_leeren_geht_durch(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
     s = _mk_state(tmp_path)
     with patch("builtins.input", side_effect=["", "", "j"]):
-        rc = _human_gate_plan(s, auto_approve=False)
+        rc = _human_gate_plan(s, )
     assert rc == 0
 
 
@@ -43,5 +43,5 @@ def test_n_alleine_lehnt_ab(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
     s = _mk_state(tmp_path)
     with patch("builtins.input", return_value="n"):
-        rc = _human_gate_plan(s, auto_approve=False)
+        rc = _human_gate_plan(s, )
     assert rc == 1

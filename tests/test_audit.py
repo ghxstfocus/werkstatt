@@ -105,7 +105,7 @@ def test_loop_plan_gate_rejected_hat_grund() -> None:
             patch("werkstatt.gates.audit") as mock_audit, \
             patch("builtins.input") as mock_input:
         mock_input.side_effect = ["n", "zu vage"]
-        rc = _human_gate_plan(state, auto_approve=False)
+        rc = _human_gate_plan(state, )
     assert rc != 0
     args, _kw = mock_audit.call_args_list[-1]
     assert args[0] == "loop_plan_gate_rejected"

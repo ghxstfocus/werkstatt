@@ -444,9 +444,6 @@ def _main_inner(argv: list[str] | None = None) -> int:
                         help="Externe run_id vom Web (Pflicht bei --headless).")
     parser.add_argument("--dry-run", action="store_true",
                         help="Nur Plan-Gate + Renderer, kein LLM, kein Patch")
-    parser.add_argument("--auto-approve", action="store_true",
-                        help="Plan-Gate + Human-Gate automatisch approven (Skript-Runs)")
-
     args = parser.parse_args(argv)
     if args.headless and not args.run_id:
         parser.error("--headless erfordert --run-id")
@@ -525,7 +522,6 @@ def _main_inner(argv: list[str] | None = None) -> int:
         project_name=args.project,
     )
     _state.start_monotonic = _time.monotonic()
-    _state.auto_approve = bool(args.auto_approve)
     state_ref: list[RunState] = [_state]
 
     _ps = PhaseState(args.project, base_dir=_pd / ".werkstatt")

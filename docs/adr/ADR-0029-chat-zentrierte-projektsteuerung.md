@@ -56,11 +56,16 @@ noch die vorhandene Kontrollschicht.
 
 Werkzeuge sind projektgebunden, capability-basiert, validiert und
 auditiert. Kein frei formulierter Shell-Befehl wird aus Chat-Text
-ausgefuehrt. Schreibende Code-Arbeit laeuft durch denselben Patch-,
-Verify-, Review- und Human-Gate-Pfad wie ein normaler Loop-Lauf.
-Start, Pause, Resume und Stop sind explizite Kontrollaktionen. Gates
-und menschliche Entscheidungen werden nie aus Chat-Prosa abgeleitet
-oder automatisch bestaetigt.
+ausgefuehrt. Vor jeder schreibenden Chat-Aktion zeigt das System die
+konkrete Aktion und ihren Umfang und wartet auf ausdrueckliche
+Freigabe. Diese Freigabe gilt nur fuer genau diese Aktion und ersetzt
+weder Loop-Gates noch weitere Freigaben fuer neue Schreibaktionen.
+Schreibende Code-Arbeit laeuft durch denselben Patch-, Verify-,
+Review- und Human-Gate-Pfad wie ein normaler Loop-Lauf. Das Plan-Gate
+ist immer verpflichtend: kein CLI-Schalter und keine Projektoption
+duerfen es ueberspringen. Start, Pause, Resume und Stop sind explizite
+Kontrollaktionen. Gates und menschliche Entscheidungen werden nie aus
+Chat-Prosa abgeleitet oder automatisch bestaetigt.
 
 ### 3. Hintergrundarbeit bleibt asynchron und sichtbar
 
@@ -82,12 +87,16 @@ denselben Working Tree veraendern.
 Arbeitspakete. Zeilenreihenfolge allein ist keine Auswahlstrategie.
 Der Selector ermittelt zunaechst Kandidaten, die offen, nicht erledigt,
 nicht blockiert und mit Abhaengigkeiten/Projektgrenzen vereinbar sind.
-Er waehlt anhand expliziter Prioritaet, des aktuellen Nutzerziels,
-nachgewiesener Auswirkung, Risiko und erwarteter Verifikation und
-schreibt eine kurze Auswahlbegruendung ins Run-Audit.
+Er kann eng verwandte OPs zu einem gemeinsamen, begrenzten Arbeitsziel
+buendeln, wenn Reihenfolge, Abhaengigkeiten, Umfang und Verifikation
+klar bleiben. Er waehlt anhand expliziter Prioritaet, des aktuellen
+Nutzerziels, nachgewiesener Auswirkung, Risiko und erwarteter
+Verifikation und schreibt Begruendung sowie Zielgrenzen ins Run-Audit.
 
 Ein direkt vom Menschen ausgewaehltes OP oder ein konkreter Chat-Auftrag
-hat Vorrang vor autonomer Auswahl. Bei Gleichstand, widerspruechlichen
+hat Vorrang vor autonomer Auswahl. Der zusammengefasste Plan samt OP-Liste,
+Reihenfolge und Abbruchgrenzen wird vor Schreibarbeit im verpflichtenden
+Plan-Gate menschlich freigegeben. Bei Gleichstand, widerspruechlichen
 Statusangaben, hohem Risiko oder fehlender Akzeptanzinformation fragt
 das System nach. Es darf keine OP aus ROADMAP-Text erfinden oder
 deren Abschluss allein aus LLM-Einschaetzung ableiten.
@@ -107,6 +116,31 @@ stagniert oder eine Entscheidung menschliche Praeferenz erfordert.
 Status wird erst mit Verifikation und dokumentiertem Ergebnis
 fortgeschrieben.
 
+## 6. Zielorientierter Run statt OP-Zeilenlauf
+
+Ein Run besitzt ein explizites Ziel und kann aus einer ausgewaehlten
+STATUS-OP, einem konkreten Chat-Auftrag oder einer freigegebenen Gruppe
+abhaengiger OPs entstehen. Eine angeklickte OP bleibt dabei eine
+bewusste Begrenzung: der Selector darf sie nicht still durch eine andere
+Arbeit ersetzen.
+
+Der Orchestrator ist primaer deterministisch. Er loest den Auftrag in
+Kandidaten und Abhaengigkeiten auf, bildet nur dann einen gemeinsamen
+Arbeitsblock, wenn Akzeptanzkriterien und Grenzen zusammenpassen, und
+legt Ziel, OP-Liste, Reihenfolge, Verify-Plan, Budget und Stop-Regeln
+im Plan-Gate vor. Nach Freigabe arbeitet der Loop diese genehmigte
+Einheit selbststaendig ab: Diagnose, begrenzte Reparatur-/Reflection-
+Runden, Verify und Review. Fehler werden als Befunde weitergereicht;
+der Loop repariert sie innerhalb des genehmigten Umfangs und stoppt bei
+Budget-, Risiko- oder Mehrdeutigkeitsgrenzen.
+
+Das Ergebnis ist ein Run-Bericht mit erledigten und offenen Teilzielen,
+aufgetretenen Fehlern samt Ursache, vorgenommenen Reparaturen,
+Verify-/Review-Belegen und Commit. STATUS wird erst anhand dieser
+Belege fortgeschrieben. Ein groesseres autonomes Batch ist ein
+ausdruecklich gewaehlter Modus mit klarer Obergrenze, kein unendliches
+Weiterarbeiten nach einem OP.
+
 ## Konsequenzen
 
 - Der Chat wird zur Bedien- und Erklaerungsschicht, nicht zu einem
@@ -118,6 +152,11 @@ fortgeschrieben.
   widerspruechliche Queue ersetzt.
 - Bestehende read-only Tools bleiben als sichere Grundmenge. Neue
   Kontrollwerkzeuge erhalten enge Schemas, Idempotenz, Audit und Tests.
+- Jede schreibende Chat-Aktion verlangt eine konkrete, vorherige
+  Zustimmung; pauschale Zustimmung fuer spaetere Aktionen gibt es nicht.
+- Planfreigabe bleibt auch bei automatisierten Skript-Runs verpflichtend;
+  headless bedeutet nur, dass die menschliche Antwort ueber den Gate-Store
+  statt stdin eingeht.
 - Die heutige Aussage im Web-Start-Endpunkt, ohne Aufgabe werde die
   naechste STATUS-OP gelesen, muss gegen tatsaechlichen Code verifiziert
   und entweder implementiert oder korrigiert werden.
@@ -131,5 +170,7 @@ fortgeschrieben.
 - Selector ueberspringt blockierte/erledigte OPs, begruendet seine Wahl
   und fragt bei Mehrdeutigkeit.
 - Wiederholte Start-Requests erzeugen keinen zweiten Schreib-Run.
-- Tests beweisen, dass Chat keinen Human-Gate-Entscheid automatisiert
+- Tests beweisen, dass Chat keinen Human-Gate-Entscheid automatisiert,
+  keine schreibende Chat-Aktion ohne vorherige Zustimmung ausfuehrt,
+  das Plan-Gate weder durch CLI noch Projektkonfiguration umgangen wird
   und Code-Aenderungen weiterhin durch Verify/Review laufen.

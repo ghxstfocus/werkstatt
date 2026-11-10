@@ -240,9 +240,26 @@ Der Chat bleibt in allen drei Modi dauerhaft sichtbar und bedienbar.
 Cockpit zeigt daneben eine ruhige Run-Zusammenfassung und verdichtete
 Timeline. Control zeigt den aktuellen Schritt, Live-Ereignisse und den
 naechsten erwarteten Schritt. Debug wird fuer evidenzbasierte
-Fehleranalyse und Event-Replay ausgebaut. Jeder Tool-Aufruf zeigt
-Zweck, Status, Dauer und Ergebnis; das System arbeitet nicht still im
-Hintergrund.
+Fehleranalyse und Event-Replay ausgebaut. Jede Aktion zeigt Zweck,
+Status, Ergebnis oder Fehler im Chat und in der UI.
+
+Schreibende Chat-Aktionen benoetigen vor der Ausfuehrung eine
+ausdrueckliche Freigabe fuer den konkret beschriebenen Umfang. Die
+Freigabe ist kein pauschaler Schreibmodus und bestaetigt kein Loop-Gate.
+Das Plan-Gate bleibt vor jedem Builder-Lauf zwingend menschlich zu
+bestaetigen, unabhaengig von CLI-Flags oder Projektkonfiguration.
+Control bietet Start, Pause, Fortsetzen und Stop; dieselben Aktionen
+sind als Chat-Befehle moeglich. Pause erfolgt kooperativ an sicheren
+Checkpoints.
+
+Ein Run ist zielorientiert und hat einen begrenzten Auftrag. Er kann mit
+einer angeklickten OP, einer Chat-Aufgabe oder einem im Plan-Gate
+freigegebenen OP-Buendel starten. Eine angeklickte OP bleibt die
+Arbeitsgrenze dieses Runs. Der Orchestrator bestimmt Reihenfolge,
+Abhaengigkeiten, Akzeptanz, Verify-Plan und Stop-Regeln; nach der
+Freigabe loest der Loop Fehler innerhalb dieser Grenzen selbststaendig.
+Ein Batch-Run darf mehrere freigegebene OPs umfassen, aber laeuft nie
+unbegrenzt in die naechste Queue weiter.
 
 
     ┌─────────────────────────────────────────────────────┐

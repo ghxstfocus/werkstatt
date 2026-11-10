@@ -1539,22 +1539,27 @@ def test_plan_renderer_zeigt_phasen(tmp_path, capsys, monkeypatch):
     assert "[create]" in out
 
 
-def test_human_gate_plan_auto_approve(tmp_path, monkeypatch):
-    """M-348b: auto_approve=True -> rc=0."""
-    from werkstatt import loop as loop_mod
+def test_plan_gate_config_cannot_disable_approval(tmp_path, monkeypatch):
+    """require_plan_approval=false darf die Freigabe nicht ueberspringen."""
+    from werkstatt import loop as loop_mod, paths
     from werkstatt.state import RunState
     (tmp_path / ".werkstatt").mkdir()
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text("require_plan_approval: false\n", encoding="utf-8")
+    monkeypatch.setattr(paths, "project_config", lambda _name: config_file)
     st = RunState(
         block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
         always={}, optional={}, file_whitelist=[], api_key="",
         budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
     )
+    monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
+    monkeypatch.setattr("builtins.input", lambda *a, **kw: "n")
     _audits = []
     monkeypatch.setattr(loop_mod, "audit",
                         lambda k, p, *a, **kw: _audits.append(k))
-    rc = loop_mod._human_gate_plan(st, auto_approve=True)
-    assert rc == 0
-    assert "loop_plan_gate_auto" in _audits
+    rc = loop_mod._human_gate_plan(st)
+    assert rc == 1
+    assert "loop_plan_gate_rejected" in _audits
 
 
 def test_human_gate_plan_test_kontext(tmp_path, monkeypatch):
@@ -1571,7 +1576,7 @@ def test_human_gate_plan_test_kontext(tmp_path, monkeypatch):
     _audits = []
     monkeypatch.setattr(loop_mod, "audit",
                         lambda k, p, *a, **kw: _audits.append(k))
-    rc = loop_mod._human_gate_plan(st, auto_approve=False)
+    rc = loop_mod._human_gate_plan(st, )
     assert rc == 0
     assert "loop_plan_gate_test" in _audits
 
@@ -1592,7 +1597,7 @@ def test_human_gate_plan_eof_reject(tmp_path, monkeypatch):
                         lambda k, p, *a, **kw: _audits.append(k))
     monkeypatch.setattr("builtins.input",
                         lambda *a, **kw: (_ for _ in ()).throw(EOFError()))
-    rc = loop_mod._human_gate_plan(st, auto_approve=False)
+    rc = loop_mod._human_gate_plan(st, )
     assert rc == 1
     assert "loop_plan_gate_eof" in _audits
 

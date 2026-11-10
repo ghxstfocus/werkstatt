@@ -46,7 +46,7 @@ def test_plan_gate_fail_closed_bei_ungueltiger_antwort() -> None:
          patch("builtins.input",
                side_effect=["x", "y", "z", "sollte_nicht_kommen"]), \
          patch("werkstatt.gates.audit"):
-        rc = _human_gate_plan(state, auto_approve=False)
+        rc = _human_gate_plan(state, )
     assert rc == 1
 
 
@@ -69,7 +69,7 @@ def test_human_gate_plan_revidierter_kontext(monkeypatch, tmp_path):
     with patch.dict("os.environ", {"WERKSTATT_IN_TEST": "0"}), \
          patch("builtins.input", side_effect=_fake_input), \
          patch("werkstatt.gates.audit"):
-        rc = _human_gate_plan(state, auto_approve=False, kontext="revidierter_plan")
+        rc = _human_gate_plan(state, kontext="revidierter_plan")
     assert rc == 1
     assert any("REVIDIERTER PLAN" in p for p in captured), f"captured={captured}"
     assert any("keine weitere Reflection" in p for p in captured)
