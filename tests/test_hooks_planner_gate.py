@@ -206,3 +206,40 @@ def test_code_aufgabe_lehnt_doku_only_plan_ab():
     result = pg.check_plan(payload)
     assert result["allow"] is False
     assert result["info"]["regel"] == "DOKU_TASK"
+
+
+def test_verify_action_erlaubt():
+    """OP-389b Live-Bug 2026-11-10: Planner produziert action='verify'
+    (siehe werkstatt/planner.py:280), der Hook lehnte es als ACTION-
+    Verstoss ab -> harter Loop-Abbruch, keine Reflection."""
+    result = _run({
+        "tasks": [{"id": "t1", "task_files": ["tests/test_ws_auth.py"],
+                   "action": "verify"}],
+        "phasen": [],
+    })
+    assert result["allow"] is True, result
+
+
+def test_delete_action_erlaubt():
+    """Regress-Barriere: delete ist im Planner-Prompt nicht prominent,
+    wird aber produktiv genutzt (phases/tasks.py:500, antipattern.py:151)."""
+    result = _run({
+        "tasks": [{"id": "t1", "task_files": ["alte_datei.py"],
+                   "action": "delete"}],
+        "phasen": [],
+    })
+    assert result["allow"] is True, result
+
+
+def test_hook_actions_enthalten_planner_schema():
+    """Meta-Test: alle Actions aus dem Planner-Prompt-Schema muessen in
+    _VALID_ACTIONS sein. Regress-Barriere gegen erneutes Auseinanderdriften."""
+    from hooks import planner_gate as pg
+    # Schema aus werkstatt/planner.py:280 (manuell gepflegt, siehe Test-Contract)
+    planner_schema = {"create", "update", "read", "verify"}
+    fehlend = planner_schema - pg._VALID_ACTIONS
+    assert not fehlend, (
+        f"Actions im Planner-Schema fehlen im Hook: {fehlend}. "
+        f"Hook kennt: {sorted(pg._VALID_ACTIONS)}"
+    )
+

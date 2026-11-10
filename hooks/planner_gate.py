@@ -30,7 +30,7 @@ _DOKU_PATTERNS = [
     # = False -> DOKU_TASK abgelehnt.
     re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\.(?:md|rst|txt)$"),
 ]
-_VALID_ACTIONS = {"read", "create", "update", "delete"}
+_VALID_ACTIONS = {"read", "create", "update", "delete", "verify"}
 _VALID_SUFFIXES = (
     # Code
     ".py", ".sql", ".sh", ".bash",
