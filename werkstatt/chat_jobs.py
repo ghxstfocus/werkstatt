@@ -145,6 +145,16 @@ class ChatJobStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def terminal_for_session(self, session_id: str) -> list[dict[str, Any]]:
+        """Liefert beendete Jobs fuer Branch-Bereinigung."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT job_id,state FROM jobs WHERE session_id=? "
+                "AND state IN ('succeeded','failed','cancelled') ORDER BY rowid",
+                (session_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def queued(self) -> list[dict[str, Any]]:
         with closing(self._connect()) as conn:
             rows = conn.execute(
@@ -538,7 +548,8 @@ def sync_completed_job_turns(
             job_id, str(job["message"]), str(job["answer"]),
         ):
             added += 1
-        session.delete_snapshot(job_id)
+    for job in ChatJobStore(path).terminal_for_session(session_id):
+        session.delete_snapshot(str(job["job_id"]))
     return added
 
 
