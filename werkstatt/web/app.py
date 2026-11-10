@@ -152,7 +152,7 @@ def _completed_op_ids(project_dir: Path, status_text: str) -> set[str]:
             encoding="utf-8", errors="replace",
         )
     except OSError:
-        return set()
+        progress_text = ""
     return parse_completed_op_ids(progress_text, status_text)
 
 
