@@ -144,7 +144,7 @@ def _pruefe_session_id(session_id: str) -> str:
     return session_id
 
 
-def _completed_op_ids(project_dir: Path) -> set[str]:
+def _completed_op_ids(project_dir: Path, status_text: str) -> set[str]:
     """Liest explizite Abschlussbelege aus der Projekt-Historie."""
     progress_path = project_dir / "PROGRESS.md"
     try:
@@ -153,7 +153,7 @@ def _completed_op_ids(project_dir: Path) -> set[str]:
         )
     except OSError:
         return set()
-    return parse_completed_op_ids(progress_text)
+    return parse_completed_op_ids(progress_text, status_text)
 
 
 def _phasen_snapshot(name: str) -> dict[str, Any]:
@@ -499,7 +499,7 @@ def create_app() -> FastAPI:
                     raise HTTPException(
                         status_code=500, detail="STATUS.md nicht lesbar",
                     ) from exc
-                _entscheidung = select_next_op(_status_text, _completed_op_ids(_pd))
+                _entscheidung = select_next_op(_status_text, _completed_op_ids(_pd, _status_text))
                 _ausgeschlossen: dict[str, Any] = next(
                     (
                         item for item in _entscheidung["ausgeschlossen"]
@@ -549,7 +549,7 @@ def create_app() -> FastAPI:
                 raise HTTPException(
                     status_code=500, detail="STATUS.md nicht lesbar",
                 ) from exc
-            entscheidung = select_next_op(status_text, _completed_op_ids(_pd))
+            entscheidung = select_next_op(status_text, _completed_op_ids(_pd, status_text))
             if entscheidung["zustand"] == "needs_input":
                 raise HTTPException(
                     status_code=409,
