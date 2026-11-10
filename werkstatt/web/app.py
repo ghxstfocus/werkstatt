@@ -1163,10 +1163,10 @@ def create_app() -> FastAPI:
         sid = _pruefe_session_id(session_id)
         db_path = _PROJECTS_BASE / ".werkstatt" / "chat-jobs" / f"{projekt}.db"
         try:
-            sync_completed_job_turns(projekt, sid, db_path=db_path)
             resume_chat_jobs(
                 projekt, (_PROJECTS_BASE / projekt).resolve(), db_path=db_path,
             )
+            sync_completed_job_turns(projekt, sid, db_path=db_path)
             jobs = ChatJobStore(db_path).reconnect_for_session(sid)
         except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
             raise HTTPException(
