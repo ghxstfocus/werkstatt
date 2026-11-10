@@ -3940,3 +3940,24 @@ die neuere Ansicht legen.
 **Prüfung:** Chat-JavaScript syntaktisch geparst; Verhaltenstest und
 Server-Gates stehen für diesen Commit noch aus.
 
+### 2026-11-10 — Runs-Fehler und Chat-Markdown
+
+**Commits:** 425c1ca, 3498eb4, 351a0ab, 38b4726, 363c8f3, 21a3a35.
+
+Der Control-Screenshot zeigte eine leere Runs-Seitenleiste. Ursache war
+ein nicht definierter Bezeichner `isRunning` in `runs.js`, der das
+Rendern vor der OP-Liste abbrach. Das Badge verwendet jetzt den
+vorhandenen Run-Status; ein Regressionstest deckt die fehlerhafte
+Referenz ab.
+
+Chat-Antworten werden nun als begrenztes Markdown mit Absätzen,
+Listen, Code, Zitaten und sicheren HTTP(S)-Links dargestellt. Die
+Darstellung baut DOM-Knoten und verwendet kein `innerHTML`; rohe
+HTML-Tags bleiben Text. Fliesstext nutzt die UI-Schrift, Code bleibt
+monospace. Ein Frontend-Vertragstest deckt Darstellung und
+Protokollbeschränkung ab. Statische Asset-URLs wurden versioniert.
+
+**Prüfung:** JavaScript-Syntax und Markdown-DOM-Vertrag im lokalen
+isolierten Runtime-Simulator geprüft; Python-/Browser-Gates und
+visuelle Serverprüfung stehen noch aus.
+
