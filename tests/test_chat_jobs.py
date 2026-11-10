@@ -353,6 +353,12 @@ def test_store_migrates_existing_jobs_table_for_worker_leases(
             "UNIQUE(session_id,idempotency_key))"
         )
         conn.execute(
+            "CREATE TABLE job_events ("
+            "seq INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "job_id TEXT NOT NULL,kind TEXT NOT NULL,"
+            "payload TEXT NOT NULL,ts TEXT NOT NULL)"
+        )
+        conn.execute(
             "INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?)",
             (
                 "legacy-job", "session-a", "legacy-key", "Old question",
@@ -363,6 +369,9 @@ def test_store_migrates_existing_jobs_table_for_worker_leases(
     ChatJobStore(db_path)
     with sqlite3.connect(db_path) as conn:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+        event_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(job_events)")
+        }
         context_seq = conn.execute(
             "SELECT context_seq FROM jobs WHERE job_id='legacy-job'",
         ).fetchone()[0]
@@ -372,6 +381,7 @@ def test_store_migrates_existing_jobs_table_for_worker_leases(
         "run_id",
     } <= columns
     assert context_seq is None
+    assert "projected" in event_columns
 
 def test_queued_job_can_be_cancelled_once(tmp_path: Path) -> None:
     store = ChatJobStore(tmp_path / "jobs.db")
