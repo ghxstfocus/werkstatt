@@ -67,13 +67,13 @@ class ChatJobStore:
                 " answer TEXT, error TEXT, created_at TEXT NOT NULL,"
                 " updated_at TEXT NOT NULL, worker_id TEXT,"
                 " heartbeat_at TEXT, cancel_requested INTEGER NOT NULL DEFAULT 0,"
-                " context_seq INTEGER, run_id TEXT,"
+                " context_seq INTEGER, run_id TEXT, project TEXT,"
                 " UNIQUE(session_id, idempotency_key));"
                 "CREATE TABLE IF NOT EXISTS job_events ("
                 " seq INTEGER PRIMARY KEY AUTOINCREMENT,"
                 " job_id TEXT NOT NULL, kind TEXT NOT NULL,"
                 " payload TEXT NOT NULL, ts TEXT NOT NULL,"
-                " FOREIGN KEY(job_id) REFERENCES jobs(job_id));"
+                " projected INTEGER NOT NULL DEFAULT 0,"" FOREIGN KEY(job_id) REFERENCES jobs(job_id));"
                 "CREATE INDEX IF NOT EXISTS idx_chat_job_events "
                 "ON job_events(job_id, seq);"
             )
@@ -95,11 +95,23 @@ class ChatJobStore:
                 )
             if "run_id" not in columns:
                 conn.execute("ALTER TABLE jobs ADD COLUMN run_id TEXT")
+            if "project" not in columns:
+                conn.execute("ALTER TABLE jobs ADD COLUMN project TEXT")
+            event_columns = {
+                str(row["name"])
+                for row in conn.execute("PRAGMA table_info(job_events)")
+            }
+            if "projected" not in event_columns:
+                conn.execute(
+                    "ALTER TABLE job_events ADD COLUMN projected INTEGER "
+                    "NOT NULL DEFAULT 0"
+                )
             conn.commit()
 
     def create(
         self, session_id: str, message: str, mode: str, idempotency_key: str,
         *, context_seq: int | None = None, run_id: str | None = None,
+        project: str | None = None,
     ) -> tuple[dict[str, Any], bool]:
         """Atomar anlegen; wiederholter Key liefert den bestehenden Job."""
         now = _now()
@@ -120,12 +132,12 @@ class ChatJobStore:
             job_id = uuid.uuid4().hex
             conn.execute(
                 "INSERT INTO jobs(job_id,session_id,idempotency_key,message,"
-                "mode,state,created_at,updated_at,context_seq,run_id) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "mode,state,created_at,updated_at,context_seq,run_id,project) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (job_id, session_id, idempotency_key, message, mode,
                  "queued", now, now,
                  None if context_seq is None else max(0, context_seq),
-                 run_id),
+                 run_id, project),
             )
             conn.execute(
                 "INSERT INTO job_events(job_id,kind,payload,ts) VALUES(?,?,?,?)",
@@ -587,6 +599,7 @@ def enqueue_chat_job(
         session_id, message, mode, idempotency_key,
         context_seq=context_seq,
         run_id=run_id,
+        project=project,
     )
     _dispatch_pending(path, project, Path(project_dir))
     return {"job": job, "created": created}
