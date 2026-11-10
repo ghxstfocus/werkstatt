@@ -202,6 +202,40 @@ def test_start_verwirft_op_mit_unbekanntem_blocker(
     assert "Unbekannte oder widerspruechliche Blocker" in antwort.json()["detail"]
     assert aufrufe == []
 
+
+def test_start_verwirft_op_mit_doppelter_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    op = (
+        "### OP-002: Doppelte Aufgabe\\n"
+        "- **Status:** open\\n"
+        "- **Blockiert von:** —\\n"
+        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\\n"
+        "- **Tests:** pytest -q tests/test_002.py\\n"
+    )
+    (docs_dir / "STATUS.md").write_text(op + "\\n" + op, encoding="utf-8")
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    _reset_loop_registry(app_modul)
+    aufrufe: list[list[str]] = []
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    client = TestClient(app_modul.app)
+
+    antwort = client.post(
+        "/api/projects/demo/start", json={"op_id": "OP-002"},
+    )
+
+    assert antwort.status_code == 409
+    assert "OP-ID kommt mehrfach" in antwort.json()["detail"]
+    assert aufrufe == []
+
 def test_start_verwirft_leere_aufgabe(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
