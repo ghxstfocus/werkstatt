@@ -59,3 +59,12 @@ def test_reconnect_renders_failed_background_jobs() -> None:
     assert '_jobFertig(job, "failed", "", item.error' in resume
     assert "if (aktiveJobs)" in resume
 
+def test_chat_can_cancel_background_jobs_without_blocking_composer() -> None:
+    js = _chat_js()
+    html = Path("static/layout.html").read_text(encoding="utf-8")
+    assert 'abbrechenBtn.id = "chat-abbrechen"' in js
+    assert '"/cancel"' in js
+    assert "function _abbrechenAktiveJobs()" in js
+    assert 'state === "cancelled"' in js
+    assert 'id="chat-eingabe"' in html
+
