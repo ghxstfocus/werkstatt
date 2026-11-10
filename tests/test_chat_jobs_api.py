@@ -27,12 +27,24 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
 ) -> None:
     client, _base = client_and_base
     from werkstatt import chat_jobs
+    from werkstatt.web import app as app_modul
+
+    class _Registry:
+        def read(self, project: str) -> dict[str, str]:
+            assert project == "demo"
+            return {"run_id": "run-active", "state": "paused"}
+
+    monkeypatch.setattr(app_modul, "_loop_registry", lambda: _Registry())
 
     def _accepted(*args: Any, **kwargs: Any) -> dict[str, Any]:
         assert kwargs["db_path"].name == "demo.db"
         assert isinstance(kwargs["context_seq"], int)
+        assert kwargs["run_id"] == "run-active"
         return {
-            "job": {"job_id": "a" * 32, "state": "queued"},
+            "job": {
+                "job_id": "a" * 32, "state": "queued",
+                "run_id": kwargs["run_id"],
+            },
             "created": True,
         }
 
@@ -50,6 +62,7 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
     assert response.status_code == 202
     assert response.json() == {
         "job_id": "a" * 32, "state": "queued", "created": True,
+        "run_id": "run-active",
     }
 
 
