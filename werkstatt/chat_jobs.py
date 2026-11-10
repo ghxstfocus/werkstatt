@@ -355,7 +355,10 @@ class ChatJobStore:
 
         from werkstatt.event_store import EventStore
 
-        events = EventStore()
+        try:
+            events = EventStore()
+        except (OSError, sqlite3.Error):
+            return 0
         projected = 0
         statuses = {
             "queued": "queued",
