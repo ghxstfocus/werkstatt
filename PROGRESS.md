@@ -4713,3 +4713,9 @@ Der Event-Store kann Events jetzt mit Projektbezug und deterministischer Event-I
 ## Live-Feed-Testfixture nach JSONL-Format korrigiert (2026-11-11)
 
 - Der Serverlauf auf `15bbeab` bestaetigte 53/54 gezielte Tests, aber das JSONL-Fixture legte den Job-Status faelschlich unter `payload` ab. Audit-JSONL flacht Event-Payloads auf die oberste Ebene ab; das Fixture folgt jetzt diesem Format. Ruff-Importe sind ebenfalls angepasst. Erneute Verifikation steht aus.
+
+
+## Idempotenter JSONL-Retry ohne falsche Drift (2026-11-11)
+
+- Ein Crash zwischen durablem Audit-Append und Outbox-Markierung kann dasselbe stabile Job-Event erneut anhängen. `Projector.status()` zählt jetzt logische eindeutige Events statt physische Wiederholungszeilen; `tail()` setzt den Checkpoint auch bei übersprungenen Duplikaten fort.
+- Regressionstest deckt Retry, Event-ID-Deduplizierung, driftfreien Health-Status und Checkpoint-Fortschritt ab. Serververifikation nach Pull steht aus.

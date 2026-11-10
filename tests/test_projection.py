@@ -329,3 +329,39 @@ def test_tail_nach_reset_liest_alle_neuen_events(tmp_path, monkeypatch):
     assert ck == "a3", f"Checkpoint sollte a3 sein, ist {ck!r}"
     assert n == 2
 
+
+
+def test_retry_duplicate_event_id_does_not_create_projection_drift(
+    tmp_path, monkeypatch,
+):
+    from werkstatt import projection
+
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+    first = {
+        "audit_id": "job-event-first",
+        "event_id": "chat-job:job-1:1",
+        "run_id": "run-a",
+        "project": "demo",
+        "kind": "chat_job_queued",
+        "timestamp": "2026-11-11T12:00:00+00:00",
+        "status": "queued",
+        "job_id": "job-1",
+        "job_event_seq": 1,
+    }
+    _write(tmp_path, "semantic-2026-11-11.jsonl", [first])
+    proj = _pj(tmp_path)
+    assert proj.tail()["eingefuegt"] == 1
+
+    retry = {**first, "audit_id": "job-event-retry"}
+    with (tmp_path / "audit-logs" / "semantic-2026-11-11.jsonl").open(
+        "a", encoding="utf-8",
+    ) as fh:
+        fh.write(json.dumps(retry) + "\n")
+
+    tail_retry = proj.tail()
+    assert tail_retry == {"eingefuegt": 0, "uebersprungen": 1}
+    status = proj.status()
+    assert status["jsonl_events"] == 1
+    assert status["sqlite_rows"] == 1
+    assert status["diff"] == 0
+    assert proj.tail() == {"eingefuegt": 0, "uebersprungen": 0}

@@ -131,13 +131,31 @@ class Projector:
         return alle
 
     def _count_jsonl(self) -> int:
-        total = 0
+        """Count unique durable events, tolerating retries with the same ID."""
+        event_ids: set[str] = set()
+        malformed = 0
         for f in self._jsonl_files():
             with f.open(encoding="utf-8") as fh:
-                for line in fh:
-                    if line.strip():
-                        total += 1
-        return total
+                for line_num, line in enumerate(fh):
+                    if not line.strip():
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        malformed += 1
+                        continue
+                    if not isinstance(event, dict):
+                        malformed += 1
+                        continue
+                    event_id = event.get("event_id")
+                    if not event_id:
+                        run_id = event.get("run_id") or ""
+                        audit_id = event.get("audit_id") or ""
+                        event_id = hashlib.sha256(
+                            f"{run_id}|{audit_id}|{f.name}|{line_num}".encode()
+                        ).hexdigest()[:16]
+                    event_ids.add(str(event_id))
+        return len(event_ids) + malformed
 
     def _insert(
         self,
@@ -218,7 +236,7 @@ class Projector:
                 aid = ev.get("audit_id")
                 if aid:
                     letzter = aid
-            if letzter and eingefuegt > 0:
+            if letzter and events:
                 self._set_checkpoint(conn, "last_audit_id", letzter)
             conn.commit()
         return {"eingefuegt": eingefuegt, "uebersprungen": uebersprungen}
