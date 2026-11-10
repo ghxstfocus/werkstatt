@@ -81,8 +81,13 @@ def test_chat_job_get_replays_persisted_events(
     )
     assert store.claim(job["job_id"])
 
+    hidden = client.get(
+        f"/api/projects/demo/chat/jobs/{job['job_id']}?session_id=other-session",
+    )
+    assert hidden.status_code == 404
+
     response = client.get(
-        f"/api/projects/demo/chat/jobs/{job['job_id']}?since_seq=1",
+        f"/api/projects/demo/chat/jobs/{job['job_id']}?session_id=session-1&since_seq=1",
     )
 
     assert response.status_code == 200
@@ -96,7 +101,7 @@ def test_chat_job_get_rejects_cross_project_unknown_job(
 ) -> None:
     client, _base = client_and_base
     response = client.get(
-        f"/api/projects/demo/chat/jobs/{'b' * 32}",
+        f"/api/projects/demo/chat/jobs/{'b' * 32}?session_id=session-1",
     )
 
     assert response.status_code == 404
