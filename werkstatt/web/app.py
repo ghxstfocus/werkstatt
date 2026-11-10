@@ -1152,7 +1152,7 @@ def create_app() -> FastAPI:
             resume_chat_jobs(
                 projekt, (_PROJECTS_BASE / projekt).resolve(), db_path=db_path,
             )
-            jobs = ChatJobStore(db_path).active_for_session(sid)
+            jobs = ChatJobStore(db_path).reconnect_for_session(sid)
         except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
             raise HTTPException(
                 status_code=500, detail=f"Chat-Jobs konnten nicht geladen werden: {exc}",
@@ -1160,7 +1160,8 @@ def create_app() -> FastAPI:
         return {
             "jobs": [
                 {"job_id": job["job_id"], "message": job["message"],
-                 "state": job["state"], "created_at": job["created_at"]}
+                 "state": job["state"], "error": job["error"],
+                 "created_at": job["created_at"]}
                 for job in jobs
             ],
         }
