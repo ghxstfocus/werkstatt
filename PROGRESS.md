@@ -4117,5 +4117,6 @@ derselben ID sowie einen davon abhaengigen OP.
 
 - **Commit:** `90ddd6067a0c` — doppelte Identitaeten fail-closed behandeln.
 - **Commit:** `2af3194df0b7` — Regressionstest fuer Auswahl und Abhaengigkeit.
+- **Commit:** `c88091e9f6c8` — Testdatei-Formatierung fuer Ruff.
 - Server-Verifikation steht aus; vor Ausweitung des Selectors ist ausserdem
   der konkrete Mypy-Befund aus dem Quality Gate zu klaeren.
