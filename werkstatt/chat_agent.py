@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from werkstatt.chat_session import ChatSession
@@ -20,10 +21,10 @@ _DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 _DEFAULT_MODEL = "deepseek-chat"
 _DEFAULT_MAX_ROUNDS = 5
 
-_SYSTEM_PROMPT = """Du bist der Werkstatt-Chat-Agent. Der Nutzer \
-arbeitet am Projekt "Werkstatt" (Coding-Loop, Gates, Tests). Du \
-diagnostizierst und erklaerst. Du schreibst NIEMALS Dateien, committest \
-NICHT, startest KEINE Loops. Dafuer gibt es den Coding-Loop, nicht dich.
+_SYSTEM_PROMPT = """Du bist der Chat-Agent fuer das aktuell ausgewaehlte Projekt. \
+Du diagnostizierst und erklaerst mit Repo-Belegen. Du schreibst keine \
+Dateien, commitest nicht und startest keine Loops; diese Aktionen sind \
+in der aktuellen Chat-Tool-Registry nicht verfuegbar.
 
 Verfuegbare Tools (read-only): read_file, grep, git_log, git_diff, \
 audit_query, pytest_collect, diagnose, read_status.
@@ -161,12 +162,18 @@ def chat_loop(
     on_tool_call: Callable[[str, dict[str, Any]], None] | None = None,
     on_tool_result: Callable[[str, str], None] | None = None,
     max_rounds: int = _DEFAULT_MAX_ROUNDS,
+    project_dir: Path | str | None = None,
 ) -> str:
     """User-Nachricht -> LLM-Loop -> Assistant-Antwort."""
     tools = tools if tools is not None else CHAT_TOOLS
     session.append("user", {"text": message})
+    _project_context = f"Aktives Projekt: {session.project}."
+    if project_dir is not None:
+        _project_context += (
+            f" Projektwurzel: {Path(project_dir).expanduser().resolve()}."
+        )
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "system", "content": _SYSTEM_PROMPT + "\n" + _project_context},
         *_baue_messages(session.load()),
     ]
     schemas = openai_schemas(tools, mode=mode)
@@ -203,7 +210,10 @@ def chat_loop(
                 args = {}
             if on_tool_call is not None:
                 on_tool_call(name, args)
-            ergebnis = execute_tool(name, args, tools, mode=mode)
+            ergebnis = execute_tool(
+                name, args, tools, mode=mode,
+                project_dir=project_dir, project_name=session.project,
+            )
             if on_tool_result is not None:
                 on_tool_result(name, ergebnis)
             session.append("tool_result", {
