@@ -183,12 +183,11 @@ def test_chat_job_events_join_project_live_feed(projektion, tmp_path):
     )
 
     feed = inspector.aggregate_live_feed("demo")
-    chat_steps = [
-        step for step in feed["steps"] if step["kind"] == "chat_job_started"
-    ]
-
-    assert len(chat_steps) == 1
-    assert chat_steps[0]["rolle"] == "chat"
-    assert chat_steps[0]["status"] == "running"
-    assert chat_steps[0]["detail"] == "Projekt wird geprueft"
+    aktiv = feed["aktiv"]
+    assert aktiv["kind"] == "chat_job_started"
+    assert aktiv["rolle"] == "chat"
+    assert aktiv["aktion"] == "Projekt wird geprueft"
+    assert not any(
+        step["kind"] == "chat_job_failed" for step in feed["steps"]
+    )
 
