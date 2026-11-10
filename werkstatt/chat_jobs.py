@@ -152,14 +152,6 @@ class ChatJobStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def running_sessions(self) -> set[str]:
-        """Sessions mit einem laufenden Turn, die noch nicht dispatchbar sind."""
-        with closing(self._connect()) as conn:
-            rows = conn.execute(
-                "SELECT DISTINCT session_id FROM jobs WHERE state='running'",
-            ).fetchall()
-        return {str(row["session_id"]) for row in rows}
-
     def claim(self, job_id: str, worker_id: str = "test-worker") -> bool:
         """Beansprucht hoechstens einen gleichzeitigen Turn pro Session."""
         now = _now()
@@ -417,11 +409,6 @@ def _run_job(
     from werkstatt.chat_agent import ChatCancelled, chat_loop
     from werkstatt.chat_session import ChatSession
 
-    parent_session = ChatSession(project, job["session_id"])
-    worker_session = parent_session.snapshot_to(
-        job_id, at_seq=int(job.get("context_seq") or 0),
-    )
-
     def event(kind: str, **payload: Any) -> None:
         store.append_event(job_id, kind, payload)
 
@@ -445,6 +432,10 @@ def _run_job(
     )
     heartbeat_thread.start()
     try:
+        parent_session = ChatSession(project, job["session_id"])
+        worker_session = parent_session.snapshot_to(
+            job_id, at_seq=int(job.get("context_seq") or 0),
+        )
         answer = chat_loop(
             worker_session,
             job["message"],
@@ -523,11 +514,14 @@ def sync_completed_job_turns(
 ) -> int:
     """Reconciles successful jobs into the parent transcript after a crash."""
     path = Path(db_path) if db_path else _db_path(project)
+    completed = ChatJobStore(path).succeeded_for_session(session_id)
+    if not completed:
+        return 0
     from werkstatt.chat_session import ChatSession
 
     session = ChatSession(project, session_id)
     added = 0
-    for job in ChatJobStore(path).succeeded_for_session(session_id):
+    for job in completed:
         if job.get("answer") is not None and session.append_job_turn(
             str(job["job_id"]), str(job["message"]), str(job["answer"]),
         ):
