@@ -1199,27 +1199,34 @@ def create_app() -> FastAPI:
 
     @app.get("/api/projects/{name}/chat/jobs/{job_id}")
     def chat_job_get(
-        name: str, job_id: str, since_seq: int = 0,
+        name: str, job_id: str, session_id: str, since_seq: int = 0,
     ) -> dict[str, Any]:
-        """Liefert Jobstatus und persistierte Events ab dem Replay-Cursor."""
+        """Liefert Jobstatus und Events nur fuer die zugehoerige Session."""
         from werkstatt.chat_jobs import ChatJobStore, resume_chat_jobs
 
         projekt = _pruefe_projektname(name)
         if not re.fullmatch(r"[a-f0-9]{32}", job_id):
             raise HTTPException(status_code=400, detail="job_id ungueltig")
+        sid = _pruefe_session_id(session_id)
         if since_seq < 0:
             raise HTTPException(status_code=400, detail="since_seq ungueltig")
         db_path = _PROJECTS_BASE / ".werkstatt" / "chat-jobs" / f"{projekt}.db"
         try:
+            store = ChatJobStore(db_path)
+            job = store.get(job_id, since_seq=since_seq)
+            if job is None or job["session_id"] != sid:
+                raise HTTPException(status_code=404, detail="Chat-Job nicht gefunden")
             resume_chat_jobs(
                 projekt, (_PROJECTS_BASE / projekt).resolve(), db_path=db_path,
             )
-            job = ChatJobStore(db_path).get(job_id, since_seq=since_seq)
+            job = store.get(job_id, since_seq=since_seq)
+        except HTTPException:
+            raise
         except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
             raise HTTPException(
                 status_code=500, detail=f"Chat-Job konnte nicht geladen werden: {exc}",
             ) from exc
-        if job is None:
+        if job is None or job["session_id"] != sid:
             raise HTTPException(status_code=404, detail="Chat-Job nicht gefunden")
         return job
 
