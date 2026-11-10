@@ -4530,3 +4530,8 @@ Der Event-Replay-Endpunkt akzeptiert jetzt eine Session-ID und liefert einen Job
 ## Expliziter OP-Start blockiert bei unbekannter Abhaengigkeit (2026-11-10)
 
 Der Web-Start-Endpunkt verweigerte bereits erkannte offene Blocker, uebersah aber unbekannte oder widerspruechliche Blocker bei einer expliziten OP-Auswahl. Der Ausschlussgrund wird jetzt ebenfalls als 409 zurueckgegeben; ein API-Regressionstest prueft, dass kein Prozess startet. Serververifikation steht aus.
+
+
+## Expliziter OP-Start verweigert doppelte OP-IDs (2026-11-10)
+
+Der Web-Start nutzt bei einer expliziten OP-ID den ersten Parser-Treffer. Wenn STATUS dieselbe OP-ID mehrfach enthielt, konnte dadurch eine mehrdeutige Aufgabe starten, obwohl der Selector Duplikate ausgeschlossen hatte. Der Start-Endpunkt weist diese Auswahl jetzt mit 409 ab; ein API-Test prueft, dass kein Prozess gestartet wird. Serververifikation steht aus.
