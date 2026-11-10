@@ -170,3 +170,22 @@ def test_chat_job_cancel_endpoint_is_session_scoped_and_persistent(
     assert saved is not None
     assert saved["state"] == "cancelled"
 
+def test_running_job_cancel_endpoint_requests_worker_stop(
+    client_and_base: tuple[Any, Path],
+) -> None:
+    client, base = client_and_base
+    store = ChatJobStore(base / ".werkstatt" / "chat-jobs" / "demo.db")
+    job, _created = store.create(
+        "session-1", "Pruefe den Loop", "read", "request-key-api-cancel-002",
+    )
+    assert store.claim(job["job_id"], "worker-test")
+
+    response = client.post(
+        f"/api/projects/demo/chat/jobs/{job['job_id']}/cancel",
+        json={"session_id": "session-1"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "cancelling"
+    assert store.cancellation_requested(job["job_id"], "worker-test")
+
