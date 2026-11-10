@@ -71,6 +71,7 @@ def test_abstains_on_conflicting_status_metadata() -> None:
         for item in result["ausgeschlossen"]
     )
 
+
 def test_duplicate_op_id_is_never_selected_or_used_as_dependency() -> None:
     duplicate = _op("OP-001", status="done") + _op("OP-001", status="open")
     waiting = _op("OP-002", blockers="OP-001")
