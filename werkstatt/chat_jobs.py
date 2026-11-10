@@ -430,8 +430,8 @@ def _run_job(
         name=f"werkstatt-chat-heartbeat-{job_id[:8]}",
         daemon=True,
     )
-    parent_session = None
-    worker_session = None
+    parent_session: ChatSession | None = None
+    worker_session: ChatSession | None = None
     heartbeat_thread.start()
     try:
         parent_session = ChatSession(project, job["session_id"])
