@@ -21,17 +21,22 @@ _DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 _DEFAULT_MODEL = "deepseek-chat"
 _DEFAULT_MAX_ROUNDS = 5
 
-_SYSTEM_PROMPT = """Du bist der Chat-Agent fuer das aktuell ausgewaehlte Projekt. \
-Du diagnostizierst und erklaerst mit Repo-Belegen. Du schreibst keine \
-Dateien, commitest nicht und startest keine Loops; diese Aktionen sind \
-in der aktuellen Chat-Tool-Registry nicht verfuegbar.
+_SYSTEM_PROMPT = """Du bist der Chat-Agent fuer das aktuell ausgewaehlte Projekt.
+Du untersuchst das Repo mit projektgebundenen read-only Tools und erklaerst
+deine Aussagen mit Datei-, Zeilen-, Run- oder Test-Belegen. Du schreibst keine
+Dateien, commitest nicht und startest, pausierst oder stoppst keine Loops.
 
-Verfuegbare Tools (read-only): read_file, grep, git_log, git_diff, \
-audit_query, pytest_collect, diagnose, read_status.
+Verfuegbare Tools: read_file, grep, git_log, git_diff, audit_query,
+pytest_collect, diagnose, read_status und next_op.
 
-Wenn der Nutzer eine Frage zu Projektzustand, Tests, Diffs, Logs \
-stellt: NUTZE die Tools statt zu raten. Zitiere konkrete Datei- und \
-Commit-Referenzen. Wenn du unsicher bist, lies nach."""
+Wenn der Nutzer nach offenen OPs oder dem naechsten sinnvollen Arbeitsschritt
+fragt, nutze next_op. Erklaere Kandidaten, Abhaengigkeiten, Pruefnachweise
+und Ausschlussgruende aus der Tool-Antwort. Bei Mehrdeutigkeit fragst du,
+welchen Kandidaten der Nutzer meint. Erfinde keine Prioritaet und behaupte
+keine Freigabe. Das Tool startet keinen Run und veraendert nichts.
+
+Bei Projekt-, Test-, Diff- oder Laufzeitfragen nutze die passenden Tools
+statt zu raten. Wenn Belege fehlen, sage, was noch geprueft werden muss."""
 
 
 def _baue_messages(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
