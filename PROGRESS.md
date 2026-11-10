@@ -4655,4 +4655,7 @@ Der Job-Speicher fuehrt jetzt ein optionales `run_id`-Feld mit Migration fuer be
 - **Commit:** `cad1cab22bd1638e02691dbf9b75e87d52baf2a1` — API-Test fuer Run-ID bei aktivem Loop.
 - **Commit:** `074abc529ba14fb30f54e815a956c79e47ef9fbf` — Migrationstest fuer Run-ID-Spalte.
 - **Commit:** `430ce24736773e8056fb689a12592941d30818eb` — STATUS um Run-Verknuepfung und verbleibende Event-Store-Luecke ergaenzen.
+- **Commit:** `a53fadd4d0f8c4a1c05851579bd50de7922ad6f5` — Replay-Ereignisse mit Run-, Job- und Session-ID versehen.
+- **Commit:** `ecb07f60830c88a803dbc82654ef75c0998a3037` — API-Test fuer IDs in wiedergegebenen Job-Events.
+- **Commit:** `1f6ce1cae029d507a03bf98fe3c19556743e9ae3` — STATUS um Event-Kontext im Replay ergaenzen.
 - **Serververifikation:** nach Pull ausstehend.
