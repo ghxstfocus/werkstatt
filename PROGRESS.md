@@ -4497,4 +4497,6 @@ Abgeschlossene Worker-Futures werden jetzt per Done-Callback aus der globalen Re
 - **Commit:** `de1d0313ea2055a3eae2bbdf` — Worker-Leases, Heartbeat und Recovery abgelaufener Jobs.
 - **Commit:** `f9ba062e1ce59bc7fc84289` — Worker-ID explizit aus Prozess-ID und Zufallswert.
 - **Commit:** `cd77c2240b40a2e640ec05c8` — Tests fuer aktive/verwaiste Lease und Worker-Eigentum.
+- **Commit:** `d020e46e9abaa3302c7b254f` — Migrationstest fuer bestehende SQLite-Jobdatenbank.
+- **Serververifikation:** einschliesslich Lease-Schema-Migration weiterhin ausstehend.
 - **Serververifikation:** fuer Idempotenz, Future-Cleanup und Lease-Recovery ausstehend.
