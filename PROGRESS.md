@@ -4035,3 +4035,8 @@ Verifiziert auf Server-HEAD `af91cf6`: Gate-/Chat-Tests 28 passed; vollstaendige
 ### 2026-11-10 — Gate-Antworten serverseitig an Optionen binden
 
 Der Gate-API-Endpunkt liest jetzt die Spezifikation des konkreten offenen Gates und akzeptiert bei Button-Gates nur eine einzelne angebotene Auswahl. Freitext-Gates bleiben unterstützt; leere oder überlange Antworten werden abgewiesen. Neue API-Tests decken unzulässige Zustimmungen, gültige Button-Auswahl und Freitext ab. Die Änderung folgt der Human-Gate-Invariante aus ADR-0029: nur eine explizite, tatsächlich angebotene Gate-Antwort darf den Loop fortsetzen. **Serververifikation ausstehend.**
+
+
+### 2026-11-10 — Serververifikation: Gate-API-Optionsschutz
+
+Verifiziert auf Server-HEAD `c3a28db`: Gate-/Chat-Tests 32 passed; vollstaendige Suite 1791 passed, 5 skipped; Ruff 0; mypy 0; Quality-Gate `ok: true`, `regression: false`. Unzulaessige Button-Antworten werden ohne `gate_answered`-Event zurueckgewiesen; gueltige Optionen und Freitext-Gates bestehen. AST- und Katalogpruefungen bleiben uebersprungen, weil `tests/test_audit_kinds.py` und `pipeline.py` fehlen.
