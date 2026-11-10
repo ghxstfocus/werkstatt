@@ -212,6 +212,7 @@ ersetzen keine Berechtigungen.
 | `pytest_collect(path)` | Tests sammeln (nicht laufen) |
 | `diagnose(state)` | Bekannte Fehlerklassen |
 | `read_status()` | STATUS.md / PROGRESS.md |
+| `next_op()` | Evidenzbasierte Kandidaten aus STATUS.md inkl. Blocker und Ausschlussgruende; read-only |
 
 **Direkte Code-Schreibtools bleiben nicht verfuegbar.** Schreibende
 Aufgaben werden als Loop-Run mit unveraendertem Verify-/Review- und
