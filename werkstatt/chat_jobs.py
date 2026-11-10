@@ -403,8 +403,13 @@ class ChatJobStore:
             except json.JSONDecodeError:
                 payload = {}
             result["events"].append({
-                "seq": event["seq"], "kind": event["kind"],
-                "payload": payload, "ts": event["ts"],
+                "seq": event["seq"],
+                "kind": event["kind"],
+                "payload": payload,
+                "ts": event["ts"],
+                "job_id": job_id,
+                "session_id": result["session_id"],
+                "run_id": result.get("run_id"),
             })
         return result
 
