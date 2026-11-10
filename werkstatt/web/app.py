@@ -448,6 +448,7 @@ def create_app() -> FastAPI:
                     args,
                     stdout=_log_fh if _log_fh is not None else subprocess.DEVNULL,
                     stderr=subprocess.STDOUT,
+                    start_new_session=(os.name == "posix"),
                 )
             except OSError as exc:
                 if _log_fh is not None:
@@ -514,7 +515,7 @@ def create_app() -> FastAPI:
             if projektname in _PAUSIERTE_LOOPS:
                 return {"pausiert": True, "bereits_pausiert": True}
             try:
-                os.kill(prozess.pid, signal.SIGSTOP)
+                os.killpg(prozess.pid, signal.SIGSTOP)
             except ProcessLookupError as exc:
                 raise HTTPException(
                     status_code=409, detail="Loop wurde bereits beendet",
@@ -542,7 +543,7 @@ def create_app() -> FastAPI:
             if projektname not in _PAUSIERTE_LOOPS:
                 return {"fortgesetzt": True, "bereits_laufend": True}
             try:
-                os.kill(prozess.pid, signal.SIGCONT)
+                os.killpg(prozess.pid, signal.SIGCONT)
             except ProcessLookupError as exc:
                 raise HTTPException(
                     status_code=409, detail="Loop wurde bereits beendet",
@@ -559,7 +560,7 @@ def create_app() -> FastAPI:
 
     @app.post("/api/projects/{name}/stop")
     def project_stop(name: str) -> dict[str, Any]:
-        """Stoppt den laufenden Loop eines Projekts."""
+        """Stoppt den Loop und seine Kindprozesse eines Projekts."""
         projektname = _pruefe_projektname(name)
         with _projekt_loop_lock(projektname):
             prozess = _LAUFENDE_LOOPS.get(projektname)
@@ -568,18 +569,27 @@ def create_app() -> FastAPI:
             run_id = _LOOP_RUN_IDS.get(projektname, "")
             if projektname in _PAUSIERTE_LOOPS and os.name == "posix":
                 try:
-                    os.kill(prozess.pid, signal.SIGCONT)
+                    os.killpg(prozess.pid, signal.SIGCONT)
                 except ProcessLookupError:
                     pass
             _PAUSIERTE_LOOPS.discard(projektname)
             try:
-                prozess.terminate()
+                if os.name == "posix":
+                    os.killpg(prozess.pid, signal.SIGTERM)
+                else:
+                    prozess.terminate()
             except ProcessLookupError:
                 pass
             try:
                 returncode = prozess.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                prozess.kill()
+                if os.name == "posix":
+                    try:
+                        os.killpg(prozess.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                else:
+                    prozess.kill()
                 try:
                     returncode = prozess.wait(timeout=5)
                 except subprocess.TimeoutExpired as exc:
