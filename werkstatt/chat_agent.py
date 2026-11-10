@@ -19,7 +19,6 @@ from werkstatt.model_routing import route_for_role
 __all__ = ["chat_loop"]
 
 _DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
-_DEFAULT_MODEL = "deepseek-flash"
 _DEFAULT_MAX_ROUNDS = 5
 
 _SYSTEM_PROMPT = """Du bist der Chat-Agent fuer das aktuell ausgewaehlte Projekt.
