@@ -1768,7 +1768,7 @@ def _sparkline_30d(es: EventStore, projekt: str) -> list[int]:
                 "SELECT run_id, MAX(ts) AS ts FROM events "
                 "WHERE kind IN ('loop_erfolg', 'loop_failed', 'loop_ended', "
                 "'web_loop_stopped') AND " + _projekt_filter_sql() + " "
-                "AND ts >= date('now', '-30 days') "
+                "AND ts >= date('now', '-30 days') AND run_id != '' "
                 "GROUP BY run_id) GROUP BY 1",
                 (projekt,),
             ).fetchall()

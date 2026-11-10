@@ -93,6 +93,16 @@ def test_sparkline_hat_30_buckets_und_dedupliziert(tmp_path: Path):
     assert sum(values) == 2
 
 
+def test_sparkline_ignoriert_events_ohne_run_id(tmp_path: Path):
+    es = _events_db(tmp_path / "events.db", [
+        ("", "loop_ended", "demo", {}, 0),
+        ("", "loop_failed", "demo", {}, 0),
+        ("bekannt", "loop_ended", "demo", {}, 0),
+    ])
+    assert sum(inspector._sparkline_30d(es, "demo")) == 1
+    assert inspector._run_verteilung_30d(es, "demo")["gesamt"] == 1
+
+
 def test_leere_eventdaten_liefern_nullsummen(tmp_path: Path):
     es = _events_db(tmp_path / "events.db")
     assert inspector._run_verteilung_30d(es, "demo") == {

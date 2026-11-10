@@ -3988,3 +3988,12 @@ SIGTERM/SIGKILL ab und startet keinen echten Loop-Prozess.
 
 **Prüfung:** Test ergänzt; Ausführung auf dem Server steht noch aus.
 
+
+
+### 2026-11-10 — Overview-Zählung für Events ohne Run-ID vereinheitlicht
+
+**Befund:** Die 30-Tage-Ergebnis-KPI zählt nur Events mit Run-ID. Die Sparkline gruppierte dagegen alle leeren Run-IDs in eine einzelne Gruppe. Dadurch konnten Kurve und KPI auseinanderlaufen.
+
+**Änderung auf main:** `_sparkline_30d` filtert jetzt wie die Run-KPI leere `run_id`-Werte aus. Ein Regressionstest deckt mehrere Legacy-Events ohne Run-ID ab. Commit: wird nach dem Push ergänzt.
+
+**Verifikation:** Noch nicht ausgeführt. Der Serverlauf muss den gezielten Overview-Test, Ruff und das Quality-Gate bestätigen.
