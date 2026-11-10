@@ -433,3 +433,31 @@ def test_sync_cleans_branch_for_failed_terminal_job(
     ).load() == []
     assert parent.load() == []
 
+def test_job_events_are_projected_to_timeline_exactly_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import event_store
+
+    monkeypatch.setattr(event_store, "werkstatt_home", lambda: tmp_path)
+    store = ChatJobStore(tmp_path / "chat-jobs.db")
+    job, _ = store.create(
+        "session-a", "Frage", "read", "request-key-timeline-001",
+        run_id="run-a", project="demo",
+    )
+
+    first = store.get(job["job_id"])
+    assert first is not None
+    assert store.project_pending_events() == 0
+
+    timeline = event_store.EventStore(tmp_path / ".werkstatt" / "events.db")
+    events = timeline.query("run-a", project="demo")
+    assert len(events) == 1
+    event = events[0]
+    assert event["kind"] == "chat_job_queued"
+    assert event["project"] == "demo"
+    assert event["payload"]["job_id"] == job["job_id"]
+    assert event["payload"]["session_id"] == "session-a"
+    assert event["payload"]["job_event_kind"] == "queued"
+
+
