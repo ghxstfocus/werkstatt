@@ -1092,11 +1092,17 @@ def _tl_aggregate_aktiv(
     ist_aktiv = (
         kind.endswith("_start")
         or kind in ("llm_call", "llm_call_start", "loop_task_start", "gate_open")
+        or (
+            kind.startswith("chat_job_")
+            and letztes.get("status") == "running"
+        )
     )
     if not ist_aktiv:
         # OP-394: Grace-Fenster — gerade-fertig-Events grace_s lang zeigen
         if grace_s > 0 and (
-            kind.endswith(("_ok", "_failed", "_done")) or kind == "summary"
+            kind.endswith(("_ok", "_failed", "_done"))
+            or kind in ("chat_job_succeeded", "chat_job_failed", "chat_job_cancelled")
+            or kind == "summary"
         ):
             try:
                 ts_g = _dt.fromisoformat(str(ts_raw))
@@ -1430,6 +1436,24 @@ def aggregate_live_feed(
     if not run_id:
         return leer
     events = [e for e in events if str(e.get("run_id", "")) == run_id]
+    try:
+        timeline = EventStore(
+            db_pfad=werkstatt_home() / ".werkstatt" / "events.db",
+        ).query(run_id, limit=1000, project=projekt)
+    except (OSError, sqlite3.Error, ValueError):
+        timeline = []
+    for ev in timeline:
+        kind = str(ev.get("kind", ""))
+        if not kind.startswith("chat_job_"):
+            continue
+        events.append({
+            "run_id": run_id,
+            "kind": kind,
+            "agent": "chat",
+            "timestamp": ev.get("ts") or "",
+            "status": ev.get("status"),
+            "payload": ev.get("payload") or {},
+        })
     if not events:
         return {**leer, "run_id": run_id}
 
