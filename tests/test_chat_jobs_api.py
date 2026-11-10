@@ -100,3 +100,26 @@ def test_chat_job_get_rejects_cross_project_unknown_job(
     )
 
     assert response.status_code == 404
+
+def test_chat_job_rejects_same_idempotency_key_with_different_message(
+    client_and_base: tuple[Any, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _base = client_and_base
+    from werkstatt import chat_jobs
+
+    monkeypatch.setattr(chat_jobs, "_dispatch_pending", lambda *_args: None)
+    payload = {
+        "session_id": "session-1",
+        "message": "Erste Frage",
+        "mode": "read",
+        "idempotency_key": "request-key-same-001",
+    }
+    first = client.post("/api/projects/demo/chat/jobs", json=payload)
+    payload["message"] = "Andere Frage mit demselben Key"
+    second = client.post("/api/projects/demo/chat/jobs", json=payload)
+
+    assert first.status_code == 202
+    assert second.status_code == 409
+    assert "andere Anfrage" in second.json()["detail"]
+
