@@ -6,12 +6,10 @@ nicht-TTY ist. Fix: headless -> _frage_gate -> gate_bridge.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
-import pytest
-
 _here = Path(__file__).parent
-import sys
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
 from factories import mk_state  # noqa: E402
