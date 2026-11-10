@@ -165,3 +165,17 @@ def test_phase_three_requires_completed_dogfooding_op() -> None:
     released = select_next_op(phase_three, completed_ids={"OP-382"})
     assert released["zustand"] == "selected"
     assert released["auswahl"]["id"] == "OP-101"
+
+
+def test_open_dogfooding_op_overrides_stale_completion_ledger() -> None:
+    status = _op("OP-382", title="Dogfooding", phase="Phase-2") + _op(
+        "OP-101", phase="Phase-3 (Memory)"
+    )
+
+    result = select_next_op(status, completed_ids={"OP-382"})
+
+    assert result["auswahl"]["id"] == "OP-382"
+    blocked = next(item for item in result["ausgeschlossen"] if item["id"] == "OP-101")
+    assert "Phase-3 gesperrt bis OP-382 abgeschlossen" in " ".join(
+        blocked["gruende"]
+    )
