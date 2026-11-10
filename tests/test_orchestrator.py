@@ -80,7 +80,7 @@ def test_werkstatt_manifest_loads_required_living_docs() -> None:
 
 def test_load_project_config_rejects_missing_living_docs(tmp_path, monkeypatch):
     (tmp_path / "demo.yaml").write_text(
-        "project: demo\\nproject_dir: /tmp/demo\\ndocs:\\n  entry: AGENTS.md\\n",
+        "project: demo\nproject_dir: /tmp/demo\ndocs:\n  entry: AGENTS.md\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(orchestrator, "PROJECTS_DIR", tmp_path)
