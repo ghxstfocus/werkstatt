@@ -4000,3 +4000,8 @@ Der Serverlauf auf `37324a1` meldete 1774 passed, 3 failed und Ruff `PIE807`; my
 ### 2026-11-10 — Idle-Loop-Status gibt keine alte Run-ID mehr aus
 
 Bei einem persistenten Registry-Eintrag blieb nach dem Übergang in `idle` die vorherige `run_id` im Status-Endpoint sichtbar. Die API gibt die Run-ID nun nur noch für eine aktive Startreservierung aus; ein Backend-Regressionstest prüft `starting → idle`. Fix: `f0a9cc0`. **Verifikation:** Serverlauf steht aus.
+
+
+### 2026-11-10 — Server-Rerun: Sparkline-Fixture an Run-Deduplizierung angepasst
+
+Der gezielte Serverlauf nach den Overview-/Loop-Status-Fixes ergab 14 passed, 1 failed; Ruff war grün. Der verbleibende Test `test_overview_sparkline_buckets` erwartete drei heutige und zwei gestrige Runs, erzeugte dabei aber je Bucket wiederholt dieselbe `run_id`. Die Sparkline zählt eindeutige Runs, daher war der tatsächliche Wert 1 korrekt. Das Fixture erzeugt nun für jeden erwarteten Run eine eindeutige ID. Zusätzlich liegt seit `83c433e` eine Byte-begrenzte, inkrementelle Chat-Dateilesung mit Offset-Tests vor; diese Änderung ist noch nicht serververifiziert.

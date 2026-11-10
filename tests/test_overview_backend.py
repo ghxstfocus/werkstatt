@@ -79,10 +79,10 @@ def test_overview_sparkline_buckets(tmp_path, monkeypatch):
     _s, db = _store(tmp_path, monkeypatch)
     heute = datetime.now(UTC).isoformat()
     gestern = (datetime.now(UTC) - timedelta(days=1)).isoformat()
-    for _ in range(3):
-        _event(db, "run-h", "loop_erfolg", "a", ts=heute)
-    for _ in range(2):
-        _event(db, "run-g", "loop_failed", "a", ts=gestern)
+    for i in range(3):
+        _event(db, f"run-h-{i}", "loop_erfolg", "a", ts=heute)
+    for i in range(2):
+        _event(db, f"run-g-{i}", "loop_failed", "a", ts=gestern)
     from werkstatt.web import inspector as _insp
     aus = _insp.aggregate_overview()
     p = aus["projekte"][0]
