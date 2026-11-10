@@ -15,7 +15,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from werkstatt.paths import werkstatt_home
 
@@ -371,11 +371,7 @@ def _dispatch_pending(
                 _run_job, db_path, project, project_dir, job["job_id"],
             )
             _FUTURES[key] = future
-            future.add_done_callback(
-                lambda completed, future_key=key: _forget_future(
-                    future_key, completed,
-                ),
-            )
+            future.add_done_callback(_future_cleanup_callback(key))
 
 
 
@@ -384,6 +380,14 @@ def _forget_future(key: str, future: Future[None]) -> None:
     with _FUTURES_LOCK:
         if _FUTURES.get(key) is future:
             _FUTURES.pop(key, None)
+
+
+def _future_cleanup_callback(key: str) -> Callable[[Future[None]], None]:
+    """Bindet einen Future-Key mit konkretem Callback-Typ."""
+    def cleanup(future: Future[None]) -> None:
+        _forget_future(key, future)
+
+    return cleanup
 
 def resume_chat_jobs(
     project: str, project_dir: Path, *, db_path: Path | None = None,
