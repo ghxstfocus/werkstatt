@@ -53,19 +53,26 @@ noch nicht vollstaendig.
 - **Tests:** Projekt-Isolation, Belegdarstellung, explizite Loop-Kontrolle, Human-Gate-Invariante und Chat waehrend aktivem Run.
 - **Blockiert von:** —
 
-### OP-397: Hintergrundjobs und Fortschritt fuer Chat-Auftraege
+### OP-397: Hintergrundjobs, Projekt-Inbox und Checkpoint-Steuerung
 - **Status:** open
 - **Typ:** async-jobs
 - **Betroffene Dateien:** `werkstatt/web/app.py`, `werkstatt/event_store.py`, `werkstatt/projection.py`, `static/chat.js`, `static/live_feed.js`, WebSocket-/Event-Tests
-- **Problem:** Ein synchroner Chat-Request kann lange Repo-Pruefungen an die Verbindung binden. Nutzer muessen Zweck, Fortschritt und Ergebnis jeder Hintergrundaktion sehen und waehrenddessen weiterfragen koennen.
+- **Problem:** Ein synchroner Chat-Request kann lange Repo-Pruefungen an die Verbindung binden. Nutzer muessen Zweck, Fortschritt und Ergebnis jeder Hintergrundaktion sehen und waehrenddessen weiterfragen sowie neue Arbeit einreichen koennen.
+
+- **Steuerungsmodell bei aktivem Run:**
+  - Lesende Chatfragen laufen unabhaengig vom Loop und duerfen ihn nicht blockieren oder seinen Plan veraendern.
+  - Neue Aufgaben werden als persistente Projektjobs mit Status `queued` aufgenommen. Der Chat kann sie analysieren; schreibende Arbeit wartet auf den exklusiven Projekt-Schreibslot.
+  - Eine Aenderung am laufenden Auftrag ist ein eigener `run_change_request`, kein stilles Editieren des freigegebenen Plans. Am naechsten sicheren Task-Checkpoint pausiert der Loop; der Chat zeigt neue Ziele, Umfang, betroffene Dateien und Verify-Folgen. Erst ein erneutes ausdrueckliches Plan-Gate darf eine versionierte Planrevision aktivieren.
+  - Abgelehnte oder abgelaufene Planrevisionen veraendern weder freigegebenen Plan noch Working Tree; der Mensch kann den bisherigen Run fortsetzen oder stoppen.
+
 - **Akzeptanzkriterien:**
   - Lange Diagnose- und Verify-Aufgaben erhalten stabile Job-IDs und laufen ausserhalb des Chat-Request-Lifecycles.
-  - Job-Events verknuepfen Projekt, Chat-Session und optional run_id; Fortschritt, Erfolg, Fehler und Abbruch sind persistent und nach Reconnect lesbar.
-  - Doppelte Requests mit gleicher Idempotency-Key erzeugen keinen doppelten Job.
+  - Job-Events verknuepfen Projekt, Chat-Session und optional run_id; Fortschritt, Erfolg, Fehler, Abbruch und Replay sind persistent und nach Reconnect lesbar.
+  - Doppelte Requests mit gleicher Idempotency-Key erzeugen keinen doppelten Job; Session-Turns werden gegen konkurrierende Schreibzugriffe serialisiert.
   - Chat-Nachrichten koennen waehrend aktivem Loop und Hintergrundjob unabhaengig beantwortet werden.
   - Jede Aktion zeigt im Chat und in der UI sofort Status, Ergebnis oder konkreten Fehler; Konsolen-Logs allein genuegen nicht.
   - Pro Projekt gibt es hoechstens einen schreibenden Loop-Run; lesende Diagnosejobs duerfen parallel laufen.
-- **Tests:** Job-Lifecycle, Reconnect/Replay, Idempotenz, Parallelitaet und Abbruch.
+  - Tests decken Job-Lifecycle, Reconnect/Replay, Idempotenz, Parallelitaet, Abbruch, Checkpoint-Pause, Planrevision mit neuem Human-Gate sowie Ablehnung ohne Working-Tree-Aenderung ab.
 - **Blockiert von:** —
 
 ### OP-398: Evidenzbasierte Auswahl autonomer Arbeit
