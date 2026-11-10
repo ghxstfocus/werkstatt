@@ -395,7 +395,7 @@ def _run_job(
     if job is None:
         return
 
-    from werkstatt.chat_agent import chat_loop
+    from werkstatt.chat_agent import ChatCancelled, chat_loop
     from werkstatt.chat_session import ChatSession
 
     def event(kind: str, **payload: Any) -> None:
@@ -437,15 +437,12 @@ def _run_job(
             request_id=job_id,
         )
         store.finish(job_id, answer=answer)
+    except ChatCancelled:
+        store.finish(job_id, cancelled=True)
     except Exception as exc:
-        from werkstatt.chat_agent import ChatCancelled
-
-        if isinstance(exc, ChatCancelled):
-            store.finish(job_id, cancelled=True)
-        else:
-            store.finish(
-                job_id, error=f"{type(exc).__name__}: {exc}",
-            )
+        store.finish(
+            job_id, error=f"{type(exc).__name__}: {exc}",
+        )
     finally:
         heartbeat_stop.set()
         heartbeat_thread.join(timeout=_WORKER_HEARTBEAT_SECONDS + 1)
