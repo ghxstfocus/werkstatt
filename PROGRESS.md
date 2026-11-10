@@ -4659,3 +4659,26 @@ Der Job-Speicher fuehrt jetzt ein optionales `run_id`-Feld mit Migration fuer be
 - **Commit:** `ecb07f60830c88a803dbc82654ef75c0998a3037` — API-Test fuer IDs in wiedergegebenen Job-Events.
 - **Commit:** `1f6ce1cae029d507a03bf98fe3c19556743e9ae3` — STATUS um Event-Kontext im Replay ergaenzen.
 - **Serververifikation:** nach Pull ausstehend.
+
+## 2026-11-10 — Chat-Job-Events in die Control-Timeline projizieren
+
+Der Event-Store kann Events jetzt mit Projektbezug und deterministischer Event-ID idempotent annehmen. Chat-Job-Events bleiben zunaechst im Job-Speicher; beim Status-Replay werden ausstehende Events in die gemeinsame Run-Timeline projiziert. Ein Retry nach Prozessabbruch erzeugt dank stabiler Quell-ID keinen zweiten Timeline-Eintrag. Der Control-Live-Feed liest nur die Chat-Job-Events des angefragten Projekts und rendert Status, Chat-Rolle und kurze Aktivitaetsdetails.
+
+- **Commit:** `eb23504c14ff0cd92bbb7da4e0b33b290411045a` — Projektfeld und idempotente Event-ID im gemeinsamen Event-Store.
+- **Commit:** `d26fd8efbf190ddb84e26ce9366cde782d56608f` — Projektbezug und Projektionsmarker fuer Job-Events migrieren.
+- **Commit:** `c9fee5d17f23137c395948feb12aba7689a8b6c2` — gespeicherte Run-gebundene Job-Events idempotent projizieren.
+- **Commit:** `cf20536be0129a2a305fe8bd5d0adcae3c516e8a` — Projekt-ID beim Job-Anlegen uebergeben.
+- **Commit:** `ed50f8d18217a31619673c4d83948bb8e0e66f7a` — API-Test fuer den Projektbezug.
+- **Commit:** `39fc946bff5c539eb2809c6a9a769283bb6fd821` — Integrationstest fuer einmalige Timeline-Projektion.
+- **Commit:** `4df910398b0da5fb73aecd472a31b424250ac54e` — Idempotenz- und Projektfiltertest fuer den Event-Store.
+- **Commit:** `b6dfe542e2ad8935833ae045150da182ead3e999` — Projektion beim Job-Poll auf den angefragten Job begrenzen.
+- **Commit:** `b6e6f8c629b6ea89635a662b8f5a2166e4ed6370` — Migrationstest fuer bestehende Job-Event-Tabellen.
+- **Commit:** `e934cfd8b086c8aac355eb02fe4120653eb7aa79` — Run-gebundene Chat-Events in den Projekt-Live-Feed aufnehmen.
+- **Commit:** `c2aef3c11f0723a135b30c015f3cb4612a42df98` — Chat-Ereignisse im Live-Feed semantisch darstellen.
+- **Commit:** `24a0fe75869887fd311b72ddb466734389155f6a` — Chat-Rolle und Eventtitel im Control-Feed ergaenzen.
+- **Commit:** `aa4ef4561e8bc041ee2cea8f120ddda83b58e22c` — statische Live-Feed-Datei cache-invalidieren.
+- **Commit:** `7940bcb352eb8164c2f977e9ddf8a28f32424dda` — Backend-Integrationstest fuer projektgefilterte Chat-Feed-Events.
+- **Commit:** `899a24cdb445a3dbf185744deefa06f2498bd535` — Chat-Worker bei nicht verfuegbarem Timeline-Store nicht fehlschlagen lassen.
+- **Commit:** `23f63f024b1d7f9ab353e4c6a081c3b1ef4a8c9d` — unbenutzten Event-Store-Cursor entfernen.
+- **Commit:** `6e9b3ad4bb5094522b24ad1b92e4ec087bb5d0fd` — STATUS um Timeline-Integration und Verifikationsstatus ergaenzen.
+- **Serververifikation:** gezielte Event-Store-/Job-/Live-Feed-Tests, Ruff, volle Testsuite und Quality Gate nach Pull ausstehend.
