@@ -166,7 +166,9 @@ def test_next_op_liest_aktives_projekt_und_startet_nichts(tmp_path) -> None:
 
 
 
-def test_next_op_resolves_only_completed_dependencies_from_project_progress(tmp_path) -> None:
+def test_next_op_resolves_completed_dependency_from_project_progress(
+    tmp_path,
+) -> None:
     docs = tmp_path / "docs"
     docs.mkdir()
     (docs / "STATUS.md").write_text(
