@@ -212,3 +212,39 @@ def test_chat_loop_cancelled_before_request_does_not_call_llm(session) -> None:
 
     assert session.load() == []
 
+def test_chat_stream_stops_when_cancel_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests = pytest.importorskip("requests")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    checks = 0
+
+    def _cancel() -> bool:
+        nonlocal checks
+        checks += 1
+        return checks >= 3
+
+    class _Response:
+        closed = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            self.closed = True
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_lines(self):
+            yield b"data: {}"
+            yield b"data: {}"
+
+    response = _Response()
+    monkeypatch.setattr(requests, "post", lambda *_args, **_kwargs: response)
+
+    with pytest.raises(chat_agent.ChatCancelled):
+        chat_agent._deepseek_chat_stream([], cancel_check=_cancel)
+
+    assert response.closed is True
+
