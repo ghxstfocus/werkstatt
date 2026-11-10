@@ -1,5 +1,6 @@
 """Tests fuer das FastAPI-Backend (OP-074)."""
 
+import signal
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -207,3 +208,71 @@ def test_parallele_starts_starten_nur_einen_loop(
     assert sum(bool(antwort.json()["gestartet"]) for antwort in antworten) == 1
     assert len(aufrufe) == 1
     assert client.post("/api/projects/demo/stop").status_code == 200
+
+
+def test_pause_resume_loop_control(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    import os
+
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    if os.name != "posix":
+        pytest.skip("Pause/Resume nutzt POSIX-Signale")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "STATUS.md").write_text("# pause/resume test\n", encoding="utf-8")
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    app_modul._LAUFENDE_LOOPS.clear()
+    app_modul._LOOP_LOG_HANDLES.clear()
+    app_modul._LOOP_RUN_IDS.clear()
+    app_modul._PAUSIERTE_LOOPS.clear()
+
+    aufrufe: list[list[str]] = []
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    signale: list[tuple[int, int]] = []
+    monkeypatch.setattr(
+        app_modul.os, "kill",
+        lambda pid, sig: signale.append((pid, sig)),
+    )
+    audit_events: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    class _FakeEventStore:
+        def append(self, *args: Any, **kwargs: Any) -> None:
+            audit_events.append((args, kwargs))
+
+    monkeypatch.setattr(app_modul, "EventStore", _FakeEventStore)
+
+    client = TestClient(app_modul.app)
+    gestartet = client.post(
+        "/api/projects/demo/start", json={"aufgabe": "pause test"},
+    )
+    assert gestartet.status_code == 200
+    pid = gestartet.json()["pid"]
+
+    pause = client.post("/api/projects/demo/pause")
+    assert pause.status_code == 200
+    assert pause.json()["pausiert"] is True
+    assert pause.json()["audit_event"] is True
+    assert signale == [(pid, signal.SIGSTOP)]
+    assert client.get("/api/projects/demo/loop").json()["state"] == "paused"
+
+    resume = client.post("/api/projects/demo/resume")
+    assert resume.status_code == 200
+    assert resume.json()["fortgesetzt"] is True
+    assert resume.json()["audit_event"] is True
+    assert signale[-1] == (pid, signal.SIGCONT)
+    assert client.get("/api/projects/demo/loop").json()["state"] == "running"
+
+    stop = client.post("/api/projects/demo/stop")
+    assert stop.status_code == 200
+    assert stop.json()["gestoppt"] is True
+    assert stop.json()["audit_event"] is True
+    assert [event[0][1] for event in audit_events] == [
+        "web_loop_paused", "web_loop_resumed", "web_loop_stopped",
+    ]
+    assert "demo" not in app_modul._LAUFENDE_LOOPS
