@@ -163,3 +163,28 @@ def test_next_op_liest_aktives_projekt_und_startet_nichts(tmp_path) -> None:
     assert '"zustand": "selected"' in result
     assert '"id": "OP-321"' in result
     assert '"quelle": "docs/STATUS.md"' in result
+
+
+
+def test_next_op_resolves_only_completed_dependencies_from_project_progress(tmp_path) -> None:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "### OP-322: Arbeit nach erledigtem OP\n"
+        "- **Status:** open\n"
+        "- **Blockiert von:** OP-201\n"
+        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\n"
+        "- **Tests:** pytest -q tests/test_322.py\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "PROGRESS.md").write_text(
+        "### 2026-11-07 — OP-201 abgeschlossen: Paket-Registrierung\n",
+        encoding="utf-8",
+    )
+
+    result = chat_tools.execute_tool(
+        "next_op", {}, project_dir=tmp_path, project_name="demo",
+    )
+
+    assert '"zustand": "selected"' in result
+    assert '"id": "OP-322"' in result
