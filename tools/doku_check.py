@@ -16,6 +16,7 @@ Ausnahmen (kein Verdacht):
 - Subject beginnt mit "docs(" oder "test(" oder "ci("
 - Subject enthaelt "[skip-doku]" explizit
 - Commit ist Merge
+- Code-Commit-SHA ist explizit in PROGRESS.md referenziert
 
 Aufruf:
   python3 tools/doku_check.py                     # Report, exit 0
@@ -41,6 +42,10 @@ DOKU_PREFIXE = ("docs/", "PROGRESS.md", "AGENTS.md", "CHANGELOG.md", "ROADMAP.md
 CODE_SUBJECT_RE = re.compile(r"^(feat|fix|chore|refactor|perf)\(")
 SKIP_SUBJECT_RE = re.compile(r"^(docs|test|ci)\(")
 SKIP_TRAILER_RE = re.compile(r"\[skip-doku\]", re.IGNORECASE)
+PROGRESS_COMMIT_REF_RE = re.compile(
+    r"(?m)^\s*-\s+\*\*Commit:\*\*\s+`([0-9a-f]{12,40})`",
+    re.IGNORECASE,
+)
 
 
 def _git(*args: str, cwd: Path | None = None) -> str:
@@ -61,6 +66,16 @@ def _commit_files(sha: str, cwd: Path | None = None) -> list[str]:
     return [ln.strip() for ln in out.splitlines() if ln.strip()]
 
 
+def _progress_commit_refs(cwd: Path | None = None) -> set[str]:
+    """Liefert explizite Code-Commit-Referenzen aus der append-only-Historie."""
+    progress = (cwd or Path.cwd()) / "PROGRESS.md"
+    try:
+        text = progress.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return set()
+    return {match.group(1).lower() for match in PROGRESS_COMMIT_REF_RE.finditer(text)}
+
+
 def ist_verdaechtig(subject: str, files: list[str]) -> bool:
     """True = Code geaendert ohne Doku-Update, trotz Code-typischem Subject."""
     if SKIP_TRAILER_RE.search(subject):
@@ -79,13 +94,15 @@ def ist_verdaechtig(subject: str, files: list[str]) -> bool:
 def pruefe_commits(limit: int = 20, cwd: Path | None = None) -> list[dict]:
     """Prueft die letzten `limit` Commits, liefert Verdachts-Liste."""
     out = _git("log", f"-{limit}", "--format=%H|%s", cwd=cwd)
+    progress_refs = _progress_commit_refs(cwd)
     verdacht = []
     for line in out.splitlines():
         if not line.strip():
             continue
         sha, _, subject = line.partition("|")
         files = _commit_files(sha, cwd=cwd)
-        if ist_verdaechtig(subject, files):
+        referenziert = any(sha.lower().startswith(ref) for ref in progress_refs)
+        if ist_verdaechtig(subject, files) and not referenziert:
             verdacht.append({
                 "sha": sha[:10],
                 "subject": subject,
