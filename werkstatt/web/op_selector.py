@@ -103,6 +103,12 @@ def select_next_op(
         if op["status_anzahl"] != 1:
             reasons.append("Status fehlt oder ist mehrfach angegeben")
         tests = fields.get("tests")
+        phase = fields.get("phase", "")
+        if (
+            re.search(r"\\bphase[\\s-]*3\\b", phase, re.IGNORECASE)
+            and "OP-382" not in completed
+        ):
+            reasons.append("Phase-3 gesperrt bis OP-382 abgeschlossen")
         if not _ausfuellbar(fields.get("akzeptanzkriterien")):
             reasons.append("Akzeptanzkriterien fehlen")
         if not _ausfuellbar(tests):
