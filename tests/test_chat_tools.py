@@ -148,11 +148,11 @@ def test_next_op_liest_aktives_projekt_und_startet_nichts(tmp_path) -> None:
     docs = tmp_path / "docs"
     docs.mkdir()
     (docs / "STATUS.md").write_text(
-        "### OP-321: Eindeutige Arbeit\\n"
-        "- **Status:** open\\n"
-        "- **Blockiert von:** —\\n"
-        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\\n"
-        "- **Tests:** pytest -q tests/test_321.py\\n",
+        "### OP-321: Eindeutige Arbeit\n"
+        "- **Status:** open\n"
+        "- **Blockiert von:** —\n"
+        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\n"
+        "- **Tests:** pytest -q tests/test_321.py\n",
         encoding="utf-8",
     )
 
