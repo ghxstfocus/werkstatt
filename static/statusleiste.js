@@ -54,7 +54,16 @@
     if (loop) {
       var L = d.loop || {prompt: 0, completion: 0, total: 0};
       _setTokenText("status-tokens-loop", "Loop: " + _fmtTokens(L.prompt) + " \u2191 / " + _fmtTokens(L.completion) + " \u2193");
-      loop.title = "Loop (run " + (L.run_id || "-") + "): " + L.total + " Token total, " + L.calls + " Calls";
+      var roleStats = d.by_role || {};
+      var roleNames = Object.keys(roleStats).sort();
+      var roleLines = roleNames.map(function (role) {
+        var R = roleStats[role];
+        return role + ": " + R.calls + " Calls, " + _fmtTokens(R.prompt)
+          + " Prompt-Token, max " + _fmtTokens(R.max_prompt);
+      });
+      loop.title = "Loop (run " + (L.run_id || "-") + "): " + L.total
+        + " Token total, " + L.calls + " Calls"
+        + (roleLines.length ? "\n\nToken pro Rolle:\n" + roleLines.join("\n") : "");
       loop.classList.toggle("aktiv", L.total > 0);
     }
     var chat = _el("status-tokens-chat");

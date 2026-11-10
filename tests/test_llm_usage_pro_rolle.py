@@ -66,6 +66,9 @@ def test_aggregate_tokens_per_rolle_summiert_und_misst_spitze(
         },
     }
 
+    api_result = inspector.aggregate_tokens("demo", "run-1")
+    assert api_result["by_role"] == result
+
 
 def test_aggregate_tokens_per_rolle_ignoriert_ungueltige_payloads(
     monkeypatch, tmp_path,

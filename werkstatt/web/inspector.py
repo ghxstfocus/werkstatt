@@ -430,11 +430,16 @@ def aggregate_tokens(projekt: str, run_id: str | None = None) -> dict[str, Any]:
             for (payload,) in rows:
                 try:
                     d = json.loads(payload)
-                except json.JSONDecodeError:
+                    if not isinstance(d, dict):
+                        continue
+                    prompt = int(d.get("prompt_tokens", 0) or 0)
+                    completion = int(d.get("completion_tokens", 0) or 0)
+                    total = int(d.get("total_tokens", 0) or 0)
+                except (json.JSONDecodeError, TypeError, ValueError):
                     continue
-                aus["loop"]["prompt"] += int(d.get("prompt_tokens", 0) or 0)
-                aus["loop"]["completion"] += int(d.get("completion_tokens", 0) or 0)
-                aus["loop"]["total"] += int(d.get("total_tokens", 0) or 0)
+                aus["loop"]["prompt"] += prompt
+                aus["loop"]["completion"] += completion
+                aus["loop"]["total"] += total
                 aus["loop"]["calls"] += 1
         except sqlite3.Error:
             pass
@@ -460,6 +465,7 @@ def aggregate_tokens(projekt: str, run_id: str | None = None) -> dict[str, Any]:
     except Exception:
         pass
 
+    aus["by_role"] = aggregate_tokens_per_rolle(projekt, run_id)
     return aus
 
 
