@@ -4570,8 +4570,7 @@ Dispatch aus. So wird der Retry nicht ausgefuehrt, solange die Session noch
 belegt ist, und ein spaeterer Queue-Eintrag bleibt nach dem Claim-Rennen nicht
 liegen.
 
-- **Implementierung:** `11cc1cb2ea1e5f9ff6a42b09c018e3b8eb8e9d21`,
-  `f523e4c3ecef044948cd2934c8ed57cb16b5f1c1`.
-- **Regressionstests:** `f3bf56c58545fbf8be0672e0a935ae36eac89607`
-  prueft aktive Sessions sowie erneuten Dispatch nach Claim-Verlust.
+- **Commit:** `11cc1cb2ea1e5f9ff6a42b09c018e3b8eb8e9d21` — aktive Sessions beim Dispatch ueberspringen und nach Claim-Verlust erneut dispatchen.
+- **Commit:** `f523e4c3ecef044948cd2934c8ed57cb16b5f1c1` — Future-Rueckgabewert fuer die Claim-Retry-Entscheidung typisieren.
+- **Commit:** `f3bf56c58545fbf8be0672e0a935ae36eac89607` — Regressionstests fuer aktive Sessions und erneuten Dispatch nach Claim-Verlust.
 - **Serververifikation:** nach Pull noch ausstehend.
