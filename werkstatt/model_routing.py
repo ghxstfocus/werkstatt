@@ -83,7 +83,8 @@ def route_for_role(role: str, requested_model: str | None = None) -> ModelRoute:
     elif label in _ROLE_MODELS:
         model = _ROLE_MODELS[label]
     else:
-        model = canonical_model_name(requested_model or "deepseek-flash")
+        # Unbekannte Agent-Labels erben nie versehentlich den Architect-Slot.
+        model = "deepseek-flash"
 
     if label == "architect":
         return ModelRoute(label, model, "enabled", "high")
