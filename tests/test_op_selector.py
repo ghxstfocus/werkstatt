@@ -70,3 +70,20 @@ def test_abstains_on_conflicting_status_metadata() -> None:
         "Status fehlt oder ist mehrfach angegeben" in " ".join(item["gruende"])
         for item in result["ausgeschlossen"]
     )
+
+def test_duplicate_op_id_is_never_selected_or_used_as_dependency() -> None:
+    duplicate = _op("OP-001", status="done") + _op("OP-001", status="open")
+    waiting = _op("OP-002", blockers="OP-001")
+
+    result = select_next_op(duplicate + waiting)
+
+    assert result["zustand"] == "no_candidate"
+    assert result["auswahl"] is None
+    assert [item["id"] for item in result["kandidaten"]] == []
+    assert sum(item["id"] == "OP-001" for item in result["ausgeschlossen"]) == 2
+    reasons = " ".join(
+        reason for item in result["ausgeschlossen"] for reason in item["gruende"]
+    )
+    assert "OP-ID kommt mehrfach in STATUS.md vor" in reasons
+    assert "Unbekannte oder widerspruechliche Blocker" in reasons
+
