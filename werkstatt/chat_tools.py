@@ -10,6 +10,7 @@ import json
 import subprocess
 import sys
 from collections.abc import Callable
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,12 @@ from werkstatt.validierung import pruefe_ref
 __all__ = ["CHAT_TOOLS", "execute_tool", "openai_schemas"]
 
 _PROJEKT_DIR = Path("/opt/werkstatt").resolve()
+_PROJEKT_DIR_KONTEXT: ContextVar[Path | None] = ContextVar(
+    "werkstatt_chat_project_dir", default=None,
+)
+_PROJEKTNAME_KONTEXT: ContextVar[str] = ContextVar(
+    "werkstatt_chat_project_name", default="werkstatt",
+)
 _MAX_READ_BYTES = 50_000
 _MAX_GREP_TREFFER = 30
 _TIMEOUT_GREP_S = 10
@@ -25,15 +32,20 @@ _TIMEOUT_GIT_S = 30
 _TIMEOUT_PYTEST_S = 60
 
 
+def _aktives_projekt_dir() -> Path:
+    return _PROJEKT_DIR_KONTEXT.get() or _PROJEKT_DIR
+
+
 def _resolved_safe(pfad: str) -> Path | None:
     if not pfad:
         return None
+    projekt_dir = _aktives_projekt_dir()
     try:
-        p = (_PROJEKT_DIR / pfad).resolve()
+        p = (projekt_dir / pfad).resolve()
     except (OSError, RuntimeError):
         return None
     try:
-        p.relative_to(_PROJEKT_DIR)
+        p.relative_to(projekt_dir)
     except ValueError:
         return None
     return p
@@ -64,7 +76,7 @@ def _grep(args: dict[str, Any]) -> str:
     try:
         r = subprocess.run(
             ["grep", "-rn", f"--max-count={_MAX_GREP_TREFFER}",
-             pattern, str(pfad)],
+             "--", pattern, str(pfad)],
             capture_output=True, text=True, check=False,
             timeout=_TIMEOUT_GREP_S,
         )
@@ -79,7 +91,7 @@ def _git_log(args: dict[str, Any]) -> str:
         r = subprocess.run(
             ["git", "log", "--oneline", f"-n{n}"],
             capture_output=True, text=True, check=False, timeout=_TIMEOUT_GIT_S,
-            cwd=_PROJEKT_DIR,
+            cwd=_aktives_projekt_dir(),
         )
     except (subprocess.TimeoutExpired, OSError) as exc:
         return f"git_log-Fehler: {exc}"
@@ -96,7 +108,7 @@ def _git_diff(args: dict[str, Any]) -> str:
         r = subprocess.run(
             ["git", "diff", ref, "--"],
             capture_output=True, text=True, check=False, timeout=_TIMEOUT_GIT_S,
-            cwd=_PROJEKT_DIR,
+            cwd=_aktives_projekt_dir(),
         )
     except (subprocess.TimeoutExpired, OSError) as exc:
         return f"git_diff-Fehler: {exc}"
@@ -110,6 +122,9 @@ def _audit_query(args: dict[str, Any]) -> str:
     run_id = str(args.get("run_id") or get_run_id() or "")
     if not run_id:
         return "audit_query: keine run_id (weder Argument noch set_run_id())"
+    projekt = _PROJEKTNAME_KONTEXT.get()
+    if not run_id.startswith(f"{projekt}-"):
+        return "audit_query: run_id gehoert nicht zum aktiven Projekt"
     kind = args.get("kind")
     since = args.get("since")
     try:
@@ -131,7 +146,7 @@ def _pytest_collect(args: dict[str, Any]) -> str:
         r = subprocess.run(
             [sys.executable, "-m", "pytest", "--collect-only", "-q", str(pfad)],
             capture_output=True, text=True, check=False, timeout=_TIMEOUT_PYTEST_S,
-            cwd=_PROJEKT_DIR,
+            cwd=_aktives_projekt_dir(),
         )
     except (subprocess.TimeoutExpired, OSError) as exc:
         return f"pytest_collect-Fehler: {exc}"
@@ -157,7 +172,7 @@ def _read_status(_args: dict[str, Any]) -> str:
     teile: list[str] = []
     try:
         from werkstatt.web.inspector import parse_ops
-        ops = parse_ops(_PROJEKT_DIR)
+        ops = parse_ops(_aktives_projekt_dir())
         counts: dict[str, int] = {}
         for o in ops:
             counts[o["status"]] = counts.get(o["status"], 0) + 1
@@ -170,7 +185,7 @@ def _read_status(_args: dict[str, Any]) -> str:
         teile.append(f"## OP-Zusammenfassung: Fehler ({exc})\n")
 
     for name in ("docs/STATUS.md", "docs/PROGRESS.md"):
-        pfad = _PROJEKT_DIR / name
+        pfad = _aktives_projekt_dir() / name
         if pfad.is_file():
             try:
                 limit = 200_000 if "STATUS" in name else 20_000
@@ -298,6 +313,9 @@ def execute_tool(
     args: dict[str, Any],
     tools: dict[str, dict[str, Any]] | None = None,
     mode: str = "read",
+    *,
+    project_dir: Path | str | None = None,
+    project_name: str | None = None,
 ) -> str:
     src = tools if tools is not None else CHAT_TOOLS
     spec = src.get(name)
@@ -306,7 +324,19 @@ def execute_tool(
     if not _mode_erlaubt(spec, mode):
         return f"Fehler: Tool '{name}' erfordert mode='write' (aktuell '{mode}')"
     fn: Callable[[dict[str, Any]], str] = spec["fn"]
+    root = (
+        Path(project_dir).expanduser().resolve()
+        if project_dir is not None
+        else _PROJEKT_DIR
+    )
+    if not root.is_dir():
+        return f"Fehler: Aktives Projektverzeichnis fehlt: {root}"
+    root_token = _PROJEKT_DIR_KONTEXT.set(root)
+    name_token = _PROJEKTNAME_KONTEXT.set(project_name or "werkstatt")
     try:
         return str(fn(args))
     except Exception as exc:
         return f"Tool-Fehler ({name}): {type(exc).__name__}: {exc}"
+    finally:
+        _PROJEKTNAME_KONTEXT.reset(name_token)
+        _PROJEKT_DIR_KONTEXT.reset(root_token)
