@@ -162,7 +162,6 @@ class ChatJobStore:
             conn.commit()
             return cur.rowcount == 1
 
-
     def heartbeat(self, job_id: str, worker_id: str) -> bool:
         """Erneuert die Lease nur fuer den Worker, der den Job beansprucht hat."""
         now = _now()
