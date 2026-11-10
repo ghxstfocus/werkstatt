@@ -69,3 +69,9 @@ def test_css_hat_loop_control_bar():
     css = _css()
     assert ".runs-control" in css
     assert '.runs-action-btn[data-action="pause"]' in css
+
+
+def test_run_badge_verwendet_definierten_status():
+    js = _js()
+    assert 'if (state === "running") badge.title' in js
+    assert "if (isRunning) badge.title" not in js
