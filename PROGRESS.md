@@ -4594,10 +4594,12 @@ inferenzieren. Erfolgreiche Antworten werden als ein idempotentes
 abgebrochene Branches werden nicht als erledigte Konversation uebernommen.
 Beim Laden der Historie sowie vor neuen Jobs gleicht der Server erfolgreiche
 Jobs erneut ab, um einen Prozessabbruch zwischen Jobabschluss und
-Transcript-Projektion zu reparieren. Bei vor der Migration angelegten Jobs
-bleibt der Kontext-Wasserstand NULL und wird einmalig aus der Session beim
-ersten Worker-Start aufgenommen; neue Jobs speichern den Wasserstand bereits
-bei der Annahme. Die UI zeigt fuer jeden Auftrag eine
+Transcript-Projektion zu reparieren. Job-Branches bleiben aus der
+Projekt-Sessionliste ausgeblendet und werden nach normalem Abschluss oder bei
+der Reconciliation eines erfolgreichen Jobs entfernt. Bei vor der Migration
+angelegten Jobs bleibt der Kontext-Wasserstand NULL und wird einmalig aus der
+Session beim ersten Worker-Start aufgenommen; neue Jobs speichern den
+Wasserstand bereits bei der Annahme. Die UI zeigt fuer jeden Auftrag eine
 eigene Antwortkarte direkt nach der zugehoerigen Frage und behaelt den
 Working-Status, solange andere Jobs aktiv sind.
 
@@ -4621,4 +4623,10 @@ Working-Status, solange andere Jobs aktiv sind.
 - **Commit:** `f6857ff98937085edc5e557314f571ccb3978132` — API-Test fuer den uebergebenen Kontext-Wasserstand.
 - **Commit:** `9302abe9dafe98c019606103536a047467d947c0` — Legacy-Jobs ohne historischen Wasserstand beim ersten Start kompatibel behandeln.
 - **Commit:** `393b9d0bc3a75c8f2ef4ae283daf604adc4f9d21` — Migrationstest fuer NULL-Wasserstand bestehender Jobs.
+- **Commit:** `538ff57eb5e73e3423f079f67aace1ead28d988d` — Job-Branches aus der Sessionauswahl ausblenden und kontrolliert loeschen.
+- **Commit:** `5be75eacfbb33d4cbac54dc2d529b3c5c6c35087` — Branch nach Worker-Abschluss entfernen.
+- **Commit:** `a7504cd7c0e0c4d19fd46262e60583520b14eefa` — optionale Session-Referenzen explizit typisieren.
+- **Commit:** `f81b22fd717d6ca928170dad0fd73a307ff0d2fa` — Listenfilter und Branch-Bereinigung testen.
+- **Commit:** `ea52fa250e36e868b31ac70f4fd86d8e9623d314` — Branch-Loeschung nach erfolgreichem Worker testen.
+- **Commit:** `2da4951d23d4a8e2a5c78c74b6fddabafcbad545` — Branch-Bereinigung auch nach Prozess-Reconnect durchfuehren.
 - **Serververifikation:** gezielte Tests, UI/Ruff, Doku-Check und Quality Gate nach Pull stehen noch aus.
