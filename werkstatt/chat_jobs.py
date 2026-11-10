@@ -327,6 +327,76 @@ class ChatJobStore:
             conn.commit()
             return int(cur.lastrowid or 0)
 
+    def project_pending_events(
+        self, session_id: str | None = None, *, limit: int = 500,
+    ) -> int:
+        """Projeziert Run-gebundene Job-Events idempotent in die Loop-Timeline."""
+        sql = (
+            "SELECT e.seq,e.job_id,e.kind,e.payload,e.ts,"
+            "j.project,j.session_id,j.run_id "
+            "FROM job_events e JOIN jobs j ON j.job_id=e.job_id "
+            "WHERE e.projected=0 AND j.project IS NOT NULL AND j.run_id IS NOT NULL"
+        )
+        params: list[Any] = []
+        if session_id is not None:
+            sql += " AND j.session_id=?"
+            params.append(session_id)
+        sql += " ORDER BY e.seq LIMIT ?"
+        params.append(max(1, limit))
+        with closing(self._connect()) as conn:
+            rows = conn.execute(sql, params).fetchall()
+        if not rows:
+            return 0
+
+        from werkstatt.event_store import EventStore
+
+        events = EventStore()
+        projected = 0
+        statuses = {
+            "queued": "queued",
+            "started": "running",
+            "succeeded": "ok",
+            "failed": "failed",
+            "cancelled": "cancelled",
+            "cancel_requested": "running",
+        }
+        for row in rows:
+            try:
+                payload = json.loads(row["payload"])
+            except json.JSONDecodeError:
+                payload = {}
+            event_id = f"chat-job:{row['job_id']}:{row['seq']}"
+            event_payload = {
+                "job_id": row["job_id"],
+                "session_id": row["session_id"],
+                "run_id": row["run_id"],
+                "job_event_seq": row["seq"],
+                "job_event_kind": row["kind"],
+                **(payload if isinstance(payload, dict) else {}),
+            }
+            try:
+                events.append(
+                    str(row["run_id"]),
+                    f"chat_job_{row['kind']}",
+                    "chat",
+                    statuses.get(str(row["kind"]), "running"),
+                    event_payload,
+                    event_id=event_id,
+                    project=str(row["project"]),
+                )
+                with closing(self._connect()) as conn:
+                    conn.execute(
+                        "UPDATE job_events SET projected=1 "
+                        "WHERE job_id=? AND seq=?",
+                        (row["job_id"], row["seq"]),
+                    )
+                    conn.commit()
+                projected += 1
+            except (OSError, sqlite3.Error, TypeError, ValueError):
+                # Keep the source event pending; next API replay retries it.
+                break
+        return projected
+
     def finish(
         self, job_id: str, *, answer: str | None = None,
         error: str | None = None, cancelled: bool = False,
@@ -382,6 +452,7 @@ class ChatJobStore:
         self, session_id: str, *, failed_limit: int = 20,
     ) -> list[dict[str, Any]]:
         """Aktive Jobs plus letzte Fehler einer Session in Erstellreihenfolge."""
+        self.project_pending_events(session_id)
         with closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT * FROM jobs WHERE session_id=? AND ("
@@ -396,6 +467,7 @@ class ChatJobStore:
     def get(
         self, job_id: str, *, since_seq: int = 0,
     ) -> dict[str, Any] | None:
+        self.project_pending_events()
         with closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT * FROM jobs WHERE job_id=?", (job_id,),
