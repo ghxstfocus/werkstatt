@@ -78,6 +78,7 @@ def test_gate_passed_unter_baseline_macht_rot(tmp_path):
     assert result["delta"]["pytest"] == 1
     assert result["ok"] is False
 
+
 def test_quality_gate_reports_mypy_diagnostic(tmp_path):
     diagnostic = (
         "werkstatt/example.py:12: error: type mismatch [arg-type]\n"
