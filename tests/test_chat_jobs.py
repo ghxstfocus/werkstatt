@@ -348,14 +348,25 @@ def test_store_migrates_existing_jobs_table_for_worker_leases(
             "created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
             "UNIQUE(session_id,idempotency_key))"
         )
+        conn.execute(
+            "INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (
+                "legacy-job", "session-a", "legacy-key", "Old question",
+                "read", "queued", None, None, "2026-11-10", "2026-11-10",
+            ),
+        )
 
     ChatJobStore(db_path)
     with sqlite3.connect(db_path) as conn:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+        context_seq = conn.execute(
+            "SELECT context_seq FROM jobs WHERE job_id='legacy-job'",
+        ).fetchone()[0]
 
     assert {
         "worker_id", "heartbeat_at", "cancel_requested", "context_seq",
     } <= columns
+    assert context_seq is None
 
 def test_queued_job_can_be_cancelled_once(tmp_path: Path) -> None:
     store = ChatJobStore(tmp_path / "jobs.db")
