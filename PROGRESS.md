@@ -3961,3 +3961,19 @@ Protokollbeschränkung ab. Statische Asset-URLs wurden versioniert.
 isolierten Runtime-Simulator geprüft; Python-/Browser-Gates und
 visuelle Serverprüfung stehen noch aus.
 
+### 2026-11-10 — Control stoppt und pausiert Prozessgruppen
+
+**Commits:** c51bf17, ac722b1, e415816.
+
+Der Serverlauf deckte einen Cache-Buster-Testvertrag auf; statische
+Asset-Versionen sind wieder numerisch. Zusätzlich startet der Web-Loop
+unter POSIX in einer eigenen Session/Prozessgruppe. Pause, Resume und
+Stop signalisieren nun die Gruppe, damit Prüf- und Test-Kindprozesse
+nicht nach der UI-Aktion weiterlaufen. Der Prozessgruppenvertrag ist
+durch Backend-Tests abgedeckt.
+
+**Prüfung:** Der gemeldete Gesamtlauf 1747 passed / 1 failed betraf
+noch den nichtnumerischen Cache-Buster; targeted tests und Ruff waren
+grün. Der Numeric-Fix und Prozessgruppenänderungen brauchen einen
+erneuten Serverlauf.
+
