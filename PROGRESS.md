@@ -4273,3 +4273,29 @@ Backend-Regressionstest bildet genau diesen Fall ohne PROGRESS-Datei ab.
 - **Serververifikation:** Zieltest, Ruff und vollstaendiges Quality-Gate nach
   Pull ausstehend. Die lokalen Aenderungen an `audit_panel.py` und
   `terminal_proxy.py` bleiben unberuehrt.
+
+
+### Verifikation und OP-Abhaengigkeiten — 2026-11-10
+
+Der Server bestaetigte den Fix fuer den fehlenden PROGRESS-Fall: der
+Regressionstest `test_autonomous_start_uses_status_done_ledger_dependency`
+besteht; die Vollsuite meldet 1826 passed / 5 skipped, Ruff 0, Mypy 0 und
+Quality Gate `ok=true`, `regression=false`. Der Doku-Check meldet nur die
+bereits vorhandenen uncommitteten Aenderungen an `werkstatt/web/audit_panel.py`
+und `werkstatt/web/terminal_proxy.py`.
+
+Der Queue-Abgleich gegen Roadmap, ADR-0010/0011/0029 und DOC_CONVENTIONS §5
+fand zwei nicht aufloesbare Blocker: OP-160 referenzierte den verworfenen
+Debugger-Entwurf OP-128 und OP-113a; OP-113i referenzierte ebenfalls die
+nicht mehr offene OP-113a. Beide Aufgaben sind jetzt an die aktuellen OP-240-
+und OP-220-Memory-Bausteine gebunden. OP-160 und OP-113i sind explizit Phase-3
+und warten auf OP-382. Ausserdem blockiert OP-382 jetzt das Memory-Grundpaket
+OP-220, sodass nachgelagerte Memory-Arbeit nicht vor den zehn Dogfooding-Runs
+aus dem Selector heraus startbar ist. OP-220a verwendet jetzt wie ADR-0010
+`scope='project'` statt des widerspruechlichen Werts `'projekt'`.
+
+- **Code-Fix:** `8edd8749717d` — STATUS-Abschlussledger ohne PROGRESS lesen.
+- **STATUS:** `8db8d84ccd5d` — veraltete Debugger-/Memory-Blocker korrigieren.
+- **STATUS:** `f3f3c2645f9b` — Phase-3-Sperre und ADR-konformes Memory-Scope festhalten.
+- **Serververifikation der STATUS-Neufassung:** noch ausstehend; sie erfolgte
+  nach dem gemeldeten Serverlauf auf `61eeb75`.
