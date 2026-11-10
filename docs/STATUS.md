@@ -1330,7 +1330,7 @@ noch nicht vollstaendig.
   (b) Rollenaggregation liest die JSON-Payload-Felder aus dem Event-Store (keine nicht vorhandenen SQL-Spalten) und liefert Anzahl, Summen sowie maximalen Prompt pro Call.
   (c) Neue Funktion `aggregate_tokens_per_rolle()` in `inspector.py` liefert die Aggregation fuer Projekt und Run.
   (d) Live: Nach dem naechsten Loop-Run ist pro Rolle eine Zeile sichtbar.
-- **Tests:** `tests/test_llm_usage_pro_rolle.py` (2 Tests: Payload enthaelt `agent`, Aggregation summiert korrekt).
+- **Tests:** `tests/test_llm_usage_pro_rolle.py` (Payload enthaelt `rolle`, Aggregation summiert korrekt und ermittelt `max_prompt`).
 - **ADR:** —
 - **Kontext:** Erste OP der Context-Engineering-Achse (Phase 2). Muss vor OP-384/385 laufen, sonst sind deren Zahlen geraten.
 

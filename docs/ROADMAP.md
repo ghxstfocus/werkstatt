@@ -1,8 +1,28 @@
 # Roadmap — Werkstatt
 
-Stand: 2026-11-02 abends (UI-Welle + Doku-Aktualisierung).
-Uebersicht. Details in `STATUS.md` (Todo)
-und `PROGRESS.md` (Erledigt).
+Stand: 2026-11-10.
+Diese Datei fasst die langfristige Entwicklung zusammen. Der verbindliche
+Arbeitsfokus und offene Loop-OPs stehen in `STATUS.md`; erledigte Arbeit
+steht in `PROGRESS.md`. Aeltere Baselines und Phasenberichte weiter unten
+sind historische Snapshots, keine aktuelle Betriebsfreigabe.
+
+## Aktueller Arbeitsfokus (2026-11-10)
+
+**Ziel:** Eine belastbare Multi-Projekt-Agentenloop- und Entwicklungsumgebung,
+deren Rollen, Gates, Audit und Projektgrenzen nachvollziehbar zusammenarbeiten.
+
+1. **Phase 1 — UI bereitstellen:** OP-381c, OP-381b, OP-306, OP-306b und
+   Interfaces (Verify/CI-Status, Rollen-Details, Debug-Ansicht).
+2. **Phase 2 — Loop im UI-Betrieb stabilisieren:** OP-382 Dogfooding mit
+   zehn vollständigen realen OPs, Debugger-Kette und konstante erfolgreiche
+   Runs ohne Abbrüche.
+3. **Phase 3 — Selbstverbesserung und Memory:** OP-376–379, OP-380 und
+   OP-220 ff. bleiben gesperrt, bis Phase 2 mit zehn erfolgreichen Runs
+   nachgewiesen ist.
+
+Der Status der Phasen, Abhängigkeiten und Live-Belege wird ausschliesslich in
+`STATUS.md` gepflegt. Die nachfolgenden Abschnitte dokumentieren frühere
+Ausbaustufen und Messstände.
 
 ## Symbole
 
