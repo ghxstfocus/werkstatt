@@ -4055,7 +4055,10 @@ aufgeloeste Blocker, Akzeptanzkriterien und ein konkreter Test/Nachweis.
 Bei mehreren Kandidaten startet der Server keinen Run, sondern liefert
 strukturierte Auswahloptionen; ohne geeignete OP erklaert die Antwort die
 Ausschlussgruende. Ein direkter Auftrag hat Vorrang vor einer zusaetzlichen
-OP-ID. Plan-Gate bleibt im Loop verpflichtend.
+OP-ID. Plan-Gate bleibt im Loop verpflichtend. In der Runs-Steuerung gibt es
+einen Startknopf fuer den naechsten eindeutigen OP; mehrdeutige Antworten
+zeigen die Kandidaten lesbar an, damit ein OP aus der Liste gewaehlt werden
+kann.
 
 Server-Verifikation steht noch aus. Der Selector buendelt keine OPs und
 rankt mehrdeutige Kandidaten absichtlich noch nicht; diese OP-398-
