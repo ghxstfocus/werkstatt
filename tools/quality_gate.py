@@ -18,6 +18,7 @@ Aufruf:
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 
 # Recursion Guard (Phase 14): Wenn wir in einem Test laufen,
@@ -43,8 +44,10 @@ BASELINE = {
     "pytest": 1214,   # pytest -q: historische Mindest-Passzahl
     "ruff": 0,        # ruff check .: Ziel 0 Fehler
     "mypy": 0,        # mypy werkstatt/: Ziel 0 Fehler
-    "ast": 0,         # skip wenn Datei fehlt
-    "katalog": 0,     # skip wenn Datei fehlt
+    "ast": 0,         # Python-Syntaxfehler in Repo-Quellen
+
+    "katalog": 0,     # Fehler im Audit-Katalogtest
+
 }
 
 HEAD = "d95e147"  # Baseline-Anker (nicht HEAD). Aktueller HEAD wechselt pro Commit.
@@ -146,31 +149,57 @@ def check_all(cwd: Path) -> dict:
     result["current"]["mypy"] = mypy_result
     result["delta"]["mypy"] = n - BASELINE["mypy"]
 
-    # ast
-    ast_test = cwd / "tests" / "test_audit_kinds.py"
-    if ast_test.exists():
-        _rc, out = _run(
-            ["pytest", "tests/test_audit_kinds.py", "-q"], cwd)
-        passed, _ = _parse_pytest(out)
-        result["current"]["ast"] = {"passed": passed}
-        result["delta"]["ast"] = BASELINE["ast"] - passed
-    else:
-        # Datei im Loop-Neubau entfernt. Skip statt Fake-Regression.
-        result["current"]["ast"] = {"skipped": "tests/test_audit_kinds.py fehlt"}
-        result["delta"]["ast"] = 0
+    # ast: Syntax aller versionierten Python-Projektquellen pruefen.
+    # Veraltete Pfade auf entfernte Test-/Monolith-Dateien entfallen.
+    ignored_parts = {".git", ".venv", "venv", "__pycache__"}
+    python_files = sorted(
+        path for path in cwd.rglob("*.py")
+        if not (ignored_parts & set(path.parts))
+    )
+    ast_diagnostics: list[str] = []
+    for path in python_files:
+        try:
+            ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (OSError, UnicodeError, SyntaxError) as exc:
+            ast_diagnostics.append(f"{path.relative_to(cwd)}: {exc}")
+    ast_errors = len(ast_diagnostics)
+    result["current"]["ast"] = {
+        "files_checked": len(python_files),
+        "errors": ast_errors,
+        "diagnostics": ast_diagnostics[:20],
+    }
+    result["delta"]["ast"] = ast_errors
 
-    # katalog
-    pipeline = cwd / "pipeline.py"
-    if pipeline.exists():
-        content = pipeline.read_text()
-        m = re.search(r"_KATALOG_SOLL\s*=\s*(\d+)", content)
-        n = int(m.group(1)) if m else -1
-        result["current"]["katalog"] = {"soll": n}
-        result["delta"]["katalog"] = n - BASELINE["katalog"]
+    # katalog: aktiv gepflegter Test ist nach der Entfernung von pipeline.py
+    # die autoritative Pruefung fuer audit()-Kinds.
+    catalog_test = "tests/test_audit_warnung.py::test_katalog_enthaelt_alle_code_kinds"
+    catalog_path = cwd / "tests" / "test_audit_warnung.py"
+    if catalog_path.is_file():
+        rc, out = _run(
+            ["pytest", catalog_test, "-q"], cwd, env=_clean_env(),
+        )
+        passed, failed = _parse_pytest(out)
+        catalog_errors = 0 if rc == 0 and passed == 1 and failed == 0 else 1
+        catalog_result: dict[str, Any] = {
+            "passed": passed,
+            "errors": catalog_errors,
+        }
+        if catalog_errors:
+            diagnostic = out.strip()
+            if len(diagnostic) > 4000:
+                diagnostic = diagnostic[:4000] + "\n...[truncated]"
+            catalog_result["diagnostic"] = diagnostic or (
+                "Audit-Katalogtest fehlgeschlagen ohne Diagnose"
+            )
     else:
-        # pipeline.py im Loop-Neubau entfernt. Skip statt Fake-Regression.
-        result["current"]["katalog"] = {"skipped": "pipeline.py fehlt"}
-        result["delta"]["katalog"] = 0
+        catalog_errors = 1
+        catalog_result = {
+            "passed": 0,
+            "errors": 1,
+            "diagnostic": f"{catalog_test} fehlt",
+        }
+    result["current"]["katalog"] = catalog_result
+    result["delta"]["katalog"] = catalog_errors
 
     # Regression?
     reg = any(
