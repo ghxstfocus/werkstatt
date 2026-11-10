@@ -406,3 +406,28 @@ def test_running_job_cancellation_is_cooperative_and_terminal(
     assert cancelled["state"] == "cancelled"
     assert cancelled["events"][-1]["kind"] == "cancelled"
 
+def test_sync_cleans_branch_for_failed_terminal_job(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_jobs, chat_session
+
+    chat_db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
+    parent = chat_session.ChatSession("demo", "session-a", db_pfad=chat_db)
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _ = store.create(
+        "session-a", "Frage", "read", "request-key-failed-branch-001",
+    )
+    parent.snapshot_to(job["job_id"])
+    assert store.claim(job["job_id"])
+    assert store.finish(job["job_id"], error="worker crashed")
+
+    assert chat_jobs.sync_completed_job_turns(
+        "demo", "session-a", db_path=store.db_path,
+    ) == 0
+    assert chat_session.ChatSession(
+        "demo", job["job_id"], db_pfad=chat_db,
+    ).load() == []
+    assert parent.load() == []
+
