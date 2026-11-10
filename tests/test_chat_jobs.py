@@ -93,6 +93,86 @@ def test_jobs_in_different_sessions_can_run_in_parallel(tmp_path: Path) -> None:
     assert store.claim(second["job_id"]) is True
 
 
+def test_dispatch_skips_session_with_running_job(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from concurrent.futures import Future
+
+    from werkstatt import chat_jobs
+
+    class _RecordingExecutor:
+        def __init__(self) -> None:
+            self.submitted: list[tuple[object, ...]] = []
+
+        def submit(self, *args: object) -> Future[bool]:
+            self.submitted.append(args)
+            return Future()
+
+    db_path = tmp_path / "jobs.db"
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    store = ChatJobStore(db_path)
+    first, _ = store.create("session-a", "Erste", "read", "request-key-run-001")
+    second, _ = store.create("session-a", "Zweite", "read", "request-key-run-002")
+    assert store.claim(first["job_id"], "worker-a")
+    executor = _RecordingExecutor()
+    monkeypatch.setattr(chat_jobs, "_EXECUTOR", executor)
+    monkeypatch.setattr(chat_jobs, "_FUTURES", {})
+
+    chat_jobs._dispatch_pending(db_path, "demo", project_dir)
+
+    assert executor.submitted == []
+    assert store.get(second["job_id"])["state"] == "queued"
+
+
+def test_dispatch_retries_when_a_claim_race_future_finishes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from concurrent.futures import Future
+
+    from werkstatt import chat_jobs
+
+    class _RecordingExecutor:
+        def __init__(self) -> None:
+            self.submitted: list[tuple[object, ...]] = []
+
+        def submit(self, *args: object) -> Future[bool]:
+            self.submitted.append(args)
+            return Future()
+
+    db_path = tmp_path / "jobs.db"
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    store = ChatJobStore(db_path)
+    first, _ = store.create("session-a", "Erste", "read", "request-key-race-001")
+    second, _ = store.create("session-a", "Zweite", "read", "request-key-race-002")
+    assert store.claim(first["job_id"], "worker-a")
+
+    executor = _RecordingExecutor()
+    futures: dict[str, Future[bool]] = {}
+    monkeypatch.setattr(chat_jobs, "_EXECUTOR", executor)
+    monkeypatch.setattr(chat_jobs, "_FUTURES", futures)
+    second_key = f"{db_path.resolve()}:{second['job_id']}"
+    lost_claim: Future[bool] = Future()
+    futures[second_key] = lost_claim
+
+    assert store.finish(first["job_id"], answer="Erste Antwort")
+    chat_jobs._dispatch_pending(db_path, "demo", project_dir)
+    assert executor.submitted == []
+
+    lost_claim.add_done_callback(
+        chat_jobs._future_cleanup_callback(
+            second_key, db_path, "demo", project_dir,
+        ),
+    )
+    lost_claim.set_result(False)
+
+    assert len(executor.submitted) == 1
+    assert executor.submitted[0][-1] == second["job_id"]
+
+
 def test_queue_order_is_fifo_when_timestamps_collide(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -120,9 +200,9 @@ def test_completed_future_is_removed_from_registry(
     from werkstatt import chat_jobs
 
     class _ImmediateExecutor:
-        def submit(self, *_args: object) -> Future[None]:
-            future: Future[None] = Future()
-            future.set_result(None)
+        def submit(self, *_args: object) -> Future[bool]:
+            future: Future[bool] = Future()
+            future.set_result(True)
             return future
 
     db_path = tmp_path / "jobs.db"
