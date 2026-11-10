@@ -120,6 +120,7 @@ def test_chat_job_get_replays_persisted_events(
     store = ChatJobStore(db_path)
     job, _created = store.create(
         "session-1", "Frage", "read", "request-key-0003",
+        run_id="run-replay",
     )
     assert store.claim(job["job_id"])
 
@@ -135,7 +136,11 @@ def test_chat_job_get_replays_persisted_events(
     assert response.status_code == 200
     result = response.json()
     assert result["state"] == "running"
+    assert result["run_id"] == "run-replay"
     assert [event["kind"] for event in result["events"]] == ["started"]
+    assert result["events"][0]["job_id"] == job["job_id"]
+    assert result["events"][0]["session_id"] == "session-1"
+    assert result["events"][0]["run_id"] == "run-replay"
 
 
 def test_chat_job_get_rejects_cross_project_unknown_job(
