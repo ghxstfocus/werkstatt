@@ -402,3 +402,50 @@ def test_llm_usage_hat_stabile_rolle_ohne_agent_zu_ueberschreiben(tmp_path):
     assert usage[0]["rolle"] == "planner"
     assert usage[0]["agent"] == "agent_pipeline"
     assert usage[0]["prompt_tokens"] == 12
+
+
+def test_builder_request_overrides_reasoner_to_flash_and_disables_thinking():
+    with patch(
+        "werkstatt.agent.requests.post",
+        return_value=_ok_response("antwort"),
+    ) as mock_post:
+        reply = agent.ask_llm(
+            api_key="sk-test",
+            system_prompt="SYS",
+            user_content="USR",
+            model="deepseek-reasoner",
+            temperature=0.2,
+            state=None,
+            aufgabe="builder",
+            heartbeat=False,
+        )
+
+    payload = mock_post.call_args.kwargs["json"]
+    assert reply.ok
+    assert payload["model"] == "deepseek-flash"
+    assert payload["thinking"] == {"type": "disabled"}
+    assert payload["temperature"] == 0.2
+
+
+def test_architect_request_uses_pro_thinking_without_temperature():
+    with patch(
+        "werkstatt.agent.requests.post",
+        return_value=_ok_response("Plan"),
+    ) as mock_post:
+        reply = agent.ask_llm(
+            api_key="sk-test",
+            system_prompt="SYS",
+            user_content="USR",
+            model="deepseek-reasoner",
+            temperature=0.2,
+            state=None,
+            aufgabe="architect",
+            heartbeat=False,
+        )
+
+    payload = mock_post.call_args.kwargs["json"]
+    assert reply.ok
+    assert payload["model"] == "deepseek-v4-pro"
+    assert payload["thinking"] == {"type": "enabled"}
+    assert payload["reasoning_effort"] == "high"
+    assert "temperature" not in payload
