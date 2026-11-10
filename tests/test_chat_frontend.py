@@ -34,3 +34,18 @@ def test_chat_typografie_trennt_fliesstext_und_code() -> None:
     assert "font-family: var(--font-sans" in css
     assert ".chat-msg.assistant pre code" in css
     assert "font-family: var(--font-mono" in css
+
+
+def test_chat_hydriert_aktiven_tab_beim_hard_reload():
+    js = _chat_js()
+    assert "zustand.initialisiert" in js
+    assert 'document.querySelector(".tab.ist-aktiv")' in js
+    assert "setze_chat(aktiverTab.dataset.projekt)" in js
+
+
+def test_chat_eingabe_nutzt_ganze_composer_breite():
+    css = _css()
+    assert ".chat-composer { width: 100%; min-width: 0; }" in css
+    assert "#chat-eingabe" in css
+    assert "width: 100%;" in css
+    assert "box-sizing: border-box;" in css

@@ -3,6 +3,7 @@
   "use strict";
   var aktuellesProjekt = "werkstatt";
   var PREFIX = "werkstatt-tl-";
+  var ladeGeneration = 0;
 
   function _el(id) { return document.getElementById(id); }
 
@@ -203,12 +204,21 @@
     });
   }
 
+  function zeige_uebersicht() {
+    aktuellesProjekt = null;
+    ladeGeneration++;
+  }
+
   function lade(projekt) {
     if (projekt) aktuellesProjekt = projekt;
-    fetch("/api/projects/" + encodeURIComponent(aktuellesProjekt) + "/timeline",
+    if (!aktuellesProjekt) return;
+    var projektGeladen = aktuellesProjekt;
+    var generation = ++ladeGeneration;
+    fetch("/api/projects/" + encodeURIComponent(projektGeladen) + "/timeline",
           {credentials: "same-origin"})
       .then(function (r) { return r.ok ? r.json() : {knoten: [], run_id: null}; })
       .then(function (d) {
+        if (generation !== ladeGeneration || projektGeladen !== aktuellesProjekt) return;
         _rendere(d.knoten || []);
         var r = _el("timeline-run");
         if (r && d.run_id) r.textContent = d.run_id;
@@ -216,7 +226,11 @@
       .catch(function () {});
   }
 
-  window.WerkstattTimeline = { lade: lade };
-  document.addEventListener("DOMContentLoaded", function () { lade(); });
+  window.WerkstattTimeline = { lade: lade, zeige_uebersicht: zeige_uebersicht };
+  document.addEventListener("DOMContentLoaded", function () {
+    var tab = document.querySelector(".tab.ist-aktiv");
+    if (tab && tab.dataset.projekt) lade(tab.dataset.projekt);
+    else zeige_uebersicht();
+  });
   setInterval(function () { lade(); }, 5000);
 })();

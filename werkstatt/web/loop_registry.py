@@ -52,9 +52,9 @@ def _pid_alive(pid: int | None, identity: str | None = None) -> bool:
     if snapshot is None:
         # On Linux, inability to inspect an expected process identity means
         # we cannot safely signal this PID. Other POSIX platforms use kill(0).
-        if identity is not None and os.name == "posix" and Path("/proc").is_dir():
-            return False
-        return True
+        return not (
+            identity is not None and os.name == "posix" and Path("/proc").is_dir()
+        )
     started, state = snapshot
     if state == "Z":
         return False
@@ -224,7 +224,9 @@ class AttachedLoopProcess:
         deadline = None if timeout is None else time.monotonic() + timeout
         while self.poll() is None:
             if deadline is not None and time.monotonic() >= deadline:
-                raise subprocess.TimeoutExpired(["loop", str(self.pid)], timeout)
+                raise subprocess.TimeoutExpired(
+                    ["loop", str(self.pid)], timeout=timeout or 0.0
+                )
             time.sleep(0.05)
         return 0
 

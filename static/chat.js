@@ -13,6 +13,7 @@
     streamBuf: "",
     streamAktiv: false,
     sessionPromise: null,
+    initialisiert: false,
     historyRequest: 0,
     sendQueue: [],
   };
@@ -494,6 +495,7 @@
 
   function setze_chat(projekt) {
     if (!projekt) return;
+    zustand.initialisiert = true;
     var anfrage = ++zustand.historyRequest;
     if (zustand.socket) {
       try { zustand.socket.close(); } catch (e) {}
@@ -560,6 +562,13 @@
 
     // Header-Button: neue Session
     var neuBtn = _el("chat-neu");
+    if (!zustand.initialisiert) {
+      var aktiverTab = document.querySelector(".tab.ist-aktiv");
+      if (aktiverTab && aktiverTab.dataset.projekt) {
+        setze_chat(aktiverTab.dataset.projekt);
+      }
+    }
+
     if (neuBtn) {
       neuBtn.addEventListener("click", function () {
         var projekt = zustand.projekt;

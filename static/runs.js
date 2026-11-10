@@ -7,6 +7,7 @@
   var _loopControl = {state: "idle"};
   var _aktionMeldung = "";
   var _aktionLaeuft = false;
+  var _ladeGeneration = 0;
 
   function _el(id) { return document.getElementById(id); }
 
@@ -17,6 +18,7 @@
   function _runBadge(state) {
     var map = {
       idle:    ["○", "idle"],
+      starting:["◌", "startet"],
       running: ["●", "läuft"],
       done:    ["✓", "fertig"],
       failed:  ["✗", "fehler"],
@@ -33,16 +35,18 @@
       : null;
     if (toolbarHost) toolbarHost.innerHTML = "";
     var control = loopControl || {state: "idle"};
-    var loopAktiv = control.state === "running" || control.state === "paused";
+    var loopAktiv = control.state === "starting" || control.state === "running" || control.state === "paused";
     var steuerung = document.createElement("div");
     steuerung.className = "runs-control";
     var zustand = document.createElement("span");
     zustand.className = "runs-control-state";
     zustand.textContent = control.state === "paused"
       ? "Loop pausiert"
-      : control.state === "running"
-        ? "Loop läuft" + (control.run_id ? " · " + control.run_id : "")
-        : "Kein aktiver Loop";
+      : control.state === "starting"
+        ? "Loop startet …"
+        : control.state === "running"
+          ? "Loop läuft" + (control.run_id ? " · " + control.run_id : "")
+          : "Kein aktiver Loop";
     steuerung.appendChild(zustand);
 
     var aktionen = document.createElement("div");
@@ -205,9 +209,17 @@
       });
   }
 
+  function zeige_uebersicht() {
+    aktuellesProjekt = null;
+    _ladeGeneration++;
+  }
+
   function lade(projekt) {
     if (projekt && projekt !== aktuellesProjekt) _aktionMeldung = "";
     if (projekt) aktuellesProjekt = projekt;
+    if (!aktuellesProjekt) return;
+    var projektGeladen = aktuellesProjekt;
+    var generation = ++_ladeGeneration;
     var base = _baseUrl();
     Promise.all([
       fetch(base + "/ops", {credentials: "same-origin"})
@@ -218,6 +230,7 @@
         .then(function (r) { return r.ok ? r.json() : {state: "idle"}; }),
     ])
       .then(function (res) {
+        if (generation !== _ladeGeneration || projektGeladen !== aktuellesProjekt) return;
         var d = res[0] || {};
         var rs = (res[1] && res[1].run_status) || {};
         _loopControl = res[2] || {state: "idle"};
@@ -228,7 +241,11 @@
       .catch(function () {});
   }
 
-  window.WerkstattRuns = { lade: lade };
-  document.addEventListener("DOMContentLoaded", function () { lade(); });
+  window.WerkstattRuns = { lade: lade, zeige_uebersicht: zeige_uebersicht };
+  document.addEventListener("DOMContentLoaded", function () {
+    var tab = document.querySelector(".tab.ist-aktiv");
+    if (tab && tab.dataset.projekt) lade(tab.dataset.projekt);
+    else zeige_uebersicht();
+  });
   setInterval(function () { lade(); }, 5000);
 })();

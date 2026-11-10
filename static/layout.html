@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Werkstatt</title>
-  <link rel="stylesheet" href="/static/layout.css?v=1794326028">
+  <link rel="stylesheet" href="/static/layout.css?v=1794330000">
 </head>
 <body data-mode="cockpit" data-runs-open="false">
 
@@ -26,6 +26,9 @@
   <div class="runs-backdrop" id="runs-backdrop" hidden></div>
 
   <nav id="tab-leiste" role="tablist" aria-label="Projekte">
+    <button id="tab-home" type="button" aria-label="Werkstatt-Übersicht" aria-pressed="false" title="Werkstatt-Übersicht">
+      <span aria-hidden="true">⌂</span>
+    </button>
     <template id="tab-vorlage">
       <button class="tab" role="tab" type="button">
         <span class="tab-titel"></span>
@@ -77,7 +80,37 @@
     </div>
   </div>
 
-  <main class="layout-grid">
+  <section id="overview-screen" class="overview-screen" hidden aria-labelledby="overview-title">
+    <header class="overview-header">
+      <div>
+        <span class="overview-eyebrow">WERKSTATT</span>
+        <h1 id="overview-title">Projektübersicht</h1>
+        <p>Alle Projekte, ihr aktueller Laufstatus und die Entwicklung der letzten 30 Tage.</p>
+      </div>
+      <button class="overview-new-project" id="overview-new-project" type="button">+ Projekt anlegen</button>
+    </header>
+    <section class="overview-week" aria-labelledby="overview-week-title">
+      <h2 id="overview-week-title">Diese Woche am meisten gebaut</h2>
+      <div id="overview-top-projects" class="overview-top-projects"></div>
+    </section>
+    <section class="overview-metrics" aria-labelledby="overview-runs-title">
+      <div class="overview-section-heading">
+        <div><span class="overview-eyebrow">WERKSTATT-WEIT</span><h2 id="overview-runs-title">Run-Ergebnisse · 30 Tage</h2></div>
+        <span id="overview-updated" class="overview-updated"></span>
+      </div>
+      <div id="overview-outcomes" class="overview-outcomes"></div>
+      <div id="overview-project-bars" class="overview-project-bars"></div>
+    </section>
+    <section class="overview-projects-section" aria-labelledby="overview-projects-title">
+      <div class="overview-section-heading">
+        <div><span class="overview-eyebrow">WORKSPACE</span><h2 id="overview-projects-title">Projekte</h2></div>
+        <button id="overview-refresh" type="button" class="overview-refresh">Aktualisieren</button>
+      </div>
+      <div id="overview-projects" class="overview-project-grid" aria-live="polite"></div>
+    </section>
+  </section>
+
+  <main class="layout-grid" id="projekt-workspace" hidden>
 
     <!-- Spalte 1: Runs-Liste -->
     <section class="bereich runs" data-bereich="runs">
@@ -237,12 +270,13 @@
     <span class="status-run" id="status-run"></span>
   </footer>
 
-  <script src="/static/tabs.js?v=1794326028"></script>
-  <script src="/static/terminal.js?v=1794326028"></script>
-  <script src="/static/audit.js?v=1794326028"></script>
-  <script src="/static/chat.js?v=1794326028"></script>
-  <script src="/static/runs.js?v=1794326028"></script>
-  <script src="/static/timeline.js?v=1794326028"></script>
+  <script src="/static/overview.js?v=1794330000"></script>
+  <script src="/static/tabs.js?v=1794330000"></script>
+  <script src="/static/terminal.js?v=1794330000"></script>
+  <script src="/static/audit.js?v=1794330000"></script>
+  <script src="/static/chat.js?v=1794330000"></script>
+  <script src="/static/runs.js?v=1794330000"></script>
+  <script src="/static/timeline.js?v=1794330000"></script>
   <div class="shortcut-help-overlay" id="shortcut-help-overlay">
     <div class="shortcut-help-box">
       <div class="shortcut-help-header">
@@ -330,17 +364,17 @@
     </div>
   </div>
 
-  <script src="/static/statusleiste.js?v=1794326028"></script>
-  <script src="/static/palette.js?v=1794326028"></script>
-  <script src="/static/shortcut_help.js?v=1794326028"></script>
-  <script src="/static/utility_bar.js?v=1794326028"></script>
-  <script src="/static/project_create.js?v=1794326028"></script>
-  <script src="/static/workbench.js?v=1794326028"></script>
-  <script src="/static/mode.js?v=1794326028"></script>
-  <script src="/static/waterfall.js?v=1794326028"></script>
-  <script src="/static/live_feed.js?v=1794326028"></script>
-  <script src="/static/gate_panel.js?v=1794326028"></script>
-  <script src="/static/detail_drawer.js?v=1794326028"></script>
-  <script src="/static/ambient_status.js?v=1794326028"></script>
+  <script src="/static/statusleiste.js?v=1794330000"></script>
+  <script src="/static/palette.js?v=1794330000"></script>
+  <script src="/static/shortcut_help.js?v=1794330000"></script>
+  <script src="/static/utility_bar.js?v=1794330000"></script>
+  <script src="/static/project_create.js?v=1794330000"></script>
+  <script src="/static/workbench.js?v=1794330000"></script>
+  <script src="/static/mode.js?v=1794330000"></script>
+  <script src="/static/waterfall.js?v=1794330000"></script>
+  <script src="/static/live_feed.js?v=1794330000"></script>
+  <script src="/static/gate_panel.js?v=1794330000"></script>
+  <script src="/static/detail_drawer.js?v=1794330000"></script>
+  <script src="/static/ambient_status.js?v=1794330000"></script>
 </body>
 </html>

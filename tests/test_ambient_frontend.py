@@ -62,3 +62,10 @@ def test_loop_done_icon_nicht_haken():
     assert '["✓", "Fertig"]' not in js
     assert 'done:    ["●"' in js or 'done: ["●"' in js
     assert 'running: ["◉"' in js
+
+
+def test_ambient_verwirft_verspaetete_projektantworten():
+    js = _js()
+    assert "ladeGeneration" in js
+    assert "generation !== ladeGeneration" in js
+    assert "projekt !== aktuellesProjekt" in js

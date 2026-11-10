@@ -2,6 +2,7 @@
 (function () {
   "use strict";
   var aktuellesProjekt = "werkstatt";
+  var ladeGeneration = 0;
   var INTERVALL_MS = 3000;
 
   function _el(id) { return document.getElementById(id); }
@@ -43,6 +44,7 @@
     if (!lr) {
       el.textContent = "Letzter Run: —";
       el.dataset.ok = "none";
+      delete el.dataset.runId;
       return;
     }
     var ok = lr.erfolg === true ? "true" : (lr.erfolg === false ? "false" : "none");
@@ -74,20 +76,33 @@
     }
   }
 
-  function _daten(d) {
-    if (!d) return;
+  function _daten(d, projekt, generation) {
+    if (!d || generation !== ladeGeneration || projekt !== aktuellesProjekt) return;
     _setLoop(d.loop_status);
     _setLastRun(d.last_run);
     _setGates(d.gates_open);
   }
 
+  function zeige_uebersicht() {
+    aktuellesProjekt = null;
+    ladeGeneration++;
+    var name = _el("ambient-project-name");
+    if (name) name.textContent = "Übersicht";
+    _setLoop("idle");
+    _setLastRun(null);
+    _setGates(0);
+  }
+
   function lade(projekt) {
     if (projekt) aktuellesProjekt = projekt;
-    var url = "/api/projects/" + encodeURIComponent(aktuellesProjekt) + "/ambient";
+    if (!aktuellesProjekt) return;
+    var projektGeladen = aktuellesProjekt;
+    var generation = ++ladeGeneration;
+    var url = "/api/projects/" + encodeURIComponent(projektGeladen) + "/ambient";
     fetch(url, { credentials: "same-origin" })
       .then(function (r) { return r.ok ? r.json() : null; })
       .catch(function () { return null; })
-      .then(_daten);
+      .then(function (d) { _daten(d, projektGeladen, generation); });
   }
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -95,9 +110,11 @@
     document.querySelectorAll(".ambient-item[data-ziel]").forEach(function (el) {
       el.addEventListener("click", function () { _clickZiel(el.dataset.ziel); });
     });
-    lade();
+    var aktiverTab = document.querySelector(".tab.ist-aktiv");
+    if (aktiverTab && aktiverTab.dataset.projekt) lade(aktiverTab.dataset.projekt);
+    else zeige_uebersicht();
     setInterval(function () { lade(); }, INTERVALL_MS);
   });
 
-  window.WerkstattAmbient = { lade: lade };
+  window.WerkstattAmbient = { lade: lade, zeige_uebersicht: zeige_uebersicht };
 })();

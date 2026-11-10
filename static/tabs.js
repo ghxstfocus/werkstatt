@@ -103,10 +103,51 @@
     return id;
   }
 
+  var _uebersichtAktiv = false;
+
+  function _zeigeUebersicht() {
+    _uebersichtAktiv = true;
+    var screen = document.getElementById("overview-screen");
+    var workspace = document.getElementById("projekt-workspace");
+    var home = document.getElementById("tab-home");
+    if (screen) screen.hidden = false;
+    if (workspace) workspace.hidden = true;
+    if (home) home.setAttribute("aria-pressed", "true");
+    if (window.WerkstattAmbient && window.WerkstattAmbient.zeige_uebersicht) {
+      window.WerkstattAmbient.zeige_uebersicht();
+    }
+    ["WerkstattRuns", "WerkstattTimeline", "WerkstattWaterfall", "WerkstattLiveFeed"].forEach(function (name) {
+      var panel = window[name];
+      if (panel && panel.zeige_uebersicht) panel.zeige_uebersicht();
+    });
+    if (window.WerkstattStatus && window.WerkstattStatus.zeige_uebersicht) {
+      window.WerkstattStatus.zeige_uebersicht();
+    }
+    if (window.WerkstattOverview && window.WerkstattOverview.lade) {
+      window.WerkstattOverview.lade();
+    }
+  }
+
+  function _zeigeProjektbereich() {
+    _uebersichtAktiv = false;
+    var screen = document.getElementById("overview-screen");
+    var workspace = document.getElementById("projekt-workspace");
+    var home = document.getElementById("tab-home");
+    if (screen) screen.hidden = true;
+    if (workspace) workspace.hidden = false;
+    if (home) home.setAttribute("aria-pressed", "false");
+  }
+
+  var homeBtn = document.getElementById("tab-home");
+  if (homeBtn) {
+    homeBtn.addEventListener("click", _zeigeUebersicht);
+  }
+
   function wechsle(tabId) {
     if (!tabDaten[tabId]) {
       return;
     }
+    _zeigeProjektbereich();
     aktiverTabId = tabId;
     _persistiere_tabs();
     document.querySelectorAll(".tab").forEach(function (t) {
@@ -140,6 +181,12 @@
       }
       if (window.WerkstattTimeline && window.WerkstattTimeline.lade) {
         window.WerkstattTimeline.lade(daten.projekt);
+      }
+      if (window.WerkstattWaterfall && window.WerkstattWaterfall.setProjekt) {
+        window.WerkstattWaterfall.setProjekt(daten.projekt);
+      }
+      if (window.WerkstattLiveFeed && window.WerkstattLiveFeed.setProjekt) {
+        window.WerkstattLiveFeed.setProjekt(daten.projekt);
       }
       if (window.WerkstattStatus && window.WerkstattStatus.lade) {
         window.WerkstattStatus.lade(daten.projekt);
@@ -177,6 +224,7 @@
         wechsle(erste.dataset.tabId);
       } else {
         aktiverTabId = null;
+        _zeigeUebersicht();
       }
     }
     _persistiere_tabs();
@@ -231,8 +279,7 @@
   // OP-306a: Rehydration aus localStorage mit Default-Fallback
   var _gespeicherte = _lade_gespeicherte_tabs();
   if (_gespeicherte.length === 0) {
-    var startId = neuerTab("werkstatt");
-    wechsle(startId);
+    _zeigeUebersicht();
   } else {
     _rehydriere_laeuft = true;
     var _aktiverId = null;
@@ -378,12 +425,24 @@
     return id;
   }
 
+  function oeffne_projekt(name) {
+    var ids = Object.keys(tabDaten);
+    for (var i = 0; i < ids.length; i++) {
+      if (tabDaten[ids[i]].projekt === name) {
+        wechsle(ids[i]);
+        return ids[i];
+      }
+    }
+    return neuer_tab(name);
+  }
+
   window.WerkstattTabs = {
     neuer_zustand: neuer_zustand,
     kanal_holen: kanal_holen,
     kanal_freigeben: kanal_freigeben,
     oeffne_tab: oeffne_tab,
     neuer_tab: neuer_tab,
+    oeffne_projekt: oeffne_projekt,
     wechsle_tab: wechsle_tab,
     schliesse_tab: schliesse_tab,
     synchronisiere: synchronisiere,

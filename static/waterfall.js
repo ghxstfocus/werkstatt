@@ -10,7 +10,8 @@
   var ROW_PAD = 4;
   var LABEL_W = 100;    // linke Spalte fuer Rollen-Namen
   var _timer = null;
-  var _aktuellesProjekt = "werkstatt";
+  var _aktuellesProjekt = null;
+  var _overviewAktiv = false;
 
   function _el(id) { return document.getElementById(id); }
 
@@ -258,7 +259,7 @@
     // OP-381i-Nachtrag: Wasserfall ist Nachanalyse-Tool, sichtbar im
     // Cockpit. Control bekommt Live-Feed (OP-381j).
     var mode = document.body.getAttribute("data-mode");
-    if (mode !== "cockpit") return;
+    if (_overviewAktiv || !_aktuellesProjekt || mode !== "cockpit") return;
     fetch("/api/projects/" + encodeURIComponent(_aktuellesProjekt) + "/swimlane",
           {credentials: "same-origin"})
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -273,6 +274,8 @@
 
   function start(projekt) {
     if (projekt) _aktuellesProjekt = projekt;
+    if (_overviewAktiv || !_aktuellesProjekt ||
+        document.body.getAttribute("data-mode") !== "cockpit") return;
     if (_timer) clearInterval(_timer);
     _lade();
     _timer = setInterval(_lade, POLL_MS);
@@ -283,16 +286,42 @@
     _timer = null;
   }
 
+  function setProjekt(projekt) {
+    _overviewAktiv = false;
+    _aktuellesProjekt = projekt || null;
+    if (document.body.getAttribute("data-mode") === "cockpit" && _aktuellesProjekt) {
+      start(_aktuellesProjekt);
+    } else {
+      stop();
+    }
+  }
+
+  function zeige_uebersicht() {
+    _overviewAktiv = true;
+    _aktuellesProjekt = null;
+    stop();
+  }
+
   // Bei Modus-Wechsel: start/stop automatisch
   document.addEventListener("werkstatt:mode-change", function (ev) {
     var m = ev.detail && ev.detail.mode;
-    if (m === "cockpit") start();
+    if (m === "cockpit" && !_overviewAktiv && _aktuellesProjekt) start();
     else stop();
   });
 
   document.addEventListener("DOMContentLoaded", function () {
-    if (document.body.getAttribute("data-mode") === "cockpit") start();
+    var tab = document.querySelector(".tab.ist-aktiv");
+    if (tab && tab.dataset.projekt) {
+      _overviewAktiv = false;
+      _aktuellesProjekt = tab.dataset.projekt;
+      if (document.body.getAttribute("data-mode") === "cockpit") start();
+    } else {
+      zeige_uebersicht();
+    }
   });
 
-  window.WerkstattWaterfall = { start: start, stop: stop, lade: _lade };
+  window.WerkstattWaterfall = {
+    start: start, stop: stop, lade: _lade,
+    setProjekt: setProjekt, zeige_uebersicht: zeige_uebersicht
+  };
 })();

@@ -2,6 +2,7 @@
 (function () {
   "use strict";
   var aktuellesProjekt = "werkstatt";
+  var ladeGeneration = 0;
 
   function _el(id) { return document.getElementById(id); }
 
@@ -75,8 +76,8 @@
     }
   }
 
-  function _fetch(pfad) {
-    return fetch("/api/projects/" + encodeURIComponent(aktuellesProjekt) + pfad,
+  function _fetch(pfad, projekt) {
+    return fetch("/api/projects/" + encodeURIComponent(projekt) + pfad,
                  {credentials: "same-origin"})
       .then(function (r) { return r.ok ? r.json() : {}; })
       .catch(function () { return {}; });
@@ -84,18 +85,47 @@
 
   function lade(projekt) {
     if (projekt) aktuellesProjekt = projekt;
-    _fetch("/status").then(_status);
-    _fetch("/tokens").then(_tokens);
-    _projection("/api/projects/" + encodeURIComponent(aktuellesProjekt) + "/projection/status");
+    if (!aktuellesProjekt) return;
+    var projektGeladen = aktuellesProjekt;
+    var generation = ++ladeGeneration;
+    _fetch("/status", projektGeladen).then(function (d) {
+      if (generation === ladeGeneration && projektGeladen === aktuellesProjekt) _status(d);
+    });
+    _fetch("/tokens", projektGeladen).then(function (d) {
+      if (generation === ladeGeneration && projektGeladen === aktuellesProjekt) _tokens(d);
+    });
+    _projection(projektGeladen, generation);
   }
 
-  function _projection(pfad) {
+  function zeige_uebersicht() {
+    aktuellesProjekt = null;
+    ladeGeneration++;
+    ["status-tasks", "status-verify", "status-drift", "status-phase", "status-run"].forEach(function (id) {
+      var item = _el(id);
+      if (item) { item.textContent = ""; item.dataset.state = ""; }
+    });
+    ["status-tokens-loop", "status-tokens-chat"].forEach(function (id) {
+      var item = _el(id);
+      if (!item) return;
+      _setTokenText(id, (id === "status-tokens-loop" ? "Loop: —" : "Chat: —"));
+      item.classList.remove("aktiv");
+      item.title = "";
+    });
+    var projection = _el("status-projection");
+    if (projection) { projection.textContent = ""; projection.dataset.state = ""; }
+    var run = _el("status-run");
+    if (run) run.textContent = "";
+  }
+
+  function _projection(projekt, generation) {
     var el = _el("status-projection");
     if (!el) return;
+    var pfad = "/api/projects/" + encodeURIComponent(projekt) + "/projection/status";
     fetch(pfad, {credentials: "same-origin"})
       .then(function (r) { return r.ok ? r.json() : null; })
       .catch(function () { return null; })
       .then(function (d) {
+        if (generation !== ladeGeneration || projekt !== aktuellesProjekt) return;
         if (!d) { el.textContent = ""; el.dataset.state = ""; return; }
         if (d.diff > 0) {
           el.textContent = "Proj: " + d.diff + " offen";
@@ -109,7 +139,11 @@
       });
   }
 
-  window.WerkstattStatus = { lade: lade };
-  document.addEventListener("DOMContentLoaded", function () { lade(); });
+  window.WerkstattStatus = { lade: lade, zeige_uebersicht: zeige_uebersicht };
+  document.addEventListener("DOMContentLoaded", function () {
+    var aktiverTab = document.querySelector(".tab.ist-aktiv");
+    if (aktiverTab && aktiverTab.dataset.projekt) lade(aktiverTab.dataset.projekt);
+    else zeige_uebersicht();
+  });
   setInterval(function () { lade(); }, 5000);
 })();

@@ -32,10 +32,13 @@ _RUN_ID_MUSTER = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 # OP-305: Basis fuer Multi-Projekt-Pfade (testbar via monkeypatch)
 _PROJECTS_BASE = Path("/opt")
 
-_LAUFENDE_LOOPS: dict[str, subprocess.Popen] = {}
+_LAUFENDE_LOOPS: dict[str, Any] = {}
 _LOOP_LOG_HANDLES: dict[str, Any] = {}
 _LOOP_RUN_IDS: dict[str, str] = {}
 _PAUSIERTE_LOOPS: set[str] = set()
+_LOOP_REGISTRY_PATH = (
+    Path(__file__).resolve().parents[2] / ".werkstatt" / "web-loop-registry.db"
+)
 _LOOP_LOCKS: dict[str, Any] = {}
 _LOOP_LOCKS_GUARD = threading.Lock()
 
@@ -44,6 +47,53 @@ def _projekt_loop_lock(projektname: str) -> Any:
     """Serialisiert Start/Stop fuer ein Projekt ueber Threadpool-Requests."""
     with _LOOP_LOCKS_GUARD:
         return _LOOP_LOCKS.setdefault(projektname, threading.RLock())
+
+
+def _loop_registry() -> Any:
+    """Shared SQLite-Registry; Tests erhalten sie unter ihrem PROJECTS_BASE."""
+    from werkstatt.web.loop_registry import LoopProcessRegistry
+
+    path = _LOOP_REGISTRY_PATH
+    if _PROJECTS_BASE != Path("/opt"):
+        path = _PROJECTS_BASE / ".werkstatt" / "web-loop-registry.db"
+    return LoopProcessRegistry(path)
+
+
+def _loop_prozess(projektname: str) -> Any | None:
+    """Liefert den lokalen oder nach Server-Neustart wiedergefundenen Loop."""
+    prozess = _LAUFENDE_LOOPS.get(projektname)
+    if prozess is not None and prozess.poll() is None:
+        return prozess
+    if prozess is not None:
+        _LAUFENDE_LOOPS.pop(projektname, None)
+        _PAUSIERTE_LOOPS.discard(projektname)
+        log_fh = _LOOP_LOG_HANDLES.pop(projektname, None)
+        if log_fh is not None:
+            try:
+                log_fh.close()
+            except OSError:
+                pass
+
+    registry = _loop_registry()
+    record = registry.read(projektname)
+    if not record or record["state"] not in ("running", "paused"):
+        return None
+    pid = record.get("pid")
+    if pid is None:
+        return None
+    from werkstatt.web.loop_registry import AttachedLoopProcess
+
+    recovered = AttachedLoopProcess(pid, record.get("process_identity"))
+    if recovered.poll() is not None:
+        registry.set_state(projektname, record["run_id"], "idle")
+        return None
+    _LAUFENDE_LOOPS[projektname] = recovered
+    _LOOP_RUN_IDS[projektname] = record["run_id"]
+    if record["state"] == "paused":
+        _PAUSIERTE_LOOPS.add(projektname)
+    else:
+        _PAUSIERTE_LOOPS.discard(projektname)
+    return recovered
 
 
 def _pruefe_projektname(name: str) -> str:
@@ -355,10 +405,18 @@ def create_app() -> FastAPI:
         # Bereits laufende Arbeit hat Vorrang vor der Validierung einer
         # neuen Eingabe. Der spaetere Lock um Popen schliesst die Race-Luecke.
         with _projekt_loop_lock(projektname):
-            laufend = _LAUFENDE_LOOPS.get(projektname)
-            if laufend is not None and laufend.poll() is None:
-                return {"gestartet": False, "pid": laufend.pid,
-                        "grund": "laeuft_bereits"}
+            laufend = _loop_prozess(projektname)
+            record = _loop_registry().read(projektname)
+            if laufend is not None or (record and record["state"] == "starting"):
+                return {
+                    "gestartet": False,
+                    "pid": laufend.pid if laufend is not None else None,
+                    "run_id": (
+                        _LOOP_RUN_IDS.get(projektname)
+                        or (record.get("run_id") if record else None)
+                    ),
+                    "grund": "laeuft_bereits",
+                }
         import secrets as _secrets
         import time as _time
         run_id = (
@@ -420,10 +478,18 @@ def create_app() -> FastAPI:
         # Recheck und Popen muessen atomar sein, sonst starten zwei Builder
         # gleichzeitig im selben Working Tree.
         with _projekt_loop_lock(projektname):
-            laufend = _LAUFENDE_LOOPS.get(projektname)
-            if laufend is not None and laufend.poll() is None:
-                return {"gestartet": False, "pid": laufend.pid,
-                        "grund": "laeuft_bereits"}
+            laufend = _loop_prozess(projektname)
+            record = _loop_registry().read(projektname)
+            if laufend is not None or (record and record["state"] == "starting"):
+                return {
+                    "gestartet": False,
+                    "pid": laufend.pid if laufend is not None else None,
+                    "run_id": (
+                        _LOOP_RUN_IDS.get(projektname)
+                        or (record.get("run_id") if record else None)
+                    ),
+                    "grund": "laeuft_bereits",
+                }
             _LAUFENDE_LOOPS.pop(projektname, None)
             _LOOP_RUN_IDS.pop(projektname, None)
             _PAUSIERTE_LOOPS.discard(projektname)
@@ -433,6 +499,16 @@ def create_app() -> FastAPI:
                     _altes_log.close()
                 except OSError:
                     pass
+
+            registry = _loop_registry()
+            reserviert, record = registry.reserve(projektname, run_id)
+            if not reserviert:
+                return {
+                    "gestartet": False,
+                    "pid": record.get("pid") if record else None,
+                    "run_id": record.get("run_id") if record else None,
+                    "grund": "laeuft_bereits",
+                }
 
             # Log-File pro Run, stdout/stderr umleiten (sonst sind
             # Loop-Crashes unsichtbar). Handle bis zum Stop/Exit halten.
@@ -451,10 +527,29 @@ def create_app() -> FastAPI:
                     start_new_session=(os.name == "posix"),
                 )
             except OSError as exc:
+                registry.set_state(projektname, run_id, "idle")
                 if _log_fh is not None:
                     _log_fh.close()
                 raise HTTPException(
                     status_code=500, detail=f"Loop konnte nicht starten: {exc}",
+                ) from exc
+            try:
+                registry.register(projektname, run_id, prozess.pid)
+            except (OSError, RuntimeError) as exc:
+                try:
+                    if os.name == "posix":
+                        os.killpg(prozess.pid, signal.SIGTERM)
+                    else:
+                        prozess.terminate()
+                    prozess.wait(timeout=5)
+                except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
+                    pass
+                registry.set_state(projektname, run_id, "idle")
+                if _log_fh is not None:
+                    _log_fh.close()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Loop-Registrierung fehlgeschlagen: {exc}",
                 ) from exc
             _LAUFENDE_LOOPS[projektname] = prozess
             _LOOP_RUN_IDS[projektname] = run_id
@@ -472,12 +567,20 @@ def create_app() -> FastAPI:
         """Liefert den Prozesszustand fuer die Projekt-Steuerung."""
         projektname = _pruefe_projektname(name)
         with _projekt_loop_lock(projektname):
-            prozess = _LAUFENDE_LOOPS.get(projektname)
-            if prozess is None or prozess.poll() is not None:
+            prozess = _loop_prozess(projektname)
+            record = _loop_registry().read(projektname)
+            if prozess is None:
                 return {
-                    "state": "idle",
+                    "state": (
+                        "starting"
+                        if record and record["state"] == "starting"
+                        else "idle"
+                    ),
                     "pid": None,
-                    "run_id": _LOOP_RUN_IDS.get(projektname),
+                    "run_id": (
+                        record.get("run_id") if record
+                        else _LOOP_RUN_IDS.get(projektname)
+                    ),
                 }
             return {
                 "state": "paused" if projektname in _PAUSIERTE_LOOPS else "running",
@@ -486,7 +589,7 @@ def create_app() -> FastAPI:
             }
 
     def _audit_loop_control(
-        projektname: str, prozess: subprocess.Popen, kind: str, status: str,
+        projektname: str, prozess: Any, kind: str, status: str,
     ) -> bool:
         run_id = _LOOP_RUN_IDS.get(projektname)
         if not run_id:
@@ -509,8 +612,8 @@ def create_app() -> FastAPI:
                 status_code=501, detail="Pause wird nur auf POSIX-Systemen unterstuetzt",
             )
         with _projekt_loop_lock(projektname):
-            prozess = _LAUFENDE_LOOPS.get(projektname)
-            if prozess is None or prozess.poll() is not None:
+            prozess = _loop_prozess(projektname)
+            if prozess is None:
                 raise HTTPException(status_code=404, detail="kein laufender Loop")
             if projektname in _PAUSIERTE_LOOPS:
                 return {"pausiert": True, "bereits_pausiert": True}
@@ -523,6 +626,9 @@ def create_app() -> FastAPI:
             except OSError as exc:
                 raise HTTPException(status_code=500, detail=f"Pause fehlgeschlagen: {exc}") from exc
             _PAUSIERTE_LOOPS.add(projektname)
+            run_id = _LOOP_RUN_IDS.get(projektname)
+            if run_id:
+                _loop_registry().set_state(projektname, run_id, "paused")
             audit_ok = _audit_loop_control(
                 projektname, prozess, "web_loop_paused", "paused",
             )
@@ -537,8 +643,8 @@ def create_app() -> FastAPI:
                 status_code=501, detail="Resume wird nur auf POSIX-Systemen unterstuetzt",
             )
         with _projekt_loop_lock(projektname):
-            prozess = _LAUFENDE_LOOPS.get(projektname)
-            if prozess is None or prozess.poll() is not None:
+            prozess = _loop_prozess(projektname)
+            if prozess is None:
                 raise HTTPException(status_code=404, detail="kein laufender Loop")
             if projektname not in _PAUSIERTE_LOOPS:
                 return {"fortgesetzt": True, "bereits_laufend": True}
@@ -553,6 +659,9 @@ def create_app() -> FastAPI:
                     status_code=500, detail=f"Fortsetzen fehlgeschlagen: {exc}",
                 ) from exc
             _PAUSIERTE_LOOPS.discard(projektname)
+            run_id = _LOOP_RUN_IDS.get(projektname)
+            if run_id:
+                _loop_registry().set_state(projektname, run_id, "running")
             audit_ok = _audit_loop_control(
                 projektname, prozess, "web_loop_resumed", "running",
             )
@@ -563,8 +672,8 @@ def create_app() -> FastAPI:
         """Stoppt den Loop und seine Kindprozesse eines Projekts."""
         projektname = _pruefe_projektname(name)
         with _projekt_loop_lock(projektname):
-            prozess = _LAUFENDE_LOOPS.get(projektname)
-            if prozess is None or prozess.poll() is not None:
+            prozess = _loop_prozess(projektname)
+            if prozess is None:
                 raise HTTPException(status_code=404, detail="kein laufender Loop")
             run_id = _LOOP_RUN_IDS.get(projektname, "")
             if projektname in _PAUSIERTE_LOOPS and os.name == "posix":
@@ -606,6 +715,7 @@ def create_app() -> FastAPI:
                     audit_ok = True
                 except Exception:
                     pass
+            _loop_registry().set_state(projektname, run_id, "idle")
             _LAUFENDE_LOOPS.pop(projektname, None)
             _LOOP_RUN_IDS.pop(projektname, None)
             _log_fh = _LOOP_LOG_HANDLES.pop(projektname, None)

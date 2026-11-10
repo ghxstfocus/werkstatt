@@ -8,7 +8,8 @@
   var POLL_MS = 2000;
   var STEPS_LIMIT = 8;
   var _timer = null;
-  var _aktuellesProjekt = "werkstatt";
+  var _aktuellesProjekt = null;
+  var _overviewAktiv = false;
   var _letzteSteps = [];
 
   // Codex-Spinner (Braille, 10 Frames)
@@ -313,7 +314,8 @@
 
   function _lade(projekt) {
     if (projekt) _aktuellesProjekt = projekt;
-    if (document.body.getAttribute("data-mode") !== "control") return;
+    if (_overviewAktiv || !_aktuellesProjekt ||
+        document.body.getAttribute("data-mode") !== "control") return;
     fetch("/api/projects/" + encodeURIComponent(_aktuellesProjekt) +
           "/live-feed?limit=30",
           {credentials: "same-origin"})
@@ -324,6 +326,7 @@
 
   function start(projekt) {
     if (projekt) _aktuellesProjekt = projekt;
+    if (_overviewAktiv || !_aktuellesProjekt) return;
     if (_timer) clearInterval(_timer);
     _lade();
     _timer = setInterval(_lade, POLL_MS);
@@ -334,18 +337,49 @@
     _timer = null;
   }
 
+  function setProjekt(projekt) {
+    _overviewAktiv = false;
+    _aktuellesProjekt = projekt || null;
+    if (document.body.getAttribute("data-mode") === "control" && _aktuellesProjekt) {
+      start(_aktuellesProjekt);
+    } else {
+      stop();
+    }
+  }
+
+  function zeige_uebersicht() {
+    _overviewAktiv = true;
+    _aktuellesProjekt = null;
+    stop();
+  }
+
   document.addEventListener("werkstatt:mode-change", function (ev) {
     var m = ev.detail && ev.detail.mode;
-    if (m === "control") { start(); _startSpinner(); }
-    else { stop(); _stopSpinner(); }
-  });
-
-  document.addEventListener("DOMContentLoaded", function () {
-    if (document.body.getAttribute("data-mode") === "control") {
+    if (m === "control" && !_overviewAktiv && _aktuellesProjekt) {
       start();
       _startSpinner();
+    } else {
+      stop();
+      _stopSpinner();
     }
   });
 
-  window.WerkstattLiveFeed = { start: start, stop: stop, lade: _lade };
+  document.addEventListener("DOMContentLoaded", function () {
+    var tab = document.querySelector(".tab.ist-aktiv");
+    if (tab && tab.dataset.projekt) {
+      _overviewAktiv = false;
+      _aktuellesProjekt = tab.dataset.projekt;
+      if (document.body.getAttribute("data-mode") === "control") {
+        start();
+        _startSpinner();
+      }
+    } else {
+      zeige_uebersicht();
+    }
+  });
+
+  window.WerkstattLiveFeed = {
+    start: start, stop: stop, lade: _lade,
+    setProjekt: setProjekt, zeige_uebersicht: zeige_uebersicht
+  };
 })();

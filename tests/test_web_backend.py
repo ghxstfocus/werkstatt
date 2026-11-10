@@ -1,5 +1,6 @@
 """Tests fuer das FastAPI-Backend (OP-074)."""
 
+import os
 import signal
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -369,3 +370,46 @@ def test_stop_eskaliert_an_prozessgruppe_nach_timeout(
         (process.pid, signal.SIGKILL),
     ]
     assert stop.json()["returncode"] == -signal.SIGKILL
+
+
+def test_loop_status_recovery_nach_server_neustart(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_modul
+    from werkstatt.web.loop_registry import LoopProcessRegistry
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "STATUS.md").write_text("## Open\n", encoding="utf-8")
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    _reset_loop_registry(app_modul)
+
+    registry = LoopProcessRegistry(
+        tmp_path / ".werkstatt" / "web-loop-registry.db",
+    )
+    assert registry.reserve("demo", "run-after-restart") == (True, None)
+    registry.register("demo", "run-after-restart", os.getpid())
+
+    # Simulate a fresh web worker: only the durable process record remains.
+    _reset_loop_registry(app_modul)
+    monkeypatch.setattr(
+        app_modul.subprocess, "Popen",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("duplicate start")),
+    )
+    client = TestClient(app_modul.app)
+
+    state = client.get("/api/projects/demo/loop")
+    assert state.status_code == 200
+    assert state.json()["state"] == "running"
+    assert state.json()["run_id"] == "run-after-restart"
+
+    start = client.post(
+        "/api/projects/demo/start", json={"aufgabe": "must not start twice"},
+    )
+    assert start.status_code == 200
+    assert start.json()["gestartet"] is False
+    assert start.json()["grund"] == "laeuft_bereits"

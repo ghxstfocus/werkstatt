@@ -1748,18 +1748,28 @@ def _scan_projekte() -> list[Path]:
     return out
 
 
+def _projekt_filter_sql() -> str:
+    """Project column is canonical; legacy web stop events carry project in JSON."""
+    return (
+        "(CASE WHEN kind='web_loop_stopped' "
+        "THEN json_extract(payload, '$.project') ELSE project END)=?"
+    )
+
+
 def _sparkline_30d(es: EventStore, projekt: str) -> list[int]:
-    """30-Tage-Bucket-Liste (aeltester zuerst) aus Terminal-Events."""
+    """30-Tage-Bucket-Liste eindeutiger Runs (aeltester zuerst)."""
     from datetime import date, timedelta
 
     buckets: dict[str, int] = {}
     try:
         with sqlite3.connect(es.db_pfad) as c:
             rows = c.execute(
-                "SELECT substr(ts, 1, 10), COUNT(*) FROM events "
-                "WHERE kind IN ('loop_erfolg', 'loop_failed', 'loop_ended') "
-                "AND project=? AND ts >= date('now', '-30 days') "
-                "GROUP BY 1",
+                "SELECT substr(MAX(ts), 1, 10), COUNT(*) FROM ("
+                "SELECT run_id, MAX(ts) AS ts FROM events "
+                "WHERE kind IN ('loop_erfolg', 'loop_failed', 'loop_ended', "
+                "'web_loop_stopped') AND " + _projekt_filter_sql() + " "
+                "AND ts >= date('now', '-30 days') "
+                "GROUP BY run_id) GROUP BY 1",
                 (projekt,),
             ).fetchall()
         for tag, n in rows:
@@ -1773,28 +1783,52 @@ def _sparkline_30d(es: EventStore, projekt: str) -> list[int]:
     ]
 
 
-def _erfolgsquote_30d(es: EventStore, projekt: str) -> float | None:
-    """Anteil erfolgreicher Terminal-Events (loop_erfolg+loop_ended) 30d."""
+def _runs_7d(es: EventStore, projekt: str) -> int:
     try:
         with sqlite3.connect(es.db_pfad) as c:
-            erfolg = c.execute(
-                "SELECT COUNT(*) FROM events "
-                "WHERE project=? AND kind IN ('loop_erfolg', 'loop_ended') "
-                "AND ts >= date('now', '-30 days')",
+            row = c.execute(
+                "SELECT COUNT(DISTINCT run_id) FROM events "
+                "WHERE kind IN ('loop_erfolg', 'loop_failed', 'loop_ended', "
+                "'web_loop_stopped') AND " + _projekt_filter_sql() + " "
+                "AND ts >= date('now', '-7 days') AND run_id != ''",
                 (projekt,),
-            ).fetchone()[0]
-            total = c.execute(
-                "SELECT COUNT(*) FROM events "
-                "WHERE project=? AND kind IN "
-                "('loop_erfolg', 'loop_failed', 'loop_ended') "
-                "AND ts >= date('now', '-30 days')",
-                (projekt,),
-            ).fetchone()[0]
+            ).fetchone()
+        return int(row[0] or 0) if row else 0
     except sqlite3.Error:
-        return None
-    if not total:
-        return None
-    return round(erfolg / total, 2)
+        return 0
+
+
+def _run_verteilung_30d(es: EventStore, projekt: str) -> dict[str, int]:
+    """Deduplicated 30-day run outcomes; an explicit web stop wins."""
+    ergebnis = {"erfolg": 0, "fehlgeschlagen": 0, "abgebrochen": 0, "gesamt": 0}
+    try:
+        with sqlite3.connect(es.db_pfad) as c:
+            rows = c.execute(
+                "SELECT run_id, "
+                "MAX(CASE WHEN kind='web_loop_stopped' THEN seq ELSE 0 END), "
+                "MAX(CASE WHEN kind='loop_failed' THEN seq ELSE 0 END), "
+                "MAX(CASE WHEN kind IN ('loop_erfolg', 'loop_ended') "
+                "THEN seq ELSE 0 END) "
+                "FROM events WHERE " + _projekt_filter_sql() + " "
+                "AND ts >= date('now', '-30 days') "
+                "AND kind IN ('loop_erfolg', 'loop_failed', 'loop_ended', "
+                "'web_loop_stopped') AND run_id != '' "
+                "GROUP BY run_id",
+                (projekt,),
+            ).fetchall()
+        for _, stopped_seq, failed_seq, success_seq in rows:
+            if stopped_seq:
+                ergebnis["abgebrochen"] += 1
+            elif failed_seq > success_seq:
+                ergebnis["fehlgeschlagen"] += 1
+            elif success_seq:
+                ergebnis["erfolg"] += 1
+        ergebnis["gesamt"] = sum(
+            ergebnis[k] for k in ("erfolg", "fehlgeschlagen", "abgebrochen")
+        )
+    except sqlite3.Error:
+        pass
+    return ergebnis
 
 
 def aggregate_overview() -> dict[str, Any]:
@@ -1819,8 +1853,13 @@ def aggregate_overview() -> dict[str, Any]:
         except (sqlite3.Error, ValueError):
             ambient = {"loop_status": "idle", "last_run": None}
 
+        verteilung = _run_verteilung_30d(es, name)
         spark = _sparkline_30d(es, name)
-        quote = _erfolgsquote_30d(es, name)
+        runs_7d_total = _runs_7d(es, name)
+        quote = (
+            round(verteilung["erfolg"] / verteilung["gesamt"], 2)
+            if verteilung["gesamt"] else None
+        )
 
         status_md = p / "docs" / "STATUS.md"
         try:
@@ -1837,21 +1876,28 @@ def aggregate_overview() -> dict[str, Any]:
             "loop_status": ambient.get("loop_status", "idle"),
             "letzter_run": ambient.get("last_run"),
             "runs_30d": spark,
-            "runs_30d_total": sum(spark),
+            "runs_30d_total": verteilung["gesamt"],
+            "runs_7d_total": runs_7d_total,
             "erfolgsquote_30d": quote,
+            "ergebnisse_30d": verteilung,
             "status_md_mtime": mtime,
         })
 
     top_3 = sorted(
         projekte,
-        key=lambda x: (x["runs_30d_total"], x["ops_offen"]),
+        key=lambda x: (x["runs_7d_total"], x["ops_offen"]),
         reverse=True,
     )[:3]
-    top_3_namen = [x["name"] for x in top_3 if x["runs_30d_total"] > 0]
+    top_3_namen = [x["name"] for x in top_3 if x["runs_7d_total"] > 0]
 
+    gesamt = {
+        key: sum(p["ergebnisse_30d"][key] for p in projekte)
+        for key in ("erfolg", "fehlgeschlagen", "abgebrochen", "gesamt")
+    }
     return {
         "projekte": projekte,
         "top_3": top_3_namen,
+        "ergebnisse_30d": gesamt,
         "generated_at": datetime.now(UTC).isoformat(),
     }
 

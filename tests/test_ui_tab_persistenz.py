@@ -39,6 +39,7 @@ class TabSpiegel:
         self.aktiver = None
         self.zaehler = 0
         self._rehydriere_laeuft = False
+        self.uebersicht = False
 
     # -- Persistenz (synchron, wie im JS nach Debounce) -----------------
 
@@ -91,6 +92,7 @@ class TabSpiegel:
         if tab_id not in self.tabs:
             return
         self.aktiver = tab_id
+        self.uebersicht = False
         self._persistiere_tabs()
 
     def schliesse(self, tab_id):
@@ -100,14 +102,15 @@ class TabSpiegel:
         del self.tabs[tab_id]
         if self.aktiver == tab_id:
             self.aktiver = self.reihenfolge[0] if self.reihenfolge else None
+            self.uebersicht = self.aktiver is None
         self._persistiere_tabs()
 
     def initialisiere(self):
         gespeicherte = self._lade_gespeicherte_tabs()
         if not gespeicherte:
-            sid = self.neuer_tab("werkstatt")
-            self.wechsle(sid)
+            self.uebersicht = True
             return
+        self.uebersicht = False
         self._rehydriere_laeuft = True
         aktiver_id = None
         for e in gespeicherte:
@@ -126,12 +129,12 @@ class TabSpiegel:
 # Verhaltens-Specs: "Was passiert bei X?"
 # ---------------------------------------------------------------------------
 
-def test_leerer_storage_nutzt_default_fallback():
+def test_leerer_storage_zeigt_workspace_overview():
     sp = TabSpiegel()
     sp.initialisiere()
-    assert len(sp.tabs) == 1
-    assert next(iter(sp.tabs.values()))["projekt"] == "werkstatt"
-    assert sp.aktiver is not None
+    assert sp.tabs == {}
+    assert sp.aktiver is None
+    assert sp.uebersicht
 
 
 def test_gespeicherter_zustand_wird_wiederhergestellt():
@@ -156,38 +159,40 @@ def test_rehydration_ohne_aktiven_fallback_auf_ersten():
     assert sp.tabs[sp.aktiver]["projekt"] == "x"
 
 
-def test_letzter_tab_loescht_key():
+def test_letzter_tab_loescht_key_und_kehren_zur_overview():
     sp = TabSpiegel()
     sp.initialisiere()
-    einziger = sp.reihenfolge[0]
+    einziger = sp.neuer_tab("werkstatt")
+    sp.wechsle(einziger)
     sp.schliesse(einziger)
     assert PERSIST_KEY not in sp.storage
     assert sp.aktiver is None
+    assert sp.uebersicht
 
 
-def test_korruptes_json_ignoriert_und_default():
+def test_korruptes_json_ignoriert_und_zeigt_overview():
     sp = TabSpiegel(storage={PERSIST_KEY: "kaputt{["})
     sp.initialisiere()
-    assert len(sp.tabs) == 1
-    assert sp.tabs[sp.reihenfolge[0]]["projekt"] == "werkstatt"
+    assert sp.tabs == {}
+    assert sp.uebersicht
 
 
-def test_nicht_array_ignoriert():
+def test_nicht_array_ignoriert_und_zeigt_overview():
     sp = TabSpiegel(storage={PERSIST_KEY: '{"x":1}'})
     sp.initialisiere()
-    assert len(sp.tabs) == 1
-    assert sp.tabs[sp.reihenfolge[0]]["projekt"] == "werkstatt"
+    assert sp.tabs == {}
+    assert sp.uebersicht
 
 
-def test_stale_projekt_eintrag_uebersprungen():
+def test_stale_projekt_eintrag_uebersprungen_und_zeigt_overview():
     sp = TabSpiegel(storage={PERSIST_KEY: json.dumps([
         {"projekt": 123, "aktiv": True},
         {"projekt": "", "aktiv": False},
         {"projekt": None, "aktiv": False},
     ])})
     sp.initialisiere()
-    assert len(sp.tabs) == 1
-    assert sp.tabs[sp.reihenfolge[0]]["projekt"] == "werkstatt"
+    assert sp.tabs == {}
+    assert sp.uebersicht
 
 
 def test_zaehler_nach_rehydration_korrekt():

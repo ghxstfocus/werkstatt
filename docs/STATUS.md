@@ -1932,7 +1932,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 
 - **Status:** open
 - **Typ:** ui-feature
-- **Phase:** Phase-2 (Focus)
+- **Phase:** Phase-1 (UI bereitstellen)
 - **Betroffene Dateien:** `werkstatt/web/app.py` (`GET /api/overview`), `werkstatt/web/aggregate.py` (Sparkline/KPI-Aggregation, falls nicht vorhanden: neu), `static/overview.js` (neu), `static/tabs.js` (Home-Button + Pause-Logik), `static/layout.html` (Overview-Screen + Home-Button + CSS-Variablen), `tests/test_overview.py` (neu), `tests/test_overview_shell_spec.py` (neu)
 - **Problem:** (1) Angelegte Projekte in `/opt/*` sind unsichtbar wenn sie keinen Tab haben. (2) Der Startzustand ist ein einzelner `werkstatt`-Tab statt einer Uebersicht — Profi-Standard (JetBrains New UI, VS Code Welcome, Linear, Notion) ist ein Overview-Screen mit Projekt-Karten und dauerhaft erreichbarer Home-Navigation. (3) Kein visuelles Feedback zur Bau-Aktivitaet pro Projekt, obwohl die Daten (Event-Architektur OP-319..323) vorhanden sind.
 - **Akzeptanzkriterien:**
