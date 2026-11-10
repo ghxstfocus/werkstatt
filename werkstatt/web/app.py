@@ -1148,7 +1148,6 @@ def create_app() -> FastAPI:
                 db_path=db_path,
                 context_seq=context_seq,
                 run_id=run_id,
-                project=projekt,
             )
         except IdempotencyConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
