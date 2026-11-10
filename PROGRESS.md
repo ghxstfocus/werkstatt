@@ -4510,3 +4510,8 @@ Der Quality-Gate-Lauf fuer `1af90ca` meldete Mypy `Cannot infer type of lambda` 
 ## OP-397 — Fehlgeschlagene Chatjobs nach Reconnect sichtbar (2026-11-10)
 
 Die Reconnect-Abfrage liefert neben queued/running Jobs die letzten 20 fehlgeschlagenen Session-Jobs mit Fehlertext. Die UI rendert diese Fehler nach Session-Reconnect wieder als Chat-Antwort, einschliesslich Jobs, deren User-Event vor einem Prozessabbruch noch nicht in der Chat-Historie stand. Erfolgshistorie wird nicht erneut abgespielt. API- und Frontend-Vertragstests ergaenzt; Serververifikation ausstehend. OP-397 bleibt offen.
+
+
+## OP-397 — Chatjobs abbrechbar (2026-11-10)
+
+Chatjobs koennen jetzt projekt- und sessiongebunden abgebrochen werden. Wartende Jobs wechseln direkt auf `cancelled`; laufende Jobs erhalten eine persistente Cancel-Anfrage und der LLM-Stream prueft diese an Chunk-Grenzen. Die UI bietet einen separaten Abbrechen-Button, sodass der Composer waehrenddessen weiter nutzbar bleibt. Tests decken Store-Lifecycle, API-Session-Scope, Chat-Agent und UI-Vertrag ab. Serververifikation steht aus; OP-397 bleibt offen.
