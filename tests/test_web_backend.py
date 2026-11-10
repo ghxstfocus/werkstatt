@@ -591,3 +591,41 @@ def test_autonomous_start_resolves_dependency_completed_in_progress(
     task_idx = aufrufe[0].index("--aufgabe")
     assert "### OP-322: Arbeit nach erledigtem OP" in aufrufe[0][task_idx + 1]
     assert client.post("/api/projects/demo/stop").status_code == 200
+
+
+
+def test_autonomous_start_uses_status_done_ledger_dependency(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "STATUS.md").write_text(
+        "## Erledigt (Auto-Log)\n"
+        "- 2026-11-09 | OP-381c | done | Gate-Modal fertig.\n\n"
+        "### OP-322: Arbeit nach erledigtem Gate-Modal\n"
+        "- **Status:** open\n"
+        "- **Blockiert von:** OP-381c\n"
+        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\n"
+        "- **Tests:** pytest -q tests/test_322.py\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    _reset_loop_registry(app_modul)
+    if app_modul.os.name == "posix":
+        monkeypatch.setattr(app_modul.os, "killpg", lambda *_: None)
+    aufrufe: list[list[str]] = []
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
+
+    client = TestClient(app_modul.app)
+    antwort = client.post("/api/projects/demo/start")
+
+    assert antwort.status_code == 200
+    assert antwort.json()["op_id"] == "OP-322"
+    assert client.post("/api/projects/demo/stop").status_code == 200
