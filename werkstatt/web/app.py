@@ -1100,7 +1100,9 @@ def create_app() -> FastAPI:
     def chat_job_create(name: str, body: dict[str, Any]) -> dict[str, Any]:
         """Persistiert Chat-Arbeit und kehrt sofort mit einer Job-ID zurueck."""
         from werkstatt.chat_jobs import (
-            IdempotencyConflict, enqueue_chat_job, sync_completed_job_turns,
+            IdempotencyConflict,
+            enqueue_chat_job,
+            sync_completed_job_turns,
         )
         from werkstatt.chat_session import ChatSession
 
@@ -1156,7 +1158,9 @@ def create_app() -> FastAPI:
     def chat_jobs_active(name: str, session_id: str) -> dict[str, Any]:
         """Liefert aktive und letzte fehlgeschlagene Jobs fuer Reconnect."""
         from werkstatt.chat_jobs import (
-            ChatJobStore, resume_chat_jobs, sync_completed_job_turns,
+            ChatJobStore,
+            resume_chat_jobs,
+            sync_completed_job_turns,
         )
 
         projekt = _pruefe_projektname(name)
