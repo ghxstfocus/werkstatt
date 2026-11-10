@@ -4406,3 +4406,19 @@ ein unvollstaendiges Manifest wird vor dem Loop-Start abgewiesen.
 - **Test:** `28827edf5bd5` — unvollstaendiges Manifest wird abgewiesen.
 - **Testformatierung:** `e0d4d697fc3a` — Newline-Literale korrigieren.
 - **Serververifikation:** nach Pull ausstehend.
+
+
+### Pflichtdoku-Ladefehler — Audit-Katalog und Regressionstest (2026-11-10)
+
+Der Serverlauf fand zwei Regressionstests nach der fail-closed-Aenderung:
+Der neue Audit-Kind `loop_docs_load_failed` fehlte im Katalog, und ein
+OP-392-Test erwartete noch den alten Erfolg trotz kaputter Projektkonfiguration.
+Der Kind ist jetzt registriert. Der Test verlangt nun Exit-Code 1, keinen
+Aufruf des Pipeline-Loops und ein Audit-Event. Damit bleibt der Lauf bei
+fehlendem/kaputtem Pflichtkontext sicher gestoppt.
+
+- **Katalog:** `b07378953cdf`.
+- **Regressionstest:** `b976ef2b24ad`; Formatierung: `10c62c006095`.
+- **Verifikation:** gezielte Tests, Ruff, Doku-Check, Vollsuite und Quality
+Gate auf dem Server noch ausstehend; die geposteten 1831 passed / 2 failed
+sind der Stand vor diesem Fix.
