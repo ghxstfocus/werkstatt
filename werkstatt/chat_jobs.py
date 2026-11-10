@@ -485,7 +485,7 @@ def _dispatch_pending(
 
 
 
-def _forget_future(key: str, future: Future[None]) -> None:
+def _forget_future(key: str, future: Future[bool]) -> None:
     """Entfernt abgeschlossene Futures ohne neuere Eintraege zu loeschen."""
     with _FUTURES_LOCK:
         if _FUTURES.get(key) is future:
