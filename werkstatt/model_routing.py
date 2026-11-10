@@ -70,7 +70,7 @@ def route_for_role(role: str, requested_model: str | None = None) -> ModelRoute:
     """
     label = _role_label(role)
     env_name = f"WERKSTATT_MODEL_{label.upper().replace('-', '_')}"
-    configured = os.environ.get(env_name)
+    configured = os.environ.get(env_name) if label in _ROLE_MODELS else None
     if label == "architect":
         # Alte Konfiguration bleibt kompatibel, wird aber kanonisiert.
         configured = (
