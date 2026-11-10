@@ -4406,6 +4406,7 @@ ein unvollstaendiges Manifest wird vor dem Loop-Start abgewiesen.
 - **Test:** `28827edf5bd5` — unvollstaendiges Manifest wird abgewiesen.
 - **Testformatierung:** `e0d4d697fc3a` — Newline-Literale korrigieren.
 - **Serververifikation:** nach Pull ausstehend.
+- **Commit:** `ac0af29e9419153cdb8f7ea8d8efd3916201cba3` — offene OP-397-Punkte an den parallelen Read-Job-Stand anpassen.
 
 
 ### Pflichtdoku-Ladefehler — Audit-Katalog und Regressionstest (2026-11-10)
