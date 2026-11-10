@@ -489,38 +489,37 @@ def create_app() -> FastAPI:
                 raise HTTPException(status_code=404, detail="OP nicht offen oder nicht gefunden")
             if auswahl.get("status") != "open":
                 raise HTTPException(status_code=409, detail="OP ist nicht als offen markiert")
-            if auswahl.get("blockiert_von"):
-                _status_md = _pd / "docs" / "STATUS.md"
-                try:
-                    _status_text = _status_md.read_text(
-                        encoding="utf-8", errors="replace",
-                    )
-                except OSError as exc:
-                    raise HTTPException(
-                        status_code=500, detail="STATUS.md nicht lesbar",
-                    ) from exc
-                _entscheidung = select_next_op(_status_text, _completed_op_ids(_pd, _status_text))
-                _ausgeschlossen: dict[str, Any] = next(
-                    (
-                        item for item in _entscheidung["ausgeschlossen"]
-                        if item.get("id") == op_id
-                    ),
-                    {},
+            _status_md = _pd / "docs" / "STATUS.md"
+            try:
+                _status_text = _status_md.read_text(
+                    encoding="utf-8", errors="replace",
                 )
-                _blocker_grund = [
-                    grund for grund in _ausgeschlossen.get("gruende", [])
-                    if (
-                        "Abhaengigkeiten" in grund
-                        or "Blocker-Angabe" in grund
-                        or "Status fehlt" in grund
-                        or "Phase-3 gesperrt" in grund
-                    )
-                ]
-                if _blocker_grund:
-                    raise HTTPException(
-                        status_code=409,
-                        detail="OP ist blockiert: " + "; ".join(_blocker_grund),
-                    )
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=500, detail="STATUS.md nicht lesbar",
+                ) from exc
+            _entscheidung = select_next_op(_status_text, _completed_op_ids(_pd, _status_text))
+            _ausgeschlossen: dict[str, Any] = next(
+                (
+                    item for item in _entscheidung["ausgeschlossen"]
+                    if item.get("id") == op_id
+                ),
+                {},
+            )
+            _blocker_grund = [
+                grund for grund in _ausgeschlossen.get("gruende", [])
+                if (
+                    "Abhaengigkeiten" in grund
+                    or "Blocker-Angabe" in grund
+                    or "Status fehlt" in grund
+                    or "Phase-3 gesperrt" in grund
+                )
+            ]
+            if _blocker_grund:
+                raise HTTPException(
+                    status_code=409,
+                    detail="OP ist blockiert: " + "; ".join(_blocker_grund),
+                )
 
             if not aufgabe:
                 # Volltext aus STATUS.md (nicht nur Titel): der Explorer
