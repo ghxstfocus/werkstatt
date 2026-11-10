@@ -12,6 +12,9 @@
     socket: null,
     streamBuf: "",
     streamAktiv: false,
+    sessionPromise: null,
+    historyRequest: 0,
+    sendQueue: [],
   };
 
   function _el(id) { return document.getElementById(id); }
@@ -21,7 +24,7 @@
                  {method: "POST", credentials: "same-origin"})
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        zustand.sessionId = d.session_id;
+        if (zustand.projekt === projekt) zustand.sessionId = d.session_id;
         return fetch("/api/projects/" + encodeURIComponent(projekt) +
                      "/chat/history?session_id=" + encodeURIComponent(d.session_id),
                      {credentials: "same-origin"})
@@ -73,38 +76,102 @@
   }
 
   function _renderSidebarAktuell() {
-    _ladeSessions(zustand.projekt).then(_rendereSidebar);
+    var projekt = zustand.projekt;
+    _ladeSessions(projekt).then(function (sessions) {
+      if (projekt === zustand.projekt) _rendereSidebar(sessions);
+    }).catch(function () {});
+  }
+
+  function _setzeChatStatus(text, typ) {
+    var status = _el("chat-status");
+    if (!status) return;
+    status.textContent = text;
+    status.dataset.status = typ || "idle";
+  }
+
+  function _zeigeLeerzustand() {
+    var box = _el("chat-nachrichten");
+    if (!box || box.children.length) return;
+    var card = document.createElement("div");
+    card.className = "chat-empty";
+
+    var eyebrow = document.createElement("span");
+    eyebrow.className = "chat-empty-eyebrow";
+    eyebrow.textContent = "PROJEKT-ASSISTENT";
+    card.appendChild(eyebrow);
+
+    var heading = document.createElement("h3");
+    heading.textContent = "Womit soll ich dir helfen?";
+    card.appendChild(heading);
+
+    var copy = document.createElement("p");
+    copy.textContent = (
+      "Ich prüfe Fragen zu Code, Status und Runs anhand des aktiven Repos. " +
+      "Der Chat kann aktuell lesen und erklären; er startet keine Runs und ändert keinen Code."
+    );
+    card.appendChild(copy);
+
+    var prompts = document.createElement("div");
+    prompts.className = "chat-suggestions";
+    [
+      "Fasse den letzten Run zusammen.",
+      "Welche offenen OPs blockieren gerade?",
+      "Erkläre den letzten Fehler mit Belegen.",
+    ].forEach(function (text) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "chat-suggestion";
+      button.textContent = text;
+      button.addEventListener("click", function () { _sende(text); });
+      prompts.appendChild(button);
+    });
+    card.appendChild(prompts);
+    box.appendChild(card);
   }
 
   function _wechsleSession(sid) {
     zustand.sessionId = sid;
-    var titel = _el("chat-titel");
-    if (titel) titel.textContent = "Chat · " + sid.slice(0, 8);
+    var projekt = zustand.projekt;
+    var anfrage = ++zustand.historyRequest;
     var box = _el("chat-nachrichten");
     if (!box) return;
     box.innerHTML = "";
-    _ladeHistory(zustand.projekt, sid).then(function (events) {
+    _setzeChatStatus("Lade Gespräch …", "loading");
+    _ladeHistory(projekt, sid).then(function (events) {
+      if (projekt !== zustand.projekt || anfrage !== zustand.historyRequest) return;
+      var hatNachricht = false;
       events.forEach(function (ev) {
         var kind = ev.kind;
         var p = ev.payload || {};
-        if (kind === "user") _karte("user", p.text || "");
-        else if (kind === "assistant") _karte("assistant", p.text || "");
-        else if (kind === "tool_call") {
+        if (kind === "user") {
+          hatNachricht = true;
+          _karte("user", p.text || "");
+        } else if (kind === "assistant") {
+          hatNachricht = true;
+          _karte("assistant", p.text || "");
+        } else if (kind === "tool_call") {
           (p.tool_calls || []).forEach(function (tc) {
             _toolKarte(tc.function && tc.function.name || "?", null, "ok");
           });
         }
       });
+      if (!hatNachricht) _zeigeLeerzustand();
+      _setzeChatStatus("Bereit · " + projekt, "ready");
+    }).catch(function () {
+      if (projekt !== zustand.projekt || anfrage !== zustand.historyRequest) return;
+      _setzeChatStatus("Gespräch konnte nicht geladen werden.", "error");
+      _zeigeLeerzustand();
     });
     _renderSidebarAktuell();
   }
-
   function _karte(rolle, text) {
     var box = _el("chat-nachrichten");
     if (!box) return null;
     var k = document.createElement("div");
     k.className = "chat-msg " + rolle;
     k.textContent = text;
+    var leer = box.querySelector(".chat-empty");
+    if (leer) leer.remove();
     box.appendChild(k);
     box.scrollTop = box.scrollHeight;
     return k;
@@ -123,6 +190,8 @@
       pre.textContent = JSON.stringify(args, null, 2);
       k.appendChild(pre);
     }
+    var leer = box.querySelector(".chat-empty");
+    if (leer) leer.remove();
     box.appendChild(k);
     box.scrollTop = box.scrollHeight;
     return k;
@@ -152,15 +221,30 @@
     var url = proto + "//" + location.host + "/api/projects/" +
               encodeURIComponent(zustand.projekt) + "/chat/stream";
     var sock = new WebSocket(url);
-    sock.addEventListener("message", _socketNachricht);
+    zustand.socket = sock;
+    sock.addEventListener("open", function () {
+      if (zustand.socket !== sock) return;
+      _setzeChatStatus("Verbunden · " + zustand.projekt, "ready");
+      var queue = zustand.sendQueue.splice(0);
+      queue.forEach(_schickeQueueNachricht);
+    });
+    sock.addEventListener("message", function (evt) {
+      if (zustand.socket === sock) _socketNachricht(evt);
+    });
     sock.addEventListener("close", function () {
+      if (zustand.socket !== sock) return;
       zustand.socket = null;
       if (zustand.streamAktiv) {
-        _karte("assistant", "[Verbindung unterbrochen]");
+        _karte("assistant", "Verbindung unterbrochen. Die Antwort wurde nicht vollständig empfangen.");
         zustand.streamAktiv = false;
       }
+      _setzeChatStatus("Verbindung getrennt · Nachricht bei erneutem Senden wiederholen.", "error");
     });
-    zustand.socket = sock;
+    sock.addEventListener("error", function () {
+      if (zustand.socket === sock) {
+        _setzeChatStatus("Chat-Verbindung fehlgeschlagen.", "error");
+      }
+    });
   }
 
   function _socketNachricht(evt) {
@@ -169,13 +253,16 @@
     if (obj.type === "chunk") {
       _streamChunk(obj.text || "");
     } else if (obj.type === "tool_call") {
+      _setzeChatStatus("Prüfe " + (obj.name || "Projektkontext") + " …", "working");
       _toolKarte(obj.name || "?", obj.args, "running");
     } else if (obj.type === "tool_result") {
       _stelleToolErgebnis(obj.name || "?", obj.content || "");
+      _setzeChatStatus("Prüfung abgeschlossen · Antwort wird erstellt …", "working");
     } else if (obj.type === "done") {
       _streamDone(obj.antwort || "");
     } else if (obj.type === "error") {
-      _karte("assistant", "[Fehler] " + (obj.detail || "unbekannt"));
+      _karte("assistant", "Fehler: " + (obj.detail || "unbekannt"));
+      _setzeChatStatus("Aktion fehlgeschlagen.", "error");
       zustand.streamAktiv = false;
     }
   }
@@ -192,6 +279,7 @@
       var box = _el("chat-nachrichten");
       if (box) box.scrollTop = box.scrollHeight;
     }
+    _setzeChatStatus("Antwort wird erstellt …", "working");
   }
 
   function _streamDone(voll) {
@@ -203,52 +291,95 @@
     zustand.streamAktiv = false;
     zustand.streamBuf = "";
     zustand.aktuelleKarte = null;
+    _setzeChatStatus("Antwort fertig · " + zustand.projekt, "ready");
     _renderSidebarAktuell();
   }
 
   function _sende(text) {
     if (!text) return;
+    var projekt = zustand.projekt;
     if (!zustand.sessionId) {
-      _neueSession(zustand.projekt).then(function () {
-        _sende(text);
+      if (!zustand.sessionPromise) {
+        zustand.sessionPromise = _neueSession(projekt).finally(function () {
+          zustand.sessionPromise = null;
+        });
+      }
+      zustand.sessionPromise.then(function () {
+        if (projekt === zustand.projekt) _sende(text);
+      }).catch(function () {
+        _setzeChatStatus("Neue Session konnte nicht erstellt werden.", "error");
       });
       return;
     }
     _karte("user", text);
-    if (!zustand.socket || zustand.socket.readyState !== WebSocket.OPEN) {
-      _socketVerbinde();
-      setTimeout(function () {
-        _sendeUeberSocket(text);
-      }, 150);
-    } else {
-      _sendeUeberSocket(text);
-    }
+    _setzeChatStatus("Nachricht wird übermittelt …", "working");
+    _sendeUeberSocket(text);
   }
 
   function _sendeUeberSocket(text) {
-    if (!zustand.socket || zustand.socket.readyState !== WebSocket.OPEN) {
-      _karte("assistant", "[Verbindung nicht bereit]");
-      return;
+    if (!zustand.socket || zustand.socket.readyState === WebSocket.CLOSING ||
+        zustand.socket.readyState === WebSocket.CLOSED) {
+      _socketVerbinde();
     }
-    zustand.socket.send(JSON.stringify({
+    var payload = {
       session_id: zustand.sessionId,
       message: text,
       mode: "read",
-    }));
+    };
+    if (!zustand.socket || zustand.socket.readyState !== WebSocket.OPEN) {
+      zustand.sendQueue.push(payload);
+      return;
+    }
+    _schickeQueueNachricht(payload);
+  }
+
+  function _schickeQueueNachricht(payload) {
+    if (!zustand.socket || zustand.socket.readyState !== WebSocket.OPEN) {
+      zustand.sendQueue.unshift(payload);
+      return;
+    }
+    try {
+      zustand.socket.send(JSON.stringify(payload));
+    } catch (err) {
+      zustand.sendQueue.unshift(payload);
+      _setzeChatStatus("Verbindung unterbrochen · Nachricht wartet auf erneuten Versuch.", "error");
+    }
   }
 
   function setze_chat(projekt) {
     if (!projekt) return;
+    var anfrage = ++zustand.historyRequest;
+    if (zustand.socket) {
+      try { zustand.socket.close(); } catch (e) {}
+    }
     zustand.projekt = projekt;
     zustand.sessionId = null;
     zustand.socket = null;
+    zustand.streamAktiv = false;
+    zustand.streamBuf = "";
+    zustand.aktuelleKarte = null;
+    zustand.sendQueue = [];
+    zustand.sessionPromise = null;
+    var box = _el("chat-nachrichten");
+    if (box) box.innerHTML = "";
     var titel = _el("chat-titel");
     if (titel) titel.textContent = "Chat — " + projekt;
+    _setzeChatStatus("Lade Projektgespräch …", "loading");
+    _zeigeLeerzustand();
     _renderSidebarAktuell();
     _ladeSessions(projekt).then(function (sessions) {
+      if (projekt !== zustand.projekt || anfrage !== zustand.historyRequest) return;
       if (sessions.length > 0) {
         _wechsleSession(sessions[sessions.length - 1]);
+      } else {
+        var nachrichten = _el("chat-nachrichten");
+        if (nachrichten) nachrichten.innerHTML = "";
+        _zeigeLeerzustand();
+        _setzeChatStatus("Bereit · " + projekt, "ready");
       }
+    }).catch(function () {
+      if (projekt !== zustand.projekt || anfrage !== zustand.historyRequest) return;
+      _setzeChatStatus("Sessions konnten nicht geladen werden.", "error");
     });
   }
 
