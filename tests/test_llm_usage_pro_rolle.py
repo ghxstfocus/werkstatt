@@ -66,7 +66,13 @@ def test_aggregate_tokens_per_rolle_summiert_und_misst_spitze(
         },
     }
 
+    refreshed = []
+    monkeypatch.setattr(
+        inspector, "_frische_projektion",
+        lambda: refreshed.append(True),
+    )
     api_result = inspector.aggregate_tokens("demo", "run-1")
+    assert refreshed == [True]
     assert api_result["by_role"] == result
 
 

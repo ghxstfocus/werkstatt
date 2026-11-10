@@ -409,6 +409,7 @@ def aggregate_tokens(projekt: str, run_id: str | None = None) -> dict[str, Any]:
     Loop: llm_usage-Events pro run_id aggregiert.
     Chat: token_usage-Events aller Sessions des Projekts aggregiert.
     """
+    _frische_projektion()
     es = EventStore()
     if run_id is None:
         run_id = _letzter_run_id(es, projekt)
