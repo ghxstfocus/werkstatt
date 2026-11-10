@@ -14,15 +14,18 @@ def test_create_is_idempotent_and_survives_store_reopen(tmp_path: Path) -> None:
     db = tmp_path / "jobs.db"
     first, created = ChatJobStore(db).create(
         "session-a", "Pruefe Status", "read", "request-key-0001",
+        context_seq=7,
     )
     duplicate, duplicate_created = ChatJobStore(db).create(
         "session-a", "Pruefe Status", "read", "request-key-0001",
+        context_seq=99,
     )
 
     assert created is True
     assert duplicate_created is False
     assert duplicate["job_id"] == first["job_id"]
     assert duplicate["state"] == "queued"
+    assert first["context_seq"] == duplicate["context_seq"] == 7
     assert ChatJobStore(db).get(first["job_id"])["events"][0]["kind"] == "queued"
 
 
