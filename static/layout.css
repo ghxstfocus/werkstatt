@@ -3213,3 +3213,30 @@ body[data-mode="control"] .lf-step-detail {
   min-width: 0;
   box-sizing: border-box;
 }
+
+/* The loop toolbar uses text buttons, unlike the compact per-OP icon actions. */
+.control-run-toolbar {
+  width: 100%;
+  min-width: 0;
+}
+.control-run-toolbar .runs-control {
+  width: 100%;
+  min-width: 0;
+}
+.runs-control .runs-control-action {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: max-content;
+  height: auto;
+  min-height: 34px;
+  padding: 6px 11px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+@media (max-width: 620px) {
+  .runs-control .runs-control-action {
+    min-width: 0;
+    white-space: normal;
+  }
+}
