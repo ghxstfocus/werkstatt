@@ -534,12 +534,12 @@ def test_explicit_op_start_respects_phase_three_dogfooding_gate(
     docs_dir = tmp_path / "demo" / "docs"
     docs_dir.mkdir(parents=True)
     (docs_dir / "STATUS.md").write_text(
-        "### OP-101: Phase-3-Aufgabe\\n"
-        "- **Status:** open\\n"
-        "- **Phase:** Phase-3 (Memory)\\n"
-        "- **Blockiert von:** —\\n"
-        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\\n"
-        "- **Tests:** pytest -q tests/test_101.py\\n",
+        "### OP-101: Phase-3-Aufgabe\n"
+        "- **Status:** open\n"
+        "- **Phase:** Phase-3 (Memory)\n"
+        "- **Blockiert von:** —\n"
+        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\n"
+        "- **Tests:** pytest -q tests/test_101.py\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
