@@ -678,3 +678,47 @@ def test_builder_meldet_leeren_high_severity_filter(tmp_path):
     prompt = mock_llm.call_args.args[2]
     assert "Keine HIGH-/critical-Reviewer-Bugs" in prompt
     assert "nur ein Hinweis" not in prompt
+
+def test_builder_behaelt_alte_fehler_neben_patch_feedback(tmp_path):
+    """Resume-Kontext darf durch erneutes Patch-Feedback nicht verschwinden."""
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    st = _state(tmp_path)
+    st.tasks = [{
+        "id": "t1", "name": "A", "description": "B",
+        "action": "update", "task_files": ["a.py"],
+    }]
+    st.aktuelle_task = st.tasks[0]
+    st.builder_feedback = {"a.py": "old_string war nicht mehr vorhanden"}
+
+    class _FakePhaseState:
+        def __init__(self, _project_name, *, base_dir):
+            self.base_dir = base_dir
+            self.data = {"tasks": [{
+                "id": "old-1",
+                "name": "Vorheriger Versuch",
+                "status": "failed",
+                "task_files": ["a.py"],
+                "failure": "Verify schlug fehl",
+            }]}
+
+        def exists(self):
+            return True
+
+        def load(self):
+            return True
+
+    fake_reply = type("R", (), {
+        "ok": True, "content": '{"patches": []}', "error": "",
+    })()
+    with patch("werkstatt.phase_state.PhaseState", _FakePhaseState), \
+         patch(
+             "werkstatt.roles.builder._common.ask_llm",
+             return_value=fake_reply,
+         ) as mock_llm:
+        run_builder(st)
+
+    prompt = mock_llm.call_args.args[2]
+    assert "VORHERIGE FEHLSCHLAEGE FUER DIESE DATEI" in prompt
+    assert "FEEDBACK AUS VORHERIGEM VERSUCH" in prompt
+    assert "Verify schlug fehl" in prompt
+    assert "old_string war nicht mehr vorhanden" in prompt

@@ -121,7 +121,7 @@ def _build_patches_fuer_datei(
             + "Behebe die Ursache, nicht nur die Symptome.\n"
         )
     if _feedback:
-        _feedback_block = (
+        _feedback_block += (
             f"\n\n## FEEDBACK AUS VORHERIGEM VERSUCH:\n"
             f"Der letzte Patch wurde verworfen. Grund:\n{_feedback}\n"
             f"Behebe das in dieser Antwort.\n"
