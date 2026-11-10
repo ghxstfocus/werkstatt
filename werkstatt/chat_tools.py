@@ -56,14 +56,44 @@ def _read_file(args: dict[str, Any]) -> str:
     if pfad is None or not pfad.is_file():
         return "Fehler: Datei nicht gefunden oder ausserhalb Projekt"
     try:
-        data = pfad.read_text(encoding="utf-8", errors="replace")
+        start = int(args.get("start", 0))
+        end_value = args.get("end")
+        end = int(end_value) if end_value is not None else None
+    except (TypeError, ValueError):
+        return "Fehler: start/end muessen ganze Zahlen sein"
+    if start < 0 or (end is not None and end < start):
+        return "Fehler: ungueltiger start/end-Bereich"
+
+    max_chars = end - start if end is not None else None
+    try:
+        teile: list[str] = []
+        with pfad.open("r", encoding="utf-8", errors="replace") as datei:
+            ueberspringen = start
+            while ueberspringen:
+                chunk = datei.read(min(ueberspringen, 8192))
+                if not chunk:
+                    return ""
+                ueberspringen -= len(chunk)
+
+            gelesen = 0
+            bytezahl = 0
+            while max_chars is None or gelesen < max_chars:
+                anfrage = 8192 if max_chars is None else min(
+                    8192, max_chars - gelesen,
+                )
+                chunk = datei.read(anfrage)
+                if not chunk:
+                    break
+                for zeichen in chunk:
+                    zeichen_bytes = len(zeichen.encode("utf-8"))
+                    if bytezahl + zeichen_bytes > _MAX_READ_BYTES:
+                        return "".join(teile)
+                    teile.append(zeichen)
+                    bytezahl += zeichen_bytes
+                    gelesen += 1
+        return "".join(teile)
     except OSError as exc:
         return f"Fehler beim Lesen: {exc}"
-    start = int(args.get("start", 0))
-    end = args.get("end")
-    if end is not None:
-        return data[start : int(end)]
-    return data[start : start + _MAX_READ_BYTES]
 
 
 def _grep(args: dict[str, Any]) -> str:

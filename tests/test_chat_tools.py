@@ -114,3 +114,31 @@ def test_audit_query_rejects_other_project_run_id(tmp_path) -> None:
         project_dir=tmp_path, project_name="alpha",
     )
     assert "gehoert nicht zum aktiven Projekt" in result
+
+
+
+def test_read_file_utf8_output_is_capped_even_with_large_end(tmp_path):
+    datei = tmp_path / "large.txt"
+    datei.write_text("ä" * (chat_tools._MAX_READ_BYTES + 10), encoding="utf-8")
+
+    result = chat_tools.execute_tool(
+        "read_file", {"path": "large.txt", "start": 0, "end": 1_000_000},
+        project_dir=tmp_path,
+    )
+
+    assert result
+    assert len(result.encode("utf-8")) <= chat_tools._MAX_READ_BYTES
+
+
+def test_read_file_validiert_offsets_und_haelt_bereich_semantik(tmp_path):
+    (tmp_path / "small.txt").write_text("alpha", encoding="utf-8")
+    assert chat_tools.execute_tool(
+        "read_file", {"path": "small.txt", "start": 1, "end": 4},
+        project_dir=tmp_path,
+    ) == "lph"
+    assert "ungueltiger" in chat_tools.execute_tool(
+        "read_file", {"path": "small.txt", "start": -1}, project_dir=tmp_path,
+    )
+    assert "ganze Zahlen" in chat_tools.execute_tool(
+        "read_file", {"path": "small.txt", "start": "x"}, project_dir=tmp_path,
+    )
