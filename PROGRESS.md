@@ -4531,12 +4531,18 @@ Der Event-Replay-Endpunkt akzeptiert jetzt eine Session-ID und liefert einen Job
 
 Der Web-Start-Endpunkt verweigerte bereits erkannte offene Blocker, uebersah aber unbekannte oder widerspruechliche Blocker bei einer expliziten OP-Auswahl. Der Ausschlussgrund wird jetzt ebenfalls als 409 zurueckgegeben; ein API-Regressionstest prueft, dass kein Prozess startet. Serververifikation steht aus.
 
+- **Commit:** `7d8e943379cede38141ecee2cf855df9164c2ee8`
+
 
 ## Expliziter OP-Start verweigert doppelte OP-IDs (2026-11-10)
 
 Der Web-Start nutzt bei einer expliziten OP-ID den ersten Parser-Treffer. Wenn STATUS dieselbe OP-ID mehrfach enthielt, konnte dadurch eine mehrdeutige Aufgabe starten, obwohl der Selector Duplikate ausgeschlossen hatte. Der Start-Endpunkt weist diese Auswahl jetzt mit 409 ab; ein API-Test prueft, dass kein Prozess gestartet wird. Serververifikation steht aus.
 
+- **Commit:** `ca539549ad0162109b8470086f73f2e72ae16874`
+
 
 ## Quality Gate prueft aktuelle Quellen statt Altdateien (2026-11-10)
 
 Die AST-Pruefung parst nun alle Python-Quellen im Repository ausser virtuellen Umgebungen und Cache-/Git-Verzeichnissen. Der Audit-Katalog wird durch den bestehenden `test_katalog_enthaelt_alle_code_kinds`-Test geprueft. Fehlende Pruefdatei, Syntaxfehler, fehlgeschlagener oder uebersprungener Katalogtest machen das Gate rot, statt die Checks als neutralen Skip zu verbuchen. Regressionstests fuer Syntax- und Katalogfehler ergaenzt; Serververifikation steht aus.
+
+- **Commit:** `823f942538e774aafd07637896ed95d149d5f3cc`
