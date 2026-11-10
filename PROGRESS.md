@@ -4084,6 +4084,7 @@ die Selector-/Chat-Beschreibung und `docs/SOLL.md §5.3` dokumentiert:
 
 - **Commit:** `997399f2721d` — OP-398 Selector-Kern.
 - **Commit:** `84492a21aa5c` — OP-398 Web-Start, Audit und sichere Abstention.
+- **Commit:** `aca364299d7a` — konsistentes Blocker-Fehlerfeedback im Web-Start.
 - **Commit:** `62931e4651c0` — OP-396 read-only Chat-Backlog-Werkzeug.
 - **Commit:** `ee870dc33bb8` — OP-396 Chat nutzt Selector-Belege.
 
