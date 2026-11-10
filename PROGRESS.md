@@ -4472,3 +4472,5 @@ vollstaendig umgesetzt oder verifiziert.
 - **Commit:** `ca7e6814fad5b99726f5404e` — serialisierte Session-Claims und Queue-Fortsetzung.
 - **Commit:** `8f65f2a76f31872d3c86beff` — Tests fuer Session-Serialisierung und parallele Sessions.
 - **Serververifikation:** noch ausstehend.
+
+- **Commit:** `437f39e4f7b66a4a8ba69f2f` — stabile FIFO-Reihenfolge auch bei gleichen Zeitstempeln.
