@@ -11,8 +11,21 @@ sind historische Snapshots, keine aktuelle Betriebsfreigabe.
 **Ziel:** Eine belastbare Multi-Projekt-Agentenloop- und Entwicklungsumgebung,
 deren Rollen, Gates, Audit und Projektgrenzen nachvollziehbar zusammenarbeiten.
 
-1. **Phase 1 — UI bereitstellen:** OP-381c, OP-381b, OP-306, OP-306b und
-   Interfaces (Verify/CI-Status, Rollen-Details, Debug-Ansicht).
+### Bedien- und Autonomie-Fundament — ADR-0029
+
+Chat wird zur zentralen Projekteingabe und Erklaerung. Runs bleiben
+ansprechbar und transparent, waehrend Diagnose und Verify im Hintergrund
+laufen. STATUS liefert genehmigte Arbeitsauftraege; die Auswahl trifft ein
+begruendeter, evidenzbasierter Selector statt einer blinden Zeilenfolge.
+
+- **OP-396:** Chat als projektbezogene Hauptoberflaeche.
+- **OP-397:** Persistente Hintergrundjobs mit Progress, Replay und Idempotenz.
+- **OP-398:** Auswahl autonomer Arbeit mit Prioritaets-/Risiko-Begruendung,
+  Verifikation und begrenzten Stop-Bedingungen.
+
+1. **Phase 1 — UI bereitstellen:** OP-396, OP-397, OP-398, OP-381c,
+   OP-381b, OP-306, OP-306b und Interfaces (Verify/CI-Status,
+   Rollen-Details, Debug-Ansicht).
 2. **Phase 2 — Loop im UI-Betrieb stabilisieren:** OP-382 Dogfooding mit
    zehn vollständigen realen OPs, Debugger-Kette und konstante erfolgreiche
    Runs ohne Abbrüche.

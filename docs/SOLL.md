@@ -10,10 +10,13 @@ verstehen — nicht nur den IST-Zustand (siehe `docs/ARCHITECTURE.md`).
 
 ## 1. Die Vision in einem Satz
 
-Ein Mensch arbeitet mit einer **Web-UI**, um Software zu bauen.
-Die UI zeigt den Zustand des Loops, bietet einen Chat für Diagnose
-und einen Debugger für Reparatur. Der Loop ist der Motor; der Chat
-ist das Interface; das Erfahrungs-Gehirn ist das Gedächtnis.
+Ein Mensch arbeitet mit einer **Web-UI**, deren Mittelpunkt der
+projektbezogene Chat ist. Der Chat untersucht das Repo, beantwortet
+Fragen mit Belegen, startet und steuert nachvollziehbare Hintergrund-
+arbeit und bleibt waehrend eines Loop-Runs ansprechbar. Cockpit fasst
+Runs zusammen, Control zeigt live, Debug erklaert spaeter Ursachen.
+Der Loop baut und prueft; der Mensch entscheidet an Gates; das
+Erfahrungs-Gehirn speichert verifiziertes Wissen.
 
 ---
 
@@ -66,7 +69,7 @@ ist das Interface; das Erfahrungs-Gehirn ist das Gedächtnis.
 | Schicht | Aufgabe | OPs |
 |---|---|---|
 | **1. Loop** | Motor, baut Code, headless | 123, 188, 189, 190, 193, 195 |
-| **2. Chat** | Interface, read-only Diagnose | 124, 125, 126, 127 |
+| **2. Chat** | Projekt-Interface, Repo-gestuetzte Antworten und delegierte Jobs | 124, 125, 126, 127, 396, 397 |
 | **3. Chat-Debugger** | Reparatur-Modus, Vorschlag+Fix | 128, 132 |
 | **4. Gehirn** | Gedächtnis, zweistufig | 113, 113a, 113i, 129, 130, 131, 160 |
 
@@ -178,11 +181,14 @@ pytest_regression.
 
 ### 5.1 Was der Chat ist
 
-Ein **read-only Assistent pro Projekt**. Beantwortet Fragen,
-liest Audit-Logs, prüft Diffs, liefert Diagnosen. **Kann nichts
-schreiben** (außer im `debugger`-Modus, siehe Schicht 3).
+Ein **projektbezogener Control-Plane im Chat**. Er liest Dateien,
+sucht im Repo, untersucht Diffs, Tests und Audit-Ereignisse und belegt
+Antworten mit Pfad, Zeile, Befehl und Ergebnis. Er kann explizit
+freigegebene Kontrollaktionen ausloesen und lange Pruefungen als
+Hintergrundjobs delegieren. Code-Aenderungen bleiben im Coding-Loop
+mit Patch-, Verify-, Review- und Human-Gate-Pfad.
 
-### 5.2 Die 3 Chat-Modi (OP-240)
+### 5.2 Chat-Modi und Rechte (OP-240, ADR-0029)
 
 | Modus | Tools | Wann |
 |---|---|---|
@@ -190,7 +196,9 @@ schreiben** (außer im `debugger`-Modus, siehe Schicht 3).
 | `debugger` | + pytest_run, write_temp_test | Reparatur mit Fix-Vorschlag |
 | `reject` | read-only | Ablehnung mit Begründung an Loop |
 
-**Der Mensch wählt den Modus**, nicht der Chat.
+**Der Mensch waehlt den Modus**, nicht der Chat. Die drei UI-Modi
+Cockpit, Control und Debug bestimmen die passende Laufansicht; sie
+ersetzen keine Berechtigungen.
 
 ### 5.3 Read-only Tool-Registry (OP-231)
 
@@ -205,9 +213,11 @@ schreiben** (außer im `debugger`-Modus, siehe Schicht 3).
 | `diagnose(state)` | Bekannte Fehlerklassen |
 | `read_status()` | STATUS.md / PROGRESS.md |
 
-**Nicht verfügbar:** `write_file`, `apply_patch`, `git_commit`.
+**Direkte Code-Schreibtools bleiben nicht verfuegbar.** Schreibende
+Aufgaben werden als Loop-Run mit unveraendertem Verify-/Review- und
+Human-Gate-Pfad gestartet. Keine Shell-Ausfuehrung aus freiem Chattext.
 
-### 5.4 Chat-Persistenz (OP-230)
+### 5.4 Chat-Persistenz und asynchrone Arbeit (OP-230, ADR-0029)
 
 SQLite pro Projekt: `events(seq, session_id, ts, kind, payload)`.
 
@@ -215,11 +225,25 @@ SQLite pro Projekt: `events(seq, session_id, ts, kind, payload)`.
 - `ChatSession.load()` — rekonstruiert Historie
 - `derive_messages()` — LLM-Historie aus Events
 - `list_sessions(project)` — Sessions auflisten
+- Lange Diagnose- und Loop-Auftraege laufen unabhaengig vom Chat-Request.
+  Fortschritt, Ergebnis und Fehler werden als projekt-/run-/jobbezogene
+  Events gespeichert und nach Reconnect wiederhergestellt.
+- Eine laufende Chat-Pruefung darf die naechste Nutzerfrage nicht
+  blockieren; getrennte Sessions behalten ihren eigenen Verlauf.
 
 **Warum Events statt Messages?** Fork-fähig (Branch einer Session),
 replaybar, auditierbar.
 
-### 5.5 Chat-UI (OP-232 + OP-233)
+### 5.5 Chat-zentrierte UI (OP-232, OP-233, OP-396, ADR-0029)
+
+Der Chat bleibt in allen drei Modi dauerhaft sichtbar und bedienbar.
+Cockpit zeigt daneben eine ruhige Run-Zusammenfassung und verdichtete
+Timeline. Control zeigt den aktuellen Schritt, Live-Ereignisse und den
+naechsten erwarteten Schritt. Debug wird fuer evidenzbasierte
+Fehleranalyse und Event-Replay ausgebaut. Jeder Tool-Aufruf zeigt
+Zweck, Status, Dauer und Ergebnis; das System arbeitet nicht still im
+Hintergrund.
+
 
     ┌─────────────────────────────────────────────────────┐
     │  Runs-Liste  │   Timeline        │   Chat          │

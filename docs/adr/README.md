@@ -26,3 +26,10 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0020](ADR-0020-human-readable-audit.md) | Human-Readable Audit-Trail im Frontend | accepted |
 | [ADR-0021](ADR-0021-rollen-detail-ansicht.md) | Rollen-spezifische Detail-Ansicht im Chat-Drawer | accepted |
 | [ADR-0022](ADR-0022-hybrid-ui-modi.md) | Hybrid-UI-Modi (Cockpit / Control / Debug) | accepted |
+| [ADR-0023](ADR-0023-multi-projekt-kontext.md) | Multi-Projekt-Kontext | accepted |
+| [ADR-0024](ADR-0024-tiered-event-log.md) | Tiered Event Log + Projector (CQRS-light) | accepted |
+| [ADR-0025](ADR-0025-erfolgsquoten-visualisierung.md) | Erfolgsquoten-Visualisierung | accepted |
+| [ADR-0026](ADR-0026-memory-graph-visualisierung.md) | Memory-Graph-Visualisierung | accepted |
+| [ADR-0027](ADR-0027-selbstverbesserungs-loop.md) | Selbstverbesserungs-Loop (Trace-First + Preservation-Gate) | proposed |
+| [ADR-0028](ADR-0028-scout-report-als-architect-kontext.md) | Scout-Report als einzige Architect-Kontextquelle | accepted |
+| [ADR-0029](ADR-0029-chat-zentrierte-projektsteuerung.md) | Chat-zentrierter Control-Plane und autonome Arbeit | accepted |

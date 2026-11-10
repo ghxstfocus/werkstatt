@@ -8,7 +8,7 @@
 >
 > **Bei Widersprüchen:** ADR > `docs/SOLL.md` > diese Datei.
 >
-Stand: 2026-11-08 (Event-Architektur via ADR-0024 + UI-Layer + Multi-Projekt via ADR-0023).
+Stand: 2026-11-10 (Run-State und Event-Architektur via ADR-0024; SOLL-Ziel fuer Chat-Control-Plane via ADR-0029).
 
 ## 1. Ziel-Architektur
 
