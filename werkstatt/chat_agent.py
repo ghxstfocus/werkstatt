@@ -107,7 +107,7 @@ def _deepseek_chat_stream(
         _DEEPSEEK_URL,
         json=body,
         headers={"Authorization": f"Bearer {api_key}"},
-        timeout=300,
+        timeout=(10, 30),
         stream=True,
     ) as resp:
         resp.raise_for_status()
