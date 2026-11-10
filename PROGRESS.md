@@ -4703,3 +4703,8 @@ Der Event-Store kann Events jetzt mit Projektbezug und deterministischer Event-I
 ## Syntax-Reparatur fuer Audit-Projektor-Patch (2026-11-11)
 
 - Server-Testsammlung meldete einen fehlerhaften Katalogabschluss in `werkstatt/audit.py` und ein fehlendes `except` im Web-Stop-Handler. Beide Syntaxfehler sind repariert; erneute Serververifikation ausstehend.
+
+
+## Event-Log-Regressionstests nach Serverlauf (2026-11-11)
+
+- Serverlauf auf `c3f34a4` bestaetigte Syntaxreparatur und 51 gezielte Tests, legte aber drei Testannahmen offen: `EventStore.query()` liefert keine Event-ID, `Projector` liegt im Modul `werkstatt.projection`, und das Duplikat-Fixture brauchte die persistierte Job-Sequenz. Die Tests sind an die echten Schnittstellen angepasst; erneute Verifikation steht aus.

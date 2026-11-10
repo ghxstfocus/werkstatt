@@ -447,7 +447,9 @@ def test_job_events_are_projected_to_timeline_exactly_once(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from werkstatt import audit as audit_mod, event_store, projection
+    import werkstatt.audit as audit_mod
+    import werkstatt.event_store as event_store
+    import werkstatt.projection as projection
 
     monkeypatch.setattr(audit_mod, "_werkstatt_home", lambda: tmp_path)
     monkeypatch.setattr(event_store, "werkstatt_home", lambda: tmp_path)
@@ -473,10 +475,16 @@ def test_job_events_are_projected_to_timeline_exactly_once(
     assert event["payload"]["job_event_kind"] == "queued"
     assert "Frage" not in str(event["payload"])
     assert store.project_pending_events() == 0
-    projector = event_store.Projector()
+    projector = projection.Projector()
     projector.rebuild()
     rebuilt = timeline.query("run-a", project="demo")
     assert len(rebuilt) == 1
-    assert rebuilt[0]["event_id"] == event["event_id"]
+    assert rebuilt[0]["payload"]["job_id"] == job["job_id"]
+    with sqlite3.connect(tmp_path / ".werkstatt" / "events.db") as conn:
+        projected_ids = conn.execute(
+            "SELECT event_id FROM events WHERE run_id=? AND kind=?",
+            ("run-a", "chat_job_queued"),
+        ).fetchall()
+    assert projected_ids == [(f"chat-job:{job['job_id']}:1",)]
 
 

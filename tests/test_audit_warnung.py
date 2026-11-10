@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 from werkstatt import audit as audit_mod
@@ -131,5 +132,10 @@ def test_audit_explicit_run_and_event_id_are_replay_stable(tmp_path, monkeypatch
         db_pfad=tmp_path / ".werkstatt" / "events.db",
     ).query("run-explicit", project="demo")
     assert len(events) == 1
-    assert events[0]["event_id"] == "stable-web-event-1"
     assert events[0]["kind"] == "web_loop_paused"
+    with sqlite3.connect(tmp_path / ".werkstatt" / "events.db") as conn:
+        projected_id = conn.execute(
+            "SELECT event_id FROM events WHERE run_id=? AND kind=?",
+            ("run-explicit", "web_loop_paused"),
+        ).fetchone()[0]
+    assert projected_id == "stable-web-event-1"
