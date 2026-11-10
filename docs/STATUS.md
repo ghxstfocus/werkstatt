@@ -1345,10 +1345,10 @@ noch nicht vollstaendig.
 - **Problem:** Kein Prompt-Builder hat ein **hartes Token-Budget**. `explorer_findings`, `scout_api_auszug` und `api_index_cache` gehen ungekuerzt in den Architect-Prompt. Bei wachsender Codebase waechst der Prompt unbegrenzt. `planner.py:1991` hat als einzige echte Truncation `_findings[:2000]`. Alles andere: unbegrenzt.
   **Forschung:** Anthropic "Effective context engineering" (2025): "Find the smallest possible set of high-signal tokens." Structured Eviction statt simpler LLM-Kompression. Context Rot: mehr Tokens ≠ mehr Leistung.
 - **Akzeptanzkriterien:**
-  (a) Neue Datei `context_budget.py` mit `budgetiere(felder: list[tuple[str, str, int]], max_tokens: int) -> tuple[str, dict]`. Jedes Feld hat `(name, content, prioritaet)`. Funktion baut den finalen Prompt zusammen, respektiert das Limit, gibt `weggelassen`-Dict zurueck.
-  (b) **Prioritaeten** (hoch nach niedrig): `OP-Spec` > `Akzeptanzkriterien` > `task_files` > `explorer_findings` > `api_index_cache` > `scout_api_auszug` > `historie` > `patches`.
-  (c) Bei Erreichen des Limits: abschneiden + Hinweis `[… {N} Tokens weggelassen, Prioritaet {X}]` im Prompt sichtbar.
-  (d) Pro Rolle konfigurierbar (Default-Werte, ueberschreibbar):
+  (a) Neue Datei `context_budget.py` mit einer testbaren Budgetfunktion. Das Budget zaehlt System- und User-Prompt sowie Nachrichten-Overheads und reserviert Completion-Tokens. Pro Modell wird ein passender Tokenizer genutzt; wenn keiner verfuegbar ist, greift ein dokumentierter konservativer Schaetzer, der nie als exakte Messung ausgegeben wird.
+  (b) **Prioritaeten** (hoch nach niedrig): `OP-Spec` > `Akzeptanzkriterien` > `task_files` > `explorer_findings` > `api_index_cache` > `scout_api_auszug` > `historie` > `patches`. OP-Spec und Akzeptanzkriterien sind Pflichtfelder: wenn sie nicht in das Budget passen, wird der LLM-Call fail-closed abgebrochen und ein Human-Review-Signal erzeugt.
+  (c) Nur optionale Felder duerfen gekuerzt oder weggelassen werden. Kuerzungen erfolgen an Feld-/Datensatzgrenzen; das Ergebnis und Schaetzverfahren werden vor dem Call geprueft. Audit-Metadaten enthalten Rollenname, Modell, Schaetzverfahren, Vorher-/Nachher-Zaehler und Feldnamen, aber keine Prompt-Inhalte.
+  (d) Pro Rolle und Modell konfigurierbar (Default-Werte, ueberschreibbar):
       - Architect: 12_000 Tokens
       - Planner: 6_000
       - Builder: 8_000
@@ -1389,9 +1389,10 @@ noch nicht vollstaendig.
   - `architect.py`: `api_index_cache` kommt aus `scout.auftrag.api_auszug` (nicht mehr parallel)
   - Architect-Prompt: nur noch `scout_auftrag`-Felder + OP-Spec + Migrationsstand
   
-  **(c) Fallback fuer alte Runs**
-  - Wenn `scout_auftrag` leer: Fallback auf altes Verhalten (`explorer_findings` direkt)
-  - Fail-safe, damit bestehende Runs nicht brechen
+  **(c) Begrenzter Fallback fuer gespeicherte Alt-Runs**
+  - Nur ein gespeicherter Run aus der Zeit vor `scout_auftrag` darf den alten Explorer-Kontext verwenden.
+  - Der Fallback ist hart begrenzt und auditiert.
+  - Fehlt der Scout-Auftrag in einem neuen Run, wird fail-closed abgebrochen und ein klares Fehler-/Human-Review-Signal gesetzt.
   
   **(d) `bereits_erfuellt`-Check bleibt harter Filter**
   - Wenn `scout.bereits_erfuellt == true`: Loop bricht ab, Architect uebersprungen
@@ -1416,7 +1417,7 @@ noch nicht vollstaendig.
   (a) `patches` durch den tatsaechlichen `git diff` ersetzen (nicht den ganzen Datei-Inhalt — nur die geaenderten Zeilen).
   (b) `last_verify_errors` nur die `error:`-Zeilen (via `_extrahiere_fehlerkern`, existiert schon in `verify.py`).
   (c) `reviewer_bugs` nur `severity in ("HIGH", "critical")`, `medium`/`low` weg.
-  (d) Fallback: wenn nach Filterung nichts uebrig, alle Bugs zeigen (fail-safe).
+  (d) Wenn keine HIGH-/critical-Bugs uebrig bleiben, werden keine medium-/low-Bugs nachgeschoben. Der Prompt enthaelt stattdessen einen expliziten Hinweis, dass der Severity-Filter keine Reviewer-Bugs uebrigliess. Deterministische Verify-Fehler bleiben davon unberuehrt.
   (e) Live: Reflection-Prompt messbar kleiner (Vergleich in PROGRESS.md).
 - **Tests:** `tests/test_reflection_kontext.py` (4 Tests: Diff statt Datei, Fehlerkern-Extraktion, Severity-Filter, Fallback).
 - **ADR:** —
@@ -1452,7 +1453,7 @@ noch nicht vollstaendig.
   (a) Neues Tool `tools/context_drift.py`: prueft jeden `llm_usage`-Event pro Rolle gegen das konfigurierte harte Limit und meldet zusaetzlich den Spitzenwert je Rolle; ein spaeterer kleiner Call darf einen frueheren Ausreisser nicht verdecken.
   (b) Neue **weiche** Stage `context_drift` in `verify.json` (Start: warnen, nicht blocken).
   (c) Nach 14 Tagen ohne Warnung: auf hart umstellen (eigene OP).
-  (d) Baseline-aware: nur `AFTER > BEFORE + 20 %` blockt (Toleranz fuer Ausreisser).
+  (d) Baseline-Vergleiche gruppieren nach gleicher Rolle und gleichem Modell und vergleichen den hoechsten Einzel-Call. Waehrend der weichen Einfuehrungsphase erzeugt eine Steigerung >20 % eine Warnung. Ein konfiguriertes absolutes Hard-Limit gilt unabhaengig von der Baseline; Baseline-Toleranz darf keinen uebergrossen Einzel-Call freigeben.
 - **Tests:** `tests/test_context_drift.py` (2 Tests: Limit-Ueberschreitung wird erkannt, Baseline-Toleranz).
 - **ADR:** —
 
