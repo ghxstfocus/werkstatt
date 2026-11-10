@@ -11,6 +11,14 @@ from tools import quality_gate
 
 _BASE = quality_gate.BASELINE["pytest"]
 
+def _prepare_tree(tmp_path):
+    (tmp_path / "tests").mkdir(exist_ok=True)
+    (tmp_path / "tests" / "test_audit_warnung.py").write_text(
+        "# fixture for the dedicated audit catalog test\\n",
+        encoding="utf-8",
+    )
+
+
 
 def _pytest_out(passed: int, failed: int = 0) -> str:
     """Erzeugt pytest-Output-String fuer Mocks."""
@@ -22,16 +30,16 @@ def _pytest_out(passed: int, failed: int = 0) -> str:
 def _mock_run_factory(pytest_output: str):
     """Erzeugt _run-Mock: pytest liefert pytest_output, andere Baseline.
 
-    Wichtig: Substring-Pruefung ("test_audit_kinds" in cmd_str), nicht
+    Wichtig: Substring-Pruefung ("test_katalog_enthaelt_alle_code_kinds" in cmd_str), nicht
     Exakt-Match in der Liste. Sonst matcht der pytest-Zweig auch fuer
-    ["pytest", "tests/test_audit_kinds.py"], weil "test_audit_kinds"
+    ["pytest", "tests/test_katalog_enthaelt_alle_code_kinds.py"], weil "test_katalog_enthaelt_alle_code_kinds"
     nicht exakt als Listenelement vorkommt.
     """
     def _mock_run(cmd, cwd, env=None):
         cmd_str = " ".join(str(c) for c in cmd)
         # Spezifischere Regel zuerst:
-        if "test_audit_kinds" in cmd_str:
-            return 0, "6 passed in 0.1s"
+        if "test_katalog_enthaelt_alle_code_kinds" in cmd_str:
+            return 0, "1 passed in 0.1s"
         if cmd_str.startswith("pytest"):
             return 0, pytest_output
         if "ruff" in cmd_str:
@@ -47,7 +55,7 @@ def test_gate_failed_macht_rot(tmp_path):
     pytest_out = _pytest_out(_BASE, failed=1)
     with patch.object(quality_gate, "_run", side_effect=_mock_run_factory(pytest_out)):
         # Katalog-Fallback: _KATALOG_SOLL in pipeline.py
-        (tmp_path / "pipeline.py").write_text("_KATALOG_SOLL = 0\n")
+        _prepare_tree(tmp_path)
         result = quality_gate.check_all(tmp_path)
 
     assert result["current"]["pytest"]["failed"] == 1
@@ -60,7 +68,7 @@ def test_gate_all_green_ist_ok(tmp_path):
     """M-331b: 1361 passed, 0 failed -> delta.pytest=0 -> ok=True."""
     pytest_out = _pytest_out(_BASE)
     with patch.object(quality_gate, "_run", side_effect=_mock_run_factory(pytest_out)):
-        (tmp_path / "pipeline.py").write_text("_KATALOG_SOLL = 0\n")
+        _prepare_tree(tmp_path)
         result = quality_gate.check_all(tmp_path)
 
     assert result["current"]["pytest"]["failed"] == 0
@@ -72,7 +80,7 @@ def test_gate_passed_unter_baseline_macht_rot(tmp_path):
     """M-331b: passed < baseline -> delta.pytest > 0 -> ok=False."""
     pytest_out = _pytest_out(_BASE - 1)  # passed < Baseline
     with patch.object(quality_gate, "_run", side_effect=_mock_run_factory(pytest_out)):
-        (tmp_path / "pipeline.py").write_text("_KATALOG_SOLL = 0\n")
+        _prepare_tree(tmp_path)
         result = quality_gate.check_all(tmp_path)
 
     assert result["delta"]["pytest"] == 1
@@ -87,8 +95,8 @@ def test_quality_gate_reports_mypy_diagnostic(tmp_path):
 
     def mock_run(cmd, cwd, env=None):
         command = " ".join(str(part) for part in cmd)
-        if "test_audit_kinds" in command:
-            return 0, "6 passed in 0.1s"
+        if "test_katalog_enthaelt_alle_code_kinds" in command:
+            return 0, "1 passed in 0.1s"
         if command.startswith("pytest"):
             return 0, _pytest_out(_BASE)
         if "ruff" in command:
@@ -97,7 +105,7 @@ def test_quality_gate_reports_mypy_diagnostic(tmp_path):
             return 1, diagnostic
         return 0, ""
 
-    (tmp_path / "pipeline.py").write_text("_KATALOG_SOLL = 0\\n")
+    _prepare_tree(tmp_path)
     with patch.object(quality_gate, "_run", side_effect=mock_run):
         result = quality_gate.check_all(tmp_path)
 
@@ -107,3 +115,42 @@ def test_quality_gate_reports_mypy_diagnostic(tmp_path):
     assert mypy["diagnostic"] == diagnostic
     assert result["regression"] is True
 
+
+def test_quality_gate_detects_python_syntax_error(tmp_path):
+    _prepare_tree(tmp_path)
+    source = tmp_path / "werkstatt"
+    source.mkdir()
+    (source / "broken.py").write_text("def broken(:\\n", encoding="utf-8")
+    with patch.object(
+        quality_gate, "_run",
+        side_effect=_mock_run_factory(_pytest_out(_BASE)),
+    ):
+        result = quality_gate.check_all(tmp_path)
+
+    assert result["current"]["ast"]["errors"] == 1
+    assert result["delta"]["ast"] == 1
+    assert "broken.py" in result["current"]["ast"]["diagnostics"][0]
+    assert result["regression"] is True
+
+
+def test_quality_gate_fails_when_audit_catalog_test_fails(tmp_path):
+    _prepare_tree(tmp_path)
+
+    def mock_run(cmd, cwd, env=None):
+        command = " ".join(str(part) for part in cmd)
+        if "test_katalog_enthaelt_alle_code_kinds" in command:
+            return 1, "0 passed, 1 failed in 0.1s"
+        if command.startswith("pytest"):
+            return 0, _pytest_out(_BASE)
+        if "ruff" in command:
+            return 0, "All checks passed!"
+        if "mypy" in command:
+            return 0, "Success: no issues found"
+        return 0, ""
+
+    with patch.object(quality_gate, "_run", side_effect=mock_run):
+        result = quality_gate.check_all(tmp_path)
+
+    assert result["current"]["katalog"]["errors"] == 1
+    assert result["delta"]["katalog"] == 1
+    assert result["regression"] is True
