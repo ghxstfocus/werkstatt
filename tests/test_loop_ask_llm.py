@@ -191,7 +191,7 @@ def test_audit_llm_call(tmp_path):
     ev = evs[0]
     # audit() merged Payload flach ins Event.
     assert ev["agent"] == "unit-test"
-    assert ev["model"] == "deepseek-chat"
+    assert ev["model"] == "deepseek-flash"
     assert ev["system_len"] == 10
     assert ev["user_len"] == 20
     assert ev["max_tokens"] == 1024
@@ -361,7 +361,7 @@ def test_payload_korrekt(tmp_path):
     assert headers["Content-Type"] == "application/json"
     # Payload
     payload = args.kwargs["json"]
-    assert payload["model"] == "deepseek-chat"
+    assert payload["model"] == "deepseek-flash"
     assert payload["temperature"] == 0.3
     assert payload["max_tokens"] == 1024
     msgs = payload["messages"]
