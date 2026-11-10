@@ -2185,20 +2185,26 @@ def aggregate_gate_context(
     diff_text = ""
     if offene:
         import subprocess as _sp
-        basis = Path("/opt/werkstatt")
+        basis: Path | None = None
         try:
-            diff_stat = _sp.run(
-                ["git", "diff", "--stat", "HEAD"],
-                capture_output=True, text=True, timeout=10,
-                cwd=str(basis), check=False,
-            ).stdout[:5000]
-            diff_text = _sp.run(
-                ["git", "diff", "HEAD"],
-                capture_output=True, text=True, timeout=15,
-                cwd=str(basis), check=False,
-            ).stdout[:100_000]
-        except (_sp.TimeoutExpired, OSError):
-            pass
+            basis = (_PROJECTS_BASE / projekt).resolve()
+            basis.relative_to(_PROJECTS_BASE.resolve())
+        except (OSError, RuntimeError, ValueError):
+            basis = None
+        if basis is not None and basis.is_dir():
+            try:
+                diff_stat = _sp.run(
+                    ["git", "diff", "--stat", "HEAD"],
+                    capture_output=True, text=True, timeout=10,
+                    cwd=str(basis), check=False,
+                ).stdout[:5000]
+                diff_text = _sp.run(
+                    ["git", "diff", "HEAD"],
+                    capture_output=True, text=True, timeout=15,
+                    cwd=str(basis), check=False,
+                ).stdout[:100_000]
+            except (_sp.TimeoutExpired, OSError):
+                pass
 
     return {
         "run_id": letzte_run_id,

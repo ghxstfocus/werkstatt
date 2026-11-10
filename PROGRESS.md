@@ -4010,3 +4010,8 @@ Der gezielte Serverlauf nach den Overview-/Loop-Status-Fixes ergab 14 passed, 1 
 ### 2026-11-10 — Serververifikation: Overview, Loop-Status und Chat-Read-Limit
 
 Verifiziert auf Server-HEAD `e4366bb`: gezielte Tests 41 passed; vollständige Suite 1781 passed, 5 skipped; Ruff 0; mypy 0; Quality-Gate `ok: true`, `regression: false`. Damit sind die Sparkline-SQL-/Fixture-Korrekturen, der Idle-Run-ID-Vertrag und die bytebegrenzte Chat-Dateilesung samt Tests durch den Serverlauf abgedeckt. AST- und Katalogprüfungen bleiben im Gate übersprungen, weil die dort genannten historischen Dateien fehlen.
+
+
+### 2026-11-10 — Gate-Debug-Kontext an aktives Projekt gebunden
+
+Beim Lesen der Debug-/Gate-Entscheidungen in ADR-0011, ADR-0022, ADR-0029 und OP-240/242 ist ein Multi-Projektfehler im Gate-Kontext aufgefallen: `aggregate_gate_context(projekt)` las den Git-Diff fest aus `/opt/werkstatt`. Bei einem Gate in einem anderen Projekt konnte der Nutzer somit den Diff eines fremden Projekts sehen. Der Endpoint verwendet jetzt den validierten Projektpfad unter `_PROJECTS_BASE` und fail-closed keinen Diff außerhalb dieser Basis. Zwei Backend-Tests decken Projektbindung und Traversal ab. **Serververifikation steht aus.**
