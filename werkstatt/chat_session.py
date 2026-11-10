@@ -163,6 +163,32 @@ class ChatSession:
             conn.commit()
         return target
 
+    def delete_snapshot(self, target_session_id: str) -> bool:
+        """Entfernt nur einen von dieser Session verwalteten Job-Branch."""
+        if target_session_id == self.session_id:
+            raise ValueError("Eltern-Session darf nicht als Snapshot geloescht werden")
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            snapshot = conn.execute(
+                "SELECT 1 FROM chat_snapshots WHERE target_session_id=? "
+                "AND parent_session_id=?",
+                (target_session_id, self.session_id),
+            ).fetchone()
+            if snapshot is None:
+                conn.commit()
+                return False
+            conn.execute("DELETE FROM events WHERE session_id=?", (target_session_id,))
+            conn.execute(
+                "DELETE FROM chat_job_turns WHERE session_id=?",
+                (target_session_id,),
+            )
+            conn.execute(
+                "DELETE FROM chat_snapshots WHERE target_session_id=?",
+                (target_session_id,),
+            )
+            conn.commit()
+        return True
+
     def append_job_turn(
         self, job_id: str, user_text: str, assistant_text: str,
     ) -> bool:
@@ -209,11 +235,16 @@ def list_sessions(
             rows = conn.execute(
                 "SELECT DISTINCT session_id FROM events "
                 "WHERE kind IN ('user', 'assistant') "
+                "AND session_id NOT IN ("
+                "SELECT target_session_id FROM chat_snapshots) "
                 "ORDER BY session_id"
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT DISTINCT session_id FROM events ORDER BY session_id"
+                "SELECT DISTINCT session_id FROM events "
+                "WHERE session_id NOT IN ("
+                "SELECT target_session_id FROM chat_snapshots) "
+                "ORDER BY session_id"
             ).fetchall()
     return [str(r[0]) for r in rows]
 
