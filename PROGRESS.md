@@ -4546,3 +4546,10 @@ Der Web-Start nutzt bei einer expliziten OP-ID den ersten Parser-Treffer. Wenn S
 Die AST-Pruefung parst nun alle Python-Quellen im Repository ausser virtuellen Umgebungen und Cache-/Git-Verzeichnissen. Der Audit-Katalog wird durch den bestehenden `test_katalog_enthaelt_alle_code_kinds`-Test geprueft. Fehlende Pruefdatei, Syntaxfehler, fehlgeschlagener oder uebersprungener Katalogtest machen das Gate rot, statt die Checks als neutralen Skip zu verbuchen. Regressionstests fuer Syntax- und Katalogfehler ergaenzt; Serververifikation steht aus.
 
 - **Commit:** `823f942538e774aafd07637896ed95d149d5f3cc`
+
+
+## Serververifikation fuer Chat-Replay, OP-398 und Quality-Gate-Tests (2026-11-10)
+
+Auf `/opt/werkstatt` wurde `9c505cb` getestet: gezielt 50 Tests bestanden, Ruff ohne Fehler, Gesamtsuite 1885 passed / 5 skipped. `doku_check --strict --limit 10 --worktree` erkannte die bereits in dieser Datei referenzierten Code-Commits fuer den OP-398- und Quality-Gate-Fix; uebrig blieb der Working-Tree-Drift fuer lokale Aenderungen an `werkstatt/web/audit_panel.py` und `werkstatt/web/terminal_proxy.py`. Die abschliessende JSON-Ausgabe von `tools.quality_gate` war im Laufprotokoll nicht enthalten; AST-/Katalog-Ergebnis fuer den neuen Gate-Code ist daher noch nicht bestaetigt.
+
+- **Commit:** `9c505cbc9e521fc20a99d5def5a6ce45dd03a232`
