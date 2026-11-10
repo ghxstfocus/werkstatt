@@ -41,6 +41,20 @@ def _fake_popen(aufrufe: list[list[str]], pid: int = 4242) -> Any:
     return _popen
 
 
+class _NullEventStore:
+    def append(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+
+def _reset_loop_registry(app_modul: Any) -> None:
+    for log_handle in app_modul._LOOP_LOG_HANDLES.values():
+        log_handle.close()
+    app_modul._LOOP_LOG_HANDLES.clear()
+    app_modul._LAUFENDE_LOOPS.clear()
+    app_modul._LOOP_RUN_IDS.clear()
+    app_modul._PAUSIERTE_LOOPS.clear()
+
+
 def test_loop_subprozess_start_stop(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -60,9 +74,9 @@ def test_loop_subprozess_start_stop(
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
 
     aufrufe: list[list[str]] = []
-    app_modul._LAUFENDE_LOOPS.clear()
-    app_modul._LOOP_LOG_HANDLES.clear()
+    _reset_loop_registry(app_modul)
     monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
 
     client = TestClient(app_modul.app)
 
@@ -120,8 +134,7 @@ def test_start_verwirft_blockierte_op(
         encoding="utf-8",
     )
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
-    app_modul._LAUFENDE_LOOPS.clear()
-    app_modul._LOOP_LOG_HANDLES.clear()
+    _reset_loop_registry(app_modul)
     aufrufe: list[list[str]] = []
     monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
 
@@ -148,8 +161,7 @@ def test_start_verwirft_leere_aufgabe(
     docs_dir.mkdir(parents=True)
     (docs_dir / "STATUS.md").write_text("# keine OP\n", encoding="utf-8")
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
-    app_modul._LAUFENDE_LOOPS.clear()
-    app_modul._LOOP_LOG_HANDLES.clear()
+    _reset_loop_registry(app_modul)
     aufrufe: list[list[str]] = []
     monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
 
@@ -174,8 +186,7 @@ def test_parallele_starts_starten_nur_einen_loop(
     docs_dir.mkdir(parents=True)
     (docs_dir / "STATUS.md").write_text("# start concurrent test\n")
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
-    app_modul._LAUFENDE_LOOPS.clear()
-    app_modul._LOOP_LOG_HANDLES.clear()
+    _reset_loop_registry(app_modul)
 
     entered = Event()
     release = Event()
@@ -227,8 +238,7 @@ def test_pause_resume_loop_control(
     docs_dir.mkdir(parents=True)
     (docs_dir / "STATUS.md").write_text("# pause/resume test\n", encoding="utf-8")
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
-    app_modul._LAUFENDE_LOOPS.clear()
-    app_modul._LOOP_LOG_HANDLES.clear()
+    _reset_loop_registry(app_modul)
     app_modul._LOOP_RUN_IDS.clear()
     app_modul._PAUSIERTE_LOOPS.clear()
 
