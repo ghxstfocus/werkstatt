@@ -1,19 +1,19 @@
-"""M-Arch-Reasoner (2026-11-02): Architect nutzt deepseek-reasoner."""
+"""M-Arch-Reasoner: Architect nutzt deepseek-v4-pro."""
 import importlib
 
 
-def test_architect_model_default_ist_reasoner(monkeypatch):
+def test_architect_model_default_ist_v4_pro(monkeypatch):
     monkeypatch.delenv("WERKSTATT_ARCHITECT_MODEL", raising=False)
     import werkstatt.planner as p
     importlib.reload(p)
-    assert p._ARCHITECT_MODEL == "deepseek-reasoner"
+    assert p._ARCHITECT_MODEL == "deepseek-v4-pro"
 
 
-def test_architect_model_env_override_auf_chat(monkeypatch):
-    monkeypatch.setenv("WERKSTATT_ARCHITECT_MODEL", "deepseek-chat")
+def test_architect_model_env_override(monkeypatch):
+    monkeypatch.setenv("WERKSTATT_MODEL_ARCHITECT", "deepseek-v4-pro")
     import werkstatt.planner as p
     importlib.reload(p)
-    assert p._ARCHITECT_MODEL == "deepseek-chat"
+    assert p._ARCHITECT_MODEL == "deepseek-v4-pro"
     # Cleanup: nach Test wieder reload ohne env
     monkeypatch.delenv("WERKSTATT_ARCHITECT_MODEL", raising=False)
     importlib.reload(p)
