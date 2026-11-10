@@ -30,6 +30,7 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
 
     def _accepted(*args: Any, **kwargs: Any) -> dict[str, Any]:
         assert kwargs["db_path"].name == "demo.db"
+        assert isinstance(kwargs["context_seq"], int)
         return {
             "job": {"job_id": "a" * 32, "state": "queued"},
             "created": True,
