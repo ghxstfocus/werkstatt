@@ -99,6 +99,9 @@ def test_run_job_uses_snapshot_and_merges_completed_turn_once(
     assert gesehen == [(
         job["job_id"], ["Vorherige Frage", "Vorherige Antwort"],
     )]
+    assert chat_session.ChatSession(
+        "demo", job["job_id"],
+    ).load() == []
     merged = parent.load()
     job_turns = [event for event in merged if event["kind"] == "job_turn"]
     assert len(job_turns) == 1
