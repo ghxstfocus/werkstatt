@@ -48,10 +48,23 @@ def select_next_op(status_text: str) -> dict[str, Any]:
             "status_anzahl": len(statuses),
         })
 
-    by_id = {op["id"]: op for op in ops}
+    id_counts: dict[str, int] = {}
+    for op in ops:
+        id_counts[op["id"]] = id_counts.get(op["id"], 0) + 1
+    by_id = {
+        op["id"]: op for op in ops
+        if id_counts[op["id"]] == 1
+    }
     candidates: list[dict[str, Any]] = []
     excluded: list[dict[str, Any]] = []
     for op in ops:
+        if id_counts[op["id"]] > 1:
+            excluded.append({
+                "id": op["id"],
+                "titel": op["titel"],
+                "gruende": ["OP-ID kommt mehrfach in STATUS.md vor"],
+            })
+            continue
         if op["status"] != "open":
             if op["status"] == "conflict":
                 excluded.append({
