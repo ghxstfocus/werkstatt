@@ -244,6 +244,14 @@ def _dispatch_pending(
             )
 
 
+def resume_chat_jobs(
+    project: str, project_dir: Path, *, db_path: Path | None = None,
+) -> None:
+    """Re-dispatch queued jobs after a server restart or client reconnect."""
+    path = Path(db_path) if db_path else _db_path(project)
+    _dispatch_pending(path, project, Path(project_dir))
+
+
 def enqueue_chat_job(
     project: str,
     project_dir: Path,
