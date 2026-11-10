@@ -4553,3 +4553,25 @@ Die AST-Pruefung parst nun alle Python-Quellen im Repository ausser virtuellen U
 Auf `/opt/werkstatt` wurde `9c505cb` getestet: gezielt 50 Tests bestanden, Ruff ohne Fehler, Gesamtsuite 1885 passed / 5 skipped. `doku_check --strict --limit 10 --worktree` erkannte die bereits in dieser Datei referenzierten Code-Commits fuer den OP-398- und Quality-Gate-Fix; uebrig blieb der Working-Tree-Drift fuer lokale Aenderungen an `werkstatt/web/audit_panel.py` und `werkstatt/web/terminal_proxy.py`. `tools.quality_gate --json` lief ebenfalls erfolgreich: 1885 passed / 0 failed, Ruff 0, Mypy 0, AST 369 Dateien / 0 Fehler und Audit-Katalog 1 passed / 0 Fehler; `ok: true`, `regression: false`.
 
 - **Commit:** `9c505cbc9e521fc20a99d5def5a6ce45dd03a232`
+
+
+### OP-397 — Session-Queue bleibt nach verlorenem Worker-Claim nicht haengen (2026-11-10)
+
+Die Dispatch-Pruefung fand ein Timing-Rennen: Ein Session-Job konnte bereits
+laufen, waehrend ein spaeter eingereihter Worker seinen Claim verlor. Wenn der
+laufende Worker genau waehrend des Future-Cleanup den naechsten Job dispatchte,
+sah er noch den nicht abgeschlossenen Future und uebersprang den Job. Nach
+dessen Cleanup gab es keinen weiteren Dispatch-Ausloeser; der Job blieb
+dauerhaft `queued`.
+
+Der Dispatcher ueberspringt jetzt Sessions mit einem aktiven Job. Ein Future,
+dessen Worker den Claim verloren hat, loest nach seinem Cleanup einen erneuten
+Dispatch aus. So wird der Retry nicht ausgefuehrt, solange die Session noch
+belegt ist, und ein spaeterer Queue-Eintrag bleibt nach dem Claim-Rennen nicht
+liegen.
+
+- **Implementierung:** `11cc1cb2ea1e5f9ff6a42b09c018e3b8eb8e9d21`,
+  `f523e4c3ecef044948cd2934c8ed57cb16b5f1c1`.
+- **Regressionstests:** `f3bf56c58545fbf8be0672e0a935ae36eac89607`
+  prueft aktive Sessions sowie erneuten Dispatch nach Claim-Verlust.
+- **Serververifikation:** nach Pull noch ausstehend.
