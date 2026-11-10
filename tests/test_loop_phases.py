@@ -167,8 +167,8 @@ def test_phase_reflection_approved(tmp_path):
     assert len(_kind(tmp_path, "loop_phase_reflection_approved")) == 1
 
 
-def test_phase_reflection_erschoepft(tmp_path):
-    """2 Runden ohne Besserung -> False + erschoepft-Audit."""
+def test_phase_reflection_last_explicit_approval_accepts_remaining_review_findings(tmp_path):
+    """Nach zwei Rejects kann der Mensch die verbleibenden Patches explizit übernehmen."""
     s = _state(tmp_path)
     s.reviewer_bugs = [{"file": "a.py", "description": "x",
                         "severity": "high"}]
@@ -178,9 +178,9 @@ def test_phase_reflection_erschoepft(tmp_path):
          patch("werkstatt.loop._verify_patches", return_value=True), \
          patch("werkstatt.reviewer.run_phase_end_review",
                return_value=False), \
-         patch("werkstatt.phases.review._phase_review_gate", return_value=0):
-        assert loop._phase_end_reflection(s) is False
-    assert len(_kind(tmp_path, "loop_phase_reflection_erschoepft")) == 1
+         patch("werkstatt.phases.review._phase_review_gate", return_value=0) as gate:
+        assert loop._phase_end_reflection(s) is True
+    assert gate.call_count == 2
 
 
 
