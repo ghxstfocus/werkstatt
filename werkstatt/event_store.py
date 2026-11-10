@@ -93,7 +93,7 @@ class EventStore:
                 )
                 seq = int(cur.lastrowid or 0)
             else:
-                cur = conn.execute(
+                conn.execute(
                     "INSERT OR IGNORE INTO events "
                     "(run_id, kind, phase, status, payload, ts, event_id, project) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
