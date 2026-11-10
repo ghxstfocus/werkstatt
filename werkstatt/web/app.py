@@ -9,6 +9,7 @@ import asyncio
 import os
 import re
 import signal
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -23,6 +24,7 @@ from werkstatt.event_store import EventStore
 from werkstatt.phase_state import PhaseState
 from werkstatt.validierung import pruefe_ref as _pruefe_ref_kern
 from werkstatt.web import audit_panel, auth, terminal_proxy, ws
+from werkstatt.web.op_selector import select_next_op
 
 __all__ = ["app", "create_app"]
 
@@ -462,8 +464,10 @@ def create_app() -> FastAPI:
         if body and isinstance(body, dict):
             op_id = str(body.get("op_id") or "").strip()
             aufgabe = str(body.get("aufgabe") or "").strip()
+        if aufgabe:
+            op_id = ""
 
-        if op_id:
+        if op_id and not aufgabe:
             if not re.fullmatch(r"OP-\d+[a-z]?", op_id):
                 raise HTTPException(status_code=400, detail="ungueltige op_id")
             from werkstatt.web import inspector as _insp
@@ -474,10 +478,36 @@ def create_app() -> FastAPI:
             if auswahl.get("status") != "open":
                 raise HTTPException(status_code=409, detail="OP ist nicht als offen markiert")
             if auswahl.get("blockiert_von"):
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"OP ist blockiert von {auswahl['blockiert_von']}",
+                _status_md = _pd / "docs" / "STATUS.md"
+                try:
+                    _status_text = _status_md.read_text(
+                        encoding="utf-8", errors="replace",
+                    )
+                except OSError as exc:
+                    raise HTTPException(
+                        status_code=500, detail="STATUS.md nicht lesbar",
+                    ) from exc
+                _entscheidung = select_next_op(_status_text)
+                _ausgeschlossen = next(
+                    (
+                        item for item in _entscheidung["ausgeschlossen"]
+                        if item.get("id") == op_id
+                    ),
+                    {},
                 )
+                _blocker_grund = [
+                    grund for grund in _ausgeschlossen.get("gruende", [])
+                    if (
+                        "Abhaengigkeiten" in grund
+                        or "Blocker-Angabe" in grund
+                        or "Status fehlt" in grund
+                    )
+                ]
+                if _blocker_grund:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="; ".join(_blocker_grund),
+                    )
 
             if not aufgabe:
                 # Volltext aus STATUS.md (nicht nur Titel): der Explorer
@@ -496,6 +526,39 @@ def create_app() -> FastAPI:
                 if not _m_op:
                     raise HTTPException(status_code=404, detail="OP-Text nicht gefunden")
                 aufgabe = _m_op.group(0).strip()
+
+        autonome_auswahl: dict[str, Any] | None = None
+        if not aufgabe and not op_id:
+            try:
+                status_text = (_pd / "docs" / "STATUS.md").read_text(
+                    encoding="utf-8", errors="replace",
+                )
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=500, detail="STATUS.md nicht lesbar",
+                ) from exc
+            entscheidung = select_next_op(status_text)
+            if entscheidung["zustand"] == "needs_input":
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "autonomy_selection_required",
+                        "message": entscheidung["begruendung"],
+                        "kandidaten": entscheidung["kandidaten"],
+                    },
+                )
+            if entscheidung["zustand"] != "selected":
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "no_ready_op",
+                        "message": entscheidung["begruendung"],
+                        "ausgeschlossen": entscheidung["ausgeschlossen"],
+                    },
+                )
+            autonome_auswahl = entscheidung["auswahl"]
+            aufgabe = entscheidung["aufgabe"]
+            op_id = autonome_auswahl["id"]
 
         if not aufgabe:
             raise HTTPException(
@@ -538,6 +601,27 @@ def create_app() -> FastAPI:
                     "run_id": record.get("run_id") if record else None,
                     "grund": "laeuft_bereits",
                 }
+
+            if autonome_auswahl:
+                try:
+                    EventStore().append(
+                        run_id, "web_op_selected", status="selected",
+                        payload={
+                            "project": projektname,
+                            "op_id": autonome_auswahl["id"],
+                            "reason": autonome_auswahl["gruende"],
+                            "priority": autonome_auswahl["prioritaet"],
+                            "risk": autonome_auswahl["risiko"],
+                            "project_goal_relevance": autonome_auswahl["projektziel_relevanz"],
+                            "verification": autonome_auswahl["verifikation"],
+                        },
+                    )
+                except (OSError, RuntimeError, ValueError, sqlite3.Error) as exc:
+                    registry.set_state(projektname, run_id, "idle")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Autonome Auswahl konnte nicht auditiert werden: {exc}",
+                    ) from exc
 
             # Log-File pro Run, stdout/stderr umleiten (sonst sind
             # Loop-Crashes unsichtbar). Handle bis zum Stop/Exit halten.
@@ -588,7 +672,9 @@ def create_app() -> FastAPI:
                 "gestartet": True,
                 "pid": prozess.pid,
                 "run_id": run_id,
-                "aufgabe": aufgabe or "(automatisch aus STATUS.md)",
+                "aufgabe": aufgabe,
+                "op_id": op_id or None,
+                "auswahl": autonome_auswahl,
             }
 
     @app.get("/api/projects/{name}/loop")
