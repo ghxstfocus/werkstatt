@@ -1,4 +1,5 @@
 """Frontend-Vertrag fuer sichere, lesbare Chat-Markdown-Ausgabe."""
+import re
 from pathlib import Path
 
 
