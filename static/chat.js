@@ -627,12 +627,18 @@
           bekannteIds[ev.payload.job_id] = true;
         }
       });
+      var aktiveJobs = 0;
       (data.jobs || []).forEach(function (item) {
         var job = _neuerJobState(projekt, sid, item.job_id, item.message, request);
         if (!bekannteIds[item.job_id]) _karte("user", item.message || "");
+        if (item.state === "failed") {
+          _jobFertig(job, "failed", "", item.error || "Auftrag wurde unterbrochen.");
+          return;
+        }
+        aktiveJobs += 1;
         _pollChatJob(job, job.pollToken);
       });
-      if ((data.jobs || []).length) {
+      if (aktiveJobs) {
         _setzeChatStatus("Aktiver Auftrag wieder verbunden.", "working");
       }
     }).catch(function () {});
