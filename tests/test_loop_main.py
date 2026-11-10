@@ -296,15 +296,11 @@ def test_hook_blocked_ueberspringt_apply_loop(tmp_path, monkeypatch):
 # =====================================================================
 
 
-def test_main_kaputte_config_kein_unbound_local_error(tmp_path, monkeypatch):
-    """Bug A (OP-392): kaputte Config -> kein UnboundLocalError.
-
-    Reproduziert: _load_cfg wirft ValueError (kein SystemExit),
-    ``except Exception: pass`` schluckt es, _full_cfg wird nie
-    zugewiesen, danach ``if _full_cfg else {}`` -> UnboundLocalError.
-    """
+def test_main_kaputte_config_fail_closed_und_auditiert(tmp_path, monkeypatch):
+    """Pflichtdoku-/Config-Ladefehler stoppen den Loop sichtbar."""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     cfg = _base_config(tmp_path)
+    loop_aufrufe: list = []
 
     def _boom(name):
         raise ValueError("kaputte YAML")
@@ -314,12 +310,20 @@ def test_main_kaputte_config_kein_unbound_local_error(tmp_path, monkeypatch):
          patch("werkstatt.orchestrator.load_project_config", _boom), \
          patch("werkstatt.orchestrator.load_docs", return_value={}), \
          patch("werkstatt.loop.load_env", return_value=None), \
-         patch("werkstatt.loop.run_pipeline_loop", _loop_runner(1, 0)), \
+         patch(
+             "werkstatt.loop.run_pipeline_loop",
+             _loop_runner(1, 0, loop_aufrufe),
+         ), \
          patch("werkstatt.loop._git_head", return_value="abc"), \
          patch("werkstatt.loop._git_dirty", return_value=False):
         rc = loop.main(["--project", "p", "--aufgabe", "a"])
-    assert rc == 0
 
+    assert rc == 1
+    assert loop_aufrufe == []
+    assert any(
+        event.get("kind") == "loop_docs_load_failed"
+        for event in _audit_events(tmp_path)
+    )
 
 def test_main_stash_pop_bei_exception(tmp_path, monkeypatch):
     """Bug B (OP-392): Exception in run_pipeline_loop -> Stash trotzdem gepoppt.
