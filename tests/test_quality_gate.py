@@ -77,3 +77,32 @@ def test_gate_passed_unter_baseline_macht_rot(tmp_path):
 
     assert result["delta"]["pytest"] == 1
     assert result["ok"] is False
+
+def test_quality_gate_reports_mypy_diagnostic(tmp_path):
+    diagnostic = (
+        "werkstatt/example.py:12: error: type mismatch [arg-type]\n"
+        "Found 1 error in 1 file (checked 2 source files)"
+    )
+
+    def mock_run(cmd, cwd, env=None):
+        command = " ".join(str(part) for part in cmd)
+        if "test_audit_kinds" in command:
+            return 0, "6 passed in 0.1s"
+        if command.startswith("pytest"):
+            return 0, _pytest_out(_BASE)
+        if "ruff" in command:
+            return 0, "All checks passed!"
+        if "mypy" in command:
+            return 1, diagnostic
+        return 0, ""
+
+    (tmp_path / "pipeline.py").write_text("_KATALOG_SOLL = 0\\n")
+    with patch.object(quality_gate, "_run", side_effect=mock_run):
+        result = quality_gate.check_all(tmp_path)
+
+    mypy = result["current"]["mypy"]
+    assert mypy["errors"] == 1
+    assert mypy["exit_code"] == 1
+    assert mypy["diagnostic"] == diagnostic
+    assert result["regression"] is True
+
