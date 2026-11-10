@@ -4374,3 +4374,20 @@ Lesefehler ab.
 - **Loop:** `d0ca7e1a2e44` — Fehler als Event/Status melden und abbrechen.
 - **Tests:** `dc177d1d9f5e`, `ab4cbe4f15bf`.
 - **Serververifikation:** nach Pull noch ausstehend.
+
+
+### OP-397 — parallele Chat-Arbeit und sichere Run-Aenderungen praezisieren (2026-11-10)
+
+Die Nutzeranforderung, waehrend eines langen Runs weiter Fragen zu stellen und
+neue Arbeit einzureichen, wurde gegen ADR-0029 abgeglichen. Die bestehende
+Architektur hat getrennte HTTP-/Loop-Prozesse, aber OP-397 spezifizierte noch
+nicht, wie neue Auftraege mit einem bereits freigegebenen Plan konkurrieren.
+STATUS legt jetzt ein Betriebsmodell fest: lesende Jobs parallel, neue
+Schreibarbeit in einer persistenten Projekt-Inbox, ein exklusiver Schreibslot
+pro Projekt und Plan-Aenderungen nur als versionierte Revision am sicheren
+Checkpoint mit erneutem Plan-Gate. Ein Reject darf den freigegebenen Plan und
+Working Tree nicht veraendern.
+
+- **Commit:** `feb496d7c55a` — Inbox-, Job- und Checkpoint-Vertrag.
+- **Implementierung:** noch offen in OP-397; Serververifikation der Doku
+  ausstehend.
