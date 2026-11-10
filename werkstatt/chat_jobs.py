@@ -11,11 +11,11 @@ import os
 import sqlite3
 import threading
 import uuid
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from collections.abc import Callable
 from typing import Any
 
 from werkstatt.paths import werkstatt_home
