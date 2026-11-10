@@ -91,6 +91,7 @@ def _deepseek_chat_stream(
     content_acc = ""
     tool_calls_acc: dict[int, dict[str, Any]] = {}
     usage_acc: dict[str, Any] | None = None
+    _provider_model = _route.model
     with requests.post(
         _DEEPSEEK_URL,
         json=body,
@@ -111,6 +112,8 @@ def _deepseek_chat_stream(
                 obj = json.loads(data)
             except json.JSONDecodeError:
                 continue
+            if obj.get("model"):
+                _provider_model = str(obj["model"])
             _u = obj.get("usage")
             if isinstance(_u, dict) and _u.get("total_tokens"):
                 usage_acc = {
@@ -118,6 +121,7 @@ def _deepseek_chat_stream(
                     "completion_tokens": int(_u.get("completion_tokens", 0) or 0),
                     "total_tokens": int(_u.get("total_tokens", 0) or 0),
                     "model": _route.model,
+                    "provider_model": _provider_model,
                 }
             choices = obj.get("choices") or []
             if not choices:
