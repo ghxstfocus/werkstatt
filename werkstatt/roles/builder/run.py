@@ -126,22 +126,31 @@ def _build_patches_fuer_datei(
             f"Der letzte Patch wurde verworfen. Grund:\n{_feedback}\n"
             f"Behebe das in dieser Antwort.\n"
         )
-    # M-466: Reviewer-Bugs aus letzter Runde in den Prompt.
+    # OP-386: Nur HIGH/critical-Bugs sind Reparatur-Signale.
+    # Medium/low-Befunde bleiben im Audit, erzeugen aber keinen
+    # zusaetzlichen Prompt-Druck.
     _reviewer_bugs = state.reviewer_bugs or []
     if _reviewer_bugs:
         _bug_lines = []
         for _b in _reviewer_bugs:
             if not isinstance(_b, dict):
                 continue
-            _sev = _b.get("severity", "?")
-            _desc = _b.get("description", "")
+            _sev = str(_b.get("severity", "")).strip()
+            if _sev.upper() not in {"HIGH", "CRITICAL"}:
+                continue
+            _desc = _b.get("description") or _b.get("beschreibung") or ""
             if _desc:
                 _bug_lines.append(f"- [{_sev}] {_desc}")
         if _bug_lines:
             _feedback_block += (
-                "\n\n## REVIEWER-FEEDBACK (aus letzter Runde):\n"
+                "\n\n## REVIEWER-FEEDBACK (HIGH/critical, letzte Runde):\n"
                 + "\n".join(_bug_lines)
                 + "\nBehebe diese Bugs in dieser Antwort.\n"
+            )
+        else:
+            _feedback_block += (
+                "\n\n## REVIEWER-FEEDBACK:\n"
+                "Keine HIGH-/critical-Reviewer-Bugs fuer diese Runde.\n"
             )
     # K33: Verify-Fehler (Ruff/Compile) aus letzter Runde als Feedback.
     _verify_errs = state.last_verify_errors or []
