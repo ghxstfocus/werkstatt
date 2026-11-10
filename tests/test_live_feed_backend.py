@@ -170,6 +170,13 @@ def test_chat_job_events_join_project_live_feed(projektion, tmp_path):
             "agent": "agent_pipeline",
         },
     ])
+    _schreibe(tmp_path, [{
+        "kind": "chat_job_started", "run_id": "r-chat",
+        "project": "demo", "timestamp": jetzt.isoformat(),
+        "agent": "agent_pipeline",
+        "payload": {"job_id": "job-1", "session_id": "session-1",
+                    "job_event_seq": 1, "status": "running"},
+    }])
     store = _es.EventStore()
     store.append(
         "r-chat", "chat_job_started", "chat", "running",
@@ -187,6 +194,10 @@ def test_chat_job_events_join_project_live_feed(projektion, tmp_path):
     assert aktiv["kind"] == "chat_job_started"
     assert aktiv["rolle"] == "chat"
     assert aktiv["aktion"] == "Projekt wird geprueft"
+    assert sum(
+        1 for item in [*feed["steps"], aktiv]
+        if item.get("kind") == "chat_job_started"
+    ) == 1
     assert not any(
         step["kind"] == "chat_job_failed" for step in feed["steps"]
     )

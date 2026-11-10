@@ -107,6 +107,11 @@ class ChatJobStore:
                     "ALTER TABLE job_events ADD COLUMN projected INTEGER "
                     "NOT NULL DEFAULT 0"
                 )
+            if "audited" not in event_columns:
+                conn.execute(
+                    "ALTER TABLE job_events ADD COLUMN audited INTEGER "
+                    "NOT NULL DEFAULT 0"
+                )
             conn.commit()
 
     def create(
@@ -332,12 +337,27 @@ class ChatJobStore:
         self, session_id: str | None = None, *,
         job_id: str | None = None, limit: int = 500,
     ) -> int:
-        """Projeziert Run-gebundene Job-Events idempotent in die Loop-Timeline."""
+        """Projiziert Run-gebundene Job-Events idempotent aus SQLite nach JSONL."""
+        from werkstatt.audit import audit
+        from werkstatt.projection import Projector
+
+        projector = Projector()
+        try:
+            projector.tail()
+            with closing(self._connect()) as conn:
+                conn.execute(
+                    "UPDATE job_events SET projected=1 "
+                    "WHERE audited=1 AND projected=0"
+                )
+                conn.commit()
+        except (OSError, sqlite3.Error, ValueError):
+            pass
+
         sql = (
             "SELECT e.seq,e.job_id,e.kind,e.payload,e.ts,"
             "j.project,j.session_id,j.run_id "
             "FROM job_events e JOIN jobs j ON j.job_id=e.job_id "
-            "WHERE e.projected=0 AND j.project IS NOT NULL AND j.run_id IS NOT NULL"
+            "WHERE e.audited=0 AND j.project IS NOT NULL AND j.run_id IS NOT NULL"
         )
         params: list[Any] = []
         if session_id is not None:
@@ -353,13 +373,7 @@ class ChatJobStore:
         if not rows:
             return 0
 
-        from werkstatt.event_store import EventStore
-
-        try:
-            events = EventStore()
-        except (OSError, sqlite3.Error):
-            return 0
-        projected = 0
+        audited = 0
         statuses = {
             "queued": "queued",
             "started": "running",
@@ -367,43 +381,48 @@ class ChatJobStore:
             "failed": "failed",
             "cancelled": "cancelled",
             "cancel_requested": "running",
+            "branch_cleanup_failed": "failed",
         }
         for row in rows:
-            try:
-                payload = json.loads(row["payload"])
-            except json.JSONDecodeError:
-                payload = {}
             event_id = f"chat-job:{row['job_id']}:{row['seq']}"
+            # The JSONL timeline is git-visible. Persist lifecycle metadata,
+            # never prompts, assistant text, tool arguments, or tool results.
             event_payload = {
                 "job_id": row["job_id"],
                 "session_id": row["session_id"],
-                "run_id": row["run_id"],
                 "job_event_seq": row["seq"],
                 "job_event_kind": row["kind"],
-                **(payload if isinstance(payload, dict) else {}),
+                "status": statuses.get(str(row["kind"]), "running"),
             }
             try:
-                events.append(
-                    str(row["run_id"]),
+                written = audit(
                     f"chat_job_{row['kind']}",
-                    "chat",
-                    statuses.get(str(row["kind"]), "running"),
                     event_payload,
+                    Path("."),
+                    str(row["project"]),
+                    run_id=str(row["run_id"]),
                     event_id=event_id,
-                    project=str(row["project"]),
                 )
-                with closing(self._connect()) as conn:
-                    conn.execute(
-                        "UPDATE job_events SET projected=1 "
-                        "WHERE job_id=? AND seq=?",
-                        (row["job_id"], row["seq"]),
-                    )
-                    conn.commit()
-                projected += 1
-            except (OSError, sqlite3.Error, TypeError, ValueError):
-                # Keep the source event pending; next API replay retries it.
+                if not written:
+                    break
+            except (OSError, TypeError, ValueError):
                 break
-        return projected
+
+            read_model_ok = False
+            try:
+                projector.tail()
+                read_model_ok = True
+            except (OSError, sqlite3.Error, ValueError):
+                pass
+            with closing(self._connect()) as conn:
+                conn.execute(
+                    "UPDATE job_events SET audited=1,projected=? "
+                    "WHERE job_id=? AND seq=?",
+                    (int(read_model_ok), row["job_id"], row["seq"]),
+                )
+                conn.commit()
+            audited += 1
+        return audited
 
     def finish(
         self, job_id: str, *, answer: str | None = None,

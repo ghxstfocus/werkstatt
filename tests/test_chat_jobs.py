@@ -381,7 +381,7 @@ def test_store_migrates_existing_jobs_table_for_worker_leases(
         "run_id",
     } <= columns
     assert context_seq is None
-    assert "projected" in event_columns
+    assert {"projected", "audited"} <= event_columns
 
 def test_queued_job_can_be_cancelled_once(tmp_path: Path) -> None:
     store = ChatJobStore(tmp_path / "jobs.db")
@@ -447,9 +447,11 @@ def test_job_events_are_projected_to_timeline_exactly_once(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from werkstatt import event_store
+    from werkstatt import audit as audit_mod, event_store, projection
 
+    monkeypatch.setattr(audit_mod, "_werkstatt_home", lambda: tmp_path)
     monkeypatch.setattr(event_store, "werkstatt_home", lambda: tmp_path)
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
     store = ChatJobStore(tmp_path / "chat-jobs.db")
     job, _ = store.create(
         "session-a", "Frage", "read", "request-key-timeline-001",
@@ -469,5 +471,12 @@ def test_job_events_are_projected_to_timeline_exactly_once(
     assert event["payload"]["job_id"] == job["job_id"]
     assert event["payload"]["session_id"] == "session-a"
     assert event["payload"]["job_event_kind"] == "queued"
+    assert "Frage" not in str(event["payload"])
+    assert store.project_pending_events() == 0
+    projector = event_store.Projector()
+    projector.rebuild()
+    rebuilt = timeline.query("run-a", project="demo")
+    assert len(rebuilt) == 1
+    assert rebuilt[0]["event_id"] == event["event_id"]
 
 

@@ -340,6 +340,33 @@ class AuthMiddleware:
         return await response(scope, receive, send)
 
 
+def _audit_web_loop_event(
+    projektname: str,
+    run_id: str,
+    kind: str,
+    status: str,
+    payload: dict[str, Any],
+) -> bool:
+    """Schreibt ein projektbezogenes Control-Event in JSONL und projiziert es."""
+    from werkstatt.audit import audit
+    from werkstatt.projection import Projector
+
+    try:
+        geschrieben = audit(
+            kind, {**payload, "status": status},
+            _PROJECTS_BASE / projektname, projektname, run_id=run_id,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return False
+    if not geschrieben:
+        return False
+    try:
+        Projector().tail()
+    except (OSError, RuntimeError, sqlite3.Error, ValueError):
+        pass
+    return True
+
+
 def create_app() -> FastAPI:
     """Erzeugt und konfiguriert die FastAPI-Anwendung."""
     app = FastAPI(title="Werkstatt")
@@ -632,26 +659,23 @@ def create_app() -> FastAPI:
                 }
 
             if autonome_auswahl:
-                try:
-                    EventStore().append(
-                        run_id, "web_op_selected", status="selected",
-                        payload={
-                            "project": projektname,
-                            "op_id": autonome_auswahl["id"],
-                            "reason": autonome_auswahl["gruende"],
-                            "priority": autonome_auswahl["prioritaet"],
-                            "risk": autonome_auswahl["risiko"],
-                            "project_goal_relevance": autonome_auswahl["projektziel_relevanz"],
-                            "verification": autonome_auswahl["verifikation"],
-                        },
-                        project=projektname,
-                    )
-                except (OSError, RuntimeError, ValueError, sqlite3.Error) as exc:
+                geschrieben = _audit_web_loop_event(
+                    projektname, run_id, "web_op_selected", "selected",
+                    {
+                        "op_id": autonome_auswahl["id"],
+                        "reason": autonome_auswahl["gruende"],
+                        "priority": autonome_auswahl["prioritaet"],
+                        "risk": autonome_auswahl["risiko"],
+                        "project_goal_relevance": autonome_auswahl["projektziel_relevanz"],
+                        "verification": autonome_auswahl["verifikation"],
+                    },
+                )
+                if not geschrieben:
                     registry.set_state(projektname, run_id, "idle")
                     raise HTTPException(
                         status_code=500,
-                        detail=f"Autonome Auswahl konnte nicht auditiert werden: {exc}",
-                    ) from exc
+                        detail="Autonome Auswahl konnte nicht auditiert werden",
+                    )
 
             # Log-File pro Run, stdout/stderr umleiten (sonst sind
             # Loop-Crashes unsichtbar). Handle bis zum Stop/Exit halten.
@@ -733,15 +757,9 @@ def create_app() -> FastAPI:
         run_id = _LOOP_RUN_IDS.get(projektname)
         if not run_id:
             return False
-        try:
-            EventStore().append(
-                run_id, kind, status=status,
-                payload={"project": projektname, "pid": prozess.pid},
-                project=projektname,
-            )
-        except Exception:
-            return False
-        return True
+        return _audit_web_loop_event(
+            projektname, run_id, kind, status, {"pid": prozess.pid},
+        )
 
     @app.post("/api/projects/{name}/pause")
     def project_pause(name: str) -> dict[str, Any]:
@@ -848,14 +866,10 @@ def create_app() -> FastAPI:
             audit_ok = False
             if run_id:
                 try:
-                    EventStore().append(
-                        run_id, "web_loop_stopped", status="stopped",
-                        payload={"project": projektname, "pid": prozess.pid},
-                        project=projektname,
+                    audit_ok = _audit_web_loop_event(
+                        projektname, run_id, "web_loop_stopped", "stopped",
+                        {"pid": prozess.pid},
                     )
-                    audit_ok = True
-                except Exception:
-                    pass
             _loop_registry().set_state(projektname, run_id, "idle")
             _LAUFENDE_LOOPS.pop(projektname, None)
             _LOOP_RUN_IDS.pop(projektname, None)

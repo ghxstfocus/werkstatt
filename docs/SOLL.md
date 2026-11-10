@@ -663,7 +663,10 @@ Tiered Event Log als Write Model + SQLite als rebuildbare
 Projektion. `audit()` schreibt semantische Events nach
 `audit-logs/semantic-*.jsonl`, `stream()` schreibt hochfrequente
 Events nach `audit-logs/stream-*.jsonl`. `werkstatt/projection.py::
-Projector` rekonstruiert SQLite deterministisch aus JSONL.
+Projector` rekonstruiert SQLite deterministisch aus JSONL. Web-Control-
+und Chat-Job-Events werden zuerst dauerhaft in Semantic-JSONL geschrieben;
+stabile Chat-Event-IDs bewahren sie bei einem Rebuild; Prompts, Antworten
+und Tool-Inhalte werden dabei nicht in git-sichtbares Audit geschrieben.
 Single-Writer-Regel: `EventStore().append()` aus Production
 verbannt. Health-Check `/api/projects/{name}/projection/status`.
 Details: ADR-0024, `docs/ARCHITECTURE.md` §8.

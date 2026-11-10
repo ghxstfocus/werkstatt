@@ -4691,3 +4691,10 @@ Der Event-Store kann Events jetzt mit Projektbezug und deterministischer Event-I
 - Verifikation auf dem Server nach Pull steht aus.
 
 - **Mehrprojekt-Audit:** Web-Auswahl-, Pause-, Resume- und Stop-Events erhalten nun auch die Event-Store-Projektspalte. Payload-Projekt allein reichte fuer projektgefilterte Timeline-Abfragen nicht; Tests pruefen den Projektbezug.
+
+
+## ADR-0024 Event-Store Single-Writer Korrektur (2026-11-11)
+
+- Web-Control- und Chat-Job-Ereignisse werden dauerhaft in Semantic-JSONL geschrieben; SQLite wird nur noch durch den Projektor beschrieben.
+- Job-Events nutzen stabile Event-IDs und eine Outbox-Migration, sodass ein Read-Model-Rebuild sie wiederherstellt. Live-Feed dedupliziert JSONL- und Read-Model-Kopien.
+- Tests und Dokumentation ergänzt. Serververifikation nach Pull steht aus.

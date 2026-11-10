@@ -339,13 +339,13 @@ def test_pause_resume_loop_control(
         app_modul.os, "killpg",
         lambda pgid, sig: signale.append((pgid, sig)),
     )
-    audit_events: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    audit_events: list[tuple[Any, ...]] = []
 
-    class _FakeEventStore:
-        def append(self, *args: Any, **kwargs: Any) -> None:
-            audit_events.append((args, kwargs))
+    def _capture_audit(project: str, run_id: str, kind: str, status: str, payload: dict[str, Any]) -> bool:
+        audit_events.append((project, run_id, kind, status, payload))
+        return True
 
-    monkeypatch.setattr(app_modul, "EventStore", _FakeEventStore)
+    monkeypatch.setattr(app_modul, "_audit_web_loop_event", _capture_audit)
 
     client = TestClient(app_modul.app)
     gestartet = client.post(
@@ -373,10 +373,10 @@ def test_pause_resume_loop_control(
     assert stop.json()["gestoppt"] is True
     assert stop.json()["audit_event"] is True
     assert signale[-1] == (pid, signal.SIGTERM)
-    assert [event[0][1] for event in audit_events] == [
+    assert [event[2] for event in audit_events] == [
         "web_loop_paused", "web_loop_resumed", "web_loop_stopped",
     ]
-    assert [event[1]["project"] for event in audit_events] == ["demo"] * 3
+    assert [event[0] for event in audit_events] == ["demo"] * 3
     assert "demo" not in app_modul._LAUFENDE_LOOPS
 
 
@@ -532,13 +532,13 @@ def test_start_waehlt_einzige_pruefbare_offene_op(
     )
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
     _reset_loop_registry(app_modul)
-    audit_events: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    audit_events: list[tuple[Any, ...]] = []
 
-    class _CapturingEventStore:
-        def append(self, *args: Any, **kwargs: Any) -> None:
-            audit_events.append((args, kwargs))
+    def _capture_audit(project: str, run_id: str, kind: str, status: str, payload: dict[str, Any]) -> bool:
+        audit_events.append((project, run_id, kind, status, payload))
+        return True
 
-    monkeypatch.setattr(app_modul, "EventStore", _CapturingEventStore)
+    monkeypatch.setattr(app_modul, "_audit_web_loop_event", _capture_audit)
     aufrufe: list[list[str]] = []
     monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
     client = TestClient(app_modul.app)
@@ -547,9 +547,9 @@ def test_start_waehlt_einzige_pruefbare_offene_op(
 
     assert antwort.status_code == 200
     assert antwort.json()["op_id"] == "OP-101"
-    assert audit_events[0][0][1] == "web_op_selected"
-    assert audit_events[0][1]["payload"]["op_id"] == "OP-101"
-    assert audit_events[0][1]["project"] == "demo"
+    assert audit_events[0][0] == "demo"
+    assert audit_events[0][2] == "web_op_selected"
+    assert audit_events[0][4]["op_id"] == "OP-101"
     assert antwort.json()["auswahl"]["id"] == "OP-101"
     assert "### OP-101:" in antwort.json()["aufgabe"]
     assert aufrufe

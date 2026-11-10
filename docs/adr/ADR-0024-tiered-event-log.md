@@ -38,8 +38,18 @@ Kind geht in Semantic.
     stream(kind, payload)     Stream     -
     EventStore().append()     -          aus Production verbannt
 
-Beide bauen dasselbe JSON-Schema mit
-event_id = sha256(run_id + seq + kind + ts)[:16].
+Web-Control-Events schreiben ueber `audit()` in den Semantic-Stream.
+Chat-Job-Events bleiben zunaechst im Job-Store; der Projektor-Adapter
+spielt sie mit stabiler `event_id=chat-job:<job_id>:<seq>` in Semantic-JSONL
+aus. Der SQLite-Read-Model wird anschliessend ausschliesslich durch
+`Projector.tail()` aktualisiert. `rebuild()` muss beide Event-Familien
+vollstaendig wiederherstellen. Bereits vorhandene Job-Events werden durch
+eine idempotente Schema-Migration ebenfalls ausgespielt. Der Audit-Stream
+enthaelt nur Lifecycle-Metadaten, keine Prompts, Antworten oder Tool-Inhalte.
+
+Beide Writer liefern dasselbe JSON-Schema. Standard-Events bekommen eine
+aus `run_id` und `audit_id` abgeleitete ID; Replays aus einem Job-Store
+uebernehmen die persistierte, stabile `event_id`.
 
 ### 3. Read Model -- SQLite, rebuildbar
 

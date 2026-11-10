@@ -726,6 +726,7 @@ _TL_LABELS: dict[str, str] = {
     "chat_job_failed": "Chat-Auftrag fehlgeschlagen",
     "chat_job_cancelled": "Chat-Auftrag abgebrochen",
     "chat_job_cancel_requested": "Chat-Abbruch angefordert",
+    "chat_job_branch_cleanup_failed": "Chat-Arbeitszweig konnte nicht bereinigt werden",
     "explorer_messung": "Explorer: Messung",
     "explorer_messung_findings": "Explorer: Befunde",
     "explorer_result": "Explorer: Ergebnis",
@@ -862,6 +863,8 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
             return f"Tool: {str(payload.get('name') or 'unbekannt')[:80]}"
         if event_kind == "tool_result":
             return f"Ergebnis: {str(payload.get('content') or '')[:120]}"
+        if event_kind == "branch_cleanup_failed":
+            return "Chat-Job: Sitzungszweig konnte nicht bereinigt werden"
         if event_kind == "succeeded":
             return str(payload.get("answer") or "Antwort fertig")[:160]
         if event_kind == "failed":
@@ -1478,18 +1481,38 @@ def aggregate_live_feed(
         ).query(run_id, limit=1000, project=projekt)
     except (OSError, sqlite3.Error, ValueError):
         timeline = []
+    def _chat_event_key(event: dict[str, Any]) -> tuple[str, str, str] | None:
+        kind = str(event.get("kind", ""))
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            payload = {}
+        job = event.get("job_id") or payload.get("job_id")
+        seq = event.get("job_event_seq") or payload.get("job_event_seq")
+        if not kind.startswith("chat_job_") or not job or seq is None:
+            return None
+        return kind, str(job), str(seq)
+
+    chat_keys = {
+        key for event in events if (key := _chat_event_key(event)) is not None
+    }
     for ev in timeline:
         kind = str(ev.get("kind", ""))
         if not kind.startswith("chat_job_"):
             continue
-        events.append({
+        event = {
             "run_id": run_id,
             "kind": kind,
             "agent": "chat",
             "timestamp": ev.get("ts") or "",
             "status": ev.get("status"),
             "payload": ev.get("payload") or {},
-        })
+        }
+        key = _chat_event_key(event)
+        if key is not None and key in chat_keys:
+            continue
+        if key is not None:
+            chat_keys.add(key)
+        events.append(event)
     if not events:
         return {**leer, "run_id": run_id}
 

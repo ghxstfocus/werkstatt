@@ -255,8 +255,12 @@ Schema: `events(event_id UNIQUE, ...)` mit `INSERT ... ON CONFLICT
 IGNORE`. Checkpoint in `projection_state(key, value)`.
 
 **Kern-Regel:** SQLite wird ausschliesslich vom Projektor beschrieben.
-`EventStore().append()` ist aus der Produktion verbannt (gestern in
-`gate_bridge.py` und `web/app.py` migriert).
+Web-Control-Events werden ueber `audit()` in Semantic-JSONL geschrieben;
+Chat-Job-Lifecycle-Events werden aus der persistenten Job-Event-Tabelle mit
+stabiler `event_id` in JSONL ausgespielt; Benutzertexte und Tool-Inhalte
+bleiben aus dem git-sichtbaren Audit-Stream heraus. Danach aktualisiert `Projector.tail()`
+das Read Model. Ein Rebuild rekonstruiert damit auch Control- und Chat-Events.
+Direkte `EventStore().append()`-Aufrufe in der Produktion sind verboten.
 
 ### 8.3 Health
 

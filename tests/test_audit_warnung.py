@@ -67,9 +67,14 @@ def test_katalog_enthaelt_alle_code_kinds():
     kinds_im_code: set[str] = set()
     pat_audit = re.compile(r'\baudit(?:_safe)?\(\s*["\']([a-z_][a-z0-9_]*)["\']')
     pat_store = re.compile(r'append\([^)]*?kind\s*=\s*["\']([a-z_][a-z0-9_]*)["\']')
+    pat_web = re.compile(r'_audit_web_loop_event\(\s*[^,]+,\s*[^,]+,\s*["\']([a-z_][a-z0-9_]*)["\']')
+    pat_control = re.compile(r'_audit_loop_control\(\s*[^,]+,\s*[^,]+,\s*["\']([a-z_][a-z0-9_]*)["\']')
+    pat_chat_job = re.compile(r'["\'](chat_job_[a-z_]+)["\']')
     for f in Path("werkstatt").rglob("*.py"):
         src = f.read_text(encoding="utf-8", errors="replace")
-        for pat in (pat_audit, pat_store):
+        for pat in (pat_audit, pat_store, pat_web, pat_control, pat_chat_job):
+            if pat is pat_chat_job and f.name == "audit.py":
+                continue
             for m in pat.finditer(src):
                 kinds_im_code.add(m.group(1))
 
@@ -93,9 +98,14 @@ def test_katalog_enthaelt_keine_toten_kinds():
     kinds_im_code: set[str] = set()
     pat_audit = re.compile(r'\baudit(?:_safe)?\(\s*["\']([a-z_][a-z0-9_]*)["\']')
     pat_store = re.compile(r'append\([^)]*?kind\s*=\s*["\']([a-z_][a-z0-9_]*)["\']')
+    pat_web = re.compile(r'_audit_web_loop_event\(\s*[^,]+,\s*[^,]+,\s*["\']([a-z_][a-z0-9_]*)["\']')
+    pat_control = re.compile(r'_audit_loop_control\(\s*[^,]+,\s*[^,]+,\s*["\']([a-z_][a-z0-9_]*)["\']')
+    pat_chat_job = re.compile(r'["\'](chat_job_[a-z_]+)["\']')
     for f in Path("werkstatt").rglob("*.py"):
         src = f.read_text(encoding="utf-8", errors="replace")
-        for pat in (pat_audit, pat_store):
+        for pat in (pat_audit, pat_store, pat_web, pat_control, pat_chat_job):
+            if pat is pat_chat_job and f.name == "audit.py":
+                continue
             for m in pat.finditer(src):
                 kinds_im_code.add(m.group(1))
 
@@ -103,3 +113,23 @@ def test_katalog_enthaelt_keine_toten_kinds():
     assert not tot, (
         f"{len(tot)} tote Katalog-Eintraege (kein Code-Aufruf): {tot[:20]}"
     )
+
+
+def test_audit_explicit_run_and_event_id_are_replay_stable(tmp_path, monkeypatch):
+    from werkstatt import event_store, projection
+
+    monkeypatch.setattr(audit_mod, "_werkstatt_home", lambda: tmp_path)
+    monkeypatch.setattr(event_store, "werkstatt_home", lambda: tmp_path)
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+    assert audit_mod.audit(
+        "web_loop_paused", {"status": "paused"}, tmp_path, "demo",
+        run_id="run-explicit", event_id="stable-web-event-1",
+    )
+    projector = projection.Projector()
+    projector.rebuild()
+    events = event_store.EventStore(
+        db_pfad=tmp_path / ".werkstatt" / "events.db",
+    ).query("run-explicit", project="demo")
+    assert len(events) == 1
+    assert events[0]["event_id"] == "stable-web-event-1"
+    assert events[0]["kind"] == "web_loop_paused"
