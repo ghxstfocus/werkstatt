@@ -108,3 +108,32 @@ def test_queue_order_is_fifo_when_timestamps_collide(
     assert [job["job_id"] for job in store.active_for_session("session-a")] == [
         first["job_id"], second["job_id"],
     ]
+
+def test_completed_future_is_removed_from_registry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from concurrent.futures import Future
+
+    from werkstatt import chat_jobs
+
+    class _ImmediateExecutor:
+        def submit(self, *_args: object) -> Future[None]:
+            future: Future[None] = Future()
+            future.set_result(None)
+            return future
+
+    db_path = tmp_path / "jobs.db"
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    store = ChatJobStore(db_path)
+    job, _created = store.create(
+        "session-a", "Frage", "read", "request-key-future-001",
+    )
+    monkeypatch.setattr(chat_jobs, "_EXECUTOR", _ImmediateExecutor())
+    key = f"{db_path.resolve()}:{job['job_id']}"
+
+    chat_jobs._dispatch_pending(db_path, "demo", project_dir)
+
+    assert key not in chat_jobs._FUTURES
+
