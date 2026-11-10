@@ -11,6 +11,7 @@ from tools import quality_gate
 
 _BASE = quality_gate.BASELINE["pytest"]
 
+
 def _prepare_tree(tmp_path):
     (tmp_path / "tests").mkdir(exist_ok=True)
     (tmp_path / "tests" / "test_audit_warnung.py").write_text(
