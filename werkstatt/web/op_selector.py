@@ -23,10 +23,15 @@ _COMPLETED_OP_ROW = re.compile(
 )
 
 
-def parse_completed_op_ids(progress_text: str) -> set[str]:
-    """Liest nur explizite Abschlussbelege aus dem append-only PROGRESS."""
-    ids = _COMPLETED_OP_HEADING.findall(progress_text)
-    ids.extend(_COMPLETED_OP_ROW.findall(progress_text))
+def parse_completed_op_ids(
+    progress_text: str,
+    status_text: str = "",
+) -> set[str]:
+    """Liest explizite Abschluesse aus PROGRESS und dem STATUS-Auto-Log."""
+    ids: list[str] = []
+    for document in (progress_text, status_text):
+        ids.extend(_COMPLETED_OP_HEADING.findall(document))
+        ids.extend(_COMPLETED_OP_ROW.findall(document))
     return {op_id.upper() for op_id in ids}
 
 
