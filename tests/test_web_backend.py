@@ -522,6 +522,39 @@ def test_start_fragt_bei_mehreren_pruefbaren_ops_nach(
     assert aufrufe == []
 
 
+def test_explicit_op_start_respects_phase_three_dogfooding_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "STATUS.md").write_text(
+        "### OP-101: Phase-3-Aufgabe\\n"
+        "- **Status:** open\\n"
+        "- **Phase:** Phase-3 (Memory)\\n"
+        "- **Blockiert von:** —\\n"
+        "- **Akzeptanzkriterien:** Ergebnis ist nachweisbar.\\n"
+        "- **Tests:** pytest -q tests/test_101.py\\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    _reset_loop_registry(app_modul)
+    aufrufe: list[list[str]] = []
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    client = TestClient(app_modul.app)
+
+    antwort = client.post("/api/projects/demo/start", json={"op_id": "OP-101"})
+
+    assert antwort.status_code == 409
+    assert "Phase-3 gesperrt" in antwort.json()["detail"]
+    assert aufrufe == []
+
+
 def test_direct_task_precedes_invalid_op_id(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
