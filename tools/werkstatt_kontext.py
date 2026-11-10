@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 # standalone: Chat-Onboarding-Block fuer den User. Manuell
 # aufgerufen (python3 tools/werkstatt_kontext.py), NICHT aus
