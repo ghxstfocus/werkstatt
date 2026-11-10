@@ -1330,7 +1330,7 @@ noch nicht vollstaendig.
   (b) Rollenaggregation liest die JSON-Payload-Felder aus dem Event-Store (keine nicht vorhandenen SQL-Spalten) und liefert Anzahl, Summen sowie maximalen Prompt pro Call.
   (c) Neue Funktion `aggregate_tokens_per_rolle()` in `inspector.py` liefert die Aggregation fuer Projekt und Run.
   (d) Live: Nach dem naechsten Loop-Run ist pro Rolle eine Zeile sichtbar.
-- **Tests:** `tests/test_llm_usage_pro_rolle.py` (Payload enthaelt `rolle`, Aggregation summiert korrekt und ermittelt `max_prompt`).
+- **Tests:** `tests/test_loop_ask_llm.py` (Rollenfeld und unveraendertes Audit-Umschlagfeld); `tests/test_llm_usage_pro_rolle.py` (Rollen-Mapping, Aggregation, Spitzenwert und ungueltige Payloads).
 - **ADR:** —
 - **Kontext:** Erste OP der Context-Engineering-Achse (Phase 2). Muss vor OP-384/385 laufen, sonst sind deren Zahlen geraten.
 
@@ -1419,7 +1419,7 @@ noch nicht vollstaendig.
   (c) `reviewer_bugs` nur `severity in ("HIGH", "critical")`, `medium`/`low` weg.
   (d) Wenn keine HIGH-/critical-Bugs uebrig bleiben, werden keine medium-/low-Bugs nachgeschoben. Der Prompt enthaelt stattdessen einen expliziten Hinweis, dass der Severity-Filter keine Reviewer-Bugs uebrigliess. Deterministische Verify-Fehler bleiben davon unberuehrt.
   (e) Live: Reflection-Prompt messbar kleiner (Vergleich in PROGRESS.md).
-- **Tests:** `tests/test_reflection_kontext.py` (4 Tests: Diff statt Datei, Fehlerkern-Extraktion, Severity-Filter, Fallback).
+- **Tests:** `tests/test_builder_agent.py` (HIGH/critical-Filter und leerer Filter-Fallback); `tests/test_reflection_kontext.py` (Diff statt Datei, Fehlerkern-Extraktion, Severity-Filter und bounded fallback).
 - **ADR:** —
 
 ### OP-387: JIT-Retrieval fuer Architect (view_api-Tool)
