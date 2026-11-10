@@ -4005,3 +4005,8 @@ Bei einem persistenten Registry-Eintrag blieb nach dem Übergang in `idle` die v
 ### 2026-11-10 — Server-Rerun: Sparkline-Fixture an Run-Deduplizierung angepasst
 
 Der gezielte Serverlauf nach den Overview-/Loop-Status-Fixes ergab 14 passed, 1 failed; Ruff war grün. Der verbleibende Test `test_overview_sparkline_buckets` erwartete drei heutige und zwei gestrige Runs, erzeugte dabei aber je Bucket wiederholt dieselbe `run_id`. Die Sparkline zählt eindeutige Runs, daher war der tatsächliche Wert 1 korrekt. Das Fixture erzeugt nun für jeden erwarteten Run eine eindeutige ID. Zusätzlich liegt seit `83c433e` eine Byte-begrenzte, inkrementelle Chat-Dateilesung mit Offset-Tests vor; diese Änderung ist noch nicht serververifiziert.
+
+
+### 2026-11-10 — Serververifikation: Overview, Loop-Status und Chat-Read-Limit
+
+Verifiziert auf Server-HEAD `e4366bb`: gezielte Tests 41 passed; vollständige Suite 1781 passed, 5 skipped; Ruff 0; mypy 0; Quality-Gate `ok: true`, `regression: false`. Damit sind die Sparkline-SQL-/Fixture-Korrekturen, der Idle-Run-ID-Vertrag und die bytebegrenzte Chat-Dateilesung samt Tests durch den Serverlauf abgedeckt. AST- und Katalogprüfungen bleiben im Gate übersprungen, weil die dort genannten historischen Dateien fehlen.
