@@ -4133,3 +4133,24 @@ im Gate-JSON nachvollziehbar.
 - **Commit:** `1d75c375e39c` — Regressionstest fuer den erhaltenen Output.
 - **Commit:** `dc7fa117c817` — Formatierung des neuen Gate-Regressionstests.
 - Server-Verifikation steht aus.
+
+### Mypy — Fehlerdiagnose aus Serverlauf korrigiert (2026-11-10)
+
+Der Serverlauf auf `c109a62` zeigte konkret `app.py:491 var-annotated`
+fuer `_ausgeschlossen`. Die Variable ist jetzt als
+`dict[str, Any]` annotiert. Mypy muss auf dem aktualisierten Branch noch
+erneut laufen; der Fix gilt bis dahin als unverifiziert.
+
+- **Commit:** `95a4b6832a94` — Typannotation am Selector-Blockerbefund.
+
+### Control-Toolbar — OP-Startknopf nicht mehr kollabiert (2026-11-10)
+
+Der Screenshot zeigte den langen Startknopf ueber dem Loop-Status. Ursache:
+Der Control-Knopf erbte die 22-Pixel-Quadratgroesse der kleinen OP-Zeilen-
+Aktionen. Er hat jetzt eine eigene Textknopf-Klasse mit intrinsischer
+Mindestbreite; auf schmalen Ansichten darf die Beschriftung umbrechen.
+
+- **Commit:** `22b45f559ae3` — eigene Klasse fuer Control-Aktionen.
+- **Commit:** `ad139c58c199` — volle Toolbar-Breite und lesbare Knopfmasse.
+- **Commit:** `da8728270bea` — UI-Regressionstest.
+- Screenshot-/Browser-Verifikation und Servertests stehen aus.
