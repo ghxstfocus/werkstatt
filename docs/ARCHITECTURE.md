@@ -12,11 +12,14 @@ Stand: 2026-11-10 (Run-State und Event-Architektur via ADR-0024; SOLL-Ziel fuer 
 
 ## 1. Ziel-Architektur
 
-Die Werkstatt ist ein Multi-Agent-System mit 9 spezialisierten
-Rollen (Detail §2) und ADaPT (On-Demand-Zerlegung). Der Mensch ist
-das letzte Gate.
+Die Werkstatt ist ein Multi-Agent-System mit spezialisierten Agentenrollen,
+einem eigenen projektbezogenen Chat und deterministischen Kontrollstufen.
+Der Chat bleibt vom schreibenden Loop getrennt. Debugging ist ein Chat-Modus;
+eine eigenstaendige Debugger-Loop-Rolle ist gemaess ADR-0018 verworfen.
+Der Mensch entscheidet an den verpflichtenden Gates.
 
-    Explorer -> Scout -> Architect -> Planner-Split -> Builder -> Verify -> Reviewer -> Reflection -> Human-Gate
+    Explorer -> Scout -> Architect -> Planner-Split -> Builder -> Verify -> Reviewer -> Reflection -> Human-Gates
+    Chat (parallel, read-only) -> Diagnose / Debug-Modus
 
 ## 1.5 Installation
 
@@ -41,24 +44,24 @@ Beide Wege bleiben dauerhaft unterstützt. Kein Migrationszwang, keine
 
 ### 2.1 Explorer (werkstatt/explorer.py)
 
-Read-only Subagent. Messt deterministisch (ruff check ., pytest -q)
-und liefert key_files aus der Messung. M-396: Explorer laeuft immer,
-auch bei expliziten Dateien.
+Read-only Agent. Sammelt Projektkontext und key_files; die Pruefungen
+selbst bleiben deterministisch. Modell: deepseek-flash, Thinking aus.
+Explorer laeuft immer, auch bei expliziten Dateien.
 
 ### 2.2 Architect (werkstatt/planner.py, Prosa-Modus)
 
-deepseek-reasoner. Keine Skills, keine Tools (M-446). Produziert
-Prosa mit numerierten Schritten (M-462). Max 16000 Tokens (M-447).
+deepseek-v4-pro mit Thinking/high. Keine Skills, keine Tools (M-446).
+Produziert Prosa mit nummerierten Schritten. Max 16000 Tokens.
 
 ### 2.3 Planner-Split (werkstatt/planner.py, JSON-Modus)
 
-deepseek-chat. Zerlegt die Architect-Prosa in Tasks mit
+deepseek-flash mit Thinking aus. Zerlegt die Architect-Prosa in Tasks mit
 architect_start/architect_ende (woertliche Marker, M-461).
 Rekursiv, max 2 Ebenen (M-469/M-470/M-471).
 
-### 2.4 Builder (werkstatt/builder.py)
+### 2.4 Builder (werkstatt/roles/builder/run.py)
 
-deepseek-chat. search/replace pro Task. Bekommt den woertlichen
+deepseek-flash mit Thinking aus. search/replace pro Task. Bekommt den woertlichen
 Architect-Abschnitt (M-461). _architect_abschnitt gibt leeren
 String zurueck, wenn die Datei nicht in der Prosa ist (M-450).
 
@@ -74,8 +77,15 @@ py_compile_core, pytest_full_checks (phase_end, M-476).
 
 ### 2.7 Reviewer (werkstatt/reviewer.py)
 
-deepseek-chat. Prueft die Task-Description, nicht die Gesamtaufgabe
+deepseek-flash mit Thinking aus. Prueft die Task-Description, nicht die Gesamtaufgabe
 (M-459). Bekommt den vollen Diff (M-448).
+
+### 2.8 Scout, Reflection und Chat
+
+Scout und Reflection nutzen deepseek-flash mit Thinking aus. Der Chat ist
+ein eigener read-only Agent mit derselben Modellroute. Debugger-Faehigkeit
+liegt im Chat-Modus gemaess ADR-0011 und ADR-0018; es gibt keine separate
+Debugger-Loop-Rolle.
 
 ### 2.8 Human-Gate (_human_gate in loop.py)
 
