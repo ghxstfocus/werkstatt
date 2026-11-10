@@ -12,7 +12,7 @@ import threading
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +27,9 @@ class IdempotencyConflict(ValueError):
 _EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="werkstatt-chat")
 _FUTURES: dict[str, Future[None]] = {}
 _FUTURES_LOCK = threading.RLock()
+_WORKER_ID = f"{__import__('os').getpid()}:{uuid.uuid4().hex}"
+_WORKER_LEASE_SECONDS = 90
+_WORKER_HEARTBEAT_SECONDS = 15
 
 
 def _now() -> str:
@@ -60,7 +63,8 @@ class ChatJobStore:
                 " idempotency_key TEXT NOT NULL, message TEXT NOT NULL,"
                 " mode TEXT NOT NULL, state TEXT NOT NULL,"
                 " answer TEXT, error TEXT, created_at TEXT NOT NULL,"
-                " updated_at TEXT NOT NULL,"
+                " updated_at TEXT NOT NULL, worker_id TEXT,"
+                " heartbeat_at TEXT,"
                 " UNIQUE(session_id, idempotency_key));"
                 "CREATE TABLE IF NOT EXISTS job_events ("
                 " seq INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -70,6 +74,13 @@ class ChatJobStore:
                 "CREATE INDEX IF NOT EXISTS idx_chat_job_events "
                 "ON job_events(job_id, seq);"
             )
+            columns = {
+                str(row["name"]) for row in conn.execute("PRAGMA table_info(jobs)")
+            }
+            if "worker_id" not in columns:
+                conn.execute("ALTER TABLE jobs ADD COLUMN worker_id TEXT")
+            if "heartbeat_at" not in columns:
+                conn.execute("ALTER TABLE jobs ADD COLUMN heartbeat_at TEXT")
             conn.commit()
 
     def create(
@@ -116,7 +127,7 @@ class ChatJobStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def claim(self, job_id: str) -> bool:
+    def claim(self, job_id: str, worker_id: str = "test-worker") -> bool:
         """Beansprucht hoechstens einen gleichzeitigen Turn pro Session."""
         now = _now()
         with closing(self._connect()) as conn:
@@ -137,9 +148,9 @@ class ChatJobStore:
                 conn.commit()
                 return False
             cur = conn.execute(
-                "UPDATE jobs SET state='running',updated_at=? "
-                "WHERE job_id=? AND state='queued'",
-                (now, job_id),
+                "UPDATE jobs SET state='running',updated_at=?,worker_id=?,"
+                "heartbeat_at=? WHERE job_id=? AND state='queued'",
+                (now, worker_id, now, job_id),
             )
             if cur.rowcount:
                 conn.execute(
@@ -149,6 +160,60 @@ class ChatJobStore:
                 )
             conn.commit()
             return cur.rowcount == 1
+
+
+    def heartbeat(self, job_id: str, worker_id: str) -> bool:
+        """Erneuert die Lease nur fuer den Worker, der den Job beansprucht hat."""
+        now = _now()
+        with closing(self._connect()) as conn:
+            cur = conn.execute(
+                "UPDATE jobs SET heartbeat_at=?,updated_at=? "
+                "WHERE job_id=? AND state='running' AND worker_id=?",
+                (now, now, job_id, worker_id),
+            )
+            conn.commit()
+            return cur.rowcount == 1
+
+    def recover_abandoned_jobs(
+        self,
+        *,
+        lease_seconds: int = _WORKER_LEASE_SECONDS,
+        now: datetime | None = None,
+    ) -> int:
+        """Markiert Jobs mit abgelaufener Worker-Lease als fehlgeschlagen."""
+        current = now or datetime.now(UTC)
+        cutoff = (current - timedelta(seconds=lease_seconds)).isoformat(
+            timespec="milliseconds",
+        )
+        timestamp = current.isoformat(timespec="milliseconds")
+        error = "Worker-Lease abgelaufen; Job nach Prozessunterbrechung beendet."
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute(
+                "SELECT job_id FROM jobs WHERE state='running' "
+                "AND COALESCE(heartbeat_at,updated_at) < ?",
+                (cutoff,),
+            ).fetchall()
+            for row in rows:
+                job_id = str(row["job_id"])
+                cur = conn.execute(
+                    "UPDATE jobs SET state='failed',error=?,updated_at=?,"
+                    "worker_id=NULL WHERE job_id=? AND state='running' "
+                    "AND COALESCE(heartbeat_at,updated_at) < ?",
+                    (error, timestamp, job_id, cutoff),
+                )
+                if cur.rowcount:
+                    conn.execute(
+                        "INSERT INTO job_events(job_id,kind,payload,ts) "
+                        "VALUES(?,?,?,?)",
+                        (
+                            job_id, "failed",
+                            json.dumps({"error": error, "reason": "worker_lease_expired"}),
+                            timestamp,
+                        ),
+                    )
+            conn.commit()
+            return len(rows)
 
     def append_event(
         self, job_id: str, kind: str, payload: dict[str, Any] | None = None,
@@ -176,8 +241,8 @@ class ChatJobStore:
         with closing(self._connect()) as conn:
             conn.execute("BEGIN IMMEDIATE")
             cur = conn.execute(
-                "UPDATE jobs SET state=?,answer=?,error=?,updated_at=? "
-                "WHERE job_id=? AND state='running'",
+                "UPDATE jobs SET state=?,answer=?,error=?,updated_at=?,"
+                "worker_id=NULL WHERE job_id=? AND state='running'",
                 (state, answer, error, now, job_id),
             )
             if cur.rowcount:
@@ -231,7 +296,7 @@ def _run_job(
     db_path: Path, project: str, project_dir: Path, job_id: str,
 ) -> None:
     store = ChatJobStore(db_path)
-    if not store.claim(job_id):
+    if not store.claim(job_id, _WORKER_ID):
         return
     job = store.get(job_id)
     if job is None:
@@ -243,6 +308,22 @@ def _run_job(
     def event(kind: str, **payload: Any) -> None:
         store.append_event(job_id, kind, payload)
 
+    heartbeat_stop = threading.Event()
+
+    def maintain_lease() -> None:
+        while not heartbeat_stop.wait(_WORKER_HEARTBEAT_SECONDS):
+            try:
+                if not store.heartbeat(job_id, _WORKER_ID):
+                    return
+            except sqlite3.Error:
+                continue
+
+    heartbeat_thread = threading.Thread(
+        target=maintain_lease,
+        name=f"werkstatt-chat-heartbeat-{job_id[:8]}",
+        daemon=True,
+    )
+    heartbeat_thread.start()
     try:
         answer = chat_loop(
             ChatSession(project, job["session_id"]),
@@ -264,6 +345,8 @@ def _run_job(
             job_id, error=f"{type(exc).__name__}: {exc}",
         )
     finally:
+        heartbeat_stop.set()
+        heartbeat_thread.join(timeout=_WORKER_HEARTBEAT_SECONDS + 1)
         _dispatch_pending(db_path, project, project_dir)
 
 
@@ -271,6 +354,7 @@ def _dispatch_pending(
     db_path: Path, project: str, project_dir: Path,
 ) -> None:
     store = ChatJobStore(db_path)
+    store.recover_abandoned_jobs()
     submitted_sessions: set[str] = set()
     for job in store.queued():
         session_id = str(job["session_id"])
@@ -303,7 +387,7 @@ def _forget_future(key: str, future: Future[None]) -> None:
 def resume_chat_jobs(
     project: str, project_dir: Path, *, db_path: Path | None = None,
 ) -> None:
-    """Re-dispatch queued jobs after a server restart or client reconnect."""
+    """Re-dispatch queued jobs and expire leases lost in a server restart."""
     path = Path(db_path) if db_path else _db_path(project)
     _dispatch_pending(path, project, Path(project_dir))
 
