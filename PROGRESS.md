@@ -4191,3 +4191,22 @@ verwendet wird.
 - **Commit:** `95a4b6832a94` — _ausgeschlossen fuer Mypy annotiert.
 - **Commit:** `4c87b0552a66` — UI-Test-Syntaxfehler behoben.
 - Diese Gate-Ergebnisse verifizieren API/Tests, aber nicht die visuelle Toolbar nach Browser-Cache-Reload.
+
+
+
+### OP-398 — erledigte Abhaengigkeiten aus PROGRESS aufloesen (2026-11-10)
+
+DOC_CONVENTIONS §5 entfernt erledigte OPs aus STATUS.md und fuehrt ihren
+Abschluss in PROGRESS.md. Der Selector konnte diese Abhaengigkeiten bisher
+nicht erkennen und markierte sie faelschlich als unbekannt. Er liest jetzt
+nur explizite Abschlussformen (datierte „OP-NNN abgeschlossen“-Eintraege und
+„done“-Ledgerzeilen); blosse Erwaehnungen und „superseded“-Zeilen reichen
+nicht. Web-Start und Chat-Tool verwenden dieselbe Aufloesung. Doppelte IDs,
+die noch in STATUS.md stehen, bleiben widerspruechlich und fail-closed.
+
+- **Commit:** `1f3dd13dde0b` — Abschlussbelege aus PROGRESS parsen und im Selector verwenden.
+- **Commit:** `513964ca1503` — Regressionstests fuer explizite, ungueltige und doppelte Abschlussbelege.
+- **Commit:** `ef4b195adc22` — Web-Start mit Abschlussliste aus dem Projekt-PROGRESS verbinden.
+- **Commit:** `cde3927e3818` — Chat-Selector an die projektgebundene Abschlussliste binden.
+- **Commit:** `32a3542154d2` — Chat-Regressionstest fuer OP-201-Abhaengigkeit.
+- **Serververifikation steht aus.** Zieltests, Ruff und vollstaendiges Quality-Gate nach Pull ausfuehren.
