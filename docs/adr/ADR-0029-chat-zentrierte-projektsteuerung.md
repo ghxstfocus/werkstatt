@@ -74,6 +74,20 @@ blockieren. Chat-Dialog und Loop-Prozess bleiben unabhaengig. Der Chat
 kann waehrend eines Runs neue Fragen beantworten; lange Pruefungen
 laufen als nachvollziehbare Jobs und melden Fortschritt als Events.
 
+**Parallelitaetsvertrag fuer Read-Jobs derselben Session:** Ein langsamer
+LLM-Turn darf eine spaeter eingereichte Lesefrage nicht in eine
+Session-FIFO-Warteschlange zwingen. Jeder Read-Job arbeitet mit einem
+unveraenderlichen Snapshot der bis zur Annahme abgeschlossenen Turns und
+einem eigenen Transcript-Zweig. User-Turn, Tool-Calls, Tool-Ergebnisse und
+Antwort bleiben an die stabile Job-ID gebunden; Worker schreiben waehrend
+der Generierung nicht in denselben Transcript. Erfolgreiche Turns werden
+idempotent als zusammengehoeriges User-/Assistant-Paar in die Eltern-Session
+uebernommen. Fehler, Abbruch und unvollstaendige Tool-Traces werden nicht in
+den Prompt anderer Jobs gemischt. Antworten duerfen in anderer Reihenfolge
+fertig werden und bleiben in der UI ihrer ausloesenden Nachricht zugeordnet.
+Ein neuer Job wartet nicht auf vorherige langsame Inferenz, sieht aber nur
+die abgeschlossenen Turns seines beim Annehmen festgehaltenen Snapshots.
+
 Jedes Event ist mit Projekt, Run, Job und ausloesender Chat-Session
 verknuepft, soweit zutreffend. Fortschritt, Ergebnis, Fehler und
 Abbruch werden dauerhaft gespeichert und nach Reconnect rekonstruiert.
