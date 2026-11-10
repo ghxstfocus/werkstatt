@@ -40,7 +40,8 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
         assert kwargs["db_path"].name == "demo.db"
         assert isinstance(kwargs["context_seq"], int)
         assert kwargs["run_id"] == "run-active"
-        assert kwargs["project"] == "demo"
+        assert args[0] == "demo"
+        assert "project" not in kwargs
         return {
             "job": {
                 "job_id": "a" * 32, "state": "queued",
