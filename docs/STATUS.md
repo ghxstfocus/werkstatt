@@ -367,7 +367,7 @@ noch nicht vollstaendig.
 
 - **Tests:** `tests/test_chat_debugger.py` (neu),
   `tests/test_debugger_memory_hook.py` (neu, OP-243)
-- **Blockiert von:** OP-231
+- **Blockiert von:** —
 - **Lern-Hook:** OP-243 (Debugger → Memory)
 
 ### OP-221: Memory-Destillation + Promotion (scope-aware)
@@ -517,7 +517,7 @@ noch nicht vollstaendig.
     Klick auf Button 1 → `POST /api/projects/{name}/chat` mit
     erwarteter Nachricht.
 - **Tests:** keine (UI, visuell)
-- **Blockiert von:** OP-231, OP-233, OP-240
+- **Blockiert von:** OP-240
 
 ### OP-283: Cost/Token-Dashboard
 
