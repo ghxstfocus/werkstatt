@@ -73,7 +73,8 @@ noch nicht vollstaendig.
   - Jede Aktion zeigt im Chat und in der UI sofort Status, Ergebnis oder konkreten Fehler; Konsolen-Logs allein genuegen nicht.
   - Pro Projekt gibt es hoechstens einen schreibenden Loop-Run; lesende Diagnosejobs duerfen parallel laufen.
   - Tests decken Job-Lifecycle, Reconnect/Replay, Idempotenz, Parallelitaet, Abbruch, Checkpoint-Pause, Planrevision mit neuem Human-Gate sowie Ablehnung ohne Working-Tree-Aenderung ab.
-- **Stand 2026-11-10:** Chatjobs haben persistente Session-Serialisierung, FIFO, Worker-Lease-Recovery, Idempotenzkonflikte, Reconnect fuer Fehler und kooperativen Abbruch. Fuer laufende Streams wird der Abbruch an SSE-Chunk-Grenzen verarbeitet; bei stiller Verbindung begrenzt ein 30-Sekunden-Read-Timeout die Wartezeit. Noch offen sind u.a. Run-/Event-Store-Verknuepfung, Chat parallel zum aktiven Loop, Projekt-Schreibslot und Checkpoint-gesteuerte Planrevision.
+- **Stand 2026-11-10 (Serververifiziert bis `9c505cb`):** Chatjobs haben persistente Session-Serialisierung/FIFO, Worker-Lease-Recovery, Idempotenzkonflikte, Fehler-/Abbruch-Reconnect und kooperativen Abbruch; der Job-Event-Replay ist an die Chat-Session gebunden. SSE-Abbruch wird an Chunk-Grenzen verarbeitet; bei stiller Verbindung begrenzt ein 30-Sekunden-Read-Timeout die Wartezeit. Gezielte Tests: 50 bestanden; Gesamtsuite: 1885 passed / 5 skipped; Ruff/Mypy 0; AST 369 Dateien / 0 Fehler; Audit-Katalogtest bestanden; Quality Gate `ok: true`.
+- **OP-397 bleibt offen:** Es fehlen Run-/Event-Store-Verknuepfung, tatsaechlich unabhaengige Antworten im selben Chat waehrend eines laufenden Hintergrundjobs, exklusiver Projekt-Schreibslot, Chat-Steuerung des aktiven Loop sowie Checkpoint-Pause und revisioniertes Plan-Gate mit Reject/Expiry-Tests.
 - **Blockiert von:** —
 
 ### OP-398: Evidenzbasierte Auswahl autonomer Arbeit
@@ -92,6 +93,8 @@ noch nicht vollstaendig.
   - Bei Gleichstand, fehlenden Akzeptanzkriterien, veralteten Blockern oder widerspruechlichem Status wird nicht geraten: Kandidaten werden erklaert und der Chat fragt nach.
   - Erfolg des gesamten Arbeitsblocks wird nur nach Verify/Review mit Referenzen auf Run und Commit als abgeschlossen markiert; Teilerfolge und ungelöste OPs bleiben getrennt sichtbar. Fehlschlaege aktualisieren Versuch/Blocker, nicht den Abschlussstatus.
   - Runs haben begrenzte Versuche, Checkpoints und klare Stop-Bedingungen; parallele Schreib-Runs fuer dasselbe Projekt sind gesperrt.
+- **Stand 2026-11-10 (Serververifiziert bis `9c505cb`):** Der Web-Start verwendet den evidenzbasierten Selector; explizite OPs mit unbekannten Blockern oder doppelter OP-ID werden fail-closed abgewiesen. Statusparser, Abhaengigkeitsaufloesung, Ambiguitaet, Audit und Start-Endpunkt sind getestet.
+- **Noch offen:** echtes Ranking statt ausschliesslicher Gleichstands-Eskalation, verifizierbare OP-Buendelung, Versuchslimits/Stop-Bedingungen und Abschlussprojektion mit Run-/Commit-Belegen.
 - **Tests:** Parser/Statusvarianten, Dependency-Aufloesung, Ranking, Ambiguitaet, Fail-closed und Abschlussbelege.
 - **Blockiert von:** —
 
