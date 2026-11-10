@@ -556,9 +556,22 @@ def create_app() -> FastAPI:
                         "ausgeschlossen": entscheidung["ausgeschlossen"],
                     },
                 )
-            autonome_auswahl = entscheidung["auswahl"]
-            aufgabe = entscheidung["aufgabe"]
-            op_id = autonome_auswahl["id"]
+            ausgewaehlt = entscheidung["auswahl"]
+            ausgewaehlte_aufgabe = entscheidung["aufgabe"]
+            if (
+                not isinstance(ausgewaehlt, dict)
+                or not isinstance(ausgewaehlt.get("id"), str)
+                or not re.fullmatch(r"OP-\d+[a-z]?", ausgewaehlt["id"])
+                or not isinstance(ausgewaehlte_aufgabe, str)
+                or not ausgewaehlte_aufgabe.strip()
+            ):
+                raise HTTPException(
+                    status_code=500,
+                    detail="Selector lieferte eine ungueltige Auswahl.",
+                )
+            autonome_auswahl = ausgewaehlt
+            aufgabe = ausgewaehlte_aufgabe.strip()
+            op_id = ausgewaehlt["id"]
 
         if not aufgabe:
             raise HTTPException(
