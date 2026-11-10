@@ -153,7 +153,7 @@ class ChatJobStore:
         return [dict(row) for row in rows]
 
     def claim(self, job_id: str, worker_id: str = "test-worker") -> bool:
-        """Beansprucht hoechstens einen gleichzeitigen Turn pro Session."""
+        """Beansprucht atomar einen Job; Session-Kontext bleibt pro Job isoliert."""
         now = _now()
         with closing(self._connect()) as conn:
             conn.execute("BEGIN IMMEDIATE")
