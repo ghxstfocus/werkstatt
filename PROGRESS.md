@@ -4682,3 +4682,10 @@ Der Event-Store kann Events jetzt mit Projektbezug und deterministischer Event-I
 - **Commit:** `23f63f024b1d7f9ab353e4c6a081c3b1ef4a8c9d` — unbenutzten Event-Store-Cursor entfernen.
 - **Commit:** `6e9b3ad4bb5094522b24ad1b92e4ec087bb5d0fd` — STATUS um Timeline-Integration und Verifikationsstatus ergaenzen.
 - **Serververifikation:** gezielte Event-Store-/Job-/Live-Feed-Tests, Ruff, volle Testsuite und Quality Gate nach Pull ausstehend.
+
+
+## Chat-Event-Timeline Regressionen (2026-11-10)
+
+- Serverlauf auf `73d2893` fand einen API-Fehler: `enqueue_chat_job` erhielt `project` zugleich positional und als Keyword. Den doppelten Keyword-Parameter entfernt; der API-Test sichert die Argumentform.
+- Der Live-Feed behandelt einen laufenden `chat_job_started` als aktuelle Aktivität und blendet ihn aus `steps` aus, um Doppelanzeige zu vermeiden. Den Test auf diesen Vertrag umgestellt und Projekt-Isolation des fehlgeschlagenen Fremdprojekts mitgeprüft.
+- Verifikation auf dem Server nach Pull steht aus.
