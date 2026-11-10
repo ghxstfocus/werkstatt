@@ -32,5 +32,5 @@ def test_chat_gate_handoff_waits_for_project_history() -> None:
 
 def test_gate_option_a_never_means_auto_approve() -> None:
     gate = Path("static/gate_panel.js").read_text(encoding="utf-8")
-    assert 'a: "a \u2014 Plan anpassen"' in gate
-    assert 'a: "a \u2014 Auto"' not in gate
+    assert r'a: "a \u2014 Plan anpassen"' in gate
+    assert r'a: "a \u2014 Auto"' not in gate
