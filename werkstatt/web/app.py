@@ -644,6 +644,7 @@ def create_app() -> FastAPI:
                             "project_goal_relevance": autonome_auswahl["projektziel_relevanz"],
                             "verification": autonome_auswahl["verifikation"],
                         },
+                        project=projektname,
                     )
                 except (OSError, RuntimeError, ValueError, sqlite3.Error) as exc:
                     registry.set_state(projektname, run_id, "idle")
@@ -736,6 +737,7 @@ def create_app() -> FastAPI:
             EventStore().append(
                 run_id, kind, status=status,
                 payload={"project": projektname, "pid": prozess.pid},
+                project=projektname,
             )
         except Exception:
             return False
@@ -849,6 +851,7 @@ def create_app() -> FastAPI:
                     EventStore().append(
                         run_id, "web_loop_stopped", status="stopped",
                         payload={"project": projektname, "pid": prozess.pid},
+                        project=projektname,
                     )
                     audit_ok = True
                 except Exception:
