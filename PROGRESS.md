@@ -4098,6 +4098,7 @@ Akzeptanzkriterien und keine Lauf-/Testbelege.
 - Vollstaendige Suite: 1815 passed, 5 skipped.
 - Ruff: 0 Fehler.
 - Mypy: 1 Fehler; Quality-Gate meldet deshalb Regression (delta +1).
+- **Commit:** `6f658b128393` — Selector-Ergebnis wird vor Start auf Typ und OP-ID geprueft; Mypy-Nachpruefung ausstehend.
 - Doku-Drift: keine verdaechtigen Commits; der Worktree meldet weiterhin die
   uncommitteten Aenderungen an `werkstatt/web/audit_panel.py` und
   `werkstatt/web/terminal_proxy.py`.
