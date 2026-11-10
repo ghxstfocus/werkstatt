@@ -973,6 +973,69 @@ oder nicht reproduzierbar. Das Muster ist konsistent mit dem
 Jeder mit konkreten Dateinamen/Funktionen/Zeilen belegte Handoff-
 Punkt braucht `grep`/`find` VOR dem Design.
 
+### Nachtrag 2026-11-10 (Live-Test) — Phase-Review-Gate crasht im headless-Modus
+
+Live-Test OP-389b im Browser: POST /start -> Explorer -> Plan-Gate
+-> Klick j -> Builder t1 (fail, falsche Imports) -> t2 (ok) -> t3
+(Reviewer rejected) -> **loop_human_gate_eof** -> sofortiger
+Loop-Abbruch.
+
+Der Loop-Plan-Gate funktioniert (nutzt `_frage_gate` -> `gate_bridge`).
+Der Phase-Review-Human-Gate (`_human_gate_body`) und weitere interaktive
+Stellen in `gates.py` (ADR-Prompt, Bestaetigungs-Prompt) nutzen aber
+direkt `input()`. Im headless-Modus (stdin=/dev/null) wirft `input()`
+sofort `EOFError` -> `loop_human_gate_eof` -> `loop_gate_failed`.
+
+**Diagnose-Muster:** Wenn ein Live-Test "bis kurz vor X funktioniert,
+dann sofort abbricht", und die Abbruch-Events in derselben Sekunde
+liegen wie der vorherige Schritt, ist es fast immer ein `input()`-Aufruf
+im headless-Kontext. `grep -n 'input(' <modul>.py` zeigt alle Stellen.
+
+**Angelegt:** OP-393 (Fix).
+
+### Drei weitere UI-Befunde aus demselben Live-Test
+
+(a) Aktiv-Block zeigt nur letztes Event — Reviewer blitzt auf und
+verschwindet sofort.
+
+(b) Sortierung: neuestes Event steht unten, "aktueller Run" oben — kein
+gemeinsamer Fluss. UI-Kritik war "verwirrend".
+
+(c) Builder-Phase hat 30-60s Luecke ohne Events (builder_file_context
+-> builder_patches_erstellt). In der UI wirkt Builder "tot" obwohl er
+am LLM-Call arbeitet.
+
+(d) `_tl_detail` liefert technische Kinds (`loop_phase`,
+`builder_import_context`), keine semantischen Verben ("Architect denkt",
+"Planner splittet Plan", "Builder liest Kontext").
+
+Angelegt: OP-394 (a/b/d, semantische Labels + Sortierung),
+OP-395 (c, Builder-Event-Emission).
+
+### Nachtrag 2026-11-10 — Loop-Patch-Erfolg + STATUS.md-Insert-Regel
+
+**Loop-Patch war sauber.** Im Live-Test 10:20-10:23 hat der Builder
+t2 (`audit_panel.py`) und t3 (`terminal_proxy.py`) exakt OP-389b-
+konform migriert. Der Diff war sauber, wurde aber verworfen, weil
+unvollstaendig (t4 lief nie, `tests/test_ws_endpoint_helpers.py`
+fehlt, t1 failte an Builder-Import-Halluzination).
+
+**STATUS.md-Insert-Regel (Fehler in dieser Session):**
+STATUS.md hat 4 Sektionen: `## Roadmap`, `## Offene Punkte`,
+`## Erledigt (Auto-Log)`, `## Delete-Zone`. OP-Header (`### OP-XXX:`)
+sind NUR in `## Offene Punkte` erlaubt. Test
+`test_keine_op_header_im_auto_log` verbietet sie zwischen
+`## Erledigt (Auto-Log)` und `## Delete-Zone`.
+
+Mein Fehler: 3 neue OPs mit Anker `## Delete-Zone` eingefuegt — davor
+steht aber `## Erledigt (Auto-Log)`, also sind die Header im
+verbotenen Bereich gelandet. Fix: Anker `## Erledigt (Auto-Log)`
+nehmen und VOR dem Anker einfuegen, nicht vor `## Delete-Zone`.
+
+**Regel:** Beim Einfuegen neuer OPs immer Anker `## Erledigt (Auto-Log)`
+nehmen, **davor** einfuegen. Dann landen sie automatisch am Ende von
+`## Offene Punkte`.
+
 ### Was gut lief in dieser Fortsetzungs-Session
 
 - Der User hat das STOPP-Kriterium "Wenn was abweicht: STOP, melden"

@@ -1910,6 +1910,55 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Tests:** `tests/test_planner_struktur.py` (5 Szenarien) + Erweiterung `tests/test_planner_deps_hybrid.py` (+3 Block-5-Format-Tests). Gesamt 8 neue Tests.
 - **Blockiert von:** —
 
+### OP-393: Phase-Review-Gate nutzt input() statt gate_bridge
+
+- **Status:** open
+- **Typ:** bugfix
+- **Phase:** Phase-2 (Focus, blockiert Loop-aus-UI)
+- **Blockiert von:** —
+- **Quelle:** Live-Test 2026-11-10 10:23 (Run werkstatt-20261110-101720-3fa14f18). Nach reviewer_phase_rejected kommt loop_human_gate_eof -> Loop sofort failed. Der Loop-Plan-Gate funktioniert (nutzt `_frage_gate` -> `gate_bridge`), aber der Phase-Review-Human-Gate (`_human_gate_body`) und weitere interaktive Stellen nutzen direkt `input()`. Im `--headless`-Modus (stdin=/dev/null) wirft `input()` sofort `EOFError` -> `loop_human_gate_eof` -> `loop_gate_failed`.
+- **Betroffene Dateien:** `werkstatt/gates.py` (Stellen `_human_gate_body` Z. ~325, ADR-Prompt Z. ~436, weitere `input()`-Aufrufe), optional `werkstatt/phases/finalize.py` (Phase-Review-Aufruf), `tests/test_human_gate_body.py` (neu).
+- **Problem:** Live-Beleg 2026-11-10: `789819 reviewer_phase_rejected`, `789820 loop_human_gate_eof` (gleiche Sekunde = kein User-Wait, sofortiger EOFError), `789821 loop_gate_failed`, `789825 loop_failed`. Der Loop kam durch Explorer, Plan-Gate (Klick j), Builder t1-t3, Reviewer bis zur Phase-Review. Erst der Phase-Review-Human-Gate crasht, weil er nicht `gate_bridge` nutzt.
+- **Akzeptanzkriterien:**
+  (a) Alle interaktiven `input()`-Aufrufe in `gates.py` (Ausnahme `_frage_gate`-intern) sind durch `_frage_gate` ersetzt.
+  (b) Im `--headless`-Modus erscheint ein `gate_open` mit `kind=phase_review` im UI; Nutzer klickt `j` -> `gate_answered` -> Loop faehrt fort.
+  (c) Test `tests/test_human_gate_body.py`: mit `_HEADLESS=True` und gefaktem `gate_bridge.wait` liefert der Gate `j` -> kein `loop_human_gate_eof`.
+- **Tests:** `tests/test_human_gate_body.py` (2-3 Tests).
+- **Grund:** Loop-aus-UI laeuft heute bis Phase-Review und crasht dann.
+
+### OP-394: Live-Feed UI-Redesign — semantische Labels + Sortierung
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-2 (UI-Ehrlichkeit)
+- **Blockiert von:** —
+- **Quelle:** Live-Test 2026-11-10 10:17-10:23. UI-Kritik: (a) Reviewer blitzt auf, dann weg (Aktiv-Block zeigt nur letztes Event), (b) Sortierung verwirrend (neuestes unten, aktueller Run oben), (c) keine semantischen Verben ("denke nach", "plane", "splitte", "baue" fehlen).
+- **Betroffene Dateien:** `werkstatt/web/inspector.py` (`_tl_detail`, `_tl_label`, `aggregate_live_feed` — Sortierung explizit), `static/live_feed.js` (Sortierung, Aktiv-Block).
+- **Problem:** Aktiv-Block zeigt nur letztes Event; Sortierung implizit (Backend/Frontend nicht abgestimmt); `aktion` im Live-Feed ist `kind` (technisch), kein semantisches Verb.
+- **Akzeptanzkriterien:**
+  (a) Live-Feed-Steps explizit chronologisch aufsteigend sortiert (dokumentiert).
+  (b) Aktiv-Block zeigt auch gerade-fertig-gewordene Rollen (5s-Fenster).
+  (c) Semantische Aktion pro Zeile: `loop_phase architect` → "Architect denkt", `loop_phase planner` → "Planner splittet Plan", `builder_file_context` → "Builder liest N Dateien", `builder_patches_erstellt` → "Builder liefert N Patches", `loop_verify_ok` → "Verify OK", `gate_answered` → "Antwort: j". Fallback: `_tl_detail`.
+  (d) Test `tests/test_live_feed_semantik.py`: 5-6 Kinds mit je erwartetem Aktions-String.
+- **Tests:** `tests/test_live_feed_semantik.py` (neu), `tests/test_live_feed_backend.py` erweitert.
+- **Grund:** UI zeigt technische Kinds. Ohne semantische Labels ist Loop im Live-Test schwer nachvollziehbar.
+
+### OP-395: Builder-Event-Emission waehrend LLM-Call
+
+- **Status:** open
+- **Typ:** ui-feature
+- **Phase:** Phase-3 (Loop-Telemetrie)
+- **Blockiert von:** —
+- **Quelle:** Live-Test 2026-11-10. Builder-Phase hat 30-60s Luecke ohne Events (`builder_file_context` 10:20:59 -> `builder_patches_erstellt` 10:21:49). UI wirkt "Builder tot".
+- **Betroffene Dateien:** `werkstatt/roles/builder/run.py` (LLM-Call-Stelle), optional `static/live_feed.js`.
+- **Problem:** Zwischen `builder_import_context` und `builder_patches_erstellt` liegen 40-60s (LLM-Call). Kein Zwischen-Event. Explorer/Scout/Reviewer haben alle `llm_call_start`/`llm_call_end` — nur Builder nicht.
+- **Akzeptanzkriterien:**
+  (a) Builder emittiert `llm_call_start`/`llm_call_end` um den LLM-Aufruf.
+  (b) Alternative: Heartbeat-Event alle 5s.
+  (c) Live-Feed zeigt "Builder denkt (35s)".
+- **Tests:** `tests/test_live_feed_backend.py` erweitert, `tests/test_builder.py` (Event-Reihenfolge).
+- **Grund:** UI-Ehrlichkeit. "Builder tot" ist falsche Interpretation eines arbeitenden Loops.
+
 ## Erledigt (Auto-Log)
 
 - 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)

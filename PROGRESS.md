@@ -3879,3 +3879,37 @@ Commits: 1869182, c1dcb4d, 63248c4
 - [E] Scout-Datei-Validierung: nicht reproduzierbar, Run fehlt.
 - [D] Commit-Gate-Prompt explizit gemacht (gates.py:697).
 
+### 2026-11-10 Live-Test OP-381 (f) — strukturell erfolgreich, 3 neue OPs
+
+**Erfolg:** Loop aus UI (POST /start mit op_id=OP-389b) startet
+korrekt, Explorer findet Dateien (Volltext-Fix aus c51b21d), Plan-Gate
+erscheint im Browser, User-Klick `j` kommt an (gate_answered +
+loop_plan_gate_approved), Builder arbeitet 3 Tasks ab (t1 fail wegen
+Builder-Import-Halluzination, t2 ok, t3 reviewer-rejected), Loop kommt
+bis Phase-Review. **OP-381 (a)-(e) sind live validiert.**
+
+**Neuer Blocker:** Phase-Review-Gate nutzt `input()` statt `gate_bridge`
+-> loop_human_gate_eof -> loop_failed. Angelegt als OP-393.
+
+**Drei UI-Befunde:** Aktiv-Block zeigt nur letztes Event, Sortierung
+verwirrend, Builder 30-60s ohne Events (wirkt "tot"), technische Kinds
+statt semantischer Verben ("Architect denkt" etc.). Angelegt als
+OP-394 (semantisch + Sortierung) und OP-395 (Builder-Event-Emission).
+
+**Handoff-Korrektur (weiter):** Handoff §3 [E] "Scout halluziniert
+ws.py" war FALSCH — der Scout hat `ws.py:80-82` korrekt referenziert,
+der Bug lag im `_pruefe_api_widerspruch` (false-positive). Handoff §3
+[A] "Builder-Typ-Bug" war falsch (balken-Konflikt war aus OP-381i).
+Damit: 4 von 5 Handoff-Bugs widerlegt oder unzutreffend; nur [B] und
+[C] waren echt (gefixt 63248c4 / c1dcb4d).
+
+**Zahlen:** 1697 passed, 5 skipped. 8 Commits (1869182, c1dcb4d,
+63248c4, 8768b72, b09af0a, a3140b0, c51b21d, 2978d27). Alle 5
+Drifts OK.
+
+**Nachtrag 2026-11-10 (nach dem Live-Test):** Loop-Patch war sauber.
+Builder hat t2 (`audit_panel.py`) und t3 (`terminal_proxy.py`) exakt
+OP-389b-konform migriert. Diff verworfen, weil unvollstaendig (t4
+`tests/test_ws_endpoint_helpers.py` fehlt, t1 failte). Der Patch-Beweis
+ist im Merkposten dokumentiert.
+
