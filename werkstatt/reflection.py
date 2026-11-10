@@ -834,9 +834,6 @@ def _phase_end_reflection(state: RunState) -> bool:
     pd = state.project_dir
     pn = state.project_name
     bugs = state.reviewer_bugs or []
-    # Gate-Merker: lebt nur lokal, kein State-Feld, kein Audit-Event.
-    _auto = False
-
     for _runde in range(2):
         if not bugs:
             # Nichts zu reparieren, aber Phase-Review war reject.
@@ -930,19 +927,14 @@ def _phase_end_reflection(state: RunState) -> bool:
             return True
         bugs = state.reviewer_bugs or []
 
-        # Gate: nach jeder Reject-Runde den Menschen fragen, ausser
-        # der Auto-Modus wurde bereits aktiviert. Der Merker lebt
-        # lokal in dieser Funktion (kein State-Feld, kein Audit).
-        # Reset: verhindert Durchsickern von phase_review_auto=True
-        # aus einer frueheren Invocation in diese Runde.
-        if not _auto:
-            from werkstatt.phases.review import _phase_review_gate
-            state.phase_review_auto = False
-            _gate = _phase_review_gate(state)
-            if _gate == 1:
-                return False
-            if _gate == 0 and getattr(state, "phase_review_auto", False):
-                _auto = True
+        # Jede Reject-Runde braucht eine eigene menschliche Entscheidung.
+        from werkstatt.phases.review import _phase_review_gate
+        if _phase_review_gate(state) != 0:
+            return False
+        if _runde == 1:
+            # Die letzte j-Antwort ist eine explizite menschliche
+            # Uebernahme trotz verbleibendem Reviewer-Befund.
+            return True
 
     audit("loop_phase_reflection_erschoepft", {"runden": 2}, pd, pn)
     return False

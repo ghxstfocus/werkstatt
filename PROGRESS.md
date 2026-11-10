@@ -4720,3 +4720,10 @@ Der Event-Store kann Events jetzt mit Projektbezug und deterministischer Event-I
 - Ein Crash zwischen durablem Audit-Append und Outbox-Markierung kann dasselbe stabile Job-Event erneut anhängen. `Projector.status()` zählt jetzt logische eindeutige Events statt physische Wiederholungszeilen; `tail()` setzt den Checkpoint auch bei übersprungenen Duplikaten fort.
 - Regressionstest deckt Retry, Event-ID-Deduplizierung, driftfreien Health-Status und Checkpoint-Fortschritt ab.
 - **Serververifikation auf `7bfdba3`:** gezielte Event-/Job-/Live-Feed-Suite 67 bestanden; Ruff ohne Fehler; Gesamtsuite 1900 passed / 5 skipped. Quality Gate: `ok: true`, Regression `false`, Ruff 0, Mypy 0, AST 369 Dateien / 0 Fehler, Audit-Katalog bestanden. `doku_check --strict --limit 10 --worktree` meldete den bereits bekannten historischen Drift `42f0c01397` sowie lokale uncommittete Änderungen an `werkstatt/web/audit_panel.py` und `werkstatt/web/terminal_proxy.py`.
+
+
+## Phase-Review-Freigabe bleibt menschlich (2026-11-11)
+
+- Code-Audit gegen ADR-0029 fand im Phase-Review-Gate die Option `a = auto bis Ende`. Sie setzte `phase_review_auto`, wodurch ein spaeteres Human-Gate derselben Reflection-Invocation uebersprungen wurde.
+- Die Auto-Option und der Skip-Merker sind entfernt. Nach jeder Reviewer-Ablehnung wird erneut eine konkrete menschliche Entscheidung verlangt; unbekannte Antworten wie `a` geben nicht frei und werden erneut abgefragt. Tests sichern die UI/Gate-Optionen und beide Reject-Runden.
+- Serververifikation nach Pull steht aus.

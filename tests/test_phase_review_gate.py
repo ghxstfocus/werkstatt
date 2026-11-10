@@ -136,10 +136,10 @@ def test_reflection_reject_ruft_gate(tmp_path):
          patch("werkstatt.reviewer.run_phase_end_review", return_value=False), \
          patch("werkstatt.phases.review._phase_review_gate",
                side_effect=_gate_spy):
-        assert _phase_end_reflection(s) is False
-    assert len(gate_calls) >= 1, (
-        f"Gate wurde {len(gate_calls)}x gerufen, erwartet >= 1"
-    )
+        # Zwei ausdrueckliche j-Entscheidungen: nach der letzten darf der
+        # Mensch die verifizierten Patches trotz Reviewer-Befund uebernehmen.
+        assert _phase_end_reflection(s) is True
+    assert len(gate_calls) == 2, "Jede Reject-Runde braucht ein eigenes Gate."
 
 
 def test_gate_n_bricht_reflection_ab(tmp_path):

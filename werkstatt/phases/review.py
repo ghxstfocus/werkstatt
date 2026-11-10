@@ -10,19 +10,16 @@ from werkstatt.state import RunState
 def _phase_review_gate(state: RunState) -> int:
     """OP-168: Human-Gate vor Phase-Review-Loop-Abbruch.
 
-    Wird gerufen, wenn _phase_end_reflection nach 2 Runden
-    aufgegeben hat. Verhindert stummes `LOOP FEHLGESCHLAGEN`
-    mit dirty Tree (Loop-Test-4, 2026-11-05).
+    Wird nach jedem fehlgeschlagenen Phase-Review in
+    `_phase_end_reflection` gerufen. Jede Reviewer-Ablehnung verlangt
+    eine konkrete menschliche Entscheidung vor der naechsten Aktion.
 
     Optionen:
-      j = Patches behalten, Loop fortsetzen (Phase 5 + Commit)
+      j = Patches behalten; nach letzter Runde Ergebnis uebernehmen
       n = Patches verwerfen, Loop abbrechen
       e = Datei manuell editieren, dann erneut fragen
-      a = Auto bis Ende (phase_review_auto=True)
-
-    Rueckgabe: 0 (j oder a), 1 (n oder EOF). Fail-closed bei EOFError.
-    Teilfix: Gate sitzt NACH _phase_end_reflection, nicht
-    zwischen den internen Runden. Vollstaendig: OP-168b.
+    Rueckgabe: 0 (j), 1 (n oder EOF). Fail-closed bei EOFError.
+    OP-168b: Das Gate wird nach jeder Reject-Runde abgefragt.
     """
     pd = getattr(state, "project_dir", None)
     pn = getattr(state, "project_name", "?")
@@ -46,24 +43,26 @@ def _phase_review_gate(state: RunState) -> int:
             return 1
     print()
     print("PHASE-REVIEW GATE")
-    print("  Phase-Review ist nach 2 Runden erschoepft.")
-    print("  j = Patches behalten, Loop fortsetzen (Phase 5 + Commit)")
+    print("  Reviewer hat die aktuelle Aenderung abgelehnt.")
+    print(
+        "  j = Patches behalten; Reflection fortsetzen, "
+        "nach letzter Runde Ergebnis uebernehmen"
+    )
     print("  n = Patches verwerfen, Loop abbrechen")
     print("  e = Datei manuell editieren (dann erneut fragen)")
-    print("  a = auto bis Ende")
     _prompt = (
         "\nPHASE-REVIEW GATE\n"
-        "  Phase-Review ist nach 2 Runden erschoepft.\n"
-        "  j = Patches behalten, Loop fortsetzen (Phase 5 + Commit)\n"
+        "  Reviewer hat die aktuelle Aenderung abgelehnt.\n"
+        "  j = Patches behalten; Reflection fortsetzen, "
+        "nach letzter Runde Ergebnis uebernehmen\n"
         "  n = Patches verwerfen, Loop abbrechen\n"
         "  e = Datei manuell editieren (dann erneut fragen)\n"
-        "  a = auto bis Ende\n"
-        "Deine Wahl [j] behalten / [n] verwerfen / [e] manuell / [a] auto bis Ende: "
+        "Deine Wahl [j] behalten / [n] verwerfen / [e] manuell: "
     )
     while True:
         try:
             antwort = _gates_mod._frage_gate(
-                "phase_review", _prompt, "jnea",
+                "phase_review", _prompt, "jne",
             ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             audit_safe("loop_human_gate_eof",
@@ -87,9 +86,4 @@ def _phase_review_gate(state: RunState) -> int:
             # headless: kein Enter-Wait moeglich (stdin=/dev/null) —
             # direkt nochmal fragen.
             continue
-        if antwort == "a":
-            state.phase_review_auto = True
-            audit_safe("loop_human_gate_auto",
-                       {"gate": "phase_review"}, pd, pn)
-            return 0
-        print("Ungueltige Eingabe. Erlaubt: j, n, e, a.")
+        print("Ungueltige Eingabe. Erlaubt: j, n, e.")

@@ -38,7 +38,7 @@ def test_headless_nutzt_frage_gate_und_liefert_j(monkeypatch):
     assert rc == 0, f"rc={rc}, aufrufe={aufrufe}"
     assert len(aufrufe) == 1
     assert aufrufe[0][0] == "phase_review"
-    assert aufrufe[0][1] == "jnea"
+    assert aufrufe[0][1] == "jne"
 
 
 def test_headless_n_liefert_1(monkeypatch):
@@ -51,17 +51,30 @@ def test_headless_n_liefert_1(monkeypatch):
     assert _phase_review_gate(_mk_state()) == 1
 
 
-def test_headless_a_setzt_auto(monkeypatch):
+def test_headless_a_erteilt_keine_freigabe(monkeypatch):
     from werkstatt import gates as gates_mod
+    from werkstatt.phases import review as review_mod
     from werkstatt.phases.review import _phase_review_gate
 
     monkeypatch.setattr(gates_mod, "_HEADLESS", True)
-    monkeypatch.setattr(gates_mod, "_frage_gate", lambda k, p, o="jna": "a")
+    antworten = iter(["a", "j"])
+    aufrufe: list[tuple] = []
+    audit_events: list[tuple] = []
 
-    s = _mk_state()
-    rc = _phase_review_gate(s)
+    def _frage(kind, prompt, optionen="jna"):
+        aufrufe.append((kind, optionen))
+        return next(antworten)
+
+    monkeypatch.setattr(gates_mod, "_frage_gate", _frage)
+    monkeypatch.setattr(
+        review_mod, "audit_safe",
+        lambda kind, payload, *_args: audit_events.append((kind, payload)),
+    )
+
+    rc = _phase_review_gate(_mk_state())
     assert rc == 0
-    assert s.phase_review_auto is True
+    assert aufrufe == [("phase_review", "jne"), ("phase_review", "jne")]
+    assert not any(kind == "loop_human_gate_auto" for kind, _ in audit_events)
 
 
 def test_headless_eof_liefert_1(monkeypatch):
