@@ -170,12 +170,138 @@
     });
     _renderSidebarAktuell();
   }
+  function _inlineMarkdown(parent, text) {
+    var muster = /\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n]+_|\x60[^\x60\n]+\x60|\[[^\]]+\]\((?:https?:\/\/|\/)[^\s)]+\)/g;
+    var offset = 0;
+    var treffer;
+    while ((treffer = muster.exec(text)) !== null) {
+      if (treffer.index > offset) {
+        parent.appendChild(document.createTextNode(text.slice(offset, treffer.index)));
+      }
+      var token = treffer[0];
+      var el = null;
+      if (token.slice(0, 2) === "**" || token.slice(0, 2) === "__") {
+        el = document.createElement("strong");
+        el.textContent = token.slice(2, -2);
+      } else if (token[0] === "*" || token[0] === "_") {
+        el = document.createElement("em");
+        el.textContent = token.slice(1, -1);
+      } else if (token[0] === "\x60") {
+        el = document.createElement("code");
+        el.textContent = token.slice(1, -1);
+      } else {
+        var link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+        if (link) {
+          var href = link[2];
+          try {
+            var url = new URL(href, window.location.href);
+            if (url.protocol === "http:" || url.protocol === "https:") {
+              el = document.createElement("a");
+              el.href = url.href;
+              el.target = "_blank";
+              el.rel = "noopener noreferrer";
+              el.textContent = link[1];
+            }
+          } catch (e) {}
+        }
+      }
+      if (el) parent.appendChild(el);
+      else parent.appendChild(document.createTextNode(token));
+      offset = muster.lastIndex;
+    }
+    if (offset < text.length) {
+      parent.appendChild(document.createTextNode(text.slice(offset)));
+    }
+  }
+
+  function _renderMarkdown(root, markdown) {
+    while (root.firstChild) root.removeChild(root.firstChild);
+    var lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
+    var i = 0;
+    function leer(line) { return !line || !line.trim(); }
+    function especial(line) {
+      return /^\s*```/.test(line) ||
+        /^#{1,6}\s+/.test(line) ||
+        /^\s*[-*+]\s+/.test(line) ||
+        /^\s*\d+[.)]\s+/.test(line) ||
+        /^\s*>/.test(line);
+    }
+    function absatz(text) {
+      var p = document.createElement("p");
+      _inlineMarkdown(p, text);
+      root.appendChild(p);
+    }
+
+    while (i < lines.length) {
+      if (leer(lines[i])) { i++; continue; }
+      if (/^\s*```/.test(lines[i])) {
+        var fence = lines[i].trim();
+        var language = fence.slice(3).trim().split(/\s+/)[0] || "";
+        var codeLines = [];
+        i++;
+        while (i < lines.length && !/^\s*```/.test(lines[i])) {
+          codeLines.push(lines[i++]);
+        }
+        if (i < lines.length) i++;
+        var pre = document.createElement("pre");
+        var code = document.createElement("code");
+        if (/^[a-z0-9_+-]{1,30}$/i.test(language)) code.className = "language-" + language;
+        code.textContent = codeLines.join("\n");
+        pre.appendChild(code);
+        root.appendChild(pre);
+        continue;
+      }
+      var heading = lines[i].match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
+      if (heading) {
+        var h = document.createElement("h" + heading[1].length);
+        _inlineMarkdown(h, heading[2]);
+        root.appendChild(h);
+        i++;
+        continue;
+      }
+      if (/^\s*>/.test(lines[i])) {
+        var quote = document.createElement("blockquote");
+        while (i < lines.length && /^\s*>/.test(lines[i])) {
+          var qp = document.createElement("p");
+          _inlineMarkdown(qp, lines[i].replace(/^\s*>\s?/, ""));
+          quote.appendChild(qp);
+          i++;
+        }
+        root.appendChild(quote);
+        continue;
+      }
+      var unordered = lines[i].match(/^\s*([-*+])\s+(.+)$/);
+      var ordered = lines[i].match(/^\s*\d+[.)]\s+(.+)$/);
+      if (unordered || ordered) {
+        var list = document.createElement(ordered ? "ol" : "ul");
+        while (i < lines.length) {
+          var item = lines[i].match(ordered ? /^\s*\d+[.)]\s+(.+)$/ : /^\s*[-*+]\s+(.+)$/);
+          if (!item) break;
+          var li = document.createElement("li");
+          _inlineMarkdown(li, item[1]);
+          list.appendChild(li);
+          i++;
+        }
+        root.appendChild(list);
+        continue;
+      }
+      var paragraph = [];
+      while (i < lines.length && !leer(lines[i]) && !especial(lines[i])) {
+        paragraph.push(lines[i]);
+        i++;
+      }
+      if (paragraph.length) absatz(paragraph.join(" "));
+      else { absatz(lines[i]); i++; }
+    }
+  }
+
   function _karte(rolle, text) {
     var box = _el("chat-nachrichten");
     if (!box) return null;
     var k = document.createElement("div");
     k.className = "chat-msg " + rolle;
-    k.textContent = text;
+    if (rolle === "assistant") _renderMarkdown(k, text);
+    else k.textContent = text;
     var leer = box.querySelector(".chat-empty");
     if (leer) leer.remove();
     box.appendChild(k);
@@ -292,7 +418,7 @@
     if (!zustand.streamAktiv && voll) {
       _karte("assistant", voll);
     } else if (zustand.aktuelleKarte) {
-      zustand.aktuelleKarte.textContent = voll || zustand.streamBuf;
+      _renderMarkdown(zustand.aktuelleKarte, voll || zustand.streamBuf);
     }
     zustand.streamAktiv = false;
     zustand.streamBuf = "";
