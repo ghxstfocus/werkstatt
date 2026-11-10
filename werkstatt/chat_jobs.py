@@ -73,7 +73,8 @@ class ChatJobStore:
                 " seq INTEGER PRIMARY KEY AUTOINCREMENT,"
                 " job_id TEXT NOT NULL, kind TEXT NOT NULL,"
                 " payload TEXT NOT NULL, ts TEXT NOT NULL,"
-                " projected INTEGER NOT NULL DEFAULT 0,"" FOREIGN KEY(job_id) REFERENCES jobs(job_id));"
+                " projected INTEGER NOT NULL DEFAULT 0,"
+                " FOREIGN KEY(job_id) REFERENCES jobs(job_id));"
                 "CREATE INDEX IF NOT EXISTS idx_chat_job_events "
                 "ON job_events(job_id, seq);"
             )
@@ -328,7 +329,8 @@ class ChatJobStore:
             return int(cur.lastrowid or 0)
 
     def project_pending_events(
-        self, session_id: str | None = None, *, limit: int = 500,
+        self, session_id: str | None = None, *,
+        job_id: str | None = None, limit: int = 500,
     ) -> int:
         """Projeziert Run-gebundene Job-Events idempotent in die Loop-Timeline."""
         sql = (
@@ -341,6 +343,9 @@ class ChatJobStore:
         if session_id is not None:
             sql += " AND j.session_id=?"
             params.append(session_id)
+        if job_id is not None:
+            sql += " AND e.job_id=?"
+            params.append(job_id)
         sql += " ORDER BY e.seq LIMIT ?"
         params.append(max(1, limit))
         with closing(self._connect()) as conn:
@@ -467,7 +472,7 @@ class ChatJobStore:
     def get(
         self, job_id: str, *, since_seq: int = 0,
     ) -> dict[str, Any] | None:
-        self.project_pending_events()
+        self.project_pending_events(job_id=job_id)
         with closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT * FROM jobs WHERE job_id=?", (job_id,),
