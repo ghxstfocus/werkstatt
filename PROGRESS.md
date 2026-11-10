@@ -4337,3 +4337,17 @@ OP-ID die Selector-Ausschlussgruende aus; die bestehende Testfixture mit
 
 - **Commit:** `0ea9b8878c33` — Phase-Gate auch ohne Blockerfeld erzwingen.
 - **Serververifikation:** nach Pull noch ausstehend.
+
+
+### OP-398 — widerspruechlichen OP-382-Abschlussbeleg fail-closed behandeln (2026-11-10)
+
+Die Phase-3-Sperre nutzt Abschlussbelege aus PROGRESS und STATUS. Ein
+veralteter Abschlussbeleg darf die Sperre nicht aufheben, solange dieselbe
+OP-ID noch in STATUS steht (offen oder doppelt). Der Selector akzeptiert den
+OP-382-Beleg deshalb nur, wenn OP-382 aus der offenen STATUS-Liste entfernt
+ist. Ein Regressionstest kombiniert einen stale done-Beleg mit offenem OP-382
+und prueft, dass OP-382 selbst startbar bleibt, Phase 3 aber gesperrt bleibt.
+
+- **Commit:** `8b3b7f5ae403` — widerspruechliche Freigabe verhindern.
+- **Commit:** `2dd3b724b1ab` — Regressionstest.
+- **Serververifikation:** nach Pull weiterhin ausstehend.
