@@ -4734,3 +4734,7 @@ Der Event-Store kann Events jetzt mit Projektbezug und deterministischer Event-I
 - Der Code-Audit fand im finalen Human-Gate einen zweiten Auto-Freigabe-Pfad: `require_human_approval: false` beendete das Gate mit Erfolg, bevor eine menschliche Antwort eingeholt wurde.
 - Der Config-Bypass ist entfernt. Eine Legacy-Konfiguration mit `false` bleibt fail-closed und verlangt weiterhin eine ausdrueckliche menschliche Antwort; EOF wird abgelehnt. Tests und ADR-0029/OP-396-Doku aktualisiert.
 - Serververifikation nach Pull steht aus.
+
+## Gate-Fix Regressionen aus Serverlauf (2026-11-11)
+
+Der Serverlauf auf `512ad5a` bestätigte die gezielte Gate-Suite (37 bestanden), Ruff und State-Drift-Prüfung. Die Gesamtsuite fand zwei Folgefehler: Der entfernte Auto-Gate-Pfad hinterliess `loop_human_gate_auto` als toten Katalogeintrag; ein älterer Reflection-Test erwartete trotz expliziter menschlicher Freigabe nach der letzten Reviewer-Ablehnung noch `False`. Den Eintrag entfernt und den Test auf die aktuelle Semantik umgestellt: zwei Reviewer-Rejects mit je explizitem `j` ergeben eine angenommene Reflection, nachdem Verify erfolgreich war. Erneute Serververifikation steht aus.
