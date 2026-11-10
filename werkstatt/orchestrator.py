@@ -76,10 +76,14 @@ def load_docs(docs_config: dict[str, str], project_dir: Path) -> dict[str, str]:
     docs: dict[str, str] = {}
     for key, rel in _sortiere_docs_nach_prioritaet(docs_config):
         path = project_dir / rel
-        if not path.exists():
-            print(f"[FAIL] Pflichtdokument fehlt: {rel}. Fail closed.")
+        try:
+            docs[key] = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(
+                f"[FAIL] Pflichtdokument {rel} kann nicht gelesen werden: "
+                f"{exc}. Fail closed."
+            )
             sys.exit(1)
-        docs[key] = path.read_text(encoding="utf-8")
     return docs
 
 
@@ -111,15 +115,7 @@ def build_run_state(
     if not api_key:
         raise ValueError("DEEPSEEK_API_KEY fehlt")
 
-    docs: dict[str, str] = {}
-    try:
-        docs = load_docs(cfg.get("docs", {}), pd)
-    except SystemExit:
-        # load_docs ruft sys.exit bei fehlenden Dateien.
-        # In build_run_state tolerieren wir das (leerer Kontext).
-        docs = {}
-    except Exception:
-        docs = {}
+    docs = load_docs(cfg.get("docs", {}), pd)
 
     # OP-053: git_author aus Manifest (projects/<name>.yaml) in RunState.
     _git_author = cfg.get("git_author", {}) or {}
