@@ -27,7 +27,7 @@ class IdempotencyConflict(ValueError):
     """Raised when a key is reused for a different chat request."""
 
 _EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="werkstatt-chat")
-_FUTURES: dict[str, Future[None]] = {}
+_FUTURES: dict[str, Future[bool]] = {}
 _FUTURES_LOCK = threading.RLock()
 _WORKER_ID = f"{os.getpid()}:{uuid.uuid4().hex}"
 _WORKER_LEASE_SECONDS = 90
@@ -133,6 +133,14 @@ class ChatJobStore:
                 "SELECT * FROM jobs WHERE state='queued' ORDER BY rowid",
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def running_sessions(self) -> set[str]:
+        """Sessions mit einem laufenden Turn, die noch nicht dispatchbar sind."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT session_id FROM jobs WHERE state='running'",
+            ).fetchall()
+        return {str(row["session_id"]) for row in rows}
 
     def claim(self, job_id: str, worker_id: str = "test-worker") -> bool:
         """Beansprucht hoechstens einen gleichzeitigen Turn pro Session."""
@@ -387,13 +395,13 @@ class ChatJobStore:
 
 def _run_job(
     db_path: Path, project: str, project_dir: Path, job_id: str,
-) -> None:
+) -> bool:
     store = ChatJobStore(db_path)
     if not store.claim(job_id, _WORKER_ID):
-        return
+        return False
     job = store.get(job_id)
     if job is None:
-        return
+        return True
 
     from werkstatt.chat_agent import ChatCancelled, chat_loop
     from werkstatt.chat_session import ChatSession
@@ -447,6 +455,7 @@ def _run_job(
         heartbeat_stop.set()
         heartbeat_thread.join(timeout=_WORKER_HEARTBEAT_SECONDS + 1)
         _dispatch_pending(db_path, project, project_dir)
+    return True
 
 
 def _dispatch_pending(
@@ -454,10 +463,11 @@ def _dispatch_pending(
 ) -> None:
     store = ChatJobStore(db_path)
     store.recover_abandoned_jobs()
+    running_sessions = store.running_sessions()
     submitted_sessions: set[str] = set()
     for job in store.queued():
         session_id = str(job["session_id"])
-        if session_id in submitted_sessions:
+        if session_id in running_sessions or session_id in submitted_sessions:
             continue
         submitted_sessions.add(session_id)
         key = f"{db_path.resolve()}:{job['job_id']}"
@@ -469,7 +479,9 @@ def _dispatch_pending(
                 _run_job, db_path, project, project_dir, job["job_id"],
             )
             _FUTURES[key] = future
-            future.add_done_callback(_future_cleanup_callback(key))
+            future.add_done_callback(
+                _future_cleanup_callback(key, db_path, project, project_dir),
+            )
 
 
 
@@ -480,10 +492,18 @@ def _forget_future(key: str, future: Future[None]) -> None:
             _FUTURES.pop(key, None)
 
 
-def _future_cleanup_callback(key: str) -> Callable[[Future[None]], None]:
-    """Bindet einen Future-Key mit konkretem Callback-Typ."""
-    def cleanup(future: Future[None]) -> None:
+def _future_cleanup_callback(
+    key: str, db_path: Path, project: str, project_dir: Path,
+) -> Callable[[Future[bool]], None]:
+    """Bereinigt Futures und versucht nach einem Claim-Rennen erneut zu dispatchen."""
+    def cleanup(future: Future[bool]) -> None:
         _forget_future(key, future)
+        try:
+            claim_lost = future.result() is False
+        except Exception:
+            claim_lost = False
+        if claim_lost:
+            _dispatch_pending(db_path, project, project_dir)
 
     return cleanup
 
