@@ -2725,3 +2725,34 @@ body[data-mode="control"] .live-feed-bereich {
   .gate-modal-inner { transition: none; }
   .gate-backdrop { transition: none; }
 }
+
+
+/* Projektbezogene Loop-Steuerung in der Runs-Ansicht. */
+.runs-control {
+  align-items: center;
+  border-bottom: 1px solid var(--border, #354052);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: space-between;
+  padding: 0.65rem 0.75rem;
+}
+.runs-control-state {
+  color: var(--text-primary, #e8edf5);
+  font-weight: 600;
+}
+.runs-control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.runs-control-message {
+  color: var(--text-secondary, #aeb8c8);
+  flex-basis: 100%;
+  min-height: 1.2em;
+}
+
+.runs-action-btn[data-action="pause"],
+.runs-action-btn[data-action="resume"] {
+  border-color: var(--accent, #7ab8ff);
+}
