@@ -53,6 +53,34 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
     }
 
 
+def test_history_repairs_completed_job_turn_after_worker_crash(
+    client_and_base: tuple[Any, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, base = client_and_base
+    from werkstatt import chat_session
+
+    chat_db = base / "chat-sessions.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
+    jobs_db = base / ".werkstatt" / "chat-jobs" / "demo.db"
+    store = ChatJobStore(jobs_db)
+    job, _ = store.create(
+        "session-1", "Frage nach Reconnect", "read", "request-key-repair-001",
+    )
+    assert store.claim(job["job_id"])
+    assert store.finish(job["job_id"], answer="Antwort nach Reconnect")
+
+    response = client.get(
+        "/api/projects/demo/chat/history?session_id=session-1",
+    )
+
+    assert response.status_code == 200
+    events = response.json()["events"]
+    assert [event["kind"] for event in events] == ["job_turn"]
+    assert events[0]["payload"]["job_id"] == job["job_id"]
+    assert events[0]["payload"]["assistant_text"] == "Antwort nach Reconnect"
+
+
 def test_chat_job_rejects_write_mode_without_gate(
     client_and_base: tuple[Any, Path],
 ) -> None:
