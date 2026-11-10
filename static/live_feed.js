@@ -155,6 +155,34 @@
     return box;
   }
 
+  var EVENT_TITEL = {
+    loop_started: "Run gestartet",
+    loop_ended: "Run beendet",
+    loop_failed: "Run fehlgeschlagen",
+    loop_human_gate_rejected: "Freigabe abgelehnt",
+    gate_expired: "Freigabe abgelaufen",
+    loop_rollback_skipped: "Rollback übersprungen",
+    loop_plan_gate_approved: "Plan freigegeben",
+    loop_verify_ok: "Prüfung erfolgreich",
+    loop_verify_failed: "Prüfung fehlgeschlagen"
+  };
+
+  function _lesbarerSchritt(step) {
+    var detail = String(step.detail || "");
+    var gate = detail.match(/gate=([a-z0-9_-]+)/i);
+    var titel = EVENT_TITEL[step.kind] || "";
+    if (gate && /rejected|abgelehnt/i.test(step.kind || "")) {
+      titel = "Gate abgelehnt";
+      detail = gate[1].replace(/_/g, " ");
+    } else if (gate && detail.indexOf("grund=?") >= 0) {
+      titel = "Gate: " + gate[1].replace(/_/g, " ");
+      detail = "";
+    }
+    if (!detail) return titel || step.kind || "";
+    if (titel && detail === step.kind) return titel;
+    return detail;
+  }
+
   function _renderStep(step, istNeu) {
     var row = document.createElement("div");
     row.className = "lf-step";
@@ -176,7 +204,7 @@
 
     var detail = document.createElement("span");
     detail.className = "lf-step-detail";
-    detail.textContent = step.detail || step.kind || "";
+    detail.textContent = _lesbarerSchritt(step);
     row.appendChild(detail);
 
     var stil = _statusStil(step.status);
