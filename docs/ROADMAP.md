@@ -114,8 +114,8 @@ Rollen: Explorer, Planner, Builder, Verify, Reviewer, Human-Gate.
 ### Phase 23: Effizienz (M-479..M-482) 🔧
 
 - M-479: Modell-Routing pro Rolle. Architect = `deepseek-v4-pro` mit Thinking/high;
-  Builder, Planner-Split, Reviewer, Scout, Explorer, Validator, Reflection,
-  Debugger und Chat = `deepseek-flash` mit Thinking/disabled.
+  Builder, Planner-Split, Reviewer, Scout, Explorer, Validator, Reflection
+  sowie Chat/Debugger-Modus = `deepseek-flash` mit Thinking/disabled.
   Rollen-Overrides laufen ueber `WERKSTATT_MODEL_<ROLLE>`.
 - M-480: Kosten-Circuit-Breaker.
 - M-481: Cache-aware Prompts.
@@ -409,7 +409,7 @@ Stand: 2026-11-03, migriert aus STATUS.md.
 - **Blockiert von:** —
 
 
-#### OP-016: M-479 — Modell-Routing pro Rolle. `ask_llm(role=...)` mit Env-Vars. Architect = `deepseek-v4-pro` (Thinking/high), alle Implementierungs- und Diagnose-Rollen = `deepseek-flash` (Thinking/disabled). Legacy-IDs werden an der API-Grenze kanonisiert.
+#### OP-016: M-479 — Modell-Routing pro Rolle. `ask_llm(role=...)` mit Env-Vars. Architect = `deepseek-v4-pro` (Thinking/high), alle Implementierungs- und Diagnose-Rollen sowie Chat/Debugger-Modus = `deepseek-flash` (Thinking/disabled). Legacy-IDs werden an der API-Grenze kanonisiert.
 - **Status:** open
 - **Typ:** roadmap-phase (nicht loop-fähig — gehört in ROADMAP.md, nicht in die Loop-Queue)
 - **Betroffene Dateien:** —
