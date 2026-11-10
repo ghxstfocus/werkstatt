@@ -4209,4 +4209,5 @@ die noch in STATUS.md stehen, bleiben widerspruechlich und fail-closed.
 - **Commit:** `ef4b195adc22` — Web-Start mit Abschlussliste aus dem Projekt-PROGRESS verbinden.
 - **Commit:** `cde3927e3818` — Chat-Selector an die projektgebundene Abschlussliste binden.
 - **Commit:** `32a3542154d2` — Chat-Regressionstest fuer OP-201-Abhaengigkeit.
+- **Commit:** `4fed0db2c692` — Ruff-konforme Formatierung der Chat-Testsignatur.
 - **Serververifikation steht aus.** Zieltests, Ruff und vollstaendiges Quality-Gate nach Pull ausfuehren.
