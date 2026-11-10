@@ -24,8 +24,6 @@ _ROLE_MODELS = {
     "reviewer": "deepseek-flash",
     "review": "deepseek-flash",
     "reflection": "deepseek-flash",
-    "debugger": "deepseek-flash",
-    "solver": "deepseek-flash",
     "planner": "deepseek-flash",
     "planner-split": "deepseek-flash",
     "explorer": "deepseek-flash",
@@ -54,6 +52,8 @@ def canonical_model_name(model: str) -> str:
 
 def _role_label(role: str) -> str:
     label = role.strip().lower().replace("_", "-")
+    if label == "debugger":
+        return "chat"
     if label.startswith("planner-") and label not in _ROLE_MODELS:
         return "planner"
     if label.startswith("reflection-") and label not in _ROLE_MODELS:
