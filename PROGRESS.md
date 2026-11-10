@@ -4478,3 +4478,9 @@ vollstaendig umgesetzt oder verifiziert.
 - **Commit:** `a968c21ca7629640f14c2941` — unbekannte Agent-Labels fallen fail-safe auf Flash zurueck.
 
 - **Commit:** `11506b4e28ef4e5225c9dbae` — Overrides nur fuer registrierte Rollen erlauben.
+
+
+## Chat-Job-Idempotenz (2026-11-10)
+
+Wiederverwendung eines Idempotency-Keys mit abweichendem Nachrichtentext oder Modus wird jetzt als Konflikt abgewiesen (HTTP 409), statt still den alten Job zurueckzugeben. Gleiche Anfrage mit gleichem Key bleibt dedupliziert. Servertests fuer den API-Konflikt stehen noch aus.
+
