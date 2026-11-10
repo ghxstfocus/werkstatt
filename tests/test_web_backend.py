@@ -1,7 +1,9 @@
 """Tests fuer das FastAPI-Backend (OP-074)."""
 
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 import pytest
@@ -155,3 +157,53 @@ def test_start_verwirft_leere_aufgabe(
 
     assert antwort.status_code == 422
     assert aufrufe == []
+
+
+
+def test_parallele_starts_starten_nur_einen_loop(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "STATUS.md").write_text("# start concurrent test\n")
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    app_modul._LAUFENDE_LOOPS.clear()
+    app_modul._LOOP_LOG_HANDLES.clear()
+
+    entered = Event()
+    release = Event()
+    aufrufe: list[list[str]] = []
+    normal = _fake_popen(aufrufe)
+
+    def langsamer_popen(argv: list[str], *args: Any, **kwargs: Any) -> Any:
+        entered.set()
+        if not release.wait(timeout=5):
+            raise AssertionError("test did not release Popen")
+        return normal(argv, *args, **kwargs)
+
+    monkeypatch.setattr(app_modul.subprocess, "Popen", langsamer_popen)
+    client = TestClient(app_modul.app)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        erster = pool.submit(
+            client.post, "/api/projects/demo/start",
+            json={"aufgabe": "concurrency test"},
+        )
+        assert entered.wait(timeout=2)
+        zweiter = pool.submit(
+            client.post, "/api/projects/demo/start",
+            json={"aufgabe": "concurrency test"},
+        )
+        release.set()
+        antworten = [erster.result(timeout=5), zweiter.result(timeout=5)]
+
+    assert all(antwort.status_code == 200 for antwort in antworten)
+    assert sum(bool(antwort.json()["gestartet"]) for antwort in antworten) == 1
+    assert len(aufrufe) == 1
+    assert client.post("/api/projects/demo/stop").status_code == 200
