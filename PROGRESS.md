@@ -3995,3 +3995,8 @@ SIGTERM/SIGKILL ab und startet keinen echten Loop-Prozess.
 Der Serverlauf auf `37324a1` meldete 1774 passed, 3 failed und Ruff `PIE807`; mypy war mit 0 Fehlern sauber. Die 30-Tage-Sparkline verwendete `GROUP BY 1` auf einer aggregierten SELECT-Expression. SQLite verwirft diese Abfrage; der abgefangene SQL-Fehler erschien als 30 Nullwerte. `_sparkline_30d` gruppiert nun nach dem Datumsausdruck und ignoriert leere `run_id` konsistent mit den Run-KPIs. Das Testfixture ordnet den erwarteten Erfolg dem abgefragten Projekt zu; `lambda: []` wurde durch `list` ersetzt.
 
 **Fixes:** `be61360` (leere Run-IDs), `ce0ef73` (Sparkline-SQL und Fixture/Ruff). **Verifikation:** Die drei zuvor fehlschlagenden Tests, Ruff und das vollständige Quality-Gate müssen nach diesen Commits erneut auf dem Server laufen; Ergebnis steht noch aus.
+
+
+### 2026-11-10 — Idle-Loop-Status gibt keine alte Run-ID mehr aus
+
+Bei einem persistenten Registry-Eintrag blieb nach dem Übergang in `idle` die vorherige `run_id` im Status-Endpoint sichtbar. Die API gibt die Run-ID nun nur noch für eine aktive Startreservierung aus; ein Backend-Regressionstest prüft `starting → idle`. Fix: nachfolgender Commit. **Verifikation:** Serverlauf steht aus.

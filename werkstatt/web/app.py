@@ -570,17 +570,11 @@ def create_app() -> FastAPI:
             prozess = _loop_prozess(projektname)
             record = _loop_registry().read(projektname)
             if prozess is None:
+                starting = bool(record and record["state"] == "starting")
                 return {
-                    "state": (
-                        "starting"
-                        if record and record["state"] == "starting"
-                        else "idle"
-                    ),
+                    "state": "starting" if starting else "idle",
                     "pid": None,
-                    "run_id": (
-                        record.get("run_id") if record
-                        else _LOOP_RUN_IDS.get(projektname)
-                    ),
+                    "run_id": record.get("run_id") if starting and record else None,
                 }
             return {
                 "state": "paused" if projektname in _PAUSIERTE_LOOPS else "running",

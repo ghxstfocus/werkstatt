@@ -413,3 +413,30 @@ def test_loop_status_recovery_nach_server_neustart(
     assert start.status_code == 200
     assert start.json()["gestartet"] is False
     assert start.json()["grund"] == "laeuft_bereits"
+
+
+
+def test_idle_loop_state_does_not_expose_stale_run_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_modul
+    from werkstatt.web.loop_registry import LoopProcessRegistry
+
+    (tmp_path / "demo" / "docs").mkdir(parents=True)
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    _reset_loop_registry(app_modul)
+    registry = LoopProcessRegistry(tmp_path / ".werkstatt" / "web-loop-registry.db")
+    assert registry.reserve("demo", "run-stale") == (True, None)
+
+    client = TestClient(app_modul.app)
+    starting = client.get("/api/projects/demo/loop").json()
+    assert starting["state"] == "starting"
+    assert starting["run_id"] == "run-stale"
+
+    assert registry.set_state("demo", "run-stale", "idle") is True
+    idle = client.get("/api/projects/demo/loop").json()
+    assert idle == {"state": "idle", "pid": None, "run_id": None}
