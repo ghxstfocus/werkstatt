@@ -4155,3 +4155,13 @@ Mindestbreite; auf schmalen Ansichten darf die Beschriftung umbrechen.
 - **Commit:** `da8728270bea` — UI-Regressionstest.
 - **Commit:** `8eb817c55863` — gemeinsamer Asset-Cache-Buster fuer den Browser-Reload.
 - Screenshot-/Browser-Verifikation und Servertests stehen aus.
+
+### Nachbesserung UI-Test — Literal-Newline entfernt (2026-11-10)
+
+Der Serverlauf auf `452ce3a` fand am Dateiende von
+`tests/test_runs_frontend.py` einen literal geschriebenen `\\n`-Text
+(Syntaxfehler bei Collection und Ruff). Der Marker wurde entfernt.
+Derselbe Lauf bestaetigte Mypy mit 0 Fehlern; Volltests und Ruff waren wegen
+des Syntaxfehlers nicht ausfuehrbar und muessen erneut laufen.
+
+- **Commit:** `4c87b0552a66` — Syntaxfehler im neuen UI-Regressionstest behoben.
