@@ -1329,8 +1329,8 @@ noch nicht vollstaendig.
   (a) Jeder `llm_usage`-Event enthaelt ein eigenes Feld `rolle` mit einem der stabilen Namen `architect`, `planner`, `builder`, `reviewer`, `reflection`, `explorer`, `scout`, `debugger`; unbekannte Tasks werden als `unbekannt` ausgewiesen. Das Audit-Umschlagfeld `agent` bleibt `agent_pipeline` und wird nicht fuer Tasknamen ueberschrieben.
   (b) Rollenaggregation liest die JSON-Payload-Felder aus dem Event-Store (keine nicht vorhandenen SQL-Spalten) und liefert Anzahl, Summen sowie maximalen Prompt pro Call.
   (c) Neue Funktion `aggregate_tokens_per_rolle()` in `inspector.py` liefert die Aggregation fuer Projekt und Run.
-  (d) Live: Nach dem naechsten Loop-Run ist pro Rolle eine Zeile sichtbar.
-- **Tests:** `tests/test_loop_ask_llm.py` (Rollenfeld und unveraendertes Audit-Umschlagfeld); `tests/test_llm_usage_pro_rolle.py` (Rollen-Mapping, Aggregation, Spitzenwert und ungueltige Payloads).
+  (d) `/api/projects/{name}/tokens` liefert `by_role`; die Statusleisten-Tokenanzeige zeigt bei Hover je Rolle Calls, Prompt-Summe und groessten Prompt-Call als eigene Zeile. Live nach einem Loop-Run verifizieren.
+- **Tests:** `tests/test_loop_ask_llm.py` (Rollenfeld und unveraendertes Audit-Umschlagfeld); `tests/test_llm_usage_pro_rolle.py` (Rollen-Mapping, Aggregation, API-Response, Spitzenwert und ungueltige Payloads). Frontend-/Live-Verhalten separat verifizieren.
 - **ADR:** —
 - **Kontext:** Erste OP der Context-Engineering-Achse (Phase 2). Muss vor OP-384/385 laufen, sonst sind deren Zahlen geraten.
 
