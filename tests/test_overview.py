@@ -29,8 +29,8 @@ def _events_db(path: Path, rows=()) -> SimpleNamespace:
 
 def test_run_verteilung_dedupliziert_terminalevents_und_stopps(tmp_path: Path):
     es = _events_db(tmp_path / "events.db", [
-        ("ok-1", "loop_erfolg", "werkstatt", {}, 0),
-        ("ok-1", "loop_ended", "werkstatt", {}, 0),
+        ("ok-1", "loop_erfolg", "demo", {}, 0),
+        ("ok-1", "loop_ended", "demo", {}, 0),
         ("fail-1", "loop_failed", "werkstatt", {}, 0),
         # Legacy stop event has project in payload but default DB project.
         ("abort-1", "web_loop_stopped", "werkstatt", {"project": "demo"}, 0),
@@ -150,7 +150,7 @@ def test_overview_ohne_projekte_hat_leere_metriken(
         inspector, "EventStore",
         lambda: SimpleNamespace(db_pfad=tmp_path / "unused.db"),
     )
-    monkeypatch.setattr(inspector, "_scan_projekte", lambda: [])
+    monkeypatch.setattr(inspector, "_scan_projekte", list)
     result = inspector.aggregate_overview()
     assert result["projekte"] == []
     assert result["top_3"] == []
