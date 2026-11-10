@@ -4484,3 +4484,9 @@ vollstaendig umgesetzt oder verifiziert.
 
 Wiederverwendung eines Idempotency-Keys mit abweichendem Nachrichtentext oder Modus wird jetzt als Konflikt abgewiesen (HTTP 409), statt still den alten Job zurueckzugeben. Gleiche Anfrage mit gleichem Key bleibt dedupliziert. Servertests fuer den API-Konflikt stehen noch aus.
 
+
+
+## Chat-Job-Future-Registry begrenzt (2026-11-10)
+
+Abgeschlossene Worker-Futures werden jetzt per Done-Callback aus der globalen Registry entfernt. Der Callback prueft die Future-Identitaet, damit ein spaeterer Eintrag unter demselben Schluessel nicht geloescht wird. Ein Test deckt auch den sofort abgeschlossenen Future ab. Serververifikation steht aus.
+
