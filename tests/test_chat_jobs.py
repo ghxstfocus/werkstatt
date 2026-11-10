@@ -1,8 +1,8 @@
 """Persistente Chat-Job-Zustaende und Event-Replay (OP-397)."""
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
