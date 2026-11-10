@@ -17,6 +17,7 @@
     historyRequest: 0,
     sendQueue: [],
     loadPromise: null,
+    jobs: Object.create(null),
   };
 
   function _el(id) { return document.getElementById(id); }
@@ -165,6 +166,7 @@
         }
       });
       if (!hatNachricht) _zeigeLeerzustand();
+      _resumeChatJobs(projekt, sid, events, anfrage);
       _setzeChatStatus("Bereit · " + projekt, "ready");
       return true;
     }).catch(function () {
@@ -432,6 +434,193 @@
     _renderSidebarAktuell();
   }
 
+  function _jobKey(projekt, sid, jobId) {
+    return projekt + \"|\" + sid + \"|\" + jobId;
+  }
+
+  function _jobAktiv(projekt, sid, anfrage) {
+    return projekt === zustand.projekt && sid === zustand.sessionId &&
+      anfrage === zustand.historyRequest;
+  }
+
+  function _jobChunk(job, text) {
+    if (!text) return;
+    if (!job.assistantCard) job.assistantCard = _karte(\"assistant\", \"\");
+    job.buffer += text;
+    job.assistantCard.textContent = job.buffer;
+    var box = _el(\"chat-nachrichten\");
+    if (box) box.scrollTop = box.scrollHeight;
+  }
+
+  function _jobToolCall(job, name, args) {
+    var card = _toolKarte(name || \"?\", args, \"running\");
+    job.toolCards.push({name: name || \"?\", card: card});
+  }
+
+  function _jobToolResult(job, name, content) {
+    for (var i = job.toolCards.length - 1; i >= 0; i--) {
+      var item = job.toolCards[i];
+      if (item.name !== name || !item.card || !item.card.classList.contains(\"running\")) continue;
+      item.card.classList.remove(\"running\");
+      item.card.classList.add(\"ok\");
+      var pre = document.createElement(\"pre\");
+      pre.textContent = content || \"\";
+      item.card.appendChild(pre);
+      return;
+    }
+  }
+
+  function _jobFertig(job, state, answer, error) {
+    if (job.done) return;
+    job.done = true;
+    if (state === \"succeeded\") {
+      if (job.assistantCard) {
+        _renderMarkdown(job.assistantCard, answer || job.buffer);
+      } else if (answer) {
+        _karte(\"assistant\", answer);
+      }
+    } else {
+      var detail = error || \"Unbekannter Hintergrundfehler\";
+      if (job.assistantCard) _renderMarkdown(job.assistantCard, \"Fehler: \" + detail);
+      else _karte(\"assistant\", \"Fehler: \" + detail);
+    }
+    delete zustand.jobs[job.key];
+    if (_jobAktiv(job.project, job.sessionId, job.request)) {
+      _setzeChatStatus(
+        state === \"succeeded\" ? \"Antwort fertig · \" + job.project : \"Aktion fehlgeschlagen.\",
+        state === \"succeeded\" ? \"ready\" : \"error\"
+      );
+      _renderSidebarAktuell();
+    }
+  }
+
+  function _handleJobEvent(job, ev) {
+    var p = ev.payload || {};
+    if (ev.kind === \"started\") {
+      if (_jobAktiv(job.project, job.sessionId, job.request)) {
+        _setzeChatStatus(\"Prüfe Projekt im Hintergrund …\", \"working\");
+      }
+    } else if (ev.kind === \"chunk\") {
+      _jobChunk(job, p.text || \"\");
+    } else if (ev.kind === \"tool_call\") {
+      _jobToolCall(job, p.name || \"?\", p.args || {});
+    } else if (ev.kind === \"tool_result\") {
+      _jobToolResult(job, p.name || \"?\", p.content || \"\");
+    } else if (ev.kind === \"succeeded\") {
+      _jobFertig(job, \"succeeded\", p.answer || \"\", null);
+    } else if (ev.kind === \"failed\") {
+      _jobFertig(job, \"failed\", \"\", p.error || \"Unbekannter Fehler\");
+    }
+  }
+
+  function _pollChatJob(job) {
+    if (job.done) return;
+    var base = \"/api/projects/\" + encodeURIComponent(job.project) + \"/chat/jobs/\" +
+      encodeURIComponent(job.jobId) + \"?since_seq=\" + job.cursor;
+    fetch(base, {credentials: \"same-origin\"}).then(function (response) {
+      if (!response.ok) throw new Error(\"Status \" + response.status);
+      return response.json();
+    }).then(function (data) {
+      (data.events || []).forEach(function (ev) {
+        job.cursor = Math.max(job.cursor, Number(ev.seq) || 0);
+        _handleJobEvent(job, ev);
+      });
+      if (job.done) return;
+      if (data.state === \"succeeded\") {
+        _jobFertig(job, data.state, data.answer || \"\", null);
+      } else if (data.state === \"failed\") {
+        _jobFertig(job, data.state, \"\", data.error || \"Unbekannter Fehler\");
+      } else {
+        window.setTimeout(function () { _pollChatJob(job); }, 500);
+      }
+    }).catch(function () {
+      if (!job.done && _jobAktiv(job.project, job.sessionId, job.request)) {
+        _setzeChatStatus(\"Verbindung unterbrochen · Job bleibt gespeichert und wird erneut geladen.\", \"working\");
+      }
+      if (!job.done) window.setTimeout(function () { _pollChatJob(job); }, 1500);
+    });
+  }
+
+  function _neuerJobState(projekt, sid, jobId, message, request) {
+    var key = _jobKey(projekt, sid, jobId);
+    if (zustand.jobs[key]) return zustand.jobs[key];
+    var job = {
+      key: key, project: projekt, sessionId: sid, jobId: jobId,
+      message: message, request: request, cursor: 0, buffer: \"\",
+      assistantCard: null, toolCards: [], done: false,
+    };
+    zustand.jobs[key] = job;
+    return job;
+  }
+
+  function _startChatJob(text, projekt, sid, request) {
+    var idempotencyKey = (window.crypto && window.crypto.randomUUID)
+      ? window.crypto.randomUUID()
+      : (Date.now().toString(36) + Math.random().toString(36).slice(2));
+    var url = \"/api/projects/\" + encodeURIComponent(projekt) + \"/chat/jobs\";
+    var body = {
+      session_id: sid, message: text, mode: \"read\",
+      idempotency_key: idempotencyKey,
+    };
+    function submit(attempt) {
+      return fetch(url, {
+        method: \"POST\", credentials: \"same-origin\",
+        headers: { \"Content-Type\": \"application/json\" },
+        body: JSON.stringify(body),
+      }).then(function (response) {
+        return response.json().then(function (data) {
+          if (!response.ok) throw new Error(data.detail || (\"Status \" + response.status));
+          return data;
+        });
+      }).catch(function (error) {
+        if (attempt < 2 && error instanceof TypeError) {
+          return new Promise(function (resolve) {
+            window.setTimeout(resolve, 500 * (attempt + 1));
+          }).then(function () { return submit(attempt + 1); });
+        }
+        throw error;
+      });
+    }
+    submit(0).then(function (data) {
+      if (projekt !== zustand.projekt || sid !== zustand.sessionId) return;
+      var job = _neuerJobState(projekt, sid, data.job_id, text, request);
+      if (data.state === \"succeeded\") _jobFertig(job, data.state, data.answer || \"\", null);
+      else _pollChatJob(job);
+      if (_jobAktiv(projekt, sid, request)) {
+        _setzeChatStatus(\"Auftrag angenommen · läuft im Hintergrund.\", \"working\");
+      }
+    }).catch(function (error) {
+      if (projekt !== zustand.projekt || sid !== zustand.sessionId) return;
+      _karte(\"assistant\", \"Chat-Auftrag konnte nicht angenommen werden: \" + error.message);
+      _setzeChatStatus(\"Aktion konnte nicht gestartet werden.\", \"error\");
+    });
+  }
+
+  function _resumeChatJobs(projekt, sid, events, request) {
+    var url = \"/api/projects/\" + encodeURIComponent(projekt) + \"/chat/jobs?session_id=\" +
+      encodeURIComponent(sid);
+    fetch(url, {credentials: \"same-origin\"}).then(function (response) {
+      if (!response.ok) throw new Error(\"Status \" + response.status);
+      return response.json();
+    }).then(function (data) {
+      if (!_jobAktiv(projekt, sid, request)) return;
+      var bekannteIds = Object.create(null);
+      events.forEach(function (ev) {
+        if (ev.kind === \"user\" && ev.payload && ev.payload.job_id) {
+          bekannteIds[ev.payload.job_id] = true;
+        }
+      });
+      (data.jobs || []).forEach(function (item) {
+        var job = _neuerJobState(projekt, sid, item.job_id, item.message, request);
+        if (!bekannteIds[item.job_id]) _karte(\"user\", item.message || \"\");
+        _pollChatJob(job);
+      });
+      if ((data.jobs || []).length) {
+        _setzeChatStatus(\"Aktiver Auftrag wieder verbunden.\", \"working\");
+      }
+    }).catch(function () {});
+  }
+
   function _sende(text) {
     if (!text) return;
     var projekt = zustand.projekt;
@@ -464,7 +653,7 @@
     }
     _karte("user", text);
     _setzeChatStatus("Nachricht wird übermittelt …", "working");
-    _sendeUeberSocket(text);
+    _startChatJob(text, projekt, zustand.sessionId, anfrage);
   }
 
   function _sendeUeberSocket(text) {
