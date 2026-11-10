@@ -6,11 +6,11 @@ def _op(op_id: str, *, title: str = "Arbeit", status: str = "open",
         blockers: str = "—", criteria: str = "Ergebnis ist korrekt.",
         tests: str = "pytest -q tests/test_feature.py",
         phase: str = "") -> str:
-    phase_field = f"- **Phase:** {phase}\\n" if phase else ""
+    phase_field = f"- **Phase:** {phase}\n" if phase else ""
     return (
-        f"### {op_id}: {title}\\n"
+        f"### {op_id}: {title}\n"
         f"{phase_field}"
-        f"- **Status:** {status}\\n"
+        f"- **Status:** {status}\n"
         f"- **Blockiert von:** {blockers}\n"
         f"- **Akzeptanzkriterien:** {criteria}\n"
         f"- **Tests:** {tests}\n"
