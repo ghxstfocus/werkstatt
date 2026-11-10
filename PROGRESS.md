@@ -4500,3 +4500,8 @@ Abgeschlossene Worker-Futures werden jetzt per Done-Callback aus der globalen Re
 - **Commit:** `d020e46e9abaa3302c7b254f` — Migrationstest fuer bestehende SQLite-Jobdatenbank.
 - **Serververifikation:** einschliesslich Lease-Schema-Migration weiterhin ausstehend.
 - **Serververifikation:** fuer Idempotenz, Future-Cleanup und Lease-Recovery ausstehend.
+
+
+## Chat-Job-Future-Callback typisiert (2026-11-10)
+
+Der Quality-Gate-Lauf fuer `1af90ca` meldete Mypy `Cannot infer type of lambda` in der Future-Bereinigung. Der Lambda wurde durch einen benannten, explizit typisierten Callback ersetzt. Die Serververifikation der Korrektur und der seitdem hinzugefuegten Worker-Lease steht noch aus.
