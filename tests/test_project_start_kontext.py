@@ -114,13 +114,12 @@ def test_start_legt_log_datei_an(client_mit_projekt, monkeypatch):
     assert logs, f"kein Log-File in {log_dir}"
 
 
-def test_start_ohne_body_kein_aufgabe_flag(client_mit_projekt, monkeypatch):
-    """Ohne op_id/aufgabe: kein --aufgabe, aber --fresh + Log-File."""
+def test_start_ohne_body_verwirft_leere_aufgabe(client_mit_projekt, monkeypatch):
+    """Ohne Auftrag darf kein leerer Loop gestartet werden."""
     client, app_modul, _ = client_mit_projekt
     aufrufe: list[list[str]] = []
     monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
 
     r = client.post("/api/projects/demo/start")
-    assert r.status_code == 200, r.text
-    assert "--aufgabe" not in aufrufe[0]
-    assert "--fresh" in aufrufe[0]
+    assert r.status_code == 422
+    assert aufrufe == []
