@@ -87,3 +87,20 @@ def test_jobs_in_different_sessions_can_run_in_parallel(tmp_path: Path) -> None:
 
     assert store.claim(first["job_id"]) is True
     assert store.claim(second["job_id"]) is True
+
+
+def test_queue_order_is_fifo_when_timestamps_collide(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from werkstatt import chat_jobs
+
+    monkeypatch.setattr(chat_jobs, "_now", lambda: "2026-11-10T00:00:00+00:00")
+    store = ChatJobStore(tmp_path / "jobs.db")
+    first, _ = store.create("session-a", "First", "read", "request-key-c001")
+    second, _ = store.create("session-a", "Second", "read", "request-key-c002")
+
+    assert [job["job_id"] for job in store.queued()] == [
+        first["job_id"], second["job_id"],
+    ]
+    assert [job["job_id"] for job in store.active_for_session("session-a")] == []
