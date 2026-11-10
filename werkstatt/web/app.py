@@ -1138,6 +1138,31 @@ def create_app() -> FastAPI:
             "created": accepted["created"],
         }
 
+    @app.get("/api/projects/{name}/chat/jobs")
+    def chat_jobs_active(name: str, session_id: str) -> dict[str, Any]:
+        """Liefert aktive Session-Jobs fuer Reconnect und setzt queued fort."""
+        from werkstatt.chat_jobs import ChatJobStore, resume_chat_jobs
+
+        projekt = _pruefe_projektname(name)
+        sid = _pruefe_session_id(session_id)
+        db_path = _PROJECTS_BASE / ".werkstatt" / "chat-jobs" / f"{projekt}.db"
+        try:
+            resume_chat_jobs(
+                projekt, (_PROJECTS_BASE / projekt).resolve(), db_path=db_path,
+            )
+            jobs = ChatJobStore(db_path).active_for_session(sid)
+        except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
+            raise HTTPException(
+                status_code=500, detail=f"Chat-Jobs konnten nicht geladen werden: {exc}",
+            ) from exc
+        return {
+            "jobs": [
+                {"job_id": job["job_id"], "message": job["message"],
+                 "state": job["state"], "created_at": job["created_at"]}
+                for job in jobs
+            ],
+        }
+
     @app.get("/api/projects/{name}/chat/jobs/{job_id}")
     def chat_job_get(
         name: str, job_id: str, since_seq: int = 0,
