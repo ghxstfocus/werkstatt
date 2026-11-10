@@ -117,13 +117,22 @@
       box.classList.add("lf-aktiv-neu");
     }
 
-    var sp = document.createElement("span");
-    sp.className = "lf-spinner";
-    var spChar = document.createElement("span");
-    spChar.className = "lf-spinner-char";
-    spChar.textContent = SPINNER[_spinnerIdx];
-    sp.appendChild(spChar);
-    box.appendChild(sp);
+    // OP-394: gerade-fertig -> Haekchen statt Spinner (5s-Grace)
+    if (aktiv.gerade_fertig) {
+      box.classList.add("lf-aktiv-fertig");
+      var sym = document.createElement("span");
+      sym.className = "lf-aktiv-sym";
+      sym.textContent = "\u2713";
+      box.appendChild(sym);
+    } else {
+      var sp = document.createElement("span");
+      sp.className = "lf-spinner";
+      var spChar = document.createElement("span");
+      spChar.className = "lf-spinner-char";
+      spChar.textContent = SPINNER[_spinnerIdx];
+      sp.appendChild(spChar);
+      box.appendChild(sp);
+    }
 
     var rolle = document.createElement("span");
     rolle.className = "lf-aktiv-rolle";
@@ -221,8 +230,13 @@
       letzteIds[(s.ts || "") + "|" + (s.kind || "")] = true;
     });
 
+    // OP-394: Scroll-Position merken (Auto-Scroll ans Ende, wenn User
+    // schon unten war — sonst respektiere seine Scroll-Position).
+    var _warUnten = (
+      container.scrollHeight - container.scrollTop - container.clientHeight
+    ) < 40;
+
     container.innerHTML = "";
-    container.appendChild(_renderAktiv(neueAktiv));
 
     var sichtbareSteps = (data.steps || []).slice();
     if (rolleGeandert && alteAktiv) {
@@ -254,9 +268,17 @@
       });
     }
     container.appendChild(stepsBox);
+    // OP-394: Aktiv-Block UNTEN (direkt nach Steps, vor Naechster) —
+    // eine Leserichtung: oben Verlauf, unten Jetzt. Neuestes immer unten.
+    container.appendChild(_renderAktiv(neueAktiv));
 
     var nx = _renderNaechster(data.naechster || {});
     if (nx) container.appendChild(nx);
+
+    // OP-394: Auto-Scroll ans Ende — Aktiv-Block bleibt sichtbar.
+    if (_warUnten) {
+      container.scrollTop = container.scrollHeight;
+    }
 
     _letzteSteps = data.steps || [];
   }
