@@ -4417,8 +4417,13 @@ Der Kind ist jetzt registriert. Der Test verlangt nun Exit-Code 1, keinen
 Aufruf des Pipeline-Loops und ein Audit-Event. Damit bleibt der Lauf bei
 fehlendem/kaputtem Pflichtkontext sicher gestoppt.
 
-- **Katalog:** `b07378953cdf`.
+- **Commit:** `b07378953cdf` — Audit-Kind fuer Ladefehler registrieren.
+- **Commit:** `dc063a94c81e` — Pflichtschluessel im Manifest validieren.
+- **Commit:** `a45ebee55fcc` — Pflichtdokumente fail-closed laden.
+- **Commit:** `d0ca7e1a2e44` — Ladefehler im Loop sichtbar behandeln.
 - **Regressionstest:** `b976ef2b24ad`; Formatierung: `10c62c006095`.
-- **Verifikation:** gezielte Tests, Ruff, Doku-Check, Vollsuite und Quality
-Gate auf dem Server noch ausstehend; die geposteten 1831 passed / 2 failed
-sind der Stand vor diesem Fix.
+- **Doku-Drift-Fix:** `706db3323df8` dokumentierte die Code-Commits; die
+  Referenzen stehen jetzt im vom Doku-Checker ausgewerteten Commit-Format.
+- **Serververifikation:** gezielte Tests, Ruff, Doku-Check, Vollsuite und
+  Quality Gate nach diesem Nachtrag noch ausstehend. Letzter Stand auf
+  `706db33`: 1833 passed / 5 skipped; Ruff 1, mypy 0, Quality Gate rot.
