@@ -2960,3 +2960,74 @@ body[data-mode="control"] .lf-step-detail {
     font-size: 12px;
   }
 }
+
+
+/* Chat-Antworten: lesbares Markdown statt Rohtext in Monospace. */
+.chat-nachrichten > .chat-msg {
+  font-family: var(--font-sans, system-ui, sans-serif);
+  white-space: normal;
+}
+.chat-nachrichten > .chat-msg.user {
+  white-space: pre-wrap;
+}
+.chat-msg.assistant > :first-child { margin-top: 0; }
+.chat-msg.assistant > :last-child { margin-bottom: 0; }
+.chat-msg.assistant p {
+  margin: 0 0 0.85em;
+  line-height: 1.7;
+}
+.chat-msg.assistant h1,
+.chat-msg.assistant h2,
+.chat-msg.assistant h3,
+.chat-msg.assistant h4,
+.chat-msg.assistant h5,
+.chat-msg.assistant h6 {
+  margin: 1.15em 0 0.5em;
+  color: var(--text, #eee);
+  line-height: 1.35;
+  font-weight: 650;
+}
+.chat-msg.assistant h1 { font-size: 1.35em; }
+.chat-msg.assistant h2 { font-size: 1.2em; }
+.chat-msg.assistant h3 { font-size: 1.08em; }
+.chat-msg.assistant ul,
+.chat-msg.assistant ol {
+  margin: 0.35em 0 0.9em;
+  padding-left: 1.55em;
+}
+.chat-msg.assistant li { margin: 0.25em 0; padding-left: 0.15em; }
+.chat-msg.assistant blockquote {
+  margin: 0.6em 0 0.9em;
+  padding: 0.15em 0 0.15em 0.9em;
+  border-left: 3px solid var(--accent, #b000ff);
+  color: var(--text-muted, #aaa);
+}
+.chat-msg.assistant blockquote p { margin: 0.35em 0; }
+.chat-msg.assistant a {
+  color: var(--accent-strong, #cf70ff);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.chat-msg.assistant code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9em;
+  padding: 0.12em 0.34em;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.chat-msg.assistant pre {
+  max-width: 100%;
+  overflow: auto;
+  margin: 0.5em 0 0.9em;
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle, #393943);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.24);
+  white-space: pre;
+}
+.chat-msg.assistant pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.9em;
+  line-height: 1.55;
+}
