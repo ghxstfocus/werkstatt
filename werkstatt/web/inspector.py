@@ -717,6 +717,15 @@ def _run_aktiv(es: EventStore, run_id: str, schwelle_s: int = 120) -> bool:
 
 
 _TL_LABELS: dict[str, str] = {
+    "chat_job_queued": "Chat-Auftrag angenommen",
+    "chat_job_started": "Chat-Pruefung gestartet",
+    "chat_job_chunk": "Chat-Antwort",
+    "chat_job_tool_call": "Chat-Tool gestartet",
+    "chat_job_tool_result": "Chat-Tool abgeschlossen",
+    "chat_job_succeeded": "Chat-Antwort fertig",
+    "chat_job_failed": "Chat-Auftrag fehlgeschlagen",
+    "chat_job_cancelled": "Chat-Auftrag abgebrochen",
+    "chat_job_cancel_requested": "Chat-Abbruch angefordert",
     "explorer_messung": "Explorer: Messung",
     "explorer_messung_findings": "Explorer: Befunde",
     "explorer_result": "Explorer: Ergebnis",
@@ -801,6 +810,12 @@ _TL_PHASEN_NAMEN: dict[str, str] = {
 
 
 def _tl_status(kind: str, payload: dict[str, Any]) -> str:
+    if kind == "chat_job_succeeded":
+        return "ok"
+    if kind in ("chat_job_failed",):
+        return "error"
+    if kind.startswith("chat_job_"):
+        return "running" if payload.get("status") == "running" else "info"
     # Info-Events (kein Fehler, nur Hinweis auf Fallback/Start)
     if kind in ("loop_plan_missing", "loop_preflight_fehler",
                 "loop_plan_reflection"):
@@ -835,6 +850,25 @@ def _tl_label(kind: str, payload: dict[str, Any]) -> str:
 
 def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
     """Kurze, menschenlesbare Zusatz-Info pro Event (1 Zeile)."""
+    if kind.startswith("chat_job_"):
+        event_kind = kind.removeprefix("chat_job_")
+        if event_kind == "queued":
+            return f"Angenommen: {str(payload.get('message') or '')[:120]}"
+        if event_kind == "started":
+            return "Projekt wird geprueft"
+        if event_kind == "chunk":
+            return str(payload.get("text") or "")[:160]
+        if event_kind == "tool_call":
+            return f"Tool: {str(payload.get('name') or 'unbekannt')[:80]}"
+        if event_kind == "tool_result":
+            return f"Ergebnis: {str(payload.get('content') or '')[:120]}"
+        if event_kind == "succeeded":
+            return str(payload.get("answer") or "Antwort fertig")[:160]
+        if event_kind == "failed":
+            return str(payload.get("error") or "Chat-Auftrag fehlgeschlagen")[:160]
+        if event_kind in ("cancel_requested", "cancelled"):
+            return "Abbruch angefordert" if event_kind == "cancel_requested" else "Abgebrochen"
+        return str(payload.get("text") or event_kind)[:160]
     if kind == "loop_task_start":
         return str(payload.get("text", ""))
     if kind in ("loop_task_ok", "loop_task_failed"):
@@ -1053,6 +1087,8 @@ def _tl_rolle(agent: str, kind: str) -> str:
     """
     a = (agent or "").lower()
     k = (kind or "").lower()
+    if k.startswith("chat_job_"):
+        return "chat"
     # Echte Rolle aus agent (Loop-Marker ueberspringen)
     if a and a != "agent_pipeline" and a in _TL_AGENT_ROLLEN:
         return _TL_AGENT_ROLLEN[a]
