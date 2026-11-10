@@ -29,6 +29,13 @@ def test_markdown_renderer_verwendet_dom_und_keine_html_injektion() -> None:
     assert 'url.protocol === "http:" || url.protocol === "https:"' in renderer
 
 
+def test_session_history_renders_completed_background_turn_pairs() -> None:
+    js = _chat_js()
+    assert 'kind === "job_turn"' in js
+    assert 'p.user_text || ""' in js
+    assert 'p.assistant_text || ""' in js
+
+
 def test_chat_typografie_trennt_fliesstext_und_code() -> None:
     css = _css()
     assert ".chat-nachrichten > .chat-msg" in css
