@@ -4074,3 +4074,18 @@ bei Fragen nach offenen OPs oder dem naechsten sinnvollen Arbeitsschritt
 und fragt bei Mehrdeutigkeit nach einer Nutzerauswahl.
 
 Server-Verifikation steht noch aus.
+
+
+### OP-396/398 — Code-Commit-Belege (GitHub-Multi-File-Updates)
+
+Die GitHub-Contents-API schreibt Dateien als einzelne Commits. Die
+folgenden Code-Commits sind durch die obenstehenden OP-396/398-Eintraege,
+die Selector-/Chat-Beschreibung und `docs/SOLL.md §5.3` dokumentiert:
+
+- **Commit:** `997399f2721d` — OP-398 Selector-Kern.
+- **Commit:** `84492a21aa5c` — OP-398 Web-Start, Audit und sichere Abstention.
+- **Commit:** `62931e4651c0` — OP-396 read-only Chat-Backlog-Werkzeug.
+- **Commit:** `ee870dc33bb8` — OP-396 Chat nutzt Selector-Belege.
+
+Diese Referenzen machen die Doku-Zuordnung pruefbar; sie ersetzen keine
+Akzeptanzkriterien und keine Lauf-/Testbelege.
