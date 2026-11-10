@@ -4630,3 +4630,13 @@ Working-Status, solange andere Jobs aktiv sind.
 - **Commit:** `ea52fa250e36e868b31ac70f4fd86d8e9623d314` — Branch-Loeschung nach erfolgreichem Worker testen.
 - **Commit:** `2da4951d23d4a8e2a5c78c74b6fddabafcbad545` — Branch-Bereinigung auch nach Prozess-Reconnect durchfuehren.
 - **Serververifikation:** gezielte Tests, UI/Ruff, Doku-Check und Quality Gate nach Pull stehen noch aus.
+
+## 2026-11-10 — Reconnect-Aufraeumung paralleler Chatjobs
+
+Beim Reconnect werden abgelaufene Worker-Leases zuerst recovered; danach entfernt die Reconciliation Transcript-Branches aller terminalen Jobs, auch bei Fehler oder Abbruch. Erfolgreiche Job-Turns bleiben idempotent in die Eltern-Session projiziert. Regressionstest deckt einen fehlgeschlagenen Job mit stehengebliebenem Branch ab.
+
+- **Commit:** `c3ebc2ef3dba0b67767c0cd997f179dd792d4fa1` — terminale Job-Branches bei Reconnect bereinigen.
+- **Commit:** `26e70f9b8941fef1faa0c2be848d0d1f12190aa5` — Lease-Recovery vor Reconnect-Bereinigung ausfuehren.
+- **Commit:** `d9f7a475a025d96f7b466b66b187c64ce4c18c01` — Regressionstest fuer fehlgeschlagenen Job-Branch.
+- **Commit:** `b5d2c825716b4e35bd7055cd9f8ffcde142d4cd5` — STATUS um Reconnect-Verhalten ergaenzen.
+- **Serververifikation:** nach Pull ausstehend.
