@@ -145,3 +145,28 @@ def test_chat_job_reconnect_includes_persisted_failures(
     assert jobs[0]["state"] == "failed"
     assert jobs[0]["error"] == "RuntimeError: Provider offline"
 
+def test_chat_job_cancel_endpoint_is_session_scoped_and_persistent(
+    client_and_base: tuple[Any, Path],
+) -> None:
+    client, base = client_and_base
+    store = ChatJobStore(base / ".werkstatt" / "chat-jobs" / "demo.db")
+    job, _created = store.create(
+        "session-1", "Pruefe den Loop", "read", "request-key-api-cancel-001",
+    )
+
+    hidden = client.post(
+        f"/api/projects/demo/chat/jobs/{job['job_id']}/cancel",
+        json={"session_id": "other-session"},
+    )
+    assert hidden.status_code == 404
+
+    response = client.post(
+        f"/api/projects/demo/chat/jobs/{job['job_id']}/cancel",
+        json={"session_id": "session-1"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"job_id": job["job_id"], "state": "cancelled"}
+    saved = store.get(job["job_id"])
+    assert saved is not None
+    assert saved["state"] == "cancelled"
+
