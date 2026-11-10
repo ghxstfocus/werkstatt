@@ -103,7 +103,7 @@ class ChatJobStore:
     def queued(self) -> list[dict[str, Any]]:
         with closing(self._connect()) as conn:
             rows = conn.execute(
-                "SELECT * FROM jobs WHERE state='queued' ORDER BY created_at,job_id",
+                "SELECT * FROM jobs WHERE state='queued' ORDER BY rowid",
             ).fetchall()
         return [dict(row) for row in rows]
 
@@ -185,7 +185,7 @@ class ChatJobStore:
         with closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT * FROM jobs WHERE session_id=? "
-                "AND state IN ('queued','running') ORDER BY created_at,job_id",
+                "AND state IN ('queued','running') ORDER BY rowid",
                 (session_id,),
             ).fetchall()
         return [dict(row) for row in rows]
