@@ -271,6 +271,8 @@ noch nicht vollstaendig.
 ### OP-220: Erfahrungs-Gehirn — deterministisches Fehler-Gedaechtnis (Sammel-OP)
 
 - **Status:** open
+- **Phase:** Phase-3; erst nach Abschluss von OP-382 beginnen
+- **Blockiert von:** OP-382
 - **Typ:** architektur (Sammel-OP, 8 Sub-OPs)
 - **Betroffen:** `werkstatt/erfahrung.py` (neu), `werkstatt/skills.py`,
   `werkstatt/diagnose.py`, `werkstatt/antipattern.py`,
@@ -297,8 +299,8 @@ noch nicht vollstaendig.
   (Destillation), OP-222 (Semantic Memory) und OP-220i (Log-Backfill)
   brauchen `scope TEXT NOT NULL DEFAULT 'projekt'` als Voraussetzung.
 - **Akzeptanzkriterien:**
-  - `erfahrung`-Tabelle hat Spalte `scope TEXT NOT NULL DEFAULT 'projekt'`,
-    CHECK auf `scope IN ('projekt','global')`.
+  - `erfahrung`-Tabelle hat Spalte `scope TEXT NOT NULL DEFAULT 'project'`,
+    CHECK auf `scope IN ('project','global')` entsprechend ADR-0010.
   - Alle bestehenden Inserts setzen explizit `scope='projekt'`.
   - Migration idempotent (ALTER TABLE nur wenn Spalte fehlt).
   - 2 Tests: Insert mit/ohne scope, Constraint-Verletzung.
