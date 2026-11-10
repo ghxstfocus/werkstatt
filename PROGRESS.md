@@ -4505,3 +4505,8 @@ Abgeschlossene Worker-Futures werden jetzt per Done-Callback aus der globalen Re
 ## Chat-Job-Future-Callback typisiert (2026-11-10)
 
 Der Quality-Gate-Lauf fuer `1af90ca` meldete Mypy `Cannot infer type of lambda` in der Future-Bereinigung. Der Lambda wurde durch einen benannten, explizit typisierten Callback ersetzt. Die Serververifikation der Korrektur und der seitdem hinzugefuegten Worker-Lease steht noch aus.
+
+
+## OP-397 — Fehlgeschlagene Chatjobs nach Reconnect sichtbar (2026-11-10)
+
+Die Reconnect-Abfrage liefert neben queued/running Jobs die letzten 20 fehlgeschlagenen Session-Jobs mit Fehlertext. Die UI rendert diese Fehler nach Session-Reconnect wieder als Chat-Antwort, einschliesslich Jobs, deren User-Event vor einem Prozessabbruch noch nicht in der Chat-Historie stand. Erfolgshistorie wird nicht erneut abgespielt. API- und Frontend-Vertragstests ergaenzt; Serververifikation ausstehend. OP-397 bleibt offen.
