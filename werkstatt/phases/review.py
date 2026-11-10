@@ -26,18 +26,24 @@ def _phase_review_gate(state: RunState) -> int:
     """
     pd = getattr(state, "project_dir", None)
     pn = getattr(state, "project_name", "?")
-    # OP-168: Non-interactive stdin (pytest, pipe, cron) -> fail-closed.
-    # Sonst wirft pytest's DontReadFromInput OSError statt EOFError.
-    try:
-        _is_tty = _sys.stdin.isatty()
-    except (AttributeError, OSError):
-        _is_tty = False
-    if not _is_tty:
-        audit_safe("loop_human_gate_eof",
-                   {"gate": "phase_review",
-                    "reason": "non_interactive"},
-                   pd, pn)
-        return 1
+    # OP-393: Im headless-Modus (Loop-Subprozess mit --headless) geht das
+    # Gate ueber _frage_gate -> gate_bridge (SQLite-Polling, siehe OP-381).
+    # Der TTY-Check ist dann nicht sinnvoll (stdin=/dev/null).
+    from werkstatt import gates as _gates_mod
+    _headless = bool(getattr(_gates_mod, "_HEADLESS", False))
+    if not _headless:
+        # Non-interactive stdin (pytest, pipe, cron) -> fail-closed.
+        # Sonst wirft pytest's DontReadFromInput OSError statt EOFError.
+        try:
+            _is_tty = _sys.stdin.isatty()
+        except (AttributeError, OSError):
+            _is_tty = False
+        if not _is_tty:
+            audit_safe("loop_human_gate_eof",
+                       {"gate": "phase_review",
+                        "reason": "non_interactive"},
+                       pd, pn)
+            return 1
     print()
     print("PHASE-REVIEW GATE")
     print("  Phase-Review ist nach 2 Runden erschoepft.")
@@ -45,12 +51,21 @@ def _phase_review_gate(state: RunState) -> int:
     print("  n = Patches verwerfen, Loop abbrechen")
     print("  e = Datei manuell editieren (dann erneut fragen)")
     print("  a = auto bis Ende")
+    _prompt = (
+        "\nPHASE-REVIEW GATE\n"
+        "  Phase-Review ist nach 2 Runden erschoepft.\n"
+        "  j = Patches behalten, Loop fortsetzen (Phase 5 + Commit)\n"
+        "  n = Patches verwerfen, Loop abbrechen\n"
+        "  e = Datei manuell editieren (dann erneut fragen)\n"
+        "  a = auto bis Ende\n"
+        "Deine Wahl [j] behalten / [n] verwerfen / [e] manuell / [a] auto bis Ende: "
+    )
     while True:
         try:
-            antwort = input(
-                "Deine Wahl [j] behalten / [n] verwerfen / [e] manuell / [a] auto bis Ende: "
+            antwort = _gates_mod._frage_gate(
+                "phase_review", _prompt, "jnea",
             ).strip().lower()
-        except EOFError:
+        except (EOFError, KeyboardInterrupt):
             audit_safe("loop_human_gate_eof",
                        {"gate": "phase_review"}, pd, pn)
             return 1
@@ -64,10 +79,13 @@ def _phase_review_gate(state: RunState) -> int:
             return 1
         if antwort == "e":
             print("Bitte Datei manuell bearbeiten, dann Enter.")
-            try:
-                input()
-            except EOFError:
-                return 1
+            if not _headless:
+                try:
+                    input()
+                except EOFError:
+                    return 1
+            # headless: kein Enter-Wait moeglich (stdin=/dev/null) —
+            # direkt nochmal fragen.
             continue
         if antwort == "a":
             state.phase_review_auto = True
