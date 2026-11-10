@@ -81,6 +81,7 @@ def select_next_op(
         op["id"]: op for op in ops
         if id_counts[op["id"]] == 1
     }
+    dogfooding_completed = "OP-382" in completed and "OP-382" not in id_counts
     candidates: list[dict[str, Any]] = []
     excluded: list[dict[str, Any]] = []
     for op in ops:
@@ -106,7 +107,7 @@ def select_next_op(
         phase = fields.get("phase", "")
         if (
             re.search(r"\bphase[\s-]*3\b", phase, re.IGNORECASE)
-            and "OP-382" not in completed
+            and not dogfooding_completed
         ):
             reasons.append("Phase-3 gesperrt bis OP-382 abgeschlossen")
         if not _ausfuellbar(fields.get("akzeptanzkriterien")):
