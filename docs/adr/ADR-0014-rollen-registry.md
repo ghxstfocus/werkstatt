@@ -54,9 +54,11 @@ und ohne `skill_filter_rolle` bekommt **keine Skills**. Leere Tupel
 - **Negativ:** Ein Registry-Fehler wirkt auf alle Rollen gleichzeitig.
   Mitigation: fail-loud-Pruefung in `architect.py` (RuntimeError wenn
   `ROLLEN['architect'].lade_skills(...)` nicht leer ist).
-- **Offen:** Migration der restlichen 5 Aufrufer (`planner`, `builder`,
-  `reviewer`, `explorer`, `scout`) laeuft in einer Folge-OP. Aktuell
-  nutzt nur `architect.py` die Registry.
+- **Offen (Stand des ADR-Datums):** Migration der restlichen 5 Aufrufer
+  (`planner`, `builder`, `reviewer`, `explorer`, `scout`) laeuft in
+  einer Folge-OP. Aktuell nutzt nur `architect.py` die Registry.
+- **Nachtrag 2026-11-10:** Der in diesem ADR als Beispiel genannte Debugger
+  ist keine eigene Loop-Rolle; ADR-0018 verwirft sie zugunsten des Chat-Modus.
 
 **Verweise:**
 - `werkstatt/rollen.py` (Implementierung)
