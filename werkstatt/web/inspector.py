@@ -485,6 +485,8 @@ def aggregate_tokens_per_rolle(
     for (payload,) in rows:
         try:
             event = json.loads(payload)
+            if not isinstance(event, dict):
+                continue
             rolle = str(event.get("rolle") or "unbekannt")
             prompt = int(event.get("prompt_tokens", 0) or 0)
             completion = int(event.get("completion_tokens", 0) or 0)

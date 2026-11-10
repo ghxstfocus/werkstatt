@@ -624,3 +624,57 @@ def test_builder_update_zieldatei_fehlt_bleibt_fail_closed(tmp_path):
         f"M-360: create-Audit bei update; audits={_audits}"
     )
 
+
+def test_builder_feedback_enthaelt_nur_high_und_critical(tmp_path):
+    """OP-386: Medium/low-Befunde duerfen den Repair-Prompt nicht fuellen."""
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    st = _state(tmp_path)
+    st.tasks = [{
+        "id": "t1", "name": "A", "description": "B",
+        "action": "update", "task_files": ["a.py"],
+    }]
+    st.aktuelle_task = st.tasks[0]
+    st.reviewer_bugs = [
+        {"severity": "medium", "description": "nur ein Hinweis"},
+        {"severity": "low", "description": "Stil"},
+        {"severity": "high", "description": "Rueckgabewert ist falsch"},
+    ]
+    fake_reply = type("R", (), {
+        "ok": True, "content": '{"patches": []}', "error": "",
+    })()
+    with patch(
+        "werkstatt.roles.builder._common.ask_llm",
+        return_value=fake_reply,
+    ) as mock_llm:
+        run_builder(st)
+
+    prompt = mock_llm.call_args.args[2]
+    assert "[high] Rueckgabewert ist falsch" in prompt
+    assert "nur ein Hinweis" not in prompt
+    assert "Stil" not in prompt
+
+
+def test_builder_meldet_leeren_high_severity_filter(tmp_path):
+    """OP-386: Der Fallback darf Medium/low nicht wieder einschleusen."""
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    st = _state(tmp_path)
+    st.tasks = [{
+        "id": "t1", "name": "A", "description": "B",
+        "action": "update", "task_files": ["a.py"],
+    }]
+    st.aktuelle_task = st.tasks[0]
+    st.reviewer_bugs = [
+        {"severity": "medium", "description": "nur ein Hinweis"},
+    ]
+    fake_reply = type("R", (), {
+        "ok": True, "content": '{"patches": []}', "error": "",
+    })()
+    with patch(
+        "werkstatt.roles.builder._common.ask_llm",
+        return_value=fake_reply,
+    ) as mock_llm:
+        run_builder(st)
+
+    prompt = mock_llm.call_args.args[2]
+    assert "Keine HIGH-/critical-Reviewer-Bugs" in prompt
+    assert "nur ein Hinweis" not in prompt
