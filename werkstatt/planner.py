@@ -18,14 +18,19 @@ from werkstatt.agent import ask_llm
 from werkstatt.render import _with_spinner
 
 
-# M-442: Architect-Modell konfigurierbar (Default: deepseek-chat).
-# Fuer billigere/schnellere Laeufe: WERKSTATT_ARCHITECT_MODEL=deepseek-chat
+# M-442/M-479: Architect bekommt das aktuelle Reasoning-Modell.
+# WERKSTATT_MODEL_ARCHITECT ist die bevorzugte Rollen-Konfiguration;
+# WERKSTATT_ARCHITECT_MODEL bleibt fuer bestehende Deployments kompatibel.
 def _is_reasoning_model(model: str) -> bool:
-    """M-445: Reasoning-Modelle unterstuetzen temperature/top_p nicht."""
-    return "reasoner" in model.lower() or "r1" in model.lower()
+    """Erkennt aktuelle und historische Reasoning-Modellnamen."""
+    lowered = model.lower()
+    return "reasoner" in lowered or "r1" in lowered or "v4-pro" in lowered
 
 
-_ARCHITECT_MODEL = os.environ.get("WERKSTATT_ARCHITECT_MODEL", "deepseek-reasoner")
+_ARCHITECT_MODEL = os.environ.get(
+    "WERKSTATT_MODEL_ARCHITECT",
+    os.environ.get("WERKSTATT_ARCHITECT_MODEL", "deepseek-v4-pro"),
+)
 
 from werkstatt.architect import (  # noqa: F401
     _BUILDER_SCHNITTSTELLE,
@@ -2279,7 +2284,7 @@ def run_planner(state: RunState) -> bool:
                   pd, pn)
 
     # 2026-11-05: Selbst-Check-Block ENTFERNT.
-    # Regress: deepseek-reasoner interpretiert "pruefe vor dem Senden"
+    # Regress: das Reasoning-Modell interpretiert "pruefe vor dem Senden"
     # als CoT-Trigger, verbraucht max_tokens=16000 mit Reasoning und
     # liefert leeren content. Der Fallback in _ask_llm_impl hat dann
     # reasoning_content als Prosa akzeptiert -> Denkprotokoll an
