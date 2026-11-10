@@ -308,3 +308,64 @@ def test_pause_resume_loop_control(
         "web_loop_paused", "web_loop_resumed", "web_loop_stopped",
     ]
     assert "demo" not in app_modul._LAUFENDE_LOOPS
+
+
+def test_stop_eskaliert_an_prozessgruppe_nach_timeout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    import os
+
+    if os.name != "posix":
+        pytest.skip("Prozessgruppen-Stop nutzt POSIX-Signale")
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "STATUS.md").write_text("# process group timeout\\n", encoding="utf-8")
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    _reset_loop_registry(app_modul)
+
+    class _TimeoutProzess:
+        pid = 4242
+        returncode: int | None = None
+
+        def poll(self) -> int | None:
+            return self.returncode
+
+        def wait(self, timeout: int | None = None) -> int:
+            if self.returncode is None:
+                raise app_modul.subprocess.TimeoutExpired("loop", timeout)
+            return self.returncode
+
+    process = _TimeoutProzess()
+    monkeypatch.setattr(
+        app_modul.subprocess, "Popen",
+        lambda *args, **kwargs: process,
+    )
+    signale: list[tuple[int, int]] = []
+
+    def _killpg(pgid: int, sig: int) -> None:
+        signale.append((pgid, sig))
+        if sig == signal.SIGKILL:
+            process.returncode = -signal.SIGKILL
+
+    monkeypatch.setattr(app_modul.os, "killpg", _killpg)
+    monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
+
+    client = TestClient(app_modul.app)
+    start = client.post(
+        "/api/projects/demo/start", json={"aufgabe": "timeout test"},
+    )
+    assert start.status_code == 200
+    stop = client.post("/api/projects/demo/stop")
+
+    assert stop.status_code == 200
+    assert signale == [
+        (process.pid, signal.SIGTERM),
+        (process.pid, signal.SIGKILL),
+    ]
+    assert stop.json()["returncode"] == -signal.SIGKILL
