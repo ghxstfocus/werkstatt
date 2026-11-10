@@ -4223,11 +4223,13 @@ und 3-Wege-Checks aus ADR-0018, obwohl dieser ADR als rejected markiert ist
 und ADR-0011/0029 den Debugger als Chat-Modus festlegen. OP-191 war ausserdem
 als Abhaengigkeit eingetragen, obwohl PROGRESS seine Entfernung dokumentiert.
 OP-216 beschreibt nun die akzeptierte Chat-Debugger-Architektur, trennt IST
-von SOLL und wartet auf OP-210/211/240. Der ADR-Index zeigt ADR-0018 jetzt
-als rejected.
+von SOLL und wartet auf OP-210/211/240. Die veraltete OP-191-Referenz wurde
+auch aus der ausgehenden Blockiert-Liste von OP-210 entfernt. Der ADR-Index
+zeigt ADR-0018 jetzt als rejected.
 
 - **Commit:** `9a3e06c81a85` — OP-216 an akzeptierte ADRs und aktuelle Abhaengigkeiten angepasst.
 - **Commit:** `719e4028ea4c` — ADR-0018-Status im Index korrigiert.
+- **Commit:** `36c2ce19d63e` — entfernte OP-191-Referenz aus OP-210 bereinigt.
 - **Serververifikation:** OP-398/Abhaengigkeitsfix auf `c959440`: 41 gezielte Tests,
   1823 Tests voll, Ruff 0, Mypy 0, Quality Gate gruen. Die nun folgenden
   Aenderungen sind Doku-only; Doku-Konsistenzpruefung nach Pull steht aus.
