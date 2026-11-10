@@ -1090,6 +1090,80 @@ def create_app() -> FastAPI:
         sid = _pruefe_session_id(session_id)
         return {"events": _cs.ChatSession(projekt, sid).load()}
 
+    @app.post("/api/projects/{name}/chat/jobs", status_code=202)
+    def chat_job_create(name: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Persistiert Chat-Arbeit und kehrt sofort mit einer Job-ID zurueck."""
+        from werkstatt.chat_jobs import enqueue_chat_job
+
+        projekt = _pruefe_projektname(name)
+        session_id = body.get("session_id")
+        message = body.get("message")
+        mode = body.get("mode", "read")
+        idempotency_key = body.get("idempotency_key")
+        if not isinstance(session_id, str) or not session_id:
+            raise HTTPException(status_code=400, detail="session_id fehlt")
+        sid = _pruefe_session_id(session_id)
+        if not isinstance(message, str) or not message.strip():
+            raise HTTPException(status_code=400, detail="message fehlt")
+        if len(message) > 20000:
+            raise HTTPException(status_code=413, detail="message zu lang")
+        if mode != "read":
+            raise HTTPException(
+                status_code=400,
+                detail="Hintergrundjobs erlauben derzeit nur read-Modus",
+            )
+        if not isinstance(idempotency_key, str) or not re.fullmatch(
+            r"[A-Za-z0-9_.:-]{8,128}", idempotency_key,
+        ):
+            raise HTTPException(status_code=400, detail="idempotency_key ungueltig")
+        db_path = _PROJECTS_BASE / ".werkstatt" / "chat-jobs" / f"{projekt}.db"
+        try:
+            accepted = enqueue_chat_job(
+                projekt,
+                (_PROJECTS_BASE / projekt).resolve(),
+                sid,
+                message.strip(),
+                mode,
+                idempotency_key,
+                db_path=db_path,
+            )
+        except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
+            raise HTTPException(
+                status_code=500, detail=f"Chat-Job konnte nicht gestartet werden: {exc}",
+            ) from exc
+        job = accepted["job"]
+        return {
+            "job_id": job["job_id"],
+            "state": job["state"],
+            "created": accepted["created"],
+        }
+
+    @app.get("/api/projects/{name}/chat/jobs/{job_id}")
+    def chat_job_get(
+        name: str, job_id: str, since_seq: int = 0,
+    ) -> dict[str, Any]:
+        """Liefert Jobstatus und persistierte Events ab dem Replay-Cursor."""
+        from werkstatt.chat_jobs import ChatJobStore, resume_chat_jobs
+
+        projekt = _pruefe_projektname(name)
+        if not re.fullmatch(r"[a-f0-9]{32}", job_id):
+            raise HTTPException(status_code=400, detail="job_id ungueltig")
+        if since_seq < 0:
+            raise HTTPException(status_code=400, detail="since_seq ungueltig")
+        db_path = _PROJECTS_BASE / ".werkstatt" / "chat-jobs" / f"{projekt}.db"
+        try:
+            resume_chat_jobs(
+                projekt, (_PROJECTS_BASE / projekt).resolve(), db_path=db_path,
+            )
+            job = ChatJobStore(db_path).get(job_id, since_seq=since_seq)
+        except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
+            raise HTTPException(
+                status_code=500, detail=f"Chat-Job konnte nicht geladen werden: {exc}",
+            ) from exc
+        if job is None:
+            raise HTTPException(status_code=404, detail="Chat-Job nicht gefunden")
+        return job
+
     @app.post("/api/projects/{name}/chat/new")
     def chat_new(name: str) -> dict[str, Any]:
         """Erzeugt eine neue Session mit Marker-Event (damit sie in
