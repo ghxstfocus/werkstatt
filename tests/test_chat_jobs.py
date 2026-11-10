@@ -73,14 +73,12 @@ def test_job_failure_is_visible_and_terminal(tmp_path: Path) -> None:
     assert failed["events"][-1]["payload"]["error"].startswith("RuntimeError")
 
 
-def test_claim_serializes_turns_within_one_session(tmp_path: Path) -> None:
+def test_claim_allows_independent_turns_within_one_session(tmp_path: Path) -> None:
     store = ChatJobStore(tmp_path / "jobs.db")
     first, _ = store.create("session-a", "Erste Frage", "read", "request-key-a001")
     second, _ = store.create("session-a", "Zweite Frage", "read", "request-key-a002")
 
     assert store.claim(first["job_id"]) is True
-    assert store.claim(second["job_id"]) is False
-    assert store.finish(first["job_id"], answer="Erledigt") is True
     assert store.claim(second["job_id"]) is True
 
 
@@ -93,7 +91,7 @@ def test_jobs_in_different_sessions_can_run_in_parallel(tmp_path: Path) -> None:
     assert store.claim(second["job_id"]) is True
 
 
-def test_dispatch_skips_session_with_running_job(
+def test_dispatch_submits_same_session_jobs_independently(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -115,17 +113,15 @@ def test_dispatch_skips_session_with_running_job(
     store = ChatJobStore(db_path)
     first, _ = store.create("session-a", "Erste", "read", "request-key-run-001")
     second, _ = store.create("session-a", "Zweite", "read", "request-key-run-002")
-    assert store.claim(first["job_id"], "worker-a")
     executor = _RecordingExecutor()
     monkeypatch.setattr(chat_jobs, "_EXECUTOR", executor)
     monkeypatch.setattr(chat_jobs, "_FUTURES", {})
 
     chat_jobs._dispatch_pending(db_path, "demo", project_dir)
 
-    assert executor.submitted == []
-    assert store.get(second["job_id"])["state"] == "queued"
-
-
+    assert [args[-1] for args in executor.submitted] == [
+        first["job_id"], second["job_id"],
+    ]
 def test_dispatch_retries_when_a_claim_race_future_finishes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -280,7 +276,9 @@ def test_store_migrates_existing_jobs_table_for_worker_leases(
     with sqlite3.connect(db_path) as conn:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
 
-    assert {"worker_id", "heartbeat_at", "cancel_requested"} <= columns
+    assert {
+        "worker_id", "heartbeat_at", "cancel_requested", "context_seq",
+    } <= columns
 
 def test_queued_job_can_be_cancelled_once(tmp_path: Path) -> None:
     store = ChatJobStore(tmp_path / "jobs.db")
