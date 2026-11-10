@@ -90,4 +90,4 @@ def test_loop_control_actions_use_full_size_text_buttons():
     assert ".runs-control .runs-control-action" in css
     assert "min-width: max-content;" in css
     assert "white-space: nowrap;" in css
-\n
+
