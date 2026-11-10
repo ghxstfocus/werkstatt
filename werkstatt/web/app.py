@@ -1088,14 +1088,21 @@ def create_app() -> FastAPI:
     def chat_history(name: str, session_id: str) -> dict[str, Any]:
         """Liefert die Event-Historie einer Session."""
         from werkstatt import chat_session as _cs
+        from werkstatt.chat_jobs import sync_completed_job_turns
+
         projekt = _pruefe_projektname(name)
         sid = _pruefe_session_id(session_id)
+        db_path = _PROJECTS_BASE / ".werkstatt" / "chat-jobs" / f"{projekt}.db"
+        sync_completed_job_turns(projekt, sid, db_path=db_path)
         return {"events": _cs.ChatSession(projekt, sid).load()}
 
     @app.post("/api/projects/{name}/chat/jobs", status_code=202)
     def chat_job_create(name: str, body: dict[str, Any]) -> dict[str, Any]:
         """Persistiert Chat-Arbeit und kehrt sofort mit einer Job-ID zurueck."""
-        from werkstatt.chat_jobs import IdempotencyConflict, enqueue_chat_job
+        from werkstatt.chat_jobs import (
+            IdempotencyConflict, enqueue_chat_job, sync_completed_job_turns,
+        )
+        from werkstatt.chat_session import ChatSession
 
         projekt = _pruefe_projektname(name)
         session_id = body.get("session_id")
@@ -1120,6 +1127,8 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="idempotency_key ungueltig")
         db_path = _PROJECTS_BASE / ".werkstatt" / "chat-jobs" / f"{projekt}.db"
         try:
+            sync_completed_job_turns(projekt, sid, db_path=db_path)
+            context_seq = ChatSession(projekt, sid).max_seq()
             accepted = enqueue_chat_job(
                 projekt,
                 (_PROJECTS_BASE / projekt).resolve(),
@@ -1128,6 +1137,7 @@ def create_app() -> FastAPI:
                 mode,
                 idempotency_key,
                 db_path=db_path,
+                context_seq=context_seq,
             )
         except IdempotencyConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1145,12 +1155,15 @@ def create_app() -> FastAPI:
     @app.get("/api/projects/{name}/chat/jobs")
     def chat_jobs_active(name: str, session_id: str) -> dict[str, Any]:
         """Liefert aktive und letzte fehlgeschlagene Jobs fuer Reconnect."""
-        from werkstatt.chat_jobs import ChatJobStore, resume_chat_jobs
+        from werkstatt.chat_jobs import (
+            ChatJobStore, resume_chat_jobs, sync_completed_job_turns,
+        )
 
         projekt = _pruefe_projektname(name)
         sid = _pruefe_session_id(session_id)
         db_path = _PROJECTS_BASE / ".werkstatt" / "chat-jobs" / f"{projekt}.db"
         try:
+            sync_completed_job_turns(projekt, sid, db_path=db_path)
             resume_chat_jobs(
                 projekt, (_PROJECTS_BASE / projekt).resolve(), db_path=db_path,
             )
