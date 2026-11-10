@@ -4448,3 +4448,6 @@ fehlendem/kaputtem Pflichtkontext sicher gestoppt.
 - **Commit:** 54b47e7 — Test-Umgebung und Erwartungswert korrigiert.
 - Code und Tests sind auf GitHub eingetragen; Laufzeittests wurden hier nicht
   ausgefuehrt. Server-Verifikation steht noch aus.
+
+- **Commit:** 3b108ac — API-Antwortmodell im LLM-Usage-Audit protokolliert.
+- **Commit:** ee50914 — Provider-Modell-ID auch im Chat-Usage-Datensatz sichtbar.
