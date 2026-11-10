@@ -80,8 +80,11 @@
 
   function _renderSidebarAktuell() {
     var projekt = zustand.projekt;
+    var anfrage = zustand.historyRequest;
     _ladeSessions(projekt).then(function (sessions) {
-      if (projekt === zustand.projekt) _rendereSidebar(sessions);
+      if (projekt === zustand.projekt && anfrage === zustand.historyRequest) {
+        _rendereSidebar(sessions);
+      }
     }).catch(function () {});
   }
 
