@@ -1,7 +1,10 @@
 """Tests fuer werkstatt/orchestrator.py (M-299d)."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+
 
 from werkstatt import orchestrator
 
@@ -32,3 +35,31 @@ def test_load_docs_fail_closed(tmp_path):
     """M-299d: load_docs beendet bei fehlender Datei."""
     with pytest.raises(SystemExit):
         orchestrator.load_docs({"missing": "nicht-da.md"}, tmp_path)
+
+
+def test_load_docs_fails_closed_on_read_error(tmp_path, monkeypatch):
+    target = tmp_path / "broken.md"
+    target.touch()
+    original_read_text = Path.read_text
+
+    def fail_target(path, *args, **kwargs):
+        if path == target:
+            raise OSError("simulierter Lesefehler")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fail_target)
+
+    with pytest.raises(SystemExit):
+        orchestrator.load_docs({"status": "broken.md"}, tmp_path)
+
+
+def test_build_run_state_does_not_suppress_missing_docs(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        orchestrator,
+        "load_project_config",
+        lambda _name: {"project_dir": str(tmp_path), "docs": {"status": "missing.md"}},
+    )
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+
+    with pytest.raises(SystemExit):
+        orchestrator.build_run_state("demo", "Aufgabe", project_dir=tmp_path)
