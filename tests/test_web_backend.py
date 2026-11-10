@@ -376,6 +376,7 @@ def test_pause_resume_loop_control(
     assert [event[0][1] for event in audit_events] == [
         "web_loop_paused", "web_loop_resumed", "web_loop_stopped",
     ]
+    assert [event[1]["project"] for event in audit_events] == ["demo"] * 3
     assert "demo" not in app_modul._LAUFENDE_LOOPS
 
 
@@ -548,6 +549,7 @@ def test_start_waehlt_einzige_pruefbare_offene_op(
     assert antwort.json()["op_id"] == "OP-101"
     assert audit_events[0][0][1] == "web_op_selected"
     assert audit_events[0][1]["payload"]["op_id"] == "OP-101"
+    assert audit_events[0][1]["project"] == "demo"
     assert antwort.json()["auswahl"]["id"] == "OP-101"
     assert "### OP-101:" in antwort.json()["aufgabe"]
     assert aufrufe
