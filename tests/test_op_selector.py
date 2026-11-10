@@ -1,5 +1,5 @@
 """Tests fuer die evidenzbasierte OP-Auswahl."""
-from werkstatt.web.op_selector import select_next_op
+from werkstatt.web.op_selector import parse_completed_op_ids, select_next_op
 
 
 def _op(op_id: str, *, title: str = "Arbeit", status: str = "open",
@@ -88,3 +88,47 @@ def test_duplicate_op_id_is_never_selected_or_used_as_dependency() -> None:
     assert "OP-ID kommt mehrfach in STATUS.md vor" in reasons
     assert "Unbekannte oder widerspruechliche Blocker" in reasons
 
+
+
+
+def test_resolves_removed_dependency_only_with_explicit_progress_completion() -> None:
+    waiting = _op("OP-002", blockers="OP-001")
+    progress = "### 2026-11-10 — OP-001 abgeschlossen: erledigt\n"
+
+    completed = parse_completed_op_ids(progress)
+    result = select_next_op(waiting, completed_ids=completed)
+
+    assert completed == {"OP-001"}
+    assert result["zustand"] == "selected"
+    assert result["auswahl"]["id"] == "OP-002"
+
+
+def test_progress_mentions_and_superseded_rows_do_not_resolve_dependency() -> None:
+    waiting = _op("OP-002", blockers="OP-001")
+    progress = (
+        "OP-001 wird als Voraussetzung diskutiert.\n"
+        "- 2026-11-10 | OP-001 | superseded | ersetzt\n"
+    )
+
+    result = select_next_op(waiting, completed_ids=parse_completed_op_ids(progress))
+
+    assert result["zustand"] == "no_candidate"
+    assert "Unbekannte oder widerspruechliche Blocker" in " ".join(
+        result["ausgeschlossen"][0]["gruende"]
+    )
+
+
+def test_progress_completion_does_not_hide_duplicate_status_identity() -> None:
+    duplicate = _op("OP-001", status="done") + _op("OP-001", status="open")
+    waiting = _op("OP-002", blockers="OP-001")
+
+    result = select_next_op(
+        duplicate + waiting,
+        completed_ids={"OP-001"},
+    )
+
+    assert result["zustand"] == "no_candidate"
+    assert any(
+        "Unbekannte oder widerspruechliche Blocker" in " ".join(item["gruende"])
+        for item in result["ausgeschlossen"]
+    )
