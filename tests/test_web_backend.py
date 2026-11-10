@@ -448,16 +448,17 @@ def test_start_waehlt_einzige_pruefbare_offene_op(
     pytest.importorskip("fastapi")
     pytest.importorskip("httpx")
     from fastapi.testclient import TestClient
+
     from werkstatt.web import app as app_modul
 
     docs_dir = tmp_path / "demo" / "docs"
     docs_dir.mkdir(parents=True)
     (docs_dir / "STATUS.md").write_text(
-        "### OP-101: Eindeutige Arbeit\\n"
-        "- **Status:** open\\n"
-        "- **Blockiert von:** —\\n"
-        "- **Akzeptanzkriterien:** Verhalten ist belegt.\\n"
-        "- **Tests:** pytest -q tests/test_feature.py\\n",
+        "### OP-101: Eindeutige Arbeit\n"
+        "- **Status:** open\n"
+        "- **Blockiert von:** —\n"
+        "- **Akzeptanzkriterien:** Verhalten ist belegt.\n"
+        "- **Tests:** pytest -q tests/test_feature.py\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
@@ -490,20 +491,21 @@ def test_start_fragt_bei_mehreren_pruefbaren_ops_nach(
     pytest.importorskip("fastapi")
     pytest.importorskip("httpx")
     from fastapi.testclient import TestClient
+
     from werkstatt.web import app as app_modul
 
     docs_dir = tmp_path / "demo" / "docs"
     docs_dir.mkdir(parents=True)
     one = (
-        "### OP-101: Erstes Thema\\n- **Status:** open\\n"
-        "- **Blockiert von:** —\\n"
-        "- **Akzeptanzkriterien:** Prüfergebnis A.\\n"
-        "- **Tests:** pytest -q tests/test_a.py\\n"
+        "### OP-101: Erstes Thema\n- **Status:** open\n"
+        "- **Blockiert von:** —\n"
+        "- **Akzeptanzkriterien:** Prüfergebnis A.\n"
+        "- **Tests:** pytest -q tests/test_a.py\n"
     )
     two = one.replace("OP-101: Erstes Thema", "OP-102: Zweites Thema").replace(
         "Prüfergebnis A", "Prüfergebnis B"
     ).replace("test_a.py", "test_b.py")
-    (docs_dir / "STATUS.md").write_text(one + "\\n" + two, encoding="utf-8")
+    (docs_dir / "STATUS.md").write_text(one + "\n" + two, encoding="utf-8")
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
     _reset_loop_registry(app_modul)
     monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
@@ -526,11 +528,12 @@ def test_direct_task_precedes_invalid_op_id(
     pytest.importorskip("fastapi")
     pytest.importorskip("httpx")
     from fastapi.testclient import TestClient
+
     from werkstatt.web import app as app_modul
 
     docs_dir = tmp_path / "demo" / "docs"
     docs_dir.mkdir(parents=True)
-    (docs_dir / "STATUS.md").write_text("# no OP needed\\n", encoding="utf-8")
+    (docs_dir / "STATUS.md").write_text("# no OP needed\n", encoding="utf-8")
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
     _reset_loop_registry(app_modul)
     aufrufe: list[list[str]] = []
