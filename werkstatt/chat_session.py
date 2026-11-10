@@ -267,6 +267,11 @@ def derive_messages(
                 "role": "assistant",
                 "content": payload.get("text", ""),
             })
+        elif kind == "job_turn":
+            msgs.extend([
+                {"role": "user", "content": payload.get("user_text", "")},
+                {"role": "assistant", "content": payload.get("assistant_text", "")},
+            ])
         elif kind == "tool_call":
             msgs.append({
                 "role": "assistant",
