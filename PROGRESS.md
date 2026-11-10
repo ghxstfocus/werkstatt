@@ -4025,3 +4025,8 @@ Der Gate-Button „Im Chat debuggen“ sendet den Projekt-/Run-/Gate-Kontext sam
 ### 2026-11-10 — Debugger-Abhaengigkeiten bereinigt
 
 Der STATUS-Parser listet OP-231 und OP-233 nicht mehr als offene Punkte; PROGRESS dokumentiert ChatSession, die acht read-only Chat-Tools, chat_agent.py und die dreispaltige Chat-Oberflaeche bereits als umgesetzt. Die veralteten Blocker wurden daher entfernt: OP-240 ist auf dieser Basis startbar, OP-242 wartet nur noch auf OP-240. Das Gate-zu-Chat-UI-Fundament ist in d80902a ergaenzt; Debugger-Tools und die direkte, freigabegestuetzte Patch-Uebergabe bleiben offen.
+
+
+### 2026-11-10 — Serververifikation: Gate-Chat-Uebergabe
+
+Verifiziert auf Server-HEAD `af91cf6`: Gate-/Chat-Tests 28 passed; vollstaendige Suite 1787 passed, 5 skipped; Ruff 0; mypy 0; Quality-Gate `ok: true`, `regression: false`. Die Option „Im Chat debuggen“ uebergibt den Projekt-/Run-/Gate-Kontext an den Chat, ohne das Gate zu beantworten. Die Option `a` ist als „Plan anpassen“ beschriftet; revidierte/Scout-No-Op-Plaene haben nur `j/n`. AST- und Katalogpruefungen bleiben uebersprungen, weil `tests/test_audit_kinds.py` und `pipeline.py` im Serverstand fehlen. Die maschinenlesbare Patch-Freigabe und Uebergabe an den Loop bleibt noch offen.
