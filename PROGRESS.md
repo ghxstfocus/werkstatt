@@ -4351,3 +4351,26 @@ und prueft, dass OP-382 selbst startbar bleibt, Phase 3 aber gesperrt bleibt.
 - **Commit:** `8b3b7f5ae403` — widerspruechliche Freigabe verhindern.
 - **Commit:** `2dd3b724b1ab` — Regressionstest.
 - **Serververifikation:** nach Pull weiterhin ausstehend.
+
+
+### Loop-Kontext — Pflichtdokumente tatsaechlich laden und fail-closed behandeln (2026-11-10)
+
+Der Architekturabgleich gegen AGENTS.md, DOC_CONVENTIONS §6 und ADR-0029
+zeigte, dass `projects/werkstatt.yaml` README.md statt AGENTS.md als Einstieg
+lud und ROADMAP.md, ARCHITECTURE.md, ADR-Index und Glossar nicht mitgab.
+Damit entsprach der tatsaechliche Planner-/Scout-Kontext nicht der
+Dokumentations-Lese-Reihenfolge. Das Manifest laedt nun die Living Docs in der
+vorgesehenen Prioritaet.
+
+Zusaetzlich unterdrueckte `build_run_state` fehlende oder fehlerhafte
+Pflichtdokumente und lieferte einen leeren Doku-Kontext. Der CLI-Pfad konnte
+nicht-lesbare Dokumente ebenfalls still tolerieren. Beide Pfade brechen jetzt
+sichtbar und auditiert ab; sie starten keine Arbeit mit unvollstaendigem
+Projektkontext. Tests decken Manifest-Schluessel, fehlende Dateien und einen
+Lesefehler ab.
+
+- **Manifest:** `b7480d358f96` — erforderliche Living Docs laden.
+- **Loader:** `a45ebee55fcc` — Pflichtdokumente fail-closed lesen.
+- **Loop:** `d0ca7e1a2e44` — Fehler als Event/Status melden und abbrechen.
+- **Tests:** `dc177d1d9f5e`, `ab4cbe4f15bf`.
+- **Serververifikation:** nach Pull noch ausstehend.
