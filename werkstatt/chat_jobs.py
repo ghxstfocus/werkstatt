@@ -231,6 +231,7 @@ def _run_job(
             on_tool_result=lambda name, content: event(
                 "tool_result", name=name, content=content,
             ),
+            request_id=job_id,
         )
         store.finish(job_id, answer=answer)
     except Exception as exc:
