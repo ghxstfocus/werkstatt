@@ -4476,3 +4476,5 @@ vollstaendig umgesetzt oder verifiziert.
 - **Commit:** `437f39e4f7b66a4a8ba69f2f` — stabile FIFO-Reihenfolge auch bei gleichen Zeitstempeln.
 
 - **Commit:** `a968c21ca7629640f14c2941` — unbekannte Agent-Labels fallen fail-safe auf Flash zurueck.
+
+- **Commit:** `11506b4e28ef4e5225c9dbae` — Overrides nur fuer registrierte Rollen erlauben.
