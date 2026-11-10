@@ -1541,7 +1541,8 @@ def test_plan_renderer_zeigt_phasen(tmp_path, capsys, monkeypatch):
 
 def test_plan_gate_config_cannot_disable_approval(tmp_path, monkeypatch):
     """require_plan_approval=false darf die Freigabe nicht ueberspringen."""
-    from werkstatt import loop as loop_mod, paths
+    from werkstatt import loop as loop_mod
+    from werkstatt import paths
     from werkstatt.state import RunState
     (tmp_path / ".werkstatt").mkdir()
     config_file = tmp_path / "project.yaml"
@@ -1565,7 +1566,8 @@ def test_plan_gate_config_cannot_disable_approval(tmp_path, monkeypatch):
 
 def test_noop_scout_plan_gate_shows_befund(tmp_path, monkeypatch):
     """Der No-Op-Pfad zeigt seinen Befund und verlangt j/n-Freigabe."""
-    from werkstatt import gates, loop as loop_mod, render
+    from werkstatt import gates, render
+    from werkstatt import loop as loop_mod
     from werkstatt.state import RunState
 
     st = RunState(
@@ -1590,7 +1592,7 @@ def test_noop_scout_plan_gate_shows_befund(tmp_path, monkeypatch):
     assert loop_mod._human_gate_plan(st) == 0
     assert prompts and "NO-OP-PLAN" in prompts[0]
     shown = next(payload for kind, payload in events if kind == "loop_plan_shown")
-    assert "bereits erfuellt" in shown["plan_text"]
+    assert "bereits als erfuellt" in shown["plan_text"]
 
 def test_human_gate_plan_test_kontext(tmp_path, monkeypatch):
     """M-348b: WERKSTATT_IN_TEST=1 -> rc=0."""
