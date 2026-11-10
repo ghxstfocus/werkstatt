@@ -242,9 +242,17 @@ def _next_op(_args: dict[str, Any]) -> str:
             "detail": f"STATUS.md kann nicht gelesen werden: {exc}",
         }, ensure_ascii=False)
 
-    from werkstatt.web.op_selector import select_next_op
+    from werkstatt.web.op_selector import parse_completed_op_ids, select_next_op
 
-    result = select_next_op(status_text)
+    progress_path = _aktives_projekt_dir() / "PROGRESS.md"
+    try:
+        progress_text = progress_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        progress_text = ""
+    result = select_next_op(
+        status_text,
+        completed_ids=parse_completed_op_ids(progress_text),
+    )
     excluded = result.pop("ausgeschlossen", [])
     result["quelle"] = "docs/STATUS.md"
     result["ausgeschlossen_anzahl"] = len(excluded)
