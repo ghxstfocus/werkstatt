@@ -4213,3 +4213,21 @@ die noch in STATUS.md stehen, bleiben widerspruechlich und fail-closed.
 - **Commit:** `1ff88b62ab68` — autonomer Web-Start mit erledigtem PROGRESS-Blocker als Regressionstest.
 - **Commit:** `5b49820c3097` — Fake-Prozess-Signal im Web-Test isolieren.
 - **Serververifikation steht aus.** Zieltests, Ruff und vollstaendiges Quality-Gate nach Pull ausfuehren.
+
+
+
+### ADR-/STATUS-Konsistenz — OP-216 und ADR-0018 (2026-11-10)
+
+Der aktuelle Status-Eintrag OP-216 verlangte eine eigene Debugger-Loop-Rolle
+und 3-Wege-Checks aus ADR-0018, obwohl dieser ADR als rejected markiert ist
+und ADR-0011/0029 den Debugger als Chat-Modus festlegen. OP-191 war ausserdem
+als Abhaengigkeit eingetragen, obwohl PROGRESS seine Entfernung dokumentiert.
+OP-216 beschreibt nun die akzeptierte Chat-Debugger-Architektur, trennt IST
+von SOLL und wartet auf OP-210/211/240. Der ADR-Index zeigt ADR-0018 jetzt
+als rejected.
+
+- **Commit:** `9a3e06c81a85` — OP-216 an akzeptierte ADRs und aktuelle Abhaengigkeiten angepasst.
+- **Commit:** `719e4028ea4c` — ADR-0018-Status im Index korrigiert.
+- **Serververifikation:** OP-398/Abhaengigkeitsfix auf `c959440`: 41 gezielte Tests,
+  1823 Tests voll, Ruff 0, Mypy 0, Quality Gate gruen. Die nun folgenden
+  Aenderungen sind Doku-only; Doku-Konsistenzpruefung nach Pull steht aus.
