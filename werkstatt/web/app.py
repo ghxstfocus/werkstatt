@@ -698,7 +698,10 @@ def create_app() -> FastAPI:
         sid = _pruefe_session_id(session_id)
         session = _cs.ChatSession(projekt, sid)
         try:
-            antwort = _ca.chat_loop(session, message, mode=mode)
+            projekt_dir = (_PROJECTS_BASE / projekt).resolve()
+            antwort = _ca.chat_loop(
+                session, message, mode=mode, project_dir=projekt_dir,
+            )
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         return {"session_id": sid, "antwort": antwort}
@@ -767,6 +770,7 @@ def create_app() -> FastAPI:
                     antwort = await asyncio.to_thread(
                         _ca.chat_loop, session, message,
                         mode=mode,
+                        project_dir=(_PROJECTS_BASE / projekt).resolve(),
                         on_chunk=on_chunk,
                         on_tool_call=on_tool_call,
                         on_tool_result=on_tool_result,
