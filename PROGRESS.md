@@ -3928,3 +3928,15 @@ Nachrichtenbereich und Status aktualisiert.
 **Prüfung:** Chat-JavaScript syntaktisch geparst. Python-/Browser-Gates
 und Server-Render sind noch nicht ausgeführt; OP-396 bleibt offen.
 
+### 2026-11-10 — Veraltete Chat-Sidebar-Antworten verwerfen
+
+**Commit:** dee7799.
+
+Die Session-Sidebar übernimmt eine verspätete Antwort nur noch, wenn
+sowohl Projekt als auch Anfragegeneration noch aktuell sind. So kann
+auch ein schneller Wechsel A → B → A keine ältere A-Sessionliste über
+die neuere Ansicht legen.
+
+**Prüfung:** Chat-JavaScript syntaktisch geparst; Verhaltenstest und
+Server-Gates stehen für diesen Commit noch aus.
+
