@@ -2,13 +2,14 @@
 
 Stellt Endpunkte fuer Projekt-Status, Phasen-Snapshot und Loop-Steuerung
 bereit. Die Handler sind bewusst synchron (``def``), damit FastAPI sie im
-Threadpool ausfuehrt; die Prozess-Registry ist ein einfaches dict ohne Lock.
+Threadpool ausfuehrt; Start und Stop pro Projekt werden serialisiert.
 """
 
 import asyncio
 import re
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,14 @@ _PROJECTS_BASE = Path("/opt")
 
 _LAUFENDE_LOOPS: dict[str, subprocess.Popen] = {}
 _LOOP_LOG_HANDLES: dict[str, Any] = {}
+_LOOP_LOCKS: dict[str, Any] = {}
+_LOOP_LOCKS_GUARD = threading.Lock()
+
+
+def _projekt_loop_lock(projektname: str) -> Any:
+    """Serialisiert Start/Stop fuer ein Projekt ueber Threadpool-Requests."""
+    with _LOOP_LOCKS_GUARD:
+        return _LOOP_LOCKS.setdefault(projektname, threading.RLock())
 
 
 def _pruefe_projektname(name: str) -> str:
@@ -339,10 +348,6 @@ def create_app() -> FastAPI:
                 status_code=404,
                 detail=f"Projekt {projektname!r} hat kein docs/STATUS.md",
             )
-        laufend = _LAUFENDE_LOOPS.get(projektname)
-        if laufend is not None and laufend.poll() is None:
-            return {"gestartet": False, "pid": laufend.pid,
-                    "grund": "laeuft_bereits"}
         import secrets as _secrets
         import time as _time
         run_id = (
@@ -400,48 +405,83 @@ def create_app() -> FastAPI:
                 detail="aufgabe oder offene, nicht blockierte op_id erforderlich",
             )
         args.extend(["--aufgabe", aufgabe])
-        # Log-File pro Run, stdout/stderr umleiten (sonst sind
-        # Loop-Crashes unsichtbar). Handle in _LOOP_LOG_HANDLES halten,
-        # damit project_stop es schliessen kann.
-        _log_dir = _pd / ".werkstatt" / "logs"
-        _log_fh = None
-        try:
-            _log_dir.mkdir(parents=True, exist_ok=True)
-            _log_fh = (_log_dir / f"loop-{run_id}.log").open("ab")
-        except OSError:
+        # Der FastAPI-Threadpool kann parallele Start-Requests bedienen.
+        # Recheck und Popen muessen atomar sein, sonst starten zwei Builder
+        # gleichzeitig im selben Working Tree.
+        with _projekt_loop_lock(projektname):
+            laufend = _LAUFENDE_LOOPS.get(projektname)
+            if laufend is not None and laufend.poll() is None:
+                return {"gestartet": False, "pid": laufend.pid,
+                        "grund": "laeuft_bereits"}
+            _LAUFENDE_LOOPS.pop(projektname, None)
+            _altes_log = _LOOP_LOG_HANDLES.pop(projektname, None)
+            if _altes_log is not None:
+                try:
+                    _altes_log.close()
+                except OSError:
+                    pass
+
+            # Log-File pro Run, stdout/stderr umleiten (sonst sind
+            # Loop-Crashes unsichtbar). Handle bis zum Stop/Exit halten.
+            _log_dir = _pd / ".werkstatt" / "logs"
             _log_fh = None
-        if _log_fh is not None:
-            _LOOP_LOG_HANDLES[projektname] = _log_fh
-        prozess = subprocess.Popen(
-            args,
-            stdout=_log_fh if _log_fh is not None else subprocess.DEVNULL,
-            stderr=subprocess.STDOUT,
-        )
-        _LAUFENDE_LOOPS[projektname] = prozess
-        return {
-            "gestartet": True,
-            "pid": prozess.pid,
-            "run_id": run_id,
-            "aufgabe": aufgabe or "(automatisch aus STATUS.md)",
-        }
+            try:
+                _log_dir.mkdir(parents=True, exist_ok=True)
+                _log_fh = (_log_dir / f"loop-{run_id}.log").open("ab")
+            except OSError:
+                _log_fh = None
+            try:
+                prozess = subprocess.Popen(
+                    args,
+                    stdout=_log_fh if _log_fh is not None else subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT,
+                )
+            except OSError as exc:
+                if _log_fh is not None:
+                    _log_fh.close()
+                raise HTTPException(
+                    status_code=500, detail=f"Loop konnte nicht starten: {exc}",
+                ) from exc
+            _LAUFENDE_LOOPS[projektname] = prozess
+            if _log_fh is not None:
+                _LOOP_LOG_HANDLES[projektname] = _log_fh
+            return {
+                "gestartet": True,
+                "pid": prozess.pid,
+                "run_id": run_id,
+                "aufgabe": aufgabe or "(automatisch aus STATUS.md)",
+            }
 
     @app.post("/api/projects/{name}/stop")
     def project_stop(name: str) -> dict[str, Any]:
         """Stoppt den laufenden Loop eines Projekts."""
         projektname = _pruefe_projektname(name)
-        prozess = _LAUFENDE_LOOPS.get(projektname)
-        if prozess is None or prozess.poll() is not None:
-            raise HTTPException(status_code=404, detail="kein laufender Loop")
-        prozess.terminate()
-        returncode = prozess.wait()
-        _LAUFENDE_LOOPS.pop(projektname, None)
-        _log_fh = _LOOP_LOG_HANDLES.pop(projektname, None)
-        if _log_fh is not None:
+        with _projekt_loop_lock(projektname):
+            prozess = _LAUFENDE_LOOPS.get(projektname)
+            if prozess is None or prozess.poll() is not None:
+                raise HTTPException(status_code=404, detail="kein laufender Loop")
             try:
-                _log_fh.close()
-            except OSError:
+                prozess.terminate()
+            except ProcessLookupError:
                 pass
-        return {"gestoppt": True, "returncode": returncode}
+            try:
+                returncode = prozess.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                prozess.kill()
+                try:
+                    returncode = prozess.wait(timeout=5)
+                except subprocess.TimeoutExpired as exc:
+                    raise HTTPException(
+                        status_code=504, detail="Loop reagiert nicht auf Stop",
+                    ) from exc
+            _LAUFENDE_LOOPS.pop(projektname, None)
+            _log_fh = _LOOP_LOG_HANDLES.pop(projektname, None)
+            if _log_fh is not None:
+                try:
+                    _log_fh.close()
+                except OSError:
+                    pass
+            return {"gestoppt": True, "returncode": returncode}
 
     @app.get("/api/projects/{name}/tokens")
     def project_tokens(name: str, run_id: str | None = None) -> dict[str, Any]:
