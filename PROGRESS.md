@@ -4535,3 +4535,8 @@ Der Web-Start-Endpunkt verweigerte bereits erkannte offene Blocker, uebersah abe
 ## Expliziter OP-Start verweigert doppelte OP-IDs (2026-11-10)
 
 Der Web-Start nutzt bei einer expliziten OP-ID den ersten Parser-Treffer. Wenn STATUS dieselbe OP-ID mehrfach enthielt, konnte dadurch eine mehrdeutige Aufgabe starten, obwohl der Selector Duplikate ausgeschlossen hatte. Der Start-Endpunkt weist diese Auswahl jetzt mit 409 ab; ein API-Test prueft, dass kein Prozess gestartet wird. Serververifikation steht aus.
+
+
+## Quality Gate prueft aktuelle Quellen statt Altdateien (2026-11-10)
+
+Die AST-Pruefung parst nun alle Python-Quellen im Repository ausser virtuellen Umgebungen und Cache-/Git-Verzeichnissen. Der Audit-Katalog wird durch den bestehenden `test_katalog_enthaelt_alle_code_kinds`-Test geprueft. Fehlende Pruefdatei, Syntaxfehler, fehlgeschlagener oder uebersprungener Katalogtest machen das Gate rot, statt die Checks als neutralen Skip zu verbuchen. Regressionstests fuer Syntax- und Katalogfehler ergaenzt; Serververifikation steht aus.
