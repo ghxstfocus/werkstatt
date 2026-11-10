@@ -15,7 +15,8 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from werkstatt.paths import werkstatt_home
 
