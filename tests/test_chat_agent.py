@@ -164,10 +164,17 @@ def test_on_tool_callbacks(session, fake_llm) -> None:
 def test_baue_messages_aus_session(session) -> None:
     session.append("user", {"text": "a"})
     session.append("assistant", {"text": "b"})
+    session.append("job_turn", {
+        "job_id": "job-1",
+        "user_text": "c",
+        "assistant_text": "d",
+    })
     msgs = chat_agent._baue_messages(session.load())
     assert msgs == [
         {"role": "user", "content": "a"},
         {"role": "assistant", "content": "b"},
+        {"role": "user", "content": "c"},
+        {"role": "assistant", "content": "d"},
     ]
 
 def test_chat_tool_uses_explicit_project_root(session, fake_llm, tmp_path) -> None:
