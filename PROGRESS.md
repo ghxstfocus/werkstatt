@@ -4015,3 +4015,8 @@ Verifiziert auf Server-HEAD `e4366bb`: gezielte Tests 41 passed; vollständige S
 ### 2026-11-10 — Gate-Debug-Kontext an aktives Projekt gebunden
 
 Beim Lesen der Debug-/Gate-Entscheidungen in ADR-0011, ADR-0022, ADR-0029 und OP-240/242 ist ein Multi-Projektfehler im Gate-Kontext aufgefallen: `aggregate_gate_context(projekt)` las den Git-Diff fest aus `/opt/werkstatt`. Bei einem Gate in einem anderen Projekt konnte der Nutzer somit den Diff eines fremden Projekts sehen. Der Endpoint verwendet jetzt den validierten Projektpfad unter `_PROJECTS_BASE` und fail-closed keinen Diff außerhalb dieser Basis. Zwei Backend-Tests decken Projektbindung und Traversal ab. **Serververifikation steht aus.**
+
+
+### 2026-11-10 — Gate-Edit an Debug-Chat uebergeben
+
+Der Gate-Button „Im Chat debuggen“ sendet den Projekt-/Run-/Gate-Kontext samt Plan, Verify-Ergebnis und begrenztem Diff an die Chat-Session und wechselt in den Debug-UI-Modus. Er beantwortet das Gate nicht; j/n/Freitext bleiben separate Gate-Antworten. Die Chat-Uebergabe wartet auf das Laden der aktiven Session, damit der Kontext nicht in einer parallelen oder verlorenen Session landet. Die Option „a“ wird als „Plan anpassen“ dargestellt; revidierte und Scout-No-Op-Plaene zeigen nur j/n, entsprechend den tatsaechlich gueltigen Antworten. Frontend- und Gate-Options-Tests ergaenzt. **Serververifikation steht aus; OP-240 bleibt offen, da der Chat derzeit noch read-only ist und keine Debugger-Testwerkzeuge/strukturierte Patch-Freigabe besitzt.**

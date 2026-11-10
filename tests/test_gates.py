@@ -73,3 +73,32 @@ def test_human_gate_plan_revidierter_kontext(monkeypatch, tmp_path):
     assert rc == 1
     assert any("REVIDIERTER PLAN" in p for p in captured), f"captured={captured}"
     assert any("keine weitere Reflection" in p for p in captured)
+
+
+def test_plan_gate_ui_options_match_editability(monkeypatch, tmp_path) -> None:
+    from werkstatt import gates, render
+
+    captured = []
+
+    def fake_gate(_kind, _prompt, optionen="jna", timeout=None):
+        captured.append(optionen)
+        return "j"
+
+    monkeypatch.setenv("WERKSTATT_IN_TEST", "0")
+    monkeypatch.setattr(gates, "_frage_gate", fake_gate)
+    monkeypatch.setattr(gates, "audit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(render, "plan", lambda *args, **kwargs: None)
+
+    state = mk_state(
+        project_dir=str(tmp_path),
+        project_name="probe",
+        tasks=[{"id": "t1"}],
+        tests=[],
+        akzeptanzkriterien=[],
+        phasen=[],
+    )
+    assert gates._human_gate_plan(state, kontext="revidierter_plan") == 0
+    assert captured[-1] == "jn"
+
+    assert gates._human_gate_plan(state) == 0
+    assert captured[-1] == "jna"

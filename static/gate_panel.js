@@ -172,6 +172,34 @@
     });
   }
 
+  function _debuggeImChat(ctx, gate) {
+    var chat = window.WerkstattChat;
+    if (!chat || typeof chat.uebergebeGate !== "function") {
+      return Promise.resolve(false);
+    }
+    var diff = String(ctx.diff || "");
+    var maxDiff = 25000;
+    var kontext = {
+      project: _aktuellesProjekt,
+      run_id: ctx.run_id,
+      gate_id: gate.gate_id,
+      gate_prompt: gate.prompt || "",
+      gate_type: gate.typ || "jna",
+      plan: (ctx.plan || {}).text || "",
+      verify: ctx.verify || null,
+      reviewer: ctx.reviewer || null,
+      diff_stat: ctx.diff_stat || "",
+      diff: diff.slice(0, maxDiff),
+      diff_truncated: diff.length > maxDiff,
+      empfehlung: ctx.empfehlung || "",
+      empfehlung_grund: ctx.empfehlung_grund || "",
+    };
+    if (window.WerkstattMode && window.WerkstattMode.setMode) {
+      window.WerkstattMode.setMode("debug");
+    }
+    return chat.uebergebeGate(_aktuellesProjekt, kontext);
+  }
+
   function _sendeAntwort(ctx, gateId, antwort) {
     return fetch("/api/runs/" + encodeURIComponent(ctx.run_id) + "/gate", {
       method: "POST",
@@ -247,18 +275,22 @@
           b.textContent = {
             j: "j \u2014 Ja",
             n: "n \u2014 Nein",
-            a: "a \u2014 Auto",
-            e: "e \u2014 Edit",
+            a: "a \u2014 Plan anpassen",
+            e: "Im Chat debuggen",
           }[opt] || opt;
           b.addEventListener("click", function () {
             b.disabled = true;
             b.textContent = "\u2026";
-            _sendeAntwort(ctx, g.gate_id, opt).then(function (ok) {
+            var operation = opt === "e"
+              ? _debuggeImChat(ctx, g)
+              : _sendeAntwort(ctx, g.gate_id, opt);
+            operation.then(function (ok) {
               if (ok) {
+                if (opt === "e") b.textContent = "Chat geöffnet · Gate bleibt offen";
                 _schliesseModal();
               } else {
                 b.disabled = false;
-                b.textContent = "Fehler";
+                b.textContent = opt === "e" ? "Chat nicht erreichbar" : "Fehler";
               }
             }).catch(function () {
               b.disabled = false;

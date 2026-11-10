@@ -279,7 +279,10 @@ def _human_gate_plan(state, kontext=""):
         )
     while True:
         try:
-            _antwort = _frage_gate("plan", _prompt).strip().lower()
+            _antwort = _frage_gate(
+                "plan", _prompt,
+                optionen=("jn" if _ist_revidierter or _is_noop_scout else "jna"),
+            ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             audit("loop_plan_gate_eof", {}, pd, pn)
             return 1
