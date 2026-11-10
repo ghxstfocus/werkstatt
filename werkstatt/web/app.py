@@ -1142,7 +1142,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/projects/{name}/chat/jobs")
     def chat_jobs_active(name: str, session_id: str) -> dict[str, Any]:
-        """Liefert aktive Session-Jobs fuer Reconnect und setzt queued fort."""
+        """Liefert aktive und letzte fehlgeschlagene Jobs fuer Reconnect."""
         from werkstatt.chat_jobs import ChatJobStore, resume_chat_jobs
 
         projekt = _pruefe_projektname(name)
