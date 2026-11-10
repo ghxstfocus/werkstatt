@@ -70,10 +70,14 @@ noch nicht vollstaendig.
 
 ### OP-398: Evidenzbasierte Auswahl autonomer Arbeit
 - **Status:** open
+- **Prioritaet:** P1
 - **Typ:** loop-autonomy
 - **Betroffene Dateien:** `werkstatt/loop.py`, `werkstatt/planner.py`, `werkstatt/web/app.py`, STATUS-Parser, Selector- und Loop-Tests
 - **Problem:** STATUS ist eine menschenlesbare Arbeitsliste, aber Zeilenreihenfolge ist keine ausreichende Auswahlstrategie. Der Web-Start-Endpunkt verspricht eine naechste OP-Auswahl ohne Aufgabentext; der Loop muss diese Auswahl nachweisbar und sicher treffen.
 - **Akzeptanzkriterien:**
+  - Die erste Selector-Stufe fuer den Web-Start waehlt ausschliesslich einen einzelnen, eindeutig startfaehigen OP mit Status `open`, aufgeloesten Blockern, dokumentierten Akzeptanzkriterien und konkretem Test/Nachweis; wenn mehrere Kandidaten passen oder ein Status widerspruechlich ist, wird kein Run gestartet und der Chat erhaelt strukturierte Kandidaten samt Gruenden.
+  - Direkte Nutzeraufgabe hat Vorrang vor einer optional mitgesendeten OP-ID; eine explizit gewaehlte OP bleibt direkt startbar.
+  - Auswahlentscheidung, Kandidaten und Ausschlussgruende sind als strukturierte API-Antwort sichtbar und die autonome Auswahl wird auditiert; ein automatischer Start durchlaeuft weiterhin das verpflichtende Plan-Gate.
   - Der Selector bildet ausschliesslich explizite, offene OPs mit erfuellten Abhaengigkeiten als Kandidaten und kann eng verwandte OPs zu einem gemeinsam begrenzten, verifizierbaren Arbeitsblock buendeln.
   - Direkter Nutzerauftrag oder ausgewaehlte OP haben Vorrang vor autonomer Auswahl. Eine OP-Buendelung nennt gemeinsamen Zweck, Reihenfolge, Abhaengigkeiten und Abbruchgrenzen und wird vor Ausfuehrung im Plan-Gate freigegeben.
   - Ranking-Begruendung nennt Prioritaet, Relevanz zum Projektziel, Risiko und verfuegbare Verifikation; Ergebnis wird auditiert.
