@@ -14,11 +14,12 @@ from typing import Any
 
 from werkstatt.chat_session import ChatSession
 from werkstatt.chat_tools import CHAT_TOOLS, execute_tool, openai_schemas
+from werkstatt.model_routing import route_for_role
 
 __all__ = ["chat_loop"]
 
 _DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
-_DEFAULT_MODEL = "deepseek-chat"
+_DEFAULT_MODEL = "deepseek-flash"
 _DEFAULT_MAX_ROUNDS = 5
 
 _SYSTEM_PROMPT = """Du bist der Chat-Agent fuer das aktuell ausgewaehlte Projekt.
@@ -74,8 +75,10 @@ def _deepseek_chat_stream(
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
         raise RuntimeError("DEEPSEEK_API_KEY nicht gesetzt")
+    _route = route_for_role("chat")
     body: dict[str, Any] = {
-        "model": os.environ.get("DEEPSEEK_MODEL", _DEFAULT_MODEL),
+        "model": _route.model,
+        "thinking": {"type": _route.thinking},
         "messages": messages,
         "temperature": 0.0,
         "stream": True,
@@ -114,7 +117,7 @@ def _deepseek_chat_stream(
                     "prompt_tokens": int(_u.get("prompt_tokens", 0) or 0),
                     "completion_tokens": int(_u.get("completion_tokens", 0) or 0),
                     "total_tokens": int(_u.get("total_tokens", 0) or 0),
-                    "model": os.environ.get("DEEPSEEK_MODEL", _DEFAULT_MODEL),
+                    "model": _route.model,
                 }
             choices = obj.get("choices") or []
             if not choices:
