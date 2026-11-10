@@ -75,3 +75,10 @@ def test_run_badge_verwendet_definierten_status():
     js = _js()
     assert 'if (state === "running") badge.title' in js
     assert "if (isRunning) badge.title" not in js
+
+
+def test_autonomous_start_button_and_ambiguity_feedback():
+    js = _js()
+    assert 'controlButton("start-next", "▶ Nächsten eindeutigen OP starten")' in js
+    assert 'detail.code === "autonomy_selection_required"' in js
+    assert "Bitte einen OP aus der Liste auswählen." in js
