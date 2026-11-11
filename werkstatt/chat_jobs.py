@@ -583,6 +583,7 @@ def _run_job(
                 "tool_result", name=name, content=content,
             ),
             request_id=job_id,
+            origin_session_id=str(job["session_id"]),
         )
         if store.finish(job_id, answer=answer):
             parent_session.append_job_turn(job_id, job["message"], answer)
