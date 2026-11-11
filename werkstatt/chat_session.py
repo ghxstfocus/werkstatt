@@ -96,6 +96,87 @@ class ChatSession:
             conn.commit()
             return int(cur.lastrowid or 0)
 
+    def resolve_loop_action(
+        self,
+        proposal_id: str,
+        decision: str,
+    ) -> tuple[dict[str, Any], str, dict[str, Any] | None] | None:
+        """Atomically decide a session-bound loop-action proposal once."""
+        if decision not in {"confirm", "reject"}:
+            raise ValueError("decision must be confirm or reject")
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute(
+                "SELECT kind, payload FROM events WHERE session_id=? "
+                "ORDER BY seq ASC",
+                (self.session_id,),
+            ).fetchall()
+            proposal: dict[str, Any] | None = None
+            status = "pending"
+            result: dict[str, Any] | None = None
+            for kind, raw_payload in rows:
+                try:
+                    payload = json.loads(raw_payload)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if payload.get("proposal_id") != proposal_id:
+                    continue
+                if kind == "loop_action_proposed":
+                    proposal = payload
+                elif kind == "loop_action_confirmed":
+                    status = "confirmed"
+                elif kind == "loop_action_rejected":
+                    status = "rejected"
+                    result = payload
+                elif kind == "loop_action_expired":
+                    status = "expired"
+                    result = payload
+                elif kind == "loop_action_completed":
+                    status = "completed"
+                    result = payload.get("result") or {}
+                elif kind == "loop_action_failed":
+                    status = "failed"
+                    result = payload
+            if proposal is None:
+                conn.commit()
+                return None
+            if status != "pending":
+                conn.commit()
+                return proposal, status, result
+            expires_at = proposal.get("expires_at")
+            if isinstance(expires_at, str):
+                try:
+                    expired = datetime.fromisoformat(expires_at) <= datetime.now(UTC)
+                except ValueError:
+                    expired = True
+            else:
+                expired = True
+            if expired:
+                status = "expired"
+                payload = {"proposal_id": proposal_id, "status": status}
+            elif decision == "reject":
+                status = "rejected"
+                payload = {"proposal_id": proposal_id, "status": status}
+            else:
+                status = "confirmed"
+                payload = {
+                    "proposal_id": proposal_id,
+                    "status": status,
+                    "action": proposal.get("action"),
+                }
+            conn.execute(
+                "INSERT INTO events (session_id, ts, kind, payload) "
+                "VALUES (?, ?, ?, ?)",
+                (
+                    self.session_id,
+                    datetime.now(UTC).isoformat(),
+                    f"loop_action_{status}",
+                    json.dumps(payload, ensure_ascii=False),
+                ),
+            )
+            conn.commit()
+            return proposal, "claimed" if status == "confirmed" else status, result
+
     def load(self) -> list[dict[str, Any]]:
         """Liefert alle Events der Session, aufsteigend nach seq."""
         with closing(self._connect()) as conn:
