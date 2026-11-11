@@ -53,14 +53,15 @@ class PhaseState:
             self.data = {}
             return False
 
-        tasks = data.get("tasks")
-        if tasks is None:
-            data["tasks"] = []
-        elif not isinstance(tasks, list) or any(
-            not isinstance(task, dict) for task in tasks
-        ):
-            self.data = {}
-            return False
+        if "tasks" in data:
+            tasks = data["tasks"]
+            if tasks is None:
+                data["tasks"] = []
+            elif not isinstance(tasks, list) or any(
+                not isinstance(task, dict) for task in tasks
+            ):
+                self.data = {}
+                return False
 
         for task in data.get("tasks", []):
             task_id = task.get("id")

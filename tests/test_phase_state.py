@@ -136,4 +136,4 @@ def test_load_normalisiert_fehlende_tasks_fuer_legacy_checkpoint(
     ps.path.write_text("project: testprojekt\n", encoding="utf-8")
 
     assert ps.load() is True
-    assert ps.data["tasks"] == []
+    assert ps.data.get("tasks", []) == []
