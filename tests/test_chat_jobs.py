@@ -312,6 +312,8 @@ def test_expired_worker_lease_fails_job_and_persists_reason(tmp_path: Path) -> N
         "Worker-Lease abgelaufen; Job nach Prozessunterbrechung beendet."
     )
     assert failed["events"][-1]["payload"]["reason"] == "worker_lease_expired"
+    assert store.cancellation_requested(job["job_id"], "worker-a")
+    assert store.heartbeat(job["job_id"], "worker-a") is False
 
 
 def test_live_worker_lease_is_not_expired_on_reconnect(tmp_path: Path) -> None:
@@ -337,6 +339,8 @@ def test_only_claiming_worker_can_renew_lease(tmp_path: Path) -> None:
     assert store.claim(job["job_id"], "worker-a")
 
     assert store.heartbeat(job["job_id"], "worker-b") is False
+    assert store.cancellation_requested(job["job_id"], "worker-b") is True
+    assert store.cancellation_requested(job["job_id"], "worker-a") is False
     assert store.heartbeat(job["job_id"], "worker-a") is True
 
 def test_store_migrates_existing_jobs_table_for_worker_leases(
