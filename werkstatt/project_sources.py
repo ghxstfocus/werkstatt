@@ -1,6 +1,7 @@
 """Sichere, serverseitige GitHub-Run-Worktrees fuer registrierte Projekte."""
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import subprocess
@@ -125,6 +126,28 @@ def _upstream_branch(project_dir: Path) -> str:
     return branch
 
 
+def _managed_worktrees_root(project_dir: Path) -> Path:
+    """Run-Worktrees liegen im Werkstatt-State, niemals im Projekt-Checkout."""
+    configured = os.environ.get("WERKSTATT_RUN_WORKTREE_DIR")
+    if configured:
+        storage_root = Path(configured).expanduser().resolve()
+    else:
+        state_home = Path(
+            os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state")),
+        ).expanduser().resolve()
+        storage_root = state_home / "werkstatt" / "run-worktrees"
+
+    project_key = hashlib.sha256(os.fsencode(str(project_dir))).hexdigest()
+    root = (storage_root / project_key).resolve()
+    try:
+        root.relative_to(project_dir)
+    except ValueError:
+        return root
+    raise GitHubSyncError(
+        "Run-Worktrees muessen ausserhalb des Projekt-Checkouts liegen.",
+    )
+
+
 def prepare_github_run_worktree(
     project_dir: Path,
     run_id: str,
@@ -190,13 +213,7 @@ def prepare_github_run_worktree(
     if branch_check.returncode != 0:
         raise GitHubSyncError("Run-Branch ist ungueltig.")
 
-    worktrees_root = (project_dir / ".werkstatt" / "worktrees").resolve()
-    try:
-        worktrees_root.relative_to(project_dir)
-    except ValueError as exc:
-        raise GitHubSyncError(
-            "Worktree-Verzeichnis liegt ausserhalb des Projekts.",
-        ) from exc
+    worktrees_root = _managed_worktrees_root(project_dir)
     worktree_path = worktrees_root / run_id
     if worktree_path.exists():
         raise GitHubSyncError("Run-Worktree existiert bereits.")
@@ -241,7 +258,7 @@ def prepare_github_run_worktree(
 def remove_prepared_worktree(project_dir: Path, prepared: PreparedGitHubRun) -> None:
     """Entfernt nur einen frisch angelegten Run-Worktree nach Startfehler."""
     project_dir = Path(project_dir).resolve()
-    expected_root = (project_dir / ".werkstatt" / "worktrees").resolve()
+    expected_root = _managed_worktrees_root(project_dir)
     path = prepared.worktree_path.resolve()
     if (
         path.parent != expected_root
