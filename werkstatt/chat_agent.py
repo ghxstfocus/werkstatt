@@ -271,7 +271,7 @@ def chat_loop(
     on_chunk: Callable[[str], None] | None = None,
     on_tool_call: Callable[[str, dict[str, Any]], None] | None = None,
     on_tool_result: Callable[[str, str], None] | None = None,
-    max_rounds: int = _DEFAULT_MAX_ROUNDS,
+    max_rounds: int | None = _DEFAULT_MAX_ROUNDS,
     project_dir: Path | str | None = None,
     request_id: str | None = None,
     cancel_check: Callable[[], bool] | None = None,
