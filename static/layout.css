@@ -3927,3 +3927,42 @@ body[data-mode="control"] .layout-grid {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+
+/* ChatGPT-artige Rollen-Hierarchie: Nutzerbeitrag als Bubble,
+   Assistant-Antwort als offene, vollbreite Leseflaeche. */
+.chat-nachrichten > .chat-msg.user {
+  align-self: flex-end;
+  width: fit-content;
+  max-width: min(78%, 760px);
+  margin-left: auto;
+  padding: 11px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 18px 18px 5px 18px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+  color: var(--text);
+  box-shadow: none;
+}
+.chat-nachrichten > .chat-msg.assistant {
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+  margin: 2px 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
+}
+body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.user {
+  max-width: min(78%, 760px);
+}
+body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.assistant {
+  width: 100%;
+  max-width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
