@@ -545,13 +545,23 @@
                 return data;
               });
             }).then(function (data) {
-              state.textContent = data.state === "completed" ? "Abgeschlossen" :
-                data.state === "rejected" ? "Abgelehnt" :
+              var result = data.result || {};
+              if (data.state === "completed") {
+                state.textContent = proposal.action === "start" ?
+                  (result.gestartet ? "Loop gestartet" : "Start verarbeitet") :
+                  proposal.action === "pause" ? "Loop pausiert" :
+                    proposal.action === "resume" ? "Loop fortgesetzt" : "Loop gestoppt";
+              } else {
+                state.textContent = data.state === "rejected" ? "Abgelehnt" :
                   data.state === "expired" ? "Abgelaufen" : "Status: " + data.state;
-              if (data.result && data.result.run_id) state.textContent += " · Run " + data.result.run_id;
+              }
+              siblings.forEach(function (other) { other.remove(); });
+              if (result.run_id) state.textContent += " · Run " + result.run_id;
+              _setzeChatStatus(state.textContent, data.state === "completed" ? "ready" : "idle");
             }).catch(function (error) {
-              state.textContent = "Fehler: " + error.message;
-              siblings.forEach(function (other) { other.disabled = false; });
+              state.textContent = "Fehler: " + error.message + " · Verlauf neu laden für den aktuellen Stand.";
+              siblings.forEach(function (other) { other.disabled = true; });
+              _setzeChatStatus("Loop-Aktion braucht Prüfung", "error");
             });
         });
         card.appendChild(button);
