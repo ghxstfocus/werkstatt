@@ -4883,3 +4883,13 @@ Die Modusleiste mit Cockpit, Control, Debug und Runs steht jetzt direkt unter de
 - **Verifikation offen:** Der Test und die Quality Gates wurden in dieser
   Umgebung nicht ausgeführt. Serverlauf nach Pull steht aus.
 \n
+
+## 2026-11-11 — OP-397 Mehrprozess-Pause verifiziert
+
+- Der CI-Lauf auf `1a71832` hat den Worker-Reconnect-Regressionstest
+  bestanden: **1922 passed, 5 skipped**.
+- Ruff: 0 Fehler; JavaScript-Syntax: bestanden; Mypy: 0 Fehler;
+  AST: 370 Dateien / 0 Fehler; Audit-Katalog: bestanden.
+- `tools.quality_gate --json`: `ok: true`, `regression: false`.
+- Dieser Nachweis ersetzt den oben dokumentierten offenen Testlauf.
+
