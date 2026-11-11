@@ -870,6 +870,8 @@ def test_github_run_starts_in_pinned_worktree(
     _reset_loop_registry(app_modul)
 
     worktree = tmp_path / "demo" / ".werkstatt" / "worktrees" / "fake-run"
+    (worktree / "docs").mkdir(parents=True)
+    (worktree / "docs" / "STATUS.md").write_text("# Pinned status\\n", encoding="utf-8")
     prepared = SimpleNamespace(
         repository="example/demo",
         branch="main",
