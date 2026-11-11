@@ -3994,12 +3994,12 @@ body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.assistant 
 }
 
 
-/* Nutzer-Bubbles an dieselbe Lesespalte wie Assistant-Text ausrichten. */
+/* Nutzer-Bubbles rechtsbuendig halten und etwas kompakter begrenzen. */
 .chat-nachrichten > .chat-msg.user,
 body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.user {
   width: fit-content;
-  max-width: min(78%, 68ch);
-  margin-right: max(0px, calc((100% - 68ch) / 2));
+  max-width: min(72%, 68ch);
+  margin-right: 0;
   margin-left: auto;
 }
 @media (max-width: 620px) {
