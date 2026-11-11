@@ -4833,3 +4833,10 @@ Der Chat hat fuer eine explizite OP-ID bisher nur die Ueberschrift in STATUS.md 
 
 - Regressionstests fuer erledigte OPs, fehlende Nachweise und unbekannte Blocker; gueltiger expliziter Start bleibt abgedeckt.
 - GitHub Actions auf Commit e3d15ec: JavaScript-Syntax, Ruff, pytest und Quality Gate gruen; 1913 passed / 5 skipped, Ruff/Mypy 0, AST 370 Dateien ohne Fehler, Audit-Katalog bestanden, ok=true.
+
+
+## OP-396 — Chat-Zeilenzitate muessen nachpruefbar sein (2026-11-11)
+
+Der System-Prompt verlangte Datei-/Zeilenbelege, obwohl read_file start/end Zeichen-Offsets bezeichnet und keine Zeilen liefert. Der Chat-Agent ist jetzt angewiesen, Zeilennummern mit grep zu verifizieren, read_file-Offsets nicht als Zeilen zu behandeln und fehlende Belege offenzulegen. Ein Prompt-Vertragstest schuetzt diese Regel vor Regression.
+
+- CI-Verifikation nach diesem Nachweis-Fix: ausstehend.
