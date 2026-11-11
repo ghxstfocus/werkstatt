@@ -1277,6 +1277,56 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="Chat-Job nicht gefunden")
         return job
 
+    @app.post("/api/projects/{name}/chat/actions/{proposal_id}")
+    def chat_loop_action(name: str, proposal_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Bestaetigt oder verwirft genau einen sessiongebundenen Vorschlag."""
+        from werkstatt.chat_session import ChatSession
+
+        projekt = _pruefe_projektname(name)
+        session_id = body.get("session_id")
+        decision = body.get("decision")
+        if not isinstance(session_id, str) or not session_id:
+            raise HTTPException(status_code=400, detail="session_id fehlt")
+        sid = _pruefe_session_id(session_id)
+        if not re.fullmatch(r"[a-f0-9]{32}", proposal_id):
+            raise HTTPException(status_code=400, detail="proposal_id ungueltig")
+        if decision not in {"confirm", "reject"}:
+            raise HTTPException(status_code=400, detail="decision muss confirm oder reject sein")
+        session = ChatSession(projekt, sid)
+        try:
+            claimed = session.resolve_loop_action(proposal_id, decision)
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            raise HTTPException(status_code=500, detail=f"Vorschlag konnte nicht aufgeloest werden: {exc}") from exc
+        if claimed is None:
+            raise HTTPException(status_code=404, detail="Vorschlag nicht gefunden")
+        proposal, state, prior_result = claimed
+        if state != "claimed":
+            return {"proposal_id": proposal_id, "state": state, "result": prior_result}
+        try:
+            action = proposal.get("action")
+            arguments = proposal.get("arguments") or {}
+            if proposal.get("project") != projekt:
+                raise HTTPException(status_code=404, detail="Vorschlag gehoert zu anderem Projekt")
+            if action == "start":
+                result = project_start(projekt, arguments)
+            elif action == "pause":
+                result = project_pause(projekt)
+            elif action == "resume":
+                result = project_resume(projekt)
+            elif action == "stop":
+                result = project_stop(projekt)
+            else:
+                raise HTTPException(status_code=400, detail="unbekannte Loop-Aktion")
+            session.append("loop_action_completed", {"proposal_id": proposal_id, "result": result})
+            return {"proposal_id": proposal_id, "state": "completed", "result": result}
+        except HTTPException as exc:
+            detail = exc.detail
+            session.append("loop_action_failed", {"proposal_id": proposal_id, "error": str(detail)})
+            raise
+        except Exception as exc:
+            session.append("loop_action_failed", {"proposal_id": proposal_id, "error": f"{type(exc).__name__}: {exc}"})
+            raise HTTPException(status_code=500, detail=f"Loop-Aktion fehlgeschlagen: {exc}") from exc
+
     @app.post("/api/projects/{name}/chat/new")
     def chat_new(name: str) -> dict[str, Any]:
         """Erzeugt eine neue Session mit Marker-Event (damit sie in
