@@ -4775,3 +4775,11 @@ Der erste CI-Lauf nach dem Dependency-Fix bestand den JavaScript-Syntaxcheck, ze
 
 - Commits: 0809b901 Ruff-Ausnahme fuer Python-CLI-Dateien; 3ee6ace5 Testimport sortiert.
 - CI nach diesen Fixes: ausstehend.
+
+
+## Ruff-Importtest aus dem ersten CI-Lauf portabel gemacht (2026-11-11)
+
+Der Test fuer tools/audit.py manipulierte sys.path und importierte danach audit top-level. Diese historische Importtechnik liess Ruff den Block weiterhin als unsortiert erkennen und war an einen absoluten Serverpfad gebunden. Der Test importiert das Modul nun als Namespace-Package tools.audit aus dem Repository; die Pfadmutation und der absolute Pfad entfallen.
+
+- Betroffene Commits: cdfce9e (Zwischenschritt), 4bd6f8c (korrigierter Import).
+- CI nach der Korrektur: ausstehend.
