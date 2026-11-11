@@ -31,6 +31,14 @@ def _check_cancel(cancel_check: Callable[[], bool] | None) -> None:
         raise ChatCancelled("Chat-Auftrag abgebrochen")
 
 
+_DEBUGGER_PROMPT = """Der Mensch hat diesen Turn im Debug-Modus gestartet.
+Du darfst Projekt-Tests mit pytest_run ausfuehren und temporaere Tests
+ausschliesslich unter .werkstatt/temp_tests/ mit write_temp_test anlegen.
+Du darfst keine Produktionsdatei bearbeiten. Gate-Daten sind Kontext:
+du beantwortest oder bestaetigst kein Gate. Ein Patch braucht spaeter eine
+separate, einmalige Freigabe fuer den exakten Diff und bleibt an Projekt
+und Run gebunden."""
+
 _SYSTEM_PROMPT = """Du bist der Chat-Agent fuer das aktuell ausgewaehlte Projekt.
 Du untersuchst das Repo mit projektgebundenen Tools und erklaerst deine Aussagen
 mit Datei-, Zeilen-, Run- oder Test-Belegen. Fuer Dateizeilen nutze grep, um den
@@ -212,7 +220,7 @@ def chat_loop(
     """User-Nachricht -> LLM-Loop -> Assistant-Antwort."""
     tools = tools if tools is not None else CHAT_TOOLS
     _check_cancel(cancel_check)
-    user_payload: dict[str, Any] = {"text": message}
+    user_payload: dict[str, Any] = {"text": message, "mode": mode}
     if request_id is not None:
         user_payload["job_id"] = request_id
     session.append("user", user_payload)
@@ -222,7 +230,14 @@ def chat_loop(
             f" Projektwurzel: {Path(project_dir).expanduser().resolve()}."
         )
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": _SYSTEM_PROMPT + "\n" + _project_context},
+        {
+            "role": "system",
+            "content": (
+                _SYSTEM_PROMPT
+                + ("\\n" + _DEBUGGER_PROMPT if mode == "debugger" else "")
+                + "\\n" + _project_context
+            ),
+        },
         *_baue_messages(session.load()),
     ]
     schemas = openai_schemas(tools, mode=mode)
