@@ -56,6 +56,28 @@ vor ihrer Aktivierung ab. Bis zur Umsetzung bleiben bestehende lokale Quellen
 und globale Modell-Defaults der Betriebsweg.
 
 
+## Spaetere Phase: Metaorchestrator
+
+ADR-0031 ist ein Architekturvorschlag, noch kein startbarer Umsetzungsauftrag.
+Der Metaorchestrator soll alle Projekte nach einem expliziten, versionierten
+Nutzervertrag priorisieren, Sicherheits-/Semantikprobleme erkennen und
+Diagnose oder Debugger-Reparatur in den jeweiligen Projektloop delegieren.
+Chat bleibt waehrenddessen ansprechbar und zeigt Belege, Patch, Gate-Status
+und Empfehlung. Ein automatisch gestarteter Debugger darf nur im Run-Worktree
+arbeiten; erst wenn die echten Verify-Gates gruen sind, wird ein belegter
+Vorschlag dem verpflichtenden Human Gate vorgelegt. Fehlende Belege,
+Sicherheitsbefunde und Zielkonflikte gehen als konkrete Rueckfrage an den
+Chat. Nutzerantworten duerfen Vertragsaenderungen vorschlagen, aber
+Berechtigungen nicht still erweitern.
+
+Voraussetzungen sind OP-396/397 fuer Chat und Hintergrundjobs, OP-399 fuer
+Projektquellen, OP-382 als Betriebsnachweis sowie nachvollziehbare
+Projektisolation und Audit-Replay. UI-Aenderungen muessen zusaetzlich in
+einem isolierten Browser mit kontrollierten Testdaten verifiziert werden;
+Screenshots, Accessibility-/DOM-Befunde und Browser-Logs werden als
+Verify-Artefakte gespeichert. Vor diesen Belegen wird kein Projekt in
+einen projektuebergreifenden Automodus geschaltet.
+
 ## Spaetere Phase: Lernen und Memory
 
 
