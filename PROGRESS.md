@@ -5097,3 +5097,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Der Planner ueberspringt den Scout nur bei einem expliziten, einzelnen Zielpfad, den der Explorer bestaetigt und der im Projekt existiert.
 - Such-, Diagnose-, Mehrdatei- und breite Auftraege behalten den Scout. Der Architect und das verpflichtende Plan-Gate bleiben in diesem Schritt unveraendert.
 - Routing-Entscheid und Zielpfad werden als `planner_scout_skipped` auditiert; Regressionstests belegen die Grenzen.
+
+
+## 2026-11-11 — Architect-Bypass an aktuelle Belege binden
+
+- Ein atomarer Scout-Plan ueberspringt den Architect nur noch bei genau einer bestehenden Projektdatei, vollstaendigen Ersetzungsfeldern und eindeutigen Treffern an den angegebenen Zeilen.
+- Veraltete, mehrdeutige oder unvollstaendige Stellen fallen in den Architect-Pfad zurueck; Tests sichern Annahme und Eskalation.

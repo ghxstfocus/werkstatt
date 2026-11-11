@@ -1788,6 +1788,77 @@ def _deterministic_entfernen_precheck(state) -> bool:
     return False
 
 
+def _atomarer_scout_plan_freigabefaehig(
+    scout_report: object, project_dir,
+) -> tuple[bool, str]:
+    """Validate evidence before allowing the Architect bypass.
+
+    Every replacement must point to one existing in-repo file and an exact,
+    unique line substring. Missing or stale evidence escalates to Architect.
+    """
+    if not isinstance(scout_report, dict):
+        return False, "scout_report_ungueltig"
+    if scout_report.get("atomarer_plan") is not True:
+        return False, "kein_atomarer_plan"
+    stellen = scout_report.get("betroffene_stellen")
+    if not isinstance(stellen, list) or not stellen:
+        return False, "stellen_fehlen"
+    if len(stellen) > 40:
+        return False, "zu_viele_stellen"
+
+    dateien: set[str] = set()
+    validierte: list[tuple[int, str]] = []
+    for stelle in stellen:
+        if not isinstance(stelle, dict):
+            return False, "stelle_ungueltig"
+        datei = stelle.get("datei")
+        if not isinstance(datei, str) or not datei.strip():
+            return False, "datei_fehlt"
+        relativer_pfad = Path(datei)
+        if relativer_pfad.is_absolute() or ".." in relativer_pfad.parts:
+            return False, "dateipfad_unsicher"
+        dateien.add(relativer_pfad.as_posix())
+
+        zeile = stelle.get("zeile")
+        if isinstance(zeile, bool) or not isinstance(zeile, int) or zeile < 1:
+            return False, "zeile_ungueltig"
+        alt = stelle.get("alt")
+        neu = stelle.get("neu")
+        grund = stelle.get("grund")
+        if not all(isinstance(wert, str) and wert.strip()
+                   for wert in (alt, neu, grund)):
+            return False, "ersetzung_unvollstaendig"
+        if alt == neu:
+            return False, "ersetzung_ohne_aenderung"
+        validierte.append((zeile, alt))
+
+    if len(dateien) != 1:
+        return False, "mehrere_zieldateien"
+    if project_dir is None:
+        return False, "projektpfad_fehlt"
+
+    relativer_pfad = Path(next(iter(dateien)))
+    try:
+        root = Path(project_dir).resolve()
+        ziel = (root / relativer_pfad).resolve(strict=True)
+        ziel.relative_to(root)
+        if not ziel.is_file():
+            return False, "zieldatei_fehlt"
+        zeilen = ziel.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError, ValueError, TypeError):
+        return False, "zieldatei_nicht_lesbar"
+
+    gesehen: set[tuple[int, str]] = set()
+    for zeile, alt in validierte:
+        key = (zeile, alt)
+        if key in gesehen:
+            return False, "stelle_doppelt"
+        gesehen.add(key)
+        if zeile > len(zeilen) or zeilen[zeile - 1].count(alt) != 1:
+            return False, "stellenbeleg_veraltet_oder_mehrdeutig"
+    return True, "exakte_einzeldatei_ersetzungen"
+
+
 def _tasks_aus_betroffenen_stellen(
     scout_report: dict, aufgabe: str,
 ) -> list[dict]:
@@ -2339,15 +2410,21 @@ def run_planner(state: RunState) -> bool:
                 + _w_block
             )
 
-    # Fix AY (2026-10-31): Atomarer Plan -- Architect ueberspringen.
-    # Der Scout hat betroffene_stellen exakt benannt und atomarer_plan
-    # auf true gesetzt. Der Planner baut direkt EINEN Task pro Datei.
+    # Architect nur ueberspringen, wenn Scout-Aenderungen vollstaendig
+    # und gegen den aktuellen Dateistand exakt belegbar sind.
     if _scout_report and _scout_report.get("atomarer_plan") is True:
-        _atom_tasks = _tasks_aus_betroffenen_stellen(_scout_report, aufgabe)
+        _atomar_ok, _atomar_grund = _atomarer_scout_plan_freigabefaehig(
+            _scout_report, pd,
+        )
+        _atom_tasks = (
+            _tasks_aus_betroffenen_stellen(_scout_report, aufgabe)
+            if _atomar_ok else []
+        )
         if _atom_tasks:
             audit("planner_atomarer_plan",
                   {"tasks": len(_atom_tasks),
-                   "dateien": [t["task_files"][0] for t in _atom_tasks]},
+                   "dateien": [t["task_files"][0] for t in _atom_tasks],
+                   "validierung": _atomar_grund},
                   pd, pn)
             state.tasks = _atom_tasks
             # Marker, damit _plan_gate den Plan als gueltig sieht.
@@ -2356,10 +2433,9 @@ def run_planner(state: RunState) -> bool:
                 state.akzeptanzkriterien or []
             )
             return True
-        else:
-            audit("planner_atomarer_plan_verworfen",
-                  {"grund": "betroffene_stellen leer oder multi-file"},
-                  pd, pn)
+
+        audit("planner_atomarer_plan_verworfen",
+              {"grund": _atomar_grund}, pd, pn)
 
     # 2026-11-05: Selbst-Check-Block ENTFERNT.
     # Regress: das Reasoning-Modell interpretiert "pruefe vor dem Senden"

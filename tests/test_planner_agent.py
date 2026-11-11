@@ -131,6 +131,110 @@ def test_planner_skips_scout_but_keeps_architect_and_plan_path(tmp_path):
     )
 
 
+def test_atomic_scout_plan_requires_current_unique_evidence(tmp_path):
+    from werkstatt.planner import _atomarer_scout_plan_freigabefaehig
+
+    target = tmp_path / "module.py"
+    target.write_text("VALUE = OLD\n", encoding="utf-8")
+    report = {
+        "atomarer_plan": True,
+        "betroffene_stellen": [{
+            "datei": "module.py",
+            "zeile": 1,
+            "alt": "OLD",
+            "neu": "NEW",
+            "grund": "Konsistente Umbenennung",
+        }],
+    }
+
+    assert _atomarer_scout_plan_freigabefaehig(report, tmp_path) == (
+        True, "exakte_einzeldatei_ersetzungen",
+    )
+    stale = {**report, "betroffene_stellen": [{
+        **report["betroffene_stellen"][0], "zeile": 2,
+    }]}
+    assert _atomarer_scout_plan_freigabefaehig(stale, tmp_path) == (
+        False, "stellenbeleg_veraltet_oder_mehrdeutig",
+    )
+    incomplete = {**report, "betroffene_stellen": [{
+        **report["betroffene_stellen"][0], "neu": "",
+    }]}
+    assert _atomarer_scout_plan_freigabefaehig(incomplete, tmp_path) == (
+        False, "ersetzung_unvollstaendig",
+    )
+
+
+def test_valid_atomic_scout_plan_skips_architect(tmp_path):
+    from werkstatt.planner import run_planner
+
+    target = tmp_path / "module.py"
+    target.write_text("VALUE = OLD\n", encoding="utf-8")
+    st = _state(tmp_path)
+    st.aufgabe = "Ersetze OLD durch NEW in module.py."
+    scout_report = {
+        "auftrag_prosa": "Ersetze OLD durch NEW.",
+        "api_auszug": {},
+        "risiken": [],
+        "atomarer_plan": True,
+        "betroffene_stellen": [{
+            "datei": "module.py",
+            "zeile": 1,
+            "alt": "OLD",
+            "neu": "NEW",
+            "grund": "Konsistente Umbenennung",
+        }],
+    }
+
+    with patch("werkstatt.planner._run_scout", return_value=scout_report), \
+         patch("werkstatt.planner.run_architect",
+               side_effect=AssertionError("Architect unnoetig")):
+        assert run_planner(st) is True
+
+    assert len(st.tasks) == 1
+    assert st.tasks[0]["task_files"] == ["module.py"]
+    assert st.architect_prosa == "[atomarer Plan vom Scout]"
+
+
+def test_invalid_atomic_scout_plan_escalates_to_architect(tmp_path):
+    from werkstatt.planner import run_planner
+
+    target = tmp_path / "module.py"
+    target.write_text("VALUE = OLD\n", encoding="utf-8")
+    st = _state(tmp_path)
+    scout_report = {
+        "auftrag_prosa": "Ersetze OLD durch NEW.",
+        "api_auszug": {},
+        "risiken": [],
+        "atomarer_plan": True,
+        "betroffene_stellen": [{
+            "datei": "module.py",
+            "zeile": 2,
+            "alt": "OLD",
+            "neu": "NEW",
+            "grund": "Konsistente Umbenennung",
+        }],
+    }
+
+    def architect(_state, _aufgabe, _content, _key, _explorer):
+        _state.architect_prosa = "## Plan\nAendere module.py."
+
+    tasks = [{
+        "id": "t1",
+        "name": "Aenderung",
+        "action": "update",
+        "task_files": ["module.py"],
+        "dependencies": [],
+        "description": "Ersetze OLD durch NEW.",
+    }]
+    with patch("werkstatt.planner._run_scout", return_value=scout_report), \
+         patch("werkstatt.planner.run_architect", side_effect=architect) as mock_architect, \
+         patch("werkstatt.planner._zerlege_in_sub_tasks", return_value=tasks):
+        assert run_planner(st) is True
+
+    mock_architect.assert_called_once()
+    assert st.tasks == tasks
+
+
 def test_planner_ohne_key(tmp_path):
     st = _state(tmp_path)
     st.api_key = ""
