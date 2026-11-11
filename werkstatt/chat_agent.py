@@ -6,6 +6,7 @@ Token-Streaming ueber on_chunk-Callback.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from collections.abc import Callable
@@ -19,7 +20,7 @@ from werkstatt.model_routing import route_for_role
 __all__ = ["chat_loop"]
 
 _DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
-_DEFAULT_MAX_ROUNDS = 5
+_DEFAULT_MAX_ROUNDS: int | None = None
 
 
 class ChatCancelled(RuntimeError):
@@ -207,6 +208,61 @@ def _deepseek_chat(
     return {"choices": [{"message": inner}], "usage": usage}
 
 
+def _finalisiere_chat(
+    messages: list[dict[str, Any]],
+    session: ChatSession,
+    *,
+    grund: str,
+    on_chunk: Callable[[str], None] | None = None,
+    cancel_check: Callable[[], bool] | None = None,
+) -> str:
+    """Schliesst einen Werkzeugturn anhand belegter Ergebnisse ab."""
+    _check_cancel(cancel_check)
+    _abschluss_prompt = (
+        "Formuliere jetzt die abschliessende Antwort fuer den Nutzer. "
+        "Verwende ausschliesslich vorhandene Nachrichten und Werkzeugergebnisse; "
+        "fuehre keine neuen Werkzeuge aus und behaupte keine ungeprueften Fakten. "
+        "Nenne klar, was belegt ist und was noch offen bleibt. "
+        "Gib keine internen Gedankengaenge wieder."
+    )
+    if grund == "stagnation":
+        _abschluss_prompt += (
+            " Derselbe Werkzeugaufruf hat wiederholt dasselbe Ergebnis geliefert. "
+            "Wiederhole ihn nicht; erklaere den belegten Stand und den naechsten "
+            "sinnvollen Schritt."
+        )
+    else:
+        _abschluss_prompt += (
+            " Der Werkzeug-Arbeitsschritt ist an seiner expliziten Obergrenze "
+            "angekommen; kennzeichne verbleibende Pruefungen als offen."
+        )
+    _abschluss_messages = [
+        *messages,
+        {"role": "user", "content": _abschluss_prompt},
+    ]
+    if cancel_check is None:
+        _resp = _deepseek_chat(_abschluss_messages)
+    else:
+        _resp = _deepseek_chat(
+            _abschluss_messages, cancel_check=cancel_check,
+        )
+    _usage = _resp.get("usage")
+    if _usage and _usage.get("total_tokens"):
+        session.append("token_usage", _usage)
+    _msg = _resp["choices"][0]["message"]
+    _answer = str(_msg.get("content") or "").strip()
+    if not _answer:
+        _answer = (
+            "Ich konnte die Prüfung nicht sauber abschließen. "
+            "Der bisherige Stand und die offenen Punkte bleiben im Chatverlauf "
+            "sichtbar; bitte starte den Auftrag erneut oder grenze ihn ein."
+        )
+    if on_chunk is not None:
+        on_chunk(_answer)
+    session.append("assistant", {"text": _answer})
+    return _answer
+
+
 def chat_loop(
     session: ChatSession,
     message: str,
@@ -246,8 +302,14 @@ def chat_loop(
     ]
     schemas = openai_schemas(tools, mode=mode)
 
-    for _ in range(max_rounds):
+    if max_rounds is not None and max_rounds < 0:
+        raise ValueError("max_rounds darf nicht negativ sein")
+    _rounds = 0
+    _previous_tool_fingerprint: str | None = None
+    _stagnant_rounds = 0
+    while max_rounds is None or _rounds < max_rounds:
         _check_cancel(cancel_check)
+        _rounds += 1
         if cancel_check is None:
             resp = _deepseek_chat(messages, tools=schemas)
         else:
@@ -272,6 +334,7 @@ def chat_loop(
             "content": None,
             "tool_calls": tool_calls,
         })
+        _round_evidence: list[tuple[str, str, str]] = []
         for tc in tool_calls:
             tc_id = tc.get("id", "?")
             fn = tc.get("function") or {}
@@ -290,6 +353,11 @@ def chat_loop(
                 project_dir=project_dir, project_name=session.project,
                 session_id=origin_session_id or session.session_id,
             )
+            _round_evidence.append((
+                name,
+                json.dumps(args, ensure_ascii=False, sort_keys=True, default=str),
+                str(ergebnis),
+            ))
             if on_tool_result is not None:
                 on_tool_result(name, ergebnis)
             session.append("tool_result", {
@@ -303,6 +371,33 @@ def chat_loop(
                 "content": ergebnis,
             })
 
-    fail = f"[chat_loop: max_rounds={max_rounds} erreicht, keine finale Antwort]"
-    session.append("assistant", {"text": fail})
-    return fail
+        _fingerprint = hashlib.sha256(
+            json.dumps(
+                _round_evidence, ensure_ascii=False, sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        if _fingerprint == _previous_tool_fingerprint:
+            _stagnant_rounds += 1
+        else:
+            _stagnant_rounds = 0
+        _previous_tool_fingerprint = _fingerprint
+        if _stagnant_rounds == 1:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "Fortschrittskontrolle: Der letzte Werkzeugzyklus hat "
+                    "dieselben Eingaben und Ergebnisse wie der vorherige. "
+                    "Wiederhole ihn nicht; nutze vorhandene Belege oder waehle "
+                    "einen anderen, gezielten Pruefschritt."
+                ),
+            })
+        elif _stagnant_rounds >= 2:
+            return _finalisiere_chat(
+                messages, session, grund="stagnation",
+                on_chunk=on_chunk, cancel_check=cancel_check,
+            )
+
+    return _finalisiere_chat(
+        messages, session, grund="round_limit",
+        on_chunk=on_chunk, cancel_check=cancel_check,
+    )
