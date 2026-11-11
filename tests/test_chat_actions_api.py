@@ -39,7 +39,27 @@ def test_confirmed_chat_action_uses_control_api_once(
         "expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
     })
 
+    calls: list[tuple[Any, ...]] = []
     process = SimpleNamespace(pid=12345, poll=lambda: None)
+    record: dict[str, Any] = {
+        "project": "demo",
+        "run_id": "demo-run",
+        "pid": process.pid,
+        "state": "running",
+    }
+
+    def transition(
+        project: str, run_id: str, expected: str, target: str,
+    ) -> bool:
+        if (
+            project != "demo"
+            or run_id != record["run_id"]
+            or record["state"] != expected
+        ):
+            return False
+        record["state"] = target
+        return True
+
     monkeypatch.setattr(app_modul, "_PAUSIERTE_LOOPS", set())
     monkeypatch.setattr(app_modul, "_LOOP_RUN_IDS", {"demo": "demo-run"})
     monkeypatch.setitem(app_modul._LAUFENDE_LOOPS, "demo", process)
@@ -47,9 +67,9 @@ def test_confirmed_chat_action_uses_control_api_once(
     monkeypatch.setattr(app_modul, "_audit_web_loop_event", lambda *_args: True)
     monkeypatch.setattr(app_modul, "_loop_registry", lambda: SimpleNamespace(
         set_state=lambda *_args: None,
-        read=lambda _project: None,
+        read=lambda _project: dict(record),
+        transition=transition,
     ))
-    calls: list[tuple[Any, ...]] = []
 
     response = TestClient(app_modul.app).post(
         f"/api/projects/demo/chat/actions/{proposal_id}",
