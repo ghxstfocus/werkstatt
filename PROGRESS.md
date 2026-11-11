@@ -5280,3 +5280,14 @@ Umsetzung: `2447873` (Fortsetzung/Stagnation), `4469948` (Tests) und
 Stagnationsabschluss hinzugefuegt. GitHub Quality Gate fuer `21028ac`:
 1.996 passed, 5 skipped; Ruff 0, Mypy 0, AST 374 Dateien/0 Fehler,
 Audit-Katalog bestanden; `ok: true`.
+
+
+## 2026-11-11 — Chatdarstellung und Composer
+
+Assistant-Antworten werden ohne Bubble vollbreit dargestellt; Nutzernachrichten
+bleiben rechtsbuendige Bubbles. Die Chat-Eingabe hat nur noch einen sichtbaren
+Fokusrahmen und setzt nach dem Senden ihre Hoehe zurueck. Der Asset-Cache wurde
+aktualisiert.
+
+GitHub Quality Gate: `9993b25` — 1.998 passed, 5 skipped; Ruff/Mypy 0,
+AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
