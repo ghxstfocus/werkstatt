@@ -179,3 +179,17 @@ def test_verify_speichert_begrenzte_stage_belege(
         "error_excerpt": "FAILED tests/test_x.py::test_expected - assert 1 == 2",
     }]
     assert state.last_verify_errors[0].startswith("pytest_focused:")
+
+
+
+def test_task_boundary_clears_verify_evidence() -> None:
+    from werkstatt.phases._common import _reset_task_state
+
+    state = mk_state(
+        last_verify_errors=["old"],
+        last_verify_results=[{"stage_id": "old", "ok": False}],
+    )
+    _reset_task_state(state)
+
+    assert state.last_verify_errors == []
+    assert state.last_verify_results == []
