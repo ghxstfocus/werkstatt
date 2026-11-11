@@ -5164,3 +5164,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Lokale Nicht-Git-Projekte werden vor jedem Git-Aufruf erkannt und ohne Git-Subprozess behandelt. Das hält den lokalen Startpfad kompatibel mit laufenden Web-Tests und spart unnötige Prozessstarts.
 - Der finale Status-/HEAD-Abgleich erfolgt vor dem Anlegen des verwalteten Worktree-Verzeichnisses. Der Projekt-Testfixture ignoriert `.werkstatt/`, wie es für das Laufzeitverzeichnis vorgesehen ist.
 - GitHub Actions hatte 22 Fehler wegen dieser beiden Randbedingungen; Ruff war bereits sauber. Der vollständige CI-Lauf wird nach dieser Korrektur erneut abgewartet.
+
+
+## 2026-11-11 — OP-399 CI-Fixture fuer Worktree-Start
+
+- Der GitHub-Run-API-Test stellt nun auch `docs/STATUS.md` im isolierten Worktree bereit. Damit prüft er tatsächlich den erfolgreichen Startpfad, statt beim absichtlich fehlenden Fixture-Inhalt den Fehler-Cleanup auszulösen.
+- Der vorherige Quality-Gate-Lauf scheiterte nur in `test_github_run_starts_in_pinned_worktree`: Der Fake-Worktree fehlte die STATUS-Datei, weshalb korrekterweise Cleanup aufgerufen wurde und dabei den global gemockten `subprocess.Popen` traf. Die vollständige Suite lief mit 1.977 bestanden und 5 übersprungen, eine Testfixture schlug fehl.
