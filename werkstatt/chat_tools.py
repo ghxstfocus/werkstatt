@@ -465,12 +465,29 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
         create_debugger_fix,
     )
     from werkstatt.event_store import EventStore
+    from werkstatt.projection import Projector
 
-    if not EventStore().query(run_id, project=project, limit=1):
-        return json.dumps({
-            "zustand": "needs_input",
-            "detail": "Der angegebene Run ist fuer dieses Projekt nicht belegt.",
-        }, ensure_ascii=False)
+    try:
+        Projector().tail()
+        event_store = EventStore()
+    except (OSError, RuntimeError, ValueError) as exc:
+        return json.dumps({"zustand": "error", "detail": f"Run-Audit konnte nicht aktualisiert werden: {type(exc).__name__}"}, ensure_ascii=False)
+    evidence_kinds = (
+        "loop_failed", "loop_verify_failed", "loop_task_failed",
+        "loop_gate_failed", "loop_gate_timeout", "loop_reviewer_rejected",
+        "gate_open", "gate_expired", "loop_gate_eof", "loop_human_gate_eof",
+    )
+    try:
+        has_failure_evidence = any(
+            event_store.query(
+                run_id, project=project, kind=kind, limit=1,
+            )
+            for kind in evidence_kinds
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        return json.dumps({"zustand": "error", "detail": f"Run-Audit konnte nicht gelesen werden: {type(exc).__name__}"}, ensure_ascii=False)
+    if not has_failure_evidence:
+        return json.dumps({"zustand": "needs_input", "detail": "Fuer diesen Projekt-Run liegt kein Fehler- oder Gate-Nachweis vor."}, ensure_ascii=False)
     try:
         head = subprocess.run(
             ["git", "rev-parse", "--verify", "HEAD"],

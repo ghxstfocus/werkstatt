@@ -362,3 +362,45 @@ def test_main_stash_pop_bei_exception(tmp_path, monkeypatch):
         f"Stash-Pop MUSS bei Exception laufen, sonst Datenverlust. "
         f"pop_calls={pop_calls}"
     )
+
+
+def test_lifecycle_event_uses_cli_project(monkeypatch, tmp_path):
+    """Terminale Lifecycle-Events bleiben dem CLI-Projekt zugeordnet."""
+    captured = []
+    monkeypatch.setattr(
+        loop, "_emit_lifecycle_end",
+        lambda erfolg, project_name: captured.append((erfolg, project_name)),
+    )
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    with _silence_renderer(), \
+         patch("werkstatt.loop.load_project_config", return_value={}), \
+         patch("werkstatt.loop.load_env", return_value=None):
+        rc = loop.main(["--project", "security-ai", "--aufgabe", "test"])
+    assert rc == 1
+    assert captured == [(False, "security-ai")]
+
+
+def test_lifecycle_audit_persists_project_name(monkeypatch):
+    """loop_failed darf Multi-Projekt-Events nicht als werkstatt markieren."""
+    import importlib
+
+    audit_module = importlib.import_module("werkstatt.audit")
+    gate_module = importlib.import_module("werkstatt.gate_bridge")
+    calls = []
+    monkeypatch.setattr(audit_module, "get_run_id", lambda: "security-ai-run-1")
+    monkeypatch.setattr(
+        audit_module, "audit",
+        lambda *args, **kwargs: calls.append(args),
+    )
+    monkeypatch.setattr(gate_module, "expire_for_run", lambda *args, **kwargs: None)
+
+    loop._emit_lifecycle_end(False, "security-ai")
+
+    assert calls
+    assert calls[0][0] == "loop_failed"
+    assert calls[0][3] == "security-ai"
+
+    calls.clear()
+    monkeypatch.setattr(audit_module, "get_run_id", lambda: "werkstatt-run-1")
+    loop._emit_lifecycle_end(False, "security-ai")
+    assert not calls

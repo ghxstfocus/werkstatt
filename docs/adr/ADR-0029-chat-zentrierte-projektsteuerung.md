@@ -91,6 +91,21 @@ Chat eine Rueckfrage und bietet keine Startbestaetigung an. Der
 bestehende Plan-Gate-Dialog bleibt nach dem Start verpflichtend.
 
 
+#### Evidenzgebundene Debugger-Patch-Uebergabe
+
+Im Debug-Modus darf der Chat einen strukturierten Fix als befristeten
+Aktionsvorschlag speichern. Der Quell-Run muss im Event-Store demselben
+Projekt zugeordnet sein und einen Fehler- oder Gate-Nachweis enthalten.
+Der Server bindet den vollstaendigen Diff, die betroffenen Pfade, den
+Run und den aktuellen Basis-Commit in einen SHA-256-Vertrag. Die UI zeigt
+den Hash und genau diesen Diff; die ausdrueckliche Freigabe gilt nur fuer
+diesen Inhalt. Vor dem Loop-Start werden Hash, Projekt, Basis-Commit und
+Anwendbarkeit erneut geprueft. Der Fix wird maschinenlesbar an den
+normalen Coding-Loop uebergeben. Chat und Freigabe-Endpunkt schreiben
+keine Produktionsdateien; Plan-, Verify-, Review- und Human-Gates
+bleiben zwingend. Fehlt passende Run-Evidenz oder hat sich der Checkout
+geaendert, wird fail-closed abgebrochen.
+
 ### 3. Hintergrundarbeit bleibt asynchron und sichtbar
 
 Ein langer Run oder Diagnoseauftrag darf die Chat-Verbindung nicht

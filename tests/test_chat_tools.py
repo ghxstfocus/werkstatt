@@ -403,18 +403,22 @@ def test_write_temp_test_rejects_large_content(tmp_path) -> None:
 def test_propose_debugger_fix_creates_project_run_bound_proposal(
     monkeypatch: pytest.MonkeyPatch, tmp_path,
 ) -> None:
-    from werkstatt import chat_session, event_store
+    from werkstatt import chat_session, event_store, projection
 
     head = "a" * 40
     run_id = "demo-run-123"
     saved = {}
+    save_count = []
 
     class FakeStore:
-        def query(self, requested_run, *, project, limit):
+        def query(self, requested_run, *, project, kind, limit):
             assert requested_run == run_id
             assert project == "demo"
             assert limit == 1
-            return [{"kind": "loop_failed"}]
+            assert kind == "loop_failed"
+            return [{"kind": kind}] if FakeStore.failure_present else []
+
+    FakeStore.failure_present = True
 
     class FakeSession:
         def __init__(self, project, session_id):
@@ -422,10 +426,12 @@ def test_propose_debugger_fix_creates_project_run_bound_proposal(
             assert session_id == "b" * 32
 
         def append(self, kind, payload):
+            save_count.append(kind)
             saved["kind"] = kind
             saved["payload"] = payload
 
     monkeypatch.setattr(event_store, "EventStore", FakeStore)
+    monkeypatch.setattr(projection, "Projector", lambda: SimpleNamespace(tail=lambda: {}))
     monkeypatch.setattr(chat_session, "ChatSession", FakeSession)
     monkeypatch.setattr(
         chat_tools.subprocess,
@@ -437,16 +443,16 @@ def test_propose_debugger_fix_creates_project_run_bound_proposal(
         "--- a/pkg/demo.py\n+++ b/pkg/demo.py\n"
         "@@ -1 +1 @@\n-old = 1\n+new = 2\n"
     )
+    tool_args = {
+        "signatur": "regression-demo",
+        "ursache_tag": "fixture",
+        "diff": diff,
+        "betroffene_dateien": ["pkg/demo.py"],
+        "confidence": 0.9,
+        "run_id": run_id,
+    }
     result = json.loads(chat_tools.execute_tool(
-        "propose_debugger_fix",
-        {
-            "signatur": "regression-demo",
-            "ursache_tag": "fixture",
-            "diff": diff,
-            "betroffene_dateien": ["pkg/demo.py"],
-            "confidence": 0.9,
-            "run_id": run_id,
-        },
+        "propose_debugger_fix", tool_args,
         mode="debugger",
         project_dir=tmp_path,
         project_name="demo",
@@ -457,3 +463,14 @@ def test_propose_debugger_fix_creates_project_run_bound_proposal(
     assert saved["payload"]["arguments"]["debugger_fix"]["base_head"] == head
     assert saved["payload"]["arguments"]["debugger_fix"]["diff"] == diff
     assert saved["payload"]["arguments"]["debugger_fix"]["patch_hash"]
+
+    FakeStore.failure_present = False
+    missing_evidence = json.loads(chat_tools.execute_tool(
+        "propose_debugger_fix", tool_args,
+        mode="debugger",
+        project_dir=tmp_path,
+        project_name="demo",
+        session_id="b" * 32,
+    ))
+    assert missing_evidence["zustand"] == "needs_input"
+    assert len(save_count) == 1

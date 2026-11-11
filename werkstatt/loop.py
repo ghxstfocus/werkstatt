@@ -89,6 +89,8 @@ from werkstatt.verify import (  # Fix AZ Stufe 3: Re-Export
     _verify_stage_with_heartbeat,
 )
 
+_LIFECYCLE_PROJECT = ""
+
 # Oeffentliche API (Re-Exports + lokale Funktionen).
 # ruff F401 entfernt sonst Re-Exports, die von Tests/Aufrufern
 # importiert werden. __all__ ist die offizielle Python-Deklaration.
@@ -379,6 +381,7 @@ def _k13_rc(rc: int, tasks_ok: int) -> int:
 
 
 def _main_inner(argv: list[str] | None = None) -> int:
+    global _LIFECYCLE_PROJECT
     # M-391: .env laden (DEEPSEEK_API_KEY automatisch setzen)
     load_env()
     # Tee-Stream fuer Browser-Terminal: alle Render-Zeilen in
@@ -445,6 +448,7 @@ def _main_inner(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true",
                         help="Nur Plan-Gate + Renderer, kein LLM, kein Patch")
     args = parser.parse_args(argv)
+    _LIFECYCLE_PROJECT = args.project
     if args.headless and not args.run_id:
         parser.error("--headless erfordert --run-id")
     if args.run_id and not args.headless:
@@ -616,7 +620,7 @@ def _main_inner(argv: list[str] | None = None) -> int:
     return _k13_rc(rc, _tasks_ok)
 
 
-def _emit_lifecycle_end(erfolg: bool) -> None:
+def _emit_lifecycle_end(erfolg: bool, project_name: str | None = None) -> None:
     """Lifecycle-Vertrag: jeder Loop-Lauf endet mit Terminal-Event.
 
     Bei Erfolg: loop_ended. Bei Exception: loop_failed.
@@ -632,19 +636,24 @@ def _emit_lifecycle_end(erfolg: bool) -> None:
     except Exception:  # noqa: BLE001
         return
     run_id = get_run_id()
-    if not run_id:
+    effektives_projekt = project_name or _LIFECYCLE_PROJECT
+    if (
+        not run_id
+        or not effektives_projekt
+        or not run_id.startswith(f"{effektives_projekt}-")
+    ):
         return
     if erfolg:
         try:
             audit("loop_ended", {"erfolg": True, "run_id": run_id},
-                  _P.cwd(), "werkstatt")
+                  _P.cwd(), effektives_projekt)
         except Exception:  # noqa: BLE001
             pass
         _grund = "loop_ended"
     else:
         try:
             audit("loop_failed", {"erfolg": False, "run_id": run_id},
-                  _P.cwd(), "werkstatt")
+                  _P.cwd(), effektives_projekt)
         except Exception:  # noqa: BLE001
             pass
         _grund = "loop_failed"
@@ -660,6 +669,8 @@ def main(argv: list[str] | None = None) -> int:
     Garantiert: loop_ended/loop_failed + alle Gates des Runs geschlossen,
     egal wie der Loop endet (return, Exception, KeyboardInterrupt).
     """
+    global _LIFECYCLE_PROJECT
+    _LIFECYCLE_PROJECT = ""
     erfolg = False
     try:
         rc = _main_inner(argv)
@@ -669,7 +680,8 @@ def main(argv: list[str] | None = None) -> int:
         erfolg = False
         raise
     finally:
-        _emit_lifecycle_end(erfolg)
+        _emit_lifecycle_end(erfolg, _LIFECYCLE_PROJECT)
+        _LIFECYCLE_PROJECT = ""
 
 
 if __name__ == "__main__":

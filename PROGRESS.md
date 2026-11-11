@@ -4973,10 +4973,19 @@ Die Folge-CI meldete weiterhin I001, weil collections.abc und dataclasses in fal
 GitHub Actions meldete, dass der Manipulationstest beim Erstellen des geaenderten Diffs zugleich einen neuen gueltigen Hash erzeugte. Der Test behaelt jetzt den urspruenglich bestaetigten Hash bei und veraendert nur den Diff; damit prueft er die tatsaechliche Bindung zwischen Freigabe und Patch-Inhalt.
 
 
-## 2026-11-11 — OP-240 Debugger-Fix an Chat-Freigabe und Loop gebunden
+## 2026-11-11 — OP-240 Projektzuordnung terminaler Run-Events korrigiert
 
-Der Debug-Modus kann jetzt einen strukturierten Patch fuer einen im Event-Store belegten Projekt-Run vorschlagen. Der Server ermittelt den Basis-HEAD, validiert Diff, Dateiliste und Pfade und berechnet den SHA-256 ueber den gesamten Vertrag. Die Chat-Aktionskarte zeigt diesen Hash und den exakten Diff. Bei Bestaetigung prueft die API Hash, Projekt, HEAD und Anwendbarkeit erneut; danach startet sie den normalen Loop mit dem vollstaendigen maschinenlesbaren Patch-Auftrag. Der Loop erhaelt keine Sonderoption zum Ueberspringen von Plan-, Verify-, Review- oder Human-Gates.
+Das Lifecycle-Finalizer-Event loop_ended/loop_failed verwendete bisher
+hartcodiert den Projektnamen werkstatt. Dadurch wurden terminale Events
+anderer Projekte im Event-Store falsch zugeordnet. Der CLI-Projektname wird
+nun bis zum Finalizer weitergereicht; ohne bekannten Projektnamen wird kein
+irrefuehrend zugeordnetes Terminal-Event geschrieben.
 
-- Keine direkte Aenderung von Produktionsdateien durch Chat oder Freigabe-Endpunkt.
-- Tests ergaenzen Tool-Modus/Run-Bindung, hashgebundenen Loop-Auftrag, Diff-Anzeige und fail-closed Verhalten bei manipuliertem Vorschlag.
-- OP-240 bleibt offen bis End-to-End-Dogfooding ueber einen echten Loop-Run und seine Gates abgeschlossen ist.
+Die Debugger-Vorschlagspruefung aktualisiert vor der Suche den Audit-Projektor
+und verlangt jetzt einen Fehler- oder Gate-Nachweis desselben Projekts im
+Quell-Run. Ein beliebiger existierender Run reicht nicht mehr.
+Regressionstests pruefen Projektzuordnung des Lifecycle-Events und
+fail-closed Verhalten des Debugger-Vertrags.
+
+- Ausloeser: Audit der OP-240-Handoff-Implementierung gegen ADR-0029 und den Event-Store.
+- Server-Pull von df539a4 bestaetigt; neue Folgeaenderungen und deren CI-Verifikation stehen noch aus.
