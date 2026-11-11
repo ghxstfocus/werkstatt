@@ -88,6 +88,20 @@ nach expliziter Architekturentscheidung zu Implementierungsauftraegen.
 Debugging bleibt eine Chat-Faehigkeit, keine neue Loop-Rolle.
 
 
+## Spaeterer UI-Feinschliff
+
+Nach Abschluss der aktuellen Funktions- und Betriebsnachweise die gemeldeten
+kleinen UI-Punkte gemeinsam pruefen und beheben:
+
+- Audit-Kalender: fruehere Tage muessen anklickbar sein; der Zeitraum soll
+  mindestens bis zum 2026-11-08 zurueckreichen.
+- Chat-Eingabe: die doppelte Umrandung entfernen.
+- Kopfbereich: Abstaende in allen Projekt-Tabs angleichen; aktuell weicht
+  insbesondere das Werkstatt-Projekt ab.
+
+Diese Punkte sind bewusst nachrangig und blockieren den aktuellen
+Loop-/Projektquellen-Fokus nicht.
+
 ## Verbindliche Quellen
 
 
