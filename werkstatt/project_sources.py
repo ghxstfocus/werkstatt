@@ -66,8 +66,7 @@ def _github_slug(remote: str) -> str | None:
                 "GitHub-Remote enthaelt unzulaessige URL-Bestandteile.",
             )
         path = parsed.path.lstrip("/")
-    if path.endswith(".git"):
-        path = path[:-4]
+    path = path.removesuffix(".git")
     parts = path.split("/")
     if len(parts) != 2 or any(
         not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", part)

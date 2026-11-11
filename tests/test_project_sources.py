@@ -90,7 +90,7 @@ def test_prepare_worktree_pins_latest_remote_without_mutating_base(
 ) -> None:
     project, origin = _repo_with_origin(tmp_path)
     base_sha = _git(project, "rev-parse", "HEAD")
-    _push_remote_commit(origin, tmp_path)
+    remote_sha = _push_remote_commit(origin, tmp_path)
     with patch.object(sources, "_github_slug", return_value="example/project"):
         prepared = sources.prepare_github_run_worktree(project, "demo-run")
 
@@ -112,9 +112,11 @@ def test_prepare_worktree_pins_latest_remote_without_mutating_base(
 def test_prepare_worktree_rejects_dirty_server_checkout(tmp_path: Path) -> None:
     project, _origin = _repo_with_origin(tmp_path)
     (project / "README.md").write_text("local change\n", encoding="utf-8")
-    with patch.object(sources, "_github_slug", return_value="example/project"):
-        with pytest.raises(sources.GitHubSyncError, match="lokale Aenderungen"):
-            sources.prepare_github_run_worktree(project, "dirty-run")
+    with (
+        patch.object(sources, "_github_slug", return_value="example/project"),
+        pytest.raises(sources.GitHubSyncError, match="lokale Aenderungen"),
+    ):
+        sources.prepare_github_run_worktree(project, "dirty-run")
 
 
 def test_prepare_worktree_rejects_local_and_remote_divergence(tmp_path: Path) -> None:
@@ -125,9 +127,11 @@ def test_prepare_worktree_rejects_local_and_remote_divergence(tmp_path: Path) ->
     _git(project, "commit", "-m", "server-only")
     _git(project, "branch", "--set-upstream-to=origin/main", "server-only")
     _push_remote_commit(origin, tmp_path)
-    with patch.object(sources, "_github_slug", return_value="example/project"):
-        with pytest.raises(sources.GitHubSyncError, match="voraus oder divergiert"):
-            sources.prepare_github_run_worktree(project, "diverged-run")
+    with (
+        patch.object(sources, "_github_slug", return_value="example/project"),
+        pytest.raises(sources.GitHubSyncError, match="voraus oder divergiert"),
+    ):
+        sources.prepare_github_run_worktree(project, "diverged-run")
 
 
 def test_prepare_worktree_returns_none_for_non_github_project(tmp_path: Path) -> None:
@@ -138,7 +142,7 @@ def test_prepare_worktree_returns_none_for_non_github_project(tmp_path: Path) ->
 
 def test_remove_prepared_worktree_removes_only_run_owned_branch(tmp_path: Path) -> None:
     project, origin = _repo_with_origin(tmp_path)
-    remote_sha = _push_remote_commit(origin, tmp_path)
+    _push_remote_commit(origin, tmp_path)
     with patch.object(sources, "_github_slug", return_value="example/project"):
         prepared = sources.prepare_github_run_worktree(project, "cleanup-run")
     assert prepared is not None
@@ -153,7 +157,9 @@ def test_origin_errors_fail_closed_for_a_git_checkout(tmp_path: Path) -> None:
     error = subprocess.CompletedProcess(
         args=["git"], returncode=128, stdout="", stderr="git config damaged",
     )
-    with patch.object(sources, "_git", return_value=error):
-        with pytest.raises(sources.GitHubSyncError, match="nicht sicher geprueft"):
-            sources._origin_repository(tmp_path)
+    with (
+        patch.object(sources, "_git", return_value=error),
+        pytest.raises(sources.GitHubSyncError, match="nicht sicher geprueft"),
+    ):
+        sources._origin_repository(tmp_path)
 

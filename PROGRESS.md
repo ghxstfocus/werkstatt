@@ -5152,3 +5152,8 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - GitHub-Runs pruefen jetzt auf dem Server den konfigurierten origin-Upstream, holen den Remote-Stand und erstellen einen eigenen Worktree-Branch auf der gepinnten Commit-SHA. Der bestehende Checkout wird nicht gemergt oder zurueckgesetzt; dirty, vorausliegende oder divergierende lokale Branches stoppen den Start.
 - Der Loop kann den Worktree-Pfad explizit als Arbeitsverzeichnis verwenden. Der Start-API-Response nennt Repository, Remote-Branch, Basis- und Ziel-SHA sowie Run-Branch.
 - CI fuer den Git-Status-Fix: 1963 Tests bestanden, 5 uebersprungen; Ruff/Mypy/AST/Katalog und Quality Gate ohne Regression. Die Integration von OP-399 wird mit Remote-/Worktree- und UI-Gates weiterverifiziert.
+
+
+## 2026-11-11 — OP-399 erste CI-Korrektur
+
+- CI meldete einen zu frueh entfernten SHA-Wert in den Worktree-Tests, drei verschachtelte Test-Context-Manager und eine Ruff-Regel fuer Dateiendungen. Testbelege und Remote-Slug-Normalisierung werden korrigiert; volle CI folgt erneut.
