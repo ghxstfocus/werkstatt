@@ -4814,3 +4814,14 @@ Mit dem kanonischen /opt/werkstatt-Symlink stieg die saubere GitHub-Suite auf 19
 Nach den Setup-Fixes besteht der Workflow nun alle Stufen: JavaScript-Syntax, Ruff, direkte pytest-Diagnose und Quality Gate. Die Suite meldete 1906 passed / 5 skipped; Quality Gate: ok true, Regression false, Ruff/Mypy 0, AST 370 Dateien ohne Fehler und Audit-Katalog bestanden. Der Lauf war auf Commit d192545. Der Chat-Control-API-Testfix und die vorausgehende Syntaxreparatur sind damit im CI-Checkout abgedeckt; der Server-Pull und der dortige gezielte Lauf bleiben ausstehend.
 
 - Erfolgreicher Actions-Lauf: https://github.com/ghxstfocus/werkstatt/actions/runs/42932576328
+
+
+## OP-393 — alle interaktiven Gate-Eingaben laufen ueber die Bridge (2026-11-11)
+
+Audit gegen den noch offenen OP fand neben dem bereits korrigierten Phase-Review-Gate weitere direkte input()-Pfade in gates.py: Plan-Datei bearbeiten, optionales ADR-Mini und Human-Gate-Edit. Sie liefen am headless UI-Gate vorbei; der Plan-Edit-Pfad konnte den Subprozess mit EOF abbrechen. Alle drei warten jetzt ueber _frage_gate und damit im Headless-Modus ueber gate_bridge. Optionale ADR-Entscheidung bleibt fail-soft; Bearbeitungsfortsetzung bricht bei fehlender/abgelehnter Gate-Antwort fail-closed ab. Ein AST-Regressionstest erlaubt direkten input()-Aufruf nur noch innerhalb von _frage_gate.
+
+Tests pruefen Plan-Edit-Weitergang, ADR-Mini-Entscheidung und den echten Phase-Review-Bridge-Roundtrip mit gate_open-Signal und Antwort-Wartefunktion.
+
+- Commits: 1d9e974 (Headless-Eingaben), 063410b (Edit-/ADR-Regressionstests), 771382f / 2c0771e (Bridge-Roundtrip-Test und Lint-Korrekturen).
+- GitHub Actions auf 2c0771e: JavaScript-Syntax, Ruff, pytest und Quality Gate gruen; 1910 passed / 5 skipped, Ruff 0, Mypy 0, AST 370 Dateien ohne Fehler, Katalog bestanden; ok=true, regression=false.
+- Server-Dogfooding nach Pull steht aus.
