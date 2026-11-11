@@ -149,3 +149,12 @@ def test_debugger_fix_proposal_shows_hash_and_exact_diff() -> None:
     assert "proposal.arguments.debugger_fix" in js
     assert '"SHA-256 · "' in js
     assert "diff.textContent = debuggerFix.diff" in js
+
+
+def test_assistant_antworten_ohne_blase_nutzer_in_blase() -> None:
+    css = _css()
+    assert ".chat-nachrichten > .chat-msg.user {" in css
+    assert "border-radius: 18px 18px 5px 18px;" in css
+    assert ".chat-nachrichten > .chat-msg.assistant {" in css
+    assert "background: transparent;" in css
+    assert "body[data-mode=\"control\"] .bereich.chat .chat-nachrichten > .chat-msg.assistant" in css
