@@ -4938,3 +4938,12 @@ Der Race zwischen mehreren Web-Workern ist mit atomaren SQLite-Statusuebergaenge
 - Regression im Chat-Control-Test an die Registry-CAS-Schnittstelle angepasst.
 - GitHub Actions auf `67caa8b`: **1926 passed, 5 skipped**; Ruff/Mypy 0; AST 370 Dateien / 0 Fehler; Audit-Katalog bestanden; Quality Gate `ok: true`, `regression: false`.
 - Statusdokumentation ergaenzt. Server-Pull und Live-Dogfooding stehen noch aus.
+
+
+## 2026-11-11 — OP-397 parallele Stop-Aufrufe abgegrenzt
+
+Ein Worker, der einen Loop bereits als `stopping` beansprucht hat, schuetzt den laufenden Stop jetzt gegen gleichzeitige Wiederholung durch weitere Web-Worker. Nach 30 Sekunden ohne Abschluss kann ein anderer Worker einen verwaisten Stop atomar uebernehmen; dadurch bleiben fehlgeschlagene Stops wiederholbar, waehrend konkurrierende Requests nicht doppelte Stop-Audit-Events erzeugen.
+
+- Registry-Regressionstest prueft erstmaligen Claim, Konflikt eines zweiten Workers, Wiederuebernahme nach abgelaufenem Claim und Ablehnung eines zweiten frischen Claims.
+- GitHub Actions auf `4a39e09`: **1927 passed, 5 skipped**; Ruff/Mypy 0, AST 370 Dateien / 0 Fehler, Audit-Katalog bestanden; Quality Gate `ok: true`, `regression: false`.
+- Neue Produktanforderungen sind in OP-399/OP-400 und der vorgeschlagenen ADR-0030 als offene Arbeit erfasst.
