@@ -4854,3 +4854,11 @@ Die UI-Auswahl `debug` wird beim Senden als Backend-Faehigkeit `debugger` an den
 Der Chat wurde als projektbezogener Arbeitsbereich gestaltet: Gespraeche zeigen lesbare Titel und Zeitangaben, Antworten erhalten mehr typografische Hierarchie, Hintergrundaktionen erscheinen als kompakte Aktivitaets-Timeline, und der Composer bekommt einen klaren Fokuszustand. Aktivitaetskarten bleiben an Projekt und Session gebunden und werden vor der laufenden Antwort angezeigt. Der Asset-Cache in `layout.html` wurde synchron erneuert.
 
 Der Screenshot zeigte `Chat-Auftrag konnte nicht angenommen werden: Not Found`. Die aktuelle API stellt `/chat/jobs` bereit; bei einem Server, dessen geladene API diese Route noch nicht kennt, faellt die UI fuer genau den generischen Routen-404 auf den bestehenden direkten Chat-Endpunkt zurueck. Projekt- oder Session-404s werden davon nicht verschluckt. Das kann eine fehlende Prozess-Neuladung temporaer abfedern, ersetzt den Webserver-Neustart fuer die Hintergrundjob-API aber nicht.
+
+
+## Einheitliches UI-Designsystem (2026-11-11)
+
+Nach dem Chat-Arbeitsbereich wurde die gemeinsame Werkstatt-Oberflaeche visuell angeglichen: Palette und Fokuszustand, Modus-Umschalter, Projekt-Tabs, obere Ambient-Leiste, Panel-Koepfe, Runs- und Timeline-Zeilen, Workbench-Drawer, Uebersichtskarten und Statusleiste teilen nun dieselben Abstaende, Radien, Flaechen und Interaktionszustaende. Die drei Modi behalten ihre bestehende Layout- und Funktionslogik; angepasst ist die gemeinsame visuelle Sprache samt responsiven Breakpoints und reduzierter Bewegung. Asset-Cache synchron erneuert.
+
+- CSS-Aenderungen sind auf `main`; Browser- und Server-Visual-QA steht nach Neuladen des Webprozesses noch aus.
+- Der Chat-404-Fallback fuer aeltere laufende API-Prozesse ist ebenfalls auf `main`; der direkte Chat-Fallback ist nur eine Kompatibilitaetsbruecke, nicht der Ersatz fuer persistente Hintergrundjobs.
