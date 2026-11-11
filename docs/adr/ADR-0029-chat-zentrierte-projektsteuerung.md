@@ -69,6 +69,28 @@ und Stop sind explizite Kontrollaktionen. Gates und menschliche
 Entscheidungen werden nie aus Chat-Prosa abgeleitet oder automatisch
 bestaetigt.
 
+#### Natuerliche Loop-Steuerung mit bestaetigter Aktion
+
+Der Nutzer kann im aktiven Projektchat in normaler Sprache um Start,
+Pause, Fortsetzen oder Stop bitten. Der Chat-Agent darf dafuer ein
+`request_loop_action`-Tool aufrufen, das ausschliesslich einen
+projekt- und sessiongebundenen, befristeten Aktionsvorschlag speichert.
+Das Tool fuehrt selbst keine Loop-Steuerung aus. Die UI zeigt die
+konkrete Aktion, das Projekt und bei Start den aufgeloesten OP-/Aufgaben-
+Umfang mit getrennten Schaltflaechen fuer Bestaetigen und Ablehnen.
+Erst die ausdrueckliche Bestaetigung durch den Nutzer loest den
+bestehenden Control-Endpunkt aus. Ein Vorschlag ist einmalig,
+idempotent, auditiert und nach Reconnect aus der Chat-Session
+rekonstruierbar. Doppelte, abgelaufene oder bereits entschiedene
+Vorschlaege duerfen keine zweite Aktion starten.
+
+Bei einem Start ohne expliziten Auftrag loest der Server vor der
+Bestaetigung genau einen eindeutigen, startfaehigen STATUS-OP auf. Ist
+die Auswahl mehrdeutig, blockiert oder fehlt ein Nachweis, stellt der
+Chat eine Rueckfrage und bietet keine Startbestaetigung an. Der
+bestehende Plan-Gate-Dialog bleibt nach dem Start verpflichtend.
+
+
 ### 3. Hintergrundarbeit bleibt asynchron und sichtbar
 
 Ein langer Run oder Diagnoseauftrag darf die Chat-Verbindung nicht
