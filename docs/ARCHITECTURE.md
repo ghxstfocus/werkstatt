@@ -59,18 +59,24 @@ und in der Roadmap aktiviert sind.
 
 ### 1.6 GitHub-Quellen und Run-Worktrees (ADR-0030)
 
-Wenn ein Projekt einen GitHub-origin mit konfiguriertem origin-Upstream hat,
-prueft der Server vor dem Start, dass sein Checkout sauber und nicht ahead oder
-divergent ist. Er fetcht den Upstream-Branch, pinnt die Commit-SHA und startet
-den Loop in einem eigenen Branch im verwalteten Worktree-Verzeichnis unterhalb von .werkstatt/worktrees. Der
-bestehende Server-Checkout wird dabei nicht gemergt, zurueckgesetzt oder
-beschrieben. Unklarer Git-Status, Fetch-Fehler, lokale Aenderungen oder ein
-auseinander gelaufener Branch stoppen den Start. Der API-Response nennt
+Bei einem GitHub-verbundenen Projekt prueft der Server vor dem Start
+den lokalen Git-Status und den konfigurierten origin-Upstream. Er fetcht den
+Branch in eine eigene Remote-Tracking-Referenz, pinnt dessen Commit-SHA und
+stoppt bei Statusfehlern, lokalen Aenderungen, Fetch-Fehlern sowie
+ahead/divergent Branches. Der bestehende Checkout wird nicht aktualisiert
+oder verworfen. Der Loop startet in einem eigenen Run-Branch und Worktree
+auf der gefetchten SHA. Worktrees liegen ausserhalb des Projekt-Checkouts
+im Werkstatt-State (konfigurierbar ueber
+`WERKSTATT_RUN_WORKTREE_DIR`, sonst unter
+`$XDG_STATE_HOME/werkstatt/run-worktrees` bzw.
+`~/.local/state/werkstatt/run-worktrees`). Der API-Response nennt
 Repository, Remote-Branch, Basis-SHA, gepinnte SHA und Run-Branch.
 
 Projekte ohne GitHub-origin laufen weiter im konfigurierten Serverpfad.
-Remote-Push und Merge bleiben getrennte, freizugebende Aktionen; die
-automatisierte Merge-/Ergebnis-Gate-Integration ist Folgearbeit in OP-399.
+Remote-Push und Merge bleiben getrennte, freizugebende Aktionen. Die
+Integration von Ergebnis-Gates und Remote-Schreibaktionen ist weiterhin
+offene Arbeit in OP-399. ADR-0030 ist angenommen; dessen Annahme bedeutet
+nicht, dass alle OP-399-Akzeptanzkriterien bereits umgesetzt sind.
 
 ## 2. Rollen
 
@@ -78,7 +84,9 @@ automatisierte Merge-/Ergebnis-Gate-Integration ist Folgearbeit in OP-399.
 
 Read-only Agent. Sammelt Projektkontext und key_files; die Pruefungen
 selbst bleiben deterministisch. Modell: deepseek-flash, Thinking aus.
-Explorer laeuft immer, auch bei expliziten Dateien.
+Der Planner kann den Scout bei einem einzelnen, expliziten und im
+Projekt belegten Dateiziel ueberspringen; der Explorer liefert weiterhin den
+Projektkontext.
 
 ### 2.2 Architect (werkstatt/planner.py, Prosa-Modus)
 
@@ -125,24 +133,29 @@ Verify, Review und Ergebnis-Gate bleiben getrennte Schritte.
 
 Plan-Gate (nach Planner) + Ergebnis-Gate (nach Reviewer). fail-closed.
 
-## 3. Task-Zerlegung (Plan-first, kein On-Demand)
+## 3. Plan- und Task-Zerlegung
 
-Der Planner zerlegt die Architect-Prosa **von Anfang an** logisch:
-Interface vor Backend vor Tests. `_leite_deps_deterministisch`
-(OP-187) uebersetzt Architect-Aussagen aus Block 5 in Datei-zu-Datei-
-Dependencies, mappt auf Task-IDs via `task_files[0]`. Topo-Sort in
-`_planner_split` bestimmt die Reihenfolge.
+Der Planner waehlt Scout- und Architect-Aufrufe nach Auftrag und aktueller
+Dateievidenz. Breite, mehrdeutige oder belegbeduerftige Auftraege laufen
+ueber den Scout. Ein einzelnes explizites Dateiziel kann den Scout nur
+ueberspringen, wenn Explorer und Pfadpruefung es bestaetigen. Ein
+deterministischer Architect-Bypass ist auf belegte, eindeutige
+Einzeldatei-Ersetzungen mit vollstaendigen Feldern begrenzt; veraltete,
+mehrdeutige oder unvollstaendige Treffer fallen in den Reasoning-Pfad
+zurueck. Diese Entscheidungen werden auditiert.
 
-Der Loop laeuft strikt in dieser Reihenfolge: Explorer -> Scout ->
-Architect -> Planner-Split -> Builder -> Verify -> Reviewer. Kein
-Task wird bei Fehlschlag zerlegt (ADaPT entfernt 2026-11-08).
+Im normalen Reasoning-Pfad strukturiert der Architect den Auftrag; der
+Planner-Split ueberfuehrt den Plan in Tasks und Abhaengigkeiten, die
+topologisch sortiert ausgefuehrt werden. Tasks durchlaufen Builder, Verify
+und Reviewer; fehlgeschlagene Befunde gehen in den begrenzten
+Reflection-/Reparaturpfad. Ein Fehlschlag erweitert den freigegebenen
+Auftrag nicht still. Der verpflichtende Plan- und Ergebnis-Gate-Pfad bleibt
+davon unberuehrt.
 
-**Warum kein On-Demand-Split mehr:** ADaPT feuerte in 237 modernen
-Runs 1-2x (nur bei `builder_failed`/`reviewer_high_bug`), hatte
-keinen Audit-Trail, und die Qualitaet der Sub-Task-Zerlegung aus
-einer fehlgeschlagenen Task war unzuverlaessig. Wenn der Plan
-schlecht ist, ist die Loesung **den Plan zu verbessern**, nicht
-ihn on-demand zu zersplittern.
+Der alte ADaPT-On-Demand-Split wurde am 2026-11-08 entfernt: historische
+Runs belegten seltene Nutzung und fehlende Auditierbarkeit. Planfehler
+werden daher ueber evidenzbasiertes Replanning behandelt, nicht ueber
+unprotokolliertes Zerteilen einer fehlgeschlagenen Task.
 
 ## 4. Verifikation
 
@@ -325,5 +338,5 @@ nicht als schwebendes, vom Projektkontext getrenntes Panel geplant.
 
 Die UI zeigt nur Daten, die durch Backend/Event-Store belegt sind. Live-
 Ereignisse und nachtraegliche Zusammenfassungen haben getrennte
-Darstellungsaufgaben. Die Projektquelle und projektbezogene Modellwahl
-sind als OP-399/OP-400 geplant; ADR-0030 ist vorgeschlagen.
+Darstellungsaufgaben. ADR-0030 fuer Projektquellen und Rollenmodelle ist
+angenommen; OP-399/OP-400 beschreiben die noch offene Umsetzung.
