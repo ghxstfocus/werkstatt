@@ -5297,3 +5297,9 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 
 - Assistant-Antworten werden auf 68 Zeichenbreiten begrenzt und mittig ausgerichtet; dadurch bleiben lange Absätze im Chat leichter lesbar.
 - Nutzernachrichten behalten ihre rechtsbuendige Bubble-Darstellung. Ein Frontend-Test sichert die Lesebreite.
+
+
+## 2026-11-11 — Nutzer-Bubbles an Lesespalte ausrichten
+
+- Nutzer-Bubbles teilen jetzt die Assistant-Lesebreite und sitzen am rechten Rand dieser Spalte; auf schmalen Displays nutzen sie den verfügbaren Platz.
+- Ein Frontend-Test sichert Desktop-Breite, Ausrichtung und Mobile-Grenze.
