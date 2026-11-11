@@ -178,3 +178,12 @@ def test_assistant_text_bleibt_auf_lesbarer_spaltenbreite() -> None:
     assert "width: min(100%, 68ch);" in regel
     assert "max-width: 68ch;" in regel
     assert "margin-inline: auto;" in regel
+
+
+def test_nutzer_bubble_an_assistant_lesespalte_ausrichten() -> None:
+    css = _css()
+    start = css.rindex("/* Nutzer-Bubbles an dieselbe Lesespalte wie Assistant-Text ausrichten. */")
+    regel = css[start:]
+    assert "max-width: min(78%, 68ch);" in regel
+    assert "margin-right: max(0px, calc((100% - 68ch) / 2));" in regel
+    assert "max-width: 92%;" in regel
