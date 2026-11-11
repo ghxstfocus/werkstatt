@@ -2,7 +2,7 @@
 
 Format aus `DOC_CONVENTIONS.md` §5. Nur offene, **loop-faehige** OPs.
 `—` in Feldern = noch nicht spezifiziert (Loop praezisiert bei Bearbeitung).
-Letzte Aktualisierung: 2026-11-10.
+Letzte Aktualisierung: 2026-11-11.
 
 Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
 `docs/ROADMAP.md`, Abschnitt "Aus STATUS.md (Loop-Queue)".
@@ -2009,22 +2009,6 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Tests:** `tests/test_planner_struktur.py` (5 Szenarien) + Erweiterung `tests/test_planner_deps_hybrid.py` (+3 Block-5-Format-Tests). Gesamt 8 neue Tests.
 - **Blockiert von:** —
 
-### OP-393: Phase-Review-Gate nutzt input() statt gate_bridge
-
-- **Status:** open
-- **Typ:** bugfix
-- **Phase:** Phase-2 (Focus, blockiert Loop-aus-UI)
-- **Blockiert von:** —
-- **Quelle:** Live-Test 2026-11-10 10:23 (Run werkstatt-20261110-101720-3fa14f18). Nach reviewer_phase_rejected kommt loop_human_gate_eof -> Loop sofort failed. Der Loop-Plan-Gate funktioniert (nutzt `_frage_gate` -> `gate_bridge`), aber der Phase-Review-Human-Gate (`_human_gate_body`) und weitere interaktive Stellen nutzen direkt `input()`. Im `--headless`-Modus (stdin=/dev/null) wirft `input()` sofort `EOFError` -> `loop_human_gate_eof` -> `loop_gate_failed`.
-- **Betroffene Dateien:** `werkstatt/phases/review.py` (`_phase_review_gate` — der TTY-Check bei Z. 30-38 schlaegt im headless-Modus fehl, ruft sofort `loop_human_gate_eof`). Der Commit-Gate in `gates.py::_human_gate` nutzt dagegen bereits `_frage_gate` und ist OK. `tests/test_phase_review_gate.py` (bestehend, bleibt gruen), plus neuer Test `test_phase_review_headless`.
-- **Problem:** Live-Beleg 2026-11-10: `789819 reviewer_phase_rejected`, `789820 loop_human_gate_eof` (gleiche Sekunde = kein User-Wait, sofortiger EOFError), `789821 loop_gate_failed`, `789825 loop_failed`. Der Loop kam durch Explorer, Plan-Gate (Klick j), Builder t1-t3, Reviewer bis zur Phase-Review. Erst der Phase-Review-Human-Gate crasht, weil er nicht `gate_bridge` nutzt.
-- **Akzeptanzkriterien:**
-  (a) Alle interaktiven `input()`-Aufrufe in `gates.py` (Ausnahme `_frage_gate`-intern) sind durch `_frage_gate` ersetzt.
-  (b) Im `--headless`-Modus erscheint ein `gate_open` mit `kind=phase_review` im UI; Nutzer klickt `j` -> `gate_answered` -> Loop faehrt fort.
-  (c) Test `tests/test_human_gate_body.py`: mit `_HEADLESS=True` und gefaktem `gate_bridge.wait` liefert der Gate `j` -> kein `loop_human_gate_eof`.
-- **Tests:** `tests/test_human_gate_body.py` (2-3 Tests).
-- **Grund:** Loop-aus-UI laeuft heute bis Phase-Review und crasht dann.
-
 ### OP-394: Live-Feed UI-Redesign — semantische Labels + Sortierung
 
 - **Status:** open
@@ -2059,6 +2043,7 @@ NameError in anderem Modul → Match findet den Absatz sofort.
 - **Grund:** UI-Ehrlichkeit. "Builder tot" ist falsche Interpretation eines arbeitenden Loops.
 
 ## Erledigt (Auto-Log)
+- 2026-11-11 | OP-393 | done | Phase-Review, Plan-Edit, Human-Gate-Edit und ADR-Mini nutzen im Headless-Modus gate_bridge; direkter input() bleibt nur in _frage_gate. Tests: Phase-Review-Bridge-Roundtrip, Edit-/ADR-Gates, AST-Wache. CI gruen auf 2c0771e.
 
 - 2026-11-02 | OP-076 | done | Chat-Fenster (f0e6d50)
 - 2026-11-02 | OP-077 | done | Audit-Panel (92b3b69)
