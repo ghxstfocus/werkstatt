@@ -211,6 +211,11 @@ def test_system_prompt_routes_next_work_questions_through_selector() -> None:
     assert "Bei Mehrdeutigkeit fragst du" in chat_agent._SYSTEM_PROMPT
     assert "veraendert nichts" in chat_agent._SYSTEM_PROMPT
 
+def test_system_prompt_requires_verified_file_line_citations() -> None:
+    assert "grep" in chat_agent._SYSTEM_PROMPT
+    assert "Zeichen-Offsets und keine Zeilennummern" in chat_agent._SYSTEM_PROMPT
+    assert "Erfinde keine Zeilenangaben" in chat_agent._SYSTEM_PROMPT
+
 def test_chat_loop_cancelled_before_request_does_not_call_llm(session) -> None:
     with pytest.raises(chat_agent.ChatCancelled):
         chat_agent.chat_loop(
