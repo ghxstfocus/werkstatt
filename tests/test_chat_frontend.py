@@ -105,4 +105,4 @@ def test_welcome_copy_matches_available_loop_capabilities() -> None:
     assert "Loop-Aktionen anfordern" in js
     assert "zur Bestätigung." in js
     assert "Code-Patches direkt aus dem Chat sind noch nicht verfügbar." in js
-\n
+
