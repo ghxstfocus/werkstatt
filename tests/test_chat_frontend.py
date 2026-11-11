@@ -121,7 +121,7 @@ def test_chat_shows_one_temporary_activity_message_and_keeps_tools_out_of_chat()
     assert 'card.textContent = text' in activity
     assert 'job.toolCalls.push({name: name || "?", done: false})' in activity
     assert 'createElement("li")' not in activity
-    assert 'classList.add("is-working")' in activity
+    assert 'classList.toggle("is-working", status === "running")' in activity
 
     result_start = js.index("function _jobToolResult")
     result_end = js.index("function _jobFertig", result_start)
