@@ -249,7 +249,7 @@
 
       var kontext = [];
       if (step.phase) kontext.push("Phase " + step.phase);
-      if (step.task_id) kontext.push("Task " + step.task_id);
+      if (step.task_id || step.task_name) kontext.push("Task " + (step.task_id ? step.task_id + ": " : "") + (step.task_name || ""));
       addDetail("Kontext", kontext.join(" · "));
       addDetail("Ergebnis", step.result_summary);
       addDetail("Entscheidung", step.decision_summary);
