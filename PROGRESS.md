@@ -4758,3 +4758,12 @@ Der Chat-Agent darf Start, Pause, Fortsetzen und Stoppen jetzt als natuerliche P
 ## Syntaxfehler im Chat-Control-Tool aus Serverlauf korrigiert (2026-11-11)
 
 Der Serverlauf auf a1fc32b konnte mehrere Chat-Tests nicht sammeln: Der request_loop_action-Eintrag in CHAT_TOOLS enthielt literal gespeicherte \\n-Sequenzen und verursachte einen SyntaxError in chat_tools.py. Der Registry-Eintrag wurde als normale mehrzeilige Python-Struktur neu geschrieben. Der Fix ist auf main, aber nach diesem Commit noch nicht auf dem Server verifiziert.
+
+
+## Chat-Control-API-Test an echte Audit-Nahtstelle angepasst (2026-11-11)
+
+Der Serverlauf nach dem Syntaxfix sammelte die Tests wieder und meldete 108 bestanden, aber ein neuer API-Test patchte _audit_loop_control als Modulvariable. Die Funktion ist lokal in create_app definiert; der Test verwendet jetzt die echte modulweite Nahtstelle _audit_web_loop_event. Serververifikation nach diesem Testfix steht aus.
+
+## CI fuer Python-Quality-Gate und JavaScript-Syntax (2026-11-11)
+
+Das Repository hatte keinen GitHub-Actions-Workflow. Ein Workflow prueft nun auf Pushes nach main und Pull Requests Python 3.11, installiert requirements.txt, parst alle static/*.js-Dateien mit Node 20 und fuehrt tools.quality_gate aus. Der erste CI-Lauf nach Anlage steht zur Auswertung aus.
