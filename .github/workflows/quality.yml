@@ -18,6 +18,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Expose the production checkout path
+        run: sudo ln -s "$GITHUB_WORKSPACE" /opt/werkstatt
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
