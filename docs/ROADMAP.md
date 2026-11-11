@@ -36,7 +36,7 @@ Fehler, Run-Kontext und konkrete Diagnose.
 
 
 ### 2. Loop-Qualitaet und Betriebsnachweis
-- OP-398: begruendete Auswahl einzelner startbarer oder zusammenhaengender OPs.
+- OP-398: begruendete Auswahl einzelner startbarer oder zusammenhaengender OPs; jeder gruene Zwischenschritt wird gegen das Hauptziel geprueft, bevor der Loop selbst weiterarbeitet oder abschliesst.
 - OP-384–388 und OP-324: Scout-/Architect-Kontext, Reflection, Retrieval
   und begrenzte Plaene verbessern.
 - OP-280: Doku-Drift beim Verify zuverlaessig erkennen.

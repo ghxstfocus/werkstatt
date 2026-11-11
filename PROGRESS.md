@@ -5203,3 +5203,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Ein bestaetigter Chat-Start, bei dem bereits ein Loop laeuft, wird als `not_started` zurueckgegeben und als fehlgeschlagener Kontrollversuch gespeichert; er erscheint nicht mehr als abgeschlossene Aktion.
 - Die Chatkarte zeigt klar, dass kein neuer Run gestartet oder eingereiht wurde. Ein vorhandener Run wird nicht faelschlich dem neuen Auftrag zugeordnet.
 - Eine dauerhafte Warteschlange fuer solche Auftraege ist weiterhin Teil von OP-401/OP-397 und wird hier nicht vorgetaeuscht.
+
+## 2026-11-11 — Reflexion nach gruenen Zwischenschritten konkretisiert
+
+- OP-398 verlangt jetzt einen evidenzbasierten Zielabgleich nach jedem gruenen Schritt. Der Loop setzt innerhalb der freigegebenen Grenze selbststaendig fort, wenn Akzeptanzkriterien offen sind, und schliesst erst nach belegter Zielerreichung plus Abschluss-Verify ab.
+- Neue unabhaengige Funde werden als getrennte Folgearbeit vorgemerkt; echte Mehrdeutigkeit oder eine Scope-Erweiterung wird im Chat geklaert. Begrenzte Reflexion darf keine unbegrenzte Arbeit erzeugen.
+- Die Reflexion ist ein Steuerungsschritt zwischen Aufgaben, keine zusaetzliche Pflichtrolle bei jedem kleinen Tool-Aufruf.
