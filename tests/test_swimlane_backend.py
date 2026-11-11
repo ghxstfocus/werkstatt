@@ -122,3 +122,20 @@ def test_swimlane_ignoriert_migrated(projektion, tmp_path):
     assert sw["run_id"] == "r1", (
         f"migrated-Datei wurde gelesen, run_id war {sw['run_id']}"
     )
+
+def test_swimlane_explizite_run_id_bleibt_projektisoliert(projektion, tmp_path):
+    """Gleiche Run-ID darf keine Swimlane-Events fremder Projekte mischen."""
+    jetzt = datetime.now(UTC).isoformat()
+    _schreibe(tmp_path, [
+        {"kind": "builder_patch_updated", "run_id": "shared",
+         "project": "demo", "timestamp": jetzt, "agent": "builder"},
+        {"kind": "architect_plan", "run_id": "shared",
+         "project": "anderes-projekt", "timestamp": jetzt, "agent": "architect"},
+    ])
+    swimlane = inspector.aggregate_swimlane("demo", run_id="shared")
+    kinds = [
+        balken["kind"]
+        for lane in swimlane["lanes"] for balken in lane["balken"]
+    ]
+    assert "builder_patch_updated" in kinds
+    assert "architect_plan" not in kinds
