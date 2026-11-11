@@ -4925,7 +4925,7 @@ Die Modusleiste mit Cockpit, Control, Debug und Runs steht jetzt direkt unter de
 - Stop sendet vor SIGTERM ein idempotentes SIGCONT, damit ein zuvor pausierter
   Prozess das Terminationssignal empfangen kann.
 - Regressionstests pruefen konkurrierende Registry-Uebergaenge und ein
-  verschachteltes Resume waehrend Pause. Die Test-Prozesse verwenden eine
+  Resume-Request waehrend eines persistenten pausing-Zustands. Die Test-Prozesse verwenden eine
   lebende PID, damit Registry-Liveness den Control-Pfad realistisch abbildet.
 - **Verifikation laeuft:** GitHub Actions fuer den aktuellen main-Stand muss
   gezielte Web-Tests und den vollen Quality Gate noch bestaetigen.
