@@ -1137,10 +1137,10 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="message fehlt")
         if len(message) > 20000:
             raise HTTPException(status_code=413, detail="message zu lang")
-        if mode != "read":
+        if mode not in ("read", "debugger"):
             raise HTTPException(
                 status_code=400,
-                detail="Hintergrundjobs erlauben derzeit nur read-Modus",
+                detail="Hintergrundjobs erlauben nur read- oder debugger-Modus",
             )
         if not isinstance(idempotency_key, str) or not re.fullmatch(
             r"[A-Za-z0-9_.:-]{8,128}", idempotency_key,
@@ -1352,7 +1352,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="session_id fehlt")
         if not isinstance(message, str) or not message:
             raise HTTPException(status_code=400, detail="message fehlt")
-        if mode not in ("read", "write"):
+        if mode not in ("read", "write", "debugger"):
             raise HTTPException(status_code=400, detail="mode ungueltig")
         sid = _pruefe_session_id(session_id)
         session = _cs.ChatSession(projekt, sid)
