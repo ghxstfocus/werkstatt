@@ -1874,6 +1874,59 @@ def _validate_contract_or_audit(
         return False
 
 
+def _scout_skip_target(aufgabe: str, explorer_ctx: object, project_dir) -> str | None:
+    """Skip Scout only for an explicit, single-file, low-ambiguity edit.
+
+    Explorer evidence and an existing in-repo target are required. Search,
+    diagnosis, API, architecture, multi-file, and broad requests keep Scout.
+    """
+    text = str(aufgabe or "").strip()
+    if not text or project_dir is None or not isinstance(explorer_ctx, dict):
+        return None
+
+    paths = set(re.findall(
+        r"(?<![\w.-])(?:[\w.-]+/)*[\w.-]+\.(?:py|md)",
+        text,
+    ))
+    if len(paths) != 1:
+        return None
+    target = next(iter(paths))
+    target_path = Path(target)
+    if target_path.is_absolute() or ".." in target_path.parts:
+        return None
+    if target.startswith("tests/"):
+        return None
+
+    lowered = text.lower()
+    broad_markers = (
+        "alle ", "gesamt", "mehrere", "umfassend", "architektur",
+        "schnittstelle", "api", "debug", "fehler", "bug", "ursache",
+        "analys", "prüf", "pruef", "check", "review", "refactor",
+        "aufräum", "aufraeum", "migrier", "blockiert", "abhängig",
+        "abhaengig",
+    )
+    if any(marker in lowered for marker in broad_markers):
+        return None
+    edit_markers = (
+        "ändere", "aendere", "korrigiere", "ergänze", "ergaenze",
+        "aktualisiere", "entferne", "ersetze", "füge", "fuege",
+        "update", "change", "edit", "fix", "add", "remove", "replace",
+    )
+    if not any(marker in lowered for marker in edit_markers):
+        return None
+
+    explorer_files = explorer_ctx.get("key_files") or []
+    confirmed = {
+        item.get("file") for item in explorer_files
+        if isinstance(item, dict) and isinstance(item.get("file"), str)
+    }
+    if target not in confirmed:
+        return None
+    if not (Path(project_dir) / target_path).is_file():
+        return None
+    return target
+
+
 def run_planner(state: RunState) -> bool:
     """Erstellt den Plan. Schreibt in state.tasks/tests/akzeptanzkriterien."""
     pd = state.project_dir
@@ -2176,8 +2229,9 @@ def run_planner(state: RunState) -> bool:
     # (_zerlege_in_sub_tasks) macht daraus Tasks. Zwei Calls,
     # zwei Agents -- kein Tool-Use, kein JSON/Prosa-Raetsel.
 
-    # === GOLD: CALL 0 -- Scout (Code-Index + Auftrag) ===
-    _code_index = _baue_api_index(pd)
+    # OP-385: Scout nur aufrufen, wenn er fehlende Evidenz liefern kann.
+    # Bei einer expliziten Einzeldatei-Aenderung bestaetigt Explorer den
+    # Zielpfad; Architect plant weiterhin unabhaengig fuer das Plan-Gate.
     _key_files_scan: list[str] = []
     if isinstance(_explorer_ctx, dict):
         for _k in (_explorer_ctx.get("key_files") or []):
@@ -2185,9 +2239,32 @@ def run_planner(state: RunState) -> bool:
                 _kf = _k["file"]
                 if _kf not in _key_files_scan:
                     _key_files_scan.append(_kf)
-    _scout_report = _run_scout(
-        state, aufgabe, _code_index, _key_files_scan, api_key,
-    )
+
+    _scout_skip_path = _scout_skip_target(aufgabe, _explorer_ctx, pd)
+    if _scout_skip_path:
+        _code_index = {}
+        _scout_report = {
+            "ziel": aufgabe,
+            "relevante_dateien": [{
+                "pfad": _scout_skip_path,
+                "warum": "explorer_hat_explizites_einzeldateiziel_bestaetigt",
+            }],
+            "api_auszug": {},
+            "vorgeschlagene_aenderungen": [],
+            "risiken": [],
+            "auftrag_prosa": aufgabe,
+            "bereits_erfuellt": False,
+            "atomarer_plan": False,
+        }
+        audit("planner_scout_skipped", {
+            "grund": "explizite_einzeldatei_mit_explorer_beleg",
+            "datei": _scout_skip_path,
+        }, pd, pn)
+    else:
+        _code_index = _baue_api_index(pd)
+        _scout_report = _run_scout(
+            state, aufgabe, _code_index, _key_files_scan, api_key,
+        )
     if not isinstance(_scout_report, dict):
         audit("planner_scout_json_fehler",
               {"grund": "kein_structured_scout_report"}, pd, pn)

@@ -68,6 +68,69 @@ def test_planner_erstellt_plan(tmp_path):
         assert len(st.tasks) == 1
 
 
+def test_scout_skip_requires_explicit_single_file_and_explorer_evidence(tmp_path):
+    from werkstatt.planner import _scout_skip_target
+
+    target = tmp_path / "werkstatt" / "small.py"
+    target.parent.mkdir()
+    target.write_text("VALUE = 1\n", encoding="utf-8")
+    context = {"key_files": [{"file": "werkstatt/small.py"}]}
+
+    assert _scout_skip_target(
+        "Korrigiere werkstatt/small.py", context, tmp_path,
+    ) == "werkstatt/small.py"
+    assert _scout_skip_target(
+        "Prüfe den Fehler in werkstatt/small.py", context, tmp_path,
+    ) is None
+    assert _scout_skip_target(
+        "Korrigiere werkstatt/small.py und werkstatt/other.py",
+        context, tmp_path,
+    ) is None
+    assert _scout_skip_target(
+        "Korrigiere werkstatt/small.py",
+        {"key_files": []}, tmp_path,
+    ) is None
+
+
+def test_planner_skips_scout_but_keeps_architect_and_plan_path(tmp_path):
+    from werkstatt.planner import run_planner
+
+    target = tmp_path / "werkstatt" / "small.py"
+    target.parent.mkdir()
+    target.write_text("VALUE = 1\n", encoding="utf-8")
+    st = _state(tmp_path)
+    st.aufgabe = "Korrigiere werkstatt/small.py"
+    st.explorer_context = {
+        "key_files": [{"file": "werkstatt/small.py"}],
+        "findings": "Datei vorhanden",
+    }
+
+    def architect(_state, _aufgabe, _content, _key, _explorer):
+        _state.architect_prosa = "## Aenderung\nAendere VALUE in small.py."
+        return True
+
+    split_tasks = [{
+        "id": "t1",
+        "name": "Kleine Korrektur",
+        "action": "update",
+        "task_files": ["werkstatt/small.py"],
+        "dependencies": [],
+        "description": "Korrigiere die angegebene Stelle.",
+    }]
+    with patch("werkstatt.planner._run_scout", side_effect=AssertionError("Scout unnötig")), \
+         patch("werkstatt.planner.run_architect", side_effect=architect) as mock_architect, \
+         patch("werkstatt.planner._zerlege_in_sub_tasks", return_value=split_tasks), \
+         patch("werkstatt.planner.audit") as mock_audit:
+        assert run_planner(st) is True
+
+    mock_architect.assert_called_once()
+    assert st.tasks == split_tasks
+    assert any(
+        call.args[0] == "planner_scout_skipped"
+        for call in mock_audit.call_args_list
+    )
+
+
 def test_planner_ohne_key(tmp_path):
     st = _state(tmp_path)
     st.api_key = ""

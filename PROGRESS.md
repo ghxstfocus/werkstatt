@@ -5091,3 +5091,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 ## 2026-11-11 — Lifecycle-Audits explizit typisieren
 
 - Terminale Run-Ereignisse werden als direkte, typisierte Audit-Aufrufe emittiert, damit der Katalogtest neue und tote Kinds erkennt.
+
+## 2026-11-11 — Scout bedarfsbasiert ueberspringen
+
+- Der Planner ueberspringt den Scout nur bei einem expliziten, einzelnen Zielpfad, den der Explorer bestaetigt und der im Projekt existiert.
+- Such-, Diagnose-, Mehrdatei- und breite Auftraege behalten den Scout. Der Architect und das verpflichtende Plan-Gate bleiben in diesem Schritt unveraendert.
+- Routing-Entscheid und Zielpfad werden als `planner_scout_skipped` auditiert; Regressionstests belegen die Grenzen.
