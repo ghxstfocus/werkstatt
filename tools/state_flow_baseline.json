@@ -14,6 +14,7 @@
     "last_reject_kind",
     "last_reject_reason",
     "last_verify_errors",
+    "last_verify_results",
     "patches",
     "phasen",
     "reviewer_bugs",
