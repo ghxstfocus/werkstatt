@@ -96,3 +96,25 @@ def test_abandoned_control_transition_recovers_from_kernel_state(
     record = registry.read("demo")
     assert record is not None
     assert record["state"] == "running"
+
+
+
+def test_stop_claim_excludes_overlap_and_reclaims_stale_stop(tmp_path: Path):
+    db = tmp_path / "registry.db"
+    worker_a = LoopProcessRegistry(db)
+    worker_b = LoopProcessRegistry(db)
+    assert worker_a.reserve("demo", "run-a") == (True, None)
+    worker_a.register("demo", "run-a", os.getpid())
+
+    assert worker_a.claim_stop("demo", "run-a") is True
+    assert worker_b.read("demo")["state"] == "stopping"
+    assert worker_b.claim_stop("demo", "run-a") is False
+
+    with worker_a._connect() as conn:
+        conn.execute(
+            "UPDATE loop_processes SET updated_at=0 WHERE project='demo'"
+        )
+        conn.commit()
+
+    assert worker_b.claim_stop("demo", "run-a") is True
+    assert worker_a.claim_stop("demo", "run-a") is False
