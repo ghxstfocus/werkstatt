@@ -89,3 +89,8 @@ forbidden_modules = ["werkstatt.web"]
 # Redundante noqa werden in einer eigenen OP selektiv entfernt
 # (siehe PROGRESS.md / OP-147d).
 ignore = ["BLE001", "S110", "RUF100"]
+
+
+[tool.ruff.lint.per-file-ignores]
+# CLI-Tools are invoked via `python3 tools/<name>.py`; git tracks them as 100644.
+"tools/*.py" = ["EXE001"]
