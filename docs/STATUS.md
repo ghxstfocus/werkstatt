@@ -107,6 +107,40 @@ noch nicht vollstaendig.
 - **Blockiert von:** —
 
 
+### OP-399: Projekt-Hub mit GitHub- und lokalen Quellen
+- **Status:** open
+- **Prioritaet:** P1
+- **Typ:** project-platform
+- **Betroffene Dateien:** Projekt-Registry, Projektquellen-Adapter, Scaffolder, Projektleiste/Plus-Menue, GitHub- und Web-Tests
+- **Problem:** Heute arbeitet die UI mit auf dem Werkstatt-Server vorhandenen Projektverzeichnissen. Ein GitHub-Link kann nicht als gleichwertiges Projekt unter derselben Haube inspiziert und geoeffnet werden; das Plus-Menue bietet keine saubere Auswahl zwischen Anlegen und Oeffnen.
+- **Akzeptanzkriterien:**
+  - Ein Projekt kann entweder als lokales Serverprojekt oder aus einem validierten GitHub-Repository registriert werden. Die Quelle und ein aufgeloester Branch/Commit sind im Projektkontext sichtbar und pro Tab isoliert.
+  - GitHub-Links werden als Repository-, Branch-, Commit-, Datei-, Issue- oder PR-Kontext validiert und nur ueber einen erlaubten GitHub-Provider gelesen; beliebige URL-Fetches sind ausgeschlossen.
+  - Die Projektleiste bietet unter Plus getrennt: lokales Projekt anlegen, GitHub-Projekt hinzufuegen und bereits registriertes Projekt oeffnen.
+  - Werkstatt kann ein Repository ueber seine Quelle untersuchen, ohne dass dafuer vorher manuell auf dem Server kopiert oder geclont werden muss. Groessere Analyse-/Testaufgaben duerfen einen isolierten Checkout/Worktree verwenden.
+  - Der Scaffolder erkennt vorhandene Dokumentations-/Konventionen und zeigt vor Migration einen konkreten nicht-destruktiven Aenderungsplan samt Diff. Keine bestehende Datei wird ohne ausdrueckliche Freigabe ueberschrieben.
+  - Schreibzugriff auf Remote-Repositories arbeitet ausschliesslich in einem isolierten Checkout und Branch; Push, Merge oder Aenderungen am Default-Branch sind eigenstaendige, ausdruecklich freizugebende Aktionen.
+  - Private Repositories verwenden Least-Privilege-Authentifizierung; Tokens werden weder in Projektdateien noch Browserantworten oder Logs offengelegt.
+  - Tests decken Quellenisolation, Ref-Aufloesung, URL-Validierung, vorhandenes Projekt oeffnen, Migrationsvorschau, Ablehnung ohne Aenderung und Private-Repo-Fehler ab.
+- **Architektur:** vorgeschlagene Richtung in ADR-0030; Authentifizierung, Remote-Checkout und Secret-Backend muessen vor Umsetzung entschieden werden.
+- **Blockiert von:** —
+
+### OP-400: Provider- und Modellrouting je Projekt und Rolle
+- **Status:** open
+- **Prioritaet:** P2
+- **Typ:** model-configuration
+- **Betroffene Dateien:** Modell-Routing/Registry, Projektkonfiguration, Chat-/Loop-Einstellungen, Einstellungsseite, API-/Prompt-Tests
+- **Problem:** Modelle werden global pro Rolle geroutet. Nutzer sollen pro Projekt gezielt Anbieter und Modelle fuer Architect, Builder, Reviewer, Chat und Debugger waehlen koennen, ohne die bestehende globale Standardkonfiguration zu verlieren.
+- **Akzeptanzkriterien:**
+  - Projektbezogene Modell-Einstellungen listen alle registrierten Rollen mit effektiver Provider-/Modellwahl, erforderlichen Faehigkeiten und Herkunft (Projekt-Override oder globaler Default).
+  - Overrides koennen pro Rolle gesetzt oder auf den globalen Default zurueckgesetzt werden. Bestehendes Rollenrouting bleibt bei fehlenden Overrides unveraendert.
+  - Modellwahl wird serverseitig gegen einen zentralen Modell-/Capability-Katalog validiert; ungueltige, nicht verfuegbare oder fuer eine Rolle unpassende Kombinationen fail-closed abgewiesen.
+  - Zugangsdaten werden als serverseitige Secret-Referenzen verwaltet, nicht als Klartext in Projektkonfiguration, Git, Browserantwort oder Logs. Die UI kann weder bestehende Secrets lesen noch bei leerem Eingabefeld versehentlich loeschen.
+  - Eine Verbindungspruefung gibt nur einen redigierten Status und einen konkreten Fehlergrund aus. Aenderungen werden auditiert und sind auf das ausgewaehlte Projekt begrenzt.
+  - Tests decken globale Defaults, Projekt-Overrides, Rollenfaehigkeiten, Secret-Redaktion, ungueltige Provider und Projektisolation ab.
+- **Architektur:** ADR-0030 proposed; bestehende Defaults (z. B. Architect-Reasoner) bleiben bis zur expliziten Projektwahl erhalten.
+- **Blockiert von:** —
+
 ### OP-281: Scout-Redundanz messen vor Umbau
 - **Status:** open
 - **Blockiert von:** OP-385 (Scout-Kette reparieren — Messung erst sinnvoll wenn Architect nur Scout-Output sieht)
