@@ -69,7 +69,7 @@ def test_chat_loop_mit_tool_call(session, fake_llm) -> None:
     assert len(tr["payload"]["content"]) > 0
 
 
-def test_chat_loop_max_rounds(session, fake_llm) -> None:
+def test_chat_loop_stagnation_liefert_belegte_antwort(session, fake_llm) -> None:
     wieder = {
         "role": "assistant",
         "content": None,
@@ -79,9 +79,51 @@ def test_chat_loop_max_rounds(session, fake_llm) -> None:
             "function": {"name": "diagnose", "arguments": "{}"},
         }],
     }
-    fake_llm(*([wieder] * 3))
-    antwort = chat_agent.chat_loop(session, "loop", max_rounds=3)
-    assert "max_rounds" in antwort
+    fake_llm(
+        wieder, wieder, wieder,
+        {"role": "assistant", "content": "Ich habe den Status geprueft."},
+    )
+    antwort = chat_agent.chat_loop(session, "Pruefe den Status")
+
+    assert antwort == "Ich habe den Status geprueft."
+    assert "max_rounds" not in antwort
+    assert session.load()[-1]["payload"]["text"] == antwort
+
+
+def test_chat_loop_standard_laeuft_ueber_fuenf_toolrunden(
+    session, fake_llm, tmp_path: Path,
+) -> None:
+    tool_calls = []
+    for index in range(6):
+        name = f"status-{index}.txt"
+        (tmp_path / name).write_text(f"Beleg {index}", encoding="utf-8")
+        tool_calls.append({
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": f"read-{index}",
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "arguments": json.dumps({"path": name}),
+                },
+            }],
+        })
+    fake_llm(
+        *tool_calls,
+        {"role": "assistant", "content": "Alle sechs Belege sind gelesen."},
+    )
+
+    antwort = chat_agent.chat_loop(
+        session, "Pruefe den Fortschritt", project_dir=tmp_path,
+    )
+
+    assert antwort == "Alle sechs Belege sind gelesen."
+    results = [event for event in session.load() if event["kind"] == "tool_result"]
+    assert len(results) == 6
+    assert {event["payload"]["content"] for event in results} == {
+        f"Beleg {index}" for index in range(6)
+    }
 
 
 def test_chat_loop_unbekanntes_tool(session, fake_llm) -> None:
