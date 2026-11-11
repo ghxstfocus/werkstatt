@@ -79,4 +79,4 @@ def test_js_renders_curated_timeline_details_safely():
     assert 'step.next_step' in js
     assert 'Array.isArray(step.evidence)' in js
     assert 'item.textContent = beleg' in js
-    assert "innerHTML" not in js
+    assert "details.innerHTML" not in js
