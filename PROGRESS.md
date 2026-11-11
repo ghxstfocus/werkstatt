@@ -4947,3 +4947,12 @@ Ein Worker, der einen Loop bereits als `stopping` beansprucht hat, schuetzt den 
 - Registry-Regressionstest prueft erstmaligen Claim, Konflikt eines zweiten Workers, Wiederuebernahme nach abgelaufenem Claim und Ablehnung eines zweiten frischen Claims.
 - GitHub Actions auf `4a39e09`: **1927 passed, 5 skipped**; Ruff/Mypy 0, AST 370 Dateien / 0 Fehler, Audit-Katalog bestanden; Quality Gate `ok: true`, `regression: false`.
 - Neue Produktanforderungen sind in OP-399/OP-400 und der vorgeschlagenen ADR-0030 als offene Arbeit erfasst.
+
+
+## 2026-11-11 — OP-240 DebuggerFix-Vertrag abgesichert
+
+Ein neuer Validierungsbaustein definiert den strukturierten Debugger-Patch als unveraenderlichen Datensatz mit Signatur, Ursache, Diff, exakten Dateipfaden, Confidence, Projekt, Ursprungs-Run und Basis-Commit. Der SHA-256 bindet alle diese Felder einschliesslich des exakten Diff-Inhalts. Pfad-Traversal, interne Werkstatt-/Git-Pfade, erkennbare Secret-Pfade, Binaer-/Rename-/Modus-/Submodule-Aenderungen, unpassende Dateilisten und geaenderte Basis-HEADs werden fail-closed abgewiesen.
+
+- Checkout-Pruefung verwendet nur `git apply --check`; der Baustein schreibt keinen Produktionscode.
+- Regressionstests decken Hash-Bindung, Kontextbindung, ungueltige Pfade, Diff-/Dateilisten-Abweichung und HEAD-Wechsel ab.
+- Die Freigabekarte und der tatsaechliche CLI-Handoff sind weiterhin offen; OP-240 bleibt offen, bis sie den selben Vertrag nutzen und die Loop-Gates nachweislich erhalten bleiben.

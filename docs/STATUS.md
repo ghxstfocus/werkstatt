@@ -430,7 +430,7 @@ noch nicht vollstaendig.
 
 - **Tests:** `tests/test_chat_debugger.py` (neu),
   `tests/test_debugger_memory_hook.py` (neu, OP-243)
-- **Implementierungsstand 2026-11-11:** `pytest_run` und `write_temp_test` sind im Chat-Agent bereits fail-closed auf `mode="debugger"` begrenzt; der UI-Modus `debug` wird jetzt als `debugger` bis zum asynchronen Chat-Job weitergereicht. Cockpit/Control bleiben `read`; direkte Chat-/WebSocket-Endpunkte akzeptieren den Debugger-Modus, waehrend Chat-Jobs `write` weiterhin ablehnen. Der Debugger fuehrt noch keine Produktions-Patches aus und erfuellt die Patch-Hash-Freigabe-/Loop-Uebergabe-Kriterien (d)/(h) noch nicht.
+- **Implementierungsstand 2026-11-11:** `pytest_run` und `write_temp_test` sind im Chat-Agent bereits fail-closed auf `mode="debugger"` begrenzt; der UI-Modus `debug` wird jetzt als `debugger` bis zum asynchronen Chat-Job weitergereicht. Cockpit/Control bleiben `read`; direkte Chat-/WebSocket-Endpunkte akzeptieren den Debugger-Modus, waehrend Chat-Jobs `write` weiterhin ablehnen. Der Debugger fuehrt noch keine Produktions-Patches aus und erfuellt die Patch-Hash-Freigabe-/Loop-Uebergabe-Kriterien (d)/(h) noch nicht. Ein zentraler `DebuggerFix`-Vertrag mit kanonischem SHA-256, Pfad-/Diff-Pruefung und nicht-schreibendem `git apply --check` ist jetzt als Fundament angelegt; Freigabekarte und CLI-Uebergabe bleiben offen.
 - **Blockiert von:** —
 - **Lern-Hook:** OP-243 (Debugger → Memory)
 
