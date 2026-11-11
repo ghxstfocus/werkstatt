@@ -174,6 +174,19 @@
           hatNachricht = true;
           _karte("user", p.user_text || "");
           _karte("assistant", p.assistant_text || "");
+        } else if (kind === "loop_action_proposed") {
+          hatNachricht = true;
+          _proposalKarte(p, "pending");
+        } else if (kind === "loop_action_confirmed") {
+          _updateProposalStatus(p.proposal_id, "Bestätigt · Ausführung läuft");
+        } else if (kind === "loop_action_rejected") {
+          _updateProposalStatus(p.proposal_id, "Abgelehnt");
+        } else if (kind === "loop_action_expired") {
+          _updateProposalStatus(p.proposal_id, "Abgelaufen");
+        } else if (kind === "loop_action_completed") {
+          _updateProposalStatus(p.proposal_id, "Abgeschlossen");
+        } else if (kind === "loop_action_failed") {
+          _updateProposalStatus(p.proposal_id, "Fehlgeschlagen: " + (p.error || "unbekannter Fehler"));
         } else if (kind === "tool_call") {
           (p.tool_calls || []).forEach(function (tc) {
             _toolKarte(tc.function && tc.function.name || "?", null, "ok");
@@ -474,6 +487,82 @@
     job.toolCards.push({name: name || "?", card: card});
   }
 
+  function _updateProposalStatus(id, text) {
+    var box = _el("chat-nachrichten");
+    if (!box) return;
+    var cards = box.querySelectorAll("[data-proposal-id]");
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].dataset.proposalId !== id) continue;
+      var state = cards[i].querySelector(".proposal-state");
+      if (state) state.textContent = text;
+      cards[i].querySelectorAll("button").forEach(function (button) { button.remove(); });
+    }
+  }
+
+  function _proposalKarte(proposal, status) {
+    if (!proposal || !proposal.proposal_id) return;
+    var box = _el("chat-nachrichten");
+    if (!box) return;
+    var existing = box.querySelectorAll("[data-proposal-id]");
+    for (var i = 0; i < existing.length; i++) {
+      if (existing[i].dataset.proposalId === proposal.proposal_id) return;
+    }
+    var card = document.createElement("section");
+    card.className = "chat-action-proposal";
+    card.dataset.proposalId = proposal.proposal_id;
+    var title = document.createElement("strong");
+    title.textContent = proposal.summary || ("Loop " + proposal.action);
+    card.appendChild(title);
+    var detail = document.createElement("p");
+    detail.textContent = "Projekt: " + (proposal.project || zustand.projekt) + " · Aktion: " + proposal.action;
+    card.appendChild(detail);
+    if (proposal.arguments && proposal.arguments.aufgabe) {
+      var task = document.createElement("pre");
+      task.textContent = proposal.arguments.aufgabe;
+      card.appendChild(task);
+    }
+    var state = document.createElement("span");
+    state.className = "proposal-state";
+    state.textContent = status || "Wartet auf deine Bestätigung";
+    card.appendChild(state);
+    if (!status || status === "pending") {
+      ["confirm", "reject"].forEach(function (decision) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.textContent = decision === "confirm" ? "Bestätigen" : "Ablehnen";
+        button.addEventListener("click", function () {
+          var siblings = card.querySelectorAll("button");
+          siblings.forEach(function (other) { other.disabled = true; });
+          state.textContent = decision === "confirm" ? "Aktion wird ausgeführt …" : "Vorschlag wird abgelehnt …";
+          fetch("/api/projects/" + encodeURIComponent(zustand.projekt) + "/chat/actions/" +
+            encodeURIComponent(proposal.proposal_id), {
+              method: "POST", credentials: "same-origin",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({session_id: zustand.sessionId, decision: decision})
+            }).then(function (response) {
+              return response.json().then(function (data) {
+                if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
+                return data;
+              });
+            }).then(function (data) {
+              state.textContent = data.state === "completed" ? "Abgeschlossen" :
+                data.state === "rejected" ? "Abgelehnt" :
+                  data.state === "expired" ? "Abgelaufen" : "Status: " + data.state;
+              if (data.result && data.result.run_id) state.textContent += " · Run " + data.result.run_id;
+            }).catch(function (error) {
+              state.textContent = "Fehler: " + error.message;
+              siblings.forEach(function (other) { other.disabled = false; });
+            });
+        });
+        card.appendChild(button);
+      });
+    }
+    var empty = box.querySelector(".chat-empty");
+    if (empty) empty.remove();
+    box.appendChild(card);
+    box.scrollTop = box.scrollHeight;
+  }
+
   function _jobToolResult(job, name, content) {
     if (!_jobAktiv(job.project, job.sessionId, job.request)) return;
     for (var i = job.toolCards.length - 1; i >= 0; i--) {
@@ -484,6 +573,13 @@
       var pre = document.createElement("pre");
       pre.textContent = content || "";
       item.card.appendChild(pre);
+      if (name === "request_loop_action") {
+        try {
+          var proposal = JSON.parse(content || "{}");
+          if (proposal.zustand === "proposal") _proposalKarte(proposal, "pending");
+          else if (proposal.zustand === "needs_input") _karte("assistant", "Für diese Loop-Aktion brauche ich noch eine Klärung: " + (proposal.detail || JSON.stringify(proposal.auswahl || {})));
+        } catch (e) {}
+      }
       return;
     }
   }
