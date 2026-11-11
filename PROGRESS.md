@@ -5116,3 +5116,10 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Ein eng begrenzter deterministischer Pfad erkennt wortwoertliche Einzeldatei-Ersetzungen mit Explorer-Beleg und exakt einmaligem aktuellem Treffer.
 - In diesem Fall erstellt der Planner direkt einen pruefbaren Ein-Task-Plan; Scout, Architect und Task-Split entfallen. Mehrdeutige oder veraltete Treffer fallen auf den bisherigen Reasoning-Pfad zurueck.
 - Planquelle und Architect-Bypass werden auditiert; Regressionstests decken Skip und Eskalation ab. Das Plan-Gate bleibt unveraendert verpflichtend.
+
+## 2026-11-11 — Server-Fetch fuer GitHub-verbundene Projekt-Runs festhalten
+
+- OP-399/ADR-0030 praezisieren: Der Werkstatt-Server muss den registrierten Ref vor einem GitHub-verbundenen Run selbst abrufen und die ausfuehrende Revision auf eine Commit-SHA pinnen.
+- Der Run nutzt einen verwalteten isolierten Checkout; lokale Serverdateien und uncommittete Aenderungen werden nicht ueberschrieben oder ungefragt mit Remote-Arbeit vermischt.
+- Reine lokale Projekte laufen weiterhin direkt aus ihrem Serverpfad. Fetch-/Auth-/Ref-Fehler stoppen Remote-Runs sichtbar; Push/Merge bleibt separat freigabepflichtig.
+- ADR-0030 bleibt vorgeschlagen, bis Git-Authentifizierung und die weiteren dortigen Architekturfragen entschieden sind.

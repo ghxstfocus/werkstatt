@@ -30,12 +30,23 @@ in Repo-Dateien oder Git landen.
    autorisiertes Repository ueber einen GitHub-Provider lesen. Ein URL-Paste
    darf nur nach Validierung auf einen unterstuetzten GitHub-Host zum Adapter
    fuehren; frei formulierter URL-Fetch ist ausgeschlossen.
-3. **Schreibarbeit in isoliertem Checkout:** Wenn ein Remote-Projekt durch den
-   Coding-Loop bearbeitet wird, erfolgt die Arbeit in einem isolierten lokalen
-   Checkout/Worktree auf einem benannten Branch. Vorschau und Aenderungen
-   laufen durch Plan-Gate, Patch-Freigabe, Verify, Review und Human-Gate.
-   Merge oder Push auf den Default-Branch ist keine implizite Folge einer
-   Freigabe.
+3. **Serverseitiger Fetch vor Remote-Runs:** Ist ein Projekt als
+   GitHub-Quelle oder als mit GitHub-Remote verknuepftes Projekt registriert,
+   ruft der Werkstatt-Server vor jedem Run den konfigurierten Branch/Ref selbst
+   ab. Er pinnt den aufgeloesten Commit-SHA und startet den Loop in einem
+   verwalteten, isolierten Server-Checkout/Worktree. Ein manueller Clone/Pull
+   durch den Nutzer ist fuer diesen Pfad nicht erforderlich. Der kanonische
+   Server-Checkout und lokale, uncommittete Aenderungen werden dabei nie
+   ueberschrieben oder stillschweigend verworfen; sie gehoeren nur dann zum Run,
+   wenn der Nutzer explizit die lokale Quelle waehlt. Fetch-/Auth-/Ref-Fehler
+   verhindern den Run und werden samt Projekt/Ref sichtbar gemeldet. Push oder
+   Merge zum Remote-Default-Branch ist keine implizite Folge einer Freigabe.
+   Der Fetch nutzt ausschliesslich serverseitig konfigurierte Git-
+   Zugangsdaten; Tokens/Schluessel werden weder in Projektdateien gespeichert
+   noch in Logs oder Browserantworten ausgegeben. Reine lokale Serverprojekte
+   werden direkt aus ihrem registrierten Pfad bearbeitet und benoetigen weder
+   Git noch GitHub. Ein schmutziger kanonischer Checkout wird nicht als
+   Arbeitsverzeichnis fuer einen Remote-Run benutzt und bleibt unveraendert.
 4. **Werkstatt-Onboarding:** Der Scaffolder erkennt vorhandene Konventionen
    und erzeugt vor einer Migration einen konkreten, nicht-destruktiven Plan
    samt Diff. Er ueberschreibt weder Projektdateien noch Dokumente still.

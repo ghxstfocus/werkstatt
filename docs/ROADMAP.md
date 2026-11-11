@@ -45,8 +45,8 @@ dieses Betriebsnachweises.
 
 
 ### 3. Projektquellen und Modellwahl
-- OP-399: lokale und GitHub-Projekte registrieren, untersuchen und sicher
-  in Werkstatt-Konventionen ueberfuehren.
+- OP-399: lokale und GitHub-Projekte registrieren, auf dem Server fuer Runs
+  selbst fetch/pinnen und sicher in Werkstatt-Konventionen ueberfuehren.
 - OP-400: Provider und Modell je Projekt und Rolle mit geerbten Defaults.
 
 ADR-0030 ist vorgeschlagen. Vor Remote-Schreiben, Authentifizierung oder

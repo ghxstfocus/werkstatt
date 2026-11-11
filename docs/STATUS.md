@@ -36,8 +36,8 @@ Letzte Aktualisierung: 2026-11-11.
 - **Status:** open
 - **Typ:** project-platform
 - **Betroffene Dateien:** Projekt-Registry, Quellenadapter, Scaffolder, Projektleiste und Tests
-- **Akzeptanzkriterien:** Plus kann lokale Projekte anlegen, GitHub-Quellen hinzufuegen und registrierte Projekte oeffnen. Quellen/Refs werden validiert; Analyse benoetigt keinen manuellen Server-Klon. Migration zeigt zuerst einen nicht-destruktiven Diff; Remote-Schreiben erfolgt nur in isoliertem Branch nach eigener Freigabe.
-- **Tests:** URL-/Ref-Validierung, Isolation, Migrationsvorschau und Ablehnung ohne Aenderung.
+- **Akzeptanzkriterien:** Plus kann lokale Projekte anlegen, GitHub-Quellen hinzufuegen und registrierte Projekte oeffnen. Quellen/Refs werden validiert. Vor jedem Run eines GitHub-verbundenen Projekts fetch't der Server den konfigurierten Ref selbst, pinnt dessen Commit-SHA und startet in einem verwalteten isolierten Checkout/Worktree; ein manueller Clone/Pull ist nicht erforderlich. Lokale Serverprojekte laufen direkt aus ihrem Pfad. Ein lokaler Checkout wird nie durch Fetch/Reset ueberschrieben; uncommittete lokale Aenderungen werden nicht still in einen GitHub-Run gemischt. Fetch-, Auth- oder Ref-Fehler stoppen den Start mit klarer Ursache; ein schmutziger kanonischer Checkout bleibt unveraendert und wird nicht in den Remote-Run aufgenommen. Migration zeigt zuerst einen nicht-destruktiven Diff; Remote-Schreiben erfolgt nur im isolierten Branch nach eigener Freigabe.
+- **Tests:** URL-/Ref-Validierung, serverseitiger Fetch und SHA-Pinning, lokale Quelle ohne Git, Projekt-/Worktree-Isolation, Ablehnung bei Fetch/Auth/Ref-Fehlern, Erhalt lokaler uncommitteter Aenderungen ohne deren Aufnahme in Remote-Runs sowie Migrationsvorschau und Ablehnung ohne Aenderung.
 - **Architektur-Voraussetzung:** ADR-0030
 - **Blockiert von:** —
 
