@@ -3254,3 +3254,19 @@ body[data-mode="control"] .lf-step-detail {
     white-space: normal;
   }
 }
+
+
+/* Chat actions: explicit, project-scoped loop confirmation. */
+.chat-action-proposal {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.8rem 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--accent, #a855f7);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent, #a855f7) 8%, var(--surface, #1d1d22));
+}
+.chat-action-proposal p { margin: 0; color: var(--text-muted, #a5a5b0); }
+.chat-action-proposal pre { max-height: 14rem; overflow: auto; white-space: pre-wrap; }
+.chat-action-proposal .proposal-state { font-size: 0.9em; }
+.chat-action-proposal button { justify-self: start; min-height: 2.25rem; }
