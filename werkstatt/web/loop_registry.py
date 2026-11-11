@@ -16,6 +16,18 @@ from pathlib import Path
 from typing import Any
 
 _STARTING_TTL_SECONDS = 60.0
+_LIVE_STATES = ("running", "paused", "pausing", "resuming", "stopping")
+_ALLOWED_TRANSITIONS = {
+    ("running", "pausing"),
+    ("paused", "resuming"),
+    ("running", "stopping"),
+    ("paused", "stopping"),
+    ("pausing", "running"),
+    ("pausing", "paused"),
+    ("resuming", "paused"),
+    ("resuming", "running"),
+    ("stopping", "idle"),
+}
 
 
 def _process_snapshot(pid: int) -> tuple[str, str] | None:
@@ -124,7 +136,7 @@ class LoopProcessRegistry:
                 and now - record["updated_at"] > _STARTING_TTL_SECONDS
             )
             dead_process = (
-                state in ("running", "paused")
+                state in _LIVE_STATES
                 and not _pid_alive(record["pid"], record["process_identity"])
             )
             if expired_start or dead_process:
@@ -160,7 +172,7 @@ class LoopProcessRegistry:
                     and now - existing["updated_at"] <= _STARTING_TTL_SECONDS
                 )
                 process_live = (
-                    state in ("running", "paused")
+                    state in _LIVE_STATES
                     and _pid_alive(existing["pid"], existing["process_identity"])
                 )
                 if starting_live or process_live:
@@ -205,6 +217,34 @@ class LoopProcessRegistry:
                 "ELSE process_identity END, updated_at=? "
                 "WHERE project=? AND run_id=?",
                 (state, state, state, time.time(), project, run_id),
+            )
+            conn.commit()
+            return cur.rowcount == 1
+
+    def transition(
+        self,
+        project: str,
+        run_id: str,
+        expected_state: str,
+        state: str,
+    ) -> bool:
+        """Compare-and-set a cross-worker loop control transition."""
+        if (expected_state, state) not in _ALLOWED_TRANSITIONS:
+            raise ValueError(
+                f"ungueltiger Loop-Uebergang: {expected_state} -> {state}"
+            )
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            cur = conn.execute(
+                "UPDATE loop_processes SET state=?, "
+                "pid=CASE WHEN ?='idle' THEN NULL ELSE pid END, "
+                "process_identity=CASE WHEN ?='idle' THEN NULL "
+                "ELSE process_identity END, updated_at=? "
+                "WHERE project=? AND run_id=? AND state=?",
+                (
+                    state, state, state, time.time(),
+                    project, run_id, expected_state,
+                ),
             )
             conn.commit()
             return cur.rowcount == 1
