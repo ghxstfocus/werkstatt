@@ -5303,3 +5303,9 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 
 - Nutzer-Bubbles teilen jetzt die Assistant-Lesebreite und sitzen am rechten Rand dieser Spalte; auf schmalen Displays nutzen sie den verfügbaren Platz.
 - Ein Frontend-Test sichert Desktop-Breite, Ausrichtung und Mobile-Grenze.
+
+
+## 2026-11-11 — Architektur-Doku mit angenommenen ADRs abgleichen
+
+- ARCHITECTURE.md behauptete noch, ADR-0030 sei proposed, beschrieb Worktrees innerhalb des Checkouts und zeigte Scout/Architect als starre Pflichtkette.
+- Aussagen sind mit ADR-0030, STATUS.md und den aktuellen Pfaden in project_sources.py/planner.py abgeglichen. OP-399/400 bleiben als offene Umsetzung gekennzeichnet.
