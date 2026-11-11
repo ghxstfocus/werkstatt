@@ -51,7 +51,7 @@ def _task_ende(
     failure: str | None = None,
     dateien: list[str] | None = None,
     human_review: bool = False,
-) -> None:
+) -> bool:
     """M-307b (A1): zentrale Task-Ende-Behandlung.
 
     Kapselt mark_done/mark_failed + progress.append in EINEM
@@ -86,7 +86,7 @@ def _task_ende(
             getattr(state, "project_dir", None),
             getattr(state, "project_name", "?"),
         )
-        return
+        return False
 
     pd = getattr(state, "project_dir", None)
     # OP-064a-Live-Fix (2026-11-01): Spec-Widerspruch aus reflection.py
@@ -111,7 +111,7 @@ def _task_ende(
             phase_state.mark_human_review(
                 task_id, grund="spec_widerspruch_vermutet",
             )
-        return
+        return False
     # OP-064a: Sticky-Veto respektieren. Wenn vetoed und ok=True:
     # kein mark_done, stattdessen human_review.
     # Defensiv: nur echte PhaseState-Instanzen fragen (MagicMock in
@@ -132,13 +132,13 @@ def _task_ende(
         phase_state.mark_human_review(
             task_id, grund="veto_nicht_aufgehoben",
         )
-        return
+        return False
     if human_review:
         # OP-060b: human_review ist Endstatus, kein done/failed.
         phase_state.mark_human_review(
             task_id, grund=failure or "unknown",
         )
-        return
+        return False
     if ok:
         phase_state.mark_done(task_id)
         if pd is not None and not _hat_op_nnn(state):
@@ -168,6 +168,7 @@ def _task_ende(
                         "failure": failure or "unknown",
                         "dateien": list(dateien or []),
                     }, ensure_ascii=True) + "\n")
+    return bool(ok)
             except (OSError, TypeError):
                 pass
         if pd is not None and not _hat_op_nnn(state):
