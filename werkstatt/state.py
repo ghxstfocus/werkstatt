@@ -278,6 +278,10 @@ class RunState:
     # Wert kein Verhaltensdelta.
     letzter_test_fehler: str = ""
     last_verify_errors: list = field(default_factory=list)
+    # Begrenzte strukturierte Verify-Belege fuer Reflection/Builder.
+    # Ein Eintrag je ausgefuehrter Stage: ID, Exit-Status und extrahierter
+    # Fehlerkern; kein voller Tool-Output und keine internen Gedanken.
+    last_verify_results: list[dict[str, Any]] = field(default_factory=list)
     last_verify_hart_stages: set = field(default_factory=set)
     messungen_nach_apply: list = field(default_factory=list)
     phase_review_uebersprungen: str = ""
