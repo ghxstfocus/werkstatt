@@ -5222,3 +5222,11 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Erste UI-Etappe umgesetzt: Der Chat zeigt je Hintergrundauftrag nur einen aktuellen, natuerlich formulierten Status, ersetzt ihn beim Schrittwechsel und zeigt nach Abschluss die Antwort. Tool-Schrittlisten und Tool-Ergebnisse werden nicht mehr im Chat angezeigt. Die ausfuehrliche Control-Timeline mit Belegen und Replay steht noch aus.
 
 - Der Chat zeigt nur die aktuelle temporaere Aktivitaet in normaler Sprache. Control enthaelt den detaillierten, replaybaren Schrittverlauf.
+
+
+## 2026-11-11 — Control-Timeline-Projektisolation
+
+- JSONL-basierte Timeline-, Aktivitaets-, Swimlane- und Live-Feed-Aggregatoren filterten teilweise nur dann nach Projekt, wenn keine Run-ID vorgegeben war. Eine explizite oder kollidierende Run-ID konnte deshalb Auditdaten anderer Projekte in der UI zeigen.
+- Alle vier Aggregatoren begrenzen die Daten jetzt immer zuerst auf das angefragte Projekt; Legacy-Events ohne Projektzuordnung gelten weiterhin ausschliesslich als Werkstatt-Events.
+- Regressionstests decken identische Run-IDs in mehreren Projekten fuer Timeline, aktive Rolle, Swimlane und Live-Feed ab.
+- Das schliesst einen konkreten Teil der Projektisolationskriterien aus ADR-0031 und OP-394 ab; die vollstaendige Control-Timeline bleibt offen.
