@@ -256,13 +256,18 @@ class ChatJobStore:
             return {"job_id": job_id, "state": state}
 
     def cancellation_requested(self, job_id: str, worker_id: str) -> bool:
+        """Beendet stale Worker fail-closed bei Cancel oder verlorenem Lease."""
         with closing(self._connect()) as conn:
             row = conn.execute(
-                "SELECT cancel_requested FROM jobs "
-                "WHERE job_id=? AND state='running' AND worker_id=?",
-                (job_id, worker_id),
+                "SELECT state,worker_id,cancel_requested FROM jobs WHERE job_id=?",
+                (job_id,),
             ).fetchone()
-        return bool(row and row["cancel_requested"])
+        return (
+            row is None
+            or row["state"] != "running"
+            or row["worker_id"] != worker_id
+            or bool(row["cancel_requested"])
+        )
 
     def heartbeat(self, job_id: str, worker_id: str) -> bool:
         """Erneuert die Lease nur fuer den Worker, der den Job beansprucht hat."""
