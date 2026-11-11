@@ -200,6 +200,9 @@ def abschnitt_regeln() -> str:
 """
 
 
+MERKPOSTEN = WERKSTATT / "docs" / "MERKPOSTEN.md"
+
+
 def abschnitt_merkposten(max_sektionen: int = 20) -> str:
     """Laedt die letzten N Sektionen aus docs/MERKPOSTEN.md.
 
