@@ -917,13 +917,15 @@ def create_app() -> FastAPI:
                     status_code=409,
                     detail=f"Loop-Kontrollaktion laeuft bereits: {state}",
                 )
-            if state in ("running", "paused"):
-                if not registry.transition(projektname, run_id, state, "stopping"):
-                    raise HTTPException(status_code=409, detail="Loop-Zustand wurde parallel geaendert")
-            elif state != "stopping":
+            if state not in ("running", "paused", "stopping"):
                 raise HTTPException(
                     status_code=409,
                     detail=f"Loop kann gerade nicht gestoppt werden: {state}",
+                )
+            if not registry.claim_stop(projektname, run_id):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Loop-Kontrollaktion laeuft bereits oder Stop wird erneut versucht",
                 )
             _PAUSIERTE_LOOPS.discard(projektname)
             if os.name == "posix":
