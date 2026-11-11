@@ -4,36 +4,9 @@ Format aus `DOC_CONVENTIONS.md` §5. Nur offene, **loop-faehige** OPs.
 `—` in Feldern = noch nicht spezifiziert (Loop praezisiert bei Bearbeitung).
 Letzte Aktualisierung: 2026-11-11.
 
-Roadmap-Phasen (M-NNN, nicht loop-faehig) stehen seit 2026-11-03 in
-`docs/ROADMAP.md`, Abschnitt "Aus STATUS.md (Loop-Queue)".
+Roadmap-Phasen und aktueller Arbeitsfokus stehen ausschliesslich in
+`docs/ROADMAP.md`; diese Datei bleibt die Queue der offenen Loop-faehigen OPs.
 
-
-## Roadmap 2026-11 (User-Direktive 2026-11-10)
-
-**Phase 1 — UI ready fuer die eigentliche Arbeit**
-
-1. OP-381c — Gate-Modal-Redesign (Vollbild, Copy, strukturiert)
-2. OP-381b — Freitext-Gate (plan_reason im Modal)
-3. OP-306  — 3 Modi: Wasserfall + Debug + Cockpit
-4. OP-306b — Etappe 2-4: Startseite / Overview
-5. Interfaces — Verify/CI-Status, Rollen-Details, Debug-Ansicht
-
-**Phase 2 — Loop stabilisieren, mit UI im Betrieb**
-
-6. OP-382  — Dogfooding: 10x echte OPs durch die UI
-7. Debugger-Modus als wichtigstes Werkzeug (Kette fertig machen)
-8. Loop zuverlaessig: konstant Erfolge, keine Abbrueche
-
-**Phase 3 — Kernarbeit am Loop**
-
-9. Erst wenn Phase 2 gruen: Selbstverbesserung (OP-376-379),
-   Memory-Graph (OP-380), Gehirn (OP-220 ff.)
-
-**Regel:** Phase 3 ist gesperrt bis Phase 2 nachweislich stabil ist.
-Die Kette selbst ist in Phase 2 fertig zu bauen — sie ist heute
-noch nicht vollstaendig.
-
----
 
 ## Offene Punkte
 
@@ -41,7 +14,7 @@ noch nicht vollstaendig.
 - **Status:** open
 - **Typ:** ui-orchestration
 - **Betroffene Dateien:** `werkstatt/chat_agent.py`, `werkstatt/chat_tools.py`, `werkstatt/web/app.py`, `static/chat.js`, `static/layout.css`, Chat- und Web-Tests
-- **Problem:** Der Chat ist read-only und getrennt von der Loop-Steuerung. Projektfragen sollen natuerlich formuliert werden koennen; der Chat muss das Repo untersuchen, Belege liefern, Aktionen verstaendlich erklaeren und waehrend eines Runs ansprechbar bleiben. Schreibende Aktionen erfordern eine ausdrueckliche Freigabe im Chat, bevor Aenderungen ausgefuehrt werden.
+- **Problem:** Projektbezogene Analyse und bestaetigungspflichtige Loop-Steuerung sind angebunden. Der verbleibende Nachweis ist der vollstaendige Betriebspfad auf dem Server: Chat-Aktion, Plan-Gate, Run und Ergebnis-Gates muessen zusammenhaengend einschliesslich Reconnect und Run-Abschluss dogfooding-verifiziert werden.
 - **Akzeptanzkriterien:**
   - Chat ist in Cockpit, Control und Debug der primaere, dauerhaft sichtbare Interaktionspunkt.
   - Repo-Antworten verwenden projektgebundene Tools und nennen Datei/Zeile oder konkreten Run-/Test-Beleg.
@@ -55,11 +28,12 @@ noch nicht vollstaendig.
   - Auch das abschliessende Human-Gate bleibt verpflichtend; `require_human_approval: false` darf keine automatische Freigabe ausloesen.
   - Lange Tool-Aufrufe blockieren weder Loop-Prozess noch weitere Chat-Nachrichten.
 - **Tests:** Projekt-Isolation, Belegdarstellung, explizite Loop-Kontrolle, Human-Gate-Invariante und Chat waehrend aktivem Run.
-- **Implementierungsstand 2026-11-11:** request_loop_action legt einen 15-Minuten-Vorschlag in der urspruenglichen Chat-Session ab; die UI zeigt Projekt und konkreten Auftrag mit Bestaetigen/Ablehnen. Explizite OP-Starts erhalten nur dann einen Vorschlag, wenn der gemeinsame OP-Selector Status, Blocker, Akzeptanzkriterien und Tests/Nachweis als startfaehig bewertet; die Laufzeitvalidierung beim Start bleibt als Schutz vor Status-Drift bestehen. Der API-Endpunkt konsumiert eine Bestaetigung atomar und genau einmal und delegiert an bestehende Loop-Control-Endpunkte. Ablehnung, Ablauf und Abschluss werden als Session-Events persistiert. GitHub Actions auf 1f821ea: 1914 Tests bestanden, 5 uebersprungen; Ruff/Mypy 0, AST 370 Dateien ohne Fehler, Katalog bestanden, Quality Gate ok=true. Der Chat-Prompt verlangt verifizierte `grep`-Zeilenbelege und untersagt geratenen Zeilenangaben. Serverseitiger Pull/Dogfooding steht aus.
+- **Implementierungsstand 2026-11-11 (CI-Nachweis auf aktuellem main):** request_loop_action legt einen 15-Minuten-Vorschlag in der urspruenglichen Chat-Session ab; die UI zeigt Projekt und konkreten Auftrag mit Bestaetigen/Ablehnen. Explizite OP-Starts erhalten nur dann einen Vorschlag, wenn der gemeinsame OP-Selector Status, Blocker, Akzeptanzkriterien und Tests/Nachweis als startfaehig bewertet; die Laufzeitvalidierung beim Start bleibt als Schutz vor Status-Drift bestehen. Der API-Endpunkt konsumiert eine Bestaetigung atomar und genau einmal und delegiert an bestehende Loop-Control-Endpunkte. Ablehnung, Ablauf und Abschluss werden als Session-Events persistiert. GitHub Actions auf bc8a84a: 1942 Tests bestanden, 5 uebersprungen; Ruff/Mypy 0, AST 372 Dateien ohne Fehler, Katalog bestanden, Quality Gate ok=true. Der Chat-Prompt verlangt verifizierte `grep`-Zeilenbelege und untersagt geratenen Zeilenangaben. Serverseitiger Pull/Dogfooding steht aus.
 - **Blockiert von:** —
 
 ### OP-397: Hintergrundjobs, Projekt-Inbox und Checkpoint-Steuerung
 - **Status:** open
+- **Tests:** —
 - **Typ:** async-jobs
 - **Betroffene Dateien:** `werkstatt/web/app.py`, `werkstatt/event_store.py`, `werkstatt/projection.py`, `static/chat.js`, `static/live_feed.js`, WebSocket-/Event-Tests
 - **Problem:** Ein synchroner Chat-Request kann lange Repo-Pruefungen an die Verbindung binden. Nutzer muessen Zweck, Fortschritt und Ergebnis jeder Hintergrundaktion sehen und waehrenddessen weiterfragen sowie neue Arbeit einreichen koennen.
@@ -109,6 +83,7 @@ noch nicht vollstaendig.
 
 ### OP-399: Projekt-Hub mit GitHub- und lokalen Quellen
 - **Status:** open
+- **Tests:** —
 - **Prioritaet:** P1
 - **Typ:** project-platform
 - **Betroffene Dateien:** Projekt-Registry, Projektquellen-Adapter, Scaffolder, Projektleiste/Plus-Menue, GitHub- und Web-Tests
@@ -127,6 +102,7 @@ noch nicht vollstaendig.
 
 ### OP-400: Provider- und Modellrouting je Projekt und Rolle
 - **Status:** open
+- **Tests:** —
 - **Prioritaet:** P2
 - **Typ:** model-configuration
 - **Betroffene Dateien:** Modell-Routing/Registry, Projektkonfiguration, Chat-/Loop-Einstellungen, Einstellungsseite, API-/Prompt-Tests
@@ -211,7 +187,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Sammel-OP, 5 Sub-OPs)
-- **Betroffen:** `werkstatt/context_builder.py` (neu), `werkstatt/test_agent.py` (neu),
+- **Betroffene Dateien:** `werkstatt/context_builder.py` (neu), `werkstatt/test_agent.py` (neu),
   `werkstatt/debugger.py` (neu), `werkstatt/pipeline_phases.py`, `werkstatt/loop.py`,
   `docs/ARCHITECTURE.md`
 - **Problem:** Builder/Test-Agent/Debugger raten heute. OP-047: Builder schrieb
@@ -295,7 +271,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur-refactor (Multi-Session)
-- **Betroffen:** `werkstatt/verify.py` (620 Zeilen), `werkstatt/loop.py`
+- **Betroffene Dateien:** `werkstatt/verify.py` (620 Zeilen), `werkstatt/loop.py`
   (Re-Export), 5 `_verify_patches`-Proxies, **163 Test-Patch-Calls**
 - **Problem:** `_verify_patches` existiert 5x als Proxy, echte Impl in
   verify.py:341. Aber: `verify.py` importiert `loop.py` (via audit-Proxy),
@@ -324,10 +300,12 @@ noch nicht vollstaendig.
 ### OP-220: Erfahrungs-Gehirn — deterministisches Fehler-Gedaechtnis (Sammel-OP)
 
 - **Status:** open
+- **Akzeptanzkriterien:** —
+- **Tests:** —
 - **Phase:** Phase-3; erst nach Abschluss von OP-382 beginnen
 - **Blockiert von:** OP-382
 - **Typ:** architektur (Sammel-OP, 8 Sub-OPs)
-- **Betroffen:** `werkstatt/erfahrung.py` (neu), `werkstatt/skills.py`,
+- **Betroffene Dateien:** `werkstatt/erfahrung.py` (neu), `werkstatt/skills.py`,
   `werkstatt/diagnose.py`, `werkstatt/antipattern.py`,
   `werkstatt/reflection.py`, `werkstatt/reviewer.py`, `docs/MERKPOSTEN.md`
 - **Problem:** Erfahrungen aus geloesten Fehlern verpuffen. `diagnose.py`
@@ -346,7 +324,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** feature (Erfahrungs-Gehirn, Sub-OP zu OP-220)
-- **Betroffen:** `werkstatt/erfahrung.py` (neu, siehe OP-220)
+- **Betroffene Dateien:** `werkstatt/erfahrung.py` (neu, siehe OP-220)
 - **Problem:** ADR-0010 legt zweistufige Memory fest. OP-220 legt
   Basis-Tabelle `erfahrung` an, aber ohne `scope`-Spalte. OP-221
   (Destillation), OP-222 (Semantic Memory) und OP-220i (Log-Backfill)
@@ -367,7 +345,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** feature
-- **Betroffen:** `werkstatt/chat_agent.py` (`chat_loop`),
+- **Betroffene Dateien:** `werkstatt/chat_agent.py` (`chat_loop`),
   `werkstatt/chat_tools.py`, `werkstatt/web/static/chat.js`
 - **Problem:** Bei fehlgeschlagenem Run oder offenem Gate soll der Chat dem Menschen eine **Eskalations-Ladder** und direkte Kontextuebergabe anbieten. Der Chat entscheidet nichts und beantwortet keine Gates. Der Mensch waehlt Diagnose, Patch-Uebergabe oder Loop-Neustart. Der Debugger ist eine Faehigkeit des Chats (Modus `debugger`), keine eigene Loop-Rolle (ADR-0011/0029; ADR-0018 verworfen).
 
@@ -449,7 +427,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** feature (Erfahrungs-Gehirn)
-- **Betroffen:** `werkstatt/erfahrung.py`, `tools/memory_destill.py`
+- **Betroffene Dateien:** `werkstatt/erfahrung.py`, `tools/memory_destill.py`
   (neu), `tools/memory_promote.py` (neu),
   `tools/memory_drift.py` (neu)
 - **Problem:** OP-220 speichert Episoden, destilliert aber keine Regeln,
@@ -500,7 +478,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** feature (Erfahrungs-Gehirn)
-- **Betroffen:** `werkstatt/erfahrung.py`,
+- **Betroffene Dateien:** `werkstatt/erfahrung.py`,
   `projects/<name>/profile.yaml`, `werkstatt/chat_tools.py`
 - **Problem:** Chat muss Basics per grep herausfinden (Test-Runner,
   DB-Typ, Migrationspfad). OP-220 speichert nur Fehler-Episoden.
@@ -529,7 +507,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** ui-feature
-- **Betroffen:** `werkstatt/web/static/memory.js` (neu),
+- **Betroffene Dateien:** `werkstatt/web/static/memory.js` (neu),
   `werkstatt/web/app.py` (`/api/memory/*`),
   `werkstatt/erfahrung.py` (Read-API)
 - **Problem:** Was das Gehirn gelernt hat, ist unsichtbar. Der User
@@ -563,7 +541,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** ui-feature
-- **Betroffen:** `werkstatt/web/static/timeline.js`,
+- **Betroffene Dateien:** `werkstatt/web/static/timeline.js`,
   `werkstatt/web/static/chat.js`, `werkstatt/web/app.py`
 - **Problem:** Bei fehlgeschlagenem Run muss der User manuell
   entscheiden, was zu tun ist. Es fehlt eine eskalierende
@@ -598,7 +576,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** ui-feature
-- **Betroffen:** `werkstatt/web/static/stats.js` (neu),
+- **Betroffene Dateien:** `werkstatt/web/static/stats.js` (neu),
   `werkstatt/web/app.py` (`/api/stats/*`),
   `werkstatt/state.py` (bereits `llm_calls`), `werkstatt/agent.py`
 - **Problem:** Token-Verbrauch und Kosten sind im Terminal nur als
@@ -621,7 +599,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Split, invasiv)
-- **Betroffen:** `werkstatt/state/` (neu), `werkstatt/state.py`
+- **Betroffene Dateien:** `werkstatt/state/` (neu), `werkstatt/state.py`
 - **Problem:** `RunState` hat 100+ Felder, keine Doku zu
   Schreiber/Leser. Handoff §7 nennt 47 tote Felder. Siehe ADR-0012
   Muster 2+3.
@@ -649,7 +627,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Split + Aufraeumen)
-- **Betroffen:** `werkstatt/cli/` (neu), `werkstatt/loop.py`,
+- **Betroffene Dateien:** `werkstatt/cli/` (neu), `werkstatt/loop.py`,
   `werkstatt/pipeline.py` (neu)
 - **Problem:** `loop.py` (500 Zeilen) ist CLI-Einstieg UND
   Re-Export-Hub. 13 ruff-Fehler (F822 `__all__` undefined,
@@ -673,7 +651,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (State-Contract)
-- **Betroffen:** `werkstatt/state_contracts.py`,
+- **Betroffene Dateien:** `werkstatt/state_contracts.py`,
   `tests/test_state_contracts_auftrag.py` (neu),
   `docs/STATE-INVENTUR.md`
 - **Problem:** Drei Felder teilen ein Konzept, haben aber
@@ -727,7 +705,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (klein, komplementaer zu OP-220/129/130/131)
-- **Betroffen:** `werkstatt/reflection.py`,
+- **Betroffene Dateien:** `werkstatt/reflection.py`,
   `werkstatt/control/reflection.py`, `werkstatt/prompts.py`,
   `werkstatt/state.py` (nur Doku)
 - **Ziel (bestaetigt 2026-11-05):** Reflection hat den Zweck, dem
@@ -777,7 +755,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Planner)
-- **Betroffen:** `werkstatt/planner.py` (`_zerlege_in_sub_tasks`,
+- **Betroffene Dateien:** `werkstatt/planner.py` (`_zerlege_in_sub_tasks`,
   `_extrahiere_prosa_abschnitt`), `tests/test_planner_deps.py` (neu)
 - **Problem:** OP-163 hat `PLANNER_SPLIT_SYSTEM` um die Pflicht-Regel
   "Konsequenz-Tasks MUESSEN dependencies setzen" erweitert (Z. 293-296
@@ -804,7 +782,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Reviewer)
-- **Betroffen:** `werkstatt/reviewer.py` (`REVIEWER_SYSTEM`,
+- **Betroffene Dateien:** `werkstatt/reviewer.py` (`REVIEWER_SYSTEM`,
   `run_reviewer`), `tests/test_reviewer_auftrag_treue.py` (neu)
 - **Problem:** OP-164 patcht den GOLD-Diff-Block (`-`-Zeile +
   bestehende Zuweisung entfernt), aber der Live-Beleg aus Loop-Test-4
@@ -840,7 +818,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Test-Infrastruktur + Spec-Qualitaet)
-- **Betroffen:** `werkstatt/state.py` (RunState Defaults),
+- **Betroffene Dateien:** `werkstatt/state.py` (RunState Defaults),
   `tests/factories.py` (neu), 167 Test-Dateien (schrittweise),
   `werkstatt/*` (getattr-Rueckbau nach Migration)
 - **Ziel:** Tests sind Specs. Jeder Test sagt per Docstring aus,
@@ -885,7 +863,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** fix (Doku-Konsistenz)
-- **Betroffen:** `werkstatt/progress.py` (`append_progress`,
+- **Betroffene Dateien:** `werkstatt/progress.py` (`append_progress`,
   `PROGRESS_FILE`), `werkstatt/phases/finalize.py` (Z. 147-156
   `M-307b: Phasen-Ende in PROGRESS.md`), `tests/test_progress.py`
   (erweitern).
@@ -920,7 +898,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** feature (Loop-Ergonomie)
-- **Betroffen:** `werkstatt/loop.py` (CLI-Args),
+- **Betroffene Dateien:** `werkstatt/loop.py` (CLI-Args),
   `werkstatt/phases/finalize.py` (Commit-Pfad),
   `werkstatt/git_ops.py` (`push`-Funktion, falls fehlt),
   `tests/test_loop_push.py` (neu).
@@ -958,7 +936,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Tests + Spec)
-- **Betroffen:** `werkstatt/phases/test_loop.py` (neu),
+- **Betroffene Dateien:** `werkstatt/phases/test_loop.py` (neu),
   `werkstatt/test_agent.py` (neu), `werkstatt/loop.py`
   (Phase einhaengen), `werkstatt/state.py` (`test_spec` +
   `test_manifest`), `tests/test_test_agent.py` (neu),
@@ -997,7 +975,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Tests + Spec)
-- **Betroffen:** `werkstatt/roles/builder/run.py` (Filter),
+- **Betroffene Dateien:** `werkstatt/roles/builder/run.py` (Filter),
   `.werkstatt/verify.json` (2 neue Stages),
   `tools/test_integrity.py` (neu),
   `tools/test_must_fail.py` (neu),
@@ -1028,7 +1006,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Tests + Qualitaet)
-- **Betroffen:** `.werkstatt/verify.json` (1 neue Stage),
+- **Betroffene Dateien:** `.werkstatt/verify.json` (1 neue Stage),
   `pyproject.toml` (`[tool.pytest-gremlins]`),
   `tests/test_mutation_gate_stage.py` (neu).
 - **Problem:** Test-Qualitaet wird heute nicht mechanisch
@@ -1053,7 +1031,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Tests + Spec)
-- **Betroffen:** `werkstatt/phases/test_loop.py` (neu, via OP-210),
+- **Betroffene Dateien:** `werkstatt/phases/test_loop.py` (neu, via OP-210),
   `werkstatt/phases/tasks.py` (Thaw-Trigger),
   `tests/test_test_thaw.py` (neu).
 - **Problem:** Wenn ein eingefrorener Test sich als falsch
@@ -1079,7 +1057,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Tests + Qualitaet)
-- **Betroffen:** `pyproject.toml`
+- **Betroffene Dateien:** `pyproject.toml`
   (`[project.optional-dependencies].test-tools`),
   `tests/conftest.py` (CI-Profil),
   `tests/test_property_planner.py` (neu),
@@ -1138,7 +1116,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Tests + Spec-Qualitaet)
-- **Betroffen:** `werkstatt/test_agent.py` (neu, via OP-210),
+- **Betroffene Dateien:** `werkstatt/test_agent.py` (neu, via OP-210),
   `werkstatt/test_spec_validator.py` (neu, via OP-212),
   `tests/test_test_agent_spec.py` (neu).
 - **Problem:** OP-201 (Loop-Lauf 19:46-19:56) zeigte: der
@@ -1179,9 +1157,10 @@ noch nicht vollstaendig.
 
 ### OP-212: Test-Spec-Validator (unabhaengige Pruefung der Architect-Spec)
 
-- **Status:** partial (Code+Tests done, Verdrahtung in OP-210 offen)
+- **Status:** open
+- **Umsetzungsstand:** Validator und Tests sind vorhanden; die noch offene Integration ist an OP-210 gekoppelt.
 - **Typ:** architektur (Tests + Spec-Validierung)
-- **Betroffen:** `werkstatt/test_spec_validator.py` (neu),
+- **Betroffene Dateien:** `werkstatt/test_spec_validator.py` (neu),
   `werkstatt/phases/test_loop.py` (neu, via OP-210),
   `tests/test_test_spec_validator.py` (neu).
 - **Problem:** Architect und Test-Agent sind beide LLMs, koennen
@@ -1209,7 +1188,7 @@ noch nicht vollstaendig.
 
 - **Status:** open
 - **Typ:** architektur (Sicherheit)
-- **Betroffen:** `werkstatt/debugger_sandbox.py` (neu),
+- **Betroffene Dateien:** `werkstatt/debugger_sandbox.py` (neu),
   `werkstatt/chat_tools.py` (Wiring),
   `tests/test_debugger_sandbox.py` (neu).
 - **Problem:** `write_temp_test` schreibt nur nach
@@ -1432,13 +1411,14 @@ noch nicht vollstaendig.
 ### OP-382: Dogfooding-Phase — UI-Loop 10× stabil im Betrieb
 
 - **Status:** open
+- **Betroffene Dateien:** —
 - **Typ:** meta (Prozess-OP, keine Code-OP)
 - **Phase:** Phase-2 (Focus, **vor jedem neuen Feature**)
 - **Blockiert von:** OP-381c (funktionierendes Gate-Modal), OP-381b (Freitext-Gate)
 - **Blockiert:** alle OPs mit `Phase: Phase-3` (Selbstverbesserung OP-376..379, Memory-Graph OP-380, Mode-Switch OP-306)
 - **Prinzip:** „Eat your own dogfood." Große Software-Firmen testen Produkte intern im echten Betrieb, bevor neue Features gebaut werden. Dabei fallen die Bugs auf, die Unit-Tests nicht finden — weil der Entwickler blind für die eigene Denkweise ist.
 - **Problem:** Werkstatt hat heute (2026-11-09) einen kritischen Zustand erreicht: der Loop kann aus der UI gestartet werden, Gates werden im Browser angezeigt, Klicks kommen an. **Aber**: jede Live-Nutzung deckt 1-2 weitere Bugs auf (heute: 4 Bugs bei einem einzigen Loop-Versuch, danach noch der `KeyboardInterrupt` im Test-Lauf). Neue Features (Selbstverbesserung, Memory-Graph) zu bauen, während der Kern noch wackelt, wäre Roulette. Erst muss der **Kern im Betrieb stabil sein**, dann wachsen die Features organisch aus echter Nutzung.
-- **Akzeptanzkriterien (Dogfooding-Zyklus):**
+- **Akzeptanzkriterien:** (Dogfooding-Zyklus)
   **(Phase A: Stabilisierung)**
   (a) OP-381c (Gate-Modal) gebaut + live getestet.
   (b) OP-381b (Freitext-Gate) gebaut + live getestet.
@@ -2245,8 +2225,9 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 ### OP-096: Phase 33.3 — gates.py nach control/ migrieren
 
 - **Status:** open
+- **Tests:** —
 - **Typ:** architektur
-- **Betroffen:** `werkstatt/gates.py` nach `werkstatt/control/gates.py`
+- **Betroffene Dateien:** `werkstatt/gates.py` nach `werkstatt/control/gates.py`
 - **Problem:** 16 Funktionen in gates.py, davon 6 echte Gates.
   13 Aufrufe in pipeline_phases.py.
 - **Akzeptanzkriterien:** `control/gates.py` mit plan_gate,
@@ -2257,8 +2238,9 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 ### OP-098: Phase 33.5 — pipeline_phases.py reduzieren
 
 - **Status:** open
+- **Tests:** —
 - **Typ:** architektur (groesster Schritt)
-- **Betroffen:** `werkstatt/pipeline_phases.py` (1600+ Zeilen)
+- **Betroffene Dateien:** `werkstatt/pipeline_phases.py` (1600+ Zeilen)
 - **Problem:** 13 Phase-End-Hooks, 3 Pre-Build, 5 Post-Build direkt
   im Monolithen. Nach 33.2-33.4 sollte diese Datei nur noch
   `run_phase(Phase.X, state)` aufrufen.
@@ -2271,7 +2253,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - **Status:** open
 - **Typ:** ux-bugfix
-- **Betroffen:** `werkstatt/pipeline_phases.py` (`_phase_tasks_loop`),
+- **Betroffene Dateien:** `werkstatt/pipeline_phases.py` (`_phase_tasks_loop`),
   `werkstatt/task_runner.py` (`_task_ende`)
 - **Problem:** Wenn ein Task `human_review` ist (z.B. `spec_widerspruch_vermutet`)
   und der User am Human-Gate `j` drückt (approve + commit), werden die
@@ -2290,8 +2272,10 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 ### OP-105: reflection.py → Deprecation-Proxy
 
 - **Status:** open
+- **Akzeptanzkriterien:** —
+- **Tests:** —
 - **Typ:** architektur (sub-OP, 1 Datei)
-- **Betroffen:** nur `werkstatt/reflection.py`
+- **Betroffene Dateien:** nur `werkstatt/reflection.py`
 - **Auftrag:** Ersetze `reflection.py` durch Proxy via `__getattr__`.
   Setzt OP-104 voraus (`control/reflection.py` vollständig).
 - **Akzeptanz:** `from werkstatt.reflection import _reflection_loop`
@@ -2301,8 +2285,10 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 ### OP-106: Aufrufer auf control.reflection umstellen
 
 - **Status:** open
+- **Akzeptanzkriterien:** —
+- **Tests:** —
 - **Typ:** architektur (sub-OP, 3 Dateien)
-- **Betroffen:** `werkstatt/loop.py`, `werkstatt/pipeline_phases.py`,
+- **Betroffene Dateien:** `werkstatt/loop.py`, `werkstatt/pipeline_phases.py`,
   `werkstatt/task_runner.py` (nur Import-Zeilen)
 - **Auftrag:** Alle `from werkstatt.reflection import X` auf
   `from werkstatt.control.reflection import X` umstellen. Keine Logik-Änderung.
@@ -2313,16 +2299,19 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 ### OP-107: Test-Patch-Pfade migrieren
 
 - **Status:** open
+- **Akzeptanzkriterien:** —
+- **Tests:** —
 - **Typ:** architektur (sub-OP, mehrere Tests)
-- **Betroffen:** `tests/test_reflection*.py`, `tests/test_loop*.py`
+- **Betroffene Dateien:** `tests/test_reflection*.py`, `tests/test_loop*.py`
 - **Auftrag:** `mock.patch("werkstatt.reflection.X")` → `mock.patch("werkstatt.control.reflection.X")`.
 - **Blockiert von:** OP-106
 
 ### OP-109: Tests für scout._erkenne_kopier_auftrag
 
 - **Status:** open
+- **Tests:** —
 - **Typ:** test
-- **Betroffen:** `tests/test_scout.py` (neu oder erweitern)
+- **Betroffene Dateien:** `tests/test_scout.py` (neu oder erweitern)
 - **Problem:** OP-108 hat `_erkenne_kopier_auftrag` eingebaut, aber
   die 4 Tests decken nur `_pruefe_zieldatei_existenz` ab.
 - **Akzeptanzkriterien:** 3 Tests: (a) "kopiere a.py nach b.py" ->
@@ -2334,7 +2323,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - **Status:** open
 - **Typ:** ux-feature
-- **Betroffen:** `werkstatt/builder.py`
+- **Betroffene Dateien:** `werkstatt/builder.py`
 - **Problem:** OP-111 Etappe 1+2 decken `start`, `prompt_sent`,
   `response_received`, `done` ab. Innerhalb von `_build_patches_fuer_datei`
   (nach `response_received`, vor `done`) fehlen granulare Schritte.
@@ -2355,7 +2344,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - **Status:** open
 - **Typ:** ux-feature
-- **Betroffen:** `werkstatt/reviewer.py`
+- **Betroffene Dateien:** `werkstatt/reviewer.py`
 - **Problem:** Reviewer-Call (OP-111 Etappe 1+2) zeigt `start`/`done`,
   aber nicht `diff_received`, `analysis_start`, `verdict`.
 - **Akzeptanzkriterien:**
@@ -2372,7 +2361,7 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 
 - **Status:** open
 - **Typ:** reflection-feature
-- **Betroffen:** `werkstatt/reflection.py`, `werkstatt/antipattern.py`,
+- **Betroffene Dateien:** `werkstatt/reflection.py`, `werkstatt/antipattern.py`,
   `werkstatt/skills.py`, `werkstatt/hard_rules.py`
 - **Problem:** Reflection-Runden reagieren nur auf Verify-Fehler +
   Reviewer-Bugs. Zwei Luecken: (a) `antipattern.scan_patches` laeuft
@@ -2420,8 +2409,9 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 ### OP-117: Scout-Prosa optimieren
 
 - **Status:** open
+- **Tests:** —
 - **Typ:** ux-fix
-- **Betroffen:** `werkstatt/scout.py` (SCOUT_SYSTEM-Prompt),
+- **Betroffene Dateien:** `werkstatt/scout.py` (SCOUT_SYSTEM-Prompt),
   `werkstatt/loop_renderer.py` (SCOUT-AUFRAG-Panel)
 - **Problem:** Rendering zeigt abgeschnittene Prosa
   (`… beschreibende Pay`). Aus Handoff §4: "Prosa 150→800 Zeichen
@@ -2438,8 +2428,9 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 ### OP-118: Heartbeat-Redundanz bei aktivem _emit_progress
 
 - **Status:** open
+- **Tests:** —
 - **Typ:** ux-cleanup
-- **Betroffen:** `werkstatt/loop_renderer.py` (`_with_spinner`)
+- **Betroffene Dateien:** `werkstatt/loop_renderer.py` (`_with_spinner`)
 - **Problem:** OP-111 sagt: "Heartbeat nur Fallback wenn Sub-Component
   keine Events sendet." Aktuell feuert der Heartbeat trotzdem, auch
   wenn `start`/`prompt_sent`/`response_received` bereits laufen.
@@ -2455,8 +2446,9 @@ Nach Delete-Zone-Muster: erledigte OPs werden hier protokolliert.
 ### OP-121: step() und _emit_progress ohne Timestamp im CI-Log
 
 - **Status:** open
+- **Tests:** —
 - **Typ:** observability
-- **Betroffen:** `werkstatt/loop_renderer.py` (`step`, `_emit_progress`)
+- **Betroffene Dateien:** `werkstatt/loop_renderer.py` (`step`, `_emit_progress`)
 - **Problem:** In `RENDER_MODE=ci` schreibt `_emit_raw` Timestamps
   `[HH:MM:SS]`, aber `step()` (Rich-Panel) und `_emit_progress`
   gehen ueber andere Pfade. Folge: Messungen wie Explorer->Scout-Gap

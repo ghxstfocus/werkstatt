@@ -6,7 +6,7 @@ Arbeitsfokus und offene Loop-OPs stehen in `STATUS.md`; erledigte Arbeit
 steht in `PROGRESS.md`. Aeltere Baselines und Phasenberichte weiter unten
 sind historische Snapshots, keine aktuelle Betriebsfreigabe.
 
-## Aktueller Arbeitsfokus (2026-11-10)
+## Aktueller Arbeitsfokus (2026-11-11)
 
 **Ziel:** Eine belastbare Multi-Projekt-Agentenloop- und Entwicklungsumgebung,
 deren Rollen, Gates, Audit und Projektgrenzen nachvollziehbar zusammenarbeiten.
@@ -61,7 +61,7 @@ Ausbaustufen und Messstände.
 | 🟡 | offen, Prioritaet P2 (strukturell) |
 | 🟢 | offen, Prioritaet P3 (Refactor) |
 
-## Ist-Stand (2026-10-31)
+## Historischer Ist-Stand (Messsnapshot 2026-11-02; keine aktuelle Baseline)
 
 **Baseline (gemessen 2026-11-02):** 1145 / 309 / 22 / - / -.
 - pytest: 1164 passed, 5 skipped (2026-11-02).
@@ -80,7 +80,7 @@ waehlt der Scout genau einen Punkt.
 pytest-Regression-Stage, hartes Reviewer-Signal, Datum aus UTC,
 Reflection-Deduplizierung, Commit-Message-Builder.
 
-## Phasen (aktuell)
+## Historische Phasen-Snapshots (Stand 2026-11-03)
 
 ### Phase 1-18: Strangler-Fig ✅
 
@@ -288,7 +288,7 @@ Beide sind per grep/AST vor dem Fix erkennbar. Ein reiner LLM-Debugger
 ohne deterministischen Guard haette beide Fallen reproduziert.
 
 
-## Offene Bloecke (P1/P2)
+## Historischer Backlog-Snapshot (Stand 2026-11-03)
 
 | Block | Prio | Kurz |
 |---|---|---|
@@ -300,9 +300,9 @@ ohne deterministischen Guard haette beide Fallen reproduziert.
 | M-323b | 🟡 P2 | phase_end-Checkpoint pro Phase |
 | M-162 | 🟢 P3 | Recovery nach Loop messen |
 
-## Loop-Bugs aus Live-Test 3 (OP-034..OP-038)
+## Historische Loop-Bugs aus Live-Test 3 (OP-034..OP-038)
 
-Akzeptanzkriterien und Test-Namen in `docs/STATUS.md`.
+Akzeptanzkriterien und Test-Namen wurden damals in `docs/STATUS.md` gefuehrt; die folgende Liste ist ein historischer Snapshot und keine aktuelle OP-Queue.
 
 | OP | Titel | Prio |
 |---|---|---|
@@ -321,11 +321,10 @@ Akzeptanzkriterien und Test-Namen in `docs/STATUS.md`.
 
 ## Aus STATUS.md (Loop-Queue, roadmap-phase)
 
-Die folgenden Punkte stammen aus `docs/STATUS.md` und sind **Roadmap-Phasen
-(M-NNN)** — nicht loop-faehig. Sie stehen hier als Design-Notizen, bis sie
-in konkrete loop-faehige OPs zerlegt werden (vgl. OP-073 Roadmap-Compiler).
-
-Stand: 2026-11-03, migriert aus STATUS.md.
+Die folgenden Punkte wurden am 2026-11-03 aus `docs/STATUS.md` migriert und
+sind ein historischer Snapshot von **Roadmap-Phasen (M-NNN)** — keine aktuelle
+Arbeitsqueue. Neue offene, loop-faehige Arbeit wird ausschliesslich in
+`docs/STATUS.md` gefuehrt.
 
 #### OP-004: M-323b — `phase_end`-Checkpoint pro logischer Phase. Nach jeder Phase `_verify_patches(state, phase="phase_end")` + Reflection.
 - **Status:** open

@@ -150,28 +150,24 @@ importiert werden kann.
 
 ## Pflicht-Befehle
 
-    pytest -q                              # 1164 passed, 5 skipped (2026-11-02)
-    ruff check .                           # 306 errors (2026-11-02)
-    mypy werkstatt/                        # 21 errors in 9 files (2026-11-02)
-    python3 -m tools.quality_gate --json   # exit 0, regression false (2026-11-02)
+Im Repository-Root und mit der Projekt-Virtualenv:
 
-Nicht python -m pytest (Binary python fehlt).
-Nicht mypy . (zaehlt tests/, mehr Fehler).
+    python3 -m pytest -q
+    python3 -m ruff check . --output-format concise
+    python3 tools/doku_check.py --strict --limit 10 --worktree
+    python3 -m tools.quality_gate --json
 
-## Baseline-Hinweis (2026-11-02)
+Keine alten Ergebniszahlen als Sollwerte verwenden. Der aktuelle Nachweis
+kommt aus dem CI-Lauf zum geprueften Commit. `quality_gate` prueft die
+konfigurierte Suite einschliesslich AST- und Audit-Katalog-Check.
 
-docs/HANDOFF-BASELINE.md und tools/quality_gate.py fuehren eine Baseline
-aus VOR dem Loop-Neubau (pytest 1435, ruff 13, mypy 11, AST 6, Katalog 162).
-Diese Baseline ist VERALTET:
+## Historischer Baseline-Hinweis
 
-- pytest 1435 -> 1164 (Loop-Neubau + spaeter wieder Tests ergaenzt)
-- ruff 13 -> 306 (tests/ wurde nie durchgerufft; keine ruff-Config)
-- mypy 11 -> 21 (werkstatt/, pipeline.py entfernt)
-- AST 6 -> 0 (tests/test_audit_kinds.py entfernt), Katalog 162 -> fehlt (_KATALOG_SOLL entfernt)
-
-Konsequenz: quality_gate BASELINE wurde 2026-11-02 re-baselined
-(pytest=1164, ruff=306, mypy=21). AST- und Katalog-Check skippen, wenn
-die jeweilige Datei fehlt (delta=0). quality_gate ist gruen (exit 0).
+Die in `docs/HANDOFF-BASELINE.md` dokumentierten Zaehler aus 2026-11-02
+sind ein historischer Snapshot und keine aktuelle Betriebsanweisung. Die
+2026-11-02 genannten fehlenden AST-/Katalogdateien wurden spaeter wieder
+durch aktive Checks ersetzt. Massgeblich sind die aktuelle Konfiguration
+von `tools/quality_gate.py` und der CI-Nachweis des jeweiligen Commits.
 
 ## Doku
 

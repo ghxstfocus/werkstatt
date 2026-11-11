@@ -4998,3 +4998,18 @@ Ruff meldete PIE807 im neuen Debugger-Tool-Test: Der Fake-Projektor verwendete e
 ## 2026-11-11 — OP-240 Run-Evidenz-Test prueft mehrere Audit-Kinds
 
 Die neue Fail-closed-Pruefung fragt mehrere Fehler- und Gate-Kinds ab. Der Test-Fake setzte faelschlich voraus, dass jede Abfrage `loop_failed` lautet, und brach deshalb beim zweiten Kind mit AssertionError ab. Er liefert jetzt nur fuer den Terminalfehler-Nachweis einen Treffer und erlaubt weitere korrekte Kind-Abfragen. Folge-CI ausstehend.
+
+## 2026-11-11 — OP-/Doku-Audit: Statusschema und historische Roadmap getrennt
+
+Audit von STATUS.md, ROADMAP.md und DOC_CONVENTIONS.md: Alle 102 OP-Header
+haben die kanonische Form und eindeutige IDs. Legacy-Feldnamen und nicht
+spezifizierte Felder wurden im STATUS-Vertrag vereinheitlicht und als `—`
+markiert, damit unvollstaendige OPs nicht still startfaehig erscheinen.
+Der doppelte Phasenplan wurde aus STATUS entfernt; historische ROADMAP-
+Snapshots sind jetzt als solche beschriftet. OP-212 bleibt `open`, weil
+seine Integration von OP-210 abhaengt. OP-396 nennt den inzwischen
+angeschlossenen Chat-Steuerungsstand und den aktuellen CI-Nachweis.
+
+- CI verifiziert auf `bc8a84a`: 1942 passed, 5 skipped; Ruff/Mypy 0,
+  AST 372 Dateien ohne Fehler, Katalog bestanden.
+- Naechster offener Nachweis fuer OP-396/OP-240 bleibt Server-Dogfooding.
