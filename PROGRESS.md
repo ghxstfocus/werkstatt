@@ -4753,3 +4753,8 @@ Die Human-Gate-Tests legten eine globale Konfiguration unter `/opt/werkstatt/pro
 Der Chat-Agent darf Start, Pause, Fortsetzen und Stoppen jetzt als natuerliche Projektanfrage aufnehmen. Das neue Tool legt nur einen 15-Minuten-Vorschlag in der urspruenglichen Chat-Session ab; ein separater UI-Klick ist erforderlich. Vorschlaege zeigen Projekt und konkreten Auftrag, sind bei OP-Start auf die OP-ID beschraenkt und werden beim Bestaetigen erneut durch den bestehenden Start-Endpunkt validiert. Der API-Endpunkt konsumiert Vorschlaege atomar/einmalig, protokolliert Ablehnung, Ablauf, Erfolg und Fehler und ruft bestehende Control-Funktionen auf. Reconnect rendert Vorschlaege und Ergebnisse aus Session-Events erneut. Das verpflichtende Plan- und Human-Gate bleiben unveraendert.
 
 - Serververifikation: noch ausstehend; die Aenderungen auf main sind nicht lokal ausgefuehrt.
+
+
+## Syntaxfehler im Chat-Control-Tool aus Serverlauf korrigiert (2026-11-11)
+
+Der Serverlauf auf a1fc32b konnte mehrere Chat-Tests nicht sammeln: Der request_loop_action-Eintrag in CHAT_TOOLS enthielt literal gespeicherte \\n-Sequenzen und verursachte einen SyntaxError in chat_tools.py. Der Registry-Eintrag wurde als normale mehrzeilige Python-Struktur neu geschrieben. Der Fix ist auf main, aber nach diesem Commit noch nicht auf dem Server verifiziert.
