@@ -94,8 +94,8 @@ Letzte Aktualisierung: 2026-11-11.
 - **Status:** open
 - **Typ:** loop-quality
 - **Betroffene Dateien:** werkstatt/reflection.py und Tests
-- **Akzeptanzkriterien:** Reflection erhaelt den relevanten Diff und aktuelle Verify-/Reviewer-Befunde statt redundanter Patchkopien. Jeder Folgeversuch benennt, welcher Befund adressiert wird. Tests sichern Kontextgrenzen und Regressionen ab.
-- **Tests:** Prompt-Kontext fuer Verify- und Reviewer-Fehler.
+- **Akzeptanzkriterien:** Reflection erhaelt den relevanten Diff und aktuelle Verify-/Reviewer-Befunde statt redundanter Patchkopien. Jeder Folgeversuch benennt, welcher Befund adressiert wird. Verify liefert pro ausgefuehrter Stage einen begrenzten strukturierten Beleg (Stage-ID, Exit-Status, extrahierter Fehlerkern); erfolgreiche Stages werden nicht als Fehler promptet. Der Builder erhaelt nur taskrelevante aktuelle Befunde plus eine begrenzte Zusammenfassung bisheriger Versuche, klar als untrusted Pruefdaten markiert; volle Logs, veraltete Task-Befunde und rohe Gedankengaenge werden nicht in den Kontext kopiert. Kontext wird am Task-/Run-Checkpoint aus Quelle und Belegen neu aufgebaut, statt als unkontrollierter Verlauf zu wachsen. Tests sichern Kontextgrenzen und Regressionen ab.
+- **Tests:** Stage-Beleg-Erzeugung und Reset pro Task; Builder-Prompt fuer strukturierte Verify- und Reviewer-Fehler, Begrenzung, keine erfolgreichen/unrelevanten Befunde und Schutz vor Anweisungen in Tool-Ausgabe.
 - **Blockiert von:** —
 
 ### OP-384: Rollenbezogene Kontextbudgets
