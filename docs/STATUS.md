@@ -55,6 +55,7 @@ noch nicht vollstaendig.
   - Auch das abschliessende Human-Gate bleibt verpflichtend; `require_human_approval: false` darf keine automatische Freigabe ausloesen.
   - Lange Tool-Aufrufe blockieren weder Loop-Prozess noch weitere Chat-Nachrichten.
 - **Tests:** Projekt-Isolation, Belegdarstellung, explizite Loop-Kontrolle, Human-Gate-Invariante und Chat waehrend aktivem Run.
+- **Implementierungsstand 2026-11-11:** request_loop_action legt einen 15-Minuten-Vorschlag in der urspruenglichen Chat-Session ab; die UI zeigt Projekt und konkreten Auftrag mit Bestaetigen/Ablehnen. Der API-Endpunkt konsumiert eine Bestaetigung atomar und genau einmal und delegiert an bestehende Loop-Control-Endpunkte. Ablehnung, Ablauf und Abschluss werden als Session-Events persistiert. Regressionstests fuer Tool, Session-Idempotenz, UI-Vertrag und API-Nebenwirkungen sind auf main; Serververifikation nach Pull steht aus.
 - **Blockiert von:** —
 
 ### OP-397: Hintergrundjobs, Projekt-Inbox und Checkpoint-Steuerung
