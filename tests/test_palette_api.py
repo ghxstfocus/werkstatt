@@ -40,3 +40,16 @@ def test_palette_endpoint_registriert():
     from werkstatt.web import app as web_app
     routes = [r.path for r in web_app.app.routes if hasattr(r, "path")]
     assert "/api/projects/{name}/palette" in routes
+
+def test_palette_run_suche_bleibt_projektisoliert(tmp_path, monkeypatch):
+    from werkstatt.event_store import EventStore
+    from werkstatt.web import inspector as _insp
+
+    es = EventStore(db_pfad=tmp_path / "events.db")
+    monkeypatch.setattr(_insp, "EventStore", lambda: es)
+    es.append("shared-demo", "loop_started", payload={}, project="demo")
+    es.append("shared-foreign", "loop_started", payload={}, project="anderes-projekt")
+
+    aus = _insp.aggregate_palette("demo", "shared")
+    run_ids = [item["titel"] for item in aus["runs"]]
+    assert run_ids == ["shared-demo"]
