@@ -722,3 +722,43 @@ def test_builder_behaelt_alte_fehler_neben_patch_feedback(tmp_path):
     assert "FEEDBACK AUS VORHERIGEM VERSUCH" in prompt
     assert "Verify schlug fehl" in prompt
     assert "old_string war nicht mehr vorhanden" in prompt
+
+
+
+def test_builder_erhaelt_strukturierte_verify_belege(tmp_path):
+    """Repair-Kontext zeigt den konkreten fehlgeschlagenen Check kompakt."""
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    st = _state(tmp_path)
+    st.tasks = [{
+        "id": "t1", "name": "A", "description": "B",
+        "action": "update", "task_files": ["a.py"],
+    }]
+    st.aktuelle_task = st.tasks[0]
+    st.last_verify_results = [
+        {
+            "stage_id": "pytest_focused",
+            "exit_code": 2,
+            "ok": False,
+            "error_excerpt": "FAILED tests/test_x.py::test_expected - assert 1 == 2",
+        },
+        {
+            "stage_id": "ruff_changed",
+            "exit_code": 0,
+            "ok": True,
+            "error_excerpt": "",
+        },
+    ]
+    fake_reply = type("R", (), {
+        "ok": True, "content": '{"patches": []}', "error": "",
+    })()
+    with patch(
+        "werkstatt.roles.builder._common.ask_llm",
+        return_value=fake_reply,
+    ) as mock_llm:
+        run_builder(st)
+
+    prompt = mock_llm.call_args.args[2]
+    assert "Stage pytest_focused; Exit-Code: 2" in prompt
+    assert "FAILED tests/test_x.py::test_expected" in prompt
+    assert "Stage ruff_changed" not in prompt
+    assert "untrusted Tool-Ausgabe" in prompt
