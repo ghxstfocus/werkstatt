@@ -4893,3 +4893,17 @@ Die Modusleiste mit Cockpit, Control, Debug und Runs steht jetzt direkt unter de
 - `tools.quality_gate --json`: `ok: true`, `regression: false`.
 - Dieser Nachweis ersetzt den oben dokumentierten offenen Testlauf.
 
+## 2026-11-11 — Chat-Willkommenstext an Steuerungsfunktionen angepasst
+
+- Die Leerzustandskarte behauptete noch, der Chat könne keine Runs starten.
+  Sie beschreibt jetzt Loop-Aktionen mit ausdruecklicher Bestaetigung und
+  weist klar darauf hin, dass direkte Code-Patches aus dem Chat noch nicht
+  verfuegbar sind.
+- Statische Asset-Version auf `202611110006` synchronisiert.
+- CI auf `4662bca`: JavaScript-Syntax und Ruff bestanden; Gesamtsuite
+  **1923 passed, 5 skipped**; Mypy 0, AST 370 Dateien / 0 Fehler,
+  Katalogtest bestanden, Quality Gate `ok: true`, `regression: false`.
+- Die Overview-Auswertung dedupliziert Endereignisse pro Run. Der Screenshot
+  zeigt 3 Erfolge aus 27 terminalen Runs; den Inhalt der Server-Event-DB
+  haben wir damit nicht separat geprueft.
+
