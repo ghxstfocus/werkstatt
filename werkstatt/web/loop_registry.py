@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 _STARTING_TTL_SECONDS = 60.0
+_CONTROL_TRANSITION_TTL_SECONDS = 15.0
 _LIVE_STATES = ("running", "paused", "pausing", "resuming", "stopping")
 _ALLOWED_TRANSITIONS = {
     ("running", "pausing"),
@@ -135,10 +136,42 @@ class LoopProcessRegistry:
                 state == "starting"
                 and now - record["updated_at"] > _STARTING_TTL_SECONDS
             )
-            dead_process = (
-                state in _LIVE_STATES
-                and not _pid_alive(record["pid"], record["process_identity"])
+            process_snapshot = (
+                _process_snapshot(record["pid"])
+                if record["pid"] is not None
+                else None
             )
+            process_alive = _pid_alive(
+                record["pid"], record["process_identity"],
+            ) if state in _LIVE_STATES else False
+            dead_process = state in _LIVE_STATES and not process_alive
+            stale_control = (
+                state in ("pausing", "resuming")
+                and now - record["updated_at"] > _CONTROL_TRANSITION_TTL_SECONDS
+                and process_alive
+            )
+            if stale_control:
+                # Recover a worker crash between claiming the transition and
+                # publishing its final state from the kernel process status.
+                recovered_state = (
+                    "paused"
+                    if process_snapshot is not None
+                    and process_snapshot[1] in ("T", "t")
+                    else "running"
+                )
+                conn.execute(
+                    "UPDATE loop_processes SET state=?, updated_at=? "
+                    "WHERE project=? AND run_id=? AND state=?",
+                    (
+                        recovered_state, now, project,
+                        record["run_id"], state,
+                    ),
+                )
+                record.update({
+                    "state": recovered_state,
+                    "updated_at": now,
+                })
+                state = recovered_state
             if expired_start or dead_process:
                 conn.execute(
                     "UPDATE loop_processes SET state='idle', pid=NULL, "
