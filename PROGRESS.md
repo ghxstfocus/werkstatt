@@ -5070,3 +5070,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 
 - ADR-0029 und OP-385 halten den aktuellen dreistufigen LLM-Planpfad als Optimierungsziel fest: Scout bedarfsbasiert, Architect mit strukturiertem Plan, deterministische Task-Kompilierung; LLM-Split nur als Fallback.
 - Builder, Verify und unabhaengiger Reviewer bleiben nachweislich getrennte Kontrollfunktionen; Entfernung erst nach messbarer Qualitaetsevaluation.
+
+## 2026-11-11 — PhaseState beim Laden strukturell validieren
+
+- YAML mit falscher Wurzel oder fehlerhaften Task-/Dependency-Typen wird nicht mehr als nutzbarer Checkpoint geladen; der Loop startet damit nicht versehentlich aus inkonsistentem Zustand.
+- Ein Legacy-Checkpoint ohne `tasks` wird kompatibel als leerer Task-Checkpoint behandelt.
+- Regressionstests decken falsche Wurzel, Task-Form, ID und Dependency-Typen ab.

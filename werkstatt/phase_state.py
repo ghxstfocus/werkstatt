@@ -42,10 +42,40 @@ class PhaseState:
             return False
         try:
             with self.path.open(encoding="utf-8") as fh:
-                self.data = yaml.safe_load(fh) or {}
-            return True
+                data = yaml.safe_load(fh)
         except (yaml.YAMLError, OSError):
+            self.data = {}
             return False
+
+        if data is None:
+            data = {}
+        if not isinstance(data, dict):
+            self.data = {}
+            return False
+
+        tasks = data.get("tasks")
+        if tasks is None:
+            data["tasks"] = []
+        elif not isinstance(tasks, list) or any(
+            not isinstance(task, dict) for task in tasks
+        ):
+            self.data = {}
+            return False
+
+        for task in data.get("tasks", []):
+            task_id = task.get("id")
+            dependencies = task.get("dependencies") or []
+            if (
+                task_id is not None and not isinstance(task_id, str)
+            ) or not isinstance(dependencies, list) or any(
+                not isinstance(dependency, str)
+                for dependency in dependencies
+            ):
+                self.data = {}
+                return False
+
+        self.data = data
+        return True
 
     def save(self) -> None:
         """Speichert den State atomar (temp + rename)."""

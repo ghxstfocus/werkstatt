@@ -1,6 +1,8 @@
 """Tests fuer werkstatt/phase_state.py (Phase 13)."""
 from __future__ import annotations
 
+import pytest
+
 from werkstatt.phase_state import PhaseState
 
 
@@ -105,3 +107,33 @@ def test_resume_blocked_wird_nach_erfolgreicher_dependency_ausfuehrbar(tmp_path)
 
     ps.mark_done("t1")
     assert ps.get_next_task()["id"] == "t2"
+
+
+@pytest.mark.parametrize(
+    "yaml_text",
+    [
+        "- not-a-mapping\n",
+        "tasks: invalid\n",
+        "tasks:\n  - not-a-mapping\n",
+        "tasks:\n  - id: [not, hashable]\n",
+        "tasks:\n  - id: t1\n    dependencies: invalid\n",
+    ],
+)
+def test_load_verwirft_strukturell_ungueltigen_phase_state(
+    tmp_path, yaml_text,
+) -> None:
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.path.write_text(yaml_text, encoding="utf-8")
+
+    assert ps.load() is False
+    assert ps.data == {}
+
+
+def test_load_normalisiert_fehlende_tasks_fuer_legacy_checkpoint(
+    tmp_path,
+) -> None:
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.path.write_text("project: testprojekt\n", encoding="utf-8")
+
+    assert ps.load() is True
+    assert ps.data["tasks"] == []
