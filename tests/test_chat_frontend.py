@@ -90,3 +90,11 @@ def test_chat_renders_explicit_loop_action_confirmation_card() -> None:
     assert '"/chat/actions/"' in js
     assert 'kind === "loop_action_proposed"' in js
     assert 'proposal.task_preview' in js
+
+
+def test_selected_debug_mode_is_forwarded_as_debugger_capability():
+    js = _chat_js()
+    assert 'function _chatRequestMode()' in js
+    assert 'uiMode === "debug" ? "debugger" : "read"' in js
+    assert 'session_id: sid, message: text, mode: _chatRequestMode()' in js
+    assert 'mode: _chatRequestMode(),' in js
