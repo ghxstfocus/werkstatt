@@ -169,3 +169,12 @@ def test_chat_composer_hat_einen_fokusrahmen_und_setzt_sich_zurueck() -> None:
     assert "box-shadow: none;" in focus_rule
     assert 'eingabe.style.height = "auto";' in js[js.index('eingabe.value = "";'):js.index("_sende(text);", js.index('eingabe.value = "";'))]
     assert "resize: none;" in css[css.rfind("/* Eingabe:"):]
+
+
+def test_assistant_text_bleibt_auf_lesbarer_spaltenbreite() -> None:
+    css = _css()
+    start = css.rindex("/* Assistant-Text auf eine angenehme Lesebreite begrenzen. */")
+    regel = css[start:]
+    assert "width: min(100%, 68ch);" in regel
+    assert "max-width: 68ch;" in regel
+    assert "margin-inline: auto;" in regel
