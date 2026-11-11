@@ -38,7 +38,7 @@ Letzte Aktualisierung: 2026-11-11.
 - **Betroffene Dateien:** Projekt-Registry, Quellenadapter, Scaffolder, Projektleiste und Tests
 - **Akzeptanzkriterien:** Plus kann lokale Projekte anlegen, GitHub-Quellen hinzufuegen und registrierte Projekte oeffnen. Quellen/Refs werden validiert; Analyse benoetigt keinen manuellen Server-Klon. Migration zeigt zuerst einen nicht-destruktiven Diff; Remote-Schreiben erfolgt nur in isoliertem Branch nach eigener Freigabe.
 - **Tests:** URL-/Ref-Validierung, Isolation, Migrationsvorschau und Ablehnung ohne Aenderung.
-- **Blockiert von:** ADR-0030 annehmen und Auth-/Secret-Grenzen festlegen.
+- **Blockiert von:** —
 
 ### OP-400: Provider- und Modellrouting je Projekt und Rolle
 - **Status:** open
@@ -46,7 +46,7 @@ Letzte Aktualisierung: 2026-11-11.
 - **Betroffene Dateien:** Rollen-/Modellregistry, Projektkonfiguration, Einstellungen und Tests
 - **Akzeptanzkriterien:** Projekte koennen je Rolle einen Provider und ein Modell ueberschreiben oder den globalen Default nutzen. Servervalidierung prueft Provider, Verfuegbarkeit und Rollenfaehigkeiten; unpassende Kombinationen werden fail-closed abgewiesen. Secrets bleiben serverseitig und werden nie in UI, Projektdateien oder Logs ausgegeben.
 - **Tests:** Defaults, Overrides, Capabilities, Projektisolation und Secret-Redaktion.
-- **Blockiert von:** ADR-0030 annehmen und Secret-Backend festlegen.
+- **Blockiert von:** —
 
 ### OP-280: Doku-Drift als Verify-Gate
 - **Status:** open
