@@ -88,6 +88,8 @@ def _looks_like_git_checkout(project_dir: Path) -> bool:
 
 
 def _origin_repository(project_dir: Path) -> str | None:
+    if not _looks_like_git_checkout(project_dir):
+        return None
     root = _git(project_dir, "rev-parse", "--show-toplevel")
     if root.returncode != 0:
         if _looks_like_git_checkout(project_dir):
@@ -198,12 +200,6 @@ def prepare_github_run_worktree(
     worktree_path = worktrees_root / run_id
     if worktree_path.exists():
         raise GitHubSyncError("Run-Worktree existiert bereits.")
-    try:
-        worktrees_root.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise GitHubSyncError(
-            "Verwaltetes Worktree-Verzeichnis kann nicht angelegt werden.",
-        ) from exc
     if worktree_path.resolve().parent != worktrees_root:
         raise GitHubSyncError("Run-Worktree-Pfad ist nicht sicher.")
     final_status = _git(project_dir, "status", "--porcelain", "--untracked-files=all")
@@ -217,6 +213,12 @@ def prepare_github_run_worktree(
         raise GitHubSyncError(
             "Server-Checkout hat sich waehrend des Fetchs geaendert; Run gestoppt.",
         )
+    try:
+        worktrees_root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise GitHubSyncError(
+            "Verwaltetes Worktree-Verzeichnis kann nicht angelegt werden.",
+        ) from exc
     created = _git(
         project_dir, "worktree", "add", "--quiet", "-b", run_branch,
         str(worktree_path), remote_sha,
