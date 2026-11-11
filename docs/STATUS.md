@@ -41,6 +41,22 @@ Letzte Aktualisierung: 2026-11-11.
 - **Architektur-Voraussetzung:** ADR-0030
 - **Blockiert von:** —
 
+### OP-401: Laufende Sessions ueber neue Chat-Arbeit informieren
+- **Status:** open
+- **Typ:** task-coordination
+- **Betroffene Dateien:** Chatjobs, Event-Store, Loop-Registry, Projekt-Chat und Tests
+- **Akzeptanzkriterien:** Jede neue Chat-Anfrage bleibt dem aktiven Projekt und der Session zugeordnet. Reine Fragen laufen parallel gegen einen stabilen Run-/Projekt-Snapshot und unterbrechen den Builder nicht. Ein neuer Schreibauftrag wird dauerhaft mit Elternauftrag, aktivem Run/Checkpoint und Basis-Commit aufgenommen; der Chat zeigt knapp, dass er ihn bearbeitet oder einreiht. Der Koordinator bewertet, ob Auftrag, Annahmen oder Dateien den aktiven Run betreffen und sendet ein replaybares Aenderungsereignis. Nicht betroffene Runs arbeiten weiter. Betroffene Runs markieren ihren Arbeitsstand am naechsten sicheren Checkpoint als veraltet und planen dort neu; bei unklarer Auswirkung fragt der Chat gezielt nach. Planversionen bleiben intern.
+- **Tests:** Frage waehrend aktivem Run, Schreibauftrag waehrend Run, Projekt-/Session-Zuordnung, Replay nach Reconnect/Neustart, verlorene/duplizierte Ereignisse, disjunkte Aenderung und unklare Scope-Auswirkung.
+- **Blockiert von:** OP-396, OP-397
+
+### OP-402: Parallele Schreibauftraege sicher integrieren
+- **Status:** open
+- **Typ:** worktree-coordination
+- **Betroffene Dateien:** Werkstatt-Worktree-Verwaltung, Loop/Verify, Event-Store, Chat-Control und Tests
+- **Akzeptanzkriterien:** Jeder freigegebene Schreibauftrag arbeitet in einem eigenen Worktree auf einem festgehaltenen Basis-Commit; zwei Worker schreiben nie in denselben Worktree. Unabhaengige Auftraege duerfen parallel bauen und pruefen. Integration in den gemeinsamen Projektstand ist pro Projekt serialisiert und erfolgt nur an einem sicheren Checkpoint. Diffs werden nur verglichen, wenn sie dieselbe Basis-SHA haben. Bei neuer Basis, ueberschneidenden Pfaden/Abhaengigkeiten oder geaenderten Planannahmen wird die betroffene Arbeit nicht als generischer Verify-Fehler beendet: sie pausiert nachvollziehbar, erstellt einen Integrations-/Replan-Auftrag und fuehrt alle betroffenen Gates auf dem exakten kombinierten Stand erneut aus. Nachweislich disjunkte Aenderungen koennen ohne Rueckfrage integriert werden, wenn die freigegebene Scope-Grenze gleich bleibt. Eine Scope-Erweiterung braucht eine neue, im Chat erklaerte Freigabe.
+- **Tests:** Zwei parallele Worktrees gleicher Basis, disjunkte Aenderungen, ueberschneidende Aenderungen, bewegte Basis-SHA, Integrationsserialisierung, Neustart/Reconcile, Gate-Lauf auf kombiniertem Commit und Ablehnung veralteter Freigaben.
+- **Blockiert von:** OP-399, OP-401
+
 ### OP-400: Provider- und Modellrouting je Projekt und Rolle
 - **Status:** open
 - **Typ:** model-configuration

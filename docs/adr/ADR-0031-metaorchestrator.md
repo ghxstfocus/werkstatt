@@ -4,7 +4,7 @@
 - **Status:** accepted
 - **Ergaenzt:** ADR-0023 (Multi-Projekt-Kontext), ADR-0024 (Event-Log),
   ADR-0029 (Chat-Control-Plane), ADR-0030 (Projektquellen und Rollenmodelle)
-- **Grundlage fuer:** OP-396/397 und spaetere Metaorchestrator-Umsetzung; kein sofort freigeschalteter Automodus
+- **Grundlage fuer:** OP-396/397/401/402 und spaetere Metaorchestrator-Umsetzung; kein sofort freigeschalteter Automodus
 
 ## Kontext
 

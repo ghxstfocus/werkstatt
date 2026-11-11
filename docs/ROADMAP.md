@@ -23,6 +23,8 @@ Plan- und Ergebnis-Gates bleiben verpflichtend.
 ### 1. Chat und UI als Arbeitsoberflaeche
 - OP-396: Projektchat, evidenzbasierte Antworten und sichere Loop-Steuerung.
 - OP-397: Hintergrundjobs, Reconnect/Replay und Checkpoint-Steuerung.
+- OP-401: neue Chat-Arbeit sicher an aktive Sessions koppeln.
+- OP-402: unabhaengige Schreibauftraege parallel, aber konfliktbewusst integrieren.
 - Chat bleibt bei laufender Arbeit ansprechbar; Schreibauftraege nutzen getrennte, commit-gepinnte Worktrees und werden am Checkpoint konfliktbewusst integriert.
 - OP-394/395: nachvollziehbare Live-Ereignisse im Control-Modus.
 - OP-308: nachtraegliche Phasen-Timeline im Cockpit.
@@ -78,9 +80,10 @@ Commits und getrennten Worktrees aufgebaut. Der Loop beobachtet Projekt-
 Aenderungsereignisse und pausiert nur betroffene Arbeit am sicheren
 Checkpoint; er vergleicht nie Diffs verschiedener Basen.
 
-Voraussetzungen sind OP-396/397 fuer Chat, parallele Hintergrundjobs und
-sichere Worktree-Integration, OP-399 fuer Projektquellen, OP-382 als
-Betriebsnachweis sowie nachvollziehbare Projektisolation und Audit-Replay. UI-Aenderungen muessen zusaetzlich in
+Voraussetzungen sind OP-396/397 fuer Chat und Hintergrundjobs, OP-399 fuer
+Projektquellen, OP-401/402 fuer laufende Aenderungsereignisse und sichere
+parallele Integration, OP-382 als Betriebsnachweis sowie nachvollziehbare
+Projektisolation und Audit-Replay. UI-Aenderungen muessen zusaetzlich in
 einem isolierten Browser mit kontrollierten Testdaten verifiziert werden;
 Screenshots, Accessibility-/DOM-Befunde und Browser-Logs werden als
 Verify-Artefakte gespeichert. Vor diesen Belegen wird kein Projekt in

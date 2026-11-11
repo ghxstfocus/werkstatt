@@ -5190,3 +5190,10 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Der Nutzer hat die Architektur fuer parallele Chat-/Loop-Auftraege freigegeben. Der Chat soll waehrend eines Runs natuerlich ansprechbar bleiben; Planversionen und Commit-Pinning sind interne Konsistenzmechanismen, keine zusaetzliche UI-Bedienung.
 - Schreibauftraege arbeiten in getrennten Worktrees auf festen Basis-Commits. Ereignisse informieren laufende Runs ueber Aenderungen; nur betroffene Arbeit pausiert am Checkpoint und wird auf dem kombinierten Stand neu geplant und verifiziert. Integration bleibt pro Projekt serialisiert; Diffs verschiedener Basen werden nicht verglichen.
 - ADR-0031, OP-396/397 und Roadmap beschreiben das Ziel. Die Funktion ist noch nicht vollstaendig implementiert; verpflichtende Plan-/Ergebnis-Gates bleiben bestehen.
+
+
+## 2026-11-11 — Parallelkoordination in umsetzbare OPs zerlegt
+
+- OP-401 behandelt Chat-/Session-Kontext, dauerhafte Auftragseinreihung und Aenderungsereignisse fuer aktive Runs.
+- OP-402 behandelt getrennte Worktrees, feste Basis-Commits, serialisierte Integration und erneute Gates auf dem kombinierten Commit.
+- Damit bleibt der normale Chatfluss leichtgewichtig: interne Versions-/SHA-Pruefungen werden nicht als manuelle UI-Schritte gezeigt. Unklare oder scopeveraendernde Konflikte werden erklaert und gezielt freigegeben.
