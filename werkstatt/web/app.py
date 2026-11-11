@@ -1098,10 +1098,12 @@ def create_app() -> FastAPI:
 
     @app.get("/api/projects/{name}/chat/sessions")
     def chat_sessions(name: str) -> dict[str, Any]:
-        """Listet alle Chat-Session-IDs eines Projekts."""
+        """Listet letzte Chats mit Vorschautitel und letzter Aktivitaet."""
         from werkstatt import chat_session as _cs
         projekt = _pruefe_projektname(name)
-        return {"sessions": _cs.list_sessions(projekt, mit_inhalt=True)}
+        details = _cs.list_session_summaries(projekt, limit=50)
+        sessions = [item["session_id"] for item in details]
+        return {"sessions": sessions, "summaries": details}
 
     @app.get("/api/projects/{name}/chat/history")
     def chat_history(name: str, session_id: str) -> dict[str, Any]:
