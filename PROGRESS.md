@@ -4791,3 +4791,11 @@ Nach erfolgreichem Ruff-Lauf meldete Quality Gate in sauberer CI 92 Testfehler (
 
 - Workflow-Commit: 5bf8e45.
 - CI-Diagnose: ausstehend.
+
+
+## CI stellt den kanonischen Werkstatt-Pfad bereit (2026-11-11)
+
+Der erste diagnostische pytest-Lauf auf GitHub Actions zeigte 68 Fehler und 1838 bestandene Tests. Der Grossteil der Fehler entstand, weil historische Tests und einige Pfadvertraege /opt/werkstatt fest erwarten, waehrend der Runner den Checkout unter /home/runner/work ablegt. Der Workflow erstellt nun im kurzlebigen Ubuntu-Runner einen Symlink von /opt/werkstatt auf den Checkout. Dadurch bleibt der Produktivpfad-Vertrag im Test erhalten; Tests ausserhalb dieses Pfadvertrags werden in der erneuten Suite sichtbar.
+
+- Workflow-Commit: 71540a79.
+- Vollstaendige CI-Verifikation: ausstehend.
