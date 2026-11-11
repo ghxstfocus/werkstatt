@@ -131,6 +131,52 @@ def test_planner_skips_scout_but_keeps_architect_and_plan_path(tmp_path):
     )
 
 
+def test_literal_single_file_replacement_skips_scout_and_architect(tmp_path):
+    target = tmp_path / "module.py"
+    target.write_text("VALUE = OLD\n", encoding="utf-8")
+    st = _state(tmp_path)
+    st.aufgabe = "Ersetze `OLD` durch `NEW` in module.py."
+    st.explorer_context = {"key_files": [{"file": "module.py"}]}
+
+    with patch(
+        "werkstatt.planner._run_scout",
+        side_effect=AssertionError("Scout fuer explizite Ersetzung unnoetig"),
+    ), patch(
+        "werkstatt.planner.run_architect",
+        side_effect=AssertionError("Architect fuer belegte Ersetzung unnoetig"),
+    ), patch("werkstatt.planner.audit") as mock_audit:
+        assert run_planner(st) is True
+
+    assert len(st.tasks) == 1
+    assert st.tasks[0]["task_files"] == ["module.py"]
+    assert "`OLD` durch `NEW`" in st.tasks[0]["description"]
+    assert st.architect_prosa == "[atomarer Plan: deterministische_literal_ersetzung]"
+    assert any(
+        call.args[0] == "planner_atomarer_plan"
+        and call.args[1].get("architect") == "uebersprungen"
+        for call in mock_audit.call_args_list
+    )
+
+
+def test_literal_replacement_with_ambiguous_or_stale_text_falls_back(tmp_path):
+    from werkstatt.planner import _deterministic_literal_replace_plan
+
+    target = tmp_path / "module.py"
+    target.write_text("VALUE = OLD\nCOPY = OLD\n", encoding="utf-8")
+    assert _deterministic_literal_replace_plan(
+        "Ersetze `OLD` durch `NEW` in module.py.", "module.py", tmp_path,
+    ) == (None, "alter_text_nicht_eindeutig")
+    assert _deterministic_literal_replace_plan(
+        "Ersetze `MISSING` durch `NEW` in module.py.", "module.py", tmp_path,
+    ) == (None, "alter_text_nicht_eindeutig")
+    assert _deterministic_literal_replace_plan(
+        "Aendere die Logik in module.py.", "module.py", tmp_path,
+    ) == (None, "kein_expliziter_literalersetzungsausdruck")
+    assert _deterministic_literal_replace_plan(
+        "Ersetze `OLD` durch `NEW` und module.py.", "module.py", tmp_path,
+    ) == (None, "zieldatei_nicht_an_ersetzung_gebunden")
+
+
 def test_atomic_scout_plan_requires_current_unique_evidence(tmp_path):
     from werkstatt.planner import _atomarer_scout_plan_freigabefaehig
 
@@ -192,7 +238,7 @@ def test_valid_atomic_scout_plan_skips_architect(tmp_path):
 
     assert len(st.tasks) == 1
     assert st.tasks[0]["task_files"] == ["module.py"]
-    assert st.architect_prosa == "[atomarer Plan vom Scout]"
+    assert st.architect_prosa == "[atomarer Plan: Scout]"
 
 
 def test_invalid_atomic_scout_plan_escalates_to_architect(tmp_path):

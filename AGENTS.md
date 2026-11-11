@@ -24,25 +24,28 @@ Der CLI-Einstieg bleibt fuer automatisierte und serverseitige Runs verfuegbar:
 
 ## Agentenrollen und Kontrollschritte
 
-1. Explorer (werkstatt/explorer.py) — read-only Kontext und Befunde
-   (deepseek-flash, Thinking aus).
-2. Scout (werkstatt/scout.py) — Auftrags- und API-Kontext
-   (deepseek-flash, Thinking aus).
-3. Architect (werkstatt/planner.py) — strukturierter Plan
-   (deepseek-v4-pro, Thinking high).
-4. Planner-Split (werkstatt/planner.py) — Architect-Prosa in Tasks
-   (deepseek-flash, Thinking aus).
-5. Builder (werkstatt/roles/builder/run.py) — Patch pro Task
-   (deepseek-flash, Thinking aus).
-6. Verify (verify.json-Stages) — deterministische Pruefungen.
-7. Reviewer (werkstatt/reviewer.py) — Task-Review
-   (deepseek-flash, Thinking aus).
-8. Reflection (werkstatt/reflection.py) — Feedback bei Reject
-   (deepseek-flash, Thinking aus).
-9. Chat (werkstatt/chat_agent.py) — projektbezogene Repo-Analyse,
-   Hintergrundfragen und freigabepflichtige Loop-Steuerung. Debugging ist
-   eine Chat-Faehigkeit gemaess ADR-0011/ADR-0029, keine eigene Loop-Rolle.
-10. Human-Gates — Plan- und Ergebnisfreigabe, fail-closed.
+Rollen sind bedarfsabhängige Verantwortlichkeiten, keine Pflicht zu einem
+LLM-Aufruf pro Run. Explorer liefert zuerst deterministische Repo-Fakten.
+Danach entscheidet der Planner anhand Auftrag, Scope und Beleglage:
+
+- Scout fuer breite, mehrdeutige, diagnostische oder API-/Ursachen-Auftraege.
+- Scout kann entfallen, wenn ein einzelnes Ziel explizit genannt und vom
+  Explorer bestaetigt wurde.
+- Architect fuer Aenderungen mit Design-, Abhaengigkeits- oder
+  Mehrdatei-Entscheidungen. Er kann entfallen, wenn eine einzelne,
+  wortwoertliche Ersetzung im aktuellen Dateiinhalt eindeutig belegt ist
+  oder ein gepruefter atomarer Scout-Plan die Aenderung vollstaendig nennt.
+- Planner-Split nur als Fallback, wenn ein Plan nicht deterministisch in
+  Tasks ueberfuehrt werden kann.
+- Builder bleibt der einzige schreibende Worker je Projekt-Working-Tree.
+  Verify bleibt deterministisch; Reviewer und Reflection laufen nach
+  Befund und Risiko gemaess Loop-Vertrag.
+- Chat ist Projektansprechpartner, Repo-Analyse und Freigabeschicht.
+  Plan- und Ergebnis-Gates bleiben fail-closed verpflichtend.
+
+Jeder Skip ist durch aktuellen Repo-Beleg begrenzt und wird auditiert.
+Mehrdeutigkeit, Diagnose, breite Aenderung oder veralteter Textbeleg
+eskalieren in den normalen Scout-/Architect-Pfad.
 
 ## Werkzeuge (CLI)
 

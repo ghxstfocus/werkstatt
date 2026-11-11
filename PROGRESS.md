@@ -5110,3 +5110,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 
 - Jeder Planlauf auditiert, ob der Scout wegen breiter/unklarer Anfrage gebraucht oder durch explizites Einzeldateiziel mit Explorer-Beleg uebersprungen wird.
 - Der Audit-Grund enthaelt den konkreten Routing-Faktor statt Auftragsprosa; Tests pruefen Eskalationsgrund und Skip-Grund.
+
+## 2026-11-11 — Architect nach Beleglage ueberspringen
+
+- Ein eng begrenzter deterministischer Pfad erkennt wortwoertliche Einzeldatei-Ersetzungen mit Explorer-Beleg und exakt einmaligem aktuellem Treffer.
+- In diesem Fall erstellt der Planner direkt einen pruefbaren Ein-Task-Plan; Scout, Architect und Task-Split entfallen. Mehrdeutige oder veraltete Treffer fallen auf den bisherigen Reasoning-Pfad zurueck.
+- Planquelle und Architect-Bypass werden auditiert; Regressionstests decken Skip und Eskalation ab. Das Plan-Gate bleibt unveraendert verpflichtend.

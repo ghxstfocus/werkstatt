@@ -1863,7 +1863,7 @@ def _atomarer_scout_plan_freigabefaehig(
 
 
 def _tasks_aus_betroffenen_stellen(
-    scout_report: dict, aufgabe: str,
+    scout_report: dict, aufgabe: str, quelle: str = "Scout",
 ) -> list[dict]:
     """Fix AY (2026-10-31): Atomarer Plan -- 1 Task pro Datei.
 
@@ -1873,8 +1873,8 @@ def _tasks_aus_betroffenen_stellen(
     Rutsch patcht und der Verify-Pfad nur einmal nach dem letzten
     Patch testet.
 
-    Kein Architect, kein Split. Der Scout hat die Stellen bereits
-    exakt benannt.
+    Kein Architect, kein Split. Die Stellen sind durch Scout oder einen
+    eng begrenzten deterministischen Pfad exakt belegt.
     """
     _stellen = scout_report.get("betroffene_stellen") or []
     if not isinstance(_stellen, list) or not _stellen:
@@ -1904,7 +1904,7 @@ def _tasks_aus_betroffenen_stellen(
             )
         _desc = (
             f"## {_datei}\n\n"
-            f"Atomare Aenderung (Scout-Plan, kein Architect).\n"
+            f"Atomare Aenderung (Planquelle: {quelle}; kein Architect).\n"
             f"Alle Stellen in EINEM Rutsch ersetzen.\n"
             f"Kein Zwischenzustand testen -- erst nach dem letzten"
             f" Patch.\n\n"
@@ -2002,6 +2002,59 @@ def _scout_route_decision(
     if not (Path(project_dir) / target_path).is_file():
         return None, "zieldatei_nicht_vorhanden"
     return target, "explizite_einzeldatei_mit_explorer_beleg"
+
+
+def _deterministic_literal_replace_plan(
+    aufgabe: str, target: str, project_dir,
+) -> tuple[dict | None, str]:
+    """Build a one-edit plan only from an explicit, uniquely verifiable replacement.
+
+    This deliberately narrow route can avoid Scout, Architect, and task split.
+    Any ambiguity falls back to the normal reasoning path.
+    """
+    match = re.search(
+        r"(?:ersetze|replace)\s+`([^`\r\n]{1,200})`"
+        r"\s+(?:durch|with)\s+`([^`\r\n]{1,200})`",
+        aufgabe,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return None, "kein_expliziter_literalersetzungsausdruck"
+    if re.search(re.escape(target), aufgabe[match.end():], flags=re.IGNORECASE) is None:
+        return None, "zieldatei_nicht_an_ersetzung_gebunden"
+    alt, neu = match.groups()
+    if not alt.strip() or not neu.strip() or alt == neu:
+        return None, "ersetzung_leer_oder_unveraendert"
+    path = Path(target)
+    if path.is_absolute() or ".." in path.parts or path.parts[0] == "tests":
+        return None, "zieldateipfad_unsicher"
+    try:
+        root = Path(project_dir).resolve()
+        file_path = (root / path).resolve(strict=True)
+        file_path.relative_to(root)
+        if not file_path.is_file():
+            return None, "zieldatei_fehlt"
+        content = file_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError, ValueError, TypeError):
+        return None, "zieldatei_nicht_lesbar"
+    if content.count(alt) != 1:
+        return None, "alter_text_nicht_eindeutig"
+    start = content.index(alt)
+    line = content.count("\n", 0, start) + 1
+    return {
+        "ziel": aufgabe,
+        "auftrag_prosa": aufgabe,
+        "api_auszug": {},
+        "risiken": [],
+        "atomarer_plan": True,
+        "betroffene_stellen": [{
+            "datei": path.as_posix(),
+            "zeile": line,
+            "alt": alt,
+            "neu": neu,
+            "grund": "Explizite Nutzerersetzung; eindeutiger Treffer im aktuellen Dateiinhalt",
+        }],
+    }, "exakte_einzeldatei_ersetzung_aktuell_belegt"
 
 
 def _scout_skip_target(aufgabe: str, explorer_ctx: object, project_dir) -> str | None:
@@ -2326,24 +2379,38 @@ def run_planner(state: RunState) -> bool:
     _scout_skip_path, _scout_route_reason = _scout_route_decision(
         aufgabe, _explorer_ctx, pd,
     )
+    _scout_source = "Scout"
     if _scout_skip_path:
-        _code_index = {}
-        _scout_report = {
-            "ziel": aufgabe,
-            "relevante_dateien": [{
-                "pfad": _scout_skip_path,
-                "warum": "explorer_hat_explizites_einzeldateiziel_bestaetigt",
-            }],
-            "api_auszug": {},
-            "vorgeschlagene_aenderungen": [],
-            "risiken": [],
-            "auftrag_prosa": aufgabe,
-            "bereits_erfuellt": False,
-            "atomarer_plan": False,
-        }
+        _direct_report, _direct_reason = _deterministic_literal_replace_plan(
+            aufgabe, _scout_skip_path, pd,
+        )
+        if _direct_report is not None:
+            _code_index = {}
+            _scout_report = _direct_report
+            _scout_source = "deterministische_literal_ersetzung"
+            _scout_route_reason = _direct_reason
+        else:
+            _code_index = {}
+            _scout_report = {
+                "ziel": aufgabe,
+                "relevante_dateien": [{
+                    "pfad": _scout_skip_path,
+                    "warum": "explorer_hat_explizites_einzeldateiziel_bestaetigt",
+                }],
+                "api_auszug": {},
+                "vorgeschlagene_aenderungen": [],
+                "risiken": [],
+                "auftrag_prosa": aufgabe,
+                "bereits_erfuellt": False,
+                "atomarer_plan": False,
+            }
         audit("planner_scout_skipped", {
             "grund": _scout_route_reason,
             "datei": _scout_skip_path,
+            "architect": (
+                "wird_nach_evidenzpruefung_uebersprungen"
+                if _direct_report is not None else "wird_aufgerufen"
+            ),
         }, pd, pn)
     else:
         audit("planner_scout_required", {
@@ -2433,18 +2500,21 @@ def run_planner(state: RunState) -> bool:
             _scout_report, pd,
         )
         _atom_tasks = (
-            _tasks_aus_betroffenen_stellen(_scout_report, aufgabe)
-            if _atomar_ok else []
+            _tasks_aus_betroffenen_stellen(
+                _scout_report, aufgabe, quelle=_scout_source,
+            ) if _atomar_ok else []
         )
         if _atom_tasks:
             audit("planner_atomarer_plan",
                   {"tasks": len(_atom_tasks),
                    "dateien": [t["task_files"][0] for t in _atom_tasks],
-                   "validierung": _atomar_grund},
+                   "validierung": _atomar_grund,
+                   "quelle": _scout_source,
+                   "architect": "uebersprungen"},
                   pd, pn)
             state.tasks = _atom_tasks
             # Marker, damit _plan_gate den Plan als gueltig sieht.
-            state.architect_prosa = "[atomarer Plan vom Scout]"
+            state.architect_prosa = f"[atomarer Plan: {_scout_source}]"
             state.akzeptanzkriterien = list(
                 state.akzeptanzkriterien or []
             )
