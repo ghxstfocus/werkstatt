@@ -5309,3 +5309,9 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 
 - ARCHITECTURE.md behauptete noch, ADR-0030 sei proposed, beschrieb Worktrees innerhalb des Checkouts und zeigte Scout/Architect als starre Pflichtkette.
 - Aussagen sind mit ADR-0030, STATUS.md und den aktuellen Pfaden in project_sources.py/planner.py abgeglichen. OP-399/400 bleiben als offene Umsetzung gekennzeichnet.
+
+
+## 2026-11-11 — Chat-Loop-Grenzfaelle aus OP-396 absichern
+
+- Beim Abgleich der Akzeptanzkriterien fehlten Tests fuer explizite Werkzeugrunden-Budgets und Nutzerabbruch nach einem ausgefuehrten Werkzeugschritt.
+- Die Abschlussantwort wird ohne weitere Tools aus den vorhandenen Belegen erstellt; ein Abbruch stoppt vor dem naechsten LLM-Aufruf und laesst User-/Tool-Ereignisse replaybar im Verlauf.
