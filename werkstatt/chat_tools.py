@@ -420,7 +420,28 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
         "fn": _read_status,
         "mode": "read",
     },
-    "request_loop_action": {\n        "description": "Legt einen befristeten Vorschlag zum Starten, Pausieren, Fortsetzen oder Stoppen an. Fuehrt nichts aus; die UI verlangt anschliessend eine ausdrueckliche Bestaetigung.",\n        "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": ["start", "pause", "resume", "stop"]}, "op_id": {"type": "string"}, "aufgabe": {"type": "string"}}, "required": ["action"]},\n        "fn": _request_loop_action,\n        "mode": "read",\n    },\n    "next_op": {
+    "request_loop_action": {
+        "description": (
+            "Legt einen befristeten Vorschlag zum Starten, Pausieren, "
+            "Fortsetzen oder Stoppen an. Fuehrt nichts aus; die UI verlangt "
+            "anschliessend eine ausdrueckliche Bestaetigung."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["start", "pause", "resume", "stop"],
+                },
+                "op_id": {"type": "string"},
+                "aufgabe": {"type": "string"},
+            },
+            "required": ["action"],
+        },
+        "fn": _request_loop_action,
+        "mode": "read",
+    },
+    "next_op": {
         "description": (
             "Analysiert docs/STATUS.md des aktiven Projekts und liefert "
             "startfaehige OP-Kandidaten, Abhaengigkeiten und Ausschlussgruende. "
