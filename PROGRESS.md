@@ -4746,3 +4746,10 @@ Der Serverlauf auf `bb427ff` bestaetigte 63 gezielte Tests, Ruff ohne Fehler und
 ## Portabilitaet der Human-Gate-Tests und deklarierte Laufzeitabhaengigkeit (2026-11-11)
 
 Die Human-Gate-Tests legten eine globale Konfiguration unter `/opt/werkstatt/projects` an, obwohl der Gate-Code diese Konfiguration nicht mehr liest. Das Schreiben in einen server-spezifischen absoluten Pfad ist entfernt; die Tests sind nun tmp_path-isoliert und auch ausserhalb des Produktivservers ausfuehrbar. Ausserdem deklariert `requirements.txt` jetzt PyYAML, das von der Produktivkonfiguration importiert wird. Verifikation dieser Folgeaenderungen steht aus.
+
+
+## Chat als Loop-Ansprechpartner: bestaetigungspflichtige Control-Aktionen (2026-11-11)
+
+Der Chat-Agent darf Start, Pause, Fortsetzen und Stoppen jetzt als natuerliche Projektanfrage aufnehmen. Das neue Tool legt nur einen 15-Minuten-Vorschlag in der urspruenglichen Chat-Session ab; ein separater UI-Klick ist erforderlich. Vorschlaege zeigen Projekt und konkreten Auftrag, sind bei OP-Start auf die OP-ID beschraenkt und werden beim Bestaetigen erneut durch den bestehenden Start-Endpunkt validiert. Der API-Endpunkt konsumiert Vorschlaege atomar/einmalig, protokolliert Ablehnung, Ablauf, Erfolg und Fehler und ruft bestehende Control-Funktionen auf. Reconnect rendert Vorschlaege und Ergebnisse aus Session-Events erneut. Das verpflichtende Plan- und Human-Gate bleiben unveraendert.
+
+- Serververifikation: noch ausstehend; die Aenderungen auf main sind nicht lokal ausgefuehrt.
