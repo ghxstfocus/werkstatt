@@ -4919,6 +4919,9 @@ Die Modusleiste mit Cockpit, Control, Debug und Runs steht jetzt direkt unter de
   erwarteten Zustand atomar, bevor sie ein Signal sendet; parallele Steuerung
   erhaelt HTTP 409. Der persistierte Zwischenzustand bleibt fuer andere Worker
   und nach Webserver-Neustarts sichtbar.
+- Nach einem Worker-Absturz werden verwaiste pausing/resuming-Zustaende
+  nach 15 Sekunden aus dem Kernel-Prozessstatus zu running/paused rekonstruiert;
+  stopping bleibt wiederaufnehmbar, bis der Prozess beendet ist.
 - Stop sendet vor SIGTERM ein idempotentes SIGCONT, damit ein zuvor pausierter
   Prozess das Terminationssignal empfangen kann.
 - Regressionstests pruefen konkurrierende Registry-Uebergaenge und ein
