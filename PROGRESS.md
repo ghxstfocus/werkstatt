@@ -5230,3 +5230,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Alle vier Aggregatoren begrenzen die Daten jetzt immer zuerst auf das angefragte Projekt; Legacy-Events ohne Projektzuordnung gelten weiterhin ausschliesslich als Werkstatt-Events.
 - Regressionstests decken identische Run-IDs in mehreren Projekten fuer Timeline, aktive Rolle, Swimlane und Live-Feed ab.
 - Das schliesst einen konkreten Teil der Projektisolationskriterien aus ADR-0031 und OP-394 ab; die vollstaendige Control-Timeline bleibt offen.
+
+
+## 2026-11-11 — Projektspezifische Run-Suche in der Command-Palette
+
+- Die Run-Suche der projektgebundenen Command-Palette fragte SQLite bisher ohne Projektfilter ab und konnte Treffer anderer Projekte anzeigen.
+- Die SQL-Abfrage bindet das aktive Projekt nun als Pflichtfilter; ein Regressionstest legt gleichnamige Suchtreffer in zwei Projekten an und bestaetigt, dass nur der projektrelevante Run erscheint.
