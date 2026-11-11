@@ -4832,11 +4832,11 @@ Tests pruefen Plan-Edit-Weitergang, ADR-Mini-Entscheidung und den echten Phase-R
 Der Chat hat fuer eine explizite OP-ID bisher nur die Ueberschrift in STATUS.md gesucht und daraus eine bestaetigbare Aktionskarte gebaut. Der Loop-Control-Endpunkt hat ungueltige Starts zwar erneut abgewiesen, dadurch erhielt der Nutzer aber erst nach Freigabe einen Fehler. request_loop_action verwendet jetzt denselben evidenzbasierten OP-Selector und erzeugt nur fuer eine eindeutig startfaehige OP einen Vorschlag. Bei erledigtem Status, fehlenden Tests/Nachweisen oder unbekannten Blockern kommen die Ausschlussgruende als Rueckfrage zurueck; es wird kein Session-Vorschlags-Event angelegt. Die erneute Validierung beim tatsaechlichen Start bleibt bestehen, damit Statusaenderungen nach dem Vorschlag sicher abgefangen werden.
 
 - Regressionstests fuer erledigte OPs, fehlende Nachweise und unbekannte Blocker; gueltiger expliziter Start bleibt abgedeckt.
-- GitHub Actions auf Commit e3d15ec: JavaScript-Syntax, Ruff, pytest und Quality Gate gruen; 1913 passed / 5 skipped, Ruff/Mypy 0, AST 370 Dateien ohne Fehler, Audit-Katalog bestanden, ok=true.
+- GitHub Actions auf Commit 1f821ea (inklusive Zitatregel): JavaScript-Syntax, Ruff, pytest und Quality Gate gruen; 1914 passed / 5 skipped, Ruff/Mypy 0, AST 370 Dateien ohne Fehler, Audit-Katalog bestanden, ok=true.
 
 
 ## OP-396 — Chat-Zeilenzitate muessen nachpruefbar sein (2026-11-11)
 
 Der System-Prompt verlangte Datei-/Zeilenbelege, obwohl read_file start/end Zeichen-Offsets bezeichnet und keine Zeilen liefert. Der Chat-Agent ist jetzt angewiesen, Zeilennummern mit grep zu verifizieren, read_file-Offsets nicht als Zeilen zu behandeln und fehlende Belege offenzulegen. Ein Prompt-Vertragstest schuetzt diese Regel vor Regression.
 
-- CI-Verifikation nach diesem Nachweis-Fix: ausstehend.
+- GitHub Actions auf Commit 1f821ea: JavaScript-Syntax, Ruff, pytest und Quality Gate gruen; 1914 passed / 5 skipped, Ruff/Mypy 0, AST 370 Dateien ohne Fehler, Audit-Katalog bestanden, ok=true.
