@@ -40,6 +40,8 @@ def test_confirmed_chat_action_uses_control_api_once(
     })
 
     process = SimpleNamespace(pid=12345, poll=lambda: None)
+    monkeypatch.setattr(app_modul, "_PAUSIERTE_LOOPS", set())
+    monkeypatch.setattr(app_modul, "_LOOP_RUN_IDS", {})
     monkeypatch.setitem(app_modul._LAUFENDE_LOOPS, "demo", process)
     monkeypatch.setattr(app_modul.os, "killpg", lambda *_args: calls.append(_args))
     monkeypatch.setattr(app_modul, "_audit_loop_control", lambda *_args: True)
