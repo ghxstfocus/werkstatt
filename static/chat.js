@@ -927,6 +927,33 @@
         throw error;
       });
     }
+    function parseAntwort(response) {
+      return response.json().then(function (data) {
+        if (!response.ok) {
+          var error = new Error(data.detail || ("Status " + response.status));
+          error.status = response.status;
+          error.detail = data.detail || "";
+          throw error;
+        }
+        return data;
+      });
+    }
+    function submitLegacy() {
+      _setzeChatStatus("Älterer Server erkannt · Antwort wird direkt erstellt …", "working");
+      return fetch("/api/projects/" + encodeURIComponent(projekt) + "/chat", {
+        method: "POST", credentials: "same-origin",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          session_id: sid, message: text, mode: _chatRequestMode(),
+        }),
+      }).then(parseAntwort).then(function (data) {
+        if (projekt !== zustand.projekt || sid !== zustand.sessionId) return;
+        if (assistantCard) _renderMarkdown(assistantCard, data.antwort || "");
+        else if (data.antwort) _karte("assistant", data.antwort);
+        _setzeChatStatus("Antwort fertig · " + projekt + " · Kompatibilitätsmodus", "ready");
+        _renderSidebarAktuell();
+      });
+    }
     submit(0).then(function (data) {
       if (projekt !== zustand.projekt || sid !== zustand.sessionId) return;
       var job = _neuerJobState(
@@ -937,8 +964,15 @@
         _setzeChatStatus("Auftrag angenommen · läuft im Hintergrund.", "working");
       }
     }).catch(function (error) {
+      if (error.status === 404 && error.detail === "Not Found") {
+        return submitLegacy();
+      }
+      throw error;
+    }).catch(function (error) {
       if (projekt !== zustand.projekt || sid !== zustand.sessionId) return;
-      var fehlermeldung = "Chat-Auftrag konnte nicht angenommen werden: " + error.message;
+      var fehlermeldung = error.status === 404 && error.detail === "Not Found"
+        ? "Der Chat-Endpunkt ist auf diesem Server nicht verfügbar. Bitte Werkstatt aktualisieren und den Webserver neu starten."
+        : "Chat-Auftrag konnte nicht angenommen werden: " + error.message;
       if (assistantCard) _renderMarkdown(assistantCard, fehlermeldung);
       else _karte("assistant", fehlermeldung);
       _setzeChatStatus("Aktion konnte nicht gestartet werden.", "error");
