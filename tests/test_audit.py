@@ -10,10 +10,10 @@ from __future__ import annotations
 import ast
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 TOOLS = Path("/opt/werkstatt/tools")
 sys.path.insert(0, str(TOOLS))
-from unittest.mock import MagicMock, patch
 
 import audit as audit_mod
 from werkstatt.gates import _human_gate_plan
