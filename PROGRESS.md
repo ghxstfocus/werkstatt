@@ -4799,3 +4799,11 @@ Der erste diagnostische pytest-Lauf auf GitHub Actions zeigte 68 Fehler und 1838
 
 - Workflow-Commit: 71540a79.
 - Vollstaendige CI-Verifikation: ausstehend.
+
+
+## Importvertrag-Testabhaengigkeit in CI ergaenzt (2026-11-11)
+
+Mit dem kanonischen /opt/werkstatt-Symlink stieg die saubere GitHub-Suite auf 1904 bestanden / 2 fehlgeschlagen. Beide Fehler waren derselbe Setup-Mangel: import-linter war nicht installiert, obwohl tests/test_import_drift.py es voraussetzt. Die Abhaengigkeit steht jetzt in requirements.txt; die volle CI-Verifikation laeuft erneut.
+
+- Commit: 4aeaff83.
+- CI nach Dependency-Ergaenzung: ausstehend.
