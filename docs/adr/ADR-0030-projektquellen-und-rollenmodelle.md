@@ -7,12 +7,13 @@
 
 ## Kontext
 
-Die Werkstatt soll Projekte aus zwei Quellen unter einer Projektoberflaeche
-bearbeiten koennen: ein GitHub-Repository, das ohne vorherigen Server-Checkout
-erkundet werden kann, und ein lokales Projektverzeichnis auf dem Werkstatt-
-Server. Der Projekt-Tab muss unabhaengig von der Quelle denselben Kontext fuer
-Chat, Loop, Runs und Doku anzeigen. Die Projektleiste soll bestehende Projekte
-oeffnen und neue Projekte anlegen lassen.
+Der Werkstatt-Server ist der primaere Arbeitsort: Neue Projekte werden dort
+angelegt und gescaffoldet. GitHub kann beim Greenfield-Setup direkt verbunden
+oder spaeter als Remote ergaenzt werden. Bestehende GitHub-Repositories koennen
+zusaetzlich ohne vorherigen manuellen Clone erkundet und als Projekt
+registriert werden. Chat, Loop, Runs und Doku zeigen fuer alle Quellen
+denselben Projektkontext. Die Projektleiste soll bestehende Projekte oeffnen
+und neue lokale oder GitHub-verbundene Projekte anlegen lassen.
 
 Zusaetzlich brauchen Projekte eigene Rollenmodelle. Die heutige globale
 Rollen-Routing-Konfiguration soll als funktionierender Default erhalten
@@ -22,31 +23,33 @@ in Repo-Dateien oder Git landen.
 
 ## Vorgeschlagene Richtung (noch nicht angenommen)
 
-1. **Projektquellen als Adapter:** Ein registriertes Projekt hat eine stabile
-   interne Projekt-ID und eine Quelle "local" oder "github". Quelle, Remote-
-   URL, Default-Branch und der aufgeloeste Commit werden getrennt von
-   laufzeitbezogenem Loop-Zustand gespeichert.
+1. **Serverprojekt mit optionalem Remote:** Ein registriertes Projekt hat eine
+   stabile interne Projekt-ID und einen Server-Arbeitsbereich. GitHub-Remote,
+   Default-Branch und aufgeloester Commit werden separat vom lokalen
+   Arbeitsstand und vom Laufzeit-Zustand gespeichert. Neue Projekte koennen
+   serverseitig ohne GitHub erstellt werden; ein Remote kann beim Anlegen oder
+   spaeter hinzugefuegt werden. Ein GitHub-Repository kann auch direkt
+   registriert und serverseitig ausgecheckt werden.
 2. **GitHub-Inspektion ohne Server-Checkout:** Chat und Explorer koennen ein
    autorisiertes Repository ueber einen GitHub-Provider lesen. Ein URL-Paste
    darf nur nach Validierung auf einen unterstuetzten GitHub-Host zum Adapter
    fuehren; frei formulierter URL-Fetch ist ausgeschlossen.
-3. **Serverseitiger Fetch vor Remote-Runs:** Ist ein Projekt als
-   GitHub-Quelle oder als mit GitHub-Remote verknuepftes Projekt registriert,
-   ruft der Werkstatt-Server vor jedem Run den konfigurierten Branch/Ref selbst
-   ab. Er pinnt den aufgeloesten Commit-SHA und startet den Loop in einem
-   verwalteten, isolierten Server-Checkout/Worktree. Ein manueller Clone/Pull
-   durch den Nutzer ist fuer diesen Pfad nicht erforderlich. Der kanonische
-   Server-Checkout und lokale, uncommittete Aenderungen werden dabei nie
-   ueberschrieben oder stillschweigend verworfen; sie gehoeren nur dann zum Run,
-   wenn der Nutzer explizit die lokale Quelle waehlt. Fetch-/Auth-/Ref-Fehler
-   verhindern den Run und werden samt Projekt/Ref sichtbar gemeldet. Push oder
-   Merge zum Remote-Default-Branch ist keine implizite Folge einer Freigabe.
-   Der Fetch nutzt ausschliesslich serverseitig konfigurierte Git-
-   Zugangsdaten; Tokens/Schluessel werden weder in Projektdateien gespeichert
-   noch in Logs oder Browserantworten ausgegeben. Reine lokale Serverprojekte
-   werden direkt aus ihrem registrierten Pfad bearbeitet und benoetigen weder
-   Git noch GitHub. Ein schmutziger kanonischer Checkout wird nicht als
-   Arbeitsverzeichnis fuer einen Remote-Run benutzt und bleibt unveraendert.
+3. **Serverseitige Git-Synchronisierung:** Bei verbundenem Remote ruft der
+   Werkstatt-Server vor jedem Run den konfigurierten Branch/Ref selbst ab und
+   pinnt dessen Commit-SHA. Ist der Server-Branch clean und nur hinter dem
+   Remote, darf er kontrolliert per Fast-Forward aktualisiert werden. Lokale
+   Commits, uncommittete Aenderungen oder divergierende Branches werden nie
+   ueberschrieben oder still verworfen: der Chat zeigt den Zustand und fordert
+   eine gezielte Sync-/Konfliktentscheidung, wenn kein sicherer Fast-Forward
+   moeglich ist. Der Loop arbeitet anschliessend in einem verwalteten,
+   isolierten Worktree auf der bestaetigten Revision; der manuelle Clone/Pull
+   entfällt. Neue serverseitige Projekte koennen auf Wunsch mit GitHub
+   verbunden und initial veroeffentlicht werden. Initiales Pushen sowie spaetere
+   Pushes/Merges benoetigen jeweils eine eigene Freigabe und sind keine
+   implizite Folge eines Plan-Gates. Fetch und Push verwenden ausschliesslich
+   serverseitig konfigurierte Git-Zugangsdaten; Tokens/Schluessel werden weder
+   in Projektdateien gespeichert noch in Logs oder Browserantworten
+   ausgegeben. Projekte ohne Remote arbeiten weiter direkt lokal.
 4. **Werkstatt-Onboarding:** Der Scaffolder erkennt vorhandene Konventionen
    und erzeugt vor einer Migration einen konkreten, nicht-destruktiven Plan
    samt Diff. Er ueberschreibt weder Projektdateien noch Dokumente still.
@@ -71,8 +74,12 @@ in Repo-Dateien oder Git landen.
 
 - GitHub-Authentifizierung: GitHub App Installation, OAuth oder vorhandenes
   Server-Credential; erforderlicher Least-Privilege-Scope fuer private Repos.
-- Remote-Lesezugriff: GitHub API Provider oder isolierter Mirror-Checkout fuer
-  grosse Repos und AST-/Testwerkzeuge.
+- Projekt-Lifecycle: GitHub-Repo-Erstellung ueber API oder vorhandenes Repo
+  verknuepfen; Freigabe- und Branch-Policy fuer initiales sowie spaeteres Pushen.
+- Remote-Lesezugriff: GitHub API Provider oder isolierter Mirror-/Worktree-
+  Checkout fuer grosse Repos und AST-/Testwerkzeuge.
+- Konfliktpolitik fuer Remote-Updates, wenn lokale Commits vorauseilen oder
+  Branches auseinanderlaufen.
 - Secret-Backend: vorhandene Server-Umgebungsvariablen, OS-Keyring oder
   dedizierter Secret-Store und dessen Backup-/Rotation-Verhalten.
 - Modell-Katalog: statische Registry oder Provider-Metadaten mit Cache,

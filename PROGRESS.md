@@ -5123,3 +5123,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Der Run nutzt einen verwalteten isolierten Checkout; lokale Serverdateien und uncommittete Aenderungen werden nicht ueberschrieben oder ungefragt mit Remote-Arbeit vermischt.
 - Reine lokale Projekte laufen weiterhin direkt aus ihrem Serverpfad. Fetch-/Auth-/Ref-Fehler stoppen Remote-Runs sichtbar; Push/Merge bleibt separat freigabepflichtig.
 - ADR-0030 bleibt vorgeschlagen, bis Git-Authentifizierung und die weiteren dortigen Architekturfragen entschieden sind.
+
+## 2026-11-11 — Server-first-Projektfluss praezisieren
+
+- Neue Projekte entstehen primaer auf dem Werkstatt-Server; GitHub kann beim Greenfield-Setup oder spaeter als Remote verbunden werden.
+- OP-399/ADR-0030 ergaenzen initiales Pushen mit eigener Freigabe sowie sicheren serverseitigen Fetch vor Remote-Runs. Lokale Aenderungen/Commits duerfen bei Sync nie still ueberschrieben werden; Konflikte muessen im Chat erklaert werden.
+- Die ADR bleibt vorgeschlagen, da GitHub-Authentifizierung, initiales Repo-Publishing und Konfliktpolitik noch formell zu entscheiden sind.
