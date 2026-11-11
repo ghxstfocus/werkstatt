@@ -4862,3 +4862,12 @@ Nach dem Chat-Arbeitsbereich wurde die gemeinsame Werkstatt-Oberflaeche visuell 
 
 - CSS-Aenderungen sind auf `main`; Browser- und Server-Visual-QA steht nach Neuladen des Webprozesses noch aus.
 - Der Chat-404-Fallback fuer aeltere laufende API-Prozesse ist ebenfalls auf `main`; der direkte Chat-Fallback ist nur eine Kompatibilitaetsbruecke, nicht der Ersatz fuer persistente Hintergrundjobs.
+
+
+
+## Projekt-Navigation und Chat-Vertrag synchronisiert (2026-11-11)
+
+Die Modusleiste mit Cockpit, Control, Debug und Runs steht jetzt direkt unter der Projekt-Tab-Leiste. Zwei Server-Testfehler nach dem UI-Update waren veraltete Erwartungen: Gate-Handoff suchte noch die vorherige Sessionsortierung, und die leere Sessions-API erwartete noch keine Vorschau-Liste. Tests sind auf die aktuelle Summary-basierte Sessionauswahl und die Antwortform `{sessions, summaries}` aktualisiert. Die Gate-Uebergabe wartet weiterhin auf `loadPromise`, bevor sie die Chat-Historie wechselt oder den Debug-Auftrag sendet.
+
+- Cache-Buster fuer alle statischen Assets synchron erneuert.
+- Die beiden gemeldeten Tests muessen nach Pull erneut zusammen mit Quality Gate ausgefuehrt werden; CI-Ergebnis steht aus.
