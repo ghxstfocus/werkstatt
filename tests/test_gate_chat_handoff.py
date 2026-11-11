@@ -27,7 +27,10 @@ def test_chat_gate_handoff_waits_for_project_history() -> None:
 
     assert "zustand.loadPromise = _ladeSessions(projekt)" in chat
     assert "return zustand.loadPromise;" in chat
-    assert "return _wechsleSession(sessions[sessions.length - 1]);" in chat
+    assert "var latest = data.summaries.length" in chat
+    assert "data.summaries[0].session_id" in chat
+    assert "return _wechsleSession(latest);" in chat
+    assert "var bereit = zustand.projekt === projekt && zustand.initialisiert" in chat
 
 
 def test_gate_option_a_never_means_auto_approve() -> None:
