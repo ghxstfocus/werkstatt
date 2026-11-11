@@ -23,9 +23,20 @@ def test_neun_soll_tools_vorhanden() -> None:
     assert set(chat_tools.CHAT_TOOLS) == erwartet
 
 
-def test_alle_tools_mode_read() -> None:
-    for spec in chat_tools.CHAT_TOOLS.values():
-        assert spec["mode"] == "read"
+def test_debugger_tools_are_hidden_outside_debugger_mode() -> None:
+    read_names = {
+        item["function"]["name"]
+        for item in chat_tools.openai_schemas(mode="read")
+    }
+    debugger_names = {
+        item["function"]["name"]
+        for item in chat_tools.openai_schemas(mode="debugger")
+    }
+    assert "pytest_run" not in read_names
+    assert "write_temp_test" not in read_names
+    assert {"pytest_run", "write_temp_test"} <= debugger_names
+    assert len(read_names) == 10
+    assert len(debugger_names) == 12
 
 
 def test_openai_schemas_anzahl() -> None:
@@ -306,3 +317,77 @@ def test_loop_action_requires_startable_explicit_op(
     assert proposal["zustand"] == "needs_input"
     assert expected_detail in proposal["detail"]
     assert not db.exists()
+
+
+def test_pytest_run_requires_debugger_mode_and_project_path(
+    tmp_path, monkeypatch,
+) -> None:
+    from types import SimpleNamespace
+
+    calls = []
+    monkeypatch.setattr(
+        chat_tools.subprocess,
+        "run",
+        lambda *args, **kwargs: (
+            calls.append((args, kwargs))
+            or SimpleNamespace(returncode=0, stdout="2 passed", stderr="")
+        ),
+    )
+    test_file = tmp_path / "tests" / "test_sample.py"
+    test_file.parent.mkdir()
+    test_file.write_text("def test_ok(): pass\n", encoding="utf-8")
+
+    blocked = chat_tools.execute_tool(
+        "pytest_run", {"path": "tests/test_sample.py"}, project_dir=tmp_path,
+    )
+    assert "erfordert mode='debugger'" in blocked
+
+    result = chat_tools.execute_tool(
+        "pytest_run", {"path": "tests/test_sample.py", "test": "test_ok"},
+        mode="debugger", project_dir=tmp_path,
+    )
+    assert '"exit_code": 0' in result
+    assert calls[0][0][0][0] == chat_tools.sys.executable
+    assert calls[0][0][0][-1] == str(test_file)
+    assert calls[0][1]["timeout"] == 120
+    assert "tests/test_sample.py" in chat_tools.execute_tool(
+        "pytest_run", {"path": "../outside.py"},
+        mode="debugger", project_dir=tmp_path,
+    )
+
+
+def test_write_temp_test_is_confined_and_session_audited(tmp_path, monkeypatch) -> None:
+    import json
+
+    from werkstatt import chat_session
+
+    monkeypatch.setattr(
+        chat_session, "_db_pfad", lambda _project: tmp_path / "chat.db",
+    )
+    result = chat_tools.execute_tool(
+        "write_temp_test", {"content": "def test_example(): pass\n"},
+        mode="debugger", project_dir=tmp_path, project_name="demo",
+        session_id="session-3",
+    )
+    data = json.loads(result)
+
+    assert data["zustand"] == "created"
+    path = tmp_path / data["path"]
+    assert path.parent == tmp_path / ".werkstatt" / "temp_tests"
+    assert path.is_file()
+    assert not (tmp_path / "tests").exists()
+    events = chat_session.ChatSession(
+        "demo", "session-3", db_pfad=tmp_path / "chat.db",
+    ).load()
+    assert events[-1]["kind"] == "debug_temp_test_created"
+    assert events[-1]["payload"]["path"] == data["path"]
+
+
+def test_write_temp_test_rejects_large_content(tmp_path) -> None:
+    result = chat_tools.execute_tool(
+        "write_temp_test",
+        {"content": "x" * 50_001},
+        mode="debugger", project_dir=tmp_path,
+    )
+    assert "50 KB" in result
+    assert not (tmp_path / ".werkstatt" / "temp_tests").exists()
