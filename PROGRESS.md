@@ -4961,3 +4961,8 @@ Ein neuer Validierungsbaustein definiert den strukturierten Debugger-Patch als u
 ## 2026-11-11 — OP-240 CI-Lintkorrektur
 
 Die erste GitHub-Actions-Runde fuer den neuen DebuggerFix-Vertrag stoppte vor pytest am Ruff-UP035-Hinweis: Mapping gehoert in collections.abc. Import korrigiert; die vollstaendige Verifikation laeuft mit dem Folgecommit.
+
+
+## 2026-11-11 — OP-240 Importordnung nach CI-Ruff
+
+Die Folge-CI meldete weiterhin I001, weil collections.abc und dataclasses in falscher Reihenfolge standen. Importblock alphabetisch sortiert; die erneute CI-Runde prueft nun Ruff, Tests und Quality Gate.

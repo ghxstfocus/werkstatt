@@ -11,8 +11,8 @@ import json
 import math
 import re
 import subprocess
-from dataclasses import asdict, dataclass
 from collections.abc import Mapping
+from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
