@@ -2564,6 +2564,23 @@ body[data-mode="control"] .live-feed-bereich {
 .lf-step-sym.lf-err      { color: var(--sem-error); }
 .lf-step-sym.lf-running  { color: var(--sem-active); }
 .lf-step-sym.lf-idle     { color: var(--text-muted); }
+.lf-step-more {
+  grid-column: 1 / -1;
+  margin: 2px 0 5px 70px;
+  padding: 5px 8px;
+  border-left: 2px solid var(--border-subtle);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.lf-step-more summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  user-select: none;
+}
+.lf-step-more p { margin: 5px 0 0; white-space: normal; }
+.lf-step-more strong { color: var(--text); }
+.lf-step-more ul { margin: 4px 0 0; padding-left: 18px; }
+.lf-step-more li { margin: 2px 0; overflow-wrap: anywhere; }
 
 /* Neue Step einblenden */
 @keyframes lf-step-flash {
