@@ -272,7 +272,6 @@ def test_git_diff_for_hook_exception():
 
 
 # =====================================================================
-# =====================================================================
 # Stash restoration is scoped to the run-owned entry
 # =====================================================================
 
@@ -335,6 +334,7 @@ def test_real_stash_pop_restores_own_entry_behind_newer_stash(tmp_path):
     assert newer_stash in remaining
     assert run_stash not in remaining
 
+
 def test_real_stash_conflict_remains_recoverable(tmp_path):
     _init_repo(tmp_path)
     ziel = tmp_path / "seed.txt"
@@ -358,6 +358,7 @@ def test_real_stash_conflict_remains_recoverable(tmp_path):
         capture_output=True, text=True, check=True,
     ).stdout.splitlines()
     assert stash_sha in remaining
+
 
 def test_commit_gate_prompt_ist_explizit(monkeypatch):
     """OP-381: Commit-Gate-Prompt sagt WAS entschieden wird.

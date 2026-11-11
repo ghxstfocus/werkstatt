@@ -100,6 +100,7 @@ def _git_stash_pop(pd: Path, stash_ref: str | None = None) -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
 
+
 def _git_stash_drop(pd: Path) -> bool:
     """M-353b: Verwirft dirty tree (bei Fehler)."""
     try:
