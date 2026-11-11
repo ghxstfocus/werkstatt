@@ -101,18 +101,6 @@ def _git_stash_pop(pd: Path, stash_ref: str | None = None) -> bool:
         return False
 
 
-def _git_stash_drop(pd: Path) -> bool:
-    """M-353b: Verwirft dirty tree (bei Fehler)."""
-    try:
-        res = subprocess.run(
-            ["git", "-C", str(pd), "stash", "drop"],
-            capture_output=True, text=True, timeout=30, check=False,
-        )
-        return res.returncode == 0
-    except Exception:
-        return False
-
-
 def _git_reset(pd: Path, ref: str) -> bool:
     """M-353c: Setzt Arbeitsbaum auf ref zurueck."""
     try:
@@ -131,6 +119,5 @@ __all__ = [
     "_git_head",
     "_git_reset",
     "_git_stash",
-    "_git_stash_drop",
     "_git_stash_pop",
 ]

@@ -5135,3 +5135,7 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Bei Cleanup wurde ein fehlgeschlagenes `git stash pop` durch ein unbedingtes `git stash drop stash@{0}` gefolgt; damit konnte ein Konflikt den einzigen wiederherstellbaren Nutzer-Stash loeschen.
 - Ausserdem galt ein erfolgreicher `git stash push`-Exitcode bereits als Beleg, dass ein neuer Stash angelegt wurde. Bei einem Race zur Dirty-Pruefung konnte so ein vorhandener Fremd-Stash gepoppt werden.
 - Cleanup ordnet die Wiederherstellung jetzt einer konkreten Stash-SHA zu, behaelt Konflikt-Stashes und bricht vor dem Loop ab, wenn lokale Aenderungen nicht nachweisbar gesichert wurden. OP-397, Audit-Katalog und Regressionstests werden angepasst.
+
+## 2026-11-11 — Generischen Stash-Drop-Helper entfernen
+
+- Der nach dem Cleanup-Fix ungenutzte `_git_stash_drop` verwarf pauschal den neuesten Stash ohne Ownership-Pruefung. Definition, Re-Export und API-Eintrag sind entfernt.

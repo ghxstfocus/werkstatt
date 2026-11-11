@@ -41,7 +41,6 @@ from werkstatt.git_ops import (  # Fix AZ Stufe 1: Re-Export
     _git_head,
     _git_reset,
     _git_stash,
-    _git_stash_drop,
     _git_stash_pop,
 )
 from werkstatt.hooks import _call_hook  # Fix AZ Stufe 2: Re-Export
@@ -134,7 +133,6 @@ __all__ = [
     "_git_head",
     "_git_reset",
     "_git_stash",
-    "_git_stash_drop",
     "_git_stash_pop",
     "_human_gate",
     "_human_gate_plan",
