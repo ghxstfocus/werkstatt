@@ -76,3 +76,23 @@ def test_control_transition_is_compare_and_set_across_registry_instances(
     assert worker_b.reserve("demo", "run-b")[0] is False
     assert worker_b.transition("demo", "run-a", "stopping", "idle") is True
     assert worker_a.read("demo")["state"] == "idle"
+
+
+def test_abandoned_control_transition_recovers_from_kernel_state(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "registry.db"
+    registry = LoopProcessRegistry(db)
+    assert registry.reserve("demo", "run-a") == (True, None)
+    registry.register("demo", "run-a", os.getpid())
+    assert registry.transition("demo", "run-a", "running", "pausing") is True
+
+    with registry._connect() as conn:
+        conn.execute(
+            "UPDATE loop_processes SET updated_at=0 WHERE project='demo'"
+        )
+        conn.commit()
+
+    record = registry.read("demo")
+    assert record is not None
+    assert record["state"] == "running"
