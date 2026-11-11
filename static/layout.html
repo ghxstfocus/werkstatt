@@ -7,23 +7,9 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Werkstatt</title>
-  <link rel="stylesheet" href="/static/layout.css?v=202611110004">
+  <link rel="stylesheet" href="/static/layout.css?v=202611110005">
 </head>
 <body data-mode="cockpit" data-runs-open="false">
-
-  <div class="top-controls">
-    <div class="mode-switch" id="mode-switch" role="group" aria-label="UI-Modus">
-      <button type="button" class="mode-btn" data-mode-btn="cockpit" aria-pressed="true" title="Cockpit (1)">Cockpit</button>
-      <button type="button" class="mode-btn" data-mode-btn="control" aria-pressed="false" title="Control (2)">Control</button>
-      <button type="button" class="mode-btn" data-mode-btn="debug" aria-pressed="false" title="Debug (3)">Debug</button>
-    </div>
-    <button type="button" class="runs-toggle" id="runs-toggle" aria-label="Runs-Sidebar" title="Runs ein-/ausblenden (R)" hidden>
-      <span class="runs-toggle-icon">☰</span>
-      <span class="runs-toggle-label">Runs</span>
-    </button>
-  </div>
-
-  <div class="runs-backdrop" id="runs-backdrop" hidden></div>
 
   <nav id="tab-leiste" role="tablist" aria-label="Projekte">
     <button id="tab-home" type="button" aria-label="Werkstatt-Übersicht" aria-pressed="false" title="Werkstatt-Übersicht">
@@ -45,6 +31,20 @@
       </button>
     </div>
   </nav>
+
+  <div class="top-controls">
+    <div class="mode-switch" id="mode-switch" role="group" aria-label="UI-Modus">
+      <button type="button" class="mode-btn" data-mode-btn="cockpit" aria-pressed="true" title="Cockpit (1)">Cockpit</button>
+      <button type="button" class="mode-btn" data-mode-btn="control" aria-pressed="false" title="Control (2)">Control</button>
+      <button type="button" class="mode-btn" data-mode-btn="debug" aria-pressed="false" title="Debug (3)">Debug</button>
+    </div>
+    <button type="button" class="runs-toggle" id="runs-toggle" aria-label="Runs-Sidebar" title="Runs ein-/ausblenden (R)" hidden>
+      <span class="runs-toggle-icon">☰</span>
+      <span class="runs-toggle-label">Runs</span>
+    </button>
+  </div>
+
+<div class="runs-backdrop" id="runs-backdrop" hidden></div>
 
   <div class="ambient-bar" id="ambient-bar" role="status" aria-live="polite">
     <span class="ambient-item ambient-project" id="ambient-project" title="Aktives Projekt">
@@ -271,13 +271,13 @@
     <span class="status-run" id="status-run"></span>
   </footer>
 
-  <script src="/static/overview.js?v=202611110004"></script>
-  <script src="/static/tabs.js?v=202611110004"></script>
-  <script src="/static/terminal.js?v=202611110004"></script>
-  <script src="/static/audit.js?v=202611110004"></script>
-  <script src="/static/chat.js?v=202611110004"></script>
-  <script src="/static/runs.js?v=202611110004"></script>
-  <script src="/static/timeline.js?v=202611110004"></script>
+  <script src="/static/overview.js?v=202611110005"></script>
+  <script src="/static/tabs.js?v=202611110005"></script>
+  <script src="/static/terminal.js?v=202611110005"></script>
+  <script src="/static/audit.js?v=202611110005"></script>
+  <script src="/static/chat.js?v=202611110005"></script>
+  <script src="/static/runs.js?v=202611110005"></script>
+  <script src="/static/timeline.js?v=202611110005"></script>
   <div class="shortcut-help-overlay" id="shortcut-help-overlay">
     <div class="shortcut-help-box">
       <div class="shortcut-help-header">
@@ -365,17 +365,17 @@
     </div>
   </div>
 
-  <script src="/static/statusleiste.js?v=202611110004"></script>
-  <script src="/static/palette.js?v=202611110004"></script>
-  <script src="/static/shortcut_help.js?v=202611110004"></script>
-  <script src="/static/utility_bar.js?v=202611110004"></script>
-  <script src="/static/project_create.js?v=202611110004"></script>
-  <script src="/static/workbench.js?v=202611110004"></script>
-  <script src="/static/mode.js?v=202611110004"></script>
-  <script src="/static/waterfall.js?v=202611110004"></script>
-  <script src="/static/live_feed.js?v=202611110004"></script>
-  <script src="/static/gate_panel.js?v=202611110004"></script>
-  <script src="/static/detail_drawer.js?v=202611110004"></script>
-  <script src="/static/ambient_status.js?v=202611110004"></script>
+  <script src="/static/statusleiste.js?v=202611110005"></script>
+  <script src="/static/palette.js?v=202611110005"></script>
+  <script src="/static/shortcut_help.js?v=202611110005"></script>
+  <script src="/static/utility_bar.js?v=202611110005"></script>
+  <script src="/static/project_create.js?v=202611110005"></script>
+  <script src="/static/workbench.js?v=202611110005"></script>
+  <script src="/static/mode.js?v=202611110005"></script>
+  <script src="/static/waterfall.js?v=202611110005"></script>
+  <script src="/static/live_feed.js?v=202611110005"></script>
+  <script src="/static/gate_panel.js?v=202611110005"></script>
+  <script src="/static/detail_drawer.js?v=202611110005"></script>
+  <script src="/static/ambient_status.js?v=202611110005"></script>
 </body>
 </html>
