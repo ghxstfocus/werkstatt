@@ -13,7 +13,7 @@ import pytest
 
 def _fake_popen(
     aufrufe: list[list[str]],
-    pid: int = 4242,
+    pid: int = os.getpid(),
     kwargs_log: list[dict[str, Any]] | None = None,
 ) -> Any:
     """Fabrik fuer einen Fake-Popen, der argv protokolliert."""
@@ -103,7 +103,7 @@ def test_loop_subprozess_start_stop(
     assert antwort.status_code == 200
     daten = antwort.json()
     assert daten["gestartet"] is True
-    assert daten["pid"] == 4242
+    assert daten["pid"] == os.getpid()
     assert aufrufe[0][:5] == [
         sys.executable,
         "-m",
@@ -400,7 +400,7 @@ def test_stop_eskaliert_an_prozessgruppe_nach_timeout(
     _reset_loop_registry(app_modul)
 
     class _TimeoutProzess:
-        pid = 4242
+        pid = os.getpid()
         returncode: int | None = None
 
         def poll(self) -> int | None:
