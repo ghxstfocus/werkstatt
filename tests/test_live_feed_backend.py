@@ -219,3 +219,32 @@ def test_live_feed_explizite_run_id_bleibt_projektisoliert(projektion, tmp_path)
     kinds = [step["kind"] for step in feed["steps"]]
     assert "builder_patch_updated" in kinds
     assert "architect_plan" not in kinds
+
+def test_live_feed_exposes_only_curated_decision_evidence(projektion, tmp_path):
+    """Kontrollspur zeigt explizite Kurzbelege, niemals rohe Promptfelder."""
+    jetzt = datetime.now(UTC).isoformat()
+    _schreibe(tmp_path, [{
+        "kind": "loop_verify_ok", "run_id": "r-evidence",
+        "project": "demo", "timestamp": jetzt, "agent": "agent_pipeline",
+        "payload": {
+            "phase": "verify", "task_id": "t-2",
+            "result_summary": "Alle 12 Tests bestanden.",
+            "decision_summary": "Zielkriterien sind noch offen.",
+            "evidence": ["pytest: 12 passed", "ruff: clean"],
+            "next_step": "Offenes Akzeptanzkriterium pruefen.",
+            "chain_of_thought": "Dieses interne Feld darf nie in der Timeline sein.",
+        },
+    }])
+    feed = inspector.aggregate_live_feed("demo")
+    step = next(item for item in feed["steps"]
+                if item["kind"] == "loop_verify_ok")
+    assert step["project"] == "demo"
+    assert step["run_id"] == "r-evidence"
+    assert step["phase"] == "verify"
+    assert step["task_id"] == "t-2"
+    assert step["result_summary"] == "Alle 12 Tests bestanden."
+    assert step["decision_summary"] == "Zielkriterien sind noch offen."
+    assert step["evidence"] == ["pytest: 12 passed", "ruff: clean"]
+    assert step["next_step"] == "Offenes Akzeptanzkriterium pruefen."
+    assert "chain_of_thought" not in step
+    assert "chain_of_thought" not in str(step)
