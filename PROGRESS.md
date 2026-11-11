@@ -4907,3 +4907,22 @@ Die Modusleiste mit Cockpit, Control, Debug und Runs steht jetzt direkt unter de
   zeigt 3 Erfolge aus 27 terminalen Runs; den Inhalt der Server-Event-DB
   haben wir damit nicht separat geprueft.
 
+
+
+## 2026-11-11 — Loop-Control cross-worker serialisiert
+
+- Pause, Resume und Stop waren nur durch einen prozesslokalen Lock geschuetzt.
+  Mehrere Gunicorn-Worker konnten deshalb denselben Registry-Zustand lesen und
+  widerspruechliche POSIX-Signale senden.
+- Die SQLite-Registry besitzt jetzt compare-and-set Uebergaenge fuer
+  pausing, resuming und stopping. Eine Aktion beansprucht den
+  erwarteten Zustand atomar, bevor sie ein Signal sendet; parallele Steuerung
+  erhaelt HTTP 409. Der persistierte Zwischenzustand bleibt fuer andere Worker
+  und nach Webserver-Neustarts sichtbar.
+- Stop sendet vor SIGTERM ein idempotentes SIGCONT, damit ein zuvor pausierter
+  Prozess das Terminationssignal empfangen kann.
+- Regressionstests pruefen konkurrierende Registry-Uebergaenge und ein
+  verschachteltes Resume waehrend Pause. Die Test-Prozesse verwenden eine
+  lebende PID, damit Registry-Liveness den Control-Pfad realistisch abbildet.
+- **Verifikation laeuft:** GitHub Actions fuer den aktuellen main-Stand muss
+  gezielte Web-Tests und den vollen Quality Gate noch bestaetigen.
