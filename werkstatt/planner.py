@@ -2022,7 +2022,7 @@ def _deterministic_literal_replace_plan(
         return None, "kein_expliziter_literalersetzungsausdruck"
     target_binding = (
         r"(?:\bin\s+(?:der\s+Datei\s+)?|\bwithin\s+)"
-        + r"\x60?" + re.escape(target) + r"\x60?(?![\w./-])"
+        + r"\x60?" + re.escape(target) + r"\x60?(?![\w/-])"
     )
     if re.search(target_binding, aufgabe[match.end():], flags=re.IGNORECASE) is None:
         return None, "zieldatei_nicht_an_ersetzung_gebunden"
