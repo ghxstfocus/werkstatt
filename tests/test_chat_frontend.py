@@ -81,3 +81,12 @@ def test_chat_can_cancel_background_jobs_without_blocking_composer() -> None:
     assert 'state === "cancelled"' in js
     assert 'id="chat-eingabe"' in html
 
+
+
+def test_chat_renders_explicit_loop_action_confirmation_card() -> None:
+    js = _chat_js()
+    assert 'function _proposalKarte(proposal, status)' in js
+    assert 'button.textContent = decision === "confirm" ? "Bestätigen" : "Ablehnen";' in js
+    assert '"/chat/actions/"' in js
+    assert 'kind === "loop_action_proposed"' in js
+    assert 'proposal.task_preview' in js
