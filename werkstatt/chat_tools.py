@@ -188,6 +188,73 @@ def _pytest_collect(args: dict[str, Any]) -> str:
     return (r.stdout or r.stderr)[:20_000]
 
 
+def _pytest_run(args: dict[str, Any]) -> str:
+    """Fuehrt ausgewaehlte Projekt-Tests mit festem Timeout aus."""
+    pfad = _resolved_safe(str(args.get("path", "")).strip())
+    if pfad is None:
+        return "Fehler: Testpfad fehlt oder liegt ausserhalb des Projekts"
+    if not pfad.exists():
+        return f"Fehler: Testpfad nicht gefunden: {pfad}"
+    test = str(args.get("test") or "").strip()
+    if len(test) > 200:
+        return "Fehler: Testauswahl ist zu lang"
+    command = [sys.executable, "-m", "pytest", "-q", str(pfad)]
+    if test:
+        command.extend(["-k", test])
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+            cwd=_aktives_projekt_dir(),
+        )
+    except subprocess.TimeoutExpired:
+        return "pytest_run: Timeout nach 120 Sekunden"
+    except OSError as exc:
+        return f"pytest_run-Fehler: {exc}"
+    output = (result.stdout or "") + (result.stderr or "")
+    return json.dumps({
+        "exit_code": result.returncode,
+        "befehl": command[1:],
+        "ausgabe": output[-20_000:],
+    }, ensure_ascii=False)
+
+
+def _write_temp_test(args: dict[str, Any]) -> str:
+    """Schreibt einen isolierten Debug-Test nur in .werkstatt/temp_tests."""
+    content = args.get("content")
+    if not isinstance(content, str) or not content.strip():
+        return "Fehler: Testinhalt fehlt"
+    if len(content.encode("utf-8")) > 50_000:
+        return "Fehler: Testinhalt ueberschreitet 50 KB"
+    root = _aktives_projekt_dir()
+    target_dir = root / ".werkstatt" / "temp_tests"
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        resolved_dir = target_dir.resolve()
+        resolved_dir.relative_to(root)
+        path = resolved_dir / f"test_chat_debug_{uuid.uuid4().hex}.py"
+        with path.open("x", encoding="utf-8") as stream:
+            stream.write(content)
+    except (OSError, ValueError, RuntimeError) as exc:
+        return f"write_temp_test-Fehler: {exc}"
+    relative = path.relative_to(root).as_posix()
+    session_id = _CHAT_SESSION_ID_KONTEXT.get()
+    if session_id:
+        from werkstatt.chat_session import ChatSession
+
+        ChatSession(_PROJEKTNAME_KONTEXT.get(), session_id).append(
+            "debug_temp_test_created", {"path": relative},
+        )
+    return json.dumps({
+        "zustand": "created",
+        "path": relative,
+        "hinweis": "Temporärer Test; Produktionsdateien wurden nicht verändert.",
+    }, ensure_ascii=False)
+
+
 def _diagnose(_args: dict[str, Any]) -> str:
     return json.dumps({
         "bekannte_fehlerklassen": [
@@ -449,6 +516,29 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
         "fn": _pytest_collect,
         "mode": "read",
     },
+    "pytest_run": {
+        "description": "Fuehrt einen Projekt-Testpfad aus (nur Debug-Modus, max. 120 Sekunden).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "test": {"type": "string"},
+            },
+            "required": ["path"],
+        },
+        "fn": _pytest_run,
+        "mode": "debugger",
+    },
+    "write_temp_test": {
+        "description": "Schreibt einen isolierten Test nach .werkstatt/temp_tests (nur Debug-Modus); niemals Produktionscode oder tests/.",
+        "parameters": {
+            "type": "object",
+            "properties": {"content": {"type": "string"}},
+            "required": ["content"],
+        },
+        "fn": _write_temp_test,
+        "mode": "debugger",
+    },
     "diagnose": {
         "description": "Liste bekannter Fehlerklassen.",
         "parameters": {"type": "object", "properties": {}},
@@ -499,6 +589,8 @@ def _mode_erlaubt(spec: dict[str, Any], mode: str) -> bool:
     want = spec.get("mode", "read")
     if want == "read":
         return True
+    if want == "debugger":
+        return mode == "debugger"
     return mode == "write"
 
 
