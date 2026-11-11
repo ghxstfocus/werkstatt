@@ -42,5 +42,8 @@ jobs:
       - name: Run Ruff
         run: python -m ruff check . --output-format concise
 
+      - name: Run pytest with diagnostics
+        run: python -m pytest -q
+
       - name: Run quality gate
         run: python -m tools.quality_gate --json
