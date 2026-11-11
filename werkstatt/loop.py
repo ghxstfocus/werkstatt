@@ -687,16 +687,24 @@ def _emit_lifecycle_end(
     if stopped:
         kind = "loop_stopped"
         payload = {"erfolg": False, "abgebrochen": True, "run_id": run_id}
+        try:
+            audit("loop_stopped", payload, _P.cwd(), effektives_projekt)
+        except Exception:  # noqa: BLE001
+            pass
     elif erfolg:
         kind = "loop_ended"
         payload = {"erfolg": True, "run_id": run_id}
+        try:
+            audit("loop_ended", payload, _P.cwd(), effektives_projekt)
+        except Exception:  # noqa: BLE001
+            pass
     else:
         kind = "loop_failed"
         payload = {"erfolg": False, "run_id": run_id}
-    try:
-        audit(kind, payload, _P.cwd(), effektives_projekt)
-    except Exception:  # noqa: BLE001
-        pass
+        try:
+            audit("loop_failed", payload, _P.cwd(), effektives_projekt)
+        except Exception:  # noqa: BLE001
+            pass
     try:
         expire_for_run(run_id, grund=kind)
     except Exception:  # noqa: BLE001

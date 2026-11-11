@@ -5087,3 +5087,7 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Web-Stop wird im Loop-Prozess als kontrollierter Abbruch behandelt, damit der bestehende `finally`-Pfad PhaseState persistiert und einen vor Run-Beginn angelegten Stash zurueckholt.
 - Der Lifecycle unterscheidet einen menschlich angeforderten Stop von einem unerwarteten Loop-Fehler und auditiert ihn als `loop_stopped`.
 - Ein Regressionstest sendet SIGTERM innerhalb des Run-Pfads und belegt den Stash-Cleanup.
+
+## 2026-11-11 — Lifecycle-Audits explizit typisieren
+
+- Terminale Run-Ereignisse werden als direkte, typisierte Audit-Aufrufe emittiert, damit der Katalogtest neue und tote Kinds erkennt.
