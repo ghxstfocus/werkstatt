@@ -631,7 +631,11 @@ def execute_tool(
     if spec is None:
         return f"Fehler: Tool '{name}' nicht in Registry (read-only)"
     if not _mode_erlaubt(spec, mode):
-        return f"Fehler: Tool '{name}' erfordert mode='write' (aktuell '{mode}')"
+        erforderlicher_modus = spec.get("mode", "read")
+        return (
+            f"Fehler: Tool '{name}' erfordert mode='{erforderlicher_modus}' "
+            f"(aktuell '{mode}')"
+        )
     fn: Callable[[dict[str, Any]], str] = spec["fn"]
     root = (
         Path(project_dir).expanduser().resolve()
