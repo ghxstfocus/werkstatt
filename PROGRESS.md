@@ -4783,3 +4783,11 @@ Der Test fuer tools/audit.py manipulierte sys.path und importierte danach audit 
 
 - Betroffene Commits: cdfce9e (Zwischenschritt), 4bd6f8c (korrigierter Import).
 - CI nach der Korrektur: ausstehend.
+
+
+## Saubere CI fuehrt pytest mit Detaildiagnose aus (2026-11-11)
+
+Nach erfolgreichem Ruff-Lauf meldete Quality Gate in sauberer CI 92 Testfehler (0 bestanden), waehrend Mypy, AST und Audit-Katalog sauber waren. Quality Gate fasst pytest-Ausgaben hier nur als Zaehler zusammen; der Workflow fuehrt deshalb die Testsuite vorher direkt aus, damit der naechste Lauf konkrete Fehler und Tracebacks im Actions-Log zeigt. Die Fehlerursache ist noch offen und wird anhand dieses Laufs behoben.
+
+- Workflow-Commit: 5bf8e45.
+- CI-Diagnose: ausstehend.
