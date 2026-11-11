@@ -364,7 +364,7 @@ def test_chat_loop_explizites_rundenbudget_liefert_abschluss(
     assert len(requests_seen) == 2
     assert requests_seen[0][1] is not None
     assert requests_seen[1][1] is None
-    assert "explizite Obergrenze" in requests_seen[1][0][-1]["content"]
+    assert "Obergrenze angekommen" in requests_seen[1][0][-1]["content"]
     assert session.load()[-1]["payload"]["text"] == antwort
 
 
