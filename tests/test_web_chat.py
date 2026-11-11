@@ -25,7 +25,7 @@ def app_client(tmp_path: Path, monkeypatch):
 def test_sessions_leer(app_client) -> None:
     r = app_client.get("/api/projects/demo/chat/sessions")
     assert r.status_code == 200
-    assert r.json() == {"sessions": []}
+    assert r.json() == {"sessions": [], "summaries": []}
 
 
 def test_new_liefert_session_id(app_client) -> None:
