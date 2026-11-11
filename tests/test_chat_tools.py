@@ -1,6 +1,8 @@
 """Tests fuer OP-231: read-only Tool-Registry."""
 from __future__ import annotations
 
+import pytest
+
 from werkstatt import chat_tools
 
 FORBIDDEN = {"write_file", "apply_patch", "git_commit",
@@ -257,21 +259,24 @@ def test_loop_action_proposal_requires_session_and_never_executes(tmp_path) -> N
     ("status_fields", "expected_detail"),
     [
         (
-            "- **Status:** done\n"
-            "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
-            "- **Tests:** pytest -q tests/test_321.py\n",
+            """- **Status:** done
+- **Akzeptanzkriterien:** Ergebnis belegbar.
+- **Tests:** pytest -q tests/test_321.py
+""",
             "nicht startfaehig",
         ),
         (
-            "- **Status:** open\n"
-            "- **Akzeptanzkriterien:** Ergebnis belegbar.\n",
+            """- **Status:** open
+- **Akzeptanzkriterien:** Ergebnis belegbar.
+""",
             "Tests oder ein pruefbarer Nachweis fehlen",
         ),
         (
-            "- **Status:** open\n"
-            "- **Blockiert von:** OP-999\n"
-            "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
-            "- **Tests:** pytest -q tests/test_321.py\n",
+            """- **Status:** open
+- **Blockiert von:** OP-999
+- **Akzeptanzkriterien:** Ergebnis belegbar.
+- **Tests:** pytest -q tests/test_321.py
+""",
             "Unbekannte oder widerspruechliche Blocker",
         ),
     ],
