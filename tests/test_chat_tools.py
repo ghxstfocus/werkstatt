@@ -20,6 +20,7 @@ def test_neun_soll_tools_vorhanden() -> None:
         "audit_query", "pytest_collect", "diagnose", "read_status", "next_op",
     }
     erwartet.add("request_loop_action")
+    erwartet.update({"pytest_run", "write_temp_test"})
     assert set(chat_tools.CHAT_TOOLS) == erwartet
 
 
