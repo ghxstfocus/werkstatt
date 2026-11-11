@@ -4929,3 +4929,12 @@ Die Modusleiste mit Cockpit, Control, Debug und Runs steht jetzt direkt unter de
   lebende PID, damit Registry-Liveness den Control-Pfad realistisch abbildet.
 - **Verifikation laeuft:** GitHub Actions fuer den aktuellen main-Stand muss
   gezielte Web-Tests und den vollen Quality Gate noch bestaetigen.
+
+
+## 2026-11-11 — OP-397 Loop-Control ueber Workergrenzen verifiziert
+
+Der Race zwischen mehreren Web-Workern ist mit atomaren SQLite-Statusuebergaengen behoben. Pause, Resume und Stop beanspruchen den erwarteten Laufzustand, bevor sie POSIX-Signale senden; konkurrierende Aktionen koennen den Claim nicht doppelt erhalten. Verwaiste Pause-/Resume-Uebergaenge werden anhand des Kernel-Prozesszustands wiederhergestellt. Stop setzt einen pausierten Prozess vor SIGTERM fort.
+
+- Regression im Chat-Control-Test an die Registry-CAS-Schnittstelle angepasst.
+- GitHub Actions auf `67caa8b`: **1926 passed, 5 skipped**; Ruff/Mypy 0; AST 370 Dateien / 0 Fehler; Audit-Katalog bestanden; Quality Gate `ok: true`, `regression: false`.
+- Statusdokumentation ergaenzt. Server-Pull und Live-Dogfooding stehen noch aus.
