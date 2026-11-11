@@ -335,7 +335,28 @@ def _human_gate_plan(state, kontext=""):
                 continue
             _plan_file = Path(pd) / ".werkstatt" / f"{pn}.phase.yaml"
             print(f"\nPlan-Datei: {_plan_file}")
-            input("Enter zum Fortfahren...")
+            try:
+                _weiter = _frage_gate(
+                    "plan_edit_continue",
+                    "Plan-Datei bearbeiten, dann fortfahren? [j]: ",
+                    "j",
+                ).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                audit(
+                    "loop_plan_gate_eof",
+                    {"reason": "plan_edit_continue"},
+                    pd,
+                    pn,
+                )
+                return 1
+            if _HEADLESS and _weiter != "j":
+                audit(
+                    "loop_plan_gate_rejected",
+                    {"reason": "plan_edit_continue"},
+                    pd,
+                    pn,
+                )
+                return 1
             if _plan_file.exists():
                 try:
                     import yaml
@@ -446,7 +467,9 @@ def _adr_mini_phase(state: RunState) -> bool:
         audit("adr_mini_skip", {"reason": "no_adr_dir"}, pd, pn)
         return True
     try:
-        antwort = input("ADR dokumentieren? [j/n]: ").strip().lower()
+        antwort = _frage_gate(
+            "adr_mini", "ADR dokumentieren? [j/n]: ", "jn",
+        ).strip().lower()
     except (EOFError, KeyboardInterrupt):
         return True
     if antwort not in ("j", "ja", "y", "yes"):
@@ -724,9 +747,29 @@ def _human_gate(state: RunState, *, defer_commit: bool = False) -> int:
         return 0
     if antwort == "e":
         # Manueller Edit-Modus: Nutzer oeffnet Editor, dann erneut fragen
-        print("  Bitte Datei(en) manuell bearbeiten. Enter druecken zum Fortfahren.")
-        if not _HEADLESS:
-            input()
+        print("  Bitte Datei(en) manuell bearbeiten.")
+        try:
+            _weiter = _frage_gate(
+                "commit_edit_continue",
+                "Aenderungen geprueft? Fortfahren? [j]: ",
+                "j",
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            audit(
+                "loop_human_gate_eof",
+                {"reason": "commit_edit_continue"},
+                pd,
+                pn,
+            )
+            return 1
+        if _HEADLESS and _weiter != "j":
+            audit(
+                "loop_human_gate_rejected",
+                {"reason": "commit_edit_continue"},
+                pd,
+                pn,
+            )
+            return 1
         # Rekursiv erneut fragen (Diff neu anzeigen)
         return _human_gate(state, defer_commit=defer_commit)
     audit("loop_human_gate_rejected", {"antwort": antwort}, pd, pn)
