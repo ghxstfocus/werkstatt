@@ -1,9 +1,7 @@
-"""Spec: _human_gate — alle 8 Rueckgabepfade.
+"""Spec: _human_gate — fail-closed und explizite Entscheidungen.
 
-Config: /opt/werkstatt/projects/<pn>.yaml (nicht Zielprojekt).
-Tests legen projects/testproj.yaml fuer die Dauer des Tests an
-und raeumen sie im finally auf. Test-Projektname "testproj"
-kollidiert nicht mit echten Projekten (nur security-ai).
+Die Tests schreiben weder in das globale Projektverzeichnis noch in
+reale Projektkonfigurationen.
 """
 from __future__ import annotations
 
@@ -12,8 +10,6 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from werkstatt import loop
 from werkstatt.state import RunState
 
@@ -21,11 +17,6 @@ _here = Path(__file__).parent
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
 from factories import mk_state  # noqa: E402
-
-PROJECTS_DIR = Path("/opt/werkstatt/projects")
-CONFIG_NAME = "testproj.yaml"
-CONFIG_PATH = PROJECTS_DIR / CONFIG_NAME
-
 
 # =====================================================================
 # Fixtures
@@ -59,26 +50,6 @@ def _kind(tmp_path: Path, kind: str) -> list[dict]:
     return [e for e in _audit_events(tmp_path) if e.get("kind") == kind]
 
 
-@pytest.fixture
-def cfg_file():
-    """Legt projects/testproj.yaml an, raeumt im finally wieder auf.
-
-    Existiert die Datei bereits (sollte nicht), wird sie gesichert
-    und wiederhergestellt.
-    """
-    vorher = None
-    if CONFIG_PATH.exists():
-        vorher = CONFIG_PATH.read_text(encoding="utf-8")
-    PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
-    try:
-        yield CONFIG_PATH
-    finally:
-        if vorher is not None:
-            CONFIG_PATH.write_text(vorher, encoding="utf-8")
-        elif CONFIG_PATH.exists():
-            CONFIG_PATH.unlink()
-
-
 # =====================================================================
 # Pfad 1: project_dir fehlt
 # =====================================================================
@@ -92,9 +63,7 @@ def test_gate_kein_project_dir():
 # Pfad 2: Projektconfig darf Human-Gate nicht deaktivieren
 # =====================================================================
 
-def test_gate_config_false_bleibt_fail_closed(tmp_path, monkeypatch, cfg_file):
-    cfg_file.write_text("require_human_approval: false\n",
-                        encoding="utf-8")
+def test_gate_ohne_menschliche_antwort_bleibt_fail_closed(tmp_path, monkeypatch):
     monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
 
     def _raise_eof(*_args, **_kwargs):
@@ -111,10 +80,7 @@ def test_gate_config_false_bleibt_fail_closed(tmp_path, monkeypatch, cfg_file):
 # Pfad 3: WERKSTATT_IN_TEST=1 -> auto approve
 # =====================================================================
 
-def test_gate_test_modus(tmp_path, monkeypatch, cfg_file):
-    # Config explizit auf true, damit der Test-Modus greift.
-    cfg_file.write_text("require_human_approval: true\n",
-                        encoding="utf-8")
+def test_gate_test_modus(tmp_path, monkeypatch):
     monkeypatch.setenv("WERKSTATT_IN_TEST", "1")
     s = _state(tmp_path)
     assert loop._human_gate(s) == 0
@@ -127,9 +93,7 @@ def test_gate_test_modus(tmp_path, monkeypatch, cfg_file):
 # Pfad 4: EOF/KeyboardInterrupt -> rc=1
 # =====================================================================
 
-def test_gate_eof(tmp_path, monkeypatch, cfg_file):
-    cfg_file.write_text("require_human_approval: true\n",
-                        encoding="utf-8")
+def test_gate_eof(tmp_path, monkeypatch):
     monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
 
     def _raise(*a, **kw):
@@ -146,9 +110,7 @@ def test_gate_eof(tmp_path, monkeypatch, cfg_file):
 # Pfad 5: 'j' + Commit ok -> rc=0 + approved + committed
 # =====================================================================
 
-def test_gate_approved_j(tmp_path, monkeypatch, cfg_file):
-    cfg_file.write_text("require_human_approval: true\n",
-                        encoding="utf-8")
+def test_gate_approved_j(tmp_path, monkeypatch):
     monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
     monkeypatch.setattr("builtins.input", lambda *a, **kw: "j")
     with patch("werkstatt.loop._committe_zielprojekt",
@@ -162,9 +124,7 @@ def test_gate_approved_j(tmp_path, monkeypatch, cfg_file):
 # Pfad 6: 'ja' (Alias) -> rc=0
 # =====================================================================
 
-def test_gate_approved_ja_alias(tmp_path, monkeypatch, cfg_file):
-    cfg_file.write_text("require_human_approval: true\n",
-                        encoding="utf-8")
+def test_gate_approved_ja_alias(tmp_path, monkeypatch):
     monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
     monkeypatch.setattr("builtins.input", lambda *a, **kw: "ja")
     with patch("werkstatt.loop._committe_zielprojekt",
@@ -178,9 +138,7 @@ def test_gate_approved_ja_alias(tmp_path, monkeypatch, cfg_file):
 # Pfad 7: 'j' + Commit fail -> rc=1 + commit_abort
 # =====================================================================
 
-def test_gate_approved_commit_fail(tmp_path, monkeypatch, cfg_file):
-    cfg_file.write_text("require_human_approval: true\n",
-                        encoding="utf-8")
+def test_gate_approved_commit_fail(tmp_path, monkeypatch):
     monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
     monkeypatch.setattr("builtins.input", lambda *a, **kw: "j")
     with patch("werkstatt.loop._committe_zielprojekt",
@@ -196,9 +154,7 @@ def test_gate_approved_commit_fail(tmp_path, monkeypatch, cfg_file):
 # Pfad 8: 'n' -> rc=1 + rejected
 # =====================================================================
 
-def test_gate_rejected(tmp_path, monkeypatch, cfg_file):
-    cfg_file.write_text("require_human_approval: true\n",
-                        encoding="utf-8")
+def test_gate_rejected(tmp_path, monkeypatch):
     monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
     monkeypatch.setattr("builtins.input", lambda *a, **kw: "n")
     s = _state(tmp_path)
@@ -212,10 +168,8 @@ def test_gate_rejected(tmp_path, monkeypatch, cfg_file):
 # Pfad 9: 'e' (edit) -> rekursiv, dann 'j' -> rc=0
 # =====================================================================
 
-def test_gate_edit_rekursiv(tmp_path, monkeypatch, cfg_file):
+def test_gate_edit_rekursiv(tmp_path, monkeypatch):
     """Zwei input()-Aufrufe: erst 'e' (Edit), dann 'j'."""
-    cfg_file.write_text("require_human_approval: true\n",
-                        encoding="utf-8")
     monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
     antworten = iter(["e", "", "j"])
 
@@ -231,9 +185,8 @@ def test_gate_edit_rekursiv(tmp_path, monkeypatch, cfg_file):
     assert len(_kind(tmp_path, "loop_human_gate_approved")) == 1
 
 
-def test_gate_approved_deferred_commit(tmp_path, monkeypatch, cfg_file):
+def test_gate_approved_deferred_commit(tmp_path, monkeypatch):
     """Explizites j gibt Freigabe zurueck, committet aber noch nicht."""
-    cfg_file.write_text("require_human_approval: true\n", encoding="utf-8")
     monkeypatch.delenv("WERKSTATT_IN_TEST", raising=False)
     monkeypatch.setattr("builtins.input", lambda *a, **kw: "j")
     with patch("werkstatt.loop._committe_zielprojekt") as commit:
