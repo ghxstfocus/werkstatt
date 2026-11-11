@@ -126,3 +126,27 @@ def test_derive_messages_mapping(db: Path) -> None:
     assert msgs[1]["tool_calls"] == [{"id": "t1", "name": "read_file"}]
     assert msgs[2] == {"role": "tool", "content": "inhalt"}
     assert msgs[3] == {"role": "assistant", "content": "x ist y"}
+
+
+def test_resolve_loop_action_is_session_bound_and_one_time(db: Path) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    session = ChatSession("demo", "s1", db_pfad=db)
+    proposal_id = "a" * 32
+    session.append("loop_action_proposed", {
+        "proposal_id": proposal_id,
+        "project": "demo",
+        "action": "stop",
+        "arguments": {},
+        "expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+    })
+
+    proposal, status, _ = session.resolve_loop_action(proposal_id, "confirm")
+    assert proposal["project"] == "demo"
+    assert status == "claimed"
+    _, duplicate_status, _ = session.resolve_loop_action(proposal_id, "confirm")
+    assert duplicate_status == "confirmed"
+    assert [event["kind"] for event in session.load()].count("loop_action_confirmed") == 1
+
+    other = ChatSession("demo", "s2", db_pfad=db)
+    assert other.resolve_loop_action(proposal_id, "confirm") is None
