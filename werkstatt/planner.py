@@ -2020,7 +2020,11 @@ def _deterministic_literal_replace_plan(
     )
     if match is None:
         return None, "kein_expliziter_literalersetzungsausdruck"
-    if re.search(re.escape(target), aufgabe[match.end():], flags=re.IGNORECASE) is None:
+    target_binding = (
+        r"(?:\bin\s+(?:der\s+Datei\s+)?|\bwithin\s+)"
+        + r"\x60?" + re.escape(target) + r"\x60?(?![\w./-])"
+    )
+    if re.search(target_binding, aufgabe[match.end():], flags=re.IGNORECASE) is None:
         return None, "zieldatei_nicht_an_ersetzung_gebunden"
     alt, neu = match.groups()
     if not alt.strip() or not neu.strip() or alt == neu:
