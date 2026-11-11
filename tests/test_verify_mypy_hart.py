@@ -8,8 +8,10 @@ Klassifikation ueberschreibt.
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from werkstatt.verify import _stage_ist_hart
 
@@ -131,3 +133,49 @@ def test_verify_patches_soft_mypy_ohne_hart_bleibt_weich(
     # mypy ohne hart-Flag -> weich -> ok=True, in weich
     assert ok is True, f"erwartet ok=True, war {ok}"
     assert weich, "weiche Errors sollten in weich landen"
+
+
+
+def test_verify_speichert_begrenzte_stage_belege(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Builder-Kontext behaelt Check-ID, Exit-Code und gekuerzten Fehlerkern."""
+    from werkstatt import verify as verify_mod
+
+    contract_dir = tmp_path / ".werkstatt"
+    contract_dir.mkdir()
+    (contract_dir / "verify.json").write_text(
+        json.dumps({
+            "stages": [{
+                "id": "pytest_focused",
+                "command": ["python3", "-m", "pytest", "tests/test_x.py"],
+                "hart": True,
+            }],
+        }),
+        encoding="utf-8",
+    )
+    state = mk_state(
+        project_dir=tmp_path,
+        project_name="p",
+        last_verify_errors=["stale error"],
+        last_verify_hart_stages=set(),
+        last_verify_results=[{"stage_id": "stale", "ok": False}],
+    )
+    monkeypatch.setattr(
+        verify_mod, "_verify_stage_with_heartbeat",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=2,
+            stdout="FAILED tests/test_x.py::test_expected - assert 1 == 2\n",
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr(verify_mod, "audit", lambda *_args, **_kwargs: None)
+
+    assert verify_mod._verify_patches(state, phase="post_build") is False
+    assert state.last_verify_results == [{
+        "stage_id": "pytest_focused",
+        "exit_code": 2,
+        "ok": False,
+        "error_excerpt": "FAILED tests/test_x.py::test_expected - assert 1 == 2",
+    }]
+    assert state.last_verify_errors[0].startswith("pytest_focused:")
