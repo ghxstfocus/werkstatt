@@ -1,8 +1,8 @@
-"""Read-only Tool-Registry fuer den Chat-Agent (OP-231, ADR-0008).
+"""Projektgebundene Tool-Registry fuer den Chat-Agent.
 
-Neun Tools (SOLL §5.3). Kein write_file/apply_patch/git_commit/shell_exec.
-Alle Tools haben Timeouts und Groessenlimits. ``mode``-Feld pro Tool
-bereitet opt-in write-Tools vor (heute alle read).
+Repo-Tools bleiben read-only. request_loop_action speichert ausschliesslich
+einen befristeten Vorschlag; die Ausfuehrung verlangt eine separate UI-Freigabe.
+Kein write_file/apply_patch/git_commit/shell_exec.
 """
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import json
 import re
 import subprocess
 import sys
+import uuid
 from collections.abc import Callable
 from contextvars import ContextVar
 from pathlib import Path
@@ -320,7 +321,7 @@ def _request_loop_action(args: dict[str, Any]) -> str:
             arguments["op_id"] = op_id
 
     from datetime import UTC, datetime, timedelta
-    proposal_id = __import__("uuid").uuid4().hex
+    proposal_id = uuid.uuid4().hex
     now = datetime.now(UTC)
     proposal = {
         "proposal_id": proposal_id,
