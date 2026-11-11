@@ -93,14 +93,31 @@ erfolgreichen Fix.
    Ereignisse seines Projekts und erkennt, wenn sein Arbeitsstand oder Plan
    nicht mehr aktuell ist. Eine globale Uebersicht darf diese Ereignisse
    projektuebergreifend aggregieren, aber keine Projektisolation aufheben.
+9. **Fortsetzung anhand des Ziels.** An jedem sicheren Checkpoint vergleicht
+   der Koordinator den aktuellen Belegstand mit dem uebergeordneten Auftrag,
+   dem Nutzervertrag und den freigegebenen Akzeptanzkriterien. Ein gruener
+   Einzeltest oder Task ist nur ein Zwischenbeleg. Sind Kriterien offen,
+   waehlt der Loop den naechsten begruendeten Schritt innerhalb des bereits
+   freigegebenen Umfangs und arbeitet weiter. Erst belegte Zielerreichung
+   plus abschliessende Verify auf dem integrierten Stand erlauben den
+   Abschluss. Reflexion passiert an Aufgaben-/Checkpoint-Grenzen, nicht als
+   zusaetzlicher LLM-Aufruf nach jedem Tool. Ihre kurze, belegbasierte
+   Entscheidung mit Grund fuer Fortsetzung/Abschluss und naechstem Schritt
+   erscheint in der detaillierten Control-Timeline. Der Chat zeigt nur eine
+   temporaere knappe Aktivitaetszeile, die bei jedem Schritt ersetzt wird
+   und nach Abschluss verschwindet. Rohe interne Gedankengaenge werden nicht
+   protokolliert. Reflexion darf weder neue Ziele erfinden noch den
+   freigegebenen Umfang erweitern; neue unabhaengige Funde werden getrennt
+   vorgemerkt, Unsicherheit wird knapp im Chat geklaert.
 
 ## Aktivierungskriterien
 
 Vor einem Automodus muessen mindestens Chat- und Hintergrundjob-
 Wiederaufnahme, Projektisolation, sichere Plan-/Ergebnis-Gates,
 Debugger-Handoff, reproduzierbare Browser- und Quality-Gates,
-Audit-Replay sowie ein dokumentierter Nutzervertrag durch Tests und
-Betriebslaeufe belegt sein. Diese ADR ist angenommen; ihre Annahme schaltet keinen
+Audit-Replay, evidenzbasierte Fortsetzung nach gruener Zwischenarbeit
+sowie ein dokumentierter Nutzervertrag durch Tests und Betriebslaeufe
+belegt sein. Diese ADR ist angenommen; ihre Annahme schaltet keinen
 Automodus frei. Bis die Kriterien belegt sind, bleibt die Umsetzung
 schrittweise an OP-396/397 und den jeweils verpflichtenden Human Gates
 gebunden. Kein Projekt wird als autonom freigegeben behandelt.

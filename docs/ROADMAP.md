@@ -25,12 +25,12 @@ Plan- und Ergebnis-Gates bleiben verpflichtend.
 - OP-397: Hintergrundjobs, Reconnect/Replay und Checkpoint-Steuerung.
 - OP-401: neue Chat-Arbeit sicher an aktive Sessions koppeln.
 - OP-402: unabhaengige Schreibauftraege parallel, aber konfliktbewusst integrieren.
-- Chat bleibt bei laufender Arbeit ansprechbar; Schreibauftraege nutzen getrennte, commit-gepinnte Worktrees und werden am Checkpoint konfliktbewusst integriert.
+- Chat bleibt bei laufender Arbeit ansprechbar; Schreibauftraege nutzen getrennte, commit-gepinnte Worktrees und werden am Checkpoint konfliktbewusst integriert. Control zeigt die Arbeitsschritte chronologisch mit Status, Belegen, kurzer Entscheidungszusammenfassung und naechstem Schritt.
 - OP-394/395: nachvollziehbare Live-Ereignisse im Control-Modus.
 - OP-308: nachtraegliche Phasen-Timeline im Cockpit.
 - OP-240: belegter Debugger-Handoff in den normalen Loop.
 
-Projektleiste zuerst, Modusleiste darunter. Control zeigt Live-Aktivitaet;
+Projektleiste zuerst, Modusleiste darunter. Control zeigt die vollstaendige, chronologische Live-Arbeitsspur. Der Chat zeigt waehrend langer Schritte nur eine menschliche temporaere Aktivitaetszeile, die ersetzt wird und nach Abschluss verschwindet. 
 Cockpit fasst abgeschlossene/laengere Verlaeufe zusammen; Debug verbindet
 Fehler, Run-Kontext und konkrete Diagnose.
 

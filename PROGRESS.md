@@ -5209,3 +5209,16 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - OP-398 verlangt jetzt einen evidenzbasierten Zielabgleich nach jedem gruenen Schritt. Der Loop setzt innerhalb der freigegebenen Grenze selbststaendig fort, wenn Akzeptanzkriterien offen sind, und schliesst erst nach belegter Zielerreichung plus Abschluss-Verify ab.
 - Neue unabhaengige Funde werden als getrennte Folgearbeit vorgemerkt; echte Mehrdeutigkeit oder eine Scope-Erweiterung wird im Chat geklaert. Begrenzte Reflexion darf keine unbegrenzte Arbeit erzeugen.
 - Die Reflexion ist ein Steuerungsschritt zwischen Aufgaben, keine zusaetzliche Pflichtrolle bei jedem kleinen Tool-Aufruf.
+
+## 2026-11-11 — ADR-0031 um Zielabgleich nach gruenen Schritten ergaenzt
+
+- Die angenommene Metaorchestrator-Entscheidung beschreibt nun eine begrenzte Reflexion an sicheren Aufgaben-/Checkpoint-Grenzen: Belege gegen Nutzerziel und freigegebene Kriterien pruefen, innerhalb des Scope fortsetzen oder nach Abschluss-Verify beenden.
+- Gruene Einzeltests gelten als Zwischenbelege. Reflexion erzeugt keine neue Freigabe fuer fremde Ziele und wird nicht nach jedem Tool-Aufruf ausgefuehrt.
+
+## 2026-11-11 — Control-Timeline als nachvollziehbare Arbeitsspur festgelegt
+
+- OP-394/395 erfassen Arbeitsschritt, Status, Ergebnis/Beleg, kurze Entscheidungszusammenfassung und naechsten Schritt fuer die Control-Timeline.
+- Die Timeline soll den Loop beim Denken und Arbeiten nachvollziehbar machen, ohne rohe interne Gedankengaenge zu speichern. Chatfragen bleiben waehrenddessen unabhaengig beantwortbar.
+- Die Anforderungen sind in Status, Roadmap und ADR-0031 abgestimmt; Umsetzung und Replay-Nachweis stehen noch aus.
+
+- Der Chat zeigt nur die aktuelle temporaere Aktivitaet in normaler Sprache. Control enthaelt den detaillierten, replaybaren Schrittverlauf.

@@ -12,7 +12,7 @@ Letzte Aktualisierung: 2026-11-11.
 - **Status:** open
 - **Typ:** ui-orchestration
 - **Betroffene Dateien:** Chat/Web-UI, Chat- und Loop-Control-Tests
-- **Akzeptanzkriterien:** Repo-Fragen liefern Datei-/Zeilen- oder Testbelege. Der Chat erstellt fuer direkte Auftraege und OPs einen begruendeten Plan samt Empfehlung und uebergibt genau diesen ohne Copy/Paste an den Loop. Planstand und Freigabeversion bleiben interne Metadaten; die UI zeigt eine natuerliche Zusammenfassung. Neue Chatfragen koennen parallel beantwortet werden. Das Plan-Gate erscheint im Chat; Freigabe ist intern an Projekt und Planstand gebunden. Eine relevante Scope-/Basis-Aenderung invalidiert die alte Freigabe; Mehrdeutigkeit fragt gezielt nach. Die freigegebene Version autorisiert Code, Tests, Doku, Verify und lokalen Commit nur innerhalb ihres Umfangs; externe/destruktive Aktionen erhalten ein separates Gate. Kontrollaktionen bleiben explizit; ein bestaetigter Start bei bereits laufendem Loop wird als nicht gestartet gemeldet und nicht als Erfolg verbucht; Ergebnis-Gate und Reconnect sind abgesichert.
+- **Akzeptanzkriterien:** Repo-Fragen liefern Datei-/Zeilen- oder Testbelege. Der Chat erstellt fuer direkte Auftraege und OPs einen begruendeten Plan samt Empfehlung und uebergibt genau diesen ohne Copy/Paste an den Loop. Planstand und Freigabeversion bleiben interne Metadaten; die UI zeigt eine natuerliche Zusammenfassung. Neue Chatfragen koennen parallel beantwortet werden. Bei laengerer Arbeit zeigt eine einzelne temporaere Zeile im Chat knapp den aktuellen Schritt; sie wird ersetzt und nach Abschluss entfernt. Die detaillierten Ereignisse bleiben in Control replaybar. Das Plan-Gate erscheint im Chat; Freigabe ist intern an Projekt und Planstand gebunden. Eine relevante Scope-/Basis-Aenderung invalidiert die alte Freigabe; Mehrdeutigkeit fragt gezielt nach. Die freigegebene Version autorisiert Code, Tests, Doku, Verify und lokalen Commit nur innerhalb ihres Umfangs; externe/destruktive Aktionen erhalten ein separates Gate. Kontrollaktionen bleiben explizit; ein bestaetigter Start bei bereits laufendem Loop wird als nicht gestartet gemeldet und nicht als Erfolg verbucht; Ergebnis-Gate und Reconnect sind abgesichert.
 - **Tests:** Plan-Version und Loop-Handoff, Empfehlungsbelege, Freigabe/Ablehnung/Revision, mehrdeutige Antworten, Projektisolation, Kontrollaktionen, Reconnect und parallele Fragen waehrend eines Runs.
 - **Blockiert von:** —
 
@@ -29,7 +29,7 @@ Letzte Aktualisierung: 2026-11-11.
 - **Typ:** loop-autonomy
 - **Betroffene Dateien:** STATUS-Parser, OP-Selector, Loop-Start und Tests
 - **Akzeptanzkriterien:** Nur eindeutig startbare offene OPs mit aufgeloesten Blockern, Akzeptanzkriterien und Verifikation werden vorgeschlagen. Mehrdeutigkeit oder veralteter Status stoppt den Start und liefert dem Chat Kandidaten samt Gruenden. Begrenzte OP-Buendel werden vor Ausfuehrung im Plan-Gate einzeln verstaendlich freigegeben. Nach jedem gruenen Schritt prueft der Loop die gespeicherten Belege gegen das uebergeordnete Ziel und dessen Akzeptanzkriterien. Gruen allein beendet den Auftrag nicht: erst wenn das Ziel belegt erreicht und die abschliessende Verify erfolgreich ist, wird abgeschlossen. Sonst waehlt der Loop selbst den naechsten begruendeten Schritt innerhalb der freigegebenen Grenze. Neue, unabhaengige Funde werden als Folgeauftrag vorgemerkt; unklare oder scopeveraendernde Schritte gehen als gezielte Chat-Rueckfrage zur Freigabe.
-- **Tests:** Statusvarianten, Blocker, Ambiguitaet, Auswahlbegruendung und Fail-closed; nach einem gruenen Zwischenschritt wird weitergearbeitet, wenn Zielkriterien offen sind; bei belegter Zielerreichung wird sauber abgeschlossen; kein endloses Reflexions-/Folgeauftragswachstum; neuer Fund bleibt vom freigegebenen Scope getrennt.
+- **Tests:** Statusvarianten, Blocker, Ambiguitaet, Auswahlbegruendung und Fail-closed; nach einem gruenen Zwischenschritt wird weitergearbeitet, wenn Zielkriterien offen sind; bei belegter Zielerreichung wird sauber abgeschlossen; kein endloses Reflexions-/Folgeauftragswachstum; neuer Fund bleibt vom freigegebenen Scope getrennt; jede Fortsetzungsentscheidung erscheint in Control als kurze Begruendung mit Beleg und naechstem Schritt.
 - **Blockiert von:** —
 
 ### OP-399: Projekt-Hub fuer GitHub- und lokale Quellen
@@ -166,17 +166,16 @@ Letzte Aktualisierung: 2026-11-11.
 - **Status:** open
 - **Typ:** observability
 - **Betroffene Dateien:** werkstatt/web/inspector.py, static/live_feed.js und Tests
-- **Akzeptanzkriterien:** Der Live-Feed zeigt lesbare Eventnamen, Zeit und Run-Kontext. JSONL- und SQLite-Kopien derselben Event-ID erscheinen nur einmal. Projektfilter und chronologische Reihenfolge bleiben korrekt.
-- **Tests:** Deduplizierung, Projektisolation und Sortierung.
-- **Blockiert von:** —
+- **Akzeptanzkriterien:** Die Control-Timeline zeigt fuer jeden Arbeitsschritt lesbaren Namen, Zeit, Projekt/Run, Phase oder Task, Status sowie Ergebnis und Beleg. Entscheidungsschritte enthalten eine kurze, belegbasierte Begruendung und den naechsten Schritt. Der Feed verraet keine rohen internen Gedankengaenge. JSONL- und SQLite-Kopien derselben Event-ID erscheinen nur einmal. Projektfilter, Replay und chronologische Reihenfolge bleiben korrekt.
+- **Tests:** Deduplizierung, Projektisolation, Sortierung, Entscheidungsschritt mit Beleg/naechstem Schritt, Replay und sichere Zusammenfassung ohne Rohgedanken.
+- **Blockiert von:** OP-395, OP-397
 
 ### OP-395: Builder-Fortschritt waehrend Modellaufrufen zeigen
 - **Status:** open
 - **Typ:** observability
 - **Betroffene Dateien:** Builder, Chat-/Live-Feed-UI und Tests
-- **Akzeptanzkriterien:** Waehrend langer Builder-Aufrufe erscheinen Fortschritt und Stillstands-Heartbeat mit Task-/Dateikontext. Fortschrittsereignisse blockieren keine Chatfragen und werden nach Reconnect nicht als doppelte Runs dargestellt.
-- **Tests:** Eventfolge, Heartbeat-Fallback und Replay.
-- **Blockiert von:** OP-397
+- **Akzeptanzkriterien:** Waehrend langer Builder-Aufrufe erscheinen Fortschritt und Stillstands-Heartbeat mit Task-/Dateikontext. Im Chat steht nur eine temporaere, menschlich formulierte Aktivitaetszeile, die knapp beschreibt, woran der Assistent gerade arbeitet; sie wird beim Schrittwechsel ersetzt und verschwindet nach Abschluss. Die vollstaendige Schrittfolge mit Status, Belegen, Ergebnissen, kurzer Entscheidungszusammenfassung und naechstem Schritt bleibt ausschliesslich als detaillierte Control-Timeline erhalten. Der Chat bleibt waehrenddessen fuer Fragen und neue Auftraege ansprechbar. Ereignisse blockieren keine Chat-Requests und werden nach Reconnect ohne doppelte Runs replayt. Sichtbare Begruendungen sind kurze Zusammenfassungen mit Belegen, keine rohen internen Gedankengaenge.
+- **Tests:** Eventfolge, Heartbeat-Fallback, Ergebnis-/Belegreferenz, Fortsetzungsentscheidung, Replay, Chatfrage waehrend Build, einzelne temporaere Chat-Aktivitaetszeile statt Spinner/Statusblasen, Ersatz beim Schrittwechsel, Entfernung bei Abschluss, detaillierte Control-Timeline und keine Ausgabe interner Rohgedanken.
 
 ### OP-308: Cockpit-Timeline fuer abgeschlossene Runs
 - **Status:** open
