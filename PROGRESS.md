@@ -5275,5 +5275,8 @@ fasst bei weiterem Stillstand den belegten Stand samt offenen Punkten zusammen.
 Ein explizit gesetztes Rundenbudget endet ebenfalls mit einer normalen,
 beleggebundenen Abschlussantwort statt einer internen Fehlermeldung.
 
-Umsetzung: `2447873`; Regressionstests fuer sechs Werkzeugrunden und
-Stagnationsabschluss hinzugefuegt. CI-Ergebnis wird nach Abschluss geprueft.
+Umsetzung: `2447873` (Fortsetzung/Stagnation), `4469948` (Tests) und
+`21028ac` (Mypy-Signatur). Regressionstests fuer sechs Werkzeugrunden und
+Stagnationsabschluss hinzugefuegt. GitHub Quality Gate fuer `21028ac`:
+1.996 passed, 5 skipped; Ruff 0, Mypy 0, AST 374 Dateien/0 Fehler,
+Audit-Katalog bestanden; `ok: true`.
