@@ -732,3 +732,61 @@ def test_autonomous_start_uses_status_done_ledger_dependency(
     assert antwort.status_code == 200
     assert antwort.json()["op_id"] == "OP-322"
     assert client.post("/api/projects/demo/stop").status_code == 200
+
+def test_live_worker_reconciles_pause_from_shared_registry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Ein Web-Worker sieht Pause/Resume-Aenderungen eines anderen Workers."""
+    if os.name != "posix":
+        pytest.skip("Pause/Resume nutzt POSIX-Signale")
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "STATUS.md").write_text("# shared worker test\\n", encoding="utf-8")
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    _reset_loop_registry(app_modul)
+
+    aufrufe: list[list[str]] = []
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    signale: list[tuple[int, int]] = []
+    monkeypatch.setattr(
+        app_modul.os, "killpg",
+        lambda pgid, sig: signale.append((pgid, sig)),
+    )
+    monkeypatch.setattr(app_modul, "_audit_web_loop_event", lambda *_args: True)
+
+    client = TestClient(app_modul.app)
+    gestartet = client.post(
+        "/api/projects/demo/start", json={"aufgabe": "shared state test"},
+    )
+    assert gestartet.status_code == 200
+    pid = gestartet.json()["pid"]
+    run_id = gestartet.json()["run_id"]
+
+    # Simuliere die persistierte Pause durch einen anderen ASGI-Worker.
+    registry = app_modul._loop_registry()
+    assert registry.set_state("demo", run_id, "paused") is True
+    app_modul._PAUSIERTE_LOOPS.clear()
+
+    state = client.get("/api/projects/demo/loop")
+    assert state.status_code == 200
+    assert state.json() == {
+        "state": "paused", "pid": pid, "run_id": run_id,
+    }
+
+    resume = client.post("/api/projects/demo/resume")
+    assert resume.status_code == 200
+    assert resume.json()["fortgesetzt"] is True
+    assert resume.json().get("bereits_laufend") is not True
+    assert signale == [(pid, signal.SIGCONT)]
+    assert registry.read("demo")["state"] == "running"
+
+    stop = client.post("/api/projects/demo/stop")
+    assert stop.status_code == 200
+    assert stop.json()["gestoppt"] is True
+\n
