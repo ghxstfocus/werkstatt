@@ -115,7 +115,7 @@ def test_welcome_copy_matches_available_loop_capabilities() -> None:
 
 def test_chat_shows_one_temporary_activity_message_and_keeps_tools_out_of_chat() -> None:
     js = _chat_js()
-    start = js.index("function _jobToolCall")
+    start = js.index("function _jobAktivitaetStatus")
     end = js.index("function _updateProposalStatus", start)
     activity = js[start:end]
     assert 'card.textContent = text' in activity
