@@ -193,7 +193,8 @@
     var copy = document.createElement("p");
     copy.textContent = (
       "Ich prüfe Fragen zu Code, Status und Runs anhand des aktiven Repos. " +
-      "Der Chat kann aktuell lesen und erklären; er startet keine Runs und ändert keinen Code."
+      "Du kannst Loop-Aktionen anfordern; ich zeige sie dir vor der Ausführung " +
+      "zur Bestätigung. Code-Patches direkt aus dem Chat sind noch nicht verfügbar."
     );
     card.appendChild(copy);
 
