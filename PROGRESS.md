@@ -5170,3 +5170,10 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 
 - Der GitHub-Run-API-Test stellt nun auch `docs/STATUS.md` im isolierten Worktree bereit. Damit prüft er tatsächlich den erfolgreichen Startpfad, statt beim absichtlich fehlenden Fixture-Inhalt den Fehler-Cleanup auszulösen.
 - Der vorherige Quality-Gate-Lauf scheiterte nur in `test_github_run_starts_in_pinned_worktree`: Der Fake-Worktree fehlte die STATUS-Datei, weshalb korrekterweise Cleanup aufgerufen wurde und dabei den global gemockten `subprocess.Popen` traf. Die vollständige Suite lief mit 1.977 bestanden und 5 übersprungen, eine Testfixture schlug fehl.
+
+
+## 2026-11-11 — OP-399 Worktree-State ausserhalb des Projekt-Checkouts
+
+- GitHub-Run-Worktrees werden jetzt in einem projektbezogenen Verzeichnis unter dem konfigurierten Werkstatt-State gespeichert, nicht mehr in `.werkstatt/` des Projekts. Projekte brauchen dadurch keine spezielle Ignore-Regel und bleiben nach einem Run clean.
+- Regressionstests erstellen ein Projekt ohne `.werkstatt`-Ignore-Regel und starten zwei gepinnte Run-Worktrees nacheinander; außerdem wird eine State-Konfiguration innerhalb des Checkouts fail-closed abgewiesen.
+- ADR-0030 und OP-399 halten diese Ablage- und Isolationsinvariante fest.
