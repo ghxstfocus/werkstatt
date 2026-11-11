@@ -5183,3 +5183,10 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 
 - Ein Worker mit abgelaufener oder entzogener Lease bekam bisher bei der naechsten Abbruchpruefung `False`, weil die Abfrage nur laufende Jobs des eigenen Workers betrachtete. Er konnte dadurch nach Lease-Recovery noch weitere Chat-Tools ausfuehren.
 - Die Abbruchpruefung behandelt fehlende Jobs, nicht mehr laufende Jobs und abweichende Worker-IDs jetzt als Abbruch. Der Lease-Test prueft, dass ein abgelaufener Worker keine Heartbeats erneuern kann und fail-closed als abgebrochen gilt.
+
+
+## 2026-11-11 — ADR-0031 freigegeben: parallele Chat- und Loop-Arbeit
+
+- Der Nutzer hat die Architektur fuer parallele Chat-/Loop-Auftraege freigegeben. Der Chat soll waehrend eines Runs natuerlich ansprechbar bleiben; Planversionen und Commit-Pinning sind interne Konsistenzmechanismen, keine zusaetzliche UI-Bedienung.
+- Schreibauftraege arbeiten in getrennten Worktrees auf festen Basis-Commits. Ereignisse informieren laufende Runs ueber Aenderungen; nur betroffene Arbeit pausiert am Checkpoint und wird auf dem kombinierten Stand neu geplant und verifiziert. Integration bleibt pro Projekt serialisiert; Diffs verschiedener Basen werden nicht verglichen.
+- ADR-0031, OP-396/397 und Roadmap beschreiben das Ziel. Die Funktion ist noch nicht vollstaendig implementiert; verpflichtende Plan-/Ergebnis-Gates bleiben bestehen.

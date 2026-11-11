@@ -23,6 +23,7 @@ Plan- und Ergebnis-Gates bleiben verpflichtend.
 ### 1. Chat und UI als Arbeitsoberflaeche
 - OP-396: Projektchat, evidenzbasierte Antworten und sichere Loop-Steuerung.
 - OP-397: Hintergrundjobs, Reconnect/Replay und Checkpoint-Steuerung.
+- Chat bleibt bei laufender Arbeit ansprechbar; Schreibauftraege nutzen getrennte, commit-gepinnte Worktrees und werden am Checkpoint konfliktbewusst integriert.
 - OP-394/395: nachvollziehbare Live-Ereignisse im Control-Modus.
 - OP-308: nachtraegliche Phasen-Timeline im Cockpit.
 - OP-240: belegter Debugger-Handoff in den normalen Loop.
@@ -58,7 +59,7 @@ und globale Modell-Defaults der Betriebsweg.
 
 ## Spaetere Phase: Metaorchestrator
 
-ADR-0031 ist ein Architekturvorschlag, noch kein startbarer Umsetzungsauftrag.
+ADR-0031 ist angenommen; die Umsetzung bleibt an OP-396/397 und die dortigen Nachweise gebunden. Die Annahme aktiviert keinen Automodus.
 Der Metaorchestrator soll alle Projekte nach einem expliziten, versionierten
 Nutzervertrag priorisieren, Sicherheits-/Semantikprobleme erkennen und
 Diagnose oder Debugger-Reparatur in den jeweiligen Projektloop delegieren.
@@ -70,9 +71,16 @@ Sicherheitsbefunde und Zielkonflikte gehen als konkrete Rueckfrage an den
 Chat. Nutzerantworten duerfen Vertragsaenderungen vorschlagen, aber
 Berechtigungen nicht still erweitern.
 
-Voraussetzungen sind OP-396/397 fuer Chat und Hintergrundjobs, OP-399 fuer
-Projektquellen, OP-382 als Betriebsnachweis sowie nachvollziehbare
-Projektisolation und Audit-Replay. UI-Aenderungen muessen zusaetzlich in
+Jede Chatfrage bleibt im gewohnten natuerlichen Ablauf. Plan- und Basisversionen
+sind intern; der Chat fragt nur dann nach, wenn sich die Freigabe oder das
+Nutzerziel tatsaechlich aendert. Parallele Aenderungen werden an festen
+Commits und getrennten Worktrees aufgebaut. Der Loop beobachtet Projekt-
+Aenderungsereignisse und pausiert nur betroffene Arbeit am sicheren
+Checkpoint; er vergleicht nie Diffs verschiedener Basen.
+
+Voraussetzungen sind OP-396/397 fuer Chat, parallele Hintergrundjobs und
+sichere Worktree-Integration, OP-399 fuer Projektquellen, OP-382 als
+Betriebsnachweis sowie nachvollziehbare Projektisolation und Audit-Replay. UI-Aenderungen muessen zusaetzlich in
 einem isolierten Browser mit kontrollierten Testdaten verifiziert werden;
 Screenshots, Accessibility-/DOM-Befunde und Browser-Logs werden als
 Verify-Artefakte gespeichert. Vor diesen Belegen wird kein Projekt in

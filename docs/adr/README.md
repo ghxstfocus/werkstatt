@@ -33,4 +33,4 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0027](ADR-0027-selbstverbesserungs-loop.md) | Selbstverbesserungs-Loop (Trace-First + Preservation-Gate) | proposed |
 | [ADR-0028](ADR-0028-scout-report-als-architect-kontext.md) | Scout-Report als einzige Architect-Kontextquelle | accepted |
 | [ADR-0029](ADR-0029-chat-zentrierte-projektsteuerung.md) | Chat-zentrierter Control-Plane und autonome Arbeit | accepted |
-| [ADR-0030](ADR-0030-projektquellen-und-rollenmodelle.md) | Projektquellen und projektbezogene Rollenmodelle | accepted |\n| [ADR-0031](ADR-0031-metaorchestrator.md) | Metaorchestrator fuer projektuebergreifende Arbeit | proposed |
+| [ADR-0030](ADR-0030-projektquellen-und-rollenmodelle.md) | Projektquellen und projektbezogene Rollenmodelle | accepted |\n| [ADR-0031](ADR-0031-metaorchestrator.md) | Metaorchestrator fuer projektuebergreifende Arbeit | accepted |
