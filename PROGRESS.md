@@ -5291,3 +5291,9 @@ aktualisiert.
 
 GitHub Quality Gate: `9993b25` — 1.998 passed, 5 skipped; Ruff/Mypy 0,
 AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
+
+
+## 2026-11-11 — Assistant-Text kompakter setzen
+
+- Assistant-Antworten werden auf 68 Zeichenbreiten begrenzt und mittig ausgerichtet; dadurch bleiben lange Absätze im Chat leichter lesbar.
+- Nutzernachrichten behalten ihre rechtsbuendige Bubble-Darstellung. Ein Frontend-Test sichert die Lesebreite.
