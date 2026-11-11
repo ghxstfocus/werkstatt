@@ -5240,6 +5240,6 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 
 ## 2026-11-11 — Control-Timeline mit kuratierten Belegen
 
-- Der Live-Feed kann jetzt Phase/Task-Kontext, Ergebnis-Kurztext, begruendete Entscheidung, Belegliste und naechsten Schritt anzeigen, sofern ein Ereignis diese Felder explizit enthaelt.
+- Der Live-Feed kann jetzt den fortgeschriebenen Phase-/Task-Kontext sowie explizite Ergebnis-Kurztexte, begruendete Entscheidungen, Beleglisten und naechste Schritte anzeigen.
 - Backend und UI reichen nur diese benannten Kurzfelder weiter; beliebige Payloads und chain_of_thought bleiben ausgeschlossen. Die UI rendert Nutzdaten ausschliesslich mit DOM-Textknoten.
 - Backend- und Frontend-Regressionstests pruefen den Belegvertrag und dass ein internes Rohfeld nicht in der Timeline erscheint. Die Detailansicht in Control ist damit vorbereitet; Loop-Emitter muessen die strukturierten Belege noch an den relevanten Checkpoints liefern.
