@@ -1418,6 +1418,13 @@ _NAECHSTER_NACH_ROLLE: dict[str, str] = {
 }
 
 
+def _tl_public_text(value: Any, limit: int = 240) -> str:
+    """Normalisiert ausschliesslich explizite, fuer die UI freigegebene Kurztexte."""
+    if not isinstance(value, str):
+        return ""
+    return " ".join(value.split())[:limit]
+
+
 def aggregate_live_feed(
     projekt: str, run_id: str | None = None, limit: int = 30,
 ) -> dict[str, Any]:
@@ -1568,7 +1575,7 @@ def aggregate_live_feed(
         if not isinstance(payload, dict):
             payload = {}
         detail = _tl_detail(kind, {**ev, **payload}) or kind
-        steps.append({
+        step: dict[str, Any] = {
             "ts": ev.get("timestamp") or ev.get("ts") or "",
             "rolle": _tl_rolle(agent, kind),
             "kind": kind,
@@ -1576,7 +1583,30 @@ def aggregate_live_feed(
             "status": _tl_status(kind, {**ev, **payload}),
             "task_id": str(payload.get("task_id", "")
                            or payload.get("id", "")),
-        })
+            "project": projekt,
+            "run_id": run_id,
+            "phase": _tl_public_text(payload.get("phase") or ev.get("phase"), 80),
+        }
+        # Nur benannte Kurzfelder duerfen in die Timeline. Beliebige Prompt-,
+        # Reasoning- oder Rohpayload-Felder werden bewusst nicht weitergereicht.
+        for feld in ("result_summary", "decision_summary", "next_step"):
+            wert = _tl_public_text(payload.get(feld))
+            if wert:
+                step[feld] = wert
+        evidence = payload.get("evidence")
+        if isinstance(evidence, str):
+            evidence_items = [evidence]
+        elif isinstance(evidence, list):
+            evidence_items = evidence
+        else:
+            evidence_items = []
+        beleg_kurz = [
+            text for item in evidence_items
+            if (text := _tl_public_text(item, 180))
+        ][:5]
+        if beleg_kurz:
+            step["evidence"] = beleg_kurz
+        steps.append(step)
 
     # Naechster-Schritt-Heuristik
     naechster: dict[str, str] = {}
