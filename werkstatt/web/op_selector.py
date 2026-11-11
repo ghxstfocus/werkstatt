@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 _OP_HEADING = re.compile(r"^### (OP-\d+[a-z]?):\s*(.+?)\s*$", re.MULTILINE)
@@ -10,6 +11,7 @@ _FIELD = re.compile(
     re.MULTILINE | re.DOTALL,
 )
 _OP_ID = re.compile(r"OP-\d+[a-z]?", re.IGNORECASE)
+_ADR_ID = re.compile(r"ADR-\d{4}", re.IGNORECASE)
 _PLACEHOLDER = {"", "—", "-", "keine", "n/a", "nicht zutreffend"}
 _COMPLETED_OP_HEADING = re.compile(
     r"^###\s+\d{4}-\d{2}-\d{2}\s+[—-]\s+"
@@ -35,6 +37,30 @@ def parse_completed_op_ids(
     return {op_id.upper() for op_id in ids}
 
 
+def load_accepted_adr_ids(adr_dir: Path) -> set[str]:
+    """Liest nur explizit angenommene ADRs; fehlende/ungueltige Dateien bleiben gesperrt."""
+    accepted: set[str] = set()
+    try:
+        paths = sorted(adr_dir.glob("ADR-*.md"))
+    except OSError:
+        return accepted
+    for path in paths:
+        match = re.fullmatch(r"(ADR-\d{4}).*\.md", path.name, re.IGNORECASE)
+        if not match:
+            continue
+        try:
+            content = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        statuses = re.findall(
+            r"^\s*-\s+\*\*Status:\*\*\s*([^\n]+)",
+            content, re.MULTILINE | re.IGNORECASE,
+        )
+        if len(statuses) == 1 and statuses[0].strip().casefold() == "accepted":
+            accepted.add(match.group(1).upper())
+    return accepted
+
+
 def _felder(block: str) -> dict[str, str]:
     return {
         match.group(1).strip().casefold(): match.group(2).strip()
@@ -52,8 +78,10 @@ def _ausfuellbar(value: str | None) -> bool:
 def select_next_op(
     status_text: str,
     completed_ids: set[str] | frozenset[str] = frozenset(),
+    accepted_adrs: set[str] | frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Waehlt startfaehige OPs; erledigte Blocker kommen aus PROGRESS."""
+    accepted = {adr_id.upper() for adr_id in accepted_adrs}
     completed = {op_id.upper() for op_id in completed_ids}
     treffer = list(_OP_HEADING.finditer(status_text))
     ops: list[dict[str, Any]] = []
@@ -114,6 +142,16 @@ def select_next_op(
             reasons.append("Akzeptanzkriterien fehlen")
         if not _ausfuellbar(tests):
             reasons.append("Tests oder ein pruefbarer Nachweis fehlen")
+
+        adr_requirement = fields.get("architektur-voraussetzung", "")
+        required_adrs = sorted({value.upper() for value in _ADR_ID.findall(adr_requirement)})
+        if adr_requirement.strip().casefold() not in _PLACEHOLDER and not required_adrs:
+            reasons.append("Architektur-Voraussetzung ist nicht eindeutig lesbar")
+        unaccepted_adrs = [adr_id for adr_id in required_adrs if adr_id not in accepted]
+        if unaccepted_adrs:
+            reasons.append(
+                "ADR-Voraussetzungen nicht angenommen: " + ", ".join(unaccepted_adrs)
+            )
 
         blockers = fields.get("blockiert von", "")
         dep_ids = [value.upper() for value in _OP_ID.findall(blockers)]

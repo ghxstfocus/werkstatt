@@ -24,7 +24,11 @@ from werkstatt.event_store import EventStore
 from werkstatt.phase_state import PhaseState
 from werkstatt.validierung import pruefe_ref as _pruefe_ref_kern
 from werkstatt.web import audit_panel, auth, terminal_proxy, ws
-from werkstatt.web.op_selector import parse_completed_op_ids, select_next_op
+from werkstatt.web.op_selector import (
+    load_accepted_adr_ids,
+    parse_completed_op_ids,
+    select_next_op,
+)
 
 __all__ = ["app", "create_app"]
 
@@ -170,6 +174,10 @@ def _completed_op_ids(project_dir: Path, status_text: str) -> set[str]:
     except OSError:
         progress_text = ""
     return parse_completed_op_ids(progress_text, status_text)
+
+def _accepted_adr_ids(project_dir: Path) -> set[str]:
+    """Liefert angenommene Architekturentscheidungen des Projekts."""
+    return load_accepted_adr_ids(project_dir / "docs" / "adr")
 
 
 def _phasen_snapshot(name: str) -> dict[str, Any]:
@@ -541,7 +549,11 @@ def create_app() -> FastAPI:
                 raise HTTPException(
                     status_code=500, detail="STATUS.md nicht lesbar",
                 ) from exc
-            _entscheidung = select_next_op(_status_text, _completed_op_ids(_pd, _status_text))
+            _entscheidung = select_next_op(
+                _status_text,
+                _completed_op_ids(_pd, _status_text),
+                accepted_adrs=_accepted_adr_ids(_pd),
+            )
             _ausgeschlossen: dict[str, Any] = next(
                 (
                     item for item in _entscheidung["ausgeschlossen"]
@@ -558,6 +570,8 @@ def create_app() -> FastAPI:
                     or "OP-ID kommt mehrfach" in grund
                     or "Status fehlt" in grund
                     or "Phase-3 gesperrt" in grund
+                    or "ADR-Voraussetzungen" in grund
+                    or "Architektur-Voraussetzung" in grund
                 )
             ]
             if _blocker_grund:
@@ -595,7 +609,9 @@ def create_app() -> FastAPI:
                     status_code=500, detail="STATUS.md nicht lesbar",
                 ) from exc
             entscheidung = select_next_op(
-                status_text, _completed_op_ids(_pd, status_text),
+                status_text,
+                _completed_op_ids(_pd, status_text),
+                accepted_adrs=_accepted_adr_ids(_pd),
             )
             if entscheidung["zustand"] == "needs_input":
                 raise HTTPException(

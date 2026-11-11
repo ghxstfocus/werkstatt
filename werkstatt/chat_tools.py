@@ -314,7 +314,11 @@ def _next_op(_args: dict[str, Any]) -> str:
             "detail": f"STATUS.md kann nicht gelesen werden: {exc}",
         }, ensure_ascii=False)
 
-    from werkstatt.web.op_selector import parse_completed_op_ids, select_next_op
+    from werkstatt.web.op_selector import (
+        load_accepted_adr_ids,
+        parse_completed_op_ids,
+        select_next_op,
+    )
 
     progress_path = _aktives_projekt_dir() / "PROGRESS.md"
     try:
@@ -324,6 +328,9 @@ def _next_op(_args: dict[str, Any]) -> str:
     result = select_next_op(
         status_text,
         completed_ids=parse_completed_op_ids(progress_text, status_text),
+        accepted_adrs=load_accepted_adr_ids(
+            _aktives_projekt_dir() / "docs" / "adr",
+        ),
     )
     excluded = result.pop("ausgeschlossen", [])
     result["quelle"] = "docs/STATUS.md"
@@ -368,6 +375,7 @@ def _request_loop_action(args: dict[str, Any]) -> str:
             except OSError as exc:
                 return json.dumps({"zustand": "error", "detail": f"STATUS kann nicht gelesen werden: {exc}"}, ensure_ascii=False)
             from werkstatt.web.op_selector import (
+                load_accepted_adr_ids,
                 parse_completed_op_ids,
                 select_next_op,
             )
@@ -382,6 +390,9 @@ def _request_loop_action(args: dict[str, Any]) -> str:
             selection = select_next_op(
                 status_text,
                 completed_ids=parse_completed_op_ids(progress_text, status_text),
+                accepted_adrs=load_accepted_adr_ids(
+                    _aktives_projekt_dir() / "docs" / "adr",
+                ),
             )
             candidate = next(
                 (

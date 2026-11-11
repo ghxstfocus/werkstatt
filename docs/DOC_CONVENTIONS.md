@@ -64,7 +64,7 @@ Migration: §7. Code-Kommentare duerfen Englisch sein.
 
 ## 5. STATUS.md-Vertrag (maschinenlesbar)
 
-`STATUS.md` enthaelt nur offene, aktuelle und konkret startbare Punkte aus dem gegenwaertigen Fokus. Begrenzte Folgearbeit darf nur aufgenommen werden, wenn sie den naechsten Meilenstein direkt entsperrt. Historische, optionale oder noch nicht angenommene Architekturideen gehoeren in PROGRESS, ROADMAP oder ein proposed ADR — nicht als detaillierte, startbare Queue. Format pro Punkt:
+`STATUS.md` enthaelt nur offene, aktuelle und konkret startbare Punkte aus dem gegenwaertigen Fokus. Begrenzte Folgearbeit darf nur aufgenommen werden, wenn sie den naechsten Meilenstein direkt entsperrt. Historische, optionale oder noch nicht angenommene Architekturideen gehoeren in PROGRESS, ROADMAP oder ein proposed ADR — nicht als detaillierte, startbare Queue. Format pro Punkt. Eine angegebene Architektur-Voraussetzung muss in `docs/adr/` genau einmal mit `Status: accepted` stehen; andernfalls ist die OP nicht startbar:
 
     ### OP-NNN: Kurztitel
     - **Status:** open
@@ -72,6 +72,7 @@ Migration: §7. Code-Kommentare duerfen Englisch sein.
     - **Akzeptanzkriterien:** 1-3 pruefbare Saetze
     - **Tests:** `pytest tests/...`
     - **Blockiert von:** OP-MMM | —
+    - **Architektur-Voraussetzung:** ADR-NNNN | —
 
     ## Delete-Zone
     | Pfad | Warum entfernt | Ersetzt durch | Wiedereinfuehrung |

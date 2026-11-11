@@ -1,15 +1,25 @@
 """Tests fuer die evidenzbasierte OP-Auswahl."""
-from werkstatt.web.op_selector import parse_completed_op_ids, select_next_op
+from pathlib import Path
+
+from werkstatt.web.op_selector import (
+    load_accepted_adr_ids,
+    parse_completed_op_ids,
+    select_next_op,
+)
 
 
 def _op(op_id: str, *, title: str = "Arbeit", status: str = "open",
         blockers: str = "—", criteria: str = "Ergebnis ist korrekt.",
         tests: str = "pytest -q tests/test_feature.py",
-        phase: str = "") -> str:
+        phase: str = "", architecture: str = "") -> str:
     phase_field = f"- **Phase:** {phase}\n" if phase else ""
+    architecture_field = (
+        f"- **Architektur-Voraussetzung:** {architecture}\n" if architecture else ""
+    )
     return (
         f"### {op_id}: {title}\n"
         f"{phase_field}"
+        f"{architecture_field}"
         f"- **Status:** {status}\n"
         f"- **Blockiert von:** {blockers}\n"
         f"- **Akzeptanzkriterien:** {criteria}\n"
@@ -178,4 +188,44 @@ def test_open_dogfooding_op_overrides_stale_completion_ledger() -> None:
     blocked = next(item for item in result["ausgeschlossen"] if item["id"] == "OP-101")
     assert "Phase-3 gesperrt bis OP-382 abgeschlossen" in " ".join(
         blocked["gruende"]
+    )
+
+
+
+def test_architecture_requirement_fails_closed_until_adr_is_accepted() -> None:
+    op = _op("OP-399", architecture="ADR-0030")
+
+    blocked = select_next_op(op)
+    assert blocked["zustand"] == "no_candidate"
+    assert "ADR-Voraussetzungen nicht angenommen: ADR-0030" in " ".join(
+        blocked["ausgeschlossen"][0]["gruende"]
+    )
+
+    accepted = select_next_op(op, accepted_adrs={"adr-0030"})
+    assert accepted["zustand"] == "selected"
+
+
+def test_load_accepted_adrs_requires_one_exact_accepted_status(tmp_path: Path) -> None:
+    adrs = tmp_path / "adr"
+    adrs.mkdir()
+    (adrs / "ADR-0030-project.md").write_text(
+        "- **Status:** proposed\n", encoding="utf-8",
+    )
+    (adrs / "ADR-0029-chat.md").write_text(
+        "- **Status:** accepted\n", encoding="utf-8",
+    )
+    (adrs / "ADR-0028-conflict.md").write_text(
+        "- **Status:** accepted\n- **Status:** proposed\n",
+        encoding="utf-8",
+    )
+
+    assert load_accepted_adr_ids(adrs) == {"ADR-0029"}
+
+
+def test_architecture_requirement_with_no_readable_adr_id_is_blocked() -> None:
+    result = select_next_op(_op("OP-399", architecture="Annahme in ADR folgt"))
+
+    assert result["zustand"] == "no_candidate"
+    assert "Architektur-Voraussetzung ist nicht eindeutig lesbar" in " ".join(
+        result["ausgeschlossen"][0]["gruende"]
     )
