@@ -4840,3 +4840,8 @@ Der Chat hat fuer eine explizite OP-ID bisher nur die Ueberschrift in STATUS.md 
 Der System-Prompt verlangte Datei-/Zeilenbelege, obwohl read_file start/end Zeichen-Offsets bezeichnet und keine Zeilen liefert. Der Chat-Agent ist jetzt angewiesen, Zeilennummern mit grep zu verifizieren, read_file-Offsets nicht als Zeilen zu behandeln und fehlende Belege offenzulegen. Ein Prompt-Vertragstest schuetzt diese Regel vor Regression.
 
 - GitHub Actions auf Commit 1f821ea: JavaScript-Syntax, Ruff, pytest und Quality Gate gruen; 1914 passed / 5 skipped, Ruff/Mypy 0, AST 370 Dateien ohne Fehler, Audit-Katalog bestanden, ok=true.
+
+
+## OP-240 — Debugger-Modus bis zu Chat-Jobs weiterreichen (2026-11-11)
+
+Die UI-Auswahl `debug` wird beim Senden als Backend-Faehigkeit `debugger` an den persistenten Chat-Job uebergeben. Cockpit und Control bleiben read-only. Job-, synchroner Chat- und WebSocket-Endpunkt akzeptieren `debugger`; schreibender Job-Modus bleibt abgewiesen. Ein Registry-Test haelt Debugger-Werkzeuge ausserhalb dieses Modus verborgen, API- und Frontend-Tests decken die Weitergabe ab. OP-240 bleibt offen: exakter strukturierter Patch, Freigabe an Patch-Hash/Projekt/Run gebunden und copy/paste-freie Uebergabe an den Coding-Loop fehlen weiterhin.
