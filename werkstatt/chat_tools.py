@@ -490,13 +490,24 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
             "zustand": "error",
             "detail": "Aktives Projekt hat keinen lesbaren Git-HEAD.",
         }, ensure_ascii=False)
+    raw_files = args.get("betroffene_dateien")
+    if not isinstance(raw_files, list):
+        return json.dumps({"zustand": "invalid", "detail": "betroffene_dateien muss eine Liste sein."}, ensure_ascii=False)
+    files: list[str] = []
+    for item in raw_files:
+        if not isinstance(item, str):
+            return json.dumps({"zustand": "invalid", "detail": "Dateipfade muessen Text sein."}, ensure_ascii=False)
+        files.append(item)
+    raw_confidence = args.get("confidence")
+    if not isinstance(raw_confidence, (int, float)) or isinstance(raw_confidence, bool):
+        return json.dumps({"zustand": "invalid", "detail": "confidence muss eine Zahl sein."}, ensure_ascii=False)
     try:
         fix = create_debugger_fix(
             signatur=str(args.get("signatur") or ""),
             ursache_tag=str(args.get("ursache_tag") or ""),
             diff=str(args.get("diff") or ""),
-            betroffene_dateien=args.get("betroffene_dateien"),
-            confidence=args.get("confidence"),
+            betroffene_dateien=files,
+            confidence=float(raw_confidence),
             project=project,
             run_id=run_id,
             base_head=head.stdout.strip(),
