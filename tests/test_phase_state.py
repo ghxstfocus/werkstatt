@@ -113,6 +113,7 @@ def test_resume_blocked_wird_nach_erfolgreicher_dependency_ausfuehrbar(tmp_path)
     "yaml_text",
     [
         "- not-a-mapping\n",
+        "project: another-project\n",
         "tasks: invalid\n",
         "tasks:\n  - not-a-mapping\n",
         "tasks:\n  - id: [not, hashable]\n",

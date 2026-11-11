@@ -53,6 +53,10 @@ class PhaseState:
             self.data = {}
             return False
 
+        if "project" in data and data["project"] != self.project_name:
+            self.data = {}
+            return False
+
         if "tasks" in data:
             tasks = data["tasks"]
             if tasks is None:

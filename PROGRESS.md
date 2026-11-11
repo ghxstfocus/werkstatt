@@ -5076,3 +5076,8 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - YAML mit falscher Wurzel oder fehlerhaften Task-/Dependency-Typen wird nicht mehr als nutzbarer Checkpoint geladen; der Loop startet damit nicht versehentlich aus inkonsistentem Zustand.
 - Ein Legacy-Checkpoint ohne `tasks` wird kompatibel als leerer Task-Checkpoint behandelt.
 - Regressionstests decken falsche Wurzel, Task-Form, ID und Dependency-Typen ab.
+
+## 2026-11-11 — PhaseState an aktives Projekt binden
+
+- Ein gespeicherter PhaseState mit abweichendem `project`-Feld wird beim Laden verworfen, bevor seine Tasks den aktuellen Projekt-Loop erreichen koennen.
+- Ein Regressionstest belegt die Zurueckweisung eines fremden Projekt-Checkpoints.
