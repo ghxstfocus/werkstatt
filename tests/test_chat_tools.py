@@ -17,6 +17,7 @@ def test_neun_soll_tools_vorhanden() -> None:
         "read_file", "grep", "git_log", "git_diff",
         "audit_query", "pytest_collect", "diagnose", "read_status", "next_op",
     }
+    erwartet.add("request_loop_action")
     assert set(chat_tools.CHAT_TOOLS) == erwartet
 
 
@@ -27,7 +28,7 @@ def test_alle_tools_mode_read() -> None:
 
 def test_openai_schemas_anzahl() -> None:
     schemas = chat_tools.openai_schemas()
-    assert len(schemas) == 9
+    assert len(schemas) == 10
     for s in schemas:
         assert s["type"] == "function"
         assert s["function"]["name"] in chat_tools.CHAT_TOOLS
@@ -80,7 +81,7 @@ def test_git_log_funktioniert() -> None:
 def test_mode_write_aktiviert_write_tools_nicht() -> None:
     """Heute gibt es keine write-Tools — Registry bleibt stabil."""
     schemas = chat_tools.openai_schemas(mode="write")
-    assert len(schemas) == 9
+    assert len(schemas) == 10
 
 
 def test_execute_tool_mit_mode_write_bei_read_tool() -> None:
@@ -212,3 +213,40 @@ def test_next_op_resolves_completed_dependency_from_status_autolog(tmp_path) -> 
 
     assert '"zustand": "selected"' in result
     assert '"id": "OP-323"' in result
+
+
+def test_loop_action_tool_only_persists_proposal_and_revalidates_op(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt import chat_session
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "### OP-321: Eindeutige Arbeit\\n"
+        "- **Status:** open\\n"
+        "- **Akzeptanzkriterien:** Ergebnis belegbar.\\n",
+        encoding="utf-8",
+    )
+    db = tmp_path / "sessions.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db)
+    result = chat_tools.execute_tool(
+        "request_loop_action", {"action": "start", "op_id": "OP-321"},
+        project_dir=tmp_path, project_name="demo", session_id="session-1",
+    )
+    import json
+    proposal = json.loads(result)
+    assert proposal["zustand"] == "proposal"
+    assert proposal["arguments"] == {"op_id": "OP-321"}
+    assert "OP-321" in proposal["task_preview"]
+    events = chat_session.ChatSession("demo", "session-1", db_pfad=db).load()
+    assert [event["kind"] for event in events] == ["loop_action_proposed"]
+
+
+def test_loop_action_proposal_requires_session_and_never_executes(tmp_path) -> None:
+    import json
+
+    result = chat_tools.execute_tool(
+        "request_loop_action", {"action": "stop"}, project_dir=tmp_path,
+    )
+    assert json.loads(result)["zustand"] == "error"
