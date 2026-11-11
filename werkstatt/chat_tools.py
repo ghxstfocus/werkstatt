@@ -292,7 +292,7 @@ def _request_loop_action(args: dict[str, Any]) -> str:
                 "detail": "Bitte entweder eine OP-ID oder einen konkreten Auftrag angeben.",
             }, ensure_ascii=False)
         if op_id:
-            if not re.fullmatch(r"OP-\\d+[a-z]?", op_id):
+            if not re.fullmatch(r"OP-\d+[a-z]?", op_id):
                 return json.dumps({"zustand": "invalid", "detail": "OP-ID ungueltig."}, ensure_ascii=False)
             status_path = _aktives_projekt_dir() / "docs" / "STATUS.md"
             try:
@@ -300,7 +300,7 @@ def _request_loop_action(args: dict[str, Any]) -> str:
             except OSError as exc:
                 return json.dumps({"zustand": "error", "detail": f"STATUS kann nicht gelesen werden: {exc}"}, ensure_ascii=False)
             match = re.search(
-                rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\\Z)",
+                rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\Z)",
                 status_text,
                 re.MULTILINE | re.DOTALL,
             )
