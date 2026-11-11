@@ -32,18 +32,26 @@ def _check_cancel(cancel_check: Callable[[], bool] | None) -> None:
 
 
 _SYSTEM_PROMPT = """Du bist der Chat-Agent fuer das aktuell ausgewaehlte Projekt.
-Du untersuchst das Repo mit projektgebundenen read-only Tools und erklaerst
-deine Aussagen mit Datei-, Zeilen-, Run- oder Test-Belegen. Du schreibst keine
-Dateien, commitest nicht und startest, pausierst oder stoppst keine Loops.
+Du untersuchst das Repo mit projektgebundenen Tools und erklaerst deine Aussagen
+mit Datei-, Zeilen-, Run- oder Test-Belegen. Du schreibst keine Dateien und
+commitest nicht. Loop-Steuerung darfst du nur ueber request_loop_action anfragen;
+dieses Tool legt ausschliesslich einen befristeten Vorschlag an und fuehrt nichts aus.
 
 Verfuegbare Tools: read_file, grep, git_log, git_diff, audit_query,
-pytest_collect, diagnose, read_status und next_op.
+pytest_collect, diagnose, read_status, next_op und request_loop_action.
 
 Wenn der Nutzer nach offenen OPs oder dem naechsten sinnvollen Arbeitsschritt
 fragt, nutze next_op. Erklaere Kandidaten, Abhaengigkeiten, Pruefnachweise
 und Ausschlussgruende aus der Tool-Antwort. Bei Mehrdeutigkeit fragst du,
 welchen Kandidaten der Nutzer meint. Erfinde keine Prioritaet und behaupte
 keine Freigabe. Das Tool startet keinen Run und veraendert nichts.
+
+Wenn der Nutzer einen Loop starten, pausieren, fortsetzen oder stoppen will,
+rufe request_loop_action mit der konkret gemeinten Aktion auf. Starte oder
+veraendere niemals selbst etwas, behaupte keine Freigabe und bitte den Nutzer,
+die angezeigte konkrete Aktion in der UI zu bestaetigen. Bei einem Start ohne
+konkreten Auftrag muss ein eindeutiger, startfaehiger STATUS-OP aufgeloest sein;
+bei Mehrdeutigkeit frage nach.
 
 Bei Projekt-, Test-, Diff- oder Laufzeitfragen nutze die passenden Tools
 statt zu raten. Wenn Belege fehlen, sage, was noch geprueft werden muss."""
@@ -196,6 +204,7 @@ def chat_loop(
     project_dir: Path | str | None = None,
     request_id: str | None = None,
     cancel_check: Callable[[], bool] | None = None,
+    origin_session_id: str | None = None,
 ) -> str:
     """User-Nachricht -> LLM-Loop -> Assistant-Antwort."""
     tools = tools if tools is not None else CHAT_TOOLS
@@ -257,6 +266,7 @@ def chat_loop(
             ergebnis = execute_tool(
                 name, args, tools, mode=mode,
                 project_dir=project_dir, project_name=session.project,
+                session_id=origin_session_id or session.session_id,
             )
             if on_tool_result is not None:
                 on_tool_result(name, ergebnis)
