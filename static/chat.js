@@ -22,6 +22,12 @@
 
   function _el(id) { return document.getElementById(id); }
 
+  function _chatRequestMode() {
+    var uiMode = window.WerkstattMode && window.WerkstattMode.getMode
+      ? window.WerkstattMode.getMode() : "cockpit";
+    return uiMode === "debug" ? "debugger" : "read";
+  }
+
   function _neueSession(projekt, anfrage) {
     if (anfrage === undefined) anfrage = zustand.historyRequest;
     return fetch("/api/projects/" + encodeURIComponent(projekt) + "/chat/new",
@@ -721,7 +727,7 @@
       : (Date.now().toString(36) + Math.random().toString(36).slice(2));
     var url = "/api/projects/" + encodeURIComponent(projekt) + "/chat/jobs";
     var body = {
-      session_id: sid, message: text, mode: "read",
+      session_id: sid, message: text, mode: _chatRequestMode(),
       idempotency_key: idempotencyKey,
     };
     function submit(attempt) {
@@ -879,7 +885,7 @@
     var payload = {
       session_id: zustand.sessionId,
       message: text,
-      mode: "read",
+      mode: _chatRequestMode(),
     };
     if (!zustand.socket || zustand.socket.readyState !== WebSocket.OPEN) {
       zustand.sendQueue.push(payload);
