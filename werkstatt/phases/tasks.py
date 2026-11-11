@@ -40,7 +40,6 @@ from ._common import (
 )
 
 
-
 def _audit_task_ok(
     transitioned: bool,
     task_id: str,
