@@ -904,15 +904,35 @@ def create_app() -> FastAPI:
         projektname = _pruefe_projektname(name)
         with _projekt_loop_lock(projektname):
             prozess = _loop_prozess(projektname)
+            registry = _loop_registry()
+            record = registry.read(projektname)
             if prozess is None:
                 raise HTTPException(status_code=404, detail="kein laufender Loop")
             run_id = _LOOP_RUN_IDS.get(projektname, "")
-            if projektname in _PAUSIERTE_LOOPS and os.name == "posix":
+            if not record or record.get("run_id") != run_id:
+                raise HTTPException(status_code=409, detail="Loop-Registry stimmt nicht mit Prozess ueberein")
+            state = record["state"]
+            if state in ("pausing", "resuming"):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Loop-Kontrollaktion laeuft bereits: {state}",
+                )
+            if state in ("running", "paused"):
+                if not registry.transition(projektname, run_id, state, "stopping"):
+                    raise HTTPException(status_code=409, detail="Loop-Zustand wurde parallel geaendert")
+            elif state != "stopping":
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Loop kann gerade nicht gestoppt werden: {state}",
+                )
+            _PAUSIERTE_LOOPS.discard(projektname)
+            if os.name == "posix":
                 try:
+                    # SIGCONT lets a process left paused by a prior stop
+                    # receive SIGTERM. It is harmless for a running process.
                     os.killpg(prozess.pid, signal.SIGCONT)
                 except ProcessLookupError:
                     pass
-            _PAUSIERTE_LOOPS.discard(projektname)
             try:
                 if os.name == "posix":
                     os.killpg(prozess.pid, signal.SIGTERM)
@@ -945,7 +965,7 @@ def create_app() -> FastAPI:
                     )
                 except (OSError, RuntimeError, sqlite3.Error, ValueError):
                     audit_ok = False
-            _loop_registry().set_state(projektname, run_id, "idle")
+            registry.transition(projektname, run_id, "stopping", "idle")
             _LAUFENDE_LOOPS.pop(projektname, None)
             _LOOP_RUN_IDS.pop(projektname, None)
             _log_fh = _LOOP_LOG_HANDLES.pop(projektname, None)
