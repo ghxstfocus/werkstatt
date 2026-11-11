@@ -65,6 +65,21 @@ def _loop_prozess(projektname: str) -> Any | None:
     """Liefert den lokalen oder nach Server-Neustart wiedergefundenen Loop."""
     prozess = _LAUFENDE_LOOPS.get(projektname)
     if prozess is not None and prozess.poll() is None:
+        record = _loop_registry().read(projektname)
+        if (
+            record is not None
+            and record["state"] in ("running", "paused")
+            and record.get("pid") == prozess.pid
+            and (
+                not _LOOP_RUN_IDS.get(projektname)
+                or _LOOP_RUN_IDS[projektname] == record["run_id"]
+            )
+        ):
+            _LOOP_RUN_IDS[projektname] = record["run_id"]
+            if record["state"] == "paused":
+                _PAUSIERTE_LOOPS.add(projektname)
+            else:
+                _PAUSIERTE_LOOPS.discard(projektname)
         return prozess
     if prozess is not None:
         _LAUFENDE_LOOPS.pop(projektname, None)
