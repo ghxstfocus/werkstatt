@@ -19,6 +19,8 @@ from typing import Any
 __all__ = [
     "DebuggerFix",
     "DebuggerFixError",
+    "create_debugger_fix",
+    "debugger_fix_loop_task",
     "parse_debugger_fix",
     "validate_debugger_fix_checkout",
 ]
@@ -211,6 +213,57 @@ def parse_debugger_fix(payload: Mapping[str, Any]) -> DebuggerFix:
     if not isinstance(payload["patch_hash"], str) or payload["patch_hash"] != fix.patch_hash:
         raise DebuggerFixError("Patch-Hash stimmt nicht mit dem freizugebenden Inhalt ueberein.")
     return fix
+
+
+
+def create_debugger_fix(
+    *,
+    signatur: str,
+    ursache_tag: str,
+    diff: str,
+    betroffene_dateien: list[str],
+    confidence: float,
+    project: str,
+    run_id: str,
+    base_head: str,
+) -> DebuggerFix:
+    """Erzeugt einen geprueften Fix und berechnet dessen Freigabe-Hash."""
+    fix = DebuggerFix(
+        signatur=signatur,
+        ursache_tag=ursache_tag,
+        diff=diff,
+        betroffene_dateien=tuple(betroffene_dateien),
+        confidence=confidence,
+        project=project,
+        run_id=run_id,
+        base_head=base_head,
+    )
+    return parse_debugger_fix(fix.to_payload())
+
+
+def debugger_fix_loop_task(fix: DebuggerFix) -> str:
+    """Formatiert den freigegebenen Fix als unveraenderlichen Loop-Auftrag."""
+    payload = {
+        "type": "debugger_fix",
+        "schema_version": 1,
+        "approval": "exact_diff_hash",
+        "patch_hash": fix.patch_hash,
+        "project": fix.project,
+        "source_run_id": fix.run_id,
+        "base_head": fix.base_head,
+        "signatur": fix.signatur,
+        "ursache_tag": fix.ursache_tag,
+        "confidence": fix.confidence,
+        "betroffene_dateien": list(fix.betroffene_dateien),
+        "diff": fix.diff,
+        "instruction": (
+            "Dies ist der exakt freigegebene Debugger-Diff. Folge dem "
+            "verpflichtenden Plan-/Human-Gate-Ablauf. Wende in der "
+            "Implementierungsphase genau diesen Diff an; veraendere seinen "
+            "Inhalt nur nach einer neuen ausdruecklichen Freigabe."
+        ),
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
 def validate_debugger_fix_checkout(

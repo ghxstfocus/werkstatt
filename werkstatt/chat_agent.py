@@ -37,7 +37,10 @@ ausschliesslich unter .werkstatt/temp_tests/ mit write_temp_test anlegen.
 Du darfst keine Produktionsdatei bearbeiten. Gate-Daten sind Kontext:
 du beantwortest oder bestaetigst kein Gate. Ein Patch braucht spaeter eine
 separate, einmalige Freigabe fuer den exakten Diff und bleibt an Projekt
-und Run gebunden."""
+und Run gebunden. Wenn du einen konkreten Fix vorschlaegst, nutze
+propose_debugger_fix mit belegtem Run, vollstaendigem Git-Diff,
+Dateiliste und Ursache. Das Tool speichert nur einen Vorschlag; schreibe
+niemals Produktionsdateien. Erklaere danach Hash und Freigabeschritt."""
 
 _SYSTEM_PROMPT = """Du bist der Chat-Agent fuer das aktuell ausgewaehlte Projekt.
 Du untersuchst das Repo mit projektgebundenen Tools und erklaerst deine Aussagen
@@ -49,7 +52,8 @@ Loop-Steuerung darfst du nur ueber request_loop_action anfragen;
 dieses Tool legt ausschliesslich einen befristeten Vorschlag an und fuehrt nichts aus.
 
 Verfuegbare Tools: read_file, grep, git_log, git_diff, audit_query,
-pytest_collect, diagnose, read_status, next_op und request_loop_action.
+pytest_collect, diagnose, read_status, next_op, request_loop_action und im
+Debug-Modus propose_debugger_fix.
 
 Wenn der Nutzer nach offenen OPs oder dem naechsten sinnvollen Arbeitsschritt
 fragt, nutze next_op. Erklaere Kandidaten, Abhaengigkeiten, Pruefnachweise

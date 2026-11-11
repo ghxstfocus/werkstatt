@@ -4971,3 +4971,12 @@ Die Folge-CI meldete weiterhin I001, weil collections.abc und dataclasses in fal
 ## 2026-11-11 — OP-240 Diff-Hash-Regressionstest korrigiert
 
 GitHub Actions meldete, dass der Manipulationstest beim Erstellen des geaenderten Diffs zugleich einen neuen gueltigen Hash erzeugte. Der Test behaelt jetzt den urspruenglich bestaetigten Hash bei und veraendert nur den Diff; damit prueft er die tatsaechliche Bindung zwischen Freigabe und Patch-Inhalt.
+
+
+## 2026-11-11 — OP-240 Debugger-Fix an Chat-Freigabe und Loop gebunden
+
+Der Debug-Modus kann jetzt einen strukturierten Patch fuer einen im Event-Store belegten Projekt-Run vorschlagen. Der Server ermittelt den Basis-HEAD, validiert Diff, Dateiliste und Pfade und berechnet den SHA-256 ueber den gesamten Vertrag. Die Chat-Aktionskarte zeigt diesen Hash und den exakten Diff. Bei Bestaetigung prueft die API Hash, Projekt, HEAD und Anwendbarkeit erneut; danach startet sie den normalen Loop mit dem vollstaendigen maschinenlesbaren Patch-Auftrag. Der Loop erhaelt keine Sonderoption zum Ueberspringen von Plan-, Verify-, Review- oder Human-Gates.
+
+- Keine direkte Aenderung von Produktionsdateien durch Chat oder Freigabe-Endpunkt.
+- Tests ergaenzen Tool-Modus/Run-Bindung, hashgebundenen Loop-Auftrag, Diff-Anzeige und fail-closed Verhalten bei manipuliertem Vorschlag.
+- OP-240 bleibt offen bis End-to-End-Dogfooding ueber einen echten Loop-Run und seine Gates abgeschlossen ist.

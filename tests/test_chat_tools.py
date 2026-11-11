@@ -1,6 +1,9 @@
 """Tests fuer OP-231: read-only Tool-Registry."""
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+
 import pytest
 
 from werkstatt import chat_tools
@@ -20,7 +23,7 @@ def test_neun_soll_tools_vorhanden() -> None:
         "audit_query", "pytest_collect", "diagnose", "read_status", "next_op",
     }
     erwartet.add("request_loop_action")
-    erwartet.update({"pytest_run", "write_temp_test"})
+    erwartet.update({"pytest_run", "write_temp_test", "propose_debugger_fix"})
     assert set(chat_tools.CHAT_TOOLS) == erwartet
 
 
@@ -37,7 +40,8 @@ def test_debugger_tools_are_hidden_outside_debugger_mode() -> None:
     assert "write_temp_test" not in read_names
     assert {"pytest_run", "write_temp_test"} <= debugger_names
     assert len(read_names) == 10
-    assert len(debugger_names) == 12
+    assert {"pytest_run", "write_temp_test", "propose_debugger_fix"} <= debugger_names
+    assert len(debugger_names) == 13
 
 
 def test_openai_schemas_anzahl() -> None:
@@ -393,3 +397,63 @@ def test_write_temp_test_rejects_large_content(tmp_path) -> None:
     )
     assert "50 KB" in result
     assert not (tmp_path / ".werkstatt" / "temp_tests").exists()
+
+
+
+def test_propose_debugger_fix_creates_project_run_bound_proposal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path,
+) -> None:
+    from werkstatt import chat_session, event_store
+
+    head = "a" * 40
+    run_id = "demo-run-123"
+    saved = {}
+
+    class FakeStore:
+        def query(self, requested_run, *, project, limit):
+            assert requested_run == run_id
+            assert project == "demo"
+            assert limit == 1
+            return [{"kind": "loop_failed"}]
+
+    class FakeSession:
+        def __init__(self, project, session_id):
+            assert project == "demo"
+            assert session_id == "b" * 32
+
+        def append(self, kind, payload):
+            saved["kind"] = kind
+            saved["payload"] = payload
+
+    monkeypatch.setattr(event_store, "EventStore", FakeStore)
+    monkeypatch.setattr(chat_session, "ChatSession", FakeSession)
+    monkeypatch.setattr(
+        chat_tools.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout=head),
+    )
+    diff = (
+        "diff --git a/pkg/demo.py b/pkg/demo.py\n"
+        "--- a/pkg/demo.py\n+++ b/pkg/demo.py\n"
+        "@@ -1 +1 @@\n-old = 1\n+new = 2\n"
+    )
+    result = json.loads(chat_tools.execute_tool(
+        "propose_debugger_fix",
+        {
+            "signatur": "regression-demo",
+            "ursache_tag": "fixture",
+            "diff": diff,
+            "betroffene_dateien": ["pkg/demo.py"],
+            "confidence": 0.9,
+            "run_id": run_id,
+        },
+        mode="debugger",
+        project_dir=tmp_path,
+        project_name="demo",
+        session_id="b" * 32,
+    ))
+    assert result["zustand"] == "proposal"
+    assert saved["kind"] == "loop_action_proposed"
+    assert saved["payload"]["arguments"]["debugger_fix"]["base_head"] == head
+    assert saved["payload"]["arguments"]["debugger_fix"]["diff"] == diff
+    assert saved["payload"]["arguments"]["debugger_fix"]["patch_hash"]

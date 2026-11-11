@@ -106,3 +106,10 @@ def test_welcome_copy_matches_available_loop_capabilities() -> None:
     assert "zur Bestätigung." in js
     assert "Code-Patches direkt aus dem Chat sind noch nicht verfügbar." in js
 
+
+
+def test_debugger_fix_proposal_shows_hash_and_exact_diff() -> None:
+    js = _chat_js()
+    assert "proposal.arguments.debugger_fix" in js
+    assert '"SHA-256 · "' in js
+    assert "diff.textContent = debuggerFix.diff" in js

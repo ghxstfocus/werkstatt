@@ -448,6 +448,85 @@ def _request_loop_action(args: dict[str, Any]) -> str:
     return json.dumps({"zustand": "proposal", **proposal}, ensure_ascii=False)
 
 
+def _propose_debugger_fix(args: dict[str, Any]) -> str:
+    """Speichert einen hashgebundenen Patch-Vorschlag; schreibt keine Dateien."""
+    project = _PROJEKTNAME_KONTEXT.get()
+    session_id = _CHAT_SESSION_ID_KONTEXT.get()
+    run_id = str(args.get("run_id") or "").strip()
+    if not session_id:
+        return json.dumps({"zustand": "error", "detail": "Chat-Session fehlt."})
+    if not run_id.startswith(project + "-"):
+        return json.dumps({
+            "zustand": "invalid",
+            "detail": "run_id gehoert nicht zum aktiven Projekt.",
+        })
+    from werkstatt.debugger_handoff import (
+        DebuggerFixError,
+        create_debugger_fix,
+    )
+    from werkstatt.event_store import EventStore
+
+    if not EventStore().query(run_id, project=project, limit=1):
+        return json.dumps({
+            "zustand": "needs_input",
+            "detail": "Der angegebene Run ist fuer dieses Projekt nicht belegt.",
+        }, ensure_ascii=False)
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=_aktives_projekt_dir(),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_TIMEOUT_GIT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return json.dumps({
+            "zustand": "error",
+            "detail": f"Projekt-HEAD konnte nicht gelesen werden: {type(exc).__name__}",
+        }, ensure_ascii=False)
+    if head.returncode != 0:
+        return json.dumps({
+            "zustand": "error",
+            "detail": "Aktives Projekt hat keinen lesbaren Git-HEAD.",
+        }, ensure_ascii=False)
+    try:
+        fix = create_debugger_fix(
+            signatur=str(args.get("signatur") or ""),
+            ursache_tag=str(args.get("ursache_tag") or ""),
+            diff=str(args.get("diff") or ""),
+            betroffene_dateien=args.get("betroffene_dateien"),
+            confidence=args.get("confidence"),
+            project=project,
+            run_id=run_id,
+            base_head=head.stdout.strip(),
+        )
+    except (DebuggerFixError, TypeError) as exc:
+        return json.dumps({
+            "zustand": "invalid",
+            "detail": str(exc),
+        }, ensure_ascii=False)
+    proposal_id = uuid.uuid4().hex
+    from datetime import UTC, datetime, timedelta
+    now = datetime.now(UTC)
+    proposal = {
+        "proposal_id": proposal_id,
+        "action": "start",
+        "arguments": {"debugger_fix": fix.to_payload()},
+        "summary": f"Debugger-Fix freigeben: {fix.signatur}",
+        "task_preview": (
+            f"{fix.ursache_tag} · {len(fix.betroffene_dateien)} Datei(en) · "
+            f"Confidence {fix.confidence:.0%}"
+        ),
+        "project": project,
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(minutes=15)).isoformat(),
+    }
+    from werkstatt.chat_session import ChatSession
+    ChatSession(project, session_id).append("loop_action_proposed", proposal)
+    return json.dumps({"zustand": "proposal", **proposal}, ensure_ascii=False)
+
+
 CHAT_TOOLS: dict[str, dict[str, Any]] = {
     "read_file": {
         "description": "Liest Datei-Inhalt (max 50 KB).",
@@ -537,6 +616,32 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
             "required": ["content"],
         },
         "fn": _write_temp_test,
+        "mode": "debugger",
+    },
+    "propose_debugger_fix": {
+        "description": (
+            "Legt im Debug-Modus einen hashgebundenen Patch-Vorschlag fuer "
+            "einen belegten Run an. Schreibt keinen Produktionscode; die UI "
+            "zeigt den exakten Diff und verlangt eine ausdrueckliche Freigabe."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "signatur": {"type": "string"},
+                "ursache_tag": {"type": "string"},
+                "diff": {"type": "string"},
+                "betroffene_dateien": {
+                    "type": "array", "items": {"type": "string"},
+                },
+                "confidence": {"type": "number"},
+                "run_id": {"type": "string"},
+            },
+            "required": [
+                "signatur", "ursache_tag", "diff",
+                "betroffene_dateien", "confidence", "run_id",
+            ],
+        },
+        "fn": _propose_debugger_fix,
         "mode": "debugger",
     },
     "diagnose": {

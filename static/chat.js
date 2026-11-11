@@ -687,6 +687,19 @@
       var task = document.createElement("pre");
       task.textContent = proposal.task_preview || proposal.arguments.aufgabe;
       card.appendChild(task);
+    }    var debuggerFix = proposal.arguments && proposal.arguments.debugger_fix;
+    if (debuggerFix) {
+      var digest = document.createElement("code");
+      digest.className = "debugger-fix-hash";
+      digest.textContent = "SHA-256 · " + debuggerFix.patch_hash;
+      card.appendChild(digest);
+      var diffLabel = document.createElement("strong");
+      diffLabel.textContent = "Exakter freizugebender Diff";
+      card.appendChild(diffLabel);
+      var diff = document.createElement("pre");
+      diff.className = "debugger-fix-diff";
+      diff.textContent = debuggerFix.diff;
+      card.appendChild(diff);
     }
     var state = document.createElement("span");
     state.className = "proposal-state";

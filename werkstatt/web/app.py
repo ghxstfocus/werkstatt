@@ -1405,6 +1405,34 @@ def create_app() -> FastAPI:
             if proposal.get("project") != projekt:
                 raise HTTPException(status_code=404, detail="Vorschlag gehoert zu anderem Projekt")
             if action == "start":
+                debugger_payload = arguments.get("debugger_fix")
+                if debugger_payload is not None:
+                    from werkstatt.debugger_handoff import (
+                        DebuggerFixError,
+                        debugger_fix_loop_task,
+                        parse_debugger_fix,
+                        validate_debugger_fix_checkout,
+                    )
+                    try:
+                        fix = parse_debugger_fix(debugger_payload)
+                    except (DebuggerFixError, TypeError) as exc:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Debugger-Freigabe ungueltig: {exc}",
+                        ) from exc
+                    if fix.project != projekt:
+                        raise HTTPException(
+                            status_code=404,
+                            detail="Debugger-Fix gehoert zu anderem Projekt",
+                        )
+                    ok, detail = validate_debugger_fix_checkout(
+                        fix,
+                        _PROJECTS_BASE / projekt,
+                        expected_project=projekt,
+                    )
+                    if not ok:
+                        raise HTTPException(status_code=409, detail=detail)
+                    arguments = {"aufgabe": debugger_fix_loop_task(fix)}
                 result = project_start(projekt, arguments)
             elif action == "pause":
                 result = project_pause(projekt)

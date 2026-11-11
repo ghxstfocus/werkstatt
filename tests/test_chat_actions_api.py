@@ -119,3 +119,51 @@ def test_rejected_chat_action_has_no_loop_side_effect(
     assert response.status_code == 200
     assert response.json()["state"] == "rejected"
     assert [event["kind"] for event in session.load()][-1] == "loop_action_rejected"
+
+
+def test_debugger_action_rejects_tampered_patch_before_start(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt import chat_session
+    from werkstatt.web import app as app_modul
+
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db_path)
+    session_id = "e" * 32
+    proposal_id = "f" * 32
+    session = chat_session.ChatSession("demo", session_id, db_pfad=db_path)
+    payload = {
+        "signatur": "regression-demo",
+        "ursache_tag": "fixture",
+        "diff": (
+            "diff --git a/pkg/demo.py b/pkg/demo.py\\n"
+            "--- a/pkg/demo.py\\n+++ b/pkg/demo.py\\n"
+            "@@ -1 +1 @@\\n-old = 1\\n+new = 2\\n"
+        ),
+        "betroffene_dateien": ["pkg/demo.py"],
+        "confidence": 0.9,
+        "project": "demo",
+        "run_id": "demo-run-123",
+        "base_head": "a" * 40,
+        "patch_hash": "0" * 64,
+    }
+    session.append("loop_action_proposed", {
+        "proposal_id": proposal_id,
+        "project": "demo",
+        "action": "start",
+        "arguments": {"debugger_fix": payload},
+        "expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+    })
+
+    response = TestClient(app_modul.app).post(
+        f"/api/projects/demo/chat/actions/{proposal_id}",
+        json={"session_id": session_id, "decision": "confirm"},
+    )
+    assert response.status_code == 400
+    assert "Debugger-Freigabe ungueltig" in response.json()["detail"]
+    assert [event["kind"] for event in session.load()][-1] == "loop_action_failed"

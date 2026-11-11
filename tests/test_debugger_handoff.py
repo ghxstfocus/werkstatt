@@ -123,3 +123,26 @@ def test_checkout_validation_fails_on_cross_project_proposal(tmp_path: Path) -> 
     assert not ok
     assert "anderen Projekt" in detail
     run.assert_not_called()
+
+
+def test_create_debugger_fix_builds_hash_and_loop_task() -> None:
+    from werkstatt.debugger_handoff import (
+        create_debugger_fix,
+        debugger_fix_loop_task,
+    )
+
+    fix = create_debugger_fix(
+        signatur="fixture-regression",
+        ursache_tag="stale_fixture",
+        diff=_DIFF,
+        betroffene_dateien=["werkstatt/sample.py"],
+        confidence=0.93,
+        project="demo",
+        run_id="demo-run-123",
+        base_head="a" * 40,
+    )
+    payload = json.loads(debugger_fix_loop_task(fix))
+    assert payload["patch_hash"] == fix.patch_hash
+    assert payload["diff"] == _DIFF
+    assert payload["approval"] == "exact_diff_hash"
+    assert "Plan-/Human-Gate" in payload["instruction"]

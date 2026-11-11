@@ -371,6 +371,15 @@ noch nicht vollstaendig.
   `werkstatt/chat_tools.py`, `werkstatt/web/static/chat.js`
 - **Problem:** Bei fehlgeschlagenem Run oder offenem Gate soll der Chat dem Menschen eine **Eskalations-Ladder** und direkte Kontextuebergabe anbieten. Der Chat entscheidet nichts und beantwortet keine Gates. Der Mensch waehlt Diagnose, Patch-Uebergabe oder Loop-Neustart. Der Debugger ist eine Faehigkeit des Chats (Modus `debugger`), keine eigene Loop-Rolle (ADR-0011/0029; ADR-0018 verworfen).
 
+- **Umsetzungsstand:** Der strukturierte DebuggerFix-Vertrag ist mit dem
+  Debug-Modus verdrahtet. Ein belegter Projekt-Run liefert einen Vorschlag
+  mit serverseitigem Basis-HEAD und Hash des exakten Diffs. Die Freigabekarte
+  zeigt Hash und Diff; die Bestätigung validiert beides erneut und reicht den
+  unveraenderten Fix als maschinenlesbaren Auftrag an den normalen Loop weiter.
+  Direkte Chat-Schreibzugriffe gibt es nicht. OP-240 bleibt offen, bis der
+  echte Loop-Durchlauf und die vorgeschriebenen Gates end-to-end dogfooding-
+  verifiziert sind.
+
 - **Ladder-Modi** (Auswahl durch den Menschen; `chat_loop(...,
   modus=...)` setzt die Wahl um):
   - `manuell` — Chat diagnostiziert read-only. Der Mensch
