@@ -4847,3 +4847,10 @@ Der System-Prompt verlangte Datei-/Zeilenbelege, obwohl read_file start/end Zeic
 Die UI-Auswahl `debug` wird beim Senden als Backend-Faehigkeit `debugger` an den persistenten Chat-Job uebergeben. Cockpit und Control bleiben read-only. Job-, synchroner Chat- und WebSocket-Endpunkt akzeptieren `debugger`; schreibender Job-Modus bleibt abgewiesen. Ein Registry-Test haelt Debugger-Werkzeuge ausserhalb dieses Modus verborgen, API- und Frontend-Tests decken die Weitergabe ab. OP-240 bleibt offen: exakter strukturierter Patch, Freigabe an Patch-Hash/Projekt/Run gebunden und copy/paste-freie Uebergabe an den Coding-Loop fehlen weiterhin.
 
 - GitHub Actions auf `ded9211`: JavaScript-Syntax, Ruff, Gesamtsuite und Quality Gate gruen; 1920 passed / 5 skipped, Ruff/Mypy 0, AST 370 Dateien ohne Fehler, Audit-Katalog bestanden, `ok=true`, `regression=false`. Ein vorheriger Testfehler bei der Argumentreihenfolge von `pytest -k` wurde im Test korrigiert.
+
+
+## Chat-Arbeitsbereich und API-Kompatibilitaet (2026-11-11)
+
+Der Chat wurde als projektbezogener Arbeitsbereich gestaltet: Gespraeche zeigen lesbare Titel und Zeitangaben, Antworten erhalten mehr typografische Hierarchie, Hintergrundaktionen erscheinen als kompakte Aktivitaets-Timeline, und der Composer bekommt einen klaren Fokuszustand. Aktivitaetskarten bleiben an Projekt und Session gebunden und werden vor der laufenden Antwort angezeigt. Der Asset-Cache in `layout.html` wurde synchron erneuert.
+
+Der Screenshot zeigte `Chat-Auftrag konnte nicht angenommen werden: Not Found`. Die aktuelle API stellt `/chat/jobs` bereit; bei einem Server, dessen geladene API diese Route noch nicht kennt, faellt die UI fuer genau den generischen Routen-404 auf den bestehenden direkten Chat-Endpunkt zurueck. Projekt- oder Session-404s werden davon nicht verschluckt. Das kann eine fehlende Prozess-Neuladung temporaer abfedern, ersetzt den Webserver-Neustart fuer die Hintergrundjob-API aber nicht.
