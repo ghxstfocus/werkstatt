@@ -269,16 +269,28 @@ def _request_loop_action(args: dict[str, Any]) -> str:
     """Persistiert einen befristeten Vorschlag; fuehrt keine Aktion aus."""
     action = str(args.get("action", "")).strip().lower()
     if action not in {"start", "pause", "resume", "stop"}:
-        return json.dumps({"zustand": "invalid", "detail": "Aktion muss start, pause, resume oder stop sein."}, ensure_ascii=False)
+        return json.dumps({
+            "zustand": "invalid",
+            "detail": "Aktion muss start, pause, resume oder stop sein.",
+        }, ensure_ascii=False)
+
     session_id = _CHAT_SESSION_ID_KONTEXT.get()
     if not session_id:
-        return json.dumps({"zustand": "error", "detail": "Chat-Session fehlt; kein Vorschlag gespeichert."}, ensure_ascii=False)
+        return json.dumps({
+            "zustand": "error",
+            "detail": "Chat-Session fehlt; kein Vorschlag gespeichert.",
+        }, ensure_ascii=False)
+
     arguments: dict[str, Any] = {}
+    preview = ""
     if action == "start":
         op_id = str(args.get("op_id") or "").strip()
         task = str(args.get("aufgabe") or "").strip()
         if op_id and task:
-            return json.dumps({"zustand": "needs_input", "detail": "Bitte entweder eine OP-ID oder einen konkreten Auftrag angeben."}, ensure_ascii=False)
+            return json.dumps({
+                "zustand": "needs_input",
+                "detail": "Bitte entweder eine OP-ID oder einen konkreten Auftrag angeben.",
+            }, ensure_ascii=False)
         if op_id:
             if not re.fullmatch(r"OP-\\d+[a-z]?", op_id):
                 return json.dumps({"zustand": "invalid", "detail": "OP-ID ungueltig."}, ensure_ascii=False)
@@ -287,35 +299,43 @@ def _request_loop_action(args: dict[str, Any]) -> str:
                 status_text = status_path.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
                 return json.dumps({"zustand": "error", "detail": f"STATUS kann nicht gelesen werden: {exc}"}, ensure_ascii=False)
-            match = re.search(rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\\Z)", status_text, re.MULTILINE | re.DOTALL)
+            match = re.search(
+                rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\\Z)",
+                status_text,
+                re.MULTILINE | re.DOTALL,
+            )
             if not match:
                 return json.dumps({"zustand": "needs_input", "detail": f"{op_id} wurde nicht in docs/STATUS.md gefunden."}, ensure_ascii=False)
-            task = match.group(0).strip()
+            preview = match.group(0).strip()
             arguments["op_id"] = op_id
         elif task:
             arguments["aufgabe"] = task
+            preview = task
         else:
             selection = json.loads(_next_op({}))
             if selection.get("zustand") != "selected":
                 return json.dumps({"zustand": "needs_input", "auswahl": selection}, ensure_ascii=False)
-            arguments["op_id"] = selection["auswahl"]["id"]
-            task = str(selection["aufgabe"])
-        if task:
-            arguments["aufgabe"] = task
-    proposal_id = __import__("uuid").uuid4().hex
+            op_id = str(selection["auswahl"]["id"])
+            preview = str(selection["aufgabe"])
+            arguments["op_id"] = op_id
+
     from datetime import UTC, datetime, timedelta
+    proposal_id = __import__("uuid").uuid4().hex
     now = datetime.now(UTC)
     proposal = {
         "proposal_id": proposal_id,
         "action": action,
         "arguments": arguments,
-        "summary": ("Loop starten: " + str(arguments.get("op_id") or arguments.get("aufgabe", ""))) if action == "start" else "Loop " + action,
+        "summary": f"Loop starten: {arguments.get('op_id') or 'Auftrag'}" if action == "start" else f"Loop {action}",
+        "task_preview": preview,
         "project": _PROJEKTNAME_KONTEXT.get(),
         "created_at": now.isoformat(),
         "expires_at": (now + timedelta(minutes=15)).isoformat(),
     }
     from werkstatt.chat_session import ChatSession
-    ChatSession(_PROJEKTNAME_KONTEXT.get(), session_id).append("loop_action_proposed", proposal)
+    ChatSession(_PROJEKTNAME_KONTEXT.get(), session_id).append(
+        "loop_action_proposed", proposal,
+    )
     return json.dumps({"zustand": "proposal", **proposal}, ensure_ascii=False)
 
 
