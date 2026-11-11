@@ -747,7 +747,7 @@ def test_live_worker_reconciles_pause_from_shared_registry(
 
     docs_dir = tmp_path / "demo" / "docs"
     docs_dir.mkdir(parents=True)
-    (docs_dir / "STATUS.md").write_text("# shared worker test\\n", encoding="utf-8")
+    (docs_dir / "STATUS.md").write_text("# shared worker test\n", encoding="utf-8")
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
     _reset_loop_registry(app_modul)
 
@@ -789,4 +789,4 @@ def test_live_worker_reconciles_pause_from_shared_registry(
     stop = client.post("/api/projects/demo/stop")
     assert stop.status_code == 200
     assert stop.json()["gestoppt"] is True
-\n
+
