@@ -307,8 +307,9 @@ def aggregate_palette(projekt: str, q: str) -> dict[str, list[dict]]:
             with sqlite3.connect(es.db_pfad) as c:
                 for rid, ts, kind in c.execute(
                     "SELECT DISTINCT run_id, ts, kind FROM events "
-                    "WHERE run_id LIKE ? ORDER BY seq DESC LIMIT 10",
-                    (f"%{q_low}%",),
+                    "WHERE project=? AND run_id LIKE ? "
+                    "ORDER BY seq DESC LIMIT 10",
+                    (projekt, f"%{q_low}%"),
                 ):
                     if rid:
                         runs.append({
