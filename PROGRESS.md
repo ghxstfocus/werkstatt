@@ -4956,3 +4956,8 @@ Ein neuer Validierungsbaustein definiert den strukturierten Debugger-Patch als u
 - Checkout-Pruefung verwendet nur `git apply --check`; der Baustein schreibt keinen Produktionscode.
 - Regressionstests decken Hash-Bindung, Kontextbindung, ungueltige Pfade, Diff-/Dateilisten-Abweichung und HEAD-Wechsel ab.
 - Die Freigabekarte und der tatsaechliche CLI-Handoff sind weiterhin offen; OP-240 bleibt offen, bis sie den selben Vertrag nutzen und die Loop-Gates nachweislich erhalten bleiben.
+
+
+## 2026-11-11 — OP-240 CI-Lintkorrektur
+
+Die erste GitHub-Actions-Runde fuer den neuen DebuggerFix-Vertrag stoppte vor pytest am Ruff-UP035-Hinweis: Mapping gehoert in collections.abc. Import korrigiert; die vollstaendige Verifikation laeuft mit dem Folgecommit.

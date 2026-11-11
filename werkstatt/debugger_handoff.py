@@ -12,8 +12,9 @@ import math
 import re
 import subprocess
 from dataclasses import asdict, dataclass
+from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
-from typing import Any, Mapping
+from typing import Any
 
 __all__ = [
     "DebuggerFix",
