@@ -3966,3 +3966,17 @@ body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.assistant 
   border: 0;
   box-shadow: none;
 }
+
+
+/* Eingabe: ein sichtbarer Fokusrahmen am Composer, keine Doppelkontur. */
+.chat-composer:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--border));
+  box-shadow: none;
+}
+#chat-eingabe,
+#chat-eingabe:focus {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  resize: none;
+}
