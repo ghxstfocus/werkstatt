@@ -111,7 +111,7 @@ def test_chat_job_rejects_write_mode_without_gate(
     )
 
     assert response.status_code == 400
-    assert "nur read-Modus" in response.json()["detail"]
+    assert "read- oder debugger-Modus" in response.json()["detail"]
 
 
 def test_chat_job_get_replays_persisted_events(
@@ -243,3 +243,41 @@ def test_running_job_cancel_endpoint_requests_worker_stop(
     assert response.json()["state"] == "cancelling"
     assert store.cancellation_requested(job["job_id"], "worker-test")
 
+
+
+def test_chat_job_accepts_debugger_mode_and_forwards_it(
+    client_and_base: tuple[Any, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _base = client_and_base
+    from werkstatt import chat_jobs
+    from werkstatt.web import app as app_modul
+
+    monkeypatch.setattr(
+        chat_jobs, "sync_completed_job_turns", lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(app_modul, "_loop_registry", lambda: type(
+        "Registry", (), {"read": lambda _self, _project: None},
+    )())
+    seen: dict[str, Any] = {}
+
+    def _accepted(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        seen["mode"] = args[4]
+        return {
+            "job": {"job_id": "c" * 32, "state": "queued", "run_id": None},
+            "created": True,
+        }
+
+    monkeypatch.setattr(chat_jobs, "enqueue_chat_job", _accepted)
+    response = client.post(
+        "/api/projects/demo/chat/jobs",
+        json={
+            "session_id": "session-1",
+            "message": "Untersuche den Fehler",
+            "mode": "debugger",
+            "idempotency_key": "request-debugger-001",
+        },
+    )
+
+    assert response.status_code == 202
+    assert seen["mode"] == "debugger"
