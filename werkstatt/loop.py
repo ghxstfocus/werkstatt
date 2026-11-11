@@ -455,6 +455,11 @@ def _main_inner(argv: list[str] | None = None) -> int:
     parser.add_argument("--project", required=True,
                         help="Projektname (z.B. security-ai)")
     parser.add_argument(
+        "--project-dir",
+        default="",
+        help="Explizites Arbeitsverzeichnis, z.B. ein gepinnter GitHub-Run-Worktree.",
+    )
+    parser.add_argument(
         "--rollback",
         action="store_true",
         help="Bei Fehler git reset --hard auf Start-HEAD (default: aus). "
@@ -515,7 +520,11 @@ def _main_inner(argv: list[str] | None = None) -> int:
                 ok=False)
         _r.footer(success=False, tasks_total=0, tasks_ok=0)
         return 1
-    _pd = _Path(_pd_str)
+    _pd = _Path(args.project_dir or _pd_str).expanduser().resolve()
+    if not _pd.is_dir():
+        _r.step(0, "config", f"project_dir ist kein Verzeichnis: {_pd}", ok=False)
+        _r.footer(success=False, tasks_total=0, tasks_ok=0)
+        return 1
 
     _api_key = _os.environ.get("DEEPSEEK_API_KEY", "")
     if not _api_key:
@@ -530,6 +539,8 @@ def _main_inner(argv: list[str] | None = None) -> int:
         from werkstatt.orchestrator import load_docs as _load_docs
         from werkstatt.orchestrator import load_project_config as _load_cfg
         _full_cfg = _load_cfg(args.project)
+        if args.project_dir:
+            _full_cfg["project_dir"] = str(_pd)
         _docs = _load_docs(_full_cfg.get("docs", {}), _pd)
     except SystemExit:
         # load_project_config/load_docs signalisieren Pflichtfehler per sys.exit.

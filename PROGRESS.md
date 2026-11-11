@@ -5144,3 +5144,11 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 
 - `_git_dirty` ignorierte bislang einen fehlerhaften Exitcode von `git status` und meldete den Baum als sauber. In einem erkennbaren Repo kann der Loop dadurch die Stash-Sicherung überspringen.
 - Bei Statusfehlern wird ein Projekt mit `.git`-Marker jetzt als unsicher behandelt; Nicht-Git-Projekte bleiben ohne Git lauffaehig. Ein Regressionstest deckt den fehlerhaften Git-Status ab.
+
+
+## 2026-11-11 — ADR-0030 angenommen, GitHub-Run-Worktree vorbereitet
+
+- ADR-0030 ist nach ausdruecklicher Freigabe als accepted in ADR, ADR-Index und Roadmap eingetragen. Die Richtung ist server-first: Greenfield-Scaffolding bleibt auf dem Server; Remote-Verbindung und initiales Pushen bleiben separate Freigaben.
+- GitHub-Runs pruefen jetzt auf dem Server den konfigurierten origin-Upstream, holen den Remote-Stand und erstellen einen eigenen Worktree-Branch auf der gepinnten Commit-SHA. Der bestehende Checkout wird nicht gemergt oder zurueckgesetzt; dirty, vorausliegende oder divergierende lokale Branches stoppen den Start.
+- Der Loop kann den Worktree-Pfad explizit als Arbeitsverzeichnis verwenden. Der Start-API-Response nennt Repository, Remote-Branch, Basis- und Ziel-SHA sowie Run-Branch.
+- CI fuer den Git-Status-Fix: 1963 Tests bestanden, 5 uebersprungen; Ruff/Mypy/AST/Katalog und Quality Gate ohne Regression. Die Integration von OP-399 wird mit Remote-/Worktree- und UI-Gates weiterverifiziert.

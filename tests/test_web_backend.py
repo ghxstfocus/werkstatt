@@ -849,3 +849,56 @@ def test_pause_state_rejects_overlapping_resume_across_workers(
     assert resumed.json()["fortgesetzt"] is True
     assert signale == [(os.getpid(), signal.SIGCONT)]
     assert client.get("/api/projects/demo/loop").json()["state"] == "running"
+
+
+def test_github_run_starts_in_pinned_worktree(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+
+    from werkstatt import project_sources
+    from werkstatt.web import app as app_modul
+
+    docs_dir = tmp_path / "demo" / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "STATUS.md").write_text("# Status\\n", encoding="utf-8")
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    _reset_loop_registry(app_modul)
+
+    worktree = tmp_path / "demo" / ".werkstatt" / "worktrees" / "fake-run"
+    prepared = SimpleNamespace(
+        repository="example/demo",
+        branch="main",
+        base_sha="a" * 40,
+        remote_sha="b" * 40,
+        run_branch="werkstatt/run/fake-run",
+        worktree_path=worktree,
+    )
+    monkeypatch.setattr(
+        project_sources,
+        "prepare_github_run_worktree",
+        lambda *_args: prepared,
+    )
+    args: list[list[str]] = []
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(args))
+    monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
+
+    response = TestClient(app_modul.app).post(
+        "/api/projects/demo/start",
+        json={"aufgabe": "Use the pinned GitHub checkout"},
+    )
+
+    assert response.status_code == 200
+    assert args[0][args[0].index("--project-dir") + 1] == str(worktree)
+    assert response.json()["source"] == {
+        "repository": "example/demo",
+        "branch": "main",
+        "base_sha": "a" * 40,
+        "pinned_sha": "b" * 40,
+        "run_branch": "werkstatt/run/fake-run",
+    }
+    _reset_loop_registry(app_modul)

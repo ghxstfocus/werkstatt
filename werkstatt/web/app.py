@@ -487,281 +487,323 @@ def create_app() -> FastAPI:
         OP-303: body enthaelt entweder eine explizite {aufgabe: str}
         oder {op_id: "OP-303"}. Ohne beides wird kein leerer Run gestartet.
         """
-        projektname = _pruefe_projektname(name)
-        # OP-305: Projekt muss minimal initialisiert sein (STATUS.md da),
-        # sonst startet der Loop ins Leere (oder falschen Kontext).
-        _pd = _PROJECTS_BASE / projektname
-        if not (_pd / "docs" / "STATUS.md").is_file():
-            raise HTTPException(
-                status_code=404,
-                detail=f"Projekt {projektname!r} hat kein docs/STATUS.md",
+        prepared_source = None
+        launch_succeeded = False
+        try:
+            projektname = _pruefe_projektname(name)
+            _pd = _PROJECTS_BASE / projektname
+            # Bereits laufende Arbeit hat Vorrang vor der Validierung einer
+            # neuen Eingabe. Der spaetere Lock um Popen schliesst die Race-Luecke.
+            with _projekt_loop_lock(projektname):
+                laufend = _loop_prozess(projektname)
+                record = _loop_registry().read(projektname)
+                if laufend is not None or (record and record["state"] == "starting"):
+                    return {
+                        "gestartet": False,
+                        "pid": laufend.pid if laufend is not None else None,
+                        "run_id": (
+                            _LOOP_RUN_IDS.get(projektname)
+                            or (record.get("run_id") if record else None)
+                        ),
+                        "grund": "laeuft_bereits",
+                    }
+            import secrets as _secrets
+            import time as _time
+            run_id = (
+                f"{projektname}-{_time.strftime('%Y%m%d-%H%M%S')}"
+                f"-{_secrets.token_hex(4)}"
             )
-        # Bereits laufende Arbeit hat Vorrang vor der Validierung einer
-        # neuen Eingabe. Der spaetere Lock um Popen schliesst die Race-Luecke.
-        with _projekt_loop_lock(projektname):
-            laufend = _loop_prozess(projektname)
-            record = _loop_registry().read(projektname)
-            if laufend is not None or (record and record["state"] == "starting"):
-                return {
-                    "gestartet": False,
-                    "pid": laufend.pid if laufend is not None else None,
-                    "run_id": (
-                        _LOOP_RUN_IDS.get(projektname)
-                        or (record.get("run_id") if record else None)
-                    ),
-                    "grund": "laeuft_bereits",
-                }
-        import secrets as _secrets
-        import time as _time
-        run_id = (
-            f"{projektname}-{_time.strftime('%Y%m%d-%H%M%S')}"
-            f"-{_secrets.token_hex(4)}"
-        )
-        args = [sys.executable, "-m", "werkstatt.loop",
-                "--project", projektname,
-                "--headless",
-                "--run-id", run_id,
-                "--fresh"]
-        aufgabe = ""
-        op_id = ""
-        if body and isinstance(body, dict):
-            op_id = str(body.get("op_id") or "").strip()
-            aufgabe = str(body.get("aufgabe") or "").strip()
-        if aufgabe:
-            op_id = ""
-
-        if op_id and not aufgabe:
-            if not re.fullmatch(r"OP-\d+[a-z]?", op_id):
-                raise HTTPException(status_code=400, detail="ungueltige op_id")
-            from werkstatt.web import inspector as _insp
-            ops = _insp.parse_ops(_pd)
-            auswahl = next((op for op in ops if op.get("id") == op_id), None)
-            if auswahl is None:
-                raise HTTPException(status_code=404, detail="OP nicht offen oder nicht gefunden")
-            if auswahl.get("status") != "open":
-                raise HTTPException(status_code=409, detail="OP ist nicht als offen markiert")
-            _status_md = _pd / "docs" / "STATUS.md"
+            args = [sys.executable, "-m", "werkstatt.loop",
+                    "--project", projektname,
+                    "--headless",
+                    "--run-id", run_id,
+                    "--fresh"]
+            from werkstatt import project_sources as _project_sources
             try:
-                _status_text = _status_md.read_text(
-                    encoding="utf-8", errors="replace",
+                prepared_source = _project_sources.prepare_github_run_worktree(
+                    _pd, run_id,
                 )
-            except OSError as exc:
-                raise HTTPException(
-                    status_code=500, detail="STATUS.md nicht lesbar",
-                ) from exc
-            _entscheidung = select_next_op(
-                _status_text,
-                _completed_op_ids(_pd, _status_text),
-                accepted_adrs=_accepted_adr_ids(_pd),
-            )
-            _ausgeschlossen: dict[str, Any] = next(
-                (
-                    item for item in _entscheidung["ausgeschlossen"]
-                    if item.get("id") == op_id
-                ),
-                {},
-            )
-            _blocker_grund = [
-                grund for grund in _ausgeschlossen.get("gruende", [])
-                if (
-                    "Abhaengigkeiten" in grund
-                    or "Blocker-Angabe" in grund
-                    or "Unbekannte oder widerspruechliche Blocker" in grund
-                    or "OP-ID kommt mehrfach" in grund
-                    or "Status fehlt" in grund
-                    or "Phase-3 gesperrt" in grund
-                    or "ADR-Voraussetzungen" in grund
-                    or "Architektur-Voraussetzung" in grund
-                )
-            ]
-            if _blocker_grund:
+            except _project_sources.GitHubSyncError as exc:
                 raise HTTPException(
                     status_code=409,
-                    detail="OP ist blockiert: " + "; ".join(_blocker_grund),
+                    detail={"code": "github_sync_blocked", "message": str(exc)},
+                ) from exc
+            _source_pd = (
+                prepared_source.worktree_path if prepared_source is not None else _pd
+            )
+            if not (_source_pd / "docs" / "STATUS.md").is_file():
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Projekt {projektname!r} hat kein docs/STATUS.md",
                 )
-
-            if not aufgabe:
-                # Volltext aus STATUS.md (nicht nur Titel): der Explorer
-                # braucht konkrete Symbole und Pfade als Suchbegriffe.
-                _status_md = _pd / "docs" / "STATUS.md"
+            if prepared_source is not None:
+                args.extend(["--project-dir", str(prepared_source.worktree_path)])
+            aufgabe = ""
+            op_id = ""
+            if body and isinstance(body, dict):
+                op_id = str(body.get("op_id") or "").strip()
+                aufgabe = str(body.get("aufgabe") or "").strip()
+            if aufgabe:
+                op_id = ""
+    
+            if op_id and not aufgabe:
+                if not re.fullmatch(r"OP-\d+[a-z]?", op_id):
+                    raise HTTPException(status_code=400, detail="ungueltige op_id")
+                from werkstatt.web import inspector as _insp
+                ops = _insp.parse_ops(_source_pd)
+                auswahl = next((op for op in ops if op.get("id") == op_id), None)
+                if auswahl is None:
+                    raise HTTPException(status_code=404, detail="OP nicht offen oder nicht gefunden")
+                if auswahl.get("status") != "open":
+                    raise HTTPException(status_code=409, detail="OP ist nicht als offen markiert")
+                _status_md = _source_pd / "docs" / "STATUS.md"
                 try:
                     _status_text = _status_md.read_text(
-                        encoding="utf-8", errors="replace")
+                        encoding="utf-8", errors="replace",
+                    )
                 except OSError as exc:
                     raise HTTPException(
                         status_code=500, detail="STATUS.md nicht lesbar",
                     ) from exc
-                _m_op = re.search(
-                    rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\Z)",
-                    _status_text, re.MULTILINE | re.DOTALL)
-                if not _m_op:
-                    raise HTTPException(status_code=404, detail="OP-Text nicht gefunden")
-                aufgabe = _m_op.group(0).strip()
-
-        autonome_auswahl: dict[str, Any] | None = None
-        if not aufgabe and not op_id:
-            try:
-                status_text = (_pd / "docs" / "STATUS.md").read_text(
-                    encoding="utf-8", errors="replace",
+                _entscheidung = select_next_op(
+                    _status_text,
+                    _completed_op_ids(_source_pd, _status_text),
+                    accepted_adrs=_accepted_adr_ids(_source_pd),
                 )
-            except OSError as exc:
-                raise HTTPException(
-                    status_code=500, detail="STATUS.md nicht lesbar",
-                ) from exc
-            entscheidung = select_next_op(
-                status_text,
-                _completed_op_ids(_pd, status_text),
-                accepted_adrs=_accepted_adr_ids(_pd),
-            )
-            if entscheidung["zustand"] == "needs_input":
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "autonomy_selection_required",
-                        "message": entscheidung["begruendung"],
-                        "kandidaten": entscheidung["kandidaten"],
-                    },
-                )
-            if entscheidung["zustand"] != "selected":
-                raise HTTPException(
-                    status_code=422,
-                    detail={
-                        "code": "no_ready_op",
-                        "message": entscheidung["begruendung"],
-                        "ausgeschlossen": entscheidung["ausgeschlossen"],
-                    },
-                )
-            ausgewaehlt = entscheidung["auswahl"]
-            ausgewaehlte_aufgabe = entscheidung["aufgabe"]
-            if (
-                not isinstance(ausgewaehlt, dict)
-                or not isinstance(ausgewaehlt.get("id"), str)
-                or not re.fullmatch(r"OP-\d+[a-z]?", ausgewaehlt["id"])
-                or not isinstance(ausgewaehlte_aufgabe, str)
-                or not ausgewaehlte_aufgabe.strip()
-            ):
-                raise HTTPException(
-                    status_code=500,
-                    detail="Selector lieferte eine ungueltige Auswahl.",
-                )
-            autonome_auswahl = ausgewaehlt
-            aufgabe = ausgewaehlte_aufgabe.strip()
-            op_id = ausgewaehlt["id"]
-
-        if not aufgabe:
-            raise HTTPException(
-                status_code=422,
-                detail="aufgabe oder offene, nicht blockierte op_id erforderlich",
-            )
-        args.extend(["--aufgabe", aufgabe])
-        # Der FastAPI-Threadpool kann parallele Start-Requests bedienen.
-        # Recheck und Popen muessen atomar sein, sonst starten zwei Builder
-        # gleichzeitig im selben Working Tree.
-        with _projekt_loop_lock(projektname):
-            laufend = _loop_prozess(projektname)
-            record = _loop_registry().read(projektname)
-            if laufend is not None or (record and record["state"] == "starting"):
-                return {
-                    "gestartet": False,
-                    "pid": laufend.pid if laufend is not None else None,
-                    "run_id": (
-                        _LOOP_RUN_IDS.get(projektname)
-                        or (record.get("run_id") if record else None)
+                _ausgeschlossen: dict[str, Any] = next(
+                    (
+                        item for item in _entscheidung["ausgeschlossen"]
+                        if item.get("id") == op_id
                     ),
-                    "grund": "laeuft_bereits",
-                }
-            _LAUFENDE_LOOPS.pop(projektname, None)
-            _LOOP_RUN_IDS.pop(projektname, None)
-            _PAUSIERTE_LOOPS.discard(projektname)
-            _altes_log = _LOOP_LOG_HANDLES.pop(projektname, None)
-            if _altes_log is not None:
-                try:
-                    _altes_log.close()
-                except OSError:
-                    pass
-
-            registry = _loop_registry()
-            reserviert, record = registry.reserve(projektname, run_id)
-            if not reserviert:
-                return {
-                    "gestartet": False,
-                    "pid": record.get("pid") if record else None,
-                    "run_id": record.get("run_id") if record else None,
-                    "grund": "laeuft_bereits",
-                }
-
-            if autonome_auswahl:
-                geschrieben = _audit_web_loop_event(
-                    projektname, run_id, "web_op_selected", "selected",
-                    {
-                        "op_id": autonome_auswahl["id"],
-                        "reason": autonome_auswahl["gruende"],
-                        "priority": autonome_auswahl["prioritaet"],
-                        "risk": autonome_auswahl["risiko"],
-                        "project_goal_relevance": autonome_auswahl["projektziel_relevanz"],
-                        "verification": autonome_auswahl["verifikation"],
-                    },
+                    {},
                 )
-                if not geschrieben:
-                    registry.set_state(projektname, run_id, "idle")
+                _blocker_grund = [
+                    grund for grund in _ausgeschlossen.get("gruende", [])
+                    if (
+                        "Abhaengigkeiten" in grund
+                        or "Blocker-Angabe" in grund
+                        or "Unbekannte oder widerspruechliche Blocker" in grund
+                        or "OP-ID kommt mehrfach" in grund
+                        or "Status fehlt" in grund
+                        or "Phase-3 gesperrt" in grund
+                        or "ADR-Voraussetzungen" in grund
+                        or "Architektur-Voraussetzung" in grund
+                    )
+                ]
+                if _blocker_grund:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="OP ist blockiert: " + "; ".join(_blocker_grund),
+                    )
+    
+                if not aufgabe:
+                    # Volltext aus STATUS.md (nicht nur Titel): der Explorer
+                    # braucht konkrete Symbole und Pfade als Suchbegriffe.
+                    _status_md = _source_pd / "docs" / "STATUS.md"
+                    try:
+                        _status_text = _status_md.read_text(
+                            encoding="utf-8", errors="replace")
+                    except OSError as exc:
+                        raise HTTPException(
+                            status_code=500, detail="STATUS.md nicht lesbar",
+                        ) from exc
+                    _m_op = re.search(
+                        rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\Z)",
+                        _status_text, re.MULTILINE | re.DOTALL)
+                    if not _m_op:
+                        raise HTTPException(status_code=404, detail="OP-Text nicht gefunden")
+                    aufgabe = _m_op.group(0).strip()
+    
+            autonome_auswahl: dict[str, Any] | None = None
+            if not aufgabe and not op_id:
+                try:
+                    status_text = (_source_pd / "docs" / "STATUS.md").read_text(
+                        encoding="utf-8", errors="replace",
+                    )
+                except OSError as exc:
+                    raise HTTPException(
+                        status_code=500, detail="STATUS.md nicht lesbar",
+                    ) from exc
+                entscheidung = select_next_op(
+                    status_text,
+                    _completed_op_ids(_source_pd, status_text),
+                    accepted_adrs=_accepted_adr_ids(_source_pd),
+                )
+                if entscheidung["zustand"] == "needs_input":
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "autonomy_selection_required",
+                            "message": entscheidung["begruendung"],
+                            "kandidaten": entscheidung["kandidaten"],
+                        },
+                    )
+                if entscheidung["zustand"] != "selected":
+                    raise HTTPException(
+                        status_code=422,
+                        detail={
+                            "code": "no_ready_op",
+                            "message": entscheidung["begruendung"],
+                            "ausgeschlossen": entscheidung["ausgeschlossen"],
+                        },
+                    )
+                ausgewaehlt = entscheidung["auswahl"]
+                ausgewaehlte_aufgabe = entscheidung["aufgabe"]
+                if (
+                    not isinstance(ausgewaehlt, dict)
+                    or not isinstance(ausgewaehlt.get("id"), str)
+                    or not re.fullmatch(r"OP-\d+[a-z]?", ausgewaehlt["id"])
+                    or not isinstance(ausgewaehlte_aufgabe, str)
+                    or not ausgewaehlte_aufgabe.strip()
+                ):
                     raise HTTPException(
                         status_code=500,
-                        detail="Autonome Auswahl konnte nicht auditiert werden",
+                        detail="Selector lieferte eine ungueltige Auswahl.",
                     )
-
-            # Log-File pro Run, stdout/stderr umleiten (sonst sind
-            # Loop-Crashes unsichtbar). Handle bis zum Stop/Exit halten.
-            _log_dir = _pd / ".werkstatt" / "logs"
-            _log_fh = None
-            try:
-                _log_dir.mkdir(parents=True, exist_ok=True)
-                _log_fh = (_log_dir / f"loop-{run_id}.log").open("ab")
-            except OSError:
-                _log_fh = None
-            try:
-                prozess = subprocess.Popen(
-                    args,
-                    stdout=_log_fh if _log_fh is not None else subprocess.DEVNULL,
-                    stderr=subprocess.STDOUT,
-                    start_new_session=(os.name == "posix"),
+                autonome_auswahl = ausgewaehlt
+                aufgabe = ausgewaehlte_aufgabe.strip()
+                op_id = ausgewaehlt["id"]
+    
+            if not aufgabe:
+                raise HTTPException(
+                    status_code=422,
+                    detail="aufgabe oder offene, nicht blockierte op_id erforderlich",
                 )
-            except OSError as exc:
-                registry.set_state(projektname, run_id, "idle")
-                if _log_fh is not None:
-                    _log_fh.close()
-                raise HTTPException(
-                    status_code=500, detail=f"Loop konnte nicht starten: {exc}",
-                ) from exc
-            try:
-                registry.register(projektname, run_id, prozess.pid)
-            except (OSError, RuntimeError) as exc:
+            args.extend(["--aufgabe", aufgabe])
+            # Der FastAPI-Threadpool kann parallele Start-Requests bedienen.
+            # Recheck und Popen muessen atomar sein, sonst starten zwei Builder
+            # gleichzeitig im selben Working Tree.
+            with _projekt_loop_lock(projektname):
+                laufend = _loop_prozess(projektname)
+                record = _loop_registry().read(projektname)
+                if laufend is not None or (record and record["state"] == "starting"):
+                    return {
+                        "gestartet": False,
+                        "pid": laufend.pid if laufend is not None else None,
+                        "run_id": (
+                            _LOOP_RUN_IDS.get(projektname)
+                            or (record.get("run_id") if record else None)
+                        ),
+                        "grund": "laeuft_bereits",
+                    }
+                _LAUFENDE_LOOPS.pop(projektname, None)
+                _LOOP_RUN_IDS.pop(projektname, None)
+                _PAUSIERTE_LOOPS.discard(projektname)
+                _altes_log = _LOOP_LOG_HANDLES.pop(projektname, None)
+                if _altes_log is not None:
+                    try:
+                        _altes_log.close()
+                    except OSError:
+                        pass
+    
+                registry = _loop_registry()
+                reserviert, record = registry.reserve(projektname, run_id)
+                if not reserviert:
+                    return {
+                        "gestartet": False,
+                        "pid": record.get("pid") if record else None,
+                        "run_id": record.get("run_id") if record else None,
+                        "grund": "laeuft_bereits",
+                    }
+    
+                if autonome_auswahl:
+                    geschrieben = _audit_web_loop_event(
+                        projektname, run_id, "web_op_selected", "selected",
+                        {
+                            "op_id": autonome_auswahl["id"],
+                            "reason": autonome_auswahl["gruende"],
+                            "priority": autonome_auswahl["prioritaet"],
+                            "risk": autonome_auswahl["risiko"],
+                            "project_goal_relevance": autonome_auswahl["projektziel_relevanz"],
+                            "verification": autonome_auswahl["verifikation"],
+                        },
+                    )
+                    if not geschrieben:
+                        registry.set_state(projektname, run_id, "idle")
+                        raise HTTPException(
+                            status_code=500,
+                            detail="Autonome Auswahl konnte nicht auditiert werden",
+                        )
+    
+                # Log-File pro Run, stdout/stderr umleiten (sonst sind
+                # Loop-Crashes unsichtbar). Handle bis zum Stop/Exit halten.
+                _log_dir = _pd / ".werkstatt" / "logs"
+                _log_fh = None
                 try:
-                    if os.name == "posix":
-                        os.killpg(prozess.pid, signal.SIGTERM)
-                    else:
-                        prozess.terminate()
-                    prozess.wait(timeout=5)
-                except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
-                    pass
-                registry.set_state(projektname, run_id, "idle")
+                    _log_dir.mkdir(parents=True, exist_ok=True)
+                    _log_fh = (_log_dir / f"loop-{run_id}.log").open("ab")
+                except OSError:
+                    _log_fh = None
+                try:
+                    prozess = subprocess.Popen(
+                        args,
+                        stdout=_log_fh if _log_fh is not None else subprocess.DEVNULL,
+                        stderr=subprocess.STDOUT,
+                        start_new_session=(os.name == "posix"),
+                    )
+                except OSError as exc:
+                    registry.set_state(projektname, run_id, "idle")
+                    if _log_fh is not None:
+                        _log_fh.close()
+                    raise HTTPException(
+                        status_code=500, detail=f"Loop konnte nicht starten: {exc}",
+                    ) from exc
+                try:
+                    registry.register(projektname, run_id, prozess.pid)
+                except (OSError, RuntimeError) as exc:
+                    try:
+                        if os.name == "posix":
+                            os.killpg(prozess.pid, signal.SIGTERM)
+                        else:
+                            prozess.terminate()
+                        prozess.wait(timeout=5)
+                    except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
+                        pass
+                    # Ein noch lebender Prozess muss seinen Worktree behalten.
+                    if prozess.poll() is None:
+                        launch_succeeded = True
+                    registry.set_state(projektname, run_id, "idle")
+                    if _log_fh is not None:
+                        _log_fh.close()
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Loop-Registrierung fehlgeschlagen: {exc}",
+                    ) from exc
+                _LAUFENDE_LOOPS[projektname] = prozess
+                _LOOP_RUN_IDS[projektname] = run_id
                 if _log_fh is not None:
-                    _log_fh.close()
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Loop-Registrierung fehlgeschlagen: {exc}",
-                ) from exc
-            _LAUFENDE_LOOPS[projektname] = prozess
-            _LOOP_RUN_IDS[projektname] = run_id
-            if _log_fh is not None:
-                _LOOP_LOG_HANDLES[projektname] = _log_fh
-            return {
-                "gestartet": True,
-                "pid": prozess.pid,
-                "run_id": run_id,
-                "aufgabe": aufgabe,
-                "op_id": op_id or None,
-                "auswahl": autonome_auswahl,
-            }
+                    _LOOP_LOG_HANDLES[projektname] = _log_fh
+                launch_succeeded = True
+                return {
+                    "gestartet": True,
+                    "pid": prozess.pid,
+                    "run_id": run_id,
+                    "aufgabe": aufgabe,
+                    "op_id": op_id or None,
+                    "auswahl": autonome_auswahl,
+                    "source": (
+                        {
+                            "repository": prepared_source.repository,
+                            "branch": prepared_source.branch,
+                            "base_sha": prepared_source.base_sha,
+                            "pinned_sha": prepared_source.remote_sha,
+                            "run_branch": prepared_source.run_branch,
+                        }
+                        if prepared_source is not None else None
+                    ),
+                }
+    
+    
+        finally:
+            if prepared_source is not None and not launch_succeeded:
+                try:
+                    _project_sources.remove_prepared_worktree(_pd, prepared_source)
+                except _project_sources.GitHubSyncError:
+                    import logging as _logging
+                    _logging.getLogger(__name__).exception(
+                        "Could not clean up failed GitHub run worktree for %s",
+                        projektname,
+                    )
 
     @app.get("/api/projects/{name}/loop")
     def project_loop_control(name: str) -> dict[str, Any]:

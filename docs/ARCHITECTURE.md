@@ -57,6 +57,21 @@ Verify-Stages stehen in pyproject.toml, requirements.txt und
 aktiven Produktionspfads, solange die zugehoerigen ADRs nicht angenommen
 und in der Roadmap aktiviert sind.
 
+### 1.6 GitHub-Quellen und Run-Worktrees (ADR-0030)
+
+Wenn ein Projekt einen GitHub-origin mit konfiguriertem origin-Upstream hat,
+prueft der Server vor dem Start, dass sein Checkout sauber und nicht ahead oder
+divergent ist. Er fetcht den Upstream-Branch, pinnt die Commit-SHA und startet
+den Loop in einem eigenen Branch im verwalteten Worktree-Verzeichnis unterhalb von .werkstatt/worktrees. Der
+bestehende Server-Checkout wird dabei nicht gemergt, zurueckgesetzt oder
+beschrieben. Unklarer Git-Status, Fetch-Fehler, lokale Aenderungen oder ein
+auseinander gelaufener Branch stoppen den Start. Der API-Response nennt
+Repository, Remote-Branch, Basis-SHA, gepinnte SHA und Run-Branch.
+
+Projekte ohne GitHub-origin laufen weiter im konfigurierten Serverpfad.
+Remote-Push und Merge bleiben getrennte, freizugebende Aktionen; die
+automatisierte Merge-/Ergebnis-Gate-Integration ist Folgearbeit in OP-399.
+
 ## 2. Rollen
 
 ### 2.1 Explorer (werkstatt/explorer.py)

@@ -492,3 +492,22 @@ def test_lifecycle_stop_emits_distinct_terminal_event(monkeypatch):
     assert audit_calls[0][0] == "loop_stopped"
     assert audit_calls[0][1]["abgebrochen"] is True
     assert expired == [("demo-run-1", "loop_stopped")]
+ 
+def test_main_project_dir_overrides_configured_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    worktree = tmp_path / "run-worktree"
+    worktree.mkdir()
+    aufrufe: list = []
+    with _silence_renderer(), _patch_main_config(tmp_path), \
+         patch("werkstatt.loop.run_pipeline_loop",
+               _loop_runner(1, 0, aufrufe)), \
+         patch("werkstatt.loop._git_head", return_value="abc"), \
+         patch("werkstatt.loop._git_dirty", return_value=False):
+        rc = loop.main([
+            "--project", "p", "--aufgabe", "a",
+            "--project-dir", str(worktree),
+        ])
+    assert rc == 0
+    assert aufrufe[0]["state_ref"][0].project_dir == worktree.resolve()
