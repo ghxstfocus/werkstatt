@@ -5129,3 +5129,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Neue Projekte entstehen primaer auf dem Werkstatt-Server; GitHub kann beim Greenfield-Setup oder spaeter als Remote verbunden werden.
 - OP-399/ADR-0030 ergaenzen initiales Pushen mit eigener Freigabe sowie sicheren serverseitigen Fetch vor Remote-Runs. Lokale Aenderungen/Commits duerfen bei Sync nie still ueberschrieben werden; Konflikte muessen im Chat erklaert werden.
 - Die ADR bleibt vorgeschlagen, da GitHub-Authentifizierung, initiales Repo-Publishing und Konfliktpolitik noch formell zu entscheiden sind.
+
+## 2026-11-11 — Loop-Stash-Cleanup gegen Datenverlust absichern
+
+- Bei Cleanup wurde ein fehlgeschlagenes `git stash pop` durch ein unbedingtes `git stash drop stash@{0}` gefolgt; damit konnte ein Konflikt den einzigen wiederherstellbaren Nutzer-Stash loeschen.
+- Ausserdem galt ein erfolgreicher `git stash push`-Exitcode bereits als Beleg, dass ein neuer Stash angelegt wurde. Bei einem Race zur Dirty-Pruefung konnte so ein vorhandener Fremd-Stash gepoppt werden.
+- Cleanup ordnet die Wiederherstellung jetzt einer konkreten Stash-SHA zu, behaelt Konflikt-Stashes und bricht vor dem Loop ab, wenn lokale Aenderungen nicht nachweisbar gesichert wurden. OP-397, Audit-Katalog und Regressionstests werden angepasst.

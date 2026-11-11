@@ -238,8 +238,8 @@ def test_main_stash_pop_bei_erfolg(tmp_path, monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     pop_calls: list = []
 
-    def _fake_pop(pd):
-        pop_calls.append(str(pd))
+    def _fake_pop(pd, stash_ref):
+        pop_calls.append((str(pd), stash_ref))
         return True
 
     with _silence_renderer(), _patch_main_config(tmp_path), \
@@ -247,12 +247,36 @@ def test_main_stash_pop_bei_erfolg(tmp_path, monkeypatch):
          patch("werkstatt.loop._git_head", return_value="abc"), \
          patch("werkstatt.loop._git_dirty", return_value=True), \
          patch("werkstatt.loop._git_stash", return_value=True), \
+         patch("werkstatt.loop._git_stash_head", side_effect=["b" * 40, "a" * 40]), \
          patch("werkstatt.loop._git_stash_pop", _fake_pop):
         rc = loop.main(["--project", "p", "--aufgabe", "a"])
     assert rc == 0
-    assert len(pop_calls) == 1
+    assert pop_calls == [(str(tmp_path), "a" * 40)]
     assert len(_kind(tmp_path, "loop_stash_pop")) == 1
 
+
+def test_main_stops_if_dirty_tree_was_not_stashed(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    runner_calls: list[bool] = []
+
+    def _runner(*_args, **_kwargs):
+        runner_calls.append(True)
+        return 0
+
+    with (
+        _silence_renderer(),
+        _patch_main_config(tmp_path),
+        patch("werkstatt.loop.run_pipeline_loop", _runner),
+        patch("werkstatt.loop._git_head", return_value="abc"),
+        patch("werkstatt.loop._git_dirty", side_effect=[True, True]),
+        patch("werkstatt.loop._git_stash", return_value=True),
+        patch("werkstatt.loop._git_stash_head", side_effect=[None, None]),
+        pytest.raises(RuntimeError, match="nicht sicher gesichert"),
+    ):
+        loop.main(["--project", "p", "--aufgabe", "a"])
+
+    assert runner_calls == []
+    assert len(_kind(tmp_path, "loop_stash_failed")) == 1
 
 # =====================================================================
 # GOLD 2026-10-30: Hook-Block ueberspringt Apply-Loop
@@ -341,8 +365,8 @@ def test_main_stash_pop_bei_exception(tmp_path, monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     pop_calls: list = []
 
-    def _fake_pop(pd):
-        pop_calls.append(str(pd))
+    def _fake_pop(pd, stash_ref):
+        pop_calls.append((str(pd), stash_ref))
         return True
 
     def _boom(*args, **kwargs):
@@ -355,6 +379,7 @@ def test_main_stash_pop_bei_exception(tmp_path, monkeypatch):
         patch("werkstatt.loop._git_head", return_value="abc"),
         patch("werkstatt.loop._git_dirty", return_value=True),
         patch("werkstatt.loop._git_stash", return_value=True),
+        patch("werkstatt.loop._git_stash_head", side_effect=["b" * 40, "a" * 40]),
         patch("werkstatt.loop._git_stash_pop", _fake_pop),
         pytest.raises(RuntimeError, match="run_pipeline_loop boom"),
     ):
@@ -415,8 +440,8 @@ def test_main_sigterm_saves_and_restores_stash(tmp_path, monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     pop_calls: list[str] = []
 
-    def _fake_pop(project_dir):
-        pop_calls.append(str(project_dir))
+    def _fake_pop(project_dir, stash_ref):
+        pop_calls.append((str(project_dir), stash_ref))
         return True
 
     lifecycle_calls: list[tuple[bool, str | None, bool]] = []
@@ -434,13 +459,14 @@ def test_main_sigterm_saves_and_restores_stash(tmp_path, monkeypatch):
         patch("werkstatt.loop._git_head", return_value="abc"),
         patch("werkstatt.loop._git_dirty", return_value=True),
         patch("werkstatt.loop._git_stash", return_value=True),
+        patch("werkstatt.loop._git_stash_head", side_effect=["b" * 40, "a" * 40]),
         patch("werkstatt.loop._git_stash_pop", _fake_pop),
         patch("werkstatt.loop._emit_lifecycle_end", _capture_lifecycle),
     ):
         rc = loop.main(["--project", "p", "--aufgabe", "a"])
 
     assert rc == 128 + signal.SIGTERM
-    assert pop_calls == [str(tmp_path)]
+    assert pop_calls == [(str(tmp_path), "a" * 40)]
     assert lifecycle_calls == [(False, "p", True)]
 
 

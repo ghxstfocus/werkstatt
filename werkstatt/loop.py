@@ -615,9 +615,34 @@ def _main_inner(argv: list[str] | None = None) -> int:
                     raise _LoopStopRequested(_STOP_SIGNAL)
                 _stash_ok = _git_stash(_pd)
                 _stash_after = _git_stash_head(_pd)
-                _had_stash = _stash_ok or (
+                _had_stash = (
                     _stash_after is not None and _stash_after != _stash_before
                 )
+                _dirty_after_stash = _git_dirty(_pd)
+                _stash_ref_unknown = (
+                    _stash_ok
+                    and _stash_before is None
+                    and _stash_after is None
+                )
+                if not _had_stash and (
+                    _dirty_after_stash or _stash_ref_unknown
+                ):
+                    audit(
+                        "loop_stash_failed",
+                        {
+                            "reason": (
+                                "dirty_tree_remains"
+                                if _dirty_after_stash
+                                else "stash_ref_missing"
+                            ),
+                            "stash_ok": _stash_ok,
+                        },
+                        _pd, args.project,
+                    )
+                    raise RuntimeError(
+                        "Lokale Aenderungen konnten nicht sicher gesichert werden; "
+                        "der Loop startet nicht."
+                    )
             finally:
                 _STOP_SIGNAL_DEFERRED = False
             if _STOP_SIGNAL is not None:
@@ -650,9 +675,23 @@ def _main_inner(argv: list[str] | None = None) -> int:
                            "grund": "kein_rollback_flag"}, _pd, args.project)
 
             if _had_stash:
-                if rc == 0 and not _hat_exception:
-                    audit("loop_stash_pop", {}, _pd, args.project)
-                _git_stash_pop(_pd)
+                _stash_restored = _git_stash_pop(_pd, _stash_after)
+                if _stash_restored:
+                    audit(
+                        "loop_stash_pop", {"stash_ref": _stash_after},
+                        _pd, args.project,
+                    )
+                else:
+                    audit(
+                        "loop_stash_restore_failed",
+                        {
+                            "stash_ref": _stash_after,
+                            "recovery": (
+                                f"git stash apply --index {_stash_after}"
+                            ),
+                        },
+                        _pd, args.project,
+                    )
         finally:
             _STOP_SIGNAL_DEFERRED = False
 

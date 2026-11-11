@@ -7,6 +7,7 @@ Test-Patches auf werkstatt.loop._git_*.
 from __future__ import annotations
 
 import subprocess
+import uuid
 from pathlib import Path
 
 
@@ -51,9 +52,9 @@ def _git_head(pd: Path) -> str:
 def _git_stash(pd: Path) -> bool:
     """M-353b: Sichert dirty tree via git stash."""
     try:
+        marker = f"werkstatt-loop:{uuid.uuid4().hex}"
         res = subprocess.run(
-            ["git", "-C", str(pd), "stash", "push", "-u",
-             "-m", "werkstatt-loop"],
+            ["git", "-C", str(pd), "stash", "push", "-u", "-m", marker],
             capture_output=True, text=True, timeout=30, check=False,
         )
         return res.returncode == 0
@@ -61,28 +62,43 @@ def _git_stash(pd: Path) -> bool:
         return False
 
 
-def _git_stash_pop(pd: Path) -> bool:
-    """M-353b: Holt dirty tree zurueck (bei Erfolg).
-
-    GOLD 2026-10-30: Wenn pop fehlschlaegt (Konflikt), drop den
-    Stash. Sonst sammeln sich Stashes an -- Live-Beleg 2026-10-30:
-    8 offene Stashes nach 8 RERUNs, alle 'werkstatt-loop'.
-    """
+def _git_stash_pop(pd: Path, stash_ref: str | None = None) -> bool:
+    """Restore only this run's stash; retain it if restoration conflicts."""
+    if (
+        not isinstance(stash_ref, str)
+        or len(stash_ref) not in (40, 64)
+        or any(char not in "0123456789abcdefABCDEF" for char in stash_ref)
+    ):
+        return False
     try:
-        res = subprocess.run(
-            ["git", "-C", str(pd), "stash", "pop"],
-            capture_output=True, text=True, timeout=30, check=False,
-        )
-        if res.returncode == 0:
-            return True
-        subprocess.run(
-            ["git", "-C", str(pd), "stash", "drop", "stash@{0}"],
+        listed = subprocess.run(
+            [
+                "git", "-C", str(pd), "stash", "list",
+                "--format=%gd%x09%H",
+            ],
             capture_output=True, text=True, timeout=10, check=False,
         )
+        if listed.returncode != 0:
+            return False
+        selector = ""
+        for line in listed.stdout.splitlines():
+            name, separator, commit = line.partition("\t")
+            if not separator or commit.lower() != stash_ref.lower():
+                continue
+            if not name.startswith("stash@{") or not name.endswith("}"):
+                return False
+            if not name[7:-1].isdecimal():
+                return False
+            selector = name
+            break
+        if not selector:
+            return False
+        return subprocess.run(
+            ["git", "-C", str(pd), "stash", "pop", "--index", selector],
+            capture_output=True, text=True, timeout=30, check=False,
+        ).returncode == 0
+    except (OSError, subprocess.SubprocessError):
         return False
-    except Exception:
-        return False
-
 
 def _git_stash_drop(pd: Path) -> bool:
     """M-353b: Verwirft dirty tree (bei Fehler)."""

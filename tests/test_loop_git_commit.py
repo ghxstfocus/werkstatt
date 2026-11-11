@@ -272,50 +272,92 @@ def test_git_diff_for_hook_exception():
 
 
 # =====================================================================
-# GOLD 2026-10-30: _git_stash_pop mit drop-Fallback
+# =====================================================================
+# Stash restoration is scoped to the run-owned entry
 # =====================================================================
 
-def test_stash_pop_drop_fallback_bei_fehler(tmp_path):
-    """_git_stash_pop droppt den Stash, wenn pop fehlschlaegt.
+def test_stash_pop_uses_exact_entry_and_never_drops_on_conflict(tmp_path):
+    stash_sha = "a" * 40
+    calls: list[list[str]] = []
 
-    Regression: Live 2026-10-30 — 8 offene Stashes nach 8 RERUNs.
-    """
-    from unittest.mock import patch
-
-    calls: list = []
-    def _fake_run(argv, **kw):
+    def _fake_run(argv, **_kwargs):
         calls.append(list(argv))
-        # Eigentlich: erster Call (pop) rc=1, zweiter (drop) rc=0
-        if "pop" in argv:
-            return type("R", (), {"returncode": 1, "stdout": "",
-                                  "stderr": "conflict"})()
-        return type("R", (), {"returncode": 0, "stdout": "",
-                              "stderr": ""})()
+        if "list" in argv:
+            return _fake_result(0, f"stash@{{1}}\t{stash_sha}\n")
+        return _fake_result(1, "", "conflict")
 
     with patch("werkstatt.loop.subprocess.run", _fake_run):
-        ok = loop._git_stash_pop(tmp_path)
-    assert ok is False
-    # Zwei Calls: pop, drop
+        assert loop._git_stash_pop(tmp_path, stash_sha) is False
+
     assert len(calls) == 2
-    assert "pop" in calls[0]
-    assert "drop" in calls[1]
-    assert "stash@{0}" in calls[1]
+    assert calls[1][-2:] == ["--index", "stash@{1}"]
+    assert all("drop" not in argv for argv in calls)
 
 
-def test_stash_pop_ohne_drop_bei_erfolg(tmp_path):
-    """_git_stash_pop droppt NICHT, wenn pop klappt."""
-    from unittest.mock import patch
-    calls: list = []
-    def _fake_run(argv, **kw):
+def test_stash_pop_missing_entry_does_not_touch_stash_stack(tmp_path):
+    calls: list[list[str]] = []
+
+    def _fake_run(argv, **_kwargs):
         calls.append(list(argv))
-        return type("R", (), {"returncode": 0, "stdout": "",
-                              "stderr": ""})()
-    with patch("werkstatt.loop.subprocess.run", _fake_run):
-        ok = loop._git_stash_pop(tmp_path)
-    assert ok is True
-    assert len(calls) == 1
-    assert "pop" in calls[0]
+        return _fake_result(0, "")
 
+    with patch("werkstatt.loop.subprocess.run", _fake_run):
+        assert loop._git_stash_pop(tmp_path, "a" * 40) is False
+
+    assert len(calls) == 1
+    assert "list" in calls[0]
+
+
+def test_real_stash_pop_restores_own_entry_behind_newer_stash(tmp_path):
+    _init_repo(tmp_path)
+    seed = tmp_path / "seed.txt"
+    seed.write_text("run-owned change\n")
+    assert loop._git_stash(tmp_path) is True
+    run_stash = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "refs/stash"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+    newer_file = tmp_path / "newer.txt"
+    newer_file.write_text("user's newer stash\n")
+    assert loop._git_stash(tmp_path) is True
+    newer_stash = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "refs/stash"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+    assert loop._git_stash_pop(tmp_path, run_stash) is True
+    assert seed.read_text() == "run-owned change\n"
+    remaining = subprocess.run(
+        ["git", "-C", str(tmp_path), "stash", "list", "--format=%H"],
+        capture_output=True, text=True, check=True,
+    ).stdout.splitlines()
+    assert newer_stash in remaining
+    assert run_stash not in remaining
+
+def test_real_stash_conflict_remains_recoverable(tmp_path):
+    _init_repo(tmp_path)
+    ziel = tmp_path / "seed.txt"
+    ziel.write_text("user change\n")
+    assert loop._git_stash(tmp_path) is True
+    stash_sha = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "refs/stash"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+    ziel.write_text("loop change\n")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "seed.txt"], check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "commit", "-m", "loop change"],
+        capture_output=True, check=True,
+    )
+
+    assert loop._git_stash_pop(tmp_path, stash_sha) is False
+    remaining = subprocess.run(
+        ["git", "-C", str(tmp_path), "stash", "list", "--format=%H"],
+        capture_output=True, text=True, check=True,
+    ).stdout.splitlines()
+    assert stash_sha in remaining
 
 def test_commit_gate_prompt_ist_explizit(monkeypatch):
     """OP-381: Commit-Gate-Prompt sagt WAS entschieden wird.
