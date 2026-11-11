@@ -1131,6 +1131,7 @@
         var text = eingabe.value.trim();
         if (!text) return;
         eingabe.value = "";
+        eingabe.style.height = "auto";
         _sende(text);
       });
     }
