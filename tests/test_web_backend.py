@@ -133,7 +133,10 @@ def test_loop_subprozess_start_stop(
     assert stop_daten["gestoppt"] is True
     assert stop_daten["returncode"] == 0
     if app_modul.os.name == "posix":
-        assert gruppensignale == [(daten["pid"], signal.SIGTERM)]
+        assert gruppensignale == [
+            (daten["pid"], signal.SIGCONT),
+            (daten["pid"], signal.SIGTERM),
+        ]
     assert "demo" not in app_modul._LAUFENDE_LOOPS
 
 
@@ -435,6 +438,7 @@ def test_stop_eskaliert_an_prozessgruppe_nach_timeout(
 
     assert stop.status_code == 200
     assert signale == [
+        (process.pid, signal.SIGCONT),
         (process.pid, signal.SIGTERM),
         (process.pid, signal.SIGKILL),
     ]
