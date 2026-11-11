@@ -1548,6 +1548,47 @@ def aggregate_live_feed(
 
     events_sorted = sorted(events, key=_ts_key)
 
+    # Kontext aus den bereits vorhandenen Phasen-/Task-Markern fortschreiben.
+    # So bleiben Ergebnisse einer Task zugeordnet, auch wenn das End-Event
+    # selbst nur die Task-ID traegt.
+    aktuelle_phase = ""
+    aktuelle_task_id = ""
+    aktuelle_task_name = ""
+    for event in events_sorted:
+        kind = str(event.get("kind", ""))
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            payload = event
+        if kind == "loop_phase":
+            aktuelle_phase = _tl_public_text(
+                payload.get("phase") or payload.get("name")
+                or event.get("phase"), 80,
+            )
+            aktuelle_task_id = ""
+            aktuelle_task_name = ""
+        elif kind == "loop_task_start":
+            aktuelle_task_id = _tl_public_text(
+                payload.get("task_id") or payload.get("id"), 80,
+            )
+            aktuelle_task_name = _tl_public_text(
+                payload.get("name") or payload.get("text"), 160,
+            )
+        event["_timeline_phase"] = (
+            _tl_public_text(payload.get("phase") or event.get("phase"), 80)
+            or aktuelle_phase
+        )
+        event["_timeline_task_id"] = (
+            _tl_public_text(payload.get("task_id") or payload.get("id"), 80)
+            or aktuelle_task_id
+        )
+        event["_timeline_task_name"] = (
+            _tl_public_text(payload.get("name") or payload.get("text"), 160)
+            or aktuelle_task_name
+        )
+        if kind in ("loop_task_ok", "loop_task_failed"):
+            aktuelle_task_id = ""
+            aktuelle_task_name = ""
+
     # Aktiv-Snapshot: letzter 'in progress'-Event
     aktiv_raw = _tl_aggregate_aktiv(events_sorted, grace_s=5)
 
@@ -1581,11 +1622,17 @@ def aggregate_live_feed(
             "kind": kind,
             "detail": str(detail)[:200],
             "status": _tl_status(kind, {**ev, **payload}),
-            "task_id": str(payload.get("task_id", "")
-                           or payload.get("id", "")),
+            "task_id": str(
+                payload.get("task_id") or payload.get("id")
+                or ev.get("_timeline_task_id") or ""
+            ),
+            "task_name": str(ev.get("_timeline_task_name") or ""),
             "project": projekt,
             "run_id": run_id,
-            "phase": _tl_public_text(payload.get("phase") or ev.get("phase"), 80),
+            "phase": _tl_public_text(
+                payload.get("phase") or ev.get("phase")
+                or ev.get("_timeline_phase"), 80,
+            ),
         }
         # Nur benannte Kurzfelder duerfen in die Timeline. Beliebige Prompt-,
         # Reasoning- oder Rohpayload-Felder werden bewusst nicht weitergereicht.
