@@ -18,6 +18,7 @@
     sendQueue: [],
     loadPromise: null,
     jobs: Object.create(null),
+    sessionSummaries: [],
   };
 
   function _el(id) { return document.getElementById(id); }
@@ -49,7 +50,9 @@
     return fetch("/api/projects/" + encodeURIComponent(projekt) + "/chat/sessions",
                  {credentials: "same-origin"})
       .then(function (r) { return r.json(); })
-      .then(function (d) { return d.sessions || []; });
+      .then(function (d) {
+        return {sessions: d.sessions || [], summaries: d.summaries || []};
+      });
   }
 
   function _ladeHistory(projekt, sid) {
@@ -60,39 +63,96 @@
       .then(function (d) { return d.events || []; });
   }
 
-  function _rendereSidebar(sessions) {
+  function _syncChatMode() {
+    var badge = _el("chat-mode-hint");
+    if (!badge) return;
+    var mode = window.WerkstattMode && window.WerkstattMode.getMode
+      ? window.WerkstattMode.getMode() : "cockpit";
+    var labels = {
+      cockpit: "Cockpit · Projektfragen",
+      control: "Control · Live-Steuerung",
+      debug: "Debug · Tests & Fehleranalyse",
+    };
+    badge.textContent = labels[mode] || labels.cockpit;
+    badge.dataset.mode = mode;
+  }
+
+  function _sessionZeit(ts) {
+    if (!ts) return "";
+    var datum = new Date(ts);
+    if (Number.isNaN(datum.getTime())) return "";
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+      }).format(datum);
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function _sessionButton(sid, summary, aktiv) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chat-session" + (aktiv ? " aktiv" : "");
+    btn.dataset.sessionId = sid;
+    btn.title = summary && summary.title ? summary.title : "Projektgespraech";
+    var title = document.createElement("span");
+    title.className = "chat-session-title";
+    title.textContent = summary && summary.title
+      ? summary.title : "Projektgespraech";
+    btn.appendChild(title);
+    var meta = document.createElement("span");
+    meta.className = "chat-session-meta";
+    meta.textContent = _sessionZeit(summary && summary.updated_at);
+    btn.appendChild(meta);
+    btn.addEventListener("click", function () { _wechsleSession(sid); });
+    return btn;
+  }
+
+  function _rendereSidebar(sessions, summaries) {
     var box = _el("chat-sessions");
     if (!box) return;
-    box.innerHTML = "";
-    sessions.forEach(function (sid) {
-      var btn = document.createElement("button");
-      btn.className = "chat-session" + (sid === zustand.sessionId ? " aktiv" : "");
-      btn.textContent = sid.slice(0, 10);
-      btn.dataset.sessionId = sid;
-      btn.addEventListener("click", function () {
-        _wechsleSession(sid);
-      });
-      box.appendChild(btn);
+    box.replaceChildren();
+    var details = summaries || [];
+    var lookup = Object.create(null);
+    details.forEach(function (item) {
+      if (item && item.session_id) lookup[item.session_id] = item;
     });
-    // Aktuelle Session, falls nicht in Liste (z.B. weil noch leer)
-    if (zustand.sessionId && sessions.indexOf(zustand.sessionId) < 0) {
-      var ghost = document.createElement("button");
-      ghost.className = "chat-session aktiv";
-      ghost.textContent = zustand.sessionId.slice(0, 10);
-      ghost.dataset.sessionId = zustand.sessionId;
-      ghost.addEventListener("click", function () {
-        _wechsleSession(zustand.sessionId);
-      });
-      box.appendChild(ghost);
+    var geordnet = details.length
+      ? details.map(function (item) { return item.session_id; })
+      : sessions;
+    geordnet.forEach(function (sid) {
+      box.appendChild(_sessionButton(
+        sid, lookup[sid], sid === zustand.sessionId,
+      ));
+    });
+    if (zustand.sessionId && geordnet.indexOf(zustand.sessionId) < 0) {
+      box.appendChild(_sessionButton(
+        zustand.sessionId,
+        {title: "Neues Gespraech", updated_at: ""},
+        true,
+      ));
+      var latest = box.lastElementChild;
+      if (latest) {
+        var meta = latest.querySelector(".chat-session-meta");
+        if (meta) meta.textContent = "Noch keine Nachricht";
+      }
+    }
+    if (!box.children.length) {
+      var leer = document.createElement("p");
+      leer.className = "chat-sessions-empty";
+      leer.textContent = "Deine Gespräche erscheinen hier.";
+      box.appendChild(leer);
     }
   }
 
   function _renderSidebarAktuell() {
     var projekt = zustand.projekt;
     var anfrage = zustand.historyRequest;
-    _ladeSessions(projekt).then(function (sessions) {
+    _ladeSessions(projekt).then(function (data) {
       if (projekt === zustand.projekt && anfrage === zustand.historyRequest) {
-        _rendereSidebar(sessions);
+        zustand.sessionSummaries = data.summaries || [];
+        _rendereSidebar(data.sessions || [], data.summaries || []);
       }
     }).catch(function () {});
   }
@@ -487,10 +547,109 @@
     if (box) box.scrollTop = box.scrollHeight;
   }
 
+  function _toolLabel(name, args) {
+    args = args || {};
+    var path = String(args.path || "").split(/[\\/]/).pop();
+    var labels = {
+      read_file: path ? "Liest " + path : "Liest eine Projektdatei",
+      grep: args.pattern ? "Sucht im Repo nach „" + String(args.pattern).slice(0, 64) + "“" : "Durchsucht das Projekt",
+      git_log: "Prüft die letzten Änderungen",
+      git_diff: "Prüft den aktuellen Code-Diff",
+      audit_query: "Liest Ereignisse aus dem Lauf",
+      pytest_collect: "Sammelt passende Tests",
+      pytest_run: path ? "Führt Tests in " + path + " aus" : "Führt Projekt-Tests aus",
+      write_temp_test: "Erstellt einen temporären Debug-Test",
+      diagnose: "Ordnet bekannte Fehlerklassen ein",
+      read_status: "Liest Status und Fortschritt",
+      next_op: "Prüft den nächsten sinnvollen Arbeitsschritt",
+      request_loop_action: "Bereitet eine Loop-Aktion zur Bestätigung vor",
+    };
+    return labels[name] || "Prüft " + String(name || "Projektwerkzeug").replace(/_/g, " ");
+  }
+
+  function _jobAktivitaet(job) {
+    if (job.activityCard) return job.activityCard;
+    var box = _el("chat-nachrichten");
+    if (!box) return null;
+    var card = document.createElement("section");
+    card.className = "chat-activity";
+    card.setAttribute("aria-live", "polite");
+    card.setAttribute("aria-label", "Hintergrundaktivität");
+    var head = document.createElement("div");
+    head.className = "chat-activity-head";
+    var mark = document.createElement("span");
+    mark.className = "chat-activity-mark";
+    mark.setAttribute("aria-hidden", "true");
+    head.appendChild(mark);
+    var copy = document.createElement("div");
+    copy.className = "chat-activity-copy";
+    var eyebrow = document.createElement("span");
+    eyebrow.className = "chat-activity-eyebrow";
+    eyebrow.textContent = "IM HINTERGRUND";
+    copy.appendChild(eyebrow);
+    var title = document.createElement("strong");
+    title.className = "chat-activity-title";
+    title.textContent = "Ich prüfe deine Anfrage …";
+    copy.appendChild(title);
+    head.appendChild(copy);
+    var state = document.createElement("span");
+    state.className = "chat-activity-state running";
+    state.textContent = "Läuft";
+    head.appendChild(state);
+    var steps = document.createElement("ol");
+    steps.className = "chat-activity-steps";
+    card.appendChild(head);
+    card.appendChild(steps);
+    var empty = box.querySelector(".chat-empty");
+    if (empty) empty.remove();
+    box.appendChild(card);
+    job.activityCard = card;
+    job.activityTitle = title;
+    job.activityState = state;
+    job.activitySteps = steps;
+    box.scrollTop = box.scrollHeight;
+    return card;
+  }
+
+  function _jobAktivitaetStatus(job, text, status) {
+    _jobAktivitaet(job);
+    if (job.activityTitle && text) job.activityTitle.textContent = text;
+    if (job.activityState) {
+      job.activityState.className = "chat-activity-state " + (status || "running");
+      job.activityState.textContent = status === "done" ? "Fertig" :
+        status === "error" ? "Fehler" :
+          status === "cancelled" ? "Abgebrochen" : "Läuft";
+    }
+    var card = job.activityCard;
+    if (card) {
+      card.classList.toggle("is-running", status !== "done" &&
+        status !== "error" && status !== "cancelled");
+      card.classList.toggle("is-error", status === "error");
+      card.classList.toggle("is-done", status === "done");
+    }
+  }
+
   function _jobToolCall(job, name, args) {
     if (!_jobAktiv(job.project, job.sessionId, job.request)) return;
-    var card = _toolKarte(name || "?", args, "running");
-    job.toolCards.push({name: name || "?", card: card});
+    _jobAktivitaetStatus(job, _toolLabel(name, args), "running");
+    var row = document.createElement("li");
+    row.className = "chat-activity-step running";
+    var dot = document.createElement("span");
+    dot.className = "chat-activity-dot";
+    dot.setAttribute("aria-hidden", "true");
+    var text = document.createElement("span");
+    text.className = "chat-activity-step-label";
+    text.textContent = _toolLabel(name, args);
+    var state = document.createElement("span");
+    state.className = "chat-activity-step-state";
+    state.textContent = "Läuft";
+    row.appendChild(dot);
+    row.appendChild(text);
+    row.appendChild(state);
+    job.activitySteps.appendChild(row);
+    job.toolCards.push({name: name || "?", card: row, state: state});
+    var box = _el("chat-nachrichten");
+    if (box) box.scrollTop = box.scrollHeight;
   }
 
   function _updateProposalStatus(id, text) {
@@ -583,17 +742,31 @@
     if (!_jobAktiv(job.project, job.sessionId, job.request)) return;
     for (var i = job.toolCards.length - 1; i >= 0; i--) {
       var item = job.toolCards[i];
-      if (item.name !== name || !item.card || !item.card.classList.contains("running")) continue;
+      if (item.name !== name || !item.card ||
+          !item.card.classList.contains("running")) continue;
       item.card.classList.remove("running");
-      item.card.classList.add("ok");
+      item.card.classList.add("done");
+      if (item.state) item.state.textContent = "Fertig";
+      var details = document.createElement("details");
+      details.className = "chat-activity-result";
+      var summary = document.createElement("summary");
+      summary.textContent = "Ergebnis ansehen";
+      details.appendChild(summary);
       var pre = document.createElement("pre");
       pre.textContent = content || "";
-      item.card.appendChild(pre);
+      details.appendChild(pre);
+      item.card.appendChild(details);
       if (name === "request_loop_action") {
         try {
           var proposal = JSON.parse(content || "{}");
           if (proposal.zustand === "proposal") _proposalKarte(proposal, "pending");
-          else if (proposal.zustand === "needs_input") _karte("assistant", "Für diese Loop-Aktion brauche ich noch eine Klärung: " + (proposal.detail || JSON.stringify(proposal.auswahl || {})));
+          else if (proposal.zustand === "needs_input") {
+            _karte(
+              "assistant",
+              "Für diese Loop-Aktion brauche ich noch eine Klärung: " +
+                (proposal.detail || JSON.stringify(proposal.auswahl || {})),
+            );
+          }
         } catch (e) {}
       }
       return;
@@ -603,6 +776,10 @@
   function _jobFertig(job, state, answer, error) {
     if (job.done) return;
     job.done = true;
+    var activityText = state === "succeeded" ? "Prüfung abgeschlossen" :
+      state === "cancelled" ? "Auftrag beendet" : "Prüfung konnte nicht abgeschlossen werden";
+    _jobAktivitaetStatus(job, activityText,
+      state === "succeeded" ? "done" : state === "cancelled" ? "cancelled" : "error");
     var sichtbar = _jobAktiv(job.project, job.sessionId, job.request);
     if (sichtbar && state === "succeeded") {
       if (job.assistantCard) {
@@ -638,6 +815,7 @@
     var p = ev.payload || {};
     if (ev.kind === "started") {
       if (_jobAktiv(job.project, job.sessionId, job.request)) {
+        _jobAktivitaetStatus(job, "Ich prüfe deine Anfrage …", "running");
         _setzeChatStatus("Prüfe Projekt im Hintergrund …", "working");
       }
     } else if (ev.kind === "chunk") {
@@ -929,10 +1107,14 @@
     _setzeChatStatus("Lade Projektgespräch …", "loading");
     _zeigeLeerzustand();
     _renderSidebarAktuell();
-    zustand.loadPromise = _ladeSessions(projekt).then(function (sessions) {
+    zustand.loadPromise = _ladeSessions(projekt).then(function (data) {
       if (projekt !== zustand.projekt || anfrage !== zustand.historyRequest) return;
-      if (sessions.length > 0) {
-        return _wechsleSession(sessions[sessions.length - 1]);
+      zustand.sessionSummaries = data.summaries || [];
+      _rendereSidebar(data.sessions || [], data.summaries || []);
+      if (data.sessions.length > 0) {
+        var latest = data.summaries.length
+          ? data.summaries[0].session_id : data.sessions[data.sessions.length - 1];
+        return _wechsleSession(latest);
       } else {
         var nachrichten = _el("chat-nachrichten");
         if (nachrichten) nachrichten.innerHTML = "";
@@ -971,6 +1153,8 @@
       return true;
     }).catch(function () { return false; });
   }
+
+  document.addEventListener("werkstatt:mode-change", _syncChatMode);
 
   window.WerkstattChat = {
     setze_chat: setze_chat,
@@ -1021,6 +1205,7 @@
     }
 
     // Header-Button: neue Session
+    _syncChatMode();
     var neuBtn = _el("chat-neu");
     if (!zustand.initialisiert) {
       var aktiverTab = document.querySelector(".tab.ist-aktiv");
