@@ -5250,3 +5250,16 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - `_task_ende` meldet jetzt zurück, ob der Task neu als `done` markiert wurde. Duplikate, Sticky-Vetos und Human-Review-Pfade erzeugen dadurch keinen irreführenden `loop_task_ok`-Eintrag.
 - Erfolgsereignisse tragen die Phase-State-Task-ID, den Status und einen knappen Abschlussbeleg. Der bisher nicht protokollierte erfolgreiche Verify-Task erscheint ebenfalls; Task-Start und Read-only-Ereignis verwenden dieselbe stabile ID.
 - Regressionstests prüfen den einmaligen `done`-Übergang und den strukturierten Timeline-Beleg. Die Chat-Aktivitätszeile bleibt davon getrennt.
+
+
+## 2026-11-11 — Verify-Belege fuer gezielte Reparaturen
+
+Verify speichert je ausgefuehrter Stage einen kleinen strukturierten Befund
+(Stage-ID, Exit-Code, begrenzter Fehlerkern). Der Builder erhaelt nur die
+fehlgeschlagenen aktuellen Checks, als untrusted Tool-Ausgabe markiert; alte
+Befunde werden an Task-Grenzen zurueckgesetzt. Volle Logs und interne
+Gedankengaenge werden nicht in den Reparaturkontext kopiert.
+
+Umsetzung auf Main: `fb6c680`, `6bf01bc`, `ce2f68d`, `8d4f091`.
+Tests fuer Stage-Belege, Task-Reset und Builder-Kontext sind hinzugefuegt.
+Quality-Gate laeuft; Ergebnis wird erst nach Abschluss des CI-Laufs bewertet.
