@@ -5301,7 +5301,7 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 
 ## 2026-11-11 — Nutzer-Bubbles an Lesespalte ausrichten
 
-- Nutzer-Bubbles teilen jetzt die Assistant-Lesebreite und sitzen am rechten Rand dieser Spalte; auf schmalen Displays nutzen sie den verfügbaren Platz.
+- Nutzer-Bubbles bleiben am rechten Chat-Rand ausgerichtet und sind auf maximal 72% bzw. 68ch begrenzt; auf schmalen Displays nutzen sie den verfügbaren Platz.
 - Ein Frontend-Test sichert Desktop-Breite, Ausrichtung und Mobile-Grenze.
 
 
