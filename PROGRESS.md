@@ -5103,3 +5103,4 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 
 - Ein atomarer Scout-Plan ueberspringt den Architect nur noch bei genau einer bestehenden Projektdatei, vollstaendigen Ersetzungsfeldern und eindeutigen Treffern an den angegebenen Zeilen.
 - Veraltete, mehrdeutige oder unvollstaendige Stellen fallen in den Architect-Pfad zurueck; Tests sichern Annahme und Eskalation.
+- Mypy verlangt eine explizite Typpruefung der Scout-Felder; der Quality-Gate-Lauf deckt diesen Vertrag neben Pytest und Ruff ab.

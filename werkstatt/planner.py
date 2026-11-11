@@ -1825,8 +1825,11 @@ def _atomarer_scout_plan_freigabefaehig(
         alt = stelle.get("alt")
         neu = stelle.get("neu")
         grund = stelle.get("grund")
-        if not all(isinstance(wert, str) and wert.strip()
-                   for wert in (alt, neu, grund)):
+        if (
+            not isinstance(alt, str) or not alt.strip()
+            or not isinstance(neu, str) or not neu.strip()
+            or not isinstance(grund, str) or not grund.strip()
+        ):
             return False, "ersetzung_unvollstaendig"
         if alt == neu:
             return False, "ersetzung_ohne_aenderung"
