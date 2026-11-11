@@ -37,3 +37,42 @@ def test_tasks_py_emittiert_loop_phase_build():
         f"loop_phase:build muss VOR dem while-True-Loop stehen "
         f"(marker@{marker_pos}, while@{while_pos})"
     )
+
+
+
+def test_task_outcome_event_has_stable_id_and_state_evidence(
+    monkeypatch, tmp_path,
+):
+    from werkstatt.phases import tasks
+
+    events = []
+    monkeypatch.setattr(tasks, "audit", lambda *args: events.append(args))
+
+    tasks._audit_task_ok(
+        True, "t-build-api", "API bauen", tmp_path, "demo",
+        via="reflection",
+    )
+
+    assert len(events) == 1
+    kind, payload = events[0][:2]
+    assert kind == "loop_task_ok"
+    assert payload["task_id"] == "t-build-api"
+    assert payload["status"] == "done"
+    assert payload["result_summary"]
+    assert payload["evidence"] == ["Phase-State: done"]
+    assert payload["via"] == "reflection"
+
+
+def test_task_outcome_event_omitted_without_done_transition(
+    monkeypatch, tmp_path,
+):
+    from werkstatt.phases import tasks
+
+    events = []
+    monkeypatch.setattr(tasks, "audit", lambda *args: events.append(args))
+
+    tasks._audit_task_ok(
+        False, "t-review", "Review", tmp_path, "demo",
+    )
+
+    assert events == []
