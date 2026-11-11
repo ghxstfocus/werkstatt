@@ -70,3 +70,13 @@ def test_js_pollt_und_reagiert_auf_mode():
     assert "setInterval" in js
     assert "/live-feed" in js
     assert "werkstatt:mode-change" in js
+
+def test_js_renders_curated_timeline_details_safely():
+    js = _js()
+    assert 'document.createElement("details")' in js
+    assert 'step.decision_summary' in js
+    assert 'step.result_summary' in js
+    assert 'step.next_step' in js
+    assert 'Array.isArray(step.evidence)' in js
+    assert 'item.textContent = beleg' in js
+    assert "innerHTML" not in js
