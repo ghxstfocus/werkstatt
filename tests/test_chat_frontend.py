@@ -110,6 +110,40 @@ def test_welcome_copy_matches_available_loop_capabilities() -> None:
 
 
 
+
+
+
+def test_chat_shows_one_temporary_activity_message_and_keeps_tools_out_of_chat() -> None:
+    js = _chat_js()
+    start = js.index("function _jobToolCall")
+    end = js.index("function _updateProposalStatus", start)
+    activity = js[start:end]
+    assert 'card.textContent = text' in activity
+    assert 'job.toolCalls.push({name: name || "?", done: false})' in activity
+    assert 'createElement("li")' not in activity
+    assert 'classList.add("is-working")' in activity
+
+    result_start = js.index("function _jobToolResult")
+    result_end = js.index("function _jobFertig", result_start)
+    result = js[result_start:result_end]
+    assert 'createElement("details")' not in result
+    assert 'if (name === "request_loop_action")' in result
+    assert 'kind === "tool_call"' not in js[js.index("events.forEach"):js.index("if (!hatNachricht)")]
+
+
+def test_chat_replaces_activity_with_final_answer_and_has_no_activity_spinner() -> None:
+    js = _chat_js()
+    start = js.index("function _jobFertig")
+    end = js.index("function _handleJobEvent", start)
+    finish = js[start:end]
+    assert "_renderMarkdown(job.assistantCard, finalText)" in finish
+    assert "job.assistantCard.remove()" in finish
+    css = _css()
+    assert ".chat-msg.assistant.is-working::before" in css
+    assert "animation: chat-pulse" not in css
+    assert ".chat-activity" not in css
+
+
 def test_debugger_fix_proposal_shows_hash_and_exact_diff() -> None:
     js = _chat_js()
     assert "proposal.arguments.debugger_fix" in js

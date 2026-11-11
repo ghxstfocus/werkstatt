@@ -5219,6 +5219,6 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 
 - OP-394/395 erfassen Arbeitsschritt, Status, Ergebnis/Beleg, kurze Entscheidungszusammenfassung und naechsten Schritt fuer die Control-Timeline.
 - Die Timeline soll den Loop beim Denken und Arbeiten nachvollziehbar machen, ohne rohe interne Gedankengaenge zu speichern. Chatfragen bleiben waehrenddessen unabhaengig beantwortbar.
-- Die Anforderungen sind in Status, Roadmap und ADR-0031 abgestimmt; Umsetzung und Replay-Nachweis stehen noch aus.
+- Erste UI-Etappe umgesetzt: Der Chat zeigt je Hintergrundauftrag nur einen aktuellen, natuerlich formulierten Status, ersetzt ihn beim Schrittwechsel und zeigt nach Abschluss die Antwort. Tool-Schrittlisten und Tool-Ergebnisse werden nicht mehr im Chat angezeigt. Die ausfuehrliche Control-Timeline mit Belegen und Replay steht noch aus.
 
 - Der Chat zeigt nur die aktuelle temporaere Aktivitaet in normaler Sprache. Control enthaelt den detaillierten, replaybaren Schrittverlauf.

@@ -256,10 +256,6 @@
           _updateProposalStatus(p.proposal_id, "Nicht gestartet · " + (p.error || "Loop läuft bereits"));
         } else if (kind === "loop_action_failed") {
           _updateProposalStatus(p.proposal_id, "Fehlgeschlagen: " + (p.error || "unbekannter Fehler"));
-        } else if (kind === "tool_call") {
-          (p.tool_calls || []).forEach(function (tc) {
-            _toolKarte(tc.function && tc.function.name || "?", null, "ok");
-          });
         }
       });
       if (!hatNachricht) _zeigeLeerzustand();
@@ -413,42 +409,6 @@
     return k;
   }
 
-  function _toolKarte(name, args, status) {
-    var box = _el("chat-nachrichten");
-    if (!box) return null;
-    var k = document.createElement("details");
-    k.className = "chat-tool " + status;
-    var s = document.createElement("summary");
-    s.textContent = "🔧 " + name + (status === "running" ? " …" : "");
-    k.appendChild(s);
-    if (args) {
-      var pre = document.createElement("pre");
-      pre.textContent = JSON.stringify(args, null, 2);
-      k.appendChild(pre);
-    }
-    var leer = box.querySelector(".chat-empty");
-    if (leer) leer.remove();
-    box.appendChild(k);
-    box.scrollTop = box.scrollHeight;
-    return k;
-  }
-
-  function _stelleToolErgebnis(name, inhalt) {
-    var box = _el("chat-nachrichten");
-    if (!box) return;
-    var karten = box.querySelectorAll("details.chat-tool.running");
-    for (var i = karten.length - 1; i >= 0; i--) {
-      if (karten[i].querySelector("summary").textContent.indexOf(name) >= 0) {
-        karten[i].classList.remove("running");
-        karten[i].classList.add("ok");
-        var pre = document.createElement("pre");
-        pre.textContent = inhalt;
-        karten[i].appendChild(pre);
-        return;
-      }
-    }
-  }
-
   function _socketVerbinde() {
     if (zustand.socket) {
       try { zustand.socket.close(); } catch (e) {}
@@ -483,23 +443,41 @@
     });
   }
 
+  function _streamStatus(text) {
+    if (!zustand.streamAktiv) {
+      zustand.streamBuf = "";
+      zustand.aktuelleKarte = _karte("assistant", text);
+      zustand.streamAktiv = true;
+    } else if (zustand.aktuelleKarte) {
+      zustand.streamBuf = "";
+      zustand.aktuelleKarte.textContent = text;
+    }
+    if (zustand.aktuelleKarte) zustand.aktuelleKarte.classList.add("is-working");
+    _setzeChatStatus(text, "working");
+  }
+
   function _socketNachricht(evt) {
     var obj;
     try { obj = JSON.parse(evt.data); } catch (e) { return; }
     if (obj.type === "chunk") {
       _streamChunk(obj.text || "");
     } else if (obj.type === "tool_call") {
-      _setzeChatStatus("Prüfe " + (obj.name || "Projektkontext") + " …", "working");
-      _toolKarte(obj.name || "?", obj.args, "running");
+      _streamStatus(_toolLabel(obj.name || "Projektkontext", obj.args || {}));
     } else if (obj.type === "tool_result") {
-      _stelleToolErgebnis(obj.name || "?", obj.content || "");
-      _setzeChatStatus("Prüfung abgeschlossen · Antwort wird erstellt …", "working");
+      _streamStatus("Ich werte das Ergebnis aus …");
     } else if (obj.type === "done") {
       _streamDone(obj.antwort || "");
     } else if (obj.type === "error") {
-      _karte("assistant", "Fehler: " + (obj.detail || "unbekannt"));
+      var errorText = "Fehler: " + (obj.detail || "unbekannt");
+      if (zustand.aktuelleKarte) {
+        _renderMarkdown(zustand.aktuelleKarte, errorText);
+        zustand.aktuelleKarte.classList.remove("is-working");
+      }
+      else _karte("assistant", errorText);
       _setzeChatStatus("Aktion fehlgeschlagen.", "error");
       zustand.streamAktiv = false;
+      zustand.streamBuf = "";
+      zustand.aktuelleKarte = null;
     }
   }
 
@@ -512,6 +490,7 @@
     zustand.streamBuf += text;
     if (zustand.aktuelleKarte) {
       zustand.aktuelleKarte.textContent = zustand.streamBuf;
+      zustand.aktuelleKarte.classList.add("is-working");
       var box = _el("chat-nachrichten");
       if (box) box.scrollTop = box.scrollHeight;
     }
@@ -523,6 +502,7 @@
       _karte("assistant", voll);
     } else if (zustand.aktuelleKarte) {
       _renderMarkdown(zustand.aktuelleKarte, voll || zustand.streamBuf);
+      zustand.aktuelleKarte.classList.remove("is-working");
     }
     zustand.streamAktiv = false;
     zustand.streamBuf = "";
@@ -546,6 +526,7 @@
     if (!_jobAktiv(job.project, job.sessionId, job.request)) return;
     if (!job.assistantCard) job.assistantCard = _karte("assistant", "");
     job.assistantCard.textContent = job.buffer;
+    job.assistantCard.classList.add("is-working");
     var box = _el("chat-nachrichten");
     if (box) box.scrollTop = box.scrollHeight;
   }
@@ -571,89 +552,25 @@
   }
 
   function _jobAktivitaet(job) {
-    if (job.activityCard) return job.activityCard;
-    var box = _el("chat-nachrichten");
-    if (!box) return null;
-    var card = document.createElement("section");
-    card.className = "chat-activity";
-    card.setAttribute("aria-live", "polite");
-    card.setAttribute("aria-label", "Hintergrundaktivität");
-    var head = document.createElement("div");
-    head.className = "chat-activity-head";
-    var mark = document.createElement("span");
-    mark.className = "chat-activity-mark";
-    mark.setAttribute("aria-hidden", "true");
-    head.appendChild(mark);
-    var copy = document.createElement("div");
-    copy.className = "chat-activity-copy";
-    var eyebrow = document.createElement("span");
-    eyebrow.className = "chat-activity-eyebrow";
-    eyebrow.textContent = "IM HINTERGRUND";
-    copy.appendChild(eyebrow);
-    var title = document.createElement("strong");
-    title.className = "chat-activity-title";
-    title.textContent = "Ich prüfe deine Anfrage …";
-    copy.appendChild(title);
-    head.appendChild(copy);
-    var state = document.createElement("span");
-    state.className = "chat-activity-state running";
-    state.textContent = "Läuft";
-    head.appendChild(state);
-    var steps = document.createElement("ol");
-    steps.className = "chat-activity-steps";
-    card.appendChild(head);
-    card.appendChild(steps);
-    var empty = box.querySelector(".chat-empty");
-    if (empty) empty.remove();
-    box.insertBefore(card, job.assistantCard || null);
-    job.activityCard = card;
-    job.activityTitle = title;
-    job.activityState = state;
-    job.activitySteps = steps;
-    box.scrollTop = box.scrollHeight;
-    return card;
+    if (job.assistantCard) return job.assistantCard;
+    job.assistantCard = _karte("assistant", "Ich prüfe deine Anfrage …");
+    if (job.assistantCard) job.assistantCard.classList.add("is-working");
+    return job.assistantCard;
   }
 
   function _jobAktivitaetStatus(job, text, status) {
     if (!_jobAktiv(job.project, job.sessionId, job.request)) return;
-    _jobAktivitaet(job);
-    if (job.activityTitle && text) job.activityTitle.textContent = text;
-    if (job.activityState) {
-      job.activityState.className = "chat-activity-state " + (status || "running");
-      job.activityState.textContent = status === "done" ? "Fertig" :
-        status === "error" ? "Fehler" :
-          status === "cancelled" ? "Abgebrochen" : "Läuft";
-    }
-    var card = job.activityCard;
-    if (card) {
-      card.classList.toggle("is-running", status !== "done" &&
-        status !== "error" && status !== "cancelled");
-      card.classList.toggle("is-error", status === "error");
-      card.classList.toggle("is-done", status === "done");
-    }
+    var card = _jobAktivitaet(job);
+    if (!card) return;
+    if (text) card.textContent = text;
+    card.classList.toggle("is-working", status === "running");
+    card.classList.toggle("is-error", status === "error");
   }
 
   function _jobToolCall(job, name, args) {
     if (!_jobAktiv(job.project, job.sessionId, job.request)) return;
     _jobAktivitaetStatus(job, _toolLabel(name, args), "running");
-    var row = document.createElement("li");
-    row.className = "chat-activity-step running";
-    var dot = document.createElement("span");
-    dot.className = "chat-activity-dot";
-    dot.setAttribute("aria-hidden", "true");
-    var text = document.createElement("span");
-    text.className = "chat-activity-step-label";
-    text.textContent = _toolLabel(name, args);
-    var state = document.createElement("span");
-    state.className = "chat-activity-step-state";
-    state.textContent = "Läuft";
-    row.appendChild(dot);
-    row.appendChild(text);
-    row.appendChild(state);
-    job.activitySteps.appendChild(row);
-    job.toolCards.push({name: name || "?", card: row, state: state});
-    var box = _el("chat-nachrichten");
-    if (box) box.scrollTop = box.scrollHeight;
+    job.toolCalls.push({name: name || "?", done: false});
   }
 
   function _updateProposalStatus(id, text) {
@@ -763,22 +680,10 @@
 
   function _jobToolResult(job, name, content) {
     if (!_jobAktiv(job.project, job.sessionId, job.request)) return;
-    for (var i = job.toolCards.length - 1; i >= 0; i--) {
-      var item = job.toolCards[i];
-      if (item.name !== name || !item.card ||
-          !item.card.classList.contains("running")) continue;
-      item.card.classList.remove("running");
-      item.card.classList.add("done");
-      if (item.state) item.state.textContent = "Fertig";
-      var details = document.createElement("details");
-      details.className = "chat-activity-result";
-      var summary = document.createElement("summary");
-      summary.textContent = "Ergebnis ansehen";
-      details.appendChild(summary);
-      var pre = document.createElement("pre");
-      pre.textContent = content || "";
-      details.appendChild(pre);
-      item.card.appendChild(details);
+    for (var i = job.toolCalls.length - 1; i >= 0; i--) {
+      var item = job.toolCalls[i];
+      if (item.name !== name || item.done) continue;
+      item.done = true;
       if (name === "request_loop_action") {
         try {
           var proposal = JSON.parse(content || "{}");
@@ -786,7 +691,7 @@
           else if (proposal.zustand === "needs_input") {
             _karte(
               "assistant",
-              "Für diese Loop-Aktion brauche ich noch eine Klärung: " +
+              "Dafür brauche ich noch eine Klärung: " +
                 (proposal.detail || JSON.stringify(proposal.auswahl || {})),
             );
           }
@@ -799,22 +704,18 @@
   function _jobFertig(job, state, answer, error) {
     if (job.done) return;
     job.done = true;
-    var activityText = state === "succeeded" ? "Prüfung abgeschlossen" :
-      state === "cancelled" ? "Auftrag beendet" : "Prüfung konnte nicht abgeschlossen werden";
-    _jobAktivitaetStatus(job, activityText,
-      state === "succeeded" ? "done" : state === "cancelled" ? "cancelled" : "error");
     var sichtbar = _jobAktiv(job.project, job.sessionId, job.request);
-    if (sichtbar && state === "succeeded") {
+    if (sichtbar) {
+      var finalText = state === "succeeded" ? (answer || job.buffer) :
+        state === "cancelled" ? "Auftrag abgebrochen." :
+          "Fehler: " + (error || "Unbekannter Hintergrundfehler");
       if (job.assistantCard) {
-        _renderMarkdown(job.assistantCard, answer || job.buffer);
-      } else if (answer) {
-        _karte("assistant", answer);
+        if (finalText) _renderMarkdown(job.assistantCard, finalText);
+        else job.assistantCard.remove();
+        job.assistantCard.classList.remove("is-working", "is-error");
+      } else if (finalText) {
+        _karte("assistant", finalText);
       }
-    } else if (sichtbar) {
-      var detail = error || "Unbekannter Hintergrundfehler";
-      var text = state === "cancelled" ? "Auftrag abgebrochen." : "Fehler: " + detail;
-      if (job.assistantCard) _renderMarkdown(job.assistantCard, text);
-      else _karte("assistant", text);
     }
     delete zustand.jobs[job.key];
     if (sichtbar) {
@@ -826,9 +727,9 @@
       var statusText = weitereAktiv ? "Weitere Antworten laufen · " + job.project :
         state === "succeeded" ? "Antwort fertig · " + job.project :
           state === "cancelled" ? "Auftrag abgebrochen." : "Aktion fehlgeschlagen.";
-      var statusArt = weitereAktiv || state === "succeeded" ? "working" :
-        state === "cancelled" ? "idle" : "error";
-      if (!weitereAktiv && state === "succeeded") statusArt = "ready";
+      var statusArt = state === "failed" ? "error" :
+        state === "cancelled" ? "idle" : "ready";
+      if (weitereAktiv) statusArt = "working";
       _setzeChatStatus(statusText, statusArt);
       _renderSidebarAktuell();
     }
@@ -906,7 +807,7 @@
         existing.cursor = 0;
         existing.buffer = "";
         existing.assistantCard = assistantCard || null;
-        existing.toolCards = [];
+        existing.toolCalls = [];
         existing.pollToken += 1;
       } else if (!existing.assistantCard && assistantCard) {
         existing.assistantCard = assistantCard;
@@ -916,7 +817,7 @@
     var job = {
       key: key, project: projekt, sessionId: sid, jobId: jobId,
       message: message, request: request, cursor: 0, buffer: "",
-      assistantCard: assistantCard || null, toolCards: [], done: false, pollToken: 0,
+      assistantCard: assistantCard || null, toolCalls: [], done: false, pollToken: 0,
     };
     zustand.jobs[key] = job;
     return job;
@@ -1030,7 +931,8 @@
         }
         aktiveJobs += 1;
         if (!job.assistantCard) {
-          job.assistantCard = _karte("assistant", "Wird bearbeitet …");
+          job.assistantCard = _karte("assistant", "Ich setze die Prüfung fort …");
+          if (job.assistantCard) job.assistantCard.classList.add("is-working");
         }
         _pollChatJob(job, job.pollToken);
       });
@@ -1107,7 +1009,8 @@
       return;
     }
     _karte("user", text);
-    var antwortKarte = _karte("assistant", "Wird bearbeitet …");
+    var antwortKarte = _karte("assistant", "Ich sehe mir das Projekt an …");
+    if (antwortKarte) antwortKarte.classList.add("is-working");
     _setzeChatStatus("Nachricht wird übermittelt …", "working");
     _startChatJob(text, projekt, zustand.sessionId, anfrage, antwortKarte);
   }
