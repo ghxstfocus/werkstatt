@@ -602,7 +602,7 @@
     card.appendChild(steps);
     var empty = box.querySelector(".chat-empty");
     if (empty) empty.remove();
-    box.appendChild(card);
+    box.insertBefore(card, job.assistantCard || null);
     job.activityCard = card;
     job.activityTitle = title;
     job.activityState = state;
@@ -612,6 +612,7 @@
   }
 
   function _jobAktivitaetStatus(job, text, status) {
+    if (!_jobAktiv(job.project, job.sessionId, job.request)) return;
     _jobAktivitaet(job);
     if (job.activityTitle && text) job.activityTitle.textContent = text;
     if (job.activityState) {
