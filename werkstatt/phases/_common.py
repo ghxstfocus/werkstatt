@@ -231,6 +231,7 @@ def _reset_task_state(state: RunState) -> None:
     """
     try:
         state.last_verify_errors = []
+        state.last_verify_results = []
     except (AttributeError, TypeError):
         pass
     try:
