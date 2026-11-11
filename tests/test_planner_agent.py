@@ -172,6 +172,7 @@ def test_literal_replacement_with_ambiguous_or_stale_text_falls_back(tmp_path):
     assert _deterministic_literal_replace_plan(
         "Aendere die Logik in module.py.", "module.py", tmp_path,
     ) == (None, "kein_expliziter_literalersetzungsausdruck")
+    target.write_text("VALUE = OLD\n", encoding="utf-8")
     assert _deterministic_literal_replace_plan(
         "Ersetze `OLD` durch `NEW` und module.py.", "module.py", tmp_path,
     ) == (None, "zieldatei_nicht_an_ersetzung_gebunden")
