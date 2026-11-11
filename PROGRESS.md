@@ -4966,3 +4966,8 @@ Die erste GitHub-Actions-Runde fuer den neuen DebuggerFix-Vertrag stoppte vor py
 ## 2026-11-11 — OP-240 Importordnung nach CI-Ruff
 
 Die Folge-CI meldete weiterhin I001, weil collections.abc und dataclasses in falscher Reihenfolge standen. Importblock alphabetisch sortiert; die erneute CI-Runde prueft nun Ruff, Tests und Quality Gate.
+
+
+## 2026-11-11 — OP-240 Diff-Hash-Regressionstest korrigiert
+
+GitHub Actions meldete, dass der Manipulationstest beim Erstellen des geaenderten Diffs zugleich einen neuen gueltigen Hash erzeugte. Der Test behaelt jetzt den urspruenglich bestaetigten Hash bei und veraendert nur den Diff; damit prueft er die tatsaechliche Bindung zwischen Freigabe und Patch-Inhalt.

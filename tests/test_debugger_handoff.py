@@ -60,7 +60,7 @@ def test_debugger_fix_hash_binds_exact_diff_and_context() -> None:
     assert fix.to_payload()["patch_hash"] == payload["patch_hash"]
     assert parse_debugger_fix(fix.to_payload()) == fix
 
-    changed = _payload(diff=_DIFF.replace("value = 2", "value = 3"))
+    changed = {**payload, "diff": _DIFF.replace("value = 2", "value = 3")}
     with pytest.raises(DebuggerFixError, match="Patch-Hash"):
         parse_debugger_fix(changed)
 
