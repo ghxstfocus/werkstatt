@@ -236,6 +236,25 @@ def test_invalid_atomic_scout_plan_escalates_to_architect(tmp_path):
     assert st.tasks == tasks
 
 
+def test_scout_route_decision_explains_escalation(tmp_path):
+    from werkstatt.planner import _scout_route_decision
+
+    target = tmp_path / "werkstatt" / "small.py"
+    target.parent.mkdir()
+    target.write_text("VALUE = 1\n", encoding="utf-8")
+    context = {"key_files": [{"file": "werkstatt/small.py"}]}
+
+    assert _scout_route_decision(
+        "Pruefe den Fehler in werkstatt/small.py", context, tmp_path,
+    ) == (None, "auftrag_enthaelt_breiten_marker:fehler")
+    assert _scout_route_decision(
+        "Korrigiere werkstatt/small.py", context, tmp_path,
+    ) == (
+        "werkstatt/small.py",
+        "explizite_einzeldatei_mit_explorer_beleg",
+    )
+
+
 def test_planner_ohne_key(tmp_path):
     st = _state(tmp_path)
     st.api_key = ""

@@ -5104,3 +5104,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Ein atomarer Scout-Plan ueberspringt den Architect nur noch bei genau einer bestehenden Projektdatei, vollstaendigen Ersetzungsfeldern und eindeutigen Treffern an den angegebenen Zeilen.
 - Veraltete, mehrdeutige oder unvollstaendige Stellen fallen in den Architect-Pfad zurueck; Tests sichern Annahme und Eskalation.
 - Mypy verlangt eine explizite Typpruefung der Scout-Felder; der Quality-Gate-Lauf deckt diesen Vertrag neben Pytest und Ruff ab.
+
+
+## 2026-11-11 — Scout-Routing im Audit begruenden
+
+- Jeder Planlauf auditiert, ob der Scout wegen breiter/unklarer Anfrage gebraucht oder durch explizites Einzeldateiziel mit Explorer-Beleg uebersprungen wird.
+- Der Audit-Grund enthaelt den konkreten Routing-Faktor statt Auftragsprosa; Tests pruefen Eskalationsgrund und Skip-Grund.

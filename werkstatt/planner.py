@@ -1948,28 +1948,30 @@ def _validate_contract_or_audit(
         return False
 
 
-def _scout_skip_target(aufgabe: str, explorer_ctx: object, project_dir) -> str | None:
-    """Skip Scout only for an explicit, single-file, low-ambiguity edit.
-
-    Explorer evidence and an existing in-repo target are required. Search,
-    diagnosis, API, architecture, multi-file, and broad requests keep Scout.
-    """
+def _scout_route_decision(
+    aufgabe: str, explorer_ctx: object, project_dir,
+) -> tuple[str | None, str]:
+    """Return a skip target or an auditable reason to invoke Scout."""
     text = str(aufgabe or "").strip()
-    if not text or project_dir is None or not isinstance(explorer_ctx, dict):
-        return None
+    if not text:
+        return None, "auftrag_leer"
+    if project_dir is None or not isinstance(explorer_ctx, dict):
+        return None, "explorer_beleg_fehlt"
 
     paths = set(re.findall(
         r"(?<![\w.-])(?:[\w.-]+/)*[\w.-]+\.(?:py|md)",
         text,
     ))
+    if not paths:
+        return None, "kein_expliziter_zieldateipfad"
     if len(paths) != 1:
-        return None
+        return None, "mehrere_explizite_zieldateien"
     target = next(iter(paths))
     target_path = Path(target)
     if target_path.is_absolute() or ".." in target_path.parts:
-        return None
+        return None, "zieldateipfad_unsicher"
     if target.startswith("tests/"):
-        return None
+        return None, "testdatei_braucht_scout"
 
     lowered = text.lower()
     broad_markers = (
@@ -1979,15 +1981,16 @@ def _scout_skip_target(aufgabe: str, explorer_ctx: object, project_dir) -> str |
         "aufräum", "aufraeum", "migrier", "blockiert", "abhängig",
         "abhaengig",
     )
-    if any(marker in lowered for marker in broad_markers):
-        return None
+    marker = next((item for item in broad_markers if item in lowered), None)
+    if marker:
+        return None, f"auftrag_enthaelt_breiten_marker:{marker}"
     edit_markers = (
         "ändere", "aendere", "korrigiere", "ergänze", "ergaenze",
         "aktualisiere", "entferne", "ersetze", "füge", "fuege",
         "update", "change", "edit", "fix", "add", "remove", "replace",
     )
-    if not any(marker in lowered for marker in edit_markers):
-        return None
+    if not any(item in lowered for item in edit_markers):
+        return None, "aenderungsabsicht_nicht_eindeutig"
 
     explorer_files = explorer_ctx.get("key_files") or []
     confirmed = {
@@ -1995,10 +1998,15 @@ def _scout_skip_target(aufgabe: str, explorer_ctx: object, project_dir) -> str |
         if isinstance(item, dict) and isinstance(item.get("file"), str)
     }
     if target not in confirmed:
-        return None
+        return None, "explorer_bestaetigt_zieldatei_nicht"
     if not (Path(project_dir) / target_path).is_file():
-        return None
-    return target
+        return None, "zieldatei_nicht_vorhanden"
+    return target, "explizite_einzeldatei_mit_explorer_beleg"
+
+
+def _scout_skip_target(aufgabe: str, explorer_ctx: object, project_dir) -> str | None:
+    """Compatibility helper returning only the selected target."""
+    return _scout_route_decision(aufgabe, explorer_ctx, project_dir)[0]
 
 
 def run_planner(state: RunState) -> bool:
@@ -2315,7 +2323,9 @@ def run_planner(state: RunState) -> bool:
                     _key_files_scan.append(_kf)
 
     _scout_report: dict | None
-    _scout_skip_path = _scout_skip_target(aufgabe, _explorer_ctx, pd)
+    _scout_skip_path, _scout_route_reason = _scout_route_decision(
+        aufgabe, _explorer_ctx, pd,
+    )
     if _scout_skip_path:
         _code_index = {}
         _scout_report = {
@@ -2332,10 +2342,13 @@ def run_planner(state: RunState) -> bool:
             "atomarer_plan": False,
         }
         audit("planner_scout_skipped", {
-            "grund": "explizite_einzeldatei_mit_explorer_beleg",
+            "grund": _scout_route_reason,
             "datei": _scout_skip_path,
         }, pd, pn)
     else:
+        audit("planner_scout_required", {
+            "grund": _scout_route_reason,
+        }, pd, pn)
         _code_index = _baue_api_index(pd)
         _scout_report = _run_scout(
             state, aufgabe, _code_index, _key_files_scan, api_key,
