@@ -11,10 +11,7 @@ import ast
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-TOOLS = Path("/opt/werkstatt/tools")
-sys.path.insert(0, str(TOOLS))
-
-import audit as audit_mod
+from tools import audit as audit_mod
 from werkstatt.gates import _human_gate_plan
 from werkstatt.phases import (
     _gate_failed_payload,
