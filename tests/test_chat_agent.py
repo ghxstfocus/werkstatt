@@ -262,21 +262,17 @@ def test_chat_stream_stops_when_cancel_requested(
 
 
 
-def test_debugger_mode_is_recorded_and_adds_debugger_only_tools(session, fake_llm) -> None:
+def test_debugger_mode_is_recorded_and_adds_debugger_only_tools(
+    session, fake_llm, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     requests_seen: list[tuple[list[dict[str, Any]], list[dict[str, Any]]]] = []
 
     def _capture(messages, tools=None):
         requests_seen.append((messages, tools or []))
         return {"choices": [{"message": {"role": "assistant", "content": "Diagnose."}}]}
 
-    import pytest
-
-    monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(chat_agent, "_deepseek_chat", _capture)
-    try:
-        chat_agent.chat_loop(session, "Untersuche den Fehler", mode="debugger")
-    finally:
-        monkeypatch.undo()
+    chat_agent.chat_loop(session, "Untersuche den Fehler", mode="debugger")
 
     system_prompt = requests_seen[0][0][0]["content"]
     tool_names = {
