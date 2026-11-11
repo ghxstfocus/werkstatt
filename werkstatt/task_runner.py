@@ -168,7 +168,6 @@ def _task_ende(
                         "failure": failure or "unknown",
                         "dateien": list(dateien or []),
                     }, ensure_ascii=True) + "\n")
-    return bool(ok)
             except (OSError, TypeError):
                 pass
         if pd is not None and not _hat_op_nnn(state):
@@ -179,6 +178,7 @@ def _task_ende(
                 dateien=dateien,
                 info=failure,
             )
+    return bool(ok)
 
 
 def _pruefe_prior_failed_dependency(
