@@ -5177,3 +5177,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - GitHub-Run-Worktrees werden jetzt in einem projektbezogenen Verzeichnis unter dem konfigurierten Werkstatt-State gespeichert, nicht mehr in `.werkstatt/` des Projekts. Projekte brauchen dadurch keine spezielle Ignore-Regel und bleiben nach einem Run clean.
 - Regressionstests erstellen ein Projekt ohne `.werkstatt`-Ignore-Regel und starten zwei gepinnte Run-Worktrees nacheinander; außerdem wird eine State-Konfiguration innerhalb des Checkouts fail-closed abgewiesen.
 - ADR-0030 und OP-399 halten diese Ablage- und Isolationsinvariante fest.
+
+
+## 2026-11-11 — OP-397 Chat-Worker bei Lease-Verlust sicher stoppen
+
+- Ein Worker mit abgelaufener oder entzogener Lease bekam bisher bei der naechsten Abbruchpruefung `False`, weil die Abfrage nur laufende Jobs des eigenen Workers betrachtete. Er konnte dadurch nach Lease-Recovery noch weitere Chat-Tools ausfuehren.
+- Die Abbruchpruefung behandelt fehlende Jobs, nicht mehr laufende Jobs und abweichende Worker-IDs jetzt als Abbruch. Der Lease-Test prueft, dass ein abgelaufener Worker keine Heartbeats erneuern kann und fail-closed als abgebrochen gilt.
