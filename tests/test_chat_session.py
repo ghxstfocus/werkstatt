@@ -10,6 +10,7 @@ from werkstatt.chat_session import (
     derive_messages,
     fork,
     list_sessions,
+    list_session_summaries,
 )
 
 
@@ -150,3 +151,18 @@ def test_resolve_loop_action_is_session_bound_and_one_time(db: Path) -> None:
 
     other = ChatSession("demo", "s2", db_pfad=db)
     assert other.resolve_loop_action(proposal_id, "confirm") is None
+
+
+def test_session_summaries_use_first_request_and_recent_activity(db: Path) -> None:
+    older = ChatSession("demo", "older", db_pfad=db)
+    older.append("user", {"text": "  Fehler   im Loop\nbitte prüfen "})
+    older.append("assistant", {"text": "Ich sehe nach."})
+    newer = ChatSession("demo", "newer", db_pfad=db)
+    newer.append_job_turn("job-1", "Fasse den letzten Run zusammen", "Der Run ist gruen.")
+
+    summaries = list_session_summaries("demo", db_pfad=db)
+
+    assert [item["session_id"] for item in summaries] == ["newer", "older"]
+    assert summaries[0]["title"] == "Fasse den letzten Run zusammen"
+    assert summaries[1]["title"] == "Fehler im Loop bitte prüfen"
+    assert summaries[0]["updated_at"]
