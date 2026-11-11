@@ -25,6 +25,9 @@ _PROJEKT_DIR_KONTEXT: ContextVar[Path | None] = ContextVar(
 _PROJEKTNAME_KONTEXT: ContextVar[str] = ContextVar(
     "werkstatt_chat_project_name", default="werkstatt",
 )
+_CHAT_SESSION_ID_KONTEXT: ContextVar[str] = ContextVar(
+    "werkstatt_chat_session_id", default="",
+)
 _MAX_READ_BYTES = 50_000
 _MAX_GREP_TREFFER = 30
 _TIMEOUT_GREP_S = 10
@@ -261,6 +264,61 @@ def _next_op(_args: dict[str, Any]) -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
+def _request_loop_action(args: dict[str, Any]) -> str:
+    """Persistiert einen befristeten Vorschlag; fuehrt keine Aktion aus."""
+    action = str(args.get("action", "")).strip().lower()
+    if action not in {"start", "pause", "resume", "stop"}:
+        return json.dumps({"zustand": "invalid", "detail": "Aktion muss start, pause, resume oder stop sein."}, ensure_ascii=False)
+    session_id = _CHAT_SESSION_ID_KONTEXT.get()
+    if not session_id:
+        return json.dumps({"zustand": "error", "detail": "Chat-Session fehlt; kein Vorschlag gespeichert."}, ensure_ascii=False)
+    arguments: dict[str, Any] = {}
+    if action == "start":
+        op_id = str(args.get("op_id") or "").strip()
+        task = str(args.get("aufgabe") or "").strip()
+        if op_id and task:
+            return json.dumps({"zustand": "needs_input", "detail": "Bitte entweder eine OP-ID oder einen konkreten Auftrag angeben."}, ensure_ascii=False)
+        if op_id:
+            if not re.fullmatch(r"OP-\\d+[a-z]?", op_id):
+                return json.dumps({"zustand": "invalid", "detail": "OP-ID ungueltig."}, ensure_ascii=False)
+            status_path = _aktives_projekt_dir() / "docs" / "STATUS.md"
+            try:
+                status_text = status_path.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                return json.dumps({"zustand": "error", "detail": f"STATUS kann nicht gelesen werden: {exc}"}, ensure_ascii=False)
+            import re
+            match = re.search(rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\\Z)", status_text, re.MULTILINE | re.DOTALL)
+            if not match:
+                return json.dumps({"zustand": "needs_input", "detail": f"{op_id} wurde nicht in docs/STATUS.md gefunden."}, ensure_ascii=False)
+            task = match.group(0).strip()
+            arguments["op_id"] = op_id
+        elif task:
+            arguments["aufgabe"] = task
+        else:
+            selection = json.loads(_next_op({}))
+            if selection.get("zustand") != "selected":
+                return json.dumps({"zustand": "needs_input", "auswahl": selection}, ensure_ascii=False)
+            arguments["op_id"] = selection["auswahl"]["id"]
+            task = str(selection["aufgabe"])
+        if task:
+            arguments["aufgabe"] = task
+    proposal_id = __import__("uuid").uuid4().hex
+    from datetime import UTC, datetime, timedelta
+    now = datetime.now(UTC)
+    proposal = {
+        "proposal_id": proposal_id,
+        "action": action,
+        "arguments": arguments,
+        "summary": ("Loop starten: " + str(arguments.get("op_id") or arguments.get("aufgabe", ""))) if action == "start" else "Loop " + action,
+        "project": _PROJEKTNAME_KONTEXT.get(),
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(minutes=15)).isoformat(),
+    }
+    from werkstatt.chat_session import ChatSession
+    ChatSession(_PROJEKTNAME_KONTEXT.get(), session_id).append("loop_action_proposed", proposal)
+    return json.dumps({"zustand": "proposal", **proposal}, ensure_ascii=False)
+
+
 CHAT_TOOLS: dict[str, dict[str, Any]] = {
     "read_file": {
         "description": "Liest Datei-Inhalt (max 50 KB).",
@@ -341,7 +399,7 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
         "fn": _read_status,
         "mode": "read",
     },
-    "next_op": {
+    "request_loop_action": {\n        "description": "Legt einen befristeten Vorschlag zum Starten, Pausieren, Fortsetzen oder Stoppen an. Fuehrt nichts aus; die UI verlangt anschliessend eine ausdrueckliche Bestaetigung.",\n        "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": ["start", "pause", "resume", "stop"]}, "op_id": {"type": "string"}, "aufgabe": {"type": "string"}}, "required": ["action"]},\n        "fn": _request_loop_action,\n        "mode": "read",\n    },\n    "next_op": {
         "description": (
             "Analysiert docs/STATUS.md des aktiven Projekts und liefert "
             "startfaehige OP-Kandidaten, Abhaengigkeiten und Ausschlussgruende. "
@@ -391,6 +449,7 @@ def execute_tool(
     *,
     project_dir: Path | str | None = None,
     project_name: str | None = None,
+    session_id: str | None = None,
 ) -> str:
     src = tools if tools is not None else CHAT_TOOLS
     spec = src.get(name)
@@ -408,10 +467,12 @@ def execute_tool(
         return f"Fehler: Aktives Projektverzeichnis fehlt: {root}"
     root_token = _PROJEKT_DIR_KONTEXT.set(root)
     name_token = _PROJEKTNAME_KONTEXT.set(project_name or "werkstatt")
+    session_token = _CHAT_SESSION_ID_KONTEXT.set(session_id or "")
     try:
         return str(fn(args))
     except Exception as exc:
         return f"Tool-Fehler ({name}): {type(exc).__name__}: {exc}"
     finally:
+        _CHAT_SESSION_ID_KONTEXT.reset(session_token)
         _PROJEKTNAME_KONTEXT.reset(name_token)
         _PROJEKT_DIR_KONTEXT.reset(root_token)
