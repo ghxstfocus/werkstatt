@@ -155,3 +155,35 @@ def test_agent_feld_hat_vorrang(projektion, tmp_path):
                 )
                 return
     pytest.fail("llm_call_start nicht in Timeline gefunden")
+
+def test_timeline_explizite_run_id_bleibt_projektisoliert(projektion, tmp_path):
+    """Gleiche Run-ID in zwei Projekten darf keine fremden Auditdaten zeigen."""
+    jetzt = datetime.now(UTC).isoformat()
+    _schreibe(tmp_path, [
+        {"kind": "builder_patch_updated", "run_id": "shared",
+         "project": "demo", "timestamp": jetzt, "agent": "builder"},
+        {"kind": "architect_plan", "run_id": "shared",
+         "project": "anderes-projekt", "timestamp": jetzt, "agent": "architect"},
+    ])
+    knoten = inspector.aggregate_timeline("demo", run_id="shared")
+    kinds = [
+        child["kind"]
+        for node in knoten for child in node.get("children", [])
+    ]
+    assert "builder_patch_updated" in kinds
+    assert "architect_plan" not in kinds
+
+
+def test_aktive_rolle_ist_projektisoliert(projektion, tmp_path):
+    """Der letzte fremde Run ueberschreibt nicht die Aktivitaet des Projekts."""
+    jetzt = datetime.now(UTC)
+    _schreibe(tmp_path, [
+        {"kind": "loop_task_start", "run_id": "shared",
+         "project": "demo", "timestamp": jetzt.isoformat(), "agent": "builder"},
+        {"kind": "llm_call_start", "run_id": "shared",
+         "project": "anderes-projekt",
+         "timestamp": (jetzt + timedelta(seconds=1)).isoformat(),
+         "agent": "architect"},
+    ])
+    aktiv = inspector.aggregate_timeline_aktiv("demo", run_id="shared")
+    assert aktiv.get("rolle") == "builder"
