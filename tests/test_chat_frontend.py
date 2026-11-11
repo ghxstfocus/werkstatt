@@ -85,6 +85,8 @@ def test_chat_can_cancel_background_jobs_without_blocking_composer() -> None:
 
 def test_chat_renders_explicit_loop_action_confirmation_card() -> None:
     js = _chat_js()
+    assert 'kind === "loop_action_not_started"' in js
+    assert '"Nicht gestartet · Ein Loop läuft bereits."' in js
     assert 'function _proposalKarte(proposal, status)' in js
     assert 'button.textContent = decision === "confirm" ? "Bestätigen" : "Ablehnen";' in js
     assert '"/chat/actions/"' in js

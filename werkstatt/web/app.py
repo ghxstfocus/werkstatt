@@ -1492,6 +1492,25 @@ def create_app() -> FastAPI:
                         raise HTTPException(status_code=409, detail=detail)
                     arguments = {"aufgabe": debugger_fix_loop_task(fix)}
                 result = project_start(projekt, arguments)
+                if (
+                    result.get("gestartet") is False
+                    and result.get("grund") == "laeuft_bereits"
+                ):
+                    error = (
+                        "Loop laeuft bereits; Auftrag wurde nicht gestartet "
+                        "oder eingereiht."
+                    )
+                    session.append("loop_action_not_started", {
+                        "proposal_id": proposal_id,
+                        "error": error,
+                        "result": result,
+                    })
+                    return {
+                        "proposal_id": proposal_id,
+                        "state": "not_started",
+                        "detail": error,
+                        "result": result,
+                    }
             elif action == "pause":
                 result = project_pause(projekt)
             elif action == "resume":

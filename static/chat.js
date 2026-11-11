@@ -252,6 +252,8 @@
           _updateProposalStatus(p.proposal_id, "Abgelaufen");
         } else if (kind === "loop_action_completed") {
           _updateProposalStatus(p.proposal_id, "Abgeschlossen");
+        } else if (kind === "loop_action_not_started") {
+          _updateProposalStatus(p.proposal_id, "Nicht gestartet · " + (p.error || "Loop läuft bereits"));
         } else if (kind === "loop_action_failed") {
           _updateProposalStatus(p.proposal_id, "Fehlgeschlagen: " + (p.error || "unbekannter Fehler"));
         } else if (kind === "tool_call") {
@@ -732,12 +734,18 @@
                   proposal.action === "pause" ? "Loop pausiert" :
                     proposal.action === "resume" ? "Loop fortgesetzt" : "Loop gestoppt";
               } else {
-                state.textContent = data.state === "rejected" ? "Abgelehnt" :
-                  data.state === "expired" ? "Abgelaufen" : "Status: " + data.state;
+                state.textContent = data.state === "not_started" ?
+                  "Nicht gestartet · Ein Loop läuft bereits." :
+                  data.state === "rejected" ? "Abgelehnt" :
+                    data.state === "expired" ? "Abgelaufen" : "Status: " + data.state;
               }
               siblings.forEach(function (other) { other.remove(); });
-              if (result.run_id) state.textContent += " · Run " + result.run_id;
-              _setzeChatStatus(state.textContent, data.state === "completed" ? "ready" : "idle");
+              if (result.run_id && data.state !== "not_started") {
+                state.textContent += " · Run " + result.run_id;
+              }
+              _setzeChatStatus(state.textContent,
+                data.state === "completed" ? "ready" :
+                  data.state === "not_started" ? "error" : "idle");
             }).catch(function (error) {
               state.textContent = "Fehler: " + error.message + " · Verlauf neu laden für den aktuellen Stand.";
               siblings.forEach(function (other) { other.disabled = true; });

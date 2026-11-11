@@ -88,6 +88,71 @@ def test_confirmed_chat_action_uses_control_api_once(
     assert len(calls) == 1
 
 
+def test_confirmed_start_reports_busy_loop_without_claiming_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt import chat_session
+    from werkstatt.web import app as app_modul
+
+    project_dir = tmp_path / "demo"
+    project_dir.mkdir()
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db_path)
+
+    session_id = "1" * 32
+    proposal_id = "2" * 32
+    session = chat_session.ChatSession("demo", session_id, db_pfad=db_path)
+    session.append("loop_action_proposed", {
+        "proposal_id": proposal_id,
+        "project": "demo",
+        "action": "start",
+        "arguments": {"aufgabe": "Testauftrag"},
+        "summary": "Loop starten",
+        "expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+    })
+
+    process = SimpleNamespace(pid=12345, poll=lambda: None)
+    record: dict[str, Any] = {
+        "project": "demo",
+        "run_id": "existing-run",
+        "pid": process.pid,
+        "state": "running",
+    }
+    monkeypatch.setattr(app_modul, "_LOOP_RUN_IDS", {"demo": "existing-run"})
+    monkeypatch.setitem(app_modul._LAUFENDE_LOOPS, "demo", process)
+    monkeypatch.setattr(app_modul, "_loop_registry", lambda: SimpleNamespace(
+        read=lambda _project: dict(record),
+    ))
+
+    response = TestClient(app_modul.app).post(
+        f"/api/projects/demo/chat/actions/{proposal_id}",
+        json={"session_id": session_id, "decision": "confirm"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["state"] == "not_started"
+    assert payload["result"]["gestartet"] is False
+    assert payload["result"]["grund"] == "laeuft_bereits"
+    events = session.load()
+    assert events[-1]["kind"] == "loop_action_not_started"
+    assert "nicht gestartet" in events[-1]["payload"]["error"]
+    assert not any(event["kind"] == "loop_action_completed" for event in events)
+
+    repeated = TestClient(app_modul.app).post(
+        f"/api/projects/demo/chat/actions/{proposal_id}",
+        json={"session_id": session_id, "decision": "confirm"},
+    )
+    assert repeated.status_code == 200
+    assert repeated.json()["state"] == "not_started"
+    assert repeated.json()["result"] == payload["result"]
+
+
 def test_rejected_chat_action_has_no_loop_side_effect(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:

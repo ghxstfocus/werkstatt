@@ -5197,3 +5197,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - OP-401 behandelt Chat-/Session-Kontext, dauerhafte Auftragseinreihung und Aenderungsereignisse fuer aktive Runs.
 - OP-402 behandelt getrennte Worktrees, feste Basis-Commits, serialisierte Integration und erneute Gates auf dem kombinierten Commit.
 - Damit bleibt der normale Chatfluss leichtgewichtig: interne Versions-/SHA-Pruefungen werden nicht als manuelle UI-Schritte gezeigt. Unklare oder scopeveraendernde Konflikte werden erklaert und gezielt freigegeben.
+
+## 2026-11-11 — Chat meldet belegten Loop-Start korrekt
+
+- Ein bestaetigter Chat-Start, bei dem bereits ein Loop laeuft, wird als `not_started` zurueckgegeben und als fehlgeschlagener Kontrollversuch gespeichert; er erscheint nicht mehr als abgeschlossene Aktion.
+- Die Chatkarte zeigt klar, dass kein neuer Run gestartet oder eingereiht wurde. Ein vorhandener Run wird nicht faelschlich dem neuen Auftrag zugeordnet.
+- Eine dauerhafte Warteschlange fuer solche Auftraege ist weiterhin Teil von OP-401/OP-397 und wird hier nicht vorgetaeuscht.
