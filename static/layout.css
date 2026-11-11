@@ -3992,3 +3992,20 @@ body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.assistant 
 .chat-msg.assistant {
   line-height: 1.65;
 }
+
+
+/* Nutzer-Bubbles an dieselbe Lesespalte wie Assistant-Text ausrichten. */
+.chat-nachrichten > .chat-msg.user,
+body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.user {
+  width: fit-content;
+  max-width: min(78%, 68ch);
+  margin-right: max(0px, calc((100% - 68ch) / 2));
+  margin-left: auto;
+}
+@media (max-width: 620px) {
+  .chat-nachrichten > .chat-msg.user,
+  body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.user {
+    max-width: 92%;
+    margin-right: 0;
+  }
+}
