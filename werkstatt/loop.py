@@ -10,6 +10,7 @@ Endzustand; der Fallback wird nach Phase >20 entfernt (M-299+).
 """
 from __future__ import annotations
 
+import signal
 import subprocess  # noqa: F401  # re-export: Tests patchen werkstatt.loop.subprocess
 import time  # noqa: F401  # re-export: Tests patchen werkstatt.loop.time
 from pathlib import Path
@@ -90,6 +91,26 @@ from werkstatt.verify import (  # Fix AZ Stufe 3: Re-Export
 )
 
 _LIFECYCLE_PROJECT = ""
+_STOP_SIGNAL: int | None = None
+_STOP_SIGNAL_DEFERRED = False
+
+
+class _LoopStopRequested(Exception):
+    """Interner, kontrollierter Abbruch nach einem SIGTERM."""
+
+    def __init__(self, signum: int):
+        super().__init__(f"Loop gestoppt (Signal {signum})")
+        self.signum = signum
+
+
+def _handle_loop_sigterm(signum: int, _frame: object) -> None:
+    """Unwindet den Loop kontrolliert; doppelte Signale stoeren Cleanup nicht."""
+    global _STOP_SIGNAL
+    if _STOP_SIGNAL is not None:
+        return
+    _STOP_SIGNAL = signum
+    if not _STOP_SIGNAL_DEFERRED:
+        raise _LoopStopRequested(signum)
 
 # Oeffentliche API (Re-Exports + lokale Funktionen).
 # ruff F401 entfernt sonst Re-Exports, die von Tests/Aufrufern
@@ -380,6 +401,19 @@ def _k13_rc(rc: int, tasks_ok: int) -> int:
     return rc
 
 
+def _git_stash_head(project_dir: Path) -> str | None:
+    """Return the current stash ref, or None when the repository has no stash."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(project_dir), "rev-parse", "--verify", "refs/stash"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
 def _main_inner(argv: list[str] | None = None) -> int:
     global _LIFECYCLE_PROJECT
     # M-391: .env laden (DEEPSEEK_API_KEY automatisch setzen)
@@ -559,58 +593,69 @@ def _main_inner(argv: list[str] | None = None) -> int:
     elif _ps.exists():
         _ps.load()
 
-    # M-356: Rollback immer auf start-HEAD. Merken, wo wir starten.
-    _start_head = _git_head(_pd)
+    # K14: Stop muss auch bei SIGTERM den Checkpoint persistieren und
+    # einen eventuell angelegten User-Stash wiederherstellen.
+    _start_head = ""
     _had_stash = False
-    if _git_dirty(_pd):
-        audit("loop_dirty_tree", {"aktion": "stash"}, _pd, args.project)
-        _had_stash = _git_stash(_pd)
-
-    # Bug B (OP-392): try/finally — PhaseState-Persistenz + Stash-Pop
-    # muessen auch bei Exception laufen, sonst Datenverlust im Working Tree.
-    # rc=1 als safe-default, falls run_pipeline_loop eine Exception wirft.
-    # _hat_exception steuert, dass Rollback-Audits (loop_rollback/
-    # loop_rollback_skipped/loop_stash_pop) nur bei normalem rc-Pfad
-    # emittiert werden — bei Exception kein Reset, aber pop (Datenrettung).
     rc = 1
     _hat_exception = False
     try:
+        _start_head = _git_head(_pd)
+        if _git_dirty(_pd):
+            audit("loop_dirty_tree", {"aktion": "stash"}, _pd, args.project)
+            # Git-Stash ist ein kurzer, aber mutierender Schritt. Ein
+            # SIGTERM wird bis zum Abschluss aufgeschoben; der Stash-Ref
+            # erkennt auch einen Stash, dessen Git-Prozess gerade beendet
+            # wurde, nachdem der Ref bereits aktualisiert war.
+            global _STOP_SIGNAL_DEFERRED
+            _STOP_SIGNAL_DEFERRED = True
+            try:
+                _stash_before = _git_stash_head(_pd)
+                if _STOP_SIGNAL is not None:
+                    raise _LoopStopRequested(_STOP_SIGNAL)
+                _stash_ok = _git_stash(_pd)
+                _stash_after = _git_stash_head(_pd)
+                _had_stash = _stash_ok or (
+                    _stash_after is not None and _stash_after != _stash_before
+                )
+            finally:
+                _STOP_SIGNAL_DEFERRED = False
+            if _STOP_SIGNAL is not None:
+                raise _LoopStopRequested(_STOP_SIGNAL)
         rc = run_pipeline_loop(args.project, args.aufgabe, state_ref, phase_state=_ps)
     except BaseException:
         _hat_exception = True
         raise
     finally:
-        # K1b/Schritt1: PhaseState am Loop-Ende persistieren (K14-neutral).
-        # Auch bei rc=1 schreiben -> Resume-Basis nach Abbruch.
-        # K21: leeren State nicht persistieren (sonst ueberschreibt {} die Tasks).
-        if _ps.data:
-            try:
-                _ps.save()
-            except OSError:
-                pass
+        # Cleanup ist nicht erneut durch ein doppeltes SIGTERM abbrechbar.
+        _STOP_SIGNAL_DEFERRED = True
+        try:
+            if _ps.data:
+                try:
+                    _ps.save()
+                except OSError:
+                    pass
 
-        # FIX AA 2026-10-31: Rollback nur bei explizitem --rollback.
-        # Reihenfolge wie bisher: reset VOR stash-pop.
-        # Bei Exception: kein reset (kein rc != 0-Zweig), aber pop (siehe unten).
-        _do_rollback = getattr(args, "rollback", False)
-        if rc != 0 and not _hat_exception:
-            if _do_rollback:
-                audit("loop_rollback",
-                      {"rc": rc, "start_head": _start_head,
-                       "grund": "explizit_angefordert"}, _pd, args.project)
-                _git_reset(_pd, _start_head)
-            else:
-                audit("loop_rollback_skipped",
-                      {"rc": rc, "start_head": _start_head,
-                       "grund": "kein_rollback_flag"}, _pd, args.project)
+            # Kein Rollback bei Ausnahme oder explizitem Stop.
+            _do_rollback = getattr(args, "rollback", False)
+            if rc != 0 and not _hat_exception:
+                if _do_rollback:
+                    audit("loop_rollback",
+                          {"rc": rc, "start_head": _start_head,
+                           "grund": "explizit_angefordert"}, _pd, args.project)
+                    _git_reset(_pd, _start_head)
+                else:
+                    audit("loop_rollback_skipped",
+                          {"rc": rc, "start_head": _start_head,
+                           "grund": "kein_rollback_flag"}, _pd, args.project)
 
-        # Bug B (OP-392): Stash-Pop IMMER — auch bei Exception.
-        # loop_stash_pop-Audit nur bei normalem rc=0-Pfad (nicht bei
-        # rc!=0 und nicht bei Exception — sonst irrefuehrende Semantik).
-        if _had_stash:
-            if rc == 0 and not _hat_exception:
-                audit("loop_stash_pop", {}, _pd, args.project)
-            _git_stash_pop(_pd)
+            if _had_stash:
+                if rc == 0 and not _hat_exception:
+                    audit("loop_stash_pop", {}, _pd, args.project)
+                _git_stash_pop(_pd)
+        finally:
+            _STOP_SIGNAL_DEFERRED = False
+
     # M-358: Footer mit echten Task-Zahlen (aus state).
     _tasks_total = len(getattr(_state, "tasks", []) or [])
     _tasks_ok = int(getattr(_state, "tasks_ok_counter", 0) or 0)
@@ -620,14 +665,10 @@ def _main_inner(argv: list[str] | None = None) -> int:
     return _k13_rc(rc, _tasks_ok)
 
 
-def _emit_lifecycle_end(erfolg: bool, project_name: str | None = None) -> None:
-    """Lifecycle-Vertrag: jeder Loop-Lauf endet mit Terminal-Event.
-
-    Bei Erfolg: loop_ended. Bei Exception: loop_failed.
-    In beiden Faellen werden alle offenen Gates des Runs expiret.
-
-    Nicht erfasst: SIGKILL. Dafuer greift das 300s-Netz in wait().
-    """
+def _emit_lifecycle_end(
+    erfolg: bool, project_name: str | None = None, *, stopped: bool = False,
+) -> None:
+    """Emit the terminal lifecycle event and close gates for this run."""
     try:
         from pathlib import Path as _P
 
@@ -643,46 +684,59 @@ def _emit_lifecycle_end(erfolg: bool, project_name: str | None = None) -> None:
         or not run_id.startswith(f"{effektives_projekt}-")
     ):
         return
-    if erfolg:
-        try:
-            audit("loop_ended", {"erfolg": True, "run_id": run_id},
-                  _P.cwd(), effektives_projekt)
-        except Exception:  # noqa: BLE001
-            pass
-        _grund = "loop_ended"
+    if stopped:
+        kind = "loop_stopped"
+        payload = {"erfolg": False, "abgebrochen": True, "run_id": run_id}
+    elif erfolg:
+        kind = "loop_ended"
+        payload = {"erfolg": True, "run_id": run_id}
     else:
-        try:
-            audit("loop_failed", {"erfolg": False, "run_id": run_id},
-                  _P.cwd(), effektives_projekt)
-        except Exception:  # noqa: BLE001
-            pass
-        _grund = "loop_failed"
+        kind = "loop_failed"
+        payload = {"erfolg": False, "run_id": run_id}
     try:
-        expire_for_run(run_id, grund=_grund)
+        audit(kind, payload, _P.cwd(), effektives_projekt)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        expire_for_run(run_id, grund=kind)
     except Exception:  # noqa: BLE001
         pass
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Lifecycle-Wrapper um _main_inner.
-
-    Garantiert: loop_ended/loop_failed + alle Gates des Runs geschlossen,
-    egal wie der Loop endet (return, Exception, KeyboardInterrupt).
-    """
-    global _LIFECYCLE_PROJECT
+    """CLI lifecycle wrapper with cleanup-safe SIGTERM handling."""
+    global _LIFECYCLE_PROJECT, _STOP_SIGNAL, _STOP_SIGNAL_DEFERRED
     _LIFECYCLE_PROJECT = ""
+    _STOP_SIGNAL = None
+    _STOP_SIGNAL_DEFERRED = False
     erfolg = False
+    gestoppt = False
+    previous_sigterm = None
     try:
-        rc = _main_inner(argv)
-        erfolg = (rc == 0)
-        return rc
-    except BaseException:
-        erfolg = False
-        raise
+        previous_sigterm = signal.getsignal(signal.SIGTERM)
+        signal.signal(signal.SIGTERM, _handle_loop_sigterm)
+    except ValueError:
+        # Main() may be invoked in a worker thread by an embedding host.
+        previous_sigterm = None
+    try:
+        try:
+            rc = _main_inner(argv)
+            if _STOP_SIGNAL is not None:
+                gestoppt = True
+                return 128 + _STOP_SIGNAL
+            erfolg = rc == 0
+            return rc
+        except _LoopStopRequested as stop:
+            gestoppt = True
+            return 128 + stop.signum
+        except BaseException:
+            erfolg = False
+            raise
     finally:
-        _emit_lifecycle_end(erfolg, _LIFECYCLE_PROJECT)
+        if previous_sigterm is not None:
+            signal.signal(signal.SIGTERM, previous_sigterm)
+        _emit_lifecycle_end(erfolg, _LIFECYCLE_PROJECT, stopped=gestoppt)
         _LIFECYCLE_PROJECT = ""
-
 
 if __name__ == "__main__":
     import sys as _sys

@@ -5081,3 +5081,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 
 - Ein gespeicherter PhaseState mit abweichendem `project`-Feld wird beim Laden verworfen, bevor seine Tasks den aktuellen Projekt-Loop erreichen koennen.
 - Ein Regressionstest belegt die Zurueckweisung eines fremden Projekt-Checkpoints.
+
+## 2026-11-11 — SIGTERM kontrolliert bereinigen
+
+- Web-Stop wird im Loop-Prozess als kontrollierter Abbruch behandelt, damit der bestehende `finally`-Pfad PhaseState persistiert und einen vor Run-Beginn angelegten Stash zurueckholt.
+- Der Lifecycle unterscheidet einen menschlich angeforderten Stop von einem unerwarteten Loop-Fehler und auditiert ihn als `loop_stopped`.
+- Ein Regressionstest sendet SIGTERM innerhalb des Run-Pfads und belegt den Stash-Cleanup.

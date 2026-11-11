@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
+import signal
 from pathlib import Path
 from unittest.mock import patch
 
@@ -369,7 +371,9 @@ def test_lifecycle_event_uses_cli_project(monkeypatch, tmp_path):
     captured = []
     monkeypatch.setattr(
         loop, "_emit_lifecycle_end",
-        lambda erfolg, project_name: captured.append((erfolg, project_name)),
+        lambda erfolg, project_name, *, stopped=False: captured.append(
+            (erfolg, project_name, stopped),
+        ),
     )
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     with _silence_renderer(), \
@@ -377,7 +381,7 @@ def test_lifecycle_event_uses_cli_project(monkeypatch, tmp_path):
          patch("werkstatt.loop.load_env", return_value=None):
         rc = loop.main(["--project", "security-ai", "--aufgabe", "test"])
     assert rc == 1
-    assert captured == [(False, "security-ai")]
+    assert captured == [(False, "security-ai", False)]
 
 
 def test_lifecycle_audit_persists_project_name(monkeypatch):
@@ -404,3 +408,61 @@ def test_lifecycle_audit_persists_project_name(monkeypatch):
     monkeypatch.setattr(audit_module, "get_run_id", lambda: "werkstatt-run-1")
     loop._emit_lifecycle_end(False, "security-ai")
     assert not calls
+
+
+def test_main_sigterm_saves_and_restores_stash(tmp_path, monkeypatch):
+    """Web-Stop ueber SIGTERM laeuft durch PhaseState-/Stash-Cleanup."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    pop_calls: list[str] = []
+
+    def _fake_pop(project_dir):
+        pop_calls.append(str(project_dir))
+        return True
+
+    lifecycle_calls: list[tuple[bool, str | None, bool]] = []
+
+    def _capture_lifecycle(erfolg, project_name, *, stopped=False):
+        lifecycle_calls.append((erfolg, project_name, stopped))
+
+    def _request_stop(*_args, **_kwargs):
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    with (
+        _silence_renderer(),
+        _patch_main_config(tmp_path),
+        patch("werkstatt.loop.run_pipeline_loop", _request_stop),
+        patch("werkstatt.loop._git_head", return_value="abc"),
+        patch("werkstatt.loop._git_dirty", return_value=True),
+        patch("werkstatt.loop._git_stash", return_value=True),
+        patch("werkstatt.loop._git_stash_pop", _fake_pop),
+        patch("werkstatt.loop._emit_lifecycle_end", _capture_lifecycle),
+    ):
+        rc = loop.main(["--project", "p", "--aufgabe", "a"])
+
+    assert rc == 128 + signal.SIGTERM
+    assert pop_calls == [str(tmp_path)]
+    assert lifecycle_calls == [(False, "p", True)]
+
+
+def test_lifecycle_stop_emits_distinct_terminal_event(monkeypatch):
+    """Ein bestaetigter Stop wird nicht als loop_failed protokolliert."""
+    import importlib
+
+    audit_module = importlib.import_module("werkstatt.audit")
+    gate_module = importlib.import_module("werkstatt.gate_bridge")
+    audit_calls = []
+    expired = []
+    monkeypatch.setattr(audit_module, "get_run_id", lambda: "demo-run-1")
+    monkeypatch.setattr(
+        audit_module, "audit", lambda *args, **_kwargs: audit_calls.append(args),
+    )
+    monkeypatch.setattr(
+        gate_module, "expire_for_run",
+        lambda run_id, *, grund: expired.append((run_id, grund)),
+    )
+
+    loop._emit_lifecycle_end(False, "demo", stopped=True)
+
+    assert audit_calls[0][0] == "loop_stopped"
+    assert audit_calls[0][1]["abgebrochen"] is True
+    assert expired == [("demo-run-1", "loop_stopped")]
