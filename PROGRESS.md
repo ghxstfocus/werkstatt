@@ -4767,3 +4767,11 @@ Der Serverlauf nach dem Syntaxfix sammelte die Tests wieder und meldete 108 best
 ## CI fuer Python-Quality-Gate und JavaScript-Syntax (2026-11-11)
 
 Das Repository hatte keinen GitHub-Actions-Workflow. Ein Workflow prueft nun auf Pushes nach main und Pull Requests Python 3.11, installiert requirements.txt, parst alle static/*.js-Dateien mit Node 20 und fuehrt tools.quality_gate aus. Der erste CI-Lauf nach Anlage steht zur Auswertung aus.
+
+
+## CI-Ruff-Baseline aus erstem sauberen Lauf korrigiert (2026-11-11)
+
+Der erste CI-Lauf nach dem Dependency-Fix bestand den JavaScript-Syntaxcheck, zeigte aber sieben EXE001-Befunde fuer CLI-Skripte, die im Repository als nicht-ausfuehrbar gespeichert sind, sowie einen unsortierten Import in tests/test_audit.py. Da die Werkstatt diese Skripte explizit mit python3 tools/<name>.py startet, ist die Shebang-/Executable-Regel fuer tools/*.py eng begrenzt ausgenommen; der Testimport ist sortiert. Die naechste CI-Ausfuehrung entscheidet, ob weitere bestehende Ruff-Befunde oder Tests sichtbar werden.
+
+- Commits: 0809b901 Ruff-Ausnahme fuer Python-CLI-Dateien; 3ee6ace5 Testimport sortiert.
+- CI nach diesen Fixes: ausstehend.
