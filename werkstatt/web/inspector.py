@@ -1239,6 +1239,11 @@ def aggregate_swimlane(
     except OSError:
         return {"run_id": "", "lanes": [], "zeitspanne": None, "aktiv": {}}
 
+    # Projektgrenze gilt fuer implizite und explizite Run-IDs.
+    events = [
+        e for e in events if (e.get("project") or "werkstatt") == projekt
+    ]
+
     # Run-Filter
     if run_id is None:
         for ev in reversed(events):
@@ -1465,6 +1470,11 @@ def aggregate_live_feed(
     except OSError:
         return leer
 
+    # Projektgrenze gilt fuer implizite und explizite Run-IDs.
+    events = [
+        e for e in events if (e.get("project") or "werkstatt") == projekt
+    ]
+
     # Run-Filter
     if run_id is None:
         for ev in reversed(events):
@@ -1633,7 +1643,11 @@ def aggregate_timeline_aktiv(
     except OSError:
         return {}
 
-    # Run-Filter
+    # Projektgrenze gilt auch bei expliziter Run-ID; sie ist kein
+    # Berechtigungsnachweis. Legacy-Events ohne Projekt gehoeren zu werkstatt.
+    events = [
+        e for e in events if (e.get("project") or "werkstatt") == projekt
+    ]
     if run_id is None:
         for ev in reversed(events):
             rid = ev.get("run_id")
@@ -1698,13 +1712,11 @@ def aggregate_timeline(
     except OSError:
         return []
 
-    # OP-306c: JSONL-Events nach Projekt filtern. Fallback 'werkstatt'
-    # fuer Events vor OP-306c. Explizites run_id umgeht den Filter.
-    if run_id is None:
-        events = [
-            e for e in events
-            if (e.get("project") or "werkstatt") == projekt
-        ]
+    # Projektgrenze gilt fuer implizite und explizite Run-IDs.
+    # Legacy-Events ohne Projekt gehoeren zu werkstatt.
+    events = [
+        e for e in events if (e.get("project") or "werkstatt") == projekt
+    ]
 
     letzte_run_id: str | None = None
     for ev in reversed(events):
