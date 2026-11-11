@@ -5243,3 +5243,10 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - Der Live-Feed kann jetzt den fortgeschriebenen Phase-/Task-Kontext sowie explizite Ergebnis-Kurztexte, begruendete Entscheidungen, Beleglisten und naechste Schritte anzeigen.
 - Backend und UI reichen nur diese benannten Kurzfelder weiter; beliebige Payloads und chain_of_thought bleiben ausgeschlossen. Die UI rendert Nutzdaten ausschliesslich mit DOM-Textknoten.
 - Backend- und Frontend-Regressionstests pruefen den Belegvertrag und dass ein internes Rohfeld nicht in der Timeline erscheint. Die Detailansicht in Control ist damit vorbereitet; Loop-Emitter muessen die strukturierten Belege noch an den relevanten Checkpoints liefern.
+
+
+## 2026-11-11 — Timeline-Task-Erfolge an tatsächlichen Abschluss gebunden
+
+- `_task_ende` meldet jetzt zurück, ob der Task neu als `done` markiert wurde. Duplikate, Sticky-Vetos und Human-Review-Pfade erzeugen dadurch keinen irreführenden `loop_task_ok`-Eintrag.
+- Erfolgsereignisse tragen die Phase-State-Task-ID, den Status und einen knappen Abschlussbeleg. Der bisher nicht protokollierte erfolgreiche Verify-Task erscheint ebenfalls; Task-Start und Read-only-Ereignis verwenden dieselbe stabile ID.
+- Regressionstests prüfen den einmaligen `done`-Übergang und den strukturierten Timeline-Beleg. Die Chat-Aktivitätszeile bleibt davon getrennt.
