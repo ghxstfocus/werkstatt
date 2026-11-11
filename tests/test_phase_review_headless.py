@@ -89,3 +89,34 @@ def test_headless_eof_liefert_1(monkeypatch):
 
     monkeypatch.setattr(gates_mod, "_frage_gate", _raise)
     assert _phase_review_gate(_mk_state()) == 1
+
+
+def test_headless_phase_review_opens_and_waits_on_bridge(monkeypatch):
+    import werkstatt.audit as audit_mod
+    from werkstatt import gate_bridge, gates as gates_mod
+    from werkstatt.phases import review as review_mod
+
+    monkeypatch.setattr(gates_mod, "_HEADLESS", True)
+    monkeypatch.setattr(audit_mod, "get_run_id", lambda: "run-review")
+    monkeypatch.setattr(review_mod, "audit_safe", lambda *args: None)
+    opened = []
+    waited = []
+
+    def signal_open(run_id, gate_id, prompt, optionen, typ="jna"):
+        opened.append((run_id, gate_id, prompt, optionen, typ))
+
+    def wait(run_id, gate_id, **_kwargs):
+        waited.append((run_id, gate_id))
+        return "j"
+
+    monkeypatch.setattr(gate_bridge, "signal_open", signal_open)
+    monkeypatch.setattr(gate_bridge, "wait", wait)
+
+    assert review_mod._phase_review_gate(_mk_state()) == 0
+    assert len(opened) == 1
+    run_id, gate_id, _prompt, optionen, typ = opened[0]
+    assert run_id == "run-review"
+    assert gate_id.startswith("phase_review-")
+    assert optionen == "jne"
+    assert typ == "jna"
+    assert waited == [(run_id, gate_id)]
