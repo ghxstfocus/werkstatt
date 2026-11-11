@@ -5157,3 +5157,10 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 ## 2026-11-11 — OP-399 erste CI-Korrektur
 
 - CI meldete einen zu frueh entfernten SHA-Wert in den Worktree-Tests, drei verschachtelte Test-Context-Manager und eine Ruff-Regel fuer Dateiendungen. Testbelege und Remote-Slug-Normalisierung werden korrigiert; volle CI folgt erneut.
+
+
+## 2026-11-11 — OP-399 Worktree-CI-Korrekturen
+
+- Lokale Nicht-Git-Projekte werden vor jedem Git-Aufruf erkannt und ohne Git-Subprozess behandelt. Das hält den lokalen Startpfad kompatibel mit laufenden Web-Tests und spart unnötige Prozessstarts.
+- Der finale Status-/HEAD-Abgleich erfolgt vor dem Anlegen des verwalteten Worktree-Verzeichnisses. Der Projekt-Testfixture ignoriert `.werkstatt/`, wie es für das Laufzeitverzeichnis vorgesehen ist.
+- GitHub Actions hatte 22 Fehler wegen dieser beiden Randbedingungen; Ruff war bereits sauber. Der vollständige CI-Lauf wird nach dieser Korrektur erneut abgewartet.
