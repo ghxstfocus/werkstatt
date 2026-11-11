@@ -23,7 +23,7 @@ def test_erster_aufruf_geht_durch(tmp_path):
     state = _run_state(tmp_path)
     ps = MagicMock()
     ps.get_task.return_value = None
-    _task_ende(state, ps, "t1", ok=False, name="x", failure="builder_failed")
+    assert not _task_ende(state, ps, "t1", ok=False, name="x", failure="builder_failed")
     ps.mark_failed.assert_called_once_with("t1", failure="builder_failed")
 
 
@@ -40,8 +40,8 @@ def test_zweiter_aufruf_skip_nach_done(tmp_path):
     state = _run_state(tmp_path)
     ps = MagicMock()
     ps.get_task.side_effect = [None, {"status": "done"}]
-    _task_ende(state, ps, "t1", ok=True, name="x")
-    _task_ende(state, ps, "t1", ok=True, name="x")
+    assert _task_ende(state, ps, "t1", ok=True, name="x")
+    assert not _task_ende(state, ps, "t1", ok=True, name="x")
     assert ps.mark_done.call_count == 1
 
 
@@ -49,7 +49,7 @@ def test_pending_erlaubt_erneuten_aufruf(tmp_path):
     state = _run_state(tmp_path)
     ps = MagicMock()
     ps.get_task.return_value = {"status": "pending"}
-    _task_ende(state, ps, "t1", ok=True, name="x")
+    assert _task_ende(state, ps, "t1", ok=True, name="x")
     ps.mark_done.assert_called_once()
 
 
