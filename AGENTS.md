@@ -15,6 +15,11 @@ Routing für Agenten. Keine Enzyklopädie.
 
 ## Loop-Start
 
+Der projektbezogene Chat ist der normale Start- und Kontrollpunkt in der UI.
+Er untersucht das Repo, formuliert den konkreten Auftrag und verlangt vor
+Aktionen eine eigene Freigabe. Plan- und Ergebnis-Gates bleiben Pflicht.
+Der CLI-Einstieg bleibt fuer automatisierte und serverseitige Runs verfuegbar:
+
     python3 -m werkstatt.loop --project NAME --aufgabe "TEXT"
 
 ## Agentenrollen und Kontrollschritte
@@ -34,9 +39,9 @@ Routing für Agenten. Keine Enzyklopädie.
    (deepseek-flash, Thinking aus).
 8. Reflection (werkstatt/reflection.py) — Feedback bei Reject
    (deepseek-flash, Thinking aus).
-9. Chat (werkstatt/chat_agent.py) — projektbezogene Diagnose
-   (deepseek-flash, Thinking aus). Der Debugger-Modus ist eine Chat-
-   Faehigkeit gemaess ADR-0011/ADR-0018, keine eigene Loop-Rolle.
+9. Chat (werkstatt/chat_agent.py) — projektbezogene Repo-Analyse,
+   Hintergrundfragen und freigabepflichtige Loop-Steuerung. Debugging ist
+   eine Chat-Faehigkeit gemaess ADR-0011/ADR-0029, keine eigene Loop-Rolle.
 10. Human-Gates — Plan- und Ergebnisfreigabe, fail-closed.
 
 ## Werkzeuge (CLI)
@@ -51,7 +56,7 @@ Routing für Agenten. Keine Enzyklopädie.
 
 ## Skills (Progressive Disclosure)
 
-20 Skills in `skills/<name>/SKILL.md`. Jeder Skill hat:
+Skills in `skills/<name>/SKILL.md`. Jeder Skill hat:
 
 - `globs:` — Datei-Muster, die den Skill aktivieren (deterministisch per fnmatch)
 - `rollen:` — Rollen-Filter: `builder`, `reviewer`, `architect`, `scout`,
@@ -77,24 +82,24 @@ ist — kein doppeltes Laden.
 Skills-Test: `tests/test_skills.py` + `tests/test_skills_loader.py`
 pruefen Anzahl und Struktur.
 
-## Roadmap-to-OP (Vision -> Queue)
+## Roadmap und Aufgabenwahl
 
-Der Loop frisst OPs (`STATUS.md`), aber die Etappen (`ROADMAP.md`) muessen
-in OPs uebersetzt werden. Bis Phase 31 (Roadmap-Compiler) geschieht das
-manuell:
-
-1. Phase aus `ROADMAP.md` waehlen.
-2. Meta-OP in `STATUS.md` anlegen: *"Lies Phase X und zerlege sie in OPs."*
-3. Loop fuehrt den Meta-OP aus -> Architect schreibt die OPs.
-4. Loop arbeitet die neuen OPs ab.
+`ROADMAP.md` setzt Fokus und Reihenfolge; sie ist keine startbare Queue.
+`STATUS.md` enthaelt nur konkrete, aktuelle und startfaehige OPs. Direkte
+Nutzerauftraege haben Vorrang. Ohne konkreten Auftrag waehlt der Selector
+begruendet aus startfaehigen OPs; Mehrdeutigkeit wird dem Chat mit Gruenden
+und Optionen zurueckgegeben. Verwandte OPs duerfen nur als begrenzter,
+verifizierbarer Arbeitsblock vorgeschlagen und muessen am Plan-Gate
+freigegeben werden. Es gibt keinen Roadmap-Compiler oder Meta-OP fuer
+ungeprueftes automatisches Zerlegen.
 
 ## Doku-Vertrag (Loop)
 
 Loop liest Living Docs in §6-Reihenfolge (entry > status > roadmap >
 architecture > conventions > adr_index > glossary). Scout bekommt eine
-PROJEKT-DOKU-Sektion (priorisiert, max 4000 Z. je Doc). Bei vagen
-Aufgaben waehlt Scout GENAU EINEN OP-NNN aus docs/STATUS.md
-(OP-NNN-Disziplin, SCOUT_SYSTEM).
+PROJEKT-DOKU-Sektion (priorisiert, max 4000 Z. je Doc). Bei vagen Aufgaben werden offene, startfaehige OPs durch den Selector
+geprueft. Kandidat, Blocker und Begruendung muessen sichtbar sein; bei
+Mehrdeutigkeit wird gefragt statt geraten.
 
 ## Task-Zerlegung (Plan-first)
 
@@ -194,5 +199,4 @@ in `werkstatt/control/` als Registry inventarisiert:
 Exit 0 erwartet. Exit 1 bei Registry-Eintrag dessen `source`-Modul
 nicht importierbar ist oder dessen Funktion fehlt.
 
-Neue Kontrolle: Eintrag in `registry.py`, dann `--check`. Migration
-nach `control/*` schrittweise ueber OPs 095-099.
+Neue Kontrolle: Eintrag in `registry.py`, dann `--check`. Migrationen werden nur aus aktuellen OPs oder akzeptierten ADRs abgeleitet; historische OP-Nummern sind keine aktive Anweisung.

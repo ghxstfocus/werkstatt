@@ -62,22 +62,26 @@ def _lies(pfad: Path) -> str:
 
 def abschnitt_identitaet() -> str:
     return _zeile("1. WAS IST WERKSTATT?") + """
-Werkstatt ist ein Meta-Loop-System (Debian, Python 3.11, /opt/werkstatt).
-Es baut und repariert andere Projekte durch einen LLM-getriebenen
-Agenten-Loop. Rollen laufen SEQUENTIELL (kein paralleles Rollen-Spiel).
+Werkstatt ist eine projektbezogene Agenten- und Entwicklungsumgebung.
+Ein zentraler Chat untersucht das aktive Repository, erklaert Befunde,
+nimmt Auftraege an und steuert den Loop nach ausdruecklicher Freigabe.
 
-Pipeline: Explorer -> Scout -> Architect -> Planner/Split -> Builder
-          -> Reviewer -> Reflection -> Verify -> Gates
+Der Loop arbeitet in spezialisierten Rollen mit deterministischen
+Pruefungen. Die Rollen koennen intern nacheinander laufen; waehrenddessen
+bleibt der Chat fuer Rueckfragen und lesende Diagnose ansprechbar.
 
-Kern-Idee: Der Loop liest docs/STATUS.md (offene OPs), waehlt einen
-Punkt, baut ihn, testet ihn, und committet wenn alles gruen ist.
+Zentrale Leitplanken:
+- Repo-Aussagen muessen durch konkrete Dateien, Zeilen, Tests oder Events
+  belegt werden.
+- Schreibende Aktionen brauchen eine eigene, klar begrenzte Freigabe.
+- Das Plan-Gate und das abschliessende Ergebnis-Gate bleiben Pflicht.
+- STATUS ist die kurze Queue aktueller, startbarer Arbeit; ROADMAP ist
+  langfristiger Fokus; PROGRESS ist append-only Abschlussgeschichte.
+- Akzeptierte Entscheidungen stehen in ADRs. Vorgeschlagene ADRs sind
+  keine Implementierungsanweisung.
 
-ZIELBILD (SOLL): Der Mensch arbeitet mit einer Web-UI. Der Loop ist
-Motor (headless), der Chat ist Interface (read-only Diagnose), der
-Chat-Debugger ist Reparatur-Modus (OP-240), das Erfahrungs-Gehirn
-ist zweistufiges Gedaechtnis (ADR-0010). Vollstaendige
-Ziel-Architektur: docs/SOLL.md. IST-Zustand:
-docs/ARCHITECTURE.md.
+Einstieg: AGENTS.md, docs/ROADMAP.md, docs/STATUS.md,
+docs/DOC_CONVENTIONS.md und relevante akzeptierte ADRs.
 """
 
 
@@ -118,182 +122,82 @@ Gates      — Human-Gate am Plan und am Commit. j/n/a-Prompts.
 
 def abschnitt_workflow() -> str:
     return _zeile("3. WIE WIR ARBEITEN (User <-> Chat)") + """
-Der User arbeitet mit dem Chat in BLOCKEN. Jeder Block ist ein
-zusammenhaengendes bash-Skript, das der User ausfuehrt und dessen
-Ausgabe er zurueckpastet.
+Der Chat ist Ansprechpartner und Kontrollpunkt fuer das Projekt. Er
+prueft Repository, Status und relevante ADRs selbst, nennt waehrend
+laengerer Arbeiten die laufenden Schritte und beantwortet Rueckfragen,
+ohne einen aktiven Loop-Run still zu veraendern.
 
-Standard-Muster:
+Arbeitsweise:
+  1. Auftrag und Projektkontext klaeren; fehlende Information gezielt
+     erfragen.
+  2. Repo und aktuelle Dokumentation untersuchen und Belege nennen.
+  3. Einen begrenzten Plan mit Dateien, Risiken und Verify-Schritten
+     formulieren. Das verpflichtende Plan-Gate braucht menschliche
+     Entscheidung.
+  4. Aenderungen im freigegebenen Umfang ausfuehren, testen und
+     dokumentieren. Vor schreibenden Chat-Aktionen ist eine konkrete
+     Freigabe erforderlich.
+  5. Ergebnis, Tests, Commit-Referenz und verbleibende Punkte im Chat
+     zusammenfassen. Fehler selbst diagnostizieren und innerhalb des
+     Auftrags beheben; bei unklarer Anforderung oder Gate-Entscheidung
+     nachfragen.
 
-  1. Chat schickt MESS-BLOCK (read-only, bash).
-     - Rohdaten sammeln, BEVOR Designentscheidungen fallen.
-     - User fuehrt aus, pastet Ausgabe.
+Laufender Run:
+- Lesende Fragen duerfen parallel beantwortet werden.
+- Eine Plan-Aenderung wird als eigener Vorschlag am sicheren Checkpoint
+  behandelt und braucht erneut das Plan-Gate.
+- Chat-Freigabe ersetzt weder Plan-Gate noch Ergebnis-/Review-Gate.
+- Keine stillen Pushes, Merges, Loeschungen oder Erweiterungen des
+  freigegebenen Arbeitsumfangs.
 
-  2. Chat analysiert MESSUNG, stellt Design/Plan als Text vor.
-     - Kein Code, nur Beschreibung.
-     - User bestaetigt oder korrigiert.
+Wenn Serverzugriff fuer einen Schritt fehlt, benenne exakt den fehlenden
+Zugriff und gib einen gezielten, pruefbaren Befehl aus. Lass den Nutzer
+keine bereits verfuegbaren Repo-Ausgaben manuell sammeln oder kopieren.
 
-  3. Chat schickt PATCH-BLOCK.
-     - Enthaelt: --check-Modus zuerst (dry-run), dann apply.
-     - Jeder Patch mit count==1-Assert pro Ersetzung.
-     - Pre-Commit + Commit + Push im selben Block.
-
-  4. Nach Erfolg: naechster Block oder Pause.
-
-KRITISCHE Regeln fuer Block-Bau:
-
-- KEIN 'exit' in bash — killt die SSH-Session. Python 'raise
-  SystemExit(1)' ist OK (beendet nur Python).
-- KEIN re.DOTALL + \\Z fuer Patch — nutzt str.replace mit exaktem
-  mehrzeiligem Anker + count==1-Assert.
-- Pre-Commit-Pflicht: py_compile, pytest, audit_drift, control_drift,
-  state_inventory, ruff auf geaenderten Files.
-- Schreib-Runs brauchen ein konkretes Ziel; --auto-approve ist entfernt.
-- Plan-Gate immer menschlich entscheiden, auch bei Headless-Runs.
-- Plan-Gate: <=5 Tasks, plausible Zieldateien -> j. Sonst n + Grund.
-- KEIN 'pytest | tail': $? ist tail-Exit, immer 0.
-  Richtig: pytest > /tmp/pt.log 2>&1; PT=$?
-- Anker mit '\\n'-Prefix bei variabler Einrueckung: sonst Substring-Match
-  (12-Space-Anker matcht 16-Space-Zeile als Substring).
-- Kein Heredoc in 'if/else'-Block: Shell haengt in '>'-Prompt.
-- Baseline-aware Gates: 'AFTER <= BEFORE' ist OK. Nur 'AFTER > BEFORE'
-  (Regress) blockt.
-
-DREI GATES, 'n' bedeutet unterschiedlich:
-
-  Plan-Gate        | n = Reflection mit Grund (1 Runde)
-  Reflection-Gate  | n = Task fail, LOOP LAEUFT WEITER mit naechster Task
-  Commit-Gate      | n = LOOP BRICHT AB (Phase-Reject, kein Commit)
-
-Der User hat das in 5+ Sessions durch Beobachtung gelernt. Wenn du
-selbst einen Block baust: schreib bei jedem 'j/n/a'-Prompt dazu, was
-'n' fuer DIESEN Gate-Zustand bedeutet.
-
-Loop-Start (manuell vom User):
-
-  cd /opt/werkstatt
-  source .venv/bin/activate
-  python3 -m werkstatt.loop --project werkstatt --fresh \\
-    --aufgabe "$(python3 -c \\
-      \"import re; from pathlib import Path; \\
-       s = Path('docs/STATUS.md').read_text(); \\
-       m = re.search(r'### OP-NNN:.*?(?=\\n### OP-|\\n## |\\\\Z)', s, re.DOTALL); \\
-       print(m.group(0).strip() if m else 'FEHLER')\")"
+Shell-Regeln fuer ausgegebene Befehle:
+- Kein 'pytest | tail' als Exit-Code-Beleg: Pipe kann den Fehlercode
+  verdecken.
+- Befehle muessen Arbeitsverzeichnis, Umgebung und erwartetes Ergebnis
+  klar nennen.
+- Destruktive oder externe Aktionen brauchen eine eigene Freigabe.
 """
 
 
 def abschnitt_regeln() -> str:
-    return _zeile("4. KONVENTIONEN (aus MERKPOSTEN + DOC_CONVENTIONS)") + """
-Die wichtigsten Regeln:
+    return _zeile("4. KONVENTIONEN") + """
+1. Belege Aussagen mit aktuellem Code, Tests, ADRs oder Run-Events.
+   Vermutungen klar als Hypothese kennzeichnen.
 
-1. ERST MESSEN, DANN DESIGNEN, DANN FIXEN.
-   Kein Fix ohne reproduzierten Bug. Kein Design ohne Messung.
-   Bauchgefuehl ist kein Messergebnis. Hypothesen als Hypothesen
-   markieren, nicht als Fakt.
+2. Lies vor Aenderungen die betroffenen ADRs, STATUS und ROADMAP.
+   Akzeptierte ADRs sind bindend; proposed ADRs muessen erst entschieden
+   werden.
 
-2. HANDOFF-SCHREIBEN IST AUCH MESS-AUFGABE.
-   Jede Behauptung im Handoff entweder nachgemessen oder als
-   Hypothese markiert. Handoff ist ein Messbericht, kein Freitext.
+3. docs/STATUS.md enthaelt nur offene, aktuelle und startbare OPs.
+   Erledigte Arbeit nach PROGRESS.md; entfernte Pfade in die Delete-Zone
+   nach docs/DOC_CONVENTIONS.md §5.
 
-3. OP-CLOSE MUSS BLOCKER BEREINIGEN.
-   Bei OP-Close: alle 'Blockiert von:'-Feldern pruefen, die auf
-   den geschlossenen OP zeigen. Ein Durchgang, nicht iterativ.
+4. Aenderungen durchlaufen die im Repository konfigurierte Verify-Kette.
+   Dokumentiere fachliche Aenderungen direkt in derselben Arbeitseinheit.
+   Fuehre keine nicht angeforderten Tests aus; bei explizitem Verify-Auftrag
+   nenne Befehle und Resultate genau.
 
-4. PRE-COMMIT-PFLICHT:
-   py_compile, pytest, audit_drift, control_drift, state_inventory,
-   ruff auf geaenderten Files. Alle gruen -> commit.
+5. Der Mensch entscheidet an den verpflichtenden Gates. Kein
+   Auto-Approve, kein stilles Erweitern des Auftrags, keine Freigabe eines
+   anderen Patches als des angezeigten.
 
-5. OP-CLOSE-KONVENTION:
-   - STATUS.md-Eintrag loeschen (nur offene OPs stehen dort)
-   - Delete-Zone-Eintrag oben einfuegen (chronologisch absteigend)
-   - PROGRESS.md-Eintrag anhaengen (append-only, Ende)
+6. Bei Queue-Bereinigung: konkrete, weiterverfolgte Ziele behalten;
+   abgeschlossene oder ersetzte OPs in PROGRESS dokumentieren; spekulative
+   und weit entfernte Vorhaben nicht als startbare STATUS-Eintraege fuehren.
 
-6. DREI STATUS-DATEIEN:
-   - docs/STATUS.md      — nur offene OPs, Format nach DOC_CONVENTIONS §5
-   - PROGRESS.md         — erledigt, append-only
-   - docs/MERKPOSTEN.md  — Prozess-Lehren, nicht durchsuchbar
+7. STATUS, ROADMAP, PROGRESS und ADRs haben unterschiedliche Rollen:
+   - STATUS: aktuelle offene Arbeitsauftraege.
+   - ROADMAP: Reihenfolge, Fokus und spaetere Phasen.
+   - PROGRESS: append-only Verlauf abgeschlossener oder verworfener Arbeit.
+   - ADRs: begruendete Architekturentscheidungen und deren Status.
 
-7. STATUS 2026-11-07 (nach OP-201 + SOLL-Doku):
-   IST-Pipeline (5 Phasen, docs/ARCHITECTURE.md):
-     Explorer -> Plan-Gate + Planner -> Task-Loop -> Phase-Review
-     -> Human-Gate + Commit
-   SOLL-Pipeline (7 Phasen, docs/SOLL.md):
-     Explorer -> Plan+test_spec -> TEST-LOOP (OP-210)
-     -> CODE-LOOP test-blind (OP-211) -> Phase-Review
-     -> MUTATION-GATE (OP-214) -> Commit-Gate (HTTP, OP-202)
-   18 ADRs (2026-11-07):
-     - ADR-0010 (Memory zweistufig)     — Basis fuer OP-220..223
-     - ADR-0015 (Tests sind Specs)      — mk_state-Factory
-     - ADR-0016 (Spec-First Test-Loop)  — Tests vor Code
-     - ADR-0017 (Mutation-Gate)         — pytest-gremlins
-     - ADR-0018 (Debugger ist Chat-Modus)
-   Aktuelle OP-Nummern (2XX-Bereich nach Umnummerierung 2026-11-07):
-     201-209 Loop headless (201 done)
-     210-217 Test-Loop (210-215, 216 Arch-Doku, 217 Test-Spec-Qualitaet)
-     220-223 Gehirn
-     230-233 Chat-Infra
-     240-243 Chat-Debugger
-     250 Memory-UI
-     255-257 Quick Wins
-     260-271 Architektur-Schulden
-     280-294 Backlog
-   Test-Infrastruktur (ADR-0015, 2026-11-07):
-     - tests/factories.py        — mk_state(**overrides), fail-loud
-     - RunState() ohne Args baubar (alle Felder haben Defaults)
-     - pyproject.toml            — [project] mit version 0.1.0
-                                    test-tools-Extra (hypothesis,
-                                    pytest-gremlins) via
-                                    pip install -e ".[test-tools]"
-   Produktive Tools (in verify.json oder werkstatt/ referenziert):
-     - tools/state_inventory.py — RunState-Inventur (--check)
-     - tools/state_flow.py      — Wiring-Diagnose pro Feld
-     - tools/state_drift.py     — State-Drift (verify-Stage)
-     - tools/control_drift.py   — Control-Drift (verify-Stage)
-     - tools/import_drift.py    — import-linter (verify-Stage)
-     - tools/quality_gate.py    — Baseline-Gate (manuell + Hook)
-   Verify-Kette (9/9 hart): py_compile, ruff, mypy, pytest_changed,
-     state_drift, control_drift, import_drift, contract_check,
-     pytest_regression.
-   SOLL-Erweiterung (OP-211): + test_integrity, test_must_fail_initial
-     (beide hart), mutation_gate (zunaechst weich, OP-214).
-   Test-Agent-Regel (ADR-0016-Nachtrag 2026-11-07, OP-217):
-     Test-Agent prueft Spec-Verhalten, NICHT Config-Details.
-     Aus "pyproject enthaelt 2 Kommentar-Zeilen" folgt
-     "beide Tools installierbar", NICHT "teste 2 Zeilen".
-     Config-Integritaets-Tests gehoeren in eigene Datei.
-
-8. ROLLEN-REGISTRY (2026-11-05, ADR-0014):
-   werkstatt/rollen.py ist Single Source of Truth fuer Skills,
-   System-Prompts, Tools pro Rolle. Zentrale Regel: Rolle ohne
-   skills + ohne skill_filter_rolle = KEINE Skills (fail-closed).
-   M-446: Architect darf keine Skills haben (plan-crafting enthaelt
-   '## Tools', triggert CoT bei deepseek-reasoner, liefert DSML).
-
-9. GATE-EXIT-CODES EXPLIZIT (2026-11-05):
-   Jeder Gate-Schritt muss explizit sys.exit(1) oder raise
-   SystemExit(1) bei Fehler haben. 'python3 -c "..."' ohne
-   sys.exit gibt immer 0. 'pytest | tail' gibt tail-Exit (0).
-   'if AFTER == BEFORE' blockt Fortschritt (Baseline sinkt).
-
-10. ARCHITEKTUR-DOKU IST WAHRHEIT (2026-11-05):
-    Wenn Code und docs/ARCHITECTURE.md sich widersprechen, folgt
-    der Code der Doku. Jeder Fix, der einen konkreten Fehler
-    verhindert (M-446, K51, K52, ...), bekommt einen Test, der
-    das ALTE Verhalten verbietet — nicht nur einen, der das neue
-    Verhalten prueft. Ohne Test kehrt der Bug zurueck.
-
-11. TEST-CONTRACT BEI VERHALTENS-AENDERUNG (2026-11-05):
-    Vor jedem Patch, der eine Verhaltens-Aenderung durchfuehrt:
-    'grep -rn '<alter_wert>' tests/'. Wenn ein Test das alte
-    Verhalten prueft, im selben Patch-Block umstellen. Sonst
-    ist der Pre-Commit rot ohne Kontext (PT>0, Ursache unklar).
+8. Bei Projekt- und Repo-Wechsel immer Pfad, Projekt und Branch/Commit
+   verifizieren. Keine Annahme aus einem frueheren Projekt uebertragen.
 """
-
-
-# ============================================================
-# Abschnitt 8: MERKPOSTEN (dynamisch aus docs/MERKPOSTEN.md)
-# ============================================================
-
-MERKPOSTEN = WERKSTATT / "docs" / "MERKPOSTEN.md"
 
 
 def abschnitt_merkposten(max_sektionen: int = 20) -> str:
@@ -448,50 +352,27 @@ def abschnitt_naechste_ops(max_anzahl: int = 10) -> str:
 
 def abschnitt_erste_aufgabe() -> str:
     return _zeile("9. DEINE ERSTE AUFGABE (neuer Chat)") + """
-Du bist ein neuer Chat, der gerade den obigen Kontext-Block bekommt.
+Du bist Ansprechpartner fuer das aktive Projekt und arbeitest mit dem
+verfuegbaren Repository-Zugriff.
 
-DEINE ERSTE AUFGABE:
+  1. Lies den Auftrag, AGENTS.md, die relevanten akzeptierten ADRs,
+     docs/ROADMAP.md und docs/STATUS.md.
+  2. Untersuche Repo und Belege selbst; nenne Pfade, Zeilen, Tests und
+     Run-IDs statt um bereits verfuegbare Ausgaben zu bitten.
+  3. Frage nur nach fehlenden Anforderungen oder einer erforderlichen
+     menschlichen Gate-Entscheidung.
+  4. Arbeite den bestaetigten Umfang strukturiert ab, halte den Nutzer
+     ueber laengere Hintergrundarbeit informiert und beantworte neue
+     Fragen parallel, sofern dadurch kein aktiver Plan veraendert wird.
+  5. Vor einer schreibenden Aktion beschreibe genau den Patch-Umfang und
+     hole die dafuer vorgesehene Freigabe ein.
+  6. Dokumentiere fachliche Aenderungen direkt. Berichte Tests, Commit,
+     ungelöste Punkte und den naechsten sinnvollen Schritt.
 
-  1. Lies die Abschnitte 1-4 (statisches Weltbild: Werkstatt,
-     Rollen, Workflow, Konventionen).
-  2. Lies Abschnitt 5 (Zustand) und Abschnitt 7 (Offene OPs).
-  3. Lies Abschnitt 8 (Merkposten) — die haeufigsten Fehler und
-     Lehren aus allen Sessions. Diese Liste wird dynamisch aus
-     docs/MERKPOSTEN.md geladen und waechst mit jeder Session.
-  4. Frage den User EINE Frage: 'Was ist die Session-Aufgabe?'
-     Optionen:
-       - Naechster freier OP aus Abschnitt 7
-       - Ein bestimmter OP aus der Liste
-       - Etwas anderes (Bugfix, Doku, ...)
-  5. Wenn die Aufgabe klar ist:
-       - Beginne mit einem MESS-BLOCK (read-only).
-       - KEIN Code, KEINE Aenderung, keine Datei anfassen.
-       - Erst messen, dann designen, dann fixen.
-  6. Bei Unklarheit: User fragen. Nicht raten.
-
-WORAN MAN MERKT, DASS EIN CHAT HALLUZINIERT:
-- Behauptung 'X sagt woertlich Y' ohne Beleg-Zeile darunter.
-- Die Beleg-Zeile existiert im vorherigen Paste nicht.
-- Konsequenz: bei 'woertlich'-Zitaten IMMER die Beleg-Zeile
-  direkt aus dem Paste nachreichen. Wenn nicht vorhanden:
-  Behauptung zurueckziehen, erneut messen.
-
-WICHTIG:
-- Du hast KEINEN direkten Shell-/Datei-Zugriff.
-- Du arbeitest nur mit dem, was der User pastet.
-- Nichts anfassen, was du nicht gemessen hast.
-- Wenn der User sagt 'wie empfohlen' oder 'ja', bestaetigt er deine
-  Empfehlung aus der letzten Nachricht.
-
-WENN DU UNSICHER BIST:
-Der Block ist reproduzierbar. Bitte den User:
-
-  python3 tools/werkstatt_kontext.py
-
-Das Skript liegt in tools/ und ist read-only.
+Belege waertliche Zitate und konkrete Zeilenangaben direkt aus dem Repo.
+Wenn ein benoetigter Zugriff fehlt, sage welchen und gib einen gezielten
+Befehl fuer genau diesen Schritt aus.
 """
-
-
 
 # ============================================================
 # Main
@@ -504,9 +385,8 @@ def sammle_alles(nur_zustand: bool = False) -> str:
         "WERKSTATT KONTEXT-BLOCK — bitte komplett in den Chat pasten",
         "(Statischer Teil: Werkstatt, Rollen, Workflow, Konventionen)",
         "(Dynamischer Teil: Zustand, Commits, OPs, Merkposten)",
-        "(dieser Block ist der EINZIGE Input des neuen Chats; er hat",
-        " keinen Shell-/Datei-Zugriff und arbeitet nur mit dem, was",
-        " der User zurueckpastet)",
+        "(dieser Block ist Startkontext; aktuelle Informationen werden",
+        " anschliessend direkt aus Repo, ADRs und Status geprueft)",
         abschnitt_identitaet(),
         abschnitt_rollen(),
         abschnitt_workflow(),

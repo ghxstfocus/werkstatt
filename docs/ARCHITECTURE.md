@@ -1,44 +1,61 @@
 # Architektur — Werkstatt
 
 
-> **IST-Zustand.** Diese Datei beschreibt, was heute läuft.
+> Diese Datei beschreibt die implementierte Architektur und verweist fuer
+> geplante Arbeit auf docs/ROADMAP.md. Verbindliche Architekturregeln
+> stehen in akzeptierten ADRs; vorgeschlagene ADRs sind nicht bindend.
 >
-> **SOLL-Zustand:** `docs/SOLL.md` — die Ziel-Architektur
-> (Chat-UI, Chat-Debugger, Erfahrungs-Gehirn, Test-Loop).
->
-> **Bei Widersprüchen:** ADR > `docs/SOLL.md` > diese Datei.
->
-Stand: 2026-11-10 (Run-State und Event-Architektur via ADR-0024; SOLL-Ziel fuer Chat-Control-Plane via ADR-0029).
+> Statusqueue: docs/STATUS.md · Abschlussverlauf: PROGRESS.md
 
-## 1. Ziel-Architektur
 
-Die Werkstatt ist ein Multi-Agent-System mit spezialisierten Agentenrollen,
-einem eigenen projektbezogenen Chat und deterministischen Kontrollstufen.
-Der Chat bleibt vom schreibenden Loop getrennt. Debugging ist ein Chat-Modus;
-eine eigenstaendige Debugger-Loop-Rolle ist gemaess ADR-0018 verworfen.
-Der Mensch entscheidet an den verpflichtenden Gates.
+Stand: 2026-11-11.
 
-    Explorer -> Scout -> Architect -> Planner-Split -> Builder -> Verify -> Reviewer -> Reflection -> Human-Gates
-    Chat (parallel, read-only) -> Diagnose / Debug-Modus
 
-## 1.5 Installation
+## 1. Produktarchitektur
 
-Zwei gleichwertige Wege — beide funktionieren:
 
-**cwd-Import (Default, keine Installation nötig):**
-Aus dem Repo-Root heraus. `pytest tests/` importiert `werkstatt` über
-`sys.path[0]`. Funktioniert ohne venv-Setup, ohne `pip install`.
-Bevorzugt für Loop-Läufe, lokale Entwicklung und CI ohne Wheel-Cache.
+Werkstatt verbindet projektbezogenen Chat, kontrollierte Loop-Runs,
+spezialisierte Agentenrollen und deterministische Verify-Stufen. Der Chat
+ist die zentrale Oberflaeche fuer Fragen und Auftraege. Er kann lesend im
+Repository untersuchen, Hintergrundjobs begleiten und nach konkreter
+Freigabe Loop-Steuerungsaktionen ausloesen.
 
-**Editable-Install (`pip install -e ".[test-tools]"`):**
-`pip show werkstatt` zeigt dann `Version: 0.1.0` und `Name: werkstatt`.
-Die Extras-Gruppe `test-tools` zieht `hypothesis` und
-`pytest-gremlins` nach. Funktioniert auch aus anderen Verzeichnissen
-heraus (z.B. wenn `pytest` nicht aus dem Repo-Root gestartet wird).
-Voraussetzung für Mutation-Gate (OP-190) und Hypothesis-Tests (OP-193).
 
-Beide Wege bleiben dauerhaft unterstützt. Kein Migrationszwang, keine
-`[tool.pytest.ini_options]` — `pytest.ini` bleibt aktive Config.
+Ein Chat-Vorschlag ist keine Gate-Freigabe. Der Loop verlangt weiterhin
+das verpflichtende Plan-Gate und das abschliessende Review-/Ergebnis-Gate.
+Eine waehrend eines Runs angeforderte Plan-Aenderung muss als eigener
+Vorschlag am sicheren Checkpoint erneut freigegeben werden. Sie veraendert
+keinen aktiven Plan still.
+
+
+Die Agentenrollen werden durch den Loop orchestriert. Lesende Chatfragen
+koennen parallel dazu beantwortet werden; schreibende Arbeit benoetigt
+einen kontrollierten Projekt-Schreibpfad. Eine getrennte Debugger-Loop-Rolle
+gibt es nicht: Debugging ist eine Chat-Faehigkeit (ADR-0011/0029).
+
+
+### UI-Modi
+
+
+- **Cockpit:** Zusammenfassung des Laufs und langsamere, nachtraegliche
+  Timeline-Einordnung.
+- **Control:** Live-Feed und aktuelle Loop-Steuerung; das Chatpanel bleibt
+  als zentraler Projektkontakt erreichbar.
+- **Debug:** Diagnose, Run-Kontext und Fehlerbehebung.
+- **Runs:** Projektlaeufe und deren Status.
+
+
+Die Modusleiste gehoert in der UI unter die Projektleiste. Verbindliche
+Live-/Nachanalyse-Trennung: ADR-0022a.
+
+## 1.5 Ausfuehrung
+
+Entwicklungs- und Verify-Befehle laufen aus dem Repository-Root und der
+projektspezifischen Umgebung. Die verbindlichen Abhaengigkeiten und
+Verify-Stages stehen in pyproject.toml, requirements.txt und
+.werkstatt/verify.json. Test-Loop und Mutation-Gate sind nicht Teil des
+aktiven Produktionspfads, solange die zugehoerigen ADRs nicht angenommen
+und in der Roadmap aktiviert sind.
 
 ## 2. Rollen
 
@@ -80,14 +97,16 @@ py_compile_core, pytest_full_checks (phase_end, M-476).
 deepseek-flash mit Thinking aus. Prueft die Task-Description, nicht die Gesamtaufgabe
 (M-459). Bekommt den vollen Diff (M-448).
 
-### 2.8 Scout, Reflection und Chat
+### 2.8 Scout, Reflection, Chat und Debugger
 
-Scout und Reflection nutzen deepseek-flash mit Thinking aus. Der Chat ist
-ein eigener read-only Agent mit derselben Modellroute. Debugger-Faehigkeit
-liegt im Chat-Modus gemaess ADR-0011 und ADR-0018; es gibt keine separate
-Debugger-Loop-Rolle.
 
-### 2.8 Human-Gate (_human_gate in loop.py)
+Scout und Reflection unterstuetzen den schreibenden Loop. Der projektbezogene
+Chat arbeitet parallel fuer Fragen, Repo-Analyse und bestaetigungspflichtige
+Kontrollaktionen. Der Debugger ist ein Chat-Modus mit evidenzgebundener
+Diagnose und Patch-Handoff an den normalen Loop. Chat-Freigabe, Plan-Gate,
+Verify, Review und Ergebnis-Gate bleiben getrennte Schritte.
+
+### 2.9 Human-Gates (_human_gate in loop.py)
 
 Plan-Gate (nach Planner) + Ergebnis-Gate (nach Reviewer). fail-closed.
 
@@ -273,69 +292,23 @@ Alte SQLite bleibt unangetastet bis `rebuild()` gruen und
 `db_hash_identisch()` nach Doppel-Rebuild. Bei Fehler: alte DB
 zurueck, kein Datenverlust.
 
-## 9. UI-Layer (2026-11-08)
+## 9. UI und Projektkontext
 
-Die Web-UI ist dreischichtig: Ambient (Handlungsampel), Panels
-(Diagnose), Palette (Navigation).
 
-### 9.1 Ambient Status Bar (OP-301)
+Die Weboberflaeche ist projektzentriert: Projektleiste, darunter
+Modusleiste, danach die Flaeche fuer den gewaehlten Modus. Bei leerer
+Projektauswahl dient die Projektuebersicht als Startseite. Sie zeigt
+Projektkarten, Laufstatus, Erfolgskennzahlen und den Zugang zum Oeffnen
+oder Anlegen eines Projekts.
 
-Zeile zwischen Tab-Leiste und Grid. Drei Elemente:
 
-- Loop-Status: `○ Idle` / `◉ Laeuft` / `● Fertig` / `✗ Fehler`
-- Letzter Run (relativ mit ✓/✗)
-- Gates (hidden bei 0, pulsierend bei > 0)
+Im Control-Modus stehen Live-Feed und Chat nebeneinander. Aktionen wie
+Start, Pause, Fortsetzen und Stop muessen im Chat bzw. in der sichtbaren
+Steuerung eine nachvollziehbare Statusrueckmeldung liefern. Der Chat wird
+nicht als schwebendes, vom Projektkontext getrenntes Panel geplant.
 
-Polling 3 s gegen `/ambient`. Klick Ziele: Timeline / Gate-Panel.
 
-**Design-Entscheidung:** Tokens und Phase sind **nicht** in der
-Ambient-Bar — sie sind Diagnose, nicht Handlung. Sie leben in der
-Statusbar unten.
-
-### 9.2 Command Palette (OP-302)
-
-`Ctrl+K` / `Cmd+K` oeffnet Overlay. Server-Filter ueber `/palette?q=`
-mit 4 Kategorien: Aktionen, OPs, Sessions, Runs. Icons ▸ → ⚙
-◆ ↻. Keyboard-Nav: ↑↓ Enter Esc.
-
-### 9.3 Runs-Liste mit Run-Status + Start/Stop (OP-303)
-
-Pro OP-Zeile: Run-Status-Badge (○ idle / ● laeuft / ✓ fertig /
-✗ fehler), Start-Button ▶, Stop-Button ■. Polling 5 s.
-Hover-Tooltip mit Blockiert-von-Info.
-
-Backend: `aggregate_ops_run_status()` liest `loop_started`-Marker
-(primär) und `pipeline_start` (Legacy-Fallback).
-
-### 9.4 Audit-Panel (ruhiges Layout)
-
-Ein-Zeilen-Layout pro Event, Icon inline vor Text, Kind-Name klein
-rechts. Run-Gruppierung mit duennen Trennern. Klick expandiert
-Payload. Kategorie-Icons (↻ Loop, ⚙ Builder, ⌕ Explorer,
-✓/✗ Verify/Reviewer, ⚑ Gate).
-
-Sem-Farben aus OP-300: `--sem-action` (lila), `--sem-active` (blau),
-`--sem-ok` (gruen), `--sem-warn` (gelb), `--sem-error` (rot),
-`--sem-history` (grau).
-
-### 9.5 Shortcut-Help + Utility-Bar (OP-304/305)
-
-`?`-Taste oeffnet Overlay mit Kategorien (Navigation, Chat, Palette).
-Utility-Bar oben rechts: `⌘K`-Button, `?`-Button. Klickwege
-parallel zu Shortcuts.
-
-### 9.6 Projekt-Anlage (OP-305)
-
-`+`-Button oder `Alt+N` oeffnet Modal. Name + Pfad (Auto-Fill
-`/opt/<name>`). Backend `POST /api/projects/create` ruft
-`scaffold()` + schreibt Projekt-Pflichtdateien. Ambient zeigt aktives
-Projekt prominent.
-
-### 9.7 Multi-Projekt-Kontext (ADR-0023)
-
-`_PROJECTS_BASE`-Konstante in app.py + inspector.py, testbar via
-monkeypatch. `/start` validiert `docs/STATUS.md` (404 sonst). `/ops`
-+ Palette lesen projekt-spezifisch.
-
-Offen (OP-306a/b/c): Tab-Persistenz, Projekt-Selector, SQLite-
-`project`-Spalte fuer `/ambient` `/status` `/timeline` `/tokens`.
+Die UI zeigt nur Daten, die durch Backend/Event-Store belegt sind. Live-
+Ereignisse und nachtraegliche Zusammenfassungen haben getrennte
+Darstellungsaufgaben. Die Projektquelle und projektbezogene Modellwahl
+sind als OP-399/OP-400 geplant; ADR-0030 ist vorgeschlagen.

@@ -64,7 +64,7 @@ Migration: §7. Code-Kommentare duerfen Englisch sein.
 
 ## 5. STATUS.md-Vertrag (maschinenlesbar)
 
-`STATUS.md` enthaelt NUR offene Punkte. Format pro Punkt:
+`STATUS.md` enthaelt nur offene, aktuelle und konkret startbare Punkte aus dem gegenwaertigen Fokus. Begrenzte Folgearbeit darf nur aufgenommen werden, wenn sie den naechsten Meilenstein direkt entsperrt. Historische, optionale oder noch nicht angenommene Architekturideen gehoeren in PROGRESS, ROADMAP oder ein proposed ADR — nicht als detaillierte, startbare Queue. Format pro Punkt:
 
     ### OP-NNN: Kurztitel
     - **Status:** open

@@ -1,3 +1,15 @@
+> **Archiviert am 2026-11-11 — nicht autoritativ.**
+
+
+> Dieser spekulative Zielentwurf vom 2026-11-08 widerspricht teilweise
+> akzeptierten Entscheidungen, besonders ADR-0029 und den verpflichtenden
+> Gates. Nicht als Arbeitsauftrag oder Implementierungsregel verwenden.
+> Aktuelle Quellen sind akzeptierte ADRs, docs/ARCHITECTURE.md,
+> docs/ROADMAP.md und docs/STATUS.md. ADR-0016/0017 sind proposed und
+> muessen vor Umsetzung ausdruecklich angenommen werden.
+
+---
+
 # SOLL-Zustand — Werkstatt
 
 **Status:** Zielarchitektur (nicht gebaut)
