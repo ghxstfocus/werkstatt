@@ -752,7 +752,7 @@ def test_live_worker_reconciles_pause_from_shared_registry(
     _reset_loop_registry(app_modul)
 
     aufrufe: list[list[str]] = []
-    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe, pid=os.getpid()))
     signale: list[tuple[int, int]] = []
     monkeypatch.setattr(
         app_modul.os, "killpg",
