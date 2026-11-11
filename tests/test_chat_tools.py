@@ -223,9 +223,9 @@ def test_loop_action_tool_only_persists_proposal_and_revalidates_op(
     docs = tmp_path / "docs"
     docs.mkdir()
     (docs / "STATUS.md").write_text(
-        "### OP-321: Eindeutige Arbeit\\n"
-        "- **Status:** open\\n"
-        "- **Akzeptanzkriterien:** Ergebnis belegbar.\\n",
+        "### OP-321: Eindeutige Arbeit\n"
+        "- **Status:** open\n"
+        "- **Akzeptanzkriterien:** Ergebnis belegbar.\n",
         encoding="utf-8",
     )
     db = tmp_path / "sessions.db"
