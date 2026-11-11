@@ -168,6 +168,14 @@ Letzte Aktualisierung: 2026-11-11.
 - **Tests:** Reihenfolge, Dauer, fehlende Zeitstempel und Trennung Cockpit/Control.
 - **Blockiert von:** —
 
+## Sub-OPs
+
+Keine separat startbaren Sub-OPs. Zerlegung erfolgt projektbezogen im Plan-Gate.
+
+## Erledigt (Auto-Log)
+
+Abgeschlossene OPs werden append-only in PROGRESS.md dokumentiert.
+
 ## Delete-Zone
 
 | Pfad | Warum entfernt | Ersetzt durch | Wiedereinfuehrung |
