@@ -457,6 +457,8 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
 
     project_dir = Path(project_dir)
     errors = []
+    _stage_results: list[dict] = []
+    state.last_verify_results = []
 
     # M-306c: venv_python aus projects/<name>.yaml (verhindert,
     # dass Verify im Zielprojekt mit System-Python laeuft und
@@ -563,19 +565,35 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
                 cmd, str(project_dir), stage.get("id", "?"),
                 timeout=_stage_timeout,
             )
+            _record = {
+                "stage_id": str(stage.get("id", "?"))[:120],
+                "exit_code": int(res.returncode),
+                "ok": res.returncode == 0,
+                "error_excerpt": "",
+            }
             if res.returncode != 0:
                 # K22a: stderr einbeziehen -- ruff schreibt auf stderr.
                 _out = (res.stdout or "") + (res.stderr or "")
                 _kern = _extrahiere_fehlerkern(_out)
+                _record["error_excerpt"] = _kern[:1200]
                 errors.append(f"{stage.get('id', '?')}: {_kern}")
+            _stage_results.append(_record)
         except Exception as exc:
-            errors.append(f"{stage.get('id', '?')}-Fehler: {exc}")
+            _error = _extrahiere_fehlerkern(str(exc), max_chars=1200)
+            _stage_results.append({
+                "stage_id": str(stage.get("id", "?"))[:120],
+                "exit_code": None,
+                "ok": False,
+                "error_excerpt": _error,
+            })
+            errors.append(f"{stage.get('id', '?')}-Fehler: {_error}")
 
     # OP-062f: Hart-Info fuer _verify_patches_soft (Prefix-Match reicht
     # nicht, wenn stage_dict 'hart': true setzt, aber Aufrufer nur
     # den Stage-ID-String sieht).
     if state is not None:
         state.last_verify_hart_stages = set(_hart_stage_ids)
+        state.last_verify_results = _stage_results
     if errors:
         audit("loop_verify_failed",
               {"errors": errors, "phase": phase,
