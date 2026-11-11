@@ -12,7 +12,7 @@ from pathlib import Path
 _here = Path(__file__).parent
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
-from factories import mk_state  # noqa: E402
+from factories import mk_state  # noqa: E402, I001
 from werkstatt import gate_bridge, gates as gates_mod  # noqa: E402
 from werkstatt.phases import review as review_mod  # noqa: E402
 
