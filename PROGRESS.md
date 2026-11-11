@@ -4738,3 +4738,11 @@ Der Event-Store kann Events jetzt mit Projektbezug und deterministischer Event-I
 ## Gate-Fix Regressionen aus Serverlauf (2026-11-11)
 
 Der Serverlauf auf `512ad5a` bestätigte die gezielte Gate-Suite (37 bestanden), Ruff und State-Drift-Prüfung. Die Gesamtsuite fand zwei Folgefehler: Der entfernte Auto-Gate-Pfad hinterliess `loop_human_gate_auto` als toten Katalogeintrag; ein älterer Reflection-Test erwartete trotz expliziter menschlicher Freigabe nach der letzten Reviewer-Ablehnung noch `False`. Den Eintrag entfernt und den Test auf die aktuelle Semantik umgestellt: zwei Reviewer-Rejects mit je explizitem `j` ergeben eine angenommene Reflection, nachdem Verify erfolgreich war. Erneute Serververifikation steht aus.
+
+## Serververifikation der Human-Gate-Fixes (2026-11-11)
+
+Der Serverlauf auf `bb427ff` bestaetigte 63 gezielte Tests, Ruff ohne Fehler und State-Drift ohne Abweichung. Die Gesamtsuite bestand mit 1900 passed / 5 skipped; das Quality Gate meldete `ok: true`, Ruff/Mypy 0, AST 369 Dateien ohne Fehler und Audit-Katalog bestanden. Der Doku-Checker meldete den separat committeten Audit-Katalog-Fix sowie die lokalen uncommitteten UI-Dateien.
+
+## Portabilitaet der Human-Gate-Tests und deklarierte Laufzeitabhaengigkeit (2026-11-11)
+
+Die Human-Gate-Tests legten eine globale Konfiguration unter `/opt/werkstatt/projects` an, obwohl der Gate-Code diese Konfiguration nicht mehr liest. Das Schreiben in einen server-spezifischen absoluten Pfad ist entfernt; die Tests sind nun tmp_path-isoliert und auch ausserhalb des Produktivservers ausfuehrbar. Ausserdem deklariert `requirements.txt` jetzt PyYAML, das von der Produktivkonfiguration importiert wird. Verifikation dieser Folgeaenderungen steht aus.
