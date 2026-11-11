@@ -2240,6 +2240,7 @@ def run_planner(state: RunState) -> bool:
                 if _kf not in _key_files_scan:
                     _key_files_scan.append(_kf)
 
+    _scout_report: dict | None
     _scout_skip_path = _scout_skip_target(aufgabe, _explorer_ctx, pd)
     if _scout_skip_path:
         _code_index = {}
