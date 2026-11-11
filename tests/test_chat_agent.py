@@ -325,3 +325,91 @@ def test_debugger_mode_is_recorded_and_adds_debugger_only_tools(
     assert "pytest_run" in tool_names
     assert "read_file" in tool_names
     assert user_event["payload"]["mode"] == "debugger"
+
+
+def test_chat_loop_explizites_rundenbudget_liefert_abschluss(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "status.txt").write_text("Run-Status: bereit", encoding="utf-8")
+    requests_seen: list[tuple[list[dict[str, Any]], list[dict[str, Any]] | None]] = []
+
+    def _fake_llm(messages, tools=None, cancel_check=None):
+        requests_seen.append((messages, tools))
+        if len(requests_seen) == 1:
+            return {"choices": [{"message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": "read-status",
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "arguments": json.dumps({"path": "status.txt"}),
+                    },
+                }],
+            }}]}
+        return {"choices": [{"message": {
+            "role": "assistant",
+            "content": "Der belegte Status ist bereit.",
+        }}]}
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", _fake_llm)
+    antwort = chat_agent.chat_loop(
+        session, "Pruefe den Status", max_rounds=1, project_dir=tmp_path,
+    )
+
+    assert antwort == "Der belegte Status ist bereit."
+    assert len(requests_seen) == 2
+    assert requests_seen[0][1] is not None
+    assert requests_seen[1][1] is None
+    assert "explizite Obergrenze" in requests_seen[1][0][-1]["content"]
+    assert session.load()[-1]["payload"]["text"] == antwort
+
+
+def test_chat_loop_abbruch_nach_werkzeugschritt_bleibt_replaybar(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "status.txt").write_text("Run-Status: bereit", encoding="utf-8")
+    cancel_checks = 0
+    llm_calls = 0
+
+    def _cancel() -> bool:
+        nonlocal cancel_checks
+        cancel_checks += 1
+        return cancel_checks >= 4
+
+    def _fake_llm(messages, tools=None, cancel_check=None):
+        nonlocal llm_calls
+        llm_calls += 1
+        return {"choices": [{"message": {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "read-status",
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "arguments": json.dumps({"path": "status.txt"}),
+                },
+            }],
+        }}]}
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", _fake_llm)
+    with pytest.raises(chat_agent.ChatCancelled):
+        chat_agent.chat_loop(
+            session,
+            "Pruefe den Status",
+            project_dir=tmp_path,
+            cancel_check=_cancel,
+        )
+
+    assert llm_calls == 1
+    events = session.load()
+    assert [event["kind"] for event in events] == [
+        "user", "tool_call", "tool_result",
+    ]
+    assert events[-1]["payload"]["content"] == "Run-Status: bereit"
