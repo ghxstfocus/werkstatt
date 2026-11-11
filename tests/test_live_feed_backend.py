@@ -205,3 +205,17 @@ def test_chat_job_events_join_project_live_feed(projektion, tmp_path):
         step["kind"] == "chat_job_failed" for step in feed["steps"]
     )
 
+
+def test_live_feed_explizite_run_id_bleibt_projektisoliert(projektion, tmp_path):
+    """Control-Livefeed zeigt bei gleicher Run-ID nur das aktive Projekt."""
+    jetzt = datetime.now(UTC).isoformat()
+    _schreibe(tmp_path, [
+        {"kind": "builder_patch_updated", "run_id": "shared",
+         "project": "demo", "timestamp": jetzt, "agent": "builder"},
+        {"kind": "architect_plan", "run_id": "shared",
+         "project": "anderes-projekt", "timestamp": jetzt, "agent": "architect"},
+    ])
+    feed = inspector.aggregate_live_feed("demo", run_id="shared")
+    kinds = [step["kind"] for step in feed["steps"]]
+    assert "builder_patch_updated" in kinds
+    assert "architect_plan" not in kinds
