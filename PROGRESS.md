@@ -4993,3 +4993,8 @@ fail-closed Verhalten des Debugger-Vertrags.
 ## 2026-11-11 — OP-240 Folge-CI Ruff-Korrektur
 
 Ruff meldete PIE807 im neuen Debugger-Tool-Test: Der Fake-Projektor verwendete einen wirkungslosen Lambda-Wrapper fuer ein leeres Dictionary. Der Test nutzt jetzt direkt den Konstruktor `dict`. Die Folge-CI muss Lifecycle-Projekttests, volle Pytest-Suite und Quality Gate erneut bestaetigen.
+
+
+## 2026-11-11 — OP-240 Run-Evidenz-Test prueft mehrere Audit-Kinds
+
+Die neue Fail-closed-Pruefung fragt mehrere Fehler- und Gate-Kinds ab. Der Test-Fake setzte faelschlich voraus, dass jede Abfrage `loop_failed` lautet, und brach deshalb beim zweiten Kind mit AssertionError ab. Er liefert jetzt nur fuer den Terminalfehler-Nachweis einen Treffer und erlaubt weitere korrekte Kind-Abfragen. Folge-CI ausstehend.

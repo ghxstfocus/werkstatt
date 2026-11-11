@@ -415,8 +415,11 @@ def test_propose_debugger_fix_creates_project_run_bound_proposal(
             assert requested_run == run_id
             assert project == "demo"
             assert limit == 1
-            assert kind == "loop_failed"
-            return [{"kind": kind}] if FakeStore.failure_present else []
+            return (
+                [{"kind": kind}]
+                if FakeStore.failure_present and kind == "loop_failed"
+                else []
+            )
 
     FakeStore.failure_present = True
 
