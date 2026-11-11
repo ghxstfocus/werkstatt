@@ -9,6 +9,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from werkstatt import gate_bridge, gates as gates_mod
+from werkstatt.phases import review as review_mod
+
 _here = Path(__file__).parent
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
@@ -92,9 +95,6 @@ def test_headless_eof_liefert_1(monkeypatch):
 
 
 def test_headless_phase_review_opens_and_waits_on_bridge(monkeypatch):
-    from werkstatt import gate_bridge, gates as gates_mod
-    from werkstatt.phases import review as review_mod
-
     monkeypatch.setattr(gates_mod, "_HEADLESS", True)
     monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: "run-review")
     monkeypatch.setattr(review_mod, "audit_safe", lambda *args: None)
