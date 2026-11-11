@@ -26,6 +26,7 @@ __all__ = [
     "derive_messages",
     "fork",
     "list_sessions",
+    "list_session_summaries",
 ]
 
 
@@ -328,6 +329,50 @@ def list_sessions(
                 "ORDER BY session_id"
             ).fetchall()
     return [str(r[0]) for r in rows]
+
+
+def list_session_summaries(
+    project: str,
+    db_pfad: Path | None = None,
+    *,
+    limit: int = 50,
+) -> list[dict[str, str]]:
+    """Liefert die juengsten Gespraeche mit menschenlesbarem Titel."""
+    pfad = Path(db_pfad) if db_pfad else _db_pfad(project)
+    if not pfad.exists() or limit < 1:
+        return []
+    with closing(sqlite3.connect(pfad)) as conn:
+        rows = conn.execute(
+            "SELECT session_id, MAX(seq), MAX(ts) FROM events "
+            "WHERE kind IN ('user', 'assistant', 'job_turn') "
+            "AND session_id NOT IN ("
+            "SELECT target_session_id FROM chat_snapshots) "
+            "GROUP BY session_id ORDER BY MAX(seq) DESC LIMIT ?",
+            (min(limit, 100),),
+        ).fetchall()
+        summaries: list[dict[str, str]] = []
+        for session_id, _last_seq, updated_at in rows:
+            first = conn.execute(
+                "SELECT kind, payload FROM events WHERE session_id=? "
+                "AND kind IN ('user', 'job_turn') ORDER BY seq ASC LIMIT 1",
+                (session_id,),
+            ).fetchone()
+            payload: dict[str, Any] = {}
+            if first:
+                try:
+                    parsed = json.loads(first[1]) if first[1] else {}
+                    if isinstance(parsed, dict):
+                        payload = parsed
+                except json.JSONDecodeError:
+                    pass
+            title = payload.get("text") or payload.get("user_text") or ""
+            title = " ".join(str(title).split())[:96] or "Projektgespraech"
+            summaries.append({
+                "session_id": str(session_id),
+                "title": title,
+                "updated_at": str(updated_at or ""),
+            })
+    return summaries
 
 
 def fork(
