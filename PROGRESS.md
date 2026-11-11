@@ -5263,3 +5263,17 @@ Gedankengaenge werden nicht in den Reparaturkontext kopiert.
 Umsetzung auf Main: `fb6c680`, `6bf01bc`, `ce2f68d`, `8d4f091`.
 Tests fuer Stage-Belege, Task-Reset und Builder-Kontext sind hinzugefuegt.
 Quality-Gate laeuft; Ergebnis wird erst nach Abschluss des CI-Laufs bewertet.
+
+
+## 2026-11-11 — Chat-Werkzeugarbeit laeuft bis zum Ergebnis
+
+Der Chat-Agent hat keinen willkuerlichen Default von fuenf Werkzeugrunden mehr.
+Er arbeitet bis zur finalen Antwort weiter; Nutzerabbruch bleibt moeglich.
+Wiederholt sich derselbe Werkzeugzyklus mit identischen Argumenten und
+identischem Ergebnis, gibt der Agent zunaechst einen Kurswechsel-Hinweis und
+fasst bei weiterem Stillstand den belegten Stand samt offenen Punkten zusammen.
+Ein explizit gesetztes Rundenbudget endet ebenfalls mit einer normalen,
+beleggebundenen Abschlussantwort statt einer internen Fehlermeldung.
+
+Umsetzung: `2447873`; Regressionstests fuer sechs Werkzeugrunden und
+Stagnationsabschluss hinzugefuegt. CI-Ergebnis wird nach Abschluss geprueft.
