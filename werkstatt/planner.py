@@ -2384,6 +2384,7 @@ def run_planner(state: RunState) -> bool:
         aufgabe, _explorer_ctx, pd,
     )
     _scout_source = "Scout"
+    _code_index: dict = {}
     if _scout_skip_path:
         _direct_report, _direct_reason = _deterministic_literal_replace_plan(
             aufgabe, _scout_skip_path, pd,
