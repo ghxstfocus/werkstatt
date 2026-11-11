@@ -5053,3 +5053,9 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 - OP-399 und OP-400 referenzieren ADR-0030 jetzt maschinenlesbar als Voraussetzung.
 - Chat- und Loop-Starts akzeptieren nur ADRs mit genau einem `Status: accepted`-Eintrag; fehlende oder widerspruechliche ADRs blockieren fail-closed.
 - ADR-0030 ist im ADR-Index als proposed verzeichnet; Selector-Regressionstests decken proposed, accepted und fehlerhafte Metadaten ab.
+
+
+## 2026-11-11 — Veralteten PhaseState bei Auftragswechsel verwerfen
+
+- Ein neuer, freigegebener Plan ersetzt nun den Checkpoint des vorherigen Auftrags. Der alte Checkpoint bleibt bis zur erfolgreichen Planfreigabe erhalten.
+- Ein Integrationstest durchlaeuft die echte Plan-Phase und belegt, dass danach nur der neue Task im PhaseState liegt.

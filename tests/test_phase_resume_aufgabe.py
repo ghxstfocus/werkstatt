@@ -1,38 +1,70 @@
-"""OP-381k: Resume nur wenn Aufgabe identisch."""
+"""OP-381k: Ein anderer Auftrag darf keinen alten PhaseState fortsetzen."""
 from __future__ import annotations
 
-from pathlib import Path
+from types import SimpleNamespace
+
+from werkstatt.phase_state import PhaseState
+from werkstatt.phases import plan as plan_phase
 
 
-def test_plan_py_hat_resume_check():
-    src = Path("werkstatt/phases/plan.py").read_text(encoding="utf-8")
-    assert "_resume_erlaubt" in src
-    assert "loop_resume_verworfen" in src
-    assert 'phase_state.data.get("aufgabe")' in src
+def test_neuer_freigegebener_plan_ersetzt_alte_tasks(
+    monkeypatch, tmp_path,
+) -> None:
+    phase_state = PhaseState("demo", base_dir=tmp_path)
+    phase_state.init_new(
+        "alter Auftrag",
+        [{"id": "old_task", "name": "Task des alten Auftrags"}],
+    )
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        tasks=[],
+        tests=[],
+        akzeptanzkriterien=[],
+        phasen=[],
+        preflight_fehler=[{"klasse": "baseline"}],
+        architect_prosa="",
+        auftrag_bereits_erfuellt=False,
+    )
 
+    plan_gate_results = iter((False, True))
+    monkeypatch.setattr(
+        plan_phase, "_plan_gate", lambda _state: next(plan_gate_results),
+    )
 
-def test_resume_bei_anderer_aufgabe_verworfen():
-    phase_aufgabe = "OP-376: Fehler-Cluster"
-    aktuelle_aufgabe = "OP-381b: Freitext-Gates"
-    erlaubt = True
-    if phase_aufgabe and phase_aufgabe != aktuelle_aufgabe:
-        erlaubt = False
-    assert erlaubt is False
+    def planner(neuer_state):
+        neuer_state.tasks = [
+            {"id": "new_task", "name": "Task des neuen Auftrags"},
+        ]
+        neuer_state.tests = ["pytest -q"]
+        neuer_state.akzeptanzkriterien = ["Neuer Auftrag ist erfuellt"]
+        neuer_state.phasen = []
+        neuer_state.architect_prosa = ""
+        neuer_state.auftrag_bereits_erfuellt = False
+        return True
 
+    monkeypatch.setattr(plan_phase, "run_planner", planner)
+    monkeypatch.setattr(
+        plan_phase, "_validate_contract_safe", lambda *_args: True,
+    )
+    monkeypatch.setattr(
+        plan_phase, "_human_gate_plan", lambda *_args, **_kwargs: 0,
+    )
+    monkeypatch.setattr(
+        plan_phase, "_verify_patches", lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(plan_phase, "audit", lambda *_args: None)
+    monkeypatch.setattr(plan_phase, "group_start", lambda *_args: None)
+    monkeypatch.setattr(plan_phase, "group_end", lambda *_args: None)
+    monkeypatch.setattr(
+        plan_phase, "step", lambda *_args, **_kwargs: None,
+    )
 
-def test_resume_bei_gleicher_aufgabe():
-    phase_aufgabe = "OP-376: Fehler-Cluster"
-    aktuelle_aufgabe = "OP-376: Fehler-Cluster"
-    erlaubt = True
-    if phase_aufgabe and phase_aufgabe != aktuelle_aufgabe:
-        erlaubt = False
-    assert erlaubt is True
+    rc, done = plan_phase._phase_plan_and_preflight(
+        state, "neuer Auftrag", "demo", phase_state,
+    )
 
-
-def test_resume_bei_leerer_phase_aufgabe():
-    phase_aufgabe = ""
-    aktuelle_aufgabe = "OP-376"
-    erlaubt = True
-    if phase_aufgabe and phase_aufgabe != aktuelle_aufgabe:
-        erlaubt = False
-    assert erlaubt is True
+    assert (rc, done) == (0, False)
+    assert phase_state.data["aufgabe"] == "neuer Auftrag"
+    assert [task["id"] for task in phase_state.data["tasks"]] == ["new_task"]
+    assert phase_state.get_next_task()["id"] == "new_task"

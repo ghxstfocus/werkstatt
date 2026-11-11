@@ -19,9 +19,9 @@ Letzte Aktualisierung: 2026-11-11.
 ### OP-397: Hintergrundjobs und Checkpoint-Steuerung
 - **Status:** open
 - **Typ:** async-jobs
-- **Betroffene Dateien:** Chatjobs, Event-Store, Loop-Registry, Web-API und UI-Tests
-- **Akzeptanzkriterien:** Lange Lese-/Verify-Aufgaben laufen mit stabiler Job-ID unabhaengig von Chat-Requests und sind nach Reconnect replaybar. Idempotenz, Abbruch, Projektisolation und maximal ein schreibender Run pro Projekt sind abgesichert. Plan-Aenderungen pausieren am sicheren Checkpoint und brauchen eine neue Planfreigabe.
-- **Tests:** Job-Lifecycle, Parallelitaet, Replay, Abbruch und Planrevision mit Reject/Expiry.
+- **Betroffene Dateien:** Chatjobs, Event-Store, Loop-Registry, Web-API, `werkstatt/phases/plan.py` und Tests
+- **Akzeptanzkriterien:** Lange Lese-/Verify-Aufgaben laufen mit stabiler Job-ID unabhaengig von Chat-Requests und sind nach Reconnect replaybar. Idempotenz, Abbruch, Projektisolation und maximal ein schreibender Run pro Projekt sind abgesichert. Plan-Aenderungen pausieren am sicheren Checkpoint und brauchen eine neue Planfreigabe. Ein Auftragswechsel verwirft den alten PhaseState; erst nach Freigabe wird der neue Checkpoint mit den neuen Tasks geschrieben.
+- **Tests:** Job-Lifecycle, Parallelitaet, Replay, Abbruch, Planrevision mit Reject/Expiry und Auftragwechsel mit Checkpoint-Ersetzung.
 - **Blockiert von:** —
 
 ### OP-398: Evidenzbasierte Auswahl autonomer Arbeit

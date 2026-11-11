@@ -282,7 +282,8 @@ def _phase_plan_and_preflight(
         audit("loop_phase", {"phase": "plan_gate", "status": "approved"}, pd, pn)
         # PhaseState mit vollstaendigem Plan-Checkpoint initialisieren.
         # K21: auch bei existierender aber leerer .phase.yaml ({})-Datei.
-        if (not phase_state.exists()
+        if (not _resume_erlaubt
+                or not phase_state.exists()
                 or not phase_state.data.get("tasks")):
             phase_state.init_new(
                 aufgabe,
