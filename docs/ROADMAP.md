@@ -1,6 +1,6 @@
 # Roadmap — Werkstatt
 
-Stand: 2026-11-10.
+Stand: 2026-11-11.
 Diese Datei fasst die langfristige Entwicklung zusammen. Der verbindliche
 Arbeitsfokus und offene Loop-OPs stehen in `STATUS.md`; erledigte Arbeit
 steht in `PROGRESS.md`. Aeltere Baselines und Phasenberichte weiter unten
@@ -25,8 +25,13 @@ begruendeter, evidenzbasierter Selector statt einer blinden Zeilenfolge.
 - **OP-397:** Persistente Hintergrundjobs mit Progress, Replay und Idempotenz.
 - **OP-398:** Auswahl autonomer Arbeit mit Prioritaets-/Risiko-Begruendung,
   Verifikation und begrenzten Stop-Bedingungen.
+- **OP-399:** Projekt-Hub fuer GitHub- und lokale Quellen, Projekt anlegen/
+  hinzufuegen/oeffnen sowie kontrollierte Werkstatt-Migration.
+- **OP-400:** Projektbezogene Provider-/Modellwahl je Agentenrolle mit
+  globalem Default, Capability-Pruefung und sicherer Secret-Verwaltung.
 
-1. **Phase 1 — UI bereitstellen:** OP-396, OP-397, OP-398, OP-381c,
+1. **Phase 1 — UI bereitstellen:** OP-396, OP-397, OP-398, OP-399,
+   OP-400, OP-381c,
    OP-381b, OP-306, OP-306b und Interfaces (Verify/CI-Status,
    Rollen-Details, Debug-Ansicht). Gate-Edit uebergibt den offenen
    Gate-Kontext an den Debug-Chat. Nach einmaliger Patch-Freigabe
