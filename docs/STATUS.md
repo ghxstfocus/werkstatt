@@ -167,7 +167,7 @@ Letzte Aktualisierung: 2026-11-11.
 - **Typ:** observability
 - **Betroffene Dateien:** werkstatt/web/inspector.py, static/live_feed.js und Tests
 - **Akzeptanzkriterien:** Die Control-Timeline zeigt fuer jeden Arbeitsschritt lesbaren Namen, Zeit, Projekt/Run, Phase oder Task, Status sowie Ergebnis und Beleg. Entscheidungsschritte enthalten eine kurze, belegbasierte Begruendung und den naechsten Schritt. Der Feed verraet keine rohen internen Gedankengaenge. JSONL- und SQLite-Kopien derselben Event-ID erscheinen nur einmal. Projektfilter, Replay und chronologische Reihenfolge bleiben korrekt.
-- **Tests:** Deduplizierung, Projektisolation, Sortierung, Entscheidungsschritt mit Beleg/naechstem Schritt, Replay und sichere Zusammenfassung ohne Rohgedanken.
+- **Tests:** Deduplizierung, projektisolierte JSONL-Timeline/Swimlane/Aktivitaet auch bei expliziter Run-ID und Run-ID-Kollisionen, Sortierung, Entscheidungsschritt mit Beleg/naechstem Schritt, Replay und sichere Zusammenfassung ohne Rohgedanken.
 - **Blockiert von:** OP-395, OP-397
 
 ### OP-395: Builder-Fortschritt waehrend Modellaufrufen zeigen
