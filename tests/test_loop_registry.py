@@ -54,3 +54,25 @@ def test_abgelaufene_startreservierung_wird_freigegeben(tmp_path: Path):
     assert record is not None
     assert record["state"] == "idle"
     assert record["run_id"] == "run-stale"
+
+
+
+def test_control_transition_is_compare_and_set_across_registry_instances(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "registry.db"
+    worker_a = LoopProcessRegistry(db)
+    worker_b = LoopProcessRegistry(db)
+    assert worker_a.reserve("demo", "run-a") == (True, None)
+    worker_a.register("demo", "run-a", os.getpid())
+
+    assert worker_a.transition("demo", "run-a", "running", "pausing") is True
+    assert worker_b.read("demo")["state"] == "pausing"
+    assert worker_b.transition("demo", "run-a", "running", "pausing") is False
+    assert worker_b.transition("demo", "run-a", "pausing", "paused") is True
+    assert worker_a.read("demo")["state"] == "paused"
+
+    assert worker_a.transition("demo", "run-a", "paused", "stopping") is True
+    assert worker_b.reserve("demo", "run-b")[0] is False
+    assert worker_b.transition("demo", "run-a", "stopping", "idle") is True
+    assert worker_a.read("demo")["state"] == "idle"
