@@ -98,3 +98,11 @@ def test_selected_debug_mode_is_forwarded_as_debugger_capability():
     assert 'uiMode === "debug" ? "debugger" : "read"' in js
     assert 'session_id: sid, message: text, mode: _chatRequestMode()' in js
     assert 'mode: _chatRequestMode(),' in js
+
+def test_welcome_copy_matches_available_loop_capabilities() -> None:
+    js = _chat_js()
+    assert "startet keine Runs und ändert keinen Code" not in js
+    assert "Loop-Aktionen anfordern" in js
+    assert "zur Bestätigung." in js
+    assert "Code-Patches direkt aus dem Chat sind noch nicht verfügbar." in js
+\n
