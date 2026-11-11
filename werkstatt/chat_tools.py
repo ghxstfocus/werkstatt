@@ -300,6 +300,47 @@ def _request_loop_action(args: dict[str, Any]) -> str:
                 status_text = status_path.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
                 return json.dumps({"zustand": "error", "detail": f"STATUS kann nicht gelesen werden: {exc}"}, ensure_ascii=False)
+            from werkstatt.web.op_selector import (
+                parse_completed_op_ids,
+                select_next_op,
+            )
+
+            progress_path = _aktives_projekt_dir() / "PROGRESS.md"
+            try:
+                progress_text = progress_path.read_text(
+                    encoding="utf-8", errors="replace",
+                )
+            except OSError:
+                progress_text = ""
+            selection = select_next_op(
+                status_text,
+                completed_ids=parse_completed_op_ids(progress_text, status_text),
+            )
+            candidate = next(
+                (
+                    item for item in selection.get("kandidaten", [])
+                    if item.get("id") == op_id.upper()
+                ),
+                None,
+            )
+            if candidate is None:
+                excluded = next(
+                    (
+                        item for item in selection.get("ausgeschlossen", [])
+                        if item.get("id") == op_id.upper()
+                    ),
+                    None,
+                )
+                reasons = excluded.get("gruende", []) if excluded else []
+                return json.dumps({
+                    "zustand": "needs_input",
+                    "detail": (
+                        f"{op_id} ist nicht startfaehig."
+                        + (" " + "; ".join(reasons) if reasons else
+                           " STATUS.md markiert die OP nicht eindeutig als offen.")
+                    ),
+                    "auswahl": selection,
+                }, ensure_ascii=False)
             match = re.search(
                 rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\Z)",
                 status_text,
