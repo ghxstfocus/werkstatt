@@ -796,7 +796,7 @@ def test_live_worker_reconciles_pause_from_shared_registry(
 
 
 
-def test_pause_serializes_overlapping_resume_through_shared_registry(
+def test_pause_state_rejects_overlapping_resume_across_workers(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
     pytest.importorskip("fastapi")
@@ -809,7 +809,7 @@ def test_pause_serializes_overlapping_resume_through_shared_registry(
         pytest.skip("Loop-Pause wird nur unter POSIX unterstuetzt")
     docs_dir = tmp_path / "demo" / "docs"
     docs_dir.mkdir(parents=True)
-    (docs_dir / "STATUS.md").write_text("# Projektstatus\n", encoding="utf-8")
+    (docs_dir / "STATUS.md").write_text("# Projektstatus\\n", encoding="utf-8")
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
     _reset_loop_registry(app_modul)
 
@@ -819,26 +819,33 @@ def test_pause_serializes_overlapping_resume_through_shared_registry(
         _fake_popen(aufrufe, pid=os.getpid()),
     )
     monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
+    signale: list[tuple[int, int]] = []
+    monkeypatch.setattr(
+        app_modul.os, "killpg",
+        lambda pgid, sig: signale.append((pgid, sig)),
+    )
+
     client = TestClient(app_modul.app)
-    verschachtelt: list[Any] = []
-
-    def _interleave_resume(pgid: int, sig: int) -> None:
-        if sig == signal.SIGSTOP:
-            verschachtelt.append(client.post("/api/projects/demo/resume"))
-
-    monkeypatch.setattr(app_modul.os, "killpg", _interleave_resume)
-
     gestartet = client.post(
         "/api/projects/demo/start", json={"aufgabe": "control race regression"},
     )
     assert gestartet.status_code == 200
-    pausiert = client.post("/api/projects/demo/pause")
+    run_id = gestartet.json()["run_id"]
 
-    assert pausiert.status_code == 200
-    assert len(verschachtelt) == 1
-    assert verschachtelt[0].status_code == 409
-    assert client.get("/api/projects/demo/loop").json()["state"] == "paused"
+    # Worker A hat Pause atomar beansprucht, muss aber noch SIGSTOP senden.
+    registry = app_modul._loop_registry()
+    assert registry.transition("demo", run_id, "running", "pausing") is True
 
-    fortgesetzt = client.post("/api/projects/demo/resume")
-    assert fortgesetzt.status_code == 200
+    # Worker B sieht den persistenten Zwischenzustand und sendet kein SIGCONT.
+    resume = client.post("/api/projects/demo/resume")
+    assert resume.status_code == 409
+    assert "pausing" in resume.json()["detail"]
+    assert signale == []
+
+    assert registry.transition("demo", run_id, "pausing", "paused") is True
+    app_modul._PAUSIERTE_LOOPS.clear()
+    resumed = client.post("/api/projects/demo/resume")
+    assert resumed.status_code == 200
+    assert resumed.json()["fortgesetzt"] is True
+    assert signale == [(os.getpid(), signal.SIGCONT)]
     assert client.get("/api/projects/demo/loop").json()["state"] == "running"
