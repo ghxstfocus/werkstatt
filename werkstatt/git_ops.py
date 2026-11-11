@@ -25,16 +25,29 @@ def _get_git_diff_for_hook() -> str:
         return ""
 
 
+def _git_worktree_marker_exists(pd: Path) -> bool:
+    """Erkennt ein Git-Repository oder einen Worktree am Projekt-Root."""
+    try:
+        (Path(pd) / ".git").lstat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
 def _git_dirty(pd: Path) -> bool:
-    """M-353a: Prueft, ob das Zielprojekt uncommittete Aenderungen hat."""
+    """Prueft Aenderungen; Git-Fehler in erkennbaren Repos sind unsicher."""
     try:
         res = subprocess.run(
             ["git", "-C", str(pd), "status", "--porcelain"],
             capture_output=True, text=True, timeout=10, check=False,
         )
-        return bool(res.stdout.strip())
     except Exception:
-        return False
+        return _git_worktree_marker_exists(pd)
+    if res.returncode == 0:
+        return bool(res.stdout.strip())
+    return _git_worktree_marker_exists(pd)
 
 
 def _git_head(pd: Path) -> str:

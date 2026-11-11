@@ -50,10 +50,10 @@ dieses Betriebsnachweises.
   Werkstatt-Konventionen ueberfuehren.
 - OP-400: Provider und Modell je Projekt und Rolle mit geerbten Defaults.
 
-ADR-0030 ist vorgeschlagen. Vor Remote-Schreiben, Authentifizierung oder
-Secret-Verwaltung wird die Architekturentscheidung angenommen und
-abgesichert. Bis dahin bleiben die aktuellen lokalen Quellen und globalen
-Modell-Defaults aktiv.
+ADR-0030 ist angenommen. OP-399 setzt die Projektquellen server-first und
+sichert Credentials, Remote-Schreiben, Revision-Pinning und isolierte Runs
+vor ihrer Aktivierung ab. Bis zur Umsetzung bleiben bestehende lokale Quellen
+und globale Modell-Defaults der Betriebsweg.
 
 
 ## Spaetere Phase: Lernen und Memory

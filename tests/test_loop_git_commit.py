@@ -212,6 +212,13 @@ def test_git_dirty_nein(tmp_path):
         assert loop._git_dirty(tmp_path) is False
 
 
+def test_git_dirty_git_status_fehler_in_repo_ist_unsicher(tmp_path):
+    (tmp_path / ".git").mkdir()
+    with patch("werkstatt.loop.subprocess.run",
+               return_value=_fake_result(128, "", "index kaputt")):
+        assert loop._git_dirty(tmp_path) is True
+
+
 def test_git_dirty_exception(tmp_path):
     with patch("werkstatt.loop.subprocess.run",
                side_effect=RuntimeError("git weg")):

@@ -5139,3 +5139,8 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 ## 2026-11-11 — Generischen Stash-Drop-Helper entfernen
 
 - Der nach dem Cleanup-Fix ungenutzte `_git_stash_drop` verwarf pauschal den neuesten Stash ohne Ownership-Pruefung. Definition, Re-Export und API-Eintrag sind entfernt.
+
+## 2026-11-11 — Git-Statusfehler fail-closed behandeln
+
+- `_git_dirty` ignorierte bislang einen fehlerhaften Exitcode von `git status` und meldete den Baum als sauber. In einem erkennbaren Repo kann der Loop dadurch die Stash-Sicherung überspringen.
+- Bei Statusfehlern wird ein Projekt mit `.git`-Marker jetzt als unsicher behandelt; Nicht-Git-Projekte bleiben ohne Git lauffaehig. Ein Regressionstest deckt den fehlerhaften Git-Status ab.

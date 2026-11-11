@@ -1,7 +1,7 @@
 # ADR-0030: Projektquellen und projektbezogene Rollenmodelle
 
 - **Datum:** 2026-11-11
-- **Status:** proposed
+- **Status:** accepted
 - **Ergaenzt:** ADR-0023 (Multi-Projekt-Kontext), ADR-0029 (Chat-zentrierte Projektsteuerung)
 - **Grundlage fuer:** OP-399
 
@@ -21,7 +21,7 @@ bleiben; ein Projekt kann einzelne Rollen wie Architect, Builder, Reviewer,
 Chat oder Debugger gezielt ueberschreiben. Zugangsdaten duerfen dabei nicht
 in Repo-Dateien oder Git landen.
 
-## Vorgeschlagene Richtung (noch nicht angenommen)
+## Entscheidung
 
 1. **Serverprojekt mit optionalem Remote:** Ein registriertes Projekt hat eine
    stabile interne Projekt-ID und einen Server-Arbeitsbereich. GitHub-Remote,
@@ -70,27 +70,19 @@ in Repo-Dateien oder Git landen.
    Faehigkeiten werden gegen einen zentralen Katalog validiert. Secrets werden
    nie zurueck an den Browser ausgegeben.
 
-## Zu klaerende Architekturfragen
+## Umsetzungsentscheidungen fuer OP-399
 
-- GitHub-Authentifizierung: GitHub App Installation, OAuth oder vorhandenes
-  Server-Credential; erforderlicher Least-Privilege-Scope fuer private Repos.
-- Projekt-Lifecycle: GitHub-Repo-Erstellung ueber API oder vorhandenes Repo
-  verknuepfen; Freigabe- und Branch-Policy fuer initiales sowie spaeteres Pushen.
-- Remote-Lesezugriff: GitHub API Provider oder isolierter Mirror-/Worktree-
-  Checkout fuer grosse Repos und AST-/Testwerkzeuge.
-- Konfliktpolitik fuer Remote-Updates, wenn lokale Commits vorauseilen oder
-  Branches auseinanderlaufen.
-- Secret-Backend: vorhandene Server-Umgebungsvariablen, OS-Keyring oder
-  dedizierter Secret-Store und dessen Backup-/Rotation-Verhalten.
-- Modell-Katalog: statische Registry oder Provider-Metadaten mit Cache,
-  Ausfallverhalten und Capability-Validierung.
-- Erlaubte Projektquellen, Branch-Policy und Sicherheitsgrenzen beim Start von
-  Tests oder anderen Projektprozessen.
+- **Authentifizierung:** Remote-Zugriff verwendet nur serverseitig konfigurierte Git-/GitHub-Credentials mit Least-Privilege. Das konkrete Credential-Backend und seine Rechte werden vor dem ersten Remote-Schreibzugriff dokumentiert; Browser und Projektdateien erhalten keine Tokens.
+- **Greenfield-Lifecycle:** Scaffolding und Erstpruefung erfolgen auf dem Werkstatt-Server. GitHub-Repository anlegen/verbinden und initial pushen sind getrennte, explizit freizugebende Aktionen. Falls die konfigurierte Integration kein Repository anlegen darf, zeigt die UI die sichere Verknuepfung eines bereits angelegten Repositories, ohne lokale Arbeit zu verlieren.
+- **Remote-Ausfuehrung:** Chat darf autorisierte Repository-Metadaten lesend untersuchen. Tests und andere Projektbefehle laufen ausschliesslich in verwalteten, isolierten Checkouts auf gepinnten Commit-SHAs.
+- **Synchronisierung:** Nur ein sauberer Branch, der ausschliesslich hinter dem Remote liegt, darf automatisch per Fast-Forward aktualisiert werden. Dirty, lokale ahead oder divergierende Branches stoppen die Aktualisierung und erfordern eine erklaerte, gezielte Entscheidung.
+- **Secrets:** Bestehende serverseitige Credential-Verwaltung wird wiederverwendet, sofern sie den Least-Privilege-Vertrag erfuellt. Andernfalls muss vor Remote-Schreibzugriffen ein geeignetes Secret-Backend mit Rotation und Rechtebegrenzung eingerichtet werden.
+- **Modelle:** Projektbezogene Rollen-Overrides und Modellkatalog folgen OP-400; bis dahin gelten globale Defaults.
+- **Migration:** Scaffolder erzeugt einen konkreten Vorschau-Diff; keine bestehenden Dateien werden ohne ausdrueckliche Freigabe ueberschrieben.
 
 ## Anforderungen fuer die Umsetzung
 
 Die Umsetzung muss Quellen-Isolation, stabile Repository-Revisionen,
 Projekt-Tab-Reconnect, nicht-destruktive Migration, Branch-/PR-Write-Policy,
 Secret-Redaktion, Modell-Override mit globalem Fallback sowie
-Fehler-/Offline-Verhalten testen. Diese ADR bleibt "proposed", bis
-Authentifizierung, Checkout-Modell und Secret-Backend entschieden sind.
+Fehler-/Offline-Verhalten testen. Die Architekturentscheidung ist angenommen. OP-399 muss die konkreten serverseitigen Credentials, Berechtigungen und Betriebsgrenzen vor Remote-Schreibzugriffen dokumentieren und die oben genannten Sicherheitsinvarianten durch Tests belegen.
