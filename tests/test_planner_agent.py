@@ -217,6 +217,7 @@ def test_invalid_atomic_scout_plan_escalates_to_architect(tmp_path):
 
     def architect(_state, _aufgabe, _content, _key, _explorer):
         _state.architect_prosa = "## Plan\nAendere module.py."
+        return True
 
     tasks = [{
         "id": "t1",

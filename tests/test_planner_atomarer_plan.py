@@ -86,6 +86,11 @@ class TestSkipArchitect:
     def test_atomarer_plan_ruft_keinen_architect(self, tmp_path) -> None:
         """Fix AY: atomarer_plan=True -> run_planner baut Task direkt
         aus betroffene_stellen, ohne Architect-LLM-Call."""
+        target = tmp_path / "a.py"
+        lines = ["nothing"] * 20
+        lines[9] = "x"
+        lines[19] = "p"
+        target.write_text("\n".join(lines) + "\n", encoding="utf-8")
         st = mk_state(
             project_dir=tmp_path,
             project_name="testproj",
