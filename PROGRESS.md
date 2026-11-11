@@ -4807,3 +4807,10 @@ Mit dem kanonischen /opt/werkstatt-Symlink stieg die saubere GitHub-Suite auf 19
 
 - Commit: 4aeaff83.
 - CI nach Dependency-Ergaenzung: ausstehend.
+
+
+## Erste saubere GitHub-CI vollstaendig gruen (2026-11-11)
+
+Nach den Setup-Fixes besteht der Workflow nun alle Stufen: JavaScript-Syntax, Ruff, direkte pytest-Diagnose und Quality Gate. Die Suite meldete 1906 passed / 5 skipped; Quality Gate: ok true, Regression false, Ruff/Mypy 0, AST 370 Dateien ohne Fehler und Audit-Katalog bestanden. Der Lauf war auf Commit d192545. Der Chat-Control-API-Testfix und die vorausgehende Syntaxreparatur sind damit im CI-Checkout abgedeckt; der Server-Pull und der dortige gezielte Lauf bleiben ausstehend.
+
+- Erfolgreicher Actions-Lauf: https://github.com/ghxstfocus/werkstatt/actions/runs/42932576328
