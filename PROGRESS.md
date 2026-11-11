@@ -4989,3 +4989,7 @@ fail-closed Verhalten des Debugger-Vertrags.
 
 - Ausloeser: Audit der OP-240-Handoff-Implementierung gegen ADR-0029 und den Event-Store.
 - Server-Pull von df539a4 bestaetigt; neue Folgeaenderungen und deren CI-Verifikation stehen noch aus.
+
+## 2026-11-11 — OP-240 Folge-CI Ruff-Korrektur
+
+Ruff meldete PIE807 im neuen Debugger-Tool-Test: Der Fake-Projektor verwendete einen wirkungslosen Lambda-Wrapper fuer ein leeres Dictionary. Der Test nutzt jetzt direkt den Konstruktor `dict`. Die Folge-CI muss Lifecycle-Projekttests, volle Pytest-Suite und Quality Gate erneut bestaetigen.

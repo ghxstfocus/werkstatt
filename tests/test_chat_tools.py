@@ -431,7 +431,7 @@ def test_propose_debugger_fix_creates_project_run_bound_proposal(
             saved["payload"] = payload
 
     monkeypatch.setattr(event_store, "EventStore", FakeStore)
-    monkeypatch.setattr(projection, "Projector", lambda: SimpleNamespace(tail=lambda: {}))
+    monkeypatch.setattr(projection, "Projector", lambda: SimpleNamespace(tail=dict))
     monkeypatch.setattr(chat_session, "ChatSession", FakeSession)
     monkeypatch.setattr(
         chat_tools.subprocess,
