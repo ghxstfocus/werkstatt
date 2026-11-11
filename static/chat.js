@@ -516,9 +516,9 @@
     var detail = document.createElement("p");
     detail.textContent = "Projekt: " + (proposal.project || zustand.projekt) + " · Aktion: " + proposal.action;
     card.appendChild(detail);
-    if (proposal.arguments && proposal.arguments.aufgabe) {
+    if (proposal.task_preview || (proposal.arguments && proposal.arguments.aufgabe)) {
       var task = document.createElement("pre");
-      task.textContent = proposal.arguments.aufgabe;
+      task.textContent = proposal.task_preview || proposal.arguments.aufgabe;
       card.appendChild(task);
     }
     var state = document.createElement("span");
