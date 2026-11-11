@@ -77,6 +77,7 @@ def test_js_renders_curated_timeline_details_safely():
     assert 'step.decision_summary' in js
     assert 'step.result_summary' in js
     assert 'step.next_step' in js
+    assert 'step.task_name' in js
     assert 'Array.isArray(step.evidence)' in js
     assert 'item.textContent = beleg' in js
     assert "details.innerHTML" not in js
