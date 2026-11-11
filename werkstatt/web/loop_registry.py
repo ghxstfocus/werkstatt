@@ -17,6 +17,7 @@ from typing import Any
 
 _STARTING_TTL_SECONDS = 60.0
 _CONTROL_TRANSITION_TTL_SECONDS = 15.0
+_STOP_RETRY_SECONDS = 30.0
 _LIVE_STATES = ("running", "paused", "pausing", "resuming", "stopping")
 _ALLOWED_TRANSITIONS = {
     ("running", "pausing"),
@@ -251,6 +252,40 @@ class LoopProcessRegistry:
                 "WHERE project=? AND run_id=?",
                 (state, state, state, time.time(), project, run_id),
             )
+            conn.commit()
+            return cur.rowcount == 1
+
+    def claim_stop(self, project: str, run_id: str) -> bool:
+        """Atomically claim a stop or reclaim one abandoned for 30 seconds."""
+        now = time.time()
+        retry_before = now - _STOP_RETRY_SECONDS
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT state, updated_at FROM loop_processes "
+                "WHERE project=? AND run_id=?",
+                (project, run_id),
+            ).fetchone()
+            if row is None:
+                conn.commit()
+                return False
+            state, updated_at = str(row[0]), float(row[1])
+            if state in ("running", "paused"):
+                cur = conn.execute(
+                    "UPDATE loop_processes SET state='stopping', updated_at=? "
+                    "WHERE project=? AND run_id=? AND state=?",
+                    (now, project, run_id, state),
+                )
+            elif state == "stopping" and updated_at < retry_before:
+                cur = conn.execute(
+                    "UPDATE loop_processes SET updated_at=? "
+                    "WHERE project=? AND run_id=? AND state='stopping' "
+                    "AND updated_at=?",
+                    (now, project, run_id, updated_at),
+                )
+            else:
+                conn.commit()
+                return False
             conn.commit()
             return cur.rowcount == 1
 
