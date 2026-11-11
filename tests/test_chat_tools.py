@@ -225,7 +225,8 @@ def test_loop_action_tool_only_persists_proposal_and_revalidates_op(
     (docs / "STATUS.md").write_text(
         "### OP-321: Eindeutige Arbeit\n"
         "- **Status:** open\n"
-        "- **Akzeptanzkriterien:** Ergebnis belegbar.\n",
+        "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
+        "- **Tests:** pytest -q tests/test_321.py\n",
         encoding="utf-8",
     )
     db = tmp_path / "sessions.db"
@@ -250,3 +251,53 @@ def test_loop_action_proposal_requires_session_and_never_executes(tmp_path) -> N
         "request_loop_action", {"action": "stop"}, project_dir=tmp_path,
     )
     assert json.loads(result)["zustand"] == "error"
+
+
+@pytest.mark.parametrize(
+    ("status_fields", "expected_detail"),
+    [
+        (
+            "- **Status:** done\n"
+            "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
+            "- **Tests:** pytest -q tests/test_321.py\n",
+            "nicht startfaehig",
+        ),
+        (
+            "- **Status:** open\n"
+            "- **Akzeptanzkriterien:** Ergebnis belegbar.\n",
+            "Tests oder ein pruefbarer Nachweis fehlen",
+        ),
+        (
+            "- **Status:** open\n"
+            "- **Blockiert von:** OP-999\n"
+            "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
+            "- **Tests:** pytest -q tests/test_321.py\n",
+            "Unbekannte oder widerspruechliche Blocker",
+        ),
+    ],
+)
+def test_loop_action_requires_startable_explicit_op(
+    tmp_path, monkeypatch, status_fields: str, expected_detail: str,
+) -> None:
+    import json
+
+    from werkstatt import chat_session
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "### OP-321: Eindeutige Arbeit\n" + status_fields,
+        encoding="utf-8",
+    )
+    db = tmp_path / "sessions.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db)
+
+    result = chat_tools.execute_tool(
+        "request_loop_action", {"action": "start", "op_id": "OP-321"},
+        project_dir=tmp_path, project_name="demo", session_id="session-2",
+    )
+    proposal = json.loads(result)
+
+    assert proposal["zustand"] == "needs_input"
+    assert expected_detail in proposal["detail"]
+    assert not db.exists()
