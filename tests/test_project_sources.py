@@ -10,6 +10,14 @@ import pytest
 from werkstatt import project_sources as sources
 
 
+@pytest.fixture(autouse=True)
+def _managed_worktree_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "WERKSTATT_RUN_WORKTREE_DIR",
+        str(tmp_path / "werkstatt-state" / "run-worktrees"),
+    )
+
+
 def _git(path: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", "-C", str(path), *args],
@@ -36,8 +44,7 @@ def _repo_with_origin(root: Path) -> tuple[Path, Path]:
     _git(project, "config", "user.name", "Werkstatt Test")
     _git(project, "config", "user.email", "test@example.invalid")
     (project / "README.md").write_text("base\n", encoding="utf-8")
-    (project / ".gitignore").write_text(".werkstatt/\n", encoding="utf-8")
-    _git(project, "add", "README.md", ".gitignore")
+    _git(project, "add", "README.md")
     _git(project, "commit", "-m", "base")
     _git(project, "remote", "add", "origin", str(origin))
     _git(project, "push", "-u", "origin", "main")
@@ -106,8 +113,42 @@ def test_prepare_worktree_pins_latest_remote_without_mutating_base(
     assert remote_content == "new remote revision\n"
     assert _git(project, "rev-parse", "HEAD") == base_sha
     assert _git(project, "status", "--porcelain") == ""
+    assert not (project / ".werkstatt").exists()
+    assert not prepared.worktree_path.is_relative_to(project)
     run_branch = _git(prepared.worktree_path, "branch", "--show-current")
     assert run_branch == prepared.run_branch
+
+
+def test_prepare_worktree_can_repeat_without_repo_ignore_rule(tmp_path: Path) -> None:
+    project, origin = _repo_with_origin(tmp_path)
+    remote_sha = _push_remote_commit(origin, tmp_path)
+    with patch.object(sources, "_github_slug", return_value="example/project"):
+        first = sources.prepare_github_run_worktree(project, "first-run")
+        second = sources.prepare_github_run_worktree(project, "second-run")
+
+    assert first is not None
+    assert second is not None
+    assert first.remote_sha == second.remote_sha == remote_sha
+    assert first.worktree_path != second.worktree_path
+    assert all(
+        not prepared.worktree_path.is_relative_to(project)
+        for prepared in (first, second)
+    )
+    assert not (project / ".werkstatt").exists()
+    assert _git(project, "status", "--porcelain") == ""
+
+
+def test_prepare_worktree_rejects_storage_inside_checkout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, _origin = _repo_with_origin(tmp_path)
+    monkeypatch.setenv("WERKSTATT_RUN_WORKTREE_DIR", str(project / ".state"))
+    with (
+        patch.object(sources, "_github_slug", return_value="example/project"),
+        pytest.raises(sources.GitHubSyncError, match="ausserhalb des Projekt-Checkouts"),
+    ):
+        sources.prepare_github_run_worktree(project, "unsafe-storage")
 
 
 def test_prepare_worktree_rejects_dirty_server_checkout(tmp_path: Path) -> None:
