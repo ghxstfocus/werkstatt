@@ -56,19 +56,34 @@ noch die vorhandene Kontrollschicht.
 
 Werkzeuge sind projektgebunden, capability-basiert, validiert und
 auditiert. Kein frei formulierter Shell-Befehl wird aus Chat-Text
-ausgefuehrt. Vor jeder schreibenden Chat-Aktion zeigt das System die
-konkrete Aktion und ihren Umfang und wartet auf ausdrueckliche
-Freigabe. Diese Freigabe gilt nur fuer genau diese Aktion und ersetzt
-weder Loop-Gates noch weitere Freigaben fuer neue Schreibaktionen.
-Schreibende Code-Arbeit laeuft durch denselben Patch-, Verify-,
-Review- und Human-Gate-Pfad wie ein normaler Loop-Lauf. Plan-Gate und
+ausgefuehrt. Der Chat erstellt fuer einen konkreten Auftrag einen
+versionierten Plan mit Ziel, Umfang, Reihenfolge, betroffenen Bereichen,
+Verify-Schritten, Risiken und Stop-Grenzen. Er spricht eine begruendete
+Empfehlung aus und zeigt die Belege dafuer. Derselbe gespeicherte Plan
+wird dem Loop uebergeben; der Mensch muss Auftrag oder Code nicht
+zwischen Chat und Loop kopieren. Plan, Empfehlung und Ausfuehrung
+erscheinen als zusammenhaengender Vorgang im Chat.
+
+Die Planfreigabe erscheint als Gate-Karte direkt im Chat. Sie ist an
+Projekt, Auftrag, Planversion und Ablaufzeit gebunden. Schaltflaechen
+fuer Freigeben, Ablehnen und Aendern sind eindeutig; eine ausdrueckliche
+Textantwort darf nur dann als Gate-Entscheid gelten, wenn sie erkennbar
+auf genau eine offene Gate-Frage antwortet. Bei Mehrdeutigkeit fragt der
+Chat nach. Plan-Aenderungen erzeugen eine neue Version und entwerten die
+vorige Freigabe. Die Freigabe autorisiert die im Plan ausgewiesenen
+Code-, Test- und Doku-Aenderungen, deren Verifikation und den lokalen
+Commit. Ausserhalb des Umfangs wird am Checkpoint pausiert und ein
+revidierter Plan vorgelegt. Externe, destruktive oder nicht reversible
+Aktionen brauchen eine eigene Freigabe.
+
+Schreibende Code-Arbeit laeuft durch denselben Patch-, Verify-, Review-
+und Human-Gate-Pfad wie ein normaler Loop-Lauf. Plan-Gate und
 abschliessendes Human-Gate sind verpflichtend: weder CLI-Schalter noch
 Projektkonfiguration (einschliesslich des Legacy-Felds
 `require_human_approval`) duerfen sie ueberspringen. Start, Pause, Resume
-und Stop sind explizite Kontrollaktionen. Gates und menschliche
-Entscheidungen werden nie aus Chat-Prosa abgeleitet oder automatisch
-bestaetigt.
-
+und Stop sind explizite Kontrollaktionen. Keine Gate-Entscheidung wird
+aus allgemeiner Chat-Prosa, Mehrdeutigkeit oder Modell-Einschaetzung
+abgeleitet oder automatisch bestaetigt.
 #### Natuerliche Loop-Steuerung mit bestaetigter Aktion
 
 Der Nutzer kann im aktiven Projektchat in normaler Sprache um Start,
@@ -204,10 +219,46 @@ laufen die betroffenen Pruefungen erneut. Diese Test-Loop-/Freeze-
 Kette ist Zielzustand aus OP-210/211 und im aktuellen Loop noch nicht
 vollstaendig gebaut.
 
+
+## 7. Rollen und Modellaufrufe nach Bedarf
+
+Rollen sind Verantwortlichkeiten und Qualitaetskontrollen, keine Pflicht
+zu einem LLM-Aufruf pro Rolle und Run. Der aktuelle Plan-Pfad ruft
+sequentiell Scout, Architect und danach den LLM-Task-Split auf. Das
+dupliziert teilweise Auftragssynthese und Planstrukturierung.
+
+Zielbild:
+- Repo-Fakten werden zuerst deterministisch und gezielt gelesen. Der
+  Scout-LLM-Aufruf laeuft nur bei breitem, mehrdeutigem oder
+  evidenzbeduerftigem Auftrag; einfache, eng begrenzte Aenderungen
+  duerfen direkt in den Planpfad.
+- Architect erzeugt einen strukturierten, versionierten Plan mit
+  Zielen, Task-Abhaengigkeiten, Dateien, Akzeptanz und Verify-Schritten.
+  Ein deterministischer Compiler validiert und normalisiert diesen Plan.
+  Ein zweiter LLM-Task-Split ist nur ein begrenzter Fallback, wenn das
+  Schema nicht ausreicht; er ist kein obligatorischer Schritt.
+- Builder bleibt der einzige schreibende Worker je Projekt-Working-Tree.
+  Verify bleibt deterministisch. Ein unabhaengiger Reviewer bleibt fuer
+  risikoreiche Aenderungen erhalten; Reflection startet nur bei einem
+  konkreten Verify-, Review- oder Gate-Befund.
+- Parallel laufen duerfen unabhaengige Read-/Diagnosejobs mit
+  unveraenderlichem Kontext. Schreibende Arbeit bleibt pro Projekt
+  serialisiert und pausiert bei Planabweichung.
+
+Kontext wird nach Belegwert priorisiert: Auftrag und freigegebener Plan,
+relevante ADR-/STATUS-Auswahl, gezielt gefundene Dateien und aktuelle
+Fehlerbelege zuerst; grosse Historien und doppelte Volltext-Kontexte
+werden durch knappe Zusammenfassungen und gezieltes Nachladen ersetzt.
+Jede Rolle erhaelt nur den Kontext fuer ihre Entscheidung. Der Loop
+protokolliert pro Run LLM-Aufrufe, Rolle, Modell sowie Input-/Output-
+Tokens. Rollen oder Pruefungen werden erst entfernt, wenn eine
+repraesentative Evaluation zeigt, dass Qualitaet und Fehlererkennung
+erhalten bleiben und die Einsparung messbar ist.
 ## Konsequenzen
 
-- Der Chat wird zur Bedien- und Erklaerungsschicht, nicht zu einem
-  zweiten, unkontrollierten Coding-Agenten.
+- Der Chat wird zur Bedien-, Planungs- und Freigabeschicht. Er teilt
+  den versionierten Plan mit dem Loop, ohne ein zweiter, unkontrollierter
+  Coding-Agent zu sein.
 - Cockpit und Control zeigen denselben Lauf mit unterschiedlicher
   zeitlicher Aufloesung; Debug liefert spaeter kausale Evidenz.
 - STATUS bleibt lesbar und editierbar; Auswahl und Fortschritt werden
@@ -215,8 +266,9 @@ vollstaendig gebaut.
   widerspruechliche Queue ersetzt.
 - Bestehende read-only Tools bleiben als sichere Grundmenge. Neue
   Kontrollwerkzeuge erhalten enge Schemas, Idempotenz, Audit und Tests.
-- Jede schreibende Chat-Aktion verlangt eine konkrete, vorherige
-  Zustimmung; pauschale Zustimmung fuer spaetere Aktionen gibt es nicht.
+- Eine konkrete Planfreigabe umfasst die angezeigten Aenderungen im
+  genehmigten Umfang; Abweichungen und externe oder destruktive Aktionen
+  verlangen eine neue Zustimmung.
 - Planfreigabe bleibt auch bei automatisierten Skript-Runs verpflichtend;
   headless bedeutet nur, dass die menschliche Antwort ueber den Gate-Store
   statt stdin eingeht. Der isolierte Testmodus ist die einzige Ausnahme fuer
@@ -234,7 +286,7 @@ vollstaendig gebaut.
 - Selector ueberspringt blockierte/erledigte OPs, begruendet seine Wahl
   und fragt bei Mehrdeutigkeit.
 - Wiederholte Start-Requests erzeugen keinen zweiten Schreib-Run.
-- Tests beweisen, dass auch der Scout-No-Op-Pfad das Plan-Gate nicht ueberspringt, Chat keinen Human-Gate-Entscheid automatisiert,
+- Tests beweisen, dass der Chat-Plan ohne Copy/Paste an denselben Loop uebergeben wird, jede Planrevision die vorige Freigabe entwertet, mehrdeutige Antworten keine Freigabe ausloesen und auch der Scout-No-Op-Pfad das Plan-Gate nicht ueberspringt, Chat keinen Human-Gate-Entscheid automatisiert,
   keine schreibende Chat-Aktion ohne vorherige Zustimmung ausfuehrt,
   das Plan-Gate weder durch CLI noch Projektkonfiguration umgangen wird
   und Code-Aenderungen weiterhin durch Verify/Review laufen.

@@ -12,8 +12,8 @@ Letzte Aktualisierung: 2026-11-11.
 - **Status:** open
 - **Typ:** ui-orchestration
 - **Betroffene Dateien:** Chat/Web-UI, Chat- und Loop-Control-Tests
-- **Akzeptanzkriterien:** Repo-Fragen liefern Datei-/Zeilen- oder Testbelege. Loop-Aktionen werden als projekt- und auftragsgebundene Vorschlaege bestaetigt; Freigabe, Ablehnung, Fehler und Ergebnis sind nach Reconnect sichtbar. Schreibende Chat-Aktionen fragen explizit nach Freigabe; Plan- und Ergebnis-Gates bleiben verpflichtend.
-- **Tests:** Chat-Aktionen, Projektisolation, Gates, Reconnect und parallele Fragen waehrend eines Runs.
+- **Akzeptanzkriterien:** Repo-Fragen liefern Datei-/Zeilen- oder Testbelege. Der Chat erstellt fuer direkte Auftraege und OPs einen versionierten, begruendeten Plan samt Empfehlung und uebergibt genau diesen ohne Copy/Paste an den Loop. Das Plan-Gate erscheint im Chat; Freigabe ist an Projekt und Planversion gebunden, Ablehnung/Aenderung erzeugt eine neue Version, Mehrdeutigkeit fragt nach. Die freigegebene Version autorisiert Code, Tests, Doku, Verify und lokalen Commit nur innerhalb ihres Umfangs; externe/destruktive Aktionen erhalten ein separates Gate. Kontrollaktionen bleiben explizit; Ergebnis-Gate und Reconnect sind abgesichert.
+- **Tests:** Plan-Version und Loop-Handoff, Empfehlungsbelege, Freigabe/Ablehnung/Revision, mehrdeutige Antworten, Projektisolation, Kontrollaktionen, Reconnect und parallele Fragen waehrend eines Runs.
 - **Blockiert von:** —
 
 ### OP-397: Hintergrundjobs und Checkpoint-Steuerung
@@ -70,8 +70,8 @@ Letzte Aktualisierung: 2026-11-11.
 - **Status:** open
 - **Typ:** loop-quality
 - **Betroffene Dateien:** werkstatt/scout.py, werkstatt/planner.py und Tests
-- **Akzeptanzkriterien:** Scout liefert einen konkreten, evidenzbasierten Auftrag mit betroffenen Dateien und Erfolgskriterien. Architect erhaelt genau diesen Auftrag plus erforderlichen OP-/API-Kontext, keine redundanten Explorer-Ausgaben. Fehlende oder widerspruechliche Belege fuehren zu einer Rueckfrage statt geratenem Plan.
-- **Tests:** Prompt-/Handoff-Tests und Vergleich realer Scout-Ausgaben.
+- **Akzeptanzkriterien:** Repo-Fakten werden zuerst gezielt gelesen; der Scout-LLM-Aufruf laeuft nur bei breiten, mehrdeutigen oder evidenzbeduerftigen Auftraegen. Architect liefert einen strukturierten Plan, den deterministische Validierung in Tasks ueberfuehrt; ein zweiter LLM-Task-Split ist nur ein begrenzter Fallback. Kontext enthaelt Belege statt redundanter Explorer-Ausgaben. Fehlende/widerspruechliche Belege fuehren zur Rueckfrage. LLM-Aufrufe und Tokens werden je Rolle gemessen; Representative Regressionsevaluation schuetzt die Qualitaet.
+- **Tests:** Kleine/einfache und breite/mehrdeutige Auftraege, strukturierter Plan/Compiler, Scout-Bedingung, Fallback und Token-/Qualitaetsvergleich.
 - **Blockiert von:** —
 
 ### OP-386: Reflection auf Fehlerbelege begrenzen

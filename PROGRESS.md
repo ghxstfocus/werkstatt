@@ -5059,3 +5059,14 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 
 - Ein neuer, freigegebener Plan ersetzt nun den Checkpoint des vorherigen Auftrags. Der alte Checkpoint bleibt bis zur erfolgreichen Planfreigabe erhalten.
 - Ein Integrationstest durchlaeuft die echte Plan-Phase und belegt, dass danach nur der neue Task im PhaseState liegt.
+
+
+## 2026-11-11 — Planfreigabe als Chat-Gate festgelegt
+
+- ADR-0029 beschreibt jetzt einen versionierten Plan als gemeinsames Objekt von Chat und Loop, mit begruendeter Empfehlung und Inline-Gate im Chat.
+- Eine Planfreigabe deckt nur den angezeigten Arbeitsumfang ab; Planrevisionen, Mehrdeutigkeit und externe/destruktive Aktionen erfordern erneute Entscheidung.
+
+## 2026-11-11 — Rollenaufrufe und Tokenbudget nach Bedarf ausrichten
+
+- ADR-0029 und OP-385 halten den aktuellen dreistufigen LLM-Planpfad als Optimierungsziel fest: Scout bedarfsbasiert, Architect mit strukturiertem Plan, deterministische Task-Kompilierung; LLM-Split nur als Fallback.
+- Builder, Verify und unabhaengiger Reviewer bleiben nachweislich getrennte Kontrollfunktionen; Entfernung erst nach messbarer Qualitaetsevaluation.
