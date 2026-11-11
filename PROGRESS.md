@@ -4871,3 +4871,15 @@ Die Modusleiste mit Cockpit, Control, Debug und Runs steht jetzt direkt unter de
 
 - Cache-Buster fuer alle statischen Assets synchron erneuert.
 - Die beiden gemeldeten Tests muessen nach Pull erneut zusammen mit Quality Gate ausgefuehrt werden; CI-Ergebnis steht aus.
+
+## 2026-11-11 — Gemeinsamen Loop-Pausenzustand zwischen Web-Workern
+
+- `_loop_prozess` gleicht den Status eines lokalen Live-Prozesses mit der
+  persistenten Loop-Registry ab. So sehen mehrere ASGI-Worker dieselbe
+  Pause und Fortsetzen kann das erforderliche POSIX-Signal senden.
+- Regressionstest `test_live_worker_reconciles_pause_from_shared_registry`
+  ergänzt: simuliert die Pause durch einen anderen Worker, prüft den UI-Status
+  und dass Resume `SIGCONT` auslöst.
+- **Verifikation offen:** Der Test und die Quality Gates wurden in dieser
+  Umgebung nicht ausgeführt. Serverlauf nach Pull steht aus.
+\n
