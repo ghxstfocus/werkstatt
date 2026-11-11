@@ -38,6 +38,7 @@ _LAUFENDE_LOOPS: dict[str, Any] = {}
 _LOOP_LOG_HANDLES: dict[str, Any] = {}
 _LOOP_RUN_IDS: dict[str, str] = {}
 _PAUSIERTE_LOOPS: set[str] = set()
+_LOOP_PROCESS_STATES = ("running", "paused", "pausing", "resuming", "stopping")
 _LOOP_REGISTRY_PATH = (
     Path(__file__).resolve().parents[2] / ".werkstatt" / "web-loop-registry.db"
 )
@@ -68,7 +69,7 @@ def _loop_prozess(projektname: str) -> Any | None:
         record = _loop_registry().read(projektname)
         if (
             record is not None
-            and record["state"] in ("running", "paused")
+            and record["state"] in _LOOP_PROCESS_STATES
             and record.get("pid") == prozess.pid
             and (
                 not _LOOP_RUN_IDS.get(projektname)
@@ -93,7 +94,7 @@ def _loop_prozess(projektname: str) -> Any | None:
 
     registry = _loop_registry()
     record = registry.read(projektname)
-    if not record or record["state"] not in ("running", "paused"):
+    if not record or record["state"] not in _LOOP_PROCESS_STATES:
         return None
     pid = record.get("pid")
     if pid is None:
@@ -754,16 +755,31 @@ def create_app() -> FastAPI:
             prozess = _loop_prozess(projektname)
             record = _loop_registry().read(projektname)
             if prozess is None:
-                starting = bool(record and record["state"] == "starting")
+                visible_state = (
+                    record["state"]
+                    if record and record["state"] in (
+                        "starting", "pausing", "resuming", "stopping",
+                    )
+                    else "idle"
+                )
                 return {
-                    "state": "starting" if starting else "idle",
-                    "pid": None,
-                    "run_id": record.get("run_id") if starting and record else None,
+                    "state": visible_state,
+                    "pid": record.get("pid") if record and visible_state != "idle" else None,
+                    "run_id": record.get("run_id") if record and visible_state != "idle" else None,
                 }
+            run_id = _LOOP_RUN_IDS.get(projektname)
+            if (
+                record is not None
+                and record.get("run_id") == run_id
+                and record["state"] in _LOOP_PROCESS_STATES
+            ):
+                state = record["state"]
+            else:
+                state = "paused" if projektname in _PAUSIERTE_LOOPS else "running"
             return {
-                "state": "paused" if projektname in _PAUSIERTE_LOOPS else "running",
+                "state": state,
                 "pid": prozess.pid,
-                "run_id": _LOOP_RUN_IDS.get(projektname),
+                "run_id": run_id,
             }
 
     def _audit_loop_control(
@@ -786,22 +802,43 @@ def create_app() -> FastAPI:
             )
         with _projekt_loop_lock(projektname):
             prozess = _loop_prozess(projektname)
+            registry = _loop_registry()
+            record = registry.read(projektname)
             if prozess is None:
+                if record and record["state"] in ("pausing", "resuming", "stopping"):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Loop-Kontrollaktion laeuft bereits: {record['state']}",
+                    )
                 raise HTTPException(status_code=404, detail="kein laufender Loop")
-            if projektname in _PAUSIERTE_LOOPS:
+            run_id = _LOOP_RUN_IDS.get(projektname)
+            if not record or record.get("run_id") != run_id:
+                raise HTTPException(status_code=409, detail="Loop-Registry stimmt nicht mit Prozess ueberein")
+            if record["state"] == "paused":
                 return {"pausiert": True, "bereits_pausiert": True}
+            if record["state"] != "running":
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Loop kann gerade nicht pausiert werden: {record['state']}",
+                )
+            if not registry.transition(projektname, run_id, "running", "pausing"):
+                raise HTTPException(status_code=409, detail="Loop-Zustand wurde parallel geaendert")
             try:
                 os.killpg(prozess.pid, signal.SIGSTOP)
             except ProcessLookupError as exc:
+                registry.transition(projektname, run_id, "pausing", "running")
                 raise HTTPException(
                     status_code=409, detail="Loop wurde bereits beendet",
                 ) from exc
             except OSError as exc:
+                registry.transition(projektname, run_id, "pausing", "running")
                 raise HTTPException(status_code=500, detail=f"Pause fehlgeschlagen: {exc}") from exc
+            if not registry.transition(projektname, run_id, "pausing", "paused"):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Loop wurde pausiert, Registry-Zustand konnte nicht bestaetigt werden",
+                )
             _PAUSIERTE_LOOPS.add(projektname)
-            run_id = _LOOP_RUN_IDS.get(projektname)
-            if run_id:
-                _loop_registry().set_state(projektname, run_id, "paused")
             audit_ok = _audit_loop_control(
                 projektname, prozess, "web_loop_paused", "paused",
             )
@@ -817,24 +854,45 @@ def create_app() -> FastAPI:
             )
         with _projekt_loop_lock(projektname):
             prozess = _loop_prozess(projektname)
+            registry = _loop_registry()
+            record = registry.read(projektname)
             if prozess is None:
+                if record and record["state"] in ("pausing", "resuming", "stopping"):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Loop-Kontrollaktion laeuft bereits: {record['state']}",
+                    )
                 raise HTTPException(status_code=404, detail="kein laufender Loop")
-            if projektname not in _PAUSIERTE_LOOPS:
+            run_id = _LOOP_RUN_IDS.get(projektname)
+            if not record or record.get("run_id") != run_id:
+                raise HTTPException(status_code=409, detail="Loop-Registry stimmt nicht mit Prozess ueberein")
+            if record["state"] == "running":
                 return {"fortgesetzt": True, "bereits_laufend": True}
+            if record["state"] != "paused":
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Loop kann gerade nicht fortgesetzt werden: {record['state']}",
+                )
+            if not registry.transition(projektname, run_id, "paused", "resuming"):
+                raise HTTPException(status_code=409, detail="Loop-Zustand wurde parallel geaendert")
             try:
                 os.killpg(prozess.pid, signal.SIGCONT)
             except ProcessLookupError as exc:
+                registry.transition(projektname, run_id, "resuming", "paused")
                 raise HTTPException(
                     status_code=409, detail="Loop wurde bereits beendet",
                 ) from exc
             except OSError as exc:
+                registry.transition(projektname, run_id, "resuming", "paused")
                 raise HTTPException(
                     status_code=500, detail=f"Fortsetzen fehlgeschlagen: {exc}",
                 ) from exc
+            if not registry.transition(projektname, run_id, "resuming", "running"):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Loop wurde fortgesetzt, Registry-Zustand konnte nicht bestaetigt werden",
+                )
             _PAUSIERTE_LOOPS.discard(projektname)
-            run_id = _LOOP_RUN_IDS.get(projektname)
-            if run_id:
-                _loop_registry().set_state(projektname, run_id, "running")
             audit_ok = _audit_loop_control(
                 projektname, prozess, "web_loop_resumed", "running",
             )
