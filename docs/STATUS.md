@@ -45,6 +45,9 @@ noch nicht vollstaendig.
 - **Akzeptanzkriterien:**
   - Chat ist in Cockpit, Control und Debug der primaere, dauerhaft sichtbare Interaktionspunkt.
   - Repo-Antworten verwenden projektgebundene Tools und nennen Datei/Zeile oder konkreten Run-/Test-Beleg.
+  - Der Nutzer kann Loop-Aktionen in normaler Sprache anfordern. Der Chat-Agent legt einen befristeten Aktionsvorschlag an, fuehrt aber nichts aus; die UI zeigt Aktion, Projekt und den konkreten Startauftrag und verlangt eine eigene Bestaetigung oder Ablehnung. Erst Bestaetigen ruft den bestehenden Control-Endpunkt auf.
+  - Vorschlaege sind projekt- und sessiongebunden, einmalig/idempotent, auditiert und nach Reconnect rekonstruierbar. Abgelaufene, abgelehnte oder bereits bestaetigte Vorschlaege duerfen keine zweite Aktion ausloesen.
+  - Bei Start ohne expliziten Auftrag muss vor der Bestaetigung genau ein startfaehiger OP aufgeloest werden; Mehrdeutigkeit oder fehlende Startkriterien erzeugen eine Rueckfrage statt eines Vorschlags.
   - Der Chat kann explizit einen Loop starten, pausieren, fortsetzen oder stoppen; jede Aktion wird vor Ausfuehrung angezeigt und auditiert. UI und Chat zeigen Erfolg, Ablehnung, laufenden Zustand und Fehler direkt sichtbar.
   - Vor jeder schreibenden Chat-Aktion fragt das System nach ausdruecklicher Freigabe; die Freigabe gilt nur fuer die konkret beschriebene Aktion und ihren Umfang.
   - Das Plan-Gate ist immer verpflichtend und darf weder per CLI-Flag noch Projektkonfiguration automatisch bestaetigt oder deaktiviert werden. Auch Chat-Freigabe ersetzt dieses Gate nicht; der Scout-No-Op-Pfad muss den Befund ebenfalls vor dem Ergebnis-Gate freigeben lassen.
