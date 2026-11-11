@@ -5236,3 +5236,10 @@ Weitere Aussteuerungen: Bereits durch die aktuelle UI abgedeckt bzw. in OP-396/3
 
 - Die Run-Suche der projektgebundenen Command-Palette fragte SQLite bisher ohne Projektfilter ab und konnte Treffer anderer Projekte anzeigen.
 - Die SQL-Abfrage bindet das aktive Projekt nun als Pflichtfilter; ein Regressionstest legt gleichnamige Suchtreffer in zwei Projekten an und bestaetigt, dass nur der projektrelevante Run erscheint.
+
+
+## 2026-11-11 — Control-Timeline mit kuratierten Belegen
+
+- Der Live-Feed kann jetzt Phase/Task-Kontext, Ergebnis-Kurztext, begruendete Entscheidung, Belegliste und naechsten Schritt anzeigen, sofern ein Ereignis diese Felder explizit enthaelt.
+- Backend und UI reichen nur diese benannten Kurzfelder weiter; beliebige Payloads und chain_of_thought bleiben ausgeschlossen. Die UI rendert Nutzdaten ausschliesslich mit DOM-Textknoten.
+- Backend- und Frontend-Regressionstests pruefen den Belegvertrag und dass ein internes Rohfeld nicht in der Timeline erscheint. Die Detailansicht in Control ist damit vorbereitet; Loop-Emitter muessen die strukturierten Belege noch an den relevanten Checkpoints liefern.
