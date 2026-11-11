@@ -42,8 +42,9 @@ in Repo-Dateien oder Git landen.
    ueberschrieben oder still verworfen: der Chat zeigt den Zustand und fordert
    eine gezielte Sync-/Konfliktentscheidung, wenn kein sicherer Fast-Forward
    moeglich ist. Der Loop arbeitet anschliessend in einem verwalteten,
-   isolierten Worktree auf der bestaetigten Revision; der manuelle Clone/Pull
-   entfällt. Neue serverseitige Projekte koennen auf Wunsch mit GitHub
+   isolierten Worktree auf der bestaetigten Revision; Run-Worktrees liegen
+   im Werkstatt-State ausserhalb des Projekt-Checkouts und benoetigen keine
+   projektseitige Ignore-Regel. Der manuelle Clone/Pull entfällt. Neue serverseitige Projekte koennen auf Wunsch mit GitHub
    verbunden und initial veroeffentlicht werden. Initiales Pushen sowie spaetere
    Pushes/Merges benoetigen jeweils eine eigene Freigabe und sind keine
    implizite Folge eines Plan-Gates. Fetch und Push verwenden ausschliesslich
