@@ -7,6 +7,7 @@ bereitet opt-in write-Tools vor (heute alle read).
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -286,7 +287,6 @@ def _request_loop_action(args: dict[str, Any]) -> str:
                 status_text = status_path.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
                 return json.dumps({"zustand": "error", "detail": f"STATUS kann nicht gelesen werden: {exc}"}, ensure_ascii=False)
-            import re
             match = re.search(rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\\Z)", status_text, re.MULTILINE | re.DOTALL)
             if not match:
                 return json.dumps({"zustand": "needs_input", "detail": f"{op_id} wurde nicht in docs/STATUS.md gefunden."}, ensure_ascii=False)
