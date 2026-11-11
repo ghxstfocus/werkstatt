@@ -92,8 +92,7 @@ def test_headless_eof_liefert_1(monkeypatch):
 
 
 def test_headless_phase_review_opens_and_waits_on_bridge(monkeypatch):
-    import werkstatt.audit as audit_mod
-    from werkstatt import gate_bridge, gates as gates_mod
+    from werkstatt import audit as audit_mod, gate_bridge, gates as gates_mod
     from werkstatt.phases import review as review_mod
 
     monkeypatch.setattr(gates_mod, "_HEADLESS", True)
