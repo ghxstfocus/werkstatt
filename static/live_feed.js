@@ -224,6 +224,52 @@
     sym.textContent = stil.symbol;
     row.appendChild(sym);
 
+    var evidence = Array.isArray(step.evidence) ? step.evidence : [];
+    var hasDetails = step.phase || step.task_id || step.result_summary ||
+      step.decision_summary || step.next_step || evidence.length;
+    if (hasDetails) {
+      var details = document.createElement("details");
+      details.className = "lf-step-more";
+      details.addEventListener("click", function (event) {
+        event.stopPropagation();
+      });
+      var summary = document.createElement("summary");
+      summary.textContent = "Schrittdetails";
+      details.appendChild(summary);
+
+      function addDetail(label, value) {
+        if (!value) return;
+        var p = document.createElement("p");
+        var strong = document.createElement("strong");
+        strong.textContent = label + ": ";
+        p.appendChild(strong);
+        p.appendChild(document.createTextNode(String(value)));
+        details.appendChild(p);
+      }
+
+      var kontext = [];
+      if (step.phase) kontext.push("Phase " + step.phase);
+      if (step.task_id) kontext.push("Task " + step.task_id);
+      addDetail("Kontext", kontext.join(" · "));
+      addDetail("Ergebnis", step.result_summary);
+      addDetail("Entscheidung", step.decision_summary);
+      if (evidence.length) {
+        var belegTitel = document.createElement("strong");
+        belegTitel.textContent = "Belege";
+        details.appendChild(belegTitel);
+        var belegListe = document.createElement("ul");
+        evidence.slice(0, 5).forEach(function (beleg) {
+          if (typeof beleg !== "string" || !beleg.trim()) return;
+          var item = document.createElement("li");
+          item.textContent = beleg;
+          belegListe.appendChild(item);
+        });
+        if (belegListe.childNodes.length) details.appendChild(belegListe);
+      }
+      addDetail("Nächster Schritt", step.next_step);
+      row.appendChild(details);
+    }
+
     row.addEventListener("click", function () {
       if (window.WerkstattDetail && window.WerkstattDetail.oeffneRolle) {
         window.WerkstattDetail.oeffneRolle(step.rolle || "loop");
