@@ -158,3 +158,14 @@ def test_assistant_antworten_ohne_blase_nutzer_in_blase() -> None:
     assert ".chat-nachrichten > .chat-msg.assistant {" in css
     assert "background: transparent;" in css
     assert "body[data-mode=\"control\"] .bereich.chat .chat-nachrichten > .chat-msg.assistant" in css
+
+
+def test_chat_composer_hat_einen_fokusrahmen_und_setzt_sich_zurueck() -> None:
+    css = _css()
+    js = _chat_js()
+    focus_start = css.index(".chat-composer:focus-within {", css.rfind("/* Eingabe:"))
+    focus_end = css.index("}", focus_start)
+    focus_rule = css[focus_start:focus_end]
+    assert "box-shadow: none;" in focus_rule
+    assert 'eingabe.style.height = "auto";' in js[js.index('eingabe.value = "";'):js.index("_sende(text);", js.index('eingabe.value = "";'))]
+    assert "resize: none;" in css[css.rfind("/* Eingabe:"):]
