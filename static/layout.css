@@ -3980,3 +3980,15 @@ body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.assistant 
   box-shadow: none;
   resize: none;
 }
+
+
+/* Assistant-Text auf eine angenehme Lesebreite begrenzen. */
+.chat-nachrichten > .chat-msg.assistant,
+body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.assistant {
+  width: min(100%, 68ch);
+  max-width: 68ch;
+  margin-inline: auto;
+}
+.chat-msg.assistant {
+  line-height: 1.65;
+}
