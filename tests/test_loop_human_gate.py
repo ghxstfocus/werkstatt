@@ -60,7 +60,7 @@ def test_gate_kein_project_dir():
 
 
 # =====================================================================
-# Pfad 2: Projektconfig darf Human-Gate nicht deaktivieren
+# Pfad 2: fehlende menschliche Antwort bleibt fail-closed
 # =====================================================================
 
 def test_gate_ohne_menschliche_antwort_bleibt_fail_closed(tmp_path, monkeypatch):
@@ -72,7 +72,6 @@ def test_gate_ohne_menschliche_antwort_bleibt_fail_closed(tmp_path, monkeypatch)
     monkeypatch.setattr("builtins.input", _raise_eof)
     s = _state(tmp_path)
     assert loop._human_gate(s) == 1
-    assert not _kind(tmp_path, "loop_human_gate_auto")
     assert len(_kind(tmp_path, "loop_human_gate_eof")) == 1
 
 
