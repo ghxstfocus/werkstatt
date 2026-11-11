@@ -40,6 +40,31 @@ from ._common import (
 )
 
 
+
+def _audit_task_ok(
+    transitioned: bool,
+    task_id: str,
+    task_name: str,
+    project_dir: Path,
+    project_name: str,
+    *,
+    via: str | None = None,
+) -> None:
+    """Emit a timeline success only after a new done transition."""
+    if not transitioned:
+        return
+    payload = {
+        "task_id": task_id,
+        "name": task_name,
+        "status": "done",
+        "result_summary": "Task abgeschlossen und im Phase-State als erledigt markiert.",
+        "evidence": ["Phase-State: done"],
+    }
+    if via:
+        payload["via"] = via
+    audit("loop_task_ok", payload, project_dir, project_name)
+
+
 def _phase_tasks_loop(
     state: RunState,
     phase_state,
@@ -105,7 +130,7 @@ def _phase_tasks_loop(
             pass
         _t_task = time.monotonic()
         task(i, len(tasks), task_name)
-        audit("loop_task_start", {"task_id": i, "name": task_name}, pd, pn)
+        audit("loop_task_start", {"task_id": task_id, "name": task_name}, pd, pn)
 
         # Builder fuer diesen Task
         state.aktuelle_task = task_obj
@@ -117,14 +142,16 @@ def _phase_tasks_loop(
         # erzeugen keinen Patch, markieren sich direkt als ok.
         _is_read = isinstance(task_obj, dict) and task_obj.get("action") == "read"
         if _is_read:
-            audit("loop_task_read_only", {"task_id": i, "name": task_name}, pd, pn)
+            audit("loop_task_read_only", {"task_id": task_id, "name": task_name}, pd, pn)
             _el_task = time.monotonic() - _t_task
             task_ok(i, len(tasks), elapsed_s=_el_task)
             group_end()
             tasks_ok += 1
             state.tasks_ok_counter = tasks_ok
-            _task_ende(state, phase_state, task_id, ok=True, name=task_name)
-            audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
+            _audit_task_ok(
+                _task_ende(state, phase_state, task_id, ok=True, name=task_name),
+                task_id, task_name, pd, pn,
+            )
             continue
 
         # Verify-Task: kein Builder, direkt Verify + Reviewer.
@@ -141,7 +168,11 @@ def _phase_tasks_loop(
                 group_end()
                 tasks_ok += 1
                 state.tasks_ok_counter = tasks_ok
-                _task_ende(state, phase_state, task_id, ok=True, name=task_name)
+                _audit_task_ok(
+                    _task_ende(state, phase_state, task_id, ok=True, name=task_name),
+                    task_id, task_name, pd, pn,
+                    via="verify_and_review",
+                )
             else:
                 group_end()
                 _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="verify_failed")
@@ -196,12 +227,12 @@ def _phase_tasks_loop(
                               {"task_id": i, "file": _primary}, pd, pn)
                         tasks_ok += 1
                         state.tasks_ok_counter = tasks_ok
-                        _task_ende(state, phase_state, task_id, ok=True,
-                                   name=task_name)
-                        audit("loop_task_ok",
-                              {"task_id": i, "name": task_name,
-                               "via": "builder_patch_bereits_erfuellt"},
-                              pd, pn)
+                        _audit_task_ok(
+                            _task_ende(state, phase_state, task_id, ok=True,
+                                       name=task_name),
+                            task_id, task_name, pd, pn,
+                            via="builder_patch_bereits_erfuellt",
+                        )
                         continue
             # M-355b: run_builder=False -> Task gescheitert, KEIN
             # Durchfallen in den Patch-Pfad mit leerem state.patches.
@@ -248,11 +279,12 @@ def _phase_tasks_loop(
             # Tasks done sind (Live-Beleg 2026-10-30 21:41:45).
             tasks_ok += 1
             state.tasks_ok_counter = tasks_ok
-            _task_ende(state, phase_state, task_id, ok=True,
-                       name=task_name)
-            audit("loop_task_ok", {"task_id": i, "name": task_name,
-                                   "via": "auftrag_bereits_erfuellt_pre_hook"},
-                  pd, pn)
+            _audit_task_ok(
+                _task_ende(state, phase_state, task_id, ok=True,
+                           name=task_name),
+                task_id, task_name, pd, pn,
+                via="auftrag_bereits_erfuellt_pre_hook",
+            )
             continue
 
         # PreToolUse-Hook (Phase 15): Patch pruefen, BEVOR er angewendet wird.
@@ -300,11 +332,12 @@ def _phase_tasks_loop(
                 state.auftrag_bereits_erfuellt = False
                 tasks_ok += 1
                 state.tasks_ok_counter = tasks_ok
-                _task_ende(state, phase_state, task_id, ok=True,
-                           name=task_name)
-                audit("loop_task_ok", {"task_id": i, "name": task_name,
-                                       "via": "auftrag_bereits_erfuellt"},
-                      pd, pn)
+                _audit_task_ok(
+                    _task_ende(state, phase_state, task_id, ok=True,
+                               name=task_name),
+                    task_id, task_name, pd, pn,
+                    via="auftrag_bereits_erfuellt",
+                )
                 continue
             # Reflection versuchen. Sie ruft run_builder + _apply_patches_with_hooks
             # intern; bei True ist der neue Patch schon angewendet.
@@ -325,11 +358,11 @@ def _phase_tasks_loop(
                 # meldete '8 failed'.
                 tasks_ok += 1
                 state.tasks_ok_counter = tasks_ok
-                _task_ende(state, phase_state, task_id, ok=True,
-                           name=task_name)
-                audit("loop_task_ok", {"task_id": i, "name": task_name,
-                                       "via": "reflection"},
-                      pd, pn)
+                _audit_task_ok(
+                    _task_ende(state, phase_state, task_id, ok=True,
+                               name=task_name),
+                    task_id, task_name, pd, pn, via="reflection",
+                )
             elif _refl_ok_al and _applied_nach_al <= _applied_vor_al:
                 # Reflection sagte "ok", aber nichts angewendet
                 audit("loop_reflection_no_apply",
@@ -421,12 +454,12 @@ def _phase_tasks_loop(
                             state.auftrag_bereits_erfuellt = False
                             tasks_ok += 1
                             state.tasks_ok_counter = tasks_ok
-                            _task_ende(state, phase_state, task_id, ok=True,
-                                       name=task_name)
-                            audit("loop_task_ok",
-                                  {"task_id": i, "name": task_name,
-                                   "via": "auftrag_bereits_erfuellt_pre_reviewer"},
-                                  pd, pn)
+                            _audit_task_ok(
+                                _task_ende(state, phase_state, task_id, ok=True,
+                                           name=task_name),
+                                task_id, task_name, pd, pn,
+                                via="auftrag_bereits_erfuellt_pre_reviewer",
+                            )
                             break
                         _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="old_string_not_found")
                         return 1, tasks_ok, tasks
@@ -852,7 +885,9 @@ def _phase_tasks_loop(
         group_end()
         tasks_ok += 1
         state.tasks_ok_counter = tasks_ok
-        _task_ende(state, phase_state, task_id, ok=True, name=task_name)
-        audit("loop_task_ok", {"task_id": i, "name": task_name}, pd, pn)
+        _audit_task_ok(
+            _task_ende(state, phase_state, task_id, ok=True, name=task_name),
+            task_id, task_name, pd, pn,
+        )
 
     return 0, tasks_ok, tasks
