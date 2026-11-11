@@ -350,7 +350,7 @@ def test_pytest_run_requires_debugger_mode_and_project_path(
     assert calls[0][0][0][0] == chat_tools.sys.executable
     assert calls[0][0][0][-1] == str(test_file)
     assert calls[0][1]["timeout"] == 120
-    assert "tests/test_sample.py" in chat_tools.execute_tool(
+    assert "ausserhalb" in chat_tools.execute_tool(
         "pytest_run", {"path": "../outside.py"},
         mode="debugger", project_dir=tmp_path,
     )
