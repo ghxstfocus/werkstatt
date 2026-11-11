@@ -4825,3 +4825,11 @@ Tests pruefen Plan-Edit-Weitergang, ADR-Mini-Entscheidung und den echten Phase-R
 - Commits: 1d9e974 (Headless-Eingaben), 063410b (Edit-/ADR-Regressionstests), 771382f / 2c0771e (Bridge-Roundtrip-Test und Lint-Korrekturen).
 - GitHub Actions auf 2c0771e: JavaScript-Syntax, Ruff, pytest und Quality Gate gruen; 1910 passed / 5 skipped, Ruff 0, Mypy 0, AST 370 Dateien ohne Fehler, Katalog bestanden; ok=true, regression=false.
 - Server-Dogfooding nach Pull steht aus.
+
+
+## OP-396 — explizite Chat-Starts pruefen Startfaehigkeit vor Vorschlag (2026-11-11)
+
+Der Chat hat fuer eine explizite OP-ID bisher nur die Ueberschrift in STATUS.md gesucht und daraus eine bestaetigbare Aktionskarte gebaut. Der Loop-Control-Endpunkt hat ungueltige Starts zwar erneut abgewiesen, dadurch erhielt der Nutzer aber erst nach Freigabe einen Fehler. request_loop_action verwendet jetzt denselben evidenzbasierten OP-Selector und erzeugt nur fuer eine eindeutig startfaehige OP einen Vorschlag. Bei erledigtem Status, fehlenden Tests/Nachweisen oder unbekannten Blockern kommen die Ausschlussgruende als Rueckfrage zurueck; es wird kein Session-Vorschlags-Event angelegt. Die erneute Validierung beim tatsaechlichen Start bleibt bestehen, damit Statusaenderungen nach dem Vorschlag sicher abgefangen werden.
+
+- Regressionstests fuer erledigte OPs, fehlende Nachweise und unbekannte Blocker; gueltiger expliziter Start bleibt abgedeckt.
+- CI-Verifikation nach den Commits: ausstehend.
