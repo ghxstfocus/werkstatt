@@ -175,7 +175,11 @@
     loop_rollback_skipped: "Rollback übersprungen",
     loop_plan_gate_approved: "Plan freigegeben",
     loop_verify_ok: "Prüfung erfolgreich",
-    loop_verify_failed: "Prüfung fehlgeschlagen"
+    loop_verify_failed: "Prüfung fehlgeschlagen",
+    loop_verify_recovery_started: "Gezielte Reparatur gestartet",
+    loop_verify_recovery_error: "Reparatur konnte nicht ausgeführt werden",
+    loop_verify_recovered: "Abschlussprüfung nach Reparatur grün",
+    loop_verify_recovery_stalled: "Reparatur noch nicht erfolgreich"
   };
 
   function _lesbarerSchritt(step) {

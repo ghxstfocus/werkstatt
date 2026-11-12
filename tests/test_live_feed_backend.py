@@ -264,3 +264,35 @@ def test_live_feed_exposes_only_curated_decision_evidence(projektion, tmp_path):
     assert step["next_step"] == "Offenes Akzeptanzkriterium pruefen."
     assert "chain_of_thought" not in step
     assert "chain_of_thought" not in str(step)
+
+
+def test_live_feed_shows_verify_recovery_as_curated_steps(projektion, tmp_path):
+    """Recovery-Verlauf zeigt Ergebnis und nächsten Schritt ohne Rohprompt."""
+    jetzt = datetime.now(UTC)
+    _schreibe(tmp_path, [
+        {
+            "kind": "loop_verify_recovery_started", "run_id": "r-recovery",
+            "project": "demo",
+            "timestamp": jetzt.isoformat(),
+            "agent": "agent_pipeline",
+            "payload": {
+                "stage_ids": ["pytest_regression"],
+                "result_summary": "Gezielte Reparatur startet.",
+                "decision_summary": "Nur belegte Verify-Befunde werden bearbeitet.",
+                "evidence": ["Verify-Stage: pytest_regression"],
+                "next_step": "Reparieren und vollständige Endprüfung wiederholen.",
+                "prompt": "Dieses Rohfeld darf nicht in die Timeline.",
+            },
+        },
+    ])
+    feed = inspector.aggregate_live_feed("demo")
+    step = next(
+        item for item in feed["steps"]
+        if item["kind"] == "loop_verify_recovery_started"
+    )
+    assert step["result_summary"] == "Gezielte Reparatur startet."
+    assert step["decision_summary"] == "Nur belegte Verify-Befunde werden bearbeitet."
+    assert step["evidence"] == ["Verify-Stage: pytest_regression"]
+    assert step["next_step"] == "Reparieren und vollständige Endprüfung wiederholen."
+    assert "prompt" not in step
+    assert "prompt" not in str(step)

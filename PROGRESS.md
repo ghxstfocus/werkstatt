@@ -5411,3 +5411,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - OP-403 begonnen: Ein fehlgeschlagenes Phase-End-Verify kann im selben Run anhand gespeicherter, redigierter Stage-Auszuege in die bestehende Reflection-Reparatur gehen. Ein erfolgreicher Reparaturcheck reicht nicht; danach muss die vollstaendige Phase-End-Verify erneut gruen sein. Unvollstaendige Failure Records bleiben fail-closed.
 
 - OP-403 Audit-Integration: Recovery-Start, Reparaturfehler, erfolgreiche Reparatur und Stillstand sind jetzt als bekannte Audit-Kinds registriert; der Regressionstest ist im Modul-Stil formatiert.
+
+
+## 2026-11-12 — Verify-Recovery in der Control-Timeline erklaert
+
+- Die same-run-Recovery nach rotem Phase-End-Verify liefert jetzt explizite Kurztexte zu Ergebnis, begruendeter Entscheidung, Verify-Belegen und naechstem Schritt.
+- Recovery-Start, Reparaturfehler, gruene Reparatur und nicht erfolgreiche Reparatur haben eigene lesbare Labels in Backend und Control-UI. Die Timeline bleibt bei kuratierten Feldern; Prompt-/Rohdaten werden nicht dargestellt.
+- Ein Backend-Regressionstest prueft die Kurzfelder und schliesst Rohprompt-Leckage aus. GitHub Actions muss das Paket noch verifizieren.

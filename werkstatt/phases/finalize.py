@@ -181,6 +181,20 @@ def _phase_finalize(
                     "failure_id": original_failure_id,
                     "stage_ids": stage_ids,
                     "artifact_ref": failure_record.get("artifact_ref"),
+                    "result_summary": (
+                        "Die Abschlussprüfung ist fehlgeschlagen; eine gezielte "
+                        "Reparatur anhand der gespeicherten Stage-Befunde startet."
+                    ),
+                    "decision_summary": (
+                        "Nur die belegten fehlgeschlagenen Verify-Stages gehen "
+                        "in die Reparatur; der Lauf bleibt bis zum erneuten "
+                        "vollständigen Verify offen."
+                    ),
+                    "evidence": [f"Verify-Stage: {stage_id}" for stage_id in stage_ids],
+                    "next_step": (
+                        "Befunde beheben und anschließend die vollständige "
+                        "Phase-End-Verify erneut ausführen."
+                    ),
                 },
                 pd,
                 pn,
@@ -198,6 +212,14 @@ def _phase_finalize(
                     {
                         "failure_id": original_failure_id,
                         "error_type": type(exc).__name__,
+                        "result_summary": "Die gezielte Reparatur konnte nicht ausgeführt werden.",
+                        "decision_summary": (
+                            "Der Run bleibt fehlgeschlagen; ein grüner Abschluss "
+                            "wird nicht angenommen."
+                        ),
+                        "next_step": (
+                            "Failure Record und Reparaturfehler im Debug-Modus prüfen."
+                        ),
                     },
                     pd,
                     pn,
@@ -208,6 +230,21 @@ def _phase_finalize(
                     {
                         "failure_id": original_failure_id,
                         "stage_ids": stage_ids,
+                        "result_summary": (
+                            "Die Reparatur war erfolgreich und die vollständige "
+                            "Phase-End-Verify ist wieder grün."
+                        ),
+                        "decision_summary": (
+                            "Der Run darf nach bestandener Abschlussprüfung "
+                            "normal fortgesetzt werden."
+                        ),
+                        "evidence": [
+                        f"Verify-Stage bestanden: {stage_id}"
+                        for stage_id in stage_ids
+                    ],
+                        "next_step": (
+                            "Commit- und Abschlusslogik des Runs fortsetzen."
+                        ),
                     },
                     pd,
                     pn,
@@ -222,6 +259,22 @@ def _phase_finalize(
                         "failure_id": final_failure_record.get("failure_id"),
                         "previous_failure_id": original_failure_id,
                         "stage_ids": stage_ids,
+                        "result_summary": (
+                            "Der Reparaturversuch hat die vollständige "
+                            "Abschlussprüfung nicht grün gemacht."
+                        ),
+                        "decision_summary": (
+                            "Der Run stoppt fehlgeschlagen; Änderungen werden "
+                            "nicht als erfolgreich abgeschlossen gemeldet."
+                        ),
+                        "evidence": [
+                            f"Betroffene Verify-Stage: {stage_id}"
+                            for stage_id in stage_ids
+                        ],
+                        "next_step": (
+                            "Fehlerbelege im Debug-Modus prüfen und gezielt "
+                            "einen neuen Run starten."
+                        ),
                     },
                     pd,
                     pn,
