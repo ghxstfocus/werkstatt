@@ -73,11 +73,12 @@ def _persist_run_checkpoint(
     run_id: str,
     phase_state: Any,
     next_task: dict[str, Any] | None,
+    *,
+    run_state: RunState | None = None,
 ) -> None:
     """Persist task-boundary state and acknowledge only observed chat notices."""
-    state = phase_state.state if hasattr(phase_state, "state") else None
-    if state is not None:
-        state.assert_run_lease()
+    if run_state is not None:
+        run_state.assert_run_lease()
     record = store.get_run_record(project_name, run_id)
     if record is None:
         return
@@ -122,6 +123,8 @@ def _persist_run_checkpoint(
             int(checkpoint.get("inbox_offset", 0)),
             max(int(message["seq"]) for message in claimed),
         )
+    if run_state is not None:
+        run_state.assert_run_lease()
     store.update_run_checkpoint(
         project_name,
         run_id,
@@ -129,6 +132,8 @@ def _persist_run_checkpoint(
         expected_version=record["checkpoint_version"],
     )
     for message in claimed:
+        if run_state is not None:
+            run_state.assert_run_lease()
         if not store.acknowledge_run_message(
             message["seq"], worker_id, message["fencing_token"],
         ):
@@ -188,6 +193,7 @@ def _phase_tasks_loop(
         if run_id:
             _persist_run_checkpoint(
                 EventStore(), pn, run_id, phase_state, next_task,
+                run_state=state,
             )
         if next_task is None:
             # OP-163: unerfuellte Deps -> als blocked markieren.
@@ -503,6 +509,7 @@ def _phase_tasks_loop(
                 target.parent.mkdir(parents=True, exist_ok=True)
                 # FIX N 2026-10-31: Write-Fehler fail-closed.
                 try:
+                    state.assert_run_lease()
                     target.write_text(content)
                 except OSError as _e:
                     audit("loop_patch_write_failed",
@@ -582,6 +589,7 @@ def _phase_tasks_loop(
                     break
                 # FIX N 2026-10-31: Write-Fehler fail-closed.
                 try:
+                    state.assert_run_lease()
                     target.write_text(_neu_content2)
                 except OSError as _e:
                     audit("loop_patch_write_failed",
@@ -634,6 +642,7 @@ def _phase_tasks_loop(
                           {"file": file}, pd, pn)
                     continue
                 try:
+                    state.assert_run_lease()
                     target.unlink()
                 except OSError as _e:
                     audit("loop_patch_delete_failed",
