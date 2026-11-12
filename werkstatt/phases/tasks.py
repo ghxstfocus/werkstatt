@@ -254,8 +254,10 @@ def _phase_tasks_loop(
         _is_verify = isinstance(task_obj, dict) and task_obj.get("action") == "verify"
         if _is_verify:
             _v_ok = bool(_verify_patches(state, phase="post_build"))
+            check_run_lease(state)
             if _v_ok:
                 _r_ok = bool(run_reviewer(state))
+                check_run_lease(state)
             else:
                 _r_ok = False
             _el_task = time.monotonic() - _t_task
@@ -318,6 +320,7 @@ def _phase_tasks_loop(
                     try:
                         _v_gruen_b = bool(
                             _verify_patches(state, phase="post_build"))
+                        check_run_lease(state)
                     except Exception:
                         _v_gruen_b = False
                     if _v_gruen_b:
@@ -768,6 +771,7 @@ def _phase_tasks_loop(
             _rev_ok = False
         else:
             _rev_ok = _with_spinner(f"Reviewer t{i}", lambda: run_reviewer(state))
+        check_run_lease(state)
         # K40: Historie pushen (unabhaengig vom Ergebnis).
         _cur_bugs = state.reviewer_bugs or []
         if _cur_bugs:
@@ -878,7 +882,10 @@ def _phase_tasks_loop(
                 # Fall durch zum task_ok (kein _task_ende im Else-Zweig)
             # M-306d Fix 2: Nach erfolgreicher Reflection MUSS der
             # Reviewer erneut pruefen. Sonst fail-open (HR-R9).
-            elif not run_reviewer(state):
+            else:
+                _post_reflection_review_ok = run_reviewer(state)
+                check_run_lease(state)
+            if not _post_reflection_review_ok:
                 audit("loop_reviewer_rejected_after_reflection", {"task_id": i}, pd, pn)
                 # M-343c: pytest ist das letzte Wort.
                 _last_errors = state.last_verify_errors or []
