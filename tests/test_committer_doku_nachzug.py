@@ -13,9 +13,9 @@ from werkstatt.committer import (
     _op_nnn_als_expliziter_auftrag,
     _op_nnn_aus_aufgabe,
     _op_nnn_fuer_doku_nachzug,
-    _status_md_op_entfernen,
-    _snapshot_op_doku,
     _restore_op_doku,
+    _snapshot_op_doku,
+    _status_md_op_entfernen,
     _update_changelog,
     _update_kennzahlen,
 )
