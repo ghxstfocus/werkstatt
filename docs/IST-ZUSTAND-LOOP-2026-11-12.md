@@ -86,7 +86,7 @@ Snapshot; er ersetzt nicht die historische Befundlage bei `d02170e`.
 - **Abschluss-Verify:** `_phase_finalize` erzeugt Failure Records,
   diagnostiziert fehlgeschlagene Stages, ruft gezielte Reflection auf und
   fuehrt anschliessend die volle Phase-End-Verify erneut aus
-  (`werkstatt/phases/finalize.py:477-729)). Wiederholter Fehler oder
+  (`werkstatt/phases/finalize.py:477-729). Wiederholter Fehler oder
   unveraenderter Worktree stoppt fail-closed; bei erfolgloser automatischer
   Reparatur folgt ein Recovery-Gate. Der fruehere Satz, es gebe nach dem
   ersten fehlgeschlagenen Abschluss-Verify gar keinen Reparaturpfad mehr,
