@@ -244,3 +244,78 @@ def test_orphaned_worker_state_blocks_web_start(
 
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "loop_worker_identity_ambiguous"
+
+def test_live_worker_after_register_failure_is_kept_orphaned(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    import subprocess
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_module
+    from werkstatt.web import run_recovery
+
+    project_dir = tmp_path / "demo"
+    (project_dir / "docs").mkdir(parents=True)
+    (project_dir / "docs" / "STATUS.md").write_text("status", encoding="utf-8")
+    run_id = "demo-20261112-abc12345"
+    context = {
+        "schema_version": 1,
+        "goal": "Aufgabe",
+        "op_id": None,
+        "source": {"kind": "local"},
+    }
+    registry_record = {"state": "idle", "run_id": run_id, "context": context}
+    states: list[str] = []
+
+    class _Registry:
+        def read(self, _project: str) -> dict[str, Any]:
+            return registry_record
+
+        def reserve(
+            self,
+            _project: str,
+            _run_id: str,
+            *,
+            context: dict[str, Any],
+        ) -> tuple[bool, None]:
+            return True, None
+
+        def register(self, *_args: Any) -> None:
+            raise RuntimeError("registry unavailable")
+
+        def set_state(self, _project: str, _run_id: str, state: str) -> bool:
+            states.append(state)
+            return True
+
+    class _StuckProcess:
+        pid = 12345
+
+        def poll(self) -> None:
+            return None
+
+        def wait(self, timeout: float) -> None:
+            raise subprocess.TimeoutExpired("worker", timeout)
+
+    def _ignore_signal(*_args: Any) -> None:
+        return None
+
+    monkeypatch.setattr(app_module, "_PROJECTS_BASE", tmp_path)
+    monkeypatch.setattr(app_module, "_loop_registry", lambda: _Registry())
+    monkeypatch.setattr(app_module, "_loop_prozess", lambda _project: None)
+    monkeypatch.setattr(app_module.subprocess, "Popen", lambda *_a, **_k: _StuckProcess())
+    monkeypatch.setattr(app_module.os, "killpg", _ignore_signal)
+    monkeypatch.setattr(run_recovery, "prepare_run_recovery", lambda *_a: {
+        "run_id": run_id,
+        "goal": "Aufgabe",
+        "op_id": None,
+        "context": context,
+        "project_dir": project_dir,
+    })
+
+    response = TestClient(app_module.app).post("/api/projects/demo/resume")
+
+    assert response.status_code == 500
+    assert states == ["orphaned"]

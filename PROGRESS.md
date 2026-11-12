@@ -5841,3 +5841,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Nach einem Serverabbruch zwischen Prozessstart und Registry-Registrierung prueft die Linux-Registry abgelaufene `starting`-Eintraege anhand der exakten CLI-Identitaet aus Projekt und Run-ID. Ein eindeutiger Treffer wird wieder an den bestehenden Worker gebunden; ohne Treffer wird die Reservierung freigegeben.
 - Mehrere passende oder nicht vollstaendig pruefbare Worker werden als `orphaned` markiert. Start und Resume bleiben dann fail-closed gesperrt, bis die Zuordnung eindeutig ist; es wird kein zweiter Schreibprozess gestartet.
 - Tests verwenden lebende OS-Subprozesse mit der echten Web-CLI-Argumentform und pruefen eindeutige Wiederanbindung, Mehrdeutigkeit, Sperre eines neuen Runs und Recovery nach Ende eines der Prozesse. Ein End-to-End-Test mit einem tatsaechlichen Loop-Serverabbruch bleibt fuer OP-397 offen.
+
+## ADR-0032 M1 — Registry-Fehler bei lebendem Worker (2026-11-12)
+
+- Schlug die Registry-Registrierung nach dem Prozessstart fehl, setzte die API einen nach dem fehlgeschlagenen Stop noch lebenden Worker bisher trotzdem auf `idle`. Dadurch konnte ein weiterer Start parallel zum bestehenden Schreibprozess zugelassen werden.
+- Lebende Worker werden jetzt fail-closed als `orphaned` markiert; ein spaeterer Registry-Read versucht die exakte Run-Identitaet wieder zuzuordnen. Nur ein nachweislich beendeter Worker wird auf `idle` gesetzt.
+- Ein API-Regressionstest simuliert Registrierungsfehler plus fehlgeschlagenes Stoppen und belegt, dass der Zustand `orphaned` bleibt.

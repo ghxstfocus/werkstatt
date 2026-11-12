@@ -392,7 +392,7 @@ class LoopProcessRegistry:
         return identity
 
     def set_state(self, project: str, run_id: str, state: str) -> bool:
-        if state not in ("running", "paused", "idle"):
+        if state not in ("running", "paused", "idle", "orphaned"):
             raise ValueError(f"ungueltiger Loop-Zustand: {state}")
         with closing(self._connect()) as conn:
             cur = conn.execute(

@@ -1023,10 +1023,13 @@ def create_app() -> FastAPI:
                         prozess.wait(timeout=5)
                     except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
                         pass
-                    # Ein noch lebender Prozess muss seinen Worktree behalten.
+                    # Ein lebender Worker darf nie als idle freigegeben werden:
+                    # ein weiterer Start wuerde einen zweiten Writer erzeugen.
                     if prozess.poll() is None:
                         launch_succeeded = True
-                    registry.set_state(projektname, run_id, "idle")
+                        registry.set_state(projektname, run_id, "orphaned")
+                    else:
+                        registry.set_state(projektname, run_id, "idle")
                     if _log_fh is not None:
                         _log_fh.close()
                     raise HTTPException(
