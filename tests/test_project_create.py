@@ -22,11 +22,11 @@ def test_endpoint_registriert():
 
 def test_endpoint_hat_validation():
     src = _api()
-    # Name-Regex, Pfad-Pflicht, mkdir, scaffold
+    # Name- und Pfadvalidierung sowie gemeinsamer Provisionierungsdienst
     assert "_re.fullmatch" in src
     assert "startswith(\"/opt/\")" in src
-    assert "Zielverzeichnis nicht leer" in src
-    assert "scaffold(name, projekt_dir)" in src
+    assert "projekt_dir.relative_to(erlaubte_basis)" in src
+    assert "create_local_project(name, projekt_dir)" in src
 
 
 def test_html_hat_modal():
