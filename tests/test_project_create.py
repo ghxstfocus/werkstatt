@@ -26,7 +26,9 @@ def test_endpoint_hat_validation():
     assert "_re.fullmatch" in src
     assert "startswith(\"/opt/\")" in src
     assert "projekt_dir.relative_to(erlaubte_basis)" in src
-    assert "create_local_project(name, projekt_dir)" in src
+    assert "create_local_project(" in src
+    assert "allowed_root=_PROJECTS_BASE" in src
+    assert "result.as_dict()" in src
 
 
 def test_html_hat_modal():
