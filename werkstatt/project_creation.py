@@ -6,9 +6,12 @@ startbares Loop-Manifest ohne Ueberschreiben registrieren.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 import yaml
@@ -29,12 +32,64 @@ _DOCS = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class LocalProjectResult:
+    """Ergebnis der Anlage, unabhaengig von UI- oder Chat-Aufrufern."""
+
+    name: str
+    project_dir: Path
+    manifest: Path
+    bericht: dict[str, str]
+
+    def as_dict(self) -> dict[str, Any]:
+        """Serialisiert das Ergebnis fuer den Web-API-Vertrag."""
+        return {
+            "name": self.name,
+            "project_dir": str(self.project_dir),
+            "manifest": str(self.manifest),
+            "bericht": dict(self.bericht),
+        }
+
+
+def _write_manifest_exclusive(manifest: Path, daten: dict[str, Any]) -> None:
+    """Schreibt erst vollstaendig in Tempdatei, danach atomar ohne Replace."""
+    temp_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=manifest.parent,
+            prefix=f".{manifest.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as fh:
+            temp_path = Path(fh.name)
+            yaml.safe_dump(
+                daten,
+                fh,
+                allow_unicode=True,
+                sort_keys=False,
+                default_flow_style=False,
+            )
+            fh.flush()
+            os.fsync(fh.fileno())
+        # Hard-link creation is atomic and fails if another request registered
+        # the same project name first. Both paths are in the same filesystem.
+        os.link(temp_path, manifest)
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 def create_local_project(
     name: str,
     project_dir: Path,
     *,
     allowed_root: Path = Path("/opt"),
-) -> dict[str, Any]:
+) -> LocalProjectResult:
     """Scaffoldet ein neues Serverprojekt und registriert sein Loop-Manifest.
 
     Bestehende Verzeichnisse und Manifeste werden fail-closed abgewiesen.
@@ -72,24 +127,12 @@ def create_local_project(
             "require_human_approval": True,
             "review_commit_package": True,
         }
-        with manifest.open("x", encoding="utf-8") as fh:
-            manifest_angelegt = True
-            yaml.safe_dump(
-                daten,
-                fh,
-                allow_unicode=True,
-                sort_keys=False,
-                default_flow_style=False,
-            )
+        _write_manifest_exclusive(manifest, daten)
+        manifest_angelegt = True
     except Exception:
         if manifest_angelegt:
             manifest.unlink(missing_ok=True)
         shutil.rmtree(ziel, ignore_errors=True)
         raise
 
-    return {
-        "name": name,
-        "project_dir": str(ziel),
-        "manifest": str(manifest),
-        "bericht": bericht,
-    }
+    return LocalProjectResult(name, ziel, manifest, bericht)
