@@ -5407,3 +5407,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - CI pruefte den Fingerprint-Code und fand zwei Test-Fixture-Luecken: Der Git-Mock lieferte keine leere `ls-files`-Liste und der neue Regressionstest codierte NUL/Newline falsch. Beides ist korrigiert; die naechste CI prueft den echten Inhaltswechsel.
 
 - Der vollstaendige Lauf erreichte nach dem Fingerprint-Fix einen nichtdeterministischen Zeitbudget-Test: Er leitete den Startzeitpunkt aus dem globalen `time.monotonic()` ab. Der Test setzt Startzeit und Uhr jetzt explizit, damit ein anderer Test-Mock die Messung nicht beeinflusst.
+
+- OP-403 begonnen: Ein fehlgeschlagenes Phase-End-Verify kann im selben Run anhand gespeicherter, redigierter Stage-Auszuege in die bestehende Reflection-Reparatur gehen. Ein erfolgreicher Reparaturcheck reicht nicht; danach muss die vollstaendige Phase-End-Verify erneut gruen sein. Unvollstaendige Failure Records bleiben fail-closed.

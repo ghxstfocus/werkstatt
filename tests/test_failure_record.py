@@ -158,3 +158,68 @@ def test_phase_finalize_attaches_failure_record_and_never_marks_success(
     assert gate_failures
     assert gate_failures[-1][1]["failure_record"]["work_sha"] == "abc123"
     assert not any(item[0] == "loop_erfolg" for item in events)
+
+def test_phase_finalize_repairs_failed_phase_end_verify_in_same_run(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    events = []
+    verify_results = iter([False, True])
+    recovery_calls = []
+    monkeypatch.setattr(finalize, "group_start", lambda *_args: None)
+    monkeypatch.setattr(finalize, "group_end", lambda: None)
+    monkeypatch.setattr(finalize, "audit", lambda *args: events.append(args))
+    monkeypatch.setattr(finalize, "_human_gate", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
+        finalize, "_verify_patches",
+        lambda *_args, **_kwargs: next(verify_results),
+    )
+    monkeypatch.setattr(finalize, "summary", lambda *_args: None)
+    monkeypatch.setattr(
+        "werkstatt.progress.append", lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        finalize,
+        "create_failure_record",
+        lambda *_args, **_kwargs: {
+            "failure_id": "failure-1",
+            "artifact_ref": "audit-logs/run-1/failures/phase_end.json",
+            "failed_stages": [
+                {
+                    "stage_id": "pytest_regression",
+                    "exit_code": 1,
+                    "error_excerpt": "tests/test_example.py::test_case AssertionError",
+                },
+            ],
+        },
+    )
+
+    def recover(_state, *, error_context, phase):
+        recovery_calls.append((error_context, phase))
+        return True
+
+    monkeypatch.setattr(finalize, "_reflection_loop", recover)
+    task = {"id": "task-1"}
+    phase_state = SimpleNamespace(
+        data={"tasks": [{"id": "task-1", "status": "done"}]},
+        get_task=lambda _task_id: {"status": "done"},
+    )
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-1",
+        tasks=[task],
+        applied_count=0,
+        reviewer_bugs=[],
+        progress_written_at_commit=True,
+        last_verify_results=[],
+        last_verify_errors=["pytest_regression: AssertionError"],
+    )
+
+    result = finalize._phase_finalize(state, 1, [task], "demo", phase_state)
+
+    assert result == 0
+    assert recovery_calls and recovery_calls[0][1] == "phase_end"
+    assert "pytest_regression" in recovery_calls[0][0]
+    assert any(item[0] == "loop_verify_recovered" for item in events)
+    assert any(item[0] == "loop_erfolg" for item in events)
+    assert not any(item[0] == "loop_gate_failed" for item in events)
