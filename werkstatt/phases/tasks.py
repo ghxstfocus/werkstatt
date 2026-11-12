@@ -320,9 +320,9 @@ def _phase_tasks_loop(
                     try:
                         _v_gruen_b = bool(
                             _verify_patches(state, phase="post_build"))
-                        check_run_lease(state)
                     except Exception:
                         _v_gruen_b = False
+                    check_run_lease(state)
                     if _v_gruen_b:
                         audit("builder_patch_bereits_erfuellt",
                               {"task_id": i, "file": _primary}, pd, pn)
@@ -876,6 +876,7 @@ def _phase_tasks_loop(
             # OP-059: False-Positive erkannt -> erneuten Reviewer-
             # Call sparen (Reviewer-Bug, nicht Task-Problem).
             _is_fp = bool(state.reviewer_stagnation_false_positive)
+            _post_reflection_review_ok = True
             if _is_fp:
                 audit("loop_reviewer_reject_false_positive",
                       {"task_id": i, "grund": "stagnation_idempotent"}, pd, pn)
