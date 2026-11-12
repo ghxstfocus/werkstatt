@@ -1,8 +1,8 @@
 """OP-090: Human-Gate zeigt Hinweis bei erschoepfter Reflection."""
 from __future__ import annotations
 
-from pathlib import Path
 import sys
+from pathlib import Path
 from unittest.mock import patch
 
 _here = Path(__file__).parent
