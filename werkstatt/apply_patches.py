@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from werkstatt.state import RunState
+from werkstatt.state import RunState, check_run_lease
 
 
 def audit(*args, **kwargs):
@@ -108,7 +108,7 @@ def _apply_patches_with_diagnose(
     Rueckgabe: (Anzahl, Liste der Diagnosen).
     Jede Diagnose: {file, old_string_len, vorkommen, grund}.
     """
-    state.assert_run_lease()
+    check_run_lease(state)
     pd = state.project_dir
     pn = state.project_name
 
@@ -118,7 +118,7 @@ def _apply_patches_with_diagnose(
     for _pat in patches:
         if not isinstance(_pat, dict):
             continue
-        state.assert_run_lease()
+        check_run_lease(state)
         _hook_res = _call_hook("pre_tool_use.py", {
             "patch": _pat.get("new_string", "") or _pat.get("content", ""),
             "action": _pat.get("action", "update"),
@@ -210,7 +210,7 @@ def _apply_patches_with_diagnose(
             continue
         # FIX N 2026-10-31: Write-Fehler fail-closed.
         try:
-            state.assert_run_lease()
+            check_run_lease(state)
             _target.write_text(
                 _collapse_excess_blank_lines(_neu_content),
                 encoding="utf-8",
