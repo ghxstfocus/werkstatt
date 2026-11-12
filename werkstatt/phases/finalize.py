@@ -158,6 +158,7 @@ def _phase_finalize(
         seen_failures: set[
             tuple[str, tuple[tuple[str, str, str], ...]]
         ] = set()
+        seen_worktrees: set[str] = set()
         previous_failure_id = None
         recovery_succeeded = False
 
@@ -169,8 +170,11 @@ def _phase_finalize(
                 if isinstance(item, dict)
             ))
             artifact_saved = bool(failure_record.get("artifact_ref"))
+            worktree_fingerprint = str(
+                failure_record.get("worktree_fingerprint") or ""
+            )
             failure_signature = (
-                str(failure_record.get("worktree_fingerprint") or ""),
+                worktree_fingerprint,
                 tuple(
                     (
                         str(item.get("stage_id") or "?"),
@@ -192,18 +196,28 @@ def _phase_finalize(
                 rc = 1
                 break
 
-            if failure_signature in seen_failures:
+            same_failure_recurred = failure_signature in seen_failures
+            worktree_unchanged = (
+                bool(worktree_fingerprint)
+                and worktree_fingerprint in seen_worktrees
+            )
+            if same_failure_recurred or worktree_unchanged:
+                stall_reason = (
+                    "same_failure_and_worktree_recurred"
+                    if same_failure_recurred
+                    else "worktree_unchanged_after_repair"
+                )
                 audit(
                     "loop_verify_recovery_stalled",
                     {
                         "failure_id": failure_record.get("failure_id"),
                         "previous_failure_id": previous_failure_id,
                         "stage_ids": stage_ids,
-                        "reason": "same_failure_and_worktree_recurred",
+                        "reason": stall_reason,
                         "result_summary": (
-                            "Nach einem Reparaturversuch ist derselbe "
-                            "Verify-Befund am unveränderten Arbeitsstand "
-                            "erneut aufgetreten."
+                            "Nach einem Reparaturversuch hat sich der "
+                            "Arbeitsstand nicht verändert; der Verify-Befund "
+                            "bleibt ungelöst."
                         ),
                         "decision_summary": (
                             "Der Run stoppt fail-closed; ein rotes Verify "
@@ -231,6 +245,8 @@ def _phase_finalize(
                 break
 
             seen_failures.add(failure_signature)
+            if worktree_fingerprint:
+                seen_worktrees.add(worktree_fingerprint)
             recovery_context = (
                 "Phase-End-Verify ist fehlgeschlagen. Diagnostiziere den "
                 "aktuellen Diff und behebe nur diese konkreten Verify-Befunde. "

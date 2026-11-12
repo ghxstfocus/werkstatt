@@ -5508,3 +5508,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - CI fand im neuen Backup-Promotionstest, dass YAML-Fixtures literale `\\n` statt Zeilenumbrueche enthielten. Die Produktionsvalidierung hat sie daher korrekt abgelehnt.
 - Testdaten auf echte Zeilenumbrueche korrigiert; erneute CI-Pruefung laeuft.
+
+
+## 2026-11-12 — Verify-Recovery stoppt bei unverändertem Worktree
+
+- OP-403: Wiederholte Failure Records wurden bisher nur bei identischem Fehlertext als Stillstand erkannt. Fluktuierende Testausgaben konnten bei unverändertem Code immer neue Builder-Reparaturversuche auslösen.
+- Der Phase-End-Recovery-Pfad erkennt nun unveränderten Worktree-Fingerprint nach einem Reparaturversuch als Stillstand, auch wenn Stage-Ausgabe oder Fehlertext variiert. Rotes Verify bleibt fail-closed; der Audit-Eintrag nennt den Grund.
+- Regressionstest variiert den Fehlerauszug bei identischem Worktree. GitHub-CI-Verifikation ausstehend.
