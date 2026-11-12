@@ -5,8 +5,8 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import stat
+import subprocess
 import tempfile
 import uuid
 from datetime import UTC, datetime

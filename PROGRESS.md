@@ -5401,3 +5401,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Failure Records hashen nun auch Inhalt, Pfad und Dateityp nicht ignorierter unversionierter Dateien; zuvor enthielt der Hash dort nur Status und Dateiname. Symlinks werden als Linktext gehasht und nicht verfolgt. Dateiinhalte werden nicht im Artefakt gespeichert.
 - Regressionstest prueft, dass eine Aenderung in einem unversionierten Quellfile den Fingerprint aendert. GitHub-CI prueft den Patch.
+
+- CI meldete im OP-403-Fingerprint-Patch nur einen unsortierten Importblock; die Reihenfolge ist korrigiert. Der Testlauf steht noch aus.
