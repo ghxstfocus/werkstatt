@@ -1072,11 +1072,6 @@ def create_app() -> FastAPI:
                         projektname,
                     )
 
-    @app.post("/api/projects/{name}/resume")
-    def project_resume(name: str) -> dict[str, Any]:
-        """Setzt den gespeicherten, inaktiven Run mit seinem Checkpoint fort."""
-        return project_start(name, {"resume": True})
-
     @app.get("/api/projects/{name}/loop")
     def project_loop_control(name: str) -> dict[str, Any]:
         """Liefert den Prozesszustand fuer die Projekt-Steuerung."""
@@ -1181,12 +1176,8 @@ def create_app() -> FastAPI:
 
     @app.post("/api/projects/{name}/resume")
     def project_resume(name: str) -> dict[str, Any]:
-        """Setzt einen pausierten POSIX-Loop fort."""
+        """Setzt einen pausierten Loop fort oder startet einen toten Run neu."""
         projektname = _pruefe_projektname(name)
-        if os.name != "posix":
-            raise HTTPException(
-                status_code=501, detail="Resume wird nur auf POSIX-Systemen unterstuetzt",
-            )
         with _projekt_loop_lock(projektname):
             prozess = _loop_prozess(projektname)
             registry = _loop_registry()
@@ -1197,7 +1188,24 @@ def create_app() -> FastAPI:
                         status_code=409,
                         detail=f"Loop-Kontrollaktion laeuft bereits: {record['state']}",
                     )
-                raise HTTPException(status_code=404, detail="kein laufender Loop")
+                if record and record["state"] == "idle":
+                    wiederaufnahme_noetig = True
+                else:
+                    raise HTTPException(status_code=404, detail="kein laufender Loop")
+            else:
+                wiederaufnahme_noetig = False
+        if wiederaufnahme_noetig:
+            return project_start(projektname, {"resume": True})
+        if os.name != "posix":
+            raise HTTPException(
+                status_code=501, detail="Pausieren wird nur auf POSIX-Systemen unterstuetzt",
+            )
+        with _projekt_loop_lock(projektname):
+            prozess = _loop_prozess(projektname)
+            registry = _loop_registry()
+            record = registry.read(projektname)
+            if prozess is None:
+                raise HTTPException(status_code=409, detail="Loop wurde zwischenzeitlich beendet")
             run_id = _LOOP_RUN_IDS.get(projektname)
             if not record or record.get("run_id") != run_id:
                 raise HTTPException(status_code=409, detail="Loop-Registry stimmt nicht mit Prozess ueberein")
