@@ -1,6 +1,8 @@
 """Tests fuer werkstatt/phase_state.py (Phase 13)."""
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from werkstatt.phase_state import PhaseState
@@ -138,3 +140,26 @@ def test_load_normalisiert_fehlende_tasks_fuer_legacy_checkpoint(
 
     assert ps.load() is True
     assert ps.data.get("tasks", []) == []
+
+
+def test_run_id_wird_im_phase_state_persistiert(tmp_path) -> None:
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.run_id = "testprojekt-run-1"
+    ps.init_new("Run gebundener Checkpoint", [{"id": "t1"}])
+    ps.save()
+
+    loaded = PhaseState("testprojekt", base_dir=tmp_path)
+    assert loaded.load() is True
+    assert loaded.run_id == "testprojekt-run-1"
+
+
+@pytest.mark.parametrize("run_id", ["", 123, ["run-a"]])
+def test_load_verwirft_ungueltige_checkpoint_run_id(tmp_path, run_id) -> None:
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.path.write_text(
+        f"project: testprojekt\nrun_id: {json.dumps(run_id)}\ntasks: []\n",
+        encoding="utf-8",
+    )
+
+    assert ps.load() is False
+    assert ps.data == {}

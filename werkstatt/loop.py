@@ -634,6 +634,31 @@ def _main_inner(argv: list[str] | None = None) -> int:
         )
     elif _ps.exists():
         _ps.load()
+        if (
+            args.run_id
+            and _ps.run_id
+            and _ps.run_id != args.run_id
+            and not getattr(args, "resume", False)
+        ):
+            audit(
+                "loop_checkpoint_run_mismatch",
+                {
+                    "checkpoint_run_id": _ps.run_id,
+                    "requested_run_id": args.run_id,
+                },
+                _pd,
+                args.project,
+            )
+            _r.step(
+                0,
+                "checkpoint",
+                "Checkpoint gehoert zu einem anderen Run; sicherer Resume gestoppt",
+                ok=False,
+            )
+            _r.footer(success=False, tasks_total=0, tasks_ok=0)
+            return 1
+    if args.run_id:
+        _ps.run_id = args.run_id
 
     # K14: Stop muss auch bei SIGTERM den Checkpoint persistieren und
     # einen eventuell angelegten User-Stash wiederherstellen.

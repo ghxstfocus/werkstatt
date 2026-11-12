@@ -5469,3 +5469,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Befund: Jeder Webstart beginnt absichtlich mit `--fresh`. Ein zweiter Fresh-Start konnte die vorhandene `.fresh-bak`-Recovery-Kopie lautlos ueberschreiben.
 - Der Loop archiviert eine bestehende Recovery-Kopie jetzt nummeriert, bevor er den aktiven Checkpoint als aktuelle Recovery-Kopie verschiebt. Scheitert das Verschieben, bricht der Start fail-closed ab; der alte Checkpoint wird nicht stillschweigend ignoriert.
 - Regressionstests pruefen Erhalt und eindeutige Archivnamen. Das ist ein Sicherungsschritt, keine vollstaendige Wiederaufnahme nach Prozess- oder Server-Neustart; OP-397 bleibt offen.
+
+## 2026-11-12 — Phase-Checkpoint an Run-ID binden
+
+- Phase-State speichert jetzt die Run-ID als Checkpoint-Eigentum; Legacy-State ohne Feld bleibt ladbar und erhaelt die ID beim naechsten Save.
+- Ein headless Lauf mit widerspruechlicher Run-ID stoppt vor Plan-/Task-Ausfuehrung fail-closed. Damit kann eine Registry-Recovery spaeter nicht versehentlich Checkpoint-Daten eines aelteren Runs fortsetzen.
+- Tests decken Run-ID-Roundtrip, ungueltige Metadaten und den Abbruch bei Run-ID-Mismatch ab. OP-397 ist weiterhin offen; die Web-API bietet noch keinen Recovery-Start.

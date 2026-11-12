@@ -30,6 +30,7 @@ class PhaseState:
         self.base_dir = base_dir or PHASE_DIR
         self.path = self.base_dir / f"{project_name}.phase.yaml"
         self.data: dict[str, Any] = {}
+        self.run_id: str | None = None
 
     # --- Laden / Speichern ---
 
@@ -56,6 +57,12 @@ class PhaseState:
         if "project" in data and data["project"] != self.project_name:
             self.data = {}
             return False
+        run_id = data.get("run_id")
+        if run_id is not None and (
+            not isinstance(run_id, str) or not run_id.strip()
+        ):
+            self.data = {}
+            return False
 
         if "tasks" in data:
             tasks = data["tasks"]
@@ -80,10 +87,13 @@ class PhaseState:
                 return False
 
         self.data = data
+        self.run_id = run_id
         return True
 
     def save(self) -> None:
         """Speichert den State atomar (temp + rename)."""
+        if self.run_id:
+            self.data["run_id"] = self.run_id
         # K21-DEBUG: Trace was gerade gespeichert wird.
         import sys
         print(

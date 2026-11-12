@@ -562,3 +562,32 @@ def test_fresh_start_keeps_archived_checkpoint_names_unique(tmp_path: Path) -> N
     assert prior_archive.read_text(encoding="utf-8") == "oldest recovery checkpoint"
     assert archived.read_text(encoding="utf-8") == "older recovery checkpoint"
     assert backup.read_text(encoding="utf-8") == "active checkpoint"
+
+
+
+def test_main_verwirft_checkpoint_eines_anderen_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt.phase_state import PhaseState
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    worktree = tmp_path / "project"
+    worktree.mkdir()
+    phase_state = PhaseState("p", base_dir=worktree / ".werkstatt")
+    phase_state.run_id = "p-previous-run"
+    phase_state.init_new("Alter Auftrag", [{"id": "t1"}])
+    phase_state.save()
+    aufrufe: list = []
+    with _silence_renderer(), _patch_main_config(tmp_path), \
+         patch("werkstatt.loop.run_pipeline_loop",
+               _loop_runner(1, 0, aufrufe)), \
+         patch("werkstatt.loop._git_head", return_value="abc"), \
+         patch("werkstatt.loop._git_dirty", return_value=False):
+        rc = loop.main([
+            "--project", "p", "--aufgabe", "Neuer Auftrag",
+            "--headless", "--run-id", "p-new-run",
+            "--project-dir", str(worktree),
+        ])
+
+    assert rc == 1
+    assert aufrufe == []
