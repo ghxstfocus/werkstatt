@@ -151,15 +151,26 @@ def _kuerze_turn(turn: list[dict[str, Any]], budget: int) -> list[dict[str, Any]
         content = str(item.get("content") or "")
         if len(content) > anteil:
             marker = "\\n[… gekuerzt; vollstaendig im Chatverlauf …]\\n"
-            rest = max(0, anteil - len(marker))
-            anfang = rest // 2
-            ende = rest - anfang
-            item["content"] = (
-                content[:anfang] + marker + (content[-ende:] if ende else "")
-            )
+            if anteil <= len(marker):
+                item["content"] = content[:anteil]
+            else:
+                rest = anteil - len(marker)
+                anfang = rest // 2
+                ende = rest - anfang
+                item["content"] = content[:anfang] + marker + (content[-ende:] if ende else "")
         gekuerzt.append(item)
-    return gekuerzt
-
+    # Marker duerfen den harten Zeichenrahmen auch bei kleinen Restbudgets nicht sprengen.
+    verbleibend = budget
+    bounded: list[dict[str, Any]] = []
+    for item in gekuerzt:
+        if verbleibend <= 0:
+            break
+        textwert = str(item.get("content") or "")
+        if len(textwert) > verbleibend:
+            item["content"] = textwert[:verbleibend]
+        bounded.append(item)
+        verbleibend -= len(str(item.get("content") or ""))
+    return bounded
 
 def _baue_messages(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Baut bounded Chat-Historie; persistente Events bleiben unveraendert."""
