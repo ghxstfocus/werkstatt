@@ -6,8 +6,8 @@ fachliche Wahrheit; leere, ausdruecklich markierte Startdokumente sind gueltig.
 from __future__ import annotations
 
 import re
-from pathlib import Path, PureWindowsPath
 from collections.abc import Mapping
+from pathlib import Path, PureWindowsPath
 
 REQUIRED_DOC_KEYS = (
     "entry",
