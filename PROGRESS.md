@@ -5536,3 +5536,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - OP-403: Die gezielte Phase-End-Reparatur lief bisher durch den allgemeinen Fünf-Runden-Deckel. Sie arbeitet jetzt bis zur bestandenen betroffenen Verify-Stage, bis ein identischer Code-/Fehlerzustand wiederkehrt oder das Run-Budget erreicht ist.
 - Der Builder übergibt seinen RunState jetzt an den LLM-Aufruf. Dadurch zählen Recovery-Aufrufe gegen das bestehende LLM-/Zeitbudget und können es nicht umgehen.
 - Regressionstest lässt die gezielte Stage erst nach sechs Builder-Aufrufen grün werden. Vollständige Phase-End-Verify bleibt danach verpflichtend. GitHub-CI (Run 43225327934): 2050 Tests bestanden; Ruff, Mypy, AST und Audit-Katalog gruen.
+
+
+## 2026-11-12 — Finale Verify-Recovery wartet am menschlichen Checkpoint
+
+- OP-403: Wenn die automatische Phase-End-Recovery ohne grünes Voll-Verify endet, wird der Run nicht mehr kommentarlos als abgeschlossen behandelt. Er öffnet ein adressiertes Gate mit Failure-Record, betroffenen Verify-Stages und konkretem nächsten Schritt.
+- Das Gate kann den Debugger-Chat öffnen und offen bleiben. Nach menschlicher Aktion führt „Weiter“ zuerst die vollständige Phase-End-Verify aus; bei geändertem Arbeitsstand kann derselbe Run die gezielte Recovery erneut starten.
+- Ein rotes oder nicht belegbares Ergebnis bleibt fehlgeschlagen. Nur die tatsächlich bestandene Vollprüfung setzt den Run fort. Regressionstest deckt Pause und Fortsetzung nach grüner Prüfung ab; GitHub-CI-Verifikation läuft.

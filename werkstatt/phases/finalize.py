@@ -105,6 +105,211 @@ def _verify_recovery_context(
     })
     return fallback, True
 
+
+
+def _phase_end_recovery_pause(state: RunState, failure_record: dict) -> bool:
+    """Pause a failed final verify at a human gate; resume only on evidence."""
+    from werkstatt.gates import _frage_gate
+
+    current = failure_record
+    while True:
+        stages = current.get("failed_stages") or []
+        stage_ids = list(dict.fromkeys(
+            str(item.get("stage_id") or "?")
+            for item in stages
+            if isinstance(item, dict)
+        ))
+        evidence = [
+            f"{item.get('stage_id')}: {str(item.get('error_excerpt') or '')[:500]}"
+            for item in stages
+            if isinstance(item, dict)
+        ][:6]
+        prompt = (
+            "Die Phase-End-Verify ist nach automatischer Recovery weiterhin "
+            "rot. Der Run ist pausiert.\n"
+            f"Run: {getattr(state, 'run_id', '?')}\n"
+            f"Failure Record: {current.get('artifact_ref') or 'nicht gespeichert'}\n"
+            f"Betroffene Stages: {', '.join(stage_ids) or 'unbekannt'}\n"
+            + "\n".join(evidence)
+            + "\n[j] erneut voll verifizieren und bei geaendertem Diff "
+            "gezielt weiter reparieren; [e] im Chat debuggen; [n] Run "
+            "fehlgeschlagen beenden."
+        )
+        audit(
+            "loop_verify_recovery_paused",
+            {
+                "failure_id": current.get("failure_id"),
+                "artifact_ref": current.get("artifact_ref"),
+                "stage_ids": stage_ids,
+                "result_summary": (
+                    "Die automatische Recovery ist festgefahren; der Run "
+                    "wartet auf eine menschliche Entscheidung."
+                ),
+                "decision_summary": (
+                    "Ein rotes Verify bleibt fehlgeschlagen. Weiterarbeit "
+                    "braucht eine menschliche Aktion oder einen neuen Beleg."
+                ),
+                "evidence": evidence,
+                "next_step": (
+                    "Im Chat debuggen oder den Diff bearbeiten und danach "
+                    "die vollständige Phase-End-Verify erneut ausführen."
+                ),
+            },
+            state.project_dir,
+            state.project_name,
+        )
+        try:
+            answer = _frage_gate(
+                "phase_end_verify",
+                prompt,
+                "jne",
+            ).strip().lower()
+        except Exception as exc:
+            audit(
+                "loop_verify_recovery_gate_error",
+                {
+                    "failure_id": current.get("failure_id"),
+                    "error_type": type(exc).__name__,
+                },
+                state.project_dir,
+                state.project_name,
+            )
+            return False
+
+        if answer in {"n", "nein"}:
+            audit(
+                "loop_human_gate_rejected",
+                {"gate": "phase_end_verify",
+                 "failure_id": current.get("failure_id")},
+                state.project_dir,
+                state.project_name,
+            )
+            return False
+        if answer == "e":
+            # The web gate intercepts e and opens the debugger handoff while
+            # leaving the gate pending. In a TTY, let the user edit the files.
+            try:
+                input("Dateien bearbeiten, dann Enter fuer erneute Pruefung: ")
+            except (EOFError, KeyboardInterrupt, OSError):
+                return False
+            answer = "j"
+        if answer not in {"j", "ja", "y", "yes"}:
+            continue
+
+        if _verify_patches(state, phase="phase_end"):
+            audit(
+                "loop_verify_recovered",
+                {
+                    "failure_id": current.get("failure_id"),
+                    "stage_ids": stage_ids,
+                    "recovered_after_human_action": True,
+                    "result_summary": (
+                        "Die vollständige Phase-End-Verify ist nach der "
+                        "menschlichen Aktion wieder grün."
+                    ),
+                    "decision_summary": (
+                        "Der Run darf nach bestandener Abschlussprüfung "
+                        "normal fortgesetzt werden."
+                    ),
+                    "evidence": [
+                        f"Verify-Stage bestanden: {stage_id}"
+                        for stage_id in stage_ids
+                    ],
+                    "next_step": "Commit- und Abschlusslogik fortsetzen.",
+                },
+                state.project_dir,
+                state.project_name,
+            )
+            return True
+
+        updated = create_failure_record(state, stage="phase_end")
+        old_fingerprint = str(current.get("worktree_fingerprint") or "")
+        new_fingerprint = str(updated.get("worktree_fingerprint") or "")
+        has_provenance = all((
+            updated.get("artifact_ref"),
+            updated.get("work_sha"),
+            updated.get("worktree_fingerprint"),
+            updated.get("failed_stages"),
+        ))
+        if (
+            has_provenance
+            and new_fingerprint
+            and new_fingerprint != old_fingerprint
+        ):
+            context, truncated = _verify_recovery_context(
+                updated.get("failed_stages") or [],
+            )
+            audit(
+                "loop_verify_recovery_resumed",
+                {
+                    "failure_id": updated.get("failure_id"),
+                    "previous_failure_id": current.get("failure_id"),
+                    "stage_ids": [
+                        str(item.get("stage_id") or "?")
+                        for item in updated.get("failed_stages") or []
+                        if isinstance(item, dict)
+                    ],
+                    "evidence_truncated": truncated,
+                    "result_summary": (
+                        "Ein neuer Arbeitsstand liegt vor; der Run setzt die "
+                        "gezielte Recovery fort."
+                    ),
+                    "decision_summary": (
+                        "Die gezielte Reparatur startet erneut und wird "
+                        "anschließend vollständig verifiziert."
+                    ),
+                    "next_step": (
+                        "Betroffene Stages reparieren und danach die "
+                        "vollständige Phase-End-Verify ausführen."
+                    ),
+                },
+                state.project_dir,
+                state.project_name,
+            )
+            try:
+                repaired = _reflection_loop(
+                    state,
+                    max_runden=None,
+                    error_context=context,
+                    phase="phase_end",
+                    verify_stage_ids={
+                        str(item.get("stage_id") or "?")
+                        for item in updated.get("failed_stages") or []
+                        if isinstance(item, dict)
+                    },
+                )
+            except Exception as exc:
+                repaired = False
+                audit(
+                    "loop_verify_recovery_error",
+                    {
+                        "failure_id": updated.get("failure_id"),
+                        "error_type": type(exc).__name__,
+                    },
+                    state.project_dir,
+                    state.project_name,
+                )
+            if repaired and _verify_patches(state, phase="phase_end"):
+                audit(
+                    "loop_verify_recovered",
+                    {
+                        "failure_id": updated.get("failure_id"),
+                        "recovered_after_human_action": True,
+                        "result_summary": (
+                            "Die gezielte Recovery nach der menschlichen "
+                            "Aktion hat die Vollprüfung bestanden."
+                        ),
+                        "decision_summary": (
+                            "Der Run setzt die Abschlusslogik fort."
+                        ),
+                        "next_step": "Commit- und Abschlusslogik fortsetzen.",
+                    },
+                    state.project_dir,
+                    state.project_name,
+                )
+                return True
+        current = updated
+
 def _phase_finalize(
     state: RunState,
     tasks_ok: int,
@@ -403,6 +608,7 @@ def _phase_finalize(
                 final_failure_record = create_failure_record(
                     state, stage="phase_end",
                 )
+                failure_record = final_failure_record
                 audit(
                     "loop_verify_recovery_stalled",
                     {
@@ -472,7 +678,11 @@ def _phase_finalize(
             )
 
         if not recovery_succeeded:
-            rc = 1
+            recovery_succeeded = _phase_end_recovery_pause(
+                state, failure_record,
+            )
+            if not recovery_succeeded:
+                rc = 1
 
     # Commit erst nach bestandenem Phase-End-Verify. Bei rotem Verify oder
     # offenen human_review-Tasks bleibt der Working Tree uncommitted.

@@ -558,3 +558,76 @@ def test_verify_recovery_context_reports_omitted_metadata() -> None:
     assert payload["failed_stage_count"] == 200
     assert payload["omitted_stage_count"] > 0
     assert len(payload["failed_stage_ids"]) + payload["omitted_stage_count"] == 200
+
+
+def test_phase_finalize_pauses_at_human_gate_and_resumes_after_green_verify(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    events = []
+    gate_calls = []
+    verify_results = iter([False, True])
+    record = {
+        "failure_id": "failure-paused",
+        "artifact_ref": "audit-logs/run-1/failures/phase_end.json",
+        "work_sha": "abc123",
+        "worktree_fingerprint": "fingerprint-1",
+        "failed_stages": [
+            {
+                "stage_id": "pytest_regression",
+                "exit_code": 1,
+                "error_excerpt": "tests/test_example.py::test_case AssertionError",
+            },
+        ],
+    }
+    monkeypatch.setattr(finalize, "group_start", lambda *_args: None)
+    monkeypatch.setattr(finalize, "group_end", lambda: None)
+    monkeypatch.setattr(finalize, "audit", lambda *args: events.append(args))
+    monkeypatch.setattr(finalize, "_human_gate", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
+        finalize, "_verify_patches",
+        lambda *_args, **_kwargs: next(verify_results),
+    )
+    monkeypatch.setattr(
+        finalize, "create_failure_record",
+        lambda *_args, **_kwargs: dict(record),
+    )
+    monkeypatch.setattr(
+        finalize, "_reflection_loop",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(finalize, "summary", lambda *_args: None)
+    monkeypatch.setattr(
+        "werkstatt.progress.append", lambda *_args, **_kwargs: None,
+    )
+
+    def answer_gate(kind, prompt, options):
+        gate_calls.append((kind, prompt, options))
+        return "j"
+
+    monkeypatch.setattr("werkstatt.gates._frage_gate", answer_gate)
+    task = {"id": "task-1"}
+    phase_state = SimpleNamespace(
+        data={"tasks": [{"id": "task-1", "status": "done"}]},
+        get_task=lambda _task_id: {"status": "done"},
+    )
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-1",
+        tasks=[task],
+        applied_count=0,
+        reviewer_bugs=[],
+        progress_written_at_commit=True,
+        last_verify_results=[],
+        last_verify_errors=["pytest_regression: AssertionError"],
+    )
+
+    result = finalize._phase_finalize(state, 1, [task], "demo", phase_state)
+
+    assert result == 0
+    assert gate_calls and gate_calls[0][0] == "phase_end_verify"
+    assert "Failure Record" in gate_calls[0][1]
+    assert gate_calls[0][2] == "jne"
+    assert any(item[0] == "loop_verify_recovery_paused" for item in events)
+    assert any(item[0] == "loop_verify_recovered" for item in events)
+    assert any(item[0] == "loop_erfolg" for item in events)
