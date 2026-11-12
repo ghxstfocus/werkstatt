@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -251,7 +252,6 @@ def test_live_worker_after_register_failure_is_kept_orphaned(
 ) -> None:
     pytest.importorskip("fastapi")
     pytest.importorskip("httpx")
-    import subprocess
     from fastapi.testclient import TestClient
 
     from werkstatt.web import app as app_module
