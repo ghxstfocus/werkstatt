@@ -104,7 +104,7 @@ def _op_nnn_als_expliziter_auftrag(aufgabe: str) -> str | None:
     """
     erste_zeile = (aufgabe or "").splitlines()[0].strip() if aufgabe else ""
     match = re.match(
-        r"^(?:#{1,6}\\s*)?(OP-\\d{3}[a-z]?\\d*)\\s*:\\s*\\S",
+        r"^(?:#{1,6}\s*)?(OP-\d{3}[a-z]?\d*)\s*:\s*\S",
         erste_zeile,
         re.IGNORECASE,
     )
