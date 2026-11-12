@@ -5743,3 +5743,17 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   - **Commit:** `167b3b64200c644d494240ab4088be980be38357`
   - **Commit:** `9e1564fae4930b3098b2b7b41f480297f016feb1`
 - GitHub Actions für den Abschlussstand `b3a5e9f91f3e031598096ee1089b46486e7a9ad6`: Quality-Gate-Workflow erfolgreich; Ruff, Pytest und Quality Gate grün. [Run 43297016790](https://github.com/ghxstfocus/werkstatt/actions/runs/43297016790).
+
+
+## 2026-11-12 — OP-Doku erst nach vollständiger Verify schließen
+
+- Audit-Fund: Der STATUS-Nachzug lag im selben Commit wie die Codeänderung. Eine danach rote Post-Commit-Verify konnte die OP daher bereits als erledigt hinterlassen.
+- Der Finalizer hält den OP-Nachzug jetzt zurück, bis Code-Commit und vollständige Post-Commit-Verify grün sind. STATUS/PROGRESS/CHANGELOG werden danach separat geändert, auf diesem konkreten Stand erneut verifiziert und erst dann als Doku-Commit gespeichert. Bei roter Doku-Verify werden die Dokuänderungen vor dem Commit zurückgesetzt; bei Commitfehlern wird der Snapshot ebenfalls wiederhergestellt.
+- Regressionstests prüfen die Reihenfolge Code-Commit → Post-Commit-Verify → Doku-Verify → Doku-Commit sowie Snapshot-Rollback für geänderte und neu angelegte Dateien.
+- Code-Commits:
+  - **Commit:** `9f3dbbcedb3b42cc83276fe4a9b393767c2f4b20`
+  - **Commit:** `4341bc0ebeada1ad2e7e9306aa1862a2a1705509`
+  - **Commit:** `11b2e7ec6dec2ef5cae136689000bdc976d4f301`
+  - **Commit:** `53b97fb484cdfe29c30fecd1ab677da2b3c26785`
+  - **Commit:** `a45f8aab8485934389af1a9d7870e7c647b1b6bb`
+- CI-Verifikation folgt.
