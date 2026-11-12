@@ -690,6 +690,25 @@ def _main_inner(argv: list[str] | None = None) -> int:
             _r.footer(success=False, tasks_total=0, tasks_ok=0)
             return 1
 
+        if checkpoint_source is not None and not _ps.run_id:
+            audit(
+                "loop_resume_verworfen",
+                {
+                    "reason": "checkpoint_run_id_missing",
+                    "checkpoint": str(checkpoint_source),
+                },
+                _pd,
+                args.project,
+            )
+            _r.step(
+                0,
+                "checkpoint",
+                "Resume abgelehnt: Run-ID im Checkpoint fehlt",
+                ok=False,
+            )
+            _r.footer(success=False, tasks_total=0, tasks_ok=0)
+            return 1
+
         if args.run_id and _ps.run_id != args.run_id:
             audit(
                 "loop_checkpoint_run_mismatch",
@@ -749,6 +768,11 @@ def _main_inner(argv: list[str] | None = None) -> int:
                 _pd,
                 args.project,
             )
+    if checkpoint_source is not None and not args.run_id:
+        # Lokaler Resume ohne explizite Web-Run-ID bleibt an den persistierten
+        # Run gebunden, damit Audit-, Gate- und Timeline-Events denselben Lauf
+        # fortsetzen.
+        set_run_id(_ps.run_id)
     if args.run_id:
         _ps.run_id = args.run_id
 

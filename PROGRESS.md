@@ -5543,3 +5543,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - OP-403: Wenn die automatische Phase-End-Recovery ohne grünes Voll-Verify endet, wird der Run nicht mehr kommentarlos als abgeschlossen behandelt. Er öffnet ein adressiertes Gate mit Failure-Record, betroffenen Verify-Stages und konkretem nächsten Schritt.
 - Das Gate kann den Debugger-Chat öffnen und offen bleiben. Nach menschlicher Aktion führt „Weiter“ zuerst die vollständige Phase-End-Verify aus; bei geändertem Arbeitsstand kann derselbe Run die gezielte Recovery erneut starten.
 - Ein rotes oder nicht belegbares Ergebnis bleibt fehlgeschlagen. Nur die tatsächlich bestandene Vollprüfung setzt den Run fort. Regressionstest deckt Pause und Fortsetzung nach grüner Prüfung ab; GitHub-CI-Verifikation läuft.
+
+## 2026-11-12 — Resume bleibt an die gespeicherte Run-ID gebunden
+
+- ADR-0032: Ein lokaler Resume ohne CLI-Run-ID uebernahm bisher den Phase-Checkpoint, stellte aber den Run-Kontext fuer Audit- und Gate-Ereignisse nicht wieder her. Checkpoints ohne Run-ID konnten ebenfalls fortgesetzt werden.
+- Resume lehnt Checkpoints ohne Run-ID jetzt fail-closed ab. Bei lokalem Resume wird die persistierte Run-ID vor dem Worker-Start wieder aktiviert; Web-Resume prueft weiterhin die explizite ID gegen den Checkpoint.
+- Regressionstests decken fehlende Run-ID und lokale Wiederaufnahme mit stabiler Run-ID ab. Lokale Vollsuite/Quality-Gate-Verifikation steht noch aus.

@@ -697,6 +697,72 @@ def test_resume_ohne_checkpoint_startet_keinen_neuen_plan(
     assert runner_calls == []
 
 
+def test_resume_ohne_persistierte_run_id_stoppt_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    state_dir = tmp_path / ".werkstatt"
+    state_dir.mkdir()
+    (state_dir / "p.phase.yaml").write_text(
+        "project: p\\naufgabe: ziel\\ntasks: []\\n",
+        encoding="utf-8",
+    )
+    runner_calls: list[bool] = []
+
+    with (
+        _silence_renderer(),
+        _patch_main_config(tmp_path),
+        patch("werkstatt.gates.set_headless", lambda _value: None),
+        patch("werkstatt.loop.set_run_id", lambda _run_id: None),
+        patch("werkstatt.loop._emit_lifecycle_end", lambda *_a, **_kw: None),
+        patch(
+            "werkstatt.loop.run_pipeline_loop",
+            lambda *_a, **_kw: runner_calls.append(True),
+        ),
+    ):
+        rc = loop.main([
+            "--project", "p", "--aufgabe", "ziel", "--resume",
+        ])
+
+    assert rc == 1
+    assert runner_calls == []
+
+
+def test_lokaler_resume_uebernimmt_persistierte_run_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    state_dir = tmp_path / ".werkstatt"
+    state_dir.mkdir()
+    (state_dir / "p.phase.yaml").write_text(
+        "project: p\\nrun_id: p-previous-run\\naufgabe: ziel\\ntasks: []\\n",
+        encoding="utf-8",
+    )
+    run_ids: list[str] = []
+    runner_calls: list[bool] = []
+
+    with (
+        _silence_renderer(),
+        _patch_main_config(tmp_path),
+        patch("werkstatt.gates.set_headless", lambda _value: None),
+        patch("werkstatt.loop.set_run_id", run_ids.append),
+        patch("werkstatt.loop._emit_lifecycle_end", lambda *_a, **_kw: None),
+        patch(
+            "werkstatt.loop.run_pipeline_loop",
+            lambda *_a, **_kw: runner_calls.append(True) or 1,
+        ),
+        patch("werkstatt.loop._git_head", return_value="abc"),
+        patch("werkstatt.loop._git_dirty", return_value=False),
+    ):
+        rc = loop.main([
+            "--project", "p", "--aufgabe", "ziel", "--resume",
+        ])
+
+    assert rc == 1
+    assert run_ids == ["p-previous-run"]
+    assert runner_calls == [True]
+
+
 def test_resume_archiviert_aktiven_checkpoint_vor_backup_aktivierung(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
