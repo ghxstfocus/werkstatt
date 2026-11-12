@@ -445,7 +445,7 @@ def test_chat_history_truncation_obeys_character_budget(monkeypatch) -> None:
     ]
 
     messages = chat_agent._baue_messages(events)
-    prior = [message for message in messages if message.get("role") != "system"]
+    prior = [message for message in messages[:-1] if message.get("role") != "system"]
 
     assert sum(len(str(message.get("content") or "")) for message in prior) <= 80
     assert messages[-1] == {"role": "user", "content": "aktuelle Aufgabe"}
