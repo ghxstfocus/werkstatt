@@ -159,6 +159,7 @@ def test_phase_finalize_attaches_failure_record_and_never_marks_success(
     assert gate_failures[-1][1]["failure_record"]["work_sha"] == "abc123"
     assert not any(item[0] == "loop_erfolg" for item in events)
 
+
 def test_phase_finalize_repairs_failed_phase_end_verify_in_same_run(
     tmp_path: Path, monkeypatch,
 ) -> None:
