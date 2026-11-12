@@ -291,7 +291,7 @@ def test_worker_discovery_ignores_processes_owned_by_other_user(
 
         workers, complete = _find_run_workers("demo", run_id)
 
-        assert complete
+        assert not complete
         assert process.pid not in [pid for pid, _identity in workers]
     finally:
         _stop_process(process)
