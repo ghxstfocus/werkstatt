@@ -5683,3 +5683,16 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   - **Commit:** `49cd355848faa6f2eb7071b2646f4d52068c862c`
   - **Commit:** `5ddfb566e6d2f6b376a469b863517fca7b649808`
 - GitHub-CI nach dem Doku-Nachzug: 1 Fehler im Audit-Katalog (`doku_nachzug_status_restore_failed` fehlte); Ruff und die uebrigen Pruefungen waren erfolgreich. Katalog-Fix: `3169aad8a51c1c8d5ac6ab981ee27ac845c89d89`; Folge-CI steht noch aus.
+
+
+## 2026-11-12 — OP-405 Teilstand: Living-Docs-Kontext verbindlich und begrenzt
+
+- Der Projektmanifest-Vertrag verlangt jetzt PROGRESS.md wie STATUS, ROADMAP und ARCHITECTURE. Der Loop laedt Progress als historische Evidenz; STATUS bleibt alleinige Quelle fuer offene OPs und Run-Events fuer den Live-Zustand.
+- Der Progress-Kontext ist deterministisch auf zehn neueste Eintraege und 12.000 Zeichen begrenzt. Der Parser wird auch fuer read_recent genutzt. Das reduziert Kontextwachstum, ohne den append-only Verlauf im Dokument zu kuerzen.
+- Regressionstests pruefen Pflichtfeld, letzte Eintraege und Zeichenlimit. OP-405 bleibt offen, weil Rollenrouting, Retrieval und Evaluierung noch fehlen.
+- Doku-Drift-Belege fuer Code-Commits:
+  - **Commit:** 2973e26db6706eb439f71c30cb2f957d18e1f036
+  - **Commit:** c30e2090bed02ba2d4a9080a1b4a893c7ea71bf8
+  - **Commit:** ba788989efaffb473b9436f3aac54a15d2f514cc
+  - **Commit:** 2c71a59811a676e5bec7978b75503d116d8cc4c1
+  - **Commit:** 5ee908b50a7954101662854fd2757fb1dd3d1700
