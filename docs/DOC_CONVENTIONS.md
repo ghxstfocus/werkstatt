@@ -85,8 +85,11 @@ am aktuellen Run geprueft und die vollstaendige Phase-End-Verify bestanden
 sind. Vor der Entfernung muss der passende `done`-Eintrag in
 PROGRESS.md erfolgreich geschrieben oder als exakt idempotenter Eintrag
 fuer dieselbe OP und Run-ID bestaetigt sein. Scheitert das Schreiben, bleibt
-der OP offen. STATUS-Aenderung und Progress-Beleg muessen durch Retry
-konsistent reconciliierbar sein.
+der OP offen. Vor der Mutation muss STATUS.md erfolgreich als Snapshot
+gelesen werden koennen. Scheitert Mutation oder Belegpruefung, wird der
+Snapshot wiederhergestellt; ein fehlgeschlagener Restore wird auditiert.
+STATUS-Aenderung und Progress-Beleg muessen durch Retry konsistent
+reconciliierbar sein.
 
 Die Delete-Zone ist nur eine kompakte Wiedereinfuehrungs-Sperrliste, keine
 zweite Historie: OP-IDs werden dedupliziert und maximal die letzten 20
