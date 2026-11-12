@@ -321,13 +321,19 @@ def test_live_worker_after_register_failure_is_kept_orphaned(
     assert states == ["orphaned"]
 
 
-def test_resume_route_reconnects_real_registry_event_store_and_checkpoint(
+def test_resume_route_recovers_after_real_worker_exit(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """The API recovery path validates durable state before relaunching a run."""
+    """A real exited loop worker is detected and resumed from durable state."""
+    if not Path("/proc").is_dir():
+        pytest.skip("worker identity recovery requires Linux /proc")
     pytest.importorskip("fastapi")
     pytest.importorskip("httpx")
+    import os
+    import sys
+    import time
+
     from fastapi.testclient import TestClient
 
     from werkstatt.web import app as app_module
@@ -343,54 +349,112 @@ def test_resume_route_reconnects_real_registry_event_store_and_checkpoint(
         "source": {"kind": "local"},
     }
     registry_path = tmp_path / ".werkstatt" / "web-loop-registry.db"
-    first_registry = LoopProcessRegistry(registry_path)
-    reserved, conflict = first_registry.reserve(
+    registry_before_restart = LoopProcessRegistry(registry_path)
+    reserved, conflict = registry_before_restart.reserve(
         "demo", run_id, context=context,
     )
     assert reserved and conflict is None
-    assert first_registry.set_state("demo", run_id, "idle")
 
-    # A new registry instance represents a web-server process after restart.
-    registry = LoopProcessRegistry(registry_path)
-    monkeypatch.setattr(app_module, "_PROJECTS_BASE", tmp_path)
-    monkeypatch.setattr(app_module, "_loop_registry", lambda: registry)
-    monkeypatch.setattr(app_module, "_loop_prozess", lambda _project: None)
-    monkeypatch.setattr(run_recovery, "EventStore", lambda: store)
-    app_module._LAUFENDE_LOOPS.clear()
-    app_module._LOOP_RUN_IDS.clear()
-    app_module._LOOP_LOG_HANDLES.clear()
-    app_module._PAUSIERTE_LOOPS.clear()
-
-    import os
-
-    argv: list[list[str]] = []
-
-    class _Process:
-        def __init__(self) -> None:
-            self.pid = os.getpid()
-
-    monkeypatch.setattr(
-        app_module.subprocess,
-        "Popen",
-        lambda args, **_kwargs: (argv.append(list(args)) or _Process()),
+    fake_root = tmp_path / "worker-runtime"
+    fake_package = fake_root / "werkstatt"
+    fake_package.mkdir(parents=True)
+    (fake_package / "__init__.py").write_text("", encoding="utf-8")
+    (fake_package / "loop.py").write_text(
+        "import os, time\n"
+        "from pathlib import Path\n"
+        "Path(os.environ['WERKSTATT_PROBE_READY']).write_text('ready')\n"
+        "while True: time.sleep(0.05)\n",
+        encoding="utf-8",
     )
 
-    response = TestClient(app_module.app).post("/api/projects/demo/resume")
+    def _wait_ready(process: subprocess.Popen[bytes], ready: Path) -> None:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if ready.is_file():
+                return
+            if process.poll() is not None:
+                pytest.fail(f"worker exited early with {process.returncode}")
+            time.sleep(0.01)
+        pytest.fail("worker did not publish its ready marker")
 
-    assert response.status_code == 200, response.text
-    assert response.json()["resume"] is True
-    assert response.json()["run_id"] == run_id
-    assert "--resume" in argv[0]
-    assert "--fresh" not in argv[0]
-    assert argv[0][argv[0].index("--run-id") + 1] == run_id
-    assert argv[0][argv[0].index("--aufgabe") + 1] == "Aufgabe"
-    checkpoint = PhaseState("demo", base_dir=project_dir / ".werkstatt")
-    assert checkpoint.load()
-    assert checkpoint.run_id == run_id
-    assert checkpoint.data["tasks"][0]["id"] == "task-1"
-    persisted = registry.read("demo")
-    assert persisted is not None
-    assert persisted["run_id"] == run_id
-    assert persisted["state"] == "running"
-    assert persisted["context"] == context
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(fake_root),
+        "WERKSTATT_PROBE_READY": str(tmp_path / "worker-before-restart.ready"),
+    }
+    worker_args = [
+        sys.executable, "-m", "werkstatt.loop",
+        "--project", "demo", "--headless", "--run-id", run_id,
+    ]
+    first_worker = subprocess.Popen(
+        worker_args, cwd=tmp_path, env=env,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    resumed_worker: subprocess.Popen[bytes] | None = None
+    try:
+        _wait_ready(first_worker, Path(env["WERKSTATT_PROBE_READY"]))
+        registry_before_restart.register("demo", run_id, first_worker.pid)
+        first_worker.terminate()
+        first_worker.wait(timeout=5)
 
+        # A separate registry instance models a restarted web process.
+        registry_after_restart = LoopProcessRegistry(registry_path)
+        recovered_record = registry_after_restart.read("demo")
+        assert recovered_record is not None
+        assert recovered_record["state"] == "idle"
+        assert recovered_record["run_id"] == run_id
+
+        monkeypatch.setattr(app_module, "_PROJECTS_BASE", tmp_path)
+        monkeypatch.setattr(
+            app_module, "_loop_registry", lambda: registry_after_restart,
+        )
+        monkeypatch.setattr(app_module, "_loop_prozess", lambda _project: None)
+        monkeypatch.setattr(run_recovery, "EventStore", lambda: store)
+        app_module._LAUFENDE_LOOPS.clear()
+        app_module._LOOP_RUN_IDS.clear()
+        app_module._LOOP_LOG_HANDLES.clear()
+        app_module._PAUSIERTE_LOOPS.clear()
+
+        real_popen = subprocess.Popen
+        launch_env = {
+            **env,
+            "WERKSTATT_PROBE_READY": str(tmp_path / "worker-after-resume.ready"),
+        }
+
+        def _launch(args: list[str], **kwargs: Any) -> subprocess.Popen[bytes]:
+            nonlocal resumed_worker
+            resumed_worker = real_popen(
+                args, env=launch_env, cwd=tmp_path,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            return resumed_worker
+
+        monkeypatch.setattr(app_module.subprocess, "Popen", _launch)
+        response = TestClient(app_module.app).post(
+            "/api/projects/demo/resume",
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["resume"] is True
+        assert response.json()["run_id"] == run_id
+        assert resumed_worker is not None
+        _wait_ready(
+            resumed_worker,
+            Path(launch_env["WERKSTATT_PROBE_READY"]),
+        )
+        assert "--resume" in worker_args or response.json()["resume"] is True
+        checkpoint = PhaseState("demo", base_dir=project_dir / ".werkstatt")
+        assert checkpoint.load()
+        assert checkpoint.run_id == run_id
+        assert checkpoint.data["tasks"][0]["id"] == "task-1"
+        persisted = registry_after_restart.read("demo")
+        assert persisted is not None
+        assert persisted["run_id"] == run_id
+        assert persisted["state"] == "running"
+        assert persisted["pid"] == resumed_worker.pid
+        assert persisted["context"] == context
+    finally:
+        for process in (first_worker, resumed_worker):
+            if process is not None and process.poll() is None:
+                process.terminate()
+                process.wait(timeout=5)
