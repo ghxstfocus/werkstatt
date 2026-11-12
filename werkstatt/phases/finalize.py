@@ -24,7 +24,6 @@ from ._common import (
 from .review import _phase_review_gate
 
 
-
 def _verify_recovery_context(
     failed_stages: list[object], *, max_chars: int = 8000,
 ) -> tuple[str, bool]:
