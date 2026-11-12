@@ -1,7 +1,12 @@
 # ADR-0010: Memory zweistufig — project + global mit Promotion
 
 - **Datum:** 2026-11-04
-- **Status:** accepted
+- **Status:** superseded by ADR-0032
+- **Hinweis:** Die Provenance-, Unabhaengigkeits-, Sanitization- und
+  Widerlegungsregeln wurden in ADR-0032 uebernommen. Das dort beschriebene
+  getrennte Zwei-Datenbank-Design ist durch einen gemeinsamen logischen
+  Memory-Store mit Project-/Global-Scope ersetzt; OP-382 bleibt Voraussetzung
+  fuer Aktivierung.
 - **Kontext:** OP-220 legt eine projektlokale SQLite-DB
   (`.werkstatt/erfahrung.db`) an. Viele Erfahrungen sind aber
   universell: `# type: ignore` ohne Kommentar, `|| true` in Shell-
@@ -133,3 +138,4 @@ OP-220a erweitert nicht nur um `scope`, sondern um diese 5 Spalten
 (alle NULLABLE, keine Breaking-Changes fuer Bestandsdaten).
 
 **Neue OP:** OP-220a-AK erweitert (Provenance-Spalten).
+

@@ -112,7 +112,11 @@ einen projektuebergreifenden Automodus geschaltet.
 
 
 Fehlercluster, Reflexions-/Memory-Promotion und Memory-Graph bleiben
-gesperrt, bis OP-382 erfolgreich abgeschlossen ist. ADR-0016 und ADR-0017
+gesperrt, bis OP-382 erfolgreich abgeschlossen ist. Der spaetere Fehler-
+Memory-Store folgt ADR-0032 und uebernimmt ADR-0010s Provenance-, unabhaengige
+Bestaetigungs-, Sanitization- und Widerlegungsregeln; Projekt- und Global-
+Scope sind zwei Bereiche desselben Speichers. ADR-0026 ist nur eine spaetere
+read-only Projektion darauf. ADR-0016 und ADR-0017
 (Spec-First Testloop und Mutation-Gate) sind vorgeschlagen; sie werden erst
 nach expliziter Architekturentscheidung zu Implementierungsauftraegen.
 Debugging bleibt eine Chat-Faehigkeit, keine neue Loop-Rolle.

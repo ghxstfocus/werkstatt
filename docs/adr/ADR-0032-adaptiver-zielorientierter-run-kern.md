@@ -2,8 +2,9 @@
 
 - **Datum:** 2026-11-12
 - **Status:** accepted
-- **Ersetzt:** starre Phasenfolge als Laufzeitsteuerung; nicht die fachlichen
-  Aufgaben, Rollen oder erforderlichen Freigaben
+- **Ersetzt:** ADR-0010s separates Memory-Speicherdesign sowie die starre
+  Phasenfolge als Laufzeitsteuerung; nicht die fachlichen Aufgaben, Rollen
+  oder erforderlichen Freigaben
 - **Ergaenzt:** ADR-0006, ADR-0007, ADR-0019, ADR-0020, ADR-0022,
   ADR-0024, ADR-0029, ADR-0030 und ADR-0031
 - **Grundlage:** Nutzerfreigabe zum vollstaendigen Umbau vom 2026-11-12
@@ -212,6 +213,40 @@ Begruendung zurueck an den Koordinator und, wenn Ziel oder Umfang betroffen
 sind, an ein Human Gate. Fuer triviale oder eindeutig spezifizierte Aufgaben
 entfaellt der Spec-Builder; der Koordinator waehlt den kuerzesten sicheren
 Pfad. Die Verwendung und Entscheidung werden in Control protokolliert.
+
+### Ein evidenzbasiertes Fehlergedaechtnis mit zwei Gueltigkeitsbereichen
+
+Das Fehlergedaechtnis ist eine spaetere Faehigkeit desselben Koordinators,
+kein zweites autonomes Gehirn und kein Ersatz fuer Run-Historie. Der Event
+Store bleibt Quelle fuer vollstaendige Run-Episoden und Belege. Ein logischer
+Memory-Store fuehrt wiederverwendbare Erkenntnisse mit `project`- oder
+`global`-Scope; Projekt- und globale Erkenntnisse nutzen dieselbe Provenance-,
+Verifikations- und Widerlegungslogik. Getrennte, konkurrierende Memory-DBs
+oder ein Graph als zweite Wissensquelle werden nicht eingefuehrt.
+
+- Projektbezogene Fehlerbilder und Fix-Erfahrungen koennen nach unabhaengiger
+  Verifikation fuer dasselbe Projekt vorgeschlagen werden. Pfade, Versionen,
+  Befehle und Projektannahmen bleiben klar gebunden.
+- Globale Muster entstehen nur aus unabhaengigen Beobachtungen in mindestens
+  zwei Projekten, nach erfolgreicher Anwendung und Sanitization von Pfaden,
+  Projekt-/Hostnamen und Secrets. Ein einzelner Run oder mehrere Wiederholungen
+  desselben Kontextes zaehlen nicht als unabhaengige Bestaetigung.
+- Jedes Wissen traegt Run-/Projekt-Provenance, Kontext- und Regelversion,
+  Ursachenkategorie, Verifikationsresultat, Geltungsbereich und moegliche
+  Widerlegung. Widerspruch senkt den Trust und wird append-only protokolliert.
+- Retrieval ist projektgebunden und liefert zuerst passende Projektbelege,
+  danach globale Kandidaten mit niedrigerem Gewicht. Der Reasoner darf sie als
+  Hypothese nutzen; Verify muss den Fix im aktuellen Checkout neu bestaetigen.
+  Memory kann keinen Plan, Scope, Sicherheitscheck oder Human Gate erweitern.
+- Promotion bleibt explizit und bis zum OP-382-Betriebsnachweis deaktiviert.
+  Danach beginnt sie als Vorschlag mit menschlicher Bestaetigung; automatisches
+  Lernen und automatische globale Promotion sind nicht Teil dieses ADRs.
+
+ADR-0010 wird durch diese Entscheidung abgeloest: seine Provenance-,
+Unabhaengigkeits-, Sanitization- und Widerlegungsregeln bleiben erhalten;
+die dort vorgeschlagenen zwei physischen Datenbanken und Tabellen werden nicht
+als separater Bauplan umgesetzt. ADR-0026s Memory-Graph bleibt eine spaetere,
+read-only Visualisierung derselben Memory-Eintraege, kein eigener Speicher.
 
 ## 6. Ereignisse und UI-Vertrag
 

@@ -1,10 +1,14 @@
 # ADR-0026: Memory-Graph-Visualisierung
 
 Datum: 2026-11-09
-Status: Accepted
+Status: Deferred by ADR-0032
 Grundlage fuer: OP-380
 
 ## Kontext
+
+ADR-0032 legt den gemeinsamen evidenzbasierten Memory-Store fest. Diese ADR
+beschreibt nur eine spaetere read-only Projektion desselben Speichers; es wird
+keine eigene Graph-Datenquelle und keine separate Promotion-Logik eingefuehrt.
 
 Nach OP-220 (Erfahrungs-Gehirn) und OP-221 (Memory-Destillation)
 entstehen Erfahrungs-Eintraege in `.werkstatt/erfahrung.db`. Diese
@@ -93,3 +97,4 @@ Editor (nur Lesen).
 
 - total-agent-memory, memorygraph, heym, Cognee, AgentFlow, Langfuse
 - OP-220, OP-221, OP-222
+

@@ -13,7 +13,7 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0007](ADR-0007-gate-bridge.md) | Gate-Bridge — Loop headless, Gates ueber HTTP | accepted |
 | [ADR-0008](ADR-0008-chat-eigener-agent.md) | Chat als eigener Agent | accepted |
 | [ADR-0009](ADR-0009-timeline-primaer-layout-a.md) | Timeline primaer, Chat rechts (Layout A) | accepted |
-| [ADR-0010](ADR-0010-memory-zweistufig.md) | Memory zweistufig — project + global | accepted |
+| [ADR-0010](ADR-0010-memory-zweistufig.md) | Memory zweistufig — Provenance-Entscheidungen in ADR-0032 uebernommen | superseded |
 | [ADR-0011](ADR-0011-debugger-chat-modus.md) | Debugger als Chat-Modus (evidence-first) | accepted |
 | [ADR-0012](ADR-0012-vier-strukturmuster.md) | Vier Strukturmuster als Ursache fuer Multi-File-Failure | accepted |
 | [ADR-0013](ADR-0013-layer-architektur.md) | Layer-Architektur + Submodul-Split-Reihenfolge | accepted |
@@ -29,7 +29,7 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0023](ADR-0023-multi-projekt-kontext.md) | Multi-Projekt-Kontext | accepted |
 | [ADR-0024](ADR-0024-tiered-event-log.md) | Tiered Event Log + Projector (CQRS-light) | accepted |
 | [ADR-0025](ADR-0025-erfolgsquoten-visualisierung.md) | Erfolgsquoten-Visualisierung | accepted |
-| [ADR-0026](ADR-0026-memory-graph-visualisierung.md) | Memory-Graph-Visualisierung | accepted |
+| [ADR-0026](ADR-0026-memory-graph-visualisierung.md) | Memory-Graph-Visualisierung als spaetere read-only Projektion | deferred |
 | [ADR-0027](ADR-0027-selbstverbesserungs-loop.md) | Selbstverbesserungs-Loop (Trace-First + Preservation-Gate) | proposed |
 | [ADR-0028](ADR-0028-scout-report-als-architect-kontext.md) | Scout-Report als einzige Architect-Kontextquelle | accepted |
 | [ADR-0029](ADR-0029-chat-zentrierte-projektsteuerung.md) | Chat-zentrierter Control-Plane und autonome Arbeit | accepted |
