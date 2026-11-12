@@ -289,14 +289,14 @@ def test_stash_pop_uses_exact_entry_and_never_drops_on_conflict(tmp_path):
     def _fake_run(argv, **_kwargs):
         calls.append(list(argv))
         if "list" in argv:
-            return _fake_result(0, f"stash@{{1}}\t{stash_sha}\n")
+            return _fake_result(0, f"{stash_sha}\n")
         return _fake_result(1, "", "conflict")
 
     with patch("werkstatt.loop.subprocess.run", _fake_run):
         assert loop._git_stash_pop(tmp_path, stash_sha) is False
 
     assert len(calls) == 2
-    assert calls[1][-2:] == ["--index", "stash@{1}"]
+    assert calls[1][-3:] == ["apply", "--index", stash_sha]
     assert all("drop" not in argv for argv in calls)
 
 
@@ -314,32 +314,44 @@ def test_stash_pop_missing_entry_does_not_touch_stash_stack(tmp_path):
     assert "list" in calls[0]
 
 
-def test_real_stash_pop_restores_own_entry_behind_newer_stash(tmp_path):
+def test_real_stash_restore_survives_concurrent_push(tmp_path):
     _init_repo(tmp_path)
+    git = ["git", "-C", str(tmp_path)]
+    run = subprocess.run
     seed = tmp_path / "seed.txt"
-    seed.write_text("run-owned change\n")
-    assert loop._git_stash(tmp_path) is True
-    run_stash = subprocess.run(
-        ["git", "-C", str(tmp_path), "rev-parse", "refs/stash"],
-        capture_output=True, text=True, check=True,
-    ).stdout.strip()
+    seed.write_text("run-owned staged change\n")
+    run([*git, "add", "seed.txt"], check=True)
+    seed.write_text("run-owned unstaged change\n")
+    run_stash = loop._git_stash_owned(tmp_path)
+    assert run_stash is not None
 
     newer_file = tmp_path / "newer.txt"
-    newer_file.write_text("user's newer stash\n")
-    assert loop._git_stash(tmp_path) is True
-    newer_stash = subprocess.run(
-        ["git", "-C", str(tmp_path), "rev-parse", "refs/stash"],
-        capture_output=True, text=True, check=True,
-    ).stdout.strip()
 
-    assert loop._git_stash_pop(tmp_path, run_stash) is True
-    assert seed.read_text() == "run-owned change\n"
-    remaining = subprocess.run(
-        ["git", "-C", str(tmp_path), "stash", "list", "--format=%H"],
+    def _concurrent_push(argv, **kwargs):
+        result = run(argv, **kwargs)
+        if argv[3:5] == ["stash", "list"]:
+            newer_file.write_text("user's newer stash\n")
+            run(
+                [*git, "stash", "push", "-u", "-m", "foreign"],
+                capture_output=True, check=True,
+            )
+        return result
+
+    with patch("werkstatt.loop.subprocess.run", _concurrent_push):
+        assert loop._git_stash_pop(tmp_path, run_stash) is True
+
+    assert seed.read_text() == "run-owned unstaged change\n"
+    assert not newer_file.exists()
+    assert run(
+        [*git, "show", ":seed.txt"], capture_output=True, text=True, check=True,
+    ).stdout == "run-owned staged change\n"
+    remaining = run(
+        [*git, "stash", "list", "--format=%H%x09%gs"],
         capture_output=True, text=True, check=True,
     ).stdout.splitlines()
-    assert newer_stash in remaining
-    assert run_stash not in remaining
+    assert len(remaining) == 2
+    assert remaining[0].endswith(": foreign")
+    assert remaining[1].startswith(f"{run_stash}\t")
 
 
 def test_real_stash_conflict_remains_recoverable(tmp_path):

@@ -116,39 +116,27 @@ def _git_stash(pd: Path) -> bool:
     except Exception:
         return False
 
+
 def _git_stash_pop(pd: Path, stash_ref: str | None = None) -> bool:
-    """Restore only this run's stash; retain it if restoration conflicts."""
+    """Restore the run's stash by commit and retain its recovery entry."""
     if (
         not isinstance(stash_ref, str)
         or len(stash_ref) not in (40, 64)
         or any(char not in "0123456789abcdefABCDEF" for char in stash_ref)
     ):
         return False
+    stash_ref = stash_ref.lower()
     try:
         listed = subprocess.run(
-            [
-                "git", "-C", str(pd), "stash", "list",
-                "--format=%gd%x09%H",
-            ],
+            ["git", "-C", str(pd), "stash", "list", "--format=%H"],
             capture_output=True, text=True, timeout=10, check=False,
         )
-        if listed.returncode != 0:
+        if listed.returncode != 0 or stash_ref not in listed.stdout.splitlines():
             return False
-        selector = ""
-        for line in listed.stdout.splitlines():
-            name, separator, commit = line.partition("\t")
-            if not separator or commit.lower() != stash_ref.lower():
-                continue
-            if not name.startswith("stash@{") or not name.endswith("}"):
-                return False
-            if not name[7:-1].isdecimal():
-                return False
-            selector = name
-            break
-        if not selector:
-            return False
+        # Positional selectors can shift between Git calls. Applying the
+        # commit directly restores the index without mutating the stash list.
         return subprocess.run(
-            ["git", "-C", str(pd), "stash", "pop", "--index", selector],
+            ["git", "-C", str(pd), "stash", "apply", "--index", stash_ref],
             capture_output=True, text=True, timeout=30, check=False,
         ).returncode == 0
     except (OSError, subprocess.SubprocessError):

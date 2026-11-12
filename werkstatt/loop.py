@@ -851,7 +851,8 @@ def _main_inner(argv: list[str] | None = None) -> int:
                 _stash_restored = _git_stash_pop(_pd, _stash_after)
                 if _stash_restored:
                     audit(
-                        "loop_stash_pop", {"stash_ref": _stash_after},
+                        "loop_stash_pop",
+                        {"stash_ref": _stash_after, "stash_retained": True},
                         _pd, args.project,
                     )
                 else:
