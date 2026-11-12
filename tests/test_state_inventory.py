@@ -29,6 +29,8 @@ def test_findet_bekannte_felder_und_kategorien():
     # Keyword gesetzt (kein "state.api_key = ..." im Code), danach nur
     # gelesen. "read_only" ist die korrekte Kategorie.
     assert erg["api_key"]["kategorie"] == "read_only"
+    # OP-403: Run-Budget wird vom Budget-Guard direkt gelesen.
+    assert erg["budget"]["kategorie"] == "read_only"
     # tasks ist aktiv (wird geschrieben und gelesen)
     assert erg["tasks"]["kategorie"] == "aktiv"
 

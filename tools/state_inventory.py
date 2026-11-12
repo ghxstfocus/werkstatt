@@ -45,7 +45,6 @@ BASELINE_GEISTER: frozenset[str] = frozenset()
 BASELINE_TOTE = frozenset({
     "agent_docs",
     "block_id",
-    "budget",
     "start_ts",
 })
 BASELINE_GETATTR_ONLY = frozenset({
