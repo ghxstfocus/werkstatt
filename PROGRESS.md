@@ -5359,3 +5359,10 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 - OP-384/387/388 sind in OP-405 konsolidiert: Rollenbudgets, begrenztes JIT-Retrieval und deterministische Budgetregressionstests bilden einen gemeinsamen Kontextvertrag.
 - OP-372/374/375, OP-394/395 und OP-308 bleiben offen: aktuelle Doku und UI belegen nur Teilfunktionen; fuer semantische Projektion, Backfill-Herkunft, vollstaendige Timeline und Browser-Dogfooding fehlt noch der angeforderte Betriebs-/Regressionnachweis. Die Oberflaeche allein ist kein Erledigungsbeleg.
 - Keine dieser Zusammenfuehrungen erklaert die enthaltenen Anforderungen fuer erledigt; sie bleiben als Akzeptanzkriterien in den neuen bzw. bestehenden OPs erhalten.
+
+
+## 2026-11-12 — Verify-State nach Recovery-Versuch zuruecksetzen
+- **Status:** done
+- **Info:** Ein erfolgreiches Verify loescht nun `last_verify_errors` und ersetzt die Stage-Ergebnisse durch die aktuelle Ausfuehrung. Damit kann ein frueherer Fehler nicht als aktueller Diagnosebefund weiterleben. Regressionstest: erst rotes, danach gruenes Verify im selben Run-State.
+- **Tests:** CI-Verifikation ausstehend.
+- **OP-403:** bleibt offen; sichere, evidenzgebundene Reparatur und erneute Endpruefung im selben Run sind noch nicht implementiert.
