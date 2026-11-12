@@ -24,8 +24,8 @@ def test_create_local_project_scaffolds_and_registers_start_config(
         "loreipsum", project_dir, allowed_root=tmp_path / "opt",
     )
 
-    assert result["name"] == "loreipsum"
-    assert Path(result["manifest"]) == config_dir / "loreipsum.yaml"
+    assert result.name == "loreipsum"
+    assert result.manifest == config_dir / "loreipsum.yaml"
     assert (project_dir / "AGENTS.md").is_file()
     assert (project_dir / "docs" / "STATUS.md").is_file()
     assert (project_dir / "docs" / "ROADMAP.md").is_file()
@@ -60,6 +60,23 @@ def test_create_local_project_rejects_invalid_name(
     assert not target.exists()
 
 
+def test_create_local_project_rejects_paths_outside_allowed_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        project_creation, "project_config",
+        lambda name: tmp_path / "projects" / f"{name}.yaml",
+    )
+
+    with pytest.raises(ValueError, match="innerhalb"):
+        project_creation.create_local_project(
+            "loreipsum", tmp_path / "outside",
+            allowed_root=tmp_path / "opt",
+        )
+
+    assert not (tmp_path / "outside").exists()
+
+
 def test_create_local_project_never_overwrites_existing_directory(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
@@ -90,7 +107,9 @@ def test_create_local_project_rejects_manifest_collision(
     monkeypatch.setattr(project_creation, "project_config", lambda _name: config)
 
     with pytest.raises(FileExistsError, match="Manifest"):
-        project_creation.create_local_project("loreipsum", target)
+        project_creation.create_local_project(
+            "loreipsum", target, allowed_root=tmp_path,
+        )
 
     assert not target.exists()
     assert config.read_text(encoding="utf-8") == "keep: true\n"
@@ -109,7 +128,9 @@ def test_create_local_project_cleans_new_directory_after_scaffold_failure(
 
     monkeypatch.setattr(project_creation, "scaffold", fail_after_partial_write)
     with pytest.raises(ValueError, match="invalid scaffold"):
-        project_creation.create_local_project("loreipsum", target)
+        project_creation.create_local_project(
+            "loreipsum", target, allowed_root=tmp_path,
+        )
 
     assert not target.exists()
     assert not config.exists()
