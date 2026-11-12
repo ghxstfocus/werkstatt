@@ -164,7 +164,7 @@ def _start_process_with_loop_identity(
 ) -> subprocess.Popen:
     module_root = tmp_path / f"worker-stub-{run_id}"
     package = module_root / "werkstatt"
-    package.mkdir(parents=True)
+    package.mkdir(parents=True, exist_ok=True)
     (package / "__init__.py").write_text("", encoding="utf-8")
     (package / "loop.py").write_text(
         "import time\ntime.sleep(30)\n",

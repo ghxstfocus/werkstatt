@@ -5853,3 +5853,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die erste Recovery-Suche pruefte CLI-Fragmente an beliebiger Stelle in argv. Ein Script-Prozess mit nachgestellten Argumenten konnte dadurch wie ein Loop aussehen. Der Test startete bisher genau diese unechte CLI-Form.
 - Die Suche verlangt jetzt die echte `python -m werkstatt.loop` Argumentposition, denselben Python-Interpreter und dieselbe Prozess-UID wie der Webserver. Nicht passende Prozesse koennen nicht mehr als Worker uebernommen werden.
 - Die Prozess-Recovery-Tests starten nun tatsaechliche Module mit der exakten Web-CLI-Form. Regressionstests decken gefaelschte Script-Argumente und fremde UIDs ab.
+
+## ADR-0032 M1 — Worker-Recovery-Pruefung nach CI (2026-11-12)
+
+- Der erste Prozessfilter pruefte Interpreter und UID fuer alle Prozesse des Hosts. Unbeteiligte Prozesse mit abweichenden Rechten machten dadurch eine leere, eindeutige Prozesssuche faelschlich zu `orphaned`.
+- Die Pruefung laeuft jetzt erst nach exaktem CLI-Match; ein passender fremder Prozess bleibt weiterhin fail-closed mehrdeutig. Mehrfach gestartete Testworker teilen sich ihr isoliertes Stub-Modul ohne Dateikollision.
+- Ruff, gezielte Recovery-Tests und Quality Gate sind fuer den Folgecommit erneut auszufuehren.

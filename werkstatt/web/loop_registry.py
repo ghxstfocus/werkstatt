@@ -105,17 +105,6 @@ def _find_run_workers(
         pid = int(entry.name)
         if pid == os.getpid():
             continue
-        try:
-            if entry.stat().st_uid != os.geteuid():
-                continue
-            executable = (entry / "exe").resolve(strict=True)
-        except FileNotFoundError:
-            continue
-        except (OSError, RuntimeError):
-            complete = False
-            continue
-        if executable != Path(sys.executable).resolve():
-            continue
         snapshot = _process_snapshot(pid)
         if snapshot is None:
             if entry.exists():
@@ -132,7 +121,19 @@ def _find_run_workers(
             complete = False
             continue
         argv = [os.fsdecode(part) for part in raw.split(b"\0") if part]
-        if _worker_command_matches(argv, project, run_id):
+        if not _worker_command_matches(argv, project, run_id):
+            continue
+        try:
+            if entry.stat().st_uid != os.geteuid():
+                complete = False
+                continue
+            executable = (entry / "exe").resolve(strict=True)
+        except FileNotFoundError:
+            continue
+        except (OSError, RuntimeError):
+            complete = False
+            continue
+        if executable == Path(sys.executable).resolve():
             workers.append((pid, identity))
     return workers, complete
 
