@@ -188,9 +188,7 @@ class LoopProcessRegistry:
                 "process_identity TEXT, "
                 "state TEXT NOT NULL, "
                 "updated_at REAL NOT NULL, "
-                "context_json TEXT NOT NULL DEFAULT '{}', "
-                "reservation_pid INTEGER, "
-                "reservation_identity TEXT)"
+                "context_json TEXT NOT NULL DEFAULT '{}')"
             )
             columns = {
                 str(row[1]) for row in conn.execute(
@@ -201,14 +199,6 @@ class LoopProcessRegistry:
                 conn.execute(
                     "ALTER TABLE loop_processes ADD COLUMN "
                     "context_json TEXT NOT NULL DEFAULT '{}'"
-                )
-            if "reservation_pid" not in columns:
-                conn.execute(
-                    "ALTER TABLE loop_processes ADD COLUMN reservation_pid INTEGER"
-                )
-            if "reservation_identity" not in columns:
-                conn.execute(
-                    "ALTER TABLE loop_processes ADD COLUMN reservation_identity TEXT"
                 )
             conn.commit()
 
@@ -229,12 +219,6 @@ class LoopProcessRegistry:
             ),
             "updated_at": float(row[5]),
             "context": _decode_context(row[6] if len(row) > 6 else None),
-            "reservation_pid": (
-                int(row[7]) if len(row) > 7 and row[7] is not None else None
-            ),
-            "reservation_identity": (
-                str(row[8]) if len(row) > 8 and row[8] is not None else None
-            ),
         }
 
     def read(self, project: str) -> dict[str, Any] | None:
@@ -244,8 +228,7 @@ class LoopProcessRegistry:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT project, run_id, pid, process_identity, state, "
-                "updated_at, context_json, reservation_pid, reservation_identity "
-                "FROM loop_processes WHERE project = ?",
+                "updated_at, context_json FROM loop_processes WHERE project = ?",
                 (project,),
             ).fetchone()
             record = self._record(row)
@@ -293,23 +276,6 @@ class LoopProcessRegistry:
                     "updated_at": now,
                 })
                 state = recovered_state
-            reservation_owner_known = (
-                record["reservation_pid"] is not None
-                and record["reservation_identity"] is not None
-            )
-            reservation_owner_alive = (
-                reservation_owner_known
-                and _pid_alive(
-                    record["reservation_pid"], record["reservation_identity"],
-                )
-            )
-            if expired_start and reservation_owner_alive:
-                # The API request that owns this start may still be between
-                # reservation and Popen/register. Never let a second request
-                # replace its reservation while that owner is alive.
-                conn.commit()
-                return record
-            starting_owner_unknown = expired_start and not reservation_owner_known
             if expired_start or state == "orphaned":
                 workers, scan_complete = _find_run_workers(
                     project, record["run_id"],
@@ -318,8 +284,7 @@ class LoopProcessRegistry:
                     pid, identity = workers[0]
                     conn.execute(
                         "UPDATE loop_processes SET state='running', pid=?, "
-                        "process_identity=?, reservation_pid=NULL, "
-                        "reservation_identity=NULL, updated_at=? WHERE project=? "
+                        "process_identity=?, updated_at=? WHERE project=? "
                         "AND run_id=?",
                         (pid, identity, now, project, record["run_id"]),
                     )
@@ -330,11 +295,10 @@ class LoopProcessRegistry:
                         "updated_at": now,
                     })
                     record.pop("recovery_issue", None)
-                elif not workers and scan_complete and not starting_owner_unknown:
+                elif not workers and scan_complete:
                     conn.execute(
                         "UPDATE loop_processes SET state='idle', pid=NULL, "
-                        "process_identity=NULL, reservation_pid=NULL, "
-                        "reservation_identity=NULL, updated_at=? WHERE project=? "
+                        "process_identity=NULL, updated_at=? WHERE project=? "
                         "AND run_id=?",
                         (now, project, record["run_id"]),
                     )
@@ -348,8 +312,7 @@ class LoopProcessRegistry:
                 else:
                     conn.execute(
                         "UPDATE loop_processes SET state='orphaned', pid=NULL, "
-                        "process_identity=NULL, reservation_pid=NULL, "
-                        "reservation_identity=NULL, updated_at=? WHERE project=? "
+                        "process_identity=NULL, updated_at=? WHERE project=? "
                         "AND run_id=?",
                         (now, project, record["run_id"]),
                     )
@@ -364,8 +327,7 @@ class LoopProcessRegistry:
             elif dead_process:
                 conn.execute(
                     "UPDATE loop_processes SET state='idle', pid=NULL, "
-                    "process_identity=NULL, reservation_pid=NULL, "
-                    "reservation_identity=NULL, updated_at=? WHERE project=? "
+                    "process_identity=NULL, updated_at=? WHERE project=? "
                     "AND run_id=?",
                     (now, project, record["run_id"]),
                 )
@@ -394,8 +356,7 @@ class LoopProcessRegistry:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT project, run_id, pid, process_identity, state, "
-                "updated_at, context_json, reservation_pid, reservation_identity "
-                "FROM loop_processes WHERE project = ?",
+                "updated_at, context_json FROM loop_processes WHERE project = ?",
                 (project,),
             ).fetchone()
             existing = self._record(row)
@@ -408,60 +369,6 @@ class LoopProcessRegistry:
                     state == "starting"
                     and now - existing["updated_at"] <= _STARTING_TTL_SECONDS
                 )
-                if state == "starting" and not starting_live:
-                    owner_known = (
-                        existing["reservation_pid"] is not None
-                        and existing["reservation_identity"] is not None
-                    )
-                    if not owner_known:
-                        conn.execute(
-                            "UPDATE loop_processes SET state='orphaned', "
-                            "updated_at=? WHERE project=? AND run_id=? "
-                            "AND state='starting'",
-                            (now, project, existing["run_id"]),
-                        )
-                        existing["state"] = "orphaned"
-                        existing["recovery_issue"] = "worker_identity_ambiguous"
-                        conn.commit()
-                        return False, existing
-                    if _pid_alive(
-                        existing["reservation_pid"],
-                        existing["reservation_identity"],
-                    ):
-                        conn.commit()
-                        return False, existing
-                    workers, scan_complete = _find_run_workers(
-                        project, existing["run_id"],
-                    )
-                    if len(workers) == 1 and scan_complete:
-                        pid, identity = workers[0]
-                        conn.execute(
-                            "UPDATE loop_processes SET state='running', pid=?, "
-                            "process_identity=?, reservation_pid=NULL, "
-                            "reservation_identity=NULL, updated_at=? "
-                            "WHERE project=? AND run_id=? AND state='starting'",
-                            (pid, identity, now, project, existing["run_id"]),
-                        )
-                        existing.update({
-                            "state": "running", "pid": pid,
-                            "process_identity": identity, "updated_at": now,
-                        })
-                        existing["reservation_pid"] = None
-                        existing["reservation_identity"] = None
-                        conn.commit()
-                        return False, existing
-                    if workers or not scan_complete:
-                        conn.execute(
-                            "UPDATE loop_processes SET state='orphaned', "
-                            "reservation_pid=NULL, reservation_identity=NULL, "
-                            "updated_at=? WHERE project=? AND run_id=? "
-                            "AND state='starting'",
-                            (now, project, existing["run_id"]),
-                        )
-                        existing["state"] = "orphaned"
-                        existing["recovery_issue"] = "worker_identity_ambiguous"
-                        conn.commit()
-                        return False, existing
                 process_live = (
                     state in _LIVE_STATES
                     and _pid_alive(existing["pid"], existing["process_identity"])
@@ -469,24 +376,15 @@ class LoopProcessRegistry:
                 if starting_live or process_live:
                     conn.commit()
                     return False, existing
-            request_pid = os.getpid()
-            request_snapshot = _process_snapshot(request_pid)
-            request_identity = request_snapshot[0] if request_snapshot else None
             conn.execute(
                 "INSERT INTO loop_processes "
                 "(project, run_id, pid, process_identity, state, updated_at, "
-                "context_json, reservation_pid, reservation_identity) "
-                "VALUES (?, ?, NULL, NULL, 'starting', ?, ?, ?, ?) "
+                "context_json) VALUES (?, ?, NULL, NULL, 'starting', ?, ?) "
                 "ON CONFLICT(project) DO UPDATE SET "
                 "run_id=excluded.run_id, pid=NULL, process_identity=NULL, "
                 "state='starting', updated_at=excluded.updated_at, "
-                "context_json=excluded.context_json, "
-                "reservation_pid=excluded.reservation_pid, "
-                "reservation_identity=excluded.reservation_identity",
-                (
-                    project, run_id, now, context_json, request_pid,
-                    request_identity,
-                ),
+                "context_json=excluded.context_json",
+                (project, run_id, now, context_json),
             )
             conn.commit()
         return True, None
@@ -498,7 +396,6 @@ class LoopProcessRegistry:
         with closing(self._connect()) as conn:
             cur = conn.execute(
                 "UPDATE loop_processes SET pid=?, process_identity=?, "
-                "reservation_pid=NULL, reservation_identity=NULL, "
                 "state='running', updated_at=? "
                 "WHERE project=? AND run_id=? AND state='starting'",
                 (pid, identity, time.time(), project, run_id),
@@ -516,13 +413,9 @@ class LoopProcessRegistry:
                 "UPDATE loop_processes SET state=?, "
                 "pid=CASE WHEN ?='idle' THEN NULL ELSE pid END, "
                 "process_identity=CASE WHEN ?='idle' THEN NULL "
-                "ELSE process_identity END, "
-                "reservation_pid=CASE WHEN ?='idle' THEN NULL "
-                "ELSE reservation_pid END, "
-                "reservation_identity=CASE WHEN ?='idle' THEN NULL "
-                "ELSE reservation_identity END, updated_at=? "
+                "ELSE process_identity END, updated_at=? "
                 "WHERE project=? AND run_id=?",
-                (state, state, state, state, state, time.time(), project, run_id),
+                (state, state, state, time.time(), project, run_id),
             )
             conn.commit()
             return cur.rowcount == 1
@@ -579,14 +472,10 @@ class LoopProcessRegistry:
                 "UPDATE loop_processes SET state=?, "
                 "pid=CASE WHEN ?='idle' THEN NULL ELSE pid END, "
                 "process_identity=CASE WHEN ?='idle' THEN NULL "
-                "ELSE process_identity END, "
-                "reservation_pid=CASE WHEN ?='idle' THEN NULL "
-                "ELSE reservation_pid END, "
-                "reservation_identity=CASE WHEN ?='idle' THEN NULL "
-                "ELSE reservation_identity END, updated_at=? "
+                "ELSE process_identity END, updated_at=? "
                 "WHERE project=? AND run_id=? AND state=?",
                 (
-                    state, state, state, state, state, time.time(),
+                    state, state, state, time.time(),
                     project, run_id, expected_state,
                 ),
             )
