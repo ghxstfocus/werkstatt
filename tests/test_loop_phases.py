@@ -556,6 +556,10 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
         return True, "abc123"
 
     monkeypatch.setattr(finalize, "_verify_patches", verify)
+    monkeypatch.setattr(
+        finalize, "_post_commit_snapshot_check",
+        lambda *_args: (True, {"worktree_clean": True}),
+    )
     monkeypatch.setattr("werkstatt.progress.append", append_progress)
     monkeypatch.setattr("werkstatt.committer._committe_zielprojekt", commit)
 
