@@ -5556,4 +5556,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - GitHub-Actions zeigte drei Integrationsfehler: neue Recovery-Events fehlten im Audit-Katalog; ein fehlgeschlagener Builder-Versuch brach vor dem menschlichen Phase-End-Gate ab; ein lokaler Resume-Test hatte ungültige YAML-Zeilenumbrüche.
 - Recovery öffnet nun auch nach einem erfolglosen automatischen Reparaturversuch das adressierte Gate mit Failure Record. Die Entscheidung bleibt beim Menschen; ein Erfolg wird weiterhin nur nach bestandener vollständiger Verify gemeldet.
 - Audit-Katalog um die Verify-Recovery- und Checkpoint-Mismatch-Events ergänzt. Resume-Fixture auf echtes mehrzeiliges YAML umgestellt.
-- CI für die vorherigen Commits: Runs 43247044555 und 43248717924 fehlgeschlagen; diese Korrektur wartet auf neue CI- und Server-Verifikation.
+- CI-Runs 43247044555 und 43248717924 belegten die Ausgangsfehler. Run 43250234763 stoppte zunächst am Ruff-Doppel-Eintrag des bereits vorhandenen `loop_checkpoint_run_mismatch`; der doppelte Katalogeintrag wurde entfernt. Neue CI- und Server-Verifikation stehen noch aus.
