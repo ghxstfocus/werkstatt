@@ -5522,3 +5522,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - OP-403: Ein Git-Fehler wurde im Failure Record bisher mit leerer Ausgabe gleichgesetzt. Das konnte einen scheinbar gültigen konstanten Worktree-Fingerprint erzeugen.
 - Failure Records markieren HEAD/Fingerprint nun als nicht verfügbar, wenn Git-Abfragen fehlschlagen. Die automatische Phase-End-Reparatur bleibt dann vor dem Builder fail-closed und protokolliert die fehlenden Provenienzfelder.
 - Tests prüfen fehlende Git-Provenienz und dass ohne Fingerprint kein Reparaturaufruf erfolgt. GitHub-CI-Verifikation ausstehend.
+
+
+## 2026-11-12 — Phase-End-Recovery erhält begrenzte Verify-Belege
+
+- OP-403: Der Recovery-Prompt wurde nach einer pauschalen 8.000-Zeichen-Grenze abgeschnitten. Bei vielen oder langen Verify-Ausgaben konnte dadurch ungültiges JSON entstehen und spätere Fehlerbelege verloren gehen.
+- Die Begrenzung kürzt Auszüge strukturiert, erhält Stage-IDs und Exit-Codes wo möglich und kennzeichnet gekürzte oder ausgelassene Belege. Der erzeugte JSON-Teil bleibt parsebar und innerhalb des Budgets.
+- Regressionstests decken lange Ausgaben und Metadaten-Überlauf ab. GitHub-CI-Verifikation ausstehend.

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from werkstatt import failure_record
 from werkstatt.phases import finalize
+from werkstatt.phases.finalize import _verify_recovery_context
 
 
 def test_failure_record_persists_bounded_sanitized_verify_evidence(
@@ -518,3 +519,39 @@ def test_git_output_marks_command_failure_as_unavailable(
 
     assert failure_record._git_output(tmp_path, "status") is None
     assert failure_record._worktree_fingerprint(tmp_path) is None
+
+
+def test_verify_recovery_context_keeps_valid_json_and_all_stage_ids() -> None:
+    stages = [
+        {"stage_id": f"stage_{index}", "exit_code": 1,
+         "error_excerpt": ("failure evidence\n" * 100)}
+        for index in range(16)
+    ]
+
+    context, truncated = _verify_recovery_context(stages)
+
+    assert len(context) <= 8000
+    assert truncated
+    payload = json.loads(context.split("\n", 1)[1])
+    assert [row["stage_id"] for row in payload["failed_stages"]] == [
+        f"stage_{index}" for index in range(16)
+    ]
+    assert payload["evidence_truncated"] is True
+    assert all(len(row["error_excerpt"]) < 1200 for row in payload["failed_stages"])
+
+
+def test_verify_recovery_context_reports_omitted_metadata() -> None:
+    stages = [
+        {"stage_id": f"very_long_stage_identifier_{index}_" + ("x" * 160),
+         "exit_code": 1, "error_excerpt": "failure"}
+        for index in range(200)
+    ]
+
+    context, truncated = _verify_recovery_context(stages, max_chars=800)
+
+    assert len(context) <= 800
+    assert truncated
+    payload = json.loads(context.split("\n", 1)[1])
+    assert payload["failed_stage_count"] == 200
+    assert payload["omitted_stage_count"] > 0
+    assert len(payload["failed_stage_ids"]) + payload["omitted_stage_count"] == 200
