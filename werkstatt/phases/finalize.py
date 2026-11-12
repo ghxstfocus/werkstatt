@@ -165,7 +165,7 @@ def _phase_finalize(
             _candidate = _phase_data.get("tasks")
             if isinstance(_candidate, list):
                 _records = _candidate
-        if _records is None:
+        if not _records:
             _records = tasks or []
 
         _unresolved = []
