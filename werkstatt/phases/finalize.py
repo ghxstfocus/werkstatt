@@ -186,12 +186,22 @@ def _phase_finalize(
                 ),
             )
 
-            if not stage_ids or not artifact_saved:
+            missing_provenance = [
+                field
+                for field in ("work_sha", "worktree_fingerprint")
+                if not failure_record.get(field)
+            ]
+            if not stage_ids or not artifact_saved or missing_provenance:
                 gate_payload = _gate_failed_payload(
                     "phase_end",
                     getattr(state, "last_verify_errors", []) or [],
                 )
                 gate_payload["failure_record"] = failure_record
+                if missing_provenance:
+                    gate_payload["recovery_blocked"] = (
+                        "failure_record_provenance_missing"
+                    )
+                    gate_payload["missing_provenance"] = missing_provenance
                 audit("loop_gate_failed", gate_payload, pd, pn)
                 rc = 1
                 break

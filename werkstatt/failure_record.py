@@ -27,7 +27,7 @@ def _audit_root() -> Path:
     return _werkstatt_home()
 
 
-def _git_output(project_dir: Path, *args: str) -> bytes:
+def _git_output(project_dir: Path, *args: str) -> bytes | None:
     try:
         result = subprocess.run(
             ["git", "-C", str(project_dir), *args],
@@ -36,13 +36,13 @@ def _git_output(project_dir: Path, *args: str) -> bytes:
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
-        return b""
+        return None
     if result.returncode:
-        return b""
+        return None
     return result.stdout or b""
 
 
-def _worktree_fingerprint(project_dir: Path) -> str:
+def _worktree_fingerprint(project_dir: Path) -> str | None:
     """Hash tracked diffs and contents of non-ignored untracked files.
 
     Untracked contents are hashed, never persisted. Symlink targets are
@@ -52,11 +52,13 @@ def _worktree_fingerprint(project_dir: Path) -> str:
         project_dir, "status", "--porcelain=v1", "--untracked-files=all",
     )
     diff = _git_output(project_dir, "diff", "--binary", "HEAD")
-    digest = hashlib.sha256(status + b"\0" + diff)
-    root = project_dir.resolve()
     untracked = _git_output(
         project_dir, "ls-files", "--others", "--exclude-standard", "-z",
     )
+    if status is None or diff is None or untracked is None:
+        return None
+    digest = hashlib.sha256(status + b"\0" + diff)
+    root = project_dir.resolve()
     paths = sorted(part for part in untracked.split(b"\0") if part)
     for raw_path in paths:
         relative = Path(os.fsdecode(raw_path))
@@ -112,6 +114,10 @@ def create_failure_record(state: Any, *, stage: str) -> dict[str, Any]:
 
     head = _git_output(project_dir, "rev-parse", "--verify", "HEAD")
     fingerprint = _worktree_fingerprint(project_dir)
+    work_sha = (
+        head.decode("ascii", errors="ignore").strip()
+        if head is not None else ""
+    ) or None
     failed_stages = []
     for item in getattr(state, "last_verify_results", []) or []:
         if not isinstance(item, dict) or item.get("ok") is True:
@@ -133,7 +139,7 @@ def create_failure_record(state: Any, *, stage: str) -> dict[str, Any]:
         "project": project_name,
         "stage": str(stage)[:120],
         "created_at": datetime.now(UTC).isoformat(),
-        "work_sha": head.decode("ascii", errors="ignore").strip() or None,
+        "work_sha": work_sha,
         "worktree_fingerprint": fingerprint,
         "failed_stages": failed_stages,
     }

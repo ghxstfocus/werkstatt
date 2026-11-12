@@ -128,7 +128,17 @@ def test_phase_finalize_attaches_failure_record_and_never_marks_success(
         lambda *_args, **_kwargs: {
             "artifact_ref": "audit-logs/run-1/failures/phase_end.json",
             "work_sha": "abc123",
+            "worktree_fingerprint": None,
+            "failed_stages": [
+                {"stage_id": "pytest", "exit_code": 1,
+                 "error_excerpt": "AssertionError"},
+            ],
         },
+    )
+    recovery_calls = []
+    monkeypatch.setattr(
+        finalize, "_reflection_loop",
+        lambda *_args, **_kwargs: recovery_calls.append(True) or True,
     )
     monkeypatch.setattr(finalize, "summary", lambda *_args: None)
     monkeypatch.setattr("werkstatt.progress.append", lambda *_args, **_kwargs: None)
@@ -157,6 +167,13 @@ def test_phase_finalize_attaches_failure_record_and_never_marks_success(
     assert result == 1
     assert gate_failures
     assert gate_failures[-1][1]["failure_record"]["work_sha"] == "abc123"
+    assert gate_failures[-1][1]["recovery_blocked"] == (
+        "failure_record_provenance_missing"
+    )
+    assert gate_failures[-1][1]["missing_provenance"] == [
+        "worktree_fingerprint",
+    ]
+    assert recovery_calls == []
     assert not any(item[0] == "loop_erfolg" for item in events)
 
 
@@ -184,6 +201,8 @@ def test_phase_finalize_repairs_failed_phase_end_verify_in_same_run(
         lambda *_args, **_kwargs: {
             "failure_id": "failure-1",
             "artifact_ref": "audit-logs/run-1/failures/phase_end.json",
+            "work_sha": "abc123",
+            "worktree_fingerprint": "fingerprint-1",
             "failed_stages": [
                 {
                     "stage_id": "pytest_regression",
@@ -240,6 +259,7 @@ def test_phase_finalize_continues_when_full_verify_finds_another_stage(
         {
             "failure_id": "failure-1",
             "artifact_ref": "audit-logs/run-1/failures/first.json",
+            "work_sha": "abc123",
             "worktree_fingerprint": "fingerprint-a",
             "failed_stages": [
                 {"stage_id": "ruff", "exit_code": 1, "error_excerpt": "F401"},
@@ -248,6 +268,7 @@ def test_phase_finalize_continues_when_full_verify_finds_another_stage(
         {
             "failure_id": "failure-2",
             "artifact_ref": "audit-logs/run-1/failures/second.json",
+            "work_sha": "abc123",
             "worktree_fingerprint": "fingerprint-b",
             "failed_stages": [
                 {
@@ -318,6 +339,7 @@ def test_phase_finalize_stops_on_repeated_failure_at_same_worktree(
     record = {
         "failure_id": "failure-repeat",
         "artifact_ref": "audit-logs/run-1/failures/repeated.json",
+        "work_sha": "abc123",
         "worktree_fingerprint": "unchanged",
         "failed_stages": [
             {"stage_id": "pytest_regression", "exit_code": 1,
@@ -386,6 +408,7 @@ def test_phase_finalize_stops_when_worktree_does_not_change_even_if_error_text_c
         {
             "failure_id": "failure-first",
             "artifact_ref": "audit-logs/run-1/failures/first.json",
+            "work_sha": "abc123",
             "worktree_fingerprint": "unchanged",
             "failed_stages": [
                 {"stage_id": "pytest_regression", "exit_code": 1,
@@ -395,6 +418,7 @@ def test_phase_finalize_stops_when_worktree_does_not_change_even_if_error_text_c
         {
             "failure_id": "failure-second",
             "artifact_ref": "audit-logs/run-1/failures/second.json",
+            "work_sha": "abc123",
             "worktree_fingerprint": "unchanged",
             "failed_stages": [
                 {"stage_id": "pytest_regression", "exit_code": 1,
@@ -452,3 +476,45 @@ def test_phase_finalize_stops_when_worktree_does_not_change_even_if_error_text_c
     assert stalled
     assert stalled[-1][1]["reason"] == "worktree_unchanged_after_repair"
     assert not any(item[0] == "loop_erfolg" for item in events)
+
+
+
+def test_failure_record_does_not_fabricate_git_provenance(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    artifact_root = tmp_path / "werkstatt"
+    monkeypatch.setattr(failure_record, "_audit_root", lambda: artifact_root)
+    monkeypatch.setattr(failure_record, "_git_output", lambda *_args: None)
+    state = SimpleNamespace(
+        run_id="run-no-git",
+        project_name="demo",
+        project_dir=project,
+        last_verify_results=[
+            {"stage_id": "pytest", "exit_code": 1, "ok": False,
+             "error_excerpt": "AssertionError"},
+        ],
+    )
+
+    result = failure_record.create_failure_record(state, stage="phase_end")
+
+    assert result["artifact_ref"]
+    assert result["work_sha"] is None
+    assert result["worktree_fingerprint"] is None
+    artifact = artifact_root / result["artifact_ref"]
+    persisted = json.loads(artifact.read_text(encoding="utf-8"))
+    assert persisted["work_sha"] is None
+    assert persisted["worktree_fingerprint"] is None
+
+
+def test_git_output_marks_command_failure_as_unavailable(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    def fail(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired("git status", 1)
+
+    monkeypatch.setattr(failure_record.subprocess, "run", fail)
+
+    assert failure_record._git_output(tmp_path, "status") is None
+    assert failure_record._worktree_fingerprint(tmp_path) is None
