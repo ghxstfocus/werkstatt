@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 from werkstatt.state import RunState
@@ -127,6 +128,35 @@ def _op_nnn_fuer_doku_nachzug(
     if not op_nnn:
         return None, "no_explicit_op_in_task"
     return op_nnn, ""
+
+
+_OP_DOKU_DATEIEN = ("docs/STATUS.md", "PROGRESS.md", "CHANGELOG.md")
+
+
+def _snapshot_op_doku(project_dir: Path) -> dict[Path, str | None] | None:
+    """Sichert die Dateien, die der automatische OP-Nachzug mutieren darf."""
+    snapshot: dict[Path, str | None] = {}
+    try:
+        for rel_path in _OP_DOKU_DATEIEN:
+            path = project_dir / rel_path
+            snapshot[path] = path.read_text(encoding="utf-8") if path.is_file() else None
+    except (OSError, UnicodeError):
+        return None
+    return snapshot
+
+
+def _restore_op_doku(snapshot: dict[Path, str | None]) -> bool:
+    """Stellt den vor dem OP-Nachzug gesicherten Doku-Stand wieder her."""
+    try:
+        for path, content in snapshot.items():
+            if content is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+    except (OSError, UnicodeError):
+        return False
+    return True
 
 
 def _status_md_op_entfernen(status_md_path: Path, op_nnn: str) -> tuple[bool, str]:
@@ -560,7 +590,11 @@ def _post_commit_check(
     return True, sha, {"reason": "verified", "message": "HEAD, Commit-Diff und Arbeitsbaum sind geprueft."}
 
 
-def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
+def _committe_zielprojekt(
+    state: RunState,
+    *,
+    verify_callback: Callable[[], bool] | None = None,
+) -> tuple[bool, str]:
     """M-487: Committet uncommittete Aenderungen im Zielprojekt.
 
     Wird vom Human-Gate nach 'j' aufgerufen. Fail-closed bei Git-Fehler.
@@ -572,6 +606,27 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     if pd is None:
         return False, "kein project_dir"
 
+    doku_commit_only = bool(getattr(state, "doku_nachzug_commit_only", False))
+    doku_snapshot = _snapshot_op_doku(Path(pd)) if doku_commit_only else None
+    if doku_commit_only and doku_snapshot is None:
+        return False, "OP-Doku-Snapshot konnte nicht gesichert werden."
+    if doku_commit_only:
+        state.doku_nachzug_applied = False
+
+    def _restore_doku_and_index() -> bool:
+        if doku_snapshot is None:
+            return True
+        restored = _restore_op_doku(doku_snapshot)
+        if not restored:
+            audit("doku_nachzug_status_restore_failed",
+                  {"reason": "deferred_verify_or_commit_failed"}, pd, pn)
+            return False
+        subprocess.run(
+            ["git", "-C", str(pd), "reset", "--quiet", "--", *_OP_DOKU_DATEIEN],
+            capture_output=True, text=True, check=False, timeout=10,
+        )
+        return True
+
     try:
         status = subprocess.run(
             ["git", "-C", str(pd), "status", "--porcelain"],
@@ -579,7 +634,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
         )
     except Exception as _e:
         return False, f"git status fehlgeschlagen: {_e}"
-    if not status.stdout.strip():
+    if not status.stdout.strip() and not doku_commit_only:
         audit("loop_human_gate_commit_skip",
               {"reason": "working_tree_clean"}, pd, pn)
         return True, ""
@@ -588,22 +643,26 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     # damit er im selben Commit landet wie der Task-Diff. Vorher
     # wurde er vom Hauptloop NACH dem Commit geschrieben und blieb
     # uncommitted (Live-Beleg 2026-10-30: 53db3b0).
-    try:
-        from werkstatt import progress as _progress_k
-        _tasks_len_k = len(state.tasks or [])
-        _tasks_ok_k = int(getattr(state, "tasks_ok_counter", 0) or 0)
-        _progress_k.append(
-            pd,
-            name=f"Phase abgeschlossen: {pn}",
-            status="phase_ende",
-            info=f"tasks_ok={_tasks_ok_k}/{_tasks_len_k}",
-            run_id=getattr(state, "run_id", None),
-        )
-    except Exception:
-        pass
+    if not doku_commit_only:
+        try:
+            from werkstatt import progress as _progress_k
+            _tasks_len_k = len(state.tasks or [])
+            _tasks_ok_k = int(getattr(state, "tasks_ok_counter", 0) or 0)
+            _progress_k.append(
+                pd,
+                name=f"Phase abgeschlossen: {pn}",
+                status="phase_ende",
+                info=f"tasks_ok={_tasks_ok_k}/{_tasks_len_k}",
+                run_id=getattr(state, "run_id", None),
+            )
+        except Exception:
+            pass
 
     # OP-048/055/056/057: Doku-Selbstpflege Ebene 1+2 (opt-in WERKSTATT_DOKU_NACHZUG=1).
-    if _doku_nachzug_aktiv():
+    if (
+        _doku_nachzug_aktiv()
+        and not getattr(state, "doku_nachzug_deferred", False)
+    ):
         _op_nnn, _doku_skip_reason = _op_nnn_fuer_doku_nachzug(
             state.aufgabe or "",
             getattr(state, "akzeptanzkriterien", []),
@@ -676,7 +735,10 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
                         pn,
                     )
                 else:
-                    _update_kennzahlen(_status_path, Path(pd))
+                    if doku_commit_only:
+                        state.doku_nachzug_applied = True
+                    if not doku_commit_only:
+                        _update_kennzahlen(_status_path, Path(pd))
                     _update_changelog(Path(pd), f"{_op_nnn}: {_subject}")
                     _drift = _architecture_drift_check(Path(pd))
                     if _drift.get("drift"):
@@ -696,16 +758,36 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
                 )
                 _already_dz = f"| {_op_nnn} |" in _dz_text
                 if _already_dz:
-                    _progress_op_done(
+                    _retry_progress_ok = _progress_op_done(
                         Path(pd), _op_nnn, _subject, pn,
                         run_id=getattr(state, "run_id", None),
                     )
+                    if doku_commit_only and _retry_progress_ok:
+                        state.doku_nachzug_applied = True
                     audit("doku_nachzug_delete_zone_retry",
                           {"op_nnn": _op_nnn}, pd, pn)
                 else:
                     audit("doku_nachzug_skip",
                           {"reason": _rm_msg, "op_nnn": _op_nnn},
                           pd, pn)
+
+    if doku_commit_only and getattr(state, "doku_nachzug_applied", False):
+        try:
+            verified = verify_callback is not None and verify_callback()
+        except Exception as exc:
+            verified = False
+            verify_error = type(exc).__name__
+        else:
+            verify_error = "verify_failed"
+        if not verified:
+            restored = _restore_doku_and_index()
+            audit(
+                "doku_nachzug_verify_failed",
+                {"reason": verify_error, "restored": restored},
+                pd,
+                pn,
+            )
+            return False, "OP-Doku-Nachzug wurde durch Verify nicht freigegeben."
 
     # FIX 2026-10-31: Task-File-Pruefung VOR git add.
     # Wenn ein Task als done markiert ist und task_files nennt,
@@ -733,7 +815,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             _p = _p.split(" -> ", 1)[1]
         if _p:
             _diff_set.add(_p)
-    _tasks_state = state.tasks or []
+    _tasks_state = [] if doku_commit_only else (state.tasks or [])
     for _t in _tasks_state:
         if not isinstance(_t, dict):
             continue
@@ -756,8 +838,10 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             capture_output=True, text=True, check=False, timeout=30,
         )
     except Exception as _e:
+        _restore_doku_and_index()
         return False, f"git add fehlgeschlagen: {_e}"
     if add.returncode != 0:
+        _restore_doku_and_index()
         return False, f"git add rc={add.returncode}: {add.stderr.strip()[:200]}"
 
     try:
@@ -769,6 +853,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             timeout=10,
         )
     except Exception as exc:
+        _restore_doku_and_index()
         return False, f"Index-Tree vor Commit nicht lesbar: {exc}"
     _expected_tree_sha = index_tree.stdout.strip()
     if (
@@ -777,6 +862,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", _expected_tree_sha,
         )
     ):
+        _restore_doku_and_index()
         return False, (
             "Index-Tree vor Commit nicht lesbar: "
             f"{(index_tree.stderr or '').strip()[:200]}"
@@ -813,6 +899,9 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     _op_nnn_subj = _op_nnn_aus_aufgabe(_aufgabe) if _aufgabe else None
     _msg_kurz = _build_commit_subject(_aufgabe or "", _op_nnn_subj)
     # Message bauen
+    if doku_commit_only:
+        _type = "docs"
+        _msg_kurz = "record verified OP completion"
     _msg = f"{_type}({_scope}): {_msg_kurz}\n\nLoop-Auftrag (Werkstatt human_gate)."
     # Laengen-Check: 72 Zeichen Subject-Limit
     if len(_msg.split("\n")[0]) > 72:
@@ -828,6 +917,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             pd,
             pn,
         )
+        _restore_doku_and_index()
         return False, f"Commit vor Ausfuehrung blockiert: {_base_error}"
 
     _commit_argv = [
@@ -842,10 +932,12 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             capture_output=True, text=True, check=False, timeout=30,
         )
     except Exception as _e:
+        _restore_doku_and_index()
         return False, f"git commit fehlgeschlagen: {_e}"
     if commit.returncode != 0:
         audit("loop_human_gate_commit_fehler",
               {"rc": commit.returncode, "stderr": commit.stderr[:300]}, pd, pn)
+        _restore_doku_and_index()
         return False, f"git commit rc={commit.returncode}: {commit.stderr.strip()[:200]}"
 
     # Commit ist noch kein Abschluss: HEAD, Commit-Diff und Working Tree
