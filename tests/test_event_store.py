@@ -194,7 +194,7 @@ def test_task_checkpoint_consumes_chat_notice_with_run_record(
         "demo",
         "run-inbox",
         "chat-job:job-1",
-        "chat_job_notice",
+        "job_notice",
         {
             "job_id": "job-1",
             "session_id": "session-1",
@@ -219,7 +219,7 @@ def test_task_checkpoint_consumes_chat_notice_with_run_record(
     assert record["checkpoint"]["safe_point"]["next_task_id"] == "t2"
     assert record["checkpoint"]["safe_point"]["completed_task_ids"] == ["t1"]
     assert record["checkpoint"]["inbox_offset"] == seq
-    assert record["checkpoint"]["chat_job_notices"] == [
+    assert record["checkpoint"]["job_notices"] == [
         {
             "seq": seq,
             "job_id": "job-1",

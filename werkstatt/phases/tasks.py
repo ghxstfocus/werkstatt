@@ -88,7 +88,7 @@ def _persist_run_checkpoint(
         )
         if message is None:
             break
-        if message["kind"] != "chat_job_notice":
+        if message["kind"] != "job_notice":
             break
         claimed.append(message)
         payload = message["payload"]
@@ -100,10 +100,10 @@ def _persist_run_checkpoint(
         })
 
     checkpoint = dict(record["checkpoint"])
-    prior_notices = checkpoint.get("chat_job_notices", [])
+    prior_notices = checkpoint.get("job_notices", [])
     if not isinstance(prior_notices, list):
         prior_notices = []
-    checkpoint["chat_job_notices"] = (prior_notices + notices)[-50:]
+    checkpoint["job_notices"] = (prior_notices + notices)[-50:]
     checkpoint["safe_point"] = {
         "phase": "build",
         "next_task_id": next_task.get("id") if next_task else None,

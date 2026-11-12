@@ -1550,7 +1550,7 @@ def create_app() -> FastAPI:
                         projekt,
                         run_id,
                         f"chat-job:{job_id}",
-                        "chat_job_notice",
+                        "job_notice",
                         {
                             "job_id": job_id,
                             "session_id": sid,

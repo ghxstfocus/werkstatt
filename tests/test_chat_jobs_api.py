@@ -79,7 +79,7 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
             "demo",
             "run-active",
             f"chat-job:{'a' * 32}",
-            "chat_job_notice",
+            "job_notice",
             {
                 "job_id": "a" * 32,
                 "session_id": "session-1",

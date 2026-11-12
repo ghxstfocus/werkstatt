@@ -5816,3 +5816,6 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die Chatjob-API schreibt bei vorhandener RunRecord-Verknuepfung eine idempotente Notiz mit Job-, Session-, Modus- und Kontextreferenz in die Run-Inbox. Der Chattext wird nicht ein zweites Mal gespeichert.
 - An Task-Grenzen schreibt der Loop einen versionierten Checkpoint mit erledigten Tasks und naechster Task. Bekannte Chatjob-Notizen werden erst nach erfolgreichem Checkpoint mit dem aktuellen Fencing-Token bestaetigt; unbekannte Typen bleiben unangetastet.
 - Tests decken Chatjob-Inbox-Kopplung, Checkpoint-Fortschritt und Lease-Ack ab. Vollstaendige M1-Restart-Wiederaufnahme, Schreibauftrag-Dispatch und Statusabschluss bleiben offen.
+
+
+- CI-Follow-up: interne Inbox-Nachrichtenklasse in `job_notice` umbenannt; dadurch wird sie nicht als Audit-Event-Katalogeintrag fehlinterpretiert.
