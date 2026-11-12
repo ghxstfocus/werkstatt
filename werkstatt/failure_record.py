@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import stat
 import tempfile
 import uuid
 from datetime import UTC, datetime
@@ -41,6 +42,50 @@ def _git_output(project_dir: Path, *args: str) -> bytes:
     return result.stdout or b""
 
 
+def _worktree_fingerprint(project_dir: Path) -> str:
+    """Hash tracked diffs and contents of non-ignored untracked files.
+
+    Untracked contents are hashed, never persisted. Symlink targets are
+    hashed as link text and are not followed outside the project tree.
+    """
+    status = _git_output(
+        project_dir, "status", "--porcelain=v1", "--untracked-files=all",
+    )
+    diff = _git_output(project_dir, "diff", "--binary", "HEAD")
+    digest = hashlib.sha256(status + b"\0" + diff)
+    root = project_dir.resolve()
+    untracked = _git_output(
+        project_dir, "ls-files", "--others", "--exclude-standard", "-z",
+    )
+    paths = sorted(part for part in untracked.split(b"\0") if part)
+    for raw_path in paths:
+        relative = Path(os.fsdecode(raw_path))
+        digest.update(b"\0untracked\0")
+        digest.update(raw_path)
+        digest.update(b"\0")
+        if relative.is_absolute():
+            digest.update(b"<invalid-path>")
+            continue
+        candidate = root / relative
+        try:
+            candidate.parent.resolve().relative_to(root)
+            mode = candidate.lstat().st_mode
+            if os.path.islink(candidate):
+                digest.update(b"symlink:")
+                digest.update(os.fsencode(os.readlink(candidate)))
+            elif stat.S_ISREG(mode):
+                digest.update(b"file:")
+                with candidate.open("rb") as handle:
+                    while chunk := handle.read(1024 * 1024):
+                        digest.update(chunk)
+            else:
+                digest.update(b"non-regular-file")
+        except (OSError, ValueError):
+            digest.update(b"<unavailable>")
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def _redact_excerpt(value: Any) -> str:
     excerpt = str(value or "")[:1200]
     excerpt = _SECRET_ASSIGNMENT.sub(r"\1\2[REDACTED]", excerpt)
@@ -66,10 +111,7 @@ def create_failure_record(state: Any, *, stage: str) -> dict[str, Any]:
     safe_stage = re.sub(r"[^A-Za-z0-9._-]", "_", str(stage))[:80] or "verify"
 
     head = _git_output(project_dir, "rev-parse", "--verify", "HEAD")
-    status = _git_output(project_dir, "status", "--porcelain=v1", "--untracked-files=all")
-    diff = _git_output(project_dir, "diff", "--binary", "HEAD")
-    fingerprint = hashlib.sha256(status + b"\0" + diff).hexdigest()
-
+    fingerprint = _worktree_fingerprint(project_dir)
     failed_stages = []
     for item in getattr(state, "last_verify_results", []) or []:
         if not isinstance(item, dict) or item.get("ok") is True:

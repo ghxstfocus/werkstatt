@@ -5396,3 +5396,8 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - GitHub-CI lief mit Ruff gruen und 2.019 Tests bestanden; ein Baseline-Test meldete `budget` als aus der Tote-Feld-Baseline weggefallen. Das Feld ist durch den Run-Budget-Guard jetzt direkt gelesen und damit `read_only`.
 - `budget` ist aus `BASELINE_TOTE` entfernt und der State-Inventar-Test prueft seine neue Kategorie explizit. Vollstaendige CI-Verifikation folgt.
+
+## 2026-11-12 — OP-403: Unversionierte Inhalte im Failure-Fingerprint
+
+- Failure Records hashen nun auch Inhalt, Pfad und Dateityp nicht ignorierter unversionierter Dateien; zuvor enthielt der Hash dort nur Status und Dateiname. Symlinks werden als Linktext gehasht und nicht verfolgt. Dateiinhalte werden nicht im Artefakt gespeichert.
+- Regressionstest prueft, dass eine Aenderung in einem unversionierten Quellfile den Fingerprint aendert. GitHub-CI prueft den Patch.

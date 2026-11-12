@@ -54,6 +54,41 @@ def test_failure_record_persists_bounded_sanitized_verify_evidence(
     assert "supersecret" not in artifact.read_text(encoding="utf-8")
 
 
+def test_failure_record_fingerprint_tracks_untracked_file_contents(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    artifact_root = tmp_path / "werkstatt"
+    untracked = project / "new_source.py"
+    untracked.write_text("value = 1\\n", encoding="utf-8")
+    monkeypatch.setattr(failure_record, "_audit_root", lambda: artifact_root)
+
+    def fake_git_output(_project_dir, *args):
+        if args == ("status", "--porcelain=v1", "--untracked-files=all"):
+            return b"?? new_source.py\\n"
+        if args == ("diff", "--binary", "HEAD"):
+            return b""
+        if args == ("ls-files", "--others", "--exclude-standard", "-z"):
+            return b"new_source.py\\0"
+        if args == ("rev-parse", "--verify", "HEAD"):
+            return b"abc123\\n"
+        raise AssertionError(args)
+
+    monkeypatch.setattr(failure_record, "_git_output", fake_git_output)
+    state = SimpleNamespace(
+        run_id="run-1",
+        project_name="demo",
+        project_dir=project,
+        last_verify_results=[],
+    )
+
+    before = failure_record.create_failure_record(state, stage="phase_end")
+    untracked.write_text("value = 2\\n", encoding="utf-8")
+    after = failure_record.create_failure_record(state, stage="phase_end")
+
+    assert before["worktree_fingerprint"] != after["worktree_fingerprint"]
+
 def test_failure_record_hashes_untrusted_run_id_for_artifact_path(
     tmp_path: Path, monkeypatch,
 ) -> None:
