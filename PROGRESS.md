@@ -5349,7 +5349,7 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 - OP-403 bleibt offen: derselbe Run muss den Befund noch an eine sichere Diagnose-/Repair-Schleife uebergeben und erneut verifizieren. Der Record ist deren belastbare Eingabe, kein vorgetaeuschter Repair.
 - OP-397/398 wurden an Run-Zielgraph und Checkpoint statt an den alten PhaseState als Laufzeitsteuerung angepasst. Runde-Cap als Abschlusskriterium aus OP-396 entfernt; echte Budgets/Stagnation bleiben.
 - Neuer UI-Zielplan: `docs/UI-PLAN-2026-11-12.md`. Codeguardian ist als unabhaengige, nicht schreibende Diff-Schutzschicht beschrieben und in OP-404 aufgenommen.
-- Tests/CI: ausstehend.
+- CI: Quality gate erfolgreich auf `fd5adae`; Ruff und JavaScript-Syntax gruen, `pytest` 2.015 passed / 5 skipped, `tools.quality_gate --json` erfolgreich.
 
 
 ## 2026-11-12 — OP-Queue an ADR-0032 ausgerichtet
