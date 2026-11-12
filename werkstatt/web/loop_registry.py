@@ -6,6 +6,7 @@ can recover control without starting a second writer.
 """
 from __future__ import annotations
 
+import json
 import os
 import signal
 import sqlite3
@@ -30,6 +31,17 @@ _ALLOWED_TRANSITIONS = {
     ("resuming", "running"),
     ("stopping", "idle"),
 }
+
+
+def _decode_context(raw: Any) -> dict[str, Any]:
+    """Decode persisted start metadata without making registry reads fail."""
+    if not isinstance(raw, str):
+        return {}
+    try:
+        value = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def _process_snapshot(pid: int) -> tuple[str, str] | None:
@@ -99,8 +111,19 @@ class LoopProcessRegistry:
                 "pid INTEGER, "
                 "process_identity TEXT, "
                 "state TEXT NOT NULL, "
-                "updated_at REAL NOT NULL)"
+                "updated_at REAL NOT NULL, "
+                "context_json TEXT NOT NULL DEFAULT '{}')"
             )
+            columns = {
+                str(row[1]) for row in conn.execute(
+                    "PRAGMA table_info(loop_processes)"
+                )
+            }
+            if "context_json" not in columns:
+                conn.execute(
+                    "ALTER TABLE loop_processes ADD COLUMN "
+                    "context_json TEXT NOT NULL DEFAULT '{}'"
+                )
             conn.commit()
 
     @staticmethod
@@ -116,6 +139,7 @@ class LoopProcessRegistry:
             ),
             "state": str(row[4]),
             "updated_at": float(row[5]),
+            "context": _decode_context(row[6] if len(row) > 6 else None),
         }
 
     def read(self, project: str) -> dict[str, Any] | None:
@@ -124,8 +148,8 @@ class LoopProcessRegistry:
         with closing(self._connect()) as conn:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
-                "SELECT project, run_id, pid, process_identity, state, updated_at "
-                "FROM loop_processes WHERE project = ?",
+                "SELECT project, run_id, pid, process_identity, state, "
+                "updated_at, context_json FROM loop_processes WHERE project = ?",
                 (project,),
             ).fetchone()
             record = self._record(row)
@@ -188,14 +212,23 @@ class LoopProcessRegistry:
             conn.commit()
         return record
 
-    def reserve(self, project: str, run_id: str) -> tuple[bool, dict[str, Any] | None]:
-        """Atomically reserve a project before spawning its loop."""
+    def reserve(
+        self,
+        project: str,
+        run_id: str,
+        *,
+        context: dict[str, Any] | None = None,
+    ) -> tuple[bool, dict[str, Any] | None]:
+        """Atomically reserve a project and persist its immutable start context."""
         now = time.time()
+        context_json = json.dumps(
+            context or {}, ensure_ascii=False, sort_keys=True,
+        )
         with closing(self._connect()) as conn:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
-                "SELECT project, run_id, pid, process_identity, state, updated_at "
-                "FROM loop_processes WHERE project = ?",
+                "SELECT project, run_id, pid, process_identity, state, "
+                "updated_at, context_json FROM loop_processes WHERE project = ?",
                 (project,),
             ).fetchone()
             existing = self._record(row)
@@ -214,12 +247,13 @@ class LoopProcessRegistry:
                     return False, existing
             conn.execute(
                 "INSERT INTO loop_processes "
-                "(project, run_id, pid, process_identity, state, updated_at) "
-                "VALUES (?, ?, NULL, NULL, 'starting', ?) "
+                "(project, run_id, pid, process_identity, state, updated_at, "
+                "context_json) VALUES (?, ?, NULL, NULL, 'starting', ?, ?) "
                 "ON CONFLICT(project) DO UPDATE SET "
                 "run_id=excluded.run_id, pid=NULL, process_identity=NULL, "
-                "state='starting', updated_at=excluded.updated_at",
-                (project, run_id, now),
+                "state='starting', updated_at=excluded.updated_at, "
+                "context_json=excluded.context_json",
+                (project, run_id, now, context_json),
             )
             conn.commit()
         return True, None

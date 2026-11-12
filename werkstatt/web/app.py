@@ -697,7 +697,29 @@ def create_app() -> FastAPI:
                         pass
     
                 registry = _loop_registry()
-                reserviert, record = registry.reserve(projektname, run_id)
+                run_context: dict[str, Any] = {
+                    "schema_version": 1,
+                    "goal": aufgabe,
+                    "op_id": op_id or None,
+                    "origin": "web",
+                    "source": (
+                        {
+                            "kind": "github",
+                            "repository": prepared_source.repository,
+                            "branch": prepared_source.branch,
+                            "base_sha": prepared_source.base_sha,
+                            "pinned_sha": prepared_source.remote_sha,
+                            "run_branch": prepared_source.run_branch,
+                            "worktree": str(prepared_source.worktree_path),
+                        }
+                        if prepared_source is not None
+                        else {"kind": "local"}
+                    ),
+                    "selection": autonome_auswahl,
+                }
+                reserviert, record = registry.reserve(
+                    projektname, run_id, context=run_context,
+                )
                 if not reserviert:
                     return {
                         "gestartet": False,
@@ -781,6 +803,7 @@ def create_app() -> FastAPI:
                     "aufgabe": aufgabe,
                     "op_id": op_id or None,
                     "auswahl": autonome_auswahl,
+                    "run_context": run_context,
                     "source": (
                         {
                             "repository": prepared_source.repository,
@@ -824,6 +847,10 @@ def create_app() -> FastAPI:
                     "state": visible_state,
                     "pid": record.get("pid") if record and visible_state != "idle" else None,
                     "run_id": record.get("run_id") if record and visible_state != "idle" else None,
+                    "run_context": (
+                        record.get("context", {})
+                        if record and visible_state != "idle" else None
+                    ),
                 }
             run_id = _LOOP_RUN_IDS.get(projektname)
             if (
@@ -838,6 +865,7 @@ def create_app() -> FastAPI:
                 "state": state,
                 "pid": prozess.pid,
                 "run_id": run_id,
+                "run_context": record.get("context", {}) if record else {},
             }
 
     def _audit_loop_control(

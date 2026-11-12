@@ -122,6 +122,14 @@ def test_loop_subprozess_start_stop(
     assert popen_kwargs[0]["start_new_session"] is (app_modul.os.name == "posix")
     assert "demo" in app_modul._LAUFENDE_LOOPS
 
+    status = client.get("/api/projects/demo/loop")
+    assert status.status_code == 200
+    context = status.json()["run_context"]
+    assert context["schema_version"] == 1
+    assert context["goal"] == daten["aufgabe"]
+    assert context["op_id"] == "OP-999"
+    assert context["source"]["kind"] == "local"
+
     zweite = client.post("/api/projects/demo/start")
     assert zweite.status_code == 200
     assert zweite.json()["gestartet"] is False

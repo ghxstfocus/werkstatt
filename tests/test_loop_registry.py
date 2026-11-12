@@ -19,6 +19,7 @@ def test_reservierung_ist_ueber_registry_instanz_atomisch(tmp_path: Path):
     assert konflikt is not None
     assert konflikt["run_id"] == "run-a"
     assert konflikt["state"] == "starting"
+    assert konflikt["context"] == {}
 
 
 def test_registrierung_pause_und_idle_sind_restartfest(tmp_path: Path):
@@ -39,6 +40,34 @@ def test_registrierung_pause_und_idle_sind_restartfest(tmp_path: Path):
     assert idle is not None
     assert idle["state"] == "idle"
     assert idle["pid"] is None
+
+
+def test_startkontext_bleibt_nach_restart_und_idle_erhalten(tmp_path: Path) -> None:
+    db = tmp_path / "registry.db"
+    first_worker = LoopProcessRegistry(db)
+    second_worker = LoopProcessRegistry(db)
+    context = {
+        "schema_version": 1,
+        "goal": "OP-397: Run-Kontext persistent machen",
+        "op_id": "OP-397",
+        "source": {"kind": "local", "base_sha": "abc123"},
+    }
+
+    assert first_worker.reserve("demo", "run-context", context=context) == (
+        True, None,
+    )
+    duplicate, existing = second_worker.reserve(
+        "demo", "run-duplicate", context={"goal": "must not replace"},
+    )
+
+    assert duplicate is False
+    assert existing is not None
+    assert existing["context"] == context
+    assert second_worker.register("demo", "run-context", os.getpid())
+    assert second_worker.set_state("demo", "run-context", "idle") is True
+    recovered = first_worker.read("demo")
+    assert recovered is not None
+    assert recovered["context"] == context
 
 
 def test_abgelaufene_startreservierung_wird_freigegeben(tmp_path: Path):

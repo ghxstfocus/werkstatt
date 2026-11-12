@@ -5452,3 +5452,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der Verhaltensregressionstest verwendet denselben gespeicherten Phase-State fuer Task-Loop und Finalizer. Er beweist, dass bereits erledigte Tasks nicht erneut gebaut werden, der Laufzaehler erhalten bleibt und die vollstaendige Phase-End-Verify vor Commit erneut laeuft.
 - Ein erfolgreicher Abschluss wird nur nach dieser Verify protokolliert. Das deckt den zuvor nur isoliert getesteten Uebergang Task-Loop -> Finalizer ab.
 - GitHub-CI prueft den erweiterten Test; dauerhafte Wiederaufnahme und Live-Run-SSOT nach Prozessneustart bleiben Teil von OP-397/M1.
+
+## 2026-11-12 — OP-397/M1: Run-Startkontext restartfest speichern
+
+- Die persistente Loop-Registry speichert beim atomaren Start jetzt Zieltext, OP-ID, Herkunft, Remote-/Branch-/Basis-SHA und die Auswahlbegruendung mit demselben Run. Eine konkurrierende Startanfrage kann diesen Kontext nicht ueberschreiben.
+- Der Projekt-Loop-Endpunkt gibt den aktiven Startkontext nach einem Webserver-Reconnect mit aus. Der Prozessstatus bleibt in der vorhandenen Registry; es wird keine zweite Run-State-Quelle angelegt.
+- Migration bestehender Registry-Datenbank erfolgt additiv mit leerem Kontext fuer alte Runs. Registry- und Web-API-Regressionstests pruefen Speicherung, Duplikatschutz und Abfrage. Vollstaendige CI-Verifikation ausstehend.
