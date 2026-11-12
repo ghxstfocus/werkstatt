@@ -53,6 +53,23 @@ def test_load_docs_fails_closed_on_read_error(tmp_path, monkeypatch):
         orchestrator.load_docs({"status": "broken.md"}, tmp_path)
 
 
+def test_load_docs_limits_progress_to_recent_context(tmp_path):
+    blocks = [
+        f"## 2026-11-12T00:00:00 -- Task {i}\n"
+        + "- **Status:** done\n"
+        + ("x" * 2400)
+        for i in range(12)
+    ]
+    (tmp_path / "PROGRESS.md").write_text("\n\n".join(blocks), encoding="utf-8")
+
+    docs = orchestrator.load_docs({"progress": "PROGRESS.md"}, tmp_path)
+
+    assert len(docs["progress"]) <= 12000
+    assert "Task 11" in docs["progress"]
+    assert "Task 10" in docs["progress"]
+    assert "Task 0" not in docs["progress"]
+
+
 def test_build_run_state_does_not_suppress_missing_docs(tmp_path, monkeypatch):
     monkeypatch.setattr(
         orchestrator,
@@ -65,6 +82,28 @@ def test_build_run_state_does_not_suppress_missing_docs(tmp_path, monkeypatch):
         orchestrator.build_run_state("demo", "Aufgabe", project_dir=tmp_path)
 
 
+def test_project_manifest_requires_progress(tmp_path, monkeypatch):
+    docs = {
+        "entry": "AGENTS.md",
+        "status": "docs/STATUS.md",
+        "roadmap": "docs/ROADMAP.md",
+        "architecture": "docs/ARCHITECTURE.md",
+        "conventions": "docs/CONVENTIONS.md",
+        "adr_index": "docs/adr/README.md",
+        "glossary": "docs/glossary.md",
+    }
+    import yaml
+
+    (tmp_path / "demo.yaml").write_text(
+        yaml.safe_dump({"project": "demo", "project_dir": "/tmp/demo", "docs": docs}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(orchestrator, "PROJECTS_DIR", tmp_path)
+
+    with pytest.raises(SystemExit):
+        orchestrator.load_project_config("demo")
+
+
 def test_werkstatt_manifest_loads_required_living_docs() -> None:
     config = yaml.safe_load(
         Path("projects/werkstatt.yaml").read_text(encoding="utf-8")
@@ -73,7 +112,8 @@ def test_werkstatt_manifest_loads_required_living_docs() -> None:
 
     assert docs["entry"] == "AGENTS.md"
     assert {
-        "status", "roadmap", "architecture", "conventions", "adr_index",
+        "status", "roadmap", "architecture", "progress",
+        "conventions", "adr_index",
     } <= docs.keys()
 
 
