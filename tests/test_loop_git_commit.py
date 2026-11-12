@@ -194,7 +194,7 @@ def test_committe_postcheck_erkennt_parallelen_head_commit(tmp_path, monkeypatch
 def test_committe_postcheck_erkennt_vom_hook_geaenderten_index_tree(
     tmp_path, monkeypatch,
 ):
-    """Ein Hook darf den verifizierten Index-Inhalt nicht still veraendern."""
+    """Ein Hook darf den vor dem Commit gepinnten Index-Inhalt nicht still veraendern."""
     _init_repo(tmp_path)
     (tmp_path / "neu.py").write_text("def f(): pass\n")
     s = _state(tmp_path)
