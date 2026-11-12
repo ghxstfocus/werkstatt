@@ -1,8 +1,9 @@
 # Ist-Zustand des Werkstatt-Loops — 2026-11-12
 
-Diese Bestandsaufnahme trennt den im Checkout belegten Ist-Zustand vom
-Zielbild. Sie ist keine Behauptung ueber den laufenden Server: Der Checkout
-steht auf `40251ac`; Deployments koennen davon abweichen.
+Diese Bestandsaufnahme trennt den in GitHub belegten Ist-Zustand vom
+Zielbild. Sie ist keine Behauptung ueber den laufenden Server: GitHub `main`
+steht bei der letzten Pruefung auf `d02170e`; Deployments koennen davon
+abweichen.
 
 ## Kurzbefund
 
