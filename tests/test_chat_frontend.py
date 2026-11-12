@@ -173,18 +173,20 @@ def test_chat_composer_hat_einen_fokusrahmen_und_setzt_sich_zurueck() -> None:
 
 def test_assistant_text_bleibt_auf_lesbarer_spaltenbreite() -> None:
     css = _css()
-    start = css.rindex("/* Assistant-Text auf eine angenehme Lesebreite begrenzen. */")
+    start = css.rindex("/* Assistant-Text bleibt linksbuendig und bekommt eine ruhige Lesebreite. */")
     regel = css[start:]
     assert "width: min(100%, 68ch);" in regel
     assert "max-width: 68ch;" in regel
-    assert "margin-inline: auto;" in regel
+    assert "margin-left: 0;" in regel
+    assert "margin-right: auto;" in regel
 
 
 def test_nutzer_bubble_rechtsbuendig_kompakt_ausrichten() -> None:
     css = _css()
-    start = css.rindex("/* Nutzer-Bubbles rechtsbuendig halten und etwas kompakter begrenzen. */")
+    start = css.rindex("/* Nutzer-Bubbles rechtsbuendig halten und kompakt begrenzen. */")
     regel = css[start:]
-    assert "max-width: min(72%, 68ch);" in regel
+    assert "align-self: flex-end;" in regel
+    assert "max-width: min(64%, 68ch);" in regel
     assert "margin-right: 0;" in regel
     assert "margin-left: auto;" in regel
     assert "max-width: 92%;" in regel
