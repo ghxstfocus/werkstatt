@@ -591,3 +591,147 @@ def test_main_verwirft_checkpoint_eines_anderen_runs(
 
     assert rc == 1
     assert aufrufe == []
+
+def test_resume_mit_falscher_run_id_stoppt_vor_task_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    state_dir = tmp_path / ".werkstatt"
+    state_dir.mkdir()
+    backup = state_dir / "p.phase.yaml.fresh-bak"
+    backup.write_text(
+        "project: p\\nrun_id: p-run-old\\naufgabe: alte Aufgabe\\ntasks: []\\n",
+        encoding="utf-8",
+    )
+    active = state_dir / "p.phase.yaml"
+    active_text = "project: p\\nrun_id: p-run-current\\naufgabe: aktive Aufgabe\\ntasks: []\\n"
+    active.write_text(active_text, encoding="utf-8")
+    runner_calls: list[bool] = []
+
+    with (
+        _silence_renderer(),
+        _patch_main_config(tmp_path),
+        patch("werkstatt.gates.set_headless", lambda _value: None),
+        patch("werkstatt.loop.set_run_id", lambda _run_id: None),
+        patch("werkstatt.loop._emit_lifecycle_end", lambda *_a, **_kw: None),
+        patch(
+            "werkstatt.loop.run_pipeline_loop",
+            lambda *_a, **_kw: runner_calls.append(True),
+        ),
+    ):
+        rc = loop.main([
+            "--project", "p", "--aufgabe", "alte Aufgabe",
+            "--headless", "--run-id", "p-run-expected", "--resume",
+        ])
+
+    assert rc == 1
+    assert runner_calls == []
+    assert backup.exists(), "abgelehnter Backup-Checkpoint muss erhalten bleiben"
+    assert active.read_text(encoding="utf-8") == active_text
+
+
+@pytest.mark.parametrize(
+    "backup_text",
+    [
+        "project: p\\nrun_id: p-run-old\\ntasks: []\\n",
+        "project: p\\ntasks: invalid\\n",
+    ],
+)
+def test_resume_verwirft_unsicheren_backup_ohne_ihn_zu_verschieben(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backup_text: str,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    state_dir = tmp_path / ".werkstatt"
+    state_dir.mkdir()
+    backup = state_dir / "p.phase.yaml.fresh-bak"
+    backup.write_text(backup_text, encoding="utf-8")
+    active = state_dir / "p.phase.yaml"
+    active_text = "project: p\\nrun_id: p-run-active\\ntasks: []\\n"
+    active.write_text(active_text, encoding="utf-8")
+    runner_calls: list[bool] = []
+
+    with (
+        _silence_renderer(),
+        _patch_main_config(tmp_path),
+        patch("werkstatt.gates.set_headless", lambda _value: None),
+        patch("werkstatt.loop.set_run_id", lambda _run_id: None),
+        patch("werkstatt.loop._emit_lifecycle_end", lambda *_a, **_kw: None),
+        patch(
+            "werkstatt.loop.run_pipeline_loop",
+            lambda *_a, **_kw: runner_calls.append(True),
+        ),
+    ):
+        rc = loop.main([
+            "--project", "p", "--aufgabe", "ziel",
+            "--headless", "--run-id", "p-run-expected", "--resume",
+        ])
+
+    assert rc == 1
+    assert runner_calls == []
+    assert backup.exists()
+    assert active.read_text(encoding="utf-8") == active_text
+
+
+def test_resume_ohne_checkpoint_startet_keinen_neuen_plan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    runner_calls: list[bool] = []
+    with (
+        _silence_renderer(),
+        _patch_main_config(tmp_path),
+        patch("werkstatt.gates.set_headless", lambda _value: None),
+        patch("werkstatt.loop.set_run_id", lambda _run_id: None),
+        patch("werkstatt.loop._emit_lifecycle_end", lambda *_a, **_kw: None),
+        patch(
+            "werkstatt.loop.run_pipeline_loop",
+            lambda *_a, **_kw: runner_calls.append(True),
+        ),
+    ):
+        rc = loop.main([
+            "--project", "p", "--aufgabe", "ziel",
+            "--headless", "--run-id", "p-run-expected", "--resume",
+        ])
+
+    assert rc == 1
+    assert runner_calls == []
+
+
+def test_resume_archiviert_aktiven_checkpoint_vor_backup_aktivierung(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    state_dir = tmp_path / ".werkstatt"
+    state_dir.mkdir()
+    backup = state_dir / "p.phase.yaml.fresh-bak"
+    backup.write_text(
+        "project: p\\nrun_id: p-run\\naufgabe: ziel\\ntasks: []\\n",
+        encoding="utf-8",
+    )
+    active = state_dir / "p.phase.yaml"
+    active.write_text(
+        "project: p\\nrun_id: p-run\\naufgabe: ziel\\ntasks: []\\n",
+        encoding="utf-8",
+    )
+    runner_calls: list = []
+
+    with (
+        _silence_renderer(),
+        _patch_main_config(tmp_path),
+        patch("werkstatt.gates.set_headless", lambda _value: None),
+        patch("werkstatt.loop.set_run_id", lambda _run_id: None),
+        patch("werkstatt.loop._emit_lifecycle_end", lambda *_a, **_kw: None),
+        patch("werkstatt.loop.run_pipeline_loop", _loop_runner(1, 0, runner_calls)),
+        patch("werkstatt.loop._git_head", return_value="abc"),
+        patch("werkstatt.loop._git_dirty", return_value=False),
+    ):
+        rc = loop.main([
+            "--project", "p", "--aufgabe", "ziel",
+            "--headless", "--run-id", "p-run", "--resume",
+        ])
+
+    assert rc == 0
+    assert len(runner_calls) == 1
+    assert not backup.exists()
+    archived = list(state_dir.glob("p.phase.yaml.resume-archive-*"))
+    assert len(archived) == 1

@@ -441,6 +441,29 @@ def _rotate_fresh_checkpoint(checkpoint: Path, backup: Path) -> Path | None:
     return archived
 
 
+def _promote_resume_checkpoint(checkpoint: Path, backup: Path) -> Path | None:
+    """Activate a validated backup while preserving the current checkpoint."""
+    archived: Path | None = None
+    if checkpoint.exists():
+        index = 1
+        while True:
+            candidate = checkpoint.with_name(
+                f"{checkpoint.name}.resume-archive-{index:04d}"
+            )
+            if not candidate.exists():
+                archived = candidate
+                break
+            index += 1
+        checkpoint.replace(archived)
+    try:
+        backup.replace(checkpoint)
+    except OSError:
+        if archived is not None and archived.exists() and not checkpoint.exists():
+            archived.replace(checkpoint)
+        raise
+    return archived
+
+
 def _main_inner(argv: list[str] | None = None) -> int:
     global _LIFECYCLE_PROJECT
     # M-391: .env laden (DEEPSEEK_API_KEY automatisch setzen)
@@ -494,13 +517,13 @@ def _main_inner(argv: list[str] | None = None) -> int:
         help="Bei Fehler git reset --hard auf Start-HEAD (default: aus). "
              "Ohne Flag bleiben erfolgreiche Task-Aenderungen im Tree.",
     )
-    parser.add_argument(
+    checkpoint_group = parser.add_mutually_exclusive_group()
+    checkpoint_group.add_argument(
         "--resume",
         action="store_true",
-        help="Aus .phase.yaml.fresh-bak laden (letzter abgebrochener Lauf). "
-             "Ohne Flag: aktuelle .phase.yaml.",
+        help="Aus .phase.yaml.fresh-bak oder aktuellem Checkpoint fortsetzen.",
     )
-    parser.add_argument(
+    checkpoint_group.add_argument(
         "--fresh",
         action="store_true",
         help="K24: .phase.yaml ignorieren, Phase neu starten.",
@@ -611,17 +634,25 @@ def _main_inner(argv: list[str] | None = None) -> int:
 
     _ps = PhaseState(args.project, base_dir=_pd / ".werkstatt")
     _bak = _ps.path.with_suffix(".yaml.fresh-bak")
-    # FIX AC 2026-10-31: --resume laedt aus .fresh-bak (letzter
-    # abgebrochener Lauf). Ohne --resume/--fresh: aktuelle .phase.yaml.
-    if getattr(args, "resume", False) and _bak.exists():
-        try:
-            _bak.replace(_ps.path)
-        except OSError:
-            pass
-        _ps.load()
-        audit("loop_resume_from_bak", {"bak": str(_bak)},
-              _pd, args.project)
-    elif getattr(args, "fresh", False) and _ps.exists():
+    resume_requested = bool(getattr(args, "resume", False))
+    fresh_requested = bool(getattr(args, "fresh", False))
+    checkpoint_source: Path | None = None
+
+    if resume_requested:
+        checkpoint_source = _bak if _bak.exists() else (
+            _ps.path if _ps.exists() else None
+        )
+        if checkpoint_source is None:
+            audit(
+                "loop_resume_verworfen",
+                {"reason": "checkpoint_missing"},
+                _pd,
+                args.project,
+            )
+            _r.step(0, "checkpoint", "Resume abgelehnt: Checkpoint fehlt", ok=False)
+            _r.footer(success=False, tasks_total=0, tasks_ok=0)
+            return 1
+    elif fresh_requested and _ps.exists():
         archived_backup = _rotate_fresh_checkpoint(_ps.path, _bak)
         audit(
             "loop_fresh_reset",
@@ -633,16 +664,47 @@ def _main_inner(argv: list[str] | None = None) -> int:
             args.project,
         )
     elif _ps.exists():
-        _ps.load()
-        if (
-            args.run_id
-            and _ps.run_id
-            and _ps.run_id != args.run_id
-            and not getattr(args, "resume", False)
-        ):
+        checkpoint_source = _ps.path
+
+    if checkpoint_source is not None:
+        active_path = _ps.path
+        _ps.path = checkpoint_source
+        try:
+            checkpoint_valid = _ps.load()
+        finally:
+            _ps.path = active_path
+        if not checkpoint_valid:
+            audit(
+                "loop_resume_verworfen",
+                {
+                    "reason": "checkpoint_invalid",
+                    "checkpoint": str(checkpoint_source),
+                },
+                _pd,
+                args.project,
+            )
+            _r.step(
+                0, "checkpoint", "Resume abgelehnt: Checkpoint ist ungueltig",
+                ok=False,
+            )
+            _r.footer(success=False, tasks_total=0, tasks_ok=0)
+            return 1
+
+        if args.run_id and _ps.run_id != args.run_id:
             audit(
                 "loop_checkpoint_run_mismatch",
                 {
+                    "checkpoint_run_id": _ps.run_id,
+                    "requested_run_id": args.run_id,
+                    "resume_requested": resume_requested,
+                },
+                _pd,
+                args.project,
+            )
+            audit(
+                "loop_resume_verworfen",
+                {
+                    "reason": "run_id_mismatch",
                     "checkpoint_run_id": _ps.run_id,
                     "requested_run_id": args.run_id,
                 },
@@ -652,11 +714,41 @@ def _main_inner(argv: list[str] | None = None) -> int:
             _r.step(
                 0,
                 "checkpoint",
-                "Checkpoint gehoert zu einem anderen Run; sicherer Resume gestoppt",
+                "Checkpoint gehoert nicht zu diesem Run; Resume fail-closed gestoppt",
                 ok=False,
             )
             _r.footer(success=False, tasks_total=0, tasks_ok=0)
             return 1
+
+        if resume_requested and checkpoint_source == _bak:
+            try:
+                archived_active = _promote_resume_checkpoint(_ps.path, _bak)
+            except OSError as exc:
+                audit(
+                    "loop_resume_verworfen",
+                    {
+                        "reason": "checkpoint_promotion_failed",
+                        "error": f"{type(exc).__name__}: {exc}"[:300],
+                    },
+                    _pd,
+                    args.project,
+                )
+                _r.step(
+                    0, "checkpoint",
+                    "Resume abgelehnt: Backup konnte nicht aktiviert werden",
+                    ok=False,
+                )
+                _r.footer(success=False, tasks_total=0, tasks_ok=0)
+                return 1
+            audit(
+                "loop_resume_from_bak",
+                {
+                    "bak": str(_bak),
+                    "archived_active": str(archived_active) if archived_active else None,
+                },
+                _pd,
+                args.project,
+            )
     if args.run_id:
         _ps.run_id = args.run_id
 

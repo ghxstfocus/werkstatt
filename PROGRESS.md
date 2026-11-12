@@ -5495,3 +5495,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - CI auf `b548933` bestand mit 2.038 Tests und 5 Skips; der verbleibende Fehler war ein fehlender Katalogeintrag fuer `loop_checkpoint_run_mismatch`, nicht ein Gate-Hang.
 - Der Audit-Kind ist in der Registry ergaenzt. Die vollstaendige CI prueft den Katalog-Fix erneut.
+
+
+## 2026-11-12 — Resume-Checkpoint fail-closed an Run-ID binden
+
+- Befund: `--resume` uebersprang den Checkpoint-Run-ID-Vergleich. Ein Backup eines anderen Runs konnte dadurch geladen und auf die aktuelle Run-ID umgeschrieben werden. Fehlende, ungueltige oder strukturell kaputte Resume-Checkpoints konnten ausserdem unbemerkt einen neuen Planpfad ausloesen.
+- Resume prueft den Checkpoint jetzt vor jeder Mutation: Datei muss existieren und gueltig sein; bei headless/Web-Aufrufen muss ihre Run-ID exakt der angeforderten Run-ID entsprechen. Abgelehnte Backups bleiben unveraendert liegen.
+- Beim Aktivieren eines geprueften Backups wird ein vorhandener aktiver Checkpoint nummeriert archiviert; ein fehlgeschlagener Move stoppt fail-closed. `--resume` und `--fresh` sind gegenseitig ausgeschlossen.
+- Regressionstests decken Run-ID-Mismatch, kaputte und fehlende Checkpoints sowie den Erhalt des aktiven Checkpoints ab. GitHub-CI-Verifikation ausstehend.
