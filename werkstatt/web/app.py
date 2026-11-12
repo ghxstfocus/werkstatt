@@ -13,6 +13,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,9 @@ _LOOP_REGISTRY_PATH = (
 )
 _LOOP_LOCKS: dict[str, Any] = {}
 _LOOP_LOCKS_GUARD = threading.Lock()
+_WEB_START_CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar(
+    "werkstatt_web_start_context", default=None,
+)
 
 
 def _projekt_loop_lock(projektname: str) -> Any:
@@ -633,6 +637,7 @@ def create_app() -> FastAPI:
         """
         prepared_source = None
         launch_succeeded = False
+        start_context = dict(_WEB_START_CONTEXT.get() or {})
         try:
             projektname = _pruefe_projektname(name)
             _pd = _PROJECTS_BASE / projektname
@@ -690,6 +695,7 @@ def create_app() -> FastAPI:
             if aufgabe:
                 op_id = ""
     
+            explizite_auswahl: dict[str, Any] | None = None
             if op_id and not aufgabe:
                 if not re.fullmatch(r"OP-\d+[a-z]?", op_id):
                     raise HTTPException(status_code=400, detail="ungueltige op_id")
@@ -713,6 +719,13 @@ def create_app() -> FastAPI:
                     _status_text,
                     _completed_op_ids(_source_pd, _status_text),
                     accepted_adrs=_accepted_adr_ids(_source_pd),
+                )
+                explizite_auswahl = next(
+                    (
+                        item for item in _entscheidung["kandidaten"]
+                        if item.get("id") == op_id
+                    ),
+                    None,
                 )
                 _ausgeschlossen: dict[str, Any] = next(
                     (
@@ -841,11 +854,56 @@ def create_app() -> FastAPI:
                         pass
     
                 registry = _loop_registry()
+                origin = start_context.get("origin")
+                if origin not in {"chat", "web"}:
+                    origin = "web"
+                session_id = start_context.get("session_id")
+                if (
+                    origin == "chat"
+                    and (
+                        not isinstance(session_id, str)
+                        or not _SESSION_ID_MUSTER.fullmatch(session_id)
+                    )
+                ):
+                    origin = "web"
+                    session_id = None
+                proposal_id = start_context.get("proposal_id")
+                if (
+                    not isinstance(proposal_id, str)
+                    or not re.fullmatch(r"[a-f0-9]{32}", proposal_id)
+                ):
+                    proposal_id = None
+                selection = autonome_auswahl or explizite_auswahl
+                selection_reason = start_context.get("selection_reason")
+                if not isinstance(selection_reason, (str, list, dict)):
+                    if autonome_auswahl:
+                        selection_reason = autonome_auswahl.get("gruende") or (
+                            "Auswahl durch den OP-Selector anhand von STATUS.md."
+                        )
+                    elif op_id:
+                        selection_reason = {
+                            "kind": "explicit_op",
+                            "summary": (
+                                "OP-ID vom Nutzer vorgegeben; aktueller Status "
+                                "und Blocker wurden vor dem Start geprueft."
+                            ),
+                        }
+                    else:
+                        selection_reason = {
+                            "kind": "direct_task",
+                            "summary": (
+                                "Direktauftrag vom Nutzer; kein Queue-OP "
+                                "automatisch ausgewaehlt."
+                            ),
+                        }
                 run_context: dict[str, Any] = {
                     "schema_version": 1,
                     "goal": aufgabe,
                     "op_id": op_id or None,
-                    "origin": "web",
+                    "origin": origin,
+                    "origin_session_id": session_id if origin == "chat" else None,
+                    "proposal_id": proposal_id if origin == "chat" else None,
+                    "selection_reason": selection_reason,
                     "source": (
                         {
                             "kind": "github",
@@ -859,7 +917,7 @@ def create_app() -> FastAPI:
                         if prepared_source is not None
                         else {"kind": "local"}
                     ),
-                    "selection": autonome_auswahl,
+                    "selection": selection,
                 }
                 reserviert, record = registry.reserve(
                     projektname, run_id, context=run_context,
@@ -1663,7 +1721,17 @@ def create_app() -> FastAPI:
                     if not ok:
                         raise HTTPException(status_code=409, detail=detail)
                     arguments = {"aufgabe": debugger_fix_loop_task(fix)}
-                result = project_start(projekt, arguments)
+                selection_reason = proposal.get("selection_reason")
+                start_token = _WEB_START_CONTEXT.set({
+                    "origin": "chat",
+                    "session_id": sid,
+                    "proposal_id": proposal_id,
+                    "selection_reason": selection_reason,
+                })
+                try:
+                    result = project_start(projekt, arguments)
+                finally:
+                    _WEB_START_CONTEXT.reset(start_token)
                 if (
                     result.get("gestartet") is False
                     and result.get("grund") == "laeuft_bereits"

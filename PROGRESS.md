@@ -5572,3 +5572,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Antwort aus Chat oder Gate-Detailmodal läuft über denselben projekt- und run-gebundenen Chat-Endpunkt. Die Gate-Antwort bleibt im Run-Audit und wird zusätzlich in derselben Chat-Session replaybar gespeichert.
 - Gate-Karten und Entscheidungen verwenden sessiongebundene Idempotenzschlüssel, damit das 2-Sekunden-Polling und Reconnect keine doppelten Chat-Ereignisse anlegen.
 - Implementiert in Commit `7f359a1`; GitHub Actions Quality Gate Run [43256007757](https://github.com/ghxstfocus/werkstatt/actions/runs/43256007757) ist gruen: 2059 Tests, Ruff 0, Mypy 0, AST 378 Dateien ohne Fehler, Audit-Katalog bestanden.
+
+
+## 2026-11-12 — OP-397: Herkunft des Chat-Loopstarts restartfest speichern
+
+- Chat-Bestaetigungen uebergaben bisher nur Auftrag/OP-ID an den Web-Start. Die Registry markierte dadurch auch Chatstarts als `origin: web`; Session, bestaetigter Vorschlag und Auswahlgrund gingen im Run-Kontext verloren.
+- Der bestaetigte Start setzt nun request-lokale Herkunftsmetadaten. Die Registry persistiert Chat-Session, Proposal-ID und Auswahlgrund zusammen mit dem vorhandenen Ziel, OP und gepinnten Source-Kontext. Direkte Webstarts erhalten einen expliziten Grund fuer die Nutzerauswahl bzw. den Direktauftrag.
+- Tests decken Web-Direktstart-Metadaten, Chat→Start-Kontext und Auswahlgrund ab. Verifikation steht noch aus.

@@ -358,6 +358,7 @@ def _request_loop_action(args: dict[str, Any]) -> str:
 
     arguments: dict[str, Any] = {}
     preview = ""
+    selection_reason: Any = None
     if action == "start":
         op_id = str(args.get("op_id") or "").strip()
         task = str(args.get("aufgabe") or "").strip()
@@ -428,6 +429,10 @@ def _request_loop_action(args: dict[str, Any]) -> str:
                 return json.dumps({"zustand": "needs_input", "detail": f"{op_id} wurde nicht in docs/STATUS.md gefunden."}, ensure_ascii=False)
             preview = match.group(0).strip()
             arguments["op_id"] = op_id
+            selection_reason = (
+                candidate.get("gruende")
+                or f"{op_id} wurde vom Nutzer explizit ausgewaehlt."
+            )
         elif task:
             arguments["aufgabe"] = task
             preview = task
@@ -438,6 +443,17 @@ def _request_loop_action(args: dict[str, Any]) -> str:
             op_id = str(selection["auswahl"]["id"])
             preview = str(selection["aufgabe"])
             arguments["op_id"] = op_id
+            selection_reason = (
+                selection["auswahl"].get("gruende")
+                or selection.get("begruendung")
+                or "Vom OP-Selector als naechster startbarer Auftrag gewaehlt."
+            )
+
+    if action == "start" and selection_reason is None:
+        selection_reason = {
+            "kind": "direct_task",
+            "summary": "Konkreter Auftrag wurde direkt im Chat vorgegeben.",
+        }
 
     from datetime import UTC, datetime, timedelta
     proposal_id = uuid.uuid4().hex
@@ -448,6 +464,7 @@ def _request_loop_action(args: dict[str, Any]) -> str:
         "arguments": arguments,
         "summary": f"Loop starten: {arguments.get('op_id') or 'Auftrag'}" if action == "start" else f"Loop {action}",
         "task_preview": preview,
+        "selection_reason": selection_reason,
         "project": _PROJEKTNAME_KONTEXT.get(),
         "created_at": now.isoformat(),
         "expires_at": (now + timedelta(minutes=15)).isoformat(),

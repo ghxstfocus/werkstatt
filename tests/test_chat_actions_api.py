@@ -1,6 +1,7 @@
 """API tests for chat initiated, explicitly confirmed loop actions."""
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -206,9 +207,9 @@ def test_debugger_action_rejects_tampered_patch_before_start(
         "signatur": "regression-demo",
         "ursache_tag": "fixture",
         "diff": (
-            "diff --git a/pkg/demo.py b/pkg/demo.py\\n"
-            "--- a/pkg/demo.py\\n+++ b/pkg/demo.py\\n"
-            "@@ -1 +1 @@\\n-old = 1\\n+new = 2\\n"
+            "diff --git a/pkg/demo.py b/pkg/demo.py\n"
+            "--- a/pkg/demo.py\n+++ b/pkg/demo.py\n"
+            "@@ -1 +1 @@\n-old = 1\n+new = 2\n"
         ),
         "betroffene_dateien": ["pkg/demo.py"],
         "confidence": 0.9,
@@ -232,3 +233,75 @@ def test_debugger_action_rejects_tampered_patch_before_start(
     assert response.status_code == 400
     assert "Debugger-Freigabe ungueltig" in response.json()["detail"]
     assert [event["kind"] for event in session.load()][-1] == "loop_action_failed"
+
+
+def test_chat_start_persists_chat_origin_and_selection_reason(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt import chat_session
+    from werkstatt.web import app as app_modul
+
+    docs = tmp_path / "demo" / "docs"
+    docs.mkdir(parents=True)
+    (docs / "STATUS.md").write_text(
+        "### OP-321: Chat-gesteuerter Start\n"
+        "- **Status:** open\n"
+        "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
+        "- **Tests:** pytest -q tests/test_321.py\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db_path)
+    app_modul._LAUFENDE_LOOPS.clear()
+    app_modul._LOOP_RUN_IDS.clear()
+    app_modul._PAUSIERTE_LOOPS.clear()
+
+    class _Started:
+        pid = os.getpid()
+
+        def poll(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        app_modul.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: _Started(),
+    )
+
+    session_id = "a" * 32
+    proposal_id = "b" * 32
+    selection_reason = ["Nutzer hat OP-321 im Chat angefordert."]
+    session = chat_session.ChatSession("demo", session_id, db_pfad=db_path)
+    session.append("loop_action_proposed", {
+        "proposal_id": proposal_id,
+        "project": "demo",
+        "action": "start",
+        "arguments": {"op_id": "OP-321"},
+        "selection_reason": selection_reason,
+        "expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+    })
+
+    client = TestClient(app_modul.app)
+    response = client.post(
+        f"/api/projects/demo/chat/actions/{proposal_id}",
+        json={"session_id": session_id, "decision": "confirm"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "completed"
+    context = client.get("/api/projects/demo/loop").json()["run_context"]
+    assert context["origin"] == "chat"
+    assert context["origin_session_id"] == session_id
+    assert context["proposal_id"] == proposal_id
+    assert context["selection_reason"] == selection_reason
+    assert context["op_id"] == "OP-321"
+    log_handle = app_modul._LOOP_LOG_HANDLES.pop("demo", None)
+    if log_handle is not None:
+        log_handle.close()
+    app_modul._LAUFENDE_LOOPS.clear()
+    app_modul._LOOP_RUN_IDS.clear()

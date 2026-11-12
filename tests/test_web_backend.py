@@ -129,6 +129,8 @@ def test_loop_subprozess_start_stop(
     assert context["goal"] == daten["aufgabe"]
     assert context["op_id"] == "OP-999"
     assert context["source"]["kind"] == "local"
+    assert context["origin"] == "web"
+    assert context["selection_reason"]["kind"] == "explicit_op"
 
     zweite = client.post("/api/projects/demo/start")
     assert zweite.status_code == 200

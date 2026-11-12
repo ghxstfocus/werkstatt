@@ -258,6 +258,7 @@ def test_loop_action_tool_only_persists_proposal_and_revalidates_op(
     assert proposal["zustand"] == "proposal"
     assert proposal["arguments"] == {"op_id": "OP-321"}
     assert "OP-321" in proposal["task_preview"]
+    assert proposal["selection_reason"]
     events = chat_session.ChatSession("demo", "session-1", db_pfad=db).load()
     assert [event["kind"] for event in events] == ["loop_action_proposed"]
 
