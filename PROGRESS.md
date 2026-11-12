@@ -5596,3 +5596,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Lokale CLI-Starts erzeugen ihre Run-ID vor der Ausfuehrung und speichern sie zusammen mit dem Plan. Ein lokaler Resume verwendet dieselbe ID fuer Audit und Checkpoint.
 - Ein Resume mit expliziter Run-ID bevorzugt den passenden aktiven Checkpoint, auch wenn ein Fresh-Backup existiert. So bleiben bereits erledigte Tasks erhalten. Ein passendes Backup kann weiterhin aktiviert werden, wenn der aktive Checkpoint einem anderen Run gehoert.
+
+## 2026-11-12 — OP-403: Befund je Abschluss-Recovery-Versuch sichtbar machen
+
+- Das Control-Ereignis `loop_verify_recovery_started` nennt jetzt den konkreten Fehlerauszug der fehlgeschlagenen Verify-Stages und die laufende Versuchsnummer. Lange Details bleiben im Failure Record; erfolgreiche Stage-Ausgaben werden nicht in den Befund kopiert.
+- Ein Regressionstest prueft zwei aufeinanderfolgende Recovery-Versuche mit unterschiedlichen Stage-Befunden und stellt sicher, dass Timeline-Evidenz und Versuchnummern pro Befund passen.
+- GitHub Actions Quality Gate fuer diesen Commit muss vor Abschluss gruen sein.

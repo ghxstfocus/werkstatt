@@ -327,9 +327,16 @@ def test_phase_finalize_continues_when_full_verify_finds_another_stage(
 
     assert result == 0
     assert recovery_stage_ids == [{"ruff"}, {"pytest_regression"}]
-    assert sum(
-        item[0] == "loop_verify_recovery_started" for item in events
-    ) == 2
+    starts = [
+        item[1] for item in events
+        if item[0] == "loop_verify_recovery_started"
+    ]
+    assert len(starts) == 2
+    assert [item["attempt"] for item in starts] == [1, 2]
+    assert starts[0]["evidence"] == ["ruff: F401"]
+    assert starts[1]["evidence"] == [
+        "pytest_regression: AssertionError: second issue"
+    ]
     assert any(item[0] == "loop_verify_recovered" for item in events)
     assert any(item[0] == "loop_erfolg" for item in events)
     assert not any(item[0] == "loop_gate_failed" for item in events)

@@ -594,11 +594,30 @@ def _phase_finalize(
                 failed_stages,
             )
             current_failure_id = failure_record.get("failure_id")
+            finding_evidence = []
+            for item in failed_stages:
+                if not isinstance(item, dict):
+                    continue
+                stage_id = str(item.get("stage_id") or "?")
+                exit_code = item.get("exit_code")
+                excerpt = " ".join(
+                    str(item.get("error_excerpt") or "").split()
+                )[:240]
+                detail = excerpt or f"fehlgeschlagen (Exit {exit_code})"
+                finding_evidence.append(f"{stage_id}: {detail}")
+                if len(finding_evidence) == 6:
+                    break
+            if len(stage_ids) > len(finding_evidence):
+                finding_evidence.append(
+                    f"{len(stage_ids) - len(finding_evidence)} weitere "
+                    "fehlgeschlagene Stage(s); Details im Failure Record."
+                )
             audit(
                 "loop_verify_recovery_started",
                 {
                     "failure_id": current_failure_id,
                     "previous_failure_id": previous_failure_id,
+                    "attempt": len(seen_failures),
                     "stage_ids": stage_ids,
                     "artifact_ref": failure_record.get("artifact_ref"),
                     "evidence_truncated": evidence_truncated,
@@ -610,9 +629,7 @@ def _phase_finalize(
                         "Der Run bearbeitet die aktuelle Fehlergruppe und "
                         "führt danach die vollständige Phase-End-Verify aus."
                     ),
-                    "evidence": [
-                        f"Verify-Stage: {stage_id}" for stage_id in stage_ids
-                    ],
+                    "evidence": finding_evidence,
                     "next_step": (
                         "Betroffene Checks erneut ausführen und anschließend "
                         "den vollständigen Abschluss prüfen."
