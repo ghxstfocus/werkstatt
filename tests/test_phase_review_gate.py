@@ -36,6 +36,7 @@ def _mock_interactive(monkeypatch, antworten):
     class _TTY:
         def isatty(self):
             return True
+    monkeypatch.setattr("werkstatt.gates._HEADLESS", False)
     monkeypatch.setattr(sys, "stdin", _TTY())
     it = iter(antworten)
     monkeypatch.setattr(
@@ -49,6 +50,7 @@ def _mock_non_interactive(monkeypatch):
     class _NoTTY:
         def isatty(self):
             return False
+    monkeypatch.setattr("werkstatt.gates._HEADLESS", False)
     monkeypatch.setattr(sys, "stdin", _NoTTY())
 
 
@@ -72,6 +74,7 @@ def test_eof_gibt_1(monkeypatch):
     class _TTY:
         def isatty(self):
             return True
+    monkeypatch.setattr("werkstatt.gates._HEADLESS", False)
     monkeypatch.setattr(sys, "stdin", _TTY())
 
     def _raise_eof(*a, **kw):
