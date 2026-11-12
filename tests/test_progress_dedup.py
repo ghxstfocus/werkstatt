@@ -68,3 +68,10 @@ def test_gleiche_ereignisse_bleiben_pro_run_idempotent(tmp_path):
     assert content.count("-- Phase abgeschlossen") == 2
     assert content.count("- **Run-ID:** run-a") == 1
     assert content.count("- **Run-ID:** run-b") == 1
+
+
+def test_eintrag_endet_ohne_leerzeile_am_dateiende(tmp_path):
+    assert progress.append(tmp_path, name="x", status="done") is True
+    content = (tmp_path / "PROGRESS.md").read_text(encoding="utf-8")
+    assert content.endswith("\n")
+    assert not content.endswith("\n\n")

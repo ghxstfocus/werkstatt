@@ -5620,3 +5620,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - CI-Nachkorrektur: `git diff-tree --check` liefert auf dem Zielrunner Exit-Code 2; der Post-Commit-Whitespace-Check nutzt deshalb `git show --check --oneline HEAD`.
 
 - CI-Nachkorrektur: Der Whitespace-Check vergleicht jetzt direkt `HEAD^..HEAD` mit `git diff --check`; Root-Commits verwenden den `git show --root`-Pfad. Fehlermeldungen enthalten die Git-Ausgabe.
+
+- Ursache des roten CI-Laufs behoben: `progress.append()` erzeugt keine zusaetzliche Leerzeile am EOF mehr. Zwischen Eintraegen bleibt ein sauberer Absatz; der neue End-of-file-Test und die Post-Commit-Pruefung schuetzen das Format.

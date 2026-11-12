@@ -56,7 +56,6 @@ def append(
         lines.append(f"- **Patch:** {patch}")
     if info:
         lines.append(f"- **Info:** {info}")
-    lines.append("")
     block = "\n".join(lines) + "\n"
 
     # OP-036: Idempotenz innerhalb eines Runs. Mit Run-ID bleiben gleiche
@@ -77,8 +76,11 @@ def append(
         # OP-036: schon vorhanden?
         if _sig in current:
             return False
+        prefix = current.rstrip("\n")
+        if prefix:
+            prefix += "\n\n"
         tmp = progress_path.with_suffix(".tmp")
-        tmp.write_text(current + block, encoding="utf-8")
+        tmp.write_text(prefix + block, encoding="utf-8")
         tmp.replace(progress_path)
         return True
     except OSError as _exc:
