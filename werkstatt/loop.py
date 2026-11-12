@@ -29,7 +29,11 @@ from werkstatt.committer import (  # Fix AZ Stufe 5a: Re-Export
     _task_fortschritt_block,
 )
 from werkstatt.env_loader import load_env
-from werkstatt.event_store import EventStore
+from werkstatt.event_store import (
+    EventStore,
+    RunLeaseBusy,
+    RunLeaseLost,
+)
 from werkstatt.explorer import run_explorer
 from werkstatt.gates import (  # Fix AZ Stufe 5b: Re-Export
     _human_gate,
@@ -329,6 +333,59 @@ def run_pipeline_loop(
     phasen_state: RunState | None = None,
     phase_state: PhaseState | None = None,
 ) -> int:
+    """Run under an exclusive renewable lease, fencing stale writers."""
+    state = phasen_state or (state_ref[-1] if state_ref else None)
+    if state is None or not isinstance(getattr(state, "project_dir", None), Path):
+        return _run_pipeline_loop_impl(
+            project_name, aufgabe, state_ref,
+            phasen_state=phasen_state, phase_state=phase_state,
+        )
+    if not get_run_id():
+        set_run_id(f"{project_name}-{time.strftime('%Y%m%d-%H%M%S')}")
+    run_id = get_run_id()
+    store = EventStore()
+    store.create_run_record(
+        project_name, run_id, aufgabe, base_commit=_git_head(state.project_dir),
+    )
+    import os as _lease_os
+    import uuid as _lease_uuid
+
+    worker_id = f"{_lease_os.getpid()}:{_lease_uuid.uuid4().hex}"
+    try:
+        with store.run_lease(
+            project_name, run_id, worker_id, lease_seconds=60,
+        ) as lease:
+            state.run_lease_check = lease.assert_owned
+            state.run_id = run_id
+            lease.assert_owned()
+            return _run_pipeline_loop_impl(
+                project_name, aufgabe, state_ref,
+                phasen_state=phasen_state, phase_state=phase_state,
+            )
+    except RunLeaseBusy:
+        step(0, "run-lease", "Ein anderer Worker besitzt diesen Run.", ok=False)
+        return 1
+    except RunLeaseLost as exc:
+        audit(
+            "loop_failed",
+            {"reason": "run_lease_lost", "error": str(exc)[:300]},
+            state.project_dir,
+            project_name,
+        )
+        step(0, "run-lease", "Run-Lease verloren; Schreibarbeit gestoppt.", ok=False)
+        return 1
+    finally:
+        state.run_lease_check = None
+
+
+def _run_pipeline_loop_impl(
+    project_name: str,
+    aufgabe: str,
+    state_ref: list[RunState],
+    *,
+    phasen_state: RunState | None = None,
+    phase_state: PhaseState | None = None,
+) -> int:
     """Echter Loop: Plan -> Planner -> Builder -> Verify -> Reflection -> Human.
 
     phase_state: wenn uebergeben, persistiert PhaseState den
@@ -412,10 +469,12 @@ def run_pipeline_loop(
     state.aufgabe = aufgabe
 
     # Fix AZ Stufe 8-A: Explorer + Preflight + PhaseState-Init
+    state.assert_run_lease()
     _rc_exp, phase_state = _phase_explorer_and_setup(
         state, aufgabe, project_name, phase_state,
     )
     if _rc_exp != 0:
+        state.assert_run_lease()
         _persist_run_result(EventStore(), project_name, get_run_id(), _rc_exp)
         return _rc_exp
 
@@ -424,24 +483,30 @@ def run_pipeline_loop(
     #    (tasks + tests + akz), Planner ueberspringen und
     #    state.* aus PhaseState befuellen.
     # Fix AZ Stufe 8-B: Plan-Gate + Planner + Plan-Human-Gate + Pre-Build
+    state.assert_run_lease()
     _rc_plan, _done = _phase_plan_and_preflight(
         state, aufgabe, project_name, phase_state,
     )
     if _done or _rc_plan != 0:
+        state.assert_run_lease()
         _persist_run_result(EventStore(), project_name, get_run_id(), _rc_plan)
         return _rc_plan
     from werkstatt.agent import _enforce_run_budget
     if _enforce_run_budget(state):
+        state.assert_run_lease()
         _persist_run_result(EventStore(), project_name, get_run_id(), 1)
         return 1
 
     # Fix AZ Stufe 8-C: Autonomer Task-Loop
+    state.assert_run_lease()
     _rc_task, tasks_ok, tasks = _phase_tasks_loop(state, phase_state)
     if _rc_task != 0:
+        state.assert_run_lease()
         _persist_run_result(EventStore(), project_name, get_run_id(), _rc_task)
         return _rc_task
 
     # Fix AZ Stufe 8-D: Phase-End-Review + Human-Gate + Verify + PROGRESS + Summary
+    state.assert_run_lease()
     rc = _phase_finalize(state, tasks_ok, tasks, project_name, phase_state)
     _persist_run_result(EventStore(), project_name, get_run_id(), rc)
     return rc
