@@ -73,32 +73,131 @@ Bei Projekt-, Test-, Diff- oder Laufzeitfragen nutze die passenden Tools
 statt zu raten. Wenn Belege fehlen, sage, was noch geprueft werden muss."""
 
 
-def _baue_messages(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    msgs: list[dict[str, Any]] = []
-    for ev in events:
-        kind = ev.get("kind")
-        p = ev.get("payload") or {}
+_CHAT_HISTORY_CHAR_BUDGET = 24_000
+_CHAT_HISTORY_COMPACT_NOTE = (
+    "Aeltere Dialogturns oder Werkzeugdetails wurden fuer das Kontextbudget "
+    "gekuerzt. Der vollstaendige Verlauf bleibt gespeichert. Behandle die "
+    "Zusammenfassung nicht als aktuelle Repo-Evidenz; lies benoetigte Fakten "
+    "bei Bedarf erneut mit den Projektwerkzeugen."
+)
+
+
+def _ereignis_messages(ev: dict[str, Any]) -> list[dict[str, Any]]:
+    kind = ev.get("kind")
+    p = ev.get("payload") or {}
+    if kind == "user":
+        return [{"role": "user", "content": str(p.get("text", ""))}]
+    if kind == "assistant":
+        return [{"role": "assistant", "content": str(p.get("text", ""))}]
+    if kind == "job_turn":
+        return [
+            {"role": "user", "content": str(p.get("user_text", ""))},
+            {"role": "assistant", "content": str(p.get("assistant_text", ""))},
+        ]
+    if kind == "tool_call":
+        return [{
+            "role": "assistant",
+            "content": None,
+            "tool_calls": p.get("tool_calls", []),
+        }]
+    if kind == "tool_result":
+        return [{
+            "role": "tool",
+            "tool_call_id": p.get("tool_call_id", "?"),
+            "content": str(p.get("content", "")),
+        }]
+    return []
+
+
+def _dialog_turns(events: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    turns: list[list[dict[str, Any]]] = []
+    pending: list[dict[str, Any]] = []
+    for event in events:
+        kind = event.get("kind")
         if kind == "user":
-            msgs.append({"role": "user", "content": p.get("text", "")})
+            if pending:
+                turns.append(pending)
+            pending = _ereignis_messages(event)
         elif kind == "assistant":
-            msgs.append({"role": "assistant", "content": p.get("text", "")})
+            if pending:
+                pending.extend(_ereignis_messages(event))
+                turns.append(pending)
+                pending = []
+            else:
+                turns.append(_ereignis_messages(event))
         elif kind == "job_turn":
-            msgs.extend([
-                {"role": "user", "content": p.get("user_text", "")},
-                {"role": "assistant", "content": p.get("assistant_text", "")},
-            ])
-        elif kind == "tool_call":
-            msgs.append({
-                "role": "assistant",
-                "content": None,
-                "tool_calls": p.get("tool_calls", []),
-            })
-        elif kind == "tool_result":
-            msgs.append({
-                "role": "tool",
-                "tool_call_id": p.get("tool_call_id", "?"),
-                "content": p.get("content", ""),
-            })
+            if pending:
+                turns.append(pending)
+                pending = []
+            turns.append(_ereignis_messages(event))
+        # Alte Tool-Traces bleiben persistent, werden aber nicht erneut
+        # in den Prompt kopiert. Der finale Assistant-Turn traegt die Antwort.
+    if pending:
+        turns.append(pending)
+    return turns
+
+
+def _message_chars(turn: list[dict[str, Any]]) -> int:
+    return sum(len(str(message.get("content") or "")) for message in turn)
+
+
+def _kuerze_turn(turn: list[dict[str, Any]], budget: int) -> list[dict[str, Any]]:
+    if not turn or budget <= 0:
+        return []
+    anteil = max(1, budget // len(turn))
+    gekuerzt: list[dict[str, Any]] = []
+    for message in turn:
+        item = dict(message)
+        content = str(item.get("content") or "")
+        if len(content) > anteil:
+            marker = "\\n[… gekuerzt; vollstaendig im Chatverlauf …]\\n"
+            rest = max(0, anteil - len(marker))
+            anfang = rest // 2
+            ende = rest - anfang
+            item["content"] = (
+                content[:anfang] + marker + (content[-ende:] if ende else "")
+            )
+        gekuerzt.append(item)
+    return gekuerzt
+
+
+def _baue_messages(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Baut bounded Chat-Historie; persistente Events bleiben unveraendert."""
+    letzter_user = max(
+        (index for index, event in enumerate(events) if event.get("kind") == "user"),
+        default=-1,
+    )
+    if letzter_user < 0:
+        historie, aktueller_turn = events, []
+    else:
+        historie = events[:letzter_user]
+        aktueller_turn = events[letzter_user:]
+
+    turns = _dialog_turns(historie)
+    gewaehlte_turns: list[list[dict[str, Any]]] = []
+    rest = _CHAT_HISTORY_CHAR_BUDGET
+    gekuerzt = any(
+        event.get("kind") in {"tool_call", "tool_result"} for event in historie
+    )
+    for turn in reversed(turns):
+        groesse = _message_chars(turn)
+        if groesse <= rest:
+            gewaehlte_turns.append(turn)
+            rest -= groesse
+            continue
+        if rest > 0 and not gewaehlte_turns:
+            gewaehlte_turns.append(_kuerze_turn(turn, rest))
+            rest = 0
+        gekuerzt = True
+        break
+
+    msgs: list[dict[str, Any]] = []
+    if gekuerzt:
+        msgs.append({"role": "system", "content": _CHAT_HISTORY_COMPACT_NOTE})
+    for turn in reversed(gewaehlte_turns):
+        msgs.extend(turn)
+    for event in aktueller_turn:
+        msgs.extend(_ereignis_messages(event))
     return msgs
 
 
