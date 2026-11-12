@@ -605,6 +605,7 @@ def _committe_zielprojekt(
     pn = getattr(state, "project_name", "?")
     if pd is None:
         return False, "kein project_dir"
+    state.assert_run_lease()
 
     doku_commit_only = bool(getattr(state, "doku_nachzug_commit_only", False))
     doku_snapshot = _snapshot_op_doku(Path(pd)) if doku_commit_only else None
@@ -644,6 +645,7 @@ def _committe_zielprojekt(
     # wurde er vom Hauptloop NACH dem Commit geschrieben und blieb
     # uncommitted (Live-Beleg 2026-10-30: 53db3b0).
     if not doku_commit_only:
+        state.assert_run_lease()
         try:
             from werkstatt import progress as _progress_k
             _tasks_len_k = len(state.tasks or [])
@@ -832,6 +834,7 @@ def _committe_zielprojekt(
                     f"{_tf} steht nicht im git-Diff. Fake-Done verhindert."
                 )
 
+    state.assert_run_lease()
     try:
         add = subprocess.run(
             ["git", "-C", str(pd), "add", "-A"],
@@ -926,6 +929,7 @@ def _committe_zielprojekt(
         "-c", f"user.email={_email}",
         "commit", "-m", _msg,
     ]
+    state.assert_run_lease()
     try:
         commit = subprocess.run(
             _commit_argv,
