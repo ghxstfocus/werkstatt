@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Any
 
 from werkstatt.antipattern import scan_patches
+from werkstatt.event_store import EventStore
 from werkstatt.render import (
     group_end,
     group_start,
@@ -64,6 +66,74 @@ def _audit_task_ok(
     audit("loop_task_ok", payload, project_dir, project_name)
 
 
+
+def _persist_run_checkpoint(
+    store: EventStore,
+    project_name: str,
+    run_id: str,
+    phase_state: Any,
+    next_task: dict[str, Any] | None,
+) -> None:
+    """Persist task-boundary state and acknowledge only observed chat notices."""
+    record = store.get_run_record(project_name, run_id)
+    if record is None:
+        return
+
+    worker_id = f"loop:{run_id}"
+    notices: list[dict[str, object]] = []
+    claimed: list[dict[str, Any]] = []
+    for _ in range(20):
+        message = store.claim_run_message(
+            project_name, run_id, worker_id, lease_seconds=120,
+        )
+        if message is None:
+            break
+        if message["kind"] != "chat_job_notice":
+            break
+        claimed.append(message)
+        payload = message["payload"]
+        notices.append({
+            "seq": message["seq"],
+            "job_id": payload.get("job_id"),
+            "mode": payload.get("mode"),
+            "session_id": payload.get("session_id"),
+        })
+
+    checkpoint = dict(record["checkpoint"])
+    prior_notices = checkpoint.get("chat_job_notices", [])
+    if not isinstance(prior_notices, list):
+        prior_notices = []
+    checkpoint["chat_job_notices"] = (prior_notices + notices)[-50:]
+    checkpoint["safe_point"] = {
+        "phase": "build",
+        "next_task_id": next_task.get("id") if next_task else None,
+        "completed_task_ids": [
+            task_record.get("id")
+            for task_record in phase_state.data.get("tasks", [])
+            if isinstance(task_record, dict)
+            and task_record.get("status") == "done"
+        ],
+    }
+    if claimed:
+        checkpoint["inbox_offset"] = max(
+            int(checkpoint.get("inbox_offset", 0)),
+            max(int(message["seq"]) for message in claimed),
+        )
+    store.update_run_checkpoint(
+        project_name,
+        run_id,
+        checkpoint,
+        expected_version=record["checkpoint_version"],
+    )
+    for message in claimed:
+        if not store.acknowledge_run_message(
+            message["seq"], worker_id, message["fencing_token"],
+        ):
+            raise RuntimeError(
+                f"Run-Inbox-Lease verloren: {message['message_id']}",
+            )
+
+
 def _phase_tasks_loop(
     state: RunState,
     phase_state,
@@ -109,6 +179,12 @@ def _phase_tasks_loop(
             phase_state.save()
             return 1, tasks_ok, tasks
         next_task = phase_state.get_next_task()
+        from werkstatt.audit import get_run_id
+        run_id = get_run_id()
+        if run_id:
+            _persist_run_checkpoint(
+                EventStore(), pn, run_id, phase_state, next_task,
+            )
         if next_task is None:
             # OP-163: unerfuellte Deps -> als blocked markieren.
             _pending_after = [

@@ -5805,4 +5805,14 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Checkpoints werden mit Compare-and-Swap-Versionen gespeichert. Inbox-Nachrichten sind je Projekt/Run/Message-ID idempotent; abweichender Inhalt unter derselben ID wird abgelehnt.
 - Inbox-Leases erhalten bei jedem Claim einen neuen Fencing-Token. Ein abgelaufener Worker kann nach Wiederuebernahme keine Nachricht mehr bestaetigen.
 - Tests decken Versionkonflikte, Idempotenz, Konflikt-ID, fehlenden RunRecord sowie Lease-Recovery/Fencing ab.
-- Dieser Commit ist die Persistenzgrundlage, noch keine vollstaendige M1-Integration: Loop-Start/Ende, Chatjob-Annahme und sichere Checkpoint-Dispatches werden als naechste Schritte an dieselbe Run-ID angeschlossen.
+- Der Loop legt den RunRecord beim Eintritt mit gepinntem Basis-Commit an; Resume derselben Run-ID behaelt den urspruenglichen Commit.
+- Aktive Read-/Debugger-Chatjobs werden als datensparsame Inbox-Notiz an die Run-ID gebunden. An Task-Grenzen aktualisiert der Loop den Checkpoint und bestaetigt nur bekannte Notiztypen mit gueltigem Lease.
+- Schreibauftraege, Planrevision und echter Worker-Restart/Resume bleiben weitere M1-Arbeit; unbekannte Inbox-Typen werden nicht bestaetigt.
+
+
+## ADR-0032 M1 — erster Runtime-Anschluss (2026-11-12)
+
+- `run_pipeline_loop` legt vor Explorer/Planner den RunRecord an und pinnt den Start-Commit. Wiederaufnahme mit identischem Ziel veraendert diesen Basis-Commit nicht.
+- Die Chatjob-API schreibt bei vorhandener RunRecord-Verknuepfung eine idempotente Notiz mit Job-, Session-, Modus- und Kontextreferenz in die Run-Inbox. Der Chattext wird nicht ein zweites Mal gespeichert.
+- An Task-Grenzen schreibt der Loop einen versionierten Checkpoint mit erledigten Tasks und naechster Task. Bekannte Chatjob-Notizen werden erst nach erfolgreichem Checkpoint mit dem aktuellen Fencing-Token bestaetigt; unbekannte Typen bleiben unangetastet.
+- Tests decken Chatjob-Inbox-Kopplung, Checkpoint-Fortschritt und Lease-Ack ab. Vollstaendige M1-Restart-Wiederaufnahme, Schreibauftrag-Dispatch und Statusabschluss bleiben offen.

@@ -29,6 +29,7 @@ from werkstatt.committer import (  # Fix AZ Stufe 5a: Re-Export
     _task_fortschritt_block,
 )
 from werkstatt.env_loader import load_env
+from werkstatt.event_store import EventStore
 from werkstatt.explorer import run_explorer
 from werkstatt.gates import (  # Fix AZ Stufe 5b: Re-Export
     _human_gate,
@@ -363,6 +364,15 @@ def run_pipeline_loop(
         )
         return 1
 
+
+    # ADR-0032 M1: create the durable run identity before work starts.
+    # Existing records are reused on resume; their original base commit stays pinned.
+    EventStore().create_run_record(
+        project_name,
+        get_run_id(),
+        aufgabe,
+        base_commit=_git_head(state.project_dir),
+    )
 
     # 0. Aufgabe in State setzen (fuer Planner)
     state.aufgabe = aufgabe

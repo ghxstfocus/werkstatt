@@ -132,8 +132,8 @@ class EventStore:
             conn.commit()
         if row is None:
             raise sqlite3.IntegrityError("RunRecord konnte nicht angelegt werden")
-        if row[3] != target or row[4] != base_commit:
-            raise ValueError("Run-ID existiert bereits mit anderem Ziel oder Basis-Commit")
+        if row[3] != target:
+            raise ValueError("Run-ID existiert bereits mit anderem Ziel")
         return self._run_record_from_row(row)
 
     @staticmethod

@@ -1542,6 +1542,22 @@ def create_app() -> FastAPI:
                 context_seq=context_seq,
                 run_id=run_id,
             )
+            job_id = accepted["job"].get("job_id")
+            if run_id and isinstance(job_id, str):
+                run_store = EventStore()
+                if run_store.get_run_record(projekt, run_id) is not None:
+                    run_store.enqueue_run_message(
+                        projekt,
+                        run_id,
+                        f"chat-job:{job_id}",
+                        "chat_job_notice",
+                        {
+                            "job_id": job_id,
+                            "session_id": sid,
+                            "mode": mode,
+                            "context_seq": context_seq,
+                        },
+                    )
         except IdempotencyConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:

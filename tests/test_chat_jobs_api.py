@@ -35,6 +35,18 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
             return {"run_id": "run-active", "state": "paused"}
 
     monkeypatch.setattr(app_modul, "_loop_registry", lambda: _Registry())
+    inbox_calls: list[tuple[Any, ...]] = []
+
+    class _InboxStore:
+        def get_run_record(self, project: str, run_id: str) -> dict[str, Any]:
+            assert (project, run_id) == ("demo", "run-active")
+            return {"run_id": run_id}
+
+        def enqueue_run_message(self, *args: Any) -> int:
+            inbox_calls.append(args)
+            return 1
+
+    monkeypatch.setattr(app_modul, "EventStore", _InboxStore)
 
     def _accepted(*args: Any, **kwargs: Any) -> dict[str, Any]:
         assert kwargs["db_path"].name == "demo.db"
@@ -62,6 +74,20 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
     )
 
     assert response.status_code == 202
+    assert inbox_calls == [
+        (
+            "demo",
+            "run-active",
+            f"chat-job:{'a' * 32}",
+            "chat_job_notice",
+            {
+                "job_id": "a" * 32,
+                "session_id": "session-1",
+                "mode": "read",
+                "context_seq": 0,
+            },
+        ),
+    ]
     assert response.json() == {
         "job_id": "a" * 32, "state": "queued", "created": True,
         "run_id": "run-active",

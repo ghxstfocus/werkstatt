@@ -3,6 +3,7 @@
 import json
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -108,6 +109,10 @@ def test_run_record_checkpoint_is_compare_and_swap(tmp_path: Path) -> None:
         "demo", "run-1", "Repair the loop", base_commit="abc123",
     )
     assert record["checkpoint_version"] == 0
+    resumed = store.create_run_record(
+        "demo", "run-1", "Repair the loop", base_commit="def456",
+    )
+    assert resumed["base_commit"] == "abc123"
 
     version = store.update_run_checkpoint(
         "demo", "run-1", {"next_action": "verify"}, expected_version=0,
@@ -176,3 +181,52 @@ def test_run_inbox_rejects_orphan_and_idempotency_conflict(
         store.enqueue_run_message(
             "demo", "run-3", "msg-1", "question", {"text": "different"},
         )
+
+
+def test_task_checkpoint_consumes_chat_notice_with_run_record(
+    tmp_path: Path,
+) -> None:
+    from werkstatt.phases.tasks import _persist_run_checkpoint
+
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-inbox", "Continue the approved task")
+    seq = store.enqueue_run_message(
+        "demo",
+        "run-inbox",
+        "chat-job:job-1",
+        "chat_job_notice",
+        {
+            "job_id": "job-1",
+            "session_id": "session-1",
+            "mode": "read",
+            "context_seq": 7,
+        },
+    )
+    phase_state = SimpleNamespace(data={
+        "tasks": [
+            {"id": "t1", "status": "done"},
+            {"id": "t2", "status": "pending"},
+        ],
+    })
+
+    _persist_run_checkpoint(
+        store, "demo", "run-inbox", phase_state, {"id": "t2"},
+    )
+
+    record = store.get_run_record("demo", "run-inbox")
+    assert record is not None
+    assert record["checkpoint_version"] == 1
+    assert record["checkpoint"]["safe_point"]["next_task_id"] == "t2"
+    assert record["checkpoint"]["safe_point"]["completed_task_ids"] == ["t1"]
+    assert record["checkpoint"]["inbox_offset"] == seq
+    assert record["checkpoint"]["chat_job_notices"] == [
+        {
+            "seq": seq,
+            "job_id": "job-1",
+            "mode": "read",
+            "session_id": "session-1",
+        },
+    ]
+    assert store.claim_run_message(
+        "demo", "run-inbox", "worker-next",
+    ) is None
