@@ -5796,4 +5796,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Das Plan-Gate prueft Task-IDs und Dependency-Graphen vor der Freigabe: unbekannte, doppelte und selbstreferenzierende Abhaengigkeiten sowie Zyklen werden als konkreter Planfehler zurueckgegeben.
 - Der bestehende Plan-Reflection-Pfad erhaelt `TASK_GRAPH` samt Diagnose und kann den Plan neu erzeugen; ungueltige Tasks erreichen weder Human-Gate noch Checkpoint.
-- Tests decken fehlerhafte Graphen und einen gueltigen gerichteten azyklischen Graphen ab. CI-Nachweis folgt mit diesem Commit.
+- Tests decken fehlerhafte Graphen und einen gueltigen gerichteten azyklischen Graphen ab. Implementiert in `f3fadcf` mit Legacy-Normalisierung in `cbf758f`; GitHub Actions Quality Gate [Run 43310954928](https://github.com/ghxstfocus/werkstatt/actions/runs/43310954928) erfolgreich.
