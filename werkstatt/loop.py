@@ -382,6 +382,8 @@ def run_pipeline_loop(
     )
     if _done or _rc_plan != 0:
         return _rc_plan
+    if state.budget_exhausted_reason:
+        return 1
 
     # Fix AZ Stufe 8-C: Autonomer Task-Loop
     _rc_task, tasks_ok, tasks = _phase_tasks_loop(state, phase_state)
