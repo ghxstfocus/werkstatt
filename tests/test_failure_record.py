@@ -192,10 +192,6 @@ def test_phase_finalize_repairs_failed_phase_end_verify_in_same_run(
         finalize, "_verify_patches",
         lambda *_args, **_kwargs: next(verify_results),
     )
-    monkeypatch.setattr(
-        finalize, "_post_commit_snapshot_check",
-        lambda *_args: (True, {"worktree_clean": True}),
-    )
     monkeypatch.setattr(finalize, "summary", lambda *_args: None)
     monkeypatch.setattr(
         "werkstatt.progress.append", lambda *_args, **_kwargs: None,
@@ -284,6 +280,10 @@ def test_post_commit_verify_repairs_same_run_and_recommits(
     monkeypatch.setattr(
         finalize, "_verify_patches",
         lambda *_args, **_kwargs: next(verify_results),
+    )
+    monkeypatch.setattr(
+        finalize, "_post_commit_snapshot_check",
+        lambda *_args: (True, {"worktree_clean": True}),
     )
     monkeypatch.setattr(finalize, "create_failure_record",
                         lambda *_args, **_kwargs: dict(failure_record))
