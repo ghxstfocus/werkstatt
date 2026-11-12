@@ -5696,3 +5696,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   - **Commit:** ba788989efaffb473b9436f3aac54a15d2f514cc
   - **Commit:** 2c71a59811a676e5bec7978b75503d116d8cc4c1
   - **Commit:** 5ee908b50a7954101662854fd2757fb1dd3d1700
+  - **Commit:** 6e93c8d2d318b568b0595d3b2a063bebbfe18ea6
