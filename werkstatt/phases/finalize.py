@@ -132,8 +132,9 @@ def _phase_end_recovery_pause(state: RunState, failure_record: dict) -> bool:
             f"Betroffene Stages: {', '.join(stage_ids) or 'unbekannt'}\n"
             + "\n".join(evidence)
             + "\n[j] erneut voll verifizieren und bei geaendertem Diff "
-            "gezielt weiter reparieren; [e] im Chat debuggen; [n] Run "
-            "fehlgeschlagen beenden."
+            "gezielt weiter reparieren; bleibt der Diff gleich und Verify "
+            "rot, endet der Run fehlgeschlagen. [e] im Chat debuggen; "
+            "[n] Run fehlgeschlagen beenden."
         )
         audit(
             "loop_verify_recovery_paused",
@@ -231,11 +232,57 @@ def _phase_end_recovery_pause(state: RunState, failure_record: dict) -> bool:
             updated.get("worktree_fingerprint"),
             updated.get("failed_stages"),
         ))
-        if (
-            has_provenance
-            and new_fingerprint
-            and new_fingerprint != old_fingerprint
-        ):
+        if not has_provenance or not new_fingerprint:
+            audit(
+                "loop_verify_recovery_stalled",
+                {
+                    "failure_id": updated.get("failure_id"),
+                    "previous_failure_id": current.get("failure_id"),
+                    "stage_ids": stage_ids,
+                    "reason": "failure_record_provenance_missing",
+                    "result_summary": (
+                        "Nach der erneuten Verify fehlt ein belastbarer "
+                        "Failure-Record-Beleg."
+                    ),
+                    "decision_summary": (
+                        "Ohne Artefakt, HEAD, Worktree-Fingerprint und "
+                        "Fehlerstages wird keine weitere Recovery gestartet."
+                    ),
+                    "next_step": (
+                        "Failure Record und Verify-Artefakte prüfen; der Run "
+                        "bleibt fehlgeschlagen."
+                    ),
+                },
+                state.project_dir,
+                state.project_name,
+            )
+            return False
+        if new_fingerprint == old_fingerprint:
+            audit(
+                "loop_verify_recovery_stalled",
+                {
+                    "failure_id": updated.get("failure_id"),
+                    "previous_failure_id": current.get("failure_id"),
+                    "stage_ids": stage_ids,
+                    "reason": "worktree_unchanged_after_human_retry",
+                    "result_summary": (
+                        "Die vollständige Verify blieb rot und der Worktree "
+                        "hat sich seit dem letzten Failure Record nicht geändert."
+                    ),
+                    "decision_summary": (
+                        "Der Run beendet die Recovery fail-closed, statt "
+                        "dieselbe Gate-Entscheidung endlos erneut anzufragen."
+                    ),
+                    "next_step": (
+                        "Fehler im Debug-Modus bearbeiten und einen neuen "
+                        "Recovery-Schritt mit geändertem Diff starten."
+                    ),
+                },
+                state.project_dir,
+                state.project_name,
+            )
+            return False
+        if new_fingerprint != old_fingerprint:
             context, truncated = _verify_recovery_context(
                 updated.get("failed_stages") or [],
             )

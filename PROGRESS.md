@@ -5556,4 +5556,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - GitHub-Actions zeigte drei Integrationsfehler: neue Recovery-Events fehlten im Audit-Katalog; ein fehlgeschlagener Builder-Versuch brach vor dem menschlichen Phase-End-Gate ab; ein lokaler Resume-Test hatte ungültige YAML-Zeilenumbrüche.
 - Recovery öffnet nun auch nach einem erfolglosen automatischen Reparaturversuch das adressierte Gate mit Failure Record. Die Entscheidung bleibt beim Menschen; ein Erfolg wird weiterhin nur nach bestandener vollständiger Verify gemeldet.
 - Audit-Katalog um die Verify-Recovery- und Checkpoint-Mismatch-Events ergänzt. Resume-Fixture auf echtes mehrzeiliges YAML umgestellt.
-- CI-Runs 43247044555 und 43248717924 belegten die Ausgangsfehler. Run 43250234763 stoppte zunächst am Ruff-Doppel-Eintrag des bereits vorhandenen `loop_checkpoint_run_mismatch`; der doppelte Katalogeintrag wurde entfernt. Run 43250541821 bestaetigte 2053 Tests, Ruff und Audit-Katalog; das Quality-Gate fand noch die nicht eingeengte optionale Run-ID. Der Guard ist jetzt explizit; finale CI- und Server-Verifikation stehen noch aus.
+- CI-Runs 43247044555 und 43248717924 belegten die Ausgangsfehler. Run 43250234763 stoppte zunächst am Ruff-Doppel-Eintrag des bereits vorhandenen `loop_checkpoint_run_mismatch`; der doppelte Katalogeintrag wurde entfernt. Neue CI- und Server-Verifikation stehen noch aus.
+
+
+## 2026-11-12 — Verify-Recovery-Gate beendet Wiederholung ohne Fortschritt
+
+- OP-403-Review: Nach „erneut prüfen“ konnte ein unveränderter, weiterhin roter Worktree das Phase-End-Gate erneut öffnen und bei wiederholter gleicher Antwort in einer Schleife bleiben.
+- Recovery prüft jetzt den neuen Failure Record auf vollständige Provenienz und vergleicht danach den Worktree-Fingerprint. Fehlende Belege oder ein unveränderter Fingerprint beenden die Recovery fail-closed mit `loop_verify_recovery_stalled` und einem konkreten nächsten Schritt; ein geänderter Diff darf weiter gezielt repariert werden.
+- Regressionstest belegt genau einen Gate-Durchlauf bei rotem Verify ohne Worktree-Fortschritt und stellt sicher, dass der Builder nicht erneut gestartet wird.

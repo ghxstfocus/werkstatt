@@ -631,3 +631,53 @@ def test_phase_finalize_pauses_at_human_gate_and_resumes_after_green_verify(
     assert any(item[0] == "loop_verify_recovery_paused" for item in events)
     assert any(item[0] == "loop_verify_recovered" for item in events)
     assert any(item[0] == "loop_erfolg" for item in events)
+
+def test_recovery_gate_stops_after_failed_verify_without_worktree_change(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    events = []
+    gate_calls = []
+    record = {
+        "failure_id": "failure-stalled",
+        "artifact_ref": "audit-logs/run-1/failures/phase_end.json",
+        "work_sha": "abc123",
+        "worktree_fingerprint": "fingerprint-1",
+        "failed_stages": [
+            {
+                "stage_id": "pytest_regression",
+                "exit_code": 1,
+                "error_excerpt": "tests/test_example.py::test_case AssertionError",
+            },
+        ],
+    }
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-1",
+    )
+    monkeypatch.setattr(finalize, "audit", lambda *args: events.append(args))
+    monkeypatch.setattr(
+        finalize, "_verify_patches", lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        finalize, "create_failure_record",
+        lambda *_args, **_kwargs: dict(record),
+    )
+
+    def unexpected_recovery(*_args, **_kwargs):
+        raise AssertionError("Unveraenderter Worktree darf nicht neu starten")
+
+    monkeypatch.setattr(finalize, "_reflection_loop", unexpected_recovery)
+
+    def answer_gate(kind, prompt, options):
+        gate_calls.append((kind, prompt, options))
+        return "j"
+
+    monkeypatch.setattr("werkstatt.gates._frage_gate", answer_gate)
+
+    assert finalize._phase_end_recovery_pause(state, record) is False
+    assert len(gate_calls) == 1
+    assert "endet der Run fehlgeschlagen" in gate_calls[0][1]
+    stalled = [item[1] for item in events if item[0] == "loop_verify_recovery_stalled"]
+    assert len(stalled) == 1
+    assert stalled[0]["reason"] == "worktree_unchanged_after_human_retry"
