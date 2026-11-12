@@ -154,10 +154,10 @@ def test_main_passes_project_budget_to_run_state(tmp_path, monkeypatch):
     cfg = _base_config(tmp_path)
     cfg["budget"] = {"max_minutes": 15, "max_llm_calls": 30}
     aufrufe: list = []
-    with _silence_renderer(), _patch_main_config(tmp_path, cfg), \\
+    with _silence_renderer(), _patch_main_config(tmp_path, cfg), \
          patch("werkstatt.loop.run_pipeline_loop",
-               _loop_runner(1, 0, aufrufe)), \\
-         patch("werkstatt.loop._git_head", return_value="abc"), \\
+               _loop_runner(1, 0, aufrufe)), \
+         patch("werkstatt.loop._git_head", return_value="abc"), \
          patch("werkstatt.loop._git_dirty", return_value=False):
         rc = loop.main(["--project", "p", "--aufgabe", "aufgabe-x"])
 
