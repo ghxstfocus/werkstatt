@@ -578,8 +578,9 @@ def create_app() -> FastAPI:
 
     @app.post("/api/projects/create")
     def project_create(body: dict[str, Any]) -> dict[str, Any]:
-        """OP-305: Neues Projekt anlegen (scaffold)."""
+        """Legt ein lokales Projekt an, scaffoldet Dokus und registriert es."""
         import re as _re
+
         name = str(body.get("name") or "").strip()
         pfad = str(body.get("pfad") or "").strip()
         if not _re.fullmatch(r"[a-z][a-z0-9_-]{0,50}", name):
@@ -587,46 +588,32 @@ def create_app() -> FastAPI:
                 status_code=400,
                 detail="Projektname ungueltig: a-z, 0-9, _, - (max 51)",
             )
-        if not pfad.startswith("/opt/"):
+        if _PROJECTS_BASE == Path("/opt") and not pfad.startswith("/opt/"):
             raise HTTPException(
                 status_code=400,
                 detail="Pfad muss unter /opt/ liegen",
             )
         try:
-            projekt_dir = Path(pfad).resolve()
-        except (OSError, RuntimeError) as exc:
-            raise HTTPException(status_code=400, detail=f"Pfad ungueltig: {exc}")
-        if not str(projekt_dir).startswith("/opt/"):
+            projekt_dir = Path(pfad).expanduser().resolve()
+            erlaubte_basis = _PROJECTS_BASE.resolve()
+            projekt_dir.relative_to(erlaubte_basis)
+            if projekt_dir == erlaubte_basis:
+                raise ValueError("Projektpfad darf nicht die Projektbasis sein")
+        except (OSError, RuntimeError, ValueError) as exc:
             raise HTTPException(
                 status_code=400,
-                detail="Pfad muss unter /opt/ bleiben (Symlink?)",
-            )
-        if projekt_dir.exists():
-            if not projekt_dir.is_dir():
-                raise HTTPException(
-                    status_code=409,
-                    detail="Pfad existiert und ist keine Verzeichnis",
-                )
-            try:
-                if any(projekt_dir.iterdir()):
-                    raise HTTPException(
-                        status_code=409,
-                        detail="Zielverzeichnis nicht leer",
-                    )
-            except OSError as exc:
-                raise HTTPException(status_code=500, detail=f"Lesen: {exc}")
-        projekt_dir.mkdir(parents=True, exist_ok=True)
-        from werkstatt.scaffold import scaffold
+                detail=f"Pfad muss innerhalb { _PROJECTS_BASE } liegen: {exc}",
+            ) from exc
+
+        from werkstatt.project_creation import create_local_project
+
         try:
-            bericht = scaffold(name, projekt_dir)
-        except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
-            raise HTTPException(status_code=500, detail=str(exc))
-        return {
-            "ok": True,
-            "name": name,
-            "pfad": str(projekt_dir),
-            "bericht": bericht,
-        }
+            result = create_local_project(name, projekt_dir)
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (FileNotFoundError, NotADirectoryError, OSError, ValueError) as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return {"ok": True, "pfad": str(projekt_dir), **result}
 
     @app.post("/api/projects/{name}/start")
     def project_start(name: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
