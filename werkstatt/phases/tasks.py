@@ -15,7 +15,7 @@ from werkstatt.render import (
     task_ok,
     task_started,
 )
-from werkstatt.state import RunState
+from werkstatt.state import RunState, check_run_lease
 from werkstatt.verify_classify import filtere_harte_verify_fehler
 
 from ._common import (
@@ -78,7 +78,7 @@ def _persist_run_checkpoint(
 ) -> None:
     """Persist task-boundary state and acknowledge only observed chat notices."""
     if run_state is not None:
-        run_state.assert_run_lease()
+        run_check_run_lease(state)
     record = store.get_run_record(project_name, run_id)
     if record is None:
         return
@@ -124,7 +124,7 @@ def _persist_run_checkpoint(
             max(int(message["seq"]) for message in claimed),
         )
     if run_state is not None:
-        run_state.assert_run_lease()
+        run_check_run_lease(state)
     store.update_run_checkpoint(
         project_name,
         run_id,
@@ -133,7 +133,7 @@ def _persist_run_checkpoint(
     )
     for message in claimed:
         if run_state is not None:
-            run_state.assert_run_lease()
+            run_check_run_lease(state)
         if not store.acknowledge_run_message(
             message["seq"], worker_id, message["fencing_token"],
         ):
@@ -183,7 +183,7 @@ def _phase_tasks_loop(
     # M-473: while-Loop statt for. Nach ADaPT-Split wird die
     # Schleife neu gestartet, damit Sub-Tasks gebaut werden.
     while True:
-        state.assert_run_lease()
+        check_run_lease(state)
         if _enforce_run_budget(state):
             phase_state.save()
             return 1, tasks_ok, tasks
@@ -509,7 +509,7 @@ def _phase_tasks_loop(
                 target.parent.mkdir(parents=True, exist_ok=True)
                 # FIX N 2026-10-31: Write-Fehler fail-closed.
                 try:
-                    state.assert_run_lease()
+                    check_run_lease(state)
                     target.write_text(content)
                 except OSError as _e:
                     audit("loop_patch_write_failed",
@@ -589,7 +589,7 @@ def _phase_tasks_loop(
                     break
                 # FIX N 2026-10-31: Write-Fehler fail-closed.
                 try:
-                    state.assert_run_lease()
+                    check_run_lease(state)
                     target.write_text(_neu_content2)
                 except OSError as _e:
                     audit("loop_patch_write_failed",
@@ -642,7 +642,7 @@ def _phase_tasks_loop(
                           {"file": file}, pd, pn)
                     continue
                 try:
-                    state.assert_run_lease()
+                    check_run_lease(state)
                     target.unlink()
                 except OSError as _e:
                     audit("loop_patch_delete_failed",
