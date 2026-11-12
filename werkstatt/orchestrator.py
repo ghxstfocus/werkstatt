@@ -25,7 +25,7 @@ from werkstatt.state import RunState
 
 PROJECTS_DIR = _projects_dir()
 _REQUIRED_DOC_KEYS = {
-    "entry", "status", "roadmap", "architecture",
+    "entry", "status", "roadmap", "architecture", "progress",
     "conventions", "adr_index", "glossary",
 }
 
@@ -65,10 +65,11 @@ def load_project_config(project_name: str) -> dict[str, Any]:
 
 
 # DOC_CONVENTIONS.md §6 — Loop-Lese-Reihenfolge.
-# entry > status > roadmap > architecture > conventions > adr_index > glossary.
+# entry > status > roadmap > architecture > progress > conventions > adr_index > glossary.
+# Progress ist historische Evidenz, keine Quelle fuer Live-Run-Status.
 # Unbekannte Keys landen alphabetisch am Ende.
 _DOCS_PRIORITAET = [
-    "entry", "status", "roadmap", "architecture",
+    "entry", "status", "roadmap", "architecture", "progress",
     "conventions", "adr_index", "glossary",
 ]
 
@@ -92,7 +93,13 @@ def load_docs(docs_config: dict[str, str], project_dir: Path) -> dict[str, str]:
     for key, rel in _sortiere_docs_nach_prioritaet(docs_config):
         path = project_dir / rel
         try:
-            docs[key] = path.read_text(encoding="utf-8")
+            content = path.read_text(encoding="utf-8")
+            if key == "progress":
+                from werkstatt.progress import recent_from_text
+
+                docs[key] = recent_from_text(content)
+            else:
+                docs[key] = content
         except OSError as exc:
             print(
                 f"[FAIL] Pflichtdokument {rel} kann nicht gelesen werden: "
