@@ -5429,3 +5429,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 
 - OP-403-Korrektur waehrend der Umsetzung: Nach gruener gezielter Stage-Verify beendet Reflection jetzt den Reparaturversuch unmittelbar. Zuvor konnte sie nach einem erfolgreichen gezielten Check weitere Builder-Runden starten, bevor der Finalizer den Voll-Verify ausfuehrte. Der Voll-Verify bleibt die einzige Abschlussfreigabe.
+
+
+## 2026-11-12 — OP-403: Folgefehler im selben Run weiterbearbeiten
+
+- Wenn die gezielte Reparatur einen Befund behebt, aber die vollstaendige Phase-End-Pruefung einen weiteren Stage-Fehler findet, erzeugt der Finalizer einen neuen Failure Record und startet gezielte Recovery fuer diese Fehlergruppe im selben Run.
+- Die Recovery verwendet alle fehlgeschlagenen Stage-IDs aus dem redigierten Record, nicht nur die ersten sechs. Sie verknuepft Folgeversuche ueber vorherige Failure-IDs in der Timeline.
+- Wenn derselbe Fehlerauszug am selben Worktree-Fingerprint wiederkommt, erkennt der Finalizer Stagnation, stoppt fail-closed und laesst Verify rot. Ein roter Voll-Verify kann weder Commit noch Erfolg ausloesen.
+- Regressionstests pruefen einen zweiten, neu auftretenden Stage-Befund sowie das Stoppen bei identischem Fehlerzustand. CI-Verifikation fuer diesen Commit steht aus.

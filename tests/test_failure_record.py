@@ -227,3 +227,150 @@ def test_phase_finalize_repairs_failed_phase_end_verify_in_same_run(
     assert any(item[0] == "loop_verify_recovered" for item in events)
     assert any(item[0] == "loop_erfolg" for item in events)
     assert not any(item[0] == "loop_gate_failed" for item in events)
+
+
+
+def test_phase_finalize_continues_when_full_verify_finds_another_stage(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    events = []
+    verify_results = iter([False, False, True])
+    recovery_stage_ids = []
+    failure_records = iter([
+        {
+            "failure_id": "failure-1",
+            "artifact_ref": "audit-logs/run-1/failures/first.json",
+            "worktree_fingerprint": "fingerprint-a",
+            "failed_stages": [
+                {"stage_id": "ruff", "exit_code": 1, "error_excerpt": "F401"},
+            ],
+        },
+        {
+            "failure_id": "failure-2",
+            "artifact_ref": "audit-logs/run-1/failures/second.json",
+            "worktree_fingerprint": "fingerprint-b",
+            "failed_stages": [
+                {
+                    "stage_id": "pytest_regression",
+                    "exit_code": 1,
+                    "error_excerpt": "AssertionError: second issue",
+                },
+            ],
+        },
+    ])
+    monkeypatch.setattr(finalize, "group_start", lambda *_args: None)
+    monkeypatch.setattr(finalize, "group_end", lambda: None)
+    monkeypatch.setattr(finalize, "audit", lambda *args: events.append(args))
+    monkeypatch.setattr(finalize, "_human_gate", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
+        finalize, "_verify_patches",
+        lambda *_args, **_kwargs: next(verify_results),
+    )
+    monkeypatch.setattr(
+        finalize, "create_failure_record",
+        lambda *_args, **_kwargs: next(failure_records),
+    )
+    monkeypatch.setattr(
+        finalize, "_reflection_loop",
+        lambda _state, *, verify_stage_ids, **_kwargs: (
+            recovery_stage_ids.append(verify_stage_ids) or True
+        ),
+    )
+    monkeypatch.setattr(finalize, "summary", lambda *_args: None)
+    monkeypatch.setattr(
+        "werkstatt.progress.append", lambda *_args, **_kwargs: None,
+    )
+
+    task = {"id": "task-1"}
+    phase_state = SimpleNamespace(
+        data={"tasks": [{"id": "task-1", "status": "done"}]},
+        get_task=lambda _task_id: {"status": "done"},
+    )
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-1",
+        tasks=[task],
+        applied_count=0,
+        reviewer_bugs=[],
+        progress_written_at_commit=True,
+        last_verify_results=[],
+        last_verify_errors=["ruff: F401"],
+    )
+
+    result = finalize._phase_finalize(state, 1, [task], "demo", phase_state)
+
+    assert result == 0
+    assert recovery_stage_ids == [{"ruff"}, {"pytest_regression"}]
+    assert sum(
+        item[0] == "loop_verify_recovery_started" for item in events
+    ) == 2
+    assert any(item[0] == "loop_verify_recovered" for item in events)
+    assert any(item[0] == "loop_erfolg" for item in events)
+    assert not any(item[0] == "loop_gate_failed" for item in events)
+
+
+def test_phase_finalize_stops_on_repeated_failure_at_same_worktree(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    events = []
+    verify_results = iter([False, False])
+    record = {
+        "failure_id": "failure-repeat",
+        "artifact_ref": "audit-logs/run-1/failures/repeated.json",
+        "worktree_fingerprint": "unchanged",
+        "failed_stages": [
+            {"stage_id": "pytest_regression", "exit_code": 1,
+             "error_excerpt": "AssertionError: unchanged"},
+        ],
+    }
+    monkeypatch.setattr(finalize, "group_start", lambda *_args: None)
+    monkeypatch.setattr(finalize, "group_end", lambda: None)
+    monkeypatch.setattr(finalize, "audit", lambda *args: events.append(args))
+    monkeypatch.setattr(finalize, "_human_gate", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
+        finalize, "_verify_patches",
+        lambda *_args, **_kwargs: next(verify_results),
+    )
+    monkeypatch.setattr(
+        finalize, "create_failure_record",
+        lambda *_args, **_kwargs: dict(record),
+    )
+    recovery_calls = []
+    monkeypatch.setattr(
+        finalize, "_reflection_loop",
+        lambda *_args, **_kwargs: recovery_calls.append(True) or True,
+    )
+    monkeypatch.setattr(finalize, "summary", lambda *_args: None)
+    monkeypatch.setattr(
+        "werkstatt.progress.append", lambda *_args, **_kwargs: None,
+    )
+
+    task = {"id": "task-1"}
+    phase_state = SimpleNamespace(
+        data={"tasks": [{"id": "task-1", "status": "done"}]},
+        get_task=lambda _task_id: {"status": "done"},
+    )
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-1",
+        tasks=[task],
+        applied_count=0,
+        reviewer_bugs=[],
+        progress_written_at_commit=True,
+        last_verify_results=[],
+        last_verify_errors=["pytest_regression: AssertionError"],
+    )
+
+    result = finalize._phase_finalize(state, 1, [task], "demo", phase_state)
+
+    assert result == 1
+    assert len(recovery_calls) == 1
+    stalled = [
+        item for item in events
+        if item[0] == "loop_verify_recovery_stalled"
+    ]
+    assert stalled
+    assert stalled[-1][1]["reason"] == "same_failure_and_worktree_recurred"
+    assert not any(item[0] == "loop_erfolg" for item in events)
