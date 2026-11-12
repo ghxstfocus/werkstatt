@@ -5571,4 +5571,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Offene Run-Gates werden beim UI-Reconnect idempotent als Chat-Karten in die aktuelle Projekt-Session übernommen; Plan, Empfehlung und knappe Verify-/Diff-Belege bleiben aufklappbar.
 - Antwort aus Chat oder Gate-Detailmodal läuft über denselben projekt- und run-gebundenen Chat-Endpunkt. Die Gate-Antwort bleibt im Run-Audit und wird zusätzlich in derselben Chat-Session replaybar gespeichert.
 - Gate-Karten und Entscheidungen verwenden sessiongebundene Idempotenzschlüssel, damit das 2-Sekunden-Polling und Reconnect keine doppelten Chat-Ereignisse anlegen.
-- Implementierung und Quality-Gate-Verifikation stehen noch aus.
+- Implementiert in Commit `7f359a1`; GitHub Actions Quality Gate Run [43256007757](https://github.com/ghxstfocus/werkstatt/actions/runs/43256007757) ist gruen: 2059 Tests, Ruff 0, Mypy 0, AST 378 Dateien ohne Fehler, Audit-Katalog bestanden.
