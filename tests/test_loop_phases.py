@@ -544,7 +544,7 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
     )
 
     def verify(_state, *, phase=None):
-        order.append(("verify", phase))
+        order.append(("verify_post_commit" if any(step[0] == "commit" for step in order) else "verify", phase))
         return True
 
     def append_progress(_project_dir, **_kwargs):
