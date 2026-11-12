@@ -5707,3 +5707,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Doku-Drift-Belege fuer Code-Commits:
   - **Commit:** b9fb3569b167b8dbfd0d08dfc741e33c0f6a8436
   - **Commit:** 03975c07741c11485b311717463a6ca461cb5728
+- CI fuer Commit `6fff05905324f3d3ff0956ee0e8c29b22245a292`: Quality-Gate-Workflow erfolgreich; 2.087 Tests bestanden, 5 uebersprungen; Ruff, JavaScript-Syntax und Quality Gate gruen. [Run 43292109189](https://github.com/ghxstfocus/werkstatt/actions/runs/43292109189).
