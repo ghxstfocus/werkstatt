@@ -192,6 +192,10 @@ def test_phase_finalize_repairs_failed_phase_end_verify_in_same_run(
         finalize, "_verify_patches",
         lambda *_args, **_kwargs: next(verify_results),
     )
+    monkeypatch.setattr(
+        finalize, "_post_commit_snapshot_check",
+        lambda *_args: (True, {"worktree_clean": True}),
+    )
     monkeypatch.setattr(finalize, "summary", lambda *_args: None)
     monkeypatch.setattr(
         "werkstatt.progress.append", lambda *_args, **_kwargs: None,
@@ -251,6 +255,144 @@ def test_phase_finalize_repairs_failed_phase_end_verify_in_same_run(
     assert any(item[0] == "loop_erfolg" for item in events)
     assert not any(item[0] == "loop_gate_failed" for item in events)
 
+
+
+def test_post_commit_verify_repairs_same_run_and_recommits(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    events = []
+    verify_results = iter([True, False, True, True])
+    commit_calls = []
+    recovery_calls = []
+    failure_record = {
+        "failure_id": "post-commit-failure",
+        "artifact_ref": "audit-logs/run-1/failures/post_commit.json",
+        "work_sha": "abc123",
+        "worktree_fingerprint": "fingerprint-post-commit",
+        "failed_stages": [
+            {
+                "stage_id": "pytest_regression",
+                "exit_code": 1,
+                "error_excerpt": "AssertionError after commit",
+            },
+        ],
+    }
+    monkeypatch.setattr(finalize, "group_start", lambda *_args: None)
+    monkeypatch.setattr(finalize, "group_end", lambda: None)
+    monkeypatch.setattr(finalize, "audit", lambda *args: events.append(args))
+    monkeypatch.setattr(finalize, "_human_gate", lambda *_args, **_kwargs: 2)
+    monkeypatch.setattr(
+        finalize, "_verify_patches",
+        lambda *_args, **_kwargs: next(verify_results),
+    )
+    monkeypatch.setattr(finalize, "create_failure_record",
+                        lambda *_args, **_kwargs: dict(failure_record))
+    monkeypatch.setattr(
+        finalize,
+        "_reflection_loop",
+        lambda _state, **kwargs: recovery_calls.append(kwargs) or True,
+    )
+    monkeypatch.setattr(finalize, "summary", lambda *_args: None)
+    monkeypatch.setattr(
+        "werkstatt.progress.append", lambda *_args, **_kwargs: None,
+    )
+
+    def commit(_state):
+        commit_calls.append(True)
+        return True, f"commit-{len(commit_calls)}"
+
+    monkeypatch.setattr("werkstatt.committer._committe_zielprojekt", commit)
+    task = {"id": "task-1"}
+    phase_state = SimpleNamespace(
+        data={"tasks": [{"id": "task-1", "status": "done"}]},
+        get_task=lambda _task_id: {"status": "done"},
+    )
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-1",
+        tasks=[task],
+        applied_count=0,
+        reviewer_bugs=[],
+        progress_written_at_commit=True,
+        last_verify_results=[],
+        last_verify_errors=["pytest_regression: AssertionError"],
+    )
+
+    result = finalize._phase_finalize(state, 1, [task], "demo", phase_state)
+
+    assert result == 0
+    assert len(commit_calls) == 2
+    assert len(recovery_calls) == 1
+    assert recovery_calls[0]["phase"] == "phase_end"
+    assert recovery_calls[0]["verify_stage_ids"] == {"pytest_regression"}
+    assert any(event[0] == "loop_post_commit_verify_failed" for event in events)
+    assert any(event[0] == "loop_post_commit_recovery_committed" for event in events)
+    assert any(event[0] == "loop_post_commit_verify_passed" for event in events)
+    assert any(event[0] == "loop_erfolg" for event in events)
+
+
+def test_failed_post_commit_verify_never_emits_loop_success(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    events = []
+    verify_results = iter([True, False])
+    failure_record = {
+        "failure_id": "post-commit-failure",
+        "artifact_ref": "audit-logs/run-1/failures/post_commit.json",
+        "work_sha": "abc123",
+        "worktree_fingerprint": "fingerprint-post-commit",
+        "failed_stages": [
+            {"stage_id": "pytest", "exit_code": 1, "error_excerpt": "failed"},
+        ],
+    }
+    monkeypatch.setattr(finalize, "group_start", lambda *_args: None)
+    monkeypatch.setattr(finalize, "group_end", lambda: None)
+    monkeypatch.setattr(finalize, "audit", lambda *args: events.append(args))
+    monkeypatch.setattr(finalize, "_human_gate", lambda *_args, **_kwargs: 2)
+    monkeypatch.setattr(
+        finalize, "_verify_patches",
+        lambda *_args, **_kwargs: next(verify_results),
+    )
+    monkeypatch.setattr(
+        finalize, "create_failure_record",
+        lambda *_args, **_kwargs: dict(failure_record),
+    )
+    monkeypatch.setattr(
+        finalize, "_reflection_loop", lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(finalize, "_phase_end_recovery_pause", lambda *_args: False)
+    monkeypatch.setattr(finalize, "summary", lambda *_args: None)
+    monkeypatch.setattr(
+        "werkstatt.progress.append", lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "werkstatt.committer._committe_zielprojekt",
+        lambda _state: (True, "commit-1"),
+    )
+    task = {"id": "task-1"}
+    phase_state = SimpleNamespace(
+        data={"tasks": [{"id": "task-1", "status": "done"}]},
+        get_task=lambda _task_id: {"status": "done"},
+    )
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-1",
+        tasks=[task],
+        applied_count=0,
+        reviewer_bugs=[],
+        progress_written_at_commit=True,
+        last_verify_results=[],
+        last_verify_errors=["pytest: failed"],
+    )
+
+    result = finalize._phase_finalize(state, 1, [task], "demo", phase_state)
+
+    kinds = [event[0] for event in events]
+    assert result == 1
+    assert "loop_human_gate_commit_post_verify_abort" in kinds
+    assert "loop_erfolg" not in kinds
 
 
 def test_phase_finalize_continues_when_full_verify_finds_another_stage(
@@ -688,3 +830,35 @@ def test_recovery_gate_stops_after_failed_verify_without_worktree_change(
     stalled = [item[1] for item in events if item[0] == "loop_verify_recovery_stalled"]
     assert len(stalled) == 1
     assert stalled[0]["reason"] == "worktree_unchanged_after_human_retry"
+
+
+
+def test_post_commit_snapshot_rejects_head_drift(tmp_path: Path, monkeypatch) -> None:
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "new-head\n", "")
+
+    monkeypatch.setattr(finalize.subprocess, "run", fake_run)
+
+    ok, evidence = finalize._post_commit_snapshot_check(tmp_path, "old-head")
+
+    assert not ok
+    assert evidence["reason"] == "head_changed_during_post_commit_verify"
+    assert evidence["expected_sha"] == "old-head"
+    assert len(calls) == 1
+
+
+def test_post_commit_snapshot_rejects_dirty_worktree(tmp_path: Path, monkeypatch) -> None:
+    def fake_run(args, **kwargs):
+        output = "abc123\n" if args[1:3] == ["rev-parse", "HEAD"] else " M app.py\n"
+        return subprocess.CompletedProcess(args, 0, output, "")
+
+    monkeypatch.setattr(finalize.subprocess, "run", fake_run)
+
+    ok, evidence = finalize._post_commit_snapshot_check(tmp_path, "abc123")
+
+    assert not ok
+    assert evidence["reason"] == "worktree_changed_during_post_commit_verify"
+    assert evidence["dirty_paths"] == ["app.py"]

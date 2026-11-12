@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+from pathlib import Path
 
 from werkstatt.failure_record import create_failure_record
 from werkstatt.render import (
@@ -356,6 +358,269 @@ def _phase_end_recovery_pause(state: RunState, failure_record: dict) -> bool:
                 )
                 return True
         current = updated
+
+
+def _post_commit_snapshot_check(
+    project_dir: Path, expected_sha: str,
+) -> tuple[bool, dict[str, object]]:
+    """Ensure Verify observed the exact committed HEAD and left no dirty files."""
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+        )
+        if head.returncode != 0:
+            return False, {"reason": "head_read_failed"}
+        actual_sha = head.stdout.strip()
+        if not expected_sha or not actual_sha.startswith(expected_sha):
+            return False, {
+                "reason": "head_changed_during_post_commit_verify",
+                "expected_sha": expected_sha,
+                "actual_sha": actual_sha,
+            }
+
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+        )
+        if status.returncode != 0:
+            return False, {"reason": "worktree_status_failed"}
+        dirty_paths = [
+            line[3:].strip()
+            for line in status.stdout.splitlines()
+            if line.strip()
+        ]
+        if dirty_paths:
+            return False, {
+                "reason": "worktree_changed_during_post_commit_verify",
+                "dirty_paths": dirty_paths[:50],
+                "omitted_paths": max(0, len(dirty_paths) - 50),
+            }
+        return True, {"head_sha": actual_sha, "worktree_clean": True}
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, {
+            "reason": "post_commit_snapshot_check_failed",
+            "error_type": type(exc).__name__,
+        }
+
+
+def _post_commit_verify_recovery(state: RunState, commit_sha: str) -> bool:
+    """Verify the committed tree and repair failures within the same run."""
+    from werkstatt.committer import _committe_zielprojekt
+
+    seen_worktrees: set[str] = set()
+    current_commit = commit_sha
+    while True:
+        if _verify_patches(state, phase="phase_end"):
+            snapshot_ok, snapshot = _post_commit_snapshot_check(
+                state.project_dir, current_commit,
+            )
+            if not snapshot_ok:
+                audit(
+                    "loop_human_gate_commit_post_verify_abort",
+                    {
+                        "sha": current_commit,
+                        **snapshot,
+                        "result_summary": (
+                            "Die Prüfschritte waren grün, aber der geprüfte "
+                            "Commit-Stand hat sich währenddessen verändert."
+                        ),
+                        "decision_summary": (
+                            "Der Run meldet keinen Erfolg, solange HEAD und "
+                            "Working Tree nicht dem geprüften Commit entsprechen."
+                        ),
+                        "next_step": (
+                            "Den neuen HEAD und alle Änderungen erneut prüfen."
+                        ),
+                    },
+                    state.project_dir,
+                    state.project_name,
+                )
+                return False
+            audit(
+                "loop_post_commit_verify_passed",
+                {
+                    "sha": current_commit,
+                    **snapshot,
+                    "result_summary": (
+                        "Die vollständige Abschlussprüfung des committeten "
+                        "Repository-Stands ist grün und der geprüfte HEAD "
+                        "ist unverändert."
+                    ),
+                    "decision_summary": (
+                        "Der Commit-Inhalt wurde nach dem Commit erneut "
+                        "vollständig verifiziert."
+                    ),
+                    "next_step": "Abschluss und Ergebnisstatus festhalten.",
+                },
+                state.project_dir,
+                state.project_name,
+            )
+            return True
+
+        failure = create_failure_record(state, stage="post_commit")
+        stages = failure.get("failed_stages") or []
+        stage_ids = list(dict.fromkeys(
+            str(item.get("stage_id") or "?")
+            for item in stages
+            if isinstance(item, dict)
+        ))
+        fingerprint = str(failure.get("worktree_fingerprint") or "")
+        missing = [
+            field for field in ("artifact_ref", "work_sha", "worktree_fingerprint")
+            if not failure.get(field)
+        ]
+        if not stage_ids or missing:
+            audit(
+                "loop_post_commit_verify_failed",
+                {
+                    "sha": current_commit,
+                    "failure_id": failure.get("failure_id"),
+                    "artifact_ref": failure.get("artifact_ref"),
+                    "stage_ids": stage_ids,
+                    "missing_provenance": missing,
+                    "result_summary": (
+                        "Die Nachprüfung des Commits ist fehlgeschlagen; "
+                        "die Fehlerbelege sind unvollständig."
+                    ),
+                    "decision_summary": (
+                        "Ohne vollständige Belege wird der Run nicht als "
+                        "erfolgreich abgeschlossen."
+                    ),
+                    "next_step": "Failure Record und Verify-Artefakte prüfen.",
+                },
+                state.project_dir,
+                state.project_name,
+            )
+            return False
+
+        if fingerprint in seen_worktrees:
+            audit(
+                "loop_verify_recovery_stalled",
+                {
+                    "failure_id": failure.get("failure_id"),
+                    "stage_ids": stage_ids,
+                    "reason": "post_commit_worktree_recurred",
+                    "result_summary": (
+                        "Die vollständige Prüfung bleibt beim selben "
+                        "Arbeitsstand rot."
+                    ),
+                    "decision_summary": (
+                        "Der Run fragt nach einer gezielten menschlichen "
+                        "Aktion, statt denselben Reparaturversuch zu wiederholen."
+                    ),
+                    "next_step": (
+                        "Failure Record prüfen, den Fehler im Debug-Modus "
+                        "bearbeiten und anschließend erneut verifizieren."
+                    ),
+                },
+                state.project_dir,
+                state.project_name,
+            )
+            if not _phase_end_recovery_pause(state, failure):
+                return False
+            commit_ok, commit_info = _committe_zielprojekt(state)
+            if not commit_ok:
+                audit(
+                    "loop_human_gate_commit_abort",
+                    {"info": commit_info, "after_post_commit_recovery": True},
+                    state.project_dir,
+                    state.project_name,
+                )
+                return False
+            current_commit = commit_info or current_commit
+            seen_worktrees.clear()
+            continue
+
+        seen_worktrees.add(fingerprint)
+        context, truncated = _verify_recovery_context(stages)
+        audit(
+            "loop_post_commit_verify_failed",
+            {
+                "sha": current_commit,
+                "failure_id": failure.get("failure_id"),
+                "artifact_ref": failure.get("artifact_ref"),
+                "stage_ids": stage_ids,
+                "evidence_truncated": truncated,
+                "result_summary": (
+                    "Die vollständige Prüfung des committeten Stands ist "
+                    "fehlgeschlagen; der Run startet gezielte Recovery."
+                ),
+                "decision_summary": (
+                    "Der rote Verify-Befund wird im selben Run diagnostiziert "
+                    "und nach jeder Reparatur erneut vollständig geprüft."
+                ),
+                "next_step": (
+                    "Fehlerstages gezielt reparieren und den Commit danach "
+                    "erneut vollständig verifizieren."
+                ),
+            },
+            state.project_dir,
+            state.project_name,
+        )
+        try:
+            repaired = _reflection_loop(
+                state,
+                max_runden=None,
+                error_context=context,
+                phase="phase_end",
+                verify_stage_ids=set(stage_ids),
+            )
+        except Exception as exc:
+            repaired = False
+            audit(
+                "loop_verify_recovery_error",
+                {
+                    "failure_id": failure.get("failure_id"),
+                    "error_type": type(exc).__name__,
+                    "after_commit": True,
+                },
+                state.project_dir,
+                state.project_name,
+            )
+
+        if not repaired:
+            if not _phase_end_recovery_pause(state, failure):
+                return False
+        elif not _verify_patches(state, phase="phase_end"):
+            continue
+
+        commit_ok, commit_info = _committe_zielprojekt(state)
+        if not commit_ok:
+            audit(
+                "loop_human_gate_commit_abort",
+                {"info": commit_info, "after_post_commit_recovery": True},
+                state.project_dir,
+                state.project_name,
+            )
+            return False
+        audit(
+            "loop_post_commit_recovery_committed",
+            {
+                "previous_sha": current_commit,
+                "sha": commit_info,
+                "result_summary": (
+                    "Die Recovery-Änderungen wurden nach bestandener "
+                    "Vollprüfung committet."
+                ),
+                "decision_summary": (
+                    "Der neue Commit wird erneut vollständig verifiziert."
+                ),
+                "next_step": "Post-Commit-Verify auf dem neuen HEAD ausführen.",
+            },
+            state.project_dir,
+            state.project_name,
+        )
+        current_commit = commit_info or current_commit
+
 
 def _phase_finalize(
     state: RunState,
@@ -758,6 +1023,28 @@ def _phase_finalize(
             rc = 1
         elif _commit_info:
             print(f"  Commit: {_commit_info}")
+            if not _post_commit_verify_recovery(state, _commit_info):
+                audit(
+                    "loop_human_gate_commit_post_verify_abort",
+                    {
+                        "sha": _commit_info,
+                        "result_summary": (
+                            "Der Commit wurde erstellt, aber die vollständige "
+                            "Nachprüfung blieb rot."
+                        ),
+                        "decision_summary": (
+                            "Der Run bleibt fehlgeschlagen; ein sauberer Git-"
+                            "Commit ersetzt keine erfolgreiche Verify."
+                        ),
+                        "next_step": (
+                            "Failure Record prüfen und den Run mit einem "
+                            "gezielten Recovery-Schritt fortsetzen."
+                        ),
+                    },
+                    pd,
+                    pn,
+                )
+                rc = 1
 
     if rc == 0:
         # OP-398: Ein gruenes Verify reicht nicht fuer einen gruenen Run,

@@ -35,9 +35,13 @@ Plan- und Ergebnis-Gates bleiben verpflichtend.
 - Das harte Doku-Gate prueft nur den aktuellen Worktree; Historien-Drift
   bleibt Teil des separaten Qualitaetsgates. Vor dem Gate wird
   `verify_pending` protokolliert, danach das tatsaechliche Ergebnis.
-- Nach jedem Commit validiert der Committer erneut HEAD-SHA samt erwartetem Commit-Elternstand und gepinntem Index-Tree, committed Diff
-  und Working Tree; parallel entstandene oder zurueckgelassene Aenderungen
-  duerfen nicht als abgeschlossener Verify-Stand gelten.
+- Vor jedem Commit werden erwarteter Eltern-HEAD und Index-Tree gepinnt.
+  Danach validiert der Committer HEAD-SHA, Eltern-Commit, Tree-Gleichheit,
+  committed Diff auf Whitespace-Fehler und den sauberen Working Tree.
+  Anschliessend laeuft die vollstaendige Phase-End-Verify erneut auf dem
+  Commit-SHA; rote Befunde gehen in die Recovery desselben Runs.
+  Parallel entstandene oder zurueckgelassene Aenderungen duerfen nicht als
+  abgeschlossener Verify-Stand gelten.
 - Live-Prozessstatus fuer Chat und fehlende Builder-Ereignisse an dieselbe
   Run-Projektion anbinden.
 - OP-403 ist der erste vertikale Zuverlaessigkeitsschnitt fuer ADR-0032;

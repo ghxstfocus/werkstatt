@@ -5635,3 +5635,8 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Nach `git add -A` wird der Index als Tree-SHA fixiert. Die Commit-Nachkontrolle vergleicht danach Eltern-Commit und Tree-SHA; ein Hook, der Dateien waehrend des Commits umschreibt und staged, kann nicht als verifizierter Run-Commit durchgehen.
 - Regressionstest simuliert einen Hook, der eine Datei waehrend `git commit` aendert und staged; der Commit wird als `head_tree_mismatch` fail-closed protokolliert.
+
+## 2026-11-12 — OP-403: Voll-Verify nach jedem Commit
+
+- Nach einem erfolgreichen Commit fuehrt der Finalizer die vollstaendige Phase-End-Verify erneut aus. Ein roter Befund erzeugt einen Failure Record und geht mit gezielter Reflection in denselben Run; nach jeder erfolgreichen Reparatur wird erneut committet und der neue HEAD wieder voll verifiziert.
+- Wiederholter unveraenderter Arbeitsstand fuehrt zum bestehenden Recovery-Gate. Ein Commit allein kann keinen Run-Erfolg ausloesen.

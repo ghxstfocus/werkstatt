@@ -407,7 +407,7 @@ def _run_finalize_commit_order(
 
     def _verify(_state, phase=None):
         assert phase == "phase_end"
-        order.append("verify")
+        order.append("verify_post_commit" if "commit" in order else "verify")
         return verify_ok
 
     def _append_progress(_project_dir, **kwargs):
@@ -428,6 +428,10 @@ def _run_finalize_commit_order(
         finalize, "_phase_end_recovery_pause", lambda *_args: False,
     )
     monkeypatch.setattr(finalize, "_verify_patches", _verify)
+    monkeypatch.setattr(
+        finalize, "_post_commit_snapshot_check",
+        lambda *_args: (True, {"worktree_clean": True}),
+    )
     monkeypatch.setattr(finalize, "_hat_human_review_tasks", lambda _ps: False)
     monkeypatch.setattr(finalize, "_phase_end_reflection", lambda _state: True)
     monkeypatch.setattr(
@@ -455,7 +459,7 @@ def test_finalize_committet_erst_nach_bestandenem_phase_end_verify(
 ):
     rc, order, _events, progress = _run_finalize_commit_order(tmp_path, monkeypatch, True)
     assert rc == 0
-    assert order == ["progress_pending", "verify", "commit"]
+    assert order == ["progress_pending", "verify", "commit", "verify_post_commit"]
     assert [entry["status"] for entry in progress] == ["verify_pending"]
     assert progress[0]["run_id"] == "run-verify-1"
 
@@ -482,7 +486,7 @@ def test_finalize_markiert_unvollstaendige_tasks_nicht_als_loop_erfolg(
     )
 
     assert rc == 1
-    assert order == ["progress_pending", "verify", "commit"]
+    assert order == ["progress_pending", "verify", "commit", "verify_post_commit"]
     assert [entry["status"] for entry in progress] == ["verify_pending"]
     kinds = [event[0] for event in events]
     assert "loop_erfolg" not in kinds
@@ -567,5 +571,9 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
     assert rc == 0
     assert tasks_ok == 1
     assert state.tasks_ok_counter == 1
-    assert order == [("verify", "phase_end"), ("commit", None)]
+    assert order == [
+        ("verify", "phase_end"),
+        ("commit", None),
+        ("verify_post_commit", "phase_end"),
+    ]
     assert any(event[0] == "loop_erfolg" for event in audit_events)
