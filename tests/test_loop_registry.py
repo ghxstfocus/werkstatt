@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from werkstatt.web.loop_registry import LoopProcessRegistry
+from werkstatt.web.loop_registry import (
+    LoopProcessRegistry,
+    _find_run_workers,
+    _worker_command_matches,
+)
 
 
 def test_reservierung_ist_ueber_registry_instanz_atomisch(tmp_path: Path):
@@ -153,12 +157,26 @@ def test_stop_claim_excludes_overlap_and_reclaims_stale_stop(tmp_path: Path):
     assert worker_a.claim_stop("demo", "run-a") is False
 
 
-def _start_process_with_loop_identity(project: str, run_id: str) -> subprocess.Popen:
+def _start_process_with_loop_identity(
+    project: str,
+    run_id: str,
+    tmp_path: Path,
+) -> subprocess.Popen:
+    module_root = tmp_path / f"worker-stub-{run_id}"
+    package = module_root / "werkstatt"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "loop.py").write_text(
+        "import time\ntime.sleep(30)\n",
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(
+        part for part in (str(module_root), env.get("PYTHONPATH", "")) if part
+    )
     return subprocess.Popen(
         [
             sys.executable,
-            "-c",
-            "import time; time.sleep(30)",
             "-m",
             "werkstatt.loop",
             "--project",
@@ -167,6 +185,8 @@ def _start_process_with_loop_identity(project: str, run_id: str) -> subprocess.P
             "--run-id",
             run_id,
         ],
+        cwd=module_root,
+        env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -186,7 +206,7 @@ def test_abgelaufener_start_reattacht_einen_laufenden_worker(tmp_path: Path):
         pytest.skip("Prozessidentitaetssuche erfordert Linux /proc")
     registry = LoopProcessRegistry(tmp_path / "registry.db")
     run_id = "run-orphan-live"
-    process = _start_process_with_loop_identity("demo", run_id)
+    process = _start_process_with_loop_identity("demo", run_id, tmp_path)
     try:
         assert registry.reserve("demo", run_id) == (True, None)
         with registry._connect() as conn:
@@ -213,8 +233,8 @@ def test_ambiguous_start_fails_closed_then_recovers_after_one_worker_exits(
         pytest.skip("Prozessidentitaetssuche erfordert Linux /proc")
     registry = LoopProcessRegistry(tmp_path / "registry.db")
     run_id = "run-orphan-ambiguous"
-    first = _start_process_with_loop_identity("demo", run_id)
-    second = _start_process_with_loop_identity("demo", run_id)
+    first = _start_process_with_loop_identity("demo", run_id, tmp_path)
+    second = _start_process_with_loop_identity("demo", run_id, tmp_path)
     try:
         assert registry.reserve("demo", run_id) == (True, None)
         with registry._connect() as conn:
@@ -239,3 +259,39 @@ def test_ambiguous_start_fails_closed_then_recovers_after_one_worker_exits(
         if first is not None:
             _stop_process(first)
         _stop_process(second)
+
+def test_worker_match_requires_real_module_invocation() -> None:
+    real_argv = [
+        sys.executable, "-m", "werkstatt.loop",
+        "--project", "demo", "--run-id", "run-exact",
+    ]
+    forged_script_argv = [
+        sys.executable, "-c", "import time; time.sleep(30)",
+        "-m", "werkstatt.loop",
+        "--project", "demo", "--run-id", "run-exact",
+    ]
+
+    assert _worker_command_matches(real_argv, "demo", "run-exact")
+    assert not _worker_command_matches(forged_script_argv, "demo", "run-exact")
+
+
+def test_worker_discovery_ignores_processes_owned_by_other_user(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    if not Path("/proc").is_dir():
+        pytest.skip("Prozessidentitaetssuche erfordert Linux /proc")
+    from werkstatt.web import loop_registry
+
+    run_id = "run-foreign-owner"
+    process = _start_process_with_loop_identity("demo", run_id, tmp_path)
+    try:
+        actual_uid = os.geteuid()
+        monkeypatch.setattr(loop_registry.os, "geteuid", lambda: actual_uid + 1)
+
+        workers, complete = _find_run_workers("demo", run_id)
+
+        assert complete
+        assert process.pid not in [pid for pid, _identity in workers]
+    finally:
+        _stop_process(process)

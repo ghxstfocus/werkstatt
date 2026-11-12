@@ -11,6 +11,7 @@ import os
 import signal
 import sqlite3
 import subprocess
+import sys
 import time
 from contextlib import closing
 from pathlib import Path
@@ -68,8 +69,9 @@ def _worker_command_matches(
     run_id: str,
 ) -> bool:
     """Match the exact CLI identity used by the web-spawned loop."""
+    if len(argv) < 3 or argv[1:3] != ["-m", "werkstatt.loop"]:
+        return False
     required = (
-        ("-m", "werkstatt.loop"),
         ("--project", project),
         ("--run-id", run_id),
     )
@@ -102,6 +104,17 @@ def _find_run_workers(
             continue
         pid = int(entry.name)
         if pid == os.getpid():
+            continue
+        try:
+            if entry.stat().st_uid != os.geteuid():
+                continue
+            executable = (entry / "exe").resolve(strict=True)
+        except FileNotFoundError:
+            continue
+        except (OSError, RuntimeError):
+            complete = False
+            continue
+        if executable != Path(sys.executable).resolve():
             continue
         snapshot = _process_snapshot(pid)
         if snapshot is None:

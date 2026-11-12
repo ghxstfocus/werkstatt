@@ -5847,3 +5847,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Schlug die Registry-Registrierung nach dem Prozessstart fehl, setzte die API einen nach dem fehlgeschlagenen Stop noch lebenden Worker bisher trotzdem auf `idle`. Dadurch konnte ein weiterer Start parallel zum bestehenden Schreibprozess zugelassen werden.
 - Lebende Worker werden jetzt fail-closed als `orphaned` markiert; ein spaeterer Registry-Read versucht die exakte Run-Identitaet wieder zuzuordnen. Nur ein nachweislich beendeter Worker wird auf `idle` gesetzt.
 - Ein API-Regressionstest simuliert Registrierungsfehler plus fehlgeschlagenes Stoppen und belegt, dass der Zustand `orphaned` bleibt.
+
+## ADR-0032 M1 — Worker-Recovery-Prozessidentitaet (2026-11-12)
+
+- Die erste Recovery-Suche pruefte CLI-Fragmente an beliebiger Stelle in argv. Ein Script-Prozess mit nachgestellten Argumenten konnte dadurch wie ein Loop aussehen. Der Test startete bisher genau diese unechte CLI-Form.
+- Die Suche verlangt jetzt die echte `python -m werkstatt.loop` Argumentposition, denselben Python-Interpreter und dieselbe Prozess-UID wie der Webserver. Nicht passende Prozesse koennen nicht mehr als Worker uebernommen werden.
+- Die Prozess-Recovery-Tests starten nun tatsaechliche Module mit der exakten Web-CLI-Form. Regressionstests decken gefaelschte Script-Argumente und fremde UIDs ab.
