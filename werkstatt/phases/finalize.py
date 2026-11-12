@@ -157,7 +157,56 @@ def _phase_finalize(
             print(f"  Commit: {_commit_info}")
 
     if rc == 0:
-        audit("loop_erfolg", {"project_name": project_name}, pd, pn)
+        # OP-398: Ein gruenes Verify reicht nicht fuer einen gruenen Run,
+        # wenn geplante Tasks fehlgeschlagen, blockiert oder offen sind.
+        _records = None
+        _phase_data = getattr(phase_state, "data", None)
+        if isinstance(_phase_data, dict):
+            _candidate = _phase_data.get("tasks")
+            if isinstance(_candidate, list):
+                _records = _candidate
+        if _records is None:
+            _records = tasks or []
+
+        _unresolved = []
+        for _index, _task_record in enumerate(_records, 1):
+            if not isinstance(_task_record, dict):
+                _unresolved.append({"task_id": f"task-{_index}", "status": "invalid"})
+                continue
+            _task_id = _task_record.get("id")
+            _status_record = (
+                phase_state.get_task(_task_id)
+                if _task_id and phase_state is not None
+                else _task_record
+            )
+            _task_status = (
+                _status_record.get("status")
+                if isinstance(_status_record, dict)
+                else None
+            )
+            if _task_status != "done":
+                _unresolved.append({
+                    "task_id": _task_id or f"task-{_index}",
+                    "status": _task_status or "missing",
+                })
+
+        if tasks_ok <= 0 or _unresolved:
+            audit(
+                "loop_phase",
+                {
+                    "phase": "completion",
+                    "status": "incomplete",
+                    "reason": "no_successful_tasks" if tasks_ok <= 0 else "tasks_unresolved",
+                    "tasks_ok": tasks_ok,
+                    "tasks_total": len(_records),
+                    "unresolved": _unresolved[:50],
+                },
+                pd,
+                pn,
+            )
+            rc = 1
+        else:
+            audit("loop_erfolg", {"project_name": project_name}, pd, pn)
 
     # M-307b: Phasen-Ende in PROGRESS.md
     # FIX AH 2026-10-31: Wurde bei jedem Loop-Ende geschrieben,
