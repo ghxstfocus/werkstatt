@@ -259,3 +259,70 @@ def test_failed_run_result_is_persisted(tmp_path: Path) -> None:
     assert result is not None
     assert result["status"] == "failed"
     assert result["checkpoint"]["exit_code"] == 1
+
+
+def test_run_lease_excludes_other_workers_and_fences_takeover(tmp_path: Path) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-a", "goal")
+
+    token_a = store.acquire_run_lease("demo", "run-a", "worker-a", lease_seconds=60)
+    assert token_a == 1
+    assert store.acquire_run_lease("demo", "run-a", "worker-b") is None
+    store.assert_run_lease("demo", "run-a", "worker-a", token_a)
+
+    with store._connect() as conn:
+        conn.execute(
+            "UPDATE run_records SET lease_until=? WHERE project=? AND run_id=?",
+            (time.time() - 1, "demo", "run-a"),
+        )
+        conn.commit()
+
+    token_b = store.acquire_run_lease("demo", "run-a", "worker-b")
+    assert token_b == token_a + 1
+    with pytest.raises(RuntimeError, match="Run-Lease verloren"):
+        store.assert_run_lease("demo", "run-a", "worker-a", token_a)
+    assert not store.renew_run_lease("demo", "run-a", "worker-a", token_a)
+    assert store.renew_run_lease("demo", "run-a", "worker-b", token_b)
+
+
+def test_run_lease_cannot_be_released_by_stale_worker(tmp_path: Path) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-a", "goal")
+    old_token = store.acquire_run_lease("demo", "run-a", "worker-a", lease_seconds=1)
+    assert old_token == 1
+    with store._connect() as conn:
+        conn.execute(
+            "UPDATE run_records SET lease_until=? WHERE project=? AND run_id=?",
+            (time.time() - 1, "demo", "run-a"),
+        )
+        conn.commit()
+
+    new_token = store.acquire_run_lease("demo", "run-a", "worker-b")
+    assert new_token == 2
+    assert not store.release_run_lease("demo", "run-a", "worker-a", old_token)
+    store.assert_run_lease("demo", "run-a", "worker-b", new_token)
+
+
+def test_run_lease_schema_migrates_existing_run_records(tmp_path: Path) -> None:
+    db = tmp_path / "events.db"
+    import sqlite3
+
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE run_records ("
+            "project TEXT NOT NULL, run_id TEXT NOT NULL, status TEXT NOT NULL, "
+            "target TEXT NOT NULL DEFAULT '', base_commit TEXT, "
+            "checkpoint_json TEXT NOT NULL DEFAULT '{}', "
+            "checkpoint_version INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL, "
+            "PRIMARY KEY (project, run_id))"
+        )
+        conn.execute(
+            "INSERT INTO run_records (project, run_id, status, target, updated_at) "
+            "VALUES ('demo', 'legacy', 'running', 'goal', 'now')"
+        )
+
+    store = EventStore(db_pfad=db)
+    record = store.get_run_record("demo", "legacy")
+    assert record is not None
+    token = store.acquire_run_lease("demo", "legacy", "worker")
+    assert token == 1
