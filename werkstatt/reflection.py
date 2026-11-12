@@ -393,6 +393,7 @@ def _reflection_loop(
     max_runden: int = 5,
     error_context: str | None = None,
     phase: str | None = "post_build",
+    verify_stage_ids: set[str] | None = None,
 ) -> bool:
     """Echter Reflection-Loop (Aider-Prinzip, M-329).
 
@@ -403,6 +404,8 @@ def _reflection_loop(
 
     error_context: zusaetzlicher Kontext (z.B. Reviewer-Befund),
     wird dem Builder-Prompt angehaengt (M-314).
+    verify_stage_ids beschraenkt den Repair-Zyklus auf zuvor fehlgeschlagene
+    Verify-Stages. Die vollstaendige Abschlusspruefung folgt im Finalizer.
     """
     pd = state.project_dir
     pn = state.project_name
@@ -417,6 +420,15 @@ def _reflection_loop(
 
     # M-329: Builder importieren (vermeidet Zirkularitaet).
     from werkstatt.roles.builder import run_builder
+
+    def _verify_repair_scope() -> bool:
+        if verify_stage_ids is None:
+            return _verify_patches(state, phase=phase)
+        return _verify_patches(
+            state,
+            phase=phase,
+            stage_ids=verify_stage_ids,
+        )
 
     _history_start = len(getattr(state, "reflection_history", []) or [])
     _ruff_vorher: int | None = None
@@ -436,13 +448,15 @@ def _reflection_loop(
         # ist ein "Verify gruen" kein Grund zum Abbrechen — der Patch
         # ist semantisch falsch, auch wenn er kompiliert. Dann direkt
         # in den Builder.
-        if not error_context:
+        if verify_stage_ids is not None or not error_context:
+            # OP-403: Recovery bestaetigt die aktuellen Stage-Befunde vor
+            # jedem Repair-Versuch. Reviewer-Reflection bleibt davon getrennt.
             # M-402: phase statt None (sonst laeuft pytest_full_checks
             # bei jeder Reflection-Runde mit).
             # GOLD 2026-10-30: ruff --fix vor jedem Verify, damit der
             # Fehler-Report den aktuellen (nach --fix) Zustand sieht.
             _ruff_fix_changed(state)
-            if _verify_patches(state, phase=phase):
+            if _verify_repair_scope():
                 return True
         # K28: Circuit Breaker praezisiert. Zaehlt nur echte Stagnation
         # (gleiche Fehler-Anzahl UND keine Verbesserung in 2 Runden).
@@ -542,7 +556,27 @@ def _reflection_loop(
         _ruff_vorher = _ruff_jetzt
         state._reflection_bug_sigs_vorher = _bug_sigs_jetzt
 
-        audit("loop_reflection_runde", {"runde": runde}, pd, pn)
+        _runde_payload: dict[str, object] = {"runde": runde}
+        if verify_stage_ids is not None:
+            _runde_payload.update({
+                "result_summary": (
+                    "Gezielte Reparatur fuer die fehlgeschlagenen "
+                    "Abschlusspruefungen."
+                ),
+                "decision_summary": (
+                    "Nur die betroffenen Verify-Stages werden nach diesem "
+                    "Reparaturversuch erneut ausgefuehrt."
+                ),
+                "evidence": [
+                    f"Fehlgeschlagene Verify-Stage: {stage_id}"
+                    for stage_id in sorted(verify_stage_ids)[:6]
+                ],
+                "next_step": (
+                    "Bei gruener Teilpruefung folgt danach die vollstaendige "
+                    "Phase-End-Verify."
+                ),
+            })
+        audit("loop_reflection_runde", _runde_payload, pd, pn)
 
         # K50-Bug-C: last_verify_errors KUMULATIV halten.
         # Vorher wurde die Liste bei jedem Reflection-Eintritt mit
@@ -706,8 +740,7 @@ def _reflection_loop(
             if _is_false_positive:
                 _verify_gruen = False
                 try:
-                    _verify_gruen = bool(
-                        _verify_patches(state, phase=phase))
+                    _verify_gruen = bool(_verify_repair_scope())
                 except Exception:
                     _verify_gruen = False
                 if _verify_gruen:
@@ -774,10 +807,14 @@ def _reflection_loop(
         # davon erfährt.
         # GOLD 2026-10-30: ruff --fix vor jedem Verify.
         _ruff_fix_changed(state)
-        if not _verify_patches(state, phase=phase):
+        if not _verify_repair_scope():
             # Verify-Fehler -> naechste Runde triggert Verify erneut.
             error_context = ""
             continue
+        # OP-403: Ein gezielter Recovery-Check ist nur Zwischenbeleg.
+        # Die vollstaendige Phase-End-Verify laeuft anschliessend im Finalizer.
+        if verify_stage_ids is not None:
+            return True
         # Verify gruen -- wenn wir Reflection wegen Reviewer-Reject
         # gestartet haben, jetzt pruefen ob Reviewer jetzt approved.
         if _had_error_context and not error_context:
@@ -796,7 +833,7 @@ def _reflection_loop(
     # IMMER NOCH rot ist, kann der Builder die Spec nicht erfuellen —
     # kein echter Fortschritt, sondern Spec-Fehler. Live-Beleg 18:49
     # OP-004: 5 Runden, jede applied=1, mypy blieb rot mit int(min_port).
-    _final_verify_ok = _verify_patches(state, phase=phase)
+    _final_verify_ok = _verify_repair_scope()
     if not _final_verify_ok:
         _hist_e = state.reflection_history or []
         # Nur Versuche dieses Aufrufs bewerten. Historie anderer Tasks

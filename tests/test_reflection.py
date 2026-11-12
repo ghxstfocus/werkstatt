@@ -146,3 +146,44 @@ def test_reflection_fortschritt_kein_abbruch(tmp_path, monkeypatch):
 
     assert result is False
     assert mocks.run_builder.call_count == 3
+
+
+def test_targeted_recovery_stops_after_affected_stages_pass(
+    tmp_path, monkeypatch,
+):
+    state = _make_state(tmp_path)
+    state.patches = [{"file": "app.py", "old_string": "old", "new_string": "new"}]
+    mocks = _setup_mocks(monkeypatch)
+    applied = MagicMock(return_value=(1, []))
+    monkeypatch.setattr(
+        reflection, "_apply_patches_with_diagnose", applied, raising=False,
+    )
+    verifications = []
+    verify_results = iter([False, True])
+
+    def verify_selected(st, phase=None, stage_ids=None):
+        verifications.append((phase, stage_ids))
+        ok = next(verify_results)
+        st.last_verify_errors = [] if ok else ["pytest_regression: still failing"]
+        return ok
+
+    monkeypatch.setattr(
+        reflection, "_verify_patches", verify_selected, raising=False,
+    )
+    mocks.run_builder.side_effect = lambda st: setattr(
+        st, "patches", [{"file": "app.py", "old_string": "old", "new_string": "new"}],
+    ) or True
+
+    result = reflection._reflection_loop(
+        state,
+        error_context="pytest_regression failed",
+        phase="phase_end",
+        verify_stage_ids={"pytest_regression"},
+    )
+
+    assert result is True
+    assert mocks.run_builder.call_count == 1
+    assert verifications == [
+        ("phase_end", {"pytest_regression"}),
+        ("phase_end", {"pytest_regression"}),
+    ]

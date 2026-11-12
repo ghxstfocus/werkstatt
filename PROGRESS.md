@@ -5418,3 +5418,14 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die same-run-Recovery nach rotem Phase-End-Verify liefert jetzt explizite Kurztexte zu Ergebnis, begruendeter Entscheidung, Verify-Belegen und naechstem Schritt.
 - Recovery-Start, Reparaturfehler, gruene Reparatur und nicht erfolgreiche Reparatur haben eigene lesbare Labels in Backend und Control-UI. Die Timeline bleibt bei kuratierten Feldern; Prompt-/Rohdaten werden nicht dargestellt.
 - Ein Backend-Regressionstest prueft die Kurzfelder und schliesst Rohprompt-Leckage aus. GitHub Actions muss das Paket noch verifizieren.
+
+
+## 2026-11-12 — OP-403: Recovery prueft zuerst nur fehlgeschlagene Stages
+
+- Der same-run-Reparaturpfad uebergibt die Stage-IDs aus dem Failure Record an Reflection. Jede Reparaturpruefung laeuft damit gezielt; der Finalizer fuehrt danach weiterhin die vollstaendige Phase-End-Verify aus.
+- Fehlt eine angeforderte Stage im aktuellen Verify-Contract oder wird sie durch Requires/Dateiplatzhalter uebersprungen, gilt die gezielte Pruefung fail-closed als fehlgeschlagen. Ein uebersprungener Test kann nicht mehr als gruener Reparaturnachweis gelten.
+- Control-Timeline protokolliert pro Reparaturversuch die betroffenen Verify-Stages und den anschliessenden Voll-Verify als naechsten Schritt.
+- Neue Tests decken Stage-Auswahl, fehlende Contract-Stages und geskipte angeforderte Stages ab. CI-Verifikation ausstehend.
+
+
+- OP-403-Korrektur waehrend der Umsetzung: Nach gruener gezielter Stage-Verify beendet Reflection jetzt den Reparaturversuch unmittelbar. Zuvor konnte sie nach einem erfolgreichen gezielten Check weitere Builder-Runden starten, bevor der Finalizer den Voll-Verify ausfuehrte. Der Voll-Verify bleibt die einzige Abschlussfreigabe.

@@ -204,6 +204,7 @@ def _phase_finalize(
                     state,
                     error_context=recovery_context,
                     phase="phase_end",
+                    verify_stage_ids=set(stage_ids),
                 )
             except Exception as exc:
                 repaired = False

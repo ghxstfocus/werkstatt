@@ -438,7 +438,11 @@ def _ruff_fix_changed(state: RunState) -> None:
         pass
 
 
-def _verify_patches(state: RunState, phase: str | None = None) -> bool:
+def _verify_patches(
+    state: RunState,
+    phase: str | None = None,
+    stage_ids: set[str] | None = None,
+) -> bool:
     """B2: Verifier (multi-projekt-faehig via Projekt-Contract).
 
     Liest .werkstatt/verify.json aus dem Zielprojekt.
@@ -447,6 +451,8 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     phase: wenn gesetzt ("pre_build" oder "post_build"),
     werden nur Stages mit passendem phase-Feld ausgefuehrt.
     Stages ohne phase-Feld laufen immer (Backward-Compat).
+    stage_ids: wenn gesetzt, wird ausschliesslich diese Teilmenge
+    verifiziert. Fehlende oder nicht ausfuehrbare Ziel-Stages sind rot.
 
     Returns: True wenn alle harten Stages gruen sind, sonst False.
     """
@@ -459,6 +465,7 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     errors = []
     _stage_results: list[dict] = []
     state.last_verify_results = []
+    state.last_verify_hart_stages = set()
 
     # M-306c: venv_python aus projects/<name>.yaml (verhindert,
     # dass Verify im Zielprojekt mit System-Python laeuft und
@@ -519,10 +526,66 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
                 "command": ["python3", "-m", "py_compile", "core/__init__.py"],
             }]
 
+    # Fuer Recovery muessen die angeforderten Stage-IDs exakt existieren.
+    # Sonst darf eine leere/veraenderte Config nicht als gruene Pruefung gelten.
+    _selected_stage_ids = (
+        {str(stage_id) for stage_id in stage_ids}
+        if stage_ids is not None else None
+    )
+    if _selected_stage_ids is not None:
+        if not _selected_stage_ids:
+            errors.append("verify recovery requested no stage IDs")
+        else:
+            _known_stage_ids = {
+                str(stage.get("id") or "?")
+                for stage in stages
+                if isinstance(stage, dict)
+            }
+            _missing_stage_ids = sorted(_selected_stage_ids - _known_stage_ids)
+            errors.extend(
+                f"{stage_id}: requested recovery stage is missing from verify contract"
+                for stage_id in _missing_stage_ids
+            )
+            stages = [
+                stage for stage in stages
+                if isinstance(stage, dict)
+                and str(stage.get("id") or "?") in _selected_stage_ids
+            ]
+        if errors:
+            state.last_verify_errors = list(errors)
+            state.last_verify_results = [
+                {
+                    "stage_id": stage_id,
+                    "exit_code": None,
+                    "ok": False,
+                    "error_excerpt": (
+                        "Requested recovery stage is absent from the active "
+                        "verify contract."
+                    ),
+                }
+                for stage_id in sorted(_selected_stage_ids)
+            ]
+            audit(
+                "loop_verify_failed",
+                {
+                    "errors": errors,
+                    "phase": phase,
+                    "stages": sorted(_selected_stage_ids),
+                },
+                project_dir,
+                getattr(state, "project_name", "?"),
+            )
+            return False
+
     # 3. Stages ausfuehren
     _executed_stages = []
     _hart_stage_ids: set[str] = set()
     for stage in stages:
+        if (
+            _selected_stage_ids is not None
+            and str(stage.get("id") or "?") not in _selected_stage_ids
+        ):
+            continue
         # OP-034: requires-Gate
         _req = stage.get("requires")
         if _req:
@@ -587,6 +650,21 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
                 "error_excerpt": _error,
             })
             errors.append(f"{stage.get('id', '?')}-Fehler: {_error}")
+
+    if _selected_stage_ids is not None:
+        _executed_set = set(_executed_stages)
+        for _stage_id in sorted(_selected_stage_ids - _executed_set):
+            _reason = (
+                "requested recovery stage was not executed "
+                "(requires gate, missing command, or no runnable files)"
+            )
+            errors.append(f"{_stage_id}: {_reason}")
+            _stage_results.append({
+                "stage_id": _stage_id[:120],
+                "exit_code": None,
+                "ok": False,
+                "error_excerpt": _reason[:1200],
+            })
 
     # OP-062f: Hart-Info fuer _verify_patches_soft (Prefix-Match reicht
     # nicht, wenn stage_dict 'hart': true setzt, aber Aufrufer nur

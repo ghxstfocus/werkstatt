@@ -10,9 +10,9 @@ Letzte Aktualisierung: 2026-11-12.
 ### OP-403: Finale Verify-Fehler im selben Run diagnostizieren und beheben
 - **Status:** open
 - **Typ:** loop-reliability
-- **Betroffene Dateien:** `werkstatt/phases/finalize.py`, `werkstatt/verify.py`, `werkstatt/committer.py`, `werkstatt/progress.py`, `werkstatt/chat_tools.py`, Run- und Verify-Tests
+- **Betroffene Dateien:** `werkstatt/phases/finalize.py`, `werkstatt/reflection.py`, `werkstatt/verify.py`, `werkstatt/committer.py`, `werkstatt/progress.py`, `werkstatt/chat_tools.py`, Run- und Verify-Tests
 - **Akzeptanzkriterien:** Vor dem finalen Doku-Gate protokolliert der Run `verify_pending` und prueft Doku-Drift nur im aktuellen Worktree; Historien-Drift bleibt ein separates Qualitaetsgate. Jede fehlgeschlagene Verify-Stage erzeugt einen redigierten Failure Record mit Stage, Exit-Code, HEAD-SHA, Worktree-Fingerprint und Artefaktverweis. Der gleiche Run diagnostiziert den Befund anhand des aktuellen Diffs und der relevanten Stage-Ausgabe, nennt bei jedem Reparaturversuch den adressierten Befund und fuehrt nur betroffene Checks plus abschliessend die Gesamt-Verify erneut aus. Erfolgreiche und sachfremde Stage-Ausgaben werden nicht als Fehlerkontext eingespeist; rohe Logs und interne Gedankengaenge werden nicht in den Builder-Kontext kopiert. Nicht sicher behebbarer oder stagnierender Fehler pausiert mit konkretem Befund und naechstem sicheren Schritt. Rotes Verify bleibt rot und kann weder Commit noch Erfolg ausloesen.
-- **Tests:** `tests/test_failure_record.py`, `tests/test_loop_recovery.py`, `tests/test_committer_doku_nachzug.py`, `tests/test_verify_contract_stage.py`
+- **Tests:** `tests/test_failure_record.py`, `tests/test_committer_doku_nachzug.py`, `tests/test_reflection.py`, `tests/test_verify_selected_stages.py`, `tests/test_verify_contract_stage.py`
 - **Blockiert von:** —
 - **Architektur-Voraussetzung:** ADR-0032
 
