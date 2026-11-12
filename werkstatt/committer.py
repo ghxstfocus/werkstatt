@@ -299,6 +299,60 @@ def _build_commit_subject(aufgabe: str, op_nnn: str | None) -> str:
     return _line
 
 
+def _post_commit_check(project_dir: Path) -> tuple[bool, str, dict[str, object]]:
+    """Prueft nach Commit HEAD, committed Diff und sauberen Working Tree."""
+    commands = [
+        ["git", "-C", str(project_dir), "rev-parse", "HEAD"],
+        ["git", "-C", str(project_dir), "show", "--check", "--format=", "HEAD"],
+        ["git", "-C", str(project_dir), "status", "--porcelain", "--untracked-files=all"],
+    ]
+    results: list[subprocess.CompletedProcess[str]] = []
+    for command in commands:
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+        except Exception as exc:
+            return False, "", {
+                "reason": "command_failed",
+                "message": f"{command[3]} fehlgeschlagen: {exc}",
+            }
+        if result.returncode != 0:
+            return False, "", {
+                "reason": "command_failed",
+                "message": (
+                    f"{command[3]} rc={result.returncode}: "
+                    f"{(result.stderr or '').strip()[:240]}"
+                ),
+            }
+        results.append(result)
+
+    sha = results[0].stdout.strip()
+    if not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", sha):
+        return False, sha, {
+            "reason": "invalid_head",
+            "message": "HEAD lieferte keine gueltige Commit-SHA.",
+        }
+
+    pending: list[str] = []
+    for line in results[2].stdout.splitlines():
+        if line.strip():
+            pending.append(line[3:].strip()[:240] if len(line) > 3 else line[:240])
+        if len(pending) == 20:
+            break
+    if pending:
+        return False, sha, {
+            "reason": "working_tree_dirty_after_commit",
+            "message": f"Arbeitsbaum enthaelt nach Commit noch {len(pending)} angezeigte Aenderung(en).",
+            "pending_files": pending,
+        }
+    return True, sha, {"reason": "verified", "message": "HEAD, Commit-Diff und Arbeitsbaum sind geprueft."}
+
+
 def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     """M-487: Committet uncommittete Aenderungen im Zielprojekt.
 
@@ -507,23 +561,45 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
               {"rc": commit.returncode, "stderr": commit.stderr[:300]}, pd, pn)
         return False, f"git commit rc={commit.returncode}: {commit.stderr.strip()[:200]}"
 
-    try:
-        _rev = subprocess.run(
-            ["git", "-C", str(pd), "rev-parse", "HEAD"],
-            capture_output=True, text=True, check=False, timeout=10,
-        )
-        _sha = _rev.stdout.strip()[:12]
-    except Exception:
-        _sha = ""
-
-    # FIX AH 2026-10-31: Flag setzen, damit der Loop-Ende-Pfad
-    # nicht doppelt PROGRESS.md schreibt.
+    # Commit ist noch kein Abschluss: HEAD, Commit-Diff und Working Tree
+    # werden nach dem Commit erneut geprueft. So werden Hook-Reste und
+    # parallele Aenderungen nicht als Teil des geprueften Commits ausgegeben.
+    _check_ok, _sha_full, _check_info = _post_commit_check(Path(pd))
+    _sha = _sha_full[:12]
     try:
         state.progress_written_at_commit = True
     except (AttributeError, TypeError):
         pass
-    audit("loop_human_gate_committed",
-          {"sha": _sha, "msg": _msg_kurz}, pd, pn)
+
+    if not _check_ok:
+        audit(
+            "loop_human_gate_commit_postcheck_failed",
+            {
+                "sha": _sha,
+                "reason": _check_info.get("reason", "unknown"),
+                "pending_files": _check_info.get("pending_files", [])[:20],
+            },
+            pd,
+            pn,
+        )
+        audit(
+            "loop_human_gate_committed",
+            {"sha": _sha, "msg": _msg_kurz, "post_commit_check": "failed"},
+            pd,
+            pn,
+        )
+        return False, (
+            f"Commit {_sha or '(SHA unbekannt)'} erstellt, "
+            f"Nachkontrolle fehlgeschlagen: "
+            f"{_check_info.get('message', 'Arbeitsbaum erneut pruefen')}"
+        )
+
+    audit(
+        "loop_human_gate_committed",
+        {"sha": _sha, "msg": _msg_kurz, "post_commit_check": "passed"},
+        pd,
+        pn,
+    )
     return True, _sha
 
 

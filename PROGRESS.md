@@ -5608,3 +5608,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die globale PROGRESS-Deduplizierung konnte gleiche `verify_pending`-/Abschluss-Eintraege spaeterer Runs unterdruecken. Der Append-Schluessel traegt jetzt die Run-ID; Wiederholungen innerhalb desselben Runs bleiben idempotent, unterschiedliche Runs bleiben einzeln sichtbar.
 - Task-, Verify-, Abschluss- und Doku-Nachzug-Eintraege uebergeben die Run-ID. Tests decken Wiederholung im selben Run, gleiche Ereignisse in zwei Runs und Run-Zuordnung im Finalizer ab.
 - Verifikation: GitHub Actions Quality Gate fuer den Commit.
+
+## 2026-11-12 — OP-403: Commit-Nachkontrolle im Loop
+
+- Der Committer prueft nach erfolgreichem `git commit` erneut die gueltige HEAD-SHA, `git show --check` und den Working Tree. So werden nach dem Verify entstandene Aenderungen (etwa parallele Chat-Edits oder Hook-Reste) nicht stillschweigend als gepruefter Abschluss behandelt.
+- Ein Post-Commit-Befund wird mit Commit-SHA und betroffenen Pfaden auditiert; der Run bleibt fehlgeschlagen statt `loop_erfolg` zu melden. Das tatsaechliche Commit-Ergebnis wird separat markiert.
+- Regressionstest injiziert eine Aenderung unmittelbar nach dem Git-Commit und prueft, dass die Nachkontrolle sie erkennt. GitHub Actions Quality Gate fuer diesen Commit muss gruen sein.

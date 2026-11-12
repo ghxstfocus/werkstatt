@@ -117,7 +117,40 @@ def test_committe_erfolg(tmp_path):
     ev = _kind(tmp_path, "loop_human_gate_committed")
     assert len(ev) == 1
     assert ev[0]["sha"] == sha
+    assert ev[0]["post_commit_check"] == "passed"
+    assert _kind(tmp_path, "loop_human_gate_commit_postcheck_failed") == []
 
+
+
+def test_committe_postcheck_faengt_neue_aenderungen_nach_commit_ab(
+    tmp_path, monkeypatch,
+):
+    """Der Commit gilt nicht als fertig, wenn nach dem Commit neue Aenderungen auftauchen."""
+    _init_repo(tmp_path)
+    (tmp_path / "neu.py").write_text("def f(): pass\n")
+    s = _state(tmp_path)
+
+    from werkstatt import loop as loop_mod
+    original_run = loop_mod.subprocess.run
+
+    def _inject_after_commit(argv, **kwargs):
+        result = original_run(argv, **kwargs)
+        if "commit" in argv and result.returncode == 0:
+            (tmp_path / "parallel.py").write_text("parallel change\n")
+        return result
+
+    monkeypatch.setattr(loop_mod.subprocess, "run", _inject_after_commit)
+    ok, info = loop._committe_zielprojekt(s)
+
+    assert ok is False
+    assert "Nachkontrolle fehlgeschlagen" in info
+    assert (tmp_path / "parallel.py").exists()
+    assert _kind(tmp_path, "loop_human_gate_commit_postcheck_failed")[0][
+        "pending_files"
+    ] == ["parallel.py"]
+    assert _kind(tmp_path, "loop_human_gate_committed")[0][
+        "post_commit_check"
+    ] == "failed"
 
 def test_committe_autor_aus_state(tmp_path):
     """git_author_name/email aus state werden im Commit verwendet."""
