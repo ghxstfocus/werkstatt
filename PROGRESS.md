@@ -5721,3 +5721,13 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   - **Commit:** `470b2a96064405bd416395feef54f8b6421ee9a4`
   - **Commit:** `b318d296037015d1da03b4d72788744305ff9f86`
 - GitHub Actions für den Teststand `b318d296037015d1da03b4d72788744305ff9f86`: 2.089 Tests bestanden, 5 übersprungen; Ruff, JavaScript-Syntax und Quality Gate grün. [Run 43293886542](https://github.com/ghxstfocus/werkstatt/actions/runs/43293886542).
+
+## 2026-11-12 — Planner-Kriterien im Run erhalten
+
+- Audit-Fund: Der normale Architect/Planner-Split verlangte keine strukturierten Akzeptanzkriterien und setzte den Run-State am Ende explizit auf eine leere Kriterienliste. Dadurch hatte der Phase-Review im Standardpfad keine prüfbaren Kriterien.
+- Der Planner-Split erhält jetzt zusätzlich den Originalauftrag, fordert beobachtbare Kriterien im JSON-Ergebnis an und persistiert gültige, deduplizierte Kriterien im Run-State. Der nachfolgende Planner-Schritt löscht sie nicht mehr. Bestehende Kriterien bleiben erhalten, falls eine Split-Antwort sie auslässt.
+- Regressionstests prüfen den Originalauftrag im Split-Kontext, die Übernahme der Kriterien und deren Erhalt durch run_planner.
+- OP-398 bleibt offen: deterministische Planabdeckung, DAG-Validierung und ein SHA-/Artefakt-gebundenes Evidence Ledger sind damit noch nicht umgesetzt.
+- Doku-Drift-Belege für die Code-Commits:
+  - **Commit:** `d209eb3fc9e9de8e8abb1e8c0cd94486b9448972`
+  - **Commit:** `6486d3dab06388b9c9b4906ab479f36420bcfb62`
