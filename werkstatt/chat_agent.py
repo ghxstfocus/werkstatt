@@ -347,8 +347,8 @@ def _begrenze_aktiven_turn(
             ),
         })
     for round_messages in raw_rounds:
-        suffix.extend(round_messages)
-    suffix.extend(notes[-1:])
+        suffix.extend(dict(message) for message in round_messages)
+    suffix.extend(dict(notes[-1]) for _ in notes[-1:])
     if sum(_message_size(message) for message in suffix) > _CHAT_ACTIVE_TOOL_CHAR_BUDGET:
         overflow = sum(_message_size(message) for message in suffix) - _CHAT_ACTIVE_TOOL_CHAR_BUDGET
         for message in suffix:
