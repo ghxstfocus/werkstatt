@@ -212,6 +212,157 @@ def _baue_messages(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return msgs
 
 
+
+_CHAT_ACTIVE_TOOL_CHAR_BUDGET = 24_000
+_CHAT_ACTIVE_TOOL_RECENT_BUDGET = 18_000
+_CHAT_ACTIVE_TOOL_SUMMARY_BUDGET = 6_000
+_CHAT_ACTIVE_TOOL_SUMMARY_MARKER = "[Verdichtete Werkzeughistorie]"
+
+
+def _message_size(message: dict[str, Any]) -> int:
+    size = len(str(message.get("content") or ""))
+    calls = message.get("tool_calls")
+    if calls:
+        size += len(json.dumps(calls, ensure_ascii=False, default=str))
+    return size
+
+
+def _komprimiere_text(text: str, budget: int) -> str:
+    if len(text) <= budget:
+        return text
+    marker = "\\n[… gekürzt; vollständiger Beleg bleibt gespeichert …]\\n"
+    if budget <= len(marker):
+        return text[:budget]
+    rest = budget - len(marker)
+    anfang = rest // 2
+    ende = rest - anfang
+    return text[:anfang] + marker + (text[-ende:] if ende else "")
+
+
+def _runde_zusammenfassen(runde: list[dict[str, Any]]) -> str:
+    calls = {
+        str(call.get("id", "?")): call.get("function") or {}
+        for message in runde
+        for call in (message.get("tool_calls") or [])
+    }
+    teile: list[str] = []
+    for result in runde:
+        if result.get("role") != "tool":
+            continue
+        fn = calls.get(str(result.get("tool_call_id", "?")), {})
+        name = str(fn.get("name", "unbekanntes Tool"))
+        args = _komprimiere_text(str(fn.get("arguments", "{}")), 180)
+        output = _komprimiere_text(str(result.get("content") or ""), 420)
+        teile.append(f"- {name}({args}) -> {output}")
+    return "\\n".join(teile)
+
+
+def _kuerze_werkzeugrunde(
+    runde: list[dict[str, Any]], budget: int,
+) -> list[dict[str, Any]]:
+    gekuerzt = [dict(message) for message in runde]
+    call_size = sum(
+        _message_size(message) for message in gekuerzt
+        if message.get("role") != "tool"
+    )
+    result_indices = [
+        index for index, message in enumerate(gekuerzt)
+        if message.get("role") == "tool"
+    ]
+    rest = max(0, budget - call_size)
+    anteil = rest // max(1, len(result_indices))
+    for index in result_indices:
+        content = str(gekuerzt[index].get("content") or "")
+        gekuerzt[index]["content"] = _komprimiere_text(content, anteil)
+    return gekuerzt
+
+
+def _begrenze_aktiven_turn(
+    messages: list[dict[str, Any]], turn_start: int,
+) -> list[dict[str, Any]]:
+    """Verdichtet abgeschlossene Werkzeugrunden; der persistente Event-Store bleibt vollstaendig."""
+    prefix = messages[:turn_start + 1]
+    tail = messages[turn_start + 1:]
+    runden: list[list[dict[str, Any]]] = []
+    loose: list[dict[str, Any]] = []
+    aktuell: list[dict[str, Any]] | None = None
+    for message in tail:
+        if message.get("role") == "assistant" and message.get("tool_calls"):
+            if aktuell:
+                runden.append(aktuell)
+            aktuell = [message]
+        elif message.get("role") == "tool" and aktuell is not None:
+            aktuell.append(message)
+        else:
+            if aktuell:
+                runden.append(aktuell)
+                aktuell = None
+            loose.append(message)
+    if aktuell:
+        runden.append(aktuell)
+
+    carry = [
+        str(message.get("content") or "")
+        for message in loose
+        if message.get("role") == "system"
+        and _CHAT_ACTIVE_TOOL_SUMMARY_MARKER in str(message.get("content") or "")
+    ]
+    notes = [
+        message for message in loose
+        if not (message.get("role") == "system" and
+                _CHAT_ACTIVE_TOOL_SUMMARY_MARKER in str(message.get("content") or ""))
+    ]
+    raw_rounds: list[list[dict[str, Any]]] = []
+    raw_size = 0
+    for round_messages in reversed(runden):
+        size = sum(_message_size(message) for message in round_messages)
+        if raw_size + size <= _CHAT_ACTIVE_TOOL_RECENT_BUDGET:
+            raw_rounds.append(round_messages)
+            raw_size += size
+            continue
+        if not raw_rounds:
+            raw_rounds.append(_kuerze_werkzeugrunde(
+                round_messages, _CHAT_ACTIVE_TOOL_RECENT_BUDGET,
+            ))
+        break
+    raw_rounds.reverse()
+    raw_ids = {id(message) for round_messages in raw_rounds for message in round_messages}
+
+    older_summaries = [
+        _runde_zusammenfassen(round_messages)
+        for round_messages in runden
+        if not all(id(message) in raw_ids for message in round_messages)
+    ]
+    summary = "\\n".join(part for part in carry + older_summaries if part)
+    summary = _komprimiere_text(summary, _CHAT_ACTIVE_TOOL_SUMMARY_BUDGET)
+    suffix: list[dict[str, Any]] = []
+    if summary:
+        suffix.append({
+            "role": "system",
+            "content": (
+                _CHAT_ACTIVE_TOOL_SUMMARY_MARKER + ": Vollständige frühere "
+                "Werkzeugausgaben bleiben im gespeicherten Verlauf. Diese "
+                "Auszüge sind Hinweise, keine aktuelle Repo-Evidenz; bei Bedarf "
+                "gezielt erneut lesen.\\n" + summary
+            ),
+        })
+    for round_messages in raw_rounds:
+        suffix.extend(round_messages)
+    suffix.extend(notes[-1:])
+    if sum(_message_size(message) for message in suffix) > _CHAT_ACTIVE_TOOL_CHAR_BUDGET:
+        overflow = sum(_message_size(message) for message in suffix) - _CHAT_ACTIVE_TOOL_CHAR_BUDGET
+        for message in suffix:
+            if overflow <= 0:
+                break
+            if message.get("role") != "tool":
+                continue
+            content = str(message.get("content") or "")
+            reduction = min(overflow, len(content))
+            message["content"] = _komprimiere_text(content, len(content) - reduction)
+            overflow -= reduction
+    return [*prefix, *suffix]
+
+
 def _deepseek_chat_stream(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None = None,
@@ -411,6 +562,9 @@ def chat_loop(
         *_baue_messages(session.load()),
     ]
     schemas = openai_schemas(tools, mode=mode)
+    _active_turn_start = max(
+        index for index, item in enumerate(messages) if item.get("role") == "user"
+    )
 
     if max_rounds is not None and max_rounds < 0:
         raise ValueError("max_rounds darf nicht negativ sein")
@@ -481,6 +635,7 @@ def chat_loop(
                 "content": ergebnis,
             })
 
+        messages = _begrenze_aktiven_turn(messages, _active_turn_start)
         _fingerprint = hashlib.sha256(
             json.dumps(
                 _round_evidence, ensure_ascii=False, sort_keys=True,
