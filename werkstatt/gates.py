@@ -131,7 +131,10 @@ def _task_graph_error(tasks: list) -> str | None:
         dependencies_by_id[task_id] = dependencies
 
     dependents: dict[str, list[str]] = {task_id: [] for task_id in by_id}
-    indegree = {task_id: len(dependencies) for task_id, dependencies in dependencies_by_id.items()}
+    indegree = {
+        task_id: len(dependencies)
+        for task_id, dependencies in dependencies_by_id.items()
+    }
     for task_id, dependencies in dependencies_by_id.items():
         for dependency in dependencies:
             dependents[dependency].append(task_id)
