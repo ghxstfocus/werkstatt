@@ -230,7 +230,7 @@ def _message_size(message: dict[str, Any]) -> int:
 def _komprimiere_text(text: str, budget: int) -> str:
     if len(text) <= budget:
         return text
-    marker = "\\n[… gekürzt; vollständiger Beleg bleibt gespeichert …]\\n"
+    marker = "\n[… gekürzt; vollständiger Beleg bleibt gespeichert …]\n"
     if budget <= len(marker):
         return text[:budget]
     rest = budget - len(marker)
@@ -254,7 +254,7 @@ def _runde_zusammenfassen(runde: list[dict[str, Any]]) -> str:
         args = _komprimiere_text(str(fn.get("arguments", "{}")), 180)
         output = _komprimiere_text(str(result.get("content") or ""), 420)
         teile.append(f"- {name}({args}) -> {output}")
-    return "\\n".join(teile)
+    return "\n".join(teile)
 
 
 def _kuerze_werkzeugrunde(
@@ -333,7 +333,7 @@ def _begrenze_aktiven_turn(
         for round_messages in runden
         if not all(id(message) in raw_ids for message in round_messages)
     ]
-    summary = "\\n".join(part for part in carry + older_summaries if part)
+    summary = "\n".join(part for part in carry + older_summaries if part)
     summary = _komprimiere_text(summary, _CHAT_ACTIVE_TOOL_SUMMARY_BUDGET)
     suffix: list[dict[str, Any]] = []
     if summary:
@@ -343,12 +343,13 @@ def _begrenze_aktiven_turn(
                 _CHAT_ACTIVE_TOOL_SUMMARY_MARKER + ": Vollständige frühere "
                 "Werkzeugausgaben bleiben im gespeicherten Verlauf. Diese "
                 "Auszüge sind Hinweise, keine aktuelle Repo-Evidenz; bei Bedarf "
-                "gezielt erneut lesen.\\n" + summary
+                "gezielt erneut lesen.\n" + summary
             ),
         })
     for round_messages in raw_rounds:
         suffix.extend(dict(message) for message in round_messages)
-    suffix.extend(dict(notes[-1]) for _ in notes[-1:])
+    if notes:
+        suffix.append(dict(notes[-1]))
     if sum(_message_size(message) for message in suffix) > _CHAT_ACTIVE_TOOL_CHAR_BUDGET:
         overflow = sum(_message_size(message) for message in suffix) - _CHAT_ACTIVE_TOOL_CHAR_BUDGET
         for message in suffix:
