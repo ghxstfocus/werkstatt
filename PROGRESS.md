@@ -5671,3 +5671,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der Live-Feed behandelt `llm_call_heartbeat` jetzt als aktive Arbeit. Dadurch verschwindet die Chat-Aktivitaetszeile bei langen Modellaufrufen nicht nach dem ersten 15-Sekunden-Heartbeat.
 - Start- und Heartbeat-Zeilen zeigen bounded Task-Name, Task-ID und maximal zwei Dateipfade; Prompt- und Datei-Inhalte bleiben ausgeschlossen.
 - Regressionstest prueft Heartbeat-Erkennung und Kontextdarstellung. OP-395 bleibt fuer den vollstaendigen E2E-Nachweis offen.
+
+## 2026-11-12 — OP-Doku-Nachzug: Belegkonsistenz und begrenzte Delete-Zone
+
+- Der Committer bestaetigt jetzt einen bereits geschriebenen Progress-Beleg nur bei passender OP, `done`-Status und Run-ID. Ein fehlender oder nicht schreibbarer Beleg verhindert das Entfernen des OPs aus `STATUS.md`; bei fehlendem Beleg wird der vorherige Status wiederhergestellt.
+- Die Delete-Zone dedupliziert OP-IDs und behaelt hoechstens die 20 neuesten Eintraege. Die ausfuehrliche Historie bleibt in dieser Datei.
+- DOC_CONVENTIONS.md legt die Abschlussregel fest: vollstaendige Phase-End-Verify und persistierter OP-/Run-Beleg vor Statusentfernung.
+- Regressionstests decken fehlenden Progress-Beleg, idempotenten Retry, Delete-Zone-Deduplizierung und Aufbewahrungsgrenze ab.
+- Commits: `d9bd058`, `49cd355`, `8635bcc`, `2c36598`, `81d23c2`, `7348574`. Die GitHub-CI ist fuer den neuesten Stand noch zu verifizieren; dieses Log behauptet kein gruenes CI-Ergebnis.
