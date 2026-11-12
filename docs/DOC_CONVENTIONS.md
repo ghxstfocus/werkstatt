@@ -103,11 +103,19 @@ nach PROGRESS.md.
       status: docs/STATUS.md
       roadmap: docs/ROADMAP.md
       architecture: docs/ARCHITECTURE.md
+      progress: PROGRESS.md
       conventions: docs/CONVENTIONS.md
       adr_index: docs/adr/README.md
       glossary: docs/glossary.md
 
-Der Loop MUSS status, roadmap, architecture, entry lesen.
+Der Loop MUSS entry, status, roadmap, architecture und progress lesen. PROGRESS
+ist begrenzte historische Evidenz fuer abgeschlossene Arbeit und Entscheidungen;
+es ersetzt weder den aktuellen OP-Status in STATUS noch den Live-Zustand aus
+Run-Events. Der Run-Kontext enthaelt hoechstens die zehn neuesten Progress-
+Bloecke und 12.000 Zeichen. Ein OP, das als erledigt in PROGRESS dokumentiert
+wird, muss im selben Abschlusslauf konsistent aus STATUS entfernt und in der
+Delete-Zone dedupliziert werden; ohne bestandene Abschlusspruefung bleibt es
+offen.
 
 ## 7. Migrations-Workflow
 
