@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime
 import hashlib
 import json
 import os
@@ -10,6 +9,7 @@ import re
 import subprocess
 import tempfile
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -92,7 +92,7 @@ def create_failure_record(state: Any, *, stage: str) -> dict[str, Any]:
         "run_id": raw_run_id,
         "project": project_name,
         "stage": str(stage)[:120],
-        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "work_sha": head.decode("ascii", errors="ignore").strip() or None,
         "worktree_fingerprint": fingerprint,
         "failed_stages": failed_stages,
