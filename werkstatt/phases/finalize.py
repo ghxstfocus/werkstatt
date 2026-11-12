@@ -1015,11 +1015,12 @@ def _phase_finalize(
     # Commit erst nach bestandenem Phase-End-Verify. Bei rotem Verify oder
     # offenen human_review-Tasks bleibt der Working Tree uncommitted.
     if rc == 0 and _commit_requested:
+        import os as _os
+
         from werkstatt.committer import (
             _committe_zielprojekt,
             _op_nnn_fuer_doku_nachzug,
         )
-        import os as _os
 
         _doku_op, _ = _op_nnn_fuer_doku_nachzug(
             state.aufgabe or "",
