@@ -75,6 +75,32 @@ def test_verify_patches_fails(tmp_path):
     assert _verify_patches(st) is False
 
 
+def test_verify_success_clears_previous_errors(tmp_path):
+    """Ein gruenes Verify darf keine Fehler des vorigen Aufrufs behalten."""
+    st = _state(tmp_path)
+    contract_dir = tmp_path / ".werkstatt"
+    contract_dir.mkdir()
+    contract = contract_dir / "verify.json"
+    contract.write_text(
+        '{"stages": [{"id": "check", "command": ['
+        '"python3", "-c", "import sys; sys.exit(1)"]}]}'
+    )
+
+    assert _verify_patches(st) is False
+    assert st.last_verify_errors
+
+    contract.write_text(
+        '{"stages": [{"id": "check", "command": ['
+        '"python3", "-c", "import sys; sys.exit(0)"]}]}'
+    )
+
+    assert _verify_patches(st) is True
+    assert st.last_verify_errors == []
+    assert st.last_verify_results == [
+        {"stage_id": "check", "exit_code": 0, "ok": True, "error_excerpt": ""}
+    ]
+
+
 def test_stage_anzahl(tmp_path):
     """_stage_anzahl: 0 ohne verify.json, 4 mit vier Stages."""
     # Fall 1: keine .werkstatt/verify.json -> 0
