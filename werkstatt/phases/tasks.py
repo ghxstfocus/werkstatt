@@ -97,7 +97,8 @@ def _phase_tasks_loop(
     # M-473: while-Loop statt for. Nach ADaPT-Split wird die
     # Schleife neu gestartet, damit Sub-Tasks gebaut werden.
     while True:
-        if state.budget_exhausted_reason:
+        from werkstatt.agent import _enforce_run_budget
+        if _enforce_run_budget(state):
             phase_state.save()
             return 1, tasks_ok, tasks
         next_task = phase_state.get_next_task()
