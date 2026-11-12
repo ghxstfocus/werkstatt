@@ -5708,3 +5708,16 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   - **Commit:** b9fb3569b167b8dbfd0d08dfc741e33c0f6a8436
   - **Commit:** 03975c07741c11485b311717463a6ca461cb5728
 - CI fuer Commit `6fff05905324f3d3ff0956ee0e8c29b22245a292`: Quality-Gate-Workflow erfolgreich; 2.087 Tests bestanden, 5 uebersprungen; Ruff, JavaScript-Syntax und Quality Gate gruen. [Run 43292109189](https://github.com/ghxstfocus/werkstatt/actions/runs/43292109189).
+
+
+## 2026-11-12 — OP-Doku-Nachzug: explizite OP-Zuordnung
+
+- Die optionale STATUS-Automatik schloss bisher die erste OP-ID, die irgendwo im freien Auftragstext vorkam. Dadurch konnte eine bloß erwähnte Blocker- oder Folge-OP entfernt werden.
+- Automatisch geschlossen wird jetzt nur noch eine OP, die als erste Auftragszeile ausdrücklich im Format `OP-NNN: Auftrag` oder `### OP-NNN: Auftrag` steht. Die allgemeine OP-Erkennung für Commit-Betreffzeilen bleibt davon getrennt.
+- Regressionstests decken explizite Kopfzeilen sowie beiläufige OP-Erwähnungen und Blocker ab.
+- Doku-Drift-Belege für die Code-Commits:
+  - **Commit:** `d44d191876975701a81a5f2e85e04292b631483f`
+  - **Commit:** `0fc358ac461314fc7a8024edc858aff6e032be13`
+  - **Commit:** `470b2a96064405bd416395feef54f8b6421ee9a4`
+  - **Commit:** `b318d296037015d1da03b4d72788744305ff9f86`
+- GitHub Actions für den Teststand `b318d296037015d1da03b4d72788744305ff9f86`: 2.089 Tests bestanden, 5 übersprungen; Ruff, JavaScript-Syntax und Quality Gate grün. [Run 43293886542](https://github.com/ghxstfocus/werkstatt/actions/runs/43293886542).
