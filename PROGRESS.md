@@ -5475,3 +5475,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Phase-State speichert jetzt die Run-ID als Checkpoint-Eigentum; Legacy-State ohne Feld bleibt ladbar und erhaelt die ID beim naechsten Save.
 - Ein headless Lauf mit widerspruechlicher Run-ID stoppt vor Plan-/Task-Ausfuehrung fail-closed. Damit kann eine Registry-Recovery spaeter nicht versehentlich Checkpoint-Daten eines aelteren Runs fortsetzen.
 - Tests decken Run-ID-Roundtrip, ungueltige Metadaten und den Abbruch bei Run-ID-Mismatch ab. OP-397 ist weiterhin offen; die Web-API bietet noch keinen Recovery-Start.
+
+## 2026-11-12 — Reflection-Test an das verpflichtende Review-Gate angepasst
+
+- Der erste CI-Lauf zur Checkpoint-Run-ID-Bindung lief in einem Reflection-Test in ein echtes Human-Gate, weil der Test nur den Reviewer abgelehnt, aber die nachgelagerte Gate-Entscheidung nicht isoliert hatte.
+- Der Test beantwortet das Phase-Review-Gate jetzt explizit mit Reject; damit bleibt er deterministisch und kann die volle Suite ohne interaktive Eingabe durchlaufen.
+- Der vorherige CI-Lauf hatte zusaetzlich bereits bei 7 Prozent einen Assertion-Fehler, dessen Abschlussbericht durch den spaeteren Timeout fehlte. Der korrigierte Lauf muss diesen Befund noch offenlegen.
