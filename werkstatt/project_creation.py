@@ -29,7 +29,12 @@ _DOCS = {
 }
 
 
-def create_local_project(name: str, project_dir: Path) -> dict[str, Any]:
+def create_local_project(
+    name: str,
+    project_dir: Path,
+    *,
+    allowed_root: Path = Path("/opt"),
+) -> dict[str, Any]:
     """Scaffoldet ein neues Serverprojekt und registriert sein Loop-Manifest.
 
     Bestehende Verzeichnisse und Manifeste werden fail-closed abgewiesen.
@@ -38,9 +43,14 @@ def create_local_project(name: str, project_dir: Path) -> dict[str, Any]:
     """
     if not isinstance(name, str) or not _PROJEKTNAME.fullmatch(name):
         raise ValueError("ungueltiger Projektname")
+    basis = allowed_root.expanduser().resolve()
     ziel = project_dir.expanduser().resolve()
-    if not ziel.is_absolute():
-        raise ValueError("Projektpfad muss absolut sein")
+    try:
+        ziel.relative_to(basis)
+    except ValueError as exc:
+        raise ValueError(f"Projektpfad muss innerhalb {basis} liegen") from exc
+    if ziel == basis:
+        raise ValueError("Projektpfad darf nicht die Projektbasis sein")
     manifest = project_config(name)
     if ziel.exists():
         raise FileExistsError(f"Projektpfad existiert bereits: {ziel}")
