@@ -35,11 +35,15 @@ def test_builder_erstellt_patches(tmp_path):
         ok = True
         content = fake_json
 
-    with patch("werkstatt.roles.builder._common.ask_llm", return_value=FakeReply()):
+    with patch(
+        "werkstatt.roles.builder._common.ask_llm",
+        return_value=FakeReply(),
+    ) as mock_llm:
         result = run_builder(st)
         assert result is True
         assert len(st.patches) == 1
         assert st.patches[0]["file"] == "a.py"
+    assert mock_llm.call_args.kwargs["state"] is st
 
 
 def test_builder_ohne_key(tmp_path):

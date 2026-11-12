@@ -361,6 +361,7 @@ def _build_patches_fuer_datei(
         model="deepseek-chat", temperature=0.2, max_tokens=8000,
         redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
         aufgabe="builder",
+        state=state,
     )
     if not reply.ok:
         _bglob.audit("builder_architect_llm_fehler",

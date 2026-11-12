@@ -372,6 +372,7 @@ def _phase_finalize(
             try:
                 repaired = _reflection_loop(
                     state,
+                    max_runden=None,
                     error_context=recovery_context,
                     phase="phase_end",
                     verify_stage_ids=set(stage_ids),

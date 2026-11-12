@@ -5529,3 +5529,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - OP-403: Der Recovery-Prompt wurde nach einer pauschalen 8.000-Zeichen-Grenze abgeschnitten. Bei vielen oder langen Verify-Ausgaben konnte dadurch ungültiges JSON entstehen und spätere Fehlerbelege verloren gehen.
 - Die Begrenzung kürzt Auszüge strukturiert, erhält Stage-IDs und Exit-Codes wo möglich und kennzeichnet gekürzte oder ausgelassene Belege. Der erzeugte JSON-Teil bleibt parsebar und innerhalb des Budgets.
 - Regressionstests decken lange Ausgaben und Metadaten-Überlauf ab. GitHub-CI-Verifikation ausstehend.
+
+
+## 2026-11-12 — Phase-End-Recovery ist budget- und fortschrittsgesteuert
+
+- OP-403: Die gezielte Phase-End-Reparatur lief bisher durch den allgemeinen Fünf-Runden-Deckel. Sie arbeitet jetzt bis zur bestandenen betroffenen Verify-Stage, bis ein identischer Code-/Fehlerzustand wiederkehrt oder das Run-Budget erreicht ist.
+- Der Builder übergibt seinen RunState jetzt an den LLM-Aufruf. Dadurch zählen Recovery-Aufrufe gegen das bestehende LLM-/Zeitbudget und können es nicht umgehen.
+- Regressionstest lässt die gezielte Stage erst nach sechs Builder-Aufrufen grün werden. Vollständige Phase-End-Verify bleibt danach verpflichtend. GitHub-CI-Verifikation ausstehend.

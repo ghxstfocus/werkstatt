@@ -19,6 +19,8 @@ wenn er nicht schon in `last_verify_errors` steckt. Die Standard-Variante
 """
 from __future__ import annotations
 
+from itertools import count
+
 from werkstatt.prompts import format_letzter_test_fehler_block
 from werkstatt.render import log_line  # Fix BA
 from werkstatt.state import RunState
@@ -390,7 +392,7 @@ def _bug_text_deutet_spec_widerspruch(bugs: list) -> bool:
 
 def _reflection_loop(
     state: RunState,
-    max_runden: int = 5,
+    max_runden: int | None = 5,
     error_context: str | None = None,
     phase: str | None = "post_build",
     verify_stage_ids: set[str] | None = None,
@@ -442,8 +444,19 @@ def _reflection_loop(
     _refl_task_id = (
         _akt_task.get("id") if isinstance(_akt_task, dict) else None
     )
-    for runde in range(1, max_runden + 1):
-        log_line(f"[reflection] Runde {runde}/{max_runden} startet")
+    adaptive_recovery = max_runden is None and verify_stage_ids is not None
+    if max_runden is None and not adaptive_recovery:
+        raise ValueError(
+            "Unbegrenzte Reflection braucht gezielte Verify-Stages."
+        )
+    recovery_states: set[tuple[str | None, str]] = set()
+    runden = count(1) if adaptive_recovery else range(1, (max_runden or 0) + 1)
+    for runde in runden:
+        label = (
+            f"Runde {runde} (zielorientiert)"
+            if adaptive_recovery else f"Runde {runde}/{max_runden}"
+        )
+        log_line(f"[reflection] {label} startet")
         # K3: Wenn error_context gesetzt ist (Reviewer hat abgelehnt),
         # ist ein "Verify gruen" kein Grund zum Abbrechen — der Patch
         # ist semantisch falsch, auch wenn er kompiliert. Dann direkt
@@ -486,6 +499,26 @@ def _reflection_loop(
         )
         _hash_jetzt = _diff_hash_for_state(state)
         _test_sig = _test_fehler_signatur(state)
+        if adaptive_recovery:
+            recovery_state = (
+                _hash_jetzt,
+                _fehler_signatur_normalisiert(_errs),
+            )
+            if recovery_state in recovery_states:
+                audit(
+                    "reflection_no_progress",
+                    {
+                        "runde": runde,
+                        "phase": phase,
+                        "reason": "recovery_state_recurred",
+                        "hash": _hash_jetzt,
+                        "verify_signature": recovery_state[1],
+                    },
+                    pd,
+                    pn,
+                )
+                return False
+            recovery_states.add(recovery_state)
         if (_hash_vorher is not None and _hash_vorher == _hash_jetzt
                 and _test_sig_vorher is not None
                 and _test_sig_vorher == _test_sig):
@@ -494,65 +527,66 @@ def _reflection_loop(
                    "test_sig": _test_sig}, pd, pn)
             return False
         _stagnation_grund = None
-        if (_ruff_vorher is not None
-                and _ruff_jetzt >= _ruff_vorher and _ruff_jetzt > 0):
-            _stagnation_grund = "ruff"
-        elif _hat_gleiche_bugs:
-            _stagnation_grund = "reviewer_bugs"
-        elif _verify_fehler_zwischen_runden_gleich(state):
-            # OP-175 B: mypy/pytest/ruff-Fehler unveraendert zwischen
-            # Runden, aber nicht als ruff- oder reviewer_bugs-Stagnation
-            # erkannt (z.B. Loop-Test-6: 10x mypy attr-defined).
-            _stagnation_grund = "verify_gleich"
-        elif _verify_fehler_alternierend(state):
-            # OP-182: Fehler-Set wechselt, aber Signatur-Intersection
-            # nicht leer (z.B. Loop-Test-9: ruff/mypy/beide wechseln).
-            # Ohne diesen Zweig resettet der Counter bei jeder
-            # Set-Aenderung -> Loop laeuft alle 5 Runden.
-            _stagnation_grund = "verify_alternierend"
-        if _stagnation_grund:
-            _stagnation += 1
-            audit("loop_reflection_stagnation_runde",
-                  {"runde": runde, "stagnation": _stagnation,
-                   "grund": _stagnation_grund,
-                   "ruff_vorher": _ruff_vorher,
-                   "ruff_jetzt": _ruff_jetzt,
-                   "gleiche_bugs": _hat_gleiche_bugs}, pd, pn)
-            if _stagnation >= 2:
-                # OP-059c + OP-059d: Spec-Widerspruch pruefen.
-                # Zwei Pfade: (a) Reviewer-Bug-Marker, (b) verify-
-                # Fehler wiederholt sich (mypy, patch_apply).
-                _bugs_fuer_check = state.reviewer_bugs or []
-                _verify_fuer_check = (
-                    state.last_verify_errors or []
-                )
-                _is_spec = (
-                    _stagnation_grund != "verify_alternierend"
-                    and (
-                        _bug_text_deutet_spec_widerspruch(_bugs_fuer_check)
-                        or _verify_fehler_wiederholt_sich(_verify_fuer_check)
+        if not adaptive_recovery:
+            if (_ruff_vorher is not None
+                    and _ruff_jetzt >= _ruff_vorher and _ruff_jetzt > 0):
+                _stagnation_grund = "ruff"
+            elif _hat_gleiche_bugs:
+                _stagnation_grund = "reviewer_bugs"
+            elif _verify_fehler_zwischen_runden_gleich(state):
+                # OP-175 B: mypy/pytest/ruff-Fehler unveraendert zwischen
+                # Runden, aber nicht als ruff- oder reviewer_bugs-Stagnation
+                # erkannt (z.B. Loop-Test-6: 10x mypy attr-defined).
+                _stagnation_grund = "verify_gleich"
+            elif _verify_fehler_alternierend(state):
+                # OP-182: Fehler-Set wechselt, aber Signatur-Intersection
+                # nicht leer (z.B. Loop-Test-9: ruff/mypy/beide wechseln).
+                # Ohne diesen Zweig resettet der Counter bei jeder
+                # Set-Aenderung -> Loop laeuft alle 5 Runden.
+                _stagnation_grund = "verify_alternierend"
+            if _stagnation_grund:
+                _stagnation += 1
+                audit("loop_reflection_stagnation_runde",
+                      {"runde": runde, "stagnation": _stagnation,
+                       "grund": _stagnation_grund,
+                       "ruff_vorher": _ruff_vorher,
+                       "ruff_jetzt": _ruff_jetzt,
+                       "gleiche_bugs": _hat_gleiche_bugs}, pd, pn)
+                if _stagnation >= 2:
+                    # OP-059c + OP-059d: Spec-Widerspruch pruefen.
+                    # Zwei Pfade: (a) Reviewer-Bug-Marker, (b) verify-
+                    # Fehler wiederholt sich (mypy, patch_apply).
+                    _bugs_fuer_check = state.reviewer_bugs or []
+                    _verify_fuer_check = (
+                        state.last_verify_errors or []
                     )
-                )
-                if _is_spec:
-                    audit("loop_reflection_spec_widerspruch",
-                          {"runde": runde,
-                           "bug_text_preview": [
-                               (b.get("description") or "")[:150]
-                               for b in _bugs_fuer_check[:2]
-                               if isinstance(b, dict)
-                           ]}, pd, pn)
-                    state.spec_widerspruch_erkannt = True
+                    _is_spec = (
+                        _stagnation_grund != "verify_alternierend"
+                        and (
+                            _bug_text_deutet_spec_widerspruch(_bugs_fuer_check)
+                            or _verify_fehler_wiederholt_sich(_verify_fuer_check)
+                        )
+                    )
+                    if _is_spec:
+                        audit("loop_reflection_spec_widerspruch",
+                              {"runde": runde,
+                               "bug_text_preview": [
+                                   (b.get("description") or "")[:150]
+                                   for b in _bugs_fuer_check[:2]
+                                   if isinstance(b, dict)
+                               ]}, pd, pn)
+                        state.spec_widerspruch_erkannt = True
+                        audit("loop_reflection_stagnation_abort",
+                              {"runde": runde, "stagnation": _stagnation,
+                               "grund": _stagnation_grund,
+                               "folge": "spec_widerspruch_vermutet"}, pd, pn)
+                        return True
                     audit("loop_reflection_stagnation_abort",
                           {"runde": runde, "stagnation": _stagnation,
-                           "grund": _stagnation_grund,
-                           "folge": "spec_widerspruch_vermutet"}, pd, pn)
-                    return True
-                audit("loop_reflection_stagnation_abort",
-                      {"runde": runde, "stagnation": _stagnation,
-                       "grund": _stagnation_grund}, pd, pn)
-                return False
-        else:
-            _stagnation = 0
+                           "grund": _stagnation_grund}, pd, pn)
+                    return False
+            else:
+                _stagnation = 0
         _ruff_vorher = _ruff_jetzt
         state._reflection_bug_sigs_vorher = _bug_sigs_jetzt
 
@@ -645,6 +679,18 @@ def _reflection_loop(
             _builder_ok = run_builder(state)
         finally:
             state.reflection_phase = False
+        if getattr(state, "budget_exhausted_reason", ""):
+            audit(
+                "loop_budget_exhausted",
+                {
+                    "phase": phase,
+                    "reason": state.budget_exhausted_reason,
+                    "recovery_stopped": True,
+                },
+                pd,
+                pn,
+            )
+            return False
         if not _builder_ok:
             audit("loop_reflection_builder_failed", {"runde": runde}, pd, pn)
             continue
