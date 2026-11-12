@@ -5564,3 +5564,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - OP-403-Review: Nach „erneut prüfen“ konnte ein unveränderter, weiterhin roter Worktree das Phase-End-Gate erneut öffnen und bei wiederholter gleicher Antwort in einer Schleife bleiben.
 - Recovery prüft jetzt den neuen Failure Record auf vollständige Provenienz und vergleicht danach den Worktree-Fingerprint. Fehlende Belege oder ein unveränderter Fingerprint beenden die Recovery fail-closed mit `loop_verify_recovery_stalled` und einem konkreten nächsten Schritt; ein geänderter Diff darf weiter gezielt repariert werden.
 - Regressionstest belegt genau einen Gate-Durchlauf bei rotem Verify ohne Worktree-Fortschritt und stellt sicher, dass der Builder nicht erneut gestartet wird.
+
+
+## 2026-11-12 — OP-396: Gate-Antworten laufen über die Projekt-Chat-Session
+
+- Offene Run-Gates werden beim UI-Reconnect idempotent als Chat-Karten in die aktuelle Projekt-Session übernommen; Plan, Empfehlung und knappe Verify-/Diff-Belege bleiben aufklappbar.
+- Antwort aus Chat oder Gate-Detailmodal läuft über denselben projekt- und run-gebundenen Chat-Endpunkt. Die Gate-Antwort bleibt im Run-Audit und wird zusätzlich in derselben Chat-Session replaybar gespeichert.
+- Gate-Karten und Entscheidungen verwenden sessiongebundene Idempotenzschlüssel, damit das 2-Sekunden-Polling und Reconnect keine doppelten Chat-Ereignisse anlegen.
+- Implementierung und Quality-Gate-Verifikation stehen noch aus.

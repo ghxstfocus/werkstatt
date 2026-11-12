@@ -241,6 +241,13 @@
           hatNachricht = true;
           _karte("user", p.user_text || "");
           _karte("assistant", p.assistant_text || "");
+        } else if (kind === "gate_card") {
+          hatNachricht = true;
+          _gateCard(p);
+        } else if (kind === "gate_decision") {
+          _gateDecision(p);
+        } else if (kind === "gate_expired") {
+          _gateExpired(p);
         } else if (kind === "loop_action_proposed") {
           hatNachricht = true;
           _proposalKarte(p, "pending");
@@ -571,6 +578,205 @@
     if (!_jobAktiv(job.project, job.sessionId, job.request)) return;
     _jobAktivitaetStatus(job, _toolLabel(name, args), "running");
     job.toolCalls.push({name: name || "?", done: false});
+  }
+
+  function _gateCard(payload) {
+    if (!payload || !payload.run_id || !payload.gate_id) return null;
+    var box = _el("chat-nachrichten");
+    if (!box) return null;
+    var cards = box.querySelectorAll(".chat-gate-card");
+    var card = null;
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].dataset.gateId === payload.gate_id &&
+          cards[i].dataset.runId === payload.run_id) {
+        card = cards[i];
+        break;
+      }
+    }
+    if (card) return card;
+    card = document.createElement("section");
+    card.className = "chat-gate-card";
+    card.dataset.gateId = payload.gate_id;
+    card.dataset.runId = payload.run_id;
+
+    var top = document.createElement("div");
+    top.className = "chat-gate-head";
+    var title = document.createElement("strong");
+    title.textContent = "Freigabe erforderlich";
+    top.appendChild(title);
+    var run = document.createElement("span");
+    run.textContent = String(payload.run_id).slice(0, 24);
+    top.appendChild(run);
+    card.appendChild(top);
+
+    var prompt = document.createElement("div");
+    prompt.className = "chat-gate-prompt";
+    _renderMarkdown(prompt, payload.prompt || "Der Loop wartet auf deine Entscheidung.");
+    card.appendChild(prompt);
+
+    var empfehlung = payload.empfehlung;
+    if (empfehlung || payload.empfehlung_grund) {
+      var advice = document.createElement("p");
+      advice.className = "chat-gate-recommendation";
+      advice.textContent = "Werkstatt empfiehlt: " +
+        (empfehlung || "prüfen") + " · " +
+        (payload.empfehlung_grund || "keine zusätzliche Begründung");
+      card.appendChild(advice);
+    }
+
+    var detailsText = "";
+    if (payload.plan && payload.plan.text) detailsText += payload.plan.text;
+    if (payload.verify && payload.verify.detail) {
+      detailsText += (detailsText ? "\n\n" : "") +
+        "Verify: " + payload.verify.detail;
+    }
+    if (payload.reviewer && payload.reviewer.verdict) {
+      detailsText += (detailsText ? "\n\n" : "") +
+        "Review: " + payload.reviewer.verdict;
+    }
+    if (payload.diff_stat) {
+      detailsText += (detailsText ? "\n\n" : "") +
+        "Änderungen:\n" + payload.diff_stat;
+    }
+    if (payload.diff) {
+      detailsText += (detailsText ? "\n\n" : "") +
+        "Diff:\n" + payload.diff;
+      if (payload.diff_truncated) detailsText += "\n[Diff-Auszug gekürzt]";
+    }
+    if (detailsText) {
+      var details = document.createElement("details");
+      details.className = "chat-gate-details";
+      var summary = document.createElement("summary");
+      summary.textContent = "Plan und Belege ansehen";
+      details.appendChild(summary);
+      var pre = document.createElement("pre");
+      pre.textContent = detailsText.slice(0, 12000);
+      details.appendChild(pre);
+      card.appendChild(details);
+    }
+
+    var status = document.createElement("p");
+    status.className = "chat-gate-status";
+    status.textContent = "Wartet auf deine Entscheidung";
+    card.appendChild(status);
+
+    var actions = document.createElement("div");
+    actions.className = "chat-gate-actions";
+    var optionen = String(payload.optionen || "jna");
+    if (payload.typ === "freitext") {
+      var area = document.createElement("textarea");
+      area.className = "chat-gate-input";
+      area.placeholder = "Begründung oder Rückmeldung";
+      actions.appendChild(area);
+      var submit = document.createElement("button");
+      submit.type = "button";
+      submit.textContent = "Senden";
+      submit.addEventListener("click", function () {
+        _chatGateAnswer(payload, area.value, card, status, actions, submit);
+      });
+      actions.appendChild(submit);
+    } else {
+      optionen.split("").forEach(function (option) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.textContent = {
+          j: "Freigeben",
+          n: "Ablehnen",
+          a: "Plan anpassen",
+          e: "Im Chat debuggen",
+        }[option] || option;
+        button.addEventListener("click", function () {
+          if (option === "e") {
+            button.disabled = true;
+            Promise.resolve(uebergeGate(zustand.projekt, payload))
+              .then(function (ok) {
+                button.disabled = false;
+                if (ok) status.textContent = "Debugger prüft · Gate bleibt offen";
+              });
+            return;
+          }
+          _chatGateAnswer(payload, option, card, status, actions, button);
+        });
+        actions.appendChild(button);
+      });
+    }
+    card.appendChild(actions);
+    var empty = box.querySelector(".chat-empty");
+    if (empty) empty.remove();
+    box.appendChild(card);
+    box.scrollTop = box.scrollHeight;
+    return card;
+  }
+
+  function _chatGateAnswer(gate, answer, card, status, actions, button) {
+    if (!String(answer || "").trim()) {
+      status.textContent = "Bitte gib eine Antwort ein.";
+      return;
+    }
+    if (button) button.disabled = true;
+    status.textContent = "Entscheidung wird gespeichert …";
+    _ensureChatSession(gate.project || zustand.projekt).then(function (ready) {
+      if (!ready) throw new Error("Chat-Session ist nicht bereit");
+      return fetch("/api/projects/" + encodeURIComponent(zustand.projekt) +
+        "/chat/gates/answer", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            session_id: zustand.sessionId,
+            run_id: gate.run_id,
+            gate_id: gate.gate_id,
+            answer: String(answer).trim(),
+          }),
+        });
+    }).then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok) throw new Error(data.detail || ("Status " + response.status));
+        return data;
+      });
+    }).then(function () {
+      status.textContent = "Entscheidung gespeichert · Loop setzt fort";
+      actions.querySelectorAll("button, textarea").forEach(function (item) {
+        item.disabled = true;
+      });
+    }).catch(function (error) {
+      status.textContent = "Freigabe fehlgeschlagen: " + error.message;
+      if (button) button.disabled = false;
+    });
+  }
+
+  function _gateDecision(payload) {
+    var card = _findGateCard(payload);
+    if (!card) return;
+    var status = card.querySelector(".chat-gate-status");
+    if (status) {
+      var answer = String(payload.answer || "");
+      status.textContent = "Entscheidung gespeichert · " +
+        ({j: "freigegeben", n: "abgelehnt", a: "Plan anpassen"}[answer] || answer);
+    }
+    card.querySelectorAll(".chat-gate-actions button, .chat-gate-actions textarea")
+      .forEach(function (item) { item.disabled = true; });
+  }
+
+  function _gateExpired(payload) {
+    var card = _findGateCard(payload);
+    if (!card) return;
+    var status = card.querySelector(".chat-gate-status");
+    if (status) status.textContent = "Gate abgelaufen · " +
+      (payload.reason || "der Run wartet nicht mehr");
+    card.querySelectorAll(".chat-gate-actions button, .chat-gate-actions textarea")
+      .forEach(function (item) { item.disabled = true; });
+  }
+
+  function _findGateCard(payload) {
+    var box = _el("chat-nachrichten");
+    if (!box || !payload) return null;
+    var cards = box.querySelectorAll(".chat-gate-card");
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].dataset.gateId === payload.gate_id &&
+          cards[i].dataset.runId === payload.run_id) return cards[i];
+    }
+    return null;
   }
 
   function _updateProposalStatus(id, text) {
@@ -1090,6 +1296,67 @@
     return zustand.loadPromise;
   }
 
+  function _ensureChatSession(projekt) {
+    var ready = zustand.projekt === projekt && zustand.initialisiert
+      ? (zustand.loadPromise || Promise.resolve(true))
+      : setze_chat(projekt);
+    return Promise.resolve(ready).then(function (ok) {
+      if (!ok || zustand.projekt !== projekt) return false;
+      if (zustand.sessionId) return true;
+      var anfrage = zustand.historyRequest;
+      return _neueSession(projekt, anfrage).then(function (sid) {
+        if (!sid || zustand.projekt !== projekt) return false;
+        return _wechsleSession(sid);
+      });
+    });
+  }
+
+  function gatesAktualisieren(projekt, kontext) {
+    if (!projekt || !kontext || !kontext.run_id) return Promise.resolve(false);
+    return _ensureChatSession(projekt).then(function (ok) {
+      if (!ok || zustand.projekt !== projekt || !zustand.sessionId) return false;
+      var sid = zustand.sessionId;
+      return fetch("/api/projects/" + encodeURIComponent(projekt) +
+        "/chat/gates/sync", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({session_id: sid, run_id: kontext.run_id}),
+        }).then(function (response) {
+          if (!response.ok) return false;
+          return response.json();
+        }).then(function (data) {
+          if (!data || zustand.projekt !== projekt || zustand.sessionId !== sid) return false;
+          (data.events || []).forEach(function (event) {
+            var payload = event.payload || {};
+            if (event.kind === "gate_card") _gateCard(payload);
+            else if (event.kind === "gate_decision") _gateDecision(payload);
+            else if (event.kind === "gate_expired") _gateExpired(payload);
+          });
+          return true;
+        });
+    }).catch(function () { return false; });
+  }
+
+  function beantworteGate(projekt, gate, answer) {
+    if (!gate || !gate.run_id || !gate.gate_id) return Promise.resolve(false);
+    return _ensureChatSession(projekt).then(function (ok) {
+      if (!ok || zustand.projekt !== projekt || !zustand.sessionId) return false;
+      return fetch("/api/projects/" + encodeURIComponent(projekt) +
+        "/chat/gates/answer", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            session_id: zustand.sessionId,
+            run_id: gate.run_id,
+            gate_id: gate.gate_id,
+            answer: answer,
+          }),
+        }).then(function (response) { return response.ok; });
+    }).catch(function () { return false; });
+  }
+
   function uebergebeGate(projekt, kontext) {
     if (!projekt || !kontext || !kontext.run_id || !kontext.gate_id) {
       return Promise.resolve(false);
@@ -1119,6 +1386,9 @@
   window.WerkstattChat = {
     setze_chat: setze_chat,
     uebergebeGate: uebergebeGate,
+    gatesAktualisieren: gatesAktualisieren,
+    beantworteGate: beantworteGate,
+    getSessionId: function () { return zustand.sessionId; },
   };
 
   document.addEventListener("DOMContentLoaded", function () {

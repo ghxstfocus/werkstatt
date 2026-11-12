@@ -80,6 +80,11 @@ class ChatSession:
                 "session_id TEXT NOT NULL,job_id TEXT NOT NULL,"
                 "PRIMARY KEY(session_id,job_id))"
             )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS idempotent_events ("
+                "session_id TEXT NOT NULL,event_key TEXT NOT NULL,seq INTEGER NOT NULL,"
+                "PRIMARY KEY(session_id,event_key))"
+            )
             conn.commit()
 
     def append(
@@ -96,6 +101,38 @@ class ChatSession:
             )
             conn.commit()
             return int(cur.lastrowid or 0)
+
+    def append_once(
+        self, event_key: str, kind: str, payload: dict[str, Any] | None = None,
+    ) -> int:
+        """Append an event once per session, even across concurrent retries."""
+        if not event_key or len(event_key) > 512:
+            raise ValueError("event_key must contain 1-512 characters")
+        ts = datetime.now(UTC).isoformat()
+        payload_json = json.dumps(payload or {}, ensure_ascii=False)
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT seq FROM idempotent_events "
+                "WHERE session_id=? AND event_key=?",
+                (self.session_id, event_key),
+            ).fetchone()
+            if row is not None:
+                conn.commit()
+                return int(row[0])
+            cur = conn.execute(
+                "INSERT INTO events (session_id, ts, kind, payload) "
+                "VALUES (?, ?, ?, ?)",
+                (self.session_id, ts, kind, payload_json),
+            )
+            seq = int(cur.lastrowid or 0)
+            conn.execute(
+                "INSERT INTO idempotent_events(session_id,event_key,seq) "
+                "VALUES(?,?,?)",
+                (self.session_id, event_key, seq),
+            )
+            conn.commit()
+            return seq
 
     def resolve_loop_action(
         self,

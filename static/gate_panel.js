@@ -201,6 +201,12 @@
   }
 
   function _sendeAntwort(ctx, gateId, antwort) {
+    var chat = window.WerkstattChat;
+    if (chat && typeof chat.beantworteGate === "function") {
+      return chat.beantworteGate(_aktuellesProjekt, {
+        run_id: ctx.run_id, gate_id: gateId,
+      }, antwort);
+    }
     return fetch("/api/runs/" + encodeURIComponent(ctx.run_id) + "/gate", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -354,6 +360,11 @@
           {credentials: "same-origin"})
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (ctx) {
+        var chat = window.WerkstattChat;
+        if (ctx && ctx.run_id && chat &&
+            typeof chat.gatesAktualisieren === "function") {
+          chat.gatesAktualisieren(_aktuellesProjekt, ctx);
+        }
         var hatGates = ctx && ctx.offene_gates && ctx.offene_gates.length > 0;
         if (!hatGates) {
           _versteckeBanner();

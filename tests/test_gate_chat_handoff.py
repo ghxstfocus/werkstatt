@@ -37,3 +37,18 @@ def test_gate_option_a_never_means_auto_approve() -> None:
     gate = Path("static/gate_panel.js").read_text(encoding="utf-8")
     assert r'a: "a \u2014 Plan anpassen"' in gate
     assert r'a: "a \u2014 Auto"' not in gate
+
+
+
+def test_open_gate_is_replayed_as_a_chat_card_and_answered_in_session() -> None:
+    chat = Path("static/chat.js").read_text(encoding="utf-8")
+    gate = Path("static/gate_panel.js").read_text(encoding="utf-8")
+
+    assert 'kind === "gate_card"' in chat
+    assert 'kind === "gate_decision"' in chat
+    assert '"/chat/gates/sync"' in chat
+    assert '"/chat/gates/answer"' in chat
+    assert 'gatesAktualisieren: gatesAktualisieren' in chat
+    assert 'beantworteGate: beantworteGate' in chat
+    assert 'chat.gatesAktualisieren(_aktuellesProjekt, ctx)' in gate
+    assert 'chat.beantworteGate(_aktuellesProjekt' in gate

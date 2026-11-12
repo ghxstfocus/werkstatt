@@ -270,6 +270,11 @@ def _registriere_event_routen(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail="answer fehlt")
         if len(answer) > 20_000:
             raise HTTPException(status_code=413, detail="answer zu lang")
+        session_id = body.get("session_id")
+        if session_id is not None:
+            if not isinstance(session_id, str) or not session_id:
+                raise HTTPException(status_code=400, detail="session_id ungueltig")
+            session_id = _pruefe_session_id(session_id)
 
         store = EventStore()
         gate_events = store.query(geprueft, kind="gate_open")
@@ -319,16 +324,155 @@ def _registriere_event_routen(app: FastAPI) -> None:
 
         from werkstatt.audit import audit
         from werkstatt.projection import Projector as _Projector
-        audit("gate_answered", {
+        audit_payload = {
             "gate_id": gate_id,
             "answer": answer,
             "run_id": geprueft,
-        }, _Path("."), "werkstatt")
+        }
+        if session_id:
+            audit_payload["session_id"] = session_id
+        audit("gate_answered", audit_payload, _Path("."), "werkstatt")
         try:
             _Projector().tail()
         except Exception:
             pass
         return {"ok": True, "gate_id": gate_id}
+
+
+    def _chat_gate_run(projekt: str, run_id: str) -> str:
+        geprueft = _pruefe_run_id(run_id)
+        record = _loop_registry().read(projekt)
+        if not record or record.get("run_id") != geprueft:
+            raise HTTPException(
+                status_code=404, detail="Run gehoert nicht zum aktiven Projekt",
+            )
+        return geprueft
+
+    @app.post("/api/projects/{name}/chat/gates/sync")
+    def chat_gate_sync(name: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Replayed offene Gates als idempotente Karten in die Chat-Session."""
+        from werkstatt.chat_session import ChatSession
+        from werkstatt.web import inspector as _insp
+
+        projekt = _pruefe_projektname(name)
+        session_id = body.get("session_id")
+        run_id = body.get("run_id")
+        if not isinstance(session_id, str) or not session_id:
+            raise HTTPException(status_code=400, detail="session_id fehlt")
+        if not isinstance(run_id, str) or not run_id:
+            raise HTTPException(status_code=400, detail="run_id fehlt")
+        sid = _pruefe_session_id(session_id)
+        geprueft = _chat_gate_run(projekt, run_id)
+        session = ChatSession(projekt, sid)
+        store = EventStore()
+        context = _insp.aggregate_gate_context(projekt, run_id=geprueft)
+        offen = {
+            str(g.get("gate_id")): g
+            for g in context.get("offene_gates", [])
+            if isinstance(g, dict) and g.get("gate_id")
+        }
+        opens = store.query(geprueft, kind="gate_open")
+        answered = {
+            str((ev.get("payload") or {}).get("gate_id")):
+                (ev.get("payload") or {})
+            for ev in store.query(geprueft, kind="gate_answered")
+            if (ev.get("payload") or {}).get("gate_id")
+        }
+        expired = {
+            str((ev.get("payload") or {}).get("gate_id")):
+                (ev.get("payload") or {})
+            for ev in store.query(geprueft, kind="gate_expired")
+            if (ev.get("payload") or {}).get("gate_id")
+        }
+        for event in opens:
+            payload = event.get("payload") or {}
+            gate_id = payload.get("gate_id")
+            if not isinstance(gate_id, str):
+                continue
+            gate = offen.get(gate_id, {})
+            prompt_context = {
+                "run_id": geprueft,
+                "gate_id": gate_id,
+                "prompt": gate.get("prompt") or payload.get("prompt") or "",
+                "optionen": gate.get("optionen") or payload.get("optionen") or "jna",
+                "typ": gate.get("typ") or payload.get("typ") or "jna",
+                "plan": context.get("plan"),
+                "verify": context.get("verify"),
+                "reviewer": context.get("reviewer"),
+                "empfehlung": context.get("empfehlung"),
+                "empfehlung_grund": context.get("empfehlung_grund"),
+                "diff_stat": context.get("diff_stat") or "",
+                "diff": str(context.get("diff") or "")[:25_000],
+                "diff_truncated": len(str(context.get("diff") or "")) > 25_000,
+            }
+            session.append_once(
+                f"gate-card:{geprueft}:{gate_id}",
+                "gate_card",
+                prompt_context,
+            )
+        for gate_id, payload in answered.items():
+            if any(
+                (ev.get("payload") or {}).get("gate_id") == gate_id
+                for ev in opens
+            ):
+                session.append_once(
+                    f"gate-decision:{geprueft}:{gate_id}",
+                    "gate_decision",
+                    {
+                        "run_id": geprueft,
+                        "gate_id": gate_id,
+                        "answer": payload.get("answer", ""),
+                    },
+                )
+        for gate_id, payload in expired.items():
+            if any(
+                (ev.get("payload") or {}).get("gate_id") == gate_id
+                for ev in opens
+            ):
+                session.append_once(
+                    f"gate-expired:{geprueft}:{gate_id}",
+                    "gate_expired",
+                    {"run_id": geprueft, "gate_id": gate_id,
+                     "reason": payload.get("grund", "timeout")},
+                )
+        gate_events = [
+            event for event in session.load()
+            if event.get("kind") in {"gate_card", "gate_decision", "gate_expired"}
+            and (event.get("payload") or {}).get("run_id") == geprueft
+        ]
+        return {
+            "events": gate_events,
+            "offene_gates": list(offen.values()),
+        }
+
+    @app.post("/api/projects/{name}/chat/gates/answer")
+    def chat_gate_answer(name: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Beantwortet ein Projekt-Gate und schreibt den Entscheid in dieselbe Session."""
+        from werkstatt.chat_session import ChatSession
+
+        projekt = _pruefe_projektname(name)
+        session_id = body.get("session_id")
+        run_id = body.get("run_id")
+        gate_id = body.get("gate_id")
+        answer = body.get("answer")
+        if not isinstance(session_id, str) or not session_id:
+            raise HTTPException(status_code=400, detail="session_id fehlt")
+        if not isinstance(run_id, str) or not run_id:
+            raise HTTPException(status_code=400, detail="run_id fehlt")
+        if not isinstance(gate_id, str) or not gate_id:
+            raise HTTPException(status_code=400, detail="gate_id fehlt")
+        sid = _pruefe_session_id(session_id)
+        geprueft = _chat_gate_run(projekt, run_id)
+        result = run_gate_answer(
+            geprueft,
+            {"gate_id": gate_id, "answer": answer, "session_id": sid},
+        )
+        ChatSession(projekt, sid).append_once(
+            f"gate-decision:{geprueft}:{gate_id}",
+            "gate_decision",
+            {"run_id": geprueft, "gate_id": gate_id, "answer": answer},
+        )
+        return result
 
 
 class AuthMiddleware:

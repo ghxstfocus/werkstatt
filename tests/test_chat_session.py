@@ -36,6 +36,38 @@ def test_persistenz_ueber_neue_instanz(db: Path) -> None:
     assert len(wieder.load()) == 1
 
 
+def test_append_once_is_idempotent_per_session(db: Path) -> None:
+    session = ChatSession("demo", "s1", db_pfad=db)
+    first = session.append_once("gate:run-1:gate-1", "gate_card", {"prompt": "Freigabe?"})
+    retry = session.append_once("gate:run-1:gate-1", "gate_card", {"prompt": "anderer Text"})
+
+    assert retry == first
+    events = session.load()
+    assert len(events) == 1
+    assert events[0]["seq"] == first
+    assert events[0]["kind"] == "gate_card"
+    assert events[0]["payload"] == {"prompt": "Freigabe?"}
+    other_session = ChatSession("demo", "s2", db_pfad=db)
+    assert other_session.append_once(
+        "gate:run-1:gate-1", "gate_card", {"prompt": "Freigabe?"},
+    ) != first
+
+
+def test_append_once_serializes_concurrent_gate_polling(db: Path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    session = ChatSession("demo", "concurrent", db_pfad=db)
+
+    def append(_index: int) -> int:
+        return session.append_once("gate:run-2:gate-2", "gate_card", {"prompt": "Freigabe?"})
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        sequences = list(executor.map(append, range(12)))
+
+    assert len(set(sequences)) == 1
+    assert len(session.load()) == 1
+
+
 def test_list_sessions(db: Path) -> None:
     ChatSession("demo", "s1", db_pfad=db).append("user", {"text": "a"})
     ChatSession("demo", "s2", db_pfad=db).append("user", {"text": "b"})
