@@ -5698,3 +5698,12 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   - **Commit:** 5ee908b50a7954101662854fd2757fb1dd3d1700
   - **Commit:** 6e93c8d2d318b568b0595d3b2a063bebbfe18ea6
 - CI fuer Commit `0c18649159e3f0b1085bbeb3aff9322f5394be49`: Quality-Gate-Workflow erfolgreich; 2.086 Tests bestanden, 5 uebersprungen; Ruff, JavaScript-Syntax und Quality Gate gruen. [Run 43290497310](https://github.com/ghxstfocus/werkstatt/actions/runs/43290497310).
+
+
+## 2026-11-12 — OP-405 Teilstand: implementierte Architektur im Architect-Kontext
+
+- Der standardmaessige Architect-Prompt v2 liess ARCHITECTURE.md bisher aus, obwohl das Manifest sie verpflichtend lud. Der Architect erhaelt nun einen begrenzten Auszug aus Produktarchitektur, Ausfuehrung, Verifikation und Doku-Vertrag (maximal 3.400 Zeichen).
+- Der Regressionstest prueft Abschnittsauswahl, Groessenlimit und tatsaechliche Einbindung in den Architect-Kontext. OP-405 bleibt offen: Retrieval fuer weitere Rollen, ADR-Evidenz und Evaluierung sind noch nicht fertig.
+- Doku-Drift-Belege fuer Code-Commits:
+  - **Commit:** b9fb3569b167b8dbfd0d08dfc741e33c0f6a8436
+  - **Commit:** 03975c07741c11485b311717463a6ca461cb5728
