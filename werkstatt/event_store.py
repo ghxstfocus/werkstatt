@@ -14,7 +14,7 @@ import time
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 from werkstatt.paths import werkstatt_home
 
@@ -582,7 +582,7 @@ class RunLeaseGuard:
         self._lost = threading.Event()
         self._thread: threading.Thread | None = None
 
-    def __enter__(self) -> RunLeaseGuard:
+    def __enter__(self) -> Self:
         token = self.store.acquire_run_lease(
             self.project,
             self.run_id,
