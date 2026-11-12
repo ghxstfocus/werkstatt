@@ -140,8 +140,11 @@ def test_run_llm_call_budget_blocks_before_network(tmp_path):
 def test_run_time_budget_blocks_before_network(tmp_path):
     s = _state(tmp_path)
     s.budget = {"max_minutes": 1}
-    s.start_monotonic = agent.time.monotonic() - 61
-    with patch("werkstatt.agent.requests.post") as post:
+    s.start_monotonic = 1.0
+    with (
+        patch("werkstatt.agent.time.monotonic", return_value=62.0),
+        patch("werkstatt.agent.requests.post") as post,
+    ):
         reply = _call(s)
     post.assert_not_called()
     assert reply.ok is False
