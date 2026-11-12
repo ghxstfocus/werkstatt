@@ -665,15 +665,50 @@ def _build_selbst_check_block() -> str:
     )
 
 
+def _reduce_architecture(text: str, max_chars: int = 3400) -> str:
+    """ARCHITECTURE.md: kompakte Ist-Architektur fuer den Architect."""
+    if not text or max_chars <= 0:
+        return ""
+
+    wanted = {
+        "1. Produktarchitektur": 1000,
+        "1.5 Ausfuehrung": 1000,
+        "4. Verifikation": 600,
+        "6. Doku-Vertrag": 500,
+    }
+    sections: dict[str, list[str]] = {}
+    title: str | None = None
+    current: list[str] = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if title in wanted:
+                sections[title] = current
+            title = line[3:].strip()
+            current = [line]
+        elif title in wanted:
+            current.append(line)
+    if title in wanted:
+        sections[title] = current
+
+    parts: list[str] = []
+    for section_title, limit in wanted.items():
+        lines = sections.get(section_title)
+        if not lines:
+            continue
+        block = "\n".join(lines).strip()
+        if len(block) > limit:
+            marker = "\n[Architekturauszug gekuerzt]"
+            block = block[: max(0, limit - len(marker))].rstrip() + marker
+        parts.append(block)
+    return "\n\n".join(parts)[:max_chars]
+
+
 def build_architect_docs_section_v2(docs: dict) -> str:
     """Strukturierter Docs-Kontext fuer den Architect (Prototyp v2).
 
-    Ersetzt den alten '--- entry ---'-Stil. Reihenfolge:
-      1. PROJEKT-ENTRY (Zweck + Struktur)
-      2. PROJEKT-STATUS (offene Punkte, ungekuerzt)
-      3. PROJEKT-ROADMAP (nur Phasen-Header, max 800 Z.)
-
-    Zielgroesse: ~6 KB (statt 29+4+1 = ~35 KB im alten Pfad).
+    Ersetzt den alten '--- entry ---'-Stil durch einen begrenzten Kontext aus
+    Entry, offenen OPs, Roadmap und implementierter Architektur. Die aktuelle
+    Progress-Historie wird separat und ebenfalls begrenzt uebergeben.
     """
     if not docs:
         return ""
@@ -690,6 +725,13 @@ def build_architect_docs_section_v2(docs: dict) -> str:
     roadmap = _reduce_roadmap(docs.get("roadmap", ""), max_chars=800)
     if roadmap:
         parts.append("### PROJEKT-ROADMAP (nur Phasen-Header)\n" + roadmap)
+
+    architecture = _reduce_architecture(docs.get("architecture", ""))
+    if architecture:
+        parts.append(
+            "### PROJEKT-ARCHITEKTUR (implementierter Ist-Zustand)\n"
+            + architecture
+        )
 
     return "\n\n".join(parts)
 
