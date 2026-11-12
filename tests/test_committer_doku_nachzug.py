@@ -14,6 +14,8 @@ from werkstatt.committer import (
     _op_nnn_aus_aufgabe,
     _op_nnn_fuer_doku_nachzug,
     _status_md_op_entfernen,
+    _snapshot_op_doku,
+    _restore_op_doku,
     _update_changelog,
     _update_kennzahlen,
 )
@@ -257,3 +259,29 @@ def test_drift_mit_py_und_doc(tmp_path, monkeypatch):
     monkeypatch.setattr(committer.subprocess, "run", fake_run)
     r = _architecture_drift_check(tmp_path)
     assert r["drift"] is False
+
+
+def test_op_doku_snapshot_stellt_geaenderte_und_neue_dateien_wieder_her(tmp_path):
+    status = tmp_path / "docs" / "STATUS.md"
+    progress = tmp_path / "PROGRESS.md"
+    status.parent.mkdir(parents=True)
+    status.write_text("# Status alt\n", encoding="utf-8")
+    progress.write_text("# Verlauf alt\n", encoding="utf-8")
+
+    snapshot = _snapshot_op_doku(tmp_path)
+    assert snapshot is not None
+    status.write_text("# Status neu\n", encoding="utf-8")
+    progress.unlink()
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Neu angelegt\n", encoding="utf-8")
+
+    assert _restore_op_doku(snapshot)
+    assert status.read_text(encoding="utf-8") == "# Status alt\n"
+    assert progress.read_text(encoding="utf-8") == "# Verlauf alt\n"
+    assert not changelog.exists()
+
+
+def test_op_doku_snapshot_scheitert_bei_nicht_lesbarem_pfad(tmp_path):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "STATUS.md").mkdir()
+    assert _snapshot_op_doku(tmp_path) is None
