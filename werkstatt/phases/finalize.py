@@ -635,13 +635,10 @@ def _phase_finalize(
                     pd,
                     pn,
                 )
-                gate_payload = _gate_failed_payload(
-                    "phase_end",
-                    getattr(state, "last_verify_errors", []) or [],
-                )
-                gate_payload["failure_record"] = final_failure_record
-                audit("loop_gate_failed", gate_payload, pd, pn)
-                rc = 1
+                # Auch wenn der Builder keinen Patch liefern konnte, erhält
+                # der Mensch das Failure Record und kann im Gate entscheiden,
+                # ob er den Diff selbst ändert, den Debugger öffnet oder abbricht.
+                failure_record = final_failure_record
                 break
 
             if _verify_patches(state, phase="phase_end"):

@@ -5549,3 +5549,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - ADR-0032: Ein lokaler Resume ohne CLI-Run-ID uebernahm bisher den Phase-Checkpoint, stellte aber den Run-Kontext fuer Audit- und Gate-Ereignisse nicht wieder her. Checkpoints ohne Run-ID konnten ebenfalls fortgesetzt werden.
 - Resume lehnt Checkpoints ohne Run-ID jetzt fail-closed ab. Bei lokalem Resume wird die persistierte Run-ID vor dem Worker-Start wieder aktiviert; Web-Resume prueft weiterhin die explizite ID gegen den Checkpoint.
 - Regressionstests decken fehlende Run-ID und lokale Wiederaufnahme mit stabiler Run-ID ab. Lokale Vollsuite/Quality-Gate-Verifikation steht noch aus.
+
+
+## 2026-11-12 — Verify-Recovery-Gate und Run-Kontext korrigiert
+
+- GitHub-Actions zeigte drei Integrationsfehler: neue Recovery-Events fehlten im Audit-Katalog; ein fehlgeschlagener Builder-Versuch brach vor dem menschlichen Phase-End-Gate ab; ein lokaler Resume-Test hatte ungültige YAML-Zeilenumbrüche.
+- Recovery öffnet nun auch nach einem erfolglosen automatischen Reparaturversuch das adressierte Gate mit Failure Record. Die Entscheidung bleibt beim Menschen; ein Erfolg wird weiterhin nur nach bestandener vollständiger Verify gemeldet.
+- Audit-Katalog um die Verify-Recovery- und Checkpoint-Mismatch-Events ergänzt. Resume-Fixture auf echtes mehrzeiliges YAML umgestellt.
+- CI für die vorherigen Commits: Runs 43247044555 und 43248717924 fehlgeschlagen; diese Korrektur wartet auf neue CI- und Server-Verifikation.

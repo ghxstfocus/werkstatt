@@ -735,7 +735,11 @@ def test_lokaler_resume_uebernimmt_persistierte_run_id(
     state_dir = tmp_path / ".werkstatt"
     state_dir.mkdir()
     (state_dir / "p.phase.yaml").write_text(
-        "project: p\\nrun_id: p-previous-run\\naufgabe: ziel\\ntasks: []\\n",
+        """project: p
+run_id: p-previous-run
+aufgabe: ziel
+tasks: []
+""",
         encoding="utf-8",
     )
     run_ids: list[str] = []
