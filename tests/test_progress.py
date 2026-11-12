@@ -51,6 +51,22 @@ def test_progress_read_recent_limit(tmp_path):
     assert "Task 10" in recent
     assert "Task 9" not in recent
 
+def test_progress_recent_context_is_bounded_and_keeps_newest_entries():
+    content = "\n\n".join(
+        f"## 2026-11-12T00:00:00 -- Task {i}\n- **Status:** done\n"
+        + ("x" * 2400)
+        for i in range(12)
+    )
+
+    recent = progress.recent_from_text(content, n=10, max_chars=5000)
+
+    assert len(recent) <= 5000
+    assert "Task 11" in recent
+    assert "Task 10" in recent
+    assert "Task 0" not in recent
+    assert "gekuerzt" in recent
+
+
 def test_loop_schreibt_progress(tmp_path):
     """M-307b-3 (N1): Loop schreibt PROGRESS.md bei mark_done."""
     from unittest.mock import patch
