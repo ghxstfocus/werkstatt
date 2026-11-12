@@ -1,6 +1,7 @@
 """Persist structured, bounded evidence for a failed final verification."""
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import os
@@ -8,7 +9,6 @@ import re
 import subprocess
 import tempfile
 import uuid
-import datetime
 from pathlib import Path
 from typing import Any
 
