@@ -74,17 +74,20 @@ class PhaseState:
                 self.data = {}
                 return False
 
+        task_ids: set[str] = set()
         for task in data.get("tasks", []):
             task_id = task.get("id")
             dependencies = task.get("dependencies") or []
             if (
-                task_id is not None and not isinstance(task_id, str)
-            ) or not isinstance(dependencies, list) or any(
-                not isinstance(dependency, str)
-                for dependency in dependencies
+                not isinstance(task_id, str)
+                or not task_id.strip()
+                or task_id in task_ids
+                or not isinstance(dependencies, list)
+                or any(not isinstance(dependency, str) for dependency in dependencies)
             ):
                 self.data = {}
                 return False
+            task_ids.add(task_id)
 
         self.data = data
         self.run_id = run_id
@@ -119,6 +122,13 @@ class PhaseState:
         Phasen-Struktur (M-323c) persistiert. Resume laedt sie
         ueber .data["phasen"].
         """
+        task_ids = [t.get("id", f"t{i}") for i, t in enumerate(tasks, 1)]
+        if any(
+            not isinstance(task_id, str) or not task_id.strip()
+            for task_id in task_ids
+        ) or len(set(task_ids)) != len(task_ids):
+            raise ValueError("Phase-State braucht eindeutige, nichtleere Task-IDs")
+
         now = datetime.datetime.now(datetime.UTC).isoformat()
         self.data = {
             "project": self.project_name,

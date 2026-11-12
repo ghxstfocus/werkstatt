@@ -120,6 +120,8 @@ def test_resume_blocked_wird_nach_erfolgreicher_dependency_ausfuehrbar(tmp_path)
         "tasks:\n  - not-a-mapping\n",
         "tasks:\n  - id: [not, hashable]\n",
         "tasks:\n  - id: t1\n    dependencies: invalid\n",
+        "tasks:\n  - id: t1\n  - id: t1\n",
+        "tasks:\n  - id: ''\n",
     ],
 )
 def test_load_verwirft_strukturell_ungueltigen_phase_state(
@@ -173,3 +175,13 @@ def test_save_keeps_checkpoint_details_out_of_stderr(tmp_path, capsys) -> None:
     state.init_new("Aufgabe X", [{"id": "t1", "name": "Task 1"}])
 
     assert capsys.readouterr().err == ""
+
+
+
+def test_init_new_rejects_duplicate_task_ids(tmp_path) -> None:
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+
+    with pytest.raises(ValueError, match="eindeutige"):
+        ps.init_new("X", [{"id": "same"}, {"id": "same"}])
+
+    assert not ps.exists()
