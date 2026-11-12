@@ -5859,3 +5859,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der erste Prozessfilter pruefte Interpreter und UID fuer alle Prozesse des Hosts. Unbeteiligte Prozesse mit abweichenden Rechten machten dadurch eine leere, eindeutige Prozesssuche faelschlich zu `orphaned`.
 - Die Pruefung laeuft jetzt erst nach exaktem CLI-Match; ein passender fremder Prozess bleibt weiterhin fail-closed mehrdeutig. Mehrfach gestartete Testworker teilen sich ihr isoliertes Stub-Modul ohne Dateikollision.
 - Ruff, gezielte Recovery-Tests und Quality Gate sind fuer den Folgecommit erneut auszufuehren.
+
+## ADR-0032 M1 — Recovery-CI-Nachweis (2026-11-12)
+
+- Nach dem Recovery-Review wurde die Prozesssuche auf exakte `python -m werkstatt.loop`-Argumente, denselben Interpreter und dieselbe UID begrenzt. Der Test verwendet nun echte Module mit dieser Kommandoform; ein passender Prozess fremder UID bleibt fail-closed mehrdeutig.
+- GitHub Actions Quality Gate Run [43323483767](https://github.com/ghxstfocus/werkstatt/actions/runs/43323483767) auf Commit `d2760a3`: Ruff bestanden, vollständige Suite **2139 passed, 5 skipped**, Quality Gate `ok=true`, `regression=false`.
+- Die ersten zwei CI-Läufe dieser Korrektur fanden Testharness- und Erwartungsfehler. Beide wurden anhand der Logs nachgebessert; der genannte Lauf ist der abschließend grüne Nachweis.
