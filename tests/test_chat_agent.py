@@ -450,3 +450,44 @@ def test_chat_history_truncation_obeys_character_budget(monkeypatch) -> None:
     assert sum(len(str(message.get("content") or "")) for message in prior) <= 80
     assert messages[-1] == {"role": "user", "content": "aktuelle Aufgabe"}
     assert chat_agent._CHAT_HISTORY_COMPACT_NOTE in messages[0]["content"]
+
+
+def test_active_tool_context_is_bounded_and_latest_evidence_survives() -> None:
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "do the work"},
+    ]
+    for index in range(8):
+        tool_id = f"tool-{index}"
+        messages.extend([
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": tool_id,
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "arguments": json.dumps({"path": f"file-{index}.py"}),
+                    },
+                }],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": tool_id,
+                "content": f"BEGIN-{index} " + ("x" * 5000) + f" END-{index}",
+            },
+        ])
+    original = json.loads(json.dumps(messages))
+
+    compacted = chat_agent._begrenze_aktiven_turn(messages, 1)
+    active = compacted[2:]
+    active_size = sum(chat_agent._message_size(message) for message in active)
+    serialized = json.dumps(compacted, ensure_ascii=False)
+
+    assert active_size <= chat_agent._CHAT_ACTIVE_TOOL_CHAR_BUDGET
+    assert "END-7" in serialized
+    assert "BEGIN-0" in serialized
+    assert messages == original
+    assert len(compacted) < len(messages)
+
