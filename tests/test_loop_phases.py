@@ -424,6 +424,9 @@ def _run_finalize_commit_order(
         return True, "abc123"
 
     monkeypatch.setattr(finalize, "_human_gate", _human_gate)
+    monkeypatch.setattr(
+        finalize, "_phase_end_recovery_pause", lambda *_args: False,
+    )
     monkeypatch.setattr(finalize, "_verify_patches", _verify)
     monkeypatch.setattr(finalize, "_hat_human_review_tasks", lambda _ps: False)
     monkeypatch.setattr(finalize, "_phase_end_reflection", lambda _state: True)
