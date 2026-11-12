@@ -5376,3 +5376,7 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 ## 2026-11-12 — Laufbudget an RunState
 
 `loop.main()` uebergibt jetzt das konfigurierte Projektbudget an den `RunState`; zuvor wurde es trotz YAML-Konfiguration leer initialisiert. Ein Regressionstest prueft die Durchreichung von `max_minutes` und `max_llm_calls`. Das aktiviert noch keine Budgetdurchsetzung; diese folgt als eigener Schritt mit kontrolliertem Abbruch und Audit-Ereignis.
+
+## 2026-11-12 — Run-Budgets werden durchgesetzt
+
+Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe vor dem HTTP-Aufruf. Die Erschoepfung wird einmal pro Run auditiert und als Zustand festgehalten; der Task-Loop stoppt am naechsten Checkpoint, speichert den Phase-State und meldet keinen Erfolg. Endpruefung und Prozess-Cleanup bleiben davon getrennt. Regressionstests decken beide Grenzen ab. Server-/CI-Ausfuehrung steht noch aus.
