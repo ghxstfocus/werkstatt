@@ -389,12 +389,24 @@ def run_pipeline_loop(
 
     # ADR-0032 M1: create the durable run identity before work starts.
     # Existing records are reused on resume; their original base commit stays pinned.
-    EventStore().create_run_record(
+    run_store = EventStore()
+    run_record = run_store.create_run_record(
         project_name,
         get_run_id(),
         aufgabe,
         base_commit=_git_head(state.project_dir),
     )
+    # A process can die after its filesystem checkpoint was saved. On an
+    # explicit, validated resume, re-open the same durable record for work.
+    # Keep the checkpoint payload and CAS version intact.
+    if run_record["status"] == "failed":
+        run_store.update_run_checkpoint(
+            project_name,
+            get_run_id(),
+            run_record["checkpoint"],
+            expected_version=run_record["checkpoint_version"],
+            status="running",
+        )
 
     # 0. Aufgabe in State setzen (fuer Planner)
     state.aufgabe = aufgabe

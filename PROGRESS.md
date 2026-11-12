@@ -5826,3 +5826,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Regulare Rueckgaben des Pipeline-Loops schreiben jetzt den terminalen RunRecord-Status (`completed`/`failed`) zusammen mit Exit-Code und versioniertem Checkpoint.
 - Explorer-, Plan-, Budget-, Task- und Finalize-Rueckgaben sind abgedeckt. Kontrollierte Prozessunterbrechungen werden nicht als `completed` markiert; Wiederaufnahme des RunRecords nach einem Prozessneustart bleibt noch offen.
 - Tests pruefen erfolgreiche und fehlgeschlagene Run-Abschluesse.
+
+
+## ADR-0032 M1 — explizite Wiederaufnahme eines inaktiven Runs (2026-11-12)
+
+- Web-Starts koennen einen beendeten Worker ueber `POST /api/projects/{name}/resume` mit derselben Run-ID und demselben gespeicherten Ziel/Startkontext fortsetzen. Ein neuer Auftrag oder eine neue OP-Auswahl ist bei Resume abgewiesen.
+- Recovery prueft Registry-Zustand, RunRecord-Ziel und Status, Checkpoint-Projekt/Run-ID/Ziel sowie bei GitHub-Quellen den verwalteten Worktree, Run-Branch, Repository und die gepinnte Basisrevision. Bei Unstimmigkeit startet kein Prozess.
+- Der bestehende RunRecord wird beim Wiederanlauf compare-and-swap von `failed` auf `running` gesetzt; Checkpoint-Daten und Version bleiben erhalten. Ein passendes Fresh-Backup kann wiederhergestellt werden.
+- Tests decken Identitaet, Checkpoint-Mismatch, terminale Runs, Backup-Fallback und Web-Startargumente ab. Das schliesst Worker-Neustart-Recovery ab; OP-397 bleibt offen fuer Lease/Fencing, Inbox-Integration, Checkpoint-gebundene Schreibkonflikte, Abbruch und UI-/Chat-Replay.

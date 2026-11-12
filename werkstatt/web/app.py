@@ -626,6 +626,14 @@ def create_app() -> FastAPI:
         """
         prepared_source = None
         launch_succeeded = False
+        resume_mode = bool(body and body.get("resume") is True)
+        if body and "resume" in body and not isinstance(body["resume"], bool):
+            raise HTTPException(status_code=400, detail="resume muss boolesch sein")
+        if resume_mode and set(body or {}) != {"resume"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Resume darf keine neue Aufgabe oder OP-Auswahl enthalten",
+            )
         start_context = dict(_WEB_START_CONTEXT.get() or {})
         try:
             projektname = _pruefe_projektname(name)
@@ -645,177 +653,205 @@ def create_app() -> FastAPI:
                         ),
                         "grund": "laeuft_bereits",
                     }
-            import secrets as _secrets
-            import time as _time
-            run_id = (
-                f"{projektname}-{_time.strftime('%Y%m%d-%H%M%S')}"
-                f"-{_secrets.token_hex(4)}"
-            )
-            args = [sys.executable, "-m", "werkstatt.loop",
+            recovery: dict[str, Any] | None = None
+            if resume_mode:
+                from werkstatt.web.run_recovery import (
+                    RunRecoveryError,
+                    prepare_run_recovery,
+                )
+                try:
+                    recovery = prepare_run_recovery(projektname, _pd, record)
+                except RunRecoveryError as exc:
+                    raise HTTPException(status_code=409, detail=str(exc)) from exc
+                run_id = recovery["run_id"]
+                aufgabe = recovery["goal"]
+                op_id = recovery.get("op_id") or ""
+                _source_pd = Path(recovery["project_dir"])
+                prepared_source = None
+                autonome_auswahl = None
+                explizite_auswahl = None
+                args = [
+                    sys.executable, "-m", "werkstatt.loop",
                     "--project", projektname,
                     "--headless",
                     "--run-id", run_id,
-                    "--fresh"]
-            from werkstatt import project_sources as _project_sources
-            try:
-                prepared_source = _project_sources.prepare_github_run_worktree(
-                    _pd, run_id,
-                )
-            except _project_sources.GitHubSyncError as exc:
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "github_sync_blocked", "message": str(exc)},
-                ) from exc
-            _source_pd = (
-                prepared_source.worktree_path if prepared_source is not None else _pd
-            )
-            if not (_source_pd / "docs" / "STATUS.md").is_file():
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Projekt {projektname!r} hat kein docs/STATUS.md",
-                )
-            if prepared_source is not None:
-                args.extend(["--project-dir", str(prepared_source.worktree_path)])
-            aufgabe = ""
-            op_id = ""
-            if body and isinstance(body, dict):
-                op_id = str(body.get("op_id") or "").strip()
-                aufgabe = str(body.get("aufgabe") or "").strip()
-            if aufgabe:
-                op_id = ""
-    
-            explizite_auswahl: dict[str, Any] | None = None
-            if op_id and not aufgabe:
-                if not re.fullmatch(r"OP-\d+[a-z]?", op_id):
-                    raise HTTPException(status_code=400, detail="ungueltige op_id")
-                from werkstatt.web import inspector as _insp
-                ops = _insp.parse_ops(_source_pd)
-                auswahl = next((op for op in ops if op.get("id") == op_id), None)
-                if auswahl is None:
-                    raise HTTPException(status_code=404, detail="OP nicht offen oder nicht gefunden")
-                if auswahl.get("status") != "open":
-                    raise HTTPException(status_code=409, detail="OP ist nicht als offen markiert")
-                _status_md = _source_pd / "docs" / "STATUS.md"
-                try:
-                    _status_text = _status_md.read_text(
-                        encoding="utf-8", errors="replace",
-                    )
-                except OSError as exc:
-                    raise HTTPException(
-                        status_code=500, detail="STATUS.md nicht lesbar",
-                    ) from exc
-                _entscheidung = select_next_op(
-                    _status_text,
-                    _completed_op_ids(_source_pd, _status_text),
-                    accepted_adrs=_accepted_adr_ids(_source_pd),
-                )
-                explizite_auswahl = next(
-                    (
-                        item for item in _entscheidung["kandidaten"]
-                        if item.get("id") == op_id
-                    ),
-                    None,
-                )
-                _ausgeschlossen: dict[str, Any] = next(
-                    (
-                        item for item in _entscheidung["ausgeschlossen"]
-                        if item.get("id") == op_id
-                    ),
-                    {},
-                )
-                _blocker_grund = [
-                    grund for grund in _ausgeschlossen.get("gruende", [])
-                    if (
-                        "Abhaengigkeiten" in grund
-                        or "Blocker-Angabe" in grund
-                        or "Unbekannte oder widerspruechliche Blocker" in grund
-                        or "OP-ID kommt mehrfach" in grund
-                        or "Status fehlt" in grund
-                        or "Phase-3 gesperrt" in grund
-                        or "ADR-Voraussetzungen" in grund
-                        or "Architektur-Voraussetzung" in grund
-                    )
+                    "--resume",
                 ]
-                if _blocker_grund:
+                if _source_pd != _pd.resolve():
+                    args.extend(["--project-dir", str(_source_pd)])
+                args.extend(["--aufgabe", aufgabe])
+            else:
+                import secrets as _secrets
+                import time as _time
+                run_id = (
+                    f"{projektname}-{_time.strftime('%Y%m%d-%H%M%S')}"
+                    f"-{_secrets.token_hex(4)}"
+                )
+                args = [sys.executable, "-m", "werkstatt.loop",
+                        "--project", projektname,
+                        "--headless",
+                        "--run-id", run_id,
+                        "--fresh"]
+                from werkstatt import project_sources as _project_sources
+                try:
+                    prepared_source = _project_sources.prepare_github_run_worktree(
+                        _pd, run_id,
+                    )
+                except _project_sources.GitHubSyncError as exc:
                     raise HTTPException(
                         status_code=409,
-                        detail="OP ist blockiert: " + "; ".join(_blocker_grund),
+                        detail={"code": "github_sync_blocked", "message": str(exc)},
+                    ) from exc
+                _source_pd = (
+                    prepared_source.worktree_path if prepared_source is not None else _pd
+                )
+                if not (_source_pd / "docs" / "STATUS.md").is_file():
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Projekt {projektname!r} hat kein docs/STATUS.md",
                     )
-    
-                if not aufgabe:
-                    # Volltext aus STATUS.md (nicht nur Titel): der Explorer
-                    # braucht konkrete Symbole und Pfade als Suchbegriffe.
+                if prepared_source is not None:
+                    args.extend(["--project-dir", str(prepared_source.worktree_path)])
+                aufgabe = ""
+                op_id = ""
+                if body and isinstance(body, dict):
+                    op_id = str(body.get("op_id") or "").strip()
+                    aufgabe = str(body.get("aufgabe") or "").strip()
+                if aufgabe:
+                    op_id = ""
+        
+                explizite_auswahl: dict[str, Any] | None = None
+                if op_id and not aufgabe:
+                    if not re.fullmatch(r"OP-\d+[a-z]?", op_id):
+                        raise HTTPException(status_code=400, detail="ungueltige op_id")
+                    from werkstatt.web import inspector as _insp
+                    ops = _insp.parse_ops(_source_pd)
+                    auswahl = next((op for op in ops if op.get("id") == op_id), None)
+                    if auswahl is None:
+                        raise HTTPException(status_code=404, detail="OP nicht offen oder nicht gefunden")
+                    if auswahl.get("status") != "open":
+                        raise HTTPException(status_code=409, detail="OP ist nicht als offen markiert")
                     _status_md = _source_pd / "docs" / "STATUS.md"
                     try:
                         _status_text = _status_md.read_text(
-                            encoding="utf-8", errors="replace")
+                            encoding="utf-8", errors="replace",
+                        )
                     except OSError as exc:
                         raise HTTPException(
                             status_code=500, detail="STATUS.md nicht lesbar",
                         ) from exc
-                    _m_op = re.search(
-                        rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\Z)",
-                        _status_text, re.MULTILINE | re.DOTALL)
-                    if not _m_op:
-                        raise HTTPException(status_code=404, detail="OP-Text nicht gefunden")
-                    aufgabe = _m_op.group(0).strip()
-    
-            autonome_auswahl: dict[str, Any] | None = None
-            if not aufgabe and not op_id:
-                try:
-                    status_text = (_source_pd / "docs" / "STATUS.md").read_text(
-                        encoding="utf-8", errors="replace",
+                    _entscheidung = select_next_op(
+                        _status_text,
+                        _completed_op_ids(_source_pd, _status_text),
+                        accepted_adrs=_accepted_adr_ids(_source_pd),
                     )
-                except OSError as exc:
-                    raise HTTPException(
-                        status_code=500, detail="STATUS.md nicht lesbar",
-                    ) from exc
-                entscheidung = select_next_op(
-                    status_text,
-                    _completed_op_ids(_source_pd, status_text),
-                    accepted_adrs=_accepted_adr_ids(_source_pd),
-                )
-                if entscheidung["zustand"] == "needs_input":
-                    raise HTTPException(
-                        status_code=409,
-                        detail={
-                            "code": "autonomy_selection_required",
-                            "message": entscheidung["begruendung"],
-                            "kandidaten": entscheidung["kandidaten"],
-                        },
+                    explizite_auswahl = next(
+                        (
+                            item for item in _entscheidung["kandidaten"]
+                            if item.get("id") == op_id
+                        ),
+                        None,
                     )
-                if entscheidung["zustand"] != "selected":
+                    _ausgeschlossen: dict[str, Any] = next(
+                        (
+                            item for item in _entscheidung["ausgeschlossen"]
+                            if item.get("id") == op_id
+                        ),
+                        {},
+                    )
+                    _blocker_grund = [
+                        grund for grund in _ausgeschlossen.get("gruende", [])
+                        if (
+                            "Abhaengigkeiten" in grund
+                            or "Blocker-Angabe" in grund
+                            or "Unbekannte oder widerspruechliche Blocker" in grund
+                            or "OP-ID kommt mehrfach" in grund
+                            or "Status fehlt" in grund
+                            or "Phase-3 gesperrt" in grund
+                            or "ADR-Voraussetzungen" in grund
+                            or "Architektur-Voraussetzung" in grund
+                        )
+                    ]
+                    if _blocker_grund:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="OP ist blockiert: " + "; ".join(_blocker_grund),
+                        )
+        
+                    if not aufgabe:
+                        # Volltext aus STATUS.md (nicht nur Titel): der Explorer
+                        # braucht konkrete Symbole und Pfade als Suchbegriffe.
+                        _status_md = _source_pd / "docs" / "STATUS.md"
+                        try:
+                            _status_text = _status_md.read_text(
+                                encoding="utf-8", errors="replace")
+                        except OSError as exc:
+                            raise HTTPException(
+                                status_code=500, detail="STATUS.md nicht lesbar",
+                            ) from exc
+                        _m_op = re.search(
+                            rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\Z)",
+                            _status_text, re.MULTILINE | re.DOTALL)
+                        if not _m_op:
+                            raise HTTPException(status_code=404, detail="OP-Text nicht gefunden")
+                        aufgabe = _m_op.group(0).strip()
+        
+                autonome_auswahl: dict[str, Any] | None = None
+                if not aufgabe and not op_id:
+                    try:
+                        status_text = (_source_pd / "docs" / "STATUS.md").read_text(
+                            encoding="utf-8", errors="replace",
+                        )
+                    except OSError as exc:
+                        raise HTTPException(
+                            status_code=500, detail="STATUS.md nicht lesbar",
+                        ) from exc
+                    entscheidung = select_next_op(
+                        status_text,
+                        _completed_op_ids(_source_pd, status_text),
+                        accepted_adrs=_accepted_adr_ids(_source_pd),
+                    )
+                    if entscheidung["zustand"] == "needs_input":
+                        raise HTTPException(
+                            status_code=409,
+                            detail={
+                                "code": "autonomy_selection_required",
+                                "message": entscheidung["begruendung"],
+                                "kandidaten": entscheidung["kandidaten"],
+                            },
+                        )
+                    if entscheidung["zustand"] != "selected":
+                        raise HTTPException(
+                            status_code=422,
+                            detail={
+                                "code": "no_ready_op",
+                                "message": entscheidung["begruendung"],
+                                "ausgeschlossen": entscheidung["ausgeschlossen"],
+                            },
+                        )
+                    ausgewaehlt = entscheidung["auswahl"]
+                    ausgewaehlte_aufgabe = entscheidung["aufgabe"]
+                    if (
+                        not isinstance(ausgewaehlt, dict)
+                        or not isinstance(ausgewaehlt.get("id"), str)
+                        or not re.fullmatch(r"OP-\d+[a-z]?", ausgewaehlt["id"])
+                        or not isinstance(ausgewaehlte_aufgabe, str)
+                        or not ausgewaehlte_aufgabe.strip()
+                    ):
+                        raise HTTPException(
+                            status_code=500,
+                            detail="Selector lieferte eine ungueltige Auswahl.",
+                        )
+                    autonome_auswahl = ausgewaehlt
+                    aufgabe = ausgewaehlte_aufgabe.strip()
+                    op_id = ausgewaehlt["id"]
+        
+                if not aufgabe:
                     raise HTTPException(
                         status_code=422,
-                        detail={
-                            "code": "no_ready_op",
-                            "message": entscheidung["begruendung"],
-                            "ausgeschlossen": entscheidung["ausgeschlossen"],
-                        },
+                        detail="aufgabe oder offene, nicht blockierte op_id erforderlich",
                     )
-                ausgewaehlt = entscheidung["auswahl"]
-                ausgewaehlte_aufgabe = entscheidung["aufgabe"]
-                if (
-                    not isinstance(ausgewaehlt, dict)
-                    or not isinstance(ausgewaehlt.get("id"), str)
-                    or not re.fullmatch(r"OP-\d+[a-z]?", ausgewaehlt["id"])
-                    or not isinstance(ausgewaehlte_aufgabe, str)
-                    or not ausgewaehlte_aufgabe.strip()
-                ):
-                    raise HTTPException(
-                        status_code=500,
-                        detail="Selector lieferte eine ungueltige Auswahl.",
-                    )
-                autonome_auswahl = ausgewaehlt
-                aufgabe = ausgewaehlte_aufgabe.strip()
-                op_id = ausgewaehlt["id"]
-    
-            if not aufgabe:
-                raise HTTPException(
-                    status_code=422,
-                    detail="aufgabe oder offene, nicht blockierte op_id erforderlich",
-                )
-            args.extend(["--aufgabe", aufgabe])
+                args.extend(["--aufgabe", aufgabe])
             # Der FastAPI-Threadpool kann parallele Start-Requests bedienen.
             # Recheck und Popen muessen atomar sein, sonst starten zwei Builder
             # gleichzeitig im selben Working Tree.
@@ -843,71 +879,75 @@ def create_app() -> FastAPI:
                         pass
     
                 registry = _loop_registry()
-                origin = start_context.get("origin")
-                if origin not in {"chat", "web"}:
-                    origin = "web"
-                session_id = start_context.get("session_id")
-                if (
-                    origin == "chat"
-                    and (
-                        not isinstance(session_id, str)
-                        or not _SESSION_ID_MUSTER.fullmatch(session_id)
-                    )
-                ):
-                    origin = "web"
-                    session_id = None
-                proposal_id = start_context.get("proposal_id")
-                if (
-                    not isinstance(proposal_id, str)
-                    or not re.fullmatch(r"[a-f0-9]{32}", proposal_id)
-                ):
-                    proposal_id = None
-                selection = autonome_auswahl or explizite_auswahl
-                selection_reason = start_context.get("selection_reason")
-                if not isinstance(selection_reason, (str, list, dict)):
-                    if autonome_auswahl:
-                        selection_reason = autonome_auswahl.get("gruende") or (
-                            "Auswahl durch den OP-Selector anhand von STATUS.md."
+                if resume_mode:
+                    assert recovery is not None
+                    run_context = recovery["context"]
+                else:
+                    origin = start_context.get("origin")
+                    if origin not in {"chat", "web"}:
+                        origin = "web"
+                    session_id = start_context.get("session_id")
+                    if (
+                        origin == "chat"
+                        and (
+                            not isinstance(session_id, str)
+                            or not _SESSION_ID_MUSTER.fullmatch(session_id)
                         )
-                    elif op_id:
-                        selection_reason = {
-                            "kind": "explicit_op",
-                            "summary": (
-                                "OP-ID vom Nutzer vorgegeben; aktueller Status "
-                                "und Blocker wurden vor dem Start geprueft."
-                            ),
-                        }
-                    else:
-                        selection_reason = {
-                            "kind": "direct_task",
-                            "summary": (
-                                "Direktauftrag vom Nutzer; kein Queue-OP "
-                                "automatisch ausgewaehlt."
-                            ),
-                        }
-                run_context: dict[str, Any] = {
-                    "schema_version": 1,
-                    "goal": aufgabe,
-                    "op_id": op_id or None,
-                    "origin": origin,
-                    "origin_session_id": session_id if origin == "chat" else None,
-                    "proposal_id": proposal_id if origin == "chat" else None,
-                    "selection_reason": selection_reason,
-                    "source": (
-                        {
-                            "kind": "github",
-                            "repository": prepared_source.repository,
-                            "branch": prepared_source.branch,
-                            "base_sha": prepared_source.base_sha,
-                            "pinned_sha": prepared_source.remote_sha,
-                            "run_branch": prepared_source.run_branch,
-                            "worktree": str(prepared_source.worktree_path),
-                        }
-                        if prepared_source is not None
-                        else {"kind": "local"}
-                    ),
-                    "selection": selection,
-                }
+                    ):
+                        origin = "web"
+                        session_id = None
+                    proposal_id = start_context.get("proposal_id")
+                    if (
+                        not isinstance(proposal_id, str)
+                        or not re.fullmatch(r"[a-f0-9]{32}", proposal_id)
+                    ):
+                        proposal_id = None
+                    selection = autonome_auswahl or explizite_auswahl
+                    selection_reason = start_context.get("selection_reason")
+                    if not isinstance(selection_reason, (str, list, dict)):
+                        if autonome_auswahl:
+                            selection_reason = autonome_auswahl.get("gruende") or (
+                                "Auswahl durch den OP-Selector anhand von STATUS.md."
+                            )
+                        elif op_id:
+                            selection_reason = {
+                                "kind": "explicit_op",
+                                "summary": (
+                                    "OP-ID vom Nutzer vorgegeben; aktueller Status "
+                                    "und Blocker wurden vor dem Start geprueft."
+                                ),
+                            }
+                        else:
+                            selection_reason = {
+                                "kind": "direct_task",
+                                "summary": (
+                                    "Direktauftrag vom Nutzer; kein Queue-OP "
+                                    "automatisch ausgewaehlt."
+                                ),
+                            }
+                    run_context: dict[str, Any] = {
+                        "schema_version": 1,
+                        "goal": aufgabe,
+                        "op_id": op_id or None,
+                        "origin": origin,
+                        "origin_session_id": session_id if origin == "chat" else None,
+                        "proposal_id": proposal_id if origin == "chat" else None,
+                        "selection_reason": selection_reason,
+                        "source": (
+                            {
+                                "kind": "github",
+                                "repository": prepared_source.repository,
+                                "branch": prepared_source.branch,
+                                "base_sha": prepared_source.base_sha,
+                                "pinned_sha": prepared_source.remote_sha,
+                                "run_branch": prepared_source.run_branch,
+                                "worktree": str(prepared_source.worktree_path),
+                            }
+                            if prepared_source is not None
+                            else {"kind": "local"}
+                        ),
+                        "selection": selection,
+                    }
                 reserviert, record = registry.reserve(
                     projektname, run_id, context=run_context,
                 )
@@ -1003,8 +1043,21 @@ def create_app() -> FastAPI:
                             "pinned_sha": prepared_source.remote_sha,
                             "run_branch": prepared_source.run_branch,
                         }
-                        if prepared_source is not None else None
+                        if prepared_source is not None
+                        else (
+                            {
+                                key: run_context["source"].get(key)
+                                for key in (
+                                    "repository", "branch", "base_sha",
+                                    "pinned_sha", "run_branch",
+                                )
+                            }
+                            if resume_mode
+                            and run_context.get("source", {}).get("kind") == "github"
+                            else None
+                        )
                     ),
+                    "resume": resume_mode,
                 }
     
     
@@ -1018,6 +1071,11 @@ def create_app() -> FastAPI:
                         "Could not clean up failed GitHub run worktree for %s",
                         projektname,
                     )
+
+    @app.post("/api/projects/{name}/resume")
+    def project_resume(name: str) -> dict[str, Any]:
+        """Setzt den gespeicherten, inaktiven Run mit seinem Checkpoint fort."""
+        return project_start(name, {"resume": True})
 
     @app.get("/api/projects/{name}/loop")
     def project_loop_control(name: str) -> dict[str, Any]:

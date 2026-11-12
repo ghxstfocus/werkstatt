@@ -1,0 +1,209 @@
+"""Fail-closed tests for restarting an idle durable run."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from werkstatt.event_store import EventStore
+from werkstatt.phase_state import PhaseState
+from werkstatt.web.run_recovery import RunRecoveryError, prepare_run_recovery
+
+
+def _lauf(tmp_path: Path, *, run_id: str = "demo-20261112-abc12345"):
+    project_dir = tmp_path / "demo"
+    (project_dir / "docs").mkdir(parents=True)
+    (project_dir / "docs" / "STATUS.md").write_text(
+        "### OP-1: Beispiel\n- **Status:** open\n",
+        encoding="utf-8",
+    )
+    state = PhaseState("demo", base_dir=project_dir / ".werkstatt")
+    state.init_new(
+        "Aufgabe",
+        [{"id": "task-1", "name": "Arbeit"}],
+        tests=["pytest -q"],
+        akzeptanzkriterien=["Ergebnis ist geprueft"],
+    )
+    state.run_id = run_id
+    state.save()
+
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record("demo", run_id, "Aufgabe")
+    context = {
+        "schema_version": 1,
+        "goal": "Aufgabe",
+        "op_id": "OP-1",
+        "source": {"kind": "local"},
+    }
+    registry_record = {
+        "state": "idle",
+        "run_id": run_id,
+        "context": context,
+    }
+    return project_dir, store, registry_record
+
+
+def test_prepare_run_recovery_keeps_identity_and_checkpoint(tmp_path: Path) -> None:
+    project_dir, store, record = _lauf(tmp_path)
+
+    recovery = prepare_run_recovery(
+        "demo", project_dir, record, store=store,
+    )
+
+    assert recovery["run_id"] == record["run_id"]
+    assert recovery["goal"] == "Aufgabe"
+    assert recovery["op_id"] == "OP-1"
+    assert recovery["project_dir"] == project_dir.resolve()
+    assert recovery["checkpoint"]["tasks"][0]["id"] == "task-1"
+
+
+@pytest.mark.parametrize("state", ["starting", "running", "missing"])
+def test_prepare_run_recovery_requires_idle_registry(
+    tmp_path: Path,
+    state: str,
+) -> None:
+    project_dir, store, record = _lauf(tmp_path)
+    if state == "missing":
+        record = None
+    else:
+        record["state"] = state
+
+    with pytest.raises(RunRecoveryError):
+        prepare_run_recovery("demo", project_dir, record, store=store)
+
+
+def test_prepare_run_recovery_rejects_checkpoint_from_another_run(
+    tmp_path: Path,
+) -> None:
+    project_dir, store, record = _lauf(tmp_path)
+    state = PhaseState("demo", base_dir=project_dir / ".werkstatt")
+    assert state.load()
+    state.run_id = "other-run"
+    state.save()
+
+    with pytest.raises(RunRecoveryError, match="Run-ID"):
+        prepare_run_recovery("demo", project_dir, record, store=store)
+
+
+def test_prepare_run_recovery_rejects_terminal_run_record(
+    tmp_path: Path,
+) -> None:
+    project_dir, store, record = _lauf(tmp_path)
+    run = store.get_run_record("demo", record["run_id"])
+    assert run is not None
+    store.update_run_checkpoint(
+        "demo",
+        record["run_id"],
+        run["checkpoint"],
+        expected_version=run["checkpoint_version"],
+        status="completed",
+    )
+
+    with pytest.raises(RunRecoveryError, match="nicht wiederaufnehmbar"):
+        prepare_run_recovery("demo", project_dir, record, store=store)
+
+
+def test_prepare_run_recovery_uses_matching_fresh_backup(
+    tmp_path: Path,
+) -> None:
+    project_dir, store, record = _lauf(tmp_path)
+    state_path = project_dir / ".werkstatt" / "demo.phase.yaml"
+    backup_path = state_path.with_suffix(".yaml.fresh-bak")
+    state_path.replace(backup_path)
+    wrong = PhaseState("demo", base_dir=project_dir / ".werkstatt")
+    wrong.init_new(
+        "Andere Aufgabe",
+        [{"id": "other-task", "name": "Andere Arbeit"}],
+        tests=["pytest -q"],
+        akzeptanzkriterien=["Anderes Ergebnis"],
+    )
+    wrong.run_id = "other-run"
+    wrong.save()
+
+    recovery = prepare_run_recovery("demo", project_dir, record, store=store)
+
+    assert recovery["checkpoint"]["tasks"][0]["id"] == "task-1"
+    assert recovery["project_dir"] == project_dir.resolve()
+
+
+def test_resume_route_relaunches_same_run_without_fresh_flag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_module
+    from werkstatt.web import run_recovery
+
+    project_dir = tmp_path / "demo"
+    (project_dir / "docs").mkdir(parents=True)
+    (project_dir / "docs" / "STATUS.md").write_text("status", encoding="utf-8")
+    run_id = "demo-20261112-abc12345"
+    context = {
+        "schema_version": 1,
+        "goal": "Aufgabe",
+        "op_id": None,
+        "source": {"kind": "local"},
+    }
+    registry_record = {"state": "idle", "run_id": run_id, "context": context}
+    reserved: list[tuple[str, str, dict[str, Any]]] = []
+
+    class _Registry:
+        def read(self, _project: str) -> dict[str, Any]:
+            return registry_record
+
+        def reserve(
+            self,
+            project: str,
+            selected_run_id: str,
+            *,
+            context: dict[str, Any],
+        ) -> tuple[bool, dict[str, Any]]:
+            reserved.append((project, selected_run_id, context))
+            return True, registry_record
+
+        def register(self, _project: str, _run_id: str, _pid: int) -> None:
+            return None
+
+    recovery = {
+        "run_id": run_id,
+        "goal": "Aufgabe",
+        "op_id": None,
+        "context": context,
+        "project_dir": project_dir,
+    }
+    monkeypatch.setattr(app_module, "_PROJECTS_BASE", tmp_path)
+    monkeypatch.setattr(app_module, "_loop_registry", lambda: _Registry())
+    monkeypatch.setattr(app_module, "_loop_prozess", lambda _project: None)
+    monkeypatch.setattr(
+        run_recovery, "prepare_run_recovery", lambda *_args: recovery,
+    )
+    app_module._LAUFENDE_LOOPS.clear()
+    app_module._LOOP_RUN_IDS.clear()
+    app_module._LOOP_LOG_HANDLES.clear()
+    app_module._PAUSIERTE_LOOPS.clear()
+
+    argv: list[list[str]] = []
+
+    class _Process:
+        pid = 12345
+
+    monkeypatch.setattr(
+        app_module.subprocess,
+        "Popen",
+        lambda args, **_kwargs: (argv.append(list(args)) or _Process()),
+    )
+
+    response = TestClient(app_module.app).post("/api/projects/demo/resume")
+
+    assert response.status_code == 200
+    assert response.json()["resume"] is True
+    assert response.json()["run_id"] == run_id
+    assert "--resume" in argv[0]
+    assert "--fresh" not in argv[0]
+    assert argv[0][argv[0].index("--run-id") + 1] == run_id
+    assert reserved == [("demo", run_id, context)]
