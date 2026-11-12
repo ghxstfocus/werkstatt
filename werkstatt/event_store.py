@@ -14,7 +14,7 @@ import time
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 from werkstatt.paths import werkstatt_home
 
@@ -652,6 +652,6 @@ class RunLeaseGuard:
                 # must not hide the run's original failure.
                 pass
 
-    def __exit__(self, exc_type: object, exc: object, traceback: object) -> bool:
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> Literal[False]:
         self.close()
         return False
