@@ -619,7 +619,7 @@ def create_app() -> FastAPI:
         from werkstatt.scaffold import scaffold
         try:
             bericht = scaffold(name, projekt_dir)
-        except (FileNotFoundError, NotADirectoryError) as exc:
+        except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
             raise HTTPException(status_code=500, detail=str(exc))
         return {
             "ok": True,

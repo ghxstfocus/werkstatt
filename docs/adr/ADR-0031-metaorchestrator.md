@@ -145,3 +145,18 @@ zusaetzliche, engere Regeln besitzen. Korrekturen des Nutzers koennen
 Vertragsaenderungen vorschlagen; sie erweitern weder Berechtigungen noch
 Auto-Gate-Grenzen stillschweigend. Bis die Aktivierungskriterien dieses ADRs
 belegt sind, bleiben Human Gates verbindlich.
+
+
+## Projektanlage durch den Metaorchestrator
+
+Eine natuerlichsprachliche Anweisung wie „Lege ein lokales Projekt unter
+/opt/loreipsum an“ wird als typisierte Projektanlage-Aktion behandelt. Der
+Metaorchestrator ruft denselben serverseitigen Anlagedienst wie die
+Projekt-UI auf; er baut keinen freien Shell-Befehl. Vor dem Schreiben werden
+Projektname, Zielpfad innerhalb des erlaubten Projektbereichs und moegliche
+Kollisionen geprueft. Die tatsaechliche Dateisystemaenderung benoetigt eine
+explizite Freigabe. Danach werden Scaffold, struktureller Doku-Preflight und
+Projektmanifest/Registrierung als ein nachverfolgbarer Vorgang ausgefuehrt.
+Ein Fehler wird als unvollstaendige Anlage mit konkretem Wiederherstellungspfad
+gemeldet, nie als Erfolg. GitHub-Verknuepfung und initiales Pushen bleiben
+getrennte Aktionen mit eigenen Freigaben.

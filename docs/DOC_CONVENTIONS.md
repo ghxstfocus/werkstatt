@@ -129,7 +129,12 @@ Nach jedem Schritt: eigener Commit + Push.
 ## 8. Scaffolder-Vertrag
 
 `python3 -m werkstatt.scaffold <name> --dir /opt/<name>` legt alle
-Pflicht-Dateien aus §2 an, idempotent, mit `--dry-run`.
+Pflicht-Dateien aus §2 an, idempotent, mit `--dry-run`. Nach einer echten
+Anlage prueft es alle acht Living-Docs-Pfade aus §6, UTF-8-Lesbarkeit,
+leere Dateien, nicht ersetzte Template-Platzhalter und das STATUS-Format.
+Der gleiche strukturelle Vertrag laeuft vor jedem Projekt-Run. Ein expliziter
+Leer-Marker im frischen STATUS ist gueltig; inhaltliche Wahrheit oder
+Vollstaendigkeit wird nicht heuristisch behauptet.
 
 ## 9. Migrator-Vertrag
 

@@ -5763,3 +5763,12 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   - **Commit:** `dac56a82bfbcb4d8853e60f1a075dd1e483851ad` (Snapshot-Fehlerfixture)
   - **Commit:** `18a379d7903857e35e083a83ea6ed56fde6d2ed8` (Review-Reihenfolge-Fixture)
 - GitHub Actions für den dokumentierten Stand `96473017a85f69eb18b748b7554f35a46d81f61d`: 2.095 Tests bestanden, 5 übersprungen; Ruff, mypy, AST-Check (379 Dateien), Audit-Katalog und Quality Gate grün. [Run 43300483073](https://github.com/ghxstfocus/werkstatt/actions/runs/43300483073).
+
+
+## 2026-11-12 — Doku-Vertrag pro Projekt und Greenfield-Onboarding
+
+- Befund: Scaffolder und Run-Start prueften bislang nur teilweise, ob Dokus vorhanden und lesbar sind. Fehlende Struktur, nicht ersetzte Template-Platzhalter und ein STATUS ohne OP-/Leer-Marker wurden nicht als gemeinsamer Vertrag fuer jedes Projekt erkannt.
+- Der neue deterministische Doku-Preflight prueft die acht Living-Docs-Pfade aus dem Projektmanifest, sichere Checkout-relative Pfade, UTF-8-Lesbarkeit, nichtleere Dateien, offene Template-Platzhalter und das STATUS-Grundformat. Er laeuft nach jedem realen Scaffold sowie vor jedem Run; leere Startvorlagen mit explizitem Marker bleiben gueltig.
+- OP-399/ADR-0031 verankern, dass UI und spaeterer Metaorchestrator denselben bestaetigungspflichtigen Greenfield-Anlagepfad verwenden. Projektregistrierung/Manifest muss Teil des startbaren Greenfield-Ergebnisses sein; Remote-Verknuepfung und Push bleiben separat freizugebende Aktionen.
+- Der Check behauptet keine semantische Wahrheit oder Aktualitaet ueber Dokumente. Das bleibt eine spaetere evidenzbasierte Review-Aufgabe.
+- Tests und CI-Verifikation folgen.

@@ -85,3 +85,14 @@ def test_verify_json_valide(tmp_path):
     assert len(data["stages"]) >= 1
     ids = [s["id"] for s in data["stages"]]
     assert "py_compile_changed" in ids
+
+
+def test_scaffold_prueft_auch_bestehende_doku(tmp_path):
+    import pytest
+
+    scaffold("demo", tmp_path)
+    (tmp_path / "docs/STATUS.md").write_text(
+        "# Status\n\nUnstrukturierter Zustand.\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="STATUS.md"):
+        scaffold("demo", tmp_path)

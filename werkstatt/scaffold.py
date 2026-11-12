@@ -86,6 +86,22 @@ def scaffold(
         ziel.parent.mkdir(parents=True, exist_ok=True)
         ziel.write_text(content, encoding="utf-8")
         bericht[rel] = "ueberschrieben" if exists else "angelegt"
+    if not dry_run:
+        from werkstatt.doc_contract import validate_project_docs
+
+        docs_config = {
+            "entry": "AGENTS.md",
+            "status": "docs/STATUS.md",
+            "roadmap": "docs/ROADMAP.md",
+            "architecture": "docs/ARCHITECTURE.md",
+            "progress": "PROGRESS.md",
+            "conventions": "docs/CONVENTIONS.md",
+            "adr_index": "docs/adr/README.md",
+            "glossary": "docs/glossary.md",
+        }
+        errors = validate_project_docs(project_dir, docs_config)
+        if errors:
+            raise ValueError("Scaffold-Dokuvertrag verletzt: " + "; ".join(errors))
     return bericht
 
 
@@ -112,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
             args.name, project_dir,
             dry_run=args.dry_run, force=args.force,
         )
-    except (FileNotFoundError, NotADirectoryError) as e:
+    except (FileNotFoundError, NotADirectoryError, ValueError) as e:
         print(f"FEHLER: {e}", file=sys.stderr)
         return 1
 

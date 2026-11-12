@@ -20,6 +20,7 @@ from typing import Any
 
 import yaml
 
+from werkstatt.doc_contract import validate_project_docs
 from werkstatt.paths import projects_dir as _projects_dir
 from werkstatt.state import RunState
 
@@ -137,7 +138,16 @@ def build_run_state(
     if not api_key:
         raise ValueError("DEEPSEEK_API_KEY fehlt")
 
-    docs = load_docs(cfg.get("docs", {}), pd)
+    docs_config = cfg.get("docs", {})
+    doc_errors = validate_project_docs(pd, docs_config)
+    if doc_errors:
+        print(
+            f"[FAIL] Doku-Vertrag fuer Projekt {project_name!r} verletzt: "
+            + "; ".join(doc_errors)
+            + ". Fail closed."
+        )
+        sys.exit(1)
+    docs = load_docs(docs_config, pd)
 
     # OP-053: git_author aus Manifest (projects/<name>.yaml) in RunState.
     _git_author = cfg.get("git_author", {}) or {}
