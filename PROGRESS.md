@@ -5335,3 +5335,9 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 - Befund im aktuellen Phase-Finalizer: Nach freigegebenem Human-Gate und gruener Phase-End-Verify konnte `loop_erfolg` erscheinen, obwohl geplante Tasks im PhaseState failed, blocked oder noch offen waren.
 - Finalisierung prueft jetzt den persistierten Task-Status. Unvollstaendige Tasks erzeugen ein `loop_phase`-Ereignis mit Status `incomplete`, IDs und Statusbelegen; der Prozess kehrt mit Fehlerstatus zurueck und emittiert kein `loop_erfolg`. Bereits ausdruecklich freigegebene Teil-Aenderungen koennen nach gruener Verify committed bleiben; der Run wird trotzdem nicht als vollstaendig gemeldet.
 - Regressionstests decken failed, blocked, pending, running und fehlenden Task-Status ab.
+
+
+## 2026-11-12 -- OP-398: Scout-No-Op an Phase-End-Verify gebunden
+- **Status:** done
+- **Info:** Scout-No-Op konnte Plan- und Ergebnis-Gate passieren und direkt `loop_erfolg` melden. Der Pfad in `werkstatt/phases/plan.py` fuehrt jetzt nach dem Ergebnis-Gate dieselbe Phase-End-Verify aus; bei Fehlern wird der Run als unvollstaendig auditiert und rc=1 geliefert. Die Full-Suite-Stage `pytest_regression` in `.werkstatt/verify.json` laeuft bei `phase_end` auch ohne geaenderte Python-Dateien. Regressionstest sichert Reihenfolge und Verify-Stage ab.
+- **Tests:** `tests/test_loop_planner_split.py` erweitert; CI-Verifikation folgt.
