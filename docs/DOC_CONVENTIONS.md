@@ -80,6 +80,19 @@ Migration: §7. Code-Kommentare duerfen Englisch sein.
 Erledigte Punkte werden aus STATUS.md GELOESCHT (nicht markiert).
 Sie wandern nach PROGRESS.md. Loop-Historie ist Beweis.
 
+Ein OP darf erst aus STATUS.md entfernt werden, wenn seine Akzeptanzkriterien
+am aktuellen Run geprueft und die vollstaendige Phase-End-Verify bestanden
+sind. Vor der Entfernung muss der passende `done`-Eintrag in
+PROGRESS.md erfolgreich geschrieben oder als exakt idempotenter Eintrag
+fuer dieselbe OP und Run-ID bestaetigt sein. Scheitert das Schreiben, bleibt
+der OP offen. STATUS-Aenderung und Progress-Beleg muessen durch Retry
+konsistent reconciliierbar sein.
+
+Die Delete-Zone ist nur eine kompakte Wiedereinfuehrungs-Sperrliste, keine
+zweite Historie: OP-IDs werden dedupliziert und maximal die letzten 20
+Eintraege behalten. Begruendung, Run-, Commit- und Verify-Belege gehoeren
+nach PROGRESS.md.
+
 ## 6. Manifest-Vertrag
 
     docs:
