@@ -5772,3 +5772,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - OP-399/ADR-0031 verankern, dass UI und spaeterer Metaorchestrator denselben bestaetigungspflichtigen Greenfield-Anlagepfad verwenden. Projektregistrierung/Manifest muss Teil des startbaren Greenfield-Ergebnisses sein; Remote-Verknuepfung und Push bleiben separat freizugebende Aktionen.
 - Der Check behauptet keine semantische Wahrheit oder Aktualitaet ueber Dokumente. Das bleibt eine spaetere evidenzbasierte Review-Aufgabe.
 - Tests und CI-Verifikation folgen.
+- Code-Commits: `7b48dd6434d0acb9d92ca3832e8f07440dea96ff` (Dokuvertrag, Tests, OP/ADR), `a74985f2fab93adc0c9142276e184e0043ff0648` und `62a16afc5dbb42db3fcf185cdfc2072a5229e2c2` (Ruff-Importkorrekturen).
+- GitHub Actions auf `62a16afc5dbb42db3fcf185cdfc2072a5229e2c2`: 2.104 Tests bestanden, 5 übersprungen; Ruff, mypy, AST (381 Dateien), Audit-Katalog und Quality Gate grün, `ok=true`, `regression=false`. [Run 43303935169](https://github.com/ghxstfocus/werkstatt/actions/runs/43303935169).
