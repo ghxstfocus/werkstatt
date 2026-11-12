@@ -5783,3 +5783,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Entfernt den ungefragten `[K21-SAVE]`-Debug-Print aus jedem Phase-State-Speichern; Run- und Taskdaten landen nicht mehr in stderr.
 - Regressionstest prueft, dass Checkpoint-Saves still bleiben.
 - Loop-Folgearbeit: ADR-0032 M1 (gemeinsamer persistierter Run-Vertrag und Inbox) bleibt der naechste Architektur-Schritt; bestehende Registry, Chatjobs und Phase-State werden dafuer weiter als Migrationsquellen behandelt.
+
+
+## Loop-Checkpoint-Haertung (2026-11-12)
+
+- Checkpoint-Task-IDs werden beim Anlegen und Laden auf nichtleere, eindeutige Strings geprueft. Damit koennen Task-Lookup und Dependency-Index nicht mehr unterschiedliche Tasks derselben ID verwenden.
+- Die Initialisierung validiert vor dem Schreiben; ungueltige Plaene hinterlassen keinen teilweise angelegten Checkpoint.
+- Implementierung: `10a7378` (fix(loop): reject ambiguous checkpoint task ids). GitHub Actions Quality Gate Run [43308895700](https://github.com/ghxstfocus/werkstatt/actions/runs/43308895700) erfolgreich.
