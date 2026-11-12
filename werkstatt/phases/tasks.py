@@ -274,10 +274,12 @@ def _phase_tasks_loop(
                 _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="verify_failed")
             continue
 
-        if not _run_with_progress(
+        _builder_ok = _run_with_progress(
             lambda i=i: _with_spinner(f"Builder t{i}", lambda: run_builder(state)),
             i, len(tasks), task_name,
-        ):
+        )
+        check_run_lease(state)
+        if not _builder_ok:
             # M-316 + M-317: Idempotenz-Erkennung NUR bei
             # action="create". Bei update: fail-closed (return 1).
             _loop_action = None
@@ -445,6 +447,7 @@ def _phase_tasks_loop(
             _applied_vor_al = int(
                 state.applied_count or 0)
             _refl_ok_al = _reflection_loop(state)
+            check_run_lease(state)
             _applied_nach_al = int(
                 state.applied_count or 0)
             if _refl_ok_al and _applied_nach_al > _applied_vor_al:
@@ -541,6 +544,7 @@ def _phase_tasks_loop(
                     # M-298d: Reflection statt stumm weiterlaufen.
                     # OP-061 A: Flag-Check vor fail-Pfad.
                     _refl_ok = _reflection_loop(state)
+                    check_run_lease(state)
                     if not _refl_ok:
                         if (state.auftrag_bereits_erfuellt
                                 and _verify_patches(state, phase="post_build")):
