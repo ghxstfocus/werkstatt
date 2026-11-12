@@ -5762,4 +5762,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   - **Commit:** `35db247bb8d0a8d9fb1ea92f6eb0e454b769cac7` (Legacy-State-Kompatibilität)
   - **Commit:** `dac56a82bfbcb4d8853e60f1a075dd1e483851ad` (Snapshot-Fehlerfixture)
   - **Commit:** `18a379d7903857e35e083a83ea6ed56fde6d2ed8` (Review-Reihenfolge-Fixture)
-- CI-Verifikation folgt.
+- GitHub Actions für den dokumentierten Stand `96473017a85f69eb18b748b7554f35a46d81f61d`: 2.095 Tests bestanden, 5 übersprungen; Ruff, mypy, AST-Check (379 Dateien), Audit-Katalog und Quality Gate grün. [Run 43300483073](https://github.com/ghxstfocus/werkstatt/actions/runs/43300483073).
