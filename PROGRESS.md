@@ -5865,3 +5865,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Nach dem Recovery-Review wurde die Prozesssuche auf exakte `python -m werkstatt.loop`-Argumente, denselben Interpreter und dieselbe UID begrenzt. Der Test verwendet nun echte Module mit dieser Kommandoform; ein passender Prozess fremder UID bleibt fail-closed mehrdeutig.
 - GitHub Actions Quality Gate Run [43323483767](https://github.com/ghxstfocus/werkstatt/actions/runs/43323483767) auf Commit `d2760a3`: Ruff bestanden, vollständige Suite **2139 passed, 5 skipped**, Quality Gate `ok=true`, `regression=false`.
 - Die ersten zwei CI-Läufe dieser Korrektur fanden Testharness- und Erwartungsfehler. Beide wurden anhand der Logs nachgebessert; der genannte Lauf ist der abschließend grüne Nachweis.
+
+## ADR-0032 M1 — unpruefbare Worker-PIDs bleiben reserviert (2026-11-13)
+
+- Review-Fund: Wenn `kill(pid, 0)` die Existenz eines registrierten Workers bestaetigte, aber `/proc/<pid>/stat` nicht lesbar war, wertete die Registry den Prozess als beendet und setzte den Run auf `idle`. Ein neuer Start konnte damit einen zweiten Writer neben einem noch laufenden Worker zulassen.
+- Unbekannte Prozessidentitaet und nicht klassifizierbare OS-Fehler gelten jetzt fail-closed als weiterhin belegt. Nur ein explizites `ProcessLookupError` oder eine nachweisbare PID-Identitaetsabweichung gibt die Reservierung frei.
+- Regressionstest belegt den unlesbaren Identitaetsfall durch Registry-Read und anschliessend abgewiesenen Zweitstart. Linux-Laufzeit/E2E auf dem Server bleibt separat zu verifizieren.
