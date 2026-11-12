@@ -295,3 +295,27 @@ def test_worker_discovery_ignores_processes_owned_by_other_user(
         assert process.pid not in [pid for pid, _identity in workers]
     finally:
         _stop_process(process)
+
+
+def test_unverifiable_live_pid_does_not_release_writer_reservation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from werkstatt.web import loop_registry
+
+    registry = LoopProcessRegistry(tmp_path / "registry.db")
+    assert registry.reserve("demo", "run-live") == (True, None)
+    registry.register("demo", "run-live", os.getpid())
+
+    # kill(pid, 0) proves the PID exists, but procfs identity is unreadable.
+    # Recovery must retain ownership instead of permitting a second writer.
+    monkeypatch.setattr(loop_registry.os, "kill", lambda *_args: None)
+    monkeypatch.setattr(loop_registry, "_process_snapshot", lambda _pid: None)
+
+    record = registry.read("demo")
+    assert record is not None
+    assert record["state"] == "running"
+    allowed, existing = registry.reserve("demo", "run-new")
+    assert not allowed
+    assert existing is not None
+    assert existing["run_id"] == "run-live"
