@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from contextlib import closing
 from datetime import UTC, datetime
@@ -22,6 +23,10 @@ __all__ = ["EventStore", "RunLeaseLost"]
 
 class RunLeaseLost(RuntimeError):
     """Der Worker ist nicht mehr Inhaber der aktuellen Run-Lease."""
+
+
+class RunLeaseBusy(RuntimeError):
+    """Ein anderer Worker haelt die aktive Run-Lease."""
 
 
 class EventStore:
@@ -348,6 +353,18 @@ class EventStore:
         return cur.rowcount == 1
 
 
+    def run_lease(
+        self,
+        project: str,
+        run_id: str,
+        worker_id: str,
+        *,
+        lease_seconds: float = 30.0,
+    ) -> RunLeaseGuard:
+        """Create a renewable fenced lease guard for one worker."""
+        return RunLeaseGuard(self, project, run_id, worker_id, lease_seconds)
+
+
     def enqueue_run_message(
         self,
         project: str,
@@ -540,3 +557,101 @@ class EventStore:
                 }
             )
         return ergebnis
+
+
+class RunLeaseGuard:
+    """Renew a run lease during long model/tool calls and fail closed on loss."""
+
+    def __init__(
+        self,
+        store: EventStore,
+        project: str,
+        run_id: str,
+        worker_id: str,
+        lease_seconds: float,
+    ) -> None:
+        if lease_seconds <= 0:
+            raise ValueError("lease_seconds muss positiv sein")
+        self.store = store
+        self.project = project
+        self.run_id = run_id
+        self.worker_id = worker_id
+        self.lease_seconds = lease_seconds
+        self.fencing_token: int | None = None
+        self._stop = threading.Event()
+        self._lost = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self) -> RunLeaseGuard:
+        token = self.store.acquire_run_lease(
+            self.project,
+            self.run_id,
+            self.worker_id,
+            lease_seconds=self.lease_seconds,
+        )
+        if token is None:
+            raise RunLeaseBusy(
+                f"Run bereits durch Worker belegt: {self.project}/{self.run_id}"
+            )
+        self.fencing_token = token
+        self._thread = threading.Thread(
+            target=self._heartbeat,
+            name=f"run-lease-{self.run_id[:12]}",
+            daemon=True,
+        )
+        self._thread.start()
+        return self
+
+    def assert_owned(self) -> None:
+        if self._lost.is_set() or self.fencing_token is None:
+            raise RunLeaseLost(
+                f"Run-Lease verloren: project={self.project}, run_id={self.run_id}"
+            )
+        try:
+            self.store.assert_run_lease(
+                self.project, self.run_id, self.worker_id, self.fencing_token,
+            )
+        except RunLeaseLost:
+            self._lost.set()
+            raise
+
+    def _heartbeat(self) -> None:
+        interval = min(10.0, max(0.05, self.lease_seconds / 3))
+        while not self._stop.wait(interval):
+            if self.fencing_token is None:
+                self._lost.set()
+                return
+            try:
+                renewed = self.store.renew_run_lease(
+                    self.project,
+                    self.run_id,
+                    self.worker_id,
+                    self.fencing_token,
+                    lease_seconds=self.lease_seconds,
+                )
+            except Exception:
+                renewed = False
+            if not renewed:
+                self._lost.set()
+                return
+
+    def close(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+        if self.fencing_token is not None:
+            try:
+                self.store.release_run_lease(
+                    self.project,
+                    self.run_id,
+                    self.worker_id,
+                    self.fencing_token,
+                )
+            except Exception:
+                # An expired lease is recoverable by its timestamp. Cleanup
+                # must not hide the run's original failure.
+                pass
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> bool:
+        self.close()
+        return False
