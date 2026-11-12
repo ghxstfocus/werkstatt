@@ -5602,3 +5602,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Das Control-Ereignis `loop_verify_recovery_started` nennt jetzt den konkreten Fehlerauszug der fehlgeschlagenen Verify-Stages und die laufende Versuchsnummer. Lange Details bleiben im Failure Record; erfolgreiche Stage-Ausgaben werden nicht in den Befund kopiert.
 - Ein Regressionstest prueft zwei aufeinanderfolgende Recovery-Versuche mit unterschiedlichen Stage-Befunden und stellt sicher, dass Timeline-Evidenz und Versuchnummern pro Befund passen.
 - GitHub Actions Quality Gate fuer diesen Commit muss vor Abschluss gruen sein.
+
+## 2026-11-12 — OP-403: Fortschrittsereignisse an Runs binden
+
+- Die globale PROGRESS-Deduplizierung konnte gleiche `verify_pending`-/Abschluss-Eintraege spaeterer Runs unterdruecken. Der Append-Schluessel traegt jetzt die Run-ID; Wiederholungen innerhalb desselben Runs bleiben idempotent, unterschiedliche Runs bleiben einzeln sichtbar.
+- Task-, Verify-, Abschluss- und Doku-Nachzug-Eintraege uebergeben die Run-ID. Tests decken Wiederholung im selben Run, gleiche Ereignisse in zwei Runs und Run-Zuordnung im Finalizer ab.
+- Verifikation: GitHub Actions Quality Gate fuer den Commit.

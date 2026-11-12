@@ -166,7 +166,9 @@ def _delete_zone_op_append(status_md_path: Path, op_nnn: str, subject: str) -> b
     return True
 
 
-def _progress_op_done(pd: Path, op_nnn: str, subject: str, pn: str) -> bool:
+def _progress_op_done(
+    pd: Path, op_nnn: str, subject: str, pn: str, *, run_id: str | None = None,
+) -> bool:
     """OP-048: Appendiert OP-Done-Eintrag an PROGRESS.md.
 
     OP-063b: Idempotent gegenueber bereits enthaltenem OP-Praefix.
@@ -183,6 +185,7 @@ def _progress_op_done(pd: Path, op_nnn: str, subject: str, pn: str) -> bool:
             name=f"{op_nnn}: {_subj}",
             status="done",
             info=f"Loop-Doku-Nachzug (Ebene 1). Beleg: git log {pn}.",
+            run_id=run_id,
         )
     except Exception:
         return False
@@ -333,6 +336,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             name=f"Phase abgeschlossen: {pn}",
             status="phase_ende",
             info=f"tasks_ok={_tasks_ok_k}/{_tasks_len_k}",
+            run_id=getattr(state, "run_id", None),
         )
     except Exception:
         pass
@@ -359,7 +363,10 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             if _dz_ok:
                 _rm_ok, _rm_msg = _status_md_op_entfernen(_status_path, _op_nnn)
             if _rm_ok:
-                _progress_op_done(Path(pd), _op_nnn, _subject, pn)
+                _progress_op_done(
+                    Path(pd), _op_nnn, _subject, pn,
+                    run_id=getattr(state, "run_id", None),
+                )
                 _update_kennzahlen(_status_path, Path(pd))
                 _update_changelog(Path(pd), f"{_op_nnn}: {_subject}")
                 _drift = _architecture_drift_check(Path(pd))
@@ -382,6 +389,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
                 if _already_dz:
                     _progress_op_done(
                         Path(pd), _op_nnn, _subject, pn,
+                        run_id=getattr(state, "run_id", None),
                     )
                     audit("doku_nachzug_delete_zone_retry",
                           {"op_nnn": _op_nnn}, pd, pn)

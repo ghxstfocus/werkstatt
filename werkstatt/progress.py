@@ -8,6 +8,7 @@ Getrennt von phase_state.yaml:
 Format pro Block (Parser-Anker A3):
   ## <ISO-timestamp> -- <name>
   - **Status:** done|failed|phase_ende|verify_pending
+  - **Run-ID:** konkrete Run-Zuordnung (wenn verfuegbar)
   - **Dateien:** file1.py, file2.py
   - **Patch:** +1 Zeile
   - **Info:** ...
@@ -33,6 +34,7 @@ def append(
     dateien: list[str] | None = None,
     patch: str | None = None,
     info: str | None = None,
+    run_id: str | None = None,
 ) -> bool:
     """Appendiert einen Block an PROGRESS.md.
 
@@ -44,6 +46,10 @@ def append(
     ts = datetime.now(UTC).isoformat(timespec="seconds")
     lines = [f"## {ts} -- {name}"]
     lines.append(f"- **Status:** {status}")
+    run_marker = str(run_id or "").strip()
+    if run_marker:
+        run_marker = run_marker.replace("\r", " ").replace("\n", " ")[:128]
+        lines.append(f"- **Run-ID:** {run_marker}")
     if dateien:
         lines.append(f"- **Dateien:** {', '.join(dateien)}")
     if patch:
@@ -53,11 +59,11 @@ def append(
     lines.append("")
     block = "\n".join(lines) + "\n"
 
-    # OP-036: Duplikat-Schutz. Wenn derselbe (name, status, info) schon
-    # in der Datei steht, skip. Verhindert doppelte PROGRESS.md-Eintraege
-    # wenn pipeline_phases bei einem Fehler mehrere _task_ende-Pfade
-    # durchlaeuft bevor `continue` greift.
+    # OP-036: Idempotenz innerhalb eines Runs. Mit Run-ID bleiben gleiche
+    # Ereignisse aus spaeteren Runs als eigene Historie erhalten.
     _sig_parts = [f"-- {name}", f"- **Status:** {status}"]
+    if run_marker:
+        _sig_parts.append(f"- **Run-ID:** {run_marker}")
     if info:
         _sig_parts.append(f"- **Info:** {info}")
     _sig = "\n".join(_sig_parts)

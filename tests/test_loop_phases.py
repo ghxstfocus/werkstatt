@@ -392,7 +392,7 @@ def _run_finalize_commit_order(
 ):
     from werkstatt.phases import finalize
 
-    state = _state(tmp_path)
+    state = _state(tmp_path, run_id="run-verify-1")
     state.tasks = [{"id": "t1"}]
     state.applied_count = 0
     phase_state = MagicMock()
@@ -457,6 +457,7 @@ def test_finalize_committet_erst_nach_bestandenem_phase_end_verify(
     assert rc == 0
     assert order == ["progress_pending", "verify", "commit"]
     assert [entry["status"] for entry in progress] == ["verify_pending"]
+    assert progress[0]["run_id"] == "run-verify-1"
 
 
 def test_finalize_committet_nicht_wenn_phase_end_verify_scheitert(
@@ -466,6 +467,9 @@ def test_finalize_committet_nicht_wenn_phase_end_verify_scheitert(
     assert rc == 1
     assert order == ["progress_pending", "verify", "progress_final"]
     assert [entry["status"] for entry in progress] == ["verify_pending", "phase_ende"]
+    assert [entry["run_id"] for entry in progress] == [
+        "run-verify-1", "run-verify-1",
+    ]
 
 
 

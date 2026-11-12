@@ -147,6 +147,7 @@ def _task_ende(
                 name=name or task_id,
                 status="done",
                 dateien=dateien,
+                run_id=getattr(state, "run_id", None),
             )
     else:
         phase_state.mark_failed(task_id, failure=failure or "unknown")
@@ -177,6 +178,7 @@ def _task_ende(
                 status="failed",
                 dateien=dateien,
                 info=failure,
+                run_id=getattr(state, "run_id", None),
             )
     return bool(ok)
 

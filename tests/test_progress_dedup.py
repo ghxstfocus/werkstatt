@@ -49,3 +49,22 @@ def test_unterschiedlicher_status_zaehlt_als_neu(tmp_path):
     assert ok is True
     text = (tmp_path / "PROGRESS.md").read_text(encoding="utf-8")
     assert text.count("-- x") == 2
+
+def test_gleiche_ereignisse_bleiben_pro_run_idempotent(tmp_path):
+    assert progress.append(
+        tmp_path, name="Phase abgeschlossen", status="phase_ende",
+        info="rc=0 tasks_ok=1/1", run_id="run-a",
+    ) is True
+    assert progress.append(
+        tmp_path, name="Phase abgeschlossen", status="phase_ende",
+        info="rc=0 tasks_ok=1/1", run_id="run-a",
+    ) is False
+    assert progress.append(
+        tmp_path, name="Phase abgeschlossen", status="phase_ende",
+        info="rc=0 tasks_ok=1/1", run_id="run-b",
+    ) is True
+
+    content = (tmp_path / "PROGRESS.md").read_text(encoding="utf-8")
+    assert content.count("-- Phase abgeschlossen") == 2
+    assert content.count("- **Run-ID:** run-a") == 1
+    assert content.count("- **Run-ID:** run-b") == 1

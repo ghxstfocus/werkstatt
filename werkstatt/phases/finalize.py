@@ -485,6 +485,7 @@ def _phase_finalize(
             name=f"Endpruefung: {project_name}",
             status="verify_pending",
             info=f"tasks_ok={tasks_ok}/{len(tasks)}",
+            run_id=getattr(state, "run_id", None),
         )
     if rc == 0 and not _verify_patches(state, phase="phase_end"):
         failure_record = create_failure_record(state, stage="phase_end")
@@ -821,6 +822,7 @@ def _phase_finalize(
             name=f"Phase abgeschlossen: {project_name}",
             status="phase_ende",
             info=f"rc={rc} tasks_ok={tasks_ok}/{len(tasks)}",
+            run_id=getattr(state, "run_id", None),
         )
 
     # M-456: Zusammenfassung.
