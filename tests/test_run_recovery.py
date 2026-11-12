@@ -319,3 +319,75 @@ def test_live_worker_after_register_failure_is_kept_orphaned(
 
     assert response.status_code == 500
     assert states == ["orphaned"]
+
+
+def test_resume_route_reconnects_real_registry_event_store_and_checkpoint(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The API recovery path validates durable state before relaunching a run."""
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_module
+    from werkstatt.web import run_recovery
+    from werkstatt.web.loop_registry import LoopProcessRegistry
+
+    project_dir, store, _record = _lauf(tmp_path)
+    run_id = "demo-20261112-abc12345"
+    context = {
+        "schema_version": 1,
+        "goal": "Aufgabe",
+        "op_id": "OP-1",
+        "source": {"kind": "local"},
+    }
+    registry_path = tmp_path / ".werkstatt" / "web-loop-registry.db"
+    first_registry = LoopProcessRegistry(registry_path)
+    reserved, conflict = first_registry.reserve(
+        "demo", run_id, context=context,
+    )
+    assert reserved and conflict is None
+    assert first_registry.set_state("demo", run_id, "idle")
+
+    # A new registry instance represents a web-server process after restart.
+    registry = LoopProcessRegistry(registry_path)
+    monkeypatch.setattr(app_module, "_PROJECTS_BASE", tmp_path)
+    monkeypatch.setattr(app_module, "_loop_registry", lambda: registry)
+    monkeypatch.setattr(app_module, "_loop_prozess", lambda _project: None)
+    monkeypatch.setattr(run_recovery, "EventStore", lambda: store)
+    app_module._LAUFENDE_LOOPS.clear()
+    app_module._LOOP_RUN_IDS.clear()
+    app_module._LOOP_LOG_HANDLES.clear()
+    app_module._PAUSIERTE_LOOPS.clear()
+
+    argv: list[list[str]] = []
+
+    class _Process:
+        pid = 12345
+
+    monkeypatch.setattr(
+        app_module.subprocess,
+        "Popen",
+        lambda args, **_kwargs: (argv.append(list(args)) or _Process()),
+    )
+
+    response = TestClient(app_module.app).post("/api/projects/demo/resume")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["resume"] is True
+    assert response.json()["run_id"] == run_id
+    assert "--resume" in argv[0]
+    assert "--fresh" not in argv[0]
+    assert argv[0][argv[0].index("--run-id") + 1] == run_id
+    assert argv[0][argv[0].index("--aufgabe") + 1] == "Aufgabe"
+    checkpoint = PhaseState("demo", base_dir=project_dir / ".werkstatt")
+    assert checkpoint.load()
+    assert checkpoint.run_id == run_id
+    assert checkpoint.data["tasks"][0]["id"] == "task-1"
+    persisted = registry.read("demo")
+    assert persisted is not None
+    assert persisted["run_id"] == run_id
+    assert persisted["state"] == "running"
+    assert persisted["context"] == context
+
