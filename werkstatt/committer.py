@@ -301,13 +301,61 @@ def _build_commit_subject(aufgabe: str, op_nnn: str | None) -> str:
 
 def _post_commit_check(project_dir: Path) -> tuple[bool, str, dict[str, object]]:
     """Prueft nach Commit HEAD, committed Diff und sauberen Working Tree."""
-    commands = [
-        ["git", "-C", str(project_dir), "rev-parse", "HEAD"],
-        ["git", "-C", str(project_dir), "show", "--check", "--oneline", "HEAD"],
-        ["git", "-C", str(project_dir), "status", "--porcelain", "--untracked-files=all"],
+    head_command = ["git", "-C", str(project_dir), "rev-parse", "HEAD"]
+    try:
+        head = subprocess.run(
+            head_command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+    except Exception as exc:
+        return False, "", {
+            "reason": "command_failed",
+            "message": f"rev-parse fehlgeschlagen: {exc}",
+        }
+    if head.returncode != 0:
+        return False, "", {
+            "reason": "command_failed",
+            "message": f"rev-parse rc={head.returncode}: {(head.stderr or '').strip()[:240]}",
+        }
+    sha = head.stdout.strip()
+    if not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", sha):
+        return False, sha, {
+            "reason": "invalid_head",
+            "message": "HEAD lieferte keine gueltige Commit-SHA.",
+        }
+
+    try:
+        parents = subprocess.run(
+            ["git", "-C", str(project_dir), "rev-list", "--parents", "-n", "1", sha],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+    except Exception as exc:
+        return False, sha, {
+            "reason": "command_failed",
+            "message": f"rev-list fehlgeschlagen: {exc}",
+        }
+    if parents.returncode != 0:
+        return False, sha, {
+            "reason": "command_failed",
+            "message": f"rev-list rc={parents.returncode}: {(parents.stderr or '').strip()[:240]}",
+        }
+    is_root_commit = len(parents.stdout.split()) == 1
+    diff_command = (
+        ["git", "-C", str(project_dir), "show", "--root", "--check", "--oneline", sha]
+        if is_root_commit
+        else ["git", "-C", str(project_dir), "diff", "--check", f"{sha}^", sha]
+    )
+    status_command = [
+        "git", "-C", str(project_dir), "status", "--porcelain", "--untracked-files=all",
     ]
     results: list[subprocess.CompletedProcess[str]] = []
-    for command in commands:
+    for command in (diff_command, status_command):
         try:
             result = subprocess.run(
                 command,
@@ -317,29 +365,20 @@ def _post_commit_check(project_dir: Path) -> tuple[bool, str, dict[str, object]]
                 timeout=10,
             )
         except Exception as exc:
-            return False, "", {
+            return False, sha, {
                 "reason": "command_failed",
                 "message": f"{command[3]} fehlgeschlagen: {exc}",
             }
         if result.returncode != 0:
-            return False, "", {
+            output = (result.stderr or result.stdout or "").strip()[:240]
+            return False, sha, {
                 "reason": "command_failed",
-                "message": (
-                    f"{command[3]} rc={result.returncode}: "
-                    f"{(result.stderr or '').strip()[:240]}"
-                ),
+                "message": f"{command[3]} rc={result.returncode}: {output}",
             }
         results.append(result)
 
-    sha = results[0].stdout.strip()
-    if not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", sha):
-        return False, sha, {
-            "reason": "invalid_head",
-            "message": "HEAD lieferte keine gueltige Commit-SHA.",
-        }
-
     pending: list[str] = []
-    for line in results[2].stdout.splitlines():
+    for line in results[1].stdout.splitlines():
         if line.strip():
             pending.append(line[3:].strip()[:240] if len(line) > 3 else line[:240])
         if len(pending) == 20:

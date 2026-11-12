@@ -5618,3 +5618,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - CI-Nachkorrektur: Der Whitespace-Check nutzt `git diff-tree --check --root --no-commit-id -r HEAD`, damit auch Root-Commits eindeutig behandelt werden und der reale Commit-Diff geprueft wird.
 
 - CI-Nachkorrektur: `git diff-tree --check` liefert auf dem Zielrunner Exit-Code 2; der Post-Commit-Whitespace-Check nutzt deshalb `git show --check --oneline HEAD`.
+
+- CI-Nachkorrektur: Der Whitespace-Check vergleicht jetzt direkt `HEAD^..HEAD` mit `git diff --check`; Root-Commits verwenden den `git show --root`-Pfad. Fehlermeldungen enthalten die Git-Ausgabe.
