@@ -120,6 +120,33 @@ def test_delete_zone_datei_fehlt(tmp_path):
     assert _delete_zone_op_append(tmp_path / "missing.md", "OP-1", "X") is False
 
 
+def test_progress_op_done_confirms_idempotent_existing_evidence(tmp_path):
+    from werkstatt.committer import _progress_op_done
+
+    progress = tmp_path / "PROGRESS.md"
+    progress.write_text("# Fortschritt\n", encoding="utf-8")
+
+    assert _progress_op_done(
+        tmp_path, "OP-048", "Doku-Nachzug", "demo", run_id="run-1",
+    ) is True
+    assert _progress_op_done(
+        tmp_path, "OP-048", "Doku-Nachzug", "demo", run_id="run-1",
+    ) is True
+    assert progress.read_text(encoding="utf-8").count("OP-048: Doku-Nachzug") == 1
+
+
+def test_progress_op_done_fails_without_persisted_evidence(tmp_path):
+    from unittest.mock import patch
+
+    from werkstatt.committer import _progress_op_done
+
+    (tmp_path / "PROGRESS.md").write_text("# Fortschritt\n", encoding="utf-8")
+    with patch("werkstatt.progress.append", return_value=False):
+        assert _progress_op_done(
+            tmp_path, "OP-048", "Doku-Nachzug", "demo", run_id="run-1",
+        ) is False
+
+
 # ---------- _update_kennzahlen ----------
 
 def test_update_kennzahlen_erfolg(tmp_path, monkeypatch):
