@@ -382,7 +382,8 @@ def run_pipeline_loop(
     )
     if _done or _rc_plan != 0:
         return _rc_plan
-    if state.budget_exhausted_reason:
+    from werkstatt.agent import _enforce_run_budget
+    if _enforce_run_budget(state):
         return 1
 
     # Fix AZ Stufe 8-C: Autonomer Task-Loop
