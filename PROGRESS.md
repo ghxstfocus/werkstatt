@@ -5758,4 +5758,8 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   - **Commit:** `a45f8aab8485934389af1a9d7870e7c647b1b6bb`
   - **Commit:** `cac1947fcb04481d2d0fc52e6199339be0261f28` (Ruff-Importkorrektur)
   - **Commit:** `ea8e88848659359eeff1295de02da43fc0577b43` (Ruff-Importkorrektur der Snapshot-Tests)
+  - **Commit:** `ab14060ee6e517a48bcc22802baa81a5d5250b42` (Audit-Katalog)
+  - **Commit:** `35db247bb8d0a8d9fb1ea92f6eb0e454b769cac7` (Legacy-State-Kompatibilität)
+  - **Commit:** `dac56a82bfbcb4d8853e60f1a075dd1e483851ad` (Snapshot-Fehlerfixture)
+  - **Commit:** `18a379d7903857e35e083a83ea6ed56fde6d2ed8` (Review-Reihenfolge-Fixture)
 - CI-Verifikation folgt.
