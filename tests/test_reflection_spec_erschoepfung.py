@@ -159,3 +159,36 @@ def test_erschoepfung_nach_einer_runde_kein_spec(
     )
     # 1 Runde reicht nicht fuer Spec-Widerspruch
     assert getattr(s, "spec_widerspruch_erkannt", False) is False
+
+
+def test_erschoepfung_nutzt_nur_versuche_des_aktuellen_tasks(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Vorherige Task-Repairs duerfen keinen aktuellen Spec-Widerspruch vortaeuschen."""
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "x.py").write_text("b\n")
+    state = _mk_state(tmp_path)
+    state.reflection_history = [
+        {"task_id": "vorher", "patches_applied": 1, "verify_errors": ["alt"]},
+        {"task_id": "vorher", "patches_applied": 1, "verify_errors": ["alt"]},
+    ]
+
+    monkeypatch.setattr(_builder_mod, "run_builder", lambda _state: True)
+    monkeypatch.setattr(
+        refl_mod, "_apply_patches_with_diagnose",
+        lambda _state, _patches, **_kwargs: (
+            1, [{"file": "core/x.py", "grund": "ok", "vorkommen": 1}],
+        ),
+    )
+    monkeypatch.setattr(refl_mod, "_verify_patches", lambda _state, phase=None: False)
+    monkeypatch.setattr(refl_mod, "_ruff_fix_changed", lambda _state: None)
+    monkeypatch.setattr(refl_mod, "_diff_hash_for_state", lambda _state: "same")
+    monkeypatch.setattr(refl_mod, "audit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(refl_mod, "log_line", lambda *_args, **_kwargs: None)
+
+    result = refl_mod._reflection_loop(
+        state, max_runden=1, error_context="current failure", phase="post_build",
+    )
+
+    assert result is False
+    assert state.spec_widerspruch_erkannt is False
