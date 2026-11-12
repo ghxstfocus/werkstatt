@@ -238,7 +238,7 @@ def _progress_op_done(
             marker += f"- **Run-ID:** {str(run_id).strip()[:128]}\n"
         marker += f"- **Info:** {info}"
         return marker in progress_path.read_text(encoding="utf-8")
-    except (OSError, Exception):
+    except Exception:
         return False
 
 
@@ -579,8 +579,12 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
                   {"reason": "no_status_md", "op_nnn": _op_nnn}, pd, pn)
         else:
             _subject = (state.aufgabe or "").strip().split("\n")[0][:60]
-            # M-Fix-2026-11-02: Delete-Zone-Append VOR dem Entfernen pruefen.
-            # Sonst geht der OP spurlos verloren wenn die Sektion fehlt.
+            try:
+                _status_before = _status_path.read_text(encoding="utf-8")
+            except OSError:
+                _status_before = None
+            # Delete-Zone erst sichern; der OP-Block wird nur entfernt,
+            # wenn anschliessend auch der passende Progress-Beleg bestaetigt ist.
             _dz_ok = _delete_zone_op_append(_status_path, _op_nnn, _subject)
             if not _dz_ok:
                 audit("doku_nachzug_skip",
@@ -590,10 +594,6 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             if _dz_ok:
                 _rm_ok, _rm_msg = _status_md_op_entfernen(_status_path, _op_nnn)
             if _rm_ok:
-                try:
-                    _status_before = _status_path.read_text(encoding="utf-8")
-                except OSError:
-                    _status_before = None
                 _progress_ok = _progress_op_done(
                     Path(pd), _op_nnn, _subject, pn,
                     run_id=getattr(state, "run_id", None),
