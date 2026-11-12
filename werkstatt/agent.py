@@ -111,6 +111,27 @@ def _rolle_aus_aufgabe(aufgabe: str) -> str:
     return "unbekannt"
 
 
+def _run_budget_limit(state: RunState) -> tuple[str, str] | None:
+    """Liefert die erste erreichte harte Run-Grenze, falls vorhanden."""
+    budget = state.budget if isinstance(state.budget, dict) else {}
+    max_calls = budget.get("max_llm_calls")
+    if (isinstance(max_calls, int) and not isinstance(max_calls, bool)
+            and max_calls > 0 and state.llm_calls >= max_calls):
+        return "max_llm_calls", f"LLM-Aufrufbudget erreicht ({max_calls})."
+
+    max_minutes = budget.get("max_minutes")
+    if (isinstance(max_minutes, int) and not isinstance(max_minutes, bool)
+            and max_minutes > 0 and state.start_monotonic > 0):
+        elapsed = time.monotonic() - state.start_monotonic
+        if elapsed >= max_minutes * 60:
+            return (
+                "max_minutes",
+                f"Zeitbudget erreicht ({max_minutes} Minuten; "
+                f"vergangen {int(elapsed)} Sekunden).",
+            )
+    return None
+
+
 def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             model: str, temperature: float, timeout: int = 120,
             *, state: RunState | None = None,
@@ -129,6 +150,25 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
     route = route_for_role(rolle or aufgabe, model)
     model = route.model
     if state is not None:
+        if state.budget_exhausted_reason:
+            return LLMReply(ok=False, error=state.budget_exhausted_reason)
+        limit = _run_budget_limit(state)
+        if limit is not None:
+            dimension, reason = limit
+            state.budget_exhausted_reason = reason
+            audit(
+                "loop_budget_exhausted",
+                {
+                    "dimension": dimension,
+                    "reason": reason,
+                    "llm_calls": state.llm_calls,
+                    "max_llm_calls": state.budget.get("max_llm_calls"),
+                    "max_minutes": state.budget.get("max_minutes"),
+                },
+                state.project_dir,
+                state.project_name,
+            )
+            return LLMReply(ok=False, error=reason)
         state.llm_calls += 1
     # Redaction: vor dem Senden anwenden
     # Auflage 2113: max_len=100_000, damit Block-Auftraege
