@@ -299,6 +299,28 @@ def load_project_config(project_name: str) -> dict:
 
 
 
+
+def _persist_run_result(
+    store: EventStore,
+    project_name: str,
+    run_id: str,
+    exit_code: int,
+) -> None:
+    """Mark the durable run terminal with a version-checked final checkpoint."""
+    record = store.get_run_record(project_name, run_id)
+    if record is None:
+        return
+    checkpoint = dict(record["checkpoint"])
+    checkpoint["exit_code"] = exit_code
+    store.update_run_checkpoint(
+        project_name,
+        run_id,
+        checkpoint,
+        expected_version=record["checkpoint_version"],
+        status="completed" if exit_code == 0 else "failed",
+    )
+
+
 def run_pipeline_loop(
     project_name: str,
     aufgabe: str,
@@ -382,6 +404,7 @@ def run_pipeline_loop(
         state, aufgabe, project_name, phase_state,
     )
     if _rc_exp != 0:
+        _persist_run_result(EventStore(), project_name, get_run_id(), _rc_exp)
         return _rc_exp
 
     # 1. Plan-Gate (leer -> Planner muss erst laufen)
@@ -393,18 +416,23 @@ def run_pipeline_loop(
         state, aufgabe, project_name, phase_state,
     )
     if _done or _rc_plan != 0:
+        _persist_run_result(EventStore(), project_name, get_run_id(), _rc_plan)
         return _rc_plan
     from werkstatt.agent import _enforce_run_budget
     if _enforce_run_budget(state):
+        _persist_run_result(EventStore(), project_name, get_run_id(), 1)
         return 1
 
     # Fix AZ Stufe 8-C: Autonomer Task-Loop
     _rc_task, tasks_ok, tasks = _phase_tasks_loop(state, phase_state)
     if _rc_task != 0:
+        _persist_run_result(EventStore(), project_name, get_run_id(), _rc_task)
         return _rc_task
 
     # Fix AZ Stufe 8-D: Phase-End-Review + Human-Gate + Verify + PROGRESS + Summary
-    return _phase_finalize(state, tasks_ok, tasks, project_name, phase_state)
+    rc = _phase_finalize(state, tasks_ok, tasks, project_name, phase_state)
+    _persist_run_result(EventStore(), project_name, get_run_id(), rc)
+    return rc
 
 
 def _k13_rc(rc: int, tasks_ok: int) -> int:

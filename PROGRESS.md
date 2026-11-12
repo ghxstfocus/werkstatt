@@ -5819,3 +5819,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 
 - CI-Follow-up: interne Inbox-Nachrichtenklasse in `job_notice` umbenannt; dadurch wird sie nicht als Audit-Event-Katalogeintrag fehlinterpretiert.
+
+
+## ADR-0032 M1 — terminale Run-Status (2026-11-12)
+
+- Regulare Rueckgaben des Pipeline-Loops schreiben jetzt den terminalen RunRecord-Status (`completed`/`failed`) zusammen mit Exit-Code und versioniertem Checkpoint.
+- Explorer-, Plan-, Budget-, Task- und Finalize-Rueckgaben sind abgedeckt. Kontrollierte Prozessunterbrechungen bleiben als wiederaufnehmbarer Zustand erhalten und werden nicht als normal abgeschlossen markiert.
+- Tests pruefen erfolgreiche und fehlgeschlagene Run-Abschluesse.

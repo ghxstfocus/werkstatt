@@ -230,3 +230,32 @@ def test_task_checkpoint_consumes_chat_notice_with_run_record(
     assert store.claim_run_message(
         "demo", "run-inbox", "worker-next",
     ) is None
+
+
+def test_run_result_marks_terminal_status_with_exit_code(
+    tmp_path: Path,
+) -> None:
+    from werkstatt.loop import _persist_run_result
+
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-success", "Finish task")
+    _persist_run_result(store, "demo", "run-success", 0)
+    result = store.get_run_record("demo", "run-success")
+
+    assert result is not None
+    assert result["status"] == "completed"
+    assert result["checkpoint"]["exit_code"] == 0
+    assert result["checkpoint_version"] == 1
+
+
+def test_failed_run_result_is_persisted(tmp_path: Path) -> None:
+    from werkstatt.loop import _persist_run_result
+
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-failed", "Repair task")
+    _persist_run_result(store, "demo", "run-failed", 1)
+    result = store.get_run_record("demo", "run-failed")
+
+    assert result is not None
+    assert result["status"] == "failed"
+    assert result["checkpoint"]["exit_code"] == 1
