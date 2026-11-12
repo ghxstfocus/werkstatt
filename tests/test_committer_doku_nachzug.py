@@ -283,5 +283,5 @@ def test_op_doku_snapshot_stellt_geaenderte_und_neue_dateien_wieder_her(tmp_path
 
 def test_op_doku_snapshot_scheitert_bei_nicht_lesbarem_pfad(tmp_path):
     (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "STATUS.md").mkdir()
+    (tmp_path / "docs" / "STATUS.md").write_bytes(b"\xff")
     assert _snapshot_op_doku(tmp_path) is None
