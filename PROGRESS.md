@@ -5797,3 +5797,12 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Das Plan-Gate prueft Task-IDs und Dependency-Graphen vor der Freigabe: unbekannte, doppelte und selbstreferenzierende Abhaengigkeiten sowie Zyklen werden als konkreter Planfehler zurueckgegeben.
 - Der bestehende Plan-Reflection-Pfad erhaelt `TASK_GRAPH` samt Diagnose und kann den Plan neu erzeugen; ungueltige Tasks erreichen weder Human-Gate noch Checkpoint.
 - Tests decken fehlerhafte Graphen und einen gueltigen gerichteten azyklischen Graphen ab. Implementiert in `f3fadcf` mit Legacy-Normalisierung in `cbf758f`; GitHub Actions Quality Gate [Run 43310954928](https://github.com/ghxstfocus/werkstatt/actions/runs/43310954928) erfolgreich.
+
+
+## ADR-0032 M1 — persistierter Run-Vertrag, erster Baustein (2026-11-12)
+
+- Der bestehende Event-Store erhaelt additive SQLite-Tabellen fuer RunRecord und Run-Inbox. Dadurch entsteht kein separates Laufzeit-DB-System neben EventStore, Chatjobs und Registry.
+- Checkpoints werden mit Compare-and-Swap-Versionen gespeichert. Inbox-Nachrichten sind je Projekt/Run/Message-ID idempotent; abweichender Inhalt unter derselben ID wird abgelehnt.
+- Inbox-Leases erhalten bei jedem Claim einen neuen Fencing-Token. Ein abgelaufener Worker kann nach Wiederuebernahme keine Nachricht mehr bestaetigen.
+- Tests decken Versionkonflikte, Idempotenz, Konflikt-ID, fehlenden RunRecord sowie Lease-Recovery/Fencing ab.
+- Dieser Commit ist die Persistenzgrundlage, noch keine vollstaendige M1-Integration: Loop-Start/Ende, Chatjob-Annahme und sichere Checkpoint-Dispatches werden als naechste Schritte an dieselbe Run-ID angeschlossen.

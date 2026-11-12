@@ -1,7 +1,10 @@
 """Tests fuer den Event-Store (OP-122): append+query, kind-Filter, since_seq-Export."""
 
 import json
+import time
 from pathlib import Path
+
+import pytest
 
 from werkstatt.event_store import EventStore
 
@@ -97,3 +100,79 @@ def test_append_with_event_id_is_idempotent_and_project_scoped(
     assert events[0]["payload"] == {"job_id": "job-1"}
     assert store.query("run-a", project="other") == []
 
+
+
+def test_run_record_checkpoint_is_compare_and_swap(tmp_path: Path) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    record = store.create_run_record(
+        "demo", "run-1", "Repair the loop", base_commit="abc123",
+    )
+    assert record["checkpoint_version"] == 0
+
+    version = store.update_run_checkpoint(
+        "demo", "run-1", {"next_action": "verify"}, expected_version=0,
+    )
+    assert version == 1
+    current = store.get_run_record("demo", "run-1")
+    assert current is not None
+    assert current["checkpoint"] == {"next_action": "verify"}
+
+    with pytest.raises(RuntimeError, match="parallel geaendert"):
+        store.update_run_checkpoint(
+            "demo", "run-1", {"next_action": "stale"}, expected_version=0,
+        )
+
+
+def test_run_inbox_is_idempotent_and_fenced_after_lease_recovery(
+    tmp_path: Path,
+) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-2", "Handle user follow-up")
+
+    first = store.enqueue_run_message(
+        "demo", "run-2", "msg-1", "question", {"text": "What changed?"},
+    )
+    retry = store.enqueue_run_message(
+        "demo", "run-2", "msg-1", "question", {"text": "What changed?"},
+    )
+    assert retry == first
+
+    old_worker = store.claim_run_message(
+        "demo", "run-2", "worker-old", lease_seconds=0.01,
+    )
+    assert old_worker is not None
+    time.sleep(0.03)
+
+    new_worker = store.claim_run_message(
+        "demo", "run-2", "worker-new", lease_seconds=10,
+    )
+    assert new_worker is not None
+    assert new_worker["fencing_token"] > old_worker["fencing_token"]
+    assert not store.acknowledge_run_message(
+        first, "worker-old", old_worker["fencing_token"],
+    )
+    assert store.acknowledge_run_message(
+        first, "worker-new", new_worker["fencing_token"],
+    )
+    assert store.claim_run_message(
+        "demo", "run-2", "worker-third",
+    ) is None
+
+
+def test_run_inbox_rejects_orphan_and_idempotency_conflict(
+    tmp_path: Path,
+) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    with pytest.raises(ValueError, match="RunRecord fehlt"):
+        store.enqueue_run_message(
+            "demo", "missing-run", "msg-1", "question", {"text": "hello"},
+        )
+
+    store.create_run_record("demo", "run-3", "Follow-up")
+    store.enqueue_run_message(
+        "demo", "run-3", "msg-1", "question", {"text": "first"},
+    )
+    with pytest.raises(ValueError, match="wiederverwendet"):
+        store.enqueue_run_message(
+            "demo", "run-3", "msg-1", "question", {"text": "different"},
+        )
