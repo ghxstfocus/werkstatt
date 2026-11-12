@@ -41,6 +41,7 @@ from werkstatt.git_ops import (  # Fix AZ Stufe 1: Re-Export
     _git_head,
     _git_reset,
     _git_stash,
+    _git_stash_owned,
     _git_stash_pop,
 )
 from werkstatt.hooks import _call_hook  # Fix AZ Stufe 2: Re-Export
@@ -133,6 +134,7 @@ __all__ = [
     "_git_head",
     "_git_reset",
     "_git_stash",
+    "_git_stash_owned",
     "_git_stash_pop",
     "_human_gate",
     "_human_gate_plan",
@@ -793,23 +795,11 @@ def _main_inner(argv: list[str] | None = None) -> int:
             global _STOP_SIGNAL_DEFERRED
             _STOP_SIGNAL_DEFERRED = True
             try:
-                _stash_before = _git_stash_head(_pd)
-                if _STOP_SIGNAL is not None:
-                    raise _LoopStopRequested(_STOP_SIGNAL)
-                _stash_ok = _git_stash(_pd)
-                _stash_after = _git_stash_head(_pd)
-                _had_stash = (
-                    _stash_after is not None and _stash_after != _stash_before
-                )
+                _stash_ref = _git_stash_owned(_pd)
+                _stash_after = _stash_ref
+                _had_stash = _stash_ref is not None
                 _dirty_after_stash = _git_dirty(_pd)
-                _stash_ref_unknown = (
-                    _stash_ok
-                    and _stash_before is None
-                    and _stash_after is None
-                )
-                if not _had_stash and (
-                    _dirty_after_stash or _stash_ref_unknown
-                ):
+                if not _had_stash or _dirty_after_stash:
                     audit(
                         "loop_stash_failed",
                         {
@@ -818,13 +808,13 @@ def _main_inner(argv: list[str] | None = None) -> int:
                                 if _dirty_after_stash
                                 else "stash_ref_missing"
                             ),
-                            "stash_ok": _stash_ok,
+                            "stash_owned": _had_stash,
                         },
                         _pd, args.project,
                     )
                     raise RuntimeError(
-                        "Lokale Aenderungen konnten nicht sicher gesichert werden; "
-                        "der Loop startet nicht."
+                        "Lokale Aenderungen konnten nicht eindeutig diesem Run "
+                        "zugeordnet gesichert werden; der Loop startet nicht."
                     )
             finally:
                 _STOP_SIGNAL_DEFERRED = False

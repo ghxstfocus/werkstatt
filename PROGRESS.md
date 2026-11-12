@@ -5579,3 +5579,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Chat-Bestaetigungen uebergaben bisher nur Auftrag/OP-ID an den Web-Start. Die Registry markierte dadurch auch Chatstarts als `origin: web`; Session, bestaetigter Vorschlag und Auswahlgrund gingen im Run-Kontext verloren.
 - Der bestaetigte Start setzt nun request-lokale Herkunftsmetadaten. Die Registry persistiert Chat-Session, Proposal-ID und Auswahlgrund zusammen mit dem vorhandenen Ziel, OP und gepinnten Source-Kontext. Direkte Webstarts erhalten einen expliziten Grund fuer die Nutzerauswahl bzw. den Direktauftrag.
 - Tests decken Web-Direktstart-Metadaten, Chat→Start-Kontext und Auswahlgrund ab. GitHub Actions Quality Gate Run [43258824522](https://github.com/ghxstfocus/werkstatt/actions/runs/43258824522) ist gruen: 2060 Tests, Ruff 0, Mypy 0, AST 378 Dateien ohne Fehler und Audit-Katalog bestanden.
+
+
+## 2026-11-12 — OP-397: Git-Stash nur mit Run-Marker zuordnen
+
+- Der Loop wertete bisher eine Veraenderung an `refs/stash` als Beleg fuer eigenen Besitz. Ein gleichzeitig angelegter fremder Stash konnte dadurch beim Cleanup versehentlich wiederhergestellt werden.
+- Stash-Erzeugung sucht jetzt den eindeutigen `werkstatt-loop:<uuid>` Marker in der Stash-Reflog-Nachricht und liefert ausschliesslich den zugehoerigen Commit-Hash. Fehlender, mehrdeutiger oder nicht lesbarer Nachweis stoppt den Run fail-closed; ein fremder Stash wird nicht als Cleanup-Ziel verwendet.
+- Die Laufzeit-Restore-Tests verwenden den explizit belegten Hash und pruefen auch, dass ein fehlender Besitznachweis den Builder nicht startet. GitHub-CI/Quality-Gate muss die Aenderung noch ausfuehren.

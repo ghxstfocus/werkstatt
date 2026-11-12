@@ -62,18 +62,51 @@ def _git_head(pd: Path) -> str:
         return ""
 
 
-def _git_stash(pd: Path) -> bool:
-    """M-353b: Sichert dirty tree via git stash."""
+def _git_stash_owned(pd: Path) -> str | None:
+    """Create a uniquely marked stash and return its exact commit if verifiable.
+
+    A changed refs/stash alone does not prove ownership: another actor can
+    add a stash while this command runs. Match the per-call marker in the
+    reflog subject and require exactly one valid commit.
+    """
+    marker = f"werkstatt-loop:{uuid.uuid4().hex}"
     try:
-        marker = f"werkstatt-loop:{uuid.uuid4().hex}"
-        res = subprocess.run(
+        subprocess.run(
             ["git", "-C", str(pd), "stash", "push", "-u", "-m", marker],
             capture_output=True, text=True, timeout=30, check=False,
         )
-        return res.returncode == 0
-    except Exception:
-        return False
+    except (OSError, subprocess.SubprocessError):
+        # The command may have created the stash before timing out. Inspect
+        # by unique marker; never infer ownership from refs/stash.
+        pass
 
+    try:
+        listed = subprocess.run(
+            ["git", "-C", str(pd), "stash", "list", "--format=%H%x09%gs"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if listed.returncode != 0:
+        return None
+
+    matches: list[str] = []
+    for line in listed.stdout.splitlines():
+        commit, separator, subject = line.partition("\t")
+        if not separator or marker not in subject:
+            continue
+        if (
+            len(commit) not in (40, 64)
+            or any(char not in "0123456789abcdefABCDEF" for char in commit)
+        ):
+            return None
+        matches.append(commit)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _git_stash(pd: Path) -> bool:
+    """Compatibility wrapper; cleanup callers must retain the exact ref."""
+    return _git_stash_owned(pd) is not None
 
 def _git_stash_pop(pd: Path, stash_ref: str | None = None) -> bool:
     """Restore only this run's stash; retain it if restoration conflicts."""
@@ -132,5 +165,6 @@ __all__ = [
     "_git_head",
     "_git_reset",
     "_git_stash",
+    "_git_stash_owned",
     "_git_stash_pop",
 ]

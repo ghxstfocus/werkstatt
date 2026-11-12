@@ -265,9 +265,8 @@ def test_main_stash_pop_bei_erfolg(tmp_path, monkeypatch):
     with _silence_renderer(), _patch_main_config(tmp_path), \
          patch("werkstatt.loop.run_pipeline_loop", _loop_runner(1, 0)), \
          patch("werkstatt.loop._git_head", return_value="abc"), \
-         patch("werkstatt.loop._git_dirty", return_value=True), \
-         patch("werkstatt.loop._git_stash", return_value=True), \
-         patch("werkstatt.loop._git_stash_head", side_effect=["b" * 40, "a" * 40]), \
+         patch("werkstatt.loop._git_dirty", side_effect=[True, False]), \
+         patch("werkstatt.loop._git_stash_owned", return_value="a" * 40), \
          patch("werkstatt.loop._git_stash_pop", _fake_pop):
         rc = loop.main(["--project", "p", "--aufgabe", "a"])
     assert rc == 0
@@ -289,9 +288,8 @@ def test_main_stops_if_dirty_tree_was_not_stashed(tmp_path, monkeypatch):
         patch("werkstatt.loop.run_pipeline_loop", _runner),
         patch("werkstatt.loop._git_head", return_value="abc"),
         patch("werkstatt.loop._git_dirty", side_effect=[True, True]),
-        patch("werkstatt.loop._git_stash", return_value=True),
-        patch("werkstatt.loop._git_stash_head", side_effect=[None, None]),
-        pytest.raises(RuntimeError, match="nicht sicher gesichert"),
+        patch("werkstatt.loop._git_stash_owned", return_value=None),
+        pytest.raises(RuntimeError, match="nicht eindeutig diesem Run"),
     ):
         loop.main(["--project", "p", "--aufgabe", "a"])
 
@@ -397,10 +395,9 @@ def test_main_stash_pop_bei_exception(tmp_path, monkeypatch):
         _patch_main_config(tmp_path),
         patch("werkstatt.loop.run_pipeline_loop", _boom),
         patch("werkstatt.loop._git_head", return_value="abc"),
-        patch("werkstatt.loop._git_dirty", return_value=True),
-        patch("werkstatt.loop._git_stash", return_value=True),
-        patch("werkstatt.loop._git_stash_head", side_effect=["b" * 40, "a" * 40]),
-        patch("werkstatt.loop._git_stash_pop", _fake_pop),
+        patch("werkstatt.loop._git_dirty", side_effect=[True, False]),
+        patch("werkstatt.loop._git_stash_owned", return_value="a" * 40),
+                patch("werkstatt.loop._git_stash_pop", _fake_pop),
         pytest.raises(RuntimeError, match="run_pipeline_loop boom"),
     ):
         loop.main(["--project", "p", "--aufgabe", "a"])
@@ -477,10 +474,9 @@ def test_main_sigterm_saves_and_restores_stash(tmp_path, monkeypatch):
         _patch_main_config(tmp_path),
         patch("werkstatt.loop.run_pipeline_loop", _request_stop),
         patch("werkstatt.loop._git_head", return_value="abc"),
-        patch("werkstatt.loop._git_dirty", return_value=True),
-        patch("werkstatt.loop._git_stash", return_value=True),
-        patch("werkstatt.loop._git_stash_head", side_effect=["b" * 40, "a" * 40]),
-        patch("werkstatt.loop._git_stash_pop", _fake_pop),
+        patch("werkstatt.loop._git_dirty", side_effect=[True, False]),
+        patch("werkstatt.loop._git_stash_owned", return_value="a" * 40),
+                patch("werkstatt.loop._git_stash_pop", _fake_pop),
         patch("werkstatt.loop._emit_lifecycle_end", _capture_lifecycle),
     ):
         rc = loop.main(["--project", "p", "--aufgabe", "a"])
