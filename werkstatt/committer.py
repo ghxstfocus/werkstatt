@@ -95,6 +95,20 @@ def _op_nnn_aus_aufgabe(aufgabe: str) -> str | None:
     m = re.search(r"\bOP-\d{3}[a-z]?\d*\b", aufgabe or "")
     return m.group(0) if m else None
 
+def _op_nnn_als_expliziter_auftrag(aufgabe: str) -> str | None:
+    """Liefert eine OP nur bei expliziter OP-Kopfzeile des Auftrags.
+
+    Freie Erwaehnungen (z. B. eine blockierende oder verwandte OP) duerfen
+    keine STATUS-Entfernung ausloesen. Die Doku-Automatik akzeptiert deshalb
+    nur eine erste Zeile im Format OP-NNN: Auftrag.
+    """
+    erste_zeile = (aufgabe or "").splitlines()[0].strip() if aufgabe else ""
+    match = re.match(
+        r"^(?:#{1,6}\\s*)?(OP-\\d{3}[a-z]?\\d*)\\s*:\\s*\\S",
+        erste_zeile,
+        re.IGNORECASE,
+    )
+    return match.group(1) if match else None
 
 def _status_md_op_entfernen(status_md_path: Path, op_nnn: str) -> tuple[bool, str]:
     """OP-048: Entfernt '### OP-NNN'-Block bis zur naechsten Ueberschrift."""
@@ -571,7 +585,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
 
     # OP-048/055/056/057: Doku-Selbstpflege Ebene 1+2 (opt-in WERKSTATT_DOKU_NACHZUG=1).
     if _doku_nachzug_aktiv():
-        _op_nnn = _op_nnn_aus_aufgabe(state.aufgabe or "")
+        _op_nnn = _op_nnn_als_expliziter_auftrag(state.aufgabe or "")
         _status_path = Path(pd) / "docs" / "STATUS.md"
         if not _op_nnn:
             audit("doku_nachzug_skip", {"reason": "no_op_in_aufgabe"}, pd, pn)
