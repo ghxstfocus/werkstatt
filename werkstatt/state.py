@@ -286,6 +286,8 @@ class RunState:
     last_verify_hart_stages: set = field(default_factory=set)
     messungen_nach_apply: list = field(default_factory=list)
     phase_review_uebersprungen: str = ""
+    # True only after phase review (or explicit review-gate approval).
+    phase_review_approved: bool = False
     progress_written_at_commit: bool = False
     reflection_erschoepft: bool = False
     reflection_phase: bool = False
