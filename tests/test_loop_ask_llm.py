@@ -124,6 +124,33 @@ def test_state_llm_calls_zaehlt_einmal(tmp_path):
     assert s.llm_calls == 1
 
 
+
+def test_run_llm_call_budget_blocks_before_network(tmp_path):
+    s = _state(tmp_path)
+    s.budget = {"max_llm_calls": 1}
+    s.llm_calls = 1
+    with patch("werkstatt.agent.requests.post") as post:
+        reply = _call(s)
+    post.assert_not_called()
+    assert reply.ok is False
+    assert "Aufrufbudget erreicht" in reply.error
+    assert s.llm_calls == 1
+    assert s.budget_exhausted_reason == reply.error
+
+
+def test_run_time_budget_blocks_before_network(tmp_path):
+    s = _state(tmp_path)
+    s.budget = {"max_minutes": 1}
+    s.start_monotonic = agent.time.monotonic() - 61
+    with patch("werkstatt.agent.requests.post") as post:
+        reply = _call(s)
+    post.assert_not_called()
+    assert reply.ok is False
+    assert "Zeitbudget erreicht" in reply.error
+    assert s.llm_calls == 0
+    assert s.budget_exhausted_reason == reply.error
+
+
 def test_ohne_state_kein_crash(tmp_path):
     with patch("werkstatt.agent.requests.post",
                return_value=_ok_response()):
