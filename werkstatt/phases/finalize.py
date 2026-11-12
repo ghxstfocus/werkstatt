@@ -138,6 +138,17 @@ def _phase_finalize(
         rc = 2
 
     # M-476: Phase-End Verify (Vollsuite) nach human_gate.
+    # Die harte Doku-Pruefung laeuft auf dem aktuellen Worktree. Schreibe
+    # deshalb vor ihr einen wahrheitsgetreuen Eintrag: die Arbeit ist
+    # abgeschlossen und wartet auf Endpruefung. Das Endergebnis folgt danach.
+    if rc == 0 and not state.progress_written_at_commit:
+        from werkstatt import progress as _progress
+        _progress.append(
+            pd,
+            name=f"Endpruefung: {project_name}",
+            status="verify_pending",
+            info=f"tasks_ok={tasks_ok}/{len(tasks)}",
+        )
     if rc == 0 and not _verify_patches(state, phase="phase_end"):
         audit("loop_gate_failed",
               _gate_failed_payload("phase_end", []), pd, pn)
@@ -230,3 +241,4 @@ def _phase_finalize(
         pass
 
     return rc
+

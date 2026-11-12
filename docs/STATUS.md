@@ -7,6 +7,14 @@ Format gemaess `DOC_CONVENTIONS.md` §5. Diese Queue enthaelt nur offene, konkre
 Letzte Aktualisierung: 2026-11-12.
 
 ## Offene Punkte
+### OP-403: Finale Verify-Fehler im selben Run diagnostizieren und beheben
+- **Status:** open
+- **Typ:** loop-reliability
+- **Betroffene Dateien:** `werkstatt/phases/finalize.py`, `werkstatt/verify.py`, `werkstatt/committer.py`, `werkstatt/progress.py`, `werkstatt/chat_tools.py`, Run- und Verify-Tests
+- **Akzeptanzkriterien:** Vor dem finalen Doku-Gate protokolliert der Run einen `verify_pending`-Eintrag und prueft Doku-Drift im aktuellen Worktree; die allgemeine Historienpruefung bleibt ein separates Qualitaetsgate. Jeder finale Verify-Fehler erzeugt einen Failure Record mit Stage, Exit-Code, Arbeits-SHA und Artefaktverweis und wird innerhalb der autorisierten Grenzen an denselben Run-Koordinator zur Diagnose, begrenzten Reparatur und erneuten Verifikation gegeben. Nicht sicher behebbarer Fehler pausiert mit konkretem Befund; kein rotes Verify kann als erfolgreiches Gate, Commit oder Run-Ergebnis verbucht werden.
+- **Tests:** `tests/test_loop_recovery.py`, `tests/test_committer_doku_nachzug.py`, `tests/test_verify_contract_stage.py`
+- **Blockiert von:** —
+- **Architektur-Voraussetzung:** ADR-0032
 
 ### OP-396: Chat als projektbezogene Hauptoberflaeche
 - **Status:** open
@@ -201,3 +209,4 @@ Abgeschlossene OPs werden append-only in PROGRESS.md dokumentiert.
 | `docs/WORKFLOW.md` | Inhalt wurde nicht eigenstaendig gepflegt | `AGENTS.md` und `docs/DOC_CONVENTIONS.md` | Nicht vorgesehen |
 | `werkstatt/control/reflection.py` | Unnoetige doppelte Implementierung entfernt | `werkstatt/reflection.py` | Nicht vorgesehen |
 | `docs/SOLL.md` | Spekulatives Zielbild widersprach akzeptierter Chat-/Gate-Architektur | Akzeptierte ADRs, `docs/ROADMAP.md` und `docs/ARCHITECTURE.md`; historische Fassung in `docs/archiv/soll-zielbild-2026-11-08.md` | Nur nach Annahme der betroffenen ADRs |
+

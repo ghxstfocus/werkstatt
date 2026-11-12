@@ -119,6 +119,20 @@ def test_main_strict_blockiert_worktree_drift(
     assert "Working Tree" in capsys.readouterr().out
 
 
+def test_worktree_only_ueberspringt_commit_historie(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _history_must_not_run(**_kwargs: object) -> list[dict]:
+        raise AssertionError("Historie geprueft")
+
+    monkeypatch.setattr(
+        doku_check, "pruefe_commits", _history_must_not_run,
+    )
+    monkeypatch.setattr(doku_check, "pruefe_worktree", lambda: None)
+
+    assert doku_check.main(["--strict", "--worktree-only"]) == 0
+
+
 def test_pruefe_commits_akzeptiert_explizite_progress_hash_referenz(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -139,3 +153,4 @@ def test_pruefe_commits_akzeptiert_explizite_progress_hash_referenz(
     monkeypatch.setattr(doku_check, "_git", fake_git)
 
     assert doku_check.pruefe_commits(limit=5, cwd=tmp_path) == []
+

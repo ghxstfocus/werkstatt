@@ -395,6 +395,7 @@ def _run_finalize_commit_order(
     phase_state.get_task.return_value = {"status": task_status}
     order = []
     audit_events = []
+    progress_entries = []
 
     def _human_gate(_state, *, defer_commit=False):
         assert defer_commit is True
@@ -404,6 +405,14 @@ def _run_finalize_commit_order(
         assert phase == "phase_end"
         order.append("verify")
         return verify_ok
+
+    def _append_progress(_project_dir, **kwargs):
+        progress_entries.append(kwargs)
+        order.append(
+            "progress_pending"
+            if kwargs.get("status") == "verify_pending"
+            else "progress_final"
+        )
 
     def _commit(_state):
         order.append("commit")
@@ -422,29 +431,34 @@ def _run_finalize_commit_order(
     monkeypatch.setattr(finalize, "group_end", lambda *a, **kw: None)
     monkeypatch.setattr(finalize, "summary", lambda *a, **kw: None)
     monkeypatch.setattr("werkstatt.committer._committe_zielprojekt", _commit)
-    monkeypatch.setattr("werkstatt.progress.append", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        "werkstatt.progress.append",
+        _append_progress,
+    )
 
     rc = finalize._phase_finalize(
         state, tasks_ok=1, tasks=state.tasks,
         project_name="testproj", phase_state=phase_state,
     )
-    return rc, order, audit_events
+    return rc, order, audit_events, progress_entries
 
 
 def test_finalize_committet_erst_nach_bestandenem_phase_end_verify(
     tmp_path, monkeypatch,
 ):
-    rc, order, _events = _run_finalize_commit_order(tmp_path, monkeypatch, True)
+    rc, order, _events, progress = _run_finalize_commit_order(tmp_path, monkeypatch, True)
     assert rc == 0
-    assert order == ["verify", "commit"]
+    assert order == ["progress_pending", "verify", "commit"]
+    assert [entry["status"] for entry in progress] == ["verify_pending"]
 
 
 def test_finalize_committet_nicht_wenn_phase_end_verify_scheitert(
     tmp_path, monkeypatch,
 ):
-    rc, order, _events = _run_finalize_commit_order(tmp_path, monkeypatch, False)
+    rc, order, _events, progress = _run_finalize_commit_order(tmp_path, monkeypatch, False)
     assert rc == 1
-    assert order == ["verify"]
+    assert order == ["progress_pending", "verify", "progress_final"]
+    assert [entry["status"] for entry in progress] == ["verify_pending", "phase_ende"]
 
 
 
@@ -452,12 +466,13 @@ def test_finalize_committet_nicht_wenn_phase_end_verify_scheitert(
 def test_finalize_markiert_unvollstaendige_tasks_nicht_als_loop_erfolg(
     tmp_path, monkeypatch, task_status,
 ):
-    rc, order, events = _run_finalize_commit_order(
+    rc, order, events, progress = _run_finalize_commit_order(
         tmp_path, monkeypatch, True, task_status=task_status,
     )
 
     assert rc == 1
-    assert order == ["verify", "commit"]
+    assert order == ["progress_pending", "verify", "progress_final"]
+    assert [entry["status"] for entry in progress] == ["verify_pending", "phase_ende"]
     kinds = [event[0] for event in events]
     assert "loop_erfolg" not in kinds
     unvollstaendig = [
@@ -473,3 +488,4 @@ def test_finalize_markiert_unvollstaendige_tasks_nicht_als_loop_erfolg(
         "tasks_total": 1,
         "unresolved": [{"task_id": "t1", "status": task_status}],
     }]
+

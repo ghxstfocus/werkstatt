@@ -102,9 +102,7 @@
         "python3",
         "tools/doku_check.py",
         "--strict",
-        "--limit",
-        "5",
-        "--worktree"
+        "--worktree-only"
       ],
       "phase": "phase_end",
       "timeout": 30,
@@ -124,3 +122,4 @@
     }
   ]
 }
+

@@ -23,6 +23,7 @@ Aufruf:
   python3 tools/doku_check.py --strict            # exit 1 bei Verdacht
   python3 tools/doku_check.py --limit 50          # mehr Commits pruefen
   python3 tools/doku_check.py --worktree          # aktuelle Aenderungen pruefen
+  python3 tools/doku_check.py --worktree-only     # nur aktuelle Aenderungen pruefen
   python3 tools/doku_check.py --json              # maschinenlesbar
 """
 
@@ -172,13 +173,20 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Aktuelle staged, unstaged und untracked Aenderungen pruefen",
     )
+    parser.add_argument(
+        "--worktree-only",
+        action="store_true",
+        help="Nur aktuelle Working-Tree-Aenderungen pruefen, keine Historie",
+    )
     parser.add_argument("--json", action="store_true",
                         help="JSON-Output")
     args = parser.parse_args(argv)
 
     try:
-        verdacht = pruefe_commits(limit=args.limit)
-        if args.worktree:
+        verdacht = (
+            [] if args.worktree_only else pruefe_commits(limit=args.limit)
+        )
+        if args.worktree or args.worktree_only:
             worktree_verdacht = pruefe_worktree()
             if worktree_verdacht:
                 verdacht.append(worktree_verdacht)
@@ -190,13 +198,21 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"verdacht": verdacht}, indent=2))
     else:
         if not verdacht:
-            scope = f"letzten {args.limit} Commits"
-            if args.worktree:
+            scope = (
+                "aktuellen Working Tree"
+                if args.worktree_only
+                else f"letzten {args.limit} Commits"
+            )
+            if args.worktree and not args.worktree_only:
                 scope += " und im Working Tree"
             print(f"OK: keine Doku-Drift in {scope}.")
         else:
-            scope = f"letzten {args.limit} Commits"
-            if args.worktree:
+            scope = (
+                "aktuellen Working Tree"
+                if args.worktree_only
+                else f"letzten {args.limit} Commits"
+            )
+            if args.worktree and not args.worktree_only:
                 scope += " und im Working Tree"
             print(f"[WARN] {len(verdacht)} Doku-Drift-Verdacht(e) "
                   f"in {scope}:")
@@ -215,3 +231,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

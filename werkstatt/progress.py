@@ -7,7 +7,7 @@ Getrennt von phase_state.yaml:
 
 Format pro Block (Parser-Anker A3):
   ## <ISO-timestamp> -- <name>
-  - **Status:** done|failed|phase_ende
+  - **Status:** done|failed|phase_ende|verify_pending
   - **Dateien:** file1.py, file2.py
   - **Patch:** +1 Zeile
   - **Info:** ...
@@ -123,3 +123,4 @@ def read_recent(project_dir: str | Path, n: int = RECENT_ENTRIES) -> str:
 
     recent = blocks[-n:]
     return "\n\n".join(recent)
+

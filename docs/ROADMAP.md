@@ -1,10 +1,15 @@
 # Roadmap — Werkstatt
 
 
-Stand: 2026-11-11. Diese Roadmap beschreibt nur den aktuellen Produktfokus
+Stand: 2026-11-12. Diese Roadmap beschreibt nur den aktuellen Produktfokus
 und die Abfolge grober Meilensteine. Konkrete startbare Auftraege stehen in
 docs/STATUS.md; abgeschlossene Arbeit in PROGRESS.md. Alte Phasenberichte
 liegen im Archiv und sind keine aktuelle Betriebs- oder Architekturvorgabe.
+ADR-0032 ist angenommen und ersetzt die feste Phasenfolge als Runtime-Steuerung
+durch einen zielorientierten, wiederaufnehmbaren Koordinator. Die nachfolgenden
+Roadmap-Meilensteine beschreiben nur die Migration; sie sind keine neuen
+Zwangsphasen im Lauf. Die konkrete Ist-Aufnahme steht in
+`docs/IST-ZUSTAND-LOOP-2026-11-12.md`.
 
 
 ## Ziel
@@ -18,6 +23,17 @@ Plan- und Ergebnis-Gates bleiben verpflichtend.
 
 
 ## Aktueller Fokus
+
+### 0. Run-Abschluss und Failure-Recovery
+- **OP-403:** finale Verify-Fehler als reparierbare Befunde desselben Runs
+  behandeln und Doku-/PROGRESS-Reihenfolge korrigieren.
+- Das harte Doku-Gate prueft nur den aktuellen Worktree; Historien-Drift
+  bleibt Teil des separaten Qualitaetsgates. Vor dem Gate wird
+  `verify_pending` protokolliert, danach das tatsaechliche Ergebnis.
+- Live-Prozessstatus fuer Chat und fehlende Builder-Ereignisse an dieselbe
+  Run-Projektion anbinden.
+- OP-403 ist der erste vertikale Zuverlaessigkeitsschnitt fuer ADR-0032;
+  verpflichtende Plan-, Ergebnis- und Human Gates bleiben unveraendert.
 
 
 ### 1. Chat und UI als Arbeitsoberflaeche
@@ -120,3 +136,4 @@ Loop-/Projektquellen-Fokus nicht.
 - Offene, startbare Arbeit: docs/STATUS.md.
 - Implementierte Architektur: docs/ARCHITECTURE.md.
 - Verlauf: PROGRESS.md.
+
