@@ -123,6 +123,7 @@ class RunState:
     file_whitelist: list[str] = field(default_factory=list)
     api_key: str = ""
     budget: dict[str, int] = field(default_factory=dict)
+    budget_exhausted_reason: str = ""
     agent_docs: dict[str, list[str]] = field(default_factory=dict)
     project_dir: Path = field(default_factory=lambda: Path("."))
     # Agent-Memory A2: Projekt-Stand (aus memory.yaml).
