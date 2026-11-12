@@ -602,13 +602,15 @@ def create_app() -> FastAPI:
         except (OSError, RuntimeError, ValueError) as exc:
             raise HTTPException(
                 status_code=400,
-                detail=f"Pfad muss innerhalb { _PROJECTS_BASE } liegen: {exc}",
+                detail=f"Pfad muss innerhalb {_PROJECTS_BASE} liegen: {exc}",
             ) from exc
 
         from werkstatt.project_creation import create_local_project
 
         try:
-            result = create_local_project(name, projekt_dir)
+            result = create_local_project(
+                name, projekt_dir, allowed_root=_PROJECTS_BASE,
+            )
         except FileExistsError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (FileNotFoundError, NotADirectoryError, OSError, ValueError) as exc:
