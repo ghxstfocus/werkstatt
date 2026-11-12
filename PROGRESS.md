@@ -5630,3 +5630,8 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die Post-Commit-Kontrolle vergleicht jetzt den Eltern-Commit des neuen HEAD mit dem unmittelbar vor `git commit` gepinnten Stand. Ein paralleler Commit im selben Checkout kann so nicht als Ergebnis des Runs ausgegeben werden.
 - Ein Regressionstest simuliert einen konkurrierenden Folge-Commit und erwartet einen protokollierten `head_parent_mismatch` statt eines erfolgreichen Runs.
 - GitHub Actions Quality Gate fuer den neuen Stand muss gruen sein.
+
+## 2026-11-12 — OP-403: Commit-Inhalt gegen gepinnten Index pruefen
+
+- Nach `git add -A` wird der Index als Tree-SHA fixiert. Die Commit-Nachkontrolle vergleicht danach Eltern-Commit und Tree-SHA; ein Hook, der Dateien waehrend des Commits umschreibt und staged, kann nicht als verifizierter Run-Commit durchgehen.
+- Regressionstest simuliert einen Hook, der eine Datei waehrend `git commit` aendert und staged; der Commit wird als `head_tree_mismatch` fail-closed protokolliert.

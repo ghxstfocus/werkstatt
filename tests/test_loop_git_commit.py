@@ -191,6 +191,44 @@ def test_committe_postcheck_erkennt_parallelen_head_commit(tmp_path, monkeypatch
     assert failure["actual_parent_sha"]
     assert failure["expected_parent_sha"] != failure["actual_parent_sha"]
 
+def test_committe_postcheck_erkennt_vom_hook_geaenderten_index_tree(
+    tmp_path, monkeypatch,
+):
+    """Ein Hook darf den verifizierten Index-Inhalt nicht still veraendern."""
+    _init_repo(tmp_path)
+    (tmp_path / "neu.py").write_text("def f(): pass\n")
+    s = _state(tmp_path)
+
+    from werkstatt import loop as loop_mod
+    original_run = loop_mod.subprocess.run
+
+    def _rewrite_staged_file_during_commit(argv, **kwargs):
+        if "commit" in argv and "--allow-empty" not in argv:
+            (tmp_path / "neu.py").write_text("def f(): return 'hook'\n")
+            original_run(
+                ["git", "-C", str(tmp_path), "add", "neu.py"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+        return original_run(argv, **kwargs)
+
+    monkeypatch.setattr(
+        loop_mod.subprocess, "run", _rewrite_staged_file_during_commit,
+    )
+    ok, info = loop._committe_zielprojekt(s)
+
+    assert ok is False
+    assert "Index-Tree" in info
+    failure = _kind(tmp_path, "loop_human_gate_commit_postcheck_failed")[0]
+    assert failure["reason"] == "head_tree_mismatch"
+    assert failure["expected_tree_sha"] != failure["actual_tree_sha"]
+    assert _kind(tmp_path, "loop_human_gate_committed")[0][
+        "post_commit_check"
+    ] == "failed"
+
+
 def test_committe_autor_aus_state(tmp_path):
     """git_author_name/email aus state werden im Commit verwendet."""
     _init_repo(tmp_path)

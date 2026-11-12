@@ -329,9 +329,11 @@ def _head_before_commit(project_dir: Path) -> tuple[bool, str, str]:
 
 
 def _post_commit_check(
-    project_dir: Path, expected_parent_sha: str,
+    project_dir: Path,
+    expected_parent_sha: str,
+    expected_tree_sha: str,
 ) -> tuple[bool, str, dict[str, object]]:
-    """Prueft Commit-Elternstand, Diff und sauberen Working Tree."""
+    """Prueft Commit-Elternstand, Tree-Inhalt, Diff und sauberen Working Tree."""
     head_command = ["git", "-C", str(project_dir), "rev-parse", "HEAD"]
     try:
         head = subprocess.run(
@@ -392,6 +394,40 @@ def _post_commit_check(
                 "Repository-Stand auf."
             ),
         }
+    try:
+        tree = subprocess.run(
+            ["git", "-C", str(project_dir), "rev-parse", f"{sha}^{{tree}}"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+    except Exception as exc:
+        return False, sha, {
+            "reason": "command_failed",
+            "message": f"Commit-Tree konnte nicht gelesen werden: {exc}",
+        }
+    if tree.returncode != 0:
+        output = (tree.stderr or tree.stdout or "").strip()[:240]
+        return False, sha, {
+            "reason": "command_failed",
+            "message": f"Commit-Tree rc={tree.returncode}: {output}",
+        }
+    actual_tree_sha = tree.stdout.strip()
+    if (
+        not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", expected_tree_sha)
+        or actual_tree_sha != expected_tree_sha
+    ):
+        return False, sha, {
+            "reason": "head_tree_mismatch",
+            "expected_tree_sha": expected_tree_sha,
+            "actual_tree_sha": actual_tree_sha,
+            "message": (
+                "Der Commit-Inhalt weicht vom vor dem Commit gepinnten "
+                "Index-Tree ab."
+            ),
+        }
+
     is_root_commit = not expected_parent_sha
     diff_command = (
         ["git", "-C", str(project_dir), "show", "--root", "--check", "--oneline", sha]
@@ -591,6 +627,28 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     if add.returncode != 0:
         return False, f"git add rc={add.returncode}: {add.stderr.strip()[:200]}"
 
+    try:
+        index_tree = subprocess.run(
+            ["git", "-C", str(pd), "write-tree"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+    except Exception as exc:
+        return False, f"Index-Tree vor Commit nicht lesbar: {exc}"
+    _expected_tree_sha = index_tree.stdout.strip()
+    if (
+        index_tree.returncode != 0
+        or not re.fullmatch(
+            r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", _expected_tree_sha,
+        )
+    ):
+        return False, (
+            "Index-Tree vor Commit nicht lesbar: "
+            f"{(index_tree.stderr or '').strip()[:200]}"
+        )
+
     _name = state.git_author_name or "builder"
     _email = state.git_author_email or "builder@security-ai.local"
     _aufgabe = (state.aufgabe or "").strip()
@@ -661,7 +719,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     # werden nach dem Commit erneut geprueft. So werden Hook-Reste und
     # parallele Aenderungen nicht als Teil des geprueften Commits ausgegeben.
     _check_ok, _sha_full, _check_info = _post_commit_check(
-        Path(pd), _base_sha,
+        Path(pd), _base_sha, _expected_tree_sha,
     )
     _sha = _sha_full[:12]
     try:
@@ -682,6 +740,10 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
                     "expected_parent_sha", _base_sha,
                 ),
                 "actual_parent_sha": _check_info.get("actual_parent_sha", ""),
+                "expected_tree_sha": _check_info.get(
+                    "expected_tree_sha", _expected_tree_sha,
+                ),
+                "actual_tree_sha": _check_info.get("actual_tree_sha", ""),
                 "pending_files": _pending_files[:20],
             },
             pd,
