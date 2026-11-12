@@ -5682,4 +5682,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   - **Commit:** `d9bd0580739d531fbc33e26121fa9ce02c0c91af`
   - **Commit:** `49cd355848faa6f2eb7071b2646f4d52068c862c`
   - **Commit:** `5ddfb566e6d2f6b376a469b863517fca7b649808`
-- Die GitHub-CI ist fuer den neuesten Stand noch zu verifizieren; dieses Log behauptet kein gruenes CI-Ergebnis.
+- GitHub-CI nach dem Doku-Nachzug: 1 Fehler im Audit-Katalog (`doku_nachzug_status_restore_failed` fehlte); Ruff und die uebrigen Pruefungen waren erfolgreich. Katalog-Fix: `3169aad8a51c1c8d5ac6ab981ee27ac845c89d89`; Folge-CI steht noch aus.
