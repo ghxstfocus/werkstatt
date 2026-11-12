@@ -5616,3 +5616,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Regressionstest injiziert eine Aenderung unmittelbar nach dem Git-Commit und prueft, dass die Nachkontrolle sie erkennt. GitHub Actions Quality Gate fuer diesen Commit muss gruen sein.
 
 - CI-Nachkorrektur: Der Whitespace-Check nutzt `git diff-tree --check --root --no-commit-id -r HEAD`, damit auch Root-Commits eindeutig behandelt werden und der reale Commit-Diff geprueft wird.
+
+- CI-Nachkorrektur: `git diff-tree --check` liefert auf dem Zielrunner Exit-Code 2; der Post-Commit-Whitespace-Check nutzt deshalb `git show --check --oneline HEAD`.

@@ -303,7 +303,7 @@ def _post_commit_check(project_dir: Path) -> tuple[bool, str, dict[str, object]]
     """Prueft nach Commit HEAD, committed Diff und sauberen Working Tree."""
     commands = [
         ["git", "-C", str(project_dir), "rev-parse", "HEAD"],
-        ["git", "-C", str(project_dir), "diff-tree", "--check", "--root", "--no-commit-id", "-r", "HEAD"],
+        ["git", "-C", str(project_dir), "show", "--check", "--oneline", "HEAD"],
         ["git", "-C", str(project_dir), "status", "--porcelain", "--untracked-files=all"],
     ]
     results: list[subprocess.CompletedProcess[str]] = []
