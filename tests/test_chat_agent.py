@@ -413,3 +413,40 @@ def test_chat_loop_abbruch_nach_werkzeugschritt_bleibt_replaybar(
         "user", "tool_call", "tool_result",
     ]
     assert events[-1]["payload"]["content"] == "Run-Status: bereit"
+
+
+def test_chat_history_omits_old_tool_traces_but_keeps_current_evidence() -> None:
+    events = [
+        {"kind": "user", "payload": {"text": "alte Frage"}},
+        {"kind": "tool_call", "payload": {"tool_calls": [{"id": "old", "function": {"name": "read_file", "arguments": "{}"}}]}},
+        {"kind": "tool_result", "payload": {"tool_call_id": "old", "content": "ALTE ROHAUSGABE"}},
+        {"kind": "assistant", "payload": {"text": "Alter Befund"}},
+        {"kind": "user", "payload": {"text": "aktuelle Frage"}},
+        {"kind": "tool_call", "payload": {"tool_calls": [{"id": "new", "function": {"name": "read_file", "arguments": "{}"}}]}},
+        {"kind": "tool_result", "payload": {"tool_call_id": "new", "content": "AKTUELLER BELEG"}},
+    ]
+    original = [dict(event) for event in events]
+
+    messages = chat_agent._baue_messages(events)
+    serialized = json.dumps(messages, ensure_ascii=False)
+
+    assert "ALTE ROHAUSGABE" not in serialized
+    assert "Alter Befund" in serialized
+    assert "AKTUELLER BELEG" in serialized
+    assert events == original
+
+
+def test_chat_history_truncation_obeys_character_budget(monkeypatch) -> None:
+    monkeypatch.setattr(chat_agent, "_CHAT_HISTORY_CHAR_BUDGET", 80)
+    events = [
+        {"kind": "user", "payload": {"text": "U" * 500}},
+        {"kind": "assistant", "payload": {"text": "A" * 500}},
+        {"kind": "user", "payload": {"text": "aktuelle Aufgabe"}},
+    ]
+
+    messages = chat_agent._baue_messages(events)
+    prior = [message for message in messages if message.get("role") != "system"]
+
+    assert sum(len(str(message.get("content") or "")) for message in prior) <= 80
+    assert messages[-1] == {"role": "user", "content": "aktuelle Aufgabe"}
+    assert chat_agent._CHAT_HISTORY_COMPACT_NOTE in messages[0]["content"]
