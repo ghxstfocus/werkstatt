@@ -1,6 +1,10 @@
 """Persistente, transaktionssichere Loop-Prozessregistrierung."""
 import os
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from werkstatt.web.loop_registry import LoopProcessRegistry
 
@@ -147,3 +151,91 @@ def test_stop_claim_excludes_overlap_and_reclaims_stale_stop(tmp_path: Path):
 
     assert worker_b.claim_stop("demo", "run-a") is True
     assert worker_a.claim_stop("demo", "run-a") is False
+
+
+def _start_process_with_loop_identity(project: str, run_id: str) -> subprocess.Popen:
+    return subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import time; time.sleep(30)",
+            "-m",
+            "werkstatt.loop",
+            "--project",
+            project,
+            "--headless",
+            "--run-id",
+            run_id,
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def _stop_process(process: subprocess.Popen) -> None:
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
+def test_abgelaufener_start_reattacht_einen_laufenden_worker(tmp_path: Path):
+    if not Path("/proc").is_dir():
+        pytest.skip("Prozessidentitaetssuche erfordert Linux /proc")
+    registry = LoopProcessRegistry(tmp_path / "registry.db")
+    run_id = "run-orphan-live"
+    process = _start_process_with_loop_identity("demo", run_id)
+    try:
+        assert registry.reserve("demo", run_id) == (True, None)
+        with registry._connect() as conn:
+            conn.execute(
+                "UPDATE loop_processes SET updated_at=0 WHERE project='demo'",
+            )
+            conn.commit()
+
+        recovered = registry.read("demo")
+
+        assert recovered is not None
+        assert recovered["state"] == "running"
+        assert recovered["pid"] == process.pid
+        assert recovered["process_identity"]
+        assert recovered["run_id"] == run_id
+    finally:
+        _stop_process(process)
+
+
+def test_ambiguous_start_fails_closed_then_recovers_after_one_worker_exits(
+    tmp_path: Path,
+):
+    if not Path("/proc").is_dir():
+        pytest.skip("Prozessidentitaetssuche erfordert Linux /proc")
+    registry = LoopProcessRegistry(tmp_path / "registry.db")
+    run_id = "run-orphan-ambiguous"
+    first = _start_process_with_loop_identity("demo", run_id)
+    second = _start_process_with_loop_identity("demo", run_id)
+    try:
+        assert registry.reserve("demo", run_id) == (True, None)
+        with registry._connect() as conn:
+            conn.execute(
+                "UPDATE loop_processes SET updated_at=0 WHERE project='demo'",
+            )
+            conn.commit()
+
+        ambiguous = registry.read("demo")
+        assert ambiguous is not None
+        assert ambiguous["state"] == "orphaned"
+        assert ambiguous["recovery_issue"] == "worker_identity_ambiguous"
+        assert registry.reserve("demo", "run-new") == (False, ambiguous)
+
+        _stop_process(first)
+        first = None
+        recovered = registry.read("demo")
+        assert recovered is not None
+        assert recovered["state"] == "running"
+        assert recovered["pid"] == second.pid
+    finally:
+        if first is not None:
+            _stop_process(first)
+        _stop_process(second)

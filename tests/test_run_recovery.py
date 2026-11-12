@@ -207,3 +207,40 @@ def test_resume_route_relaunches_same_run_without_fresh_flag(
     assert "--fresh" not in argv[0]
     assert argv[0][argv[0].index("--run-id") + 1] == run_id
     assert reserved == [("demo", run_id, context)]
+
+
+def test_orphaned_worker_state_blocks_web_start(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.web import app as app_module
+
+    class _Registry:
+        def read(self, _project: str) -> dict[str, Any]:
+            return {
+                "state": "orphaned",
+                "run_id": "run-ambiguous",
+                "recovery_issue": "worker_identity_ambiguous",
+                "context": {},
+            }
+
+    monkeypatch.setattr(app_module, "_PROJECTS_BASE", tmp_path)
+    monkeypatch.setattr(app_module, "_loop_registry", lambda: _Registry())
+    monkeypatch.setattr(app_module, "_loop_prozess", lambda _project: None)
+    monkeypatch.setattr(
+        app_module.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: pytest.fail("orphaned run must not spawn"),
+    )
+
+    response = TestClient(app_module.app).post(
+        "/api/projects/demo/start",
+        json={"aufgabe": "Neue Aufgabe"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "loop_worker_identity_ambiguous"

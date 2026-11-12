@@ -643,6 +643,18 @@ def create_app() -> FastAPI:
             with _projekt_loop_lock(projektname):
                 laufend = _loop_prozess(projektname)
                 record = _loop_registry().read(projektname)
+                if record and record["state"] == "orphaned":
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "loop_worker_identity_ambiguous",
+                            "message": (
+                                "Mehrere oder nicht pruefbare Worker passen zu "
+                                "dieser Run-ID. Ein neuer Schreibprozess wird "
+                                "fail-closed verhindert."
+                            ),
+                        },
+                    )
                 if laufend is not None or (record and record["state"] == "starting"):
                     return {
                         "gestartet": False,
@@ -1134,6 +1146,17 @@ def create_app() -> FastAPI:
             registry = _loop_registry()
             record = registry.read(projektname)
             if prozess is None:
+                if record and record["state"] == "orphaned":
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "loop_worker_identity_ambiguous",
+                            "message": (
+                                "Die Worker-Zuordnung ist mehrdeutig; "
+                                "Fortsetzen bleibt bis zur Klaerung gesperrt."
+                            ),
+                        },
+                    )
                 if record and record["state"] in ("pausing", "resuming", "stopping"):
                     raise HTTPException(
                         status_code=409,

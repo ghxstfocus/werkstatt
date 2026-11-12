@@ -62,6 +62,68 @@ def _process_snapshot(pid: int) -> tuple[str, str] | None:
     return fields[19], fields[0]
 
 
+def _worker_command_matches(
+    argv: list[str],
+    project: str,
+    run_id: str,
+) -> bool:
+    """Match the exact CLI identity used by the web-spawned loop."""
+    required = (
+        ("-m", "werkstatt.loop"),
+        ("--project", project),
+        ("--run-id", run_id),
+    )
+    return all(
+        any(
+            argv[index] == option and argv[index + 1] == value
+            for index in range(len(argv) - 1)
+        )
+        for option, value in required
+    )
+
+
+def _find_run_workers(
+    project: str,
+    run_id: str,
+) -> tuple[list[tuple[int, str]], bool]:
+    """Find exact run processes; the bool says whether /proc was fully readable."""
+    proc_root = Path("/proc")
+    if not proc_root.is_dir():
+        return [], False
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError:
+        return [], False
+
+    workers: list[tuple[int, str]] = []
+    complete = True
+    for entry in entries:
+        if not entry.name.isdecimal():
+            continue
+        pid = int(entry.name)
+        if pid == os.getpid():
+            continue
+        snapshot = _process_snapshot(pid)
+        if snapshot is None:
+            if entry.exists():
+                complete = False
+            continue
+        identity, process_state = snapshot
+        if process_state == "Z":
+            continue
+        try:
+            raw = (entry / "cmdline").read_bytes()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            complete = False
+            continue
+        argv = [os.fsdecode(part) for part in raw.split(b"\0") if part]
+        if _worker_command_matches(argv, project, run_id):
+            workers.append((pid, identity))
+    return workers, complete
+
+
 def _pid_alive(pid: int | None, identity: str | None = None) -> bool:
     if pid is None or pid <= 0:
         return False
@@ -138,6 +200,9 @@ class LoopProcessRegistry:
                 str(row[3]) if row[3] is not None else None
             ),
             "state": str(row[4]),
+            "recovery_issue": (
+                "worker_identity_ambiguous" if row[4] == "orphaned" else None
+            ),
             "updated_at": float(row[5]),
             "context": _decode_context(row[6] if len(row) > 6 else None),
         }
@@ -197,11 +262,60 @@ class LoopProcessRegistry:
                     "updated_at": now,
                 })
                 state = recovered_state
-            if expired_start or dead_process:
+            if expired_start or state == "orphaned":
+                workers, scan_complete = _find_run_workers(
+                    project, record["run_id"],
+                )
+                if len(workers) == 1 and scan_complete:
+                    pid, identity = workers[0]
+                    conn.execute(
+                        "UPDATE loop_processes SET state='running', pid=?, "
+                        "process_identity=?, updated_at=? WHERE project=? "
+                        "AND run_id=?",
+                        (pid, identity, now, project, record["run_id"]),
+                    )
+                    record.update({
+                        "state": "running",
+                        "pid": pid,
+                        "process_identity": identity,
+                        "updated_at": now,
+                    })
+                    record.pop("recovery_issue", None)
+                elif not workers and scan_complete:
+                    conn.execute(
+                        "UPDATE loop_processes SET state='idle', pid=NULL, "
+                        "process_identity=NULL, updated_at=? WHERE project=? "
+                        "AND run_id=?",
+                        (now, project, record["run_id"]),
+                    )
+                    record.update({
+                        "state": "idle",
+                        "pid": None,
+                        "process_identity": None,
+                        "updated_at": now,
+                    })
+                    record.pop("recovery_issue", None)
+                else:
+                    conn.execute(
+                        "UPDATE loop_processes SET state='orphaned', pid=NULL, "
+                        "process_identity=NULL, updated_at=? WHERE project=? "
+                        "AND run_id=?",
+                        (now, project, record["run_id"]),
+                    )
+                    record.update({
+                        "state": "orphaned",
+                        "pid": None,
+                        "process_identity": None,
+                        "updated_at": now,
+                        "recovery_issue": "worker_identity_ambiguous",
+                    })
+                state = record["state"]
+            elif dead_process:
                 conn.execute(
                     "UPDATE loop_processes SET state='idle', pid=NULL, "
-                    "process_identity=NULL, updated_at=? WHERE project=?",
-                    (now, project),
+                    "process_identity=NULL, updated_at=? WHERE project=? "
+                    "AND run_id=?",
+                    (now, project, record["run_id"]),
                 )
                 record.update({
                     "state": "idle",
@@ -234,6 +348,9 @@ class LoopProcessRegistry:
             existing = self._record(row)
             if existing is not None:
                 state = existing["state"]
+                if state == "orphaned":
+                    conn.commit()
+                    return False, existing
                 starting_live = (
                     state == "starting"
                     and now - existing["updated_at"] <= _STARTING_TTL_SECONDS
