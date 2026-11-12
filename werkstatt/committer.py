@@ -581,12 +581,24 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             _subject = (state.aufgabe or "").strip().split("\n")[0][:60]
             try:
                 _status_before = _status_path.read_text(encoding="utf-8")
-            except OSError:
+            except OSError as _snapshot_exc:
                 _status_before = None
-            # Delete-Zone erst sichern; der OP-Block wird nur entfernt,
-            # wenn anschliessend auch der passende Progress-Beleg bestaetigt ist.
-            _dz_ok = _delete_zone_op_append(_status_path, _op_nnn, _subject)
-            if not _dz_ok:
+                audit(
+                    "doku_nachzug_skip",
+                    {
+                        "reason": "status_snapshot_failed",
+                        "op_nnn": _op_nnn,
+                        "error_type": type(_snapshot_exc).__name__,
+                    },
+                    pd,
+                    pn,
+                )
+            # Ohne wiederherstellbaren Snapshot keine Statusmutation starten.
+            _dz_ok = (
+                _status_before is not None
+                and _delete_zone_op_append(_status_path, _op_nnn, _subject)
+            )
+            if _status_before is not None and not _dz_ok:
                 audit("doku_nachzug_skip",
                       {"reason": "delete_zone_append_failed",
                        "op_nnn": _op_nnn}, pd, pn)
