@@ -72,3 +72,35 @@ noetig, Auftrag gestoppt oder ein echtes Budget ausgeschoepft ist.
 Das Zielbild und der begruendete Migrationspfad stehen in
 [`ADR-0032`](adr/ADR-0032-adaptiver-zielorientierter-run-kern.md).
 
+## Nachpruefung des aktuellen Hauptstands
+
+Geprueft gegen GitHub `main` bei `4a88f543f0bc260c37f2f6198359657c655d5fe5`
+am 2026-11-12. Dieser Nachtrag aktualisiert den oben referenzierten
+Snapshot; er ersetzt nicht die historische Befundlage bei `d02170e`.
+
+- **Builder-Progress:** Der Builder uebergibt `state=state` an
+  `ask_llm` (`werkstatt/roles/builder/run.py:359-365`). Damit koennen
+  `llm_call_start/end` und Laufzeit-/Nutzungsereignisse diesem Run
+  zugeordnet werden. Der fruehere Befund eines fehlenden Builder-RunState
+  ist im aktuellen Hauptstand geschlossen.
+- **Abschluss-Verify:** `_phase_finalize` erzeugt Failure Records,
+  diagnostiziert fehlgeschlagene Stages, ruft gezielte Reflection auf und
+  fuehrt anschliessend die volle Phase-End-Verify erneut aus
+  (`werkstatt/phases/finalize.py:477-729)). Wiederholter Fehler oder
+  unveraenderter Worktree stoppt fail-closed; bei erfolgloser automatischer
+  Reparatur folgt ein Recovery-Gate. Der fruehere Satz, es gebe nach dem
+  ersten fehlgeschlagenen Abschluss-Verify gar keinen Reparaturpfad mehr,
+  beschreibt den aktuellen Hauptstand nicht.
+- **Web-Reconnect:** Die Run-Registry kann einen noch lebenden Prozess nach
+  einem Webserver-Neustart wiederfinden. Der Resume-Endpunkt sendet
+  `SIGCONT` an einen pausierten, lebenden Prozess; einen bereits beendeten
+  Prozess startet er nicht aus dem Checkpoint neu
+  (`werkstatt/web/app.py:1135-1187`). Die CLI besitzt dagegen
+  `--resume` und validiert Checkpoint- und Run-ID
+  (`werkstatt/loop.py:522-549,640-779`).
+- **Abnahmestatus:** Diese Implementierungen schliessen einzelne Belege aus
+  OP-396/397/403, aber nicht deren gesamten Vertrag. OP-396, OP-397, OP-403
+  und OP-398 bleiben gemaess `docs/STATUS.md` offen, bis die dortigen
+  Akzeptanzkriterien und Tests vollstaendig belegt sind. Insbesondere sind
+  Chat-Steuerung und Run-Zustand noch nicht ein durchgaengiger
+  zielorientierter Koordinator.
