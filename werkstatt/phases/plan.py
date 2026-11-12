@@ -165,6 +165,22 @@ def _phase_plan_and_preflight(
                   pd, pn)
             rc = _human_gate(state)
             group_end()
+            # OP-398: Der Scout-No-Op muss dieselbe Abschluss-Verify
+            # bestehen wie ein gebauter Auftrag. Sonst koennte ein
+            # Modellurteil ohne technische Belege als Erfolg gelten.
+            if rc == 0 and not _verify_patches(state, phase="phase_end"):
+                audit("loop_gate_failed",
+                      _gate_failed_payload(
+                          "phase_end",
+                          getattr(state, "last_verify_errors", []) or [],
+                      ),
+                      pd, pn)
+                audit("loop_phase",
+                      {"phase": "completion",
+                       "status": "incomplete",
+                       "reason": "scout_noop_verify_failed"},
+                      pd, pn)
+                rc = 1
             if rc == 0:
                 audit("loop_erfolg",
                       {"project_name": project_name,
