@@ -594,13 +594,14 @@ def _verify_patches(state: RunState, phase: str | None = None) -> bool:
     if state is not None:
         state.last_verify_hart_stages = set(_hart_stage_ids)
         state.last_verify_results = _stage_results
+        # Immer den aktuellen Laufstand spiegeln. Sonst bleiben Fehler
+        # eines vorherigen Verify-Aufrufs nach einem gruenen Lauf im State.
+        state.last_verify_errors = list(errors)
     if errors:
         audit("loop_verify_failed",
               {"errors": errors, "phase": phase,
                "stages": _executed_stages},
               project_dir, getattr(state, "project_name", "?"))
-        # M-326a: Errors fuer Reflection verfuegbar machen.
-        state.last_verify_errors = list(errors)
         return False
 
     # M-322: Erfolg sichtbar machen.
