@@ -394,11 +394,18 @@ def test_resume_route_recovers_after_real_worker_exit(
     try:
         _wait_ready(first_worker, Path(env["WERKSTATT_PROBE_READY"]))
         registry_before_restart.register("demo", run_id, first_worker.pid)
+
+        # A separate registry instance can reattach to the still-live worker.
+        registry_after_restart = LoopProcessRegistry(registry_path)
+        attached_record = registry_after_restart.read("demo")
+        assert attached_record is not None
+        assert attached_record["state"] == "running"
+        assert attached_record["pid"] == first_worker.pid
+        assert attached_record["run_id"] == run_id
+
+        # Once that worker exits, the same durable record becomes resumable.
         first_worker.terminate()
         first_worker.wait(timeout=5)
-
-        # A separate registry instance models a restarted web process.
-        registry_after_restart = LoopProcessRegistry(registry_path)
         recovered_record = registry_after_restart.read("demo")
         assert recovered_record is not None
         assert recovered_record["state"] == "idle"
