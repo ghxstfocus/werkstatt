@@ -5341,3 +5341,12 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 - **Status:** done
 - **Info:** Scout-No-Op konnte Plan- und Ergebnis-Gate passieren und direkt `loop_erfolg` melden. Der Pfad in `werkstatt/phases/plan.py` fuehrt jetzt nach dem Ergebnis-Gate dieselbe Phase-End-Verify aus; bei Fehlern wird der Run als unvollstaendig auditiert und rc=1 geliefert. Die Full-Suite-Stage `pytest_regression` in Repo- und Scaffold-Verify-Konfiguration laeuft bei `phase_end` auch ohne geaenderte Python-Dateien. Der alte OP-149-Testvertrag wurde angepasst; Regressionstests sichern Reihenfolge und Verify-Stage ab.
 - **Tests:** `tests/test_loop_planner_split.py` erweitert; CI-Verifikation folgt.
+
+
+## 2026-11-12 — Final-Verify-Failure-Record und UI-Zielplan
+
+- Der Finalizer persistiert jetzt bei rotem Phase-End-Verify einen strukturierten Failure Record ausserhalb des Projekt-Checkouts: Run/Projekt, Verify-Stage, Exit-Code, HEAD-SHA, Worktree-Fingerprint und redigierte kurze Fehlerauszuege. Der Artefaktverweis und Befund werden an das bestehende Gate-Failed-Event gebunden; ein Fehler bleibt rc=1 und kann keinen Erfolg ausloesen.
+- OP-403 bleibt offen: derselbe Run muss den Befund noch an eine sichere Diagnose-/Repair-Schleife uebergeben und erneut verifizieren. Der Record ist deren belastbare Eingabe, kein vorgetaeuschter Repair.
+- OP-397/398 wurden an Run-Zielgraph und Checkpoint statt an den alten PhaseState als Laufzeitsteuerung angepasst. Runde-Cap als Abschlusskriterium aus OP-396 entfernt; echte Budgets/Stagnation bleiben.
+- Neuer UI-Zielplan: `docs/UI-PLAN-2026-11-12.md`. Codeguardian ist als unabhaengige, nicht schreibende Diff-Schutzschicht beschrieben und in OP-404 aufgenommen.
+- Tests/CI: ausstehend.

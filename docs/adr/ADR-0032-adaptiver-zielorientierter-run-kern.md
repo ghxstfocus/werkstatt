@@ -272,6 +272,22 @@ Details zeigen, aber die Antwort wird in dieselbe Session und denselben
 Audit-Vertrag geschrieben. Jede Kontrollaktion zeigt direkt Feedback,
 Zwischenstatus und Resultat.
 
+
+### Codeguardian: unabhaengige Schutzschicht, kein weiterer Writer
+
+Der Codeguardian ist eine benannte Faehigkeit und ein Belegvertrag, keine
+zweite autonome Builder-Rolle. Deterministische Pruefungen kontrollieren den
+freigegebenen Diff gegen Scope, Secret-/Dependency-/Policy-Regeln und
+Verify-Artefakte. Eine unabhaengige semantische Review wird nur bei
+risikoreichen oder mehrdeutigen Aenderungen zugeschaltet. Jeder Befund hat
+eine reproduzierbare Quelle, betroffene Pfade, Schweregrad und Regelversion.
+Der Guardian darf nicht patchen, Gate-Entscheidungen treffen oder harte
+Verify-Ergebnisse ueberschreiben. Er kann einen Befund mit Evidenz an den
+bestehenden Run zur Diagnose/Repair zurueckgeben; nach jeder Reparatur laufen
+die betroffenen harten Checks erneut. False Positives koennen mit Begruendung
+zurueckgewiesen werden, bleiben aber auditiert. Geheimnisse und untrusted
+Dateiinhalte werden vor Anzeige und Persistenz redigiert.
+
 ## 7. Sicherheits- und Zuverlaessigkeitsgrenzen
 
 - Tools bleiben typisiert, projektgebunden, capability-basiert und auditiert;

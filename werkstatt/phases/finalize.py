@@ -1,6 +1,7 @@
 """Phase: _phase_finalize (OP-139 Phase 2b)."""
 from __future__ import annotations
 
+from werkstatt.failure_record import create_failure_record
 from werkstatt.render import (
     group_end,
     group_start,
@@ -150,8 +151,13 @@ def _phase_finalize(
             info=f"tasks_ok={tasks_ok}/{len(tasks)}",
         )
     if rc == 0 and not _verify_patches(state, phase="phase_end"):
-        audit("loop_gate_failed",
-              _gate_failed_payload("phase_end", []), pd, pn)
+        failure_record = create_failure_record(state, stage="phase_end")
+        gate_payload = _gate_failed_payload(
+            "phase_end",
+            getattr(state, "last_verify_errors", []) or [],
+        )
+        gate_payload["failure_record"] = failure_record
+        audit("loop_gate_failed", gate_payload, pd, pn)
         rc = 1
 
     # Commit erst nach bestandenem Phase-End-Verify. Bei rotem Verify oder

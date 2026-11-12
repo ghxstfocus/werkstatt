@@ -26,7 +26,9 @@ Plan- und Ergebnis-Gates bleiben verpflichtend.
 
 ### 0. Run-Abschluss und Failure-Recovery
 - **OP-403:** finale Verify-Fehler als reparierbare Befunde desselben Runs
-  behandeln und Doku-/PROGRESS-Reihenfolge korrigieren.
+  behandeln und Doku-/PROGRESS-Reihenfolge korrigieren. Der erste Schnitt
+  speichert den redigierten Failure Record samt HEAD- und Worktree-Fingerprint;
+  derselbe Run muss Diagnose/Repair und erneute Verify weiterfuehren.
 - Spec-First bleibt als bedarfsgesteuerter Pfad erhalten: Spec-Builder friert
   unabhaengige Tests/Vertraege ein, Code-Builder implementiert ohne Einsicht
   in diese Tests; einfache Aufgaben ueberspringen den Pfad.
@@ -46,6 +48,9 @@ Plan- und Ergebnis-Gates bleiben verpflichtend.
 - OP-402: unabhaengige Schreibauftraege parallel, aber konfliktbewusst integrieren.
 - Chat bleibt bei laufender Arbeit ansprechbar; Schreibauftraege nutzen getrennte, commit-gepinnte Worktrees und werden am Checkpoint konfliktbewusst integriert. Control zeigt die Arbeitsschritte chronologisch mit Status, Belegen, kurzer Entscheidungszusammenfassung und naechstem Schritt.
 - OP-394/395: nachvollziehbare Live-Ereignisse im Control-Modus.
+- OP-404: Codeguardian als diff-gebundene Schutzschicht; deterministische
+  Regeln zuerst, risikobasierte semantische Review danach. Er schreibt keine
+  Patches und delegiert Befunde in denselben Run.
 - OP-308: nachtraegliche Phasen-Timeline im Cockpit.
 - OP-240: belegter Debugger-Handoff in den normalen Loop.
 
@@ -144,3 +149,14 @@ Loop-/Projektquellen-Fokus nicht.
 - Implementierte Architektur: docs/ARCHITECTURE.md.
 - Verlauf: PROGRESS.md.
 
+
+
+## UI-Zielbild und Codeguardian
+
+Der konkrete, ueberarbeitete UI-Plan liegt in
+`docs/UI-PLAN-2026-11-12.md`. Er fuehrt Projektwahl, Modusleiste, Chat,
+Control-Timeline, Cockpit und Debug auf eine gemeinsame Run-Projektion
+zurueck. Codeguardian-Befunde erscheinen als normale Chat-Karten fuer
+Handlungsbedarf, als Timeline-Ereignisse in Control und als Ursache-Wirkungs-
+Fall in Debug; es gibt keinen separaten Chat-Agenten, der unabhaengig am
+gleichen Diff schreibt.
