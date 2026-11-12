@@ -362,6 +362,7 @@ def _build_patches_fuer_datei(
         redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
         aufgabe="builder",
         state=state,
+        progress_context={"files": [zieldatei]},
     )
     if not reply.ok:
         _bglob.audit("builder_architect_llm_fehler",

@@ -121,3 +121,27 @@ belegt sein. Diese ADR ist angenommen; ihre Annahme schaltet keinen
 Automodus frei. Bis die Kriterien belegt sind, bleibt die Umsetzung
 schrittweise an OP-396/397 und den jeweils verpflichtenden Human Gates
 gebunden. Kein Projekt wird als autonom freigegeben behandelt.
+
+
+## Klarstellung: Werkstattweite Startseite und Projektassistenten
+
+Der Metaorchestrator ist eine werkstattweite Steuerungsebene fuer **alle
+registrierten Projekte** und sitzt auf der Startseite/Projektuebersicht. Sein
+Chat ist der globale Ansprechpartner: Er kann projektuebergreifend Status,
+ADRs, Roadmaps, offene Ops und belegte Risiken sichten, Arbeit priorisieren
+und konkrete Auftraege an die betroffenen Projektloops delegieren.
+
+Der Chat innerhalb eines Projekts bleibt zugleich dessen projektbezogener
+Koordinator und Assistent. Er nimmt freie Auftraege entgegen, prueft den
+Projektkontext und die passende OP-Queue und verfolgt das Ziel bis zur
+belegten Abschlusspruefung. Beide Chats verwenden denselben natuerlichen
+Arbeitsfluss; der globale Metaorchestrator schreibt nicht direkt in
+Projekt-Checkouts und mischt keine Projektbelege. Er delegiert an den
+isolierten Projektloop und aggregiert nur die fuer die werkstattweite
+Priorisierung noetigen, provenance-tragenden Status- und Ereignisdaten.
+
+Globale Nutzerpraeferenzen gelten als versionierter Vertrag. Projekte duerfen
+zusaetzliche, engere Regeln besitzen. Korrekturen des Nutzers koennen
+Vertragsaenderungen vorschlagen; sie erweitern weder Berechtigungen noch
+Auto-Gate-Grenzen stillschweigend. Bis die Aktivierungskriterien dieses ADRs
+belegt sind, bleiben Human Gates verbindlich.

@@ -5648,3 +5648,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Nach gruener Verify prueft ein Snapshot-Check, dass HEAD weiterhin dem erwarteten Commit entspricht und der Working Tree sauber ist. Abweichungen verhindern Erfolg und werden mit Grund und Belegen auditiert.
 - Verifikation auf `main` `681a47a`: GitHub Actions Quality Gate [43278824595](https://github.com/ghxstfocus/werkstatt/actions/runs/43278824595) erfolgreich: 2075 Tests bestanden, 5 uebersprungen, Ruff 0, Mypy 0, AST 379 Dateien ohne Fehler, Audit-Katalog bestanden.
 - OP-403 aus der offenen STATUS-Queue entfernt. M0 bleibt wegen Live-Prozessstatus und vollstaendigen Builder-Ereignissen (OP-397/OP-395) offen.
+
+
+## 2026-11-12 — OP-395: Builder-Modellaufrufe mit Task-/Dateikontext
+
+- Modellaufrufe protokollieren Start und Ergebnis mit begrenzten Task-/Dateimetadaten; Prompt- und Datei-Inhalte gelangen nicht in diese Progress-Events.
+- Lange Modellaufrufe senden alle 15 Sekunden einen Heartbeat an die Control-Timeline. Der bestehende CLI-Heartbeat bleibt bei fuenf Sekunden; Audit-Ausfall darf den Modellaufruf nicht unterbrechen.
+- OP-395 bleibt offen: die temporaere Chat-Aktivitaetszeile, Reconnect-Replay und der durchgaengige End-to-End-Nachweis stehen weiterhin aus.
+- ADR-0031/Roadmap/Architektur praezisieren den globalen Metaorchestrator auf der Startseite und die Projektchats als projektbezogene Koordinatoren. Die Aktivierung bleibt an ADR-0031-Nachweise gebunden.

@@ -79,7 +79,8 @@ def _audit_events(project_dir: Path) -> list[dict]:
 
 def _call(state: RunState | None = None,
           system: str = "SYS",
-          user: str = "USER") -> agent.LLMReply:
+          user: str = "USER",
+          progress_context: dict | None = None) -> agent.LLMReply:
     return agent.ask_llm(
         api_key="sk-test",
         system_prompt=system,
@@ -90,6 +91,7 @@ def _call(state: RunState | None = None,
         state=state,
         aufgabe="unit-test",
         max_tokens=1024,
+        progress_context=progress_context,
     )
 
 
@@ -478,3 +480,90 @@ def test_architect_request_uses_pro_thinking_without_temperature():
     assert payload["thinking"] == {"type": "enabled"}
     assert payload["reasoning_effort"] == "high"
     assert "temperature" not in payload
+
+
+def test_builder_progress_events_include_task_and_file_without_prompt_content(tmp_path):
+    state = _state(tmp_path)
+    state.aktuelle_task = {
+        "id": "task-7",
+        "name": "Parser robust machen",
+        "task_files": ["src/parser.py"],
+    }
+    with patch(
+        "werkstatt.agent.requests.post",
+        return_value=_ok_response("patch"),
+    ):
+        _call(
+            state,
+            user="SECRET PROMPT CONTENT",
+            progress_context={"files": ["src/parser.py"]},
+        )
+
+    events = _audit_events(tmp_path)
+    start = next(event for event in events if event.get("kind") == "llm_call_start")
+    end = next(event for event in events if event.get("kind") == "llm_call_end")
+    for event in (start, end):
+        assert event["task_id"] == "task-7"
+        assert event["task_name"] == "Parser robust machen"
+        assert event["files"] == ["src/parser.py"]
+        assert "SECRET PROMPT CONTENT" not in json.dumps(event)
+
+
+def test_builder_heartbeat_event_contains_task_and_file(monkeypatch, tmp_path):
+    state = _state(tmp_path)
+    state.aktuelle_task = {
+        "id": "task-8",
+        "name": "API robust machen",
+        "task_files": ["werkstatt/api.py"],
+    }
+    clock = iter([100.0, 115.0])
+    monkeypatch.setattr(agent.time, "monotonic", lambda: next(clock))
+    emitted = []
+
+    class _StopEvent:
+        stopped = False
+
+        def is_set(self):
+            return self.stopped
+
+        def wait(self, _seconds):
+            self.stopped = True
+
+    stop_event = _StopEvent()
+
+    class _Thread:
+        def __init__(self, *, target, **_kwargs):
+            self.target = target
+
+        def start(self):
+            self.target()
+
+    monkeypatch.setattr(agent.threading, "Event", lambda: stop_event)
+    monkeypatch.setattr(agent.threading, "Thread", _Thread)
+    monkeypatch.setattr(
+        agent,
+        "audit",
+        lambda kind, payload, project_dir, project_name: emitted.append(
+            (kind, payload, project_dir, project_name)
+        ) or True,
+    )
+
+    thread, actual_stop = agent._heartbeat_start(
+        "builder",
+        state=state,
+        progress_context={"files": ["werkstatt/api.py"]},
+    )
+    thread.start()
+
+    assert actual_stop is stop_event
+    assert len(emitted) == 1
+    kind, payload, project_dir, project_name = emitted[0]
+    assert kind == "llm_call_heartbeat"
+    assert payload["agent"] == "builder"
+    assert payload["elapsed_s"] == 15
+    assert payload["task_id"] == "task-8"
+    assert payload["task_name"] == "API robust machen"
+    assert payload["files"] == ["werkstatt/api.py"]
+    assert project_dir == tmp_path
+    assert project_name == "testproj"
+    assert "reasoning" not in json.dumps(payload).lower()

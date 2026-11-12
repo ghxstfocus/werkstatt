@@ -263,7 +263,7 @@ Zustand, ohne Events zu duplizieren.
 | Control | Vollstaendige geordnete Timeline: was wurde getan, von welcher Faehigkeit, mit welchem Zweck, auf welchen Belegen, Ergebnis und naechster Schritt. Keine rohen internen Gedankengaenge. |
 | Cockpit | Zielstatus, erreichte/offene Kriterien, grobe Dauer-Timeline, Risiken und Ergebniszusammenfassung. |
 | Debug | Failure Record, Logs/Artefakte, Diff, Hypothese, Testbeleg, Reparaturversuche und kausaler Navigationspfad. |
-| Runs/Projektuebersicht | Projektuebergreifender Laufstatus und Historie; Startseite bleibt Standard, wenn kein Projekt offen ist. |
+| Runs/Projektuebersicht | Projektuebergreifender Laufstatus und Historie; Startseite bleibt Standard, wenn kein Projekt offen ist. Der werkstattweite Metaorchestrator sitzt hier und steuert alle registrierten Projekte ueber deren isolierte Projektloops. |
 
 Alle Modi beziehen ihren Status aus derselben Run-Projektion. Gate-Banner und
 Chat duerfen nicht zwei unabhaengige Entscheidungen darstellen: Plan-,

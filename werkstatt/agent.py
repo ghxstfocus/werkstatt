@@ -76,8 +76,11 @@ def _dump_prompt(aufgabe: str, model: str,
 
 def _heartbeat_start(
         stage_name: str,
+        *,
+        state: RunState | None = None,
+        progress_context: dict[str, Any] | None = None,
 ) -> tuple[threading.Thread, threading.Event]:
-    """Startet einen Heartbeat-Thread, der alle 5s eine Zeile ausgibt.
+    """Print 5s heartbeats and persist contextual progress every 15s.
 
     Gibt (thread, stop_event) zurueck. Der Aufrufer MUSS
     stop_event.set() und thread.join(timeout=1.0) im finally
@@ -85,17 +88,77 @@ def _heartbeat_start(
     """
     stop_event = threading.Event()
     start = time.monotonic()
+    next_audit_at = 15
+    context = _progress_context(state, progress_context)
 
     def _tick() -> None:
+        nonlocal next_audit_at
         while not stop_event.is_set():
             elapsed = int(time.monotonic() - start)
             print(f"  ... {stage_name} laeuft ({elapsed}s)", flush=True)
+            if state is not None and elapsed >= next_audit_at:
+                payload = {
+                    "agent": stage_name,
+                    "elapsed_s": elapsed,
+                    **context,
+                    "result_summary": (
+                        f"{_aufgabe_zu_label(stage_name)} arbeitet noch "
+                        f"({elapsed}s)."
+                    ),
+                    "decision_summary": (
+                        "Der Modellaufruf ist weiterhin aktiv; der Run wartet "
+                        "auf die Antwort."
+                    ),
+                    "next_step": (
+                        "Antwort entgegennehmen und den Rollen-Schritt fortsetzen."
+                    ),
+                }
+                try:
+                    audit(
+                        "llm_call_heartbeat",
+                        payload,
+                        state.project_dir,
+                        state.project_name,
+                    )
+                except Exception:
+                    # Observability must not interrupt an in-flight model call.
+                    pass
+                next_audit_at += 15
             stop_event.wait(5)
 
     thread = threading.Thread(
         target=_tick, daemon=True, name=f"heartbeat-{stage_name}")
     thread.start()
     return thread, stop_event
+
+
+def _progress_context(
+    state: RunState | None,
+    explicit: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return bounded task/file metadata; never include prompt or file contents."""
+    task = getattr(state, "aktuelle_task", None) if state is not None else None
+    task = task if isinstance(task, dict) else {}
+    supplied = explicit if isinstance(explicit, dict) else {}
+
+    task_id = str(supplied.get("task_id") or task.get("id") or "")[:100]
+    task_name = str(supplied.get("task_name") or task.get("name") or "")[:160]
+    files = supplied.get("files") or task.get("task_files") or []
+    if isinstance(files, str):
+        files = [files]
+    safe_files = [
+        str(path)[:240] for path in files
+        if isinstance(path, str) and path.strip()
+    ][:10]
+
+    context: dict[str, Any] = {}
+    if task_id:
+        context["task_id"] = task_id
+    if task_name:
+        context["task_name"] = task_name
+    if safe_files:
+        context["files"] = safe_files
+    return context
 
 
 def _rolle_aus_aufgabe(aufgabe: str) -> str:
@@ -165,7 +228,8 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             rolle: str | None = None,
             heartbeat: bool = True,
             max_tokens: int = 4096,
-            redact: bool = True) -> LLMReply:
+            redact: bool = True,
+            progress_context: dict[str, Any] | None = None) -> LLMReply:
     """Fragt das LLM.
 
     Auflage 2125: Wenn `state` uebergeben wird, zaehlt
@@ -276,7 +340,9 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
         # nicht passend (Abbruch durch break).
         _versuche_absolut += 1  # noqa: SIM113
         if heartbeat:
-            hb_thread, hb_stop = _heartbeat_start(aufgabe)
+            hb_thread, hb_stop = _heartbeat_start(
+                aufgabe, state=state, progress_context=progress_context,
+            )
         else:
             hb_thread, hb_stop = None, None
         try:
@@ -748,17 +814,31 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             rolle: str | None = None,
             heartbeat: bool = True,
             max_tokens: int = 4096,
-            redact: bool = True) -> LLMReply:
+            redact: bool = True,
+            progress_context: dict[str, Any] | None = None) -> LLMReply:
     """Oeffentliche LLM-API mit Progress-Events (OP-111)."""
     from werkstatt.render import _emit_progress
     route = route_for_role(rolle or aufgabe, model)
     model = route.model
     _label = _aufgabe_zu_label(aufgabe)
+    _context = _progress_context(state, progress_context)
+    _detail = ", ".join(_context.get("files", []))
+    if _context.get("task_name"):
+        _detail = f"{_context['task_name']}" + (f" · {_detail}" if _detail else "")
     _t0 = time.monotonic()
-    _emit_progress(_label, "prompt_sent", f"model={model}")
+    progress_detail = (
+        f"model={model}; {_detail}" if _detail else f"model={model}"
+    )
+    _emit_progress(_label, "prompt_sent", progress_detail)
     if state is not None:
         audit("llm_call_start",
               {"agent": aufgabe, "model": model,
+               **_context,
+               "result_summary": f"{_label} startet Modellaufruf.",
+               "decision_summary": (
+                   f"Der Auftrag wird an die Rolle {_label} übergeben."
+               ),
+               "next_step": "Modellantwort verarbeiten und den Task fortsetzen.",
                "system_len": len(system_prompt),
                "user_len": len(user_content)},
               state.project_dir, state.project_name)
@@ -766,7 +846,8 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
         reply = _ask_llm_impl(
             api_key, system_prompt, user_content, model, temperature,
             timeout=timeout, state=state, aufgabe=aufgabe,
-            rolle=rolle, heartbeat=heartbeat, max_tokens=max_tokens, redact=redact,
+            rolle=rolle, heartbeat=heartbeat, max_tokens=max_tokens,
+            redact=redact, progress_context=_context,
         )
     except Exception as exc:
         _emit_progress(_label, "response_failed", str(exc)[:80])
@@ -782,6 +863,23 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
                "ok": bool(reply.ok),
                "elapsed_s": round(_elapsed, 2),
                "content_len": len(reply.content or ""),
+               **_context,
+               "result_summary": (
+                   f"{_label} Modellaufruf "
+                   f"{'abgeschlossen' if reply.ok else 'fehlgeschlagen'}."
+               ),
+               "decision_summary": (
+                   "Die Modellantwort wird dem laufenden Task zurückgegeben."
+                   if reply.ok else
+                   "Der Fehler wird dem bestehenden Recovery-Pfad übergeben."
+               ),
+               "next_step": (
+                   "Builder-Ausgabe prüfen und gezielt anwenden."
+                   if aufgabe == "builder" and reply.ok else
+                   "Fehler klassifizieren und gezielt beheben."
+                   if not reply.ok else
+                   "Ergebnis des Rollen-Schritts auswerten."
+               ),
                "error": (reply.error or "")[:200]},
               state.project_dir, state.project_name)
     return reply

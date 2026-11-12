@@ -336,7 +336,13 @@ Die Weboberflaeche ist projektzentriert: Projektleiste, darunter
 Modusleiste, danach die Flaeche fuer den gewaehlten Modus. Bei leerer
 Projektauswahl dient die Projektuebersicht als Startseite. Sie zeigt
 Projektkarten, Laufstatus, Erfolgskennzahlen und den Zugang zum Oeffnen
-oder Anlegen eines Projekts.
+oder Anlegen eines Projekts. Der spaetere werkstattweite Metaorchestrator
+sitzt auf dieser Startseite und koordiniert alle registrierten Projekte.
+Sein Chat ist der globale Ansprechpartner fuer Status, offene Ops,
+Priorisierung und Delegation. In jedem Projekt bleibt der dortige Chat der
+projektbezogene Koordinator und Assistent; schreibende Arbeit laeuft nur im
+isolierten Projektloop. Globale Praeferenzen sind versioniert, waehrend
+projektbezogene Regeln und Belege strikt im jeweiligen Projektkontext bleiben.
 
 
 Im Control-Modus stehen Live-Feed und Chat nebeneinander. Aktionen wie

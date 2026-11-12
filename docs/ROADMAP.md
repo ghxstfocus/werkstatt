@@ -83,17 +83,32 @@ und globale Modell-Defaults der Betriebsweg.
 
 ## Spaetere Phase: Metaorchestrator
 
-ADR-0031 ist angenommen; die Umsetzung bleibt an OP-396/397 und die dortigen Nachweise gebunden. Die Annahme aktiviert keinen Automodus.
-Der Metaorchestrator soll alle Projekte nach einem expliziten, versionierten
-Nutzervertrag priorisieren, Sicherheits-/Semantikprobleme erkennen und
-Diagnose oder Debugger-Reparatur in den jeweiligen Projektloop delegieren.
-Chat bleibt waehrenddessen ansprechbar und zeigt Belege, Patch, Gate-Status
-und Empfehlung. Ein automatisch gestarteter Debugger darf nur im Run-Worktree
-arbeiten; erst wenn die echten Verify-Gates gruen sind, wird ein belegter
-Vorschlag dem verpflichtenden Human Gate vorgelegt. Fehlende Belege,
-Sicherheitsbefunde und Zielkonflikte gehen als konkrete Rueckfrage an den
-Chat. Nutzerantworten duerfen Vertragsaenderungen vorschlagen, aber
-Berechtigungen nicht still erweitern.
+ADR-0031 ist angenommen; die Umsetzung bleibt an OP-396/397 und den dortigen
+Nachweisen gebunden. Die Annahme aktiviert keinen Automodus. Der
+Metaorchestrator ist die werkstattweite Steuerungsebene fuer **alle
+registrierten Projekte** und sitzt auf der Startseite/Projektuebersicht.
+Sein globaler Chat ist der Ansprechpartner fuer projektuebergreifende
+Status-/ADR-/Roadmap-/OP-Pruefung, Priorisierung und Delegation. Die Chats in
+den Projekten bleiben deren Koordinatoren und Assistenten: Sie nehmen freie
+Auftraege an, pruefen Projektkontext und passende Ops und verfolgen das Ziel
+bis zur belegten Verify. Schreibende Arbeit laeuft ausschliesslich im
+isolierten Projektloop; der Metaorchestrator aggregiert nur belegte
+Statusereignisse und schreibt nicht direkt in Projekt-Checkouts.
+
+Globale Nutzerpraeferenzen liegen in einem versionierten Vertrag; engere
+Projektregeln bleiben zusaetzlich wirksam. Nutzerkorrekturen duerfen
+Vertragsaenderungen vorschlagen, aber Berechtigungen oder Gate-Grenzen nicht
+still erweitern.
+
+Der Metaorchestrator priorisiert Projekte nach diesem Vertrag, erkennt
+Sicherheits-/Semantikprobleme und delegiert Diagnose oder Debugger-Reparatur
+in den jeweiligen Projektloop. Chat bleibt waehrenddessen ansprechbar und
+zeigt Belege, Patch, Gate-Status und Empfehlung. Ein automatisch gestarteter
+Debugger darf nur im Run-Worktree arbeiten; erst wenn die echten Verify-Gates
+gruen sind, wird ein belegter Vorschlag dem verpflichtenden Human Gate
+vorgelegt. Fehlende Belege, Sicherheitsbefunde und Zielkonflikte gehen als
+konkrete Rueckfrage an den globalen oder betroffenen Projektchat. Bis die
+Aktivierungskriterien belegt sind, bleibt Automodus gesperrt.
 
 Jede Chatfrage bleibt im gewohnten natuerlichen Ablauf. Plan- und Basisversionen
 sind intern; der Chat fragt nur dann nach, wenn sich die Freigabe oder das
