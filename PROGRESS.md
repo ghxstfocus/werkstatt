@@ -5640,3 +5640,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Nach einem erfolgreichen Commit fuehrt der Finalizer die vollstaendige Phase-End-Verify erneut aus. Ein roter Befund erzeugt einen Failure Record und geht mit gezielter Reflection in denselben Run; nach jeder erfolgreichen Reparatur wird erneut committet und der neue HEAD wieder voll verifiziert.
 - Wiederholter unveraenderter Arbeitsstand fuehrt zum bestehenden Recovery-Gate. Ein Commit allein kann keinen Run-Erfolg ausloesen.
+
+
+## 2026-11-12 — OP-403 abgeschlossen: Commit nach Commit vollstaendig verifizieren
+
+- Der Finalizer fuehrt nach jedem Commit die volle Phase-End-Verify erneut aus. Bei Rot werden Failure Record, gezielte Diagnose/Reparatur und erneuter Commit in derselben Run-ID weitergefuehrt.
+- Nach gruener Verify prueft ein Snapshot-Check, dass HEAD weiterhin dem erwarteten Commit entspricht und der Working Tree sauber ist. Abweichungen verhindern Erfolg und werden mit Grund und Belegen auditiert.
+- Verifikation auf `main` `681a47a`: GitHub Actions Quality Gate [43278824595](https://github.com/ghxstfocus/werkstatt/actions/runs/43278824595) erfolgreich: 2075 Tests bestanden, 5 uebersprungen, Ruff 0, Mypy 0, AST 379 Dateien ohne Fehler, Audit-Katalog bestanden.
+- OP-403 aus der offenen STATUS-Queue entfernt. M0 bleibt wegen Live-Prozessstatus und vollstaendigen Builder-Ereignissen (OP-397/OP-395) offen.

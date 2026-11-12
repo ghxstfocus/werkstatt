@@ -7,22 +7,13 @@ Format gemaess `DOC_CONVENTIONS.md` §5. Diese Queue enthaelt nur offene, konkre
 Letzte Aktualisierung: 2026-11-12.
 
 ## Offene Punkte
-### OP-403: Finale Verify-Fehler im selben Run diagnostizieren und beheben
-- **Status:** open
-- **Typ:** loop-reliability
-- **Betroffene Dateien:** `werkstatt/phases/finalize.py`, `werkstatt/reflection.py`, `werkstatt/verify.py`, `werkstatt/committer.py`, `werkstatt/progress.py`, `werkstatt/chat_tools.py`, Run- und Verify-Tests
-- **Akzeptanzkriterien:** Vor dem finalen Doku-Gate protokolliert der Run `verify_pending` und prueft Doku-Drift nur im aktuellen Worktree; Historien-Drift bleibt ein separates Qualitaetsgate. Jede fehlgeschlagene Verify-Stage erzeugt einen redigierten Failure Record mit Stage, Exit-Code, HEAD-SHA, Worktree-Fingerprint und Artefaktverweis. Der gleiche Run diagnostiziert den Befund anhand des aktuellen Diffs und der relevanten Stage-Ausgabe, nennt bei jedem Reparaturversuch den adressierten Befund und fuehrt nur betroffene Checks plus abschliessend die Gesamt-Verify erneut aus. Erfolgreiche und sachfremde Stage-Ausgaben werden nicht als Fehlerkontext eingespeist; rohe Logs und interne Gedankengaenge werden nicht in den Builder-Kontext kopiert. Nicht sicher behebbarer oder stagnierender Fehler pausiert mit konkretem Befund und naechstem sicheren Schritt. Rotes Verify bleibt rot und kann weder Commit noch Erfolg ausloesen. Vor jedem Commit werden Eltern-HEAD und Index-Tree gepinnt; danach prueft der Committer Commit-SHA, Eltern-Commit, Tree-Gleichheit, Whitespace und sauberen Working Tree. Der Finalizer fuehrt anschliessend die vollstaendige Phase-End-Verify erneut auf dem Commit-SHA aus. Rote Nachpruefungen erzeugen einen Failure Record und gehen in die Recovery desselben Runs. Verbliebene oder waehrenddessen neu entstandene Aenderungen sowie rotes Post-Commit-Verify verhindern Run-Erfolg.
-- **Tests:** `tests/test_failure_record.py` (auch Folgefehler und Wiederholungs-Stagnation), `tests/test_committer_doku_nachzug.py`, `tests/test_loop_git_commit.py` (Commit-Nachkontrolle), `tests/test_progress_dedup.py` (Run-gebundene Historie), `tests/test_reflection.py`, `tests/test_verify_selected_stages.py`, `tests/test_verify_contract_stage.py`
-- **Blockiert von:** —
-- **Architektur-Voraussetzung:** ADR-0032
-
 ### OP-404: Codeguardian als unabhaengige Schutz- und Evidenzschicht
 - **Status:** open
 - **Typ:** change-guardian
 - **Betroffene Dateien:** Verify-/Review-Vertrag, Rollen- und Tool-Policies, Event-Projektion, Control-/Debug-UI und Tests
 - **Akzeptanzkriterien:** Der Codeguardian ist kein zweiter schreibender Builder. Deterministische Scope-, Secret-, Dependency-, Test- und Policy-Checks laufen auf dem gepinnten Diff; unabhaengige semantische Review wird risikobasiert zugeschaltet. Jeder Befund verweist auf Datei/Zeile oder Verify-Artefakt und unterscheidet Blocker, Warnung und Information. Er darf keine Gates oder harten Checks umgehen; Reparaturen gehen an denselben Run zurueck und muessen erneut verifiziert werden. Vor Ausfuehrung sind Regelquellen, False-Positive-Pfad, Datenredaktion und Betriebsgrenzen dokumentiert.
 - **Tests:** Scope-Verletzung, Secret-/Dependency-Befund, begruendetes Risiko-Routing, sichere Tool-Ausgaben, Finding-Provenance, False-Positive-Ablehnung und erneute Verify nach Patch.
-- **Blockiert von:** OP-403, OP-396
+- **Blockiert von:** OP-396
 
 ### OP-405: Rollenbezogenen Belegkontext und Kontextbudgets steuern
 - **Status:** open

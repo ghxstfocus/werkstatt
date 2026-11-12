@@ -25,27 +25,18 @@ Plan- und Ergebnis-Gates bleiben verpflichtend.
 ## Aktueller Fokus
 
 ### 0. Run-Abschluss und Failure-Recovery
-- **OP-403:** finale Verify-Fehler als reparierbare Befunde desselben Runs
-  behandeln und Doku-/PROGRESS-Reihenfolge korrigieren. Der erste Schnitt
-  speichert den redigierten Failure Record samt HEAD- und Worktree-Fingerprint;
-  derselbe Run muss Diagnose/Repair und erneute Verify weiterfuehren.
-- Spec-First bleibt als bedarfsgesteuerter Pfad erhalten: Spec-Builder friert
-  unabhaengige Tests/Vertraege ein, Code-Builder implementiert ohne Einsicht
-  in diese Tests; einfache Aufgaben ueberspringen den Pfad.
-- Das harte Doku-Gate prueft nur den aktuellen Worktree; Historien-Drift
-  bleibt Teil des separaten Qualitaetsgates. Vor dem Gate wird
-  `verify_pending` protokolliert, danach das tatsaechliche Ergebnis.
-- Vor jedem Commit werden erwarteter Eltern-HEAD und Index-Tree gepinnt.
-  Danach validiert der Committer HEAD-SHA, Eltern-Commit, Tree-Gleichheit,
-  committed Diff auf Whitespace-Fehler und den sauberen Working Tree.
-  Anschliessend laeuft die vollstaendige Phase-End-Verify erneut auf dem
-  Commit-SHA; rote Befunde gehen in die Recovery desselben Runs.
-  Parallel entstandene oder zurueckgelassene Aenderungen duerfen nicht als
-  abgeschlossener Verify-Stand gelten.
-- Live-Prozessstatus fuer Chat und fehlende Builder-Ereignisse an dieselbe
-  Run-Projektion anbinden.
-- OP-403 ist der erste vertikale Zuverlaessigkeitsschnitt fuer ADR-0032;
-  verpflichtende Plan-, Ergebnis- und Human Gates bleiben unveraendert.
+
+OP-403 ist abgeschlossen: Das finale Verify wird vorbereitet, Fehler werden
+im selben Run anhand redigierter Failure Records bearbeitet, und nach jedem
+Commit laeuft die vollstaendige Phase-End-Verify erneut. Commit-, HEAD- und
+Working-Tree-Pruefungen verhindern, dass ein abweichender Stand als gruen
+gemeldet wird. Der Stand ist durch GitHub Actions Quality Gate Run
+[43278824595](https://github.com/ghxstfocus/werkstatt/actions/runs/43278824595)
+verifiziert.
+
+M0 ist damit noch nicht vollstaendig: Live-Prozessstatus und lueckenlose
+Builder-Ereignisse bleiben bei OP-397 und OP-395. Plan-, Ergebnis- und
+Human-Gates bleiben verpflichtend.
 
 
 ### 1. Chat und UI als Arbeitsoberflaeche
@@ -69,7 +60,6 @@ Fehler, Run-Kontext und konkrete Diagnose.
 ### 2. Loop-Qualitaet und Betriebsnachweis
 - OP-398: begruendete Auswahl einzelner startbarer oder zusammenhaengender OPs; jeder gruene Zwischenschritt wird gegen das Hauptziel geprueft, bevor der Loop selbst weiterarbeitet oder abschliesst.
 - OP-398: adaptive Rollenwahl, deterministische Planvalidierung und Zielabgleich.
-- OP-403: Verify-Fehler im selben Run evidenzbasiert diagnostizieren und reparieren.
 - OP-405: Rollenbelege und Kontextbudgets begrenzen und messbar halten.
 - OP-280: Doku-Drift beim Verify zuverlaessig erkennen.
 - OP-372/374/375: Projektstatistik und Event-Projektion semantisch korrekt halten.

@@ -8,7 +8,7 @@
 > Statusqueue: docs/STATUS.md · Abschlussverlauf: PROGRESS.md
 
 
-Stand: 2026-11-11.
+Stand: 2026-11-12.
 
 
 ## 1. Produktarchitektur
@@ -49,6 +49,15 @@ Die Modusleiste gehoert in der UI unter die Projektleiste. Verbindliche
 Live-/Nachanalyse-Trennung: ADR-0022a.
 
 ## 1.5 Ausfuehrung
+
+Der produktive Run-Kern ist weiterhin die bestehende lineare Folge aus
+Setup/Explorer, Plan/Preflight, Task-Loop und Finalizer. Der Finalizer hat
+einen Failure-Record-Recoverypfad fuer das Phase-End-Verify. Nach einem
+erfolgreichen Commit wird die vollstaendige Phase-End-Verify erneut
+ausgefuehrt; HEAD und Working Tree werden danach gegen den geprueften Commit
+validiert. Ein roter oder veraenderter Stand kann keinen Run-Erfolg ausloesen.
+Der persistierte Zielkoordinator, die Inbox fuer Folgeauftraege und ein
+gemeinsames Evidence Ledger aus ADR-0032 sind noch nicht implementiert.
 
 Entwicklungs- und Verify-Befehle laufen aus dem Repository-Root und der
 projektspezifischen Umgebung. Die verbindlichen Abhaengigkeiten und
