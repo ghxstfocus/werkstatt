@@ -19,6 +19,9 @@
     loadPromise: null,
     jobs: Object.create(null),
     sessionSummaries: [],
+    loopActivityGeneration: 0,
+    loopActivityTimer: null,
+    loopActivityNode: null,
   };
 
   function _el(id) { return document.getElementById(id); }
@@ -1184,6 +1187,102 @@
     });
   }
 
+  function _loopHatAktivenChatJob(projekt) {
+    return Object.keys(zustand.jobs).some(function (key) {
+      var job = zustand.jobs[key];
+      return !job.done && job.project === projekt &&
+        job.sessionId === zustand.sessionId;
+    });
+  }
+
+  function _loopAktivitaetEntfernen() {
+    if (zustand.loopActivityNode && zustand.loopActivityNode.parentNode) {
+      zustand.loopActivityNode.remove();
+    }
+    zustand.loopActivityNode = null;
+  }
+
+  function _loopAktivitaetSetzen(text) {
+    var box = _el("chat-nachrichten");
+    if (!box || !text) return;
+    var node = zustand.loopActivityNode;
+    if (!node || node.parentNode !== box) {
+      node = document.createElement("div");
+      node.className = "chat-msg assistant chat-loop-activity is-working";
+      node.setAttribute("role", "status");
+      node.setAttribute("aria-live", "polite");
+      zustand.loopActivityNode = node;
+    }
+    node.textContent = text;
+    if (box.lastElementChild !== node) box.appendChild(node);
+  }
+
+  function _loopAktivitaetPoll(projekt, generation) {
+    if (projekt !== zustand.projekt ||
+        generation !== zustand.loopActivityGeneration) return;
+    var loopUrl = "/api/projects/" + encodeURIComponent(projekt) + "/loop";
+    fetch(loopUrl, {credentials: "same-origin"})
+      .then(function (response) {
+        if (!response.ok) throw new Error("Status " + response.status);
+        return response.json();
+      })
+      .then(function (loop) {
+        if (projekt !== zustand.projekt ||
+            generation !== zustand.loopActivityGeneration) return;
+        if (loop.state !== "running" || !loop.run_id) {
+          _loopAktivitaetEntfernen();
+          return;
+        }
+        var feedUrl = "/api/projects/" + encodeURIComponent(projekt) +
+          "/live-feed?run_id=" + encodeURIComponent(loop.run_id) + "&limit=1";
+        return fetch(feedUrl, {credentials: "same-origin"})
+          .then(function (response) {
+            if (!response.ok) throw new Error("Status " + response.status);
+            return response.json();
+          })
+          .then(function (feed) {
+            if (projekt !== zustand.projekt ||
+                generation !== zustand.loopActivityGeneration) return;
+            if (_loopHatAktivenChatJob(projekt)) {
+              _loopAktivitaetEntfernen();
+              return;
+            }
+            var aktiv = feed.aktiv || {};
+            if (!aktiv.aktion) {
+              _loopAktivitaetEntfernen();
+              return;
+            }
+            var rolle = String(aktiv.rolle || "Loop").trim();
+            var aktion = String(aktiv.aktion).trim().slice(0, 160);
+            _loopAktivitaetSetzen(rolle + " · " + aktion);
+          });
+      })
+      .catch(function () {
+        if (projekt === zustand.projekt &&
+            generation === zustand.loopActivityGeneration) {
+          _loopAktivitaetEntfernen();
+        }
+      })
+      .then(function () {
+        if (projekt === zustand.projekt &&
+            generation === zustand.loopActivityGeneration) {
+          zustand.loopActivityTimer = window.setTimeout(function () {
+            _loopAktivitaetPoll(projekt, generation);
+          }, 2500);
+        }
+      });
+  }
+
+  function _starteLoopAktivitaet(projekt) {
+    zustand.loopActivityGeneration += 1;
+    if (zustand.loopActivityTimer) {
+      window.clearTimeout(zustand.loopActivityTimer);
+      zustand.loopActivityTimer = null;
+    }
+    _loopAktivitaetEntfernen();
+    _loopAktivitaetPoll(projekt, zustand.loopActivityGeneration);
+  }
+
   function _sende(text) {
     if (!text) return;
     var projekt = zustand.projekt;
@@ -1259,6 +1358,7 @@
       try { zustand.socket.close(); } catch (e) {}
     }
     zustand.projekt = projekt;
+    _starteLoopAktivitaet(projekt);
     zustand.sessionId = null;
     zustand.socket = null;
     zustand.streamAktiv = false;

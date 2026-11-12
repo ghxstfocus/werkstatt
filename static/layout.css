@@ -4105,3 +4105,23 @@ body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.user {
   color: var(--text);
   resize: vertical;
 }
+
+
+/* OP-395: Eine rekonstruierbare, einzelne Live-Aktivitaet des Projektloops. */
+.chat-nachrichten > .chat-loop-activity {
+  width: min(100%, 68ch);
+  max-width: 68ch;
+  margin: 2px 0;
+  padding: 8px 10px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  font-size: 12px;
+}
+.chat-nachrichten > .chat-loop-activity::before {
+  width: 6px;
+  height: 6px;
+  margin-right: 9px;
+  background: var(--accent);
+}

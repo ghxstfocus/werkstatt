@@ -5656,3 +5656,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Lange Modellaufrufe senden alle 15 Sekunden einen Heartbeat an die Control-Timeline. Der bestehende CLI-Heartbeat bleibt bei fuenf Sekunden; Audit-Ausfall darf den Modellaufruf nicht unterbrechen.
 - OP-395 bleibt offen: die temporaere Chat-Aktivitaetszeile, Reconnect-Replay und der durchgaengige End-to-End-Nachweis stehen weiterhin aus.
 - ADR-0031/Roadmap/Architektur praezisieren den globalen Metaorchestrator auf der Startseite und die Projektchats als projektbezogene Koordinatoren. Die Aktivierung bleibt an ADR-0031-Nachweise gebunden.
+
+
+## 2026-11-12 — OP-395: Live-Arbeit im Projektchat rekonstruieren
+
+- Der Projektchat liest den aktiven Loop-Run und dessen aktuelle Live-Feed-Aktivitaet und zeigt genau eine temporaere, ersetzbare Statuszeile mit Rolle und Arbeitsschritt.
+- Beim Projektwechsel wird die alte Anzeige entfernt; Reload und Reconnect rekonstruieren den Schritt aus Loop-Registry und Audit-Feed. Aktive Chatfragen behalten Vorrang, damit keine zweite konkurrierende Aktivitaetszeile entsteht.
+- Die Anzeige enthaelt nur den aktuellen Arbeitsschritt, keine Prompts oder internen Gedankengaenge. Detaillierte Ereignisse bleiben in Control.
+- OP-395 bleibt offen bis Reconnect-, UI- und End-to-End-Verifikation sowie laengere Builder-Heartbeats gemeinsam belegt sind.

@@ -190,3 +190,18 @@ def test_nutzer_bubble_rechtsbuendig_kompakt_ausrichten() -> None:
     assert "margin-right: 0;" in regel
     assert "margin-left: auto;" in regel
     assert "max-width: 92%;" in regel
+
+
+
+def test_chat_replays_one_temporary_live_loop_activity() -> None:
+    js = _chat_js()
+    assert '"/api/projects/" + encodeURIComponent(projekt) + "/loop"' in js
+    assert '"/live-feed?run_id="' in js
+    assert 'node.className = "chat-msg assistant chat-loop-activity is-working"' in js
+    assert "node.textContent = text" in js
+    assert "_loopAktivitaetEntfernen();" in js
+    assert "zustand.loopActivityGeneration" in js
+
+    css = _css()
+    assert ".chat-nachrichten > .chat-loop-activity {" in css
+    assert "border-left: 2px solid var(--accent);" in css
