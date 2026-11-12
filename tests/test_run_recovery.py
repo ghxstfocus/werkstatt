@@ -416,13 +416,15 @@ def test_resume_route_recovers_after_real_worker_exit(
         app_module._PAUSIERTE_LOOPS.clear()
 
         real_popen = subprocess.Popen
+        resumed_argv: list[list[str]] = []
         launch_env = {
             **env,
             "WERKSTATT_PROBE_READY": str(tmp_path / "worker-after-resume.ready"),
         }
 
-        def _launch(args: list[str], **kwargs: Any) -> subprocess.Popen[bytes]:
+        def _launch(args: list[str], **_kwargs: Any) -> subprocess.Popen[bytes]:
             nonlocal resumed_worker
+            resumed_argv.append(list(args))
             resumed_worker = real_popen(
                 args, env=launch_env, cwd=tmp_path,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -438,11 +440,13 @@ def test_resume_route_recovers_after_real_worker_exit(
         assert response.json()["resume"] is True
         assert response.json()["run_id"] == run_id
         assert resumed_worker is not None
+        assert "--resume" in resumed_argv[0]
+        assert "--fresh" not in resumed_argv[0]
+        assert resumed_argv[0][resumed_argv[0].index("--run-id") + 1] == run_id
         _wait_ready(
             resumed_worker,
             Path(launch_env["WERKSTATT_PROBE_READY"]),
         )
-        assert "--resume" in worker_args or response.json()["resume"] is True
         checkpoint = PhaseState("demo", base_dir=project_dir / ".werkstatt")
         assert checkpoint.load()
         assert checkpoint.run_id == run_id
