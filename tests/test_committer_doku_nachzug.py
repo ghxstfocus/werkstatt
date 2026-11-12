@@ -11,6 +11,7 @@ from werkstatt.committer import (
     _delete_zone_op_append,
     _doku_nachzug_aktiv,
     _op_nnn_aus_aufgabe,
+    _op_nnn_als_expliziter_auftrag,
     _status_md_op_entfernen,
     _update_changelog,
     _update_kennzahlen,
@@ -44,6 +45,16 @@ def test_op_nnn_aus_aufgabe_negativ():
 
 def test_op_nnn_aus_aufgabe_leer():
     assert _op_nnn_aus_aufgabe("") is None
+
+def test_doku_op_wird_nur_aus_expliziter_op_kopfzeile_ermittelt():
+    assert _op_nnn_als_expliziter_auftrag("OP-048: Doku-Nachzug") == "OP-048"
+    assert _op_nnn_als_expliziter_auftrag("### OP-002b2: Duplikatschutz") == "OP-002b2"
+
+
+def test_doku_op_ignoriert_erwaehnungen_und_blocker():
+    assert _op_nnn_als_expliziter_auftrag("Baue OP-048; blockiert von OP-055") is None
+    assert _op_nnn_als_expliziter_auftrag("Pruefe zuerst OP-055") is None
+    assert _op_nnn_als_expliziter_auftrag("") is None
 
 
 # ---------- _status_md_op_entfernen ----------
