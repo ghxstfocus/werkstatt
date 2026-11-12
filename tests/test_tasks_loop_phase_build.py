@@ -76,3 +76,34 @@ def test_task_outcome_event_omitted_without_done_transition(
     )
 
     assert events == []
+
+
+def test_tasks_loop_resume_counts_persisted_done_tasks(monkeypatch, tmp_path):
+    """Resume nach rotem Final-Verify muss erledigte Arbeit weiterzaehlen."""
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.phases import tasks
+    from werkstatt.state import RunState
+
+    planned = [{"id": "t1", "name": "Implementierung"}]
+    phase_state = PhaseState("testproj", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new("Final-Verify wiederholen", planned)
+    phase_state.mark_done("t1")
+
+    state = RunState(
+        block_id="t", aufgabe="Final-Verify wiederholen",
+        start_ts="2026-11-12T00:00:00Z", docs={}, agents={}, always={},
+        optional={}, file_whitelist=[], api_key="sk-test", budget={},
+        agent_docs={}, project_dir=tmp_path, project_name="testproj",
+    )
+    state.tasks = planned
+    monkeypatch.setattr(
+        "werkstatt.agent._enforce_run_budget", lambda _state: False,
+    )
+    monkeypatch.setattr(tasks, "audit", lambda *_args: None)
+
+    rc, tasks_ok, returned_tasks = tasks._phase_tasks_loop(state, phase_state)
+
+    assert rc == 0
+    assert tasks_ok == 1
+    assert returned_tasks == planned
+    assert state.tasks_ok_counter == 1

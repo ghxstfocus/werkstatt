@@ -92,7 +92,14 @@ def _phase_tasks_loop(
     #    Alle Tasks werden abgearbeitet ohne Unterbrechung.
     #    Human-Gate kommt nur am Ende der Phase.
     tasks = state.tasks
-    tasks_ok = 0
+    # Resume after a final-verify failure may find every planned task already
+    # done. Count persisted work so finalization can re-run verification instead
+    # of misclassifying the resumed run as having done no work.
+    tasks_ok = sum(
+        1 for task_record in phase_state.data.get("tasks", [])
+        if isinstance(task_record, dict) and task_record.get("status") == "done"
+    )
+    state.tasks_ok_counter = tasks_ok
     i = 0
     from werkstatt.agent import _enforce_run_budget
     # M-473: while-Loop statt for. Nach ADaPT-Split wird die

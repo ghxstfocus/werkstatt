@@ -5437,3 +5437,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die Recovery verwendet alle fehlgeschlagenen Stage-IDs aus dem redigierten Record, nicht nur die ersten sechs. Sie verknuepft Folgeversuche ueber vorherige Failure-IDs in der Timeline.
 - Wenn derselbe Fehlerauszug am selben Worktree-Fingerprint wiederkommt, erkennt der Finalizer Stagnation, stoppt fail-closed und laesst Verify rot. Ein roter Voll-Verify kann weder Commit noch Erfolg ausloesen.
 - Regressionstests pruefen einen zweiten, neu auftretenden Stage-Befund sowie das Stoppen bei identischem Fehlerzustand. CI-Verifikation fuer diesen Commit steht aus.
+
+
+## 2026-11-12 — Resume nach fehlgeschlagenem Phase-End-Verify
+
+- Befund: Der Task-Loop uebersprang im Resume persistierte `done`-Tasks korrekt, setzte seinen Laufzaehler aber auf null. Damit konnte die Finalisierung trotz erledigtem Plan mit `no_successful_tasks` abbrechen, bevor sie das fehlgeschlagene Phase-End-Verify erneut pruefte.
+- Der Laufzaehler uebernimmt jetzt ausschliesslich `done`-Tasks aus dem validierten Phase-State. Failed-, blocked- und pending-Tasks zaehlen nicht als erledigt; die Abschlusspruefung kontrolliert sie weiterhin einzeln und bleibt fail-closed.
+- Ein Regressionstest startet den Task-Loop mit einem bereits erledigten Plan und prueft, dass die Finalisierung den Resume-Pfad erreicht.
+- OP-397 bleibt offen: Dauerhaftes Run-Checkpointing, Pause/Resume ueber Prozessneustarts und Ende-zu-Ende-Verifikation sind damit nicht abgeschlossen. CI-Verifikation fuer diesen Patch steht aus.
