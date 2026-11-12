@@ -5678,4 +5678,8 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die Delete-Zone dedupliziert OP-IDs und behaelt hoechstens die 20 neuesten Eintraege. Die ausfuehrliche Historie bleibt in dieser Datei.
 - DOC_CONVENTIONS.md legt die Abschlussregel fest: vollstaendige Phase-End-Verify und persistierter OP-/Run-Beleg vor Statusentfernung.
 - Regressionstests decken fehlenden Progress-Beleg, idempotenten Retry, Delete-Zone-Deduplizierung und Aufbewahrungsgrenze ab.
-- Commits: `d9bd058`, `49cd355`, `8635bcc`, `2c36598`, `81d23c2`, `7348574`. Die GitHub-CI ist fuer den neuesten Stand noch zu verifizieren; dieses Log behauptet kein gruenes CI-Ergebnis.
+- Doku-Drift-Belege fuer die Code-Commits:
+  - **Commit:** `d9bd058`
+  - **Commit:** `49cd355`
+  - **Commit:** `5ddfb56`
+- Die GitHub-CI ist fuer den neuesten Stand noch zu verifizieren; dieses Log behauptet kein gruenes CI-Ergebnis.
