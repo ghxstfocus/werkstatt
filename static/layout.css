@@ -3982,23 +3982,25 @@ body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.assistant 
 }
 
 
-/* Assistant-Text auf eine angenehme Lesebreite begrenzen. */
+/* Assistant-Text bleibt linksbuendig und bekommt eine ruhige Lesebreite. */
 .chat-nachrichten > .chat-msg.assistant,
 body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.assistant {
   width: min(100%, 68ch);
   max-width: 68ch;
-  margin-inline: auto;
+  margin-left: 0;
+  margin-right: auto;
 }
 .chat-msg.assistant {
   line-height: 1.65;
 }
 
 
-/* Nutzer-Bubbles rechtsbuendig halten und etwas kompakter begrenzen. */
+/* Nutzer-Bubbles rechtsbuendig halten und kompakt begrenzen. */
 .chat-nachrichten > .chat-msg.user,
 body[data-mode="control"] .bereich.chat .chat-nachrichten > .chat-msg.user {
+  align-self: flex-end;
   width: fit-content;
-  max-width: min(72%, 68ch);
+  max-width: min(64%, 68ch);
   margin-right: 0;
   margin-left: auto;
 }
