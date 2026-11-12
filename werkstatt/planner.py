@@ -285,7 +285,11 @@ def _erledigte_punkte(pd) -> str:
 
 
 PLANNER_SPLIT_SYSTEM = """Du bist ein Task-Zerleger.
-Du bekommst eine Architect-Prosa und eine Liste von Dateien.
+Du bekommst den Originalauftrag, eine Architect-Prosa und eine Liste von Dateien.
+Leite aus Originalauftrag und Prosa die beobachtbaren Abnahmekriterien fuer
+das Gesamtziel ab. Uebernimm explizite Kriterien aus STATUS/ADR; erfinde keine
+nicht geforderten Produktanforderungen. Kriterien muessen spaeter durch Tests,
+Datei-/API-Verhalten oder explizite Doku-Inhalte pruefbar sein.
 Zerlege die Prosa in so viele Sub-Tasks wie noetig (typisch 3-10).
 Nicht mehr, nicht weniger als die Aufgabe braucht.
 
@@ -320,6 +324,13 @@ Jeder Sub-Task:
   die den Vorbedingungs-Zustand veraendern. Reine Datei-Tasks
   ohne Vorbedingung: leere Liste [].
 
+Gesamtplan:
+- akzeptanzkriterien: Liste beobachtbarer Abnahmekriterien fuer den
+  Originalauftrag. Nutze den exakten JSON-Schluessel "akzeptanzkriterien".
+- Mindestens ein Kriterium, sofern der Auftrag ein veraenderbares Ziel
+  enthaelt. Reine Analyseauftraege bekommen Kriterien fuer Belege und
+  Ergebnisumfang. Kriterien aus dem Auftrag duerfen nicht still entfallen.
+
 Regeln:
   - INTERFACE-GRENZE: Jede Task liefert EIN vollstaendiges,
     reviewbares Interface — nicht einen Schritt einer Funktion.
@@ -350,6 +361,7 @@ Regeln:
 
 Antworte NUR mit JSON:
 {
+  "akzeptanzkriterien": ["beobachtbares, pruefbares Kriterium"],
   "tasks": [
     {"id": "t1", "name": "...", "action": "update",
      "task_files": ["..."], "architect_start": "...",
@@ -1310,11 +1322,14 @@ def _zerlege_in_sub_tasks(
     _skb = ""
     if state is not None:
         _skb = state.planner_skills_block or ""
+    _originalauftrag = (aufgabe or "").strip()
     _user = (
         (f"{_skb}\n\n" if _skb else "")
         + f"{_mess_planner_block}"
-        f"## ARCHITECT-PROSA:\n{prosa}\n\n"
-        f"## DATEIEN:\n" + "\n".join(f"- {f}" for f in key_files)
+        + (f"## ORIGINALAUFTRAG:\n{_originalauftrag[:12000]}\n\n"
+           if _originalauftrag else "")
+        + f"## ARCHITECT-PROSA:\n{prosa}\n\n"
+        + "## DATEIEN:\n" + "\n".join(f"- {f}" for f in key_files)
     )
     reply = _with_spinner(
         "Planner-Split",
@@ -1332,6 +1347,15 @@ def _zerlege_in_sub_tasks(
     if parsed is None:
         audit("planner_split_json_fehler", {"raw": raw[:200]}, pd, pn)
         return []
+    criteria_raw = parsed.get("akzeptanzkriterien", [])
+    if isinstance(criteria_raw, list):
+        criteria = list(dict.fromkeys(
+            str(item).strip()[:500]
+            for item in criteria_raw
+            if isinstance(item, str) and item.strip()
+        ))[:30]
+        if state is not None and criteria:
+            state.akzeptanzkriterien = criteria
     tasks_raw = parsed.get("tasks", [])
     if not isinstance(tasks_raw, list):
         return []
@@ -2581,7 +2605,6 @@ def run_planner(state: RunState) -> bool:
 
     state.phasen = []
     state.tests = []
-    state.akzeptanzkriterien = []
 
     audit("planner_plan_erstellt",
           {"tasks": len(state.tasks),
