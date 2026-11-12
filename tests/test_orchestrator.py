@@ -92,8 +92,6 @@ def test_project_manifest_requires_progress(tmp_path, monkeypatch):
         "adr_index": "docs/adr/README.md",
         "glossary": "docs/glossary.md",
     }
-    import yaml
-
     (tmp_path / "demo.yaml").write_text(
         yaml.safe_dump({"project": "demo", "project_dir": "/tmp/demo", "docs": docs}),
         encoding="utf-8",
