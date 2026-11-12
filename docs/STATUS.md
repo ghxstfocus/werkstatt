@@ -11,7 +11,7 @@ Letzte Aktualisierung: 2026-11-12.
 - **Status:** open
 - **Typ:** loop-reliability
 - **Betroffene Dateien:** `werkstatt/phases/finalize.py`, `werkstatt/verify.py`, `werkstatt/committer.py`, `werkstatt/progress.py`, `werkstatt/chat_tools.py`, Run- und Verify-Tests
-- **Akzeptanzkriterien:** Vor dem finalen Doku-Gate protokolliert der Run `verify_pending` und prueft Doku-Drift nur im aktuellen Worktree; Historien-Drift bleibt ein separates Qualitaetsgate. Jeder finale Verify-Fehler erzeugt einen redigierten Failure Record mit Stage, Exit-Code, HEAD-SHA, Worktree-Fingerprint und Artefaktverweis; der Fehler wird demselben Run zur belegten Diagnose, begrenzten Reparatur und erneuten Verify uebergeben. Nicht sicher behebbarer Fehler pausiert mit konkretem Befund. Rotes Verify bleibt immer rot und kann weder Commit noch Erfolg ausloesen.
+- **Akzeptanzkriterien:** Vor dem finalen Doku-Gate protokolliert der Run `verify_pending` und prueft Doku-Drift nur im aktuellen Worktree; Historien-Drift bleibt ein separates Qualitaetsgate. Jede fehlgeschlagene Verify-Stage erzeugt einen redigierten Failure Record mit Stage, Exit-Code, HEAD-SHA, Worktree-Fingerprint und Artefaktverweis. Der gleiche Run diagnostiziert den Befund anhand des aktuellen Diffs und der relevanten Stage-Ausgabe, nennt bei jedem Reparaturversuch den adressierten Befund und fuehrt nur betroffene Checks plus abschliessend die Gesamt-Verify erneut aus. Erfolgreiche und sachfremde Stage-Ausgaben werden nicht als Fehlerkontext eingespeist; rohe Logs und interne Gedankengaenge werden nicht in den Builder-Kontext kopiert. Nicht sicher behebbarer oder stagnierender Fehler pausiert mit konkretem Befund und naechstem sicheren Schritt. Rotes Verify bleibt rot und kann weder Commit noch Erfolg ausloesen.
 - **Tests:** `tests/test_failure_record.py`, `tests/test_loop_recovery.py`, `tests/test_committer_doku_nachzug.py`, `tests/test_verify_contract_stage.py`
 - **Blockiert von:** —
 - **Architektur-Voraussetzung:** ADR-0032
@@ -23,6 +23,14 @@ Letzte Aktualisierung: 2026-11-12.
 - **Akzeptanzkriterien:** Der Codeguardian ist kein zweiter schreibender Builder. Deterministische Scope-, Secret-, Dependency-, Test- und Policy-Checks laufen auf dem gepinnten Diff; unabhaengige semantische Review wird risikobasiert zugeschaltet. Jeder Befund verweist auf Datei/Zeile oder Verify-Artefakt und unterscheidet Blocker, Warnung und Information. Er darf keine Gates oder harten Checks umgehen; Reparaturen gehen an denselben Run zurueck und muessen erneut verifiziert werden. Vor Ausfuehrung sind Regelquellen, False-Positive-Pfad, Datenredaktion und Betriebsgrenzen dokumentiert.
 - **Tests:** Scope-Verletzung, Secret-/Dependency-Befund, begruendetes Risiko-Routing, sichere Tool-Ausgaben, Finding-Provenance, False-Positive-Ablehnung und erneute Verify nach Patch.
 - **Blockiert von:** OP-403, OP-396
+
+### OP-405: Rollenbezogenen Belegkontext und Kontextbudgets steuern
+- **Status:** open
+- **Typ:** loop-quality
+- **Betroffene Dateien:** Rollen-/Prompt-Builders, Repo-Retrieval, Verify-Konfiguration und Tests
+- **Akzeptanzkriterien:** Jede aktive Rolle hat ein deterministisches Kontextbudget und eine Priorisierung, die Nutzerauftrag, relevante ADRs, aktuelle Diff-/Verify-Belege und Sicherheitsregeln vor optionalem Kontext erhaelt. Rollen koennen bei belegtem Bedarf projektgebunden, read-only und begrenzt Dateien/Symbole nachladen; Belege tragen Pfad und Fundstelle. Ueberschreitungen und Retrieval-Ergebnisse werden auditiert und sichtbar markiert, nie still abgeschnitten. Volle Logs bleiben als Artefakte verfuegbar, aber nur relevante markierte Auszuege gelangen in Modellkontexte. Verify prueft Budget und Rollenrouting deterministisch. Rollen-Tokens und Ergebnisqualitaet werden auf einem repräsentativen Eval-Satz gemessen.
+- **Tests:** Budgetgrenzen und Priorisierung je Rolle; JIT-Retrieval mit Projektisolation, Treffer, leere/mehrdeutige Suche; untrusted Tool-Ausgabe; sichtbare Ueberschreitung; Regression bei Rolle, Limit und Prompt-Aufbau; Tokens-/Qualitaetsvergleich.
+- **Blockiert von:** OP-398
 
 ### OP-396: Chat als projektbezogene Hauptoberflaeche
 - **Status:** open
@@ -44,7 +52,7 @@ Letzte Aktualisierung: 2026-11-12.
 - **Status:** open
 - **Typ:** loop-autonomy
 - **Betroffene Dateien:** STATUS-Parser, OP-Selector, Loop-Start und Tests
-- **Akzeptanzkriterien:** Nur eindeutig startbare offene OPs mit aufgeloesten Blockern, Akzeptanzkriterien und Verifikation werden vorgeschlagen. Mehrdeutigkeit oder veralteter Status stoppt den Start und liefert dem Chat Kandidaten samt Gruenden. Begrenzte OP-Buendel werden vor Ausfuehrung im Plan-Gate einzeln verstaendlich freigegeben. Nach jedem gruenen Schritt prueft der Koordinator die gespeicherten Belege gegen das uebergeordnete Ziel und dessen Akzeptanzkriterien. Gruen allein beendet den Auftrag nicht: erst wenn alle freigegebenen Graph-Aufgaben erledigt, das Ziel belegt erreicht und die abschliessende Verify erfolgreich ist, wird abgeschlossen. Auch ein Scout-No-Op durchlaeuft nach dem Ergebnis-Gate die Phase-End-Verify; die Full-Suite darf in Repo- und Scaffold-Verify-Konfiguration bei leerem Diff nicht durch einen Changed-Files-Guard entfallen. Fehlgeschlagene, blockierte oder offene Tasks koennen nach freigegebener Teilpruefung dokumentiert und gegebenenfalls committed werden, duerfen den Run aber nie als loop_erfolg markieren. Sonst waehlt der Loop selbst den naechsten begruendeten Schritt innerhalb der freigegebenen Grenze. Neue, unabhaengige Funde werden als Folgeauftrag vorgemerkt; unklare oder scopeveraendernde Schritte gehen als gezielte Chat-Rueckfrage zur Freigabe.
+- **Akzeptanzkriterien:** Nur eindeutig startbare offene OPs mit aufgeloesten Blockern, Akzeptanzkriterien und Verifikation werden vorgeschlagen. Mehrdeutigkeit oder veralteter Status stoppt den Start und liefert dem Chat Kandidaten samt Gruenden. Ein deterministischer Plan-Compiler prueft Abdeckung der Akzeptanzkriterien, Abhaengigkeiten und Zyklen vor dem Plan-Gate. Der Koordinator waehlt Scout, Architect und bedarfsgesteuerten Spec-First-Pfad nach Auftragsbreite, Unsicherheit und Risiko; einfache Auftraege ueberspringen unnoetige Rollen. Begrenzte OP-Buendel werden vor Ausfuehrung im Plan-Gate einzeln verstaendlich freigegeben. Nach jedem gruenen Schritt prueft der Koordinator die gespeicherten Belege gegen das uebergeordnete Ziel und dessen Akzeptanzkriterien. Gruen allein beendet den Auftrag nicht: erst wenn alle freigegebenen Graph-Aufgaben erledigt, das Ziel belegt erreicht und die abschliessende Verify erfolgreich ist, wird abgeschlossen. Auch ein Scout-No-Op durchlaeuft nach dem Ergebnis-Gate die Phase-End-Verify; die Full-Suite darf in Repo- und Scaffold-Verify-Konfiguration bei leerem Diff nicht durch einen Changed-Files-Guard entfallen. Fehlgeschlagene, blockierte oder offene Tasks koennen nach freigegebener Teilpruefung dokumentiert und gegebenenfalls committed werden, duerfen den Run aber nie als loop_erfolg markieren. Sonst waehlt der Loop selbst den naechsten begruendeten Schritt innerhalb der freigegebenen Grenze. Neue, unabhaengige Funde werden als Folgeauftrag vorgemerkt; unklare oder scopeveraendernde Schritte gehen als gezielte Chat-Rueckfrage zur Freigabe.
 - **Tests:** Statusvarianten, Blocker, Ambiguitaet, Auswahlbegruendung und Fail-closed; Run-Abschluss mit failed/blocked/pending/running Tasks bleibt trotz gruenem Verify ohne loop_erfolg; Scout-No-Op fuehrt nach dem Human-Gate Phase-End-Verify und Full-Suite aus und bleibt bei rotem Verify ohne loop_erfolg; nach einem gruenen Zwischenschritt wird weitergearbeitet, wenn Zielkriterien offen sind; bei belegter Zielerreichung wird sauber abgeschlossen; kein endloses Reflexions-/Folgeauftragswachstum; neuer Fund bleibt vom freigegebenen Scope getrennt; jede Fortsetzungsentscheidung erscheint in Control als kurze Begruendung mit Beleg und naechstem Schritt.
 - **Blockiert von:** —
 
@@ -97,54 +105,6 @@ Letzte Aktualisierung: 2026-11-12.
 - **Akzeptanzkriterien:** Zehn aufeinanderfolgende OP-Runs werden aus der UI gestartet und mit Chat, Plan-Gate, Status, Ergebnis-Gate, Reconnect und Verify-Beleg dokumentiert. Jeder Nachweis nennt Projekt, OP, Run-ID und Ergebnis. Fehler werden behoben oder als konkreter Blocker festgehalten; keine stillen Abbrueche.
 - **Tests:** Betriebsprotokoll mit Run-IDs und Quality-Gate-Belegen.
 - **Blockiert von:** OP-396, OP-397
-
-### OP-385: Scout-Auftrag als Hauptzweck und Architect-Kontext
-- **Status:** open
-- **Typ:** loop-quality
-- **Betroffene Dateien:** werkstatt/scout.py, werkstatt/planner.py und Tests
-- **Akzeptanzkriterien:** Repo-Fakten werden zuerst gezielt gelesen; der Scout-LLM-Aufruf laeuft nur bei breiten, mehrdeutigen oder evidenzbeduerftigen Auftraegen. Architect liefert einen strukturierten Plan, den deterministische Validierung in Tasks ueberfuehrt; ein zweiter LLM-Task-Split ist nur ein begrenzter Fallback. Kontext enthaelt Belege statt redundanter Explorer-Ausgaben. Fehlende/widerspruechliche Belege fuehren zur Rueckfrage. LLM-Aufrufe und Tokens werden je Rolle gemessen; Representative Regressionsevaluation schuetzt die Qualitaet.
-- **Tests:** Kleine/einfache und breite/mehrdeutige Auftraege, strukturierter Plan/Compiler, Scout-Bedingung, Fallback und Token-/Qualitaetsvergleich.
-- **Blockiert von:** —
-
-### OP-386: Reflection auf Fehlerbelege begrenzen
-- **Status:** open
-- **Typ:** loop-quality
-- **Betroffene Dateien:** werkstatt/reflection.py und Tests
-- **Akzeptanzkriterien:** Reflection erhaelt den relevanten Diff und aktuelle Verify-/Reviewer-Befunde statt redundanter Patchkopien. Jeder Folgeversuch benennt, welcher Befund adressiert wird. Verify liefert pro ausgefuehrter Stage einen begrenzten strukturierten Beleg (Stage-ID, Exit-Status, extrahierter Fehlerkern); erfolgreiche Stages werden nicht als Fehler promptet. Der Builder erhaelt nur taskrelevante aktuelle Befunde plus eine begrenzte Zusammenfassung bisheriger Versuche, klar als untrusted Pruefdaten markiert; volle Logs, veraltete Task-Befunde und rohe Gedankengaenge werden nicht in den Kontext kopiert. Kontext wird am Task-/Run-Checkpoint aus Quelle und Belegen neu aufgebaut, statt als unkontrollierter Verlauf zu wachsen. Tests sichern Kontextgrenzen und Regressionen ab.
-- **Tests:** Stage-Beleg-Erzeugung und Reset pro Task; Builder-Prompt fuer strukturierte Verify- und Reviewer-Fehler, Begrenzung, keine erfolgreichen/unrelevanten Befunde und Schutz vor Anweisungen in Tool-Ausgabe.
-- **Blockiert von:** —
-
-### OP-384: Rollenbezogene Kontextbudgets
-- **Status:** open
-- **Typ:** loop-quality
-- **Betroffene Dateien:** werkstatt/model_routing.py, Prompt-Builders und Tests
-- **Akzeptanzkriterien:** Jede Rolle hat ein dokumentiertes Kontextbudget mit deterministischer Begrenzung. Wichtige Auftrags-, ADR- und Fehlerbelege werden vor optionalem Kontext erhalten. Ueberschreitungen werden sichtbar protokolliert und nicht still abgeschnitten.
-- **Tests:** Budgetgrenzen und Priorisierung je Rolle.
-- **Blockiert von:** OP-385
-
-### OP-387: JIT-Retrieval fuer Architect
-- **Status:** open
-- **Typ:** loop-quality
-- **Betroffene Dateien:** werkstatt/planner.py, Repo-Tools und Tests
-- **Akzeptanzkriterien:** Architect kann bei belegtem Bedarf gezielt Symbole/Dateien nachladen, statt unbeschraenkte Repo-Kontexte zu erhalten. Retrieval ist projektgebunden, read-only und begrenzt; Ergebnisse werden mit Pfad und Fundstelle in den Plan-Kontext aufgenommen.
-- **Tests:** Tool-Berechtigung, Projektgrenze, Treffer und leere/mehrdeutige Suche.
-- **Blockiert von:** OP-384, OP-385
-
-### OP-388: Kontextbudget im Verify absichern
-- **Status:** open
-- **Typ:** verify-fundament
-- **Betroffene Dateien:** Verify-Konfiguration und Prompt-/Routing-Tests
-- **Akzeptanzkriterien:** Verify prueft die konfigurierten Rollenkontextbudgets deterministisch. Eine Regression, die unbegrenzten oder falschen Rollenkontext wieder einfuehrt, blockiert den Commit. Fehlermeldungen nennen Rolle, Limit und gemessenen Wert.
-- **Tests:** Regressionen bei Budget, Rolle und Prompt-Aufbau.
-- **Blockiert von:** OP-384
-
-### OP-324: Planner-Qualitaet strukturell pruefen
-- **Status:** open
-- **Typ:** loop-quality
-- **Betroffene Dateien:** werkstatt/planner.py und Planner-Tests
-- **Akzeptanzkriterien:** Plan-Tasks decken Auftrag und Akzeptanzkriterien nachvollziehbar ab. Datei-/Task-Abhaengigkeiten sind explizit und zyklusfrei. Unvollstaendige Plaene werden vor dem Plan-Gate mit konkreten Luecken gezeigt.
-- **Tests:** AK-Abdeckung, Abhaengigkeitsgraph und unvollstaendige Plaene.
-- **Blockiert von:** —
 
 ### OP-240: Debugger-Handoff an den normalen Loop
 - **Status:** open

@@ -5350,3 +5350,12 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 - OP-397/398 wurden an Run-Zielgraph und Checkpoint statt an den alten PhaseState als Laufzeitsteuerung angepasst. Runde-Cap als Abschlusskriterium aus OP-396 entfernt; echte Budgets/Stagnation bleiben.
 - Neuer UI-Zielplan: `docs/UI-PLAN-2026-11-12.md`. Codeguardian ist als unabhaengige, nicht schreibende Diff-Schutzschicht beschrieben und in OP-404 aufgenommen.
 - Tests/CI: ausstehend.
+
+
+## 2026-11-12 — OP-Queue an ADR-0032 ausgerichtet
+
+- OP-324 und OP-385 sind in OP-398 zusammengefuehrt: Planabdeckung, DAG-Validierung und adaptive Auswahl von Scout/Architect/Spec-First gehoeren zum zielorientierten Koordinator, nicht in zwei parallel gepflegte Ziele.
+- OP-386 ist in OP-403 aufgegangen: strukturierte, relevante Fehlerbelege und evidenzgebundene Reparatur sind Bestandteil derselben Failure-Recovery-Kette.
+- OP-384/387/388 sind in OP-405 konsolidiert: Rollenbudgets, begrenztes JIT-Retrieval und deterministische Budgetregressionstests bilden einen gemeinsamen Kontextvertrag.
+- OP-372/374/375, OP-394/395 und OP-308 bleiben offen: aktuelle Doku und UI belegen nur Teilfunktionen; fuer semantische Projektion, Backfill-Herkunft, vollstaendige Timeline und Browser-Dogfooding fehlt noch der angeforderte Betriebs-/Regressionnachweis. Die Oberflaeche allein ist kein Erledigungsbeleg.
+- Keine dieser Zusammenfuehrungen erklaert die enthaltenen Anforderungen fuer erledigt; sie bleiben als Akzeptanzkriterien in den neuen bzw. bestehenden OPs erhalten.

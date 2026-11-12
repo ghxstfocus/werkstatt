@@ -61,8 +61,9 @@ Fehler, Run-Kontext und konkrete Diagnose.
 
 ### 2. Loop-Qualitaet und Betriebsnachweis
 - OP-398: begruendete Auswahl einzelner startbarer oder zusammenhaengender OPs; jeder gruene Zwischenschritt wird gegen das Hauptziel geprueft, bevor der Loop selbst weiterarbeitet oder abschliesst.
-- OP-384–388 und OP-324: Scout-/Architect-Kontext, Reflection, Retrieval
-  und begrenzte Plaene verbessern.
+- OP-398: adaptive Rollenwahl, deterministische Planvalidierung und Zielabgleich.
+- OP-403: Verify-Fehler im selben Run evidenzbasiert diagnostizieren und reparieren.
+- OP-405: Rollenbelege und Kontextbudgets begrenzen und messbar halten.
 - OP-280: Doku-Drift beim Verify zuverlaessig erkennen.
 - OP-372/374/375: Projektstatistik und Event-Projektion semantisch korrekt halten.
 - OP-382: zehn vollstaendige UI-Runs mit Run-, Gate- und Verify-Belegen.
