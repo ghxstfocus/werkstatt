@@ -1015,9 +1015,24 @@ def _phase_finalize(
     # Commit erst nach bestandenem Phase-End-Verify. Bei rotem Verify oder
     # offenen human_review-Tasks bleibt der Working Tree uncommitted.
     if rc == 0 and _commit_requested:
-        from werkstatt.committer import _committe_zielprojekt
+        from werkstatt.committer import (
+            _committe_zielprojekt,
+            _op_nnn_fuer_doku_nachzug,
+        )
+        import os as _os
+
+        _doku_op, _ = _op_nnn_fuer_doku_nachzug(
+            state.aufgabe or "",
+            getattr(state, "akzeptanzkriterien", []),
+            bool(getattr(state, "phase_review_approved", False)),
+        )
+        state.doku_nachzug_deferred = (
+            _os.environ.get("WERKSTATT_DOKU_NACHZUG") == "1"
+            and _doku_op is not None
+        )
         _commit_ok, _commit_info = _committe_zielprojekt(state)
         if not _commit_ok:
+            state.doku_nachzug_deferred = False
             audit("loop_human_gate_commit_abort",
                   {"info": _commit_info}, pd, pn)
             print(f"  FEHLER beim Commit: {_commit_info}")
@@ -1025,6 +1040,7 @@ def _phase_finalize(
         elif _commit_info:
             print(f"  Commit: {_commit_info}")
             if not _post_commit_verify_recovery(state, _commit_info):
+                state.doku_nachzug_deferred = False
                 audit(
                     "loop_human_gate_commit_post_verify_abort",
                     {
@@ -1046,6 +1062,65 @@ def _phase_finalize(
                     pn,
                 )
                 rc = 1
+            elif state.doku_nachzug_deferred:
+                state.doku_nachzug_deferred = False
+                state.doku_nachzug_commit_only = True
+                try:
+                    _doku_commit_ok, _doku_commit_info = _committe_zielprojekt(
+                        state,
+                        verify_callback=lambda: _verify_patches(
+                            state,
+                            phase="phase_end",
+                        ),
+                    )
+                finally:
+                    state.doku_nachzug_commit_only = False
+                if not _doku_commit_ok:
+                    audit(
+                        "loop_human_gate_commit_abort",
+                        {
+                            "reason": "verified_op_docs_commit_failed",
+                            "info": _doku_commit_info,
+                        },
+                        pd,
+                        pn,
+                    )
+                    print(
+                        "  FEHLER beim OP-Doku-Commit: "
+                        f"{_doku_commit_info}"
+                    )
+                    rc = 1
+                elif _doku_commit_info:
+                    print(f"  OP-Doku-Commit: {_doku_commit_info}")
+
+    if rc == 0 and state.doku_nachzug_deferred:
+        from werkstatt.committer import _committe_zielprojekt
+        state.doku_nachzug_deferred = False
+        state.doku_nachzug_commit_only = True
+        try:
+            _doku_commit_ok, _doku_commit_info = _committe_zielprojekt(
+                state,
+                verify_callback=lambda: _verify_patches(
+                    state,
+                    phase="phase_end",
+                ),
+            )
+        finally:
+            state.doku_nachzug_commit_only = False
+        if not _doku_commit_ok:
+            audit(
+                "loop_human_gate_commit_abort",
+                {
+                    "reason": "verified_op_docs_commit_failed",
+                    "info": _doku_commit_info,
+                },
+                pd,
+                pn,
+            )
+            print(f"  FEHLER beim OP-Doku-Commit: {_doku_commit_info}")
+            rc = 1
+        elif _doku_commit_info:
+            print(f"  OP-Doku-Commit: {_doku_commit_info}")
 
     if rc == 0:
         # OP-398: Ein gruenes Verify reicht nicht fuer einen gruenen Run,
