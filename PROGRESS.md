@@ -5731,3 +5731,14 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Doku-Drift-Belege für die Code-Commits:
   - **Commit:** `d209eb3fc9e9de8e8abb1e8c0cd94486b9448972`
   - **Commit:** `6486d3dab06388b9c9b4906ab479f36420bcfb62`
+
+## 2026-11-12 — OP-Abschluss an Review und Kriterien gebunden
+
+- Audit-Fund: Der optionale STATUS-Nachzug konnte eine explizit genannte OP entfernen, obwohl der normale Planner-Split keine Kriterien geliefert hatte oder der Phase-Review nicht freigegeben war.
+- Der Run-State speichert jetzt die erfolgreiche Phase-Review-Freigabe. Der Committer schließt eine OP nur bei ausdrücklicher OP-Kopfzeile, mindestens einem nichtleeren Abnahmekriterium und freigegebenem Phase-Review. Fehlende Voraussetzungen lassen den OP-Eintrag offen und werden mit einem konkreten Skip-Grund auditiert.
+- Regressionstest deckt fehlende Review-Freigabe, fehlende Kriterien, beiläufige OP-Erwähnung und den zulässigen Fall ab. Der Committer wird im Finalizer erst nach grüner Phase-End-Verify aufgerufen.
+- Doku-Drift-Belege für die Code-Commits:
+  - **Commit:** `af502c9a35bbd13a53e7e1fa886b341e0f58c911`
+  - **Commit:** `88702f47be2b4b999d986a47ec45b262f5d3e0d9`
+  - **Commit:** `167b3b64200c644d494240ab4088be980be38357`
+  - **Commit:** `9e1564fae4930b3098b2b7b41f480297f016feb1`
