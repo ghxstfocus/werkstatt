@@ -5481,3 +5481,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der erste CI-Lauf zur Checkpoint-Run-ID-Bindung lief in einem Reflection-Test in ein echtes Human-Gate, weil der Test nur den Reviewer abgelehnt, aber die nachgelagerte Gate-Entscheidung nicht isoliert hatte.
 - Der Test beantwortet das Phase-Review-Gate jetzt explizit mit Reject; damit bleibt er deterministisch und kann die volle Suite ohne interaktive Eingabe durchlaufen.
 - Der vorherige CI-Lauf hatte zusaetzlich bereits bei 7 Prozent einen Assertion-Fehler, dessen Abschlussbericht durch den spaeteren Timeout fehlte. Der korrigierte Lauf muss diesen Befund noch offenlegen.
+
+- Folgepruefung: Ein zweiter Reflection-Test mit fehlgeschlagenem Builder traf denselben interaktiven Gate-Pfad. Auch dieser Test beantwortet das Gate jetzt explizit mit Reject, damit CI nicht erneut vor der Fehlerzusammenfassung haengen bleibt.
