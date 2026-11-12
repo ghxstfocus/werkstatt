@@ -43,9 +43,7 @@ jobs:
         run: find static -maxdepth 1 -name '*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Run Ruff
-        run: |
-          python -m ruff check werkstatt/failure_record.py --fix --diff || true
-          python -m ruff check . --output-format concise
+        run: python -m ruff check . --output-format concise
 
       - name: Run pytest with diagnostics
         run: python -m pytest -q

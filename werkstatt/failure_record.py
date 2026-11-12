@@ -12,7 +12,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-
 _SECRET_ASSIGNMENT = re.compile(
     r"(?i)\b(api[_-]?key|access[_-]?token|secret|password|authorization)"
     r"(\s*[:=]\s*)([^\s,;]+)"
