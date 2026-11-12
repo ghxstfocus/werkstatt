@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path, PureWindowsPath
-from typing import Mapping
+from collections.abc import Mapping
 
 REQUIRED_DOC_KEYS = (
     "entry",
