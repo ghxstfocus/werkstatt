@@ -489,3 +489,72 @@ def test_finalize_markiert_unvollstaendige_tasks_nicht_als_loop_erfolg(
         "unresolved": [{"task_id": "t1", "status": task_status}],
     }]
 
+
+
+def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
+    tmp_path, monkeypatch,
+):
+    """Ein gespeicherter All-done-Checkpoint muss erneut final verifiziert werden."""
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.phases import finalize, tasks
+
+    planned = [{"id": "t1", "name": "Implementierung"}]
+    phase_state = PhaseState("testproj", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new("Resume Abschlusspruefung", planned)
+    phase_state.mark_done("t1")
+
+    state = _state(tmp_path)
+    state.tasks = planned
+    state.applied_count = 0
+    order = []
+    audit_events = []
+
+    monkeypatch.setattr(
+        "werkstatt.agent._enforce_run_budget", lambda _state: False,
+    )
+    monkeypatch.setattr(tasks, "audit", lambda *_args: None)
+    monkeypatch.setattr(finalize, "audit",
+                        lambda *args, **_kwargs: audit_events.append(args))
+    monkeypatch.setattr(finalize, "group_start", lambda *_args: None)
+    monkeypatch.setattr(finalize, "group_end", lambda *_args: None)
+    monkeypatch.setattr(finalize, "summary", lambda *_args: None)
+    monkeypatch.setattr(finalize, "_human_gate",
+                        lambda *_args, **_kwargs: 2)
+    monkeypatch.setattr(finalize, "_hat_human_review_tasks",
+                        lambda _phase_state: False)
+    monkeypatch.setattr(finalize, "_phase_end_reflection",
+                        lambda _state: True)
+    monkeypatch.setattr(
+        "werkstatt.reviewer.run_phase_end_review", lambda _state: True,
+    )
+
+    def verify(_state, *, phase=None):
+        order.append(("verify", phase))
+        return True
+
+    def append_progress(_project_dir, **_kwargs):
+        return None
+
+    def commit(_state):
+        order.append(("commit", None))
+        _state.progress_written_at_commit = True
+        return True, "abc123"
+
+    monkeypatch.setattr(finalize, "_verify_patches", verify)
+    monkeypatch.setattr("werkstatt.progress.append", append_progress)
+    monkeypatch.setattr("werkstatt.committer._committe_zielprojekt", commit)
+
+    rc_tasks, tasks_ok, returned_tasks = tasks._phase_tasks_loop(
+        state, phase_state,
+    )
+    assert rc_tasks == 0
+
+    rc = finalize._phase_finalize(
+        state, tasks_ok, returned_tasks, "testproj", phase_state,
+    )
+
+    assert rc == 0
+    assert tasks_ok == 1
+    assert state.tasks_ok_counter == 1
+    assert order == [("verify", "phase_end"), ("commit", None)]
+    assert any(event[0] == "loop_erfolg" for event in audit_events)

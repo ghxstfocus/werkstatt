@@ -5445,3 +5445,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der Laufzaehler uebernimmt jetzt ausschliesslich `done`-Tasks aus dem validierten Phase-State. Failed-, blocked- und pending-Tasks zaehlen nicht als erledigt; die Abschlusspruefung kontrolliert sie weiterhin einzeln und bleibt fail-closed.
 - Ein Regressionstest startet den Task-Loop mit einem bereits erledigten Plan und prueft, dass die Finalisierung den Resume-Pfad erreicht.
 - OP-397 bleibt offen: Dauerhaftes Run-Checkpointing, Pause/Resume ueber Prozessneustarts und Ende-zu-Ende-Verifikation sind damit nicht abgeschlossen. CI-Verifikation fuer diesen Patch steht aus.
+
+
+## 2026-11-12 — OP-397: Resume bis zur erneuten Phase-End-Verify integriert
+
+- Der Verhaltensregressionstest verwendet denselben gespeicherten Phase-State fuer Task-Loop und Finalizer. Er beweist, dass bereits erledigte Tasks nicht erneut gebaut werden, der Laufzaehler erhalten bleibt und die vollstaendige Phase-End-Verify vor Commit erneut laeuft.
+- Ein erfolgreicher Abschluss wird nur nach dieser Verify protokolliert. Das deckt den zuvor nur isoliert getesteten Uebergang Task-Loop -> Finalizer ab.
+- GitHub-CI prueft den erweiterten Test; dauerhafte Wiederaufnahme und Live-Run-SSOT nach Prozessneustart bleiben Teil von OP-397/M1.
