@@ -5890,13 +5890,16 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 ## OP-397 Recovery-Handoff, 2026-11-12
 
-- Der Resume-API-Test verbindet jetzt die echte SQLite-Loop-Registry, den echten
-  EventStore und einen echten Phase-Checkpoint. Eine neue Registry-Instanz
-  simuliert den Webserver-Reconnect; der Test prueft Run-ID, Ziel, Task-Checkpoint
-  und den erneuten Start mit `--resume` ohne `--fresh`.
-- Die Betriebssystem-Prozessgrenze bleibt im Test simuliert; ein echter
-  Worker-Abbruch mit anschließendem Linux-Webserver-Neustart ist damit noch
-  nicht als Ende-zu-Ende-Betriebsnachweis erbracht. OP-397 bleibt offen.
-- Verifiziert auf Commit `0bbeb54`: GitHub Quality Gate erfolgreich,
+- Der Linux-Integrationstest startet einen echten Python-Kinderprozess mit der
+  exakten Worker-CLI-Identitaet. Eine neue SQLite-Registry-Instanz findet den
+  weiterlaufenden PID wieder; nach dessen Ende wird derselbe Run mit echtem
+  EventStore und Phase-Checkpoint ueber die Resume-API erneut gestartet.
+  Run-ID, Ziel, Checkpoint sowie `--resume` ohne `--fresh` werden geprueft.
+- Der Testprozess verwendet ein kleines schlafendes Probe-Modul anstelle der
+  echten Loop-Ausfuehrung; der Webserver wird innerhalb des Tests ebenfalls
+  nicht als separater Prozess neu gestartet. Damit sind Worker-Erkennung,
+  Registry-Reconnect und API-Resume belegt, aber noch kein kompletter
+  Produktionslauf nach echtem Webserver-Neustart. OP-397 bleibt offen.
+- Verifiziert auf Commit `dad237d`: GitHub Quality Gate erfolgreich,
   2144 Tests bestanden, 5 uebersprungen, Ruff/Mypy/AST/Audit-Katalog ohne
   Fehler, Quality Gate `ok=true`, `regression=false`.
