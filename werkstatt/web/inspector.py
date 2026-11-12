@@ -932,8 +932,26 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
             f"{payload.get('elapsed_s', 0)}s, "
             f"{payload.get('content_len', 0)} Zeichen"
         )
-    if kind == "llm_call_start":
-        return f"{payload.get('agent', '?')}: startet ..."
+    if kind in ("llm_call_start", "llm_call_heartbeat"):
+        task_name = str(payload.get("task_name") or "").strip()
+        task_id = str(payload.get("task_id") or "").strip()
+        task = task_name or (f"Task {task_id}" if task_id else "")
+        files = payload.get("files")
+        if isinstance(files, list):
+            file_names = [
+                str(path).strip()[:120] for path in files
+                if isinstance(path, str) and path.strip()
+            ][:2]
+        else:
+            file_names = []
+        context = " · ".join(part for part in [task, ", ".join(file_names)] if part)
+        if kind == "llm_call_heartbeat":
+            elapsed = payload.get("elapsed_s")
+            timing = f" · {elapsed}s" if isinstance(elapsed, (int, float)) else ""
+            return (
+                f"arbeitet weiter{': ' + context if context else ''}{timing}"
+            )
+        return f"startet Modellaufruf{': ' + context if context else ''}"
     if kind == "loop_plan_missing":
         auf = str(payload.get("aufgabe", ""))[:80]
         return f"kein initialer Plan — Aufgabe: {auf}" if auf else "kein initialer Plan"
@@ -1135,7 +1153,10 @@ def _tl_aggregate_aktiv(
 
     ist_aktiv = (
         kind.endswith("_start")
-        or kind in ("llm_call", "llm_call_start", "loop_task_start", "gate_open")
+        or kind in (
+            "llm_call", "llm_call_start", "llm_call_heartbeat",
+            "loop_task_start", "gate_open",
+        )
         or (
             kind.startswith("chat_job_")
             and letztes.get("status") == "running"

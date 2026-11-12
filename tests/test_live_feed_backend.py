@@ -296,3 +296,45 @@ def test_live_feed_shows_verify_recovery_as_curated_steps(projektion, tmp_path):
     assert step["next_step"] == "Reparieren und vollständige Endprüfung wiederholen."
     assert "prompt" not in step
     assert "prompt" not in str(step)
+
+
+
+def test_llm_heartbeat_keeps_builder_activity_with_task_and_files(
+    projektion, tmp_path,
+):
+    """Lange Builder-Aufrufe bleiben aktiv und zeigen begrenzten Task-Kontext."""
+    jetzt = datetime.now(UTC)
+    _schreibe(tmp_path, [
+        {
+            "kind": "llm_call_start",
+            "run_id": "r1",
+            "project": "werkstatt",
+            "timestamp": (jetzt - timedelta(seconds=50)).isoformat(),
+            "agent": "builder",
+            "payload": {
+                "task_id": "t3",
+                "task_name": "Reconnect-Anzeige vervollstaendigen",
+                "files": ["static/chat.js", "tests/test_chat_frontend.py"],
+            },
+        },
+        {
+            "kind": "llm_call_heartbeat",
+            "run_id": "r1",
+            "project": "werkstatt",
+            "timestamp": jetzt.isoformat(),
+            "agent": "builder",
+            "payload": {
+                "task_id": "t3",
+                "task_name": "Reconnect-Anzeige vervollstaendigen",
+                "files": ["static/chat.js", "tests/test_chat_frontend.py"],
+                "elapsed_s": 45,
+            },
+        },
+    ])
+
+    aktiv = inspector.aggregate_live_feed("werkstatt")["aktiv"]
+    assert aktiv["kind"] == "llm_call_heartbeat"
+    assert aktiv["rolle"] == "builder"
+    assert "Reconnect-Anzeige vervollstaendigen" in aktiv["aktion"]
+    assert "static/chat.js" in aktiv["aktion"]
+    assert "45s" in aktiv["aktion"]

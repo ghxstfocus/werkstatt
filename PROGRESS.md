@@ -5664,3 +5664,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Beim Projektwechsel wird die alte Anzeige entfernt; Reload und Reconnect rekonstruieren den Schritt aus Loop-Registry und Audit-Feed. Aktive Chatfragen behalten Vorrang, damit keine zweite konkurrierende Aktivitaetszeile entsteht.
 - Die Anzeige enthaelt nur den aktuellen Arbeitsschritt, keine Prompts oder internen Gedankengaenge. Detaillierte Ereignisse bleiben in Control.
 - OP-395 bleibt offen bis Reconnect-, UI- und End-to-End-Verifikation sowie laengere Builder-Heartbeats gemeinsam belegt sind.
+
+
+## 2026-11-12 — OP-395: Heartbeat-Aktivitaet vollstaendig anzeigen
+
+- Der Live-Feed behandelt `llm_call_heartbeat` jetzt als aktive Arbeit. Dadurch verschwindet die Chat-Aktivitaetszeile bei langen Modellaufrufen nicht nach dem ersten 15-Sekunden-Heartbeat.
+- Start- und Heartbeat-Zeilen zeigen bounded Task-Name, Task-ID und maximal zwei Dateipfade; Prompt- und Datei-Inhalte bleiben ausgeschlossen.
+- Regressionstest prueft Heartbeat-Erkennung und Kontextdarstellung. OP-395 bleibt fuer den vollstaendigen E2E-Nachweis offen.
