@@ -110,6 +110,25 @@ def _op_nnn_als_expliziter_auftrag(aufgabe: str) -> str | None:
     )
     return match.group(1) if match else None
 
+def _op_nnn_fuer_doku_nachzug(
+    aufgabe: str,
+    akzeptanzkriterien: list,
+    phase_review_approved: bool,
+) -> tuple[str | None, str]:
+    """Erlaubt OP-Abschluss nur nach Review und mit pruefbaren Kriterien."""
+    if not phase_review_approved:
+        return None, "phase_review_not_approved"
+    if not any(
+        isinstance(item, str) and item.strip()
+        for item in (akzeptanzkriterien or [])
+    ):
+        return None, "acceptance_criteria_missing"
+    op_nnn = _op_nnn_als_expliziter_auftrag(aufgabe)
+    if not op_nnn:
+        return None, "no_explicit_op_in_task"
+    return op_nnn, ""
+
+
 def _status_md_op_entfernen(status_md_path: Path, op_nnn: str) -> tuple[bool, str]:
     """OP-048: Entfernt '### OP-NNN'-Block bis zur naechsten Ueberschrift."""
     if not status_md_path.exists():
@@ -585,10 +604,19 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
 
     # OP-048/055/056/057: Doku-Selbstpflege Ebene 1+2 (opt-in WERKSTATT_DOKU_NACHZUG=1).
     if _doku_nachzug_aktiv():
-        _op_nnn = _op_nnn_als_expliziter_auftrag(state.aufgabe or "")
+        _op_nnn, _doku_skip_reason = _op_nnn_fuer_doku_nachzug(
+            state.aufgabe or "",
+            getattr(state, "akzeptanzkriterien", []),
+            bool(getattr(state, "phase_review_approved", False)),
+        )
         _status_path = Path(pd) / "docs" / "STATUS.md"
         if not _op_nnn:
-            audit("doku_nachzug_skip", {"reason": "no_op_in_aufgabe"}, pd, pn)
+            audit(
+                "doku_nachzug_skip",
+                {"reason": _doku_skip_reason},
+                pd,
+                pn,
+            )
         elif not _status_path.exists():
             audit("doku_nachzug_skip",
                   {"reason": "no_status_md", "op_nnn": _op_nnn}, pd, pn)
