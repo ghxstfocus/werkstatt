@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from unittest.mock import patch
 from pathlib import Path
 
 _here = Path(__file__).parent
@@ -173,3 +174,56 @@ def test_adr_mini_prompt_uses_gate_bridge_in_headless(monkeypatch, tmp_path) -> 
 
     assert gates._adr_mini_phase(state) is True
     assert calls == [("adr_mini", "jn")]
+
+
+def test_plan_gate_rejects_invalid_task_graph_before_human_gate(tmp_path) -> None:
+    from werkstatt.gates import _plan_gate
+
+    invalid_graphs = [
+        ([{"id": "t1"}, {"id": "t1"}], "mehrfach vergeben"),
+        ([{"id": "t1", "dependencies": ["missing"]}], "unbekannte dependency"),
+        ([{"id": "t1", "dependencies": ["t1"]}], "sich selbst"),
+        (
+            [
+                {"id": "t1", "dependencies": ["t2"]},
+                {"id": "t2", "dependencies": ["t1"]},
+            ],
+            "zyklische",
+        ),
+    ]
+    for tasks, erwartung in invalid_graphs:
+        state = mk_state(
+            project_dir=str(tmp_path),
+            project_name="probe",
+            architect_prosa="Plan",
+            tasks=tasks,
+            tests=[],
+            akzeptanzkriterien=[],
+            phasen=[],
+        )
+        with patch(
+            "werkstatt.gates._call_hook",
+            side_effect=AssertionError("invalid graph must stop before hooks"),
+        ):
+            assert _plan_gate(state) is False
+        assert erwartung in state.last_planner_info["fakt"]
+        assert state.last_planner_info["regel"] == "TASK_GRAPH"
+
+
+def test_plan_gate_accepts_valid_dependency_dag(tmp_path) -> None:
+    from werkstatt.gates import _plan_gate
+
+    state = mk_state(
+        project_dir=str(tmp_path),
+        project_name="probe",
+        architect_prosa="Plan",
+        tasks=[
+            {"id": "t1"},
+            {"id": "t2", "dependencies": ["t1"]},
+        ],
+        tests=[],
+        akzeptanzkriterien=[],
+        phasen=[],
+    )
+    with patch("werkstatt.gates._call_hook", return_value={"allow": True}):
+        assert _plan_gate(state) is True

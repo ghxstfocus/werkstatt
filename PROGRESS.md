@@ -5790,3 +5790,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Checkpoint-Task-IDs werden beim Anlegen und Laden auf nichtleere, eindeutige Strings geprueft. Damit koennen Task-Lookup und Dependency-Index nicht mehr unterschiedliche Tasks derselben ID verwenden.
 - Die Initialisierung validiert vor dem Schreiben; ungueltige Plaene hinterlassen keinen teilweise angelegten Checkpoint.
 - Implementierung: `10a7378` (fix(loop): reject ambiguous checkpoint task ids). GitHub Actions Quality Gate Run [43308895700](https://github.com/ghxstfocus/werkstatt/actions/runs/43308895700) erfolgreich.
+
+
+## Planner-Taskgraph-Validierung (2026-11-12)
+
+- Das Plan-Gate prueft Task-IDs und Dependency-Graphen vor der Freigabe: unbekannte, doppelte und selbstreferenzierende Abhaengigkeiten sowie Zyklen werden als konkreter Planfehler zurueckgegeben.
+- Der bestehende Plan-Reflection-Pfad erhaelt `TASK_GRAPH` samt Diagnose und kann den Plan neu erzeugen; ungueltige Tasks erreichen weder Human-Gate noch Checkpoint.
+- Tests decken fehlerhafte Graphen und einen gueltigen gerichteten azyklischen Graphen ab. CI-Nachweis folgt mit diesem Commit.
