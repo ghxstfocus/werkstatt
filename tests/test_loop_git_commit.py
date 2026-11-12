@@ -185,7 +185,7 @@ def test_committe_postcheck_erkennt_parallelen_head_commit(tmp_path, monkeypatch
     ok, info = loop._committe_zielprojekt(s)
 
     assert ok is False
-    assert "Elternstand" in info
+    assert "Repository-Stand" in info
     failure = _kind(tmp_path, "loop_human_gate_commit_postcheck_failed")[0]
     assert failure["reason"] == "head_parent_mismatch"
     assert failure["actual_parent_sha"]
