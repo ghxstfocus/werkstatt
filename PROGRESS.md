@@ -5366,3 +5366,9 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 - **Info:** Ein erfolgreiches Verify loescht nun `last_verify_errors` und ersetzt die Stage-Ergebnisse durch die aktuelle Ausfuehrung. Damit kann ein frueherer Fehler nicht als aktueller Diagnosebefund weiterleben. Regressionstest: erst rotes, danach gruenes Verify im selben Run-State.
 - **Tests:** CI-Verifikation ausstehend.
 - **OP-403:** bleibt offen; sichere, evidenzgebundene Reparatur und erneute Endpruefung im selben Run sind noch nicht implementiert.
+
+
+## 2026-11-12 — Reflection-Befund auf aktuellen Task begrenzen
+- **Status:** umgesetzt; Quality-Gate-Verifikation ausstehend.
+- **Info:** Die Erschoepfungsdiagnose fuer einen Spec-Widerspruch wertet nur Reflection-Versuche desselben Aufrufs aus. Historische Patches eines vorigen Tasks koennen keinen aktuellen Widerspruch mehr vortaeuschen. Regressionstest deckt den Cross-Task-Fall ab.
+- **OP-403:** Der Failure-Record ist weiterhin nur Diagnosegrundlage. Same-run-Reparatur nach finalem Verify und deren End-to-End-Nachweis bleiben offen.
