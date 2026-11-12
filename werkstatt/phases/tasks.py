@@ -75,6 +75,9 @@ def _persist_run_checkpoint(
     next_task: dict[str, Any] | None,
 ) -> None:
     """Persist task-boundary state and acknowledge only observed chat notices."""
+    state = phase_state.state if hasattr(phase_state, "state") else None
+    if state is not None:
+        state.assert_run_lease()
     record = store.get_run_record(project_name, run_id)
     if record is None:
         return
@@ -175,6 +178,7 @@ def _phase_tasks_loop(
     # M-473: while-Loop statt for. Nach ADaPT-Split wird die
     # Schleife neu gestartet, damit Sub-Tasks gebaut werden.
     while True:
+        state.assert_run_lease()
         if _enforce_run_budget(state):
             phase_state.save()
             return 1, tasks_ok, tasks
