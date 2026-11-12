@@ -609,3 +609,85 @@ def test_planner_action_create_update(tmp_path):
     assert rc is True
     assert st.tasks[0]["action"] == "create"
     assert st.tasks[1]["action"] == "update"
+
+
+
+def test_planner_split_persistiert_abnahmekriterien_und_originalauftrag(tmp_path):
+    """Der Split muss Kriterien aus dem Modell strukturiert in den Run uebernehmen."""
+    from werkstatt.planner import _zerlege_in_sub_tasks
+
+    st = _state(tmp_path)
+    st.aufgabe = "OP-900: Der API-Endpunkt muss Projektisolation erzwingen."
+    reply = MagicMock(
+        ok=True,
+        content=json.dumps({
+            "akzeptanzkriterien": [
+                "Fremde Projekte liefern keine Ereignisse.",
+                "Fremde Projekte liefern keine Ereignisse.",
+            ],
+            "tasks": [{
+                "id": "t1",
+                "name": "Projektfilter",
+                "task_files": ["werkstatt/web/app.py"],
+                "dependencies": [],
+            }],
+        }),
+    )
+    captured = {}
+
+    def _ask(_key, _system, user_content, **_kwargs):
+        captured["prompt"] = user_content
+        return reply
+
+    with patch("werkstatt.planner.ask_llm", side_effect=_ask), \
+         patch("werkstatt.planner._with_spinner", side_effect=lambda _label, fn: fn()), \
+         patch("werkstatt.planner.audit"):
+        tasks = _zerlege_in_sub_tasks(
+            "## werkstatt/web/app.py\nFiltere Projekt-Ereignisse.",
+            ["werkstatt/web/app.py"],
+            "fake",
+            tmp_path,
+            "demo",
+            aufgabe=st.aufgabe,
+            state=st,
+        )
+
+    assert tasks and tasks[0]["id"] == "t1"
+    assert st.akzeptanzkriterien == [
+        "Fremde Projekte liefern keine Ereignisse.",
+    ]
+    assert "ORIGINALAUFTRAG" in captured["prompt"]
+    assert st.aufgabe in captured["prompt"]
+
+
+def test_run_planner_behaelt_kriterien_des_planner_splits(tmp_path):
+    """Ein nachgelagerter Planner-Schritt darf Kriterien nicht wieder loeschen."""
+    st = _state(tmp_path)
+    st.explorer_context = {"key_files": [{"file": "werkstatt/demo.py"}]}
+
+    def _architect(_state, _aufgabe, _content, _key, _explorer):
+        _state.architect_prosa = "## werkstatt/demo.py\nAendere den Handler."
+        return True
+
+    def _split(*_args, state=None, **_kwargs):
+        state.akzeptanzkriterien = ["Handler gibt 404 bei unbekanntem Projekt."]
+        return [{
+            "id": "t1",
+            "name": "Handler anpassen",
+            "action": "update",
+            "task_files": ["werkstatt/demo.py"],
+            "dependencies": [],
+            "description": "Aendere den Handler.",
+        }]
+
+    with patch("werkstatt.planner._run_scout", return_value={
+        "auftrag_prosa": "Aendere den Handler.", "api_auszug": {},
+        "risiken": [], "bereits_erfuellt": False,
+    }), \
+         patch("werkstatt.planner.run_architect", side_effect=_architect), \
+         patch("werkstatt.planner._zerlege_in_sub_tasks", side_effect=_split):
+        assert run_planner(st) is True
+
+    assert st.akzeptanzkriterien == [
+        "Handler gibt 404 bei unbekanntem Projekt.",
+    ]
