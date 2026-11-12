@@ -5756,4 +5756,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   - **Commit:** `11b2e7ec6dec2ef5cae136689000bdc976d4f301`
   - **Commit:** `53b97fb484cdfe29c30fecd1ab677da2b3c26785`
   - **Commit:** `a45f8aab8485934389af1a9d7870e7c647b1b6bb`
+  - **Commit:** `cac1947fcb04481d2d0fc52e6199339be0261f28` (Ruff-Importkorrektur)
 - CI-Verifikation folgt.
