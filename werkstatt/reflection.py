@@ -23,7 +23,7 @@ from itertools import count
 
 from werkstatt.prompts import format_letzter_test_fehler_block
 from werkstatt.render import log_line  # Fix BA
-from werkstatt.state import RunState
+from werkstatt.state import RunState, check_run_lease
 
 
 def _setze_runde_patches(state, patches: list) -> None:
@@ -677,6 +677,7 @@ def _reflection_loop(
         state.reflection_phase = True
         try:
             _builder_ok = run_builder(state)
+            check_run_lease(state)
         finally:
             state.reflection_phase = False
         if getattr(state, "budget_exhausted_reason", ""):
@@ -985,7 +986,9 @@ def _phase_end_reflection(state: RunState) -> bool:
             }
             # Builder rufen.
             state.patches = []
-            if not run_builder(state):
+            _phase_builder_ok = run_builder(state)
+            check_run_lease(state)
+            if not _phase_builder_ok:
                 audit("loop_phase_reflection_builder_failed",
                       {"datei": _datei, "runde": _runde + 1}, pd, pn)
                 continue
