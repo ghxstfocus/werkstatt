@@ -5403,3 +5403,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Regressionstest prueft, dass eine Aenderung in einem unversionierten Quellfile den Fingerprint aendert. GitHub-CI prueft den Patch.
 
 - CI meldete im OP-403-Fingerprint-Patch nur einen unsortierten Importblock; die Reihenfolge ist korrigiert. Der Testlauf steht noch aus.
+
+- CI pruefte den Fingerprint-Code und fand zwei Test-Fixture-Luecken: Der Git-Mock lieferte keine leere `ls-files`-Liste und der neue Regressionstest codierte NUL/Newline falsch. Beides ist korrigiert; die naechste CI prueft den echten Inhaltswechsel.
