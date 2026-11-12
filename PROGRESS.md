@@ -5372,3 +5372,7 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 - **Status:** umgesetzt; Quality-Gate-Verifikation ausstehend.
 - **Info:** Die Erschoepfungsdiagnose fuer einen Spec-Widerspruch wertet nur Reflection-Versuche desselben Aufrufs aus. Historische Patches eines vorigen Tasks koennen keinen aktuellen Widerspruch mehr vortaeuschen. Regressionstest deckt den Cross-Task-Fall ab.
 - **OP-403:** Der Failure-Record ist weiterhin nur Diagnosegrundlage. Same-run-Reparatur nach finalem Verify und deren End-to-End-Nachweis bleiben offen.
+
+## 2026-11-12 — Laufbudget an RunState
+
+`loop.main()` uebergibt jetzt das konfigurierte Projektbudget an den `RunState`; zuvor wurde es trotz YAML-Konfiguration leer initialisiert. Ein Regressionstest prueft die Durchreichung von `max_minutes` und `max_llm_calls`. Das aktiviert noch keine Budgetdurchsetzung; diese folgt als eigener Schritt mit kontrolliertem Abbruch und Audit-Ereignis.
