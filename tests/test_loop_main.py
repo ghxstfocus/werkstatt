@@ -600,11 +600,11 @@ def test_resume_mit_falscher_run_id_stoppt_vor_task_loop(
     state_dir.mkdir()
     backup = state_dir / "p.phase.yaml.fresh-bak"
     backup.write_text(
-        "project: p\\nrun_id: p-run-old\\naufgabe: alte Aufgabe\\ntasks: []\\n",
+        "project: p\nrun_id: p-run-old\naufgabe: alte Aufgabe\ntasks: []\n",
         encoding="utf-8",
     )
     active = state_dir / "p.phase.yaml"
-    active_text = "project: p\\nrun_id: p-run-current\\naufgabe: aktive Aufgabe\\ntasks: []\\n"
+    active_text = "project: p\nrun_id: p-run-current\naufgabe: aktive Aufgabe\ntasks: []\n"
     active.write_text(active_text, encoding="utf-8")
     runner_calls: list[bool] = []
 
@@ -633,8 +633,8 @@ def test_resume_mit_falscher_run_id_stoppt_vor_task_loop(
 @pytest.mark.parametrize(
     "backup_text",
     [
-        "project: p\\nrun_id: p-run-old\\ntasks: []\\n",
-        "project: p\\ntasks: invalid\\n",
+        "project: p\nrun_id: p-run-old\ntasks: []\n",
+        "project: p\ntasks: invalid\n",
     ],
 )
 def test_resume_verwirft_unsicheren_backup_ohne_ihn_zu_verschieben(
@@ -646,7 +646,7 @@ def test_resume_verwirft_unsicheren_backup_ohne_ihn_zu_verschieben(
     backup = state_dir / "p.phase.yaml.fresh-bak"
     backup.write_text(backup_text, encoding="utf-8")
     active = state_dir / "p.phase.yaml"
-    active_text = "project: p\\nrun_id: p-run-active\\ntasks: []\\n"
+    active_text = "project: p\nrun_id: p-run-active\ntasks: []\n"
     active.write_text(active_text, encoding="utf-8")
     runner_calls: list[bool] = []
 
@@ -705,12 +705,12 @@ def test_resume_archiviert_aktiven_checkpoint_vor_backup_aktivierung(
     state_dir.mkdir()
     backup = state_dir / "p.phase.yaml.fresh-bak"
     backup.write_text(
-        "project: p\\nrun_id: p-run\\naufgabe: ziel\\ntasks: []\\n",
+        "project: p\nrun_id: p-run\naufgabe: ziel\ntasks: []\n",
         encoding="utf-8",
     )
     active = state_dir / "p.phase.yaml"
     active.write_text(
-        "project: p\\nrun_id: p-run\\naufgabe: ziel\\ntasks: []\\n",
+        "project: p\nrun_id: p-run\naufgabe: ziel\ntasks: []\n",
         encoding="utf-8",
     )
     runner_calls: list = []

@@ -5503,3 +5503,8 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Resume prueft den Checkpoint jetzt vor jeder Mutation: Datei muss existieren und gueltig sein; bei headless/Web-Aufrufen muss ihre Run-ID exakt der angeforderten Run-ID entsprechen. Abgelehnte Backups bleiben unveraendert liegen.
 - Beim Aktivieren eines geprueften Backups wird ein vorhandener aktiver Checkpoint nummeriert archiviert; ein fehlgeschlagener Move stoppt fail-closed. `--resume` und `--fresh` sind gegenseitig ausgeschlossen.
 - Regressionstests decken Run-ID-Mismatch, kaputte und fehlende Checkpoints sowie den Erhalt des aktiven Checkpoints ab. GitHub-CI-Verifikation ausstehend.
+
+## 2026-11-12 — Resume-Test-Fixtures verwenden echte YAML-Zeilen
+
+- CI fand im neuen Backup-Promotionstest, dass YAML-Fixtures literale `\\n` statt Zeilenumbrueche enthielten. Die Produktionsvalidierung hat sie daher korrekt abgelehnt.
+- Testdaten auf echte Zeilenumbrueche korrigiert; erneute CI-Pruefung laeuft.
