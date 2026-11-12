@@ -5679,7 +5679,7 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - DOC_CONVENTIONS.md legt die Abschlussregel fest: vollstaendige Phase-End-Verify und persistierter OP-/Run-Beleg vor Statusentfernung.
 - Regressionstests decken fehlenden Progress-Beleg, idempotenten Retry, Delete-Zone-Deduplizierung und Aufbewahrungsgrenze ab.
 - Doku-Drift-Belege fuer die Code-Commits:
-  - **Commit:** `d9bd058`
-  - **Commit:** `49cd355`
-  - **Commit:** `5ddfb56`
+  - **Commit:** `d9bd0580739d531fbc33e26121fa9ce02c0c91af`
+  - **Commit:** `49cd355848faa6f2eb7071b2646f4d52068c862c`
+  - **Commit:** `5ddfb566e6d2f6b376a469b863517fca7b649808`
 - Die GitHub-CI ist fuer den neuesten Stand noch zu verifizieren; dieses Log behauptet kein gruenes CI-Ergebnis.
