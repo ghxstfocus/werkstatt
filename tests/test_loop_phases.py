@@ -471,8 +471,8 @@ def test_finalize_markiert_unvollstaendige_tasks_nicht_als_loop_erfolg(
     )
 
     assert rc == 1
-    assert order == ["progress_pending", "verify", "progress_final"]
-    assert [entry["status"] for entry in progress] == ["verify_pending", "phase_ende"]
+    assert order == ["progress_pending", "verify", "commit"]
+    assert [entry["status"] for entry in progress] == ["verify_pending"]
     kinds = [event[0] for event in events]
     assert "loop_erfolg" not in kinds
     unvollstaendig = [

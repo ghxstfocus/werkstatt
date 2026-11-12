@@ -27,6 +27,9 @@ Plan- und Ergebnis-Gates bleiben verpflichtend.
 ### 0. Run-Abschluss und Failure-Recovery
 - **OP-403:** finale Verify-Fehler als reparierbare Befunde desselben Runs
   behandeln und Doku-/PROGRESS-Reihenfolge korrigieren.
+- Spec-First bleibt als bedarfsgesteuerter Pfad erhalten: Spec-Builder friert
+  unabhaengige Tests/Vertraege ein, Code-Builder implementiert ohne Einsicht
+  in diese Tests; einfache Aufgaben ueberspringen den Pfad.
 - Das harte Doku-Gate prueft nur den aktuellen Worktree; Historien-Drift
   bleibt Teil des separaten Qualitaetsgates. Vor dem Gate wird
   `verify_pending` protokolliert, danach das tatsaechliche Ergebnis.

@@ -182,6 +182,7 @@ Unsicherheit, Beleglage und erwartbarem Nutzen:
 | Repo-Explorer | Breites, neues oder mehrdeutiges Vorhaben | Read-only, gezielte Datei-/Symbolbelege. Enges explizites Ziel braucht keinen Scout-LLM-Aufruf. |
 | Architect/Reasoner | Architektur-, Multi-Datei- oder mehrdeutiger Auftrag | Strukturiertes Planobjekt mit Kriterien, Abhaengigkeiten, Risiken und Verify; nur ein Syntheseschritt als Normalpfad. |
 | Plan-Compiler | Jeder generierte/geaenderte Plan | Deterministisch Schema, Vollstaendigkeit, Abhaengigkeiten und Grenzen pruefen; ersetzt den separaten LLM-Task-Split, sobald Evaluation Gleichwertigkeit belegt. |
+| Spec-Builder | Bei hoher Komplexitaet, neuen Schnittstellen, mehrdeutigen Anforderungen oder hohem Regressionsrisiko | Erstellt unabhaengige Akzeptanztests/Vertrag; diese werden vor dem Codebau geprueft und eingefroren. Bei klaren, kleinen Aufgaben wird diese Faehigkeit ausgelassen. |
 | Builder | Schreibende Umsetzung | Ein Writer pro Worktree; begrenzte Werkzeuge und voller Run-Kontext fuer nachvollziehbare Events. |
 | Verify | Jede relevante Aenderung | Deterministische Projektpruefungen auf dem aktuellen integrierten SHA. |
 | Reviewer | Risiko, neue Schnittstelle, grosse/mehrdeutige Aenderung oder negatives Verify | Unabhaengig vom Builder; Befunde muessen auf Diff/Anforderung verweisen. |
@@ -194,6 +195,23 @@ oder Sicherheit verliert. Parallel ist Read/Diagnose moeglich; schreibende
 Arbeit nutzt getrennte Worktrees auf gepinnter Basis und wird bei Integration
 serialisiert. Nach Integration laufen relevante Gates erneut auf dem
 kombinierten SHA.
+
+### Bedarfsweiser Spec-First-Pfad
+
+Wenn der Koordinator den Spec-First-Pfad begruendet auswaehlt, erstellt ein
+Spec-Builder zuerst unabhaengige Akzeptanztests und einen maschinenlesbaren
+Vertrag. Der Koordinator prueft die Spezifikation auf Bezug zum Nutzerziel,
+Vollstaendigkeit, Testbarkeit und Scope; danach werden Spec-Dateien und
+Test-Hash eingefroren. Ein zweiter Code-Builder erhaelt den freigegebenen
+Implementierungsauftrag und die benoetigten oeffentlichen Schnittstellen,
+aber weder Testdateien noch erwartete Testausgaben. Er darf die eingefrorene
+Spezifikation nicht aendern. Ein unabhaengiger Verify-Schritt fuehrt sie gegen
+den Patch aus; bei Befund darf derselbe Run gezielt nachbessern, ohne die
+Tests still zu lockern. Eine notwendige Spezifikationsaenderung geht mit
+Begruendung zurueck an den Koordinator und, wenn Ziel oder Umfang betroffen
+sind, an ein Human Gate. Fuer triviale oder eindeutig spezifizierte Aufgaben
+entfaellt der Spec-Builder; der Koordinator waehlt den kuerzesten sicheren
+Pfad. Die Verwendung und Entscheidung werden in Control protokolliert.
 
 ## 6. Ereignisse und UI-Vertrag
 
