@@ -32,12 +32,15 @@ def _mk_state() -> RunState:
 
 
 def _mock_interactive(monkeypatch, antworten):
-    """stdin als TTY markieren + input aus Antwortliste."""
+    """Gate-Bridge und manuelle Edit-Eingabe aus Antwortliste speisen."""
     class _TTY:
         def isatty(self):
             return True
     monkeypatch.setattr(sys, "stdin", _TTY())
     it = iter(antworten)
+    monkeypatch.setattr(
+        "werkstatt.gates._frage_gate", lambda *a, **kw: next(it),
+    )
     monkeypatch.setattr("builtins.input", lambda *a, **kw: next(it))
 
 
@@ -73,7 +76,7 @@ def test_eof_gibt_1(monkeypatch):
 
     def _raise_eof(*a, **kw):
         raise EOFError
-    monkeypatch.setattr("builtins.input", _raise_eof)
+    monkeypatch.setattr("werkstatt.gates._frage_gate", _raise_eof)
     assert _phase_review_gate(_mk_state()) == 1
 
 
