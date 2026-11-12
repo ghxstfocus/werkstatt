@@ -388,13 +388,16 @@ def test_alle_done_aus_phasestate():
 
 
 def _run_finalize_commit_order(
-    tmp_path, monkeypatch, verify_ok, *, task_status="done",
+    tmp_path, monkeypatch, verify_ok, *, task_status="done", doku_nachzug=False,
 ):
     from werkstatt.phases import finalize
 
     state = _state(tmp_path, run_id="run-verify-1")
     state.tasks = [{"id": "t1"}]
     state.applied_count = 0
+    if doku_nachzug:
+        state.aufgabe = "OP-999: Verifizierten Abschluss testen"
+        state.akzeptanzkriterien = ["Abschluss wird erst nach Verify dokumentiert."]
     phase_state = MagicMock()
     phase_state.get_task.return_value = {"status": task_status}
     order = []
@@ -407,7 +410,10 @@ def _run_finalize_commit_order(
 
     def _verify(_state, phase=None):
         assert phase == "phase_end"
-        order.append("verify_post_commit" if "commit" in order else "verify")
+        if getattr(_state, "doku_nachzug_commit_only", False):
+            order.append("verify_docs")
+        else:
+            order.append("verify_post_commit" if "commit" in order else "verify")
         return verify_ok
 
     def _append_progress(_project_dir, **kwargs):
@@ -418,11 +424,21 @@ def _run_finalize_commit_order(
             else "progress_final"
         )
 
-    def _commit(_state):
+    def _commit(_state, *, verify_callback=None):
+        if getattr(_state, "doku_nachzug_commit_only", False):
+            assert verify_callback is not None
+            assert verify_callback()
+            _state.doku_nachzug_applied = True
+            order.append("commit_docs")
+            return True, "docs123"
         order.append("commit")
         _state.progress_written_at_commit = True
         return True, "abc123"
 
+    if doku_nachzug:
+        monkeypatch.setenv("WERKSTATT_DOKU_NACHZUG", "1")
+    else:
+        monkeypatch.delenv("WERKSTATT_DOKU_NACHZUG", raising=False)
     monkeypatch.setattr(finalize, "_human_gate", _human_gate)
     monkeypatch.setattr(
         finalize, "_phase_end_recovery_pause", lambda *_args: False,
@@ -462,6 +478,21 @@ def test_finalize_committet_erst_nach_bestandenem_phase_end_verify(
     assert order == ["progress_pending", "verify", "commit", "verify_post_commit"]
     assert [entry["status"] for entry in progress] == ["verify_pending"]
     assert progress[0]["run_id"] == "run-verify-1"
+
+
+def test_op_doku_commit_kommt_nach_code_post_commit_verify(tmp_path, monkeypatch):
+    rc, order, _events, _progress = _run_finalize_commit_order(
+        tmp_path, monkeypatch, True, doku_nachzug=True,
+    )
+    assert rc == 0
+    assert order == [
+        "progress_pending",
+        "verify",
+        "commit",
+        "verify_post_commit",
+        "verify_docs",
+        "commit_docs",
+    ]
 
 
 def test_finalize_committet_nicht_wenn_phase_end_verify_scheitert(
