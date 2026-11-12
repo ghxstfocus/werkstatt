@@ -16,18 +16,18 @@ from werkstatt.orchestrator import (
 def test_prioritaetsliste():
     assert _DOCS_PRIORITAET == [
         "entry", "status", "roadmap", "architecture",
-        "conventions", "adr_index", "glossary",
+        "progress", "conventions", "adr_index", "glossary",
     ]
 
 
 def test_sortierung_entry_vor_rest():
     cfg = {
         "glossary": "g", "adr_index": "a", "architecture": "ar",
-        "roadmap": "r", "status": "s", "entry": "e",
+        "roadmap": "r", "status": "s", "entry": "e", "progress": "p",
     }
     keys = [k for k, _ in _sortiere_docs_nach_prioritaet(cfg)]
     assert keys == [
-        "entry", "status", "roadmap", "architecture",
+        "entry", "status", "roadmap", "architecture", "progress",
         "adr_index", "glossary",
     ]
 
