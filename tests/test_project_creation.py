@@ -20,7 +20,9 @@ def test_create_local_project_scaffolds_and_registers_start_config(
         lambda name: config_dir / f"{name}.yaml",
     )
 
-    result = project_creation.create_local_project("loreipsum", project_dir)
+    result = project_creation.create_local_project(
+        "loreipsum", project_dir, allowed_root=tmp_path / "opt",
+    )
 
     assert result["name"] == "loreipsum"
     assert Path(result["manifest"]) == config_dir / "loreipsum.yaml"
@@ -51,7 +53,9 @@ def test_create_local_project_rejects_invalid_name(
     target = tmp_path / "target"
 
     with pytest.raises(ValueError, match="Projektname"):
-        project_creation.create_local_project(name, target)
+        project_creation.create_local_project(
+            name, target, allowed_root=tmp_path,
+        )
 
     assert not target.exists()
 
@@ -69,7 +73,9 @@ def test_create_local_project_never_overwrites_existing_directory(
     )
 
     with pytest.raises(FileExistsError, match="existiert bereits"):
-        project_creation.create_local_project("loreipsum", target)
+        project_creation.create_local_project(
+            "loreipsum", target, allowed_root=tmp_path,
+        )
 
     assert marker.read_text(encoding="utf-8") == "preserve"
 
