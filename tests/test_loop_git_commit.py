@@ -152,6 +152,45 @@ def test_committe_postcheck_faengt_neue_aenderungen_nach_commit_ab(
         "post_commit_check"
     ] == "failed"
 
+
+
+def test_committe_postcheck_erkennt_parallelen_head_commit(tmp_path, monkeypatch):
+    """Ein fremder Folge-Commit darf nicht als eigener Commit verifiziert werden."""
+    _init_repo(tmp_path)
+    (tmp_path / "neu.py").write_text("def f(): pass\n")
+    s = _state(tmp_path)
+
+    from werkstatt import loop as loop_mod
+    original_run = loop_mod.subprocess.run
+
+    def _commit_parallel(argv, **kwargs):
+        result = original_run(argv, **kwargs)
+        if "commit" in argv and "--allow-empty" not in argv and result.returncode == 0:
+            parallel = original_run(
+                [
+                    "git", "-C", str(tmp_path),
+                    "-c", "user.name=parallel",
+                    "-c", "user.email=parallel@example.com",
+                    "commit", "--allow-empty", "-m", "parallel commit",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+            assert parallel.returncode == 0, parallel.stderr
+        return result
+
+    monkeypatch.setattr(loop_mod.subprocess, "run", _commit_parallel)
+    ok, info = loop._committe_zielprojekt(s)
+
+    assert ok is False
+    assert "Elternstand" in info
+    failure = _kind(tmp_path, "loop_human_gate_commit_postcheck_failed")[0]
+    assert failure["reason"] == "head_parent_mismatch"
+    assert failure["actual_parent_sha"]
+    assert failure["expected_parent_sha"] != failure["actual_parent_sha"]
+
 def test_committe_autor_aus_state(tmp_path):
     """git_author_name/email aus state werden im Commit verwendet."""
     _init_repo(tmp_path)

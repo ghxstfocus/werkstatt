@@ -5624,3 +5624,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Ursache des roten CI-Laufs behoben: `progress.append()` erzeugt keine zusaetzliche Leerzeile am EOF mehr. Zwischen Eintraegen bleibt ein sauberer Absatz; der neue End-of-file-Test und die Post-Commit-Pruefung schuetzen das Format.
 
 - Qualitaetsgate-Nachkorrektur: Die optionale Liste offener Dateien wird vor dem Auditing zur Laufzeit typgeprueft; damit bleibt der Post-Commit-Fehlerpfad auch im mypy-Gate sauber.
+
+## 2026-11-12 — OP-403: Commit gegen gepinnten Basisstand pruefen
+
+- Die Post-Commit-Kontrolle vergleicht jetzt den Eltern-Commit des neuen HEAD mit dem unmittelbar vor `git commit` gepinnten Stand. Ein paralleler Commit im selben Checkout kann so nicht als Ergebnis des Runs ausgegeben werden.
+- Ein Regressionstest simuliert einen konkurrierenden Folge-Commit und erwartet einen protokollierten `head_parent_mismatch` statt eines erfolgreichen Runs.
+- GitHub Actions Quality Gate fuer den neuen Stand muss gruen sein.

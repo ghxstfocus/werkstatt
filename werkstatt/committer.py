@@ -299,8 +299,39 @@ def _build_commit_subject(aufgabe: str, op_nnn: str | None) -> str:
     return _line
 
 
-def _post_commit_check(project_dir: Path) -> tuple[bool, str, dict[str, object]]:
-    """Prueft nach Commit HEAD, committed Diff und sauberen Working Tree."""
+def _head_before_commit(project_dir: Path) -> tuple[bool, str, str]:
+    """Liest den gepinnten Commit-Elternstand; erlaubt ein leeres Root-Repo."""
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(project_dir), "rev-parse", "--verify", "HEAD"],
+            capture_output=True, text=True, check=False, timeout=10,
+        )
+    except Exception as exc:
+        return False, "", f"HEAD vor Commit nicht lesbar: {exc}"
+    if head.returncode == 0:
+        sha = head.stdout.strip()
+        if re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", sha):
+            return True, sha, ""
+        return False, "", "HEAD vor Commit lieferte keine gueltige SHA."
+    try:
+        count = subprocess.run(
+            ["git", "-C", str(project_dir), "rev-list", "--all", "--count"],
+            capture_output=True, text=True, check=False, timeout=10,
+        )
+    except Exception as exc:
+        return False, "", f"Git-Historie vor Commit nicht lesbar: {exc}"
+    if count.returncode == 0 and count.stdout.strip() == "0":
+        return True, "", ""
+    return False, "", (
+        "HEAD konnte nicht gelesen werden und das Repository ist nicht leer: "
+        f"{(head.stderr or '').strip()[:200]}"
+    )
+
+
+def _post_commit_check(
+    project_dir: Path, expected_parent_sha: str,
+) -> tuple[bool, str, dict[str, object]]:
+    """Prueft Commit-Elternstand, Diff und sauberen Working Tree."""
     head_command = ["git", "-C", str(project_dir), "rev-parse", "HEAD"]
     try:
         head = subprocess.run(
@@ -345,7 +376,23 @@ def _post_commit_check(project_dir: Path) -> tuple[bool, str, dict[str, object]]
             "reason": "command_failed",
             "message": f"rev-list rc={parents.returncode}: {(parents.stderr or '').strip()[:240]}",
         }
-    is_root_commit = len(parents.stdout.split()) == 1
+    parent_fields = parents.stdout.split()
+    actual_parent_sha = parent_fields[1] if len(parent_fields) > 1 else ""
+    expected_parent_count = 1 if not expected_parent_sha else 2
+    if (
+        len(parent_fields) != expected_parent_count
+        or actual_parent_sha != expected_parent_sha
+    ):
+        return False, sha, {
+            "reason": "head_parent_mismatch",
+            "expected_parent_sha": expected_parent_sha,
+            "actual_parent_sha": actual_parent_sha,
+            "message": (
+                "Der neue HEAD baut nicht auf dem vor dem Commit gepinnten "
+                "Repository-Stand auf."
+            ),
+        }
+    is_root_commit = not expected_parent_sha
     diff_command = (
         ["git", "-C", str(project_dir), "show", "--root", "--check", "--oneline", sha]
         if is_root_commit
@@ -582,6 +629,16 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
         _rest = "\n".join(_msg.split("\n")[1:])
         _msg = _subject + "\n" + _rest
 
+    _base_ok, _base_sha, _base_error = _head_before_commit(Path(pd))
+    if not _base_ok:
+        audit(
+            "loop_human_gate_commit_postcheck_failed",
+            {"reason": "base_head_unavailable", "message": _base_error},
+            pd,
+            pn,
+        )
+        return False, f"Commit vor Ausfuehrung blockiert: {_base_error}"
+
     _commit_argv = [
         "git", "-C", str(pd),
         "-c", f"user.name={_name}",
@@ -603,7 +660,9 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
     # Commit ist noch kein Abschluss: HEAD, Commit-Diff und Working Tree
     # werden nach dem Commit erneut geprueft. So werden Hook-Reste und
     # parallele Aenderungen nicht als Teil des geprueften Commits ausgegeben.
-    _check_ok, _sha_full, _check_info = _post_commit_check(Path(pd))
+    _check_ok, _sha_full, _check_info = _post_commit_check(
+        Path(pd), _base_sha,
+    )
     _sha = _sha_full[:12]
     try:
         state.progress_written_at_commit = True
@@ -619,6 +678,10 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             {
                 "sha": _sha,
                 "reason": _check_info.get("reason", "unknown"),
+                "expected_parent_sha": _check_info.get(
+                    "expected_parent_sha", _base_sha,
+                ),
+                "actual_parent_sha": _check_info.get("actual_parent_sha", ""),
                 "pending_files": _pending_files[:20],
             },
             pd,
@@ -626,7 +689,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
         )
         audit(
             "loop_human_gate_committed",
-            {"sha": _sha, "msg": _msg_kurz, "post_commit_check": "failed"},
+            {"sha": _sha, "base_sha": _base_sha, "msg": _msg_kurz, "post_commit_check": "failed"},
             pd,
             pn,
         )
@@ -638,7 +701,7 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
 
     audit(
         "loop_human_gate_committed",
-        {"sha": _sha, "msg": _msg_kurz, "post_commit_check": "passed"},
+        {"sha": _sha, "base_sha": _base_sha, "msg": _msg_kurz, "post_commit_check": "passed"},
         pd,
         pn,
     )
