@@ -615,7 +615,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (FileNotFoundError, NotADirectoryError, OSError, ValueError) as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
-        return {"ok": True, "pfad": str(projekt_dir), **result}
+        return {"ok": True, "pfad": str(projekt_dir), **result.as_dict()}
 
     @app.post("/api/projects/{name}/start")
     def project_start(name: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
