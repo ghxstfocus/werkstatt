@@ -418,6 +418,7 @@ def _reflection_loop(
     # M-329: Builder importieren (vermeidet Zirkularitaet).
     from werkstatt.roles.builder import run_builder
 
+    _history_start = len(getattr(state, "reflection_history", []) or [])
     _ruff_vorher: int | None = None
     _hash_vorher: str | None = None
     _test_sig_vorher: str | None = None
@@ -798,7 +799,14 @@ def _reflection_loop(
     _final_verify_ok = _verify_patches(state, phase=phase)
     if not _final_verify_ok:
         _hist_e = state.reflection_history or []
-        _letzte_e = _hist_e[-2:] if len(_hist_e) >= 2 else []
+        # Nur Versuche dieses Aufrufs bewerten. Historie anderer Tasks
+        # darf keinen Spec-Widerspruch fuer den aktuellen Task ausloesen.
+        _aktuelle_versuche = _hist_e[_history_start:]
+        _letzte_e = (
+            _aktuelle_versuche[-2:]
+            if len(_aktuelle_versuche) >= 2
+            else []
+        )
         if len(_letzte_e) >= 2:
             _alle_applied = all(
                 isinstance(r, dict)
