@@ -148,6 +148,26 @@ def test_main_ruft_run_pipeline_loop(tmp_path, monkeypatch):
     assert isinstance(a["state_ref"][0], RunState)
 
 
+
+def test_main_passes_project_budget_to_run_state(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    cfg = _base_config(tmp_path)
+    cfg["budget"] = {"max_minutes": 15, "max_llm_calls": 30}
+    aufrufe: list = []
+    with _silence_renderer(), _patch_main_config(tmp_path, cfg), \\
+         patch("werkstatt.loop.run_pipeline_loop",
+               _loop_runner(1, 0, aufrufe)), \\
+         patch("werkstatt.loop._git_head", return_value="abc"), \\
+         patch("werkstatt.loop._git_dirty", return_value=False):
+        rc = loop.main(["--project", "p", "--aufgabe", "aufgabe-x"])
+
+    assert rc == 0
+    assert aufrufe[0]["state_ref"][0].budget == {
+        "max_minutes": 15,
+        "max_llm_calls": 30,
+    }
+
+
 def test_main_k13_rc_nach_loop(tmp_path, monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     with _silence_renderer(), _patch_main_config(tmp_path), \
