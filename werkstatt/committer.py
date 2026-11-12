@@ -159,7 +159,7 @@ def _delete_zone_op_append(status_md_path: Path, op_nnn: str, subject: str) -> b
             if lines[i].startswith("## "):
                 section_end = i
                 break
-        row_indexes = []
+        row_indexes: list[int] = []
         matching_op = False
         for i in range(dz_idx + 1, section_end):
             match = op_row.match(lines[i])
@@ -188,7 +188,8 @@ def _delete_zone_op_append(status_md_path: Path, op_nnn: str, subject: str) -> b
         if excess > 0:
             for i in row_indexes[:excess][::-1]:
                 del lines[i]
-        status_md_path.write_text("\n".join(lines).rstrip("\n") + "\n", encoding="utf-8")
+        result_text = "\n".join(lines).rstrip("\n") + "\n"
+        status_md_path.write_text(result_text, encoding="utf-8")
     except OSError:
         return False
     return True
