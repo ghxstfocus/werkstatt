@@ -520,7 +520,10 @@ def test_idle_loop_state_does_not_expose_stale_run_id(
 
     assert registry.set_state("demo", "run-stale", "idle") is True
     idle = client.get("/api/projects/demo/loop").json()
-    assert idle == {"state": "idle", "pid": None, "run_id": None}
+    assert idle["state"] == "idle"
+    assert idle["pid"] is None
+    assert idle["run_id"] is None
+    assert idle["run_context"] is None
 
 
 def test_start_waehlt_einzige_pruefbare_offene_op(
@@ -787,9 +790,11 @@ def test_live_worker_reconciles_pause_from_shared_registry(
 
     state = client.get("/api/projects/demo/loop")
     assert state.status_code == 200
-    assert state.json() == {
-        "state": "paused", "pid": pid, "run_id": run_id,
-    }
+    state_data = state.json()
+    assert state_data["state"] == "paused"
+    assert state_data["pid"] == pid
+    assert state_data["run_id"] == run_id
+    assert state_data["run_context"]["goal"] == "shared state test"
 
     resume = client.post("/api/projects/demo/resume")
     assert resume.status_code == 200
