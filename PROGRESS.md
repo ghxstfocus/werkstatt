@@ -5892,14 +5892,15 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der Linux-Integrationstest startet einen echten Python-Kinderprozess mit der
   exakten Worker-CLI-Identitaet. Eine neue SQLite-Registry-Instanz findet den
-  weiterlaufenden PID wieder; nach dessen Ende wird derselbe Run mit echtem
-  EventStore und Phase-Checkpoint ueber die Resume-API erneut gestartet.
+  weiterlaufenden PID wieder; `GET /api/projects/demo/loop` uebernimmt den
+  Worker und meldet denselben PID. Nach Prozessende wird derselbe Run mit
+  echtem EventStore und Phase-Checkpoint ueber die Resume-API erneut gestartet.
   Run-ID, Ziel, Checkpoint sowie `--resume` ohne `--fresh` werden geprueft.
 - Der Testprozess verwendet ein kleines schlafendes Probe-Modul anstelle der
-  echten Loop-Ausfuehrung; der Webserver wird innerhalb des Tests ebenfalls
-  nicht als separater Prozess neu gestartet. Damit sind Worker-Erkennung,
-  Registry-Reconnect und API-Resume belegt, aber noch kein kompletter
-  Produktionslauf nach echtem Webserver-Neustart. OP-397 bleibt offen.
-- Verifiziert auf Commit `dad237d`: GitHub Quality Gate erfolgreich,
+  echten Loop-Ausfuehrung; der Webserver wird innerhalb des Tests nicht als
+  separater Prozess neu gestartet. Damit sind Worker-Erkennung,
+  Registry-Reconnect, Control-Status-API und Resume-Handoff belegt, aber noch
+  kein kompletter Produktionslauf nach echtem Webserver-Neustart. OP-397 bleibt offen.
+- Verifiziert auf Commit `fb02ec0`: GitHub Quality Gate erfolgreich,
   2144 Tests bestanden, 5 uebersprungen, Ruff/Mypy/AST/Audit-Katalog ohne
   Fehler, Quality Gate `ok=true`, `regression=false`.
