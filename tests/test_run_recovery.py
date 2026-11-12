@@ -403,6 +403,21 @@ def test_resume_route_recovers_after_real_worker_exit(
         assert attached_record["pid"] == first_worker.pid
         assert attached_record["run_id"] == run_id
 
+        monkeypatch.setattr(app_module, "_PROJECTS_BASE", tmp_path)
+        monkeypatch.setattr(
+            app_module, "_loop_registry", lambda: registry_after_restart,
+        )
+        app_module._LAUFENDE_LOOPS.clear()
+        app_module._LOOP_RUN_IDS.clear()
+        app_module._LOOP_LOG_HANDLES.clear()
+        app_module._PAUSIERTE_LOOPS.clear()
+        client = TestClient(app_module.app)
+        control_response = client.get("/api/projects/demo/loop")
+        assert control_response.status_code == 200
+        assert control_response.json()["state"] == "running"
+        assert control_response.json()["pid"] == first_worker.pid
+        assert control_response.json()["run_id"] == run_id
+
         # Once that worker exits, the same durable record becomes resumable.
         first_worker.terminate()
         first_worker.wait(timeout=5)
@@ -411,16 +426,7 @@ def test_resume_route_recovers_after_real_worker_exit(
         assert recovered_record["state"] == "idle"
         assert recovered_record["run_id"] == run_id
 
-        monkeypatch.setattr(app_module, "_PROJECTS_BASE", tmp_path)
-        monkeypatch.setattr(
-            app_module, "_loop_registry", lambda: registry_after_restart,
-        )
-        monkeypatch.setattr(app_module, "_loop_prozess", lambda _project: None)
         monkeypatch.setattr(run_recovery, "EventStore", lambda: store)
-        app_module._LAUFENDE_LOOPS.clear()
-        app_module._LOOP_RUN_IDS.clear()
-        app_module._LOOP_LOG_HANDLES.clear()
-        app_module._PAUSIERTE_LOOPS.clear()
 
         real_popen = subprocess.Popen
         resumed_argv: list[list[str]] = []
@@ -439,9 +445,7 @@ def test_resume_route_recovers_after_real_worker_exit(
             return resumed_worker
 
         monkeypatch.setattr(app_module.subprocess, "Popen", _launch)
-        response = TestClient(app_module.app).post(
-            "/api/projects/demo/resume",
-        )
+        response = client.post("/api/projects/demo/resume")
 
         assert response.status_code == 200, response.text
         assert response.json()["resume"] is True
