@@ -768,7 +768,7 @@ def _main_inner(argv: list[str] | None = None) -> int:
                 _pd,
                 args.project,
             )
-    if checkpoint_source is not None and not args.run_id:
+    if checkpoint_source is not None and not args.run_id and _ps.run_id:
         # Lokaler Resume ohne explizite Web-Run-ID bleibt an den persistierten
         # Run gebunden, damit Audit-, Gate- und Timeline-Events denselben Lauf
         # fortsetzen.
