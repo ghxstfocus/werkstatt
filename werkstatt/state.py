@@ -288,6 +288,10 @@ class RunState:
     phase_review_uebersprungen: str = ""
     # True only after phase review (or explicit review-gate approval).
     phase_review_approved: bool = False
+    # Defer OP closure until the code commit passes post-commit verification.
+    doku_nachzug_deferred: bool = False
+    doku_nachzug_commit_only: bool = False
+    doku_nachzug_applied: bool = False
     progress_written_at_commit: bool = False
     reflection_erschoepft: bool = False
     reflection_phase: bool = False
