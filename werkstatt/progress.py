@@ -101,20 +101,14 @@ def append(
         return False
 
 
-def read_recent(project_dir: str | Path, n: int = RECENT_ENTRIES) -> str:
-    """Liefert die letzten N Eintraege als Text.
-
-    Parser-Anker (A3): Bloecke zwischen "## "-Headern.
-    Kaputte Bloecke werden uebersprungen, nicht crashen.
-    """
-    pd = Path(project_dir)
-    progress_path = pd / PROGRESS_FILE
-    if not progress_path.exists():
-        return ""
-
-    try:
-        content = progress_path.read_text(encoding="utf-8")
-    except OSError:
+def recent_from_text(
+    content: str,
+    n: int = RECENT_ENTRIES,
+    *,
+    max_chars: int = 12000,
+) -> str:
+    """Liefert die neuesten N Bloecke, begrenzt auch deren Gesamtgroesse."""
+    if n <= 0 or max_chars <= 0:
         return ""
 
     blocks: list[str] = []
@@ -130,5 +124,48 @@ def read_recent(project_dir: str | Path, n: int = RECENT_ENTRIES) -> str:
         blocks.append("\n".join(current))
 
     recent = blocks[-n:]
-    return "\n\n".join(recent)
+    joined = "\n\n".join(recent)
+    if len(joined) <= max_chars:
+        return joined
+
+    marker = "[… aelterer Progress-Kontext gekuerzt …]\n"
+    selected: list[str] = []
+    used = 0
+    for block in reversed(recent):
+        separator = 2 if selected else 0
+        room = max_chars - used - separator
+        if room <= 0:
+            break
+        if len(block) <= room:
+            selected.append(block)
+            used += separator + len(block)
+            continue
+        body_room = max(0, room - len(marker))
+        selected.append(marker + block[-body_room:] if body_room else marker[:room])
+        break
+    return "\n\n".join(reversed(selected))
+
+
+def read_recent(
+    project_dir: str | Path,
+    n: int = RECENT_ENTRIES,
+    *,
+    max_chars: int = 12000,
+) -> str:
+    """Liefert die letzten N Eintraege als begrenzten Kontext.
+
+    Parser-Anker (A3): Bloecke zwischen "## "-Headern.
+    Schreibfehler bleiben fail-open; der Loop-Lader prueft Pflichtdateien
+    separat fail-closed.
+    """
+    pd = Path(project_dir)
+    progress_path = pd / PROGRESS_FILE
+    if not progress_path.exists():
+        return ""
+
+    try:
+        content = progress_path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    return recent_from_text(content, n=n, max_chars=max_chars)
 
