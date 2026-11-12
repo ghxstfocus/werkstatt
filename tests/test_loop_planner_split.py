@@ -308,6 +308,27 @@ def test_scout_noop_still_requires_plan_gate():
         '_human_gate(state)'
     )
     assert '"status": "rejected"' in branch
+    verify_pos = branch.index(
+        '_verify_patches(state, phase="phase_end")'
+    )
+    assert branch.index('_human_gate(state)') < verify_pos
+    assert verify_pos < branch.index('audit("loop_erfolg"')
+
+
+def test_scout_noop_phase_end_verify_runs_full_test_stage():
+    """No-op success must have the same full phase-end test evidence."""
+    import json
+    from pathlib import Path
+
+    contract = json.loads(
+        Path(".werkstatt/verify.json").read_text(encoding="utf-8")
+    )
+    pytest_stage = next(
+        stage for stage in contract["stages"]
+        if stage.get("id") == "pytest_regression"
+    )
+    assert pytest_stage.get("phase") == "phase_end"
+    assert "requires" not in pytest_stage
 
 
 def test_scout_abbruch_setzt_tasks_ok():
