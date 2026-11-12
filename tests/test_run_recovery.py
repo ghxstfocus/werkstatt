@@ -188,10 +188,13 @@ def test_resume_route_relaunches_same_run_without_fresh_flag(
     app_module._LOOP_LOG_HANDLES.clear()
     app_module._PAUSIERTE_LOOPS.clear()
 
+    import os
+
     argv: list[list[str]] = []
 
     class _Process:
-        pid = 12345
+        def __init__(self) -> None:
+            self.pid = os.getpid()
 
     monkeypatch.setattr(
         app_module.subprocess,
