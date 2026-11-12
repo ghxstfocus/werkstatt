@@ -5489,3 +5489,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der CI-Hang in den OP-168-Unit-Tests kam ebenfalls von veralteten Fixtures: Sie ersetzten `input()`, waehrend das aktuelle Gate `gates._frage_gate` nutzt. Die Fixtures beantworten jetzt den tatsaechlichen Gate-Einstieg und behalten die getrennte TTY-Pruefung.
 
 - Zusaetzlicher Befund: `_HEADLESS` ist globaler Gate-Zustand; ein anderer Test konnte ihn bis in die OP-168-Tests tragen. Die Interactive-/Non-TTY-Fixtures setzen ihn jetzt vor jedem Fall zurueck und verhindern so Bridge-Polling aus CLI-Testresten.
+
+
+## 2026-11-12 — Checkpoint-Run-ID-Kind registriert
+
+- CI auf `b548933` bestand mit 2.038 Tests und 5 Skips; der verbleibende Fehler war ein fehlender Katalogeintrag fuer `loop_checkpoint_run_mismatch`, nicht ein Gate-Hang.
+- Der Audit-Kind ist in der Registry ergaenzt. Die vollstaendige CI prueft den Katalog-Fix erneut.
