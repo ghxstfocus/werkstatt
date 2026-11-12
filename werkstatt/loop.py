@@ -376,6 +376,7 @@ def run_pipeline_loop(
         return 1
     finally:
         state.run_lease_check = None
+    return 1
 
 
 def _run_pipeline_loop_impl(
