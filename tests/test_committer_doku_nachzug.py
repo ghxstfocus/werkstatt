@@ -12,6 +12,7 @@ from werkstatt.committer import (
     _doku_nachzug_aktiv,
     _op_nnn_als_expliziter_auftrag,
     _op_nnn_aus_aufgabe,
+    _op_nnn_fuer_doku_nachzug,
     _status_md_op_entfernen,
     _update_changelog,
     _update_kennzahlen,
@@ -55,6 +56,24 @@ def test_doku_op_ignoriert_erwaehnungen_und_blocker():
     assert _op_nnn_als_expliziter_auftrag("Baue OP-048; blockiert von OP-055") is None
     assert _op_nnn_als_expliziter_auftrag("Pruefe zuerst OP-055") is None
     assert _op_nnn_als_expliziter_auftrag("") is None
+
+
+def test_op_dokuabschluss_erfordert_review_und_kriterien():
+    aufgabe = "OP-048: Doku-Nachzug"
+
+    assert _op_nnn_fuer_doku_nachzug(
+        aufgabe, ["STATUS wird korrekt aktualisiert."], False,
+    ) == (None, "phase_review_not_approved")
+    assert _op_nnn_fuer_doku_nachzug(
+        aufgabe, [], True,
+    ) == (None, "acceptance_criteria_missing")
+    assert _op_nnn_fuer_doku_nachzug(
+        "Auftrag erwaehnt OP-048 nur als Blocker",
+        ["Ergebnis ist nachweisbar."], True,
+    ) == (None, "no_explicit_op_in_task")
+    assert _op_nnn_fuer_doku_nachzug(
+        aufgabe, ["STATUS wird korrekt aktualisiert."], True,
+    ) == ("OP-048", "")
 
 
 # ---------- _status_md_op_entfernen ----------
