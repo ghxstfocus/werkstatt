@@ -398,6 +398,7 @@ def _run_finalize_commit_order(
     if doku_nachzug:
         state.aufgabe = "OP-999: Verifizierten Abschluss testen"
         state.akzeptanzkriterien = ["Abschluss wird erst nach Verify dokumentiert."]
+        state.applied_count = 1
     phase_state = MagicMock()
     phase_state.get_task.return_value = {"status": task_status}
     order = []
