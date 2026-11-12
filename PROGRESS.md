@@ -5320,5 +5320,5 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 ## 2026-11-12 — Chat-Kontextbudget
 
 - Vorherige abgeschlossene Chat-Turns werden fuer Modellaufrufe auf ein Zeichenbudget begrenzt; alte Roh-Werkzeugtraces bleiben im persistenten Verlauf, werden aber nicht erneut in den Prompt kopiert.
-- Der aktuelle Auftrag und seine Werkzeugbelege bleiben waehrend des Turns vollstaendig verfuegbar. Das verhindert abgeschnittene aktuelle Evidenz, laesst deren Kontext bei sehr langen Werkzeugketten aber weiter anwachsen; aktive-Turn-Komprimierung bleibt offene Arbeit in OP-396.
-- Regressionstests decken Verlustfreiheit des gespeicherten Verlaufs, Unterdrueckung alter Werkzeugausgaben und Einhaltung des Budgets fuer alte Dialogturns ab.
+- Auch im aktiven Auftrag werden abgeschlossene Werkzeugrunden zwischen Modellaufrufen auf 24.000 Zeichen begrenzt: die juengsten Runden bleiben bevorzugt roh, aeltere Runden werden als markierte Belegauszuege mit Toolnamen und Argumenten verdichtet. Grosse Einzelausgaben werden nur im Modellprompt gekuerzt; der Event-Store behaelt sie vollstaendig, damit gezielte Nachlese moeglich bleibt. Es gibt weiterhin kein Standard-Rundencap.
+- Regressionstests decken alte und aktive Kontextbudgets, erhaltene aktuelle Belege, unveraenderte Transcripts und gekuerzte Prompt-Ausgaben bei vollstaendiger Event-Persistenz ab.
