@@ -5315,3 +5315,10 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 
 - Beim Abgleich der Akzeptanzkriterien fehlten Tests fuer explizite Werkzeugrunden-Budgets und Nutzerabbruch nach einem ausgefuehrten Werkzeugschritt.
 - Die Abschlussantwort wird ohne weitere Tools aus den vorhandenen Belegen erstellt; ein Abbruch stoppt vor dem naechsten LLM-Aufruf und laesst User-/Tool-Ereignisse replaybar im Verlauf.
+
+
+## 2026-11-12 — Chat-Kontextbudget
+
+- Vorherige abgeschlossene Chat-Turns werden fuer Modellaufrufe auf ein Zeichenbudget begrenzt; alte Roh-Werkzeugtraces bleiben im persistenten Verlauf, werden aber nicht erneut in den Prompt kopiert.
+- Der aktuelle Auftrag und seine Werkzeugbelege bleiben waehrend des Turns vollstaendig verfuegbar. Das verhindert abgeschnittene aktuelle Evidenz, laesst deren Kontext bei sehr langen Werkzeugketten aber weiter anwachsen; aktive-Turn-Komprimierung bleibt offene Arbeit in OP-396.
+- Regressionstests decken Verlustfreiheit des gespeicherten Verlaufs, Unterdrueckung alter Werkzeugausgaben und Einhaltung des Budgets fuer alte Dialogturns ab.
