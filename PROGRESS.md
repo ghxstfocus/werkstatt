@@ -5322,3 +5322,9 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 - Vorherige abgeschlossene Chat-Turns werden fuer Modellaufrufe auf ein Zeichenbudget begrenzt; alte Roh-Werkzeugtraces bleiben im persistenten Verlauf, werden aber nicht erneut in den Prompt kopiert.
 - Auch im aktiven Auftrag werden abgeschlossene Werkzeugrunden zwischen Modellaufrufen auf 24.000 Zeichen begrenzt: die juengsten Runden bleiben bevorzugt roh, aeltere Runden werden als markierte Belegauszuege mit Toolnamen und Argumenten verdichtet. Grosse Einzelausgaben werden nur im Modellprompt gekuerzt; der Event-Store behaelt sie vollstaendig, damit gezielte Nachlese moeglich bleibt. Es gibt weiterhin kein Standard-Rundencap.
 - Regressionstests decken alte und aktive Kontextbudgets, erhaltene aktuelle Belege, unveraenderte Transcripts und gekuerzte Prompt-Ausgaben bei vollstaendiger Event-Persistenz ab.
+
+
+## UI-Nachbesserung Chat-Ausrichtung (2026-11-12)
+
+- Assistant-Antworten bleiben links in einer begrenzten Lesespalte; Nutzer-Bubbles sitzen am rechten Rand und sind schmaler begrenzt.
+- Stylesheet-Cache-Buster aktualisiert.
