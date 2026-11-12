@@ -107,7 +107,7 @@ def test_committe_erfolg(tmp_path):
     (tmp_path / "neu.py").write_text("def f(): pass\n")
     s = _state(tmp_path)
     ok, sha = loop._committe_zielprojekt(s)
-    assert ok is True
+    assert ok is True, sha
     assert len(sha) == 12
     # SHA taucht im Log auf.
     log = subprocess.run(
@@ -145,9 +145,9 @@ def test_committe_postcheck_faengt_neue_aenderungen_nach_commit_ab(
     assert ok is False
     assert "Nachkontrolle fehlgeschlagen" in info
     assert (tmp_path / "parallel.py").exists()
-    assert _kind(tmp_path, "loop_human_gate_commit_postcheck_failed")[0][
-        "pending_files"
-    ] == ["parallel.py"]
+    failure = _kind(tmp_path, "loop_human_gate_commit_postcheck_failed")[0]
+    assert failure["reason"] == "working_tree_dirty_after_commit", failure
+    assert failure["pending_files"] == ["parallel.py"], failure
     assert _kind(tmp_path, "loop_human_gate_committed")[0][
         "post_commit_check"
     ] == "failed"

@@ -5614,3 +5614,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der Committer prueft nach erfolgreichem `git commit` erneut die gueltige HEAD-SHA, `git show --check` und den Working Tree. So werden nach dem Verify entstandene Aenderungen (etwa parallele Chat-Edits oder Hook-Reste) nicht stillschweigend als gepruefter Abschluss behandelt.
 - Ein Post-Commit-Befund wird mit Commit-SHA und betroffenen Pfaden auditiert; der Run bleibt fehlgeschlagen statt `loop_erfolg` zu melden. Das tatsaechliche Commit-Ergebnis wird separat markiert.
 - Regressionstest injiziert eine Aenderung unmittelbar nach dem Git-Commit und prueft, dass die Nachkontrolle sie erkennt. GitHub Actions Quality Gate fuer diesen Commit muss gruen sein.
+
+- CI-Nachkorrektur: Der Whitespace-Check nutzt `git diff-tree --check --root --no-commit-id -r HEAD`, damit auch Root-Commits eindeutig behandelt werden und der reale Commit-Diff geprueft wird.
