@@ -105,8 +105,16 @@ def _git_stash_owned(pd: Path) -> str | None:
 
 
 def _git_stash(pd: Path) -> bool:
-    """Compatibility wrapper; cleanup callers must retain the exact ref."""
-    return _git_stash_owned(pd) is not None
+    """M-353b: Legacy-Wrapper fuer den Bool-Erfolg des Stash-Pushs."""
+    try:
+        marker = f"werkstatt-loop:{uuid.uuid4().hex}"
+        res = subprocess.run(
+            ["git", "-C", str(pd), "stash", "push", "-u", "-m", marker],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        return res.returncode == 0
+    except Exception:
+        return False
 
 def _git_stash_pop(pd: Path, stash_ref: str | None = None) -> bool:
     """Restore only this run's stash; retain it if restoration conflicts."""

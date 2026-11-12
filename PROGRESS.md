@@ -5585,4 +5585,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der Loop wertete bisher eine Veraenderung an `refs/stash` als Beleg fuer eigenen Besitz. Ein gleichzeitig angelegter fremder Stash konnte dadurch beim Cleanup versehentlich wiederhergestellt werden.
 - Stash-Erzeugung sucht jetzt den eindeutigen `werkstatt-loop:<uuid>` Marker in der Stash-Reflog-Nachricht und liefert ausschliesslich den zugehoerigen Commit-Hash. Fehlender, mehrdeutiger oder nicht lesbarer Nachweis stoppt den Run fail-closed; ein fremder Stash wird nicht als Cleanup-Ziel verwendet.
-- Die Laufzeit-Restore-Tests verwenden den explizit belegten Hash und pruefen auch, dass ein fehlender Besitznachweis den Builder nicht startet. GitHub-CI/Quality-Gate muss die Aenderung noch ausfuehren.
+- Die Laufzeit-Restore-Tests verwenden den explizit belegten Hash und pruefen auch, dass ein fehlender Besitznachweis den Builder nicht startet. Der erste GitHub-CI-Lauf fand einen bestehenden Vertragstest fuer den Bool-Kompatibilitaets-Wrapper. Dieser Wrapper behaelt seine bisherige Semantik; nur der Loop-Cleanup nutzt die neue Hash-Rueckgabe. CI laeuft erneut.
