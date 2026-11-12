@@ -5328,3 +5328,10 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 
 - Assistant-Antworten bleiben links in einer begrenzten Lesespalte; Nutzer-Bubbles sitzen am rechten Rand und sind schmaler begrenzt.
 - Stylesheet-Cache-Buster aktualisiert.
+
+
+## OP-398: Kein falscher Erfolg bei unvollstaendigen Tasks (2026-11-12)
+
+- Befund im aktuellen Phase-Finalizer: Nach freigegebenem Human-Gate und gruener Phase-End-Verify konnte `loop_erfolg` erscheinen, obwohl geplante Tasks im PhaseState failed, blocked oder noch offen waren.
+- Finalisierung prueft jetzt den persistierten Task-Status. Unvollstaendige Tasks erzeugen ein `loop_phase`-Ereignis mit Status `incomplete`, IDs und Statusbelegen; der Prozess kehrt mit Fehlerstatus zurueck und emittiert kein `loop_erfolg`. Bereits ausdruecklich freigegebene Teil-Aenderungen koennen nach gruener Verify committed bleiben; der Run wird trotzdem nicht als vollstaendig gemeldet.
+- Regressionstests decken failed, blocked, pending, running und fehlenden Task-Status ab.
