@@ -5878,3 +5878,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Ein Zwischenschritt speicherte den Webserver-PID als Eigentümer einer Startreservierung. Da dieser Prozess viele Anfragen bedient, konnte eine abgebrochene Anfrage nach Ablauf der TTL dauerhaft als aktiv gelten.
 - Die Änderung wurde verworfen. Die Recovery bleibt an Run-ID, exakter Worker-Prozessidentität und vollständigem Prozess-Scan ausgerichtet. Verliert ein verspätet gestarteter Worker seine Reservierung, schlägt seine Registrierung fehl; der Startpfad beendet diesen Prozess und hält ihn bei nicht bestätigtem Ende fail-closed.
 - Der Stand vor dem PID-Zwischenschritt ist unter Commit `f708eea` dokumentiert. Die Regressionstests und das Quality Gate auf diesem Stand waren grün; der korrigierte aktuelle Stand muss nach dem Pull erneut geprüft werden.
+
+
+## ADR-0032 M1 — persistente Run-Lease im Loop (2026-11-13)
+
+- Ein Loop-Run erwirbt jetzt vor der Ausfuehrung eine restartfeste Lease in `run_records`. Das additive Schema speichert Worker-ID, Ablaufzeit und monotonen Fencing-Token; ein Heartbeat verlaengert die Lease waehrend laengerer Modell-/Tool-Aufrufe.
+- Bei Konkurrenz wird kein zweiter Worker zugelassen. Ein Worker mit verlorener oder abgelaufener Lease stoppt fail-closed: Die Laufzeit prueft nach Builder-, Reflection-, Reviewer- und Verify-Aufrufen sowie vor Task-Checkpoint, Patch-Create/Update/Delete, Doku-/Git-Schreibpfaden und terminalem Run-Ergebnis. Die Lease-Pruefung nutzt den deklarierten RunState-Callback und bleibt mit Test-Doubles kompatibel.
+- GitHub Actions Quality Gate [43329204303](https://github.com/ghxstfocus/werkstatt/actions/runs/43329204303) auf Commit `3cc2134`: **2143 passed, 5 skipped**, Ruff 0, Mypy 0, AST 0, Audit-Katalog bestanden; `ok=true`, `regression=false`.
+- OP-397 bleibt offen: Ein echter End-to-End-Recovery-Test mit abrupt beendetem Loop-Worker und anschliessendem Webserver-Reconnect ist noch ausstehend. Die Lease-Primitive und die Laufzeit-Fencing-Punkte allein belegen diesen Recovery-Ablauf noch nicht.
