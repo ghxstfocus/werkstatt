@@ -8,6 +8,7 @@ sys.path.insert(0, "/opt/werkstatt")
 
 from werkstatt.architect import (
     _build_selbst_check_block,
+    _reduce_architecture,
     _reduce_entry,
     _reduce_roadmap,
     _reduce_status,
@@ -46,6 +47,30 @@ def test_reduce_status_behaelt_offene_punkte():
     assert "## Kennzahlen" not in result
 
 
+def test_reduce_architecture_keeps_runtime_and_docs_contract_bounded():
+    architecture = (
+        "# Architektur\n"
+        "## 1. Produktarchitektur\nChat ist zentral.\n"
+        + ("x" * 1500)
+        + "\n## 1.5 Ausfuehrung\nEinheitliche Verify-Kette.\n"
+        + ("y" * 1500)
+        + "\n## 4. Verifikation\nNur verifizierte Commits gelten.\n"
+        + ("z" * 1000)
+        + "\n## 6. Doku-Vertrag\nSTATUS, ROADMAP, Progress.\n"
+        + ("q" * 1000)
+        + "\n## 7. Verweise\nNicht in Prompt.\n"
+    )
+
+    result = _reduce_architecture(architecture, max_chars=3400)
+
+    assert len(result) <= 3400
+    assert "## 1. Produktarchitektur" in result
+    assert "## 1.5 Ausfuehrung" in result
+    assert "## 4. Verifikation" in result
+    assert "## 6. Doku-Vertrag" in result
+    assert "## 7. Verweise" not in result
+
+
 def test_reduce_roadmap_nur_phasen_header():
     text = (
         "# Roadmap\n\nEinleitung\n\n"
@@ -74,16 +99,25 @@ def test_build_architect_docs_section_v2_leer():
     assert build_architect_docs_section_v2(None) == ""
 
 
-def test_build_v2_enthaelt_drei_sektionen():
+def test_build_v2_enthaelt_vier_living_docs_bereiche():
     docs = {
         "entry": "# A\n\n## Zweck\nX\n\n## Struktur\nY\n\n## Hard-Rules\nZ\n",
         "status": "# S\n\n## Offene Punkte\nOP-001: foo\n",
         "roadmap": "# R\n\n## Phase 1: A\n\n## Phase 2: B\n",
+        "architecture": (
+            "# Architektur\n## 1. Produktarchitektur\n"
+            "Chat koordiniert den Loop.\n## 1.5 Ausfuehrung\n"
+            "Verify vor Commit.\n## 4. Verifikation\n"
+            "Nur Belege zaehlen.\n## 6. Doku-Vertrag\n"
+            "PROGRESS historisch, STATUS offen.\n"
+        ),
     }
     result = build_architect_docs_section_v2(docs)
     assert "### PROJEKT-ENTRY" in result
     assert "### PROJEKT-STATUS" in result
     assert "### PROJEKT-ROADMAP" in result
+    assert "### PROJEKT-ARCHITEKTUR" in result
+    assert "Verify vor Commit." in result
     # Keine alten Marker
     assert "--- entry ---" not in result
     assert "--- status ---" not in result
