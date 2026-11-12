@@ -5886,3 +5886,17 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Bei Konkurrenz wird kein zweiter Worker zugelassen. Ein Worker mit verlorener oder abgelaufener Lease stoppt fail-closed: Die Laufzeit prueft nach Builder-, Reflection-, Reviewer- und Verify-Aufrufen sowie vor Task-Checkpoint, Patch-Create/Update/Delete, Doku-/Git-Schreibpfaden und terminalem Run-Ergebnis. Die Lease-Pruefung nutzt den deklarierten RunState-Callback und bleibt mit Test-Doubles kompatibel.
 - GitHub Actions Quality Gate [43329204303](https://github.com/ghxstfocus/werkstatt/actions/runs/43329204303) auf Commit `3cc2134`: **2143 passed, 5 skipped**, Ruff 0, Mypy 0, AST 0, Audit-Katalog bestanden; `ok=true`, `regression=false`.
 - OP-397 bleibt offen: Ein echter End-to-End-Recovery-Test mit abrupt beendetem Loop-Worker und anschliessendem Webserver-Reconnect ist noch ausstehend. Die Lease-Primitive und die Laufzeit-Fencing-Punkte allein belegen diesen Recovery-Ablauf noch nicht.
+
+
+## OP-397 Recovery-Handoff, 2026-11-12
+
+- Der Resume-API-Test verbindet jetzt die echte SQLite-Loop-Registry, den echten
+  EventStore und einen echten Phase-Checkpoint. Eine neue Registry-Instanz
+  simuliert den Webserver-Reconnect; der Test prueft Run-ID, Ziel, Task-Checkpoint
+  und den erneuten Start mit `--resume` ohne `--fresh`.
+- Die Betriebssystem-Prozessgrenze bleibt im Test simuliert; ein echter
+  Worker-Abbruch mit anschließendem Linux-Webserver-Neustart ist damit noch
+  nicht als Ende-zu-Ende-Betriebsnachweis erbracht. OP-397 bleibt offen.
+- Verifiziert auf Commit `0bbeb54`: GitHub Quality Gate erfolgreich,
+  2144 Tests bestanden, 5 uebersprungen, Ruff/Mypy/AST/Audit-Katalog ohne
+  Fehler, Quality Gate `ok=true`, `regression=false`.
