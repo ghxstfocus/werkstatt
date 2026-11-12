@@ -124,7 +124,6 @@ def test_state_llm_calls_zaehlt_einmal(tmp_path):
     assert s.llm_calls == 1
 
 
-
 def test_run_llm_call_budget_blocks_before_network(tmp_path):
     s = _state(tmp_path)
     s.budget = {"max_llm_calls": 1}
