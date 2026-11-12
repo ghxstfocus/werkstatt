@@ -1023,7 +1023,7 @@ def _phase_finalize(
         )
 
         _doku_op, _ = _op_nnn_fuer_doku_nachzug(
-            state.aufgabe or "",
+            getattr(state, "aufgabe", "") or "",
             getattr(state, "akzeptanzkriterien", []),
             bool(getattr(state, "phase_review_approved", False)),
         )
@@ -1094,7 +1094,7 @@ def _phase_finalize(
                 elif _doku_commit_info:
                     print(f"  OP-Doku-Commit: {_doku_commit_info}")
 
-    if rc == 0 and state.doku_nachzug_deferred:
+    if rc == 0 and getattr(state, "doku_nachzug_deferred", False):
         from werkstatt.committer import _committe_zielprojekt
         state.doku_nachzug_deferred = False
         state.doku_nachzug_commit_only = True
