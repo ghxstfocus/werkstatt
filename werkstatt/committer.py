@@ -611,12 +611,15 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
         pass
 
     if not _check_ok:
+        _pending_files = _check_info.get("pending_files")
+        if not isinstance(_pending_files, list):
+            _pending_files = []
         audit(
             "loop_human_gate_commit_postcheck_failed",
             {
                 "sha": _sha,
                 "reason": _check_info.get("reason", "unknown"),
-                "pending_files": _check_info.get("pending_files", [])[:20],
+                "pending_files": _pending_files[:20],
             },
             pd,
             pn,
