@@ -148,15 +148,15 @@ def _pid_alive(pid: int | None, identity: str | None = None) -> bool:
     except PermissionError:
         pass
     except OSError:
-        return False
+        # kill(0) failed for a reason other than ESRCH. The process may still
+        # exist but be inaccessible; do not release its writer reservation.
+        return True
 
     snapshot = _process_snapshot(pid)
     if snapshot is None:
-        # On Linux, inability to inspect an expected process identity means
-        # we cannot safely signal this PID. Other POSIX platforms use kill(0).
-        return not (
-            identity is not None and os.name == "posix" and Path("/proc").is_dir()
-        )
+        # Existence is known (kill(0) succeeded or was permission-denied),
+        # but its identity cannot be checked. Keep the run fail-closed as live.
+        return True
     started, state = snapshot
     if state == "Z":
         return False
