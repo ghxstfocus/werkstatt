@@ -400,6 +400,6 @@ class PhaseMainPlannerKontext:
 
 def check_run_lease(state: RunState) -> None:
     """Fail closed when a run worker no longer owns its fencing lease."""
-    check = state.run_lease_check
+    check = getattr(state, "run_lease_check", None)
     if callable(check):
         check()
