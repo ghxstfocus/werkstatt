@@ -206,10 +206,13 @@ Verifikations-Pipeline:- ruff --fix vor _verify_patches (M-467).
 ## 6. Doku-Vertrag
 
 Der Loop liest die Living Docs in der Reihenfolge aus
-DOC_CONVENTIONS.md §6. Manifest-Feld docs: {entry, status, roadmap,
-architecture, conventions, adr_index, glossary} in
-projects/<name>.yaml. progress + changelog optional, werden nicht im
-Loop-Kontext verwendet.
+DOC_CONVENTIONS.md §6. Pflichtfelder im Manifest
+projects/<name>.yaml: {entry, status, roadmap, architecture, progress,
+conventions, adr_index, glossary}. PROGRESS wird als historische Evidenz
+begrenzt auf die zehn neuesten Bloecke und 12.000 Zeichen in den Run-Kontext
+geladen. STATUS bleibt Quelle fuer offene OPs; Progress-Eintraege muessen bei
+einem OP-Abschluss mit STATUS und Delete-Zone konsistent aktualisiert sein.
+CHANGELOG bleibt optional und wird nicht in den Loop-Kontext geladen.
 
 ## 7. Doku-Verweise
 
