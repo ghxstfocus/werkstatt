@@ -654,6 +654,8 @@ def create_app() -> FastAPI:
                         "grund": "laeuft_bereits",
                     }
             recovery: dict[str, Any] | None = None
+            autonome_auswahl: dict[str, Any] | None = None
+            explizite_auswahl: dict[str, Any] | None = None
             if resume_mode:
                 from werkstatt.web.run_recovery import (
                     RunRecoveryError,
@@ -668,8 +670,6 @@ def create_app() -> FastAPI:
                 op_id = recovery.get("op_id") or ""
                 _source_pd = Path(recovery["project_dir"])
                 prepared_source = None
-                autonome_auswahl = None
-                explizite_auswahl = None
                 args = [
                     sys.executable, "-m", "werkstatt.loop",
                     "--project", projektname,
@@ -720,7 +720,6 @@ def create_app() -> FastAPI:
                 if aufgabe:
                     op_id = ""
         
-                explizite_auswahl: dict[str, Any] | None = None
                 if op_id and not aufgabe:
                     if not re.fullmatch(r"OP-\d+[a-z]?", op_id):
                         raise HTTPException(status_code=400, detail="ungueltige op_id")
@@ -796,7 +795,6 @@ def create_app() -> FastAPI:
                             raise HTTPException(status_code=404, detail="OP-Text nicht gefunden")
                         aufgabe = _m_op.group(0).strip()
         
-                autonome_auswahl: dict[str, Any] | None = None
                 if not aufgabe and not op_id:
                     try:
                         status_text = (_source_pd / "docs" / "STATUS.md").read_text(
@@ -879,6 +877,7 @@ def create_app() -> FastAPI:
                         pass
     
                 registry = _loop_registry()
+                run_context: dict[str, Any]
                 if resume_mode:
                     assert recovery is not None
                     run_context = recovery["context"]
@@ -925,7 +924,7 @@ def create_app() -> FastAPI:
                                     "automatisch ausgewaehlt."
                                 ),
                             }
-                    run_context: dict[str, Any] = {
+                    run_context = {
                         "schema_version": 1,
                         "goal": aufgabe,
                         "op_id": op_id or None,
