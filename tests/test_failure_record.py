@@ -214,9 +214,11 @@ def test_phase_finalize_repairs_failed_phase_end_verify_in_same_run(
         },
     )
 
-    def recover(_state, *, error_context, phase, verify_stage_ids):
+    def recover(
+        _state, *, max_runden, error_context, phase, verify_stage_ids,
+    ):
         recovery_calls.append(
-            (error_context, phase, verify_stage_ids)
+            (max_runden, error_context, phase, verify_stage_ids)
         )
         return True
 
@@ -241,9 +243,10 @@ def test_phase_finalize_repairs_failed_phase_end_verify_in_same_run(
     result = finalize._phase_finalize(state, 1, [task], "demo", phase_state)
 
     assert result == 0
-    assert recovery_calls and recovery_calls[0][1] == "phase_end"
-    assert "pytest_regression" in recovery_calls[0][0]
-    assert recovery_calls[0][2] == {"pytest_regression"}
+    assert recovery_calls and recovery_calls[0][0] is None
+    assert recovery_calls[0][2] == "phase_end"
+    assert "pytest_regression" in recovery_calls[0][1]
+    assert recovery_calls[0][3] == {"pytest_regression"}
     assert any(item[0] == "loop_verify_recovered" for item in events)
     assert any(item[0] == "loop_erfolg" for item in events)
     assert not any(item[0] == "loop_gate_failed" for item in events)
