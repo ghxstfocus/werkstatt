@@ -5871,3 +5871,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Review-Fund: Wenn `kill(pid, 0)` die Existenz eines registrierten Workers bestaetigte, aber `/proc/<pid>/stat` nicht lesbar war, wertete die Registry den Prozess als beendet und setzte den Run auf `idle`. Ein neuer Start konnte damit einen zweiten Writer neben einem noch laufenden Worker zulassen.
 - Unbekannte Prozessidentitaet und nicht klassifizierbare OS-Fehler gelten jetzt fail-closed als weiterhin belegt. Nur ein explizites `ProcessLookupError` oder eine nachweisbare PID-Identitaetsabweichung gibt die Reservierung frei.
 - Regressionstest belegt den unlesbaren Identitaetsfall durch Registry-Read und anschliessend abgewiesenen Zweitstart. Linux-Laufzeit/E2E auf dem Server bleibt separat zu verifizieren.
+
+
+## Recovery-Review: Startreservierung bleibt request-agnostisch (2026-11-13)
+
+- Ein Zwischenschritt speicherte den Webserver-PID als Eigentümer einer Startreservierung. Da dieser Prozess viele Anfragen bedient, konnte eine abgebrochene Anfrage nach Ablauf der TTL dauerhaft als aktiv gelten.
+- Die Änderung wurde verworfen. Die Recovery bleibt an Run-ID, exakter Worker-Prozessidentität und vollständigem Prozess-Scan ausgerichtet. Verliert ein verspätet gestarteter Worker seine Reservierung, schlägt seine Registrierung fehl; der Startpfad beendet diesen Prozess und hält ihn bei nicht bestätigtem Ende fail-closed.
+- Der Stand vor dem PID-Zwischenschritt ist unter Commit `f708eea` dokumentiert. Die Regressionstests und das Quality Gate auf diesem Stand waren grün; der korrigierte aktuelle Stand muss nach dem Pull erneut geprüft werden.
