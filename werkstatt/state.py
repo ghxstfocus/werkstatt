@@ -207,6 +207,14 @@ class RunState:
     mess_protokoll_veraltet: bool = False
     # Auflage 2183 A2: run_id fuer Korrelation.
     run_id: str = ""
+    # OP-397: runtime-only assertion callback; never persisted into PhaseState.
+    run_lease_check: Any = None
+
+    def assert_run_lease(self) -> None:
+        check = self.run_lease_check
+        if callable(check):
+            check()
+
     # Post-Apply-Fix 2026-10-16: Recovery-Plan aus
     # apply_and_recheck fuer die Builder-Korrektur-Runde.
     letzter_recovery_vorschlag: object = None
