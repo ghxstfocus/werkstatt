@@ -5591,3 +5591,8 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Beim Cleanup konnte ein gleichzeitig angelegter Stash den zuvor ermittelten `stash@{n}`-Selektor verschieben. Der Loop verwendet jetzt `git stash apply --index <commit>` und behaelt den Stash-Eintrag auch nach erfolgreicher Wiederherstellung als Sicherung. Das Audit markiert den erhaltenen Eintrag.
 - Ein Test im echten Git-Repository erzeugt den fremden Stash zwischen Auflisten und Wiederherstellen. Er prueft Index und Working Tree separat sowie den Erhalt beider Stash-Eintraege.
+
+## 2026-11-12 — OP-397: Checkpoint an die Run-ID binden
+
+- Lokale CLI-Starts erzeugen ihre Run-ID vor der Ausfuehrung und speichern sie zusammen mit dem Plan. Ein lokaler Resume verwendet dieselbe ID fuer Audit und Checkpoint.
+- Ein Resume mit expliziter Run-ID bevorzugt den passenden aktiven Checkpoint, auch wenn ein Fresh-Backup existiert. So bleiben bereits erledigte Tasks erhalten. Ein passendes Backup kann weiterhin aktiviert werden, wenn der aktive Checkpoint einem anderen Run gehoert.

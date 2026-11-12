@@ -523,7 +523,7 @@ def _main_inner(argv: list[str] | None = None) -> int:
     checkpoint_group.add_argument(
         "--resume",
         action="store_true",
-        help="Aus .phase.yaml.fresh-bak oder aktuellem Checkpoint fortsetzen.",
+        help="Mit Run-ID passenden aktiven Checkpoint bevorzugen; sonst Backup zuerst.",
     )
     checkpoint_group.add_argument(
         "--fresh",
@@ -562,6 +562,7 @@ def _main_inner(argv: list[str] | None = None) -> int:
     # Konstruktionsfunktion folgt in M-299+ (Altlasten).
     import os as _os
     import time as _time
+    import uuid as _uuid
     from datetime import UTC as _UTC
     from datetime import datetime as _dt
     from pathlib import Path as _Path
@@ -644,6 +645,11 @@ def _main_inner(argv: list[str] | None = None) -> int:
         checkpoint_source = _bak if _bak.exists() else (
             _ps.path if _ps.exists() else None
         )
+        if (
+            args.run_id and checkpoint_source == _bak
+            and _ps.load() and _ps.run_id == args.run_id
+        ):
+            checkpoint_source = _ps.path
         if checkpoint_source is None:
             audit(
                 "loop_resume_verworfen",
@@ -770,13 +776,13 @@ def _main_inner(argv: list[str] | None = None) -> int:
                 _pd,
                 args.project,
             )
-    if checkpoint_source is not None and not args.run_id and _ps.run_id:
-        # Lokaler Resume ohne explizite Web-Run-ID bleibt an den persistierten
-        # Run gebunden, damit Audit-, Gate- und Timeline-Events denselben Lauf
-        # fortsetzen.
-        set_run_id(_ps.run_id)
     if args.run_id:
         _ps.run_id = args.run_id
+    else:
+        # Lokale Starts und Wiederaufnahmen teilen ihre ID mit dem Checkpoint.
+        if not _ps.run_id:
+            _ps.run_id = f"{args.project}-{_uuid.uuid4().hex}"
+        set_run_id(_ps.run_id)
 
     # K14: Stop muss auch bei SIGTERM den Checkpoint persistieren und
     # einen eventuell angelegten User-Stash wiederherstellen.

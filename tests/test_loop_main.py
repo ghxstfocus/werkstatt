@@ -763,8 +763,9 @@ tasks: []
     assert runner_calls == [True]
 
 
-def test_resume_archiviert_aktiven_checkpoint_vor_backup_aktivierung(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("active_run_id", ["p-other-run", "p-run"])
+def test_resume_waehlt_checkpoint_fuer_run_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, active_run_id: str,
 ) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     state_dir = tmp_path / ".werkstatt"
@@ -776,7 +777,8 @@ def test_resume_archiviert_aktiven_checkpoint_vor_backup_aktivierung(
     )
     active = state_dir / "p.phase.yaml"
     active.write_text(
-        "project: p\nrun_id: p-run\naufgabe: ziel\ntasks: []\n",
+        f"project: p\nrun_id: {active_run_id}\naufgabe: ziel\n"
+        "tasks: [{id: t1, status: done}]\n",
         encoding="utf-8",
     )
     runner_calls: list = []
@@ -798,6 +800,39 @@ def test_resume_archiviert_aktiven_checkpoint_vor_backup_aktivierung(
 
     assert rc == 0
     assert len(runner_calls) == 1
-    assert not backup.exists()
     archived = list(state_dir.glob("p.phase.yaml.resume-archive-*"))
-    assert len(archived) == 1
+    if active_run_id == "p-run":
+        assert backup.exists()
+        assert archived == []
+        assert runner_calls[0]["kw"]["phase_state"].data["tasks"][0]["status"] == "done"
+    else:
+        assert not backup.exists()
+        assert len(archived) == 1
+
+
+def test_lokaler_start_persistiert_id_fuer_resume(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    run_ids: list[str] = []
+    calls = []
+
+    def _runner(_project, aufgabe, _state_ref, *, phase_state):
+        calls.append(phase_state.run_id)
+        if not phase_state.data:
+            phase_state.init_new(aufgabe, [{"id": "t1"}])
+        return 1
+
+    with (
+        _silence_renderer(),
+        _patch_main_config(tmp_path),
+        patch("werkstatt.loop.set_run_id", run_ids.append),
+        patch("werkstatt.loop.run_pipeline_loop", _runner),
+        patch("werkstatt.loop._git_head", return_value="abc"),
+        patch("werkstatt.loop._git_dirty", return_value=False),
+    ):
+        args = ["--project", "p", "--aufgabe", "ziel"]
+        assert loop.main(args) == 1
+        assert loop.main([*args, "--resume"]) == 1
+
+    assert len(run_ids) == 2
+    assert run_ids[0].startswith("p-")
+    assert calls == run_ids == [run_ids[0], run_ids[0]]
