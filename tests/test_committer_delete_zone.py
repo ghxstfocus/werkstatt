@@ -48,7 +48,7 @@ def test_delete_zone_retains_only_latest_twenty_entries(tmp_path):
     ]
     assert len(rows) == 20
     assert "| OP-001 |" not in text
-    assert "| OP-005 |" in text
+    assert "| OP-006 |" in text
     assert "| OP-025 |" in text
 
 
