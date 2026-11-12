@@ -163,3 +163,13 @@ def test_load_verwirft_ungueltige_checkpoint_run_id(tmp_path, run_id) -> None:
 
     assert ps.load() is False
     assert ps.data == {}
+
+
+
+def test_save_keeps_checkpoint_details_out_of_stderr(tmp_path, capsys) -> None:
+    """Checkpoint-Saves duerfen keine Debug-Daten in Prozesslogs ausgeben."""
+    state = PhaseState("testprojekt", base_dir=tmp_path)
+
+    state.init_new("Aufgabe X", [{"id": "t1", "name": "Task 1"}])
+
+    assert capsys.readouterr().err == ""

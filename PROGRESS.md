@@ -5776,3 +5776,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Regressionstests decken startbares Manifest, Orchestrator-Laden, Pfad-/Namensgrenzen, Kollisionen und Bereinigung bei Scaffold-Fehler ab.
 - Code-Commits: `7b48dd6434d0acb9d92ca3832e8f07440dea96ff` (Dokuvertrag, Tests, OP/ADR), `a74985f2fab93adc0c9142276e184e0043ff0648` und `62a16afc5dbb42db3fcf185cdfc2072a5229e2c2` (Ruff-Importkorrekturen), `a97f0b126477e021fa82cc9a8cde4ed819e0185d`, `e1935e5d9fd10ec63cff93e538c0151aa1a0a83e`, `3ab03580f1677116289555b37432be244de72eb9`, `93d665c7c035f702aebd7150c4c154e69fe3c4e1`, `0c6c123cd05f19ed0151906938a4ef78e7c6bd5e`, `b3c23aa683a5aaa5318beb898461f2c72486dc3d` und `690f6d408fc4a70032190bea91625e73c8d7ce1f` (gemeinsame Projektanlage und Tests).
 - GitHub Actions auf `62a16afc5dbb42db3fcf185cdfc2072a5229e2c2`: 2.104 Tests bestanden, 5 übersprungen; Ruff, mypy, AST (381 Dateien), Audit-Katalog und Quality Gate grün, `ok=true`, `regression=false`. [Run 43303935169](https://github.com/ghxstfocus/werkstatt/actions/runs/43303935169).
+
+
+## 2026-11-12 — Checkpoint-Ausgaben bereinigt
+
+- Entfernt den ungefragten `[K21-SAVE]`-Debug-Print aus jedem Phase-State-Speichern; Run- und Taskdaten landen nicht mehr in stderr.
+- Regressionstest prueft, dass Checkpoint-Saves still bleiben.
+- Loop-Folgearbeit: ADR-0032 M1 (gemeinsamer persistierter Run-Vertrag und Inbox) bleibt der naechste Architektur-Schritt; bestehende Registry, Chatjobs und Phase-State werden dafuer weiter als Migrationsquellen behandelt.
