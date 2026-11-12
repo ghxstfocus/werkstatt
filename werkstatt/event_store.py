@@ -17,7 +17,11 @@ from typing import Any
 
 from werkstatt.paths import werkstatt_home
 
-__all__ = ["EventStore"]
+__all__ = ["EventStore", "RunLeaseLost"]
+
+
+class RunLeaseLost(RuntimeError):
+    """Der Worker ist nicht mehr Inhaber der aktuellen Run-Lease."""
 
 
 class EventStore:
@@ -79,8 +83,25 @@ class EventStore:
                 "checkpoint_json TEXT NOT NULL DEFAULT '{}', "
                 "checkpoint_version INTEGER NOT NULL DEFAULT 0, "
                 "updated_at TEXT NOT NULL, "
+                "lease_owner TEXT, "
+                "lease_until REAL, "
+                "fencing_token INTEGER NOT NULL DEFAULT 0, "
                 "PRIMARY KEY (project, run_id))"
             )
+            run_columns = {
+                str(row[1]) for row in conn.execute(
+                    "PRAGMA table_info(run_records)"
+                )
+            }
+            for column, definition in (
+                ("lease_owner", "TEXT"),
+                ("lease_until", "REAL"),
+                ("fencing_token", "INTEGER NOT NULL DEFAULT 0"),
+            ):
+                if column not in run_columns:
+                    conn.execute(
+                        f"ALTER TABLE run_records ADD COLUMN {column} {definition}"
+                    )
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS run_inbox ("
                 "seq INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -199,6 +220,133 @@ class EventStore:
             ).fetchone()
             conn.commit()
         return int(row[0])
+
+    def acquire_run_lease(
+        self,
+        project: str,
+        run_id: str,
+        worker_id: str,
+        *,
+        lease_seconds: float = 30.0,
+    ) -> int | None:
+        """Acquire an expired/unowned run lease and return its fence.
+
+        Re-acquisition by the same owner renews the current fence. A different
+        live owner is never displaced, and expiry advances the fencing token.
+        """
+        if not worker_id.strip():
+            raise ValueError("worker_id darf nicht leer sein")
+        if lease_seconds <= 0:
+            raise ValueError("lease_seconds muss positiv sein")
+        now = time.time()
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT lease_owner, lease_until, fencing_token "
+                "FROM run_records WHERE project=? AND run_id=?",
+                (project, run_id),
+            ).fetchone()
+            if row is None:
+                conn.rollback()
+                raise ValueError("RunRecord fehlt; Lease nicht angelegt")
+            owner, lease_until, token = row
+            if owner == worker_id:
+                if lease_until is None or float(lease_until) <= now:
+                    conn.rollback()
+                    return None
+                conn.execute(
+                    "UPDATE run_records SET lease_until=?, updated_at=? "
+                    "WHERE project=? AND run_id=? AND lease_owner=? "
+                    "AND fencing_token=?",
+                    (
+                        now + lease_seconds, datetime.now(UTC).isoformat(),
+                        project, run_id, worker_id, int(token),
+                    ),
+                )
+                conn.commit()
+                return int(token)
+            if lease_until is not None and float(lease_until) > now:
+                conn.commit()
+                return None
+            next_token = int(token) + 1
+            conn.execute(
+                "UPDATE run_records SET lease_owner=?, lease_until=?, "
+                "fencing_token=?, updated_at=? WHERE project=? AND run_id=?",
+                (
+                    worker_id, now + lease_seconds, next_token,
+                    datetime.now(UTC).isoformat(), project, run_id,
+                ),
+            )
+            conn.commit()
+        return next_token
+
+    def renew_run_lease(
+        self,
+        project: str,
+        run_id: str,
+        worker_id: str,
+        fencing_token: int,
+        *,
+        lease_seconds: float = 30.0,
+    ) -> bool:
+        """Renew only a still-live lease with the same fencing token."""
+        if lease_seconds <= 0:
+            raise ValueError("lease_seconds muss positiv sein")
+        now = time.time()
+        with closing(self._connect()) as conn:
+            cur = conn.execute(
+                "UPDATE run_records SET lease_until=?, updated_at=? "
+                "WHERE project=? AND run_id=? AND lease_owner=? "
+                "AND fencing_token=? AND lease_until>?",
+                (
+                    now + lease_seconds, datetime.now(UTC).isoformat(),
+                    project, run_id, worker_id, fencing_token, now,
+                ),
+            )
+            conn.commit()
+        return cur.rowcount == 1
+
+    def assert_run_lease(
+        self,
+        project: str,
+        run_id: str,
+        worker_id: str,
+        fencing_token: int,
+    ) -> None:
+        """Raise when this worker no longer has the exclusive live run lease."""
+        now = time.time()
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM run_records WHERE project=? AND run_id=? "
+                "AND lease_owner=? AND fencing_token=? AND lease_until>?",
+                (project, run_id, worker_id, fencing_token, now),
+            ).fetchone()
+        if row is None:
+            raise RunLeaseLost(
+                f"Run-Lease verloren: project={project}, run_id={run_id}"
+            )
+
+    def release_run_lease(
+        self,
+        project: str,
+        run_id: str,
+        worker_id: str,
+        fencing_token: int,
+    ) -> bool:
+        """Release only the matching owner; stale workers cannot clear a new lease."""
+        with closing(self._connect()) as conn:
+            cur = conn.execute(
+                "UPDATE run_records SET lease_owner=NULL, lease_until=NULL, "
+                "updated_at=? WHERE project=? AND run_id=? AND lease_owner=? "
+                "AND fencing_token=?",
+                (
+                    datetime.now(UTC).isoformat(),
+                    project, run_id, worker_id, fencing_token,
+                ),
+            )
+            conn.commit()
+        return cur.rowcount == 1
+
 
     def enqueue_run_message(
         self,
