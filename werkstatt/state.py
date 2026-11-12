@@ -210,11 +210,6 @@ class RunState:
     # OP-397: runtime-only assertion callback; never persisted into PhaseState.
     run_lease_check: Any = None
 
-    def assert_run_lease(self) -> None:
-        check = self.run_lease_check
-        if callable(check):
-            check()
-
     # Post-Apply-Fix 2026-10-16: Recovery-Plan aus
     # apply_and_recheck fuer die Builder-Korrektur-Runde.
     letzter_recovery_vorschlag: object = None
@@ -401,3 +396,10 @@ class PhaseMainPlannerKontext:
     phase_titel: str
     unterbloecke: list
     letzter_vorschlag: tuple | None
+
+
+def check_run_lease(state: RunState) -> None:
+    """Fail closed when a run worker no longer owns its fencing lease."""
+    check = state.run_lease_check
+    if callable(check):
+        check()
