@@ -5385,3 +5385,7 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Serverlauf auf `1ce6483` zeigte einen Testfehler, weil `test_verify_regression.py` neben den Werkstatt-Konfigurationen auch `/opt/security-ai/.werkstatt/verify.json` eines separaten Projekts geprueft hat. Dessen changed-files-Filter ist kein Werkstatt-Repo- oder Scaffold-Vertrag.
 - Der Test prueft nun nur die repo-eigene Verify-Konfiguration und das Scaffold-Template. Die Verifikation auf `main` laeuft ueber GitHub Actions.
+
+## 2026-11-12 — Verify-Test-CI-Korrekturen
+
+- Die erste CI nach der Testisolation stoppte vor pytest: Ruff fand eine veraltete `f`-Referenz im geaenderten Test und implizite Stringverkettung im zuvor bestehenden Zeitbudget-Guard. Beide Befunde sind korrigiert; GitHub Actions prueft den Commit erneut.

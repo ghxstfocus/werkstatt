@@ -99,7 +99,7 @@ def test_alle_3_json_haben_pytest_regression():
             continue
         data = json.loads(p.read_text())
         ids = [s.get("id") for s in data.get("stages", [])]
-        assert "pytest_regression" in ids, f"{f}: pytest_regression fehlt"
+        assert "pytest_regression" in ids, f"{p}: pytest_regression fehlt"
 
 
 def test_pytest_regression_runs_on_phase_end_without_diff():
