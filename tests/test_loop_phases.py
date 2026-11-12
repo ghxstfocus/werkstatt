@@ -129,7 +129,8 @@ def test_phase_reflection_kein_patch(tmp_path):
     with patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop._apply_patches_with_hooks", return_value=0), \
          patch("werkstatt.loop._verify_patches", return_value=True), \
-         patch("werkstatt.reviewer.run_phase_end_review", return_value=False):
+         patch("werkstatt.reviewer.run_phase_end_review", return_value=False), \
+         patch("werkstatt.phases.review._phase_review_gate", return_value=1):
         assert loop._phase_end_reflection(s) is False
     assert len(_kind(tmp_path, "loop_phase_reflection_kein_patch")) >= 1
 
@@ -143,7 +144,8 @@ def test_phase_reflection_verify_failed(tmp_path):
     with patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop._apply_patches_with_hooks", return_value=1), \
          patch("werkstatt.loop._verify_patches", return_value=False), \
-         patch("werkstatt.reviewer.run_phase_end_review", return_value=False):
+         patch("werkstatt.reviewer.run_phase_end_review", return_value=False), \
+         patch("werkstatt.phases.review._phase_review_gate", return_value=1):
         assert loop._phase_end_reflection(s) is False
     assert len(_kind(tmp_path, "loop_phase_reflection_verify_failed")) == 1
 

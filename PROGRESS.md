@@ -5483,3 +5483,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der vorherige CI-Lauf hatte zusaetzlich bereits bei 7 Prozent einen Assertion-Fehler, dessen Abschlussbericht durch den spaeteren Timeout fehlte. Der korrigierte Lauf muss diesen Befund noch offenlegen.
 
 - Folgepruefung: Ein zweiter Reflection-Test mit fehlgeschlagenem Builder traf denselben interaktiven Gate-Pfad. Auch dieser Test beantwortet das Gate jetzt explizit mit Reject, damit CI nicht erneut vor der Fehlerzusammenfassung haengen bleibt.
+
+- Weitere Reflection-Faelle ohne Patch und mit rotem Verify liefen ebenfalls in dasselbe Gate. Beide isolieren die menschliche Reject-Antwort jetzt ebenfalls, damit die Tests das produktive Gate nicht versehentlich pollen.
