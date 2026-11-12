@@ -124,9 +124,10 @@ def _run_budget_limit(state: RunState) -> tuple[str, str] | None:
             and max_minutes > 0 and state.start_monotonic > 0):
         elapsed = time.monotonic() - state.start_monotonic
         if elapsed >= max_minutes * 60:
+            elapsed_s = int(elapsed)
             reason = (
-                "Zeitbudget erreicht ({} Minuten; vergangen {} Sekunden)."
-                .format(max_minutes, int(elapsed))
+                f"Zeitbudget erreicht ({max_minutes} Minuten; "
+                f"vergangen {elapsed_s} Sekunden)."
             )
             return "max_minutes", reason
     return None

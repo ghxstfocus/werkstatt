@@ -5389,3 +5389,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 ## 2026-11-12 — Verify-Test-CI-Korrekturen
 
 - Die erste CI nach der Testisolation stoppte vor pytest: Ruff fand eine veraltete `f`-Referenz im geaenderten Test und implizite Stringverkettung im zuvor bestehenden Zeitbudget-Guard. Beide Befunde sind korrigiert; GitHub Actions prueft den Commit erneut.
+
+- Die zweite CI-Runde meldete Ruff UP032 fuer die format()-Schreibweise; der Budget-Fehlertext nutzt nun f-Strings. Die komplette CI muss den Fix noch bestaetigen.
