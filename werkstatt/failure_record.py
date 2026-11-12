@@ -1,7 +1,5 @@
 """Persist structured, bounded evidence for a failed final verification."""
 
-from __future__ import annotations
-
 import hashlib
 import json
 import os
