@@ -115,28 +115,30 @@ def _status_md_op_entfernen(status_md_path: Path, op_nnn: str) -> tuple[bool, st
     return True, ""
 
 
-def _delete_zone_op_append(status_md_path: Path, op_nnn: str, subject: str) -> bool:
-    """OP-048: Ergaenzt OP-NNN in der Delete-Zone-Tabelle.
+_DELETE_ZONE_MAX_ENTRIES = 20
 
-    Legt die Sektion '## Delete-Zone' an, falls sie fehlt.
+
+def _delete_zone_op_append(status_md_path: Path, op_nnn: str, subject: str) -> bool:
+    """Fuehrt eine kompakte, deduplizierte Delete-Zone mit 20 Eintraegen.
+
+    Die ausfuehrliche Abschluss-Historie bleibt append-only in PROGRESS.md;
+    die Delete-Zone dient nur als begrenzte Wiedereinfuehrungs-Sperrliste.
     """
     from datetime import date as _date_dz
+
     datum = _date_dz.today().isoformat()
     note = subject.replace("|", "-")[:60]
     new_row = f"| {op_nnn} | erledigt {datum} | {note} | - |"
+    op_row = re.compile(r"^\|\s*([^|]+?)\s*\|")
     try:
-        # OP-069-Fix (2026-11-02): Datei muss existieren. Sonst False.
-        # Ohne diesen Check legt write_text am Ende die Datei an,
-        # was der Akzeptanz "bei fehlender Datei: False" widerspricht.
-        if not status_md_path.exists():
+        if not status_md_path.is_file():
             return False
         text = status_md_path.read_text(encoding="utf-8")
         lines = text.splitlines()
-        dz_idx = -1
-        for i, line in enumerate(lines):
-            if line.strip() == "## Delete-Zone":
-                dz_idx = i
-                break
+        dz_idx = next(
+            (i for i, line in enumerate(lines) if line.strip() == "## Delete-Zone"),
+            -1,
+        )
         if dz_idx < 0:
             if text and not text.endswith("\n"):
                 text += "\n"
@@ -146,21 +148,47 @@ def _delete_zone_op_append(status_md_path: Path, op_nnn: str, subject: str) -> b
                 "|---|---|---|---|\n"
                 f"{new_row}\n"
             )
-        else:
-            section_end = len(lines)
-            for j in range(dz_idx + 1, len(lines)):
-                if lines[j].startswith("## "):
-                    section_end = j
-                    break
-            last_idx = -1
-            for j in range(dz_idx, section_end):
-                if lines[j].startswith("|"):
-                    last_idx = j
-            if last_idx < 0:
+            lines = text.splitlines()
+            dz_idx = next(
+                i for i, line in enumerate(lines)
+                if line.strip() == "## Delete-Zone"
+            )
+
+        section_end = len(lines)
+        for i in range(dz_idx + 1, len(lines)):
+            if lines[i].startswith("## "):
+                section_end = i
+                break
+        row_indexes = []
+        matching_op = False
+        for i in range(dz_idx + 1, section_end):
+            match = op_row.match(lines[i])
+            if not match or match.group(1).strip().lower() == "op":
+                continue
+            row_indexes.append(i)
+            matching_op = matching_op or match.group(1).strip() == op_nnn
+
+        if not matching_op:
+            last_table_line = next(
+                (
+                    i for i in range(section_end - 1, dz_idx, -1)
+                    if lines[i].startswith("|")
+                ),
+                -1,
+            )
+            if last_table_line < 0:
                 return False
-            lines.insert(last_idx + 1, new_row)
-            text = "\n".join(lines) + "\n"
-        status_md_path.write_text(text, encoding="utf-8")
+            lines.insert(last_table_line + 1, new_row)
+            row_indexes = [
+                *row_indexes,
+                last_table_line + 1,
+            ]
+
+        excess = len(row_indexes) - _DELETE_ZONE_MAX_ENTRIES
+        if excess > 0:
+            for i in row_indexes[:excess][::-1]:
+                del lines[i]
+        status_md_path.write_text("\n".join(lines).rstrip("\n") + "\n", encoding="utf-8")
     except OSError:
         return False
     return True
@@ -178,16 +206,39 @@ def _progress_op_done(
     _prefix = f"{op_nnn}:"
     if _subj.upper().startswith(_prefix.upper()):
         _subj = _subj[len(_prefix):].lstrip()
+    info = (
+        "Loop-Doku-Nachzug nach bestandener Phase-End-Verify; "
+        "STATUS-Eintrag wird entfernt."
+    )
     try:
         from werkstatt import progress as _progress_od
-        return _progress_od.append(
+
+        appended = _progress_od.append(
             pd,
             name=f"{op_nnn}: {_subj}",
             status="done",
-            info=f"Loop-Doku-Nachzug (Ebene 1). Beleg: git log {pn}.",
+            info=info,
             run_id=run_id,
         )
-    except Exception:
+        if appended:
+            return True
+
+        # append() liefert auch bei einem bereits vorhandenen Eintrag False.
+        # Ein Retry gilt nur dann als erfolgreich, wenn der exakte OP-/Run-
+        # Beleg bereits persistiert ist; ein Schreibfehler darf STATUS nicht
+        # trotzdem als erledigt ausblenden.
+        progress_path = Path(pd) / "PROGRESS.md"
+        if not progress_path.is_file():
+            return False
+        marker = (
+            f" -- {op_nnn}: {_subj}\n"
+            "- **Status:** done\n"
+        )
+        if run_id:
+            marker += f"- **Run-ID:** {str(run_id).strip()[:128]}\n"
+        marker += f"- **Info:** {info}"
+        return marker in progress_path.read_text(encoding="utf-8")
+    except (OSError, Exception):
         return False
 
 
@@ -539,19 +590,46 @@ def _committe_zielprojekt(state: RunState) -> tuple[bool, str]:
             if _dz_ok:
                 _rm_ok, _rm_msg = _status_md_op_entfernen(_status_path, _op_nnn)
             if _rm_ok:
-                _progress_op_done(
+                try:
+                    _status_before = _status_path.read_text(encoding="utf-8")
+                except OSError:
+                    _status_before = None
+                _progress_ok = _progress_op_done(
                     Path(pd), _op_nnn, _subject, pn,
                     run_id=getattr(state, "run_id", None),
                 )
-                _update_kennzahlen(_status_path, Path(pd))
-                _update_changelog(Path(pd), f"{_op_nnn}: {_subject}")
-                _drift = _architecture_drift_check(Path(pd))
-                if _drift.get("drift"):
-                    audit("committer_architecture_drift",
-                          {"py_changed": _drift.get("py", [])}, pd, pn)
-                    print(f"  WARNUNG: Architecture-Drift: "
-                          f"{len(_drift.get('py', []))} neue/geloeschte .py "
-                          f"ohne ARCHITECTURE.md-Aenderung")
+                if not _progress_ok:
+                    # STATUS darf nicht den einzigen offenen OP-Beleg verlieren,
+                    # wenn PROGRESS nicht geschrieben oder bestaetigt wurde.
+                    if _status_before is not None:
+                        try:
+                            _status_path.write_text(_status_before, encoding="utf-8")
+                        except OSError as _restore_exc:
+                            audit(
+                                "doku_nachzug_status_restore_failed",
+                                {
+                                    "op_nnn": _op_nnn,
+                                    "error_type": type(_restore_exc).__name__,
+                                },
+                                pd,
+                                pn,
+                            )
+                    audit(
+                        "doku_nachzug_skip",
+                        {"reason": "progress_write_failed", "op_nnn": _op_nnn},
+                        pd,
+                        pn,
+                    )
+                else:
+                    _update_kennzahlen(_status_path, Path(pd))
+                    _update_changelog(Path(pd), f"{_op_nnn}: {_subject}")
+                    _drift = _architecture_drift_check(Path(pd))
+                    if _drift.get("drift"):
+                        audit("committer_architecture_drift",
+                              {"py_changed": _drift.get("py", [])}, pd, pn)
+                        print(f"  WARNUNG: Architecture-Drift: "
+                              f"{len(_drift.get('py', []))} neue/geloeschte .py "
+                              f"ohne ARCHITECTURE.md-Aenderung")
             else:
                 # OP-063: OP-NNN steht vielleicht nur noch in der
                 # Delete-Zone (Body schon entfernt). Dann ist
