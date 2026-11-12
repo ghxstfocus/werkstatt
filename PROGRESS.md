@@ -5502,7 +5502,7 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Befund: `--resume` uebersprang den Checkpoint-Run-ID-Vergleich. Ein Backup eines anderen Runs konnte dadurch geladen und auf die aktuelle Run-ID umgeschrieben werden. Fehlende, ungueltige oder strukturell kaputte Resume-Checkpoints konnten ausserdem unbemerkt einen neuen Planpfad ausloesen.
 - Resume prueft den Checkpoint jetzt vor jeder Mutation: Datei muss existieren und gueltig sein; bei headless/Web-Aufrufen muss ihre Run-ID exakt der angeforderten Run-ID entsprechen. Abgelehnte Backups bleiben unveraendert liegen.
 - Beim Aktivieren eines geprueften Backups wird ein vorhandener aktiver Checkpoint nummeriert archiviert; ein fehlgeschlagener Move stoppt fail-closed. `--resume` und `--fresh` sind gegenseitig ausgeschlossen.
-- Regressionstests decken Run-ID-Mismatch, kaputte und fehlende Checkpoints sowie den Erhalt des aktiven Checkpoints ab. GitHub-CI-Verifikation ausstehend.
+- Regressionstests decken Run-ID-Mismatch, kaputte und fehlende Checkpoints sowie den Erhalt des aktiven Checkpoints ab. GitHub-CI (Run 43225327934): 2050 Tests bestanden; Ruff, Mypy, AST und Audit-Katalog gruen.
 
 ## 2026-11-12 — Resume-Test-Fixtures verwenden echte YAML-Zeilen
 
@@ -5514,25 +5514,25 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - OP-403: Wiederholte Failure Records wurden bisher nur bei identischem Fehlertext als Stillstand erkannt. Fluktuierende Testausgaben konnten bei unverändertem Code immer neue Builder-Reparaturversuche auslösen.
 - Der Phase-End-Recovery-Pfad erkennt nun unveränderten Worktree-Fingerprint nach einem Reparaturversuch als Stillstand, auch wenn Stage-Ausgabe oder Fehlertext variiert. Rotes Verify bleibt fail-closed; der Audit-Eintrag nennt den Grund.
-- Regressionstest variiert den Fehlerauszug bei identischem Worktree. GitHub-CI-Verifikation ausstehend.
+- Regressionstest variiert den Fehlerauszug bei identischem Worktree. GitHub-CI (Run 43225327934): 2050 Tests bestanden; Ruff, Mypy, AST und Audit-Katalog gruen.
 
 
 ## 2026-11-12 — Verify-Recovery verlangt Git-Provenienz
 
 - OP-403: Ein Git-Fehler wurde im Failure Record bisher mit leerer Ausgabe gleichgesetzt. Das konnte einen scheinbar gültigen konstanten Worktree-Fingerprint erzeugen.
 - Failure Records markieren HEAD/Fingerprint nun als nicht verfügbar, wenn Git-Abfragen fehlschlagen. Die automatische Phase-End-Reparatur bleibt dann vor dem Builder fail-closed und protokolliert die fehlenden Provenienzfelder.
-- Tests prüfen fehlende Git-Provenienz und dass ohne Fingerprint kein Reparaturaufruf erfolgt. GitHub-CI-Verifikation ausstehend.
+- Tests prüfen fehlende Git-Provenienz und dass ohne Fingerprint kein Reparaturaufruf erfolgt. GitHub-CI (Run 43225327934): 2050 Tests bestanden; Ruff, Mypy, AST und Audit-Katalog gruen.
 
 
 ## 2026-11-12 — Phase-End-Recovery erhält begrenzte Verify-Belege
 
 - OP-403: Der Recovery-Prompt wurde nach einer pauschalen 8.000-Zeichen-Grenze abgeschnitten. Bei vielen oder langen Verify-Ausgaben konnte dadurch ungültiges JSON entstehen und spätere Fehlerbelege verloren gehen.
 - Die Begrenzung kürzt Auszüge strukturiert, erhält Stage-IDs und Exit-Codes wo möglich und kennzeichnet gekürzte oder ausgelassene Belege. Der erzeugte JSON-Teil bleibt parsebar und innerhalb des Budgets.
-- Regressionstests decken lange Ausgaben und Metadaten-Überlauf ab. GitHub-CI-Verifikation ausstehend.
+- Regressionstests decken lange Ausgaben und Metadaten-Überlauf ab. GitHub-CI (Run 43225327934): 2050 Tests bestanden; Ruff, Mypy, AST und Audit-Katalog gruen.
 
 
 ## 2026-11-12 — Phase-End-Recovery ist budget- und fortschrittsgesteuert
 
 - OP-403: Die gezielte Phase-End-Reparatur lief bisher durch den allgemeinen Fünf-Runden-Deckel. Sie arbeitet jetzt bis zur bestandenen betroffenen Verify-Stage, bis ein identischer Code-/Fehlerzustand wiederkehrt oder das Run-Budget erreicht ist.
 - Der Builder übergibt seinen RunState jetzt an den LLM-Aufruf. Dadurch zählen Recovery-Aufrufe gegen das bestehende LLM-/Zeitbudget und können es nicht umgehen.
-- Regressionstest lässt die gezielte Stage erst nach sechs Builder-Aufrufen grün werden. Vollständige Phase-End-Verify bleibt danach verpflichtend. GitHub-CI-Verifikation ausstehend.
+- Regressionstest lässt die gezielte Stage erst nach sechs Builder-Aufrufen grün werden. Vollständige Phase-End-Verify bleibt danach verpflichtend. GitHub-CI (Run 43225327934): 2050 Tests bestanden; Ruff, Mypy, AST und Audit-Katalog gruen.
