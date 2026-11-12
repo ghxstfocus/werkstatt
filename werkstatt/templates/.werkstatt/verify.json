@@ -73,7 +73,6 @@
         "pytest",
         "-q"
       ],
-      "requires": "{changed_py_files}",
       "phase": "phase_end",
       "timeout": 600
     }

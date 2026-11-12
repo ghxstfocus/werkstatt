@@ -5339,5 +5339,5 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 
 ## 2026-11-12 -- OP-398: Scout-No-Op an Phase-End-Verify gebunden
 - **Status:** done
-- **Info:** Scout-No-Op konnte Plan- und Ergebnis-Gate passieren und direkt `loop_erfolg` melden. Der Pfad in `werkstatt/phases/plan.py` fuehrt jetzt nach dem Ergebnis-Gate dieselbe Phase-End-Verify aus; bei Fehlern wird der Run als unvollstaendig auditiert und rc=1 geliefert. Die Full-Suite-Stage `pytest_regression` in `.werkstatt/verify.json` laeuft bei `phase_end` auch ohne geaenderte Python-Dateien. Regressionstest sichert Reihenfolge und Verify-Stage ab.
+- **Info:** Scout-No-Op konnte Plan- und Ergebnis-Gate passieren und direkt `loop_erfolg` melden. Der Pfad in `werkstatt/phases/plan.py` fuehrt jetzt nach dem Ergebnis-Gate dieselbe Phase-End-Verify aus; bei Fehlern wird der Run als unvollstaendig auditiert und rc=1 geliefert. Die Full-Suite-Stage `pytest_regression` in Repo- und Scaffold-Verify-Konfiguration laeuft bei `phase_end` auch ohne geaenderte Python-Dateien. Der alte OP-149-Testvertrag wurde angepasst; Regressionstests sichern Reihenfolge und Verify-Stage ab.
 - **Tests:** `tests/test_loop_planner_split.py` erweitert; CI-Verifikation folgt.

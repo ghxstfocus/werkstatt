@@ -1,5 +1,4 @@
-"""OP-034 + OP-149: pytest_regression-Stage; requires-Gate nutzt jetzt
-changed_py_files (jede .py-Aenderung), nicht nur non_test_py_files."""
+"""Regressionstests fuer die Phase-End pytest_regression-Stage (OP-034/149/398)."""
 from __future__ import annotations
 
 import json
@@ -104,7 +103,7 @@ def test_alle_3_json_haben_pytest_regression():
         assert "pytest_regression" in ids, f"{f}: pytest_regression fehlt"
 
 
-def test_pytest_regression_requires_gesetzt():
+def test_pytest_regression_runs_on_phase_end_without_diff():
     for f in [
         "/opt/werkstatt/werkstatt/templates/.werkstatt/verify.json",
         "/opt/werkstatt/.werkstatt/verify.json",
@@ -116,5 +115,6 @@ def test_pytest_regression_requires_gesetzt():
         data = json.loads(p.read_text())
         stages = data.get("stages", [])
         stage = next(s for s in stages if s.get("id") == "pytest_regression")
-        assert stage.get("requires") == "{changed_py_files}"  # OP-149
+        # OP-398: no-op Abschluesse muessen die Full-Suite ausfuehren.
+        assert "requires" not in stage
         assert stage.get("phase") == "phase_end"
