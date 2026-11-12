@@ -78,7 +78,7 @@ def _persist_run_checkpoint(
 ) -> None:
     """Persist task-boundary state and acknowledge only observed chat notices."""
     if run_state is not None:
-        run_check_run_lease(state)
+        check_run_lease(run_state)
     record = store.get_run_record(project_name, run_id)
     if record is None:
         return
@@ -124,7 +124,7 @@ def _persist_run_checkpoint(
             max(int(message["seq"]) for message in claimed),
         )
     if run_state is not None:
-        run_check_run_lease(state)
+        check_run_lease(run_state)
     store.update_run_checkpoint(
         project_name,
         run_id,
@@ -133,7 +133,7 @@ def _persist_run_checkpoint(
     )
     for message in claimed:
         if run_state is not None:
-            run_check_run_lease(state)
+            check_run_lease(run_state)
         if not store.acknowledge_run_message(
             message["seq"], worker_id, message["fencing_token"],
         ):
