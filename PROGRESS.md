@@ -5380,3 +5380,8 @@ AST 374 Dateien ohne Fehler, Audit-Katalog bestanden; `ok: true`.
 ## 2026-11-12 — Run-Budgets werden durchgesetzt
 
 Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe vor dem HTTP-Aufruf. Die Erschoepfung wird einmal pro Run auditiert und als Zustand festgehalten; der Task-Loop stoppt am naechsten Checkpoint, speichert den Phase-State und meldet keinen Erfolg. Endpruefung und Prozess-Cleanup bleiben davon getrennt. Regressionstests decken beide Grenzen ab. Server-/CI-Ausfuehrung steht noch aus.
+
+## 2026-11-12 — Verify-Regressionstest auf Repo-Konfiguration begrenzen
+
+- Serverlauf auf `1ce6483` zeigte einen Testfehler, weil `test_verify_regression.py` neben den Werkstatt-Konfigurationen auch `/opt/security-ai/.werkstatt/verify.json` eines separaten Projekts geprueft hat. Dessen changed-files-Filter ist kein Werkstatt-Repo- oder Scaffold-Vertrag.
+- Der Test prueft nun nur die repo-eigene Verify-Konfiguration und das Scaffold-Template. Die Verifikation auf `main` laeuft ueber GitHub Actions.

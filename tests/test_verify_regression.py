@@ -90,12 +90,11 @@ def test_placeholder_non_test_skip_wenn_nur_code_und_nur_tests_platzhalter(tmp_p
 
 
 def test_alle_3_json_haben_pytest_regression():
-    for f in [
-        "/opt/werkstatt/werkstatt/templates/.werkstatt/verify.json",
-        "/opt/werkstatt/.werkstatt/verify.json",
-        "/opt/security-ai/.werkstatt/verify.json",
+    repo_root = Path(__file__).resolve().parents[1]
+    for p in [
+        repo_root / "werkstatt/templates/.werkstatt/verify.json",
+        repo_root / ".werkstatt/verify.json",
     ]:
-        p = Path(f)
         if not p.exists():
             continue
         data = json.loads(p.read_text())
@@ -104,12 +103,11 @@ def test_alle_3_json_haben_pytest_regression():
 
 
 def test_pytest_regression_runs_on_phase_end_without_diff():
-    for f in [
-        "/opt/werkstatt/werkstatt/templates/.werkstatt/verify.json",
-        "/opt/werkstatt/.werkstatt/verify.json",
-        "/opt/security-ai/.werkstatt/verify.json",
+    repo_root = Path(__file__).resolve().parents[1]
+    for p in [
+        repo_root / "werkstatt/templates/.werkstatt/verify.json",
+        repo_root / ".werkstatt/verify.json",
     ]:
-        p = Path(f)
         if not p.exists():
             continue
         data = json.loads(p.read_text())
