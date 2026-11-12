@@ -721,6 +721,7 @@ def _phase_finalize(
                 audit("loop_phase",
                       {"phase": "phase_end_review",
                        "status": "approved_after_gate"}, pd, pn)
+        state.phase_review_approved = True
         audit("loop_phase", {"phase": "phase_end_review", "status": "approved"}, pd, pn)
         group_end()
 
