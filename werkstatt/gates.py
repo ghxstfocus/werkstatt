@@ -98,21 +98,25 @@ def _frage_gate(
 def _task_graph_error(tasks: list) -> str | None:
     """Liefert einen konkreten Fehler fuer einen ungueltigen Task-DAG."""
     by_id: dict[str, dict] = {}
+    dependencies_by_id: dict[str, list[str]] = {}
     for index, task in enumerate(tasks, 1):
-        if not isinstance(task, dict):
-            return f"Task {index} ist kein Objekt"
-        task_id = task.get("id")
+        if isinstance(task, str):
+            task_id = f"t{index}"
+            dependencies: object = []
+        elif isinstance(task, dict):
+            task_id = task.get("id", f"t{index}")
+            dependencies = task.get("dependencies")
+            if dependencies is None:
+                dependencies = []
+        else:
+            return f"Task {index} ist weder Objekt noch Text"
+
         if not isinstance(task_id, str) or not task_id.strip():
             return f"Task {index} hat keine nichtleere ID"
         if task_id in by_id:
             return f"Task-ID {task_id!r} ist mehrfach vergeben"
-        by_id[task_id] = task
+        by_id[task_id] = task if isinstance(task, dict) else {"id": task_id}
 
-    dependencies_by_id: dict[str, list[str]] = {}
-    for task_id, task in by_id.items():
-        dependencies = task.get("dependencies")
-        if dependencies is None:
-            dependencies = []
         if not isinstance(dependencies, list) or any(
             not isinstance(dependency, str) or not dependency.strip()
             for dependency in dependencies
@@ -120,6 +124,9 @@ def _task_graph_error(tasks: list) -> str | None:
             return f"Task {task_id!r} hat ungueltige dependencies"
         if len(set(dependencies)) != len(dependencies):
             return f"Task {task_id!r} wiederholt eine dependency"
+        dependencies_by_id[task_id] = dependencies
+
+    for task_id, dependencies in dependencies_by_id.items():
         for dependency in dependencies:
             if dependency not in by_id:
                 return (
@@ -128,7 +135,6 @@ def _task_graph_error(tasks: list) -> str | None:
                 )
             if dependency == task_id:
                 return f"Task {task_id!r} haengt von sich selbst ab"
-        dependencies_by_id[task_id] = dependencies
 
     dependents: dict[str, list[str]] = {task_id: [] for task_id in by_id}
     indegree = {
