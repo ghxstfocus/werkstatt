@@ -531,3 +531,34 @@ def test_main_project_dir_overrides_configured_worktree(
         ])
     assert rc == 0
     assert aufrufe[0]["state_ref"][0].project_dir == worktree.resolve()
+
+
+
+def test_fresh_start_archives_previous_recovery_checkpoint(tmp_path: Path) -> None:
+    active = tmp_path / "demo.phase.yaml"
+    backup = tmp_path / "demo.phase.yaml.fresh-bak"
+    active.write_text("active checkpoint", encoding="utf-8")
+    backup.write_text("older recovery checkpoint", encoding="utf-8")
+
+    archived = loop._rotate_fresh_checkpoint(active, backup)
+
+    assert archived is not None
+    assert archived.read_text(encoding="utf-8") == "older recovery checkpoint"
+    assert backup.read_text(encoding="utf-8") == "active checkpoint"
+    assert not active.exists()
+
+
+def test_fresh_start_keeps_archived_checkpoint_names_unique(tmp_path: Path) -> None:
+    active = tmp_path / "demo.phase.yaml"
+    backup = tmp_path / "demo.phase.yaml.fresh-bak"
+    prior_archive = backup.with_name(f"{backup.name}.archive-0001")
+    prior_archive.write_text("oldest recovery checkpoint", encoding="utf-8")
+    backup.write_text("older recovery checkpoint", encoding="utf-8")
+    active.write_text("active checkpoint", encoding="utf-8")
+
+    archived = loop._rotate_fresh_checkpoint(active, backup)
+
+    assert archived == backup.with_name(f"{backup.name}.archive-0002")
+    assert prior_archive.read_text(encoding="utf-8") == "oldest recovery checkpoint"
+    assert archived.read_text(encoding="utf-8") == "older recovery checkpoint"
+    assert backup.read_text(encoding="utf-8") == "active checkpoint"

@@ -415,6 +415,32 @@ def _git_stash_head(project_dir: Path) -> str | None:
         return None
     return result.stdout.strip() or None
 
+def _rotate_fresh_checkpoint(checkpoint: Path, backup: Path) -> Path | None:
+    """Preserve the previous backup before moving the active checkpoint.
+
+    Repeated fresh starts must not overwrite the only recovery copy. The
+    active checkpoint becomes the resumable backup; older backups are kept
+    under numbered archive names in the same directory.
+    """
+    archived: Path | None = None
+    if backup.exists():
+        index = 1
+        while True:
+            candidate = backup.with_name(f"{backup.name}.archive-{index:04d}")
+            if not candidate.exists():
+                archived = candidate
+                break
+            index += 1
+        backup.replace(archived)
+    try:
+        checkpoint.replace(backup)
+    except OSError:
+        if archived is not None and archived.exists() and not backup.exists():
+            archived.replace(backup)
+        raise
+    return archived
+
+
 def _main_inner(argv: list[str] | None = None) -> int:
     global _LIFECYCLE_PROJECT
     # M-391: .env laden (DEEPSEEK_API_KEY automatisch setzen)
@@ -596,12 +622,16 @@ def _main_inner(argv: list[str] | None = None) -> int:
         audit("loop_resume_from_bak", {"bak": str(_bak)},
               _pd, args.project)
     elif getattr(args, "fresh", False) and _ps.exists():
-        try:
-            _ps.path.replace(_bak)
-        except OSError:
-            pass
-        audit("loop_fresh_reset", {"bak": str(_bak)},
-              _pd, args.project)
+        archived_backup = _rotate_fresh_checkpoint(_ps.path, _bak)
+        audit(
+            "loop_fresh_reset",
+            {
+                "bak": str(_bak),
+                "archived_backup": str(archived_backup) if archived_backup else None,
+            },
+            _pd,
+            args.project,
+        )
     elif _ps.exists():
         _ps.load()
 

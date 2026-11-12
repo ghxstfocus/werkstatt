@@ -5463,3 +5463,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - GitHub-CI meldete zunaechst zwei bestehende Loop-Status-Tests, deren exakte JSON-Vergleiche das neue additive Feld nicht erwarteten. Die Tests pruefen jetzt die bisherigen Statusfelder plus den Run-Kontext gezielt.
 - Der korrigierte Quality-Gate-Lauf ist gruen: 2.032 Tests bestanden, 5 uebersprungen; Ruff, Mypy, AST und Audit-Katalog ohne Fehler. Lauf: https://github.com/ghxstfocus/werkstatt/actions/runs/43212112192
+
+## 2026-11-12 — Fresh-Start-Checkpoint-Archivierung
+
+- Befund: Jeder Webstart beginnt absichtlich mit `--fresh`. Ein zweiter Fresh-Start konnte die vorhandene `.fresh-bak`-Recovery-Kopie lautlos ueberschreiben.
+- Der Loop archiviert eine bestehende Recovery-Kopie jetzt nummeriert, bevor er den aktiven Checkpoint als aktuelle Recovery-Kopie verschiebt. Scheitert das Verschieben, bricht der Start fail-closed ab; der alte Checkpoint wird nicht stillschweigend ignoriert.
+- Regressionstests pruefen Erhalt und eindeutige Archivnamen. Das ist ein Sicherungsschritt, keine vollstaendige Wiederaufnahme nach Prozess- oder Server-Neustart; OP-397 bleibt offen.
