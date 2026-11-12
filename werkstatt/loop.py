@@ -508,6 +508,7 @@ def _run_pipeline_loop_impl(
     # Fix AZ Stufe 8-D: Phase-End-Review + Human-Gate + Verify + PROGRESS + Summary
     state.assert_run_lease()
     rc = _phase_finalize(state, tasks_ok, tasks, project_name, phase_state)
+    state.assert_run_lease()
     _persist_run_result(EventStore(), project_name, get_run_id(), rc)
     return rc
 
