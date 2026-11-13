@@ -211,14 +211,16 @@ def test_read_status_finds_exact_op_beyond_bounded_status_head(tmp_path) -> None
     assert "JSONL und SQLite nur fuer denselben Zeitraum" in result
 
 
-def test_read_status_op_372_matches_current_status_source() -> None:
+def test_read_status_reports_op_372_closed_with_progress_evidence() -> None:
     result = chat_tools.execute_tool(
         "read_status", {"op_id": "OP-372"}, project_dir=Path.cwd(),
     )
 
     assert "Vollstaendiger Abschnitt OP-372" in result
-    assert "JSONL- und SQLite-Zaehler werden nur fuer denselben Zeitraum" in result
-    assert "projection_status als strukturiertes Feld" not in result
+    assert "OP-372 kommt in docs/STATUS.md nicht vor." in result
+    progress = Path("PROGRESS.md").read_text(encoding="utf-8")
+    assert "OP-372: Projection-Status semantisch vergleichen" in progress
+    assert "43499741171" in progress
 
 
 def test_read_status_rejects_ambiguous_or_invalid_op_id(tmp_path) -> None:

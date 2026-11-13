@@ -6487,6 +6487,20 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Der Integrationstest laesst jetzt den Resume-Endpunkt den echten Produktions-CLI-Worker starten und wartet auf dessen Abschluss samt Phase-End-Verify. Der POSIX-Fake ist unter Windows korrekt isoliert.
 - **Verifikation:** Lokal unter Windows/Python 3.14: `tests/test_run_recovery.py` 11 bestanden, 2 Linux-only uebersprungen; Ruff, strikte Doku-Drift-Pruefung und `git diff --check` bestanden. GitHub Actions Quality Gate [43488444501](https://github.com/ghxstfocus/werkstatt/actions/runs/43488444501) auf Linux erfolgreich: 2.234 Tests bestanden, 5 uebersprungen; Ruff, Mypy, AST, Audit-Katalog und Regression Gate gruen. Damit lief der Endpoint-Worker-Pfad unter POSIX bis zur Phase-End-Verify.
 - **Grenze:** Ein echter Absturz und Neustart des Webserver-Prozesses ist durch diese Testaenderung weiterhin nicht simuliert.
+## 2026-11-13 — OP-372: Projection-Status semantisch vergleichen
+
+- **Befund:** Der Health-Status verglich die Gesamtzahl aktiver JSONL-Events mit allen SQLite-Zeilen. Historische/migrierte Zeilen lagen damit auf einer anderen Basis; API und Statusleiste nannten weder Zeitraum noch Vergleichsbasis.
+- **Änderung:** Der Projektor vergleicht jetzt eindeutige Event-IDs der aktiven, nicht migrierten JSONL-Quelle mit SQLite-Zeilen derselben ID-Menge. SQLite-Zeilen außerhalb dieser Basis werden separat ausgewiesen. API und Statusleisten-Tooltip/Accessibility-Label nennen Scope, Basis, Anker und Zeitraum. Beschädigte JSONL-Zeilen und fehlende/ungueltige Zeitstempel verhindern eine grüne Anzeige. Die globale Projektion bleibt gemäß ADR-0023 erhalten.
+- **Abgesichert:** Regressionstests für Migrationsanker und historische SQLite-Zeilen, UTC-Zeitraum, fehlende und beschädigte Zeitstempel, API-Antwort, UI-Anzeige, Event-ID-Deduplizierung sowie wiederholten Rebuild/tail.
+- **Lokale Verifikation:** Betroffene Tests 24 bestanden; Ruff und strikte Doku-Drift-Prüfung bestanden. Das lokale Windows-Quality-Gate konnte die Linux-Kommandos nicht ausführen; der Windows-Gesamttestlauf enthielt plattformfremde Altfehler.
+- **Linux-CI:** GitHub Actions Quality Gate [43499741171](https://github.com/ghxstfocus/werkstatt/actions/runs/43499741171), PR-Merge-Ref `e5abe40` / Branch-Commit `ec84cdf`: 2.238 bestanden, 5 übersprungen; Ruff, Mypy, AST (390 Dateien), Audit-Katalog und JavaScript-Syntax erfolgreich; `ok=true`, `regression=false`.
+- **Ergebnis:** OP-372-Akzeptanzkriterien auf dem geprüften Branch erfüllt; OP-372 aus `docs/STATUS.md` entfernt. Änderung ist in PR #10 zur Übernahme nach `main`.
+
+## 2026-11-13 — OP-372-Abschluss nach Queue-Bereinigung verifiziert
+
+- **CI-Nachbesserung:** Nach dem ordnungsgemäßen Entfernen der erledigten OP-372 aus `docs/STATUS.md` erwartete ein Chat-Tool-Test sie weiterhin als offene OP. Der Test prüft jetzt den geschlossenen Zustand anhand des Progress-Belegs und der CI-Run-ID, statt eine erledigte OP in der offenen Queue zu verlangen.
+- **Verifikation:** GitHub Actions Quality Gate [43500911166](https://github.com/ghxstfocus/werkstatt/actions/runs/43500911166), Run 744, Commit `6d459e0`: erfolgreich. Die betroffenen lokalen Tests bestanden (25); Ruff und strikte Doku-Drift-Prüfung bestanden. Sechs nicht betroffene Chat-Tool-Tests konnten lokal unter Windows wegen der fest konfigurierten, hier fehlenden `/opt/werkstatt`-Projektwurzel nicht laufen; Linux-CI ist dafür maßgeblich.
+- **Ergebnis:** OP-372 bleibt abgeschlossen; Test und Dokumentationsstatus stimmen mit der Queue-Konvention überein.
 
 ## 2026-11-13 — OP-Start im Chat nur mit passendem Tool-Beleg bestaetigen
 

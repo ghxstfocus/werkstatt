@@ -126,15 +126,40 @@
       .catch(function () { return null; })
       .then(function (d) {
         if (generation !== ladeGeneration || projekt !== aktuellesProjekt) return;
-        if (!d) { el.textContent = ""; el.dataset.state = ""; return; }
-        if (d.diff > 0) {
+        if (!d) {
+          el.textContent = "";
+          el.dataset.state = "";
+          el.title = "";
+          el.removeAttribute("aria-label");
+          return;
+        }
+        var period = d.comparison_period || {};
+        var anchor = d.comparison_anchor || {};
+        var basis = d.comparison_basis || "unbekannte Basis";
+        var zeitraum = period.from && period.to
+          ? period.from + " bis " + period.to
+          : "keine Zeitstempel";
+        var details = "Umfang: " + (d.scope || "global")
+          + " | Basis: " + basis + " | Anker: "
+          + (anchor.event_id || "keiner") + " | Zeitraum: " + zeitraum
+          + " | JSONL: " + d.jsonl_events + " / SQLite: " + d.sqlite_rows
+          + " (" + (d.sqlite_rows_outside_basis || 0)
+          + " SQLite-Zeilen außerhalb der Basis)";
+        el.title = details;
+        el.setAttribute("aria-label", details);
+        if (d.comparable === false) {
+          el.textContent = "Proj: unvollständig";
+          el.dataset.state = "warn";
+          el.title = details + " | Fehlerhafte JSONL-Zeilen: "
+            + (d.malformed_jsonl_lines || 0) + " | Events ohne Zeitstempel: "
+            + (d.untimestamped_jsonl_events || 0);
+          el.setAttribute("aria-label", el.title);
+        } else if (d.diff > 0) {
           el.textContent = "Proj: " + d.diff + " offen";
           el.dataset.state = "warn";
-          el.title = "JSONL: " + d.jsonl_events + " / SQLite: " + d.sqlite_rows;
         } else {
           el.textContent = "Proj: OK";
           el.dataset.state = "ok";
-          el.title = "JSONL=" + d.jsonl_events + " SQLite=" + d.sqlite_rows;
         }
       });
   }

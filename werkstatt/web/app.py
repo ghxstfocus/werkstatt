@@ -1614,7 +1614,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/projects/{name}/projection/status")
     def projection_status(name: str) -> dict[str, Any]:
-        """OP-323: JSONL vs. SQLite Divergenz."""
+        """OP-372: Globale JSONL/SQLite-Projektion auf gemeinsamer Basis."""
         _pruefe_projektname(name)
         from werkstatt.projection import Projector
         return Projector().status()

@@ -92,9 +92,82 @@ def test_status_divergenz(tmp_path, monkeypatch):
     assert s0["jsonl_events"] == 2
     assert s0["sqlite_rows"] == 0
     assert s0["diff"] == 2
+    assert s0["untimestamped_jsonl_events"] == 2
+    assert s0["comparable"] is False
     proj.rebuild()
     s1 = proj.status()
     assert s1["diff"] == 0
+
+
+def test_status_vergleicht_aktive_jsonl_basis_mit_migrationsanker(
+    tmp_path, monkeypatch,
+):
+    from werkstatt import projection
+
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+    _write(tmp_path, "semantic-2026-11-12.jsonl", [
+        {
+            "audit_id": "live-a1", "event_id": "live-1", "run_id": "r1",
+            "kind": "loop_started", "timestamp": "2026-11-12T10:00:00+01:00",
+        },
+        {
+            "audit_id": "live-a2", "event_id": "live-2", "run_id": "r1",
+            "kind": "loop_ended", "timestamp": "2026-11-12T11:00:00Z",
+        },
+    ])
+    _write(tmp_path, "semantic-migrated-2026-11-12.jsonl", [{
+        "audit_id": "migration", "event_id": "legacy-1", "run_id": "old",
+        "kind": "loop_ended", "timestamp": "2026-01-01T00:00:00Z",
+    }])
+    proj = _pj(tmp_path)
+    with sqlite3.connect(str(proj.db_pfad)) as conn:
+        for event_id, run_id, timestamp in (
+            ("live-1", "r1", "2026-11-12T09:00:00Z"),
+            ("live-2", "r1", "2026-11-12T11:00:00Z"),
+            ("legacy-1", "old", "2026-01-01T00:00:00Z"),
+        ):
+            conn.execute(
+                "INSERT INTO events "
+                "(event_id, run_id, kind, payload, ts, project) "
+                "VALUES (?, ?, 'loop_ended', '{}', ?, 'werkstatt')",
+                (event_id, run_id, timestamp),
+            )
+
+    status = proj.status()
+
+    assert status["jsonl_events"] == 2
+    assert status["sqlite_rows"] == 2
+    assert status["sqlite_rows_total"] == 3
+    assert status["sqlite_rows_outside_basis"] == 1
+    assert status["diff"] == 0
+    assert status["comparison_basis"] == "active_jsonl_event_ids"
+    assert status["comparison_anchor"] == {
+        "event_id": "live-1", "timestamp": "2026-11-12T09:00:00Z",
+    }
+    assert status["comparison_period"] == {
+        "from": "2026-11-12T09:00:00Z", "to": "2026-11-12T11:00:00Z",
+    }
+    assert status["scope"] == "global"
+    assert status["comparable"] is True
+
+
+def test_status_unvollstaendig_bei_beschaedigter_jsonl(tmp_path, monkeypatch):
+    from werkstatt import projection
+
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+    logs = tmp_path / "audit-logs"
+    logs.mkdir()
+    (logs / "semantic-2026-11-12.jsonl").write_text(
+        '{"event_id":"e1","timestamp":"2026-11-12T10:00:00Z"}\n'
+        '{kaputt}\n',
+        encoding="utf-8",
+    )
+
+    status = _pj(tmp_path).status()
+
+    assert status["jsonl_events"] == 1
+    assert status["malformed_jsonl_lines"] == 1
+    assert status["comparable"] is False
 
 
 def test_event_id_fallback(tmp_path, monkeypatch):

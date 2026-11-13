@@ -8,6 +8,8 @@ Dann ist der Projektor-Pfad deterministisch.
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 
 def _patch_home(monkeypatch, tmp_path):
     from werkstatt import audit as A
@@ -72,6 +74,39 @@ def test_status_endpoint_vorhanden():
     from werkstatt.web import app as web_app
     routes = [r.path for r in web_app.app.routes if hasattr(r, "path")]
     assert "/api/projects/{name}/projection/status" in routes
+
+
+def test_projection_status_api_liefert_vergleichsbasis_und_zeitraum(
+    tmp_path, monkeypatch,
+):
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt import projection
+    from werkstatt.web import auth
+    from werkstatt.web.app import create_app
+
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+    monkeypatch.setattr(auth, "is_auth_disabled", lambda: True)
+    (tmp_path / "audit-logs").mkdir()
+    (tmp_path / "audit-logs" / "semantic-2026-11-12.jsonl").write_text(
+        '{"event_id":"api-event","timestamp":"2026-11-12T10:00:00Z"}\n',
+        encoding="utf-8",
+    )
+
+    response = TestClient(create_app()).get(
+        "/api/projects/demo/projection/status"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["comparison_basis"] == "active_jsonl_event_ids"
+    assert data["comparison_period"] == {
+        "from": "2026-11-12T10:00:00Z", "to": "2026-11-12T10:00:00Z",
+    }
+    assert data["comparison_anchor"]["event_id"] == "api-event"
+    assert data["scope"] == "global"
 
 
 def test_stream_write_landet_in_sqlite(tmp_path, monkeypatch):

@@ -5,6 +5,7 @@ import hashlib
 import json
 import sqlite3
 from contextlib import closing
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -130,9 +131,39 @@ class Projector:
             )
         return alle
 
-    def _count_jsonl(self) -> int:
-        """Count unique durable events, tolerating retries with the same ID."""
-        event_ids: set[str] = set()
+    @staticmethod
+    def _event_id(
+        event: dict[str, Any], file_name: str, line_num: int,
+    ) -> str:
+        event_id = event.get("event_id")
+        if event_id:
+            return str(event_id)
+        run_id = event.get("run_id") or ""
+        audit_id = event.get("audit_id") or ""
+        return hashlib.sha256(
+            f"{run_id}|{audit_id}|{file_name}|{line_num}".encode()
+        ).hexdigest()[:16]
+
+    @staticmethod
+    def _parse_timestamp(value: Any) -> datetime | None:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.strip())
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+
+    def _jsonl_inventory(self) -> dict[str, Any]:
+        """Return the active JSONL event-ID basis and its time coverage.
+
+        Migration dumps are excluded by ``_jsonl_files``. IDs are unique and
+        the first occurrence wins, matching SQLite's ``INSERT OR IGNORE``
+        replay semantics.
+        """
+        event_times: dict[str, datetime | None] = {}
         malformed = 0
         for f in self._jsonl_files():
             with f.open(encoding="utf-8") as fh:
@@ -147,15 +178,36 @@ class Projector:
                     if not isinstance(event, dict):
                         malformed += 1
                         continue
-                    event_id = event.get("event_id")
-                    if not event_id:
-                        run_id = event.get("run_id") or ""
-                        audit_id = event.get("audit_id") or ""
-                        event_id = hashlib.sha256(
-                            f"{run_id}|{audit_id}|{f.name}|{line_num}".encode()
-                        ).hexdigest()[:16]
-                    event_ids.add(str(event_id))
-        return len(event_ids) + malformed
+                    event_id = self._event_id(event, f.name, line_num)
+                    timestamp = self._parse_timestamp(
+                        event.get("timestamp") or event.get("ts")
+                    )
+                    event_times.setdefault(event_id, timestamp)
+
+        timestamps = [value for value in event_times.values() if value is not None]
+        first_event_id = next(iter(event_times), None)
+        first_timestamp = event_times.get(first_event_id) if first_event_id else None
+        return {
+            "event_ids": set(event_times),
+            "malformed_jsonl_lines": malformed,
+            "untimestamped_events": sum(
+                value is None for value in event_times.values()
+            ),
+            "anchor": {
+                "event_id": first_event_id,
+                "timestamp": self._format_timestamp(first_timestamp),
+            },
+            "period": {
+                "from": self._format_timestamp(min(timestamps)) if timestamps else None,
+                "to": self._format_timestamp(max(timestamps)) if timestamps else None,
+            },
+        }
+
+    @staticmethod
+    def _format_timestamp(value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        return value.isoformat(timespec="seconds").replace("+00:00", "Z")
 
     def _insert(
         self,
@@ -166,12 +218,7 @@ class Projector:
     ) -> bool:
         run_id = ev.get("run_id") or ""
         kind = ev.get("kind") or "?"
-        event_id = ev.get("event_id")
-        if not event_id:
-            aid = ev.get("audit_id") or ""
-            event_id = hashlib.sha256(
-                f"{run_id}|{aid}|{file_name}|{line_num}".encode()
-            ).hexdigest()[:16]
+        event_id = self._event_id(ev, file_name, line_num)
         # OP-306c: project bekommt eigene Spalte (single source of
         # truth), wird deshalb bewusst aus payload entfernt. Doppel-
         # Speicherung waere Drift-Risiko.
@@ -241,13 +288,37 @@ class Projector:
             conn.commit()
         return {"eingefuegt": eingefuegt, "uebersprungen": uebersprungen}
 
-    def status(self) -> dict[str, int | str | None]:
-        jsonl_events = self._count_jsonl()
+    def status(self) -> dict[str, Any]:
+        inventory = self._jsonl_inventory()
+        source_ids: set[str] = inventory["event_ids"]
         with closing(self._connect()) as conn:
-            sqlite_rows = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+            sqlite_rows_total = int(
+                conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+            )
+            sqlite_ids = {
+                str(row[0])
+                for row in conn.execute(
+                    "SELECT event_id FROM events WHERE event_id IS NOT NULL"
+                )
+            }
+        sqlite_rows = len(source_ids & sqlite_ids)
+        jsonl_events = len(source_ids)
+        diff = jsonl_events - sqlite_rows
         return {
             "jsonl_events": jsonl_events,
             "sqlite_rows": sqlite_rows,
-            "diff": jsonl_events - sqlite_rows,
+            "sqlite_rows_total": sqlite_rows_total,
+            "sqlite_rows_outside_basis": sqlite_rows_total - sqlite_rows,
+            "diff": diff,
             "last_checkpoint": self._get_checkpoint("last_audit_id"),
+            "scope": "global",
+            "comparison_basis": "active_jsonl_event_ids",
+            "comparison_anchor": inventory["anchor"],
+            "comparison_period": inventory["period"],
+            "untimestamped_jsonl_events": inventory["untimestamped_events"],
+            "malformed_jsonl_lines": inventory["malformed_jsonl_lines"],
+            "comparable": (
+                inventory["malformed_jsonl_lines"] == 0
+                and inventory["untimestamped_events"] == 0
+            ),
         }

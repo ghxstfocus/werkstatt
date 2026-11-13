@@ -324,8 +324,14 @@ Direkte `EventStore().append()`-Aufrufe in der Produktion sind verboten.
 
 ### 8.3 Health
 
-`GET /api/projects/{name}/projection/status` liefert Divergenz JSONL
-vs. SQLite. Statusbar zeigt Warnung bei `diff > 0`.
+`GET /api/projects/{name}/projection/status` liefert den globalen
+JSONL/SQLite-Vergleich gemaess ADR-0023. `jsonl_events` und `sqlite_rows`
+zaehlen dieselbe Basis eindeutiger Event-IDs aus aktiven, nicht migrierten
+JSONL-Dateien. Historische SQLite-Zeilen ausserhalb der Basis stehen separat
+in `sqlite_rows_outside_basis`. `comparison_basis`, `comparison_anchor` und
+`comparison_period` machen die Herleitung sichtbar; fehlerhafte JSONL-Zeilen
+oder fehlende/ungueltige Zeitstempel setzen `comparable=false`. Die
+Statusleiste warnt bei `diff > 0` oder einem unvollstaendigen Vergleich.
 
 ### 8.4 Regel
 
