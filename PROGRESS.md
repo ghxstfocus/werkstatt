@@ -6012,3 +6012,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der Regressionstest mit einem als `phase_end_verify_failed` markierten Run blieb nach HTTP-Annahme im Zustand `failed`; der bestehende Worker-Log war leer.
 - Der Test protokolliert im Assertion-Fehler jetzt Worker-Exitcode, Registry-Snapshot, Bootstrap-Marker und begrenzte Inhalte weiterer Testlogs. Damit grenzt der nächste CI-Lauf den Resume-Abbruch ein, ohne die Akzeptanz abzuschwächen.
+
+
+## 2026-11-13 — Resume-Worker Prozessdiagnose
+
+- Der RunRecord blieb bei HTTP-Resume unverändert `failed`; die Registry zeigte den frisch gestarteten Worker als `running`, aber der Overlay-Bootstrapmarker wurde nach 15 Sekunden nicht angelegt und es gab keine Worker-Ausgabe.
+- Die Diagnose prüft im CI-Fehlerfall nun zusätzlich Prozesskommando, Kernel-Status/Wartekanal und ausschließlich die relevanten `PYTHONPATH`-/Bootstrap-Variablen. Das grenzt Prozessstart, Modulauflösung und Importstillstand voneinander ab.
+- Ursache und produktive Korrektur sind bis zum nächsten Diagnose-Run offen.

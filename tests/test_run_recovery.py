@@ -646,10 +646,37 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
                 f"{path}: {path.read_text(encoding='utf-8', errors='replace')[-4000:]}"
                 for path in sorted(tmp_path.rglob("*.log"))[:10]
             )
+            worker_proc = Path("/proc") / str(worker.pid) if worker is not None else None
+            proc_cmdline = ""
+            proc_state = ""
+            proc_wchan = ""
+            proc_env = ""
+            if worker_proc is not None and worker_proc.is_dir():
+                proc_cmdline = (
+                    (worker_proc / "cmdline").read_bytes()
+                    .replace(b"\\0", b" ").decode("utf-8", errors="replace")
+                )
+                proc_state = next(
+                    (
+                        line for line in (worker_proc / "status").read_text().splitlines()
+                        if line.startswith("State:")
+                    ),
+                    "",
+                )
+                proc_wchan = (worker_proc / "wchan").read_text().strip()
+                proc_env = ";".join(
+                    entry.decode("utf-8", errors="replace")
+                    for entry in (worker_proc / "environ").read_bytes().split(b"\\0")
+                    if entry.startswith(
+                        (b"PYTHONPATH=", b"WERKSTATT_WORKER_BOOT="),
+                    )
+                )
             assert record["status"] == "completed", (
                 f"run={record!r}; worker_returncode="
                 f"{worker.poll() if worker is not None else None}; "
                 f"registry={registry_snapshot!r}; worker_boot={worker_boot.exists()}; "
+                f"cmdline={proc_cmdline!r}; state={proc_state!r}; "
+                f"wchan={proc_wchan!r}; env={proc_env!r}; "
                 f"worker_log={log!r}; other_logs={extra_logs!r}"
             )
         assert record["run_id"] == run_id
