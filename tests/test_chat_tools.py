@@ -63,6 +63,30 @@ def test_read_file_liest_projekt() -> None:
     assert "Fehler" not in r[:80]
 
 
+def test_read_file_offsets_are_character_offsets_and_truncation_is_explicit(tmp_path):
+    (tmp_path / "offset.txt").write_text("ä\\nbeta", encoding="utf-8")
+    offset_result = chat_tools.execute_tool(
+        "read_file", {"path": "offset.txt", "start": 2, "end": 6},
+        project_dir=tmp_path,
+    )
+    assert offset_result == "beta"
+
+    large = tmp_path / "large-doc.md"
+    large.write_text("x" * (chat_tools._MAX_READ_BYTES + 10), encoding="utf-8")
+    result = chat_tools.execute_tool(
+        "read_file",
+        {"path": "large-doc.md", "start": 0, "end": 100_000},
+        project_dir=tmp_path,
+    )
+    assert "0-basierte Zeichen-Offsets, keine Zeilennummern" in result
+    assert "Fortsetzen mit read_file(start=" in result
+    assert ", end=100000)" in result
+    assert len(result.encode("utf-8")) <= chat_tools._MAX_READ_BYTES
+    schema = chat_tools.CHAT_TOOLS["read_file"]["description"]
+    assert "keine Zeilennummern" in schema
+    assert "nächsten start-Offset" in schema
+
+
 def test_grep_findet_pattern() -> None:
     r = chat_tools.execute_tool(
         "grep", {"pattern": "chat_loop", "path": "werkstatt/chat_agent.py"},
