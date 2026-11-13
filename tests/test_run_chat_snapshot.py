@@ -128,7 +128,7 @@ def test_checkpoint_captures_run_tree_before_ack_and_resumes_jobs(
     monkeypatch.setattr(tasks, "check_run_lease", lambda _state: None)
     resumed: list[tuple[str, Path]] = []
     monkeypatch.setattr(
-        tasks,
+        chat_jobs,
         "resume_chat_jobs",
         lambda project, path: resumed.append((project, Path(path))),
     )
@@ -211,7 +211,7 @@ def test_run_job_uses_then_removes_checkpoint_snapshot(
     assert chat_jobs._run_job(
         jobs.db_path, "demo", project_dir, job["job_id"],
     )
+    result = jobs.get(job["job_id"])
+    assert result is not None and result["state"] == "succeeded", result
     assert seen == [(snapshot.path, "captured state\n")]
     assert not snapshot.path.exists()
-    result = jobs.get(job["job_id"])
-    assert result is not None and result["state"] == "succeeded"
