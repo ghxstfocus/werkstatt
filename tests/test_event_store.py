@@ -464,8 +464,16 @@ def test_task_checkpoint_persists_chat_followup_without_replacing_goal(
     ]) == 1
 
 
-def test_task_checkpoint_rejects_non_text_followup_without_ack(
+@pytest.mark.parametrize(
+    ("request_text", "error_type", "message"),
+    [
+        (["not", "text"], TypeError, "gültigen Text"),
+        (" \n\t ", ValueError, "leeren Text"),
+    ],
+)
+def test_task_checkpoint_rejects_invalid_followup_without_ack(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    request_text: object, error_type: type[Exception], message: str,
 ) -> None:
     from werkstatt.phases import tasks
 
@@ -480,11 +488,11 @@ def test_task_checkpoint_rejects_non_text_followup_without_ack(
             "session_id": "session-1",
             "parent_run_id": "run-invalid-followup",
             "base_commit": None,
-            "request": ["not", "text"],
+            "request": request_text,
         },
     )
 
-    with pytest.raises(TypeError, match="gültigen Text"):
+    with pytest.raises(error_type, match=message):
         tasks._persist_run_checkpoint(
             store,
             "demo",

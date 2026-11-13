@@ -84,6 +84,8 @@ den Spawn-Fehlerpfad.
    transportieren dabei ihren gespeicherten Vorschautext; fehlt der Inhalt,
    wird die Annahme fail-closed abgelehnt. Die Aufgaben werden am Checkpoint
    aber noch nicht fachlich disponiert oder in den Arbeitsgraphen uebernommen.
+   Der Checkpoint-Consumer weist leere/whitespace-only Inbox-Texte jetzt
+   ebenfalls fail-closed ab, bevor sie persistiert oder quittiert werden.
    Fragen, Control und Gate-Antworten veraendern den Arbeitsgraphen ebenfalls
    noch nicht.
 3. **Zielorientierter Arbeitsgraph fehlt weiterhin:** Der Planner verwirft

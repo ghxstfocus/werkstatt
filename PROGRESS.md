@@ -6557,3 +6557,11 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Regression:** Der Busy-Loop-Handoff-Test prueft jetzt sowohl direkte Auftraege als auch explizite OPs und verifiziert den kompletten OP-Vorschautext in der persistenten Inbox.
 - **Verifikation:** `tests/test_chat_actions_api.py`: 9 bestanden, 1 POSIX-only-Test unter Windows uebersprungen; `pytest.main()` lieferte Exit-Code 0. Ruff fuer Webhandler und Test sowie `tools/doku_check.py --strict --limit 10 --worktree` bestanden; `git diff --check` bestanden. GitHub Actions Quality Gate [43516895725](https://github.com/ghxstfocus/werkstatt/actions/runs/43516895725) fuer den enthaltenen Code-Commit `0b972a2`: erfolgreich. Der Server-Gesamtlauf auf Basis `2930dee` war zuvor gruen: 2.256 bestanden, 5 uebersprungen.
 - **Grenze:** Damit ist die Uebergabe des Inhalts belegt, nicht dessen fachliche Einordnung oder Ausfuehrung im Arbeitsgraphen. Die Disposition eingereihter Folgeauftraege bleibt OP-401/ADR-0032-Arbeit.
+
+## 2026-11-13 — Leere Chat-Folgeauftraege am Checkpoint ablehnen
+
+- **Befund:** Die Web-API weist Folgeauftraege ohne Inhalt ab. Der Loop-Checkpoint-Consumer pruefte dagegen nur den Datentyp und haette eine leere oder aus Leerzeichen bestehende Nachricht als `received` persistiert und quittiert. Das kann bei Legacy-/direkt eingestellten Inbox-Nachrichten weiterhin passieren.
+- **Aenderung:** Der Consumer weist leeren Text jetzt vor Checkpoint-Persistierung, Chat-Quittung und Inbox-Acknowledge fail-closed ab.
+- **Regression:** Der Checkpoint-Test deckt ungueltigen Nicht-Text sowie whitespace-only Inhalt ab und prueft, dass beides unquittiert bleibt.
+- **Verifikation:** `tests/test_event_store.py`: 28 bestanden; Ruff, strikter Doku-Drift-Check und `git diff --check` bestanden. GitHub Actions Quality Gate [43518178481](https://github.com/ghxstfocus/werkstatt/actions/runs/43518178481) fuer Commit `48f5659`: erfolgreich. `main` enthaelt bereits den API-seitigen OP-Aufgabentext-Fix aus PR #16; der Serverlauf auf `7cdd6b6` ergab 2.258 bestanden und 5 uebersprungen.
+- **Grenze:** Das schuetzt die Inbox vor nicht ausfuehrbaren Follow-ups; Klassifikation, Scope-Abgleich und Uebernahme in den Arbeitsgraphen bleiben OP-401 offen.

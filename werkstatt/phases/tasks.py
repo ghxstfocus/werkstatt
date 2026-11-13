@@ -252,6 +252,10 @@ def _persist_run_checkpoint(
                 f"Chat-Folgeauftrag {message['message_id']} hat keinen "
                 "gültigen Text",
             )
+        if not request.strip():
+            raise ValueError(
+                f"Chat-Folgeauftrag {message['message_id']} hat leeren Text",
+            )
         followups.append({
             "seq": message["seq"],
             "message_id": message["message_id"],
