@@ -156,7 +156,7 @@ class PhaseState:
                     "criterion_refs muessen eine Liste nichtleerer IDs sein"
                 )
 
-        criteria_tracking = bool(akzeptanzkriterien) or any(
+        criteria_tracking = any(
             task.get("criterion_refs") for task in tasks
         )
         now = datetime.datetime.now(datetime.UTC).isoformat()

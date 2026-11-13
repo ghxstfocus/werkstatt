@@ -6162,7 +6162,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 
 
-- Der erste CI-Lauf fuer den Kriterienabschluss deckte einen Kompatibilitaetsfehler
-  auf: leere Planner-Referenzlisten wurden als aktives Tracking gewertet.
-  Die Markierung unterscheidet jetzt leere Referenzen von echten Kriterien-
-  Auftraegen; Regressionstest hinzugefuegt. Der zweite CI-Lauf bleibt massgeblich.
+- CI-Lauf 622 deckte auf, dass leere Planner-Referenzlisten als
+  aktives Tracking gewertet wurden. CI-Lauf 623 zeigte zusaetzlich, dass
+  Legacy-Plaene mit Akzeptanzkriterien ohne explizite Zuordnung dadurch
+  faelschlich blockiert wurden. Die Checkpoint-Pruefung verfolgt deshalb nur
+  explizit nichtleere Referenzen; neue Plaene bleiben durch den Plan-Compiler
+  fuer fehlende Zuordnungen gesperrt. Regressionstest fuer leere Referenzlisten.
