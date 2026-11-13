@@ -245,6 +245,31 @@ def test_run_inbox_rejects_orphan_and_idempotency_conflict(
         )
 
 
+def test_run_inbox_rejects_new_messages_after_terminal_status(
+    tmp_path: Path,
+) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-terminal-inbox", "Originalauftrag")
+    seq = store.enqueue_run_message(
+        "demo", "run-terminal-inbox", "msg-before-end", "question",
+        {"text": "accepted while active"},
+    )
+    store.update_run_checkpoint(
+        "demo", "run-terminal-inbox", {"done": True},
+        expected_version=0, status="completed",
+    )
+
+    assert store.enqueue_run_message(
+        "demo", "run-terminal-inbox", "msg-before-end", "question",
+        {"text": "accepted while active"},
+    ) == seq
+    with pytest.raises(ValueError, match="nicht mehr aktiv"):
+        store.enqueue_run_message(
+            "demo", "run-terminal-inbox", "msg-after-end", "question",
+            {"text": "must not be stranded"},
+        )
+
+
 def test_task_checkpoint_consumes_chat_notice_with_run_record(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

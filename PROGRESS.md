@@ -6437,3 +6437,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - Aenderung: Nach erfolgreichem Checkpoint schreibt der Loop ein idempotentes Chat-Event in die referenzierte Session. Der Chat aktualisiert die Vorschlagskarte und bestaetigt die Aufnahme. Er sagt explizit, dass die inhaltliche Einordnung noch aussteht und Hauptziel/Tasks unveraendert bleiben.
 - Grenze: Das bestaetigt nur die dauerhafte Aufnahme. Fachliche Scope-Pruefung, adaptive Replanung und Ausfuehrung des Folgeauftrags bleiben offen in OP-401.
 - Verifikation: Event-Store/Inbox 24 bestanden; Chat-Frontend 21 bestanden; Chat-Aktions-API 4 bestanden/1 plattformbedingt uebersprungen; Chatjobs 25 bestanden. Ruff, strikte Doku-Drift-Pruefung und `git diff --check` bestanden. Ein gemeinsamer pytest-Aufruf wurde lokal mit KeyboardInterrupt beendet und wird nicht als bestanden gewertet; die Gruppen liefen danach einzeln erfolgreich.
+
+## 2026-11-13 — Nachrichten nicht an abgeschlossene Runs binden
+
+- Befund: Die Run-Inbox pruefte beim Einreihen nur, ob ein RunRecord existiert. Ein Chatjob oder Folgeauftrag konnte dadurch nach dem terminalen Run-Status angenommen werden, ohne dass noch ein Worker den Eintrag verarbeitet.
+- Aenderung: Run-Inbox-Einreihung und Statuspruefung laufen jetzt unter einer SQLite-Schreibtransaktion. Neue Nachrichten sind nur fuer `starting`/`running` zulaessig; bereits gespeicherte idempotente Retries bleiben auch nach Run-Ende abrufbar. Eine Chatjob-Outbox, deren Run waehrend des Handoffs terminal wurde, wird mit `run_ended_before_checkpoint` sichtbar abgeschlossen.
+- Verifikation: `tests/test_event_store.py` 23 bestanden; `tests/test_chat_jobs.py` 26 bestanden; Inbox-Replay und Chat-Aktions-API 6 bestanden/1 plattformbedingt uebersprungen. Ruff, Doku-Drift-Pruefung und `git diff --check` bestanden.

@@ -639,6 +639,35 @@ def test_run_inbox_outbox_waits_for_run_record_then_reconciles(
     }
 
 
+def test_run_inbox_outbox_fails_job_when_run_is_already_terminal(
+    tmp_path: Path,
+) -> None:
+    from werkstatt import chat_jobs, event_store
+
+    jobs_db = tmp_path / "chat-jobs.db"
+    events = event_store.EventStore(tmp_path / "events.db")
+    events.create_run_record("demo", "run-ended", "Pruefe Repo")
+    events.update_run_checkpoint(
+        "demo", "run-ended", {"done": True},
+        expected_version=0, status="completed",
+    )
+    store = ChatJobStore(jobs_db)
+    job, _ = store.create(
+        "session-a", "Frage im Abschlussrennen", "read",
+        "request-key-terminal-run", context_seq=3,
+        run_id="run-ended", project="demo",
+    )
+
+    assert chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    ) == 0
+    failed = store.get(job["job_id"])
+    assert failed["state"] == "failed"
+    assert failed["events"][-1]["payload"]["reason"] == (
+        "run_ended_before_checkpoint"
+    )
+
+
 def test_run_inbox_reconciles_terminal_chat_job_result_idempotently(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

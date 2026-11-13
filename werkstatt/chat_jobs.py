@@ -919,9 +919,11 @@ def reconcile_run_inbox(
     path = Path(db_path) if db_path else _db_path(project)
     store = ChatJobStore(path)
     if event_store is None:
-        from werkstatt.event_store import EventStore
+        from werkstatt.event_store import EventStore, RunNotActiveError
 
         event_store = EventStore()
+    else:
+        from werkstatt.event_store import RunNotActiveError
 
     reconciled = 0
     after_rowid = 0
@@ -934,21 +936,31 @@ def reconcile_run_inbox(
         after_rowid = int(jobs[-1]["outbox_seq"])
         for job in jobs:
             run_id = str(job["run_id"])
-            if event_store.get_run_record(project, run_id) is None:
+            run_record = event_store.get_run_record(project, run_id)
+            if run_record is None:
                 continue
             job_id = str(job["job_id"])
-            event_store.enqueue_run_message(
-                project,
-                run_id,
-                f"chat-job:{job_id}",
-                "job_notice",
-                {
-                    "job_id": job_id,
-                    "session_id": str(job["session_id"]),
-                    "mode": str(job["mode"]),
-                    "context_seq": job["context_seq"],
-                },
-            )
+            try:
+                event_store.enqueue_run_message(
+                    project,
+                    run_id,
+                    f"chat-job:{job_id}",
+                    "job_notice",
+                    {
+                        "job_id": job_id,
+                        "session_id": str(job["session_id"]),
+                        "mode": str(job["mode"]),
+                        "context_seq": job["context_seq"],
+                    },
+                )
+            except RunNotActiveError:
+                store.fail_queued(
+                    job_id,
+                    "Der zugeordnete Run endete, bevor die Chat-Anfrage am "
+                    "Checkpoint uebernommen wurde. Bitte starte die Frage erneut.",
+                    reason="run_ended_before_checkpoint",
+                )
+                continue
             if store.mark_run_inbox_enqueued(job_id):
                 reconciled += 1
 

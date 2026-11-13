@@ -18,7 +18,7 @@ from typing import Any, Literal, Self
 
 from werkstatt.paths import werkstatt_home
 
-__all__ = ["EventStore", "RunLeaseLost"]
+__all__ = ["EventStore", "RunLeaseLost", "RunNotActiveError"]
 
 
 class RunLeaseLost(RuntimeError):
@@ -27,6 +27,10 @@ class RunLeaseLost(RuntimeError):
 
 class RunLeaseBusy(RuntimeError):
     """Ein anderer Worker haelt die aktive Run-Lease."""
+
+
+class RunNotActiveError(ValueError):
+    """Neue Inbox-Nachricht zielt auf einen terminalen Run."""
 
 
 class EventStore:
@@ -417,23 +421,36 @@ class EventStore:
         payload_json = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         now = datetime.now(UTC).isoformat()
         with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
             record = conn.execute(
-                "SELECT 1 FROM run_records WHERE project=? AND run_id=?",
+                "SELECT status FROM run_records WHERE project=? AND run_id=?",
                 (project, run_id),
             ).fetchone()
             if record is None:
+                conn.rollback()
                 raise ValueError("RunRecord fehlt; Inbox-Nachricht nicht angenommen")
-            conn.execute(
-                "INSERT OR IGNORE INTO run_inbox "
-                "(project, run_id, message_id, kind, payload, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (project, run_id, message_id, kind, payload_json, now),
-            )
             row = conn.execute(
                 "SELECT seq, kind, payload FROM run_inbox "
                 "WHERE project=? AND run_id=? AND message_id=?",
                 (project, run_id, message_id),
             ).fetchone()
+            if row is None:
+                if record[0] not in {"starting", "running"}:
+                    conn.rollback()
+                    raise RunNotActiveError(
+                        "Run ist nicht mehr aktiv; Inbox-Nachricht nicht angenommen",
+                    )
+                conn.execute(
+                    "INSERT INTO run_inbox "
+                    "(project, run_id, message_id, kind, payload, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (project, run_id, message_id, kind, payload_json, now),
+                )
+                row = conn.execute(
+                    "SELECT seq, kind, payload FROM run_inbox "
+                    "WHERE project=? AND run_id=? AND message_id=?",
+                    (project, run_id, message_id),
+                ).fetchone()
             conn.commit()
         if row is None:
             raise ValueError("RunRecord fehlt; Inbox-Nachricht nicht angenommen")
