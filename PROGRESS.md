@@ -5961,4 +5961,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Ein neuer Linux-Integrationstest verbindet die echte Resume-Route mit einem separaten produktiven Loop-CLI-Prozess und verfolgt denselben persistierten Run bis completed samt Phase-End-Verify.
 - Nur externe Modell-, Commit- und Verify-Seiteneffekte sind kontrolliert; HTTP-Recovery, Run-ID, Checkpoint, CLI-Einstieg, Finalizer und RunRecord laufen produktiv.
-- Die gezielte GitHub-CI-Verifikation steht nach dem Commit aus. OP-397 bleibt bis zu den weiteren Restart-, Checkpoint- und Follow-up-Akzeptanzkriterien offen.
+- Der erste GitHub-CI-Lauf stoppte vor pytest an Ruff wegen eines unbenutzten `sys`-Imports im Testmodul; der Import ist entfernt. Der Quality-Gate-Lauf fuer die Korrektur steht aus. OP-397 bleibt bis zu den weiteren Restart-, Checkpoint- und Follow-up-Akzeptanzkriterien offen.
