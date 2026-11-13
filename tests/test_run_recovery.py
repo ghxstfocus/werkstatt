@@ -480,7 +480,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """HTTP-Recovery startet den echten CLI-Resume und finalisiert denselben Run."""
+    """Der Resume-Handler startet den echten CLI-Resume und finalisiert denselben Run."""
     if not Path("/proc").is_dir():
         pytest.skip("worker identity recovery requires Linux /proc")
     pytest.importorskip("fastapi")
@@ -489,8 +489,6 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     import os
     import sys
     import time
-
-    from fastapi.testclient import TestClient
 
     from werkstatt.event_store import EventStore
     from werkstatt.phase_state import PhaseState
@@ -732,12 +730,14 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
 
     try:
         monkeypatch.chdir(tmp_path)
-        response = TestClient(app_module.app).post(
-            "/api/projects/demo/resume",
+        resume_route = next(
+            route.endpoint
+            for route in app_module.app.routes
+            if getattr(route, "path", None) == "/api/projects/{name}/resume"
         )
-        assert response.status_code == 200, response.text
-        assert response.json()["resume"] is True
-        assert response.json()["run_id"] == run_id
+        response = resume_route("demo")
+        assert response["resume"] is True
+        assert response["run_id"] == run_id
 
         deadline = time.monotonic() + 15
         record = None

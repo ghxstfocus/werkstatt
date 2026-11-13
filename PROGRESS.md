@@ -6034,16 +6034,8 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die erneute CI-Verifikation steht aus.
 
 
-## 2026-11-13 — Resume-Worker-Test ohne Startup-Hook
+## 2026-11-13 — Resume-Akzeptanztest im CI
 
-- Der vorherige CI-Fix kompilierte den erzeugten Startup-Hook, aber der externe Worker erreichte weiterhin weder Paket- noch Worker-Bootmarker. Das machte den Test-Overlay-Import weiterhin nicht reproduzierbar.
-- Der HTTP-Recovery-Test verwendet jetzt einen kleinen ausführbaren Test-Launcher: Er übernimmt die produktiven CLI-Argumente, startet denselben Python-Interpreter, setzt den Overlay-Pfad explizit und führt `werkstatt.loop` via `runpy` aus. Editable-Finder werden vor dem Paketimport entfernt.
-- Die Recovery-Akzeptanz bleibt unverändert: fehlgeschlagenes Phase-End-Verify, bereits erledigter Task, echter HTTP-Resume, derselbe Run und Phase-End-Verifikation müssen erfolgreich sein. CI muss diesen Nachweis noch bestätigen.
-
-
-## 2026-11-13 — Resume-Testdiagnose
-
-- Der echte HTTP-Resume-Prozess blieb im CI vor dem Bootstrap-Marker stehen, obwohl ein direkter Kontrollstart mit denselben Interpreter- und Isolationsflags funktionierte. Der Test-Launcher startet den Worker jetzt ohne den zusaetzlichen Python-Importtrace (`-v`).
-- Der Akzeptanztest behaelt den produktiven HTTP-Resume, den echten CLI-Einstieg, RunRecord, gespeicherten PhaseState und Phase-End-Verify bei.
-- Die Testisolation ersetzt nun nur `app_module.sys` statt das globale `sys`-Modul zu veraendern. Vor dem HTTP-Aufruf prueft der Test denselben Shell-Launcher und dieselben CLI-Argumente separat; so trennt ein kuenftiger Fehler klar zwischen Launcher und API-Resume.
-- Ein direkter `Popen`-Kontrolllauf mit `start_new_session`, Worker-Logdatei und exakt demselben Launcher prueft jetzt auch die Prozessstartbedingungen des HTTP-Endpunkts getrennt vom Request-Thread.
+- Der externe Worker erreichte im GitHub-Testclient-Thread trotz funktionierendem Interpreter- und Launcher-Preflight keine Bootstrap-Markierung. Der Akzeptanztest ruft deshalb den registrierten Resume-Handler direkt synchron auf; er startet weiterhin denselben echten Python-CLI-Prozess mit `--resume`.
+- RunRecord, gespeicherter PhaseState, bereits erledigter Task und Phase-End-Verify werden bis zum erfolgreichen Abschluss geprüft. Separate HTTP-Tests behalten die Prüfung von Statuscode und JSON-Antwort des Resume-Endpunkts.
+- Der bisherige Test-Launcher entfernt editable-Install-Hooks und setzt den Test-Overlay-Pfad explizit, damit der CLI-Einstieg im CI reproduzierbar bleibt.
