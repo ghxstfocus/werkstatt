@@ -6256,3 +6256,12 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Beim erneuten Doku-Abgleich fiel auf, dass die angehaengten Abschnitte als literale `\\n` statt echter Zeilenumbrueche gespeichert waren; der neue Suffix wurde korrigiert und anschliessend erneut gelesen.
 - Nach Korrektur der versehentlich literal gespeicherten Zeilenumbrueche lief das vollstaendige Quality Gate erneut erfolgreich: [Run 43404864193](https://github.com/ghxstfocus/werkstatt/actions/runs/43404864193), 2.195 Tests bestanden, 5 uebersprungen; Ruff/Mypy/AST 0, Audit-Katalog bestanden, keine Regression.
 - Der Test belegt Tool- und Prompt-Verdrahtung, nicht das reale Befolgen durch einen externen Modellprovider. Ein Provider-Eval ueber mehrere tatsaechliche Dokumentfragen bleibt noetig.
+
+
+
+## 2026-11-13 — OP-401: verwaiste Checkpoint-Jobs sichtbar abschliessen
+
+- Reconnect zeigte einen Fehlerpfad: endete ein Run, bevor er eine Chatfrage am Inbox-Checkpoint bestaetigte und einen Snapshot band, blieb der Job dauerhaft `queued`. Der Dispatcher konnte ihn aus Sicherheitsgruenden nicht starten, aber der Chat erhielt auch keinen terminalen Zustand.
+- Der Reconnect-Pfad prueft jetzt den persistenten Loop-Registry-Status. Bei sicher inaktivem Run werden unbestaetigte Jobs mit einem erklaerenden Fehler und Aufforderung zum erneuten Senden abgeschlossen. Aktive, startende und mehrdeutige/orphaned Runs bleiben unangetastet.
+- Jobs mit vollstaendig gebundenem Snapshot und bestaetigter Inbox-Nachricht bleiben nach Run-Ende replayfaehig; nur fehlender Checkpoint-Nachweis wird beendet.
+- Regressionstests pruefen direkte Zustandsregeln sowie den API-Reconnect: uncheckpointed Jobs werden failed, sichere Replay-Jobs und aktive Run-Jobs bleiben queued. Vollstaendige CI-Verifikation folgt.
