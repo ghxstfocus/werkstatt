@@ -658,7 +658,7 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
             "Liest Datei-Inhalt mit 0-basierten Zeichen-Offsets (start/end, "
             "keine Zeilennummern; max 50 KB). Fuer aktuelle Eintraege "
             "tail_chars nutzen: liefert Dateiende-Auszug, Gesamtlaenge und "
-            "Offsets. Gekuerzte Ausgaben nennen die Fortsetzung."
+            "Offsets. Gekuerzte Ausgaben nennen den naechsten start-Offset zur Fortsetzung."
         ),
         "parameters": {
             "type": "object",
