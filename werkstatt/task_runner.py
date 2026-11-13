@@ -269,10 +269,27 @@ def _task_ende(
                         pd,
                         getattr(state, "project_name", "?"),
                     )
-            except Exception:
-                # Zusatztelemetrie darf den bereits verifizierten Abschluss
-                # eines Tasks nicht rueckgaengig machen.
-                pass
+            except Exception as exc:
+                # Der Task bleibt done, aber ein fehlender Zielabgleich darf
+                # nicht unsichtbar bleiben. Keine Exception-Texte persistieren.
+                try:
+                    audit(
+                        "loop_criteria_checkpoint_failed",
+                        {
+                            "task_id": task_id,
+                            "error_type": type(exc).__name__,
+                            "next_step": (
+                                "Kriterienfortschritt am naechsten sicheren "
+                                "Checkpoint erneut pruefen"
+                            ),
+                        },
+                        pd,
+                        getattr(state, "project_name", "?"),
+                    )
+                except Exception:
+                    # Der Taskabschluss bleibt unangetastet, auch wenn der
+                    # Audit-Store selbst nicht verfuegbar ist.
+                    pass
         if pd is not None and not _hat_op_nnn(state):
             _progress.append(
                 pd,
