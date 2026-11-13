@@ -6248,3 +6248,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der erste CI-Lauf nach der Ergaenzung war rot: Ruff meldete zweimal RUF010 in der Anzeige verbleibender Task-IDs/-Status; pytest und Quality Gate wurden deshalb uebersprungen. Die Ursache lag in expliziten `str()`-Aufrufen innerhalb von f-Strings.
 - Die Ausgabe wurde mit expliziten Formatkonvertierungen korrigiert. Danach liefen JavaScript-Syntax, Ruff und die komplette Suite erfolgreich: 2.185 bestanden, 5 uebersprungen.
 - GitHub Actions Quality Gate [Run 43416255092](https://github.com/ghxstfocus/werkstatt/actions/runs/43416255092) bestaetigt: Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden, `ok: true`, `regression: false`.
+
+## 2026-11-13 — Kriterien-Checkpoint darf nicht still ausfallen
+
+- Review des grünen Task-Checkpoint-Schritts fand einen Fehlerpfad: Wenn die Kriterienberechnung oder das Fortschritts-Audit nach `mark_done` scheitert, blieb der Task korrekt erledigt, aber der fehlende Zielabgleich wurde still verschluckt.
+- Der Taskstatus bleibt erhalten; der Loop schreibt jetzt einen separaten, redigierten Fehlerbefund mit Task-ID, Fehlertyp und angekündigter Wiederprüfung am nächsten sicheren Checkpoint. Exception-Texte werden nicht persistiert.
+- Regressionstest belegt beides: `done` bleibt bestehen und der Checkpoint-Ausfall erscheint sichtbar. Quality Gate für diese Nachbesserung läuft.
