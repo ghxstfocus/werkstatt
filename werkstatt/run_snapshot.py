@@ -59,7 +59,8 @@ def _valid_id(value: str, label: str) -> str:
 def _checked_symlink_target(root: Path, path: Path) -> str:
     """Return an in-tree relative link target suitable for a copied snapshot."""
     target = os.readlink(path)
-    if Path(target).is_absolute() or PureWindowsPath(target).drive:
+    windows_target = PureWindowsPath(target)
+    if Path(target).is_absolute() or windows_target.root or windows_target.drive:
         raise SnapshotError(f"Absoluter Symlink ist im Snapshot nicht sicher: {path}")
     resolved = (path.parent / target).resolve()
     if not resolved.is_relative_to(root.resolve()):

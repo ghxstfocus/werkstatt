@@ -115,3 +115,17 @@ def test_snapshot_rejects_absolute_internal_symlink(
 
     with pytest.raises(run_snapshot.SnapshotError, match="Absoluter Symlink"):
         run_snapshot.create_project_snapshot(source, "demo", "run-4", "job-4")
+
+
+@pytest.mark.parametrize("target", [r"C:\outside", r"\outside"])
+def test_snapshot_rejects_windows_rooted_symlink_targets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+) -> None:
+    source = _repo(tmp_path / "project")
+    link = source / "windows-link"
+    monkeypatch.setattr(run_snapshot.os, "readlink", lambda _path: target)
+
+    with pytest.raises(run_snapshot.SnapshotError, match="Absoluter Symlink"):
+        run_snapshot._checked_symlink_target(source, link)

@@ -6459,4 +6459,5 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 
 - **Befund:** Ein absoluter Symlink innerhalb des Quellprojekts blieb beim Kopieren auf den urspruenglichen Checkout gerichtet. Der Hintergrundjob konnte dadurch keinen wirklich abgeschlossenen Snapshot verwenden.
 - **Aenderung:** Snapshot-Erstellung und -Validierung weisen absolute Symlinks zurueck; relative, innerhalb des Projekts bleibende Symlinks bleiben unterstuetzt. Ein Regressionstest deckt den internen absoluten Link ab.
-- **Verifikation:** Ausstehend im Linux-CI, da die lokale Windows-Umgebung kein Python-Test-Runtime bereitstellt.
+- **Review-Nachbesserung:** Windows-rooted Ziele ohne Laufwerksbuchstaben werden ebenfalls als absolut abgewiesen; Regressionstests decken Laufwerks- und rooted Pfade ab.
+- **Verifikation:** Lokal unter Windows 3.14: `tests/test_run_snapshot.py` 4 bestanden, 2 wegen fehlender Symlink-Rechte uebersprungen; Ruff und `git diff --check` bestanden. Der Linux-CI-Lauf fuer den vorherigen Commit `6b7b8a3` war erfolgreich; die zusaetzliche Windows-rooted-Kante braucht noch einen CI-Lauf.
