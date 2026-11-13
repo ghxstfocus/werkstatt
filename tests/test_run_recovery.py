@@ -557,27 +557,27 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         encoding="utf-8",
     )
     worker_bootstrap = (
-        "import os\\n"
-        "open(os.environ['WERKSTATT_BOOTSTRAP_STARTED'], 'w').write('started')\\n"
-        "import faulthandler, runpy, sys, sysconfig\\n"
-        "faulthandler.dump_traceback_later(3, repeat=True)\\n"
-        "for key in ('purelib', 'platlib'):\\n"
-        "    path = sysconfig.get_paths()[key]\\n"
-        "    if path not in sys.path: sys.path.append(path)\\n"
+        "import os\n"
+        "open(os.environ['WERKSTATT_BOOTSTRAP_STARTED'], 'w').write('started')\n"
+        "import faulthandler, runpy, sys, sysconfig\n"
+        "faulthandler.dump_traceback_later(3, repeat=True)\n"
+        "for key in ('purelib', 'platlib'):\n"
+        "    path = sysconfig.get_paths()[key]\n"
+        "    if path not in sys.path: sys.path.append(path)\n"
         "sys.meta_path[:] = [finder for finder in sys.meta_path "
-        "if not type(finder).__module__.startswith('__editable__')]\\n"
+        "if not type(finder).__module__.startswith('__editable__')]\n"
         "sys.path[:0] = [os.environ['WERKSTATT_TEST_OVERLAY'], "
-        "os.environ['WERKSTATT_REPO_ROOT']]\\n"
-        "sys.argv = ['werkstatt.loop', *sys.argv[3:]]\\n"
-        "runpy.run_module('werkstatt.loop', run_name='__main__')\\n"
+        "os.environ['WERKSTATT_REPO_ROOT']]\n"
+        "sys.argv = ['werkstatt.loop', *sys.argv[3:]]\n"
+        "runpy.run_module('werkstatt.loop', run_name='__main__')\n"
     )
     compile(worker_bootstrap, "worker_bootstrap", "exec")
     monkeypatch.setenv("WERKSTATT_WORKER_BOOTSTRAP_CODE", worker_bootstrap)
     worker_launcher = overlay_root / "python-worker"
     worker_launcher.write_text(
-        "#!/bin/sh\\n"
+        "#!/bin/sh\n"
         "exec \"$WERKSTATT_TEST_PYTHON\" -E -S -v -c "
-        "\"$WERKSTATT_WORKER_BOOTSTRAP_CODE\" \"$@\"\\n",
+        "\"$WERKSTATT_WORKER_BOOTSTRAP_CODE\" \"$@\"\n",
         encoding="utf-8",
     )
     worker_launcher.chmod(0o755)
