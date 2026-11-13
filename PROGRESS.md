@@ -6311,4 +6311,4 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 
 - Der erste Quality-Gate-Lauf fuer `17c473ba1a726f78b2688a2e8e9283d6b0f4c7b1` deckte zwei Mypy-Fehler in der Typverengung dynamischer Checkpoint-Daten auf. JavaScript-Syntax, Ruff und die volle Suite (2.196 bestanden, 5 uebersprungen) waren gruen; das Gate blieb wegen Mypy rot.
 - Die Sequenznummern der Inbox-Ergebnisse werden jetzt beim Einlesen explizit als Integer gesammelt und erst danach fuer Offset/Max-Berechnung verwendet. Lokales Mypy fuer `werkstatt/phases/tasks.py`, Ruff und dieselben 66 Regressionstests sind erneut gruen.
-- Ein neuer CI-Lauf fuer den Korrektur-Commit ist erforderlich; bis zu dessen Abschluss ist der Branch nicht als vollstaendig verifiziert zu melden.
+- GitHub Actions [Quality Gate Run 43428035455](https://github.com/ghxstfocus/werkstatt/actions/runs/43428035455) fuer Korrektur-Commit `45c88517988d2bbc461b67f26fb12eeac224398b` ist gruen: 2.196 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden; `ok: true`, `regression: false`.
