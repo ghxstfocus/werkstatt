@@ -4,12 +4,13 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Ausgangsstand: `9ecc994` (ADR-0022 an den freigegebenen UI-Plan
-angepasst). Der Quality-Gate-Workflow fuer diesen Stand ist erfolgreich:
-[Run 43355306845](https://github.com/ghxstfocus/werkstatt/actions/runs/43355306845).
-Die nachfolgend beschriebene RunRecord-Initialisierung vor dem Workerstart
-ist die aktuelle Aenderung und muss durch deren eigenen CI-Lauf bestaetigt
-werden.
+Gepruefter Repository-Stand: `969f9c3`. Seit dem UI-Plan-Abgleich
+(`9ecc994`) sind RunRecord-Startzustand, Run-Inbox-Outbox und die
+Outbox-Recovery integriert. Der Code-Fix `12407fa` besteht den vollstaendigen
+Quality Gate in [Run 43360398386](https://github.com/ghxstfocus/werkstatt/actions/runs/43360398386);
+auch der anschliessende Dokumentationsstand besteht den Gate in
+[Run 43360637128](https://github.com/ghxstfocus/werkstatt/actions/runs/43360637128).
+Das belegt Repository-Tests, nicht den aktuell laufenden Produktionsserver.
 
 ## Kurzbefund
 
