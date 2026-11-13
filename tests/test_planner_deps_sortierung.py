@@ -17,7 +17,6 @@ sys.path.insert(0, "/opt/werkstatt")
 
 from werkstatt.planner import (
     _leite_deps_deterministisch,
-    TaskGraphError,
     _topo_sort_tasks,
 )
 
