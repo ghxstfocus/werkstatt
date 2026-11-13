@@ -6153,3 +6153,16 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Phase-Checkpoints berechnen jetzt aus Akzeptanzkriterien, Task-Referenzen und Task-Status, welche Kriterien durch erledigte Tasks abgedeckt sind. Nach jedem erfolgreich verifizierten Task wird dieser Stand als replaybares Audit-Ereignis ausgegeben.
 - Die Abschlusspruefung blockiert loop_erfolg, wenn ein explizit getracktes Kriterium noch keinem erledigten Task zugeordnet ist oder die gespeicherte Referenzstruktur ungueltig ist. Legacy-Plaene ohne Kriterienreferenzen bleiben als ungetrackt gekennzeichnet.
 - Regressionstests pruefen Zwischenfortschritt, unbekannte Referenzen und den fail-closed Abschluss. Quality-Gate-Nachweis folgt; OP-398 bleibt offen.
+
+
+
+- Der Control-Live-Feed uebersetzt den Kriterienfortschritt in eine kurze
+  deutsche Zeile mit Anzahl erledigter/offener Kriterien und Taskbezug.
+  `loop_criteria_progress` bleibt als Audit-Beleg replaybar.
+
+
+
+- Der erste CI-Lauf fuer den Kriterienabschluss deckte einen Kompatibilitaetsfehler
+  auf: leere Planner-Referenzlisten wurden als aktives Tracking gewertet.
+  Die Markierung unterscheidet jetzt leere Referenzen von echten Kriterien-
+  Auftraegen; Regressionstest hinzugefuegt. Der zweite CI-Lauf bleibt massgeblich.

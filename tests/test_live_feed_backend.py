@@ -338,3 +338,19 @@ def test_llm_heartbeat_keeps_builder_activity_with_task_and_files(
     assert "Reconnect-Anzeige vervollstaendigen" in aktiv["aktion"]
     assert "static/chat.js" in aktiv["aktion"]
     assert "45s" in aktiv["aktion"]
+
+
+
+def test_kriterienfortschritt_ist_in_timeline_menschlich_beschriftet():
+    label = inspector._tl_label("loop_criteria_progress", {})
+    detail = inspector._tl_detail(
+        "loop_criteria_progress",
+        {
+            "task_id": "t2",
+            "covered": ["AC1"],
+            "remaining": ["AC2", "AC3"],
+        },
+    )
+
+    assert label == "Akzeptanzkriterien: Fortschritt"
+    assert detail == "1 erledigt, 2 offen nach t2"

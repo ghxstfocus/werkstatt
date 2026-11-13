@@ -220,6 +220,16 @@ def test_criteria_progress_requires_done_task_for_each_criterion(tmp_path):
     assert ps.criteria_progress()["covered"] == ["AC1", "AC2"]
 
 
+def test_plan_without_criteria_ignores_empty_ref_lists(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new(
+        "Task ohne Zielkriterien",
+        [{"id": "t1", "criterion_refs": []}],
+    )
+
+    assert ps.criteria_progress()["tracked"] is False
+
+
 def test_legacy_checkpoint_with_empty_refs_is_untracked(tmp_path):
     ps = PhaseState("testprojekt", base_dir=tmp_path)
     ps.init_new(

@@ -742,6 +742,7 @@ _TL_LABELS: dict[str, str] = {
     "builder_keine_patches_gold": "Builder: keine Patches",
     "builder_patch_bereits_erfuellt": "Builder: bereits erfuellt",
     "loop_task_start": "Task startet",
+    "loop_criteria_progress": "Akzeptanzkriterien: Fortschritt",
     "loop_task_ok": "Task erfolgreich",
     "loop_task_failed": "Task fehlgeschlagen",
     "loop_patch_applied": "Patch angewendet",
@@ -877,6 +878,16 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
         if event_kind in ("cancel_requested", "cancelled"):
             return "Abbruch angefordert" if event_kind == "cancel_requested" else "Abgebrochen"
         return str(payload.get("text") or event_kind)[:160]
+    if kind == "loop_criteria_progress":
+        covered = payload.get("covered")
+        remaining = payload.get("remaining")
+        covered_count = len(covered) if isinstance(covered, list) else 0
+        remaining_count = len(remaining) if isinstance(remaining, list) else 0
+        task = str(payload.get("task_id") or "").strip()
+        suffix = f" nach {task}" if task else ""
+        return (
+            f"{covered_count} erledigt, {remaining_count} offen{suffix}"
+        )
     if kind == "loop_task_start":
         return str(payload.get("text", ""))
     if kind in ("loop_task_ok", "loop_task_failed"):

@@ -157,7 +157,7 @@ class PhaseState:
                 )
 
         criteria_tracking = bool(akzeptanzkriterien) or any(
-            "criterion_refs" in task for task in tasks
+            task.get("criterion_refs") for task in tasks
         )
         now = datetime.datetime.now(datetime.UTC).isoformat()
         self.data = {
