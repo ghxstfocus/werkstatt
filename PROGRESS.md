@@ -6139,3 +6139,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der erste CI-Lauf fuer die Vollpruefung fand einen Fehler im neuen Regressionstest: Die Argumente wurden aus dem Mock-Call statt aus dem Callback-Verlauf gelesen. Die Produktionslogik und Ruff waren gruen; der Test prueft jetzt die tatsaechlich zwischen den beiden Recovery-Aufrufen erfassten Stage-IDs.
 - Erneute Quality-Gate-Ausfuehrung laeuft.
+
+
+## 2026-11-13 — OP-398: Kriterienzuordnung im Phase-Checkpoint erhalten
+
+- Der Plan-Compiler prueft die Zuordnung von Akzeptanzkriterien zu Tasks, aber `PhaseState.init_new()` hat `criterion_refs` beim Erzeugen des Phase-Checkpoints verworfen. Dadurch konnte die Resume-/Zielabgleich-Logik nach einem Neustart nicht mehr auf dieselbe Task-Kriterien-Zuordnung zugreifen.
+- Phase-Checkpoints speichern die Referenzen jetzt je Task; Laden und Initialisieren weisen fehlerhafte Referenzlisten fail-closed ab. Regressionstests decken Speicherung, Reload und ungueltige Daten ab.
+- Quality-Gate fuer den Fix laeuft; OP-398 bleibt offen, bis die gesamte Abnahmekette belegt ist.
