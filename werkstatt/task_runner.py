@@ -194,6 +194,59 @@ def _task_ende(
                                 "Kein weiterer Task ist ausfuehrbar; offene "
                                 "Abhaengigkeiten muessen vor dem Abschluss geklaert werden."
                             )
+                    _goal = str(
+                        getattr(phase_state, "data", {}).get("aufgabe")
+                        or getattr(state, "aufgabe", "")
+                    ).strip()
+                    _criteria_text = getattr(phase_state, "data", {}).get(
+                        "akzeptanzkriterien", [],
+                    )
+                    _criteria_by_id = {
+                        f"AC{index}": str(text).strip()
+                        for index, text in enumerate(_criteria_text, 1)
+                        if isinstance(text, str) and text.strip()
+                    } if isinstance(_criteria_text, list) else {}
+                    _checkpoint_evidence = [
+                        f"Task {task_id} als done gespeichert",
+                    ]
+                    if _goal:
+                        _checkpoint_evidence.append(f"Ziel: {_goal[:160]}")
+                    for _criterion_id in _criterion_progress.get("covered", []):
+                        if len(_checkpoint_evidence) >= 5:
+                            break
+                        _criterion_text = _criteria_by_id.get(
+                            str(_criterion_id), "",
+                        )
+                        _checkpoint_evidence.append(
+                            f"Erfuellt: {_criterion_id}"
+                            + (f" — {_criterion_text[:120]}" if _criterion_text else "")
+                        )
+                    for _criterion_id in _criterion_progress.get("uncovered", []):
+                        if len(_checkpoint_evidence) >= 5:
+                            break
+                        _criterion_text = _criteria_by_id.get(
+                            str(_criterion_id), "",
+                        )
+                        _checkpoint_evidence.append(
+                            f"Offen: {_criterion_id}"
+                            + (f" — {_criterion_text[:120]}" if _criterion_text else "")
+                        )
+                    _task_rows = getattr(phase_state, "data", {}).get("tasks", [])
+                    _open_tasks = [
+                        item for item in _task_rows
+                        if isinstance(item, dict)
+                        and item.get("status") not in ("done", "split")
+                    ] if isinstance(_task_rows, list) else []
+                    if _open_tasks and len(_checkpoint_evidence) < 5:
+                        _open_labels = [
+                            f"{str(item.get('id') or '?')}: "
+                            f"{str(item.get('status') or '?')}"
+                            for item in _open_tasks[:3]
+                        ]
+                        _checkpoint_evidence.append(
+                            "Restlicher Graph: " + ", ".join(_open_labels)
+                            + (f" (+{len(_open_tasks) - 3})" if len(_open_tasks) > 3 else "")
+                        )
                     audit(
                         "loop_criteria_progress",
                         {
@@ -211,13 +264,7 @@ def _task_ende(
                             "next_task_id": _next_task_id or None,
                             "next_step": _next_step,
                             "decision_summary": _decision,
-                            "evidence": [
-                                f"Task {task_id} als done gespeichert",
-                                "Abgedeckt: "
-                                + ", ".join(_criterion_progress.get("covered", [])),
-                                "Offen: "
-                                + ", ".join(_criterion_progress.get("uncovered", [])),
-                            ],
+                            "evidence": _checkpoint_evidence,
                         },
                         pd,
                         getattr(state, "project_name", "?"),
