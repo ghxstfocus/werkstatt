@@ -6078,3 +6078,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Run-gebundene Chatjobs werden vor Worker-Dispatch idempotent in die Run-Inbox eingetragen. Ein lokaler Outbox-Marker wird erst nach bestaetigtem Inbox-Commit gesetzt.
 - Resume/Reconnect gleicht offene Outbox-Eintraege erneut ab; dieselbe stabile Chatjob-ID verhindert Duplikate nach Prozessabbruch zwischen Inbox-Commit und Marker.
 - Tests decken den Abbruch genau in diesem Fenster sowie einen beim ersten Versuch noch fehlenden RunRecord ab. Der Quality-Gate-Nachweis folgt fuer den resultierenden Commit.
+
+- Quality Gate Run [43360398386](https://github.com/ghxstfocus/werkstatt/actions/runs/43360398386) ist auf `12407fa` gruen: Ruff, vollstaendige Pytest-Suite und Quality Gate bestanden. Der Recovery-Test prueft den Dispatch jetzt ohne vorherige Inbox-Lease; die Nachricht wird danach einmalig geclaimt und bestaetigt.
