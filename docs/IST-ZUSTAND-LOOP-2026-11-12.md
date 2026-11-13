@@ -4,13 +4,15 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Repository-Stand: `969f9c3`. Seit dem UI-Plan-Abgleich
-(`9ecc994`) sind RunRecord-Startzustand, Run-Inbox-Outbox und die
-Outbox-Recovery integriert. Der Code-Fix `12407fa` besteht den vollstaendigen
-Quality Gate in [Run 43360398386](https://github.com/ghxstfocus/werkstatt/actions/runs/43360398386);
-auch der anschliessende Dokumentationsstand besteht den Gate in
-[Run 43360637128](https://github.com/ghxstfocus/werkstatt/actions/runs/43360637128).
-Das belegt Repository-Tests, nicht den aktuell laufenden Produktionsserver.
+Gepruefter Code-Stand: `93831e5` (Quality-Gate-Run
+[43362294835](https://github.com/ghxstfocus/werkstatt/actions/runs/43362294835));
+der zugehoerige Dokumentationsstand wurde anschliessend bis `6042fe7`
+fortgeschrieben. Seit dem UI-Plan-Abgleich (`9ecc994`) sind
+RunRecord-Startzustand, Run-Inbox-Outbox und Outbox-Recovery integriert.
+Der Plan-Compiler verwirft inzwischen ungueltige Task-DAGs vor dem Plan-Gate.
+Der Quality-Gate-Run belegt 2.158 bestandene Tests, 5 uebersprungene Tests
+und fehlerfreie Ruff-, Mypy-, AST- und Audit-Katalog-Pruefungen. Das belegt
+Repository-Tests, nicht den aktuell laufenden Produktionsserver.
 
 ## Kurzbefund
 
