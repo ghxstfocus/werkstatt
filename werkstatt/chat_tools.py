@@ -70,6 +70,8 @@ def _read_file(args: dict[str, Any]) -> str:
         return "Fehler: ungueltiger start/end-Bereich"
 
     max_chars = end - start if end is not None else None
+    # Keep room for an explicit continuation marker inside the output cap.
+    content_byte_limit = _MAX_READ_BYTES - 1024
     try:
         teile: list[str] = []
         with pfad.open("r", encoding="utf-8", errors="replace") as datei:
@@ -82,6 +84,7 @@ def _read_file(args: dict[str, Any]) -> str:
 
             gelesen = 0
             bytezahl = 0
+            truncated = False
             while max_chars is None or gelesen < max_chars:
                 anfrage = 8192 if max_chars is None else min(
                     8192, max_chars - gelesen,
@@ -91,12 +94,27 @@ def _read_file(args: dict[str, Any]) -> str:
                     break
                 for zeichen in chunk:
                     zeichen_bytes = len(zeichen.encode("utf-8"))
-                    if bytezahl + zeichen_bytes > _MAX_READ_BYTES:
-                        return "".join(teile)
+                    if bytezahl + zeichen_bytes > content_byte_limit:
+                        truncated = True
+                        break
                     teile.append(zeichen)
                     bytezahl += zeichen_bytes
                     gelesen += 1
-        return "".join(teile)
+                if truncated:
+                    break
+        inhalt = "".join(teile)
+        if truncated:
+            fortsetzen = f"read_file(start={start + gelesen}"
+            if end is not None:
+                fortsetzen += f", end={end}"
+            fortsetzen += ")"
+            marker = (
+                "\\n[Ausgabe gekürzt: maximal 50 KB. start/end sind "
+                "0-basierte Zeichen-Offsets, keine Zeilennummern. "
+                f"Fortsetzen mit {fortsetzen}.]"
+            )
+            inhalt += marker
+        return inhalt
     except OSError as exc:
         return f"Fehler beim Lesen: {exc}"
 
@@ -585,7 +603,11 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
 
 CHAT_TOOLS: dict[str, dict[str, Any]] = {
     "read_file": {
-        "description": "Liest Datei-Inhalt (max 50 KB).",
+        "description": (
+            "Liest Datei-Inhalt mit 0-basierten Zeichen-Offsets (start/end, "
+            "keine Zeilennummern; max 50 KB). Gekürzte Ausgaben nennen "
+            "den nächsten start-Offset zur Fortsetzung."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
