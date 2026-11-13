@@ -6443,3 +6443,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - Befund: Die Run-Inbox pruefte beim Einreihen nur, ob ein RunRecord existiert. Ein Chatjob oder Folgeauftrag konnte dadurch nach dem terminalen Run-Status angenommen werden, ohne dass noch ein Worker den Eintrag verarbeitet.
 - Aenderung: Run-Inbox-Einreihung und Statuspruefung laufen jetzt unter einer SQLite-Schreibtransaktion. Neue Nachrichten sind nur fuer `starting`/`running` zulaessig; bereits gespeicherte idempotente Retries bleiben auch nach Run-Ende abrufbar. Eine Chatjob-Outbox, deren Run waehrend des Handoffs terminal wurde, wird mit `run_ended_before_checkpoint` sichtbar abgeschlossen.
 - Verifikation: `tests/test_event_store.py` 23 bestanden; `tests/test_chat_jobs.py` 26 bestanden; Inbox-Replay und Chat-Aktions-API 6 bestanden/1 plattformbedingt uebersprungen. Ruff, Doku-Drift-Pruefung und `git diff --check` bestanden.
+
+## 2026-11-13 — Run-Abschluss drainiert parallele Chat-Inbox
+
+- **Befund:** Eine Nachricht konnte nach dem letzten Task-Checkpoint, aber vor dem terminalen Run-Status eintreffen. Die atomare Einreihung akzeptierte sie noch unter `running`; der Run-Abschluss prüfte die Inbox nicht und konnte sie unbearbeitet zuruecklassen.
+- **Aenderung:** Terminale Checkpoint-Updates pruefen jetzt in derselben `BEGIN IMMEDIATE`-Transaktion, ob alle Run-Inbox-Eintraege bestaetigt sind. Der Loop drainiert vor dem Abschluss die bekannten Job-/Folgeauftragstypen und wiederholt den Drain, falls zwischen Checkpoint und CAS eine neue Nachricht eintraf. Unbekannte offene Nachrichtentypen beenden den Abschluss fail-closed.
+- **Grenze:** Ein bestaetigter Folgeauftrag wird dadurch dauerhaft und sichtbar aufgenommen; automatische Scope-Einordnung und Replanung bleiben weiterhin OP-401/402.
+- **Verifikation:** Event-Store-, Inbox-Replay-, Loop-Main-, Loop-Phasen- und Phase-Review-Tests: 102 bestanden, 1 Windows-SIGTERM-Test plattformbedingt ausgelassen. Der dedizierte Race-Test injiziert die Nachricht exakt zwischen Drain und terminalem CAS.

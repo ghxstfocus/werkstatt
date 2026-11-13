@@ -18,7 +18,9 @@ from typing import Any, Literal, Self
 
 from werkstatt.paths import werkstatt_home
 
-__all__ = ["EventStore", "RunLeaseLost", "RunNotActiveError"]
+__all__ = [
+    "EventStore", "RunInboxPendingError", "RunLeaseLost", "RunNotActiveError",
+]
 
 
 class RunLeaseLost(RuntimeError):
@@ -31,6 +33,10 @@ class RunLeaseBusy(RuntimeError):
 
 class RunNotActiveError(ValueError):
     """Neue Inbox-Nachricht zielt auf einen terminalen Run."""
+
+
+class RunInboxPendingError(RuntimeError):
+    """Run kann nicht terminal werden, solange Inbox-Nachrichten offen sind."""
 
 
 class EventStore:
@@ -269,6 +275,67 @@ class EventStore:
             ).fetchone()
             conn.commit()
         return int(row[0])
+
+    def finish_run_checkpoint(
+        self,
+        project: str,
+        run_id: str,
+        checkpoint: dict[str, Any],
+        *,
+        expected_version: int,
+        status: Literal["completed", "failed"],
+    ) -> int | None:
+        """Atomically finish a run only after its durable inbox is drained.
+
+        Returns the new checkpoint version, or ``None`` if an inbox message
+        arrived before the terminal transition. Enqueue and finish both take
+        SQLite's write lock, so no message can slip between the empty check
+        and the status update.
+        """
+        now = datetime.now(UTC).isoformat()
+        checkpoint_json = json.dumps(checkpoint, ensure_ascii=False)
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            pending = conn.execute(
+                "SELECT 1 FROM run_inbox WHERE project=? AND run_id=? "
+                "AND status!='acked' LIMIT 1",
+                (project, run_id),
+            ).fetchone()
+            if pending is not None:
+                conn.rollback()
+                return None
+            cur = conn.execute(
+                "UPDATE run_records SET checkpoint_json=?, "
+                "checkpoint_version=checkpoint_version+1, status=?, updated_at=? "
+                "WHERE project=? AND run_id=? AND checkpoint_version=? "
+                "AND status IN ('starting', 'running')",
+                (
+                    checkpoint_json, status, now, project, run_id,
+                    expected_version,
+                ),
+            )
+            if cur.rowcount != 1:
+                conn.rollback()
+                raise RuntimeError(
+                    "RunCheckpoint fehlt, ist terminal oder wurde parallel geaendert",
+                )
+            row = conn.execute(
+                "SELECT checkpoint_version FROM run_records "
+                "WHERE project=? AND run_id=?",
+                (project, run_id),
+            ).fetchone()
+            conn.commit()
+        return int(row[0])
+
+    def pending_run_message_kinds(self, project: str, run_id: str) -> set[str]:
+        """Return kinds of inbox entries not yet durably acknowledged."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT kind FROM run_inbox WHERE project=? "
+                "AND run_id=? AND status!='acked'",
+                (project, run_id),
+            ).fetchall()
+        return {str(row[0]) for row in rows}
 
     def acquire_run_lease(
         self,

@@ -641,6 +641,85 @@ def test_failed_run_result_is_persisted(tmp_path: Path) -> None:
     assert result["checkpoint"]["exit_code"] == 1
 
 
+def test_terminal_run_transition_refuses_unacknowledged_inbox(
+    tmp_path: Path,
+) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-finish-inbox", "Finish safely")
+    store.enqueue_run_message(
+        "demo", "run-finish-inbox", "followup-1",
+        "chat_followup_request", {"request": "Check one more thing"},
+    )
+
+    assert store.finish_run_checkpoint(
+        "demo", "run-finish-inbox", {"exit_code": 0},
+        expected_version=0, status="completed",
+    ) is None
+    record = store.get_run_record("demo", "run-finish-inbox")
+    assert record is not None
+    assert record["status"] == "running"
+    assert record["checkpoint_version"] == 0
+
+
+def test_run_result_drains_message_arriving_during_terminal_cas(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_session
+    from werkstatt.loop import _persist_run_result
+    from werkstatt.phases import tasks
+
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record(
+        "demo", "run-final-race", "Finish safely", base_commit="abc123",
+    )
+    chat_db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
+    monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: True)
+    original_finish = store.finish_run_checkpoint
+    inserted = False
+
+    def enqueue_at_finish(*args, **kwargs):
+        nonlocal inserted
+        if not inserted:
+            inserted = True
+            store.enqueue_run_message(
+                "demo", "run-final-race", "followup-late",
+                "chat_followup_request", {
+                    "proposal_id": "proposal-late",
+                    "project": "demo",
+                    "session_id": "session-final",
+                    "parent_run_id": "run-final-race",
+                    "base_commit": "abc123",
+                    "request": "Review the final diff",
+                },
+            )
+        return original_finish(*args, **kwargs)
+
+    monkeypatch.setattr(store, "finish_run_checkpoint", enqueue_at_finish)
+    run_state = SimpleNamespace(project_dir=tmp_path, run_lease_check=None)
+    phase_state = SimpleNamespace(data={"tasks": []})
+    _persist_run_result(
+        store, "demo", "run-final-race", 0,
+        run_state=run_state, phase_state=phase_state,
+    )
+
+    record = store.get_run_record("demo", "run-final-race")
+    assert record is not None
+    assert record["status"] == "completed"
+    assert record["checkpoint"]["chat_followup_requests"][0]["proposal_id"] == (
+        "proposal-late"
+    )
+    assert store.run_message_acknowledged(
+        "demo", "run-final-race", "followup-late",
+    )
+    session = chat_session.ChatSession("demo", "session-final", db_pfad=chat_db)
+    assert any(
+        event["kind"] == "loop_followup_checkpointed"
+        and event["payload"]["proposal_id"] == "proposal-late"
+        for event in session.load()
+    )
+
+
 def test_run_lease_excludes_other_workers_and_fences_takeover(tmp_path: Path) -> None:
     store = EventStore(db_pfad=tmp_path / "events.db")
     store.create_run_record("demo", "run-a", "goal")
