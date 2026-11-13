@@ -5980,3 +5980,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Ruff stoppte den Diagnoselauf, bevor der neue Worker-Log sichtbar werden konnte: `json` war nach der Assertion-Umstellung unbenutzt. Der lokale Import wurde entfernt.
 - Der naechste Quality-Gate-Lauf soll den eigentlichen Subprozess-Fehler samt Worker-Log offenlegen; OP-397 bleibt bis zur erfolgreichen produktiven HTTP-Resume-Recovery offen.
+
+
+## 2026-11-13 — Isolierter Resume-Worker-Arbeitsordner
+
+- CI-Worker-Log zeigte, dass `python -m werkstatt.loop` wegen des geerbten Repository-CWD das echte Modul vor dem Test-Overlay importierte und dadurch die Testkonfiguration umging.
+- Der HTTP-Recovery-Test startet seinen Subprozess jetzt aus `tmp_path`; damit greift das isolierte Overlay, waehrend CLI-Einstieg, HTTP-Recovery, Checkpoint, Finalizer und RunRecord weiterhin produktiv laufen.

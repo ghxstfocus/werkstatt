@@ -594,6 +594,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     app_module._PAUSIERTE_LOOPS.clear()
 
     try:
+        monkeypatch.chdir(tmp_path)
         response = TestClient(app_module.app).post(
             "/api/projects/demo/resume",
         )
