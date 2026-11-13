@@ -6331,3 +6331,62 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - Der erste Quality-Gate-Lauf fuer `17c473ba1a726f78b2688a2e8e9283d6b0f4c7b1` deckte zwei Mypy-Fehler in der Typverengung dynamischer Checkpoint-Daten auf. JavaScript-Syntax, Ruff und die volle Suite (2.196 bestanden, 5 uebersprungen) waren gruen; das Gate blieb wegen Mypy rot.
 - Die Sequenznummern der Inbox-Ergebnisse werden jetzt beim Einlesen explizit als Integer gesammelt und erst danach fuer Offset/Max-Berechnung verwendet. Lokales Mypy fuer `werkstatt/phases/tasks.py`, Ruff und dieselben 66 Regressionstests sind erneut gruen.
 - GitHub Actions [Quality Gate Run 43428035455](https://github.com/ghxstfocus/werkstatt/actions/runs/43428035455) fuer Korrektur-Commit `45c88517988d2bbc461b67f26fb12eeac224398b` ist gruen: 2.196 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden; `ok: true`, `regression: false`.
+
+## 2026-11-13 — OP-401: Chatfragen an Run-Checkpoint binden
+
+- Run-gebundene Lesejobs werden erst an einem bestätigten Inbox-Checkpoint gestartet. Vor dem Acknowledge erstellt der Loop einen verwalteten Snapshot des exakten Run-Worktrees; Quelle, Snapshot-Pfad, HEAD und Fingerprint werden am Job und im Checkpoint protokolliert.
+- Der Worker validiert Snapshot-Identität und Inhalt vor dem Lesen. Fehlende, veränderte oder nicht passende Snapshots beenden den Job sichtbar und fail-closed. Nach dem Job wird nur der genau zugehörige Snapshot bereinigt; Cleanup-Fehler werden als Audit-Ereignis geführt.
+- Ein Zwischen-CI-Lauf deckte einen fehlerhaften Testaufbau auf: Das Manifest verwendete eine Platzhalter-Job-ID statt der tatsächlich erzeugten ID. Der Test bindet den Snapshot jetzt an die echte Job-ID. Zusätzlich ist das Cleanup-Audit-Ereignis im Katalog registriert.
+- Quality-Gate [Run 43397231589](https://github.com/ghxstfocus/werkstatt/actions/runs/43397231589): 2.190 Tests bestanden, 5 übersprungen; Ruff, Mypy, AST und Audit-Katalog grün. Der erneute CI-Lauf nach dem Protokolleintrag ist [Run 43397584682](https://github.com/ghxstfocus/werkstatt/actions/runs/43397584682): 2.190 Tests bestanden, 5 übersprungen; Quality-Gate ohne Regression.
+
+## Folgeprüfung nach Loop- und UI-Stabilisierung
+
+- Eine Werkstatt-Chatantwort zu den letzten 24 Stunden hat PROGRESS.md zunächst vom Dateianfang gelesen und Zeichen-Offsets fälschlich wie Zeilenpositionen behandelt. Dadurch behauptete sie unbelegt, neuere Einträge fehlten, und wollte erst nach Nachfrage ans Dateiende gehen.
+- Bei der späteren Korrektur wurde derselbe Offsetfehler wiederholt. Folgeprüfung: Chat-Dateiwerkzeuge und Prompt-/Tool-Verhalten gegen große append-only Dokumente prüfen; Lesen muss Dateiende, Suchtreffer und tatsächliche Tool-Limits belegen, bevor Vollständigkeit behauptet oder eine Rückfrage gestellt wird. Als reproduzierbaren Fall mit den konkreten Zeitstempeln und Tool-Aufrufen dokumentieren.
+- Dieser Punkt ist vorgemerkt und wird nach Loop- und UI-Stabilisierung separat untersucht; er ist durch die aktuelle OP-401-Änderung nicht behoben.
+
+## 2026-11-13 — Chat-Dateilesen: Offset- und Trunkierungsbelege
+
+- Chat-Tool `read_file` dokumentiert nun explizit 0-basierte Zeichen-Offsets (keine Zeilennummern). Große Ausgaben werden nicht mehr still abgeschnitten: der Rückgabewert markiert die Kürzung und gibt den nächsten Fortsetzungs-Offset samt angefragtem Ende an.
+- Regressionstest deckt Unicode-Zeichen-Offsets, explizite Fortsetzung, Ende des angefragten Bereichs und das 50-KB-Ausgabelimit ab.
+- Das behebt die konkrete Werkzeug-Mehrdeutigkeit beim Lesen großer append-only Dateien; ob der Chat daraus korrekte Vollständigkeitsbehauptungen ableitet, muss zusätzlich über Chat-Agent-Evals verifiziert werden.
+
+
+## 2026-11-13 — Chat: Dateiende-Belege für aktuelle Dokumentation
+
+- `read_file` unterstützt `tail_chars` und liefert den tatsächlichen Zeichenbereich, die Gesamtzahl der Zeichen sowie einen Hinweis zum gezielten Nachladen älterer Abschnitte. Der Auszug bleibt unter dem 50-KB-Limit; Offsetmodus und Dateiende-Modus schließen sich aus.
+- Der System-Prompt weist den Chat an, bei Fragen nach aktuellen/letzten Einträgen den Dateiende-Modus zu nutzen, den Zeitraum gegen den gelieferten Bereich abzugleichen und partielle Ausgaben nicht als Vollständigkeitsbeleg zu behandeln.
+- Regressionstests prüfen Dateiende, Gesamtumfang, Fortsetzung, Parameterkonflikte und Prompt-Regel. Ein echter Provider-Eval bleibt erforderlich, um die Befolgung durch das Modell zu messen.
+
+
+## 2026-11-13 — Dateiende-Protokoll und Chat-Agent-Nachweis
+
+- Regressionstest ueber den echten Chat-Agent-Pfad: bei der Anfrage nach dem neuesten append-only Eintrag ruft der Agent `read_file(tail_chars=...)` auf, erhaelt Dateiende, Gesamtlaenge und Zeichenbereich und antwortet aus dem neuesten belegten Ausschnitt. Aeltere Inhalte ausserhalb des Auszugs werden nicht als gelesen behandelt.
+- Zwischen-CI fand drei Testvertrag-Abweichungen: stale Prompt-/Tool-Schema-Assertions und eine doppelt escapte Newline im Fixture; jede wurde korrigiert, nicht durch Entfernen oder Skippen von Tests.
+- Finaler Quality-Gate-Lauf [Run 43404274631](https://github.com/ghxstfocus/werkstatt/actions/runs/43404274631): 2.195 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 0, Audit-Katalog bestanden, keine Regression.
+- Beim erneuten Doku-Abgleich fiel auf, dass die angehaengten Abschnitte als literale `\\n` statt echter Zeilenumbrueche gespeichert waren; der neue Suffix wurde korrigiert und anschliessend erneut gelesen.
+- Nach Korrektur der versehentlich literal gespeicherten Zeilenumbrueche lief das vollstaendige Quality Gate erneut erfolgreich: [Run 43404864193](https://github.com/ghxstfocus/werkstatt/actions/runs/43404864193), 2.195 Tests bestanden, 5 uebersprungen; Ruff/Mypy/AST 0, Audit-Katalog bestanden, keine Regression.
+- Der Test belegt Tool- und Prompt-Verdrahtung, nicht das reale Befolgen durch einen externen Modellprovider. Ein Provider-Eval ueber mehrere tatsaechliche Dokumentfragen bleibt noetig.
+
+
+
+## 2026-11-13 — OP-401: verwaiste Checkpoint-Jobs sichtbar abschliessen
+
+- Reconnect zeigte einen Fehlerpfad: endete ein Run, bevor er eine Chatfrage am Inbox-Checkpoint bestaetigte und einen Snapshot band, blieb der Job dauerhaft `queued`. Der Dispatcher konnte ihn aus Sicherheitsgruenden nicht starten, aber der Chat erhielt auch keinen terminalen Zustand.
+- Der Reconnect-Pfad prueft jetzt den persistenten Loop-Registry-Status. Bei sicher inaktivem Run werden unbestaetigte Jobs mit einem erklaerenden Fehler und Aufforderung zum erneuten Senden abgeschlossen. Aktive, startende und mehrdeutige/orphaned Runs bleiben unangetastet.
+- Jobs mit vollstaendig gebundenem Snapshot und bestaetigter Inbox-Nachricht bleiben nach Run-Ende replayfaehig; nur fehlender Checkpoint-Nachweis wird beendet.
+- Regressionstests pruefen direkte Zustandsregeln sowie den API-Reconnect: uncheckpointed Jobs werden failed, sichere Replay-Jobs und aktive Run-Jobs bleiben queued. Vollstaendige CI-Verifikation folgt.
+
+
+## 2026-11-13 — Verifikation des Checkpoint-Reconnect-Fehlerpfads
+
+- GitHub Actions Quality-Gate [Run 43406275982](https://github.com/ghxstfocus/werkstatt/actions/runs/43406275982) nach der OP-401-Reconnect-Korrektur: 2.197 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 0, Audit-Katalog bestanden, keine Regression.
+- Der Lauf enthaelt direkte Tests fuer aktive, beendete und bestaetigte Snapshot-Jobs sowie einen API-Reconnect-Test, der den terminalen Fehler fuer den Nutzer abruft.
+
+
+## 2026-11-13 — Integrationspruefung OP-397/401 und Checkpoint-Zielabgleich
+
+- **Befund:** Die zwei getrennt entwickelten Aenderungszweige fuer Checkpoint-Zielabgleich und run-gebundene Chat-Snapshots liessen sich nicht konfliktfrei zusammenfuehren. Konflikte betrafen `PROGRESS.md`, den Audit-Katalog und die Chatjob-Outbox. Ein schlichtes Beibehalten nur einer Seite haette entweder terminale Ergebnis-Replays oder Snapshot-Schutz verloren.
+- **Integration:** Beide Outbox-Cursor (`job_result_enqueued` und Snapshot-Bindungsfelder) sowie deren additive SQLite-Migrationen bleiben erhalten. Audit-Kinds wurden als Vereinigungsmenge zusammengefuehrt. `PROGRESS.md` behaelt beide append-only Arbeitsverlaeufe.
+- **Gezielte Verifikation auf Windows:** 78 Tests bestanden. Drei Snapshot-Tests koennen in dieser Umgebung nicht gueltig beurteilt werden: zwei laufen in Windows-Pfadlaengenfehler beim Git-Klon, einer benoetigt Symlink-Rechte. Das sind keine bestandenen Tests und kein Linux-Beleg. Ruff und Python-Bytecode-Kompilierung der geaenderten Python-Dateien bestanden; `git diff --cached --check` bestanden.
+- **Naechster Beleg:** Linux-CI fuer den kombinierten Integrationsstand. Bis dahin bleiben PR-Integration und OP-Abschluss unbewiesen; die bestehenden PRs werden nicht gemergt.

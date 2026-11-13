@@ -1,6 +1,7 @@
 """Phase: _phase_tasks_loop (OP-139 Phase 2b)."""
 from __future__ import annotations
 
+import sqlite3
 import time
 from pathlib import Path
 from typing import Any
@@ -242,6 +243,60 @@ def _persist_run_checkpoint(
     # shared inbox cursor past questions or controls that another consumer has
     # not handled. Prior seq values also migrate checkpoints written by the
     # previous shared-offset implementation without replaying stored notices.
+    snapshot_by_seq: dict[int, dict[str, object]] = {}
+    snapshot_errors: dict[int, str] = {}
+    if run_state is not None and claimed:
+        from werkstatt.chat_jobs import ChatJobStore, _db_path
+        from werkstatt.run_snapshot import SnapshotError, create_project_snapshot
+
+        jobs = ChatJobStore(_db_path(project_name))
+        for message in claimed:
+            payload = message["payload"]
+            job_id = payload.get("job_id")
+            seq = message.get("seq")
+            if not isinstance(job_id, str) or not isinstance(seq, int):
+                continue
+            job = jobs.get(job_id)
+            if job is None:
+                continue
+            if (
+                job.get("run_id") != run_id
+                or job.get("project") != project_name
+                or job.get("state") != "queued"
+            ):
+                continue
+            try:
+                source = Path(run_state.project_dir).resolve()
+                snapshot = create_project_snapshot(
+                    source, project_name, run_id, job_id,
+                )
+                if not jobs.set_run_snapshot(
+                    job_id,
+                    source,
+                    snapshot.path,
+                    snapshot.head,
+                    snapshot.fingerprint,
+                ):
+                    raise SnapshotError(
+                        "Chatjob konnte den Checkpoint-Snapshot nicht binden.",
+                    )
+                snapshot_by_seq[seq] = {
+                    "snapshot_path": str(snapshot.path),
+                    "snapshot_head": snapshot.head,
+                    "snapshot_fingerprint": snapshot.fingerprint,
+                }
+            except (OSError, RuntimeError, ValueError, sqlite3.Error) as exc:
+                reason = f"Run-Snapshot am sicheren Checkpoint fehlgeschlagen: {exc}"
+                jobs.fail_queued(job_id, reason)
+                snapshot_errors[seq] = reason
+
+    for notice in notices:
+        seq = notice.get("seq")
+        if isinstance(seq, int):
+            notice.update(snapshot_by_seq.get(seq, {}))
+            if seq in snapshot_errors:
+                notice["snapshot_error"] = snapshot_errors[seq]
+
     notices_above_offset: list[dict[str, object]] = []
     for notice in notices:
         seq = notice.get("seq")
@@ -409,6 +464,13 @@ def _persist_run_checkpoint(
             raise RuntimeError(
                 f"Run-Inbox-Lease verloren: {message['message_id']}",
             )
+    if run_state is not None and claimed:
+        from werkstatt.chat_jobs import resume_chat_jobs
+
+        resume_chat_jobs(
+            project_name,
+            Path(run_state.project_dir),
+        )
 
 
 def _phase_tasks_loop(

@@ -511,6 +511,21 @@ class EventStore:
             conn.commit()
         return cur.rowcount == 1
 
+    def run_message_acknowledged(
+        self,
+        project: str,
+        run_id: str,
+        message_id: str,
+    ) -> bool:
+        """Return whether this stable inbox message crossed its checkpoint ack."""
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM run_inbox WHERE project=? AND run_id=? "
+                "AND message_id=? AND status='acked'",
+                (project, run_id, message_id),
+            ).fetchone()
+        return row is not None
+
     def append(
         self,
         run_id: str,
