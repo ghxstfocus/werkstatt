@@ -5955,3 +5955,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Ein Integrations-Test führt `loop.main(... --resume)` mit einem auf Platte gespeicherten All-done-Checkpoint aus. Run-Lease, RunRecord, Plan-/Task-Pfad, Finalizer und beide Phase-End-Verifies laufen über Produktionscode; externe Commit-/Verify-Seiteneffekte sind kontrolliert.
 - Der Test prüft denselben Run bis `completed` und Exit-Code 0. Ein echter Webserver-Neustart mit produktivem Worker bleibt ausdrücklich noch unbewiesen; Quality-Gate-Verifikation dieses Tests steht aus.
+
+
+## 2026-11-13 — HTTP-Recovery bis zum produktiven CLI-Resume
+
+- Ein neuer Linux-Integrationstest verbindet die echte Resume-Route mit einem separaten produktiven Loop-CLI-Prozess und verfolgt denselben persistierten Run bis completed samt Phase-End-Verify.
+- Nur externe Modell-, Commit- und Verify-Seiteneffekte sind kontrolliert; HTTP-Recovery, Run-ID, Checkpoint, CLI-Einstieg, Finalizer und RunRecord laufen produktiv.
+- Die gezielte GitHub-CI-Verifikation steht nach dem Commit aus. OP-397 bleibt bis zu den weiteren Restart-, Checkpoint- und Follow-up-Akzeptanzkriterien offen.

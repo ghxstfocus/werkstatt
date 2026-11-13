@@ -473,3 +473,144 @@ def test_resume_route_recovers_after_real_worker_exit(
             if process is not None and process.poll() is None:
                 process.terminate()
                 process.wait(timeout=5)
+
+
+def test_resume_endpoint_runs_production_cli_to_completed_run(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """HTTP-Recovery startet den echten CLI-Resume und finalisiert denselben Run."""
+    if not Path("/proc").is_dir():
+        pytest.skip("worker identity recovery requires Linux /proc")
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+
+    import json
+    import os
+    import sys
+    import time
+
+    from fastapi.testclient import TestClient
+
+    from werkstatt.event_store import EventStore
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.web import app as app_module
+    from werkstatt.web.loop_registry import LoopProcessRegistry
+
+    project_base = tmp_path / "projects"
+    project_dir = project_base / "demo"
+    (project_dir / "docs").mkdir(parents=True)
+    (project_dir / "docs" / "STATUS.md").write_text(
+        "## Erledigt\n", encoding="utf-8",
+    )
+    state_home = tmp_path / "werkstatt-home"
+    monkeypatch.setenv("WERKSTATT_HOME", str(state_home))
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    run_id = "demo-20261113-production-resume"
+    goal = "HTTP-Recovery bis zur Phase-End-Verify"
+    phase_state = PhaseState("demo", base_dir=project_dir / ".werkstatt")
+    phase_state.init_new(
+        goal,
+        [{"id": "task-1", "name": "Bereits erledigt"}],
+        tests=["pytest -q"],
+        akzeptanzkriterien=["Der gespeicherte Run wird abgeschlossen"],
+    )
+    phase_state.mark_done("task-1")
+    phase_state.run_id = run_id
+    phase_state.save()
+
+    store = EventStore()
+    store.create_run_record("demo", run_id, goal)
+    registry = LoopProcessRegistry(
+        project_base / ".werkstatt" / "web-loop-registry.db",
+    )
+    context = {
+        "schema_version": 1,
+        "goal": goal,
+        "op_id": "OP-1",
+        "source": {"kind": "local"},
+    }
+    reserved, conflict = registry.reserve("demo", run_id, context=context)
+    assert reserved and conflict is None
+    assert registry.set_state("demo", run_id, "idle")
+
+    repo_root = Path(__file__).resolve().parents[1]
+    overlay_root = tmp_path / "production-worker-overlay"
+    stub_package = overlay_root / "werkstatt"
+    stub_package.mkdir(parents=True)
+    (stub_package / "__init__.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "__path__ = [str(Path(__file__).parent), "
+        "os.environ['WERKSTATT_REAL_PACKAGE']]\n",
+        encoding="utf-8",
+    )
+    (stub_package / "loop.py").write_text(
+        "import os, sys\n"
+        "import werkstatt\n"
+        "werkstatt.__path__ = [os.environ['WERKSTATT_REAL_PACKAGE']]\n"
+        "from werkstatt import loop, orchestrator\n"
+        "from werkstatt.phases import finalize\n"
+        "from werkstatt import committer, progress, reviewer\n"
+        "cfg = {'project_dir': os.environ['WERKSTATT_TEST_PROJECT_DIR'], "
+        "'venv_python': sys.executable, 'docs': {}}\n"
+        "loop.load_project_config = lambda _project: cfg\n"
+        "loop.load_env = lambda _name: None\n"
+        "orchestrator.load_project_config = lambda _project: cfg\n"
+        "orchestrator.load_docs = lambda *_args: {}\n"
+        "loop._phase_explorer_and_setup = "
+        "lambda _state, _goal, _project, saved: (0, saved)\n"
+        "finalize.group_start = lambda *_args: None\n"
+        "finalize.group_end = lambda *_args: None\n"
+        "finalize.summary = lambda *_args: None\n"
+        "finalize._human_gate = lambda *_args, **_kwargs: 2\n"
+        "finalize._hat_human_review_tasks = lambda _phase: False\n"
+        "finalize._phase_end_reflection = lambda _state: True\n"
+        "finalize._verify_patches = "
+        "lambda _state, *, phase=None: True\n"
+        "finalize._post_commit_snapshot_check = "
+        "lambda *_args: (True, {'worktree_clean': True})\n"
+        "progress.append = lambda *_args, **_kwargs: None\n"
+        "committer._committe_zielprojekt = "
+        "lambda state: (setattr(state, 'progress_written_at_commit', True) "
+        "or True, 'committed-resume')\n"
+        "reviewer.run_phase_end_review = lambda _state: True\n"
+        "loop._git_head = lambda _path: 'base-commit'\n"
+        "loop._git_dirty = lambda _path: False\n"
+        "raise SystemExit(loop.main())\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(
+        "WERKSTATT_REAL_PACKAGE", str(repo_root / "werkstatt"),
+    )
+    monkeypatch.setenv("WERKSTATT_TEST_PROJECT_DIR", str(project_dir))
+    monkeypatch.setenv(
+        "PYTHONPATH",
+        os.pathsep.join((str(overlay_root), str(repo_root))),
+    )
+    monkeypatch.setattr(app_module, "_PROJECTS_BASE", project_base)
+    monkeypatch.setattr(app_module, "_loop_registry", lambda: registry)
+    app_module._LAUFENDE_LOOPS.clear()
+    app_module._LOOP_RUN_IDS.clear()
+    app_module._LOOP_LOG_HANDLES.clear()
+    app_module._PAUSIERTE_LOOPS.clear()
+
+    response = TestClient(app_module.app).post(
+        "/api/projects/demo/resume",
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["resume"] is True
+    assert response.json()["run_id"] == run_id
+
+    deadline = time.monotonic() + 15
+    record = None
+    while time.monotonic() < deadline:
+        record = store.get_run_record("demo", run_id)
+        if record and record["status"] in {"completed", "failed"}:
+            break
+        time.sleep(0.05)
+
+    assert record is not None
+    assert record["status"] == "completed", json.dumps(record, default=str)
+    assert record["checkpoint"]["exit_code"] == 0
+    assert record["checkpoint"]["run_id"] == run_id
