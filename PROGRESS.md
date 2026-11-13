@@ -6060,3 +6060,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Regressionstests sichern die Reihenfolge RunRecord-vor-Workerstart und das
   Auffuellen des Basis-Commits. Der Quality Gate fuer diesen Commit verifiziert
   die Aenderung.
+
+## 2026-11-13 — Idempotenz bei abweichendem Run-Ziel
+
+- Ein Retry mit derselben Projekt-/Run-ID, aber anderem Ziel darf keinen noch offenen `base_commit`-Pin setzen, bevor die Zielabweichung abgelehnt wird.
+- Die RunRecord-Aktualisierung bindet den Pin jetzt zusätzlich an das gespeicherte Ziel; ein Regressionstest belegt, dass der anschliessende gueltige Retry seinen korrekten Basis-Commit setzen kann.
+- Quality Gate Run [43356409195](https://github.com/ghxstfocus/werkstatt/actions/runs/43356409195) ist fuer den Fix gruen.
