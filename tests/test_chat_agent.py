@@ -39,6 +39,57 @@ def test_prompt_directs_recent_append_only_reads_to_tail_evidence():
     assert "Behaupte Vollstaendigkeit nur fuer den tatsaechlich gelesenen Bereich" in chat_agent._SYSTEM_PROMPT
 
 
+def test_chat_loop_reads_latest_append_only_entry_from_tail_evidence(
+    session, tmp_path: Path, monkeypatch,
+) -> None:
+    path = tmp_path / "PROGRESS.md"
+    path.write_text(
+        "historischer Eintrag\\n" * 80 + "2026-11-13 — neuester belegter Eintrag\\n",
+        encoding="utf-8",
+    )
+    calls = 0
+
+    def _tail_then_answer(messages, tools=None):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            assert "tail_chars" in json.dumps(tools, ensure_ascii=False)
+            assert "partielle Ausgabe belegt niemals" in messages[0]["content"]
+            return {"choices": [{"message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": "tail-1",
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "arguments": json.dumps({
+                            "path": "PROGRESS.md",
+                            "tail_chars": 128,
+                        }),
+                    },
+                }],
+            }}]}
+        evidence = messages[-1]["content"]
+        assert "Dateiende-Auszug:" in evidence
+        assert "neuester belegter Eintrag" in evidence
+        assert "historischer Eintrag" not in evidence
+        return {"choices": [{"message": {
+            "role": "assistant",
+            "content": "Der neueste belegte Eintrag ist vom 2026-11-13.",
+        }}]}
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", _tail_then_answer)
+    answer = chat_agent.chat_loop(
+        session,
+        "Lies den neuesten Eintrag in PROGRESS.md.",
+        project_dir=tmp_path,
+    )
+
+    assert answer == "Der neueste belegte Eintrag ist vom 2026-11-13."
+    assert calls == 2
+
+
 def test_chat_loop_ohne_tool(session, fake_llm) -> None:
     fake_llm({"role": "assistant", "content": "Hallo!"})
     antwort = chat_agent.chat_loop(session, "Hi")
