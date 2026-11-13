@@ -744,6 +744,7 @@ _TL_LABELS: dict[str, str] = {
     "loop_task_start": "Task startet",
     "loop_criteria_progress": "Akzeptanzkriterien: Fortschritt",
     "loop_chat_job_observed": "Parallelen Chat-Job am Checkpoint erkannt",
+    "loop_chat_job_result_observed": "Ergebnis eines parallelen Chat-Jobs erkannt",
     "loop_task_ok": "Task erfolgreich",
     "loop_task_failed": "Task fehlgeschlagen",
     "loop_patch_applied": "Patch angewendet",
@@ -885,6 +886,14 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
         job_id = str(payload.get("job_id") or "")
         suffix = f" ({job_id[:12]})" if job_id else ""
         return f"Paralleler {mode}-Auftrag am sicheren Punkt erkannt{suffix}"
+    if kind == "loop_chat_job_result_observed":
+        state = str(payload.get("state") or "unbekannt")
+        job_id = str(payload.get("job_id") or "")
+        suffix = f" ({job_id[:12]})" if job_id else ""
+        answer_hash = payload.get("answer_sha256")
+        if answer_hash:
+            suffix += f" · Ergebnisbeleg {str(answer_hash)[:12]}"
+        return f"Paralleler Chat-Job {state}{suffix}"
     if kind == "loop_criteria_progress":
         covered = payload.get("covered")
         remaining = payload.get("remaining")

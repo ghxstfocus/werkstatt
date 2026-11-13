@@ -423,3 +423,20 @@ def test_paralleler_chat_job_ist_in_timeline_menschlich_beschriftet():
 
     assert label == "Parallelen Chat-Job am Checkpoint erkannt"
     assert detail == "Paralleler debugger-Auftrag am sicheren Punkt erkannt (0123456789ab)"
+
+
+def test_chat_job_ergebnis_ist_in_timeline_mit_beleg_sichtbar():
+    label = inspector._tl_label("loop_chat_job_result_observed", {})
+    detail = inspector._tl_detail(
+        "loop_chat_job_result_observed",
+        {
+            "state": "succeeded",
+            "job_id": "0123456789abcdef",
+            "answer_sha256": "a" * 64,
+        },
+    )
+
+    assert label == "Ergebnis eines parallelen Chat-Jobs erkannt"
+    assert detail == (
+        "Paralleler Chat-Job succeeded (0123456789ab) · Ergebnisbeleg aaaaaaaaaaaa"
+    )

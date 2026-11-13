@@ -6,6 +6,7 @@ abrufbar und koennen nach einem UI-Reconnect wieder abgespielt werden.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -69,6 +70,7 @@ class ChatJobStore:
                 " heartbeat_at TEXT, cancel_requested INTEGER NOT NULL DEFAULT 0,"
                 " context_seq INTEGER, run_id TEXT, project TEXT,"
                 " run_inbox_enqueued INTEGER NOT NULL DEFAULT 0,"
+                " run_result_enqueued INTEGER NOT NULL DEFAULT 0,"
                 " UNIQUE(session_id, idempotency_key));"
                 "CREATE TABLE IF NOT EXISTS job_events ("
                 " seq INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -102,6 +104,11 @@ class ChatJobStore:
             if "run_inbox_enqueued" not in columns:
                 conn.execute(
                     "ALTER TABLE jobs ADD COLUMN run_inbox_enqueued INTEGER "
+                    "NOT NULL DEFAULT 0"
+                )
+            if "run_result_enqueued" not in columns:
+                conn.execute(
+                    "ALTER TABLE jobs ADD COLUMN run_result_enqueued INTEGER "
                     "NOT NULL DEFAULT 0"
                 )
             event_columns = {
@@ -214,6 +221,40 @@ class ChatJobStore:
             cur = conn.execute(
                 "UPDATE jobs SET run_inbox_enqueued=1,updated_at=? "
                 "WHERE job_id=? AND run_inbox_enqueued=0",
+                (_now(), job_id),
+            )
+            conn.commit()
+            return cur.rowcount == 1
+
+    def pending_run_results(
+        self,
+        project: str,
+        *,
+        limit: int = 500,
+        after_rowid: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Returns terminal run-bound jobs whose result handoff is pending."""
+        if limit < 1:
+            return []
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT rowid AS outbox_seq,job_id,session_id,mode,context_seq,"
+                "run_id,state,answer,error FROM jobs WHERE project=? "
+                "AND run_id IS NOT NULL AND run_inbox_enqueued=1 "
+                "AND run_result_enqueued=0 "
+                "AND state IN ('succeeded','failed','cancelled') "
+                "AND rowid>? ORDER BY rowid LIMIT ?",
+                (project, max(0, after_rowid), limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_run_result_enqueued(self, job_id: str) -> bool:
+        """Marks a terminal-result outbox delivered after the inbox write."""
+        with closing(self._connect()) as conn:
+            cur = conn.execute(
+                "UPDATE jobs SET run_result_enqueued=1,updated_at=? "
+                "WHERE job_id=? AND run_result_enqueued=0 "
+                "AND state IN ('succeeded','failed','cancelled')",
                 (_now(), job_id),
             )
             conn.commit()
@@ -737,7 +778,7 @@ def reconcile_run_inbox(
             project, limit=limit, after_rowid=after_rowid,
         )
         if not jobs:
-            return reconciled
+            break
         after_rowid = int(jobs[-1]["outbox_seq"])
         for job in jobs:
             run_id = str(job["run_id"])
@@ -759,12 +800,52 @@ def reconcile_run_inbox(
             if store.mark_run_inbox_enqueued(job_id):
                 reconciled += 1
 
+    after_rowid = 0
+    while True:
+        results = store.pending_run_results(
+            project, limit=limit, after_rowid=after_rowid,
+        )
+        if not results:
+            return reconciled
+        after_rowid = int(results[-1]["outbox_seq"])
+        for result in results:
+            run_id = str(result["run_id"])
+            if event_store.get_run_record(project, run_id) is None:
+                continue
+            job_id = str(result["job_id"])
+            answer = str(result.get("answer") or "")
+            error = str(result.get("error") or "")
+            payload = {
+                "job_id": job_id,
+                "session_id": str(result["session_id"]),
+                "mode": str(result["mode"]),
+                "context_seq": result["context_seq"],
+                "state": str(result["state"]),
+                "answer_sha256": hashlib.sha256(
+                    answer.encode("utf-8"),
+                ).hexdigest() if answer else None,
+                "error_sha256": hashlib.sha256(
+                    error.encode("utf-8"),
+                ).hexdigest() if error else None,
+            }
+            event_store.enqueue_run_message(
+                project,
+                run_id,
+                f"chat-job:{job_id}:result",
+                "job_result_notice",
+                payload,
+            )
+            if store.mark_run_result_enqueued(job_id):
+                reconciled += 1
+
 
 def resume_chat_jobs(
     project: str, project_dir: Path, *, db_path: Path | None = None,
 ) -> None:
-    """Reconciles run notices before dispatching queued jobs after restart."""
+    """Reconciles run notices/results before dispatching after restart."""
     path = Path(db_path) if db_path else _db_path(project)
+    # Expired workers become terminal before their result outbox is replayed.
+    ChatJobStore(path).recover_abandoned_jobs()
     reconcile_run_inbox(project, db_path=path)
     _dispatch_pending(path, project, Path(project_dir))
 

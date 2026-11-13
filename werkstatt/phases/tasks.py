@@ -201,6 +201,28 @@ def _persist_run_checkpoint(
             "context_seq": payload.get("context_seq"),
         })
 
+    job_results: list[dict[str, object]] = []
+    for _ in range(20):
+        message = store.claim_run_message(
+            project_name, run_id, worker_id, lease_seconds=120,
+            kind="job_result_notice",
+        )
+        if message is None:
+            break
+        claimed.append(message)
+        payload = message["payload"]
+        job_results.append({
+            "seq": message["seq"],
+            "message_id": message["message_id"],
+            "job_id": payload.get("job_id"),
+            "mode": payload.get("mode"),
+            "session_id": payload.get("session_id"),
+            "context_seq": payload.get("context_seq"),
+            "state": payload.get("state"),
+            "answer_sha256": payload.get("answer_sha256"),
+            "error_sha256": payload.get("error_sha256"),
+        })
+
     checkpoint = dict(record["checkpoint"])
     # The legacy shared cursor could skip non-job inbox messages. Consumers
     # now keep independent cursors, so do not expose that ambiguous offset.
@@ -274,6 +296,70 @@ def _persist_run_checkpoint(
             )
 
     checkpoint["job_notices"] = (prior_notices + notices)[-50:]
+    try:
+        result_offset = int(checkpoint.get("job_result_offset", 0))
+    except (TypeError, ValueError):
+        result_offset = 0
+    prior_results = checkpoint.get("job_results", [])
+    if not isinstance(prior_results, list):
+        prior_results = []
+    prior_result_seqs = {
+        item.get("seq") for item in prior_results
+        if isinstance(item, dict) and isinstance(item.get("seq"), int)
+    }
+    results_above_offset = [
+        result for result in job_results
+        if isinstance(result.get("seq"), int)
+        and result["seq"] > result_offset
+        and result["seq"] not in prior_result_seqs
+    ]
+    for result in results_above_offset:
+        seq = result.get("seq")
+        audit_result = audit(
+            "loop_chat_job_result_observed",
+            {
+                "job_id": result.get("job_id"),
+                "mode": result.get("mode"),
+                "session_id": result.get("session_id"),
+                "context_seq": result.get("context_seq"),
+                "state": result.get("state"),
+                "answer_sha256": result.get("answer_sha256"),
+                "error_sha256": result.get("error_sha256"),
+                "result_summary": (
+                    "Ein paralleler Chat-Job ist beendet; sein Ergebnis bleibt "
+                    "in derselben Chat-Session abrufbar."
+                ),
+                "decision_summary": (
+                    "Der Lauf uebernimmt keine Ziel- oder Diff-Aenderung aus "
+                    "Job-Metadaten; das freigegebene Hauptziel bleibt erhalten."
+                ),
+                "evidence": [
+                    f"Chat-Job {result.get('job_id') or '?'}",
+                    f"Status: {result.get('state') or 'unbekannt'}",
+                    f"Run-Inbox-Sequenz: {seq}",
+                ],
+                "next_step": (
+                    "Freigegebene Arbeit fortsetzen; den Chat-Ergebnisinhalt "
+                    "bei einer tatsaechlichen Ziel- oder Scope-Aenderung "
+                    "gesondert abstimmen."
+                ),
+            },
+            run_state.project_dir if run_state is not None else Path.cwd(),
+            project_name,
+            run_id=run_id,
+            audit_id=f"RUN-{run_id}-CHAT-RESULT-{seq}",
+        )
+        if audit_result is False:
+            raise RuntimeError(
+                f"Chat-Job-Ergebnis {result.get('job_id')} "
+                "konnte nicht auditiert werden",
+            )
+    checkpoint["job_results"] = (prior_results + results_above_offset)[-50:]
+    if results_above_offset:
+        checkpoint["job_result_offset"] = max(
+            result_offset,
+            max(int(result["seq"]) for result in results_above_offset),
+        )
     checkpoint["safe_point"] = {
         "phase": "build",
         "next_task_id": next_task.get("id") if next_task else None,
@@ -287,7 +373,19 @@ def _persist_run_checkpoint(
     if claimed:
         checkpoint["job_notice_offset"] = max(
             notice_offset,
-            max(int(message["seq"]) for message in claimed),
+            max(
+                (int(message["seq"]) for message in claimed
+                 if message["kind"] == "job_notice"),
+                default=notice_offset,
+            ),
+        )
+        checkpoint["job_result_offset"] = max(
+            result_offset,
+            max(
+                (int(message["seq"]) for message in claimed
+                 if message["kind"] == "job_result_notice"),
+                default=result_offset,
+            ),
         )
     if run_state is not None:
         check_run_lease(run_state)

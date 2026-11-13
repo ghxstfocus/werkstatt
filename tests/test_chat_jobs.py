@@ -1,6 +1,7 @@
 """Persistente Chat-Job-Zustaende und Event-Replay (OP-397)."""
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -588,3 +589,81 @@ def test_run_inbox_outbox_waits_for_run_record_then_reconciles(
         "mode": "read",
         "context_seq": 3,
     }
+
+
+def test_run_inbox_reconciles_terminal_chat_job_result_idempotently(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_jobs, event_store
+
+    jobs_db = tmp_path / "chat-jobs.db"
+    events = event_store.EventStore(tmp_path / "events.db")
+    events.create_run_record("demo", "run-result", "Pruefe Repo")
+    monkeypatch.setattr(event_store, "EventStore", lambda: events)
+    store = ChatJobStore(jobs_db)
+    job, _ = store.create(
+        "session-a", "Pruefe den Status", "read", "request-key-result-001",
+        context_seq=12, run_id="run-result", project="demo",
+    )
+
+    assert chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    ) == 1
+    assert store.claim(job["job_id"], "chat-worker")
+    assert store.finish(job["job_id"], answer="Belegte Antwort")
+    assert chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    ) == 1
+    assert chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    ) == 0
+
+    result = events.claim_run_message(
+        "demo", "run-result", "loop-worker", kind="job_result_notice",
+    )
+    assert result is not None
+    assert result["message_id"] == f"chat-job:{job['job_id']}:result"
+    assert result["payload"]["state"] == "succeeded"
+    assert result["payload"]["context_seq"] == 12
+    assert result["payload"]["answer_sha256"] == hashlib.sha256(
+        b"Belegte Antwort",
+    ).hexdigest()
+    assert "Belegte Antwort" not in str(result["payload"])
+    assert events.acknowledge_run_message(
+        result["seq"], "loop-worker", result["fencing_token"],
+    )
+
+
+def test_resume_reconciles_result_of_abandoned_run_bound_chat_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_jobs, event_store
+
+    jobs_db = tmp_path / "chat-jobs.db"
+    events = event_store.EventStore(tmp_path / "events.db")
+    events.create_run_record("demo", "run-abandoned-chat", "Pruefe Repo")
+    monkeypatch.setattr(event_store, "EventStore", lambda: events)
+    store = ChatJobStore(jobs_db)
+    job, _ = store.create(
+        "session-a", "Pruefe den Status", "read", "request-key-result-002",
+        run_id="run-abandoned-chat", project="demo",
+    )
+    chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    )
+    assert store.claim(job["job_id"], "lost-chat-worker")
+    with sqlite3.connect(jobs_db) as connection:
+        connection.execute(
+            "UPDATE jobs SET heartbeat_at=? WHERE job_id=?",
+            ((datetime.now(UTC) - timedelta(minutes=5)).isoformat(), job["job_id"]),
+        )
+        connection.commit()
+
+    chat_jobs.resume_chat_jobs("demo", tmp_path, db_path=jobs_db)
+
+    result = events.claim_run_message(
+        "demo", "run-abandoned-chat", "loop-worker", kind="job_result_notice",
+    )
+    assert result is not None
+    assert result["payload"]["state"] == "failed"
+    assert result["payload"]["error_sha256"]

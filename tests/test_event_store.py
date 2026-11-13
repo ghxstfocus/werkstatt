@@ -343,6 +343,96 @@ def test_task_checkpoint_retries_chat_notice_audit_idempotently(
     assert audit_ids == ["RUN-run-replay-CHAT-1"]
 
 
+def test_task_checkpoint_audits_chat_result_without_copying_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt.phases import tasks
+
+    audit_events: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _audit(*args: object, **kwargs: object) -> bool:
+        audit_events.append((args, kwargs))
+        return True
+
+    monkeypatch.setattr(tasks, "audit", _audit)
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-result", "Keep the approved goal")
+    seq = store.enqueue_run_message(
+        "demo", "run-result", "chat-job:job-result:result", "job_result_notice",
+        {
+            "job_id": "job-result",
+            "session_id": "session-result",
+            "mode": "read",
+            "context_seq": 9,
+            "state": "succeeded",
+            "answer_sha256": "a" * 64,
+        },
+    )
+
+    tasks._persist_run_checkpoint(
+        store, "demo", "run-result", SimpleNamespace(data={"tasks": []}), None,
+    )
+
+    record = store.get_run_record("demo", "run-result")
+    assert record is not None
+    assert record["checkpoint"]["job_result_offset"] == seq
+    assert record["checkpoint"]["job_results"] == [{
+        "seq": seq,
+        "message_id": "chat-job:job-result:result",
+        "job_id": "job-result",
+        "mode": "read",
+        "session_id": "session-result",
+        "context_seq": 9,
+        "state": "succeeded",
+        "answer_sha256": "a" * 64,
+        "error_sha256": None,
+    }]
+    kind, payload = audit_events[0][0][:2]
+    assert kind == "loop_chat_job_result_observed"
+    assert isinstance(payload, dict)
+    assert payload["answer_sha256"] == "a" * 64
+    assert "answer" not in payload
+    assert audit_events[0][1]["audit_id"] == (
+        f"RUN-run-result-CHAT-RESULT-{seq}"
+    )
+    assert store.claim_run_message(
+        "demo", "run-result", "next-worker", kind="job_result_notice",
+    ) is None
+
+
+def test_chat_result_audit_failure_keeps_inbox_unacked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt.phases import tasks
+
+    monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: False)
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-result-audit-fail", "Keep the goal")
+    seq = store.enqueue_run_message(
+        "demo", "run-result-audit-fail", "chat-job:result-fail:result",
+        "job_result_notice", {"job_id": "result-fail", "state": "failed"},
+    )
+
+    with pytest.raises(RuntimeError, match="konnte nicht auditiert werden"):
+        tasks._persist_run_checkpoint(
+            store,
+            "demo",
+            "run-result-audit-fail",
+            SimpleNamespace(data={"tasks": []}),
+            None,
+        )
+
+    record = store.get_run_record("demo", "run-result-audit-fail")
+    assert record is not None
+    assert record["checkpoint_version"] == 0
+    assert "job_result_offset" not in record["checkpoint"]
+    with sqlite3.connect(store.db_pfad) as connection:
+        status = connection.execute(
+            "SELECT status FROM run_inbox WHERE seq=?", (seq,),
+        ).fetchone()
+    assert status == ("leased",)
+
+
 def test_task_checkpoint_does_not_ack_chat_notice_if_audit_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
