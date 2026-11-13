@@ -70,7 +70,7 @@ def test_zyklus_wird_vor_planfreigabe_abgelehnt_und_auditiert() -> None:
     ]
     with (
         patch("werkstatt.planner.audit") as mock_audit,
-        pytest.raises(TaskGraphError, match="Abhaengigkeitszyklus"),
+        pytest.raises(ValueError, match="Abhaengigkeitszyklus"),
     ):
         _topo_sort_tasks(tasks, pd=Path("/tmp/x"), pn="test")
     kinds = [call.args[0] for call in mock_audit.call_args_list]
@@ -82,22 +82,22 @@ def test_unbekannte_abhaengigkeit_wird_abgelehnt() -> None:
         {"id": "t1", "dependencies": ["gibt_es_nicht"]},
         {"id": "t2", "dependencies": []},
     ]
-    with pytest.raises(TaskGraphError, match="unbekannte Abhaengigkeit"):
+    with pytest.raises(ValueError, match="unbekannte Abhaengigkeit"):
         _topo_sort_tasks(tasks)
 
 
 def test_selbstabhaengigkeit_wird_abgelehnt() -> None:
-    with pytest.raises(TaskGraphError, match="sich selbst"):
+    with pytest.raises(ValueError, match="sich selbst"):
         _topo_sort_tasks([{"id": "t1", "dependencies": ["t1"]}])
 
 
 def test_doppelte_task_id_wird_abgelehnt() -> None:
-    with pytest.raises(TaskGraphError, match="doppelt"):
+    with pytest.raises(ValueError, match="doppelt"):
         _topo_sort_tasks([{"id": "t1"}, {"id": "t1"}])
 
 
 def test_malformed_dependencies_are_rejected() -> None:
-    with pytest.raises(TaskGraphError, match="muessen eine Liste"):
+    with pytest.raises(ValueError, match="muessen eine Liste"):
         _topo_sort_tasks([{"id": "t1", "dependencies": "t2"}])
 
 
