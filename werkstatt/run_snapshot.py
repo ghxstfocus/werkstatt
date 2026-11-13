@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import uuid
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from werkstatt.paths import werkstatt_home
 
@@ -56,6 +56,17 @@ def _valid_id(value: str, label: str) -> str:
     return value
 
 
+def _checked_symlink_target(root: Path, path: Path) -> str:
+    """Return an in-tree relative link target suitable for a copied snapshot."""
+    target = os.readlink(path)
+    if Path(target).is_absolute() or PureWindowsPath(target).drive:
+        raise SnapshotError(f"Absoluter Symlink ist im Snapshot nicht sicher: {path}")
+    resolved = (path.parent / target).resolve()
+    if not resolved.is_relative_to(root.resolve()):
+        raise SnapshotError(f"Symlink verlaesst das Projekt: {path}")
+    return target
+
+
 def _file_lists(root: Path) -> tuple[list[str], list[str]]:
     tracked = _git(root, "ls-files", "--cached", "-z").split("\0")
     untracked = _git(
@@ -84,10 +95,7 @@ def _digest(root: Path, paths: list[str]) -> str:
             digest.update(b"missing\0")
             continue
         if path.is_symlink():
-            target = os.readlink(path)
-            resolved = (path.parent / target).resolve()
-            if not resolved.is_relative_to(root.resolve()):
-                raise SnapshotError(f"Symlink verlaesst das Projekt: {name}")
+            target = _checked_symlink_target(root, path)
             digest.update(b"link\0")
             digest.update(target.encode("utf-8", errors="surrogateescape"))
         elif path.is_file():
@@ -111,9 +119,7 @@ def _remove_path(path: Path) -> None:
 
 def _copy_file(source: Path, destination: Path, project_root: Path) -> None:
     if source.is_symlink():
-        target = os.readlink(source)
-        if not (source.parent / target).resolve().is_relative_to(project_root.resolve()):
-            raise SnapshotError(f"Symlink verlaesst das Projekt: {source}")
+        target = _checked_symlink_target(project_root, source)
         destination.symlink_to(target)
     elif source.is_file():
         shutil.copy2(source, destination, follow_symlinks=False)

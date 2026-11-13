@@ -6454,3 +6454,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **CI-Nachbesserung:** Wiederholte/stale Ergebnis-Persistierung auf bereits terminalen Runs bleibt jetzt idempotent und veraendert den terminalen Datensatz nicht. Regressionstest deckt ab, dass ein zweiter Aufruf mit abweichendem Exitcode keinen abgeschlossenen Run ueberschreibt.
 - **CI-Befund:** Der Linux-Gesamttest (2222 bestanden, 5 uebersprungen), Ruff und JavaScript-Syntax waren gruen; Quality Gate fand zwei Mypy-Typfehler am terminalen Statusparameter. Der Status ist nun als `Literal["completed", "failed"]` typisiert.
 - **Verifikation:** GitHub Actions Quality Gate Run [43450127576](https://github.com/ghxstfocus/werkstatt/actions/runs/43450127576) fuer Commit `3bdf805`: erfolgreich. Damit sind auf Linux Pytest (2222 bestanden, 5 uebersprungen), Ruff, Mypy, AST und Audit-Katalog erfolgreich; OP-401/402 und OP-382 bleiben wie oben dokumentiert offen.
+
+## 2026-11-13 — Absolute interne Symlinks in Run-Snapshots fail-closed behandeln
+
+- **Befund:** Ein absoluter Symlink innerhalb des Quellprojekts blieb beim Kopieren auf den urspruenglichen Checkout gerichtet. Der Hintergrundjob konnte dadurch keinen wirklich abgeschlossenen Snapshot verwenden.
+- **Aenderung:** Snapshot-Erstellung und -Validierung weisen absolute Symlinks zurueck; relative, innerhalb des Projekts bleibende Symlinks bleiben unterstuetzt. Ein Regressionstest deckt den internen absoluten Link ab.
+- **Verifikation:** Ausstehend im Linux-CI, da die lokale Windows-Umgebung kein Python-Test-Runtime bereitstellt.
