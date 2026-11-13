@@ -47,12 +47,13 @@ spaeter im Loop. Die Chat-Job-API erkennt bereits den Registry-Zustand
 einstellen. Der Chatjob wurde trotzdem angenommen. Damit konnte ein waehrend
 des Starts eingereichter Job ohne Run-Inbox-Verknuepfung bleiben.
 
-Der Webstart legt den RunRecord jetzt vor `Popen` an. Der Worker-Aufruf
-fuellt beim spaeteren Start den noch leeren `base_commit` nach, ohne einen
-bereits gepinnten Commit zu ueberschreiben. Tests sichern die Reihenfolge
-RunRecord-vor-Workerstart und das idempotente Auffuellen des Basis-Commits.
-Der Quality-Gate-Lauf des Aenderungscommits entscheidet, ob diese Korrektur
-verifiziert ist.
+Der Webstart legt den RunRecord jetzt vor `Popen` mit Status
+`starting` an. Der Worker-Aufruf wechselt denselben Record idempotent und
+zielgebunden nach `running`; ein fehlgeschlagener Spawn markiert den Record
+per Compare-and-Swap als `failed`, ohne den Checkpoint zu veraendern. Der
+Worker fuellt ausserdem den noch leeren `base_commit` nach, ohne einen bereits
+gepinnten Commit zu ueberschreiben. Tests sichern diese Lifecycle-Kanten und
+den Spawn-Fehlerpfad.
 
 ## Verbleibender Architekturabstand zu ADR-0032
 

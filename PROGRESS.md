@@ -6066,3 +6066,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Ein Retry mit derselben Projekt-/Run-ID, aber anderem Ziel darf keinen noch offenen `base_commit`-Pin setzen, bevor die Zielabweichung abgelehnt wird.
 - Die RunRecord-Aktualisierung bindet den Pin jetzt zusätzlich an das gespeicherte Ziel; ein Regressionstest belegt, dass der anschliessende gueltige Retry seinen korrekten Basis-Commit setzen kann.
 - Quality Gate Run [43356409195](https://github.com/ghxstfocus/werkstatt/actions/runs/43356409195) ist fuer den Fix gruen.
+
+## 2026-11-13 — Runstart-Status als Compare-and-Swap-Lifecycle
+
+- Webstarts persistieren den RunRecord als `starting`; der Worker bestaetigt seinen Start idempotent als `running`.
+- Wenn `Popen` fehlschlaegt oder der autonome Auswahlbeleg nicht geschrieben werden kann, wird `starting → failed` per Status-CAS gesetzt. Der Run bleibt nicht irrtuemlich als laufend markiert und sein Checkpoint bleibt unveraendert.
+- Event-Store- und Web-Regressionstests decken Statusuebergaenge und den fehlgeschlagenen Workerstart ab. Quality Gate wird nach dem Commit verlinkt.

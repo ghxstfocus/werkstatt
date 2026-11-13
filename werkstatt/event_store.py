@@ -140,7 +140,7 @@ class EventStore:
         base_commit: str | None = None,
         status: str = "running",
     ) -> dict[str, Any]:
-        """Create the durable run identity once; retries return the same record."""
+        """Create/reuse a run identity and acknowledge a worker's initial start."""
         now = datetime.now(UTC).isoformat()
         with closing(self._connect()) as conn:
             conn.execute(
@@ -159,6 +159,15 @@ class EventStore:
                     "AND base_commit IS NULL",
                     (base_commit, now, project, run_id, target),
                 )
+            # The web API writes "starting" before Popen. The worker's first
+            # idempotent create call is the durable starting -> running edge.
+            if status == "running":
+                conn.execute(
+                    "UPDATE run_records SET status='running', updated_at=? "
+                    "WHERE project=? AND run_id=? AND target=? "
+                    "AND status='starting'",
+                    (now, project, run_id, target),
+                )
             row = conn.execute(
                 "SELECT project, run_id, status, target, base_commit, "
                 "checkpoint_json, checkpoint_version, updated_at "
@@ -171,6 +180,27 @@ class EventStore:
         if row[3] != target:
             raise ValueError("Run-ID existiert bereits mit anderem Ziel")
         return self._run_record_from_row(row)
+
+    def transition_run_status(
+        self,
+        project: str,
+        run_id: str,
+        *,
+        expected_status: str,
+        status: str,
+    ) -> bool:
+        """Compare-and-swap one lifecycle status without changing checkpoint data."""
+        if not expected_status or not status or expected_status == status:
+            raise ValueError("Run-Status-Uebergang muss zwei Statuswerte enthalten")
+        now = datetime.now(UTC).isoformat()
+        with closing(self._connect()) as conn:
+            cur = conn.execute(
+                "UPDATE run_records SET status=?, updated_at=? "
+                "WHERE project=? AND run_id=? AND status=?",
+                (status, now, project, run_id, expected_status),
+            )
+            conn.commit()
+        return cur.rowcount == 1
 
     @staticmethod
     def _run_record_from_row(row: tuple[Any, ...]) -> dict[str, Any]:

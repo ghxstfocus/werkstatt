@@ -120,6 +120,45 @@ def test_run_record_wrong_target_retry_does_not_mutate_base_commit(
     assert record["base_commit"] == "correct-pin"
 
 
+def test_run_record_starting_transitions_to_running_once(
+    tmp_path: Path,
+) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    starting = store.create_run_record(
+        "demo", "run-starting", "Build feature", status="starting",
+    )
+    assert starting["status"] == "starting"
+
+    running = store.create_run_record("demo", "run-starting", "Build feature")
+    assert running["status"] == "running"
+    assert not store.transition_run_status(
+        "demo", "run-starting",
+        expected_status="starting", status="failed",
+    )
+
+
+def test_run_status_transition_uses_compare_and_swap(
+    tmp_path: Path,
+) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record(
+        "demo", "run-transition", "Build feature", status="starting",
+    )
+
+    assert store.transition_run_status(
+        "demo", "run-transition",
+        expected_status="starting", status="failed",
+    )
+    assert not store.transition_run_status(
+        "demo", "run-transition",
+        expected_status="starting", status="running",
+    )
+    record = store.get_run_record("demo", "run-transition")
+    assert record is not None
+    assert record["status"] == "failed"
+    assert record["checkpoint_version"] == 0
+
+
 def test_run_record_checkpoint_is_compare_and_swap(tmp_path: Path) -> None:
     store = EventStore(db_pfad=tmp_path / "events.db")
     record = store.create_run_record(

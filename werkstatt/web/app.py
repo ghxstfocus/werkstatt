@@ -973,7 +973,7 @@ def create_app() -> FastAPI:
                 if not resume_mode:
                     try:
                         EventStore().create_run_record(
-                            projektname, run_id, aufgabe,
+                            projektname, run_id, aufgabe, status="starting",
                         )
                     except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
                         registry.set_state(projektname, run_id, "idle")
@@ -995,6 +995,10 @@ def create_app() -> FastAPI:
                         },
                     )
                     if not geschrieben:
+                        EventStore().transition_run_status(
+                            projektname, run_id,
+                            expected_status="starting", status="failed",
+                        )
                         registry.set_state(projektname, run_id, "idle")
                         raise HTTPException(
                             status_code=500,
@@ -1018,6 +1022,10 @@ def create_app() -> FastAPI:
                         start_new_session=(os.name == "posix"),
                     )
                 except OSError as exc:
+                    EventStore().transition_run_status(
+                        projektname, run_id,
+                        expected_status="starting", status="failed",
+                    )
                     registry.set_state(projektname, run_id, "idle")
                     if _log_fh is not None:
                         _log_fh.close()

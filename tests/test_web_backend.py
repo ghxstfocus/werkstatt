@@ -59,8 +59,13 @@ class _NullEventStore:
             "project": project,
             "run_id": run_id,
             "target": target,
-            "status": "running",
+            "status": _kwargs.get("status", "running"),
         }
+
+    def transition_run_status(
+        self, *_args: Any, **_kwargs: Any,
+    ) -> bool:
+        return True
 
 
 def _reset_loop_registry(app_modul: Any) -> None:
@@ -70,6 +75,57 @@ def _reset_loop_registry(app_modul: Any) -> None:
     app_modul._LAUFENDE_LOOPS.clear()
     app_modul._LOOP_RUN_IDS.clear()
     app_modul._PAUSIERTE_LOOPS.clear()
+
+
+def test_failed_worker_spawn_marks_run_record_failed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt.event_store import EventStore
+    from werkstatt.web import app as app_modul
+
+    docs = tmp_path / "demo" / "docs"
+    docs.mkdir(parents=True)
+    (docs / "STATUS.md").write_text(
+        "### OP-999: Spawn failure test\n"
+        "- **Status:** open\n"
+        "- **Blockiert von:** —\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    _reset_loop_registry(app_modul)
+    store = EventStore(tmp_path / "events.db")
+    created_run_ids: list[str] = []
+    create_run_record = store.create_run_record
+
+    def _capture_create(
+        project: str, run_id: str, target: str, **kwargs: Any,
+    ) -> dict[str, Any]:
+        created_run_ids.append(run_id)
+        return create_run_record(project, run_id, target, **kwargs)
+
+    monkeypatch.setattr(store, "create_run_record", _capture_create)
+    monkeypatch.setattr(app_modul, "EventStore", lambda: store)
+
+    def _popen_fails(*_args: Any, **_kwargs: Any) -> Any:
+        raise OSError("synthetic worker spawn failure")
+
+    monkeypatch.setattr(app_modul.subprocess, "Popen", _popen_fails)
+    client = TestClient(app_modul.app)
+
+    response = client.post(
+        "/api/projects/demo/start", json={"op_id": "OP-999"},
+    )
+
+    assert response.status_code == 500
+    assert len(created_run_ids) == 1
+    record = store.get_run_record("demo", created_run_ids[0])
+    assert record is not None
+    assert record["status"] == "failed"
+    assert record["checkpoint_version"] == 0
 
 
 def test_loop_subprozess_start_stop(
