@@ -104,6 +104,17 @@ def _persist_run_checkpoint(
         })
 
     checkpoint = dict(record["checkpoint"])
+    try:
+        inbox_offset = int(checkpoint.get("inbox_offset", 0))
+    except (TypeError, ValueError):
+        inbox_offset = 0
+    # The checkpoint is written before inbox acknowledgement. If the worker
+    # dies in that gap, a later lease retry must not project the same notice
+    # twice into the durable checkpoint.
+    notices = [
+        notice for notice in notices
+        if int(notice["seq"]) > inbox_offset
+    ]
     prior_notices = checkpoint.get("job_notices", [])
     if not isinstance(prior_notices, list):
         prior_notices = []
@@ -120,7 +131,7 @@ def _persist_run_checkpoint(
     }
     if claimed:
         checkpoint["inbox_offset"] = max(
-            int(checkpoint.get("inbox_offset", 0)),
+            inbox_offset,
             max(int(message["seq"]) for message in claimed),
         )
     if run_state is not None:

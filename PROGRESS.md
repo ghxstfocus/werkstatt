@@ -5917,3 +5917,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - GitHub Actions Quality Gate Run [43334447467](https://github.com/ghxstfocus/werkstatt/actions/runs/43334447467) auf Commit `76822cd` ist erfolgreich. Installation, JS-Syntax, Ruff, pytest und Quality Gate sind gruen.
 - Der neue Test trennt Worker und Webserver als unabhaengige OS-Prozesse und belegt per HTTP denselben PID/Run-Kontext vor und nach einem Webserver-Neustart. Er verwendet einen Probe-Worker; vollstaendige produktive Loop-Ausfuehrung und zehn UI-Runs sind damit nicht abgenommen.
+
+
+## ADR-0032 M1 — Inbox-Replay bei Checkpoint-Absturz (2026-11-13)
+
+- Der Worker schreibt den Run-Checkpoint vor der Inbox-Bestaetigung. Ein Prozessabbruch in diesem Fenster laesst die Nachricht nach Ablauf der Lease erneut beanspruchen. Der Checkpoint-Offset wird jetzt als Idempotenzgrenze fuer die Projektion verwendet: wiederholte Zustellung bleibt quittierbar, erzeugt aber keinen doppelten Job-Hinweis.
+- Ein Regressionstest simuliert den Absturz genau zwischen Checkpoint-Schreibvorgang und Inbox-Ack, laesst die Lease ablaufen und belegt die einmalige Projektion nach Wiederaufnahme.
+- Vollstaendiger Worker-Neustart und HTTP-Reconnect sind separat durch den vorherigen OP-397-Test abgedeckt.
