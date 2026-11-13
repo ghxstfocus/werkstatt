@@ -212,6 +212,7 @@ def test_run_job_uses_then_removes_checkpoint_snapshot(
         jobs.db_path, "demo", project_dir, job["job_id"],
     )
     result = jobs.get(job["job_id"])
-    assert result is not None and result["state"] == "succeeded", result
+    assert result is not None
+    assert result["state"] == "succeeded", (result.get("error"), result.get("events"))
     assert seen == [(snapshot.path, "captured state\n")]
     assert not snapshot.path.exists()
