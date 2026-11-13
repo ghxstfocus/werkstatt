@@ -270,7 +270,7 @@ def _diagnose(_args: dict[str, Any]) -> str:
 
 
 def _read_status(_args: dict[str, Any]) -> str:
-    """STATUS.md + PROGRESS.md plus strukturierte OP-Zusammenfassung."""
+    """Read current queue, roadmap, architecture and the root progress tail."""
     teile: list[str] = []
     try:
         from werkstatt.web.inspector import parse_ops
@@ -286,16 +286,23 @@ def _read_status(_args: dict[str, Any]) -> str:
     except Exception as exc:  # noqa: BLE001
         teile.append(f"## OP-Zusammenfassung: Fehler ({exc})\n")
 
-    for name in ("docs/STATUS.md", "docs/PROGRESS.md"):
-        pfad = _aktives_projekt_dir() / name
+    dokumente = (
+        ("docs/STATUS.md", 12_000, "head"),
+        ("docs/ROADMAP.md", 8_000, "head"),
+        ("docs/ARCHITECTURE.md", 8_000, "head"),
+        ("PROGRESS.md", 16_000, "tail"),
+    )
+    basis = _aktives_projekt_dir()
+    for name, limit, richtung in dokumente:
+        pfad = basis / name
         if pfad.is_file():
             try:
                 inhalt = pfad.read_text(encoding="utf-8", errors="replace")
             except OSError:
+                teile.append(f"## {name}\n[Datei konnte nicht gelesen werden.]\n")
                 continue
-            limit = 12_000 if name.endswith("STATUS.md") else 16_000
             if len(inhalt) > limit:
-                if name.endswith("PROGRESS.md"):
+                if richtung == "tail":
                     start = len(inhalt) - limit
                     zeilenende = inhalt.find("\n", start)
                     if zeilenende >= start and zeilenende - start <= 2_000:
@@ -314,8 +321,10 @@ def _read_status(_args: dict[str, Any]) -> str:
             else:
                 text = inhalt
             teile.append(f"## {name}\n{text}\n")
+        else:
+            teile.append(f"## {name}\n[Fehlt im aktiven Projekt.]\n")
 
-    return "\n".join(teile) if teile else "(STATUS.md/PROGRESS.md nicht gefunden)"
+    return "\n".join(teile)
 
 def _next_op(_args: dict[str, Any]) -> str:
     """Liefert begruendete STATUS-OP-Auswahl ohne einen Run zu starten."""
@@ -726,7 +735,11 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
         "mode": "read",
     },
     "read_status": {
-        "description": "STATUS.md-Queue und neuester PROGRESS.md-Auszug; bei Bedarf mit grep gezielt nachpruefen.",
+        "description": (
+            "Liest die aktuelle STATUS-Queue, ROADMAP, ARCHITECTURE und "
+            "den neuesten Auszug aus der Root-PROGRESS.md; bei Bedarf mit "
+            "grep gezielt Fundstellen nachpruefen."
+        ),
         "parameters": {"type": "object", "properties": {}},
         "fn": _read_status,
         "mode": "read",

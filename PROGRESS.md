@@ -6298,6 +6298,15 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - Die GitHub-Actions-Schritte fuer JavaScript-Syntax, Ruff, pytest-Diagnose und Quality Gate sind alle erfolgreich. Der Run belegt den Commit im PR-Branch, nicht den Produktionsserver und nicht den gesamten ADR-0032-Umbau.
 - Der Implementierungsumfang bleibt bewusst begrenzt: Run-gebundene Lese-/Debugger-Jobs werden am sicheren Checkpoint sichtbar auditiert. Allgemeine Fragen, Steueraktionen, Gate-Antworten und Schreibauftraege sind weiterhin offen in OP-401; eine vollstaendige adaptive Run-SSOT ist damit nicht behauptet.
 
+## 2026-11-13 — Chat-Statusabgleich auf kanonische Living Docs korrigieren
+
+- **Befund:** Das Chat-Werkzeug `read_status` suchte `docs/PROGRESS.md`, obwohl die Doku-Konvention diese verbotene Duplikatdatei ausdruecklich zugunsten von Root-`PROGRESS.md` ausschliesst. Es gab damit den Chat keine aktuelle Historie, wenn wie im Werkstatt-Checkout nur die Root-Datei existiert. Zudem fehlten ROADMAP und ARCHITECTURE im kompakten Statusabgleich.
+- **Aenderung:** `read_status` liefert jetzt `docs/STATUS.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md` und den neuesten begrenzten Auszug aus Root-`PROGRESS.md`, jeweils mit expliziter Quelle und Markierung fuer fehlende oder gekuerzte Dateien. Es liest nie den verbotenen Duplikatpfad.
+- **Regression:** Fixture mit langer Root-PROGRESS und absichtlich vorhandener falscher `docs/PROGRESS.md`-Kopie belegt, dass nur der neueste Root-Auszug sowie alle drei Living Docs ausgegeben werden.
+- **Verifikation lokal:** Der gezielte Regressionstest `tests/test_chat_tools.py::test_read_status_liefert_neuesten_progress_abschnitt` besteht (1 passed). Ruff fuer `werkstatt/chat_tools.py` und `tests/test_chat_tools.py`, strikter Doku-Drift-Check und `git diff --check` bestehen. Der komplette Chat-Tools-Testlauf auf Windows hat 25 bestanden und 6 bestehende Tests mit festem Linux-Checkout `/opt/werkstatt` verfehlt; diese Tests koennen hier den Linux-CI-Lauf nicht ersetzen.
+- **Vorheriger Referenzlauf:** GitHub Actions Quality Gate [Run 43428534562](https://github.com/ghxstfocus/werkstatt/actions/runs/43428534562) fuer vorherigen Stand `404c0c24ed4de0cd228fc359e29fb743d4228ad6` ist gruen (JS-Syntax, Ruff, volle Pytest-Suite und Quality Gate). Er prueft diese neue Status-Tool-Aenderung noch nicht; CI fuer den aktuellen Fix folgt.
+- **Grenze:** Das verbessert die Kontextgrundlage des Chats; es implementiert nicht den fehlenden persistenten adaptiven Run-Koordinator aus ADR-0032 M1/M2.
+
 ## 2026-11-13 — Rueckkehr paralleler Chat-Jobs am Checkpoint sichtbar machen
 
 - **Befund:** Der laufende Run erhielt beim Start eines parallelen Lese-/Debuggerjobs einen Inbox-Hinweis. Nach Abschluss, Fehler oder Abbruch gab es jedoch keinen zweiten Run-Inbox-Beleg. Der Run konnte daher die Rueckkehr des Nebenjobs an einem spaeteren Checkpoint nicht nachvollziehen.
