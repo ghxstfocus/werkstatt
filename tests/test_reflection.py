@@ -263,10 +263,13 @@ def test_post_build_verify_recovery_targets_failed_stages_with_run_budget(
         budget={"max_llm_calls": 30, "max_minutes": 15},
     )
     recovery = MagicMock(return_value=True)
+    full_verify = MagicMock(return_value=(True, []))
     monkeypatch.setattr(tasks, "_reflection_loop", recovery)
+    monkeypatch.setattr(tasks, "_verify_patches_soft", full_verify)
     monkeypatch.setattr(tasks, "audit", MagicMock())
 
     assert tasks._reflect_verify_failure(state, phase="post_build") is True
+    full_verify.assert_called_once_with(state, phase="post_build")
     recovery.assert_called_once_with(
         state,
         max_runden=None,
@@ -302,3 +305,44 @@ def test_post_build_verify_recovery_stays_bounded_without_run_budget(
 
     assert tasks._reflect_verify_failure(state, phase="post_build") is False
     recovery.assert_called_once_with(state)
+
+
+def test_post_build_recovery_rechecks_full_phase_and_targets_new_failures(
+    tmp_path, monkeypatch,
+):
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from werkstatt.phases import tasks
+
+    verify_dir = tmp_path / ".werkstatt"
+    verify_dir.mkdir()
+    (verify_dir / "verify.json").write_text(
+        json.dumps({"stages": [
+            {"id": "pytest_regression", "phase": "post_build"},
+            {"id": "ruff", "phase": "post_build"},
+        ]}),
+        encoding="utf-8",
+    )
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        last_verify_errors=["pytest_regression: assertion failed"],
+        budget={"max_llm_calls": 30},
+    )
+    recovery = MagicMock(side_effect=[
+        setattr(state, "last_verify_errors", ["ruff-Fehler: timeout"]) or True,
+        setattr(state, "last_verify_errors", []) or True,
+    ])
+    full_verify = MagicMock(side_effect=[(False, []), (True, [])])
+    monkeypatch.setattr(tasks, "_reflection_loop", recovery)
+    monkeypatch.setattr(tasks, "_verify_patches_soft", full_verify)
+    monkeypatch.setattr(tasks, "audit", MagicMock())
+
+    assert tasks._reflect_verify_failure(state, phase="post_build") is True
+    assert [
+        call.kwargs["verify_stage_ids"]
+        for call in recovery.call_args_list
+    ] == [{"pytest_regression"}, {"ruff"}]
+    assert full_verify.call_count == 2
