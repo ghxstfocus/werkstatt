@@ -1413,26 +1413,72 @@ def create_app() -> FastAPI:
         return {"links": _insp.aggregate_evidence_links(projekt, run_id=run_id)}
 
     @app.get("/api/projects/{name}/diff")
-    def project_diff(name: str, ref: str = "HEAD") -> dict[str, Any]:
-        """git diff gegen ref (default HEAD), als Text + Stat."""
+    def project_diff(
+        name: str,
+        ref: str = "HEAD",
+        run_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Diff des aktuellen Run-Checkouts gegen seine Basisrevision."""
         import subprocess as _sp
         projektname = _pruefe_projektname(name)
         ref = _pruefe_ref(ref)
         basis = _PROJECTS_BASE / projektname
+        basis_ref = ref
+        record = _loop_registry().read(projektname)
+        if record is not None:
+            registry_run_id = record.get("run_id")
+            if not isinstance(registry_run_id, str):
+                raise HTTPException(
+                    status_code=409, detail="Registry-Run-ID ist ungueltig",
+                )
+            if run_id is not None and _pruefe_run_id(run_id) != registry_run_id:
+                raise HTTPException(status_code=404, detail="Run nicht gefunden")
+            run_id = registry_run_id
+        elif run_id is not None:
+            _pruefe_run_id(run_id)
+            raise HTTPException(status_code=404, detail="Run nicht gefunden")
+
+        if record is not None:
+            context = record.get("context")
+            source = context.get("source") if isinstance(context, dict) else None
+            if isinstance(source, dict) and source.get("kind") == "github":
+                from werkstatt.web.run_recovery import (
+                    RunRecoveryError,
+                    _validate_github_worktree,
+                )
+
+                if not isinstance(run_id, str):
+                    raise HTTPException(
+                        status_code=409, detail="Registry-Run-ID ist ungueltig",
+                    )
+                try:
+                    basis = _validate_github_worktree(basis, run_id, source)
+                except RunRecoveryError as exc:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"GitHub-Run-Diff nicht sicher verfuegbar: {exc}",
+                    ) from exc
+                if ref == "HEAD":
+                    basis_ref = str(source["pinned_sha"])
         try:
             stat = _sp.run(
-                ["git", "diff", "--stat", ref, "--"],
+                ["git", "diff", "--stat", basis_ref, "--"],
                 capture_output=True, text=True, timeout=10,
                 cwd=str(basis), check=False,
             ).stdout
             diff = _sp.run(
-                ["git", "diff", ref, "--"],
+                ["git", "diff", basis_ref, "--"],
                 capture_output=True, text=True, timeout=20,
                 cwd=str(basis), check=False,
             ).stdout
         except (_sp.TimeoutExpired, OSError) as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
-        return {"ref": ref, "stat": stat[:20_000], "diff": diff[:200_000]}
+        return {
+            "ref": basis_ref,
+            "run_id": run_id,
+            "stat": stat[:20_000],
+            "diff": diff[:200_000],
+        }
 
     @app.get("/api/projects/{name}/verify")
     def project_verify(name: str) -> dict[str, Any]:
@@ -1672,6 +1718,7 @@ def create_app() -> FastAPI:
         """Liefert aktive und letzte fehlgeschlagene Jobs fuer Reconnect."""
         from werkstatt.chat_jobs import (
             ChatJobStore,
+            fail_uncheckpointed_jobs_for_inactive_run,
             resume_chat_jobs,
             sync_completed_job_turns,
         )
@@ -1680,6 +1727,19 @@ def create_app() -> FastAPI:
         sid = _pruefe_session_id(session_id)
         db_path = _PROJECTS_BASE / ".werkstatt" / "chat-jobs" / f"{projekt}.db"
         try:
+            run_record = _loop_registry().read(projekt)
+            run_state = run_record.get("state") if run_record else None
+            protected_states = {
+                "starting", *_LOOP_PROCESS_STATES, "orphaned",
+            }
+            active_run_id = (
+                str(run_record["run_id"])
+                if run_record and run_state in protected_states
+                else None
+            )
+            fail_uncheckpointed_jobs_for_inactive_run(
+                projekt, active_run_id, db_path=db_path,
+            )
             resume_chat_jobs(
                 projekt, (_PROJECTS_BASE / projekt).resolve(), db_path=db_path,
             )
@@ -1836,20 +1896,67 @@ def create_app() -> FastAPI:
                     result.get("gestartet") is False
                     and result.get("grund") == "laeuft_bereits"
                 ):
-                    error = (
-                        "Loop laeuft bereits; Auftrag wurde nicht gestartet "
-                        "oder eingereiht."
+                    active_run_id = _LOOP_RUN_IDS.get(projekt)
+                    run_record = (
+                        EventStore().get_run_record(projekt, active_run_id)
+                        if isinstance(active_run_id, str) and active_run_id
+                        else None
                     )
-                    session.append("loop_action_not_started", {
+                    if (
+                        not isinstance(active_run_id, str)
+                        or not active_run_id
+                        or run_record is None
+                    ):
+                        raise HTTPException(
+                            status_code=409,
+                            detail=(
+                                "Aktiver Run hat keinen belastbaren Checkpoint; "
+                                "der Folgeauftrag wurde nicht angenommen."
+                            ),
+                        )
+                    followup = {
                         "proposal_id": proposal_id,
-                        "error": error,
-                        "result": result,
+                        "project": projekt,
+                        "session_id": sid,
+                        "parent_run_id": active_run_id,
+                        "base_commit": run_record.get("base_commit"),
+                        "checkpoint_version": run_record.get("checkpoint_version"),
+                        "request": arguments.get("aufgabe", ""),
+                        "op_id": arguments.get("op_id"),
+                    }
+                    try:
+                        inbox_seq = EventStore().enqueue_run_message(
+                            projekt,
+                            active_run_id,
+                            f"chat-followup:{proposal_id}",
+                            "chat_followup_request",
+                            followup,
+                        )
+                    except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
+                        raise HTTPException(
+                            status_code=409,
+                            detail=f"Folgeauftrag nicht dauerhaft angenommen: {exc}",
+                        ) from exc
+                    followup["inbox_seq"] = inbox_seq
+                    detail = (
+                        "Folgeauftrag dauerhaft eingereiht und am nächsten "
+                        "sicheren Checkpoint zur Einordnung sichtbar. Das "
+                        "Hauptziel bleibt erhalten; Ausführung erst nach "
+                        "Einordnung und nötiger Freigabe."
+                    )
+                    session.append("loop_action_queued", {
+                        "proposal_id": proposal_id,
+                        "run_id": active_run_id,
+                        "inbox_seq": inbox_seq,
+                        "request": followup["request"],
+                        "detail": detail,
+                        "result": {"run_id": active_run_id, "inbox_seq": inbox_seq},
                     })
                     return {
                         "proposal_id": proposal_id,
-                        "state": "not_started",
-                        "detail": error,
-                        "result": result,
+                        "state": "queued",
+                        "detail": detail,
+                        "result": {"run_id": active_run_id, "inbox_seq": inbox_seq},
                     }
             elif action == "pause":
                 result = project_pause(projekt)

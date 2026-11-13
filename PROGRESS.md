@@ -6219,3 +6219,238 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - GitHub Actions Quality-Gate fuer den vollständigen Fix-Stand: [Run 43390871808](https://github.com/ghxstfocus/werkstatt/actions/runs/43390871808) erfolgreich.
 - Ergebnis: 2.184 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 0, Audit-Katalog bestanden.
 - Der Lauf deckt den Standard-Reflection-Pfad ueber fuenf Reparaturschritte, Reviewer-Nachpruefung nach leerem Patch sowie den aktiven Task mit sichtbarem Verify-Timeline-Event ab.
+
+
+## 2026-11-13 — Nächster belegter Schritt nach grünem Task
+
+- Beim Taskabschluss wurde der Fortschritt der Akzeptanzkriterien bereits auditiert, aber der nächste Schritt fehlte in diesem Ereignis. Damit ließ sich in der Control-Timeline nicht erkennen, ob der Loop einen freigegebenen Task fortsetzt, offene/blockierte Abhängigkeiten klärt oder zur Abschlussprüfung übergeht.
+- Das Kriterienfortschritts-Ereignis trägt nun die gespeicherten Kriterienbelege, eine kurze Entscheidungszusammenfassung und den nächsten ausführbaren Task. Sind alle Tasks erledigt, nennt es die Phase-End-Verify; ohne ausführbaren Task meldet es die nötige Klärung offener Abhängigkeiten.
+- Die Timeline zeigt den nächsten Schritt kompakt hinter der Kriterienabdeckung. Es werden keine rohen Modellgedanken protokolliert.
+- Regressionstests prüfen Task-Fortsetzung, Übergang zur Phase-End-Verify und lesbare Timeline-Ausgabe.
+- Vollständiger GitHub-Quality-Gate-Lauf [43408415562](https://github.com/ghxstfocus/werkstatt/actions/runs/43408415562): 2.185 Tests bestanden, 5 übersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden. Der abschließende Quality-Gate meldet `ok: true`, `regression: false`.
+
+## 2026-11-13 — Builder-Heartbeat in Control lesbar machen
+
+- Die bestehende Agent-API sendet bereits Start-, Heartbeat- und Abschlussereignisse mit Task- und Dateikontext; die Live-Projektion verwendet den aktuellen Heartbeat auch fuer die temporaere Aktivitaetszeile im Projektchat.
+- Im Control-Feed wurde der Heartbeat bislang mit dem rohen technischen Eventnamen `llm_call_heartbeat` beschriftet. Die Timeline benennt Start, laufenden Modellaufruf und Abschluss jetzt einheitlich und menschlich.
+- Ein Regressionstest prueft Label und Detailtext mit Task, Dateien und Laufzeit. Das schliesst die lesbare Timeline-Luecke, beweist aber nicht allein alle OP-395-Kriterien (Reconnect, Heartbeat-Fallback und parallele Chatfragen).
+- GitHub Actions Quality Gate [Run 43409943398](https://github.com/ghxstfocus/werkstatt/actions/runs/43409943398): 2.185 Tests bestanden, 5 uebersprungen; JavaScript-Syntax, Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden; `ok: true`, `regression: false`.
+
+
+## 2026-11-13 — Parallele Chat-Jobs am Run-Checkpoint sichtbar machen
+
+- Der Task-Loop speicherte `job_notice` zwar in seinem Checkpoint, zeigte aber nicht als eigenes Control-Ereignis, dass der laufende Run einen Chat-Job aufgenommen hat. Damit fehlte ein nachvollziehbarer Beleg fuer die Uebergabe zwischen Chat und Loop.
+- Neue Lese-/Debugger-Job-Hinweise werden jetzt am sicheren Task-Checkpoint mit Modus, Job-/Inbox-ID, Session und Chat-Kontextsequenz in der Timeline protokolliert. Die stabile Audit-ID dedupliziert Wiederholungen nach einem Crash zwischen Audit und Checkpoint. Der Eintrag enthaelt keine Nutzernachricht oder Modellgedanken und bestaetigt ausdruecklich, dass das Run-Hauptziel unveraendert bleibt.
+- Der Checkpoint wird erst nach erfolgreichem Audit geschrieben; die Inbox-Nachricht wird erst danach bestaetigt. Bei Audit-Fehler bleibt sie unbestaetigt und kann nach Ablauf der Lease erneut verarbeitet werden.
+- **Grenze:** Das ist die beobachtbare Uebergabe fuer parallel laufende Lese-/Diagnosejobs. Fragen, Gate-Antworten, Steueraktionen und neue Schreibauftraege werden dadurch noch nicht vom Koordinator klassifiziert oder in den Arbeitsgraphen aufgenommen; OP-401/M1 bleibt offen.
+- **Verifikation lokal:** `tests/test_event_store.py`, `tests/test_chat_jobs.py`, `tests/test_live_feed_backend.py`, `tests/test_audit_warnung.py`: 61 bestanden. Ruff fuer geaenderte Python-Dateien: bestanden. `git diff --check` und strikter Doku-Drift-Check: bestanden. Das vollstaendige Quality Gate ist auf dem Windows-Checkout nicht aussagekraeftig: die projektspezifischen Subprozess-Aufrufe finden dort `pytest`/`mypy` nicht konsistent, und die Vollsuite enthaelt Linux-Pfade sowie POSIX-Signale. GitHub-CI fuer diesen Stand ist noch nicht ausgefuehrt.
+
+## 2026-11-13 — Zieltext und Akzeptanzkriterien am Task-Checkpoint
+
+- Der Checkpoint nach einem grünen Task zeigte bisher IDs und den nächsten Task, aber nicht den Wortlaut des übergeordneten Ziels oder der offenen Akzeptanzkriterien. Damit war die Entscheidung in Control nur teilweise gegen den Auftrag prüfbar.
+- Das Ereignis enthält jetzt den gespeicherten Zieltext, die konkret erfüllten und offenen Kriterien sowie einen kompakten Status des verbleibenden Task-Graphen. Die Felder sind auf fünf kurze Belege begrenzt; Modellgedanken und Prompts werden nicht protokolliert.
+- Regressionstests prüfen den Ziel-/Kriterienbezug bei Fortsetzung und beim Übergang zur Phase-End-Verify. Der bestehende Checkpoint bestimmt weiter den nächsten freigegebenen Task; diese Änderung ist Observability und Zielabgleich, noch keine dynamische Neuplanung.
+
+### Nachpruefung des Ziel-Checkpoints
+
+- Der erste CI-Lauf nach der Ergaenzung war rot: Ruff meldete zweimal RUF010 in der Anzeige verbleibender Task-IDs/-Status; pytest und Quality Gate wurden deshalb uebersprungen. Die Ursache lag in expliziten `str()`-Aufrufen innerhalb von f-Strings.
+- Die Ausgabe wurde mit expliziten Formatkonvertierungen korrigiert. Danach liefen JavaScript-Syntax, Ruff und die komplette Suite erfolgreich: 2.185 bestanden, 5 uebersprungen.
+- GitHub Actions Quality Gate [Run 43416255092](https://github.com/ghxstfocus/werkstatt/actions/runs/43416255092) bestaetigt: Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden, `ok: true`, `regression: false`.
+
+## 2026-11-13 — Kriterien-Checkpoint darf nicht still ausfallen
+
+- Review des grünen Task-Checkpoint-Schritts fand einen Fehlerpfad: Wenn die Kriterienberechnung oder das Fortschritts-Audit nach `mark_done` scheitert, blieb der Task korrekt erledigt, aber der fehlende Zielabgleich wurde still verschluckt.
+- Der Taskstatus bleibt erhalten; der Loop schreibt einen separaten, redigierten Fehlerbefund mit Task-ID und Fehlertyp. Die Meldung benennt jetzt den tatsächlich erzwungenen nächsten Schritt: Phase-End-Verify berechnet den Zielabgleich erneut; bei Fehlern oder offenen Kriterien wird kein `loop_erfolg` geschrieben. Exception-Texte werden nicht persistiert.
+- Regressionstest belegt beides: `done` bleibt bestehen und der Checkpoint-Ausfall erscheint sichtbar. GitHub Actions Quality Gate [43417405532](https://github.com/ghxstfocus/werkstatt/actions/runs/43417405532) erfolgreich: 2.186 Tests bestanden, 5 übersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden; `ok: true`, `regression: false`.
+
+- Ein zusaetzlicher Integrationsregressionstest fuehrt den Taskabschluss mit einem temporaeren Kriterienfehler aus und laesst anschliessend die echte Phase-End-Verify laufen. Er prueft, dass die Kriterienberechnung dort erneut aufgerufen wird und Erfolg erst nach dem zweiten, gruenen Zielabgleich moeglich ist. GitHub Actions Quality Gate [Run 43419490145](https://github.com/ghxstfocus/werkstatt/actions/runs/43419490145) erfolgreich: 2.187 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden; `ok: true`, `regression: false`.
+
+
+### Chat-Kontext — aktuelle Fortschritte aus PROGRESS.md (2026-11-13)
+
+Die Chat-Funktion `read_status` lieferte bisher den Anfang der append-only
+`PROGRESS.md`. Bei langen Dateien zeigte das fruehe Projekthistorie statt
+der neuesten Arbeit. Die Ausgabe ist jetzt begrenzt und markiert die
+Richtung des Auszugs: Queue am Anfang von `docs/STATUS.md`, neueste
+Eintraege am Ende von `PROGRESS.md`. Ein Regressionstest belegt, dass
+junge Eintraege sichtbar sind und alte Historie nicht als aktueller Stand
+erscheint. Das beseitigt eine konkrete Ursache fuer die beobachtete falsche
+Zusammenfassung; der Chat muss fuer exakte Fundstellen weiterhin gezielt
+`grep` bzw. `read_file` verwenden. Die Standard-Chat-Schleife ist im
+aktuellen Code unbegrenzt; identische wiederholte Werkzeugzyklen werden
+stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
+- **Commit:** `c906fba625e617e3d74d6fe166a44018feb84de4`
+- **Commit:** `edfbb450646166c9fcd86f54f800f0a6e6799a3e`
+
+
+## 2026-11-13 — Arbeitsvertrag: Ziel halten, erneut abgleichen, exakt dokumentieren
+
+- Der Nutzer hat den Qualitaetsmassstab praezisiert: Werkstatt soll wie ein zielorientierter Assistent weiterarbeiten, Zwischenanliegen aufnehmen, wiederholt den Ist-Stand abgleichen und erledigte Schritte mit belastbaren Belegen dokumentieren.
+- ADR-0032 legt diesen Ablauf jetzt explizit fest: Hauptziel und Run-Identitaet bleiben bei Zwischenfragen erhalten; neue Nachrichten werden klassifiziert; Checkpoints gleichen Freigabe, Kriterien, Inbox, Code/Doku, Verify-Belege und Reparaturversuche ab. Gruene Teilpruefungen gelten nur fuer ihren geprueften SHA und beenden keinen noch offenen Auftrag.
+- Dokumentationsvertrag geschaerft: relevante Aenderungen bekommen PROGRESS mit tatsaechlich ausgefuehrten Checks; STATUS schliesst OPs nur nach belegten Kriterien; ROADMAP/ARCHITECTURE/ADRs werden bei passender Fokus- bzw. Verhaltensaenderung aktualisiert. Die Abschlussantwort wird gegen Diff und exakten Pruefstand abgeglichen.
+- OP-401 uebernimmt die Verhaltens- und Regressionserwartungen fuer Zwischenfragen, Folgeauftraege und erneuten Ziel-/Doku-Abgleich.
+- **Wichtig: Das ist eine Spezifikations- und Queue-Aenderung, keine Behauptung, dass der adaptive Run-Koordinator bereits implementiert ist.** Laut Ist-Aufnahme konsumiert der Task-Loop weiterhin nur `job_notice`; Fragen, Steuerung, Gate-Antworten und Schreibauftraege haben noch keinen vollstaendigen produktiven Dispatcher. Diese Implementierung bleibt offen in OP-401/ADR-0032 M1.
+- Geaendert: `docs/adr/ADR-0032-adaptiver-zielorientierter-run-kern.md`, `docs/STATUS.md`, `PROGRESS.md`. Code- oder Laufzeittests wurden fuer diese reine Doku-Aenderung nicht ausgefuehrt.
+
+## 2026-11-13 — CI-Beleg fuer Checkpoint-Uebergabe
+
+- Der zuvor als ausstehend dokumentierte GitHub-CI-Lauf fuer die parallele Chat-Job-Uebergabe ist abgeschlossen: [Quality Gate Run 43425088713](https://github.com/ghxstfocus/werkstatt/actions/runs/43425088713) ist fuer Commit `48e10bf0ecc4f6167915b3b3cc7585ee8d9e7cda` erfolgreich.
+- Die GitHub-Actions-Schritte fuer JavaScript-Syntax, Ruff, pytest-Diagnose und Quality Gate sind alle erfolgreich. Der Run belegt den Commit im PR-Branch, nicht den Produktionsserver und nicht den gesamten ADR-0032-Umbau.
+- Der Implementierungsumfang bleibt bewusst begrenzt: Run-gebundene Lese-/Debugger-Jobs werden am sicheren Checkpoint sichtbar auditiert. Allgemeine Fragen, Steueraktionen, Gate-Antworten und Schreibauftraege sind weiterhin offen in OP-401; eine vollstaendige adaptive Run-SSOT ist damit nicht behauptet.
+
+## 2026-11-13 — Chat-Statusabgleich auf kanonische Living Docs korrigieren
+
+- **Befund:** Das Chat-Werkzeug `read_status` suchte `docs/PROGRESS.md`, obwohl die Doku-Konvention diese verbotene Duplikatdatei ausdruecklich zugunsten von Root-`PROGRESS.md` ausschliesst. Es gab damit den Chat keine aktuelle Historie, wenn wie im Werkstatt-Checkout nur die Root-Datei existiert. Zudem fehlten ROADMAP und ARCHITECTURE im kompakten Statusabgleich.
+- **Aenderung:** `read_status` liefert jetzt `docs/STATUS.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md` und den neuesten begrenzten Auszug aus Root-`PROGRESS.md`, jeweils mit expliziter Quelle und Markierung fuer fehlende oder gekuerzte Dateien. Es liest nie den verbotenen Duplikatpfad.
+- **Regression:** Fixture mit langer Root-PROGRESS und absichtlich vorhandener falscher `docs/PROGRESS.md`-Kopie belegt, dass nur der neueste Root-Auszug sowie alle drei Living Docs ausgegeben werden.
+- **Verifikation lokal:** Der gezielte Regressionstest `tests/test_chat_tools.py::test_read_status_liefert_neuesten_progress_abschnitt` besteht (1 passed). Ruff fuer `werkstatt/chat_tools.py` und `tests/test_chat_tools.py`, strikter Doku-Drift-Check und `git diff --check` bestehen. Der komplette Chat-Tools-Testlauf auf Windows hat 25 bestanden und 6 bestehende Tests mit festem Linux-Checkout `/opt/werkstatt` verfehlt; diese Tests koennen hier den Linux-CI-Lauf nicht ersetzen.
+- **Vorheriger Referenzlauf:** GitHub Actions Quality Gate [Run 43428534562](https://github.com/ghxstfocus/werkstatt/actions/runs/43428534562) fuer vorherigen Stand `404c0c24ed4de0cd228fc359e29fb743d4228ad6` war gruen, pruefte diese Status-Tool-Aenderung aber noch nicht.
+- **Aktueller CI-Nachweis:** GitHub Actions Quality Gate [Run 43429232311](https://github.com/ghxstfocus/werkstatt/actions/runs/43429232311) lief im PR-Merge-Checkout `d48d6183d29f15a61cb2d93ef912cb260e735911`, der den Branch-Stand `2eaade0c64ffb8c64e50d0a3510f452f957bd32f` mit damaligem `main` pruefte: 2.196 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden, `ok: true`, `regression: false`.
+- **Grenze:** Das verbessert die Kontextgrundlage des Chats; es implementiert nicht den fehlenden persistenten adaptiven Run-Koordinator aus ADR-0032 M1/M2.
+
+## 2026-11-13 — Zielabgleich an Checkpoints auch fuer Legacy-Plaene anzeigen
+
+- **Befund:** Der erfolgreiche Task-Abschluss protokollierte `loop_criteria_progress` nur, wenn der Plan explizite und gueltige Akzeptanzkriterien-Verweise hatte. Bei Legacy-Plaenen ohne solche Verweise fehlte der sichtbare erneute Abgleich und der naechste Schritt.
+- **Aenderung:** Jeder erfolgreiche Task-Abschluss schreibt jetzt einen Checkpoint-Eintrag. Wenn Kriterien nicht explizit zugeordnet sind, steht der Status sichtbar auf `untracked`; Beleg und Entscheidungszusammenfassung sagen ausdruecklich, dass der Zielabschluss offen bleibt. Control zeigt eine passende Beschreibung statt irrefuehrend „0 erledigt, 0 offen“.
+- **Regressionen:** Getrackter Fortschritt und Phase-End-Verify bleiben unveraendert; Legacy-Plan zeigt den naechsten Graph-Task und behauptet keinen Kriterienabschluss; Control-Renderer zeigt fehlende Kriterienzuordnung korrekt an.
+- **Verifikation lokal:** `tests/test_loop_phases.py` und `tests/test_live_feed_backend.py`: 50 bestanden. Ruff fuer alle vier geaenderten Python-Dateien sowie strikter Doku-Drift-Check und `git diff --check` bestanden. Der Windows-Gesamtsuite-Lauf war kein gueltiger Gesamtbeleg: 10 bestehende plattformabhaengige Tests scheiterten an festem Linux-Pfad `/opt/werkstatt` bzw. Windows-Pfadseparatoren; danach endete pytest in einem Capture-Timeout.
+- **Linux-CI-Nachweis:** GitHub Actions [Quality Gate Run 43430542793](https://github.com/ghxstfocus/werkstatt/actions/runs/43430542793) pruefte Branch-Commit `8a435ec39adff8ec476701820b76f49aaadf97cf` im PR-Merge-Checkout `856b94e47718db6c5be3c3f587a3415b1d2cf9d3` (mit `main` `8b5a0f8124be083844529c9ae41966b224416d8c`): 2.198 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden, `ok: true`, `regression: false`.
+- **Grenze:** Das ist ein transparenter Zielabgleich nach erfolgreichen Tasks, kein vollstaendiger ADR-0032-Koordinator. Chat-Schreibauftraege und ungeplante Scope-Aenderungen werden weiterhin nicht automatisch in den aktiven Arbeitsgraph integriert.
+
+## 2026-11-13 — Rueckkehr paralleler Chat-Jobs am Checkpoint sichtbar machen
+
+- **Befund:** Der laufende Run erhielt beim Start eines parallelen Lese-/Debuggerjobs einen Inbox-Hinweis. Nach Abschluss, Fehler oder Abbruch gab es jedoch keinen zweiten Run-Inbox-Beleg. Der Run konnte daher die Rueckkehr des Nebenjobs an einem spaeteren Checkpoint nicht nachvollziehen.
+- **Aenderung:** Die Chatjob-Outbox reconciliert terminale Ergebnisse separat und idempotent in `job_result_notice`. Der Checkpoint fuehrt dafuer einen eigenen Cursor, auditiert Job-Status, Session, Kontextsequenz und SHA-256-Fingerabdruck der Antwort bzw. des Fehlers und bestaetigt die Inbox erst nach erfolgreichem Audit und Checkpoint-Write. Antwort- und Fehlertexte werden nicht dupliziert.
+- **Control:** Die Timeline zeigt den terminalen Jobstatus und einen kurzen Ergebnisfingerabdruck. Der Hinweis erklaert ausdruecklich, dass der Inhalt des Paralleljobs noch nicht automatisch in Ziel, Scope oder Task-Graph des Hauptlaufs einfliesst.
+- **Regressionen:** Terminales Ergebnis wird auch nach wiederholtem Reconcile nur einmal eingereiht; der Loop auditiert den Ergebnisbeleg mit stabiler ID und konsumiert ihn am sicheren Task-Checkpoint. Die Antwort selbst erscheint nicht in Run-Inbox oder Audit.
+- **Verifikation lokal:** `tests/test_chat_jobs.py`, `tests/test_event_store.py`, `tests/test_live_feed_backend.py`, `tests/test_audit_warnung.py`: 66 bestanden. Ruff fuer geaenderte Python-Dateien: bestanden. Strikter Doku-Drift-Check und `git diff --check`: bestanden. Vollstaendiger Linux-Quality-Gate-Nachweis fuer den Branch-Commit steht noch aus.
+- **Grenze:** Das schliesst nur die beobachtbare Rueckkehr eines parallelen Jobs. Die inhaltliche Relevanzbewertung und sichere Uebernahme neuer Schreibauftraege bleiben Teil von OP-401/402 und sind hier nicht implementiert.
+
+### CI-Nachpruefung
+
+- Der erste Quality-Gate-Lauf fuer `17c473ba1a726f78b2688a2e8e9283d6b0f4c7b1` deckte zwei Mypy-Fehler in der Typverengung dynamischer Checkpoint-Daten auf. JavaScript-Syntax, Ruff und die volle Suite (2.196 bestanden, 5 uebersprungen) waren gruen; das Gate blieb wegen Mypy rot.
+- Die Sequenznummern der Inbox-Ergebnisse werden jetzt beim Einlesen explizit als Integer gesammelt und erst danach fuer Offset/Max-Berechnung verwendet. Lokales Mypy fuer `werkstatt/phases/tasks.py`, Ruff und dieselben 66 Regressionstests sind erneut gruen.
+- GitHub Actions [Quality Gate Run 43428035455](https://github.com/ghxstfocus/werkstatt/actions/runs/43428035455) fuer Korrektur-Commit `45c88517988d2bbc461b67f26fb12eeac224398b` ist gruen: 2.196 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden; `ok: true`, `regression: false`.
+
+## 2026-11-13 — OP-401: Chatfragen an Run-Checkpoint binden
+
+- Run-gebundene Lesejobs werden erst an einem bestätigten Inbox-Checkpoint gestartet. Vor dem Acknowledge erstellt der Loop einen verwalteten Snapshot des exakten Run-Worktrees; Quelle, Snapshot-Pfad, HEAD und Fingerprint werden am Job und im Checkpoint protokolliert.
+- Der Worker validiert Snapshot-Identität und Inhalt vor dem Lesen. Fehlende, veränderte oder nicht passende Snapshots beenden den Job sichtbar und fail-closed. Nach dem Job wird nur der genau zugehörige Snapshot bereinigt; Cleanup-Fehler werden als Audit-Ereignis geführt.
+- Ein Zwischen-CI-Lauf deckte einen fehlerhaften Testaufbau auf: Das Manifest verwendete eine Platzhalter-Job-ID statt der tatsächlich erzeugten ID. Der Test bindet den Snapshot jetzt an die echte Job-ID. Zusätzlich ist das Cleanup-Audit-Ereignis im Katalog registriert.
+- Quality-Gate [Run 43397231589](https://github.com/ghxstfocus/werkstatt/actions/runs/43397231589): 2.190 Tests bestanden, 5 übersprungen; Ruff, Mypy, AST und Audit-Katalog grün. Der erneute CI-Lauf nach dem Protokolleintrag ist [Run 43397584682](https://github.com/ghxstfocus/werkstatt/actions/runs/43397584682): 2.190 Tests bestanden, 5 übersprungen; Quality-Gate ohne Regression.
+
+## Folgeprüfung nach Loop- und UI-Stabilisierung
+
+- Eine Werkstatt-Chatantwort zu den letzten 24 Stunden hat PROGRESS.md zunächst vom Dateianfang gelesen und Zeichen-Offsets fälschlich wie Zeilenpositionen behandelt. Dadurch behauptete sie unbelegt, neuere Einträge fehlten, und wollte erst nach Nachfrage ans Dateiende gehen.
+- Bei der späteren Korrektur wurde derselbe Offsetfehler wiederholt. Folgeprüfung: Chat-Dateiwerkzeuge und Prompt-/Tool-Verhalten gegen große append-only Dokumente prüfen; Lesen muss Dateiende, Suchtreffer und tatsächliche Tool-Limits belegen, bevor Vollständigkeit behauptet oder eine Rückfrage gestellt wird. Als reproduzierbaren Fall mit den konkreten Zeitstempeln und Tool-Aufrufen dokumentieren.
+- Dieser Punkt ist vorgemerkt und wird nach Loop- und UI-Stabilisierung separat untersucht; er ist durch die aktuelle OP-401-Änderung nicht behoben.
+
+## 2026-11-13 — Chat-Dateilesen: Offset- und Trunkierungsbelege
+
+- Chat-Tool `read_file` dokumentiert nun explizit 0-basierte Zeichen-Offsets (keine Zeilennummern). Große Ausgaben werden nicht mehr still abgeschnitten: der Rückgabewert markiert die Kürzung und gibt den nächsten Fortsetzungs-Offset samt angefragtem Ende an.
+- Regressionstest deckt Unicode-Zeichen-Offsets, explizite Fortsetzung, Ende des angefragten Bereichs und das 50-KB-Ausgabelimit ab.
+- Das behebt die konkrete Werkzeug-Mehrdeutigkeit beim Lesen großer append-only Dateien; ob der Chat daraus korrekte Vollständigkeitsbehauptungen ableitet, muss zusätzlich über Chat-Agent-Evals verifiziert werden.
+
+
+## 2026-11-13 — Chat: Dateiende-Belege für aktuelle Dokumentation
+
+- `read_file` unterstützt `tail_chars` und liefert den tatsächlichen Zeichenbereich, die Gesamtzahl der Zeichen sowie einen Hinweis zum gezielten Nachladen älterer Abschnitte. Der Auszug bleibt unter dem 50-KB-Limit; Offsetmodus und Dateiende-Modus schließen sich aus.
+- Der System-Prompt weist den Chat an, bei Fragen nach aktuellen/letzten Einträgen den Dateiende-Modus zu nutzen, den Zeitraum gegen den gelieferten Bereich abzugleichen und partielle Ausgaben nicht als Vollständigkeitsbeleg zu behandeln.
+- Regressionstests prüfen Dateiende, Gesamtumfang, Fortsetzung, Parameterkonflikte und Prompt-Regel. Ein echter Provider-Eval bleibt erforderlich, um die Befolgung durch das Modell zu messen.
+
+
+## 2026-11-13 — Dateiende-Protokoll und Chat-Agent-Nachweis
+
+- Regressionstest ueber den echten Chat-Agent-Pfad: bei der Anfrage nach dem neuesten append-only Eintrag ruft der Agent `read_file(tail_chars=...)` auf, erhaelt Dateiende, Gesamtlaenge und Zeichenbereich und antwortet aus dem neuesten belegten Ausschnitt. Aeltere Inhalte ausserhalb des Auszugs werden nicht als gelesen behandelt.
+- Zwischen-CI fand drei Testvertrag-Abweichungen: stale Prompt-/Tool-Schema-Assertions und eine doppelt escapte Newline im Fixture; jede wurde korrigiert, nicht durch Entfernen oder Skippen von Tests.
+- Finaler Quality-Gate-Lauf [Run 43404274631](https://github.com/ghxstfocus/werkstatt/actions/runs/43404274631): 2.195 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 0, Audit-Katalog bestanden, keine Regression.
+- Beim erneuten Doku-Abgleich fiel auf, dass die angehaengten Abschnitte als literale `\\n` statt echter Zeilenumbrueche gespeichert waren; der neue Suffix wurde korrigiert und anschliessend erneut gelesen.
+- Nach Korrektur der versehentlich literal gespeicherten Zeilenumbrueche lief das vollstaendige Quality Gate erneut erfolgreich: [Run 43404864193](https://github.com/ghxstfocus/werkstatt/actions/runs/43404864193), 2.195 Tests bestanden, 5 uebersprungen; Ruff/Mypy/AST 0, Audit-Katalog bestanden, keine Regression.
+- Der Test belegt Tool- und Prompt-Verdrahtung, nicht das reale Befolgen durch einen externen Modellprovider. Ein Provider-Eval ueber mehrere tatsaechliche Dokumentfragen bleibt noetig.
+
+
+
+## 2026-11-13 — OP-401: verwaiste Checkpoint-Jobs sichtbar abschliessen
+
+- Reconnect zeigte einen Fehlerpfad: endete ein Run, bevor er eine Chatfrage am Inbox-Checkpoint bestaetigte und einen Snapshot band, blieb der Job dauerhaft `queued`. Der Dispatcher konnte ihn aus Sicherheitsgruenden nicht starten, aber der Chat erhielt auch keinen terminalen Zustand.
+- Der Reconnect-Pfad prueft jetzt den persistenten Loop-Registry-Status. Bei sicher inaktivem Run werden unbestaetigte Jobs mit einem erklaerenden Fehler und Aufforderung zum erneuten Senden abgeschlossen. Aktive, startende und mehrdeutige/orphaned Runs bleiben unangetastet.
+- Jobs mit vollstaendig gebundenem Snapshot und bestaetigter Inbox-Nachricht bleiben nach Run-Ende replayfaehig; nur fehlender Checkpoint-Nachweis wird beendet.
+- Regressionstests pruefen direkte Zustandsregeln sowie den API-Reconnect: uncheckpointed Jobs werden failed, sichere Replay-Jobs und aktive Run-Jobs bleiben queued. Vollstaendige CI-Verifikation folgt.
+
+
+## 2026-11-13 — Verifikation des Checkpoint-Reconnect-Fehlerpfads
+
+- GitHub Actions Quality-Gate [Run 43406275982](https://github.com/ghxstfocus/werkstatt/actions/runs/43406275982) nach der OP-401-Reconnect-Korrektur: 2.197 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 0, Audit-Katalog bestanden, keine Regression.
+- Der Lauf enthaelt direkte Tests fuer aktive, beendete und bestaetigte Snapshot-Jobs sowie einen API-Reconnect-Test, der den terminalen Fehler fuer den Nutzer abruft.
+
+
+## 2026-11-13 — Integrationspruefung OP-397/401 und Checkpoint-Zielabgleich
+
+- **Befund:** Die zwei getrennt entwickelten Aenderungszweige fuer Checkpoint-Zielabgleich und run-gebundene Chat-Snapshots liessen sich nicht konfliktfrei zusammenfuehren. Konflikte betrafen `PROGRESS.md`, den Audit-Katalog und die Chatjob-Outbox. Ein schlichtes Beibehalten nur einer Seite haette entweder terminale Ergebnis-Replays oder Snapshot-Schutz verloren.
+- **Integration:** Beide Outbox-Cursor (`job_result_enqueued` und Snapshot-Bindungsfelder) sowie deren additive SQLite-Migrationen bleiben erhalten. Audit-Kinds wurden als Vereinigungsmenge zusammengefuehrt. `PROGRESS.md` behaelt beide append-only Arbeitsverlaeufe.
+- **Gezielte Verifikation auf Windows:** 78 Tests bestanden. Drei Snapshot-Tests koennen in dieser Umgebung nicht gueltig beurteilt werden: zwei laufen in Windows-Pfadlaengenfehler beim Git-Klon, einer benoetigt Symlink-Rechte. Das sind keine bestandenen Tests und kein Linux-Beleg. Ruff und Python-Bytecode-Kompilierung der geaenderten Python-Dateien bestanden; `git diff --cached --check` bestanden.
+- **Naechster Beleg:** Linux-CI fuer den kombinierten Integrationsstand. Bis dahin bleiben PR-Integration und OP-Abschluss unbewiesen; die bestehenden PRs werden nicht gemergt.
+
+### Linux-CI-Nachweis fuer den kombinierten Stand
+
+- GitHub Actions Quality Gate [Run 43433111477](https://github.com/ghxstfocus/werkstatt/actions/runs/43433111477) pruefte den Integrationscommit `4cbb7ddb48818c7e1eaae75e30d47b9fa745ae9e` gegen `main` `8b5a0f8124be083844529c9ae41966b224416d8c` und ist erfolgreich.
+- Alle Schritte des Jobs `quality` sind abgeschlossen: JavaScript-Syntax, Ruff, vollstaendiger pytest-Lauf mit Diagnostik und Quality Gate; der Job endete mit `success`. Die Windows-Sonderfehler aus den drei lokalen Snapshot-Tests sind damit fuer den Linux-CI-Lauf nicht reproduziert. Es wird hier keine Testzahl behauptet, weil die CI-Logausgabe in dieser Pruefung keine auslesbare Zusammenfassung lieferte.
+- Der Nachweis gilt fuer den kombinierten PR-Stand, nicht fuer den Serverbetrieb. Der Integrations-PR bleibt ein Draft und wird nicht automatisch gemergt.
+- **Weiter offen:** OP-401 ist nicht abgeschlossen. Hintergrundjobs sind aktuell run-gebundene Lese-/Debuggerfragen mit Snapshot und Checkpoint-Reconcile. Schreibauftraege, sichere Aenderungsuebernahme/Replan und die vollstaendige adaptive Inbox-Verarbeitung sind weiterhin offen; ebenso OP-402. Damit ist das Ziel „Chat und Loop arbeiten wie ein durchgaengiger, unterbrechbarer Koordinator“ noch nicht erreicht.
+
+## 2026-11-13 — Regressionstest gegen pauschalen Chat-Rundenabbruch
+
+- **Befund:** Der alte Werkstatt-Chat zeigte wiederholt `maxrounds=5 erreicht, keine finale Antwort`. Im aktuellen Code ist das Standardbudget bereits unbegrenzt; der bisherige Test pruefte aber nur ein explizit gesetztes Ein-Runden-Budget und schloss einen Rueckfall auf fuenf Standardrunden nicht aus.
+- **Aenderung:** Ein Regressionstest laesst den normalen Chat-Turn sieben unterschiedliche Werkzeugrunden ausfuehren und verlangt anschliessend eine finale Antwort. Das bildet den Nutzerfall direkt ab, ohne die explizite Abbruch-/Stagnationskontrolle zu entfernen.
+- **Verifikation:** Gezielter Test bestanden (1 passed); Ruff fuer `tests/test_chat_agent.py` bestanden. Die Dokumentations- und Gesamtpruefungen folgen separat; dieser Test belegt nur den Chat-Rundenvertrag, nicht die noch offene Schreibauftrags-Uebergabe aus OP-401.
+# 2026-11-13 — Chat-Folgeauftrag am Loop-Checkpoint dauerhaft aufnehmen
+
+- Ein bestätigter Chat-Start während eines bereits laufenden Projekt-Runs wird nicht mehr als „nicht gestartet“ verworfen.
+- Die Run-Inbox speichert den Auftrag idempotent mit Projekt, Chat-Session, Parent-Run, Basis-Commit, Checkpoint-Version und optionaler OP-ID.
+- Der Loop übernimmt den Eintrag am Task-Checkpoint in den Run-Checkpoint und schreibt ein stabiles Audit-Ereignis. Das bestehende Hauptziel bleibt unverändert.
+- Geprüft: die drei gezielten API-, Checkpoint- und Chat-Frontend-Regressionstests bestanden; vollständiges Ruff, Python-Syntax, JavaScript-Syntax, Doku-Drift und `git diff --check` bestanden. Ein breiterer lokaler Testlauf wurde durch einen `KeyboardInterrupt` unterbrochen und wird nicht als bestanden gewertet.
+- PR-CI: 2213 Tests, Ruff und Syntaxprüfungen bestanden; Quality Gate fand anschließend einen Mypy-Typfehler bei der aktiven Run-ID. Die Guard-Bedingung wurde verschärft; gezielte Tests und Ruff erneut grün. Mypy ist lokal nicht installiert, die korrigierte Quality-Gate-CI läuft erneut.
+- Grenze dieses Schritts: Die fachliche Klassifikation, Freigabe und dynamische Neuplanung des Folgeauftrags sind noch nicht implementiert; der Auftrag ist zunächst nur dauerhaft aufgenommen und sichtbar.
+
+## 2026-11-13 — Folgeauftragstext aus globalem Audit heraushalten
+
+- Der Checkpoint-Audit-Eintrag speichert nicht mehr den vollständigen Chat-Folgeauftrag, sondern dessen SHA-256-Fingerprint. Der Originaltext bleibt im projektgebundenen Inbox-/Checkpoint-Datensatz zur weiteren Bearbeitung.
+- Ungültige Nicht-Text-Payloads werden am Checkpoint mit einem Typfehler fail-closed abgewiesen.
+- Verifikation: gezielter Checkpoint-Test, Ruff, Bytecode-Kompilierung und `git diff --check`.
+
+## 2026-11-13 — GitHub-Run-Recovery an gepinnte Historie binden
+
+- Recovery validiert jetzt zusaetzlich, dass der Run-Branch weiterhin von der beim Start gepinnten Remote-Revision abstammt. Ein umgehaengter Branch mit fremder Historie wird vor dem Resume abgewiesen.
+- Regressionstest prueft sowohl gueltige Wiederaufnahme als auch einen danach auf eine unabhaengige Historie gesetzten Run-Branch.
+
+## 2026-11-13 — GitHub-Run-Diff aus dem gepinnten Worktree anzeigen
+
+- Befund: Der Workbench-Diff las ausschliesslich den Server-Projektordner, waehrend verbundene GitHub-Runs in einem separaten Worktree arbeiten. Dadurch konnte die UI Loop-Aenderungen nicht zeigen.
+- Der Diff-Endpunkt verwendet jetzt den validierten Worktree des registrierten Runs und vergleicht standardmaessig gegen dessen gepinnte Ausgangsrevision. Lokale Projekte behalten den Checkout-/HEAD-Pfad; nicht mehr passende Run-IDs werden abgewiesen.
+- Regressionstest erstellt einen GitHub-Run-Worktree mit Aenderung und belegt, dass die API genau diesen Diff gegen die Start-SHA liefert.
+- Der erste integrierte Quality-Gate-Lauf fand nach 2.216 erfolgreichen Tests einen Mypy-Befund zur optionalen Registry-Run-ID. Der Handler validiert sie jetzt vor der Worktree-Aufloesung; explizite, nicht registrierte Run-IDs antworten mit 404, ungueltige Registry-Daten mit 409.
+- Der Folgelauf bestaetigte, dass die bedingte Validierung fuer Mypy nicht bis zum Worktree-Aufruf verengt war. Eine zweite explizite Typpruefung direkt vor dem Aufruf schliesst diesen Pfad; erneuter Quality-Gate-Nachweis steht aus.
+
+## 2026-11-13 — Folgeauftrag am Checkpoint im Chat bestaetigen
+
+- Befund: Der bestaetigte Folgeauftrag wurde im Run-Checkpoint gespeichert und auditiert, aber die urspruengliche Chat-Session erhielt beim Checkpoint keine sichtbare Rueckmeldung.
+- Aenderung: Nach erfolgreichem Checkpoint schreibt der Loop ein idempotentes Chat-Event in die referenzierte Session. Der Chat aktualisiert die Vorschlagskarte und bestaetigt die Aufnahme. Er sagt explizit, dass die inhaltliche Einordnung noch aussteht und Hauptziel/Tasks unveraendert bleiben.
+- Grenze: Das bestaetigt nur die dauerhafte Aufnahme. Fachliche Scope-Pruefung, adaptive Replanung und Ausfuehrung des Folgeauftrags bleiben offen in OP-401.
+- Verifikation: Event-Store/Inbox 24 bestanden; Chat-Frontend 21 bestanden; Chat-Aktions-API 4 bestanden/1 plattformbedingt uebersprungen; Chatjobs 25 bestanden. Ruff, strikte Doku-Drift-Pruefung und `git diff --check` bestanden. Ein gemeinsamer pytest-Aufruf wurde lokal mit KeyboardInterrupt beendet und wird nicht als bestanden gewertet; die Gruppen liefen danach einzeln erfolgreich.
+
+## 2026-11-13 — Nachrichten nicht an abgeschlossene Runs binden
+
+- Befund: Die Run-Inbox pruefte beim Einreihen nur, ob ein RunRecord existiert. Ein Chatjob oder Folgeauftrag konnte dadurch nach dem terminalen Run-Status angenommen werden, ohne dass noch ein Worker den Eintrag verarbeitet.
+- Aenderung: Run-Inbox-Einreihung und Statuspruefung laufen jetzt unter einer SQLite-Schreibtransaktion. Neue Nachrichten sind nur fuer `starting`/`running` zulaessig; bereits gespeicherte idempotente Retries bleiben auch nach Run-Ende abrufbar. Eine Chatjob-Outbox, deren Run waehrend des Handoffs terminal wurde, wird mit `run_ended_before_checkpoint` sichtbar abgeschlossen.
+- Verifikation: `tests/test_event_store.py` 23 bestanden; `tests/test_chat_jobs.py` 26 bestanden; Inbox-Replay und Chat-Aktions-API 6 bestanden/1 plattformbedingt uebersprungen. Ruff, Doku-Drift-Pruefung und `git diff --check` bestanden.
+
+## 2026-11-13 — Run-Abschluss drainiert parallele Chat-Inbox
+
+- **Befund:** Eine Nachricht konnte nach dem letzten Task-Checkpoint, aber vor dem terminalen Run-Status eintreffen. Die atomare Einreihung akzeptierte sie noch unter `running`; der Run-Abschluss prüfte die Inbox nicht und konnte sie unbearbeitet zuruecklassen.
+- **Aenderung:** Terminale Checkpoint-Updates pruefen jetzt in derselben `BEGIN IMMEDIATE`-Transaktion, ob alle Run-Inbox-Eintraege bestaetigt sind. Der Loop drainiert vor dem Abschluss die bekannten Job-/Folgeauftragstypen und wiederholt den Drain, falls zwischen Checkpoint und CAS eine neue Nachricht eintraf. Unbekannte offene Nachrichtentypen beenden den Abschluss fail-closed.
+- **Grenze:** Ein bestaetigter Folgeauftrag wird dadurch dauerhaft und sichtbar aufgenommen; automatische Scope-Einordnung und Replanung bleiben weiterhin OP-401/402.
+- **Verifikation:** Event-Store-, Inbox-Replay-, Loop-Main-, Loop-Phasen- und Phase-Review-Tests: 102 bestanden, 1 Windows-SIGTERM-Test plattformbedingt ausgelassen. Der dedizierte Race-Test injiziert die Nachricht exakt zwischen Drain und terminalem CAS.
+
+- **CI-Nachbesserung:** Wiederholte/stale Ergebnis-Persistierung auf bereits terminalen Runs bleibt jetzt idempotent und veraendert den terminalen Datensatz nicht. Regressionstest deckt ab, dass ein zweiter Aufruf mit abweichendem Exitcode keinen abgeschlossenen Run ueberschreibt.
+- **CI-Befund:** Der Linux-Gesamttest (2222 bestanden, 5 uebersprungen), Ruff und JavaScript-Syntax waren gruen; Quality Gate fand zwei Mypy-Typfehler am terminalen Statusparameter. Der Status ist nun als `Literal["completed", "failed"]` typisiert.
+- **Verifikation:** GitHub Actions Quality Gate Run [43450127576](https://github.com/ghxstfocus/werkstatt/actions/runs/43450127576) fuer Commit `3bdf805`: erfolgreich. Damit sind auf Linux Pytest (2222 bestanden, 5 uebersprungen), Ruff, Mypy, AST und Audit-Katalog erfolgreich; OP-401/402 und OP-382 bleiben wie oben dokumentiert offen.

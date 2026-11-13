@@ -200,6 +200,40 @@ def test_chat_job_reconnect_includes_persisted_failures(
     assert jobs[0]["state"] == "failed"
     assert jobs[0]["error"] == "RuntimeError: Provider offline"
 
+def test_reconnect_reports_job_whose_run_ended_before_checkpoint(
+    client_and_base: tuple[Any, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, base = client_and_base
+    from werkstatt.web import app as app_modul
+
+    class _InactiveRegistry:
+        def read(self, project: str) -> dict[str, str]:
+            assert project == "demo"
+            return {"run_id": "run-finished", "state": "idle"}
+
+    monkeypatch.setattr(app_modul, "_loop_registry", lambda: _InactiveRegistry())
+    store = ChatJobStore(base / ".werkstatt" / "chat-jobs" / "demo.db")
+    job, _created = store.create(
+        "session-1", "Frage am Ende des Runs", "read",
+        "request-key-orphan-api-001",
+        run_id="run-finished",
+        project="demo",
+    )
+
+    response = client.get(
+        "/api/projects/demo/chat/jobs?session_id=session-1",
+    )
+
+    assert response.status_code == 200
+    reconnect = next(
+        item for item in response.json()["jobs"]
+        if item["job_id"] == job["job_id"]
+    )
+    assert reconnect["state"] == "failed"
+    assert "erneut" in reconnect["error"]
+
+
 def test_chat_job_cancel_endpoint_is_session_scoped_and_persistent(
     client_and_base: tuple[Any, Path],
 ) -> None:

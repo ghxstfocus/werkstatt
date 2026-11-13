@@ -33,6 +33,64 @@ def fake_llm(monkeypatch):
     return _set
 
 
+def test_prompt_directs_recent_append_only_reads_to_tail_evidence():
+    assert "read_file mit tail_chars" in chat_agent._SYSTEM_PROMPT
+    assert "Eine gekuerzte oder partielle Ausgabe belegt niemals" in chat_agent._SYSTEM_PROMPT
+    assert "Behaupte Vollstaendigkeit nur fuer den tatsaechlich gelesenen Bereich" in chat_agent._SYSTEM_PROMPT
+
+
+def test_chat_loop_reads_latest_append_only_entry_from_tail_evidence(
+    session, tmp_path: Path, monkeypatch,
+) -> None:
+    path = tmp_path / "PROGRESS.md"
+    path.write_text(
+        "".join(f"historischer Eintrag {i:03d}\n" for i in range(80))
+        + "2026-11-13 — neuester belegter Eintrag\n",
+        encoding="utf-8",
+    )
+    calls = 0
+
+    def _tail_then_answer(messages, tools=None):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            assert "tail_chars" in json.dumps(tools, ensure_ascii=False)
+            assert "partielle Ausgabe belegt niemals" in messages[0]["content"]
+            return {"choices": [{"message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": "tail-1",
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "arguments": json.dumps({
+                            "path": "PROGRESS.md",
+                            "tail_chars": 128,
+                        }),
+                    },
+                }],
+            }}]}
+        evidence = messages[-1]["content"]
+        assert "Dateiende-Auszug:" in evidence
+        assert "neuester belegter Eintrag" in evidence
+        assert "historischer Eintrag 000" not in evidence
+        return {"choices": [{"message": {
+            "role": "assistant",
+            "content": "Der neueste belegte Eintrag ist vom 2026-11-13.",
+        }}]}
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", _tail_then_answer)
+    answer = chat_agent.chat_loop(
+        session,
+        "Lies den neuesten Eintrag in PROGRESS.md.",
+        project_dir=tmp_path,
+    )
+
+    assert answer == "Der neueste belegte Eintrag ist vom 2026-11-13."
+    assert calls == 2
+
+
 def test_chat_loop_ohne_tool(session, fake_llm) -> None:
     fake_llm({"role": "assistant", "content": "Hallo!"})
     antwort = chat_agent.chat_loop(session, "Hi")
@@ -418,6 +476,57 @@ def test_chat_loop_explizites_rundenbudget_liefert_abschluss(
     assert requests_seen[1][1] is None
     assert "Obergrenze angekommen" in requests_seen[1][0][-1]["content"]
     assert session.load()[-1]["payload"]["text"] == antwort
+
+
+def test_chat_loop_default_laeuft_ueber_fuenf_werkzeugrunden_weiter(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Der normale Chat-Turn hat keine pauschale Fuenf-Runden-Grenze."""
+    calls = 0
+    tools = {
+        "probe": {
+            "description": "Liefert den angefragten Beleg.",
+            "parameters": {
+                "type": "object",
+                "properties": {"n": {"type": "integer"}},
+                "required": ["n"],
+            },
+            "fn": lambda args: f"Beleg {args['n']}",
+            "mode": "read",
+        },
+    }
+
+    def _fake_llm(messages, tools=None, cancel_check=None):
+        nonlocal calls
+        calls += 1
+        if calls <= 7:
+            return {"choices": [{"message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": f"probe-{calls}",
+                    "type": "function",
+                    "function": {
+                        "name": "probe",
+                        "arguments": json.dumps({"n": calls}),
+                    },
+                }],
+            }}]}
+        return {"choices": [{"message": {
+            "role": "assistant",
+            "content": "Sieben Belege geprueft; der Auftrag ist beantwortet.",
+        }}]}
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", _fake_llm)
+    answer = chat_agent.chat_loop(
+        session, "Pruefe sieben Belege", tools=tools, project_dir=tmp_path,
+    )
+
+    assert calls == 8
+    assert answer == "Sieben Belege geprueft; der Auftrag ist beantwortet."
+    assert sum(event["kind"] == "tool_call" for event in session.load()) == 7
 
 
 def test_chat_loop_abbruch_nach_werkzeugschritt_bleibt_replaybar(

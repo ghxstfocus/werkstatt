@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import uuid
+from collections import deque
 from collections.abc import Callable
 from contextvars import ContextVar
 from pathlib import Path
@@ -56,10 +57,60 @@ def _resolved_safe(pfad: str) -> Path | None:
     return p
 
 
+def _read_file_tail(pfad: Path, tail_chars: int) -> str:
+    """Return a bounded end excerpt with its true character offsets."""
+    if tail_chars < 1 or tail_chars > 49_000:
+        return "Fehler: tail_chars muss zwischen 1 und 49000 liegen"
+    content_byte_limit = _MAX_READ_BYTES - 512
+    teile: deque[tuple[str, int]] = deque()
+    bytezahl = 0
+    gesamt_zeichen = 0
+    try:
+        with pfad.open("r", encoding="utf-8", errors="replace") as datei:
+            while chunk := datei.read(8192):
+                for zeichen in chunk:
+                    zeichen_bytes = len(zeichen.encode("utf-8"))
+                    teile.append((zeichen, zeichen_bytes))
+                    bytezahl += zeichen_bytes
+                    gesamt_zeichen += 1
+                    while teile and (
+                        len(teile) > tail_chars
+                        or bytezahl > content_byte_limit
+                    ):
+                        _verworfen, verworfene_bytes = teile.popleft()
+                        bytezahl -= verworfene_bytes
+    except OSError as exc:
+        return f"Fehler beim Lesen: {exc}"
+
+    offset = gesamt_zeichen - len(teile)
+    auszug = "".join(zeichen for zeichen, _groesse in teile)
+    marker = (
+        f"[Dateiende-Auszug: Zeichen {offset} bis {gesamt_zeichen} "
+        f"von {gesamt_zeichen}; angefordert {tail_chars}, geliefert "
+        f"{len(teile)}. "
+    )
+    if offset:
+        marker += f"Frueheren Inhalt gezielt mit read_file(start=0, end={offset}) lesen.]"
+    else:
+        marker += "Dateianfang und Dateiende sind vollständig enthalten.]"
+    return marker + "\n" + auszug
+
+
 def _read_file(args: dict[str, Any]) -> str:
     pfad = _resolved_safe(str(args.get("path", "")))
     if pfad is None or not pfad.is_file():
         return "Fehler: Datei nicht gefunden oder ausserhalb Projekt"
+    if args.get("tail_chars") is not None:
+        try:
+            start = int(args.get("start", 0))
+            end_value = args.get("end")
+            end = int(end_value) if end_value is not None else None
+            tail_chars = int(args["tail_chars"])
+        except (TypeError, ValueError):
+            return "Fehler: tail_chars/start/end muessen ganze Zahlen sein"
+        if start != 0 or end is not None:
+            return "Fehler: tail_chars darf nicht mit start/end kombiniert werden"
+        return _read_file_tail(pfad, tail_chars)
     try:
         start = int(args.get("start", 0))
         end_value = args.get("end")
@@ -70,6 +121,8 @@ def _read_file(args: dict[str, Any]) -> str:
         return "Fehler: ungueltiger start/end-Bereich"
 
     max_chars = end - start if end is not None else None
+    # Keep room for an explicit continuation marker inside the output cap.
+    content_byte_limit = _MAX_READ_BYTES - 1024
     try:
         teile: list[str] = []
         with pfad.open("r", encoding="utf-8", errors="replace") as datei:
@@ -82,6 +135,7 @@ def _read_file(args: dict[str, Any]) -> str:
 
             gelesen = 0
             bytezahl = 0
+            truncated = False
             while max_chars is None or gelesen < max_chars:
                 anfrage = 8192 if max_chars is None else min(
                     8192, max_chars - gelesen,
@@ -91,12 +145,27 @@ def _read_file(args: dict[str, Any]) -> str:
                     break
                 for zeichen in chunk:
                     zeichen_bytes = len(zeichen.encode("utf-8"))
-                    if bytezahl + zeichen_bytes > _MAX_READ_BYTES:
-                        return "".join(teile)
+                    if bytezahl + zeichen_bytes > content_byte_limit:
+                        truncated = True
+                        break
                     teile.append(zeichen)
                     bytezahl += zeichen_bytes
                     gelesen += 1
-        return "".join(teile)
+                if truncated:
+                    break
+        inhalt = "".join(teile)
+        if truncated:
+            fortsetzen = f"read_file(start={start + gelesen}"
+            if end is not None:
+                fortsetzen += f", end={end}"
+            fortsetzen += ")"
+            marker = (
+                "\n[Ausgabe gekürzt: maximal 50 KB. start/end sind "
+                "0-basierte Zeichen-Offsets, keine Zeilennummern. "
+                f"Fortsetzen mit {fortsetzen}.]"
+            )
+            inhalt += marker
+        return inhalt
     except OSError as exc:
         return f"Fehler beim Lesen: {exc}"
 
@@ -270,7 +339,7 @@ def _diagnose(_args: dict[str, Any]) -> str:
 
 
 def _read_status(_args: dict[str, Any]) -> str:
-    """STATUS.md + PROGRESS.md plus strukturierte OP-Zusammenfassung."""
+    """Read current queue, roadmap, architecture and the root progress tail."""
     teile: list[str] = []
     try:
         from werkstatt.web.inspector import parse_ops
@@ -286,17 +355,45 @@ def _read_status(_args: dict[str, Any]) -> str:
     except Exception as exc:  # noqa: BLE001
         teile.append(f"## OP-Zusammenfassung: Fehler ({exc})\n")
 
-    for name in ("docs/STATUS.md", "docs/PROGRESS.md"):
-        pfad = _aktives_projekt_dir() / name
+    dokumente = (
+        ("docs/STATUS.md", 12_000, "head"),
+        ("docs/ROADMAP.md", 8_000, "head"),
+        ("docs/ARCHITECTURE.md", 8_000, "head"),
+        ("PROGRESS.md", 16_000, "tail"),
+    )
+    basis = _aktives_projekt_dir()
+    for name, limit, richtung in dokumente:
+        pfad = basis / name
         if pfad.is_file():
             try:
-                limit = 200_000 if "STATUS" in name else 20_000
-                text = pfad.read_text(encoding="utf-8", errors="replace")[:limit]
+                inhalt = pfad.read_text(encoding="utf-8", errors="replace")
             except OSError:
+                teile.append(f"## {name}\n[Datei konnte nicht gelesen werden.]\n")
                 continue
+            if len(inhalt) > limit:
+                if richtung == "tail":
+                    start = len(inhalt) - limit
+                    zeilenende = inhalt.find("\n", start)
+                    if zeilenende >= start and zeilenende - start <= 2_000:
+                        start = zeilenende + 1
+                    text = (
+                        f"[Auszug: neuester Dateischluss; {start} fruehere Zeichen "
+                        f"ausgelassen von {len(inhalt)} Zeichen insgesamt.]\n"
+                        + inhalt[start:]
+                    )
+                else:
+                    text = (
+                        f"[Auszug: Dateianfang; {len(inhalt) - limit} Zeichen "
+                        f"am Ende ausgelassen von {len(inhalt)} Zeichen insgesamt.]\n"
+                        + inhalt[:limit]
+                    )
+            else:
+                text = inhalt
             teile.append(f"## {name}\n{text}\n")
+        else:
+            teile.append(f"## {name}\n[Fehlt im aktiven Projekt.]\n")
 
-    return "\n".join(teile) if teile else "(STATUS.md/PROGRESS.md nicht gefunden)"
+    return "\n".join(teile)
 
 def _next_op(_args: dict[str, Any]) -> str:
     """Liefert begruendete STATUS-OP-Auswahl ohne einen Run zu starten."""
@@ -585,13 +682,23 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
 
 CHAT_TOOLS: dict[str, dict[str, Any]] = {
     "read_file": {
-        "description": "Liest Datei-Inhalt (max 50 KB).",
+        "description": (
+            "Liest Datei-Inhalt mit 0-basierten Zeichen-Offsets (start/end, "
+            "keine Zeilennummern; max 50 KB). Fuer aktuelle Eintraege "
+            "tail_chars nutzen: liefert Dateiende-Auszug, Gesamtlaenge und "
+            "Offsets. Gekuerzte Ausgaben nennen den naechsten start-Offset zur Fortsetzung."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
                 "path": {"type": "string"},
                 "start": {"type": "integer"},
                 "end": {"type": "integer"},
+                "tail_chars": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 49000,
+                },
             },
             "required": ["path"],
         },
@@ -707,7 +814,11 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
         "mode": "read",
     },
     "read_status": {
-        "description": "STATUS.md + PROGRESS.md (Kopf).",
+        "description": (
+            "Liest die aktuelle STATUS-Queue, ROADMAP, ARCHITECTURE und "
+            "den neuesten Auszug aus der Root-PROGRESS.md; bei Bedarf mit "
+            "grep gezielt Fundstellen nachpruefen."
+        ),
         "parameters": {"type": "object", "properties": {}},
         "fn": _read_status,
         "mode": "read",

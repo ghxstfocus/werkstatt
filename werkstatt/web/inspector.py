@@ -743,6 +743,8 @@ _TL_LABELS: dict[str, str] = {
     "builder_patch_bereits_erfuellt": "Builder: bereits erfuellt",
     "loop_task_start": "Task startet",
     "loop_criteria_progress": "Akzeptanzkriterien: Fortschritt",
+    "loop_chat_job_observed": "Parallelen Chat-Job am Checkpoint erkannt",
+    "loop_chat_job_result_observed": "Ergebnis eines parallelen Chat-Jobs erkannt",
     "loop_task_ok": "Task erfolgreich",
     "loop_task_failed": "Task fehlgeschlagen",
     "loop_patch_applied": "Patch angewendet",
@@ -783,8 +785,9 @@ _TL_LABELS: dict[str, str] = {
     "loop_human_gate_committed": "Human-Gate: committed",
     "progress": "Fortschritt",
     "llm_call": "LLM-Aufruf",
-    "llm_call_start": "LLM-Call startet",
-    "llm_call_end": "LLM-Call beendet",
+    "llm_call_start": "Modellaufruf startet",
+    "llm_call_heartbeat": "Modellaufruf läuft",
+    "llm_call_end": "Modellaufruf beendet",
     "llm_usage": "LLM-Token",
     "llm_timeout_read": "LLM-Timeout (read)",
     "llm_timeout_gesamt": "LLM-Timeout (gesamt)",
@@ -878,6 +881,19 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
         if event_kind in ("cancel_requested", "cancelled"):
             return "Abbruch angefordert" if event_kind == "cancel_requested" else "Abgebrochen"
         return str(payload.get("text") or event_kind)[:160]
+    if kind == "loop_chat_job_observed":
+        mode = str(payload.get("mode") or "Chat")
+        job_id = str(payload.get("job_id") or "")
+        suffix = f" ({job_id[:12]})" if job_id else ""
+        return f"Paralleler {mode}-Auftrag am sicheren Punkt erkannt{suffix}"
+    if kind == "loop_chat_job_result_observed":
+        state = str(payload.get("state") or "unbekannt")
+        job_id = str(payload.get("job_id") or "")
+        suffix = f" ({job_id[:12]})" if job_id else ""
+        answer_hash = payload.get("answer_sha256")
+        if answer_hash:
+            suffix += f" · Ergebnisbeleg {str(answer_hash)[:12]}"
+        return f"Paralleler Chat-Job {state}{suffix}"
     if kind == "loop_criteria_progress":
         covered = payload.get("covered")
         remaining = payload.get("remaining")
@@ -885,9 +901,14 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
         remaining_count = len(remaining) if isinstance(remaining, list) else 0
         task = str(payload.get("task_id") or "").strip()
         suffix = f" nach {task}" if task else ""
-        return (
-            f"{covered_count} erledigt, {remaining_count} offen{suffix}"
-        )
+        if payload.get("tracked") is False:
+            summary = f"Zielabgleich ohne explizite Kriterienzuordnung{suffix}"
+        else:
+            summary = f"{covered_count} erledigt, {remaining_count} offen{suffix}"
+        next_step = str(payload.get("next_step") or "").strip()
+        if next_step:
+            summary += f"; danach: {next_step[:120]}"
+        return summary
     if kind == "loop_task_start":
         return str(payload.get("text", ""))
     if kind in ("loop_task_ok", "loop_task_failed"):

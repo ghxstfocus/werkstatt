@@ -12,6 +12,9 @@ rot werden.
 """
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -60,32 +63,39 @@ def test_pruefe_ref_lehnt_ungueltige_ab(ref: str) -> None:
 # 3) HTTP-Endpoint /api/projects/{name}/diff
 # ---------------------------------------------------------------------
 
-def _client_auth_disabled(monkeypatch) -> TestClient:
+def _client_auth_disabled(monkeypatch, tmp_path: Path) -> TestClient:
+    from werkstatt.web import app as app_module
     from werkstatt.web import auth
     from werkstatt.web.app import create_app
+
     monkeypatch.setattr(auth, "_AUTH_DISABLED", True)
+    monkeypatch.setattr(app_module, "_PROJECTS_BASE", tmp_path)
+    (tmp_path / "werkstatt").mkdir()
     return TestClient(create_app())
 
 
-def test_endpoint_400_bei_output_option(monkeypatch) -> None:
+def test_endpoint_400_bei_output_option(monkeypatch, tmp_path) -> None:
     """``ref=--output=...`` MUSS 400 geben, kein git diff."""
-    client = _client_auth_disabled(monkeypatch)
+    client = _client_auth_disabled(monkeypatch, tmp_path)
     r = client.get("/api/projects/werkstatt/diff?ref=--output=/tmp/owned")
     assert r.status_code == 400, r.text
     assert "ref" in r.text.lower()
 
 
-def test_endpoint_400_bei_kurzer_option(monkeypatch) -> None:
+def test_endpoint_400_bei_kurzer_option(monkeypatch, tmp_path) -> None:
     """``ref=-p`` MUSS 400 geben."""
-    client = _client_auth_disabled(monkeypatch)
+    client = _client_auth_disabled(monkeypatch, tmp_path)
     r = client.get("/api/projects/werkstatt/diff?ref=-p")
     assert r.status_code == 400, r.text
 
 
-def test_endpoint_200_bei_normalem_ref(monkeypatch) -> None:
+def test_endpoint_200_bei_normalem_ref(monkeypatch, tmp_path) -> None:
     """``ref=HEAD`` MUSS 200 geben, Diff-Feld vorhanden."""
-    client = _client_auth_disabled(monkeypatch)
-    r = client.get("/api/projects/werkstatt/diff?ref=HEAD")
+    client = _client_auth_disabled(monkeypatch, tmp_path)
+    fake = MagicMock()
+    fake.stdout = ""
+    with patch("werkstatt.web.app.subprocess.run", return_value=fake):
+        r = client.get("/api/projects/werkstatt/diff?ref=HEAD")
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ref"] == "HEAD"

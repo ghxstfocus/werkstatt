@@ -1,6 +1,7 @@
 """Persistente Chat-Job-Zustaende und Event-Replay (OP-397)."""
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -152,6 +153,54 @@ def test_job_failure_is_visible_and_terminal(tmp_path: Path) -> None:
     assert failed["state"] == "failed"
     assert failed["error"] == "RuntimeError: LLM nicht verfuegbar"
     assert failed["events"][-1]["payload"]["error"].startswith("RuntimeError")
+
+
+def test_inactive_run_fails_uncheckpointed_jobs_but_preserves_safe_replay(
+    tmp_path: Path,
+) -> None:
+    from werkstatt.chat_jobs import fail_uncheckpointed_jobs_for_inactive_run
+
+    store = ChatJobStore(tmp_path / "jobs.db")
+    uncheckpointed, _ = store.create(
+        "session-a", "Frage vor Run-Ende", "read",
+        "request-key-orphan-001", run_id="run-finished", project="demo",
+    )
+    replayable, _ = store.create(
+        "session-a", "Frage mit Checkpoint", "read",
+        "request-key-orphan-002", run_id="run-finished", project="demo",
+    )
+    active, _ = store.create(
+        "session-a", "Frage im aktiven Run", "read",
+        "request-key-orphan-003", run_id="run-active", project="demo",
+    )
+    assert store.set_run_snapshot(
+        replayable["job_id"], tmp_path, tmp_path / "snapshot",
+        "base-head", "fingerprint",
+    )
+
+    class _Events:
+        def run_message_acknowledged(
+            self, project: str, run_id: str, message_id: str,
+        ) -> bool:
+            return (
+                project == "demo"
+                and run_id == "run-finished"
+                and message_id == f"chat-job:{replayable['job_id']}"
+            )
+
+    failed = fail_uncheckpointed_jobs_for_inactive_run(
+        "demo", "run-active", db_path=store.db_path, event_store=_Events(),
+    )
+
+    assert failed == 1
+    failed_job = store.get(uncheckpointed["job_id"])
+    replayable_job = store.get(replayable["job_id"])
+    active_job = store.get(active["job_id"])
+    assert failed_job is not None and failed_job["state"] == "failed"
+    assert "Bitte sende den Auftrag erneut" in failed_job["error"]
+    assert failed_job["events"][-1]["payload"]["reason"] == "run_ended_before_checkpoint"
+    assert replayable_job is not None and replayable_job["state"] == "queued"
+    assert active_job is not None and active_job["state"] == "queued"
 
 
 def test_claim_allows_independent_turns_within_one_session(tmp_path: Path) -> None:
@@ -588,3 +637,110 @@ def test_run_inbox_outbox_waits_for_run_record_then_reconciles(
         "mode": "read",
         "context_seq": 3,
     }
+
+
+def test_run_inbox_outbox_fails_job_when_run_is_already_terminal(
+    tmp_path: Path,
+) -> None:
+    from werkstatt import chat_jobs, event_store
+
+    jobs_db = tmp_path / "chat-jobs.db"
+    events = event_store.EventStore(tmp_path / "events.db")
+    events.create_run_record("demo", "run-ended", "Pruefe Repo")
+    events.update_run_checkpoint(
+        "demo", "run-ended", {"done": True},
+        expected_version=0, status="completed",
+    )
+    store = ChatJobStore(jobs_db)
+    job, _ = store.create(
+        "session-a", "Frage im Abschlussrennen", "read",
+        "request-key-terminal-run", context_seq=3,
+        run_id="run-ended", project="demo",
+    )
+
+    assert chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    ) == 0
+    failed = store.get(job["job_id"])
+    assert failed["state"] == "failed"
+    assert failed["events"][-1]["payload"]["reason"] == (
+        "run_ended_before_checkpoint"
+    )
+
+
+def test_run_inbox_reconciles_terminal_chat_job_result_idempotently(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_jobs, event_store
+
+    jobs_db = tmp_path / "chat-jobs.db"
+    events = event_store.EventStore(tmp_path / "events.db")
+    events.create_run_record("demo", "run-result", "Pruefe Repo")
+    monkeypatch.setattr(event_store, "EventStore", lambda: events)
+    store = ChatJobStore(jobs_db)
+    job, _ = store.create(
+        "session-a", "Pruefe den Status", "read", "request-key-result-001",
+        context_seq=12, run_id="run-result", project="demo",
+    )
+
+    assert chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    ) == 1
+    assert store.claim(job["job_id"], "chat-worker")
+    assert store.finish(job["job_id"], answer="Belegte Antwort")
+    assert chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    ) == 1
+    assert chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    ) == 0
+
+    result = events.claim_run_message(
+        "demo", "run-result", "loop-worker", kind="job_result_notice",
+    )
+    assert result is not None
+    assert result["message_id"] == f"chat-job:{job['job_id']}:result"
+    assert result["payload"]["state"] == "succeeded"
+    assert result["payload"]["context_seq"] == 12
+    assert result["payload"]["answer_sha256"] == hashlib.sha256(
+        b"Belegte Antwort",
+    ).hexdigest()
+    assert "Belegte Antwort" not in str(result["payload"])
+    assert events.acknowledge_run_message(
+        result["seq"], "loop-worker", result["fencing_token"],
+    )
+
+
+def test_resume_reconciles_result_of_abandoned_run_bound_chat_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_jobs, event_store
+
+    jobs_db = tmp_path / "chat-jobs.db"
+    events = event_store.EventStore(tmp_path / "events.db")
+    events.create_run_record("demo", "run-abandoned-chat", "Pruefe Repo")
+    monkeypatch.setattr(event_store, "EventStore", lambda: events)
+    store = ChatJobStore(jobs_db)
+    job, _ = store.create(
+        "session-a", "Pruefe den Status", "read", "request-key-result-002",
+        run_id="run-abandoned-chat", project="demo",
+    )
+    chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    )
+    assert store.claim(job["job_id"], "lost-chat-worker")
+    with sqlite3.connect(jobs_db) as connection:
+        connection.execute(
+            "UPDATE jobs SET heartbeat_at=? WHERE job_id=?",
+            ((datetime.now(UTC) - timedelta(minutes=5)).isoformat(), job["job_id"]),
+        )
+        connection.commit()
+
+    chat_jobs.resume_chat_jobs("demo", tmp_path, db_path=jobs_db)
+
+    result = events.claim_run_message(
+        "demo", "run-abandoned-chat", "loop-worker", kind="job_result_notice",
+    )
+    assert result is not None
+    assert result["payload"]["state"] == "failed"
+    assert result["payload"]["error_sha256"]

@@ -373,12 +373,26 @@ def test_llm_heartbeat_keeps_builder_activity_with_task_and_files(
         },
     ])
 
-    aktiv = inspector.aggregate_live_feed("werkstatt")["aktiv"]
+    feed = inspector.aggregate_live_feed("werkstatt")
+    aktiv = feed["aktiv"]
     assert aktiv["kind"] == "llm_call_heartbeat"
     assert aktiv["rolle"] == "builder"
     assert "Reconnect-Anzeige vervollstaendigen" in aktiv["aktion"]
     assert "static/chat.js" in aktiv["aktion"]
     assert "45s" in aktiv["aktion"]
+
+    assert inspector._tl_label("llm_call_heartbeat", {}) == "Modellaufruf läuft"
+    assert inspector._tl_detail(
+        "llm_call_heartbeat",
+        {
+            "task_name": "Reconnect-Anzeige vervollstaendigen",
+            "files": ["static/chat.js", "tests/test_chat_frontend.py"],
+            "elapsed_s": 45,
+        },
+    ) == (
+        "arbeitet weiter: Reconnect-Anzeige vervollstaendigen · "
+        "static/chat.js, tests/test_chat_frontend.py · 45s"
+    )
 
 
 
@@ -390,8 +404,57 @@ def test_kriterienfortschritt_ist_in_timeline_menschlich_beschriftet():
             "task_id": "t2",
             "covered": ["AC1"],
             "remaining": ["AC2", "AC3"],
+            "next_step": "Weiter mit t3: Tests ergaenzen",
         },
     )
 
     assert label == "Akzeptanzkriterien: Fortschritt"
-    assert detail == "1 erledigt, 2 offen nach t2"
+    assert detail == (
+        "1 erledigt, 2 offen nach t2; danach: Weiter mit t3: Tests ergaenzen"
+    )
+
+
+def test_nicht_getrackte_kriterien_verursachen_keinen_falschen_nullfortschritt():
+    detail = inspector._tl_detail(
+        "loop_criteria_progress",
+        {
+            "task_id": "t1",
+            "tracked": False,
+            "covered": [],
+            "remaining": [],
+            "next_step": "Weiter mit t2",
+        },
+    )
+
+    assert detail == (
+        "Zielabgleich ohne explizite Kriterienzuordnung nach t1; "
+        "danach: Weiter mit t2"
+    )
+
+
+def test_paralleler_chat_job_ist_in_timeline_menschlich_beschriftet():
+    label = inspector._tl_label("loop_chat_job_observed", {})
+    detail = inspector._tl_detail(
+        "loop_chat_job_observed",
+        {"mode": "debugger", "job_id": "0123456789abcdef"},
+    )
+
+    assert label == "Parallelen Chat-Job am Checkpoint erkannt"
+    assert detail == "Paralleler debugger-Auftrag am sicheren Punkt erkannt (0123456789ab)"
+
+
+def test_chat_job_ergebnis_ist_in_timeline_mit_beleg_sichtbar():
+    label = inspector._tl_label("loop_chat_job_result_observed", {})
+    detail = inspector._tl_detail(
+        "loop_chat_job_result_observed",
+        {
+            "state": "succeeded",
+            "job_id": "0123456789abcdef",
+            "answer_sha256": "a" * 64,
+        },
+    )
+
+    assert label == "Ergebnis eines parallelen Chat-Jobs erkannt"
+    assert detail == (
+        "Paralleler Chat-Job succeeded (0123456789ab) · Ergebnisbeleg aaaaaaaaaaaa"
+    )

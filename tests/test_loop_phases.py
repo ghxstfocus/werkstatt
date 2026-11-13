@@ -389,7 +389,7 @@ def test_alle_done_aus_phasestate():
 
 def _run_finalize_commit_order(
     tmp_path, monkeypatch, verify_ok, *, task_status="done", doku_nachzug=False,
-    criteria_progress=None,
+    criteria_progress=None, phase_state=None,
 ):
     from werkstatt.phases import finalize
 
@@ -400,11 +400,12 @@ def _run_finalize_commit_order(
         state.aufgabe = "OP-999: Verifizierten Abschluss testen"
         state.akzeptanzkriterien = ["Abschluss wird erst nach Verify dokumentiert."]
         state.applied_count = 1
-    phase_state = MagicMock()
-    phase_state.get_task.return_value = {"status": task_status}
-    phase_state.criteria_progress.return_value = criteria_progress or {
-        "tracked": False, "valid": True, "covered": [], "uncovered": [],
-    }
+    if phase_state is None:
+        phase_state = MagicMock()
+        phase_state.get_task.return_value = {"status": task_status}
+        phase_state.criteria_progress.return_value = criteria_progress or {
+            "tracked": False, "valid": True, "covered": [], "uncovered": [],
+        }
     order = []
     audit_events = []
     progress_entries = []
@@ -541,10 +542,83 @@ def test_task_ende_auditiert_kriterienfortschritt_nach_gruenem_task(tmp_path):
     assert progress_events[0][1] == {
         "task_id": "t1",
         "status": "in_progress",
+        "tracked": True,
         "covered": ["AC1"],
         "remaining": ["AC2"],
         "error": None,
+        "next_step_type": "task",
+        "next_task_id": "t2",
+        "next_step": "Weiter mit t2",
+        "decision_summary": (
+            "Offene Kriterien bleiben im freigegebenen Task-Graph; "
+            "der naechste ausfuehrbare Task wird fortgesetzt."
+        ),
+        "evidence": [
+            "Task t1 als done gespeichert",
+            "Ziel: Kriterienfortschritt",
+            "Erfuellt: AC1 — Erstes Ziel",
+            "Offen: AC2 — Zweites Ziel",
+            "Restlicher Graph: t2: pending",
+        ],
     }
+
+
+def test_task_ende_zeigt_phase_end_verify_als_naechsten_schritt(tmp_path):
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.task_runner import _task_ende
+
+    state = _state(tmp_path)
+    phase_state = PhaseState("testprojekt", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new(
+        "Einzelnes Ziel",
+        [{"id": "t1", "name": "Implementierung", "criterion_refs": ["AC1"]}],
+        akzeptanzkriterien=["Ziel ist belegt"],
+    )
+    events = []
+
+    with patch("werkstatt.task_runner.audit", lambda *args: events.append(args)), \
+         patch("werkstatt.progress.append"):
+        _task_ende(state, phase_state, "t1", ok=True, name="Implementierung")
+
+    event = next(item for item in events if item[0] == "loop_criteria_progress")
+    assert event[1]["next_step_type"] == "phase_end_verify"
+    assert event[1]["next_step"] == "Phase-End-Verify ausfuehren"
+    assert event[1]["decision_summary"].startswith(
+        "Der Task-Graph ist abgeschlossen;"
+    )
+    assert "Ziel: Einzelnes Ziel" in event[1]["evidence"]
+    assert "Erfuellt: AC1 — Ziel ist belegt" in event[1]["evidence"]
+
+
+def test_task_ende_macht_fehlende_kriterienzuordnung_sichtbar(tmp_path):
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.task_runner import _task_ende
+
+    state = _state(tmp_path)
+    phase_state = PhaseState("testprojekt", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new(
+        "Legacy-Auftrag ohne Kriterienzuordnung",
+        [
+            {"id": "t1", "name": "Erster Schritt"},
+            {"id": "t2", "name": "Naechster Schritt"},
+        ],
+    )
+    events = []
+
+    with patch("werkstatt.task_runner.audit", lambda *args: events.append(args)), \
+         patch("werkstatt.progress.append"):
+        _task_ende(state, phase_state, "t1", ok=True, name="Erster Schritt")
+
+    event = next(item for item in events if item[0] == "loop_criteria_progress")
+    payload = event[1]
+    assert payload["tracked"] is False
+    assert payload["status"] == "untracked"
+    assert payload["next_step"] == "Weiter mit t2: Naechster Schritt"
+    assert any(
+        "kein Zielabschluss aus diesem Checkpoint" in item
+        for item in payload["evidence"]
+    )
+    assert "Ziel bleibt offen" in payload["decision_summary"]
 
 
 @pytest.mark.parametrize("task_status", ["failed", "blocked", "pending", "running", "missing"])
@@ -698,3 +772,96 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
         ("verify_post_commit", "phase_end"),
     ]
     assert any(event[0] == "loop_erfolg" for event in audit_events)
+
+def test_phase_end_verify_prueft_nach_task_checkpoint_fehler_erneut(
+    tmp_path, monkeypatch,
+):
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.task_runner import _task_ende
+
+    phase_state = PhaseState("testprojekt", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new(
+        "Ziel trotz Checkpoint-Ausfall belegen",
+        [{"id": "t1", "criterion_refs": ["AC1"]}],
+        akzeptanzkriterien=["Ziel ist durch Verify belegt"],
+    )
+    calls = 0
+
+    def _criteria_progress():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("transient checkpoint failure")
+        return {
+            "tracked": True,
+            "valid": True,
+            "covered": ["AC1"],
+            "uncovered": [],
+            "error": None,
+        }
+
+    monkeypatch.setattr(phase_state, "criteria_progress", _criteria_progress)
+    state = _state(tmp_path, run_id="run-criteria-retry")
+    state.tasks = [{"id": "t1"}]
+    task_events = []
+    monkeypatch.setattr(
+        "werkstatt.task_runner.audit",
+        lambda *args: task_events.append(args),
+    )
+    monkeypatch.setattr("werkstatt.progress.append", lambda *_args, **_kwargs: None)
+
+    assert _task_ende(state, phase_state, "t1", ok=True, name="Implementierung")
+    assert phase_state.get_task("t1")["status"] == "done"
+    assert calls == 1
+    assert any(event[0] == "loop_criteria_checkpoint_failed" for event in task_events)
+
+    rc, _order, final_events, _progress = _run_finalize_commit_order(
+        tmp_path, monkeypatch, True, phase_state=phase_state,
+    )
+
+    assert calls == 2
+    assert rc == 0
+    assert any(event[0] == "loop_erfolg" for event in final_events)
+
+
+def test_task_ende_auditiert_fehlgeschlagenen_kriterien_checkpoint(
+    tmp_path, monkeypatch,
+):
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.task_runner import _task_ende
+
+    state = _state(tmp_path)
+    phase_state = PhaseState("testprojekt", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new(
+        "Kriterienfortschritt",
+        [{"id": "t1", "criterion_refs": ["AC1"]}],
+        akzeptanzkriterien=["Erstes Ziel"],
+    )
+
+    def _checkpoint_fehler():
+        raise RuntimeError("interner Text wird nicht persistiert")
+
+    monkeypatch.setattr(phase_state, "criteria_progress", _checkpoint_fehler)
+    events = []
+    monkeypatch.setattr(
+        "werkstatt.task_runner.audit",
+        lambda *args: events.append(args),
+    )
+    monkeypatch.setattr("werkstatt.progress.append", lambda *_args, **_kwargs: None)
+
+    _task_ende(state, phase_state, "t1", ok=True, name="Erstes Ziel")
+
+    assert phase_state.get_task("t1")["status"] == "done"
+    failed = [
+        event for event in events
+        if event[0] == "loop_criteria_checkpoint_failed"
+    ]
+    assert len(failed) == 1
+    assert failed[0][1] == {
+        "task_id": "t1",
+        "error_type": "RuntimeError",
+        "next_step": (
+            "Phase-End-Verify prueft den Zielabgleich erneut; "
+            "Erfolg bleibt bis dahin offen"
+        ),
+    }

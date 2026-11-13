@@ -6,6 +6,7 @@ abrufbar und koennen nach einem UI-Reconnect wieder abgespielt werden.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -69,6 +70,9 @@ class ChatJobStore:
                 " heartbeat_at TEXT, cancel_requested INTEGER NOT NULL DEFAULT 0,"
                 " context_seq INTEGER, run_id TEXT, project TEXT,"
                 " run_inbox_enqueued INTEGER NOT NULL DEFAULT 0,"
+                " run_result_enqueued INTEGER NOT NULL DEFAULT 0,"
+                " run_snapshot_source TEXT,run_snapshot_path TEXT,"
+                " run_snapshot_head TEXT,run_snapshot_fingerprint TEXT,"
                 " UNIQUE(session_id, idempotency_key));"
                 "CREATE TABLE IF NOT EXISTS job_events ("
                 " seq INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -104,6 +108,19 @@ class ChatJobStore:
                     "ALTER TABLE jobs ADD COLUMN run_inbox_enqueued INTEGER "
                     "NOT NULL DEFAULT 0"
                 )
+            if "run_result_enqueued" not in columns:
+                conn.execute(
+                    "ALTER TABLE jobs ADD COLUMN run_result_enqueued INTEGER "
+                    "NOT NULL DEFAULT 0"
+                )
+            for column in (
+                "run_snapshot_source",
+                "run_snapshot_path",
+                "run_snapshot_head",
+                "run_snapshot_fingerprint",
+            ):
+                if column not in columns:
+                    conn.execute(f"ALTER TABLE jobs ADD COLUMN {column} TEXT")
             event_columns = {
                 str(row["name"])
                 for row in conn.execute("PRAGMA table_info(job_events)")
@@ -216,6 +233,114 @@ class ChatJobStore:
                 "WHERE job_id=? AND run_inbox_enqueued=0",
                 (_now(), job_id),
             )
+            conn.commit()
+            return cur.rowcount == 1
+
+    def pending_run_results(
+        self,
+        project: str,
+        *,
+        limit: int = 500,
+        after_rowid: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Returns terminal run-bound jobs whose result handoff is pending."""
+        if limit < 1:
+            return []
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT rowid AS outbox_seq,job_id,session_id,mode,context_seq,"
+                "run_id,state,answer,error FROM jobs WHERE project=? "
+                "AND run_id IS NOT NULL AND run_inbox_enqueued=1 "
+                "AND run_result_enqueued=0 "
+                "AND state IN ('succeeded','failed','cancelled') "
+                "AND rowid>? ORDER BY rowid LIMIT ?",
+                (project, max(0, after_rowid), limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_run_result_enqueued(self, job_id: str) -> bool:
+        """Marks a terminal-result outbox delivered after the inbox write."""
+        with closing(self._connect()) as conn:
+            cur = conn.execute(
+                "UPDATE jobs SET run_result_enqueued=1,updated_at=? "
+                "WHERE job_id=? AND run_result_enqueued=0 "
+                "AND state IN ('succeeded','failed','cancelled')",
+                (_now(), job_id),
+            )
+            conn.commit()
+            return cur.rowcount == 1
+
+    def set_run_snapshot(
+        self,
+        job_id: str,
+        source: Path,
+        snapshot_path: Path,
+        head: str,
+        fingerprint: str,
+    ) -> bool:
+        """Attach one immutable checkpoint snapshot to a queued run-bound job."""
+        values = (
+            str(Path(source).resolve()),
+            str(Path(snapshot_path).resolve()),
+            head,
+            fingerprint,
+        )
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT state,run_id,run_snapshot_source,run_snapshot_path,"
+                "run_snapshot_head,run_snapshot_fingerprint "
+                "FROM jobs WHERE job_id=?",
+                (job_id,),
+            ).fetchone()
+            if row is None or row["state"] != "queued" or not row["run_id"]:
+                conn.rollback()
+                return False
+            previous = tuple(row[key] for key in (
+                "run_snapshot_source",
+                "run_snapshot_path",
+                "run_snapshot_head",
+                "run_snapshot_fingerprint",
+            ))
+            if any(value is not None for value in previous) and previous != values:
+                conn.rollback()
+                return False
+            conn.execute(
+                "UPDATE jobs SET run_snapshot_source=?,run_snapshot_path=?,"
+                "run_snapshot_head=?,run_snapshot_fingerprint=?,updated_at=? "
+                "WHERE job_id=? AND state='queued'",
+                (*values, _now(), job_id),
+            )
+            conn.commit()
+            return True
+
+    def fail_queued(
+        self,
+        job_id: str,
+        error: str,
+        *,
+        reason: str = "run_snapshot_failed",
+    ) -> bool:
+        """Finish an unstarted job with a durable handoff failure."""
+        now = _now()
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            cur = conn.execute(
+                "UPDATE jobs SET state='failed',error=?,updated_at=? "
+                "WHERE job_id=? AND state='queued'",
+                (error, now, job_id),
+            )
+            if cur.rowcount:
+                conn.execute(
+                    "INSERT INTO job_events(job_id,kind,payload,ts) "
+                    "VALUES(?,?,?,?)",
+                    (
+                        job_id,
+                        "failed",
+                        json.dumps({"error": error, "reason": reason}),
+                        now,
+                    ),
+                )
             conn.commit()
             return cur.rowcount == 1
 
@@ -423,6 +548,7 @@ class ChatJobStore:
             "cancelled": "cancelled",
             "cancel_requested": "running",
             "branch_cleanup_failed": "failed",
+            "run_snapshot_cleanup_failed": "failed",
         }
         for row in rows:
             event_id = f"chat-job:{row['job_id']}:{row['seq']}"
@@ -436,8 +562,13 @@ class ChatJobStore:
                 "status": statuses.get(str(row["kind"]), "running"),
             }
             try:
+                audit_kind = (
+                    "chat_job_run_snapshot_cleanup_failed"
+                    if row["kind"] == "run_snapshot_cleanup_failed"
+                    else f"chat_job_{row['kind']}"
+                )
                 written = audit(
-                    f"chat_job_{row['kind']}",
+                    audit_kind,
                     event_payload,
                     Path("."),
                     str(row["project"]),
@@ -604,6 +735,34 @@ def _run_job(
     worker_session: ChatSession | None = None
     heartbeat_thread.start()
     try:
+        chat_project_dir = Path(project_dir)
+        if job.get("run_id"):
+            from werkstatt.run_snapshot import validate_project_snapshot
+
+            source_value = job.get("run_snapshot_source")
+            snapshot_value = job.get("run_snapshot_path")
+            if (
+                not source_value
+                or not snapshot_value
+                or not job.get("run_snapshot_head")
+                or not job.get("run_snapshot_fingerprint")
+            ):
+                raise RuntimeError(
+                    "Run-gebundener Chatjob hat keinen Checkpoint-Snapshot.",
+                )
+            snapshot = validate_project_snapshot(
+                Path(snapshot_value),
+                Path(source_value),
+                project,
+                str(job["run_id"]),
+                job_id,
+            )
+            if (
+                snapshot.head != job["run_snapshot_head"]
+                or snapshot.fingerprint != job["run_snapshot_fingerprint"]
+            ):
+                raise RuntimeError("Run-Snapshot-Metadaten stimmen nicht ueberein.")
+            chat_project_dir = snapshot.path
         parent_session = ChatSession(project, job["session_id"])
         context_seq = job.get("context_seq")
         worker_session = parent_session.snapshot_to(
@@ -614,7 +773,7 @@ def _run_job(
             worker_session,
             job["message"],
             mode=job["mode"],
-            project_dir=project_dir,
+            project_dir=chat_project_dir,
             cancel_check=cancel_check,
             on_chunk=lambda text: event("chunk", text=text),
             on_tool_call=lambda name, args: event(
@@ -642,6 +801,20 @@ def _run_job(
                 store.append_event(
                     job_id, "branch_cleanup_failed", {"error": str(exc)},
                 )
+        if job.get("run_id") and job.get("run_snapshot_path"):
+            try:
+                from werkstatt.run_snapshot import remove_project_snapshot
+
+                remove_project_snapshot(
+                    Path(job["run_snapshot_path"]),
+                    project,
+                    str(job["run_id"]),
+                    job_id,
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                store.append_event(
+                    job_id, "run_snapshot_cleanup_failed", {"error": str(exc)},
+                )
         heartbeat_stop.set()
         heartbeat_thread.join(timeout=_WORKER_HEARTBEAT_SECONDS + 1)
         resume_chat_jobs(project, project_dir, db_path=db_path)
@@ -654,8 +827,28 @@ def _dispatch_pending(
     store = ChatJobStore(db_path)
     store.recover_abandoned_jobs()
     for job in store.queued():
-        if job.get("run_id") and not job.get("run_inbox_enqueued"):
-            continue
+        if job.get("run_id"):
+            if (
+                not job.get("run_inbox_enqueued")
+                or not job.get("run_snapshot_source")
+                or not job.get("run_snapshot_path")
+                or not job.get("run_snapshot_head")
+                or not job.get("run_snapshot_fingerprint")
+                or not job.get("project")
+            ):
+                continue
+            try:
+                from werkstatt.event_store import EventStore
+
+                acknowledged = EventStore().run_message_acknowledged(
+                    str(job["project"]),
+                    str(job["run_id"]),
+                    f"chat-job:{job['job_id']}",
+                )
+            except (OSError, RuntimeError, sqlite3.Error, ValueError):
+                acknowledged = False
+            if not acknowledged:
+                continue
         key = f"{db_path.resolve()}:{job['job_id']}"
         with _FUTURES_LOCK:
             current = _FUTURES.get(key)
@@ -726,9 +919,11 @@ def reconcile_run_inbox(
     path = Path(db_path) if db_path else _db_path(project)
     store = ChatJobStore(path)
     if event_store is None:
-        from werkstatt.event_store import EventStore
+        from werkstatt.event_store import EventStore, RunNotActiveError
 
         event_store = EventStore()
+    else:
+        from werkstatt.event_store import RunNotActiveError
 
     reconciled = 0
     after_rowid = 0
@@ -737,36 +932,145 @@ def reconcile_run_inbox(
             project, limit=limit, after_rowid=after_rowid,
         )
         if not jobs:
-            return reconciled
+            break
         after_rowid = int(jobs[-1]["outbox_seq"])
         for job in jobs:
             run_id = str(job["run_id"])
-            if event_store.get_run_record(project, run_id) is None:
+            run_record = event_store.get_run_record(project, run_id)
+            if run_record is None:
                 continue
             job_id = str(job["job_id"])
+            try:
+                event_store.enqueue_run_message(
+                    project,
+                    run_id,
+                    f"chat-job:{job_id}",
+                    "job_notice",
+                    {
+                        "job_id": job_id,
+                        "session_id": str(job["session_id"]),
+                        "mode": str(job["mode"]),
+                        "context_seq": job["context_seq"],
+                    },
+                )
+            except RunNotActiveError:
+                store.fail_queued(
+                    job_id,
+                    "Der zugeordnete Run endete, bevor die Chat-Anfrage am "
+                    "Checkpoint uebernommen wurde. Bitte starte die Frage erneut.",
+                    reason="run_ended_before_checkpoint",
+                )
+                continue
+            if store.mark_run_inbox_enqueued(job_id):
+                reconciled += 1
+
+    after_rowid = 0
+    while True:
+        results = store.pending_run_results(
+            project, limit=limit, after_rowid=after_rowid,
+        )
+        if not results:
+            return reconciled
+        after_rowid = int(results[-1]["outbox_seq"])
+        for result in results:
+            run_id = str(result["run_id"])
+            if event_store.get_run_record(project, run_id) is None:
+                continue
+            job_id = str(result["job_id"])
+            answer = str(result.get("answer") or "")
+            error = str(result.get("error") or "")
+            payload = {
+                "job_id": job_id,
+                "session_id": str(result["session_id"]),
+                "mode": str(result["mode"]),
+                "context_seq": result["context_seq"],
+                "state": str(result["state"]),
+                "answer_sha256": hashlib.sha256(
+                    answer.encode("utf-8"),
+                ).hexdigest() if answer else None,
+                "error_sha256": hashlib.sha256(
+                    error.encode("utf-8"),
+                ).hexdigest() if error else None,
+            }
             event_store.enqueue_run_message(
                 project,
                 run_id,
-                f"chat-job:{job_id}",
-                "job_notice",
-                {
-                    "job_id": job_id,
-                    "session_id": str(job["session_id"]),
-                    "mode": str(job["mode"]),
-                    "context_seq": job["context_seq"],
-                },
+                f"chat-job:{job_id}:result",
+                "job_result_notice",
+                payload,
             )
-            if store.mark_run_inbox_enqueued(job_id):
+            if store.mark_run_result_enqueued(job_id):
                 reconciled += 1
 
 
 def resume_chat_jobs(
     project: str, project_dir: Path, *, db_path: Path | None = None,
 ) -> None:
-    """Reconciles run notices before dispatching queued jobs after restart."""
+    """Reconciles run notices/results before dispatching after restart."""
     path = Path(db_path) if db_path else _db_path(project)
+    # Expired workers become terminal before their result outbox is replayed.
+    ChatJobStore(path).recover_abandoned_jobs()
     reconcile_run_inbox(project, db_path=path)
     _dispatch_pending(path, project, Path(project_dir))
+
+
+def fail_uncheckpointed_jobs_for_inactive_run(
+    project: str,
+    active_run_id: str | None,
+    *,
+    db_path: Path | None = None,
+    event_store: Any | None = None,
+) -> int:
+    """Fail queued run jobs whose run ended before a durable safe handoff.
+
+    Jobs with a fully bound snapshot and an acknowledged inbox message remain
+    eligible for replay even after their originating loop has exited. Jobs
+    attached to the active run, including an ambiguous/orphaned run, are left
+    untouched. Unknown checkpoint state is treated as unproven and reported
+    as a visible failure rather than left queued forever.
+    """
+    store = ChatJobStore(Path(db_path) if db_path else _db_path(project))
+    if event_store is None:
+        from werkstatt.event_store import EventStore
+
+        event_store = EventStore()
+
+    failed = 0
+    for job in store.queued():
+        run_id = job.get("run_id")
+        if not isinstance(run_id, str) or not run_id or run_id == active_run_id:
+            continue
+        if job.get("project") != project:
+            continue
+        snapshot_bound = all(
+            isinstance(job.get(field), str) and bool(job[field])
+            for field in (
+                "run_snapshot_source",
+                "run_snapshot_path",
+                "run_snapshot_head",
+                "run_snapshot_fingerprint",
+            )
+        )
+        try:
+            acknowledged = event_store.run_message_acknowledged(
+                project, run_id, f"chat-job:{job['job_id']}",
+            )
+        except (OSError, RuntimeError, sqlite3.Error, ValueError):
+            acknowledged = False
+        if snapshot_bound and acknowledged:
+            continue
+        error = (
+            f"Der zugeordnete Run {run_id} endete, bevor die Chat-Anfrage "
+            "an einem bestaetigten Checkpoint mit stabilem Snapshot "
+            "uebernommen wurde. Bitte sende den Auftrag erneut."
+        )
+        if store.fail_queued(
+            str(job["job_id"]),
+            error,
+            reason="run_ended_before_checkpoint",
+        ):
+            failed += 1
+    return failed
 
 
 def enqueue_chat_job(

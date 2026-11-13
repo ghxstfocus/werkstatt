@@ -27,7 +27,6 @@ def test_confirmed_chat_action_uses_control_api_once(
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
     db_path = tmp_path / "sessions.db"
     monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db_path)
-
     session_id = "a" * 32
     proposal_id = "b" * 32
     session = chat_session.ChatSession("demo", session_id, db_pfad=db_path)
@@ -89,7 +88,7 @@ def test_confirmed_chat_action_uses_control_api_once(
     assert len(calls) == 1
 
 
-def test_confirmed_start_reports_busy_loop_without_claiming_success(
+def test_confirmed_start_queues_followup_for_busy_loop(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
     pytest.importorskip("fastapi")
@@ -97,6 +96,7 @@ def test_confirmed_start_reports_busy_loop_without_claiming_success(
     from fastapi.testclient import TestClient
 
     from werkstatt import chat_session
+    from werkstatt.event_store import EventStore
     from werkstatt.web import app as app_modul
 
     project_dir = tmp_path / "demo"
@@ -104,6 +104,11 @@ def test_confirmed_start_reports_busy_loop_without_claiming_success(
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
     db_path = tmp_path / "sessions.db"
     monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db_path)
+    event_store = EventStore(db_pfad=tmp_path / "events.db")
+    event_store.create_run_record(
+        "demo", "existing-run", "Originalauftrag", base_commit="abc123",
+    )
+    monkeypatch.setattr(app_modul, "EventStore", lambda: event_store)
 
     session_id = "1" * 32
     proposal_id = "2" * 32
@@ -137,12 +142,24 @@ def test_confirmed_start_reports_busy_loop_without_claiming_success(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["state"] == "not_started"
-    assert payload["result"]["gestartet"] is False
-    assert payload["result"]["grund"] == "laeuft_bereits"
+    assert payload["state"] == "queued"
+    assert payload["result"]["run_id"] == "existing-run"
+    message = event_store.claim_run_message(
+        "demo", "existing-run", "test", kind="chat_followup_request",
+    )
+    assert message is not None
+    assert message["payload"] == {
+        "proposal_id": proposal_id,
+        "project": "demo",
+        "session_id": session_id,
+        "parent_run_id": "existing-run",
+        "base_commit": "abc123",
+        "checkpoint_version": 0,
+        "request": "Testauftrag",
+        "op_id": None,
+    }
     events = session.load()
-    assert events[-1]["kind"] == "loop_action_not_started"
-    assert "nicht gestartet" in events[-1]["payload"]["error"]
+    assert events[-1]["kind"] == "loop_action_queued"
     assert not any(event["kind"] == "loop_action_completed" for event in events)
 
     repeated = TestClient(app_modul.app).post(
@@ -150,7 +167,7 @@ def test_confirmed_start_reports_busy_loop_without_claiming_success(
         json={"session_id": session_id, "decision": "confirm"},
     )
     assert repeated.status_code == 200
-    assert repeated.json()["state"] == "not_started"
+    assert repeated.json()["state"] == "queued"
     assert repeated.json()["result"] == payload["result"]
 
 

@@ -63,6 +63,60 @@ def test_read_file_liest_projekt() -> None:
     assert "Fehler" not in r[:80]
 
 
+def test_read_file_offsets_are_character_offsets_and_truncation_is_explicit(tmp_path):
+    (tmp_path / "offset.txt").write_text("ä\nbeta", encoding="utf-8")
+    offset_result = chat_tools.execute_tool(
+        "read_file", {"path": "offset.txt", "start": 2, "end": 6},
+        project_dir=tmp_path,
+    )
+    assert offset_result == "beta"
+
+    large = tmp_path / "large-doc.md"
+    large.write_text("x" * (chat_tools._MAX_READ_BYTES + 10), encoding="utf-8")
+    result = chat_tools.execute_tool(
+        "read_file",
+        {"path": "large-doc.md", "start": 0, "end": 100_000},
+        project_dir=tmp_path,
+    )
+    assert "0-basierte Zeichen-Offsets, keine Zeilennummern" in result
+    assert "Fortsetzen mit read_file(start=" in result
+    assert ", end=100000)" in result
+    assert len(result.encode("utf-8")) <= chat_tools._MAX_READ_BYTES
+    schema = chat_tools.CHAT_TOOLS["read_file"]["description"]
+    assert "keine Zeilennummern" in schema
+    assert "naechsten start-Offset" in schema
+
+
+def test_read_file_tail_reports_actual_range_and_file_length(tmp_path):
+    (tmp_path / "progress.md").write_text(
+        "alt\n" + "x" * 200 + "\nneuester Eintrag\n",
+        encoding="utf-8",
+    )
+    result = chat_tools.execute_tool(
+        "read_file", {"path": "progress.md", "tail_chars": 32},
+        project_dir=tmp_path,
+    )
+    assert "Dateiende-Auszug:" in result
+    assert "von 222" in result
+    assert "Frueheren Inhalt gezielt mit read_file(start=0, end=" in result
+    assert result.endswith("neuester Eintrag\n")
+    assert len(result.encode("utf-8")) <= chat_tools._MAX_READ_BYTES
+
+
+def test_read_file_tail_rejects_conflicting_or_unbounded_ranges(tmp_path):
+    (tmp_path / "progress.md").write_text("inhalt", encoding="utf-8")
+    assert "nicht mit start/end kombiniert" in chat_tools.execute_tool(
+        "read_file",
+        {"path": "progress.md", "tail_chars": 10, "start": 1},
+        project_dir=tmp_path,
+    )
+    assert "zwischen 1 und 49000" in chat_tools.execute_tool(
+        "read_file",
+        {"path": "progress.md", "tail_chars": 50_000},
+        project_dir=tmp_path,
+    )
+
+
 def test_grep_findet_pattern() -> None:
     r = chat_tools.execute_tool(
         "grep", {"pattern": "chat_loop", "path": "werkstatt/chat_agent.py"},
@@ -88,6 +142,35 @@ def test_diagnose_liefert_json() -> None:
 def test_read_status_liefert_inhalt() -> None:
     r = chat_tools.execute_tool("read_status", {})
     assert "STATUS.md" in r or "PROGRESS.md" in r
+
+
+def test_read_status_liefert_neuesten_progress_abschnitt(tmp_path) -> None:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text("## Offene Punkte\n", encoding="utf-8")
+    (docs / "ROADMAP.md").write_text("## Aktueller Fokus\n", encoding="utf-8")
+    (docs / "ARCHITECTURE.md").write_text("## Modulkarte\n", encoding="utf-8")
+    (tmp_path / "PROGRESS.md").write_text(
+        "ALTE-GESCHICHTE\n" + ("Vergangener Eintrag\n" * 2_000)
+        + "## 2026-11-13 — letzter belegter Schritt\n"
+        + "Neuester Beleg: zielabgleich erneut ausgefuehrt.\n",
+        encoding="utf-8",
+    )
+    # The forbidden legacy duplicate must never shadow root PROGRESS.md.
+    (docs / "PROGRESS.md").write_text("FALSCHE DOKU-KOPIE\n", encoding="utf-8")
+
+    result = chat_tools.execute_tool("read_status", {}, project_dir=tmp_path)
+
+    assert "## docs/STATUS.md" in result
+    assert "## docs/ROADMAP.md" in result
+    assert "## docs/ARCHITECTURE.md" in result
+    assert "## PROGRESS.md" in result
+    assert "2026-11-13 — letzter belegter Schritt" in result
+    assert "Neuester Beleg: zielabgleich erneut ausgefuehrt." in result
+    assert "ALTE-GESCHICHTE" not in result
+    assert "FALSCHE DOKU-KOPIE" not in result
+    assert "neuester Dateischluss" in result
+    assert "fruehere Zeichen ausgelassen" in result
 
 
 def test_git_log_funktioniert() -> None:

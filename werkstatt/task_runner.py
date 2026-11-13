@@ -144,31 +144,163 @@ def _task_ende(
         if hasattr(phase_state, "criteria_progress"):
             try:
                 _criterion_progress = phase_state.criteria_progress()
-                if (
-                    isinstance(_criterion_progress, dict)
-                    and _criterion_progress.get("tracked") is True
-                ):
+                if isinstance(_criterion_progress, dict):
+                    _criteria_tracked = (
+                        _criterion_progress.get("tracked") is True
+                    )
+                    _next_task = None
+                    try:
+                        _candidate = phase_state.get_next_task()
+                        if isinstance(_candidate, dict):
+                            _next_task = _candidate
+                    except Exception:
+                        _next_task = None
+                    _next_task_id = (
+                        str(_next_task.get("id") or "").strip()
+                        if _next_task else ""
+                    )
+                    _next_task_name = (
+                        str(_next_task.get("name") or "").strip()
+                        if _next_task else ""
+                    )
+                    if _next_task_id:
+                        _next_step_type = "task"
+                        _next_step = (
+                            f"Weiter mit {_next_task_id}"
+                            + (f": {_next_task_name}" if _next_task_name else "")
+                        )
+                        _decision = (
+                            "Offene Kriterien bleiben im freigegebenen Task-Graph; "
+                            "der naechste ausfuehrbare Task wird fortgesetzt."
+                            if _criteria_tracked
+                            else "Explizite Kriterienzuordnung fehlt; der freigegebene "
+                            "Task-Graph wird fortgesetzt und das Ziel bleibt offen."
+                        )
+                    else:
+                        try:
+                            _all_tasks_done = phase_state.is_complete() is True
+                        except Exception:
+                            _all_tasks_done = False
+                        if _all_tasks_done:
+                            _next_step_type = "phase_end_verify"
+                            _next_step = "Phase-End-Verify ausfuehren"
+                            _decision = (
+                                "Der Task-Graph ist abgeschlossen; jetzt wird "
+                                "das Gesamtziel mit der Abschlusspruefung belegt."
+                            )
+                        else:
+                            _next_step_type = "resolve_open_tasks"
+                            _next_step = (
+                                "Offene oder blockierte Tasks und Abhaengigkeiten klaeren"
+                            )
+                            _decision = (
+                                "Kein weiterer Task ist ausfuehrbar; offene "
+                                "Abhaengigkeiten muessen vor dem Abschluss geklaert werden."
+                            )
+                    _goal = str(
+                        getattr(phase_state, "data", {}).get("aufgabe")
+                        or getattr(state, "aufgabe", "")
+                    ).strip()
+                    _criteria_text = getattr(phase_state, "data", {}).get(
+                        "akzeptanzkriterien", [],
+                    )
+                    _criteria_by_id = {
+                        f"AC{index}": str(text).strip()
+                        for index, text in enumerate(_criteria_text, 1)
+                        if isinstance(text, str) and text.strip()
+                    } if isinstance(_criteria_text, list) else {}
+                    _checkpoint_evidence = [
+                        f"Task {task_id} als done gespeichert",
+                    ]
+                    if _goal:
+                        _checkpoint_evidence.append(f"Ziel: {_goal[:160]}")
+                    if not _criteria_tracked:
+                        _checkpoint_evidence.append(
+                            "Akzeptanzkriterien sind nicht explizit zugeordnet; "
+                            "kein Zielabschluss aus diesem Checkpoint"
+                        )
+                    for _criterion_id in _criterion_progress.get("covered", []):
+                        if len(_checkpoint_evidence) >= 5:
+                            break
+                        _criterion_text = _criteria_by_id.get(
+                            str(_criterion_id), "",
+                        )
+                        _checkpoint_evidence.append(
+                            f"Erfuellt: {_criterion_id}"
+                            + (f" — {_criterion_text[:120]}" if _criterion_text else "")
+                        )
+                    for _criterion_id in _criterion_progress.get("uncovered", []):
+                        if len(_checkpoint_evidence) >= 5:
+                            break
+                        _criterion_text = _criteria_by_id.get(
+                            str(_criterion_id), "",
+                        )
+                        _checkpoint_evidence.append(
+                            f"Offen: {_criterion_id}"
+                            + (f" — {_criterion_text[:120]}" if _criterion_text else "")
+                        )
+                    _task_rows = getattr(phase_state, "data", {}).get("tasks", [])
+                    _open_tasks = [
+                        item for item in _task_rows
+                        if isinstance(item, dict)
+                        and item.get("status") not in ("done", "split")
+                    ] if isinstance(_task_rows, list) else []
+                    if _open_tasks and len(_checkpoint_evidence) < 5:
+                        _open_labels = [
+                            f"{(item.get('id') or '?')!s}: "
+                            f"{(item.get('status') or '?')!s}"
+                            for item in _open_tasks[:3]
+                        ]
+                        _checkpoint_evidence.append(
+                            "Restlicher Graph: " + ", ".join(_open_labels)
+                            + (f" (+{len(_open_tasks) - 3})" if len(_open_tasks) > 3 else "")
+                        )
                     audit(
                         "loop_criteria_progress",
                         {
                             "task_id": task_id,
                             "status": (
-                                "complete"
+                                "untracked"
+                                if not _criteria_tracked
+                                else "complete"
                                 if _criterion_progress.get("valid") is True
                                 and not _criterion_progress.get("uncovered")
                                 else "in_progress"
                             ),
+                            "tracked": _criteria_tracked,
                             "covered": _criterion_progress.get("covered", []),
                             "remaining": _criterion_progress.get("uncovered", []),
                             "error": _criterion_progress.get("error"),
+                            "next_step_type": _next_step_type,
+                            "next_task_id": _next_task_id or None,
+                            "next_step": _next_step,
+                            "decision_summary": _decision,
+                            "evidence": _checkpoint_evidence,
                         },
                         pd,
                         getattr(state, "project_name", "?"),
                     )
-            except Exception:
-                # Zusatztelemetrie darf den bereits verifizierten Abschluss
-                # eines Tasks nicht rueckgaengig machen.
-                pass
+            except Exception as exc:
+                # Der Task bleibt done, aber ein fehlender Zielabgleich darf
+                # nicht unsichtbar bleiben. Keine Exception-Texte persistieren.
+                try:
+                    audit(
+                        "loop_criteria_checkpoint_failed",
+                        {
+                            "task_id": task_id,
+                            "error_type": type(exc).__name__,
+                            "next_step": (
+                                "Phase-End-Verify prueft den Zielabgleich erneut; "
+                                "Erfolg bleibt bis dahin offen"
+                            ),
+                        },
+                        pd,
+                        getattr(state, "project_name", "?"),
+                    )
+                except Exception:
+                    # Der Taskabschluss bleibt unangetastet, auch wenn der
+                    # Audit-Store selbst nicht verfuegbar ist.
+                    pass
         if pd is not None and not _hat_op_nnn(state):
             _progress.append(
                 pd,

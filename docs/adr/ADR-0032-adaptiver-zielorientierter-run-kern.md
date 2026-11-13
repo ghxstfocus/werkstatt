@@ -134,6 +134,54 @@ Bleibt der Fortschritt aus, pausiert der Run mit Diagnose und konkreter
 Rueckfrage. Sie verhindert unendliche Wiederholung, ohne eine starre Zahl
 von LLM-Runden zum Erfolgs- oder Abbruchkriterium zu machen.
 
+### Fortlaufendes Arbeiten und erneuter Zielabgleich
+
+Der Run behaelt ein persistiertes Hauptziel, auch wenn der Chat waehrend
+der Ausfuehrung eine Zwischenfrage beantwortet oder ein neues Anliegen
+aufnimmt. Eine neue Nachricht ersetzt den laufenden Auftrag nicht implizit.
+Der Koordinator ordnet sie als Frage/Diagnose, Steuerung, Gate-Antwort,
+Folgeauftrag innerhalb des freigegebenen Scopes oder separaten bzw.
+scopeveraendernden Schreibauftrag ein. Unklare Zuordnung wird sichtbar
+gemacht und am Chat geklaert. Jede angenommene Nachricht bleibt mit Projekt,
+Session, Run, Elternauftrag und Idempotenzschluessel nachvollziehbar; ein
+Reconnect setzt denselben Arbeitsstand fort.
+
+An jedem sicheren Checkpoint baut der Koordinator den naechsten Schritt aus
+dem aktuellen Stand neu auf: Nutzerziel und Freigabe, offene
+Akzeptanzkriterien, aktuelle Code-/Dokumentationsbasis, neue Inbox-Ereignisse,
+Verify-/Review-Belege und bisherige Reparaturversuche werden abgeglichen.
+Ein gruener Einzelcheck beantwortet nur die Frage, die dieser Check auf dem
+geprueften SHA abdeckt. Er beendet den Run nicht, solange Zielkriterien,
+Dokumentation oder erforderliche Gesamtpruefungen offen oder widerspruechlich
+sind. Nach einem Fehler wird zuerst die Ursache mit einem konkreten neuen
+Beleg eingegrenzt; dieselbe erfolglose Aktion wird nicht als Fortschritt
+wiederholt. Nach Patch oder Replan werden Freigabe, Diff, betroffene Checks
+und Gesamtziel erneut geprueft. Modellurteile allein sind weder Fortschritts-
+noch Erfolgsbelege.
+
+Dokumentation ist Teil des Arbeitsprodukts und des Verify-Vertrags:
+
+- Jede relevante Code-/UI-Aenderung erhaelt einen append-only
+  PROGRESS-Eintrag mit Zweck, betroffenen Bereichen und tatsaechlichen
+  Test-/Verify-Ergebnissen. Ausgefuehrte und nicht ausgefuehrte Checks werden
+  getrennt benannt; CI-Belege sind an Commit-SHA und Lauf gebunden.
+- STATUS.md wird aktualisiert, wenn OPs beginnen, blockiert, umgeschnitten
+  oder durch belegte Akzeptanzkriterien abgeschlossen werden. Eine OP wird
+  nicht allein deshalb geschlossen, weil ein Teilfix oder Commit existiert.
+- ROADMAP.md wird nur bei einer Aenderung von Fokus, Reihenfolge oder
+  Meilenstein angepasst. ARCHITECTURE.md und ADRs werden angepasst, wenn sich
+  implementiertes Verhalten oder eine angenommene Entscheidung aendert.
+- Vor einer Abschlussantwort vergleicht der Koordinator Ziel und Freigabe,
+  Status/Progress/Roadmap/Architektur, tatsaechlichen Diff und Tests mit dem
+  exakten geprueften Stand. Nicht belegte Aussagen bleiben als offen,
+  unbekannt oder nicht ausgefuehrt markiert.
+
+Die Timeline darf den aktuellen Zweck, die gepruefte Quelle, das Ergebnis
+und den naechsten Schritt in menschlich lesbarer Form zeigen. Sie zeigt keine
+verdeckten Modellgedankengaenge. Vollstaendige Kommandos, Ausgaben und
+Artefakte bleiben fuer Debug/Replay verlinkt und werden nur begrenzt und
+markiert in den Chatkontext uebernommen.
+
 ## 4. Fehlerbehandlung: Fehler werden Eingaben fuer denselben Run
 
 Jeder fehlgeschlagene Tool-, Builder-, Reviewer- oder Verify-Schritt wird zu

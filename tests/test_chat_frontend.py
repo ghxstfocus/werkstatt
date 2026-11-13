@@ -86,12 +86,21 @@ def test_chat_can_cancel_background_jobs_without_blocking_composer() -> None:
 def test_chat_renders_explicit_loop_action_confirmation_card() -> None:
     js = _chat_js()
     assert 'kind === "loop_action_not_started"' in js
+    assert 'kind === "loop_action_queued"' in js
+    assert 'data.state === "queued"' in js
     assert '"Nicht gestartet · Ein Loop läuft bereits."' in js
     assert 'function _proposalKarte(proposal, status)' in js
     assert 'button.textContent = decision === "confirm" ? "Bestätigen" : "Ablehnen";' in js
     assert '"/chat/actions/"' in js
     assert 'kind === "loop_action_proposed"' in js
     assert 'proposal.task_preview' in js
+
+
+def test_chat_surfaces_followup_checkpoint_receipt() -> None:
+    js = _chat_js()
+    assert 'kind === "loop_followup_checkpointed"' in js
+    assert '"Aufgenommen · Einordnung ausstehend"' in js
+    assert '_karte("assistant", p.detail' in js
 
 
 def test_selected_debug_mode_is_forwarded_as_debugger_capability():

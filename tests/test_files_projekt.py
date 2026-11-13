@@ -88,3 +88,76 @@ def test_diff_ruft_subprocess_mit_projekt_cwd(client_multi) -> None:
             f"git-diff-cwd muss {erwartet!r} sein (projekt-spezifisch), "
             f"war {cwd!r}"
         )
+
+
+def test_github_run_diff_uses_validated_worktree_and_pinned_base(
+    monkeypatch, tmp_path,
+) -> None:
+    """GitHub-Diff zeigt den Run-Worktree gegen die gepinnte Startrevision."""
+    from werkstatt.project_sources import _managed_worktrees_root
+    from werkstatt.web.app import create_app
+
+    project = tmp_path / "demo"
+    project.mkdir()
+
+    def git(path, *args):
+        result = real_subprocess.run(
+            ["git", "-C", str(path), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.email", "test@example.invalid")
+    git(project, "config", "user.name", "Test")
+    git(project, "remote", "add", "origin", "https://github.com/example/demo.git")
+    (project / "tracked.txt").write_text("base\n", encoding="utf-8")
+    git(project, "add", "tracked.txt")
+    git(project, "commit", "-m", "base")
+    pinned_sha = git(project, "rev-parse", "HEAD")
+
+    run_id = "demo-20261113-abc12345"
+    monkeypatch.setenv("WERKSTATT_RUN_WORKTREE_DIR", str(tmp_path / "run-state"))
+    worktree = _managed_worktrees_root(project) / run_id
+    worktree.parent.mkdir(parents=True)
+    git(
+        project, "worktree", "add", "-b", f"werkstatt/run/{run_id}",
+        str(worktree), pinned_sha,
+    )
+    (worktree / "tracked.txt").write_text("changed by the loop\n", encoding="utf-8")
+
+    record = {
+        "run_id": run_id,
+        "state": "running",
+        "context": {
+            "source": {
+                "kind": "github",
+                "repository": "example/demo",
+                "branch": "main",
+                "pinned_sha": pinned_sha,
+                "run_branch": f"werkstatt/run/{run_id}",
+                "worktree": str(worktree),
+            },
+        },
+    }
+
+    class Registry:
+        def read(self, _project):
+            return record
+
+
+    monkeypatch.setattr(app_module, "_PROJECTS_BASE", tmp_path)
+    monkeypatch.setattr(app_module, "_loop_registry", lambda: Registry())
+    monkeypatch.setattr(auth, "_AUTH_DISABLED", True)
+    client = TestClient(create_app())
+
+    response = client.get("/api/projects/demo/diff")
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["run_id"] == run_id
+    assert data["ref"] == pinned_sha
+    assert "changed by the loop" in data["diff"]
+    git(project, "worktree", "remove", "--force", str(worktree))

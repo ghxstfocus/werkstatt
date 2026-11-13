@@ -107,6 +107,90 @@ def test_prepare_run_recovery_rejects_terminal_run_record(
         prepare_run_recovery("demo", project_dir, record, store=store)
 
 
+def test_prepare_run_recovery_rejects_github_worktree_off_pinned_history(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    from werkstatt.project_sources import _managed_worktrees_root
+
+    project_dir = tmp_path / "demo"
+    (project_dir / "docs").mkdir(parents=True)
+    (project_dir / "docs" / "STATUS.md").write_text(
+        "status\n", encoding="utf-8",
+    )
+
+    def git(path: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", "-C", str(path), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    git(project_dir, "init", "-b", "main")
+    git(project_dir, "config", "user.email", "test@example.invalid")
+    git(project_dir, "config", "user.name", "Test")
+    git(project_dir, "remote", "add", "origin", "https://github.com/example/demo.git")
+    git(project_dir, "add", "docs/STATUS.md")
+    git(project_dir, "commit", "-m", "base")
+    pinned_sha = git(project_dir, "rev-parse", "HEAD")
+
+    worktree_root = tmp_path / "managed-worktrees"
+    monkeypatch.setenv("WERKSTATT_RUN_WORKTREE_DIR", str(worktree_root))
+    run_id = "demo-20261113-abc12345"
+    worktree = _managed_worktrees_root(project_dir) / run_id
+    worktree.parent.mkdir(parents=True)
+    git(
+        project_dir, "worktree", "add", "-b", f"werkstatt/run/{run_id}",
+        str(worktree), pinned_sha,
+    )
+
+    phase = PhaseState("demo", base_dir=worktree / ".werkstatt")
+    phase.init_new(
+        "Aufgabe", [{"id": "task-1", "name": "Arbeit"}],
+        tests=["pytest -q"], akzeptanzkriterien=["Ergebnis belegt"],
+    )
+    phase.run_id = run_id
+    phase.save()
+
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record(
+        "demo", run_id, "Aufgabe", base_commit=pinned_sha,
+    )
+    context = {
+        "schema_version": 1,
+        "goal": "Aufgabe",
+        "source": {
+            "kind": "github",
+            "repository": "example/demo",
+            "branch": "main",
+            "pinned_sha": pinned_sha,
+            "run_branch": f"werkstatt/run/{run_id}",
+            "worktree": str(worktree),
+        },
+    }
+    registry = {"state": "idle", "run_id": run_id, "context": context}
+
+    assert prepare_run_recovery(
+        "demo", project_dir, registry, store=store,
+    )["project_dir"] == worktree.resolve()
+
+    alternate = tmp_path / "alternate"
+    alternate.mkdir()
+    git(alternate, "init", "-b", "main")
+    git(alternate, "config", "user.email", "test@example.invalid")
+    git(alternate, "config", "user.name", "Test")
+    (alternate / "other.txt").write_text("unrelated\n", encoding="utf-8")
+    git(alternate, "add", "other.txt")
+    git(alternate, "commit", "-m", "unrelated")
+    git(project_dir, "fetch", str(alternate), "HEAD")
+    unrelated_sha = git(project_dir, "rev-parse", "FETCH_HEAD")
+    git(worktree, "reset", "--hard", unrelated_sha)
+
+    with pytest.raises(RunRecoveryError, match="gepinnte[nr]? Remote-Revision"):
+        prepare_run_recovery("demo", project_dir, registry, store=store)
+
+
 def test_prepare_run_recovery_uses_matching_fresh_backup(
     tmp_path: Path,
 ) -> None:

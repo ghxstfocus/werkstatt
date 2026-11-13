@@ -14,6 +14,7 @@ import signal
 import subprocess  # noqa: F401  # re-export: Tests patchen werkstatt.loop.subprocess
 import time  # noqa: F401  # re-export: Tests patchen werkstatt.loop.time
 from pathlib import Path
+from typing import Literal
 
 from werkstatt.apply_patches import (  # Fix AZ Stufe 4: Re-Export
     _apply_one_patch,
@@ -31,6 +32,7 @@ from werkstatt.committer import (  # Fix AZ Stufe 5a: Re-Export
 from werkstatt.env_loader import load_env
 from werkstatt.event_store import (
     EventStore,
+    RunInboxPendingError,
     RunLeaseBusy,
     RunLeaseLost,
 )
@@ -309,20 +311,83 @@ def _persist_run_result(
     project_name: str,
     run_id: str,
     exit_code: int,
+    *,
+    run_state: RunState | None = None,
+    phase_state: PhaseState | None = None,
 ) -> None:
-    """Mark the durable run terminal with a version-checked final checkpoint."""
+    """Drain accepted chat input, then atomically mark the run terminal."""
+    status: Literal["completed", "failed"] = (
+        "completed" if exit_code == 0 else "failed"
+    )
+    current = store.get_run_record(project_name, run_id)
+    if current is None:
+        return
+    if current["status"] in {"completed", "failed"}:
+        if (
+            current["status"] == status
+            and current["checkpoint"].get("exit_code") == exit_code
+        ):
+            return
+        # Terminal records are immutable. A duplicate/stale caller must not
+        # overwrite them with a different exit code or status.
+        return
+    if run_state is not None:
+        from werkstatt.phases.tasks import _persist_run_checkpoint
+
+        if phase_state is None:
+            phase_state = PhaseState(
+                project_name,
+                base_dir=Path(run_state.project_dir) / ".werkstatt",
+            )
+            phase_state.load()
+        handled_kinds = {
+            "job_notice", "job_result_notice", "chat_followup_request",
+        }
+        while True:
+            check_run_lease(run_state)
+            _persist_run_checkpoint(
+                store, project_name, run_id, phase_state, None,
+                run_state=run_state,
+            )
+            record = store.get_run_record(project_name, run_id)
+            if record is None:
+                return
+            checkpoint = dict(record["checkpoint"])
+            checkpoint["exit_code"] = exit_code
+            version = store.finish_run_checkpoint(
+                project_name,
+                run_id,
+                checkpoint,
+                expected_version=record["checkpoint_version"],
+                status=status,
+            )
+            if version is not None:
+                return
+            pending_kinds = store.pending_run_message_kinds(project_name, run_id)
+            unsupported = pending_kinds - handled_kinds
+            if unsupported:
+                raise RunInboxPendingError(
+                    "Run-Inbox enthaelt nicht verarbeitbare Nachrichtentypen: "
+                    + ", ".join(sorted(unsupported)),
+                )
+
     record = store.get_run_record(project_name, run_id)
     if record is None:
         return
     checkpoint = dict(record["checkpoint"])
     checkpoint["exit_code"] = exit_code
-    store.update_run_checkpoint(
+    if store.finish_run_checkpoint(
         project_name,
         run_id,
         checkpoint,
         expected_version=record["checkpoint_version"],
-        status="completed" if exit_code == 0 else "failed",
-    )
+        status=status,
+    ) is None:
+        pending_kinds = store.pending_run_message_kinds(project_name, run_id)
+        raise RunInboxPendingError(
+            "Run kann nicht terminal werden; offene Inbox-Nachricht(en): "
+            + (", ".join(sorted(pending_kinds)) or "unbekannt"),
+        )
 
 
 def run_pipeline_loop(
@@ -476,7 +541,10 @@ def _run_pipeline_loop_impl(
     )
     if _rc_exp != 0:
         check_run_lease(state)
-        _persist_run_result(EventStore(), project_name, get_run_id(), _rc_exp)
+        _persist_run_result(
+            EventStore(), project_name, get_run_id(), _rc_exp,
+            run_state=state, phase_state=phase_state,
+        )
         return _rc_exp
 
     # 1. Plan-Gate (leer -> Planner muss erst laufen)
@@ -490,12 +558,18 @@ def _run_pipeline_loop_impl(
     )
     if _done or _rc_plan != 0:
         check_run_lease(state)
-        _persist_run_result(EventStore(), project_name, get_run_id(), _rc_plan)
+        _persist_run_result(
+            EventStore(), project_name, get_run_id(), _rc_plan,
+            run_state=state, phase_state=phase_state,
+        )
         return _rc_plan
     from werkstatt.agent import _enforce_run_budget
     if _enforce_run_budget(state):
         check_run_lease(state)
-        _persist_run_result(EventStore(), project_name, get_run_id(), 1)
+        _persist_run_result(
+            EventStore(), project_name, get_run_id(), 1,
+            run_state=state, phase_state=phase_state,
+        )
         return 1
 
     # Fix AZ Stufe 8-C: Autonomer Task-Loop
@@ -503,14 +577,20 @@ def _run_pipeline_loop_impl(
     _rc_task, tasks_ok, tasks = _phase_tasks_loop(state, phase_state)
     if _rc_task != 0:
         check_run_lease(state)
-        _persist_run_result(EventStore(), project_name, get_run_id(), _rc_task)
+        _persist_run_result(
+            EventStore(), project_name, get_run_id(), _rc_task,
+            run_state=state, phase_state=phase_state,
+        )
         return _rc_task
 
     # Fix AZ Stufe 8-D: Phase-End-Review + Human-Gate + Verify + PROGRESS + Summary
     check_run_lease(state)
     rc = _phase_finalize(state, tasks_ok, tasks, project_name, phase_state)
     check_run_lease(state)
-    _persist_run_result(EventStore(), project_name, get_run_id(), rc)
+    _persist_run_result(
+        EventStore(), project_name, get_run_id(), rc,
+        run_state=state, phase_state=phase_state,
+    )
     return rc
 
 

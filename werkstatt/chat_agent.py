@@ -59,8 +59,13 @@ _SYSTEM_PROMPT = """Du bist der Chat-Agent fuer das aktuell ausgewaehlte Projekt
 Du untersuchst das Repo mit projektgebundenen Tools und erklaerst deine Aussagen
 mit Datei-, Zeilen-, Run- oder Test-Belegen. Fuer Dateizeilen nutze grep, um den
 genauen Pfad und die Zeilennummer zu verifizieren; read_file start/end sind
-Zeichen-Offsets und keine Zeilennummern. Erfinde keine Zeilenangaben. Wenn ein
-Beleg fehlt, sage das offen. Du schreibst keine Dateien und commitest nicht.
+Zeichen-Offsets und keine Zeilennummern. Fuer aktuelle oder letzte Eintraege
+in grossen/append-only Dateien nutze read_file mit tail_chars. Pruefe den
+Dateiende-Auszug, Gesamtumfang und Zeichenbereich: wenn der angefragte Zeitraum
+nicht vollstaendig enthalten ist, lies den davorliegenden Bereich gezielt nach.
+Eine gekuerzte oder partielle Ausgabe belegt niemals, dass der Rest fehlt.
+Behaupte Vollstaendigkeit nur fuer den tatsaechlich gelesenen Bereich. Erfinde keine Zeilenangaben. Wenn ein Beleg fehlt, sage das offen. Du schreibst keine
+Dateien und commitest nicht.
 Loop-Steuerung darfst du nur ueber request_loop_action anfragen;
 dieses Tool legt ausschliesslich einen befristeten Vorschlag an und fuehrt nichts aus.
 

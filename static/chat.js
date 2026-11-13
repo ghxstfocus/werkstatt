@@ -264,6 +264,12 @@
           _updateProposalStatus(p.proposal_id, "Abgeschlossen");
         } else if (kind === "loop_action_not_started") {
           _updateProposalStatus(p.proposal_id, "Nicht gestartet · " + (p.error || "Loop läuft bereits"));
+        } else if (kind === "loop_action_queued") {
+          _updateProposalStatus(p.proposal_id, "Eingereiht · wartet auf sicheren Checkpoint");
+        } else if (kind === "loop_followup_checkpointed") {
+          hatNachricht = true;
+          _updateProposalStatus(p.proposal_id, "Aufgenommen · Einordnung ausstehend");
+          _karte("assistant", p.detail || "Der Loop hat den Folgeauftrag am sicheren Checkpoint aufgenommen.");
         } else if (kind === "loop_action_failed") {
           _updateProposalStatus(p.proposal_id, "Fehlgeschlagen: " + (p.error || "unbekannter Fehler"));
         }
@@ -860,8 +866,10 @@
                   proposal.action === "pause" ? "Loop pausiert" :
                     proposal.action === "resume" ? "Loop fortgesetzt" : "Loop gestoppt";
               } else {
-                state.textContent = data.state === "not_started" ?
-                  "Nicht gestartet · Ein Loop läuft bereits." :
+                state.textContent = data.state === "queued" ?
+                  "Eingereiht · wird am sicheren Checkpoint abgeglichen." :
+                  data.state === "not_started" ?
+                    "Nicht gestartet · Ein Loop läuft bereits." :
                   data.state === "rejected" ? "Abgelehnt" :
                     data.state === "expired" ? "Abgelaufen" : "Status: " + data.state;
               }
@@ -871,7 +879,8 @@
               }
               _setzeChatStatus(state.textContent,
                 data.state === "completed" ? "ready" :
-                  data.state === "not_started" ? "error" : "idle");
+                  data.state === "not_started" ? "error" :
+                    data.state === "queued" ? "ready" : "idle");
             }).catch(function (error) {
               state.textContent = "Fehler: " + error.message + " · Verlauf neu laden für den aktuellen Stand.";
               siblings.forEach(function (other) { other.disabled = true; });
