@@ -542,6 +542,7 @@ def test_task_ende_auditiert_kriterienfortschritt_nach_gruenem_task(tmp_path):
     assert progress_events[0][1] == {
         "task_id": "t1",
         "status": "in_progress",
+        "tracked": True,
         "covered": ["AC1"],
         "remaining": ["AC2"],
         "error": None,
@@ -587,6 +588,37 @@ def test_task_ende_zeigt_phase_end_verify_als_naechsten_schritt(tmp_path):
     )
     assert "Ziel: Einzelnes Ziel" in event[1]["evidence"]
     assert "Erfuellt: AC1 — Ziel ist belegt" in event[1]["evidence"]
+
+
+def test_task_ende_macht_fehlende_kriterienzuordnung_sichtbar(tmp_path):
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.task_runner import _task_ende
+
+    state = _state(tmp_path)
+    phase_state = PhaseState("testprojekt", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new(
+        "Legacy-Auftrag ohne Kriterienzuordnung",
+        [
+            {"id": "t1", "name": "Erster Schritt"},
+            {"id": "t2", "name": "Naechster Schritt"},
+        ],
+    )
+    events = []
+
+    with patch("werkstatt.task_runner.audit", lambda *args: events.append(args)), \
+         patch("werkstatt.progress.append"):
+        _task_ende(state, phase_state, "t1", ok=True, name="Erster Schritt")
+
+    event = next(item for item in events if item[0] == "loop_criteria_progress")
+    payload = event[1]
+    assert payload["tracked"] is False
+    assert payload["status"] == "untracked"
+    assert payload["next_step"] == "Weiter mit t2: Naechster Schritt"
+    assert any(
+        "kein Zielabschluss aus diesem Checkpoint" in item
+        for item in payload["evidence"]
+    )
+    assert "Ziel bleibt offen" in payload["decision_summary"]
 
 
 @pytest.mark.parametrize("task_status", ["failed", "blocked", "pending", "running", "missing"])

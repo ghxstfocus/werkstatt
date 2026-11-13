@@ -414,6 +414,24 @@ def test_kriterienfortschritt_ist_in_timeline_menschlich_beschriftet():
     )
 
 
+def test_nicht_getrackte_kriterien_verursachen_keinen_falschen_nullfortschritt():
+    detail = inspector._tl_detail(
+        "loop_criteria_progress",
+        {
+            "task_id": "t1",
+            "tracked": False,
+            "covered": [],
+            "remaining": [],
+            "next_step": "Weiter mit t2",
+        },
+    )
+
+    assert detail == (
+        "Zielabgleich ohne explizite Kriterienzuordnung nach t1; "
+        "danach: Weiter mit t2"
+    )
+
+
 def test_paralleler_chat_job_ist_in_timeline_menschlich_beschriftet():
     label = inspector._tl_label("loop_chat_job_observed", {})
     detail = inspector._tl_detail(

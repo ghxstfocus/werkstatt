@@ -144,10 +144,10 @@ def _task_ende(
         if hasattr(phase_state, "criteria_progress"):
             try:
                 _criterion_progress = phase_state.criteria_progress()
-                if (
-                    isinstance(_criterion_progress, dict)
-                    and _criterion_progress.get("tracked") is True
-                ):
+                if isinstance(_criterion_progress, dict):
+                    _criteria_tracked = (
+                        _criterion_progress.get("tracked") is True
+                    )
                     _next_task = None
                     try:
                         _candidate = phase_state.get_next_task()
@@ -172,6 +172,9 @@ def _task_ende(
                         _decision = (
                             "Offene Kriterien bleiben im freigegebenen Task-Graph; "
                             "der naechste ausfuehrbare Task wird fortgesetzt."
+                            if _criteria_tracked
+                            else "Explizite Kriterienzuordnung fehlt; der freigegebene "
+                            "Task-Graph wird fortgesetzt und das Ziel bleibt offen."
                         )
                     else:
                         try:
@@ -211,6 +214,11 @@ def _task_ende(
                     ]
                     if _goal:
                         _checkpoint_evidence.append(f"Ziel: {_goal[:160]}")
+                    if not _criteria_tracked:
+                        _checkpoint_evidence.append(
+                            "Akzeptanzkriterien sind nicht explizit zugeordnet; "
+                            "kein Zielabschluss aus diesem Checkpoint"
+                        )
                     for _criterion_id in _criterion_progress.get("covered", []):
                         if len(_checkpoint_evidence) >= 5:
                             break
@@ -252,11 +260,14 @@ def _task_ende(
                         {
                             "task_id": task_id,
                             "status": (
-                                "complete"
+                                "untracked"
+                                if not _criteria_tracked
+                                else "complete"
                                 if _criterion_progress.get("valid") is True
                                 and not _criterion_progress.get("uncovered")
                                 else "in_progress"
                             ),
+                            "tracked": _criteria_tracked,
                             "covered": _criterion_progress.get("covered", []),
                             "remaining": _criterion_progress.get("uncovered", []),
                             "error": _criterion_progress.get("error"),

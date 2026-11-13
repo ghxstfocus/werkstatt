@@ -901,7 +901,10 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
         remaining_count = len(remaining) if isinstance(remaining, list) else 0
         task = str(payload.get("task_id") or "").strip()
         suffix = f" nach {task}" if task else ""
-        summary = f"{covered_count} erledigt, {remaining_count} offen{suffix}"
+        if payload.get("tracked") is False:
+            summary = f"Zielabgleich ohne explizite Kriterienzuordnung{suffix}"
+        else:
+            summary = f"{covered_count} erledigt, {remaining_count} offen{suffix}"
         next_step = str(payload.get("next_step") or "").strip()
         if next_step:
             summary += f"; danach: {next_step[:120]}"
