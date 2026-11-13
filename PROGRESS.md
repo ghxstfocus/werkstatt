@@ -6108,3 +6108,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Ein fehlgeschlagener Post-Build-Verify-Schritt wird jetzt anhand seiner Stage-ID einer gezielten Reflection zugefuehrt. Die Reflection kann mit dokumentiertem Run-Budget ueber fuenf Versuche hinaus weiterarbeiten und stoppt bei wiederholtem identischem Zustand; unbekannte Stages oder fehlende Budgets bleiben im begrenzten Kompatibilitaetspfad.
 - CI-Nachweis folgt. Der Loop-Kern nutzt weiterhin eine feste Setup-/Plan-/Task-/Finalize-Sequenz; das bleibt ein offener Architekturmeilenstein aus ADR-0032.
+
+
+## 2026-11-13 — OP-398: Audit-Katalog fuer adaptive Recovery
+
+- CI hat die beiden neuen Ereignistypen `loop_reflection_bounded_fallback` und `loop_reflection_targeted_recovery` als fehlende Katalogeintraege erkannt. Beide sind jetzt in `werkstatt/audit.py` registriert.
+- Der fehlgeschlagene Quality-Gate-Lauf war damit ein echter Katalogdrift; Ruff war gruen, Pytest hatte 1 Fehler und 2164 bestandene Tests. Erneuter CI-Nachweis folgt.
