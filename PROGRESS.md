@@ -6188,3 +6188,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der Linux-End-to-End-Test startet den CLI-Worker mit `-E -S`, um globale Site-Hooks auszuschliessen. Unter Python-Versionen, die Venv-Pfade erst beim Laden von `site` aktivieren, zeigt `sysconfig` dort auf das globale Python.
 - Der Test-Bootstrap nimmt jetzt zusaetzlich das `site-packages` des explizit verwendeten Test-Python auf. Damit bleiben installierte Laufzeitabhaengigkeiten wie `requests` erreichbar, ohne die Produktionsstartlogik oder den isolierten Testzweck zu aendern.
+
+
+## 2026-11-13 — Control: laufenden Task zwischen Builder-Events anzeigen
+
+- Die Aktiv-Anzeige leitete bisher nur aus dem allerletzten Event ab, ob gerade gearbeitet wird. Kontext- und Datei-Events des Builders konnten deshalb einen noch offenen Task aus der Live-Anzeige entfernen.
+- Der Live-Feed verfolgt jetzt einen gestarteten Task bis zu dessen Abschluss-, Fehler- oder Blockiert-Event. Die bestehende Stale-Grenze bleibt aktiv; ein Gate-Warten hat Vorrang und wird weiter als Warten auf Antwort angezeigt. Parallel eingehende Chat-Job-Events verdecken den Loop-Task nicht.
+- Die Control-Aktivitaet zeigt Rolle und Task-Namen verstaendlich an, waehrend die einzelnen Events als detaillierte Timeline-Schritte erhalten bleiben.
+- Regressionstest: offener Task plus `builder_file_context` muss weiter Builder, Task-ID und lesbare Aktion anzeigen. Vollstaendiges Quality-Gate folgt.
