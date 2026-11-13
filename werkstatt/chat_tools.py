@@ -109,7 +109,7 @@ def _read_file(args: dict[str, Any]) -> str:
                 fortsetzen += f", end={end}"
             fortsetzen += ")"
             marker = (
-                "\\n[Ausgabe gekürzt: maximal 50 KB. start/end sind "
+                "\n[Ausgabe gekürzt: maximal 50 KB. start/end sind "
                 "0-basierte Zeichen-Offsets, keine Zeilennummern. "
                 f"Fortsetzen mit {fortsetzen}.]"
             )
