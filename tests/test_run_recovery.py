@@ -695,6 +695,34 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         f"Resume launcher probe failed: {launcher_probe.stdout!r} "
         f"{launcher_probe.stderr[-3000:]!r}"
     )
+    worker_probe_env = {
+        **bootstrap_probe_env,
+        "WERKSTATT_BOOTSTRAP_STARTED": str(tmp_path / "popen-bootstrap"),
+        "WERKSTATT_WORKER_BOOT": str(tmp_path / "popen-worker"),
+        "WERKSTATT_PACKAGE_BOOT": str(tmp_path / "popen-package"),
+    }
+    worker_probe_log = (tmp_path / "popen-worker.log").open("ab")
+    worker_probe: subprocess.Popen[bytes] | None = None
+    try:
+        worker_probe = subprocess.Popen(
+            [str(worker_launcher), "-m", "werkstatt.loop", "--help"],
+            cwd=tmp_path,
+            env=worker_probe_env,
+            stdout=worker_probe_log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        worker_probe_rc = worker_probe.wait(timeout=10)
+    finally:
+        worker_probe_log.close()
+        if worker_probe is not None and worker_probe.poll() is None:
+            worker_probe.kill()
+            worker_probe.wait(timeout=5)
+    assert worker_probe_rc == 0, (
+        f"Resume Popen probe failed: "
+        f"{(tmp_path / 'popen-worker.log').read_text(encoding='utf-8', errors='replace')[-3000:]!r}"
+    )
+    assert (tmp_path / "popen-bootstrap").is_file()
     monkeypatch.setattr(app_module, "_PROJECTS_BASE", project_base)
     monkeypatch.setattr(app_module, "_loop_registry", lambda: registry)
     app_module._LAUFENDE_LOOPS.clear()
