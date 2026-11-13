@@ -576,7 +576,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     worker_launcher = overlay_root / "python-worker"
     worker_launcher.write_text(
         "#!/bin/sh\n"
-        "exec \"$WERKSTATT_TEST_PYTHON\" -E -S -v -c "
+        "exec \"$WERKSTATT_TEST_PYTHON\" -E -S -c "
         "\"$WERKSTATT_WORKER_BOOTSTRAP_CODE\" \"$@\"\n",
         encoding="utf-8",
     )

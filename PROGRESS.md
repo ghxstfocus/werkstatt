@@ -6041,50 +6041,8 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die Recovery-Akzeptanz bleibt unverändert: fehlgeschlagenes Phase-End-Verify, bereits erledigter Task, echter HTTP-Resume, derselbe Run und Phase-End-Verifikation müssen erfolgreich sein. CI muss diesen Nachweis noch bestätigen.
 
 
-## 2026-11-13 — Resume-Launcher-Argumente und Bootstrap-Diagnose
+## 2026-11-13 — Resume-Testdiagnose
 
-- Der explizite Test-Launcher übernimmt aus dem produktiven Startbefehl nur die CLI-Argumente nach `-m werkstatt.loop`; das Modulpräfix darf nicht als Loop-Option weitergereicht werden.
-- Ein frueher Marker und periodische Python-Stack-Dumps machen den naechsten CI-Fehler diagnostizierbar, falls der Subprozess vor dem Overlay-Import haengen bleibt. Die Resume-Akzeptanz bleibt unveraendert.
-
-
-## 2026-11-13 — Resume-Worker startet Python ohne editable Startup-Hooks
-
-- Der letzte CI-Lauf bestaetigt: Selbst der explizite Launcher erreicht nicht den ersten Python-Statement-Marker; der Interpreter bleibt schon waehrend der normalen `site`-Initialisierung stehen.
-- Der Test-Launcher startet den gleichen Interpreter nun mit `-S`, um automatische `.pth`-/editable-Hooks zu ueberspringen, und fuegt die installierten `purelib`-/`platlib`-Pfade danach explizit hinzu. So bleibt der HTTP-/CLI-/RunRecord-Recovery-Pfad real, ohne dass ein Test-Overlay von installierten Startup-Hooks abhaengt.
-- CI muss bestaetigen, dass der Worker nun in den Bootstrap eintritt und den fehlgeschlagenen Run bis Phase-End-Verify abschliesst.
-
-
-## 2026-11-13 — Resume-Worker Python-Startup-Trace
-
-- Auch mit `-S` erreicht der Worker den ersten Bootstrap-Marker nicht. Der Test-Launcher schaltet fuer den naechsten Lauf den Python-Importtrace ein; dessen Ausgabe landet im Worker-Log und zeigt, ob der Stillstand noch vor dem Skript oder waehrend eines Imports passiert.
-- Der Resume-Test bleibt rot, bis der Worker nachweislich startet und denselben fehlgeschlagenen Run abschliesst.
-
-
-## 2026-11-13 — Resume-Worker isoliert von Python-Umgebungsvariablen
-
-- Der Importtrace endet weiterhin vor dem Bootstrap bei der Initialisierung des Python-Interpreters. Der Launcher ignoriert jetzt mit `-E` geerbte `PYTHON*`-Variablen; Overlay, Projektcode und installierte Bibliotheken werden danach gezielt durch den Test-Bootstrap auf den Importpfad gesetzt.
-- Der naechste Quality-Gate-Lauf prueft erneut den produktiven HTTP-Resume bis zum Phase-End-Verify, ohne die Recovery-Akzeptanz abzuschwaechen.
-
-
-## 2026-11-13 — Python-Interpreter-Preflight fuer Resume
-
-- Der HTTP-gestartete Worker bleibt vor dem Test-Bootstrap stehen, obwohl Python mit `-E -S` gestartet wird. Vor dem HTTP-Aufruf prueft derselbe CI-Prozess nun denselben Interpreter und dieselben Startup-Flags mit einem isolierten `-c`-Aufruf (5-Sekunden-Timeout).
-- Der Preflight macht sichtbar, ob das Problem die allgemeine Python-Initialisierung in diesem Runner betrifft oder nur den durch die API gestarteten Worker.
-
-
-## 2026-11-13 — Preflight auf echten Python-Pfad korrigiert
-
-- Der erste Preflight-Aufruf verwendete nach dem Test-Monkeypatch versehentlich erneut den Launcher statt des Python-Interpreters; das erklaert, warum sein Trace Overlay-Imports enthielt.
-- Die Probe nutzt jetzt den vor dem Monkeypatch gesicherten Interpreterpfad aus `WERKSTATT_TEST_PYTHON`. Erst damit ist der Kontrolllauf unabhaengig vom HTTP-Worker-Launcher.
-
-
-## 2026-11-13 — Resume-Launcher ohne Skriptdatei
-
-- Der direkte Python-Preflight laeuft, waehrend die Skriptdatei-Variante des Launchers vor ihrem ersten Statement stehen bleibt. Um die Skriptpfad-Hypothese zu pruefen, fuehrt der Launcher denselben Test-Bootstrap jetzt mit `python -c` aus.
-- CLI-Argumente, echter Python-Prozess, HTTP-Resume, RunRecord, PhaseState und Phase-End-Verify bleiben Teil des Tests; der Launcher ist weiter nur ein Isolationsadapter fuer den editable-installierten CI-Test.
-
-
-## 2026-11-13 — Direkter Resume-Bootstrap-Probe
-
-- Der einfache Interpreter-Preflight ist gruen, der vom HTTP-Resume gestartete Prozess erreicht aber weiter keinen Bootstrap-Marker.
-- Vor dem HTTP-Aufruf fuehrt der Test jetzt denselben `-E -S -c`-Bootstrap einmal direkt mit `--help` aus. So prueft er den kompletten Paket-/Overlay-Einstieg getrennt vom API-Prozessstart; beide Pfade muessen starten, bevor der Resume-Akzeptanztest weiterlaeuft.
+- Der echte HTTP-Resume-Prozess blieb im CI vor dem Bootstrap-Marker stehen, obwohl ein direkter Kontrollstart mit denselben Interpreter- und Isolationsflags funktionierte. Der Test-Launcher startet den Worker jetzt ohne den zusaetzlichen Python-Importtrace (`-v`).
+- Der Akzeptanztest behaelt den produktiven HTTP-Resume, den echten CLI-Einstieg, RunRecord, gespeicherten PhaseState und Phase-End-Verify bei.
+- Wiederholte Zwischenhypothesen und Preflight-Notizen sind zu diesem Befund zusammengezogen. Der aktuelle CI-Lauf muss noch bestaetigen, dass der fehlgeschlagene Run erfolgreich fortgesetzt wird.
