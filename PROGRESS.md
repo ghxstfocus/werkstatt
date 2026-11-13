@@ -6454,10 +6454,16 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **CI-Nachbesserung:** Wiederholte/stale Ergebnis-Persistierung auf bereits terminalen Runs bleibt jetzt idempotent und veraendert den terminalen Datensatz nicht. Regressionstest deckt ab, dass ein zweiter Aufruf mit abweichendem Exitcode keinen abgeschlossenen Run ueberschreibt.
 - **CI-Befund:** Der Linux-Gesamttest (2222 bestanden, 5 uebersprungen), Ruff und JavaScript-Syntax waren gruen; Quality Gate fand zwei Mypy-Typfehler am terminalen Statusparameter. Der Status ist nun als `Literal["completed", "failed"]` typisiert.
 - **Verifikation:** GitHub Actions Quality Gate Run [43450127576](https://github.com/ghxstfocus/werkstatt/actions/runs/43450127576) fuer Commit `3bdf805`: erfolgreich. Damit sind auf Linux Pytest (2222 bestanden, 5 uebersprungen), Ruff, Mypy, AST und Audit-Katalog erfolgreich; OP-401/402 und OP-382 bleiben wie oben dokumentiert offen.
-
 ## 2026-11-13 — Absolute interne Symlinks in Run-Snapshots fail-closed behandeln
 
 - **Befund:** Ein absoluter Symlink innerhalb des Quellprojekts blieb beim Kopieren auf den urspruenglichen Checkout gerichtet. Der Hintergrundjob konnte dadurch keinen wirklich abgeschlossenen Snapshot verwenden.
 - **Aenderung:** Snapshot-Erstellung und -Validierung weisen absolute Symlinks zurueck; relative, innerhalb des Projekts bleibende Symlinks bleiben unterstuetzt. Ein Regressionstest deckt den internen absoluten Link ab.
 - **Review-Nachbesserung:** Windows-rooted Ziele ohne Laufwerksbuchstaben werden ebenfalls als absolut abgewiesen; Regressionstests decken Laufwerks- und rooted Pfade ab.
 - **Verifikation:** Lokal unter Windows 3.14: `tests/test_run_snapshot.py` 4 bestanden, 2 wegen fehlender Symlink-Rechte uebersprungen; Ruff und `git diff --check` bestanden. Der Linux-CI-Lauf fuer den vorherigen Commit `6b7b8a3` war erfolgreich; die zusaetzliche Windows-rooted-Kante braucht noch einen CI-Lauf.
+
+# 2026-11-13 — Chat-Implementierungsauftraege an den Loop uebergeben
+
+- **Live-Befund:** Bei „Bearbeite OP-372“ erklaerte der Projektchat, er koenne nicht schreiben, und bot nur read-only Schritte an. Der Chat-Agent hat tatsaechlich keine Produktions-Schreibtools; `request_loop_action` kann aber den Auftrag als befristeten Vorschlag an den Loop uebergeben. Der Systemprompt beschrieb diese Trennung, band natuerlich formulierte Umsetzungswuensche jedoch nicht eindeutig an den Handoff.
+- **Aenderung:** Der Prompt weist Umsetzungswuensche/OPs jetzt explizit dem Loop zu: Belege pruefen, knappen Plan formulieren, den Handoff ohne Copy/Paste anfordern und UI-/Plan-Gates korrekt erklaeren. Reine Analyse startet weiterhin keinen Run; Ablehnungsgruende werden konkret weitergegeben.
+- **Verifikation:** Lokal unter Python 3.14: Chat-Agent-/Action-API-Tests 31 bestanden, 1 plattformbedingt uebersprungen; gezielte Handoff- und Registry-Regressionen 8 bestanden, 1 uebersprungen. Ruff und `git diff --check` bestanden. Kein Vollsuite-/Linux-CI-Nachweis fuer diese Aenderung.
+- **Grenze:** Der Handoff erstellt weiterhin nur einen Vorschlag. Der Nutzer bestaetigt den angezeigten Start in der UI; die Loop-Planfreigabe bleibt vor Produktionsaenderungen verpflichtend.

@@ -825,6 +825,10 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
     },
     "request_loop_action": {
         "description": (
+            "Nutze dieses Tool, wenn der Nutzer eine OP oder einen konkreten "
+            "Code-/Doku-/Test-Auftrag umgesetzt haben will. Uebergib OPs mit "
+            "op_id und direkte Auftraege mit aufgabe. Das Tool erstellt nur "
+            "einen befristeten Vorschlag; es startet den Loop nicht selbst. "
             "Legt einen befristeten Vorschlag zum Starten, Pausieren, "
             "Fortsetzen oder Stoppen an. Fuehrt nichts aus; die UI verlangt "
             "anschliessend eine ausdrueckliche Bestaetigung."

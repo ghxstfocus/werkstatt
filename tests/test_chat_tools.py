@@ -52,6 +52,14 @@ def test_openai_schemas_anzahl() -> None:
         assert s["function"]["name"] in chat_tools.CHAT_TOOLS
 
 
+def test_loop_action_tool_is_documented_as_write_handoff() -> None:
+    description = chat_tools.CHAT_TOOLS["request_loop_action"]["description"]
+    assert "wenn der Nutzer eine OP" in description
+    assert "Code-/Doku-/Test-Auftrag" in description
+    assert "op_id" in description and "aufgabe" in description
+    assert "startet den Loop nicht selbst" in description
+
+
 def test_read_file_blockt_ausserhalb() -> None:
     r = chat_tools.execute_tool("read_file", {"path": "/etc/passwd"})
     assert "Fehler" in r or "nicht" in r
