@@ -6114,3 +6114,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - CI hat die beiden neuen Ereignistypen `loop_reflection_bounded_fallback` und `loop_reflection_targeted_recovery` als fehlende Katalogeintraege erkannt. Beide sind jetzt in `werkstatt/audit.py` registriert.
 - Der fehlgeschlagene Quality-Gate-Lauf war damit ein echter Katalogdrift; Ruff war gruen, Pytest hatte 1 Fehler und 2164 bestandene Tests. Erneuter CI-Nachweis folgt.
+
+
+## 2026-11-13 — OP-398: Verify-Ausnahmen gezielt zuordnen
+
+- Prozess- und Timeoutfehler aus Verify werden als `stage-Fehler: …` protokolliert. Die Build-Recovery erkennt dieses Format jetzt ebenso wie normale `stage: …`-Fehler und bleibt auf die tatsaechlich rote Stage begrenzt.
+- Der Regressionstest deckt die Ausnahmeform ab. Die Quality-Gate-Pruefung fuer diesen Fix laeuft; OP-398 und der Umbau des festen Phasenkoerns bleiben offen.
