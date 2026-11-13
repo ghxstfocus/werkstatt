@@ -93,11 +93,11 @@ def test_read_status_liefert_inhalt() -> None:
 def test_read_status_liefert_neuesten_progress_abschnitt(tmp_path) -> None:
     docs = tmp_path / "docs"
     docs.mkdir()
-    (docs / "STATUS.md").write_text("## Offene Punkte\\n", encoding="utf-8")
+    (docs / "STATUS.md").write_text("## Offene Punkte\n", encoding="utf-8")
     (docs / "PROGRESS.md").write_text(
-        "ALTE-GESCHICHTE\\n" + ("Vergangener Eintrag\\n" * 2_000)
-        + "## 2026-11-13 — letzter belegter Schritt\\n"
-        + "Neuester Beleg: zielabgleich erneut ausgefuehrt.\\n",
+        "ALTE-GESCHICHTE\n" + ("Vergangener Eintrag\n" * 2_000)
+        + "## 2026-11-13 — letzter belegter Schritt\n"
+        + "Neuester Beleg: zielabgleich erneut ausgefuehrt.\n",
         encoding="utf-8",
     )
 
