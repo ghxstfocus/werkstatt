@@ -21,6 +21,30 @@ def test_init_new_und_load(tmp_path):
     assert ps2.data["tasks"][0]["status"] == "pending"
 
 
+def test_init_new_persistiert_criterion_refs_ueber_reload(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new(
+        "Kriteriengebundener Plan",
+        [{"id": "t1", "criterion_refs": ["AC1", "AC3"]}],
+        akzeptanzkriterien=["Kriterium 1", "Kriterium 2", "Kriterium 3"],
+    )
+
+    assert ps.data["tasks"][0]["criterion_refs"] == ["AC1", "AC3"]
+
+    resumed = PhaseState("testprojekt", base_dir=tmp_path)
+    assert resumed.load() is True
+    assert resumed.data["tasks"][0]["criterion_refs"] == ["AC1", "AC3"]
+
+
+def test_init_new_verwirft_ungueltige_criterion_refs(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+
+    with pytest.raises(ValueError, match="criterion_refs"):
+        ps.init_new("X", [{"id": "t1", "criterion_refs": ["AC1", 2]}])
+
+    assert not ps.exists()
+
+
 def test_resume_findet_naechsten_task(tmp_path):
     ps = PhaseState("testprojekt", base_dir=tmp_path)
     ps.init_new("X", [{"id": "t1"}, {"id": "t2"}, {"id": "t3"}])
@@ -120,6 +144,8 @@ def test_resume_blocked_wird_nach_erfolgreicher_dependency_ausfuehrbar(tmp_path)
         "tasks:\n  - not-a-mapping\n",
         "tasks:\n  - id: [not, hashable]\n",
         "tasks:\n  - id: t1\n    dependencies: invalid\n",
+        "tasks:\n  - id: t1\n    criterion_refs: invalid\n",
+        "tasks:\n  - id: t1\n    criterion_refs: [AC1, 2]\n",
         "tasks:\n  - id: t1\n  - id: t1\n",
         "tasks:\n  - id: ''\n",
     ],
