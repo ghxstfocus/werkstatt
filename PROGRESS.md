@@ -6467,3 +6467,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Der Prompt weist Umsetzungswuensche/OPs jetzt explizit dem Loop zu: Belege pruefen, knappen Plan formulieren, den Handoff ohne Copy/Paste anfordern und UI-/Plan-Gates korrekt erklaeren. Reine Analyse startet weiterhin keinen Run; Ablehnungsgruende werden konkret weitergegeben.
 - **Verifikation:** Lokal unter Python 3.14: Chat-Agent-/Action-API-Tests 31 bestanden, 1 plattformbedingt uebersprungen; gezielte Handoff- und Registry-Regressionen 8 bestanden, 1 uebersprungen. Ruff und `git diff --check` bestanden. Kein Vollsuite-/Linux-CI-Nachweis fuer diese Aenderung.
 - **Grenze:** Der Handoff erstellt weiterhin nur einen Vorschlag. Der Nutzer bestaetigt den angezeigten Start in der UI; die Loop-Planfreigabe bleibt vor Produktionsaenderungen verpflichtend.
+
+## 2026-11-13 — Chat-Aktionskarte auch in Kompatibilitaets- und Reconnect-Pfaden anzeigen
+
+- **Live-Befund:** Der Chat erklaerte einen Loop-Vorschlag, aber die UI zeigte keine Bestaetigungskarte. Der Legacy-`/chat`-Pfad lieferte nur Antworttext zurueck; ausserdem hing das Live-Rendering davon ab, dass das vorherige Tool-Call-Event im Browser angekommen war.
+- **Aenderung:** Der Legacy-Endpunkt gibt ausschliesslich strukturierte `request_loop_action`-Ergebnisse als `action_proposals` zurueck. Legacy- und WebSocket-Pfade rendern daraus dieselbe Aktionskarte. Der Hintergrundjob-Pfad verarbeitet das Proposal-Tool-Ergebnis auch dann, wenn das zugehoerige Call-Event beim Reconnect fehlt.
+- **Verifikation:** Lokal unter Windows/Python 3.14: Chat-, Job-, Gate- und Aktions-API-/Frontend-Tests 51 bestanden, 1 plattformbedingt uebersprungen. Ruff, strikte Doku-Drift-Pruefung und `git diff --check` bestanden. Linux-CI fuer diesen Fix steht nach dem Push aus.
