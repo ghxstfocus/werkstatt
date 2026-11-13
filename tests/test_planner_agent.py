@@ -590,8 +590,14 @@ def test_planner_action_create_update(tmp_path):
     mock_reply.ok = True
     mock_reply.content = json.dumps({
         "tasks": [
-            {"id": "t1", "name": "Neu", "action": "create"},
-            {"id": "t2", "name": "Update", "action": "update"},
+            {
+                "id": "t1", "name": "Neu", "action": "create",
+                "criterion_refs": ["AC1"],
+            },
+            {
+                "id": "t2", "name": "Update", "action": "update",
+                "criterion_refs": ["AC1"],
+            },
         ],
         "tests": ["t"],
         "akzeptanzkriterien": ["a"],

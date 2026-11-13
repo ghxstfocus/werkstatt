@@ -6096,3 +6096,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Das Plan-Gate prueft dieselben Referenzen erneut, bevor es den Freigabe-Hook aufruft. Ein einzelner Task darf alle Kriterien tragen; bei mehreren Tasks ist die Zuordnung explizit.
 - Atomare Einzeldatei-Plaene erhalten ein konkretes Kriterium; ein generischer Split-Fallback darf mehrere Kriterien nicht auf einen einzigen ersten-Datei-Task reduzieren.
 - OP-398 bleibt offen: Auswahlbegruendung, zielorientierte Fortsetzung, Evidence Ledger und Ende-zu-Ende-Verhalten sind damit nicht abgeschlossen. Quality-Gate-Nachweis folgt fuer den Commit.
+
+
+## 2026-11-13 — OP-398: CI-Feedback zu Kriterienzuordnung
+
+- Der erste CI-Lauf fand drei veraltete Test-Fixtures, die mehrteilige Plaene ohne Kriteriumsreferenzen modellierten. Die fail-closed Regel blieb aktiv; die Fixtures enthalten jetzt beobachtbare Kriterien und AC-Referenzen.
+- Die CI wird erneut ausgefuehrt; OP-398 bleibt bis zur fachlichen, durchgaengigen Erfuellung aller Kriterien offen.

@@ -63,6 +63,7 @@ def _build_llm_reply_single(task: dict) -> Any:
     # wörtlich -- so wie der echte Architect es tun wuerde.
     import json
     payload = {
+        "akzeptanzkriterien": ["Alle 5 Architect-Punkte sind umgesetzt."],
         "tasks": [
             {
                 "id": "t1",
@@ -72,6 +73,7 @@ def _build_llm_reply_single(task: dict) -> Any:
                 "architect_start": "1. In `core/alerts/filters.py`",
                 "architect_ende": "2. In `core/alerts/filters.py`",
                 "dependencies": [],
+                "criterion_refs": ["AC1"],
             },
             {
                 "id": "t2",
@@ -81,6 +83,7 @@ def _build_llm_reply_single(task: dict) -> Any:
                 "architect_start": "3. In `core/services/audit_reader_service.py`",
                 "architect_ende": "5. In `core/services/audit_reader_service.py`",
                 "dependencies": ["t1"],
+                "criterion_refs": ["AC1"],
             },
         ]
     }
@@ -135,6 +138,7 @@ def test_lange_prosa_wird_nicht_zu_kurzer_description():
         # vorkommen -> Extraktor schlaegt fehl -> Fallback greift.
         import json
         payload = {
+            "akzeptanzkriterien": ["Der Task wird vollstaendig beschrieben."],
             "tasks": [
                 {
                     "id": "t1",
@@ -144,6 +148,7 @@ def test_lange_prosa_wird_nicht_zu_kurzer_description():
                     "architect_start": "GIBT ES NICHT",
                     "architect_ende": "AUCH NICHT",
                     "dependencies": [],
+                    "criterion_refs": ["AC1"],
                 }
             ]
         }
