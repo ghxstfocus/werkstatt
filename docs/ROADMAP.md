@@ -61,7 +61,7 @@ Fehler, Run-Kontext und konkrete Diagnose.
 - OP-398: begruendete OP-Auswahl, adaptive Rollenwahl, deterministische Planvalidierung und Zielabgleich; gueltige Task-DAGs werden sortiert, fehlerhafte vor dem Plan-Gate abgewiesen.
 - OP-405: Rollenbelege und Kontextbudgets begrenzen und messbar halten.
 - OP-280: Doku-Drift beim Verify zuverlaessig erkennen.
-- OP-372/374/375: Projektstatistik und Event-Projektion semantisch korrekt halten.
+- OP-372 ist abgeschlossen. OP-374/375: Backfill, Projektstatistik und Event-Projektion semantisch korrekt halten.
 - OP-382: zehn vollstaendige UI-Runs mit Run-, Gate- und Verify-Belegen.
 
 Keine optionale Selbstverbesserung oder Memory-Injektion vor Abschluss
