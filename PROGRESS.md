@@ -6226,7 +6226,7 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Run-gebundene Lesejobs werden erst an einem bestätigten Inbox-Checkpoint gestartet. Vor dem Acknowledge erstellt der Loop einen verwalteten Snapshot des exakten Run-Worktrees; Quelle, Snapshot-Pfad, HEAD und Fingerprint werden am Job und im Checkpoint protokolliert.
 - Der Worker validiert Snapshot-Identität und Inhalt vor dem Lesen. Fehlende, veränderte oder nicht passende Snapshots beenden den Job sichtbar und fail-closed. Nach dem Job wird nur der genau zugehörige Snapshot bereinigt; Cleanup-Fehler werden als Audit-Ereignis geführt.
 - Ein Zwischen-CI-Lauf deckte einen fehlerhaften Testaufbau auf: Das Manifest verwendete eine Platzhalter-Job-ID statt der tatsächlich erzeugten ID. Der Test bindet den Snapshot jetzt an die echte Job-ID. Zusätzlich ist das Cleanup-Audit-Ereignis im Katalog registriert.
-- Quality-Gate [Run 43397231589](https://github.com/ghxstfocus/werkstatt/actions/runs/43397231589): 2.190 Tests bestanden, 5 übersprungen; Ruff, Mypy, AST und Audit-Katalog grün. Der Doku-/OP-Abgleich und ein erneuter CI-Lauf nach diesem Protokolleintrag stehen noch aus.
+- Quality-Gate [Run 43397231589](https://github.com/ghxstfocus/werkstatt/actions/runs/43397231589): 2.190 Tests bestanden, 5 übersprungen; Ruff, Mypy, AST und Audit-Katalog grün. Der erneute CI-Lauf nach dem Protokolleintrag ist [Run 43397584682](https://github.com/ghxstfocus/werkstatt/actions/runs/43397584682): 2.190 Tests bestanden, 5 übersprungen; Quality-Gate ohne Regression.
 
 ## Folgeprüfung nach Loop- und UI-Stabilisierung
 
