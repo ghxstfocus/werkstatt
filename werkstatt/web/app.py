@@ -1447,6 +1447,10 @@ def create_app() -> FastAPI:
                     _validate_github_worktree,
                 )
 
+                if not isinstance(run_id, str):
+                    raise HTTPException(
+                        status_code=409, detail="Registry-Run-ID ist ungueltig",
+                    )
                 try:
                     basis = _validate_github_worktree(basis, run_id, source)
                 except RunRecoveryError as exc:
