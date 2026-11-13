@@ -331,10 +331,16 @@ def test_post_build_recovery_rechecks_full_phase_and_targets_new_failures(
         last_verify_errors=["pytest_regression: assertion failed"],
         budget={"max_llm_calls": 30},
     )
-    recovery = MagicMock(side_effect=[
-        setattr(state, "last_verify_errors", ["ruff-Fehler: timeout"]) or True,
-        setattr(state, "last_verify_errors", []) or True,
-    ])
+    recovery_calls = []
+
+    def recover(_state, **kwargs):
+        recovery_calls.append(kwargs)
+        state.last_verify_errors = (
+            ["ruff-Fehler: timeout"] if len(recovery_calls) == 1 else []
+        )
+        return True
+
+    recovery = MagicMock(side_effect=recover)
     full_verify = MagicMock(side_effect=[(False, []), (True, [])])
     monkeypatch.setattr(tasks, "_reflection_loop", recovery)
     monkeypatch.setattr(tasks, "_verify_patches_soft", full_verify)
