@@ -556,6 +556,8 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     )
     (stub_package / "loop.py").write_text(
         "import os, sys\n"
+        "from pathlib import Path\n"
+        "Path(os.environ['WERKSTATT_WORKER_BOOT']).write_text('boot', encoding='utf-8')\n"
         "import werkstatt\n"
         "werkstatt.__path__ = [os.environ['WERKSTATT_REAL_PACKAGE']]\n"
         "from werkstatt import loop, orchestrator\n"
@@ -598,6 +600,8 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "WERKSTATT_REAL_PACKAGE", str(repo_root / "werkstatt"),
     )
     monkeypatch.setenv("WERKSTATT_TEST_PROJECT_DIR", str(project_dir))
+    worker_boot = tmp_path / "resume-worker-booted"
+    monkeypatch.setenv("WERKSTATT_WORKER_BOOT", str(worker_boot))
     verify_marker = tmp_path / "phase-end-verify-ran"
     monkeypatch.setenv("WERKSTATT_VERIFY_MARKER", str(verify_marker))
     monkeypatch.setenv(
@@ -636,8 +640,17 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
                 if log_path.is_file()
                 else "(no worker log)"
             )
+            worker = app_module._LAUFENDE_LOOPS.get("demo")
+            registry_snapshot = registry.read("demo")
+            extra_logs = "\\n".join(
+                f"{path}: {path.read_text(encoding='utf-8', errors='replace')[-4000:]}"
+                for path in sorted(tmp_path.rglob("*.log"))[:10]
+            )
             assert record["status"] == "completed", (
-                f"run={record!r}; worker_log={log}"
+                f"run={record!r}; worker_returncode="
+                f"{worker.poll() if worker is not None else None}; "
+                f"registry={registry_snapshot!r}; worker_boot={worker_boot.exists()}; "
+                f"worker_log={log!r}; other_logs={extra_logs!r}"
             )
         assert record["run_id"] == run_id
         assert record["checkpoint_version"] > failed_record["checkpoint_version"]

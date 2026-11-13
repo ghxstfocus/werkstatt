@@ -6006,3 +6006,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der integrierte HTTP-Resume-Test startet jetzt aus einem fehlgeschlagenen RunRecord mit gespeichertem Verify-Fehler und einem bereits erledigten Task im PhaseState.
 - Der echte CLI-Resume muss den Phase-End-Verify erreichen, denselben Run abschließen und den Taskstatus `done` erhalten. Damit wird gezielt die OP-397-Akzeptanz „keine erneute Task-Ausführung als Voraussetzung für Finalisierung“ abgesichert.
 - Die CI-Verifikation dieses verschärften Tests steht noch aus.
+
+
+## 2026-11-13 — Diagnose fehlgeschlagenen HTTP-Resume
+
+- Der Regressionstest mit einem als `phase_end_verify_failed` markierten Run blieb nach HTTP-Annahme im Zustand `failed`; der bestehende Worker-Log war leer.
+- Der Test protokolliert im Assertion-Fehler jetzt Worker-Exitcode, Registry-Snapshot, Bootstrap-Marker und begrenzte Inhalte weiterer Testlogs. Damit grenzt der nächste CI-Lauf den Resume-Abbruch ein, ohne die Akzeptanz abzuschwächen.
