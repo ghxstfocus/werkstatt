@@ -553,8 +553,10 @@ def test_task_ende_auditiert_kriterienfortschritt_nach_gruenem_task(tmp_path):
         ),
         "evidence": [
             "Task t1 als done gespeichert",
-            "Abgedeckt: AC1",
-            "Offen: AC2",
+            "Ziel: Kriterienfortschritt",
+            "Erfuellt: AC1 — Erstes Ziel",
+            "Offen: AC2 — Zweites Ziel",
+            "Restlicher Graph: t2: pending",
         ],
     }
 
@@ -582,6 +584,8 @@ def test_task_ende_zeigt_phase_end_verify_als_naechsten_schritt(tmp_path):
     assert event[1]["decision_summary"].startswith(
         "Der Task-Graph ist abgeschlossen;"
     )
+    assert "Ziel: Einzelnes Ziel" in event[1]["evidence"]
+    assert "Erfuellt: AC1 — Ziel ist belegt" in event[1]["evidence"]
 
 
 @pytest.mark.parametrize("task_status", ["failed", "blocked", "pending", "running", "missing"])
