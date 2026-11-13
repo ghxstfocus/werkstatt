@@ -6183,3 +6183,8 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die Chat-Werkzeugschleife hat keine Standard-Rundengrenze. Die Stagnationspruefung erkennt jetzt neben unmittelbar wiederholten Aufrufen auch alternierende Zyklen bis zur Periodenlaenge drei anhand identischer Werkzeug-Eingaben und -Ergebnisse.
 - Beim ersten erkannten Zyklus bekommt das Modell einen konkreten Kurskorrektur-Hinweis; wiederholt sich derselbe Zyklus danach erneut, formuliert es eine belegte Abschlussantwort mit offenen Punkten. Abbruch und echte Budgetgrenzen bleiben davon getrennt.
 - Tests decken A→B→A→B, direkte Wiederholung und mehr als fuenf erfolgreiche Werkzeugrunden ab. Quality-Gate-Nachweis folgt.
+
+## 2026-11-13 — Resume-Test: isoliertes Python findet venv-Abhaengigkeiten
+
+- Der Linux-End-to-End-Test startet den CLI-Worker mit `-E -S`, um globale Site-Hooks auszuschliessen. Unter Python-Versionen, die Venv-Pfade erst beim Laden von `site` aktivieren, zeigt `sysconfig` dort auf das globale Python.
+- Der Test-Bootstrap nimmt jetzt zusaetzlich das `site-packages` des explizit verwendeten Test-Python auf. Damit bleiben installierte Laufzeitabhaengigkeiten wie `requests` erreichbar, ohne die Produktionsstartlogik oder den isolierten Testzweck zu aendern.
