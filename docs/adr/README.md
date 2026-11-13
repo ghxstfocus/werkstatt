@@ -12,7 +12,7 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0006](ADR-0006-event-store-ssot.md) | Event-Store als SSOT fuer Loop-Events | accepted |
 | [ADR-0007](ADR-0007-gate-bridge.md) | Gate-Bridge — Loop headless, Gates ueber HTTP | accepted |
 | [ADR-0008](ADR-0008-chat-eigener-agent.md) | Chat als eigener Agent | accepted |
-| [ADR-0009](ADR-0009-timeline-primaer-layout-a.md) | Timeline primaer, Chat rechts (Layout A) | accepted |
+| [ADR-0009](ADR-0009-timeline-primaer-layout-a.md) | Frueheres Timeline-primaer-Layout | superseded |
 | [ADR-0010](ADR-0010-memory-zweistufig.md) | Memory zweistufig — Provenance-Entscheidungen in ADR-0032 uebernommen | superseded |
 | [ADR-0011](ADR-0011-debugger-chat-modus.md) | Debugger als Chat-Modus (evidence-first) | accepted |
 | [ADR-0012](ADR-0012-vier-strukturmuster.md) | Vier Strukturmuster als Ursache fuer Multi-File-Failure | accepted |
@@ -25,7 +25,8 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0019](ADR-0019-gate-lifecycle.md) | Gate-Lifecycle-Vertrag statt PID/Heartbeat/Timeout | accepted |
 | [ADR-0020](ADR-0020-human-readable-audit.md) | Human-Readable Audit-Trail im Frontend | accepted |
 | [ADR-0021](ADR-0021-rollen-detail-ansicht.md) | Rollen-spezifische Detail-Ansicht im Chat-Drawer | accepted |
-| [ADR-0022](ADR-0022-hybrid-ui-modi.md) | Hybrid-UI-Modi (Cockpit / Control / Debug) | accepted |
+| [ADR-0022](ADR-0022-hybrid-ui-modi.md) | Chat-zentrierte Projektoberflaeche und Arbeitsmodi | accepted |
+| [ADR-0022a](ADR-0022a-wasserfall-cockpit.md) | Historische Wasserfall-/Live-Feed-Entscheidung | superseded |
 | [ADR-0023](ADR-0023-multi-projekt-kontext.md) | Multi-Projekt-Kontext | accepted |
 | [ADR-0024](ADR-0024-tiered-event-log.md) | Tiered Event Log + Projector (CQRS-light) | accepted |
 | [ADR-0025](ADR-0025-erfolgsquoten-visualisierung.md) | Erfolgsquoten-Visualisierung | accepted |
@@ -36,4 +37,3 @@ Architecture Decision Records. Dateiname: `ADR-NNNN-<slug>.md`.
 | [ADR-0030](ADR-0030-projektquellen-und-rollenmodelle.md) | Projektquellen und projektbezogene Rollenmodelle | accepted |
 | [ADR-0031](ADR-0031-metaorchestrator.md) | Metaorchestrator fuer projektuebergreifende Arbeit | accepted |
 | [ADR-0032](ADR-0032-adaptiver-zielorientierter-run-kern.md) | Adaptiver, zielorientierter Run-Kern | accepted |
-
