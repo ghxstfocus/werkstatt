@@ -6071,4 +6071,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Webstarts persistieren den RunRecord als `starting`; der Worker bestaetigt seinen Start idempotent als `running`.
 - Wenn `Popen` fehlschlaegt oder der autonome Auswahlbeleg nicht geschrieben werden kann, wird `starting → failed` per Status-CAS gesetzt. Der Run bleibt nicht irrtuemlich als laufend markiert und sein Checkpoint bleibt unveraendert.
-- Event-Store- und Web-Regressionstests decken Statusuebergaenge und den fehlgeschlagenen Workerstart ab. Quality Gate wird nach dem Commit verlinkt.
+- Event-Store- und Web-Regressionstests decken Statusuebergaenge und den fehlgeschlagenen Workerstart ab. Quality Gate Run [43357750948](https://github.com/ghxstfocus/werkstatt/actions/runs/43357750948) ist gruen: 2.154 Tests bestanden; Ruff/Mypy ohne Fehler, AST 387 Dateien ohne Fehler, Audit-Katalog bestanden.
