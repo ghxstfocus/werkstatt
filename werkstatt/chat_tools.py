@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import uuid
+from collections import deque
 from collections.abc import Callable
 from contextvars import ContextVar
 from pathlib import Path
@@ -56,10 +57,60 @@ def _resolved_safe(pfad: str) -> Path | None:
     return p
 
 
+def _read_file_tail(pfad: Path, tail_chars: int) -> str:
+    """Return a bounded end excerpt with its true character offsets."""
+    if tail_chars < 1 or tail_chars > 49_000:
+        return "Fehler: tail_chars muss zwischen 1 und 49000 liegen"
+    content_byte_limit = _MAX_READ_BYTES - 512
+    teile: deque[tuple[str, int]] = deque()
+    bytezahl = 0
+    gesamt_zeichen = 0
+    try:
+        with pfad.open("r", encoding="utf-8", errors="replace") as datei:
+            while chunk := datei.read(8192):
+                for zeichen in chunk:
+                    zeichen_bytes = len(zeichen.encode("utf-8"))
+                    teile.append((zeichen, zeichen_bytes))
+                    bytezahl += zeichen_bytes
+                    gesamt_zeichen += 1
+                    while teile and (
+                        len(teile) > tail_chars
+                        or bytezahl > content_byte_limit
+                    ):
+                        _verworfen, verworfene_bytes = teile.popleft()
+                        bytezahl -= verworfene_bytes
+    except OSError as exc:
+        return f"Fehler beim Lesen: {exc}"
+
+    offset = gesamt_zeichen - len(teile)
+    auszug = "".join(zeichen for zeichen, _groesse in teile)
+    marker = (
+        f"[Dateiende-Auszug: Zeichen {offset} bis {gesamt_zeichen} "
+        f"von {gesamt_zeichen}; angefordert {tail_chars}, geliefert "
+        f"{len(teile)}. "
+    )
+    if offset:
+        marker += f"Frueheren Inhalt gezielt mit read_file(start=0, end={offset}) lesen.]"
+    else:
+        marker += "Dateianfang und Dateiende sind vollständig enthalten.]"
+    return marker + "\\n" + auszug
+
+
 def _read_file(args: dict[str, Any]) -> str:
     pfad = _resolved_safe(str(args.get("path", "")))
     if pfad is None or not pfad.is_file():
         return "Fehler: Datei nicht gefunden oder ausserhalb Projekt"
+    if args.get("tail_chars") is not None:
+        try:
+            start = int(args.get("start", 0))
+            end_value = args.get("end")
+            end = int(end_value) if end_value is not None else None
+            tail_chars = int(args["tail_chars"])
+        except (TypeError, ValueError):
+            return "Fehler: tail_chars/start/end muessen ganze Zahlen sein"
+        if start != 0 or end is not None:
+            return "Fehler: tail_chars darf nicht mit start/end kombiniert werden"
+        return _read_file_tail(pfad, tail_chars)
     try:
         start = int(args.get("start", 0))
         end_value = args.get("end")
@@ -605,8 +656,9 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
     "read_file": {
         "description": (
             "Liest Datei-Inhalt mit 0-basierten Zeichen-Offsets (start/end, "
-            "keine Zeilennummern; max 50 KB). Gekürzte Ausgaben nennen "
-            "den nächsten start-Offset zur Fortsetzung."
+            "keine Zeilennummern; max 50 KB). Fuer aktuelle Eintraege "
+            "tail_chars nutzen: liefert Dateiende-Auszug, Gesamtlaenge und "
+            "Offsets. Gekuerzte Ausgaben nennen die Fortsetzung."
         ),
         "parameters": {
             "type": "object",
@@ -614,6 +666,11 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
                 "path": {"type": "string"},
                 "start": {"type": "integer"},
                 "end": {"type": "integer"},
+                "tail_chars": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 49000,
+                },
             },
             "required": ["path"],
         },
