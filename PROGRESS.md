@@ -6212,3 +6212,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der Loop verlangt bei einem leeren Repair jetzt eine erneute Reviewer-Freigabe, bevor er den Reviewer-Befund als erledigt wertet. Bleibt sie aus, wird der konkrete Stillstand gemeldet.
 - Die Control-Anzeige identifiziert den offenen Task separat vom letzten Fortschrittsereignis. Das Ereignis selbst bleibt in der Timeline; Rolle und Task-Name stehen im aktiven Hinweis.
 - Regressionen: K3-Reviewer-Fall und aktiver Task mit nachfolgendem Verify-Event. Quality-Gate der Korrektur folgt.
+
+
+## 2026-11-13 — Endnachweis fuer adaptive Reflection und Control-Aktivitaet
+
+- GitHub Actions Quality-Gate fuer den vollständigen Fix-Stand: [Run 43390871808](https://github.com/ghxstfocus/werkstatt/actions/runs/43390871808) erfolgreich.
+- Ergebnis: 2.184 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 0, Audit-Katalog bestanden.
+- Der Lauf deckt den Standard-Reflection-Pfad ueber fuenf Reparaturschritte, Reviewer-Nachpruefung nach leerem Patch sowie den aktiven Task mit sichtbarem Verify-Timeline-Event ab.
