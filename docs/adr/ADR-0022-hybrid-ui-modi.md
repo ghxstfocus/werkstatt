@@ -1,227 +1,161 @@
-# ADR-0022: Chat-zentrierte Projektoberflaeche und Arbeitsmodi
+# ADR-0022: Chat-zentrierte Projektoberflaeche
 
 - **Datum:** 2026-11-13
 - **Status:** accepted
-- **Ersetzt:** die urspruengliche ADR-0022 sowie die Layout- und Modusentscheidungen aus ADR-0009 und ADR-0022a
+- **Ersetzt:** die fruehere ADR-0022 sowie die Layout- und Modusentscheidungen aus ADR-0009 und ADR-0022a
 - **Produktspezifikation:** [Freigegebener UI-Plan](../UI-PLAN-2026-11-12.md)
-- **Abgrenzung:** ADR-0029 definiert Chat-Aktionen und Freigaben; ADR-0032 definiert Run-, Event-, Inbox- und Checkpoint-Vertraege; ADR-0031 definiert den werkstattweiten Metaorchestrator.
+- **Ergaenzt:** ADR-0029 (Chat-Aktionen und Freigaben), ADR-0031 (Metaorchestrator), ADR-0032 (Run-, Event- und Checkpoint-Vertraege)
 
 ## Kontext
 
-Die Werkstatt ist eine Multi-Projekt-Entwicklungsumgebung. Der Chat ist
-Ansprechpartner und primaerer Steuerungsort fuer Fragen, Auftraege, Runs,
-Freigaben und Ergebnisse. Die UI muss waehrenddessen die technische Arbeit
-erklaerbar machen, ohne Chat, Gate, Run und Timeline zu getrennten
-Wahrheiten zu machen.
+Die Werkstatt ist eine Multi-Projekt-Entwicklungsumgebung. Der Projektchat
+ist Ansprechpartner und primaerer Ort fuer Fragen, Arbeitsauftraege,
+Run-Steuerung, Freigaben und Ergebnisse. Die UI muss technische Arbeit
+erklaerbar und pruefbar machen, ohne fuer Chat, Gate, Run und Timeline
+getrennte Wahrheiten zu erzeugen.
 
-Der am 2026-11-12 freigegebene UI-Plan beschreibt die konkrete
-Produktspezifikation. Diese ADR legt die dauerhaften Architektur- und
-Interaktionsregeln fest. Sie behauptet nicht, dass die Zieloberflaeche
-bereits vollstaendig umgesetzt ist.
+Der freigegebene UI-Plan definiert Produktdetails und Lieferumfang. Diese
+ADR legt nur die stabilen Architektur- und Interaktionsentscheidungen fest.
+Sie ist kein Implementierungsnachweis.
 
 ## Entscheidung
 
-### 1. Informationshierarchie
+### 1. Projekt-Shell und Hierarchie
 
-Die Projektoberflaeche hat eine feste, responsive Struktur:
+Die Projektansicht ordnet die Bereiche verbindlich so:
 
-1. **Projektleiste:** Home/Uebersicht, offene Projekttabs und Plus-Menue.
-   Das Plus-Menue bietet Projektanlage, GitHub-Verbindung/Registrierung
-   und das Oeffnen eines vorhandenen lokalen Projekts.
-2. **Modusleiste direkt darunter:** Cockpit, Control, Debug und Runs.
-3. **Projektstatus:** kompakte Anzeige von Laufzustand, offenem Gate und
-   letztem Run des aktiven Projekts.
-4. **Arbeitsflaeche:** Chat bleibt im Projekt dauerhaft sichtbar und
-   bedienbar. Eine kontextuelle Arbeitsansicht ergaenzt ihn, ersetzt ihn
-   aber nicht als Steuerungsweg.
-5. **Detailleiste:** Audit, Loop-Log, Diff, Verify und Dateien bleiben
-   erreichbar und auf Projekt sowie gegebenenfalls Run gefiltert.
+1. **Projektleiste:** Uebersicht, geoeffnete Projekte und ein Plus-Menue zum
+   Anlegen, Verbinden oder Oeffnen eines Projekts.
+2. **Modusleiste:** direkt darunter Cockpit, Control, Debug und Runs.
+3. **Projektstatus:** kompakter, belegter Laufzustand, offene Freigaben und
+   letzter Run des aktiven Projekts.
+4. **Arbeitsflaeche:** Chat und eine zum Modus passende Zusatzansicht.
+5. **Detailleiste:** Audit, Loop-Log, Diff, Verify und Dateien, gefiltert nach
+   Projekt und bei Bedarf Run.
 
-Ohne geoeffnetes Projekt ist die Projektuebersicht die Default-Ansicht.
-Sie zeigt registrierte Projekte, belegte Laufzustaende, Zeitraeume und
-Datenaktualitaet, Run-Ergebnisse sowie Aktionen zum Oeffnen oder Anlegen.
-Der spaetere Metaorchestrator sitzt auf dieser Uebersicht. Er verwendet
-dieselben Projekt- und Run-Belege und hebt weder Projektisolation noch
-Human-Gates auf.
+Ohne aktives Projekt ist die Projektuebersicht die Default-Ansicht. Sie
+aggregiert registrierte Projekte und deren belegte Kennzahlen. Der spaetere
+Metaorchestrator sitzt auf dieser Uebersicht; seine Befugnisse und
+Aktivierungsvoraussetzungen stehen in ADR-0031.
 
-Die Moduswahl aendert Schwerpunkt und Detailgrad, nicht aktives Projekt,
-Chat-Session, Run oder Gate. Projekt-, Tab- und Sessionwechsel duerfen
-Nachrichten, Aktionen, Events und Freigaben nicht vermischen.
+Projektwechsel isolieren Sessions, Aktionen, Gates, Runs und Events.
+Ein Moduswechsel aendert nur die Perspektive, nicht Projekt, Session oder
+Laufzustand.
 
-### 2. Vier Modi, eine Quelle der Wahrheit
+### 2. Eine Quelle der Wahrheit, mehrere Sichten
 
-Chat, Modi und Detailleiste lesen dieselbe persistierte Run-/Event-Projektion.
-Sie duerfen Informationen unterschiedlich darstellen, aber keinen eigenen
-widersprechenden Prozess-, Gate- oder Chat-Zustand fuehren.
+Chat, Cockpit, Control, Debug und Runs projizieren denselben persistenten
+Projekt-/Run-/Event-Zustand gemaess ADR-0024 und ADR-0032. Sie duerfen
+unterschiedliche Detailgrade zeigen, aber keine voneinander abweichenden
+Status-, Gate- oder Laufzustaende verwalten. Nicht persistierte DOM- oder
+Frontend-Schattenzustaende sind keine Statusquelle. Reconnect muss denselben
+Zustand idempotent rekonstruieren.
 
-| Ansicht | Leitfrage | Inhalt |
+| Ansicht | Zweck | Verbindlicher Schwerpunkt |
 |---|---|---|
-| **Cockpit** | Wo stehen Ziel und Projekt? | Ziel und Akzeptanzkriterien, belegter Gesamtfortschritt, offene Risiken und Gates, Run-Ergebnisse sowie verdichteter langsamer Verlauf. |
-| **Control** | Was tut der Run gerade und was folgt? | Vollstaendige chronologische Live-Timeline mit Akteur/Faehigkeit, Zweck, Task/Pfad, Status, Ergebnis/Beleg und naechstem Schritt. Die Reihenfolge bleibt sichtbar. |
-| **Debug** | Was ist fehlgeschlagen und wie wird es behoben? | Failure Record, Stage/Exit-Code, Commit- und Worktree-Fingerprint, Log-/Artefaktverweise, betroffene Kriterien, Reparaturversuche und erneute Verify in Ursache-Wirkungs-Reihenfolge. |
-| **Runs** | Was lief in einem oder mehreren Projekten? | Filterbare Run-Historie, Status, Gate-Verlauf und Replay. Werkstattweite Schreibsteuerung bleibt bis zu den Aktivierungskriterien aus ADR-0031 gesperrt. |
+| **Cockpit** | Orientierung und Verlauf | Ziel, Kriterien, belegter Fortschritt, Risiken, Gates, Run-Ergebnisse und verdichtete Timeline |
+| **Control** | Laufende Arbeit verstehen | Chronologische Live-Ereignisse mit Akteur, Schritt, Zweck, Status, Beleg und naechstem Schritt |
+| **Debug** | Fehler nachvollziehen | Fehler, Diagnose, betroffene Kriterien, Reparaturversuche und erneute Verify kausal verknuepfen |
+| **Runs** | Laeufe vergleichen und wiedergeben | Projekt-/Run-Historie, Ergebnis, Gates und Replay |
 
-Cockpit und Control sind keine konkurrierenden Timelines: Cockpit verdichtet
-den Verlauf zur Orientierung und Nachanalyse; Control bewahrt dessen
-chronologische Detailspur. Debug verbindet Fehler und Reparatur mit den
-konkreten Belegen.
+Cockpit verdichtet Ereignisse; Control bewahrt ihre zeitliche Detailfolge;
+Debug ordnet sie nach Ursache und Wirkung. Keine dieser Ansichten ersetzt
+den Chat als Handlungsort.
 
-### 3. Chat und Nachrichtenlayout
+### 3. Chat als Interaktionsflaeche
 
-- Nutzernachrichten stehen rechtsbuendig in kompakten Bubbles mit begrenzter
-  Maximalbreite. Sie wachsen mit dem Text, nehmen aber nicht die gesamte
-  Chatbreite ein.
-- Assistentenantworten stehen linksbuendig in einer ruhig lesbaren,
-  begrenzten Textspalte. Lange Zeilen werden umgebrochen; Code und Tabellen
-  duerfen das Layout nicht horizontal aufziehen.
-- Der Composer bleibt am unteren Rand erreichbar, ist mehrzeilig und
-  tastaturbedienbar. Enter sendet, Shift+Enter erzeugt einen Zeilenumbruch.
-  Fokuszustand und Screenreader-Beschriftung sind eindeutig.
-- Die Chat-Historie bleibt bei Moduswechsel erhalten. Neue Antworten werden
-  der ausloesenden Nachricht und Session zugeordnet; parallele Read-Jobs
-  duerfen in anderer Reihenfolge fertig werden.
-- Antworten auf Repo-, Status- und Run-Fragen nennen verfuegbare Belege wie
-  Datei/Fundstelle, Event, Kommando, Ergebnis und Zeitpunkt. Ohne Beleg wird
-  die Unsicherheit benannt; Aktivitaet wird nicht erfunden.
+Der Chat bleibt in jedem Projektmodus sichtbar und bedienbar. Er zeigt
+Nutzernachrichten rechts als kompakte, in der Breite begrenzte Bubbles und
+Assistentenantworten links in einer gut lesbaren Textspalte. Der Composer
+bleibt erreichbar, mehrzeilig und tastaturbedienbar.
 
-Bei laengerer Arbeit zeigt der Chat hoechstens eine temporaere,
-menschlich formulierte Aktivitaetszeile fuer den aktuellen Chat-Auftrag.
-Sie wird beim Schrittwechsel ersetzt und nach Abschluss entfernt.
-Detaillierte Agenten-/Loop-Schritte stehen in Control. Der Chat zeigt keine
-Spinnerfolge und keine internen Rohgedanken, sondern kurze erklaerende
-Zusammenfassungen.
+Fragen zu Code, Status und Runs werden mit verfuegbaren Datei-, Zeilen-,
+Event-, Kommando- oder Verify-Belegen beantwortet. Fehlende Evidenz wird
+benannt. Prozessstart, Aufgabenannahme und erfolgreicher Abschluss sind
+getrennte Zustaende.
 
-Prozessstart, Aufgabenannahme, Ausfuehrung, Ablehnung, Abschluss und Fehler
-sind getrennte Zustaende und werden entsprechend dargestellt. Ein gestarteter
-Prozess ist kein Beleg fuer angenommene oder abgeschlossene Arbeit.
+Bei laengerer Arbeit zeigt der Chat hoechstens eine temporaere, menschlich
+formulierte Statuszeile zum aktuellen Chat-Auftrag. Sie wird beim
+Schrittwechsel ersetzt und nach Abschluss entfernt. Detaillierte
+Loop-Schritte gehoeren in Control. Die UI zeigt kurze, belegte
+Erklaerungen, keine internen Gedankengaenge.
 
-### 4. Timeline und Evidenz
+Aktionen, Planfreigaben und Human-Gates folgen ausschliesslich ADR-0029.
+Diese ADR legt keine zweite Aktions- oder Gate-Logik fest.
 
-Control ist die vollstaendige, gespeicherte und replaybare Arbeitsspur.
-Ein Ereignis enthaelt, soweit zutreffend:
+### 4. Ereignis- und Gate-Darstellung
 
-- Zeit, Projekt- und Run-Bezug;
-- Akteur oder Faehigkeit sowie den konkreten Arbeitsschritt;
-- kurzen Zweck und betroffenen Task, Pfad oder Akzeptanzpunkt;
-- Status und Ergebnis;
-- Beleg-, Log- oder Artefaktverweis;
-- naechsten Schritt oder den Grund fuer eine Pause.
+Jedes Control-Ereignis wird aus gespeicherten Run-Daten aufgebaut und
+enthaelt, soweit zutreffend: Projekt und Run, Zeitpunkt, Akteur/Faehigkeit,
+Arbeitsschritt, Zweck, Task/Pfad/Kriterium, Status, Ergebnis/Beleg und
+naechsten Schritt oder Pausengrund. Cockpit und Debug verwenden dieselben
+Ereignisse fuer Verdichtung beziehungsweise Fehlerzusammenhang.
 
-Cockpit verdichtet dieselben Ereignisse. Debug ordnet Fehler, Diagnose,
-Reparatur und Verify kausal. Reconnect rekonstruiert denselben Zustand
-idempotent aus persistierten Run-/Event-Daten. DOM-Heuristiken und
-unpersistierte UI-Schattenzustaende sind keine Statusquelle.
+Gate-Karten erscheinen im ausloesenden Projektchat und in der passenden
+Session. Eine stabile Gate-ID bindet Karte, Antwort, Status und Audit an
+dieselbe Freigabe. Modal oder Banner duerfen die Karte zusaetzlich
+darstellen, sind aber kein eigener Gate-Zustand und kein separater
+Antwortkanal. Abgelaufene, mehrdeutige, veraltete oder bereits beantwortete
+Gates loesen keine Aktion aus. Exakte Freigaberegeln bleiben ADR-0029
+vorbehalten.
 
-Sichtbare Erklaerungen sind kurze, evidenzgebundene Zusammenfassungen und
-keine Wiedergabe interner Gedankengaenge.
+Codeguardian-Befunde verwenden denselben Run-/Event-Bezug: Chat zeigt
+Handlungsbedarf, Control den Befund mit Regel und Evidenz, Debug den
+Ursache-Wirkungs-Verlauf. Der Codeguardian schreibt keine eigenen Patches
+und umgeht keine Verify- oder Human-Gates.
 
-### 5. Gates im Chat
+### 5. Bedienbarkeit und Verifikation
 
-Plan-, Rueckfrage- und Ergebnisfreigaben erscheinen als Karten im passenden
-Projekt- und Sessionverlauf. Eine Karte zeigt die konkrete Handlung, den
-Umfang, betroffene Dateien oder Kriterien, Empfehlung, Risiko und eindeutige
-Optionen. Eine stabile Gate-ID bindet Antwort, Status und Audit idempotent
-an genau diese Freigabe.
+Alle Ansichten muessen responsiv und per Tastatur bedienbar sein,
+eindeutige Fokus- und Screenreader-Zustaende besitzen, ausreichenden
+Kontrast bieten und reduzierte Bewegung respektieren. UI-Aenderungen werden
+mit isolierten Testdaten im Browser geprueft. Screenshots, DOM-/
+Accessibility-Befunde und Browser-Logs sind Verify-Artefakte, keine
+informellen Sichtpruefungen.
 
-Ein Modal darf dieselbe Karte als Detailansicht oeffnen, ist aber weder ein
-separater Gate-Zustand noch ein eigener Antwortkanal. Offene und
-abgeschlossene Karten werden nach Reconnect ohne Duplikate rekonstruiert.
-Abgelaufene, veraltete, mehrdeutige oder bereits beantwortete Gates loesen
-keine Aktion aus. Aendert sich der freigegebene Umfang, gilt die
-Freigabesemantik aus ADR-0029.
+## Umsetzung und Abnahme
 
-### 6. Codeguardian
+Die UI baut auf den Run-, Event-, Replay-, Job- und Gate-Vertraegen aus
+ADR-0032 und ADR-0029 auf. Danach folgen Projekt-Shell und Chat, Gate- und
+Kontrollaktionen, die vier konsistenten Sichten und die Browserabnahme.
+Der freigegebene UI-Plan beschreibt die Lieferdetails; STATUS.md fuehrt die
+startbaren Arbeitspakete. Diese Reihenfolge erzeugt keine zusaetzliche
+Runtime-Phasenlogik.
 
-Der Codeguardian ist eine Schutz- und Evidenzfaehigkeit, kein schreibender
-Builder. Befunde erscheinen im Chat, wenn eine Entscheidung oder Handlung
-noetig ist; Control zeigt Regel, Grund, Status und Beleg; Debug verknuepft
-Schweregrad, Pfad/Zeile, Regelversion, Diff-Fingerprint und Verify-Ergebnis.
-Der Guardian erstellt keinen eigenen Patch, umgeht keine Gates und
-ueberschreibt keine harten Pruefungen. Sicherheits- und Scope-Verletzungen
-bleiben bis zur belegten Aufloesung blockierend.
+Die Architektur gilt erst als umgesetzt, wenn:
 
-### 7. Responsive Bedienbarkeit und Browserpruefung
+1. alle vier Sichten nach Replay denselben Run-Zustand widerspruchsfrei
+   darstellen;
+2. Projekt-, Tab- und Sessionwechsel keine Nachrichten, Aktionen, Gates
+   oder Events vermischen;
+3. Gate-Entscheidungen genau einmal im Chat und Audit erscheinen und nach
+   Reconnect korrekt rekonstruiert werden;
+4. Fragen waehrend eines Runs beantwortbar bleiben und angezeigte Aktivitaet
+   aus realen Events stammt;
+5. Fehler, Reparatur und erneute Verify an denselben Commit-/Worktree-Stand
+   gebunden sind;
+6. responsive, Tastatur- und Accessibility-Pruefungen sowie die
+   Browserabnahme bestanden sind.
 
-Alle Ansichten muessen auf schmalen Viewports nutzbar bleiben. Tastatur,
-Fokusindikatoren, Screenreader-Namen, ausreichender Kontrast und reduzierte
-Bewegung gehoeren zur Abnahme. Browserpruefungen laufen mit isolierten
-Testdaten; Screenshots, DOM-/Accessibility-Befunde und Browser-Logs werden
-als Verify-Artefakte gespeichert.
-
-### 8. Umsetzungsreihenfolge
-
-Die UI wird auf belastbare Laufzeitvertraege gesetzt, nicht auf
-kurzlebige Frontend-Zustaende. Die Reihenfolge ist:
-
-1. **Run- und Event-Vertraege:** Projekt-/Run-Identitaet, persistierte
-   Events, Replay, Checkpoints, Job-Lifecycle und Gate-Identitaet gemaess
-   ADR-0032/ADR-0029. Jeder Status, den die UI zeigt, muss aus dieser
-   Quelle belegbar sein.
-2. **Projekt-Shell und Chat:** Home/Projektleiste, Modusleiste,
-   Sessionzuordnung, asynchrone Fragen und sichtbare Annahme-/Fehlerzustaende.
-   Ein Chat-Auftrag bleibt derselbe Auftrag, wenn er an einen Loop-Run
-   uebergeben wird.
-3. **Gate- und Kontrollfluss:** Freigabekarten im Chat, eindeutige
-   Antworten und Chat-gesteuerte Start-/Pause-/Fortsetzen-/Stop-Aktionen.
-   Reconnect darf keine Aktion wiederholen oder Gate-Antwort verlieren.
-4. **Modus-Projektionen:** Cockpit, Control, Debug und Runs werden aus
-   denselben Run-/Event-Daten aufgebaut. Erst wenn Replay konsistent ist,
-   gelten sie als eine Oberflaeche.
-5. **Codeguardian und Browserabnahme:** Findings werden an Diff und
-   Revision gebunden; danach folgen isolierte Browserpruefung, Accessibility-
-   Befunde und die zehn vollstaendigen UI-Runs aus den Abnahmekriterien.
-
-Ein Modus darf nicht durch eine separate Schattenimplementierung vorgezogen
-werden, wenn dessen Statusquelle oder Aktion noch nicht durch den
-Run-/Event-Vertrag abgesichert ist. UI-Politur kann parallel erfolgen,
-darf aber diese Reihenfolge, Gate-Semantik oder Projektisolation nicht
-umgehen. Die konkrete Lieferplanung und offene Umsetzungsarbeit bleiben im
-freigegebenen UI-Plan und in docs/STATUS.md.
-
-## Abnahme
-
-Die UI ist erst nachgewiesen, wenn:
-
-1. Chat, Cockpit, Control, Debug und Runs denselben Run nach Replay
-   widerspruchsfrei darstellen.
-2. Projekt-, Tab- und Sessionwechsel Nachrichten, Gates und Events strikt
-   isolieren.
-3. Gate-Entscheidungen genau einmal in Chat und Audit erscheinen und nach
-   Reconnect korrekt rekonstruiert werden.
-4. Fragen waehrend eines Runs beantwortbar bleiben und Aktivitaet nur aus
-   realen Events stammt.
-5. Ein Verify-Fehler an den exakten Commit-/Worktree-Stand gebunden ist und
-   Failure Record, Reparatur und erneute Pruefung zusammenhaengen.
-6. Responsive Bedienbarkeit und Browserpruefung Abschnitt 7 erfuellen.
-7. Zehn vollstaendige UI-Runs Start, Frage waehrend Arbeit, Gate,
-   Pause/Resume, Reconnect, Verify-Fehler-Recovery und Abschluss mit
-   Projekt, OP, Run-ID und Belegen nachweisen.
-
-Das sind Zielbedingungen, kein Umsetzungsnachweis. Offene Umsetzung bleibt
-in `docs/STATUS.md`, bis Tests und Betriebsbelege die Kriterien erfuellen.
+Diese Kriterien beschreiben Zielbedingungen. Sie bescheinigen keinen
+Implementierungsstand. Der Betriebsnachweis mit zehn vollstaendigen
+UI-Runs wird in STATUS.md/OP-382 gefuehrt.
 
 ## Abloesung und Folgen
 
-Diese ADR ersetzt die fruehere Timeline-primaer-Anordnung und die
-eigenstaendige Modus-/Wasserfallentscheidung aus ADR-0009 und ADR-0022a.
-Eine primaere Timeline mit Chat als Nebenpanel, ein eigener Gate-
-Antwortkanal und unterschiedliche Statusquellen pro Modus sind keine
-gueltigen Bauvorgaben mehr.
+Die fruehere Timeline-primaer-Anordnung aus ADR-0009 und die eigenstaendige
+Wasserfall-/Modusentscheidung aus ADR-0022a sind keine Bauvorgaben mehr.
+Ihre fachliche Trennung bleibt erhalten: Control ist chronologisch,
+Cockpit verdichtet den Verlauf. ADR-0029 bleibt massgeblich fuer
+Chat-Aktionen und Freigaben; ADR-0031 fuer den Metaorchestrator; ADR-0032
+fuer Run-, Event-, Inbox- und Checkpoint-Vertraege.
 
-Die fachliche Trennung aus ADR-0022a bleibt gueltig: Control zeigt eine
-sequenzielle Live-Chronologie, Cockpit den verdichteten Verlauf.
-ADR-0029 bleibt fuer Chat-Aktionen und Freigaben massgeblich; ADR-0031 fuer
-den Metaorchestrator; ADR-0032 fuer Run-, Event-, Inbox- und
-Checkpoint-Vertraege.
+Daraus folgen:
 
-Konsequenzen:
-
-- Der Chat ist in jedem Projektmodus sichtbar und der primaere
-  Handlungsort.
-- Moduswechsel veraendern die Perspektive, nicht den Run oder dessen
-  Quelle der Wahrheit.
-- Relevante UI- und Gate-Aktionen muessen als gespeicherte, replaybare
-  Ereignisse erscheinen.
-- UI-Arbeit wird auf den Run-/Event-Vertraegen aus ADR-0032 aufgebaut.
-  Visueller Feinschliff darf Chat-, Control- und Gate-Vertraege nicht
-  abschwaechen.
+- Der Chat ist der primaere Handlungsort; Zusatzansichten liefern Kontext
+  und Belege.
+- Moduswechsel aendern Darstellung, niemals Berechtigungen oder Laufzustand.
+- Status und Gate-Zustaende muessen aus persistenten, replaybaren Daten
+  stammen.
+- Der UI-Plan und STATUS.md bleiben die Quellen fuer Produktspezifikation
+  beziehungsweise offene Umsetzung.
