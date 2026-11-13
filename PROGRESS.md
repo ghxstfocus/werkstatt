@@ -6045,3 +6045,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der explizite Test-Launcher übernimmt aus dem produktiven Startbefehl nur die CLI-Argumente nach `-m werkstatt.loop`; das Modulpräfix darf nicht als Loop-Option weitergereicht werden.
 - Ein frueher Marker und periodische Python-Stack-Dumps machen den naechsten CI-Fehler diagnostizierbar, falls der Subprozess vor dem Overlay-Import haengen bleibt. Die Resume-Akzeptanz bleibt unveraendert.
+
+
+## 2026-11-13 — Resume-Worker startet Python ohne editable Startup-Hooks
+
+- Der letzte CI-Lauf bestaetigt: Selbst der explizite Launcher erreicht nicht den ersten Python-Statement-Marker; der Interpreter bleibt schon waehrend der normalen `site`-Initialisierung stehen.
+- Der Test-Launcher startet den gleichen Interpreter nun mit `-S`, um automatische `.pth`-/editable-Hooks zu ueberspringen, und fuegt die installierten `purelib`-/`platlib`-Pfade danach explizit hinzu. So bleibt der HTTP-/CLI-/RunRecord-Recovery-Pfad real, ohne dass ein Test-Overlay von installierten Startup-Hooks abhaengt.
+- CI muss bestaetigen, dass der Worker nun in den Bootstrap eintritt und den fehlgeschlagenen Run bis Phase-End-Verify abschliesst.

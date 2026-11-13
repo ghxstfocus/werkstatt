@@ -560,8 +560,11 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     worker_bootstrap.write_text(
         "import os\n"
         "open(os.environ['WERKSTATT_BOOTSTRAP_STARTED'], 'w').write('started')\n"
-        "import faulthandler, runpy, sys\n"
+        "import faulthandler, runpy, sys, sysconfig\n"
         "faulthandler.dump_traceback_later(3, repeat=True)\n"
+        "for key in ('purelib', 'platlib'):\n"
+        "    path = sysconfig.get_paths()[key]\n"
+        "    if path not in sys.path: sys.path.append(path)\n"
         "sys.meta_path[:] = [finder for finder in sys.meta_path "
         "if not type(finder).__module__.startswith('__editable__')]\n"
         "sys.path[:0] = [os.environ['WERKSTATT_TEST_OVERLAY'], "
@@ -578,7 +581,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     worker_launcher = overlay_root / "python-worker"
     worker_launcher.write_text(
         "#!/bin/sh\n"
-        "exec \"$WERKSTATT_TEST_PYTHON\" "
+        "exec \"$WERKSTATT_TEST_PYTHON\" -S "
         "\"$WERKSTATT_WORKER_BOOTSTRAP\" \"$@\"\n",
         encoding="utf-8",
     )
