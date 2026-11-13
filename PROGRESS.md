@@ -6052,3 +6052,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der letzte CI-Lauf bestaetigt: Selbst der explizite Launcher erreicht nicht den ersten Python-Statement-Marker; der Interpreter bleibt schon waehrend der normalen `site`-Initialisierung stehen.
 - Der Test-Launcher startet den gleichen Interpreter nun mit `-S`, um automatische `.pth`-/editable-Hooks zu ueberspringen, und fuegt die installierten `purelib`-/`platlib`-Pfade danach explizit hinzu. So bleibt der HTTP-/CLI-/RunRecord-Recovery-Pfad real, ohne dass ein Test-Overlay von installierten Startup-Hooks abhaengt.
 - CI muss bestaetigen, dass der Worker nun in den Bootstrap eintritt und den fehlgeschlagenen Run bis Phase-End-Verify abschliesst.
+
+
+## 2026-11-13 — Resume-Worker Python-Startup-Trace
+
+- Auch mit `-S` erreicht der Worker den ersten Bootstrap-Marker nicht. Der Test-Launcher schaltet fuer den naechsten Lauf den Python-Importtrace ein; dessen Ausgabe landet im Worker-Log und zeigt, ob der Stillstand noch vor dem Skript oder waehrend eines Imports passiert.
+- Der Resume-Test bleibt rot, bis der Worker nachweislich startet und denselben fehlgeschlagenen Run abschliesst.
