@@ -373,18 +373,23 @@ def test_llm_heartbeat_keeps_builder_activity_with_task_and_files(
         },
     ])
 
-    aktiv = inspector.aggregate_live_feed("werkstatt")["aktiv"]
+    feed = inspector.aggregate_live_feed("werkstatt")
+    aktiv = feed["aktiv"]
     assert aktiv["kind"] == "llm_call_heartbeat"
-    assert inspector._tl_label(aktiv["kind"], {}) == "Modellaufruf läuft"
-    detail = inspector._tl_detail(aktiv["kind"], aktiv["payload"])
-    assert detail == (
-        "arbeitet weiter: Reconnect-Anzeige vervollstaendigen · "
-        "static/chat.js, tests/test_chat_frontend.py · 45s"
-    )
     assert aktiv["rolle"] == "builder"
     assert "Reconnect-Anzeige vervollstaendigen" in aktiv["aktion"]
     assert "static/chat.js" in aktiv["aktion"]
     assert "45s" in aktiv["aktion"]
+
+    heartbeat = next(
+        step for step in feed["steps"]
+        if step["kind"] == "llm_call_heartbeat"
+    )
+    assert heartbeat["label"] == "Modellaufruf läuft"
+    assert heartbeat["detail"] == (
+        "arbeitet weiter: Reconnect-Anzeige vervollstaendigen · "
+        "static/chat.js, tests/test_chat_frontend.py · 45s"
+    )
 
 
 
