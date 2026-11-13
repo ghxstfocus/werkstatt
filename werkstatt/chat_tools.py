@@ -93,7 +93,7 @@ def _read_file_tail(pfad: Path, tail_chars: int) -> str:
         marker += f"Frueheren Inhalt gezielt mit read_file(start=0, end={offset}) lesen.]"
     else:
         marker += "Dateianfang und Dateiende sind vollständig enthalten.]"
-    return marker + "\\n" + auszug
+    return marker + "\n" + auszug
 
 
 def _read_file(args: dict[str, Any]) -> str:
