@@ -5911,3 +5911,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Neuer Linux-Integrationstest startet einen echten Probe-Loop-Worker und zwei voneinander getrennte Uvicorn-Webserver-Prozesse nacheinander gegen dieselbe persistente SQLite-Registry. Beide HTTP-Control-Abfragen muessen denselben laufenden PID, dieselbe Run-ID und denselben gespeicherten Startkontext melden; das Beenden des Webservers darf den Worker nicht beenden.
 - Nach dem Beenden des Probe-Workers muss der zweite Webserver ueber HTTP den Zustand auf idle erkennen. Der Test nutzt isolierte Projekt-, State- und Modulpfade; er fuehrt weder produktive Projekte noch echte Loop-Modellaufrufe aus. Der bestehende API-Test deckt den Resume-Start mit `--resume` separat ab.
 - Dieser Test schliesst die bisherige Luecke „Webserver laeuft nur im Testprozess“. Er belegt weiterhin keinen vollstaendigen produktiven Run; OP-397 und OP-382 bleiben offen.
+
+
+## OP-397 — HTTP-Reconnect-Test CI-Nachweis (2026-11-13)
+
+- GitHub Actions Quality Gate Run [43334447467](https://github.com/ghxstfocus/werkstatt/actions/runs/43334447467) auf Commit `76822cd` ist erfolgreich. Installation, JS-Syntax, Ruff, pytest und Quality Gate sind gruen.
+- Der neue Test trennt Worker und Webserver als unabhaengige OS-Prozesse und belegt per HTTP denselben PID/Run-Kontext vor und nach einem Webserver-Neustart. Er verwendet einen Probe-Worker; vollstaendige produktive Loop-Ausfuehrung und zehn UI-Runs sind damit nicht abgenommen.
