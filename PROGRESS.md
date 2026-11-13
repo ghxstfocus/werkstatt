@@ -6235,3 +6235,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Im Control-Feed wurde der Heartbeat bislang mit dem rohen technischen Eventnamen `llm_call_heartbeat` beschriftet. Die Timeline benennt Start, laufenden Modellaufruf und Abschluss jetzt einheitlich und menschlich.
 - Ein Regressionstest prueft Label und Detailtext mit Task, Dateien und Laufzeit. Das schliesst die lesbare Timeline-Luecke, beweist aber nicht allein alle OP-395-Kriterien (Reconnect, Heartbeat-Fallback und parallele Chatfragen).
 - GitHub Actions Quality Gate [Run 43409943398](https://github.com/ghxstfocus/werkstatt/actions/runs/43409943398): 2.185 Tests bestanden, 5 uebersprungen; JavaScript-Syntax, Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden; `ok: true`, `regression: false`.
+
+
+## 2026-11-13 — Zieltext und Akzeptanzkriterien am Task-Checkpoint
+
+- Der Checkpoint nach einem grünen Task zeigte bisher IDs und den nächsten Task, aber nicht den Wortlaut des übergeordneten Ziels oder der offenen Akzeptanzkriterien. Damit war die Entscheidung in Control nur teilweise gegen den Auftrag prüfbar.
+- Das Ereignis enthält jetzt den gespeicherten Zieltext, die konkret erfüllten und offenen Kriterien sowie einen kompakten Status des verbleibenden Task-Graphen. Die Felder sind auf fünf kurze Belege begrenzt; Modellgedanken und Prompts werden nicht protokolliert.
+- Regressionstests prüfen den Ziel-/Kriterienbezug bei Fortsetzung und beim Übergang zur Phase-End-Verify. Der bestehende Checkpoint bestimmt weiter den nächsten freigegebenen Task; diese Änderung ist Observability und Zielabgleich, noch keine dynamische Neuplanung.
