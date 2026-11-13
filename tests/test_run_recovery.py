@@ -621,8 +621,9 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
             assert record["status"] == "completed", (
                 f"run={record!r}; worker_log={log}"
             )
+        assert record["run_id"] == run_id
+        assert record["checkpoint_version"] >= 1
         assert record["checkpoint"]["exit_code"] == 0
-        assert record["checkpoint"]["run_id"] == run_id
     finally:
         process = app_module._LAUFENDE_LOOPS.pop("demo", None)
         if process is not None and process.poll() is None:

@@ -5993,3 +5993,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Nach dem isolierten Arbeitsverzeichnis importiert der Worker nachweislich das Test-Overlay und erreicht den echten `loop.main()`-Resume-Pfad.
 - Der Worker-Log zeigt den naechsten Fixture-Fehler: `load_env()` wird produktiv ohne Argument aufgerufen; der Stub verlangte unzutreffend eins. Der Stub akzeptiert jetzt die reale Aufrufform.
 - Der HTTP-Ende-zu-Ende-Nachweis ist weiterhin offen, bis RunRecord und Checkpoint erfolgreich terminal sind.
+
+
+## 2026-11-13 — Run-Identitaet im Resume-Nachweis
+
+- Der echte HTTP-Resume-Worker hat den Run erfolgreich auf `completed` gesetzt und den Exit-Code `0` persistiert.
+- Die letzte Testabweichung war eine falsche Schemaannahme: `run_id` ist im RunRecord der Identitaetsschluessel, nicht Teil des frei geformten Checkpoint-Payloads. Der Test prueft nun die top-level Run-ID, eine erhoehte Checkpoint-Version und den terminalen Exit-Code.
