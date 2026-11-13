@@ -6168,3 +6168,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   faelschlich blockiert wurden. Die Checkpoint-Pruefung verfolgt deshalb nur
   explizit nichtleere Referenzen; neue Plaene bleiben durch den Plan-Compiler
   fuer fehlende Zuordnungen gesperrt. Regressionstest fuer leere Referenzlisten.
+
+
+- Quality-Gate-Lauf [43371051414](https://github.com/ghxstfocus/werkstatt/actions/runs/43371051414)
+  fuer Commit `a0c8d2d` ist gruen: 2.180 Tests bestanden, 5 uebersprungen;
+  Ruff 0, mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden.
+  Die beiden vorangegangenen roten Laeufe deckten die zu breite Erkennung leerer
+  Referenzen auf; der finale Checkpoint verfolgt nur explizite, nichtleere
+  Kriterienzuordnungen. OP-398 bleibt offen.
