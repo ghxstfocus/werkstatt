@@ -6265,3 +6265,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der Reconnect-Pfad prueft jetzt den persistenten Loop-Registry-Status. Bei sicher inaktivem Run werden unbestaetigte Jobs mit einem erklaerenden Fehler und Aufforderung zum erneuten Senden abgeschlossen. Aktive, startende und mehrdeutige/orphaned Runs bleiben unangetastet.
 - Jobs mit vollstaendig gebundenem Snapshot und bestaetigter Inbox-Nachricht bleiben nach Run-Ende replayfaehig; nur fehlender Checkpoint-Nachweis wird beendet.
 - Regressionstests pruefen direkte Zustandsregeln sowie den API-Reconnect: uncheckpointed Jobs werden failed, sichere Replay-Jobs und aktive Run-Jobs bleiben queued. Vollstaendige CI-Verifikation folgt.
+
+
+## 2026-11-13 — Verifikation des Checkpoint-Reconnect-Fehlerpfads
+
+- GitHub Actions Quality-Gate [Run 43406275982](https://github.com/ghxstfocus/werkstatt/actions/runs/43406275982) nach der OP-401-Reconnect-Korrektur: 2.197 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 0, Audit-Katalog bestanden, keine Regression.
+- Der Lauf enthaelt direkte Tests fuer aktive, beendete und bestaetigte Snapshot-Jobs sowie einen API-Reconnect-Test, der den terminalen Fehler fuer den Nutzer abruft.
