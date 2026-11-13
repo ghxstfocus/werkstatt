@@ -486,6 +486,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     pytest.importorskip("httpx")
 
     import os
+    import sys
     import time
 
     from fastapi.testclient import TestClient
