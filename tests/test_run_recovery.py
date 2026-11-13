@@ -558,12 +558,15 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     )
     worker_bootstrap = overlay_root / "worker_bootstrap.py"
     worker_bootstrap.write_text(
-        "import os, runpy, sys\n"
+        "import os\n"
+        "open(os.environ['WERKSTATT_BOOTSTRAP_STARTED'], 'w').write('started')\n"
+        "import faulthandler, runpy, sys\n"
+        "faulthandler.dump_traceback_later(3, repeat=True)\n"
         "sys.meta_path[:] = [finder for finder in sys.meta_path "
         "if not type(finder).__module__.startswith('__editable__')]\n"
         "sys.path[:0] = [os.environ['WERKSTATT_TEST_OVERLAY'], "
         "os.environ['WERKSTATT_REPO_ROOT']]\n"
-        "sys.argv = ['werkstatt.loop', *sys.argv[1:]]\n"
+        "sys.argv = ['werkstatt.loop', *sys.argv[3:]]\n"
         "runpy.run_module('werkstatt.loop', run_name='__main__')\n",
         encoding="utf-8",
     )
@@ -631,6 +634,8 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     monkeypatch.setenv("WERKSTATT_WORKER_BOOTSTRAP", str(worker_bootstrap))
     monkeypatch.setattr(app_module.sys, "executable", str(worker_launcher))
     monkeypatch.setenv("WERKSTATT_TEST_PROJECT_DIR", str(project_dir))
+    bootstrap_started = tmp_path / "resume-bootstrap-started"
+    monkeypatch.setenv("WERKSTATT_BOOTSTRAP_STARTED", str(bootstrap_started))
     worker_boot = tmp_path / "resume-worker-booted"
     package_boot = tmp_path / "resume-package-booted"
     monkeypatch.setenv("WERKSTATT_WORKER_BOOT", str(worker_boot))
@@ -712,7 +717,8 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
             assert record["status"] == "completed", (
                 f"run={record!r}; worker_returncode="
                 f"{worker.poll() if worker is not None else None}; "
-                f"registry={registry_snapshot!r}; worker_boot={worker_boot.exists()}; "
+                f"registry={registry_snapshot!r}; bootstrap={bootstrap_started.exists()}; "
+                f"worker_boot={worker_boot.exists()}; "
                 f"package_boot={package_boot.exists()}; "
                 f"cmdline={proc_cmdline!r}; state={proc_state!r}; "
                 f"wchan={proc_wchan!r}; env={proc_env!r}; maps={proc_maps!r}; "

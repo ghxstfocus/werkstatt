@@ -6039,3 +6039,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der vorherige CI-Fix kompilierte den erzeugten Startup-Hook, aber der externe Worker erreichte weiterhin weder Paket- noch Worker-Bootmarker. Das machte den Test-Overlay-Import weiterhin nicht reproduzierbar.
 - Der HTTP-Recovery-Test verwendet jetzt einen kleinen ausführbaren Test-Launcher: Er übernimmt die produktiven CLI-Argumente, startet denselben Python-Interpreter, setzt den Overlay-Pfad explizit und führt `werkstatt.loop` via `runpy` aus. Editable-Finder werden vor dem Paketimport entfernt.
 - Die Recovery-Akzeptanz bleibt unverändert: fehlgeschlagenes Phase-End-Verify, bereits erledigter Task, echter HTTP-Resume, derselbe Run und Phase-End-Verifikation müssen erfolgreich sein. CI muss diesen Nachweis noch bestätigen.
+
+
+## 2026-11-13 — Resume-Launcher-Argumente und Bootstrap-Diagnose
+
+- Der explizite Test-Launcher übernimmt aus dem produktiven Startbefehl nur die CLI-Argumente nach `-m werkstatt.loop`; das Modulpräfix darf nicht als Loop-Option weitergereicht werden.
+- Ein frueher Marker und periodische Python-Stack-Dumps machen den naechsten CI-Fehler diagnostizierbar, falls der Subprozess vor dem Overlay-Import haengen bleibt. Die Resume-Akzeptanz bleibt unveraendert.
