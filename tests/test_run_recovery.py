@@ -518,7 +518,18 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     phase_state.save()
 
     store = EventStore()
-    store.create_run_record("demo", run_id, goal)
+    failed_record = store.create_run_record("demo", run_id, goal)
+    store.update_run_checkpoint(
+        "demo",
+        run_id,
+        {
+            "exit_code": 1,
+            "failure_kind": "phase_end_verify_failed",
+            "failed_stages": [{"stage_id": "pytest_regression"}],
+        },
+        expected_version=failed_record["checkpoint_version"],
+        status="failed",
+    )
     registry = LoopProcessRegistry(
         project_base / ".werkstatt" / "web-loop-registry.db",
     )
@@ -564,8 +575,13 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "finalize._human_gate = lambda *_args, **_kwargs: 2\n"
         "finalize._hat_human_review_tasks = lambda _phase: False\n"
         "finalize._phase_end_reflection = lambda _state: True\n"
-        "finalize._verify_patches = "
-        "lambda _state, *, phase=None: True\n"
+        "verify_marker = os.environ['WERKSTATT_VERIFY_MARKER']\n"
+        "def _verify_patches(_state, *, phase=None):\n"
+        "    if phase == 'phase_end':\n"
+        "        from pathlib import Path\n"
+        "        Path(verify_marker).write_text('phase_end', encoding='utf-8')\n"
+        "    return True\n"
+        "finalize._verify_patches = _verify_patches\n"
         "finalize._post_commit_snapshot_check = "
         "lambda *_args: (True, {'worktree_clean': True})\n"
         "progress.append = lambda *_args, **_kwargs: None\n"
@@ -582,6 +598,8 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "WERKSTATT_REAL_PACKAGE", str(repo_root / "werkstatt"),
     )
     monkeypatch.setenv("WERKSTATT_TEST_PROJECT_DIR", str(project_dir))
+    verify_marker = tmp_path / "phase-end-verify-ran"
+    monkeypatch.setenv("WERKSTATT_VERIFY_MARKER", str(verify_marker))
     monkeypatch.setenv(
         "PYTHONPATH",
         os.pathsep.join((str(overlay_root), str(repo_root))),
@@ -622,8 +640,15 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
                 f"run={record!r}; worker_log={log}"
             )
         assert record["run_id"] == run_id
-        assert record["checkpoint_version"] >= 1
+        assert record["checkpoint_version"] > failed_record["checkpoint_version"]
         assert record["checkpoint"]["exit_code"] == 0
+        assert verify_marker.read_text(encoding="utf-8") == "phase_end"
+        resumed_phase_state = PhaseState(
+            "demo", base_dir=project_dir / ".werkstatt",
+        )
+        assert resumed_phase_state.load()
+        assert resumed_phase_state.run_id == run_id
+        assert resumed_phase_state.data["tasks"][0]["status"] == "done"
     finally:
         process = app_module._LAUFENDE_LOOPS.pop("demo", None)
         if process is not None and process.poll() is None:

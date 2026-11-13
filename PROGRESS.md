@@ -5999,3 +5999,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der echte HTTP-Resume-Worker hat den Run erfolgreich auf `completed` gesetzt und den Exit-Code `0` persistiert.
 - Die letzte Testabweichung war eine falsche Schemaannahme: `run_id` ist im RunRecord der Identitaetsschluessel, nicht Teil des frei geformten Checkpoint-Payloads. Der Test prueft nun die top-level Run-ID, eine erhoehte Checkpoint-Version und den terminalen Exit-Code.
+
+
+## 2026-11-13 — Resume nach fehlgeschlagenem Phase-End-Verify
+
+- Der integrierte HTTP-Resume-Test startet jetzt aus einem fehlgeschlagenen RunRecord mit gespeichertem Verify-Fehler und einem bereits erledigten Task im PhaseState.
+- Der echte CLI-Resume muss den Phase-End-Verify erreichen, denselben Run abschließen und den Taskstatus `done` erhalten. Damit wird gezielt die OP-397-Akzeptanz „keine erneute Task-Ausführung als Voraussetzung für Finalisierung“ abgesichert.
+- Die CI-Verifikation dieses verschärften Tests steht noch aus.
