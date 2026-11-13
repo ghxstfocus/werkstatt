@@ -179,7 +179,7 @@ def _grep(args: dict[str, Any]) -> str:
         return "Fehler: path ausserhalb Projekt"
     try:
         r = subprocess.run(
-            ["grep", "-rn", f"--max-count={_MAX_GREP_TREFFER}",
+            ["grep", "-Ern", f"--max-count={_MAX_GREP_TREFFER}",
              "--", pattern, str(pfad)],
             capture_output=True, text=True, check=False,
             timeout=_TIMEOUT_GREP_S,
@@ -765,7 +765,10 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
         "mode": "read",
     },
     "grep": {
-        "description": f"Sucht Pattern in Datei/Verzeichnis (max {_MAX_GREP_TREFFER} Treffer).",
+        "description": (
+            "Sucht mit erweiterten regulaeren Ausdruecken (ERE) in Datei/"
+            f"Verzeichnis; Alternation mit | ist erlaubt (max {_MAX_GREP_TREFFER} Treffer)."
+        ),
         "parameters": {
             "type": "object",
             "properties": {

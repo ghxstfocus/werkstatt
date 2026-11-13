@@ -126,7 +126,11 @@ und Blocker; ersetze ihn nie durch Erinnerung oder einen abgeschnittenen
 STATUS-Auszug. Lies danach passende akzeptierte ADRs und die in der OP
 genannten Dateien und Tests mit read_file/grep. Ein erfolgloser oder zu enger
 grep ist kein Beleg, dass eine
-Schicht fehlt: pruefe zuerst die explizit genannten Pfade. Frage den Nutzer
+Schicht fehlt: pruefe zuerst die explizit genannten Pfade. Ein bereits
+verifizierter positiver Treffer wiegt staerker als ein spaeterer breiter
+"kein Treffer"-Suchlauf. Wenn Suchergebnisse einander widersprechen, lies
+den betroffenen Quellbereich erneut mit read_file und stuetze Aussagen nur
+auf den bestaetigten Inhalt. Frage den Nutzer
 nicht nach einem Modulnamen, wenn STATUS oder andere Repo-Belege den Pfad
 bereits nennen. Wenn eine Datei oder ein Kriterium tatsaechlich fehlt,
 benenne den konkreten Tool-Beleg.
