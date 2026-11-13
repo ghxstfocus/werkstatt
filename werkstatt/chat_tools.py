@@ -297,23 +297,23 @@ def _read_status(_args: dict[str, Any]) -> str:
             if len(inhalt) > limit:
                 if name.endswith("PROGRESS.md"):
                     start = len(inhalt) - limit
-                    zeilenende = inhalt.find("\\n", start)
+                    zeilenende = inhalt.find("\n", start)
                     if zeilenende >= start and zeilenende - start <= 2_000:
                         start = zeilenende + 1
                     text = (
                         f"[Auszug: neuester Dateischluss; {start} fruehere Zeichen "
-                        f"ausgelassen von {len(inhalt)} Zeichen insgesamt.]\\n"
+                        f"ausgelassen von {len(inhalt)} Zeichen insgesamt.]\n"
                         + inhalt[start:]
                     )
                 else:
                     text = (
                         f"[Auszug: Dateianfang; {len(inhalt) - limit} Zeichen "
-                        f"am Ende ausgelassen von {len(inhalt)} Zeichen insgesamt.]\\n"
+                        f"am Ende ausgelassen von {len(inhalt)} Zeichen insgesamt.]\n"
                         + inhalt[:limit]
                     )
             else:
                 text = inhalt
-            teile.append(f"## {name}\\n{text}\\n")
+            teile.append(f"## {name}\n{text}\n")
 
     return "\n".join(teile) if teile else "(STATUS.md/PROGRESS.md nicht gefunden)"
 
