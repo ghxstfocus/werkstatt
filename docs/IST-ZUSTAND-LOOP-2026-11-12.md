@@ -1,13 +1,13 @@
-# Ist-Zustand des Werkstatt-Loops — GitHub main 2026-11-12
+# Ist-Zustand des Werkstatt-Loops — GitHub main 2026-11-13
 
 Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Stand: `681a47ad035ceff6f59f32f37ea87a7b165c6aec`
-(`test(loop): classify verify after mocked commit`).
+Gepruefter Stand: `f20ec83092d3e7687b816ec2f6beb0bd228efc20`
+(`style(test): sort resume recovery test imports`).
 GitHub Actions Quality Gate:
-[Run 43278824595](https://github.com/ghxstfocus/werkstatt/actions/runs/43278824595).
+[Run 43352637612](https://github.com/ghxstfocus/werkstatt/actions/runs/43352637612).
 
 ## Kurzbefund
 
@@ -31,7 +31,7 @@ jeweils Teile des Zustands, bilden aber noch keinen gemeinsamen Run-Vertrag.
 |---|---|
 | Laufsteuerung | `run_pipeline_loop` ruft die bestehende Setup-, Plan-, Task- und Finalizer-Kette auf. Phasen bleiben im Runtime-Pfad also noch Steuerungsstruktur. |
 | Failure Records | Rote Abschlusspruefungen erzeugen redigierte, Run-gebundene Belege mit Stage, Exit-Code, HEAD und Worktree-Fingerprint. |
-| Recovery | Der gleiche Run kann anhand fehlgeschlagener Stages gezielt reflektieren, betroffene Checks ausfuehren und anschliessend die volle Abschlusspruefung wiederholen. Stagnation stoppt fail-closed und zeigt ein adressiertes Recovery-Gate. |
+| Recovery | Der Resume-Akzeptanztest durchlaeuft den HTTP-Endpunkt, prueft genau einen CLI-Aufruf mit derselben Run-ID und `--resume` und fuehrt exakt diese Argumente bis zum erfolgreichen Phase-End-Verify aus. Ein separater Probe prueft den echten Launcher/Subprozessstart. GitHub Quality Gate verifiziert 2.149 Tests. Der Test ersetzt den per HTTP gestarteten Worker durch einen CLI-Aufruf im Test-Hauptthread; ein kompletter Webserver-Absturz mit autonomer Worker-Wiederaufnahme ist damit noch nicht nachgewiesen. Stagnation stoppt fail-closed und zeigt ein adressiertes Recovery-Gate. |
 | Commit-Vertrag | Committer pinnt Eltern-HEAD und Index-Tree und kontrolliert Commit-SHA, Parent, Tree, Whitespace und Working-Tree-Zustand. |
 | Verify nach Commit | Nach jedem erzeugten Commit laeuft die vollstaendige Phase-End-Verify erneut. Rot startet Recovery desselben Runs; nach Repair wird neu committet und wieder geprueft. Snapshot-Abweichungen verhindern Erfolg. |
 | Run-Ergebnis | Ein Run wird nicht allein wegen eines gruenen Teilchecks erfolgreich; offene/fehlgeschlagene Tasks oder rotes Verify bleiben unvollstaendig. |
