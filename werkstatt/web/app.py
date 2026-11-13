@@ -1975,6 +1975,17 @@ def create_app() -> FastAPI:
                                 "der Folgeauftrag wurde nicht angenommen."
                             ),
                         )
+                    followup_request = arguments.get("aufgabe")
+                    if not isinstance(followup_request, str) or not followup_request.strip():
+                        followup_request = proposal.get("task_preview")
+                    if not isinstance(followup_request, str) or not followup_request.strip():
+                        raise HTTPException(
+                            status_code=409,
+                            detail=(
+                                "Folgeauftrag enthaelt keinen gespeicherten Aufgabeninhalt; "
+                                "er wurde nicht angenommen. Bitte Vorschlag neu erstellen."
+                            ),
+                        )
                     followup = {
                         "proposal_id": proposal_id,
                         "project": projekt,
@@ -1982,7 +1993,7 @@ def create_app() -> FastAPI:
                         "parent_run_id": active_run_id,
                         "base_commit": run_record.get("base_commit"),
                         "checkpoint_version": run_record.get("checkpoint_version"),
-                        "request": arguments.get("aufgabe", ""),
+                        "request": followup_request.strip(),
                         "op_id": arguments.get("op_id"),
                     }
                     try:
