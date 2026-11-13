@@ -279,8 +279,8 @@ def _task_ende(
                             "task_id": task_id,
                             "error_type": type(exc).__name__,
                             "next_step": (
-                                "Kriterienfortschritt am naechsten sicheren "
-                                "Checkpoint erneut pruefen"
+                                "Phase-End-Verify prueft den Zielabgleich erneut; "
+                                "Erfolg bleibt bis dahin offen"
                             ),
                         },
                         pd,
