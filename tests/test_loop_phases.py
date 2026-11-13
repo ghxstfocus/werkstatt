@@ -559,7 +559,6 @@ def test_task_ende_auditiert_kriterienfortschritt_nach_gruenem_task(tmp_path):
     }
 
 
-@pytest.mark.parametrize("task_status", ["failed", "blocked", "pending", "running", "missing"])
 def test_task_ende_zeigt_phase_end_verify_als_naechsten_schritt(tmp_path):
     from werkstatt.phase_state import PhaseState
     from werkstatt.task_runner import _task_ende
