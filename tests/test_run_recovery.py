@@ -485,11 +485,12 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         pytest.skip("worker identity recovery requires Linux /proc")
     pytest.importorskip("fastapi")
     pytest.importorskip("httpx")
-    from fastapi.testclient import TestClient
 
     import os
     import sys
     import time
+
+    from fastapi.testclient import TestClient
 
     from werkstatt.event_store import EventStore
     from werkstatt.phase_state import PhaseState
