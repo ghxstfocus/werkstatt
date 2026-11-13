@@ -1255,11 +1255,22 @@ def _tl_aggregate_aktiv(
         # generische Task-Name; diesen behalten wir fuer die Live-Anzeige.
         if activity_kind == "llm_call_heartbeat":
             action = _tl_detail(activity_kind, activity) or action
+        progress_kinds = {
+            "llm_call", "llm_call_start", "llm_call_heartbeat",
+            "loop_task_start",
+        }
+        visible_kind = (
+            activity_kind if (
+                activity_kind.endswith("_start")
+                or activity_kind in progress_kinds
+            ) else "loop_task_start"
+        )
         return {
             "rolle": role,
             "aktion": action[:120],
             "seit_s": int(delta_s),
-            "kind": activity_kind or "loop_task_start",
+            "kind": visible_kind,
+            "activity_kind": activity_kind,
             "task_id": task_payload.get("task_id"),
         }
 
