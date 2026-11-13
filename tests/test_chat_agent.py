@@ -39,6 +39,73 @@ def test_prompt_directs_recent_append_only_reads_to_tail_evidence():
     assert "Behaupte Vollstaendigkeit nur fuer den tatsaechlich gelesenen Bereich" in chat_agent._SYSTEM_PROMPT
 
 
+def test_prompt_hands_implementation_requests_to_the_loop():
+    prompt = chat_agent._SYSTEM_PROMPT
+    assert "OP oder einen konkreten Projektauftrag bearbeiten" in prompt
+    assert "rufe danach\nrequest_loop_action" in prompt
+    assert "den Auftrag zu kopieren" in prompt
+    assert "der Loop vor Schreibarbeit sein\nPlan-Gate zeigt" in prompt
+    assert "Bei einer reinen Plan-/Analysefrage ohne Umsetzungswunsch" in prompt
+
+
+def test_chat_loop_can_handoff_explicit_op_implementation_request(
+    session: ChatSession,
+    fake_llm,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from werkstatt import chat_session
+
+    monkeypatch.setattr(
+        chat_session,
+        "_db_pfad",
+        lambda _project: session.db_pfad,
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "### OP-321: Eindeutige Arbeit\n"
+        "- **Status:** open\n"
+        "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
+        "- **Tests:** pytest -q tests/test_321.py\n",
+        encoding="utf-8",
+    )
+    fake_llm(
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "start-op-321",
+                "type": "function",
+                "function": {
+                    "name": "request_loop_action",
+                    "arguments": json.dumps({
+                        "action": "start",
+                        "op_id": "OP-321",
+                    }),
+                },
+            }],
+        },
+        {
+            "role": "assistant",
+            "content": "Der Loop-Start fuer OP-321 wartet auf deine Bestaetigung.",
+        },
+    )
+
+    answer = chat_agent.chat_loop(
+        session,
+        "Bearbeite OP-321 nach den Akzeptanzkriterien.",
+        project_dir=tmp_path,
+    )
+
+    assert "wartet auf deine Bestaetigung" in answer
+    proposal = next(
+        event for event in session.load()
+        if event["kind"] == "loop_action_proposed"
+    )
+    assert proposal["payload"]["arguments"] == {"op_id": "OP-321"}
+
+
 def test_chat_loop_reads_latest_append_only_entry_from_tail_evidence(
     session, tmp_path: Path, monkeypatch,
 ) -> None:
