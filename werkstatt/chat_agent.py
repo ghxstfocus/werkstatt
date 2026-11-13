@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,22 @@ def _repeated_tool_cycle(
         if previous == current:
             return tuple(current)
     return None
+
+
+_EXPLICIT_OP_EXECUTION = re.compile(
+    r"\b(?:bearbeite|umsetzen|implementiere|implementieren|fixe|fixen|"
+    r"repariere|reparieren|erledige|erledigen|"
+    r"arbeite\s+(?:an|ab)|start(?:e|en)?)\b",
+    re.IGNORECASE,
+)
+
+
+def _explicit_op_execution_request(message: str) -> str | None:
+    """Return an explicitly requested OP only for clear execution language."""
+    match = re.search(r"\bOP-\d+[a-z]?\b", message, re.IGNORECASE)
+    if match is None or _EXPLICIT_OP_EXECUTION.search(message) is None:
+        return None
+    return match.group(0).upper()
 
 
 _DEBUGGER_PROMPT = """Der Mensch hat diesen Turn im Debug-Modus gestartet.
@@ -83,6 +100,12 @@ startest du nichts. Wenn das Tool die OP ablehnt oder Mehrdeutigkeit meldet,
 nenne dessen konkrete Gruende und frage nur nach der fehlenden Entscheidung.
 Loop-Steuerung darfst du ausschliesslich ueber request_loop_action anfragen;
 dieses Tool fuehrt keine Aktion selbst aus.
+
+Behaupte niemals, einen Startvorschlag angelegt zu haben, wenn kein echtes
+Tool-Ergebnis von request_loop_action mit zustand="proposal" vorliegt. Wenn
+du bei einem ausdruecklichen OP-Umsetzungsauftrag zunaechst ohne Tool endest,
+pruefe die Uebergabe noch einmal gezielt. Bei fehlendem oder abgelehntem
+Tool-Ergebnis sage klar, dass nichts gestartet wurde.
 
 Verfuegbare Tools: read_file, grep, git_log, git_diff, audit_query,
 pytest_collect, diagnose, read_status, next_op, request_loop_action und im
@@ -616,6 +639,9 @@ def chat_loop(
     _rounds = 0
     _recent_tool_fingerprints: list[str] = []
     _warned_tool_cycles: set[tuple[str, ...]] = set()
+    requested_op = _explicit_op_execution_request(message)
+    op_handoff_retry_used = False
+    op_handoff_result: dict[str, Any] | None = None
     while max_rounds is None or _rounds < max_rounds:
         _check_cancel(cancel_check)
         _rounds += 1
@@ -632,6 +658,48 @@ def chat_loop(
         tool_calls = msg.get("tool_calls") or []
         if not tool_calls:
             antwort = str(msg.get("content") or "")
+            if requested_op and op_handoff_result is None:
+                if not op_handoff_retry_used and (
+                    max_rounds is None or _rounds < max_rounds
+                ):
+                    op_handoff_retry_used = True
+                    messages.append({"role": "assistant", "content": antwort})
+                    messages.append({
+                        "role": "system",
+                        "content": (
+                            f"Der Nutzer hat ausdruecklich die Umsetzung von "
+                            f"{requested_op} beauftragt. Bislang liegt kein "
+                            "Tool-Ergebnis fuer request_loop_action vor; eine "
+                            "textliche Behauptung ersetzt keine Uebergabe. "
+                            "Pruefe die verfuegbaren Belege und rufe "
+                            "request_loop_action mit action=start und genau "
+                            f"op_id={requested_op} auf. Wenn das Tool die OP "
+                            "ablehnt, erklaere den konkreten Grund."
+                        ),
+                    })
+                    continue
+                antwort = (
+                    f"Ich habe fuer {requested_op} keinen bestaetigten "
+                    "Loop-Startvorschlag erzeugt. Es wurde nichts gestartet. "
+                    "Der Auftrag bleibt hier offen; die vorherige Aussage "
+                    "war kein Nachweis fuer eine Uebergabe."
+                )
+            elif requested_op and op_handoff_result.get("zustand") != "proposal":
+                detail = str(op_handoff_result.get("detail") or "")
+                antwort = (
+                    f"Der Startvorschlag fuer {requested_op} wurde nicht "
+                    "angelegt; es wurde nichts gestartet."
+                    + (f" Grund: {detail}" if detail else "")
+                )
+            elif requested_op and op_handoff_result.get("zustand") == "proposal":
+                # The tool result, not free-form model prose, is the authority
+                # for whether the user has a confirmable action in the UI.
+                antwort = (
+                    f"Der Startvorschlag fuer {requested_op} ist im Chat zur "
+                    "Bestaetigung bereit. Der Loop ist noch nicht gestartet; "
+                    "nach deiner Bestaetigung zeigt er vor Schreibarbeit sein "
+                    "Plan-Gate."
+                )
             if on_chunk is not None and antwort:
                 on_chunk(antwort)
             session.append("assistant", {"text": antwort})
@@ -657,11 +725,40 @@ def chat_loop(
             _check_cancel(cancel_check)
             if on_tool_call is not None:
                 on_tool_call(name, args)
-            ergebnis = execute_tool(
-                name, args, tools, mode=mode,
-                project_dir=project_dir, project_name=session.project,
-                session_id=origin_session_id or session.session_id,
-            )
+            requested_action = str(args.get("action", "")).casefold()
+            requested_tool_op = str(args.get("op_id", "")).upper()
+            if (
+                requested_op
+                and name == "request_loop_action"
+                and requested_action == "start"
+                and requested_tool_op != requested_op
+            ):
+                ergebnis = json.dumps({
+                    "zustand": "invalid",
+                    "detail": (
+                        f"Der Nutzer hat {requested_op} beauftragt; "
+                        "ein anderer OP-Start wurde nicht angelegt."
+                    ),
+                }, ensure_ascii=False)
+            else:
+                ergebnis = execute_tool(
+                    name, args, tools, mode=mode,
+                    project_dir=project_dir, project_name=session.project,
+                    session_id=origin_session_id or session.session_id,
+                )
+            if (
+                requested_op
+                and name == "request_loop_action"
+                and str(args.get("action", "")).casefold() == "start"
+                and str(args.get("op_id", "")).upper() == requested_op
+            ):
+                try:
+                    parsed_result = json.loads(ergebnis)
+                except (TypeError, json.JSONDecodeError):
+                    parsed_result = {}
+                op_handoff_result = (
+                    parsed_result if isinstance(parsed_result, dict) else {}
+                )
             _round_evidence.append((
                 name,
                 json.dumps(args, ensure_ascii=False, sort_keys=True, default=str),
