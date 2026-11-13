@@ -392,7 +392,7 @@ def _bug_text_deutet_spec_widerspruch(bugs: list) -> bool:
 
 def _reflection_loop(
     state: RunState,
-    max_runden: int | None = 5,
+    max_runden: int | None = None,
     error_context: str | None = None,
     phase: str | None = "post_build",
     verify_stage_ids: set[str] | None = None,
@@ -444,11 +444,9 @@ def _reflection_loop(
     _refl_task_id = (
         _akt_task.get("id") if isinstance(_akt_task, dict) else None
     )
-    adaptive_recovery = max_runden is None and verify_stage_ids is not None
-    if max_runden is None and not adaptive_recovery:
-        raise ValueError(
-            "Unbegrenzte Reflection braucht gezielte Verify-Stages."
-        )
+    # Kein pauschales Rundelimit: Fortschritt, wiederkehrender Zustand und
+    # das konfigurierte Run-Budget beenden die Reparatur nachvollziehbar.
+    adaptive_recovery = max_runden is None
     recovery_states: set[tuple[str | None, str]] = set()
     runden = count(1) if adaptive_recovery else range(1, (max_runden or 0) + 1)
     for runde in runden:
