@@ -836,3 +836,82 @@ def test_lokaler_start_persistiert_id_fuer_resume(tmp_path, monkeypatch):
     assert len(run_ids) == 2
     assert run_ids[0].startswith("p-")
     assert calls == run_ids == [run_ids[0], run_ids[0]]
+
+
+def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI-Resume laedt den Checkpoint und finalisiert denselben Run real."""
+    from werkstatt.event_store import EventStore
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.phases import finalize
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("WERKSTATT_HOME", str(tmp_path / "werkstatt-home"))
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "STATUS.md").write_text(
+        "## Erledigt\n", encoding="utf-8",
+    )
+
+    run_id = "p-resume-final-verify"
+    phase_state = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new(
+        "ziel",
+        [{"id": "task-1", "name": "Bereits erledigt"}],
+        tests=["pytest -q"],
+        akzeptanzkriterien=["Ergebnis bleibt verifiziert"],
+    )
+    phase_state.mark_done("task-1")
+    phase_state.run_id = run_id
+    phase_state.save()
+
+    verify_phases: list[str | None] = []
+
+    def verify(_state: RunState, *, phase: str | None = None) -> bool:
+        verify_phases.append(phase)
+        return True
+
+    def commit(state: RunState) -> tuple[bool, str]:
+        state.progress_written_at_commit = True
+        return True, "committed-resume"
+
+    monkeypatch.setattr(
+        loop, "_phase_explorer_and_setup",
+        lambda _state, _goal, _project, saved: (0, saved),
+    )
+    monkeypatch.setattr(finalize, "group_start", lambda *_args: None)
+    monkeypatch.setattr(finalize, "group_end", lambda *_args: None)
+    monkeypatch.setattr(finalize, "summary", lambda *_args: None)
+    monkeypatch.setattr(finalize, "_human_gate", lambda *_args, **_kw: 2)
+    monkeypatch.setattr(
+        finalize, "_hat_human_review_tasks", lambda _phase: False,
+    )
+    monkeypatch.setattr(finalize, "_phase_end_reflection", lambda _state: True)
+    monkeypatch.setattr(finalize, "_verify_patches", verify)
+    monkeypatch.setattr(
+        finalize, "_post_commit_snapshot_check",
+        lambda *_args: (True, {"worktree_clean": True}),
+    )
+    monkeypatch.setattr("werkstatt.progress.append", lambda *_a, **_kw: None)
+    monkeypatch.setattr("werkstatt.committer._committe_zielprojekt", commit)
+    monkeypatch.setattr(
+        "werkstatt.reviewer.run_phase_end_review", lambda _state: True,
+    )
+    monkeypatch.setattr(loop, "_git_head", lambda _path: "base-commit")
+    monkeypatch.setattr(loop, "_git_dirty", lambda _path: False)
+
+    with _silence_renderer(), _patch_main_config(tmp_path):
+        rc = loop.main([
+            "--project", "p",
+            "--aufgabe", "ziel",
+            "--headless",
+            "--run-id", run_id,
+            "--resume",
+        ])
+
+    record = EventStore().get_run_record("p", run_id)
+    assert rc == 0
+    assert verify_phases == ["phase_end", "phase_end"]
+    assert record is not None
+    assert record["status"] == "completed"
+    assert record["checkpoint"]["exit_code"] == 0

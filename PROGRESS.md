@@ -5949,3 +5949,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der Phase-End-Resume-Test speichert den All-done-PhaseState jetzt inklusive Run-ID auf Platte und lädt ihn in einer neuen Instanz wieder, bevor Task-Loop und Phase-End-Verify ausgeführt werden.
 - Damit deckt der Test die serialisierte Checkpoint-Grenze nach einem Prozessneustart ab. Er beweist weiterhin keinen echten Worker-/Webserver-Restart; OP-397 bleibt bis zum integrierten Produktivpfad offen.
+
+
+## 2026-11-13 — Produktiver CLI-Resume bis Phase-End-Verify
+
+- Ein Integrations-Test führt `loop.main(... --resume)` mit einem auf Platte gespeicherten All-done-Checkpoint aus. Run-Lease, RunRecord, Plan-/Task-Pfad, Finalizer und beide Phase-End-Verifies laufen über Produktionscode; externe Commit-/Verify-Seiteneffekte sind kontrolliert.
+- Der Test prüft denselben Run bis `completed` und Exit-Code 0. Ein echter Webserver-Neustart mit produktivem Worker bleibt ausdrücklich noch unbewiesen; Quality-Gate-Verifikation dieses Tests steht aus.
