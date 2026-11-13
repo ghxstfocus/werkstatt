@@ -501,6 +501,7 @@ class ChatJobStore:
             "cancelled": "cancelled",
             "cancel_requested": "running",
             "branch_cleanup_failed": "failed",
+            "run_snapshot_cleanup_failed": "failed",
         }
         for row in rows:
             event_id = f"chat-job:{row['job_id']}:{row['seq']}"
@@ -514,8 +515,13 @@ class ChatJobStore:
                 "status": statuses.get(str(row["kind"]), "running"),
             }
             try:
+                audit_kind = (
+                    "chat_job_run_snapshot_cleanup_failed"
+                    if row["kind"] == "run_snapshot_cleanup_failed"
+                    else f"chat_job_{row['kind']}"
+                )
                 written = audit(
-                    f"chat_job_{row['kind']}",
+                    audit_kind,
                     event_payload,
                     Path("."),
                     str(row["project"]),
