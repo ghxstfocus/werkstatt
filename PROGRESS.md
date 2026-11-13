@@ -5940,3 +5940,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der bisher gemeinsame `inbox_offset` konnte über eine nicht verarbeitete Nachricht hinweg springen. Er wird beim nächsten Checkpoint entfernt und durch `job_notice_offset` ersetzt; bereits projizierte Sequenzen verhindern Replay-Duplikate während der Migration.
 - Regressionstest: Frage vor Job-Hinweis einreihen, Checkpoint laufen lassen, danach belegen, dass der Job-Hinweis projiziert und quittiert ist und die Frage weiterhin beansprucht werden kann.
 - Die gezielte CI-Verifikation dieses Fixes läuft nach Commit; OP-397 bleibt offen, bis auch der produktive Resume-/Follow-up-Pfad vollständig integriert und belegt ist.
+
+- Der erste Quality-Gate-Lauf [43337317796](https://github.com/ghxstfocus/werkstatt/actions/runs/43337317796) bestand 2146 Tests, scheiterte aber an einem bestehenden Event-Store-Test, der noch den abgeloesten gemeinsamen Cursor erwartete. Der Test ist auf `job_notice_offset` umgestellt; die erneute CI-Verifikation folgt.

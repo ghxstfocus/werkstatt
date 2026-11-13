@@ -218,7 +218,8 @@ def test_task_checkpoint_consumes_chat_notice_with_run_record(
     assert record["checkpoint_version"] == 1
     assert record["checkpoint"]["safe_point"]["next_task_id"] == "t2"
     assert record["checkpoint"]["safe_point"]["completed_task_ids"] == ["t1"]
-    assert record["checkpoint"]["inbox_offset"] == seq
+    assert record["checkpoint"]["job_notice_offset"] == seq
+    assert "inbox_offset" not in record["checkpoint"]
     assert record["checkpoint"]["job_notices"] == [
         {
             "seq": seq,
