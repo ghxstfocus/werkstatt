@@ -6253,4 +6253,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Review des grünen Task-Checkpoint-Schritts fand einen Fehlerpfad: Wenn die Kriterienberechnung oder das Fortschritts-Audit nach `mark_done` scheitert, blieb der Task korrekt erledigt, aber der fehlende Zielabgleich wurde still verschluckt.
 - Der Taskstatus bleibt erhalten; der Loop schreibt jetzt einen separaten, redigierten Fehlerbefund mit Task-ID, Fehlertyp und angekündigter Wiederprüfung am nächsten sicheren Checkpoint. Exception-Texte werden nicht persistiert.
-- Regressionstest belegt beides: `done` bleibt bestehen und der Checkpoint-Ausfall erscheint sichtbar. Quality Gate für diese Nachbesserung läuft.
+- Regressionstest belegt beides: `done` bleibt bestehen und der Checkpoint-Ausfall erscheint sichtbar. GitHub Actions Quality Gate [43417405532](https://github.com/ghxstfocus/werkstatt/actions/runs/43417405532) erfolgreich: 2.186 Tests bestanden, 5 übersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden; `ok: true`, `regression: false`.
