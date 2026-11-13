@@ -6145,4 +6145,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der Plan-Compiler prueft die Zuordnung von Akzeptanzkriterien zu Tasks, aber `PhaseState.init_new()` hat `criterion_refs` beim Erzeugen des Phase-Checkpoints verworfen. Dadurch konnte die Resume-/Zielabgleich-Logik nach einem Neustart nicht mehr auf dieselbe Task-Kriterien-Zuordnung zugreifen.
 - Phase-Checkpoints speichern die Referenzen jetzt je Task; Laden und Initialisieren weisen fehlerhafte Referenzlisten fail-closed ab. Regressionstests decken Speicherung, Reload und ungueltige Daten ab.
-- Quality-Gate fuer den Fix laeuft; OP-398 bleibt offen, bis die gesamte Abnahmekette belegt ist.
+- Quality Gate [43368306093](https://github.com/ghxstfocus/werkstatt/actions/runs/43368306093) ist gruen: 2170 Tests bestanden, 5 uebersprungen; Ruff 0, mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden. OP-398 bleibt offen, bis die gesamte Abnahmekette belegt ist.
