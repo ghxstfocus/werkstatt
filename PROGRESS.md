@@ -6058,3 +6058,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Auch mit `-S` erreicht der Worker den ersten Bootstrap-Marker nicht. Der Test-Launcher schaltet fuer den naechsten Lauf den Python-Importtrace ein; dessen Ausgabe landet im Worker-Log und zeigt, ob der Stillstand noch vor dem Skript oder waehrend eines Imports passiert.
 - Der Resume-Test bleibt rot, bis der Worker nachweislich startet und denselben fehlgeschlagenen Run abschliesst.
+
+
+## 2026-11-13 — Resume-Worker isoliert von Python-Umgebungsvariablen
+
+- Der Importtrace endet weiterhin vor dem Bootstrap bei der Initialisierung des Python-Interpreters. Der Launcher ignoriert jetzt mit `-E` geerbte `PYTHON*`-Variablen; Overlay, Projektcode und installierte Bibliotheken werden danach gezielt durch den Test-Bootstrap auf den Importpfad gesetzt.
+- Der naechste Quality-Gate-Lauf prueft erneut den produktiven HTTP-Resume bis zum Phase-End-Verify, ohne die Recovery-Akzeptanz abzuschwaechen.
