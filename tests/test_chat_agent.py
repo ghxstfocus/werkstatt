@@ -478,6 +478,57 @@ def test_chat_loop_explizites_rundenbudget_liefert_abschluss(
     assert session.load()[-1]["payload"]["text"] == antwort
 
 
+def test_chat_loop_default_laeuft_ueber_fuenf_werkzeugrunden_weiter(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Der normale Chat-Turn hat keine pauschale Fuenf-Runden-Grenze."""
+    calls = 0
+    tools = {
+        "probe": {
+            "description": "Liefert den angefragten Beleg.",
+            "parameters": {
+                "type": "object",
+                "properties": {"n": {"type": "integer"}},
+                "required": ["n"],
+            },
+            "fn": lambda args: f"Beleg {args['n']}",
+            "mode": "read",
+        },
+    }
+
+    def _fake_llm(messages, tools=None, cancel_check=None):
+        nonlocal calls
+        calls += 1
+        if calls <= 7:
+            return {"choices": [{"message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": f"probe-{calls}",
+                    "type": "function",
+                    "function": {
+                        "name": "probe",
+                        "arguments": json.dumps({"n": calls}),
+                    },
+                }],
+            }}]}
+        return {"choices": [{"message": {
+            "role": "assistant",
+            "content": "Sieben Belege geprueft; der Auftrag ist beantwortet.",
+        }}]}
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", _fake_llm)
+    answer = chat_agent.chat_loop(
+        session, "Pruefe sieben Belege", tools=tools, project_dir=tmp_path,
+    )
+
+    assert calls == 8
+    assert answer == "Sieben Belege geprueft; der Auftrag ist beantwortet."
+    assert sum(event["kind"] == "tool_call" for event in session.load()) == 7
+
+
 def test_chat_loop_abbruch_nach_werkzeugschritt_bleibt_replaybar(
     session: ChatSession,
     monkeypatch: pytest.MonkeyPatch,

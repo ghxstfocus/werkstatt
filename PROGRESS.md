@@ -6397,3 +6397,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - Alle Schritte des Jobs `quality` sind abgeschlossen: JavaScript-Syntax, Ruff, vollstaendiger pytest-Lauf mit Diagnostik und Quality Gate; der Job endete mit `success`. Die Windows-Sonderfehler aus den drei lokalen Snapshot-Tests sind damit fuer den Linux-CI-Lauf nicht reproduziert. Es wird hier keine Testzahl behauptet, weil die CI-Logausgabe in dieser Pruefung keine auslesbare Zusammenfassung lieferte.
 - Der Nachweis gilt fuer den kombinierten PR-Stand, nicht fuer den Serverbetrieb. Der Integrations-PR bleibt ein Draft und wird nicht automatisch gemergt.
 - **Weiter offen:** OP-401 ist nicht abgeschlossen. Hintergrundjobs sind aktuell run-gebundene Lese-/Debuggerfragen mit Snapshot und Checkpoint-Reconcile. Schreibauftraege, sichere Aenderungsuebernahme/Replan und die vollstaendige adaptive Inbox-Verarbeitung sind weiterhin offen; ebenso OP-402. Damit ist das Ziel „Chat und Loop arbeiten wie ein durchgaengiger, unterbrechbarer Koordinator“ noch nicht erreicht.
+
+## 2026-11-13 — Regressionstest gegen pauschalen Chat-Rundenabbruch
+
+- **Befund:** Der alte Werkstatt-Chat zeigte wiederholt `maxrounds=5 erreicht, keine finale Antwort`. Im aktuellen Code ist das Standardbudget bereits unbegrenzt; der bisherige Test pruefte aber nur ein explizit gesetztes Ein-Runden-Budget und schloss einen Rueckfall auf fuenf Standardrunden nicht aus.
+- **Aenderung:** Ein Regressionstest laesst den normalen Chat-Turn sieben unterschiedliche Werkzeugrunden ausfuehren und verlangt anschliessend eine finale Antwort. Das bildet den Nutzerfall direkt ab, ohne die explizite Abbruch-/Stagnationskontrolle zu entfernen.
+- **Verifikation:** Gezielter Test bestanden (1 passed); Ruff fuer `tests/test_chat_agent.py` bestanden. Die Dokumentations- und Gesamtpruefungen folgen separat; dieser Test belegt nur den Chat-Rundenvertrag, nicht die noch offene Schreibauftrags-Uebergabe aus OP-401.
