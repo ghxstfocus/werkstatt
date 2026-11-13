@@ -6237,6 +6237,14 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - GitHub Actions Quality Gate [Run 43409943398](https://github.com/ghxstfocus/werkstatt/actions/runs/43409943398): 2.185 Tests bestanden, 5 uebersprungen; JavaScript-Syntax, Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden; `ok: true`, `regression: false`.
 
 
+## 2026-11-13 — Parallele Chat-Jobs am Run-Checkpoint sichtbar machen
+
+- Der Task-Loop speicherte `job_notice` zwar in seinem Checkpoint, zeigte aber nicht als eigenes Control-Ereignis, dass der laufende Run einen Chat-Job aufgenommen hat. Damit fehlte ein nachvollziehbarer Beleg fuer die Uebergabe zwischen Chat und Loop.
+- Neue Lese-/Debugger-Job-Hinweise werden jetzt am sicheren Task-Checkpoint mit Modus, Job-/Inbox-ID, Session und Chat-Kontextsequenz in der Timeline protokolliert. Die stabile Audit-ID dedupliziert Wiederholungen nach einem Crash zwischen Audit und Checkpoint. Der Eintrag enthaelt keine Nutzernachricht oder Modellgedanken und bestaetigt ausdruecklich, dass das Run-Hauptziel unveraendert bleibt.
+- Der Checkpoint wird erst nach erfolgreichem Audit geschrieben; die Inbox-Nachricht wird erst danach bestaetigt. Bei Audit-Fehler bleibt sie unbestaetigt und kann nach Ablauf der Lease erneut verarbeitet werden.
+- **Grenze:** Das ist die beobachtbare Uebergabe fuer parallel laufende Lese-/Diagnosejobs. Fragen, Gate-Antworten, Steueraktionen und neue Schreibauftraege werden dadurch noch nicht vom Koordinator klassifiziert oder in den Arbeitsgraphen aufgenommen; OP-401/M1 bleibt offen.
+- **Verifikation lokal:** `tests/test_event_store.py`, `tests/test_chat_jobs.py`, `tests/test_live_feed_backend.py`, `tests/test_audit_warnung.py`: 61 bestanden. Ruff fuer geaenderte Python-Dateien: bestanden. `git diff --check` und strikter Doku-Drift-Check: bestanden. Das vollstaendige Quality Gate ist auf dem Windows-Checkout nicht aussagekraeftig: die projektspezifischen Subprozess-Aufrufe finden dort `pytest`/`mypy` nicht konsistent, und die Vollsuite enthaelt Linux-Pfade sowie POSIX-Signale. GitHub-CI fuer diesen Stand ist noch nicht ausgefuehrt.
+
 ## 2026-11-13 — Zieltext und Akzeptanzkriterien am Task-Checkpoint
 
 - Der Checkpoint nach einem grünen Task zeigte bisher IDs und den nächsten Task, aber nicht den Wortlaut des übergeordneten Ziels oder der offenen Akzeptanzkriterien. Damit war die Entscheidung in Control nur teilweise gegen den Auftrag prüfbar.
@@ -6271,6 +6279,8 @@ Zusammenfassung; der Chat muss fuer exakte Fundstellen weiterhin gezielt
 `grep` bzw. `read_file` verwenden. Die Standard-Chat-Schleife ist im
 aktuellen Code unbegrenzt; identische wiederholte Werkzeugzyklen werden
 stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
+- **Commit:** `c906fba625e617e3d74d6fe166a44018feb84de4`
+- **Commit:** `edfbb450646166c9fcd86f54f800f0a6e6799a3e`
 
 
 ## 2026-11-13 — Arbeitsvertrag: Ziel halten, erneut abgleichen, exakt dokumentieren

@@ -1,6 +1,7 @@
 """Tests fuer den Event-Store (OP-122): append+query, kind-Filter, since_seq-Export."""
 
 import json
+import sqlite3
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -244,9 +245,17 @@ def test_run_inbox_rejects_orphan_and_idempotency_conflict(
 
 
 def test_task_checkpoint_consumes_chat_notice_with_run_record(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from werkstatt.phases.tasks import _persist_run_checkpoint
+    from werkstatt.phases import tasks
+
+    audit_events: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _audit(*args: object, **kwargs: object) -> bool:
+        audit_events.append((args, kwargs))
+        return True
+
+    monkeypatch.setattr(tasks, "audit", _audit)
 
     store = EventStore(db_pfad=tmp_path / "events.db")
     store.create_run_record("demo", "run-inbox", "Continue the approved task")
@@ -269,7 +278,7 @@ def test_task_checkpoint_consumes_chat_notice_with_run_record(
         ],
     })
 
-    _persist_run_checkpoint(
+    tasks._persist_run_checkpoint(
         store, "demo", "run-inbox", phase_state, {"id": "t2"},
     )
 
@@ -284,13 +293,83 @@ def test_task_checkpoint_consumes_chat_notice_with_run_record(
         {
             "seq": seq,
             "job_id": "job-1",
+            "message_id": "chat-job:job-1",
             "mode": "read",
             "session_id": "session-1",
+            "context_seq": 7,
         },
     ]
+    assert len(audit_events) == 1
+    payload = audit_events[0][0][1]
+    assert isinstance(payload, dict)
+    assert payload["job_id"] == "job-1"
+    assert payload["context_seq"] == 7
+    assert payload["decision_summary"].startswith(
+        "Das Run-Hauptziel bleibt unveraendert"
+    )
+    assert audit_events[0][1]["audit_id"] == f"RUN-run-inbox-CHAT-{seq}"
     assert store.claim_run_message(
         "demo", "run-inbox", "worker-next",
     ) is None
+
+
+def test_task_checkpoint_retries_chat_notice_audit_idempotently(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt.phases import tasks
+
+    audit_ids: list[str] = []
+
+    def _audit(*_args: object, **kwargs: object) -> bool:
+        audit_ids.append(str(kwargs["audit_id"]))
+        return True
+
+    monkeypatch.setattr(tasks, "audit", _audit)
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-replay", "Continue approved work")
+    store.enqueue_run_message(
+        "demo", "run-replay", "chat-job:job-replay", "job_notice",
+        {"job_id": "job-replay", "mode": "debugger", "session_id": "s1"},
+    )
+    phase_state = SimpleNamespace(data={"tasks": []})
+
+    tasks._persist_run_checkpoint(
+        store, "demo", "run-replay", phase_state, None,
+    )
+    tasks._persist_run_checkpoint(
+        store, "demo", "run-replay", phase_state, None,
+    )
+
+    assert audit_ids == ["RUN-run-replay-CHAT-1"]
+
+
+def test_task_checkpoint_does_not_ack_chat_notice_if_audit_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt.phases import tasks
+
+    monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: False)
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-audit-fail", "Continue approved work")
+    seq = store.enqueue_run_message(
+        "demo", "run-audit-fail", "chat-job:job-audit-fail", "job_notice",
+        {"job_id": "job-audit-fail", "mode": "read", "session_id": "s1"},
+    )
+
+    with pytest.raises(RuntimeError, match="konnte nicht auditiert werden"):
+        tasks._persist_run_checkpoint(
+            store, "demo", "run-audit-fail", SimpleNamespace(data={"tasks": []}), None,
+        )
+
+    record = store.get_run_record("demo", "run-audit-fail")
+    assert record is not None
+    assert record["checkpoint_version"] == 0
+    # The worker lease is deliberately left unacknowledged so recovery can retry it.
+    with sqlite3.connect(store.db_pfad) as connection:
+        status = connection.execute(
+            "SELECT status FROM run_inbox WHERE seq=?", (seq,),
+        ).fetchone()
+    assert status == ("leased",)
 
 
 def test_run_result_marks_terminal_status_with_exit_code(

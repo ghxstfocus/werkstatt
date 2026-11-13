@@ -412,3 +412,14 @@ def test_kriterienfortschritt_ist_in_timeline_menschlich_beschriftet():
     assert detail == (
         "1 erledigt, 2 offen nach t2; danach: Weiter mit t3: Tests ergaenzen"
     )
+
+
+def test_paralleler_chat_job_ist_in_timeline_menschlich_beschriftet():
+    label = inspector._tl_label("loop_chat_job_observed", {})
+    detail = inspector._tl_detail(
+        "loop_chat_job_observed",
+        {"mode": "debugger", "job_id": "0123456789abcdef"},
+    )
+
+    assert label == "Parallelen Chat-Job am Checkpoint erkannt"
+    assert detail == "Paralleler debugger-Auftrag am sicheren Punkt erkannt (0123456789ab)"

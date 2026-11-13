@@ -194,9 +194,11 @@ def _persist_run_checkpoint(
         payload = message["payload"]
         notices.append({
             "seq": message["seq"],
+            "message_id": message["message_id"],
             "job_id": payload.get("job_id"),
             "mode": payload.get("mode"),
             "session_id": payload.get("session_id"),
+            "context_seq": payload.get("context_seq"),
         })
 
     checkpoint = dict(record["checkpoint"])
@@ -228,6 +230,49 @@ def _persist_run_checkpoint(
         ):
             notices_above_offset.append(notice)
     notices = notices_above_offset
+
+    # Ein Hintergrundjob ist eine neue Eingabe in den laufenden Run. Er wird
+    # am sicheren Punkt sichtbar gemacht, ohne Ziel oder Task-Graph implizit
+    # zu aendern. Die stabile Audit-ID macht Wiederholungen nach einem Crash
+    # zwischen Audit und Checkpoint in der Projektion idempotent.
+    for notice in notices:
+        seq = notice.get("seq")
+        audit_result = audit(
+            "loop_chat_job_observed",
+            {
+                "message_id": notice.get("message_id"),
+                "job_id": notice.get("job_id"),
+                "mode": notice.get("mode"),
+                "session_id": notice.get("session_id"),
+                "context_seq": notice.get("context_seq"),
+                "result_summary": (
+                    "Der laufende Run hat einen parallelen Chat-Job am "
+                    "sicheren Checkpoint erkannt."
+                ),
+                "decision_summary": (
+                    "Das Run-Hauptziel bleibt unveraendert; der Lese- oder "
+                    "Diagnosejob wird separat in seiner Chat-Session bearbeitet."
+                ),
+                "evidence": [
+                    f"Chat-Job {notice.get('job_id') or '?'}",
+                    f"Modus: {notice.get('mode') or 'unbekannt'}",
+                    f"Run-Inbox-Sequenz: {seq}",
+                ],
+                "next_step": (
+                    "Aktiven Task-Graph fortsetzen und das Chat-Ergebnis "
+                    "bei seiner Rueckkehr gegen das Run-Ziel abgleichen."
+                ),
+            },
+            run_state.project_dir if run_state is not None else Path.cwd(),
+            project_name,
+            run_id=run_id,
+            audit_id=f"RUN-{run_id}-CHAT-{seq}",
+        )
+        if audit_result is False:
+            raise RuntimeError(
+                f"Chat-Job {notice.get('job_id')} konnte nicht auditiert werden",
+            )
+
     checkpoint["job_notices"] = (prior_notices + notices)[-50:]
     checkpoint["safe_point"] = {
         "phase": "build",
