@@ -84,7 +84,7 @@ def test_read_file_offsets_are_character_offsets_and_truncation_is_explicit(tmp_
     assert len(result.encode("utf-8")) <= chat_tools._MAX_READ_BYTES
     schema = chat_tools.CHAT_TOOLS["read_file"]["description"]
     assert "keine Zeilennummern" in schema
-    assert "nächsten start-Offset" in schema
+    assert "naechsten start-Offset" in schema
 
 
 def test_read_file_tail_reports_actual_range_and_file_length(tmp_path):
