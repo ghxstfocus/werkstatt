@@ -45,8 +45,9 @@ gibt es nicht: Debugging ist eine Chat-Faehigkeit (ADR-0011/0029).
 - **Runs:** Projektlaeufe und deren Status.
 
 
-Die Modusleiste gehoert in der UI unter die Projektleiste. Verbindliche
-Live-/Nachanalyse-Trennung: ADR-0022a.
+Die verbindliche UI-Hierarchie, Modussemantik und Abgrenzung der
+Ansichten steht in ADR-0022 und im freigegebenen UI-Plan. ADR-0022a ist
+abgeloest und keine gueltige Bauvorgabe.
 
 ## 1.5 Ausfuehrung
 
