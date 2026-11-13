@@ -58,6 +58,7 @@ def test_prompt_hands_implementation_requests_to_the_loop():
         ("Kannst du erklaeren, was OP-372 bedeutet?", None),
         ("Was macht OP-372?", None),
         ("Welche OP waere ein guter Test?", None),
+        ("Bearbeite OP-372; OP-373 ist blockiert.", None),
     ],
 )
 def test_explicit_op_execution_intent_is_distinguished_from_questions(
@@ -122,6 +123,28 @@ def test_chat_loop_can_handoff_explicit_op_implementation_request(
         if event["kind"] == "loop_action_proposed"
     )
     assert proposal["payload"]["arguments"] == {"op_id": "OP-321"}
+
+
+def test_ambiguous_op_execution_request_asks_before_model_or_handoff(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _unexpected_model_call(*_args, **_kwargs):
+        raise AssertionError("Mehrdeutiger OP-Auftrag darf nicht ans Modell gehen")
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", _unexpected_model_call)
+
+    answer = chat_agent.chat_loop(
+        session,
+        "Bearbeite OP-321; OP-322 ist blockiert.",
+    )
+
+    assert "OP-321, OP-322" in answer
+    assert "Welche davon" in answer
+    assert "keinen Startvorschlag angelegt" in answer
+    assert not any(
+        event["kind"] == "loop_action_proposed" for event in session.load()
+    )
 
 
 def test_explicit_op_request_retries_missing_tool_handoff(

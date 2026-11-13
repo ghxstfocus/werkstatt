@@ -6495,3 +6495,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Nachpruefung:** Der erste Linux-CI-Lauf bestand mit 2.242 Pytests (5 uebersprungen), Ruff, AST und Audit-Katalog, fand aber drei Mypy-Fehler beim Eingrenzen des optionalen Tool-Belegs. Der Erfolgs-/Fehlerpfad grenzt den Beleg jetzt explizit ein.
 - **Verifikation:** Lokal unter Windows/Python 3.14: `tests/test_chat_agent.py` 36 bestanden; Ruff und Doku-Drift-Pruefung bestanden. Lokales Mypy ist nicht installiert; der aktualisierte Linux-CI-Lauf steht noch aus. Die Windows-Vollsuite ist wegen plattformabhaengiger bestehender Tests kein gueltiger Gesamtbeleg.
 - **Grenze:** Der Chat legt weiterhin nur einen Vorschlag an. Der Listener des Produktionsservers ist nicht von diesem lokalen Worktree aktualisiert; der Nutzer muss nach dem Pull den tatsaechlichen Listener kontrolliert neu starten.
+
+## 2026-11-13 — Mehrdeutige OP-Umsetzungsauftraege vor Handoff klaeren
+
+- **Befund:** Die OP-Erkennung nahm bei einer ausdruecklichen Umsetzungsanfrage die erste OP-ID im gesamten Text. Bei mehreren Referenzen, etwa „Bearbeite OP-372; OP-373 ist blockiert“, konnte dadurch die falsche OP als Ziel festgelegt werden.
+- **Aenderung:** Der Chat erkennt mehrere unterschiedliche OP-IDs in einem Umsetzungsauftrag und fragt vor jedem Modell- oder Tool-Aufruf nach, welche OP gemeint ist. Es wird dabei kein Startvorschlag erzeugt. Eine einzelne OP-ID behaelt den bestehenden Handoff-Pfad.
+- **Verifikation:** Lokal unter Windows/Python 3.14: `tests/test_chat_agent.py` 38 bestanden, Ruff und `git diff --check` bestanden. Doku-Drift-Pruefung nach Eintrag bestanden. Linux-CI fuer den Branch steht aus.

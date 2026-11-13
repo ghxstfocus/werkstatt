@@ -55,10 +55,18 @@ _EXPLICIT_OP_EXECUTION = re.compile(
 
 def _explicit_op_execution_request(message: str) -> str | None:
     """Return an explicitly requested OP only for clear execution language."""
-    match = re.search(r"\bOP-\d+[a-z]?\b", message, re.IGNORECASE)
-    if match is None or _EXPLICIT_OP_EXECUTION.search(message) is None:
+    if _EXPLICIT_OP_EXECUTION.search(message) is None:
         return None
-    return match.group(0).upper()
+    op_ids = _explicit_op_ids(message)
+    return op_ids[0] if len(op_ids) == 1 else None
+
+
+def _explicit_op_ids(message: str) -> tuple[str, ...]:
+    """Return distinct OP references in an execution request, in text order."""
+    return tuple(dict.fromkeys(
+        match.group(0).upper()
+        for match in re.finditer(r"\bOP-\d+[a-z]?\b", message, re.IGNORECASE)
+    ))
 
 
 _DEBUGGER_PROMPT = """Der Mensch hat diesen Turn im Debug-Modus gestartet.
@@ -613,6 +621,18 @@ def chat_loop(
     if request_id is not None:
         user_payload["job_id"] = request_id
     session.append("user", user_payload)
+    op_ids = _explicit_op_ids(message)
+    if _EXPLICIT_OP_EXECUTION.search(message) is not None and len(op_ids) > 1:
+        antwort = (
+            "Ich sehe mehrere OPs in deinem Umsetzungsauftrag: "
+            + ", ".join(op_ids)
+            + ". Welche davon soll ich an den Loop zur Bearbeitung uebergeben? "
+            "Ich habe keinen Startvorschlag angelegt."
+        )
+        if on_chunk is not None:
+            on_chunk(antwort)
+        session.append("assistant", {"text": antwort})
+        return antwort
     _project_context = f"Aktives Projekt: {session.project}."
     if project_dir is not None:
         _project_context += (
