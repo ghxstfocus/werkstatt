@@ -273,8 +273,14 @@ class ChatJobStore:
             conn.commit()
             return True
 
-    def fail_queued(self, job_id: str, error: str) -> bool:
-        """Finish an unstarted job with a durable checkpoint/snapshot error."""
+    def fail_queued(
+        self,
+        job_id: str,
+        error: str,
+        *,
+        reason: str = "run_snapshot_failed",
+    ) -> bool:
+        """Finish an unstarted job with a durable handoff failure."""
         now = _now()
         with closing(self._connect()) as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -290,7 +296,7 @@ class ChatJobStore:
                     (
                         job_id,
                         "failed",
-                        json.dumps({"error": error, "reason": "run_snapshot_failed"}),
+                        json.dumps({"error": error, "reason": reason}),
                         now,
                     ),
                 )
@@ -913,6 +919,65 @@ def resume_chat_jobs(
     path = Path(db_path) if db_path else _db_path(project)
     reconcile_run_inbox(project, db_path=path)
     _dispatch_pending(path, project, Path(project_dir))
+
+
+def fail_uncheckpointed_jobs_for_inactive_run(
+    project: str,
+    active_run_id: str | None,
+    *,
+    db_path: Path | None = None,
+    event_store: Any | None = None,
+) -> int:
+    """Fail queued run jobs whose run ended before a durable safe handoff.
+
+    Jobs with a fully bound snapshot and an acknowledged inbox message remain
+    eligible for replay even after their originating loop has exited. Jobs
+    attached to the active run, including an ambiguous/orphaned run, are left
+    untouched. Unknown checkpoint state is treated as unproven and reported
+    as a visible failure rather than left queued forever.
+    """
+    store = ChatJobStore(Path(db_path) if db_path else _db_path(project))
+    if event_store is None:
+        from werkstatt.event_store import EventStore
+
+        event_store = EventStore()
+
+    failed = 0
+    for job in store.queued():
+        run_id = job.get("run_id")
+        if not isinstance(run_id, str) or not run_id or run_id == active_run_id:
+            continue
+        if job.get("project") != project:
+            continue
+        snapshot_bound = all(
+            isinstance(job.get(field), str) and bool(job[field])
+            for field in (
+                "run_snapshot_source",
+                "run_snapshot_path",
+                "run_snapshot_head",
+                "run_snapshot_fingerprint",
+            )
+        )
+        try:
+            acknowledged = event_store.run_message_acknowledged(
+                project, run_id, f"chat-job:{job['job_id']}",
+            )
+        except (OSError, RuntimeError, sqlite3.Error, ValueError):
+            acknowledged = False
+        if snapshot_bound and acknowledged:
+            continue
+        error = (
+            f"Der zugeordnete Run {run_id} endete, bevor die Chat-Anfrage "
+            "an einem bestaetigten Checkpoint mit stabilem Snapshot "
+            "uebernommen wurde. Bitte sende den Auftrag erneut."
+        )
+        if store.fail_queued(
+            str(job["job_id"]),
+            error,
+            reason="run_ended_before_checkpoint",
+        ):
+            failed += 1
+    return failed
 
 
 def enqueue_chat_job(
