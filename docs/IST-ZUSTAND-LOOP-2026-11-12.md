@@ -79,8 +79,13 @@ den Spawn-Fehlerpfad.
    Freigabedetails und naechste Aktion sind aber noch nicht vollstaendig in
    einen atomar abgeglichenen Run-Vertrag migriert.
 2. **Inbox ist nur teilweise integriert:** `job_notice` wird persistiert
-   und checkpoint-sicher konsumiert. Fragen, Control, Gate-Antworten und
-   Schreibauftraege veraendern den Arbeitsgraphen noch nicht.
+   und checkpoint-sicher konsumiert. Bestaetigte Chat-Folgeauftraege werden
+   ebenfalls dauerhaft der aktiven Run-Inbox zugeordnet. Explizite OPs
+   transportieren dabei ihren gespeicherten Vorschautext; fehlt der Inhalt,
+   wird die Annahme fail-closed abgelehnt. Die Aufgaben werden am Checkpoint
+   aber noch nicht fachlich disponiert oder in den Arbeitsgraphen uebernommen.
+   Fragen, Control und Gate-Antworten veraendern den Arbeitsgraphen ebenfalls
+   noch nicht.
 3. **Zielorientierter Arbeitsgraph fehlt weiterhin:** Der Planner verwirft
    jetzt strukturell ungueltige Task-DAGs vor dem Plan-Gate und sortiert
    gueltige Abhaengigkeiten stabil. Der Run disponiert Tasks aber weiterhin

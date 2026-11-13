@@ -88,8 +88,27 @@ def test_confirmed_chat_action_uses_control_api_once(
     assert len(calls) == 1
 
 
+@pytest.mark.parametrize(
+    (
+        "arguments", "task_preview", "expected_request", "expected_op_id",
+        "expected_status",
+    ),
+    [
+        ({"aufgabe": "Testauftrag"}, "", "Testauftrag", None, 200),
+        (
+            {"op_id": "OP-372"},
+            "### OP-372: Projection-Status\n- **Status:** open\nAkzeptanzkriterien",
+            "### OP-372: Projection-Status\n- **Status:** open\nAkzeptanzkriterien",
+            "OP-372",
+            200,
+        ),
+        ({"op_id": "OP-372"}, "", "", "OP-372", 409),
+    ],
+)
 def test_confirmed_start_queues_followup_for_busy_loop(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    arguments: dict[str, str], task_preview: str,
+    expected_request: str, expected_op_id: str | None, expected_status: int,
 ) -> None:
     pytest.importorskip("fastapi")
     pytest.importorskip("httpx")
@@ -117,7 +136,8 @@ def test_confirmed_start_queues_followup_for_busy_loop(
         "proposal_id": proposal_id,
         "project": "demo",
         "action": "start",
-        "arguments": {"aufgabe": "Testauftrag"},
+        "arguments": arguments,
+        "task_preview": task_preview,
         "summary": "Loop starten",
         "expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
     })
@@ -140,7 +160,13 @@ def test_confirmed_start_queues_followup_for_busy_loop(
         json={"session_id": session_id, "decision": "confirm"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == expected_status
+    if expected_status == 409:
+        assert "keinen gespeicherten Aufgabeninhalt" in response.json()["detail"]
+        assert event_store.claim_run_message(
+            "demo", "existing-run", "test", kind="chat_followup_request",
+        ) is None
+        return
     payload = response.json()
     assert payload["state"] == "queued"
     assert payload["result"]["run_id"] == "existing-run"
@@ -155,8 +181,8 @@ def test_confirmed_start_queues_followup_for_busy_loop(
         "parent_run_id": "existing-run",
         "base_commit": "abc123",
         "checkpoint_version": 0,
-        "request": "Testauftrag",
-        "op_id": None,
+        "request": expected_request,
+        "op_id": expected_op_id,
     }
     events = session.load()
     assert events[-1]["kind"] == "loop_action_queued"
