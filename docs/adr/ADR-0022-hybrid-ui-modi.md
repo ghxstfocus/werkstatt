@@ -148,6 +148,36 @@ Bewegung gehoeren zur Abnahme. Browserpruefungen laufen mit isolierten
 Testdaten; Screenshots, DOM-/Accessibility-Befunde und Browser-Logs werden
 als Verify-Artefakte gespeichert.
 
+### 8. Umsetzungsreihenfolge
+
+Die UI wird auf belastbare Laufzeitvertraege gesetzt, nicht auf
+kurzlebige Frontend-Zustaende. Die Reihenfolge ist:
+
+1. **Run- und Event-Vertraege:** Projekt-/Run-Identitaet, persistierte
+   Events, Replay, Checkpoints, Job-Lifecycle und Gate-Identitaet gemaess
+   ADR-0032/ADR-0029. Jeder Status, den die UI zeigt, muss aus dieser
+   Quelle belegbar sein.
+2. **Projekt-Shell und Chat:** Home/Projektleiste, Modusleiste,
+   Sessionzuordnung, asynchrone Fragen und sichtbare Annahme-/Fehlerzustaende.
+   Ein Chat-Auftrag bleibt derselbe Auftrag, wenn er an einen Loop-Run
+   uebergeben wird.
+3. **Gate- und Kontrollfluss:** Freigabekarten im Chat, eindeutige
+   Antworten und Chat-gesteuerte Start-/Pause-/Fortsetzen-/Stop-Aktionen.
+   Reconnect darf keine Aktion wiederholen oder Gate-Antwort verlieren.
+4. **Modus-Projektionen:** Cockpit, Control, Debug und Runs werden aus
+   denselben Run-/Event-Daten aufgebaut. Erst wenn Replay konsistent ist,
+   gelten sie als eine Oberflaeche.
+5. **Codeguardian und Browserabnahme:** Findings werden an Diff und
+   Revision gebunden; danach folgen isolierte Browserpruefung, Accessibility-
+   Befunde und die zehn vollstaendigen UI-Runs aus den Abnahmekriterien.
+
+Ein Modus darf nicht durch eine separate Schattenimplementierung vorgezogen
+werden, wenn dessen Statusquelle oder Aktion noch nicht durch den
+Run-/Event-Vertrag abgesichert ist. UI-Politur kann parallel erfolgen,
+darf aber diese Reihenfolge, Gate-Semantik oder Projektisolation nicht
+umgehen. Die konkrete Lieferplanung und offene Umsetzungsarbeit bleiben im
+freigegebenen UI-Plan und in docs/STATUS.md.
+
 ## Abnahme
 
 Die UI ist erst nachgewiesen, wenn:
