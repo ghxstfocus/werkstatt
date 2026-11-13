@@ -65,6 +65,50 @@ def test_aggregate_status_filtert_projekt(tmp_path, monkeypatch):
     assert b["tasks"] == {"started": 1, "done": 0}
 
 
+def test_aggregate_status_jsonl_verify_fallback_filtert_projekt_und_run(
+    tmp_path, monkeypatch,
+):
+    """Der JSONL-Fallback darf kein fremdes oder altes Verify uebernehmen."""
+    _s, db = _store(tmp_path, monkeypatch)
+    _event(db, "run-a", "loop_started", project="a")
+
+    from werkstatt.web import inspector
+
+    audit_dir = tmp_path / "audit-logs"
+    audit_dir.mkdir()
+    audit_file = audit_dir / "agent-pipeline-2026-11-14.jsonl"
+    audit_file.write_text(
+        "\n".join([
+            json.dumps({
+                "project": "a", "run_id": "old-run-a",
+                "kind": "verify_stage_failed", "ts": "2026-11-14T10:00:00Z",
+            }),
+            json.dumps({
+                "project": "b", "run_id": "run-b",
+                "kind": "verify_stage_passed", "ts": "2026-11-14T11:00:00Z",
+            }),
+        ]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(inspector, "werkstatt_home", lambda: tmp_path)
+    monkeypatch.setattr(inspector, "_frische_projektion", lambda: None)
+
+    assert inspector.aggregate_status("a")["verify"] is None
+
+    audit_file.write_text(
+        json.dumps({
+            "project": "a", "run_id": "run-a",
+            "kind": "verify_stage_passed", "ts": "2026-11-14T12:00:00Z",
+        }) + "\n" + audit_file.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    assert inspector.aggregate_status("a")["verify"] == {
+        "ok": True,
+        "kind": "verify_stage_passed",
+        "ts": "2026-11-14T12:00:00Z",
+    }
+
+
 def test_aggregate_tokens_filtert_projekt(tmp_path, monkeypatch):
     _s, db = _store(tmp_path, monkeypatch)
     _event(db, "run-a", "llm_usage", {
