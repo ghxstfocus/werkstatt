@@ -6242,3 +6242,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der Checkpoint nach einem grünen Task zeigte bisher IDs und den nächsten Task, aber nicht den Wortlaut des übergeordneten Ziels oder der offenen Akzeptanzkriterien. Damit war die Entscheidung in Control nur teilweise gegen den Auftrag prüfbar.
 - Das Ereignis enthält jetzt den gespeicherten Zieltext, die konkret erfüllten und offenen Kriterien sowie einen kompakten Status des verbleibenden Task-Graphen. Die Felder sind auf fünf kurze Belege begrenzt; Modellgedanken und Prompts werden nicht protokolliert.
 - Regressionstests prüfen den Ziel-/Kriterienbezug bei Fortsetzung und beim Übergang zur Phase-End-Verify. Der bestehende Checkpoint bestimmt weiter den nächsten freigegebenen Task; diese Änderung ist Observability und Zielabgleich, noch keine dynamische Neuplanung.
+
+### Nachpruefung des Ziel-Checkpoints
+
+- Der erste CI-Lauf nach der Ergaenzung war rot: Ruff meldete zweimal RUF010 in der Anzeige verbleibender Task-IDs/-Status; pytest und Quality Gate wurden deshalb uebersprungen. Die Ursache lag in expliziten `str()`-Aufrufen innerhalb von f-Strings.
+- Die Ausgabe wurde mit expliziten Formatkonvertierungen korrigiert. Danach liefen JavaScript-Syntax, Ruff und die komplette Suite erfolgreich: 2.185 bestanden, 5 uebersprungen.
+- GitHub Actions Quality Gate [Run 43416255092](https://github.com/ghxstfocus/werkstatt/actions/runs/43416255092) bestaetigt: Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden, `ok: true`, `regression: false`.
