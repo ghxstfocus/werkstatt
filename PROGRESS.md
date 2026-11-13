@@ -6196,3 +6196,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der Live-Feed verfolgt jetzt einen gestarteten Task bis zu dessen Abschluss-, Fehler- oder Blockiert-Event. Die bestehende Stale-Grenze bleibt aktiv; ein Gate-Warten hat Vorrang und wird weiter als Warten auf Antwort angezeigt. Parallel eingehende Chat-Job-Events verdecken den Loop-Task nicht.
 - Die Control-Aktivitaet zeigt Rolle und Task-Namen verstaendlich an, waehrend die einzelnen Events als detaillierte Timeline-Schritte erhalten bleiben.
 - Regressionstest: offener Task plus `builder_file_context` muss weiter Builder, Task-ID und lesbare Aktion anzeigen. Vollstaendiges Quality-Gate folgt.
+
+
+## 2026-11-13 — Loop-Reflection ohne starres Fuenf-Runden-Limit
+
+- Der normale Reflection-Aufruf laeuft jetzt adaptiv weiter, bis die Verify-Evidenz gruen ist, derselbe Fehler-/Diff-Zustand wiederkehrt oder das konfigurierte Run-Budget erreicht wird. Ein explizites `max_runden` bleibt fuer gezielte Spezialfaelle und Tests moeglich.
+- Damit greift die bereits bei gezielter Verify-Recovery verwendete Fortschritts- und Wiederholungspruefung auch beim Standardpfad; kein pauschaler Fuenf-Runden-Abbruch beendet einen noch fortschreitenden Repair.
+- Regressionstest: Der Standardpfad muss mehr als fuenf Builder-Schritte ausfuehren koennen und erst nach erfolgreicher Verify-Evidenz zurueckkehren.
+- Quality-Gate-Nachweis fuer die Folgecommits steht noch aus.
