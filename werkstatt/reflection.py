@@ -698,6 +698,33 @@ def _reflection_loop(
         _patches = state.patches or []
         if not _patches:
             audit("loop_reflection_kein_patch", {"runde": runde}, pd, pn)
+            if _had_error_context and _verify_repair_scope():
+                # Ein Builder ohne Patch hat den Reviewer-Befund nicht
+                # automatisch beseitigt. Vor Erfolg muss der Reviewer den
+                # aktuellen Stand nochmals freigeben.
+                from werkstatt.reviewer import run_reviewer as _run_rev
+                if _run_rev(state):
+                    audit(
+                        "reviewer_stagnation_false_positive",
+                        {
+                            "runde": runde,
+                            "reason": "no_patch_but_verify_and_reviewer_approved",
+                        },
+                        pd,
+                        pn,
+                    )
+                    state.reviewer_stagnation_false_positive = True
+                    return True
+                audit(
+                    "loop_reflection_stagnation_abort",
+                    {
+                        "runde": runde,
+                        "grund": "no_patch_reviewer_not_approved",
+                    },
+                    pd,
+                    pn,
+                )
+                return False
             continue
 
         # M-330: gemeinsame Apply-Funktion MIT Hooks.
