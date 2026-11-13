@@ -6036,6 +6036,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 ## 2026-11-13 — Resume-Akzeptanztest im CI
 
-- Der externe Worker erreichte im GitHub-Testclient-Thread trotz funktionierendem Interpreter- und Launcher-Preflight keine Bootstrap-Markierung. Der Akzeptanztest ruft deshalb den registrierten Resume-Handler direkt synchron auf; er startet weiterhin denselben echten Python-CLI-Prozess mit `--resume`.
-- RunRecord, gespeicherter PhaseState, bereits erledigter Task und Phase-End-Verify werden bis zum erfolgreichen Abschluss geprüft. Separate HTTP-Tests behalten die Prüfung von Statuscode und JSON-Antwort des Resume-Endpunkts.
-- Der bisherige Test-Launcher entfernt editable-Install-Hooks und setzt den Test-Overlay-Pfad explizit, damit der CLI-Einstieg im CI reproduzierbar bleibt.
+- Der Akzeptanztest deckt die HTTP-Route, ihre einmalige CLI-Übergabe mit derselben `run_id` und `--resume` sowie die echte Ausführung genau dieser Argumente ab. Der echte Worker wird außerhalb des TestClient-Threads ausgeführt, weil dessen Threadpool-Start im GitHub-Runner vor dem Python-Bootstrap hängen blieb.
+- RunRecord, gespeicherter PhaseState, bereits erledigter Task und Phase-End-Verify müssen bis zum erfolgreichen Abschluss erhalten bleiben. Ein separater Launcher-Probe deckt den tatsächlichen Subprozessstart mit Prozessgruppe und Logdatei ab.

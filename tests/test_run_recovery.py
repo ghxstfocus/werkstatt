@@ -485,6 +485,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         pytest.skip("worker identity recovery requires Linux /proc")
     pytest.importorskip("fastapi")
     pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
 
     import os
     import sys
@@ -729,15 +730,59 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     app_module._PAUSIERTE_LOOPS.clear()
 
     try:
+        class _CapturedWorker:
+            pid = 999_999
+            returncode: int | None = None
+
+            def poll(self) -> int | None:
+                return self.returncode
+
+            def terminate(self) -> None:
+                self.returncode = -15
+
+            def wait(self, timeout: float | None = None) -> int:
+                del timeout
+                return self.returncode or 0
+
+        captured_args: list[list[str]] = []
+        fake_worker = _CapturedWorker()
+
+        def _capture_worker(args: list[str], **_kwargs: Any) -> _CapturedWorker:
+            captured_args.append(list(args))
+            return fake_worker
+
         monkeypatch.chdir(tmp_path)
-        resume_route = next(
-            route.endpoint
-            for route in app_module.app.routes
-            if getattr(route, "path", None) == "/api/projects/{name}/resume"
+        with monkeypatch.context() as route_patch:
+            route_patch.setattr(
+                app_module.subprocess, "Popen", _capture_worker,
+            )
+            response = TestClient(app_module.app).post(
+                "/api/projects/demo/resume",
+            )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["resume"] is True
+        assert response.json()["run_id"] == run_id
+        assert len(captured_args) == 1
+        cli_args = captured_args[0]
+        assert cli_args[cli_args.index("--run-id") + 1] == run_id
+        assert "--resume" in cli_args
+        assert "--fresh" not in cli_args
+
+        cli_result = subprocess.run(
+            cli_args,
+            cwd=tmp_path,
+            env=os.environ.copy(),
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
         )
-        response = resume_route("demo")
-        assert response["resume"] is True
-        assert response["run_id"] == run_id
+        fake_worker.returncode = cli_result.returncode
+        assert cli_result.returncode == 0, (
+            f"Resumed CLI failed: {cli_result.stdout[-3000:]!r} "
+            f"{cli_result.stderr[-3000:]!r}"
+        )
 
         deadline = time.monotonic() + 15
         record = None
