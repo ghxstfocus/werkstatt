@@ -239,8 +239,8 @@ def _task_ende(
                     ] if isinstance(_task_rows, list) else []
                     if _open_tasks and len(_checkpoint_evidence) < 5:
                         _open_labels = [
-                            f"{str(item.get('id') or '?')}: "
-                            f"{str(item.get('status') or '?')}"
+                            f"{(item.get('id') or '?')!s}: "
+                            f"{(item.get('status') or '?')!s}"
                             for item in _open_tasks[:3]
                         ]
                         _checkpoint_evidence.append(
