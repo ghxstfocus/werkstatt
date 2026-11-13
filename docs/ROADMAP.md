@@ -58,8 +58,7 @@ Fehler, Run-Kontext und konkrete Diagnose.
 
 
 ### 2. Loop-Qualitaet und Betriebsnachweis
-- OP-398: begruendete Auswahl einzelner startbarer oder zusammenhaengender OPs; jeder gruene Zwischenschritt wird gegen das Hauptziel geprueft, bevor der Loop selbst weiterarbeitet oder abschliesst.
-- OP-398: adaptive Rollenwahl, deterministische Planvalidierung und Zielabgleich.
+- OP-398: begruendete OP-Auswahl, adaptive Rollenwahl, deterministische Planvalidierung und Zielabgleich; gueltige Task-DAGs werden sortiert, fehlerhafte vor dem Plan-Gate abgewiesen.
 - OP-405: Rollenbelege und Kontextbudgets begrenzen und messbar halten.
 - OP-280: Doku-Drift beim Verify zuverlaessig erkennen.
 - OP-372/374/375: Projektstatistik und Event-Projektion semantisch korrekt halten.

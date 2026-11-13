@@ -55,6 +55,11 @@ from werkstatt.scout import (  # noqa: F401
 from werkstatt.state import RunState
 
 
+class TaskGraphError(ValueError):
+    """A generated task graph is structurally unsafe to execute."""
+
+
+
 def _format_explorer_findings(f: dict) -> str:
     """M-WelleE: Explorer-Findings als Prompt-Block."""
     if not isinstance(f, dict) or not f:
@@ -1172,82 +1177,92 @@ def _leite_deps_deterministisch(
 def _topo_sort_tasks(
     tasks: list[dict], pd=None, pn="?",
 ) -> list[dict]:
-    """OP-175 A: Topologische Sortierung nach dependencies.
+    """Compile a task dependency graph or reject it before the plan gate.
 
-    Grund: der Architect-Plan kann Tasks enthalten, die deps auf
-    spaeter stehende Tasks haben (Loop-Test-6 18:27: t1 deps=[t2],
-    aber t1 steht vor t2). Ohne Sort blockt der Task-Loop t1
-    stumm und arbeitet alle anderen fail-closed als blocked ab.
-
-    Stabil: bei mehreren in-degree=0 behaelt die Originalreihen-
-    folge Vorrang. Zyklus: fail-soft (Tasks in Originalreihen-
-    folge zurueck + audit), sonst blockt _unmet_dependencies
-    alle Tasks stumm. Dangling deps (unbekannte IDs) ignoriert.
+    Keeps input order among simultaneously ready tasks. Invalid IDs,
+    malformed/dangling/self dependencies and cycles never reach execution.
     """
     if not tasks:
         return tasks
 
-    _by_id: dict[str, dict] = {}
-    _orig_idx: dict[str, int] = {}
-    for _i, _t in enumerate(tasks):
-        if not isinstance(_t, dict):
-            continue
-        _tid = _t.get("id")
-        if isinstance(_tid, str):
-            _by_id[_tid] = _t
-            _orig_idx[_tid] = _i
+    by_id: dict[str, dict] = {}
+    original_index: dict[str, int] = {}
+    for index, task in enumerate(tasks):
+        if not isinstance(task, dict):
+            raise TaskGraphError(f"Task {index + 1} ist kein Objekt.")
+        task_id = task.get("id")
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise TaskGraphError(f"Task {index + 1} hat keine gueltige ID.")
+        if task_id in by_id:
+            raise TaskGraphError(f"Task-ID doppelt vergeben: {task_id}.")
+        by_id[task_id] = task
+        original_index[task_id] = index
 
-    if not _by_id:
-        return tasks
+    indegree = {task_id: 0 for task_id in by_id}
+    dependents: dict[str, list[str]] = {task_id: [] for task_id in by_id}
+    for task_id, task in by_id.items():
+        dependencies = task.get("dependencies") or []
+        if not isinstance(dependencies, list):
+            raise TaskGraphError(
+                f"Abhaengigkeiten von {task_id} muessen eine Liste sein.",
+            )
+        if any(not isinstance(dep, str) or not dep.strip() for dep in dependencies):
+            raise TaskGraphError(
+                f"Task {task_id} enthaelt eine ungueltige Abhaengigkeits-ID.",
+            )
+        if len(set(dependencies)) != len(dependencies):
+            raise TaskGraphError(
+                f"Task {task_id} enthaelt doppelte Abhaengigkeiten.",
+            )
+        for dependency in dependencies:
+            if dependency == task_id:
+                raise TaskGraphError(
+                    f"Task {task_id} haengt von sich selbst ab.",
+                )
+            if dependency not in by_id:
+                raise TaskGraphError(
+                    f"Task {task_id} verweist auf unbekannte Abhaengigkeit "
+                    f"{dependency}.",
+                )
+            indegree[task_id] += 1
+            dependents[dependency].append(task_id)
 
-    _indeg: dict[str, int] = {_tid: 0 for _tid in _by_id}
-    _dependents: dict[str, list[str]] = {_tid: [] for _tid in _by_id}
-    for _tid, _t in _by_id.items():
-        for _dep in (_t.get("dependencies") or []):
-            if not isinstance(_dep, str):
-                continue
-            if _dep not in _by_id or _dep == _tid:
-                continue
-            _indeg[_tid] += 1
-            _dependents[_dep].append(_tid)
-
-    _queue = sorted(
-        [_tid for _tid, _d in _indeg.items() if _d == 0],
-        key=lambda x: _orig_idx[x],
+    ready = sorted(
+        [task_id for task_id, degree in indegree.items() if degree == 0],
+        key=original_index.__getitem__,
     )
-    _result: list[str] = []
-    while _queue:
-        _tid = _queue.pop(0)
-        _result.append(_tid)
-        _neue: list[str] = []
-        for _dep_tid in _dependents[_tid]:
-            _indeg[_dep_tid] -= 1
-            if _indeg[_dep_tid] == 0:
-                _neue.append(_dep_tid)
-        if _neue:
-            _queue.extend(_neue)
-            _queue.sort(key=lambda x: _orig_idx[x])
+    ordered_ids: list[str] = []
+    while ready:
+        task_id = ready.pop(0)
+        ordered_ids.append(task_id)
+        newly_ready: list[str] = []
+        for dependent_id in dependents[task_id]:
+            indegree[dependent_id] -= 1
+            if indegree[dependent_id] == 0:
+                newly_ready.append(dependent_id)
+        if newly_ready:
+            ready.extend(newly_ready)
+            ready.sort(key=original_index.__getitem__)
 
-    if len(_result) != len(_by_id):
-        _zyklisch = sorted(
-            [_tid for _tid, _d in _indeg.items() if _d > 0],
-            key=lambda x: _orig_idx[x],
+    if len(ordered_ids) != len(by_id):
+        cyclic_ids = sorted(
+            [task_id for task_id, degree in indegree.items() if degree > 0],
+            key=original_index.__getitem__,
         )
         if pd is not None:
             try:
                 audit("planner_deps_zyklus", {
-                    "zyklische_ids": _zyklisch,
+                    "zyklische_ids": cyclic_ids,
                     "anzahl_tasks": len(tasks),
                 }, pd, pn)
             except Exception:
                 pass
-        return tasks
+        raise TaskGraphError(
+            "Abhaengigkeitszyklus zwischen Tasks: "
+            + ", ".join(cyclic_ids),
+        )
 
-    _out: list[dict] = [_by_id[_tid] for _tid in _result]
-    for _t in tasks:
-        if not isinstance(_t, dict) or _t.get("id") not in _by_id:
-            _out.append(_t)
-    return _out
+    return [by_id[task_id] for task_id in ordered_ids]
 
 
 def _normalisiere_task_files(tasks, explorer_ctx, pd, pn) -> list:
@@ -2580,10 +2595,17 @@ def run_planner(state: RunState) -> bool:
                 if _f not in _key_files:
                     _key_files.append(_f)
 
-    _sub_tasks = _zerlege_in_sub_tasks(
-        _arch_prosa, _key_files, api_key, pd, pn,
-        aufgabe=aufgabe, state=state,
-    )
+    try:
+        _sub_tasks = _zerlege_in_sub_tasks(
+            _arch_prosa, _key_files, api_key, pd, pn,
+            aufgabe=aufgabe, state=state,
+        )
+    except TaskGraphError as exc:
+        audit("planner_plan_abgelehnt", {
+            "grund": str(exc),
+            "quelle": "architect_planner_split",
+        }, pd, pn)
+        return False
 
     if _sub_tasks:
         _sub_tasks = _normalisiere_task_files(

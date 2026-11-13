@@ -11,10 +11,13 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 sys.path.insert(0, "/opt/werkstatt")
 
 from werkstatt.planner import (
     _leite_deps_deterministisch,
+    TaskGraphError,
     _topo_sort_tasks,
 )
 
@@ -60,37 +63,40 @@ def test_diamond_reihenfolge() -> None:
 
 # ============ Fehler-Faelle ============
 
-def test_zyklus_fail_soft_und_audit() -> None:
-    """Zyklus -> Tasks unveraendert zurueck, audit-Event emittiert.
-    Sonst blockt der Loop alle Tasks stumm."""
+def test_zyklus_wird_vor_planfreigabe_abgelehnt_und_auditiert() -> None:
     tasks = [
         {"id": "t1", "dependencies": ["t2"]},
         {"id": "t2", "dependencies": ["t1"]},
     ]
     with patch("werkstatt.planner.audit") as mock_audit:
-        out = _topo_sort_tasks(tasks, pd=Path("/tmp/x"), pn="test")
-    assert [t["id"] for t in out] == ["t1", "t2"]  # Original
-    assert mock_audit.called
-    kinds = [c.args[0] for c in mock_audit.call_args_list]
+        with pytest.raises(TaskGraphError, match="Abhaengigkeitszyklus"):
+            _topo_sort_tasks(tasks, pd=Path("/tmp/x"), pn="test")
+    kinds = [call.args[0] for call in mock_audit.call_args_list]
     assert "planner_deps_zyklus" in kinds
 
 
-def test_dangling_dep_wird_ignoriert() -> None:
-    """dep verweist auf unbekannte ID -> keine Exception, Task
-    bleibt normal in der Reihenfolge."""
+def test_unbekannte_abhaengigkeit_wird_abgelehnt() -> None:
     tasks = [
         {"id": "t1", "dependencies": ["gibt_es_nicht"]},
         {"id": "t2", "dependencies": []},
     ]
-    out = _topo_sort_tasks(tasks)
-    ids = [t["id"] for t in out]
-    assert set(ids) == {"t1", "t2"}
+    with pytest.raises(TaskGraphError, match="unbekannte Abhaengigkeit"):
+        _topo_sort_tasks(tasks)
 
 
-def test_self_dep_wird_ignoriert() -> None:
-    tasks = [{"id": "t1", "dependencies": ["t1"]}]
-    out = _topo_sort_tasks(tasks)
-    assert [t["id"] for t in out] == ["t1"]
+def test_selbstabhaengigkeit_wird_abgelehnt() -> None:
+    with pytest.raises(TaskGraphError, match="sich selbst"):
+        _topo_sort_tasks([{"id": "t1", "dependencies": ["t1"]}])
+
+
+def test_doppelte_task_id_wird_abgelehnt() -> None:
+    with pytest.raises(TaskGraphError, match="doppelt"):
+        _topo_sort_tasks([{"id": "t1"}, {"id": "t1"}])
+
+
+def test_malformed_dependencies_are_rejected() -> None:
+    with pytest.raises(TaskGraphError, match="muessen eine Liste"):
+        _topo_sort_tasks([{"id": "t1", "dependencies": "t2"}])
 
 
 # ============ Integration: Ableitung + Sort ============

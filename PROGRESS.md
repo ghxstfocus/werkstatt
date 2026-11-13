@@ -6080,3 +6080,12 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Tests decken den Abbruch genau in diesem Fenster sowie einen beim ersten Versuch noch fehlenden RunRecord ab. Der Quality-Gate-Nachweis folgt fuer den resultierenden Commit.
 
 - Quality Gate Run [43360398386](https://github.com/ghxstfocus/werkstatt/actions/runs/43360398386) ist auf `12407fa` gruen: Ruff, vollstaendige Pytest-Suite und Quality Gate bestanden. Der Recovery-Test prueft den Dispatch jetzt ohne vorherige Inbox-Lease; die Nachricht wird danach einmalig geclaimt und bestaetigt.
+
+
+## 2026-11-13 — OP-398: Task-Abhaengigkeitsgraph fail-closed kompilieren
+
+- Der Planner ignorierte unbekannte und Selbst-Abhaengigkeiten und gab zyklische Plaene nach Audit in Originalreihenfolge zurueck. Das konnte einen strukturell ungueltigen Plan bis zum Task-Loop durchlassen.
+- Die deterministische Plan-Grenze weist jetzt fehlende/duplizierte IDs, malformed dependencies, Selbst-/unbekannte/duplizierte Abhaengigkeiten und Zyklen mit konkretem Grund zurueck. Gueltige DAGs bleiben stabil topologisch sortiert.
+- Der Architect/Planner-Split wird bei einem ungueltigen Graphen vor dem Plan-Gate fail-closed abgelehnt; er faellt nicht auf einen scheinbar gueltigen Fallback-Task zurueck. Regressionstests sichern die Fehlerklassen und das Audit des Zyklus.
+- Dieser Schritt schliesst OP-398 nicht: Abdeckung der Nutzer-/STATUS-Akzeptanzkriterien, zielorientierter Arbeitsgraph und Evidence Ledger bleiben offen.
+- CI-Nachweis folgt fuer den resultierenden Commit.

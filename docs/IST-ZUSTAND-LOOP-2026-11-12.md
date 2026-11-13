@@ -72,9 +72,11 @@ den Spawn-Fehlerpfad.
 2. **Inbox ist nur teilweise integriert:** `job_notice` wird persistiert
    und checkpoint-sicher konsumiert. Fragen, Control, Gate-Antworten und
    Schreibauftraege veraendern den Arbeitsgraphen noch nicht.
-3. **Arbeitsgraph fehlt:** Tasks kommen aus dem Plan und werden in der
-   festen Task-Schleife abgearbeitet, statt an Checkpoints gegen offene
-   Akzeptanzkriterien disponiert zu werden.
+3. **Zielorientierter Arbeitsgraph fehlt weiterhin:** Der Planner verwirft
+   jetzt strukturell ungueltige Task-DAGs vor dem Plan-Gate und sortiert
+   gueltige Abhaengigkeiten stabil. Der Run disponiert Tasks aber weiterhin
+   aus dem freigegebenen Plan in einer festen Task-Schleife, statt an
+   Checkpoints gegen offene Akzeptanzkriterien neu zu waehlen.
 4. **Evidence Ledger fehlt:** Einzelne Verify-/Audit-Belege existieren,
    aber es gibt keine einheitliche Kriterium-zu-Beleg-Zuordnung mit Quelle,
    Befehl, Exit-Code, SHA und Artefakt-Hash.
@@ -94,6 +96,16 @@ OP-403 ist abgeschlossen und aus der offenen Queue entfernt. Unit-Tests und
 GitHub-CI belegen keine vollstaendige Server-Dogfooding-Abnahme. Zehn
 UI-Runs mit Frage waehrend Arbeit, Gate, Pause/Resume, Reconnect,
 Verify-Fehler-Recovery und Abschluss bleiben Teil von OP-382.
+
+## OP-398: deterministische DAG-Grenze
+
+Der Planner lehnt duplicate/fehlende Task-IDs, malformed, unbekannte,
+doppelte oder selbstreferenzierende Abhaengigkeiten sowie Zyklen vor dem
+Plan-Gate mit einem konkreten Audit-Befund ab. Gueltige Graphen werden stabil
+topologisch sortiert. Das verhindert, dass bekannte Strukturfehler erst im
+Task-Loop als still blockierte Arbeit sichtbar werden. Es ersetzt weder die
+Abdeckung von Akzeptanzkriterien noch den zielorientierten Arbeitsgraphen;
+diese Teile von OP-398 bleiben offen.
 
 ## Naechster Architektur-Schritt
 
