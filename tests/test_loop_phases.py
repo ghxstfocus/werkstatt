@@ -739,3 +739,44 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
         ("verify_post_commit", "phase_end"),
     ]
     assert any(event[0] == "loop_erfolg" for event in audit_events)
+
+def test_task_ende_auditiert_fehlgeschlagenen_kriterien_checkpoint(
+    tmp_path, monkeypatch,
+):
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.task_runner import _task_ende
+
+    state = _state(tmp_path)
+    phase_state = PhaseState("testprojekt", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new(
+        "Kriterienfortschritt",
+        [{"id": "t1", "criterion_refs": ["AC1"]}],
+        akzeptanzkriterien=["Erstes Ziel"],
+    )
+
+    def _checkpoint_fehler():
+        raise RuntimeError("interner Text wird nicht persistiert")
+
+    monkeypatch.setattr(phase_state, "criteria_progress", _checkpoint_fehler)
+    events = []
+    monkeypatch.setattr(
+        "werkstatt.task_runner.audit",
+        lambda *args: events.append(args),
+    )
+    monkeypatch.setattr("werkstatt.progress.append", lambda *_args, **_kwargs: None)
+
+    _task_ende(state, phase_state, "t1", ok=True, name="Erstes Ziel")
+
+    assert phase_state.get_task("t1")["status"] == "done"
+    failed = [
+        event for event in events
+        if event[0] == "loop_criteria_checkpoint_failed"
+    ]
+    assert len(failed) == 1
+    assert failed[0][1] == {
+        "task_id": "t1",
+        "error_type": "RuntimeError",
+        "next_step": (
+            "Kriterienfortschritt am naechsten sicheren Checkpoint erneut pruefen"
+        ),
+    }
