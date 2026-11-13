@@ -6422,3 +6422,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 
 - Recovery validiert jetzt zusaetzlich, dass der Run-Branch weiterhin von der beim Start gepinnten Remote-Revision abstammt. Ein umgehaengter Branch mit fremder Historie wird vor dem Resume abgewiesen.
 - Regressionstest prueft sowohl gueltige Wiederaufnahme als auch einen danach auf eine unabhaengige Historie gesetzten Run-Branch.
+
+## 2026-11-13 — GitHub-Run-Diff aus dem gepinnten Worktree anzeigen
+
+- Befund: Der Workbench-Diff las ausschliesslich den Server-Projektordner, waehrend verbundene GitHub-Runs in einem separaten Worktree arbeiten. Dadurch konnte die UI Loop-Aenderungen nicht zeigen.
+- Der Diff-Endpunkt verwendet jetzt den validierten Worktree des registrierten Runs und vergleicht standardmaessig gegen dessen gepinnte Ausgangsrevision. Lokale Projekte behalten den Checkout-/HEAD-Pfad; nicht mehr passende Run-IDs werden abgewiesen.
+- Regressionstest erstellt einen GitHub-Run-Worktree mit Aenderung und belegt, dass die API genau diesen Diff gegen die Start-SHA liefert.

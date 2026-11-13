@@ -1413,26 +1413,62 @@ def create_app() -> FastAPI:
         return {"links": _insp.aggregate_evidence_links(projekt, run_id=run_id)}
 
     @app.get("/api/projects/{name}/diff")
-    def project_diff(name: str, ref: str = "HEAD") -> dict[str, Any]:
-        """git diff gegen ref (default HEAD), als Text + Stat."""
+    def project_diff(
+        name: str,
+        ref: str = "HEAD",
+        run_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Diff des aktuellen Run-Checkouts gegen seine Basisrevision."""
         import subprocess as _sp
         projektname = _pruefe_projektname(name)
         ref = _pruefe_ref(ref)
         basis = _PROJECTS_BASE / projektname
+        basis_ref = ref
+        record = _loop_registry().read(projektname)
+        if run_id is not None:
+            run_id = _pruefe_run_id(run_id)
+            if record is None or record.get("run_id") != run_id:
+                raise HTTPException(status_code=404, detail="Run nicht gefunden")
+        elif record is not None:
+            run_id = record.get("run_id")
+
+        if record is not None and record.get("run_id") == run_id:
+            context = record.get("context")
+            source = context.get("source") if isinstance(context, dict) else None
+            if isinstance(source, dict) and source.get("kind") == "github":
+                from werkstatt.web.run_recovery import (
+                    RunRecoveryError,
+                    _validate_github_worktree,
+                )
+
+                try:
+                    basis = _validate_github_worktree(basis, run_id, source)
+                except RunRecoveryError as exc:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"GitHub-Run-Diff nicht sicher verfuegbar: {exc}",
+                    ) from exc
+                if ref == "HEAD":
+                    basis_ref = str(source["pinned_sha"])
         try:
             stat = _sp.run(
-                ["git", "diff", "--stat", ref, "--"],
+                ["git", "diff", "--stat", basis_ref, "--"],
                 capture_output=True, text=True, timeout=10,
                 cwd=str(basis), check=False,
             ).stdout
             diff = _sp.run(
-                ["git", "diff", ref, "--"],
+                ["git", "diff", basis_ref, "--"],
                 capture_output=True, text=True, timeout=20,
                 cwd=str(basis), check=False,
             ).stdout
         except (_sp.TimeoutExpired, OSError) as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
-        return {"ref": ref, "stat": stat[:20_000], "diff": diff[:200_000]}
+        return {
+            "ref": basis_ref,
+            "run_id": run_id,
+            "stat": stat[:20_000],
+            "diff": diff[:200_000],
+        }
 
     @app.get("/api/projects/{name}/verify")
     def project_verify(name: str) -> dict[str, Any]:
