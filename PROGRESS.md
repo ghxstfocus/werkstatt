@@ -6204,3 +6204,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Damit greift die bereits bei gezielter Verify-Recovery verwendete Fortschritts- und Wiederholungspruefung auch beim Standardpfad; kein pauschaler Fuenf-Runden-Abbruch beendet einen noch fortschreitenden Repair.
 - Regressionstest: Der Standardpfad muss mehr als fuenf Builder-Schritte ausfuehren koennen und erst nach erfolgreicher Verify-Evidenz zurueckkehren.
 - Quality-Gate-Nachweis fuer die Folgecommits steht noch aus.
+
+
+## 2026-11-13 — CI-Nachbesserung: Reviewer-Nachweis und Timeline-Schritt
+
+- Die erste Quality-Gate-Ausfuehrung deckte zwei Regressionen der adaptiven Reflection auf: Ein Gruen-Verify nach einem leeren Builder-Ergebnis wurde ohne neue Reviewer-Entscheidung akzeptiert; ausserdem verschwand ein Verify-Ereignis aus der Timeline, weil die offene Task-Aktivitaet es als Spinner-Ereignis markierte.
+- Der Loop verlangt bei einem leeren Repair jetzt eine erneute Reviewer-Freigabe, bevor er den Reviewer-Befund als erledigt wertet. Bleibt sie aus, wird der konkrete Stillstand gemeldet.
+- Die Control-Anzeige identifiziert den offenen Task separat vom letzten Fortschrittsereignis. Das Ereignis selbst bleibt in der Timeline; Rolle und Task-Name stehen im aktiven Hinweis.
+- Regressionen: K3-Reviewer-Fall und aktiver Task mit nachfolgendem Verify-Event. Quality-Gate der Korrektur folgt.
