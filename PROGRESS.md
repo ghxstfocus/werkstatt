@@ -6228,3 +6228,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die Timeline zeigt den nächsten Schritt kompakt hinter der Kriterienabdeckung. Es werden keine rohen Modellgedanken protokolliert.
 - Regressionstests prüfen Task-Fortsetzung, Übergang zur Phase-End-Verify und lesbare Timeline-Ausgabe.
 - Vollständiger GitHub-Quality-Gate-Lauf [43408415562](https://github.com/ghxstfocus/werkstatt/actions/runs/43408415562): 2.185 Tests bestanden, 5 übersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden. Der abschließende Quality-Gate meldet `ok: true`, `regression: false`.
+
+## 2026-11-13 — Builder-Heartbeat in Control lesbar machen
+
+- Die bestehende Agent-API sendet bereits Start-, Heartbeat- und Abschlussereignisse mit Task- und Dateikontext; die Live-Projektion verwendet den aktuellen Heartbeat auch fuer die temporaere Aktivitaetszeile im Projektchat.
+- Im Control-Feed wurde der Heartbeat bislang mit dem rohen technischen Eventnamen `llm_call_heartbeat` beschriftet. Die Timeline benennt Start, laufenden Modellaufruf und Abschluss jetzt einheitlich und menschlich.
+- Ein Regressionstest prueft Label und Detailtext mit Task, Dateien und Laufzeit. Das schliesst die lesbare Timeline-Luecke, beweist aber nicht allein alle OP-395-Kriterien (Reconnect, Heartbeat-Fallback und parallele Chatfragen).
