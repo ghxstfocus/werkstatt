@@ -89,12 +89,43 @@ def test_snapshot_rejects_symlink_escape_and_cleanup_outside_root(
     monkeypatch.setattr(run_snapshot, "werkstatt_home", lambda: tmp_path / "state")
     outside = tmp_path / "secret.txt"
     outside.write_text("secret", encoding="utf-8")
-    (source / "secret-link").symlink_to(outside)
-
-    with pytest.raises(run_snapshot.SnapshotError, match="Symlink"):
-        run_snapshot.create_project_snapshot(source, "demo", "run-3", "job-3")
-
     with pytest.raises(run_snapshot.SnapshotError, match="Cleanup"):
         run_snapshot.remove_project_snapshot(
             outside, "demo", "run-3", "job-3",
         )
+    try:
+        (source / "secret-link").symlink_to(outside)
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"Symlinks are unavailable: {exc}")
+
+    with pytest.raises(run_snapshot.SnapshotError, match="Symlink"):
+        run_snapshot.create_project_snapshot(source, "demo", "run-3", "job-3")
+
+
+def test_snapshot_rejects_absolute_internal_symlink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _repo(tmp_path / "project")
+    monkeypatch.setattr(run_snapshot, "werkstatt_home", lambda: tmp_path / "state")
+    try:
+        (source / "absolute-link").symlink_to(source / "README.md")
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"Symlinks are unavailable: {exc}")
+
+    with pytest.raises(run_snapshot.SnapshotError, match="Absoluter Symlink"):
+        run_snapshot.create_project_snapshot(source, "demo", "run-4", "job-4")
+
+
+@pytest.mark.parametrize("target", [r"C:\outside", r"\outside"])
+def test_snapshot_rejects_windows_rooted_symlink_targets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+) -> None:
+    source = _repo(tmp_path / "project")
+    link = source / "windows-link"
+    monkeypatch.setattr(run_snapshot.os, "readlink", lambda _path: target)
+
+    with pytest.raises(run_snapshot.SnapshotError, match="Absoluter Symlink"):
+        run_snapshot._checked_symlink_target(source, link)
