@@ -41,6 +41,15 @@ def prepare_run_recovery(
     run_record = run_store.get_run_record(project, run_id)
     if run_record is None or run_record.get("target") != goal:
         raise RunRecoveryError("RunRecord fehlt oder Ziel stimmt nicht ueberein.")
+    persisted_context = run_record.get("start_context")
+    if persisted_context:
+        if not isinstance(persisted_context, dict) or persisted_context != context:
+            raise RunRecoveryError(
+                "RunRecord und Registry-Startkontext weichen ab; "
+                "Recovery wird nicht mit einem geratenen Kontext fortgesetzt.",
+            )
+    elif run_record.get("start_context_version", 0) != 0:
+        raise RunRecoveryError("RunRecord-Startkontext ist ungueltig.")
     if run_record.get("status") not in {"running", "failed"}:
         raise RunRecoveryError("Der Run ist nicht wiederaufnehmbar.")
     pinned_sha = source.get("pinned_sha")

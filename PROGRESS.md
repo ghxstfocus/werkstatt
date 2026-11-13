@@ -6541,4 +6541,11 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Abgesichert:** Tests fuer Webstart-Weitergabe, Schema-Migration, Legacy-Lesen, Worker-Retry, gepinnte Basis und Konflikt-Fail-Closed.
 - **Grenze:** Die Prozess-Registry spiegelt den Kontext aus Kompatibilitaetsgruenden weiter. Vollstaendige Run-SSOT, Follow-up-Disposition und OP-397-Abschluss bleiben offen.
 - **Lokale Verifikation:** `tests/test_event_store.py`: 27 bestanden; Ruff fuer EventStore/Webstart und Tests, strikte Doku-Drift-Pruefung sowie `git diff --check` bestanden. Der Webstart-Endpunkttest wurde unter Windows trotz UTF-8-Modus vom lokalen pytest-Lauf mit `KeyboardInterrupt` abgebrochen; sein Assertion-Beleg ist daher Linux-CI vorbehalten.
-- **Linux-CI:** Ausstehend fuer diesen Branch; Serverlauf auf dem vorherigen `main`-Stand `3335ac1` bestand unabhaengig davon mit 2.254 Tests und 5 Skips.
+- **Verifikation:** GitHub Actions Quality Gate [43514018234](https://github.com/ghxstfocus/werkstatt/actions/runs/43514018234), PR #14, erfolgreich; anschliessender Serverlauf auf Merge-Commit `58e211f`: 2.255 bestanden, 5 uebersprungen.
+
+## 2026-11-13 — Recovery auf divergierenden Startkontext pruefen
+
+- **Befund:** Nach dem Persistieren des versionierten Startkontexts in Registry und RunRecord pruefte `prepare_run_recovery()` nur Run-Ziel und GitHub-Basis-SHA. Bei gleichem Ziel, aber abweichendem OP, Ursprung oder anderem Run-Metadatum, konnte es dem Registry-Kontext folgen und den Run mit widerspruechlicher Recovery-Identitaet fortsetzen.
+- **Aenderung:** Recovery vergleicht jetzt den nichtleeren RunRecord-Startkontext strukturell mit dem Registry-Kontext und stoppt bei jeder Abweichung fail-closed. Aeltere RunRecords mit Version 0 und leerem Kontext bleiben kompatibel; ihre bestehende Registry-Validierung gilt weiter.
+- **Abgesichert:** Regressionstest fuer abweichende OP-ID bei unveraendertem Ziel; bestehender Recovery-Test mit Legacy-RunRecord schuetzt die Rueckwaertskompatibilitaet.
+- **Verifikation:** Lokal: `tests/test_run_recovery.py tests/test_event_store.py` 39 bestanden, 2 uebersprungen; Ruff, strikte Doku-Drift-Pruefung und `git diff --check` bestanden. GitHub Actions Quality Gate [43514973400](https://github.com/ghxstfocus/werkstatt/actions/runs/43514973400) fuer Commit `a98cb13`: erfolgreich. Der PR ist noch offen und wartet auf Merge.

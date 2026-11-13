@@ -61,6 +61,23 @@ def test_prepare_run_recovery_keeps_identity_and_checkpoint(tmp_path: Path) -> N
     assert recovery["checkpoint"]["tasks"][0]["id"] == "task-1"
 
 
+def test_prepare_run_recovery_rejects_divergent_persisted_start_context(
+    tmp_path: Path,
+) -> None:
+    project_dir, store, registry_record = _lauf(tmp_path)
+    run_id = registry_record["run_id"]
+    context = registry_record["context"]
+    store.create_run_record(
+        "demo", run_id, "Aufgabe",
+        start_context={**context, "op_id": "OP-2"},
+    )
+
+    with pytest.raises(RunRecoveryError, match="Startkontext weichen ab"):
+        prepare_run_recovery(
+            "demo", project_dir, registry_record, store=store,
+        )
+
+
 @pytest.mark.parametrize("state", ["starting", "running", "missing"])
 def test_prepare_run_recovery_requires_idle_registry(
     tmp_path: Path,
