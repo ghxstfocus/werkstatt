@@ -64,6 +64,11 @@ class PhaseState:
             self.data = {}
             return False
 
+        criteria_tracking = data.get("criteria_tracking")
+        if criteria_tracking is not None and not isinstance(criteria_tracking, bool):
+            self.data = {}
+            return False
+
         if "tasks" in data:
             tasks = data["tasks"]
             if tasks is None:
@@ -75,6 +80,7 @@ class PhaseState:
                 return False
 
         task_ids: set[str] = set()
+        has_criterion_refs = False
         for task in data.get("tasks", []):
             task_id = task.get("id")
             dependencies = task.get("dependencies") or []
@@ -93,7 +99,12 @@ class PhaseState:
             ):
                 self.data = {}
                 return False
+            has_criterion_refs = has_criterion_refs or bool(criterion_refs)
             task_ids.add(task_id)
+
+        if data.get("criteria_tracking") is False and has_criterion_refs:
+            self.data = {}
+            return False
 
         self.data = data
         self.run_id = run_id
@@ -143,8 +154,12 @@ class PhaseState:
                     "criterion_refs muessen eine Liste nichtleerer IDs sein"
                 )
 
+        criteria_tracking = any(
+            "criterion_refs" in task for task in tasks
+        )
         now = datetime.datetime.now(datetime.UTC).isoformat()
         self.data = {
+            "criteria_tracking": criteria_tracking,
             "project": self.project_name,
             "aufgabe": aufgabe,
             "phase_id": f"phase-{now[:10]}",
@@ -404,6 +419,86 @@ class PhaseState:
         self.update_task(task_id, "running")
 
     # --- Fortschritt ---
+
+    def criteria_progress(self) -> dict[str, Any]:
+        """Projektfortschritt ueber explizit zugeordnete Akzeptanzkriterien.
+
+        Ein Kriterium gilt erst als abgedeckt, wenn mindestens ein Task mit
+        diesem AC-Verweis den gespeicherten Status done hat. Legacy-Plaene
+        ohne Referenzen werden als ungetrackt ausgewiesen.
+        """
+        criteria = self.data.get("akzeptanzkriterien")
+        tasks = self.data.get("tasks")
+        tracking_marker = self.data.get("criteria_tracking")
+        tracked = (
+            tracking_marker
+            if isinstance(tracking_marker, bool)
+            else isinstance(tasks, list) and any(
+                isinstance(task, dict) and task.get("criterion_refs")
+                for task in tasks
+            )
+        )
+        if not tracked:
+            return {
+                "tracked": False,
+                "valid": True,
+                "covered": [],
+                "uncovered": [],
+                "error": None,
+            }
+
+        if (
+            not isinstance(criteria, list)
+            or not criteria
+            or any(not isinstance(item, str) or not item.strip() for item in criteria)
+            or not isinstance(tasks, list)
+        ):
+            return {
+                "tracked": True,
+                "valid": False,
+                "covered": [],
+                "uncovered": [],
+                "error": "invalid_acceptance_criteria",
+            }
+
+        expected = {f"AC{index}" for index in range(1, len(criteria) + 1)}
+        assigned: set[str] = set()
+        covered: set[str] = set()
+        for task in tasks:
+            if not isinstance(task, dict):
+                return {
+                    "tracked": True,
+                    "valid": False,
+                    "covered": sorted(covered),
+                    "uncovered": sorted(expected - covered),
+                    "error": "invalid_task_record",
+                }
+            refs = task.get("criterion_refs")
+            if (
+                not isinstance(refs, list)
+                or not refs
+                or any(not isinstance(ref, str) or not ref.strip() for ref in refs)
+                or len(set(refs)) != len(refs)
+                or set(refs) - expected
+            ):
+                return {
+                    "tracked": True,
+                    "valid": False,
+                    "covered": sorted(covered),
+                    "uncovered": sorted(expected - covered),
+                    "error": f"invalid_criterion_refs:{task.get('id', '?')}",
+                }
+            assigned.update(refs)
+            if task.get("status") == "done":
+                covered.update(refs)
+
+        return {
+            "tracked": True,
+            "valid": assigned == expected,
+            "covered": sorted(covered, key=lambda item: int(item[2:])),
+            "uncovered": sorted(expected - covered, key=lambda item: int(item[2:])),
+            "error": None if assigned == expected else "criteria_not_assigned",
+        }
 
     def progress(self) -> dict[str, int]:
         """Gibt den Fortschritt zurueck (done/total)."""

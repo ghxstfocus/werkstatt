@@ -1157,20 +1157,45 @@ def _phase_finalize(
                     "status": _task_status or "missing",
                 })
 
-        if tasks_ok <= 0 or _unresolved:
-            audit(
-                "loop_phase",
-                {
-                    "phase": "completion",
-                    "status": "incomplete",
-                    "reason": "no_successful_tasks" if tasks_ok <= 0 else "tasks_unresolved",
-                    "tasks_ok": tasks_ok,
-                    "tasks_total": len(_records),
-                    "unresolved": _unresolved[:50],
-                },
-                pd,
-                pn,
+        _criterion_progress = (
+            phase_state.criteria_progress()
+            if phase_state is not None
+            and callable(getattr(phase_state, "criteria_progress", None))
+            else {"tracked": False, "valid": True, "covered": [], "uncovered": []}
+        )
+        _criteria_unresolved = bool(
+            isinstance(_criterion_progress, dict)
+            and _criterion_progress.get("tracked") is True
+            and (
+                _criterion_progress.get("valid") is not True
+                or _criterion_progress.get("uncovered")
             )
+        )
+        if tasks_ok <= 0 or _unresolved or _criteria_unresolved:
+            _reason = (
+                "no_successful_tasks"
+                if tasks_ok <= 0
+                else "tasks_unresolved"
+                if _unresolved
+                else "criteria_unresolved"
+            )
+            _completion = {
+                "phase": "completion",
+                "status": "incomplete",
+                "reason": _reason,
+                "tasks_ok": tasks_ok,
+                "tasks_total": len(_records),
+                "unresolved": _unresolved[:50],
+            }
+            if _criteria_unresolved:
+                _completion["criteria_covered"] = _criterion_progress.get(
+                    "covered", [],
+                )
+                _completion["criteria_uncovered"] = _criterion_progress.get(
+                    "uncovered", [],
+                )
+                _completion["criteria_error"] = _criterion_progress.get("error")
+            audit("loop_phase", _completion, pd, pn)
             rc = 1
         else:
             audit("loop_erfolg", {"project_name": project_name}, pd, pn)

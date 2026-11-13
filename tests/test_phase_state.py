@@ -194,6 +194,87 @@ def test_load_verwirft_ungueltige_checkpoint_run_id(tmp_path, run_id) -> None:
 
 
 
+def test_criteria_progress_requires_done_task_for_each_criterion(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new(
+        "Kriterienfortschritt",
+        [
+            {"id": "t1", "criterion_refs": ["AC1"]},
+            {"id": "t2", "criterion_refs": ["AC2"]},
+        ],
+        akzeptanzkriterien=["Erstes Ziel", "Zweites Ziel"],
+    )
+    ps.mark_done("t1")
+
+    progress = ps.criteria_progress()
+    assert progress == {
+        "tracked": True,
+        "valid": True,
+        "covered": ["AC1"],
+        "uncovered": ["AC2"],
+        "error": None,
+    }
+
+    ps.mark_done("t2")
+    assert ps.criteria_progress()["uncovered"] == []
+    assert ps.criteria_progress()["covered"] == ["AC1", "AC2"]
+
+
+def test_legacy_checkpoint_with_empty_refs_is_untracked(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new(
+        "Legacy checkpoint",
+        [{"id": "t1"}],
+        akzeptanzkriterien=["Altes Ziel"],
+    )
+    ps.data.pop("criteria_tracking")
+    ps.save()
+
+    resumed = PhaseState("testprojekt", base_dir=tmp_path)
+    assert resumed.load() is True
+    assert resumed.criteria_progress()["tracked"] is False
+
+
+def test_invalid_criteria_tracking_marker_rejects_checkpoint(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.path.write_text(
+        "project: testprojekt\ncriteria_tracking: 'yes'\ntasks: []\n",
+        encoding="utf-8",
+    )
+
+    assert ps.load() is False
+    assert ps.data == {}
+
+
+def test_checkpoint_cannot_disable_tracking_with_references(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.path.write_text(
+        "project: testprojekt\n"
+        "criteria_tracking: false\n"
+        "tasks:\n"
+        "  - id: t1\n"
+        "    criterion_refs: [AC1]\n",
+        encoding="utf-8",
+    )
+
+    assert ps.load() is False
+    assert ps.data == {}
+
+
+def test_criteria_progress_rejects_unknown_reference(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new(
+        "Ungueltige Kriterienreferenz",
+        [{"id": "t1", "criterion_refs": ["AC2"]}],
+        akzeptanzkriterien=["Ein Ziel"],
+    )
+
+    progress = ps.criteria_progress()
+    assert progress["tracked"] is True
+    assert progress["valid"] is False
+    assert progress["error"] == "invalid_criterion_refs:t1"
+
+
 def test_save_keeps_checkpoint_details_out_of_stderr(tmp_path, capsys) -> None:
     """Checkpoint-Saves duerfen keine Debug-Daten in Prozesslogs ausgeben."""
     state = PhaseState("testprojekt", base_dir=tmp_path)

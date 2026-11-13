@@ -141,6 +141,34 @@ def _task_ende(
         return False
     if ok:
         phase_state.mark_done(task_id)
+        if hasattr(phase_state, "criteria_progress"):
+            try:
+                _criterion_progress = phase_state.criteria_progress()
+                if (
+                    isinstance(_criterion_progress, dict)
+                    and _criterion_progress.get("tracked") is True
+                ):
+                    audit(
+                        "loop_criteria_progress",
+                        {
+                            "task_id": task_id,
+                            "status": (
+                                "complete"
+                                if _criterion_progress.get("valid") is True
+                                and not _criterion_progress.get("uncovered")
+                                else "in_progress"
+                            ),
+                            "covered": _criterion_progress.get("covered", []),
+                            "remaining": _criterion_progress.get("uncovered", []),
+                            "error": _criterion_progress.get("error"),
+                        },
+                        pd,
+                        getattr(state, "project_name", "?"),
+                    )
+            except Exception:
+                # Zusatztelemetrie darf den bereits verifizierten Abschluss
+                # eines Tasks nicht rueckgaengig machen.
+                pass
         if pd is not None and not _hat_op_nnn(state):
             _progress.append(
                 pd,

@@ -389,6 +389,7 @@ def test_alle_done_aus_phasestate():
 
 def _run_finalize_commit_order(
     tmp_path, monkeypatch, verify_ok, *, task_status="done", doku_nachzug=False,
+    criteria_progress=None,
 ):
     from werkstatt.phases import finalize
 
@@ -401,6 +402,9 @@ def _run_finalize_commit_order(
         state.applied_count = 1
     phase_state = MagicMock()
     phase_state.get_task.return_value = {"status": task_status}
+    phase_state.criteria_progress.return_value = criteria_progress or {
+        "tracked": False, "valid": True, "covered": [], "uncovered": [],
+    }
     order = []
     audit_events = []
     progress_entries = []
@@ -509,6 +513,40 @@ def test_finalize_committet_nicht_wenn_phase_end_verify_scheitert(
 
 
 
+
+def test_task_ende_auditiert_kriterienfortschritt_nach_gruenem_task(tmp_path):
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.task_runner import _task_ende
+
+    state = _state(tmp_path)
+    phase_state = PhaseState("testprojekt", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new(
+        "Kriterienfortschritt",
+        [
+            {"id": "t1", "criterion_refs": ["AC1"]},
+            {"id": "t2", "criterion_refs": ["AC2"]},
+        ],
+        akzeptanzkriterien=["Erstes Ziel", "Zweites Ziel"],
+    )
+    events = []
+
+    with patch("werkstatt.task_runner.audit", lambda *args: events.append(args)), \
+         patch("werkstatt.progress.append"):
+        _task_ende(state, phase_state, "t1", ok=True, name="Erstes Ziel")
+
+    progress_events = [
+        event for event in events if event[0] == "loop_criteria_progress"
+    ]
+    assert len(progress_events) == 1
+    assert progress_events[0][1] == {
+        "task_id": "t1",
+        "status": "in_progress",
+        "covered": ["AC1"],
+        "remaining": ["AC2"],
+        "error": None,
+    }
+
+
 @pytest.mark.parametrize("task_status", ["failed", "blocked", "pending", "running", "missing"])
 def test_finalize_markiert_unvollstaendige_tasks_nicht_als_loop_erfolg(
     tmp_path, monkeypatch, task_status,
@@ -534,6 +572,44 @@ def test_finalize_markiert_unvollstaendige_tasks_nicht_als_loop_erfolg(
         "tasks_ok": 1,
         "tasks_total": 1,
         "unresolved": [{"task_id": "t1", "status": task_status}],
+    }]
+
+
+
+def test_finalize_blockiert_erfolg_wenn_akzeptanzkriterium_offen_ist(
+    tmp_path, monkeypatch,
+):
+    report = {
+        "tracked": True,
+        "valid": True,
+        "covered": ["AC1"],
+        "uncovered": ["AC2"],
+        "error": None,
+    }
+    rc, _order, events, _progress = _run_finalize_commit_order(
+        tmp_path,
+        monkeypatch,
+        True,
+        criteria_progress=report,
+    )
+
+    assert rc == 1
+    assert "loop_erfolg" not in [event[0] for event in events]
+    completion = [
+        event[1] for event in events
+        if event[0] == "loop_phase"
+        and event[1].get("phase") == "completion"
+    ]
+    assert completion == [{
+        "phase": "completion",
+        "status": "incomplete",
+        "reason": "criteria_unresolved",
+        "tasks_ok": 1,
+        "tasks_total": 1,
+        "unresolved": [],
+        "criteria_covered": ["AC1"],
+        "criteria_uncovered": ["AC2"],
+        "criteria_error": None,
     }]
 
 

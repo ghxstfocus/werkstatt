@@ -6146,3 +6146,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der Plan-Compiler prueft die Zuordnung von Akzeptanzkriterien zu Tasks, aber `PhaseState.init_new()` hat `criterion_refs` beim Erzeugen des Phase-Checkpoints verworfen. Dadurch konnte die Resume-/Zielabgleich-Logik nach einem Neustart nicht mehr auf dieselbe Task-Kriterien-Zuordnung zugreifen.
 - Phase-Checkpoints speichern die Referenzen jetzt je Task; Laden und Initialisieren weisen fehlerhafte Referenzlisten fail-closed ab. Regressionstests decken Speicherung, Reload und ungueltige Daten ab.
 - Quality Gate [43368306093](https://github.com/ghxstfocus/werkstatt/actions/runs/43368306093) ist gruen: 2170 Tests bestanden, 5 uebersprungen; Ruff 0, mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden. OP-398 bleibt offen, bis die gesamte Abnahmekette belegt ist.
+
+
+## 2026-11-13 — OP-398: Zielkriterien nach jedem Task nachhalten
+
+- Phase-Checkpoints berechnen jetzt aus Akzeptanzkriterien, Task-Referenzen und Task-Status, welche Kriterien durch erledigte Tasks abgedeckt sind. Nach jedem erfolgreich verifizierten Task wird dieser Stand als replaybares Audit-Ereignis ausgegeben.
+- Die Abschlusspruefung blockiert loop_erfolg, wenn ein explizit getracktes Kriterium noch keinem erledigten Task zugeordnet ist oder die gespeicherte Referenzstruktur ungueltig ist. Legacy-Plaene ohne Kriterienreferenzen bleiben als ungetrackt gekennzeichnet.
+- Regressionstests pruefen Zwischenfortschritt, unbekannte Referenzen und den fail-closed Abschluss. Quality-Gate-Nachweis folgt; OP-398 bleibt offen.
