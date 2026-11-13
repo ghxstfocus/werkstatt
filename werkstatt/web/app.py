@@ -1856,7 +1856,11 @@ def create_app() -> FastAPI:
                         if isinstance(active_run_id, str) and active_run_id
                         else None
                     )
-                    if run_record is None:
+                    if (
+                        not isinstance(active_run_id, str)
+                        or not active_run_id
+                        or run_record is None
+                    ):
                         raise HTTPException(
                             status_code=409,
                             detail=(
