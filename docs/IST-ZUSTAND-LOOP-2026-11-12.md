@@ -4,15 +4,15 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Code-Stand: `93831e5` (Quality-Gate-Run
-[43362294835](https://github.com/ghxstfocus/werkstatt/actions/runs/43362294835));
-der zugehoerige Dokumentationsstand wurde anschliessend bis `6042fe7`
-fortgeschrieben. Seit dem UI-Plan-Abgleich (`9ecc994`) sind
-RunRecord-Startzustand, Run-Inbox-Outbox und Outbox-Recovery integriert.
-Der Plan-Compiler verwirft inzwischen ungueltige Task-DAGs vor dem Plan-Gate.
-Der Quality-Gate-Run belegt 2.158 bestandene Tests, 5 uebersprungene Tests
-und fehlerfreie Ruff-, Mypy-, AST- und Audit-Katalog-Pruefungen. Das belegt
-Repository-Tests, nicht den aktuell laufenden Produktionsserver.
+Gepruefter Code-Stand: `3fcb1c6` (Quality-Gate-Run
+[43386828673](https://github.com/ghxstfocus/werkstatt/actions/runs/43386828673)).
+Der Lauf ist fuer diesen Commit erfolgreich. Seit der letzten Bestandsaufnahme
+wurden unter anderem Akzeptanzkriterien explizit auf Tasks abgebildet und als
+Checkpoint-Daten erhalten, Verify-Reparaturen auf betroffene Stages begrenzt
+und danach die vollstaendige Phase-End-Pruefung erneut ausgefuehrt. Der
+Werkzeugdialog erkennt wiederholte und alternierende Werkzeugzyklen ohne
+pauschale Rundengrenze. Diese CI-Belege betreffen den Repository-Stand, nicht
+den aktuell laufenden Produktionsserver.
 
 ## Kurzbefund
 
@@ -33,13 +33,13 @@ Arbeitsgraphen und Evidence Ledger.
 | Bereich | Aktueller Stand |
 |---|---|
 | Laufsteuerung | `run_pipeline_loop` ruft Setup, Plan, Task-Loop und Finalizer in fester Folge auf. Phasen bleiben Runtime-Steuerung. |
-| Failure Records | Rote Abschlusspruefungen koennen redigierte, Run-gebundene Befunde mit Stage, Exit-Code, HEAD und Worktree-Fingerprint liefern. |
+| Failure Records | Rote Abschlusspruefungen liefern redigierte, Run-gebundene Befunde mit Stage, Exit-Code, HEAD und Worktree-Fingerprint. Recovery zielt auf fehlgeschlagene Verify-Stages; nach einer Reparatur wird die vollstaendige Phase-End-Pruefung erneut ausgefuehrt. Wiederholte Befunde ohne wirksame Worktree-Aenderung stoppen fail-closed. |
 | Recovery | Der Resume-Akzeptanztest prueft HTTP-Route, dieselbe Run-ID und `--resume`, dann die Ausfuehrung bis zur erfolgreichen Phase-End-Verify. Der CLI-Aufruf laeuft im Test-Hauptthread; ein separater Probe prueft den Launcher. Ein echter vom HTTP-Endpunkt gestarteter Worker, der nach einem Webserver-Absturz autonom denselben Run wiederaufnimmt, ist nicht durchgehend belegt. |
 | Commit und Verify | Commit-Pruefungen pinnen Parent-HEAD und Index-Tree. Nach einem Commit laeuft die vollstaendige Phase-End-Verify erneut; Snapshot-Abweichungen verhindern Erfolg. |
-| Run-Ergebnis | Ein gruener Teilcheck genuegt nicht. Offene/fehlgeschlagene Tasks oder rotes Verify verhindern den Erfolg. |
+| Run-Ergebnis | Ein gruener Teilcheck genuegt nicht. Task-Akzeptanzkriterien werden vor dem Gate auf Abdeckung geprueft und Referenzen bleiben im Checkpoint erhalten. Offene/fehlgeschlagene Tasks, nicht abgedeckte Kriterien oder rotes Verify verhindern den Erfolg. |
 | Prozessstatus | Die Registry ueberlebt Webserver-Neustarts und kann lebende Worker wiederfinden. Sie und der RunRecord bleiben getrennte Speichervertraege. |
 | Run-Inbox | SQLite speichert Nachrichten idempotent mit Lease/Fencing. Run-gebundene Chatjobs fuehren zusaetzlich eine Outbox-Markierung: Inbox-Eintrag wird vor Worker-Dispatch geschrieben und bei Reconnect/Resume idempotent reconciliert. Der Task-Loop konsumiert Hinweise an Task-Grenzen und schreibt sie crash-sicher in den Checkpoint. Fragen, Steueraktionen, Gate-Antworten und Schreibauftraege sind noch keine vollstaendig integrierten Koordinator-Ereignisse. |
-| Control-Timeline | Viele Rollen- und Verify-Schritte sind sichtbar. Lueckenloses Builder-/LLM-Eventing und eine einheitliche Run-Projektion bleiben offen. |
+| Control-Timeline | Viele Rollen- und Verify-Schritte sind sichtbar. Lueckenloses Builder-/LLM-Eventing und eine einheitliche Run-Projektion bleiben offen. Chat-Werkzeuge haben keine pauschale Rundengrenze mehr; wiederholte Zyklen loesen Kurskorrektur und bei weiterem Stillstand eine belegte Abschlussantwort aus. |
 
 ## Nachgewiesene Start-Race und Korrektur
 
@@ -104,10 +104,13 @@ Verify-Fehler-Recovery und Abschluss bleiben Teil von OP-382.
 Der Planner lehnt duplicate/fehlende Task-IDs, malformed, unbekannte,
 doppelte oder selbstreferenzierende Abhaengigkeiten sowie Zyklen vor dem
 Plan-Gate mit einem konkreten Audit-Befund ab. Gueltige Graphen werden stabil
-topologisch sortiert. Das verhindert, dass bekannte Strukturfehler erst im
-Task-Loop als still blockierte Arbeit sichtbar werden. Es ersetzt weder die
-Abdeckung von Akzeptanzkriterien noch den zielorientierten Arbeitsgraphen;
-diese Teile von OP-398 bleiben offen.
+topologisch sortiert. Akzeptanzkriterien muessen Tasks zugeordnet sein; die
+Referenzen werden im Checkpoint wiederhergestellt, waehrend Legacy-Plaene ohne
+explizite Referenzen rueckwaertskompatibel bleiben. Das verhindert bekannte
+Struktur- und Abdeckungsfehler vor der Ausfuehrung. Der Run disponiert Tasks
+aber weiterhin aus dem freigegebenen Plan in einer festen Task-Schleife,
+statt an Checkpoints gegen offene Kriterien neu zu waehlen; der zielorientierte
+Arbeitsgraph von OP-398 bleibt offen.
 
 ## Naechster Architektur-Schritt
 
