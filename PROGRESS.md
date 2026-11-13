@@ -5924,3 +5924,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der Worker schreibt den Run-Checkpoint vor der Inbox-Bestaetigung. Ein Prozessabbruch in diesem Fenster laesst die Nachricht nach Ablauf der Lease erneut beanspruchen. Der Checkpoint-Offset wird jetzt als Idempotenzgrenze fuer die Projektion verwendet: wiederholte Zustellung bleibt quittierbar, erzeugt aber keinen doppelten Job-Hinweis.
 - Ein Regressionstest simuliert den Absturz genau zwischen Checkpoint-Schreibvorgang und Inbox-Ack, laesst die Lease ablaufen und belegt die einmalige Projektion nach Wiederaufnahme.
 - Vollstaendiger Worker-Neustart und HTTP-Reconnect sind separat durch den vorherigen OP-397-Test abgedeckt.
+
+
+## 2026-11-13 — Inbox-Replay und UI-ADR verifiziert
+
+- Der Replay-Fix in `werkstatt/phases/tasks.py` verhindert doppelte Job-Hinweise, wenn der Worker nach dem Checkpoint-Schreiben, aber vor dem Inbox-Ack ausfaellt. Der Regressionstest deckt Lease-Ablauf, Wiederbeanspruchung, Idempotenz und anschliessendes Ack ab.
+- Der erste Lauf [43335457552](https://github.com/ghxstfocus/werkstatt/actions/runs/43335457552) fand nach 2146 bestandenen Tests einen neuen Mypy-Fehler. Die Typbehandlung wurde korrigiert; Lauf [43335805170](https://github.com/ghxstfocus/werkstatt/actions/runs/43335805170) auf Commit `0fe3ae5` ist vollstaendig gruen: 2146 Tests bestanden, 5 uebersprungen, Ruff/Mypy/AST/Audit-Katalog ohne Fehler und Quality Gate `ok=true`.
+- ADR-0022 wurde gemaess freigegebenem UI-Plan neu gefasst: Projektuebersicht als Default ohne Projekt, Modusleiste unter Projektleiste, Chat als zentraler Steuerungsort, Cockpit/Control/Debug/Runs als Sichten auf denselben Run-Zustand und Gates als Chat-Karten mit optionaler Modal-Detailansicht. GitHub Actions Quality Gate [43336137658](https://github.com/ghxstfocus/werkstatt/actions/runs/43336137658) auf Commit `8e5d141` ist erfolgreich.
+- Diese Arbeit schliesst weder OP-397 noch den Umbau aus ADR-0032 ab: Der Replay-Test prueft einen konkreten Checkpoint-Absturz; der zielorientierte Koordinator, integrierte Wiederaufnahme produktiver Worker und zehn UI-Runs bleiben offen.
