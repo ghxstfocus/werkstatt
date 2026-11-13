@@ -4,66 +4,92 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Stand: `b65cb83dcb501e4db146062f4f76014326fc9612`
-(`fix(loop): keep old-interpreter workers fail closed`).
-GitHub Actions Quality Gate:
-[Run 43354116256](https://github.com/ghxstfocus/werkstatt/actions/runs/43352637612).
+Gepruefter Ausgangsstand: `9ecc994` (ADR-0022 an den freigegebenen UI-Plan
+angepasst). Der Quality-Gate-Workflow fuer diesen Stand ist erfolgreich:
+[Run 43355306845](https://github.com/ghxstfocus/werkstatt/actions/runs/43355306845).
+Die nachfolgend beschriebene RunRecord-Initialisierung vor dem Workerstart
+ist die aktuelle Aenderung und muss durch deren eigenen CI-Lauf bestaetigt
+werden.
 
 ## Kurzbefund
 
-Die Werkstatt hat solide operative Bausteine: Projekt-Runs, spezialisierte
+Die Werkstatt hat operative Bausteine fuer Projekt-Runs, spezialisierte
 Rollen, harte Verify-Stufen, Human Gates, Failure Records, Event Store,
-Chatjobs und eine Prozess-Registry. Der Abschlussfehlerpfad ist deutlich
-staerker als im frueheren Befund: Ein rotes Phase-End-Verify kann im selben
-Run gezielt diagnostiziert und repariert werden. Nach einem Commit prueft
-der Loop den committed Stand noch einmal vollstaendig.
+Chatjobs und Prozess-Registry. Rote Phase-End-Verifikation kann im selben Run
+diagnostiziert und repariert werden; nach Commits wird der committed Stand
+erneut vollstaendig verifiziert.
 
-Der groesste Architekturabstand zu ADR-0032 bleibt der Run-Kern: Der
-Produktionslauf ist weiterhin eine feste Funktionsfolge aus Setup/Explorer,
-Plan/Preflight, Task-Loop und Finalizer. Ein einheitlicher persistierter
-Zielkoordinator mit Inbox, veränderbarem Arbeitsgraphen und Evidence Ledger
-fehlt. Chat-Session, Chatjobs, Phase-Checkpoint und Loop-Registry speichern
-jeweils Teile des Zustands, bilden aber noch keinen gemeinsamen Run-Vertrag.
+Der Produktionslauf bleibt jedoch eine feste Folge aus Setup/Explorer,
+Plan/Preflight, Task-Loop und Finalizer. Der persistierte RunRecord,
+Event-Inbox, Chatjob, Phase-Checkpoint und Prozess-Registry bilden noch
+keinen einheitlichen zielorientierten Koordinator mit veraenderbarem
+Arbeitsgraphen und Evidence Ledger.
 
-## Implementierte Zuverlaessigkeitsvertraege
+## Implementierte Vertraege
 
 | Bereich | Aktueller Stand |
 |---|---|
-| Laufsteuerung | `run_pipeline_loop` ruft die bestehende Setup-, Plan-, Task- und Finalizer-Kette auf. Phasen bleiben im Runtime-Pfad also noch Steuerungsstruktur. |
-| Failure Records | Rote Abschlusspruefungen erzeugen redigierte, Run-gebundene Belege mit Stage, Exit-Code, HEAD und Worktree-Fingerprint. |
-| Recovery | Der Resume-Akzeptanztest durchlaeuft den HTTP-Endpunkt, prueft genau einen CLI-Aufruf mit derselben Run-ID und `--resume` und fuehrt exakt diese Argumente bis zum erfolgreichen Phase-End-Verify aus. Ein separater Probe prueft den echten Launcher/Subprozessstart. GitHub Quality Gate verifiziert 2.149 Tests. Der Test ersetzt den per HTTP gestarteten Worker durch einen CLI-Aufruf im Test-Hauptthread; ein kompletter Webserver-Absturz mit autonomer Worker-Wiederaufnahme ist damit noch nicht nachgewiesen. Stagnation stoppt fail-closed und zeigt ein adressiertes Recovery-Gate. |
-| Commit-Vertrag | Committer pinnt Eltern-HEAD und Index-Tree und kontrolliert Commit-SHA, Parent, Tree, Whitespace und Working-Tree-Zustand. |
-| Verify nach Commit | Nach jedem erzeugten Commit laeuft die vollstaendige Phase-End-Verify erneut. Rot startet Recovery desselben Runs; nach Repair wird neu committet und wieder geprueft. Snapshot-Abweichungen verhindern Erfolg. |
-| Run-Ergebnis | Ein Run wird nicht allein wegen eines gruenen Teilchecks erfolgreich; offene/fehlgeschlagene Tasks oder rotes Verify bleiben unvollstaendig. |
-| Chat und Prozess | Chatjobs, Session-Historie und Loop-Registry sind persistiert, aber Status und Steuerung sind noch nicht aus einem gemeinsamen RunRecord abgeleitet. Der Server kann einen lebenden Prozess wiederfinden; einen beendeten Prozess nicht allgemein aus einem Run-Checkpoint fortsetzen. |
-| Control-Timeline | Ereignisse zeigen viele Rollen- und Verify-Schritte. Lueckenloses Builder-Fortschritts-/LLM-Eventing und die einheitliche semantische Run-Projektion bleiben offene Arbeit. |
+| Laufsteuerung | `run_pipeline_loop` ruft Setup, Plan, Task-Loop und Finalizer in fester Folge auf. Phasen bleiben Runtime-Steuerung. |
+| Failure Records | Rote Abschlusspruefungen koennen redigierte, Run-gebundene Befunde mit Stage, Exit-Code, HEAD und Worktree-Fingerprint liefern. |
+| Recovery | Der Resume-Akzeptanztest prueft HTTP-Route, dieselbe Run-ID und `--resume`, dann die Ausfuehrung bis zur erfolgreichen Phase-End-Verify. Der CLI-Aufruf laeuft im Test-Hauptthread; ein separater Probe prueft den Launcher. Ein echter vom HTTP-Endpunkt gestarteter Worker, der nach einem Webserver-Absturz autonom denselben Run wiederaufnimmt, ist nicht durchgehend belegt. |
+| Commit und Verify | Commit-Pruefungen pinnen Parent-HEAD und Index-Tree. Nach einem Commit laeuft die vollstaendige Phase-End-Verify erneut; Snapshot-Abweichungen verhindern Erfolg. |
+| Run-Ergebnis | Ein gruener Teilcheck genuegt nicht. Offene/fehlgeschlagene Tasks oder rotes Verify verhindern den Erfolg. |
+| Prozessstatus | Die Registry ueberlebt Webserver-Neustarts und kann lebende Worker wiederfinden. Sie und der RunRecord bleiben getrennte Speichervertraege. |
+| Run-Inbox | SQLite speichert Nachrichten idempotent mit Lease/Fencing. Die Chat-Job-API stellt derzeit `job_notice` ein; der Task-Loop konsumiert diese Hinweise an Task-Grenzen und schreibt sie crash-sicher in den Checkpoint. Fragen, Steueraktionen, Gate-Antworten und Schreibauftraege sind noch keine vollstaendig integrierten Koordinator-Ereignisse. |
+| Control-Timeline | Viele Rollen- und Verify-Schritte sind sichtbar. Lueckenloses Builder-/LLM-Eventing und eine einheitliche Run-Projektion bleiben offen. |
 
-## Architekturabstand zu ADR-0032
+## Nachgewiesene Start-Race und Korrektur
 
-1. **Persistierter Run-Vertrag fehlt:** Es gibt noch keine gemeinsame SSOT fuer Ziel, Freigabe, Basis-Commit, Checkpoint-Version, naechste Aktion und Inbox-Offset.
-2. **Nachrichten-Inbox fehlt:** Chatfragen, Steuerung, Folgeauftraege und Gate-Antworten sind noch nicht allesamt idempotente Ereignisse an denselben Koordinator.
-3. **Arbeitsgraph fehlt:** Tasks werden weiterhin aus einem Plan in der festen Task-Schleife abgearbeitet, statt am Checkpoint gegen offene Akzeptanzkriterien neu disponiert zu werden.
-4. **Evidence Ledger fehlt:** Verify- und Audit-Ereignisse existieren, aber es gibt noch keine einheitliche Zuordnung von Kriterium zu Quelle, Befehl, SHA und Artefakt-Hash.
-5. **UI bleibt auf Teilprojektionen:** Chat, Control, Runs und Prozessstatus nutzen verbundene, aber getrennte Speicher- und API-Pfade.
+Vor dieser Aenderung reservierte der Webserver einen Run in der Prozess-
+Registry und startete den Worker; der Worker erzeugte den RunRecord erst
+spaeter im Loop. Die Chat-Job-API erkennt bereits den Registry-Zustand
+`starting`, konnte aber mangels RunRecord keine `job_notice`-Nachricht
+einstellen. Der Chatjob wurde trotzdem angenommen. Damit konnte ein waehrend
+des Starts eingereichter Job ohne Run-Inbox-Verknuepfung bleiben.
 
-Diese Punkte sind nicht als fertige Architektur zu interpretieren. Der
-verbindliche Zielvertrag und die Migrations-Meilensteine stehen in
+Der Webstart legt den RunRecord jetzt vor `Popen` an. Der Worker-Aufruf
+fuellt beim spaeteren Start den noch leeren `base_commit` nach, ohne einen
+bereits gepinnten Commit zu ueberschreiben. Tests sichern die Reihenfolge
+RunRecord-vor-Workerstart und das idempotente Auffuellen des Basis-Commits.
+Der Quality-Gate-Lauf des Aenderungscommits entscheidet, ob diese Korrektur
+verifiziert ist.
+
+## Verbleibender Architekturabstand zu ADR-0032
+
+1. **Gemeinsame Run-SSOT fehlt:** Ziel, Freigabe, Basis, Checkpoint,
+   naechste Aktion und Prozessstatus liegen weiterhin in getrennten
+   Komponenten.
+2. **Inbox ist nur teilweise integriert:** `job_notice` wird persistiert
+   und checkpoint-sicher konsumiert. Fragen, Control, Gate-Antworten und
+   Schreibauftraege veraendern den Arbeitsgraphen noch nicht.
+3. **Arbeitsgraph fehlt:** Tasks kommen aus dem Plan und werden in der
+   festen Task-Schleife abgearbeitet, statt an Checkpoints gegen offene
+   Akzeptanzkriterien disponiert zu werden.
+4. **Evidence Ledger fehlt:** Einzelne Verify-/Audit-Belege existieren,
+   aber es gibt keine einheitliche Kriterium-zu-Beleg-Zuordnung mit Quelle,
+   Befehl, Exit-Code, SHA und Artefakt-Hash.
+5. **Recovery ist nicht vollstaendig E2E belegt:** Der integrierte
+   Webserver-Absturz mit autonomer Wiederaufnahme eines gestarteten Workers
+   bleibt offen.
+6. **UI-Projektionen sind getrennt:** Chat, Control, Runs und Prozessstatus
+   beziehen Teile ihrer Fakten aus verschiedenen Speicher-/API-Pfaden.
+
+Diese Punkte sind keine fertige Zielarchitektur. Verbindlich sind
 [ADR-0032](adr/ADR-0032-adaptiver-zielorientierter-run-kern.md) und
-[ROADMAP.md](ROADMAP.md). Die konkreten offenen Aufgaben stehen nur in
-[STATUS.md](STATUS.md).
+[ROADMAP.md](ROADMAP.md); startbare Arbeit steht in [STATUS.md](STATUS.md).
 
-## OP-403 Abschlussnachweis
+## OP-403 und Betriebsnachweis
 
-OP-403 ist abgeschlossen und aus der offenen Queue entfernt. Der aktuelle
-Nachweis ist der verifizierte Commit oben sowie dessen CI-Lauf. Die
-vollstaendige Server-Dogfooding-Abnahme und zehn UI-Runs sind weiterhin
-Teil von OP-382; sie werden durch Unit-Tests oder GitHub-CI nicht behauptet.
+OP-403 ist abgeschlossen und aus der offenen Queue entfernt. Unit-Tests und
+GitHub-CI belegen keine vollstaendige Server-Dogfooding-Abnahme. Zehn
+UI-Runs mit Frage waehrend Arbeit, Gate, Pause/Resume, Reconnect,
+Verify-Fehler-Recovery und Abschluss bleiben Teil von OP-382.
 
 ## Naechster Architektur-Schritt
 
-ADR-0032 nennt M1 als naechsten Architektur-Meilenstein: RunRecord und
-idempotente Ereignis-Inbox fuer Fragen, Steuerung, Gate-Antworten und neue
-Schreibauftraege. Vor Umsetzung sind die bestehenden SQLite-Stores,
-Loop-Registry und Phase-Checkpoints als Migrationsquellen zu behandeln; ein
-zweiter paralleler Statusspeicher ohne Replay-/Recovery-Vertrag waere kein
-Fortschritt.
+M1 aus ADR-0032 bleibt offen: die vorhandene Run-Inbox muss in einen
+einheitlichen Run-Vertrag ueberfuehrt werden, der Fragen, Steuerung,
+Gate-Antworten und Schreibauftraege idempotent dem selben Run zuordnet und
+deren Wirkung an sicheren Checkpoints definiert. Die vorhandenen SQLite-
+Stores, Prozess-Registry und Phase-Checkpoints sind zu migrieren, nicht
+durch einen unverbundenen zweiten Statusspeicher zu verdoppeln.

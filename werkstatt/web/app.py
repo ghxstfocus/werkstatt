@@ -970,6 +970,18 @@ def create_app() -> FastAPI:
                         "grund": "laeuft_bereits",
                     }
     
+                if not resume_mode:
+                    try:
+                        EventStore().create_run_record(
+                            projektname, run_id, aufgabe,
+                        )
+                    except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
+                        registry.set_state(projektname, run_id, "idle")
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"RunRecord konnte nicht angelegt werden: {exc}",
+                        ) from exc
+
                 if autonome_auswahl:
                     geschrieben = _audit_web_loop_event(
                         projektname, run_id, "web_op_selected", "selected",

@@ -6048,3 +6048,15 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Ein passender, gleichnamiger Worker unter einem anderen Interpreter gilt nun als mehrdeutig; die Registry bleibt `orphaned` und sperrt neue Runs fail-closed.
 - Der Regressionstest simuliert einen Server-Interpreterwechsel bei lebendem Alt-Worker und belegt, dass keine zweite Run-Reservierung erfolgt.
 - Quality Gate Run [43354116256](https://github.com/ghxstfocus/werkstatt/actions/runs/43354116256) ist auf `b65cb83` grün: 2.150 Tests bestanden, Ruff/Mypy/AST/Audit-Katalog ohne Fehler.
+
+
+## 2026-11-13 — RunRecord vor Workerstart
+
+- Der Webstart erzeugt den RunRecord jetzt vor `Popen`, damit Chatjobs, die
+  waehrend `starting` angenommen werden, eine vorhandene Inbox-Referenz
+  erhalten.
+- Der spaetere Workerstart fuellt einen noch fehlenden `base_commit` idempotent
+  nach; ein bereits gepinnter Commit wird nicht ersetzt.
+- Regressionstests sichern die Reihenfolge RunRecord-vor-Workerstart und das
+  Auffuellen des Basis-Commits. Der Quality Gate fuer diesen Commit verifiziert
+  die Aenderung.

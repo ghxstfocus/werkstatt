@@ -149,6 +149,15 @@ class EventStore:
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 (project, run_id, status, target, base_commit, now),
             )
+            # The Web API publishes the durable run identity before Popen so
+            # chat jobs can attach during startup. The worker later fills the
+            # exact checkout HEAD without replacing an already pinned base.
+            if base_commit is not None:
+                conn.execute(
+                    "UPDATE run_records SET base_commit=?, updated_at=? "
+                    "WHERE project=? AND run_id=? AND base_commit IS NULL",
+                    (base_commit, now, project, run_id),
+                )
             row = conn.execute(
                 "SELECT project, run_id, status, target, base_commit, "
                 "checkpoint_json, checkpoint_version, updated_at "

@@ -106,9 +106,13 @@ def test_append_with_event_id_is_idempotent_and_project_scoped(
 def test_run_record_checkpoint_is_compare_and_swap(tmp_path: Path) -> None:
     store = EventStore(db_pfad=tmp_path / "events.db")
     record = store.create_run_record(
-        "demo", "run-1", "Repair the loop", base_commit="abc123",
+        "demo", "run-1", "Repair the loop",
     )
     assert record["checkpoint_version"] == 0
+    pinned = store.create_run_record(
+        "demo", "run-1", "Repair the loop", base_commit="abc123",
+    )
+    assert pinned["base_commit"] == "abc123"
     resumed = store.create_run_record(
         "demo", "run-1", "Repair the loop", base_commit="def456",
     )

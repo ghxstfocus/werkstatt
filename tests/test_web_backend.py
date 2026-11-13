@@ -52,6 +52,16 @@ class _NullEventStore:
     def append(self, *args: Any, **kwargs: Any) -> None:
         return None
 
+    def create_run_record(
+        self, project: str, run_id: str, target: str, **_kwargs: Any,
+    ) -> dict[str, Any]:
+        return {
+            "project": project,
+            "run_id": run_id,
+            "target": target,
+            "status": "running",
+        }
+
 
 def _reset_loop_registry(app_modul: Any) -> None:
     for log_handle in app_modul._LOOP_LOG_HANDLES.values():
@@ -89,11 +99,25 @@ def test_loop_subprozess_start_stop(
             lambda pgid, sig: gruppensignale.append((pgid, sig)),
         )
     _reset_loop_registry(app_modul)
+    run_records: list[tuple[str, str, str]] = []
+
+    class _RecordingEventStore(_NullEventStore):
+        def create_run_record(
+            self, project: str, run_id: str, target: str, **_kwargs: Any,
+        ) -> dict[str, Any]:
+            run_records.append((project, run_id, target))
+            return super().create_run_record(project, run_id, target, **_kwargs)
+
+    fake_popen = _fake_popen(aufrufe, kwargs_log=popen_kwargs)
+
+    def _popen_after_run_record(*args: Any, **kwargs: Any) -> Any:
+        assert run_records, "RunRecord must exist before worker spawn"
+        return fake_popen(*args, **kwargs)
+
     monkeypatch.setattr(
-        app_modul.subprocess, "Popen",
-        _fake_popen(aufrufe, kwargs_log=popen_kwargs),
+        app_modul.subprocess, "Popen", _popen_after_run_record,
     )
-    monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
+    monkeypatch.setattr(app_modul, "EventStore", _RecordingEventStore)
 
     client = TestClient(app_modul.app)
 
@@ -119,6 +143,7 @@ def test_loop_subprozess_start_stop(
     run_id_idx = aufrufe[0].index("--run-id")
     assert aufrufe[0][run_id_idx + 1].startswith("demo-")
     assert daten["run_id"] == aufrufe[0][run_id_idx + 1]
+    assert run_records == [("demo", daten["run_id"], daten["aufgabe"])]
     assert popen_kwargs[0]["start_new_session"] is (app_modul.os.name == "posix")
     assert "demo" in app_modul._LAUFENDE_LOOPS
 
