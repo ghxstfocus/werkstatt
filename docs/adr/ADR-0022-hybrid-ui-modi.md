@@ -1,93 +1,145 @@
-# ADR-0022: Hybrid-UI-Modi (Cockpit / Control / Debug)
+# ADR-0022: Projektzentrierte Chat- und Arbeitsmodi
 
-- **Datum:** 2026-11-08
+- **Datum:** 2026-11-13
 - **Status:** accepted
-- **Ergaenzt:** ADR-0009 (Timeline primaer, Layout A)
-- **Verworfen:** Monolithisches Single-Mode-Layout
+- **Ersetzt:** Die urspruengliche ADR-0022 vom 2026-11-08 mit drei eigenstaendigen Layouts, schwebendem Chat und phasenbezogenem Wasserfall.
+- **Bestaetigt durch:** Freigegebener UI-Plan vom 2026-11-12 in `docs/UI-PLAN-2026-11-12.md`
+- **Ergaenzt:** ADR-0009, ADR-0022a, ADR-0029, ADR-0031 und ADR-0032
 
 ## Kontext
 
-Das Web-UI hat heute drei feste Spalten (Runs / Timeline / Chat) plus
-Workbench-Drawer. Diese Struktur ist funktional, aber sie skaliert
-weder nach unten (User will nur Status sehen, wird von drei Spalten
-erschlagen) noch nach oben (User will einen laufenden Run im Detail
-verfolgen, kann aber die Spalten nicht umschichten).
+Die bisherige Modusentscheidung beschreibt drei getrennte Layouts und einen
+schwebenden Chat. Das passt nicht mehr zum Produktziel: Der Projektchat ist
+der Ansprechpartner und Steuerungspunkt, waehrend Cockpit, Control und Debug
+unterschiedliche Sichten auf denselben Run und dieselben Belege liefern.
+Ein schwebendes Panel, getrennte Statuszustaende oder ein Gate ausserhalb des
+Chatverlaufs lassen Aktionen und Entscheidungen auseinanderfallen.
 
-Zwei User-Typen kollidieren:
-
-- **Cockpit-Typ**: will ruhige, minimale Anzeige. „Das System macht
-  das schon, ich greife nur ein wenn noetig." Ambient presence statt
-  Aufmerksamkeit.
-- **Kontrollraum-Typ**: will dichte Information, alle Panels
-  gleichzeitig, Farb-kodiert, Filter, Detail. „Ich habe die Kontrolle."
-
-Ein Single-Mode-Layout bedient immer nur einen Typ. Der andere muss
-sich anpassen oder wird nicht bedient.
-
-Vorbilder aus der Branche:
-- Claude Code: reines Terminal, immer gleich
-- Cline/Cursor: immer Chat + Code nebeneinander
-- VS Code: Sidebar-Toggle (nur Groesse)
-- Devin: Kanban (nur Run-Liste)
-- Linear: 2 Layouts (Liste + Board)
-
-Kein System wechselt die **semantische Rolle** der UI-Elemente.
+Die UI soll zugleich eine Entwicklungsumgebung bleiben: Projekte muessen
+schnell erreichbar sein, laufende Arbeit soll im Control-Modus nachvollziehbar
+sein, und Fehler brauchen in Debug einen belastbaren Ursache-Wirkungs-Kontext.
 
 ## Entscheidung
 
-**Drei explizite UI-Modi, manuell waehlbar, persistent.**
+### 1. Gemeinsame Informationsarchitektur
 
-| Modus | Wann | Was sichtbar | Was versteckt |
-|---|---|---|---|
-| **Cockpit** (default) | Kein aktiver Run / Idle | 3 Spalten wie heute, Ambient Bar oben, Kalender eingeklappt | Detail-Panels, Multi-Run-History |
-| **Control** | Run laeuft / aktives Verfolgen | Horizontaler Phasen-Wasserfall, Chat schwebend, Runs-Liste schmal | Kalender, alte Runs, Session-History |
-| **Debug** | Fehlersuche | Timeline + Audit gekoppelt (Klick → Scroll), keine Runs-Liste | Kalender, History |
+Die Anwendung hat diese Reihenfolge:
 
-**Wechsel:**
-- `Shift+Space` zyklisch durch die 3 Modi
-- Command Palette (`⌘K`) → „mode cockpit" / „mode control" / „mode debug"
-- URL-Parameter `?mode=cockpit` (Deep-Link)
-- localStorage persistiert
+1. **Projektleiste:** Startseite/Uebersicht, geoeffnete Projekt-Tabs und ein
+   Plus-Menue fuer Projekt anlegen, GitHub-Projekt verbinden sowie bestehendes
+   lokales Projekt oeffnen.
+2. **Modusleiste darunter:** Cockpit, Control, Debug und Runs. Ohne aktives
+   Projekt ist die Projektuebersicht die Standardansicht.
+3. **Projektstatus:** kompakte Anzeige von belegtem Laufzustand, offenem Gate
+   und letztem Run.
+4. **Arbeitsflaeche:** projektbezogener Chat als primaerer Handlungsort; die
+   jeweilige Modusansicht ergaenzt den Chat um passenden Kontext.
+5. **Detailleiste:** Audit, Loop-Log, Diff, Verify und Dateien, jeweils nach
+   Projekt und Run gefiltert.
 
-**Semantik je Modus:**
-- Cockpit: alles was Ruhe braucht, ohne Ablenkung
-- Control: alles was Aufmerksamkeit braucht, grosse Schrift, wenig Chrome
-- Debug: alles was Analyse braucht, zwei Ansichten synchronisiert
+Der Chat bleibt im Projektkontext verankert und wird nicht als unabhaengiges
+schwebendes Steuerungsfenster umgesetzt. Der Projektwechsel darf keine
+Nachrichten, Ereignisse oder Gates zwischen Projekten vermischen.
 
-**Discoverability-Pflicht:**
-- Mode-Name oben links sichtbar
-- `?`-Overlay zeigt alle Shortcuts
-- Jeder Mode-Wechsel ist auch per Maus klickbar (Dropdown oben)
+### 2. Vier Modi, eine Run-Projektion
+
+| Modus | Beantwortet | Zeigt |
+|---|---|---|
+| **Cockpit** | Wo stehen Ziel und Projekt? | Ziel und Akzeptanzkriterien, belegten Fortschritt, letzte Runs, offene Gates und Risiken sowie Statistiken mit Zeitraum und Datenqualitaet. |
+| **Control** | Was tut der Run gerade und was folgt? | Chronologische Ereignisse mit Akteur/Faehigkeit, kurzer Zweckbeschreibung, Task/Pfad, Status, Beleg oder Artefakt und naechstem Schritt. |
+| **Debug** | Was ist fehlgeschlagen und wie wird es behoben? | Failure Record, Stage und Exit-Code, Commit-/Worktree-Fingerprint, Logauszug, betroffene Kriterien, Reparaturversuche und Verify-Ergebnis in Ursache-Wirkungs-Reihenfolge. |
+| **Runs** | Was lief im Projekt oder in der Werkstatt? | Filterbare Run-Historie, Laufzustand, Ergebnis, Gate-Verlauf und Replay. Werkstattweite Metaansichten bleiben read-only, bis ihre Aktivierungskriterien belegt sind. |
+
+Diese Modi sind Projektionen auf dieselbe persistierte Run-Quelle und denselben
+Event-Verlauf. Sie halten keine konkurrierenden Prozess-, Gate- oder
+Chat-Zustaende. Der Projektstatus wird aus dieser Quelle abgeleitet, nicht aus
+DOM-Heuristiken oder einer blossen Prozessliste.
+
+### 3. Chat-, Aktivitaets- und Gate-Vertrag
+
+- Nutzerbeitraege stehen rechts in kompakten, rechtsbuendigen Bubbles.
+  Assistentenantworten stehen links in einer begrenzten Lesespalte mit
+  gut lesbarer Markdown-Formatierung.
+- Der Composer bleibt unten erreichbar, mehrzeilig und per Tastatur nutzbar.
+  Enter sendet; Shift+Enter fuegt eine neue Zeile ein. Fokuszustand und
+  Bedienbarkeit muessen sichtbar bleiben.
+- Waehrend langer Arbeit erscheint im Chat hoechstens eine temporaere,
+  menschlich formulierte Aktivitaetszeile. Sie wird beim Schrittwechsel
+  ersetzt und nach Abschluss entfernt. Die detaillierte Schrittfolge gehoert
+  in Control.
+- Control protokolliert Status, Belege, Ergebnis und naechsten Schritt.
+  Sichtbare Begruendungen sind kurze, belegte Zusammenfassungen; rohe interne
+  Gedankengaenge werden nicht ausgegeben.
+- Freigaben sind Chat-Nachrichten/Karten im selben Projekt- und
+  Sessionverlauf. Eine Gate-ID bindet Antwort, Status und Audit idempotent an
+  genau eine Freigabe. Ein Modal darf dieselbe Gate-Karte zusaetzlich
+  darstellen, ist aber kein eigener Gate-Zustand und kein separater
+  Antwortkanal.
+- Bei Reconnect werden Nachrichten, Aktivitaet, Gate-Karten und Antworten aus
+  dem gespeicherten Zustand wiederhergestellt, ohne Duplikate oder verlorene
+  Antworten. Eine Chat-Aktion meldet Annahme, Ausfuehrungsstatus oder
+  Ablehnung eindeutig; Prozessstart gilt nicht als erfolgreiche Annahme.
+
+### 4. Startseite und Metaorchestrator
+
+Die Startseite ist der Default, wenn kein Projekt geoeffnet ist. Sie zeigt
+registrierte Projekte, belegte Laufzustaende, Erfolgs-/Fehlerstatistik,
+Aktualitaet der Daten und Aktionen zum Oeffnen oder Anlegen.
+
+Der spaetere Metaorchestrator sitzt auf dieser Startseite und koordiniert
+registrierte Projekte. Er aggregiert dieselben belegten Projekt-/Run-Events;
+er erhaelt weder einen zweiten Statusspeicher noch direkten Schreibzugriff
+auf Projekt-Checkouts. Projektisolation und Human-Gates bleiben wirksam.
+
+### 5. Codeguardian
+
+Codeguardian-Befunde verwenden dieselbe Run-Identitaet und Evidenz:
+
+- Im Chat erscheinen sie bei Entscheidung oder erforderlicher Handlung.
+- Control zeigt Regel, Grund, Status und Beleg.
+- Debug verknuepft Schweregrad, Pfad/Zeile, Regelversion, Diff-Fingerprint
+  und Verify-Ergebnis.
+
+Codeguardian schreibt keinen eigenen Patch und umgeht keine Freigabe.
+Sicherheits- oder Scope-Verletzungen bleiben blockierend, bis sie belegbar
+aufgeloest sind.
+
+## Qualitaets- und Abnahmekriterien
+
+Die Umsetzung gilt fuer diese ADR erst dann als verifiziert, wenn:
+
+1. Ein Run-Replay in Chat, Cockpit, Control und Debug dieselben Status- und
+   Ereignisfakten liefert; jede Ansicht darf sie anders ordnen, nicht
+   widersprechen.
+2. Projektwechsel, mehrere Tabs und Sessionwechsel sauber isoliert sind.
+3. Ein Gate genau einmal in der Projektkonversation und Audit-Spur erscheint;
+   offene und abgeschlossene Gates werden nach Reconnect korrekt angezeigt
+   und koennen nicht durch eine veraltete Antwort bestaetigt werden.
+4. Chatfragen waehrend eines Runs dessen Schreibarbeit nicht blockieren;
+   Aktivitaet wird ersetzt und endet sichtbar mit dem Schritt.
+5. Verify-Fehler auf den exakten Commit-/Worktree-Stand bezogen sind und
+   Failure Record, Reparatur und erneute Pruefung zusammenhaengen.
+6. Tastaturbedienung, Fokus, Screenreader-Namen, Kontrast, reduzierte
+   Bewegung und schmale Viewports geprueft sind.
+7. Browserpruefungen mit isolierten Testdaten DOM-/Accessibility-Befunde,
+   Screenshots und Browser-Logs als Verify-Artefakte festhalten.
+8. Zehn vollstaendige UI-Runs Start, Fragen waehrend der Arbeit, Gates,
+   Pause/Resume, Reconnect, Verify-Fehler-Recovery und sauberen Abschluss
+   mit Projekt, OP, Run-ID und Belegen nachweisen.
+
+Diese Entscheidung beschreibt das Zielbild. Sie erklaert keine offenen
+Umsetzungs- oder Betriebs-OPs fuer erledigt; diese bleiben in
+`docs/STATUS.md` offen, bis ihre Kriterien und Belege erfuellt sind.
 
 ## Konsequenzen
 
-Positiv:
-- Cockpit-Typ und Kontrollraum-Typ sind beide bedient — jeder bekommt
-  „sein" UI.
-- Default Cockpit ist ruhig. Wer mehr will, schaltet selbst um.
-- Focus (Control) ist der Beweis dass die UI „wach" sein kann — im
-  Gegensatz zu ruhigem Cockpit.
-- Drei spezifische Layouts sind einfacher zu bauen und zu testen als
-  ein komplexes responsives Grid.
-
-Negativ:
-- Drei Layouts warten statt eins. Neue Features muessen in jedem Modus
-  einen Platz finden (oder bewusst versteckt sein).
-- State-Management: Mode-Persistenz, Guard bei Mode-Wechsel waehrend
-  eines laufenden Runs.
-- Nutzer die Control nie entdecken verpassen die Dichte.
-
-Neutral:
-- Farb-Semantik (6 Farben) ist Vorbedingung: alle 3 Modi nutzen
-  dieselbe Farbsprache.
-- Ambient Bar (Status oben) ist in allen Modi sichtbar — identitaets-
-  stiftendes Element.
-
-## Verwandte OPs
-
-- OP-300 (Semantic Colors) — Vorbedingung
-- OP-301 (Ambient Status Bar) — Vorbedingung
-- OP-306 (Mode-Switch) — Implementierung
-- OP-308 (Focus-View Wasserfall) — Control-Modus
-- OP-309 (Chat schwebend) — Control-Modus
-- OP-311 (Audit-Filterleiste) — Debug-Modus
+- Die UI hat eine dauerhafte Projekt- und Chat-Orientierung; Modi aendern
+  Schwerpunkt und Detailgrad, nicht die Quelle der Wahrheit.
+- Jede Laufzeit- oder Gate-Aktion muss als gespeichertes, replaybares Ereignis
+  sichtbar sein.
+- Der Chat kann waehrend langer Arbeit ansprechbar bleiben, waehrend Control
+  die vollstaendige technische Arbeitsspur bewahrt.
+- Umsetzung und Browser-Dogfooding haengen von den Run-, Event-, Inbox- und
+  Checkpoint-Vertraegen aus ADR-0032 ab.
+- UI-Feinschliff ohne Einfluss auf diese Daten- und Bedienvertraege bleibt
+  nachgelagert und blockiert die Loop-Stabilisierung nicht.
