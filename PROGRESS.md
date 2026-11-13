@@ -6076,3 +6076,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der erste Preflight-Aufruf verwendete nach dem Test-Monkeypatch versehentlich erneut den Launcher statt des Python-Interpreters; das erklaert, warum sein Trace Overlay-Imports enthielt.
 - Die Probe nutzt jetzt den vor dem Monkeypatch gesicherten Interpreterpfad aus `WERKSTATT_TEST_PYTHON`. Erst damit ist der Kontrolllauf unabhaengig vom HTTP-Worker-Launcher.
+
+
+## 2026-11-13 — Resume-Launcher ohne Skriptdatei
+
+- Der direkte Python-Preflight laeuft, waehrend die Skriptdatei-Variante des Launchers vor ihrem ersten Statement stehen bleibt. Um die Skriptpfad-Hypothese zu pruefen, fuehrt der Launcher denselben Test-Bootstrap jetzt mit `python -c` aus.
+- CLI-Argumente, echter Python-Prozess, HTTP-Resume, RunRecord, PhaseState und Phase-End-Verify bleiben Teil des Tests; der Launcher ist weiter nur ein Isolationsadapter fuer den editable-installierten CI-Test.

@@ -556,33 +556,28 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "os.environ['WERKSTATT_REAL_PACKAGE']]\n",
         encoding="utf-8",
     )
-    worker_bootstrap = overlay_root / "worker_bootstrap.py"
-    worker_bootstrap.write_text(
-        "import os\n"
-        "open(os.environ['WERKSTATT_BOOTSTRAP_STARTED'], 'w').write('started')\n"
-        "import faulthandler, runpy, sys, sysconfig\n"
-        "faulthandler.dump_traceback_later(3, repeat=True)\n"
-        "for key in ('purelib', 'platlib'):\n"
-        "    path = sysconfig.get_paths()[key]\n"
-        "    if path not in sys.path: sys.path.append(path)\n"
+    worker_bootstrap = (
+        "import os\\n"
+        "open(os.environ['WERKSTATT_BOOTSTRAP_STARTED'], 'w').write('started')\\n"
+        "import faulthandler, runpy, sys, sysconfig\\n"
+        "faulthandler.dump_traceback_later(3, repeat=True)\\n"
+        "for key in ('purelib', 'platlib'):\\n"
+        "    path = sysconfig.get_paths()[key]\\n"
+        "    if path not in sys.path: sys.path.append(path)\\n"
         "sys.meta_path[:] = [finder for finder in sys.meta_path "
-        "if not type(finder).__module__.startswith('__editable__')]\n"
+        "if not type(finder).__module__.startswith('__editable__')]\\n"
         "sys.path[:0] = [os.environ['WERKSTATT_TEST_OVERLAY'], "
-        "os.environ['WERKSTATT_REPO_ROOT']]\n"
-        "sys.argv = ['werkstatt.loop', *sys.argv[3:]]\n"
-        "runpy.run_module('werkstatt.loop', run_name='__main__')\n",
-        encoding="utf-8",
+        "os.environ['WERKSTATT_REPO_ROOT']]\\n"
+        "sys.argv = ['werkstatt.loop', *sys.argv[3:]]\\n"
+        "runpy.run_module('werkstatt.loop', run_name='__main__')\\n"
     )
-    compile(
-        worker_bootstrap.read_text(encoding="utf-8"),
-        str(worker_bootstrap),
-        "exec",
-    )
+    compile(worker_bootstrap, "worker_bootstrap", "exec")
+    monkeypatch.setenv("WERKSTATT_WORKER_BOOTSTRAP_CODE", worker_bootstrap)
     worker_launcher = overlay_root / "python-worker"
     worker_launcher.write_text(
-        "#!/bin/sh\n"
-        "exec \"$WERKSTATT_TEST_PYTHON\" -E -S -v "
-        "\"$WERKSTATT_WORKER_BOOTSTRAP\" \"$@\"\n",
+        "#!/bin/sh\\n"
+        "exec \"$WERKSTATT_TEST_PYTHON\" -E -S -v -c "
+        "\"$WERKSTATT_WORKER_BOOTSTRAP_CODE\" \"$@\"\\n",
         encoding="utf-8",
     )
     worker_launcher.chmod(0o755)
@@ -634,7 +629,6 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     monkeypatch.setenv("WERKSTATT_TEST_OVERLAY", str(overlay_root))
     monkeypatch.setenv("WERKSTATT_REPO_ROOT", str(repo_root))
     monkeypatch.setenv("WERKSTATT_TEST_PYTHON", sys.executable)
-    monkeypatch.setenv("WERKSTATT_WORKER_BOOTSTRAP", str(worker_bootstrap))
     monkeypatch.setattr(app_module.sys, "executable", str(worker_launcher))
     monkeypatch.setenv("WERKSTATT_TEST_PROJECT_DIR", str(project_dir))
     bootstrap_started = tmp_path / "resume-bootstrap-started"
