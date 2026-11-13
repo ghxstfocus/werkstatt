@@ -34,7 +34,8 @@ def test_k3_error_context_ruft_builder_obwohl_verify_gruen() -> None:
 
     # _verify_patches immer gruen, run_builder wird gezaehlt.
     with patch.object(_loop, "_verify_patches", return_value=True), \
-         patch("werkstatt.roles.builder.run_builder", side_effect=_fake_builder):
+         patch("werkstatt.roles.builder.run_builder", side_effect=_fake_builder), \
+         patch("werkstatt.reviewer.run_reviewer", return_value=True):
         ok = _loop._reflection_loop(st, error_context="reviewer sagt nein")
 
     assert len(builder_calls) >= 1, "K3: Builder muss bei error_context laufen"
