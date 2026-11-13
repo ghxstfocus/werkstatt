@@ -124,21 +124,52 @@ def check_all(cwd: Path) -> dict:
     # 74 Tests skippen -> 1361 statt 1435.
     # -m "not slow": PTY-Tests im TestClient liefern unzuverlaessig
     # Output (30s Timeout wuerde Gate blockieren).
-    _rc, out = _run(["pytest", "-q", "-m", "not slow"], cwd, env=_clean_env())
+    _rc, out = _run(
+        [sys.executable, "-m", "pytest", "-q", "-m", "not slow"],
+        cwd,
+        env=_clean_env(),
+    )
     passed, failed = _parse_pytest(out)
-    result["current"]["pytest"] = {"passed": passed, "failed": failed}
+    pytest_result: dict[str, Any] = {
+        "passed": passed,
+        "failed": failed,
+        "exit_code": _rc,
+    }
+    if _rc != 0:
+        # A missing executable/import failure has no pytest summary. Report it
+        # as a gate error instead of silently turning it into 0/0.
+        if failed == 0:
+            failed = 1
+            pytest_result["failed"] = failed
+        diagnostic = out.strip()
+        if len(diagnostic) > 4000:
+            diagnostic = diagnostic[:4000] + "\n...[truncated]"
+        pytest_result["diagnostic"] = diagnostic or (
+            "pytest failed without diagnostic output"
+        )
+    result["current"]["pytest"] = pytest_result
     # M-331: failed zaehlt als Fehler. Sonst ist der Gate fail-open:
     # 1360 passed + 1 failed -> delta=0 -> "ok", obwohl ein Test rot ist.
     result["delta"]["pytest"] = max(0, BASELINE["pytest"] - passed) + failed
 
     # ruff
-    _rc, out = _run(["ruff", "check", "--no-cache", "."], cwd)
+    _rc, out = _run(
+        [sys.executable, "-m", "ruff", "check", "--no-cache", "."], cwd,
+    )
     n = _parse_count(out, r"Found (\d+) error", clean_marker="All checks passed")
-    result["current"]["ruff"] = {"errors": n}
+    ruff_result: dict[str, Any] = {"errors": n, "exit_code": _rc}
+    if _rc != 0:
+        diagnostic = out.strip()
+        if len(diagnostic) > 4000:
+            diagnostic = diagnostic[:4000] + "\n...[truncated]"
+        ruff_result["diagnostic"] = diagnostic or (
+            "ruff failed without diagnostic output"
+        )
+    result["current"]["ruff"] = ruff_result
     result["delta"]["ruff"] = n - BASELINE["ruff"]
 
     # mypy
-    _rc, out = _run(["mypy", "werkstatt/"], cwd)
+    _rc, out = _run([sys.executable, "-m", "mypy", "werkstatt/"], cwd)
     n = _parse_count(out, r"Found (\d+) error", clean_marker="Success: no issues found")
     mypy_result: dict[str, Any] = {"errors": n, "exit_code": _rc}
     if n > BASELINE["mypy"] or _rc != 0:
@@ -176,7 +207,9 @@ def check_all(cwd: Path) -> dict:
     catalog_path = cwd / "tests" / "test_audit_warnung.py"
     if catalog_path.is_file():
         rc, out = _run(
-            ["pytest", catalog_test, "-q"], cwd, env=_clean_env(),
+            [sys.executable, "-m", "pytest", catalog_test, "-q"],
+            cwd,
+            env=_clean_env(),
         )
         passed, failed = _parse_pytest(out)
         catalog_errors = 0 if rc == 0 and passed == 1 and failed == 0 else 1

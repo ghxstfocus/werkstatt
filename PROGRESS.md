@@ -6520,3 +6520,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** `Projector.status()` zaehlte kaputte JSON-Struktur als unvollstaendige Quelle, konnte aber bei einer ungueltigen UTF-8-Bytefolge schon beim Text-Decoding mit `UnicodeDecodeError` abbrechen. Damit wurde die zugesicherte Health-Diagnose nicht als strukturierter, nicht-gruener Befund ausgeliefert.
 - **Aenderung:** Die Inventur liest JSONL zeilenweise als Bytes und markiert nicht decodierbare Zeilen als beschaedigt. Sie behaelt gueltige Zeilen fuer die Statusdiagnose bei und setzt `comparable=false`.
 - **Verifikation:** `tests/test_projection.py`, API-Wiring und Statusleisten-Tests: 25 bestanden; Ruff und `git diff --check` bestanden. Der strikte Doku-Check erkennt die Codeaenderung bis zum Eintrag als Drift.
+
+## 2026-11-13 — Quality-Gate nutzt die aktive Python-Umgebung
+
+- **Befund:** `tools.quality_gate` startete `pytest`, `ruff` und `mypy` als separate PATH-Kommandos. In einem Windows-Checkout mit installierten Python-Modulen, aber ohne Script-Launcher im PATH, meldete pytest 0/0 ohne Startdiagnose und die anderen Tools als nicht gefunden.
+- **Aenderung:** Die drei Checks sowie der Audit-Katalogtest laufen jetzt ueber `sys.executable -m ...` und damit dieselbe Umgebung wie der aufrufende Loop. Nicht erfolgreiche Starts liefern Exit-Code und Diagnose; ein pytest-Startfehler wird als Gate-Fehler gezaehlt statt als scheinbar leeres Ergebnis.
+- **Verifikation:** `tests/test_quality_gate.py`: 8 bestanden; Ruff fuer Tool und Test sowie `git diff --check` bestanden. Das vollstaendige Linux-Quality-Gate fuer diese Aenderung steht noch aus.

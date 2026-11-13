@@ -31,21 +31,19 @@ def _pytest_out(passed: int, failed: int = 0) -> str:
 def _mock_run_factory(pytest_output: str):
     """Erzeugt _run-Mock: pytest liefert pytest_output, andere Baseline.
 
-    Wichtig: Substring-Pruefung ("test_katalog_enthaelt_alle_code_kinds" in cmd_str), nicht
-    Exakt-Match in der Liste. Sonst matcht der pytest-Zweig auch fuer
-    ["pytest", "tests/test_katalog_enthaelt_alle_code_kinds.py"], weil "test_katalog_enthaelt_alle_code_kinds"
-    nicht exakt als Listenelement vorkommt.
+    Pytest wird als `sys.executable -m pytest` gestartet, damit das Gate
+    dieselbe Python-Umgebung wie den aufrufenden Loop verwendet.
     """
     def _mock_run(cmd, cwd, env=None):
         cmd_str = " ".join(str(c) for c in cmd)
         # Spezifischere Regel zuerst:
         if "test_katalog_enthaelt_alle_code_kinds" in cmd_str:
             return 0, "1 passed in 0.1s"
-        if cmd_str.startswith("pytest"):
+        if "-m pytest" in cmd_str:
             return 0, pytest_output
-        if "ruff" in cmd_str:
+        if "-m ruff" in cmd_str:
             return 0, f"Found {quality_gate.BASELINE['ruff']} errors."
-        if "mypy" in cmd_str:
+        if "-m mypy" in cmd_str:
             return 0, f"Found {quality_gate.BASELINE['mypy']} errors."
         return 0, ""
     return _mock_run
@@ -97,11 +95,11 @@ def test_quality_gate_reports_mypy_diagnostic(tmp_path):
         command = " ".join(str(part) for part in cmd)
         if "test_katalog_enthaelt_alle_code_kinds" in command:
             return 0, "1 passed in 0.1s"
-        if command.startswith("pytest"):
+        if "-m pytest" in command:
             return 0, _pytest_out(_BASE)
-        if "ruff" in command:
+        if "-m ruff" in command:
             return 0, "All checks passed!"
-        if "mypy" in command:
+        if "-m mypy" in command:
             return 1, diagnostic
         return 0, ""
 
@@ -113,6 +111,60 @@ def test_quality_gate_reports_mypy_diagnostic(tmp_path):
     assert mypy["errors"] == 1
     assert mypy["exit_code"] == 1
     assert mypy["diagnostic"] == diagnostic
+    assert result["regression"] is True
+
+
+def test_quality_gate_reports_pytest_start_failure(tmp_path):
+    diagnostic = "ModuleNotFoundError: No module named pytest"
+
+    def mock_run(cmd, cwd, env=None):
+        command = " ".join(str(part) for part in cmd)
+        if "test_katalog_enthaelt_alle_code_kinds" in command:
+            return 1, diagnostic
+        if "-m pytest" in command:
+            return -1, diagnostic
+        if "-m ruff" in command:
+            return 0, "All checks passed!"
+        if "-m mypy" in command:
+            return 0, "Success: no issues found"
+        return 0, ""
+
+    _prepare_tree(tmp_path)
+    with patch.object(quality_gate, "_run", side_effect=mock_run):
+        result = quality_gate.check_all(tmp_path)
+
+    pytest_result = result["current"]["pytest"]
+    assert pytest_result["passed"] == 0
+    assert pytest_result["failed"] == 1
+    assert pytest_result["exit_code"] == -1
+    assert pytest_result["diagnostic"] == diagnostic
+    assert result["delta"]["pytest"] > 0
+    assert result["regression"] is True
+
+
+def test_quality_gate_reports_ruff_start_failure(tmp_path):
+    diagnostic = "No module named ruff"
+
+    def mock_run(cmd, cwd, env=None):
+        command = " ".join(str(part) for part in cmd)
+        if "test_katalog_enthaelt_alle_code_kinds" in command:
+            return 0, "1 passed in 0.1s"
+        if "-m pytest" in command:
+            return 0, _pytest_out(_BASE)
+        if "-m ruff" in command:
+            return -1, diagnostic
+        if "-m mypy" in command:
+            return 0, "Success: no issues found"
+        return 0, ""
+
+    _prepare_tree(tmp_path)
+    with patch.object(quality_gate, "_run", side_effect=mock_run):
+        result = quality_gate.check_all(tmp_path)
+
+    ruff = result["current"]["ruff"]
+    assert ruff["errors"] == 999_999
+    assert ruff["exit_code"] == -1
+    assert ruff["diagnostic"] == diagnostic
     assert result["regression"] is True
 
 
@@ -140,11 +192,11 @@ def test_quality_gate_fails_when_audit_catalog_test_fails(tmp_path):
         command = " ".join(str(part) for part in cmd)
         if "test_katalog_enthaelt_alle_code_kinds" in command:
             return 1, "0 passed, 1 failed in 0.1s"
-        if command.startswith("pytest"):
+        if "-m pytest" in command:
             return 0, _pytest_out(_BASE)
-        if "ruff" in command:
+        if "-m ruff" in command:
             return 0, "All checks passed!"
-        if "mypy" in command:
+        if "-m mypy" in command:
             return 0, "Success: no issues found"
         return 0, ""
 
