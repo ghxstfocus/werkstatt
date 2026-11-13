@@ -6515,3 +6515,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** Die OP-Erkennung nahm bei einer ausdruecklichen Umsetzungsanfrage die erste OP-ID im gesamten Text. Bei mehreren Referenzen, etwa „Bearbeite OP-372; OP-373 ist blockiert“, konnte dadurch die falsche OP als Ziel festgelegt werden.
 - **Aenderung:** Der Chat erkennt mehrere unterschiedliche OP-IDs in einem Umsetzungsauftrag und fragt vor jedem Modell- oder Tool-Aufruf nach, welche OP gemeint ist. Es wird dabei kein Startvorschlag erzeugt. Eine einzelne OP-ID behaelt den bestehenden Handoff-Pfad.
 - **Verifikation:** Lokal unter Windows/Python 3.14: `tests/test_chat_agent.py` 38 bestanden, Ruff und `git diff --check` bestanden. Doku-Drift-Pruefung nach Eintrag bestanden. Linux-CI fuer den Branch steht aus.
+\n## 2026-11-13 — OP-372-Folgepruefung: ungueltiges UTF-8 fail-closed anzeigen
+
+- **Befund:** `Projector.status()` zaehlte kaputte JSON-Struktur als unvollstaendige Quelle, konnte aber bei einer ungueltigen UTF-8-Bytefolge schon beim Text-Decoding mit `UnicodeDecodeError` abbrechen. Damit wurde die zugesicherte Health-Diagnose nicht als strukturierter, nicht-gruener Befund ausgeliefert.
+- **Aenderung:** Die Inventur liest JSONL zeilenweise als Bytes und markiert nicht decodierbare Zeilen als beschaedigt. Sie behaelt gueltige Zeilen fuer die Statusdiagnose bei und setzt `comparable=false`.
+- **Verifikation:** `tests/test_projection.py`, API-Wiring und Statusleisten-Tests: 25 bestanden; Ruff und `git diff --check` bestanden. Der strikte Doku-Check erkennt die Codeaenderung bis zum Eintrag als Drift.

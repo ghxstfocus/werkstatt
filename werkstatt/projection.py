@@ -166,8 +166,13 @@ class Projector:
         event_times: dict[str, datetime | None] = {}
         malformed = 0
         for f in self._jsonl_files():
-            with f.open(encoding="utf-8") as fh:
-                for line_num, line in enumerate(fh):
+            with f.open("rb") as fh:
+                for line_num, raw_line in enumerate(fh):
+                    try:
+                        line = raw_line.decode("utf-8")
+                    except UnicodeDecodeError:
+                        malformed += 1
+                        continue
                     if not line.strip():
                         continue
                     try:
