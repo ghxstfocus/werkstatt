@@ -6570,3 +6570,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** OP-372 ist laut Abschlussbeleg oben abgeschlossen und nicht mehr in `docs/STATUS.md` offen. OP-375 fuehrte OP-372 dennoch weiter als Blocker.
 - **Aenderung:** OP-375 wartet jetzt nur noch auf die weiterhin offene OP-374. Die Roadmap kennzeichnet OP-372 als abgeschlossen.
 - **Verifikation:** Dokumentations-Drift-Pruefung und Queue-Abgleich ausgefuehrt.
+
+## 2026-11-14 — Chat-Grep: Alternation und widerspruechliche Belege
+
+- **Befund:** Der gespeicherte Chat-Job fuer die OP-374-Pruefung erhielt zuerst echte Treffer fuer `werkstatt/web/inspector.py::_letzter_run_id`, danach aber Suchmuster mit `|`. `_grep` rief GNU grep ohne ERE-Modus auf; deshalb wurden Alternationen als literales Pipe-Zeichen behandelt und faelschlich „kein Treffer“ geliefert. Der Chat verwarf anschliessend den frueheren positiven Beleg.
+- **Aenderung:** `_grep` verwendet jetzt ERE (`-E`), und die Tool-Beschreibung weist Alternation explizit aus. Der System-Prompt verpflichtet den Chat bei widerspruechlichen Treffern zum erneuten Lesen des Quellbereichs und zur Bevorzugung bestaetigter positiver Belege.
+- **Regression:** Neuer Tool-Test fuer `alpha|beta`; Prompt-Test fuer den Belegkonflikt-Grundsatz.
+- **Verifikation:** Windows: Prompt-Regression bestanden; ERE-Lauf wegen fehlendem GNU grep uebersprungen. Der groessere Chat-Testsatz hatte 6 bestehende Umgebungsausfaelle, weil Standardtests `/opt/werkstatt` erwarten; 70 Tests bestanden. Linux-Serverlauf vor diesem Fix: 2.259 bestanden, 5 uebersprungen (Commit `4c3c240`).

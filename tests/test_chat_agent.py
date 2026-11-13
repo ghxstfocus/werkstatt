@@ -642,6 +642,8 @@ def test_system_prompt_requires_exact_op_evidence_before_planning() -> None:
     assert "passende akzeptierte ADRs" in chat_agent._SYSTEM_PROMPT
     assert "explizit genannten Pfade" in chat_agent._SYSTEM_PROMPT
     assert "nicht nach einem Modulnamen" in chat_agent._SYSTEM_PROMPT
+    assert "verifizierter positiver Treffer wiegt staerker" in chat_agent._SYSTEM_PROMPT
+    assert "lies" in chat_agent._SYSTEM_PROMPT and "read_file" in chat_agent._SYSTEM_PROMPT
 
 def test_system_prompt_requires_verified_file_line_citations() -> None:
     assert "grep" in chat_agent._SYSTEM_PROMPT

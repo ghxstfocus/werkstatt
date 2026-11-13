@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -131,6 +132,24 @@ def test_grep_findet_pattern() -> None:
         "grep", {"pattern": "chat_loop", "path": "werkstatt/chat_agent.py"},
     )
     assert "chat_loop" in r
+
+
+def test_grep_unterstuetzt_ere_alternation(tmp_path: Path) -> None:
+    if shutil.which("grep") is None:
+        pytest.skip("grep ist nicht installiert")
+    (tmp_path / "sample.py").write_text(
+        "alpha = 1\nbeta = 2\ngamma = 3\n", encoding="utf-8",
+    )
+
+    result = chat_tools.execute_tool(
+        "grep", {"pattern": "alpha|beta", "path": "sample.py"},
+        project_dir=tmp_path,
+    )
+
+    assert "alpha = 1" in result
+    assert "beta = 2" in result
+    assert "gamma = 3" not in result
+    assert "Alternation mit |" in chat_tools.CHAT_TOOLS["grep"]["description"]
 
 
 def test_grep_ohne_pattern() -> None:
