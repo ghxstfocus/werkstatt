@@ -232,3 +232,73 @@ def test_targeted_recovery_continues_past_five_rounds_until_stage_passes(
     assert result is True
     assert mocks.run_builder.call_count == 6
     assert verifications[0] == 13
+
+
+def test_post_build_verify_recovery_targets_failed_stages_with_run_budget(
+    tmp_path, monkeypatch,
+):
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from werkstatt.phases import tasks
+
+    verify_dir = tmp_path / ".werkstatt"
+    verify_dir.mkdir()
+    (verify_dir / "verify.json").write_text(
+        json.dumps({"stages": [
+            {"id": "pytest_regression", "phase": "post_build"},
+            {"id": "ruff", "phase": "post_build"},
+            {"id": "mypy", "phase": "phase_end"},
+        ]}),
+        encoding="utf-8",
+    )
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        last_verify_errors=[
+            "pytest_regression: assertion failed",
+            "ruff: E501 line too long",
+        ],
+        budget={"max_llm_calls": 30, "max_minutes": 15},
+    )
+    recovery = MagicMock(return_value=True)
+    monkeypatch.setattr(tasks, "_reflection_loop", recovery)
+    monkeypatch.setattr(tasks, "audit", MagicMock())
+
+    assert tasks._reflect_verify_failure(state, phase="post_build") is True
+    recovery.assert_called_once_with(
+        state,
+        max_runden=None,
+        phase="post_build",
+        verify_stage_ids={"pytest_regression", "ruff"},
+    )
+
+
+def test_post_build_verify_recovery_stays_bounded_without_run_budget(
+    tmp_path, monkeypatch,
+):
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from werkstatt.phases import tasks
+
+    verify_dir = tmp_path / ".werkstatt"
+    verify_dir.mkdir()
+    (verify_dir / "verify.json").write_text(
+        json.dumps({"stages": [{"id": "pytest_regression"}]}),
+        encoding="utf-8",
+    )
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        last_verify_errors=["pytest_regression: assertion failed"],
+        budget={},
+    )
+    recovery = MagicMock(return_value=False)
+    monkeypatch.setattr(tasks, "_reflection_loop", recovery)
+    monkeypatch.setattr(tasks, "audit", MagicMock())
+
+    assert tasks._reflect_verify_failure(state, phase="post_build") is False
+    recovery.assert_called_once_with(state)

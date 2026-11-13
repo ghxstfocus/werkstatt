@@ -42,6 +42,67 @@ from ._common import (
 )
 
 
+def _reflect_verify_failure(state: RunState, phase: str) -> bool:
+    """Recover only the failing verify stages, using the configured run budget."""
+    from werkstatt.verify import _stage_ids
+
+    configured = set(_stage_ids(Path(state.project_dir)))
+    errors = getattr(state, "last_verify_errors", None)
+    if not isinstance(errors, list):
+        errors = []
+    failed = {
+        str(error).split(":", 1)[0].strip()
+        for error in errors
+        if ":" in str(error)
+    }
+    targeted = sorted(configured & failed)
+    budget = state.budget if isinstance(state.budget, dict) else {}
+    has_run_budget = any(
+        isinstance(budget.get(key), int)
+        and not isinstance(budget.get(key), bool)
+        and budget[key] > 0
+        for key in ("max_llm_calls", "max_minutes")
+    )
+    if targeted and has_run_budget:
+        audit(
+            "loop_reflection_targeted_recovery",
+            {
+                "phase": phase,
+                "stage_ids": targeted,
+                "run_budget": {
+                    key: budget[key]
+                    for key in ("max_llm_calls", "max_minutes")
+                    if key in budget
+                },
+            },
+            state.project_dir,
+            state.project_name,
+        )
+        return _reflection_loop(
+            state,
+            max_runden=None,
+            phase=phase,
+            verify_stage_ids=set(targeted),
+        )
+
+    reason = (
+        "verify_stage_unbekannt" if not targeted
+        else "run_budget_fehlt"
+    )
+    audit(
+        "loop_reflection_bounded_fallback",
+        {
+            "phase": phase,
+            "reason": reason,
+            "failed_stage_ids": sorted(failed),
+            "configured_stage_ids": sorted(configured),
+        },
+        state.project_dir,
+        state.project_name,
+    )
+    return _reflection_loop(state)
+
+
 def _audit_task_ok(
     transitioned: bool,
     task_id: str,
@@ -711,7 +772,7 @@ def _phase_tasks_loop(
                 _gate_failed_payload("post_build", []),
                 pd, pn,
             )
-            if not _reflection_loop(state):
+            if not _reflect_verify_failure(state, phase="post_build"):
                 audit("loop_reflection_gescheitert", {"task_id": i}, pd, pn)
                 # OP-059d: bei Spec-Widerspruch-Verdacht human_review
                 # statt post_build_verify_failed.

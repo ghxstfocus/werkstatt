@@ -6102,3 +6102,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der erste CI-Lauf fand drei veraltete Test-Fixtures, die mehrteilige Plaene ohne Kriteriumsreferenzen modellierten. Die fail-closed Regel blieb aktiv; die Fixtures enthalten jetzt beobachtbare Kriterien und AC-Referenzen.
 - Die CI wird erneut ausgefuehrt; OP-398 bleibt bis zur fachlichen, durchgaengigen Erfuellung aller Kriterien offen.
+
+
+## 2026-11-13 — OP-398: gezielte Verify-Reparatur im Buildpfad
+
+- Ein fehlgeschlagener Post-Build-Verify-Schritt wird jetzt anhand seiner Stage-ID einer gezielten Reflection zugefuehrt. Die Reflection kann mit dokumentiertem Run-Budget ueber fuenf Versuche hinaus weiterarbeiten und stoppt bei wiederholtem identischem Zustand; unbekannte Stages oder fehlende Budgets bleiben im begrenzten Kompatibilitaetspfad.
+- CI-Nachweis folgt. Der Loop-Kern nutzt weiterhin eine feste Setup-/Plan-/Task-/Finalize-Sequenz; das bleibt ein offener Architekturmeilenstein aus ADR-0032.
