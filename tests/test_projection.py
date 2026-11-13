@@ -170,6 +170,24 @@ def test_status_unvollstaendig_bei_beschaedigter_jsonl(tmp_path, monkeypatch):
     assert status["comparable"] is False
 
 
+def test_status_unvollstaendig_bei_ungueltigem_utf8(tmp_path, monkeypatch):
+    from werkstatt import projection
+
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+    logs = tmp_path / "audit-logs"
+    logs.mkdir()
+    (logs / "semantic-2026-11-12.jsonl").write_bytes(
+        b'{"event_id":"e1","timestamp":"2026-11-12T10:00:00Z"}\n'
+        b'{"event_id":"invalid-utf8-\xff"}\n'
+    )
+
+    status = _pj(tmp_path).status()
+
+    assert status["jsonl_events"] == 1
+    assert status["malformed_jsonl_lines"] == 1
+    assert status["comparable"] is False
+
+
 def test_event_id_fallback(tmp_path, monkeypatch):
     from werkstatt import projection
     monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
