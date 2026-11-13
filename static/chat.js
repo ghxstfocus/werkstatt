@@ -266,6 +266,10 @@
           _updateProposalStatus(p.proposal_id, "Nicht gestartet · " + (p.error || "Loop läuft bereits"));
         } else if (kind === "loop_action_queued") {
           _updateProposalStatus(p.proposal_id, "Eingereiht · wartet auf sicheren Checkpoint");
+        } else if (kind === "loop_followup_checkpointed") {
+          hatNachricht = true;
+          _updateProposalStatus(p.proposal_id, "Aufgenommen · Einordnung ausstehend");
+          _karte("assistant", p.detail || "Der Loop hat den Folgeauftrag am sicheren Checkpoint aufgenommen.");
         } else if (kind === "loop_action_failed") {
           _updateProposalStatus(p.proposal_id, "Fehlgeschlagen: " + (p.error || "unbekannter Fehler"));
         }

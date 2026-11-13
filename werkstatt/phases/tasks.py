@@ -545,6 +545,32 @@ def _persist_run_checkpoint(
         checkpoint,
         expected_version=record["checkpoint_version"],
     )
+    # Reflect durable follow-up intake in the originating chat. The event key
+    # makes checkpoint retries safe, while the checkpoint remains authoritative.
+    if run_state is not None:
+        from werkstatt.chat_session import ChatSession
+
+        for item in checkpoint["chat_followup_requests"]:
+            if not isinstance(item, dict) or item.get("status") != "received":
+                continue
+            session_id = item.get("session_id")
+            proposal_id = item.get("proposal_id")
+            if not isinstance(session_id, str) or not isinstance(proposal_id, str):
+                continue
+            ChatSession(project_name, session_id).append_once(
+                f"loop-followup-checkpoint:{run_id}:{proposal_id}",
+                "loop_followup_checkpointed",
+                {
+                    "proposal_id": proposal_id,
+                    "run_id": run_id,
+                    "status": "received",
+                    "detail": (
+                        "Der Loop hat den Folgeauftrag am sicheren Checkpoint "
+                        "aufgenommen. Die inhaltliche Einordnung steht noch "
+                        "aus; Hauptziel und laufende Tasks bleiben unverändert."
+                    ),
+                },
+            )
     for message in claimed:
         if run_state is not None:
             check_run_lease(run_state)

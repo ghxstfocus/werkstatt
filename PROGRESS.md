@@ -6430,3 +6430,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - Regressionstest erstellt einen GitHub-Run-Worktree mit Aenderung und belegt, dass die API genau diesen Diff gegen die Start-SHA liefert.
 - Der erste integrierte Quality-Gate-Lauf fand nach 2.216 erfolgreichen Tests einen Mypy-Befund zur optionalen Registry-Run-ID. Der Handler validiert sie jetzt vor der Worktree-Aufloesung; explizite, nicht registrierte Run-IDs antworten mit 404, ungueltige Registry-Daten mit 409.
 - Der Folgelauf bestaetigte, dass die bedingte Validierung fuer Mypy nicht bis zum Worktree-Aufruf verengt war. Eine zweite explizite Typpruefung direkt vor dem Aufruf schliesst diesen Pfad; erneuter Quality-Gate-Nachweis steht aus.
+
+## 2026-11-13 — Folgeauftrag am Checkpoint im Chat bestaetigen
+
+- Befund: Der bestaetigte Folgeauftrag wurde im Run-Checkpoint gespeichert und auditiert, aber die urspruengliche Chat-Session erhielt beim Checkpoint keine sichtbare Rueckmeldung.
+- Aenderung: Nach erfolgreichem Checkpoint schreibt der Loop ein idempotentes Chat-Event in die referenzierte Session. Der Chat aktualisiert die Vorschlagskarte und bestaetigt die Aufnahme. Er sagt explizit, dass die inhaltliche Einordnung noch aussteht und Hauptziel/Tasks unveraendert bleiben.
+- Grenze: Das bestaetigt nur die dauerhafte Aufnahme. Fachliche Scope-Pruefung, adaptive Replanung und Ausfuehrung des Folgeauftrags bleiben offen in OP-401.
+- Verifikation: Event-Store/Inbox 24 bestanden; Chat-Frontend 21 bestanden; Chat-Aktions-API 4 bestanden/1 plattformbedingt uebersprungen; Chatjobs 25 bestanden. Ruff, strikte Doku-Drift-Pruefung und `git diff --check` bestanden. Ein gemeinsamer pytest-Aufruf wurde lokal mit KeyboardInterrupt beendet und wird nicht als bestanden gewertet; die Gruppen liefen danach einzeln erfolgreich.

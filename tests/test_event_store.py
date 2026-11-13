@@ -317,6 +317,7 @@ def test_task_checkpoint_consumes_chat_notice_with_run_record(
 def test_task_checkpoint_persists_chat_followup_without_replacing_goal(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from werkstatt import chat_session
     from werkstatt.phases import tasks
 
     audit_events: list[tuple[tuple[object, ...], dict[str, object]]] = []
@@ -326,6 +327,8 @@ def test_task_checkpoint_persists_chat_followup_without_replacing_goal(
         return True
 
     monkeypatch.setattr(tasks, "audit", _audit)
+    chat_db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
     store = EventStore(db_pfad=tmp_path / "events.db")
     store.create_run_record(
         "demo", "run-followup", "Keep original goal", base_commit="abc123",
@@ -350,6 +353,7 @@ def test_task_checkpoint_persists_chat_followup_without_replacing_goal(
         "run-followup",
         SimpleNamespace(data={"tasks": []}),
         {"id": "next-task"},
+        run_state=SimpleNamespace(project_dir=tmp_path),
     )
 
     record = store.get_run_record("demo", "run-followup")
@@ -377,6 +381,27 @@ def test_task_checkpoint_persists_chat_followup_without_replacing_goal(
     assert audit_payload["request_sha256"] == sha256(
         b"Check the ADRs",
     ).hexdigest()
+    chat = chat_session.ChatSession("demo", "session-1", db_pfad=chat_db)
+    checkpoint_events = [
+        event for event in chat.load()
+        if event["kind"] == "loop_followup_checkpointed"
+    ]
+    assert len(checkpoint_events) == 1
+    assert checkpoint_events[0]["payload"]["proposal_id"] == "proposal-1"
+    assert "Einordnung steht noch aus" in checkpoint_events[0]["payload"]["detail"]
+
+    tasks._persist_run_checkpoint(
+        store,
+        "demo",
+        "run-followup",
+        SimpleNamespace(data={"tasks": []}),
+        {"id": "next-task"},
+        run_state=SimpleNamespace(project_dir=tmp_path),
+    )
+    assert len([
+        event for event in chat.load()
+        if event["kind"] == "loop_followup_checkpointed"
+    ]) == 1
 
 
 def test_task_checkpoint_rejects_non_text_followup_without_ack(
