@@ -1672,6 +1672,7 @@ def create_app() -> FastAPI:
         """Liefert aktive und letzte fehlgeschlagene Jobs fuer Reconnect."""
         from werkstatt.chat_jobs import (
             ChatJobStore,
+            fail_uncheckpointed_jobs_for_inactive_run,
             resume_chat_jobs,
             sync_completed_job_turns,
         )
@@ -1680,6 +1681,19 @@ def create_app() -> FastAPI:
         sid = _pruefe_session_id(session_id)
         db_path = _PROJECTS_BASE / ".werkstatt" / "chat-jobs" / f"{projekt}.db"
         try:
+            run_record = _loop_registry().read(projekt)
+            run_state = run_record.get("state") if run_record else None
+            protected_states = {
+                "starting", *_LOOP_PROCESS_STATES, "orphaned",
+            }
+            active_run_id = (
+                str(run_record["run_id"])
+                if run_record and run_state in protected_states
+                else None
+            )
+            fail_uncheckpointed_jobs_for_inactive_run(
+                projekt, active_run_id, db_path=db_path,
+            )
             resume_chat_jobs(
                 projekt, (_PROJECTS_BASE / projekt).resolve(), db_path=db_path,
             )
