@@ -258,7 +258,7 @@ def test_post_build_verify_recovery_targets_failed_stages_with_run_budget(
         project_name="demo",
         last_verify_errors=[
             "pytest_regression: assertion failed",
-            "ruff: E501 line too long",
+            "ruff-Fehler: process timed out",
         ],
         budget={"max_llm_calls": 30, "max_minutes": 15},
     )
