@@ -6088,4 +6088,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die deterministische Plan-Grenze weist jetzt fehlende/duplizierte IDs, malformed dependencies, Selbst-/unbekannte/duplizierte Abhaengigkeiten und Zyklen mit konkretem Grund zurueck. Gueltige DAGs bleiben stabil topologisch sortiert.
 - Der Architect/Planner-Split wird bei einem ungueltigen Graphen vor dem Plan-Gate fail-closed abgelehnt; er faellt nicht auf einen scheinbar gueltigen Fallback-Task zurueck. Regressionstests sichern die Fehlerklassen und das Audit des Zyklus.
 - Dieser Schritt schliesst OP-398 nicht: Abdeckung der Nutzer-/STATUS-Akzeptanzkriterien, zielorientierter Arbeitsgraph und Evidence Ledger bleiben offen.
-- CI-Nachweis folgt fuer den resultierenden Commit.
+- Quality Gate Run [43362294835](https://github.com/ghxstfocus/werkstatt/actions/runs/43362294835) ist auf `93831e5` gruen: 2.158 Tests bestanden, 5 uebersprungen; Ruff, Mypy, AST (387 Dateien) und Audit-Katalog ohne Fehler.
