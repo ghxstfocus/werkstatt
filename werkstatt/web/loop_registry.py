@@ -133,8 +133,14 @@ def _find_run_workers(
         except (OSError, RuntimeError):
             complete = False
             continue
-        if executable == Path(sys.executable).resolve():
-            workers.append((pid, identity))
+        if executable != Path(sys.executable).resolve():
+            # A matching live run under another interpreter may be a worker
+            # left behind by a venv/Python deployment change. It cannot be
+            # treated as absent: doing so could release the writer reservation
+            # and start a duplicate run.
+            complete = False
+            continue
+        workers.append((pid, identity))
     return workers, complete
 
 

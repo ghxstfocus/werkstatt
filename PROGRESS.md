@@ -6040,3 +6040,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der CLI-Prozess wird im Test-Hauptthread ausgefuehrt, weil der reale Workerstart aus dem TestClient-Thread im GitHub-Runner vor dem Python-Bootstrap hing. Separat prueft ein echter Launcher-Probe den Start mit Prozessgruppe und Logdatei; der Test behauptet daher keinen produktiven HTTP-zu-Worker-Abschluss in einem einzigen Prozesspfad.
 - Quality Gate Run [43352637612](https://github.com/ghxstfocus/werkstatt/actions/runs/43352637612) ist auf `f20ec83` gruen: 2.149 Tests bestanden, Ruff/Mypy/AST/Audit-Katalog ohne Fehler. Der Dokumentationsstand `e24fa6e` ist ebenfalls in CI gruen.
 - Der Test belegt die Resume-CLI-Recovery desselben Runs inklusive gespeichertem PhaseState, bereits erledigtem Task und Phase-End-Verify. Ein kompletter Webserver-Neustart mit autonomer Wiederaufnahme des vom HTTP-Endpunkt gestarteten Workers bleibt offen.
+
+
+## 2026-11-13 — Recovery bei Python-/venv-Wechsel absichern
+
+- Die Prozesssuche erkannte einen lebenden Resume-Worker mit passender Projekt-/Run-CLI, aber anderem Python-Executable nicht als Worker. Bei abgelaufener `starting`-Reservierung konnte das fälschlich `idle` ergeben und einen zweiten Writer erlauben.
+- Ein passender, gleichnamiger Worker unter einem anderen Interpreter gilt nun als mehrdeutig; die Registry bleibt `orphaned` und sperrt neue Runs fail-closed.
+- Regressionstest simuliert einen neuen Server-Interpreter bei gleichzeitig lebendem alten Worker und belegt, dass kein zweiter Run reserviert werden kann. CI-Verifikation steht aus.

@@ -275,6 +275,43 @@ def test_worker_match_requires_real_module_invocation() -> None:
     assert not _worker_command_matches(forged_script_argv, "demo", "run-exact")
 
 
+def test_old_interpreter_worker_keeps_start_reservation_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    if not Path("/proc").is_dir():
+        pytest.skip("Prozessidentitaetssuche erfordert Linux /proc")
+    from werkstatt.web import loop_registry
+
+    run_id = "run-old-interpreter"
+    process = _start_process_with_loop_identity("demo", run_id, tmp_path)
+    registry = LoopProcessRegistry(tmp_path / "registry.db")
+
+    class _NewServerPython:
+        executable = str(tmp_path / "new-venv" / "bin" / "python")
+
+    try:
+        assert registry.reserve("demo", run_id) == (True, None)
+        with registry._connect() as conn:
+            conn.execute(
+                "UPDATE loop_processes SET updated_at=0 WHERE project='demo'",
+            )
+            conn.commit()
+
+        monkeypatch.setattr(loop_registry, "sys", _NewServerPython)
+        recovered = registry.read("demo")
+
+        assert recovered is not None
+        assert recovered["state"] == "orphaned"
+        assert recovered["recovery_issue"] == "worker_identity_ambiguous"
+        allowed, existing = registry.reserve("demo", "run-new")
+        assert not allowed
+        assert existing is not None
+        assert existing["run_id"] == run_id
+    finally:
+        _stop_process(process)
+
+
 def test_worker_discovery_ignores_processes_owned_by_other_user(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
