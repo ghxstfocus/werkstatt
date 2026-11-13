@@ -6032,3 +6032,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - CI zeigte, dass der gestartete Python-Prozess die Test-Paket- und Loop-Bootmarker nicht erreicht; das Verhalten trat nach `pip install -e .` auf, bevor der echte Loop-Testpfad begann.
 - Der Test-Overlay entfernt jetzt im Subprozess den setuptools-Editable-Meta-Path-Finder. Die reguläre Paketauflösung nutzt danach den isolierten Overlay und dessen expliziten Pfad zum echten Werkstatt-Code. Damit bleiben produktiver CLI-Resume, HTTP-Route, Run-Lease, Checkpoint und Finalizer echt; nur externe Seiteneffekte sind gestubbt.
 - Die erneute CI-Verifikation steht aus.
+
+
+## 2026-11-13 — Resume-Worker-Test ohne Startup-Hook
+
+- Der vorherige CI-Fix kompilierte den erzeugten Startup-Hook, aber der externe Worker erreichte weiterhin weder Paket- noch Worker-Bootmarker. Das machte den Test-Overlay-Import weiterhin nicht reproduzierbar.
+- Der HTTP-Recovery-Test verwendet jetzt einen kleinen ausführbaren Test-Launcher: Er übernimmt die produktiven CLI-Argumente, startet denselben Python-Interpreter, setzt den Overlay-Pfad explizit und führt `werkstatt.loop` via `runpy` aus. Editable-Finder werden vor dem Paketimport entfernt.
+- Die Recovery-Akzeptanz bleibt unverändert: fehlgeschlagenes Phase-End-Verify, bereits erledigter Task, echter HTTP-Resume, derselbe Run und Phase-End-Verifikation müssen erfolgreich sein. CI muss diesen Nachweis noch bestätigen.

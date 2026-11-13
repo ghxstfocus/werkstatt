@@ -555,14 +555,30 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "os.environ['WERKSTATT_REAL_PACKAGE']]\n",
         encoding="utf-8",
     )
-    sitecustomize = overlay_root / "sitecustomize.py"
-    sitecustomize.write_text(
-        "import sys\n"
+    worker_bootstrap = overlay_root / "worker_bootstrap.py"
+    worker_bootstrap.write_text(
+        "import os, runpy, sys\n"
         "sys.meta_path[:] = [finder for finder in sys.meta_path "
-        "if not type(finder).__module__.startswith('__editable__')]\n",
+        "if not type(finder).__module__.startswith('__editable__')]\n"
+        "sys.path[:0] = [os.environ['WERKSTATT_TEST_OVERLAY'], "
+        "os.environ['WERKSTATT_REPO_ROOT']]\n"
+        "sys.argv = ['werkstatt.loop', *sys.argv[1:]]\n"
+        "runpy.run_module('werkstatt.loop', run_name='__main__')\n",
         encoding="utf-8",
     )
-    compile(sitecustomize.read_text(encoding="utf-8"), str(sitecustomize), "exec")
+    compile(
+        worker_bootstrap.read_text(encoding="utf-8"),
+        str(worker_bootstrap),
+        "exec",
+    )
+    worker_launcher = overlay_root / "python-worker"
+    worker_launcher.write_text(
+        "#!/bin/sh\n"
+        "exec \"$WERKSTATT_TEST_PYTHON\" "
+        "\"$WERKSTATT_WORKER_BOOTSTRAP\" \"$@\"\n",
+        encoding="utf-8",
+    )
+    worker_launcher.chmod(0o755)
     (stub_package / "loop.py").write_text(
         "import os, sys\n"
         "from pathlib import Path\n"
@@ -608,6 +624,11 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     monkeypatch.setenv(
         "WERKSTATT_REAL_PACKAGE", str(repo_root / "werkstatt"),
     )
+    monkeypatch.setenv("WERKSTATT_TEST_OVERLAY", str(overlay_root))
+    monkeypatch.setenv("WERKSTATT_REPO_ROOT", str(repo_root))
+    monkeypatch.setenv("WERKSTATT_TEST_PYTHON", sys.executable)
+    monkeypatch.setenv("WERKSTATT_WORKER_BOOTSTRAP", str(worker_bootstrap))
+    monkeypatch.setattr(app_module.sys, "executable", str(worker_launcher))
     monkeypatch.setenv("WERKSTATT_TEST_PROJECT_DIR", str(project_dir))
     worker_boot = tmp_path / "resume-worker-booted"
     package_boot = tmp_path / "resume-package-booted"
