@@ -6306,3 +6306,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Regressionen:** Terminales Ergebnis wird auch nach wiederholtem Reconcile nur einmal eingereiht; der Loop auditiert den Ergebnisbeleg mit stabiler ID und konsumiert ihn am sicheren Task-Checkpoint. Die Antwort selbst erscheint nicht in Run-Inbox oder Audit.
 - **Verifikation lokal:** `tests/test_chat_jobs.py`, `tests/test_event_store.py`, `tests/test_live_feed_backend.py`, `tests/test_audit_warnung.py`: 66 bestanden. Ruff fuer geaenderte Python-Dateien: bestanden. Strikter Doku-Drift-Check und `git diff --check`: bestanden. Vollstaendiger Linux-Quality-Gate-Nachweis fuer den Branch-Commit steht noch aus.
 - **Grenze:** Das schliesst nur die beobachtbare Rueckkehr eines parallelen Jobs. Die inhaltliche Relevanzbewertung und sichere Uebernahme neuer Schreibauftraege bleiben Teil von OP-401/402 und sind hier nicht implementiert.
+
+### CI-Nachpruefung
+
+- Der erste Quality-Gate-Lauf fuer `17c473ba1a726f78b2688a2e8e9283d6b0f4c7b1` deckte zwei Mypy-Fehler in der Typverengung dynamischer Checkpoint-Daten auf. JavaScript-Syntax, Ruff und die volle Suite (2.196 bestanden, 5 uebersprungen) waren gruen; das Gate blieb wegen Mypy rot.
+- Die Sequenznummern der Inbox-Ergebnisse werden jetzt beim Einlesen explizit als Integer gesammelt und erst danach fuer Offset/Max-Berechnung verwendet. Lokales Mypy fuer `werkstatt/phases/tasks.py`, Ruff und dieselben 66 Regressionstests sind erneut gruen.
+- Ein neuer CI-Lauf fuer den Korrektur-Commit ist erforderlich; bis zu dessen Abschluss ist der Branch nicht als vollstaendig verifiziert zu melden.

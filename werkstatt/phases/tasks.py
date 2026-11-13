@@ -307,12 +307,17 @@ def _persist_run_checkpoint(
         item.get("seq") for item in prior_results
         if isinstance(item, dict) and isinstance(item.get("seq"), int)
     }
-    results_above_offset = [
-        result for result in job_results
-        if isinstance(result.get("seq"), int)
-        and result["seq"] > result_offset
-        and result["seq"] not in prior_result_seqs
-    ]
+    results_above_offset: list[dict[str, object]] = []
+    result_seqs_above_offset: list[int] = []
+    for result in job_results:
+        seq = result.get("seq")
+        if (
+            isinstance(seq, int)
+            and seq > result_offset
+            and seq not in prior_result_seqs
+        ):
+            results_above_offset.append(result)
+            result_seqs_above_offset.append(seq)
     for result in results_above_offset:
         seq = result.get("seq")
         audit_result = audit(
@@ -355,10 +360,10 @@ def _persist_run_checkpoint(
                 "konnte nicht auditiert werden",
             )
     checkpoint["job_results"] = (prior_results + results_above_offset)[-50:]
-    if results_above_offset:
+    if result_seqs_above_offset:
         checkpoint["job_result_offset"] = max(
             result_offset,
-            max(int(result["seq"]) for result in results_above_offset),
+            max(result_seqs_above_offset),
         )
     checkpoint["safe_point"] = {
         "phase": "build",
