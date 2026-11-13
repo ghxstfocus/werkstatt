@@ -655,6 +655,30 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         f"Python worker startup failed: {startup_probe.stdout!r} "
         f"{startup_probe.stderr!r}"
     )
+    bootstrap_probe_env = {
+        **os.environ,
+        "WERKSTATT_BOOTSTRAP_STARTED": str(tmp_path / "probe-bootstrap"),
+        "WERKSTATT_WORKER_BOOT": str(tmp_path / "probe-worker"),
+        "WERKSTATT_PACKAGE_BOOT": str(tmp_path / "probe-package"),
+        "WERKSTATT_VERIFY_MARKER": str(tmp_path / "probe-verify"),
+    }
+    bootstrap_probe = subprocess.run(
+        [
+            os.environ["WERKSTATT_TEST_PYTHON"],
+            "-E", "-S", "-c", worker_bootstrap,
+            "-m", "werkstatt.loop", "--help",
+        ],
+        cwd=tmp_path,
+        env=bootstrap_probe_env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert bootstrap_probe.returncode == 0, (
+        f"Resume bootstrap probe failed: {bootstrap_probe.stdout!r} "
+        f"{bootstrap_probe.stderr[-3000:]!r}"
+    )
     monkeypatch.setattr(app_module, "_PROJECTS_BASE", project_base)
     monkeypatch.setattr(app_module, "_loop_registry", lambda: registry)
     app_module._LAUFENDE_LOOPS.clear()

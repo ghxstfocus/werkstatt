@@ -6082,3 +6082,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der direkte Python-Preflight laeuft, waehrend die Skriptdatei-Variante des Launchers vor ihrem ersten Statement stehen bleibt. Um die Skriptpfad-Hypothese zu pruefen, fuehrt der Launcher denselben Test-Bootstrap jetzt mit `python -c` aus.
 - CLI-Argumente, echter Python-Prozess, HTTP-Resume, RunRecord, PhaseState und Phase-End-Verify bleiben Teil des Tests; der Launcher ist weiter nur ein Isolationsadapter fuer den editable-installierten CI-Test.
+
+
+## 2026-11-13 — Direkter Resume-Bootstrap-Probe
+
+- Der einfache Interpreter-Preflight ist gruen, der vom HTTP-Resume gestartete Prozess erreicht aber weiter keinen Bootstrap-Marker.
+- Vor dem HTTP-Aufruf fuehrt der Test jetzt denselben `-E -S -c`-Bootstrap einmal direkt mit `--help` aus. So prueft er den kompletten Paket-/Overlay-Einstieg getrennt vom API-Prozessstart; beide Pfade muessen starten, bevor der Resume-Akzeptanztest weiterlaeuft.
