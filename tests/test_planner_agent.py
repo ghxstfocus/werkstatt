@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -691,3 +692,66 @@ def test_run_planner_behaelt_kriterien_des_planner_splits(tmp_path):
     assert st.akzeptanzkriterien == [
         "Handler gibt 404 bei unbekanntem Projekt.",
     ]
+
+
+def test_criteria_coverage_requires_known_references():
+    from werkstatt.planner import (
+        TaskGraphError,
+        _validate_criteria_coverage,
+    )
+
+    tasks = [
+        {"id": "t1", "criterion_refs": ["AC1"]},
+        {"id": "t2", "criterion_refs": ["AC2"]},
+    ]
+    _validate_criteria_coverage(tasks, ["Kriterium eins", "Kriterium zwei"])
+
+    with pytest.raises(TaskGraphError, match="Nicht alle Akzeptanzkriterien"):
+        _validate_criteria_coverage(
+            [{"id": "t1", "criterion_refs": ["AC1"]}],
+            ["Kriterium eins", "Kriterium zwei"],
+            infer_single_task=False,
+        )
+
+    with pytest.raises(TaskGraphError, match="unbekannte"):
+        _validate_criteria_coverage(
+            [{"id": "t1", "criterion_refs": ["AC3"]}],
+            ["Kriterium eins", "Kriterium zwei"],
+        )
+
+
+def test_single_task_infers_all_acceptance_criteria():
+    from werkstatt.planner import _validate_criteria_coverage
+
+    tasks = [{"id": "t1"}]
+    _validate_criteria_coverage(tasks, ["Kriterium eins", "Kriterium zwei"])
+    assert tasks[0]["criterion_refs"] == ["AC1", "AC2"]
+
+
+
+def test_oversized_task_split_rejects_malformed_criterion_refs():
+    from werkstatt.planner import TaskGraphError, _llm_split_einzel_task
+
+    reply = MagicMock(
+        ok=True,
+        content=json.dumps({"tasks": [{
+            "id": "t1_a",
+            "name": "Teil",
+            "criterion_refs": [{"unexpected": "object"}],
+        }]}),
+    )
+    with patch("werkstatt.planner.ask_llm", return_value=reply), \
+         patch("werkstatt.planner._with_spinner", side_effect=lambda _label, fn: fn()):
+        with pytest.raises(TaskGraphError, match="ungueltige criterion_refs"):
+            _llm_split_einzel_task(
+                "## werkstatt/demo.py\nAendere die Funktion.",
+                {
+                    "id": "t1",
+                    "criterion_refs": ["AC1"],
+                    "task_files": ["werkstatt/demo.py"],
+                    "description": "x" * 2600,
+                },
+                "fake",
+                Path("."),
+                "demo",
+            )

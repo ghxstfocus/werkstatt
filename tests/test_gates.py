@@ -227,3 +227,47 @@ def test_plan_gate_accepts_valid_dependency_dag(tmp_path) -> None:
     )
     with patch("werkstatt.gates._call_hook", return_value={"allow": True}):
         assert _plan_gate(state) is True
+
+
+def test_plan_gate_rejects_uncovered_acceptance_criterion(tmp_path) -> None:
+    from werkstatt.gates import _plan_gate
+
+    state = mk_state(
+        project_dir=str(tmp_path),
+        project_name="probe",
+        architect_prosa="Plan",
+        tasks=[
+            {"id": "t1", "criterion_refs": ["AC1"]},
+            {"id": "t2", "criterion_refs": ["AC1"]},
+        ],
+        tests=[],
+        akzeptanzkriterien=["Kriterium eins", "Kriterium zwei"],
+        phasen=[],
+    )
+    with patch(
+        "werkstatt.gates._call_hook",
+        side_effect=AssertionError("coverage error must stop before hooks"),
+    ):
+        assert _plan_gate(state) is False
+    assert state.last_planner_info["regel"] == "ACCEPTANCE_COVERAGE"
+    assert "AC2" in state.last_planner_info["fakt"]
+
+
+def test_plan_gate_accepts_complete_acceptance_criterion_coverage(tmp_path) -> None:
+    from werkstatt.gates import _plan_gate
+
+    state = mk_state(
+        project_dir=str(tmp_path),
+        project_name="probe",
+        architect_prosa="Plan",
+        tasks=[
+            {"id": "t1", "criterion_refs": ["AC1"]},
+            {"id": "t2", "criterion_refs": ["AC2"]},
+        ],
+        tests=[],
+        akzeptanzkriterien=["Kriterium eins", "Kriterium zwei"],
+        phasen=[],
+    )
+    with patch("werkstatt.gates._call_hook", return_value={"allow": True}):
+        assert _plan_gate(state) is True
+

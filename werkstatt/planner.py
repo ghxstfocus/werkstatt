@@ -59,6 +59,57 @@ class TaskGraphError(ValueError):
     """A generated task graph is structurally unsafe to execute."""
 
 
+def _validate_criteria_coverage(
+    tasks: list[dict], criteria: list[str], *, infer_single_task: bool = True,
+) -> None:
+    """Fail closed unless every plan criterion is assigned to a task."""
+    if not criteria or any(not isinstance(item, str) or not item.strip()
+                           for item in criteria):
+        raise TaskGraphError("Plan enthaelt keine gueltigen Akzeptanzkriterien.")
+    if not tasks:
+        raise TaskGraphError("Plan enthaelt keine Tasks fuer die Akzeptanzkriterien.")
+
+    expected = {f"AC{index}" for index in range(1, len(criteria) + 1)}
+    if infer_single_task and len(tasks) == 1:
+        task = tasks[0]
+        if isinstance(task, dict) and not task.get("criterion_refs"):
+            task["criterion_refs"] = sorted(
+                expected, key=lambda item: int(item[2:]),
+            )
+
+    covered: set[str] = set()
+    for index, task in enumerate(tasks, 1):
+        if not isinstance(task, dict):
+            raise TaskGraphError(f"Task {index} ist kein Objekt.")
+        refs = task.get("criterion_refs")
+        if not isinstance(refs, list) or not refs:
+            raise TaskGraphError(
+                f"Task {task.get('id', index)!r} hat keine criterion_refs.",
+            )
+        if any(not isinstance(ref, str) or not ref.strip() for ref in refs):
+            raise TaskGraphError(
+                f"Task {task.get('id', index)!r} enthaelt ungueltige criterion_refs.",
+            )
+        if len(set(refs)) != len(refs):
+            raise TaskGraphError(
+                f"Task {task.get('id', index)!r} wiederholt criterion_refs.",
+            )
+        unknown = sorted(set(refs) - expected)
+        if unknown:
+            raise TaskGraphError(
+                f"Task {task.get('id', index)!r} referenziert unbekannte "
+                f"Akzeptanzkriterien: {', '.join(unknown)}.",
+            )
+        covered.update(refs)
+
+    missing = sorted(expected - covered, key=lambda item: int(item[2:]))
+    if missing:
+        raise TaskGraphError(
+            "Nicht alle Akzeptanzkriterien sind Tasks zugeordnet: "
+            + ", ".join(missing),
+        )
+
+
 
 def _format_explorer_findings(f: dict) -> str:
     """M-WelleE: Explorer-Findings als Prompt-Block."""
@@ -323,6 +374,9 @@ Jeder Sub-Task:
   nummerierte Schritte sein (max 3 Schritte dazwischen).
   Wenn ein Task nur 1 Schritt umfasst, setze start = ende.
 - dependencies: Liste von Task-IDs, die vorher fertig sein muessen.
+- criterion_refs: Liste der IDs "AC1", "AC2", ... aus der Gesamtplan-Liste.
+  Jeder Task muss mindestens ein Kriterium referenzieren; zusammen muessen
+  die Tasks jedes Kriterium abdecken. Keine IDs erfinden oder auslassen.
   WANN setzen (Pflicht): Konsequenz-Tasks (Baseline senken, Doku
   die Endzustand prueft, Cross-Role-Tests, Ghost-Entfernung in
   mehreren Dateien) MUESSEN dependencies auf alle Tasks setzen,
@@ -370,7 +424,8 @@ Antworte NUR mit JSON:
   "tasks": [
     {"id": "t1", "name": "...", "action": "update",
      "task_files": ["..."], "architect_start": "...",
-     "architect_ende": "...", "dependencies": []},
+     "architect_ende": "...", "dependencies": [],
+     "criterion_refs": ["AC1"]},
     ...
   ]
 }
@@ -389,6 +444,8 @@ Jeder Sub-Task:
 - architect_start: ERSTE Zeile des Architect-Abschnitts (woertlich)
 - architect_ende: LETZTE Zeile (woertlich, benachbart zu start)
 - dependencies: Liste von Task-IDs
+- criterion_refs: Erhalte die parent criterion_refs. Verteile sie auf
+  die passenden Sub-Tasks; die Gesamtdeckung darf nicht verloren gehen.
 
 Regeln:
   - Jede Sub-Task liefert ein vollstaendiges, reviewbares
@@ -710,6 +767,7 @@ def _llm_split_einzel_task(
         f"## ZU GROSSER TASK:\n"
         f"id: {task.get('id')}\n"
         f"name: {task.get('name')}\n"
+        f"criterion_refs: {task.get('criterion_refs') or []}\n"
         f"description (Laenge {len(task.get('description', ''))}):\n"
         f"{task.get('description', '')[:3000]}\n\n"
         f"## ARCHITECT-PROSA (Kontext):\n{prosa[:4000]}"
@@ -754,12 +812,24 @@ def _llm_split_einzel_task(
         if len(_abschnitt) > 2500:
             _cut = _abschnitt.rfind(".", 0, 2500)
             _abschnitt = _abschnitt[:_cut + 1] if _cut > 0 else _abschnitt[:2500]
+        _refs = t.get("criterion_refs")
+        if _refs is None or _refs == []:
+            _refs = task.get("criterion_refs") or []
+        if (
+            not isinstance(_refs, list)
+            or any(not isinstance(ref, str) or not ref.strip() for ref in _refs)
+            or len(set(_refs)) != len(_refs)
+        ):
+            raise TaskGraphError(
+                f"Sub-Task {t.get('id') or i} hat ungueltige criterion_refs.",
+            )
         out.append({
             "id": t.get("id") or f"{task.get('id', 't')}_{i}",
             "name": t.get("name") or f"Sub {i}",
             "action": t.get("action", "update"),
             "task_files": t.get("task_files") or task.get("task_files") or [],
             "dependencies": t.get("dependencies") or [],
+            "criterion_refs": _refs,
             "description": _abschnitt,
         })
     return out
@@ -949,6 +1019,9 @@ def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 1800) -> list[dic
             _deps.update(t.get("dependencies") or [])
             _deps.discard(prev.get("id"))
             prev["dependencies"] = sorted(_deps)
+            _criteria = set(prev.get("criterion_refs") or [])
+            _criteria.update(t.get("criterion_refs") or [])
+            prev["criterion_refs"] = sorted(_criteria)
         else:
             # K36: Nicht-gemergt -- auch loggen.
             import sys
@@ -1363,14 +1436,17 @@ def _zerlege_in_sub_tasks(
         audit("planner_split_json_fehler", {"raw": raw[:200]}, pd, pn)
         return []
     criteria_raw = parsed.get("akzeptanzkriterien", [])
-    if isinstance(criteria_raw, list):
-        criteria = list(dict.fromkeys(
-            str(item).strip()[:500]
-            for item in criteria_raw
-            if isinstance(item, str) and item.strip()
-        ))[:30]
-        if state is not None and criteria:
-            state.akzeptanzkriterien = criteria
+    if not isinstance(criteria_raw, list):
+        raise TaskGraphError("Akzeptanzkriterien muessen eine Liste sein.")
+    criteria = list(dict.fromkeys(
+        str(item).strip()[:500]
+        for item in criteria_raw
+        if isinstance(item, str) and item.strip()
+    ))[:30]
+    if not criteria:
+        raise TaskGraphError("Der Planner-Split lieferte keine Akzeptanzkriterien.")
+    if state is not None:
+        state.akzeptanzkriterien = criteria
     tasks_raw = parsed.get("tasks", [])
     if not isinstance(tasks_raw, list):
         return []
@@ -1410,8 +1486,10 @@ def _zerlege_in_sub_tasks(
             "action": t.get("action", "update"),
             "task_files": t.get("task_files") or [],
             "dependencies": t.get("dependencies") or [],
+            "criterion_refs": t.get("criterion_refs") or [],
             "description": _abschnitt,
         })
+    _validate_criteria_coverage(tasks, criteria)
     # M-469: Rekursive Zerlegung (ADaPT). Tasks > 2500 Zeichen (K19b).
     # werden neu zerlegt (max 2 Ebenen tief).
     _final: list[dict] = []
@@ -1508,7 +1586,9 @@ def _zerlege_in_sub_tasks(
          "deps": t.get("dependencies") or [],
          "desc_len": len(t.get("description", ""))} for t in _final
     ]}, pd, pn)
-    return _doku_post_check(_final, prosa, pd, pn, aufgabe)
+    _checked = _doku_post_check(_final, prosa, pd, pn, aufgabe)
+    _validate_criteria_coverage(_checked, criteria)
+    return _checked
 
 
 def _doku_post_check(
@@ -2556,6 +2636,14 @@ def run_planner(state: RunState) -> bool:
                    "quelle": _scout_source,
                    "architect": "uebersprungen"},
                   pd, pn)
+            state.akzeptanzkriterien = [
+                "Alle eindeutig belegten Ersetzungen im atomaren Plan sind umgesetzt."
+            ]
+            for _task in _atom_tasks:
+                _task["criterion_refs"] = ["AC1"]
+            _validate_criteria_coverage(
+                _atom_tasks, state.akzeptanzkriterien,
+            )
             state.tasks = _atom_tasks
             # Marker, damit _plan_gate den Plan als gueltig sieht.
             state.architect_prosa = f"[atomarer Plan: {_scout_source}]"
@@ -2618,11 +2706,20 @@ def run_planner(state: RunState) -> bool:
         # bei JSON-Split-Fehler, Loop-Test 10 13:42).
         # OP-187: Deps + Topo-Sort auch im Fallback-Pfad ableiten
         # (strukturell konsistent mit dem LLM-Split-Pfad).
+        if len(state.akzeptanzkriterien or []) != 1:
+            audit("planner_plan_abgelehnt", {
+                "grund": "split_fallback_deckt_nicht_mehrere_kriterien_ab",
+                "kriterien": len(state.akzeptanzkriterien or []),
+            }, pd, pn)
+            return False
         _fb_tasks = _leite_deps_deterministisch(
             [_fallback_task_von_prosa(_arch_prosa, _key_files)],
             _arch_prosa, pd, pn,
         )
         _fb_tasks = _topo_sort_tasks(_fb_tasks, pd, pn)
+        if _fb_tasks:
+            _fb_tasks[0]["criterion_refs"] = ["AC1"]
+        _validate_criteria_coverage(_fb_tasks, state.akzeptanzkriterien)
         state.tasks = _fb_tasks
 
     state.phasen = []

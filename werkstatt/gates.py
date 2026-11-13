@@ -160,6 +160,42 @@ def _task_graph_error(tasks: list) -> str | None:
     return None
 
 
+def _criteria_coverage_error(tasks: list, criteria: object) -> str | None:
+    """Validate explicit task-to-acceptance-criterion references."""
+    if not any(
+        isinstance(task, dict) and "criterion_refs" in task
+        for task in tasks
+    ):
+        return None
+    if not isinstance(criteria, list) or not criteria or any(
+        not isinstance(item, str) or not item.strip() for item in criteria
+    ):
+        return "Run hat keine gueltigen Akzeptanzkriterien."
+    expected = {f"AC{index}" for index in range(1, len(criteria) + 1)}
+    covered: set[str] = set()
+    for index, task in enumerate(tasks, 1):
+        if not isinstance(task, dict):
+            return f"Task {index} ist kein Objekt mit criterion_refs."
+        refs = task.get("criterion_refs")
+        if not isinstance(refs, list) or not refs:
+            return f"Task {task.get('id', index)!r} hat keine criterion_refs."
+        if any(not isinstance(ref, str) or not ref.strip() for ref in refs):
+            return f"Task {task.get('id', index)!r} hat ungueltige criterion_refs."
+        if len(set(refs)) != len(refs):
+            return f"Task {task.get('id', index)!r} wiederholt criterion_refs."
+        unknown = sorted(set(refs) - expected)
+        if unknown:
+            return (
+                f"Task {task.get('id', index)!r} referenziert unbekannte "
+                f"Akzeptanzkriterien: {', '.join(unknown)}"
+            )
+        covered.update(refs)
+    missing = sorted(expected - covered, key=lambda item: int(item[2:]))
+    if missing:
+        return "Nicht abgedeckte Akzeptanzkriterien: " + ", ".join(missing)
+    return None
+
+
 def _plan_gate(state: RunState) -> bool:
     """B1: Plan-Gate (deterministisch).
 
@@ -179,6 +215,19 @@ def _plan_gate(state: RunState) -> bool:
             "erklaerung": (
                 "Tasks muessen eindeutige IDs und einen vollstaendigen, "
                 "azyklischen Abhaengigkeitsgraphen haben."
+            ),
+        }
+        return False
+    criteria_error = _criteria_coverage_error(
+        _tasks_check, state.akzeptanzkriterien,
+    )
+    if criteria_error:
+        state.last_planner_info = {
+            "regel": "ACCEPTANCE_COVERAGE",
+            "fakt": criteria_error,
+            "erklaerung": (
+                "Jedes Akzeptanzkriterium muss mindestens einem Task "
+                "zugeordnet sein."
             ),
         }
         return False

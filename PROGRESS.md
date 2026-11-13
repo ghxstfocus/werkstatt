@@ -6089,3 +6089,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der Architect/Planner-Split wird bei einem ungueltigen Graphen vor dem Plan-Gate fail-closed abgelehnt; er faellt nicht auf einen scheinbar gueltigen Fallback-Task zurueck. Regressionstests sichern die Fehlerklassen und das Audit des Zyklus.
 - Dieser Schritt schliesst OP-398 nicht: Abdeckung der Nutzer-/STATUS-Akzeptanzkriterien, zielorientierter Arbeitsgraph und Evidence Ledger bleiben offen.
 - Quality Gate Run [43362294835](https://github.com/ghxstfocus/werkstatt/actions/runs/43362294835) ist auf `93831e5` gruen: 2.158 Tests bestanden, 5 uebersprungen; Ruff, Mypy, AST (387 Dateien) und Audit-Katalog ohne Fehler.
+
+## 2026-11-13 — OP-398: Akzeptanzkriterien an Plan-Tasks binden
+
+- Planner-Split-Plaene tragen Referenzen AC1, AC2 usw. von Tasks zu den Kriterien des Gesamtziels. Ein deterministischer Check verwirft fehlende, unbekannte, doppelte oder nicht abgedeckte Referenzen vor dem Plan-Gate.
+- Das Plan-Gate prueft dieselben Referenzen erneut, bevor es den Freigabe-Hook aufruft. Ein einzelner Task darf alle Kriterien tragen; bei mehreren Tasks ist die Zuordnung explizit.
+- Atomare Einzeldatei-Plaene erhalten ein konkretes Kriterium; ein generischer Split-Fallback darf mehrere Kriterien nicht auf einen einzigen ersten-Datei-Task reduzieren.
+- OP-398 bleibt offen: Auswahlbegruendung, zielorientierte Fortsetzung, Evidence Ledger und Ende-zu-Ende-Verhalten sind damit nicht abgeschlossen. Quality-Gate-Nachweis folgt fuer den Commit.
