@@ -684,14 +684,22 @@ def chat_loop(
                     "Der Auftrag bleibt hier offen; die vorherige Aussage "
                     "war kein Nachweis fuer eine Uebergabe."
                 )
-            elif requested_op and op_handoff_result.get("zustand") != "proposal":
+            elif (
+                requested_op
+                and op_handoff_result is not None
+                and op_handoff_result.get("zustand") != "proposal"
+            ):
                 detail = str(op_handoff_result.get("detail") or "")
                 antwort = (
                     f"Der Startvorschlag fuer {requested_op} wurde nicht "
                     "angelegt; es wurde nichts gestartet."
                     + (f" Grund: {detail}" if detail else "")
                 )
-            elif requested_op and op_handoff_result.get("zustand") == "proposal":
+            elif (
+                requested_op
+                and op_handoff_result is not None
+                and op_handoff_result.get("zustand") == "proposal"
+            ):
                 # The tool result, not free-form model prose, is the authority
                 # for whether the user has a confirmable action in the UI.
                 antwort = (
