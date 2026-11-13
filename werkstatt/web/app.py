@@ -71,6 +71,35 @@ def _loop_registry() -> Any:
     return LoopProcessRegistry(path)
 
 
+def _recovered_chat_start(
+    session: Any, project: str, proposal_id: str,
+) -> dict[str, Any] | None:
+    """Replay a chat start whose process launch committed before its chat ack."""
+    record = _loop_registry().read(project)
+    if not isinstance(record, dict):
+        return None
+    context = record.get("context")
+    if not isinstance(context, dict) or context.get("proposal_id") != proposal_id:
+        return None
+    run_id = record.get("run_id")
+    if not isinstance(run_id, str) or not run_id:
+        raise RuntimeError("Chat-Start ist registriert, aber ohne Run-ID")
+    result: dict[str, Any] = {
+        "gestartet": True,
+        "run_id": run_id,
+        "wiederhergestellt": True,
+    }
+    pid = record.get("pid")
+    if isinstance(pid, int):
+        result["pid"] = pid
+    session.append_once(
+        f"loop-action-completed:{proposal_id}",
+        "loop_action_completed",
+        {"proposal_id": proposal_id, "result": result},
+    )
+    return {"proposal_id": proposal_id, "state": "completed", "result": result}
+
+
 def _loop_prozess(projektname: str) -> Any | None:
     """Liefert den lokalen oder nach Server-Neustart wiedergefundenen Loop."""
     prozess = _LAUFENDE_LOOPS.get(projektname)
@@ -1846,7 +1875,29 @@ def create_app() -> FastAPI:
         if claimed is None:
             raise HTTPException(status_code=404, detail="Vorschlag nicht gefunden")
         proposal, state, prior_result = claimed
-        if state != "claimed":
+        if (
+            state == "confirmed"
+            and proposal.get("action") == "start"
+            and decision == "confirm"
+        ):
+            # The previous web worker may have persisted confirmation and
+            # then stopped before enqueue/start or before its chat receipt.
+            # Resume this idempotent start handoff instead of treating the
+            # durable confirmation as a completed no-op.
+            try:
+                recovered = _recovered_chat_start(session, projekt, proposal_id)
+            except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Bestaetigter Chat-Start kann nicht abgeglichen werden: {exc}",
+                ) from exc
+            if recovered is not None:
+                return recovered
+        if state != "claimed" and not (
+            state == "confirmed"
+            and proposal.get("action") == "start"
+            and decision == "confirm"
+        ):
             return {"proposal_id": proposal_id, "state": state, "result": prior_result}
         try:
             action = proposal.get("action")
@@ -1897,6 +1948,11 @@ def create_app() -> FastAPI:
                     result.get("gestartet") is False
                     and result.get("grund") == "laeuft_bereits"
                 ):
+                    recovered = _recovered_chat_start(
+                        session, projekt, proposal_id,
+                    )
+                    if recovered is not None:
+                        return recovered
                     active_run_id = _LOOP_RUN_IDS.get(projekt)
                     run_record = (
                         EventStore().get_run_record(projekt, active_run_id)
@@ -1945,14 +2001,21 @@ def create_app() -> FastAPI:
                         "Hauptziel bleibt erhalten; Ausführung erst nach "
                         "Einordnung und nötiger Freigabe."
                     )
-                    session.append("loop_action_queued", {
-                        "proposal_id": proposal_id,
-                        "run_id": active_run_id,
-                        "inbox_seq": inbox_seq,
-                        "request": followup["request"],
-                        "detail": detail,
-                        "result": {"run_id": active_run_id, "inbox_seq": inbox_seq},
-                    })
+                    session.append_once(
+                        f"loop-action-queued:{proposal_id}",
+                        "loop_action_queued",
+                        {
+                            "proposal_id": proposal_id,
+                            "run_id": active_run_id,
+                            "inbox_seq": inbox_seq,
+                            "request": followup["request"],
+                            "detail": detail,
+                            "result": {
+                                "run_id": active_run_id,
+                                "inbox_seq": inbox_seq,
+                            },
+                        },
+                    )
                     return {
                         "proposal_id": proposal_id,
                         "state": "queued",
@@ -1967,14 +2030,29 @@ def create_app() -> FastAPI:
                 result = project_stop(projekt)
             else:
                 raise HTTPException(status_code=400, detail="unbekannte Loop-Aktion")
-            session.append("loop_action_completed", {"proposal_id": proposal_id, "result": result})
+            session.append_once(
+                f"loop-action-completed:{proposal_id}",
+                "loop_action_completed",
+                {"proposal_id": proposal_id, "result": result},
+            )
             return {"proposal_id": proposal_id, "state": "completed", "result": result}
         except HTTPException as exc:
             detail = exc.detail
-            session.append("loop_action_failed", {"proposal_id": proposal_id, "error": str(detail)})
+            session.append_once(
+                f"loop-action-failed:{proposal_id}",
+                "loop_action_failed",
+                {"proposal_id": proposal_id, "error": str(detail)},
+            )
             raise
         except Exception as exc:
-            session.append("loop_action_failed", {"proposal_id": proposal_id, "error": f"{type(exc).__name__}: {exc}"})
+            session.append_once(
+                f"loop-action-failed:{proposal_id}",
+                "loop_action_failed",
+                {
+                    "proposal_id": proposal_id,
+                    "error": f"{type(exc).__name__}: {exc}",
+                },
+            )
             raise HTTPException(status_code=500, detail=f"Loop-Aktion fehlgeschlagen: {exc}") from exc
 
     @app.post("/api/projects/{name}/chat/new")
