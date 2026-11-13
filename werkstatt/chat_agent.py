@@ -64,8 +64,7 @@ in grossen/append-only Dateien nutze read_file mit tail_chars. Pruefe den
 Dateiende-Auszug, Gesamtumfang und Zeichenbereich: wenn der angefragte Zeitraum
 nicht vollstaendig enthalten ist, lies den davorliegenden Bereich gezielt nach.
 Eine gekuerzte oder partielle Ausgabe belegt niemals, dass der Rest fehlt.
-Behaupte Vollstaendigkeit nur fuer den tatsaechlich gelesenen Bereich. Erfinde
-keine Zeilenangaben. Wenn ein Beleg fehlt, sage das offen. Du schreibst keine
+Behaupte Vollstaendigkeit nur fuer den tatsaechlich gelesenen Bereich. Erfinde keine Zeilenangaben. Wenn ein Beleg fehlt, sage das offen. Du schreibst keine
 Dateien und commitest nicht.
 Loop-Steuerung darfst du nur ueber request_loop_action anfragen;
 dieses Tool legt ausschliesslich einen befristeten Vorschlag an und fuehrt nichts aus.
